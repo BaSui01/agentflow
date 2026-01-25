@@ -5,9 +5,9 @@ import (
 	"encoding/json"
 	"time"
 
-	"github.com/yourusername/agentflow/llm/circuitbreaker"
-	"github.com/yourusername/agentflow/llm/idempotency"
-	"github.com/yourusername/agentflow/llm/retry"
+	"github.com/BaSui01/agentflow/llm/circuitbreaker"
+	"github.com/BaSui01/agentflow/llm/idempotency"
+	"github.com/BaSui01/agentflow/llm/retry"
 	"go.uber.org/zap"
 )
 

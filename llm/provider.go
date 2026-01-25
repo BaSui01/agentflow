@@ -66,21 +66,21 @@ type ToolSchema struct {
 }
 
 type ChatRequest struct {
-	TraceID         string            `json:"trace_id"`
-	TenantID        string            `json:"tenant_id,omitempty"`
-	UserID          string            `json:"user_id,omitempty"`
-	ChannelID       string            `json:"channel_id,omitempty"`
-	Model           string            `json:"model"`
-	Messages        []Message         `json:"messages"`
-	MaxTokens       int               `json:"max_tokens,omitempty"`
-	Temperature     float32           `json:"temperature,omitempty"`
-	TopP            float32           `json:"top_p,omitempty"`
-	Stop            []string          `json:"stop,omitempty"`
-	Tools           []ToolSchema      `json:"tools,omitempty"`
-	ToolChoice      string            `json:"tool_choice,omitempty"`       // auto/none/<tool name>
-	Timeout         time.Duration     `json:"timeout,omitempty"`
-	Metadata        map[string]string `json:"metadata,omitempty"`
-	Tags            []string          `json:"tags,omitempty"` // 路由策略：标签匹配
+	TraceID     string            `json:"trace_id"`
+	TenantID    string            `json:"tenant_id,omitempty"`
+	UserID      string            `json:"user_id,omitempty"`
+	ChannelID   string            `json:"channel_id,omitempty"`
+	Model       string            `json:"model"`
+	Messages    []Message         `json:"messages"`
+	MaxTokens   int               `json:"max_tokens,omitempty"`
+	Temperature float32           `json:"temperature,omitempty"`
+	TopP        float32           `json:"top_p,omitempty"`
+	Stop        []string          `json:"stop,omitempty"`
+	Tools       []ToolSchema      `json:"tools,omitempty"`
+	ToolChoice  string            `json:"tool_choice,omitempty"` // auto/none/<tool name>
+	Timeout     time.Duration     `json:"timeout,omitempty"`
+	Metadata    map[string]string `json:"metadata,omitempty"`
+	Tags        []string          `json:"tags,omitempty"` // 路由策略：标签匹配
 }
 
 type ChatUsage struct {
