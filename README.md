@@ -268,8 +268,17 @@ agentflow/
 │
 ├── providers/                # Provider实现
 │   ├── openai/               # OpenAI
-│   ├── claude/               # Claude
-│   └── gemini/               # Gemini
+│   ├── anthropic/            # Claude
+│   ├── gemini/               # Gemini
+│   ├── deepseek/             # DeepSeek
+│   ├── qwen/                 # 通义千问
+│   ├── glm/                  # 智谱AI
+│   ├── grok/                 # xAI Grok
+│   ├── minimax/              # MiniMax
+│   ├── mistral/              # Mistral AI ⭐
+│   ├── hunyuan/              # 腾讯混元 ⭐
+│   ├── kimi/                 # 月之暗面 ⭐
+│   └── llama/                # Meta Llama ⭐
 │
 └── agent/                    # Agent框架
     ├── base.go               # BaseAgent
@@ -326,11 +335,29 @@ agentflow/
 
 ## 🔧 支持的Provider
 
+### 原生协议 Provider
+
 | Provider | 状态 | 功能 | API 版本 |
 |----------|------|------|----------|
 | OpenAI | ✅ 完整支持 | Chat Completions + Responses API (2025), Stream, Function Calling | v1/chat/completions, v1/responses |
 | Claude | ✅ 完整支持 | Messages API, Stream, Function Calling, Prompt Caching | v1/messages |
 | Gemini | ✅ 完整支持 | Generate Content API, Stream, Function Calling, 多模态 | v1beta/models/{model}:generateContent |
+
+### OpenAI 兼容 Provider
+
+| Provider | 状态 | 默认模型 | BaseURL |
+|----------|------|---------|---------|
+| DeepSeek | ✅ 完整支持 | deepseek-chat | https://api.deepseek.com |
+| Qwen (通义千问) | ✅ 完整支持 | qwen-plus | https://dashscope.aliyuncs.com/compatible-mode/v1 |
+| GLM (智谱AI) | ✅ 完整支持 | glm-4 | https://open.bigmodel.cn/api/paas/v4 |
+| Grok (xAI) | ✅ 完整支持 | grok-beta | https://api.x.ai/v1 |
+| MiniMax | ✅ 完整支持 | abab6.5-chat | https://api.minimax.chat/v1 |
+| Mistral AI | ✅ 完整支持 | mistral-large-latest | https://api.mistral.ai/v1 |
+| Hunyuan (腾讯混元) | ✅ 完整支持 | hunyuan-lite | https://hunyuan.tencentcloudapi.com/v1 |
+| Kimi (月之暗面) | ✅ 完整支持 | moonshot-v1-8k | https://api.moonshot.cn/v1 |
+| Llama (Meta) | ✅ 完整支持 | meta-llama/Llama-3.3-70B-Instruct-Turbo | https://api.together.xyz/v1 |
+
+**覆盖率**: 12/15 主流厂商 (80%)
 
 ### API 端点说明
 
@@ -350,6 +377,11 @@ agentflow/
 - 认证: `x-goog-api-key` header
 - 特性: 多模态、长上下文 (1M tokens)、原生工具调用
 
+**OpenAI 兼容 Provider**:
+- 所有 OpenAI 兼容 Provider 使用相同的 `POST /v1/chat/completions` 端点
+- 认证: `Authorization: Bearer {api_key}` header
+- 特性: 完整支持 Function Calling、Stream、工具调用
+
 ## 📖 文档
 
 - [快速开始指南](QUICK_START.md)
@@ -366,6 +398,7 @@ agentflow/
 - [06_advanced_features](examples/06_advanced_features/) - 高级特性 ⭐
 - [07_mid_priority_features](examples/07_mid_priority_features/) - 中级特性 ⭐
 - [08_low_priority_features](examples/08_low_priority_features/) - 协作与监控 ⭐
+- [13_new_providers](examples/13_new_providers/) - 新增 Provider 示例 ⭐
 
 ## 🎯 使用场景
 
@@ -386,13 +419,7 @@ agentflow/
 - InfluxDB（时序数据）
 - Neo4j（知识图谱，可选）
 
-## 🔧 支持的Provider
 
-| Provider | 状态 | 功能 | API 版本 |
-|----------|------|------|----------|
-| OpenAI | ✅ 完整支持 | Chat Completions + Responses API (2025), Stream, Function Calling | v1/chat/completions, v1/responses |
-| Claude | ✅ 完整支持 | Messages API, Stream, Function Calling, Prompt Caching | v1/messages |
-| Gemini | ✅ 完整支持 | Generate Content API, Stream, Function Calling, 多模态 | v1beta/models/{model}:generateContent |
 
 ## 📊 性能指标
 

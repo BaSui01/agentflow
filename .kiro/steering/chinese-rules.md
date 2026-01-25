@@ -29,45 +29,12 @@ inclusion: always
 
 ## 项目结构
 
-### 目录组织
-- `agent/` - 智能代理核心功能
-- `llm/` - LLM 提供商集成和工具
-- `providers/` - 具体的 LLM 提供商实现
-- `workflow/` - 工作流编排
-- `examples/` - 示例代码
-- `docs/` - 文档
-
-### 文件命名
-- 使用小写字母和下划线
-- 测试文件以 `_test.go` 结尾
-- 示例文件以 `_example.go` 结尾
+- 文件命名: `snake_case.go`, 测试: `*_test.go`, 示例: `*_example.go`
 
 ## 开发流程
 
-### 功能开发
-1. 在 `.kiro/specs/` 目录创建功能规格
-2. 编写设计文档 (`design.md`)
-3. 分解任务 (`tasks.md`)
-4. 实现功能
-5. 编写测试
-6. 更新文档
-
-### 测试要求
-- 单元测试覆盖核心逻辑
-- 使用表驱动测试处理多个测试案例
-- 测试函数命名：`Test<FunctionName>`
-- 基准测试命名：`Benchmark<FunctionName>`
-
-### 提交规范
-- 提交信息使用英文
-- 格式：`<type>: <subject>`
-- type 类型：
-  - feat: 新功能
-  - fix: 修复 bug
-  - docs: 文档更新
-  - refactor: 重构
-  - test: 测试相关
-  - chore: 构建/工具相关
+- 表驱动测试,命名: `Test<FunctionName>`, `Benchmark<FunctionName>`
+- 提交格式: `<type>: <subject>` (feat/fix/refactor/test/chore)
 
 ## 性能优化
 
@@ -83,34 +50,10 @@ inclusion: always
 - 优先使用 channel 进行通信
 - 避免共享内存，通过通信共享
 
-## 依赖管理
+## 其他
 
-- 使用 Go modules 管理依赖
-- 定期更新依赖到稳定版本
-- 避免引入不必要的依赖
-- 优先使用标准库
-
-## 文档要求
-
-### README
-- 项目简介
-- 快速开始
-- 功能特性
-- 使用示例
-- API 文档链接
-
-### 代码文档
-- 每个包都应该有包级别的文档
-- 复杂的算法需要详细注释
-- 提供使用示例
-
-## 安全规范
-
-- 不在代码中硬编码敏感信息
-- 使用环境变量或配置文件管理凭证
-- 验证所有外部输入
-- 使用 HTTPS 进行网络通信
-- 定期更新依赖以修复安全漏洞
+- 依赖: Go modules, 优先标准库
+- 安全: 环境变量存凭证, 验证外部输入
 
 ## AI 代理开发特定规范
 

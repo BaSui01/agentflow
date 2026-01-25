@@ -28,75 +28,15 @@
 - **testify**: Assertions and mocking (`stretchr/testify`)
 - Table-driven tests (Go standard pattern)
 
-## Build & Development
-
-### Common Commands
+## 常用命令
 
 ```bash
-# Build the project
-go build ./...
-
-# Run tests
-go test ./...
-
-# Run tests with coverage
-go test -cover ./...
-
-# Run tests for specific package
-go test ./llm/cache/...
-
-# Run specific test
-go test -run TestLRUCache_Basic ./llm/cache/
-
-# Format code
-go fmt ./...
-gofmt -w .
-
-# Vet code
-go vet ./...
-
-# Tidy dependencies
-go mod tidy
-
-# Download dependencies
-go mod download
-
-# Run examples
-go run examples/01_simple_chat/main.go
-go run examples/06_advanced_features/main.go
+go build ./...           # 构建
+go test ./...            # 测试
+go test -cover ./...     # 覆盖率
+go fmt ./...             # 格式化
+go mod tidy              # 整理依赖
 ```
-
-### Build Examples
-
-```bash
-# Build all examples
-go build -o bin/ ./examples/...
-
-# Build specific example
-go build -o bin/simple_chat examples/01_simple_chat/main.go
-
-# Run with race detector
-go run -race examples/01_simple_chat/main.go
-```
-
-## Code Organization Patterns
-
-### Package Structure
-- Flat package hierarchy within domains
-- Clear separation between interface and implementation
-- Provider implementations in `providers/<name>/`
-- Shared types in package root (e.g., `llm/types.go`)
-
-### Testing Patterns
-- Test files alongside source: `*_test.go`
-- Table-driven tests for multiple scenarios
-- Example tests: `*_example_test.go`
-- Benchmark tests: `Benchmark*` functions
-
-### Configuration
-- Struct-based configuration
-- Environment variables for secrets
-- No hardcoded credentials in code
 
 ## Performance Considerations
 
