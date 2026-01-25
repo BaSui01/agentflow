@@ -7,9 +7,9 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/stretchr/testify/assert"
 	"github.com/BaSui01/agentflow/llm"
 	"github.com/BaSui01/agentflow/llm/middleware"
+	"github.com/stretchr/testify/assert"
 )
 
 // Feature: multi-provider-support, Property 9: RewriterChain Error Handling
@@ -20,104 +20,104 @@ import (
 // Minimum 100 iterations are achieved through comprehensive test cases.
 func TestProperty9_RewriterChainErrorHandling(t *testing.T) {
 	testCases := []struct {
-		name              string
-		rewriterError     error
-		expectedCode      llm.ErrorCode
+		name               string
+		rewriterError      error
+		expectedCode       llm.ErrorCode
 		expectedHTTPStatus int
-		provider          string
-		requirement       string
-		description       string
+		provider           string
+		requirement        string
+		description        string
 	}{
 		// Requirement 7.3: When RewriterChain execution fails, return ErrInvalidRequest with HTTPStatus=400
 		{
-			name:              "Simple rewriter error",
-			rewriterError:     errors.New("rewriter failed"),
-			expectedCode:      llm.ErrInvalidRequest,
+			name:               "Simple rewriter error",
+			rewriterError:      errors.New("rewriter failed"),
+			expectedCode:       llm.ErrInvalidRequest,
 			expectedHTTPStatus: http.StatusBadRequest,
-			provider:          "grok",
-			requirement:       "7.3",
-			description:       "Basic rewriter failure should return ErrInvalidRequest",
+			provider:           "grok",
+			requirement:        "7.3",
+			description:        "Basic rewriter failure should return ErrInvalidRequest",
 		},
 		{
-			name:              "Validation error",
-			rewriterError:     errors.New("validation failed: invalid parameter"),
-			expectedCode:      llm.ErrInvalidRequest,
+			name:               "Validation error",
+			rewriterError:      errors.New("validation failed: invalid parameter"),
+			expectedCode:       llm.ErrInvalidRequest,
 			expectedHTTPStatus: http.StatusBadRequest,
-			provider:          "qwen",
-			requirement:       "7.3",
-			description:       "Validation error should return ErrInvalidRequest",
+			provider:           "qwen",
+			requirement:        "7.3",
+			description:        "Validation error should return ErrInvalidRequest",
 		},
 		{
-			name:              "Empty tools cleaner error",
-			rewriterError:     errors.New("empty tools cleaner failed"),
-			expectedCode:      llm.ErrInvalidRequest,
+			name:               "Empty tools cleaner error",
+			rewriterError:      errors.New("empty tools cleaner failed"),
+			expectedCode:       llm.ErrInvalidRequest,
 			expectedHTTPStatus: http.StatusBadRequest,
-			provider:          "deepseek",
-			requirement:       "7.3",
-			description:       "EmptyToolsCleaner error should return ErrInvalidRequest",
+			provider:           "deepseek",
+			requirement:        "7.3",
+			description:        "EmptyToolsCleaner error should return ErrInvalidRequest",
 		},
 		{
-			name:              "Request transformation error",
-			rewriterError:     errors.New("request transformation failed"),
-			expectedCode:      llm.ErrInvalidRequest,
+			name:               "Request transformation error",
+			rewriterError:      errors.New("request transformation failed"),
+			expectedCode:       llm.ErrInvalidRequest,
 			expectedHTTPStatus: http.StatusBadRequest,
-			provider:          "glm",
-			requirement:       "7.3",
-			description:       "Transformation error should return ErrInvalidRequest",
+			provider:           "glm",
+			requirement:        "7.3",
+			description:        "Transformation error should return ErrInvalidRequest",
 		},
 		{
-			name:              "Nil request error",
-			rewriterError:     errors.New("nil request"),
-			expectedCode:      llm.ErrInvalidRequest,
+			name:               "Nil request error",
+			rewriterError:      errors.New("nil request"),
+			expectedCode:       llm.ErrInvalidRequest,
 			expectedHTTPStatus: http.StatusBadRequest,
-			provider:          "minimax",
-			requirement:       "7.3",
-			description:       "Nil request error should return ErrInvalidRequest",
+			provider:           "minimax",
+			requirement:        "7.3",
+			description:        "Nil request error should return ErrInvalidRequest",
 		},
 		{
-			name:              "Invalid message format",
-			rewriterError:     errors.New("invalid message format"),
-			expectedCode:      llm.ErrInvalidRequest,
+			name:               "Invalid message format",
+			rewriterError:      errors.New("invalid message format"),
+			expectedCode:       llm.ErrInvalidRequest,
 			expectedHTTPStatus: http.StatusBadRequest,
-			provider:          "openai",
-			requirement:       "7.3",
-			description:       "Invalid message format should return ErrInvalidRequest",
+			provider:           "openai",
+			requirement:        "7.3",
+			description:        "Invalid message format should return ErrInvalidRequest",
 		},
 		{
-			name:              "Tool schema validation error",
-			rewriterError:     errors.New("tool schema validation failed"),
-			expectedCode:      llm.ErrInvalidRequest,
+			name:               "Tool schema validation error",
+			rewriterError:      errors.New("tool schema validation failed"),
+			expectedCode:       llm.ErrInvalidRequest,
 			expectedHTTPStatus: http.StatusBadRequest,
-			provider:          "claude",
-			requirement:       "7.3",
-			description:       "Tool schema error should return ErrInvalidRequest",
+			provider:           "claude",
+			requirement:        "7.3",
+			description:        "Tool schema error should return ErrInvalidRequest",
 		},
 		{
-			name:              "Context error",
-			rewriterError:     errors.New("context error"),
-			expectedCode:      llm.ErrInvalidRequest,
+			name:               "Context error",
+			rewriterError:      errors.New("context error"),
+			expectedCode:       llm.ErrInvalidRequest,
 			expectedHTTPStatus: http.StatusBadRequest,
-			provider:          "grok",
-			requirement:       "7.3",
-			description:       "Context error should return ErrInvalidRequest",
+			provider:           "grok",
+			requirement:        "7.3",
+			description:        "Context error should return ErrInvalidRequest",
 		},
 		{
-			name:              "Parameter validation error",
-			rewriterError:     errors.New("parameter validation failed"),
-			expectedCode:      llm.ErrInvalidRequest,
+			name:               "Parameter validation error",
+			rewriterError:      errors.New("parameter validation failed"),
+			expectedCode:       llm.ErrInvalidRequest,
 			expectedHTTPStatus: http.StatusBadRequest,
-			provider:          "qwen",
-			requirement:       "7.3",
-			description:       "Parameter validation error should return ErrInvalidRequest",
+			provider:           "qwen",
+			requirement:        "7.3",
+			description:        "Parameter validation error should return ErrInvalidRequest",
 		},
 		{
-			name:              "Unsupported feature error",
-			rewriterError:     errors.New("unsupported feature"),
-			expectedCode:      llm.ErrInvalidRequest,
+			name:               "Unsupported feature error",
+			rewriterError:      errors.New("unsupported feature"),
+			expectedCode:       llm.ErrInvalidRequest,
 			expectedHTTPStatus: http.StatusBadRequest,
-			provider:          "deepseek",
-			requirement:       "7.3",
-			description:       "Unsupported feature should return ErrInvalidRequest",
+			provider:           "deepseek",
+			requirement:        "7.3",
+			description:        "Unsupported feature should return ErrInvalidRequest",
 		},
 	}
 
@@ -139,13 +139,13 @@ func TestProperty9_RewriterChainErrorHandling(t *testing.T) {
 	providers := []string{"grok", "qwen", "deepseek", "glm", "minimax", "openai", "claude"}
 
 	expandedTestCases := make([]struct {
-		name              string
-		rewriterError     error
-		expectedCode      llm.ErrorCode
+		name               string
+		rewriterError      error
+		expectedCode       llm.ErrorCode
 		expectedHTTPStatus int
-		provider          string
-		requirement       string
-		description       string
+		provider           string
+		requirement        string
+		description        string
 	}, 0, len(testCases)+len(errorMessages)*len(providers))
 
 	// Add original test cases
@@ -155,21 +155,21 @@ func TestProperty9_RewriterChainErrorHandling(t *testing.T) {
 	for _, errMsg := range errorMessages {
 		for _, provider := range providers {
 			expandedTestCases = append(expandedTestCases, struct {
-				name              string
-				rewriterError     error
-				expectedCode      llm.ErrorCode
+				name               string
+				rewriterError      error
+				expectedCode       llm.ErrorCode
 				expectedHTTPStatus int
-				provider          string
-				requirement       string
-				description       string
+				provider           string
+				requirement        string
+				description        string
 			}{
-				name:              fmt.Sprintf("%s - provider: %s", errMsg, provider),
-				rewriterError:     errors.New(errMsg),
-				expectedCode:      llm.ErrInvalidRequest,
+				name:               fmt.Sprintf("%s - provider: %s", errMsg, provider),
+				rewriterError:      errors.New(errMsg),
+				expectedCode:       llm.ErrInvalidRequest,
 				expectedHTTPStatus: http.StatusBadRequest,
-				provider:          provider,
-				requirement:       "7.3",
-				description:       fmt.Sprintf("Error '%s' should return ErrInvalidRequest for provider %s", errMsg, provider),
+				provider:           provider,
+				requirement:        "7.3",
+				description:        fmt.Sprintf("Error '%s' should return ErrInvalidRequest for provider %s", errMsg, provider),
 			})
 		}
 	}
@@ -194,21 +194,21 @@ func TestProperty9_RewriterChainErrorHandling(t *testing.T) {
 	for _, se := range specificErrors {
 		for _, provider := range providers {
 			expandedTestCases = append(expandedTestCases, struct {
-				name              string
-				rewriterError     error
-				expectedCode      llm.ErrorCode
+				name               string
+				rewriterError      error
+				expectedCode       llm.ErrorCode
 				expectedHTTPStatus int
-				provider          string
-				requirement       string
-				description       string
+				provider           string
+				requirement        string
+				description        string
 			}{
-				name:              fmt.Sprintf("%s - provider: %s", se.name, provider),
-				rewriterError:     se.error,
-				expectedCode:      llm.ErrInvalidRequest,
+				name:               fmt.Sprintf("%s - provider: %s", se.name, provider),
+				rewriterError:      se.error,
+				expectedCode:       llm.ErrInvalidRequest,
 				expectedHTTPStatus: http.StatusBadRequest,
-				provider:          provider,
-				requirement:       "7.3",
-				description:       fmt.Sprintf("Specific error '%s' should return ErrInvalidRequest", se.name),
+				provider:           provider,
+				requirement:        "7.3",
+				description:        fmt.Sprintf("Specific error '%s' should return ErrInvalidRequest", se.name),
 			})
 		}
 	}
@@ -247,10 +247,10 @@ func TestProperty9_RewriterChainErrorHandling(t *testing.T) {
 
 			// Verify the provider error properties
 			assert.NotNil(t, providerErr, "Provider should return non-nil error")
-			
+
 			llmErr, ok := providerErr.(*llm.Error)
 			assert.True(t, ok, "Provider error should be of type *llm.Error")
-			
+
 			if llmErr != nil {
 				assert.Equal(t, tc.expectedCode, llmErr.Code,
 					"Error code should be ErrInvalidRequest (Requirement %s)", tc.requirement)

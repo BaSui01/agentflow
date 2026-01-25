@@ -57,7 +57,7 @@ func (p *OpenAIProvider) HealthCheck(ctx context.Context) (*llm.HealthStatus, er
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		msg := readErrMsg(resp.Body)
+		msg := providers.ReadErrorMessage(resp.Body)
 		return &llm.HealthStatus{Healthy: false, Latency: latency}, fmt.Errorf("openai health check failed: status=%d msg=%s", resp.StatusCode, msg)
 	}
 
@@ -134,31 +134,6 @@ type openAIErrorResp struct {
 		Code    any    `json:"code"`
 		Param   string `json:"param"`
 	} `json:"error"`
-}
-
-// mapError maps HTTP status codes to llm.ErrorCode values with appropriate retry flags
-func mapError(status int, msg string, provider string) *llm.Error {
-	switch status {
-	case http.StatusUnauthorized:
-		return &llm.Error{Code: llm.ErrUnauthorized, Message: msg, HTTPStatus: status, Provider: provider}
-	case http.StatusForbidden:
-		return &llm.Error{Code: llm.ErrForbidden, Message: msg, HTTPStatus: status, Provider: provider}
-	case http.StatusTooManyRequests:
-		return &llm.Error{Code: llm.ErrRateLimited, Message: msg, HTTPStatus: status, Retryable: true, Provider: provider}
-	case http.StatusBadRequest:
-		// Check for quota/credit keywords
-		if strings.Contains(strings.ToLower(msg), "quota") ||
-			strings.Contains(strings.ToLower(msg), "credit") {
-			return &llm.Error{Code: llm.ErrQuotaExceeded, Message: msg, HTTPStatus: status, Provider: provider}
-		}
-		return &llm.Error{Code: llm.ErrInvalidRequest, Message: msg, HTTPStatus: status, Provider: provider}
-	case http.StatusServiceUnavailable, http.StatusBadGateway, http.StatusGatewayTimeout:
-		return &llm.Error{Code: llm.ErrUpstreamError, Message: msg, HTTPStatus: status, Retryable: true, Provider: provider}
-	case 529: // Model overloaded
-		return &llm.Error{Code: llm.ErrModelOverloaded, Message: msg, HTTPStatus: status, Retryable: true, Provider: provider}
-	default:
-		return &llm.Error{Code: llm.ErrUpstreamError, Message: msg, HTTPStatus: status, Retryable: status >= 500, Provider: provider}
-	}
 }
 
 func (p *OpenAIProvider) buildHeaders(req *http.Request, apiKey string) {
@@ -240,7 +215,7 @@ func (p *OpenAIProvider) Completion(ctx context.Context, req *llm.ChatRequest) (
 
 	// 回退到传统的 Chat Completions API
 	body := openAIRequest{
-		Model:       chooseModel(req, p.cfg.Model),
+		Model:       providers.ChooseModel(req, p.cfg.Model, "gpt-5.2"), // 2026: GPT-5.2
 		Messages:    convertMessages(req.Messages),
 		Tools:       convertTools(req.Tools),
 		MaxTokens:   req.MaxTokens,
@@ -263,8 +238,8 @@ func (p *OpenAIProvider) Completion(ctx context.Context, req *llm.ChatRequest) (
 	defer resp.Body.Close()
 
 	if resp.StatusCode >= 400 {
-		msg := readErrMsg(resp.Body)
-		return nil, mapError(resp.StatusCode, msg, p.Name())
+		msg := providers.ReadErrorMessage(resp.Body)
+		return nil, providers.MapHTTPError(resp.StatusCode, msg, p.Name())
 	}
 
 	var oaResp openAIResponse
@@ -295,7 +270,7 @@ func (p *OpenAIProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-ch
 		}
 	}
 	body := openAIRequest{
-		Model:     chooseModel(req, p.cfg.Model),
+		Model:     providers.ChooseModel(req, p.cfg.Model, "gpt-5.2"), // 2026: GPT-5.2
 		Messages:  convertMessages(req.Messages),
 		Tools:     convertTools(req.Tools),
 		MaxTokens: req.MaxTokens,
@@ -315,8 +290,8 @@ func (p *OpenAIProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-ch
 	}
 	if resp.StatusCode >= 400 {
 		defer resp.Body.Close()
-		msg := readErrMsg(resp.Body)
-		return nil, mapError(resp.StatusCode, msg, p.Name())
+		msg := providers.ReadErrorMessage(resp.Body)
+		return nil, providers.MapHTTPError(resp.StatusCode, msg, p.Name())
 	}
 
 	ch := make(chan llm.StreamChunk)
@@ -417,37 +392,18 @@ func toChatResponse(oa openAIResponse, provider string) *llm.ChatResponse {
 	return resp
 }
 
-func readErrMsg(body io.Reader) string {
-	data, _ := io.ReadAll(body)
-	var errResp openAIErrorResp
-	if err := json.Unmarshal(data, &errResp); err == nil && errResp.Error.Message != "" {
-		return errResp.Error.Message
-	}
-	return string(data)
-}
-
-func chooseModel(req *llm.ChatRequest, defaultModel string) string {
-	if req != nil && req.Model != "" {
-		return req.Model
-	}
-	if defaultModel != "" {
-		return defaultModel
-	}
-	return "gpt-4o-mini"
-}
-
 // OpenAI Responses API 结构（2025年3月新增）
 type openAIResponsesRequest struct {
-	Model              string                   `json:"model"`
-	Input              []openAIResponsesInput   `json:"input"`
-	MaxOutputTokens    int                      `json:"max_output_tokens,omitempty"`
-	Temperature        float32                  `json:"temperature,omitempty"`
-	TopP               float32                  `json:"top_p,omitempty"`
-	Tools              []openAITool             `json:"tools,omitempty"`
-	ToolChoice         interface{}              `json:"tool_choice,omitempty"`
-	PreviousResponseID string                   `json:"previous_response_id,omitempty"`
-	Store              bool                     `json:"store,omitempty"`
-	Metadata           map[string]string        `json:"metadata,omitempty"`
+	Model              string                 `json:"model"`
+	Input              []openAIResponsesInput `json:"input"`
+	MaxOutputTokens    int                    `json:"max_output_tokens,omitempty"`
+	Temperature        float32                `json:"temperature,omitempty"`
+	TopP               float32                `json:"top_p,omitempty"`
+	Tools              []openAITool           `json:"tools,omitempty"`
+	ToolChoice         interface{}            `json:"tool_choice,omitempty"`
+	PreviousResponseID string                 `json:"previous_response_id,omitempty"`
+	Store              bool                   `json:"store,omitempty"`
+	Metadata           map[string]string      `json:"metadata,omitempty"`
 }
 
 type openAIResponsesInput struct {
@@ -456,14 +412,14 @@ type openAIResponsesInput struct {
 }
 
 type openAIResponsesResponse struct {
-	ID          string                      `json:"id"`
-	Object      string                      `json:"object"` // "response"
-	CreatedAt   int64                       `json:"created_at"`
-	Status      string                      `json:"status"` // completed, in_progress, failed, cancelled
-	CompletedAt int64                       `json:"completed_at,omitempty"`
-	Model       string                      `json:"model"`
-	Output      []openAIResponsesOutput     `json:"output"`
-	Usage       *openAIUsage                `json:"usage,omitempty"`
+	ID          string                  `json:"id"`
+	Object      string                  `json:"object"` // "response"
+	CreatedAt   int64                   `json:"created_at"`
+	Status      string                  `json:"status"` // completed, in_progress, failed, cancelled
+	CompletedAt int64                   `json:"completed_at,omitempty"`
+	Model       string                  `json:"model"`
+	Output      []openAIResponsesOutput `json:"output"`
+	Usage       *openAIUsage            `json:"usage,omitempty"`
 }
 
 type openAIResponsesOutput struct {
@@ -495,7 +451,7 @@ func (p *OpenAIProvider) completionWithResponsesAPI(ctx context.Context, req *ll
 	}
 
 	body := openAIResponsesRequest{
-		Model:           chooseModel(req, p.cfg.Model),
+		Model:           providers.ChooseModel(req, p.cfg.Model, "gpt-5.2"), // 2026: GPT-5.2
 		Input:           input,
 		MaxOutputTokens: req.MaxTokens,
 		Temperature:     req.Temperature,
@@ -532,8 +488,8 @@ func (p *OpenAIProvider) completionWithResponsesAPI(ctx context.Context, req *ll
 	defer resp.Body.Close()
 
 	if resp.StatusCode >= 400 {
-		msg := readErrMsg(resp.Body)
-		return nil, mapError(resp.StatusCode, msg, p.Name())
+		msg := providers.ReadErrorMessage(resp.Body)
+		return nil, providers.MapHTTPError(resp.StatusCode, msg, p.Name())
 	}
 
 	var responsesResp openAIResponsesResponse

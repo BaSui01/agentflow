@@ -240,8 +240,14 @@ func (p *DeepSeekProvider) Completion(ctx context.Context, req *llm.ChatRequest)
 		}
 	}
 
+	// 2026: 根据 ReasoningMode 自动选择模型
+	defaultModel := "deepseek-chat"
+	if req.ReasoningMode == "thinking" || req.ReasoningMode == "extended" {
+		defaultModel = "deepseek-reasoner"
+	}
+	
 	body := openAIRequest{
-		Model:       providers.ChooseModel(req, p.cfg.Model, "deepseek-chat"),
+		Model:       providers.ChooseModel(req, p.cfg.Model, defaultModel),
 		Messages:    convertMessages(req.Messages),
 		Tools:       convertTools(req.Tools),
 		MaxTokens:   req.MaxTokens,
@@ -428,5 +434,3 @@ func readErrMsg(body io.Reader) string {
 	}
 	return string(data)
 }
-
-

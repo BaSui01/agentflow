@@ -4,8 +4,8 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/stretchr/testify/assert"
 	"github.com/BaSui01/agentflow/llm"
+	"github.com/stretchr/testify/assert"
 )
 
 // Feature: multi-provider-support, Property 12: HTTP Status to Error Code Mapping
@@ -1155,10 +1155,10 @@ func TestProperty12_QuotaCreditDetectionCaseInsensitive(t *testing.T) {
 // is set correctly for all status codes (Requirements 9.3, 9.5, 9.6)
 func TestProperty12_RetryableFlagConsistency(t *testing.T) {
 	testCases := []struct {
-		name           string
-		status         int
-		expectedRetry  bool
-		requirement    string
+		name          string
+		status        int
+		expectedRetry bool
+		requirement   string
 	}{
 		// Retryable errors
 		{"429 is retryable", 429, true, "9.3"},

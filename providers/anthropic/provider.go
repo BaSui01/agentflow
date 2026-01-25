@@ -101,15 +101,17 @@ type claudeTool struct {
 }
 
 type claudeRequest struct {
-	Model       string          `json:"model"`
-	Messages    []claudeMessage `json:"messages"`
-	System      string          `json:"system,omitempty"` // system 消息单独传递
-	MaxTokens   int             `json:"max_tokens"`
-	Temperature float32         `json:"temperature,omitempty"`
-	TopP        float32         `json:"top_p,omitempty"`
-	StopSeq     []string        `json:"stop_sequences,omitempty"`
-	Stream      bool            `json:"stream,omitempty"`
-	Tools       []claudeTool    `json:"tools,omitempty"`
+	Model            string          `json:"model"`
+	Messages         []claudeMessage `json:"messages"`
+	System           string          `json:"system,omitempty"` // system 消息单独传递
+	MaxTokens        int             `json:"max_tokens"`
+	Temperature      float32         `json:"temperature,omitempty"`
+	TopP             float32         `json:"top_p,omitempty"`
+	StopSeq          []string        `json:"stop_sequences,omitempty"`
+	Stream           bool            `json:"stream,omitempty"`
+	Tools            []claudeTool    `json:"tools,omitempty"`
+	ReasoningMode    string          `json:"reasoning_mode,omitempty"`    // 2026: "fast" | "extended"
+	ThoughtSignatures []string       `json:"thought_signatures,omitempty"` // 2026: Thought Signatures
 }
 
 type claudeUsage struct {
@@ -118,14 +120,15 @@ type claudeUsage struct {
 }
 
 type claudeResponse struct {
-	ID           string          `json:"id"`
-	Type         string          `json:"type"` // message, content_block_delta, etc.
-	Role         string          `json:"role"`
-	Content      []claudeContent `json:"content"`
-	Model        string          `json:"model"`
-	StopReason   string          `json:"stop_reason"`
-	StopSequence string          `json:"stop_sequence,omitempty"`
-	Usage        *claudeUsage    `json:"usage,omitempty"`
+	ID                string          `json:"id"`
+	Type              string          `json:"type"` // message, content_block_delta, etc.
+	Role              string          `json:"role"`
+	Content           []claudeContent `json:"content"`
+	Model             string          `json:"model"`
+	StopReason        string          `json:"stop_reason"`
+	StopSequence      string          `json:"stop_sequence,omitempty"`
+	Usage             *claudeUsage    `json:"usage,omitempty"`
+	ThoughtSignatures []string        `json:"thought_signatures,omitempty"` // 2026: Thought Signatures
 }
 
 // 流式响应的事件类型
@@ -261,14 +264,16 @@ func (p *ClaudeProvider) Completion(ctx context.Context, req *llm.ChatRequest) (
 	system, messages := convertToClaudeMessages(req.Messages)
 
 	body := claudeRequest{
-		Model:       chooseClaudeModel(req, p.cfg.Model),
-		Messages:    messages,
-		System:      system,
-		MaxTokens:   chooseMaxTokens(req),
-		Temperature: req.Temperature,
-		TopP:        req.TopP,
-		StopSeq:     req.Stop,
-		Tools:       convertToClaudeTools(req.Tools),
+		Model:             chooseClaudeModel(req, p.cfg.Model),
+		Messages:          messages,
+		System:            system,
+		MaxTokens:         chooseMaxTokens(req),
+		Temperature:       req.Temperature,
+		TopP:              req.TopP,
+		StopSeq:           req.Stop,
+		Tools:             convertToClaudeTools(req.Tools),
+		ReasoningMode:     req.ReasoningMode,     // 2026: 混合推理模式
+		ThoughtSignatures: req.ThoughtSignatures, // 2026: Thought Signatures
 	}
 
 	payload, _ := json.Marshal(body)
@@ -330,12 +335,14 @@ func (p *ClaudeProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-ch
 	system, messages := convertToClaudeMessages(req.Messages)
 
 	body := claudeRequest{
-		Model:     chooseClaudeModel(req, p.cfg.Model),
-		Messages:  messages,
-		System:    system,
-		MaxTokens: chooseMaxTokens(req),
-		Stream:    true,
-		Tools:     convertToClaudeTools(req.Tools),
+		Model:             chooseClaudeModel(req, p.cfg.Model),
+		Messages:          messages,
+		System:            system,
+		MaxTokens:         chooseMaxTokens(req),
+		Stream:            true,
+		Tools:             convertToClaudeTools(req.Tools),
+		ReasoningMode:     req.ReasoningMode,     // 2026: 混合推理模式
+		ThoughtSignatures: req.ThoughtSignatures, // 2026: Thought Signatures
 	}
 
 	payload, _ := json.Marshal(body)
@@ -350,8 +357,8 @@ func (p *ClaudeProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-ch
 	}
 	if resp.StatusCode >= 400 {
 		defer resp.Body.Close()
-		msg := readClaudeErrMsg(resp.Body)
-		return nil, mapClaudeError(resp.StatusCode, msg, p.Name())
+		msg := providers.ReadErrorMessage(resp.Body)
+		return nil, providers.MapHTTPError(resp.StatusCode, msg, p.Name())
 	}
 
 	ch := make(chan llm.StreamChunk)
@@ -545,6 +552,11 @@ func toClaudeChatResponse(cr claudeResponse, provider string) *llm.ChatResponse 
 		}
 	}
 
+	// 2026: 传递 Thought Signatures
+	if len(cr.ThoughtSignatures) > 0 {
+		resp.ThoughtSignatures = cr.ThoughtSignatures
+	}
+
 	return resp
 }
 
@@ -588,8 +600,8 @@ func chooseClaudeModel(req *llm.ChatRequest, defaultModel string) string {
 	if defaultModel != "" {
 		return defaultModel
 	}
-	// Claude 默认模型
-	return "claude-3-5-sonnet-20241022"
+	// Claude 默认模型 (2026: Claude 4.5)
+	return "claude-opus-4.5-20260105"
 }
 
 func chooseMaxTokens(req *llm.ChatRequest) int {

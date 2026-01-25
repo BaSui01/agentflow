@@ -428,5 +428,3 @@ func readErrMsg(body io.Reader) string {
 	}
 	return string(data)
 }
-
-

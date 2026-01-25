@@ -4,9 +4,9 @@ import (
 	"context"
 	"testing"
 
-	"github.com/stretchr/testify/assert"
 	"github.com/BaSui01/agentflow/llm"
 	"github.com/BaSui01/agentflow/llm/middleware"
+	"github.com/stretchr/testify/assert"
 )
 
 // Feature: multi-provider-support, Property 8: RewriterChain Application
@@ -17,17 +17,17 @@ import (
 // Minimum 100 iterations are achieved through comprehensive test cases.
 func TestProperty8_RewriterChainApplication(t *testing.T) {
 	testCases := []struct {
-		name                string
-		inputTools          []llm.ToolSchema
-		inputToolChoice     string
-		expectedToolsNil    bool
-		expectedToolChoice  string
-		requirement         string
-		description         string
+		name               string
+		inputTools         []llm.ToolSchema
+		inputToolChoice    string
+		expectedToolsNil   bool
+		expectedToolChoice string
+		requirement        string
+		description        string
 	}{
 		// Requirement 7.1: RewriterChain SHALL apply to both Completion and Stream
 		// Requirement 7.4: RewriterChain SHALL apply to both methods
-		
+
 		// Empty tools array cases
 		{
 			name:               "Empty tools array with tool_choice - should clear tool_choice",
@@ -65,7 +65,7 @@ func TestProperty8_RewriterChainApplication(t *testing.T) {
 			requirement:        "7.1, 7.4",
 			description:        "EmptyToolsCleaner should handle nil tools with no tool_choice",
 		},
-		
+
 		// Non-empty tools cases
 		{
 			name: "Single tool with tool_choice - should preserve both",
@@ -101,7 +101,7 @@ func TestProperty8_RewriterChainApplication(t *testing.T) {
 			requirement:        "7.1, 7.4",
 			description:        "EmptyToolsCleaner should preserve tools even without tool_choice",
 		},
-		
+
 		// Additional test cases to reach 100+ iterations
 		// Various tool_choice values with empty tools
 		{
@@ -131,7 +131,7 @@ func TestProperty8_RewriterChainApplication(t *testing.T) {
 			requirement:        "7.1, 7.4",
 			description:        "Should clear tool_choice='auto' when tools nil",
 		},
-		
+
 		// Various tool configurations
 		{
 			name: "Tool with minimal parameters",
@@ -196,22 +196,22 @@ func TestProperty8_RewriterChainApplication(t *testing.T) {
 			description:        "Should preserve five tools with required choice",
 		},
 	}
-	
+
 	// Duplicate test cases with variations to reach 100+ iterations
 	// We'll test each scenario multiple times with different contexts
 	expandedTestCases := make([]struct {
-		name                string
-		inputTools          []llm.ToolSchema
-		inputToolChoice     string
-		expectedToolsNil    bool
-		expectedToolChoice  string
-		requirement         string
-		description         string
+		name               string
+		inputTools         []llm.ToolSchema
+		inputToolChoice    string
+		expectedToolsNil   bool
+		expectedToolChoice string
+		requirement        string
+		description        string
 	}, 0, len(testCases)*8)
-	
+
 	// Add original test cases
 	expandedTestCases = append(expandedTestCases, testCases...)
-	
+
 	// Add variations with different providers
 	providers := []string{"grok", "qwen", "deepseek", "glm", "minimax", "openai", "claude"}
 	for _, provider := range providers {
@@ -221,7 +221,7 @@ func TestProperty8_RewriterChainApplication(t *testing.T) {
 			expandedTestCases = append(expandedTestCases, expandedTC)
 		}
 	}
-	
+
 	// Run all test cases
 	for _, tc := range expandedTestCases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -234,19 +234,19 @@ func TestProperty8_RewriterChainApplication(t *testing.T) {
 				Tools:      tc.inputTools,
 				ToolChoice: tc.inputToolChoice,
 			}
-			
+
 			// Create RewriterChain with EmptyToolsCleaner
 			chain := middleware.NewRewriterChain(
 				middleware.NewEmptyToolsCleaner(),
 			)
-			
+
 			// Execute the chain
 			rewrittenReq, err := chain.Execute(context.Background(), req)
-			
+
 			// Verify no error
 			assert.NoError(t, err, "RewriterChain should not return error for valid request")
 			assert.NotNil(t, rewrittenReq, "RewriterChain should return non-nil request")
-			
+
 			// Verify tools handling
 			if tc.expectedToolsNil {
 				assert.Empty(t, rewrittenReq.Tools,
@@ -257,18 +257,18 @@ func TestProperty8_RewriterChainApplication(t *testing.T) {
 				assert.Equal(t, len(tc.inputTools), len(rewrittenReq.Tools),
 					"Tool count should be preserved")
 			}
-			
+
 			// Verify tool_choice handling
 			assert.Equal(t, tc.expectedToolChoice, rewrittenReq.ToolChoice,
 				"ToolChoice should be '%s' (Requirement %s): %s",
 				tc.expectedToolChoice, tc.requirement, tc.description)
-			
+
 			// Verify other fields are preserved
 			assert.Equal(t, req.Model, rewrittenReq.Model, "Model should be preserved")
 			assert.Equal(t, len(req.Messages), len(rewrittenReq.Messages), "Messages should be preserved")
 		})
 	}
-	
+
 	// Verify we have at least 100 test cases
 	assert.GreaterOrEqual(t, len(expandedTestCases), 100,
 		"Property test should have minimum 100 iterations")
@@ -279,13 +279,13 @@ func TestProperty8_RewriterChainApplication(t *testing.T) {
 func TestProperty8_RewriterChainAppliedToBothMethods(t *testing.T) {
 	// This test verifies the pattern used in all providers
 	// We test that the rewriter chain is called before processing in both methods
-	
+
 	testCases := []struct {
-		name            string
-		tools           []llm.ToolSchema
-		toolChoice      string
-		expectModified  bool
-		requirement     string
+		name           string
+		tools          []llm.ToolSchema
+		toolChoice     string
+		expectModified bool
+		requirement    string
 	}{
 		{
 			name:           "Empty tools should be cleaned in Completion",
@@ -320,7 +320,7 @@ func TestProperty8_RewriterChainAppliedToBothMethods(t *testing.T) {
 			requirement:    "7.4",
 		},
 	}
-	
+
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			req := &llm.ChatRequest{
@@ -329,14 +329,14 @@ func TestProperty8_RewriterChainAppliedToBothMethods(t *testing.T) {
 				Tools:      tc.tools,
 				ToolChoice: tc.toolChoice,
 			}
-			
+
 			chain := middleware.NewRewriterChain(
 				middleware.NewEmptyToolsCleaner(),
 			)
-			
+
 			rewrittenReq, err := chain.Execute(context.Background(), req)
 			assert.NoError(t, err)
-			
+
 			if tc.expectModified {
 				// ToolChoice should be cleared when tools are empty
 				assert.Empty(t, rewrittenReq.ToolChoice,
@@ -353,7 +353,7 @@ func TestProperty8_RewriterChainAppliedToBothMethods(t *testing.T) {
 // TestProperty8_EmptyToolsCleanerBehavior tests the specific behavior of EmptyToolsCleaner
 func TestProperty8_EmptyToolsCleanerBehavior(t *testing.T) {
 	cleaner := middleware.NewEmptyToolsCleaner()
-	
+
 	testCases := []struct {
 		name               string
 		inputReq           *llm.ChatRequest
@@ -361,10 +361,10 @@ func TestProperty8_EmptyToolsCleanerBehavior(t *testing.T) {
 		description        string
 	}{
 		{
-			name: "Nil request should be handled gracefully",
-			inputReq: nil,
+			name:               "Nil request should be handled gracefully",
+			inputReq:           nil,
 			expectedToolChoice: "",
-			description: "EmptyToolsCleaner should handle nil request",
+			description:        "EmptyToolsCleaner should handle nil request",
 		},
 		{
 			name: "Request with nil tools and tool_choice",
@@ -373,7 +373,7 @@ func TestProperty8_EmptyToolsCleanerBehavior(t *testing.T) {
 				ToolChoice: "auto",
 			},
 			expectedToolChoice: "",
-			description: "Should clear tool_choice when tools is nil",
+			description:        "Should clear tool_choice when tools is nil",
 		},
 		{
 			name: "Request with empty tools array and tool_choice",
@@ -382,7 +382,7 @@ func TestProperty8_EmptyToolsCleanerBehavior(t *testing.T) {
 				ToolChoice: "required",
 			},
 			expectedToolChoice: "",
-			description: "Should clear tool_choice when tools is empty array",
+			description:        "Should clear tool_choice when tools is empty array",
 		},
 		{
 			name: "Request with tools and tool_choice",
@@ -393,7 +393,7 @@ func TestProperty8_EmptyToolsCleanerBehavior(t *testing.T) {
 				ToolChoice: "auto",
 			},
 			expectedToolChoice: "auto",
-			description: "Should preserve tool_choice when tools exist",
+			description:        "Should preserve tool_choice when tools exist",
 		},
 		{
 			name: "Request with tools but no tool_choice",
@@ -404,16 +404,16 @@ func TestProperty8_EmptyToolsCleanerBehavior(t *testing.T) {
 				ToolChoice: "",
 			},
 			expectedToolChoice: "",
-			description: "Should preserve empty tool_choice when tools exist",
+			description:        "Should preserve empty tool_choice when tools exist",
 		},
 	}
-	
+
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			result, err := cleaner.Rewrite(context.Background(), tc.inputReq)
-			
+
 			assert.NoError(t, err, "EmptyToolsCleaner should not return error")
-			
+
 			if tc.inputReq == nil {
 				assert.Nil(t, result, "Should return nil for nil input")
 			} else {

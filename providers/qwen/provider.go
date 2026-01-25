@@ -240,8 +240,9 @@ func (p *QwenProvider) Completion(ctx context.Context, req *llm.ChatRequest) (*l
 		}
 	}
 
+	// 2026: 默认使用 Qwen3
 	body := openAIRequest{
-		Model:       providers.ChooseModel(req, p.cfg.Model, "qwen-plus"),
+		Model:       providers.ChooseModel(req, p.cfg.Model, "qwen3-235b-a22b"),
 		Messages:    convertMessages(req.Messages),
 		Tools:       convertTools(req.Tools),
 		MaxTokens:   req.MaxTokens,
@@ -428,5 +429,3 @@ func readErrMsg(body io.Reader) string {
 	}
 	return string(data)
 }
-
-

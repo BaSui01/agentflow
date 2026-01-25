@@ -3,8 +3,8 @@ package providers
 import (
 	"testing"
 
-	"github.com/stretchr/testify/assert"
 	"github.com/BaSui01/agentflow/llm"
+	"github.com/stretchr/testify/assert"
 )
 
 // TestChooseModel_Priority tests the model selection priority:

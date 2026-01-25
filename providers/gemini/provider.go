@@ -80,14 +80,14 @@ func (p *GeminiProvider) SupportsNativeFunctionCalling() bool { return true }
 
 // Gemini 消息结构
 type geminiContent struct {
-	Role  string        `json:"role,omitempty"` // user, model
-	Parts []geminiPart  `json:"parts"`
+	Role  string       `json:"role,omitempty"` // user, model
+	Parts []geminiPart `json:"parts"`
 }
 
 type geminiPart struct {
-	Text         string                 `json:"text,omitempty"`
-	InlineData   *geminiInlineData      `json:"inlineData,omitempty"`
-	FunctionCall *geminiFunctionCall    `json:"functionCall,omitempty"`
+	Text             string                  `json:"text,omitempty"`
+	InlineData       *geminiInlineData       `json:"inlineData,omitempty"`
+	FunctionCall     *geminiFunctionCall     `json:"functionCall,omitempty"`
 	FunctionResponse *geminiFunctionResponse `json:"functionResponse,omitempty"`
 }
 
@@ -125,10 +125,10 @@ type geminiGenerationConfig struct {
 }
 
 type geminiRequest struct {
-	Contents         []geminiContent         `json:"contents"`
-	Tools            []geminiTool            `json:"tools,omitempty"`
-	GenerationConfig *geminiGenerationConfig `json:"generationConfig,omitempty"`
-	SystemInstruction *geminiContent         `json:"systemInstruction,omitempty"`
+	Contents          []geminiContent         `json:"contents"`
+	Tools             []geminiTool            `json:"tools,omitempty"`
+	GenerationConfig  *geminiGenerationConfig `json:"generationConfig,omitempty"`
+	SystemInstruction *geminiContent          `json:"systemInstruction,omitempty"`
 }
 
 type geminiCandidate struct {
@@ -145,10 +145,10 @@ type geminiUsageMetadata struct {
 }
 
 type geminiResponse struct {
-	Candidates     []geminiCandidate    `json:"candidates"`
-	UsageMetadata  *geminiUsageMetadata `json:"usageMetadata,omitempty"`
-	ModelVersion   string               `json:"modelVersion,omitempty"`
-	ResponseID     string               `json:"responseId,omitempty"`
+	Candidates    []geminiCandidate    `json:"candidates"`
+	UsageMetadata *geminiUsageMetadata `json:"usageMetadata,omitempty"`
+	ModelVersion  string               `json:"modelVersion,omitempty"`
+	ResponseID    string               `json:"responseId,omitempty"`
 }
 
 type geminiErrorResp struct {
@@ -326,8 +326,8 @@ func (p *GeminiProvider) Completion(ctx context.Context, req *llm.ChatRequest) (
 	defer resp.Body.Close()
 
 	if resp.StatusCode >= 400 {
-		msg := readGeminiErrMsg(resp.Body)
-		return nil, mapGeminiError(resp.StatusCode, msg, p.Name())
+		msg := providers.ReadErrorMessage(resp.Body)
+		return nil, providers.MapHTTPError(resp.StatusCode, msg, p.Name())
 	}
 
 	var geminiResp geminiResponse
@@ -393,8 +393,8 @@ func (p *GeminiProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-ch
 	}
 	if resp.StatusCode >= 400 {
 		defer resp.Body.Close()
-		msg := readGeminiErrMsg(resp.Body)
-		return nil, mapGeminiError(resp.StatusCode, msg, p.Name())
+		msg := providers.ReadErrorMessage(resp.Body)
+		return nil, providers.MapHTTPError(resp.StatusCode, msg, p.Name())
 	}
 
 	ch := make(chan llm.StreamChunk)
@@ -564,6 +564,6 @@ func chooseGeminiModel(req *llm.ChatRequest, defaultModel string) string {
 	if defaultModel != "" {
 		return defaultModel
 	}
-	// Gemini 默认模型
-	return "gemini-2.5-flash"
+	// Gemini 默认模型 (2026: Gemini 3)
+	return "gemini-3-pro"
 }

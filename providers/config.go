@@ -67,3 +67,36 @@ type DeepSeekConfig struct {
 	Model   string        `json:"model,omitempty" yaml:"model,omitempty"`
 	Timeout time.Duration `json:"timeout,omitempty" yaml:"timeout,omitempty"`
 }
+
+// MistralConfig Mistral AI Provider 配置
+type MistralConfig struct {
+	APIKey  string        `json:"api_key" yaml:"api_key"`
+	BaseURL string        `json:"base_url" yaml:"base_url"`
+	Model   string        `json:"model,omitempty" yaml:"model,omitempty"`
+	Timeout time.Duration `json:"timeout,omitempty" yaml:"timeout,omitempty"`
+}
+
+// HunyuanConfig Tencent Hunyuan Provider 配置
+type HunyuanConfig struct {
+	APIKey  string        `json:"api_key" yaml:"api_key"`
+	BaseURL string        `json:"base_url" yaml:"base_url"`
+	Model   string        `json:"model,omitempty" yaml:"model,omitempty"`
+	Timeout time.Duration `json:"timeout,omitempty" yaml:"timeout,omitempty"`
+}
+
+// KimiConfig Moonshot Kimi Provider 配置
+type KimiConfig struct {
+	APIKey  string        `json:"api_key" yaml:"api_key"`
+	BaseURL string        `json:"base_url" yaml:"base_url"`
+	Model   string        `json:"model,omitempty" yaml:"model,omitempty"`
+	Timeout time.Duration `json:"timeout,omitempty" yaml:"timeout,omitempty"`
+}
+
+// LlamaConfig Meta Llama Provider 配置 (via Together AI/Replicate)
+type LlamaConfig struct {
+	APIKey   string        `json:"api_key" yaml:"api_key"`
+	BaseURL  string        `json:"base_url" yaml:"base_url"`
+	Model    string        `json:"model,omitempty" yaml:"model,omitempty"`
+	Timeout  time.Duration `json:"timeout,omitempty" yaml:"timeout,omitempty"`
+	Provider string        `json:"provider,omitempty" yaml:"provider,omitempty"` // together/replicate/openrouter
+}

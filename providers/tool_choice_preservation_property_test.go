@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/stretchr/testify/assert"
 	"github.com/BaSui01/agentflow/llm"
+	"github.com/stretchr/testify/assert"
 )
 
 // Feature: multi-provider-support, Property 18: Tool Choice Preservation
@@ -443,11 +443,11 @@ func TestProperty18_ToolChoiceTypeConsistency(t *testing.T) {
 // Mock conversion functions that follow the spec
 
 type mockOpenAIRequestWithToolChoice struct {
-	Model      string          `json:"model"`
-	Messages   []interface{}   `json:"messages"`
-	Tools      []interface{}   `json:"tools,omitempty"`
-	ToolChoice interface{}     `json:"tool_choice,omitempty"`
-	MaxTokens  int             `json:"max_tokens,omitempty"`
+	Model      string        `json:"model"`
+	Messages   []interface{} `json:"messages"`
+	Tools      []interface{} `json:"tools,omitempty"`
+	ToolChoice interface{}   `json:"tool_choice,omitempty"`
+	MaxTokens  int           `json:"max_tokens,omitempty"`
 }
 
 type mockMiniMaxRequestWithToolChoice struct {

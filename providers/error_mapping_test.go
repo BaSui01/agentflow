@@ -4,8 +4,8 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/stretchr/testify/assert"
 	"github.com/BaSui01/agentflow/llm"
+	"github.com/stretchr/testify/assert"
 )
 
 // TestErrorMapping_HTTPStatusCodes tests that all HTTP status codes are correctly mapped
