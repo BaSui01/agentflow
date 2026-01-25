@@ -11,9 +11,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/yourusername/agentflow/llm"
-	"github.com/yourusername/agentflow/llm/middleware"
-	"github.com/yourusername/agentflow/providers"
+	"github.com/BaSui01/agentflow/llm"
+	"github.com/BaSui01/agentflow/llm/middleware"
+	"github.com/BaSui01/agentflow/providers"
 	"go.uber.org/zap"
 )
 
@@ -136,8 +136,8 @@ type openAIErrorResp struct {
 	} `json:"error"`
 }
 
+// mapError maps HTTP status codes to llm.ErrorCode values with appropriate retry flags
 func mapError(status int, msg string, provider string) *llm.Error {
-	// 基于 HTTP 状态映射错误码，细分常见上游错误
 	switch status {
 	case http.StatusUnauthorized:
 		return &llm.Error{Code: llm.ErrUnauthorized, Message: msg, HTTPStatus: status, Provider: provider}
@@ -146,9 +146,16 @@ func mapError(status int, msg string, provider string) *llm.Error {
 	case http.StatusTooManyRequests:
 		return &llm.Error{Code: llm.ErrRateLimited, Message: msg, HTTPStatus: status, Retryable: true, Provider: provider}
 	case http.StatusBadRequest:
+		// Check for quota/credit keywords
+		if strings.Contains(strings.ToLower(msg), "quota") ||
+			strings.Contains(strings.ToLower(msg), "credit") {
+			return &llm.Error{Code: llm.ErrQuotaExceeded, Message: msg, HTTPStatus: status, Provider: provider}
+		}
 		return &llm.Error{Code: llm.ErrInvalidRequest, Message: msg, HTTPStatus: status, Provider: provider}
 	case http.StatusServiceUnavailable, http.StatusBadGateway, http.StatusGatewayTimeout:
 		return &llm.Error{Code: llm.ErrUpstreamError, Message: msg, HTTPStatus: status, Retryable: true, Provider: provider}
+	case 529: // Model overloaded
+		return &llm.Error{Code: llm.ErrModelOverloaded, Message: msg, HTTPStatus: status, Retryable: true, Provider: provider}
 	default:
 		return &llm.Error{Code: llm.ErrUpstreamError, Message: msg, HTTPStatus: status, Retryable: status >= 500, Provider: provider}
 	}
@@ -225,6 +232,13 @@ func (p *OpenAIProvider) Completion(ctx context.Context, req *llm.ChatRequest) (
 			apiKey = strings.TrimSpace(c.APIKey)
 		}
 	}
+
+	// 优先使用新的 Responses API（如果配置启用）
+	if p.cfg.UseResponsesAPI {
+		return p.completionWithResponsesAPI(ctx, req, apiKey)
+	}
+
+	// 回退到传统的 Chat Completions API
 	body := openAIRequest{
 		Model:       chooseModel(req, p.cfg.Model),
 		Messages:    convertMessages(req.Messages),
@@ -420,4 +434,174 @@ func chooseModel(req *llm.ChatRequest, defaultModel string) string {
 		return defaultModel
 	}
 	return "gpt-4o-mini"
+}
+
+// OpenAI Responses API 结构（2025年3月新增）
+type openAIResponsesRequest struct {
+	Model              string                   `json:"model"`
+	Input              []openAIResponsesInput   `json:"input"`
+	MaxOutputTokens    int                      `json:"max_output_tokens,omitempty"`
+	Temperature        float32                  `json:"temperature,omitempty"`
+	TopP               float32                  `json:"top_p,omitempty"`
+	Tools              []openAITool             `json:"tools,omitempty"`
+	ToolChoice         interface{}              `json:"tool_choice,omitempty"`
+	PreviousResponseID string                   `json:"previous_response_id,omitempty"`
+	Store              bool                     `json:"store,omitempty"`
+	Metadata           map[string]string        `json:"metadata,omitempty"`
+}
+
+type openAIResponsesInput struct {
+	Role    string `json:"role"`
+	Content string `json:"content"`
+}
+
+type openAIResponsesResponse struct {
+	ID          string                      `json:"id"`
+	Object      string                      `json:"object"` // "response"
+	CreatedAt   int64                       `json:"created_at"`
+	Status      string                      `json:"status"` // completed, in_progress, failed, cancelled
+	CompletedAt int64                       `json:"completed_at,omitempty"`
+	Model       string                      `json:"model"`
+	Output      []openAIResponsesOutput     `json:"output"`
+	Usage       *openAIUsage                `json:"usage,omitempty"`
+}
+
+type openAIResponsesOutput struct {
+	Type    string          `json:"type"` // "message"
+	ID      string          `json:"id"`
+	Status  string          `json:"status"`
+	Role    string          `json:"role"`
+	Content []openAIContent `json:"content"`
+}
+
+type openAIContent struct {
+	Type        string          `json:"type"` // "output_text", "tool_call"
+	Text        string          `json:"text,omitempty"`
+	Annotations []interface{}   `json:"annotations,omitempty"`
+	ID          string          `json:"id,omitempty"`
+	Name        string          `json:"name,omitempty"`
+	Arguments   json.RawMessage `json:"arguments,omitempty"`
+}
+
+// completionWithResponsesAPI 使用新的 Responses API
+func (p *OpenAIProvider) completionWithResponsesAPI(ctx context.Context, req *llm.ChatRequest, apiKey string) (*llm.ChatResponse, error) {
+	// 转换消息格式
+	input := make([]openAIResponsesInput, 0, len(req.Messages))
+	for _, msg := range req.Messages {
+		input = append(input, openAIResponsesInput{
+			Role:    string(msg.Role),
+			Content: msg.Content,
+		})
+	}
+
+	body := openAIResponsesRequest{
+		Model:           chooseModel(req, p.cfg.Model),
+		Input:           input,
+		MaxOutputTokens: req.MaxTokens,
+		Temperature:     req.Temperature,
+		TopP:            req.TopP,
+		Tools:           convertTools(req.Tools),
+		Store:           true, // 启用状态存储
+	}
+
+	if req.ToolChoice != "" {
+		body.ToolChoice = req.ToolChoice
+	}
+
+	// 从上下文中获取 previous_response_id（用于有状态对话）
+	if prevID, ok := ctx.Value("previous_response_id").(string); ok && prevID != "" {
+		body.PreviousResponseID = prevID
+	}
+
+	payload, _ := json.Marshal(body)
+	endpoint := fmt.Sprintf("%s/v1/responses", strings.TrimRight(p.cfg.BaseURL, "/"))
+
+	httpReq, _ := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(payload))
+	p.buildHeaders(httpReq, apiKey)
+
+	resp, err := p.client.Do(httpReq)
+	if err != nil {
+		return nil, &llm.Error{
+			Code:       llm.ErrUpstreamError,
+			Message:    err.Error(),
+			HTTPStatus: http.StatusBadGateway,
+			Retryable:  true,
+			Provider:   p.Name(),
+		}
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 400 {
+		msg := readErrMsg(resp.Body)
+		return nil, mapError(resp.StatusCode, msg, p.Name())
+	}
+
+	var responsesResp openAIResponsesResponse
+	if err := json.NewDecoder(resp.Body).Decode(&responsesResp); err != nil {
+		return nil, &llm.Error{
+			Code:       llm.ErrUpstreamError,
+			Message:    err.Error(),
+			HTTPStatus: http.StatusBadGateway,
+			Retryable:  true,
+			Provider:   p.Name(),
+		}
+	}
+
+	return toResponsesAPIChatResponse(responsesResp, p.Name()), nil
+}
+
+// toResponsesAPIChatResponse 将 Responses API 响应转换为统一格式
+func toResponsesAPIChatResponse(resp openAIResponsesResponse, provider string) *llm.ChatResponse {
+	choices := make([]llm.ChatChoice, 0, len(resp.Output))
+
+	for idx, output := range resp.Output {
+		if output.Type != "message" {
+			continue
+		}
+
+		msg := llm.Message{
+			Role: llm.Role(output.Role),
+		}
+
+		// 解析 content 数组
+		for _, content := range output.Content {
+			switch content.Type {
+			case "output_text":
+				msg.Content += content.Text
+			case "tool_call":
+				msg.ToolCalls = append(msg.ToolCalls, llm.ToolCall{
+					ID:        content.ID,
+					Name:      content.Name,
+					Arguments: content.Arguments,
+				})
+			}
+		}
+
+		choices = append(choices, llm.ChatChoice{
+			Index:        idx,
+			FinishReason: output.Status,
+			Message:      msg,
+		})
+	}
+
+	chatResp := &llm.ChatResponse{
+		ID:       resp.ID,
+		Provider: provider,
+		Model:    resp.Model,
+		Choices:  choices,
+	}
+
+	if resp.Usage != nil {
+		chatResp.Usage = llm.ChatUsage{
+			PromptTokens:     resp.Usage.PromptTokens,
+			CompletionTokens: resp.Usage.CompletionTokens,
+			TotalTokens:      resp.Usage.TotalTokens,
+		}
+	}
+
+	if resp.CreatedAt != 0 {
+		chatResp.CreatedAt = time.Unix(resp.CreatedAt, 0)
+	}
+
+	return chatResp
 }

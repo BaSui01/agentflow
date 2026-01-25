@@ -11,9 +11,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/yourusername/agentflow/llm"
-	"github.com/yourusername/agentflow/llm/middleware"
-	"github.com/yourusername/agentflow/providers"
+	"github.com/BaSui01/agentflow/llm"
+	"github.com/BaSui01/agentflow/llm/middleware"
+	"github.com/BaSui01/agentflow/providers"
 	"go.uber.org/zap"
 )
 
@@ -241,7 +241,7 @@ func (p *GrokProvider) Completion(ctx context.Context, req *llm.ChatRequest) (*l
 	}
 
 	body := openAIRequest{
-		Model:       chooseModel(req, p.cfg.Model),
+		Model:       providers.ChooseModel(req, p.cfg.Model, "grok-beta"),
 		Messages:    convertMessages(req.Messages),
 		Tools:       convertTools(req.Tools),
 		MaxTokens:   req.MaxTokens,
@@ -298,7 +298,7 @@ func (p *GrokProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-chan
 	}
 
 	body := openAIRequest{
-		Model:     chooseModel(req, p.cfg.Model),
+		Model:     providers.ChooseModel(req, p.cfg.Model, "grok-beta"),
 		Messages:  convertMessages(req.Messages),
 		Tools:     convertTools(req.Tools),
 		MaxTokens: req.MaxTokens,
@@ -429,12 +429,4 @@ func readErrMsg(body io.Reader) string {
 	return string(data)
 }
 
-func chooseModel(req *llm.ChatRequest, configModel string) string {
-	if req != nil && req.Model != "" {
-		return req.Model
-	}
-	if configModel != "" {
-		return configModel
-	}
-	return "grok-beta"
-}
+
