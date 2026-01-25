@@ -4,38 +4,38 @@ import (
 	"context"
 	"fmt"
 	"time"
-	
+
 	"go.uber.org/zap"
 )
 
 // EnhancedExecutionOptions 增强执行选项
 type EnhancedExecutionOptions struct {
 	// Reflection 选项
-	UseReflection     bool
-	ReflectionConfig  interface{} // ReflectionConfig
-	
+	UseReflection    bool
+	ReflectionConfig interface{} // ReflectionConfig
+
 	// 工具选择选项
-	UseToolSelection  bool
+	UseToolSelection    bool
 	ToolSelectionConfig interface{} // ToolSelectionConfig
-	
+
 	// 提示词增强选项
-	UsePromptEnhancer bool
+	UsePromptEnhancer       bool
 	PromptEngineeringConfig interface{} // PromptEngineeringConfig
-	
+
 	// Skills 选项
-	UseSkills         bool
-	SkillsQuery       string
-	
+	UseSkills   bool
+	SkillsQuery string
+
 	// 记忆选项
-	UseEnhancedMemory bool
-	LoadWorkingMemory bool
+	UseEnhancedMemory   bool
+	LoadWorkingMemory   bool
 	LoadShortTermMemory bool
-	SaveToMemory      bool
-	
+	SaveToMemory        bool
+
 	// 可观测性选项
-	UseObservability  bool
-	RecordMetrics     bool
-	RecordTrace       bool
+	UseObservability bool
+	RecordMetrics    bool
+	RecordTrace      bool
 }
 
 // DefaultEnhancedExecutionOptions 默认增强执行选项
@@ -100,7 +100,7 @@ func (b *BaseAgent) EnableObservability(obsSystem interface{}) {
 // ExecuteEnhanced 增强执行（集成所有功能）
 func (b *BaseAgent) ExecuteEnhanced(ctx context.Context, input *Input, options EnhancedExecutionOptions) (*Output, error) {
 	startTime := time.Now()
-	
+
 	b.logger.Info("starting enhanced execution",
 		zap.String("trace_id", input.TraceID),
 		zap.Bool("reflection", options.UseReflection),
@@ -110,7 +110,7 @@ func (b *BaseAgent) ExecuteEnhanced(ctx context.Context, input *Input, options E
 		zap.Bool("enhanced_memory", options.UseEnhancedMemory),
 		zap.Bool("observability", options.UseObservability),
 	)
-	
+
 	// 1. 可观测性：开始追踪
 	var traceID string
 	if options.UseObservability && b.observabilitySystem != nil {
@@ -123,7 +123,7 @@ func (b *BaseAgent) ExecuteEnhanced(ctx context.Context, input *Input, options E
 			obs.StartTrace(traceID, b.ID())
 		}
 	}
-	
+
 	// 2. Skills：发现并加载技能
 	var skillInstructions []string
 	if options.UseSkills && b.skillManager != nil {
@@ -132,7 +132,7 @@ func (b *BaseAgent) ExecuteEnhanced(ctx context.Context, input *Input, options E
 			query = input.Content
 		}
 		b.logger.Debug("discovering skills", zap.String("query", query))
-		
+
 		// 类型断言并调用
 		if sm, ok := b.skillManager.(interface {
 			DiscoverSkills(ctx context.Context, task string) (interface{}, error)
@@ -153,7 +153,7 @@ func (b *BaseAgent) ExecuteEnhanced(ctx context.Context, input *Input, options E
 			}
 		}
 	}
-	
+
 	// 3. 增强记忆：加载上下文
 	var memoryContext []string
 	if options.UseEnhancedMemory && b.enhancedMemory != nil {
@@ -198,7 +198,7 @@ func (b *BaseAgent) ExecuteEnhanced(ctx context.Context, input *Input, options E
 			}
 		}
 	}
-	
+
 	// 4. 提示词增强
 	enhancedPrompt := input.Content
 	if options.UsePromptEnhancer && b.promptEnhancer != nil {
@@ -214,7 +214,7 @@ func (b *BaseAgent) ExecuteEnhanced(ctx context.Context, input *Input, options E
 			if len(memoryContext) > 0 {
 				contextStr += "Memory: " + fmt.Sprintf("%v", memoryContext) + "\n"
 			}
-			
+
 			enhanced, err := pe.EnhanceUserPrompt(input.Content, contextStr)
 			if err != nil {
 				b.logger.Warn("prompt enhancement failed", zap.Error(err))
@@ -224,7 +224,7 @@ func (b *BaseAgent) ExecuteEnhanced(ctx context.Context, input *Input, options E
 			}
 		}
 	}
-	
+
 	// 更新输入内容
 	enhancedInput := &Input{
 		TraceID:   input.TraceID,
@@ -235,7 +235,7 @@ func (b *BaseAgent) ExecuteEnhanced(ctx context.Context, input *Input, options E
 		Context:   input.Context,
 		Variables: input.Variables,
 	}
-	
+
 	// 5. 动态工具选择
 	if options.UseToolSelection && b.toolSelector != nil && b.toolManager != nil {
 		b.logger.Debug("selecting tools dynamically")
@@ -253,11 +253,11 @@ func (b *BaseAgent) ExecuteEnhanced(ctx context.Context, input *Input, options E
 			}
 		}
 	}
-	
+
 	// 6. 执行任务
 	var output *Output
 	var err error
-	
+
 	if options.UseReflection && b.reflectionExecutor != nil {
 		// 使用 Reflection 执行
 		b.logger.Debug("executing with reflection")
@@ -268,7 +268,7 @@ func (b *BaseAgent) ExecuteEnhanced(ctx context.Context, input *Input, options E
 			if err != nil {
 				return nil, fmt.Errorf("reflection execution failed: %w", err)
 			}
-			
+
 			// 提取最终输出
 			if reflectionResult, ok := result.(interface{ GetFinalOutput() *Output }); ok {
 				output = reflectionResult.GetFinalOutput()
@@ -284,7 +284,7 @@ func (b *BaseAgent) ExecuteEnhanced(ctx context.Context, input *Input, options E
 		// 普通执行
 		output, err = b.Execute(ctx, enhancedInput)
 	}
-	
+
 	if err != nil {
 		// 可观测性：记录错误
 		if options.UseObservability && b.observabilitySystem != nil {
@@ -297,11 +297,11 @@ func (b *BaseAgent) ExecuteEnhanced(ctx context.Context, input *Input, options E
 		}
 		return nil, err
 	}
-	
+
 	// 7. 保存到增强记忆
 	if options.UseEnhancedMemory && b.enhancedMemory != nil && options.SaveToMemory {
 		b.logger.Debug("saving to enhanced memory")
-		
+
 		// 保存短期记忆
 		if mem, ok := b.enhancedMemory.(interface {
 			SaveShortTerm(ctx context.Context, agentID, content string, metadata map[string]interface{}) error
@@ -315,7 +315,7 @@ func (b *BaseAgent) ExecuteEnhanced(ctx context.Context, input *Input, options E
 				b.logger.Warn("failed to save short-term memory", zap.Error(err))
 			}
 		}
-		
+
 		// 记录情节
 		if mem, ok := b.enhancedMemory.(interface {
 			RecordEpisode(ctx context.Context, event interface{}) error
@@ -340,7 +340,7 @@ func (b *BaseAgent) ExecuteEnhanced(ctx context.Context, input *Input, options E
 			}
 		}
 	}
-	
+
 	// 8. 可观测性：记录指标
 	if options.UseObservability && b.observabilitySystem != nil {
 		duration := time.Since(startTime)
@@ -360,34 +360,34 @@ func (b *BaseAgent) ExecuteEnhanced(ctx context.Context, input *Input, options E
 			}
 		}
 	}
-	
+
 	b.logger.Info("enhanced execution completed",
 		zap.String("trace_id", input.TraceID),
 		zap.Duration("total_duration", time.Since(startTime)),
 		zap.Int("tokens_used", output.TokensUsed),
 	)
-	
+
 	return output, nil
 }
 
 // GetFeatureStatus 获取功能启用状态
 func (b *BaseAgent) GetFeatureStatus() map[string]bool {
 	return map[string]bool{
-		"reflection":       b.reflectionExecutor != nil,
-		"tool_selection":   b.toolSelector != nil,
-		"prompt_enhancer":  b.promptEnhancer != nil,
-		"skills":           b.skillManager != nil,
-		"mcp":              b.mcpServer != nil,
-		"enhanced_memory":  b.enhancedMemory != nil,
-		"observability":    b.observabilitySystem != nil,
-		"context_manager":  b.contextManager != nil,
+		"reflection":      b.reflectionExecutor != nil,
+		"tool_selection":  b.toolSelector != nil,
+		"prompt_enhancer": b.promptEnhancer != nil,
+		"skills":          b.skillManager != nil,
+		"mcp":             b.mcpServer != nil,
+		"enhanced_memory": b.enhancedMemory != nil,
+		"observability":   b.observabilitySystem != nil,
+		"context_manager": b.contextManager != nil,
 	}
 }
 
 // PrintFeatureStatus 打印功能状态
 func (b *BaseAgent) PrintFeatureStatus() {
 	status := b.GetFeatureStatus()
-	
+
 	b.logger.Info("Agent Feature Status",
 		zap.String("agent_id", b.ID()),
 		zap.Bool("reflection", status["reflection"]),
@@ -401,180 +401,10 @@ func (b *BaseAgent) PrintFeatureStatus() {
 	)
 }
 
-// AgentBuilder 构建器模式，用于创建完整配置的 Agent
-type AgentBuilder struct {
-	config      Config
-	provider    interface{} // llm.Provider
-	memory      MemoryManager
-	toolManager ToolManager
-	bus         EventBus
-	logger      *zap.Logger
-	
-	// 2025 新功能
-	reflectionConfig      interface{} // ReflectionConfig
-	toolSelectionConfig   interface{} // ToolSelectionConfig
-	promptEngineeringConfig interface{} // PromptEngineeringConfig
-	skillManagerConfig    interface{} // SkillManagerConfig
-	mcpServerConfig       interface{} // MCPServerConfig
-	enhancedMemoryConfig  interface{} // EnhancedMemoryConfig
-	observabilityConfig   interface{} // ObservabilityConfig
-}
-
-// NewAgentBuilder 创建 Agent 构建器
-func NewAgentBuilder(config Config) *AgentBuilder {
-	return &AgentBuilder{
-		config: config,
-	}
-}
-
-// WithProvider 设置 LLM Provider
-func (b *AgentBuilder) WithProvider(provider interface{}) *AgentBuilder {
-	b.provider = provider
-	return b
-}
-
-// WithMemory 设置记忆管理器
-func (b *AgentBuilder) WithMemory(memory MemoryManager) *AgentBuilder {
-	b.memory = memory
-	return b
-}
-
-// WithToolManager 设置工具管理器
-func (b *AgentBuilder) WithToolManager(toolManager ToolManager) *AgentBuilder {
-	b.toolManager = toolManager
-	return b
-}
-
-// WithEventBus 设置事件总线
-func (b *AgentBuilder) WithEventBus(bus EventBus) *AgentBuilder {
-	b.bus = bus
-	return b
-}
-
-// WithLogger 设置日志器
-func (b *AgentBuilder) WithLogger(logger *zap.Logger) *AgentBuilder {
-	b.logger = logger
-	return b
-}
-
-// WithReflection 启用 Reflection 机制
-func (b *AgentBuilder) WithReflection(config interface{}) *AgentBuilder {
-	b.reflectionConfig = config
-	b.config.EnableReflection = true
-	return b
-}
-
-// WithToolSelection 启用动态工具选择
-func (b *AgentBuilder) WithToolSelection(config interface{}) *AgentBuilder {
-	b.toolSelectionConfig = config
-	b.config.EnableToolSelection = true
-	return b
-}
-
-// WithPromptEnhancer 启用提示词增强
-func (b *AgentBuilder) WithPromptEnhancer(config interface{}) *AgentBuilder {
-	b.promptEngineeringConfig = config
-	b.config.EnablePromptEnhancer = true
-	return b
-}
-
-// WithSkills 启用 Skills 系统
-func (b *AgentBuilder) WithSkills(config interface{}) *AgentBuilder {
-	b.skillManagerConfig = config
-	b.config.EnableSkills = true
-	return b
-}
-
-// WithMCP 启用 MCP 集成
-func (b *AgentBuilder) WithMCP(config interface{}) *AgentBuilder {
-	b.mcpServerConfig = config
-	b.config.EnableMCP = true
-	return b
-}
-
-// WithEnhancedMemory 启用增强记忆系统
-func (b *AgentBuilder) WithEnhancedMemory(config interface{}) *AgentBuilder {
-	b.enhancedMemoryConfig = config
-	b.config.EnableEnhancedMemory = true
-	return b
-}
-
-// WithObservability 启用可观测性系统
-func (b *AgentBuilder) WithObservability(config interface{}) *AgentBuilder {
-	b.observabilityConfig = config
-	b.config.EnableObservability = true
-	return b
-}
-
-// Build 构建 Agent
-func (b *AgentBuilder) Build() (*BaseAgent, error) {
-	// 验证必需字段
-	if b.provider == nil {
-		return nil, fmt.Errorf("provider is required")
-	}
-	
-	if b.logger == nil {
-		b.logger, _ = zap.NewProduction()
-	}
-	
-	// 创建基础 Agent
-	// 注意：这里需要将 interface{} 转换为实际的 llm.Provider 类型
-	// 由于避免循环依赖，这里保持 interface{} 类型
-	// 实际使用时需要在调用方进行类型转换
-	
-	agent := &BaseAgent{
-		config:      b.config,
-		state:       StateInit,
-		provider:    nil, // 需要类型转换
-		memory:      b.memory,
-		toolManager: b.toolManager,
-		bus:         b.bus,
-		logger:      b.logger.With(zap.String("agent_id", b.config.ID), zap.String("agent_type", string(b.config.Type))),
-	}
-	
-	// 启用各项功能
-	if b.config.EnableReflection && b.reflectionConfig != nil {
-		agent.reflectionExecutor = b.reflectionConfig
-		b.logger.Info("reflection enabled in builder")
-	}
-	
-	if b.config.EnableToolSelection && b.toolSelectionConfig != nil {
-		agent.toolSelector = b.toolSelectionConfig
-		b.logger.Info("tool selection enabled in builder")
-	}
-	
-	if b.config.EnablePromptEnhancer && b.promptEngineeringConfig != nil {
-		agent.promptEnhancer = b.promptEngineeringConfig
-		b.logger.Info("prompt enhancer enabled in builder")
-	}
-	
-	if b.config.EnableSkills && b.skillManagerConfig != nil {
-		agent.skillManager = b.skillManagerConfig
-		b.logger.Info("skills enabled in builder")
-	}
-	
-	if b.config.EnableMCP && b.mcpServerConfig != nil {
-		agent.mcpServer = b.mcpServerConfig
-		b.logger.Info("MCP enabled in builder")
-	}
-	
-	if b.config.EnableEnhancedMemory && b.enhancedMemoryConfig != nil {
-		agent.enhancedMemory = b.enhancedMemoryConfig
-		b.logger.Info("enhanced memory enabled in builder")
-	}
-	
-	if b.config.EnableObservability && b.observabilityConfig != nil {
-		agent.observabilitySystem = b.observabilityConfig
-		b.logger.Info("observability enabled in builder")
-	}
-	
-	return agent, nil
-}
-
 // QuickSetupOptions 快速设置选项
 type QuickSetupOptions struct {
 	EnableAllFeatures bool
-	
+
 	// 功能开关
 	EnableReflection     bool
 	EnableToolSelection  bool
@@ -583,7 +413,7 @@ type QuickSetupOptions struct {
 	EnableMCP            bool
 	EnableEnhancedMemory bool
 	EnableObservability  bool
-	
+
 	// 配置
 	ReflectionMaxIterations int
 	ToolSelectionMaxTools   int
@@ -618,43 +448,43 @@ func (b *BaseAgent) QuickSetup(ctx context.Context, options QuickSetupOptions) e
 	b.logger.Info("quick setup: enabling features",
 		zap.Bool("all_features", options.EnableAllFeatures),
 	)
-	
+
 	// 由于避免循环依赖，这里只能提供接口
 	// 实际实现需要在调用方创建具体的实例并调用 Enable* 方法
-	
+
 	if options.EnableAllFeatures || options.EnableReflection {
-		b.logger.Info("reflection should be enabled with max_iterations", 
+		b.logger.Info("reflection should be enabled with max_iterations",
 			zap.Int("max_iterations", options.ReflectionMaxIterations))
 	}
-	
+
 	if options.EnableAllFeatures || options.EnableToolSelection {
 		b.logger.Info("tool selection should be enabled with max_tools",
 			zap.Int("max_tools", options.ToolSelectionMaxTools))
 	}
-	
+
 	if options.EnableAllFeatures || options.EnablePromptEnhancer {
 		b.logger.Info("prompt enhancer should be enabled")
 	}
-	
+
 	if options.EnableAllFeatures || options.EnableSkills {
 		b.logger.Info("skills should be enabled with directory",
 			zap.String("directory", options.SkillsDirectory))
 	}
-	
+
 	if options.EnableMCP {
 		b.logger.Info("MCP should be enabled with server name",
 			zap.String("server_name", options.MCPServerName))
 	}
-	
+
 	if options.EnableAllFeatures || options.EnableEnhancedMemory {
 		b.logger.Info("enhanced memory should be enabled with TTL",
 			zap.Duration("ttl", options.MemoryTTL))
 	}
-	
+
 	if options.EnableAllFeatures || options.EnableObservability {
 		b.logger.Info("observability should be enabled")
 	}
-	
+
 	b.logger.Info("quick setup completed - features configured")
 	return nil
 }
@@ -662,45 +492,45 @@ func (b *BaseAgent) QuickSetup(ctx context.Context, options QuickSetupOptions) e
 // ValidateConfiguration 验证配置
 func (b *BaseAgent) ValidateConfiguration() error {
 	errors := []string{}
-	
+
 	// 检查必需组件
 	if b.provider == nil {
 		errors = append(errors, "provider not set")
 	}
-	
+
 	// 检查功能依赖
 	if b.config.EnableReflection && b.reflectionExecutor == nil {
 		errors = append(errors, "reflection enabled but executor not set")
 	}
-	
+
 	if b.config.EnableToolSelection && b.toolSelector == nil {
 		errors = append(errors, "tool selection enabled but selector not set")
 	}
-	
+
 	if b.config.EnablePromptEnhancer && b.promptEnhancer == nil {
 		errors = append(errors, "prompt enhancer enabled but enhancer not set")
 	}
-	
+
 	if b.config.EnableSkills && b.skillManager == nil {
 		errors = append(errors, "skills enabled but manager not set")
 	}
-	
+
 	if b.config.EnableMCP && b.mcpServer == nil {
 		errors = append(errors, "MCP enabled but server not set")
 	}
-	
+
 	if b.config.EnableEnhancedMemory && b.enhancedMemory == nil {
 		errors = append(errors, "enhanced memory enabled but system not set")
 	}
-	
+
 	if b.config.EnableObservability && b.observabilitySystem == nil {
 		errors = append(errors, "observability enabled but system not set")
 	}
-	
+
 	if len(errors) > 0 {
 		return fmt.Errorf("configuration validation failed: %v", errors)
 	}
-	
+
 	b.logger.Info("configuration validated successfully")
 	return nil
 }
@@ -708,7 +538,7 @@ func (b *BaseAgent) ValidateConfiguration() error {
 // GetFeatureMetrics 获取功能使用指标
 func (b *BaseAgent) GetFeatureMetrics() map[string]interface{} {
 	status := b.GetFeatureStatus()
-	
+
 	metrics := map[string]interface{}{
 		"agent_id":   b.ID(),
 		"agent_name": b.Name(),
@@ -721,7 +551,7 @@ func (b *BaseAgent) GetFeatureMetrics() map[string]interface{} {
 			"temperature": b.config.Temperature,
 		},
 	}
-	
+
 	// 添加功能计数
 	enabledCount := 0
 	for _, enabled := range status {
@@ -731,7 +561,7 @@ func (b *BaseAgent) GetFeatureMetrics() map[string]interface{} {
 	}
 	metrics["enabled_features_count"] = enabledCount
 	metrics["total_features_count"] = len(status)
-	
+
 	return metrics
 }
 
@@ -745,13 +575,13 @@ func (b *BaseAgent) ExportConfiguration() map[string]interface{} {
 		"model":       b.config.Model,
 		"provider":    b.config.Provider,
 		"features": map[string]bool{
-			"reflection":       b.config.EnableReflection,
-			"tool_selection":   b.config.EnableToolSelection,
-			"prompt_enhancer":  b.config.EnablePromptEnhancer,
-			"skills":           b.config.EnableSkills,
-			"mcp":              b.config.EnableMCP,
-			"enhanced_memory":  b.config.EnableEnhancedMemory,
-			"observability":    b.config.EnableObservability,
+			"reflection":      b.config.EnableReflection,
+			"tool_selection":  b.config.EnableToolSelection,
+			"prompt_enhancer": b.config.EnablePromptEnhancer,
+			"skills":          b.config.EnableSkills,
+			"mcp":             b.config.EnableMCP,
+			"enhanced_memory": b.config.EnableEnhancedMemory,
+			"observability":   b.config.EnableObservability,
 		},
 		"tools":    b.config.Tools,
 		"metadata": b.config.Metadata,

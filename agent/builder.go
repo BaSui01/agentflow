@@ -3,7 +3,7 @@ package agent
 import (
 	"fmt"
 
-	"github.com/yourusername/agentflow/llm"
+	"github.com/BaSui01/agentflow/llm"
 	"go.uber.org/zap"
 )
 
@@ -18,13 +18,13 @@ type AgentBuilder struct {
 	logger      *zap.Logger
 
 	// 增强功能配置
-	reflectionConfig      *ReflectionConfig
-	toolSelectionConfig   *ToolSelectionConfig
-	promptEnhancerConfig  *PromptEnhancerConfig
-	skillsConfig          interface{} // 避免循环依赖
-	mcpConfig             interface{}
-	enhancedMemoryConfig  interface{}
-	observabilityConfig   interface{}
+	reflectionConfig     *ReflectionExecutorConfig
+	toolSelectionConfig  *ToolSelectionConfig
+	promptEnhancerConfig *PromptEnhancerConfig
+	skillsConfig         interface{} // 避免循环依赖
+	mcpConfig            interface{}
+	enhancedMemoryConfig interface{}
+	observabilityConfig  interface{}
 
 	errors []error
 }
@@ -76,7 +76,7 @@ func (b *AgentBuilder) WithLogger(logger *zap.Logger) *AgentBuilder {
 }
 
 // WithReflection 启用 Reflection 机制
-func (b *AgentBuilder) WithReflection(config *ReflectionConfig) *AgentBuilder {
+func (b *AgentBuilder) WithReflection(config *ReflectionExecutorConfig) *AgentBuilder {
 	if config == nil {
 		config = DefaultReflectionConfig()
 	}
@@ -160,7 +160,7 @@ func (b *AgentBuilder) Build() (*BaseAgent, error) {
 		b.logger,
 	)
 
-	// 启用增强功能
+	// Enable advanced features
 	if b.config.EnableReflection && b.reflectionConfig != nil {
 		reflectionExecutor := NewReflectionExecutor(agent, *b.reflectionConfig)
 		agent.EnableReflection(reflectionExecutor)

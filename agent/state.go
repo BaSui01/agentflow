@@ -6,20 +6,20 @@ import "fmt"
 type State string
 
 const (
-	StateInit      State = "init"      // 初始化中
-	StateReady     State = "ready"     // 就绪，可执行
-	StateRunning   State = "running"   // 执行中
-	StatePaused    State = "paused"    // 暂停（等待人工/外部输入）
-	StateCompleted State = "completed" // 已完成
-	StateFailed    State = "failed"    // 失败
+	StateInit      State = "init"      // Initializing
+	StateReady     State = "ready"     // Ready to execute
+	StateRunning   State = "running"   // Executing
+	StatePaused    State = "paused"    // Paused (waiting for human/external input)
+	StateCompleted State = "completed" // Completed
+	StateFailed    State = "failed"    // Failed
 )
 
 // validTransitions 定义合法的状态转换
 var validTransitions = map[State][]State{
 	StateInit:      {StateReady, StateFailed},
 	StateReady:     {StateRunning, StateFailed},
-	StateRunning:   {StateReady, StatePaused, StateCompleted, StateFailed}, // 支持中断后重试
-	StatePaused:    {StateRunning, StateCompleted, StateFailed},            // 支持暂停后直接结束
+	StateRunning:   {StateReady, StatePaused, StateCompleted, StateFailed}, // Support retry after interruption
+	StatePaused:    {StateRunning, StateCompleted, StateFailed},            // Support direct completion after pause
 	StateCompleted: {StateReady},                                           // 支持重新调度
 	StateFailed:    {StateReady, StateInit},                                // 支持重试或重置
 }

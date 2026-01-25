@@ -8,9 +8,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/yourusername/agentflow/internal/ctxkeys"
-	"github.com/yourusername/agentflow/llm"
-	llmtools "github.com/yourusername/agentflow/llm/tools"
+	"github.com/BaSui01/agentflow/internal/ctxkeys"
+	"github.com/BaSui01/agentflow/llm"
+	llmtools "github.com/BaSui01/agentflow/llm/tools"
 
 	"go.uber.org/zap"
 )
@@ -21,12 +21,12 @@ type AgentType string
 
 // 预定义的常见 Agent 类型（可选使用）
 const (
-	TypeGeneric    AgentType = "generic"     // 通用 Agent
-	TypeAssistant  AgentType = "assistant"   // 助手
-	TypeAnalyzer   AgentType = "analyzer"    // 分析
-	TypeTranslator AgentType = "translator"  // 翻译
-	TypeSummarizer AgentType = "summarizer"  // 摘要
-	TypeReviewer   AgentType = "reviewer"    // 审查
+	TypeGeneric    AgentType = "generic"    // 通用 Agent
+	TypeAssistant  AgentType = "assistant"  // 助手
+	TypeAnalyzer   AgentType = "analyzer"   // 分析
+	TypeTranslator AgentType = "translator" // 翻译
+	TypeSummarizer AgentType = "summarizer" // 摘要
+	TypeReviewer   AgentType = "reviewer"   // 审查
 )
 
 // Agent 定义核心行为接口
@@ -109,15 +109,15 @@ type Config struct {
 	PromptBundle PromptBundle      `json:"prompt_bundle,omitempty"` // 模块化提示词包
 	Tools        []string          `json:"tools,omitempty"`         // 可用工具列表
 	Metadata     map[string]string `json:"metadata,omitempty"`
-	
+
 	// 2025 新增配置（可选）
-	EnableReflection      bool                   `json:"enable_reflection,omitempty"`
-	EnableToolSelection   bool                   `json:"enable_tool_selection,omitempty"`
-	EnablePromptEnhancer  bool                   `json:"enable_prompt_enhancer,omitempty"`
-	EnableSkills          bool                   `json:"enable_skills,omitempty"`
-	EnableMCP             bool                   `json:"enable_mcp,omitempty"`
-	EnableEnhancedMemory  bool                   `json:"enable_enhanced_memory,omitempty"`
-	EnableObservability   bool                   `json:"enable_observability,omitempty"`
+	EnableReflection     bool `json:"enable_reflection,omitempty"`
+	EnableToolSelection  bool `json:"enable_tool_selection,omitempty"`
+	EnablePromptEnhancer bool `json:"enable_prompt_enhancer,omitempty"`
+	EnableSkills         bool `json:"enable_skills,omitempty"`
+	EnableMCP            bool `json:"enable_mcp,omitempty"`
+	EnableEnhancedMemory bool `json:"enable_enhanced_memory,omitempty"`
+	EnableObservability  bool `json:"enable_observability,omitempty"`
 }
 
 // BaseAgent 提供可复用的状态管理、记忆、工具与 LLM 能力
@@ -138,15 +138,15 @@ type BaseAgent struct {
 	// 上下文工程相关
 	contextManager       ContextManager // 上下文管理器（可选）
 	contextEngineEnabled bool           // 是否启用上下文工程
-	
+
 	// 2025 新增功能（可选启用）
-	reflectionExecutor   interface{} // *ReflectionExecutor - 避免循环依赖
-	toolSelector         interface{} // *DynamicToolSelector
-	promptEnhancer       interface{} // *PromptEnhancer
-	skillManager         interface{} // *SkillManager
-	mcpServer            interface{} // *MCPServer
-	enhancedMemory       interface{} // *EnhancedMemorySystem
-	observabilitySystem  interface{} // *ObservabilitySystem
+	reflectionExecutor  interface{} // *ReflectionExecutor - 避免循环依赖
+	toolSelector        interface{} // *DynamicToolSelector
+	promptEnhancer      interface{} // *PromptEnhancer
+	skillManager        interface{} // *SkillManager
+	mcpServer           interface{} // *MCPServer
+	enhancedMemory      interface{} // *EnhancedMemorySystem
+	observabilitySystem interface{} // *ObservabilitySystem
 }
 
 // NewBaseAgent 创建基础 Agent
@@ -846,11 +846,11 @@ func (b *BaseAgent) Execute(ctx context.Context, input *Input) (*Output, error) 
 
 	// 8. 返回结果
 	return &Output{
-		TraceID:      input.TraceID,
-		Content:      resp.Choices[0].Message.Content,
+		TraceID: input.TraceID,
+		Content: resp.Choices[0].Message.Content,
 		Metadata: map[string]any{
-			"model":       resp.Model,
-			"provider":    resp.Provider,
+			"model":    resp.Model,
+			"provider": resp.Provider,
 		},
 		TokensUsed:   resp.Usage.TotalTokens,
 		Duration:     duration,
