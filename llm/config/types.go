@@ -6,20 +6,20 @@ import (
 
 // FallbackPolicy 降级策略配置
 type FallbackPolicy struct {
-	ID              string       `json:"id" yaml:"id"`
-	Name            string       `json:"name" yaml:"name"`
-	Priority        int          `json:"priority" yaml:"priority"`
-	TriggerProvider string       `json:"trigger_provider,omitempty" yaml:"trigger_provider,omitempty"`
-	TriggerModel    string       `json:"trigger_model,omitempty" yaml:"trigger_model,omitempty"`
-	TriggerErrors   []string     `json:"trigger_errors" yaml:"trigger_errors"`
-	FallbackType    FallbackType `json:"fallback_type" yaml:"fallback_type"`
-	FallbackTarget  string       `json:"fallback_target,omitempty" yaml:"fallback_target,omitempty"`
-	FallbackTemplate string      `json:"fallback_template,omitempty" yaml:"fallback_template,omitempty"`
-	RetryMax        int          `json:"retry_max" yaml:"retry_max"`
-	RetryDelayMs    int          `json:"retry_delay_ms" yaml:"retry_delay_ms"`
-	RetryMultiplier float64      `json:"retry_multiplier" yaml:"retry_multiplier"`
-	Enabled         bool         `json:"enabled" yaml:"enabled"`
-	Version         int          `json:"version" yaml:"version"`
+	ID               string       `json:"id" yaml:"id"`
+	Name             string       `json:"name" yaml:"name"`
+	Priority         int          `json:"priority" yaml:"priority"`
+	TriggerProvider  string       `json:"trigger_provider,omitempty" yaml:"trigger_provider,omitempty"`
+	TriggerModel     string       `json:"trigger_model,omitempty" yaml:"trigger_model,omitempty"`
+	TriggerErrors    []string     `json:"trigger_errors" yaml:"trigger_errors"`
+	FallbackType     FallbackType `json:"fallback_type" yaml:"fallback_type"`
+	FallbackTarget   string       `json:"fallback_target,omitempty" yaml:"fallback_target,omitempty"`
+	FallbackTemplate string       `json:"fallback_template,omitempty" yaml:"fallback_template,omitempty"`
+	RetryMax         int          `json:"retry_max" yaml:"retry_max"`
+	RetryDelayMs     int          `json:"retry_delay_ms" yaml:"retry_delay_ms"`
+	RetryMultiplier  float64      `json:"retry_multiplier" yaml:"retry_multiplier"`
+	Enabled          bool         `json:"enabled" yaml:"enabled"`
+	Version          int          `json:"version" yaml:"version"`
 }
 
 type FallbackType string

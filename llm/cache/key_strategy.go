@@ -1,7 +1,7 @@
 package cache
 
 import (
-	llmpkg "github.com/yourusername/agentflow/llm"
+	llmpkg "github.com/BaSui01/agentflow/llm"
 )
 
 // KeyStrategy 缓存键生成策略接口
