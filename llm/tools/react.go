@@ -188,6 +188,17 @@ func (r *ReActExecutor) ExecuteStream(ctx context.Context, req *llmpkg.ChatReque
 		messages := append([]llmpkg.Message{}, req.Messages...)
 
 		for i := 0; i < r.config.MaxIterations; i++ {
+			// 检查上下文取消
+			select {
+			case <-ctx.Done():
+				eventCh <- ReActStreamEvent{
+					Type:  "error",
+					Error: fmt.Sprintf("context cancelled: %v", ctx.Err()),
+				}
+				return
+			default:
+			}
+
 			// 发送迭代开始事件
 			eventCh <- ReActStreamEvent{
 				Type:      "iteration_start",
@@ -225,6 +236,17 @@ func (r *ReActExecutor) ExecuteStream(ctx context.Context, req *llmpkg.ChatReque
 			)
 
 			for chunk := range streamCh {
+				// 检查上下文取消
+				select {
+				case <-ctx.Done():
+					eventCh <- ReActStreamEvent{
+						Type:  "error",
+						Error: fmt.Sprintf("context cancelled: %v", ctx.Err()),
+					}
+					return
+				default:
+				}
+
 				// 转发 chunk 给用户
 				eventCh <- ReActStreamEvent{
 					Type:  "llm_chunk",

@@ -1,6 +1,7 @@
 package context
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"sort"
@@ -80,6 +81,61 @@ func NewDefaultContextManager(tokenizer Tokenizer, logger *zap.Logger) *DefaultC
 		tokenizer: tokenizer,
 		logger:    logger,
 	}
+}
+
+// NewDefaultContextManagerWithCompression 创建带压缩功能的上下文管理器
+func NewDefaultContextManagerWithCompression(
+	tokenizer Tokenizer,
+	compressor *SummaryCompressor,
+	logger *zap.Logger,
+) *EnhancedContextManager {
+	return &EnhancedContextManager{
+		DefaultContextManager: &DefaultContextManager{
+			tokenizer: tokenizer,
+			logger:    logger,
+		},
+		compressor: compressor,
+		logger:     logger,
+	}
+}
+
+// EnhancedContextManager 增强的上下文管理器（支持摘要压缩）
+type EnhancedContextManager struct {
+	*DefaultContextManager
+	compressor *SummaryCompressor
+	logger     *zap.Logger
+}
+
+// TrimMessages 裁剪消息（支持自动压缩）
+func (m *EnhancedContextManager) TrimMessages(msgs []Message, maxTokens int) ([]Message, error) {
+	// 先尝试压缩
+	if m.compressor != nil {
+		compressed, err := m.compressor.CompressIfNeeded(context.Background(), msgs, m.tokenizer)
+		if err != nil {
+			m.logger.Warn("compression failed, falling back to pruning", zap.Error(err))
+		} else {
+			msgs = compressed
+		}
+	}
+
+	// 如果压缩后仍超过限制，使用裁剪策略
+	return m.DefaultContextManager.TrimMessages(msgs, maxTokens)
+}
+
+// PruneByStrategy 按策略裁剪（支持自动压缩）
+func (m *EnhancedContextManager) PruneByStrategy(msgs []Message, maxTokens int, strategy PruneStrategy) ([]Message, error) {
+	// 先尝试压缩
+	if m.compressor != nil {
+		compressed, err := m.compressor.CompressIfNeeded(context.Background(), msgs, m.tokenizer)
+		if err != nil {
+			m.logger.Warn("compression failed, falling back to pruning", zap.Error(err))
+		} else {
+			msgs = compressed
+		}
+	}
+
+	// 如果压缩后仍超过限制，使用裁剪策略
+	return m.DefaultContextManager.PruneByStrategy(msgs, maxTokens, strategy)
 }
 
 func (m *DefaultContextManager) EstimateTokens(msgs []Message) int {

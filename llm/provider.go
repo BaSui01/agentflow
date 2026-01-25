@@ -81,6 +81,12 @@ type ChatRequest struct {
 	Timeout     time.Duration     `json:"timeout,omitempty"`
 	Metadata    map[string]string `json:"metadata,omitempty"`
 	Tags        []string          `json:"tags,omitempty"` // 路由策略：标签匹配
+	
+	// 2026 新增字段
+	ReasoningMode      string           `json:"reasoning_mode,omitempty"`       // fast/extended/thinking
+	ThoughtSignatures  []string         `json:"thought_signatures,omitempty"`   // Gemini 3/OpenAI
+	MediaResolution    *MediaResolution `json:"media_resolution,omitempty"`     // Gemini 3
+	PreviousResponseID string           `json:"previous_response_id,omitempty"` // OpenAI Responses API
 }
 
 type ChatUsage struct {
@@ -103,6 +109,10 @@ type ChatResponse struct {
 	Choices   []ChatChoice `json:"choices"`
 	Usage     ChatUsage    `json:"usage,omitempty"`
 	CreatedAt time.Time    `json:"created_at,omitempty"`
+	
+	// 2026 新增字段
+	ThoughtSignatures []string `json:"thought_signatures,omitempty"` // Gemini 3/OpenAI
+	ResponseID        string   `json:"response_id,omitempty"`        // OpenAI Responses API
 }
 
 type StreamChunk struct {
