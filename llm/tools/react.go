@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"strings"
 
-	llmpkg "github.com/yourusername/agentflow/llm"
+	llmpkg "github.com/BaSui01/agentflow/llm"
 	"go.uber.org/zap"
 )
 
@@ -126,49 +126,49 @@ func (r *ReActExecutor) Execute(ctx context.Context, req *llmpkg.ChatRequest) (*
 // ExecuteWithTrace 执行 ReAct 循环并返回完整追踪
 func (r *ReActExecutor) ExecuteWithTrace(ctx context.Context, req *llmpkg.ChatRequest) (*llmpkg.ChatResponse, *ReActTrace, error) {
 	resp, steps, err := r.Execute(ctx, req)
-	
+
 	trace := &ReActTrace{
 		TraceID:    fmt.Sprintf("react-%d", len(steps)),
 		Steps:      steps,
 		TotalSteps: len(steps),
 		Success:    err == nil,
 	}
-	
+
 	// 计算总 token 数
 	for _, step := range steps {
 		trace.TotalTokens += step.TokensUsed
 	}
-	
+
 	if resp != nil && len(resp.Choices) > 0 {
 		trace.FinalAnswer = resp.Choices[0].Message.Content
 	}
-	
+
 	if err != nil {
 		trace.ErrorMessage = err.Error()
 	}
-	
+
 	return resp, trace, err
 }
 
 // ReActStep 表示 ReAct 循环的一个步骤（Thought → Action → Observation）
 type ReActStep struct {
-	StepNumber  int                `json:"step_number"`
-	Thought     string             `json:"thought,omitempty"`      // 思考过程（从 LLM 响应中提取）
-	Actions     []llmpkg.ToolCall  `json:"actions,omitempty"`      // 行动（工具调用）
+	StepNumber   int               `json:"step_number"`
+	Thought      string            `json:"thought,omitempty"`      // 思考过程（从 LLM 响应中提取）
+	Actions      []llmpkg.ToolCall `json:"actions,omitempty"`      // 行动（工具调用）
 	Observations []ToolResult      `json:"observations,omitempty"` // 观察结果
-	Timestamp   string             `json:"timestamp"`
-	TokensUsed  int                `json:"tokens_used,omitempty"`
+	Timestamp    string            `json:"timestamp"`
+	TokensUsed   int               `json:"tokens_used,omitempty"`
 }
 
 // ReActTrace 表示完整的 ReAct 执行追踪
 type ReActTrace struct {
-	TraceID      string        `json:"trace_id"`
-	Steps        []ReActStep   `json:"steps"`
-	TotalTokens  int           `json:"total_tokens"`
-	TotalSteps   int           `json:"total_steps"`
-	Success      bool          `json:"success"`
-	FinalAnswer  string        `json:"final_answer,omitempty"`
-	ErrorMessage string        `json:"error_message,omitempty"`
+	TraceID      string      `json:"trace_id"`
+	Steps        []ReActStep `json:"steps"`
+	TotalTokens  int         `json:"total_tokens"`
+	TotalSteps   int         `json:"total_steps"`
+	Success      bool        `json:"success"`
+	FinalAnswer  string      `json:"final_answer,omitempty"`
+	ErrorMessage string      `json:"error_message,omitempty"`
 }
 
 // LLMCallInfo 记录 LLM 调用的详细信息（保留用于向后兼容）
