@@ -326,11 +326,29 @@ agentflow/
 
 ## 🔧 支持的Provider
 
-| Provider | 状态 | 功能 |
-|----------|------|------|
-| OpenAI | ✅ 完整支持 | Chat、Stream、Function Calling |
-| Claude | ✅ 完整支持 | Chat、Stream、Function Calling |
-| Gemini | 🚧 开发中 | - |
+| Provider | 状态 | 功能 | API 版本 |
+|----------|------|------|----------|
+| OpenAI | ✅ 完整支持 | Chat Completions + Responses API (2025), Stream, Function Calling | v1/chat/completions, v1/responses |
+| Claude | ✅ 完整支持 | Messages API, Stream, Function Calling, Prompt Caching | v1/messages |
+| Gemini | ✅ 完整支持 | Generate Content API, Stream, Function Calling, 多模态 | v1beta/models/{model}:generateContent |
+
+### API 端点说明
+
+**OpenAI**:
+- 传统端点: `POST /v1/chat/completions`
+- 新端点 (2025): `POST /v1/responses` - 支持有状态对话、自动上下文管理
+- 配置: 设置 `UseResponsesAPI: true` 启用新 API
+
+**Claude (Anthropic)**:
+- 端点: `POST /v1/messages`
+- 认证: `x-api-key` header
+- 特性: 原生工具调用、提示缓存、结构化输出
+
+**Gemini (Google)**:
+- 端点: `POST /v1beta/models/{model}:generateContent`
+- 流式: `POST /v1beta/models/{model}:streamGenerateContent`
+- 认证: `x-goog-api-key` header
+- 特性: 多模态、长上下文 (1M tokens)、原生工具调用
 
 ## 📖 文档
 
@@ -370,11 +388,11 @@ agentflow/
 
 ## 🔧 支持的Provider
 
-| Provider | 状态 | 功能 |
-|----------|------|------|
-| OpenAI | ✅ 完整支持 | Chat、Stream、Function Calling |
-| Claude | ✅ 完整支持 | Chat、Stream、Function Calling |
-| Gemini | 🚧 开发中 | - |
+| Provider | 状态 | 功能 | API 版本 |
+|----------|------|------|----------|
+| OpenAI | ✅ 完整支持 | Chat Completions + Responses API (2025), Stream, Function Calling | v1/chat/completions, v1/responses |
+| Claude | ✅ 完整支持 | Messages API, Stream, Function Calling, Prompt Caching | v1/messages |
+| Gemini | ✅ 完整支持 | Generate Content API, Stream, Function Calling, 多模态 | v1beta/models/{model}:generateContent |
 
 ## 📊 性能指标
 
