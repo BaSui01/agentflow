@@ -14,50 +14,50 @@ import (
 type EnhancedMemorySystem struct {
 	// 短期记忆（Redis/内存）- 最近的交互
 	shortTerm MemoryStore
-	
+
 	// 工作记忆（内存）- 当前任务的上下文
 	working MemoryStore
-	
+
 	// 长期记忆（向量数据库）- 持久化的重要信息
 	longTerm VectorStore
-	
+
 	// 情节记忆（时序数据库）- 时间序列事件
 	episodic EpisodicStore
-	
+
 	// 语义记忆（知识图谱）- 结构化知识
 	semantic KnowledgeGraph
-	
+
 	// 记忆整合器
 	consolidator *MemoryConsolidator
-	
+
 	// 配置
 	config EnhancedMemoryConfig
-	
+
 	logger *zap.Logger
 }
 
 // EnhancedMemoryConfig 增强记忆配置
 type EnhancedMemoryConfig struct {
 	// 短期记忆配置
-	ShortTermTTL      time.Duration `json:"short_term_ttl"`       // 短期记忆 TTL
-	ShortTermMaxSize  int           `json:"short_term_max_size"`  // 最大条目数
-	
+	ShortTermTTL     time.Duration `json:"short_term_ttl"`      // 短期记忆 TTL
+	ShortTermMaxSize int           `json:"short_term_max_size"` // 最大条目数
+
 	// 工作记忆配置
-	WorkingMemorySize int           `json:"working_memory_size"`  // 工作记忆容量
-	
+	WorkingMemorySize int `json:"working_memory_size"` // 工作记忆容量
+
 	// 长期记忆配置
-	LongTermEnabled   bool          `json:"long_term_enabled"`    // 是否启用长期记忆
-	VectorDimension   int           `json:"vector_dimension"`     // 向量维度
-	
+	LongTermEnabled bool `json:"long_term_enabled"` // 是否启用长期记忆
+	VectorDimension int  `json:"vector_dimension"`  // 向量维度
+
 	// 情节记忆配置
-	EpisodicEnabled   bool          `json:"episodic_enabled"`     // 是否启用情节记忆
-	EpisodicRetention time.Duration `json:"episodic_retention"`   // 情节记忆保留时间
-	
+	EpisodicEnabled   bool          `json:"episodic_enabled"`   // 是否启用情节记忆
+	EpisodicRetention time.Duration `json:"episodic_retention"` // 情节记忆保留时间
+
 	// 语义记忆配置
-	SemanticEnabled   bool          `json:"semantic_enabled"`     // 是否启用语义记忆
-	
+	SemanticEnabled bool `json:"semantic_enabled"` // 是否启用语义记忆
+
 	// 记忆整合配置
-	ConsolidationEnabled bool          `json:"consolidation_enabled"` // 是否启用记忆整合
+	ConsolidationEnabled  bool          `json:"consolidation_enabled"`  // 是否启用记忆整合
 	ConsolidationInterval time.Duration `json:"consolidation_interval"` // 整合间隔
 }
 
@@ -90,13 +90,13 @@ type MemoryStore interface {
 type VectorStore interface {
 	// 存储向量
 	Store(ctx context.Context, id string, vector []float64, metadata map[string]interface{}) error
-	
+
 	// 语义搜索
 	Search(ctx context.Context, query []float64, topK int, filter map[string]interface{}) ([]VectorSearchResult, error)
-	
+
 	// 删除向量
 	Delete(ctx context.Context, id string) error
-	
+
 	// 批量操作
 	BatchStore(ctx context.Context, items []VectorItem) error
 }
@@ -104,7 +104,7 @@ type VectorStore interface {
 // VectorSearchResult 向量搜索结果
 type VectorSearchResult struct {
 	ID       string                 `json:"id"`
-	Score    float64                `json:"score"`    // 相似度分数
+	Score    float64                `json:"score"` // 相似度分数
 	Metadata map[string]interface{} `json:"metadata"`
 }
 
@@ -119,10 +119,10 @@ type VectorItem struct {
 type EpisodicStore interface {
 	// 记录事件
 	RecordEvent(ctx context.Context, event *EpisodicEvent) error
-	
+
 	// 查询事件
 	QueryEvents(ctx context.Context, query EpisodicQuery) ([]EpisodicEvent, error)
-	
+
 	// 获取时间线
 	GetTimeline(ctx context.Context, agentID string, start, end time.Time) ([]EpisodicEvent, error)
 }
@@ -131,11 +131,11 @@ type EpisodicStore interface {
 type EpisodicEvent struct {
 	ID        string                 `json:"id"`
 	AgentID   string                 `json:"agent_id"`
-	Type      string                 `json:"type"`      // 事件类型
-	Content   string                 `json:"content"`   // 事件内容
-	Context   map[string]interface{} `json:"context"`   // 上下文
+	Type      string                 `json:"type"`    // 事件类型
+	Content   string                 `json:"content"` // 事件内容
+	Context   map[string]interface{} `json:"context"` // 上下文
 	Timestamp time.Time              `json:"timestamp"`
-	Duration  time.Duration          `json:"duration"`  // 事件持续时间
+	Duration  time.Duration          `json:"duration"` // 事件持续时间
 }
 
 // EpisodicQuery 情节查询
@@ -151,16 +151,16 @@ type EpisodicQuery struct {
 type KnowledgeGraph interface {
 	// 添加实体
 	AddEntity(ctx context.Context, entity *Entity) error
-	
+
 	// 添加关系
 	AddRelation(ctx context.Context, relation *Relation) error
-	
+
 	// 查询实体
 	QueryEntity(ctx context.Context, id string) (*Entity, error)
-	
+
 	// 查询关系
 	QueryRelations(ctx context.Context, entityID string, relationType string) ([]Relation, error)
-	
+
 	// 路径查询
 	FindPath(ctx context.Context, fromID, toID string, maxDepth int) ([][]string, error)
 }
@@ -189,15 +189,15 @@ type Relation struct {
 // MemoryConsolidator 记忆整合器
 type MemoryConsolidator struct {
 	system *EnhancedMemorySystem
-	
+
 	// 整合策略
 	strategies []ConsolidationStrategy
-	
+
 	// 运行状态
 	running bool
 	stopCh  chan struct{}
 	mu      sync.Mutex
-	
+
 	logger *zap.Logger
 }
 
@@ -205,7 +205,7 @@ type MemoryConsolidator struct {
 type ConsolidationStrategy interface {
 	// 判断是否应该整合
 	ShouldConsolidate(ctx context.Context, memory interface{}) bool
-	
+
 	// 执行整合
 	Consolidate(ctx context.Context, memories []interface{}) error
 }
@@ -249,7 +249,7 @@ func (m *EnhancedMemorySystem) SaveShortTerm(ctx context.Context, agentID string
 	}
 
 	key := fmt.Sprintf("short_term:%s:%d", agentID, time.Now().UnixNano())
-	
+
 	memory := map[string]interface{}{
 		"content":   content,
 		"metadata":  metadata,
@@ -276,7 +276,7 @@ func (m *EnhancedMemorySystem) SaveWorking(ctx context.Context, agentID string, 
 	}
 
 	key := fmt.Sprintf("working:%s:%d", agentID, time.Now().UnixNano())
-	
+
 	memory := map[string]interface{}{
 		"content":   content,
 		"metadata":  metadata,
@@ -312,7 +312,7 @@ func (m *EnhancedMemorySystem) SaveLongTerm(ctx context.Context, agentID string,
 	}
 
 	id := fmt.Sprintf("long_term:%s:%d", agentID, time.Now().UnixNano())
-	
+
 	if metadata == nil {
 		metadata = make(map[string]interface{})
 	}

@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/yourusername/agentflow/agent"
+	"github.com/BaSui01/agentflow/agent"
 	"go.uber.org/zap"
 )
 
@@ -14,13 +14,13 @@ import (
 type ObservabilitySystem struct {
 	// 指标收集器
 	metricsCollector *MetricsCollector
-	
+
 	// 追踪器
 	tracer *Tracer
-	
+
 	// 评估器
 	evaluator *Evaluator
-	
+
 	// 日志器
 	logger *zap.Logger
 }
@@ -35,38 +35,38 @@ type MetricsCollector struct {
 // AgentMetrics Agent 指标
 type AgentMetrics struct {
 	AgentID string
-	
+
 	// 性能指标
-	TotalTasks       int64
-	SuccessfulTasks  int64
-	FailedTasks      int64
-	TaskSuccessRate  float64
-	AvgLatency       time.Duration
-	P50Latency       time.Duration
-	P95Latency       time.Duration
-	P99Latency       time.Duration
-	
+	TotalTasks      int64
+	SuccessfulTasks int64
+	FailedTasks     int64
+	TaskSuccessRate float64
+	AvgLatency      time.Duration
+	P50Latency      time.Duration
+	P95Latency      time.Duration
+	P99Latency      time.Duration
+
 	// Token 指标
 	TotalTokens      int64
 	PromptTokens     int64
 	CompletionTokens int64
 	TokenEfficiency  float64 // tokens per task
-	
+
 	// 质量指标
 	AvgOutputQuality float64
 	HumanSimilarity  float64
-	
+
 	// 成本指标
-	TotalCost        float64
-	CostPerTask      float64
-	
+	TotalCost   float64
+	CostPerTask float64
+
 	// 时间统计
-	FirstTaskAt      time.Time
-	LastTaskAt       time.Time
-	
+	FirstTaskAt time.Time
+	LastTaskAt  time.Time
+
 	// 详细记录
-	LatencyHistory   []time.Duration
-	QualityHistory   []float64
+	LatencyHistory []time.Duration
+	QualityHistory []float64
 }
 
 // Tracer 追踪器
@@ -83,14 +83,14 @@ type Trace struct {
 	StartTime time.Time
 	EndTime   time.Time
 	Duration  time.Duration
-	
+
 	// 执行步骤
 	Spans []*Span
-	
+
 	// 状态
 	Status string
 	Error  error
-	
+
 	// 元数据
 	Metadata map[string]interface{}
 }
@@ -102,21 +102,21 @@ type Span struct {
 	StartTime time.Time
 	EndTime   time.Time
 	Duration  time.Duration
-	
+
 	// 父 Span
 	ParentSpanID string
-	
+
 	// 属性
 	Attributes map[string]interface{}
-	
+
 	// 事件
 	Events []SpanEvent
 }
 
 // SpanEvent Span 事件
 type SpanEvent struct {
-	Name      string
-	Timestamp time.Time
+	Name       string
+	Timestamp  time.Time
 	Attributes map[string]interface{}
 }
 
@@ -124,10 +124,10 @@ type SpanEvent struct {
 type Evaluator struct {
 	// 评估策略
 	strategies []EvaluationStrategy
-	
+
 	// 基准数据集
 	benchmarks map[string]*Benchmark
-	
+
 	logger *zap.Logger
 }
 
@@ -162,15 +162,15 @@ type BenchmarkCase struct {
 
 // BenchmarkResult 基准测试结果
 type BenchmarkResult struct {
-	AgentID       string
-	TotalCases    int
-	PassedCases   int
-	FailedCases   int
-	SuccessRate   float64
-	AvgScore      float64
-	AvgLatency    time.Duration
-	TotalCost     float64
-	Timestamp     time.Time
+	AgentID     string
+	TotalCases  int
+	PassedCases int
+	FailedCases int
+	SuccessRate float64
+	AvgScore    float64
+	AvgLatency  time.Duration
+	TotalCost   float64
+	Timestamp   time.Time
 }
 
 // NewObservabilitySystem 创建可观测性系统

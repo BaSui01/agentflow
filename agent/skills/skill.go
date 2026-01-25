@@ -8,39 +8,39 @@ import (
 	"strings"
 	"time"
 
-	"github.com/yourusername/agentflow/llm"
+	"github.com/BaSui01/agentflow/llm"
 )
 
 // Skill 代表一个可加载的 Agent 技能
 // 基于 Anthropic Agent Skills 标准设计
 type Skill struct {
-	ID          string                 `json:"id"`
-	Name        string                 `json:"name"`
-	Version     string                 `json:"version"`
-	Description string                 `json:"description"`
-	Category    string                 `json:"category,omitempty"` // 技能分类
-	Tags        []string               `json:"tags,omitempty"`     // 标签
-	
+	ID          string   `json:"id"`
+	Name        string   `json:"name"`
+	Version     string   `json:"version"`
+	Description string   `json:"description"`
+	Category    string   `json:"category,omitempty"` // 技能分类
+	Tags        []string `json:"tags,omitempty"`     // 标签
+
 	// 核心内容
 	Instructions string                 `json:"instructions"` // 技能指令
 	Tools        []string               `json:"tools"`        // 需要的工具列表
 	Resources    map[string]interface{} `json:"resources"`    // 资源（文件、数据等）
 	Examples     []SkillExample         `json:"examples"`     // 使用示例
-	
+
 	// 加载策略
-	LazyLoad     bool                   `json:"lazy_load"`      // 是否延迟加载
-	Priority     int                    `json:"priority"`       // 优先级（用于冲突解决）
-	Dependencies []string               `json:"dependencies"`   // 依赖的其他技能
-	
+	LazyLoad     bool     `json:"lazy_load"`    // 是否延迟加载
+	Priority     int      `json:"priority"`     // 优先级（用于冲突解决）
+	Dependencies []string `json:"dependencies"` // 依赖的其他技能
+
 	// 元数据
-	Author       string                 `json:"author,omitempty"`
-	License      string                 `json:"license,omitempty"`
-	CreatedAt    time.Time              `json:"created_at"`
-	UpdatedAt    time.Time              `json:"updated_at"`
-	
+	Author    string    `json:"author,omitempty"`
+	License   string    `json:"license,omitempty"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+
 	// 运行时状态
-	Loaded       bool                   `json:"-"` // 是否已加载
-	LoadedAt     time.Time              `json:"-"` // 加载时间
+	Loaded   bool      `json:"-"` // 是否已加载
+	LoadedAt time.Time `json:"-"` // 加载时间
 }
 
 // SkillExample 技能使用示例
@@ -70,7 +70,7 @@ type SkillManifest struct {
 // LoadSkillFromDirectory 从目录加载技能
 func LoadSkillFromDirectory(dir string) (*Skill, error) {
 	manifestPath := filepath.Join(dir, "SKILL.json")
-	
+
 	data, err := os.ReadFile(manifestPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read skill manifest: %w", err)
@@ -82,7 +82,7 @@ func LoadSkillFromDirectory(dir string) (*Skill, error) {
 	}
 
 	skill := &manifest.Skill
-	
+
 	// 加载关联资源
 	if err := loadSkillResources(dir, skill, manifest.Files); err != nil {
 		return nil, fmt.Errorf("failed to load skill resources: %w", err)
@@ -102,7 +102,7 @@ func loadSkillResources(dir string, skill *Skill, files []string) error {
 
 	for _, file := range files {
 		filePath := filepath.Join(dir, file)
-		
+
 		// 检查文件是否存在
 		if _, err := os.Stat(filePath); os.IsNotExist(err) {
 			continue
@@ -199,10 +199,10 @@ func (s *Skill) ToToolSchema() llm.ToolSchema {
 		},
 		"required": []string{"input"},
 	}
-	
+
 	// 转换为 json.RawMessage
 	parametersJSON, _ := json.Marshal(parametersMap)
-	
+
 	return llm.ToolSchema{
 		Name:        s.ID,
 		Description: s.Description,
@@ -213,7 +213,7 @@ func (s *Skill) ToToolSchema() llm.ToolSchema {
 // RenderInstructions 渲染技能指令（支持变量替换）
 func (s *Skill) RenderInstructions(vars map[string]string) string {
 	instructions := s.Instructions
-	
+
 	if vars == nil {
 		return instructions
 	}
@@ -289,7 +289,7 @@ func (s *Skill) MatchesTask(task string) float64 {
 	// 检查描述匹配
 	descWords := strings.Fields(strings.ToLower(s.Description))
 	taskWords := strings.Fields(task)
-	
+
 	matchCount := 0
 	for _, tw := range taskWords {
 		for _, dw := range descWords {
@@ -299,7 +299,7 @@ func (s *Skill) MatchesTask(task string) float64 {
 			}
 		}
 	}
-	
+
 	if len(taskWords) > 0 {
 		score += 0.4 * float64(matchCount) / float64(len(taskWords))
 	}
@@ -322,13 +322,13 @@ func (s *Skill) MatchesTask(task string) float64 {
 // Clone 克隆技能（用于隔离修改）
 func (s *Skill) Clone() *Skill {
 	clone := *s
-	
+
 	// 深拷贝切片和 map
 	clone.Tags = append([]string{}, s.Tags...)
 	clone.Tools = append([]string{}, s.Tools...)
 	clone.Dependencies = append([]string{}, s.Dependencies...)
 	clone.Examples = append([]SkillExample{}, s.Examples...)
-	
+
 	clone.Resources = make(map[string]interface{})
 	for k, v := range s.Resources {
 		clone.Resources[k] = v

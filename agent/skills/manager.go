@@ -16,20 +16,20 @@ import (
 type SkillManager interface {
 	// 技能发现
 	DiscoverSkills(ctx context.Context, task string) ([]*Skill, error)
-	
+
 	// 技能加载
 	LoadSkill(ctx context.Context, skillID string) (*Skill, error)
 	UnloadSkill(ctx context.Context, skillID string) error
-	
+
 	// 技能查询
 	GetSkill(skillID string) (*Skill, bool)
 	ListSkills() []*SkillMetadata
 	SearchSkills(query string) []*SkillMetadata
-	
+
 	// 技能管理
 	RegisterSkill(skill *Skill) error
 	UnregisterSkill(skillID string) error
-	
+
 	// 技能仓库
 	ScanDirectory(dir string) error
 	RefreshIndex() error
@@ -40,26 +40,26 @@ type DefaultSkillManager struct {
 	// 已加载的技能
 	skills map[string]*Skill
 	mu     sync.RWMutex
-	
+
 	// 技能索引（用于快速查找）
 	index map[string]*SkillMetadata
-	
+
 	// 技能目录
 	directories []string
-	
+
 	// 配置
 	config SkillManagerConfig
-	
+
 	logger *zap.Logger
 }
 
 // SkillManagerConfig 技能管理器配置
 type SkillManagerConfig struct {
-	AutoLoad         bool    `json:"auto_load"`          // 自动加载技能
-	MaxLoadedSkills  int     `json:"max_loaded_skills"`  // 最大加载技能数
-	MinMatchScore    float64 `json:"min_match_score"`    // 最低匹配分数
-	EnableCaching    bool    `json:"enable_caching"`     // 启用缓存
-	CacheTTL         int     `json:"cache_ttl"`          // 缓存 TTL（秒）
+	AutoLoad        bool    `json:"auto_load"`         // 自动加载技能
+	MaxLoadedSkills int     `json:"max_loaded_skills"` // 最大加载技能数
+	MinMatchScore   float64 `json:"min_match_score"`   // 最低匹配分数
+	EnableCaching   bool    `json:"enable_caching"`    // 启用缓存
+	CacheTTL        int     `json:"cache_ttl"`         // 缓存 TTL（秒）
 }
 
 // DefaultSkillManagerConfig 默认配置
@@ -94,7 +94,7 @@ func (m *DefaultSkillManager) DiscoverSkills(ctx context.Context, task string) (
 
 	// 1. 搜索匹配的技能
 	metadata := m.SearchSkills(task)
-	
+
 	if len(metadata) == 0 {
 		m.logger.Info("no matching skills found", zap.String("task", task))
 		return []*Skill{}, nil
@@ -105,9 +105,9 @@ func (m *DefaultSkillManager) DiscoverSkills(ctx context.Context, task string) (
 		skill *Skill
 		score float64
 	}
-	
+
 	scored := []scoredSkill{}
-	
+
 	for _, meta := range metadata {
 		skill, err := m.LoadSkill(ctx, meta.ID)
 		if err != nil {
@@ -219,7 +219,7 @@ func (m *DefaultSkillManager) UnloadSkill(ctx context.Context, skillID string) e
 	}
 
 	delete(m.skills, skillID)
-	
+
 	m.logger.Info("skill unloaded", zap.String("skill_id", skillID))
 
 	return nil
@@ -436,6 +436,6 @@ func (m *DefaultSkillManager) ClearCache() {
 	defer m.mu.Unlock()
 
 	m.skills = make(map[string]*Skill)
-	
+
 	m.logger.Info("skill cache cleared")
 }

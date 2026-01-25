@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/yourusername/agentflow/agent"
+	"github.com/BaSui01/agentflow/agent"
 	"go.uber.org/zap"
 )
 
@@ -14,37 +14,37 @@ import (
 type CollaborationPattern string
 
 const (
-	PatternDebate      CollaborationPattern = "debate"       // 辩论模式
-	PatternConsensus   CollaborationPattern = "consensus"    // 共识模式
-	PatternPipeline    CollaborationPattern = "pipeline"     // 流水线模式
-	PatternBroadcast   CollaborationPattern = "broadcast"    // 广播模式
-	PatternNetwork     CollaborationPattern = "network"      // 网络模式
+	PatternDebate    CollaborationPattern = "debate"    // 辩论模式
+	PatternConsensus CollaborationPattern = "consensus" // 共识模式
+	PatternPipeline  CollaborationPattern = "pipeline"  // 流水线模式
+	PatternBroadcast CollaborationPattern = "broadcast" // 广播模式
+	PatternNetwork   CollaborationPattern = "network"   // 网络模式
 )
 
 // MultiAgentSystem 多 Agent 系统
 type MultiAgentSystem struct {
 	agents  map[string]agent.Agent
 	pattern CollaborationPattern
-	
+
 	// 通信
 	messageHub *MessageHub
-	
+
 	// 协调
 	coordinator Coordinator
-	
+
 	// 配置
 	config MultiAgentConfig
-	
+
 	logger *zap.Logger
 }
 
 // MultiAgentConfig 多 Agent 配置
 type MultiAgentConfig struct {
-	Pattern           CollaborationPattern `json:"pattern"`
-	MaxRounds         int                  `json:"max_rounds"`          // 最大轮次
-	ConsensusThreshold float64             `json:"consensus_threshold"` // 共识阈值
-	Timeout           time.Duration        `json:"timeout"`
-	EnableVoting      bool                 `json:"enable_voting"`
+	Pattern            CollaborationPattern `json:"pattern"`
+	MaxRounds          int                  `json:"max_rounds"`          // 最大轮次
+	ConsensusThreshold float64              `json:"consensus_threshold"` // 共识阈值
+	Timeout            time.Duration        `json:"timeout"`
+	EnableVoting       bool                 `json:"enable_voting"`
 }
 
 // DefaultMultiAgentConfig 默认配置
@@ -242,7 +242,7 @@ func (c *DebateCoordinator) Coordinate(ctx context.Context, agents map[string]ag
 
 	// 1. 每个 Agent 提出初始观点
 	proposals := make(map[string]*agent.Output)
-	
+
 	for id, a := range agents {
 		output, err := a.Execute(ctx, input)
 		if err != nil {
@@ -263,13 +263,13 @@ func (c *DebateCoordinator) Coordinate(ctx context.Context, agents map[string]ag
 		for id, a := range agents {
 			// 构建辩论提示
 			debatePrompt := fmt.Sprintf("原始问题：%s\n\n其他观点：\n", input.Content)
-			
+
 			for otherID, proposal := range proposals {
 				if otherID != id {
 					debatePrompt += fmt.Sprintf("\nAgent %s: %s\n", otherID, proposal.Content)
 				}
 			}
-			
+
 			debatePrompt += "\n请评论这些观点并提出你的改进意见。"
 
 			debateInput := &agent.Input{
@@ -318,7 +318,7 @@ func (c *ConsensusCoordinator) Coordinate(ctx context.Context, agents map[string
 
 	// 1. 收集所有 Agent 的输出
 	outputs := make([]*agent.Output, 0, len(agents))
-	
+
 	for _, a := range agents {
 		output, err := a.Execute(ctx, input)
 		if err != nil {

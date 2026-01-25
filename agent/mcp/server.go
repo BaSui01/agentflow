@@ -11,24 +11,24 @@ import (
 // DefaultMCPServer 默认 MCP 服务器实现
 type DefaultMCPServer struct {
 	info ServerInfo
-	
+
 	// 资源存储
-	resources map[string]*Resource
+	resources   map[string]*Resource
 	resourcesMu sync.RWMutex
-	
+
 	// 工具注册
-	tools map[string]*ToolDefinition
+	tools        map[string]*ToolDefinition
 	toolHandlers map[string]ToolHandler
-	toolsMu sync.RWMutex
-	
+	toolsMu      sync.RWMutex
+
 	// 提示词模板
-	prompts map[string]*PromptTemplate
+	prompts   map[string]*PromptTemplate
 	promptsMu sync.RWMutex
-	
+
 	// 资源订阅
 	subscriptions map[string][]chan Resource
-	subsMu sync.RWMutex
-	
+	subsMu        sync.RWMutex
+
 	logger *zap.Logger
 }
 
@@ -79,7 +79,7 @@ func (s *DefaultMCPServer) RegisterResource(resource *Resource) error {
 	defer s.resourcesMu.Unlock()
 
 	s.resources[resource.URI] = resource
-	
+
 	s.logger.Info("resource registered",
 		zap.String("uri", resource.URI),
 		zap.String("name", resource.Name),

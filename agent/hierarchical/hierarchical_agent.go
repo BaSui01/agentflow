@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/yourusername/agentflow/agent"
+	"github.com/BaSui01/agentflow/agent"
 	"go.uber.org/zap"
 )
 
@@ -14,15 +14,15 @@ import (
 // 实现 Supervisor-Worker 模式
 type HierarchicalAgent struct {
 	*agent.BaseAgent
-	
+
 	// 层次结构
 	supervisor  agent.Agent      // 监督者
 	workers     []agent.Agent    // 工作者
 	coordinator *TaskCoordinator // 任务协调器
-	
+
 	// 配置
 	config HierarchicalConfig
-	
+
 	logger *zap.Logger
 }
 
@@ -52,33 +52,33 @@ func DefaultHierarchicalConfig() HierarchicalConfig {
 type TaskCoordinator struct {
 	// 任务队列
 	taskQueue chan *Task
-	
+
 	// 工作者池
 	workers []agent.Agent
-	
+
 	// 工作者状态
 	workerStatus map[string]*WorkerStatus
 	statusMu     sync.RWMutex
-	
+
 	// 任务分配策略
 	strategy AssignmentStrategy
-	
+
 	// 配置
 	config HierarchicalConfig
-	
+
 	logger *zap.Logger
 }
 
 // Task 任务
 type Task struct {
-	ID          string
-	Type        string
-	Input       *agent.Input
-	Priority    int
-	Deadline    time.Time
+	ID           string
+	Type         string
+	Input        *agent.Input
+	Priority     int
+	Deadline     time.Time
 	Dependencies []string
-	Metadata    map[string]interface{}
-	
+	Metadata     map[string]interface{}
+
 	// 执行状态
 	Status      TaskStatus
 	AssignedTo  string
@@ -103,14 +103,14 @@ const (
 
 // WorkerStatus 工作者状态
 type WorkerStatus struct {
-	AgentID       string
-	Status        string // idle, busy, error
-	CurrentTask   *Task
+	AgentID        string
+	Status         string // idle, busy, error
+	CurrentTask    *Task
 	CompletedTasks int
-	FailedTasks   int
-	AvgDuration   time.Duration
-	LastActive    time.Time
-	Load          float64 // 0-1
+	FailedTasks    int
+	AvgDuration    time.Duration
+	LastActive     time.Time
+	Load           float64 // 0-1
 }
 
 // AssignmentStrategy 任务分配策略
@@ -162,19 +162,19 @@ func (h *HierarchicalAgent) Execute(ctx context.Context, input *agent.Input) (*a
 	// 2. 分配任务给 Workers
 	results := make([]*agent.Output, len(subtasks))
 	errors := make([]error, len(subtasks))
-	
+
 	var wg sync.WaitGroup
 	for i, subtask := range subtasks {
 		wg.Add(1)
 		go func(idx int, task *Task) {
 			defer wg.Done()
-			
+
 			result, err := h.coordinator.ExecuteTask(ctx, task)
 			results[idx] = result
 			errors[idx] = err
 		}(i, subtask)
 	}
-	
+
 	wg.Wait()
 
 	// 3. 检查错误
@@ -349,7 +349,7 @@ func (c *TaskCoordinator) ExecuteTask(ctx context.Context, task *Task) (*agent.O
 
 		// 创建带超时的上下文
 		execCtx, cancel := context.WithTimeout(ctx, c.config.TaskTimeout)
-		
+
 		output, execErr = worker.Execute(execCtx, task.Input)
 		cancel()
 
@@ -400,7 +400,7 @@ func (c *TaskCoordinator) updateWorkerStatus(workerID string, status string, tas
 		ws.Status = status
 		ws.CurrentTask = task
 		ws.LastActive = time.Now()
-		
+
 		// 更新负载
 		if status == "busy" {
 			ws.Load = 1.0
@@ -417,7 +417,7 @@ func (c *TaskCoordinator) incrementWorkerCompletions(workerID string, duration t
 
 	if ws, ok := c.workerStatus[workerID]; ok {
 		ws.CompletedTasks++
-		
+
 		// 更新平均持续时间
 		if ws.AvgDuration == 0 {
 			ws.AvgDuration = duration
@@ -468,7 +468,7 @@ func (s *RoundRobinStrategy) SelectWorker(ctx context.Context, task *Task, worke
 	for i := 0; i < len(workers); i++ {
 		idx := (s.current + i) % len(workers)
 		worker := workers[idx]
-		
+
 		if ws, ok := status[worker.ID()]; ok && ws.Status == "idle" {
 			s.current = (idx + 1) % len(workers)
 			return worker, nil
