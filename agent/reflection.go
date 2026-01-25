@@ -6,19 +6,25 @@ import (
 	"strings"
 	"time"
 
-	"github.com/yourusername/agentflow/llm"
+	"github.com/BaSui01/agentflow/llm"
 	"go.uber.org/zap"
 )
 
-// ReflectionExecutorConfig Reflection 配置
+// ReflectionExecutorConfig Reflection executor configuration
 type ReflectionExecutorConfig struct {
 	Enabled       bool    `json:"enabled"`
-	MaxIterations int     `json:"max_iterations"` // 最大反思迭代次数
-	MinQuality    float64 `json:"min_quality"`    // 最低质量阈值 (0-1)
-	CriticPrompt  string  `json:"critic_prompt"`  // 评审提示词
+	MaxIterations int     `json:"max_iterations"` // Maximum reflection iterations
+	MinQuality    float64 `json:"min_quality"`    // Minimum quality threshold (0-1)
+	CriticPrompt  string  `json:"critic_prompt"`  // Critic prompt template
 }
 
-// DefaultReflectionExecutorConfig 默认配置
+// DefaultReflectionConfig returns default reflection configuration
+func DefaultReflectionConfig() *ReflectionExecutorConfig {
+	config := DefaultReflectionExecutorConfig()
+	return &config
+}
+
+// DefaultReflectionExecutorConfig returns default reflection configuration
 func DefaultReflectionExecutorConfig() ReflectionExecutorConfig {
 	return ReflectionExecutorConfig{
 		Enabled:       true,
@@ -55,11 +61,11 @@ type Critique struct {
 
 // ReflectionResult Reflection 执行结果
 type ReflectionResult struct {
-	FinalOutput    *Output    `json:"final_output"`
-	Iterations     int        `json:"iterations"`
-	Critiques      []Critique `json:"critiques"`
-	TotalDuration  time.Duration `json:"total_duration"`
-	ImprovedByReflection bool   `json:"improved_by_reflection"`
+	FinalOutput          *Output       `json:"final_output"`
+	Iterations           int           `json:"iterations"`
+	Critiques            []Critique    `json:"critiques"`
+	TotalDuration        time.Duration `json:"total_duration"`
+	ImprovedByReflection bool          `json:"improved_by_reflection"`
 }
 
 // ReflectionExecutor Reflection 执行器
@@ -91,7 +97,7 @@ func NewReflectionExecutor(agent *BaseAgent, config ReflectionExecutorConfig) *R
 // ExecuteWithReflection 执行任务并进行 Reflection
 func (r *ReflectionExecutor) ExecuteWithReflection(ctx context.Context, input *Input) (*ReflectionResult, error) {
 	startTime := time.Now()
-	
+
 	if !r.config.Enabled {
 		// Reflection 未启用，直接执行
 		output, err := r.agent.Execute(ctx, input)
@@ -261,8 +267,8 @@ func (r *ReflectionExecutor) parseCritique(feedback string) *Critique {
 		}
 
 		// 提取列表项
-		if strings.HasPrefix(line, "-") || strings.HasPrefix(line, "•") || 
-		   (len(line) > 2 && line[0] >= '0' && line[0] <= '9' && line[1] == '.') {
+		if strings.HasPrefix(line, "-") || strings.HasPrefix(line, "•") ||
+			(len(line) > 2 && line[0] >= '0' && line[0] <= '9' && line[1] == '.') {
 			item := strings.TrimLeft(line, "-•0123456789. ")
 			if item != "" {
 				switch currentSection {

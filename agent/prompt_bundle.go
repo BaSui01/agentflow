@@ -4,7 +4,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/yourusername/agentflow/llm"
+	"github.com/BaSui01/agentflow/llm"
 )
 
 // PromptBundle 模块化提示词包（按版本管理）。

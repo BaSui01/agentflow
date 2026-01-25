@@ -5,17 +5,26 @@ import (
 	"strings"
 )
 
-// PromptEngineeringConfig 提示词工程配置
-type PromptEngineeringConfig struct {
-	UseChainOfThought   bool `json:"use_chain_of_thought"`   // 使用思维链 (CoT)
-	UseSelfConsistency  bool `json:"use_self_consistency"`   // 使用自我一致性
-	UseStructuredOutput bool `json:"use_structured_output"`  // 使用结构化输出
-	UseFewShot          bool `json:"use_few_shot"`           // 使用 Few-shot
-	MaxExamples         int  `json:"max_examples,omitempty"` // 最多示例数
-	UseDelimiters       bool `json:"use_delimiters"`         // 使用分隔符
+// PromptEnhancerConfig prompt engineering configuration
+type PromptEnhancerConfig struct {
+	UseChainOfThought   bool `json:"use_chain_of_thought"`   // Use Chain of Thought (CoT)
+	UseSelfConsistency  bool `json:"use_self_consistency"`   // Use self-consistency
+	UseStructuredOutput bool `json:"use_structured_output"`  // Use structured output
+	UseFewShot          bool `json:"use_few_shot"`           // Use few-shot learning
+	MaxExamples         int  `json:"max_examples,omitempty"` // Maximum number of examples
+	UseDelimiters       bool `json:"use_delimiters"`         // Use delimiters
 }
 
-// DefaultPromptEngineeringConfig 默认配置
+// PromptEngineeringConfig is an alias for PromptEnhancerConfig for backward compatibility
+type PromptEngineeringConfig = PromptEnhancerConfig
+
+// DefaultPromptEnhancerConfig returns default prompt enhancer configuration
+func DefaultPromptEnhancerConfig() *PromptEnhancerConfig {
+	config := DefaultPromptEngineeringConfig()
+	return &config
+}
+
+// DefaultPromptEngineeringConfig returns default prompt engineering configuration
 func DefaultPromptEngineeringConfig() PromptEngineeringConfig {
 	return PromptEngineeringConfig{
 		UseChainOfThought:   true,
