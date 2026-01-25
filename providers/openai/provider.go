@@ -1,0 +1,423 @@
+package openai
+
+import (
+	"bufio"
+	"bytes"
+	"context"
+	"encoding/json"
+	"fmt"
+	"io"
+	"net/http"
+	"strings"
+	"time"
+
+	"github.com/yourusername/agentflow/llm"
+	"github.com/yourusername/agentflow/llm/middleware"
+	"github.com/yourusername/agentflow/providers"
+	"go.uber.org/zap"
+)
+
+type OpenAIProvider struct {
+	cfg           providers.OpenAIConfig
+	client        *http.Client
+	logger        *zap.Logger
+	rewriterChain *middleware.RewriterChain
+}
+
+func NewOpenAIProvider(cfg providers.OpenAIConfig, logger *zap.Logger) *OpenAIProvider {
+	timeout := cfg.Timeout
+	if timeout == 0 {
+		timeout = 30 * time.Second
+	}
+	return &OpenAIProvider{
+		cfg: cfg,
+		client: &http.Client{
+			Timeout: timeout,
+		},
+		logger: logger,
+		rewriterChain: middleware.NewRewriterChain(
+			middleware.NewEmptyToolsCleaner(),
+		),
+	}
+}
+
+func (p *OpenAIProvider) Name() string { return "openai" }
+
+func (p *OpenAIProvider) HealthCheck(ctx context.Context) (*llm.HealthStatus, error) {
+	start := time.Now()
+	endpoint := fmt.Sprintf("%s/v1/models", strings.TrimRight(p.cfg.BaseURL, "/"))
+	httpReq, _ := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	p.buildHeaders(httpReq, p.cfg.APIKey)
+
+	resp, err := p.client.Do(httpReq)
+	latency := time.Since(start)
+	if err != nil {
+		return &llm.HealthStatus{Healthy: false, Latency: latency}, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		msg := readErrMsg(resp.Body)
+		return &llm.HealthStatus{Healthy: false, Latency: latency}, fmt.Errorf("openai health check failed: status=%d msg=%s", resp.StatusCode, msg)
+	}
+
+	return &llm.HealthStatus{Healthy: true, Latency: latency}, nil
+}
+
+func (p *OpenAIProvider) SupportsNativeFunctionCalling() bool { return true }
+
+type openAIMessage struct {
+	Role         string           `json:"role"`
+	Content      string           `json:"content,omitempty"`
+	Name         string           `json:"name,omitempty"`
+	ToolCalls    []openAIToolCall `json:"tool_calls,omitempty"`
+	ToolCallID   string           `json:"tool_call_id,omitempty"`
+	FunctionCall interface{}      `json:"function_call,omitempty"`
+}
+
+type openAIToolCall struct {
+	ID       string         `json:"id"`
+	Type     string         `json:"type"`
+	Function openAIFunction `json:"function"`
+}
+
+type openAIFunction struct {
+	Name      string          `json:"name"`
+	Arguments json.RawMessage `json:"arguments"`
+}
+
+type openAITool struct {
+	Type     string         `json:"type"`
+	Function openAIFunction `json:"function"`
+}
+
+type openAIRequest struct {
+	Model            string          `json:"model"`
+	Messages         []openAIMessage `json:"messages"`
+	Tools            []openAITool    `json:"tools,omitempty"`
+	ToolChoice       interface{}     `json:"tool_choice,omitempty"`
+	MaxTokens        int             `json:"max_tokens,omitempty"`
+	Temperature      float32         `json:"temperature,omitempty"`
+	TopP             float32         `json:"top_p,omitempty"`
+	Stop             []string        `json:"stop,omitempty"`
+	Stream           bool            `json:"stream,omitempty"`
+	ResponseFormat   interface{}     `json:"response_format,omitempty"`
+	PresencePenalty  float32         `json:"presence_penalty,omitempty"`
+	FrequencyPenalty float32         `json:"frequency_penalty,omitempty"`
+}
+
+type openAIChoice struct {
+	Index        int            `json:"index"`
+	FinishReason string         `json:"finish_reason"`
+	Message      openAIMessage  `json:"message"`
+	Delta        *openAIMessage `json:"delta,omitempty"`
+}
+
+type openAIUsage struct {
+	PromptTokens     int `json:"prompt_tokens"`
+	CompletionTokens int `json:"completion_tokens"`
+	TotalTokens      int `json:"total_tokens"`
+}
+
+type openAIResponse struct {
+	ID      string         `json:"id"`
+	Model   string         `json:"model"`
+	Choices []openAIChoice `json:"choices"`
+	Usage   *openAIUsage   `json:"usage,omitempty"`
+	Created int64          `json:"created,omitempty"`
+}
+
+type openAIErrorResp struct {
+	Error struct {
+		Message string `json:"message"`
+		Type    string `json:"type"`
+		Code    any    `json:"code"`
+		Param   string `json:"param"`
+	} `json:"error"`
+}
+
+func mapError(status int, msg string, provider string) *llm.Error {
+	// 基于 HTTP 状态映射错误码，细分常见上游错误
+	switch status {
+	case http.StatusUnauthorized:
+		return &llm.Error{Code: llm.ErrUnauthorized, Message: msg, HTTPStatus: status, Provider: provider}
+	case http.StatusForbidden:
+		return &llm.Error{Code: llm.ErrForbidden, Message: msg, HTTPStatus: status, Provider: provider}
+	case http.StatusTooManyRequests:
+		return &llm.Error{Code: llm.ErrRateLimited, Message: msg, HTTPStatus: status, Retryable: true, Provider: provider}
+	case http.StatusBadRequest:
+		return &llm.Error{Code: llm.ErrInvalidRequest, Message: msg, HTTPStatus: status, Provider: provider}
+	case http.StatusServiceUnavailable, http.StatusBadGateway, http.StatusGatewayTimeout:
+		return &llm.Error{Code: llm.ErrUpstreamError, Message: msg, HTTPStatus: status, Retryable: true, Provider: provider}
+	default:
+		return &llm.Error{Code: llm.ErrUpstreamError, Message: msg, HTTPStatus: status, Retryable: status >= 500, Provider: provider}
+	}
+}
+
+func (p *OpenAIProvider) buildHeaders(req *http.Request, apiKey string) {
+	req.Header.Set("Authorization", "Bearer "+apiKey)
+	if p.cfg.Organization != "" {
+		req.Header.Set("OpenAI-Organization", p.cfg.Organization)
+	}
+	req.Header.Set("Content-Type", "application/json")
+}
+
+func convertMessages(msgs []llm.Message) []openAIMessage {
+	out := make([]openAIMessage, 0, len(msgs))
+	for _, m := range msgs {
+		oa := openAIMessage{
+			Role:       string(m.Role),
+			Name:       m.Name,
+			Content:    m.Content,
+			ToolCallID: m.ToolCallID,
+		}
+		if len(m.ToolCalls) > 0 {
+			oa.ToolCalls = make([]openAIToolCall, 0, len(m.ToolCalls))
+			for _, tc := range m.ToolCalls {
+				oa.ToolCalls = append(oa.ToolCalls, openAIToolCall{
+					ID:   tc.ID,
+					Type: "function",
+					Function: openAIFunction{
+						Name:      tc.Name,
+						Arguments: tc.Arguments,
+					},
+				})
+			}
+		}
+		out = append(out, oa)
+	}
+	return out
+}
+
+func convertTools(tools []llm.ToolSchema) []openAITool {
+	if len(tools) == 0 {
+		return nil
+	}
+	out := make([]openAITool, 0, len(tools))
+	for _, t := range tools {
+		out = append(out, openAITool{
+			Type: "function",
+			Function: openAIFunction{
+				Name:      t.Name,
+				Arguments: t.Parameters,
+			},
+		})
+	}
+	return out
+}
+
+func (p *OpenAIProvider) Completion(ctx context.Context, req *llm.ChatRequest) (*llm.ChatResponse, error) {
+	// 统一入口：应用改写器链
+	rewrittenReq, err := p.rewriterChain.Execute(ctx, req)
+	if err != nil {
+		return nil, &llm.Error{
+			Code:       llm.ErrInvalidRequest,
+			Message:    fmt.Sprintf("request rewrite failed: %v", err),
+			HTTPStatus: http.StatusBadRequest,
+			Provider:   p.Name(),
+		}
+	}
+	req = rewrittenReq
+
+	apiKey := p.cfg.APIKey
+	if c, ok := llm.CredentialOverrideFromContext(ctx); ok {
+		if strings.TrimSpace(c.APIKey) != "" {
+			apiKey = strings.TrimSpace(c.APIKey)
+		}
+	}
+	body := openAIRequest{
+		Model:       chooseModel(req, p.cfg.Model),
+		Messages:    convertMessages(req.Messages),
+		Tools:       convertTools(req.Tools),
+		MaxTokens:   req.MaxTokens,
+		Temperature: req.Temperature,
+		TopP:        req.TopP,
+		Stop:        req.Stop,
+	}
+	if req.ToolChoice != "" {
+		body.ToolChoice = req.ToolChoice
+	}
+	payload, _ := json.Marshal(body)
+
+	httpReq, _ := http.NewRequestWithContext(ctx, http.MethodPost, fmt.Sprintf("%s/v1/chat/completions", strings.TrimRight(p.cfg.BaseURL, "/")), bytes.NewReader(payload))
+	p.buildHeaders(httpReq, apiKey)
+
+	resp, err := p.client.Do(httpReq)
+	if err != nil {
+		return nil, &llm.Error{Code: llm.ErrUpstreamError, Message: err.Error(), HTTPStatus: http.StatusBadGateway, Retryable: true}
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 400 {
+		msg := readErrMsg(resp.Body)
+		return nil, mapError(resp.StatusCode, msg, p.Name())
+	}
+
+	var oaResp openAIResponse
+	if err := json.NewDecoder(resp.Body).Decode(&oaResp); err != nil {
+		return nil, &llm.Error{Code: llm.ErrUpstreamError, Message: err.Error(), HTTPStatus: http.StatusBadGateway, Retryable: true}
+	}
+
+	return toChatResponse(oaResp, p.Name()), nil
+}
+
+func (p *OpenAIProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-chan llm.StreamChunk, error) {
+	// 统一入口：应用改写器链
+	rewrittenReq, err := p.rewriterChain.Execute(ctx, req)
+	if err != nil {
+		return nil, &llm.Error{
+			Code:       llm.ErrInvalidRequest,
+			Message:    fmt.Sprintf("request rewrite failed: %v", err),
+			HTTPStatus: http.StatusBadRequest,
+			Provider:   p.Name(),
+		}
+	}
+	req = rewrittenReq
+
+	apiKey := p.cfg.APIKey
+	if c, ok := llm.CredentialOverrideFromContext(ctx); ok {
+		if strings.TrimSpace(c.APIKey) != "" {
+			apiKey = strings.TrimSpace(c.APIKey)
+		}
+	}
+	body := openAIRequest{
+		Model:     chooseModel(req, p.cfg.Model),
+		Messages:  convertMessages(req.Messages),
+		Tools:     convertTools(req.Tools),
+		MaxTokens: req.MaxTokens,
+		Stream:    true,
+	}
+	if req.ToolChoice != "" {
+		body.ToolChoice = req.ToolChoice
+	}
+	payload, _ := json.Marshal(body)
+
+	httpReq, _ := http.NewRequestWithContext(ctx, http.MethodPost, fmt.Sprintf("%s/v1/chat/completions", strings.TrimRight(p.cfg.BaseURL, "/")), bytes.NewReader(payload))
+	p.buildHeaders(httpReq, apiKey)
+
+	resp, err := p.client.Do(httpReq)
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode >= 400 {
+		defer resp.Body.Close()
+		msg := readErrMsg(resp.Body)
+		return nil, mapError(resp.StatusCode, msg, p.Name())
+	}
+
+	ch := make(chan llm.StreamChunk)
+	go func() {
+		defer resp.Body.Close()
+		defer close(ch)
+		reader := bufio.NewReader(resp.Body)
+		for {
+			line, err := reader.ReadString('\n')
+			if err != nil {
+				if err != io.EOF {
+					ch <- llm.StreamChunk{Err: &llm.Error{Code: llm.ErrUpstreamError, Message: err.Error(), HTTPStatus: http.StatusBadGateway, Retryable: true}}
+				}
+				return
+			}
+			line = strings.TrimSpace(line)
+			if line == "" || !strings.HasPrefix(line, "data:") {
+				continue
+			}
+			data := strings.TrimSpace(strings.TrimPrefix(line, "data:"))
+			if data == "[DONE]" {
+				return
+			}
+			var oaResp openAIResponse
+			if err := json.Unmarshal([]byte(data), &oaResp); err != nil {
+				ch <- llm.StreamChunk{Err: &llm.Error{Code: llm.ErrUpstreamError, Message: err.Error(), HTTPStatus: http.StatusBadGateway, Retryable: true}}
+				return
+			}
+			for _, choice := range oaResp.Choices {
+				chunk := llm.StreamChunk{
+					ID:       oaResp.ID,
+					Provider: p.Name(),
+					Model:    oaResp.Model,
+					Index:    choice.Index,
+					Delta: llm.Message{
+						Role:    llm.RoleAssistant,
+						Content: choice.Delta.Content,
+					},
+					FinishReason: choice.FinishReason,
+				}
+				if choice.Delta != nil && len(choice.Delta.ToolCalls) > 0 {
+					chunk.Delta.ToolCalls = make([]llm.ToolCall, 0, len(choice.Delta.ToolCalls))
+					for _, tc := range choice.Delta.ToolCalls {
+						chunk.Delta.ToolCalls = append(chunk.Delta.ToolCalls, llm.ToolCall{
+							ID:        tc.ID,
+							Name:      tc.Function.Name,
+							Arguments: tc.Function.Arguments,
+						})
+					}
+				}
+				ch <- chunk
+			}
+		}
+	}()
+	return ch, nil
+}
+
+func toChatResponse(oa openAIResponse, provider string) *llm.ChatResponse {
+	choices := make([]llm.ChatChoice, 0, len(oa.Choices))
+	for _, c := range oa.Choices {
+		msg := llm.Message{
+			Role:    llm.RoleAssistant,
+			Content: c.Message.Content,
+			Name:    c.Message.Name,
+		}
+		if len(c.Message.ToolCalls) > 0 {
+			msg.ToolCalls = make([]llm.ToolCall, 0, len(c.Message.ToolCalls))
+			for _, tc := range c.Message.ToolCalls {
+				msg.ToolCalls = append(msg.ToolCalls, llm.ToolCall{
+					ID:        tc.ID,
+					Name:      tc.Function.Name,
+					Arguments: tc.Function.Arguments,
+				})
+			}
+		}
+		choices = append(choices, llm.ChatChoice{
+			Index:        c.Index,
+			FinishReason: c.FinishReason,
+			Message:      msg,
+		})
+	}
+	resp := &llm.ChatResponse{
+		ID:       oa.ID,
+		Provider: provider,
+		Model:    oa.Model,
+		Choices:  choices,
+	}
+	if oa.Usage != nil {
+		resp.Usage = llm.ChatUsage{
+			PromptTokens:     oa.Usage.PromptTokens,
+			CompletionTokens: oa.Usage.CompletionTokens,
+			TotalTokens:      oa.Usage.TotalTokens,
+		}
+	}
+	if oa.Created != 0 {
+		resp.CreatedAt = time.Unix(oa.Created, 0)
+	}
+	return resp
+}
+
+func readErrMsg(body io.Reader) string {
+	data, _ := io.ReadAll(body)
+	var errResp openAIErrorResp
+	if err := json.Unmarshal(data, &errResp); err == nil && errResp.Error.Message != "" {
+		return errResp.Error.Message
+	}
+	return string(data)
+}
+
+func chooseModel(req *llm.ChatRequest, defaultModel string) string {
+	if req != nil && req.Model != "" {
+		return req.Model
+	}
+	if defaultModel != "" {
+		return defaultModel
+	}
+	return "gpt-4o-mini"
+}
