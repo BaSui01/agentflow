@@ -6,9 +6,9 @@ import (
 	"log"
 	"time"
 
-	"github.com/yourusername/agentflow/agent/mcp"
-	"github.com/yourusername/agentflow/agent/memory"
-	"github.com/yourusername/agentflow/agent/skills"
+	"github.com/BaSui01/agentflow/agent/mcp"
+	"github.com/BaSui01/agentflow/agent/memory"
+	"github.com/BaSui01/agentflow/agent/skills"
 	"go.uber.org/zap"
 )
 
@@ -18,7 +18,7 @@ func main() {
 	logger, _ := zap.NewDevelopment()
 	defer logger.Sync()
 
-	fmt.Println("=== 中优先级功能演示 ===\n")
+	fmt.Println("=== 中优先级功能演示 ===")
 
 	// 示例 1: Skills 系统
 	fmt.Println("=== 示例 1: Skills 系统 ===")
@@ -295,7 +295,7 @@ func demoEnhancedMemory(logger *zap.Logger) {
 	// 1. 创建增强记忆系统
 	fmt.Println("1. 创建增强记忆系统")
 	config := memory.DefaultEnhancedMemoryConfig()
-	
+
 	// 注意：实际使用时需要提供真实的存储实现
 	// 这里使用 nil 仅作演示
 	var shortTerm memory.MemoryStore = nil

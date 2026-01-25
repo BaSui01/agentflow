@@ -4,10 +4,10 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/yourusername/agentflow/agent"
-	"github.com/yourusername/agentflow/agent/collaboration"
-	"github.com/yourusername/agentflow/agent/hierarchical"
-	"github.com/yourusername/agentflow/agent/observability"
+	"github.com/BaSui01/agentflow/agent"
+	"github.com/BaSui01/agentflow/agent/collaboration"
+	"github.com/BaSui01/agentflow/agent/hierarchical"
+	"github.com/BaSui01/agentflow/agent/observability"
 	"go.uber.org/zap"
 )
 
@@ -17,7 +17,7 @@ func main() {
 	logger, _ := zap.NewDevelopment()
 	defer logger.Sync()
 
-	fmt.Println("=== 低优先级功能演示 ===\n")
+	fmt.Println("=== 低优先级功能演示 ===")
 
 	// 示例 1: 层次化架构
 	fmt.Println("=== 示例 1: 层次化架构 (Supervisor-Worker) ===")
@@ -43,7 +43,7 @@ func demoHierarchicalArchitecture(logger *zap.Logger) {
 		MaxTokens:   2000,
 		Temperature: 0.7,
 	}
-	
+
 	// 注意：实际使用时需要提供真实的 provider
 	var provider interface{} = nil
 	supervisor := agent.NewBaseAgent(supervisorConfig, nil, nil, nil, nil, logger)
@@ -51,7 +51,7 @@ func demoHierarchicalArchitecture(logger *zap.Logger) {
 	// 2. 创建 Worker Agents
 	fmt.Println("2. 创建 Worker Agents")
 	workers := []agent.Agent{}
-	
+
 	for i := 1; i <= 3; i++ {
 		workerConfig := agent.Config{
 			ID:          fmt.Sprintf("worker-%d", i),
@@ -142,7 +142,7 @@ func demoMultiAgentCollaboration(logger *zap.Logger) {
 	// 1. 创建多个 Agent
 	fmt.Println("1. 创建协作 Agents")
 	agents := []agent.Agent{}
-	
+
 	agentRoles := []string{"Analyst", "Critic", "Synthesizer"}
 	for i, role := range agentRoles {
 		config := agent.Config{
@@ -269,7 +269,7 @@ func demoObservabilitySystem(logger *zap.Logger) {
 	// 2. 指标收集
 	fmt.Println("\n2. 指标收集")
 	fmt.Println("模拟记录 10 个任务...")
-	
+
 	// 显示示例指标
 	fmt.Println("\n指标统计:")
 	fmt.Println("  - 总任务数: 10")

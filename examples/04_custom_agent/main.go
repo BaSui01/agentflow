@@ -5,19 +5,19 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/yourusername/agentflow/agent"
-	"github.com/yourusername/agentflow/llm"
-	"github.com/yourusername/agentflow/providers"
-	"github.com/yourusername/agentflow/providers/openai"
+	"github.com/BaSui01/agentflow/agent"
+	"github.com/BaSui01/agentflow/llm"
+	"github.com/BaSui01/agentflow/providers"
+	"github.com/BaSui01/agentflow/providers/openai"
 	"go.uber.org/zap"
 )
 
 // 定义自己的 Agent 类型（完全自定义）
 const (
-	TypeCodeReviewer  agent.AgentType = "code-reviewer"
-	TypeDataAnalyst   agent.AgentType = "data-analyst"
-	TypeStoryWriter   agent.AgentType = "story-writer"
-	TypeMathTutor     agent.AgentType = "math-tutor"
+	TypeCodeReviewer   agent.AgentType = "code-reviewer"
+	TypeDataAnalyst    agent.AgentType = "data-analyst"
+	TypeStoryWriter    agent.AgentType = "story-writer"
+	TypeMathTutor      agent.AgentType = "math-tutor"
 	TypeProductManager agent.AgentType = "product-manager"
 )
 

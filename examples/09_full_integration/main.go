@@ -4,13 +4,13 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/yourusername/agentflow/agent"
-	"github.com/yourusername/agentflow/agent/collaboration"
-	"github.com/yourusername/agentflow/agent/hierarchical"
-	"github.com/yourusername/agentflow/agent/mcp"
-	"github.com/yourusername/agentflow/agent/memory"
-	"github.com/yourusername/agentflow/agent/observability"
-	"github.com/yourusername/agentflow/agent/skills"
+	"github.com/BaSui01/agentflow/agent"
+	"github.com/BaSui01/agentflow/agent/collaboration"
+	"github.com/BaSui01/agentflow/agent/hierarchical"
+	"github.com/BaSui01/agentflow/agent/mcp"
+	"github.com/BaSui01/agentflow/agent/memory"
+	"github.com/BaSui01/agentflow/agent/observability"
+	"github.com/BaSui01/agentflow/agent/skills"
 	"go.uber.org/zap"
 )
 
@@ -20,7 +20,7 @@ func main() {
 	logger, _ := zap.NewDevelopment()
 	defer logger.Sync()
 
-	fmt.Println("=== AgentFlow 2025 完整集成示例 ===\n")
+	fmt.Println("=== AgentFlow 2025 完整集成示例 ===")
 
 	// 场景 1: 单 Agent 增强版
 	fmt.Println("场景 1: 单 Agent 增强版（启用所有功能）")
@@ -51,7 +51,7 @@ func demoEnhancedSingleAgent(logger *zap.Logger) {
 		Model:       "gpt-4",
 		MaxTokens:   2000,
 		Temperature: 0.7,
-		
+
 		// 启用新功能
 		EnableReflection:     true,
 		EnableToolSelection:  true,
@@ -77,7 +77,7 @@ func demoEnhancedSingleAgent(logger *zap.Logger) {
 	// 3. 启用动态工具选择
 	fmt.Println("3. 启用动态工具选择")
 	toolSelectionConfig := agent.DefaultToolSelectionConfig()
-	toolSelector := agent.NewDynamicToolSelector(baseAgent, toolSelectionConfig)
+	toolSelector := agent.NewDynamicToolSelector(baseAgent, *toolSelectionConfig)
 	baseAgent.EnableToolSelection(toolSelector)
 
 	// 4. 启用提示词增强
@@ -90,14 +90,14 @@ func demoEnhancedSingleAgent(logger *zap.Logger) {
 	fmt.Println("5. 启用 Skills 系统")
 	skillsConfig := skills.DefaultSkillManagerConfig()
 	skillManager := skills.NewSkillManager(skillsConfig, logger)
-	
+
 	// 注册一些技能
 	codeReviewSkill, _ := skills.NewSkillBuilder("code-review", "代码审查").
 		WithDescription("专业的代码审查技能").
 		WithInstructions("审查代码质量、安全性和最佳实践").
 		Build()
 	skillManager.RegisterSkill(codeReviewSkill)
-	
+
 	baseAgent.EnableSkills(skillManager)
 
 	// 6. 启用 MCP
@@ -124,7 +124,7 @@ func demoEnhancedSingleAgent(logger *zap.Logger) {
 	fmt.Println("\n9. 功能状态检查")
 	baseAgent.PrintFeatureStatus()
 	status := baseAgent.GetFeatureStatus()
-	
+
 	enabledCount := 0
 	for _, enabled := range status {
 		if enabled {
@@ -187,7 +187,7 @@ func demoHierarchicalSystem(logger *zap.Logger) {
 	// 2. 创建 Workers
 	workers := []agent.Agent{}
 	workerTypes := []string{"analyzer", "reviewer", "optimizer"}
-	
+
 	for i, wType := range workerTypes {
 		workerConfig := agent.Config{
 			ID:          fmt.Sprintf("worker-%d", i+1),
@@ -283,7 +283,7 @@ func demoCollaborativeSystem(logger *zap.Logger) {
 
 	// 3. 其他协作模式
 	fmt.Println("\n其他可用模式:")
-	
+
 	patterns := []struct {
 		pattern collaboration.CollaborationPattern
 		desc    string
@@ -304,7 +304,7 @@ func demoCollaborativeSystem(logger *zap.Logger) {
 }
 
 func demoProductionConfig(logger *zap.Logger) {
-	fmt.Println("\n生产环境配置建议\n")
+	fmt.Println("\n生产环境配置建议")
 
 	// 1. 性能优化配置
 	fmt.Println("1. 性能优化配置")

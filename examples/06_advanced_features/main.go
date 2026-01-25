@@ -6,30 +6,30 @@ import (
 	"log"
 	"time"
 
-	"github.com/yourusername/agentflow/agent"
-	"github.com/yourusername/agentflow/llm"
+	"github.com/BaSui01/agentflow/agent"
+	"github.com/BaSui01/agentflow/llm"
 	"go.uber.org/zap"
 )
 
-// 演示高级特性：Reflection、动态工具选择、提示词工程
+// Demonstrates advanced features: Reflection, Dynamic Tool Selection, Prompt Engineering
 
 func main() {
 	logger, _ := zap.NewDevelopment()
 	defer logger.Sync()
 
-	// 示例 1: Reflection 机制
-	fmt.Println("=== 示例 1: Reflection 机制 ===")
+	// Example 1: Reflection Mechanism
+	fmt.Println("=== Example 1: Reflection Mechanism ===")
 	demoReflection(logger)
 
-	fmt.Println("\n=== 示例 2: 动态工具选择 ===")
+	fmt.Println("\n=== Example 2: Dynamic Tool Selection ===")
 	demoToolSelection(logger)
 
-	fmt.Println("\n=== 示例 3: 提示词工程 ===")
+	fmt.Println("\n=== Example 3: Prompt Engineering ===")
 	demoPromptEngineering(logger)
 }
 
 func demoReflection(logger *zap.Logger) {
-	// 创建 Agent
+	// Create Agent
 	config := agent.Config{
 		ID:          "reflection-agent",
 		Name:        "Reflection Agent",
@@ -39,25 +39,25 @@ func demoReflection(logger *zap.Logger) {
 		Temperature: 0.7,
 	}
 
-	// 创建提示词包
+	// Create prompt bundle
 	config.PromptBundle = agent.PromptBundle{
 		Version: "1.0",
 		System: agent.SystemPrompt{
-			Role:     "你是一个专业的内容分析专家",
-			Identity: "你擅长分析文本质量，发现问题并提供改进建议",
+			Role:     "You are a professional content analysis expert",
+			Identity: "You excel at analyzing text quality, identifying issues, and providing improvement suggestions",
 			OutputRules: []string{
-				"输出要清晰、结构化",
-				"提供具体的改进建议",
+				"Output should be clear and structured",
+				"Provide specific improvement suggestions",
 			},
 		},
 	}
 
-	// 假设已有 provider（这里用 nil 演示结构）
-	var provider llm.Provider = nil // 实际使用时需要初始化
+	// Assume provider exists (using nil for demonstration)
+	var provider llm.Provider = nil // Should be initialized in actual use
 
 	baseAgent := agent.NewBaseAgent(config, provider, nil, nil, nil, logger)
 
-	// 配置 Reflection
+	// Configure Reflection
 	reflectionConfig := agent.ReflectionExecutorConfig{
 		Enabled:       true,
 		MaxIterations: 3,
@@ -66,39 +66,39 @@ func demoReflection(logger *zap.Logger) {
 
 	executor := agent.NewReflectionExecutor(baseAgent, reflectionConfig)
 
-	// 执行任务
+	// Execute task
 	input := &agent.Input{
 		TraceID: "trace-001",
-		Content: "请写一篇关于人工智能的短文",
+		Content: "Please write a short article about artificial intelligence",
 	}
 
 	ctx := context.Background()
 	result, err := executor.ExecuteWithReflection(ctx, input)
 	if err != nil {
-		log.Printf("Reflection 执行失败: %v", err)
+		log.Printf("Reflection execution failed: %v", err)
 		return
 	}
 
-	fmt.Printf("迭代次数: %d\n", result.Iterations)
-	fmt.Printf("是否改进: %v\n", result.ImprovedByReflection)
-	fmt.Printf("总耗时: %v\n", result.TotalDuration)
+	fmt.Printf("Iterations: %d\n", result.Iterations)
+	fmt.Printf("Improved: %v\n", result.ImprovedByReflection)
+	fmt.Printf("Total duration: %v\n", result.TotalDuration)
 
-	// 打印每次迭代的评审结果
+	// Print critique results for each iteration
 	for i, critique := range result.Critiques {
-		fmt.Printf("\n第 %d 次迭代评审:\n", i+1)
-		fmt.Printf("  分数: %.2f\n", critique.Score)
-		fmt.Printf("  是否达标: %v\n", critique.IsGood)
+		fmt.Printf("\nIteration %d critique:\n", i+1)
+		fmt.Printf("  Score: %.2f\n", critique.Score)
+		fmt.Printf("  Is good: %v\n", critique.IsGood)
 		if len(critique.Issues) > 0 {
-			fmt.Printf("  问题: %v\n", critique.Issues)
+			fmt.Printf("  Issues: %v\n", critique.Issues)
 		}
 		if len(critique.Suggestions) > 0 {
-			fmt.Printf("  建议: %v\n", critique.Suggestions)
+			fmt.Printf("  Suggestions: %v\n", critique.Suggestions)
 		}
 	}
 }
 
 func demoToolSelection(logger *zap.Logger) {
-	// 创建 Agent
+	// Create Agent
 	config := agent.Config{
 		ID:          "tool-agent",
 		Name:        "Tool Selection Agent",
@@ -111,69 +111,69 @@ func demoToolSelection(logger *zap.Logger) {
 	var provider llm.Provider = nil
 	baseAgent := agent.NewBaseAgent(config, provider, nil, nil, nil, logger)
 
-	// 配置动态工具选择
+	// Configure dynamic tool selection
 	selectorConfig := agent.DefaultToolSelectionConfig()
 	selectorConfig.MaxTools = 3
 	selectorConfig.MinScore = 0.4
 
-	selector := agent.NewDynamicToolSelector(baseAgent, selectorConfig)
+	selector := agent.NewDynamicToolSelector(baseAgent, *selectorConfig)
 
-	// 定义可用工具
+	// Define available tools
 	availableTools := []llm.ToolSchema{
 		{
 			Name:        "web_search",
-			Description: "搜索互联网获取最新信息",
+			Description: "Search the internet for latest information",
 		},
 		{
 			Name:        "calculator",
-			Description: "执行数学计算",
+			Description: "Perform mathematical calculations",
 		},
 		{
 			Name:        "code_interpreter",
-			Description: "执行 Python 代码",
+			Description: "Execute Python code",
 		},
 		{
 			Name:        "database_query",
-			Description: "查询数据库",
+			Description: "Query database",
 		},
 		{
 			Name:        "file_reader",
-			Description: "读取文件内容",
+			Description: "Read file contents",
 		},
 	}
 
-	// 任务：需要搜索和计算
-	task := "查找最新的 GDP 数据并计算增长率"
+	// Task: requires search and calculation
+	task := "Find the latest GDP data and calculate growth rate"
 
 	ctx := context.Background()
 	selectedTools, err := selector.SelectTools(ctx, task, availableTools)
 	if err != nil {
-		log.Printf("工具选择失败: %v", err)
+		log.Printf("Tool selection failed: %v", err)
 		return
 	}
 
-	fmt.Printf("任务: %s\n", task)
-	fmt.Printf("可用工具数: %d\n", len(availableTools))
-	fmt.Printf("选择的工具数: %d\n", len(selectedTools))
-	fmt.Println("选择的工具:")
+	fmt.Printf("Task: %s\n", task)
+	fmt.Printf("Available tools: %d\n", len(availableTools))
+	fmt.Printf("Selected tools: %d\n", len(selectedTools))
+	fmt.Println("Selected tools:")
 	for i, tool := range selectedTools {
 		fmt.Printf("  %d. %s - %s\n", i+1, tool.Name, tool.Description)
 	}
 
-	// 演示工具评分
+	// Demonstrate tool scoring
 	scores, _ := selector.ScoreTools(ctx, task, availableTools)
-	fmt.Println("\n工具评分详情:")
+	fmt.Println("\nTool scoring details:")
 	for _, score := range scores {
-		fmt.Printf("  %s: 总分=%.2f (语义=%.2f, 成本=%.2f, 可靠性=%.2f)\n",
+		fmt.Printf("  %s: Total=%.2f (Semantic=%.2f, Cost=%.2f, Reliability=%.2f)\n",
 			score.Tool.Name,
 			score.TotalScore,
 			score.SemanticSimilarity,
-			1.0-score.EstimatedCost*10, // 归一化显示
+			1.0-score.EstimatedCost*10, // Normalized display
 			score.ReliabilityScore,
 		)
 	}
 
-	// 更新工具统计
+	// Update tool statistics
 	selector.UpdateToolStats("web_search", true, 500*time.Millisecond, 0.05)
 	selector.UpdateToolStats("calculator", true, 100*time.Millisecond, 0.01)
 }

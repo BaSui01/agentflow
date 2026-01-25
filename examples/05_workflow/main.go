@@ -7,10 +7,10 @@ import (
 	"os"
 	"strings"
 
-	"github.com/yourusername/agentflow/llm"
-	"github.com/yourusername/agentflow/providers"
-	"github.com/yourusername/agentflow/providers/openai"
-	"github.com/yourusername/agentflow/workflow"
+	"github.com/BaSui01/agentflow/llm"
+	"github.com/BaSui01/agentflow/providers"
+	"github.com/BaSui01/agentflow/providers/openai"
+	"github.com/BaSui01/agentflow/workflow"
 	"go.uber.org/zap"
 )
 
@@ -61,7 +61,7 @@ func runPromptChaining(ctx context.Context, provider llm.Provider, logger *zap.L
 	// 步骤 1: 翻译
 	translateStep := workflow.NewFuncStep("translate", func(ctx context.Context, input interface{}) (interface{}, error) {
 		text := input.(string)
-		
+
 		resp, err := provider.Completion(ctx, &llm.ChatRequest{
 			Model: "gpt-3.5-turbo",
 			Messages: []llm.Message{
@@ -74,14 +74,14 @@ func runPromptChaining(ctx context.Context, provider llm.Provider, logger *zap.L
 		if err != nil {
 			return nil, err
 		}
-		
+
 		return resp.Choices[0].Message.Content, nil
 	})
 
 	// 步骤 2: 总结
 	summarizeStep := workflow.NewFuncStep("summarize", func(ctx context.Context, input interface{}) (interface{}, error) {
 		text := input.(string)
-		
+
 		resp, err := provider.Completion(ctx, &llm.ChatRequest{
 			Model: "gpt-3.5-turbo",
 			Messages: []llm.Message{
@@ -94,7 +94,7 @@ func runPromptChaining(ctx context.Context, provider llm.Provider, logger *zap.L
 		if err != nil {
 			return nil, err
 		}
-		
+
 		return resp.Choices[0].Message.Content, nil
 	})
 
@@ -125,7 +125,7 @@ func runRouting(ctx context.Context, provider llm.Provider, logger *zap.Logger) 
 	// 创建路由器（使用 LLM 进行分类）
 	router := workflow.NewFuncRouter(func(ctx context.Context, input interface{}) (string, error) {
 		question := input.(string)
-		
+
 		resp, err := provider.Completion(ctx, &llm.ChatRequest{
 			Model: "gpt-3.5-turbo",
 			Messages: []llm.Message{
@@ -138,17 +138,17 @@ func runRouting(ctx context.Context, provider llm.Provider, logger *zap.Logger) 
 		if err != nil {
 			return "", err
 		}
-		
+
 		category := strings.ToLower(strings.TrimSpace(resp.Choices[0].Message.Content))
 		logger.Info("问题分类", zap.String("category", category))
-		
+
 		return category, nil
 	})
 
 	// 创建处理器
 	technicalHandler := workflow.NewFuncHandler("technical", func(ctx context.Context, input interface{}) (interface{}, error) {
 		question := input.(string)
-		
+
 		resp, err := provider.Completion(ctx, &llm.ChatRequest{
 			Model: "gpt-3.5-turbo",
 			Messages: []llm.Message{
@@ -161,13 +161,13 @@ func runRouting(ctx context.Context, provider llm.Provider, logger *zap.Logger) 
 		if err != nil {
 			return nil, err
 		}
-		
+
 		return resp.Choices[0].Message.Content, nil
 	})
 
 	businessHandler := workflow.NewFuncHandler("business", func(ctx context.Context, input interface{}) (interface{}, error) {
 		question := input.(string)
-		
+
 		resp, err := provider.Completion(ctx, &llm.ChatRequest{
 			Model: "gpt-3.5-turbo",
 			Messages: []llm.Message{
@@ -180,13 +180,13 @@ func runRouting(ctx context.Context, provider llm.Provider, logger *zap.Logger) 
 		if err != nil {
 			return nil, err
 		}
-		
+
 		return resp.Choices[0].Message.Content, nil
 	})
 
 	generalHandler := workflow.NewFuncHandler("general", func(ctx context.Context, input interface{}) (interface{}, error) {
 		question := input.(string)
-		
+
 		resp, err := provider.Completion(ctx, &llm.ChatRequest{
 			Model: "gpt-3.5-turbo",
 			Messages: []llm.Message{
@@ -199,7 +199,7 @@ func runRouting(ctx context.Context, provider llm.Provider, logger *zap.Logger) 
 		if err != nil {
 			return nil, err
 		}
-		
+
 		return resp.Choices[0].Message.Content, nil
 	})
 
@@ -223,13 +223,13 @@ func runRouting(ctx context.Context, provider llm.Provider, logger *zap.Logger) 
 
 	for i, question := range questions {
 		fmt.Printf("问题 %d: %s\n", i+1, question)
-		
+
 		result, err := routingWorkflow.Execute(ctx, question)
 		if err != nil {
 			log.Printf("工作流执行失败: %v", err)
 			continue
 		}
-		
+
 		fmt.Printf("回答: %s\n\n", result)
 	}
 }
@@ -239,7 +239,7 @@ func runParallelization(ctx context.Context, provider llm.Provider, logger *zap.
 	// 任务 1: 情感分析
 	sentimentTask := workflow.NewFuncTask("sentiment", func(ctx context.Context, input interface{}) (interface{}, error) {
 		text := input.(string)
-		
+
 		resp, err := provider.Completion(ctx, &llm.ChatRequest{
 			Model: "gpt-3.5-turbo",
 			Messages: []llm.Message{
@@ -252,14 +252,14 @@ func runParallelization(ctx context.Context, provider llm.Provider, logger *zap.
 		if err != nil {
 			return nil, err
 		}
-		
+
 		return resp.Choices[0].Message.Content, nil
 	})
 
 	// 任务 2: 主题提取
 	topicTask := workflow.NewFuncTask("topic", func(ctx context.Context, input interface{}) (interface{}, error) {
 		text := input.(string)
-		
+
 		resp, err := provider.Completion(ctx, &llm.ChatRequest{
 			Model: "gpt-3.5-turbo",
 			Messages: []llm.Message{
@@ -272,14 +272,14 @@ func runParallelization(ctx context.Context, provider llm.Provider, logger *zap.
 		if err != nil {
 			return nil, err
 		}
-		
+
 		return resp.Choices[0].Message.Content, nil
 	})
 
 	// 任务 3: 关键词提取
 	keywordTask := workflow.NewFuncTask("keyword", func(ctx context.Context, input interface{}) (interface{}, error) {
 		text := input.(string)
-		
+
 		resp, err := provider.Completion(ctx, &llm.ChatRequest{
 			Model: "gpt-3.5-turbo",
 			Messages: []llm.Message{
@@ -292,18 +292,18 @@ func runParallelization(ctx context.Context, provider llm.Provider, logger *zap.
 		if err != nil {
 			return nil, err
 		}
-		
+
 		return resp.Choices[0].Message.Content, nil
 	})
 
 	// 创建聚合器
 	aggregator := workflow.NewFuncAggregator(func(ctx context.Context, results []workflow.TaskResult) (interface{}, error) {
 		report := "=== 文本分析报告 ===\n\n"
-		
+
 		for _, r := range results {
 			report += fmt.Sprintf("%s:\n%s\n\n", r.TaskName, r.Result)
 		}
-		
+
 		return report, nil
 	})
 

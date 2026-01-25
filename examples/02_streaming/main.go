@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/yourusername/agentflow/llm"
-	"github.com/yourusername/agentflow/providers"
-	"github.com/yourusername/agentflow/providers/openai"
+	"github.com/BaSui01/agentflow/llm"
+	"github.com/BaSui01/agentflow/providers"
+	"github.com/BaSui01/agentflow/providers/openai"
 	"go.uber.org/zap"
 )
 
