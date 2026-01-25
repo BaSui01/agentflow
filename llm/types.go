@@ -22,6 +22,16 @@ type LLMModel struct {
 	Enabled         bool
 }
 
+// LLMProvider 本地类型（避免导入 internal/domain）
+type LLMProvider struct {
+	ID        uint
+	Code      string
+	Name      string
+	Status    LLMProviderStatus
+	CreatedAt time.Time
+	UpdatedAt time.Time
+}
+
 // AuditLog 本地类型（避免导入 internal/domain）
 type AuditLog struct {
 	ID           uint

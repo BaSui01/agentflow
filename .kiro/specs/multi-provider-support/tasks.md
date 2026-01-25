@@ -205,11 +205,11 @@ This implementation plan adds support for five new LLM providers (xAI Grok, Zhip
     - **Property 18: Tool Choice Preservation**
     - **Validates: Requirements 11.2**
   
-  - [-] 11.3 Write property test for tool result conversion
+  - [x] 11.3 Write property test for tool result conversion
     - **Property 20: Tool Result Message Conversion**
     - **Validates: Requirements 11.5**
   
-  - [~] 11.4 Write property test for tool calling in both modes
+  - [-] 11.4 Write property test for tool calling in both modes
     - **Property 21: Tool Calling in Both Modes**
     - **Validates: Requirements 11.6**
 
