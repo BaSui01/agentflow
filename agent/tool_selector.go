@@ -401,9 +401,15 @@ func extractKeywords(text string) []string {
 	return keywords
 }
 
-// parseToolIndices 解析工具编号
+// parseToolIndices parses tool indices from text
+// Only parses comma-separated format, returns empty for newline-separated
 func parseToolIndices(text string) []int {
 	indices := []int{}
+
+	// Check if text contains newlines without commas - return empty
+	if strings.Contains(text, "\n") && !strings.Contains(text, ",") {
+		return indices
+	}
 
 	// Remove all spaces and newlines
 	text = strings.ReplaceAll(text, " ", "")
@@ -413,6 +419,9 @@ func parseToolIndices(text string) []int {
 	parts := strings.Split(text, ",")
 
 	for _, part := range parts {
+		if part == "" {
+			continue
+		}
 		var idx int
 		if _, err := fmt.Sscanf(part, "%d", &idx); err == nil {
 			indices = append(indices, idx)

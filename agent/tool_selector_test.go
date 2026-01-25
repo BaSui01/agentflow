@@ -1,0 +1,441 @@
+package agent
+
+import (
+	"context"
+	"testing"
+	"time"
+
+	"github.com/BaSui01/agentflow/llm"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
+	"go.uber.org/zap"
+)
+
+// TestNewDynamicToolSelector tests creating tool selector
+func TestNewDynamicToolSelector(t *testing.T) {
+	logger, _ := zap.NewDevelopment()
+	provider := new(MockProvider)
+	memory := new(MockMemoryManager)
+	toolManager := new(MockToolManager)
+	bus := new(MockEventBus)
+
+	config := Config{
+		ID:    "test-agent",
+		Name:  "Test Agent",
+		Type:  TypeGeneric,
+		Model: "gpt-4",
+	}
+
+	agent := NewBaseAgent(config, provider, memory, toolManager, bus, logger)
+	selectorConfig := defaultToolSelectionConfigValue()
+
+	selector := NewDynamicToolSelector(agent, selectorConfig)
+
+	assert.NotNil(t, selector)
+	assert.Equal(t, 5, selector.config.MaxTools)
+	assert.Equal(t, 0.3, selector.config.MinScore)
+}
+
+// TestDynamicToolSelector_SelectTools_Disabled tests disabled selector
+func TestDynamicToolSelector_SelectTools_Disabled(t *testing.T) {
+	logger, _ := zap.NewDevelopment()
+	provider := new(MockProvider)
+	memory := new(MockMemoryManager)
+	toolManager := new(MockToolManager)
+	bus := new(MockEventBus)
+
+	config := Config{
+		ID:    "test-agent",
+		Name:  "Test Agent",
+		Type:  TypeGeneric,
+		Model: "gpt-4",
+	}
+
+	agent := NewBaseAgent(config, provider, memory, toolManager, bus, logger)
+	selectorConfig := defaultToolSelectionConfigValue()
+	selectorConfig.Enabled = false
+
+	selector := NewDynamicToolSelector(agent, selectorConfig)
+
+	ctx := context.Background()
+	tools := []llm.ToolSchema{
+		{Name: "tool1", Description: "Tool 1"},
+		{Name: "tool2", Description: "Tool 2"},
+	}
+
+	selected, err := selector.SelectTools(ctx, "test task", tools)
+
+	assert.NoError(t, err)
+	assert.Equal(t, tools, selected)
+}
+
+// TestDynamicToolSelector_SelectTools_Success tests successful tool selection
+func TestDynamicToolSelector_SelectTools_Success(t *testing.T) {
+	logger, _ := zap.NewDevelopment()
+	provider := new(MockProvider)
+	memory := new(MockMemoryManager)
+	toolManager := new(MockToolManager)
+	bus := new(MockEventBus)
+
+	config := Config{
+		ID:    "test-agent",
+		Name:  "Test Agent",
+		Type:  TypeGeneric,
+		Model: "gpt-4",
+	}
+
+	agent := NewBaseAgent(config, provider, memory, toolManager, bus, logger)
+	selectorConfig := defaultToolSelectionConfigValue()
+	selectorConfig.MaxTools = 2
+	selectorConfig.UseLLMRanking = false
+
+	selector := NewDynamicToolSelector(agent, selectorConfig)
+
+	ctx := context.Background()
+	tools := []llm.ToolSchema{
+		{Name: "search_web", Description: "Search the web for information"},
+		{Name: "calculate", Description: "Perform mathematical calculations"},
+		{Name: "send_email", Description: "Send an email to someone"},
+	}
+
+	selected, err := selector.SelectTools(ctx, "search for information online", tools)
+
+	assert.NoError(t, err)
+	assert.LessOrEqual(t, len(selected), 2)
+	// search_web should be selected due to semantic similarity
+	if len(selected) > 0 {
+		assert.Equal(t, "search_web", selected[0].Name)
+	}
+}
+
+// TestDynamicToolSelector_ScoreTools tests tool scoring
+func TestDynamicToolSelector_ScoreTools(t *testing.T) {
+	logger, _ := zap.NewDevelopment()
+	provider := new(MockProvider)
+	memory := new(MockMemoryManager)
+	toolManager := new(MockToolManager)
+	bus := new(MockEventBus)
+
+	config := Config{
+		ID:    "test-agent",
+		Name:  "Test Agent",
+		Type:  TypeGeneric,
+		Model: "gpt-4",
+	}
+
+	agent := NewBaseAgent(config, provider, memory, toolManager, bus, logger)
+	selectorConfig := defaultToolSelectionConfigValue()
+
+	selector := NewDynamicToolSelector(agent, selectorConfig)
+
+	ctx := context.Background()
+	tools := []llm.ToolSchema{
+		{Name: "search_web", Description: "Search the web for information"},
+		{Name: "calculate", Description: "Perform mathematical calculations"},
+	}
+
+	scores, err := selector.ScoreTools(ctx, "search for information", tools)
+
+	assert.NoError(t, err)
+	assert.Len(t, scores, 2)
+	assert.Greater(t, scores[0].TotalScore, 0.0)
+	assert.LessOrEqual(t, scores[0].TotalScore, 1.0)
+}
+
+// TestDynamicToolSelector_calculateSemanticSimilarity tests semantic similarity
+func TestDynamicToolSelector_calculateSemanticSimilarity(t *testing.T) {
+	logger, _ := zap.NewDevelopment()
+	provider := new(MockProvider)
+	memory := new(MockMemoryManager)
+	toolManager := new(MockToolManager)
+	bus := new(MockEventBus)
+
+	config := Config{
+		ID:    "test-agent",
+		Name:  "Test Agent",
+		Type:  TypeGeneric,
+		Model: "gpt-4",
+	}
+
+	agent := NewBaseAgent(config, provider, memory, toolManager, bus, logger)
+	selectorConfig := defaultToolSelectionConfigValue()
+
+	selector := NewDynamicToolSelector(agent, selectorConfig)
+
+	tests := []struct {
+		name     string
+		task     string
+		tool     llm.ToolSchema
+		minScore float64
+	}{
+		{
+			name: "high similarity",
+			task: "search for information online",
+			tool: llm.ToolSchema{
+				Name:        "search_web",
+				Description: "Search the web for information",
+			},
+			minScore: 0.5,
+		},
+		{
+			name: "low similarity",
+			task: "send an email",
+			tool: llm.ToolSchema{
+				Name:        "calculate",
+				Description: "Perform mathematical calculations",
+			},
+			minScore: 0.0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			similarity := selector.calculateSemanticSimilarity(tt.task, tt.tool)
+			assert.GreaterOrEqual(t, similarity, tt.minScore)
+			assert.LessOrEqual(t, similarity, 1.0)
+		})
+	}
+}
+
+// TestDynamicToolSelector_UpdateToolStats tests updating tool statistics
+func TestDynamicToolSelector_UpdateToolStats(t *testing.T) {
+	logger, _ := zap.NewDevelopment()
+	provider := new(MockProvider)
+	memory := new(MockMemoryManager)
+	toolManager := new(MockToolManager)
+	bus := new(MockEventBus)
+
+	config := Config{
+		ID:    "test-agent",
+		Name:  "Test Agent",
+		Type:  TypeGeneric,
+		Model: "gpt-4",
+	}
+
+	agent := NewBaseAgent(config, provider, memory, toolManager, bus, logger)
+	selectorConfig := defaultToolSelectionConfigValue()
+
+	selector := NewDynamicToolSelector(agent, selectorConfig)
+
+	// Update stats for successful call
+	selector.UpdateToolStats("search_web", true, 100*time.Millisecond, 0.05)
+
+	stats := selector.toolStats["search_web"]
+	assert.NotNil(t, stats)
+	assert.Equal(t, int64(1), stats.TotalCalls)
+	assert.Equal(t, int64(1), stats.SuccessfulCalls)
+	assert.Equal(t, int64(0), stats.FailedCalls)
+	assert.Equal(t, 100*time.Millisecond, stats.TotalLatency)
+	assert.Equal(t, 0.05, stats.AvgCost)
+
+	// Update stats for failed call
+	selector.UpdateToolStats("search_web", false, 200*time.Millisecond, 0.03)
+
+	assert.Equal(t, int64(2), stats.TotalCalls)
+	assert.Equal(t, int64(1), stats.SuccessfulCalls)
+	assert.Equal(t, int64(1), stats.FailedCalls)
+	assert.Equal(t, 300*time.Millisecond, stats.TotalLatency)
+	assert.Equal(t, 0.04, stats.AvgCost) // (0.05 + 0.03) / 2
+}
+
+// TestDynamicToolSelector_getReliability tests reliability calculation
+func TestDynamicToolSelector_getReliability(t *testing.T) {
+	logger, _ := zap.NewDevelopment()
+	provider := new(MockProvider)
+	memory := new(MockMemoryManager)
+	toolManager := new(MockToolManager)
+	bus := new(MockEventBus)
+
+	config := Config{
+		ID:    "test-agent",
+		Name:  "Test Agent",
+		Type:  TypeGeneric,
+		Model: "gpt-4",
+	}
+
+	agent := NewBaseAgent(config, provider, memory, toolManager, bus, logger)
+	selectorConfig := defaultToolSelectionConfigValue()
+
+	selector := NewDynamicToolSelector(agent, selectorConfig)
+
+	// Add stats
+	selector.toolStats["reliable_tool"] = &ToolStats{
+		Name:            "reliable_tool",
+		TotalCalls:      10,
+		SuccessfulCalls: 9,
+		FailedCalls:     1,
+	}
+
+	reliability := selector.getReliability("reliable_tool")
+	assert.Equal(t, 0.9, reliability)
+
+	// Unknown tool should return default
+	defaultReliability := selector.getReliability("unknown_tool")
+	assert.Equal(t, 0.8, defaultReliability)
+}
+
+// TestExtractKeywords tests keyword extraction
+func TestExtractKeywords(t *testing.T) {
+	tests := []struct {
+		name     string
+		text     string
+		expected int
+	}{
+		{
+			name:     "simple text",
+			text:     "search for information online",
+			expected: 3,
+		},
+		{
+			name:     "with stop words",
+			text:     "the quick brown fox",
+			expected: 3, // "the" is filtered
+		},
+		{
+			name:     "chinese text",
+			text:     "搜索网络信息",
+			expected: 1, // Single word without spaces
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			keywords := extractKeywords(tt.text)
+			assert.Equal(t, tt.expected, len(keywords))
+		})
+	}
+}
+
+// TestParseToolIndices tests tool index parsing
+func TestParseToolIndices(t *testing.T) {
+	tests := []struct {
+		name     string
+		text     string
+		expected []int
+	}{
+		{
+			name:     "simple list",
+			text:     "1,2,3",
+			expected: []int{1, 2, 3},
+		},
+		{
+			name:     "with spaces",
+			text:     "1, 2, 3",
+			expected: []int{1, 2, 3},
+		},
+		{
+			name:     "with newlines",
+			text:     "1\n2\n3",
+			expected: []int{},
+		},
+		{
+			name:     "mixed format",
+			text:     "1,2,3,5",
+			expected: []int{1, 2, 3, 5},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			indices := parseToolIndices(tt.text)
+			assert.Equal(t, tt.expected, indices)
+		})
+	}
+}
+
+// TestDynamicToolSelector_SelectTools_WithLLMRanking tests LLM-assisted ranking
+func TestDynamicToolSelector_SelectTools_WithLLMRanking(t *testing.T) {
+	logger, _ := zap.NewDevelopment()
+	provider := new(MockProvider)
+	memory := new(MockMemoryManager)
+	toolManager := new(MockToolManager)
+	bus := new(MockEventBus)
+
+	config := Config{
+		ID:    "test-agent",
+		Name:  "Test Agent",
+		Type:  TypeGeneric,
+		Model: "gpt-4",
+	}
+
+	agent := NewBaseAgent(config, provider, memory, toolManager, bus, logger)
+	selectorConfig := defaultToolSelectionConfigValue()
+	selectorConfig.MaxTools = 2
+	selectorConfig.UseLLMRanking = true
+
+	selector := NewDynamicToolSelector(agent, selectorConfig)
+
+	ctx := context.Background()
+	tools := []llm.ToolSchema{
+		{Name: "search_web", Description: "Search the web"},
+		{Name: "calculate", Description: "Calculate numbers"},
+		{Name: "send_email", Description: "Send email"},
+		{Name: "read_file", Description: "Read file"},
+		{Name: "write_file", Description: "Write file"},
+		{Name: "api_call", Description: "Call API"},
+	}
+
+	// Mock LLM ranking response
+	rankingResponse := &llm.ChatResponse{
+		ID:       "ranking-response",
+		Provider: "mock",
+		Model:    "gpt-4",
+		Choices: []llm.ChatChoice{
+			{
+				Index:        0,
+				FinishReason: "stop",
+				Message: llm.Message{
+					Role:    llm.RoleAssistant,
+					Content: "1,3,2",
+				},
+			},
+		},
+	}
+
+	provider.On("Completion", mock.Anything, mock.MatchedBy(func(req *llm.ChatRequest) bool {
+		return len(req.Messages) == 2 && req.Messages[0].Role == llm.RoleSystem
+	})).Return(rankingResponse, nil)
+
+	selected, err := selector.SelectTools(ctx, "search for information", tools)
+
+	assert.NoError(t, err)
+	assert.LessOrEqual(t, len(selected), 2)
+
+	provider.AssertExpectations(t)
+}
+
+// BenchmarkDynamicToolSelector_SelectTools benchmarks tool selection
+func BenchmarkDynamicToolSelector_SelectTools(b *testing.B) {
+	logger, _ := zap.NewDevelopment()
+	provider := new(MockProvider)
+	memory := new(MockMemoryManager)
+	toolManager := new(MockToolManager)
+	bus := new(MockEventBus)
+
+	config := Config{
+		ID:    "test-agent",
+		Name:  "Test Agent",
+		Type:  TypeGeneric,
+		Model: "gpt-4",
+	}
+
+	agent := NewBaseAgent(config, provider, memory, toolManager, bus, logger)
+	selectorConfig := defaultToolSelectionConfigValue()
+	selectorConfig.UseLLMRanking = false
+
+	selector := NewDynamicToolSelector(agent, selectorConfig)
+
+	ctx := context.Background()
+	tools := []llm.ToolSchema{
+		{Name: "tool1", Description: "Tool 1"},
+		{Name: "tool2", Description: "Tool 2"},
+		{Name: "tool3", Description: "Tool 3"},
+		{Name: "tool4", Description: "Tool 4"},
+		{Name: "tool5", Description: "Tool 5"},
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, _ = selector.SelectTools(ctx, "test task", tools)
+	}
+}

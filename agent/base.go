@@ -132,8 +132,9 @@ type BaseAgent struct {
 	toolManager ToolManager
 	bus         EventBus
 
-	recentMemory []MemoryRecord // 缓存最近加载的记忆
-	logger       *zap.Logger
+	recentMemory   []MemoryRecord // 缓存最近加载的记忆
+	recentMemoryMu sync.RWMutex   // 保护 recentMemory 的并发访问
+	logger         *zap.Logger
 
 	// 上下文工程相关
 	contextManager       ContextManager // 上下文管理器（可选）
@@ -208,7 +209,7 @@ func (e toolManagerExecutor) Execute(ctx context.Context, calls []llm.ToolCall) 
 		if e.bus == nil {
 			return
 		}
-		_ = e.bus.Publish(ctx, EventToolCall, &ToolCallEvent{
+		e.bus.Publish(&ToolCallEvent{
 			AgentID_:            e.agentID,
 			RunID:               runID,
 			TraceID:             traceID,
@@ -312,14 +313,12 @@ func (b *BaseAgent) Transition(ctx context.Context, to State) error {
 
 	// 发布状态变更事件
 	if b.bus != nil {
-		if err := b.bus.Publish(ctx, EventStateChange, &StateChangeEvent{
+		b.bus.Publish(&StateChangeEvent{
 			AgentID_:   b.config.ID,
 			FromState:  from,
 			ToState:    to,
 			Timestamp_: time.Now(),
-		}); err != nil {
-			b.logger.Warn("failed to publish state change event", zap.Error(err))
-		}
+		})
 	}
 
 	return nil
@@ -335,7 +334,9 @@ func (b *BaseAgent) Init(ctx context.Context) error {
 		if err != nil {
 			b.logger.Warn("failed to load memory", zap.Error(err))
 		} else {
+			b.recentMemoryMu.Lock()
 			b.recentMemory = records
+			b.recentMemoryMu.Unlock()
 		}
 	}
 
@@ -778,16 +779,21 @@ func (b *BaseAgent) Execute(ctx context.Context, input *Input) (*Output, error) 
 
 	// 4. 加载最近的记忆（如果有）
 	var contextMessages []llm.Message
-	if b.memory != nil && len(b.recentMemory) > 0 {
-		// 将最近的记忆转换为消息
-		for _, mem := range b.recentMemory {
-			if mem.Kind == MemoryShortTerm {
-				contextMessages = append(contextMessages, llm.Message{
-					Role:    llm.RoleAssistant,
-					Content: mem.Content,
-				})
+	if b.memory != nil {
+		b.recentMemoryMu.RLock()
+		hasMemory := len(b.recentMemory) > 0
+		if hasMemory {
+			// 将最近的记忆转换为消息
+			for _, mem := range b.recentMemory {
+				if mem.Kind == MemoryShortTerm {
+					contextMessages = append(contextMessages, llm.Message{
+						Role:    llm.RoleAssistant,
+						Content: mem.Content,
+					})
+				}
 			}
 		}
+		b.recentMemoryMu.RUnlock()
 	}
 
 	// 5. 构建消息
@@ -886,15 +892,13 @@ func (b *BaseAgent) Observe(ctx context.Context, feedback *Feedback) error {
 
 	// 2. 发布反馈事件
 	if b.bus != nil {
-		if err := b.bus.Publish(ctx, EventFeedback, &FeedbackEvent{
-			AgentID_:   b.config.ID,
-			Type:       feedback.Type,
-			Content:    feedback.Content,
-			Data:       feedback.Data,
-			Timestamp_: time.Now(),
-		}); err != nil {
-			b.logger.Warn("failed to publish feedback event", zap.Error(err))
-		}
+		b.bus.Publish(&FeedbackEvent{
+			AgentID_:     b.config.ID,
+			FeedbackType: feedback.Type,
+			Content:      feedback.Content,
+			Data:         feedback.Data,
+			Timestamp_:   time.Now(),
+		})
 	}
 
 	b.logger.Info("feedback observed successfully",

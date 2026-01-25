@@ -448,15 +448,26 @@ func (c *MemoryConsolidator) run(ctx context.Context) {
 	ticker := time.NewTicker(c.system.config.ConsolidationInterval)
 	defer ticker.Stop()
 
+	// 创建带超时的子上下文
+	consolidationTimeout := 5 * time.Minute
+	if c.system.config.ConsolidationInterval > 0 {
+		consolidationTimeout = c.system.config.ConsolidationInterval / 2
+	}
+
 	for {
 		select {
 		case <-ticker.C:
-			if err := c.consolidate(ctx); err != nil {
+			// 为每次整合创建带超时的上下文
+			consolidateCtx, cancel := context.WithTimeout(ctx, consolidationTimeout)
+			if err := c.consolidate(consolidateCtx); err != nil {
 				c.logger.Error("consolidation failed", zap.Error(err))
 			}
+			cancel() // 确保释放资源
 		case <-c.stopCh:
+			c.logger.Debug("consolidator stopped via stopCh")
 			return
 		case <-ctx.Done():
+			c.logger.Debug("consolidator stopped via context cancellation")
 			return
 		}
 	}

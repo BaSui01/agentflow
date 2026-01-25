@@ -1,7 +1,5 @@
 package agent
 
-import "fmt"
-
 // State 定义 Agent 生命周期状态
 type State string
 
@@ -38,12 +36,5 @@ func CanTransition(from, to State) bool {
 	return false
 }
 
-// ErrInvalidTransition 非法状态转换错误
-type ErrInvalidTransition struct {
-	From State
-	To   State
-}
-
-func (e ErrInvalidTransition) Error() string {
-	return fmt.Sprintf("invalid state transition: %s -> %s", e.From, e.To)
-}
+// ErrInvalidTransition is now defined in errors.go
+// This comment is kept for backward compatibility

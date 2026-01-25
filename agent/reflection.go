@@ -287,18 +287,31 @@ func (r *ReflectionExecutor) parseCritique(feedback string) *Critique {
 	return critique
 }
 
-// extractScore 从文本中提取分数
+// extractScore extracts score from text
 func (r *ReflectionExecutor) extractScore(text string) float64 {
-	// 尝试提取 "X/10" 格式
-	parts := strings.Split(text, "/")
-	if len(parts) >= 2 {
-		var score float64
-		if _, err := fmt.Sscanf(parts[0], "%f", &score); err == nil {
-			return score
+	// Try to extract "X/10" format
+	if idx := strings.Index(text, "/"); idx > 0 {
+		// Extract the part before "/"
+		beforeSlash := strings.TrimSpace(text[:idx])
+		// Remove non-numeric characters from the end
+		numStr := ""
+		for i := len(beforeSlash) - 1; i >= 0; i-- {
+			ch := beforeSlash[i]
+			if (ch >= '0' && ch <= '9') || ch == '.' {
+				numStr = string(ch) + numStr
+			} else if numStr != "" {
+				break
+			}
+		}
+		if numStr != "" {
+			var score float64
+			if _, err := fmt.Sscanf(numStr, "%f", &score); err == nil {
+				return score
+			}
 		}
 	}
 
-	// 尝试提取纯数字
+	// Try to extract pure number
 	var score float64
 	if _, err := fmt.Sscanf(text, "%f", &score); err == nil {
 		return score

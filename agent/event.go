@@ -1,7 +1,8 @@
 package agent
 
 import (
-	"context"
+	"fmt"
+	"sync"
 	"time"
 )
 
@@ -9,116 +10,147 @@ import (
 type EventType string
 
 const (
-	EventStateChange EventType = "agent.state_change" // 状态变更
-	EventExecute     EventType = "agent.execute"      // 开始执行
-	EventComplete    EventType = "agent.complete"     // 执行完成
-	EventError       EventType = "agent.error"        // 执行错误
-	EventToolCall    EventType = "agent.tool_call"    // 工具调用
-	EventFeedback    EventType = "agent.feedback"     // 反馈事件
+	EventStateChange       EventType = "state_change"
+	EventToolCall          EventType = "tool_call"
+	EventFeedback          EventType = "feedback"
+	EventApprovalRequested EventType = "approval_requested"
+	EventApprovalResponded EventType = "approval_responded"
+	EventSubagentCompleted EventType = "subagent_completed"
 )
 
-// Event 基础事件接口
+// Event 事件接口
 type Event interface {
-	EventType() EventType
-	AgentID() string
 	Timestamp() time.Time
+	Type() EventType
+}
+
+// EventHandler 事件处理器
+type EventHandler func(Event)
+
+// EventBus 定义事件总线接口
+type EventBus interface {
+	Publish(event Event)
+	Subscribe(eventType EventType, handler EventHandler) string
+	Unsubscribe(subscriptionID string)
+}
+
+// SimpleEventBus 简单的事件总线实现
+type SimpleEventBus struct {
+	mu           sync.RWMutex
+	handlers     map[EventType]map[string]EventHandler
+	eventChannel chan Event
+	done         chan struct{}
+}
+
+// NewEventBus 创建新的事件总线
+func NewEventBus() EventBus {
+	bus := &SimpleEventBus{
+		handlers:     make(map[EventType]map[string]EventHandler),
+		eventChannel: make(chan Event, 100),
+		done:         make(chan struct{}),
+	}
+	go bus.processEvents()
+	return bus
+}
+
+// Publish 发布事件
+func (b *SimpleEventBus) Publish(event Event) {
+	select {
+	case b.eventChannel <- event:
+	case <-b.done:
+	default:
+		// 如果通道满了，丢弃事件
+	}
+}
+
+// Subscribe 订阅事件
+func (b *SimpleEventBus) Subscribe(eventType EventType, handler EventHandler) string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	if b.handlers[eventType] == nil {
+		b.handlers[eventType] = make(map[string]EventHandler)
+	}
+
+	id := fmt.Sprintf("%s-%d", eventType, time.Now().UnixNano())
+	b.handlers[eventType][id] = handler
+	return id
+}
+
+// Unsubscribe 取消订阅
+func (b *SimpleEventBus) Unsubscribe(subscriptionID string) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	for eventType, handlers := range b.handlers {
+		if _, ok := handlers[subscriptionID]; ok {
+			delete(handlers, subscriptionID)
+			if len(handlers) == 0 {
+				delete(b.handlers, eventType)
+			}
+			return
+		}
+	}
+}
+
+// processEvents 处理事件
+func (b *SimpleEventBus) processEvents() {
+	for {
+		select {
+		case event := <-b.eventChannel:
+			b.mu.RLock()
+			handlers := b.handlers[event.Type()]
+			b.mu.RUnlock()
+
+			for _, handler := range handlers {
+				go handler(event)
+			}
+		case <-b.done:
+			return
+		}
+	}
+}
+
+// Stop 停止事件总线
+func (b *SimpleEventBus) Stop() {
+	close(b.done)
 }
 
 // StateChangeEvent 状态变更事件
 type StateChangeEvent struct {
-	AgentID_   string    `json:"agent_id"`
-	FromState  State     `json:"from_state"`
-	ToState    State     `json:"to_state"`
-	Timestamp_ time.Time `json:"timestamp"`
+	AgentID_   string
+	FromState  State
+	ToState    State
+	Timestamp_ time.Time
 }
 
-func (e *StateChangeEvent) EventType() EventType { return EventStateChange }
-func (e *StateChangeEvent) AgentID() string      { return e.AgentID_ }
 func (e *StateChangeEvent) Timestamp() time.Time { return e.Timestamp_ }
+func (e *StateChangeEvent) Type() EventType      { return EventStateChange }
 
-// ExecuteEvent 执行事件
-type ExecuteEvent struct {
-	AgentID_            string    `json:"agent_id"`
-	RunID               string    `json:"run_id,omitempty"`
-	TraceID             string    `json:"trace_id"`
-	PromptBundleVersion string    `json:"prompt_bundle_version,omitempty"`
-	Input               *Input    `json:"input,omitempty"`
-	Timestamp_          time.Time `json:"timestamp"`
-}
-
-func (e *ExecuteEvent) EventType() EventType { return EventExecute }
-func (e *ExecuteEvent) AgentID() string      { return e.AgentID_ }
-func (e *ExecuteEvent) Timestamp() time.Time { return e.Timestamp_ }
-
-// CompleteEvent 完成事件
-type CompleteEvent struct {
-	AgentID_            string        `json:"agent_id"`
-	RunID               string        `json:"run_id,omitempty"`
-	TraceID             string        `json:"trace_id"`
-	PromptBundleVersion string        `json:"prompt_bundle_version,omitempty"`
-	Output              *Output       `json:"output,omitempty"`
-	Duration            time.Duration `json:"duration"`
-	Timestamp_          time.Time     `json:"timestamp"`
-}
-
-func (e *CompleteEvent) EventType() EventType { return EventComplete }
-func (e *CompleteEvent) AgentID() string      { return e.AgentID_ }
-func (e *CompleteEvent) Timestamp() time.Time { return e.Timestamp_ }
-
-// ErrorEvent 错误事件
-type ErrorEvent struct {
-	AgentID_            string    `json:"agent_id"`
-	RunID               string    `json:"run_id,omitempty"`
-	TraceID             string    `json:"trace_id"`
-	PromptBundleVersion string    `json:"prompt_bundle_version,omitempty"`
-	Error               string    `json:"error"`
-	ErrorCategory       string    `json:"error_category,omitempty"`
-	Timestamp_          time.Time `json:"timestamp"`
-}
-
-func (e *ErrorEvent) EventType() EventType { return EventError }
-func (e *ErrorEvent) AgentID() string      { return e.AgentID_ }
-func (e *ErrorEvent) Timestamp() time.Time { return e.Timestamp_ }
-
-// ToolCallEvent 工具调用事件（start/end）。
+// ToolCallEvent 工具调用事件
 type ToolCallEvent struct {
-	AgentID_            string    `json:"agent_id"`
-	RunID               string    `json:"run_id,omitempty"`
-	TraceID             string    `json:"trace_id,omitempty"`
-	PromptBundleVersion string    `json:"prompt_bundle_version,omitempty"`
-	ToolCallID          string    `json:"tool_call_id,omitempty"`
-	ToolName            string    `json:"tool_name"`
-	Stage               string    `json:"stage"` // start/end
-	Error               string    `json:"error,omitempty"`
-	Timestamp_          time.Time `json:"timestamp"`
+	AgentID_            string
+	RunID               string
+	TraceID             string
+	PromptBundleVersion string
+	ToolCallID          string
+	ToolName            string
+	Stage               string // start/end
+	Error               string
+	Timestamp_          time.Time
 }
 
-func (e *ToolCallEvent) EventType() EventType { return EventToolCall }
-func (e *ToolCallEvent) AgentID() string      { return e.AgentID_ }
 func (e *ToolCallEvent) Timestamp() time.Time { return e.Timestamp_ }
-
-// EventHandler 事件处理函数
-type EventHandler func(ctx context.Context, event Event) error
-
-// EventBus 事件总线接口
-type EventBus interface {
-	// Publish 发布事件
-	Publish(ctx context.Context, eventType EventType, event Event) error
-	// Subscribe 订阅事件
-	Subscribe(ctx context.Context, eventType EventType, handler EventHandler) error
-	// Unsubscribe 取消订阅
-	Unsubscribe(eventType EventType, handler EventHandler) error
-}
+func (e *ToolCallEvent) Type() EventType      { return EventToolCall }
 
 // FeedbackEvent 反馈事件
 type FeedbackEvent struct {
-	AgentID_   string         `json:"agent_id"`
-	Type       string         `json:"type"` // approval/rejection/correction
-	Content    string         `json:"content"`
-	Data       map[string]any `json:"data,omitempty"`
-	Timestamp_ time.Time      `json:"timestamp"`
+	AgentID_     string
+	FeedbackType string
+	Content      string
+	Data         map[string]any
+	Timestamp_   time.Time
 }
 
-func (e *FeedbackEvent) EventType() EventType { return EventFeedback }
-func (e *FeedbackEvent) AgentID() string      { return e.AgentID_ }
 func (e *FeedbackEvent) Timestamp() time.Time { return e.Timestamp_ }
+func (e *FeedbackEvent) Type() EventType      { return EventFeedback }
