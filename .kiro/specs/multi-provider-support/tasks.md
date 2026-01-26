@@ -196,7 +196,7 @@ This implementation plan adds support for five new LLM providers (xAI Grok, Zhip
     - **Property 9: RewriterChain Error Handling**
     - **Validates: Requirements 7.3**
 
-- [ ] 11. Implement tool calling support tests
+- [x] 11. Implement tool calling support tests
   - [x] 11.1 Write property test for tool schema conversion
     - **Property 17: Tool Schema Conversion**
     - **Validates: Requirements 11.1**
@@ -209,109 +209,114 @@ This implementation plan adds support for five new LLM providers (xAI Grok, Zhip
     - **Property 20: Tool Result Message Conversion**
     - **Validates: Requirements 11.5**
   
-  - [-] 11.4 Write property test for tool calling in both modes
+  - [x] 11.4 Write property test for tool calling in both modes
     - **Property 21: Tool Calling in Both Modes**
     - **Validates: Requirements 11.6**
 
-- [ ] 12. Implement streaming support tests
-  - [ ] 12.1 Write property test for streaming request format
+- [x] 12. Implement streaming support tests
+  - [x] 12.1 Write property test for streaming request format
     - **Property 13: Streaming Request Format**
     - **Validates: Requirements 10.1**
   
-  - [ ] 12.2 Write property test for SSE response parsing
+  - [x] 12.2 Write property test for SSE response parsing
     - **Property 14: SSE Response Parsing**
     - **Validates: Requirements 10.2, 10.3**
   
-  - [ ] 12.3 Write property test for stream error handling
+  - [x] 12.3 Write property test for stream error handling
     - **Property 15: Stream Error Handling**
     - **Validates: Requirements 10.5**
   
-  - [ ] 12.4 Write property test for tool call accumulation
+  - [x] 12.4 Write property test for tool call accumulation
     - **Property 16: Tool Call Accumulation in Streaming**
     - **Validates: Requirements 10.6**
   
-  - [ ] 12.5 Write unit test for [DONE] marker handling
+  - [x] 12.5 Write unit test for [DONE] marker handling
     - Test that stream closes on [DONE]
     - Test that channel is properly closed
     - _Requirements: 10.4_
 
-- [ ] 13. Implement message and response conversion tests
-  - [ ] 13.1 Write property test for message role conversion
+- [x] 13. Implement message and response conversion tests
+  - [x] 13.1 Write property test for message role conversion
     - **Property 22: Message Role Conversion**
     - **Validates: Requirements 12.1, 12.2, 12.3, 12.4**
   
-  - [ ] 13.2 Write property test for message content preservation
+  - [x] 13.2 Write property test for message content preservation
     - **Property 23: Message Content Preservation**
     - **Validates: Requirements 12.5, 12.6, 12.7**
   
-  - [ ] 13.3 Write property test for response field extraction
+  - [x] 13.3 Write property test for response field extraction
     - **Property 24: Response Field Extraction**
     - **Validates: Requirements 13.1-13.7**
 
-- [ ] 14. Implement HTTP client and context tests
-  - [ ] 14.1 Write property test for default timeout configuration
+- [x] 14. Implement HTTP client and context tests
+  - [x] 14.1 Write property test for default timeout configuration
     - **Property 7: Default Timeout Configuration**
     - **Validates: Requirements 6.6, 15.1**
   
-  - [ ] 14.2 Write property test for HTTP headers configuration
+  - [x] 14.2 Write property test for HTTP headers configuration
     - **Property 25: HTTP Headers Configuration**
     - **Validates: Requirements 15.3, 15.4, 15.5**
   
-  - [ ] 14.3 Write property test for context propagation
+  - [x] 14.3 Write property test for context propagation
     - **Property 26: Context Propagation**
     - **Validates: Requirements 16.1, 16.4**
   
-  - [ ] 14.4 Write property test for context cancellation
+  - [x] 14.4 Write property test for context cancellation
     - **Property 27: Context Cancellation Handling**
     - **Validates: Requirements 16.2, 16.3**
 
-- [ ] 15. Implement health check tests
-  - [ ] 15.1 Write property test for health check request execution
+- [x] 15. Implement health check tests
+  - [x] 15.1 Write property test for health check request execution
     - **Property 10: Health Check Request Execution**
     - **Validates: Requirements 8.1, 8.5**
   
-  - [ ] 15.2 Write property test for health check latency measurement
+  - [x] 15.2 Write property test for health check latency measurement
     - **Property 11: Health Check Latency Measurement**
     - **Validates: Requirements 8.2**
   
-  - [ ] 15.3 Write unit test for health check success case
+  - [x] 15.3 Write unit test for health check success case
     - Test that HTTP 200 returns Healthy=true
     - _Requirements: 8.3_
   
-  - [ ] 15.4 Write unit test for health check failure case
+  - [x] 15.4 Write unit test for health check failure case
     - Test that HTTP errors return Healthy=false
     - _Requirements: 8.4_
 
-- [ ] 16. Implement dual completion mode tests
-  - [ ] 16.1 Write property test for dual completion mode support
+- [x] 16. Implement dual completion mode tests
+  - [x] 16.1 Write property test for dual completion mode support
     - **Property 4: Dual Completion Mode Support**
     - **Validates: Requirements 1.5, 2.4, 3.4, 4.5, 5.5**
 
-- [ ] 17. Add integration tests (optional)
+- [ ] 17. Add integration tests (optional) - 需要使用 APIKeyPool
   - [ ] 17.1 Create integration test for Grok provider
-    - Test end-to-end completion with real API (requires API key)
+    - 使用 APIKeyPool 管理 API keys
+    - Test end-to-end completion with real API
     - Test streaming response
     - Test tool calling flow
     - _Requirements: 1.1-1.8_
   
   - [ ] 17.2 Create integration test for Qwen provider
-    - Test end-to-end completion with real API (requires API key)
+    - 使用 APIKeyPool 管理 API keys
+    - Test end-to-end completion with real API
     - _Requirements: 4.1-4.8_
   
   - [ ] 17.3 Create integration test for DeepSeek provider
-    - Test end-to-end completion with real API (requires API key)
+    - 使用 APIKeyPool 管理 API keys
+    - Test end-to-end completion with real API
     - _Requirements: 5.1-5.8_
   
   - [ ] 17.4 Create integration test for GLM provider
-    - Test end-to-end completion with real API (requires API key)
+    - 使用 APIKeyPool 管理 API keys
+    - Test end-to-end completion with real API
     - _Requirements: 2.1-2.8_
   
   - [ ] 17.5 Create integration test for MiniMax provider
-    - Test end-to-end completion with real API (requires API key)
+    - 使用 APIKeyPool 管理 API keys
+    - Test end-to-end completion with real API
     - Test XML tool call format
     - _Requirements: 3.1-3.8_
 
-- [ ] 18. Final checkpoint - Comprehensive testing
+- [x] 18. Final checkpoint - Comprehensive testing
   - Run all unit tests and property tests
   - Verify all 27 correctness properties are tested
   - Ensure test coverage is adequate
