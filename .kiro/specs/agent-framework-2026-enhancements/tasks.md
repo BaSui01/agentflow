@@ -17,7 +17,7 @@
 
 ## 任务
 
-- [ ] 1. Guardrails 模块实现
+- [x] 1. Guardrails 模块实现
   - [x] 1.1 实现核心接口和类型定义
     - 创建 `agent/guardrails/` 目录
     - 实现 `Validator`、`Filter` 接口
@@ -79,7 +79,7 @@
   - 运行 `go test ./agent/guardrails/...`
   - 确保所有测试通过，如有问题请询问用户
 
-- [ ] 3. Structured Output 模块实现
+- [x] 3. Structured Output 模块实现
   - [x] 3.1 实现 JSON Schema 类型定义
     - 创建 `agent/structured/` 目录
     - 实现 `JSONSchema` 结构体
@@ -98,7 +98,7 @@
     - 返回字段级错误信息
     - _Requirements: 3.1, 3.2, 3.6_
 
-  - [ ]* 3.4 编写 Schema 验证属性测试
+  - [x]* 3.4 编写 Schema 验证属性测试
     - **Property 8: Schema 验证错误定位**
     - **Validates: Requirements 3.2**
 
@@ -108,7 +108,7 @@
     - 支持原生和提示工程两种模式
     - _Requirements: 3.3, 3.4, 3.7, 4.1_
 
-  - [ ]* 3.6 编写 Schema Round-Trip 属性测试
+  - [x]* 3.6 编写 Schema Round-Trip 属性测试
     - **Property 7: Schema 生成与解析 Round-Trip**
     - **Validates: Requirements 3.1, 3.5, 3.6, 4.1, 4.3**
 
@@ -116,7 +116,7 @@
   - 运行 `go test ./agent/structured/...`
   - 确保所有测试通过，如有问题请询问用户
 
-- [ ] 5. A2A Protocol 模块实现
+- [x] 5. A2A Protocol 模块实现
   - [x] 5.1 实现 Agent Card 类型定义
     - 创建 `agent/a2a/` 目录
     - 实现 `AgentCard`、`Capability`、`ToolDefinition` 类型
@@ -127,7 +127,7 @@
     - 从 Agent 配置自动生成 Card
     - _Requirements: 5.2, 5.4_
 
-  - [ ]* 5.3 编写 Agent Card 属性测试
+  - [x]* 5.3 编写 Agent Card 属性测试
     - **Property 9: Agent Card 完整性**
     - **Validates: Requirements 5.1, 5.2, 5.3**
 
@@ -136,7 +136,7 @@
     - 实现消息序列化/反序列化
     - _Requirements: 6.1_
 
-  - [ ]* 5.5 编写 A2A 消息 Round-Trip 属性测试
+  - [x]* 5.5 编写 A2A 消息 Round-Trip 属性测试
     - **Property 10: A2A 消息 Round-Trip**
     - **Validates: Requirements 6.1**
 
@@ -151,7 +151,7 @@
     - 实现任务路由到本地 Agent
     - _Requirements: 5.5, 6.2, 6.6_
 
-  - [ ]* 5.8 编写 A2A 路由属性测试
+  - [x]* 5.8 编写 A2A 路由属性测试
     - **Property 11: A2A 任务路由正确性**
     - **Validates: Requirements 6.2**
 
@@ -195,7 +195,7 @@
     - 实现 `RollbackToVersion` 方法
     - _Requirements: 8.3, 8.5, 8.6_
 
-  - [ ]* 7.8 编写恢复步骤跳过属性测试
+  - [x]* 7.8 编写恢复步骤跳过属性测试
     - **Property 14: 检查点恢复步骤跳过**
     - **Validates: Requirements 8.5**
 
@@ -203,60 +203,60 @@
   - 运行 `go test ./agent/checkpoint*.go -v`
   - 测试文件: `checkpoint_file_test.go`, `checkpoint_manager_test.go`, `checkpoint_property_test.go`
 
-- [ ] 9. Evaluation 模块实现 _(目录 `agent/evaluation/` 已创建，待实现)_
+- [x] 9. Evaluation 模块实现 _(目录 `agent/evaluation/` 已创建，待实现)_
   - [x] 9.1 实现评估指标类型定义
     - 创建 `agent/evaluation/` 目录
     - 实现 `Metric`、`EvalInput`、`EvalOutput`、`EvalResult` 类型
     - _Requirements: 9.1_
 
-  - [-] 9.2 实现内置评估指标
+  - [x] 9.2 实现内置评估指标
     - 实现 `AccuracyMetric`、`LatencyMetric`、`TokenUsageMetric`、`CostMetric`
     - _Requirements: 9.3_
 
-  - [~] 9.3 实现评估执行器
+  - [x] 9.3 实现评估执行器
     - 实现 `Evaluator` 结构体
     - 实现批量评估和报告生成
     - _Requirements: 9.2, 9.4, 9.5, 9.6_
 
-  - [ ]* 9.4 编写评估指标收集属性测试
+  - [x]* 9.4 编写评估指标收集属性测试
     - **Property 15: 评估指标收集完整性**
     - **Validates: Requirements 9.1, 9.2**
 
-  - [~] 9.5 实现 LLM-as-Judge
+  - [x] 9.5 实现 LLM-as-Judge
     - 实现 `LLMJudge` 结构体
     - 实现 `LLMJudgeConfig`、`JudgeDimension`、`JudgeResult` 类型
     - 实现 `Judge` 和 `JudgeBatch` 方法
     - _Requirements: 10.1, 10.2, 10.3, 10.4, 10.5_
 
-  - [ ]* 9.6 编写 LLM-as-Judge 属性测试
+  - [x]* 9.6 编写 LLM-as-Judge 属性测试
     - **Property 16: LLM-as-Judge 结果结构**
     - **Validates: Requirements 10.1, 10.3, 10.4**
 
-  - [~] 9.7 实现 A/B 测试器
+  - [x] 9.7 实现 A/B 测试器
     - 实现 `ABTester`、`Experiment`、`Variant` 类型
     - 实现流量分配和结果记录
     - _Requirements: 11.1, 11.2, 11.3, 11.5_
 
-  - [ ]* 9.8 编写 A/B 测试流量分配属性测试
+  - [x]* 9.8 编写 A/B 测试流量分配属性测试
     - **Property 17: A/B 测试流量分配**
     - **Validates: Requirements 11.2**
 
-  - [~] 9.9 实现统计分析和报告
+  - [x] 9.9 实现统计分析和报告
     - 实现 `ExperimentResult`、`VariantResult` 类型
     - 实现统计显著性分析
     - 实现自动选择优胜配置
     - _Requirements: 11.4, 11.6_
 
-  - [ ]* 9.10 编写 A/B 测试统计分析属性测试
+  - [x]* 9.10 编写 A/B 测试统计分析属性测试
     - **Property 18: A/B 测试统计分析**
     - **Validates: Requirements 11.3, 11.4**
 
-- [~] 10. Checkpoint - 确保 Evaluation 模块测试通过
+- [x] 10. Checkpoint - 确保 Evaluation 模块测试通过
   - 运行 `go test ./agent/evaluation/...`
   - 确保所有测试通过，如有问题请询问用户
 
-- [ ] 11. 集成和文档
-  - [~] 11.1 集成 Guardrails 到 BaseAgent
+- [x] 11. 集成和文档
+  - [x] 11.1 集成 Guardrails 到 BaseAgent
     - 在 BaseAgent 中添加 Guardrails 配置
     - 在 Execute 方法中集成输入/输出验证
     - _Requirements: 1.7, 2.4_
@@ -266,12 +266,12 @@
     - 在 Execute 方法中集成检查点保存
     - _Requirements: 7.1, 7.4_
 
-  - [~] 11.3 更新 examples 目录
+  - [x] 11.3 更新 examples 目录
     - 添加 Guardrails 使用示例
     - 添加 Structured Output 使用示例
     - 添加 A2A Protocol 使用示例
 
-- [~] 12. Final Checkpoint - 确保所有测试通过
+- [x] 12. Final Checkpoint - 确保所有测试通过
   - 运行 `go test ./...`
   - 确保所有测试通过，如有问题请询问用户
 

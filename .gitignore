@@ -25,3 +25,6 @@ Thumbs.db
 *.coverprofile
 coverage.html
 .ace-tool/
+
+# Test artifacts
+test_artifacts/
