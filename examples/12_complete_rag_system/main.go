@@ -5,8 +5,9 @@ import (
 	"fmt"
 	"log"
 
-	llmcontext "github.com/BaSui01/agentflow/llm/context"
-	"github.com/BaSui01/agentflow/llm/retrieval"
+	agentcontext "github.com/BaSui01/agentflow/agent/context"
+	"github.com/BaSui01/agentflow/rag"
+	"github.com/BaSui01/agentflow/types"
 	"go.uber.org/zap"
 )
 
@@ -18,26 +19,26 @@ func main() {
 	logger, _ := zap.NewDevelopment()
 	defer logger.Sync()
 
-	fmt.Println("=== 完整 RAG 系统示例 ===\n")
+	fmt.Println("=== 完整 RAG 系统示例 ===")
 
 	// 1. 创建向量存储
-	vectorStore := retrieval.NewInMemoryVectorStore(logger)
+	vectorStore := rag.NewInMemoryVectorStore(logger)
 
 	// 2. 准备文档
-	docs := []retrieval.Document{
+	docs := []rag.Document{
 		{
-			ID:      "doc1",
-			Content: "Go is a statically typed, compiled programming language designed at Google.",
+			ID:        "doc1",
+			Content:   "Go is a statically typed, compiled programming language designed at Google.",
 			Embedding: []float64{0.1, 0.2, 0.3, 0.4, 0.5},
 		},
 		{
-			ID:      "doc2",
-			Content: "Python is an interpreted, high-level programming language with dynamic typing.",
+			ID:        "doc2",
+			Content:   "Python is an interpreted, high-level programming language with dynamic typing.",
 			Embedding: []float64{0.2, 0.3, 0.4, 0.5, 0.6},
 		},
 		{
-			ID:      "doc3",
-			Content: "Rust is a systems programming language focused on safety and performance.",
+			ID:        "doc3",
+			Content:   "Rust is a systems programming language focused on safety and performance.",
 			Embedding: []float64{0.15, 0.25, 0.35, 0.45, 0.55},
 		},
 	}
@@ -48,8 +49,8 @@ func main() {
 	}
 
 	// 4. 创建混合检索器
-	config := retrieval.DefaultHybridRetrievalConfig()
-	retriever := retrieval.NewHybridRetrieverWithVectorStore(config, vectorStore, logger)
+	config := rag.DefaultHybridRetrievalConfig()
+	retriever := rag.NewHybridRetrieverWithVectorStore(config, vectorStore, logger)
 
 	if err := retriever.IndexDocuments(docs); err != nil {
 		log.Fatal(err)
@@ -71,15 +72,15 @@ func main() {
 
 	// 6. 语义缓存示例
 	fmt.Println("\n=== 语义缓存 ===")
-	cacheConfig := retrieval.SemanticCacheConfig{
+	cacheConfig := rag.SemanticCacheConfig{
 		SimilarityThreshold: 0.9,
 	}
-	cache := retrieval.NewSemanticCache(vectorStore, cacheConfig, logger)
+	cache := rag.NewSemanticCache(vectorStore, cacheConfig, logger)
 
 	// 设置缓存
-	cacheDoc := retrieval.Document{
-		ID:      "cache1",
-		Content: "Cached response for programming language query",
+	cacheDoc := rag.Document{
+		ID:        "cache1",
+		Content:   "Cached response for programming language query",
 		Embedding: queryEmbedding,
 	}
 	if err := cache.Set(context.Background(), cacheDoc); err != nil {
@@ -96,56 +97,33 @@ func main() {
 	// 7. 上下文压缩示例
 	fmt.Println("\n=== 上下文压缩 ===")
 
-	// 创建 tokenizer（简化版）
-	tokenizer := &SimpleTokenizer{}
+	// 使用新的 agent/context.Engineer 进行上下文管理
+	engineerConfig := agentcontext.DefaultConfig()
+	engineer := agentcontext.New(engineerConfig, logger)
 
-	// Create summary compressor
-	compressorConfig := llmcontext.DefaultSummaryCompressionConfig()
-	compressor := llmcontext.NewSummaryCompressor(nil, compressorConfig, logger)
-
-	// Create enhanced context manager
-	contextManager := llmcontext.NewDefaultContextManagerWithCompression(tokenizer, compressor, logger)
-
-	// Prepare messages
-	messages := []llmcontext.Message{
-		{Role: llmcontext.RoleSystem, Content: "You are a helpful assistant."},
-		{Role: llmcontext.RoleUser, Content: "What is Go?"},
-		{Role: llmcontext.RoleAssistant, Content: "Go is a programming language."},
-		{Role: llmcontext.RoleUser, Content: "What about Python?"},
-		{Role: llmcontext.RoleAssistant, Content: "Python is also a programming language."},
+	// 准备消息
+	messages := []types.Message{
+		{Role: types.RoleSystem, Content: "You are a helpful assistant."},
+		{Role: types.RoleUser, Content: "What is Go?"},
+		{Role: types.RoleAssistant, Content: "Go is a programming language."},
+		{Role: types.RoleUser, Content: "What about Python?"},
+		{Role: types.RoleAssistant, Content: "Python is also a programming language."},
 	}
 
-	// 裁剪消息
-	trimmed, err := contextManager.TrimMessages(messages, 100)
+	// 获取上下文状态
+	status := engineer.GetStatus(messages)
+	fmt.Printf("当前 token 数: %d\n", status.CurrentTokens)
+	fmt.Printf("使用率: %.2f%%\n", status.UsageRatio*100)
+	fmt.Printf("建议: %s\n", status.Recommendation)
+
+	// 管理上下文（如果需要压缩）
+	managed, err := engineer.Manage(context.Background(), messages, "What about Python?")
 	if err != nil {
 		log.Fatal(err)
 	}
 
 	fmt.Printf("原始消息数: %d\n", len(messages))
-	fmt.Printf("裁剪后消息数: %d\n", len(trimmed))
+	fmt.Printf("管理后消息数: %d\n", len(managed))
 
 	fmt.Println("\n=== 完成 ===")
-}
-
-// SimpleTokenizer 简单的 tokenizer 实现
-type SimpleTokenizer struct{}
-
-func (t *SimpleTokenizer) CountTokens(text string) int {
-	return len(text) / 4 // 简化估算
-}
-
-func (t *SimpleTokenizer) CountMessageTokens(msg llmcontext.Message) int {
-	return t.CountTokens(msg.Content)
-}
-
-func (t *SimpleTokenizer) CountMessagesTokens(msgs []llmcontext.Message) int {
-	total := 0
-	for _, msg := range msgs {
-		total += t.CountMessageTokens(msg)
-	}
-	return total
-}
-
-func (t *SimpleTokenizer) EstimateToolTokens(tools []llmcontext.ToolSchema) int {
-	return len(tools) * 50 // Simple estimation
 }

@@ -8,8 +8,8 @@ import (
 	"strings"
 
 	"github.com/BaSui01/agentflow/llm"
-	"github.com/BaSui01/agentflow/providers"
-	"github.com/BaSui01/agentflow/providers/openai"
+	"github.com/BaSui01/agentflow/llm/providers"
+	"github.com/BaSui01/agentflow/llm/providers/openai"
 	"github.com/BaSui01/agentflow/workflow"
 	"go.uber.org/zap"
 )

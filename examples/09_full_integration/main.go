@@ -7,7 +7,7 @@ import (
 	"github.com/BaSui01/agentflow/agent"
 	"github.com/BaSui01/agentflow/agent/collaboration"
 	"github.com/BaSui01/agentflow/agent/hierarchical"
-	"github.com/BaSui01/agentflow/agent/mcp"
+	"github.com/BaSui01/agentflow/agent/protocol/mcp"
 	"github.com/BaSui01/agentflow/agent/memory"
 	"github.com/BaSui01/agentflow/agent/observability"
 	"github.com/BaSui01/agentflow/agent/skills"

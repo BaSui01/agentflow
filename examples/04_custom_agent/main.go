@@ -7,8 +7,8 @@ import (
 
 	"github.com/BaSui01/agentflow/agent"
 	"github.com/BaSui01/agentflow/llm"
-	"github.com/BaSui01/agentflow/providers"
-	"github.com/BaSui01/agentflow/providers/openai"
+	"github.com/BaSui01/agentflow/llm/providers"
+	"github.com/BaSui01/agentflow/llm/providers/openai"
 	"go.uber.org/zap"
 )
 
