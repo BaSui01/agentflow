@@ -91,7 +91,6 @@ func TestMultiProviderRouting(t *testing.T) {
 	}
 
 	provider1.On("Completion", ctx, req).Return(resp1, nil)
-	provider1.On("SupportsNativeFunctionCalling").Return(true)
 
 	// Route to provider1 - use provider directly since legacy router is deprecated
 	resp, err := provider1.Completion(ctx, req)
@@ -130,7 +129,6 @@ func TestMultiProviderFailover(t *testing.T) {
 
 	// Mock provider1 failure
 	provider1.On("Completion", ctx, req).Return(nil, assert.AnError)
-	provider1.On("SupportsNativeFunctionCalling").Return(true)
 
 	// Mock provider2 success
 	resp2 := &llm.ChatResponse{
@@ -148,7 +146,6 @@ func TestMultiProviderFailover(t *testing.T) {
 	}
 
 	provider2.On("Completion", ctx, req).Return(resp2, nil)
-	provider2.On("SupportsNativeFunctionCalling").Return(true)
 
 	// Try provider1, should fail - use provider directly
 	_, err := provider1.Completion(ctx, req)
@@ -210,9 +207,7 @@ func TestMultiProviderLoadBalancing(t *testing.T) {
 	}
 
 	provider1.On("Completion", ctx, mock.Anything).Return(resp1, nil)
-	provider1.On("SupportsNativeFunctionCalling").Return(true)
 	provider2.On("Completion", ctx, mock.Anything).Return(resp2, nil)
-	provider2.On("SupportsNativeFunctionCalling").Return(true)
 
 	// Send multiple requests - use providers directly
 	for i := 0; i < 10; i++ {
@@ -321,7 +316,6 @@ func BenchmarkMultiProviderRouting(b *testing.B) {
 	}
 
 	provider1.On("Completion", ctx, req).Return(resp, nil)
-	provider1.On("SupportsNativeFunctionCalling").Return(true)
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
