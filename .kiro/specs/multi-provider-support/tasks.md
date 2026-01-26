@@ -214,76 +214,76 @@ This implementation plan adds support for five new LLM providers (xAI Grok, Zhip
     - **Validates: Requirements 11.6**
 
 - [ ] 12. Implement streaming support tests
-  - [~] 12.1 Write property test for streaming request format
+  - [ ] 12.1 Write property test for streaming request format
     - **Property 13: Streaming Request Format**
     - **Validates: Requirements 10.1**
   
-  - [~] 12.2 Write property test for SSE response parsing
+  - [ ] 12.2 Write property test for SSE response parsing
     - **Property 14: SSE Response Parsing**
     - **Validates: Requirements 10.2, 10.3**
   
-  - [~] 12.3 Write property test for stream error handling
+  - [ ] 12.3 Write property test for stream error handling
     - **Property 15: Stream Error Handling**
     - **Validates: Requirements 10.5**
   
-  - [~] 12.4 Write property test for tool call accumulation
+  - [ ] 12.4 Write property test for tool call accumulation
     - **Property 16: Tool Call Accumulation in Streaming**
     - **Validates: Requirements 10.6**
   
-  - [~] 12.5 Write unit test for [DONE] marker handling
+  - [ ] 12.5 Write unit test for [DONE] marker handling
     - Test that stream closes on [DONE]
     - Test that channel is properly closed
     - _Requirements: 10.4_
 
 - [ ] 13. Implement message and response conversion tests
-  - [~] 13.1 Write property test for message role conversion
+  - [ ] 13.1 Write property test for message role conversion
     - **Property 22: Message Role Conversion**
     - **Validates: Requirements 12.1, 12.2, 12.3, 12.4**
   
-  - [~] 13.2 Write property test for message content preservation
+  - [ ] 13.2 Write property test for message content preservation
     - **Property 23: Message Content Preservation**
     - **Validates: Requirements 12.5, 12.6, 12.7**
   
-  - [~] 13.3 Write property test for response field extraction
+  - [ ] 13.3 Write property test for response field extraction
     - **Property 24: Response Field Extraction**
     - **Validates: Requirements 13.1-13.7**
 
 - [ ] 14. Implement HTTP client and context tests
-  - [~] 14.1 Write property test for default timeout configuration
+  - [ ] 14.1 Write property test for default timeout configuration
     - **Property 7: Default Timeout Configuration**
     - **Validates: Requirements 6.6, 15.1**
   
-  - [~] 14.2 Write property test for HTTP headers configuration
+  - [ ] 14.2 Write property test for HTTP headers configuration
     - **Property 25: HTTP Headers Configuration**
     - **Validates: Requirements 15.3, 15.4, 15.5**
   
-  - [~] 14.3 Write property test for context propagation
+  - [ ] 14.3 Write property test for context propagation
     - **Property 26: Context Propagation**
     - **Validates: Requirements 16.1, 16.4**
   
-  - [~] 14.4 Write property test for context cancellation
+  - [ ] 14.4 Write property test for context cancellation
     - **Property 27: Context Cancellation Handling**
     - **Validates: Requirements 16.2, 16.3**
 
 - [ ] 15. Implement health check tests
-  - [~] 15.1 Write property test for health check request execution
+  - [ ] 15.1 Write property test for health check request execution
     - **Property 10: Health Check Request Execution**
     - **Validates: Requirements 8.1, 8.5**
   
-  - [~] 15.2 Write property test for health check latency measurement
+  - [ ] 15.2 Write property test for health check latency measurement
     - **Property 11: Health Check Latency Measurement**
     - **Validates: Requirements 8.2**
   
-  - [~] 15.3 Write unit test for health check success case
+  - [ ] 15.3 Write unit test for health check success case
     - Test that HTTP 200 returns Healthy=true
     - _Requirements: 8.3_
   
-  - [~] 15.4 Write unit test for health check failure case
+  - [ ] 15.4 Write unit test for health check failure case
     - Test that HTTP errors return Healthy=false
     - _Requirements: 8.4_
 
 - [ ] 16. Implement dual completion mode tests
-  - [~] 16.1 Write property test for dual completion mode support
+  - [ ] 16.1 Write property test for dual completion mode support
     - **Property 4: Dual Completion Mode Support**
     - **Validates: Requirements 1.5, 2.4, 3.4, 4.5, 5.5**
 
@@ -318,12 +318,12 @@ This implementation plan adds support for five new LLM providers (xAI Grok, Zhip
   - Ask the user if questions arise
 
 - [ ] 19. Documentation and examples
-  - [~] 19.1 Add usage examples for each provider
+  - [ ] 19.1 Add usage examples for each provider
     - Create example code showing how to initialize each provider
     - Show basic completion and streaming examples
     - Show tool calling examples
   
-  - [~] 19.2 Update README or documentation
+  - [ ] 19.2 Update README or documentation
     - Document the five new providers
     - List supported models for each provider
     - Document configuration options

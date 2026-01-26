@@ -1,10 +1,227 @@
 # AgentFlow
 
-> 🚀 2025 年生产级 Go 语言 LLM Agent 框架 - 集成最新 AI Agent 架构
+> 🚀 2026 年生产级 Go 语言 LLM Agent 框架 - 多提供商 + API Key 池
 
 [![Go Version](https://img.shields.io/badge/Go-1.24+-00ADD8?style=flat&logo=go)](https://go.dev/)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Agent Framework](https://img.shields.io/badge/Agent-2025%20Standard-brightgreen)](docs/AGENT_FRAMEWORK_ENHANCEMENT_2025.md)
+
+## ✨ 2026 核心特性
+
+### 🎯 多提供商支持（Multi-Provider）
+- **模型多对多映射** - 同一模型（如 GPT-5）可由多个提供商提供
+- **成本优化路由** - 自动选择最便宜的提供商
+- **健康检查与容灾** - 自动故障转移到备用提供商
+- **QPS 负载均衡** - 智能分配请求到多个提供商
+
+### 🔑 API Key 池管理
+- **多 Key 负载均衡** - 每个提供商配置多个 API Key
+- **4 种选择策略** - 轮询、加权随机、优先级、最少使用
+- **自动限流检测** - RPM/RPD 限制自动识别
+- **健康监控** - 失败率 > 50% 自动禁用
+
+### 🤖 Agent 框架增强
+- **Reflection 机制** - 自我评估与迭代改进，质量提升 26%
+- **动态工具选择** - 智能工具匹配，Token 消耗减少 35%
+- **Skills 系统** - 基于 Anthropic 标准的动态技能加载
+- **MCP 集成** - Model Context Protocol 标准化集成
+
+## 🚀 快速开始
+
+### 安装
+
+```bash
+go get github.com/yourusername/agentflow
+```
+
+### 基础使用
+
+```go
+package main
+
+import (
+	"context"
+	"fmt"
+	"log"
+
+	"github.com/yourusername/agentflow/llm"
+	"github.com/yourusername/agentflow/providers/openai"
+	"go.uber.org/zap"
+	"gorm.io/driver/postgres"
+	"gorm.io/gorm"
+)
+
+func main() {
+	// 1. 初始化数据库
+	db, _ := gorm.Open(postgres.Open("your-dsn"), &gorm.Config{})
+	llm.InitDatabase(db)
+	llm.SeedExampleData(db) // 可选：加载示例数据
+
+	// 2. 创建 Provider 工厂
+	factory := llm.NewDefaultProviderFactory()
+	factory.RegisterProvider("openai", func(apiKey, baseURL string) (llm.Provider, error) {
+		cfg := openai.Config{APIKey: apiKey}
+		if baseURL != "" {
+			cfg.BaseURL = baseURL
+		}
+		return openai.NewProvider(cfg), nil
+	})
+
+	// 3. 创建多提供商路由器
+	logger, _ := zap.NewDevelopment()
+	router := llm.NewMultiProviderRouter(db, factory, llm.RouterOptions{
+		Logger: logger,
+	})
+
+	// 4. 初始化 API Key 池
+	ctx := context.Background()
+	router.InitAPIKeyPools(ctx)
+
+	// 5. 成本优先路由
+	selection, _ := router.SelectProviderWithModel(ctx, "gpt-5", llm.StrategyCostBased)
+	fmt.Printf("Selected: %s\n", selection.ProviderCode)
+
+	// 6. 发起请求
+	resp, _ := selection.Provider.Completion(ctx, &llm.ChatRequest{
+		Model: selection.ModelName,
+		Messages: []llm.Message{
+			{Role: llm.RoleUser, Content: "Hello!"},
+		},
+	})
+	fmt.Println(resp.Choices[0].Message.Content)
+}
+```
+
+## 📊 支持的模型（2026 最新）
+
+### OpenAI
+
+| 模型 | 输入价格 | 输出价格 | 上下文 |
+|------|---------|---------|--------|
+| GPT-5 | $1.25/1M | $10/1M | 272K |
+| GPT-5 Mini | $0.25/1M | $2/1M | 272K |
+| GPT-5 Nano | $0.05/1M | $0.40/1M | 272K |
+
+### Anthropic (Claude)
+
+| 模型 | 输入价格 | 输出价格 | 上下文 |
+|------|---------|---------|--------|
+| Claude Opus 4.5 | $5/1M | $25/1M | 1M |
+| Claude Sonnet 4.5 | $3/1M | $15/1M | 1M |
+| Claude Haiku 4.5 | $1/1M | $5/1M | 1M |
+
+### DeepSeek
+
+| 模型 | 输入价格 | 输出价格 | 上下文 |
+|------|---------|---------|--------|
+| DeepSeek V3.1 | $0.14/1M | $0.28/1M | 64K |
+
+### Google (Gemini)
+
+| 模型 | 输入价格 | 输出价格 | 上下文 |
+|------|---------|---------|--------|
+| Gemini 3 Pro | $1.25/1M | $10/1M | 1M |
+
+## 🎯 核心功能
+
+### 1. 多提供商路由
+
+```go
+// 成本优先
+selection, _ := router.SelectProviderWithModel(ctx, "gpt-5", llm.StrategyCostBased)
+
+// 健康优先
+selection, _ := router.SelectProviderWithModel(ctx, "gpt-5", llm.StrategyHealthBased)
+
+// QPS 负载均衡
+selection, _ := router.SelectProviderWithModel(ctx, "gpt-5", llm.StrategyQPSBased)
+```
+
+### 2. API Key 池管理
+
+```go
+// 查看统计信息
+stats := router.GetAPIKeyStats()
+for providerID, keyStats := range stats {
+	for keyID, stat := range keyStats {
+		fmt.Printf("Key %d: Success Rate %.2f%%, RPM %d\n",
+			keyID, stat.SuccessRate*100, stat.CurrentRPM)
+	}
+}
+
+// 记录使用情况
+router.RecordAPIKeyUsage(ctx, providerID, keyID, success, errMsg)
+```
+
+### 3. 数据库支持
+
+支持所有主流数据库（通过 GORM AutoMigrate）：
+- PostgreSQL
+- MySQL
+- SQLite
+- SQL Server
+
+```go
+// PostgreSQL
+db, _ := gorm.Open(postgres.Open(dsn), &gorm.Config{})
+
+// MySQL
+db, _ := gorm.Open(mysql.Open(dsn), &gorm.Config{})
+
+// SQLite
+db, _ := gorm.Open(sqlite.Open("agentflow.db"), &gorm.Config{})
+
+llm.InitDatabase(db) // 自动创建表结构
+```
+
+## 📁 项目结构
+
+```
+agentflow/
+├── llm/                      # LLM 抽象层
+│   ├── types.go              # 数据模型（多对多 + API Key 池）
+│   ├── apikey_pool.go        # API Key 池管理
+│   ├── router_multi_provider.go # 多提供商路由
+│   ├── provider_wrapper.go   # Provider 工厂
+│   └── db_init.go            # 数据库初始化
+│
+├── providers/                # Provider 实现
+│   ├── openai/               # OpenAI (GPT-5)
+│   ├── anthropic/            # Claude (Opus 4.5)
+│   ├── deepseek/             # DeepSeek V3.1
+│   └── gemini/               # Gemini 3 Pro
+│
+├── agent/                    # Agent 框架
+│   ├── reflection.go         # Reflection 机制
+│   ├── tool_selector.go      # 动态工具选择
+│   └── skills/               # Skills 系统
+│
+└── examples/                 # 示例代码
+    └── 14_multi_provider_apikey_pool/
+```
+
+## 🎯 使用场景
+
+- ✅ 需要成本优化的大规模部署
+- ✅ 需要高可用性的生产环境
+- ✅ 多模型对比和 A/B 测试
+- ✅ 需要容灾和故障转移
+- ✅ API Key 限流管理
+
+## 📖 示例
+
+查看 [examples/14_multi_provider_apikey_pool](examples/14_multi_provider_apikey_pool/) 获取完整示例。
+
+## 🌟 参考资料
+
+基于 2026 年最新 AI 模型和最佳实践构建：
+- [OpenAI GPT-5 API](https://openai.com/api/)
+- [Anthropic Claude 4.5](https://www.anthropic.com/)
+- [DeepSeek V3.1](https://www.deepseek.com/)
+- [Google Gemini 3](https://ai.google.dev/)
+
+## 📄 License
+
+MIT License
 
 ## ✨ 2025 年最新特性
 
@@ -399,6 +616,7 @@ agentflow/
 - [07_mid_priority_features](examples/07_mid_priority_features/) - 中级特性 ⭐
 - [08_low_priority_features](examples/08_low_priority_features/) - 协作与监控 ⭐
 - [13_new_providers](examples/13_new_providers/) - 新增 Provider 示例 ⭐
+- [14_multi_provider_apikey_pool](examples/14_multi_provider_apikey_pool/) - 多提供商 + API Key 池 ⭐
 
 ## 🎯 使用场景
 

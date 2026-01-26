@@ -1,5 +1,98 @@
 # Provider 层 2026 年更新指南
 
+## 数据库内置模型 (2026-01-26 更新)
+
+**AgentFlow 现已内置 50+ 主流模型的完整信息**
+
+### 覆盖范围
+
+- **13 个提供商**: OpenAI, Anthropic, Google, DeepSeek, Doubao, Qwen, GLM, Grok, Mistral, Hunyuan, Kimi, MiniMax, Llama
+- **52 个模型**: 包含 2026 年最新旗舰模型和经济型模型
+- **完整定价**: 输入/输出 token 价格 ($/1M tokens)
+- **上下文窗口**: 每个模型的最大 token 数
+- **优先级配置**: 智能路由的默认优先级
+
+### 使用方式
+
+```go
+import "your-module/llm"
+
+// 初始化数据库并自动填充 50+ 模型数据
+db, _ := gorm.Open(sqlite.Open("agentflow.db"), &gorm.Config{})
+llm.InitDatabase(db)
+llm.SeedExampleData(db) // 自动填充所有模型
+
+// 查询可用模型
+var models []llm.LLMModel
+db.Find(&models)
+
+// 查询特定提供商的模型
+var providerModels []llm.LLMProviderModel
+db.Where("provider_id = ?", 1).Find(&providerModels)
+```
+
+### 内置模型列表
+
+| Provider | Models | Context | Price Range |
+|----------|--------|---------|-------------|
+| OpenAI | 5 | 128K-272K | $0.0001-$0.01/M |
+| Anthropic | 6 | 200K-1M | $0.0008-$0.025/M |
+| Google | 5 | 1M-2M | $0.0001-$0.01/M |
+| DeepSeek | 4 | 64K | $0.00014-$0.0022/M |
+| Doubao | 4 | 32K | $0.00004-$0.00035/M |
+| Qwen | 5 | 128K | $0.00008-$0.0012/M |
+| GLM | 4 | 128K | $0.000001-$0.0001/M |
+| Grok | 3 | 131K | $0.0005-$0.015/M |
+| Mistral | 4 | 32K-128K | $0.0002-$0.006/M |
+| Hunyuan | 3 | 32K | $0.000014-$0.00042/M |
+| Kimi | 3 | 128K | $0.00014/M |
+| MiniMax | 2 | 245K | $0.00014/M |
+| Llama | 4 | 128K | Free (开源) |
+
+### 数据结构
+
+```go
+// 模型定义
+type LLMModel struct {
+    ID          uint
+    ModelName   string  // 统一模型名 (如 "gpt-5")
+    DisplayName string  // 显示名称
+    Enabled     bool
+}
+
+// 提供商-模型映射 (多对多)
+type LLMProviderModel struct {
+    ModelID         uint
+    ProviderID      uint
+    RemoteModelName string  // 提供商的实际模型名
+    PriceInput      float64 // $/1M tokens
+    PriceCompletion float64 // $/1M tokens
+    MaxTokens       int     // 上下文窗口
+    Priority        int     // 路由优先级
+    Enabled         bool
+}
+```
+
+### 自动路由
+
+框架会根据内置数据自动选择最优模型:
+
+```go
+router := llm.NewMultiProviderRouter(db)
+
+// 自动选择最便宜的可用模型
+resp, _ := router.Chat(ctx, &llm.ChatRequest{
+    Messages: messages,
+    // 不指定 Model，自动路由
+})
+
+// 或指定模型，自动选择最优提供商
+resp, _ := router.Chat(ctx, &llm.ChatRequest{
+    Model:    "gpt-5",  // 会自动找到 OpenAI 的 gpt-5
+    Messages: messages,
+})
+```
+
 ## 重大变化总览
 
 ### 1. OpenAI - Responses API 迁移（重要）
