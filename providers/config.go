@@ -100,3 +100,11 @@ type LlamaConfig struct {
 	Timeout  time.Duration `json:"timeout,omitempty" yaml:"timeout,omitempty"`
 	Provider string        `json:"provider,omitempty" yaml:"provider,omitempty"` // together/replicate/openrouter
 }
+
+// DoubaoConfig ByteDance Doubao Provider 配置
+type DoubaoConfig struct {
+	APIKey  string        `json:"api_key" yaml:"api_key"`
+	BaseURL string        `json:"base_url" yaml:"base_url"` // Default: https://ark.cn-beijing.volces.com/api/v3
+	Model   string        `json:"model,omitempty" yaml:"model,omitempty"` // Default: Doubao-1.5-pro-32k
+	Timeout time.Duration `json:"timeout,omitempty" yaml:"timeout,omitempty"`
+}

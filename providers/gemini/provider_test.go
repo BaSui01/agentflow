@@ -112,7 +112,10 @@ func TestGeminiProvider_Integration(t *testing.T) {
 				{Role: llm.RoleUser, Content: "Describe this image"},
 			},
 			MaxTokens: 50,
-			MediaResolution: &llm.MediaResolution{
+			MediaResolution: &struct {
+				Resolution string `json:"resolution"`
+				MaxTokens  int    `json:"max_tokens,omitempty"`
+			}{
 				Resolution: "high",
 			},
 		}
