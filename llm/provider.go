@@ -83,10 +83,13 @@ type ChatRequest struct {
 	Tags        []string          `json:"tags,omitempty"` // 路由策略：标签匹配
 	
 	// 2026 新增字段
-	ReasoningMode      string           `json:"reasoning_mode,omitempty"`       // fast/extended/thinking
-	ThoughtSignatures  []string         `json:"thought_signatures,omitempty"`   // Gemini 3/OpenAI
-	MediaResolution    *MediaResolution `json:"media_resolution,omitempty"`     // Gemini 3
-	PreviousResponseID string           `json:"previous_response_id,omitempty"` // OpenAI Responses API
+	ReasoningMode      string `json:"reasoning_mode,omitempty"`       // fast/extended/thinking
+	ThoughtSignatures  []string `json:"thought_signatures,omitempty"` // Gemini 3/OpenAI
+	MediaResolution    *struct {
+		Resolution string `json:"resolution"` // low/medium/high
+		MaxTokens  int    `json:"max_tokens,omitempty"`
+	} `json:"media_resolution,omitempty"` // Gemini 3
+	PreviousResponseID string `json:"previous_response_id,omitempty"` // OpenAI Responses API
 }
 
 type ChatUsage struct {

@@ -1,6 +1,7 @@
 package llm
 
 import (
+	"context"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -21,6 +22,30 @@ func (m *MockProviderForResilience) Name() string {
 func (m *MockProviderForResilience) SupportsNativeFunctionCalling() bool {
 	args := m.Called()
 	return args.Bool(0)
+}
+
+func (m *MockProviderForResilience) Completion(ctx context.Context, req *ChatRequest) (*ChatResponse, error) {
+	args := m.Called(ctx, req)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*ChatResponse), args.Error(1)
+}
+
+func (m *MockProviderForResilience) Stream(ctx context.Context, req *ChatRequest) (<-chan StreamChunk, error) {
+	args := m.Called(ctx, req)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(<-chan StreamChunk), args.Error(1)
+}
+
+func (m *MockProviderForResilience) HealthCheck(ctx context.Context) (*HealthStatus, error) {
+	args := m.Called(ctx)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*HealthStatus), args.Error(1)
 }
 
 // TestResilientProvider_Name tests Name method
