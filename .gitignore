@@ -28,3 +28,4 @@ coverage.html
 
 # Test artifacts
 test_artifacts/
+.snow/
