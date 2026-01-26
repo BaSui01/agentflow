@@ -8,17 +8,21 @@ import (
 	"sync"
 	"time"
 
+	"github.com/BaSui01/agentflow/types"
 	"go.uber.org/zap"
 )
 
 // MemoryType defines the type of memory.
-type MemoryType string
+// Deprecated: Use types.MemoryCategory instead for new code.
+type MemoryType = types.MemoryCategory
 
+// Memory type constants - mapped to unified types.MemoryCategory
+// Deprecated: Use types.MemoryEpisodic, types.MemorySemantic, etc.
 const (
-	MemoryTypeEpisodic   MemoryType = "episodic"   // Event-based memories
-	MemoryTypeSemantic   MemoryType = "semantic"   // Factual knowledge
-	MemoryTypeWorking    MemoryType = "working"    // Short-term context
-	MemoryTypeProcedural MemoryType = "procedural" // How-to knowledge
+	MemoryTypeEpisodic   = types.MemoryEpisodic   // Event-based memories
+	MemoryTypeSemantic   = types.MemorySemantic   // Factual knowledge
+	MemoryTypeWorking    = types.MemoryWorking    // Short-term context
+	MemoryTypeProcedural = types.MemoryProcedural // How-to knowledge
 )
 
 // MemoryEntry represents a single memory entry.

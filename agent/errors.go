@@ -3,11 +3,16 @@ package agent
 import (
 	"fmt"
 	"time"
+
+	"github.com/BaSui01/agentflow/types"
 )
 
 // ErrorCode 定义 Agent 错误码
-type ErrorCode string
+// Uses types.ErrorCode as the underlying type for consistency with the framework.
+type ErrorCode = types.ErrorCode
 
+// Agent-specific error codes
+// These extend the base error codes defined in types/error.go
 const (
 	// 状态相关错误
 	ErrCodeInvalidTransition ErrorCode = "AGENT_INVALID_TRANSITION"
@@ -41,9 +46,13 @@ const (
 
 	// 上下文相关错误
 	ErrCodeContextOptimizationFailed ErrorCode = "AGENT_CONTEXT_OPTIMIZATION_FAILED"
+
+	// Guardrails 相关错误
+	ErrCodeGuardrailsViolated ErrorCode = "AGENT_GUARDRAILS_VIOLATED"
 )
 
 // Error Agent 统一错误类型
+// Extends types.Error with Agent-specific fields.
 type Error struct {
 	Code      ErrorCode              `json:"code"`
 	Message   string                 `json:"message"`
@@ -89,6 +98,31 @@ func NewErrorWithCause(code ErrorCode, message string, cause error) *Error {
 	}
 }
 
+// FromTypesError converts a types.Error to an agent.Error
+func FromTypesError(err *types.Error) *Error {
+	if err == nil {
+		return nil
+	}
+	return &Error{
+		Code:      err.Code,
+		Message:   err.Message,
+		Retryable: err.Retryable,
+		Timestamp: time.Now(),
+		Cause:     err.Cause,
+		Metadata:  make(map[string]interface{}),
+	}
+}
+
+// ToTypesError converts an agent.Error to a types.Error
+func (e *Error) ToTypesError() *types.Error {
+	return &types.Error{
+		Code:      e.Code,
+		Message:   e.Message,
+		Retryable: e.Retryable,
+		Cause:     e.Cause,
+	}
+}
+
 // WithAgent 添加 Agent 信息
 func (e *Error) WithAgent(id string, agentType AgentType) *Error {
 	e.AgentID = id
@@ -109,6 +143,29 @@ func (e *Error) WithMetadata(key string, value interface{}) *Error {
 	}
 	e.Metadata[key] = value
 	return e
+}
+
+// WithCause 添加原因错误
+func (e *Error) WithCause(cause error) *Error {
+	e.Cause = cause
+	return e
+}
+
+// IsRetryable checks if an agent error is retryable
+func IsRetryable(err error) bool {
+	if e, ok := err.(*Error); ok {
+		return e.Retryable
+	}
+	// Also check types.Error
+	return types.IsRetryable(err)
+}
+
+// GetErrorCode extracts the error code from an error
+func GetErrorCode(err error) ErrorCode {
+	if e, ok := err.(*Error); ok {
+		return e.Code
+	}
+	return types.GetErrorCode(err)
 }
 
 // 预定义错误（向后兼容）

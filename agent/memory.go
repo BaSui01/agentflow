@@ -3,28 +3,37 @@ package agent
 import (
 	"context"
 	"time"
+
+	"github.com/BaSui01/agentflow/types"
 )
 
 // MemoryKind 记忆类型
-type MemoryKind string
+// Deprecated: Use types.MemoryCategory instead for new code.
+// This alias is kept for backward compatibility.
+type MemoryKind = types.MemoryCategory
 
+// Memory kind constants - mapped to unified types.MemoryCategory
+// Deprecated: Use types.MemoryWorking, types.MemoryEpisodic, etc.
 const (
-	MemoryShortTerm MemoryKind = "short_term" // 短期记忆（Redis）
-	MemoryWorking   MemoryKind = "working"    // 工作记忆（ReAct traces）
-	MemoryLongTerm  MemoryKind = "long_term"  // 长期记忆（PostgreSQL/Qdrant）
-	MemoryEpisodic  MemoryKind = "episodic"   // 情节记忆（Vector Store）
+	MemoryShortTerm = types.MemoryWorking   // 短期记忆 -> Working
+	MemoryWorking   = types.MemoryWorking   // 工作记忆
+	MemoryLongTerm  = types.MemorySemantic  // 长期记忆 -> Semantic
+	MemoryEpisodic  = types.MemoryEpisodic  // 情节记忆
+	MemorySemantic  = types.MemorySemantic  // 语义记忆 (新增)
+	MemoryProcedural = types.MemoryProcedural // 程序记忆 (新增)
 )
 
 // MemoryRecord 统一记忆结构
+// Uses types.MemoryCategory for the Kind field to ensure consistency.
 type MemoryRecord struct {
-	ID        string         `json:"id"`
-	AgentID   string         `json:"agent_id"`
-	Kind      MemoryKind     `json:"kind"`
-	Content   string         `json:"content"`
-	Metadata  map[string]any `json:"metadata,omitempty"`
-	VectorID  string         `json:"vector_id,omitempty"` // Qdrant 向量 ID
-	CreatedAt time.Time      `json:"created_at"`
-	ExpiresAt *time.Time     `json:"expires_at,omitempty"` // 短期记忆过期时间
+	ID        string               `json:"id"`
+	AgentID   string               `json:"agent_id"`
+	Kind      types.MemoryCategory `json:"kind"`
+	Content   string               `json:"content"`
+	Metadata  map[string]any       `json:"metadata,omitempty"`
+	VectorID  string               `json:"vector_id,omitempty"` // Qdrant 向量 ID
+	CreatedAt time.Time            `json:"created_at"`
+	ExpiresAt *time.Time           `json:"expires_at,omitempty"` // 短期记忆过期时间
 }
 
 // MemoryWriter 记忆写入接口
