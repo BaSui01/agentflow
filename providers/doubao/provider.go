@@ -35,7 +35,7 @@ func NewDoubaoProvider(cfg providers.DoubaoConfig, logger *zap.Logger) *DoubaoPr
 
 	// Set default BaseURL if not provided
 	if cfg.BaseURL == "" {
-		cfg.BaseURL = "https://ark.cn-beijing.volces.com/api/v3"
+		cfg.BaseURL = "https://ark.cn-beijing.volces.com"
 	}
 
 	return &DoubaoProvider{
@@ -56,7 +56,7 @@ func (p *DoubaoProvider) SupportsNativeFunctionCalling() bool { return true }
 
 func (p *DoubaoProvider) HealthCheck(ctx context.Context) (*llm.HealthStatus, error) {
 	start := time.Now()
-	endpoint := fmt.Sprintf("%s/models", strings.TrimRight(p.cfg.BaseURL, "/"))
+	endpoint := fmt.Sprintf("%s/api/v3/models", strings.TrimRight(p.cfg.BaseURL, "/"))
 	httpReq, _ := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	p.buildHeaders(httpReq, p.cfg.APIKey)
 
@@ -251,7 +251,7 @@ func (p *DoubaoProvider) Completion(ctx context.Context, req *llm.ChatRequest) (
 	}
 	payload, _ := json.Marshal(body)
 
-	httpReq, _ := http.NewRequestWithContext(ctx, http.MethodPost, fmt.Sprintf("%s/chat/completions", strings.TrimRight(p.cfg.BaseURL, "/")), bytes.NewReader(payload))
+	httpReq, _ := http.NewRequestWithContext(ctx, http.MethodPost, fmt.Sprintf("%s/api/v3/chat/completions", strings.TrimRight(p.cfg.BaseURL, "/")), bytes.NewReader(payload))
 	p.buildHeaders(httpReq, apiKey)
 
 	resp, err := p.client.Do(httpReq)
@@ -304,7 +304,7 @@ func (p *DoubaoProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-ch
 	}
 	payload, _ := json.Marshal(body)
 
-	httpReq, _ := http.NewRequestWithContext(ctx, http.MethodPost, fmt.Sprintf("%s/chat/completions", strings.TrimRight(p.cfg.BaseURL, "/")), bytes.NewReader(payload))
+	httpReq, _ := http.NewRequestWithContext(ctx, http.MethodPost, fmt.Sprintf("%s/api/v3/chat/completions", strings.TrimRight(p.cfg.BaseURL, "/")), bytes.NewReader(payload))
 	p.buildHeaders(httpReq, apiKey)
 
 	resp, err := p.client.Do(httpReq)

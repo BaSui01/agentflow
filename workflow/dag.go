@@ -35,6 +35,30 @@ const (
 	LoopTypeForEach LoopType = "foreach"
 )
 
+// ErrorStrategy defines how errors should be handled
+type ErrorStrategy string
+
+const (
+	// ErrorStrategyFailFast stops execution immediately on error
+	ErrorStrategyFailFast ErrorStrategy = "fail_fast"
+	// ErrorStrategySkip skips the failed node and continues
+	ErrorStrategySkip ErrorStrategy = "skip"
+	// ErrorStrategyRetry retries the failed node
+	ErrorStrategyRetry ErrorStrategy = "retry"
+)
+
+// ErrorConfig defines error handling behavior for a node
+type ErrorConfig struct {
+	// Strategy specifies how to handle errors
+	Strategy ErrorStrategy
+	// MaxRetries is the maximum number of retry attempts (for retry strategy)
+	MaxRetries int
+	// RetryDelayMs is the delay between retries in milliseconds
+	RetryDelayMs int
+	// FallbackValue is the value to use when skipping a failed node
+	FallbackValue interface{}
+}
+
 // ConditionFunc evaluates a condition and returns true or false
 type ConditionFunc func(ctx context.Context, input interface{}) (bool, error)
 
@@ -67,6 +91,8 @@ type DAGNode struct {
 	LoopConfig *LoopConfig
 	// SubGraph is a nested workflow (for subgraph nodes)
 	SubGraph *DAGGraph
+	// ErrorConfig defines error handling behavior
+	ErrorConfig *ErrorConfig
 	// Metadata stores additional node information
 	Metadata map[string]any
 }
@@ -231,7 +257,7 @@ func (w *DAGWorkflow) Execute(ctx context.Context, input interface{}) (interface
 	if executor == nil {
 		executor = NewDAGExecutor(nil, nil)
 	}
-	
+
 	// Execute the graph
 	return executor.Execute(ctx, w.graph, input)
 }

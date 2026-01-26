@@ -22,7 +22,7 @@ type KimiProvider struct {
 func NewKimiProvider(cfg providers.KimiConfig, logger *zap.Logger) *KimiProvider {
 	// Set default BaseURL if not provided
 	if cfg.BaseURL == "" {
-		cfg.BaseURL = "https://api.moonshot.cn/v1"
+		cfg.BaseURL = "https://api.moonshot.cn"
 	}
 
 	// Convert to OpenAI config

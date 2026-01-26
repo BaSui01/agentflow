@@ -22,7 +22,7 @@ type HunyuanProvider struct {
 func NewHunyuanProvider(cfg providers.HunyuanConfig, logger *zap.Logger) *HunyuanProvider {
 	// Set default BaseURL if not provided
 	if cfg.BaseURL == "" {
-		cfg.BaseURL = "https://hunyuan.tencentcloudapi.com/v1"
+		cfg.BaseURL = "https://hunyuan.tencentcloudapi.com"
 	}
 
 	// Convert to OpenAI config

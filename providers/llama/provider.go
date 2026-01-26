@@ -28,13 +28,13 @@ func NewLlamaProvider(cfg providers.LlamaConfig, logger *zap.Logger) *LlamaProvi
 	if cfg.BaseURL == "" {
 		switch cfg.Provider {
 		case "together":
-			cfg.BaseURL = "https://api.together.xyz/v1"
+			cfg.BaseURL = "https://api.together.xyz"
 		case "replicate":
-			cfg.BaseURL = "https://api.replicate.com/v1"
+			cfg.BaseURL = "https://api.replicate.com"
 		case "openrouter":
-			cfg.BaseURL = "https://openrouter.ai/api/v1"
+			cfg.BaseURL = "https://openrouter.ai/api"
 		default:
-			cfg.BaseURL = "https://api.together.xyz/v1"
+			cfg.BaseURL = "https://api.together.xyz"
 		}
 	}
 

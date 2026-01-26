@@ -36,7 +36,7 @@ func NewMiniMaxProvider(cfg providers.MiniMaxConfig, logger *zap.Logger) *MiniMa
 
 	// Set default BaseURL if not provided
 	if cfg.BaseURL == "" {
-		cfg.BaseURL = "https://api.minimax.chat/v1"
+		cfg.BaseURL = "https://api.minimax.chat"
 	}
 
 	return &MiniMaxProvider{
@@ -57,7 +57,7 @@ func (p *MiniMaxProvider) SupportsNativeFunctionCalling() bool { return true }
 
 func (p *MiniMaxProvider) HealthCheck(ctx context.Context) (*llm.HealthStatus, error) {
 	start := time.Now()
-	endpoint := fmt.Sprintf("%s/text/chatcompletion_v2", strings.TrimRight(p.cfg.BaseURL, "/"))
+	endpoint := fmt.Sprintf("%s/v1/text/chatcompletion_v2", strings.TrimRight(p.cfg.BaseURL, "/"))
 
 	// MiniMax health check: send a minimal request
 	testReq := miniMaxRequest{

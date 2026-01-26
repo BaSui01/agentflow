@@ -44,7 +44,7 @@ func (b *DAGBuilder) AddNode(id string, nodeType NodeType) *NodeBuilder {
 		Metadata: make(map[string]any),
 	}
 	b.graph.AddNode(node)
-	
+
 	return &NodeBuilder{
 		node:   node,
 		parent: b,
@@ -72,13 +72,13 @@ func (b *DAGBuilder) Build() (*DAGWorkflow, error) {
 
 	// Create the workflow
 	workflow := NewDAGWorkflow(b.name, b.desc, b.graph)
-	
+
 	b.logger.Info("DAG workflow built successfully",
 		zap.String("name", b.name),
 		zap.Int("nodes", len(b.graph.nodes)),
 		zap.String("entry", b.graph.entry),
 	)
-	
+
 	return workflow, nil
 }
 
@@ -346,6 +346,12 @@ func (nb *NodeBuilder) WithSubGraph(subGraph *DAGGraph) *NodeBuilder {
 // WithMetadata sets a metadata value
 func (nb *NodeBuilder) WithMetadata(key string, value any) *NodeBuilder {
 	nb.node.Metadata[key] = value
+	return nb
+}
+
+// WithErrorConfig sets the error handling configuration for a node
+func (nb *NodeBuilder) WithErrorConfig(config ErrorConfig) *NodeBuilder {
+	nb.node.ErrorConfig = &config
 	return nb
 }
 

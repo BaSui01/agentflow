@@ -22,7 +22,7 @@ type MistralProvider struct {
 func NewMistralProvider(cfg providers.MistralConfig, logger *zap.Logger) *MistralProvider {
 	// Set default BaseURL if not provided
 	if cfg.BaseURL == "" {
-		cfg.BaseURL = "https://api.mistral.ai/v1"
+		cfg.BaseURL = "https://api.mistral.ai"
 	}
 
 	// Convert to OpenAI config

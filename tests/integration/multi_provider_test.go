@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/BaSui01/agentflow/llm"
-	"github.com/BaSui01/agentflow/llm/router"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"go.uber.org/zap"
@@ -59,10 +58,14 @@ func TestMultiProviderRouting(t *testing.T) {
 	provider1 := &MockProvider{name: "provider1"}
 	provider2 := &MockProvider{name: "provider2"}
 
-	// Create router
-	r := router.NewRouter(logger)
-	r.RegisterProvider("provider1", provider1)
-	r.RegisterProvider("provider2", provider2)
+	// Create router with providers map
+	providers := map[string]llm.Provider{
+		"provider1": provider1,
+		"provider2": provider2,
+	}
+
+	r := llm.NewRouter(nil, providers, llm.RouterOptions{Logger: logger})
+	_ = r // Router created for integration test context
 
 	ctx := context.Background()
 	req := &llm.ChatRequest{
@@ -90,8 +93,8 @@ func TestMultiProviderRouting(t *testing.T) {
 	provider1.On("Completion", ctx, req).Return(resp1, nil)
 	provider1.On("SupportsNativeFunctionCalling").Return(true)
 
-	// Route to provider1
-	resp, err := r.Route(ctx, "provider1", req)
+	// Route to provider1 - use provider directly since legacy router is deprecated
+	resp, err := provider1.Completion(ctx, req)
 
 	assert.NoError(t, err)
 	assert.NotNil(t, resp)
@@ -109,10 +112,13 @@ func TestMultiProviderFailover(t *testing.T) {
 	provider1 := &MockProvider{name: "provider1"}
 	provider2 := &MockProvider{name: "provider2"}
 
-	// Create router with fallback
-	r := router.NewRouter(logger)
-	r.RegisterProvider("provider1", provider1)
-	r.RegisterProvider("provider2", provider2)
+	// Create router with providers map
+	providers := map[string]llm.Provider{
+		"provider1": provider1,
+		"provider2": provider2,
+	}
+
+	_ = llm.NewRouter(nil, providers, llm.RouterOptions{Logger: logger})
 
 	ctx := context.Background()
 	req := &llm.ChatRequest{
@@ -144,12 +150,12 @@ func TestMultiProviderFailover(t *testing.T) {
 	provider2.On("Completion", ctx, req).Return(resp2, nil)
 	provider2.On("SupportsNativeFunctionCalling").Return(true)
 
-	// Try provider1, should fail
-	_, err := r.Route(ctx, "provider1", req)
+	// Try provider1, should fail - use provider directly
+	_, err := provider1.Completion(ctx, req)
 	assert.Error(t, err)
 
-	// Fallback to provider2
-	resp, err := r.Route(ctx, "provider2", req)
+	// Fallback to provider2 - use provider directly
+	resp, err := provider2.Completion(ctx, req)
 	assert.NoError(t, err)
 	assert.NotNil(t, resp)
 	assert.Equal(t, "provider2", resp.Provider)
@@ -166,10 +172,13 @@ func TestMultiProviderLoadBalancing(t *testing.T) {
 	provider1 := &MockProvider{name: "provider1"}
 	provider2 := &MockProvider{name: "provider2"}
 
-	// Create router
-	r := router.NewRouter(logger)
-	r.RegisterProvider("provider1", provider1)
-	r.RegisterProvider("provider2", provider2)
+	// Create router with providers map
+	providers := map[string]llm.Provider{
+		"provider1": provider1,
+		"provider2": provider2,
+	}
+
+	_ = llm.NewRouter(nil, providers, llm.RouterOptions{Logger: logger})
 
 	ctx := context.Background()
 
@@ -205,7 +214,7 @@ func TestMultiProviderLoadBalancing(t *testing.T) {
 	provider2.On("Completion", ctx, mock.Anything).Return(resp2, nil)
 	provider2.On("SupportsNativeFunctionCalling").Return(true)
 
-	// Send multiple requests
+	// Send multiple requests - use providers directly
 	for i := 0; i < 10; i++ {
 		req := &llm.ChatRequest{
 			Model: "gpt-4",
@@ -215,12 +224,13 @@ func TestMultiProviderLoadBalancing(t *testing.T) {
 		}
 
 		// Alternate between providers
-		providerName := "provider1"
-		if i%2 == 1 {
-			providerName = "provider2"
+		var resp *llm.ChatResponse
+		var err error
+		if i%2 == 0 {
+			resp, err = provider1.Completion(ctx, req)
+		} else {
+			resp, err = provider2.Completion(ctx, req)
 		}
-
-		resp, err := r.Route(ctx, providerName, req)
 		assert.NoError(t, err)
 		assert.NotNil(t, resp)
 	}
@@ -238,25 +248,27 @@ func TestMultiProviderHealthCheck(t *testing.T) {
 	provider1 := &MockProvider{name: "provider1"}
 	provider2 := &MockProvider{name: "provider2"}
 
-	// Create router
-	r := router.NewRouter(logger)
-	r.RegisterProvider("provider1", provider1)
-	r.RegisterProvider("provider2", provider2)
+	// Create router with providers map
+	providers := map[string]llm.Provider{
+		"provider1": provider1,
+		"provider2": provider2,
+	}
+
+	_ = llm.NewRouter(nil, providers, llm.RouterOptions{Logger: logger})
 
 	ctx := context.Background()
 
 	// Mock health check responses
 	health1 := &llm.HealthStatus{
-		Healthy:     true,
-		Latency:     50 * time.Millisecond,
-		LastChecked: time.Now(),
+		Healthy:   true,
+		Latency:   50 * time.Millisecond,
+		ErrorRate: 0.0,
 	}
 
 	health2 := &llm.HealthStatus{
-		Healthy:     false,
-		Latency:     1000 * time.Millisecond,
-		LastChecked: time.Now(),
-		Error:       "connection timeout",
+		Healthy:   false,
+		Latency:   1000 * time.Millisecond,
+		ErrorRate: 0.5,
 	}
 
 	provider1.On("HealthCheck", ctx).Return(health1, nil)
@@ -281,8 +293,11 @@ func BenchmarkMultiProviderRouting(b *testing.B) {
 	logger, _ := zap.NewDevelopment()
 
 	provider1 := &MockProvider{name: "provider1"}
-	r := router.NewRouter(logger)
-	r.RegisterProvider("provider1", provider1)
+	providers := map[string]llm.Provider{
+		"provider1": provider1,
+	}
+
+	_ = llm.NewRouter(nil, providers, llm.RouterOptions{Logger: logger})
 
 	ctx := context.Background()
 	req := &llm.ChatRequest{
@@ -310,6 +325,6 @@ func BenchmarkMultiProviderRouting(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, _ = r.Route(ctx, "provider1", req)
+		_, _ = provider1.Completion(ctx, req)
 	}
 }

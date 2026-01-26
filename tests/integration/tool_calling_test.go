@@ -413,6 +413,11 @@ func (m *MockToolExecutor) Execute(ctx context.Context, calls []llm.ToolCall) []
 	return args.Get(0).([]tools.ToolResult)
 }
 
+func (m *MockToolExecutor) ExecuteOne(ctx context.Context, call llm.ToolCall) tools.ToolResult {
+	args := m.Called(ctx, call)
+	return args.Get(0).(tools.ToolResult)
+}
+
 // BenchmarkReActLoop benchmarks ReAct loop performance
 func BenchmarkReActLoop(b *testing.B) {
 	logger, _ := zap.NewDevelopment()

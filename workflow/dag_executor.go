@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"go.uber.org/zap"
@@ -12,6 +13,7 @@ import (
 // DAGExecutor executes DAG workflows with dependency resolution
 type DAGExecutor struct {
 	checkpointMgr CheckpointManager
+	historyStore  *ExecutionHistoryStore
 	logger        *zap.Logger
 
 	// Execution state
@@ -19,6 +21,7 @@ type DAGExecutor struct {
 	threadID     string
 	nodeResults  map[string]interface{}
 	visitedNodes map[string]bool
+	history      *ExecutionHistory
 	mu           sync.RWMutex
 }
 
@@ -29,12 +32,21 @@ type CheckpointManager interface {
 
 // NewDAGExecutor creates a new DAG executor
 func NewDAGExecutor(checkpointMgr CheckpointManager, logger *zap.Logger) *DAGExecutor {
+	if logger == nil {
+		logger = zap.NewNop()
+	}
 	return &DAGExecutor{
 		checkpointMgr: checkpointMgr,
+		historyStore:  NewExecutionHistoryStore(),
 		logger:        logger.With(zap.String("component", "dag_executor")),
 		nodeResults:   make(map[string]interface{}),
 		visitedNodes:  make(map[string]bool),
 	}
+}
+
+// SetHistoryStore sets a custom history store
+func (e *DAGExecutor) SetHistoryStore(store *ExecutionHistoryStore) {
+	e.historyStore = store
 }
 
 // Execute runs the DAG workflow with dependency resolution
@@ -48,6 +60,7 @@ func (e *DAGExecutor) Execute(ctx context.Context, graph *DAGGraph, input interf
 	e.executionID = generateExecutionID()
 	e.nodeResults = make(map[string]interface{})
 	e.visitedNodes = make(map[string]bool)
+	e.history = NewExecutionHistory(e.executionID, "")
 	e.mu.Unlock()
 
 	e.logger.Info("starting DAG execution",
@@ -57,16 +70,26 @@ func (e *DAGExecutor) Execute(ctx context.Context, graph *DAGGraph, input interf
 
 	// Validate graph has entry node
 	if graph.entry == "" {
+		e.history.Complete(fmt.Errorf("graph has no entry node"))
+		e.historyStore.Save(e.history)
 		return nil, fmt.Errorf("graph has no entry node")
 	}
 
 	entryNode, exists := graph.GetNode(graph.entry)
 	if !exists {
-		return nil, fmt.Errorf("entry node not found: %s", graph.entry)
+		err := fmt.Errorf("entry node not found: %s", graph.entry)
+		e.history.Complete(err)
+		e.historyStore.Save(e.history)
+		return nil, err
 	}
 
 	// Execute from entry node
 	result, err := e.executeNode(ctx, graph, entryNode, input)
+
+	// Complete history
+	e.history.Complete(err)
+	e.historyStore.Save(e.history)
+
 	if err != nil {
 		e.logger.Error("DAG execution failed",
 			zap.String("execution_id", e.executionID),
@@ -81,6 +104,16 @@ func (e *DAGExecutor) Execute(ctx context.Context, graph *DAGGraph, input interf
 	)
 
 	return result, nil
+}
+
+// GetHistory returns the execution history for the current execution
+func (e *DAGExecutor) GetHistory() *ExecutionHistory {
+	return e.history
+}
+
+// GetHistoryStore returns the history store
+func (e *DAGExecutor) GetHistoryStore() *ExecutionHistoryStore {
+	return e.historyStore
 }
 
 // executeNode executes a single node based on its type
@@ -101,6 +134,12 @@ func (e *DAGExecutor) executeNode(ctx context.Context, graph *DAGGraph, node *DA
 	e.visitedNodes[node.ID] = true
 	e.mu.Unlock()
 
+	// Record node start in history
+	var nodeExec *NodeExecution
+	if e.history != nil {
+		nodeExec = e.history.RecordNodeStart(node.ID, node.Type, input)
+	}
+
 	e.logger.Debug("executing node",
 		zap.String("node_id", node.ID),
 		zap.String("node_type", string(node.Type)),
@@ -113,7 +152,7 @@ func (e *DAGExecutor) executeNode(ctx context.Context, graph *DAGGraph, node *DA
 	// Execute based on node type
 	switch node.Type {
 	case NodeTypeAction:
-		result, err = e.executeActionNode(ctx, node, input)
+		result, err = e.executeActionNode(ctx, graph, node, input)
 	case NodeTypeCondition:
 		result, err = e.executeConditionNode(ctx, graph, node, input)
 	case NodeTypeLoop:
@@ -130,14 +169,21 @@ func (e *DAGExecutor) executeNode(ctx context.Context, graph *DAGGraph, node *DA
 
 	duration := time.Since(startTime)
 
+	// Handle errors based on error strategy
 	if err != nil {
-		e.logger.Error("node execution failed",
-			zap.String("node_id", node.ID),
-			zap.String("node_type", string(node.Type)),
-			zap.Duration("duration", duration),
-			zap.Error(err),
-		)
-		return nil, fmt.Errorf("node %s failed: %w", node.ID, err)
+		result, err = e.handleNodeError(ctx, graph, node, input, err, duration)
+		if err != nil {
+			// Record failure in history
+			if nodeExec != nil {
+				e.history.RecordNodeEnd(nodeExec, nil, err)
+			}
+			return nil, err
+		}
+	}
+
+	// Record success in history
+	if nodeExec != nil {
+		e.history.RecordNodeEnd(nodeExec, result, nil)
 	}
 
 	// Store result
@@ -153,8 +199,110 @@ func (e *DAGExecutor) executeNode(ctx context.Context, graph *DAGGraph, node *DA
 	return result, nil
 }
 
-// executeActionNode executes an action node
-func (e *DAGExecutor) executeActionNode(ctx context.Context, node *DAGNode, input interface{}) (interface{}, error) {
+// handleNodeError handles errors based on the node's error strategy
+func (e *DAGExecutor) handleNodeError(ctx context.Context, graph *DAGGraph, node *DAGNode, input interface{}, originalErr error, duration time.Duration) (interface{}, error) {
+	// Default to fail-fast if no error config
+	if node.ErrorConfig == nil {
+		e.logger.Error("node execution failed",
+			zap.String("node_id", node.ID),
+			zap.String("node_type", string(node.Type)),
+			zap.Duration("duration", duration),
+			zap.Error(originalErr),
+		)
+		return nil, fmt.Errorf("node %s failed: %w", node.ID, originalErr)
+	}
+
+	switch node.ErrorConfig.Strategy {
+	case ErrorStrategySkip:
+		e.logger.Warn("node execution failed, skipping",
+			zap.String("node_id", node.ID),
+			zap.Error(originalErr),
+		)
+		return node.ErrorConfig.FallbackValue, nil
+
+	case ErrorStrategyRetry:
+		return e.retryNode(ctx, graph, node, input, originalErr)
+
+	default: // ErrorStrategyFailFast
+		e.logger.Error("node execution failed",
+			zap.String("node_id", node.ID),
+			zap.String("node_type", string(node.Type)),
+			zap.Duration("duration", duration),
+			zap.Error(originalErr),
+		)
+		return nil, fmt.Errorf("node %s failed: %w", node.ID, originalErr)
+	}
+}
+
+// retryNode retries a failed node based on its retry configuration
+func (e *DAGExecutor) retryNode(ctx context.Context, graph *DAGGraph, node *DAGNode, input interface{}, originalErr error) (interface{}, error) {
+	maxRetries := node.ErrorConfig.MaxRetries
+	if maxRetries <= 0 {
+		maxRetries = 3 // Default
+	}
+
+	retryDelay := time.Duration(node.ErrorConfig.RetryDelayMs) * time.Millisecond
+	if retryDelay <= 0 {
+		retryDelay = 100 * time.Millisecond // Default
+	}
+
+	var lastErr error = originalErr
+	for attempt := 1; attempt <= maxRetries; attempt++ {
+		e.logger.Debug("retrying node",
+			zap.String("node_id", node.ID),
+			zap.Int("attempt", attempt),
+			zap.Int("max_retries", maxRetries),
+		)
+
+		// Wait before retry
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-time.After(retryDelay):
+		}
+
+		// Unmark as visited to allow re-execution
+		e.mu.Lock()
+		delete(e.visitedNodes, node.ID)
+		e.mu.Unlock()
+
+		// Re-execute the node's step directly (not the full node to avoid recursion issues)
+		var result interface{}
+		var err error
+
+		if node.Type == NodeTypeAction && node.Step != nil {
+			result, err = node.Step.Execute(ctx, input)
+		} else {
+			err = fmt.Errorf("retry only supported for action nodes")
+		}
+
+		if err == nil {
+			e.logger.Info("node retry succeeded",
+				zap.String("node_id", node.ID),
+				zap.Int("attempt", attempt),
+			)
+			return result, nil
+		}
+
+		lastErr = err
+	}
+
+	e.logger.Error("node retry exhausted",
+		zap.String("node_id", node.ID),
+		zap.Int("max_retries", maxRetries),
+		zap.Error(lastErr),
+	)
+
+	// Check if we should use fallback after retry exhaustion
+	if node.ErrorConfig.FallbackValue != nil {
+		return node.ErrorConfig.FallbackValue, nil
+	}
+
+	return nil, fmt.Errorf("node %s failed after %d retries: %w", node.ID, maxRetries, lastErr)
+}
+
+// executeActionNode executes an action node and continues to next nodes
+func (e *DAGExecutor) executeActionNode(ctx context.Context, graph *DAGGraph, node *DAGNode, input interface{}) (interface{}, error) {
 	if node.Step == nil {
 		return nil, fmt.Errorf("action node %s has no step", node.ID)
 	}
@@ -164,6 +312,19 @@ func (e *DAGExecutor) executeActionNode(ctx context.Context, node *DAGNode, inpu
 	result, err := node.Step.Execute(ctx, input)
 	if err != nil {
 		return nil, err
+	}
+
+	// Continue to next nodes
+	nextNodeIDs := graph.GetEdges(node.ID)
+	for _, nextNodeID := range nextNodeIDs {
+		nextNode, exists := graph.GetNode(nextNodeID)
+		if !exists {
+			return nil, fmt.Errorf("next node not found: %s", nextNodeID)
+		}
+		result, err = e.executeNode(ctx, graph, nextNode, result)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	return result, nil
@@ -550,7 +711,10 @@ func (e *DAGExecutor) GetExecutionID() string {
 	return e.executionID
 }
 
+var executionIDCounter uint64
+
 // generateExecutionID generates a unique execution ID
 func generateExecutionID() string {
-	return fmt.Sprintf("exec_%d", time.Now().UnixNano())
+	counter := atomic.AddUint64(&executionIDCounter, 1)
+	return fmt.Sprintf("exec_%d_%d", time.Now().UnixNano(), counter)
 }

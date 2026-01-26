@@ -35,7 +35,7 @@ func NewQwenProvider(cfg providers.QwenConfig, logger *zap.Logger) *QwenProvider
 
 	// Set default BaseURL if not provided
 	if cfg.BaseURL == "" {
-		cfg.BaseURL = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+		cfg.BaseURL = "https://dashscope.aliyuncs.com"
 	}
 
 	return &QwenProvider{
@@ -56,7 +56,7 @@ func (p *QwenProvider) SupportsNativeFunctionCalling() bool { return true }
 
 func (p *QwenProvider) HealthCheck(ctx context.Context) (*llm.HealthStatus, error) {
 	start := time.Now()
-	endpoint := fmt.Sprintf("%s/models", strings.TrimRight(p.cfg.BaseURL, "/"))
+	endpoint := fmt.Sprintf("%s/compatible-mode/v1/models", strings.TrimRight(p.cfg.BaseURL, "/"))
 	httpReq, _ := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	p.buildHeaders(httpReq, p.cfg.APIKey)
 
@@ -255,7 +255,7 @@ func (p *QwenProvider) Completion(ctx context.Context, req *llm.ChatRequest) (*l
 	}
 	payload, _ := json.Marshal(body)
 
-	httpReq, _ := http.NewRequestWithContext(ctx, http.MethodPost, fmt.Sprintf("%s/chat/completions", strings.TrimRight(p.cfg.BaseURL, "/")), bytes.NewReader(payload))
+	httpReq, _ := http.NewRequestWithContext(ctx, http.MethodPost, fmt.Sprintf("%s/compatible-mode/v1/chat/completions", strings.TrimRight(p.cfg.BaseURL, "/")), bytes.NewReader(payload))
 	p.buildHeaders(httpReq, apiKey)
 
 	resp, err := p.client.Do(httpReq)
@@ -310,7 +310,7 @@ func (p *QwenProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-chan
 	}
 	payload, _ := json.Marshal(body)
 
-	httpReq, _ := http.NewRequestWithContext(ctx, http.MethodPost, fmt.Sprintf("%s/chat/completions", strings.TrimRight(p.cfg.BaseURL, "/")), bytes.NewReader(payload))
+	httpReq, _ := http.NewRequestWithContext(ctx, http.MethodPost, fmt.Sprintf("%s/compatible-mode/v1/chat/completions", strings.TrimRight(p.cfg.BaseURL, "/")), bytes.NewReader(payload))
 	p.buildHeaders(httpReq, apiKey)
 
 	resp, err := p.client.Do(httpReq)
