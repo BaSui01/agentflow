@@ -69,6 +69,11 @@ func (c *CanaryConfig) Stop() {
 
 // loadFromDB 从数据库加载活跃的金丝雀部署
 func (c *CanaryConfig) loadFromDB() {
+	// Skip if db is nil (e.g., in tests)
+	if c.db == nil {
+		return
+	}
+
 	var records []struct {
 		ID             uint
 		ProviderID     uint

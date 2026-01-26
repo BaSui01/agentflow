@@ -5,59 +5,12 @@ import (
 	"context"
 	"sync"
 	"time"
+
+	llmpkg "github.com/BaSui01/agentflow/llm"
 )
 
-// Request represents an LLM request passing through middleware.
-type Request struct {
-	Model       string            `json:"model"`
-	Messages    []Message         `json:"messages"`
-	Tools       []Tool            `json:"tools,omitempty"`
-	Temperature float64           `json:"temperature,omitempty"`
-	MaxTokens   int               `json:"max_tokens,omitempty"`
-	Stream      bool              `json:"stream,omitempty"`
-	Metadata    map[string]any    `json:"metadata,omitempty"`
-	Headers     map[string]string `json:"headers,omitempty"`
-}
-
-// Message represents a chat message.
-type Message struct {
-	Role    string `json:"role"`
-	Content string `json:"content"`
-}
-
-// Tool represents a tool definition.
-type Tool struct {
-	Name        string `json:"name"`
-	Description string `json:"description"`
-	Parameters  any    `json:"parameters"`
-}
-
-// Response represents an LLM response passing through middleware.
-type Response struct {
-	Content      string         `json:"content"`
-	ToolCalls    []ToolCall     `json:"tool_calls,omitempty"`
-	Usage        Usage          `json:"usage"`
-	Model        string         `json:"model"`
-	FinishReason string         `json:"finish_reason"`
-	Metadata     map[string]any `json:"metadata,omitempty"`
-}
-
-// ToolCall represents a tool call in response.
-type ToolCall struct {
-	ID        string `json:"id"`
-	Name      string `json:"name"`
-	Arguments string `json:"arguments"`
-}
-
-// Usage represents token usage.
-type Usage struct {
-	PromptTokens     int `json:"prompt_tokens"`
-	CompletionTokens int `json:"completion_tokens"`
-	TotalTokens      int `json:"total_tokens"`
-}
-
 // Handler processes a request and returns a response.
-type Handler func(ctx context.Context, req *Request) (*Response, error)
+type Handler func(ctx context.Context, req *llmpkg.ChatRequest) (*llmpkg.ChatResponse, error)
 
 // Middleware wraps a handler with additional functionality.
 type Middleware func(next Handler) Handler
@@ -115,7 +68,7 @@ func (c *Chain) Len() int {
 // LoggingMiddleware logs request/response details.
 func LoggingMiddleware(logger func(format string, args ...any)) Middleware {
 	return func(next Handler) Handler {
-		return func(ctx context.Context, req *Request) (*Response, error) {
+		return func(ctx context.Context, req *llmpkg.ChatRequest) (*llmpkg.ChatResponse, error) {
 			start := time.Now()
 			logger("[LLM] Request: model=%s messages=%d", req.Model, len(req.Messages))
 
@@ -136,7 +89,7 @@ func LoggingMiddleware(logger func(format string, args ...any)) Middleware {
 // TimeoutMiddleware adds timeout to requests.
 func TimeoutMiddleware(timeout time.Duration) Middleware {
 	return func(next Handler) Handler {
-		return func(ctx context.Context, req *Request) (*Response, error) {
+		return func(ctx context.Context, req *llmpkg.ChatRequest) (*llmpkg.ChatResponse, error) {
 			ctx, cancel := context.WithTimeout(ctx, timeout)
 			defer cancel()
 			return next(ctx, req)
@@ -147,7 +100,7 @@ func TimeoutMiddleware(timeout time.Duration) Middleware {
 // RetryMiddleware retries failed requests.
 func RetryMiddleware(maxRetries int, backoff time.Duration) Middleware {
 	return func(next Handler) Handler {
-		return func(ctx context.Context, req *Request) (*Response, error) {
+		return func(ctx context.Context, req *llmpkg.ChatRequest) (*llmpkg.ChatResponse, error) {
 			var lastErr error
 			for i := 0; i <= maxRetries; i++ {
 				resp, err := next(ctx, req)
@@ -172,7 +125,7 @@ func RetryMiddleware(maxRetries int, backoff time.Duration) Middleware {
 // MetricsMiddleware collects request metrics.
 func MetricsMiddleware(collector MetricsCollector) Middleware {
 	return func(next Handler) Handler {
-		return func(ctx context.Context, req *Request) (*Response, error) {
+		return func(ctx context.Context, req *llmpkg.ChatRequest) (*llmpkg.ChatResponse, error) {
 			start := time.Now()
 			resp, err := next(ctx, req)
 			duration := time.Since(start)
@@ -193,15 +146,15 @@ type MetricsCollector interface {
 	RecordTokens(model string, tokens int)
 }
 
-// HeadersMiddleware adds custom headers to requests.
+// HeadersMiddleware adds custom headers to request metadata.
 func HeadersMiddleware(headers map[string]string) Middleware {
 	return func(next Handler) Handler {
-		return func(ctx context.Context, req *Request) (*Response, error) {
-			if req.Headers == nil {
-				req.Headers = make(map[string]string)
+		return func(ctx context.Context, req *llmpkg.ChatRequest) (*llmpkg.ChatResponse, error) {
+			if req.Metadata == nil {
+				req.Metadata = make(map[string]string)
 			}
 			for k, v := range headers {
-				req.Headers[k] = v
+				req.Metadata[k] = v
 			}
 			return next(ctx, req)
 		}
@@ -211,12 +164,7 @@ func HeadersMiddleware(headers map[string]string) Middleware {
 // CacheMiddleware caches responses.
 func CacheMiddleware(cache Cache) Middleware {
 	return func(next Handler) Handler {
-		return func(ctx context.Context, req *Request) (*Response, error) {
-			// Skip cache for streaming requests
-			if req.Stream {
-				return next(ctx, req)
-			}
-
+		return func(ctx context.Context, req *llmpkg.ChatRequest) (*llmpkg.ChatResponse, error) {
 			key := cache.Key(req)
 			if cached, ok := cache.Get(key); ok {
 				return cached, nil
@@ -234,15 +182,15 @@ func CacheMiddleware(cache Cache) Middleware {
 
 // Cache defines caching interface.
 type Cache interface {
-	Key(req *Request) string
-	Get(key string) (*Response, bool)
-	Set(key string, resp *Response)
+	Key(req *llmpkg.ChatRequest) string
+	Get(key string) (*llmpkg.ChatResponse, bool)
+	Set(key string, resp *llmpkg.ChatResponse)
 }
 
 // RateLimitMiddleware applies rate limiting.
 func RateLimitMiddleware(limiter RateLimiter) Middleware {
 	return func(next Handler) Handler {
-		return func(ctx context.Context, req *Request) (*Response, error) {
+		return func(ctx context.Context, req *llmpkg.ChatRequest) (*llmpkg.ChatResponse, error) {
 			if err := limiter.Wait(ctx); err != nil {
 				return nil, err
 			}
@@ -259,7 +207,7 @@ type RateLimiter interface {
 // RecoveryMiddleware recovers from panics.
 func RecoveryMiddleware(onPanic func(any)) Middleware {
 	return func(next Handler) Handler {
-		return func(ctx context.Context, req *Request) (resp *Response, err error) {
+		return func(ctx context.Context, req *llmpkg.ChatRequest) (resp *llmpkg.ChatResponse, err error) {
 			defer func() {
 				if r := recover(); r != nil {
 					if onPanic != nil {
@@ -285,7 +233,7 @@ func (e *PanicError) Error() string {
 // TracingMiddleware adds distributed tracing.
 func TracingMiddleware(tracer Tracer) Middleware {
 	return func(next Handler) Handler {
-		return func(ctx context.Context, req *Request) (*Response, error) {
+		return func(ctx context.Context, req *llmpkg.ChatRequest) (*llmpkg.ChatResponse, error) {
 			ctx, span := tracer.Start(ctx, "llm.request")
 			defer span.End()
 
@@ -320,7 +268,7 @@ type Span interface {
 // ValidatorMiddleware validates requests before processing.
 func ValidatorMiddleware(validators ...Validator) Middleware {
 	return func(next Handler) Handler {
-		return func(ctx context.Context, req *Request) (*Response, error) {
+		return func(ctx context.Context, req *llmpkg.ChatRequest) (*llmpkg.ChatResponse, error) {
 			for _, v := range validators {
 				if err := v.Validate(req); err != nil {
 					return nil, err
@@ -333,13 +281,13 @@ func ValidatorMiddleware(validators ...Validator) Middleware {
 
 // Validator defines request validation interface.
 type Validator interface {
-	Validate(req *Request) error
+	Validate(req *llmpkg.ChatRequest) error
 }
 
 // TransformMiddleware transforms requests/responses.
-func TransformMiddleware(reqTransform func(*Request), respTransform func(*Response)) Middleware {
+func TransformMiddleware(reqTransform func(*llmpkg.ChatRequest), respTransform func(*llmpkg.ChatResponse)) Middleware {
 	return func(next Handler) Handler {
-		return func(ctx context.Context, req *Request) (*Response, error) {
+		return func(ctx context.Context, req *llmpkg.ChatRequest) (*llmpkg.ChatResponse, error) {
 			if reqTransform != nil {
 				reqTransform(req)
 			}

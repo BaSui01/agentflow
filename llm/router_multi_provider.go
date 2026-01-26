@@ -12,7 +12,7 @@ import (
 // MultiProviderRouter 多提供商路由器（支持同模型多提供商）
 type MultiProviderRouter struct {
 	*Router // 继承原有路由器
-	
+
 	apiKeyPools     map[uint]*APIKeyPool // providerID -> APIKeyPool
 	providerFactory ProviderFactory      // Provider 工厂
 }
@@ -21,7 +21,7 @@ type MultiProviderRouter struct {
 func NewMultiProviderRouter(db *gorm.DB, providerFactory ProviderFactory, opts RouterOptions) *MultiProviderRouter {
 	// 注意：这里不传入 providers map，因为会动态创建
 	baseRouter := NewRouter(db, make(map[string]Provider), opts)
-	
+
 	return &MultiProviderRouter{
 		Router:          baseRouter,
 		apiKeyPools:     make(map[uint]*APIKeyPool),
@@ -36,11 +36,11 @@ func (r *MultiProviderRouter) InitAPIKeyPools(ctx context.Context) error {
 	err := r.db.WithContext(ctx).
 		Where("status = ?", LLMProviderStatusActive).
 		Find(&providers).Error
-	
+
 	if err != nil {
 		return err
 	}
-	
+
 	// 为每个提供商创建 API Key 池
 	for _, provider := range providers {
 		pool := NewAPIKeyPool(r.db, provider.ID, StrategyWeightedRandom, r.logger)
@@ -53,7 +53,7 @@ func (r *MultiProviderRouter) InitAPIKeyPools(ctx context.Context) error {
 		}
 		r.apiKeyPools[provider.ID] = pool
 	}
-	
+
 	r.logger.Info("API key pools initialized", zap.Int("count", len(r.apiKeyPools)))
 	return nil
 }
@@ -72,22 +72,22 @@ func (r *MultiProviderRouter) SelectProviderWithModel(ctx context.Context, model
 		ProviderStatus int16
 		ModelName      string
 	}
-	
+
 	query := r.db.WithContext(ctx).Table("sc_llm_provider_models").
 		Select("sc_llm_provider_models.*, p.code as provider_code, p.status as provider_status, m.model_name").
 		Joins("JOIN sc_llm_providers p ON p.id = sc_llm_provider_models.provider_id").
 		Joins("JOIN sc_llm_models m ON m.id = sc_llm_provider_models.model_id").
-		Where("m.model_name = ? AND sc_llm_provider_models.enabled = TRUE AND p.status = ?", 
+		Where("m.model_name = ? AND sc_llm_provider_models.enabled = TRUE AND p.status = ?",
 			modelName, LLMProviderStatusActive)
-	
+
 	if err := query.Find(&candidates).Error; err != nil {
 		return nil, &Error{Code: "BUSINESS_LLM_ROUTING_FAILED", Message: "Failed to query provider models"}
 	}
-	
+
 	if len(candidates) == 0 {
 		return nil, &Error{Code: "BUSINESS_LLM_MODEL_NOT_FOUND", Message: fmt.Sprintf("Model %s not found", modelName)}
 	}
-	
+
 	// 2. 根据策略选择最佳提供商
 	switch strategy {
 	case StrategyCostBased:
@@ -102,7 +102,7 @@ func (r *MultiProviderRouter) SelectProviderWithModel(ctx context.Context, model
 }
 
 // selectByCostMulti 成本优先选择（多提供商）
-func (r *MultiProviderRouter) selectByCostMulti(ctx context.Context, candidates []struct {
+func (r *MultiProviderRouter) selectByCostMulti(_ context.Context, candidates []struct {
 	LLMProviderModel
 	ProviderCode   string
 	ProviderStatus int16
@@ -115,18 +115,18 @@ func (r *MultiProviderRouter) selectByCostMulti(ctx context.Context, candidates 
 		ProviderStatus int16
 		ModelName      string
 	}
-	
+
 	for _, c := range candidates {
 		score := r.healthMonitor.GetHealthScore(c.ProviderCode)
 		if score >= 0.5 {
 			healthyCandidates = append(healthyCandidates, c)
 		}
 	}
-	
+
 	if len(healthyCandidates) == 0 {
 		return nil, &Error{Code: "BUSINESS_LLM_PROVIDER_UNAVAILABLE", Message: "All providers are unhealthy"}
 	}
-	
+
 	// 按成本排序（价格越低越优先）
 	sort.Slice(healthyCandidates, func(i, j int) bool {
 		costI := healthyCandidates[i].PriceInput + healthyCandidates[i].PriceCompletion
@@ -137,13 +137,13 @@ func (r *MultiProviderRouter) selectByCostMulti(ctx context.Context, candidates 
 		// 成本相同时按优先级排序
 		return healthyCandidates[i].Priority < healthyCandidates[j].Priority
 	})
-	
+
 	best := healthyCandidates[0]
 	return r.buildSelectionMulti(best.LLMProviderModel, best.ProviderCode, best.ModelName, StrategyCostBased)
 }
 
 // selectByHealthMulti 健康优先选择（多提供商）
-func (r *MultiProviderRouter) selectByHealthMulti(ctx context.Context, candidates []struct {
+func (r *MultiProviderRouter) selectByHealthMulti(_ context.Context, candidates []struct {
 	LLMProviderModel
 	ProviderCode   string
 	ProviderStatus int16
@@ -156,7 +156,7 @@ func (r *MultiProviderRouter) selectByHealthMulti(ctx context.Context, candidate
 		ModelName      string
 		HealthScore    float64
 	}
-	
+
 	candidatesWithScore := make([]candidateWithScore, 0, len(candidates))
 	for _, c := range candidates {
 		score := r.healthMonitor.GetHealthScore(c.ProviderCode)
@@ -170,11 +170,11 @@ func (r *MultiProviderRouter) selectByHealthMulti(ctx context.Context, candidate
 			})
 		}
 	}
-	
+
 	if len(candidatesWithScore) == 0 {
 		return nil, &Error{Code: "BUSINESS_LLM_PROVIDER_UNAVAILABLE", Message: "All providers are unhealthy"}
 	}
-	
+
 	// 按健康分数排序（高到低）
 	sort.Slice(candidatesWithScore, func(i, j int) bool {
 		if candidatesWithScore[i].HealthScore != candidatesWithScore[j].HealthScore {
@@ -183,13 +183,13 @@ func (r *MultiProviderRouter) selectByHealthMulti(ctx context.Context, candidate
 		// 健康分数相同时按优先级排序
 		return candidatesWithScore[i].Priority < candidatesWithScore[j].Priority
 	})
-	
+
 	best := candidatesWithScore[0]
 	return r.buildSelectionMulti(best.LLMProviderModel, best.ProviderCode, best.ModelName, StrategyHealthBased)
 }
 
 // selectByQPSMulti QPS 负载均衡选择（多提供商）
-func (r *MultiProviderRouter) selectByQPSMulti(ctx context.Context, candidates []struct {
+func (r *MultiProviderRouter) selectByQPSMulti(_ context.Context, candidates []struct {
 	LLMProviderModel
 	ProviderCode   string
 	ProviderStatus int16
@@ -202,18 +202,18 @@ func (r *MultiProviderRouter) selectByQPSMulti(ctx context.Context, candidates [
 		ProviderStatus int16
 		ModelName      string
 	}
-	
+
 	for _, c := range candidates {
 		score := r.healthMonitor.GetHealthScore(c.ProviderCode)
 		if score >= 0.5 {
 			healthyCandidates = append(healthyCandidates, c)
 		}
 	}
-	
+
 	if len(healthyCandidates) == 0 {
 		return nil, &Error{Code: "BUSINESS_LLM_PROVIDER_UNAVAILABLE", Message: "All providers are unhealthy"}
 	}
-	
+
 	// 选择当前 QPS 最低的提供商
 	minQPS := int(^uint(0) >> 1)
 	var bestCandidate *struct {
@@ -222,7 +222,7 @@ func (r *MultiProviderRouter) selectByQPSMulti(ctx context.Context, candidates [
 		ProviderStatus int16
 		ModelName      string
 	}
-	
+
 	for i := range healthyCandidates {
 		c := &healthyCandidates[i]
 		currentQPS := r.healthMonitor.GetCurrentQPS(c.ProviderCode)
@@ -236,14 +236,14 @@ func (r *MultiProviderRouter) selectByQPSMulti(ctx context.Context, candidates [
 			}
 		}
 	}
-	
+
 	if bestCandidate == nil {
 		return nil, &Error{Code: "BUSINESS_LLM_PROVIDER_UNAVAILABLE", Message: "Failed to select provider by QPS"}
 	}
-	
+
 	// 增加 QPS 计数
 	r.healthMonitor.IncrementQPS(bestCandidate.ProviderCode)
-	
+
 	return r.buildSelectionMulti(bestCandidate.LLMProviderModel, bestCandidate.ProviderCode, bestCandidate.ModelName, StrategyQPSBased)
 }
 
@@ -262,7 +262,7 @@ func (r *MultiProviderRouter) buildSelectionMulti(
 			Message: fmt.Sprintf("No available API key for provider %s: %v", providerCode, err),
 		}
 	}
-	
+
 	// 使用工厂创建 Provider 实例（带 API Key 和 BaseURL）
 	baseURL := providerModel.BaseURL
 	provider, err := r.providerFactory.CreateProvider(providerCode, apiKey.APIKey, baseURL)
@@ -272,10 +272,10 @@ func (r *MultiProviderRouter) buildSelectionMulti(
 			Message: fmt.Sprintf("Failed to create provider %s: %v", providerCode, err),
 		}
 	}
-	
+
 	// 记录 QPS
 	r.healthMonitor.IncrementQPS(providerCode)
-	
+
 	return &ProviderSelection{
 		Provider:     provider,
 		ProviderID:   providerModel.ProviderID,
@@ -296,7 +296,7 @@ func (r *MultiProviderRouter) SelectAPIKey(ctx context.Context, providerID uint)
 			Message: fmt.Sprintf("API key pool not found for provider %d", providerID),
 		}
 	}
-	
+
 	key, err := pool.SelectKey(ctx)
 	if err != nil {
 		return nil, &Error{
@@ -304,7 +304,7 @@ func (r *MultiProviderRouter) SelectAPIKey(ctx context.Context, providerID uint)
 			Message: fmt.Sprintf("Failed to select API key: %v", err),
 		}
 	}
-	
+
 	return key, nil
 }
 
@@ -314,7 +314,7 @@ func (r *MultiProviderRouter) RecordAPIKeyUsage(ctx context.Context, providerID 
 	if !exists {
 		return fmt.Errorf("API key pool not found for provider %d", providerID)
 	}
-	
+
 	if success {
 		return pool.RecordSuccess(ctx, keyID)
 	}
@@ -324,10 +324,10 @@ func (r *MultiProviderRouter) RecordAPIKeyUsage(ctx context.Context, providerID 
 // GetAPIKeyStats 获取所有 API Key 统计信息
 func (r *MultiProviderRouter) GetAPIKeyStats() map[uint]map[uint]*APIKeyStats {
 	stats := make(map[uint]map[uint]*APIKeyStats)
-	
+
 	for providerID, pool := range r.apiKeyPools {
 		stats[providerID] = pool.GetStats()
 	}
-	
+
 	return stats
 }

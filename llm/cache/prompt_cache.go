@@ -263,108 +263,146 @@ func (c *MultiLevelCache) InvalidateByVersion(ctx context.Context, promptVersion
 }
 
 // ============================================================
-// LRU 本地缓存实现
+// LRU 本地缓存实现（使用双向链表实现 O(1) 操作）
 // ============================================================
 
 type LRUCache struct {
 	mu       sync.RWMutex
 	capacity int
 	ttl      time.Duration
-	items    map[string]*lruItem
-	order    []string // 简单的 LRU 顺序
+	items    map[string]*lruNode
+	head     *lruNode // 最近使用
+	tail     *lruNode // 最久未使用
 }
 
-type lruItem struct {
+type lruNode struct {
+	key       string
 	entry     *CacheEntry
 	expiresAt time.Time
+	prev      *lruNode
+	next      *lruNode
 }
 
 func NewLRUCache(capacity int, ttl time.Duration) *LRUCache {
 	return &LRUCache{
 		capacity: capacity,
 		ttl:      ttl,
-		items:    make(map[string]*lruItem),
-		order:    make([]string, 0, capacity),
+		items:    make(map[string]*lruNode),
 	}
 }
 
 func (c *LRUCache) Get(key string) (*CacheEntry, bool) {
-	c.mu.RLock()
-	item, ok := c.items[key]
-	c.mu.RUnlock()
+	c.mu.Lock()
+	defer c.mu.Unlock()
 
+	node, ok := c.items[key]
 	if !ok {
 		return nil, false
 	}
 
 	// 检查过期
-	if time.Now().After(item.expiresAt) {
-		c.Delete(key)
+	if time.Now().After(node.expiresAt) {
+		c.removeNode(node)
+		delete(c.items, key)
 		return nil, false
 	}
 
-	// 更新 LRU 顺序
-	c.mu.Lock()
-	c.moveToFront(key)
-	item.entry.HitCount++
-	c.mu.Unlock()
+	// 移动到头部（O(1) 操作）
+	c.moveToHead(node)
+	node.entry.HitCount++
 
-	return item.entry, true
+	return node.entry, true
 }
 
 func (c *LRUCache) Set(key string, entry *CacheEntry) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	// 检查容量
-	if len(c.items) >= c.capacity {
-		c.evictOldest()
+	// 如果已存在，更新并移动到头部
+	if node, ok := c.items[key]; ok {
+		node.entry = entry
+		node.expiresAt = time.Now().Add(c.ttl)
+		c.moveToHead(node)
+		return
 	}
 
-	c.items[key] = &lruItem{
+	// 检查容量，淘汰最久未使用的
+	if len(c.items) >= c.capacity {
+		c.evictTail()
+	}
+
+	// 创建新节点并添加到头部
+	node := &lruNode{
+		key:       key,
 		entry:     entry,
 		expiresAt: time.Now().Add(c.ttl),
 	}
-	c.order = append([]string{key}, c.order...)
+	c.items[key] = node
+	c.addToHead(node)
 }
 
 func (c *LRUCache) Delete(key string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	delete(c.items, key)
-	c.removeFromOrder(key)
+	if node, ok := c.items[key]; ok {
+		c.removeNode(node)
+		delete(c.items, key)
+	}
 }
 
 func (c *LRUCache) Clear() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	c.items = make(map[string]*lruItem)
-	c.order = make([]string, 0, c.capacity)
+	c.items = make(map[string]*lruNode)
+	c.head = nil
+	c.tail = nil
 }
 
-func (c *LRUCache) moveToFront(key string) {
-	c.removeFromOrder(key)
-	c.order = append([]string{key}, c.order...)
-}
-
-func (c *LRUCache) removeFromOrder(key string) {
-	for i, k := range c.order {
-		if k == key {
-			c.order = append(c.order[:i], c.order[i+1:]...)
-			break
-		}
+// addToHead 添加节点到头部 O(1)
+func (c *LRUCache) addToHead(node *lruNode) {
+	node.prev = nil
+	node.next = c.head
+	if c.head != nil {
+		c.head.prev = node
+	}
+	c.head = node
+	if c.tail == nil {
+		c.tail = node
 	}
 }
 
-func (c *LRUCache) evictOldest() {
-	if len(c.order) == 0 {
+// removeNode 从链表中移除节点 O(1)
+func (c *LRUCache) removeNode(node *lruNode) {
+	if node.prev != nil {
+		node.prev.next = node.next
+	} else {
+		c.head = node.next
+	}
+	if node.next != nil {
+		node.next.prev = node.prev
+	} else {
+		c.tail = node.prev
+	}
+}
+
+// moveToHead 移动节点到头部 O(1)
+func (c *LRUCache) moveToHead(node *lruNode) {
+	if node == c.head {
 		return
 	}
-	oldest := c.order[len(c.order)-1]
-	delete(c.items, oldest)
-	c.order = c.order[:len(c.order)-1]
+	c.removeNode(node)
+	c.addToHead(node)
+}
+
+// evictTail 淘汰尾部节点 O(1)
+func (c *LRUCache) evictTail() {
+	if c.tail == nil {
+		return
+	}
+	delete(c.items, c.tail.key)
+	c.removeNode(c.tail)
 }
 
 // Stats 缓存统计

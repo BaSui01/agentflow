@@ -53,8 +53,7 @@ func TestResilientProvider_Name(t *testing.T) {
 	logger, _ := zap.NewDevelopment()
 	mockProvider := new(MockProviderForResilience)
 
-	config := DefaultResilientProviderConfig()
-	rp := NewResilientProvider(mockProvider, nil, nil, nil, config, logger)
+	rp := NewResilientProvider(mockProvider, nil, logger)
 
 	mockProvider.On("Name").Return("test-provider")
 
@@ -69,8 +68,7 @@ func TestResilientProvider_SupportsNativeFunctionCalling(t *testing.T) {
 	logger, _ := zap.NewDevelopment()
 	mockProvider := new(MockProviderForResilience)
 
-	config := DefaultResilientProviderConfig()
-	rp := NewResilientProvider(mockProvider, nil, nil, nil, config, logger)
+	rp := NewResilientProvider(mockProvider, nil, logger)
 
 	mockProvider.On("SupportsNativeFunctionCalling").Return(true)
 

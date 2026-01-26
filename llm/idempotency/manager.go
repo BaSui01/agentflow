@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/redis/go-redis/v9"
@@ -166,8 +167,11 @@ func (m *redisManager) Exists(ctx context.Context, key string) (bool, error) {
 
 // memoryManager 基于内存的幂等性管理器实现（用于测试）
 type memoryManager struct {
-	cache  map[string]*cacheEntry
-	logger *zap.Logger
+	cache           map[string]*cacheEntry
+	mu              sync.RWMutex
+	logger          *zap.Logger
+	stopCh          chan struct{}
+	cleanupInterval time.Duration
 }
 
 type cacheEntry struct {
@@ -177,10 +181,68 @@ type cacheEntry struct {
 
 // NewMemoryManager 创建基于内存的幂等性管理器（仅用于测试）
 func NewMemoryManager(logger *zap.Logger) Manager {
-	return &memoryManager{
-		cache:  make(map[string]*cacheEntry),
-		logger: logger,
+	m := &memoryManager{
+		cache:           make(map[string]*cacheEntry),
+		logger:          logger,
+		stopCh:          make(chan struct{}),
+		cleanupInterval: 5 * time.Minute,
 	}
+	// 启动后台清理 goroutine
+	go m.cleanupLoop()
+	return m
+}
+
+// NewMemoryManagerWithCleanup 创建带自定义清理间隔的内存管理器
+func NewMemoryManagerWithCleanup(logger *zap.Logger, cleanupInterval time.Duration) Manager {
+	m := &memoryManager{
+		cache:           make(map[string]*cacheEntry),
+		logger:          logger,
+		stopCh:          make(chan struct{}),
+		cleanupInterval: cleanupInterval,
+	}
+	go m.cleanupLoop()
+	return m
+}
+
+// cleanupLoop 定期清理过期条目
+func (m *memoryManager) cleanupLoop() {
+	ticker := time.NewTicker(m.cleanupInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			m.cleanup()
+		case <-m.stopCh:
+			return
+		}
+	}
+}
+
+// cleanup 清理所有过期条目
+func (m *memoryManager) cleanup() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	now := time.Now()
+	expired := 0
+	for key, entry := range m.cache {
+		if now.After(entry.ExpiresAt) {
+			delete(m.cache, key)
+			expired++
+		}
+	}
+
+	if expired > 0 && m.logger != nil {
+		m.logger.Debug("cleaned up expired idempotency entries",
+			zap.Int("expired", expired),
+			zap.Int("remaining", len(m.cache)))
+	}
+}
+
+// Close 停止清理 goroutine
+func (m *memoryManager) Close() {
+	close(m.stopCh)
 }
 
 // GenerateKey 实现 Manager.GenerateKey（同 redisManager）
@@ -202,14 +264,19 @@ func (m *memoryManager) GenerateKey(inputs ...interface{}) (string, error) {
 
 // Get 实现 Manager.Get
 func (m *memoryManager) Get(ctx context.Context, key string) (json.RawMessage, bool, error) {
+	m.mu.RLock()
 	entry, exists := m.cache[key]
+	m.mu.RUnlock()
+
 	if !exists {
 		return nil, false, nil
 	}
 
 	// 检查是否过期
 	if time.Now().After(entry.ExpiresAt) {
+		m.mu.Lock()
 		delete(m.cache, key)
+		m.mu.Unlock()
 		return nil, false, nil
 	}
 
@@ -227,30 +294,39 @@ func (m *memoryManager) Set(ctx context.Context, key string, result interface{},
 		ttl = 1 * time.Hour
 	}
 
+	m.mu.Lock()
 	m.cache[key] = &cacheEntry{
 		Data:      data,
 		ExpiresAt: time.Now().Add(ttl),
 	}
+	m.mu.Unlock()
 
 	return nil
 }
 
 // Delete 实现 Manager.Delete
 func (m *memoryManager) Delete(ctx context.Context, key string) error {
+	m.mu.Lock()
 	delete(m.cache, key)
+	m.mu.Unlock()
 	return nil
 }
 
 // Exists 实现 Manager.Exists
 func (m *memoryManager) Exists(ctx context.Context, key string) (bool, error) {
+	m.mu.RLock()
 	entry, exists := m.cache[key]
+	m.mu.RUnlock()
+
 	if !exists {
 		return false, nil
 	}
 
 	// 检查是否过期
 	if time.Now().After(entry.ExpiresAt) {
+		m.mu.Lock()
 		delete(m.cache, key)
+		m.mu.Unlock()
 		return false, nil
 	}
 

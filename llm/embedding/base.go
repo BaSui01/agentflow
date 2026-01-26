@@ -1,0 +1,174 @@
+package embedding
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"fmt"
+	"io"
+	"net/http"
+	"strings"
+	"time"
+
+	"github.com/BaSui01/agentflow/llm"
+)
+
+// BaseProvider provides common functionality for embedding providers.
+type BaseProvider struct {
+	name       string
+	client     *http.Client
+	baseURL    string
+	apiKey     string
+	model      string
+	dimensions int
+	maxBatch   int
+}
+
+// BaseConfig holds common configuration for base provider.
+type BaseConfig struct {
+	Name       string
+	BaseURL    string
+	APIKey     string
+	Model      string
+	Dimensions int
+	MaxBatch   int
+	Timeout    time.Duration
+}
+
+// NewBaseProvider creates a new base provider.
+func NewBaseProvider(cfg BaseConfig) *BaseProvider {
+	timeout := cfg.Timeout
+	if timeout == 0 {
+		timeout = 30 * time.Second
+	}
+	maxBatch := cfg.MaxBatch
+	if maxBatch == 0 {
+		maxBatch = 100
+	}
+	return &BaseProvider{
+		name:       cfg.Name,
+		client:     &http.Client{Timeout: timeout},
+		baseURL:    strings.TrimRight(cfg.BaseURL, "/"),
+		apiKey:     cfg.APIKey,
+		model:      cfg.Model,
+		dimensions: cfg.Dimensions,
+		maxBatch:   maxBatch,
+	}
+}
+
+func (p *BaseProvider) Name() string      { return p.name }
+func (p *BaseProvider) Dimensions() int   { return p.dimensions }
+func (p *BaseProvider) MaxBatchSize() int { return p.maxBatch }
+
+// EmbedQuery embeds a single query string.
+func (p *BaseProvider) EmbedQuery(ctx context.Context, query string, embedFn func(context.Context, *EmbeddingRequest) (*EmbeddingResponse, error)) ([]float64, error) {
+	resp, err := embedFn(ctx, &EmbeddingRequest{
+		Input:     []string{query},
+		InputType: InputTypeQuery,
+	})
+	if err != nil {
+		return nil, err
+	}
+	if len(resp.Embeddings) == 0 {
+		return nil, fmt.Errorf("no embeddings returned")
+	}
+	return resp.Embeddings[0].Embedding, nil
+}
+
+// EmbedDocuments embeds multiple documents.
+func (p *BaseProvider) EmbedDocuments(ctx context.Context, documents []string, embedFn func(context.Context, *EmbeddingRequest) (*EmbeddingResponse, error)) ([][]float64, error) {
+	resp, err := embedFn(ctx, &EmbeddingRequest{
+		Input:     documents,
+		InputType: InputTypeDocument,
+	})
+	if err != nil {
+		return nil, err
+	}
+	result := make([][]float64, len(resp.Embeddings))
+	for i, emb := range resp.Embeddings {
+		result[i] = emb.Embedding
+	}
+	return result, nil
+}
+
+// DoRequest performs an HTTP request with common error handling.
+func (p *BaseProvider) DoRequest(ctx context.Context, method, endpoint string, body interface{}, headers map[string]string) ([]byte, error) {
+	var reqBody io.Reader
+	if body != nil {
+		data, err := json.Marshal(body)
+		if err != nil {
+			return nil, fmt.Errorf("failed to marshal request: %w", err)
+		}
+		reqBody = bytes.NewReader(data)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, method, p.baseURL+endpoint, reqBody)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+	for k, v := range headers {
+		req.Header.Set(k, v)
+	}
+
+	resp, err := p.client.Do(req)
+	if err != nil {
+		return nil, &llm.Error{
+			Code:       llm.ErrUpstreamError,
+			Message:    err.Error(),
+			HTTPStatus: http.StatusBadGateway,
+			Retryable:  true,
+			Provider:   p.name,
+		}
+	}
+	defer resp.Body.Close()
+
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response: %w", err)
+	}
+
+	if resp.StatusCode >= 400 {
+		return nil, mapHTTPError(resp.StatusCode, string(respBody), p.name)
+	}
+
+	return respBody, nil
+}
+
+// mapHTTPError maps HTTP status to llm.Error.
+func mapHTTPError(status int, msg, provider string) *llm.Error {
+	code := llm.ErrUpstreamError
+	retryable := status >= 500
+
+	switch status {
+	case http.StatusUnauthorized:
+		code = llm.ErrUnauthorized
+	case http.StatusForbidden:
+		code = llm.ErrForbidden
+	case http.StatusTooManyRequests:
+		code = llm.ErrRateLimited
+		retryable = true
+	case http.StatusBadRequest:
+		code = llm.ErrInvalidRequest
+	}
+
+	return &llm.Error{
+		Code:       code,
+		Message:    msg,
+		HTTPStatus: status,
+		Retryable:  retryable,
+		Provider:   provider,
+	}
+}
+
+// ChooseModel selects model from request or defaults.
+func ChooseModel(reqModel, defaultModel, fallback string) string {
+	if reqModel != "" {
+		return reqModel
+	}
+	if defaultModel != "" {
+		return defaultModel
+	}
+	return fallback
+}

@@ -7,63 +7,50 @@ import (
 	"sync"
 	"time"
 
-	llmpkg "github.com/BaSui01/agentflow/llm"
+	"github.com/BaSui01/agentflow/llm"
 	"go.uber.org/zap"
 )
 
-// ToolFunc 定义工具函数的签名。
-// 输入为 JSON 参数，输出为 JSON 结果或错误。
+// ToolFunc defines the tool function signature.
 type ToolFunc func(ctx context.Context, args json.RawMessage) (json.RawMessage, error)
 
-// ToolMetadata 描述工具的元数据。
+// ToolMetadata describes tool metadata.
 type ToolMetadata struct {
-	Schema      llmpkg.ToolSchema // 工具的 JSON Schema
-	Permission  string            // 所需权限（可选，用于鉴权）
-	RateLimit   *RateLimitConfig  // 速率限制配置（可选）
-	Timeout     time.Duration     // 执行超时（默认 30s）
-	Description string            // 详细描述
+	Schema      llm.ToolSchema   // Tool JSON Schema
+	Permission  string           // Required permission (optional)
+	RateLimit   *RateLimitConfig // Rate limit config (optional)
+	Timeout     time.Duration    // Execution timeout (default 30s)
+	Description string           // Detailed description
 }
 
-// RateLimitConfig 定义速率限制配置
+// RateLimitConfig defines rate limit configuration.
 type RateLimitConfig struct {
-	MaxCalls int           // 最大调用次数
-	Window   time.Duration // 时间窗口
+	MaxCalls int           // Maximum calls
+	Window   time.Duration // Time window
 }
 
-// ToolResult 表示工具执行的结果。
+// ToolResult represents tool execution result.
 type ToolResult struct {
-	ToolCallID string          `json:"tool_call_id"`    // 对应的 ToolCall ID
-	Name       string          `json:"name"`            // 工具名称
-	Result     json.RawMessage `json:"result"`          // 执行结果（JSON）
-	Error      string          `json:"error,omitempty"` // 错误信息
-	Duration   time.Duration   `json:"duration"`        // 执行耗时
+	ToolCallID string          `json:"tool_call_id"`
+	Name       string          `json:"name"`
+	Result     json.RawMessage `json:"result"`
+	Error      string          `json:"error,omitempty"`
+	Duration   time.Duration   `json:"duration"`
 }
 
-// ToolRegistry 定义工具注册中心接口。
+// ToolRegistry defines tool registry interface.
 type ToolRegistry interface {
-	// Register 注册一个工具
 	Register(name string, fn ToolFunc, metadata ToolMetadata) error
-
-	// Unregister 注销一个工具
 	Unregister(name string) error
-
-	// Get 获取工具函数和元数据
 	Get(name string) (ToolFunc, ToolMetadata, error)
-
-	// List 列出所有已注册的工具
-	List() []llmpkg.ToolSchema
-
-	// Has 检查工具是否已注册
+	List() []llm.ToolSchema
 	Has(name string) bool
 }
 
-// ToolExecutor 定义工具执行器接口。
+// ToolExecutor defines tool executor interface.
 type ToolExecutor interface {
-	// Execute 执行一组 ToolCalls，返回对应的 ToolResults
-	Execute(ctx context.Context, calls []llmpkg.ToolCall) []ToolResult
-
-	// ExecuteOne 执行单个 ToolCall
-	ExecuteOne(ctx context.Context, call llmpkg.ToolCall) ToolResult
+	Execute(ctx context.Context, calls []llm.ToolCall) []ToolResult
+	ExecuteOne(ctx context.Context, call llm.ToolCall) ToolResult
 }
 
 // ====== 实现：DefaultRegistry ======
@@ -152,11 +139,11 @@ func (r *DefaultRegistry) Get(name string) (ToolFunc, ToolMetadata, error) {
 	return fn, meta, nil
 }
 
-func (r *DefaultRegistry) List() []llmpkg.ToolSchema {
+func (r *DefaultRegistry) List() []llm.ToolSchema {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	schemas := make([]llmpkg.ToolSchema, 0, len(r.metadata))
+	schemas := make([]llm.ToolSchema, 0, len(r.metadata))
 	for _, meta := range r.metadata {
 		schemas = append(schemas, meta.Schema)
 	}
@@ -198,14 +185,14 @@ func NewDefaultExecutor(registry ToolRegistry, logger *zap.Logger) *DefaultExecu
 	}
 }
 
-func (e *DefaultExecutor) Execute(ctx context.Context, calls []llmpkg.ToolCall) []ToolResult {
+func (e *DefaultExecutor) Execute(ctx context.Context, calls []llm.ToolCall) []ToolResult {
 	results := make([]ToolResult, len(calls))
 
 	// 并发执行所有工具调用
 	var wg sync.WaitGroup
 	for i, call := range calls {
 		wg.Add(1)
-		go func(idx int, c llmpkg.ToolCall) {
+		go func(idx int, c llm.ToolCall) {
 			defer wg.Done()
 			results[idx] = e.ExecuteOne(ctx, c)
 		}(i, call)
@@ -215,7 +202,7 @@ func (e *DefaultExecutor) Execute(ctx context.Context, calls []llmpkg.ToolCall) 
 	return results
 }
 
-func (e *DefaultExecutor) ExecuteOne(ctx context.Context, call llmpkg.ToolCall) ToolResult {
+func (e *DefaultExecutor) ExecuteOne(ctx context.Context, call llm.ToolCall) ToolResult {
 	start := time.Now()
 	result := ToolResult{
 		ToolCallID: call.ID,
