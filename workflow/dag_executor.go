@@ -21,9 +21,13 @@ type DAGExecutor struct {
 	threadID     string
 	nodeResults  map[string]interface{}
 	visitedNodes map[string]bool
+	loopDepth    map[string]int // 循环深度追踪
 	history      *ExecutionHistory
 	mu           sync.RWMutex
 }
+
+// 最大循环深度限制
+const maxLoopDepth = 1000
 
 // CheckpointManager interface for checkpoint integration
 type CheckpointManager interface {
@@ -60,6 +64,7 @@ func (e *DAGExecutor) Execute(ctx context.Context, graph *DAGGraph, input interf
 	e.executionID = generateExecutionID()
 	e.nodeResults = make(map[string]interface{})
 	e.visitedNodes = make(map[string]bool)
+	e.loopDepth = make(map[string]int)
 	e.history = NewExecutionHistory(e.executionID, "")
 	e.mu.Unlock()
 
@@ -379,6 +384,22 @@ func (e *DAGExecutor) executeLoopNode(ctx context.Context, graph *DAGGraph, node
 		zap.String("loop_type", string(config.Type)),
 		zap.Int("max_iterations", config.MaxIterations),
 	)
+
+	// 检查循环深度
+	e.mu.Lock()
+	e.loopDepth[node.ID]++
+	currentDepth := e.loopDepth[node.ID]
+	e.mu.Unlock()
+
+	if currentDepth > maxLoopDepth {
+		return nil, fmt.Errorf("loop node %s exceeded max depth %d, possible infinite loop", node.ID, maxLoopDepth)
+	}
+
+	defer func() {
+		e.mu.Lock()
+		e.loopDepth[node.ID]--
+		e.mu.Unlock()
+	}()
 
 	var result interface{} = input
 	iteration := 0
