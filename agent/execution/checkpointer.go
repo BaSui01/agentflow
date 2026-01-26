@@ -1,5 +1,5 @@
-// Package checkpoint provides pluggable persistence backends for agent state.
-package checkpoint
+// package execution provides pluggable persistence backends for agent state.
+package execution
 
 import (
 	"context"
