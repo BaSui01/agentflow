@@ -178,9 +178,9 @@ func TestBaseAgent_Init(t *testing.T) {
 	memory.On("LoadRecent", mock.Anything, "test-agent", MemoryShortTerm, 10).
 		Return([]MemoryRecord{}, nil)
 
-	// Mock event publishing
-	bus.On("Publish", mock.Anything, EventStateChange, mock.Anything).
-		Return(nil)
+	// Mock event publishing - Publish takes a single Event argument
+	bus.On("Publish", mock.AnythingOfType("*agent.StateChangeEvent")).
+		Return()
 
 	ctx := context.Background()
 	err := agent.Init(ctx)
@@ -209,9 +209,9 @@ func TestBaseAgent_StateTransition(t *testing.T) {
 
 	agent := NewBaseAgent(config, provider, memory, toolManager, bus, logger)
 
-	// Mock event publishing
-	bus.On("Publish", mock.Anything, EventStateChange, mock.Anything).
-		Return(nil)
+	// Mock event publishing - Publish takes a single Event argument
+	bus.On("Publish", mock.AnythingOfType("*agent.StateChangeEvent")).
+		Return()
 
 	ctx := context.Background()
 
@@ -259,8 +259,8 @@ func TestBaseAgent_Execute(t *testing.T) {
 	// Initialize agent
 	memory.On("LoadRecent", mock.Anything, "test-agent", MemoryShortTerm, 10).
 		Return([]MemoryRecord{}, nil)
-	bus.On("Publish", mock.Anything, EventStateChange, mock.Anything).
-		Return(nil)
+	bus.On("Publish", mock.AnythingOfType("*agent.StateChangeEvent")).
+		Return()
 
 	ctx := context.Background()
 	err := agent.Init(ctx)
@@ -446,9 +446,9 @@ func TestBaseAgent_Observe(t *testing.T) {
 			rec.Content == "feedback content"
 	})).Return(nil)
 
-	// Mock event publishing
-	bus.On("Publish", mock.Anything, EventFeedback, mock.Anything).
-		Return(nil)
+	// Mock event publishing - Publish takes a single Event argument
+	bus.On("Publish", mock.AnythingOfType("*agent.FeedbackEvent")).
+		Return()
 
 	feedback := &Feedback{
 		Type:    "approval",
@@ -554,8 +554,8 @@ func BenchmarkBaseAgent_Execute(b *testing.B) {
 	// Setup mocks
 	memory.On("LoadRecent", mock.Anything, "test-agent", MemoryShortTerm, 10).
 		Return([]MemoryRecord{}, nil)
-	bus.On("Publish", mock.Anything, EventStateChange, mock.Anything).
-		Return(nil)
+	bus.On("Publish", mock.AnythingOfType("*agent.StateChangeEvent")).
+		Return()
 
 	ctx := context.Background()
 	_ = agent.Init(ctx)

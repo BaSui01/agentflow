@@ -8,9 +8,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/BaSui01/agentflow/internal/ctxkeys"
+	"github.com/BaSui01/agentflow/agent/guardrails"
 	"github.com/BaSui01/agentflow/llm"
 	llmtools "github.com/BaSui01/agentflow/llm/tools"
+	"github.com/BaSui01/agentflow/types"
 
 	"go.uber.org/zap"
 )
@@ -48,16 +49,11 @@ type Agent interface {
 }
 
 // ContextManager 上下文管理器接口
+// 使用 pkg/context.AgentContextManager 作为标准实现
 type ContextManager interface {
-	PrepareContext(ctx context.Context, query string, messages []llm.Message) ([]llm.Message, interface{}, error)
-}
-
-// ContextStats 上下文处理统计
-type ContextStats struct {
-	TokensBefore     int     `json:"tokens_before"`
-	TokensAfter      int     `json:"tokens_after"`
-	CompressionRatio float64 `json:"compression_ratio"`
-	TotalLatencyMs   int64   `json:"total_latency_ms"`
+	PrepareMessages(ctx context.Context, messages []llm.Message, currentQuery string) ([]llm.Message, error)
+	GetStatus(messages []llm.Message) interface{}
+	EstimateTokens(messages []llm.Message) int
 }
 
 // Input Agent 输入
@@ -118,6 +114,10 @@ type Config struct {
 	EnableMCP            bool `json:"enable_mcp,omitempty"`
 	EnableEnhancedMemory bool `json:"enable_enhanced_memory,omitempty"`
 	EnableObservability  bool `json:"enable_observability,omitempty"`
+
+	// 2026 Guardrails 配置
+	// Requirements 1.7: 支持自定义验证规则的注册和扩展
+	Guardrails *guardrails.GuardrailsConfig `json:"guardrails,omitempty"`
 }
 
 // BaseAgent 提供可复用的状态管理、记忆、工具与 LLM 能力
@@ -148,6 +148,12 @@ type BaseAgent struct {
 	mcpServer           interface{} // *MCPServer
 	enhancedMemory      interface{} // *EnhancedMemorySystem
 	observabilitySystem interface{} // *ObservabilitySystem
+
+	// 2026 Guardrails 功能
+	// Requirements 1.7, 2.4: 输入/输出验证和重试支持
+	inputValidatorChain *guardrails.ValidatorChain
+	outputValidator     *guardrails.OutputValidator
+	guardrailsEnabled   bool
 }
 
 // NewBaseAgent 创建基础 Agent
@@ -169,7 +175,65 @@ func NewBaseAgent(
 		logger:      logger.With(zap.String("agent_id", cfg.ID), zap.String("agent_type", string(cfg.Type))),
 	}
 
+	// Initialize guardrails if configured
+	if cfg.Guardrails != nil {
+		ba.initGuardrails(cfg.Guardrails)
+	}
+
 	return ba
+}
+
+// initGuardrails initializes the guardrails system
+// Requirements 1.7: Support custom validation rule registration and extension
+func (b *BaseAgent) initGuardrails(cfg *guardrails.GuardrailsConfig) {
+	b.guardrailsEnabled = true
+
+	// Initialize input validator chain
+	b.inputValidatorChain = guardrails.NewValidatorChain(&guardrails.ValidatorChainConfig{
+		Mode: guardrails.ChainModeCollectAll,
+	})
+
+	// Add configured input validators
+	for _, v := range cfg.InputValidators {
+		b.inputValidatorChain.Add(v)
+	}
+
+	// Add built-in validators based on config
+	if cfg.MaxInputLength > 0 {
+		b.inputValidatorChain.Add(guardrails.NewLengthValidator(&guardrails.LengthValidatorConfig{
+			MaxLength: cfg.MaxInputLength,
+			Action:    guardrails.LengthActionReject,
+		}))
+	}
+
+	if len(cfg.BlockedKeywords) > 0 {
+		b.inputValidatorChain.Add(guardrails.NewKeywordValidator(&guardrails.KeywordValidatorConfig{
+			BlockedKeywords: cfg.BlockedKeywords,
+			CaseSensitive:   false,
+		}))
+	}
+
+	if cfg.InjectionDetection {
+		b.inputValidatorChain.Add(guardrails.NewInjectionDetector(nil))
+	}
+
+	if cfg.PIIDetectionEnabled {
+		b.inputValidatorChain.Add(guardrails.NewPIIDetector(nil))
+	}
+
+	// Initialize output validator
+	outputConfig := &guardrails.OutputValidatorConfig{
+		Validators:     cfg.OutputValidators,
+		Filters:        cfg.OutputFilters,
+		EnableAuditLog: true,
+	}
+	b.outputValidator = guardrails.NewOutputValidator(outputConfig)
+
+	b.logger.Info("guardrails initialized",
+		zap.Int("input_validators", b.inputValidatorChain.Len()),
+		zap.Bool("pii_detection", cfg.PIIDetectionEnabled),
+		zap.Bool("injection_detection", cfg.InjectionDetection),
+	)
 }
 
 type toolManagerExecutor struct {
@@ -201,9 +265,9 @@ func (e toolManagerExecutor) isAllowed(toolName string) bool {
 }
 
 func (e toolManagerExecutor) Execute(ctx context.Context, calls []llm.ToolCall) []llmtools.ToolResult {
-	traceID, _ := ctxkeys.TraceID(ctx)
-	runID, _ := ctxkeys.RunID(ctx)
-	promptVer, _ := ctxkeys.PromptBundleVersion(ctx)
+	traceID, _ := types.TraceID(ctx)
+	runID, _ := types.RunID(ctx)
+	promptVer, _ := types.PromptBundleVersion(ctx)
 
 	publish := func(stage string, call llm.ToolCall, errMsg string) {
 		if e.bus == nil {
@@ -365,20 +429,23 @@ func (b *BaseAgent) ChatCompletion(ctx context.Context, messages []llm.Message) 
 				break
 			}
 		}
-		optimized, statsIface, err := b.contextManager.PrepareContext(ctx, query, messages)
+		optimized, err := b.contextManager.PrepareMessages(ctx, messages, query)
 		if err != nil {
 			b.logger.Warn("context optimization failed, using original messages", zap.Error(err))
 		} else {
-			messages = optimized
-			// 尝试从 interface{} 提取统计信息（使用反射友好的方式）
-			if statsIface != nil {
-				b.logContextStats(statsIface)
+			tokensBefore := b.contextManager.EstimateTokens(messages)
+			tokensAfter := b.contextManager.EstimateTokens(optimized)
+			if tokensBefore != tokensAfter {
+				b.logger.Debug("context optimized",
+					zap.Int("tokens_before", tokensBefore),
+					zap.Int("tokens_after", tokensAfter))
 			}
+			messages = optimized
 		}
 	}
 
 	model := b.config.Model
-	if v, ok := ctxkeys.LLMModel(ctx); ok && strings.TrimSpace(v) != "" {
+	if v, ok := types.LLMModel(ctx); ok && strings.TrimSpace(v) != "" {
 		model = strings.TrimSpace(v)
 	}
 
@@ -548,19 +615,16 @@ func (b *BaseAgent) StreamCompletion(ctx context.Context, messages []llm.Message
 				break
 			}
 		}
-		optimized, statsIface, err := b.contextManager.PrepareContext(ctx, query, messages)
+		optimized, err := b.contextManager.PrepareMessages(ctx, messages, query)
 		if err != nil {
 			b.logger.Warn("context optimization failed, using original messages", zap.Error(err))
 		} else {
 			messages = optimized
-			if statsIface != nil {
-				b.logContextStats(statsIface)
-			}
 		}
 	}
 
 	model := b.config.Model
-	if v, ok := ctxkeys.LLMModel(ctx); ok && strings.TrimSpace(v) != "" {
+	if v, ok := types.LLMModel(ctx); ok && strings.TrimSpace(v) != "" {
 		model = strings.TrimSpace(v)
 	}
 
@@ -653,39 +717,6 @@ func (b *BaseAgent) ContextEngineEnabled() bool {
 	return b.contextEngineEnabled
 }
 
-// logContextStats 记录上下文优化统计（通过反射提取字段避免循环依赖）
-func (b *BaseAgent) logContextStats(statsIface interface{}) {
-	if statsIface == nil {
-		return
-	}
-	// 使用类型断言尝试提取常见的统计字段
-	type statsLike interface {
-		GetTokensBefore() int
-		GetTokensAfter() int
-		GetCompressionRatio() float64
-	}
-	// 直接使用 map 或 struct 反射
-	switch s := statsIface.(type) {
-	case interface{ TokensBefore() int }:
-		// 如果实现了方法形式
-	case map[string]interface{}:
-		if before, ok := s["tokens_before"].(int); ok {
-			if after, ok := s["tokens_after"].(int); ok {
-				if ratio, ok := s["compression_ratio"].(float64); ok {
-					b.logger.Debug("context optimized",
-						zap.Int("tokens_before", before),
-						zap.Int("tokens_after", after),
-						zap.Float64("compression_ratio", ratio))
-					return
-				}
-			}
-		}
-	default:
-		// 尝试通过反射获取公开字段
-		b.logger.Debug("context optimized", zap.Any("stats", statsIface))
-	}
-}
-
 // Plan 生成执行计划
 // 使用 LLM 分析任务并生成详细的执行步骤
 func (b *BaseAgent) Plan(ctx context.Context, input *Input) (*PlanResult, error) {
@@ -747,6 +778,8 @@ func (b *BaseAgent) Plan(ctx context.Context, input *Input) (*PlanResult, error)
 
 // Execute 执行任务（完整的 ReAct 循环）
 // 这是 Agent 的核心执行方法，包含完整的推理-行动循环
+// Requirements 1.7: 集成输入验证
+// Requirements 2.4: 输出验证失败时支持重试
 func (b *BaseAgent) Execute(ctx context.Context, input *Input) (*Output, error) {
 	startTime := time.Now()
 
@@ -777,7 +810,42 @@ func (b *BaseAgent) Execute(ctx context.Context, input *Input) (*Output, error) 
 		zap.String("agent_type", string(b.config.Type)),
 	)
 
-	// 4. 加载最近的记忆（如果有）
+	// 4. Input validation (Guardrails)
+	if b.guardrailsEnabled && b.inputValidatorChain != nil {
+		validationResult, err := b.inputValidatorChain.Validate(ctx, input.Content)
+		if err != nil {
+			b.logger.Error("input validation error", zap.Error(err))
+			return nil, fmt.Errorf("input validation error: %w", err)
+		}
+
+		if !validationResult.Valid {
+			b.logger.Warn("input validation failed",
+				zap.String("trace_id", input.TraceID),
+				zap.Any("errors", validationResult.Errors),
+			)
+
+			// Check failure action from config
+			failureAction := guardrails.FailureActionReject
+			if b.config.Guardrails != nil {
+				failureAction = b.config.Guardrails.OnInputFailure
+			}
+
+			switch failureAction {
+			case guardrails.FailureActionReject:
+				return nil, &GuardrailsError{
+					Type:    GuardrailsErrorTypeInput,
+					Message: "input validation failed",
+					Errors:  validationResult.Errors,
+				}
+			case guardrails.FailureActionWarn:
+				b.logger.Warn("input validation warning, continuing execution",
+					zap.Any("warnings", validationResult.Errors),
+				)
+			}
+		}
+	}
+
+	// 5. 加载最近的记忆（如果有）
 	var contextMessages []llm.Message
 	if b.memory != nil {
 		b.recentMemoryMu.RLock()
@@ -796,7 +864,7 @@ func (b *BaseAgent) Execute(ctx context.Context, input *Input) (*Output, error) 
 		b.recentMemoryMu.RUnlock()
 	}
 
-	// 5. 构建消息
+	// 6. 构建消息
 	messages := []llm.Message{
 		{
 			Role:    llm.RoleSystem,
@@ -813,17 +881,104 @@ func (b *BaseAgent) Execute(ctx context.Context, input *Input) (*Output, error) 
 		Content: input.Content,
 	})
 
-	// 6. 执行 ReAct 循环（通过 ChatCompletion）
-	resp, err := b.ChatCompletion(ctx, messages)
-	if err != nil {
-		b.logger.Error("execution failed",
-			zap.Error(err),
-			zap.String("trace_id", input.TraceID),
-		)
-		return nil, fmt.Errorf("execution failed: %w", err)
+	// 7. Execute with output validation and retry support
+	// Requirements 2.4: Retry on output validation failure
+	maxRetries := 0
+	if b.config.Guardrails != nil {
+		maxRetries = b.config.Guardrails.MaxRetries
 	}
 
-	// 7. 保存记忆
+	var resp *llm.ChatResponse
+	var outputContent string
+	var lastValidationResult *guardrails.ValidationResult
+
+	for attempt := 0; attempt <= maxRetries; attempt++ {
+		if attempt > 0 {
+			b.logger.Info("retrying execution due to output validation failure",
+				zap.Int("attempt", attempt),
+				zap.String("trace_id", input.TraceID),
+			)
+
+			// Add feedback about validation failure for retry
+			if lastValidationResult != nil {
+				feedbackMsg := b.buildValidationFeedbackMessage(lastValidationResult)
+				messages = append(messages, llm.Message{
+					Role:    llm.RoleUser,
+					Content: feedbackMsg,
+				})
+			}
+		}
+
+		// Execute ReAct loop
+		var err error
+		resp, err = b.ChatCompletion(ctx, messages)
+		if err != nil {
+			b.logger.Error("execution failed",
+				zap.Error(err),
+				zap.String("trace_id", input.TraceID),
+			)
+			return nil, fmt.Errorf("execution failed: %w", err)
+		}
+
+		outputContent = resp.Choices[0].Message.Content
+
+		// Output validation (Guardrails)
+		if b.guardrailsEnabled && b.outputValidator != nil {
+			var filteredContent string
+			filteredContent, lastValidationResult, err = b.outputValidator.ValidateAndFilter(ctx, outputContent)
+			if err != nil {
+				b.logger.Error("output validation error", zap.Error(err))
+				return nil, fmt.Errorf("output validation error: %w", err)
+			}
+
+			if !lastValidationResult.Valid {
+				b.logger.Warn("output validation failed",
+					zap.String("trace_id", input.TraceID),
+					zap.Int("attempt", attempt),
+					zap.Any("errors", lastValidationResult.Errors),
+				)
+
+				// Check failure action
+				failureAction := guardrails.FailureActionReject
+				if b.config.Guardrails != nil {
+					failureAction = b.config.Guardrails.OnOutputFailure
+				}
+
+				// If retry is configured and we haven't exhausted retries, continue
+				if failureAction == guardrails.FailureActionRetry && attempt < maxRetries {
+					continue
+				}
+
+				// Handle based on failure action
+				switch failureAction {
+				case guardrails.FailureActionReject:
+					return nil, &GuardrailsError{
+						Type:    GuardrailsErrorTypeOutput,
+						Message: "output validation failed",
+						Errors:  lastValidationResult.Errors,
+					}
+				case guardrails.FailureActionWarn:
+					b.logger.Warn("output validation warning, using filtered content")
+					outputContent = filteredContent
+				case guardrails.FailureActionRetry:
+					// Exhausted retries, reject
+					return nil, &GuardrailsError{
+						Type:    GuardrailsErrorTypeOutput,
+						Message: fmt.Sprintf("output validation failed after %d retries", maxRetries),
+						Errors:  lastValidationResult.Errors,
+					}
+				}
+			} else {
+				// Validation passed, use filtered content
+				outputContent = filteredContent
+			}
+		}
+
+		// Validation passed or warning mode, break retry loop
+		break
+	}
+
+	// 8. 保存记忆
 	if b.memory != nil {
 		// 保存用户输入
 		if err := b.SaveMemory(ctx, input.Content, MemoryShortTerm, map[string]any{
@@ -834,7 +989,7 @@ func (b *BaseAgent) Execute(ctx context.Context, input *Input) (*Output, error) 
 		}
 
 		// 保存 Agent 响应
-		if err := b.SaveMemory(ctx, resp.Choices[0].Message.Content, MemoryShortTerm, map[string]any{
+		if err := b.SaveMemory(ctx, outputContent, MemoryShortTerm, map[string]any{
 			"trace_id": input.TraceID,
 			"role":     "assistant",
 		}); err != nil {
@@ -850,10 +1005,10 @@ func (b *BaseAgent) Execute(ctx context.Context, input *Input) (*Output, error) 
 		zap.Int("tokens_used", resp.Usage.TotalTokens),
 	)
 
-	// 8. 返回结果
+	// 9. 返回结果
 	return &Output{
 		TraceID: input.TraceID,
-		Content: resp.Choices[0].Message.Content,
+		Content: outputContent,
 		Metadata: map[string]any{
 			"model":    resp.Model,
 			"provider": resp.Provider,
@@ -862,6 +1017,17 @@ func (b *BaseAgent) Execute(ctx context.Context, input *Input) (*Output, error) 
 		Duration:     duration,
 		FinishReason: resp.Choices[0].FinishReason,
 	}, nil
+}
+
+// buildValidationFeedbackMessage creates a feedback message for retry
+func (b *BaseAgent) buildValidationFeedbackMessage(result *guardrails.ValidationResult) string {
+	var sb strings.Builder
+	sb.WriteString("Your previous response failed validation. Please regenerate your response addressing the following issues:\n")
+	for _, err := range result.Errors {
+		sb.WriteString(fmt.Sprintf("- %s: %s\n", err.Code, err.Message))
+	}
+	sb.WriteString("\nPlease provide a corrected response.")
+	return sb.String()
 }
 
 // Observe 处理反馈并更新 Agent 状态
@@ -941,4 +1107,86 @@ func parsePlanSteps(content string) []string {
 	}
 
 	return steps
+}
+
+// GuardrailsErrorType defines the type of guardrails error
+type GuardrailsErrorType string
+
+const (
+	// GuardrailsErrorTypeInput indicates input validation failure
+	GuardrailsErrorTypeInput GuardrailsErrorType = "input"
+	// GuardrailsErrorTypeOutput indicates output validation failure
+	GuardrailsErrorTypeOutput GuardrailsErrorType = "output"
+)
+
+// GuardrailsError represents a guardrails validation error
+// Requirements 1.6: Return detailed error information with failure reasons
+type GuardrailsError struct {
+	Type    GuardrailsErrorType          `json:"type"`
+	Message string                       `json:"message"`
+	Errors  []guardrails.ValidationError `json:"errors"`
+}
+
+// Error implements the error interface
+func (e *GuardrailsError) Error() string {
+	if len(e.Errors) == 0 {
+		return fmt.Sprintf("guardrails %s validation failed: %s", e.Type, e.Message)
+	}
+	var sb strings.Builder
+	sb.WriteString(fmt.Sprintf("guardrails %s validation failed: %s [", e.Type, e.Message))
+	for i, err := range e.Errors {
+		if i > 0 {
+			sb.WriteString(", ")
+		}
+		sb.WriteString(fmt.Sprintf("%s: %s", err.Code, err.Message))
+	}
+	sb.WriteString("]")
+	return sb.String()
+}
+
+// SetGuardrails configures guardrails for the agent
+// Requirements 1.7: Support custom validation rule registration and extension
+func (b *BaseAgent) SetGuardrails(cfg *guardrails.GuardrailsConfig) {
+	if cfg == nil {
+		b.guardrailsEnabled = false
+		b.inputValidatorChain = nil
+		b.outputValidator = nil
+		return
+	}
+	b.config.Guardrails = cfg
+	b.initGuardrails(cfg)
+}
+
+// GuardrailsEnabled returns whether guardrails are enabled
+func (b *BaseAgent) GuardrailsEnabled() bool {
+	return b.guardrailsEnabled
+}
+
+// AddInputValidator adds a custom input validator
+// Requirements 1.7: Support custom validation rule registration and extension
+func (b *BaseAgent) AddInputValidator(v guardrails.Validator) {
+	if b.inputValidatorChain == nil {
+		b.inputValidatorChain = guardrails.NewValidatorChain(nil)
+		b.guardrailsEnabled = true
+	}
+	b.inputValidatorChain.Add(v)
+}
+
+// AddOutputValidator adds a custom output validator
+// Requirements 1.7: Support custom validation rule registration and extension
+func (b *BaseAgent) AddOutputValidator(v guardrails.Validator) {
+	if b.outputValidator == nil {
+		b.outputValidator = guardrails.NewOutputValidator(nil)
+		b.guardrailsEnabled = true
+	}
+	b.outputValidator.AddValidator(v)
+}
+
+// AddOutputFilter adds a custom output filter
+func (b *BaseAgent) AddOutputFilter(f guardrails.Filter) {
+	if b.outputValidator == nil {
+		b.outputValidator = guardrails.NewOutputValidator(nil)
+		b.guardrailsEnabled = true
+	}
+	b.outputValidator.AddFilter(f)
 }

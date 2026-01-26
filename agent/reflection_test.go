@@ -60,8 +60,8 @@ func TestReflectionExecutor_ExecuteWithReflection_Disabled(t *testing.T) {
 	// Initialize agent
 	memory.On("LoadRecent", mock.Anything, "test-agent", MemoryShortTerm, 10).
 		Return([]MemoryRecord{}, nil)
-	bus.On("Publish", mock.Anything, EventStateChange, mock.Anything).
-		Return(nil)
+	bus.On("Publish", mock.AnythingOfType("*agent.StateChangeEvent")).
+		Return()
 
 	ctx := context.Background()
 	_ = agent.Init(ctx)
@@ -136,8 +136,8 @@ func TestReflectionExecutor_ExecuteWithReflection_Success(t *testing.T) {
 	// Initialize agent
 	memory.On("LoadRecent", mock.Anything, "test-agent", MemoryShortTerm, 10).
 		Return([]MemoryRecord{}, nil)
-	bus.On("Publish", mock.Anything, EventStateChange, mock.Anything).
-		Return(nil)
+	bus.On("Publish", mock.AnythingOfType("*agent.StateChangeEvent")).
+		Return()
 
 	ctx := context.Background()
 	_ = agent.Init(ctx)
