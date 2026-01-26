@@ -4,6 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
+	"sort"
+	"strings"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"go.uber.org/zap"
@@ -12,13 +18,17 @@ import (
 // Checkpoint Agent 执行检查点（基于 LangGraph 2026 标准）
 type Checkpoint struct {
 	ID        string                 `json:"id"`
-	ThreadID  string                 `json:"thread_id"`  // 会话线程 ID
+	ThreadID  string                 `json:"thread_id"` // 会话线程 ID
 	AgentID   string                 `json:"agent_id"`
+	Version   int                    `json:"version"` // 版本号（线程内递增）
 	State     State                  `json:"state"`
 	Messages  []CheckpointMessage    `json:"messages"`
 	Metadata  map[string]interface{} `json:"metadata"`
 	CreatedAt time.Time              `json:"created_at"`
 	ParentID  string                 `json:"parent_id,omitempty"` // 父检查点 ID
+
+	// ExecutionContext 工作流执行上下文
+	ExecutionContext *ExecutionContext `json:"execution_context,omitempty"`
 }
 
 // CheckpointMessage 检查点消息
@@ -38,38 +48,71 @@ type CheckpointToolCall struct {
 	Error     string          `json:"error,omitempty"`
 }
 
+// ExecutionContext 工作流执行上下文
+type ExecutionContext struct {
+	WorkflowID  string                 `json:"workflow_id,omitempty"`
+	CurrentNode string                 `json:"current_node,omitempty"`
+	NodeResults map[string]interface{} `json:"node_results,omitempty"`
+	Variables   map[string]interface{} `json:"variables,omitempty"`
+}
+
+// CheckpointVersion 检查点版本元数据
+type CheckpointVersion struct {
+	Version   int       `json:"version"`
+	ID        string    `json:"id"`
+	CreatedAt time.Time `json:"created_at"`
+	State     State     `json:"state"`
+	Summary   string    `json:"summary"`
+}
+
 // CheckpointStore 检查点存储接口
 type CheckpointStore interface {
 	// Save 保存检查点
 	Save(ctx context.Context, checkpoint *Checkpoint) error
-	
+
 	// Load 加载检查点
 	Load(ctx context.Context, checkpointID string) (*Checkpoint, error)
-	
+
 	// LoadLatest 加载线程最新检查点
 	LoadLatest(ctx context.Context, threadID string) (*Checkpoint, error)
-	
+
 	// List 列出线程的所有检查点
 	List(ctx context.Context, threadID string, limit int) ([]*Checkpoint, error)
-	
+
 	// Delete 删除检查点
 	Delete(ctx context.Context, checkpointID string) error
-	
+
 	// DeleteThread 删除整个线程
 	DeleteThread(ctx context.Context, threadID string) error
+
+	// LoadVersion 加载指定版本的检查点
+	LoadVersion(ctx context.Context, threadID string, version int) (*Checkpoint, error)
+
+	// ListVersions 列出线程的所有版本
+	ListVersions(ctx context.Context, threadID string) ([]CheckpointVersion, error)
+
+	// Rollback 回滚到指定版本
+	Rollback(ctx context.Context, threadID string, version int) error
 }
 
 // CheckpointManager 检查点管理器
 type CheckpointManager struct {
 	store  CheckpointStore
 	logger *zap.Logger
+
+	// Auto-save configuration
+	autoSaveEnabled  bool
+	autoSaveInterval time.Duration
+	autoSaveCancel   context.CancelFunc
+	autoSaveMu       sync.Mutex
 }
 
 // NewCheckpointManager 创建检查点管理器
 func NewCheckpointManager(store CheckpointStore, logger *zap.Logger) *CheckpointManager {
 	return &CheckpointManager{
-		store:  store,
-		logger: logger.With(zap.String("component", "checkpoint_manager")),
+		store:           store,
+		logger:          logger.With(zap.String("component", "checkpoint_manager")),
+		autoSaveEnabled: false,
 	}
 }
 
@@ -81,41 +124,41 @@ func (m *CheckpointManager) SaveCheckpoint(ctx context.Context, checkpoint *Chec
 	if checkpoint.CreatedAt.IsZero() {
 		checkpoint.CreatedAt = time.Now()
 	}
-	
+
 	m.logger.Debug("saving checkpoint",
 		zap.String("checkpoint_id", checkpoint.ID),
 		zap.String("thread_id", checkpoint.ThreadID),
 		zap.String("agent_id", checkpoint.AgentID),
 	)
-	
+
 	if err := m.store.Save(ctx, checkpoint); err != nil {
 		return fmt.Errorf("failed to save checkpoint: %w", err)
 	}
-	
+
 	return nil
 }
 
 // LoadCheckpoint 加载检查点
 func (m *CheckpointManager) LoadCheckpoint(ctx context.Context, checkpointID string) (*Checkpoint, error) {
 	m.logger.Debug("loading checkpoint", zap.String("checkpoint_id", checkpointID))
-	
+
 	checkpoint, err := m.store.Load(ctx, checkpointID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load checkpoint: %w", err)
 	}
-	
+
 	return checkpoint, nil
 }
 
 // LoadLatestCheckpoint 加载最新检查点
 func (m *CheckpointManager) LoadLatestCheckpoint(ctx context.Context, threadID string) (*Checkpoint, error) {
 	m.logger.Debug("loading latest checkpoint", zap.String("thread_id", threadID))
-	
+
 	checkpoint, err := m.store.LoadLatest(ctx, threadID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load latest checkpoint: %w", err)
 	}
-	
+
 	return checkpoint, nil
 }
 
@@ -125,33 +168,289 @@ func (m *CheckpointManager) ResumeFromCheckpoint(ctx context.Context, agent Agen
 	if err != nil {
 		return err
 	}
-	
+
 	m.logger.Info("resuming from checkpoint",
 		zap.String("checkpoint_id", checkpointID),
 		zap.String("agent_id", checkpoint.AgentID),
 		zap.String("state", string(checkpoint.State)),
 	)
-	
+
 	// 验证 Agent ID
 	if agent.ID() != checkpoint.AgentID {
 		return fmt.Errorf("agent ID mismatch: expected %s, got %s", checkpoint.AgentID, agent.ID())
 	}
-	
+
 	// 恢复状态（需要 Agent 支持状态恢复）
 	if ba, ok := agent.(*BaseAgent); ok {
 		if err := ba.Transition(ctx, checkpoint.State); err != nil {
 			return fmt.Errorf("failed to restore state: %w", err)
 		}
 	}
-	
+
 	m.logger.Info("checkpoint restored successfully")
-	
+
 	return nil
 }
 
+// EnableAutoSave enables automatic checkpoint saving with the specified interval
+func (m *CheckpointManager) EnableAutoSave(ctx context.Context, agent Agent, threadID string, interval time.Duration) error {
+	m.autoSaveMu.Lock()
+	defer m.autoSaveMu.Unlock()
+
+	if m.autoSaveEnabled {
+		return fmt.Errorf("auto-save already enabled")
+	}
+
+	if interval <= 0 {
+		return fmt.Errorf("invalid interval: must be positive")
+	}
+
+	m.autoSaveInterval = interval
+	m.autoSaveEnabled = true
+
+	// Create cancellable context for auto-save goroutine
+	autoSaveCtx, cancel := context.WithCancel(ctx)
+	m.autoSaveCancel = cancel
+
+	// Start auto-save goroutine
+	go m.autoSaveLoop(autoSaveCtx, agent, threadID)
+
+	m.logger.Info("auto-save enabled",
+		zap.Duration("interval", interval),
+		zap.String("thread_id", threadID),
+	)
+
+	return nil
+}
+
+// DisableAutoSave stops automatic checkpoint saving
+func (m *CheckpointManager) DisableAutoSave() {
+	m.autoSaveMu.Lock()
+	defer m.autoSaveMu.Unlock()
+
+	if !m.autoSaveEnabled {
+		return
+	}
+
+	if m.autoSaveCancel != nil {
+		m.autoSaveCancel()
+		m.autoSaveCancel = nil
+	}
+
+	m.autoSaveEnabled = false
+
+	m.logger.Info("auto-save disabled")
+}
+
+// autoSaveLoop runs the automatic checkpoint saving loop
+func (m *CheckpointManager) autoSaveLoop(ctx context.Context, agent Agent, threadID string) {
+	ticker := time.NewTicker(m.autoSaveInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			m.logger.Debug("auto-save loop stopped")
+			return
+		case <-ticker.C:
+			if err := m.CreateCheckpoint(ctx, agent, threadID); err != nil {
+				m.logger.Error("auto-save failed", zap.Error(err))
+			} else {
+				m.logger.Debug("auto-save checkpoint created", zap.String("thread_id", threadID))
+			}
+		}
+	}
+}
+
+// CreateCheckpoint captures the current agent state and saves it as a checkpoint
+func (m *CheckpointManager) CreateCheckpoint(ctx context.Context, agent Agent, threadID string) error {
+	m.logger.Debug("creating checkpoint",
+		zap.String("agent_id", agent.ID()),
+		zap.String("thread_id", threadID),
+	)
+
+	// Extract agent state
+	state := agent.State()
+	messages := []CheckpointMessage{}
+	var executionContext *ExecutionContext
+
+	// Create checkpoint
+	checkpoint := &Checkpoint{
+		ID:               generateCheckpointID(),
+		ThreadID:         threadID,
+		AgentID:          agent.ID(),
+		State:            state,
+		Messages:         messages,
+		Metadata:         make(map[string]interface{}),
+		CreatedAt:        time.Now(),
+		ExecutionContext: executionContext,
+	}
+
+	// Save checkpoint
+	if err := m.SaveCheckpoint(ctx, checkpoint); err != nil {
+		return fmt.Errorf("failed to create checkpoint: %w", err)
+	}
+
+	m.logger.Info("checkpoint created",
+		zap.String("checkpoint_id", checkpoint.ID),
+		zap.String("thread_id", threadID),
+		zap.Int("version", checkpoint.Version),
+	)
+
+	return nil
+}
+
+// RollbackToVersion rolls back the agent to a specific checkpoint version
+func (m *CheckpointManager) RollbackToVersion(ctx context.Context, agent Agent, threadID string, version int) error {
+	m.logger.Info("rolling back to version",
+		zap.String("thread_id", threadID),
+		zap.Int("version", version),
+	)
+
+	// Load the target version
+	checkpoint, err := m.store.LoadVersion(ctx, threadID, version)
+	if err != nil {
+		return fmt.Errorf("failed to load version %d: %w", version, err)
+	}
+
+	// Verify agent ID
+	if agent.ID() != checkpoint.AgentID {
+		return fmt.Errorf("agent ID mismatch: expected %s, got %s", checkpoint.AgentID, agent.ID())
+	}
+
+	// Restore agent state
+	// Try to use Transition method if available (for BaseAgent and compatible types)
+	type transitioner interface {
+		Transition(ctx context.Context, newState State) error
+	}
+	
+	if t, ok := agent.(transitioner); ok {
+		if err := t.Transition(ctx, checkpoint.State); err != nil {
+			return fmt.Errorf("failed to restore state: %w", err)
+		}
+	} else {
+		m.logger.Warn("agent does not support Transition method, state restoration skipped",
+			zap.String("agent_id", agent.ID()),
+		)
+	}
+
+	// Perform rollback in store (creates new checkpoint)
+	if err := m.store.Rollback(ctx, threadID, version); err != nil {
+		return fmt.Errorf("failed to rollback in store: %w", err)
+	}
+
+	m.logger.Info("rollback completed",
+		zap.String("thread_id", threadID),
+		zap.Int("version", version),
+	)
+
+	return nil
+}
+
+// CompareVersions compares two checkpoint versions and returns the differences
+func (m *CheckpointManager) CompareVersions(ctx context.Context, threadID string, version1, version2 int) (*CheckpointDiff, error) {
+	m.logger.Debug("comparing versions",
+		zap.String("thread_id", threadID),
+		zap.Int("version1", version1),
+		zap.Int("version2", version2),
+	)
+
+	// Load both versions
+	cp1, err := m.store.LoadVersion(ctx, threadID, version1)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load version %d: %w", version1, err)
+	}
+
+	cp2, err := m.store.LoadVersion(ctx, threadID, version2)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load version %d: %w", version2, err)
+	}
+
+	// Generate diff
+	diff := &CheckpointDiff{
+		ThreadID:     threadID,
+		Version1:     version1,
+		Version2:     version2,
+		StateChanged: cp1.State != cp2.State,
+		OldState:     cp1.State,
+		NewState:     cp2.State,
+		MessagesDiff: m.compareMessages(cp1.Messages, cp2.Messages),
+		MetadataDiff: m.compareMetadata(cp1.Metadata, cp2.Metadata),
+		TimeDiff:     cp2.CreatedAt.Sub(cp1.CreatedAt),
+	}
+
+	return diff, nil
+}
+
+// ListVersions lists all checkpoint versions for a thread
+func (m *CheckpointManager) ListVersions(ctx context.Context, threadID string) ([]CheckpointVersion, error) {
+	m.logger.Debug("listing versions", zap.String("thread_id", threadID))
+
+	versions, err := m.store.ListVersions(ctx, threadID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list versions: %w", err)
+	}
+
+	return versions, nil
+}
+
+// compareMessages compares two message slices and returns a summary
+func (m *CheckpointManager) compareMessages(msgs1, msgs2 []CheckpointMessage) string {
+	if len(msgs1) == len(msgs2) {
+		return fmt.Sprintf("No change (%d messages)", len(msgs1))
+	}
+	return fmt.Sprintf("Changed from %d to %d messages", len(msgs1), len(msgs2))
+}
+
+// compareMetadata compares two metadata maps and returns a summary
+func (m *CheckpointManager) compareMetadata(meta1, meta2 map[string]interface{}) string {
+	added := 0
+	removed := 0
+	changed := 0
+
+	// Check for added and changed keys
+	for k, v2 := range meta2 {
+		if v1, exists := meta1[k]; !exists {
+			added++
+		} else if fmt.Sprintf("%v", v1) != fmt.Sprintf("%v", v2) {
+			changed++
+		}
+	}
+
+	// Check for removed keys
+	for k := range meta1 {
+		if _, exists := meta2[k]; !exists {
+			removed++
+		}
+	}
+
+	if added == 0 && removed == 0 && changed == 0 {
+		return "No changes"
+	}
+
+	return fmt.Sprintf("Added: %d, Removed: %d, Changed: %d", added, removed, changed)
+}
+
+// CheckpointDiff represents the differences between two checkpoint versions
+type CheckpointDiff struct {
+	ThreadID     string        `json:"thread_id"`
+	Version1     int           `json:"version1"`
+	Version2     int           `json:"version2"`
+	StateChanged bool          `json:"state_changed"`
+	OldState     State         `json:"old_state"`
+	NewState     State         `json:"new_state"`
+	MessagesDiff string        `json:"messages_diff"`
+	MetadataDiff string        `json:"metadata_diff"`
+	TimeDiff     time.Duration `json:"time_diff"`
+}
+
+var checkpointIDCounter uint64
+
 // generateCheckpointID 生成检查点 ID
 func generateCheckpointID() string {
-	return fmt.Sprintf("ckpt_%d", time.Now().UnixNano())
+	// 使用纳秒时间戳 + 原子计数器确保唯一性
+	counter := atomic.AddUint64(&checkpointIDCounter, 1)
+	return fmt.Sprintf("ckpt_%d%d", time.Now().UnixNano(), counter)
 }
 
 // ====== Redis 实现 ======
@@ -187,29 +486,46 @@ func NewRedisCheckpointStore(client RedisClient, prefix string, ttl time.Duratio
 
 // Save 保存检查点
 func (s *RedisCheckpointStore) Save(ctx context.Context, checkpoint *Checkpoint) error {
+	// 如果版本号为0，自动分配版本号
+	if checkpoint.Version == 0 {
+		versions, err := s.ListVersions(ctx, checkpoint.ThreadID)
+		if err == nil && len(versions) > 0 {
+			maxVersion := 0
+			for _, v := range versions {
+				if v.Version > maxVersion {
+					maxVersion = v.Version
+				}
+			}
+			checkpoint.Version = maxVersion + 1
+		} else {
+			checkpoint.Version = 1
+		}
+	}
+
 	data, err := json.Marshal(checkpoint)
 	if err != nil {
 		return fmt.Errorf("failed to marshal checkpoint: %w", err)
 	}
-	
+
 	// 保存检查点数据
 	key := s.checkpointKey(checkpoint.ID)
 	if err := s.client.Set(ctx, key, data, s.ttl); err != nil {
 		return err
 	}
-	
+
 	// 添加到线程索引（有序集合，按时间排序）
 	threadKey := s.threadKey(checkpoint.ThreadID)
 	score := float64(checkpoint.CreatedAt.Unix())
 	if err := s.client.ZAdd(ctx, threadKey, score, checkpoint.ID); err != nil {
 		return err
 	}
-	
+
 	s.logger.Debug("checkpoint saved to redis",
 		zap.String("checkpoint_id", checkpoint.ID),
 		zap.String("thread_id", checkpoint.ThreadID),
+		zap.Int("version", checkpoint.Version),
 	)
-	
+
 	return nil
 }
 
@@ -220,42 +536,42 @@ func (s *RedisCheckpointStore) Load(ctx context.Context, checkpointID string) (*
 	if err != nil {
 		return nil, err
 	}
-	
+
 	var checkpoint Checkpoint
 	if err := json.Unmarshal(data, &checkpoint); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal checkpoint: %w", err)
 	}
-	
+
 	return &checkpoint, nil
 }
 
 // LoadLatest 加载最新检查点
 func (s *RedisCheckpointStore) LoadLatest(ctx context.Context, threadID string) (*Checkpoint, error) {
 	threadKey := s.threadKey(threadID)
-	
+
 	// 获取最新的检查点 ID
 	ids, err := s.client.ZRevRange(ctx, threadKey, 0, 0)
 	if err != nil {
 		return nil, err
 	}
-	
+
 	if len(ids) == 0 {
 		return nil, fmt.Errorf("no checkpoints found for thread: %s", threadID)
 	}
-	
+
 	return s.Load(ctx, ids[0])
 }
 
 // List 列出检查点
 func (s *RedisCheckpointStore) List(ctx context.Context, threadID string, limit int) ([]*Checkpoint, error) {
 	threadKey := s.threadKey(threadID)
-	
+
 	// 获取检查点 ID 列表
 	ids, err := s.client.ZRevRange(ctx, threadKey, 0, int64(limit-1))
 	if err != nil {
 		return nil, err
 	}
-	
+
 	checkpoints := make([]*Checkpoint, 0, len(ids))
 	for _, id := range ids {
 		checkpoint, err := s.Load(ctx, id)
@@ -265,7 +581,7 @@ func (s *RedisCheckpointStore) List(ctx context.Context, threadID string, limit 
 		}
 		checkpoints = append(checkpoints, checkpoint)
 	}
-	
+
 	return checkpoints, nil
 }
 
@@ -282,14 +598,14 @@ func (s *RedisCheckpointStore) DeleteThread(ctx context.Context, threadID string
 	if err != nil {
 		return err
 	}
-	
+
 	// 删除所有检查点
 	for _, checkpoint := range checkpoints {
 		if err := s.Delete(ctx, checkpoint.ID); err != nil {
 			s.logger.Warn("failed to delete checkpoint", zap.String("id", checkpoint.ID), zap.Error(err))
 		}
 	}
-	
+
 	// 删除线程索引
 	threadKey := s.threadKey(threadID)
 	return s.client.Delete(ctx, threadKey)
@@ -301,6 +617,79 @@ func (s *RedisCheckpointStore) checkpointKey(id string) string {
 
 func (s *RedisCheckpointStore) threadKey(threadID string) string {
 	return fmt.Sprintf("%s:thread:%s", s.prefix, threadID)
+}
+
+// LoadVersion 加载指定版本的检查点
+func (s *RedisCheckpointStore) LoadVersion(ctx context.Context, threadID string, version int) (*Checkpoint, error) {
+	versions, err := s.ListVersions(ctx, threadID)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, v := range versions {
+		if v.Version == version {
+			return s.Load(ctx, v.ID)
+		}
+	}
+
+	return nil, fmt.Errorf("version %d not found for thread %s", version, threadID)
+}
+
+// ListVersions 列出线程的所有版本
+func (s *RedisCheckpointStore) ListVersions(ctx context.Context, threadID string) ([]CheckpointVersion, error) {
+	checkpoints, err := s.List(ctx, threadID, 1000)
+	if err != nil {
+		return nil, err
+	}
+
+	versions := make([]CheckpointVersion, 0, len(checkpoints))
+	for _, cp := range checkpoints {
+		versions = append(versions, CheckpointVersion{
+			Version:   cp.Version,
+			ID:        cp.ID,
+			CreatedAt: cp.CreatedAt,
+			State:     cp.State,
+			Summary:   fmt.Sprintf("Checkpoint at %s", cp.CreatedAt.Format(time.RFC3339)),
+		})
+	}
+
+	return versions, nil
+}
+
+// Rollback 回滚到指定版本
+func (s *RedisCheckpointStore) Rollback(ctx context.Context, threadID string, version int) error {
+	checkpoint, err := s.LoadVersion(ctx, threadID, version)
+	if err != nil {
+		return err
+	}
+
+	// 创建新的检查点作为回滚点
+	newCheckpoint := *checkpoint
+	newCheckpoint.ID = generateCheckpointID()
+	newCheckpoint.CreatedAt = time.Now()
+	newCheckpoint.ParentID = checkpoint.ID
+
+	// 获取当前最大版本号
+	versions, err := s.ListVersions(ctx, threadID)
+	if err != nil {
+		return err
+	}
+
+	maxVersion := 0
+	for _, v := range versions {
+		if v.Version > maxVersion {
+			maxVersion = v.Version
+		}
+	}
+
+	newCheckpoint.Version = maxVersion + 1
+
+	if newCheckpoint.Metadata == nil {
+		newCheckpoint.Metadata = make(map[string]interface{})
+	}
+	newCheckpoint.Metadata["rollback_from_version"] = version
+
+	return s.Save(ctx, &newCheckpoint)
 }
 
 // ====== PostgreSQL 实现 ======
@@ -340,56 +729,75 @@ func NewPostgreSQLCheckpointStore(db PostgreSQLClient, logger *zap.Logger) *Post
 
 // Save 保存检查点
 func (s *PostgreSQLCheckpointStore) Save(ctx context.Context, checkpoint *Checkpoint) error {
+	// 如果版本号为0，自动分配版本号
+	if checkpoint.Version == 0 {
+		versions, err := s.ListVersions(ctx, checkpoint.ThreadID)
+		if err == nil && len(versions) > 0 {
+			maxVersion := 0
+			for _, v := range versions {
+				if v.Version > maxVersion {
+					maxVersion = v.Version
+				}
+			}
+			checkpoint.Version = maxVersion + 1
+		} else {
+			checkpoint.Version = 1
+		}
+	}
+
 	data, err := json.Marshal(checkpoint)
 	if err != nil {
 		return fmt.Errorf("failed to marshal checkpoint: %w", err)
 	}
-	
+
 	query := `
-		INSERT INTO agent_checkpoints (id, thread_id, agent_id, state, data, created_at, parent_id)
-		VALUES ($1, $2, $3, $4, $5, $6, $7)
+		INSERT INTO agent_checkpoints (id, thread_id, agent_id, version, state, data, created_at, parent_id)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 		ON CONFLICT (id) DO UPDATE SET
+			version = EXCLUDED.version,
 			state = EXCLUDED.state,
 			data = EXCLUDED.data
 	`
-	
+
 	err = s.db.Exec(ctx, query,
 		checkpoint.ID,
 		checkpoint.ThreadID,
 		checkpoint.AgentID,
+		checkpoint.Version,
 		checkpoint.State,
 		data,
 		checkpoint.CreatedAt,
 		checkpoint.ParentID,
 	)
-	
+
 	if err != nil {
 		return fmt.Errorf("failed to save checkpoint: %w", err)
 	}
-	
+
 	s.logger.Debug("checkpoint saved to postgresql",
 		zap.String("checkpoint_id", checkpoint.ID),
 		zap.String("thread_id", checkpoint.ThreadID),
+		zap.Int("version", checkpoint.Version),
 	)
-	
+
 	return nil
 }
 
 // Load 加载检查点
 func (s *PostgreSQLCheckpointStore) Load(ctx context.Context, checkpointID string) (*Checkpoint, error) {
 	query := `SELECT data FROM agent_checkpoints WHERE id = $1`
-	
+
 	var data []byte
 	row := s.db.QueryRow(ctx, query, checkpointID)
 	if err := row.Scan(&data); err != nil {
 		return nil, fmt.Errorf("checkpoint not found: %w", err)
 	}
-	
+
 	var checkpoint Checkpoint
 	if err := json.Unmarshal(data, &checkpoint); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal checkpoint: %w", err)
 	}
-	
+
 	return &checkpoint, nil
 }
 
@@ -401,18 +809,18 @@ func (s *PostgreSQLCheckpointStore) LoadLatest(ctx context.Context, threadID str
 		ORDER BY created_at DESC
 		LIMIT 1
 	`
-	
+
 	var data []byte
 	row := s.db.QueryRow(ctx, query, threadID)
 	if err := row.Scan(&data); err != nil {
 		return nil, fmt.Errorf("no checkpoints found: %w", err)
 	}
-	
+
 	var checkpoint Checkpoint
 	if err := json.Unmarshal(data, &checkpoint); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal checkpoint: %w", err)
 	}
-	
+
 	return &checkpoint, nil
 }
 
@@ -424,13 +832,13 @@ func (s *PostgreSQLCheckpointStore) List(ctx context.Context, threadID string, l
 		ORDER BY created_at DESC
 		LIMIT $2
 	`
-	
+
 	rows, err := s.db.Query(ctx, query, threadID, limit)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	
+
 	checkpoints := make([]*Checkpoint, 0)
 	for rows.Next() {
 		var data []byte
@@ -438,16 +846,16 @@ func (s *PostgreSQLCheckpointStore) List(ctx context.Context, threadID string, l
 			s.logger.Warn("failed to scan row", zap.Error(err))
 			continue
 		}
-		
+
 		var checkpoint Checkpoint
 		if err := json.Unmarshal(data, &checkpoint); err != nil {
 			s.logger.Warn("failed to unmarshal checkpoint", zap.Error(err))
 			continue
 		}
-		
+
 		checkpoints = append(checkpoints, &checkpoint)
 	}
-	
+
 	return checkpoints, nil
 }
 
@@ -461,4 +869,508 @@ func (s *PostgreSQLCheckpointStore) Delete(ctx context.Context, checkpointID str
 func (s *PostgreSQLCheckpointStore) DeleteThread(ctx context.Context, threadID string) error {
 	query := `DELETE FROM agent_checkpoints WHERE thread_id = $1`
 	return s.db.Exec(ctx, query, threadID)
+}
+
+// LoadVersion 加载指定版本的检查点
+func (s *PostgreSQLCheckpointStore) LoadVersion(ctx context.Context, threadID string, version int) (*Checkpoint, error) {
+	query := `
+		SELECT data FROM agent_checkpoints
+		WHERE thread_id = $1 AND version = $2
+		LIMIT 1
+	`
+
+	var data []byte
+	row := s.db.QueryRow(ctx, query, threadID, version)
+	if err := row.Scan(&data); err != nil {
+		return nil, fmt.Errorf("version %d not found: %w", version, err)
+	}
+
+	var checkpoint Checkpoint
+	if err := json.Unmarshal(data, &checkpoint); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal checkpoint: %w", err)
+	}
+
+	return &checkpoint, nil
+}
+
+// ListVersions 列出线程的所有版本
+func (s *PostgreSQLCheckpointStore) ListVersions(ctx context.Context, threadID string) ([]CheckpointVersion, error) {
+	query := `
+		SELECT id, version, created_at, state FROM agent_checkpoints
+		WHERE thread_id = $1
+		ORDER BY version ASC
+	`
+
+	rows, err := s.db.Query(ctx, query, threadID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	versions := make([]CheckpointVersion, 0)
+	for rows.Next() {
+		var v CheckpointVersion
+		var state string
+		if err := rows.Scan(&v.ID, &v.Version, &v.CreatedAt, &state); err != nil {
+			s.logger.Warn("failed to scan version row", zap.Error(err))
+			continue
+		}
+		v.State = State(state)
+		v.Summary = fmt.Sprintf("Checkpoint at %s", v.CreatedAt.Format(time.RFC3339))
+		versions = append(versions, v)
+	}
+
+	return versions, nil
+}
+
+// Rollback 回滚到指定版本
+func (s *PostgreSQLCheckpointStore) Rollback(ctx context.Context, threadID string, version int) error {
+	checkpoint, err := s.LoadVersion(ctx, threadID, version)
+	if err != nil {
+		return err
+	}
+
+	// 创建新的检查点作为回滚点
+	newCheckpoint := *checkpoint
+	newCheckpoint.ID = generateCheckpointID()
+	newCheckpoint.CreatedAt = time.Now()
+	newCheckpoint.ParentID = checkpoint.ID
+
+	// 获取当前最大版本号
+	versions, err := s.ListVersions(ctx, threadID)
+	if err != nil {
+		return err
+	}
+
+	maxVersion := 0
+	for _, v := range versions {
+		if v.Version > maxVersion {
+			maxVersion = v.Version
+		}
+	}
+
+	newCheckpoint.Version = maxVersion + 1
+
+	if newCheckpoint.Metadata == nil {
+		newCheckpoint.Metadata = make(map[string]interface{})
+	}
+	newCheckpoint.Metadata["rollback_from_version"] = version
+
+	return s.Save(ctx, &newCheckpoint)
+}
+
+// ====== File-based 实现 ======
+
+// FileCheckpointStore 文件检查点存储（用于本地开发和测试）
+type FileCheckpointStore struct {
+	basePath string
+	logger   *zap.Logger
+	mu       sync.RWMutex
+}
+
+// NewFileCheckpointStore 创建文件检查点存储
+func NewFileCheckpointStore(basePath string, logger *zap.Logger) (*FileCheckpointStore, error) {
+	// 创建基础目录
+	if err := os.MkdirAll(basePath, 0755); err != nil {
+		return nil, fmt.Errorf("failed to create base directory: %w", err)
+	}
+
+	return &FileCheckpointStore{
+		basePath: basePath,
+		logger:   logger.With(zap.String("store", "file_checkpoint")),
+	}, nil
+}
+
+// Save 保存检查点
+func (s *FileCheckpointStore) Save(ctx context.Context, checkpoint *Checkpoint) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	// 如果版本号为0，自动分配版本号
+	if checkpoint.Version == 0 {
+		versions, err := s.listVersionsUnlocked(ctx, checkpoint.ThreadID)
+		if err == nil && len(versions) > 0 {
+			maxVersion := 0
+			for _, v := range versions {
+				if v.Version > maxVersion {
+					maxVersion = v.Version
+				}
+			}
+			checkpoint.Version = maxVersion + 1
+		} else {
+			checkpoint.Version = 1
+		}
+	}
+
+	// 创建线程目录
+	threadDir := s.threadDir(checkpoint.ThreadID)
+	if err := os.MkdirAll(threadDir, 0755); err != nil {
+		return fmt.Errorf("failed to create thread directory: %w", err)
+	}
+
+	checkpointsDir := filepath.Join(threadDir, "checkpoints")
+	if err := os.MkdirAll(checkpointsDir, 0755); err != nil {
+		return fmt.Errorf("failed to create checkpoints directory: %w", err)
+	}
+
+	// 序列化检查点
+	data, err := json.MarshalIndent(checkpoint, "", "  ")
+	if err != nil {
+		return fmt.Errorf("failed to marshal checkpoint: %w", err)
+	}
+
+	// 写入检查点文件
+	checkpointFile := filepath.Join(checkpointsDir, fmt.Sprintf("%s.json", checkpoint.ID))
+	if err := os.WriteFile(checkpointFile, data, 0644); err != nil {
+		return fmt.Errorf("failed to write checkpoint file: %w", err)
+	}
+
+	// 更新版本索引
+	if err := s.updateVersionsIndex(checkpoint.ThreadID, checkpoint); err != nil {
+		return fmt.Errorf("failed to update versions index: %w", err)
+	}
+
+	// 更新 latest.txt
+	latestFile := filepath.Join(threadDir, "latest.txt")
+	if err := os.WriteFile(latestFile, []byte(checkpoint.ID), 0644); err != nil {
+		return fmt.Errorf("failed to update latest file: %w", err)
+	}
+
+	s.logger.Debug("checkpoint saved to file",
+		zap.String("checkpoint_id", checkpoint.ID),
+		zap.String("thread_id", checkpoint.ThreadID),
+		zap.Int("version", checkpoint.Version),
+	)
+
+	return nil
+}
+
+// Load 加载检查点
+func (s *FileCheckpointStore) Load(ctx context.Context, checkpointID string) (*Checkpoint, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	// 搜索所有线程目录
+	threadsDir := filepath.Join(s.basePath, "threads")
+	entries, err := os.ReadDir(threadsDir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, fmt.Errorf("checkpoint not found: %s", checkpointID)
+		}
+		return nil, fmt.Errorf("failed to read threads directory: %w", err)
+	}
+
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+
+		checkpointFile := filepath.Join(threadsDir, entry.Name(), "checkpoints", fmt.Sprintf("%s.json", checkpointID))
+		if _, err := os.Stat(checkpointFile); err == nil {
+			return s.loadCheckpointFile(checkpointFile)
+		}
+	}
+
+	return nil, fmt.Errorf("checkpoint not found: %s", checkpointID)
+}
+
+// LoadLatest 加载最新检查点
+func (s *FileCheckpointStore) LoadLatest(ctx context.Context, threadID string) (*Checkpoint, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	threadDir := s.threadDir(threadID)
+	latestFile := filepath.Join(threadDir, "latest.txt")
+
+	data, err := os.ReadFile(latestFile)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, fmt.Errorf("no checkpoints found for thread: %s", threadID)
+		}
+		return nil, fmt.Errorf("failed to read latest file: %w", err)
+	}
+
+	checkpointID := string(data)
+	checkpointFile := filepath.Join(threadDir, "checkpoints", fmt.Sprintf("%s.json", checkpointID))
+
+	return s.loadCheckpointFile(checkpointFile)
+}
+
+// List 列出检查点
+func (s *FileCheckpointStore) List(ctx context.Context, threadID string, limit int) ([]*Checkpoint, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	checkpointsDir := filepath.Join(s.threadDir(threadID), "checkpoints")
+	entries, err := os.ReadDir(checkpointsDir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return []*Checkpoint{}, nil
+		}
+		return nil, fmt.Errorf("failed to read checkpoints directory: %w", err)
+	}
+
+	// 加载所有检查点
+	checkpoints := make([]*Checkpoint, 0)
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".json") {
+			continue
+		}
+
+		checkpointFile := filepath.Join(checkpointsDir, entry.Name())
+		checkpoint, err := s.loadCheckpointFile(checkpointFile)
+		if err != nil {
+			s.logger.Warn("failed to load checkpoint file",
+				zap.String("file", checkpointFile),
+				zap.Error(err))
+			continue
+		}
+
+		checkpoints = append(checkpoints, checkpoint)
+	}
+
+	// 按创建时间降序排序
+	sort.Slice(checkpoints, func(i, j int) bool {
+		return checkpoints[i].CreatedAt.After(checkpoints[j].CreatedAt)
+	})
+
+	// 限制返回数量
+	if limit > 0 && len(checkpoints) > limit {
+		checkpoints = checkpoints[:limit]
+	}
+
+	return checkpoints, nil
+}
+
+// Delete 删除检查点
+func (s *FileCheckpointStore) Delete(ctx context.Context, checkpointID string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	// 搜索所有线程目录
+	threadsDir := filepath.Join(s.basePath, "threads")
+	entries, err := os.ReadDir(threadsDir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil // 已经不存在
+		}
+		return fmt.Errorf("failed to read threads directory: %w", err)
+	}
+
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+
+		checkpointFile := filepath.Join(threadsDir, entry.Name(), "checkpoints", fmt.Sprintf("%s.json", checkpointID))
+		if _, err := os.Stat(checkpointFile); err == nil {
+			if err := os.Remove(checkpointFile); err != nil {
+				return fmt.Errorf("failed to delete checkpoint file: %w", err)
+			}
+
+			s.logger.Debug("checkpoint deleted",
+				zap.String("checkpoint_id", checkpointID),
+				zap.String("thread_id", entry.Name()))
+
+			return nil
+		}
+	}
+
+	return nil // 检查点不存在，视为成功
+}
+
+// DeleteThread 删除线程
+func (s *FileCheckpointStore) DeleteThread(ctx context.Context, threadID string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	threadDir := s.threadDir(threadID)
+	if err := os.RemoveAll(threadDir); err != nil {
+		if os.IsNotExist(err) {
+			return nil // 已经不存在
+		}
+		return fmt.Errorf("failed to delete thread directory: %w", err)
+	}
+
+	s.logger.Debug("thread deleted", zap.String("thread_id", threadID))
+
+	return nil
+}
+
+// LoadVersion 加载指定版本的检查点
+func (s *FileCheckpointStore) LoadVersion(ctx context.Context, threadID string, version int) (*Checkpoint, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	versions, err := s.listVersionsUnlocked(ctx, threadID)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, v := range versions {
+		if v.Version == version {
+			checkpointFile := filepath.Join(s.threadDir(threadID), "checkpoints", fmt.Sprintf("%s.json", v.ID))
+			return s.loadCheckpointFile(checkpointFile)
+		}
+	}
+
+	return nil, fmt.Errorf("version %d not found for thread %s", version, threadID)
+}
+
+// ListVersions 列出线程的所有版本
+func (s *FileCheckpointStore) ListVersions(ctx context.Context, threadID string) ([]CheckpointVersion, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	return s.listVersionsUnlocked(ctx, threadID)
+}
+
+// Rollback 回滚到指定版本
+func (s *FileCheckpointStore) Rollback(ctx context.Context, threadID string, version int) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	// 加载指定版本的检查点
+	versions, err := s.listVersionsUnlocked(ctx, threadID)
+	if err != nil {
+		return err
+	}
+
+	var targetCheckpoint *Checkpoint
+	for _, v := range versions {
+		if v.Version == version {
+			checkpointFile := filepath.Join(s.threadDir(threadID), "checkpoints", fmt.Sprintf("%s.json", v.ID))
+			targetCheckpoint, err = s.loadCheckpointFile(checkpointFile)
+			if err != nil {
+				return err
+			}
+			break
+		}
+	}
+
+	if targetCheckpoint == nil {
+		return fmt.Errorf("version %d not found for thread %s", version, threadID)
+	}
+
+	// 创建新的检查点作为回滚点
+	newCheckpoint := *targetCheckpoint
+	newCheckpoint.ID = generateCheckpointID()
+	newCheckpoint.CreatedAt = time.Now()
+	newCheckpoint.ParentID = targetCheckpoint.ID
+
+	// 获取当前最大版本号
+	maxVersion := 0
+	for _, v := range versions {
+		if v.Version > maxVersion {
+			maxVersion = v.Version
+		}
+	}
+
+	newCheckpoint.Version = maxVersion + 1
+
+	if newCheckpoint.Metadata == nil {
+		newCheckpoint.Metadata = make(map[string]interface{})
+	}
+	newCheckpoint.Metadata["rollback_from_version"] = version
+
+	// 保存新检查点（需要临时释放锁，因为 Save 会获取锁）
+	s.mu.Unlock()
+	err = s.Save(ctx, &newCheckpoint)
+	s.mu.Lock()
+
+	return err
+}
+
+// 辅助方法
+
+func (s *FileCheckpointStore) threadDir(threadID string) string {
+	return filepath.Join(s.basePath, "threads", threadID)
+}
+
+func (s *FileCheckpointStore) loadCheckpointFile(filePath string) (*Checkpoint, error) {
+	data, err := os.ReadFile(filePath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read checkpoint file: %w", err)
+	}
+
+	var checkpoint Checkpoint
+	if err := json.Unmarshal(data, &checkpoint); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal checkpoint: %w", err)
+	}
+
+	return &checkpoint, nil
+}
+
+func (s *FileCheckpointStore) updateVersionsIndex(threadID string, checkpoint *Checkpoint) error {
+	versionsFile := filepath.Join(s.threadDir(threadID), "versions.json")
+
+	// 读取现有版本索引
+	var versions []CheckpointVersion
+	if data, err := os.ReadFile(versionsFile); err == nil {
+		if err := json.Unmarshal(data, &versions); err != nil {
+			return fmt.Errorf("failed to unmarshal versions: %w", err)
+		}
+	}
+
+	// 检查版本是否已存在
+	found := false
+	for i, v := range versions {
+		if v.Version == checkpoint.Version {
+			versions[i] = CheckpointVersion{
+				Version:   checkpoint.Version,
+				ID:        checkpoint.ID,
+				CreatedAt: checkpoint.CreatedAt,
+				State:     checkpoint.State,
+				Summary:   fmt.Sprintf("Checkpoint at %s", checkpoint.CreatedAt.Format(time.RFC3339)),
+			}
+			found = true
+			break
+		}
+	}
+
+	if !found {
+		versions = append(versions, CheckpointVersion{
+			Version:   checkpoint.Version,
+			ID:        checkpoint.ID,
+			CreatedAt: checkpoint.CreatedAt,
+			State:     checkpoint.State,
+			Summary:   fmt.Sprintf("Checkpoint at %s", checkpoint.CreatedAt.Format(time.RFC3339)),
+		})
+	}
+
+	// 按版本号排序
+	sort.Slice(versions, func(i, j int) bool {
+		return versions[i].Version < versions[j].Version
+	})
+
+	// 写入版本索引
+	data, err := json.MarshalIndent(versions, "", "  ")
+	if err != nil {
+		return fmt.Errorf("failed to marshal versions: %w", err)
+	}
+
+	if err := os.WriteFile(versionsFile, data, 0644); err != nil {
+		return fmt.Errorf("failed to write versions file: %w", err)
+	}
+
+	return nil
+}
+
+func (s *FileCheckpointStore) listVersionsUnlocked(ctx context.Context, threadID string) ([]CheckpointVersion, error) {
+	versionsFile := filepath.Join(s.threadDir(threadID), "versions.json")
+
+	data, err := os.ReadFile(versionsFile)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return []CheckpointVersion{}, nil
+		}
+		return nil, fmt.Errorf("failed to read versions file: %w", err)
+	}
+
+	var versions []CheckpointVersion
+	if err := json.Unmarshal(data, &versions); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal versions: %w", err)
+	}
+
+	return versions, nil
 }
