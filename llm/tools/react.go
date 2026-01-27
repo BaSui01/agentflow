@@ -321,7 +321,6 @@ func (r *ReActExecutor) ExecuteStream(ctx context.Context, req *llm.ChatRequest)
 			for _, result := range toolResults {
 				toolMessage := result.ToMessage()
 				if result.Error != "" && r.config.StopOnError {
-					messages = append(messages, toolMessage)
 					eventCh <- ReActStreamEvent{Type: "error", Error: fmt.Sprintf("tool execution failed: %s", result.Error)}
 					return
 				}
