@@ -242,6 +242,28 @@ func NewEnhancedMemorySystem(
 	return system
 }
 
+// NewDefaultEnhancedMemorySystem creates an EnhancedMemorySystem with in-memory default stores.
+// It is intended for local development, tests, and quick starts.
+func NewDefaultEnhancedMemorySystem(config EnhancedMemoryConfig, logger *zap.Logger) *EnhancedMemorySystem {
+	if logger == nil {
+		logger = zap.NewNop()
+	}
+
+	shortTerm := NewInMemoryMemoryStore(InMemoryMemoryStoreConfig{}, logger)
+	working := NewInMemoryMemoryStore(InMemoryMemoryStoreConfig{}, logger)
+
+	var longTerm VectorStore
+	if config.LongTermEnabled {
+		longTerm = NewInMemoryVectorStore(InMemoryVectorStoreConfig{Dimension: config.VectorDimension}, logger)
+	}
+
+	system := NewEnhancedMemorySystem(shortTerm, working, longTerm, nil, nil, config, logger)
+	if config.ConsolidationEnabled {
+		_ = system.AddDefaultConsolidationStrategies()
+	}
+	return system
+}
+
 // SaveShortTerm 保存短期记忆
 func (m *EnhancedMemorySystem) SaveShortTerm(ctx context.Context, agentID string, content string, metadata map[string]interface{}) error {
 	if m.shortTerm == nil {
@@ -251,12 +273,30 @@ func (m *EnhancedMemorySystem) SaveShortTerm(ctx context.Context, agentID string
 	key := fmt.Sprintf("short_term:%s:%d", agentID, time.Now().UnixNano())
 
 	memory := map[string]interface{}{
+		"key":       key,
+		"agent_id":  agentID,
 		"content":   content,
 		"metadata":  metadata,
 		"timestamp": time.Now(),
 	}
 
 	return m.shortTerm.Save(ctx, key, memory, m.config.ShortTermTTL)
+}
+
+// SaveShortTermWithVector saves a short-term memory entry and attaches a vector in metadata.
+// Built-in consolidation strategies can promote such entries to long-term memory.
+func (m *EnhancedMemorySystem) SaveShortTermWithVector(
+	ctx context.Context,
+	agentID string,
+	content string,
+	vector []float64,
+	metadata map[string]interface{},
+) error {
+	if metadata == nil {
+		metadata = make(map[string]interface{})
+	}
+	metadata["vector"] = vector
+	return m.SaveShortTerm(ctx, agentID, content, metadata)
 }
 
 // LoadShortTerm 加载短期记忆
@@ -278,6 +318,8 @@ func (m *EnhancedMemorySystem) SaveWorking(ctx context.Context, agentID string, 
 	key := fmt.Sprintf("working:%s:%d", agentID, time.Now().UnixNano())
 
 	memory := map[string]interface{}{
+		"key":       key,
+		"agent_id":  agentID,
 		"content":   content,
 		"metadata":  metadata,
 		"timestamp": time.Now(),
@@ -399,12 +441,31 @@ func (m *EnhancedMemorySystem) StopConsolidation() error {
 	return m.consolidator.Stop()
 }
 
+// ConsolidateOnce triggers one consolidation run (useful for manual runs and tests).
+func (m *EnhancedMemorySystem) ConsolidateOnce(ctx context.Context) error {
+	if !m.config.ConsolidationEnabled || m.consolidator == nil {
+		return fmt.Errorf("memory consolidation not configured")
+	}
+	return m.consolidator.consolidate(ctx)
+}
+
+// AddConsolidationStrategy adds a consolidation strategy.
+func (m *EnhancedMemorySystem) AddConsolidationStrategy(strategy ConsolidationStrategy) error {
+	if !m.config.ConsolidationEnabled || m.consolidator == nil {
+		return fmt.Errorf("memory consolidation not configured")
+	}
+	if strategy == nil {
+		return fmt.Errorf("strategy is nil")
+	}
+	m.consolidator.AddStrategy(strategy)
+	return nil
+}
+
 // NewMemoryConsolidator 创建记忆整合器
 func NewMemoryConsolidator(system *EnhancedMemorySystem, logger *zap.Logger) *MemoryConsolidator {
 	return &MemoryConsolidator{
 		system:     system,
 		strategies: []ConsolidationStrategy{},
-		stopCh:     make(chan struct{}),
 		logger:     logger.With(zap.String("component", "memory_consolidator")),
 	}
 }
@@ -416,6 +477,7 @@ func (c *MemoryConsolidator) Start(ctx context.Context) error {
 		c.mu.Unlock()
 		return fmt.Errorf("consolidator already running")
 	}
+	c.stopCh = make(chan struct{})
 	c.running = true
 	c.mu.Unlock()
 
@@ -435,7 +497,9 @@ func (c *MemoryConsolidator) Stop() error {
 		return fmt.Errorf("consolidator not running")
 	}
 
-	close(c.stopCh)
+	if c.stopCh != nil {
+		close(c.stopCh)
+	}
 	c.running = false
 
 	c.logger.Info("memory consolidator stopped")
@@ -445,6 +509,12 @@ func (c *MemoryConsolidator) Stop() error {
 
 // run 运行整合循环
 func (c *MemoryConsolidator) run(ctx context.Context) {
+	defer func() {
+		c.mu.Lock()
+		c.running = false
+		c.mu.Unlock()
+	}()
+
 	ticker := time.NewTicker(c.system.config.ConsolidationInterval)
 	defer ticker.Stop()
 
@@ -477,11 +547,67 @@ func (c *MemoryConsolidator) run(ctx context.Context) {
 func (c *MemoryConsolidator) consolidate(ctx context.Context) error {
 	c.logger.Debug("starting memory consolidation")
 
-	// TODO: 实现具体的整合逻辑
-	// 1. 从短期记忆中选择重要的记忆
-	// 2. 将其转移到长期记忆
-	// 3. 提取知识并更新语义记忆
-	// 4. 清理过期的短期记忆
+	c.mu.Lock()
+	strategies := append([]ConsolidationStrategy(nil), c.strategies...)
+	c.mu.Unlock()
+
+	if len(strategies) == 0 {
+		c.logger.Debug("no consolidation strategies configured")
+		return nil
+	}
+
+	var memories []interface{}
+
+	if c.system.shortTerm != nil {
+		limit := c.system.config.ShortTermMaxSize * 100
+		if limit <= 0 {
+			limit = 1000
+		}
+		items, err := c.system.shortTerm.List(ctx, "short_term:*", limit)
+		if err != nil {
+			return fmt.Errorf("list short-term memories: %w", err)
+		}
+		memories = append(memories, items...)
+	}
+
+	if c.system.working != nil {
+		limit := c.system.config.WorkingMemorySize * 100
+		if limit <= 0 {
+			limit = 1000
+		}
+		items, err := c.system.working.List(ctx, "working:*", limit)
+		if err != nil {
+			return fmt.Errorf("list working memories: %w", err)
+		}
+		memories = append(memories, items...)
+	}
+
+	if len(memories) == 0 {
+		c.logger.Debug("no memories available for consolidation")
+		return nil
+	}
+
+	for _, strategy := range strategies {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+
+		var selected []interface{}
+		for _, mem := range memories {
+			if err := ctx.Err(); err != nil {
+				return err
+			}
+			if strategy.ShouldConsolidate(ctx, mem) {
+				selected = append(selected, mem)
+			}
+		}
+		if len(selected) == 0 {
+			continue
+		}
+		if err := strategy.Consolidate(ctx, selected); err != nil {
+			return err
+		}
+	}
 
 	c.logger.Debug("memory consolidation completed")
 
@@ -490,5 +616,16 @@ func (c *MemoryConsolidator) consolidate(ctx context.Context) error {
 
 // AddStrategy 添加整合策略
 func (c *MemoryConsolidator) AddStrategy(strategy ConsolidationStrategy) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	c.strategies = append(c.strategies, strategy)
+}
+
+func extractMemoryKey(memory interface{}) (string, bool) {
+	m, ok := memory.(map[string]interface{})
+	if !ok {
+		return "", false
+	}
+	key, ok := m["key"].(string)
+	return key, ok && key != ""
 }
