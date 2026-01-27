@@ -231,6 +231,6 @@ func demoTracing(logger *zap.Logger) {
 
 	// Demo conversation tracer
 	convTracer := observability.NewConversationTracer(tracer)
-	ctx, conv := convTracer.StartConversation(ctx, "test-chat")
+	_, conv := convTracer.StartConversation(ctx, "test-chat")
 	fmt.Printf("   Conversation trace ID: %s\n", conv.ID)
 }
