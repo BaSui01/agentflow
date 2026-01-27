@@ -389,7 +389,7 @@ func extractKeywords(text string) []string {
 	keywords := []string{}
 
 	// Define punctuation to remove (using raw string to avoid escaping)
-	punctuation := `,.!?;:"'()[]{}，。！？；：""''（）【】`
+	punctuation := `,.!?;:"'()[]{}，。！？；：（）【】`
 
 	for _, word := range words {
 		word = strings.Trim(word, punctuation)

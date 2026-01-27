@@ -264,9 +264,9 @@ func (b *BaseAgent) ExecuteEnhanced(ctx context.Context, input *Input, options E
 		if re, ok := b.reflectionExecutor.(interface {
 			ExecuteWithReflection(ctx context.Context, input *Input) (interface{}, error)
 		}); ok {
-			result, err := re.ExecuteWithReflection(ctx, enhancedInput)
-			if err != nil {
-				return nil, fmt.Errorf("reflection execution failed: %w", err)
+			result, execErr := re.ExecuteWithReflection(ctx, enhancedInput)
+			if execErr != nil {
+				return nil, fmt.Errorf("reflection execution failed: %w", execErr)
 			}
 
 			// 提取最终输出
