@@ -10,38 +10,57 @@
 ## ✨ 核心特性
 
 ### 🤖 Agent 框架
+
 - **Reflection 机制** - 自我评估与迭代改进
 - **动态工具选择** - 智能工具匹配，减少 Token 消耗
 - **Skills 系统** - 动态技能加载
-- **MCP/A2A 协议** - 完整 Agent 互操作协议栈
-- **Guardrails** - 输入/输出验证、PII 检测、注入防护
+- **MCP/A2A 协议** - 完整 Agent 互操作协议栈 (支持 Google A2A & Anthropic MCP)
+- **Guardrails** - 输入/输出验证、PII 检测、注入防护、自定义验证规则
 - **Evaluation** - 自动化评估框架 (A/B 测试、LLM Judge)
 - **Thought Signatures** - 推理链签名，保持多轮推理连续性
 
 ### 🧠 记忆系统
-- **多层记忆** - 短期/工作/长期/情节/语义记忆
-- **Intelligent Decay** - 基于 recency/relevance/utility 的智能衰减
-- **上下文工程** - 自适应压缩、摘要、紧急截断
+
+- **多层记忆** - 仿人脑记忆架构：
+  - **短期/工作记忆 (Working Memory)** - 存储当前任务上下文，支持 TTL 与优先级衰减
+  - **长期记忆 (Long-term Memory)** - 结构化信息存储
+  - **情节记忆 (Episodic Memory)** - 存储事件序列与执行经验
+  - **语义记忆 (Semantic Memory)** - 存储事实知识与本体关系
+  - **程序性记忆 (Procedural Memory)** - 存储“如何做”的技能与流程
+- **Intelligent Decay** - 基于 recency/relevance/utility 的智能衰减算法
+- **上下文工程** - 自适应压缩、摘要、窗口管理、紧急截断
 
 ### 🧩 推理模式
-- **ReAct** - 推理与行动交替
-- **Reflexion** - 自我反思改进
-- **ReWOO** - 推理与观察分离
-- **Plan-Execute** - 计划执行模式
-- **Dynamic Planner** - 动态规划
+
+- **ReAct** - 推理与行动交替 (Reasoning and Acting)
+- **Reflexion** - 通过自我反思进行闭环改进
+- **ReWOO** - 推理与观察解耦，预规划工具调用
+- **Plan-Execute** - 计划与执行分离模式
+- **Tree of Thoughts (ToT)** - 多路径分支搜索与启发式评估
+- **Dynamic Planner** - 针对复杂任务的动态规划器
 
 ### 🔄 工作流引擎
-- **DAG 工作流** - 有向无环图编排
-- **条件分支** - 动态路由
-- **并行执行** - 并发任务处理
-- **检查点** - 状态持久化与恢复
+
+- **DAG 工作流** - 支持有向无环图的复杂逻辑编排
+- **Chain 工作流** - 简单的线性步骤序列
+- **并行执行** - 支持分支并发执行与结果聚合
+- **状态持久化** - 支持检查点 (Checkpoint) 的保存与恢复
+
+### 🔍 RAG 系统 (检索增强生成)
+
+- **混合检索 (Hybrid Retrieval)** - 结合向量搜索 (Dense) 与关键词搜索 (Sparse)
+- **语义缓存 (Semantic Cache)** - 基于向量相似度的响应缓存，大幅降低延迟与成本
+- **多向量数据库支持** - Qdrant, Pinecone, Milvus, Weaviate 及内置 InMemoryStore
+- **文档管理** - 自动分块 (Chunking)、元数据过滤、重排序 (Reranker)
 
 ### 🎯 多提供商支持
+
 - **13+ 提供商** - OpenAI, Claude, Gemini, DeepSeek, Qwen, GLM, Grok, Mistral, Hunyuan, Kimi, MiniMax, Doubao, Llama
 - **智能路由** - 成本/健康/QPS 负载均衡
 - **API Key 池** - 多 Key 轮询、限流检测
 
 ### 🎨 多模态能力
+
 - **Embedding** - OpenAI, Gemini, Cohere, Jina, Voyage
 - **Image** - DALL-E, Flux, Gemini
 - **Video** - Runway, Veo, Gemini
@@ -50,6 +69,7 @@
 - **3D** - Meshy, Tripo
 
 ### 🛡️ 企业级能力
+
 - **弹性机制** - 重试、幂等、熔断
 - **可观测性** - Prometheus 指标、OpenTelemetry 追踪
 - **缓存系统** - 多级缓存策略
@@ -62,26 +82,40 @@ go get github.com/BaSui01/agentflow
 
 ### 基础对话
 
+完整可运行示例：`examples/01_simple_chat/`
+
 ```go
 package main
 
 import (
     "context"
     "fmt"
+
     "github.com/BaSui01/agentflow/llm"
-    "github.com/BaSui01/agentflow/llm/providers/openai"
+    "github.com/BaSui01/agentflow/llm/providers"
+    openaiprov "github.com/BaSui01/agentflow/llm/providers/openai"
+    "go.uber.org/zap"
 )
 
 func main() {
-    provider := openai.NewProvider(openai.Config{APIKey: "sk-xxx"})
-    
-    resp, _ := provider.Completion(context.Background(), &llm.ChatRequest{
+    logger, _ := zap.NewDevelopment()
+    defer logger.Sync()
+
+    provider := openaiprov.NewOpenAIProvider(providers.OpenAIConfig{
+        APIKey:  "sk-xxx",
+        BaseURL: "https://api.openai.com",
+    }, logger)
+
+    resp, err := provider.Completion(context.Background(), &llm.ChatRequest{
         Model: "gpt-4o",
         Messages: []llm.Message{
             {Role: llm.RoleUser, Content: "Hello!"},
         },
     })
-    
+    if err != nil {
+        panic(err)
+    }
+
     fmt.Println(resp.Choices[0].Message.Content)
 }
 ```
@@ -89,19 +123,101 @@ func main() {
 ### 多提供商路由
 
 ```go
-db, _ := gorm.Open(sqlite.Open("agentflow.db"), &gorm.Config{})
-llm.InitDatabase(db)
+package main
 
-router := llm.NewMultiProviderRouter(db, factory, llm.RouterOptions{})
-router.InitAPIKeyPools(ctx)
+import (
+    "context"
+    "fmt"
+    "os"
 
-selection, _ := router.SelectProviderWithModel(ctx, "gpt-4o", llm.StrategyCostBased)
+    "github.com/BaSui01/agentflow/llm"
+    "github.com/BaSui01/agentflow/llm/providers"
+    openaiprov "github.com/BaSui01/agentflow/llm/providers/openai"
+    "github.com/glebarez/sqlite"
+    "go.uber.org/zap"
+    "gorm.io/gorm"
+)
+
+func main() {
+    logger, _ := zap.NewDevelopment()
+    defer logger.Sync()
+
+    ctx := context.Background()
+
+    db, err := gorm.Open(sqlite.Open("file::memory:?cache=shared"), &gorm.Config{})
+    if err != nil {
+        panic(err)
+    }
+    if err := llm.InitDatabase(db); err != nil {
+        panic(err)
+    }
+
+    // Minimal seed: one provider + one model + mapping + API key.
+    p := llm.LLMProvider{Code: "openai", Name: "OpenAI", Status: llm.LLMProviderStatusActive}
+    if err := db.Create(&p).Error; err != nil {
+        panic(err)
+    }
+    m := llm.LLMModel{ModelName: "gpt-4o", DisplayName: "GPT-4o", Enabled: true}
+    if err := db.Create(&m).Error; err != nil {
+        panic(err)
+    }
+    pm := llm.LLMProviderModel{
+        ModelID:         m.ID,
+        ProviderID:      p.ID,
+        RemoteModelName: "gpt-4o",
+        BaseURL:         "https://api.openai.com",
+        PriceInput:      0.001,
+        PriceCompletion: 0.002,
+        Priority:        10,
+        Enabled:         true,
+    }
+    if err := db.Create(&pm).Error; err != nil {
+        panic(err)
+    }
+
+    key := os.Getenv("OPENAI_API_KEY")
+    if key == "" {
+        key = "sk-xxx" // demo key (no live call without real key)
+    }
+    if err := db.Create(&llm.LLMProviderAPIKey{
+        ProviderID: p.ID,
+        APIKey:     key,
+        Label:      "default",
+        Priority:   10,
+        Weight:     100,
+        Enabled:    true,
+    }).Error; err != nil {
+        panic(err)
+    }
+
+    factory := llm.NewDefaultProviderFactory()
+    factory.RegisterProvider("openai", func(apiKey, baseURL string) (llm.Provider, error) {
+        return openaiprov.NewOpenAIProvider(providers.OpenAIConfig{
+            APIKey:  apiKey,
+            BaseURL: baseURL,
+        }, logger), nil
+    })
+
+    router := llm.NewMultiProviderRouter(db, factory, llm.RouterOptions{Logger: logger})
+    if err := router.InitAPIKeyPools(ctx); err != nil {
+        panic(err)
+    }
+
+    selection, err := router.SelectProviderWithModel(ctx, "gpt-4o", llm.StrategyCostBased)
+    if err != nil {
+        panic(err)
+    }
+
+    fmt.Printf("selected provider=%s model=%s\n", selection.ProviderCode, selection.ModelName)
+}
 ```
 
 ### Reflection 自我改进
 
+完整可运行示例：`examples/06_advanced_features/`（或 `examples/09_full_integration/`）
+
 ```go
-executor := agent.NewReflectionExecutor(agent, agent.ReflectionConfig{
+executor := agent.NewReflectionExecutor(baseAgent, agent.ReflectionExecutorConfig{
     Enabled:       true,
     MaxIterations: 3,
     MinQuality:    0.7,
@@ -111,6 +227,8 @@ result, _ := executor.ExecuteWithReflection(ctx, input)
 ```
 
 ### DAG 工作流
+
+完整可运行示例：`examples/05_workflow/`
 
 ```go
 graph := workflow.NewDAGGraph()
@@ -183,31 +301,31 @@ agentflow/
 
 ## 📖 示例
 
-| 示例 | 说明 |
-|------|------|
-| [01_simple_chat](examples/01_simple_chat/) | 基础对话 |
-| [02_streaming](examples/02_streaming/) | 流式响应 |
-| [04_custom_agent](examples/04_custom_agent/) | 自定义 Agent |
-| [05_workflow](examples/05_workflow/) | 工作流编排 |
-| [12_complete_rag_system](examples/12_complete_rag_system/) | RAG 系统 |
-| [14_guardrails](examples/14_guardrails/) | 安全护栏 |
-| [15_structured_output](examples/15_structured_output/) | 结构化输出 |
-| [16_a2a_protocol](examples/16_a2a_protocol/) | A2A 协议 |
+| 示例                                                       | 说明         |
+| ---------------------------------------------------------- | ------------ |
+| [01_simple_chat](examples/01_simple_chat/)                 | 基础对话     |
+| [02_streaming](examples/02_streaming/)                     | 流式响应     |
+| [04_custom_agent](examples/04_custom_agent/)               | 自定义 Agent |
+| [05_workflow](examples/05_workflow/)                       | 工作流编排   |
+| [12_complete_rag_system](examples/12_complete_rag_system/) | RAG 系统     |
+| [14_guardrails](examples/14_guardrails/)                   | 安全护栏     |
+| [15_structured_output](examples/15_structured_output/)     | 结构化输出   |
+| [16_a2a_protocol](examples/16_a2a_protocol/)               | A2A 协议     |
 
-## � 文档
+## 📚 文档
 
-- [快速开始](docs/cn/01.快速开始.md)
-- [Provider 配置指南](docs/cn/02.Provider配置指南.md)
-- [Agent 开发教程](docs/cn/03.Agent开发教程.md)
-- [工具集成说明](docs/cn/04.工具集成说明.md)
-- [工作流编排](docs/cn/05.工作流编排.md)
-- [多模态处理](docs/cn/06.多模态处理.md)
-- [检索增强 RAG](docs/cn/07.检索增强RAG.md)
-- [多 Agent 协作](docs/cn/08.多Agent协作.md)
+- [快速开始](docs/cn/tutorials/01.快速开始.md)
+- [Provider 配置指南](docs/cn/tutorials/02.Provider配置指南.md)
+- [Agent 开发教程](docs/cn/tutorials/03.Agent开发教程.md)
+- [工具集成说明](docs/cn/tutorials/04.工具集成说明.md)
+- [工作流编排](docs/cn/tutorials/05.工作流编排.md)
+- [多模态处理](docs/cn/tutorials/06.多模态处理.md)
+- [检索增强 RAG](docs/cn/tutorials/07.检索增强RAG.md)
+- [多 Agent 协作](docs/cn/tutorials/08.多Agent协作.md)
 
 ## 🔧 技术栈
 
-- **Go 1.24+**
+- **Go 1.24+**i
 - **Redis** - 短期记忆/缓存
 - **PostgreSQL/MySQL/SQLite** - 元数据 (GORM)
 - **Qdrant/Pinecone** - 向量存储

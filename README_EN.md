@@ -62,25 +62,39 @@ go get github.com/BaSui01/agentflow
 
 ### Basic Chat
 
+Runnable example: `examples/01_simple_chat/`
+
 ```go
 package main
 
 import (
     "context"
     "fmt"
+
     "github.com/BaSui01/agentflow/llm"
-    "github.com/BaSui01/agentflow/llm/providers/openai"
+    "github.com/BaSui01/agentflow/llm/providers"
+    openaiprov "github.com/BaSui01/agentflow/llm/providers/openai"
+    "go.uber.org/zap"
 )
 
 func main() {
-    provider := openai.NewProvider(openai.Config{APIKey: "sk-xxx"})
-    
-    resp, _ := provider.Completion(context.Background(), &llm.ChatRequest{
+    logger, _ := zap.NewDevelopment()
+    defer logger.Sync()
+
+    provider := openaiprov.NewOpenAIProvider(providers.OpenAIConfig{
+        APIKey:  "sk-xxx",
+        BaseURL: "https://api.openai.com",
+    }, logger)
+
+    resp, err := provider.Completion(context.Background(), &llm.ChatRequest{
         Model: "gpt-4o",
         Messages: []llm.Message{
             {Role: llm.RoleUser, Content: "Hello!"},
         },
     })
+    if err != nil {
+        panic(err)
+    }
     
     fmt.Println(resp.Choices[0].Message.Content)
 }
@@ -89,19 +103,101 @@ func main() {
 ### Multi-Provider Routing
 
 ```go
-db, _ := gorm.Open(sqlite.Open("agentflow.db"), &gorm.Config{})
-llm.InitDatabase(db)
+package main
 
-router := llm.NewMultiProviderRouter(db, factory, llm.RouterOptions{})
-router.InitAPIKeyPools(ctx)
+import (
+    "context"
+    "fmt"
+    "os"
 
-selection, _ := router.SelectProviderWithModel(ctx, "gpt-4o", llm.StrategyCostBased)
+    "github.com/BaSui01/agentflow/llm"
+    "github.com/BaSui01/agentflow/llm/providers"
+    openaiprov "github.com/BaSui01/agentflow/llm/providers/openai"
+    "github.com/glebarez/sqlite"
+    "go.uber.org/zap"
+    "gorm.io/gorm"
+)
+
+func main() {
+    logger, _ := zap.NewDevelopment()
+    defer logger.Sync()
+
+    ctx := context.Background()
+
+    db, err := gorm.Open(sqlite.Open("file::memory:?cache=shared"), &gorm.Config{})
+    if err != nil {
+        panic(err)
+    }
+    if err := llm.InitDatabase(db); err != nil {
+        panic(err)
+    }
+
+    // Minimal seed: one provider + one model + mapping + API key.
+    p := llm.LLMProvider{Code: "openai", Name: "OpenAI", Status: llm.LLMProviderStatusActive}
+    if err := db.Create(&p).Error; err != nil {
+        panic(err)
+    }
+    m := llm.LLMModel{ModelName: "gpt-4o", DisplayName: "GPT-4o", Enabled: true}
+    if err := db.Create(&m).Error; err != nil {
+        panic(err)
+    }
+    pm := llm.LLMProviderModel{
+        ModelID:         m.ID,
+        ProviderID:      p.ID,
+        RemoteModelName: "gpt-4o",
+        BaseURL:         "https://api.openai.com",
+        PriceInput:      0.001,
+        PriceCompletion: 0.002,
+        Priority:        10,
+        Enabled:         true,
+    }
+    if err := db.Create(&pm).Error; err != nil {
+        panic(err)
+    }
+
+    key := os.Getenv("OPENAI_API_KEY")
+    if key == "" {
+        key = "sk-xxx" // demo key (no live call without real key)
+    }
+    if err := db.Create(&llm.LLMProviderAPIKey{
+        ProviderID: p.ID,
+        APIKey:     key,
+        Label:      "default",
+        Priority:   10,
+        Weight:     100,
+        Enabled:    true,
+    }).Error; err != nil {
+        panic(err)
+    }
+
+    factory := llm.NewDefaultProviderFactory()
+    factory.RegisterProvider("openai", func(apiKey, baseURL string) (llm.Provider, error) {
+        return openaiprov.NewOpenAIProvider(providers.OpenAIConfig{
+            APIKey:  apiKey,
+            BaseURL: baseURL,
+        }, logger), nil
+    })
+
+    router := llm.NewMultiProviderRouter(db, factory, llm.RouterOptions{Logger: logger})
+    if err := router.InitAPIKeyPools(ctx); err != nil {
+        panic(err)
+    }
+
+    selection, err := router.SelectProviderWithModel(ctx, "gpt-4o", llm.StrategyCostBased)
+    if err != nil {
+        panic(err)
+    }
+
+    fmt.Printf("selected provider=%s model=%s\n", selection.ProviderCode, selection.ModelName)
+}
 ```
 
 ### Reflection Self-Improvement
 
+Runnable example: `examples/06_advanced_features/` (or `examples/09_full_integration/`)
+
 ```go
-executor := agent.NewReflectionExecutor(agent, agent.ReflectionConfig{
+executor := agent.NewReflectionExecutor(baseAgent, agent.ReflectionExecutorConfig{
     Enabled:       true,
     MaxIterations: 3,
     MinQuality:    0.7,
@@ -111,6 +207,8 @@ result, _ := executor.ExecuteWithReflection(ctx, input)
 ```
 
 ### DAG Workflow
+
+Runnable example: `examples/05_workflow/`
 
 ```go
 graph := workflow.NewDAGGraph()
