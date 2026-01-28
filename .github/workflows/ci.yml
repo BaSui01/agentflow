@@ -36,7 +36,15 @@ jobs:
           go test ./... -covermode atomic -coverprofile coverage.out -count=1
           total="$(go tool cover -func coverage.out | awk '/^total:/{gsub(/%/,"",$NF); print $NF}')"
           echo "Total coverage: ${total}%"
-          threshold="20.0"
+          threshold="24.0"
+          awk -v total="${total}" -v threshold="${threshold}" 'BEGIN { exit (total+0 < threshold+0) }'
+
+      - name: Test (key-path coverage)
+        run: |
+          go test ./types ./llm ./llm/cache ./llm/middleware ./llm/observability ./llm/retry ./llm/router ./llm/tools ./rag ./workflow ./agent ./agent/context -covermode atomic -coverprofile coverage.key.out -count=1
+          total="$(go tool cover -func coverage.key.out | awk '/^total:/{gsub(/%/,"",$NF); print $NF}')"
+          echo "Key-path coverage: ${total}%"
+          threshold="30.0"
           awk -v total="${total}" -v threshold="${threshold}" 'BEGIN { exit (total+0 < threshold+0) }'
 
       - name: Race
