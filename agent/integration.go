@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/BaSui01/agentflow/agent/skills"
 	"go.uber.org/zap"
 )
 
@@ -133,20 +134,33 @@ func (b *BaseAgent) ExecuteEnhanced(ctx context.Context, input *Input, options E
 		}
 		b.logger.Debug("discovering skills", zap.String("query", query))
 
-		// 类型断言并调用
+		// Prefer the built-in skills manager signature.
 		if sm, ok := b.skillManager.(interface {
-			DiscoverSkills(ctx context.Context, task string) (interface{}, error)
+			DiscoverSkills(ctx context.Context, task string) ([]*skills.Skill, error)
 		}); ok {
-			skills, err := sm.DiscoverSkills(ctx, query)
+			found, err := sm.DiscoverSkills(ctx, query)
 			if err != nil {
 				b.logger.Warn("skill discovery failed", zap.Error(err))
 			} else {
-				// 提取技能指令
-				if skillList, ok := skills.([]interface{}); ok {
-					for _, s := range skillList {
-						if skill, ok := s.(interface{ GetInstructions() string }); ok {
-							skillInstructions = append(skillInstructions, skill.GetInstructions())
-						}
+				for _, s := range found {
+					if s == nil {
+						continue
+					}
+					skillInstructions = append(skillInstructions, s.GetInstructions())
+				}
+				b.logger.Info("skills discovered", zap.Int("count", len(skillInstructions)))
+			}
+		} else if sm, ok := b.skillManager.(interface {
+			DiscoverSkills(ctx context.Context, task string) (interface{}, error)
+		}); ok {
+			// Backwards-compatible fallback for custom implementations.
+			raw, err := sm.DiscoverSkills(ctx, query)
+			if err != nil {
+				b.logger.Warn("skill discovery failed", zap.Error(err))
+			} else if list, ok := raw.([]interface{}); ok {
+				for _, s := range list {
+					if skill, ok := s.(interface{ GetInstructions() string }); ok {
+						skillInstructions = append(skillInstructions, skill.GetInstructions())
 					}
 				}
 				b.logger.Info("skills discovered", zap.Int("count", len(skillInstructions)))

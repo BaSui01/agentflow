@@ -226,6 +226,14 @@ func (s *Skill) RenderInstructions(vars map[string]string) string {
 	return instructions
 }
 
+// GetInstructions returns the skill instructions for prompt injection/augmentation.
+func (s *Skill) GetInstructions() string {
+	if s == nil {
+		return ""
+	}
+	return s.Instructions
+}
+
 // GetResourceAsString 获取资源作为字符串
 func (s *Skill) GetResourceAsString(name string) (string, error) {
 	resource, ok := s.Resources[name]

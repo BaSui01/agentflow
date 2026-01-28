@@ -249,8 +249,12 @@ func NewDefaultEnhancedMemorySystem(config EnhancedMemoryConfig, logger *zap.Log
 		logger = zap.NewNop()
 	}
 
-	shortTerm := NewInMemoryMemoryStore(InMemoryMemoryStoreConfig{}, logger)
-	working := NewInMemoryMemoryStore(InMemoryMemoryStoreConfig{}, logger)
+	shortTerm := NewInMemoryMemoryStore(InMemoryMemoryStoreConfig{
+		MaxEntries: config.ShortTermMaxSize,
+	}, logger)
+	working := NewInMemoryMemoryStore(InMemoryMemoryStoreConfig{
+		MaxEntries: config.WorkingMemorySize,
+	}, logger)
 
 	var longTerm VectorStore
 	if config.LongTermEnabled {

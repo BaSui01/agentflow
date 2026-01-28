@@ -2,7 +2,12 @@ package agent
 
 import (
 	"fmt"
+	"os"
+	"strings"
 
+	"github.com/BaSui01/agentflow/agent/memory"
+	mcpproto "github.com/BaSui01/agentflow/agent/protocol/mcp"
+	"github.com/BaSui01/agentflow/agent/skills"
 	"github.com/BaSui01/agentflow/llm"
 	"go.uber.org/zap"
 )
@@ -105,11 +110,35 @@ func (b *AgentBuilder) WithPromptEnhancer(config *PromptEnhancerConfig) *AgentBu
 	return b
 }
 
+// SkillsOptions configures how the builder creates a default skills manager.
+type SkillsOptions struct {
+	Directory string
+	Config    skills.SkillManagerConfig
+}
+
+// MCPServerOptions configures how the builder creates a default MCP server.
+type MCPServerOptions struct {
+	Name    string
+	Version string
+}
+
 // WithSkills 启用 Skills 系统
 func (b *AgentBuilder) WithSkills(config interface{}) *AgentBuilder {
 	b.skillsConfig = config
 	b.config.EnableSkills = true
 	return b
+}
+
+// WithDefaultSkills enables the built-in skills manager and optionally scans a directory.
+func (b *AgentBuilder) WithDefaultSkills(directory string, config *skills.SkillManagerConfig) *AgentBuilder {
+	opts := SkillsOptions{
+		Directory: strings.TrimSpace(directory),
+		Config:    skills.DefaultSkillManagerConfig(),
+	}
+	if config != nil {
+		opts.Config = *config
+	}
+	return b.WithSkills(opts)
 }
 
 // WithMCP 启用 MCP 集成
@@ -119,11 +148,28 @@ func (b *AgentBuilder) WithMCP(config interface{}) *AgentBuilder {
 	return b
 }
 
+// WithDefaultMCPServer enables the built-in MCP server with a default name/version.
+func (b *AgentBuilder) WithDefaultMCPServer(name, version string) *AgentBuilder {
+	return b.WithMCP(MCPServerOptions{
+		Name:    strings.TrimSpace(name),
+		Version: strings.TrimSpace(version),
+	})
+}
+
 // WithEnhancedMemory 启用增强记忆系统
 func (b *AgentBuilder) WithEnhancedMemory(config interface{}) *AgentBuilder {
 	b.enhancedMemoryConfig = config
 	b.config.EnableEnhancedMemory = true
 	return b
+}
+
+// WithDefaultEnhancedMemory enables the built-in enhanced memory system with in-memory stores.
+func (b *AgentBuilder) WithDefaultEnhancedMemory(config *memory.EnhancedMemoryConfig) *AgentBuilder {
+	if config == nil {
+		cfg := memory.DefaultEnhancedMemoryConfig()
+		return b.WithEnhancedMemory(cfg)
+	}
+	return b.WithEnhancedMemory(*config)
 }
 
 // WithObservability 启用可观测性系统
@@ -160,6 +206,17 @@ func (b *AgentBuilder) Build() (*BaseAgent, error) {
 		b.logger,
 	)
 
+	// If feature flags were enabled directly on Config, fall back to default configs.
+	if b.config.EnableReflection && b.reflectionConfig == nil {
+		b.reflectionConfig = DefaultReflectionConfig()
+	}
+	if b.config.EnableToolSelection && b.toolSelectionConfig == nil {
+		b.toolSelectionConfig = DefaultToolSelectionConfig()
+	}
+	if b.config.EnablePromptEnhancer && b.promptEnhancerConfig == nil {
+		b.promptEnhancerConfig = DefaultPromptEnhancerConfig()
+	}
+
 	// Enable advanced features
 	if b.config.EnableReflection && b.reflectionConfig != nil {
 		reflectionExecutor := NewReflectionExecutor(agent, *b.reflectionConfig)
@@ -176,10 +233,126 @@ func (b *AgentBuilder) Build() (*BaseAgent, error) {
 		agent.EnablePromptEnhancer(promptEnhancer)
 	}
 
-	// 其他增强功能可以在这里添加
-	// 注意：Skills、MCP、EnhancedMemory 等需要额外的依赖，这里只做占位
+	if err := b.enableOptionalFeatures(agent); err != nil {
+		return nil, err
+	}
 
 	return agent, nil
+}
+
+func (b *AgentBuilder) enableOptionalFeatures(agent *BaseAgent) error {
+	if b.config.EnableSkills {
+		if err := b.enableSkills(agent); err != nil {
+			return err
+		}
+	}
+	if b.config.EnableMCP {
+		if err := b.enableMCP(agent); err != nil {
+			return err
+		}
+	}
+	if b.config.EnableEnhancedMemory {
+		if err := b.enableEnhancedMemory(agent); err != nil {
+			return err
+		}
+	}
+	// Observability has an import-cycle with agent/observability (it imports agent).
+	// Builders can still accept a provided instance; for out-of-the-box wiring use agent/runtime.
+	if b.config.EnableObservability && b.observabilityConfig != nil {
+		agent.EnableObservability(b.observabilityConfig)
+	}
+	return nil
+}
+
+func (b *AgentBuilder) enableSkills(agent *BaseAgent) error {
+	switch v := b.skillsConfig.(type) {
+	case nil:
+		mgr := skills.NewSkillManager(skills.DefaultSkillManagerConfig(), b.logger)
+		if _, err := os.Stat("./skills"); err == nil {
+			_ = mgr.ScanDirectory("./skills")
+		}
+		agent.EnableSkills(mgr)
+		return nil
+	case string:
+		dir := strings.TrimSpace(v)
+		mgr := skills.NewSkillManager(skills.DefaultSkillManagerConfig(), b.logger)
+		if dir != "" {
+			if err := mgr.ScanDirectory(dir); err != nil {
+				return fmt.Errorf("scan skills directory %q: %w", dir, err)
+			}
+		}
+		agent.EnableSkills(mgr)
+		return nil
+	case SkillsOptions:
+		mgr := skills.NewSkillManager(v.Config, b.logger)
+		if v.Directory != "" {
+			if err := mgr.ScanDirectory(v.Directory); err != nil {
+				return fmt.Errorf("scan skills directory %q: %w", v.Directory, err)
+			}
+		}
+		agent.EnableSkills(mgr)
+		return nil
+	case skills.SkillManagerConfig:
+		mgr := skills.NewSkillManager(v, b.logger)
+		agent.EnableSkills(mgr)
+		return nil
+	case *skills.DefaultSkillManager:
+		agent.EnableSkills(v)
+		return nil
+	case skills.SkillManager:
+		agent.EnableSkills(v)
+		return nil
+	default:
+		agent.EnableSkills(v)
+		return nil
+	}
+}
+
+func (b *AgentBuilder) enableMCP(agent *BaseAgent) error {
+	switch v := b.mcpConfig.(type) {
+	case nil:
+		agent.EnableMCP(mcpproto.NewMCPServer("agentflow-mcp", "0.1.0", b.logger))
+		return nil
+	case MCPServerOptions:
+		name := v.Name
+		version := v.Version
+		if name == "" {
+			name = "agentflow-mcp"
+		}
+		if version == "" {
+			version = "0.1.0"
+		}
+		agent.EnableMCP(mcpproto.NewMCPServer(name, version, b.logger))
+		return nil
+	case string:
+		name := strings.TrimSpace(v)
+		if name == "" {
+			name = "agentflow-mcp"
+		}
+		agent.EnableMCP(mcpproto.NewMCPServer(name, "0.1.0", b.logger))
+		return nil
+	default:
+		agent.EnableMCP(v)
+		return nil
+	}
+}
+
+func (b *AgentBuilder) enableEnhancedMemory(agent *BaseAgent) error {
+	switch v := b.enhancedMemoryConfig.(type) {
+	case nil:
+		cfg := memory.DefaultEnhancedMemoryConfig()
+		agent.EnableEnhancedMemory(memory.NewDefaultEnhancedMemorySystem(cfg, b.logger))
+		return nil
+	case memory.EnhancedMemoryConfig:
+		agent.EnableEnhancedMemory(memory.NewDefaultEnhancedMemorySystem(v, b.logger))
+		return nil
+	case *memory.EnhancedMemorySystem:
+		agent.EnableEnhancedMemory(v)
+		return nil
+	default:
+		agent.EnableEnhancedMemory(v)
+		return nil
+	}
 }
 
 // Validate 验证配置是否有效
