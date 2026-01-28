@@ -389,7 +389,49 @@ func (e *Engineer) hardTruncate(msgs []types.Message, maxTokens int) []types.Mes
 		otherMsgs = otherMsgs[len(otherMsgs)-2:]
 	}
 
-	return append(systemMsgs, otherMsgs...)
+	result := append(systemMsgs, otherMsgs...)
+	if len(result) == 0 {
+		return result
+	}
+
+	// Ensure we actually fit within the requested budget.
+	for tries := 0; tries < 20 && e.tokenizer.CountMessagesTokens(result) > maxTokens; tries++ {
+		// Prefer dropping older non-system messages first.
+		if len(result) > 1 {
+			dropIdx := -1
+			for i := 0; i < len(result); i++ {
+				if result[i].Role != types.RoleSystem {
+					dropIdx = i
+					break
+				}
+			}
+			if dropIdx < 0 {
+				dropIdx = 0
+			}
+			result = append(result[:dropIdx], result[dropIdx+1:]...)
+			continue
+		}
+
+		// Single message left: truncate aggressively to fit.
+		result = e.truncateMessages(result, maxTokens)
+	}
+
+	// If we still overflow, try truncating with a per-message budget.
+	for tries := 0; tries < 10 && e.tokenizer.CountMessagesTokens(result) > maxTokens && len(result) > 0; tries++ {
+		perMsg := maxTokens / len(result)
+		if perMsg < 1 {
+			perMsg = 1
+		}
+		result = e.truncateMessages(result, perMsg)
+		if e.tokenizer.CountMessagesTokens(result) <= maxTokens {
+			break
+		}
+		if len(result) > 1 {
+			result = result[1:]
+		}
+	}
+
+	return result
 }
 
 // EstimateTokens returns token count for messages.

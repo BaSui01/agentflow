@@ -54,7 +54,7 @@ func (LLMProvider) TableName() string {
 type LLMProviderModel struct {
 	ID              uint      `gorm:"primaryKey" json:"id"`
 	ModelID         uint      `gorm:"not null;index:idx_model_provider" json:"model_id"`
-	ProviderID      uint      `gorm:"not null;index:idx_model_provider;index:idx_provider" json:"provider_id"`
+	ProviderID      uint      `gorm:"not null;index:idx_model_provider;index:idx_provider_models_provider_id" json:"provider_id"`
 	RemoteModelName string    `gorm:"size:100;not null" json:"remote_model_name"`
 	BaseURL         string    `gorm:"size:500" json:"base_url"`
 	PriceInput      float64   `gorm:"type:decimal(10,6);default:0" json:"price_input"`
@@ -80,21 +80,21 @@ func (LLMProviderModel) TableName() string {
 // LLMProviderAPIKey represents an API key in the pool
 // Supports multiple API keys per provider for load balancing and failover
 type LLMProviderAPIKey struct {
-	ID         uint      `gorm:"primaryKey" json:"id"`
-	ProviderID uint      `gorm:"not null;index:idx_provider" json:"provider_id"`
-	APIKey     string    `gorm:"size:500;not null" json:"api_key"`
-	Label      string    `gorm:"size:100" json:"label"`
-	Priority   int       `gorm:"default:100" json:"priority"`
-	Weight     int       `gorm:"default:100" json:"weight"`
-	Enabled    bool      `gorm:"default:true" json:"enabled"`
-	
+	ID         uint   `gorm:"primaryKey" json:"id"`
+	ProviderID uint   `gorm:"not null;index:idx_provider_api_keys_provider_id" json:"provider_id"`
+	APIKey     string `gorm:"size:500;not null" json:"api_key"`
+	Label      string `gorm:"size:100" json:"label"`
+	Priority   int    `gorm:"default:100" json:"priority"`
+	Weight     int    `gorm:"default:100" json:"weight"`
+	Enabled    bool   `gorm:"default:true" json:"enabled"`
+
 	// Usage statistics
-	TotalRequests   int64      `gorm:"default:0" json:"total_requests"`
-	FailedRequests  int64      `gorm:"default:0" json:"failed_requests"`
-	LastUsedAt      *time.Time `json:"last_used_at"`
-	LastErrorAt     *time.Time `json:"last_error_at"`
-	LastError       string     `gorm:"type:text" json:"last_error"`
-	
+	TotalRequests  int64      `gorm:"default:0" json:"total_requests"`
+	FailedRequests int64      `gorm:"default:0" json:"failed_requests"`
+	LastUsedAt     *time.Time `json:"last_used_at"`
+	LastErrorAt    *time.Time `json:"last_error_at"`
+	LastError      string     `gorm:"type:text" json:"last_error"`
+
 	// Rate limiting
 	RateLimitRPM int       `gorm:"default:0" json:"rate_limit_rpm"`
 	RateLimitRPD int       `gorm:"default:0" json:"rate_limit_rpd"`
@@ -102,7 +102,7 @@ type LLMProviderAPIKey struct {
 	CurrentRPD   int       `gorm:"default:0" json:"current_rpd"`
 	RPMResetAt   time.Time `json:"rpm_reset_at"`
 	RPDResetAt   time.Time `json:"rpd_reset_at"`
-	
+
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
 
@@ -118,9 +118,9 @@ func (k *LLMProviderAPIKey) IsHealthy() bool {
 	if !k.Enabled {
 		return false
 	}
-	
+
 	now := time.Now()
-	
+
 	// Check rate limits
 	if k.RateLimitRPM > 0 && now.Before(k.RPMResetAt) && k.CurrentRPM >= k.RateLimitRPM {
 		return false
@@ -128,7 +128,7 @@ func (k *LLMProviderAPIKey) IsHealthy() bool {
 	if k.RateLimitRPD > 0 && now.Before(k.RPDResetAt) && k.CurrentRPD >= k.RateLimitRPD {
 		return false
 	}
-	
+
 	// Check error rate (fail rate > 50%)
 	if k.TotalRequests >= 100 {
 		failRate := float64(k.FailedRequests) / float64(k.TotalRequests)
@@ -136,7 +136,7 @@ func (k *LLMProviderAPIKey) IsHealthy() bool {
 			return false
 		}
 	}
-	
+
 	return true
 }
 
@@ -145,19 +145,19 @@ func (k *LLMProviderAPIKey) IncrementUsage(success bool) {
 	now := time.Now()
 	k.TotalRequests++
 	k.LastUsedAt = &now
-	
+
 	if !success {
 		k.FailedRequests++
 		k.LastErrorAt = &now
 	}
-	
+
 	// Reset RPM counter
 	if now.After(k.RPMResetAt) {
 		k.CurrentRPM = 0
 		k.RPMResetAt = now.Add(time.Minute)
 	}
 	k.CurrentRPM++
-	
+
 	// Reset RPD counter
 	if now.After(k.RPDResetAt) {
 		k.CurrentRPD = 0
