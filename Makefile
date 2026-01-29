@@ -1,0 +1,354 @@
+# =============================================================================
+# 🚀 AgentFlow Makefile
+# =============================================================================
+# 统一构建入口，提供常用的开发、测试、部署命令
+#
+# 使用方法:
+#   make help          # 显示帮助信息
+#   make build         # 构建二进制
+#   make test          # 运行测试
+#   make docker-build  # 构建 Docker 镜像
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# 📦 变量定义
+# -----------------------------------------------------------------------------
+BINARY_NAME := agentflow
+MODULE := github.com/BaSui01/agentflow
+VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
+BUILD_TIME := $(shell date -u '+%Y-%m-%dT%H:%M:%SZ')
+GIT_COMMIT := $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
+
+# Go 相关
+GO := go
+GOFLAGS := -v
+LDFLAGS := -s -w \
+	-X main.Version=$(VERSION) \
+	-X main.BuildTime=$(BUILD_TIME) \
+	-X main.GitCommit=$(GIT_COMMIT)
+
+# Docker 相关
+DOCKER_IMAGE := agentflow
+DOCKER_TAG := $(VERSION)
+DOCKER_REGISTRY ?=
+
+# 目录
+BUILD_DIR := ./build
+CMD_DIR := ./cmd/agentflow
+
+# -----------------------------------------------------------------------------
+# 🎯 默认目标
+# -----------------------------------------------------------------------------
+.DEFAULT_GOAL := help
+
+# -----------------------------------------------------------------------------
+# 📋 帮助信息
+# -----------------------------------------------------------------------------
+.PHONY: help
+help: ## 显示帮助信息
+	@echo ""
+	@echo "🚀 AgentFlow Makefile"
+	@echo ""
+	@echo "Usage: make [target]"
+	@echo ""
+	@echo "Targets:"
+	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-20s\033[0m %s\n", $$1, $$2}'
+	@echo ""
+
+# -----------------------------------------------------------------------------
+# 🔨 构建目标
+# -----------------------------------------------------------------------------
+.PHONY: build
+build: ## 构建二进制文件
+	@echo "🔨 Building $(BINARY_NAME)..."
+	@mkdir -p $(BUILD_DIR)
+	$(GO) build $(GOFLAGS) -ldflags "$(LDFLAGS)" -o $(BUILD_DIR)/$(BINARY_NAME) $(CMD_DIR)
+	@echo "✅ Build complete: $(BUILD_DIR)/$(BINARY_NAME)"
+
+.PHONY: build-linux
+build-linux: ## 构建 Linux 二进制文件
+	@echo "🔨 Building $(BINARY_NAME) for Linux..."
+	@mkdir -p $(BUILD_DIR)
+	GOOS=linux GOARCH=amd64 $(GO) build $(GOFLAGS) -ldflags "$(LDFLAGS)" -o $(BUILD_DIR)/$(BINARY_NAME)-linux-amd64 $(CMD_DIR)
+	@echo "✅ Build complete: $(BUILD_DIR)/$(BINARY_NAME)-linux-amd64"
+
+.PHONY: build-darwin
+build-darwin: ## 构建 macOS 二进制文件
+	@echo "🔨 Building $(BINARY_NAME) for macOS..."
+	@mkdir -p $(BUILD_DIR)
+	GOOS=darwin GOARCH=amd64 $(GO) build $(GOFLAGS) -ldflags "$(LDFLAGS)" -o $(BUILD_DIR)/$(BINARY_NAME)-darwin-amd64 $(CMD_DIR)
+	GOOS=darwin GOARCH=arm64 $(GO) build $(GOFLAGS) -ldflags "$(LDFLAGS)" -o $(BUILD_DIR)/$(BINARY_NAME)-darwin-arm64 $(CMD_DIR)
+	@echo "✅ Build complete"
+
+.PHONY: build-windows
+build-windows: ## 构建 Windows 二进制文件
+	@echo "🔨 Building $(BINARY_NAME) for Windows..."
+	@mkdir -p $(BUILD_DIR)
+	GOOS=windows GOARCH=amd64 $(GO) build $(GOFLAGS) -ldflags "$(LDFLAGS)" -o $(BUILD_DIR)/$(BINARY_NAME)-windows-amd64.exe $(CMD_DIR)
+	@echo "✅ Build complete: $(BUILD_DIR)/$(BINARY_NAME)-windows-amd64.exe"
+
+.PHONY: build-all
+build-all: build-linux build-darwin build-windows ## 构建所有平台的二进制文件
+
+.PHONY: install
+install: build ## 安装到 GOPATH/bin
+	@echo "📦 Installing $(BINARY_NAME)..."
+	cp $(BUILD_DIR)/$(BINARY_NAME) $(GOPATH)/bin/
+	@echo "✅ Installed to $(GOPATH)/bin/$(BINARY_NAME)"
+
+# -----------------------------------------------------------------------------
+# 🧪 测试目标
+# -----------------------------------------------------------------------------
+.PHONY: test
+test: ## 运行单元测试
+	@echo "🧪 Running unit tests..."
+	$(GO) test ./... -v -race -cover
+	@echo "✅ Tests complete"
+
+.PHONY: test-short
+test-short: ## 运行快速测试（跳过长时间测试）
+	@echo "🧪 Running short tests..."
+	$(GO) test ./... -v -short
+	@echo "✅ Short tests complete"
+
+.PHONY: test-cover
+test-cover: ## 运行测试并生成覆盖率报告
+	@echo "🧪 Running tests with coverage..."
+	@mkdir -p $(BUILD_DIR)
+	$(GO) test ./... -v -race -coverprofile=$(BUILD_DIR)/coverage.out
+	$(GO) tool cover -html=$(BUILD_DIR)/coverage.out -o $(BUILD_DIR)/coverage.html
+	@echo "✅ Coverage report: $(BUILD_DIR)/coverage.html"
+
+.PHONY: test-e2e
+test-e2e: ## 运行 E2E 测试
+	@echo "🧪 Running E2E tests..."
+	$(GO) test ./tests/e2e/... -v -tags=e2e -timeout=10m
+	@echo "✅ E2E tests complete"
+
+.PHONY: test-integration
+test-integration: ## 运行集成测试
+	@echo "🧪 Running integration tests..."
+	$(GO) test ./tests/integration/... -v -timeout=5m
+	@echo "✅ Integration tests complete"
+
+.PHONY: test-all
+test-all: test test-integration test-e2e ## 运行所有测试
+
+.PHONY: bench
+bench: ## 运行基准测试
+	@echo "📊 Running benchmarks..."
+	$(GO) test ./... -bench=. -benchmem -run=^$
+	@echo "✅ Benchmarks complete"
+
+# -----------------------------------------------------------------------------
+# 🔍 代码质量
+# -----------------------------------------------------------------------------
+.PHONY: lint
+lint: ## 运行代码检查
+	@echo "🔍 Running linter..."
+	@if command -v golangci-lint >/dev/null 2>&1; then \
+		golangci-lint run ./...; \
+	else \
+		echo "⚠️  golangci-lint not installed, running go vet instead"; \
+		$(GO) vet ./...; \
+	fi
+	@echo "✅ Lint complete"
+
+.PHONY: fmt
+fmt: ## 格式化代码
+	@echo "🎨 Formatting code..."
+	$(GO) fmt ./...
+	@echo "✅ Format complete"
+
+.PHONY: vet
+vet: ## 运行 go vet
+	@echo "🔍 Running go vet..."
+	$(GO) vet ./...
+	@echo "✅ Vet complete"
+
+.PHONY: tidy
+tidy: ## 整理依赖
+	@echo "📦 Tidying dependencies..."
+	$(GO) mod tidy
+	@echo "✅ Tidy complete"
+
+.PHONY: verify
+verify: fmt vet lint test ## 完整验证（格式化 + 检查 + 测试）
+
+# -----------------------------------------------------------------------------
+# 🐳 Docker 目标
+# -----------------------------------------------------------------------------
+.PHONY: docker-build
+docker-build: ## 构建 Docker 镜像
+	@echo "🐳 Building Docker image..."
+	docker build \
+		--build-arg VERSION=$(VERSION) \
+		--build-arg BUILD_TIME=$(BUILD_TIME) \
+		--build-arg GIT_COMMIT=$(GIT_COMMIT) \
+		-t $(DOCKER_IMAGE):$(DOCKER_TAG) \
+		-t $(DOCKER_IMAGE):latest \
+		.
+	@echo "✅ Docker image built: $(DOCKER_IMAGE):$(DOCKER_TAG)"
+
+.PHONY: docker-push
+docker-push: ## 推送 Docker 镜像到仓库
+	@echo "🚀 Pushing Docker image..."
+ifdef DOCKER_REGISTRY
+	docker tag $(DOCKER_IMAGE):$(DOCKER_TAG) $(DOCKER_REGISTRY)/$(DOCKER_IMAGE):$(DOCKER_TAG)
+	docker tag $(DOCKER_IMAGE):latest $(DOCKER_REGISTRY)/$(DOCKER_IMAGE):latest
+	docker push $(DOCKER_REGISTRY)/$(DOCKER_IMAGE):$(DOCKER_TAG)
+	docker push $(DOCKER_REGISTRY)/$(DOCKER_IMAGE):latest
+else
+	docker push $(DOCKER_IMAGE):$(DOCKER_TAG)
+	docker push $(DOCKER_IMAGE):latest
+endif
+	@echo "✅ Docker image pushed"
+
+.PHONY: docker-run
+docker-run: ## 运行 Docker 容器
+	@echo "🐳 Running Docker container..."
+	docker run --rm -it \
+		-p 8080:8080 \
+		-p 9090:9090 \
+		-p 9091:9091 \
+		$(DOCKER_IMAGE):$(DOCKER_TAG)
+
+# -----------------------------------------------------------------------------
+# 🚀 Docker Compose 目标
+# -----------------------------------------------------------------------------
+.PHONY: up
+up: ## 启动本地开发环境
+	@echo "🚀 Starting local environment..."
+	docker-compose up -d
+	@echo "✅ Environment started"
+	@echo "   HTTP API: http://localhost:8080"
+	@echo "   gRPC:     localhost:9090"
+	@echo "   Metrics:  http://localhost:9091/metrics"
+
+.PHONY: up-build
+up-build: ## 重新构建并启动本地环境
+	@echo "🚀 Building and starting local environment..."
+	docker-compose up -d --build
+	@echo "✅ Environment started"
+
+.PHONY: up-monitoring
+up-monitoring: ## 启动带监控的本地环境
+	@echo "🚀 Starting environment with monitoring..."
+	docker-compose --profile monitoring up -d
+	@echo "✅ Environment started with monitoring"
+	@echo "   Prometheus: http://localhost:9092"
+	@echo "   Grafana:    http://localhost:3000 (admin/admin)"
+
+.PHONY: down
+down: ## 停止本地环境
+	@echo "🛑 Stopping local environment..."
+	docker-compose down
+	@echo "✅ Environment stopped"
+
+.PHONY: down-v
+down-v: ## 停止本地环境并删除数据卷
+	@echo "🛑 Stopping local environment and removing volumes..."
+	docker-compose down -v
+	@echo "✅ Environment stopped and volumes removed"
+
+.PHONY: logs
+logs: ## 查看服务日志
+	docker-compose logs -f agentflow
+
+.PHONY: ps
+ps: ## 查看服务状态
+	docker-compose ps
+
+.PHONY: restart
+restart: down up ## 重启本地环境
+
+# -----------------------------------------------------------------------------
+# 🔧 开发工具
+# -----------------------------------------------------------------------------
+.PHONY: run
+run: build ## 构建并运行服务
+	@echo "🚀 Running $(BINARY_NAME)..."
+	$(BUILD_DIR)/$(BINARY_NAME) serve
+
+.PHONY: dev
+dev: ## 开发模式运行（带热重载，需要 air）
+	@echo "🔥 Starting development mode..."
+	@if command -v air >/dev/null 2>&1; then \
+		air; \
+	else \
+		echo "⚠️  air not installed, running normally"; \
+		$(GO) run $(CMD_DIR) serve; \
+	fi
+
+.PHONY: generate
+generate: ## 运行代码生成
+	@echo "⚙️  Running code generation..."
+	$(GO) generate ./...
+	@echo "✅ Generation complete"
+
+.PHONY: deps
+deps: ## 下载依赖
+	@echo "📦 Downloading dependencies..."
+	$(GO) mod download
+	@echo "✅ Dependencies downloaded"
+
+.PHONY: deps-update
+deps-update: ## 更新依赖
+	@echo "📦 Updating dependencies..."
+	$(GO) get -u ./...
+	$(GO) mod tidy
+	@echo "✅ Dependencies updated"
+
+# -----------------------------------------------------------------------------
+# 🧹 清理目标
+# -----------------------------------------------------------------------------
+.PHONY: clean
+clean: ## 清理构建产物
+	@echo "🧹 Cleaning build artifacts..."
+	rm -rf $(BUILD_DIR)
+	$(GO) clean -cache
+	@echo "✅ Clean complete"
+
+.PHONY: clean-docker
+clean-docker: ## 清理 Docker 资源
+	@echo "🧹 Cleaning Docker resources..."
+	docker-compose down -v --rmi local
+	docker image prune -f
+	@echo "✅ Docker cleanup complete"
+
+.PHONY: clean-all
+clean-all: clean clean-docker ## 清理所有资源
+
+# -----------------------------------------------------------------------------
+# 📊 信息目标
+# -----------------------------------------------------------------------------
+.PHONY: version
+version: ## 显示版本信息
+	@echo "Version:    $(VERSION)"
+	@echo "Build Time: $(BUILD_TIME)"
+	@echo "Git Commit: $(GIT_COMMIT)"
+
+.PHONY: info
+info: ## 显示项目信息
+	@echo ""
+	@echo "🚀 AgentFlow Project Info"
+	@echo ""
+	@echo "Module:     $(MODULE)"
+	@echo "Version:    $(VERSION)"
+	@echo "Build Time: $(BUILD_TIME)"
+	@echo "Git Commit: $(GIT_COMMIT)"
+	@echo "Go Version: $(shell $(GO) version)"
+	@echo ""
+
+# -----------------------------------------------------------------------------
+# 🎯 CI/CD 目标
+# -----------------------------------------------------------------------------
+.PHONY: ci
+ci: deps verify ## CI 流水线（依赖 + 验证）
+
+.PHONY: cd
+cd: docker-build docker-push ## CD 流水线（构建 + 推送镜像）
+
+.PHONY: release
+release: clean build-all docker-build ## 发布准备（清理 + 构建所有平台 + Docker）
+	@echo "🎉 Release $(VERSION) ready!"
