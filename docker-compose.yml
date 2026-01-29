@@ -1,0 +1,200 @@
+# =============================================================================
+# 🐳 AgentFlow Docker Compose - 本地开发环境
+# =============================================================================
+# 包含完整的开发环境：主服务 + Redis + PostgreSQL + Qdrant + 监控
+#
+# 使用方法:
+#   docker-compose up -d              # 启动所有服务
+#   docker-compose up -d agentflow    # 仅启动主服务
+#   docker-compose logs -f agentflow  # 查看日志
+#   docker-compose down               # 停止所有服务
+#   docker-compose down -v            # 停止并删除数据卷
+# =============================================================================
+
+version: "3.9"
+
+services:
+  # ---------------------------------------------------------------------------
+  # 🚀 AgentFlow 主服务
+  # ---------------------------------------------------------------------------
+  agentflow:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        VERSION: ${VERSION:-dev}
+    image: agentflow:${VERSION:-dev}
+    container_name: agentflow
+    restart: unless-stopped
+    ports:
+      - "8080:8080"   # HTTP API
+      - "9090:9090"   # gRPC
+      - "9091:9091"   # Prometheus 指标
+    environment:
+      # 服务配置
+      AGENTFLOW_SERVER_HTTP_PORT: "8080"
+      AGENTFLOW_SERVER_GRPC_PORT: "9090"
+      AGENTFLOW_SERVER_METRICS_PORT: "9091"
+      # Redis 配置
+      AGENTFLOW_REDIS_ADDR: "redis:6379"
+      AGENTFLOW_REDIS_PASSWORD: ""
+      AGENTFLOW_REDIS_DB: "0"
+      # PostgreSQL 配置
+      AGENTFLOW_DATABASE_HOST: "postgres"
+      AGENTFLOW_DATABASE_PORT: "5432"
+      AGENTFLOW_DATABASE_USER: "agentflow"
+      AGENTFLOW_DATABASE_PASSWORD: "agentflow_secret"
+      AGENTFLOW_DATABASE_NAME: "agentflow"
+      # Qdrant 配置
+      AGENTFLOW_QDRANT_HOST: "qdrant"
+      AGENTFLOW_QDRANT_PORT: "6334"
+      # 日志配置
+      AGENTFLOW_LOG_LEVEL: "info"
+      AGENTFLOW_LOG_FORMAT: "json"
+    volumes:
+      - ./config:/app/config:ro
+      - agentflow_data:/app/data
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      qdrant:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    networks:
+      - agentflow-network
+
+  # ---------------------------------------------------------------------------
+  # 🔴 Redis - 短期记忆缓存
+  # ---------------------------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    container_name: agentflow-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - agentflow-network
+
+  # ---------------------------------------------------------------------------
+  # 🐘 PostgreSQL - 元数据存储
+  # ---------------------------------------------------------------------------
+  postgres:
+    image: postgres:16-alpine
+    container_name: agentflow-postgres
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: agentflow
+      POSTGRES_PASSWORD: agentflow_secret
+      POSTGRES_DB: agentflow
+      PGDATA: /var/lib/postgresql/data/pgdata
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U agentflow -d agentflow"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - agentflow-network
+
+  # ---------------------------------------------------------------------------
+  # 🔷 Qdrant - 向量存储
+  # ---------------------------------------------------------------------------
+  qdrant:
+    image: qdrant/qdrant:v1.7.4
+    container_name: agentflow-qdrant
+    restart: unless-stopped
+    ports:
+      - "6333:6333"   # REST API
+      - "6334:6334"   # gRPC
+    volumes:
+      - qdrant_data:/qdrant/storage
+    environment:
+      QDRANT__SERVICE__GRPC_PORT: "6334"
+    networks:
+      - agentflow-network
+
+  # ---------------------------------------------------------------------------
+  # 📊 Prometheus - 指标收集（可选）
+  # ---------------------------------------------------------------------------
+  prometheus:
+    image: prom/prometheus:v2.48.0
+    container_name: agentflow-prometheus
+    restart: unless-stopped
+    profiles:
+      - monitoring
+    ports:
+      - "9092:9090"
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.enable-lifecycle'
+    volumes:
+      - ./deployments/docker/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    networks:
+      - agentflow-network
+
+  # ---------------------------------------------------------------------------
+  # 📈 Grafana - 可视化仪表盘（可选）
+  # ---------------------------------------------------------------------------
+  grafana:
+    image: grafana/grafana:10.2.2
+    container_name: agentflow-grafana
+    restart: unless-stopped
+    profiles:
+      - monitoring
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - grafana_data:/var/lib/grafana
+    depends_on:
+      - prometheus
+    networks:
+      - agentflow-network
+
+# =============================================================================
+# 📦 数据卷
+# =============================================================================
+volumes:
+  agentflow_data:
+    driver: local
+  redis_data:
+    driver: local
+  postgres_data:
+    driver: local
+  qdrant_data:
+    driver: local
+  prometheus_data:
+    driver: local
+  grafana_data:
+    driver: local
+
+# =============================================================================
+# 🌐 网络
+# =============================================================================
+networks:
+  agentflow-network:
+    driver: bridge
+    name: agentflow-network
