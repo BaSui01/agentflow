@@ -1,0 +1,158 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "agentflow.fullname" . }}
+  labels:
+    {{- include "agentflow.labels" . | nindent 4 }}
+spec:
+  {{- if not .Values.autoscaling.enabled }}
+  replicas: {{ .Values.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "agentflow.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      labels:
+        {{- include "agentflow.labels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "agentflow.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      {{- with .Values.initContainers }}
+      initContainers:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: {{ .Chart.Name }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args:
+            - serve
+            - --config
+            - /app/config/config.yaml
+          ports:
+            - name: http
+              containerPort: {{ .Values.config.server.httpPort }}
+              protocol: TCP
+            - name: grpc
+              containerPort: {{ .Values.config.server.grpcPort }}
+              protocol: TCP
+            - name: metrics
+              containerPort: {{ .Values.config.server.metricsPort }}
+              protocol: TCP
+          env:
+            # Redis 配置
+            - name: AGENTFLOW_REDIS_ADDR
+              value: "{{ include "agentflow.redisHost" . }}:{{ .Values.redis.external.port | default 6379 }}"
+            {{- if .Values.redis.auth.enabled }}
+            - name: AGENTFLOW_REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "agentflow.fullname" . }}-redis
+                  key: redis-password
+            {{- end }}
+            # PostgreSQL 配置
+            {{- if or .Values.postgresql.enabled .Values.postgresql.external.host }}
+            - name: AGENTFLOW_DATABASE_HOST
+              value: {{ include "agentflow.postgresqlHost" . | quote }}
+            - name: AGENTFLOW_DATABASE_PORT
+              value: {{ .Values.postgresql.external.port | default 5432 | quote }}
+            - name: AGENTFLOW_DATABASE_USER
+              value: {{ .Values.postgresql.auth.username | default .Values.postgresql.external.user | quote }}
+            - name: AGENTFLOW_DATABASE_NAME
+              value: {{ .Values.postgresql.auth.database | default .Values.postgresql.external.database | quote }}
+            - name: AGENTFLOW_DATABASE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "agentflow.fullname" . }}-postgresql
+                  key: password
+            {{- end }}
+            # Qdrant 配置
+            {{- if or .Values.qdrant.enabled .Values.qdrant.external.host }}
+            - name: AGENTFLOW_QDRANT_HOST
+              value: {{ include "agentflow.qdrantHost" . | quote }}
+            - name: AGENTFLOW_QDRANT_PORT
+              value: {{ .Values.qdrant.external.port | default 6334 | quote }}
+            {{- end }}
+            # LLM API Key
+            {{- if or .Values.secrets.llmApiKey .Values.secrets.existingSecret }}
+            - name: AGENTFLOW_LLM_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.existingSecret | default (printf "%s-secrets" (include "agentflow.fullname" .)) }}
+                  key: {{ .Values.secrets.llmApiKeyKey }}
+            {{- end }}
+            {{- with .Values.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          {{- with .Values.extraEnvFrom }}
+          envFrom:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          livenessProbe:
+            {{- toYaml .Values.livenessProbe | nindent 12 }}
+          readinessProbe:
+            {{- toYaml .Values.readinessProbe | nindent 12 }}
+          {{- if .Values.startupProbe }}
+          startupProbe:
+            {{- toYaml .Values.startupProbe | nindent 12 }}
+          {{- end }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            - name: config
+              mountPath: /app/config
+              readOnly: true
+            - name: data
+              mountPath: /app/data
+            {{- with .Values.extraVolumeMounts }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+        {{- with .Values.sidecars }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      volumes:
+        - name: config
+          configMap:
+            name: {{ include "agentflow.fullname" . }}-config
+        - name: data
+          {{- if .Values.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ include "agentflow.fullname" . }}-data
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
+        {{- with .Values.extraVolumes }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.topologySpreadConstraints }}
+      topologySpreadConstraints:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

@@ -1,0 +1,330 @@
+# =============================================================================
+# 🚀 AgentFlow Helm Chart Values
+# =============================================================================
+# 默认配置值，可通过 --set 或 -f values.yaml 覆盖
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# 📦 基础配置
+# -----------------------------------------------------------------------------
+replicaCount: 1
+
+image:
+  repository: agentflow
+  pullPolicy: IfNotPresent
+  # 覆盖 Chart appVersion 中的镜像标签
+  tag: ""
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+# -----------------------------------------------------------------------------
+# 🔐 服务账户
+# -----------------------------------------------------------------------------
+serviceAccount:
+  # 是否创建服务账户
+  create: true
+  # 注解
+  annotations: {}
+  # 服务账户名称（留空则使用 fullname 模板生成）
+  name: ""
+
+# -----------------------------------------------------------------------------
+# 🏷️ Pod 配置
+# -----------------------------------------------------------------------------
+podAnnotations: {}
+
+podLabels: {}
+
+podSecurityContext:
+  fsGroup: 1000
+
+securityContext:
+  capabilities:
+    drop:
+      - ALL
+  readOnlyRootFilesystem: true
+  runAsNonRoot: true
+  runAsUser: 1000
+
+# -----------------------------------------------------------------------------
+# 🌐 服务配置
+# -----------------------------------------------------------------------------
+service:
+  type: ClusterIP
+
+  http:
+    port: 8080
+    targetPort: 8080
+
+  grpc:
+    port: 9090
+    targetPort: 9090
+
+  metrics:
+    port: 9091
+    targetPort: 9091
+
+# -----------------------------------------------------------------------------
+# 🚪 Ingress 配置
+# -----------------------------------------------------------------------------
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+    # kubernetes.io/ingress.class: nginx
+    # kubernetes.io/tls-acme: "true"
+  hosts:
+    - host: agentflow.local
+      paths:
+        - path: /
+          pathType: ImplementationSpecific
+  tls: []
+  #  - secretName: agentflow-tls
+  #    hosts:
+  #      - agentflow.local
+
+# -----------------------------------------------------------------------------
+# 💪 资源配置
+# -----------------------------------------------------------------------------
+resources:
+  limits:
+    cpu: 1000m
+    memory: 1Gi
+  requests:
+    cpu: 100m
+    memory: 256Mi
+
+# -----------------------------------------------------------------------------
+# 📈 自动扩缩容
+# -----------------------------------------------------------------------------
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 80
+  targetMemoryUtilizationPercentage: 80
+
+# -----------------------------------------------------------------------------
+# 🔄 Pod 中断预算
+# -----------------------------------------------------------------------------
+podDisruptionBudget:
+  enabled: false
+  minAvailable: 1
+  # maxUnavailable: 1
+
+# -----------------------------------------------------------------------------
+# 📍 调度配置
+# -----------------------------------------------------------------------------
+nodeSelector: {}
+
+tolerations: []
+
+affinity: {}
+
+# 拓扑分布约束
+topologySpreadConstraints: []
+
+# -----------------------------------------------------------------------------
+# 🏥 健康检查
+# -----------------------------------------------------------------------------
+livenessProbe:
+  httpGet:
+    path: /health
+    port: http
+  initialDelaySeconds: 10
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 3
+
+readinessProbe:
+  httpGet:
+    path: /ready
+    port: http
+  initialDelaySeconds: 5
+  periodSeconds: 5
+  timeoutSeconds: 3
+  failureThreshold: 3
+
+startupProbe:
+  httpGet:
+    path: /health
+    port: http
+  initialDelaySeconds: 5
+  periodSeconds: 5
+  timeoutSeconds: 3
+  failureThreshold: 30
+
+# -----------------------------------------------------------------------------
+# ⚙️ 应用配置
+# -----------------------------------------------------------------------------
+config:
+  # 服务器配置
+  server:
+    httpPort: 8080
+    grpcPort: 9090
+    metricsPort: 9091
+    readTimeout: "30s"
+    writeTimeout: "30s"
+    shutdownTimeout: "15s"
+
+  # Agent 默认配置
+  agent:
+    name: "default-agent"
+    model: "gpt-4"
+    maxIterations: 10
+    temperature: 0.7
+    maxTokens: 4096
+    timeout: "5m"
+    streamEnabled: true
+    memory:
+      enabled: true
+      type: "buffer"
+      maxMessages: 100
+      tokenLimit: 8000
+
+  # 日志配置
+  log:
+    level: "info"
+    format: "json"
+    enableCaller: true
+
+  # 遥测配置
+  telemetry:
+    enabled: false
+    otlpEndpoint: ""
+    serviceName: "agentflow"
+    sampleRate: 0.1
+
+# -----------------------------------------------------------------------------
+# 🔑 密钥配置
+# -----------------------------------------------------------------------------
+secrets:
+  # LLM API Key（建议使用外部 Secret）
+  llmApiKey: ""
+  # 或引用已存在的 Secret
+  existingSecret: ""
+  # Secret 中的 key 名称
+  llmApiKeyKey: "llm-api-key"
+
+# -----------------------------------------------------------------------------
+# 🔴 Redis 配置
+# -----------------------------------------------------------------------------
+redis:
+  # 是否启用内置 Redis
+  enabled: true
+
+  # 外部 Redis 配置（当 enabled: false 时使用）
+  external:
+    host: ""
+    port: 6379
+    password: ""
+    db: 0
+
+  # Bitnami Redis Chart 配置
+  architecture: standalone
+  auth:
+    enabled: false
+  master:
+    persistence:
+      enabled: true
+      size: 1Gi
+
+# -----------------------------------------------------------------------------
+# 🐘 PostgreSQL 配置
+# -----------------------------------------------------------------------------
+postgresql:
+  # 是否启用内置 PostgreSQL
+  enabled: false
+
+  # 外部 PostgreSQL 配置（当 enabled: false 时使用）
+  external:
+    host: ""
+    port: 5432
+    user: "agentflow"
+    password: ""
+    database: "agentflow"
+    sslMode: "disable"
+
+  # Bitnami PostgreSQL Chart 配置
+  auth:
+    username: agentflow
+    password: ""
+    database: agentflow
+  primary:
+    persistence:
+      enabled: true
+      size: 8Gi
+
+# -----------------------------------------------------------------------------
+# 🔷 Qdrant 配置
+# -----------------------------------------------------------------------------
+qdrant:
+  # 是否启用 Qdrant
+  enabled: false
+
+  # 外部 Qdrant 配置
+  external:
+    host: ""
+    port: 6334
+    apiKey: ""
+    collection: "agentflow_vectors"
+
+# -----------------------------------------------------------------------------
+# 📊 监控配置
+# -----------------------------------------------------------------------------
+metrics:
+  # 是否启用 Prometheus 指标
+  enabled: true
+
+  # ServiceMonitor（需要 Prometheus Operator）
+  serviceMonitor:
+    enabled: false
+    interval: 30s
+    scrapeTimeout: 10s
+    labels: {}
+    annotations: {}
+
+# -----------------------------------------------------------------------------
+# 📁 持久化存储
+# -----------------------------------------------------------------------------
+persistence:
+  enabled: false
+  storageClass: ""
+  accessModes:
+    - ReadWriteOnce
+  size: 1Gi
+  annotations: {}
+
+# -----------------------------------------------------------------------------
+# 🔧 额外配置
+# -----------------------------------------------------------------------------
+# 额外的环境变量
+extraEnv: []
+  # - name: EXTRA_VAR
+  #   value: "value"
+
+# 额外的环境变量（从 ConfigMap/Secret）
+extraEnvFrom: []
+  # - configMapRef:
+  #     name: extra-config
+  # - secretRef:
+  #     name: extra-secret
+
+# 额外的卷
+extraVolumes: []
+  # - name: extra-volume
+  #   configMap:
+  #     name: extra-config
+
+# 额外的卷挂载
+extraVolumeMounts: []
+  # - name: extra-volume
+  #   mountPath: /etc/extra
+
+# 初始化容器
+initContainers: []
+
+# Sidecar 容器
+sidecars: []

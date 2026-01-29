@@ -1,0 +1,49 @@
+apiVersion: v2
+name: agentflow
+description: AgentFlow - AI Agent Framework for building intelligent applications
+type: application
+
+# Chart 版本（每次修改 Chart 时递增）
+version: 0.1.0
+
+# 应用版本
+appVersion: "1.0.0"
+
+# 关键词
+keywords:
+  - ai
+  - agent
+  - llm
+  - framework
+  - golang
+
+# 主页
+home: https://github.com/BaSui01/agentflow
+
+# 源码仓库
+sources:
+  - https://github.com/BaSui01/agentflow
+
+# 维护者
+maintainers:
+  - name: BaSui01
+    email: basui@example.com
+
+# 图标（可选）
+# icon: https://example.com/icon.png
+
+# 依赖（可选）
+dependencies:
+  - name: redis
+    version: "18.x.x"
+    repository: "https://charts.bitnami.com/bitnami"
+    condition: redis.enabled
+  - name: postgresql
+    version: "13.x.x"
+    repository: "https://charts.bitnami.com/bitnami"
+    condition: postgresql.enabled
+
+# 注解
+annotations:
+  category: AI/ML
+  licenses: MIT
