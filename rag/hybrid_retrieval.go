@@ -69,10 +69,12 @@ type HybridRetriever struct {
 	config    HybridRetrievalConfig
 	documents []Document
 
-	// BM25 统计
-	avgDocLen float64
-	docLens   []int
-	idf       map[string]float64
+	// BM25 统计（预计算，提升性能）
+	avgDocLen    float64
+	docLens      []int
+	idf          map[string]float64
+	docTermFreqs []map[string]int // 预计算的文档词频
+	docIDIndex   map[string]int   // 文档 ID 到索引的映射
 
 	// 向量存储（可选）
 	vectorStore VectorStore
@@ -192,24 +194,35 @@ func (r *HybridRetriever) Retrieve(ctx context.Context, query string, queryEmbed
 }
 
 // computeBM25Stats 计算 BM25 统计信息
+// 🚀 性能优化：预计算所有文档的词频，避免检索时重复分词
 func (r *HybridRetriever) computeBM25Stats() {
 	totalLen := 0
 	r.docLens = make([]int, len(r.documents))
+	r.docTermFreqs = make([]map[string]int, len(r.documents)) // 预计算词频
+	r.docIDIndex = make(map[string]int, len(r.documents))     // 文档 ID 索引
 	termDocCount := make(map[string]int)
 
 	for i, doc := range r.documents {
+		// 建立文档 ID 到索引的映射（O(1) 查找）
+		r.docIDIndex[doc.ID] = i
+
+		// 分词并计算词频（只做一次！）
 		terms := r.tokenize(doc.Content)
 		r.docLens[i] = len(terms)
 		totalLen += len(terms)
 
-		// 统计包含每个词的文档数
-		seen := make(map[string]bool)
+		// 预计算该文档的词频
+		termFreq := make(map[string]int, len(terms)/2) // 预估容量，减少 map 扩容
+		seen := make(map[string]bool, len(terms)/2)
 		for _, term := range terms {
+			termFreq[term]++
+			// 统计包含每个词的文档数（用于 IDF）
 			if !seen[term] {
 				termDocCount[term]++
 				seen[term] = true
 			}
 		}
+		r.docTermFreqs[i] = termFreq
 	}
 
 	// 计算平均文档长度
@@ -225,15 +238,17 @@ func (r *HybridRetriever) computeBM25Stats() {
 }
 
 // bm25Retrieve BM25 检索
+// 🚀 性能优化：使用预计算的词频，避免每次检索都重新分词
+// 复杂度从 O(n*m) 降低到 O(n)，其中 n=文档数，m=平均文档长度
 func (r *HybridRetriever) bm25Retrieve(query string) map[string]float64 {
 	queryTerms := r.tokenize(query)
-	scores := make(map[string]float64)
+	scores := make(map[string]float64, len(r.documents))
 
 	for i, doc := range r.documents {
-		docTerms := r.tokenize(doc.Content)
-		termFreq := make(map[string]int)
-		for _, term := range docTerms {
-			termFreq[term]++
+		// 🎯 直接使用预计算的词频，不再重新分词！
+		termFreq := r.docTermFreqs[i]
+		if termFreq == nil {
+			continue
 		}
 
 		score := 0.0
@@ -430,7 +445,17 @@ func (r *HybridRetriever) tokenize(text string) []string {
 }
 
 // getDocumentByID 根据 ID 获取文档
+// 🚀 性能优化：使用索引实现 O(1) 查找，替代原来的 O(n) 线性扫描
 func (r *HybridRetriever) getDocumentByID(id string) *Document {
+	// 优先使用索引（O(1) 查找）
+	if r.docIDIndex != nil {
+		if idx, ok := r.docIDIndex[id]; ok && idx < len(r.documents) {
+			return &r.documents[idx]
+		}
+		return nil
+	}
+
+	// 回退到线性扫描（兼容未建立索引的情况）
 	for i := range r.documents {
 		if r.documents[i].ID == id {
 			return &r.documents[i]
