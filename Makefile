@@ -115,9 +115,70 @@ test-short: ## 运行快速测试（跳过长时间测试）
 test-cover: ## 运行测试并生成覆盖率报告
 	@echo "🧪 Running tests with coverage..."
 	@mkdir -p $(BUILD_DIR)
-	$(GO) test ./... -v -race -coverprofile=$(BUILD_DIR)/coverage.out
+	$(GO) test ./... -v -race -covermode=atomic -coverprofile=$(BUILD_DIR)/coverage.out
 	$(GO) tool cover -html=$(BUILD_DIR)/coverage.out -o $(BUILD_DIR)/coverage.html
 	@echo "✅ Coverage report: $(BUILD_DIR)/coverage.html"
+
+.PHONY: coverage
+coverage: test-cover ## 生成覆盖率报告（test-cover 的别名）
+
+.PHONY: coverage-func
+coverage-func: ## 显示函数级别的覆盖率统计
+	@echo "📊 Function coverage report..."
+	@mkdir -p $(BUILD_DIR)
+	@if [ ! -f $(BUILD_DIR)/coverage.out ]; then \
+		$(GO) test ./... -covermode=atomic -coverprofile=$(BUILD_DIR)/coverage.out; \
+	fi
+	$(GO) tool cover -func=$(BUILD_DIR)/coverage.out
+	@echo ""
+	@echo "📈 Total coverage:"
+	@$(GO) tool cover -func=$(BUILD_DIR)/coverage.out | grep total | awk '{print $$3}'
+
+.PHONY: coverage-html
+coverage-html: ## 在浏览器中打开覆盖率报告
+	@echo "🌐 Opening coverage report in browser..."
+	@mkdir -p $(BUILD_DIR)
+	@if [ ! -f $(BUILD_DIR)/coverage.out ]; then \
+		$(GO) test ./... -covermode=atomic -coverprofile=$(BUILD_DIR)/coverage.out; \
+	fi
+	$(GO) tool cover -html=$(BUILD_DIR)/coverage.out -o $(BUILD_DIR)/coverage.html
+	@echo "✅ Coverage report generated: $(BUILD_DIR)/coverage.html"
+	@if command -v xdg-open >/dev/null 2>&1; then \
+		xdg-open $(BUILD_DIR)/coverage.html; \
+	elif command -v open >/dev/null 2>&1; then \
+		open $(BUILD_DIR)/coverage.html; \
+	elif command -v start >/dev/null 2>&1; then \
+		start $(BUILD_DIR)/coverage.html; \
+	else \
+		echo "📂 Please open $(BUILD_DIR)/coverage.html manually"; \
+	fi
+
+.PHONY: coverage-check
+coverage-check: ## 检查覆盖率是否达到阈值 (默认 24%)
+	@echo "🔍 Checking coverage threshold..."
+	@mkdir -p $(BUILD_DIR)
+	@$(GO) test ./... -covermode=atomic -coverprofile=$(BUILD_DIR)/coverage.out
+	@total=$$($(GO) tool cover -func=$(BUILD_DIR)/coverage.out | grep total | awk '{gsub(/%/,"",$$3); print $$3}'); \
+	threshold=$${COVERAGE_THRESHOLD:-24.0}; \
+	echo "📊 Current coverage: $${total}%"; \
+	echo "📏 Threshold: $${threshold}%"; \
+	if [ $$(echo "$${total} < $${threshold}" | bc -l) -eq 1 ]; then \
+		echo "❌ Coverage $${total}% is below threshold $${threshold}%"; \
+		exit 1; \
+	else \
+		echo "✅ Coverage $${total}% meets threshold $${threshold}%"; \
+	fi
+
+.PHONY: coverage-badge
+coverage-badge: ## 生成覆盖率徽章数据
+	@echo "🏷️ Generating coverage badge data..."
+	@mkdir -p $(BUILD_DIR)
+	@if [ ! -f $(BUILD_DIR)/coverage.out ]; then \
+		$(GO) test ./... -covermode=atomic -coverprofile=$(BUILD_DIR)/coverage.out; \
+	fi
+	@total=$$($(GO) tool cover -func=$(BUILD_DIR)/coverage.out | grep total | awk '{gsub(/%/,"",$$3); print $$3}'); \
+	echo "{\"coverage\": $${total}}" > $(BUILD_DIR)/coverage.json
+	@echo "✅ Coverage badge data: $(BUILD_DIR)/coverage.json"
 
 .PHONY: test-e2e
 test-e2e: ## 运行 E2E 测试
@@ -339,6 +400,151 @@ info: ## 显示项目信息
 	@echo "Git Commit: $(GIT_COMMIT)"
 	@echo "Go Version: $(shell $(GO) version)"
 	@echo ""
+
+# -----------------------------------------------------------------------------
+# 📚 API 文档目标
+# -----------------------------------------------------------------------------
+.PHONY: docs
+docs: docs-swagger ## 生成 API 文档（swagger 的别名）
+
+.PHONY: docs-swagger
+docs-swagger: ## 生成 Swagger/OpenAPI 文档
+	@echo "📚 Generating Swagger documentation..."
+	@if command -v swag >/dev/null 2>&1; then \
+		swag init -g cmd/agentflow/main.go -o api --parseDependency --parseInternal; \
+		echo "✅ Swagger docs generated in api/"; \
+	else \
+		echo "⚠️  swag not installed, using static OpenAPI spec"; \
+		echo "   Install swag: go install github.com/swaggo/swag/cmd/swag@latest"; \
+		echo "✅ Static OpenAPI spec available at api/openapi.yaml"; \
+	fi
+
+.PHONY: docs-serve
+docs-serve: ## 启动 Swagger UI 服务器
+	@echo "🌐 Starting Swagger UI server..."
+	@if command -v docker >/dev/null 2>&1; then \
+		docker run --rm -p 8081:8080 \
+			-e SWAGGER_JSON=/api/openapi.yaml \
+			-v $(PWD)/api:/api \
+			swaggerapi/swagger-ui; \
+	else \
+		echo "⚠️  Docker not available"; \
+		echo "   View OpenAPI spec at: api/openapi.yaml"; \
+		echo "   Or use online editor: https://editor.swagger.io"; \
+	fi
+
+.PHONY: docs-validate
+docs-validate: ## 验证 OpenAPI 规范
+	@echo "🔍 Validating OpenAPI specification..."
+	@if command -v swagger-cli >/dev/null 2>&1; then \
+		swagger-cli validate api/openapi.yaml; \
+		echo "✅ OpenAPI spec is valid"; \
+	elif command -v npx >/dev/null 2>&1; then \
+		npx @apidevtools/swagger-cli validate api/openapi.yaml; \
+		echo "✅ OpenAPI spec is valid"; \
+	else \
+		echo "⚠️  swagger-cli not available"; \
+		echo "   Install: npm install -g @apidevtools/swagger-cli"; \
+		echo "   Or validate online: https://editor.swagger.io"; \
+	fi
+
+.PHONY: docs-generate-client
+docs-generate-client: ## 从 OpenAPI 生成客户端代码
+	@echo "⚙️  Generating client from OpenAPI spec..."
+	@if command -v openapi-generator-cli >/dev/null 2>&1; then \
+		openapi-generator-cli generate -i api/openapi.yaml -g go -o api/client/go; \
+		echo "✅ Go client generated in api/client/go/"; \
+	elif command -v docker >/dev/null 2>&1; then \
+		docker run --rm -v $(PWD):/local openapitools/openapi-generator-cli generate \
+			-i /local/api/openapi.yaml \
+			-g go \
+			-o /local/api/client/go; \
+		echo "✅ Go client generated in api/client/go/"; \
+	else \
+		echo "⚠️  openapi-generator-cli not available"; \
+		echo "   Install: npm install -g @openapitools/openapi-generator-cli"; \
+	fi
+
+.PHONY: install-swag
+install-swag: ## 安装 swag 工具
+	@echo "📦 Installing swag..."
+	$(GO) install github.com/swaggo/swag/cmd/swag@latest
+	@echo "✅ swag installed"
+
+# -----------------------------------------------------------------------------
+# 🗄️ 数据库迁移目标
+# -----------------------------------------------------------------------------
+MIGRATE_CMD := $(BUILD_DIR)/$(BINARY_NAME) migrate
+
+.PHONY: migrate-up
+migrate-up: build ## 运行所有待执行的数据库迁移
+	@echo "🗄️ Running database migrations..."
+	$(MIGRATE_CMD) up
+	@echo "✅ Migrations complete"
+
+.PHONY: migrate-down
+migrate-down: build ## 回滚最后一次数据库迁移
+	@echo "🗄️ Rolling back last migration..."
+	$(MIGRATE_CMD) down
+	@echo "✅ Rollback complete"
+
+.PHONY: migrate-status
+migrate-status: build ## 显示数据库迁移状态
+	@echo "🗄️ Migration status:"
+	$(MIGRATE_CMD) status
+
+.PHONY: migrate-version
+migrate-version: build ## 显示当前数据库迁移版本
+	@echo "🗄️ Current migration version:"
+	$(MIGRATE_CMD) version
+
+.PHONY: migrate-reset
+migrate-reset: build ## 回滚所有数据库迁移
+	@echo "🗄️ Resetting all migrations..."
+	$(MIGRATE_CMD) reset
+	@echo "✅ Reset complete"
+
+.PHONY: migrate-goto
+migrate-goto: build ## 迁移到指定版本 (使用 VERSION=n)
+ifndef VERSION
+	@echo "❌ Please specify VERSION, e.g., make migrate-goto VERSION=1"
+	@exit 1
+endif
+	@echo "🗄️ Migrating to version $(VERSION)..."
+	$(MIGRATE_CMD) goto $(VERSION)
+	@echo "✅ Migration complete"
+
+.PHONY: migrate-force
+migrate-force: build ## 强制设置迁移版本 (使用 VERSION=n)
+ifndef VERSION
+	@echo "❌ Please specify VERSION, e.g., make migrate-force VERSION=0"
+	@exit 1
+endif
+	@echo "🗄️ Forcing version to $(VERSION)..."
+	$(MIGRATE_CMD) force $(VERSION)
+	@echo "✅ Version forced"
+
+.PHONY: migrate-create
+migrate-create: ## 创建新的迁移文件 (使用 NAME=migration_name)
+ifndef NAME
+	@echo "❌ Please specify NAME, e.g., make migrate-create NAME=add_users_table"
+	@exit 1
+endif
+	@echo "🗄️ Creating migration files..."
+	@TIMESTAMP=$$(date +%Y%m%d%H%M%S); \
+	for db in postgres mysql sqlite; do \
+		touch migrations/$$db/$${TIMESTAMP}_$(NAME).up.sql; \
+		touch migrations/$$db/$${TIMESTAMP}_$(NAME).down.sql; \
+		echo "Created: migrations/$$db/$${TIMESTAMP}_$(NAME).up.sql"; \
+		echo "Created: migrations/$$db/$${TIMESTAMP}_$(NAME).down.sql"; \
+	done
+	@echo "✅ Migration files created"
+
+.PHONY: install-migrate
+install-migrate: ## 安装 golang-migrate CLI 工具
+	@echo "📦 Installing golang-migrate..."
+	$(GO) install -tags 'postgres mysql sqlite3' github.com/golang-migrate/migrate/v4/cmd/migrate@latest
+	@echo "✅ golang-migrate installed"
 
 # -----------------------------------------------------------------------------
 # 🎯 CI/CD 目标

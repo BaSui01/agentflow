@@ -47,6 +47,39 @@ jobs:
           threshold="30.0"
           awk -v total="${total}" -v threshold="${threshold}" 'BEGIN { exit (total+0 < threshold+0) }'
 
+      # -------------------------------------------------------------------------
+      # 上传覆盖率到 Codecov
+      # -------------------------------------------------------------------------
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: ./coverage.out,./coverage.key.out
+          flags: unittests
+          name: codecov-agentflow
+          fail_ci_if_error: false
+          verbose: true
+
+      - name: Generate coverage report artifact
+        run: |
+          go tool cover -html=coverage.out -o coverage.html
+          go tool cover -func=coverage.out > coverage-summary.txt
+          echo "## Coverage Summary" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          cat coverage-summary.txt >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
+      - name: Upload coverage artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: |
+            coverage.out
+            coverage.key.out
+            coverage.html
+            coverage-summary.txt
+          retention-days: 30
+
       - name: Race
         env:
           CGO_ENABLED: "1"

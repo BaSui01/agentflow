@@ -1,9 +1,9 @@
 # =============================================================================
-# 🐳 AgentFlow Docker Compose - 本地开发环境
+# AgentFlow Docker Compose - Local Development Environment
 # =============================================================================
-# 包含完整的开发环境：主服务 + Redis + PostgreSQL + Qdrant + 监控
+# Complete development environment: Main service + Redis + PostgreSQL + Qdrant + Weaviate + Monitoring
 #
-# 使用方法:
+# Usage:
 #   docker-compose up -d              # 启动所有服务
 #   docker-compose up -d agentflow    # 仅启动主服务
 #   docker-compose logs -f agentflow  # 查看日志
@@ -115,7 +115,7 @@ services:
       - agentflow-network
 
   # ---------------------------------------------------------------------------
-  # 🔷 Qdrant - 向量存储
+  # Qdrant - Vector Store
   # ---------------------------------------------------------------------------
   qdrant:
     image: qdrant/qdrant:v1.7.4
@@ -132,7 +132,149 @@ services:
       - agentflow-network
 
   # ---------------------------------------------------------------------------
-  # 📊 Prometheus - 指标收集（可选）
+  # Weaviate - Vector Store (Alternative)
+  # ---------------------------------------------------------------------------
+  # Weaviate is an open-source vector database with built-in:
+  # - Vector search (HNSW)
+  # - BM25 keyword search
+  # - Hybrid search (vector + BM25)
+  # - GraphQL API
+  #
+  # Enable with: docker-compose --profile weaviate up -d
+  # ---------------------------------------------------------------------------
+  weaviate:
+    image: semitechnologies/weaviate:1.24.1
+    container_name: agentflow-weaviate
+    restart: unless-stopped
+    profiles:
+      - weaviate
+    ports:
+      - "8081:8080"   # REST/GraphQL API
+      - "50051:50051" # gRPC
+    environment:
+      QUERY_DEFAULTS_LIMIT: 25
+      AUTHENTICATION_ANONYMOUS_ACCESS_ENABLED: "true"
+      PERSISTENCE_DATA_PATH: "/var/lib/weaviate"
+      DEFAULT_VECTORIZER_MODULE: "none"
+      ENABLE_MODULES: ""
+      CLUSTER_HOSTNAME: "node1"
+      # Performance tuning
+      LIMIT_RESOURCES: "false"
+      GOMAXPROCS: "4"
+      # Logging
+      LOG_LEVEL: "info"
+      LOG_FORMAT: "json"
+    volumes:
+      - weaviate_data:/var/lib/weaviate
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/v1/.well-known/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - agentflow-network
+
+  # ---------------------------------------------------------------------------
+  # Milvus - Vector Store (Alternative)
+  # ---------------------------------------------------------------------------
+  # Milvus is a high-performance vector database with:
+  # - Multiple index types (IVF_FLAT, HNSW, IVF_SQ8, IVF_PQ)
+  # - GPU acceleration support
+  # - Distributed architecture
+  # - REST API (v2)
+  #
+  # Enable with: docker-compose --profile milvus up -d
+  #
+  # Note: Milvus requires etcd and MinIO for metadata and object storage.
+  # This is a standalone deployment suitable for development/testing.
+  # For production, consider using Milvus Operator on Kubernetes.
+  # ---------------------------------------------------------------------------
+  etcd:
+    image: quay.io/coreos/etcd:v3.5.11
+    container_name: agentflow-milvus-etcd
+    restart: unless-stopped
+    profiles:
+      - milvus
+    environment:
+      ETCD_AUTO_COMPACTION_MODE: revision
+      ETCD_AUTO_COMPACTION_RETENTION: "1000"
+      ETCD_QUOTA_BACKEND_BYTES: "4294967296"
+      ETCD_SNAPSHOT_COUNT: "50000"
+    volumes:
+      - milvus_etcd_data:/etcd
+    command: etcd -advertise-client-urls=http://127.0.0.1:2379 -listen-client-urls http://0.0.0.0:2379 --data-dir /etcd
+    healthcheck:
+      test: ["CMD", "etcdctl", "endpoint", "health"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+    networks:
+      - agentflow-network
+
+  minio:
+    image: minio/minio:RELEASE.2024-01-16T16-07-38Z
+    container_name: agentflow-milvus-minio
+    restart: unless-stopped
+    profiles:
+      - milvus
+    environment:
+      MINIO_ACCESS_KEY: minioadmin
+      MINIO_SECRET_KEY: minioadmin
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - milvus_minio_data:/minio_data
+    command: minio server /minio_data --console-address ":9001"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+    networks:
+      - agentflow-network
+
+  milvus:
+    image: milvusdb/milvus:v2.3.7
+    container_name: agentflow-milvus
+    restart: unless-stopped
+    profiles:
+      - milvus
+    command: ["milvus", "run", "standalone"]
+    security_opt:
+      - seccomp:unconfined
+    environment:
+      ETCD_ENDPOINTS: etcd:2379
+      MINIO_ADDRESS: minio:9000
+      MINIO_ACCESS_KEY_ID: minioadmin
+      MINIO_SECRET_ACCESS_KEY: minioadmin
+      # Common configuration
+      COMMON_STORAGETYPE: minio
+      # Performance tuning
+      QUERYNODE_GRACEFULTIME: "5000"
+      QUERYCOORD_ENABLEACTIVESTANDBY: "false"
+    volumes:
+      - milvus_data:/var/lib/milvus
+    ports:
+      - "19530:19530"  # gRPC/REST API
+      - "9091:9091"    # Metrics (conflicts with agentflow, change if needed)
+    depends_on:
+      etcd:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9091/healthz"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+      start_period: 90s
+    networks:
+      - agentflow-network
+
+  # ---------------------------------------------------------------------------
+  # Prometheus - Metrics Collection (Optional)
   # ---------------------------------------------------------------------------
   prometheus:
     image: prom/prometheus:v2.48.0
@@ -175,7 +317,7 @@ services:
       - agentflow-network
 
 # =============================================================================
-# 📦 数据卷
+# Volumes
 # =============================================================================
 volumes:
   agentflow_data:
@@ -186,13 +328,21 @@ volumes:
     driver: local
   qdrant_data:
     driver: local
+  weaviate_data:
+    driver: local
+  milvus_data:
+    driver: local
+  milvus_etcd_data:
+    driver: local
+  milvus_minio_data:
+    driver: local
   prometheus_data:
     driver: local
   grafana_data:
     driver: local
 
 # =============================================================================
-# 🌐 网络
+# Networks
 # =============================================================================
 networks:
   agentflow-network:
