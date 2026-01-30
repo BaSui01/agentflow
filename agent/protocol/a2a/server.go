@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/BaSui01/agentflow/agent"
+	"github.com/BaSui01/agentflow/agent/persistence"
 	"github.com/google/uuid"
 	"go.uber.org/zap"
 )
@@ -54,6 +55,7 @@ func DefaultServerConfig() *ServerConfig {
 }
 
 // HTTPServer is the default implementation of A2AServer using HTTP.
+// Supports task persistence for recovery after service restart.
 type HTTPServer struct {
 	config *ServerConfig
 	logger *zap.Logger
@@ -66,9 +68,12 @@ type HTTPServer struct {
 	agentCards   map[string]*AgentCard
 	agentCardsMu sync.RWMutex
 
-	// asyncTasks stores async task state
+	// asyncTasks stores async task state (in-memory cache)
 	asyncTasks   map[string]*asyncTask
 	asyncTasksMu sync.RWMutex
+
+	// taskStore provides persistent storage for async tasks
+	taskStore persistence.TaskStore
 
 	// cardGenerator generates agent cards from agents
 	cardGenerator *AgentCardGenerator
@@ -104,6 +109,159 @@ func NewHTTPServer(config *ServerConfig) *HTTPServer {
 		asyncTasks:    make(map[string]*asyncTask),
 		cardGenerator: NewAgentCardGenerator(),
 	}
+}
+
+// NewHTTPServerWithTaskStore creates a new HTTPServer with task persistence.
+func NewHTTPServerWithTaskStore(config *ServerConfig, taskStore persistence.TaskStore) *HTTPServer {
+	server := NewHTTPServer(config)
+	server.taskStore = taskStore
+	return server
+}
+
+// SetTaskStore sets the task store for persistence (dependency injection).
+func (s *HTTPServer) SetTaskStore(store persistence.TaskStore) {
+	s.taskStore = store
+}
+
+// RecoverTasks recovers tasks from persistent storage after service restart.
+func (s *HTTPServer) RecoverTasks(ctx context.Context) error {
+	if s.taskStore == nil {
+		return nil
+	}
+
+	s.logger.Info("recovering tasks from persistent storage")
+
+	tasks, err := s.taskStore.GetRecoverableTasks(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to get recoverable tasks: %w", err)
+	}
+
+	recovered := 0
+	for _, persistTask := range tasks {
+		// Find the agent for this task
+		s.agentsMu.RLock()
+		ag, ok := s.agents[persistTask.AgentID]
+		s.agentsMu.RUnlock()
+
+		if !ok {
+			s.logger.Warn("agent not found for task recovery",
+				zap.String("task_id", persistTask.ID),
+				zap.String("agent_id", persistTask.AgentID),
+			)
+			continue
+		}
+
+		// Convert to internal task format
+		task := s.convertFromPersistTask(persistTask)
+
+		// Add to in-memory cache
+		s.asyncTasksMu.Lock()
+		s.asyncTasks[task.ID] = task
+		s.asyncTasksMu.Unlock()
+
+		// Re-execute running tasks
+		if persistTask.Status == persistence.TaskStatusRunning {
+			execCtx, cancel := context.WithTimeout(ctx, s.config.RequestTimeout)
+			task.cancel = cancel
+			go s.executeAsyncTask(execCtx, ag, task)
+			s.logger.Info("task re-execution started",
+				zap.String("task_id", task.ID),
+			)
+		}
+
+		recovered++
+	}
+
+	s.logger.Info("task recovery completed",
+		zap.Int("recovered", recovered),
+	)
+
+	return nil
+}
+
+// convertToPersistTask converts internal task to persistence format.
+func (s *HTTPServer) convertToPersistTask(task *asyncTask) *persistence.AsyncTask {
+	var input map[string]interface{}
+	if task.Message != nil && task.Message.Payload != nil {
+		if m, ok := task.Message.Payload.(map[string]interface{}); ok {
+			input = m
+		}
+	}
+
+	persistTask := &persistence.AsyncTask{
+		ID:        task.ID,
+		AgentID:   task.AgentID,
+		Type:      "a2a_message",
+		Input:     input,
+		CreatedAt: task.CreatedAt,
+		UpdatedAt: task.UpdatedAt,
+	}
+
+	// Convert status
+	switch task.Status {
+	case "pending":
+		persistTask.Status = persistence.TaskStatusPending
+	case "processing":
+		persistTask.Status = persistence.TaskStatusRunning
+	case "completed":
+		persistTask.Status = persistence.TaskStatusCompleted
+	case "failed":
+		persistTask.Status = persistence.TaskStatusFailed
+	default:
+		persistTask.Status = persistence.TaskStatusPending
+	}
+
+	if task.Error != "" {
+		persistTask.Error = task.Error
+	}
+
+	if task.Result != nil {
+		persistTask.Result = task.Result
+	}
+
+	return persistTask
+}
+
+// convertFromPersistTask converts persistence format to internal task.
+func (s *HTTPServer) convertFromPersistTask(persistTask *persistence.AsyncTask) *asyncTask {
+	task := &asyncTask{
+		ID:        persistTask.ID,
+		AgentID:   persistTask.AgentID,
+		CreatedAt: persistTask.CreatedAt,
+		UpdatedAt: persistTask.UpdatedAt,
+	}
+
+	// Convert status
+	switch persistTask.Status {
+	case persistence.TaskStatusPending:
+		task.Status = "pending"
+	case persistence.TaskStatusRunning:
+		task.Status = "processing"
+	case persistence.TaskStatusCompleted:
+		task.Status = "completed"
+	case persistence.TaskStatusFailed:
+		task.Status = "failed"
+	default:
+		task.Status = "pending"
+	}
+
+	task.Error = persistTask.Error
+
+	if persistTask.Result != nil {
+		if result, ok := persistTask.Result.(*A2AMessage); ok {
+			task.Result = result
+		}
+	}
+
+	// Reconstruct message from input
+	if persistTask.Input != nil {
+		task.Message = &A2AMessage{
+			ID:      persistTask.ID,
+			Payload: persistTask.Input,
+		}
+	}
+
+	return task
 }
 
 // RegisterAgent registers a local agent with the server.
@@ -407,6 +565,18 @@ func (s *HTTPServer) handleAsyncMessage(w http.ResponseWriter, r *http.Request) 
 		cancel:    cancel,
 	}
 
+	// Persist task if store is configured
+	if s.taskStore != nil {
+		persistTask := s.convertToPersistTask(task)
+		if err := s.taskStore.SaveTask(r.Context(), persistTask); err != nil {
+			s.logger.Error("failed to persist task",
+				zap.String("task_id", taskID),
+				zap.Error(err),
+			)
+			// Continue even if persistence fails - task will still execute
+		}
+	}
+
 	s.asyncTasksMu.Lock()
 	s.asyncTasks[taskID] = task
 	s.asyncTasksMu.Unlock()
@@ -576,6 +746,16 @@ func (s *HTTPServer) executeAsyncTask(ctx context.Context, ag agent.Agent, task 
 	task.UpdatedAt = time.Now()
 	s.asyncTasksMu.Unlock()
 
+	// Update persistent storage
+	if s.taskStore != nil {
+		if err := s.taskStore.UpdateStatus(ctx, task.ID, persistence.TaskStatusRunning, nil, ""); err != nil {
+			s.logger.Warn("failed to update task status in store",
+				zap.String("task_id", task.ID),
+				zap.Error(err),
+			)
+		}
+	}
+
 	// Execute task
 	result, err := s.executeTask(ctx, ag, task.Message)
 
@@ -590,6 +770,24 @@ func (s *HTTPServer) executeAsyncTask(ctx context.Context, ag agent.Agent, task 
 	}
 	task.UpdatedAt = time.Now()
 	s.asyncTasksMu.Unlock()
+
+	// Update persistent storage
+	if s.taskStore != nil {
+		var status persistence.TaskStatus
+		var errMsg string
+		if err != nil {
+			status = persistence.TaskStatusFailed
+			errMsg = err.Error()
+		} else {
+			status = persistence.TaskStatusCompleted
+		}
+		if updateErr := s.taskStore.UpdateStatus(ctx, task.ID, status, result, errMsg); updateErr != nil {
+			s.logger.Warn("failed to update task status in store",
+				zap.String("task_id", task.ID),
+				zap.Error(updateErr),
+			)
+		}
+	}
 
 	s.logger.Info("async task completed",
 		zap.String("task_id", task.ID),
@@ -676,7 +874,53 @@ func (s *HTTPServer) CleanupExpiredTasks(maxAge time.Duration) int {
 		}
 	}
 
+	// Also cleanup persistent storage
+	if s.taskStore != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		persistCount, err := s.taskStore.Cleanup(ctx, maxAge)
+		if err != nil {
+			s.logger.Warn("failed to cleanup persistent task store",
+				zap.Error(err),
+			)
+		} else if persistCount > 0 {
+			s.logger.Debug("cleaned up persistent tasks",
+				zap.Int("count", persistCount),
+			)
+		}
+	}
+
 	return count
+}
+
+// StartCleanupLoop starts a background goroutine to periodically cleanup expired tasks.
+func (s *HTTPServer) StartCleanupLoop(ctx context.Context, interval time.Duration, maxAge time.Duration) {
+	go func() {
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				count := s.CleanupExpiredTasks(maxAge)
+				if count > 0 {
+					s.logger.Debug("cleaned up expired tasks",
+						zap.Int("count", count),
+					)
+				}
+			}
+		}
+	}()
+}
+
+// TaskStats returns statistics about the task store.
+func (s *HTTPServer) TaskStats(ctx context.Context) (*persistence.TaskStoreStats, error) {
+	if s.taskStore == nil {
+		return nil, fmt.Errorf("no task store configured")
+	}
+	return s.taskStore.Stats(ctx)
 }
 
 // GetTaskStatus returns the status of an async task.

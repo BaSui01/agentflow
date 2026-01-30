@@ -42,7 +42,7 @@ func (e *AsyncExecutor) ExecuteAsync(ctx context.Context, input *Input) (*AsyncE
 		zap.String("execution_id", execution.ID),
 		zap.String("agent_id", e.agent.ID()),
 	)
-	
+
 	// 异步执行
 	go func() {
 		output, err := e.agent.Execute(ctx, input)
@@ -56,10 +56,13 @@ func (e *AsyncExecutor) ExecuteAsync(ctx context.Context, input *Input) (*AsyncE
 			execution.Output = output
 		}
 		execution.EndTime = time.Now()
-		close(execution.resultCh)
-		close(execution.errorCh)
+		// 使用 sync.Once 确保 channel 只关闭一次，防止 panic
+		execution.closeOnce.Do(func() {
+			close(execution.resultCh)
+			close(execution.errorCh)
+		})
 	}()
-	
+
 	return execution, nil
 }
 
@@ -156,9 +159,10 @@ type AsyncExecution struct {
 	Error     string
 	StartTime time.Time
 	EndTime   time.Time
-	
-	resultCh chan *Output
-	errorCh  chan error
+
+	resultCh  chan *Output
+	errorCh   chan error
+	closeOnce sync.Once // 确保 channel 只关闭一次
 }
 
 // ExecutionStatus 执行状态
@@ -210,24 +214,27 @@ func (m *SubagentManager) SpawnSubagent(ctx context.Context, subagent Agent, inp
 		resultCh:  make(chan *Output, 1),
 		errorCh:   make(chan error, 1),
 	}
-	
+
 	m.mu.Lock()
 	m.executions[execution.ID] = execution
 	m.mu.Unlock()
-	
+
 	m.logger.Debug("spawning subagent",
 		zap.String("execution_id", execution.ID),
 		zap.String("subagent_id", subagent.ID()),
 	)
-	
+
 	// 异步执行
 	go func() {
 		defer func() {
 			execution.EndTime = time.Now()
-			close(execution.resultCh)
-			close(execution.errorCh)
+			// 使用 sync.Once 确保 channel 只关闭一次，防止 panic
+			execution.closeOnce.Do(func() {
+				close(execution.resultCh)
+				close(execution.errorCh)
+			})
 		}()
-		
+
 		output, err := subagent.Execute(ctx, input)
 		if err != nil {
 			execution.errorCh <- err
@@ -246,7 +253,7 @@ func (m *SubagentManager) SpawnSubagent(ctx context.Context, subagent Agent, inp
 			)
 		}
 	}()
-	
+
 	return execution, nil
 }
 

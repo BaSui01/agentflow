@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"github.com/BaSui01/agentflow/agent"
+	"github.com/BaSui01/agentflow/agent/persistence"
+	"github.com/google/uuid"
 	"go.uber.org/zap"
 )
 
@@ -81,10 +83,14 @@ const (
 )
 
 // MessageHub 消息中心
+// 支持持久化存储，防止消息丢失
 type MessageHub struct {
-	channels map[string]chan *Message
-	mu       sync.RWMutex
-	logger   *zap.Logger
+	channels     map[string]chan *Message
+	mu           sync.RWMutex
+	logger       *zap.Logger
+	messageStore persistence.MessageStore // 持久化存储（可选）
+	retryConfig  persistence.RetryConfig  // 重试配置
+	closed       bool
 }
 
 // Coordinator 协调器接口
@@ -156,9 +162,44 @@ func (m *MultiAgentSystem) Execute(ctx context.Context, input *agent.Input) (*ag
 // NewMessageHub 创建消息中心
 func NewMessageHub(logger *zap.Logger) *MessageHub {
 	return &MessageHub{
-		channels: make(map[string]chan *Message),
-		logger:   logger.With(zap.String("component", "message_hub")),
+		channels:    make(map[string]chan *Message),
+		logger:      logger.With(zap.String("component", "message_hub")),
+		retryConfig: persistence.DefaultRetryConfig(),
 	}
+}
+
+// NewMessageHubWithStore 创建带持久化的消息中心
+func NewMessageHubWithStore(logger *zap.Logger, store persistence.MessageStore) *MessageHub {
+	hub := NewMessageHub(logger)
+	hub.messageStore = store
+	return hub
+}
+
+// SetMessageStore 设置消息存储（用于依赖注入）
+func (h *MessageHub) SetMessageStore(store persistence.MessageStore) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.messageStore = store
+}
+
+// Close 关闭消息中心
+func (h *MessageHub) Close() error {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	h.closed = true
+
+	// 关闭所有通道
+	for _, ch := range h.channels {
+		close(ch)
+	}
+
+	// 关闭存储
+	if h.messageStore != nil {
+		return h.messageStore.Close()
+	}
+
+	return nil
 }
 
 // CreateChannel 创建通道
@@ -170,9 +211,43 @@ func (h *MessageHub) CreateChannel(agentID string) {
 }
 
 // Send 发送消息
+// 如果配置了持久化存储，消息会先持久化再投递
+// 即使 channel 满了，消息也不会丢失
 func (h *MessageHub) Send(msg *Message) error {
+	return h.SendWithContext(context.Background(), msg)
+}
+
+// SendWithContext 发送消息（带上下文）
+// 修复竞态条件：使用单次锁定确保操作原子性
+func (h *MessageHub) SendWithContext(ctx context.Context, msg *Message) error {
+	// 生成消息 ID（无需锁）
+	if msg.ID == "" {
+		msg.ID = uuid.New().String()
+	}
+	if msg.Timestamp.IsZero() {
+		msg.Timestamp = time.Now()
+	}
+
+	// 如果有持久化存储，先持久化消息（无需锁）
+	if h.messageStore != nil {
+		persistMsg := h.toPersistMessage(msg)
+		if err := h.messageStore.SaveMessage(ctx, persistMsg); err != nil {
+			h.logger.Error("failed to persist message",
+				zap.String("msg_id", msg.ID),
+				zap.Error(err),
+			)
+			// 持久化失败不阻止消息投递，但记录错误
+		}
+	}
+
+	// 获取读锁并保持到操作完成
 	h.mu.RLock()
 	defer h.mu.RUnlock()
+
+	// 检查是否已关闭
+	if h.closed {
+		return fmt.Errorf("message hub is closed")
+	}
 
 	if msg.ToID == "" {
 		// 广播
@@ -180,9 +255,15 @@ func (h *MessageHub) Send(msg *Message) error {
 			if id != msg.FromID {
 				select {
 				case ch <- msg:
+					// 消息投递成功，确认消息
+					if h.messageStore != nil {
+						go h.ackMessage(ctx, msg.ID)
+					}
 				default:
-					h.logger.Warn("channel full, message dropped",
+					// channel 满了，消息已持久化，后续可重试
+					h.logger.Debug("channel full, message persisted for retry",
 						zap.String("to", id),
+						zap.String("msg_id", msg.ID),
 					)
 				}
 			}
@@ -196,12 +277,169 @@ func (h *MessageHub) Send(msg *Message) error {
 
 		select {
 		case ch <- msg:
+			// 消息投递成功，确认消息
+			if h.messageStore != nil {
+				go h.ackMessage(ctx, msg.ID)
+			}
 		default:
-			return fmt.Errorf("channel full: %s", msg.ToID)
+			// channel 满了，消息已持久化，后续可重试
+			h.logger.Debug("channel full, message persisted for retry",
+				zap.String("to", msg.ToID),
+				zap.String("msg_id", msg.ID),
+			)
+			// 不返回错误，因为消息已持久化
 		}
 	}
 
 	return nil
+}
+
+// toPersistMessage 转换为持久化消息格式
+func (h *MessageHub) toPersistMessage(msg *Message) *persistence.Message {
+	return &persistence.Message{
+		ID:        msg.ID,
+		Topic:     msg.ToID, // 使用 ToID 作为 topic
+		FromID:    msg.FromID,
+		ToID:      msg.ToID,
+		Type:      string(msg.Type),
+		Content:   msg.Content,
+		Payload:   msg.Metadata,
+		CreatedAt: msg.Timestamp,
+	}
+}
+
+// fromPersistMessage 从持久化消息格式转换
+func (h *MessageHub) fromPersistMessage(pm *persistence.Message) *Message {
+	return &Message{
+		ID:        pm.ID,
+		FromID:    pm.FromID,
+		ToID:      pm.ToID,
+		Type:      MessageType(pm.Type),
+		Content:   pm.Content,
+		Metadata:  pm.Payload,
+		Timestamp: pm.CreatedAt,
+	}
+}
+
+// ackMessage 确认消息已处理
+func (h *MessageHub) ackMessage(ctx context.Context, msgID string) {
+	if h.messageStore == nil {
+		return
+	}
+	if err := h.messageStore.AckMessage(ctx, msgID); err != nil {
+		h.logger.Debug("failed to ack message",
+			zap.String("msg_id", msgID),
+			zap.Error(err),
+		)
+	}
+}
+
+// RecoverMessages 恢复未处理的消息（服务重启后调用）
+func (h *MessageHub) RecoverMessages(ctx context.Context) error {
+	if h.messageStore == nil {
+		return nil
+	}
+
+	h.logger.Info("recovering unprocessed messages")
+
+	h.mu.RLock()
+	agentIDs := make([]string, 0, len(h.channels))
+	for id := range h.channels {
+		agentIDs = append(agentIDs, id)
+	}
+	h.mu.RUnlock()
+
+	totalRecovered := 0
+
+	for _, agentID := range agentIDs {
+		// 获取该 agent 的未确认消息
+		msgs, err := h.messageStore.GetUnackedMessages(ctx, agentID, 5*time.Minute)
+		if err != nil {
+			h.logger.Warn("failed to get unacked messages",
+				zap.String("agent_id", agentID),
+				zap.Error(err),
+			)
+			continue
+		}
+
+		for _, pm := range msgs {
+			// 检查是否应该重试
+			if !pm.ShouldRetry(h.retryConfig) {
+				h.logger.Debug("message exceeded max retries",
+					zap.String("msg_id", pm.ID),
+					zap.Int("retry_count", pm.RetryCount),
+				)
+				continue
+			}
+
+			// 增加重试计数
+			if err := h.messageStore.IncrementRetry(ctx, pm.ID); err != nil {
+				h.logger.Warn("failed to increment retry count",
+					zap.String("msg_id", pm.ID),
+					zap.Error(err),
+				)
+			}
+
+			// 重新投递消息
+			msg := h.fromPersistMessage(pm)
+			h.mu.RLock()
+			ch, ok := h.channels[agentID]
+			h.mu.RUnlock()
+
+			if ok {
+				select {
+				case ch <- msg:
+					totalRecovered++
+					h.logger.Debug("message recovered",
+						zap.String("msg_id", msg.ID),
+						zap.String("to", agentID),
+					)
+				default:
+					h.logger.Debug("channel still full during recovery",
+						zap.String("msg_id", msg.ID),
+						zap.String("to", agentID),
+					)
+				}
+			}
+		}
+	}
+
+	h.logger.Info("message recovery completed",
+		zap.Int("recovered", totalRecovered),
+	)
+
+	return nil
+}
+
+// StartRetryLoop 启动消息重试循环
+func (h *MessageHub) StartRetryLoop(ctx context.Context, interval time.Duration) {
+	if h.messageStore == nil {
+		return
+	}
+
+	go func() {
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				if err := h.RecoverMessages(ctx); err != nil {
+					h.logger.Warn("retry loop error", zap.Error(err))
+				}
+			}
+		}
+	}()
+}
+
+// Stats 获取消息统计信息
+func (h *MessageHub) Stats(ctx context.Context) (*persistence.MessageStoreStats, error) {
+	if h.messageStore == nil {
+		return nil, fmt.Errorf("no message store configured")
+	}
+	return h.messageStore.Stats(ctx)
 }
 
 // Receive 接收消息

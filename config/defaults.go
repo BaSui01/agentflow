@@ -10,13 +10,15 @@ import "time"
 // DefaultConfig 返回默认配置
 func DefaultConfig() *Config {
 	return &Config{
-		Server: DefaultServerConfig(),
-		Agent:  DefaultAgentConfig(),
-		Redis:  DefaultRedisConfig(),
-		Database: DefaultDatabaseConfig(),
-		Qdrant: DefaultQdrantConfig(),
-		LLM:    DefaultLLMConfig(),
-		Log:    DefaultLogConfig(),
+		Server:    DefaultServerConfig(),
+		Agent:     DefaultAgentConfig(),
+		Redis:     DefaultRedisConfig(),
+		Database:  DefaultDatabaseConfig(),
+		Qdrant:    DefaultQdrantConfig(),
+		Weaviate:  DefaultWeaviateConfig(),
+		Milvus:    DefaultMilvusConfig(),
+		LLM:       DefaultLLMConfig(),
+		Log:       DefaultLogConfig(),
 		Telemetry: DefaultTelemetryConfig(),
 	}
 }
@@ -88,6 +90,41 @@ func DefaultQdrantConfig() QdrantConfig {
 		Port:       6334,
 		APIKey:     "",
 		Collection: "agentflow_vectors",
+	}
+}
+
+// DefaultWeaviateConfig 返回默认 Weaviate 配置
+func DefaultWeaviateConfig() WeaviateConfig {
+	return WeaviateConfig{
+		Host:             "localhost",
+		Port:             8080,
+		Scheme:           "http",
+		APIKey:           "",
+		ClassName:        "AgentFlowDocuments",
+		AutoCreateSchema: true,
+		Distance:         "cosine",
+		HybridAlpha:      0.5,
+		Timeout:          30 * time.Second,
+	}
+}
+
+// DefaultMilvusConfig 返回默认 Milvus 配置
+func DefaultMilvusConfig() MilvusConfig {
+	return MilvusConfig{
+		Host:                 "localhost",
+		Port:                 19530,
+		Username:             "",
+		Password:             "",
+		Token:                "",
+		Database:             "default",
+		Collection:           "agentflow_vectors",
+		VectorDimension:      1536, // OpenAI embedding dimension
+		IndexType:            "IVF_FLAT",
+		MetricType:           "COSINE",
+		AutoCreateCollection: true,
+		Timeout:              30 * time.Second,
+		BatchSize:            1000,
+		ConsistencyLevel:     "Strong",
 	}
 }
 

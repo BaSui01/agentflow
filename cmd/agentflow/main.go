@@ -1,15 +1,45 @@
 // =============================================================================
-// 🚀 AgentFlow 主入口
+// AgentFlow 主入口
 // =============================================================================
 // 完整服务入口点，包含 HTTP/gRPC 服务、健康检查、Prometheus 指标
 //
 // 使用方法:
 //
-//	agentflow serve                    # 启动服务
+//	agentflow serve                       # 启动服务
 //	agentflow serve --config config.yaml  # 指定配置文件
-//	agentflow version                  # 显示版本信息
-//	agentflow health                   # 健康检查
+//	agentflow version                     # 显示版本信息
+//	agentflow health                      # 健康检查
+//	agentflow migrate up                  # 运行数据库迁移
+//	agentflow migrate down                # 回滚最后一次迁移
+//	agentflow migrate status              # 查看迁移状态
 // =============================================================================
+
+// @title AgentFlow API
+// @version 1.0.0
+// @description AgentFlow is a production-ready Go framework for building AI agents with multi-provider LLM support.
+// @description
+// @description ## Features
+// @description - Multi-provider LLM routing (OpenAI, Claude, Gemini, DeepSeek, etc.)
+// @description - A2A (Agent-to-Agent) protocol support
+// @description - MCP (Model Context Protocol) support
+// @description - Streaming responses via SSE
+// @description - Health monitoring and metrics
+
+// @contact.name AgentFlow Team
+// @contact.url https://github.com/BaSui01/agentflow
+
+// @license.name MIT
+// @license.url https://opensource.org/licenses/MIT
+
+// @host localhost:8080
+// @BasePath /
+// @schemes http https
+
+// @securityDefinitions.apikey ApiKeyAuth
+// @in header
+// @name X-API-Key
+// @description API key for authentication
+
 package main
 
 import (
@@ -54,6 +84,8 @@ func main() {
 	switch os.Args[1] {
 	case "serve":
 		runServe(os.Args[2:])
+	case "migrate":
+		runMigrate(os.Args[2:])
 	case "version":
 		printVersion()
 	case "health":
@@ -105,8 +137,8 @@ func runServe(args []string) {
 		zap.String("git_commit", GitCommit),
 	)
 
-	// 创建服务器
-	server := NewServer(cfg, logger)
+	// 创建服务器（传入配置文件路径以支持热更新）
+	server := NewServer(cfg, *configPath, logger)
 
 	// 启动服务器
 	if err := server.Start(); err != nil {
@@ -161,6 +193,7 @@ Usage:
 
 Commands:
   serve     Start the AgentFlow server
+  migrate   Database migration commands
   version   Show version information
   health    Check server health
   help      Show this help message
@@ -168,9 +201,20 @@ Commands:
 Options for 'serve':
   --config <path>   Path to configuration file (YAML)
 
+Migration subcommands:
+  migrate up        Apply all pending migrations
+  migrate down      Rollback the last migration
+  migrate status    Show migration status
+  migrate version   Show current migration version
+  migrate goto <v>  Migrate to a specific version
+  migrate force <v> Force set migration version
+  migrate reset     Rollback all migrations
+
 Examples:
   agentflow serve
   agentflow serve --config /etc/agentflow/config.yaml
+  agentflow migrate up
+  agentflow migrate status
   agentflow health --addr http://localhost:8080
   agentflow version`)
 }
@@ -241,20 +285,26 @@ func initLogger(cfg config.LogConfig) *zap.Logger {
 
 // Server 是 AgentFlow 的主服务器
 type Server struct {
-	cfg    *config.Config
-	logger *zap.Logger
+	cfg        *config.Config
+	configPath string
+	logger     *zap.Logger
 
 	httpServer    *http.Server
 	metricsServer *http.Server
+
+	// Hot reload manager
+	hotReloadManager *config.HotReloadManager
+	configAPIHandler *config.ConfigAPIHandler
 
 	shutdownChan chan struct{}
 	wg           sync.WaitGroup
 }
 
 // NewServer 创建新的服务器实例
-func NewServer(cfg *config.Config, logger *zap.Logger) *Server {
+func NewServer(cfg *config.Config, configPath string, logger *zap.Logger) *Server {
 	return &Server{
 		cfg:          cfg,
+		configPath:   configPath,
 		logger:       logger,
 		shutdownChan: make(chan struct{}),
 	}
@@ -262,6 +312,11 @@ func NewServer(cfg *config.Config, logger *zap.Logger) *Server {
 
 // Start 启动所有服务
 func (s *Server) Start() error {
+	// 初始化热更新管理器
+	if err := s.initHotReloadManager(); err != nil {
+		return fmt.Errorf("failed to init hot reload manager: %w", err)
+	}
+
 	// 启动 HTTP 服务器
 	if err := s.startHTTPServer(); err != nil {
 		return fmt.Errorf("failed to start HTTP server: %w", err)
@@ -275,7 +330,48 @@ func (s *Server) Start() error {
 	s.logger.Info("All servers started",
 		zap.Int("http_port", s.cfg.Server.HTTPPort),
 		zap.Int("metrics_port", s.cfg.Server.MetricsPort),
+		zap.Bool("hot_reload_enabled", s.configPath != ""),
 	)
+
+	return nil
+}
+
+// initHotReloadManager 初始化热更新管理器
+func (s *Server) initHotReloadManager() error {
+	opts := []config.HotReloadOption{
+		config.WithHotReloadLogger(s.logger),
+	}
+
+	if s.configPath != "" {
+		opts = append(opts, config.WithConfigPath(s.configPath))
+	}
+
+	s.hotReloadManager = config.NewHotReloadManager(s.cfg, opts...)
+
+	// 注册配置变更回调
+	s.hotReloadManager.OnChange(func(change config.ConfigChange) {
+		s.logger.Info("Configuration changed",
+			zap.String("path", change.Path),
+			zap.String("source", change.Source),
+			zap.Bool("requires_restart", change.RequiresRestart),
+		)
+	})
+
+	// 注册配置重载回调
+	s.hotReloadManager.OnReload(func(oldConfig, newConfig *config.Config) {
+		s.logger.Info("Configuration reloaded")
+		// 更新服务器配置引用
+		s.cfg = newConfig
+	})
+
+	// 启动热更新管理器
+	ctx := context.Background()
+	if err := s.hotReloadManager.Start(ctx); err != nil {
+		return fmt.Errorf("failed to start hot reload manager: %w", err)
+	}
+
+	// 创建配置 API 处理器
+	s.configAPIHandler = config.NewConfigAPIHandler(s.hotReloadManager)
 
 	return nil
 }
@@ -295,6 +391,18 @@ func (s *Server) startHTTPServer() error {
 
 	// API 路由（占位符，后续扩展）
 	mux.HandleFunc("/api/v1/agents", s.handleAgents)
+
+	// 配置管理 API
+	if s.configAPIHandler != nil {
+		s.configAPIHandler.RegisterRoutes(mux)
+		s.logger.Info("Configuration API registered",
+			zap.String("get_config", "GET /api/v1/config"),
+			zap.String("update_config", "PUT /api/v1/config"),
+			zap.String("reload_config", "POST /api/v1/config/reload"),
+			zap.String("get_fields", "GET /api/v1/config/fields"),
+			zap.String("get_changes", "GET /api/v1/config/changes"),
+		)
+	}
 
 	s.httpServer = &http.Server{
 		Addr:         fmt.Sprintf(":%d", s.cfg.Server.HTTPPort),
@@ -358,6 +466,13 @@ func (s *Server) Shutdown() {
 	ctx, cancel := context.WithTimeout(context.Background(), s.cfg.Server.ShutdownTimeout)
 	defer cancel()
 
+	// 停止热更新管理器
+	if s.hotReloadManager != nil {
+		if err := s.hotReloadManager.Stop(); err != nil {
+			s.logger.Error("Hot reload manager shutdown error", zap.Error(err))
+		}
+	}
+
 	// 关闭 HTTP 服务器
 	if s.httpServer != nil {
 		if err := s.httpServer.Shutdown(ctx); err != nil {
@@ -384,13 +499,22 @@ func (s *Server) Shutdown() {
 // =============================================================================
 
 // HealthResponse 健康检查响应
+// @Description 健康检查响应结构
 type HealthResponse struct {
-	Status    string `json:"status"`
-	Timestamp string `json:"timestamp"`
-	Version   string `json:"version"`
+	Status    string `json:"status" example:"healthy"`    // 服务状态
+	Timestamp string `json:"timestamp" example:"2024-01-01T00:00:00Z"` // 时间戳
+	Version   string `json:"version" example:"1.0.0"`     // 版本号
 }
 
 // handleHealth 处理健康检查请求
+// @Summary 健康检查
+// @Description 返回服务的健康状态
+// @Tags Health
+// @Accept json
+// @Produce json
+// @Success 200 {object} HealthResponse "服务健康"
+// @Failure 503 {object} HealthResponse "服务不健康"
+// @Router /health [get]
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	resp := HealthResponse{
 		Status:    "healthy",
@@ -404,6 +528,14 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleReady 处理就绪检查请求
+// @Summary 就绪检查
+// @Description 返回服务是否准备好接受请求
+// @Tags Health
+// @Accept json
+// @Produce json
+// @Success 200 {object} HealthResponse "服务就绪"
+// @Failure 503 {object} HealthResponse "服务未就绪"
+// @Router /ready [get]
 func (s *Server) handleReady(w http.ResponseWriter, r *http.Request) {
 	// TODO: 检查依赖服务（Redis、PostgreSQL、Qdrant）的连接状态
 	resp := HealthResponse{
@@ -418,13 +550,21 @@ func (s *Server) handleReady(w http.ResponseWriter, r *http.Request) {
 }
 
 // VersionResponse 版本信息响应
+// @Description 版本信息响应结构
 type VersionResponse struct {
-	Version   string `json:"version"`
-	BuildTime string `json:"build_time"`
-	GitCommit string `json:"git_commit"`
+	Version   string `json:"version" example:"1.0.0"`      // 版本号
+	BuildTime string `json:"build_time" example:"2024-01-01T00:00:00Z"` // 构建时间
+	GitCommit string `json:"git_commit" example:"abc1234"` // Git 提交哈希
 }
 
 // handleVersion 处理版本信息请求
+// @Summary 获取版本信息
+// @Description 返回服务的版本信息
+// @Tags Health
+// @Accept json
+// @Produce json
+// @Success 200 {object} VersionResponse "版本信息"
+// @Router /version [get]
 func (s *Server) handleVersion(w http.ResponseWriter, r *http.Request) {
 	resp := VersionResponse{
 		Version:   Version,
@@ -437,7 +577,30 @@ func (s *Server) handleVersion(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(resp)
 }
 
-// handleAgents 处理 Agent API 请求（占位符）
+// AgentListResponse Agent 列表响应
+// @Description Agent 列表响应结构
+type AgentListResponse struct {
+	Agents []interface{} `json:"agents"` // Agent 列表
+	Total  int           `json:"total"`  // 总数
+}
+
+// ErrorResponse 错误响应
+// @Description 错误响应结构
+type ErrorResponse struct {
+	Error string `json:"error" example:"not implemented"` // 错误信息
+}
+
+// handleAgents 处理 Agent API 请求
+// @Summary 获取 Agent 列表
+// @Description 返回所有 Agent 的列表
+// @Tags Agents
+// @Accept json
+// @Produce json
+// @Security ApiKeyAuth
+// @Success 200 {object} AgentListResponse "Agent 列表"
+// @Failure 401 {object} ErrorResponse "未授权"
+// @Failure 501 {object} ErrorResponse "未实现"
+// @Router /api/v1/agents [get]
 func (s *Server) handleAgents(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:

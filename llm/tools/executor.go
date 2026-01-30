@@ -243,33 +243,42 @@ func (e *DefaultExecutor) ExecuteOne(ctx context.Context, call llm.ToolCall) Too
 	execCtx, cancel := context.WithTimeout(ctx, meta.Timeout)
 	defer cancel()
 
-	resChan := make(chan json.RawMessage, 1)
-	errChan := make(chan error, 1)
+	// 使用带缓冲的 channel 防止 goroutine 泄漏
+	// 即使超时后没人接收，goroutine 也能正常退出
+	doneChan := make(chan struct {
+		res json.RawMessage
+		err error
+	}, 1)
 
 	go func() {
 		res, err := fn(execCtx, call.Arguments)
-		if err != nil {
-			errChan <- err
-		} else {
-			resChan <- res
+		// 使用 select 确保即使超时也能退出
+		select {
+		case doneChan <- struct {
+			res json.RawMessage
+			err error
+		}{res, err}:
+		case <-execCtx.Done():
+			// 上下文已取消，直接退出，不阻塞
 		}
 	}()
 
 	select {
-	case res := <-resChan:
-		result.Result = res
-		result.Duration = time.Since(start)
-		e.logger.Info("tool executed successfully",
-			zap.String("name", call.Name),
-			zap.Duration("duration", result.Duration))
-
-	case err := <-errChan:
-		result.Error = err.Error()
-		result.Duration = time.Since(start)
-		e.logger.Error("tool execution failed",
-			zap.String("name", call.Name),
-			zap.Error(err),
-			zap.Duration("duration", result.Duration))
+	case done := <-doneChan:
+		if done.err != nil {
+			result.Error = done.err.Error()
+			result.Duration = time.Since(start)
+			e.logger.Error("tool execution failed",
+				zap.String("name", call.Name),
+				zap.Error(done.err),
+				zap.Duration("duration", result.Duration))
+		} else {
+			result.Result = done.res
+			result.Duration = time.Since(start)
+			e.logger.Info("tool executed successfully",
+				zap.String("name", call.Name),
+				zap.Duration("duration", result.Duration))
+		}
 
 	case <-execCtx.Done():
 		result.Error = fmt.Sprintf("execution timeout after %s", meta.Timeout)

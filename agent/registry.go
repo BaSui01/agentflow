@@ -190,19 +190,40 @@ func (r *AgentRegistry) ListTypes() []AgentType {
 }
 
 // GlobalRegistry is the default agent registry instance
-var GlobalRegistry *AgentRegistry
+var (
+	GlobalRegistry     *AgentRegistry
+	globalRegistryOnce sync.Once
+	globalRegistryMu   sync.RWMutex
+)
 
-// InitGlobalRegistry initializes the global agent registry
+// InitGlobalRegistry initializes the global agent registry.
+// This function is safe to call multiple times - only the first call will initialize.
 func InitGlobalRegistry(logger *zap.Logger) {
-	GlobalRegistry = NewAgentRegistry(logger)
+	globalRegistryOnce.Do(func() {
+		GlobalRegistry = NewAgentRegistry(logger)
+	})
 }
 
-// RegisterAgentType registers an agent type in the global registry
+// GetGlobalRegistry returns the global registry, initializing it if necessary.
+// This is the recommended way to access the global registry.
+func GetGlobalRegistry(logger *zap.Logger) *AgentRegistry {
+	InitGlobalRegistry(logger)
+	return GlobalRegistry
+}
+
+// RegisterAgentType registers an agent type in the global registry.
+// If the global registry is not initialized, it will be initialized with a nop logger.
 func RegisterAgentType(agentType AgentType, factory AgentFactory) {
-	if GlobalRegistry == nil {
-		panic("global registry not initialized, call InitGlobalRegistry first")
+	globalRegistryMu.RLock()
+	registry := GlobalRegistry
+	globalRegistryMu.RUnlock()
+
+	if registry == nil {
+		// Auto-initialize with nop logger if not initialized
+		InitGlobalRegistry(zap.NewNop())
+		registry = GlobalRegistry
 	}
-	GlobalRegistry.Register(agentType, factory)
+	registry.Register(agentType, factory)
 }
 
 // CreateAgent creates an agent using the global registry
@@ -214,8 +235,12 @@ func CreateAgent(
 	bus EventBus,
 	logger *zap.Logger,
 ) (Agent, error) {
-	if GlobalRegistry == nil {
-		return nil, fmt.Errorf("global registry not initialized")
+	globalRegistryMu.RLock()
+	registry := GlobalRegistry
+	globalRegistryMu.RUnlock()
+
+	if registry == nil {
+		return nil, fmt.Errorf("global registry not initialized, call InitGlobalRegistry first")
 	}
-	return GlobalRegistry.Create(config, provider, memory, toolManager, bus, logger)
+	return registry.Create(config, provider, memory, toolManager, bus, logger)
 }

@@ -46,6 +46,12 @@ type Config struct {
 	// Qdrant 向量存储配置
 	Qdrant QdrantConfig `yaml:"qdrant" env:"QDRANT"`
 
+	// Weaviate 向量存储配置
+	Weaviate WeaviateConfig `yaml:"weaviate" env:"WEAVIATE"`
+
+	// Milvus 向量存储配置
+	Milvus MilvusConfig `yaml:"milvus" env:"MILVUS"`
+
 	// LLM 大语言模型配置
 	LLM LLMConfig `yaml:"llm" env:"LLM"`
 
@@ -156,6 +162,60 @@ type QdrantConfig struct {
 	APIKey string `yaml:"api_key" env:"API_KEY"`
 	// 默认集合名
 	Collection string `yaml:"collection" env:"COLLECTION"`
+}
+
+// WeaviateConfig Weaviate 向量存储配置
+type WeaviateConfig struct {
+	// 主机
+	Host string `yaml:"host" env:"HOST"`
+	// HTTP 端口
+	Port int `yaml:"port" env:"PORT"`
+	// 协议: http 或 https
+	Scheme string `yaml:"scheme" env:"SCHEME"`
+	// API Key（可选）
+	APIKey string `yaml:"api_key" env:"API_KEY"`
+	// 默认类名（集合名）
+	ClassName string `yaml:"class_name" env:"CLASS_NAME"`
+	// 是否自动创建 Schema
+	AutoCreateSchema bool `yaml:"auto_create_schema" env:"AUTO_CREATE_SCHEMA"`
+	// 距离度量: cosine, dot, l2
+	Distance string `yaml:"distance" env:"DISTANCE"`
+	// 混合搜索 Alpha 值 (0=BM25, 1=向量)
+	HybridAlpha float64 `yaml:"hybrid_alpha" env:"HYBRID_ALPHA"`
+	// 请求超时
+	Timeout time.Duration `yaml:"timeout" env:"TIMEOUT"`
+}
+
+// MilvusConfig Milvus 向量存储配置
+type MilvusConfig struct {
+	// 主机
+	Host string `yaml:"host" env:"HOST"`
+	// gRPC 端口
+	Port int `yaml:"port" env:"PORT"`
+	// 用户名（可选）
+	Username string `yaml:"username" env:"USERNAME"`
+	// 密码（可选）
+	Password string `yaml:"password" env:"PASSWORD"`
+	// Token（用于 Zilliz Cloud）
+	Token string `yaml:"token" env:"TOKEN"`
+	// 数据库名
+	Database string `yaml:"database" env:"DATABASE"`
+	// 默认集合名
+	Collection string `yaml:"collection" env:"COLLECTION"`
+	// 向量维度
+	VectorDimension int `yaml:"vector_dimension" env:"VECTOR_DIMENSION"`
+	// 索引类型: IVF_FLAT, HNSW, FLAT, IVF_SQ8, IVF_PQ
+	IndexType string `yaml:"index_type" env:"INDEX_TYPE"`
+	// 距离度量: L2, IP, COSINE
+	MetricType string `yaml:"metric_type" env:"METRIC_TYPE"`
+	// 是否自动创建集合
+	AutoCreateCollection bool `yaml:"auto_create_collection" env:"AUTO_CREATE_COLLECTION"`
+	// 请求超时
+	Timeout time.Duration `yaml:"timeout" env:"TIMEOUT"`
+	// 批量操作大小
+	BatchSize int `yaml:"batch_size" env:"BATCH_SIZE"`
+	// 一致性级别: Strong, Session, Bounded, Eventually
+	ConsistencyLevel string `yaml:"consistency_level" env:"CONSISTENCY_LEVEL"`
 }
 
 // LLMConfig LLM 配置
@@ -446,4 +506,53 @@ func (d *DatabaseConfig) DSN() string {
 	default:
 		return ""
 	}
+}
+
+// SafeDSN 返回用于日志记录的安全连接字符串（密码已掩码）
+// 使用此方法而非 DSN() 来记录日志，防止敏感信息泄露
+func (d *DatabaseConfig) SafeDSN() string {
+	maskedPassword := MaskSensitive(d.Password)
+	switch d.Driver {
+	case "postgres":
+		return fmt.Sprintf(
+			"host=%s port=%d user=%s password=%s dbname=%s sslmode=%s",
+			d.Host, d.Port, d.User, maskedPassword, d.Name, d.SSLMode,
+		)
+	case "mysql":
+		return fmt.Sprintf(
+			"%s:%s@tcp(%s:%d)/%s?parseTime=true",
+			d.User, maskedPassword, d.Host, d.Port, d.Name,
+		)
+	case "sqlite":
+		return d.Name
+	default:
+		return ""
+	}
+}
+
+// MaskSensitive 掩码敏感信息，用于日志记录
+// 例如: "mysecretpassword" -> "mys***ord"
+func MaskSensitive(s string) string {
+	if len(s) == 0 {
+		return ""
+	}
+	if len(s) <= 3 {
+		return "***"
+	}
+	if len(s) <= 6 {
+		return s[:1] + "***" + s[len(s)-1:]
+	}
+	return s[:3] + "***" + s[len(s)-3:]
+}
+
+// MaskAPIKey 掩码 API Key，用于日志记录
+// 例如: "sk-1234567890abcdef" -> "sk-123...def"
+func MaskAPIKey(key string) string {
+	if len(key) == 0 {
+		return ""
+	}
+	if len(key) <= 8 {
+		return "***"
+	}
+	return key[:6] + "..." + key[len(key)-3:]
 }
