@@ -4,6 +4,7 @@ package rag
 import (
 	"context"
 	"fmt"
+	"sort"
 	"sync"
 	"time"
 
@@ -273,14 +274,10 @@ func (r *GraphRAG) Retrieve(ctx context.Context, query string) ([]GraphRetrieval
 		}
 	}
 
-	// Sort by score (simple bubble sort for small results)
-	for i := 0; i < len(results)-1; i++ {
-		for j := i + 1; j < len(results); j++ {
-			if results[j].Score > results[i].Score {
-				results[i], results[j] = results[j], results[i]
-			}
-		}
-	}
+	// Sort by score (optimized: O(n log n) instead of O(n²))
+	sort.Slice(results, func(i, j int) bool {
+		return results[i].Score > results[j].Score
+	})
 
 	// Limit results
 	if len(results) > r.config.MaxResults {

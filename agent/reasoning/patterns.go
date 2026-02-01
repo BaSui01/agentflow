@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sort"
 	"sync"
 	"time"
 
@@ -312,14 +313,10 @@ func (t *TreeOfThought) selectTopBranches(thoughts []ReasoningStep, n int) []Rea
 		}
 	}
 
-	// Sort by score (simple bubble sort for small n)
-	for i := 0; i < len(filtered); i++ {
-		for j := i + 1; j < len(filtered); j++ {
-			if filtered[j].Score > filtered[i].Score {
-				filtered[i], filtered[j] = filtered[j], filtered[i]
-			}
-		}
-	}
+	// Sort by score (optimized: O(n log n) instead of O(n²))
+	sort.Slice(filtered, func(i, j int) bool {
+		return filtered[i].Score > filtered[j].Score
+	})
 
 	if len(filtered) > n {
 		return filtered[:n]
