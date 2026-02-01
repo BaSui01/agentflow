@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -223,6 +224,7 @@ func (r *MultiHopReasoner) Reason(ctx context.Context, query string) (*Reasoning
 
 	startTime := time.Now()
 	seenDocIDs := make(map[string]bool)
+	seenQueries := make(map[string]bool) // Track executed queries to prevent cycles
 	accumulatedContext := ""
 
 	// Initial query transformation
@@ -274,6 +276,16 @@ func (r *MultiHopReasoner) Reason(ctx context.Context, query string) (*Reasoning
 				}
 			}
 		}
+
+		// Check for duplicate query (cycle detection)
+		normalizedQuery := normalizeQueryForDedup(hopQuery)
+		if seenQueries[normalizedQuery] {
+			r.logger.Debug("skipping duplicate query",
+				zap.String("query", hopQuery),
+				zap.Int("hop", hopNum))
+			continue
+		}
+		seenQueries[normalizedQuery] = true
 
 		// Execute hop
 		hop, err := r.executeHop(ctx, hopNum, hopType, hopQuery, accumulatedContext, seenDocIDs)
@@ -672,14 +684,10 @@ func (c *ReasoningChain) GetTopDocuments(k int) []RetrievalResult {
 		}
 	}
 
-	// Sort by score
-	for i := 0; i < len(allResults)-1; i++ {
-		for j := i + 1; j < len(allResults); j++ {
-			if allResults[j].FinalScore > allResults[i].FinalScore {
-				allResults[i], allResults[j] = allResults[j], allResults[i]
-			}
-		}
-	}
+	// Sort by score (optimized: O(n log n) instead of O(n²))
+	sort.Slice(allResults, func(i, j int) bool {
+		return allResults[i].FinalScore > allResults[j].FinalScore
+	})
 
 	if k > len(allResults) {
 		k = len(allResults)
@@ -857,4 +865,13 @@ func truncateContext(text string, maxLen int) string {
 		return text
 	}
 	return text[:maxLen] + "..."
+}
+
+// normalizeQueryForDedup normalizes a query for deduplication
+// It converts to lowercase, trims whitespace, and normalizes spaces
+func normalizeQueryForDedup(query string) string {
+	// Convert to lowercase and trim
+	query = strings.ToLower(strings.TrimSpace(query))
+	// Normalize multiple spaces to single space
+	return strings.Join(strings.Fields(query), " ")
 }

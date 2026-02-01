@@ -562,3 +562,62 @@ func TestGenerateChainID(t *testing.T) {
 		t.Error("expected chain ID to start with 'chain_'")
 	}
 }
+
+func TestNormalizeQueryForDedup(t *testing.T) {
+	tests := []struct {
+		input    string
+		expected string
+	}{
+		{"What is AI?", "what is ai?"},
+		{"  HELLO   WORLD  ", "hello world"},
+		{"Same Query", "same query"},
+		{"  multiple   spaces   here  ", "multiple spaces here"},
+		{"", ""},
+		{"   ", ""},
+		{"MixedCase", "mixedcase"},
+	}
+
+	for _, tt := range tests {
+		result := normalizeQueryForDedup(tt.input)
+		if result != tt.expected {
+			t.Errorf("normalizeQueryForDedup(%q) = %q, expected %q", tt.input, result, tt.expected)
+		}
+	}
+}
+
+func TestMultiHopReasoner_QueryDeduplication(t *testing.T) {
+	config := DefaultMultiHopConfig()
+	config.MaxHops = 5
+	config.EnableLLMReasoning = false
+	config.EnableQueryRefinement = false // Disable refinement to control queries
+
+	retrieverConfig := DefaultHybridRetrievalConfig()
+	retriever := NewHybridRetriever(retrieverConfig, zap.NewNop())
+
+	// Index test documents
+	docs := []Document{
+		{ID: "doc1", Content: "Machine learning is a subset of artificial intelligence."},
+		{ID: "doc2", Content: "Deep learning uses neural networks."},
+	}
+	retriever.IndexDocuments(docs)
+
+	reasoner := NewMultiHopReasoner(config, retriever, nil, nil, nil, zap.NewNop())
+
+	ctx := context.Background()
+	query := "What is machine learning?"
+
+	chain, err := reasoner.Reason(ctx, query)
+	if err != nil {
+		t.Fatalf("Reason failed: %v", err)
+	}
+
+	if chain == nil {
+		t.Fatal("expected chain to be returned")
+	}
+
+	// With deduplication, even with MaxHops=5, we should not execute duplicate queries
+	// The first hop executes the query, subsequent hops with the same query should be skipped
+	if chain.Status != StatusCompleted {
+		t.Errorf("expected status to be completed, got %s", chain.Status)
+	}
+}
