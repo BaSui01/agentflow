@@ -99,11 +99,7 @@ func (r *DefaultRegistry) Register(name string, fn ToolFunc, metadata ToolMetada
 
 	// 初始化速率限制器
 	if metadata.RateLimit != nil {
-		r.rateLimits[name] = &rateLimiter{
-			maxCalls: metadata.RateLimit.MaxCalls,
-			window:   metadata.RateLimit.Window,
-			calls:    make([]time.Time, 0),
-		}
+		r.rateLimits[name] = newRateLimiter(metadata.RateLimit.MaxCalls, metadata.RateLimit.Window)
 	}
 
 	r.logger.Info("tool registered", zap.String("name", name), zap.Duration("timeout", metadata.Timeout))
@@ -293,35 +289,84 @@ func (e *DefaultExecutor) ExecuteOne(ctx context.Context, call llm.ToolCall) Too
 
 // ====== 速率限制器 ======
 
+// tokenBucketLimiter implements a token bucket rate limiter with O(1) Allow() complexity
+type tokenBucketLimiter struct {
+	mu         sync.Mutex
+	tokens     float64   // Current available tokens
+	maxTokens  float64   // Maximum tokens (bucket capacity)
+	refillRate float64   // Tokens per second
+	lastRefill time.Time // Last refill timestamp
+}
+
+// newTokenBucketLimiter creates a new token bucket rate limiter
+// maxCalls: maximum calls allowed in the time window
+// window: time window duration
+func newTokenBucketLimiter(maxCalls int, window time.Duration) *tokenBucketLimiter {
+	refillRate := float64(maxCalls) / window.Seconds()
+	return &tokenBucketLimiter{
+		tokens:     float64(maxCalls),
+		maxTokens:  float64(maxCalls),
+		refillRate: refillRate,
+		lastRefill: time.Now(),
+	}
+}
+
+// Allow checks if a request is allowed (O(1) time complexity)
+func (tb *tokenBucketLimiter) Allow() error {
+	tb.mu.Lock()
+	defer tb.mu.Unlock()
+
+	now := time.Now()
+
+	// Refill tokens based on elapsed time
+	elapsed := now.Sub(tb.lastRefill).Seconds()
+	tb.tokens += elapsed * tb.refillRate
+
+	// Cap tokens at maximum
+	if tb.tokens > tb.maxTokens {
+		tb.tokens = tb.maxTokens
+	}
+
+	tb.lastRefill = now
+
+	// Check if we have available tokens
+	if tb.tokens < 1 {
+		return fmt.Errorf("rate limit exceeded: no tokens available")
+	}
+
+	// Consume one token
+	tb.tokens--
+	return nil
+}
+
+// Tokens returns the current number of available tokens (for monitoring)
+func (tb *tokenBucketLimiter) Tokens() float64 {
+	tb.mu.Lock()
+	defer tb.mu.Unlock()
+	return tb.tokens
+}
+
+// Reset resets the limiter to full capacity
+func (tb *tokenBucketLimiter) Reset() {
+	tb.mu.Lock()
+	defer tb.mu.Unlock()
+	tb.tokens = tb.maxTokens
+	tb.lastRefill = time.Now()
+}
+
+// rateLimiter is kept for backward compatibility but uses tokenBucketLimiter internally
+// Deprecated: Use tokenBucketLimiter directly for new code
 type rateLimiter struct {
-	mu       sync.Mutex
-	maxCalls int
-	window   time.Duration
-	calls    []time.Time
+	internal *tokenBucketLimiter
+}
+
+// newRateLimiter creates a new rate limiter (uses token bucket internally)
+func newRateLimiter(maxCalls int, window time.Duration) *rateLimiter {
+	return &rateLimiter{
+		internal: newTokenBucketLimiter(maxCalls, window),
+	}
 }
 
 func (rl *rateLimiter) Allow() error {
-	rl.mu.Lock()
-	defer rl.mu.Unlock()
-
-	now := time.Now()
-	cutoff := now.Add(-rl.window)
-
-	// 清理过期记录
-	validCalls := make([]time.Time, 0)
-	for _, t := range rl.calls {
-		if t.After(cutoff) {
-			validCalls = append(validCalls, t)
-		}
-	}
-	rl.calls = validCalls
-
-	// 检查是否超限
-	if len(rl.calls) >= rl.maxCalls {
-		return fmt.Errorf("rate limit exceeded: %d calls in %s", rl.maxCalls, rl.window)
-	}
-
-	// 记录本次调用
-	rl.calls = append(rl.calls, now)
-	return nil
+	return rl.internal.Allow()
 }

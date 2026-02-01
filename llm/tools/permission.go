@@ -3,6 +3,7 @@ package tools
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"sync"
 	"time"
@@ -575,7 +576,7 @@ func findSubstr(s, substr string) bool {
 // PermissionMiddleware creates a middleware that checks permissions before tool execution.
 func PermissionMiddleware(pm PermissionManager) func(ToolFunc) ToolFunc {
 	return func(next ToolFunc) ToolFunc {
-		return func(ctx context.Context, args []byte) ([]byte, error) {
+		return func(ctx context.Context, args json.RawMessage) (json.RawMessage, error) {
 			// Extract permission context from context
 			permCtx, ok := ctx.Value(permissionContextKey).(*PermissionContext)
 			if !ok {
