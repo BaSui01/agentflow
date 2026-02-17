@@ -124,7 +124,10 @@ func (p *MeshyProvider) createTextTo3DTask(ctx context.Context, req *GenerateReq
 	payload, _ := json.Marshal(body)
 	endpoint := fmt.Sprintf("%s/text-to-3d", strings.TrimRight(p.cfg.BaseURL, "/"))
 
-	httpReq, _ := http.NewRequestWithContext(ctx, "POST", endpoint, bytes.NewReader(payload))
+	httpReq, err := http.NewRequestWithContext(ctx, "POST", endpoint, bytes.NewReader(payload))
+	if err != nil {
+		return "", fmt.Errorf("failed to create request: %w", err)
+	}
 	httpReq.Header.Set("Authorization", "Bearer "+p.cfg.APIKey)
 	httpReq.Header.Set("Content-Type", "application/json")
 
@@ -161,7 +164,10 @@ func (p *MeshyProvider) createImageTo3DTask(ctx context.Context, req *GenerateRe
 	payload, _ := json.Marshal(body)
 	endpoint := fmt.Sprintf("%s/image-to-3d", strings.TrimRight(p.cfg.BaseURL, "/"))
 
-	httpReq, _ := http.NewRequestWithContext(ctx, "POST", endpoint, bytes.NewReader(payload))
+	httpReq, err := http.NewRequestWithContext(ctx, "POST", endpoint, bytes.NewReader(payload))
+	if err != nil {
+		return "", fmt.Errorf("failed to create request: %w", err)
+	}
 	httpReq.Header.Set("Authorization", "Bearer "+p.cfg.APIKey)
 	httpReq.Header.Set("Content-Type", "application/json")
 
@@ -198,7 +204,10 @@ func (p *MeshyProvider) pollTask(ctx context.Context, taskID string) (*meshyTask
 			return nil, ctx.Err()
 		case <-ticker.C:
 			endpoint := fmt.Sprintf("%s/text-to-3d/%s", strings.TrimRight(p.cfg.BaseURL, "/"), taskID)
-			httpReq, _ := http.NewRequestWithContext(ctx, "GET", endpoint, nil)
+			httpReq, err := http.NewRequestWithContext(ctx, "GET", endpoint, nil)
+			if err != nil {
+				return nil, fmt.Errorf("failed to create request: %w", err)
+			}
 			httpReq.Header.Set("Authorization", "Bearer "+p.cfg.APIKey)
 
 			resp, err := p.client.Do(httpReq)

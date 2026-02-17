@@ -105,7 +105,10 @@ func (p *GeminiProvider) Generate(ctx context.Context, req *GenerateRequest) (*G
 	url := fmt.Sprintf("https://generativelanguage.googleapis.com/v1beta/models/%s:generateContent?key=%s",
 		model, p.cfg.APIKey)
 
-	httpReq, _ := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(payload))
+	httpReq, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(payload))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
 	httpReq.Header.Set("Content-Type", "application/json")
 
 	resp, err := p.client.Do(httpReq)
@@ -186,7 +189,10 @@ func (p *GeminiProvider) Edit(ctx context.Context, req *EditRequest) (*GenerateR
 	url := fmt.Sprintf("https://generativelanguage.googleapis.com/v1beta/models/%s:generateContent?key=%s",
 		model, p.cfg.APIKey)
 
-	httpReq, _ := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(payload))
+	httpReq, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(payload))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
 	httpReq.Header.Set("Content-Type", "application/json")
 
 	resp, err := p.client.Do(httpReq)

@@ -112,9 +112,12 @@ func (p *OpenAISTTProvider) Transcribe(ctx context.Context, req *STTRequest) (*S
 
 	writer.Close()
 
-	httpReq, _ := http.NewRequestWithContext(ctx, "POST",
+	httpReq, err := http.NewRequestWithContext(ctx, "POST",
 		strings.TrimRight(p.cfg.BaseURL, "/")+"/v1/audio/transcriptions",
 		&buf)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
 	httpReq.Header.Set("Authorization", "Bearer "+p.cfg.APIKey)
 	httpReq.Header.Set("Content-Type", writer.FormDataContentType())
 

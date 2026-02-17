@@ -223,9 +223,16 @@ func TestProperty27_StreamCancellation(t *testing.T) {
 					flusher, ok := w.(http.Flusher)
 					if ok {
 						for i := 0; i < 100; i++ {
-							w.Write([]byte(`data: {"id":"test","choices":[{"delta":{"content":"chunk"}}]}` + "\n\n"))
+							select {
+							case <-r.Context().Done():
+								return
+							case <-time.After(50 * time.Millisecond):
+							}
+							_, err := w.Write([]byte(`data: {"id":"test","choices":[{"delta":{"content":"chunk"}}]}` + "\n\n"))
+							if err != nil {
+								return
+							}
 							flusher.Flush()
-							time.Sleep(50 * time.Millisecond)
 						}
 					}
 				}))

@@ -18,8 +18,10 @@ English | [中文](README.md)
 - **Skills System** - Dynamic skill loading
 - **MCP/A2A Protocol** - Complete agent interoperability protocol stack
 - **Guardrails** - Input/output validation, PII detection, injection protection
-- **Evaluation** - Automated evaluation framework (A/B testing, LLM Judge)
+- **Evaluation** - Automated evaluation framework (A/B testing, LLM Judge, multi-dimensional research quality assessment)
 - **Thought Signatures** - Reasoning chain signatures for multi-turn continuity
+- **Role Pipeline** - Multi-agent role orchestration with Collector→Filter→Generator→Validator→Writer research pipeline
+- **Web Tools** - Web Search / Web Scrape tool abstractions with pluggable search/scraping backends
 
 ### 🧠 Memory System
 - **Layered Memory** - Short-term/working/long-term/episodic/semantic memory
@@ -31,7 +33,9 @@ English | [中文](README.md)
 - **Reflexion** - Self-reflection improvement
 - **ReWOO** - Reasoning without observation
 - **Plan-Execute** - Planning and execution mode
+- **Tree of Thoughts (ToT)** - Multi-path branching search with heuristic evaluation
 - **Dynamic Planner** - Dynamic planning
+- **Iterative Deepening** - Recursive deepening research pattern with breadth-first queries + depth-first exploration (inspired by deep-research)
 
 ### 🔄 Workflow Engine
 - **DAG Workflow** - Directed acyclic graph orchestration

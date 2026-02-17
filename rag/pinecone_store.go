@@ -89,18 +89,21 @@ func (s *PineconeStore) ensureBaseURL(ctx context.Context) error {
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
-		return err
+		return fmt.Errorf("create describe-index request: %w", err)
 	}
 	req.Header.Set("accept", "application/json")
 	req.Header.Set("Api-Key", s.cfg.APIKey)
 
 	resp, err := s.client.Do(req)
 	if err != nil {
-		return err
+		return fmt.Errorf("describe index %s: %w", s.cfg.Index, err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		raw, _ := io.ReadAll(resp.Body)
+		raw, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return fmt.Errorf("failed to read response body: %w", err)
+		}
 		return fmt.Errorf("pinecone describe index failed: status=%d body=%s", resp.StatusCode, string(raw))
 	}
 
@@ -108,7 +111,7 @@ func (s *PineconeStore) ensureBaseURL(ctx context.Context) error {
 		Host string `json:"host"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&describe); err != nil {
-		return err
+		return fmt.Errorf("decode describe-index response: %w", err)
 	}
 	host := strings.TrimSpace(describe.Host)
 	if host == "" {
@@ -130,7 +133,7 @@ func (s *PineconeStore) ensureBaseURL(ctx context.Context) error {
 
 func (s *PineconeStore) doJSON(ctx context.Context, method, path string, in any, out any) error {
 	if err := s.ensureBaseURL(ctx); err != nil {
-		return err
+		return fmt.Errorf("resolve pinecone base URL: %w", err)
 	}
 
 	s.mu.RLock()
@@ -142,26 +145,29 @@ func (s *PineconeStore) doJSON(ctx context.Context, method, path string, in any,
 	if in != nil {
 		b, err := json.Marshal(in)
 		if err != nil {
-			return err
+			return fmt.Errorf("marshal request body: %w", err)
 		}
 		body = bytes.NewReader(b)
 	}
 
 	req, err := http.NewRequestWithContext(ctx, method, endpoint, body)
 	if err != nil {
-		return err
+		return fmt.Errorf("create request %s %s: %w", method, path, err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Api-Key", s.cfg.APIKey)
 
 	resp, err := s.client.Do(req)
 	if err != nil {
-		return err
+		return fmt.Errorf("execute request %s %s: %w", method, path, err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		raw, _ := io.ReadAll(resp.Body)
+		raw, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return fmt.Errorf("failed to read response body: %w", err)
+		}
 		return fmt.Errorf("pinecone request failed: method=%s path=%s status=%d body=%s", method, path, resp.StatusCode, string(raw))
 	}
 
@@ -170,7 +176,7 @@ func (s *PineconeStore) doJSON(ctx context.Context, method, path string, in any,
 	}
 
 	if err := json.NewDecoder(resp.Body).Decode(out); err != nil {
-		return err
+		return fmt.Errorf("decode response for %s %s: %w", method, path, err)
 	}
 	return nil
 }
@@ -257,7 +263,7 @@ func (s *PineconeStore) Search(ctx context.Context, queryEmbedding []float64, to
 	}
 
 	if err := s.doJSON(ctx, http.MethodPost, "/query", req, &resp); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("query vectors: %w", err)
 	}
 
 	out := make([]VectorSearchResult, 0, len(resp.Matches))
@@ -318,7 +324,7 @@ func (s *PineconeStore) Count(ctx context.Context) (int, error) {
 	}
 
 	if err := s.doJSON(ctx, http.MethodPost, "/describe_index_stats", req, &resp); err != nil {
-		return 0, err
+		return 0, fmt.Errorf("describe index stats: %w", err)
 	}
 
 	if ns := strings.TrimSpace(s.cfg.Namespace); ns != "" && resp.Namespaces != nil {

@@ -142,7 +142,11 @@ func (s *QdrantStore) ensureCollection(ctx context.Context, vectorSize int) erro
 			return
 		}
 		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-			raw, _ := io.ReadAll(resp.Body)
+			raw, err := io.ReadAll(resp.Body)
+			if err != nil {
+				s.ensureErr = fmt.Errorf("qdrant create collection failed: status=%d (failed to read body: %v)", resp.StatusCode, err)
+				return
+			}
 			s.ensureErr = fmt.Errorf("qdrant create collection failed: status=%d body=%s", resp.StatusCode, string(raw))
 			return
 		}
@@ -185,7 +189,10 @@ func (s *QdrantStore) doJSON(ctx context.Context, method, path string, in any, o
 	defer resp.Body.Close()
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		raw, _ := io.ReadAll(resp.Body)
+		raw, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return fmt.Errorf("failed to read response body: %w", err)
+		}
 		return fmt.Errorf("qdrant request failed: method=%s path=%s status=%d body=%s", method, path, resp.StatusCode, string(raw))
 	}
 

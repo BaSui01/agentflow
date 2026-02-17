@@ -79,7 +79,10 @@ func (p *ElevenLabsProvider) Synthesize(ctx context.Context, req *TTSRequest) (*
 	}
 	endpoint += "?output_format=" + format
 
-	httpReq, _ := http.NewRequestWithContext(ctx, "POST", endpoint, bytes.NewReader(payload))
+	httpReq, err := http.NewRequestWithContext(ctx, "POST", endpoint, bytes.NewReader(payload))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
 	httpReq.Header.Set("xi-api-key", p.cfg.APIKey)
 	httpReq.Header.Set("Content-Type", "application/json")
 
@@ -144,7 +147,10 @@ type elevenLabsVoicesResponse struct {
 func (p *ElevenLabsProvider) ListVoices(ctx context.Context) ([]Voice, error) {
 	endpoint := fmt.Sprintf("%s/v1/voices", strings.TrimRight(p.cfg.BaseURL, "/"))
 
-	httpReq, _ := http.NewRequestWithContext(ctx, "GET", endpoint, nil)
+	httpReq, err := http.NewRequestWithContext(ctx, "GET", endpoint, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
 	httpReq.Header.Set("xi-api-key", p.cfg.APIKey)
 
 	resp, err := p.client.Do(httpReq)

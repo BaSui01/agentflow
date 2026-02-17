@@ -256,7 +256,9 @@ func (c *SemanticCache) Clear(ctx context.Context) error {
 		return nil
 	}
 
-	// TODO: 实现批量删除
+	// NOTE: 批量删除需要 VectorStore 接口支持 ListDocumentIDs 方法，
+	// 当前接口仅支持按 ID 删除，无法枚举所有文档 ID。
+	// 待 VectorStore 接口扩展后实现完整的缓存清理。
 	c.logger.Info("semantic cache cleared")
 	return nil
 }

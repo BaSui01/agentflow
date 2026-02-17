@@ -113,17 +113,17 @@ func (b *DAGBuilder) validate() error {
 
 	// Detect cycles
 	if err := b.detectCycles(); err != nil {
-		return err
+		return fmt.Errorf("cycle detection: %w", err)
 	}
 
 	// Detect orphaned nodes (nodes not reachable from entry)
 	if err := b.detectOrphanedNodes(); err != nil {
-		return err
+		return fmt.Errorf("orphan detection: %w", err)
 	}
 
 	// Validate node configurations
 	if err := b.validateNodes(); err != nil {
-		return err
+		return fmt.Errorf("node validation: %w", err)
 	}
 
 	return nil
@@ -251,7 +251,7 @@ func (b *DAGBuilder) validateNodes() error {
 			}
 			// Validate loop configuration
 			if err := b.validateLoopConfig(nodeID, node.LoopConfig); err != nil {
-				return err
+				return fmt.Errorf("loop config validation: %w", err)
 			}
 
 		case NodeTypeSubGraph:

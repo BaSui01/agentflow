@@ -115,9 +115,12 @@ func (p *RunwayProvider) Generate(ctx context.Context, req *GenerateRequest) (*G
 	}
 
 	payload, _ := json.Marshal(body)
-	httpReq, _ := http.NewRequestWithContext(ctx, "POST",
+	httpReq, err := http.NewRequestWithContext(ctx, "POST",
 		p.cfg.BaseURL+"/v1/image_to_video",
 		bytes.NewReader(payload))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
 	httpReq.Header.Set("Authorization", "Bearer "+p.cfg.APIKey)
 	httpReq.Header.Set("Content-Type", "application/json")
 	httpReq.Header.Set("X-Runway-Version", "2024-11-06")
@@ -173,8 +176,11 @@ func (p *RunwayProvider) pollGeneration(ctx context.Context, id string) (*runway
 		case <-ctx.Done():
 			return nil, ctx.Err()
 		case <-ticker.C:
-			httpReq, _ := http.NewRequestWithContext(ctx, "GET",
+			httpReq, err := http.NewRequestWithContext(ctx, "GET",
 				fmt.Sprintf("%s/v1/tasks/%s", p.cfg.BaseURL, id), nil)
+			if err != nil {
+				return nil, fmt.Errorf("failed to create request: %w", err)
+			}
 			httpReq.Header.Set("Authorization", "Bearer "+p.cfg.APIKey)
 			httpReq.Header.Set("X-Runway-Version", "2024-11-06")
 

@@ -19,8 +19,10 @@
 - **Skills 系统** - 动态技能加载
 - **MCP/A2A 协议** - 完整 Agent 互操作协议栈 (支持 Google A2A & Anthropic MCP)
 - **Guardrails** - 输入/输出验证、PII 检测、注入防护、自定义验证规则
-- **Evaluation** - 自动化评估框架 (A/B 测试、LLM Judge)
+- **Evaluation** - 自动化评估框架 (A/B 测试、LLM Judge、研究质量多维评估)
 - **Thought Signatures** - 推理链签名，保持多轮推理连续性
+- **角色编排 (Role Pipeline)** - 多 Agent 角色流水线，支持 Collector→Filter→Generator→Validator→Writer 研究管线
+- **Web 工具** - Web Search / Web Scrape 工具抽象，支持可插拔搜索/抓取后端
 
 ### 🧠 记忆系统
 
@@ -41,6 +43,7 @@
 - **Plan-Execute** - 计划与执行分离模式
 - **Tree of Thoughts (ToT)** - 多路径分支搜索与启发式评估
 - **Dynamic Planner** - 针对复杂任务的动态规划器
+- **Iterative Deepening** - 递归深化研究模式，广度优先查询 + 深度优先探索（灵感来自 deep-research）
 
 ### 🔄 工作流引擎
 
@@ -52,9 +55,11 @@
 ### 🔍 RAG 系统 (检索增强生成)
 
 - **混合检索 (Hybrid Retrieval)** - 结合向量搜索 (Dense) 与关键词搜索 (Sparse)
+- **Web 增强检索** - 本地 RAG + 实时 Web 搜索混合检索，支持权重分配与结果去重
 - **语义缓存 (Semantic Cache)** - 基于向量相似度的响应缓存，大幅降低延迟与成本
 - **多向量数据库支持** - Qdrant, Pinecone, Milvus, Weaviate 及内置 InMemoryStore
 - **文档管理** - 自动分块 (Chunking)、元数据过滤、重排序 (Reranker)
+- **学术数据源** - arXiv 论文检索、GitHub 仓库/代码搜索适配器
 
 ### 🎯 多提供商支持
 

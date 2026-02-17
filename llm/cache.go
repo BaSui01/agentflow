@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"sync"
 	"time"
 
@@ -108,7 +109,7 @@ func (c *MultiLevelCache) Set(ctx context.Context, key string, entry *CacheEntry
 	if c.config.EnableRedis && c.redis != nil {
 		data, err := json.Marshal(entry)
 		if err != nil {
-			return err
+			return fmt.Errorf("marshal cache entry: %w", err)
 		}
 		return c.redis.Set(ctx, c.redisKey(key), data, c.config.RedisTTL).Err()
 	}

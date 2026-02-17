@@ -116,7 +116,7 @@ func LoadFromYAMLFile(filename string) (*DAGDefinition, error) {
 func (d *DAGDefinition) SaveToJSONFile(filename string) error {
 	jsonStr, err := d.ToJSON()
 	if err != nil {
-		return err
+		return fmt.Errorf("marshal DAG to JSON: %w", err)
 	}
 	
 	if err := os.WriteFile(filename, []byte(jsonStr), 0644); err != nil {
@@ -130,7 +130,7 @@ func (d *DAGDefinition) SaveToJSONFile(filename string) error {
 func (d *DAGDefinition) SaveToYAMLFile(filename string) error {
 	yamlStr, err := d.ToYAML()
 	if err != nil {
-		return err
+		return fmt.Errorf("marshal DAG to YAML: %w", err)
 	}
 	
 	if err := os.WriteFile(filename, []byte(yamlStr), 0644); err != nil {

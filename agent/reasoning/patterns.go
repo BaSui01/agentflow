@@ -46,6 +46,76 @@ type ReasoningStep struct {
 }
 
 // ============================================================
+// Pattern Registry
+// ============================================================
+
+// PatternRegistry 推理模式注册表 - 管理和发现可用的推理模式
+type PatternRegistry struct {
+	patterns map[string]ReasoningPattern
+	mu       sync.RWMutex
+}
+
+// NewPatternRegistry 创建推理模式注册表
+func NewPatternRegistry() *PatternRegistry {
+	return &PatternRegistry{
+		patterns: make(map[string]ReasoningPattern),
+	}
+}
+
+// Register 注册推理模式
+func (r *PatternRegistry) Register(pattern ReasoningPattern) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	name := pattern.Name()
+	if _, exists := r.patterns[name]; exists {
+		return fmt.Errorf("reasoning pattern %q already registered", name)
+	}
+	r.patterns[name] = pattern
+	return nil
+}
+
+// Get 获取推理模式
+func (r *PatternRegistry) Get(name string) (ReasoningPattern, bool) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	p, ok := r.patterns[name]
+	return p, ok
+}
+
+// List 列出所有已注册的推理模式名称
+func (r *PatternRegistry) List() []string {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	names := make([]string, 0, len(r.patterns))
+	for name := range r.patterns {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
+}
+
+// Unregister 注销推理模式
+func (r *PatternRegistry) Unregister(name string) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if _, exists := r.patterns[name]; !exists {
+		return false
+	}
+	delete(r.patterns, name)
+	return true
+}
+
+// MustGet 获取推理模式，不存在则 panic
+func (r *PatternRegistry) MustGet(name string) ReasoningPattern {
+	p, ok := r.Get(name)
+	if !ok {
+		panic(fmt.Sprintf("reasoning pattern %q not registered", name))
+	}
+	return p
+}
+
+// ============================================================
 // Tree of Thought (ToT) Pattern
 // ============================================================
 

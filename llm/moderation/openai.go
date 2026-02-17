@@ -82,7 +82,10 @@ func (p *OpenAIProvider) Moderate(ctx context.Context, req *ModerationRequest) (
 	payload, _ := json.Marshal(body)
 
 	endpoint := fmt.Sprintf("%s/moderations", strings.TrimRight(p.cfg.BaseURL, "/"))
-	httpReq, _ := http.NewRequestWithContext(ctx, "POST", endpoint, bytes.NewReader(payload))
+	httpReq, err := http.NewRequestWithContext(ctx, "POST", endpoint, bytes.NewReader(payload))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
 	httpReq.Header.Set("Authorization", "Bearer "+p.cfg.APIKey)
 	httpReq.Header.Set("Content-Type", "application/json")
 

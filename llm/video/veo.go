@@ -115,7 +115,10 @@ func (p *VeoProvider) Generate(ctx context.Context, req *GenerateRequest) (*Gene
 	url := fmt.Sprintf("https://generativelanguage.googleapis.com/v1beta/models/%s:generateVideos?key=%s",
 		model, p.cfg.APIKey)
 
-	httpReq, _ := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(payload))
+	httpReq, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(payload))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
 	httpReq.Header.Set("Content-Type", "application/json")
 
 	resp, err := p.client.Do(httpReq)
@@ -172,7 +175,10 @@ func (p *VeoProvider) pollOperation(ctx context.Context, opName string) (*veoRes
 			return nil, ctx.Err()
 		case <-ticker.C:
 			url := fmt.Sprintf("https://generativelanguage.googleapis.com/v1beta/%s?key=%s", opName, p.cfg.APIKey)
-			httpReq, _ := http.NewRequestWithContext(ctx, "GET", url, nil)
+			httpReq, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+			if err != nil {
+				return nil, fmt.Errorf("failed to create request: %w", err)
+			}
 
 			resp, err := p.client.Do(httpReq)
 			if err != nil {

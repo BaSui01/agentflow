@@ -235,7 +235,10 @@ func (e *Evaluator) Evaluate(ctx context.Context, suite *EvalSuite, agent AgentE
 	var stopFlag bool
 
 	for i, task := range suite.Tasks {
-		if stopFlag {
+		mu.Lock()
+		stopped := stopFlag
+		mu.Unlock()
+		if stopped {
 			break
 		}
 

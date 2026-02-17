@@ -69,7 +69,10 @@ func (p *MiniMaxProvider) HealthCheck(ctx context.Context) (*llm.HealthStatus, e
 	}
 	payload, _ := json.Marshal(testReq)
 
-	httpReq, _ := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(payload))
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(payload))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
 	p.buildHeaders(httpReq, p.cfg.APIKey)
 
 	resp, err := p.client.Do(httpReq)
@@ -279,7 +282,10 @@ func (p *MiniMaxProvider) Completion(ctx context.Context, req *llm.ChatRequest) 
 	}
 	payload, _ := json.Marshal(body)
 
-	httpReq, _ := http.NewRequestWithContext(ctx, http.MethodPost, fmt.Sprintf("%s/v1/text/chatcompletion_v2", strings.TrimRight(p.cfg.BaseURL, "/")), bytes.NewReader(payload))
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, fmt.Sprintf("%s/v1/text/chatcompletion_v2", strings.TrimRight(p.cfg.BaseURL, "/")), bytes.NewReader(payload))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
 	p.buildHeaders(httpReq, apiKey)
 
 	resp, err := p.client.Do(httpReq)
@@ -332,7 +338,10 @@ func (p *MiniMaxProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-c
 	payload, _ := json.Marshal(body)
 
 	// MiniMax API endpoint: /v1/text/chatcompletion_v2
-	httpReq, _ := http.NewRequestWithContext(ctx, http.MethodPost, fmt.Sprintf("%s/v1/text/chatcompletion_v2", strings.TrimRight(p.cfg.BaseURL, "/")), bytes.NewReader(payload))
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, fmt.Sprintf("%s/v1/text/chatcompletion_v2", strings.TrimRight(p.cfg.BaseURL, "/")), bytes.NewReader(payload))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
 	p.buildHeaders(httpReq, apiKey)
 
 	resp, err := p.client.Do(httpReq)

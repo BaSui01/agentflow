@@ -344,7 +344,7 @@ func (s *MilvusStore) collectionExists(ctx context.Context) (bool, error) {
 	}
 
 	if err := s.doJSON(ctx, http.MethodPost, "/v2/vectordb/collections/has", req, &resp); err != nil {
-		return false, err
+		return false, fmt.Errorf("check collection existence: %w", err)
 	}
 
 	return resp.Data.HasCollection, nil
@@ -404,7 +404,7 @@ func (s *MilvusStore) createCollection(ctx context.Context, vectorDim int) error
 	}
 
 	if err := s.doJSON(ctx, http.MethodPost, "/v2/vectordb/collections/create", req, &resp); err != nil {
-		return err
+		return fmt.Errorf("create collection %s: %w", s.cfg.Collection, err)
 	}
 
 	return nil
@@ -432,7 +432,7 @@ func (s *MilvusStore) createIndex(ctx context.Context) error {
 	}
 
 	if err := s.doJSON(ctx, http.MethodPost, "/v2/vectordb/indexes/create", req, &resp); err != nil {
-		return err
+		return fmt.Errorf("create index on %s: %w", s.cfg.VectorField, err)
 	}
 
 	return nil
@@ -451,7 +451,7 @@ func (s *MilvusStore) loadCollection(ctx context.Context) error {
 	}
 
 	if err := s.doJSON(ctx, http.MethodPost, "/v2/vectordb/collections/load", req, &resp); err != nil {
-		return err
+		return fmt.Errorf("load collection %s: %w", s.cfg.Collection, err)
 	}
 
 	return nil
@@ -486,7 +486,7 @@ func (s *MilvusStore) AddDocuments(ctx context.Context, docs []Document) error {
 
 	// Ensure collection exists
 	if err := s.ensureCollection(ctx, vectorDim); err != nil {
-		return err
+		return fmt.Errorf("ensure collection: %w", err)
 	}
 
 	// Process in batches
@@ -544,7 +544,7 @@ func (s *MilvusStore) insertBatch(ctx context.Context, docs []Document) error {
 	}
 
 	if err := s.doJSON(ctx, http.MethodPost, "/v2/vectordb/entities/insert", req, &resp); err != nil {
-		return err
+		return fmt.Errorf("insert entities: %w", err)
 	}
 
 	return nil
@@ -584,7 +584,7 @@ func (s *MilvusStore) Search(ctx context.Context, queryEmbedding []float64, topK
 	}
 
 	if err := s.doJSON(ctx, http.MethodPost, "/v2/vectordb/entities/search", req, &resp); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("search entities: %w", err)
 	}
 
 	// Convert results
@@ -672,7 +672,7 @@ func (s *MilvusStore) DeleteDocuments(ctx context.Context, ids []string) error {
 	}
 
 	if err := s.doJSON(ctx, http.MethodPost, "/v2/vectordb/entities/delete", req, &resp); err != nil {
-		return err
+		return fmt.Errorf("delete entities: %w", err)
 	}
 
 	s.logger.Debug("milvus delete completed", zap.Int("count", len(pointIDs)))
@@ -709,7 +709,7 @@ func (s *MilvusStore) Count(ctx context.Context) (int, error) {
 	}
 
 	if err := s.doJSON(ctx, http.MethodPost, "/v2/vectordb/collections/get_stats", req, &resp); err != nil {
-		return 0, err
+		return 0, fmt.Errorf("get collection stats: %w", err)
 	}
 
 	return resp.Data.RowCount, nil
@@ -732,7 +732,7 @@ func (s *MilvusStore) DropCollection(ctx context.Context) error {
 	}
 
 	if err := s.doJSON(ctx, http.MethodPost, "/v2/vectordb/collections/drop", req, &resp); err != nil {
-		return err
+		return fmt.Errorf("drop collection %s: %w", s.cfg.Collection, err)
 	}
 
 	s.logger.Info("collection dropped", zap.String("collection", s.cfg.Collection))

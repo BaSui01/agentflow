@@ -46,7 +46,10 @@ func (p *OpenAIProvider) Name() string { return "openai" }
 func (p *OpenAIProvider) HealthCheck(ctx context.Context) (*llm.HealthStatus, error) {
 	start := time.Now()
 	endpoint := fmt.Sprintf("%s/v1/models", strings.TrimRight(p.cfg.BaseURL, "/"))
-	httpReq, _ := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
 	p.buildHeaders(httpReq, p.cfg.APIKey)
 
 	resp, err := p.client.Do(httpReq)
@@ -228,7 +231,10 @@ func (p *OpenAIProvider) Completion(ctx context.Context, req *llm.ChatRequest) (
 	}
 	payload, _ := json.Marshal(body)
 
-	httpReq, _ := http.NewRequestWithContext(ctx, http.MethodPost, fmt.Sprintf("%s/v1/chat/completions", strings.TrimRight(p.cfg.BaseURL, "/")), bytes.NewReader(payload))
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, fmt.Sprintf("%s/v1/chat/completions", strings.TrimRight(p.cfg.BaseURL, "/")), bytes.NewReader(payload))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
 	p.buildHeaders(httpReq, apiKey)
 
 	resp, err := p.client.Do(httpReq)
@@ -281,7 +287,10 @@ func (p *OpenAIProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-ch
 	}
 	payload, _ := json.Marshal(body)
 
-	httpReq, _ := http.NewRequestWithContext(ctx, http.MethodPost, fmt.Sprintf("%s/v1/chat/completions", strings.TrimRight(p.cfg.BaseURL, "/")), bytes.NewReader(payload))
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, fmt.Sprintf("%s/v1/chat/completions", strings.TrimRight(p.cfg.BaseURL, "/")), bytes.NewReader(payload))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
 	p.buildHeaders(httpReq, apiKey)
 
 	resp, err := p.client.Do(httpReq)
@@ -472,7 +481,10 @@ func (p *OpenAIProvider) completionWithResponsesAPI(ctx context.Context, req *ll
 	payload, _ := json.Marshal(body)
 	endpoint := fmt.Sprintf("%s/v1/responses", strings.TrimRight(p.cfg.BaseURL, "/"))
 
-	httpReq, _ := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(payload))
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(payload))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
 	p.buildHeaders(httpReq, apiKey)
 
 	resp, err := p.client.Do(httpReq)

@@ -111,7 +111,10 @@ func (p *FluxProvider) Generate(ctx context.Context, req *GenerateRequest) (*Gen
 	// Submit generation request
 	payload, _ := json.Marshal(body)
 	endpoint := fmt.Sprintf("%s/v1/%s", strings.TrimRight(p.cfg.BaseURL, "/"), model)
-	httpReq, _ := http.NewRequestWithContext(ctx, "POST", endpoint, bytes.NewReader(payload))
+	httpReq, err := http.NewRequestWithContext(ctx, "POST", endpoint, bytes.NewReader(payload))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
 	httpReq.Header.Set("x-key", p.cfg.APIKey)
 	httpReq.Header.Set("Content-Type", "application/json")
 	httpReq.Header.Set("accept", "application/json")
@@ -169,7 +172,10 @@ func (p *FluxProvider) pollResult(ctx context.Context, pollingURL string) (*flux
 		case <-time.After(2 * time.Second):
 		}
 
-		httpReq, _ := http.NewRequestWithContext(ctx, "GET", pollingURL, nil)
+		httpReq, err := http.NewRequestWithContext(ctx, "GET", pollingURL, nil)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create request: %w", err)
+		}
 		httpReq.Header.Set("x-key", p.cfg.APIKey)
 		httpReq.Header.Set("accept", "application/json")
 
