@@ -59,7 +59,10 @@ func (p *GeminiProvider) Name() string { return "gemini" }
 func (p *GeminiProvider) HealthCheck(ctx context.Context) (*llm.HealthStatus, error) {
 	start := time.Now()
 	endpoint := fmt.Sprintf("%s/v1beta/models", strings.TrimRight(p.cfg.BaseURL, "/"))
-	httpReq, _ := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
 	p.buildHeaders(httpReq, p.cfg.APIKey)
 
 	resp, err := p.client.Do(httpReq)
@@ -310,7 +313,10 @@ func (p *GeminiProvider) Completion(ctx context.Context, req *llm.ChatRequest) (
 	model := chooseGeminiModel(req, p.cfg.Model)
 	endpoint := fmt.Sprintf("%s/v1beta/models/%s:generateContent", strings.TrimRight(p.cfg.BaseURL, "/"), model)
 
-	httpReq, _ := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(payload))
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(payload))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
 	p.buildHeaders(httpReq, apiKey)
 
 	resp, err := p.client.Do(httpReq)
@@ -384,7 +390,10 @@ func (p *GeminiProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-ch
 	model := chooseGeminiModel(req, p.cfg.Model)
 	endpoint := fmt.Sprintf("%s/v1beta/models/%s:streamGenerateContent", strings.TrimRight(p.cfg.BaseURL, "/"), model)
 
-	httpReq, _ := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(payload))
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(payload))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
 	p.buildHeaders(httpReq, apiKey)
 
 	resp, err := p.client.Do(httpReq)

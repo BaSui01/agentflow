@@ -57,7 +57,10 @@ func (p *GLMProvider) SupportsNativeFunctionCalling() bool { return true }
 func (p *GLMProvider) HealthCheck(ctx context.Context) (*llm.HealthStatus, error) {
 	start := time.Now()
 	endpoint := fmt.Sprintf("%s/api/paas/v4/models", strings.TrimRight(p.cfg.BaseURL, "/"))
-	httpReq, _ := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
 	p.buildHeaders(httpReq, p.cfg.APIKey)
 
 	resp, err := p.client.Do(httpReq)
@@ -254,7 +257,10 @@ func (p *GLMProvider) Completion(ctx context.Context, req *llm.ChatRequest) (*ll
 	}
 	payload, _ := json.Marshal(body)
 
-	httpReq, _ := http.NewRequestWithContext(ctx, http.MethodPost, fmt.Sprintf("%s/api/paas/v4/chat/completions", strings.TrimRight(p.cfg.BaseURL, "/")), bytes.NewReader(payload))
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, fmt.Sprintf("%s/api/paas/v4/chat/completions", strings.TrimRight(p.cfg.BaseURL, "/")), bytes.NewReader(payload))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
 	p.buildHeaders(httpReq, apiKey)
 
 	resp, err := p.client.Do(httpReq)
@@ -309,7 +315,10 @@ func (p *GLMProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-chan 
 	}
 	payload, _ := json.Marshal(body)
 
-	httpReq, _ := http.NewRequestWithContext(ctx, http.MethodPost, fmt.Sprintf("%s/api/paas/v4/chat/completions", strings.TrimRight(p.cfg.BaseURL, "/")), bytes.NewReader(payload))
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, fmt.Sprintf("%s/api/paas/v4/chat/completions", strings.TrimRight(p.cfg.BaseURL, "/")), bytes.NewReader(payload))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
 	p.buildHeaders(httpReq, apiKey)
 
 	resp, err := p.client.Do(httpReq)
