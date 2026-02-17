@@ -76,7 +76,10 @@ func (p *SunoProvider) Generate(ctx context.Context, req *GenerateRequest) (*Gen
 	payload, _ := json.Marshal(body)
 	endpoint := fmt.Sprintf("%s/suno/create", strings.TrimRight(p.cfg.BaseURL, "/"))
 
-	httpReq, _ := http.NewRequestWithContext(ctx, "POST", endpoint, bytes.NewReader(payload))
+	httpReq, err := http.NewRequestWithContext(ctx, "POST", endpoint, bytes.NewReader(payload))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
 	httpReq.Header.Set("Authorization", "Bearer "+p.cfg.APIKey)
 	httpReq.Header.Set("Content-Type", "application/json")
 
@@ -141,7 +144,10 @@ func (p *SunoProvider) pollTask(ctx context.Context, taskID string) (*sunoRespon
 			return nil, ctx.Err()
 		case <-ticker.C:
 			endpoint := fmt.Sprintf("%s/suno/task/%s", strings.TrimRight(p.cfg.BaseURL, "/"), taskID)
-			httpReq, _ := http.NewRequestWithContext(ctx, "GET", endpoint, nil)
+			httpReq, err := http.NewRequestWithContext(ctx, "GET", endpoint, nil)
+			if err != nil {
+				return nil, fmt.Errorf("failed to create request: %w", err)
+			}
 			httpReq.Header.Set("Authorization", "Bearer "+p.cfg.APIKey)
 
 			resp, err := p.client.Do(httpReq)

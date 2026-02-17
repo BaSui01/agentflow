@@ -86,9 +86,12 @@ func (p *CohereProvider) Rerank(ctx context.Context, req *RerankRequest) (*Reran
 	}
 
 	payload, _ := json.Marshal(body)
-	httpReq, _ := http.NewRequestWithContext(ctx, "POST",
+	httpReq, err := http.NewRequestWithContext(ctx, "POST",
 		strings.TrimRight(p.cfg.BaseURL, "/")+"/v2/rerank",
 		bytes.NewReader(payload))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
 	httpReq.Header.Set("Authorization", "Bearer "+p.cfg.APIKey)
 	httpReq.Header.Set("Content-Type", "application/json")
 

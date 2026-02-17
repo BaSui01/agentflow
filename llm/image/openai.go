@@ -92,9 +92,12 @@ func (p *OpenAIProvider) Generate(ctx context.Context, req *GenerateRequest) (*G
 	}
 
 	payload, _ := json.Marshal(body)
-	httpReq, _ := http.NewRequestWithContext(ctx, "POST",
+	httpReq, err := http.NewRequestWithContext(ctx, "POST",
 		strings.TrimRight(p.cfg.BaseURL, "/")+"/v1/images/generations",
 		bytes.NewReader(payload))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
 	httpReq.Header.Set("Authorization", "Bearer "+p.cfg.APIKey)
 	httpReq.Header.Set("Content-Type", "application/json")
 
@@ -176,9 +179,12 @@ func (p *OpenAIProvider) Edit(ctx context.Context, req *EditRequest) (*GenerateR
 
 	writer.Close()
 
-	httpReq, _ := http.NewRequestWithContext(ctx, "POST",
+	httpReq, err := http.NewRequestWithContext(ctx, "POST",
 		strings.TrimRight(p.cfg.BaseURL, "/")+"/v1/images/edits",
 		&buf)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
 	httpReq.Header.Set("Authorization", "Bearer "+p.cfg.APIKey)
 	httpReq.Header.Set("Content-Type", writer.FormDataContentType())
 
@@ -237,9 +243,12 @@ func (p *OpenAIProvider) CreateVariation(ctx context.Context, req *VariationRequ
 
 	writer.Close()
 
-	httpReq, _ := http.NewRequestWithContext(ctx, "POST",
+	httpReq, err := http.NewRequestWithContext(ctx, "POST",
 		strings.TrimRight(p.cfg.BaseURL, "/")+"/v1/images/variations",
 		&buf)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
 	httpReq.Header.Set("Authorization", "Bearer "+p.cfg.APIKey)
 	httpReq.Header.Set("Content-Type", writer.FormDataContentType())
 
