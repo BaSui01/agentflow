@@ -510,14 +510,14 @@ func (s *RedisCheckpointStore) Save(ctx context.Context, checkpoint *Checkpoint)
 	// 保存检查点数据
 	key := s.checkpointKey(checkpoint.ID)
 	if err := s.client.Set(ctx, key, data, s.ttl); err != nil {
-		return err
+		return fmt.Errorf("save checkpoint data to redis: %w", err)
 	}
 
 	// 添加到线程索引（有序集合，按时间排序）
 	threadKey := s.threadKey(checkpoint.ThreadID)
 	score := float64(checkpoint.CreatedAt.Unix())
 	if err := s.client.ZAdd(ctx, threadKey, score, checkpoint.ID); err != nil {
-		return err
+		return fmt.Errorf("add checkpoint to thread index: %w", err)
 	}
 
 	s.logger.Debug("checkpoint saved to redis",
@@ -534,7 +534,7 @@ func (s *RedisCheckpointStore) Load(ctx context.Context, checkpointID string) (*
 	key := s.checkpointKey(checkpointID)
 	data, err := s.client.Get(ctx, key)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("get checkpoint from redis: %w", err)
 	}
 
 	var checkpoint Checkpoint
@@ -552,7 +552,7 @@ func (s *RedisCheckpointStore) LoadLatest(ctx context.Context, threadID string) 
 	// 获取最新的检查点 ID
 	ids, err := s.client.ZRevRange(ctx, threadKey, 0, 0)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("get latest checkpoint ID: %w", err)
 	}
 
 	if len(ids) == 0 {
@@ -569,7 +569,7 @@ func (s *RedisCheckpointStore) List(ctx context.Context, threadID string, limit 
 	// 获取检查点 ID 列表
 	ids, err := s.client.ZRevRange(ctx, threadKey, 0, int64(limit-1))
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("list checkpoint IDs: %w", err)
 	}
 
 	checkpoints := make([]*Checkpoint, 0, len(ids))
@@ -596,7 +596,7 @@ func (s *RedisCheckpointStore) DeleteThread(ctx context.Context, threadID string
 	// 获取所有检查点
 	checkpoints, err := s.List(ctx, threadID, 1000)
 	if err != nil {
-		return err
+		return fmt.Errorf("list checkpoints for thread deletion: %w", err)
 	}
 
 	// 删除所有检查点
@@ -623,7 +623,7 @@ func (s *RedisCheckpointStore) threadKey(threadID string) string {
 func (s *RedisCheckpointStore) LoadVersion(ctx context.Context, threadID string, version int) (*Checkpoint, error) {
 	versions, err := s.ListVersions(ctx, threadID)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("list versions for load: %w", err)
 	}
 
 	for _, v := range versions {
@@ -639,7 +639,7 @@ func (s *RedisCheckpointStore) LoadVersion(ctx context.Context, threadID string,
 func (s *RedisCheckpointStore) ListVersions(ctx context.Context, threadID string) ([]CheckpointVersion, error) {
 	checkpoints, err := s.List(ctx, threadID, 1000)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("list checkpoints for versions: %w", err)
 	}
 
 	versions := make([]CheckpointVersion, 0, len(checkpoints))
@@ -660,7 +660,7 @@ func (s *RedisCheckpointStore) ListVersions(ctx context.Context, threadID string
 func (s *RedisCheckpointStore) Rollback(ctx context.Context, threadID string, version int) error {
 	checkpoint, err := s.LoadVersion(ctx, threadID, version)
 	if err != nil {
-		return err
+		return fmt.Errorf("load version %d for rollback: %w", version, err)
 	}
 
 	// 创建新的检查点作为回滚点
@@ -672,7 +672,7 @@ func (s *RedisCheckpointStore) Rollback(ctx context.Context, threadID string, ve
 	// 获取当前最大版本号
 	versions, err := s.ListVersions(ctx, threadID)
 	if err != nil {
-		return err
+		return fmt.Errorf("list versions for rollback: %w", err)
 	}
 
 	maxVersion := 0
@@ -835,7 +835,7 @@ func (s *PostgreSQLCheckpointStore) List(ctx context.Context, threadID string, l
 
 	rows, err := s.db.Query(ctx, query, threadID, limit)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("query checkpoints: %w", err)
 	}
 	defer rows.Close()
 
@@ -903,7 +903,7 @@ func (s *PostgreSQLCheckpointStore) ListVersions(ctx context.Context, threadID s
 
 	rows, err := s.db.Query(ctx, query, threadID)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("query checkpoint versions: %w", err)
 	}
 	defer rows.Close()
 
@@ -927,7 +927,7 @@ func (s *PostgreSQLCheckpointStore) ListVersions(ctx context.Context, threadID s
 func (s *PostgreSQLCheckpointStore) Rollback(ctx context.Context, threadID string, version int) error {
 	checkpoint, err := s.LoadVersion(ctx, threadID, version)
 	if err != nil {
-		return err
+		return fmt.Errorf("load version %d for rollback: %w", version, err)
 	}
 
 	// 创建新的检查点作为回滚点
@@ -939,7 +939,7 @@ func (s *PostgreSQLCheckpointStore) Rollback(ctx context.Context, threadID strin
 	// 获取当前最大版本号
 	versions, err := s.ListVersions(ctx, threadID)
 	if err != nil {
-		return err
+		return fmt.Errorf("list versions for rollback: %w", err)
 	}
 
 	maxVersion := 0
@@ -1204,7 +1204,7 @@ func (s *FileCheckpointStore) LoadVersion(ctx context.Context, threadID string, 
 
 	versions, err := s.listVersionsUnlocked(ctx, threadID)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("list versions: %w", err)
 	}
 
 	for _, v := range versions {
@@ -1233,7 +1233,7 @@ func (s *FileCheckpointStore) Rollback(ctx context.Context, threadID string, ver
 	// 加载指定版本的检查点
 	versions, err := s.listVersionsUnlocked(ctx, threadID)
 	if err != nil {
-		return err
+		return fmt.Errorf("list versions for rollback: %w", err)
 	}
 
 	var targetCheckpoint *Checkpoint
@@ -1242,7 +1242,7 @@ func (s *FileCheckpointStore) Rollback(ctx context.Context, threadID string, ver
 			checkpointFile := filepath.Join(s.threadDir(threadID), "checkpoints", fmt.Sprintf("%s.json", v.ID))
 			targetCheckpoint, err = s.loadCheckpointFile(checkpointFile)
 			if err != nil {
-				return err
+				return fmt.Errorf("load checkpoint file for rollback: %w", err)
 			}
 			break
 		}

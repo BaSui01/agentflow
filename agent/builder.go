@@ -243,17 +243,17 @@ func (b *AgentBuilder) Build() (*BaseAgent, error) {
 func (b *AgentBuilder) enableOptionalFeatures(agent *BaseAgent) error {
 	if b.config.EnableSkills {
 		if err := b.enableSkills(agent); err != nil {
-			return err
+			return fmt.Errorf("enable skills: %w", err)
 		}
 	}
 	if b.config.EnableMCP {
 		if err := b.enableMCP(agent); err != nil {
-			return err
+			return fmt.Errorf("enable MCP: %w", err)
 		}
 	}
 	if b.config.EnableEnhancedMemory {
 		if err := b.enableEnhancedMemory(agent); err != nil {
-			return err
+			return fmt.Errorf("enable enhanced memory: %w", err)
 		}
 	}
 	// Observability has an import-cycle with agent/observability (it imports agent).

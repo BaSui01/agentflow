@@ -3,6 +3,7 @@ package llm
 import (
 	"context"
 	"errors"
+	"fmt"
 	"math/rand"
 	"sort"
 	"sync"
@@ -71,7 +72,7 @@ func (p *APIKeyPool) LoadKeys(ctx context.Context) error {
 		Find(&keys).Error
 
 	if err != nil {
-		return err
+		return fmt.Errorf("load API keys from database: %w", err)
 	}
 
 	p.keys = keys

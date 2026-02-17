@@ -222,7 +222,7 @@ func (d *Deployer) Delete(ctx context.Context, deploymentID string) error {
 	}
 
 	if err := provider.Delete(ctx, deploymentID); err != nil {
-		return err
+		return fmt.Errorf("delete deployment %s: %w", deploymentID, err)
 	}
 
 	d.mu.Lock()
@@ -255,7 +255,7 @@ func (d *Deployer) Scale(ctx context.Context, deploymentID string, replicas int)
 	)
 
 	if err := provider.Scale(ctx, deploymentID, replicas); err != nil {
-		return err
+		return fmt.Errorf("scale deployment %s: %w", deploymentID, err)
 	}
 
 	d.mu.Lock()
@@ -309,7 +309,7 @@ func generateDeploymentID() string {
 func (d *Deployer) ExportManifest(deploymentID string) ([]byte, error) {
 	deployment, err := d.GetDeployment(deploymentID)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("get deployment for manifest export: %w", err)
 	}
 
 	manifest := map[string]any{

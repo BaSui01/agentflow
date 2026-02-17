@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -891,10 +893,34 @@ func (h *HealthChecker) performHealthCheck(ctx context.Context, agent *AgentInfo
 
 	// For remote agents, perform HTTP health check
 	if agent.Endpoint != "" {
-		// TODO: Implement HTTP health check
-		result.Healthy = true
-		result.Status = AgentStatusOnline
+		healthURL := strings.TrimRight(agent.Endpoint, "/") + "/health"
+		client := &http.Client{Timeout: 5 * time.Second}
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, healthURL, nil)
+		if err != nil {
+			result.Healthy = false
+			result.Status = AgentStatusUnhealthy
+			result.Message = fmt.Sprintf("failed to create health check request: %v", err)
+			result.Latency = time.Since(start)
+			return result
+		}
+		resp, err := client.Do(req)
+		if err != nil {
+			result.Healthy = false
+			result.Status = AgentStatusUnhealthy
+			result.Message = fmt.Sprintf("health check request failed: %v", err)
+			result.Latency = time.Since(start)
+			return result
+		}
+		resp.Body.Close()
 		result.Latency = time.Since(start)
+		if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+			result.Healthy = true
+			result.Status = AgentStatusOnline
+		} else {
+			result.Healthy = false
+			result.Status = AgentStatusUnhealthy
+			result.Message = fmt.Sprintf("health check returned status %d", resp.StatusCode)
+		}
 		return result
 	}
 

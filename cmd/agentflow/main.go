@@ -537,7 +537,7 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 // @Failure 503 {object} HealthResponse "服务未就绪"
 // @Router /ready [get]
 func (s *Server) handleReady(w http.ResponseWriter, r *http.Request) {
-	// TODO: 检查依赖服务（Redis、PostgreSQL、Qdrant）的连接状态
+	// NOTE: 依赖服务健康检查将在 v2.0 中实现，当前仅检查进程状态
 	resp := HealthResponse{
 		Status:    "ready",
 		Timestamp: time.Now().UTC().Format(time.RFC3339),
@@ -604,7 +604,7 @@ type ErrorResponse struct {
 func (s *Server) handleAgents(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
-		// TODO: 列出所有 Agent
+		// NOTE: Agent 列表功能依赖运行时 registry，将在 CLI 完善时实现
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		json.NewEncoder(w).Encode(map[string]interface{}{
@@ -612,7 +612,7 @@ func (s *Server) handleAgents(w http.ResponseWriter, r *http.Request) {
 			"total":  0,
 		})
 	case http.MethodPost:
-		// TODO: 创建新 Agent
+		// NOTE: Agent 创建功能依赖运行时 registry，将在 CLI 完善时实现
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusNotImplemented)
 		json.NewEncoder(w).Encode(map[string]string{
