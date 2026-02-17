@@ -162,7 +162,10 @@ func (s *WeaviateStore) doJSON(ctx context.Context, method, path string, in any,
 	defer resp.Body.Close()
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		raw, _ := io.ReadAll(resp.Body)
+		raw, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return fmt.Errorf("failed to read response body: %w", err)
+		}
 		return fmt.Errorf("weaviate request failed: method=%s path=%s status=%d body=%s",
 			method, path, resp.StatusCode, string(raw))
 	}
@@ -201,7 +204,7 @@ func (s *WeaviateStore) ensureSchema(ctx context.Context, vectorSize int) error 
 			s.ensureErr = err
 			return
 		}
-		checkResp.Body.Close()
+		defer checkResp.Body.Close()
 
 		// Class already exists
 		if checkResp.StatusCode == http.StatusOK {
@@ -630,7 +633,7 @@ func (s *WeaviateStore) DeleteDocuments(ctx context.Context, ids []string) error
 		if err != nil {
 			return fmt.Errorf("weaviate delete request failed: %w", err)
 		}
-		resp.Body.Close()
+		defer resp.Body.Close()
 
 		// 404 is acceptable (object doesn't exist)
 		if resp.StatusCode != http.StatusNoContent && resp.StatusCode != http.StatusNotFound {
@@ -714,7 +717,7 @@ func (s *WeaviateStore) DeleteClass(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("weaviate delete class request failed: %w", err)
 	}
-	resp.Body.Close()
+	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNotFound {
 		return fmt.Errorf("weaviate delete class failed: status=%d", resp.StatusCode)

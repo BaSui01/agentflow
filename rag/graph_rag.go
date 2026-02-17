@@ -304,12 +304,12 @@ func (r *GraphRAG) AddDocument(ctx context.Context, doc GraphDocument) error {
 	// Generate embedding
 	emb, err := r.embedder.Embed(ctx, doc.Content)
 	if err != nil {
-		return err
+		return fmt.Errorf("embed document %s: %w", doc.ID, err)
 	}
 
 	// Add to vector store
 	if err := r.vectorStore.Store(ctx, doc.ID, emb, doc.Metadata); err != nil {
-		return err
+		return fmt.Errorf("store document %s: %w", doc.ID, err)
 	}
 
 	// Add to graph

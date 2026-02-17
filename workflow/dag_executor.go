@@ -123,19 +123,16 @@ func (e *DAGExecutor) GetHistoryStore() *ExecutionHistoryStore {
 
 // executeNode executes a single node based on its type
 func (e *DAGExecutor) executeNode(ctx context.Context, graph *DAGGraph, node *DAGNode, input interface{}) (interface{}, error) {
-	// Check if already visited (prevent cycles)
-	e.mu.RLock()
+	// Check if already visited and mark atomically (prevent cycles and duplicate execution)
+	e.mu.Lock()
 	if e.visitedNodes[node.ID] {
-		e.mu.RUnlock()
+		result := e.nodeResults[node.ID]
+		e.mu.Unlock()
 		e.logger.Debug("node already visited, skipping",
 			zap.String("node_id", node.ID),
 		)
-		return e.nodeResults[node.ID], nil
+		return result, nil
 	}
-	e.mu.RUnlock()
-
-	// Mark as visited
-	e.mu.Lock()
 	e.visitedNodes[node.ID] = true
 	e.mu.Unlock()
 
