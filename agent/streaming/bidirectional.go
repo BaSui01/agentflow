@@ -33,6 +33,18 @@ type StreamChunk struct {
 	Metadata  map[string]any `json:"metadata,omitempty"`
 }
 
+// StreamConnection 底层流式连接接口（WebSocket、gRPC stream 等）
+type StreamConnection interface {
+	// ReadChunk 从连接读取一个数据块（阻塞直到有数据或出错）
+	ReadChunk(ctx context.Context) (*StreamChunk, error)
+	// WriteChunk 向连接写入一个数据块
+	WriteChunk(ctx context.Context, chunk StreamChunk) error
+	// Close 关闭连接
+	Close() error
+	// IsAlive 检查连接是否存活
+	IsAlive() bool
+}
+
 // StreamConfig configures bidirectional streaming.
 type StreamConfig struct {
 	BufferSize     int           `json:"buffer_size"`
@@ -42,18 +54,27 @@ type StreamConfig struct {
 	EnableVAD      bool          `json:"enable_vad"`
 	ChunkDuration  time.Duration `json:"chunk_duration"`
 	ReconnectDelay time.Duration `json:"reconnect_delay"`
+	// 新增字段
+	HeartbeatInterval time.Duration `json:"heartbeat_interval"` // 心跳间隔，默认 30s
+	HeartbeatTimeout  time.Duration `json:"heartbeat_timeout"`  // 心跳超时，默认 10s
+	MaxReconnects     int           `json:"max_reconnects"`     // 最大重连次数，默认 5
+	EnableHeartbeat   bool          `json:"enable_heartbeat"`   // 是否启用心跳
 }
 
 // DefaultStreamConfig returns default streaming configuration.
 func DefaultStreamConfig() StreamConfig {
 	return StreamConfig{
-		BufferSize:     1024,
-		MaxLatencyMS:   200,
-		SampleRate:     16000,
-		Channels:       1,
-		EnableVAD:      true,
-		ChunkDuration:  100 * time.Millisecond,
-		ReconnectDelay: time.Second,
+		BufferSize:        1024,
+		MaxLatencyMS:      200,
+		SampleRate:        16000,
+		Channels:          1,
+		EnableVAD:         true,
+		ChunkDuration:     100 * time.Millisecond,
+		ReconnectDelay:    time.Second,
+		HeartbeatInterval: 30 * time.Second,
+		HeartbeatTimeout:  10 * time.Second,
+		MaxReconnects:     5,
+		EnableHeartbeat:   true,
 	}
 }
 
@@ -65,10 +86,16 @@ type BidirectionalStream struct {
 	inbound  chan StreamChunk
 	outbound chan StreamChunk
 	handler  StreamHandler
+	conn     StreamConnection // 新增：底层连接
 	logger   *zap.Logger
 	mu       sync.RWMutex
 	done     chan struct{}
 	sequence int64
+	// 新增字段
+	connFactory    func() (StreamConnection, error) // 连接工厂，用于重连
+	reconnectCount int
+	lastHeartbeat  time.Time
+	errChan        chan error // 内部错误通道
 }
 
 // StreamState represents the stream state.
@@ -91,19 +118,28 @@ type StreamHandler interface {
 }
 
 // NewBidirectionalStream creates a new bidirectional stream.
-func NewBidirectionalStream(config StreamConfig, handler StreamHandler, logger *zap.Logger) *BidirectionalStream {
+func NewBidirectionalStream(
+	config StreamConfig,
+	handler StreamHandler,
+	conn StreamConnection,
+	connFactory func() (StreamConnection, error),
+	logger *zap.Logger,
+) *BidirectionalStream {
 	if logger == nil {
 		logger = zap.NewNop()
 	}
 	return &BidirectionalStream{
-		ID:       fmt.Sprintf("stream_%d", time.Now().UnixNano()),
-		Config:   config,
-		State:    StateDisconnected,
-		inbound:  make(chan StreamChunk, config.BufferSize),
-		outbound: make(chan StreamChunk, config.BufferSize),
-		handler:  handler,
-		logger:   logger.With(zap.String("component", "bidirectional_stream")),
-		done:     make(chan struct{}),
+		ID:          fmt.Sprintf("stream_%d", time.Now().UnixNano()),
+		Config:      config,
+		State:       StateDisconnected,
+		inbound:     make(chan StreamChunk, config.BufferSize),
+		outbound:    make(chan StreamChunk, config.BufferSize),
+		handler:     handler,
+		conn:        conn,
+		connFactory: connFactory,
+		logger:      logger.With(zap.String("component", "bidirectional_stream")),
+		done:        make(chan struct{}),
+		errChan:     make(chan error, 16),
 	}
 }
 
@@ -112,14 +148,52 @@ func (s *BidirectionalStream) Start(ctx context.Context) error {
 	s.setState(StateConnecting)
 	s.logger.Info("starting bidirectional stream")
 
+	// 验证连接
+	if s.conn == nil && s.connFactory != nil {
+		conn, err := s.connFactory()
+		if err != nil {
+			s.setState(StateError)
+			return fmt.Errorf("failed to establish connection: %w", err)
+		}
+		s.conn = conn
+	}
+	if s.conn == nil {
+		s.setState(StateError)
+		return fmt.Errorf("no connection available")
+	}
+
 	s.setState(StateConnected)
 
-	// Start processing goroutines
+	s.mu.Lock()
+	s.lastHeartbeat = time.Now()
+	s.mu.Unlock()
+
+	// 启动处理协程
 	go s.processInbound(ctx)
 	go s.processOutbound(ctx)
+	go s.processHeartbeat(ctx)
+	go s.monitorErrors(ctx)
 
 	s.setState(StateStreaming)
 	return nil
+}
+
+// monitorErrors 监控内部错误
+func (s *BidirectionalStream) monitorErrors(ctx context.Context) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-s.done:
+			return
+		case err := <-s.errChan:
+			s.logger.Warn("stream error detected", zap.Error(err))
+			// 连续错误可以触发状态变更
+			if s.GetState() == StateError {
+				return
+			}
+		}
+	}
 }
 
 // Send sends data to the outbound stream.
@@ -157,8 +231,19 @@ func (s *BidirectionalStream) Close() error {
 
 	close(s.done)
 	s.State = StateDisconnected
+
+	// 关闭底层连接
+	var connErr error
+	if s.conn != nil {
+		connErr = s.conn.Close()
+	}
+
+	// 排空 channel
+	close(s.inbound)
+	close(s.outbound)
+
 	s.logger.Info("stream closed")
-	return nil
+	return connErr
 }
 
 func (s *BidirectionalStream) setState(state StreamState) {
@@ -171,6 +256,85 @@ func (s *BidirectionalStream) setState(state StreamState) {
 }
 
 func (s *BidirectionalStream) processInbound(ctx context.Context) {
+	defer s.logger.Debug("processInbound exited")
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-s.done:
+			return
+		default:
+		}
+
+		// 从底层连接读取数据
+		chunk, err := s.conn.ReadChunk(ctx)
+		if err != nil {
+			// 检查是否是正常关闭
+			select {
+			case <-s.done:
+				return
+			case <-ctx.Done():
+				return
+			default:
+			}
+
+			s.logger.Error("connection read error", zap.Error(err))
+			s.errChan <- fmt.Errorf("inbound read error: %w", err)
+
+			// 尝试重连
+			if s.tryReconnect(ctx) {
+				continue
+			}
+			return
+		}
+
+		if chunk == nil {
+			continue
+		}
+
+		// 更新心跳时间
+		s.mu.Lock()
+		s.lastHeartbeat = time.Now()
+		s.mu.Unlock()
+
+		// 跳过心跳包
+		if chunk.Type == "heartbeat" {
+			continue
+		}
+
+		// 调用 handler 处理入站数据
+		if s.handler != nil {
+			response, err := s.handler.OnInbound(ctx, *chunk)
+			if err != nil {
+				s.logger.Error("inbound handler error", zap.Error(err))
+				continue
+			}
+			if response != nil {
+				select {
+				case s.inbound <- *response:
+				case <-s.done:
+					return
+				default:
+					s.logger.Warn("inbound buffer full, dropping chunk",
+						zap.Int64("sequence", response.Sequence))
+				}
+			}
+		} else {
+			// 没有 handler 时直接写入 inbound channel
+			select {
+			case s.inbound <- *chunk:
+			case <-s.done:
+				return
+			default:
+				s.logger.Warn("inbound buffer full, dropping chunk",
+					zap.Int64("sequence", chunk.Sequence))
+			}
+		}
+	}
+}
+
+func (s *BidirectionalStream) processOutbound(ctx context.Context) {
+	defer s.logger.Debug("processOutbound exited")
 	for {
 		select {
 		case <-ctx.Done():
@@ -178,33 +342,146 @@ func (s *BidirectionalStream) processInbound(ctx context.Context) {
 		case <-s.done:
 			return
 		case chunk := <-s.outbound:
+			// 调用 handler 预处理出站数据
 			if s.handler != nil {
-				response, err := s.handler.OnInbound(ctx, chunk)
-				if err != nil {
-					s.logger.Error("inbound handler error", zap.Error(err))
+				if err := s.handler.OnOutbound(ctx, chunk); err != nil {
+					s.logger.Error("outbound handler error",
+						zap.Error(err),
+						zap.Int64("sequence", chunk.Sequence))
 					continue
 				}
-				if response != nil {
-					select {
-					case s.inbound <- *response:
-					default:
-						s.logger.Warn("inbound buffer full")
+			}
+
+			// 写入底层连接
+			if err := s.conn.WriteChunk(ctx, chunk); err != nil {
+				s.logger.Error("connection write error", zap.Error(err))
+				s.errChan <- fmt.Errorf("outbound write error: %w", err)
+
+				// 尝试重连后重发
+				if s.tryReconnect(ctx) {
+					// 重连成功，重新发送当前 chunk
+					if retryErr := s.conn.WriteChunk(ctx, chunk); retryErr != nil {
+						s.logger.Error("retry write failed after reconnect", zap.Error(retryErr))
 					}
+					continue
 				}
+				return
 			}
 		}
 	}
 }
 
-func (s *BidirectionalStream) processOutbound(ctx context.Context) {
+// processHeartbeat 定期发送心跳并检测超时
+func (s *BidirectionalStream) processHeartbeat(ctx context.Context) {
+	if !s.Config.EnableHeartbeat {
+		return
+	}
+
+	ticker := time.NewTicker(s.Config.HeartbeatInterval)
+	defer ticker.Stop()
+
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case <-s.done:
 			return
+		case <-ticker.C:
+			// 发送心跳
+			heartbeat := StreamChunk{
+				Type:      "heartbeat",
+				Timestamp: time.Now(),
+				Metadata:  map[string]any{"ping": true},
+			}
+			if err := s.conn.WriteChunk(ctx, heartbeat); err != nil {
+				s.logger.Warn("heartbeat send failed", zap.Error(err))
+				s.errChan <- fmt.Errorf("heartbeat failed: %w", err)
+			}
+
+			// 检查对端心跳超时
+			s.mu.RLock()
+			lastBeat := s.lastHeartbeat
+			s.mu.RUnlock()
+
+			if !lastBeat.IsZero() && time.Since(lastBeat) > s.Config.HeartbeatTimeout+s.Config.HeartbeatInterval {
+				s.logger.Warn("heartbeat timeout detected",
+					zap.Duration("since_last", time.Since(lastBeat)))
+				s.errChan <- fmt.Errorf("heartbeat timeout: last=%v", lastBeat)
+
+				// 尝试重连
+				if !s.tryReconnect(ctx) {
+					s.setState(StateError)
+					return
+				}
+			}
 		}
 	}
+}
+
+// tryReconnect 尝试重新建立连接
+func (s *BidirectionalStream) tryReconnect(ctx context.Context) bool {
+	if s.connFactory == nil {
+		s.logger.Error("no connection factory, cannot reconnect")
+		return false
+	}
+
+	s.mu.Lock()
+	if s.reconnectCount >= s.Config.MaxReconnects {
+		s.mu.Unlock()
+		s.logger.Error("max reconnect attempts reached",
+			zap.Int("attempts", s.reconnectCount))
+		s.setState(StateError)
+		return false
+	}
+	s.reconnectCount++
+	attempt := s.reconnectCount
+	s.mu.Unlock()
+
+	s.setState(StateConnecting)
+	s.logger.Info("attempting reconnect",
+		zap.Int("attempt", attempt),
+		zap.Int("max", s.Config.MaxReconnects))
+
+	// 指数退避
+	delay := s.Config.ReconnectDelay * time.Duration(1<<uint(attempt-1))
+	if delay > 30*time.Second {
+		delay = 30 * time.Second
+	}
+
+	select {
+	case <-ctx.Done():
+		return false
+	case <-s.done:
+		return false
+	case <-time.After(delay):
+	}
+
+	// 关闭旧连接
+	if s.conn != nil {
+		_ = s.conn.Close()
+	}
+
+	// 创建新连接
+	newConn, err := s.connFactory()
+	if err != nil {
+		s.logger.Error("reconnect failed", zap.Error(err), zap.Int("attempt", attempt))
+		return s.tryReconnect(ctx) // 递归重试
+	}
+
+	s.mu.Lock()
+	s.conn = newConn
+	s.lastHeartbeat = time.Now()
+	s.mu.Unlock()
+
+	s.setState(StateConnected)
+	s.logger.Info("reconnected successfully", zap.Int("attempt", attempt))
+
+	// 重置重连计数
+	s.mu.Lock()
+	s.reconnectCount = 0
+	s.mu.Unlock()
+
+	return true
 }
 
 // GetState returns the current stream state.
@@ -271,8 +548,13 @@ func NewStreamManager(logger *zap.Logger) *StreamManager {
 }
 
 // CreateStream creates a new stream.
-func (m *StreamManager) CreateStream(config StreamConfig, handler StreamHandler) *BidirectionalStream {
-	stream := NewBidirectionalStream(config, handler, m.logger)
+func (m *StreamManager) CreateStream(
+	config StreamConfig,
+	handler StreamHandler,
+	conn StreamConnection,
+	connFactory func() (StreamConnection, error),
+) *BidirectionalStream {
+	stream := NewBidirectionalStream(config, handler, conn, connFactory, m.logger)
 	m.mu.Lock()
 	m.streams[stream.ID] = stream
 	m.mu.Unlock()
