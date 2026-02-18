@@ -12,9 +12,10 @@ import (
 
 // DAGExecutor executes DAG workflows with dependency resolution
 type DAGExecutor struct {
-	checkpointMgr CheckpointManager
-	historyStore  *ExecutionHistoryStore
-	logger        *zap.Logger
+	checkpointMgr   CheckpointManager
+	historyStore    *ExecutionHistoryStore
+	logger          *zap.Logger
+	circuitBreakers *CircuitBreakerRegistry
 
 	// Execution state
 	executionID  string
@@ -40,17 +41,28 @@ func NewDAGExecutor(checkpointMgr CheckpointManager, logger *zap.Logger) *DAGExe
 		logger = zap.NewNop()
 	}
 	return &DAGExecutor{
-		checkpointMgr: checkpointMgr,
-		historyStore:  NewExecutionHistoryStore(),
-		logger:        logger.With(zap.String("component", "dag_executor")),
-		nodeResults:   make(map[string]interface{}),
-		visitedNodes:  make(map[string]bool),
+		checkpointMgr:   checkpointMgr,
+		historyStore:    NewExecutionHistoryStore(),
+		logger:          logger.With(zap.String("component", "dag_executor")),
+		nodeResults:     make(map[string]interface{}),
+		visitedNodes:    make(map[string]bool),
+		circuitBreakers: NewCircuitBreakerRegistry(DefaultCircuitBreakerConfig(), nil, logger),
 	}
 }
 
 // SetHistoryStore sets a custom history store
 func (e *DAGExecutor) SetHistoryStore(store *ExecutionHistoryStore) {
 	e.historyStore = store
+}
+
+// SetCircuitBreakerConfig 设置熔断器配置
+func (e *DAGExecutor) SetCircuitBreakerConfig(config CircuitBreakerConfig, handler CircuitBreakerEventHandler) {
+	e.circuitBreakers = NewCircuitBreakerRegistry(config, handler, e.logger)
+}
+
+// GetCircuitBreakerStates 获取所有熔断器状态
+func (e *DAGExecutor) GetCircuitBreakerStates() map[string]CircuitState {
+	return e.circuitBreakers.GetAllStates()
 }
 
 // Execute runs the DAG workflow with dependency resolution
@@ -147,6 +159,23 @@ func (e *DAGExecutor) executeNode(ctx context.Context, graph *DAGGraph, node *DA
 		zap.String("node_type", string(node.Type)),
 	)
 
+	// 熔断器检查
+	cb := e.circuitBreakers.GetOrCreate(node.ID)
+	allowed, cbErr := cb.AllowRequest()
+	if !allowed {
+		e.logger.Warn("node circuit breaker tripped",
+			zap.String("node_id", node.ID),
+			zap.String("state", cb.GetState().String()),
+			zap.Error(cbErr))
+		if nodeExec != nil {
+			e.history.RecordNodeEnd(nodeExec, nil, cbErr)
+		}
+		if node.ErrorConfig != nil && node.ErrorConfig.FallbackValue != nil {
+			return node.ErrorConfig.FallbackValue, nil
+		}
+		return nil, cbErr
+	}
+
 	startTime := time.Now()
 	var result interface{}
 	var err error
@@ -175,6 +204,7 @@ func (e *DAGExecutor) executeNode(ctx context.Context, graph *DAGGraph, node *DA
 	if err != nil {
 		result, err = e.handleNodeError(ctx, graph, node, input, err, duration)
 		if err != nil {
+			cb.RecordFailure()
 			// Record failure in history
 			if nodeExec != nil {
 				e.history.RecordNodeEnd(nodeExec, nil, err)
@@ -182,6 +212,9 @@ func (e *DAGExecutor) executeNode(ctx context.Context, graph *DAGGraph, node *DA
 			return nil, err
 		}
 	}
+
+	// 记录成功
+	cb.RecordSuccess()
 
 	// Record success in history
 	if nodeExec != nil {

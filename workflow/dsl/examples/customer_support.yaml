@@ -1,0 +1,99 @@
+version: "1.0"
+name: customer-support-workflow
+description: 客户支持自动化工作流
+
+variables:
+  language:
+    type: string
+    default: "zh-CN"
+    description: 响应语言
+  max_search_results:
+    type: int
+    default: 5
+
+agents:
+  classifier:
+    model: gpt-4o-mini
+    system_prompt: "你是一个客户问题分类器。将问题分为：billing, technical, general"
+    temperature: 0.1
+    max_tokens: 100
+
+  responder:
+    model: claude-sonnet-4-20250514
+    system_prompt: "你是一个专业的客户支持代表。使用 ${language} 回复。"
+    temperature: 0.7
+    max_tokens: 2000
+    tools:
+      - knowledge_search
+
+tools:
+  knowledge_search:
+    type: builtin
+    description: 搜索知识库
+    config:
+      index: customer_support_kb
+      top_k: ${max_search_results}
+
+steps:
+  classify:
+    type: llm
+    agent: classifier
+    prompt: "请分类以下客户问题：${input}"
+
+  search_kb:
+    type: tool
+    tool: knowledge_search
+
+  generate_response:
+    type: llm
+    agent: responder
+    prompt: "基于以下知识库结果回答客户问题"
+
+  escalate:
+    type: human_input
+    config:
+      prompt: "需要人工介入处理此问题"
+      timeout: 300
+
+workflow:
+  entry: classify_input
+  nodes:
+    - id: classify_input
+      type: action
+      step: classify
+      next: [check_category]
+
+    - id: check_category
+      type: condition
+      condition: "${classification} == technical"
+      on_true: [search_knowledge]
+      on_false: [check_billing]
+
+    - id: check_billing
+      type: condition
+      condition: "${classification} == billing"
+      on_true: [escalate_to_human]
+      on_false: [generate_general_response]
+
+    - id: search_knowledge
+      type: action
+      step: search_kb
+      next: [generate_tech_response]
+      error:
+        strategy: skip
+        fallback_value: "未找到相关知识"
+
+    - id: generate_tech_response
+      type: action
+      step: generate_response
+      next: []
+
+    - id: generate_general_response
+      type: action
+      step: generate_response
+      next: []
+
+    - id: escalate_to_human
+      type: action
+      step: escalate
+      next: []
