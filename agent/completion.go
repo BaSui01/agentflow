@@ -255,8 +255,15 @@ func (b *BaseAgent) StreamCompletion(ctx context.Context, messages []llm.Message
 	if b.toolManager != nil && len(b.config.Tools) > 0 {
 		req.Tools = filterToolSchemasByWhitelist(b.toolManager.GetAllowedTools(b.config.ID), b.config.Tools)
 	}
-	if len(req.Tools) > 0 && b.provider != nil && !b.provider.SupportsNativeFunctionCalling() {
-		return nil, fmt.Errorf("provider %q does not support native function calling", b.provider.Name())
+	if len(req.Tools) > 0 {
+		// 确定实际用于工具调用的 provider（与 ChatCompletion 保持一致）
+		effectiveToolProvider := b.provider
+		if b.toolProvider != nil {
+			effectiveToolProvider = b.toolProvider
+		}
+		if effectiveToolProvider != nil && !effectiveToolProvider.SupportsNativeFunctionCalling() {
+			return nil, fmt.Errorf("provider %q does not support native function calling", effectiveToolProvider.Name())
+		}
 	}
 
 	return b.provider.Stream(ctx, req)
