@@ -196,7 +196,7 @@ func demoBidirectionalStreaming(logger *zap.Logger) {
 	manager := streaming.NewStreamManager(logger)
 
 	config := streaming.DefaultStreamConfig()
-	stream := manager.CreateStream(config, nil)
+	stream := manager.CreateStream(config, nil, nil, nil)
 
 	fmt.Printf("   Stream ID: %s\n", stream.ID)
 	fmt.Printf("   Buffer size: %d\n", config.BufferSize)
