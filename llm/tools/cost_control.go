@@ -192,18 +192,25 @@ type ToolCostSummary struct {
 
 // DefaultCostController is the default implementation of CostController.
 type DefaultCostController struct {
-	toolCosts    map[string]*ToolCost
-	budgets      map[string]*Budget
-	records      []*CostRecord
-	usage        map[string]float64 // key -> usage
-	alertHandler CostAlertHandler
-	logger       *zap.Logger
-	mu           sync.RWMutex
+	toolCosts       map[string]*ToolCost
+	budgets         map[string]*Budget
+	records         []*CostRecord
+	usage           map[string]float64 // key -> usage
+	usageResetTimes map[string]time.Time
+	tokenCounter    TokenCounter
+	alertHandler    CostAlertHandler
+	logger          *zap.Logger
+	mu              sync.RWMutex
 }
 
 // CostAlertHandler handles cost alerts.
 type CostAlertHandler interface {
 	HandleAlert(ctx context.Context, alert *CostAlert) error
+}
+
+// TokenCounter 可选的 token 计数器接口
+type TokenCounter interface {
+	CountTokens(text string) (int, error)
 }
 
 // NewCostController creates a new cost controller.
@@ -212,11 +219,12 @@ func NewCostController(logger *zap.Logger) *DefaultCostController {
 		logger = zap.NewNop()
 	}
 	return &DefaultCostController{
-		toolCosts: make(map[string]*ToolCost),
-		budgets:   make(map[string]*Budget),
-		records:   make([]*CostRecord, 0),
-		usage:     make(map[string]float64),
-		logger:    logger.With(zap.String("component", "cost_controller")),
+		toolCosts:       make(map[string]*ToolCost),
+		budgets:         make(map[string]*Budget),
+		records:         make([]*CostRecord, 0),
+		usage:           make(map[string]float64),
+		usageResetTimes: make(map[string]time.Time),
+		logger:          logger.With(zap.String("component", "cost_controller")),
 	}
 }
 
@@ -234,20 +242,62 @@ func (cc *DefaultCostController) CalculateCost(toolName string, args json.RawMes
 
 	toolCost, ok := cc.toolCosts[toolName]
 	if !ok {
-		// Default cost if not configured
-		return 1.0, nil
+		return 1.0, nil // 默认成本
 	}
 
 	cost := toolCost.BaseCost
 
-	// Calculate additional cost based on arguments
 	if toolCost.CostPerUnit > 0 && len(args) > 0 {
-		// Simple estimation based on argument size
-		units := float64(len(args)) / 100.0
-		cost += units * toolCost.CostPerUnit
+		switch toolCost.Unit {
+		case CostUnitTokens:
+			// 如果有 token 计数器，精确计算
+			if cc.tokenCounter != nil {
+				tokens, err := cc.tokenCounter.CountTokens(string(args))
+				if err == nil {
+					cost += float64(tokens) * toolCost.CostPerUnit
+					break
+				}
+			}
+			// fallback: 按字符数估算（1 token ≈ 4 字符）
+			cost += float64(len(args)) / 4.0 * toolCost.CostPerUnit
+		case CostUnitCredits, CostUnitDollars:
+			cost += float64(len(args)) / 100.0 * toolCost.CostPerUnit
+		}
 	}
 
 	return cost, nil
+}
+
+// resetUsageIfNeeded 检查并重置过期的预算周期
+func (cc *DefaultCostController) resetUsageIfNeeded(budget *Budget) {
+	key := cc.buildUsageKey(budget)
+	resetKey := key + ":reset_at"
+
+	lastReset, exists := cc.usageResetTimes[resetKey]
+	if !exists {
+		cc.usageResetTimes[resetKey] = time.Now()
+		return
+	}
+
+	var shouldReset bool
+	switch budget.Period {
+	case BudgetPeriodHourly:
+		shouldReset = time.Since(lastReset) >= time.Hour
+	case BudgetPeriodDaily:
+		shouldReset = time.Since(lastReset) >= 24*time.Hour
+	case BudgetPeriodWeekly:
+		shouldReset = time.Since(lastReset) >= 7*24*time.Hour
+	case BudgetPeriodMonthly:
+		shouldReset = time.Since(lastReset) >= 30*24*time.Hour
+	case BudgetPeriodTotal:
+		shouldReset = false
+	}
+
+	if shouldReset {
+		cc.usage[key] = 0
+		cc.usageResetTimes[resetKey] = time.Now()
+		cc.logger.Info("budget usage reset", zap.String("budget_id", budget.ID), zap.String("period", string(budget.Period)))
+	}
 }
 
 // CheckBudget checks if a tool call is within budget.
@@ -267,6 +317,9 @@ func (cc *DefaultCostController) CheckBudget(ctx context.Context, agentID, userI
 		if !budget.Enabled {
 			continue
 		}
+
+		// 惰性检查并重置过期的预算周期
+		cc.resetUsageIfNeeded(budget)
 
 		key := cc.buildUsageKey(budget)
 		currentUsage := cc.usage[key]
@@ -524,60 +577,46 @@ func (cc *DefaultCostController) GetOptimizations(agentID, userID string) []*Cos
 	cc.mu.RLock()
 	defer cc.mu.RUnlock()
 
-	var optimizations []*CostOptimization
+	var opts []*CostOptimization
 
-	// Analyze usage patterns
-	toolUsage := make(map[string]int)
+	// 分析高频工具
+	toolCalls := make(map[string]int)
 	toolCosts := make(map[string]float64)
-
-	for _, record := range cc.records {
-		if (agentID == "" || record.AgentID == agentID) &&
-			(userID == "" || record.UserID == userID) {
-			toolUsage[record.ToolName]++
-			toolCosts[record.ToolName] += record.Cost
+	for _, rec := range cc.records {
+		if agentID != "" && rec.AgentID != agentID {
+			continue
 		}
+		if userID != "" && rec.UserID != userID {
+			continue
+		}
+		toolCalls[rec.ToolName]++
+		toolCosts[rec.ToolName] += rec.Cost
 	}
 
-	// Find high-cost tools
-	for tool, cost := range toolCosts {
-		if cost > 100 { // Threshold for high cost
-			optimizations = append(optimizations, &CostOptimization{
-				Type:        "high_cost_tool",
-				Description: fmt.Sprintf("Tool '%s' has high total cost (%.2f). Consider caching results or reducing usage.", tool, cost),
-				Savings:     cost * 0.2, // Estimated 20% savings
+	for tool, count := range toolCalls {
+		cost := toolCosts[tool]
+		avgCost := cost / float64(count)
+		// 高频高成本工具建议缓存
+		if count > 100 && avgCost > 5.0 {
+			opts = append(opts, &CostOptimization{
+				Type:        "cache",
+				Description: fmt.Sprintf("Tool '%s' called %d times with avg cost %.2f. Consider caching results.", tool, count, avgCost),
+				Savings:     cost * 0.3,
 				Priority:    1,
 			})
 		}
-	}
-
-	// Find frequently used tools
-	for tool, count := range toolUsage {
-		if count > 100 { // Threshold for high frequency
-			optimizations = append(optimizations, &CostOptimization{
-				Type:        "high_frequency_tool",
-				Description: fmt.Sprintf("Tool '%s' is called frequently (%d times). Consider batching requests.", tool, count),
-				Savings:     float64(count) * 0.1, // Estimated savings
+		// 低使用率高成本工具建议替换
+		if count < 10 && cost > 100 {
+			opts = append(opts, &CostOptimization{
+				Type:        "replace",
+				Description: fmt.Sprintf("Tool '%s' has high total cost (%.2f) with low usage (%d calls). Consider cheaper alternative.", tool, cost, count),
+				Savings:     cost * 0.5,
 				Priority:    2,
 			})
 		}
 	}
 
-	// Check for budget utilization
-	for _, budget := range cc.budgets {
-		key := cc.buildUsageKey(budget)
-		usage := cc.usage[key]
-		utilization := (usage / budget.Limit) * 100
-
-		if utilization < 20 {
-			optimizations = append(optimizations, &CostOptimization{
-				Type:        "underutilized_budget",
-				Description: fmt.Sprintf("Budget '%s' is underutilized (%.1f%%). Consider reducing the limit.", budget.Name, utilization),
-				Priority:    3,
-			})
-		}
-	}
-
-	return optimizations
+	return opts
 }
 
 // GetCostReport generates a cost report.
@@ -593,76 +632,37 @@ func (cc *DefaultCostController) GetCostReport(filter *CostReportFilter) (*CostR
 		GeneratedAt: time.Now(),
 	}
 
-	toolCalls := make(map[string]int64)
-
-	for _, record := range cc.records {
-		// Apply filters
-		if filter.AgentID != "" && record.AgentID != filter.AgentID {
-			continue
-		}
-		if filter.UserID != "" && record.UserID != filter.UserID {
-			continue
-		}
-		if filter.ToolName != "" && record.ToolName != filter.ToolName {
-			continue
-		}
-		if filter.StartTime != nil && record.Timestamp.Before(*filter.StartTime) {
-			continue
-		}
-		if filter.EndTime != nil && record.Timestamp.After(*filter.EndTime) {
-			continue
-		}
-
-		// Aggregate data
-		report.TotalCost += record.Cost
-		report.TotalCalls++
-
-		report.ByTool[record.ToolName] += record.Cost
-		toolCalls[record.ToolName]++
-
-		if record.AgentID != "" {
-			report.ByAgent[record.AgentID] += record.Cost
-		}
-		if record.UserID != "" {
-			report.ByUser[record.UserID] += record.Cost
-		}
-
-		day := record.Timestamp.Format("2006-01-02")
-		report.ByDay[day] += record.Cost
-	}
-
-	// Calculate average
-	if report.TotalCalls > 0 {
-		report.AverageCost = report.TotalCost / float64(report.TotalCalls)
-	}
-
-	// Build top tools list
-	for tool, cost := range report.ByTool {
-		calls := toolCalls[tool]
-		avgCost := float64(0)
-		if calls > 0 {
-			avgCost = cost / float64(calls)
-		}
-		report.TopTools = append(report.TopTools, ToolCostSummary{
-			ToolName:  tool,
-			TotalCost: cost,
-			CallCount: calls,
-			AvgCost:   avgCost,
-		})
-	}
-
-	// Sort top tools by total cost (descending)
-	for i := 0; i < len(report.TopTools)-1; i++ {
-		for j := i + 1; j < len(report.TopTools); j++ {
-			if report.TopTools[j].TotalCost > report.TopTools[i].TotalCost {
-				report.TopTools[i], report.TopTools[j] = report.TopTools[j], report.TopTools[i]
+	for _, rec := range cc.records {
+		// 应用过滤器
+		if filter != nil {
+			if filter.AgentID != "" && rec.AgentID != filter.AgentID {
+				continue
+			}
+			if filter.UserID != "" && rec.UserID != filter.UserID {
+				continue
+			}
+			if filter.ToolName != "" && rec.ToolName != filter.ToolName {
+				continue
+			}
+			if filter.StartTime != nil && rec.Timestamp.Before(*filter.StartTime) {
+				continue
+			}
+			if filter.EndTime != nil && rec.Timestamp.After(*filter.EndTime) {
+				continue
 			}
 		}
+
+		report.TotalCost += rec.Cost
+		report.TotalCalls++
+		report.ByTool[rec.ToolName] += rec.Cost
+		report.ByAgent[rec.AgentID] += rec.Cost
+		report.ByUser[rec.UserID] += rec.Cost
+		day := rec.Timestamp.Format("2006-01-02")
+		report.ByDay[day] += rec.Cost
 	}
 
-	// Limit to top 10
-	if len(report.TopTools) > 10 {
-		report.TopTools = report.TopTools[:10]
+	if report.TotalCalls > 0 {
+		report.AverageCost = report.TotalCost / float64(report.TotalCalls)
 	}
 
 	return report, nil
