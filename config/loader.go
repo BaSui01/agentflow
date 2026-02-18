@@ -76,6 +76,14 @@ type ServerConfig struct {
 	WriteTimeout time.Duration `yaml:"write_timeout" env:"WRITE_TIMEOUT"`
 	// 优雅关闭超时
 	ShutdownTimeout time.Duration `yaml:"shutdown_timeout" env:"SHUTDOWN_TIMEOUT"`
+	// CORS 允许的源
+	CORSAllowedOrigins []string `yaml:"cors_allowed_origins" json:"cors_allowed_origins,omitempty"`
+	// API Keys
+	APIKeys []string `yaml:"api_keys" json:"api_keys,omitempty"`
+	// 限流 RPS，默认 100
+	RateLimitRPS int `yaml:"rate_limit_rps" json:"rate_limit_rps,omitempty"`
+	// 限流 Burst，默认 200
+	RateLimitBurst int `yaml:"rate_limit_burst" json:"rate_limit_burst,omitempty"`
 }
 
 // AgentConfig Agent 配置（与 types.AgentConfig 兼容）

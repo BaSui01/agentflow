@@ -55,3 +55,42 @@ func (p *KimiProvider) HealthCheck(ctx context.Context) (*llm.HealthStatus, erro
 }
 
 func (p *KimiProvider) SupportsNativeFunctionCalling() bool { return true }
+
+// Completion overrides OpenAI's Completion to fix the Provider field.
+func (p *KimiProvider) Completion(ctx context.Context, req *llm.ChatRequest) (*llm.ChatResponse, error) {
+	resp, err := p.OpenAIProvider.Completion(ctx, req)
+	if err != nil {
+		if llmErr, ok := err.(*llm.Error); ok {
+			llmErr.Provider = p.Name()
+			return nil, llmErr
+		}
+		return nil, err
+	}
+	resp.Provider = p.Name()
+	return resp, nil
+}
+
+// Stream overrides OpenAI's Stream to fix the Provider field on each chunk.
+func (p *KimiProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-chan llm.StreamChunk, error) {
+	ch, err := p.OpenAIProvider.Stream(ctx, req)
+	if err != nil {
+		if llmErr, ok := err.(*llm.Error); ok {
+			llmErr.Provider = p.Name()
+			return nil, llmErr
+		}
+		return nil, err
+	}
+
+	wrappedCh := make(chan llm.StreamChunk)
+	go func() {
+		defer close(wrappedCh)
+		for chunk := range ch {
+			chunk.Provider = p.Name()
+			if chunk.Err != nil {
+				chunk.Err.Provider = p.Name()
+			}
+			wrappedCh <- chunk
+		}
+	}()
+	return wrappedCh, nil
+}

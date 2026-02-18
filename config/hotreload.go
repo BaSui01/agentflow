@@ -33,12 +33,19 @@ type HotReloadManager struct {
 	config     *Config
 	configPath string
 
+	// Rollback support
+	previousConfig *Config           // 上一个成功应用的配置（用于回滚）
+	configHistory  []ConfigSnapshot  // 配置变更历史（环形缓冲）
+	maxHistorySize int               // 最大历史记录数，默认 10
+	validateFunc   ValidateFunc      // 配置验证钩子（可选）
+
 	// File watcher
 	watcher *FileWatcher
 
 	// Callbacks
-	changeCallbacks []ChangeCallback
-	reloadCallbacks []ReloadCallback
+	changeCallbacks   []ChangeCallback
+	reloadCallbacks   []ReloadCallback
+	rollbackCallbacks []RollbackCallback // 回滚事件回调
 
 	// Change log
 	changeLog []ConfigChange
@@ -83,6 +90,32 @@ type ConfigChange struct {
 
 	// Error if the change failed
 	Error string `json:"error,omitempty"`
+}
+
+// ConfigSnapshot 配置快照（用于历史记录和回滚）
+type ConfigSnapshot struct {
+	Config    *Config   `json:"config"`
+	Timestamp time.Time `json:"timestamp"`
+	Source    string    `json:"source"`   // 变更来源：file, api, env
+	Version   int       `json:"version"`  // 递增版本号
+	Checksum  string    `json:"checksum"` // 配置内容校验和
+}
+
+// ValidateFunc 配置验证钩子函数
+// 接收新配置，返回 error 表示验证失败
+type ValidateFunc func(newConfig *Config) error
+
+// RollbackCallback 回滚事件回调
+type RollbackCallback func(event RollbackEvent)
+
+// RollbackEvent 回滚事件
+type RollbackEvent struct {
+	Timestamp      time.Time `json:"timestamp"`
+	Reason         string    `json:"reason"`
+	FailedConfig   *Config   `json:"failed_config"`
+	RestoredConfig *Config   `json:"restored_config"`
+	Version        int       `json:"version"`
+	Error          error     `json:"error,omitempty"`
 }
 
 // HotReloadableField defines which fields can be hot reloaded
@@ -293,6 +326,22 @@ func WithConfigPath(path string) HotReloadOption {
 	}
 }
 
+// WithMaxHistorySize 设置配置历史最大记录数
+func WithMaxHistorySize(size int) HotReloadOption {
+	return func(m *HotReloadManager) {
+		if size > 0 {
+			m.maxHistorySize = size
+		}
+	}
+}
+
+// WithValidateFunc 设置配置验证钩子
+func WithValidateFunc(fn ValidateFunc) HotReloadOption {
+	return func(m *HotReloadManager) {
+		m.validateFunc = fn
+	}
+}
+
 // =============================================================================
 // Hot Reload Manager Implementation
 // =============================================================================
@@ -300,18 +349,71 @@ func WithConfigPath(path string) HotReloadOption {
 // NewHotReloadManager creates a new hot reload manager
 func NewHotReloadManager(config *Config, opts ...HotReloadOption) *HotReloadManager {
 	m := &HotReloadManager{
-		config:          config,
-		changeCallbacks: make([]ChangeCallback, 0),
-		reloadCallbacks: make([]ReloadCallback, 0),
-		changeLog:       make([]ConfigChange, 0, 100),
-		logger:          zap.NewNop(),
+		config:            config,
+		previousConfig:    nil,
+		configHistory:     make([]ConfigSnapshot, 0, 10),
+		maxHistorySize:    10,
+		changeCallbacks:   make([]ChangeCallback, 0),
+		reloadCallbacks:   make([]ReloadCallback, 0),
+		rollbackCallbacks: make([]RollbackCallback, 0),
+		changeLog:         make([]ConfigChange, 0, 100),
+		logger:            zap.NewNop(),
 	}
 
 	for _, opt := range opts {
 		opt(m)
 	}
 
+	// 将初始配置作为第一个历史快照
+	m.pushHistory(config, "init")
+
 	return m
+}
+
+// pushHistory 将配置快照推入历史记录（环形缓冲）
+func (m *HotReloadManager) pushHistory(config *Config, source string) {
+	version := 1
+	if len(m.configHistory) > 0 {
+		version = m.configHistory[len(m.configHistory)-1].Version + 1
+	}
+	snapshot := ConfigSnapshot{
+		Config:    deepCopyConfig(config),
+		Timestamp: time.Now(),
+		Source:    source,
+		Version:   version,
+		Checksum:  computeConfigChecksum(config),
+	}
+	m.configHistory = append(m.configHistory, snapshot)
+	if len(m.configHistory) > m.maxHistorySize {
+		m.configHistory = m.configHistory[len(m.configHistory)-m.maxHistorySize:]
+	}
+}
+
+// deepCopyConfig 深拷贝配置（通过 JSON 序列化/反序列化）
+func deepCopyConfig(config *Config) *Config {
+	data, err := json.Marshal(config)
+	if err != nil {
+		return config
+	}
+	var copied Config
+	if err := json.Unmarshal(data, &copied); err != nil {
+		return config
+	}
+	return &copied
+}
+
+// computeConfigChecksum 计算配置校验和（FNV hash）
+func computeConfigChecksum(config *Config) string {
+	data, err := json.Marshal(config)
+	if err != nil {
+		return ""
+	}
+	var hash uint64
+	for _, b := range data {
+		hash ^= uint64(b)
+		hash *= 1099511628211
+	}
+	return fmt.Sprintf("%016x", hash)
 }
 
 // Start starts the hot reload manager
@@ -396,20 +498,27 @@ func (m *HotReloadManager) ReloadFromFile() error {
 		return fmt.Errorf("no config path set")
 	}
 
-	// Load new configuration
 	loader := NewLoader().WithConfigPath(m.configPath)
 	newConfig, err := loader.Load()
 	if err != nil {
+		m.logger.Error("failed to load config from file, keeping current config",
+			zap.Error(err), zap.String("path", m.configPath))
 		return fmt.Errorf("failed to load config: %w", err)
 	}
 
-	// Validate new configuration
 	if err := newConfig.Validate(); err != nil {
+		m.logger.Error("invalid config from file, keeping current config",
+			zap.Error(err), zap.String("path", m.configPath))
 		return fmt.Errorf("invalid config: %w", err)
 	}
 
-	// Apply changes
-	return m.ApplyConfig(newConfig, "file")
+	// ApplyConfig 内部会处理 validateFunc 和自动回滚
+	if err := m.ApplyConfig(newConfig, "file"); err != nil {
+		m.logger.Error("failed to apply config, auto-rollback may have occurred",
+			zap.Error(err))
+		return err
+	}
+	return nil
 }
 
 // ApplyConfig applies a new configuration
@@ -418,16 +527,31 @@ func (m *HotReloadManager) ApplyConfig(newConfig *Config, source string) error {
 	defer m.mu.Unlock()
 
 	oldConfig := m.config
-	changes := m.detectChanges(oldConfig, newConfig)
 
+	// 1. 执行自定义验证钩子
+	if m.validateFunc != nil {
+		if err := m.validateFunc(newConfig); err != nil {
+			m.logger.Warn("config validation hook failed",
+				zap.Error(err), zap.String("source", source))
+			m.changeLog = append(m.changeLog, ConfigChange{
+				Timestamp: time.Now(),
+				Source:    source,
+				Path:      "(validation_hook)",
+				Applied:   false,
+				Error:     fmt.Sprintf("validation hook failed: %v", err),
+			})
+			return fmt.Errorf("config validation failed: %w", err)
+		}
+	}
+
+	// 2. 检测变更
+	changes := m.detectChanges(oldConfig, newConfig)
 	var requiresRestart bool
 	var appliedChanges []ConfigChange
 
 	for _, change := range changes {
 		change.Source = source
 		change.Timestamp = time.Now()
-
-		// Check if this field can be hot reloaded
 		field, known := hotReloadableFields[change.Path]
 		if known {
 			change.RequiresRestart = field.RequiresRestart
@@ -436,51 +560,62 @@ func (m *HotReloadManager) ApplyConfig(newConfig *Config, source string) error {
 				change.NewValue = "[REDACTED]"
 			}
 		} else {
-			// Unknown fields require restart by default
 			change.RequiresRestart = true
 		}
-
 		if change.RequiresRestart {
 			requiresRestart = true
 		}
-
 		change.Applied = true
 		appliedChanges = append(appliedChanges, change)
-
-		// Log the change
 		m.logChange(change)
 	}
 
-	// Update configuration
+	// 3. 保存当前配置为 previousConfig
+	m.previousConfig = deepCopyConfig(oldConfig)
+
+	// 4. 应用新配置
 	m.config = newConfig
 
-	// Add to change log
-	m.changeLog = append(m.changeLog, appliedChanges...)
+	// 5. 通知回调（失败则自动回滚）
+	if err := m.notifyCallbacksSafe(oldConfig, newConfig, appliedChanges); err != nil {
+		m.logger.Error("callback failed, rolling back", zap.Error(err))
+		m.rollbackLocked(oldConfig, fmt.Sprintf("callback error: %v", err), err)
+		return fmt.Errorf("config applied but callback failed, rolled back: %w", err)
+	}
 
-	// Trim change log if too large
+	// 6. 推入历史记录
+	m.pushHistory(newConfig, source)
+
+	// 7. 更新变更日志
+	m.changeLog = append(m.changeLog, appliedChanges...)
 	if len(m.changeLog) > 1000 {
 		m.changeLog = m.changeLog[len(m.changeLog)-1000:]
-	}
-
-	// Notify callbacks
-	for _, cb := range m.changeCallbacks {
-		for _, change := range appliedChanges {
-			cb(change)
-		}
-	}
-
-	for _, cb := range m.reloadCallbacks {
-		cb(oldConfig, newConfig)
 	}
 
 	if requiresRestart {
 		m.logger.Warn("Some configuration changes require restart to take effect")
 	}
-
 	m.logger.Info("Configuration reloaded",
 		zap.Int("changes", len(appliedChanges)),
 		zap.Bool("requires_restart", requiresRestart))
+	return nil
+}
 
+// notifyCallbacksSafe 安全地通知回调（捕获 panic）
+func (m *HotReloadManager) notifyCallbacksSafe(oldConfig, newConfig *Config, changes []ConfigChange) (retErr error) {
+	defer func() {
+		if r := recover(); r != nil {
+			retErr = fmt.Errorf("callback panicked: %v", r)
+		}
+	}()
+	for _, cb := range m.changeCallbacks {
+		for _, change := range changes {
+			cb(change)
+		}
+	}
+	for _, cb := range m.reloadCallbacks {
+		cb(oldConfig, newConfig)
+	}
 	return nil
 }
 
@@ -563,6 +698,104 @@ func (m *HotReloadManager) OnReload(callback ReloadCallback) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.reloadCallbacks = append(m.reloadCallbacks, callback)
+}
+
+// Rollback 回滚到上一个有效配置
+func (m *HotReloadManager) Rollback() error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.previousConfig == nil {
+		return fmt.Errorf("no previous config available for rollback")
+	}
+	m.rollbackLocked(m.previousConfig, "manual rollback", nil)
+	return nil
+}
+
+// RollbackToVersion 回滚到指定版本
+func (m *HotReloadManager) RollbackToVersion(version int) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for _, snapshot := range m.configHistory {
+		if snapshot.Version == version {
+			m.rollbackLocked(snapshot.Config, fmt.Sprintf("rollback to version %d", version), nil)
+			return nil
+		}
+	}
+	return fmt.Errorf("config version %d not found in history", version)
+}
+
+// rollbackLocked 执行回滚（调用方必须持有 m.mu 写锁）
+func (m *HotReloadManager) rollbackLocked(targetConfig *Config, reason string, originalErr error) {
+	failedConfig := m.config
+	restoredConfig := deepCopyConfig(targetConfig)
+	m.config = restoredConfig
+
+	restoredVersion := 0
+	checksum := computeConfigChecksum(targetConfig)
+	for _, snapshot := range m.configHistory {
+		if snapshot.Checksum == checksum {
+			restoredVersion = snapshot.Version
+			break
+		}
+	}
+
+	event := RollbackEvent{
+		Timestamp:      time.Now(),
+		Reason:         reason,
+		FailedConfig:   failedConfig,
+		RestoredConfig: restoredConfig,
+		Version:        restoredVersion,
+		Error:          originalErr,
+	}
+
+	m.changeLog = append(m.changeLog, ConfigChange{
+		Timestamp: time.Now(),
+		Source:    "rollback",
+		Path:      "(rollback)",
+		Applied:   true,
+		Error:     reason,
+	})
+
+	for _, cb := range m.rollbackCallbacks {
+		func() {
+			defer func() {
+				if r := recover(); r != nil {
+					m.logger.Error("rollback callback panicked", zap.Any("panic", r))
+				}
+			}()
+			cb(event)
+		}()
+	}
+
+	m.logger.Warn("configuration rolled back",
+		zap.String("reason", reason),
+		zap.Int("restored_version", restoredVersion))
+}
+
+// OnRollback 注册回滚事件回调
+func (m *HotReloadManager) OnRollback(callback RollbackCallback) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.rollbackCallbacks = append(m.rollbackCallbacks, callback)
+}
+
+// GetConfigHistory 获取配置变更历史
+func (m *HotReloadManager) GetConfigHistory() []ConfigSnapshot {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	result := make([]ConfigSnapshot, len(m.configHistory))
+	copy(result, m.configHistory)
+	return result
+}
+
+// GetCurrentVersion 获取当前配置版本号
+func (m *HotReloadManager) GetCurrentVersion() int {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	if len(m.configHistory) == 0 {
+		return 0
+	}
+	return m.configHistory[len(m.configHistory)-1].Version
 }
 
 // GetConfig returns the current configuration

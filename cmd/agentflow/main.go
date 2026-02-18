@@ -404,9 +404,19 @@ func (s *Server) startHTTPServer() error {
 		)
 	}
 
+	// 构建中间件链
+	skipAuthPaths := []string{"/health", "/healthz", "/ready", "/readyz", "/version", "/metrics"}
+	handler := Chain(mux,
+		Recovery(s.logger),
+		RequestLogger(s.logger),
+		CORS(s.cfg.Server.CORSAllowedOrigins),
+		RateLimiter(float64(s.cfg.Server.RateLimitRPS), s.cfg.Server.RateLimitBurst, s.logger),
+		APIKeyAuth(s.cfg.Server.APIKeys, skipAuthPaths, s.logger),
+	)
+
 	s.httpServer = &http.Server{
 		Addr:         fmt.Sprintf(":%d", s.cfg.Server.HTTPPort),
-		Handler:      mux,
+		Handler:      handler,
 		ReadTimeout:  s.cfg.Server.ReadTimeout,
 		WriteTimeout: s.cfg.Server.WriteTimeout,
 	}

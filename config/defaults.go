@@ -32,6 +32,8 @@ func DefaultServerConfig() ServerConfig {
 		ReadTimeout:     30 * time.Second,
 		WriteTimeout:    30 * time.Second,
 		ShutdownTimeout: 15 * time.Second,
+		RateLimitRPS:    100,
+		RateLimitBurst:  200,
 	}
 }
 

@@ -52,6 +52,17 @@ type ReasoningHop struct {
 	Duration      time.Duration     `json:"duration"`
 	Metadata      map[string]any    `json:"metadata,omitempty"`
 	Timestamp     time.Time         `json:"timestamp"`
+
+	// 去重统计（新增）
+	DedupStats *DedupStats `json:"dedup_stats,omitempty"`
+}
+
+// DedupStats 去重统计
+type DedupStats struct {
+	TotalRetrieved    int `json:"total_retrieved"`     // 原始检索结果数
+	DedupByID         int `json:"dedup_by_id"`         // 按 ID 去重数量
+	DedupBySimilarity int `json:"dedup_by_similarity"` // 按内容相似度去重数量
+	FinalCount        int `json:"final_count"`         // 去重后最终数量
 }
 
 // ReasoningChain represents the complete reasoning chain
@@ -68,6 +79,10 @@ type ReasoningChain struct {
 	Metadata        map[string]any  `json:"metadata,omitempty"`
 	CreatedAt       time.Time       `json:"created_at"`
 	CompletedAt     time.Time       `json:"completed_at,omitempty"`
+
+	// 全局去重统计（新增）
+	TotalDedupByID         int `json:"total_dedup_by_id"`
+	TotalDedupBySimilarity int `json:"total_dedup_by_similarity"`
 }
 
 // MultiHopConfig configures the multi-hop reasoning system
@@ -310,6 +325,12 @@ func (r *MultiHopReasoner) Reason(ctx context.Context, query string) (*Reasoning
 			chain.TotalRetrieval++
 		}
 
+		// 汇总去重统计
+		if hop.DedupStats != nil {
+			chain.TotalDedupByID += hop.DedupStats.DedupByID
+			chain.TotalDedupBySimilarity += hop.DedupStats.DedupBySimilarity
+		}
+
 		// Check stopping conditions
 		if r.shouldStop(ctx, chain, hop, hopNum) {
 			break
@@ -341,6 +362,9 @@ func (r *MultiHopReasoner) Reason(ctx context.Context, query string) (*Reasoning
 		zap.String("query", query),
 		zap.Int("hops", len(chain.Hops)),
 		zap.Int("unique_docs", chain.UniqueDocuments),
+		zap.Int("total_retrieved", chain.TotalRetrieval),
+		zap.Int("dedup_by_id", chain.TotalDedupByID),
+		zap.Int("dedup_by_similarity", chain.TotalDedupBySimilarity),
 		zap.Duration("duration", chain.TotalDuration))
 
 	return chain, nil
@@ -396,19 +420,47 @@ func (r *MultiHopReasoner) executeHop(
 	}
 
 	// Filter and deduplicate results
-	filteredResults := make([]RetrievalResult, 0, r.config.ResultsPerHop)
+	stats := &DedupStats{
+		TotalRetrieved: len(results),
+	}
+
+	// Phase 1: 基于文档 ID 去重 + 最低分数过滤
+	idFilteredResults := make([]RetrievalResult, 0, len(results))
+	hopSeenIDs := make(map[string]bool) // 同一 hop 内的 ID 去重
 	for _, result := range results {
+		// 跨 hop ID 去重
 		if r.config.DeduplicateResults && seenDocIDs[result.Document.ID] {
+			stats.DedupByID++
 			continue
 		}
+		// 同一 hop 内 ID 去重
+		if hopSeenIDs[result.Document.ID] {
+			stats.DedupByID++
+			continue
+		}
+		// 最低分数过滤
 		if result.FinalScore < r.config.MinConfidence {
 			continue
 		}
-		filteredResults = append(filteredResults, result)
-		if len(filteredResults) >= r.config.ResultsPerHop {
-			break
-		}
+		hopSeenIDs[result.Document.ID] = true
+		idFilteredResults = append(idFilteredResults, result)
 	}
+
+	// Phase 2: 基于内容相似度去重
+	filteredResults := r.deduplicateBySimilarity(hopCtx, idFilteredResults, stats)
+
+	// Phase 3: 去重后重新排序（按 FinalScore 降序）
+	sort.Slice(filteredResults, func(i, j int) bool {
+		return filteredResults[i].FinalScore > filteredResults[j].FinalScore
+	})
+
+	// Phase 4: 截断到 ResultsPerHop
+	if len(filteredResults) > r.config.ResultsPerHop {
+		filteredResults = filteredResults[:r.config.ResultsPerHop]
+	}
+
+	stats.FinalCount = len(filteredResults)
+	hop.DedupStats = stats
 
 	hop.Results = filteredResults
 
@@ -440,6 +492,112 @@ func (r *MultiHopReasoner) executeHop(
 		zap.Float64("confidence", hop.Confidence))
 
 	return hop, nil
+}
+
+// deduplicateBySimilarity 基于内容相似度去重
+// 使用文档 embedding 计算余弦相似度，超过阈值的视为重复
+func (r *MultiHopReasoner) deduplicateBySimilarity(
+	ctx context.Context,
+	results []RetrievalResult,
+	stats *DedupStats,
+) []RetrievalResult {
+	if !r.config.DeduplicateResults || len(results) <= 1 {
+		return results
+	}
+
+	threshold := r.config.SimilarityThreshold
+	if threshold <= 0 {
+		threshold = 0.85
+	}
+
+	deduplicated := make([]RetrievalResult, 0, len(results))
+
+	for _, candidate := range results {
+		isDuplicate := false
+
+		for _, existing := range deduplicated {
+			similarity := r.computeContentSimilarity(ctx, candidate.Document, existing.Document)
+			if similarity >= threshold {
+				isDuplicate = true
+				stats.DedupBySimilarity++
+
+				// 如果候选文档分数更高，替换已有文档
+				if candidate.FinalScore > existing.FinalScore {
+					for i, d := range deduplicated {
+						if d.Document.ID == existing.Document.ID {
+							deduplicated[i] = candidate
+							break
+						}
+					}
+				}
+				break
+			}
+		}
+
+		if !isDuplicate {
+			deduplicated = append(deduplicated, candidate)
+		}
+	}
+
+	return deduplicated
+}
+
+// computeContentSimilarity 计算两个文档的内容相似度
+// 优先使用 embedding 余弦相似度，fallback 到 Jaccard 相似度
+func (r *MultiHopReasoner) computeContentSimilarity(
+	ctx context.Context,
+	doc1, doc2 Document,
+) float64 {
+	// 策略 1：如果两个文档都有 embedding，使用余弦相似度
+	if len(doc1.Embedding) > 0 && len(doc2.Embedding) > 0 && len(doc1.Embedding) == len(doc2.Embedding) {
+		return cosineSimilarity(doc1.Embedding, doc2.Embedding)
+	}
+
+	// 策略 2：如果有 embeddingFunc，动态生成 embedding
+	if r.embeddingFunc != nil {
+		emb1, err1 := r.embeddingFunc(ctx, doc1.Content)
+		emb2, err2 := r.embeddingFunc(ctx, doc2.Content)
+		if err1 == nil && err2 == nil && len(emb1) == len(emb2) {
+			return cosineSimilarity(emb1, emb2)
+		}
+	}
+
+	// 策略 3：Fallback 到 Jaccard 相似度（基于词集合）
+	return jaccardSimilarity(doc1.Content, doc2.Content)
+}
+
+// jaccardSimilarity 计算 Jaccard 相似度（基于词集合）
+func jaccardSimilarity(text1, text2 string) float64 {
+	words1 := tokenizeToSet(text1)
+	words2 := tokenizeToSet(text2)
+
+	if len(words1) == 0 && len(words2) == 0 {
+		return 1.0
+	}
+
+	intersection := 0
+	for w := range words1 {
+		if words2[w] {
+			intersection++
+		}
+	}
+
+	union := len(words1) + len(words2) - intersection
+	if union == 0 {
+		return 0.0
+	}
+
+	return float64(intersection) / float64(union)
+}
+
+// tokenizeToSet 将文本分词为集合
+func tokenizeToSet(text string) map[string]bool {
+	words := strings.Fields(strings.ToLower(text))
+	set := make(map[string]bool, len(words))
+	for _, w := range words {
+		set[w] = true
+	}
+	return set
 }
 
 // refineQuery generates a refined query based on accumulated context

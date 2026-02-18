@@ -13,12 +13,9 @@ import (
 
 // DefaultMCPClient MCP 客户端默认实现
 type DefaultMCPClient struct {
+	transport  Transport // 传输层接口
 	serverURL  string
 	serverInfo *ServerInfo
-
-	// 通信
-	reader io.Reader
-	writer io.Writer
 
 	// 请求管理
 	nextID    int64
@@ -33,21 +30,45 @@ type DefaultMCPClient struct {
 	connected bool
 	mu        sync.RWMutex
 
+	// 初始化握手完成
+	initialized bool
+
 	logger *zap.Logger
 }
 
-// NewMCPClient 创建 MCP 客户端
+// NewMCPClient 创建 MCP 客户端（兼容旧接口，使用 StdioTransport）
 func NewMCPClient(reader io.Reader, writer io.Writer, logger *zap.Logger) *DefaultMCPClient {
 	return &DefaultMCPClient{
-		reader:        reader,
-		writer:        writer,
+		transport:     NewStdioTransport(reader, writer, logger),
 		pending:       make(map[int64]chan *MCPMessage),
 		subscriptions: make(map[string]chan Resource),
 		logger:        logger,
 	}
 }
 
-// Connect 连接到 MCP 服务器
+// NewMCPClientWithTransport 使用指定传输层创建客户端
+func NewMCPClientWithTransport(transport Transport, logger *zap.Logger) *DefaultMCPClient {
+	return &DefaultMCPClient{
+		transport:     transport,
+		pending:       make(map[int64]chan *MCPMessage),
+		subscriptions: make(map[string]chan Resource),
+		logger:        logger,
+	}
+}
+
+// NewSSEClient 创建 SSE 客户端
+func NewSSEClient(endpoint string, logger *zap.Logger) *DefaultMCPClient {
+	transport := NewSSETransport(endpoint, logger)
+	return NewMCPClientWithTransport(transport, logger)
+}
+
+// NewWebSocketClient 创建 WebSocket 客户端
+func NewWebSocketClient(url string, logger *zap.Logger) *DefaultMCPClient {
+	transport := NewWebSocketTransport(url, logger)
+	return NewMCPClientWithTransport(transport, logger)
+}
+
+// Connect 连接到 MCP 服务器（含 initialize 握手）
 func (c *DefaultMCPClient) Connect(ctx context.Context, serverURL string) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -58,18 +79,61 @@ func (c *DefaultMCPClient) Connect(ctx context.Context, serverURL string) error 
 
 	c.serverURL = serverURL
 
-	// 获取服务器信息
-	info, err := c.GetServerInfo(ctx)
-	if err != nil {
-		return fmt.Errorf("failed to get server info: %w", err)
+	// 如果传输层支持连接（SSE/WebSocket），先建立连接
+	if connectable, ok := c.transport.(interface {
+		Connect(ctx context.Context) error
+	}); ok {
+		if err := connectable.Connect(ctx); err != nil {
+			return fmt.Errorf("transport connect failed: %w", err)
+		}
 	}
 
-	c.serverInfo = info
+	// 启动消息循环
+	go c.messageLoop(ctx)
+
+	// 标记为已连接（sendRequest 需要此状态）
 	c.connected = true
 
-	c.logger.Info("connected to MCP server",
-		zap.String("server", info.Name),
-		zap.String("version", info.Version))
+	// MCP 初始化握手
+	initResult, err := c.sendRequest(ctx, "initialize", map[string]interface{}{
+		"protocolVersion": MCPVersion,
+		"capabilities": map[string]interface{}{
+			"roots": map[string]interface{}{"listChanged": true},
+		},
+		"clientInfo": map[string]interface{}{
+			"name":    "agentflow-mcp-client",
+			"version": "1.0.0",
+		},
+	})
+	if err != nil {
+		c.connected = false
+		return fmt.Errorf("initialize handshake failed: %w", err)
+	}
+
+	// 解析服务器信息
+	var initResp struct {
+		ServerInfo      ServerInfo         `json:"serverInfo"`
+		Capabilities    ServerCapabilities `json:"capabilities"`
+		ProtocolVersion string             `json:"protocolVersion"`
+	}
+	if err := json.Unmarshal(initResult, &initResp); err != nil {
+		c.connected = false
+		return fmt.Errorf("parse initialize response: %w", err)
+	}
+
+	c.serverInfo = &initResp.ServerInfo
+	c.initialized = true
+
+	// 发送 initialized 通知
+	notifyMsg := &MCPMessage{
+		JSONRPC: "2.0",
+		Method:  "notifications/initialized",
+	}
+	_ = c.transport.Send(ctx, notifyMsg)
+
+	c.logger.Info("MCP client initialized",
+		zap.String("server", c.serverInfo.Name),
+		zap.String("protocol", initResp.ProtocolVersion))
 
 	return nil
 }
@@ -91,7 +155,13 @@ func (c *DefaultMCPClient) Disconnect(ctx context.Context) error {
 	c.subscriptions = make(map[string]chan Resource)
 	c.subsMu.Unlock()
 
+	// 关闭传输层
+	if c.transport != nil {
+		c.transport.Close()
+	}
+
 	c.connected = false
+	c.initialized = false
 	c.logger.Info("disconnected from MCP server")
 
 	return nil
@@ -279,22 +349,27 @@ func (c *DefaultMCPClient) UnsubscribeResource(ctx context.Context, uri string) 
 	return nil
 }
 
-// Start 启动客户端消息循环
+// Start 启动客户端消息循环（兼容旧接口，内部调用 messageLoop）
 func (c *DefaultMCPClient) Start(ctx context.Context) error {
+	c.messageLoop(ctx)
+	return ctx.Err()
+}
+
+// messageLoop 消息循环，持续从 transport 接收消息并分发
+func (c *DefaultMCPClient) messageLoop(ctx context.Context) {
 	for {
 		select {
 		case <-ctx.Done():
-			return ctx.Err()
+			return
 		default:
-			msg, err := c.readMessage()
+			msg, err := c.transport.Receive(ctx)
 			if err != nil {
-				if err == io.EOF {
-					return nil
+				if ctx.Err() != nil {
+					return
 				}
-				c.logger.Error("failed to read message", zap.Error(err))
+				c.logger.Error("transport receive error", zap.Error(err))
 				continue
 			}
-
 			c.handleMessage(msg)
 		}
 	}
@@ -323,7 +398,7 @@ func (c *DefaultMCPClient) sendRequest(ctx context.Context, method string, param
 	// 发送请求
 	msg := NewMCPRequest(id, method, params)
 
-	if err := c.writeMessage(msg); err != nil {
+	if err := c.transport.Send(ctx, msg); err != nil {
 		return nil, err
 	}
 
@@ -343,60 +418,6 @@ func (c *DefaultMCPClient) sendRequest(ctx context.Context, method string, param
 
 		return resultJSON, nil
 	}
-}
-
-// readMessage 读取消息
-func (c *DefaultMCPClient) readMessage() (*MCPMessage, error) {
-	// 读取 Content-Length 头
-	var contentLength int
-	for {
-		var line string
-		_, err := fmt.Fscanln(c.reader, &line)
-		if err != nil {
-			return nil, err
-		}
-
-		if line == "\r\n" || line == "" {
-			break
-		}
-
-		if _, err := fmt.Sscanf(line, "Content-Length: %d", &contentLength); err == nil {
-			continue
-		}
-	}
-
-	// 读取消息体
-	body := make([]byte, contentLength)
-	if _, err := io.ReadFull(c.reader, body); err != nil {
-		return nil, err
-	}
-
-	// 解析 JSON
-	var msg MCPMessage
-	if err := json.Unmarshal(body, &msg); err != nil {
-		return nil, err
-	}
-
-	return &msg, nil
-}
-
-// writeMessage 写入消息
-func (c *DefaultMCPClient) writeMessage(msg *MCPMessage) error {
-	body, err := json.Marshal(msg)
-	if err != nil {
-		return err
-	}
-
-	header := fmt.Sprintf("Content-Length: %d\r\n\r\n", len(body))
-	if _, err := c.writer.Write([]byte(header)); err != nil {
-		return err
-	}
-
-	if _, err := c.writer.Write(body); err != nil {
-		return err
-	}
-
-	return nil
 }
 
 // handleMessage 处理消息

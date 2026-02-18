@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"time"
 
 	"go.uber.org/zap"
 )
@@ -180,7 +181,7 @@ func (s *DefaultMCPServer) ListTools(ctx context.Context) ([]ToolDefinition, err
 	return result, nil
 }
 
-// CallTool 调用工具
+// CallTool 调用工具（带 30 秒超时控制）
 func (s *DefaultMCPServer) CallTool(ctx context.Context, name string, args map[string]interface{}) (interface{}, error) {
 	s.toolsMu.RLock()
 	handler, ok := s.toolHandlers[name]
@@ -195,7 +196,11 @@ func (s *DefaultMCPServer) CallTool(ctx context.Context, name string, args map[s
 		zap.Any("args", args),
 	)
 
-	result, err := handler(ctx, args)
+	// 添加 30 秒超时控制
+	callCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+
+	result, err := handler(callCtx, args)
 	if err != nil {
 		s.logger.Error("tool call failed",
 			zap.String("name", name),

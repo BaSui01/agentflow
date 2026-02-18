@@ -15,9 +15,10 @@ import (
 // AgentBuilder 提供流式构建 Agent 的能力
 // 支持链式调用，简化 Agent 创建过程
 type AgentBuilder struct {
-	config      Config
-	provider    llm.Provider
-	memory      MemoryManager
+	config       Config
+	provider     llm.Provider
+	toolProvider llm.Provider // 工具调用专用 Provider（可选，为 nil 时退化为 provider）
+	memory       MemoryManager
 	toolManager ToolManager
 	bus         EventBus
 	logger      *zap.Logger
@@ -49,6 +50,23 @@ func (b *AgentBuilder) WithProvider(provider llm.Provider) *AgentBuilder {
 		return b
 	}
 	b.provider = provider
+	return b
+}
+
+// WithToolProvider 设置工具调用专用的 LLM Provider。
+// ReAct 循环中的推理和工具调用将使用此 Provider，而最终内容生成仍使用主 Provider。
+// 如果不设置，所有调用都使用主 Provider（向后兼容）。
+func (b *AgentBuilder) WithToolProvider(provider llm.Provider) *AgentBuilder {
+	b.toolProvider = provider
+	return b
+}
+
+// WithMaxReActIterations 设置 ReAct 最大迭代次数。
+// n <= 0 时忽略，使用默认值 10。
+func (b *AgentBuilder) WithMaxReActIterations(n int) *AgentBuilder {
+	if n > 0 {
+		b.config.MaxReActIterations = n
+	}
 	return b
 }
 
@@ -205,6 +223,11 @@ func (b *AgentBuilder) Build() (*BaseAgent, error) {
 		b.bus,
 		b.logger,
 	)
+
+	// 设置工具专用 Provider（双模型模式）
+	if b.toolProvider != nil {
+		agent.toolProvider = b.toolProvider
+	}
 
 	// If feature flags were enabled directly on Config, fall back to default configs.
 	if b.config.EnableReflection && b.reflectionConfig == nil {
