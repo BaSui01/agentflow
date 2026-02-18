@@ -146,6 +146,106 @@ func TestToolProvider_Builder(t *testing.T) {
 	assert.Equal(t, toolProvider, agent.ToolProvider(), "toolProvider 应通过 Builder 正确注入")
 }
 
+// TestToolProvider_FunctionCallingValidation 测试 toolProvider 不支持 function calling 时报错
+func TestToolProvider_FunctionCallingValidation(t *testing.T) {
+	logger := zap.NewNop()
+	mainProvider := new(MockProvider)
+	toolProvider := new(MockProvider)
+	toolMgr := new(MockToolManager)
+
+	config := Config{
+		ID:    "test-dual-fc",
+		Name:  "Dual FC Agent",
+		Type:  TypeGeneric,
+		Model: "claude-sonnet-4-6",
+		Tools: []string{"search"},
+	}
+
+	agent := NewBaseAgent(config, mainProvider, nil, toolMgr, nil, logger)
+	agent.SetToolProvider(toolProvider)
+
+	// toolProvider 不支持 function calling → 应报错
+	toolProvider.On("SupportsNativeFunctionCalling").Return(false)
+	toolProvider.On("Name").Return("cheap-model")
+	toolMgr.On("GetAllowedTools", "test-dual-fc").Return([]llm.ToolSchema{
+		{Name: "search", Description: "search tool"},
+	})
+
+	_, err := agent.ChatCompletion(context.Background(), []llm.Message{
+		{Role: llm.RoleUser, Content: "search something"},
+	})
+
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "does not support native function calling")
+	assert.Contains(t, err.Error(), "cheap-model")
+}
+
+// TestToolProvider_FunctionCallingValidation_StreamCompletion 测试 StreamCompletion 的 FC 校验
+func TestToolProvider_FunctionCallingValidation_StreamCompletion(t *testing.T) {
+	logger := zap.NewNop()
+	mainProvider := new(MockProvider)
+	toolProvider := new(MockProvider)
+	toolMgr := new(MockToolManager)
+
+	config := Config{
+		ID:    "test-dual-fc-stream",
+		Name:  "Dual FC Stream Agent",
+		Type:  TypeGeneric,
+		Model: "claude-sonnet-4-6",
+		Tools: []string{"search"},
+	}
+
+	agent := NewBaseAgent(config, mainProvider, nil, toolMgr, nil, logger)
+	agent.SetToolProvider(toolProvider)
+
+	// toolProvider 不支持 function calling → StreamCompletion 也应报错
+	toolProvider.On("SupportsNativeFunctionCalling").Return(false)
+	toolProvider.On("Name").Return("cheap-model")
+	toolMgr.On("GetAllowedTools", "test-dual-fc-stream").Return([]llm.ToolSchema{
+		{Name: "search", Description: "search tool"},
+	})
+
+	_, err := agent.StreamCompletion(context.Background(), []llm.Message{
+		{Role: llm.RoleUser, Content: "search something"},
+	})
+
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "does not support native function calling")
+	assert.Contains(t, err.Error(), "cheap-model")
+}
+
+// TestToolProvider_FunctionCallingValidation_NilToolProvider toolProvider 为 nil 时退化校验 provider
+func TestToolProvider_FunctionCallingValidation_NilToolProvider(t *testing.T) {
+	logger := zap.NewNop()
+	mainProvider := new(MockProvider)
+	toolMgr := new(MockToolManager)
+
+	config := Config{
+		ID:    "test-fc-nil-tp",
+		Name:  "FC Nil ToolProvider Agent",
+		Type:  TypeGeneric,
+		Model: "claude-sonnet-4-6",
+		Tools: []string{"search"},
+	}
+
+	agent := NewBaseAgent(config, mainProvider, nil, toolMgr, nil, logger)
+	// 不设置 toolProvider → 退化校验 mainProvider
+
+	mainProvider.On("SupportsNativeFunctionCalling").Return(false)
+	mainProvider.On("Name").Return("main-no-fc")
+	toolMgr.On("GetAllowedTools", "test-fc-nil-tp").Return([]llm.ToolSchema{
+		{Name: "search", Description: "search tool"},
+	})
+
+	_, err := agent.ChatCompletion(context.Background(), []llm.Message{
+		{Role: llm.RoleUser, Content: "search something"},
+	})
+
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "does not support native function calling")
+	assert.Contains(t, err.Error(), "main-no-fc")
+}
+
 // TestToolProvider_BuilderWithoutToolProvider Builder 不设置 toolProvider 时向后兼容
 func TestToolProvider_BuilderWithoutToolProvider(t *testing.T) {
 	logger := zap.NewNop()
