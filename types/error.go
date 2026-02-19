@@ -1,6 +1,9 @@
 package types
 
-import "fmt"
+import (
+	"errors"
+	"fmt"
+)
 
 // ErrorCode represents a unified error code across the framework.
 type ErrorCode string
@@ -111,3 +114,102 @@ func GetErrorCode(err error) ErrorCode {
 	}
 	return ""
 }
+
+// =============================================================================
+// 🔧 错误转换工具函数
+// =============================================================================
+
+// WrapError 包装标准错误为 types.Error
+func WrapError(err error, code ErrorCode, message string) *Error {
+	if err == nil {
+		return nil
+	}
+
+	// 如果已经是 types.Error，直接返回
+	if typedErr, ok := err.(*Error); ok {
+		return typedErr
+	}
+
+	return NewError(code, message).WithCause(err)
+}
+
+// WrapErrorf 包装标准错误为 types.Error（支持格式化）
+func WrapErrorf(err error, code ErrorCode, format string, args ...interface{}) *Error {
+	if err == nil {
+		return nil
+	}
+
+	message := fmt.Sprintf(format, args...)
+	return WrapError(err, code, message)
+}
+
+// AsError 尝试将 error 转换为 *Error
+func AsError(err error) (*Error, bool) {
+	var typedErr *Error
+	if errors.As(err, &typedErr) {
+		return typedErr, true
+	}
+	return nil, false
+}
+
+// IsErrorCode 检查错误是否为指定的错误码
+func IsErrorCode(err error, code ErrorCode) bool {
+	if typedErr, ok := AsError(err); ok {
+		return typedErr.Code == code
+	}
+	return false
+}
+
+// =============================================================================
+// 🎯 常用错误构造函数
+// =============================================================================
+
+// NewInvalidRequestError 创建无效请求错误
+func NewInvalidRequestError(message string) *Error {
+	return NewError(ErrInvalidRequest, message).
+		WithHTTPStatus(400).
+		WithRetryable(false)
+}
+
+// NewAuthenticationError 创建认证错误
+func NewAuthenticationError(message string) *Error {
+	return NewError(ErrAuthentication, message).
+		WithHTTPStatus(401).
+		WithRetryable(false)
+}
+
+// NewNotFoundError 创建未找到错误
+func NewNotFoundError(message string) *Error {
+	return NewError(ErrModelNotFound, message).
+		WithHTTPStatus(404).
+		WithRetryable(false)
+}
+
+// NewRateLimitError 创建限流错误
+func NewRateLimitError(message string) *Error {
+	return NewError(ErrRateLimit, message).
+		WithHTTPStatus(429).
+		WithRetryable(true)
+}
+
+// NewInternalError 创建内部错误
+func NewInternalError(message string) *Error {
+	return NewError(ErrInternalError, message).
+		WithHTTPStatus(500).
+		WithRetryable(false)
+}
+
+// NewServiceUnavailableError 创建服务不可用错误
+func NewServiceUnavailableError(message string) *Error {
+	return NewError(ErrServiceUnavailable, message).
+		WithHTTPStatus(503).
+		WithRetryable(true)
+}
+
+// NewTimeoutError 创建超时错误
+func NewTimeoutError(message string) *Error {
+	return NewError(ErrTimeout, message).
+		WithHTTPStatus(504).
+		WithRetryable(true)
+}
+
