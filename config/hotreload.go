@@ -34,10 +34,10 @@ type HotReloadManager struct {
 	configPath string
 
 	// Rollback support
-	previousConfig *Config           // 上一个成功应用的配置（用于回滚）
-	configHistory  []ConfigSnapshot  // 配置变更历史（环形缓冲）
-	maxHistorySize int               // 最大历史记录数，默认 10
-	validateFunc   ValidateFunc      // 配置验证钩子（可选）
+	previousConfig *Config          // 上一个成功应用的配置（用于回滚）
+	configHistory  []ConfigSnapshot // 配置变更历史（环形缓冲）
+	maxHistorySize int              // 最大历史记录数，默认 10
+	validateFunc   ValidateFunc     // 配置验证钩子（可选）
 
 	// File watcher
 	watcher *FileWatcher
@@ -524,7 +524,6 @@ func (m *HotReloadManager) ReloadFromFile() error {
 // ApplyConfig applies a new configuration
 func (m *HotReloadManager) ApplyConfig(newConfig *Config, source string) error {
 	m.mu.Lock()
-	defer m.mu.Unlock()
 
 	oldConfig := m.config
 
@@ -540,6 +539,7 @@ func (m *HotReloadManager) ApplyConfig(newConfig *Config, source string) error {
 				Applied:   false,
 				Error:     fmt.Sprintf("validation hook failed: %v", err),
 			})
+			m.mu.Unlock()
 			return fmt.Errorf("config validation failed: %w", err)
 		}
 	}
@@ -575,13 +575,27 @@ func (m *HotReloadManager) ApplyConfig(newConfig *Config, source string) error {
 
 	// 4. 应用新配置
 	m.config = newConfig
+	changeCallbacks := append([]ChangeCallback(nil), m.changeCallbacks...)
+	reloadCallbacks := append([]ReloadCallback(nil), m.reloadCallbacks...)
+	m.mu.Unlock()
 
 	// 5. 通知回调（失败则自动回滚）
-	if err := m.notifyCallbacksSafe(oldConfig, newConfig, appliedChanges); err != nil {
-		m.logger.Error("callback failed, rolling back", zap.Error(err))
-		m.rollbackLocked(oldConfig, fmt.Sprintf("callback error: %v", err), err)
-		return fmt.Errorf("config applied but callback failed, rolled back: %w", err)
+	if err := m.notifyCallbacksSafe(changeCallbacks, reloadCallbacks, oldConfig, newConfig, appliedChanges); err != nil {
+		m.mu.Lock()
+		if m.config == newConfig {
+			m.logger.Error("callback failed, rolling back", zap.Error(err))
+			m.rollbackLocked(oldConfig, fmt.Sprintf("callback error: %v", err), err)
+		} else {
+			m.logger.Warn("callback failed but config changed concurrently, skip rollback",
+				zap.Error(err),
+			)
+		}
+		m.mu.Unlock()
+		return fmt.Errorf("config applied but callback failed: %w", err)
 	}
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
 
 	// 6. 推入历史记录
 	m.pushHistory(newConfig, source)
@@ -602,18 +616,18 @@ func (m *HotReloadManager) ApplyConfig(newConfig *Config, source string) error {
 }
 
 // notifyCallbacksSafe 安全地通知回调（捕获 panic）
-func (m *HotReloadManager) notifyCallbacksSafe(oldConfig, newConfig *Config, changes []ConfigChange) (retErr error) {
+func (m *HotReloadManager) notifyCallbacksSafe(changeCallbacks []ChangeCallback, reloadCallbacks []ReloadCallback, oldConfig, newConfig *Config, changes []ConfigChange) (retErr error) {
 	defer func() {
 		if r := recover(); r != nil {
 			retErr = fmt.Errorf("callback panicked: %v", r)
 		}
 	}()
-	for _, cb := range m.changeCallbacks {
+	for _, cb := range changeCallbacks {
 		for _, change := range changes {
 			cb(change)
 		}
 	}
-	for _, cb := range m.reloadCallbacks {
+	for _, cb := range reloadCallbacks {
 		cb(oldConfig, newConfig)
 	}
 	return nil
@@ -802,7 +816,7 @@ func (m *HotReloadManager) GetCurrentVersion() int {
 func (m *HotReloadManager) GetConfig() *Config {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	return m.config
+	return deepCopyConfig(m.config)
 }
 
 // GetChangeLog returns the configuration change log
@@ -825,17 +839,20 @@ func (m *HotReloadManager) GetChangeLog(limit int) []ConfigChange {
 // UpdateField updates a single configuration field
 func (m *HotReloadManager) UpdateField(path string, value interface{}) error {
 	m.mu.Lock()
-	defer m.mu.Unlock()
+
+	oldConfigSnapshot := deepCopyConfig(m.config)
 
 	// Check if field is known
 	field, known := hotReloadableFields[path]
 	if !known {
+		m.mu.Unlock()
 		return fmt.Errorf("unknown configuration field: %s", path)
 	}
 
 	// Validate if validator exists
 	if field.Validator != nil {
 		if err := field.Validator(value); err != nil {
+			m.mu.Unlock()
 			return fmt.Errorf("validation failed for %s: %w", path, err)
 		}
 	}
@@ -843,11 +860,13 @@ func (m *HotReloadManager) UpdateField(path string, value interface{}) error {
 	// Get old value
 	oldValue, err := m.getFieldValue(path)
 	if err != nil {
+		m.mu.Unlock()
 		return fmt.Errorf("failed to get old value: %w", err)
 	}
 
 	// Set new value
 	if err := m.setFieldValue(path, value); err != nil {
+		m.mu.Unlock()
 		return fmt.Errorf("failed to set value: %w", err)
 	}
 
@@ -870,9 +889,14 @@ func (m *HotReloadManager) UpdateField(path string, value interface{}) error {
 	// Log and notify
 	m.logChange(change)
 	m.changeLog = append(m.changeLog, change)
+	callbacks := append([]ChangeCallback(nil), m.changeCallbacks...)
+	m.mu.Unlock()
 
-	for _, cb := range m.changeCallbacks {
-		cb(change)
+	if err := m.notifyCallbacksSafe(callbacks, nil, oldConfigSnapshot, m.GetConfig(), []ConfigChange{change}); err != nil {
+		m.mu.Lock()
+		m.rollbackLocked(oldConfigSnapshot, fmt.Sprintf("callback error: %v", err), err)
+		m.mu.Unlock()
+		return fmt.Errorf("field updated but callback failed, rolled back: %w", err)
 	}
 
 	return nil

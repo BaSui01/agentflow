@@ -193,7 +193,7 @@ func (s *Server) startHTTPServer() error {
 		RequestLogger(s.logger),
 		CORS(s.cfg.Server.CORSAllowedOrigins),
 		RateLimiter(float64(s.cfg.Server.RateLimitRPS), s.cfg.Server.RateLimitBurst, s.logger),
-		APIKeyAuth(s.cfg.Server.APIKeys, skipAuthPaths, s.logger),
+		APIKeyAuth(s.cfg.Server.APIKeys, skipAuthPaths, s.cfg.Server.AllowQueryAPIKey, s.logger),
 	)
 
 	// ========================================

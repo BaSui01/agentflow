@@ -5,6 +5,7 @@ package server
 import (
 	"context"
 	"fmt"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -21,11 +22,13 @@ import (
 
 // Manager HTTP 服务器管理器
 type Manager struct {
-	server *http.Server
-	config Config
-	logger *zap.Logger
-	mu     sync.RWMutex
-	closed bool
+	server   *http.Server
+	listener net.Listener
+	errCh    chan error
+	config   Config
+	logger   *zap.Logger
+	mu       sync.RWMutex
+	closed   bool
 }
 
 // Config 服务器配置
@@ -74,6 +77,7 @@ func NewManager(handler http.Handler, config Config, logger *zap.Logger) *Manage
 
 	return &Manager{
 		server: server,
+		errCh:  make(chan error, 1),
 		config: config,
 		logger: logger.With(zap.String("component", "http_server")),
 	}
@@ -92,13 +96,19 @@ func (m *Manager) Start() error {
 		return fmt.Errorf("server is closed")
 	}
 
+	if m.listener != nil {
+		return fmt.Errorf("server already started")
+	}
+
+	listener, err := net.Listen("tcp", m.config.Addr)
+	if err != nil {
+		return fmt.Errorf("failed to listen on %s: %w", m.config.Addr, err)
+	}
+
+	m.listener = listener
 	m.logger.Info("starting HTTP server", zap.String("addr", m.config.Addr))
 
-	go func() {
-		if err := m.server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			m.logger.Fatal("HTTP server failed", zap.Error(err))
-		}
-	}()
+	go m.serve(listener)
 
 	return nil
 }
@@ -112,18 +122,44 @@ func (m *Manager) StartTLS(certFile, keyFile string) error {
 		return fmt.Errorf("server is closed")
 	}
 
+	if m.listener != nil {
+		return fmt.Errorf("server already started")
+	}
+
+	listener, err := net.Listen("tcp", m.config.Addr)
+	if err != nil {
+		return fmt.Errorf("failed to listen on %s: %w", m.config.Addr, err)
+	}
+
+	m.listener = listener
 	m.logger.Info("starting HTTPS server",
 		zap.String("addr", m.config.Addr),
 		zap.String("cert", certFile),
 	)
 
-	go func() {
-		if err := m.server.ListenAndServeTLS(certFile, keyFile); err != nil && err != http.ErrServerClosed {
-			m.logger.Fatal("HTTPS server failed", zap.Error(err))
-		}
-	}()
+	go m.serveTLS(listener, certFile, keyFile)
 
 	return nil
+}
+
+func (m *Manager) serve(listener net.Listener) {
+	if err := m.server.Serve(listener); err != nil && err != http.ErrServerClosed {
+		m.logger.Error("HTTP server failed", zap.Error(err))
+		select {
+		case m.errCh <- err:
+		default:
+		}
+	}
+}
+
+func (m *Manager) serveTLS(listener net.Listener, certFile, keyFile string) {
+	if err := m.server.ServeTLS(listener, certFile, keyFile); err != nil && err != http.ErrServerClosed {
+		m.logger.Error("HTTPS server failed", zap.Error(err))
+		select {
+		case m.errCh <- err:
+		default:
+		}
+	}
 }
 
 // Shutdown 优雅关闭服务器
@@ -148,6 +184,8 @@ func (m *Manager) Shutdown(ctx context.Context) error {
 		return err
 	}
 
+	m.listener = nil
+
 	m.logger.Info("HTTP server stopped")
 	return nil
 }
@@ -156,14 +194,26 @@ func (m *Manager) Shutdown(ctx context.Context) error {
 func (m *Manager) WaitForShutdown() {
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+	defer signal.Stop(quit)
 
-	sig := <-quit
-	m.logger.Info("received shutdown signal", zap.String("signal", sig.String()))
+	select {
+	case sig := <-quit:
+		m.logger.Info("received shutdown signal", zap.String("signal", sig.String()))
+	case err := <-m.errCh:
+		if err != nil {
+			m.logger.Error("server exited unexpectedly", zap.Error(err))
+		}
+	}
 
 	ctx := context.Background()
 	if err := m.Shutdown(ctx); err != nil {
 		m.logger.Error("shutdown error", zap.Error(err))
 	}
+}
+
+// Errors returns asynchronous server errors.
+func (m *Manager) Errors() <-chan error {
+	return m.errCh
 }
 
 // =============================================================================

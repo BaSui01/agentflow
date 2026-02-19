@@ -36,12 +36,12 @@ func NewChatHandler(provider llm.Provider, logger *zap.Logger) *ChatHandler {
 // @Tags 聊天
 // @Accept json
 // @Produce json
-// @Param 请求正文 api.ChatRequest true "聊天请求"
-// @Success 200 {object} api.ChatResponse “聊天响应”
-// @Failure 400 {object} 响应“无效请求”
-// @Failure 500 {object} 响应“内部错误”
-// @Security API密钥认证
-// @Router /v1/chat/completions [帖子]
+// @Param request body api.ChatRequest true "聊天请求"
+// @Success 200 {object} api.ChatResponse "聊天响应"
+// @Failure 400 {object} Response "无效请求"
+// @Failure 500 {object} Response "内部错误"
+// @Security ApiKeyAuth
+// @Router /v1/chat/completions [post]
 func (h *ChatHandler) HandleCompletion(w http.ResponseWriter, r *http.Request) {
 	// 验证 Content-Type
 	if !ValidateContentType(w, r, h.logger) {
@@ -100,13 +100,13 @@ func (h *ChatHandler) HandleCompletion(w http.ResponseWriter, r *http.Request) {
 // @Description 发送流式聊天完成请求
 // @Tags 聊天
 // @Accept json
-// @Produce 文本/事件流
-// @Param 请求正文 api.ChatRequest true "聊天请求"
-// @Success 200 {string} 字符串 "SSE 流"
-// @Failure 400 {object} 响应“无效请求”
-// @Failure 500 {object} 响应“内部错误”
-// @Security API密钥认证
-// @Router /v1/chat/completions/stream [帖子]
+// @Produce text/event-stream
+// @Param request body api.ChatRequest true "聊天请求"
+// @Success 200 {string} string "SSE 流"
+// @Failure 400 {object} Response "无效请求"
+// @Failure 500 {object} Response "内部错误"
+// @Security ApiKeyAuth
+// @Router /v1/chat/completions/stream [post]
 func (h *ChatHandler) HandleStream(w http.ResponseWriter, r *http.Request) {
 	// 验证 Content-Type
 	if !ValidateContentType(w, r, h.logger) {
