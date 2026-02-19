@@ -16,6 +16,8 @@
 
 - **Reflection 机制** - 自我评估与迭代改进
 - **动态工具选择** - 智能工具匹配，减少 Token 消耗
+- **双模型架构 (toolProvider)** - 便宜模型做工具调用，贵模型做内容生成，大幅降低成本
+- **Browser Automation** - 浏览器自动化（chromedp 驱动、连接池、视觉适配器）
 - **Skills 系统** - 动态技能加载
 - **MCP/A2A 协议** - 完整 Agent 互操作协议栈 (支持 Google A2A & Anthropic MCP)
 - **Guardrails** - 输入/输出验证、PII 检测、注入防护、自定义验证规则
@@ -51,10 +53,14 @@
 - **Chain 工作流** - 简单的线性步骤序列
 - **并行执行** - 支持分支并发执行与结果聚合
 - **状态持久化** - 支持检查点 (Checkpoint) 的保存与恢复
+- **熔断器 (Circuit Breaker)** - DAG 节点级熔断保护（Closed/Open/HalfOpen 三态机）
+- **YAML DSL 编排语言** - 声明式工作流定义，支持变量插值、条件分支、循环、子图
 
 ### 🔍 RAG 系统 (检索增强生成)
 
 - **混合检索 (Hybrid Retrieval)** - 结合向量搜索 (Dense) 与关键词搜索 (Sparse)
+- **BM25 Contextual Retrieval** - 基于 Anthropic 最佳实践的上下文检索，BM25 参数可调（k1/b），IDF 缓存
+- **Multi-hop 推理与去重** - 多跳推理链，四阶段去重流程（ID 去重 + 内容相似度去重），DedupStats 统计
 - **Web 增强检索** - 本地 RAG + 实时 Web 搜索混合检索，支持权重分配与结果去重
 - **语义缓存 (Semantic Cache)** - 基于向量相似度的响应缓存，大幅降低延迟与成本
 - **多向量数据库支持** - Qdrant, Pinecone, Milvus, Weaviate 及内置 InMemoryStore
@@ -65,6 +71,9 @@
 
 - **13+ 提供商** - OpenAI, Claude, Gemini, DeepSeek, Qwen, GLM, Grok, Mistral, Hunyuan, Kimi, MiniMax, Doubao, Llama
 - **智能路由** - 成本/健康/QPS 负载均衡
+- **A/B 测试路由** - 多变体流量分配、粘性路由、动态权重调整、指标收集
+- **统一 Token 计数器** - Tokenizer 接口 + tiktoken 适配器 + CJK 估算器
+- **Provider 重试包装器** - RetryableProvider 指数退避重试，仅重试可恢复错误
 - **API Key 池** - 多 Key 轮询、限流检测
 
 ### 🎨 多模态能力
@@ -81,6 +90,9 @@
 - **弹性机制** - 重试、幂等、熔断
 - **可观测性** - Prometheus 指标、OpenTelemetry 追踪
 - **缓存系统** - 多级缓存策略
+- **API 安全中间件** - API Key 认证、IP 限流、CORS、Panic 恢复、请求日志
+- **成本控制与预算管理** - Token 计数、周期重置、成本报告、优化建议
+- **配置热重载与回滚** - 文件监听自动重载、版本化历史、一键回滚、验证钩子
 
 ## 🚀 快速开始
 
@@ -272,7 +284,17 @@ agentflow/
 │   │   ├── gemini/
 │   │   ├── deepseek/
 │   │   ├── qwen/
+│   │   ├── retry_wrapper.go  # Provider 重试包装器（指数退避）
 │   │   └── ...
+│   ├── router/               # 路由层
+│   │   ├── router.go         # 路由接口
+│   │   ├── ab_router.go      # A/B 测试路由（粘性路由、权重管理、指标收集）
+│   │   ├── prefix_router.go  # 前缀路由
+│   │   └── semantic.go       # 语义路由
+│   ├── tokenizer/            # 统一 Token 计数器
+│   │   ├── tokenizer.go      # Tokenizer 接口 + 全局注册表
+│   │   ├── tiktoken.go       # tiktoken 适配器（OpenAI 模型）
+│   │   └── estimator.go      # CJK 估算器（无需下载模型数据）
 │   ├── tools/                # 工具执行
 │   │   ├── executor.go
 │   │   └── react.go
@@ -280,9 +302,18 @@ agentflow/
 │
 ├── agent/                    # Layer 2: Agent 核心
 │   ├── base.go               # BaseAgent
+│   ├── completion.go         # ChatCompletion/StreamCompletion（双模型架构）
+│   ├── react.go              # Plan/Execute/Observe ReAct 循环
 │   ├── state.go              # 状态机
 │   ├── event.go              # 事件总线
 │   ├── registry.go           # Agent 注册表
+│   ├── browser/              # 浏览器自动化
+│   │   ├── browser.go        # Browser 接口 + BrowserTool
+│   │   ├── chromedp_driver.go # chromedp 驱动实现
+│   │   ├── browser_pool.go   # 浏览器连接池
+│   │   ├── vision_adapter.go # 视觉适配器（截图→LLM）
+│   │   └── agentic_browser.go # Agent 级浏览器封装
+│   ├── streaming/            # 双向通信增强
 │   ├── guardrails/           # 护栏系统
 │   ├── protocol/             # A2A/MCP 协议
 │   │   ├── a2a/
@@ -302,7 +333,18 @@ agentflow/
 │   ├── workflow.go
 │   ├── dag.go
 │   ├── dag_executor.go
-│   └── parallel.go
+│   ├── parallel.go
+│   ├── circuit_breaker.go    # DAG 熔断器（三态机 + 注册表）
+│   └── dsl/                  # YAML DSL 编排
+│       ├── schema.go         # DSL 类型定义（WorkflowDSL, NodeDef, StepDef...）
+│       ├── parser.go         # YAML 解析 + 变量插值 + DAGWorkflow 构建
+│       └── validator.go      # DSL 验证器（节点、引用、变量完整性）
+│
+├── config/                   # 配置管理
+│   └── hotreload.go          # 配置热重载与回滚（版本化历史、验证钩子、自动回滚）
+│
+├── cmd/agentflow/            # 应用入口
+│   └── middleware.go         # API 安全中间件（认证、限流、CORS、Recovery）
 │
 └── examples/                 # 示例代码
 ```

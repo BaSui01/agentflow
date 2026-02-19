@@ -345,3 +345,157 @@ logger.Info("agent execution completed",
 - [API 参考](../api/README.md)
 - [教程](../tutorials/)
 - [故障排查](./troubleshooting.md)
+
+---
+
+## 成本控制最佳实践
+
+### Token 计数器选择
+
+| 场景 | 推荐 | 原因 |
+|------|------|------|
+| OpenAI 模型 | `TiktokenTokenizer` | 精确计数，支持 o200k_base/cl100k_base 编码 |
+| 非 OpenAI 模型 | `EstimatorTokenizer` | 无需下载模型数据，CJK 字符优化 |
+| 混合场景 | `GetTokenizerOrEstimator` | 自动回退，优先精确计数 |
+
+### 预算管理建议
+
+```go
+// 1. 启动时注册所有 OpenAI tokenizer
+tokenizer.RegisterOpenAITokenizers()
+
+// 2. 请求前预估 Token 消耗
+tok := tokenizer.GetTokenizerOrEstimator(model)
+estimated, _ := tok.CountMessages(messages)
+if estimated > budgetLimit {
+    // 裁剪消息或拒绝请求
+}
+
+// 3. 请求后记录实际消耗
+resp, _ := provider.Completion(ctx, req)
+actualTokens := resp.Usage.TotalTokens
+```
+
+### 双模型架构降本
+
+- 工具调用密集型任务：设置 `toolProvider` 为便宜模型（如 GPT-4o-mini），主 Provider 为贵模型
+- 预期成本降低 40-60%（工具调用通常占总 Token 的 60-80%）
+
+---
+
+## Config Hot Reload 回滚最佳实践
+
+### 基本配置
+
+```go
+import "github.com/BaSui01/agentflow/config"
+
+manager := config.NewHotReloadManager(cfg,
+    config.WithConfigPath("/etc/agentflow/config.yaml"),
+    config.WithHotReloadLogger(logger),
+    config.WithMaxHistorySize(20),       // 保留 20 个历史版本
+    config.WithValidateFunc(func(newConfig *config.Config) error {
+        // 自定义验证逻辑
+        if newConfig.Agent.MaxTokens > 100000 {
+            return fmt.Errorf("max_tokens too large")
+        }
+        return nil
+    }),
+)
+
+manager.Start(ctx)
+defer manager.Stop()
+```
+
+### 回滚策略
+
+```go
+// 手动回滚到上一个版本
+manager.Rollback()
+
+// 回滚到指定版本
+manager.RollbackToVersion(3)
+
+// 查看配置历史
+history := manager.GetConfigHistory()
+for _, snapshot := range history {
+    fmt.Printf("版本 %d: %s (来源: %s)\n",
+        snapshot.Version, snapshot.Timestamp, snapshot.Source)
+}
+```
+
+### 监控与告警
+
+```go
+// 监听配置变更
+manager.OnChange(func(change config.ConfigChange) {
+    if change.RequiresRestart {
+        alertOps("配置变更需要重启: " + change.Path)
+    }
+})
+
+// 监听回滚事件
+manager.OnRollback(func(event config.RollbackEvent) {
+    alertOps(fmt.Sprintf("配置回滚! 原因: %s, 恢复到版本: %d",
+        event.Reason, event.Version))
+})
+```
+
+### 生产环境注意事项
+
+1. **热重载字段**：Log.Level、Agent.MaxIterations、Agent.Temperature 等可热重载
+2. **需重启字段**：Server.HTTPPort、Database.Host、Redis.Addr 等需要重启
+3. **敏感字段**：Password、APIKey 等字段在变更日志中自动脱敏
+4. **自动回滚**：回调函数执行失败时自动回滚到上一个有效配置
+5. **环形缓冲**：历史记录使用环形缓冲，默认保留最近 10 个版本
+
+---
+
+## API 中间件安全配置
+
+`cmd/agentflow/middleware.go` 提供生产级 API 安全中间件。
+
+### 推荐中间件链
+
+```go
+import "go.uber.org/zap"
+
+logger, _ := zap.NewProduction()
+
+handler := Chain(apiHandler,
+    Recovery(logger),                    // 1. Panic 恢复（最外层）
+    RequestLogger(logger),               // 2. 请求日志
+    CORS([]string{"https://app.example.com"}), // 3. CORS
+    RateLimiter(100, 200, logger),       // 4. 限流（100 RPS，突发 200）
+    APIKeyAuth(                          // 5. 认证（最内层）
+        []string{"key-1", "key-2"},
+        []string{"/health", "/metrics"}, // 跳过认证的路径
+        logger,
+    ),
+)
+```
+
+### API Key 认证
+
+- 支持 `X-API-Key` Header 和 `api_key` Query Parameter
+- 可配置跳过路径（健康检查、指标端点等）
+
+### 限流配置建议
+
+| 场景 | RPS | Burst | 说明 |
+|------|-----|-------|------|
+| 开发环境 | 1000 | 2000 | 宽松限制 |
+| 生产 API | 100 | 200 | 标准限制 |
+| 公开端点 | 10 | 20 | 严格限制 |
+
+### CORS 配置
+
+```go
+// 允许特定域名
+CORS([]string{"https://app.example.com", "https://admin.example.com"})
+
+// 允许所有域名（仅开发环境）
+CORS(nil)
+```
+
+> 限流器基于 IP 地址，自动清理 3 分钟内无活动的访客记录。
