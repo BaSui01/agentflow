@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/BaSui01/agentflow/agent/skills"
@@ -168,6 +169,11 @@ func (b *BaseAgent) ExecuteEnhanced(ctx context.Context, input *Input, options E
 		}
 	}
 
+	enhancedPrompt := input.Content
+	if len(skillInstructions) > 0 {
+		enhancedPrompt = prependSkillInstructions(input.Content, skillInstructions)
+	}
+
 	// 3. 增强记忆：加载上下文
 	var memoryContext []string
 	if options.UseEnhancedMemory && b.enhancedMemory != nil {
@@ -214,7 +220,6 @@ func (b *BaseAgent) ExecuteEnhanced(ctx context.Context, input *Input, options E
 	}
 
 	// 4. 提示词增强
-	enhancedPrompt := input.Content
 	if options.UsePromptEnhancer && b.promptEnhancer != nil {
 		b.logger.Debug("enhancing prompt")
 		if pe, ok := b.promptEnhancer.(interface {
@@ -577,6 +582,39 @@ func (b *BaseAgent) GetFeatureMetrics() map[string]interface{} {
 	metrics["total_features_count"] = len(status)
 
 	return metrics
+}
+
+func prependSkillInstructions(prompt string, instructions []string) string {
+	if len(instructions) == 0 {
+		return prompt
+	}
+
+	unique := make(map[string]struct{}, len(instructions))
+	cleaned := make([]string, 0, len(instructions))
+	for _, instruction := range instructions {
+		instruction = strings.TrimSpace(instruction)
+		if instruction == "" {
+			continue
+		}
+		if _, exists := unique[instruction]; exists {
+			continue
+		}
+		unique[instruction] = struct{}{}
+		cleaned = append(cleaned, instruction)
+	}
+
+	if len(cleaned) == 0 {
+		return prompt
+	}
+
+	var sb strings.Builder
+	sb.WriteString("技能执行指令:\n")
+	for idx, instruction := range cleaned {
+		sb.WriteString(fmt.Sprintf("%d. %s\n", idx+1, instruction))
+	}
+	sb.WriteString("\n用户请求:\n")
+	sb.WriteString(prompt)
+	return sb.String()
 }
 
 // ExportConfiguration 导出配置（用于持久化或分享）

@@ -6,6 +6,13 @@ package lsp
 // LSPVersion LSP 协议版本
 const LSPVersion = "3.17"
 
+// TextDocumentSyncKind 文档同步策略。
+const (
+	TextDocumentSyncNone        = 0
+	TextDocumentSyncFull        = 1
+	TextDocumentSyncIncremental = 2
+)
+
 // Position 文档位置
 type Position struct {
 	Line      int `json:"line"`      // 行号（从 0 开始）

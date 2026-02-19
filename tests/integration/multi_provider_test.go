@@ -50,6 +50,11 @@ func (m *MockProvider) SupportsNativeFunctionCalling() bool {
 	return args.Bool(0)
 }
 
+func (m *MockProvider) ListModels(ctx context.Context) ([]llm.Model, error) {
+	_ = ctx
+	return nil, nil
+}
+
 // TestMultiProviderRouting tests routing between multiple providers
 func TestMultiProviderRouting(t *testing.T) {
 	logger, _ := zap.NewDevelopment()

@@ -50,6 +50,11 @@ func (m *MockProvider) SupportsNativeFunctionCalling() bool {
 	return args.Bool(0)
 }
 
+func (m *MockProvider) ListModels(ctx context.Context) ([]llm.Model, error) {
+	_ = ctx
+	return nil, nil
+}
+
 // MockMemoryManager 模拟记忆管理器
 type MockMemoryManager struct {
 	mock.Mock

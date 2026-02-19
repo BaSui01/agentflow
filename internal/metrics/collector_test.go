@@ -1,6 +1,8 @@
 package metrics
 
 import (
+	"fmt"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -10,13 +12,20 @@ import (
 	"go.uber.org/zap"
 )
 
+var collectorNamespaceSeq uint64
+
+func nextTestNamespace() string {
+	seq := atomic.AddUint64(&collectorNamespaceSeq, 1)
+	return fmt.Sprintf("test_%d", seq)
+}
+
 // =============================================================================
 // 🧪 Collector 测试
 // =============================================================================
 
 func TestNewCollector(t *testing.T) {
 	logger := zap.NewNop()
-	collector := NewCollector("test", logger)
+	collector := NewCollector(nextTestNamespace(), logger)
 
 	assert.NotNil(t, collector)
 	assert.NotNil(t, collector.httpRequestsTotal)
@@ -29,7 +38,7 @@ func TestNewCollector(t *testing.T) {
 
 func TestCollector_RecordHTTPRequest(t *testing.T) {
 	logger := zap.NewNop()
-	collector := NewCollector("test", logger)
+	collector := NewCollector(nextTestNamespace(), logger)
 
 	// 记录请求
 	collector.RecordHTTPRequest("GET", "/test", 200, 100*time.Millisecond, 1024, 2048)
@@ -48,7 +57,7 @@ func TestCollector_RecordHTTPRequest(t *testing.T) {
 
 func TestCollector_RecordLLMRequest(t *testing.T) {
 	logger := zap.NewNop()
-	collector := NewCollector("test", logger)
+	collector := NewCollector(nextTestNamespace(), logger)
 
 	// 记录 LLM 请求
 	collector.RecordLLMRequest(
@@ -74,7 +83,7 @@ func TestCollector_RecordLLMRequest(t *testing.T) {
 
 func TestCollector_RecordAgentExecution(t *testing.T) {
 	logger := zap.NewNop()
-	collector := NewCollector("test", logger)
+	collector := NewCollector(nextTestNamespace(), logger)
 
 	// 记录 Agent 执行
 	collector.RecordAgentExecution(
@@ -91,7 +100,7 @@ func TestCollector_RecordAgentExecution(t *testing.T) {
 
 func TestCollector_RecordCacheOperation(t *testing.T) {
 	logger := zap.NewNop()
-	collector := NewCollector("test", logger)
+	collector := NewCollector(nextTestNamespace(), logger)
 
 	// 记录缓存命中
 	collector.RecordCacheHit("redis")
@@ -109,7 +118,7 @@ func TestCollector_RecordCacheOperation(t *testing.T) {
 
 func TestCollector_RecordDatabaseQuery(t *testing.T) {
 	logger := zap.NewNop()
-	collector := NewCollector("test", logger)
+	collector := NewCollector(nextTestNamespace(), logger)
 
 	// 记录数据库查询
 	collector.RecordDBQuery("postgres", "SELECT", 20*time.Millisecond)
@@ -121,7 +130,7 @@ func TestCollector_RecordDatabaseQuery(t *testing.T) {
 
 func TestCollector_UpdateConnectionPool(t *testing.T) {
 	logger := zap.NewNop()
-	collector := NewCollector("test", logger)
+	collector := NewCollector(nextTestNamespace(), logger)
 
 	// 更新连接池状态
 	collector.RecordDBConnections("postgres", 10, 5)
@@ -136,7 +145,7 @@ func TestCollector_UpdateConnectionPool(t *testing.T) {
 
 func TestCollector_ConcurrentRecording(t *testing.T) {
 	logger := zap.NewNop()
-	collector := NewCollector("test", logger)
+	collector := NewCollector(nextTestNamespace(), logger)
 
 	// 并发记录多个指标
 	done := make(chan bool)
@@ -172,14 +181,14 @@ func TestCollector_MetricsRegistration(t *testing.T) {
 	registry := prometheus.NewRegistry()
 
 	// 创建 collector（会自动注册到默认 registry）
-	collector := NewCollector("test", logger)
+	collector := NewCollector(nextTestNamespace(), logger)
 
 	// 手动注册到自定义 registry
 	registry.MustRegister(collector.httpRequestsTotal)
 	registry.MustRegister(collector.httpRequestDuration)
 
 	// 记录一些数据
-	collector.RecordHTTPRequest("/test", "GET", 200, 100*time.Millisecond)
+	collector.RecordHTTPRequest("GET", "/test", 200, 100*time.Millisecond, 0, 0)
 
 	// 验证可以从自定义 registry 收集指标
 	count := testutil.CollectAndCount(collector.httpRequestsTotal)

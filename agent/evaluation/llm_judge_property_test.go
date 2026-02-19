@@ -440,3 +440,7 @@ func (m *mockJudgeProvider) Name() string {
 func (m *mockJudgeProvider) SupportsNativeFunctionCalling() bool {
 	return true
 }
+
+func (m *mockJudgeProvider) ListModels(ctx context.Context) ([]llm.Model, error) {
+	return nil, nil
+}

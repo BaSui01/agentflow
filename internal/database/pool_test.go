@@ -20,13 +20,14 @@ import (
 
 func setupTestDB(t *testing.T) (*sql.DB, sqlmock.Sqlmock, *gorm.DB) {
 	// 创建 mock DB
-	mockDB, mock, err := sqlmock.New()
+	mockDB, mock, err := sqlmock.New(sqlmock.MonitorPingsOption(true))
 	require.NoError(t, err)
 
 	// 创建 GORM DB
 	dialector := postgres.New(postgres.Config{
 		Conn: mockDB,
 	})
+	mock.ExpectPing()
 
 	gormDB, err := gorm.Open(dialector, &gorm.Config{})
 	require.NoError(t, err)
@@ -207,6 +208,7 @@ func TestPoolManager_WithTransactionRollback(t *testing.T) {
 
 func TestPoolManager_Close(t *testing.T) {
 	mockDB, mock, gormDB := setupTestDB(t)
+	defer mockDB.Close()
 
 	logger := zap.NewNop()
 	config := PoolConfig{
@@ -241,9 +243,7 @@ func TestPoolManager_StartHealthCheck(t *testing.T) {
 
 	manager, err := NewPoolManager(gormDB, config, logger)
 	require.NoError(t, err)
-
-	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
-	defer cancel()
+	defer manager.Close()
 
 	// Mock 多次 ping
 	mock.ExpectPing()
@@ -260,56 +260,11 @@ func TestPoolManager_StartHealthCheck(t *testing.T) {
 	// 只要没有 panic 就算成功
 }
 
-func TestPoolConfig_Validate(t *testing.T) {
-	tests := []struct {
-		name    string
-		config  PoolConfig
-		wantErr bool
-	}{
-		{
-			name: "valid config",
-			config: PoolConfig{
-				MaxOpenConns:    10,
-				MaxIdleConns:    5,
-				ConnMaxLifetime: 1 * time.Hour,
-				ConnMaxIdleTime: 30 * time.Minute,
-			},
-			wantErr: false,
-		},
-		{
-			name: "invalid max open conns",
-			config: PoolConfig{
-				MaxOpenConns: 0,
-				MaxIdleConns: 5,
-			},
-			wantErr: true,
-		},
-		{
-			name: "invalid max idle conns",
-			config: PoolConfig{
-				MaxOpenConns: 10,
-				MaxIdleConns: 0,
-			},
-			wantErr: true,
-		},
-		{
-			name: "idle > open",
-			config: PoolConfig{
-				MaxOpenConns: 5,
-				MaxIdleConns: 10,
-			},
-			wantErr: true,
-		},
-	}
+func TestDefaultPoolConfig(t *testing.T) {
+	config := DefaultPoolConfig()
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			err := // tt.config.Validate()
-			if tt.wantErr {
-				assert.Error(t, err)
-			} else {
-				assert.NoError(t, err)
-			}
-		})
-	}
+	assert.Greater(t, config.MaxOpenConns, 0)
+	assert.Greater(t, config.MaxIdleConns, 0)
+	assert.Greater(t, config.ConnMaxLifetime, time.Duration(0))
+	assert.Greater(t, config.ConnMaxIdleTime, time.Duration(0))
 }
