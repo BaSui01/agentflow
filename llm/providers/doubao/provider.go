@@ -54,6 +54,11 @@ func (p *DoubaoProvider) Name() string { return "doubao" }
 
 func (p *DoubaoProvider) SupportsNativeFunctionCalling() bool { return true }
 
+// ListModels 获取 Doubao 支持的模型列表
+func (p *DoubaoProvider) ListModels(ctx context.Context) ([]llm.Model, error) {
+	return providers.ListModelsOpenAICompat(ctx, p.client, p.cfg.BaseURL, p.cfg.APIKey, p.Name(), "/api/v3/models", p.buildHeaders)
+}
+
 func (p *DoubaoProvider) HealthCheck(ctx context.Context) (*llm.HealthStatus, error) {
 	start := time.Now()
 	endpoint := fmt.Sprintf("%s/api/v3/models", strings.TrimRight(p.cfg.BaseURL, "/"))

@@ -67,7 +67,7 @@ func (rw *responseWriter) WriteHeader(code int) {
 
 // APIKeyAuth API Key 认证中间件
 // skipPaths 中的路径不需要认证（如 /health, /healthz, /ready, /readyz, /version, /metrics）
-func APIKeyAuth(validKeys []string, skipPaths []string, logger *zap.Logger) Middleware {
+func APIKeyAuth(validKeys []string, skipPaths []string, allowQueryAPIKey bool, logger *zap.Logger) Middleware {
 	keySet := make(map[string]struct{}, len(validKeys))
 	for _, k := range validKeys {
 		keySet[k] = struct{}{}
@@ -83,7 +83,7 @@ func APIKeyAuth(validKeys []string, skipPaths []string, logger *zap.Logger) Midd
 				return
 			}
 			key := r.Header.Get("X-API-Key")
-			if key == "" {
+			if allowQueryAPIKey && key == "" {
 				key = r.URL.Query().Get("api_key")
 			}
 			if _, ok := keySet[key]; !ok {

@@ -65,9 +65,9 @@ func (h *HealthHandler) RegisterCheck(check HealthCheck) {
 // @Description 简单的健康检查端点
 // @Tags 健康
 // @Produce json
-// @Success 200 {object} HealthStatus“服务正常”
-// @Failure 503 {object} HealthStatus“服务不健康”
-// @Router /健康 [获取]
+// @Success 200 {object} HealthStatus "服务正常"
+// @Failure 503 {object} HealthStatus "服务不健康"
+// @Router /health [get]
 func (h *HealthHandler) HandleHealth(w http.ResponseWriter, r *http.Request) {
 	status := HealthStatus{
 		Status:    "healthy",
@@ -82,8 +82,8 @@ func (h *HealthHandler) HandleHealth(w http.ResponseWriter, r *http.Request) {
 // @Description Kubernetes 的活跃度探针
 // @Tags 健康
 // @Produce json
-// @Success 200 {object} HealthStatus“服务处于活动状态”
-// @Router /healthz [获取]
+// @Success 200 {object} HealthStatus "服务处于活动状态"
+// @Router /healthz [get]
 func (h *HealthHandler) HandleHealthz(w http.ResponseWriter, r *http.Request) {
 	// Liveness probe - 只检查服务是否运行
 	status := HealthStatus{
@@ -99,9 +99,9 @@ func (h *HealthHandler) HandleHealthz(w http.ResponseWriter, r *http.Request) {
 // @Description 检查服务是否准备好接受流量
 // @Tags 健康
 // @Produce json
-// @Success 200 {object} HealthStatus“服务已准备就绪”
-// @Failure 503 {object} HealthStatus“服务尚未准备好”
-// @Router /准备好[获取]
+// @Success 200 {object} HealthStatus "服务已准备就绪"
+// @Failure 503 {object} HealthStatus "服务尚未准备好"
+// @Router /ready [get]
 func (h *HealthHandler) HandleReady(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 	defer cancel()
@@ -158,7 +158,7 @@ func (h *HealthHandler) HandleReady(w http.ResponseWriter, r *http.Request) {
 // @Tags 健康
 // @Produce json
 // @Success 200 {object} map[string]string "版本信息"
-// @Router /版本[获取]
+// @Router /version [get]
 func (h *HealthHandler) HandleVersion(version, buildTime, gitCommit string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		info := map[string]string{

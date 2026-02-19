@@ -1,4 +1,4 @@
-// Package api provides API types and documentation for AgentFlow.
+// 包 api 提供了 AgentFlow 的 API 类型和文档。
 package api
 
 import (
@@ -7,416 +7,416 @@ import (
 )
 
 // =============================================================================
-// Chat Completion Types
+// 聊天完成类型
 // =============================================================================
 
-// ChatRequest represents a chat completion request.
-// @Description Chat completion request structure
+// ChatRequest代表聊天完成请求。
+// @Description 聊天完成请求结构
 type ChatRequest struct {
-	// Trace ID for request tracking
+	// 用于请求跟踪的跟踪 ID
 	TraceID string `json:"trace_id,omitempty" example:"trace-123"`
-	// Tenant ID for multi-tenancy
+	// 多租户的租户 ID
 	TenantID string `json:"tenant_id,omitempty" example:"tenant-1"`
-	// User ID
+	// 用户身份
 	UserID string `json:"user_id,omitempty" example:"user-1"`
-	// Model name (e.g., gpt-4, claude-3-opus)
+	// 型号名称（例如 gpt-4、claude-3-opus）
 	Model string `json:"model" example:"gpt-4" binding:"required"`
-	// Conversation messages
+	// 对话消息
 	Messages []Message `json:"messages" binding:"required"`
-	// Maximum tokens to generate
+	// 生成的最大代币数量
 	MaxTokens int `json:"max_tokens,omitempty" example:"4096"`
-	// Sampling temperature (0-2)
+	// 采样温度（0-2）
 	Temperature float32 `json:"temperature,omitempty" example:"0.7"`
-	// Nucleus sampling parameter (0-1)
+	// 核采样参数（0-1）
 	TopP float32 `json:"top_p,omitempty" example:"1.0"`
-	// Stop sequences
+	// 停止序列
 	Stop []string `json:"stop,omitempty"`
-	// Available tools for function calling
+	// 函数调用的可用工具
 	Tools []ToolSchema `json:"tools,omitempty"`
-	// Tool choice mode (auto, none, or specific tool name)
+	// 工具选择模式（自动、无或特定工具名称）
 	ToolChoice string `json:"tool_choice,omitempty" example:"auto"`
-	// Request timeout duration
+	// 请求超时时长
 	Timeout string `json:"timeout,omitempty" example:"30s"`
-	// Custom metadata
+	// 自定义元数据
 	Metadata map[string]string `json:"metadata,omitempty"`
-	// Tags for routing
+	// 路由标签
 	Tags []string `json:"tags,omitempty"`
 }
 
-// ChatResponse represents a chat completion response.
-// @Description Chat completion response structure
+// ChatResponse 表示聊天完成响应。
+// @Description 聊天完成响应结构
 type ChatResponse struct {
-	// Response ID
+	// 响应ID
 	ID string `json:"id,omitempty" example:"chatcmpl-123"`
-	// Provider that handled the request
+	// 处理请求的提供者
 	Provider string `json:"provider,omitempty" example:"openai"`
-	// Model used
+	// 使用型号
 	Model string `json:"model" example:"gpt-4"`
-	// Response choices
+	// 反应选择
 	Choices []ChatChoice `json:"choices"`
-	// Token usage statistics
+	// 代币使用统计
 	Usage ChatUsage `json:"usage"`
-	// Response creation timestamp
+	// 响应创建时间戳
 	CreatedAt time.Time `json:"created_at"`
 }
 
-// ChatChoice represents a single choice in the response.
-// @Description Chat choice structure
+// ChatChoice 代表响应中的单个选择。
+// @Description 聊天选择结构
 type ChatChoice struct {
-	// Choice index
+	// 选择指数
 	Index int `json:"index" example:"0"`
-	// Reason for completion (stop, length, tool_calls, content_filter)
+	// 完成原因（停止、长度、tool_calls、content_filter）
 	FinishReason string `json:"finish_reason,omitempty" example:"stop"`
-	// Response message
+	// 回复信息
 	Message Message `json:"message"`
 }
 
-// ChatUsage represents token usage in a response.
-// @Description Token usage statistics
+// ChatUsage 表示响应中的令牌使用情况。
+// @Description 代币使用统计
 type ChatUsage struct {
-	// Tokens in the prompt
+	// 提示中的令牌
 	PromptTokens int `json:"prompt_tokens" example:"100"`
-	// Tokens in the completion
+	// 完成中的代币
 	CompletionTokens int `json:"completion_tokens" example:"50"`
-	// Total tokens used
+	// 使用的代币总数
 	TotalTokens int `json:"total_tokens" example:"150"`
 }
 
-// StreamChunk represents a streaming response chunk.
-// @Description Streaming response chunk structure
+// StreamChunk 表示流响应块。
+// @Description 流式响应块结构
 type StreamChunk struct {
-	// Chunk ID
+	// 块ID
 	ID string `json:"id,omitempty" example:"chatcmpl-123"`
-	// Provider name
+	// 提供商名称
 	Provider string `json:"provider,omitempty" example:"openai"`
-	// Model name
+	// 型号名称
 	Model string `json:"model,omitempty" example:"gpt-4"`
-	// Choice index
+	// 选择指数
 	Index int `json:"index,omitempty" example:"0"`
-	// Delta message content
+	// 达美讯息内容
 	Delta Message `json:"delta"`
-	// Finish reason (only in final chunk)
+	// 完成原因（仅在最后一块）
 	FinishReason string `json:"finish_reason,omitempty" example:"stop"`
-	// Usage statistics (only in final chunk)
+	// 使用统计（仅在最终块中）
 	Usage *ChatUsage `json:"usage,omitempty"`
-	// Error information
+	// 错误信息
 	Error *ErrorDetail `json:"error,omitempty"`
 }
 
 // =============================================================================
-// Message Types
+// 消息类型
 // =============================================================================
 
-// Message represents a conversation message.
-// @Description Conversation message structure
+// Message代表对话消息。
+// @Description 对话消息结构
 type Message struct {
-	// Message role (system, user, assistant, tool)
+	// 消息角色（系统、用户、助手、工具）
 	Role string `json:"role" example:"user" binding:"required"`
-	// Message content
+	// 留言内容
 	Content string `json:"content,omitempty" example:"Hello, how are you?"`
-	// Name (for tool messages)
+	// 名称（用于工具消息）
 	Name string `json:"name,omitempty"`
-	// Tool calls (for assistant messages)
+	// 工具调用（用于辅助消息）
 	ToolCalls []ToolCall `json:"tool_calls,omitempty"`
-	// Tool call ID (for tool messages)
+	// 工具调用 ID（用于工具消息）
 	ToolCallID string `json:"tool_call_id,omitempty"`
-	// Image content for multimodal messages
+	// 多模式消息的图像内容
 	Images []ImageContent `json:"images,omitempty"`
-	// Custom metadata
+	// 自定义元数据
 	Metadata interface{} `json:"metadata,omitempty"`
-	// Message timestamp
+	// 消息时间戳
 	Timestamp time.Time `json:"timestamp,omitempty"`
 }
 
-// ToolCall represents a tool invocation request from the LLM.
-// @Description Tool call structure
+// ToolCall 代表来自 LLM 的工具调用请求。
+// @Description 工具调用结构
 type ToolCall struct {
-	// Tool call ID
+	// 工具调用 ID
 	ID string `json:"id" example:"call_123"`
-	// Tool name
+	// 工具名称
 	Name string `json:"name" example:"get_weather"`
-	// Tool arguments as JSON
+	// JSON 格式的工具参数
 	Arguments json.RawMessage `json:"arguments"`
 }
 
-// ImageContent represents image data for multimodal messages.
-// @Description Image content structure
+// ImageContent 表示多模式消息的图像数据。
+// @Description 图像内容结构
 type ImageContent struct {
-	// Image content type (url or base64)
+	// 图像内容类型（url 或 base64）
 	Type string `json:"type" example:"url"`
-	// Image URL (when type is url)
+	// 图片 URL（当类型为 url 时）
 	URL string `json:"url,omitempty" example:"https://example.com/image.png"`
-	// Base64 encoded image data (when type is base64)
+	// Base64编码的图像数据（当类型为base64时）
 	Data string `json:"data,omitempty"`
 }
 
 // =============================================================================
-// Tool Types
+// 工具类型
 // =============================================================================
 
-// ToolSchema defines a tool's interface for LLM function calling.
-// @Description Tool schema structure
+// ToolSchema 定义了用于 LLM 函数调用的工具接口。
+// @Description 工具架构结构
 type ToolSchema struct {
-	// Tool name
+	// 工具名称
 	Name string `json:"name" example:"get_weather"`
-	// Tool description
+	// 工具说明
 	Description string `json:"description,omitempty" example:"Get the current weather for a location"`
-	// JSON Schema for tool parameters
+	// 工具参数的 JSON 架构
 	Parameters json.RawMessage `json:"parameters"`
-	// Tool version
+	// 工具版本
 	Version string `json:"version,omitempty" example:"1.0.0"`
 }
 
-// ToolResult represents the result of a tool execution.
-// @Description Tool result structure
+// ToolResult 表示工具执行的结果。
+// @Description 工具结果结构
 type ToolResult struct {
-	// Tool call ID
+	// 工具调用 ID
 	ToolCallID string `json:"tool_call_id" example:"call_123"`
-	// Tool name
+	// 工具名称
 	Name string `json:"name" example:"get_weather"`
-	// Tool result as JSON
+	// JSON 格式的工具结果
 	Result json.RawMessage `json:"result"`
-	// Error message if execution failed
+	// 如果执行失败则出现错误消息
 	Error string `json:"error,omitempty"`
-	// Execution duration
+	// 执行时长
 	Duration string `json:"duration,omitempty" example:"100ms"`
 }
 
-// ToolInvokeRequest represents a request to invoke a tool.
-// @Description Tool invocation request
+// ToolInvokeRequest 表示调用工具的请求。
+// @Description 工具调用请求
 type ToolInvokeRequest struct {
-	// Tool arguments
+	// 工具参数
 	Arguments json.RawMessage `json:"arguments" binding:"required"`
 }
 
 // =============================================================================
-// Provider Types
+// 提供者类型
 // =============================================================================
 
-// LLMProvider represents an LLM provider.
-// @Description LLM provider structure
+// LLMProvider 代表 LLM 提供者。
+// @Description LLM提供商结构
 type LLMProvider struct {
-	// Provider ID
+	// 提供商 ID
 	ID uint `json:"id" example:"1"`
-	// Provider code (e.g., openai, anthropic)
+	// 提供商代码（例如 openai、anthropic）
 	Code string `json:"code" example:"openai"`
-	// Provider display name
+	// 提供商显示名称
 	Name string `json:"name" example:"OpenAI"`
-	// Provider description
+	// 提供商描述
 	Description string `json:"description,omitempty" example:"OpenAI GPT models"`
-	// Provider status (0: Inactive, 1: Active, 2: Disabled)
+	// 提供商状态（0：非活动、1：活动、2：禁用）
 	Status int `json:"status" example:"1"`
-	// Creation timestamp
+	// 创建时间戳
 	CreatedAt time.Time `json:"created_at"`
-	// Last update timestamp
+	// 最后更新时间戳
 	UpdatedAt time.Time `json:"updated_at"`
 }
 
-// LLMModel represents an LLM model.
-// @Description LLM model structure
+// LLMModel 代表 LLM 模型。
+// @Description LLM模型结构
 type LLMModel struct {
-	// Model ID
+	// 型号编号
 	ID uint `json:"id" example:"1"`
-	// Model identifier
+	// 型号标识符
 	ModelName string `json:"model_name" example:"gpt-4"`
-	// Display name
+	// 显示名称
 	DisplayName string `json:"display_name,omitempty" example:"GPT-4"`
-	// Model description
+	// 型号说明
 	Description string `json:"description,omitempty"`
-	// Whether the model is enabled
+	// 模型是否启用
 	Enabled bool `json:"enabled" example:"true"`
-	// Creation timestamp
+	// 创建时间戳
 	CreatedAt time.Time `json:"created_at"`
-	// Last update timestamp
+	// 最后更新时间戳
 	UpdatedAt time.Time `json:"updated_at"`
 }
 
-// LLMProviderModel represents a provider's model instance.
-// @Description Provider model mapping structure
+// LLMProviderModel 表示提供者的模型实例。
+// @Description 提供者模型映射结构
 type LLMProviderModel struct {
-	// Mapping ID
+	// 映射ID
 	ID uint `json:"id" example:"1"`
-	// Model ID
+	// 型号编号
 	ModelID uint `json:"model_id" example:"1"`
-	// Provider ID
+	// 提供商 ID
 	ProviderID uint `json:"provider_id" example:"1"`
-	// Model name as known by the provider
+	// 供应商已知的型号名称
 	RemoteModelName string `json:"remote_model_name" example:"gpt-4-turbo"`
-	// Provider base URL
+	// 提供者基本 URL
 	BaseURL string `json:"base_url,omitempty" example:"https://api.openai.com"`
-	// Price per 1K input tokens
+	// 每 1K 输入代币的价格
 	PriceInput float64 `json:"price_input" example:"0.01"`
-	// Price per 1K completion tokens
+	// 每 1K 完成代币的价格
 	PriceCompletion float64 `json:"price_completion" example:"0.03"`
-	// Maximum context length
+	// 最大上下文长度
 	MaxTokens int `json:"max_tokens" example:"128000"`
-	// Priority for routing
+	// 路由优先级
 	Priority int `json:"priority" example:"100"`
-	// Whether the mapping is enabled
+	// 是否启用映射
 	Enabled bool `json:"enabled" example:"true"`
 }
 
-// HealthStatus represents provider health check result.
-// @Description Provider health status
+// HealthStatus 代表提供商健康检查结果。
+// @Description 提供者健康状况
 type HealthStatus struct {
-	// Whether the provider is healthy
+	// 提供者是否健康
 	Healthy bool `json:"healthy" example:"true"`
-	// Response latency
+	// 响应延迟
 	Latency string `json:"latency" example:"100ms"`
-	// Error rate (0-1)
+	// 错误率（0-1）
 	ErrorRate float64 `json:"error_rate" example:"0.01"`
 }
 
 // =============================================================================
-// Routing Types
+// 路由类型
 // =============================================================================
 
-// RoutingRequest represents a provider selection request.
-// @Description Routing request structure
+// RoutingRequest代表提供商选择请求。
+// @Description 路由请求结构
 type RoutingRequest struct {
-	// Model name to route
+	// 路线的型号名称
 	Model string `json:"model" example:"gpt-4" binding:"required"`
-	// Routing strategy (cost, health, qps, canary, tag)
+	// 路由策略（成本、运行状况、qps、金丝雀、标签）
 	Strategy string `json:"strategy" example:"cost" binding:"required"`
-	// Tags for tag-based routing
+	// 用于基于标签的路由的标签
 	Tags []string `json:"tags,omitempty"`
 }
 
-// ProviderSelection represents a selected provider.
-// @Description Provider selection result
+// ProviderSelection 代表选定的提供者。
+// @Description 供应商选择结果
 type ProviderSelection struct {
-	// Provider ID
+	// 提供商 ID
 	ProviderID uint `json:"provider_id" example:"1"`
-	// Provider code
+	// 提供商代码
 	ProviderCode string `json:"provider_code" example:"openai"`
-	// Model ID
+	// 型号编号
 	ModelID uint `json:"model_id" example:"1"`
-	// Model name
+	// 型号名称
 	ModelName string `json:"model_name" example:"gpt-4"`
-	// Whether this is a canary deployment
+	// 这是否是金丝雀部署
 	IsCanary bool `json:"is_canary" example:"false"`
-	// Strategy used for selection
+	// 用于选择的策略
 	Strategy string `json:"strategy" example:"cost"`
 }
 
 // =============================================================================
-// A2A Protocol Types
+// A2A 协议类型
 // =============================================================================
 
-// AgentCard represents an A2A Agent Card.
-// @Description A2A Agent Card structure
+// AgentCard代表A2A代理卡。
+// @Description A2A代理卡结构
 type AgentCard struct {
-	// Agent name
+	// 代理名称
 	Name string `json:"name" example:"my-agent"`
-	// Agent description
+	// 代理说明
 	Description string `json:"description" example:"A helpful AI assistant"`
-	// Agent endpoint URL
+	// 代理端点 URL
 	URL string `json:"url" example:"http://localhost:8080"`
-	// Agent version
+	// 代理版
 	Version string `json:"version" example:"1.0.0"`
-	// Agent capabilities
+	// 代理能力
 	Capabilities []Capability `json:"capabilities"`
-	// JSON Schema for agent input
+	// 代理输入的 JSON 架构
 	InputSchema interface{} `json:"input_schema,omitempty"`
-	// JSON Schema for agent output
+	// 代理输出的 JSON 架构
 	OutputSchema interface{} `json:"output_schema,omitempty"`
-	// Available tools
+	// 可用工具
 	Tools []ToolDefinition `json:"tools,omitempty"`
-	// Additional metadata
+	// 附加元数据
 	Metadata map[string]string `json:"metadata,omitempty"`
 }
 
-// Capability defines an agent's capability.
-// @Description Agent capability structure
+// 能力定义了代理的能力。
+// @Description 代理能力结构
 type Capability struct {
-	// Capability name
+	// 能力名称
 	Name string `json:"name" example:"chat"`
-	// Capability description
+	// 能力描述
 	Description string `json:"description" example:"Chat with the agent"`
-	// Capability type (task, query, stream)
+	// 能力类型（任务、查询、流）
 	Type string `json:"type" example:"query"`
 }
 
-// ToolDefinition defines a tool that an agent can use.
-// @Description Tool definition structure
+// ToolDefinition 定义代理可以使用的工具。
+// @Description 工具定义结构
 type ToolDefinition struct {
-	// Tool name
+	// 工具名称
 	Name string `json:"name" example:"search"`
-	// Tool description
+	// 工具说明
 	Description string `json:"description" example:"Search the web"`
-	// JSON Schema for tool parameters
+	// 工具参数的 JSON 架构
 	Parameters interface{} `json:"parameters,omitempty"`
 }
 
-// A2ARequest represents an A2A invocation request.
-// @Description A2A request structure
+// A2ARequest表示A2A调用请求。
+// @Description A2A请求结构
 type A2ARequest struct {
-	// Task description or query
+	// 任务描述或查询
 	Task string `json:"task" example:"What is the weather today?" binding:"required"`
-	// Additional context
+	// 额外的背景信息
 	Context interface{} `json:"context,omitempty"`
-	// Whether to stream the response
+	// 是否流式传输响应
 	Stream bool `json:"stream,omitempty" example:"false"`
 }
 
-// A2AResponse represents an A2A invocation response.
-// @Description A2A response structure
+// A2AResponse 表示 A2A 调用响应。
+// @Description A2A 响应结构
 type A2AResponse struct {
-	// Response status (success, error, pending)
+	// 响应状态（成功、错误、待处理）
 	Status string `json:"status" example:"success"`
-	// Task result
+	// 任务结果
 	Result interface{} `json:"result,omitempty"`
-	// Error message if failed
+	// 如果失败则出现错误消息
 	Error string `json:"error,omitempty"`
 }
 
 // =============================================================================
-// Error Types
+// 错误类型
 // =============================================================================
 
-// ErrorResponse represents an error response.
-// @Description Error response structure
+// ErrorResponse表示错误响应。
+// @Description 错误响应结构
 type ErrorResponse struct {
-	// Error details
+	// 错误详情
 	Error ErrorDetail `json:"error"`
 }
 
-// ErrorDetail represents error details.
-// @Description Error detail structure
+// ErrorDetail 表示错误详细信息。
+// @Description 错误详细结构
 type ErrorDetail struct {
-	// Error code
+	// 错误代码
 	Code string `json:"code" example:"INVALID_REQUEST"`
-	// Human-readable error message
+	// 人类可读的错误消息
 	Message string `json:"message" example:"Invalid request parameters"`
-	// HTTP status code
+	// HTTP 状态码
 	HTTPStatus int `json:"http_status,omitempty" example:"400"`
-	// Whether the request can be retried
+	// 请求是否可以重试
 	Retryable bool `json:"retryable,omitempty" example:"false"`
-	// Provider that returned the error
+	// 返回错误的提供者
 	Provider string `json:"provider,omitempty" example:"openai"`
 }
 
 // =============================================================================
-// List Response Types
+// 列出响应类型
 // =============================================================================
 
-// ProviderListResponse represents a list of providers.
-// @Description Provider list response
+// ProviderListResponse 表示提供者列表。
+// @Description 提供商列表响应
 type ProviderListResponse struct {
-	// List of providers
+	// 供应商名单
 	Providers []LLMProvider `json:"providers"`
 }
 
-// ModelListResponse represents a list of models.
-// @Description Model list response
+// ModelListResponse 表示模型列表。
+// @Description 型号列表响应
 type ModelListResponse struct {
-	// List of models
+	// 型号一览
 	Models []LLMModel `json:"models"`
 }
 
-// ToolListResponse represents a list of tools.
-// @Description Tool list response
+// ToolListResponse 表示工具列表。
+// @Description 工具列表响应
 type ToolListResponse struct {
-	// List of tools
+	// 工具清单
 	Tools []ToolSchema `json:"tools"`
 }

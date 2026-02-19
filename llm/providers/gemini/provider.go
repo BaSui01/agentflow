@@ -81,6 +81,69 @@ func (p *GeminiProvider) HealthCheck(ctx context.Context) (*llm.HealthStatus, er
 
 func (p *GeminiProvider) SupportsNativeFunctionCalling() bool { return true }
 
+// ListModels 获取 Gemini 支持的模型列表
+func (p *GeminiProvider) ListModels(ctx context.Context) ([]llm.Model, error) {
+	endpoint := fmt.Sprintf("%s/v1beta/models", strings.TrimRight(p.cfg.BaseURL, "/"))
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+	p.buildHeaders(httpReq, p.cfg.APIKey)
+
+	resp, err := p.client.Do(httpReq)
+	if err != nil {
+		return nil, &llm.Error{
+			Code:       llm.ErrUpstreamError,
+			Message:    err.Error(),
+			HTTPStatus: http.StatusBadGateway,
+			Retryable:  true,
+			Provider:   p.Name(),
+		}
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 400 {
+		msg := readGeminiErrMsg(resp.Body)
+		return nil, mapGeminiError(resp.StatusCode, msg, p.Name())
+	}
+
+	var modelsResp struct {
+		Models []struct {
+			Name               string   `json:"name"`
+			BaseModelID        string   `json:"baseModelId"`
+			Version            string   `json:"version"`
+			DisplayName        string   `json:"displayName"`
+			Description        string   `json:"description"`
+			InputTokenLimit    int      `json:"inputTokenLimit"`
+			OutputTokenLimit   int      `json:"outputTokenLimit"`
+			SupportedMethods   []string `json:"supportedGenerationMethods"`
+		} `json:"models"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&modelsResp); err != nil {
+		return nil, &llm.Error{
+			Code:       llm.ErrUpstreamError,
+			Message:    err.Error(),
+			HTTPStatus: http.StatusBadGateway,
+			Retryable:  true,
+			Provider:   p.Name(),
+		}
+	}
+
+	// 转换为统一格式
+	models := make([]llm.Model, 0, len(modelsResp.Models))
+	for _, m := range modelsResp.Models {
+		// 提取模型 ID（去掉 "models/" 前缀）
+		modelID := strings.TrimPrefix(m.Name, "models/")
+		models = append(models, llm.Model{
+			ID:      modelID,
+			Object:  "model",
+			OwnedBy: "google",
+		})
+	}
+
+	return models, nil
+}
+
 // Gemini 消息结构
 type geminiContent struct {
 	Role  string       `json:"role,omitempty"` // user, model

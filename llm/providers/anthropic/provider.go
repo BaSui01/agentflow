@@ -81,6 +81,48 @@ func (p *ClaudeProvider) HealthCheck(ctx context.Context) (*llm.HealthStatus, er
 
 func (p *ClaudeProvider) SupportsNativeFunctionCalling() bool { return true }
 
+// ListModels 获取 Claude 支持的模型列表
+func (p *ClaudeProvider) ListModels(ctx context.Context) ([]llm.Model, error) {
+	endpoint := fmt.Sprintf("%s/v1/models", strings.TrimRight(p.cfg.BaseURL, "/"))
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+	p.buildHeaders(httpReq, p.cfg.APIKey)
+
+	resp, err := p.client.Do(httpReq)
+	if err != nil {
+		return nil, &llm.Error{
+			Code:       llm.ErrUpstreamError,
+			Message:    err.Error(),
+			HTTPStatus: http.StatusBadGateway,
+			Retryable:  true,
+			Provider:   p.Name(),
+		}
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 400 {
+		msg := readClaudeErrMsg(resp.Body)
+		return nil, mapClaudeError(resp.StatusCode, msg, p.Name())
+	}
+
+	var modelsResp struct {
+		Data []llm.Model `json:"data"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&modelsResp); err != nil {
+		return nil, &llm.Error{
+			Code:       llm.ErrUpstreamError,
+			Message:    err.Error(),
+			HTTPStatus: http.StatusBadGateway,
+			Retryable:  true,
+			Provider:   p.Name(),
+		}
+	}
+
+	return modelsResp.Data, nil
+}
+
 // Claude 的消息结构与 OpenAI 不同
 type claudeMessage struct {
 	Role    string          `json:"role"` // user 或 assistant

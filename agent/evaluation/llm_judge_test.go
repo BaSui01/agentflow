@@ -48,6 +48,10 @@ func (m *mockProvider) SupportsNativeFunctionCalling() bool {
 	return true
 }
 
+func (m *mockProvider) ListModels(ctx context.Context) ([]llm.Model, error) {
+	return nil, nil
+}
+
 func TestNewLLMJudge(t *testing.T) {
 	provider := &mockProvider{}
 

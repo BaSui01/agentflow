@@ -1,7 +1,7 @@
 // =============================================================================
 // AgentFlow 主入口
 // =============================================================================
-// 完整服务入口点，包含 HTTP/gRPC 服务、健康检查、Prometheus 指标
+// 完整服务入口点，包含 HTTP 服务、健康检查、Prometheus 指标
 //
 // 使用方法:
 //
@@ -20,8 +20,7 @@
 // @description
 // @description ## Features
 // @description - Multi-provider LLM routing (OpenAI, Claude, Gemini, DeepSeek, etc.)
-// @description - A2A (Agent-to-Agent) protocol support
-// @description - MCP (Model Context Protocol) support
+// @description - Runtime config management API (hot reload, history, rollback)
 // @description - Streaming responses via SSE
 // @description - Health monitoring and metrics
 

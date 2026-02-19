@@ -43,6 +43,10 @@ func (m *mockProvider) SupportsNativeFunctionCalling() bool {
 	return false
 }
 
+func (m *mockProvider) ListModels(ctx context.Context) ([]llm.Model, error) {
+	return nil, nil
+}
+
 // mockStructuredProvider supports native structured output.
 type mockStructuredProvider struct {
 	mockProvider

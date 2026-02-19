@@ -8,6 +8,8 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"time"
+	"unicode"
 
 	"go.uber.org/zap"
 )
@@ -40,6 +42,9 @@ type DefaultSkillManager struct {
 	// 已加载的技能
 	skills map[string]*Skill
 	mu     sync.RWMutex
+
+	// 内存注册的技能（无落盘路径）
+	inMemory map[string]*Skill
 
 	// 技能索引（用于快速查找）
 	index map[string]*SkillMetadata
@@ -81,6 +86,7 @@ func NewSkillManager(config SkillManagerConfig, logger *zap.Logger) *DefaultSkil
 
 	return &DefaultSkillManager{
 		skills:      make(map[string]*Skill),
+		inMemory:    make(map[string]*Skill),
 		index:       make(map[string]*SkillMetadata),
 		directories: []string{},
 		config:      config,
@@ -155,6 +161,14 @@ func (m *DefaultSkillManager) DiscoverSkills(ctx context.Context, task string) (
 
 // LoadSkill 加载技能
 func (m *DefaultSkillManager) LoadSkill(ctx context.Context, skillID string) (*Skill, error) {
+	return m.loadSkill(ctx, skillID, map[string]struct{}{})
+}
+
+func (m *DefaultSkillManager) loadSkill(ctx context.Context, skillID string, loading map[string]struct{}) (*Skill, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+
 	// 检查是否已加载
 	m.mu.RLock()
 	if skill, ok := m.skills[skillID]; ok {
@@ -162,13 +176,20 @@ func (m *DefaultSkillManager) LoadSkill(ctx context.Context, skillID string) (*S
 		m.logger.Debug("skill already loaded", zap.String("skill_id", skillID))
 		return skill, nil
 	}
+	meta, metaOK := m.index[skillID]
+	inMemory := m.inMemory[skillID]
 	m.mu.RUnlock()
 
 	// 从索引获取元数据
-	meta, ok := m.index[skillID]
-	if !ok {
+	if !metaOK {
 		return nil, fmt.Errorf("skill %s not found in index", skillID)
 	}
+
+	if _, exists := loading[skillID]; exists {
+		return nil, fmt.Errorf("cyclic skill dependency detected: %s", skillID)
+	}
+	loading[skillID] = struct{}{}
+	defer delete(loading, skillID)
 
 	// 加载技能
 	m.logger.Info("loading skill",
@@ -176,9 +197,24 @@ func (m *DefaultSkillManager) LoadSkill(ctx context.Context, skillID string) (*S
 		zap.String("path", meta.Path),
 	)
 
-	skill, err := LoadSkillFromDirectory(meta.Path)
-	if err != nil {
-		return nil, fmt.Errorf("failed to load skill: %w", err)
+	var (
+		skill *Skill
+		err   error
+	)
+
+	if inMemory != nil {
+		skill = inMemory.Clone()
+		skill.Loaded = true
+		skill.LoadedAt = time.Now()
+	} else {
+		if strings.TrimSpace(meta.Path) == "" {
+			return nil, fmt.Errorf("skill %s has no storage path", skillID)
+		}
+
+		skill, err = LoadSkillFromDirectory(meta.Path)
+		if err != nil {
+			return nil, fmt.Errorf("failed to load skill: %w", err)
+		}
 	}
 
 	// 加载依赖
@@ -189,7 +225,7 @@ func (m *DefaultSkillManager) LoadSkill(ctx context.Context, skillID string) (*S
 		)
 
 		for _, depID := range skill.Dependencies {
-			if _, err := m.LoadSkill(ctx, depID); err != nil {
+			if _, err := m.loadSkill(ctx, depID, loading); err != nil {
 				m.logger.Warn("failed to load dependency",
 					zap.String("skill_id", skillID),
 					zap.String("dependency", depID),
@@ -258,24 +294,32 @@ func (m *DefaultSkillManager) SearchSkills(query string) []*SkillMetadata {
 	defer m.mu.RUnlock()
 
 	query = strings.ToLower(query)
-	result := []*SkillMetadata{}
+	tokens := tokenizeQuery(query)
+
+	type scoredMetadata struct {
+		meta  *SkillMetadata
+		score float64
+	}
+
+	scored := make([]scoredMetadata, 0, len(m.index))
 
 	for _, meta := range m.index {
-		// 检查名称、描述、分类、标签
-		if strings.Contains(strings.ToLower(meta.Name), query) ||
-			strings.Contains(strings.ToLower(meta.Description), query) ||
-			strings.Contains(strings.ToLower(meta.Category), query) {
-			result = append(result, meta)
-			continue
+		score := scoreMetadataMatch(meta, query, tokens)
+		if score > 0 {
+			scored = append(scored, scoredMetadata{meta: meta, score: score})
 		}
+	}
 
-		// 检查标签
-		for _, tag := range meta.Tags {
-			if strings.Contains(strings.ToLower(tag), query) {
-				result = append(result, meta)
-				break
-			}
+	sort.Slice(scored, func(i, j int) bool {
+		if scored[i].score != scored[j].score {
+			return scored[i].score > scored[j].score
 		}
+		return scored[i].meta.Name < scored[j].meta.Name
+	})
+
+	result := make([]*SkillMetadata, 0, len(scored))
+	for _, item := range scored {
+		result = append(result, item.meta)
 	}
 
 	return result
@@ -289,6 +333,7 @@ func (m *DefaultSkillManager) RegisterSkill(skill *Skill) error {
 
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	m.inMemory[skill.ID] = skill.Clone()
 
 	// 添加到索引
 	m.index[skill.ID] = &SkillMetadata{
@@ -303,7 +348,10 @@ func (m *DefaultSkillManager) RegisterSkill(skill *Skill) error {
 
 	// 如果配置了自动加载，直接加载
 	if m.config.AutoLoad {
-		m.skills[skill.ID] = skill
+		loaded := skill.Clone()
+		loaded.Loaded = true
+		loaded.LoadedAt = time.Now()
+		m.skills[skill.ID] = loaded
 	}
 
 	m.logger.Info("skill registered", zap.String("skill_id", skill.ID))
@@ -318,6 +366,7 @@ func (m *DefaultSkillManager) UnregisterSkill(skillID string) error {
 
 	delete(m.index, skillID)
 	delete(m.skills, skillID)
+	delete(m.inMemory, skillID)
 
 	m.logger.Info("skill unregistered", zap.String("skill_id", skillID))
 
@@ -327,6 +376,10 @@ func (m *DefaultSkillManager) UnregisterSkill(skillID string) error {
 // ScanDirectory 扫描目录查找技能
 func (m *DefaultSkillManager) ScanDirectory(dir string) error {
 	m.logger.Info("scanning directory for skills", zap.String("dir", dir))
+	dir = filepath.Clean(strings.TrimSpace(dir))
+	if dir == "" {
+		return fmt.Errorf("directory is empty")
+	}
 
 	// 检查目录是否存在
 	if _, err := os.Stat(dir); os.IsNotExist(err) {
@@ -334,7 +387,18 @@ func (m *DefaultSkillManager) ScanDirectory(dir string) error {
 	}
 
 	// 添加到目录列表
-	m.directories = append(m.directories, dir)
+	m.mu.Lock()
+	exists := false
+	for _, scannedDir := range m.directories {
+		if scannedDir == dir {
+			exists = true
+			break
+		}
+	}
+	if !exists {
+		m.directories = append(m.directories, dir)
+	}
+	m.mu.Unlock()
 
 	// 遍历目录
 	entries, err := os.ReadDir(dir)
@@ -394,13 +458,31 @@ func (m *DefaultSkillManager) ScanDirectory(dir string) error {
 func (m *DefaultSkillManager) RefreshIndex() error {
 	m.logger.Info("refreshing skill index")
 
+	m.mu.RLock()
+	directories := append([]string(nil), m.directories...)
+	inMemory := make(map[string]*Skill, len(m.inMemory))
+	for id, skill := range m.inMemory {
+		inMemory[id] = skill.Clone()
+	}
+	m.mu.RUnlock()
+
 	// 清空索引
 	m.mu.Lock()
 	m.index = make(map[string]*SkillMetadata)
 	m.mu.Unlock()
 
+	// 先恢复内存技能的索引
+	for _, skill := range inMemory {
+		if err := m.RegisterSkill(skill); err != nil {
+			m.logger.Warn("failed to restore in-memory skill",
+				zap.String("skill_id", skill.ID),
+				zap.Error(err),
+			)
+		}
+	}
+
 	// 重新扫描所有目录
-	for _, dir := range m.directories {
+	for _, dir := range directories {
 		if err := m.ScanDirectory(dir); err != nil {
 			m.logger.Warn("failed to scan directory",
 				zap.String("dir", dir),
@@ -438,4 +520,89 @@ func (m *DefaultSkillManager) ClearCache() {
 	m.skills = make(map[string]*Skill)
 
 	m.logger.Info("skill cache cleared")
+}
+
+func tokenizeQuery(query string) []string {
+	if query == "" {
+		return nil
+	}
+	tokens := strings.FieldsFunc(query, func(r rune) bool {
+		return !(unicode.IsLetter(r) || unicode.IsDigit(r) || r == '_' || r == '-')
+	})
+	if len(tokens) == 0 {
+		return nil
+	}
+
+	unique := make(map[string]struct{}, len(tokens))
+	result := make([]string, 0, len(tokens))
+	for _, token := range tokens {
+		token = strings.ToLower(strings.TrimSpace(token))
+		if token == "" {
+			continue
+		}
+		if _, exists := unique[token]; exists {
+			continue
+		}
+		unique[token] = struct{}{}
+		result = append(result, token)
+	}
+
+	return result
+}
+
+func scoreMetadataMatch(meta *SkillMetadata, query string, tokens []string) float64 {
+	if meta == nil {
+		return 0
+	}
+	if query == "" {
+		return 1
+	}
+
+	name := strings.ToLower(meta.Name)
+	description := strings.ToLower(meta.Description)
+	category := strings.ToLower(meta.Category)
+
+	score := 0.0
+	if strings.Contains(name, query) {
+		score += 0.45
+	}
+	if strings.Contains(description, query) {
+		score += 0.25
+	}
+	if strings.Contains(category, query) {
+		score += 0.15
+	}
+
+	tagMatched := false
+	for _, tag := range meta.Tags {
+		if strings.Contains(strings.ToLower(tag), query) {
+			tagMatched = true
+			break
+		}
+	}
+	if tagMatched {
+		score += 0.15
+	}
+
+	if len(tokens) > 0 {
+		matched := 0
+		for _, token := range tokens {
+			if strings.Contains(name, token) || strings.Contains(description, token) || strings.Contains(category, token) {
+				matched++
+				continue
+			}
+			for _, tag := range meta.Tags {
+				if strings.Contains(strings.ToLower(tag), token) {
+					matched++
+					break
+				}
+			}
+		}
+		score += 0.4 * float64(matched) / float64(len(tokens))
+	}
+
+	if score > 1 {
+		return 1
+	}
+	return score
 }

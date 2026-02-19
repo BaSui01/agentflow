@@ -53,6 +53,10 @@ func (m *mockProvider) SupportsNativeFunctionCalling() bool {
 	return true
 }
 
+func (m *mockProvider) ListModels(ctx context.Context) ([]llm.Model, error) {
+	return nil, nil
+}
+
 // =============================================================================
 // 🧪 ChatHandler 测试
 // =============================================================================

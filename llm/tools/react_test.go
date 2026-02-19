@@ -38,6 +38,10 @@ func (p *scriptedCompletionProvider) Name() string { return "scripted" }
 
 func (p *scriptedCompletionProvider) SupportsNativeFunctionCalling() bool { return true }
 
+func (p *scriptedCompletionProvider) ListModels(_ context.Context) ([]llmpkg.Model, error) {
+	return nil, nil
+}
+
 type scriptedToolExecutor struct {
 	calls int
 	failN int

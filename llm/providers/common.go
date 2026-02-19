@@ -1,6 +1,7 @@
 package providers
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -293,3 +294,47 @@ func SafeCloseBody(body io.ReadCloser) {
 		_ = body.Close()
 	}
 }
+
+// ListModelsOpenAICompat 通用的 OpenAI 兼容 Provider 模型列表获取函数
+func ListModelsOpenAICompat(ctx context.Context, client *http.Client, baseURL, apiKey, providerName, modelsEndpoint string, buildHeadersFunc func(*http.Request, string)) ([]llm.Model, error) {
+	endpoint := fmt.Sprintf("%s%s", strings.TrimRight(baseURL, "/"), modelsEndpoint)
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+	buildHeadersFunc(httpReq, apiKey)
+
+	resp, err := client.Do(httpReq)
+	if err != nil {
+		return nil, &llm.Error{
+			Code:       llm.ErrUpstreamError,
+			Message:    err.Error(),
+			HTTPStatus: http.StatusBadGateway,
+			Retryable:  true,
+			Provider:   providerName,
+		}
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 400 {
+		msg := ReadErrorMessage(resp.Body)
+		return nil, MapHTTPError(resp.StatusCode, msg, providerName)
+	}
+
+	var modelsResp struct {
+		Object string       `json:"object"`
+		Data   []llm.Model  `json:"data"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&modelsResp); err != nil {
+		return nil, &llm.Error{
+			Code:       llm.ErrUpstreamError,
+			Message:    err.Error(),
+			HTTPStatus: http.StatusBadGateway,
+			Retryable:  true,
+			Provider:   providerName,
+		}
+	}
+
+	return modelsResp.Data, nil
+}
+

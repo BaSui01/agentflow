@@ -210,14 +210,7 @@ func TestManager_HealthCheckFailed(t *testing.T) {
 	}
 
 	manager, err := NewManager(config, logger)
-	require.NoError(t, err)
-	defer manager.Close()
-
-	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
-	defer cancel()
-
-	// Ping 应该失败
-	err = manager.Ping(ctx)
+	assert.Nil(t, manager)
 	assert.Error(t, err)
 }
 

@@ -1,10 +1,13 @@
 package lsp
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
+	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 
@@ -17,8 +20,10 @@ type LSPClient struct {
 	capabilities *ServerCapabilities
 
 	// 通信
-	reader io.Reader
-	writer io.Writer
+	reader    io.Reader
+	bufReader *bufio.Reader
+	writer    io.Writer
+	writeMu   sync.Mutex
 
 	// 请求管理
 	nextID    int64
@@ -41,8 +46,13 @@ type NotificationHandler func(method string, params json.RawMessage)
 
 // NewLSPClient 创建 LSP 客户端
 func NewLSPClient(reader io.Reader, writer io.Writer, logger *zap.Logger) *LSPClient {
+	if logger == nil {
+		logger = zap.NewNop()
+	}
+
 	return &LSPClient{
 		reader:               reader,
+		bufReader:            bufio.NewReader(reader),
 		writer:               writer,
 		pending:              make(map[int64]chan *LSPMessage),
 		notificationHandlers: make(map[string]NotificationHandler),
@@ -180,6 +190,21 @@ func (c *LSPClient) TextDocumentCodeAction(ctx context.Context, params CodeActio
 	return actions, nil
 }
 
+// TextDocumentDidOpen 发送文档打开通知。
+func (c *LSPClient) TextDocumentDidOpen(params DidOpenTextDocumentParams) error {
+	return c.sendNotification("textDocument/didOpen", params)
+}
+
+// TextDocumentDidChange 发送文档变更通知。
+func (c *LSPClient) TextDocumentDidChange(params DidChangeTextDocumentParams) error {
+	return c.sendNotification("textDocument/didChange", params)
+}
+
+// TextDocumentDidClose 发送文档关闭通知。
+func (c *LSPClient) TextDocumentDidClose(params DidCloseTextDocumentParams) error {
+	return c.sendNotification("textDocument/didClose", params)
+}
+
 // RegisterNotificationHandler 注册通知处理器
 func (c *LSPClient) RegisterNotificationHandler(method string, handler NotificationHandler) {
 	c.handlersMu.Lock()
@@ -281,27 +306,42 @@ func (c *LSPClient) sendNotification(method string, params interface{}) error {
 
 // readMessage 读取消息
 func (c *LSPClient) readMessage() (*LSPMessage, error) {
-	// 读取 Content-Length 头
-	var contentLength int
+	// 读取 Header
+	contentLength := -1
 	for {
-		var line string
-		_, err := fmt.Fscanln(c.reader, &line)
+		line, err := c.bufReader.ReadString('\n')
 		if err != nil {
 			return nil, err
 		}
 
-		if line == "\r\n" || line == "" {
+		line = strings.TrimRight(line, "\r\n")
+		if line == "" {
 			break
 		}
 
-		if _, err := fmt.Sscanf(line, "Content-Length: %d", &contentLength); err == nil {
+		parts := strings.SplitN(line, ":", 2)
+		if len(parts) != 2 {
 			continue
 		}
+
+		key := strings.ToLower(strings.TrimSpace(parts[0]))
+		value := strings.TrimSpace(parts[1])
+		if key == "content-length" {
+			parsed, err := strconv.Atoi(value)
+			if err != nil {
+				return nil, fmt.Errorf("invalid Content-Length %q: %w", value, err)
+			}
+			contentLength = parsed
+		}
+	}
+
+	if contentLength < 0 {
+		return nil, fmt.Errorf("missing Content-Length header")
 	}
 
 	// 读取消息体
 	body := make([]byte, contentLength)
-	if _, err := io.ReadFull(c.reader, body); err != nil {
+	if _, err := io.ReadFull(c.bufReader, body); err != nil {
 		return nil, err
 	}
 
@@ -316,6 +356,9 @@ func (c *LSPClient) readMessage() (*LSPMessage, error) {
 
 // writeMessage 写入消息
 func (c *LSPClient) writeMessage(msg *LSPMessage) error {
+	c.writeMu.Lock()
+	defer c.writeMu.Unlock()
+
 	body, err := json.Marshal(msg)
 	if err != nil {
 		return err
@@ -337,9 +380,9 @@ func (c *LSPClient) writeMessage(msg *LSPMessage) error {
 func (c *LSPClient) handleMessage(msg *LSPMessage) {
 	// 响应消息
 	if msg.ID != nil {
-		if id, ok := msg.ID.(float64); ok {
+		if id, ok := parseMessageID(msg.ID); ok {
 			c.pendingMu.RLock()
-			respChan, exists := c.pending[int64(id)]
+			respChan, exists := c.pending[id]
 			c.pendingMu.RUnlock()
 
 			if exists {
@@ -358,6 +401,31 @@ func (c *LSPClient) handleMessage(msg *LSPMessage) {
 		if exists {
 			go handler(msg.Method, msg.Params)
 		}
+	}
+}
+
+func parseMessageID(id interface{}) (int64, bool) {
+	switch v := id.(type) {
+	case float64:
+		return int64(v), true
+	case int64:
+		return v, true
+	case int:
+		return int64(v), true
+	case json.Number:
+		parsed, err := v.Int64()
+		if err != nil {
+			return 0, false
+		}
+		return parsed, true
+	case string:
+		parsed, err := strconv.ParseInt(v, 10, 64)
+		if err != nil {
+			return 0, false
+		}
+		return parsed, true
+	default:
+		return 0, false
 	}
 }
 
@@ -444,6 +512,37 @@ type CodeActionParams struct {
 // CodeActionContext 代码操作上下文
 type CodeActionContext struct {
 	Diagnostics []Diagnostic `json:"diagnostics"`
+}
+
+// DidOpenTextDocumentParams 文档打开参数。
+type DidOpenTextDocumentParams struct {
+	TextDocument TextDocumentItem `json:"textDocument"`
+}
+
+// TextDocumentItem 文档内容。
+type TextDocumentItem struct {
+	URI        string `json:"uri"`
+	LanguageID string `json:"languageId,omitempty"`
+	Version    int    `json:"version"`
+	Text       string `json:"text"`
+}
+
+// DidChangeTextDocumentParams 文档变更参数。
+type DidChangeTextDocumentParams struct {
+	TextDocument   VersionedTextDocumentIdentifier  `json:"textDocument"`
+	ContentChanges []TextDocumentContentChangeEvent `json:"contentChanges"`
+}
+
+// TextDocumentContentChangeEvent 文档变更条目。
+type TextDocumentContentChangeEvent struct {
+	Range       *Range `json:"range,omitempty"`
+	RangeLength int    `json:"rangeLength,omitempty"`
+	Text        string `json:"text"`
+}
+
+// DidCloseTextDocumentParams 文档关闭参数。
+type DidCloseTextDocumentParams struct {
+	TextDocument TextDocumentIdentifier `json:"textDocument"`
 }
 
 // TextDocumentIdentifier 文本文档标识

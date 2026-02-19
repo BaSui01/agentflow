@@ -41,6 +41,10 @@ func (p *mockProvider) Name() string { return p.name }
 
 func (p *mockProvider) SupportsNativeFunctionCalling() bool { return false }
 
+func (p *mockProvider) ListModels(ctx context.Context) ([]Model, error) {
+	return nil, nil
+}
+
 func TestMultiProviderRouter_SelectProviderWithModel(t *testing.T) {
 	t.Parallel()
 

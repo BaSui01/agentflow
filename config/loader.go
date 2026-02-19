@@ -80,6 +80,8 @@ type ServerConfig struct {
 	CORSAllowedOrigins []string `yaml:"cors_allowed_origins" json:"cors_allowed_origins,omitempty"`
 	// API Keys
 	APIKeys []string `yaml:"api_keys" json:"api_keys,omitempty"`
+	// 是否允许从 URL Query 读取 API Key（默认 false，出于安全考虑）
+	AllowQueryAPIKey bool `yaml:"allow_query_api_key" env:"ALLOW_QUERY_API_KEY" json:"allow_query_api_key,omitempty"`
 	// 限流 RPS，默认 100
 	RateLimitRPS int `yaml:"rate_limit_rps" json:"rate_limit_rps,omitempty"`
 	// 限流 Burst，默认 200

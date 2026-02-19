@@ -67,12 +67,12 @@ func NewAgentHandler(logger *zap.Logger) *AgentHandler {
 // HandleListAgents 列出所有 Agent
 // @Summary 列出代理
 // @Description 获取所有注册代理的列表
-// @Tags 代理人
+// @Tags agent
 // @Produce json
-// @Success 200 {object} Response{data=[]AgentInfo} “代理列表”
-// @Failure 500 {object} 响应“内部错误”
-// @Security API密钥认证
-// @Router /v1/agents [获取]
+// @Success 200 {object} Response{data=[]AgentInfo} "Agent list"
+// @Failure 500 {object} Response "Internal error"
+// @Security ApiKeyAuth
+// @Router /v1/agents [get]
 func (h *AgentHandler) HandleListAgents(w http.ResponseWriter, r *http.Request) {
 	// TODO: 实现 agent registry 后启用
 	// 代理 := h.registry.ListAgents()
@@ -85,13 +85,13 @@ func (h *AgentHandler) HandleListAgents(w http.ResponseWriter, r *http.Request) 
 // HandleGetAgent 获取单个 Agent 信息
 // @Summary 获取代理
 // @Description 获取有关特定代理的信息
-// @Tags 代理人
+// @Tags agent
 // @Produce json
-// @Param id 路径字符串 true“代理 ID”
-// @Success 200 {object} Response{data=AgentInfo} "代理信息"
-// @Failure 404 {object} 响应“未找到代理”
-// @Security API密钥认证
-// @Router /v1/agents/{id} [获取]
+// @Param id path string true "Agent ID"
+// @Success 200 {object} Response{data=AgentInfo} "Agent info"
+// @Failure 404 {object} Response "Agent not found"
+// @Security ApiKeyAuth
+// @Router /v1/agents/{id} [get]
 func (h *AgentHandler) HandleGetAgent(w http.ResponseWriter, r *http.Request) {
 	// TODO: 实现 agent registry 后启用
 	err := types.NewNotFoundError("agent not found")
@@ -101,16 +101,16 @@ func (h *AgentHandler) HandleGetAgent(w http.ResponseWriter, r *http.Request) {
 // HandleExecuteAgent 执行 Agent
 // @Summary 执行代理
 // @Description 使用给定的输入执行代理
-// @Tags 代理人
+// @Tags agent
 // @Accept json
 // @Produce json
-// @Param 请求主体 AgentExecuteRequest true "执行请求"
+// @Param request body AgentExecuteRequest true "执行请求"
 // @Success 200 {object} Response{data=AgentExecuteResponse} "执行结果"
-// @Failure 400 {object} 响应“无效请求”
-// @Failure 404 {object} 响应“未找到代理”
-// @Failure 500 {object} 响应“执行失败”
-// @Security API密钥认证
-// @Router /v1/agents/执行 [帖子]
+// @Failure 400 {object} Response "无效请求"
+// @Failure 404 {object} Response "未找到代理"
+// @Failure 500 {object} Response "执行失败"
+// @Security ApiKeyAuth
+// @Router /v1/agents/execute [post]
 func (h *AgentHandler) HandleExecuteAgent(w http.ResponseWriter, r *http.Request) {
 	// TODO: 实现 agent registry 后启用
 	err := types.NewError(types.ErrInternalError, "not implemented")
@@ -120,16 +120,16 @@ func (h *AgentHandler) HandleExecuteAgent(w http.ResponseWriter, r *http.Request
 // HandlePlanAgent 规划 Agent 执行
 // @Summary 计划代理执行
 // @Description 获取代理的执行计划
-// @Tags 代理人
+// @Tags agent
 // @Accept json
 // @Produce json
-// @Param 请求主体 AgentExecuteRequest true "计划请求"
+// @Param request body AgentExecuteRequest true "计划请求"
 // @Success 200 {object} Response{data=map[string]interface{}} "执行计划"
-// @Failure 400 {object} 响应“无效请求”
-// @Failure 404 {object} 响应“未找到代理”
-// @Failure 500 {object} 响应“计划失败”
-// @Security API密钥认证
-// @Router /v1/agents/plan [帖子]
+// @Failure 400 {object} Response "无效请求"
+// @Failure 404 {object} Response "未找到代理"
+// @Failure 500 {object} Response "计划失败"
+// @Security ApiKeyAuth
+// @Router /v1/agents/plan [post]
 func (h *AgentHandler) HandlePlanAgent(w http.ResponseWriter, r *http.Request) {
 	// TODO: 实现 agent registry 后启用
 	err := types.NewError(types.ErrInternalError, "not implemented")
@@ -139,14 +139,14 @@ func (h *AgentHandler) HandlePlanAgent(w http.ResponseWriter, r *http.Request) {
 // HandleAgentHealth 检查 Agent 健康状态
 // @Summary 代理健康检查
 // @Description 检查代理是否健康并准备就绪
-// @Tags 代理人
+// @Tags agent
 // @Produce json
-// @Param id 查询字符串 true“代理 ID”
-// @Success 200 {object} Response{data=map[string]interface{}} “代理健康”
-// @Failure 404 {object} 响应“未找到代理”
-// @Failure 503 {object} 响应“代理尚未准备好”
-// @Security API密钥认证
-// @Router /v1/agents/health [获取]
+// @Param id query string true "Agent ID"
+// @Success 200 {object} Response{data=map[string]interface{}} "Agent health"
+// @Failure 404 {object} Response "未找到代理"
+// @Failure 503 {object} Response "代理尚未准备好"
+// @Security ApiKeyAuth
+// @Router /v1/agents/health [get]
 func (h *AgentHandler) HandleAgentHealth(w http.ResponseWriter, r *http.Request) {
 	// TODO: 实现 agent registry 后启用
 	err := types.NewNotFoundError("agent not found")

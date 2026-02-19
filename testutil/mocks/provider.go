@@ -166,6 +166,18 @@ func (m *MockProvider) SupportsNativeFunctionCalling() bool {
 	return true
 }
 
+// ListModels 返回可用模型列表
+func (m *MockProvider) ListModels(ctx context.Context) ([]llm.Model, error) {
+	_ = ctx
+	return []llm.Model{
+		{
+			ID:      "mock-model",
+			Object:  "model",
+			OwnedBy: "mock",
+		},
+	}, nil
+}
+
 // HealthCheck 执行健康检查
 func (m *MockProvider) HealthCheck(ctx context.Context) (*llm.HealthStatus, error) {
 	return &llm.HealthStatus{

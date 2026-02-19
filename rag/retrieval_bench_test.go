@@ -1,7 +1,6 @@
 package rag
 
 import (
-	"context"
 	"fmt"
 	"testing"
 
@@ -67,8 +66,7 @@ func setupBenchmarkRetriever(b *testing.B, numDocs int) *HybridRetriever {
 	docs := generateMockDocuments(numDocs)
 
 	// 索引文档
-	ctx := context.Background()
-	if err := retriever.IndexDocuments(ctx, docs); err != nil {
+	if err := retriever.IndexDocuments(docs); err != nil {
 		b.Fatal(err)
 	}
 

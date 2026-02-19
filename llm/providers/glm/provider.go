@@ -54,6 +54,11 @@ func (p *GLMProvider) Name() string { return "glm" }
 
 func (p *GLMProvider) SupportsNativeFunctionCalling() bool { return true }
 
+// ListModels 获取 GLM 支持的模型列表
+func (p *GLMProvider) ListModels(ctx context.Context) ([]llm.Model, error) {
+	return providers.ListModelsOpenAICompat(ctx, p.client, p.cfg.BaseURL, p.cfg.APIKey, p.Name(), "/api/paas/v4/models", p.buildHeaders)
+}
+
 func (p *GLMProvider) HealthCheck(ctx context.Context) (*llm.HealthStatus, error) {
 	start := time.Now()
 	endpoint := fmt.Sprintf("%s/api/paas/v4/models", strings.TrimRight(p.cfg.BaseURL, "/"))

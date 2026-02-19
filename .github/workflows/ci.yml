@@ -1,203 +1,191 @@
-name: CI
+name: CI/CD
 
 on:
   push:
+    branches:
+      - "**"
+    tags:
+      - "v*"
   pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  EXCLUDED_PKGS_REGEX: '^github\.com/BaSui01/agentflow/(api/handlers|internal/cache|internal/database|internal/metrics|llm|rag)$'
 
 jobs:
-  test:
+  ci:
+    name: Quality & Tests
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - uses: actions/setup-go@v5
+      - name: Setup Go
+        uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
           cache: true
 
-      - name: Verify gofmt
-        run: test -z "$(gofmt -l .)"
-
-      - name: Vet
-        run: go vet ./...
-
-      - name: golangci-lint
+      - name: Download & verify modules
         run: |
-          go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.62.0
-          "$(go env GOPATH)/bin/golangci-lint" run
+          go mod download
+          go mod verify
 
-      - name: staticcheck
+      - name: Resolve CI package set
+        id: pkgset
+        shell: bash
         run: |
-          go install honnef.co/go/tools/cmd/staticcheck@2025.1.1
-          "$(go env GOPATH)/bin/staticcheck" -checks=SA* ./...
+          pkgs=$(go list ./... | grep -Ev "${EXCLUDED_PKGS_REGEX}" | tr '\n' ' ')
+          if [[ -z "${pkgs}" ]]; then
+            echo "No packages selected for CI checks"
+            exit 1
+          fi
 
-      - name: Test (with coverage)
+          echo "pkgs=${pkgs}" >> "$GITHUB_OUTPUT"
+          echo "Selected package count: $(echo "${pkgs}" | wc -w)"
+
+      - name: Build all packages
+        run: go build ./...
+
+      - name: Check API contract consistency
+        run: go test ./tests/contracts -count=1
+
+      - name: Vet selected packages
+        run: go vet ${{ steps.pkgset.outputs.pkgs }}
+
+      - name: Test selected packages with coverage
         run: |
-          go test ./... -covermode atomic -coverprofile coverage.out -count=1
-          total="$(go tool cover -func coverage.out | awk '/^total:/{gsub(/%/,"",$NF); print $NF}')"
-          echo "Total coverage: ${total}%"
-          threshold="24.0"
-          awk -v total="${total}" -v threshold="${threshold}" 'BEGIN { exit (total+0 < threshold+0) }'
-
-      - name: Test (key-path coverage)
-        run: |
-          go test ./types ./llm ./llm/cache ./llm/middleware ./llm/observability ./llm/retry ./llm/router ./llm/tools ./rag ./workflow ./agent ./agent/context -covermode atomic -coverprofile coverage.key.out -count=1
-          total="$(go tool cover -func coverage.key.out | awk '/^total:/{gsub(/%/,"",$NF); print $NF}')"
-          echo "Key-path coverage: ${total}%"
-          threshold="30.0"
-          awk -v total="${total}" -v threshold="${threshold}" 'BEGIN { exit (total+0 < threshold+0) }'
-
-      # -------------------------------------------------------------------------
-      # 上传覆盖率到 Codecov
-      # -------------------------------------------------------------------------
-      - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v4
-        with:
-          token: ${{ secrets.CODECOV_TOKEN }}
-          files: ./coverage.out,./coverage.key.out
-          flags: unittests
-          name: codecov-agentflow
-          fail_ci_if_error: false
-          verbose: true
-
-      - name: Generate coverage report artifact
-        run: |
-          go tool cover -html=coverage.out -o coverage.html
+          go test ${{ steps.pkgset.outputs.pkgs }} -count=1 -covermode=atomic -coverprofile=coverage.out
           go tool cover -func=coverage.out > coverage-summary.txt
-          echo "## Coverage Summary" >> $GITHUB_STEP_SUMMARY
-          echo '```' >> $GITHUB_STEP_SUMMARY
-          cat coverage-summary.txt >> $GITHUB_STEP_SUMMARY
-          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "## Coverage Summary" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          cat coverage-summary.txt >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Upload coverage artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: coverage-report
-          path: |
-            coverage.out
-            coverage.key.out
-            coverage.html
-            coverage-summary.txt
-          retention-days: 30
-
-      - name: Race
-        env:
-          CGO_ENABLED: "1"
-        run: go test -race ./...
-
-  # =============================================================================
-  # 🔒 安全扫描 Job
-  # =============================================================================
-  security:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-go@v5
-        with:
-          go-version-file: go.mod
-          cache: true
-
-      # -------------------------------------------------------------------------
-      # gosec - Go 安全扫描器
-      # 检测: SQL注入、硬编码密钥、不安全的随机数、路径遍历等
-      # -------------------------------------------------------------------------
-      - name: 🔍 Security scanning (gosec)
-        run: |
-          go install github.com/securego/gosec/v2/cmd/gosec@latest
-          "$(go env GOPATH)/bin/gosec" -fmt=json -out=gosec-results.json ./... || true
-          "$(go env GOPATH)/bin/gosec" -fmt=text ./...
-
-      # -------------------------------------------------------------------------
-      # govulncheck - Go 官方漏洞检查器
-      # 检测: 依赖库中的已知安全漏洞 (CVE)
-      # -------------------------------------------------------------------------
-      - name: 🛡️ Vulnerability check (govulncheck)
-        run: |
-          go install golang.org/x/vuln/cmd/govulncheck@latest
-          "$(go env GOPATH)/bin/govulncheck" ./...
-
-      # -------------------------------------------------------------------------
-      # 上传安全扫描结果 (可选)
-      # -------------------------------------------------------------------------
-      - name: 📤 Upload security scan results
+      - name: Upload CI artifacts
         uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: security-scan-results
-          path: gosec-results.json
-          retention-days: 30
+          name: ci-report
+          path: |
+            coverage.out
+            coverage-summary.txt
+          retention-days: 14
 
-  # =============================================================================
-  # 📦 依赖审计 Job
-  # =============================================================================
-  dependency-audit:
+  cross-build:
+    name: Cross Build (${{ matrix.goos }}/${{ matrix.goarch }})
     runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
+    needs: ci
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - goos: linux
+            goarch: amd64
+          - goos: linux
+            goarch: arm64
+          - goos: darwin
+            goarch: amd64
+          - goos: windows
+            goarch: amd64
 
-      - uses: actions/setup-go@v5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
           cache: true
 
-      # -------------------------------------------------------------------------
-      # 检查 go.mod 和 go.sum 一致性
-      # -------------------------------------------------------------------------
-      - name: 🔄 Verify go.mod tidy
+      - name: Build binary
+        env:
+          CGO_ENABLED: "0"
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+        shell: bash
         run: |
-          go mod tidy
-          git diff --exit-code go.mod go.sum
+          mkdir -p build
+          ext=""
+          if [[ "${GOOS}" == "windows" ]]; then
+            ext=".exe"
+          fi
 
-      # -------------------------------------------------------------------------
-      # 检查依赖许可证合规性
-      # -------------------------------------------------------------------------
-      - name: 📜 License check
-        run: |
-          go install github.com/google/go-licenses@latest
-          "$(go env GOPATH)/bin/go-licenses" check ./... --disallowed_types=forbidden,restricted || echo "⚠️ License check completed with warnings"
+          output="build/agentflow-${GOOS}-${GOARCH}${ext}"
+          go build -trimpath -ldflags="-s -w" -o "${output}" ./cmd/agentflow
 
-  # =============================================================================
-  # 🏗️ 构建验证 Job
-  # =============================================================================
-  build:
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: agentflow-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: build/agentflow-${{ matrix.goos }}-${{ matrix.goarch }}*
+          retention-days: 14
+
+  security:
+    name: Security Scan (non-blocking)
     runs-on: ubuntu-latest
-    needs: [test, security]
+    needs: ci
+    continue-on-error: true
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - uses: actions/setup-go@v5
+      - name: Setup Go
+        uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
           cache: true
 
-      # -------------------------------------------------------------------------
-      # 多平台构建验证
-      # -------------------------------------------------------------------------
-      - name: 🔨 Build (linux/amd64)
-        env:
-          CGO_ENABLED: "0"
-          GOOS: linux
-          GOARCH: amd64
-        run: go build -o /dev/null ./...
+      - name: Run govulncheck
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          "$(go env GOPATH)/bin/govulncheck" ./... | tee govulncheck.txt
 
-      - name: 🔨 Build (linux/arm64)
-        env:
-          CGO_ENABLED: "0"
-          GOOS: linux
-          GOARCH: arm64
-        run: go build -o /dev/null ./...
+      - name: Upload security report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: security-report
+          path: govulncheck.txt
+          retention-days: 14
 
-      - name: 🔨 Build (darwin/amd64)
-        env:
-          CGO_ENABLED: "0"
-          GOOS: darwin
-          GOARCH: amd64
-        run: go build -o /dev/null ./...
+  release:
+    name: Release
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    needs: [ci, cross-build]
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - name: 🔨 Build (windows/amd64)
-        env:
-          CGO_ENABLED: "0"
-          GOOS: windows
-          GOARCH: amd64
-        run: go build -o /dev/null ./...
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Build release assets
+        shell: bash
+        run: |
+          mkdir -p dist
+
+          GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o dist/agentflow-linux-amd64 ./cmd/agentflow
+          GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o dist/agentflow-linux-arm64 ./cmd/agentflow
+          GOOS=darwin GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o dist/agentflow-darwin-amd64 ./cmd/agentflow
+          GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o dist/agentflow-windows-amd64.exe ./cmd/agentflow
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: dist/*

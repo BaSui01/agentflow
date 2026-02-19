@@ -48,6 +48,14 @@ func (m *MockProviderForResilience) HealthCheck(ctx context.Context) (*HealthSta
 	return args.Get(0).(*HealthStatus), args.Error(1)
 }
 
+func (m *MockProviderForResilience) ListModels(ctx context.Context) ([]Model, error) {
+	args := m.Called(ctx)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]Model), args.Error(1)
+}
+
 // TestResilientProvider_Name tests Name method
 func TestResilientProvider_Name(t *testing.T) {
 	logger, _ := zap.NewDevelopment()
