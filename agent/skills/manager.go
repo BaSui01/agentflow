@@ -300,7 +300,7 @@ func (m *DefaultSkillManager) SearchSkills(query string) []*SkillMetadata {
 		meta  *SkillMetadata
 		score float64
 	}
- 
+
 	scored := make([]scoredMetadata, 0, len(m.index))
 
 	for _, meta := range m.index {

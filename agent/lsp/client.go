@@ -529,7 +529,7 @@ type TextDocumentItem struct {
 
 // DidChangeTextDocumentParams 文档变更参数。
 type DidChangeTextDocumentParams struct {
-	TextDocument   VersionedTextDocumentIdentifier `json:"textDocument"`
+	TextDocument   VersionedTextDocumentIdentifier  `json:"textDocument"`
 	ContentChanges []TextDocumentContentChangeEvent `json:"contentChanges"`
 }
 

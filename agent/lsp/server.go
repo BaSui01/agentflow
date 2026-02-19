@@ -750,7 +750,7 @@ func wordAtPosition(text string, position Position) (string, Range, bool, error)
 	if probe < len(runes) && !isIdentifierPart(runes[probe]) && probe > 0 && isIdentifierPart(runes[probe-1]) {
 		probe--
 	}
- 
+
 	if probe < 0 || probe >= len(runes) || !isIdentifierPart(runes[probe]) {
 		return "", Range{}, false, nil
 	}
