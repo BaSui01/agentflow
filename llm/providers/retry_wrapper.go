@@ -54,6 +54,9 @@ var _ llm.Provider = (*RetryableProvider)(nil)
 
 func (p *RetryableProvider) Name() string                        { return p.inner.Name() }
 func (p *RetryableProvider) SupportsNativeFunctionCalling() bool { return p.inner.SupportsNativeFunctionCalling() }
+func (p *RetryableProvider) ListModels(ctx context.Context) ([]llm.Model, error) {
+	return p.inner.ListModels(ctx)
+}
 func (p *RetryableProvider) HealthCheck(ctx context.Context) (*llm.HealthStatus, error) {
 	return p.inner.HealthCheck(ctx)
 }

@@ -56,6 +56,11 @@ func (p *MiniMaxProvider) Name() string { return "minimax" }
 
 func (p *MiniMaxProvider) SupportsNativeFunctionCalling() bool { return true }
 
+// ListModels 获取 MiniMax 支持的模型列表
+func (p *MiniMaxProvider) ListModels(ctx context.Context) ([]llm.Model, error) {
+	return providers.ListModelsOpenAICompat(ctx, p.client, p.cfg.BaseURL, p.cfg.APIKey, p.Name(), "/v1/models", p.buildHeaders)
+}
+
 func (p *MiniMaxProvider) HealthCheck(ctx context.Context) (*llm.HealthStatus, error) {
 	start := time.Now()
 	endpoint := fmt.Sprintf("%s/v1/text/chatcompletion_v2", strings.TrimRight(p.cfg.BaseURL, "/"))

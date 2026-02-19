@@ -54,6 +54,11 @@ func (p *QwenProvider) Name() string { return "qwen" }
 
 func (p *QwenProvider) SupportsNativeFunctionCalling() bool { return true }
 
+// ListModels 获取 Qwen 支持的模型列表
+func (p *QwenProvider) ListModels(ctx context.Context) ([]llm.Model, error) {
+	return providers.ListModelsOpenAICompat(ctx, p.client, p.cfg.BaseURL, p.cfg.APIKey, p.Name(), "/compatible-mode/v1/models", p.buildHeaders)
+}
+
 func (p *QwenProvider) HealthCheck(ctx context.Context) (*llm.HealthStatus, error) {
 	start := time.Now()
 	endpoint := fmt.Sprintf("%s/compatible-mode/v1/models", strings.TrimRight(p.cfg.BaseURL, "/"))

@@ -223,6 +223,11 @@ func (m *ThoughtSignatureMiddleware) SupportsNativeFunctionCalling() bool {
 	return m.provider.SupportsNativeFunctionCalling()
 }
 
+// ListModels delegates to the wrapped provider.
+func (m *ThoughtSignatureMiddleware) ListModels(ctx context.Context) ([]Model, error) {
+	return m.provider.ListModels(ctx)
+}
+
 func generateSignatureID(sig string) string {
 	hash := sha256.Sum256([]byte(sig + time.Now().String()))
 	return hex.EncodeToString(hash[:8])

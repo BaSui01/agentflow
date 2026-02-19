@@ -6,6 +6,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"math/rand"
+	"sort"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -318,6 +319,44 @@ func (r *ABRouter) SupportsNativeFunctionCalling() bool {
 		}
 	}
 	return true
+}
+
+// ListModels implements llmpkg.Provider.
+// It merges model lists from all variants and deduplicates by model ID.
+func (r *ABRouter) ListModels(ctx context.Context) ([]llmpkg.Model, error) {
+	modelsByID := make(map[string]llmpkg.Model)
+	var lastErr error
+
+	for _, v := range r.config.Variants {
+		models, err := v.Provider.ListModels(ctx)
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		for _, model := range models {
+			if model.ID == "" {
+				continue
+			}
+			modelsByID[model.ID] = model
+		}
+	}
+
+	if len(modelsByID) == 0 {
+		return nil, lastErr
+	}
+
+	keys := make([]string, 0, len(modelsByID))
+	for id := range modelsByID {
+		keys = append(keys, id)
+	}
+	sort.Strings(keys)
+
+	result := make([]llmpkg.Model, 0, len(keys))
+	for _, id := range keys {
+		result = append(result, modelsByID[id])
+	}
+
+	return result, nil
 }
 
 // UpdateWeights dynamically adjusts variant weights. Weights must sum to 100.

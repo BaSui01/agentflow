@@ -54,6 +54,11 @@ func (p *GrokProvider) Name() string { return "grok" }
 
 func (p *GrokProvider) SupportsNativeFunctionCalling() bool { return true }
 
+// ListModels 获取 Grok 支持的模型列表
+func (p *GrokProvider) ListModels(ctx context.Context) ([]llm.Model, error) {
+	return providers.ListModelsOpenAICompat(ctx, p.client, p.cfg.BaseURL, p.cfg.APIKey, p.Name(), "/v1/models", p.buildHeaders)
+}
+
 func (p *GrokProvider) HealthCheck(ctx context.Context) (*llm.HealthStatus, error) {
 	start := time.Now()
 	endpoint := fmt.Sprintf("%s/v1/models", strings.TrimRight(p.cfg.BaseURL, "/"))

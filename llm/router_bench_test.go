@@ -3,10 +3,6 @@ package llm
 import (
 	"context"
 	"testing"
-	"time"
-
-	"github.com/BaSui01/agentflow/types"
-	"go.uber.org/zap"
 )
 
 // =============================================================================
@@ -15,13 +11,8 @@ import (
 
 // BenchmarkMultiProviderRouter_SelectProvider 测试路由选择性能
 func BenchmarkMultiProviderRouter_SelectProvider(b *testing.B) {
-	// 创建模拟 Provider
-	mockProvider := &mockProvider{
-		name: "mock",
-	}
-
 	// 创建路由器（使用内存数据库）
-	router := setupBenchmarkRouter(b, mockProvider)
+	router := setupBenchmarkRouter(b)
 
 	ctx := context.Background()
 
@@ -38,11 +29,7 @@ func BenchmarkMultiProviderRouter_SelectProvider(b *testing.B) {
 
 // BenchmarkMultiProviderRouter_SelectProvider_Parallel 并发路由选择
 func BenchmarkMultiProviderRouter_SelectProvider_Parallel(b *testing.B) {
-	mockProvider := &mockProvider{
-		name: "mock",
-	}
-
-	router := setupBenchmarkRouter(b, mockProvider)
+	router := setupBenchmarkRouter(b)
 	ctx := context.Background()
 
 	b.ResetTimer()
@@ -58,55 +45,33 @@ func BenchmarkMultiProviderRouter_SelectProvider_Parallel(b *testing.B) {
 	})
 }
 
-// BenchmarkMultiProviderRouter_Completion 测试完整请求性能
-func BenchmarkMultiProviderRouter_Completion(b *testing.B) {
-	mockProvider := &mockProvider{
-		name: "mock",
-	}
-
-	router := setupBenchmarkRouter(b, mockProvider)
+// BenchmarkMultiProviderRouter_RouteLoop 测试连续路由性能
+func BenchmarkMultiProviderRouter_RouteLoop(b *testing.B) {
+	router := setupBenchmarkRouter(b)
 	ctx := context.Background()
-
-	req := &ChatRequest{
-		Model: "gpt-4o",
-		Messages: []types.Message{
-			{Role: types.RoleUser, Content: "Hello"},
-		},
-	}
 
 	b.ResetTimer()
 	b.ReportAllocs()
 
 	for i := 0; i < b.N; i++ {
-		_, err := router.Completion(ctx, req)
+		_, err := router.SelectProviderWithModel(ctx, "gpt-4o", StrategyCostBased)
 		if err != nil {
 			b.Fatal(err)
 		}
 	}
 }
 
-// BenchmarkMultiProviderRouter_Completion_Parallel 并发请求
-func BenchmarkMultiProviderRouter_Completion_Parallel(b *testing.B) {
-	mockProvider := &mockProvider{
-		name: "mock",
-	}
-
-	router := setupBenchmarkRouter(b, mockProvider)
+// BenchmarkMultiProviderRouter_RouteLoop_Parallel 并发路由请求
+func BenchmarkMultiProviderRouter_RouteLoop_Parallel(b *testing.B) {
+	router := setupBenchmarkRouter(b)
 	ctx := context.Background()
-
-	req := &ChatRequest{
-		Model: "gpt-4o",
-		Messages: []types.Message{
-			{Role: types.RoleUser, Content: "Hello"},
-		},
-	}
 
 	b.ResetTimer()
 	b.ReportAllocs()
 
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {
-			_, err := router.Completion(ctx, req)
+			_, err := router.SelectProviderWithModel(ctx, "gpt-4o", StrategyCostBased)
 			if err != nil {
 				b.Fatal(err)
 			}
@@ -114,20 +79,18 @@ func BenchmarkMultiProviderRouter_Completion_Parallel(b *testing.B) {
 	})
 }
 
-// BenchmarkMultiProviderRouter_HealthCheck 测试健康检查性能
-func BenchmarkMultiProviderRouter_HealthCheck(b *testing.B) {
-	mockProvider := &mockProvider{
-		name: "mock",
-	}
-
-	router := setupBenchmarkRouter(b, mockProvider)
+// BenchmarkMultiProviderRouter_StrategySwitch 测试策略切换性能
+func BenchmarkMultiProviderRouter_StrategySwitch(b *testing.B) {
+	router := setupBenchmarkRouter(b)
 	ctx := context.Background()
+	strategies := []RoutingStrategy{StrategyCostBased, StrategyHealthBased, StrategyQPSBased}
 
 	b.ResetTimer()
 	b.ReportAllocs()
 
 	for i := 0; i < b.N; i++ {
-		_, err := router.HealthCheck(ctx)
+		strategy := strategies[i%len(strategies)]
+		_, err := router.SelectProviderWithModel(ctx, "gpt-4o", strategy)
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -139,7 +102,7 @@ func BenchmarkMultiProviderRouter_HealthCheck(b *testing.B) {
 // =============================================================================
 
 // setupBenchmarkRouter 创建基准测试用的路由器
-func setupBenchmarkRouter(b *testing.B, provider Provider) *MultiProviderRouter {
+func setupBenchmarkRouter(b *testing.B) *MultiProviderRouter {
 	b.Helper()
 
 	// 使用内存数据库（需要实现）
@@ -151,7 +114,6 @@ func setupBenchmarkRouter(b *testing.B, provider Provider) *MultiProviderRouter 
 
 	return nil
 }
-
 
 // =============================================================================
 // 📊 基准测试结果示例

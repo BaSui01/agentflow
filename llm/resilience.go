@@ -256,6 +256,11 @@ func (rp *ResilientProvider) SupportsNativeFunctionCalling() bool {
 	return rp.provider.SupportsNativeFunctionCalling()
 }
 
+// ListModels implements Provider.
+func (rp *ResilientProvider) ListModels(ctx context.Context) ([]Model, error) {
+	return rp.provider.ListModels(ctx)
+}
+
 func (rp *ResilientProvider) generateIdempotencyKey(req *ChatRequest) string {
 	data, _ := json.Marshal(struct {
 		Model    string    `json:"model"`

@@ -48,6 +48,11 @@ func (w *ProviderWrapper) SupportsNativeFunctionCalling() bool {
 	return w.baseProvider.SupportsNativeFunctionCalling()
 }
 
+// ListModels implements Provider interface.
+func (w *ProviderWrapper) ListModels(ctx context.Context) ([]Model, error) {
+	return w.baseProvider.ListModels(ctx)
+}
+
 // GetAPIKey returns the API key
 func (w *ProviderWrapper) GetAPIKey() string {
 	return w.apiKey

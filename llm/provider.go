@@ -67,6 +67,10 @@ type Provider interface {
 
 	// SupportsNativeFunctionCalling returns whether native function calling is supported.
 	SupportsNativeFunctionCalling() bool
+
+	// ListModels returns the list of available models from the provider.
+	// Returns nil if the provider doesn't support model listing.
+	ListModels(ctx context.Context) ([]Model, error)
 }
 
 // HealthStatus represents provider health check result.
@@ -134,6 +138,17 @@ type StreamChunk struct {
 	FinishReason string     `json:"finish_reason,omitempty"`
 	Usage        *ChatUsage `json:"usage,omitempty"`
 	Err          *Error     `json:"error,omitempty"`
+}
+
+// Model represents a model available from a provider.
+type Model struct {
+	ID          string    `json:"id"`           // 模型 ID（API 调用时使用）
+	Object      string    `json:"object"`       // 对象类型（通常是 "model"）
+	Created     int64     `json:"created"`      // 创建时间戳
+	OwnedBy     string    `json:"owned_by"`     // 所属组织
+	Permissions []string  `json:"permissions"`  // 权限列表
+	Root        string    `json:"root"`         // 根模型
+	Parent      string    `json:"parent"`       // 父模型
 }
 
 // IsRetryable checks if an error is retryable.

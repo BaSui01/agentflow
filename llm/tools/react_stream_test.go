@@ -43,6 +43,10 @@ func (p *scriptedProvider) Name() string { return "scripted" }
 
 func (p *scriptedProvider) SupportsNativeFunctionCalling() bool { return p.supportsNative }
 
+func (p *scriptedProvider) ListModels(_ context.Context) ([]llmpkg.Model, error) {
+	return nil, nil
+}
+
 func (e *countingToolExecutor) Execute(ctx context.Context, calls []llmpkg.ToolCall) []ToolResult {
 	_ = ctx
 	e.calls = append(e.calls, calls...)

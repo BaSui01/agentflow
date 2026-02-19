@@ -69,6 +69,49 @@ func (p *OpenAIProvider) HealthCheck(ctx context.Context) (*llm.HealthStatus, er
 
 func (p *OpenAIProvider) SupportsNativeFunctionCalling() bool { return true }
 
+// ListModels 获取 OpenAI 支持的模型列表
+func (p *OpenAIProvider) ListModels(ctx context.Context) ([]llm.Model, error) {
+	endpoint := fmt.Sprintf("%s/v1/models", strings.TrimRight(p.cfg.BaseURL, "/"))
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+	p.buildHeaders(httpReq, p.cfg.APIKey)
+
+	resp, err := p.client.Do(httpReq)
+	if err != nil {
+		return nil, &llm.Error{
+			Code:       llm.ErrUpstreamError,
+			Message:    err.Error(),
+			HTTPStatus: http.StatusBadGateway,
+			Retryable:  true,
+			Provider:   p.Name(),
+		}
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 400 {
+		msg := providers.ReadErrorMessage(resp.Body)
+		return nil, providers.MapHTTPError(resp.StatusCode, msg, p.Name())
+	}
+
+	var modelsResp struct {
+		Object string       `json:"object"`
+		Data   []llm.Model  `json:"data"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&modelsResp); err != nil {
+		return nil, &llm.Error{
+			Code:       llm.ErrUpstreamError,
+			Message:    err.Error(),
+			HTTPStatus: http.StatusBadGateway,
+			Retryable:  true,
+			Provider:   p.Name(),
+		}
+	}
+
+	return modelsResp.Data, nil
+}
+
 type openAIMessage struct {
 	Role         string           `json:"role"`
 	Content      string           `json:"content,omitempty"`
