@@ -1,5 +1,3 @@
-// 包代理为AgentFlow提供了核心代理框架.
-// 此文件执行 FeatureManager 管理可选代理特性 。
 package agent
 
 import (

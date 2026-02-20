@@ -1,4 +1,3 @@
-// 包推理为AI代理提供了先进的推理模式.
 package reasoning
 
 import (

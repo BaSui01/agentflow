@@ -1,4 +1,3 @@
-// 软件包执行为代理状态提供了可插接的持久后端。
 package execution
 
 import (

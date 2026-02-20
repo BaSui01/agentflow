@@ -1,4 +1,3 @@
-// 软件包执行提供了 Docker 实际执行。
 package execution
 
 import (

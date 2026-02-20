@@ -1,4 +1,3 @@
-// 成套评价为AI代理提供了自动化的评价框架.
 package evaluation
 
 import (

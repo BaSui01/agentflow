@@ -1,4 +1,3 @@
-// 包浏览器为AI代理提供浏览器自动化能力.
 package browser
 
 import (

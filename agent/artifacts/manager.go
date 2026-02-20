@@ -1,5 +1,3 @@
-// 包裹出品为AI代理提供出品生命周期管理.
-// 对文件,数据和产出实施Google ADK风格的文物管理.
 package artifacts
 
 import (

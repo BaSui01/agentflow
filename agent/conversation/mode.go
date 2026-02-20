@@ -1,4 +1,3 @@
-// 包式对话提供AutoGen式多代理对话管弦乐.
 package conversation
 
 import (

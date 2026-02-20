@@ -1,5 +1,3 @@
-// 包代理为AgentFlow提供了核心代理框架.
-// 此文件执行内存协调员来协调内存操作.
 package agent
 
 import (

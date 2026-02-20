@@ -1,4 +1,3 @@
-// 软件包浏览器为代理浏览器提供了Vision-Action Loop.
 package browser
 
 import (

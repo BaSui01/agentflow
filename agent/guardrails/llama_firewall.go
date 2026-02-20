@@ -1,5 +1,3 @@
-// 包护栏为企业环境提供影子AI检测.
-// 检测组织内部未经授权使用AI的情况.
 package guardrails
 
 import (

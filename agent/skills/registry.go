@@ -1,4 +1,3 @@
-// 成套技能提供了标准化的技能定义和发现.
 package skills
 
 import (

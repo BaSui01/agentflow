@@ -1,4 +1,3 @@
-// 软件包 k8s提供Kubernetes操作员的代理管理能力.
 package k8s
 
 import (

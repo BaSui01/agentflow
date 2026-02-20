@@ -1,4 +1,3 @@
-// 软件包可观察性提供了可解释性和推理跟踪能力.
 package observability
 
 import (
