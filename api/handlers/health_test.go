@@ -46,7 +46,7 @@ func TestHealthHandler_HandleHealth(t *testing.T) {
 
 	assert.Equal(t, http.StatusOK, w.Code)
 
-	var status HealthStatus
+	var status ServiceHealthResponse
 	err := json.NewDecoder(w.Body).Decode(&status)
 	require.NoError(t, err)
 
@@ -65,7 +65,7 @@ func TestHealthHandler_HandleHealthz(t *testing.T) {
 
 	assert.Equal(t, http.StatusOK, w.Code)
 
-	var status HealthStatus
+	var status ServiceHealthResponse
 	err := json.NewDecoder(w.Body).Decode(&status)
 	require.NoError(t, err)
 
@@ -80,13 +80,13 @@ func TestHealthHandler_HandleReady(t *testing.T) {
 		name           string
 		setupChecks    func(*HealthHandler)
 		expectedStatus int
-		checkStatus    func(*testing.T, *HealthStatus)
+		checkStatus    func(*testing.T, *ServiceHealthResponse)
 	}{
 		{
 			name:           "no checks - ready",
 			setupChecks:    func(h *HealthHandler) {},
 			expectedStatus: http.StatusOK,
-			checkStatus: func(t *testing.T, status *HealthStatus) {
+			checkStatus: func(t *testing.T, status *ServiceHealthResponse) {
 				assert.Equal(t, "healthy", status.Status)
 			},
 		},
@@ -97,7 +97,7 @@ func TestHealthHandler_HandleReady(t *testing.T) {
 				h.RegisterCheck(&mockHealthCheck{name: "test2", err: nil})
 			},
 			expectedStatus: http.StatusOK,
-			checkStatus: func(t *testing.T, status *HealthStatus) {
+			checkStatus: func(t *testing.T, status *ServiceHealthResponse) {
 				assert.Equal(t, "healthy", status.Status)
 				assert.Len(t, status.Checks, 2)
 				assert.Equal(t, "pass", status.Checks["test1"].Status)
@@ -111,7 +111,7 @@ func TestHealthHandler_HandleReady(t *testing.T) {
 				h.RegisterCheck(&mockHealthCheck{name: "test2", err: errors.New("check failed")})
 			},
 			expectedStatus: http.StatusServiceUnavailable,
-			checkStatus: func(t *testing.T, status *HealthStatus) {
+			checkStatus: func(t *testing.T, status *ServiceHealthResponse) {
 				assert.Equal(t, "unhealthy", status.Status)
 				assert.Len(t, status.Checks, 2)
 				assert.Equal(t, "pass", status.Checks["test1"].Status)
@@ -133,7 +133,7 @@ func TestHealthHandler_HandleReady(t *testing.T) {
 
 			assert.Equal(t, tt.expectedStatus, w.Code)
 
-			var status HealthStatus
+			var status ServiceHealthResponse
 			err := json.NewDecoder(w.Body).Decode(&status)
 			require.NoError(t, err)
 
@@ -165,7 +165,7 @@ func TestHealthHandler_HandleVersion(t *testing.T) {
 	assert.True(t, resp.Success)
 	assert.NotNil(t, resp.Data)
 
-	data, ok := resp.Data.(map[string]interface{})
+	data, ok := resp.Data.(map[string]any)
 	require.True(t, ok)
 
 	assert.Equal(t, version, data["version"])

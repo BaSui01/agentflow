@@ -69,10 +69,10 @@ type ConfigChange struct {
 	Path string `json:"path"`
 
 	// 更改前的 OldValue（可能会对敏感字段进行编辑）
-	OldValue interface{} `json:"old_value,omitempty"`
+	OldValue any `json:"old_value,omitempty"`
 
 	// 更改后的 NewValue（可能会对敏感字段进行编辑）
-	NewValue interface{} `json:"new_value,omitempty"`
+	NewValue any `json:"new_value,omitempty"`
 
 	// RequiresRestart 指示此更改是否需要重新启动
 	RequiresRestart bool `json:"requires_restart"`
@@ -125,7 +125,7 @@ type HotReloadableField struct {
 	Sensitive bool
 
 	// Validator 是可选的校验函数
-	Validator func(value interface{}) error
+	Validator func(value any) error
 }
 
 // --- 可热重载字段注册表 ---
@@ -823,7 +823,7 @@ func (m *HotReloadManager) GetChangeLog(limit int) []ConfigChange {
 }
 
 // UpdateField 更新单个配置字段
-func (m *HotReloadManager) UpdateField(path string, value interface{}) error {
+func (m *HotReloadManager) UpdateField(path string, value any) error {
 	m.mu.Lock()
 
 	oldConfigSnapshot := deepCopyConfig(m.config)
@@ -889,19 +889,19 @@ func (m *HotReloadManager) UpdateField(path string, value interface{}) error {
 }
 
 // getFieldValue 通过路径获取字段值
-func (m *HotReloadManager) getFieldValue(path string) (interface{}, error) {
+func (m *HotReloadManager) getFieldValue(path string) (any, error) {
 	val := reflect.ValueOf(m.config).Elem()
 	return getNestedField(val, path)
 }
 
 // setFieldValue 通过路径设置字段值
-func (m *HotReloadManager) setFieldValue(path string, value interface{}) error {
+func (m *HotReloadManager) setFieldValue(path string, value any) error {
 	val := reflect.ValueOf(m.config).Elem()
 	return setNestedField(val, path, value)
 }
 
 // getNestedField 通过点分隔路径获取嵌套字段
-func getNestedField(v reflect.Value, path string) (interface{}, error) {
+func getNestedField(v reflect.Value, path string) (any, error) {
 	parts := splitPath(path)
 
 	for _, part := range parts {
@@ -921,7 +921,7 @@ func getNestedField(v reflect.Value, path string) (interface{}, error) {
 }
 
 // setNestedField 通过点分隔路径设置嵌套字段
-func setNestedField(v reflect.Value, path string, value interface{}) error {
+func setNestedField(v reflect.Value, path string, value any) error {
 	parts := splitPath(path)
 
 	for i, part := range parts {
@@ -977,7 +977,7 @@ func IsHotReloadable(path string) bool {
 // --- API 脱敏配置视图 ---
 
 // SanitizedConfig 返回包含敏感字段的配置副本
-func (m *HotReloadManager) SanitizedConfig() map[string]interface{} {
+func (m *HotReloadManager) SanitizedConfig() map[string]any {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
@@ -987,7 +987,7 @@ func (m *HotReloadManager) SanitizedConfig() map[string]interface{} {
 		return nil
 	}
 
-	var result map[string]interface{}
+	var result map[string]any
 	if err := json.Unmarshal(data, &result); err != nil {
 		return nil
 	}
@@ -999,7 +999,7 @@ func (m *HotReloadManager) SanitizedConfig() map[string]interface{} {
 }
 
 // redactSensitiveFields 递归地编辑敏感字段
-func redactSensitiveFields(data map[string]interface{}, prefix string) {
+func redactSensitiveFields(data map[string]any, prefix string) {
 	sensitiveKeys := map[string]bool{
 		"password":   true,
 		"api_key":    true,
@@ -1027,7 +1027,7 @@ func redactSensitiveFields(data map[string]interface{}, prefix string) {
 		}
 
 		// 递归到嵌套映射
-		if nested, ok := value.(map[string]interface{}); ok {
+		if nested, ok := value.(map[string]any); ok {
 			redactSensitiveFields(nested, fullPath)
 		}
 	}

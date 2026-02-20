@@ -330,7 +330,7 @@ func (h *ChatHandler) handleProviderError(w http.ResponseWriter, err error) {
 }
 
 // writeJSON 写入 JSON（不包含响应头）
-func writeJSON(w http.ResponseWriter, data interface{}) error {
+func writeJSON(w http.ResponseWriter, data any) error {
 	encoder := json.NewEncoder(w)
 	return encoder.Encode(data)
 }

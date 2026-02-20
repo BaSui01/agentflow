@@ -151,7 +151,7 @@ func (m *Manager) Set(ctx context.Context, key string, value string, ttl time.Du
 }
 
 // GetJSON 获取 JSON 缓存值
-func (m *Manager) GetJSON(ctx context.Context, key string, dest interface{}) error {
+func (m *Manager) GetJSON(ctx context.Context, key string, dest any) error {
 	val, err := m.Get(ctx, key)
 	if err != nil {
 		return err
@@ -165,7 +165,7 @@ func (m *Manager) GetJSON(ctx context.Context, key string, dest interface{}) err
 }
 
 // SetJSON 设置 JSON 缓存值
-func (m *Manager) SetJSON(ctx context.Context, key string, value interface{}, ttl time.Duration) error {
+func (m *Manager) SetJSON(ctx context.Context, key string, value any, ttl time.Duration) error {
 	data, err := json.Marshal(value)
 	if err != nil {
 		return fmt.Errorf("failed to marshal cache value: %w", err)

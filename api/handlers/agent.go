@@ -188,7 +188,7 @@ func (h *AgentHandler) HandleExecuteAgent(w http.ResponseWriter, r *http.Request
 // @Accept json
 // @Produce json
 // @Param request body AgentExecuteRequest true "Plan request"
-// @Success 200 {object} Response{data=map[string]interface{}} "Execution plan"
+// @Success 200 {object} Response{data=map[string]any} "Execution plan"
 // @Failure 400 {object} Response "Invalid request"
 // @Failure 404 {object} Response "Agent not found"
 // @Failure 500 {object} Response "Plan failed"

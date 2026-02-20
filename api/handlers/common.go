@@ -16,7 +16,7 @@ import (
 // Response 统一 API 响应结构
 type Response struct {
 	Success   bool        `json:"success"`
-	Data      interface{} `json:"data,omitempty"`
+	Data      any `json:"data,omitempty"`
 	Error     *ErrorInfo  `json:"error,omitempty"`
 	Timestamp time.Time   `json:"timestamp"`
 	RequestID string      `json:"request_id,omitempty"`
@@ -36,7 +36,7 @@ type ErrorInfo struct {
 // =============================================================================
 
 // WriteJSON 写入 JSON 响应
-func WriteJSON(w http.ResponseWriter, status int, data interface{}) {
+func WriteJSON(w http.ResponseWriter, status int, data any) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.WriteHeader(status)
@@ -49,7 +49,7 @@ func WriteJSON(w http.ResponseWriter, status int, data interface{}) {
 }
 
 // WriteSuccess 写入成功响应
-func WriteSuccess(w http.ResponseWriter, data interface{}) {
+func WriteSuccess(w http.ResponseWriter, data any) {
 	WriteJSON(w, http.StatusOK, Response{
 		Success:   true,
 		Data:      data,
@@ -144,7 +144,7 @@ func mapErrorCodeToHTTPStatus(code types.ErrorCode) int {
 // =============================================================================
 
 // DecodeJSONBody 解码 JSON 请求体
-func DecodeJSONBody(w http.ResponseWriter, r *http.Request, dst interface{}, logger *zap.Logger) error {
+func DecodeJSONBody(w http.ResponseWriter, r *http.Request, dst any, logger *zap.Logger) error {
 	if r.Body == nil {
 		err := types.NewError(types.ErrInvalidRequest, "request body is empty")
 		WriteError(w, err, logger)

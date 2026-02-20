@@ -178,18 +178,18 @@ func TestHotReloadManager_SanitizedConfig(t *testing.T) {
 
 	// Config 结构使用 yaml 标签，因此 JSON 封送将使用字段名称
 	// 检查敏感字段是否已被编辑
-	if db, ok := sanitized["Database"].(map[string]interface{}); ok {
+	if db, ok := sanitized["Database"].(map[string]any); ok {
 		assert.Equal(t, "[REDACTED]", db["Password"])
-	} else if db, ok := sanitized["database"].(map[string]interface{}); ok {
+	} else if db, ok := sanitized["database"].(map[string]any); ok {
 		assert.Equal(t, "[REDACTED]", db["password"])
 	} else {
 		// 只需验证清理后的配置不为零
 		assert.NotNil(t, sanitized)
 	}
 
-	if llm, ok := sanitized["LLM"].(map[string]interface{}); ok {
+	if llm, ok := sanitized["LLM"].(map[string]any); ok {
 		assert.Equal(t, "[REDACTED]", llm["APIKey"])
-	} else if llm, ok := sanitized["llm"].(map[string]interface{}); ok {
+	} else if llm, ok := sanitized["llm"].(map[string]any); ok {
 		assert.Equal(t, "[REDACTED]", llm["api_key"])
 	}
 }
@@ -506,11 +506,11 @@ func TestSplitPath(t *testing.T) {
 }
 
 func TestRedactSensitiveFields(t *testing.T) {
-	data := map[string]interface{}{
+	data := map[string]any{
 		"host":     "localhost",
 		"password": "secret123",
 		"api_key":  "sk-test",
-		"nested": map[string]interface{}{
+		"nested": map[string]any{
 			"token":  "bearer-token",
 			"normal": "value",
 		},
@@ -522,7 +522,7 @@ func TestRedactSensitiveFields(t *testing.T) {
 	assert.Equal(t, "[REDACTED]", data["password"])
 	assert.Equal(t, "[REDACTED]", data["api_key"])
 
-	nested := data["nested"].(map[string]interface{})
+	nested := data["nested"].(map[string]any)
 	assert.Equal(t, "[REDACTED]", nested["token"])
 	assert.Equal(t, "value", nested["normal"])
 }
