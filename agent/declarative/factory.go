@@ -61,7 +61,8 @@ func (f *AgentFactory) Validate(def *AgentDefinition) error {
 // Keys match the JSON tags of agent.Config:
 //
 //	"id", "name", "type", "description", "model", "provider",
-//	"max_tokens", "temperature", "system_prompt", "tools", "metadata",
+//	"max_tokens", "temperature", "system_prompt", "tools",
+//	"tool_definitions", "memory", "guardrails", "metadata",
 //	"enable_reflection", "enable_tool_selection", "enable_prompt_enhancer",
 //	"enable_skills", "enable_mcp", "enable_observability",
 //	"max_react_iterations"
@@ -73,6 +74,9 @@ func (f *AgentFactory) ToAgentConfig(def *AgentDefinition) map[string]interface{
 	}
 
 	// Optional string fields
+	if def.Type != "" {
+		m["type"] = def.Type
+	}
 	if def.Description != "" {
 		m["description"] = def.Description
 	}
@@ -94,9 +98,24 @@ func (f *AgentFactory) ToAgentConfig(def *AgentDefinition) map[string]interface{
 		m["max_tokens"] = def.MaxTokens
 	}
 
-	// Tools
+	// Tools (string names)
 	if len(def.Tools) > 0 {
 		m["tools"] = def.Tools
+	}
+
+	// Tool definitions (richer metadata)
+	if len(def.ToolDefinitions) > 0 {
+		m["tool_definitions"] = def.ToolDefinitions
+	}
+
+	// Memory
+	if def.Memory != nil {
+		m["memory"] = def.Memory
+	}
+
+	// Guardrails
+	if def.Guardrails != nil {
+		m["guardrails"] = def.Guardrails
 	}
 
 	// Metadata
