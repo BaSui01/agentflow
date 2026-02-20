@@ -25,6 +25,10 @@
 - **Thought Signatures** - 推理链签名，保持多轮推理连续性
 - **角色编排 (Role Pipeline)** - 多 Agent 角色流水线，支持 Collector→Filter→Generator→Validator→Writer 研究管线
 - **Web 工具** - Web Search / Web Scrape 工具抽象，支持可插拔搜索/抓取后端
+- **声明式 Agent 加载器** — YAML/JSON 定义 Agent，工厂自动装配
+- **插件系统** — 插件注册表、生命周期管理（Init/Shutdown）
+- **Human-in-the-Loop** — 人工审批节点
+- **Agent 联邦/服务发现** — 跨集群编排与注册发现
 
 ### 🧠 记忆系统
 
@@ -66,6 +70,10 @@
 - **多向量数据库支持** - Qdrant, Pinecone, Milvus, Weaviate 及内置 InMemoryStore
 - **文档管理** - 自动分块 (Chunking)、元数据过滤、重排序 (Reranker)
 - **学术数据源** - arXiv 论文检索、GitHub 仓库/代码搜索适配器
+- **DocumentLoader** — 统一文档加载接口（Text/Markdown/CSV/JSON）
+- **Config→RAG 桥接** — 配置驱动的 RAG 管线工厂
+- **Graph RAG** — 知识图谱检索增强
+- **查询路由/变换** — 智能查询分发与改写
 
 ### 🎯 多提供商支持
 
@@ -75,6 +83,8 @@
 - **统一 Token 计数器** - Tokenizer 接口 + tiktoken 适配器 + CJK 估算器
 - **Provider 重试包装器** - RetryableProvider 指数退避重试，仅重试可恢复错误
 - **API Key 池** - 多 Key 轮询、限流检测
+- **Provider 工厂函数** — 配置驱动的 Provider 实例化
+- **OpenAI 兼容层** — 统一适配 OpenAI 兼容 API（9 个 provider 瘦身至 ~30 行）
 
 ### 🎨 多模态能力
 
@@ -93,6 +103,7 @@
 - **API 安全中间件** - API Key 认证、IP 限流、CORS、Panic 恢复、请求日志
 - **成本控制与预算管理** - Token 计数、周期重置、成本报告、优化建议
 - **配置热重载与回滚** - 文件监听自动重载、版本化历史、一键回滚、验证钩子
+- **MCP WebSocket 心跳重连** — 指数退避重连、连接状态监控
 
 ## 🚀 快速开始
 
@@ -315,25 +326,25 @@ agentflow/
 │   ├── cache.go              # 多级缓存
 │   ├── middleware.go         # 中间件链
 │   ├── providers/            # Provider 实现
-│   │   ├── openai/
-│   │   ├── anthropic/
-│   │   ├── gemini/
-│   │   ├── deepseek/
-│   │   ├── qwen/
+│   │   ├── openai/           # OpenAI
+│   │   ├── anthropic/        # Claude
+│   │   ├── gemini/           # Gemini
+│   │   ├── deepseek/         # DeepSeek
+│   │   ├── qwen/             # 通义千问
 │   │   ├── retry_wrapper.go  # Provider 重试包装器（指数退避）
-│   │   └── ...
+│   │   └── ...               # GLM, Grok, Mistral, Hunyuan 等
+│   ├── factory/              # Provider 工厂函数
+│   ├── budget/               # 成本控制与预算管理
+│   ├── batch/                # 批量请求处理
+│   ├── embedding/            # Embedding 抽象
+│   ├── rerank/               # Rerank 抽象
 │   ├── router/               # 路由层
 │   │   ├── router.go         # 路由接口
-│   │   ├── ab_router.go      # A/B 测试路由（粘性路由、权重管理、指标收集）
+│   │   ├── ab_router.go      # A/B 测试路由
 │   │   ├── prefix_router.go  # 前缀路由
 │   │   └── semantic.go       # 语义路由
 │   ├── tokenizer/            # 统一 Token 计数器
-│   │   ├── tokenizer.go      # Tokenizer 接口 + 全局注册表
-│   │   ├── tiktoken.go       # tiktoken 适配器（OpenAI 模型）
-│   │   └── estimator.go      # CJK 估算器（无需下载模型数据）
 │   ├── tools/                # 工具执行
-│   │   ├── executor.go
-│   │   └── react.go
 │   └── multimodal/           # 多模态路由
 │
 ├── agent/                    # Layer 2: Agent 核心
@@ -343,6 +354,15 @@ agentflow/
 │   ├── state.go              # 状态机
 │   ├── event.go              # 事件总线
 │   ├── registry.go           # Agent 注册表
+│   ├── declarative/          # 声明式 Agent 加载器（YAML/JSON）
+│   ├── plugins/              # 插件系统（注册表、生命周期）
+│   ├── collaboration/        # 多 Agent 协作
+│   ├── crews/                # Crew 编排
+│   ├── federation/           # Agent 联邦/服务发现
+│   ├── hitl/                 # Human-in-the-Loop 审批
+│   ├── artifacts/            # Artifact 管理
+│   ├── voice/                # 语音交互
+│   ├── lsp/                  # LSP 协议支持
 │   ├── browser/              # 浏览器自动化
 │   │   ├── browser.go        # Browser 接口 + BrowserTool
 │   │   ├── chromedp_driver.go # chromedp 驱动实现
@@ -360,43 +380,84 @@ agentflow/
 │   └── context/              # 上下文管理
 │
 ├── rag/                      # Layer 2: RAG 系统
+│   ├── loader/               # DocumentLoader（Text/Markdown/CSV/JSON）
+│   ├── sources/              # 数据源适配器（arXiv, GitHub）
+│   ├── factory.go            # Config→RAG 桥接工厂
+│   ├── graph_rag.go          # Graph RAG 知识图谱检索
+│   ├── query_router.go       # 查询路由/变换
 │   ├── chunking.go           # 文档分块
+│   ├── contextual_retrieval.go # BM25 上下文检索
 │   ├── hybrid_retrieval.go   # 混合检索
+│   ├── multi_hop.go          # 多跳推理
+│   ├── semantic_cache.go     # 语义缓存
 │   ├── reranker.go           # 重排序
-│   └── vector_store.go       # 向量存储
+│   ├── vector_store.go       # 向量存储接口
+│   ├── pinecone_store.go     # Pinecone 实现
+│   ├── qdrant_store.go       # Qdrant 实现
+│   ├── milvus_store.go       # Milvus 实现
+│   ├── weaviate_store.go     # Weaviate 实现
+│   └── web_retrieval.go      # Web 增强检索
 │
 ├── workflow/                 # Layer 3: 工作流
 │   ├── workflow.go
-│   ├── dag.go
-│   ├── dag_executor.go
-│   ├── parallel.go
+│   ├── dag.go                # DAG 定义
+│   ├── dag_builder.go        # DAG 构建器
+│   ├── dag_executor.go       # DAG 执行器
+│   ├── dag_serialization.go  # DAG 序列化
+│   ├── parallel.go           # 并行执行
+│   ├── routing.go            # 路由节点
+│   ├── state_reducer.go      # 状态归约
+│   ├── steps.go              # 步骤定义
+│   ├── agent_adapter.go      # Agent 适配器
+│   ├── builder_visual.go     # 可视化构建器
 │   ├── circuit_breaker.go    # DAG 熔断器（三态机 + 注册表）
+│   ├── checkpoint_enhanced.go # 增强检查点
+│   ├── execution_history.go  # 执行历史
 │   └── dsl/                  # YAML DSL 编排
-│       ├── schema.go         # DSL 类型定义（WorkflowDSL, NodeDef, StepDef...）
-│       ├── parser.go         # YAML 解析 + 变量插值 + DAGWorkflow 构建
-│       └── validator.go      # DSL 验证器（节点、引用、变量完整性）
+│       ├── schema.go         # DSL 类型定义
+│       ├── parser.go         # YAML 解析 + 变量插值
+│       └── validator.go      # DSL 验证器
 │
 ├── config/                   # 配置管理
-│   └── hotreload.go          # 配置热重载与回滚（版本化历史、验证钩子、自动回滚）
+│   ├── loader.go             # 配置加载器
+│   ├── defaults.go           # 默认配置
+│   ├── hotreload.go          # 热重载与回滚
+│   ├── watcher.go            # 文件监听
+│   ├── api.go                # 配置 API
+│   └── doc.go                # 包文档
+│
+├── tools/                    # 工具扩展
+│   └── openapi/              # OpenAPI 工具生成
 │
 ├── cmd/agentflow/            # 应用入口
-│   └── middleware.go         # API 安全中间件（认证、限流、CORS、Recovery）
+│   └── middleware.go         # API 安全中间件
 │
-└── examples/                 # 示例代码
+└── examples/                 # 示例代码（19 个场景）
 ```
 
 ## 📖 示例
 
-| 示例                                                       | 说明         |
-| ---------------------------------------------------------- | ------------ |
-| [01_simple_chat](examples/01_simple_chat/)                 | 基础对话     |
-| [02_streaming](examples/02_streaming/)                     | 流式响应     |
-| [04_custom_agent](examples/04_custom_agent/)               | 自定义 Agent |
-| [05_workflow](examples/05_workflow/)                       | 工作流编排   |
-| [12_complete_rag_system](examples/12_complete_rag_system/) | RAG 系统     |
-| [14_guardrails](examples/14_guardrails/)                   | 安全护栏     |
-| [15_structured_output](examples/15_structured_output/)     | 结构化输出   |
-| [16_a2a_protocol](examples/16_a2a_protocol/)               | A2A 协议     |
+| 示例                                                       | 说明              |
+| ---------------------------------------------------------- | ----------------- |
+| [01_simple_chat](examples/01_simple_chat/)                 | 基础对话          |
+| [02_streaming](examples/02_streaming/)                     | 流式响应          |
+| [04_custom_agent](examples/04_custom_agent/)               | 自定义 Agent      |
+| [05_workflow](examples/05_workflow/)                       | 工作流编排        |
+| [06_advanced_features](examples/06_advanced_features/)     | 高级特性          |
+| [07_mid_priority_features](examples/07_mid_priority_features/) | 中优先级特性  |
+| [08_low_priority_features](examples/08_low_priority_features/) | 低优先级特性  |
+| [09_full_integration](examples/09_full_integration/)       | 完整集成          |
+| [11_multi_provider_apis](examples/11_multi_provider_apis/) | 多提供商 API      |
+| [12_complete_rag_system](examples/12_complete_rag_system/) | RAG 系统          |
+| [13_new_providers](examples/13_new_providers/)             | 新提供商          |
+| [14_guardrails](examples/14_guardrails/)                   | 安全护栏          |
+| [15_structured_output](examples/15_structured_output/)     | 结构化输出        |
+| [16_a2a_protocol](examples/16_a2a_protocol/)               | A2A 协议          |
+| [17_high_priority_features](examples/17_high_priority_features/) | 高优先级特性 |
+| [18_advanced_agent_features](examples/18_advanced_agent_features/) | 高级 Agent 特性 |
+| [19_2026_features](examples/19_2026_features/)             | 2026 新特性       |
+| [20_multimodal_providers](examples/20_multimodal_providers/) | 多模态提供商    |
+| [21_research_workflow](examples/21_research_workflow/)     | 研究工作流        |
 
 ## 📚 文档
 
@@ -411,13 +472,18 @@ agentflow/
 
 ## 🔧 技术栈
 
-- **Go 1.24+**i
+- **Go 1.24+**
 - **Redis** - 短期记忆/缓存
 - **PostgreSQL/MySQL/SQLite** - 元数据 (GORM)
-- **Qdrant/Pinecone** - 向量存储
+- **Qdrant/Pinecone/Milvus/Weaviate** - 向量存储
 - **Prometheus** - 指标收集
 - **OpenTelemetry** - 分布式追踪
 - **Zap** - 结构化日志
+- **tiktoken-go** - OpenAI Token 计数
+- **chromedp** - 浏览器自动化
+- **nhooyr.io/websocket** - WebSocket 客户端
+- **golang-migrate** - 数据库迁移
+- **yaml.v3** - YAML 解析
 
 ## 📄 License
 

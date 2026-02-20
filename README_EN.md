@@ -13,20 +13,33 @@ English | [中文](README.md)
 ## ✨ Core Features
 
 ### 🤖 Agent Framework
+
 - **Reflection** - Self-evaluation and iterative improvement
 - **Dynamic Tool Selection** - Intelligent tool matching, reduced token consumption
+- **Dual-Model Architecture (toolProvider)** - Cheap model for tool calls, expensive model for content generation, significantly reducing costs
+- **Browser Automation** - Browser automation (chromedp driver, connection pool, vision adapter)
 - **Skills System** - Dynamic skill loading
-- **MCP/A2A Protocol** - Complete agent interoperability protocol stack
-- **Guardrails** - Input/output validation, PII detection, injection protection
+- **MCP/A2A Protocol** - Complete agent interoperability protocol stack (Google A2A & Anthropic MCP)
+- **Guardrails** - Input/output validation, PII detection, injection protection, custom validation rules
 - **Evaluation** - Automated evaluation framework (A/B testing, LLM Judge, multi-dimensional research quality assessment)
 - **Thought Signatures** - Reasoning chain signatures for multi-turn continuity
 - **Role Pipeline** - Multi-agent role orchestration with Collector→Filter→Generator→Validator→Writer research pipeline
 - **Web Tools** - Web Search / Web Scrape tool abstractions with pluggable search/scraping backends
+- **Declarative Agent Loader** - YAML/JSON Agent definitions, factory auto-assembly
+- **Plugin System** - Plugin registry, lifecycle management (Init/Shutdown)
+- **Human-in-the-Loop** - Human approval nodes
+- **Agent Federation/Service Discovery** - Cross-cluster orchestration and registry discovery
 
 ### 🧠 Memory System
-- **Layered Memory** - Short-term/working/long-term/episodic/semantic memory
+
+- **Layered Memory** - Brain-inspired memory architecture:
+  - **Working Memory** - Stores current task context, supports TTL and priority decay
+  - **Long-term Memory** - Structured information storage
+  - **Episodic Memory** - Stores event sequences and execution experiences
+  - **Semantic Memory** - Stores factual knowledge and ontological relationships
+  - **Procedural Memory** - Stores "how-to" skills and procedures
 - **Intelligent Decay** - Smart decay based on recency/relevance/utility
-- **Context Engineering** - Adaptive compression, summarization, emergency truncation
+- **Context Engineering** - Adaptive compression, summarization, window management, emergency truncation
 
 ### 🧩 Reasoning Patterns
 - **ReAct** - Reasoning and action alternation
@@ -38,14 +51,38 @@ English | [中文](README.md)
 - **Iterative Deepening** - Recursive deepening research pattern with breadth-first queries + depth-first exploration (inspired by deep-research)
 
 ### 🔄 Workflow Engine
+
 - **DAG Workflow** - Directed acyclic graph orchestration
-- **Conditional Branching** - Dynamic routing
-- **Parallel Execution** - Concurrent task processing
+- **Chain Workflow** - Simple linear step sequences
+- **Parallel Execution** - Concurrent branch execution with result aggregation
 - **Checkpointing** - State persistence and recovery
+- **Circuit Breaker** - DAG node-level circuit breaker protection (Closed/Open/HalfOpen state machine)
+- **YAML DSL Orchestration Language** - Declarative workflow definition with variable interpolation, conditional branching, loops, subgraphs
+
+### 🔍 RAG System (Retrieval-Augmented Generation)
+
+- **Hybrid Retrieval** - Combining vector search (Dense) and keyword search (Sparse)
+- **BM25 Contextual Retrieval** - Context retrieval based on Anthropic best practices, tunable BM25 parameters (k1/b), IDF caching
+- **Multi-hop Reasoning & Deduplication** - Multi-hop reasoning chains, four-stage deduplication (ID dedup + content similarity dedup), DedupStats
+- **Web-Enhanced Retrieval** - Local RAG + real-time web search hybrid retrieval with weight allocation and result deduplication
+- **Semantic Cache** - Vector similarity-based response caching, significantly reducing latency and cost
+- **Multi Vector Database Support** - Qdrant, Pinecone, Milvus, Weaviate, and built-in InMemoryStore
+- **Document Management** - Auto chunking, metadata filtering, reranking
+- **Academic Data Sources** - arXiv paper retrieval, GitHub repository/code search adapters
+- **DocumentLoader** - Unified document loading interface (Text/Markdown/CSV/JSON)
+- **Config→RAG Bridge** - Configuration-driven RAG pipeline factory
+- **Graph RAG** - Knowledge graph retrieval augmentation
+- **Query Routing/Transformation** - Intelligent query dispatch and rewriting
 
 ### 🎯 Multi-Provider Support
+
 - **13+ Providers** - OpenAI, Claude, Gemini, DeepSeek, Qwen, GLM, Grok, Mistral, Hunyuan, Kimi, MiniMax, Doubao, Llama
 - **Smart Routing** - Cost/health/QPS load balancing
+- **A/B Testing Router** - Multi-variant traffic allocation, sticky routing, dynamic weight adjustment, metrics collection
+- **Unified Token Counter** - Tokenizer interface + tiktoken adapter + CJK estimator
+- **Provider Retry Wrapper** - RetryableProvider with exponential backoff, only retries recoverable errors
+- **Provider Factory Functions** - Configuration-driven Provider instantiation
+- **OpenAI Compatibility Layer** - Unified adapter for OpenAI-compatible APIs (9 providers slimmed to ~30 lines)
 - **API Key Pool** - Multi-key rotation, rate limit detection
 
 ### 🎨 Multimodal Capabilities
@@ -57,9 +94,14 @@ English | [中文](README.md)
 - **3D** - Meshy, Tripo
 
 ### 🛡️ Enterprise-Grade
+
 - **Resilience** - Retry, idempotency, circuit breaker
 - **Observability** - Prometheus metrics, OpenTelemetry tracing
 - **Caching** - Multi-level cache strategies
+- **API Security Middleware** - API Key authentication, IP rate limiting, CORS, Panic recovery, request logging
+- **Cost Control & Budget Management** - Token counting, periodic reset, cost reports, optimization suggestions
+- **Configuration Hot-Reload & Rollback** - File watch auto-reload, versioned history, one-click rollback, validation hooks
+- **MCP WebSocket Heartbeat Reconnection** - Exponential backoff reconnection, connection state monitoring
 
 ## 🚀 Quick Start
 
@@ -281,13 +323,28 @@ agentflow/
 │   ├── resilience.go         # Retry/circuit breaker/idempotency
 │   ├── cache.go              # Multi-level cache
 │   ├── middleware.go         # Middleware chain
+│   ├── factory/              # Provider factory functions
+│   ├── budget/               # Token budget & cost control
+│   ├── batch/                # Batch request processing
+│   ├── embedding/            # Embedding providers
+│   ├── rerank/               # Reranking providers
 │   ├── providers/            # Provider implementations
 │   │   ├── openai/
 │   │   ├── anthropic/
 │   │   ├── gemini/
 │   │   ├── deepseek/
 │   │   ├── qwen/
+│   │   ├── retry_wrapper.go  # Provider retry wrapper (exponential backoff)
 │   │   └── ...
+│   ├── router/               # Routing layer
+│   │   ├── router.go         # Router interface
+│   │   ├── ab_router.go      # A/B testing router
+│   │   ├── prefix_router.go  # Prefix router
+│   │   └── semantic.go       # Semantic router
+│   ├── tokenizer/            # Unified token counter
+│   │   ├── tokenizer.go      # Tokenizer interface + global registry
+│   │   ├── tiktoken.go       # tiktoken adapter (OpenAI models)
+│   │   └── estimator.go      # CJK estimator
 │   ├── tools/                # Tool execution
 │   │   ├── executor.go
 │   │   └── react.go
@@ -295,9 +352,27 @@ agentflow/
 │
 ├── agent/                    # Layer 2: Agent core
 │   ├── base.go               # BaseAgent
+│   ├── completion.go         # ChatCompletion/StreamCompletion (dual-model architecture)
+│   ├── react.go              # Plan/Execute/Observe ReAct loop
 │   ├── state.go              # State machine
 │   ├── event.go              # Event bus
 │   ├── registry.go           # Agent registry
+│   ├── declarative/          # Declarative Agent loader (YAML/JSON)
+│   ├── plugins/              # Plugin system & lifecycle
+│   ├── collaboration/        # Multi-agent collaboration
+│   ├── crews/                # Agent crews
+│   ├── federation/           # Agent federation & service discovery
+│   ├── hitl/                 # Human-in-the-Loop
+│   ├── artifacts/            # Artifact management
+│   ├── voice/                # Voice capabilities
+│   ├── lsp/                  # LSP server integration
+│   ├── browser/              # Browser automation
+│   │   ├── browser.go        # Browser interface + BrowserTool
+│   │   ├── chromedp_driver.go # chromedp driver implementation
+│   │   ├── browser_pool.go   # Browser connection pool
+│   │   ├── vision_adapter.go # Vision adapter (screenshot→LLM)
+│   │   └── agentic_browser.go # Agent-level browser wrapper
+│   ├── streaming/            # Bidirectional communication
 │   ├── guardrails/           # Safety guardrails
 │   ├── protocol/             # A2A/MCP protocols
 │   │   ├── a2a/
@@ -310,14 +385,56 @@ agentflow/
 ├── rag/                      # Layer 2: RAG system
 │   ├── chunking.go           # Document chunking
 │   ├── hybrid_retrieval.go   # Hybrid retrieval
+│   ├── contextual_retrieval.go # BM25 contextual retrieval
+│   ├── multi_hop.go          # Multi-hop reasoning
+│   ├── web_retrieval.go      # Web-enhanced retrieval
+│   ├── semantic_cache.go     # Semantic cache
 │   ├── reranker.go           # Reranking
-│   └── vector_store.go       # Vector store
+│   ├── vector_store.go       # Vector store interface
+│   ├── qdrant_store.go       # Qdrant implementation
+│   ├── pinecone_store.go     # Pinecone implementation
+│   ├── milvus_store.go       # Milvus implementation
+│   ├── weaviate_store.go     # Weaviate implementation
+│   ├── factory.go            # Config→RAG pipeline factory
+│   ├── graph_rag.go          # Graph RAG
+│   ├── query_router.go       # Query routing & transformation
+│   ├── loader/               # Document loaders
+│   │   ├── loader.go         # Unified loader interface
+│   │   ├── text.go           # Text loader
+│   │   ├── markdown.go       # Markdown loader
+│   │   ├── csv.go            # CSV loader
+│   │   └── json.go           # JSON loader
+│   └── sources/              # Data sources
+│       ├── arxiv.go          # arXiv paper retrieval
+│       └── github_source.go  # GitHub repository search
 │
-├── workflow/                 # Layer 3: Workflow
+├── workflow/                 # Layer 3: Workflow engine
 │   ├── workflow.go
-│   ├── dag.go
-│   ├── dag_executor.go
-│   └── parallel.go
+│   ├── dag.go                # DAG workflow
+│   ├── dag_executor.go       # DAG executor
+│   ├── dag_builder.go        # DAG builder
+│   ├── parallel.go           # Parallel execution
+│   ├── steps.go              # Step definitions
+│   ├── routing.go            # Workflow routing
+│   ├── circuit_breaker.go    # Circuit breaker (three-state machine + registry)
+│   ├── builder_visual.go     # Visual workflow builder
+│   └── dsl/                  # YAML DSL orchestration
+│       ├── schema.go         # DSL type definitions
+│       ├── parser.go         # YAML parser + variable interpolation + DAG builder
+│       └── validator.go      # DSL validator
+│
+├── config/                   # Configuration management
+│   ├── loader.go             # Configuration loader
+│   ├── defaults.go           # Default values
+│   ├── watcher.go            # File watcher
+│   ├── hotreload.go          # Hot-reload & rollback
+│   └── api.go                # Configuration API
+│
+├── tools/                    # Tool extensions
+│   └── openapi/              # OpenAPI tool generator
+│
+├── cmd/agentflow/            # Application entry
+│   └── middleware.go         # API security middleware
 │
 └── examples/                 # Example code
 ```
@@ -326,14 +443,25 @@ agentflow/
 
 | Example | Description |
 |---------|-------------|
-| [01_simple_chat](examples/01_simple_chat/) | Basic chat |
-| [02_streaming](examples/02_streaming/) | Streaming response |
-| [04_custom_agent](examples/04_custom_agent/) | Custom agent |
-| [05_workflow](examples/05_workflow/) | Workflow orchestration |
-| [12_complete_rag_system](examples/12_complete_rag_system/) | RAG system |
-| [14_guardrails](examples/14_guardrails/) | Safety guardrails |
-| [15_structured_output](examples/15_structured_output/) | Structured output |
-| [16_a2a_protocol](examples/16_a2a_protocol/) | A2A protocol |
+| [01_simple_chat](examples/01_simple_chat/) | Basic Chat |
+| [02_streaming](examples/02_streaming/) | Streaming Response |
+| [04_custom_agent](examples/04_custom_agent/) | Custom Agent |
+| [05_workflow](examples/05_workflow/) | Workflow Orchestration |
+| [06_advanced_features](examples/06_advanced_features/) | Advanced Features |
+| [07_mid_priority_features](examples/07_mid_priority_features/) | Mid-Priority Features |
+| [08_low_priority_features](examples/08_low_priority_features/) | Low-Priority Features |
+| [09_full_integration](examples/09_full_integration/) | Full Integration |
+| [11_multi_provider_apis](examples/11_multi_provider_apis/) | Multi-Provider APIs |
+| [12_complete_rag_system](examples/12_complete_rag_system/) | RAG System |
+| [13_new_providers](examples/13_new_providers/) | New Providers |
+| [14_guardrails](examples/14_guardrails/) | Safety Guardrails |
+| [15_structured_output](examples/15_structured_output/) | Structured Output |
+| [16_a2a_protocol](examples/16_a2a_protocol/) | A2A Protocol |
+| [17_high_priority_features](examples/17_high_priority_features/) | High-Priority Features |
+| [18_advanced_agent_features](examples/18_advanced_agent_features/) | Advanced Agent Features |
+| [19_2026_features](examples/19_2026_features/) | 2026 Features |
+| [20_multimodal_providers](examples/20_multimodal_providers/) | Multimodal Providers |
+| [21_research_workflow](examples/21_research_workflow/) | Research Workflow |
 
 ## 📚 Documentation
 
@@ -351,10 +479,15 @@ agentflow/
 - **Go 1.24+**
 - **Redis** - Short-term memory/caching
 - **PostgreSQL/MySQL/SQLite** - Metadata (GORM)
-- **Qdrant/Pinecone** - Vector storage
+- **Qdrant/Pinecone/Milvus/Weaviate** - Vector storage
 - **Prometheus** - Metrics collection
 - **OpenTelemetry** - Distributed tracing
 - **Zap** - Structured logging
+- **tiktoken-go** - OpenAI token counting
+- **chromedp** - Browser automation
+- **nhooyr.io/websocket** - WebSocket client
+- **golang-migrate** - Database migrations
+- **yaml.v3** - YAML parsing
 
 ## 📄 License
 
