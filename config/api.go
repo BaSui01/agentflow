@@ -15,7 +15,8 @@ import (
 
 // ConfigAPIHandler 处理配置 API 请求
 type ConfigAPIHandler struct {
-	manager *HotReloadManager
+	manager       *HotReloadManager
+	allowedOrigin string
 }
 
 // ConfigResponse 表示配置 API 响应
@@ -71,10 +72,16 @@ type ConfigUpdateRequest struct {
 
 // --- API 处理器实现 ---
 
-// NewConfigAPIHandler 创建一个新的配置 API 处理程序
-func NewConfigAPIHandler(manager *HotReloadManager) *ConfigAPIHandler {
+// NewConfigAPIHandler 创建一个新的配置 API 处理程序。
+// allowedOrigin 指定 CORS 允许的来源，为空时默认不设置 Access-Control-Allow-Origin。
+func NewConfigAPIHandler(manager *HotReloadManager, allowedOrigin ...string) *ConfigAPIHandler {
+	origin := ""
+	if len(allowedOrigin) > 0 && allowedOrigin[0] != "" {
+		origin = allowedOrigin[0]
+	}
 	return &ConfigAPIHandler{
-		manager: manager,
+		manager:       manager,
+		allowedOrigin: origin,
 	}
 }
 
@@ -193,13 +200,13 @@ func (h *ConfigAPIHandler) updateConfig(w http.ResponseWriter, r *http.Request) 
 }
 
 // handleReload 处理 POST 请求以从文件重新加载配置
-// @Summary 从文件重新加载配置
-// @Description 从配置文件重新加载配置
+// @Summary 从文件热重载配置
+// @Description 从配置文件热重载并应用最新配置
 // @Tags config
 // @Accept json
 // @Produce json
-// @Success 200 {object} ConfigResponse "配置已重新加载"
-// @Failure 500 {object} ConfigResponse "重新加载失败"
+// @Success 200 {object} ConfigResponse "配置已热重载"
+// @Failure 500 {object} ConfigResponse "热重载失败"
 // @Router /api/v1/config/reload [post]
 func (h *ConfigAPIHandler) handleReload(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodOptions {
@@ -230,12 +237,12 @@ func (h *ConfigAPIHandler) handleReload(w http.ResponseWriter, r *http.Request) 
 }
 
 // handleFields 返回热可重载字段的列表
-// @Summary 获取热可重载字段
-// @Description 返回可热重载的配置字段列表
+// @Summary 获取可热重载字段
+// @Description 返回支持热重载的配置字段列表
 // @Tags config
 // @Accept json
 // @Produce json
-// @Success 200 {object} ConfigResponse "热可重载字段"
+// @Success 200 {object} ConfigResponse "可热重载字段"
 // @Router /api/v1/config/fields [get]
 func (h *ConfigAPIHandler) handleFields(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodOptions {
@@ -317,15 +324,25 @@ func (h *ConfigAPIHandler) handleChanges(w http.ResponseWriter, r *http.Request)
 
 // writeJSON 写入 JSON 响应
 func (h *ConfigAPIHandler) writeJSON(w http.ResponseWriter, status int, data interface{}) {
+	buf, err := json.Marshal(data)
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = w.Write([]byte(`{"success":false,"error":"failed to encode response"}`))
+		return
+	}
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(data)
+	_, _ = w.Write(buf)
 }
 
 // handleCORS 处理 CORS 预检请求
 func (h *ConfigAPIHandler) handleCORS(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Access-Control-Allow-Origin", "*")
+	if h.allowedOrigin != "" {
+		w.Header().Set("Access-Control-Allow-Origin", h.allowedOrigin)
+	}
 	w.Header().Set("Access-Control-Allow-Methods", "GET, PUT, POST, OPTIONS")
 	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-API-Key")
 	w.Header().Set("Access-Control-Max-Age", "86400")
@@ -369,9 +386,7 @@ func (m *ConfigAPIMiddleware) RequireAuth(next http.HandlerFunc) http.HandlerFun
 		// 检查 API 密钥（如果已配置）
 		if m.apiKey != "" {
 			apiKey := r.Header.Get("X-API-Key")
-			if apiKey == "" {
-				apiKey = r.URL.Query().Get("api_key")
-			}
+			// 不再支持 query string 传递 API key（安全风险：会暴露在日志和浏览器历史中）
 
 			if apiKey != m.apiKey {
 				m.handler.writeJSON(w, http.StatusUnauthorized, ConfigResponse{

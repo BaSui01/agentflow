@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"reflect"
+	"strings"
 	"sync"
 	"time"
 
@@ -1033,9 +1034,9 @@ func redactSensitiveFields(data map[string]interface{}, prefix string) {
 		}
 
 		// 检查这是否是敏感字段
-		lowerKey := toLower(key)
+		lowerKey := strings.ToLower(key)
 		for sensitiveKey := range sensitiveKeys {
-			if contains(lowerKey, sensitiveKey) {
+			if strings.Contains(lowerKey, sensitiveKey) {
 				if str, ok := value.(string); ok && str != "" {
 					data[key] = "[REDACTED]"
 				}
@@ -1048,27 +1049,4 @@ func redactSensitiveFields(data map[string]interface{}, prefix string) {
 			redactSensitiveFields(nested, fullPath)
 		}
 	}
-}
-
-// toLower 将字符串转换为小写
-func toLower(s string) string {
-	result := make([]byte, len(s))
-	for i := 0; i < len(s); i++ {
-		c := s[i]
-		if c >= 'A' && c <= 'Z' {
-			c += 'a' - 'A'
-		}
-		result[i] = c
-	}
-	return string(result)
-}
-
-// contains 检查 s 是否包含 substr
-func contains(s, substr string) bool {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
-		}
-	}
-	return false
 }

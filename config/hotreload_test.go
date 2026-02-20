@@ -474,13 +474,14 @@ func TestConfigAPIMiddleware_RequireAuth_QueryParam(t *testing.T) {
 	handler := NewConfigAPIHandler(manager)
 	middleware := NewConfigAPIMiddleware(handler, "test-api-key")
 
+	// query string 传递 API key 不再被支持（安全风险），应返回 401
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/config?api_key=test-api-key", nil)
 	w := httptest.NewRecorder()
 
 	wrappedHandler := middleware.RequireAuth(handler.getConfig)
 	wrappedHandler(w, req)
 
-	assert.Equal(t, http.StatusOK, w.Code)
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
 }
 
 // --- 辅助函数测试 ---
