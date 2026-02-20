@@ -73,7 +73,7 @@ func (p *GeminiProvider) HealthCheck(ctx context.Context) (*llm.HealthStatus, er
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		msg := readGeminiErrMsg(resp.Body)
+		msg := providers.ReadErrorMessage(resp.Body)
 		return &llm.HealthStatus{Healthy: false, Latency: latency}, fmt.Errorf("gemini health check failed: status=%d msg=%s", resp.StatusCode, msg)
 	}
 	return &llm.HealthStatus{Healthy: true, Latency: latency}, nil
@@ -103,8 +103,8 @@ func (p *GeminiProvider) ListModels(ctx context.Context) ([]llm.Model, error) {
 	defer resp.Body.Close()
 
 	if resp.StatusCode >= 400 {
-		msg := readGeminiErrMsg(resp.Body)
-		return nil, mapGeminiError(resp.StatusCode, msg, p.Name())
+		msg := providers.ReadErrorMessage(resp.Body)
+		return nil, providers.MapHTTPError(resp.StatusCode, msg, p.Name())
 	}
 
 	var modelsResp struct {
@@ -372,8 +372,11 @@ func (p *GeminiProvider) Completion(ctx context.Context, req *llm.ChatRequest) (
 		}
 	}
 
-	payload, _ := json.Marshal(body)
-	model := chooseGeminiModel(req, p.cfg.Model)
+	payload, err := json.Marshal(body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal request: %w", err)
+	}
+	model := providers.ChooseModel(req, p.cfg.Model, "gemini-3-pro")
 	endpoint := fmt.Sprintf("%s/v1beta/models/%s:generateContent", strings.TrimRight(p.cfg.BaseURL, "/"), model)
 
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(payload))
@@ -449,8 +452,11 @@ func (p *GeminiProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-ch
 		}
 	}
 
-	payload, _ := json.Marshal(body)
-	model := chooseGeminiModel(req, p.cfg.Model)
+	payload, err := json.Marshal(body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal request: %w", err)
+	}
+	model := providers.ChooseModel(req, p.cfg.Model, "gemini-3-pro")
 	endpoint := fmt.Sprintf("%s/v1beta/models/%s:streamGenerateContent", strings.TrimRight(p.cfg.BaseURL, "/"), model)
 
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(payload))
@@ -524,7 +530,10 @@ func (p *GeminiProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-ch
 					}
 
 					if part.FunctionCall != nil {
-						argsJSON, _ := json.Marshal(part.FunctionCall.Args)
+						argsJSON, err := json.Marshal(part.FunctionCall.Args)
+						if err != nil {
+							continue // 跳过无法序列化的工具调用
+						}
 						// 生成唯一的工具调用 ID
 						toolCallID := fmt.Sprintf("call_%s_%d_%d", part.FunctionCall.Name, candidate.Index, toolCallIndex)
 						chunk.Delta.ToolCalls = append(chunk.Delta.ToolCalls, llm.ToolCall{
@@ -573,7 +582,10 @@ func toGeminiChatResponse(gr geminiResponse, provider, model string) *llm.ChatRe
 			}
 
 			if part.FunctionCall != nil {
-				argsJSON, _ := json.Marshal(part.FunctionCall.Args)
+				argsJSON, err := json.Marshal(part.FunctionCall.Args)
+				if err != nil {
+					continue // 跳过无法序列化的工具调用
+				}
 				// 生成唯一的工具调用 ID
 				toolCallID := fmt.Sprintf("call_%s_%d", part.FunctionCall.Name, toolCallIndex)
 				if gr.ResponseID != "" {
@@ -611,44 +623,4 @@ func toGeminiChatResponse(gr geminiResponse, provider, model string) *llm.ChatRe
 	}
 
 	return resp
-}
-
-func readGeminiErrMsg(body io.Reader) string {
-	data, _ := io.ReadAll(body)
-	var errResp geminiErrorResp
-	if err := json.Unmarshal(data, &errResp); err == nil && errResp.Error.Message != "" {
-		return fmt.Sprintf("%s (status: %s)", errResp.Error.Message, errResp.Error.Status)
-	}
-	return string(data)
-}
-
-func mapGeminiError(status int, msg string, provider string) *llm.Error {
-	switch status {
-	case http.StatusUnauthorized:
-		return &llm.Error{Code: llm.ErrUnauthorized, Message: msg, HTTPStatus: status, Provider: provider}
-	case http.StatusForbidden:
-		return &llm.Error{Code: llm.ErrForbidden, Message: msg, HTTPStatus: status, Provider: provider}
-	case http.StatusTooManyRequests:
-		return &llm.Error{Code: llm.ErrRateLimited, Message: msg, HTTPStatus: status, Retryable: true, Provider: provider}
-	case http.StatusBadRequest:
-		if strings.Contains(msg, "quota") || strings.Contains(msg, "limit") {
-			return &llm.Error{Code: llm.ErrQuotaExceeded, Message: msg, HTTPStatus: status, Provider: provider}
-		}
-		return &llm.Error{Code: llm.ErrInvalidRequest, Message: msg, HTTPStatus: status, Provider: provider}
-	case http.StatusServiceUnavailable, http.StatusBadGateway, http.StatusGatewayTimeout:
-		return &llm.Error{Code: llm.ErrUpstreamError, Message: msg, HTTPStatus: status, Retryable: true, Provider: provider}
-	default:
-		return &llm.Error{Code: llm.ErrUpstreamError, Message: msg, HTTPStatus: status, Retryable: status >= 500, Provider: provider}
-	}
-}
-
-func chooseGeminiModel(req *llm.ChatRequest, defaultModel string) string {
-	if req != nil && req.Model != "" {
-		return req.Model
-	}
-	if defaultModel != "" {
-		return defaultModel
-	}
-	// Gemini 默认模型 (2026: Gemini 3)
-	return "gemini-3-pro"
 }

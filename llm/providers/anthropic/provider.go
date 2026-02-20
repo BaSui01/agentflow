@@ -73,7 +73,7 @@ func (p *ClaudeProvider) HealthCheck(ctx context.Context) (*llm.HealthStatus, er
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		msg := readClaudeErrMsg(resp.Body)
+		msg := providers.ReadErrorMessage(resp.Body)
 		return &llm.HealthStatus{Healthy: false, Latency: latency}, fmt.Errorf("claude health check failed: status=%d msg=%s", resp.StatusCode, msg)
 	}
 	return &llm.HealthStatus{Healthy: true, Latency: latency}, nil
@@ -103,8 +103,8 @@ func (p *ClaudeProvider) ListModels(ctx context.Context) ([]llm.Model, error) {
 	defer resp.Body.Close()
 
 	if resp.StatusCode >= 400 {
-		msg := readClaudeErrMsg(resp.Body)
-		return nil, mapClaudeError(resp.StatusCode, msg, p.Name())
+		msg := providers.ReadErrorMessage(resp.Body)
+		return nil, providers.MapHTTPError(resp.StatusCode, msg, p.Name())
 	}
 
 	var modelsResp struct {
@@ -309,7 +309,7 @@ func (p *ClaudeProvider) Completion(ctx context.Context, req *llm.ChatRequest) (
 	system, messages := convertToClaudeMessages(req.Messages)
 
 	body := claudeRequest{
-		Model:             chooseClaudeModel(req, p.cfg.Model),
+		Model:             providers.ChooseModel(req, p.cfg.Model, "claude-opus-4.5-20260105"),
 		Messages:          messages,
 		System:            system,
 		MaxTokens:         chooseMaxTokens(req),
@@ -321,7 +321,10 @@ func (p *ClaudeProvider) Completion(ctx context.Context, req *llm.ChatRequest) (
 		ThoughtSignatures: req.ThoughtSignatures, // 2026: Thought Signatures
 	}
 
-	payload, _ := json.Marshal(body)
+	payload, err := json.Marshal(body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal request: %w", err)
+	}
 	endpoint := fmt.Sprintf("%s/v1/messages", strings.TrimRight(p.cfg.BaseURL, "/"))
 
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(payload))
@@ -343,8 +346,8 @@ func (p *ClaudeProvider) Completion(ctx context.Context, req *llm.ChatRequest) (
 	defer resp.Body.Close()
 
 	if resp.StatusCode >= 400 {
-		msg := readClaudeErrMsg(resp.Body)
-		return nil, mapClaudeError(resp.StatusCode, msg, p.Name())
+		msg := providers.ReadErrorMessage(resp.Body)
+		return nil, providers.MapHTTPError(resp.StatusCode, msg, p.Name())
 	}
 
 	var claudeResp claudeResponse
@@ -383,7 +386,7 @@ func (p *ClaudeProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-ch
 	system, messages := convertToClaudeMessages(req.Messages)
 
 	body := claudeRequest{
-		Model:             chooseClaudeModel(req, p.cfg.Model),
+		Model:             providers.ChooseModel(req, p.cfg.Model, "claude-opus-4.5-20260105"),
 		Messages:          messages,
 		System:            system,
 		MaxTokens:         chooseMaxTokens(req),
@@ -393,7 +396,10 @@ func (p *ClaudeProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-ch
 		ThoughtSignatures: req.ThoughtSignatures, // 2026: Thought Signatures
 	}
 
-	payload, _ := json.Marshal(body)
+	payload, err := json.Marshal(body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal request: %w", err)
+	}
 	endpoint := fmt.Sprintf("%s/v1/messages", strings.TrimRight(p.cfg.BaseURL, "/"))
 
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(payload))
@@ -609,50 +615,6 @@ func toClaudeChatResponse(cr claudeResponse, provider string) *llm.ChatResponse 
 	}
 
 	return resp
-}
-
-func readClaudeErrMsg(body io.Reader) string {
-	data, _ := io.ReadAll(body)
-	var errResp claudeErrorResp
-	if err := json.Unmarshal(data, &errResp); err == nil && errResp.Error.Message != "" {
-		return fmt.Sprintf("%s (type: %s)", errResp.Error.Message, errResp.Error.Type)
-	}
-	return string(data)
-}
-
-func mapClaudeError(status int, msg string, provider string) *llm.Error {
-	// Claude 错误码映射
-	switch status {
-	case http.StatusUnauthorized:
-		return &llm.Error{Code: llm.ErrUnauthorized, Message: msg, HTTPStatus: status, Provider: provider}
-	case http.StatusForbidden:
-		return &llm.Error{Code: llm.ErrForbidden, Message: msg, HTTPStatus: status, Provider: provider}
-	case http.StatusTooManyRequests:
-		return &llm.Error{Code: llm.ErrRateLimited, Message: msg, HTTPStatus: status, Retryable: true, Provider: provider}
-	case http.StatusBadRequest:
-		// Claude 可能返回参数错误、配额不足等
-		if strings.Contains(msg, "credit") || strings.Contains(msg, "quota") {
-			return &llm.Error{Code: llm.ErrQuotaExceeded, Message: msg, HTTPStatus: status, Provider: provider}
-		}
-		return &llm.Error{Code: llm.ErrInvalidRequest, Message: msg, HTTPStatus: status, Provider: provider}
-	case http.StatusServiceUnavailable, http.StatusBadGateway, http.StatusGatewayTimeout:
-		return &llm.Error{Code: llm.ErrUpstreamError, Message: msg, HTTPStatus: status, Retryable: true, Provider: provider}
-	case 529: // Claude 特有的过载状态码
-		return &llm.Error{Code: llm.ErrModelOverloaded, Message: msg, HTTPStatus: status, Retryable: true, Provider: provider}
-	default:
-		return &llm.Error{Code: llm.ErrUpstreamError, Message: msg, HTTPStatus: status, Retryable: status >= 500, Provider: provider}
-	}
-}
-
-func chooseClaudeModel(req *llm.ChatRequest, defaultModel string) string {
-	if req != nil && req.Model != "" {
-		return req.Model
-	}
-	if defaultModel != "" {
-		return defaultModel
-	}
-	// Claude 默认模型 (2026: Claude 4.5)
-	return "claude-opus-4.5-20260105"
 }
 
 func chooseMaxTokens(req *llm.ChatRequest) int {
