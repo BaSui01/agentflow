@@ -2,6 +2,7 @@ package guardrails
 
 import (
 	"context"
+	"fmt"
 )
 
 // Validator 验证器接口
@@ -18,6 +19,7 @@ type Validator interface {
 // ValidationResult 验证结果
 type ValidationResult struct {
 	Valid    bool              `json:"valid"`
+	Tripwire bool              `json:"tripwire,omitempty"` // 触发即中断整个 Agent 执行链
 	Errors   []ValidationError `json:"errors,omitempty"`
 	Warnings []string          `json:"warnings,omitempty"`
 	Metadata map[string]any    `json:"metadata,omitempty"`
@@ -52,6 +54,9 @@ func (r *ValidationResult) Merge(other *ValidationResult) {
 	if !other.Valid {
 		r.Valid = false
 	}
+	if other.Tripwire {
+		r.Tripwire = true
+	}
 	r.Errors = append(r.Errors, other.Errors...)
 	r.Warnings = append(r.Warnings, other.Warnings...)
 	for k, v := range other.Metadata {
@@ -84,6 +89,18 @@ const (
 	ErrCodeContentBlocked    = "CONTENT_BLOCKED"
 	ErrCodeValidationFailed  = "VALIDATION_FAILED"
 )
+
+// TripwireError 表示 Tripwire 被触发的错误。
+// 当验证器返回 Tripwire=true 时，整个 Agent 执行链应立即中断。
+type TripwireError struct {
+	ValidatorName string
+	Result        *ValidationResult
+}
+
+// Error 实现 error 接口
+func (e *TripwireError) Error() string {
+	return fmt.Sprintf("tripwire triggered by validator %q", e.ValidatorName)
+}
 
 // Filter 过滤器接口
 // 用于过滤和转换内容
