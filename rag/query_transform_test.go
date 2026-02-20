@@ -6,7 +6,7 @@ import (
 	"time"
 )
 
-// mockLLMProvider is a mock LLM provider for testing
+// 模拟LLMProvider是用于测试的模拟LLM提供者
 type mockLLMProvider struct {
 	responses map[string]string
 	callCount int
@@ -21,7 +21,7 @@ func newMockLLMProvider() *mockLLMProvider {
 func (m *mockLLMProvider) Complete(ctx context.Context, prompt string) (string, error) {
 	m.callCount++
 
-	// Return predefined responses based on prompt content
+	// 基于即时内容返回预定义的回复
 	if contains(prompt, "alternative search queries") {
 		return "1. What is machine learning\n2. ML basics explained\n3. Introduction to machine learning", nil
 	}
@@ -132,7 +132,7 @@ func TestQueryTransformer_Expand(t *testing.T) {
 		t.Error("expected at least one expansion")
 	}
 
-	// Original query should be included
+	// 请列入原始查询
 	found := false
 	for _, exp := range expansions {
 		if exp == query {
@@ -211,7 +211,7 @@ func TestQueryTransformer_ExtractKeywords(t *testing.T) {
 		t.Error("expected keywords to be extracted")
 	}
 
-	// Check that stop words are removed
+	// 请检查停止的单词被删除
 	for _, kw := range keywords {
 		if kw == "how" || kw == "to" || kw == "in" {
 			t.Errorf("stop word %q should not be in keywords", kw)
@@ -226,7 +226,7 @@ func TestQueryTransformer_ExtractEntities(t *testing.T) {
 	query := "How does Google use TensorFlow for machine learning?"
 	entities := transformer.extractEntities(query)
 
-	// Should find capitalized words (Google, TensorFlow)
+	// 应找到资本字( Google, TensorFlow)
 	if len(entities) == 0 {
 		t.Error("expected entities to be extracted")
 	}
@@ -289,7 +289,7 @@ func TestQueryTransformer_Rewrite(t *testing.T) {
 		t.Fatalf("rewrite failed: %v", err)
 	}
 
-	// Should remove filler words
+	// 应删除填充词
 	if rewritten == query {
 		t.Error("expected query to be rewritten")
 	}
@@ -347,19 +347,19 @@ func TestQueryTransformer_Cache(t *testing.T) {
 	ctx := context.Background()
 	query := "What is machine learning?"
 
-	// First call
+	// 第一通电话
 	result1, err := transformer.Transform(ctx, query)
 	if err != nil {
 		t.Fatalf("Transform failed: %v", err)
 	}
 
-	// Second call should hit cache
+	// 二通电话应打缓存
 	result2, err := transformer.Transform(ctx, query)
 	if err != nil {
 		t.Fatalf("Transform failed: %v", err)
 	}
 
-	// Results should be the same
+	// 结果应该是一样的
 	if result1.Transformed != result2.Transformed {
 		t.Error("expected cached result to match")
 	}
@@ -433,13 +433,13 @@ func TestTransformedQuery_JSON(t *testing.T) {
 		Keywords:    []string{"test", "query"},
 	}
 
-	// Serialize
+	// 序列化
 	data, err := tq.ToJSON()
 	if err != nil {
 		t.Fatalf("ToJSON failed: %v", err)
 	}
 
-	// Deserialize
+	// 淡化
 	tq2 := &TransformedQuery{}
 	err = tq2.FromJSON(data)
 	if err != nil {
@@ -495,7 +495,7 @@ func TestTransformCache(t *testing.T) {
 		Transformed: "transformed",
 	}
 
-	// Set and get
+	// 准备就绪
 	cache.set("key1", tq)
 	result, ok := cache.get("key1")
 	if !ok {
@@ -505,13 +505,13 @@ func TestTransformCache(t *testing.T) {
 		t.Error("expected cached value to match")
 	}
 
-	// Non-existent key
+	// 不存在密钥
 	_, ok = cache.get("nonexistent")
 	if ok {
 		t.Error("expected cache miss for non-existent key")
 	}
 
-	// Wait for expiration
+	// 等待过期
 	time.Sleep(150 * time.Millisecond)
 	_, ok = cache.get("key1")
 	if ok {

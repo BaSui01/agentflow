@@ -15,75 +15,75 @@ import (
 	"go.uber.org/zap"
 )
 
-// MilvusIndexType defines the index type for Milvus vector search.
+// MilvusIndexType定义了Milvus向量搜索的索引类型.
 type MilvusIndexType string
 
 const (
-	// MilvusIndexIVFFlat is the IVF_FLAT index type (good balance of speed and accuracy).
+	// MilvusIndexIVFFlat是IVF FLAT指数类型(速度和准确性的良好平衡).
 	MilvusIndexIVFFlat MilvusIndexType = "IVF_FLAT"
-	// MilvusIndexHNSW is the HNSW index type (high accuracy, more memory).
+	// MilvusIndexHNSW是HNSW指数类型(高精度,多为内存).
 	MilvusIndexHNSW MilvusIndexType = "HNSW"
-	// MilvusIndexFlat is the FLAT index type (brute force, highest accuracy).
+	// MilvusIndexFlat是FLAT指数类型(Brute force,最高精度).
 	MilvusIndexFlat MilvusIndexType = "FLAT"
-	// MilvusIndexIVFSQ8 is the IVF_SQ8 index type (compressed, faster but less accurate).
+	// MilvusIndexIVFSQ8是IVF SQ8指数类型(压缩,速度快但准确度更低).
 	MilvusIndexIVFSQ8 MilvusIndexType = "IVF_SQ8"
-	// MilvusIndexIVFPQ is the IVF_PQ index type (highly compressed, fastest but least accurate).
+	// MilvusIndexIVFPQ是IVF PQ指数类型(高度压缩,速度最快但最不准确).
 	MilvusIndexIVFPQ MilvusIndexType = "IVF_PQ"
 )
 
-// MilvusMetricType defines the distance metric for Milvus vector search.
+// MilvusMetricType定义了Milvus向量搜索的距离度量.
 type MilvusMetricType string
 
 const (
-	// MilvusMetricL2 is the Euclidean distance metric.
+	// MilvusMetricL2是欧几里得相距度量衡.
 	MilvusMetricL2 MilvusMetricType = "L2"
-	// MilvusMetricIP is the Inner Product (cosine similarity) metric.
+	// MilvusMetricIP是内产物(宇宙相似性)的度量衡.
 	MilvusMetricIP MilvusMetricType = "IP"
-	// MilvusMetricCosine is the Cosine similarity metric.
+	// 密尔武斯Metric Cosine是克辛类似度量衡.
 	MilvusMetricCosine MilvusMetricType = "COSINE"
 )
 
-// MilvusConfig configures the Milvus VectorStore implementation.
+// MilvusConfig配置了Milvus矢量Store执行.
 type MilvusConfig struct {
-	// Connection settings
+	// 连接设置
 	Host    string `json:"host"`
 	Port    int    `json:"port"`
 	BaseURL string `json:"base_url,omitempty"` // Override host:port if set
 
-	// Authentication
+	// 认证
 	Username string `json:"username,omitempty"`
 	Password string `json:"password,omitempty"`
 	Token    string `json:"token,omitempty"` // For Zilliz Cloud
 
-	// Collection settings
+	// 收藏设置
 	Collection string `json:"collection"`
 	Database   string `json:"database,omitempty"` // Default: "default"
 
-	// Schema settings
+	// Schema 设置
 	VectorDimension int    `json:"vector_dimension,omitempty"` // Required for auto-create
 	PrimaryField    string `json:"primary_field,omitempty"`    // Default: "id"
 	VectorField     string `json:"vector_field,omitempty"`     // Default: "vector"
 	ContentField    string `json:"content_field,omitempty"`    // Default: "content"
 	MetadataField   string `json:"metadata_field,omitempty"`   // Default: "metadata"
 
-	// Index settings
+	// 索引设置
 	IndexType   MilvusIndexType  `json:"index_type,omitempty"`   // Default: IVF_FLAT
 	MetricType  MilvusMetricType `json:"metric_type,omitempty"`  // Default: COSINE
 	IndexParams map[string]any   `json:"index_params,omitempty"` // Index-specific params
 
-	// Search settings
+	// 搜索设置
 	SearchParams map[string]any `json:"search_params,omitempty"` // Search-specific params
 
-	// Behavior settings
+	// 行为设置
 	AutoCreateCollection bool          `json:"auto_create_collection,omitempty"`
 	Timeout              time.Duration `json:"timeout,omitempty"`
 	BatchSize            int           `json:"batch_size,omitempty"` // For batch operations
 
-	// Consistency level: Strong, Session, Bounded, Eventually
+	// 一致性水平:强、会、会、会、终
 	ConsistencyLevel string `json:"consistency_level,omitempty"`
 }
 
-// MilvusStore implements VectorStore using Milvus REST API (v2).
+// 米尔武斯斯托尔执行矢量Store使用米尔武斯REST API(v2).
 type MilvusStore struct {
 	cfg     MilvusConfig
 	baseURL string
@@ -94,13 +94,13 @@ type MilvusStore struct {
 	ensureErr  error
 }
 
-// NewMilvusStore creates a Milvus-backed VectorStore.
+// NewMilvusStore 创建了由米尔武斯支撑的"矢量".
 func NewMilvusStore(cfg MilvusConfig, logger *zap.Logger) *MilvusStore {
 	if logger == nil {
 		logger = zap.NewNop()
 	}
 
-	// Apply defaults
+	// 应用默认
 	if cfg.Host == "" {
 		cfg.Host = "localhost"
 	}
@@ -138,7 +138,7 @@ func NewMilvusStore(cfg MilvusConfig, logger *zap.Logger) *MilvusStore {
 		cfg.ConsistencyLevel = "Strong"
 	}
 
-	// Set default index params based on index type
+	// 根据索引类型设定默认索引参数
 	if cfg.IndexParams == nil {
 		cfg.IndexParams = defaultIndexParams(cfg.IndexType)
 	}
@@ -146,7 +146,7 @@ func NewMilvusStore(cfg MilvusConfig, logger *zap.Logger) *MilvusStore {
 		cfg.SearchParams = defaultSearchParams(cfg.IndexType)
 	}
 
-	// Build base URL
+	// 构建基础 URL
 	baseURL := strings.TrimRight(strings.TrimSpace(cfg.BaseURL), "/")
 	if baseURL == "" {
 		baseURL = fmt.Sprintf("http://%s:%d", cfg.Host, cfg.Port)
@@ -160,7 +160,7 @@ func NewMilvusStore(cfg MilvusConfig, logger *zap.Logger) *MilvusStore {
 	}
 }
 
-// defaultIndexParams returns default index parameters for the given index type.
+// 默认 IndexParams 返回给定索引类型的默认索引参数。
 func defaultIndexParams(indexType MilvusIndexType) map[string]any {
 	switch indexType {
 	case MilvusIndexIVFFlat:
@@ -178,7 +178,7 @@ func defaultIndexParams(indexType MilvusIndexType) map[string]any {
 	}
 }
 
-// defaultSearchParams returns default search parameters for the given index type.
+// 默认SearchParams返回给定索引类型的默认搜索参数。
 func defaultSearchParams(indexType MilvusIndexType) map[string]any {
 	switch indexType {
 	case MilvusIndexIVFFlat, MilvusIndexIVFSQ8, MilvusIndexIVFPQ:
@@ -192,31 +192,31 @@ func defaultSearchParams(indexType MilvusIndexType) map[string]any {
 	}
 }
 
-// milvusNamespace is used to generate stable UUIDs from document IDs.
+// milvusNamespace用于从文档ID生成稳定的UUID.
 var milvusNamespace = uuid.MustParse("a1b2c3d4-e5f6-7890-abcd-ef1234567890")
 
-// milvusPointID generates a stable UUID from a document ID.
+// milvusPointID从文档ID生成稳定的UUID.
 func milvusPointID(docID string) string {
 	return uuid.NewSHA1(milvusNamespace, []byte(docID)).String()
 }
 
-// applyHeaders adds authentication and content-type headers to a request.
+// 应用程序标题为请求添加认证和内容类型标题。
 func (s *MilvusStore) applyHeaders(req *http.Request) {
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
 
-	// Token-based auth (Zilliz Cloud)
+	// 基于托肯的认证( Zilliz Cloud)
 	if s.cfg.Token != "" {
 		req.Header.Set("Authorization", "Bearer "+s.cfg.Token)
 	}
 
-	// Basic auth
+	// 基本认证
 	if s.cfg.Username != "" && s.cfg.Password != "" {
 		req.SetBasicAuth(s.cfg.Username, s.cfg.Password)
 	}
 }
 
-// doJSON performs a JSON HTTP request and decodes the response.
+// doJSON执行JSON HTTP请求并解码响应.
 func (s *MilvusStore) doJSON(ctx context.Context, method, path string, in any, out any) error {
 	endpoint := s.baseURL + path
 
@@ -249,7 +249,7 @@ func (s *MilvusStore) doJSON(ctx context.Context, method, path string, in any, o
 
 	s.logger.Debug("milvus response", zap.Int("status", resp.StatusCode), zap.String("body", string(respBody)))
 
-	// Milvus REST API returns 200 even for errors, check the response body
+	// Milvus REST API 返回 200 甚至是错误, 请检查响应体
 	var baseResp struct {
 		Code    int    `json:"code"`
 		Message string `json:"message,omitempty"`
@@ -274,7 +274,7 @@ func (s *MilvusStore) doJSON(ctx context.Context, method, path string, in any, o
 	return nil
 }
 
-// ensureCollection creates the collection if it doesn't exist.
+// 如果收藏不存在,则确保收藏创建。
 func (s *MilvusStore) ensureCollection(ctx context.Context, vectorDim int) error {
 	if !s.cfg.AutoCreateCollection {
 		return nil
@@ -293,30 +293,30 @@ func (s *MilvusStore) ensureCollection(ctx context.Context, vectorDim int) error
 	return s.ensureErr
 }
 
-// createCollectionIfNotExists creates the collection with schema and index.
+// 创建 Collection If NotExists 创建了图集和索引。
 func (s *MilvusStore) createCollectionIfNotExists(ctx context.Context, vectorDim int) error {
-	// Check if collection exists
+	// 检查收藏是否存在
 	exists, err := s.collectionExists(ctx)
 	if err != nil {
 		s.logger.Warn("failed to check collection existence", zap.Error(err))
-		// Continue to try creating
+		// 继续尝试创建
 	}
 	if exists {
 		s.logger.Debug("collection already exists", zap.String("collection", s.cfg.Collection))
 		return nil
 	}
 
-	// Create collection with schema
+	// 用计划创建收藏
 	if err := s.createCollection(ctx, vectorDim); err != nil {
 		return fmt.Errorf("create collection: %w", err)
 	}
 
-	// Create index on vector field
+	// 在向量字段创建索引
 	if err := s.createIndex(ctx); err != nil {
 		return fmt.Errorf("create index: %w", err)
 	}
 
-	// Load collection into memory
+	// 将收藏装入内存
 	if err := s.loadCollection(ctx); err != nil {
 		return fmt.Errorf("load collection: %w", err)
 	}
@@ -329,7 +329,7 @@ func (s *MilvusStore) createCollectionIfNotExists(ctx context.Context, vectorDim
 	return nil
 }
 
-// collectionExists checks if the collection exists.
+// 收藏 Exists 检查收藏是否存在 。
 func (s *MilvusStore) collectionExists(ctx context.Context) (bool, error) {
 	req := map[string]any{
 		"dbName":         s.cfg.Database,
@@ -350,9 +350,9 @@ func (s *MilvusStore) collectionExists(ctx context.Context) (bool, error) {
 	return resp.Data.HasCollection, nil
 }
 
-// createCollection creates a new collection with the specified schema.
+// 创建 Collection 以指定的方案创建新收藏。
 func (s *MilvusStore) createCollection(ctx context.Context, vectorDim int) error {
-	// Build schema
+	// 构建计划
 	schema := map[string]any{
 		"autoId": false,
 		"fields": []map[string]any{
@@ -410,7 +410,7 @@ func (s *MilvusStore) createCollection(ctx context.Context, vectorDim int) error
 	return nil
 }
 
-// createIndex creates an index on the vector field.
+// 创建 Index 在向量字段上创建索引。
 func (s *MilvusStore) createIndex(ctx context.Context) error {
 	req := map[string]any{
 		"dbName":         s.cfg.Database,
@@ -438,7 +438,7 @@ func (s *MilvusStore) createIndex(ctx context.Context) error {
 	return nil
 }
 
-// loadCollection loads the collection into memory for searching.
+// 加载 Collection 将收藏装入内存以进行搜索。
 func (s *MilvusStore) loadCollection(ctx context.Context) error {
 	req := map[string]any{
 		"dbName":         s.cfg.Database,
@@ -457,7 +457,7 @@ func (s *MilvusStore) loadCollection(ctx context.Context) error {
 	return nil
 }
 
-// AddDocuments adds documents to the Milvus collection.
+// 添加文档将文档添加到米尔武斯收藏中 。
 func (s *MilvusStore) AddDocuments(ctx context.Context, docs []Document) error {
 	if len(docs) == 0 {
 		return nil
@@ -466,7 +466,7 @@ func (s *MilvusStore) AddDocuments(ctx context.Context, docs []Document) error {
 		return fmt.Errorf("milvus collection is required")
 	}
 
-	// Validate embeddings and determine vector dimension
+	// 验证嵌入和确定矢量维度
 	vectorDim := s.cfg.VectorDimension
 	for i, doc := range docs {
 		if doc.ID == "" {
@@ -484,12 +484,12 @@ func (s *MilvusStore) AddDocuments(ctx context.Context, docs []Document) error {
 		}
 	}
 
-	// Ensure collection exists
+	// 确保收藏存在
 	if err := s.ensureCollection(ctx, vectorDim); err != nil {
 		return fmt.Errorf("ensure collection: %w", err)
 	}
 
-	// Process in batches
+	// 分批处理
 	batchSize := s.cfg.BatchSize
 	for i := 0; i < len(docs); i += batchSize {
 		end := i + batchSize
@@ -507,12 +507,12 @@ func (s *MilvusStore) AddDocuments(ctx context.Context, docs []Document) error {
 	return nil
 }
 
-// insertBatch inserts a batch of documents.
+// 插入批次文档。
 func (s *MilvusStore) insertBatch(ctx context.Context, docs []Document) error {
-	// Build data array
+	// 构建数据数组
 	data := make([]map[string]any, 0, len(docs))
 	for _, doc := range docs {
-		// Serialize metadata to JSON
+		// 将元数据序列化为 JSON
 		metadata := doc.Metadata
 		if metadata == nil {
 			metadata = make(map[string]any)
@@ -550,7 +550,7 @@ func (s *MilvusStore) insertBatch(ctx context.Context, docs []Document) error {
 	return nil
 }
 
-// Search searches for similar documents in the Milvus collection.
+// 在 Milvus 收藏中搜索类似的文档 。
 func (s *MilvusStore) Search(ctx context.Context, queryEmbedding []float64, topK int) ([]VectorSearchResult, error) {
 	if strings.TrimSpace(s.cfg.Collection) == "" {
 		return nil, fmt.Errorf("milvus collection is required")
@@ -562,7 +562,7 @@ func (s *MilvusStore) Search(ctx context.Context, queryEmbedding []float64, topK
 		return nil, fmt.Errorf("query embedding is required")
 	}
 
-	// Build search request
+	// 构建搜索请求
 	req := map[string]any{
 		"dbName":         s.cfg.Database,
 		"collectionName": s.cfg.Collection,
@@ -587,7 +587,7 @@ func (s *MilvusStore) Search(ctx context.Context, queryEmbedding []float64, topK
 		return nil, fmt.Errorf("search entities: %w", err)
 	}
 
-	// Convert results
+	// 转换结果
 	results := make([]VectorSearchResult, 0)
 	if len(resp.Data) > 0 {
 		for _, hit := range resp.Data[0] {
@@ -595,7 +595,7 @@ func (s *MilvusStore) Search(ctx context.Context, queryEmbedding []float64, topK
 				ID: hit.ID,
 			}
 
-			// Extract fields from entity
+			// 从实体提取字段
 			if hit.Entity != nil {
 				if docID, ok := hit.Entity["doc_id"].(string); ok {
 					doc.ID = docID
@@ -608,7 +608,7 @@ func (s *MilvusStore) Search(ctx context.Context, queryEmbedding []float64, topK
 				}
 			}
 
-			// Convert distance to score based on metric type
+			// 根据公制类型将距离转换为分数
 			score := s.distanceToScore(hit.Distance)
 
 			results = append(results, VectorSearchResult{
@@ -622,21 +622,21 @@ func (s *MilvusStore) Search(ctx context.Context, queryEmbedding []float64, topK
 	return results, nil
 }
 
-// distanceToScore converts Milvus distance to a similarity score.
+// 距离 ToScore将Milvus的距离转换成相似的分数。
 func (s *MilvusStore) distanceToScore(distance float64) float64 {
 	switch s.cfg.MetricType {
 	case MilvusMetricIP, MilvusMetricCosine:
-		// For IP and Cosine, higher is better, distance is already similarity
+		// 对IP和Cosine来说,更高更好,距离已经很相似
 		return distance
 	case MilvusMetricL2:
-		// For L2, lower is better, convert to similarity
+		// 对于L2, 下调更好, 转换为相似性
 		return 1.0 / (1.0 + distance)
 	default:
 		return 1.0 - distance
 	}
 }
 
-// DeleteDocuments deletes documents from the Milvus collection.
+// 删除文档删除米尔武斯收藏中的文档。
 func (s *MilvusStore) DeleteDocuments(ctx context.Context, ids []string) error {
 	if len(ids) == 0 {
 		return nil
@@ -645,7 +645,7 @@ func (s *MilvusStore) DeleteDocuments(ctx context.Context, ids []string) error {
 		return fmt.Errorf("milvus collection is required")
 	}
 
-	// Convert document IDs to point IDs
+	// 将文档ID转换为指向ID
 	pointIDs := make([]string, 0, len(ids))
 	for _, id := range ids {
 		if strings.TrimSpace(id) != "" {
@@ -657,7 +657,7 @@ func (s *MilvusStore) DeleteDocuments(ctx context.Context, ids []string) error {
 		return nil
 	}
 
-	// Build filter expression
+	// 构建过滤表达式
 	filter := fmt.Sprintf("%s in [%s]", s.cfg.PrimaryField, formatStringList(pointIDs))
 
 	req := map[string]any{
@@ -679,17 +679,17 @@ func (s *MilvusStore) DeleteDocuments(ctx context.Context, ids []string) error {
 	return nil
 }
 
-// UpdateDocument updates a document in the Milvus collection.
+// 更新文档更新米尔武斯收藏中的文档。
 func (s *MilvusStore) UpdateDocument(ctx context.Context, doc Document) error {
-	// Milvus doesn't have native update, so we delete and re-insert
+	// Milvus没有本地更新 所以我们删除并重新插入
 	if err := s.DeleteDocuments(ctx, []string{doc.ID}); err != nil {
 		s.logger.Warn("failed to delete document for update", zap.Error(err))
-		// Continue with insert anyway
+		// 无论如何继续插入
 	}
 	return s.AddDocuments(ctx, []Document{doc})
 }
 
-// Count returns the number of documents in the Milvus collection.
+// 计数返回 Milvus 收藏中的文档数 。
 func (s *MilvusStore) Count(ctx context.Context) (int, error) {
 	if strings.TrimSpace(s.cfg.Collection) == "" {
 		return 0, fmt.Errorf("milvus collection is required")
@@ -715,7 +715,7 @@ func (s *MilvusStore) Count(ctx context.Context) (int, error) {
 	return resp.Data.RowCount, nil
 }
 
-// DropCollection drops the collection (use with caution).
+// Drop Collection 将收藏放下( 谨慎使用) 。
 func (s *MilvusStore) DropCollection(ctx context.Context) error {
 	if strings.TrimSpace(s.cfg.Collection) == "" {
 		return fmt.Errorf("milvus collection is required")
@@ -739,7 +739,7 @@ func (s *MilvusStore) DropCollection(ctx context.Context) error {
 	return nil
 }
 
-// Flush flushes the collection to ensure data persistence.
+// Flush冲出收集器,以确保数据的持久性.
 func (s *MilvusStore) Flush(ctx context.Context) error {
 	if strings.TrimSpace(s.cfg.Collection) == "" {
 		return fmt.Errorf("milvus collection is required")
@@ -755,19 +755,19 @@ func (s *MilvusStore) Flush(ctx context.Context) error {
 		Message string `json:"message"`
 	}
 
-	// Note: Milvus 2.x REST API may not have a direct flush endpoint
-	// This is a placeholder for when it becomes available
+	// 注:Milvus 2.x REST API可能没有直接冲出端点
+	// 这是可供使用的占位符
 	if err := s.doJSON(ctx, http.MethodPost, "/v2/vectordb/collections/flush", req, &resp); err != nil {
-		// Ignore flush errors as it may not be supported
+		// 忽略冲出错误, 因为可能不被支持
 		s.logger.Debug("flush may not be supported", zap.Error(err))
 	}
 
 	return nil
 }
 
-// Helper functions
+// 辅助功能
 
-// truncateString truncates a string to the specified maximum length.
+// 将字符串切入指定的最大长度。
 func truncateString(s string, maxLen int) string {
 	if len(s) <= maxLen {
 		return s
@@ -775,7 +775,7 @@ func truncateString(s string, maxLen int) string {
 	return s[:maxLen]
 }
 
-// formatStringList formats a list of strings for Milvus filter expression.
+// 格式化StringList格式是Milvus过滤表达式的字符串列表。
 func formatStringList(strs []string) string {
 	quoted := make([]string, len(strs))
 	for i, s := range strs {

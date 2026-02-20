@@ -15,48 +15,48 @@ import (
 	"go.uber.org/zap"
 )
 
-// WeaviateConfig configures the Weaviate VectorStore implementation.
+// WeaviateConfig配置了Weaviate矢量Store执行.
 //
-// Weaviate is an open-source vector database that supports:
-// - Vector search with multiple distance metrics
-// - BM25 keyword search
-// - Hybrid search (combining vector and BM25)
-// - GraphQL API for flexible queries
-// - Automatic schema management
+// Weaviate是一个开源向量数据库,支持:
+// - 具有多距离测量标准的矢量搜索
+// - BM25关键字搜索
+// - 混合搜索(合并向量和BM25)
+// - 用于灵活查询的图表QL API
+// - 自动计划管理
 type WeaviateConfig struct {
-	// Connection settings
+	// 连接设置
 	Host    string `json:"host"`              // Weaviate host (default: localhost)
 	Port    int    `json:"port"`              // Weaviate port (default: 8080)
 	Scheme  string `json:"scheme,omitempty"`  // http or https (default: http)
 	BaseURL string `json:"base_url,omitempty"` // Full base URL (overrides host/port/scheme)
 
-	// Authentication
+	// 认证
 	APIKey string `json:"api_key,omitempty"` // API key for authentication
 
-	// Class/Collection settings
+	// 类/收集设置
 	ClassName string `json:"class_name"` // Weaviate class name (required)
 
-	// Schema settings
+	// Schema 设置
 	AutoCreateSchema bool   `json:"auto_create_schema,omitempty"` // Auto-create class if not exists
 	VectorIndexType  string `json:"vector_index_type,omitempty"`  // hnsw (default), flat
 	Distance         string `json:"distance,omitempty"`           // cosine (default), dot, l2, hamming, manhattan
 
-	// Vector settings
+	// 矢量设置
 	VectorSize int `json:"vector_size,omitempty"` // Vector dimension (optional, auto-detected)
 
-	// Hybrid search settings
+	// 混合搜索设置
 	HybridAlpha float64 `json:"hybrid_alpha,omitempty"` // Alpha for hybrid search (0=BM25, 1=vector, default: 0.5)
 
-	// Timeout settings
+	// 超时设置
 	Timeout time.Duration `json:"timeout,omitempty"` // Request timeout (default: 30s)
 
-	// Property field names
+	// 属性字段名称
 	ContentProperty  string `json:"content_property,omitempty"`  // Property for document content (default: content)
 	MetadataProperty string `json:"metadata_property,omitempty"` // Property for document metadata (default: metadata)
 	DocIDProperty    string `json:"doc_id_property,omitempty"`   // Property for original document ID (default: docId)
 }
 
-// WeaviateStore implements VectorStore using Weaviate's REST and GraphQL APIs.
+// Weaviate Store 使用 Weaviate 的 REST 和 GraphQL API 执行 VectorStore 。
 type WeaviateStore struct {
 	cfg WeaviateConfig
 
@@ -68,13 +68,13 @@ type WeaviateStore struct {
 	ensureErr  error
 }
 
-// NewWeaviateStore creates a Weaviate-backed VectorStore.
+// NewWeaviate Store创建了由Weaviate支撑的"矢量".
 func NewWeaviateStore(cfg WeaviateConfig, logger *zap.Logger) *WeaviateStore {
 	if logger == nil {
 		logger = zap.NewNop()
 	}
 
-	// Apply defaults
+	// 应用默认
 	if cfg.Host == "" {
 		cfg.Host = "localhost"
 	}
@@ -106,7 +106,7 @@ func NewWeaviateStore(cfg WeaviateConfig, logger *zap.Logger) *WeaviateStore {
 		cfg.DocIDProperty = "docId"
 	}
 
-	// Build base URL
+	// 构建基础 URL
 	baseURL := strings.TrimRight(strings.TrimSpace(cfg.BaseURL), "/")
 	if baseURL == "" {
 		baseURL = fmt.Sprintf("%s://%s:%d", cfg.Scheme, cfg.Host, cfg.Port)
@@ -120,15 +120,15 @@ func NewWeaviateStore(cfg WeaviateConfig, logger *zap.Logger) *WeaviateStore {
 	}
 }
 
-// weaviateNamespace is used to generate deterministic UUIDs from document IDs.
+// 用于从文档ID中生成决定性的UUID。
 var weaviateNamespace = uuid.MustParse("a1b2c3d4-e5f6-7890-abcd-ef1234567890")
 
-// weaviateObjectID generates a deterministic UUID from a document ID.
+// weaviate ObjectID从文档ID生成一个决定性的UUID.
 func weaviateObjectID(docID string) string {
 	return uuid.NewSHA1(weaviateNamespace, []byte(docID)).String()
 }
 
-// applyHeaders sets common headers for Weaviate requests.
+// 应用程序标题为Weaviate请求设置常见标题。
 func (s *WeaviateStore) applyHeaders(req *http.Request) {
 	req.Header.Set("Content-Type", "application/json")
 	if strings.TrimSpace(s.cfg.APIKey) != "" {
@@ -136,7 +136,7 @@ func (s *WeaviateStore) applyHeaders(req *http.Request) {
 	}
 }
 
-// doJSON performs a JSON HTTP request to Weaviate.
+// doJSON执行JSON HTTP请求去织造.
 func (s *WeaviateStore) doJSON(ctx context.Context, method, path string, in any, out any) error {
 	endpoint := s.baseURL + path
 
@@ -180,7 +180,7 @@ func (s *WeaviateStore) doJSON(ctx context.Context, method, path string, in any,
 	return nil
 }
 
-// ensureSchema creates the Weaviate class if it doesn't exist.
+// 保证Schema创建Weaviate类 如果它不存在。
 func (s *WeaviateStore) ensureSchema(ctx context.Context, vectorSize int) error {
 	if !s.cfg.AutoCreateSchema {
 		return nil
@@ -190,7 +190,7 @@ func (s *WeaviateStore) ensureSchema(ctx context.Context, vectorSize int) error 
 	}
 
 	s.ensureOnce.Do(func() {
-		// Check if class exists
+		// 检查类是否存在
 		checkPath := fmt.Sprintf("/v1/schema/%s", s.cfg.ClassName)
 		checkReq, err := http.NewRequestWithContext(ctx, http.MethodGet, s.baseURL+checkPath, nil)
 		if err != nil {
@@ -206,13 +206,13 @@ func (s *WeaviateStore) ensureSchema(ctx context.Context, vectorSize int) error 
 		}
 		defer checkResp.Body.Close()
 
-		// Class already exists
+		// 类已存在
 		if checkResp.StatusCode == http.StatusOK {
 			s.logger.Debug("weaviate class already exists", zap.String("class", s.cfg.ClassName))
 			return
 		}
 
-		// Create class schema
+		// 创建类计划
 		schema := s.buildClassSchema(vectorSize)
 
 		var resp any
@@ -227,9 +227,9 @@ func (s *WeaviateStore) ensureSchema(ctx context.Context, vectorSize int) error 
 	return s.ensureErr
 }
 
-// buildClassSchema builds the Weaviate class schema definition.
+// BuildClassSchema 构建了Weaviate类计划定义.
 func (s *WeaviateStore) buildClassSchema(vectorSize int) map[string]any {
-	// Map distance metric to Weaviate format
+	// 向 Weaviate 格式映射距离度量尺
 	distanceMetric := s.cfg.Distance
 	switch strings.ToLower(distanceMetric) {
 	case "cosine":
@@ -279,7 +279,7 @@ func (s *WeaviateStore) buildClassSchema(vectorSize int) map[string]any {
 		},
 	}
 
-	// Add inverted index config for BM25 search
+	// 为 BM25 搜索添加倒数索引配置
 	schema["invertedIndexConfig"] = map[string]any{
 		"bm25": map[string]any{
 			"b":  0.75,
@@ -293,7 +293,7 @@ func (s *WeaviateStore) buildClassSchema(vectorSize int) map[string]any {
 	return schema
 }
 
-// AddDocuments adds documents to the Weaviate store.
+// 添加文档将文档添加到 Weaviate 商店 。
 func (s *WeaviateStore) AddDocuments(ctx context.Context, docs []Document) error {
 	if len(docs) == 0 {
 		return nil
@@ -302,7 +302,7 @@ func (s *WeaviateStore) AddDocuments(ctx context.Context, docs []Document) error
 		return fmt.Errorf("weaviate class_name is required")
 	}
 
-	// Validate documents and determine vector size
+	// 校验文档并确定向量大小
 	vectorSize := s.cfg.VectorSize
 	for i, doc := range docs {
 		if doc.ID == "" {
@@ -320,15 +320,15 @@ func (s *WeaviateStore) AddDocuments(ctx context.Context, docs []Document) error
 		}
 	}
 
-	// Ensure schema exists
+	// 确保存在计划
 	if err := s.ensureSchema(ctx, vectorSize); err != nil {
 		return err
 	}
 
-	// Build batch request
+	// 构建批量请求
 	objects := make([]map[string]any, 0, len(docs))
 	for _, doc := range docs {
-		// Serialize metadata to JSON
+		// 将元数据序列化为 JSON
 		metadataJSON := "{}"
 		if doc.Metadata != nil {
 			if b, err := json.Marshal(doc.Metadata); err == nil {
@@ -349,7 +349,7 @@ func (s *WeaviateStore) AddDocuments(ctx context.Context, docs []Document) error
 		objects = append(objects, obj)
 	}
 
-	// Batch upsert
+	// 批量升级
 	batchReq := map[string]any{
 		"objects": objects,
 	}
@@ -371,7 +371,7 @@ func (s *WeaviateStore) AddDocuments(ctx context.Context, docs []Document) error
 		return err
 	}
 
-	// Check for errors in batch response
+	// 检查批量回复中的错误
 	for _, r := range batchResp.Results {
 		if r.Result.Errors != nil && len(r.Result.Errors.Error) > 0 {
 			return fmt.Errorf("weaviate batch error for object %s: %s",
@@ -383,7 +383,7 @@ func (s *WeaviateStore) AddDocuments(ctx context.Context, docs []Document) error
 	return nil
 }
 
-// Search performs a vector similarity search.
+// 搜索执行向量相似性搜索 。
 func (s *WeaviateStore) Search(ctx context.Context, queryEmbedding []float64, topK int) ([]VectorSearchResult, error) {
 	if strings.TrimSpace(s.cfg.ClassName) == "" {
 		return nil, fmt.Errorf("weaviate class_name is required")
@@ -395,13 +395,13 @@ func (s *WeaviateStore) Search(ctx context.Context, queryEmbedding []float64, to
 		return nil, fmt.Errorf("query embedding is required")
 	}
 
-	// Build GraphQL query for vector search
+	// 构建矢量搜索的图QL查询
 	query := s.buildVectorSearchQuery(queryEmbedding, topK)
 
 	return s.executeGraphQLSearch(ctx, query)
 }
 
-// HybridSearch performs a hybrid search combining vector similarity and BM25.
+// HybridSearch)进行混合搜索,结合了矢量相似性和BM25.
 func (s *WeaviateStore) HybridSearch(ctx context.Context, queryText string, queryEmbedding []float64, topK int) ([]VectorSearchResult, error) {
 	if strings.TrimSpace(s.cfg.ClassName) == "" {
 		return nil, fmt.Errorf("weaviate class_name is required")
@@ -410,13 +410,13 @@ func (s *WeaviateStore) HybridSearch(ctx context.Context, queryText string, quer
 		return []VectorSearchResult{}, nil
 	}
 
-	// Build GraphQL query for hybrid search
+	// 构建用于混合搜索的图形QL查询
 	query := s.buildHybridSearchQuery(queryText, queryEmbedding, topK)
 
 	return s.executeGraphQLSearch(ctx, query)
 }
 
-// BM25Search performs a keyword-based BM25 search.
+// BM25Search执行基于关键词的BM25搜索.
 func (s *WeaviateStore) BM25Search(ctx context.Context, queryText string, topK int) ([]VectorSearchResult, error) {
 	if strings.TrimSpace(s.cfg.ClassName) == "" {
 		return nil, fmt.Errorf("weaviate class_name is required")
@@ -428,13 +428,13 @@ func (s *WeaviateStore) BM25Search(ctx context.Context, queryText string, topK i
 		return nil, fmt.Errorf("query text is required for BM25 search")
 	}
 
-	// Build GraphQL query for BM25 search
+	// 为 BM25 搜索构建图形QL 查询
 	query := s.buildBM25SearchQuery(queryText, topK)
 
 	return s.executeGraphQLSearch(ctx, query)
 }
 
-// buildVectorSearchQuery builds a GraphQL query for vector search.
+// 构建 VectorSearchQuery 构建用于向量搜索的 GraphQL 查询 。
 func (s *WeaviateStore) buildVectorSearchQuery(vector []float64, topK int) map[string]any {
 	vectorStr := formatVector(vector)
 
@@ -464,14 +464,14 @@ func (s *WeaviateStore) buildVectorSearchQuery(vector []float64, topK int) map[s
 	}
 }
 
-// buildHybridSearchQuery builds a GraphQL query for hybrid search.
+// 构建 HybridSearchQuery 构建用于混合搜索的 GraphQL 查询 。
 func (s *WeaviateStore) buildHybridSearchQuery(queryText string, vector []float64, topK int) map[string]any {
 	vectorStr := ""
 	if len(vector) > 0 {
 		vectorStr = fmt.Sprintf(`, vector: %s`, formatVector(vector))
 	}
 
-	// Escape query text for GraphQL
+	// GraphQL 的逃逸查询文本
 	escapedQuery := escapeGraphQLString(queryText)
 
 	graphql := fmt.Sprintf(`{
@@ -502,9 +502,9 @@ func (s *WeaviateStore) buildHybridSearchQuery(queryText string, vector []float6
 	}
 }
 
-// buildBM25SearchQuery builds a GraphQL query for BM25 search.
+// 建设BM25SearchQuery为BM25搜索构建了GraphQL查询.
 func (s *WeaviateStore) buildBM25SearchQuery(queryText string, topK int) map[string]any {
-	// Escape query text for GraphQL
+	// GraphQL 的逃逸查询文本
 	escapedQuery := escapeGraphQLString(queryText)
 
 	graphql := fmt.Sprintf(`{
@@ -533,7 +533,7 @@ func (s *WeaviateStore) buildBM25SearchQuery(queryText string, topK int) map[str
 	}
 }
 
-// executeGraphQLSearch executes a GraphQL search query and parses results.
+// 执行 GraphQLSearch 执行 GraphQL 搜索查询和剖析结果。
 func (s *WeaviateStore) executeGraphQLSearch(ctx context.Context, query map[string]any) ([]VectorSearchResult, error) {
 	var resp struct {
 		Data struct {
@@ -558,12 +558,12 @@ func (s *WeaviateStore) executeGraphQLSearch(ctx context.Context, query map[stri
 		return nil, err
 	}
 
-	// Check for GraphQL errors
+	// 检查图QL出错
 	if len(resp.Errors) > 0 {
 		return nil, fmt.Errorf("weaviate graphql error: %s", resp.Errors[0].Message)
 	}
 
-	// Parse results
+	// 分析结果
 	results := resp.Data.Get[s.cfg.ClassName]
 	out := make([]VectorSearchResult, 0, len(results))
 
@@ -573,7 +573,7 @@ func (s *WeaviateStore) executeGraphQLSearch(ctx context.Context, query map[stri
 			Content: r.Content,
 		}
 
-		// Parse metadata JSON
+		// 解析元数据 JSON
 		if r.Metadata != "" && r.Metadata != "{}" {
 			var meta map[string]any
 			if err := json.Unmarshal([]byte(r.Metadata), &meta); err == nil {
@@ -581,14 +581,14 @@ func (s *WeaviateStore) executeGraphQLSearch(ctx context.Context, query map[stri
 			}
 		}
 
-		// Calculate score and distance
+		// 计算得分和距离
 		var score, distance float64
 		if r.Additional.Certainty != nil {
 			score = *r.Additional.Certainty
 			distance = 1.0 - score
 		} else if r.Additional.Distance != nil {
 			distance = *r.Additional.Distance
-			// Convert distance to score (assuming cosine distance)
+			// 将距离转换为分数( 假设余弦距离)
 			score = 1.0 - distance
 		} else if r.Additional.Score != nil {
 			score = *r.Additional.Score
@@ -605,7 +605,7 @@ func (s *WeaviateStore) executeGraphQLSearch(ctx context.Context, query map[stri
 	return out, nil
 }
 
-// DeleteDocuments deletes documents by their IDs.
+// 删除文档用其标识删除文档。
 func (s *WeaviateStore) DeleteDocuments(ctx context.Context, ids []string) error {
 	if len(ids) == 0 {
 		return nil
@@ -614,7 +614,7 @@ func (s *WeaviateStore) DeleteDocuments(ctx context.Context, ids []string) error
 		return fmt.Errorf("weaviate class_name is required")
 	}
 
-	// Delete each document by its Weaviate object ID
+	// 删除每个文档的 Weaviate 对象ID
 	for _, id := range ids {
 		if strings.TrimSpace(id) == "" {
 			continue
@@ -635,7 +635,7 @@ func (s *WeaviateStore) DeleteDocuments(ctx context.Context, ids []string) error
 		}
 		defer resp.Body.Close()
 
-		// 404 is acceptable (object doesn't exist)
+		// 404是可以接受的(对象不存在)
 		if resp.StatusCode != http.StatusNoContent && resp.StatusCode != http.StatusNotFound {
 			return fmt.Errorf("weaviate delete failed: status=%d", resp.StatusCode)
 		}
@@ -645,18 +645,18 @@ func (s *WeaviateStore) DeleteDocuments(ctx context.Context, ids []string) error
 	return nil
 }
 
-// UpdateDocument updates a single document (upsert).
+// 更新文档更新一个文档(upsert).
 func (s *WeaviateStore) UpdateDocument(ctx context.Context, doc Document) error {
 	return s.AddDocuments(ctx, []Document{doc})
 }
 
-// Count returns the total number of documents in the collection.
+// 计数返回收藏中的文档总数。
 func (s *WeaviateStore) Count(ctx context.Context) (int, error) {
 	if strings.TrimSpace(s.cfg.ClassName) == "" {
 		return 0, fmt.Errorf("weaviate class_name is required")
 	}
 
-	// Use GraphQL aggregate query
+	// 使用 GraphQL 汇总查询
 	graphql := fmt.Sprintf(`{
 		Aggregate {
 			%s {
@@ -700,7 +700,7 @@ func (s *WeaviateStore) Count(ctx context.Context) (int, error) {
 	return results[0].Meta.Count, nil
 }
 
-// DeleteClass deletes the entire Weaviate class (use with caution).
+// 删除Class删除整个Weviate类(谨慎使用).
 func (s *WeaviateStore) DeleteClass(ctx context.Context) error {
 	if strings.TrimSpace(s.cfg.ClassName) == "" {
 		return fmt.Errorf("weaviate class_name is required")
@@ -723,7 +723,7 @@ func (s *WeaviateStore) DeleteClass(ctx context.Context) error {
 		return fmt.Errorf("weaviate delete class failed: status=%d", resp.StatusCode)
 	}
 
-	// Reset ensureOnce so schema can be recreated
+	// 重置保证, 这样可以重新创建计划
 	s.ensureOnce = sync.Once{}
 	s.ensureErr = nil
 
@@ -731,7 +731,7 @@ func (s *WeaviateStore) DeleteClass(ctx context.Context) error {
 	return nil
 }
 
-// GetSchema returns the current class schema.
+// GetSchema 返回当前类计划 。
 func (s *WeaviateStore) GetSchema(ctx context.Context) (map[string]any, error) {
 	if strings.TrimSpace(s.cfg.ClassName) == "" {
 		return nil, fmt.Errorf("weaviate class_name is required")
@@ -746,9 +746,9 @@ func (s *WeaviateStore) GetSchema(ctx context.Context) (map[string]any, error) {
 	return schema, nil
 }
 
-// Helper functions
+// 辅助功能
 
-// formatVector formats a float64 slice as a JSON array string.
+// 格式Vector将一个浮点64切片作为JSON数组字符串。
 func formatVector(v []float64) string {
 	parts := make([]string, len(v))
 	for i, f := range v {
@@ -757,7 +757,7 @@ func formatVector(v []float64) string {
 	return "[" + strings.Join(parts, ",") + "]"
 }
 
-// escapeGraphQLString escapes a string for use in GraphQL queries.
+// 逃出 GraphQLSTring 摆脱了用于 GraphQL 查询的字符串。
 func escapeGraphQLString(s string) string {
 	s = strings.ReplaceAll(s, "\\", "\\\\")
 	s = strings.ReplaceAll(s, "\"", "\\\"")

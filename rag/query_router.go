@@ -1,5 +1,5 @@
-// Package rag provides intelligent query routing for retrieval strategies.
-// This module routes queries to the most appropriate retrieval method based on query characteristics.
+// 包布为检索策略提供智能查询路由.
+// 这个模块会根据查询特性,向最合适的检索方法查询.
 package rag
 
 import (
@@ -15,9 +15,9 @@ import (
 	"go.uber.org/zap"
 )
 
-// ====== Query Routing Types ======
+// QQ 查询运行类型QQ
 
-// RetrievalStrategy represents a retrieval strategy
+// 检索策略代表检索策略
 type RetrievalStrategy string
 
 const (
@@ -31,7 +31,7 @@ const (
 	StrategySparse      RetrievalStrategy = "sparse"       // Sparse retrieval (TF-IDF)
 )
 
-// RoutingDecision represents the routing decision for a query
+// 运行决定代表查询的路径决定
 type RoutingDecision struct {
 	Query            string                       `json:"query"`
 	SelectedStrategy RetrievalStrategy            `json:"selected_strategy"`
@@ -42,7 +42,7 @@ type RoutingDecision struct {
 	Timestamp        time.Time                    `json:"timestamp"`
 }
 
-// StrategyConfig configures a retrieval strategy
+// 策略Config 配置检索策略
 type StrategyConfig struct {
 	Strategy    RetrievalStrategy `json:"strategy"`
 	Enabled     bool              `json:"enabled"`
@@ -52,7 +52,7 @@ type StrategyConfig struct {
 	Conditions  []RoutingCondition `json:"conditions"`  // Conditions that favor this strategy
 }
 
-// RoutingCondition represents a condition for routing
+// 路由条件代表了路由条件
 type RoutingCondition struct {
 	Type      string  `json:"type"`       // "intent", "keyword", "length", "complexity"
 	Value     string  `json:"value"`      // Value to match
@@ -60,32 +60,32 @@ type RoutingCondition struct {
 	Operator  string  `json:"operator"`   // "equals", "contains", "greater", "less"
 }
 
-// QueryRouterConfig configures the query router
+// 查询路透社 Config 配置查询路由器
 type QueryRouterConfig struct {
-	// Strategy configurations
+	// 战略配置
 	Strategies []StrategyConfig `json:"strategies"`
 
-	// Default strategy
+	// 默认策略
 	DefaultStrategy RetrievalStrategy `json:"default_strategy"`
 
-	// Routing settings
+	// 运行设置
 	EnableLLMRouting     bool    `json:"enable_llm_routing"`      // Use LLM for routing decisions
 	EnableAdaptiveRouting bool   `json:"enable_adaptive_routing"` // Learn from feedback
 	ConfidenceThreshold  float64 `json:"confidence_threshold"`    // Min confidence for routing
 
-	// Fallback settings
+	// 后退设置
 	EnableFallback       bool              `json:"enable_fallback"`
 	FallbackStrategy     RetrievalStrategy `json:"fallback_strategy"`
 
-	// Caching
+	// 缓存
 	EnableCache bool          `json:"enable_cache"`
 	CacheTTL    time.Duration `json:"cache_ttl"`
 
-	// Logging
+	// 日志
 	LogDecisions bool `json:"log_decisions"`
 }
 
-// DefaultQueryRouterConfig returns default configuration
+// 默认查询程序 Config 返回默认配置
 func DefaultQueryRouterConfig() QueryRouterConfig {
 	return QueryRouterConfig{
 		Strategies: []StrategyConfig{
@@ -167,9 +167,9 @@ func DefaultQueryRouterConfig() QueryRouterConfig {
 	}
 }
 
-// ====== Query Router ======
+// 查询路由器
 
-// QueryRouter routes queries to appropriate retrieval strategies
+// 查询路透查询到适当的检索策略
 type QueryRouter struct {
 	config           QueryRouterConfig
 	queryTransformer *QueryTransformer
@@ -179,7 +179,7 @@ type QueryRouter struct {
 	logger           *zap.Logger
 }
 
-// routingCache caches routing decisions
+// 路径 缓存缓存路由决定
 type routingCache struct {
 	entries map[string]*RoutingDecision
 	mu      sync.RWMutex
@@ -210,13 +210,13 @@ func (c *routingCache) set(key string, decision *RoutingDecision) {
 	c.entries[key] = decision
 }
 
-// feedbackStore stores routing feedback for adaptive learning
+// 储存用于适应性学习的路由反馈
 type feedbackStore struct {
 	feedback map[string][]RoutingFeedback
 	mu       sync.RWMutex
 }
 
-// RoutingFeedback represents feedback on a routing decision
+// RoutingFeedback代表了对路线决定的反馈
 type RoutingFeedback struct {
 	Query            string            `json:"query"`
 	SelectedStrategy RetrievalStrategy `json:"selected_strategy"`
@@ -238,7 +238,7 @@ func (s *feedbackStore) add(feedback RoutingFeedback) {
 	key := string(feedback.SelectedStrategy)
 	s.feedback[key] = append(s.feedback[key], feedback)
 
-	// Keep only recent feedback
+	// 只保留最近反馈
 	if len(s.feedback[key]) > 1000 {
 		s.feedback[key] = s.feedback[key][500:]
 	}
@@ -263,7 +263,7 @@ func (s *feedbackStore) getSuccessRate(strategy RetrievalStrategy) float64 {
 	return float64(successCount) / float64(len(feedbacks))
 }
 
-// NewQueryRouter creates a new query router
+// 新建查询路由器创建新的查询路由器
 func NewQueryRouter(
 	config QueryRouterConfig,
 	queryTransformer *QueryTransformer,
@@ -294,9 +294,9 @@ func NewQueryRouter(
 	}
 }
 
-// Route determines the best retrieval strategy for a query
+// 路由决定查询的最佳检索策略
 func (r *QueryRouter) Route(ctx context.Context, query string) (*RoutingDecision, error) {
-	// Check cache
+	// 检查缓存
 	if r.cache != nil {
 		if cached, ok := r.cache.get(query); ok {
 			r.logger.Debug("cache hit", zap.String("query", query))
@@ -311,11 +311,11 @@ func (r *QueryRouter) Route(ctx context.Context, query string) (*RoutingDecision
 		Timestamp: time.Now(),
 	}
 
-	// Analyze query characteristics
+	// 分析查询特性
 	queryFeatures := r.analyzeQuery(ctx, query)
 	decision.Metadata["features"] = queryFeatures
 
-	// Calculate scores for each strategy
+	// 计算每个策略的分数
 	for _, strategyConfig := range r.config.Strategies {
 		if !strategyConfig.Enabled {
 			continue
@@ -323,7 +323,7 @@ func (r *QueryRouter) Route(ctx context.Context, query string) (*RoutingDecision
 
 		score := r.calculateStrategyScore(strategyConfig, queryFeatures)
 
-		// Apply adaptive learning adjustment
+		// 应用适应性学习调整
 		if r.config.EnableAdaptiveRouting && r.feedbackStore != nil {
 			successRate := r.feedbackStore.getSuccessRate(strategyConfig.Strategy)
 			score *= (0.5 + successRate) // Adjust based on historical success
@@ -332,11 +332,11 @@ func (r *QueryRouter) Route(ctx context.Context, query string) (*RoutingDecision
 		decision.Scores[strategyConfig.Strategy] = score
 	}
 
-	// Use LLM for complex routing decisions
+	// 在复杂的路由决定中使用 LLM
 	if r.config.EnableLLMRouting && r.llmProvider != nil {
 		llmDecision, err := r.routeWithLLM(ctx, query, queryFeatures)
 		if err == nil && llmDecision != nil {
-			// Blend LLM decision with rule-based scores
+			// 将 LLM 决定与基于规则的分数合并
 			for strategy, score := range llmDecision.Scores {
 				if existingScore, ok := decision.Scores[strategy]; ok {
 					decision.Scores[strategy] = (existingScore + score) / 2
@@ -348,10 +348,10 @@ func (r *QueryRouter) Route(ctx context.Context, query string) (*RoutingDecision
 		}
 	}
 
-	// Select best strategy
+	// 选择最佳策略
 	bestStrategy, bestScore := r.selectBestStrategy(decision.Scores)
 
-	// Check confidence threshold
+	// 检查信任阈值
 	if bestScore < r.config.ConfidenceThreshold {
 		if r.config.EnableFallback {
 			bestStrategy = r.config.FallbackStrategy
@@ -365,12 +365,12 @@ func (r *QueryRouter) Route(ctx context.Context, query string) (*RoutingDecision
 	decision.SelectedStrategy = bestStrategy
 	decision.Confidence = bestScore
 
-	// Cache decision
+	// 缓存决定
 	if r.cache != nil {
 		r.cache.set(query, decision)
 	}
 
-	// Log decision
+	// 日志决定
 	if r.config.LogDecisions {
 		r.logger.Info("routing decision",
 			zap.String("query", truncateContext(query, 50)),
@@ -381,7 +381,7 @@ func (r *QueryRouter) Route(ctx context.Context, query string) (*RoutingDecision
 	return decision, nil
 }
 
-// QueryFeatures represents analyzed features of a query
+// 查询Features 代表已分析的查询特性
 type QueryFeatures struct {
 	Intent      QueryIntent `json:"intent"`
 	Complexity  string      `json:"complexity"`  // "low", "medium", "high"
@@ -394,7 +394,7 @@ type QueryFeatures struct {
 	WordCount   int         `json:"word_count"`
 }
 
-// analyzeQuery analyzes query characteristics
+// 分析查询特性
 func (r *QueryRouter) analyzeQuery(ctx context.Context, query string) QueryFeatures {
 	features := QueryFeatures{
 		Intent:     IntentUnknown,
@@ -403,7 +403,7 @@ func (r *QueryRouter) analyzeQuery(ctx context.Context, query string) QueryFeatu
 		WordCount:  len(strings.Fields(query)),
 	}
 
-	// Determine length category
+	// 确定长度类别
 	if features.WordCount <= 5 {
 		features.Length = "short"
 	} else if features.WordCount <= 15 {
@@ -412,7 +412,7 @@ func (r *QueryRouter) analyzeQuery(ctx context.Context, query string) QueryFeatu
 		features.Length = "long"
 	}
 
-	// Check if question
+	// 检查问题
 	features.IsQuestion = strings.HasSuffix(strings.TrimSpace(query), "?") ||
 		strings.HasPrefix(strings.ToLower(query), "what") ||
 		strings.HasPrefix(strings.ToLower(query), "how") ||
@@ -421,7 +421,7 @@ func (r *QueryRouter) analyzeQuery(ctx context.Context, query string) QueryFeatu
 		strings.HasPrefix(strings.ToLower(query), "where") ||
 		strings.HasPrefix(strings.ToLower(query), "who")
 
-	// Use query transformer for detailed analysis
+	// 使用查询变压器进行详细分析
 	if r.queryTransformer != nil {
 		transformed, err := r.queryTransformer.Transform(ctx, query)
 		if err == nil {
@@ -433,31 +433,31 @@ func (r *QueryRouter) analyzeQuery(ctx context.Context, query string) QueryFeatu
 		}
 	}
 
-	// Determine complexity
+	// 确定复杂性
 	features.Complexity = r.determineComplexity(query, features)
 
 	return features
 }
 
-// determineComplexity determines query complexity
+// 复杂度决定了查询的复杂性
 func (r *QueryRouter) determineComplexity(query string, features QueryFeatures) string {
 	complexityScore := 0.0
 
-	// Length contributes to complexity
+	// 长度增加复杂性
 	if features.Length == "long" {
 		complexityScore += 0.3
 	} else if features.Length == "medium" {
 		complexityScore += 0.15
 	}
 
-	// Multiple entities increase complexity
+	// 多个实体增加复杂性
 	if len(features.Entities) > 2 {
 		complexityScore += 0.2
 	} else if len(features.Entities) > 0 {
 		complexityScore += 0.1
 	}
 
-	// Certain intents are more complex
+	// 某些意图比较复杂
 	complexIntents := map[QueryIntent]float64{
 		IntentAnalytical:   0.3,
 		IntentComparison:   0.25,
@@ -469,7 +469,7 @@ func (r *QueryRouter) determineComplexity(query string, features QueryFeatures) 
 		complexityScore += score
 	}
 
-	// Check for complex query patterns
+	// 检查复杂的查询模式
 	queryLower := strings.ToLower(query)
 	complexPatterns := []string{
 		"compare", "difference between", "relationship",
@@ -482,7 +482,7 @@ func (r *QueryRouter) determineComplexity(query string, features QueryFeatures) 
 		}
 	}
 
-	// Categorize complexity
+	// 分类复杂性
 	if complexityScore >= 0.6 {
 		return "high"
 	} else if complexityScore >= 0.3 {
@@ -491,22 +491,22 @@ func (r *QueryRouter) determineComplexity(query string, features QueryFeatures) 
 	return "low"
 }
 
-// calculateStrategyScore calculates the score for a strategy
+// 计算策略的分数
 func (r *QueryRouter) calculateStrategyScore(config StrategyConfig, features QueryFeatures) float64 {
 	score := config.Weight
 
-	// Apply conditions
+	// 应用条件
 	for _, condition := range config.Conditions {
 		if r.matchCondition(condition, features) {
 			score += condition.Weight
 		}
 	}
 
-	// Normalize score
+	// 将分数正常化
 	return math.Min(score, 2.0) / 2.0
 }
 
-// matchCondition checks if a condition matches the query features
+// 匹配条件检查, 如果条件符合查询功能
 func (r *QueryRouter) matchCondition(condition RoutingCondition, features QueryFeatures) bool {
 	switch condition.Type {
 	case "intent":
@@ -530,7 +530,7 @@ func (r *QueryRouter) matchCondition(condition RoutingCondition, features QueryF
 		return fmt.Sprintf("%v", features.HasEntities) == condition.Value
 
 	case "has_context":
-		// This would be set externally based on conversation context
+		// 外部根据对话背景设置
 		return false
 
 	case "is_question":
@@ -540,9 +540,9 @@ func (r *QueryRouter) matchCondition(condition RoutingCondition, features QueryF
 	return false
 }
 
-// routeWithLLM uses LLM for routing decision
+// 路由 WithLLM 在路由决定中使用LLM
 func (r *QueryRouter) routeWithLLM(ctx context.Context, query string, features QueryFeatures) (*RoutingDecision, error) {
-	// Build strategy descriptions
+	// 构建战略说明
 	strategyDescriptions := `
 - vector: Best for semantic similarity search, conceptual queries, and finding related content
 - bm25: Best for exact keyword matching, specific terms, and technical queries
@@ -586,14 +586,14 @@ Respond in JSON format:
 		return nil, err
 	}
 
-	// Parse response
+	// 解析响应
 	var llmResponse struct {
 		Strategy   string  `json:"strategy"`
 		Confidence float64 `json:"confidence"`
 		Reasoning  string  `json:"reasoning"`
 	}
 
-	// Try to extract JSON from response
+	// 尝试从响应中提取 JSON
 	response = strings.TrimSpace(response)
 	startIdx := strings.Index(response, "{")
 	endIdx := strings.LastIndex(response, "}")
@@ -614,13 +614,13 @@ Respond in JSON format:
 		Timestamp:        time.Now(),
 	}
 
-	// Set score for selected strategy
+	// 设定选定策略的分数
 	decision.Scores[decision.SelectedStrategy] = llmResponse.Confidence
 
 	return decision, nil
 }
 
-// selectBestStrategy selects the strategy with the highest score
+// 选择得分最高的战略
 func (r *QueryRouter) selectBestStrategy(scores map[RetrievalStrategy]float64) (RetrievalStrategy, float64) {
 	var bestStrategy RetrievalStrategy
 	var bestScore float64 = -1
@@ -639,9 +639,9 @@ func (r *QueryRouter) selectBestStrategy(scores map[RetrievalStrategy]float64) (
 	return bestStrategy, bestScore
 }
 
-// ====== Feedback Methods ======
+// 反馈方法
 
-// RecordFeedback records feedback on a routing decision
+// 记录 Feedback 记录对路径决定的反馈
 func (r *QueryRouter) RecordFeedback(feedback RoutingFeedback) {
 	if r.feedbackStore != nil {
 		r.feedbackStore.add(feedback)
@@ -651,7 +651,7 @@ func (r *QueryRouter) RecordFeedback(feedback RoutingFeedback) {
 	}
 }
 
-// GetStrategyStats returns statistics for each strategy
+// 获取战略数据返回每个战略的统计数据
 func (r *QueryRouter) GetStrategyStats() map[RetrievalStrategy]StrategyStats {
 	stats := make(map[RetrievalStrategy]StrategyStats)
 
@@ -688,7 +688,7 @@ func (r *QueryRouter) GetStrategyStats() map[RetrievalStrategy]StrategyStats {
 	return stats
 }
 
-// StrategyStats represents statistics for a strategy
+// 战略统计数据代表一项战略的统计数据
 type StrategyStats struct {
 	Strategy     RetrievalStrategy `json:"strategy"`
 	TotalCalls   int               `json:"total_calls"`
@@ -696,9 +696,9 @@ type StrategyStats struct {
 	AverageScore float64           `json:"average_score"`
 }
 
-// ====== Multi-Strategy Routing ======
+// 多战略路线
 
-// MultiStrategyDecision represents a decision to use multiple strategies
+// 多战略决定代表使用多战略的决定
 type MultiStrategyDecision struct {
 	Query      string                        `json:"query"`
 	Strategies []StrategyWithWeight          `json:"strategies"`
@@ -706,21 +706,21 @@ type MultiStrategyDecision struct {
 	Timestamp  time.Time                     `json:"timestamp"`
 }
 
-// StrategyWithWeight represents a strategy with its weight
+// 战略 用Weight代表着一个有分量的策略
 type StrategyWithWeight struct {
 	Strategy RetrievalStrategy `json:"strategy"`
 	Weight   float64           `json:"weight"`
 }
 
-// RouteMulti determines multiple strategies for ensemble retrieval
+// Route Multision 确定多个组合检索策略
 func (r *QueryRouter) RouteMulti(ctx context.Context, query string, maxStrategies int) (*MultiStrategyDecision, error) {
-	// Get single routing decision first
+	// 先获得单一路线决定
 	decision, err := r.Route(ctx, query)
 	if err != nil {
 		return nil, err
 	}
 
-	// Sort strategies by score
+	// 按分数排序策略
 	type strategyScore struct {
 		strategy RetrievalStrategy
 		score    float64
@@ -735,7 +735,7 @@ func (r *QueryRouter) RouteMulti(ctx context.Context, query string, maxStrategie
 		return scores[i].score > scores[j].score
 	})
 
-	// Select top strategies
+	// 选择顶级策略
 	multiDecision := &MultiStrategyDecision{
 		Query:      query,
 		Strategies: make([]StrategyWithWeight, 0, maxStrategies),
@@ -754,7 +754,7 @@ func (r *QueryRouter) RouteMulti(ctx context.Context, query string, maxStrategie
 		}
 	}
 
-	// Normalize weights
+	// 使权重正常化
 	if totalScore > 0 {
 		for i := range multiDecision.Strategies {
 			multiDecision.Strategies[i].Weight /= totalScore
@@ -764,9 +764,9 @@ func (r *QueryRouter) RouteMulti(ctx context.Context, query string, maxStrategie
 	return multiDecision, nil
 }
 
-// ====== Batch Routing ======
+// 批量运行
 
-// RouteBatch routes multiple queries
+// RouteBatch 路线 多个查询
 func (r *QueryRouter) RouteBatch(ctx context.Context, queries []string) ([]*RoutingDecision, error) {
 	results := make([]*RoutingDecision, len(queries))
 	var wg sync.WaitGroup
@@ -793,14 +793,14 @@ func (r *QueryRouter) RouteBatch(ctx context.Context, queries []string) ([]*Rout
 	return results, firstErr
 }
 
-// ====== JSON Serialization ======
+// JSON 序列化
 
-// ToJSON serializes a RoutingDecision to JSON
+// ToJSON 串行决定给JSON
 func (d *RoutingDecision) ToJSON() ([]byte, error) {
 	return json.Marshal(d)
 }
 
-// FromJSON deserializes a RoutingDecision from JSON
+// JSON将JSON的例行决定断章取义
 func (d *RoutingDecision) FromJSON(data []byte) error {
 	return json.Unmarshal(data, d)
 }

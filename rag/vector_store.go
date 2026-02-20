@@ -152,16 +152,16 @@ func (s *InMemoryVectorStore) UpdateDocument(ctx context.Context, doc Document) 
 	return fmt.Errorf("document %s not found", doc.ID)
 }
 
-// Count returns document count
+// 计数返回文档计数
 func (s *InMemoryVectorStore) Count(ctx context.Context) (int, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return len(s.documents), nil
 }
 
-// ====== Utility Functions ======
+// 功用函数
 
-// cosineSimilarity calculates cosine similarity
+// 等同度计算等同度
 func cosineSimilarity(a, b []float64) float64 {
 	if len(a) != len(b) {
 		return 0.0

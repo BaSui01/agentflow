@@ -12,7 +12,7 @@ import (
 )
 
 // ---------------------------------------------------------------------------
-// DefaultWebRetrieverConfig
+// 默认Web Retriever 配置
 // ---------------------------------------------------------------------------
 
 func TestDefaultWebRetrieverConfig(t *testing.T) {
@@ -35,14 +35,14 @@ func TestDefaultWebRetrieverConfig(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// NewWebRetriever
+// 新网络检索器
 // ---------------------------------------------------------------------------
 
 func TestNewWebRetriever_NilLogger(t *testing.T) {
 	t.Parallel()
 
 	cfg := DefaultWebRetrieverConfig()
-	// Must not panic when logger is nil.
+	// 当日志为零时,千万不要惊慌。
 	wr := NewWebRetriever(cfg, nil, nil, nil)
 	assert.NotNil(t, wr)
 }
@@ -70,7 +70,7 @@ func TestNewWebRetriever_CacheEnabled(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// Retrieve – web-only (nil localRetriever)
+// 检索 – 仅网络( 无本地检索)
 // ---------------------------------------------------------------------------
 
 func fakeWebSearch(results []WebRetrievalResult, err error) WebSearchFunc {
@@ -97,21 +97,21 @@ func TestRetrieve_WebOnly(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotEmpty(t, results)
 
-	// All results should come from web (source=web in metadata).
+	// 所有结果应来自网络(来源=元数据中的网络)。
 	for _, r := range results {
 		src, ok := r.Document.Metadata["source"]
 		assert.True(t, ok)
 		assert.Equal(t, "web", src)
 	}
 
-	// Results should be sorted by FinalScore descending.
+	// 结果应该通过最后得分降分来排序。
 	for i := 1; i < len(results); i++ {
 		assert.GreaterOrEqual(t, results[i-1].FinalScore, results[i].FinalScore)
 	}
 }
 
 // ---------------------------------------------------------------------------
-// Retrieve – local + web merge
+// 检索 – 本地 + 网络合并
 // ---------------------------------------------------------------------------
 
 func TestRetrieve_MergesLocalAndWeb(t *testing.T) {
@@ -126,7 +126,7 @@ func TestRetrieve_MergesLocalAndWeb(t *testing.T) {
 	cfg.MinScore = 0.0
 	cfg.ParallelSearch = false // sequential for determinism
 
-	// Build a minimal HybridRetriever with one indexed document.
+	// 以一个索引文档构建一个最小的HybridRetriever。
 	localCfg := HybridRetrievalConfig{
 		TopK:         5,
 		UseBM25:      true,
@@ -145,7 +145,7 @@ func TestRetrieve_MergesLocalAndWeb(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotEmpty(t, results)
 
-	// We should see results from both sources.
+	// 我们应该从两个方面看到结果。
 	hasLocal, hasWeb := false, false
 	for _, r := range results {
 		if src, ok := r.Document.Metadata["source"]; ok && src == "web" {
@@ -158,7 +158,7 @@ func TestRetrieve_MergesLocalAndWeb(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// Deduplication
+// 复制
 // ---------------------------------------------------------------------------
 
 func TestRetrieve_DeduplicateByURL(t *testing.T) {
@@ -180,7 +180,7 @@ func TestRetrieve_DeduplicateByURL(t *testing.T) {
 	results, err := wr.Retrieve(context.Background(), "test", nil)
 	require.NoError(t, err)
 
-	// The duplicate URL should appear only once.
+	// 复制的 URL 应当只显示一次 。
 	urls := map[string]int{}
 	for _, r := range results {
 		if u, ok := r.Document.Metadata["url"]; ok {
@@ -212,7 +212,7 @@ func TestRetrieve_NoDeduplicate(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// Fallback behaviour
+// 退后行为
 // ---------------------------------------------------------------------------
 
 func TestRetrieve_FallbackToLocal_WhenWebFails(t *testing.T) {
@@ -255,7 +255,7 @@ func TestRetrieve_NoFallback_WhenWebFails(t *testing.T) {
 
 	failingWeb := fakeWebSearch(nil, fmt.Errorf("network error"))
 
-	// No local retriever either, so both fail.
+	// 没有本地检索器,所以都失败了。
 	wr := NewWebRetriever(cfg, nil, failingWeb, zap.NewNop())
 
 	_, err := wr.Retrieve(context.Background(), "test query", nil)
@@ -270,7 +270,7 @@ func TestRetrieve_BothFail(t *testing.T) {
 	cfg.ParallelSearch = false
 	cfg.FallbackToLocal = false // disable fallback so web error propagates
 
-	// webSearchFn is nil => searchWeb returns error "web search function not configured"
+	// webSearchFn 是零 QQ 搜索Web 返回错误“ 未配置网络搜索功能 ”
 	wr := NewWebRetriever(cfg, nil, nil, zap.NewNop())
 
 	_, err := wr.Retrieve(context.Background(), "test", nil)
@@ -279,7 +279,7 @@ func TestRetrieve_BothFail(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// MinScore filtering
+// 最小分数过滤
 // ---------------------------------------------------------------------------
 
 func TestRetrieve_MinScoreFilter(t *testing.T) {
@@ -306,13 +306,13 @@ func TestRetrieve_MinScoreFilter(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// TopK limiting
+// TopK 限制
 // ---------------------------------------------------------------------------
 
 func TestRetrieve_TopKLimit(t *testing.T) {
 	t.Parallel()
 
-	// Generate more results than TopK.
+	// 生成比TopK更多的结果.
 	webResults := make([]WebRetrievalResult, 20)
 	for i := range webResults {
 		webResults[i] = WebRetrievalResult{

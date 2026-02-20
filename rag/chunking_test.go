@@ -6,11 +6,11 @@ import (
 	"go.uber.org/zap"
 )
 
-// mockTokenizer implements Tokenizer interface for testing
+// 模拟器工具 用于测试的切换器接口
 type mockTokenizer struct{}
 
 func (m *mockTokenizer) CountTokens(text string) int {
-	// Simple approximation: ~4 chars per token
+	// 简单近似 : ~ 4 个字符/ 每个符号
 	return len(text) / 4
 }
 
@@ -84,7 +84,7 @@ func TestDocumentChunker_FixedSizeChunking(t *testing.T) {
 		t.Error("expected at least one chunk")
 	}
 
-	// Verify chunks have content
+	// 校验块有内容
 	for i, chunk := range chunks {
 		if chunk.Content == "" {
 			t.Errorf("chunk %d has empty content", i)
@@ -121,7 +121,7 @@ Fourth paragraph with even more content to test the recursive chunking algorithm
 		t.Error("expected at least one chunk")
 	}
 
-	// Verify chunks maintain some structure
+	// 校验块保持一些结构
 	for i, chunk := range chunks {
 		if chunk.Content == "" {
 			t.Errorf("chunk %d has empty content", i)
@@ -212,7 +212,7 @@ func TestDocumentChunker_EmptyDocument(t *testing.T) {
 
 	chunks := chunker.ChunkDocument(doc)
 
-	// Empty document should return empty or single empty chunk
+	// 空文档应返回空或单个空块
 	if len(chunks) > 1 {
 		t.Errorf("expected at most 1 chunk for empty document, got %d", len(chunks))
 	}
@@ -237,12 +237,12 @@ func TestDocumentChunker_SmallDocument(t *testing.T) {
 
 	chunks := chunker.ChunkDocument(doc)
 
-	// Small document may result in 0 or 1 chunk depending on implementation
+	// 视执行情况,小文件可能导致0或1个块
 	if len(chunks) > 1 {
 		t.Errorf("expected at most 1 chunk for small document, got %d", len(chunks))
 	}
 
-	// If there's a chunk, verify content
+	// 如果有块,请核对内容
 	if len(chunks) == 1 && chunks[0].Content != doc.Content {
 		t.Errorf("expected chunk content to match document content")
 	}
@@ -276,7 +276,7 @@ func BenchmarkDocumentChunker_RecursiveChunking(b *testing.B) {
 
 	chunker := NewDocumentChunker(config, tokenizer, logger)
 
-	// Create a large document
+	// 创建大文档
 	content := ""
 	for i := 0; i < 100; i++ {
 		content += "This is paragraph number " + string(rune('0'+i%10)) + ". It contains some text for testing. "

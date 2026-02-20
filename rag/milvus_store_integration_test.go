@@ -11,12 +11,12 @@ import (
 	"go.uber.org/zap"
 )
 
-// TestMilvusStore_Integration tests the Milvus store against a real Milvus instance.
-// Run with: go test -tags=integration -v -run TestMilvusStore_Integration ./rag/...
+// TestMilvusStore 集成测试 米尔武斯商店针对真实的米尔武斯实例.
+// 运行方式: go test -tags=整合 -v - 运行 TestMilvusStore 集成./rag/.
 //
-// Prerequisites:
-// - Milvus running on localhost:19530 (or set MILVUS_HOST and MILVUS_PORT)
-// - docker-compose --profile milvus up -d
+// 先决条件:
+// - Milvus在本地主机上运行:19530(或设置MILVUS HOST和MILVUS PORT)
+// - 插头组装 - 标注的Milvus up - d
 func TestMilvusStore_Integration(t *testing.T) {
 	host := os.Getenv("MILVUS_HOST")
 	if host == "" {
@@ -24,7 +24,7 @@ func TestMilvusStore_Integration(t *testing.T) {
 	}
 	port := 19530
 	if p := os.Getenv("MILVUS_PORT"); p != "" {
-		// Parse port if needed
+		// 需要解析端口
 	}
 
 	logger, _ := zap.NewDevelopment()
@@ -42,7 +42,7 @@ func TestMilvusStore_Integration(t *testing.T) {
 
 	ctx := context.Background()
 
-	// Clean up after test
+	// 测试后清理
 	defer func() {
 		if err := store.DropCollection(ctx); err != nil {
 			t.Logf("Warning: failed to drop collection: %v", err)
@@ -50,7 +50,7 @@ func TestMilvusStore_Integration(t *testing.T) {
 	}()
 
 	t.Run("AddAndSearch", func(t *testing.T) {
-		// Create test documents with random embeddings
+		// 创建带有随机嵌入的测试文档
 		docs := make([]Document, 10)
 		for i := 0; i < 10; i++ {
 			embedding := make([]float64, 128)
@@ -65,15 +65,15 @@ func TestMilvusStore_Integration(t *testing.T) {
 			}
 		}
 
-		// Add documents
+		// 添加文档
 		if err := store.AddDocuments(ctx, docs); err != nil {
 			t.Fatalf("AddDocuments failed: %v", err)
 		}
 
-		// Wait for indexing
+		// 等待索引
 		time.Sleep(2 * time.Second)
 
-		// Search
+		// 搜索
 		queryEmbedding := docs[0].Embedding
 		results, err := store.Search(ctx, queryEmbedding, 5)
 		if err != nil {
@@ -90,7 +90,7 @@ func TestMilvusStore_Integration(t *testing.T) {
 				i, r.Document.ID, r.Score, r.Document.Content)
 		}
 
-		// The first result should be the document we searched for
+		// 第一个结果应该是我们搜索的文件
 		if results[0].Document.ID != "a" {
 			t.Logf("Warning: expected first result to be 'a', got '%s'", results[0].Document.ID)
 		}
@@ -107,15 +107,15 @@ func TestMilvusStore_Integration(t *testing.T) {
 	})
 
 	t.Run("Delete", func(t *testing.T) {
-		// Delete some documents
+		// 删除一些文档
 		if err := store.DeleteDocuments(ctx, []string{"a", "b", "c"}); err != nil {
 			t.Fatalf("DeleteDocuments failed: %v", err)
 		}
 
-		// Wait for deletion
+		// 等待删除
 		time.Sleep(1 * time.Second)
 
-		// Verify count
+		// 校验计数
 		count, err := store.Count(ctx)
 		if err != nil {
 			t.Fatalf("Count after delete failed: %v", err)
@@ -126,7 +126,7 @@ func TestMilvusStore_Integration(t *testing.T) {
 	})
 
 	t.Run("Update", func(t *testing.T) {
-		// Update a document
+		// 更新文档
 		embedding := make([]float64, 128)
 		for j := 0; j < 128; j++ {
 			embedding[j] = 0.5
@@ -142,10 +142,10 @@ func TestMilvusStore_Integration(t *testing.T) {
 			t.Fatalf("UpdateDocument failed: %v", err)
 		}
 
-		// Wait for update
+		// 等待更新
 		time.Sleep(1 * time.Second)
 
-		// Search for the updated document
+		// 搜索更新的文档
 		results, err := store.Search(ctx, embedding, 1)
 		if err != nil {
 			t.Fatalf("Search after update failed: %v", err)
@@ -161,7 +161,7 @@ func TestMilvusStore_Integration(t *testing.T) {
 	})
 }
 
-// TestMilvusStore_Integration_HNSW tests the HNSW index type.
+// 测试MilvusStore 集成 HNSW测试HNSW指数类型.
 func TestMilvusStore_Integration_HNSW(t *testing.T) {
 	host := os.Getenv("MILVUS_HOST")
 	if host == "" {
@@ -190,7 +190,7 @@ func TestMilvusStore_Integration_HNSW(t *testing.T) {
 		}
 	}()
 
-	// Create test documents
+	// 创建测试文档
 	docs := make([]Document, 5)
 	for i := 0; i < 5; i++ {
 		embedding := make([]float64, 64)
@@ -222,7 +222,7 @@ func TestMilvusStore_Integration_HNSW(t *testing.T) {
 	}
 }
 
-// TestMilvusStore_Integration_BatchPerformance tests batch insert performance.
+// TestMilvusStore 集成-BatchPerformance 测试批次插入性能.
 func TestMilvusStore_Integration_BatchPerformance(t *testing.T) {
 	host := os.Getenv("MILVUS_HOST")
 	if host == "" {
@@ -250,7 +250,7 @@ func TestMilvusStore_Integration_BatchPerformance(t *testing.T) {
 		}
 	}()
 
-	// Create 1000 test documents
+	// 创建1000个测试文档
 	numDocs := 1000
 	docs := make([]Document, numDocs)
 	for i := 0; i < numDocs; i++ {
@@ -274,7 +274,7 @@ func TestMilvusStore_Integration_BatchPerformance(t *testing.T) {
 	t.Logf("Inserted %d documents in %v (%.2f docs/sec)",
 		numDocs, elapsed, float64(numDocs)/elapsed.Seconds())
 
-	// Verify count
+	// 校验计数
 	time.Sleep(2 * time.Second)
 	count, err := store.Count(ctx)
 	if err != nil {

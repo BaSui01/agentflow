@@ -151,7 +151,7 @@ func TestQdrantStore_BasicFlow(t *testing.T) {
 		t.Fatalf("DeleteDocuments: %v", err)
 	}
 
-	// Ensure endpoints were hit.
+	// 确保终点被击中。
 	if createCollectionCalls.Load() != 1 {
 		t.Fatalf("expected create collection 1 call, got %d", createCollectionCalls.Load())
 	}
@@ -168,4 +168,3 @@ func TestQdrantStore_BasicFlow(t *testing.T) {
 		t.Fatalf("expected count 1 call, got %d", countCalls.Load())
 	}
 }
-

@@ -27,7 +27,7 @@ func TestMilvusStore_BasicFlow(t *testing.T) {
 
 	mux := http.NewServeMux()
 
-	// Has collection endpoint
+	// 有收藏端点
 	mux.HandleFunc("/v2/vectordb/collections/has", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			t.Fatalf("unexpected method: %s", r.Method)
@@ -46,7 +46,7 @@ func TestMilvusStore_BasicFlow(t *testing.T) {
 		_, _ = w.Write([]byte(`{"code":0,"data":{"has":false}}`))
 	})
 
-	// Create collection endpoint
+	// 创建收藏端点
 	mux.HandleFunc("/v2/vectordb/collections/create", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			t.Fatalf("unexpected method: %s", r.Method)
@@ -61,7 +61,7 @@ func TestMilvusStore_BasicFlow(t *testing.T) {
 			t.Fatalf("unexpected collection name: %v", req["collectionName"])
 		}
 
-		// Verify schema
+		// 校验方案
 		schema, ok := req["schema"].(map[string]any)
 		if !ok {
 			t.Fatalf("expected schema in request")
@@ -75,7 +75,7 @@ func TestMilvusStore_BasicFlow(t *testing.T) {
 		_, _ = w.Write([]byte(`{"code":0,"message":"success"}`))
 	})
 
-	// Create index endpoint
+	// 创建索引终点
 	mux.HandleFunc("/v2/vectordb/indexes/create", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			t.Fatalf("unexpected method: %s", r.Method)
@@ -96,7 +96,7 @@ func TestMilvusStore_BasicFlow(t *testing.T) {
 		_, _ = w.Write([]byte(`{"code":0,"message":"success"}`))
 	})
 
-	// Load collection endpoint
+	// 装入收藏端点
 	mux.HandleFunc("/v2/vectordb/collections/load", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			t.Fatalf("unexpected method: %s", r.Method)
@@ -107,7 +107,7 @@ func TestMilvusStore_BasicFlow(t *testing.T) {
 		_, _ = w.Write([]byte(`{"code":0,"message":"success"}`))
 	})
 
-	// Insert endpoint
+	// 插入端点
 	mux.HandleFunc("/v2/vectordb/entities/insert", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			t.Fatalf("unexpected method: %s", r.Method)
@@ -127,7 +127,7 @@ func TestMilvusStore_BasicFlow(t *testing.T) {
 			t.Fatalf("expected 2 documents, got %d", len(data))
 		}
 
-		// Verify document structure
+		// 校验文档结构
 		for _, d := range data {
 			doc := d.(map[string]any)
 			if _, ok := doc["id"]; !ok {
@@ -148,7 +148,7 @@ func TestMilvusStore_BasicFlow(t *testing.T) {
 		_, _ = w.Write([]byte(`{"code":0,"data":{"insertCount":2,"insertIds":["id1","id2"]}}`))
 	})
 
-	// Search endpoint
+	// 搜索终点
 	mux.HandleFunc("/v2/vectordb/entities/search", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			t.Fatalf("unexpected method: %s", r.Method)
@@ -177,7 +177,7 @@ func TestMilvusStore_BasicFlow(t *testing.T) {
 		}`))
 	})
 
-	// Delete endpoint
+	// 删除端点
 	mux.HandleFunc("/v2/vectordb/entities/delete", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			t.Fatalf("unexpected method: %s", r.Method)
@@ -198,7 +198,7 @@ func TestMilvusStore_BasicFlow(t *testing.T) {
 		_, _ = w.Write([]byte(`{"code":0,"message":"success"}`))
 	})
 
-	// Get stats endpoint
+	// 获取数据端点
 	mux.HandleFunc("/v2/vectordb/collections/get_stats", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			t.Fatalf("unexpected method: %s", r.Method)
@@ -223,7 +223,7 @@ func TestMilvusStore_BasicFlow(t *testing.T) {
 
 	ctx := context.Background()
 
-	// Test AddDocuments
+	// 测试添加文档
 	docs := []Document{
 		{ID: "doc1", Content: "hello", Metadata: map[string]any{"k": "v"}, Embedding: []float64{0.1, 0.2}},
 		{ID: "doc2", Content: "world", Metadata: map[string]any{"k": "v2"}, Embedding: []float64{0.2, 0.1}},
@@ -233,7 +233,7 @@ func TestMilvusStore_BasicFlow(t *testing.T) {
 		t.Fatalf("AddDocuments: %v", err)
 	}
 
-	// Test Search
+	// 测试搜索
 	results, err := store.Search(ctx, []float64{0.1, 0.2}, 2)
 	if err != nil {
 		t.Fatalf("Search: %v", err)
@@ -248,7 +248,7 @@ func TestMilvusStore_BasicFlow(t *testing.T) {
 		t.Fatalf("expected score 0.95, got %f", results[0].Score)
 	}
 
-	// Test Count
+	// 测试计数
 	n, err := store.Count(ctx)
 	if err != nil {
 		t.Fatalf("Count: %v", err)
@@ -257,12 +257,12 @@ func TestMilvusStore_BasicFlow(t *testing.T) {
 		t.Fatalf("expected count=2, got %d", n)
 	}
 
-	// Test DeleteDocuments
+	// 测试删除文档
 	if err := store.DeleteDocuments(ctx, []string{"doc1", "doc2"}); err != nil {
 		t.Fatalf("DeleteDocuments: %v", err)
 	}
 
-	// Verify endpoint calls
+	// 校验端点呼叫
 	if hasCollectionCalls.Load() != 1 {
 		t.Fatalf("expected has collection 1 call, got %d", hasCollectionCalls.Load())
 	}
@@ -298,21 +298,21 @@ func TestMilvusStore_ExistingCollection(t *testing.T) {
 
 	mux := http.NewServeMux()
 
-	// Has collection endpoint - returns true (collection exists)
+	// 收藏端点 - 返回为真( 收藏存在)
 	mux.HandleFunc("/v2/vectordb/collections/has", func(w http.ResponseWriter, r *http.Request) {
 		hasCollectionCalls.Add(1)
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"code":0,"data":{"has":true}}`))
 	})
 
-	// Create collection endpoint - should not be called
+	// 创建收藏端点 - 不应调用
 	mux.HandleFunc("/v2/vectordb/collections/create", func(w http.ResponseWriter, r *http.Request) {
 		createCollectionCalls.Add(1)
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"code":0,"message":"success"}`))
 	})
 
-	// Insert endpoint
+	// 插入端点
 	mux.HandleFunc("/v2/vectordb/entities/insert", func(w http.ResponseWriter, r *http.Request) {
 		insertCalls.Add(1)
 		w.Header().Set("Content-Type", "application/json")
@@ -339,7 +339,7 @@ func TestMilvusStore_ExistingCollection(t *testing.T) {
 		t.Fatalf("AddDocuments: %v", err)
 	}
 
-	// Verify that create collection was not called
+	// 校验创建收藏未调用
 	if hasCollectionCalls.Load() != 1 {
 		t.Fatalf("expected has collection 1 call, got %d", hasCollectionCalls.Load())
 	}
@@ -392,7 +392,7 @@ func TestMilvusStore_BatchInsert(t *testing.T) {
 
 	ctx := context.Background()
 
-	// Create 7 documents to test batching (should result in 3 batches: 3+3+1)
+	// 创建7个文件以测试批量( 应分出3个批: 3+3+1)
 	docs := make([]Document, 7)
 	for i := 0; i < 7; i++ {
 		docs[i] = Document{
@@ -424,19 +424,19 @@ func TestMilvusStore_ValidationErrors(t *testing.T) {
 
 	ctx := context.Background()
 
-	// Test empty document ID
+	// 测试空文档 ID
 	err := store.AddDocuments(ctx, []Document{{ID: "", Embedding: []float64{0.1}}})
 	if err == nil || !strings.Contains(err.Error(), "empty id") {
 		t.Fatalf("expected empty id error, got: %v", err)
 	}
 
-	// Test missing embedding
+	// 测试缺失嵌入
 	err = store.AddDocuments(ctx, []Document{{ID: "doc1", Embedding: nil}})
 	if err == nil || !strings.Contains(err.Error(), "no embedding") {
 		t.Fatalf("expected no embedding error, got: %v", err)
 	}
 
-	// Test dimension mismatch
+	// 测试尺寸不匹配
 	err = store.AddDocuments(ctx, []Document{
 		{ID: "doc1", Embedding: []float64{0.1, 0.2}},
 		{ID: "doc2", Embedding: []float64{0.1, 0.2, 0.3}},
@@ -445,13 +445,13 @@ func TestMilvusStore_ValidationErrors(t *testing.T) {
 		t.Fatalf("expected dimension mismatch error, got: %v", err)
 	}
 
-	// Test empty query embedding
+	// 测试空查询嵌入
 	_, err = store.Search(ctx, []float64{}, 10)
 	if err == nil || !strings.Contains(err.Error(), "query embedding is required") {
 		t.Fatalf("expected query embedding required error, got: %v", err)
 	}
 
-	// Test missing collection
+	// 测试丢失的收藏
 	storeNoCol := NewMilvusStore(MilvusConfig{}, logger)
 	err = storeNoCol.AddDocuments(ctx, []Document{{ID: "doc1", Embedding: []float64{0.1}}})
 	if err == nil || !strings.Contains(err.Error(), "collection is required") {
@@ -588,17 +588,17 @@ func TestMilvusStore_EmptyOperations(t *testing.T) {
 
 	ctx := context.Background()
 
-	// Empty AddDocuments should succeed
+	// 空添加文档应成功
 	if err := store.AddDocuments(ctx, []Document{}); err != nil {
 		t.Fatalf("empty AddDocuments should succeed: %v", err)
 	}
 
-	// Empty DeleteDocuments should succeed
+	// 空删除文档应成功
 	if err := store.DeleteDocuments(ctx, []string{}); err != nil {
 		t.Fatalf("empty DeleteDocuments should succeed: %v", err)
 	}
 
-	// Zero topK should return empty results
+	// 0 上K 应返回空结果
 	results, err := store.Search(ctx, []float64{0.1}, 0)
 	if err != nil {
 		t.Fatalf("zero topK Search should succeed: %v", err)
@@ -636,7 +636,7 @@ func TestMilvusStore_DefaultConfig(t *testing.T) {
 func TestMilvusStore_HelperFunctions(t *testing.T) {
 	t.Parallel()
 
-	// Test truncateString
+	// 测试短线
 	if truncateString("hello", 10) != "hello" {
 		t.Error("truncateString should not truncate short strings")
 	}
@@ -644,13 +644,13 @@ func TestMilvusStore_HelperFunctions(t *testing.T) {
 		t.Error("truncateString should truncate long strings")
 	}
 
-	// Test formatStringList
+	// 测试格式 列表
 	result := formatStringList([]string{"a", "b", "c"})
 	if result != `"a", "b", "c"` {
 		t.Errorf("unexpected formatStringList result: %s", result)
 	}
 
-	// Test milvusPointID generates consistent UUIDs
+	// 测试 milvusPointID 生成一致的 UUID
 	id1 := milvusPointID("doc1")
 	id2 := milvusPointID("doc1")
 	id3 := milvusPointID("doc2")

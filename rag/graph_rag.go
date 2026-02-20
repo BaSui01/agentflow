@@ -1,4 +1,4 @@
-// package rag provides GraphRAG - Knowledge Graph + Vector hybrid retrieval.
+// 包布提供了 GraphRAG - 知识图+矢量混合检索。
 package rag
 
 import (
@@ -11,7 +11,7 @@ import (
 	"go.uber.org/zap"
 )
 
-// Node represents a node in the knowledge graph.
+// 节点代表了知识图中的节点.
 type Node struct {
 	ID         string         `json:"id"`
 	Type       string         `json:"type"`
@@ -21,7 +21,7 @@ type Node struct {
 	CreatedAt  time.Time      `json:"created_at"`
 }
 
-// Edge represents a relationship between nodes.
+// 边缘代表了节点之间的关系.
 type Edge struct {
 	ID         string         `json:"id"`
 	Source     string         `json:"source"`
@@ -31,14 +31,14 @@ type Edge struct {
 	Weight     float64        `json:"weight"`
 }
 
-// Triple represents a subject-predicate-object triple.
+// 三相代表一个主题-前相-对象三相.
 type Triple struct {
 	Subject   string `json:"subject"`
 	Predicate string `json:"predicate"`
 	Object    string `json:"object"`
 }
 
-// KnowledgeGraph provides in-memory knowledge graph operations.
+// KnowledgeGraph提供记忆知识图操作.
 type KnowledgeGraph struct {
 	nodes    map[string]*Node
 	edges    map[string]*Edge
@@ -48,7 +48,7 @@ type KnowledgeGraph struct {
 	mu       sync.RWMutex
 }
 
-// NewKnowledgeGraph creates a new knowledge graph.
+// NewKnowledgeGraph创建了新的知识图.
 func NewKnowledgeGraph(logger *zap.Logger) *KnowledgeGraph {
 	if logger == nil {
 		logger = zap.NewNop()
@@ -62,7 +62,7 @@ func NewKnowledgeGraph(logger *zap.Logger) *KnowledgeGraph {
 	}
 }
 
-// AddNode adds a node to the graph.
+// 添加节点在图表中添加了节点。
 func (g *KnowledgeGraph) AddNode(node *Node) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
@@ -75,7 +75,7 @@ func (g *KnowledgeGraph) AddNode(node *Node) {
 	g.nodes[node.ID] = node
 }
 
-// AddEdge adds an edge to the graph.
+// 添加Edge在图中添加了边缘.
 func (g *KnowledgeGraph) AddEdge(edge *Edge) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
@@ -87,7 +87,7 @@ func (g *KnowledgeGraph) AddEdge(edge *Edge) {
 	g.inEdges[edge.Target] = append(g.inEdges[edge.Target], edge.ID)
 }
 
-// GetNode retrieves a node by ID.
+// GetNode通过ID检索到一个节点.
 func (g *KnowledgeGraph) GetNode(id string) (*Node, bool) {
 	g.mu.RLock()
 	defer g.mu.RUnlock()
@@ -95,7 +95,7 @@ func (g *KnowledgeGraph) GetNode(id string) (*Node, bool) {
 	return n, ok
 }
 
-// GetNeighbors returns neighboring nodes.
+// Get nearbors return 邻居的节点。
 func (g *KnowledgeGraph) GetNeighbors(nodeID string, depth int) []*Node {
 	g.mu.RLock()
 	defer g.mu.RUnlock()
@@ -112,7 +112,7 @@ func (g *KnowledgeGraph) traverseNeighbors(nodeID string, depth int, visited map
 	}
 	visited[nodeID] = true
 
-	// Outgoing edges
+	// 外出边缘
 	for _, edgeID := range g.outEdges[nodeID] {
 		edge := g.edges[edgeID]
 		if node, ok := g.nodes[edge.Target]; ok && !visited[edge.Target] {
@@ -121,7 +121,7 @@ func (g *KnowledgeGraph) traverseNeighbors(nodeID string, depth int, visited map
 		}
 	}
 
-	// Incoming edges
+	// 即将来临的边缘
 	for _, edgeID := range g.inEdges[nodeID] {
 		edge := g.edges[edgeID]
 		if node, ok := g.nodes[edge.Source]; ok && !visited[edge.Source] {
@@ -131,7 +131,7 @@ func (g *KnowledgeGraph) traverseNeighbors(nodeID string, depth int, visited map
 	}
 }
 
-// QueryByType returns nodes of a specific type.
+// 查询ByType返回特定类型的节点。
 func (g *KnowledgeGraph) QueryByType(nodeType string) []*Node {
 	g.mu.RLock()
 	defer g.mu.RUnlock()
@@ -145,7 +145,7 @@ func (g *KnowledgeGraph) QueryByType(nodeType string) []*Node {
 	return results
 }
 
-// GraphRAG combines knowledge graph with vector retrieval.
+// GraphRAG结合了知识图和向量检索.
 type GraphRAG struct {
 	graph       *KnowledgeGraph
 	vectorStore GraphVectorStore
@@ -154,25 +154,25 @@ type GraphRAG struct {
 	logger      *zap.Logger
 }
 
-// GraphVectorStore interface for vector operations in GraphRAG.
+// GraphRAG中矢量操作的 GraphVectorStore 接口.
 type GraphVectorStore interface {
 	Store(ctx context.Context, id string, embedding []float32, metadata map[string]any) error
 	Search(ctx context.Context, embedding []float32, limit int) ([]GraphVectorResult, error)
 }
 
-// GraphVectorResult represents a vector search result.
+// GraphVectorResult 代表着向量搜索结果.
 type GraphVectorResult struct {
 	ID       string         `json:"id"`
 	Score    float64        `json:"score"`
 	Metadata map[string]any `json:"metadata,omitempty"`
 }
 
-// GraphEmbedder generates embeddings.
+// GraphEmbedder 生成嵌入式.
 type GraphEmbedder interface {
 	Embed(ctx context.Context, text string) ([]float32, error)
 }
 
-// GraphRAGConfig configures GraphRAG.
+// GraphRAGConfig 配置了 GraphRAG.
 type GraphRAGConfig struct {
 	GraphWeight   float64 `json:"graph_weight"`    // Weight for graph results
 	VectorWeight  float64 `json:"vector_weight"`   // Weight for vector results
@@ -181,7 +181,7 @@ type GraphRAGConfig struct {
 	MinScore      float64 `json:"min_score"`
 }
 
-// DefaultGraphRAGConfig returns default configuration.
+// 默认 GraphRAGConfig 返回默认配置 。
 func DefaultGraphRAGConfig() GraphRAGConfig {
 	return GraphRAGConfig{
 		GraphWeight:   0.4,
@@ -192,7 +192,7 @@ func DefaultGraphRAGConfig() GraphRAGConfig {
 	}
 }
 
-// NewGraphRAG creates a new GraphRAG instance.
+// NewGraphRAG创建了一个新的GraphRAG实例.
 func NewGraphRAG(graph *KnowledgeGraph, vectorStore GraphVectorStore, embedder GraphEmbedder, config GraphRAGConfig, logger *zap.Logger) *GraphRAG {
 	if logger == nil {
 		logger = zap.NewNop()
@@ -206,7 +206,7 @@ func NewGraphRAG(graph *KnowledgeGraph, vectorStore GraphVectorStore, embedder G
 	}
 }
 
-// GraphRetrievalResult represents a hybrid retrieval result.
+// Graph Retrival Result 代表混合检索结果.
 type GraphRetrievalResult struct {
 	ID           string         `json:"id"`
 	Content      string         `json:"content"`
@@ -218,24 +218,24 @@ type GraphRetrievalResult struct {
 	RelatedNodes []*Node        `json:"related_nodes,omitempty"`
 }
 
-// Retrieve performs hybrid retrieval.
+// 检索进行混合检索。
 func (r *GraphRAG) Retrieve(ctx context.Context, query string) ([]GraphRetrievalResult, error) {
-	// Generate query embedding
+	// 生成查询嵌入
 	queryEmb, err := r.embedder.Embed(ctx, query)
 	if err != nil {
 		return nil, fmt.Errorf("failed to embed query: %w", err)
 	}
 
-	// Vector search
+	// 矢量搜索
 	vectorResults, err := r.vectorStore.Search(ctx, queryEmb, r.config.MaxResults*2)
 	if err != nil {
 		r.logger.Warn("vector search failed", zap.Error(err))
 	}
 
-	// Build result map
+	// 构建结果映射
 	resultMap := make(map[string]*GraphRetrievalResult)
 
-	// Process vector results
+	// 进程向量结果
 	for _, vr := range vectorResults {
 		resultMap[vr.ID] = &GraphRetrievalResult{
 			ID:          vr.ID,
@@ -245,7 +245,7 @@ func (r *GraphRAG) Retrieve(ctx context.Context, query string) ([]GraphRetrieval
 		}
 	}
 
-	// Graph traversal for top vector results
+	// 上向量结果的图正反转
 	for _, vr := range vectorResults[:min(5, len(vectorResults))] {
 		neighbors := r.graph.GetNeighbors(vr.ID, r.config.MaxGraphDepth)
 		for _, neighbor := range neighbors {
@@ -265,7 +265,7 @@ func (r *GraphRAG) Retrieve(ctx context.Context, query string) ([]GraphRetrieval
 		}
 	}
 
-	// Calculate final scores and filter
+	// 计算最终分数和过滤器
 	var results []GraphRetrievalResult
 	for _, res := range resultMap {
 		res.Score = res.VectorScore*r.config.VectorWeight + res.GraphScore*r.config.GraphWeight
@@ -274,12 +274,12 @@ func (r *GraphRAG) Retrieve(ctx context.Context, query string) ([]GraphRetrieval
 		}
 	}
 
-	// Sort by score (optimized: O(n log n) instead of O(n²))
+	// 按分数排序(优化:O(n logn n)而不是O(n2))
 	sort.Slice(results, func(i, j int) bool {
 		return results[i].Score > results[j].Score
 	})
 
-	// Limit results
+	// 限制结果
 	if len(results) > r.config.MaxResults {
 		results = results[:r.config.MaxResults]
 	}
@@ -299,20 +299,20 @@ func min(a, b int) int {
 	return b
 }
 
-// AddDocument adds a document to both graph and vector store.
+// 添加文件将文档添加到图表和向量存储中 。
 func (r *GraphRAG) AddDocument(ctx context.Context, doc GraphDocument) error {
-	// Generate embedding
+	// 生成嵌入
 	emb, err := r.embedder.Embed(ctx, doc.Content)
 	if err != nil {
 		return fmt.Errorf("embed document %s: %w", doc.ID, err)
 	}
 
-	// Add to vector store
+	// 添加到向量存储
 	if err := r.vectorStore.Store(ctx, doc.ID, emb, doc.Metadata); err != nil {
 		return fmt.Errorf("store document %s: %w", doc.ID, err)
 	}
 
-	// Add to graph
+	// 添加到图表
 	node := &Node{
 		ID:         doc.ID,
 		Type:       "document",
@@ -322,7 +322,7 @@ func (r *GraphRAG) AddDocument(ctx context.Context, doc GraphDocument) error {
 	}
 	r.graph.AddNode(node)
 
-	// Add entity edges if entities provided
+	// 如果实体提供了, 则添加实体边缘
 	for _, entity := range doc.Entities {
 		entityNode := &Node{
 			ID:    entity.ID,
@@ -340,7 +340,7 @@ func (r *GraphRAG) AddDocument(ctx context.Context, doc GraphDocument) error {
 	return nil
 }
 
-// GraphDocument represents a document for indexing.
+// GraphDocument是用于索引的文档。
 type GraphDocument struct {
 	ID       string         `json:"id"`
 	Title    string         `json:"title"`
@@ -349,7 +349,7 @@ type GraphDocument struct {
 	Entities []Entity       `json:"entities,omitempty"`
 }
 
-// Entity represents an extracted entity.
+// 实体代表被提取的实体。
 type Entity struct {
 	ID   string `json:"id"`
 	Name string `json:"name"`

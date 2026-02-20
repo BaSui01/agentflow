@@ -1,5 +1,5 @@
-// Package rag provides multi-hop reasoning capabilities for complex queries.
-// This module implements iterative retrieval with context passing and reasoning chain tracking.
+// 包布为复杂的查询提供多跳推理能力.
+// 该模块通过上下文传递和推理链跟踪执行迭代检索.
 package rag
 
 import (
@@ -14,9 +14,9 @@ import (
 	"go.uber.org/zap"
 )
 
-// ====== Multi-Hop Reasoning Types ======
+// 多原因类型
 
-// HopType represents the type of reasoning hop
+// HopType 代表推理跳的类型
 type HopType string
 
 const (
@@ -28,7 +28,7 @@ const (
 	HopTypeBridging     HopType = "bridging"      // Bridge between concepts
 )
 
-// ReasoningStatus represents the status of the reasoning process
+// 理由 状态代表推理过程状态.
 type ReasoningStatus string
 
 const (
@@ -38,7 +38,7 @@ const (
 	StatusTimeout    ReasoningStatus = "timeout"
 )
 
-// ReasoningHop represents a single hop in the reasoning chain
+// ReasoningHop代表推理链中的一跳
 type ReasoningHop struct {
 	ID            string            `json:"id"`
 	HopNumber     int               `json:"hop_number"`
@@ -65,7 +65,7 @@ type DedupStats struct {
 	FinalCount        int `json:"final_count"`         // 去重后最终数量
 }
 
-// ReasoningChain represents the complete reasoning chain
+// 理由 链表示完整的推理链
 type ReasoningChain struct {
 	ID              string          `json:"id"`
 	OriginalQuery   string          `json:"original_query"`
@@ -85,35 +85,35 @@ type ReasoningChain struct {
 	TotalDedupBySimilarity int `json:"total_dedup_by_similarity"`
 }
 
-// MultiHopConfig configures the multi-hop reasoning system
+// MultiHopConfig 配置多跳推理系统
 type MultiHopConfig struct {
-	// Hop limits
+	// 跳跃限制
 	MaxHops           int           `json:"max_hops"`            // Maximum number of hops (2-5)
 	MinHops           int           `json:"min_hops"`            // Minimum hops before stopping
 	HopTimeout        time.Duration `json:"hop_timeout"`         // Timeout per hop
 	TotalTimeout      time.Duration `json:"total_timeout"`       // Total reasoning timeout
 
-	// Retrieval settings
+	// 检索设置
 	ResultsPerHop     int     `json:"results_per_hop"`     // Documents per hop
 	MinConfidence     float64 `json:"min_confidence"`      // Minimum confidence to continue
 	ContextWindowSize int     `json:"context_window_size"` // Max context tokens
 
-	// Reasoning settings
+	// 原因设置
 	EnableLLMReasoning    bool    `json:"enable_llm_reasoning"`    // Use LLM for reasoning
 	EnableQueryRefinement bool    `json:"enable_query_refinement"` // Refine queries between hops
 	EnableVerification    bool    `json:"enable_verification"`     // Verify answers
 	ConfidenceThreshold   float64 `json:"confidence_threshold"`    // Stop if confidence exceeds
 
-	// Deduplication
+	// 复制
 	DeduplicateResults bool    `json:"deduplicate_results"` // Remove duplicate documents
 	SimilarityThreshold float64 `json:"similarity_threshold"` // Threshold for deduplication
 
-	// Caching
+	// 缓存
 	EnableCache bool          `json:"enable_cache"`
 	CacheTTL    time.Duration `json:"cache_ttl"`
 }
 
-// DefaultMultiHopConfig returns default configuration
+// 默认多HopConfig 返回默认配置
 func DefaultMultiHopConfig() MultiHopConfig {
 	return MultiHopConfig{
 		MaxHops:               4,
@@ -134,9 +134,9 @@ func DefaultMultiHopConfig() MultiHopConfig {
 	}
 }
 
-// ====== Multi-Hop Reasoner ======
+// QQ 多原因 QQ
 
-// MultiHopReasoner performs multi-hop reasoning over documents
+// MultiHopReasoner 对文档进行多跳推理
 type MultiHopReasoner struct {
 	config           MultiHopConfig
 	retriever        *HybridRetriever
@@ -147,7 +147,7 @@ type MultiHopReasoner struct {
 	logger           *zap.Logger
 }
 
-// reasoningCache caches reasoning chains
+// 推理 缓存缓存推理链
 type reasoningCache struct {
 	entries map[string]*ReasoningChain
 	mu      sync.RWMutex
@@ -170,7 +170,7 @@ func (c *reasoningCache) get(key string) (*ReasoningChain, bool) {
 		return nil, false
 	}
 
-	// Check if expired
+	// 检查是否过期
 	if time.Since(chain.CreatedAt) > c.ttl {
 		return nil, false
 	}
@@ -184,7 +184,7 @@ func (c *reasoningCache) set(key string, chain *ReasoningChain) {
 	c.entries[key] = chain
 }
 
-// NewMultiHopReasoner creates a new multi-hop reasoner
+// 新建多功能读取器
 func NewMultiHopReasoner(
 	config MultiHopConfig,
 	retriever *HybridRetriever,
@@ -213,9 +213,9 @@ func NewMultiHopReasoner(
 	}
 }
 
-// Reason performs multi-hop reasoning for a query
+// 为查询进行多跳推理
 func (r *MultiHopReasoner) Reason(ctx context.Context, query string) (*ReasoningChain, error) {
-	// Check cache
+	// 检查缓存
 	if r.cache != nil {
 		if cached, ok := r.cache.get(query); ok {
 			r.logger.Debug("cache hit", zap.String("query", query))
@@ -223,7 +223,7 @@ func (r *MultiHopReasoner) Reason(ctx context.Context, query string) (*Reasoning
 		}
 	}
 
-	// Create reasoning chain
+	// 创建推理链
 	chain := &ReasoningChain{
 		ID:            generateChainID(),
 		OriginalQuery: query,
@@ -233,7 +233,7 @@ func (r *MultiHopReasoner) Reason(ctx context.Context, query string) (*Reasoning
 		CreatedAt:     time.Now(),
 	}
 
-	// Create context with timeout
+	// 以超时创建上下文
 	ctx, cancel := context.WithTimeout(ctx, r.config.TotalTimeout)
 	defer cancel()
 
@@ -242,7 +242,7 @@ func (r *MultiHopReasoner) Reason(ctx context.Context, query string) (*Reasoning
 	seenQueries := make(map[string]bool) // Track executed queries to prevent cycles
 	accumulatedContext := ""
 
-	// Initial query transformation
+	// 初始查询转换
 	var currentQuery string
 	var subQueries []string
 
@@ -261,7 +261,7 @@ func (r *MultiHopReasoner) Reason(ctx context.Context, query string) (*Reasoning
 		currentQuery = query
 	}
 
-	// Execute reasoning hops
+	// 执行推理跳跃
 	for hopNum := 0; hopNum < r.config.MaxHops; hopNum++ {
 		select {
 		case <-ctx.Done():
@@ -271,17 +271,17 @@ func (r *MultiHopReasoner) Reason(ctx context.Context, query string) (*Reasoning
 		default:
 		}
 
-		// Determine hop type and query
+		// 确定跳转类型和查询
 		hopType := HopTypeInitial
 		hopQuery := currentQuery
 
 		if hopNum > 0 {
 			if len(subQueries) > hopNum-1 {
-				// Use decomposed sub-query
+				// 使用已分解的子query
 				hopType = HopTypeDecomposed
 				hopQuery = subQueries[hopNum-1]
 			} else if r.config.EnableQueryRefinement {
-				// Generate refined query based on context
+				// 根据上下文生成精细查询
 				hopType = HopTypeFollowUp
 				refinedQuery, err := r.refineQuery(ctx, query, accumulatedContext, hopNum)
 				if err != nil {
@@ -292,7 +292,7 @@ func (r *MultiHopReasoner) Reason(ctx context.Context, query string) (*Reasoning
 			}
 		}
 
-		// Check for duplicate query (cycle detection)
+		// 检查重复查询( 循环检测)
 		normalizedQuery := normalizeQueryForDedup(hopQuery)
 		if seenQueries[normalizedQuery] {
 			r.logger.Debug("skipping duplicate query",
@@ -302,7 +302,7 @@ func (r *MultiHopReasoner) Reason(ctx context.Context, query string) (*Reasoning
 		}
 		seenQueries[normalizedQuery] = true
 
-		// Execute hop
+		// 执行跳
 		hop, err := r.executeHop(ctx, hopNum, hopType, hopQuery, accumulatedContext, seenDocIDs)
 		if err != nil {
 			r.logger.Warn("hop execution failed",
@@ -313,10 +313,10 @@ func (r *MultiHopReasoner) Reason(ctx context.Context, query string) (*Reasoning
 
 		chain.Hops = append(chain.Hops, *hop)
 
-		// Update accumulated context
+		// 更新累积上下文
 		accumulatedContext = r.updateContext(accumulatedContext, hop)
 
-		// Track unique documents
+		// 跟踪独有文档
 		for _, result := range hop.Results {
 			if !seenDocIDs[result.Document.ID] {
 				seenDocIDs[result.Document.ID] = true
@@ -331,13 +331,13 @@ func (r *MultiHopReasoner) Reason(ctx context.Context, query string) (*Reasoning
 			chain.TotalDedupBySimilarity += hop.DedupStats.DedupBySimilarity
 		}
 
-		// Check stopping conditions
+		// 检查停止条件
 		if r.shouldStop(ctx, chain, hop, hopNum) {
 			break
 		}
 	}
 
-	// Generate final answer if LLM is available
+	// 如果 LLM 可用, 生成最终答案
 	if r.config.EnableLLMReasoning && r.llmProvider != nil {
 		finalAnswer, err := r.generateFinalAnswer(ctx, query, chain)
 		if err != nil {
@@ -347,13 +347,13 @@ func (r *MultiHopReasoner) Reason(ctx context.Context, query string) (*Reasoning
 		}
 	}
 
-	// Finalize chain
+	// 最后确定链条
 	chain.FinalContext = accumulatedContext
 	chain.Status = StatusCompleted
 	chain.TotalDuration = time.Since(startTime)
 	chain.CompletedAt = time.Now()
 
-	// Cache result
+	// 缓存结果
 	if r.cache != nil {
 		r.cache.set(query, chain)
 	}
@@ -370,7 +370,7 @@ func (r *MultiHopReasoner) Reason(ctx context.Context, query string) (*Reasoning
 	return chain, nil
 }
 
-// executeHop executes a single reasoning hop
+// 执行Hop 执行单个推理跳
 func (r *MultiHopReasoner) executeHop(
 	ctx context.Context,
 	hopNum int,
@@ -394,7 +394,7 @@ func (r *MultiHopReasoner) executeHop(
 		Timestamp: time.Now(),
 	}
 
-	// Transform query if transformer is available
+	// 如果有变压器, 则进行变压查询
 	if r.queryTransformer != nil {
 		transformed, err := r.queryTransformer.Transform(hopCtx, query)
 		if err == nil {
@@ -402,7 +402,7 @@ func (r *MultiHopReasoner) executeHop(
 		}
 	}
 
-	// Generate query embedding
+	// 生成查询嵌入
 	var queryEmbedding []float64
 	if r.embeddingFunc != nil {
 		embedding, err := r.embeddingFunc(hopCtx, query)
@@ -413,13 +413,13 @@ func (r *MultiHopReasoner) executeHop(
 		}
 	}
 
-	// Retrieve documents
+	// 获取文档
 	results, err := r.retriever.Retrieve(hopCtx, query, queryEmbedding)
 	if err != nil {
 		return nil, fmt.Errorf("retrieval failed: %w", err)
 	}
 
-	// Filter and deduplicate results
+	// 过滤和复制结果
 	stats := &DedupStats{
 		TotalRetrieved: len(results),
 	}
@@ -464,7 +464,7 @@ func (r *MultiHopReasoner) executeHop(
 
 	hop.Results = filteredResults
 
-	// Calculate hop confidence
+	// 计算自信
 	if len(filteredResults) > 0 {
 		totalScore := 0.0
 		for _, result := range filteredResults {
@@ -473,7 +473,7 @@ func (r *MultiHopReasoner) executeHop(
 		hop.Confidence = totalScore / float64(len(filteredResults))
 	}
 
-	// Generate reasoning for this hop if LLM is available
+	// 如果 LLM 可用, 生成此跳动的推理
 	if r.config.EnableLLMReasoning && r.llmProvider != nil {
 		reasoning, err := r.generateHopReasoning(hopCtx, query, filteredResults, previousContext)
 		if err != nil {
@@ -600,7 +600,7 @@ func tokenizeToSet(text string) map[string]bool {
 	return set
 }
 
-// refineQuery generates a refined query based on accumulated context
+// 精细查询根据累积上下文生成精细查询
 func (r *MultiHopReasoner) refineQuery(
 	ctx context.Context,
 	originalQuery string,
@@ -633,7 +633,7 @@ Follow-up query:`, originalQuery, truncateContext(context, 2000), hopNum+1)
 	return strings.TrimSpace(response), nil
 }
 
-// generateHopReasoning generates reasoning for a single hop
+// 生成HopReasoning 为单跳生成推理
 func (r *MultiHopReasoner) generateHopReasoning(
 	ctx context.Context,
 	query string,
@@ -644,7 +644,7 @@ func (r *MultiHopReasoner) generateHopReasoning(
 		return "No relevant documents found for this query.", nil
 	}
 
-	// Build document summaries
+	// 构建文档摘要
 	var docSummaries strings.Builder
 	for i, result := range results {
 		docSummaries.WriteString(fmt.Sprintf("\nDocument %d (score: %.2f):\n%s\n",
@@ -676,13 +676,13 @@ Analysis:`, query, truncateContext(previousContext, 1000), docSummaries.String()
 	return strings.TrimSpace(response), nil
 }
 
-// generateFinalAnswer generates the final answer from the reasoning chain
+// 从推理链生成最后答案
 func (r *MultiHopReasoner) generateFinalAnswer(
 	ctx context.Context,
 	query string,
 	chain *ReasoningChain,
 ) (string, error) {
-	// Build reasoning summary
+	// 构建推理摘要
 	var reasoningSummary strings.Builder
 	for _, hop := range chain.Hops {
 		reasoningSummary.WriteString(fmt.Sprintf("\nHop %d (%s):\n", hop.HopNumber+1, hop.Type))
@@ -717,24 +717,24 @@ Answer:`, query, reasoningSummary.String(), truncateContext(chain.FinalContext, 
 	return strings.TrimSpace(response), nil
 }
 
-// updateContext updates the accumulated context with new hop results
+// 更新 Context 用新的跳出结果更新累积上下文
 func (r *MultiHopReasoner) updateContext(currentContext string, hop *ReasoningHop) string {
 	var newContext strings.Builder
 	newContext.WriteString(currentContext)
 
-	// Add hop results to context
+	// 将 hop 结果添加到上下文
 	for _, result := range hop.Results {
 		newContext.WriteString("\n---\n")
 		newContext.WriteString(result.Document.Content)
 	}
 
-	// Add reasoning if available
+	// 可用时添加推理
 	if hop.Reasoning != "" {
 		newContext.WriteString("\n[Reasoning]: ")
 		newContext.WriteString(hop.Reasoning)
 	}
 
-	// Truncate if too long
+	// 如果太长, 截断
 	contextStr := newContext.String()
 	if len(contextStr) > r.config.ContextWindowSize*4 { // Approximate token to char ratio
 		contextStr = contextStr[len(contextStr)-r.config.ContextWindowSize*4:]
@@ -743,32 +743,32 @@ func (r *MultiHopReasoner) updateContext(currentContext string, hop *ReasoningHo
 	return contextStr
 }
 
-// shouldStop determines if reasoning should stop
+// 应停止确定是否停止推理
 func (r *MultiHopReasoner) shouldStop(
 	ctx context.Context,
 	chain *ReasoningChain,
 	lastHop *ReasoningHop,
 	hopNum int,
 ) bool {
-	// Minimum hops not reached
+	// 未达到最小跳数
 	if hopNum < r.config.MinHops-1 {
 		return false
 	}
 
-	// High confidence reached
+	// 实现了高度信任
 	if lastHop.Confidence >= r.config.ConfidenceThreshold {
 		r.logger.Debug("stopping: confidence threshold reached",
 			zap.Float64("confidence", lastHop.Confidence))
 		return true
 	}
 
-	// No new results
+	// 无新成果
 	if len(lastHop.Results) == 0 {
 		r.logger.Debug("stopping: no new results")
 		return true
 	}
 
-	// Check if we have enough information (using LLM)
+	// 检查是否有足够的信息( 使用 LLM)
 	if r.config.EnableLLMReasoning && r.llmProvider != nil && hopNum >= r.config.MinHops-1 {
 		sufficient, err := r.checkSufficiency(ctx, chain)
 		if err == nil && sufficient {
@@ -780,7 +780,7 @@ func (r *MultiHopReasoner) shouldStop(
 	return false
 }
 
-// checkSufficiency checks if gathered information is sufficient
+// 如果收集的信息足够,则检查是否足够
 func (r *MultiHopReasoner) checkSufficiency(ctx context.Context, chain *ReasoningChain) (bool, error) {
 	prompt := fmt.Sprintf(`Given the original query and the information gathered through multi-hop reasoning, determine if we have sufficient information to answer the query.
 
@@ -800,9 +800,9 @@ Respond with only "YES" if sufficient information is available, or "NO" if more 
 	return strings.Contains(strings.ToUpper(response), "YES"), nil
 }
 
-// ====== Reasoning Chain Methods ======
+// 理由链方法
 
-// GetHop returns a specific hop by number
+// GetHop 按数字返回一个特定的跳
 func (c *ReasoningChain) GetHop(hopNum int) *ReasoningHop {
 	if hopNum < 0 || hopNum >= len(c.Hops) {
 		return nil
@@ -810,7 +810,7 @@ func (c *ReasoningChain) GetHop(hopNum int) *ReasoningHop {
 	return &c.Hops[hopNum]
 }
 
-// GetAllDocuments returns all unique documents from the chain
+// Get AllDocuments 从链条返回所有唯一的文档
 func (c *ReasoningChain) GetAllDocuments() []Document {
 	seen := make(map[string]bool)
 	docs := make([]Document, 0)
@@ -827,9 +827,9 @@ func (c *ReasoningChain) GetAllDocuments() []Document {
 	return docs
 }
 
-// GetTopDocuments returns top-k documents by score across all hops
+// GetTopDocuments 在所有跳跃中按分数返回上行文档
 func (c *ReasoningChain) GetTopDocuments(k int) []RetrievalResult {
-	// Collect all results
+	// 收集所有结果
 	allResults := make([]RetrievalResult, 0)
 	seen := make(map[string]bool)
 
@@ -842,7 +842,7 @@ func (c *ReasoningChain) GetTopDocuments(k int) []RetrievalResult {
 		}
 	}
 
-	// Sort by score (optimized: O(n log n) instead of O(n²))
+	// 按分数排序(优化:O(n logn n)而不是O(n2))
 	sort.Slice(allResults, func(i, j int) bool {
 		return allResults[i].FinalScore > allResults[j].FinalScore
 	})
@@ -854,25 +854,25 @@ func (c *ReasoningChain) GetTopDocuments(k int) []RetrievalResult {
 	return allResults[:k]
 }
 
-// ToJSON serializes the reasoning chain to JSON
+// ToJSON将推理链序列化为JSON
 func (c *ReasoningChain) ToJSON() ([]byte, error) {
 	return json.Marshal(c)
 }
 
-// FromJSON deserializes a reasoning chain from JSON
+// 从JSON 解析一个推理链 从JSON
 func (c *ReasoningChain) FromJSON(data []byte) error {
 	return json.Unmarshal(data, c)
 }
 
-// ====== Visualization ======
+// 视线化 视线化
 
-// ChainVisualization represents a visualization of the reasoning chain
+// 链可视化代表了推理链的可视化
 type ChainVisualization struct {
 	Nodes []VisualizationNode `json:"nodes"`
 	Edges []VisualizationEdge `json:"edges"`
 }
 
-// VisualizationNode represents a node in the visualization
+// 可视化 节点代表可视化中的节点
 type VisualizationNode struct {
 	ID       string         `json:"id"`
 	Type     string         `json:"type"` // "query", "hop", "document", "answer"
@@ -880,7 +880,7 @@ type VisualizationNode struct {
 	Metadata map[string]any `json:"metadata,omitempty"`
 }
 
-// VisualizationEdge represents an edge in the visualization
+// 可视化Edge代表可视化中的边缘
 type VisualizationEdge struct {
 	Source string  `json:"source"`
 	Target string  `json:"target"`
@@ -888,14 +888,14 @@ type VisualizationEdge struct {
 	Weight float64 `json:"weight,omitempty"`
 }
 
-// Visualize creates a visualization of the reasoning chain
+// 可视化创建推理链可视化
 func (c *ReasoningChain) Visualize() *ChainVisualization {
 	viz := &ChainVisualization{
 		Nodes: make([]VisualizationNode, 0),
 		Edges: make([]VisualizationEdge, 0),
 	}
 
-	// Add query node
+	// 添加查询节点
 	queryNodeID := "query_0"
 	viz.Nodes = append(viz.Nodes, VisualizationNode{
 		ID:    queryNodeID,
@@ -908,7 +908,7 @@ func (c *ReasoningChain) Visualize() *ChainVisualization {
 
 	prevNodeID := queryNodeID
 
-	// Add hop nodes
+	// 添加跳接点
 	for _, hop := range c.Hops {
 		hopNodeID := fmt.Sprintf("hop_%d", hop.HopNumber)
 		viz.Nodes = append(viz.Nodes, VisualizationNode{
@@ -922,14 +922,14 @@ func (c *ReasoningChain) Visualize() *ChainVisualization {
 			},
 		})
 
-		// Edge from previous node to hop
+		// 从上一个节点到跳
 		viz.Edges = append(viz.Edges, VisualizationEdge{
 			Source: prevNodeID,
 			Target: hopNodeID,
 			Label:  string(hop.Type),
 		})
 
-		// Add document nodes for this hop
+		// 为此跳跃添加文档节点
 		for i, result := range hop.Results {
 			docNodeID := fmt.Sprintf("doc_%d_%d", hop.HopNumber, i)
 			viz.Nodes = append(viz.Nodes, VisualizationNode{
@@ -942,7 +942,7 @@ func (c *ReasoningChain) Visualize() *ChainVisualization {
 				},
 			})
 
-			// Edge from hop to document
+			// 从跳转到文档的边缘
 			viz.Edges = append(viz.Edges, VisualizationEdge{
 				Source: hopNodeID,
 				Target: docNodeID,
@@ -953,7 +953,7 @@ func (c *ReasoningChain) Visualize() *ChainVisualization {
 		prevNodeID = hopNodeID
 	}
 
-	// Add answer node if available
+	// 如果可用, 添加答案节点
 	if c.FinalAnswer != "" {
 		answerNodeID := "answer_0"
 		viz.Nodes = append(viz.Nodes, VisualizationNode{
@@ -975,16 +975,16 @@ func (c *ReasoningChain) Visualize() *ChainVisualization {
 	return viz
 }
 
-// ====== Batch Processing ======
+// 批处理
 
-// ReasonBatch performs multi-hop reasoning for multiple queries
+// 理由Batch 执行多个查询的多跳推理
 func (r *MultiHopReasoner) ReasonBatch(ctx context.Context, queries []string) ([]*ReasoningChain, error) {
 	results := make([]*ReasoningChain, len(queries))
 	var wg sync.WaitGroup
 	var mu sync.Mutex
 	var firstErr error
 
-	// Limit concurrency
+	// 限制货币
 	semaphore := make(chan struct{}, 3)
 
 	for i, query := range queries {
@@ -1010,14 +1010,14 @@ func (r *MultiHopReasoner) ReasonBatch(ctx context.Context, queries []string) ([
 	return results, firstErr
 }
 
-// ====== Helper Functions ======
+// 帮助函数
 
-// generateChainID generates a unique chain ID
+// 生成 ChanID 生成一个独特的链式 ID
 func generateChainID() string {
 	return fmt.Sprintf("chain_%d", time.Now().UnixNano())
 }
 
-// truncateContext truncates context to a maximum length
+// 切换上下文到最大长度
 func truncateContext(text string, maxLen int) string {
 	if len(text) <= maxLen {
 		return text
@@ -1025,11 +1025,11 @@ func truncateContext(text string, maxLen int) string {
 	return text[:maxLen] + "..."
 }
 
-// normalizeQueryForDedup normalizes a query for deduplication
-// It converts to lowercase, trims whitespace, and normalizes spaces
+// 正常查询ForDedup 使调试查询正常化
+// 它转换为小写, 修剪白空格, 使空格正常化
 func normalizeQueryForDedup(query string) string {
-	// Convert to lowercase and trim
+	// 转换为小写和修剪
 	query = strings.ToLower(strings.TrimSpace(query))
-	// Normalize multiple spaces to single space
+	// 将多个空间规范化为单个空间
 	return strings.Join(strings.Fields(query), " ")
 }

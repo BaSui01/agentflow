@@ -123,27 +123,27 @@ func generateMockEmbedding(dim int) []float64 {
 
 /*
 运行基准测试：
-go test -bench=BenchmarkHybridRetriever -benchmem -benchtime=10s
+测试 - Benchmark Hybrid Retriever - Bennchmem - Bennchtime=10s (英语).
 
 预期结果（参考）：
-BenchmarkHybridRetriever_Retrieve-8                            	   50000	     25000 ns/op	   10240 B/op	     150 allocs/op
-BenchmarkHybridRetriever_Retrieve_Parallel-8                   	  200000	      8000 ns/op	    5120 B/op	      80 allocs/op
-BenchmarkHybridRetriever_BM25-8                                	  100000	     12000 ns/op	    4096 B/op	      60 allocs/op
-BenchmarkHybridRetriever_VectorSearch-8                        	   80000	     15000 ns/op	    6144 B/op	      90 allocs/op
-BenchmarkHybridRetriever_Rerank-8                              	   30000	     40000 ns/op	   15360 B/op	     200 allocs/op
+基准HybridRetriever  Retrive-8 50000 25000 ns/op 10240 B/op 150 alogs/op
+基准HybridRetriever Retrieve Parallel-8 200000 8000ns/op 5120 B/op 80 alogs/op
+基准HybridRetriever BM25-8 100000 12000ns/op 4096 B/op 60 alogs/op
+基准 HybridRetriever VectorSearch-8 80000 15000ns/op 6144 B/op 90 次分配/op
+基准HybridRetriever-Rank-8 30000 40000ns/op 15360 B/op 200 alogs/op
 
 规模测试：
-BenchmarkHybridRetriever_ScaleTest/docs_100-8                  	  100000	     10000 ns/op
-BenchmarkHybridRetriever_ScaleTest/docs_1000-8                 	   50000	     25000 ns/op
-BenchmarkHybridRetriever_ScaleTest/docs_10000-8                	   20000	     60000 ns/op
-BenchmarkHybridRetriever_ScaleTest/docs_100000-8               	    5000	    250000 ns/op
+基准HybridRetriever 比例测试/docs 100-8 100000 100000 ns/op
+基准HybridRetriever 比例测试/docs 1000-8 50000 25000ns/op
+基准HybridRetriever 比例测试/docs 1000-8 20000 60000ns/op
+基准HybridRetriever 比例测试/docs 100000-850002500000ns/op
 
 TopK 变化：
-BenchmarkHybridRetriever_TopKVariation/topk_5-8                	   60000	     20000 ns/op
-BenchmarkHybridRetriever_TopKVariation/topk_10-8               	   50000	     25000 ns/op
-BenchmarkHybridRetriever_TopKVariation/topk_20-8               	   40000	     30000 ns/op
-BenchmarkHybridRetriever_TopKVariation/topk_50-8               	   30000	     40000 ns/op
-BenchmarkHybridRetriever_TopKVariation/topk_100-8              	   20000	     60000 ns/op
+基准HybridRetriever TopKVariation/topk 5-8 60000 20000 ns/op
+基准HybridRetriever TopKVariation/topk 10-8 50000 25000ns/op
+基准HybridRetriever TopKVariation/topk 20-8 40000 30000 ns/op
+基准HybridRetriever TopKVariation/topk 50-8 30000 40000ns/op
+基准HybridRetriever TopKVariation/topk 100-8 20000 60000ns/op
 
 性能目标：
 - 1000 文档检索：< 30ms

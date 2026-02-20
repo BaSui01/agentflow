@@ -11,12 +11,12 @@ import (
 	"go.uber.org/zap"
 )
 
-// TestWeaviateStore_Integration tests the Weaviate store against a real Weaviate instance.
-// Run with: go test -tags=integration -run TestWeaviateStore_Integration ./rag/...
+// 测试WeaviateStore 集成 测试Weaviate商店与真正的Weaviate案例.
+// 运行与: go test -tags=整合 - 运行的测试WeaviateStore 集成. /rag/.
 //
-// Prerequisites:
-// - Weaviate running on localhost:8080 (or set WEAVIATE_HOST and WEAVIATE_PORT)
-// - docker-compose --profile weaviate up -d
+// 先决条件:
+// - 本地主机:8080(或设置WEAVIATE HOST和WEAVIATE PORT)
+// - 涂鸦编织 - 标注式编织 - d
 func TestWeaviateStore_Integration(t *testing.T) {
 	host := os.Getenv("WEAVIATE_HOST")
 	if host == "" {
@@ -24,11 +24,11 @@ func TestWeaviateStore_Integration(t *testing.T) {
 	}
 	port := 8080
 	if p := os.Getenv("WEAVIATE_PORT"); p != "" {
-		// Parse port if needed
+		// 需要解析端口
 		port = 8080
 	}
 
-	// Skip if Weaviate is not available
+	// 无法使用 Weaviate 时跳过
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
@@ -42,7 +42,7 @@ func TestWeaviateStore_Integration(t *testing.T) {
 		HybridAlpha:      0.5,
 	}, logger)
 
-	// Clean up before and after test
+	// 测试前后清理
 	_ = store.DeleteClass(ctx)
 	defer func() {
 		cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -50,7 +50,7 @@ func TestWeaviateStore_Integration(t *testing.T) {
 		_ = store.DeleteClass(cleanupCtx)
 	}()
 
-	// Test documents
+	// 测试文档
 	docs := []Document{
 		{
 			ID:        "doc1",
@@ -72,17 +72,17 @@ func TestWeaviateStore_Integration(t *testing.T) {
 		},
 	}
 
-	// Test AddDocuments
+	// 测试添加文档
 	t.Run("AddDocuments", func(t *testing.T) {
 		if err := store.AddDocuments(ctx, docs); err != nil {
 			t.Fatalf("AddDocuments failed: %v", err)
 		}
 	})
 
-	// Wait for indexing
+	// 等待索引
 	time.Sleep(500 * time.Millisecond)
 
-	// Test Count
+	// 测试计数
 	t.Run("Count", func(t *testing.T) {
 		count, err := store.Count(ctx)
 		if err != nil {
@@ -93,7 +93,7 @@ func TestWeaviateStore_Integration(t *testing.T) {
 		}
 	})
 
-	// Test Vector Search
+	// 测试矢量搜索
 	t.Run("VectorSearch", func(t *testing.T) {
 		results, err := store.Search(ctx, generateTestEmbedding(128, 0.15), 2)
 		if err != nil {
@@ -102,11 +102,11 @@ func TestWeaviateStore_Integration(t *testing.T) {
 		if len(results) != 2 {
 			t.Fatalf("expected 2 results, got %d", len(results))
 		}
-		// First result should be closest to query embedding
+		// 第一个结果应最接近查询嵌入
 		t.Logf("Vector search results: %+v", results)
 	})
 
-	// Test Hybrid Search
+	// 测试混合搜索
 	t.Run("HybridSearch", func(t *testing.T) {
 		results, err := store.HybridSearch(ctx, "machine learning artificial intelligence", generateTestEmbedding(128, 0.2), 2)
 		if err != nil {
@@ -118,7 +118,7 @@ func TestWeaviateStore_Integration(t *testing.T) {
 		t.Logf("Hybrid search results: %+v", results)
 	})
 
-	// Test BM25 Search
+	// 测试 BM25 搜索
 	t.Run("BM25Search", func(t *testing.T) {
 		results, err := store.BM25Search(ctx, "fox dog", 2)
 		if err != nil {
@@ -127,7 +127,7 @@ func TestWeaviateStore_Integration(t *testing.T) {
 		if len(results) == 0 {
 			t.Fatalf("expected at least 1 result")
 		}
-		// Should find the document about fox and dog
+		// 应该找到关于狐狸和狗的文件
 		found := false
 		for _, r := range results {
 			if r.Document.ID == "doc1" {
@@ -141,7 +141,7 @@ func TestWeaviateStore_Integration(t *testing.T) {
 		t.Logf("BM25 search results: %+v", results)
 	})
 
-	// Test UpdateDocument
+	// 测试更新文档
 	t.Run("UpdateDocument", func(t *testing.T) {
 		updatedDoc := Document{
 			ID:        "doc1",
@@ -153,10 +153,10 @@ func TestWeaviateStore_Integration(t *testing.T) {
 			t.Fatalf("UpdateDocument failed: %v", err)
 		}
 
-		// Wait for update to be indexed
+		// 等待更新索引
 		time.Sleep(500 * time.Millisecond)
 
-		// Verify update via search
+		// 通过搜索验证更新
 		results, err := store.BM25Search(ctx, "updated", 1)
 		if err != nil {
 			t.Fatalf("Search after update failed: %v", err)
@@ -166,13 +166,13 @@ func TestWeaviateStore_Integration(t *testing.T) {
 		}
 	})
 
-	// Test DeleteDocuments
+	// 测试删除文档
 	t.Run("DeleteDocuments", func(t *testing.T) {
 		if err := store.DeleteDocuments(ctx, []string{"doc1"}); err != nil {
 			t.Fatalf("DeleteDocuments failed: %v", err)
 		}
 
-		// Wait for deletion
+		// 等待删除
 		time.Sleep(500 * time.Millisecond)
 
 		count, err := store.Count(ctx)
@@ -184,7 +184,7 @@ func TestWeaviateStore_Integration(t *testing.T) {
 		}
 	})
 
-	// Test GetSchema
+	// 测试 GetSchema
 	t.Run("GetSchema", func(t *testing.T) {
 		schema, err := store.GetSchema(ctx)
 		if err != nil {
@@ -197,7 +197,7 @@ func TestWeaviateStore_Integration(t *testing.T) {
 	})
 }
 
-// TestWeaviateStore_LargeScale tests the Weaviate store with a larger dataset.
+// 测试WeaviateStore Large Scale 用更大的数据集测试Weaviate商店.
 func TestWeaviateStore_LargeScale(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping large scale test in short mode")
@@ -219,7 +219,7 @@ func TestWeaviateStore_LargeScale(t *testing.T) {
 		AutoCreateSchema: true,
 	}, logger)
 
-	// Clean up
+	// 清理
 	_ = store.DeleteClass(ctx)
 	defer func() {
 		cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -227,7 +227,7 @@ func TestWeaviateStore_LargeScale(t *testing.T) {
 		_ = store.DeleteClass(cleanupCtx)
 	}()
 
-	// Generate 1000 documents
+	// 生成 1000 个文档
 	numDocs := 1000
 	docs := make([]Document, numDocs)
 	for i := 0; i < numDocs; i++ {
@@ -239,7 +239,7 @@ func TestWeaviateStore_LargeScale(t *testing.T) {
 		}
 	}
 
-	// Batch insert
+	// 批次插入
 	batchSize := 100
 	start := time.Now()
 	for i := 0; i < numDocs; i += batchSize {
@@ -253,10 +253,10 @@ func TestWeaviateStore_LargeScale(t *testing.T) {
 	}
 	t.Logf("Inserted %d documents in %v", numDocs, time.Since(start))
 
-	// Wait for indexing
+	// 等待索引
 	time.Sleep(2 * time.Second)
 
-	// Verify count
+	// 校验计数
 	count, err := store.Count(ctx)
 	if err != nil {
 		t.Fatalf("Count failed: %v", err)
@@ -265,7 +265,7 @@ func TestWeaviateStore_LargeScale(t *testing.T) {
 		t.Fatalf("expected count %d, got %d", numDocs, count)
 	}
 
-	// Test search performance
+	// 测试搜索性能
 	start = time.Now()
 	for i := 0; i < 100; i++ {
 		_, err := store.Search(ctx, generateTestEmbedding(128, 0.5), 10)
@@ -276,12 +276,12 @@ func TestWeaviateStore_LargeScale(t *testing.T) {
 	t.Logf("100 searches completed in %v (avg: %v)", time.Since(start), time.Since(start)/100)
 }
 
-// Helper functions
+// 辅助功能
 
 func generateTestEmbedding(dim int, seed float64) []float64 {
 	embedding := make([]float64, dim)
 	for i := 0; i < dim; i++ {
-		// Generate deterministic values based on seed
+		// 基于种子生成确定值
 		embedding[i] = (seed + float64(i)/float64(dim)) / 2.0
 	}
 	return embedding

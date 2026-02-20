@@ -15,11 +15,11 @@ import (
 	"go.uber.org/zap"
 )
 
-// PineconeConfig configures the Pinecone VectorStore implementation.
+// PineconeConfig 配置 Pinecone 矢量执行 。
 //
-// To use Pinecone you need either:
-// - BaseURL (data-plane host, e.g. https://<index>-<project>.svc.<region>.pinecone.io), or
-// - Index, in which case the store will resolve host via the controller API.
+// 要使用Pinecone,你也需要:
+// - BaseURL(数据-飞机主机,例如https://<index>-<project>.svc.<region>.pinecone.io),或
+// - Index,在这种情况下,商店将通过控制器API解决主机.
 type PineconeConfig struct {
 	APIKey     string        `json:"api_key"`
 	Index      string        `json:"index,omitempty"`     // Used to resolve BaseURL if BaseURL is empty
@@ -29,11 +29,11 @@ type PineconeConfig struct {
 
 	ControllerBaseURL string `json:"controller_base_url,omitempty"` // Default: https://api.pinecone.io
 
-	// Payload fields stored in metadata.
+	// 存储在元数据中的有效载荷字段 。
 	MetadataContentField string `json:"metadata_content_field,omitempty"` // Default: "content"
 }
 
-// PineconeStore implements VectorStore using Pinecone's REST API.
+// PineconeStore使用Pinecone的REST API执行矢量Store.
 type PineconeStore struct {
 	cfg    PineconeConfig
 	logger *zap.Logger
@@ -43,7 +43,7 @@ type PineconeStore struct {
 	baseURL string
 }
 
-// NewPineconeStore creates a Pinecone-backed VectorStore.
+// 新PineconeStore创建了皮内可酮后置矢量Store.
 func NewPineconeStore(cfg PineconeConfig, logger *zap.Logger) *PineconeStore {
 	if logger == nil {
 		logger = zap.NewNop()
@@ -83,7 +83,7 @@ func (s *PineconeStore) ensureBaseURL(ctx context.Context) error {
 		return fmt.Errorf("pinecone api_key is required")
 	}
 
-	// Resolve host via controller API: GET /indexes/{index}
+	// 通过控制器 API 解析主机: get/indexs/{index}
 	controller := strings.TrimRight(strings.TrimSpace(s.cfg.ControllerBaseURL), "/")
 	endpoint := fmt.Sprintf("%s/indexes/%s", controller, url.PathEscape(s.cfg.Index))
 
@@ -209,7 +209,7 @@ func (s *PineconeStore) AddDocuments(ctx context.Context, docs []Document) error
 			meta[k] = v
 		}
 		if doc.Content != "" {
-			// Best-effort: store content in metadata.
+			// 最佳效果:在元数据中存储内容.
 			if _, exists := meta[s.cfg.MetadataContentField]; !exists {
 				meta[s.cfg.MetadataContentField] = doc.Content
 			}

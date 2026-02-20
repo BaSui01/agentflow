@@ -72,7 +72,7 @@ func AdaptiveHNSWConfig(dataSize int) HNSWConfig {
 	config := DefaultHNSWConfig()
 	
 	// 根据数据规模动态调整 M
-	// < 10K: M=12, 10K-100K: M=16, 100K-1M: M=24, > 1M: M=32
+	// 数据规模与 M 的对应关系：<10K 时 M=12，10K-100K 时 M=16，100K-1M 时 M=24，>1M 时 M=32
 	switch {
 	case dataSize < 10000:
 		config.M = 12

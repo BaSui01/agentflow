@@ -86,7 +86,7 @@ func TestArxivSource_BuildQuery_WithMultipleCategories(t *testing.T) {
 	assert.Contains(t, result, "+OR+")
 	assert.Contains(t, result, "cat:cs.CL")
 	assert.Contains(t, result, "cat:cs.LG")
-	// Verify the category part is wrapped in parentheses
+	// 校验括号中包含的类别部分
 	assert.Contains(t, result, "(cat:cs.AI+OR+cat:cs.CL+OR+cat:cs.LG)")
 }
 
@@ -117,7 +117,7 @@ func TestArxivSource_ToJSON(t *testing.T) {
 	assert.NoError(t, err)
 	assert.NotEmpty(t, jsonStr)
 
-	// Verify it's valid JSON by unmarshalling back
+	// 证明JSON是有效的 解除退赛
 	var decoded []ArxivPaper
 	err = json.Unmarshal([]byte(jsonStr), &decoded)
 	assert.NoError(t, err)
