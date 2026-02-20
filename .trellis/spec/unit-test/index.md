@@ -604,3 +604,52 @@ func TestFoo(t *testing.T) {
     t.Cleanup(func() { os.Remove(f.Name()) })
 }
 ```
+
+### 6. Using `testify/mock` (Banned — Use Hand-Written Mocks)
+
+**Known violations (as of 2026-02-21 audit)**: 7 files still use `testify/mock`:
+
+| File | Status |
+|------|--------|
+| `agent/base_test.go` | Uses `mock.Mock` embedding |
+| `agent/tool_selector_test.go` | Uses `mock.Mock` embedding |
+| `agent/tool_provider_test.go` | Uses `mock.Mock` embedding |
+| `agent/reflection_test.go` | Uses `mock.Mock` embedding |
+| `llm/resilient_provider_test.go` | Uses `mock.Mock` embedding |
+| `tests/integration/multi_provider_test.go` | Uses `mock.Mock` embedding |
+| `tests/integration/tool_calling_test.go` | Uses `mock.Mock` embedding |
+
+These should be migrated to hand-written mocks with builder pattern (see Mock Patterns section above).
+
+### 7. Using `time.Sleep` in Tests (Flaky Test Risk)
+
+`time.Sleep` in tests creates timing-dependent failures. Use `testutil.WaitFor` or `testutil.WaitForChannel` instead:
+
+```go
+// WRONG — flaky, slow
+time.Sleep(100 * time.Millisecond)
+assert.True(t, condition())
+
+// CORRECT — fast, deterministic
+ok := testutil.WaitFor(condition, 5*time.Second)
+require.True(t, ok, "condition not met within timeout")
+```
+
+**Known scope**: 60+ `time.Sleep` calls across test files. Priority migration targets:
+- `agent/` package tests (highest flaky risk due to concurrent agent operations)
+- `llm/` package tests (network-dependent timing)
+
+### 8. Zero-Test Packages (Coverage Gap)
+
+34 packages have zero test files. Priority packages that need tests:
+
+| Package | Risk | Reason |
+|---------|------|--------|
+| `agent/browser/` | High | Concurrent pool + vision, P0 race conditions |
+| `agent/hitl/` | High | P0 Resolve/Cancel race condition |
+| `agent/federation/` | High | P0 channel close race |
+| `agent/voice/` | Medium | Audio streaming lifecycle |
+| `llm/batch/` | Medium | Batch processing with timeouts |
+| `llm/streaming/` | Medium | Backpressure and buffer management |
+| `llm/embedding/` | Low | Relatively simple wrapper |
+| `llm/tokenizer/` | Low | Thin adapter layer |

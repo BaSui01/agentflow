@@ -492,3 +492,76 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 7: README 全量更新 — 中英文双版本同步对齐
+
+**Date**: 2026-02-21
+**Task**: README 全量更新 — 中英文双版本同步对齐
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+## 概述
+
+README.md（中文）和 README_EN.md（英文）全量更新，使文档覆盖度从 ~60-70% 提升至 100%，与代码库实际状态完全对齐。
+
+## 变更内容
+
+| 变更项 | 说明 |
+|--------|------|
+| Bug 修复 | `**Go 1.24+**i` → `**Go 1.24+**` typo 修复 |
+| Agent 框架 | 追加声明式加载器、插件系统、HITL、联邦/服务发现（4 条） |
+| RAG 系统 | 追加 DocumentLoader、Config→RAG 桥接、Graph RAG、查询路由（4 条） |
+| 多提供商 | 追加 Provider 工厂函数、OpenAI 兼容层（2 条） |
+| 企业级能力 | 追加 MCP WebSocket 心跳重连（1 条） |
+| 项目结构树 | 替换为完整新版，展示到二级子目录（含 34 个 agent 子目录、20 个 llm 子目录等） |
+| 示例表 | 从 8 个扩展到 19 个 |
+| 技术栈 | 补充 Milvus/Weaviate + tiktoken-go/chromedp/websocket/golang-migrate/yaml.v3 |
+| 英文版同步 | README_EN.md 全量翻译对齐，补齐双模型架构、Browser Automation、RAG 完整章节等缺失内容 |
+| Trellis 规范 | 更新错误处理/代码复用/跨层思考指南 |
+| 任务归档 | 归档 02-20-framework-optimization 到 archive/2026-02/ |
+
+## 修改文件
+
+- `README.md` — 中文版全量更新
+- `README_EN.md` — 英文版全量同步对齐
+- `.trellis/spec/backend/error-handling.md` — 错误处理规范
+- `.trellis/spec/guides/code-reuse-thinking-guide.md` — 代码复用指南
+- `.trellis/spec/guides/cross-layer-thinking-guide.md` — 跨层思考指南
+- `.trellis/spec/guides/index.md` — 指南索引
+- `.trellis/workspace/BaSui/index.md` — 工作区索引
+- `.trellis/workspace/BaSui/journal-1.md` — 工作日志
+
+## 验证结果
+
+- ✅ 两个文件章节结构一一对应（7 个 ## + 8 个 ###）
+- ✅ 特性条目数量完全一致（Agent 15 条、RAG 12 条、多提供商 8 条、企业级 7 条）
+- ✅ 项目结构树中列出的目录/文件全部实际存在
+- ✅ 示例表 19 个目录全部实际存在
+- ✅ 技术栈依赖在 go.mod 中全部存在
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `167d451` | (see git log) |
+| `060cce7` | (see git log) |
+| `2b30312` | (see git log) |
+| `63b25b0` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

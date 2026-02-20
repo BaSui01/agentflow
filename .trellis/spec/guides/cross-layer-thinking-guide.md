@@ -214,3 +214,70 @@ func (s *LLMStep) Execute(ctx context.Context, input any) (any, error) {
 ### Reference
 
 → See [quality-guidelines.md §12](../backend/quality-guidelines.md) for full pattern details
+
+---
+
+## Known Cross-Layer Type Splits (2026-02-21 Audit)
+
+### Temperature: float32 vs float64
+
+Two camps exist across the codebase. This is a **known tech debt**, not a bug — but narrowing casts (float64→float32) happen silently at boundaries.
+
+**float32 camp** (LLM runtime / API / Agent):
+- `types/config.go` — `LLMConfig.Temperature float32`
+- `llm/provider.go` — `ChatRequest.Temperature float32`
+- `api/types.go` — `api.ChatRequest.Temperature float32`
+- `agent/base.go` — `Config.Temperature float32`
+- `agent/run_config.go` — `*float32`
+
+**float64 camp** (Config / Workflow / Declarative / K8s / RAG):
+- `config/loader.go` — `AgentConfig.Temperature float64`
+- `workflow/steps.go` — `LLMStep.Temperature float64` (explicit `float32()` cast at line 95)
+- `workflow/dsl/schema.go` — `AgentDef.Temperature float64`
+- `agent/declarative/definition.go` — `AgentDefinition.Temperature float64`
+- `agent/k8s/operator.go` — `ModelSpec.Temperature float64`
+- `rag/reranker.go` — `LLMRerankerConfig.Temperature float64`
+
+**Impact**: Lossy narrowing at `workflow/steps.go:95` (`float32(s.Temperature)`). For Temperature values (0.0-2.0), precision loss is negligible, but the inconsistency creates confusion.
+
+**Rule**: When adding new Temperature fields, use `float32` to match the LLM runtime convention. If in a config/YAML struct, use `float64` (YAML default) and document the narrowing cast.
+
+### Embedding: []float32 vs []float64
+
+**float32 camp** (agent/memory layer):
+- `types/memory.go` — `MemoryRecord.Embedding []float32`
+- `agent/memory/layered_memory.go` — `Embedder.Embed() ([]float32, error)`
+
+**float64 camp** (RAG / LLM embedding layer):
+- `rag/vector_store.go` — `VectorStore.Search(queryEmbedding []float64, ...)`
+- `llm/embedding/types.go` — `EmbeddingResult.Embedding []float64`
+- `rag/provider_integration.go` — `EmbeddingProvider.EmbedQuery() ([]float64, error)`
+
+**Bridge**: `rag/vector_convert.go` provides `Float32ToFloat64` / `Float64ToFloat32`, but these are NOT used at the `agent/memory` ↔ `rag/` boundary.
+
+**Rule**: When passing embeddings across the memory↔RAG boundary, always use the conversion functions from `rag/vector_convert.go`.
+
+### TokenUsage: Three Incompatible Structs
+
+| Type | Location | Fields |
+|------|----------|--------|
+| `types.TokenUsage` | `types/token.go` | `PromptTokens`, `CompletionTokens`, `TotalTokens`, `Cost float64` |
+| `llm.ChatUsage` | `llm/provider.go` | `PromptTokens`, `CompletionTokens`, `TotalTokens` (no Cost) |
+| `observability.TokenUsage` | `llm/observability/tracing.go` | `Prompt`, `Completion`, `Total` (different field names!) |
+
+**Unsafe cast** at `api/handlers/chat.go:313`:
+```go
+Usage: (*api.ChatUsage)(chunk.Usage)  // raw pointer cast — breaks if fields diverge
+```
+
+**Rule**: Never use raw pointer type casts between structs. Use explicit field-by-field mapping or a conversion function.
+
+### Duplicate Config Types (No Conversion Functions)
+
+| Type | Duplicates | Conversion |
+|------|-----------|------------|
+| `GuardrailsConfig` | `types/` vs `agent/guardrails/` vs `agent/declarative/` | None |
+| `MemoryConfig` | `types/` vs `config/` vs `agent/declarative/` vs `agent/prompt_bundle.go` | None |
+| `AgentConfig` | `config/loader.go` (flat, float64) vs `types/config.go` (nested, float32) | None |
+
+**Rule**: When adding a new config type, search for existing definitions first (`grep -r "type <Name>Config struct"`). If duplication is unavoidable, create a conversion function.

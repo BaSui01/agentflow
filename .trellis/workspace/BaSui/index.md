@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 6
+- **Total Sessions**: 7
 - **Last Active**: 2026-02-21
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~494 | Active |
+| `journal-1.md` | ~567 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits |
 |---|------|-------|---------|
+| 7 | 2026-02-21 | README 全量更新 — 中英文双版本同步对齐 | `167d451`, `060cce7`, `2b30312`, `63b25b0` |
 | 6 | 2026-02-21 | Sprint 6: 框架优化收尾 — P1类型统一 + OP1-OP16架构优化 + 规范沉淀 | `5ca967d`, `18ca491`, `ccce915`, `49e470b`, `00de1ce`, `ab28054`, `2d17b05`, `0d674c6` |
 | 5 | 2026-02-21 | Sprint 6: 跨层检查 + Weaviate offset 测试 + 规范沉淀 + 分批提交 | `0d674c6`, `2d17b05`, `ab28054`, `00de1ce`, `49e470b`, `ccce915`, `18ca491` |
 | 4 | 2026-02-21 | Session 3: Sprint 1-5 框架架构优化 + 分批提交 + 质量检查 | `82f15ae`, `30438a2`, `eaaa896`, `46bd0a3`, `36e308f`, `770548e`, `fe5ea6e`, `7820eaa`, `58f4736`, `18fd504`, `be68d07`, `0ad300b`, `0abcce4`, `5bb4de4`, `7b8d5e0`, `b48f17e`, `8f549f5`, `0ed2bc5`, `0b140c3` |

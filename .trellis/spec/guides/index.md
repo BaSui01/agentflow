@@ -123,6 +123,36 @@ These guides help you **ask the right questions before coding**.
 
 → Read [unit-test/index.md § HTTP Mock Patterns](../unit-test/index.md) for pagination strategy matrix
 
+### When to Think About Channel Lifecycle Safety
+
+- [ ] 新增 `close(ch)` 调用 — 是否有 `sync.Once` 保护？（§24）
+- [ ] 新增 streaming/SSE 循环 — 是否有 `ctx.Done()` 退出路径？（§25）
+- [ ] 新增 `recover()` — 是否记录了 panic 信息？（§27）
+- [ ] 新增 goroutine — 是否有明确的退出机制（done channel / context）？
+- [ ] 修改 `Close()`/`Shutdown()`/`Stop()` 方法 — 是否考虑了并发调用？
+
+→ Read [quality-guidelines.md §24-§27](../backend/quality-guidelines.md) for Channel/Streaming/Panic patterns
+→ Read [error-handling.md § HITL Race](../backend/error-handling.md) for Resolve/Cancel race pattern
+
+### When to Think About Interface Deduplication
+
+- [ ] 新增接口定义 — 是否已有同名接口在其他包中？先搜索 `type <Name> interface`
+- [ ] 已知重复接口：`VectorStore`(3处)、`AuditLogger`(3处)、`Tokenizer`(3处)、`Plugin`(2处)、`CheckpointStore`(2处)、`MetricsCollector`(2处)
+- [ ] 如果重复是为了避免循环依赖 — 使用 §15 Workflow-Local Interface 模式并注释说明
+- [ ] 如果重复无正当理由 — 统一到 `types/` 或最低层包中
+
+→ Read [quality-guidelines.md §15](../backend/quality-guidelines.md) for Workflow-Local Interface pattern
+
+### When to Think About Cross-Layer Type Consistency
+
+- [ ] 新增 Temperature/TopP 等浮点字段 — 是 `float32`（LLM runtime）还是 `float64`（config/YAML）？
+- [ ] 新增 Embedding 字段 — 是 `[]float32`（agent/memory）还是 `[]float64`（RAG/LLM）？需要 `vector_convert.go` 桥接吗？
+- [ ] 新增 Config 结构体 — 是否已有同名 Config 在其他包中？先搜索 `type <Name>Config struct`
+- [ ] 跨包传递 TokenUsage — 是否使用了 raw pointer cast？改用字段映射
+- [ ] 新增 ErrorCode — 是否与现有 code 语义重复？（如 `RATE_LIMIT` vs `RATE_LIMITED`）
+
+→ Read [cross-layer-thinking-guide.md § Known Type Splits](./cross-layer-thinking-guide.md) for full inventory
+
 ---
 
 ## Pre-Modification Rule (CRITICAL)

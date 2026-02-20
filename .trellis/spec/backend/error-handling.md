@@ -436,3 +436,93 @@ case <-t.done:
 - [ ] 向 channel 发送前检查 done 信号
 - [ ] goroutine 有明确的退出路径（`select` on `done` channel）
 - [ ] 不要依赖 `recover()` 来捕获 channel panic — 从设计上避免
+
+---
+
+## HITL Interrupt Resolve/Cancel Race Condition (P0)
+
+`agent/hitl/interrupt.go` has a race between `Resolve()` (line ~239) and `Cancel()` (line ~282) — both write to `responseCh` without coordination:
+
+```go
+// WRONG — current code: two methods can write to same channel concurrently
+func (i *Interrupt) Resolve(response string) error {
+    i.responseCh <- response  // may panic if Cancel() already closed it
+    return i.store.Update(i.id, StatusResolved)  // return value ignored!
+}
+
+func (i *Interrupt) Cancel() error {
+    close(i.responseCh)  // may panic if Resolve() already sent
+    return i.store.Update(i.id, StatusCancelled)
+}
+```
+
+**Two bugs**:
+1. Race: concurrent `Resolve` + `Cancel` = panic (send on closed channel)
+2. `store.Update` return value is ignored — persistence failure is silent
+
+**Fix pattern**:
+
+```go
+type Interrupt struct {
+    responseCh chan string
+    closeOnce  sync.Once
+    mu         sync.Mutex
+    resolved   bool
+}
+
+func (i *Interrupt) Resolve(response string) error {
+    i.mu.Lock()
+    defer i.mu.Unlock()
+    if i.resolved {
+        return ErrAlreadyResolved
+    }
+    i.resolved = true
+    i.responseCh <- response
+    return i.store.Update(i.id, StatusResolved)  // MUST check error
+}
+
+func (i *Interrupt) Cancel() error {
+    i.mu.Lock()
+    defer i.mu.Unlock()
+    if i.resolved {
+        return ErrAlreadyResolved
+    }
+    i.resolved = true
+    i.closeOnce.Do(func() { close(i.responseCh) })
+    return i.store.Update(i.id, StatusCancelled)
+}
+```
+
+---
+
+## Rate Limiter Goroutine Leak (P2)
+
+`cmd/agentflow/middleware.go:126-137` creates a goroutine for token bucket refill with no shutdown mechanism:
+
+```go
+// WRONG — goroutine runs forever, no way to stop it
+go func() {
+    ticker := time.NewTicker(refillInterval)
+    defer ticker.Stop()
+    for range ticker.C {
+        limiter.refill()
+    }
+}()
+```
+
+**Fix**: Accept a `context.Context` or `done` channel for graceful shutdown:
+
+```go
+go func() {
+    ticker := time.NewTicker(refillInterval)
+    defer ticker.Stop()
+    for {
+        select {
+        case <-ticker.C:
+            limiter.refill()
+        case <-ctx.Done():
+            return
+        }
+    }
+}()
+```
