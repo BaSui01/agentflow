@@ -30,6 +30,10 @@ type WindowConfig struct {
 }
 
 // TokenCounter counts tokens in text. Compatible with rag.Tokenizer.
+//
+// Note: llm/tools.TokenCounter has a different signature (returns error).
+// These cannot be unified because this interface is error-free by design
+// (context window management should not fail on token counting).
 type TokenCounter interface {
 	CountTokens(text string) int
 }

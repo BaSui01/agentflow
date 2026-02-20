@@ -168,3 +168,87 @@ func TestQdrantStore_BasicFlow(t *testing.T) {
 		t.Fatalf("expected count 1 call, got %d", countCalls.Load())
 	}
 }
+
+func TestQdrantStore_ListDocumentIDs(t *testing.T) {
+	t.Parallel()
+
+	mux := http.NewServeMux()
+
+	mux.HandleFunc("/collections/testcol/points/scroll", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			t.Fatalf("unexpected method: %s", r.Method)
+		}
+
+		var req struct {
+			Limit       int `json:"limit"`
+			WithPayload any `json:"with_payload"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			t.Fatalf("decode scroll request: %v", err)
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"status":"ok",
+			"result":{
+				"points":[
+					{"id":"uuid-1","payload":{"doc_id":"doc1"}},
+					{"id":"uuid-2","payload":{"doc_id":"doc2"}},
+					{"id":"uuid-3","payload":{"doc_id":"doc3"}}
+				]
+			}
+		}`))
+	})
+
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	store := NewQdrantStore(QdrantConfig{
+		BaseURL:    srv.URL,
+		Collection: "testcol",
+	}, zap.NewNop())
+
+	ctx := context.Background()
+
+	// All documents
+	ids, err := store.ListDocumentIDs(ctx, 10, 0)
+	if err != nil {
+		t.Fatalf("ListDocumentIDs: %v", err)
+	}
+	if len(ids) != 3 {
+		t.Fatalf("expected 3 IDs, got %d", len(ids))
+	}
+	if ids[0] != "doc1" || ids[1] != "doc2" || ids[2] != "doc3" {
+		t.Fatalf("unexpected IDs: %v", ids)
+	}
+
+	// With offset
+	ids, err = store.ListDocumentIDs(ctx, 2, 1)
+	if err != nil {
+		t.Fatalf("ListDocumentIDs with offset: %v", err)
+	}
+	if len(ids) != 2 {
+		t.Fatalf("expected 2 IDs, got %d", len(ids))
+	}
+	if ids[0] != "doc2" || ids[1] != "doc3" {
+		t.Fatalf("unexpected IDs with offset: %v", ids)
+	}
+
+	// Offset beyond length
+	ids, err = store.ListDocumentIDs(ctx, 10, 10)
+	if err != nil {
+		t.Fatalf("ListDocumentIDs beyond offset: %v", err)
+	}
+	if len(ids) != 0 {
+		t.Fatalf("expected 0 IDs, got %d", len(ids))
+	}
+
+	// Zero limit
+	ids, err = store.ListDocumentIDs(ctx, 0, 0)
+	if err != nil {
+		t.Fatalf("ListDocumentIDs zero limit: %v", err)
+	}
+	if len(ids) != 0 {
+		t.Fatalf("expected 0 IDs for zero limit, got %d", len(ids))
+	}
+}

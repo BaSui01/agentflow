@@ -207,7 +207,10 @@ type CostAlertHandler interface {
 	HandleAlert(ctx context.Context, alert *CostAlert) error
 }
 
-// TokenCounter 可选的 token 计数器接口
+// TokenCounter 可选的 token 计数器接口。
+//
+// 注意：agent/context.TokenCounter 签名为 CountTokens(string) int（无 error），
+// 本接口返回 error 以支持真实 tokenizer 的错误处理。两者无法统一。
 type TokenCounter interface {
 	CountTokens(text string) (int, error)
 }

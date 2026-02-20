@@ -26,6 +26,57 @@ func TestInMemoryVectorStore_ImplementsVectorStore(t *testing.T) {
 	var _ VectorStore = (*InMemoryVectorStore)(nil)
 }
 
+// External store interface compliance: VectorStore
+func TestQdrantStore_ImplementsVectorStore(t *testing.T) {
+	var _ VectorStore = (*QdrantStore)(nil)
+}
+
+func TestMilvusStore_ImplementsVectorStore(t *testing.T) {
+	var _ VectorStore = (*MilvusStore)(nil)
+}
+
+func TestWeaviateStore_ImplementsVectorStore(t *testing.T) {
+	var _ VectorStore = (*WeaviateStore)(nil)
+}
+
+func TestPineconeStore_ImplementsVectorStore(t *testing.T) {
+	var _ VectorStore = (*PineconeStore)(nil)
+}
+
+// External store interface compliance: Clearable
+func TestQdrantStore_ImplementsClearable(t *testing.T) {
+	var _ Clearable = (*QdrantStore)(nil)
+}
+
+func TestMilvusStore_ImplementsClearable(t *testing.T) {
+	var _ Clearable = (*MilvusStore)(nil)
+}
+
+func TestWeaviateStore_ImplementsClearable(t *testing.T) {
+	var _ Clearable = (*WeaviateStore)(nil)
+}
+
+func TestPineconeStore_ImplementsClearable(t *testing.T) {
+	var _ Clearable = (*PineconeStore)(nil)
+}
+
+// External store interface compliance: DocumentLister
+func TestQdrantStore_ImplementsDocumentLister(t *testing.T) {
+	var _ DocumentLister = (*QdrantStore)(nil)
+}
+
+func TestMilvusStore_ImplementsDocumentLister(t *testing.T) {
+	var _ DocumentLister = (*MilvusStore)(nil)
+}
+
+func TestWeaviateStore_ImplementsDocumentLister(t *testing.T) {
+	var _ DocumentLister = (*WeaviateStore)(nil)
+}
+
+func TestPineconeStore_ImplementsDocumentLister(t *testing.T) {
+	var _ DocumentLister = (*PineconeStore)(nil)
+}
+
 // ============================================================
 // InMemoryVectorStore.ClearAll tests
 // ============================================================

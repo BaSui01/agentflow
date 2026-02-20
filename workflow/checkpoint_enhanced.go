@@ -46,7 +46,14 @@ type NodeSnapshot struct {
 	Duration int64  `json:"duration_ms,omitempty"`
 }
 
-// CheckpointStore defines storage interface for enhanced checkpoints.
+// CheckpointStore defines storage interface for enhanced checkpoints (Workflow layer).
+//
+// Note: Two CheckpointStore interfaces exist in the project, operating on different types:
+//   - agent.CheckpointStore    — operates on *agent.Checkpoint (agent state, List/DeleteThread/Rollback)
+//   - workflow.CheckpointStore (this) — operates on *workflow.EnhancedCheckpoint (DAG node results, time-travel)
+//
+// They cannot be unified because the checkpoint structs have different fields
+// (agent state vs DAG execution state).
 type CheckpointStore interface {
 	Save(ctx context.Context, checkpoint *EnhancedCheckpoint) error
 	Load(ctx context.Context, checkpointID string) (*EnhancedCheckpoint, error)

@@ -662,3 +662,77 @@ func TestMilvusStore_HelperFunctions(t *testing.T) {
 		t.Error("milvusPointID should generate different UUIDs for different inputs")
 	}
 }
+
+func TestMilvusStore_ListDocumentIDs(t *testing.T) {
+	t.Parallel()
+
+	mux := http.NewServeMux()
+
+	mux.HandleFunc("/v2/vectordb/entities/query", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			t.Fatalf("unexpected method: %s", r.Method)
+		}
+
+		var req map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			t.Fatalf("decode query request: %v", err)
+		}
+
+		if req["collectionName"] != "testcol" {
+			t.Fatalf("unexpected collection: %v", req["collectionName"])
+		}
+
+		// Verify outputFields contains doc_id
+		outputFields, ok := req["outputFields"].([]any)
+		if !ok || len(outputFields) == 0 {
+			t.Fatalf("expected outputFields in request")
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"code": 0,
+			"data": [
+				{"doc_id": "doc1"},
+				{"doc_id": "doc2"},
+				{"doc_id": "doc3"}
+			]
+		}`))
+	})
+
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	store := NewMilvusStore(MilvusConfig{
+		BaseURL:    srv.URL,
+		Collection: "testcol",
+	}, zap.NewNop())
+
+	ctx := context.Background()
+
+	ids, err := store.ListDocumentIDs(ctx, 10, 0)
+	if err != nil {
+		t.Fatalf("ListDocumentIDs: %v", err)
+	}
+	if len(ids) != 3 {
+		t.Fatalf("expected 3 IDs, got %d", len(ids))
+	}
+	if ids[0] != "doc1" || ids[1] != "doc2" || ids[2] != "doc3" {
+		t.Fatalf("unexpected IDs: %v", ids)
+	}
+
+	// Zero limit
+	ids, err = store.ListDocumentIDs(ctx, 0, 0)
+	if err != nil {
+		t.Fatalf("ListDocumentIDs zero limit: %v", err)
+	}
+	if len(ids) != 0 {
+		t.Fatalf("expected 0 IDs for zero limit, got %d", len(ids))
+	}
+
+	// Missing collection
+	storeNoCol := NewMilvusStore(MilvusConfig{}, zap.NewNop())
+	_, err = storeNoCol.ListDocumentIDs(ctx, 10, 0)
+	if err == nil || !strings.Contains(err.Error(), "collection is required") {
+		t.Fatalf("expected collection required error, got: %v", err)
+	}
+}
