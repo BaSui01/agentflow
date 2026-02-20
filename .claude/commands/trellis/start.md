@@ -1,348 +1,348 @@
-# Start Session
+# 启动会话
 
-Initialize your AI development session and begin working on tasks.
-
----
-
-## Operation Types
-
-| Marker | Meaning | Executor |
-|--------|---------|----------|
-| `[AI]` | Bash scripts or Task calls executed by AI | You (AI) |
-| `[USER]` | Slash commands executed by user | User |
+初始化你的 AI 开发会话并开始处理任务。
 
 ---
 
-## Initialization `[AI]`
+## 操作类型
 
-### Step 1: Understand Development Workflow
+| 标记 | 含义 | 执行者 |
+|------|------|--------|
+| `[AI]` | 由 AI 执行的 Bash 脚本或 Task 调用 | 你（AI） |
+| `[USER]` | 由用户执行的斜杠命令 | 用户 |
 
-First, read the workflow guide to understand the development process:
+---
+
+## 初始化 `[AI]`
+
+### 步骤 1：理解开发工作流
+
+首先，阅读工作流指南以理解开发流程：
 
 ```bash
 cat .trellis/workflow.md
 ```
 
-**Follow the instructions in workflow.md** - it contains:
-- Core principles (Read Before Write, Follow Standards, etc.)
-- File system structure
-- Development process
-- Best practices
+**遵循 workflow.md 中的指示** - 它包含：
+- 核心原则（先读后写、遵循标准等）
+- 文件系统结构
+- 开发流程
+- 最佳实践
 
-### Step 2: Get Current Context
+### 步骤 2：获取当前上下文
 
 ```bash
 python3 ./.trellis/scripts/get_context.py
 ```
 
-This shows: developer identity, git status, current task (if any), active tasks.
+显示：开发者身份、git 状态、当前任务（如有）、活跃任务。
 
-### Step 3: Read Guidelines Index
+### 步骤 3：阅读规范索引
 
 ```bash
-cat .trellis/spec/frontend/index.md  # Frontend guidelines
-cat .trellis/spec/backend/index.md   # Backend guidelines
-cat .trellis/spec/guides/index.md    # Thinking guides
-cat .trellis/spec/unit-test/index.md # Testing guidelines
+cat .trellis/spec/frontend/index.md  # 前端规范
+cat .trellis/spec/backend/index.md   # 后端规范
+cat .trellis/spec/guides/index.md    # 思维指南
+cat .trellis/spec/unit-test/index.md # 测试规范
 ```
 
-### Step 4: Report and Ask
+### 步骤 4：报告并询问
 
-Report what you learned and ask: "What would you like to work on?"
+报告你了解到的内容，然后问："你想做什么？"
 
 ---
 
-## Task Classification
+## 任务分类
 
-When user describes a task, classify it:
+当用户描述任务时，进行分类：
 
-| Type | Criteria | Workflow |
-|------|----------|----------|
-| **Question** | User asks about code, architecture, or how something works | Answer directly |
-| **Trivial Fix** | Typo fix, comment update, single-line change | Direct Edit |
-| **Simple Task** | Clear goal, 1-2 files, well-defined scope | Quick confirm → Implement |
-| **Complex Task** | Vague goal, multiple files, architectural decisions | **Brainstorm → Task Workflow** |
+| 类型 | 标准 | 工作流 |
+|------|------|--------|
+| **提问** | 用户询问代码、架构或工作原理 | 直接回答 |
+| **微小修复** | 修错别字、更新注释、单行修改 | 直接编辑 |
+| **简单任务** | 目标明确、1-2 个文件、范围清晰 | 快速确认 → 实现 |
+| **复杂任务** | 目标模糊、多文件、架构决策 | **头脑风暴 → 任务工作流** |
 
-### Classification Signals
+### 分类信号
 
-**Trivial/Simple indicators:**
-- User specifies exact file and change
-- "Fix the typo in X"
-- "Add field Y to component Z"
-- Clear acceptance criteria already stated
+**微小/简单的指标：**
+- 用户指定了确切的文件和修改
+- "修复 X 中的错别字"
+- "给组件 Z 添加字段 Y"
+- 已经明确了验收标准
 
-**Complex indicators:**
-- "I want to add a feature for..."
-- "Can you help me improve..."
-- Mentions multiple areas or systems
-- No clear implementation path
-- User seems unsure about approach
+**复杂的指标：**
+- "我想添加一个功能来..."
+- "你能帮我改进..."
+- 涉及多个区域或系统
+- 没有明确的实现路径
+- 用户对方案不确定
 
-### Decision Rule
+### 决策规则
 
-> **If in doubt, use Brainstorm + Task Workflow.**
+> **如果不确定，使用头脑风暴 + 任务工作流。**
 >
-> Task Workflow ensures code-spec context is injected to agents, resulting in higher quality code.
-> The overhead is minimal, but the benefit is significant.
+> 任务工作流确保代码规范上下文被注入到 Agent，从而产出更高质量的代码。
+> 开销很小，但收益显著。
 
 ---
 
-## Question / Trivial Fix
+## 提问 / 微小修复
 
-For questions or trivial fixes, work directly:
+对于提问或微小修复，直接处理：
 
-1. Answer question or make the fix
-2. If code was changed, remind user to run `/trellis:finish-work`
-
----
-
-## Simple Task
-
-For simple, well-defined tasks:
-
-1. Quick confirm: "I understand you want to [goal]. Ready to proceed?"
-2. If yes, skip to **Task Workflow Step 2** (Research)
-3. If no, clarify and confirm again
+1. 回答问题或进行修复
+2. 如果修改了代码，提醒用户运行 `/trellis:finish-work`
 
 ---
 
-## Complex Task - Brainstorm First
+## 简单任务
 
-For complex or vague tasks, use the brainstorm process to clarify requirements.
+对于简单、定义明确的任务：
 
-See `/trellis:brainstorm` for the full process. Summary:
-
-1. **Acknowledge and classify** - State your understanding
-2. **Create task directory** - Track evolving requirements in `prd.md`
-3. **Ask questions one at a time** - Update PRD after each answer
-4. **Propose approaches** - For architectural decisions
-5. **Confirm final requirements** - Get explicit approval
-6. **Proceed to Task Workflow** - With clear requirements in PRD
-
-### Key Brainstorm Principles
-
-| Principle | Description |
-|-----------|-------------|
-| **One question at a time** | Never overwhelm with multiple questions |
-| **Update PRD immediately** | After each answer, update the document |
-| **Prefer multiple choice** | Easier for users to answer |
-| **YAGNI** | Challenge unnecessary complexity |
+1. 快速确认："我理解你想要 [目标]。准备好继续了吗？"
+2. 如果是，跳到**任务工作流步骤 2**（研究）
+3. 如果不是，澄清后再确认
 
 ---
 
-## Task Workflow (Development Tasks)
+## 复杂任务 - 先头脑风暴
 
-**Why this workflow?**
-- Research Agent analyzes what code-spec files are needed
-- Code-spec files are configured in jsonl files
-- Implement Agent receives code-spec context via Hook injection
-- Check Agent verifies against code-spec requirements
-- Result: Code that follows project conventions automatically
+对于复杂或模糊的任务，使用头脑风暴流程来澄清需求。
 
-### Step 1: Understand the Task `[AI]`
+参见 `/trellis:brainstorm` 了解完整流程。摘要：
 
-**If coming from Brainstorm:** Skip this step - requirements are already in PRD.
+1. **确认并分类** - 陈述你的理解
+2. **创建任务目录** - 在 `prd.md` 中跟踪演进的需求
+3. **逐个提问** - 每次回答后更新 PRD
+4. **提出方案** - 用于架构决策
+5. **确认最终需求** - 获得明确批准
+6. **进入任务工作流** - 带着清晰的 PRD 需求
 
-**If Simple Task:** Quick confirm understanding:
-- What is the goal?
-- What type of development? (frontend / backend / fullstack)
-- Any specific requirements or constraints?
+### 头脑风暴关键原则
 
-### Step 1.5: Code-Spec Depth Requirement (CRITICAL) `[AI]`
+| 原则 | 描述 |
+|------|------|
+| **一次一个问题** | 不要用多个问题轰炸用户 |
+| **立即更新 PRD** | 每次回答后更新文档 |
+| **优先选择题** | 用户更容易回答 |
+| **YAGNI** | 质疑不必要的复杂性 |
 
-If the task touches infra or cross-layer contracts, do not start implementation until code-spec depth is defined.
+---
 
-Trigger this requirement when the change includes any of:
-- New or changed command/API signatures
-- Database schema or migration changes
-- Infra integrations (storage, queue, cache, secrets, env contracts)
-- Cross-layer payload transformations
+## 任务工作流（开发任务）
 
-Must-have before implementation:
-- [ ] Target code-spec files to update are identified
-- [ ] Concrete contract is defined (signature, fields, env keys)
-- [ ] Validation and error matrix is defined
-- [ ] At least one Good/Base/Bad case is defined
+**为什么要用这个工作流？**
+- Research Agent 分析需要哪些代码规范文件
+- 代码规范文件配置在 jsonl 文件中
+- Implement Agent 通过 Hook 注入接收代码规范上下文
+- Check Agent 对照代码规范要求进行验证
+- 结果：代码自动遵循项目约定
 
-### Step 2: Research the Codebase `[AI]`
+### 步骤 1：理解任务 `[AI]`
 
-Call Research Agent to analyze:
+**如果来自头脑风暴：** 跳过此步骤 - 需求已在 PRD 中。
+
+**如果是简单任务：** 快速确认理解：
+- 目标是什么？
+- 什么类型的开发？（前端 / 后端 / 全栈）
+- 有什么特定的需求或约束？
+
+### 步骤 1.5：代码规范深度要求（关键） `[AI]`
+
+如果任务涉及基础设施或跨层契约，在代码规范深度定义之前不要开始实现。
+
+当变更包含以下任何一项时触发此要求：
+- 新增或修改的命令/API 签名
+- 数据库 schema 或迁移变更
+- 基础设施集成（存储、队列、缓存、密钥、环境变量契约）
+- 跨层载荷转换
+
+实现前必须具备：
+- [ ] 已确定需要更新的目标代码规范文件
+- [ ] 已定义具体契约（签名、字段、环境变量键）
+- [ ] 已定义验证和错误矩阵
+- [ ] 至少定义了一个 Good/Base/Bad 用例
+
+### 步骤 2：研究代码库 `[AI]`
+
+调用 Research Agent 进行分析：
 
 ```
 Task(
   subagent_type: "research",
-  prompt: "Analyze the codebase for this task:
+  prompt: "分析代码库以完成此任务：
 
-  Task: <user's task description>
-  Type: <frontend/backend/fullstack>
+  任务：<用户的任务描述>
+  类型：<frontend/backend/fullstack>
 
-  Please find:
-  1. Relevant code-spec files in .trellis/spec/
-  2. Existing code patterns to follow (find 2-3 examples)
-  3. Files that will likely need modification
+  请查找：
+  1. .trellis/spec/ 中的相关代码规范文件
+  2. 需要遵循的现有代码模式（找 2-3 个示例）
+  3. 可能需要修改的文件
 
-  Output:
-  ## Relevant Code-Specs
-  - <path>: <why it's relevant>
+  输出：
+  ## 相关代码规范
+  - <路径>：<为什么相关>
 
-  ## Code Patterns Found
-  - <pattern>: <example file path>
+  ## 发现的代码模式
+  - <模式>：<示例文件路径>
 
-  ## Files to Modify
-  - <path>: <what change>
+  ## 需要修改的文件
+  - <路径>：<什么修改>
 
-  ## Suggested Task Name
+  ## 建议的任务名称
   - <short-slug-name>",
   model: "opus"
 )
 ```
 
-### Step 3: Create Task Directory `[AI]`
+### 步骤 3：创建任务目录 `[AI]`
 
-Based on research results:
+基于研究结果：
 
 ```bash
-TASK_DIR=$(python3 ./.trellis/scripts/task.py create "<title from research>" --slug <suggested-slug>)
+TASK_DIR=$(python3 ./.trellis/scripts/task.py create "<研究得出的标题>" --slug <建议的slug>)
 ```
 
-### Step 4: Configure Context `[AI]`
+### 步骤 4：配置上下文 `[AI]`
 
-Initialize default context:
+初始化默认上下文：
 
 ```bash
 python3 ./.trellis/scripts/task.py init-context "$TASK_DIR" <type>
 # type: backend | frontend | fullstack
 ```
 
-Add code-spec files found by Research Agent:
+添加 Research Agent 发现的代码规范文件：
 
 ```bash
-# For each relevant code-spec and code pattern:
-python3 ./.trellis/scripts/task.py add-context "$TASK_DIR" implement "<path>" "<reason>"
-python3 ./.trellis/scripts/task.py add-context "$TASK_DIR" check "<path>" "<reason>"
+# 对于每个相关的代码规范和代码模式：
+python3 ./.trellis/scripts/task.py add-context "$TASK_DIR" implement "<路径>" "<原因>"
+python3 ./.trellis/scripts/task.py add-context "$TASK_DIR" check "<路径>" "<原因>"
 ```
 
-### Step 5: Write Requirements `[AI]`
+### 步骤 5：编写需求 `[AI]`
 
-Create `prd.md` in the task directory with:
+在任务目录中创建 `prd.md`：
 
 ```markdown
-# <Task Title>
+# <任务标题>
 
-## Goal
-<What we're trying to achieve>
+## 目标
+<我们要实现什么>
 
-## Requirements
-- <Requirement 1>
-- <Requirement 2>
+## 需求
+- <需求 1>
+- <需求 2>
 
-## Acceptance Criteria
-- [ ] <Criterion 1>
-- [ ] <Criterion 2>
+## 验收标准
+- [ ] <标准 1>
+- [ ] <标准 2>
 
-## Technical Notes
-<Any technical decisions or constraints>
+## 技术说明
+<任何技术决策或约束>
 ```
 
-### Step 6: Activate Task `[AI]`
+### 步骤 6：激活任务 `[AI]`
 
 ```bash
 python3 ./.trellis/scripts/task.py start "$TASK_DIR"
 ```
 
-This sets `.current-task` so hooks can inject context.
+这会设置 `.current-task`，使 Hook 可以注入上下文。
 
-### Step 7: Implement `[AI]`
+### 步骤 7：实现 `[AI]`
 
-Call Implement Agent (code-spec context is auto-injected by hook):
+调用 Implement Agent（代码规范上下文由 Hook 自动注入）：
 
 ```
 Task(
   subagent_type: "implement",
-  prompt: "Implement the task described in prd.md.
+  prompt: "实现 prd.md 中描述的任务。
 
-  Follow all code-spec files that have been injected into your context.
-  Run lint and typecheck before finishing.",
+  遵循所有已注入到你上下文中的代码规范文件。
+  完成前运行 lint 和 typecheck。",
   model: "opus"
 )
 ```
 
-### Step 8: Check Quality `[AI]`
+### 步骤 8：质量检查 `[AI]`
 
-Call Check Agent (code-spec context is auto-injected by hook):
+调用 Check Agent（代码规范上下文由 Hook 自动注入）：
 
 ```
 Task(
   subagent_type: "check",
-  prompt: "Review all code changes against the code-spec requirements.
+  prompt: "对照代码规范要求审查所有代码变更。
 
-  Fix any issues you find directly.
-  Ensure lint and typecheck pass.",
+  直接修复发现的任何问题。
+  确保 lint 和 typecheck 通过。",
   model: "opus"
 )
 ```
 
-### Step 9: Complete `[AI]`
+### 步骤 9：完成 `[AI]`
 
-1. Verify lint and typecheck pass
-2. Report what was implemented
-3. Remind user to:
-   - Test the changes
-   - Commit when ready
-   - Run `/trellis:record-session` to record this session
-
----
-
-## Continuing Existing Task
-
-If `get_context.py` shows a current task:
-
-1. Read the task's `prd.md` to understand the goal
-2. Check `task.json` for current status and phase
-3. Ask user: "Continue working on <task-name>?"
-
-If yes, resume from the appropriate step (usually Step 7 or 8).
+1. 验证 lint 和 typecheck 通过
+2. 报告实现了什么
+3. 提醒用户：
+   - 测试变更
+   - 准备好后 commit
+   - 运行 `/trellis:record-session` 记录本次会话
 
 ---
 
-## Commands Reference
+## 继续现有任务
 
-### User Commands `[USER]`
+如果 `get_context.py` 显示有当前任务：
 
-| Command | When to Use |
-|---------|-------------|
-| `/trellis:start` | Begin a session (this command) |
-| `/trellis:brainstorm` | Clarify vague requirements (called from start) |
-| `/trellis:parallel` | Complex tasks needing isolated worktree |
-| `/trellis:finish-work` | Before committing changes |
-| `/trellis:record-session` | After completing a task |
+1. 阅读任务的 `prd.md` 了解目标
+2. 检查 `task.json` 了解当前状态和阶段
+3. 询问用户："继续处理 <task-name> 吗？"
 
-### AI Scripts `[AI]`
-
-| Script | Purpose |
-|--------|---------|
-| `python3 ./.trellis/scripts/get_context.py` | Get session context |
-| `python3 ./.trellis/scripts/task.py create` | Create task directory |
-| `python3 ./.trellis/scripts/task.py init-context` | Initialize jsonl files |
-| `python3 ./.trellis/scripts/task.py add-context` | Add code-spec/context file to jsonl |
-| `python3 ./.trellis/scripts/task.py start` | Set current task |
-| `python3 ./.trellis/scripts/task.py finish` | Clear current task |
-| `python3 ./.trellis/scripts/task.py archive` | Archive completed task |
-
-### Sub Agents `[AI]`
-
-| Agent | Purpose | Hook Injection |
-|-------|---------|----------------|
-| research | Analyze codebase | No (reads directly) |
-| implement | Write code | Yes (implement.jsonl) |
-| check | Review & fix | Yes (check.jsonl) |
-| debug | Fix specific issues | Yes (debug.jsonl) |
+如果是，从适当的步骤恢复（通常是步骤 7 或 8）。
 
 ---
 
-## Key Principle
+## 命令参考
 
-> **Code-spec context is injected, not remembered.**
+### 用户命令 `[USER]`
+
+| 命令 | 使用时机 |
+|------|----------|
+| `/trellis:start` | 开始会话（本命令） |
+| `/trellis:brainstorm` | 澄清模糊需求（从 start 调用） |
+| `/trellis:parallel` | 需要隔离 worktree 的复杂任务 |
+| `/trellis:finish-work` | 提交变更之前 |
+| `/trellis:record-session` | 完成任务之后 |
+
+### AI 脚本 `[AI]`
+
+| 脚本 | 用途 |
+|------|------|
+| `python3 ./.trellis/scripts/get_context.py` | 获取会话上下文 |
+| `python3 ./.trellis/scripts/task.py create` | 创建任务目录 |
+| `python3 ./.trellis/scripts/task.py init-context` | 初始化 jsonl 文件 |
+| `python3 ./.trellis/scripts/task.py add-context` | 添加代码规范/上下文文件到 jsonl |
+| `python3 ./.trellis/scripts/task.py start` | 设置当前任务 |
+| `python3 ./.trellis/scripts/task.py finish` | 清除当前任务 |
+| `python3 ./.trellis/scripts/task.py archive` | 归档已完成的任务 |
+
+### Sub Agent `[AI]`
+
+| Agent | 用途 | Hook 注入 |
+|-------|------|-----------|
+| research | 分析代码库 | 否（直接读取） |
+| implement | 编写代码 | 是（implement.jsonl） |
+| check | 审查和修复 | 是（check.jsonl） |
+| debug | 修复特定问题 | 是（debug.jsonl） |
+
+---
+
+## 核心原则
+
+> **代码规范上下文是注入的，不是靠记忆的。**
 >
-> The Task Workflow ensures agents receive relevant code-spec context automatically.
-> This is more reliable than hoping the AI "remembers" conventions.
+> 任务工作流确保 Agent 自动接收相关的代码规范上下文。
+> 这比指望 AI "记住"约定要可靠得多。

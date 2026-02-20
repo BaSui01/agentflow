@@ -1,130 +1,130 @@
 ---
 name: break-loop
-description: "Break the Loop - Deep Bug Analysis"
+description: "打破循环 - 深度 Bug 分析"
 ---
 
-# Break the Loop - Deep Bug Analysis
+# 打破循环 - 深度 Bug 分析
 
-When debug is complete, use this skill for deep analysis to break the "fix bug -> forget -> repeat" cycle.
-
----
-
-## Analysis Framework
-
-Analyze the bug you just fixed from these 5 dimensions:
-
-### 1. Root Cause Category
-
-Which category does this bug belong to?
-
-| Category | Characteristics | Example |
-|----------|-----------------|---------|
-| **A. Missing Spec** | No documentation on how to do it | New feature without checklist |
-| **B. Cross-Layer Contract** | Interface between layers unclear | API returns different format than expected |
-| **C. Change Propagation Failure** | Changed one place, missed others | Changed function signature, missed call sites |
-| **D. Test Coverage Gap** | Unit test passes, integration fails | Works alone, breaks when combined |
-| **E. Implicit Assumption** | Code relies on undocumented assumption | Timestamp seconds vs milliseconds |
-
-### 2. Why Fixes Failed (if applicable)
-
-If you tried multiple fixes before succeeding, analyze each failure:
-
-- **Surface Fix**: Fixed symptom, not root cause
-- **Incomplete Scope**: Found root cause, didn't cover all cases
-- **Tool Limitation**: grep missed it, type check wasn't strict
-- **Mental Model**: Kept looking in same layer, didn't think cross-layer
-
-### 3. Prevention Mechanisms
-
-What mechanisms would prevent this from happening again?
-
-| Type | Description | Example |
-|------|-------------|---------|
-| **Documentation** | Write it down so people know | Update thinking guide |
-| **Architecture** | Make the error impossible structurally | Type-safe wrappers |
-| **Compile-time** | TypeScript strict, no any | Signature change causes compile error |
-| **Runtime** | Monitoring, alerts, scans | Detect orphan entities |
-| **Test Coverage** | E2E tests, integration tests | Verify full flow |
-| **Code Review** | Checklist, PR template | "Did you check X?" |
-
-### 4. Systematic Expansion
-
-What broader problems does this bug reveal?
-
-- **Similar Issues**: Where else might this problem exist?
-- **Design Flaw**: Is there a fundamental architecture issue?
-- **Process Flaw**: Is there a development process improvement?
-- **Knowledge Gap**: Is the team missing some understanding?
-
-### 5. Knowledge Capture
-
-Solidify insights into the system:
-
-- [ ] Update `.trellis/spec/guides/` thinking guides
-- [ ] Update `.trellis/spec/backend/` or `frontend/` docs
-- [ ] Create issue record (if applicable)
-- [ ] Create feature ticket for root fix
-- [ ] Update check skills if needed
+当调试完成后，使用此 Skill 进行深度分析，打破"修 Bug → 遗忘 → 重复"的循环。
 
 ---
 
-## Output Format
+## 分析框架
 
-Please output analysis in this format:
+从以下 5 个维度分析你刚修复的 Bug：
+
+### 1. 根因分类
+
+这个 Bug 属于哪个类别？
+
+| 类别 | 特征 | 示例 |
+|------|------|------|
+| **A. 规范缺失** | 没有文档说明该怎么做 | 新功能没有检查清单 |
+| **B. 跨层契约** | 层与层之间的接口不清晰 | API 返回的格式与预期不同 |
+| **C. 变更传播失败** | 改了一处，漏了其他地方 | 改了函数签名，漏了调用点 |
+| **D. 测试覆盖缺口** | 单元测试通过，集成测试失败 | 单独运行正常，组合起来就挂 |
+| **E. 隐式假设** | 代码依赖未文档化的假设 | 时间戳秒 vs 毫秒 |
+
+### 2. 修复失败原因（如适用）
+
+如果你在成功之前尝试了多次修复，分析每次失败：
+
+- **表面修复**：修了症状，没修根因
+- **范围不完整**：找到了根因，但没覆盖所有情况
+- **工具局限**：grep 没搜到，类型检查不够严格
+- **思维模型**：一直在同一层找，没有跨层思考
+
+### 3. 预防机制
+
+什么机制可以防止这类问题再次发生？
+
+| 类型 | 描述 | 示例 |
+|------|------|------|
+| **文档** | 写下来让大家知道 | 更新思维指南 |
+| **架构** | 从结构上让错误不可能发生 | 类型安全的包装器 |
+| **编译时** | TypeScript strict，禁止 any | 签名变更导致编译错误 |
+| **运行时** | 监控、告警、扫描 | 检测孤立实体 |
+| **测试覆盖** | E2E 测试、集成测试 | 验证完整流程 |
+| **代码审查** | 检查清单、PR 模板 | "你检查了 X 吗？" |
+
+### 4. 系统性扩展
+
+这个 Bug 揭示了哪些更广泛的问题？
+
+- **类似问题**：其他地方是否存在同样的问题？
+- **设计缺陷**：是否存在根本性的架构问题？
+- **流程缺陷**：开发流程是否需要改进？
+- **知识缺口**：团队是否缺少某些理解？
+
+### 5. 知识沉淀
+
+将洞察固化到系统中：
+
+- [ ] 更新 `.trellis/spec/guides/` 思维指南
+- [ ] 更新 `.trellis/spec/backend/` 或 `frontend/` 文档
+- [ ] 创建问题记录（如适用）
+- [ ] 创建根因修复的功能工单
+- [ ] 更新检查 Skill（如需要）
+
+---
+
+## 输出格式
+
+请按以下格式输出分析：
 
 ```markdown
-## Bug Analysis: [Short Description]
+## Bug 分析：[简短描述]
 
-### 1. Root Cause Category
-- **Category**: [A/B/C/D/E] - [Category Name]
-- **Specific Cause**: [Detailed description]
+### 1. 根因分类
+- **类别**：[A/B/C/D/E] - [类别名称]
+- **具体原因**：[详细描述]
 
-### 2. Why Fixes Failed (if applicable)
-1. [First attempt]: [Why it failed]
-2. [Second attempt]: [Why it failed]
+### 2. 修复失败原因（如适用）
+1. [第一次尝试]：[失败原因]
+2. [第二次尝试]：[失败原因]
 ...
 
-### 3. Prevention Mechanisms
-| Priority | Mechanism | Specific Action | Status |
-|----------|-----------|-----------------|--------|
+### 3. 预防机制
+| 优先级 | 机制 | 具体行动 | 状态 |
+|--------|------|----------|------|
 | P0 | ... | ... | TODO/DONE |
 
-### 4. Systematic Expansion
-- **Similar Issues**: [List places with similar problems]
-- **Design Improvement**: [Architecture-level suggestions]
-- **Process Improvement**: [Development process suggestions]
+### 4. 系统性扩展
+- **类似问题**：[列出有类似问题的地方]
+- **设计改进**：[架构层面的建议]
+- **流程改进**：[开发流程的建议]
 
-### 5. Knowledge Capture
-- [ ] [Documents to update / tickets to create]
+### 5. 知识沉淀
+- [ ] [需要更新的文档 / 需要创建的工单]
 ```
 
 ---
 
-## Core Philosophy
+## 核心理念
 
-> **The value of debugging is not in fixing the bug, but in making this class of bugs never happen again.**
+> **调试的价值不在于修复 Bug，而在于让这类 Bug 永远不再发生。**
 
-Three levels of insight:
-1. **Tactical**: How to fix THIS bug
-2. **Strategic**: How to prevent THIS CLASS of bugs
-3. **Philosophical**: How to expand thinking patterns
+三个层次的洞察：
+1. **战术层**：如何修复这个 Bug
+2. **战略层**：如何预防这类 Bug
+3. **哲学层**：如何拓展思维模式
 
-30 minutes of analysis saves 30 hours of future debugging.
+30 分钟的分析可以节省未来 30 小时的调试时间。
 
 ---
 
-## After Analysis: Immediate Actions
+## 分析之后：立即行动
 
-**IMPORTANT**: After completing the analysis above, you MUST immediately:
+**重要**：完成上述分析后，你必须立即：
 
-1. **Update spec/guides** - Don't just list TODOs, actually update the relevant files:
-   - If it's a cross-platform issue → update `cross-platform-thinking-guide.md`
-   - If it's a cross-layer issue → update `cross-layer-thinking-guide.md`
-   - If it's a code reuse issue → update `code-reuse-thinking-guide.md`
-   - If it's domain-specific → update `backend/*.md` or `frontend/*.md`
+1. **更新 spec/guides** - 不要只列 TODO，要实际更新相关文件：
+   - 如果是跨平台问题 → 更新 `cross-platform-thinking-guide.md`
+   - 如果是跨层问题 → 更新 `cross-layer-thinking-guide.md`
+   - 如果是代码复用问题 → 更新 `code-reuse-thinking-guide.md`
+   - 如果是领域特定的 → 更新 `backend/*.md` 或 `frontend/*.md`
 
-2. **Sync templates** - After updating `.trellis/spec/`, sync to `src/templates/markdown/spec/`
+2. **同步模板** - 更新 `.trellis/spec/` 后，同步到 `src/templates/markdown/spec/`
 
-3. **Commit the spec updates** - This is the primary output, not just the analysis text
+3. **提交规范更新** - 这才是主要产出，不只是分析文本
 
-> **The analysis is worthless if it stays in chat. The value is in the updated specs.**
+> **分析如果只停留在聊天记录里就毫无价值。价值在于更新后的规范。**
