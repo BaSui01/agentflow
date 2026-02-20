@@ -102,7 +102,7 @@ type openAIResponsesRequest struct {
 	Temperature        float32                `json:"temperature,omitempty"`
 	TopP               float32                `json:"top_p,omitempty"`
 	Tools              []providers.OpenAICompatTool `json:"tools,omitempty"`
-	ToolChoice         interface{}            `json:"tool_choice,omitempty"`
+	ToolChoice         any            `json:"tool_choice,omitempty"`
 	PreviousResponseID string                 `json:"previous_response_id,omitempty"`
 	Store              bool                   `json:"store,omitempty"`
 	Metadata           map[string]string      `json:"metadata,omitempty"`
@@ -135,7 +135,7 @@ type openAIResponsesOutput struct {
 type openAIContent struct {
 	Type        string          `json:"type"`
 	Text        string          `json:"text,omitempty"`
-	Annotations []interface{}   `json:"annotations,omitempty"`
+	Annotations []any   `json:"annotations,omitempty"`
 	ID          string          `json:"id,omitempty"`
 	Name        string          `json:"name,omitempty"`
 	Arguments   json.RawMessage `json:"arguments,omitempty"`

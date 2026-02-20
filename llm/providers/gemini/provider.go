@@ -164,12 +164,12 @@ type geminiInlineData struct {
 
 type geminiFunctionCall struct {
 	Name string                 `json:"name"`
-	Args map[string]interface{} `json:"args"`
+	Args map[string]any `json:"args"`
 }
 
 type geminiFunctionResponse struct {
 	Name     string                 `json:"name"`
-	Response map[string]interface{} `json:"response"`
+	Response map[string]any `json:"response"`
 }
 
 type geminiTool struct {
@@ -179,7 +179,7 @@ type geminiTool struct {
 type geminiFunctionDeclaration struct {
 	Name        string                 `json:"name"`
 	Description string                 `json:"description,omitempty"`
-	Parameters  map[string]interface{} `json:"parameters,omitempty"` // JSON Schema
+	Parameters  map[string]any `json:"parameters,omitempty"` // JSON Schema
 }
 
 type geminiGenerationConfig struct {
@@ -201,7 +201,7 @@ type geminiCandidate struct {
 	Content       geminiContent `json:"content"`
 	FinishReason  string        `json:"finishReason,omitempty"`
 	Index         int           `json:"index"`
-	SafetyRatings []interface{} `json:"safetyRatings,omitempty"`
+	SafetyRatings []any `json:"safetyRatings,omitempty"`
 }
 
 type geminiUsageMetadata struct {
@@ -265,7 +265,7 @@ func convertToGeminiContents(msgs []llm.Message) (*geminiContent, []geminiConten
 		// 工具调用
 		if len(m.ToolCalls) > 0 {
 			for _, tc := range m.ToolCalls {
-				var args map[string]interface{}
+				var args map[string]any
 				if err := json.Unmarshal(tc.Arguments, &args); err == nil {
 					content.Parts = append(content.Parts, geminiPart{
 						FunctionCall: &geminiFunctionCall{
@@ -279,7 +279,7 @@ func convertToGeminiContents(msgs []llm.Message) (*geminiContent, []geminiConten
 
 		// 工具响应
 		if m.Role == llm.RoleTool && m.ToolCallID != "" {
-			var response map[string]interface{}
+			var response map[string]any
 			if err := json.Unmarshal([]byte(m.Content), &response); err == nil {
 				content.Parts = append(content.Parts, geminiPart{
 					FunctionResponse: &geminiFunctionResponse{
@@ -292,7 +292,7 @@ func convertToGeminiContents(msgs []llm.Message) (*geminiContent, []geminiConten
 				content.Parts = append(content.Parts, geminiPart{
 					FunctionResponse: &geminiFunctionResponse{
 						Name: m.Name,
-						Response: map[string]interface{}{
+						Response: map[string]any{
 							"result": m.Content,
 						},
 					},
@@ -315,7 +315,7 @@ func convertToGeminiTools(tools []llm.ToolSchema) []geminiTool {
 
 	declarations := make([]geminiFunctionDeclaration, 0, len(tools))
 	for _, t := range tools {
-		var params map[string]interface{}
+		var params map[string]any
 		if err := json.Unmarshal(t.Parameters, &params); err == nil {
 			declarations = append(declarations, geminiFunctionDeclaration{
 				Name:        t.Name,
