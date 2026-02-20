@@ -9,6 +9,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/BaSui01/agentflow/internal/tlsutil"
 )
 
 // SunoProvider使用Suno API执行音乐生成.
@@ -31,7 +33,7 @@ func NewSunoProvider(cfg SunoConfig) *SunoProvider {
 	}
 	return &SunoProvider{
 		cfg:    cfg,
-		client: &http.Client{Timeout: timeout},
+		client: tlsutil.SecureHTTPClient(timeout),
 	}
 }
 

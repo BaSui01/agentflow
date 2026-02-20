@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/BaSui01/agentflow/internal/tlsutil"
 	"github.com/google/uuid"
 	"go.uber.org/zap"
 )
@@ -89,7 +90,7 @@ func NewQdrantStore(cfg QdrantConfig, logger *zap.Logger) *QdrantStore {
 	return &QdrantStore{
 		cfg:     cfg,
 		baseURL: baseURL,
-		client:  &http.Client{Timeout: cfg.Timeout},
+		client:  tlsutil.SecureHTTPClient(cfg.Timeout),
 		logger:  logger.With(zap.String("component", "qdrant_store")),
 	}
 }

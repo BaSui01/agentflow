@@ -9,6 +9,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/BaSui01/agentflow/internal/tlsutil"
 )
 
 // Flux Provider使用 Black Forest Labs Flux执行图像生成.
@@ -37,7 +39,7 @@ func NewFluxProvider(cfg FluxConfig) *FluxProvider {
 
 	return &FluxProvider{
 		cfg:    cfg,
-		client: &http.Client{Timeout: timeout},
+		client: tlsutil.SecureHTTPClient(timeout),
 	}
 }
 

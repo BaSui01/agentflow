@@ -9,9 +9,9 @@ import (
 	"net/http"
 	"strings"
 	"time"
-)
 
-// Jina Provider执行重排 使用 Jina AI 的 API.
+	"github.com/BaSui01/agentflow/internal/tlsutil"
+)
 type JinaProvider struct {
 	cfg    JinaConfig
 	client *http.Client
@@ -32,7 +32,7 @@ func NewJinaProvider(cfg JinaConfig) *JinaProvider {
 
 	return &JinaProvider{
 		cfg:    cfg,
-		client: &http.Client{Timeout: timeout},
+		client: tlsutil.SecureHTTPClient(timeout),
 	}
 }
 

@@ -9,6 +9,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/BaSui01/agentflow/internal/tlsutil"
 )
 
 // MiniMax Provider使用MiniMax API执行音乐生成.
@@ -31,7 +33,7 @@ func NewMiniMaxProvider(cfg MiniMaxMusicConfig) *MiniMaxProvider {
 	}
 	return &MiniMaxProvider{
 		cfg:    cfg,
-		client: &http.Client{Timeout: timeout},
+		client: tlsutil.SecureHTTPClient(timeout),
 	}
 }
 

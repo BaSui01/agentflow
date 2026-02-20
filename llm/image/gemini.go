@@ -9,6 +9,8 @@ import (
 	"io"
 	"net/http"
 	"time"
+
+	"github.com/BaSui01/agentflow/internal/tlsutil"
 )
 
 // GeminiProvider 利用 Google Gemini 原生多模态能力实现图像生成.
@@ -29,7 +31,7 @@ func NewGeminiProvider(cfg GeminiConfig) *GeminiProvider {
 
 	return &GeminiProvider{
 		cfg:    cfg,
-		client: &http.Client{Timeout: timeout},
+		client: tlsutil.SecureHTTPClient(timeout),
 	}
 }
 

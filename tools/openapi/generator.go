@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/BaSui01/agentflow/internal/tlsutil"
 	"github.com/BaSui01/agentflow/llm"
 	"go.uber.org/zap"
 )
@@ -131,7 +132,7 @@ func NewGenerator(config GeneratorConfig, logger *zap.Logger) *Generator {
 		timeout = 30 * time.Second
 	}
 	return &Generator{
-		httpClient: &http.Client{Timeout: timeout},
+		httpClient: tlsutil.SecureHTTPClient(timeout),
 		logger:     logger.With(zap.String("component", "openapi_generator")),
 		cache:      make(map[string]*OpenAPISpec),
 	}
@@ -280,7 +281,10 @@ func (g *Generator) operationToTool(spec *OpenAPISpec, path, method string, op *
 		Required:   required,
 	}
 
-	paramsJSON, _ := json.Marshal(paramsSchema)
+	paramsJSON, err := json.Marshal(paramsSchema)
+	if err != nil {
+		paramsJSON = []byte("{}")
+	}
 
 	return &GeneratedTool{
 		Name:        name,

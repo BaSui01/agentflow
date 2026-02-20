@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/BaSui01/agentflow/internal/tlsutil"
 	"go.uber.org/zap"
 )
 
@@ -63,7 +64,7 @@ func NewPineconeStore(cfg PineconeConfig, logger *zap.Logger) *PineconeStore {
 	return &PineconeStore{
 		cfg:     cfg,
 		logger:  logger.With(zap.String("component", "pinecone_store")),
-		client:  &http.Client{Timeout: cfg.Timeout},
+		client:  tlsutil.SecureHTTPClient(cfg.Timeout),
 		baseURL: baseURL,
 	}
 }

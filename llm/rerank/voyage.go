@@ -9,9 +9,9 @@ import (
 	"net/http"
 	"strings"
 	"time"
-)
 
-// Voyage Provider执行重排,使用Voyage AI的API.
+	"github.com/BaSui01/agentflow/internal/tlsutil"
+)
 type VoyageProvider struct {
 	cfg    VoyageConfig
 	client *http.Client
@@ -32,7 +32,7 @@ func NewVoyageProvider(cfg VoyageConfig) *VoyageProvider {
 
 	return &VoyageProvider{
 		cfg:    cfg,
-		client: &http.Client{Timeout: timeout},
+		client: tlsutil.SecureHTTPClient(timeout),
 	}
 }
 

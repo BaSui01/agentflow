@@ -10,6 +10,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/BaSui01/agentflow/internal/tlsutil"
 )
 
 // OpenAIProvider使用OpenAI DALL-E执行图像生成.
@@ -33,7 +35,7 @@ func NewOpenAIProvider(cfg OpenAIConfig) *OpenAIProvider {
 
 	return &OpenAIProvider{
 		cfg:    cfg,
-		client: &http.Client{Timeout: timeout},
+		client: tlsutil.SecureHTTPClient(timeout),
 	}
 }
 

@@ -9,6 +9,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/BaSui01/agentflow/internal/tlsutil"
 )
 
 // Tripo Provider使用 Tripo3D API执行3D生成.
@@ -28,7 +30,7 @@ func NewTripoProvider(cfg TripoConfig) *TripoProvider {
 	}
 	return &TripoProvider{
 		cfg:    cfg,
-		client: &http.Client{Timeout: timeout},
+		client: tlsutil.SecureHTTPClient(timeout),
 	}
 }
 
