@@ -17,7 +17,7 @@ This directory contains guidelines for backend development. Fill in each file wi
 | [Directory Structure](./directory-structure.md) | Module organization and file layout | ✅ Filled |
 | [Database Guidelines](./database-guidelines.md) | ORM patterns, queries, migrations | ✅ Filled |
 | [Error Handling](./error-handling.md) | Error types, handling strategies | ✅ Filled |
-| [Quality Guidelines](./quality-guidelines.md) | Code standards, forbidden patterns | ✅ Filled |
+| [Quality Guidelines](./quality-guidelines.md) | Code standards, forbidden patterns, TLS hardening (§32), input validation (§33) | ✅ Filled |
 | [Logging Guidelines](./logging-guidelines.md) | Structured logging, log levels | ✅ Filled |
 
 ---

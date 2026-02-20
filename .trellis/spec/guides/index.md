@@ -115,6 +115,18 @@ These guides help you **ask the right questions before coding**.
 
 → Read [Cross-Platform Thinking Guide](./cross-platform-thinking-guide.md)
 
+### When to Think About TLS / Security Hardening
+
+- [ ] Creating `&http.Client{}` — MUST use `tlsutil.SecureHTTPClient(timeout)` (§32)
+- [ ] Creating `&http.Server{}` — MUST add `TLSConfig: tlsutil.DefaultTLSConfig()` (§32)
+- [ ] Creating `redis.Options{}` — check if `TLSEnabled` config flag should add TLS (§32)
+- [ ] Building database connection URLs — default `sslmode` should be `"require"`, not `"disable"` (§32)
+- [ ] Custom `&http.Transport{}` with `TLSClientConfig: nil` — fallback to `tlsutil.DefaultTLSConfig()` (§32)
+- [ ] Extracting IDs from URL path/query — MUST validate with compiled regex before use (§33)
+- [ ] New API handler accepting user input — add format validation before passing to business logic (§33)
+
+→ Read [quality-guidelines.md §32-§33](../backend/quality-guidelines.md) for TLS Hardening and Input Validation patterns
+
 ### When to Think About HTTP Mock Pagination
 
 - [ ] Writing tests for an external store that supports `ListDocumentIDs` or similar paginated API
@@ -128,11 +140,22 @@ These guides help you **ask the right questions before coding**.
 - [ ] 新增 `close(ch)` 调用 — 是否有 `sync.Once` 保护？（§24）
 - [ ] 新增 streaming/SSE 循环 — 是否有 `ctx.Done()` 退出路径？（§25）
 - [ ] 新增 `recover()` — 是否记录了 panic 信息？（§27）
-- [ ] 新增 goroutine — 是否有明确的退出机制（done channel / context）？
+- [ ] 新增 goroutine — 是否有明确的退出机制（done channel / context）？（§31）
 - [ ] 修改 `Close()`/`Shutdown()`/`Stop()` 方法 — 是否考虑了并发调用？
+- [ ] 新增 middleware goroutine — 是否接受 `ctx` 并在 `ctx.Done()` 时退出？（§31）
 
-→ Read [quality-guidelines.md §24-§27](../backend/quality-guidelines.md) for Channel/Streaming/Panic patterns
+→ Read [quality-guidelines.md §24-§27, §31](../backend/quality-guidelines.md) for Channel/Streaming/Panic/Goroutine patterns
 → Read [error-handling.md § HITL Race](../backend/error-handling.md) for Resolve/Cancel race pattern
+
+### When to Think About Test Double Design
+
+- [ ] 新增 mock/test double — 是否使用了 function callback 模式而非 `testify/mock`？（§30）
+- [ ] 新增 `mock.Mock` embedding — ❌ 禁止！改用 function callback pattern
+- [ ] 共享 test double — 是否放在 `testutil/mocks/` 或 `mock_test.go` 中？
+- [ ] Mock 方法的 nil callback — 是否返回合理的零值而非 panic？
+
+→ Read [quality-guidelines.md §30](../backend/quality-guidelines.md) for Function Callback Pattern
+→ Read [unit-test/index.md § Mock Patterns](../unit-test/index.md) for shared mock conventions
 
 ### When to Think About Interface Deduplication
 

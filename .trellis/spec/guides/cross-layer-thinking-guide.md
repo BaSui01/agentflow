@@ -265,9 +265,10 @@ Two camps exist across the codebase. This is a **known tech debt**, not a bug �
 | `llm.ChatUsage` | `llm/provider.go` | `PromptTokens`, `CompletionTokens`, `TotalTokens` (no Cost) |
 | `observability.TokenUsage` | `llm/observability/tracing.go` | `Prompt`, `Completion`, `Total` (different field names!) |
 
-**Unsafe cast** at `api/handlers/chat.go:313`:
+**Unsafe cast** at `api/handlers/chat.go:313` — ✅ FIXED:
 ```go
-Usage: (*api.ChatUsage)(chunk.Usage)  // raw pointer cast — breaks if fields diverge
+// BEFORE (unsafe): (*api.ChatUsage)(chunk.Usage)
+// AFTER (safe): convertStreamUsage() with field-by-field mapping
 ```
 
 **Rule**: Never use raw pointer type casts between structs. Use explicit field-by-field mapping or a conversion function.
