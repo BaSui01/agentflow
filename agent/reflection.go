@@ -10,7 +10,7 @@ import (
 	"go.uber.org/zap"
 )
 
-// ReflectionExecutorConfig Reflection executor configuration
+// 反射执行器配置
 type ReflectionExecutorConfig struct {
 	Enabled       bool    `json:"enabled"`
 	MaxIterations int     `json:"max_iterations"` // Maximum reflection iterations
@@ -18,13 +18,13 @@ type ReflectionExecutorConfig struct {
 	CriticPrompt  string  `json:"critic_prompt"`  // Critic prompt template
 }
 
-// DefaultReflectionConfig returns default reflection configuration
+// 默认反射 Config 返回默认反射配置
 func DefaultReflectionConfig() *ReflectionExecutorConfig {
 	config := DefaultReflectionExecutorConfig()
 	return &config
 }
 
-// DefaultReflectionExecutorConfig returns default reflection configuration
+// 默认反射 ExecutorConfig 返回默认反射配置
 func DefaultReflectionExecutorConfig() ReflectionExecutorConfig {
 	return ReflectionExecutorConfig{
 		Enabled:       true,
@@ -287,13 +287,13 @@ func (r *ReflectionExecutor) parseCritique(feedback string) *Critique {
 	return critique
 }
 
-// extractScore extracts score from text
+// 从文本中提取分数
 func (r *ReflectionExecutor) extractScore(text string) float64 {
-	// Try to extract "X/10" format
+	// 尝试提取“ X/ 10” 格式
 	if idx := strings.Index(text, "/"); idx > 0 {
-		// Extract the part before "/"
+		// 提取“ /” 之前的部分
 		beforeSlash := strings.TrimSpace(text[:idx])
-		// Remove non-numeric characters from the end
+		// 从结尾删除非数字字符
 		numStr := ""
 		for i := len(beforeSlash) - 1; i >= 0; i-- {
 			ch := beforeSlash[i]
@@ -311,7 +311,7 @@ func (r *ReflectionExecutor) extractScore(text string) float64 {
 		}
 	}
 
-	// Try to extract pure number
+	// 尝试提取纯数
 	var score float64
 	if _, err := fmt.Sscanf(text, "%f", &score); err == nil {
 		return score

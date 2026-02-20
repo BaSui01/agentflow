@@ -11,23 +11,23 @@ import (
 )
 
 // Feature: agent-framework-2026-enhancements, Property 8: Schema 验证错误定位
-// **Validates: Requirements 3.2**
-// For any JSON output that doesn't conform to Schema, validation errors should contain
-// the specific violating field path (JSON Path format) and the reason for violation.
+// ** 参数:要求3.2**
+// 对于任何不符合Schema的JSON输出,验证错误应当包含
+// 特定的违反字段路径(JSON路径格式)和违反的原因。
 
-// TestProperty_SchemaValidation_ErrorPathLocalization tests that validation errors
-// include specific field paths in JSON Path format and violation reasons.
+// 验证错误的测试Property SchemaValidation ErrorPath Llocalization
+// 包括 JSON 路径格式中的具体字段路径和违反原因。
 func TestProperty_SchemaValidation_ErrorPathLocalization(t *testing.T) {
 	rapid.Check(t, func(rt *rapid.T) {
 		validator := NewValidator()
 
-		// Generate a schema with required fields
+		// 生成一个包含所需字段的计划
 		fieldName := rapid.StringMatching(`[a-z]{3,10}`).Draw(rt, "fieldName")
 		schema := NewObjectSchema().
 			AddProperty(fieldName, NewStringSchema()).
 			AddRequired(fieldName)
 
-		// Test missing required field - should have path in error
+		// 测试缺少所需的字段 - 应该有出错的路径
 		emptyObj := `{}`
 		err := validator.Validate([]byte(emptyObj), schema)
 		require.Error(t, err, "Missing required field should cause error")
@@ -36,7 +36,7 @@ func TestProperty_SchemaValidation_ErrorPathLocalization(t *testing.T) {
 		require.True(t, ok, "Error should be ValidationErrors type")
 		require.NotEmpty(t, validationErr.Errors, "Should have at least one error")
 
-		// Verify error contains field path
+		// 校验错误包含字段路径
 		foundFieldPath := false
 		for _, e := range validationErr.Errors {
 			if strings.Contains(e.Path, fieldName) {
@@ -48,7 +48,7 @@ func TestProperty_SchemaValidation_ErrorPathLocalization(t *testing.T) {
 	})
 }
 
-// TestProperty_SchemaValidation_TypeMismatchErrorPath tests type mismatch errors include path.
+// 测试Property SchemaValidation TypeMismatchErrorPath测试类型不匹配错误包括路径.
 func TestProperty_SchemaValidation_TypeMismatchErrorPath(t *testing.T) {
 	rapid.Check(t, func(rt *rapid.T) {
 		validator := NewValidator()
@@ -57,7 +57,7 @@ func TestProperty_SchemaValidation_TypeMismatchErrorPath(t *testing.T) {
 		schema := NewObjectSchema().
 			AddProperty(fieldName, NewIntegerSchema())
 
-		// Provide string instead of integer
+		// 提供字符串而不是整数
 		data := map[string]any{fieldName: "not_an_integer"}
 		jsonData, _ := json.Marshal(data)
 
@@ -68,13 +68,13 @@ func TestProperty_SchemaValidation_TypeMismatchErrorPath(t *testing.T) {
 		require.True(t, ok)
 		require.NotEmpty(t, validationErr.Errors)
 
-		// Verify error path points to the field
+		// 校验到字段的错误路径
 		assert.Equal(t, fieldName, validationErr.Errors[0].Path, "Error path should be the field name")
 		assert.Contains(t, validationErr.Errors[0].Message, "expected integer", "Message should explain type mismatch")
 	})
 }
 
-// TestProperty_SchemaValidation_NestedFieldErrorPath tests nested field error paths.
+// 测试Property SchemaValidation Nested FieldErrorPath测试嵌入了战地出错路径.
 func TestProperty_SchemaValidation_NestedFieldErrorPath(t *testing.T) {
 	rapid.Check(t, func(rt *rapid.T) {
 		validator := NewValidator()
@@ -87,7 +87,7 @@ func TestProperty_SchemaValidation_NestedFieldErrorPath(t *testing.T) {
 				AddProperty(childField, NewStringSchema().WithMinLength(5)).
 				AddRequired(childField))
 
-		// Provide too short string for nested field
+		// 为嵌入地提供太短的字符串
 		data := map[string]any{
 			parentField: map[string]any{
 				childField: "ab", // Too short
@@ -102,14 +102,14 @@ func TestProperty_SchemaValidation_NestedFieldErrorPath(t *testing.T) {
 		require.True(t, ok)
 		require.NotEmpty(t, validationErr.Errors)
 
-		// Verify nested path format: parent.child
+		// 校验嵌入式路径格式: sparent. child
 		expectedPath := parentField + "." + childField
 		assert.Equal(t, expectedPath, validationErr.Errors[0].Path, "Error path should be nested: %s", expectedPath)
 		assert.Contains(t, validationErr.Errors[0].Message, "minimum", "Message should explain the constraint violation")
 	})
 }
 
-// TestProperty_SchemaValidation_ArrayItemErrorPath tests array item error paths.
+// TestProperty SchemaValidation Array Project ErrorPath 测试阵列项目出错路径 。
 func TestProperty_SchemaValidation_ArrayItemErrorPath(t *testing.T) {
 	rapid.Check(t, func(rt *rapid.T) {
 		validator := NewValidator()
@@ -120,7 +120,7 @@ func TestProperty_SchemaValidation_ArrayItemErrorPath(t *testing.T) {
 		schema := NewObjectSchema().
 			AddProperty(arrayField, NewArraySchema(NewIntegerSchema()))
 
-		// Create array with one invalid item (string instead of integer)
+		// 用一个无效的项目创建数组( 字符串而不是整数)
 		items := make([]any, invalidIndex+1)
 		for i := 0; i < invalidIndex; i++ {
 			items[i] = i * 10
@@ -137,7 +137,7 @@ func TestProperty_SchemaValidation_ArrayItemErrorPath(t *testing.T) {
 		require.True(t, ok)
 		require.NotEmpty(t, validationErr.Errors)
 
-		// Verify array index in path: field[index]
+		// 校验路径中的数组索引: 字段[index]
 		expectedPathPrefix := arrayField + "["
 		foundArrayPath := false
 		for _, e := range validationErr.Errors {
@@ -150,7 +150,7 @@ func TestProperty_SchemaValidation_ArrayItemErrorPath(t *testing.T) {
 	})
 }
 
-// TestProperty_SchemaValidation_NumericConstraintErrorPath tests numeric constraint error paths.
+// 测试Property SchemaValidation NumericControlErrorPath测试 数值约束出错路径.
 func TestProperty_SchemaValidation_NumericConstraintErrorPath(t *testing.T) {
 	rapid.Check(t, func(rt *rapid.T) {
 		validator := NewValidator()
@@ -162,7 +162,7 @@ func TestProperty_SchemaValidation_NumericConstraintErrorPath(t *testing.T) {
 		schema := NewObjectSchema().
 			AddProperty(fieldName, NewNumberSchema().WithMinimum(minValue).WithMaximum(maxValue))
 
-		// Test value below minimum
+		// 测试值低于最小值
 		belowMin := minValue - float64(rapid.IntRange(1, 10).Draw(rt, "belowMin"))
 		data := map[string]any{fieldName: belowMin}
 		jsonData, _ := json.Marshal(data)
@@ -179,7 +179,7 @@ func TestProperty_SchemaValidation_NumericConstraintErrorPath(t *testing.T) {
 	})
 }
 
-// TestProperty_SchemaValidation_EnumConstraintErrorPath tests enum constraint error paths.
+// 测试Property SchemaValidation EnumControlErrorPath测试 enum约束出错路径.
 func TestProperty_SchemaValidation_EnumConstraintErrorPath(t *testing.T) {
 	rapid.Check(t, func(rt *rapid.T) {
 		validator := NewValidator()
@@ -190,7 +190,7 @@ func TestProperty_SchemaValidation_EnumConstraintErrorPath(t *testing.T) {
 		schema := NewObjectSchema().
 			AddProperty(fieldName, NewEnumSchema(enumValues...))
 
-		// Provide invalid enum value
+		// 提供无效的enum值
 		invalidValue := rapid.StringMatching(`[a-z]{10,15}`).Draw(rt, "invalidValue")
 		data := map[string]any{fieldName: invalidValue}
 		jsonData, _ := json.Marshal(data)
@@ -207,7 +207,7 @@ func TestProperty_SchemaValidation_EnumConstraintErrorPath(t *testing.T) {
 	})
 }
 
-// TestProperty_SchemaValidation_MultipleErrorsHavePaths tests multiple errors all have paths.
+// TestProperty SchemaValidation MultipleErrors HavePaths 测试多个出错都具有路径.
 func TestProperty_SchemaValidation_MultipleErrorsHavePaths(t *testing.T) {
 	rapid.Check(t, func(rt *rapid.T) {
 		validator := NewValidator()
@@ -222,11 +222,11 @@ func TestProperty_SchemaValidation_MultipleErrorsHavePaths(t *testing.T) {
 			AddProperty(field3, NewStringSchema()).
 			AddRequired(field1, field2, field3)
 
-		// Provide data with multiple violations
+		// 提供多起侵权行为的数据
 		data := map[string]any{
 			field1: "short", // Too short
 			field2: 50,      // Below minimum
-			// field3 missing - required
+			// 字段 3 缺失 - 需要
 		}
 		jsonData, _ := json.Marshal(data)
 
@@ -237,7 +237,7 @@ func TestProperty_SchemaValidation_MultipleErrorsHavePaths(t *testing.T) {
 		require.True(t, ok)
 		require.GreaterOrEqual(t, len(validationErr.Errors), 2, "Should have multiple errors")
 
-		// Verify all errors have paths and messages
+		// 校验所有错误有路径和信件
 		for _, e := range validationErr.Errors {
 			assert.NotEmpty(t, e.Path, "Every error should have a path")
 			assert.NotEmpty(t, e.Message, "Every error should have a message")
@@ -245,7 +245,7 @@ func TestProperty_SchemaValidation_MultipleErrorsHavePaths(t *testing.T) {
 	})
 }
 
-// TestProperty_SchemaValidation_DeeplyNestedErrorPath tests deeply nested field error paths.
+// 测试Property SchemaValidation 深层ErrorPath测试深层嵌入场出错路径.
 func TestProperty_SchemaValidation_DeeplyNestedErrorPath(t *testing.T) {
 	rapid.Check(t, func(rt *rapid.T) {
 		validator := NewValidator()
@@ -262,7 +262,7 @@ func TestProperty_SchemaValidation_DeeplyNestedErrorPath(t *testing.T) {
 				AddRequired(level2)).
 			AddRequired(level1)
 
-		// Provide wrong type at deepest level
+		// 在最深处提供错误类型
 		data := map[string]any{
 			level1: map[string]any{
 				level2: map[string]any{
@@ -279,7 +279,7 @@ func TestProperty_SchemaValidation_DeeplyNestedErrorPath(t *testing.T) {
 		require.True(t, ok)
 		require.NotEmpty(t, validationErr.Errors)
 
-		// Verify full nested path
+		// 验证完整嵌入路径
 		expectedPath := level1 + "." + level2 + "." + level3
 		assert.Equal(t, expectedPath, validationErr.Errors[0].Path, "Error path should show full nesting")
 		assert.Contains(t, validationErr.Errors[0].Message, "boolean", "Message should mention expected type")

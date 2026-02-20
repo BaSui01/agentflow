@@ -1,4 +1,4 @@
-// Package longrunning provides support for long-running agent tasks (days-level).
+// 包长跑为长跑代理任务(日-等)提供支持.
 package longrunning
 
 import (
@@ -12,7 +12,7 @@ import (
 	"go.uber.org/zap"
 )
 
-// ExecutionState represents the state of a long-running execution.
+// 处决国是长期处决状态。
 type ExecutionState string
 
 const (
@@ -25,7 +25,7 @@ const (
 	StateCancelled   ExecutionState = "cancelled"
 )
 
-// Execution represents a long-running agent execution.
+// 处决是长期执行的代理人处决。
 type Execution struct {
 	ID          string         `json:"id"`
 	Name        string         `json:"name"`
@@ -41,7 +41,7 @@ type Execution struct {
 	Error       string         `json:"error,omitempty"`
 }
 
-// Checkpoint represents a resumable checkpoint.
+// 检查站是一个可恢复的检查站。
 type Checkpoint struct {
 	ID        string         `json:"id"`
 	Step      int            `json:"step"`
@@ -50,7 +50,7 @@ type Checkpoint struct {
 	Metadata  map[string]any `json:"metadata,omitempty"`
 }
 
-// ExecutorConfig configures the long-running executor.
+// 执行器Config 配置长期执行器。
 type ExecutorConfig struct {
 	CheckpointInterval time.Duration `json:"checkpoint_interval"`
 	CheckpointDir      string        `json:"checkpoint_dir"`
@@ -59,7 +59,7 @@ type ExecutorConfig struct {
 	AutoResume         bool          `json:"auto_resume"`
 }
 
-// DefaultExecutorConfig returns default configuration.
+// 默认执行config 返回默认配置 。
 func DefaultExecutorConfig() ExecutorConfig {
 	return ExecutorConfig{
 		CheckpointInterval: 5 * time.Minute,
@@ -70,10 +70,10 @@ func DefaultExecutorConfig() ExecutorConfig {
 	}
 }
 
-// StepFunc represents a single step in long-running execution.
+// StepFunc代表了长跑行刑的单步.
 type StepFunc func(ctx context.Context, state any) (any, error)
 
-// Executor manages long-running agent executions.
+// 执行官管理长期代理处决。
 type Executor struct {
 	config     ExecutorConfig
 	executions map[string]*Execution
@@ -82,7 +82,7 @@ type Executor struct {
 	mu         sync.RWMutex
 }
 
-// NewExecutor creates a new long-running executor.
+// NewExecuters 创建一个新的长期执行器 。
 func NewExecutor(config ExecutorConfig, logger *zap.Logger) *Executor {
 	if logger == nil {
 		logger = zap.NewNop()
@@ -97,7 +97,7 @@ func NewExecutor(config ExecutorConfig, logger *zap.Logger) *Executor {
 	}
 }
 
-// CreateExecution creates a new long-running execution.
+// CreateExecution 创建了新的长期执行.
 func (e *Executor) CreateExecution(name string, steps []StepFunc) *Execution {
 	exec := &Execution{
 		ID:          fmt.Sprintf("exec_%d", time.Now().UnixNano()),
@@ -126,7 +126,7 @@ func (e *Executor) CreateExecution(name string, steps []StepFunc) *Execution {
 	return exec
 }
 
-// Start starts a long-running execution.
+// 开始长期执行
 func (e *Executor) Start(ctx context.Context, execID string, initialState any) error {
 	e.mu.RLock()
 	exec, ok := e.executions[execID]
@@ -166,14 +166,14 @@ func (e *Executor) runExecution(ctx context.Context, exec *Execution, steps []St
 		default:
 		}
 
-		// Check if paused
+		// 检查是否暂停
 		if exec.State == StatePaused {
 			e.saveCheckpoint(exec, currentState)
 			time.Sleep(time.Second)
 			continue
 		}
 
-		// Execute step with retries
+		// 重复执行步骤
 		step := steps[exec.CurrentStep]
 		var err error
 		var result any
@@ -240,7 +240,7 @@ func (e *Executor) saveCheckpoint(exec *Execution, state any) {
 
 	exec.Checkpoints = append(exec.Checkpoints, checkpoint)
 
-	// Persist to disk
+	// 坚持到磁盘
 	data, err := json.Marshal(exec)
 	if err != nil {
 		e.logger.Error("failed to marshal checkpoint", zap.Error(err))
@@ -253,7 +253,7 @@ func (e *Executor) saveCheckpoint(exec *Execution, state any) {
 	}
 }
 
-// Pause pauses an execution.
+// 暂停执行 。
 func (e *Executor) Pause(execID string) error {
 	e.mu.Lock()
 	defer e.mu.Unlock()
@@ -272,7 +272,7 @@ func (e *Executor) Pause(execID string) error {
 	return nil
 }
 
-// Resume resumes a paused execution.
+// 恢复暂停执行 。
 func (e *Executor) Resume(execID string) error {
 	e.mu.Lock()
 	defer e.mu.Unlock()
@@ -291,7 +291,7 @@ func (e *Executor) Resume(execID string) error {
 	return nil
 }
 
-// LoadExecution loads an execution from checkpoint.
+// LoadExecution从检查站装入一个执行器.
 func (e *Executor) LoadExecution(execID string) (*Execution, error) {
 	path := fmt.Sprintf("%s/%s.json", e.config.CheckpointDir, execID)
 	data, err := os.ReadFile(path)
@@ -311,7 +311,7 @@ func (e *Executor) LoadExecution(execID string) (*Execution, error) {
 	return &exec, nil
 }
 
-// GetExecution retrieves an execution by ID.
+// GetExecution 以 ID 检索执行 。
 func (e *Executor) GetExecution(execID string) (*Execution, bool) {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
@@ -319,7 +319,7 @@ func (e *Executor) GetExecution(execID string) (*Execution, bool) {
 	return exec, ok
 }
 
-// ListExecutions returns all executions.
+// ListExecutions 返回全部处决 。
 func (e *Executor) ListExecutions() []*Execution {
 	e.mu.RLock()
 	defer e.mu.RUnlock()

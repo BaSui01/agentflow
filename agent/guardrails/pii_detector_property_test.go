@@ -11,22 +11,22 @@ import (
 	"pgregory.net/rapid"
 )
 
-// Feature: agent-framework-2026-enhancements, Property 1: Input Validation Detection
-// Validates: Requirements 1.2 - PII Detection
-// This property test verifies that PII detector correctly identifies PII in any input.
+// 特性:代理框架-2026-增强,属性1:输入验证检测
+// 验证:要求1.2 - PII检测
+// 这个属性测试验证PII探测器在任何输入中正确识别出PII.
 func TestProperty_PIIDetector_InputValidationDetection(t *testing.T) {
 	rapid.Check(t, func(rt *rapid.T) {
-		// Generate random phone number (Chinese format)
+		// 生成随机电话号码 (中文格式)
 		phonePrefix := rapid.SampledFrom([]string{"13", "14", "15", "16", "17", "18", "19"}).Draw(rt, "phonePrefix")
 		phoneSuffix := rapid.StringMatching(`[0-9]{9}`).Draw(rt, "phoneSuffix")
 		phone := phonePrefix + phoneSuffix
 
-		// Generate random email
+		// 生成随机电子邮件
 		emailUser := rapid.StringMatching(`[a-z]{3,10}`).Draw(rt, "emailUser")
 		emailDomain := rapid.StringMatching(`[a-z]{3,8}`).Draw(rt, "emailDomain")
 		email := emailUser + "@" + emailDomain + ".com"
 
-		// Generate surrounding text
+		// 生成周围文本
 		prefix := rapid.StringMatching(`[a-zA-Z\x{4e00}-\x{9fa5}]{0,20}`).Draw(rt, "prefix")
 		suffix := rapid.StringMatching(`[a-zA-Z\x{4e00}-\x{9fa5}]{0,20}`).Draw(rt, "suffix")
 
@@ -37,21 +37,21 @@ func TestProperty_PIIDetector_InputValidationDetection(t *testing.T) {
 
 		ctx := context.Background()
 
-		// Test phone detection
+		// 测试电话检测
 		contentWithPhone := prefix + phone + suffix
 		result, err := detector.Validate(ctx, contentWithPhone)
 		require.NoError(t, err)
 		assert.False(t, result.Valid, "Should detect phone number: %s", phone)
 		assert.NotEmpty(t, result.Errors, "Should have validation errors for phone")
 
-		// Test email detection
+		// 测试电子邮件检测
 		contentWithEmail := prefix + email + suffix
 		result, err = detector.Validate(ctx, contentWithEmail)
 		require.NoError(t, err)
 		assert.False(t, result.Valid, "Should detect email: %s", email)
 		assert.NotEmpty(t, result.Errors, "Should have validation errors for email")
 
-		// Test content without PII
+		// 测试内容无 PII
 		cleanContent := rapid.StringMatching(`[a-zA-Z\x{4e00}-\x{9fa5}]{10,50}`).Draw(rt, "cleanContent")
 		result, err = detector.Validate(ctx, cleanContent)
 		require.NoError(t, err)
@@ -59,17 +59,17 @@ func TestProperty_PIIDetector_InputValidationDetection(t *testing.T) {
 	})
 }
 
-// Feature: agent-framework-2026-enhancements, Property 5: Output Sensitive Information Masking
-// Validates: Requirements 2.1 - Detect and mask sensitive information
-// This property test verifies that PII masking preserves content structure while hiding PII.
+// 特性:代理框架2026-增强,财产5:输出敏感信息遮盖
+// 验证:要求2.1 - 检测和掩盖敏感信息
+// 这个属性测试验证PII遮掩了内容结构同时隐藏了PII.
 func TestProperty_PIIDetector_OutputSensitiveInfoMasking(t *testing.T) {
 	rapid.Check(t, func(rt *rapid.T) {
-		// Generate random phone number
+		// 生成随机电话号码
 		phonePrefix := rapid.SampledFrom([]string{"13", "14", "15", "16", "17", "18", "19"}).Draw(rt, "phonePrefix")
 		phoneSuffix := rapid.StringMatching(`[0-9]{9}`).Draw(rt, "phoneSuffix")
 		phone := phonePrefix + phoneSuffix
 
-		// Generate random email
+		// 生成随机电子邮件
 		emailUser := rapid.StringMatching(`[a-z]{3,10}`).Draw(rt, "emailUser")
 		emailDomain := rapid.StringMatching(`[a-z]{3,8}`).Draw(rt, "emailDomain")
 		email := emailUser + "@" + emailDomain + ".com"
@@ -81,7 +81,7 @@ func TestProperty_PIIDetector_OutputSensitiveInfoMasking(t *testing.T) {
 
 		ctx := context.Background()
 
-		// Test phone masking
+		// 测试电话口罩
 		contentWithPhone := "联系电话：" + phone
 		result, err := detector.Validate(ctx, contentWithPhone)
 		require.NoError(t, err)
@@ -94,7 +94,7 @@ func TestProperty_PIIDetector_OutputSensitiveInfoMasking(t *testing.T) {
 		assert.Contains(t, maskedContent, phone[:3], "Masked phone should preserve first 3 digits")
 		assert.Contains(t, maskedContent, phone[len(phone)-4:], "Masked phone should preserve last 4 digits")
 
-		// Test email masking
+		// 测试电子邮件遮盖
 		contentWithEmail := "邮箱地址：" + email
 		result, err = detector.Validate(ctx, contentWithEmail)
 		require.NoError(t, err)
@@ -107,10 +107,10 @@ func TestProperty_PIIDetector_OutputSensitiveInfoMasking(t *testing.T) {
 	})
 }
 
-// TestProperty_PIIDetector_MaskingPreservesLength verifies masking maintains reasonable length
+// Property PII 检测器  Masking PreservesLength 验证掩码保持合理长度
 func TestProperty_PIIDetector_MaskingPreservesLength(t *testing.T) {
 	rapid.Check(t, func(rt *rapid.T) {
-		// Generate content with multiple PII
+		// 生成包含多个 PII 的内容
 		phonePrefix := rapid.SampledFrom([]string{"13", "15", "18"}).Draw(rt, "phonePrefix")
 		phoneSuffix := rapid.StringMatching(`[0-9]{9}`).Draw(rt, "phoneSuffix")
 		phone := phonePrefix + phoneSuffix
@@ -123,17 +123,17 @@ func TestProperty_PIIDetector_MaskingPreservesLength(t *testing.T) {
 
 		masked := detector.Mask(content)
 
-		// Masked content should have similar length (within reasonable bounds)
+		// 被遮盖的内容应具有相近长度(在合理范围内)
 		originalLen := len([]rune(content))
 		maskedLen := len([]rune(masked))
 
-		// Allow some variance due to mask characters
+		// 允许由于口罩字符而出现一些差异
 		assert.InDelta(t, originalLen, maskedLen, 5, "Masked length should be similar to original")
 		assert.NotEqual(t, content, masked, "Content should be modified")
 	})
 }
 
-// TestProperty_PIIDetector_DetectAllTypes verifies all PII types are detected
+// 检测所有 PII 类型
 func TestProperty_PIIDetector_DetectAllTypes(t *testing.T) {
 	testCases := []struct {
 		name     string
@@ -176,11 +176,11 @@ func TestProperty_PIIDetector_DetectAllTypes(t *testing.T) {
 	}
 }
 
-// TestProperty_PIIDetector_NoFalsePositives verifies clean content passes validation
+// 测试 Property PII 检测器  NoFasePosients 验证干净的内容通过验证
 func TestProperty_PIIDetector_NoFalsePositives(t *testing.T) {
 	rapid.Check(t, func(rt *rapid.T) {
-		// Generate content that should NOT be detected as PII
-		// Avoid patterns that look like phone numbers or emails
+		// 生成不应检测为 PII 的内容
+		// 避免看起来像电话号码或电子邮件的模式
 		words := make([]string, rapid.IntRange(3, 10).Draw(rt, "wordCount"))
 		for i := range words {
 			words[i] = rapid.StringMatching(`[a-zA-Z]{3,8}`).Draw(rt, fmt.Sprintf("word_%d", i))

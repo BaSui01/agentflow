@@ -1,4 +1,4 @@
-// Package agent provides the core agent framework for AgentFlow.
+// 包代理为AgentFlow提供了核心代理框架.
 package agent
 
 import (
@@ -8,11 +8,11 @@ import (
 )
 
 // ============================================================
-// Plugin System
-// Provides a pluggable architecture for extending agent capabilities.
+// 插件系统
+// 为扩展代理能力提供可插件架构.
 // ============================================================
 
-// PluginType defines the type of plugin.
+// 插件Type 定义了插件的类型 。
 type PluginType string
 
 const (
@@ -22,44 +22,44 @@ const (
 	PluginTypeExtension   PluginType = "extension"    // Adds new capabilities
 )
 
-// Plugin defines the interface for agent plugins.
+// 插件定义代理插件的接口 。
 type Plugin interface {
-	// Name returns the plugin name.
+	// 名称返回插件名称 。
 	Name() string
-	// Type returns the plugin type.
+	// 类型返回插件类型 。
 	Type() PluginType
-	// Init initializes the plugin.
+	// Init 初始化插件 。
 	Init(ctx context.Context) error
-	// Close cleans up the plugin.
+	// 关闭清理插件 。
 	Close(ctx context.Context) error
 }
 
-// PreProcessPlugin runs before agent execution.
+// PrecessPlugin 在代理执行前运行.
 type PreProcessPlugin interface {
 	Plugin
-	// PreProcess processes input before execution.
+	// Precess 执行前处理输入.
 	PreProcess(ctx context.Context, input *Input) (*Input, error)
 }
 
-// PostProcessPlugin runs after agent execution.
+// 后ProcessPlugin在代理执行后运行.
 type PostProcessPlugin interface {
 	Plugin
-	// PostProcess processes output after execution.
+	// 程序执行后处理输出 。
 	PostProcess(ctx context.Context, output *Output) (*Output, error)
 }
 
-// MiddlewarePlugin wraps agent execution.
+// MiddlewarePlugin 包装代理执行 。
 type MiddlewarePlugin interface {
 	Plugin
-	// Wrap wraps the execution function.
+	// 环绕执行函数 。
 	Wrap(next func(ctx context.Context, input *Input) (*Output, error)) func(ctx context.Context, input *Input) (*Output, error)
 }
 
 // ============================================================
-// Plugin Registry
+// 插件登记
 // ============================================================
 
-// PluginRegistry manages plugin registration and lifecycle.
+// 插件注册管理插件注册和生命周期.
 type PluginRegistry struct {
 	plugins      map[string]Plugin
 	preProcess   []PreProcessPlugin
@@ -69,7 +69,7 @@ type PluginRegistry struct {
 	initialized  bool
 }
 
-// NewPluginRegistry creates a new plugin registry.
+// NewPluginRegistry创建了新的插件注册.
 func NewPluginRegistry() *PluginRegistry {
 	return &PluginRegistry{
 		plugins:     make(map[string]Plugin),
@@ -79,7 +79,7 @@ func NewPluginRegistry() *PluginRegistry {
 	}
 }
 
-// Register registers a plugin.
+// 注册注册插件 。
 func (r *PluginRegistry) Register(plugin Plugin) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -91,7 +91,7 @@ func (r *PluginRegistry) Register(plugin Plugin) error {
 
 	r.plugins[name] = plugin
 
-	// Categorize by type
+	// 按类型分类
 	switch p := plugin.(type) {
 	case PreProcessPlugin:
 		r.preProcess = append(r.preProcess, p)
@@ -104,7 +104,7 @@ func (r *PluginRegistry) Register(plugin Plugin) error {
 	return nil
 }
 
-// Unregister removes a plugin.
+// 未注册删除插件 。
 func (r *PluginRegistry) Unregister(name string) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -116,7 +116,7 @@ func (r *PluginRegistry) Unregister(name string) error {
 
 	delete(r.plugins, name)
 
-	// Remove from categzed lists
+	// 从分类列表中删除
 	switch p := plugin.(type) {
 	case PreProcessPlugin:
 		r.preProcess = removePreProcess(r.preProcess, p)
@@ -129,7 +129,7 @@ func (r *PluginRegistry) Unregister(name string) error {
 	return nil
 }
 
-// Get retrieves a plugin by name.
+// 获取一个名称的插件 。
 func (r *PluginRegistry) Get(name string) (Plugin, bool) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -137,7 +137,7 @@ func (r *PluginRegistry) Get(name string) (Plugin, bool) {
 	return plugin, ok
 }
 
-// List returns all registered plugins.
+// 列表返回所有已注册的插件 。
 func (r *PluginRegistry) List() []Plugin {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -149,7 +149,7 @@ func (r *PluginRegistry) List() []Plugin {
 	return plugins
 }
 
-// Init initializes all plugins.
+// Init 初始化所有插件 。
 func (r *PluginRegistry) Init(ctx context.Context) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -168,7 +168,7 @@ func (r *PluginRegistry) Init(ctx context.Context) error {
 	return nil
 }
 
-// Close closes all plugins.
+// 关闭所有插件 。
 func (r *PluginRegistry) Close(ctx context.Context) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -188,28 +188,28 @@ func (r *PluginRegistry) Close(ctx context.Context) error {
 	return nil
 }
 
-// PreProcessPlugins returns all pre-process plugins.
+// PrecessPlugins 返回所有预处理插件 。
 func (r *PluginRegistry) PreProcessPlugins() []PreProcessPlugin {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return append([]PreProcessPlugin{}, r.preProcess...)
 }
 
-// PostProcessPlugins returns all post-process plugins.
+// PostProcessPlugins 返回所有后进程插件.
 func (r *PluginRegistry) PostProcessPlugins() []PostProcessPlugin {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return append([]PostProcessPlugin{}, r.postProcess...)
 }
 
-// MiddlewarePlugins returns all middleware plugins.
+// MiddlewarePlugins返回所有中间软件插件.
 func (r *PluginRegistry) MiddlewarePlugins() []MiddlewarePlugin {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return append([]MiddlewarePlugin{}, r.middleware...)
 }
 
-// Helper functions for removing plugins from slices
+// 从切片中删除插件的辅助功能
 func removePreProcess(slice []PreProcessPlugin, plugin PreProcessPlugin) []PreProcessPlugin {
 	for i, p := range slice {
 		if p.Name() == plugin.Name() {
@@ -238,16 +238,16 @@ func removeMiddleware(slice []MiddlewarePlugin, plugin MiddlewarePlugin) []Middl
 }
 
 // ============================================================
-// Plugin-Enabled Agent
+// 插件启用代理
 // ============================================================
 
-// PluginEnabledAgent wraps an agent with plugin support.
+// 插件可启用代理用插件支持将代理包入。
 type PluginEnabledAgent struct {
 	agent    Agent
 	registry *PluginRegistry
 }
 
-// NewPluginEnabledAgent creates a plugin-enabled agent wrapper.
+// NewPluginEnabled Agent 创建了插件启用的代理包.
 func NewPluginEnabledAgent(agent Agent, registry *PluginRegistry) *PluginEnabledAgent {
 	if registry == nil {
 		registry = NewPluginRegistry()
@@ -258,46 +258,46 @@ func NewPluginEnabledAgent(agent Agent, registry *PluginRegistry) *PluginEnabled
 	}
 }
 
-// ID returns the agent ID.
+// ID返回代理ID.
 func (a *PluginEnabledAgent) ID() string { return a.agent.ID() }
 
-// Name returns the agent name.
+// 名称返回代理名称 。
 func (a *PluginEnabledAgent) Name() string { return a.agent.Name() }
 
-// Type returns the agent type.
+// 类型返回代理类型。
 func (a *PluginEnabledAgent) Type() AgentType { return a.agent.Type() }
 
-// State returns the agent state.
+// 国家归还代理国.
 func (a *PluginEnabledAgent) State() State { return a.agent.State() }
 
-// Init initializes the agent and plugins.
+// 初始化代理和插件 。
 func (a *PluginEnabledAgent) Init(ctx context.Context) error {
-	// Initialize plugins first
+	// 首先初始化插件
 	if err := a.registry.Init(ctx); err != nil {
 		return err
 	}
 	return a.agent.Init(ctx)
 }
 
-// Teardown cleans up the agent and plugins.
+// 倒地清理代理和插件.
 func (a *PluginEnabledAgent) Teardown(ctx context.Context) error {
-	// Teardown agent first
+	// 抢先拆掉
 	if err := a.agent.Teardown(ctx); err != nil {
 		return err
 	}
 	return a.registry.Close(ctx)
 }
 
-// Plan generates an execution plan.
+// 计划产生一个执行计划。
 func (a *PluginEnabledAgent) Plan(ctx context.Context, input *Input) (*PlanResult, error) {
 	return a.agent.Plan(ctx, input)
 }
 
-// Execute executes with plugin pipeline.
+// 用插件管道执行执行 。
 func (a *PluginEnabledAgent) Execute(ctx context.Context, input *Input) (*Output, error) {
 	var err error
 
-	// Run pre-process plugins
+	// 运行预处理插件
 	for _, plugin := range a.registry.PreProcessPlugins() {
 		input, err = plugin.PreProcess(ctx, input)
 		if err != nil {
@@ -305,19 +305,19 @@ func (a *PluginEnabledAgent) Execute(ctx context.Context, input *Input) (*Output
 		}
 	}
 
-	// Build execution chain with middleware
+	// 用中间软件构建执行链
 	execFunc := a.agent.Execute
 	for i := len(a.registry.MiddlewarePlugins()) - 1; i >= 0; i-- {
 		execFunc = a.registry.MiddlewarePlugins()[i].Wrap(execFunc)
 	}
 
-	// Execute
+	// 执行
 	output, err := execFunc(ctx, input)
 	if err != nil {
 		return nil, err
 	}
 
-	// Run post-process plugins
+	// 运行进程后插件
 	for _, plugin := range a.registry.PostProcessPlugins() {
 		output, err = plugin.PostProcess(ctx, output)
 		if err != nil {
@@ -328,17 +328,17 @@ func (a *PluginEnabledAgent) Execute(ctx context.Context, input *Input) (*Output
 	return output, nil
 }
 
-// Observe processes feedback.
+// 观察处理反馈.
 func (a *PluginEnabledAgent) Observe(ctx context.Context, feedback *Feedback) error {
 	return a.agent.Observe(ctx, feedback)
 }
 
-// Registry returns the plugin registry.
+// 注册返回插件注册 。
 func (a *PluginEnabledAgent) Registry() *PluginRegistry {
 	return a.registry
 }
 
-// UnderlyingAgent returns the wrapped agent.
+// 地下特工还原被包裹的特工.
 func (a *PluginEnabledAgent) UnderlyingAgent() Agent {
 	return a.agent
 }

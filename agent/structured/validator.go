@@ -8,18 +8,18 @@ import (
 	"strings"
 )
 
-// SchemaValidator validates JSON data against a JSONSchema.
+// SchemaValidator对照一个JSONSchema验证了JSON数据.
 type SchemaValidator interface {
 	Validate(data []byte, schema *JSONSchema) error
 }
 
-// ParseError represents a validation error with field path.
+// ParseError 代表着与字段路径的校验错误 。
 type ParseError struct {
 	Path    string `json:"path"`
 	Message string `json:"message"`
 }
 
-// Error implements the error interface.
+// 执行错误接口出错 。
 func (e *ParseError) Error() string {
 	if e.Path == "" {
 		return e.Message
@@ -27,12 +27,12 @@ func (e *ParseError) Error() string {
 	return fmt.Sprintf("%s: %s", e.Path, e.Message)
 }
 
-// ValidationErrors represents multiple validation errors.
+// 校验错误( Errors) 代表多个校验错误.
 type ValidationErrors struct {
 	Errors []ParseError `json:"errors"`
 }
 
-// Error implements the error interface.
+// 执行错误接口出错 。
 func (e *ValidationErrors) Error() string {
 	if len(e.Errors) == 0 {
 		return "validation failed"
@@ -47,13 +47,13 @@ func (e *ValidationErrors) Error() string {
 	return fmt.Sprintf("validation failed with %d errors: %s", len(e.Errors), strings.Join(msgs, "; "))
 }
 
-// DefaultValidator is the default implementation of SchemaValidator.
+// 默认变量是 SchemaValidator 的默认执行.
 type DefaultValidator struct {
-	// formatValidators holds custom format validators
+	// 格式变异器持有自定义格式验证器
 	formatValidators map[StringFormat]func(string) bool
 }
 
-// NewValidator creates a new DefaultValidator with built-in format validators.
+// NewValidator 创建了带有内置格式验证符的新默认变量.
 func NewValidator() *DefaultValidator {
 	v := &DefaultValidator{
 		formatValidators: make(map[StringFormat]func(string) bool),
@@ -62,52 +62,52 @@ func NewValidator() *DefaultValidator {
 	return v
 }
 
-// registerBuiltinFormats registers built-in format validators.
+// 注册BuiltinFormats 注册内置格式验证器。
 func (v *DefaultValidator) registerBuiltinFormats() {
-	// Email format
+	// 电子邮件格式
 	v.formatValidators[FormatEmail] = func(s string) bool {
-		// Simple email regex
+		// 简单的电子邮件正则x
 		pattern := `^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$`
 		matched, _ := regexp.MatchString(pattern, s)
 		return matched
 	}
 
-	// URI format
+	// URI 格式
 	v.formatValidators[FormatURI] = func(s string) bool {
 		pattern := `^[a-zA-Z][a-zA-Z0-9+.-]*://`
 		matched, _ := regexp.MatchString(pattern, s)
 		return matched
 	}
 
-	// UUID format
+	// UUID 格式
 	v.formatValidators[FormatUUID] = func(s string) bool {
 		pattern := `^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`
 		matched, _ := regexp.MatchString(pattern, s)
 		return matched
 	}
 
-	// Date-time format (ISO 8601)
+	// 日期格式(ISO 8601)
 	v.formatValidators[FormatDateTime] = func(s string) bool {
 		pattern := `^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(.\d+)?(Z|[+-]\d{2}:\d{2})?$`
 		matched, _ := regexp.MatchString(pattern, s)
 		return matched
 	}
 
-	// Date format
+	// 日期格式
 	v.formatValidators[FormatDate] = func(s string) bool {
 		pattern := `^\d{4}-\d{2}-\d{2}$`
 		matched, _ := regexp.MatchString(pattern, s)
 		return matched
 	}
 
-	// Time format
+	// 时间格式
 	v.formatValidators[FormatTime] = func(s string) bool {
 		pattern := `^\d{2}:\d{2}:\d{2}(.\d+)?(Z|[+-]\d{2}:\d{2})?$`
 		matched, _ := regexp.MatchString(pattern, s)
 		return matched
 	}
 
-	// IPv4 format
+	// IPv4 格式
 	v.formatValidators[FormatIPv4] = func(s string) bool {
 		pattern := `^(\d{1,3}\.){3}\d{1,3}$`
 		matched, _ := regexp.MatchString(pattern, s)
@@ -125,14 +125,14 @@ func (v *DefaultValidator) registerBuiltinFormats() {
 		return true
 	}
 
-	// IPv6 format
+	// IPv6 格式
 	v.formatValidators[FormatIPv6] = func(s string) bool {
 		pattern := `^([0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}$|^::$|^([0-9a-fA-F]{1,4}:)*:([0-9a-fA-F]{1,4}:)*[0-9a-fA-F]{1,4}$`
 		matched, _ := regexp.MatchString(pattern, s)
 		return matched
 	}
 
-	// Hostname format
+	// 主机名格式
 	v.formatValidators[FormatHostname] = func(s string) bool {
 		pattern := `^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$`
 		matched, _ := regexp.MatchString(pattern, s)
@@ -140,12 +140,12 @@ func (v *DefaultValidator) registerBuiltinFormats() {
 	}
 }
 
-// RegisterFormat registers a custom format validator.
+// RegisterFormat 注册自定义格式验证符 。
 func (v *DefaultValidator) RegisterFormat(format StringFormat, validator func(string) bool) {
 	v.formatValidators[format] = validator
 }
 
-// Validate validates JSON data against a schema.
+// 校验组对照一个计划验证JSON数据.
 func (v *DefaultValidator) Validate(data []byte, schema *JSONSchema) error {
 	if schema == nil {
 		return nil
@@ -167,13 +167,13 @@ func (v *DefaultValidator) Validate(data []byte, schema *JSONSchema) error {
 	return nil
 }
 
-// validateValue validates a value against a schema at the given path.
+// 验证Value 在给定路径上对照一个计划验证一个值。
 func (v *DefaultValidator) validateValue(value any, schema *JSONSchema, path string, errors *[]ParseError) {
 	if schema == nil {
 		return
 	}
 
-	// Check const first
+	// 先检查康斯特
 	if schema.Const != nil {
 		if !v.equalValues(value, schema.Const) {
 			*errors = append(*errors, ParseError{
@@ -184,7 +184,7 @@ func (v *DefaultValidator) validateValue(value any, schema *JSONSchema, path str
 		return
 	}
 
-	// Check enum
+	// 检查enum
 	if len(schema.Enum) > 0 {
 		found := false
 		for _, enumVal := range schema.Enum {
@@ -201,13 +201,13 @@ func (v *DefaultValidator) validateValue(value any, schema *JSONSchema, path str
 		}
 	}
 
-	// Validate based on type
+	// 根据类型验证
 	if schema.Type != "" {
 		v.validateType(value, schema, path, errors)
 	}
 }
 
-// validateType validates a value against its expected type.
+// 验证 Type 对照预期类型验证一个值 。
 func (v *DefaultValidator) validateType(value any, schema *JSONSchema, path string, errors *[]ParseError) {
 	switch schema.Type {
 	case TypeString:
@@ -227,7 +227,7 @@ func (v *DefaultValidator) validateType(value any, schema *JSONSchema, path stri
 	}
 }
 
-// validateString validates a string value.
+// 验证 String 验证字符串值。
 func (v *DefaultValidator) validateString(value any, schema *JSONSchema, path string, errors *[]ParseError) {
 	str, ok := value.(string)
 	if !ok {
@@ -238,7 +238,7 @@ func (v *DefaultValidator) validateString(value any, schema *JSONSchema, path st
 		return
 	}
 
-	// Check minLength
+	// 检查分钟
 	if schema.MinLength != nil && len(str) < *schema.MinLength {
 		*errors = append(*errors, ParseError{
 			Path:    path,
@@ -246,7 +246,7 @@ func (v *DefaultValidator) validateString(value any, schema *JSONSchema, path st
 		})
 	}
 
-	// Check maxLength
+	// 检查最大
 	if schema.MaxLength != nil && len(str) > *schema.MaxLength {
 		*errors = append(*errors, ParseError{
 			Path:    path,
@@ -254,7 +254,7 @@ func (v *DefaultValidator) validateString(value any, schema *JSONSchema, path st
 		})
 	}
 
-	// Check pattern
+	// 检查图案
 	if schema.Pattern != "" {
 		matched, err := regexp.MatchString(schema.Pattern, str)
 		if err != nil {
@@ -270,7 +270,7 @@ func (v *DefaultValidator) validateString(value any, schema *JSONSchema, path st
 		}
 	}
 
-	// Check format
+	// 检查格式
 	if schema.Format != "" {
 		if validator, ok := v.formatValidators[schema.Format]; ok {
 			if !validator(str) {
@@ -283,7 +283,7 @@ func (v *DefaultValidator) validateString(value any, schema *JSONSchema, path st
 	}
 }
 
-// validateNumber validates a number value.
+// 数字验证一个数字值。
 func (v *DefaultValidator) validateNumber(value any, schema *JSONSchema, path string, errors *[]ParseError) {
 	num, ok := v.toFloat64(value)
 	if !ok {
@@ -297,7 +297,7 @@ func (v *DefaultValidator) validateNumber(value any, schema *JSONSchema, path st
 	v.validateNumericConstraints(num, schema, path, errors)
 }
 
-// validateInteger validates an integer value.
+// 验证整数 。
 func (v *DefaultValidator) validateInteger(value any, schema *JSONSchema, path string, errors *[]ParseError) {
 	num, ok := v.toFloat64(value)
 	if !ok {
@@ -308,7 +308,7 @@ func (v *DefaultValidator) validateInteger(value any, schema *JSONSchema, path s
 		return
 	}
 
-	// Check if it's actually an integer
+	// 检查它是否是整数
 	if num != math.Trunc(num) {
 		*errors = append(*errors, ParseError{
 			Path:    path,
@@ -320,9 +320,9 @@ func (v *DefaultValidator) validateInteger(value any, schema *JSONSchema, path s
 	v.validateNumericConstraints(num, schema, path, errors)
 }
 
-// validateNumericConstraints validates numeric constraints.
+// 验证 Numeric Constructions 验证数字限制 。
 func (v *DefaultValidator) validateNumericConstraints(num float64, schema *JSONSchema, path string, errors *[]ParseError) {
-	// Check minimum
+	// 检查最小值
 	if schema.Minimum != nil && num < *schema.Minimum {
 		*errors = append(*errors, ParseError{
 			Path:    path,
@@ -330,7 +330,7 @@ func (v *DefaultValidator) validateNumericConstraints(num float64, schema *JSONS
 		})
 	}
 
-	// Check maximum
+	// 检查最大值
 	if schema.Maximum != nil && num > *schema.Maximum {
 		*errors = append(*errors, ParseError{
 			Path:    path,
@@ -338,7 +338,7 @@ func (v *DefaultValidator) validateNumericConstraints(num float64, schema *JSONS
 		})
 	}
 
-	// Check exclusiveMinimum
+	// 选中最小值
 	if schema.ExclusiveMinimum != nil && num <= *schema.ExclusiveMinimum {
 		*errors = append(*errors, ParseError{
 			Path:    path,
@@ -346,7 +346,7 @@ func (v *DefaultValidator) validateNumericConstraints(num float64, schema *JSONS
 		})
 	}
 
-	// Check exclusiveMaximum
+	// 检查独有的Maximum
 	if schema.ExclusiveMaximum != nil && num >= *schema.ExclusiveMaximum {
 		*errors = append(*errors, ParseError{
 			Path:    path,
@@ -354,7 +354,7 @@ func (v *DefaultValidator) validateNumericConstraints(num float64, schema *JSONS
 		})
 	}
 
-	// Check multipleOf
+	// 检查多处
 	if schema.MultipleOf != nil && *schema.MultipleOf != 0 {
 		quotient := num / *schema.MultipleOf
 		if quotient != math.Trunc(quotient) {
@@ -366,7 +366,7 @@ func (v *DefaultValidator) validateNumericConstraints(num float64, schema *JSONS
 	}
 }
 
-// validateBoolean validates a boolean value.
+// 验证 Boolean 验证布尔值 。
 func (v *DefaultValidator) validateBoolean(value any, schema *JSONSchema, path string, errors *[]ParseError) {
 	if _, ok := value.(bool); !ok {
 		*errors = append(*errors, ParseError{
@@ -376,7 +376,7 @@ func (v *DefaultValidator) validateBoolean(value any, schema *JSONSchema, path s
 	}
 }
 
-// validateNull validates a null value.
+// 验证 Null 验证一个无效值。
 func (v *DefaultValidator) validateNull(value any, schema *JSONSchema, path string, errors *[]ParseError) {
 	if value != nil {
 		*errors = append(*errors, ParseError{
@@ -386,7 +386,7 @@ func (v *DefaultValidator) validateNull(value any, schema *JSONSchema, path stri
 	}
 }
 
-// validateObject validates an object value.
+// 验证对象验证对象值。
 func (v *DefaultValidator) validateObject(value any, schema *JSONSchema, path string, errors *[]ParseError) {
 	obj, ok := value.(map[string]any)
 	if !ok {
@@ -397,7 +397,7 @@ func (v *DefaultValidator) validateObject(value any, schema *JSONSchema, path st
 		return
 	}
 
-	// Check required fields
+	// 检查需要的字段
 	for _, req := range schema.Required {
 		val, exists := obj[req]
 		if !exists {
@@ -413,7 +413,7 @@ func (v *DefaultValidator) validateObject(value any, schema *JSONSchema, path st
 		}
 	}
 
-	// Check minProperties
+	// 检查 minProperties
 	if schema.MinProperties != nil && len(obj) < *schema.MinProperties {
 		*errors = append(*errors, ParseError{
 			Path:    path,
@@ -421,7 +421,7 @@ func (v *DefaultValidator) validateObject(value any, schema *JSONSchema, path st
 		})
 	}
 
-	// Check maxProperties
+	// 检查最大收益
 	if schema.MaxProperties != nil && len(obj) > *schema.MaxProperties {
 		*errors = append(*errors, ParseError{
 			Path:    path,
@@ -429,15 +429,15 @@ func (v *DefaultValidator) validateObject(value any, schema *JSONSchema, path st
 		})
 	}
 
-	// Validate properties
+	// 校验属性
 	for propName, propValue := range obj {
 		propPath := v.joinPath(path, propName)
 
-		// Check if property is defined in schema
+		// 检查是否在计划中定义属性
 		if propSchema, ok := schema.Properties[propName]; ok {
 			v.validateValue(propValue, propSchema, propPath, errors)
 		} else if schema.AdditionalProperties != nil {
-			// Check additionalProperties
+			// 检查额外财产
 			if !schema.AdditionalProperties.Allowed && schema.AdditionalProperties.Schema == nil {
 				*errors = append(*errors, ParseError{
 					Path:    propPath,
@@ -448,7 +448,7 @@ func (v *DefaultValidator) validateObject(value any, schema *JSONSchema, path st
 			}
 		}
 
-		// Check patternProperties
+		// 检查模式
 		for pattern, patternSchema := range schema.PatternProperties {
 			matched, err := regexp.MatchString(pattern, propName)
 			if err == nil && matched {
@@ -457,7 +457,7 @@ func (v *DefaultValidator) validateObject(value any, schema *JSONSchema, path st
 		}
 	}
 
-	// Validate propertyNames
+	// 验证属性Names
 	if schema.PropertyNames != nil {
 		for propName := range obj {
 			v.validateValue(propName, schema.PropertyNames, v.joinPath(path, propName), errors)
@@ -465,7 +465,7 @@ func (v *DefaultValidator) validateObject(value any, schema *JSONSchema, path st
 	}
 }
 
-// validateArray validates an array value.
+// 验证阵列验证一个数组值。
 func (v *DefaultValidator) validateArray(value any, schema *JSONSchema, path string, errors *[]ParseError) {
 	arr, ok := value.([]any)
 	if !ok {
@@ -476,7 +476,7 @@ func (v *DefaultValidator) validateArray(value any, schema *JSONSchema, path str
 		return
 	}
 
-	// Check minItems
+	// 检查分钟项目
 	if schema.MinItems != nil && len(arr) < *schema.MinItems {
 		*errors = append(*errors, ParseError{
 			Path:    path,
@@ -484,7 +484,7 @@ func (v *DefaultValidator) validateArray(value any, schema *JSONSchema, path str
 		})
 	}
 
-	// Check maxItems
+	// 检查最大项目
 	if schema.MaxItems != nil && len(arr) > *schema.MaxItems {
 		*errors = append(*errors, ParseError{
 			Path:    path,
@@ -492,7 +492,7 @@ func (v *DefaultValidator) validateArray(value any, schema *JSONSchema, path str
 		})
 	}
 
-	// Check uniqueItems
+	// 检查独有的项目
 	if schema.UniqueItems != nil && *schema.UniqueItems {
 		seen := make(map[string]bool)
 		for i, item := range arr {
@@ -507,7 +507,7 @@ func (v *DefaultValidator) validateArray(value any, schema *JSONSchema, path str
 		}
 	}
 
-	// Validate items
+	// 验证项目
 	if schema.Items != nil {
 		for i, item := range arr {
 			itemPath := fmt.Sprintf("%s[%d]", path, i)
@@ -515,7 +515,7 @@ func (v *DefaultValidator) validateArray(value any, schema *JSONSchema, path str
 		}
 	}
 
-	// Validate prefixItems
+	// 校验前缀项目
 	if len(schema.PrefixItems) > 0 {
 		for i, prefixSchema := range schema.PrefixItems {
 			if i < len(arr) {
@@ -525,7 +525,7 @@ func (v *DefaultValidator) validateArray(value any, schema *JSONSchema, path str
 		}
 	}
 
-	// Validate contains
+	// 校验包含
 	if schema.Contains != nil {
 		containsCount := 0
 		for _, item := range arr {
@@ -557,7 +557,7 @@ func (v *DefaultValidator) validateArray(value any, schema *JSONSchema, path str
 	}
 }
 
-// toFloat64 converts a value to float64.
+// toFloat64 将一个值转换为浮动64。
 func (v *DefaultValidator) toFloat64(value any) (float64, bool) {
 	switch n := value.(type) {
 	case float64:
@@ -578,41 +578,41 @@ func (v *DefaultValidator) toFloat64(value any) (float64, bool) {
 	}
 }
 
-// equalValues compares two values for equality.
+// 平等价值比较两个平等价值。
 func (v *DefaultValidator) equalValues(a, b any) bool {
-	// Handle numeric comparison
+	// 处理数字比较
 	aNum, aIsNum := v.toFloat64(a)
 	bNum, bIsNum := v.toFloat64(b)
 	if aIsNum && bIsNum {
 		return aNum == bNum
 	}
 
-	// Handle string comparison
+	// 处理字符串比较
 	aStr, aIsStr := a.(string)
 	bStr, bIsStr := b.(string)
 	if aIsStr && bIsStr {
 		return aStr == bStr
 	}
 
-	// Handle boolean comparison
+	// 处理布尔比较
 	aBool, aIsBool := a.(bool)
 	bBool, bIsBool := b.(bool)
 	if aIsBool && bIsBool {
 		return aBool == bBool
 	}
 
-	// Handle nil comparison
+	// 处理
 	if a == nil && b == nil {
 		return true
 	}
 
-	// Use JSON serialization for complex types
+	// 对复杂类型使用 JSON 序列化
 	aJSON, _ := json.Marshal(a)
 	bJSON, _ := json.Marshal(b)
 	return string(aJSON) == string(bJSON)
 }
 
-// joinPath joins path segments.
+// 加入 Path 加入路径段 。
 func (v *DefaultValidator) joinPath(base, segment string) string {
 	if base == "" {
 		return segment
@@ -620,7 +620,7 @@ func (v *DefaultValidator) joinPath(base, segment string) string {
 	return base + "." + segment
 }
 
-// valueKey generates a unique key for a value (for uniqueItems check).
+// 值 Key 生成一个值的独有密钥(用于唯一的项目检查) 。
 func (v *DefaultValidator) valueKey(value any) string {
 	data, _ := json.Marshal(value)
 	return string(data)

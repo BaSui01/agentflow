@@ -10,7 +10,7 @@ import (
 	"go.uber.org/zap"
 )
 
-// TestNewReflectionExecutor tests creating reflection executor
+// 测试新引用执行器测试创建反射执行器
 func TestNewReflectionExecutor(t *testing.T) {
 	logger, _ := zap.NewDevelopment()
 	provider := new(MockProvider)
@@ -35,7 +35,7 @@ func TestNewReflectionExecutor(t *testing.T) {
 	assert.Equal(t, 0.7, executor.config.MinQuality)
 }
 
-// TestReflectionExecutor_ExecuteWithReflection_Disabled tests disabled reflection
+// 测试Reflection 执行器 Execute with Reflection Disabled 测试 已禁用反射
 func TestReflectionExecutor_ExecuteWithReflection_Disabled(t *testing.T) {
 	logger, _ := zap.NewDevelopment()
 	provider := new(MockProvider)
@@ -57,7 +57,7 @@ func TestReflectionExecutor_ExecuteWithReflection_Disabled(t *testing.T) {
 
 	agent := NewBaseAgent(config, provider, memory, toolManager, bus, logger)
 
-	// Initialize agent
+	// 初始化代理
 	memory.On("LoadRecent", mock.Anything, "test-agent", MemoryShortTerm, 10).
 		Return([]MemoryRecord{}, nil)
 	bus.On("Publish", mock.AnythingOfType("*agent.StateChangeEvent")).
@@ -71,7 +71,7 @@ func TestReflectionExecutor_ExecuteWithReflection_Disabled(t *testing.T) {
 
 	executor := NewReflectionExecutor(agent, reflectionConfig)
 
-	// Mock LLM response
+	// Mock LLM 响应
 	mockResponse := &llm.ChatResponse{
 		ID:       "test-response",
 		Provider: "mock",
@@ -111,7 +111,7 @@ func TestReflectionExecutor_ExecuteWithReflection_Disabled(t *testing.T) {
 	memory.AssertExpectations(t)
 }
 
-// TestReflectionExecutor_ExecuteWithReflection_Success tests successful reflection
+// 测试引用执行器  执行引用  成功测试反射
 func TestReflectionExecutor_ExecuteWithReflection_Success(t *testing.T) {
 	logger, _ := zap.NewDevelopment()
 	provider := new(MockProvider)
@@ -133,7 +133,7 @@ func TestReflectionExecutor_ExecuteWithReflection_Success(t *testing.T) {
 
 	agent := NewBaseAgent(config, provider, memory, toolManager, bus, logger)
 
-	// Initialize agent
+	// 初始化代理
 	memory.On("LoadRecent", mock.Anything, "test-agent", MemoryShortTerm, 10).
 		Return([]MemoryRecord{}, nil)
 	bus.On("Publish", mock.AnythingOfType("*agent.StateChangeEvent")).
@@ -147,7 +147,7 @@ func TestReflectionExecutor_ExecuteWithReflection_Success(t *testing.T) {
 
 	executor := NewReflectionExecutor(agent, reflectionConfig)
 
-	// First execution - low quality
+	// 第一次执行 -- -- 质量低
 	firstResponse := &llm.ChatResponse{
 		ID:       "response-1",
 		Provider: "mock",
@@ -165,7 +165,7 @@ func TestReflectionExecutor_ExecuteWithReflection_Success(t *testing.T) {
 		Usage: llm.ChatUsage{TotalTokens: 10},
 	}
 
-	// Critique response - low score
+	// 批评反应 - 低分数
 	critiqueResponse := &llm.ChatResponse{
 		ID:       "critique-1",
 		Provider: "mock",
@@ -183,7 +183,7 @@ func TestReflectionExecutor_ExecuteWithReflection_Success(t *testing.T) {
 		Usage: llm.ChatUsage{TotalTokens: 20},
 	}
 
-	// Second execution - high quality
+	// 第二次执行 -- -- 高质量
 	secondResponse := &llm.ChatResponse{
 		ID:       "response-2",
 		Provider: "mock",
@@ -201,7 +201,7 @@ func TestReflectionExecutor_ExecuteWithReflection_Success(t *testing.T) {
 		Usage: llm.ChatUsage{TotalTokens: 30},
 	}
 
-	// Second critique - high score
+	// 第二个批评 - 高分
 	secondCritiqueResponse := &llm.ChatResponse{
 		ID:       "critique-2",
 		Provider: "mock",
@@ -219,7 +219,7 @@ func TestReflectionExecutor_ExecuteWithReflection_Success(t *testing.T) {
 		Usage: llm.ChatUsage{TotalTokens: 15},
 	}
 
-	// Setup mock calls in order
+	// 按顺序设置模拟呼叫
 	provider.On("Completion", mock.Anything, mock.MatchedBy(func(req *llm.ChatRequest) bool {
 		return len(req.Messages) == 2 && req.Messages[1].Content == "Hello"
 	})).Return(firstResponse, nil).Once()
@@ -256,7 +256,7 @@ func TestReflectionExecutor_ExecuteWithReflection_Success(t *testing.T) {
 	provider.AssertExpectations(t)
 }
 
-// TestReflectionExecutor_parseCritique tests critique parsing
+// 测试引用执行器  praseCritic 测试批判解
 func TestReflectionExecutor_parseCritique(t *testing.T) {
 	logger, _ := zap.NewDevelopment()
 	provider := new(MockProvider)
@@ -294,7 +294,7 @@ func TestReflectionExecutor_parseCritique(t *testing.T) {
 	assert.Contains(t, critique.Suggestions[0], "代码")
 }
 
-// TestReflectionExecutor_extractScore tests score extraction
+// 测试引用执行器  提取分数测试
 func TestReflectionExecutor_extractScore(t *testing.T) {
 	logger, _ := zap.NewDevelopment()
 	provider := new(MockProvider)

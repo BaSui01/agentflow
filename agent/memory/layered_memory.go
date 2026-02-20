@@ -1,4 +1,4 @@
-// Package memory provides layered memory systems for AI agents.
+// 包内存为AI代理提供了分层内存系统.
 package memory
 
 import (
@@ -12,12 +12,12 @@ import (
 	"go.uber.org/zap"
 )
 
-// MemoryType defines the type of memory.
-// Deprecated: Use types.MemoryCategory instead for new code.
+// 内存Type定义了内存的类型.
+// 折旧:使用类型。 用于新代码的内存类型 。
 type MemoryType = types.MemoryCategory
 
-// Memory type constants - mapped to unified types.MemoryCategory
-// Deprecated: Use types.MemoryEpisodic, types.MemorySemantic, etc.
+// 内存类型常数 - 映射到统一类型. 内存类型
+// 折旧:使用类型。 记忆Episodic,类型. 记忆语义等.
 const (
 	MemoryTypeEpisodic   = types.MemoryEpisodic   // Event-based memories
 	MemoryTypeSemantic   = types.MemorySemantic   // Factual knowledge
@@ -25,7 +25,7 @@ const (
 	MemoryTypeProcedural = types.MemoryProcedural // How-to knowledge
 )
 
-// MemoryEntry represents a single memory entry.
+// 内存 Entry 代表单个内存条目.
 type MemoryEntry struct {
 	ID          string         `json:"id"`
 	Type        MemoryType     `json:"type"`
@@ -40,7 +40,7 @@ type MemoryEntry struct {
 	Relations   []string       `json:"relations,omitempty"`
 }
 
-// EpisodicMemory stores event-based experiences.
+// EpisodicMemory存储基于事件的经验.
 type EpisodicMemory struct {
 	episodes []*Episode
 	maxSize  int
@@ -48,7 +48,7 @@ type EpisodicMemory struct {
 	mu       sync.RWMutex
 }
 
-// Episode represents a single episode/event.
+// 第一部代表一集/活动.
 type Episode struct {
 	ID           string         `json:"id"`
 	Timestamp    time.Time      `json:"timestamp"`
@@ -61,7 +61,7 @@ type Episode struct {
 	Metadata     map[string]any `json:"metadata,omitempty"`
 }
 
-// NewEpisodicMemory creates a new episodic memory store.
+// NewEpisodic Memory创建了一款新的偶联记忆商店.
 func NewEpisodicMemory(maxSize int, logger *zap.Logger) *EpisodicMemory {
 	if logger == nil {
 		logger = zap.NewNop()
@@ -73,7 +73,7 @@ func NewEpisodicMemory(maxSize int, logger *zap.Logger) *EpisodicMemory {
 	}
 }
 
-// Store stores a new episode.
+// 存储新剧集。
 func (m *EpisodicMemory) Store(ep *Episode) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -87,13 +87,13 @@ func (m *EpisodicMemory) Store(ep *Episode) {
 
 	m.episodes = append(m.episodes, ep)
 
-	// Evict old episodes if over capacity
+	// 如果容量过大, 就会发生旧事件
 	if len(m.episodes) > m.maxSize {
 		m.episodes = m.episodes[1:]
 	}
 }
 
-// Recall retrieves recent episodes.
+// 召回最近的一些事件。
 func (m *EpisodicMemory) Recall(limit int) []*Episode {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
@@ -106,7 +106,7 @@ func (m *EpisodicMemory) Recall(limit int) []*Episode {
 	return append([]*Episode{}, m.episodes[start:]...)
 }
 
-// Search searches episodes by context.
+// 按上下文进行搜索 。
 func (m *EpisodicMemory) Search(query string, limit int) []*Episode {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
@@ -132,7 +132,7 @@ func contains(s, substr string) bool {
 	return false
 }
 
-// SemanticMemory stores factual knowledge.
+// 语义记忆存储事实知识.
 type SemanticMemory struct {
 	facts    map[string]*Fact
 	embedder Embedder
@@ -140,7 +140,7 @@ type SemanticMemory struct {
 	mu       sync.RWMutex
 }
 
-// Fact represents a piece of factual knowledge.
+// 事实代表了事实知识。
 type Fact struct {
 	ID         string    `json:"id"`
 	Subject    string    `json:"subject"`
@@ -153,12 +153,12 @@ type Fact struct {
 	UpdatedAt  time.Time `json:"updated_at"`
 }
 
-// Embedder generates embeddings for text.
+// 嵌入器生成文字嵌入.
 type Embedder interface {
 	Embed(ctx context.Context, text string) ([]float32, error)
 }
 
-// NewSemanticMemory creates a new semantic memory store.
+// NewSemantic Memory创建了一个新的语义记忆商店.
 func NewSemanticMemory(embedder Embedder, logger *zap.Logger) *SemanticMemory {
 	if logger == nil {
 		logger = zap.NewNop()
@@ -170,7 +170,7 @@ func NewSemanticMemory(embedder Embedder, logger *zap.Logger) *SemanticMemory {
 	}
 }
 
-// StoreFact stores a fact.
+// StoreFact存储了一个事实。
 func (m *SemanticMemory) StoreFact(ctx context.Context, fact *Fact) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -181,7 +181,7 @@ func (m *SemanticMemory) StoreFact(ctx context.Context, fact *Fact) error {
 	fact.CreatedAt = time.Now()
 	fact.UpdatedAt = time.Now()
 
-	// Generate embedding
+	// 生成嵌入
 	if m.embedder != nil {
 		text := fmt.Sprintf("%s %s %s", fact.Subject, fact.Predicate, fact.Object)
 		emb, err := m.embedder.Embed(ctx, text)
@@ -194,7 +194,7 @@ func (m *SemanticMemory) StoreFact(ctx context.Context, fact *Fact) error {
 	return nil
 }
 
-// Query queries facts by subject.
+// 按主题查询事实。
 func (m *SemanticMemory) Query(subject string) []*Fact {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
@@ -208,7 +208,7 @@ func (m *SemanticMemory) Query(subject string) []*Fact {
 	return results
 }
 
-// GetFact retrieves a fact by ID.
+// Get Fact通过身份证检索一个事实.
 func (m *SemanticMemory) GetFact(id string) (*Fact, bool) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
@@ -216,7 +216,7 @@ func (m *SemanticMemory) GetFact(id string) (*Fact, bool) {
 	return f, ok
 }
 
-// WorkingMemory provides short-term context storage.
+// WorkMemory提供短期上下文存储.
 type WorkingMemory struct {
 	items    []WorkingItem
 	capacity int
@@ -225,7 +225,7 @@ type WorkingMemory struct {
 	mu       sync.RWMutex
 }
 
-// WorkingItem represents an item in working memory.
+// 工作 项目是工作记忆中的一个项目。
 type WorkingItem struct {
 	Key       string    `json:"key"`
 	Value     any       `json:"value"`
@@ -234,7 +234,7 @@ type WorkingItem struct {
 	ExpiresAt time.Time `json:"expires_at"`
 }
 
-// NewWorkingMemory creates a new working memory.
+// 新工作记忆创造出新的工作记忆.
 func NewWorkingMemory(capacity int, ttl time.Duration, logger *zap.Logger) *WorkingMemory {
 	if logger == nil {
 		logger = zap.NewNop()
@@ -247,12 +247,12 @@ func NewWorkingMemory(capacity int, ttl time.Duration, logger *zap.Logger) *Work
 	}
 }
 
-// Set sets a value in working memory.
+// 设定工作内存中的值 。
 func (m *WorkingMemory) Set(key string, value any, priority int) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	// Remove existing item with same key
+	// 以相同的密钥删除已存在的项目
 	for i, item := range m.items {
 		if item.Key == key {
 			m.items = append(m.items[:i], m.items[i+1:]...)
@@ -270,7 +270,7 @@ func (m *WorkingMemory) Set(key string, value any, priority int) {
 
 	m.items = append(m.items, item)
 
-	// Evict low priority items if over capacity
+	// 超能力时优先项目
 	if len(m.items) > m.capacity {
 		m.evictLowestPriority()
 	}
@@ -289,7 +289,7 @@ func (m *WorkingMemory) evictLowestPriority() {
 	m.items = append(m.items[:minIdx], m.items[minIdx+1:]...)
 }
 
-// Get retrieves a value from working memory.
+// 从工作记忆中获取一个值 。
 func (m *WorkingMemory) Get(key string) (any, bool) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
@@ -302,7 +302,7 @@ func (m *WorkingMemory) Get(key string) (any, bool) {
 	return nil, false
 }
 
-// Clear clears expired items.
+// 清除过期的项目 。
 func (m *WorkingMemory) Clear() {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -317,7 +317,7 @@ func (m *WorkingMemory) Clear() {
 	m.items = valid
 }
 
-// GetAll returns all non-expired items.
+// Get All 返回所有未过期的项目 。
 func (m *WorkingMemory) GetAll() []WorkingItem {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
@@ -332,7 +332,7 @@ func (m *WorkingMemory) GetAll() []WorkingItem {
 	return results
 }
 
-// LayeredMemory combines all memory types.
+// 分层记忆结合了所有的内存类型.
 type LayeredMemory struct {
 	Episodic   *EpisodicMemory
 	Semantic   *SemanticMemory
@@ -341,7 +341,7 @@ type LayeredMemory struct {
 	logger     *zap.Logger
 }
 
-// LayeredMemoryConfig configures layered memory.
+// 分层的MemoryConfig配置分层内存.
 type LayeredMemoryConfig struct {
 	EpisodicMaxSize  int
 	WorkingCapacity  int
@@ -350,7 +350,7 @@ type LayeredMemoryConfig struct {
 	ProceduralConfig ProceduralConfig
 }
 
-// NewLayeredMemory creates a new layered memory system.
+// NewLayered Memory创造了一个新的分层记忆系统.
 func NewLayeredMemory(config LayeredMemoryConfig, logger *zap.Logger) *LayeredMemory {
 	if logger == nil {
 		logger = zap.NewNop()
@@ -364,7 +364,7 @@ func NewLayeredMemory(config LayeredMemoryConfig, logger *zap.Logger) *LayeredMe
 	}
 }
 
-// Export exports all memory to JSON.
+// 导出全部内存到 JSON 。
 func (lm *LayeredMemory) Export() ([]byte, error) {
 	data := map[string]any{
 		"episodic": lm.Episodic.Recall(100),
@@ -373,12 +373,12 @@ func (lm *LayeredMemory) Export() ([]byte, error) {
 	return json.MarshalIndent(data, "", "  ")
 }
 
-// ProceduralConfig configures procedural memory.
+// 程序Config配置程序内存.
 type ProceduralConfig struct {
 	MaxProcedures int `json:"max_procedures"`
 }
 
-// ProceduralMemory stores how-to knowledge.
+// 程序记忆存储如何知识。
 type ProceduralMemory struct {
 	procedures map[string]*Procedure
 	config     ProceduralConfig
@@ -386,7 +386,7 @@ type ProceduralMemory struct {
 	mu         sync.RWMutex
 }
 
-// Procedure represents a learned procedure.
+// 程序是一种学习过的程序。
 type Procedure struct {
 	ID          string   `json:"id"`
 	Name        string   `json:"name"`
@@ -397,7 +397,7 @@ type Procedure struct {
 	Executions  int      `json:"executions"`
 }
 
-// NewProceduralMemory creates a new procedural memory.
+// 新程序记忆创造出一个新的程序记忆.
 func NewProceduralMemory(config ProceduralConfig, logger *zap.Logger) *ProceduralMemory {
 	if logger == nil {
 		logger = zap.NewNop()
@@ -409,7 +409,7 @@ func NewProceduralMemory(config ProceduralConfig, logger *zap.Logger) *Procedura
 	}
 }
 
-// Store stores a procedure.
+// 存储存储程序。
 func (m *ProceduralMemory) Store(proc *Procedure) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -419,7 +419,7 @@ func (m *ProceduralMemory) Store(proc *Procedure) {
 	m.procedures[proc.ID] = proc
 }
 
-// Get retrieves a procedure by ID.
+// 获取一个程序 通过身份。
 func (m *ProceduralMemory) Get(id string) (*Procedure, bool) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
@@ -427,7 +427,7 @@ func (m *ProceduralMemory) Get(id string) (*Procedure, bool) {
 	return p, ok
 }
 
-// FindByTrigger finds procedures by trigger.
+// FindByTrigger通过触发找到程序.
 func (m *ProceduralMemory) FindByTrigger(trigger string) []*Procedure {
 	m.mu.RLock()
 	defer m.mu.RUnlock()

@@ -1,4 +1,4 @@
-// Package voice provides real-time voice agent capabilities.
+// 软件包语音提供实时语音代理能力.
 package voice
 
 import (
@@ -10,7 +10,7 @@ import (
 	"go.uber.org/zap"
 )
 
-// VoiceConfig configures the voice agent.
+// VoiceConfig 配置语音代理 。
 type VoiceConfig struct {
 	STTProvider      string        `json:"stt_provider"`      // deepgram, assemblyai, whisper
 	TTSProvider      string        `json:"tts_provider"`      // elevenlabs, openai, azure
@@ -21,7 +21,7 @@ type VoiceConfig struct {
 	BufferDuration   time.Duration `json:"buffer_duration"`
 }
 
-// DefaultVoiceConfig returns optimized defaults for low latency.
+// 默认 VoiceConfig 为低延迟返回优化默认值。
 func DefaultVoiceConfig() VoiceConfig {
 	return VoiceConfig{
 		STTProvider:      "deepgram",
@@ -34,7 +34,7 @@ func DefaultVoiceConfig() VoiceConfig {
 	}
 }
 
-// AudioChunk represents a chunk of audio data.
+// AudioChunk代表了一大块音频数据.
 type AudioChunk struct {
 	Data       []byte    `json:"data"`
 	SampleRate int       `json:"sample_rate"`
@@ -43,7 +43,7 @@ type AudioChunk struct {
 	IsFinal    bool      `json:"is_final"`
 }
 
-// TranscriptEvent represents a speech-to-text event.
+// TranscriptEvent代表一个语音对文本事件.
 type TranscriptEvent struct {
 	Text       string    `json:"text"`
 	IsFinal    bool      `json:"is_final"`
@@ -53,7 +53,7 @@ type TranscriptEvent struct {
 	Timestamp  time.Time `json:"timestamp"`
 }
 
-// SpeechEvent represents a text-to-speech event.
+// SpeechEvent 代表文字对语音事件.
 type SpeechEvent struct {
 	Audio     []byte    `json:"audio"`
 	Text      string    `json:"text"`
@@ -61,7 +61,7 @@ type SpeechEvent struct {
 	Timestamp time.Time `json:"timestamp"`
 }
 
-// VoiceState represents the current state of the voice agent.
+// 语音状态代表语音代理的当前状态.
 type VoiceState string
 
 const (
@@ -72,32 +72,32 @@ const (
 	StateInterrupted VoiceState = "interrupted"
 )
 
-// STTProvider defines the speech-to-text interface.
+// STTProvider定义了语音到文本接口.
 type STTProvider interface {
 	StartStream(ctx context.Context, sampleRate int) (STTStream, error)
 	Name() string
 }
 
-// STTStream represents a streaming STT session.
+// STTstream代表流传的STT会话.
 type STTStream interface {
 	Send(chunk AudioChunk) error
 	Receive() <-chan TranscriptEvent
 	Close() error
 }
 
-// TTSProvider defines the text-to-speech interface.
+// TTS Provider定义了文本到语音界面.
 type TTSProvider interface {
 	Synthesize(ctx context.Context, text string) (<-chan SpeechEvent, error)
 	SynthesizeStream(ctx context.Context, textChan <-chan string) (<-chan SpeechEvent, error)
 	Name() string
 }
 
-// LLMHandler handles LLM interactions for voice.
+// LLMHandler为语音处理LLM交互.
 type LLMHandler interface {
 	ProcessStream(ctx context.Context, input string) (<-chan string, error)
 }
 
-// VoiceAgent implements a real-time voice agent.
+// VoiceAgent执行实时语音代理.
 type VoiceAgent struct {
 	config VoiceConfig
 	stt    STTProvider
@@ -108,12 +108,12 @@ type VoiceAgent struct {
 	state   VoiceState
 	stateMu sync.RWMutex
 
-	// Metrics
+	// 计量
 	metrics   VoiceMetrics
 	metricsMu sync.Mutex
 }
 
-// VoiceMetrics tracks voice agent performance.
+// 语音计量跟踪语音代理性能.
 type VoiceMetrics struct {
 	TotalSessions     int64         `json:"total_sessions"`
 	AverageLatency    time.Duration `json:"average_latency"`
@@ -122,7 +122,7 @@ type VoiceMetrics struct {
 	TotalAudioSeconds float64       `json:"total_audio_seconds"`
 }
 
-// NewVoiceAgent creates a new voice agent.
+// NewVoiceAgent创建了新的语音代理.
 func NewVoiceAgent(config VoiceConfig, stt STTProvider, tts TTSProvider, llm LLMHandler, logger *zap.Logger) *VoiceAgent {
 	if logger == nil {
 		logger = zap.NewNop()
@@ -137,7 +137,7 @@ func NewVoiceAgent(config VoiceConfig, stt STTProvider, tts TTSProvider, llm LLM
 	}
 }
 
-// Start starts a voice conversation session.
+// 开始语音对话
 func (v *VoiceAgent) Start(ctx context.Context) (*VoiceSession, error) {
 	v.setState(StateListening)
 
@@ -151,14 +151,14 @@ func (v *VoiceAgent) Start(ctx context.Context) (*VoiceSession, error) {
 		doneChan:   make(chan struct{}),
 	}
 
-	// Start STT stream
+	// 启动 STT 流
 	sttStream, err := v.stt.StartStream(ctx, v.config.SampleRate)
 	if err != nil {
 		return nil, fmt.Errorf("failed to start STT: %w", err)
 	}
 	session.sttStream = sttStream
 
-	// Start processing goroutines
+	// 开始处理去例程
 	go session.processAudio(ctx)
 	go session.processTranscripts(ctx)
 	go session.processSpeech(ctx)
@@ -176,21 +176,21 @@ func (v *VoiceAgent) setState(state VoiceState) {
 	v.state = state
 }
 
-// GetState returns the current state.
+// GetState 返回当前状态 。
 func (v *VoiceAgent) GetState() VoiceState {
 	v.stateMu.RLock()
 	defer v.stateMu.RUnlock()
 	return v.state
 }
 
-// GetMetrics returns current metrics.
+// GetMetrics 返回当前度量衡 。
 func (v *VoiceAgent) GetMetrics() VoiceMetrics {
 	v.metricsMu.Lock()
 	defer v.metricsMu.Unlock()
 	return v.metrics
 }
 
-// VoiceSession represents an active voice conversation.
+// 语音会议代表了积极的语音对话。
 type VoiceSession struct {
 	ID         string
 	agent      *VoiceAgent
@@ -204,7 +204,7 @@ type VoiceSession struct {
 	closed     bool
 }
 
-// SendAudio sends audio data to the session.
+// SendAudio向会话发送音频数据.
 func (s *VoiceSession) SendAudio(chunk AudioChunk) error {
 	s.mu.Lock()
 	if s.closed {
@@ -221,12 +221,12 @@ func (s *VoiceSession) SendAudio(chunk AudioChunk) error {
 	}
 }
 
-// ReceiveSpeech returns the channel for receiving synthesized speech.
+// 接收Speech返回接收合成语音的信道 。
 func (s *VoiceSession) ReceiveSpeech() <-chan SpeechEvent {
 	return s.speechChan
 }
 
-// Close closes the session.
+// 关闭会话 。
 func (s *VoiceSession) Close() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -285,7 +285,7 @@ func (s *VoiceSession) processTranscripts(ctx context.Context) {
 					zap.String("text", transcript.Text),
 					zap.Float64("confidence", transcript.Confidence))
 
-				// Process through LLM
+				// 通过 LLM 处理
 				go s.processLLMResponse(ctx, transcript.Text)
 			}
 		}
@@ -301,7 +301,7 @@ func (s *VoiceSession) processLLMResponse(ctx context.Context, input string) {
 
 	s.agent.setState(StateSpeaking)
 
-	// Stream LLM response to TTS
+	// 对 TTS 的流 LLM 响应
 	speechChan, err := s.agent.tts.SynthesizeStream(ctx, responseChan)
 	if err != nil {
 		s.agent.logger.Error("TTS synthesis failed", zap.Error(err))
@@ -322,16 +322,16 @@ func (s *VoiceSession) processLLMResponse(ctx context.Context, input string) {
 }
 
 func (s *VoiceSession) processSpeech(ctx context.Context) {
-	// Handle interruptions if enabled
+	// 启用时处理中断
 	if !s.agent.config.InterruptEnabled {
 		return
 	}
 
-	// Monitor for user speech during agent speaking
-	// This would integrate with VAD to detect interruptions
+	// 代理服务器发言时用户语音监视器
+	// 这将与 VAD 整合以检测中断
 }
 
-// Interrupt interrupts the current speech.
+// 中断当前发言 。
 func (s *VoiceSession) Interrupt() {
 	s.agent.setState(StateInterrupted)
 	s.agent.metricsMu.Lock()

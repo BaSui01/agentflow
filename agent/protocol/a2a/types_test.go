@@ -172,16 +172,16 @@ func TestAgentCard_JSONSerialization(t *testing.T) {
 	card.AddTool("search_tool", "A search tool", structured.NewObjectSchema())
 	card.SetMetadata("author", "test")
 
-	// Serialize to JSON
+	// 序列化为 JSON
 	data, err := json.Marshal(card)
 	require.NoError(t, err)
 
-	// Deserialize from JSON
+	// 从 JSON 切入
 	var decoded AgentCard
 	err = json.Unmarshal(data, &decoded)
 	require.NoError(t, err)
 
-	// Verify fields
+	// 校验字段
 	assert.Equal(t, card.Name, decoded.Name)
 	assert.Equal(t, card.Description, decoded.Description)
 	assert.Equal(t, card.URL, decoded.URL)

@@ -1,15 +1,15 @@
-// Package agent provides the core agent framework for AgentFlow.
-// This file implements FeatureManager for managing optional agent features.
+// 包代理为AgentFlow提供了核心代理框架.
+// 此文件执行 FeatureManager 管理可选代理特性 。
 package agent
 
 import (
 	"go.uber.org/zap"
 )
 
-// FeatureManager manages optional agent features.
-// It encapsulates feature management logic that was previously in BaseAgent.
+// 特性管理器管理可选代理特性.
+// 它囊括了之前在BaseAgent中的特性管理逻辑.
 type FeatureManager struct {
-	// Feature instances (using interface{} to avoid circular dependencies)
+	// 特性实例( 使用接口来避免循环依赖)
 	reflection     interface{} // *ReflectionExecutor
 	toolSelector   interface{} // *DynamicToolSelector
 	promptEnhancer interface{} // *PromptEnhancer
@@ -18,7 +18,7 @@ type FeatureManager struct {
 	enhancedMemory interface{} // *EnhancedMemorySystem
 	observability  interface{} // *ObservabilitySystem
 
-	// Feature flags
+	// 地物标志
 	reflectionEnabled     bool
 	toolSelectionEnabled  bool
 	promptEnhancerEnabled bool
@@ -30,182 +30,182 @@ type FeatureManager struct {
 	logger *zap.Logger
 }
 
-// NewFeatureManager creates a new feature manager.
+// NewFeatureManager创建了新的功能管理器.
 func NewFeatureManager(logger *zap.Logger) *FeatureManager {
 	return &FeatureManager{
 		logger: logger.With(zap.String("component", "feature_manager")),
 	}
 }
 
-// EnableReflection enables the reflection feature.
+// 启用反射功能可以实现反射功能 。
 func (fm *FeatureManager) EnableReflection(executor interface{}) {
 	fm.reflection = executor
 	fm.reflectionEnabled = true
 	fm.logger.Info("reflection feature enabled")
 }
 
-// DisableReflection disables the reflection feature.
+// 禁用反射功能 。
 func (fm *FeatureManager) DisableReflection() {
 	fm.reflection = nil
 	fm.reflectionEnabled = false
 	fm.logger.Info("reflection feature disabled")
 }
 
-// GetReflection returns the reflection executor.
+// Get Reflection 返回反射执行器 。
 func (fm *FeatureManager) GetReflection() interface{} {
 	return fm.reflection
 }
 
-// IsReflectionEnabled checks if reflection is enabled.
+// 是否启用了反射功能 。
 func (fm *FeatureManager) IsReflectionEnabled() bool {
 	return fm.reflectionEnabled && fm.reflection != nil
 }
 
-// EnableToolSelection enables the dynamic tool selection feature.
+// 启用工具选择允许动态工具选择功能 。
 func (fm *FeatureManager) EnableToolSelection(selector interface{}) {
 	fm.toolSelector = selector
 	fm.toolSelectionEnabled = true
 	fm.logger.Info("tool selection feature enabled")
 }
 
-// DisableToolSelection disables the tool selection feature.
+// 禁用工具选择功能 。
 func (fm *FeatureManager) DisableToolSelection() {
 	fm.toolSelector = nil
 	fm.toolSelectionEnabled = false
 	fm.logger.Info("tool selection feature disabled")
 }
 
-// GetToolSelector returns the tool selector.
+// GetTooSelector 返回工具选择器。
 func (fm *FeatureManager) GetToolSelector() interface{} {
 	return fm.toolSelector
 }
 
-// IsToolSelectionEnabled checks if tool selection is enabled.
+// 如果启用了工具选择, IsTools Selection 可启用检查 。
 func (fm *FeatureManager) IsToolSelectionEnabled() bool {
 	return fm.toolSelectionEnabled && fm.toolSelector != nil
 }
 
-// EnablePromptEnhancer enables the prompt enhancer feature.
+// 启用Prompt Enhancer 启用了即时增强器特性 。
 func (fm *FeatureManager) EnablePromptEnhancer(enhancer interface{}) {
 	fm.promptEnhancer = enhancer
 	fm.promptEnhancerEnabled = true
 	fm.logger.Info("prompt enhancer feature enabled")
 }
 
-// DisablePromptEnhancer disables the prompt enhancer feature.
+// 禁用Prompt Enhancer 禁用快速增强器特性 。
 func (fm *FeatureManager) DisablePromptEnhancer() {
 	fm.promptEnhancer = nil
 	fm.promptEnhancerEnabled = false
 	fm.logger.Info("prompt enhancer feature disabled")
 }
 
-// GetPromptEnhancer returns the prompt enhancer.
+// GetPrompt Enhancer 返回快速增强器 。
 func (fm *FeatureManager) GetPromptEnhancer() interface{} {
 	return fm.promptEnhancer
 }
 
-// IsPromptEnhancerEnabled checks if prompt enhancer is enabled.
+// IsPrompt EnhancerEnabled 检查如果启用了即时增强器。
 func (fm *FeatureManager) IsPromptEnhancerEnabled() bool {
 	return fm.promptEnhancerEnabled && fm.promptEnhancer != nil
 }
 
-// EnableSkills enables the skills feature.
+// 启用技能可以实现技能特性 。
 func (fm *FeatureManager) EnableSkills(manager interface{}) {
 	fm.skillManager = manager
 	fm.skillsEnabled = true
 	fm.logger.Info("skills feature enabled")
 }
 
-// DisableSkills disables the skills feature.
+// 禁用技能特性 。
 func (fm *FeatureManager) DisableSkills() {
 	fm.skillManager = nil
 	fm.skillsEnabled = false
 	fm.logger.Info("skills feature disabled")
 }
 
-// GetSkillManager returns the skill manager.
+// GetSkillManager返回技能管理器.
 func (fm *FeatureManager) GetSkillManager() interface{} {
 	return fm.skillManager
 }
 
-// IsSkillsEnabled checks if skills are enabled.
+// IsSkills 启用技能后可以检查 。
 func (fm *FeatureManager) IsSkillsEnabled() bool {
 	return fm.skillsEnabled && fm.skillManager != nil
 }
 
-// EnableMCP enables the MCP (Model Context Protocol) feature.
+// 启用 MCP 启用 MCP( 模式背景协议) 特性 。
 func (fm *FeatureManager) EnableMCP(server interface{}) {
 	fm.mcpServer = server
 	fm.mcpEnabled = true
 	fm.logger.Info("MCP feature enabled")
 }
 
-// DisableMCP disables the MCP feature.
+// 禁用 MCP 禁用 MCP 特性 。
 func (fm *FeatureManager) DisableMCP() {
 	fm.mcpServer = nil
 	fm.mcpEnabled = false
 	fm.logger.Info("MCP feature disabled")
 }
 
-// GetMCPServer returns the MCP server.
+// GetMCPServer 返回 MCP 服务器.
 func (fm *FeatureManager) GetMCPServer() interface{} {
 	return fm.mcpServer
 }
 
-// IsMCPEnabled checks if MCP is enabled.
+// 如果启用 MCP , IsMCP 可启用检查 。
 func (fm *FeatureManager) IsMCPEnabled() bool {
 	return fm.mcpEnabled && fm.mcpServer != nil
 }
 
-// EnableEnhancedMemory enables the enhanced memory feature.
+// 启用 Enhanced Memory 启用增强的内存功能 。
 func (fm *FeatureManager) EnableEnhancedMemory(system interface{}) {
 	fm.enhancedMemory = system
 	fm.enhancedMemoryEnabled = true
 	fm.logger.Info("enhanced memory feature enabled")
 }
 
-// DisableEnhancedMemory disables the enhanced memory feature.
+// 禁用增强的记忆功能 。
 func (fm *FeatureManager) DisableEnhancedMemory() {
 	fm.enhancedMemory = nil
 	fm.enhancedMemoryEnabled = false
 	fm.logger.Info("enhanced memory feature disabled")
 }
 
-// GetEnhancedMemory returns the enhanced memory system.
+// Get Enhanced Memory 返回增强的内存系统.
 func (fm *FeatureManager) GetEnhancedMemory() interface{} {
 	return fm.enhancedMemory
 }
 
-// IsEnhancedMemoryEnabled checks if enhanced memory is enabled.
+// 如果启用了增强内存, IsEnhanced Memory Enabled 检查。
 func (fm *FeatureManager) IsEnhancedMemoryEnabled() bool {
 	return fm.enhancedMemoryEnabled && fm.enhancedMemory != nil
 }
 
-// EnableObservability enables the observability feature.
+// 启用可观察性可以实现可观察性特性.
 func (fm *FeatureManager) EnableObservability(system interface{}) {
 	fm.observability = system
 	fm.observabilityEnabled = true
 	fm.logger.Info("observability feature enabled")
 }
 
-// DisableObservability disables the observability feature.
+// 禁用可观察性可以禁用可观察性特性 。
 func (fm *FeatureManager) DisableObservability() {
 	fm.observability = nil
 	fm.observabilityEnabled = false
 	fm.logger.Info("observability feature disabled")
 }
 
-// GetObservability returns the observability system.
+// GetObservacy返回可观察系统.
 func (fm *FeatureManager) GetObservability() interface{} {
 	return fm.observability
 }
 
-// IsObservabilityEnabled checks if observability is enabled.
+// 如果启用可观察性, 则可以进行可观察性检查 。
 func (fm *FeatureManager) IsObservabilityEnabled() bool {
 	return fm.observabilityEnabled && fm.observability != nil
 }
 
-// EnabledFeatures returns a list of enabled feature names.
+// 启用 Features 返回已启用的特性名列表 。
 func (fm *FeatureManager) EnabledFeatures() []string {
 	var features []string
 	if fm.IsReflectionEnabled() {
@@ -232,7 +232,7 @@ func (fm *FeatureManager) EnabledFeatures() []string {
 	return features
 }
 
-// DisableAll disables all features.
+// 禁用所有特性 。
 func (fm *FeatureManager) DisableAll() {
 	fm.DisableReflection()
 	fm.DisableToolSelection()

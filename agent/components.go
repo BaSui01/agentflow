@@ -1,4 +1,4 @@
-// Package agent provides the core agent framework for AgentFlow.
+// 包代理为AgentFlow提供了核心代理框架.
 package agent
 
 import (
@@ -12,12 +12,12 @@ import (
 )
 
 // ============================================================
-// Agent Components
-// These components break down BaseAgent's responsibilities into
-// smaller, focused units following the Single Responsibility Principle.
+// 代理组件
+// 这些组件将Base Agent的责任细分为
+// 遵循单一责任原则的小型、重点突出的单位。
 // ============================================================
 
-// AgentIdentity manages agent identity information.
+// 代理身份管理代理身份信息.
 type AgentIdentity struct {
 	id          string
 	name        string
@@ -25,7 +25,7 @@ type AgentIdentity struct {
 	description string
 }
 
-// NewAgentIdentity creates a new AgentIdentity.
+// 新代理身份创建了新的代理身份.
 func NewAgentIdentity(id, name string, agentType AgentType) *AgentIdentity {
 	return &AgentIdentity{
 		id:        id,
@@ -34,26 +34,26 @@ func NewAgentIdentity(id, name string, agentType AgentType) *AgentIdentity {
 	}
 }
 
-// ID returns the agent's unique identifier.
+// ID 返回代理的唯一标识符 。
 func (i *AgentIdentity) ID() string { return i.id }
 
-// Name returns the agent's name.
+// 名称返回代理名.
 func (i *AgentIdentity) Name() string { return i.name }
 
-// Type returns the agent's type.
+// 类型返回代理类型 。
 func (i *AgentIdentity) Type() AgentType { return i.agentType }
 
-// Description returns the agent's description.
+// 描述返回代理描述.
 func (i *AgentIdentity) Description() string { return i.description }
 
-// SetDescription sets the agent's description.
+// 设置 Description 设置代理描述 。
 func (i *AgentIdentity) SetDescription(desc string) { i.description = desc }
 
 // ============================================================
-// State Manager (Lightweight state management for ModularAgent)
+// 州管理者(模块代理的轻量级州管理)
 // ============================================================
 
-// StateManager manages agent state transitions (lightweight version).
+// StateManager管理代理状态过渡(轻量级版).
 type StateManager struct {
 	state   State
 	stateMu sync.RWMutex
@@ -63,7 +63,7 @@ type StateManager struct {
 	agentID string
 }
 
-// NewStateManager creates a new StateManager.
+// 新州管理者创建了新的州管理者.
 func NewStateManager(agentID string, bus EventBus, logger *zap.Logger) *StateManager {
 	return &StateManager{
 		state:   StateInit,
@@ -73,14 +73,14 @@ func NewStateManager(agentID string, bus EventBus, logger *zap.Logger) *StateMan
 	}
 }
 
-// State returns the current state.
+// 状态返回当前状态 。
 func (sm *StateManager) State() State {
 	sm.stateMu.RLock()
 	defer sm.stateMu.RUnlock()
 	return sm.state
 }
 
-// Transition performs a state transition with validation.
+// 过渡通过验证实现国家过渡。
 func (sm *StateManager) Transition(ctx context.Context, to State) error {
 	sm.stateMu.Lock()
 	defer sm.stateMu.Unlock()
@@ -95,7 +95,7 @@ func (sm *StateManager) Transition(ctx context.Context, to State) error {
 		zap.String("from", string(from)),
 		zap.String("to", string(to)))
 
-	// Publish state change event
+	// 发布状态更改事件
 	if sm.bus != nil {
 		sm.bus.Publish(&StateChangeEvent{
 			AgentID_:   sm.agentID,
@@ -108,17 +108,17 @@ func (sm *StateManager) Transition(ctx context.Context, to State) error {
 	return nil
 }
 
-// TryLockExec attempts to acquire the execution lock.
+// TryLockExec试图获取执行锁.
 func (sm *StateManager) TryLockExec() bool {
 	return sm.execMu.TryLock()
 }
 
-// UnlockExec releases the execution lock.
+// UnlockExec 发布了执行锁.
 func (sm *StateManager) UnlockExec() {
 	sm.execMu.Unlock()
 }
 
-// EnsureReady checks if the agent is in ready state.
+// 如果特工处于准备状态, 请确保准备检查 。
 func (sm *StateManager) EnsureReady() error {
 	if sm.State() != StateReady {
 		return ErrAgentNotReady
@@ -127,10 +127,10 @@ func (sm *StateManager) EnsureReady() error {
 }
 
 // ============================================================
-// LLM Executor
+// LLM 执行器
 // ============================================================
 
-// LLMExecutor handles LLM interactions.
+// LLM执行器处理LLM交互.
 type LLMExecutor struct {
 	provider       llm.Provider
 	model          string
@@ -140,14 +140,14 @@ type LLMExecutor struct {
 	logger         *zap.Logger
 }
 
-// LLMExecutorConfig configures the LLM executor.
+// LLMExecutorconfig 配置 LLM 执行器 。
 type LLMExecutorConfig struct {
 	Model       string
 	MaxTokens   int
 	Temperature float32
 }
 
-// NewLLMExecutor creates a new LLMExecutor.
+// NewLLMExecutor创建了新的LLMExecutor.
 func NewLLMExecutor(provider llm.Provider, config LLMExecutorConfig, logger *zap.Logger) *LLMExecutor {
 	return &LLMExecutor{
 		provider:    provider,
@@ -158,23 +158,23 @@ func NewLLMExecutor(provider llm.Provider, config LLMExecutorConfig, logger *zap
 	}
 }
 
-// SetContextManager sets the context manager for message optimization.
+// SetContextManager 设置信息优化的上下文管理器.
 func (e *LLMExecutor) SetContextManager(cm ContextManager) {
 	e.contextManager = cm
 }
 
-// Provider returns the underlying LLM provider.
+// 提供者返回基本的 LLM 提供者 。
 func (e *LLMExecutor) Provider() llm.Provider {
 	return e.provider
 }
 
-// Complete sends a completion request to the LLM.
+// 完整向LLM发送完成请求.
 func (e *LLMExecutor) Complete(ctx context.Context, messages []llm.Message) (*llm.ChatResponse, error) {
 	if e.provider == nil {
 		return nil, ErrProviderNotSet
 	}
 
-	// Apply context optimization if available
+	// 如果可用, 请应用上下文优化
 	if e.contextManager != nil && len(messages) > 1 {
 		query := extractLastUserQuery(messages)
 		optimized, err := e.contextManager.PrepareMessages(ctx, messages, query)
@@ -195,7 +195,7 @@ func (e *LLMExecutor) Complete(ctx context.Context, messages []llm.Message) (*ll
 	return e.provider.Completion(ctx, req)
 }
 
-// Stream sends a streaming request to the LLM.
+// Stream 向 LLM 发送流报请求 。
 func (e *LLMExecutor) Stream(ctx context.Context, messages []llm.Message) (<-chan llm.StreamChunk, error) {
 	if e.provider == nil {
 		return nil, ErrProviderNotSet
@@ -211,7 +211,7 @@ func (e *LLMExecutor) Stream(ctx context.Context, messages []llm.Message) (<-cha
 	return e.provider.Stream(ctx, req)
 }
 
-// extractLastUserQuery extracts the last user message content.
+// 提取 Last UserQuery 提取最后的用户信件内容 。
 func extractLastUserQuery(messages []llm.Message) string {
 	for i := len(messages) - 1; i >= 0; i-- {
 		if messages[i].Role == llm.RoleUser {
@@ -222,10 +222,10 @@ func extractLastUserQuery(messages []llm.Message) string {
 }
 
 // ============================================================
-// Extension Manager
+// 扩展管理器
 // ============================================================
 
-// ExtensionManager manages optional agent extensions.
+// 扩展管理器管理可选代理扩展 。
 type ExtensionManager struct {
 	reflection     types.ReflectionExtension
 	toolSelection  types.ToolSelectionExtension
@@ -238,103 +238,103 @@ type ExtensionManager struct {
 	logger         *zap.Logger
 }
 
-// NewExtensionManager creates a new ExtensionManager.
+// NewExtensionManager创建了新的扩展管理器.
 func NewExtensionManager(logger *zap.Logger) *ExtensionManager {
 	return &ExtensionManager{
 		logger: logger,
 	}
 }
 
-// SetReflection sets the reflection extension.
+// 设定反射设置反射扩展 。
 func (em *ExtensionManager) SetReflection(ext types.ReflectionExtension) {
 	em.reflection = ext
 	em.logger.Info("reflection extension registered")
 }
 
-// SetToolSelection sets the tool selection extension.
+// SetTools Selection 设置工具选择扩展名.
 func (em *ExtensionManager) SetToolSelection(ext types.ToolSelectionExtension) {
 	em.toolSelection = ext
 	em.logger.Info("tool selection extension registered")
 }
 
-// SetPromptEnhancer sets the prompt enhancer extension.
+// SetPrompt Enhancer 设置了快速增强器扩展.
 func (em *ExtensionManager) SetPromptEnhancer(ext types.PromptEnhancerExtension) {
 	em.promptEnhancer = ext
 	em.logger.Info("prompt enhancer extension registered")
 }
 
-// SetSkills sets the skills extension.
+// SetSkills 设置技能扩展.
 func (em *ExtensionManager) SetSkills(ext types.SkillsExtension) {
 	em.skills = ext
 	em.logger.Info("skills extension registered")
 }
 
-// SetMCP sets the MCP extension.
+// SetMCP设置了MCP扩展.
 func (em *ExtensionManager) SetMCP(ext types.MCPExtension) {
 	em.mcp = ext
 	em.logger.Info("MCP extension registered")
 }
 
-// SetEnhancedMemory sets the enhanced memory extension.
+// Set Enhanced Memory 设置了增强的内存扩展名.
 func (em *ExtensionManager) SetEnhancedMemory(ext types.EnhancedMemoryExtension) {
 	em.enhancedMemory = ext
 	em.logger.Info("enhanced memory extension registered")
 }
 
-// SetObservability sets the observability extension.
+// SetObservacy设置可观察扩展.
 func (em *ExtensionManager) SetObservability(ext types.ObservabilityExtension) {
 	em.observability = ext
 	em.logger.Info("observability extension registered")
 }
 
-// SetGuardrails sets the guardrails extension.
+// SetGuardrails设置了护栏扩展.
 func (em *ExtensionManager) SetGuardrails(ext types.GuardrailsExtension) {
 	em.guardrails = ext
 	em.logger.Info("guardrails extension registered")
 }
 
-// Reflection returns the reflection extension.
+// 反射返回反射扩展.
 func (em *ExtensionManager) Reflection() types.ReflectionExtension { return em.reflection }
 
-// ToolSelection returns the tool selection extension.
+// ToolSection 返回工具选择扩展名.
 func (em *ExtensionManager) ToolSelection() types.ToolSelectionExtension { return em.toolSelection }
 
-// PromptEnhancer returns the prompt enhancer extension.
+// PowerEnhancer 返回快速增强器扩展 。
 func (em *ExtensionManager) PromptEnhancer() types.PromptEnhancerExtension { return em.promptEnhancer }
 
-// Skills returns the skills extension.
+// 技能返回技能扩展。
 func (em *ExtensionManager) Skills() types.SkillsExtension { return em.skills }
 
-// MCP returns the MCP extension.
+// MCP返回MCP扩展.
 func (em *ExtensionManager) MCP() types.MCPExtension { return em.mcp }
 
-// EnhancedMemory returns the enhanced memory extension.
+// 增强记忆返回增强的内存扩展.
 func (em *ExtensionManager) EnhancedMemory() types.EnhancedMemoryExtension { return em.enhancedMemory }
 
-// Observability returns the observability extension.
+// 可观察性返回可观察性扩展.
 func (em *ExtensionManager) Observability() types.ObservabilityExtension { return em.observability }
 
-// Guardrails returns the guardrails extension.
+// 护卫员把护卫员的分机还给我
 func (em *ExtensionManager) Guardrails() types.GuardrailsExtension { return em.guardrails }
 
-// HasReflection checks if reflection is available.
+// 如果存在反射, 请进行反射检查 。
 func (em *ExtensionManager) HasReflection() bool { return em.reflection != nil }
 
-// HasToolSelection checks if tool selection is available.
+// 如果可以选择工具, HasTooLSsection 检查 。
 func (em *ExtensionManager) HasToolSelection() bool { return em.toolSelection != nil }
 
-// HasGuardrails checks if guardrails are available.
+// 如果有护栏,就检查护栏
 func (em *ExtensionManager) HasGuardrails() bool { return em.guardrails != nil }
 
-// HasObservability checks if observability is available.
+// 如果存在可观察性,则有可观察性检查。
 func (em *ExtensionManager) HasObservability() bool { return em.observability != nil }
 
 // ============================================================
-// Modular Agent (New Architecture)
+// 模块代理 (新架构)
 // ============================================================
 
-// ModularAgent is a refactored agent using composition over inheritance.
-// It delegates responsibilities to specialized components.
+// 模块化代理(ModularAgent)是一种使用组成来取代继承的再造代理.
+// 它将责任下放给专门部门。
 type ModularAgent struct {
 	identity   *AgentIdentity
 	stateManager *StateManager
@@ -346,7 +346,7 @@ type ModularAgent struct {
 	logger     *zap.Logger
 }
 
-// ModularAgentConfig configures a ModularAgent.
+// ModularAgentConfig 配置一个ModularAgent.
 type ModularAgentConfig struct {
 	ID          string
 	Name        string
@@ -355,7 +355,7 @@ type ModularAgentConfig struct {
 	LLM         LLMExecutorConfig
 }
 
-// NewModularAgent creates a new ModularAgent.
+// 新ModularAgent创建了新的ModularAgent.
 func NewModularAgent(
 	config ModularAgentConfig,
 	provider llm.Provider,
@@ -388,23 +388,23 @@ func NewModularAgent(
 	}
 }
 
-// ID returns the agent's ID.
+// 身份证还给探员的身份证
 func (a *ModularAgent) ID() string { return a.identity.ID() }
 
-// Name returns the agent's name.
+// 名称返回代理名.
 func (a *ModularAgent) Name() string { return a.identity.Name() }
 
-// Type returns the agent's type.
+// 类型返回代理类型 。
 func (a *ModularAgent) Type() AgentType { return a.identity.Type() }
 
-// State returns the current state.
+// 状态返回当前状态 。
 func (a *ModularAgent) State() State { return a.stateManager.State() }
 
-// Init initializes the agent.
+// 输入初始化代理。
 func (a *ModularAgent) Init(ctx context.Context) error {
 	a.logger.Info("initializing modular agent")
 
-	// Load recent memory if available
+	// 如果可用, 装入最近的内存
 	if a.memory != nil {
 		records, err := a.memory.LoadRecent(ctx, a.identity.ID(), MemoryShortTerm, 10)
 		if err != nil {
@@ -417,28 +417,28 @@ func (a *ModularAgent) Init(ctx context.Context) error {
 	return a.stateManager.Transition(ctx, StateReady)
 }
 
-// Teardown cleans up the agent.
+// 倒地打扫了经纪人.
 func (a *ModularAgent) Teardown(ctx context.Context) error {
 	a.logger.Info("tearing down modular agent")
 	return nil
 }
 
-// Execute executes a task.
+// 执行任务 。
 func (a *ModularAgent) Execute(ctx context.Context, input *Input) (*Output, error) {
 	startTime := time.Now()
 
-	// Ensure agent is ready
+	// 确保代理准备好
 	if err := a.stateManager.EnsureReady(); err != nil {
 		return nil, err
 	}
 
-	// Try to acquire execution lock
+	// 尝试获取执行锁
 	if !a.stateManager.TryLockExec() {
 		return nil, ErrAgentBusy
 	}
 	defer a.stateManager.UnlockExec()
 
-	// Validate input with guardrails if available
+	// 验证可用守护栏的输入
 	if a.extensions.HasGuardrails() {
 		result, err := a.extensions.Guardrails().ValidateInput(ctx, input.Content)
 		if err != nil {
@@ -449,12 +449,12 @@ func (a *ModularAgent) Execute(ctx context.Context, input *Input) (*Output, erro
 		}
 	}
 
-	// Build messages
+	// 构建信件
 	messages := []llm.Message{
 		{Role: llm.RoleUser, Content: input.Content},
 	}
 
-	// Execute LLM
+	// 执行 LLM
 	resp, err := a.llm.Complete(ctx, messages)
 	if err != nil {
 		return nil, err
@@ -465,7 +465,7 @@ func (a *ModularAgent) Execute(ctx context.Context, input *Input) (*Output, erro
 		content = resp.Choices[0].Message.Content
 	}
 
-	// Validate output with guardrails if available
+	// 如果有护栏, 验证输出
 	if a.extensions.HasGuardrails() {
 		result, err := a.extensions.Guardrails().ValidateOutput(ctx, content)
 		if err != nil {
@@ -488,9 +488,9 @@ func (a *ModularAgent) Execute(ctx context.Context, input *Input) (*Output, erro
 	}, nil
 }
 
-// Plan generates an execution plan.
+// 计划产生一个执行计划。
 func (a *ModularAgent) Plan(ctx context.Context, input *Input) (*PlanResult, error) {
-	// Delegate to LLM with planning prompt
+	// 参加 LLM 的代表, 即时规划
 	planPrompt := "Please create a step-by-step plan for: " + input.Content
 
 	messages := []llm.Message{
@@ -512,7 +512,7 @@ func (a *ModularAgent) Plan(ctx context.Context, input *Input) (*PlanResult, err
 	}, nil
 }
 
-// Observe processes feedback.
+// 观察处理反馈.
 func (a *ModularAgent) Observe(ctx context.Context, feedback *Feedback) error {
 	a.logger.Info("observing feedback",
 		zap.String("type", feedback.Type),
@@ -520,22 +520,22 @@ func (a *ModularAgent) Observe(ctx context.Context, feedback *Feedback) error {
 	return nil
 }
 
-// Extensions returns the extension manager.
+// 扩展返回扩展管理器 。
 func (a *ModularAgent) Extensions() *ExtensionManager {
 	return a.extensions
 }
 
-// LLM returns the LLM executor.
+// LLM 返回 LLM 执行器 。
 func (a *ModularAgent) LLM() *LLMExecutor {
 	return a.llm
 }
 
-// Memory returns the memory manager.
+// 内存返回内存管理器.
 func (a *ModularAgent) Memory() MemoryManager {
 	return a.memory
 }
 
-// Tools returns the tool manager.
+// 工具返回工具管理器 。
 func (a *ModularAgent) Tools() ToolManager {
 	return a.tools
 }

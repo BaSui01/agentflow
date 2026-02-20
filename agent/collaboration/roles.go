@@ -10,21 +10,21 @@ import (
 )
 
 // ============================================================================
-// Role-Based Agent Orchestration
+// 基于角色的代理管弦乐团
 // ============================================================================
 //
-// Inspired by AI-Researcher's multi-agent pipeline, this module provides
-// a role-based orchestration system where agents are assigned specific roles
-// with defined capabilities, responsibilities, and communication patterns.
+// 在AI-Researcher的多代理管道的启发下,这个模块提供
+// 一种基于角色的管弦系统,其中指定了代理人的具体角色
+// 具有确定的能力、责任和交流模式。
 //
-// Example roles in a research pipeline:
-//   - Collector: Gathers resources from external sources
-//   - Filter: Evaluates and filters resources by quality
-//   - Generator: Generates novel ideas from filtered resources
-//   - Designer: Creates design specifications from ideas
-//   - Implementer: Implements designs into working code
-//   - Validator: Tests and validates implementations
-//   - Writer: Generates reports and documentation
+// 研究程序方面的例子作用:
+//   - 收集者:从外部来源收集资源
+//   - 过滤器:按质量评价和过滤资源
+//   - 发电机:从过滤的资源中产生出新想法
+//   - 设计师:从想法创造设计规格
+//   - 执行者:将设计纳入工作守则
+//   - 验证器:测试和验证执行
+//   - 作者:产生报告和文献
 // ============================================================================
 
 // RoleType 角色类型
@@ -106,7 +106,7 @@ type RoleTransition struct {
 }
 
 // ============================================================================
-// Role Registry
+// 书记官处
 // ============================================================================
 
 // RoleRegistry 角色注册表
@@ -178,7 +178,7 @@ func (r *RoleRegistry) Unregister(roleType RoleType) error {
 }
 
 // ============================================================================
-// Role Pipeline Orchestrator
+// 角色管道 Orchestrator( 管道管管)
 // ============================================================================
 
 // PipelineConfig 流水线配置
@@ -238,7 +238,7 @@ func (p *RolePipeline) AddStage(roles ...RoleType) *RolePipeline {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	// Validate all roles are registered
+	// 对所有角色进行验证
 	for _, role := range roles {
 		if _, ok := p.registry.Get(role); !ok {
 			p.logger.Warn("role not registered, skipping", zap.String("role", string(role)))
@@ -274,10 +274,10 @@ func (p *RolePipeline) Execute(ctx context.Context, initialInput interface{}) (m
 			p.logger.Warn("stage failed, continuing", zap.Int("stage", stageIdx+1), zap.Error(err))
 		}
 
-		// Merge stage results
+		// 合并阶段结果
 		for role, output := range stageResults {
 			results[role] = output
-			// Use last stage's output as next stage's input
+			// 使用最后阶段的输出作为下一阶段的输入
 			currentInput = output
 		}
 	}
@@ -301,7 +301,7 @@ func (p *RolePipeline) executeStage(
 	var wg sync.WaitGroup
 	var firstErr error
 
-	// Limit concurrency
+	// 限制货币
 	sem := make(chan struct{}, p.config.MaxConcurrency)
 
 	for _, roleType := range roles {
@@ -311,7 +311,7 @@ func (p *RolePipeline) executeStage(
 			continue
 		}
 
-		// Determine input: use dependency output if available
+		// 确定输入:如果可用,使用依赖性输出
 		roleInput := input
 		for _, dep := range def.Dependencies {
 			if depOutput, ok := previousResults[dep]; ok {
@@ -344,7 +344,7 @@ func (p *RolePipeline) executeStage(
 				zap.String("role", string(rt)),
 				zap.String("instance", instance.ID))
 
-			// Execute with timeout
+			// 以超时执行
 			roleCtx := ctx
 			if rd.Timeout > 0 {
 				var roleCancel context.CancelFunc
@@ -352,7 +352,7 @@ func (p *RolePipeline) executeStage(
 				defer roleCancel()
 			}
 
-			// Execute with retry
+			// 用重试执行
 			var output interface{}
 			var err error
 			maxAttempts := 1
@@ -411,7 +411,7 @@ func (p *RolePipeline) executeStage(
 			results[rt] = output
 			mu.Unlock()
 
-			// Record transition
+			// 记录过渡
 			p.mu.Lock()
 			p.transitions = append(p.transitions, RoleTransition{
 				FromRole:  rt,
@@ -451,7 +451,7 @@ func (p *RolePipeline) GetTransitions() []RoleTransition {
 }
 
 // ============================================================================
-// Predefined Research Roles
+// 预定义的研究角色
 // ============================================================================
 
 // NewResearchCollectorRole 创建研究资源收集者角色

@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// mockPattern implements ReasoningPattern for testing.
+// 模拟 Pattern 执行 测试模式。
 type mockPattern struct {
 	name string
 }

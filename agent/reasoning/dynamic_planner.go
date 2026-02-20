@@ -1,4 +1,4 @@
-// Package reasoning provides advanced reasoning patterns for AI agents.
+// 包推理为AI代理提供了先进的推理模式.
 package reasoning
 
 import (
@@ -14,10 +14,10 @@ import (
 )
 
 // ============================================================
-// Dynamic Planning with Backtracking
+// 动态规划与后跟踪
 // ============================================================
 
-// DynamicPlannerConfig configures the dynamic planner.
+// DynamicPlannerConfig配置了动态规划器.
 type DynamicPlannerConfig struct {
 	MaxBacktracks       int           // Maximum backtrack attempts
 	MaxPlanDepth        int           // Maximum plan depth
@@ -27,7 +27,7 @@ type DynamicPlannerConfig struct {
 	MaxParallelPaths    int           // Maximum parallel paths to explore
 }
 
-// DefaultDynamicPlannerConfig returns sensible defaults.
+// 默认 DynamicPlannerConfig 返回合理的默认值 。
 func DefaultDynamicPlannerConfig() DynamicPlannerConfig {
 	return DynamicPlannerConfig{
 		MaxBacktracks:       5,
@@ -39,7 +39,7 @@ func DefaultDynamicPlannerConfig() DynamicPlannerConfig {
 	}
 }
 
-// PlanNode represents a node in the execution plan tree.
+// PlanNode代表了执行计划中树上的一个节点.
 type PlanNode struct {
 	ID           string      `json:"id"`
 	ParentID     string      `json:"parent_id,omitempty"`
@@ -55,7 +55,7 @@ type PlanNode struct {
 	CompletedAt  *time.Time  `json:"completed_at,omitempty"`
 }
 
-// NodeStatus represents the status of a plan node.
+// 节点状态代表计划节点状态.
 type NodeStatus string
 
 const (
@@ -67,7 +67,7 @@ const (
 	NodeStatusBacktrack NodeStatus = "backtrack"
 )
 
-// DynamicPlanner implements dynamic planning with backtracking.
+// Dynamic Planner执行动态规划并进行回溯跟踪.
 type DynamicPlanner struct {
 	provider     llm.Provider
 	toolExecutor tools.ToolExecutor
@@ -75,7 +75,7 @@ type DynamicPlanner struct {
 	config       DynamicPlannerConfig
 	logger       *zap.Logger
 
-	// State
+	// 状态
 	mu          sync.RWMutex
 	rootNode    *PlanNode
 	currentNode *PlanNode
@@ -83,7 +83,7 @@ type DynamicPlanner struct {
 	nodeCounter int
 }
 
-// NewDynamicPlanner creates a new dynamic planner.
+// NewDynamic Planner创建了新的动态计划.
 func NewDynamicPlanner(provider llm.Provider, executor tools.ToolExecutor, schemas []llm.ToolSchema, config DynamicPlannerConfig, logger *zap.Logger) *DynamicPlanner {
 	if logger == nil {
 		logger = zap.NewNop()
@@ -99,7 +99,7 @@ func NewDynamicPlanner(provider llm.Provider, executor tools.ToolExecutor, schem
 
 func (d *DynamicPlanner) Name() string { return "dynamic_planner" }
 
-// Execute runs the dynamic planning with backtracking.
+// 执行运行动态规划并进行回溯跟踪.
 func (d *DynamicPlanner) Execute(ctx context.Context, task string) (*ReasoningResult, error) {
 	start := time.Now()
 	ctx, cancel := context.WithTimeout(ctx, d.config.Timeout)
@@ -111,7 +111,7 @@ func (d *DynamicPlanner) Execute(ctx context.Context, task string) (*ReasoningRe
 		Metadata: make(map[string]any),
 	}
 
-	// Initialize root node
+	// 初始化根节点
 	d.mu.Lock()
 	d.rootNode = &PlanNode{
 		ID:          d.nextNodeID(),
@@ -125,7 +125,7 @@ func (d *DynamicPlanner) Execute(ctx context.Context, task string) (*ReasoningRe
 	d.backtracks = 0
 	d.mu.Unlock()
 
-	// Generate initial plan
+	// 生成初始计划
 	initialPlan, planTokens, err := d.generateNextSteps(ctx, task, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate initial plan: %w", err)
@@ -136,7 +136,7 @@ func (d *DynamicPlanner) Execute(ctx context.Context, task string) (*ReasoningRe
 	d.rootNode.Children = initialPlan
 	d.mu.Unlock()
 
-	// Execute plan with dynamic adjustment
+	// 以动态调整执行计划
 	finalResult, execTokens, err := d.executePlan(ctx, task)
 	result.TotalTokens += execTokens
 
@@ -144,7 +144,7 @@ func (d *DynamicPlanner) Execute(ctx context.Context, task string) (*ReasoningRe
 		result.Metadata["error"] = err.Error()
 	}
 
-	// Build steps from plan tree
+	// 从计划树上建立步骤
 	result.Steps = d.collectSteps(d.rootNode)
 	result.FinalAnswer = finalResult
 	result.TotalLatency = time.Since(start)
@@ -165,7 +165,7 @@ func (d *DynamicPlanner) generateNextSteps(ctx context.Context, task string, cur
 		contextInfo = fmt.Sprintf("\nCurrent state: %s\nResult so far: %s", currentState.Description, currentState.Result)
 	}
 
-	// Build tool descriptions
+	// 构建工具描述
 	var toolDescs []string
 	for _, t := range d.toolSchemas {
 		toolDescs = append(toolDescs, fmt.Sprintf("- %s: %s", t.Name, t.Description))
@@ -237,7 +237,7 @@ Generate 1-3 next steps with alternatives. Output as JSON:
 			CreatedAt:   time.Now(),
 		}
 
-		// Add alternatives
+		// 添加替代品
 		for _, alt := range step.Alternatives {
 			altNode := &PlanNode{
 				ID:          d.nextNodeID(),
@@ -267,10 +267,10 @@ func (d *DynamicPlanner) executePlan(ctx context.Context, task string) (string, 
 		default:
 		}
 
-		// Find next executable node
+		// 查找下一个可执行节点
 		node := d.findNextNode()
 		if node == nil {
-			// No more nodes, check if we have a result
+			// 不再有节点,检查是否有结果
 			break
 		}
 
@@ -279,14 +279,14 @@ func (d *DynamicPlanner) executePlan(ctx context.Context, task string) (string, 
 			zap.String("action", node.Action),
 			zap.Float64("confidence", node.Confidence))
 
-		// Check confidence threshold
+		// 检查信任阈值
 		if node.Confidence < d.config.ConfidenceThreshold {
 			d.logger.Debug("skipping low confidence node", zap.String("id", node.ID))
 			node.Status = NodeStatusSkipped
 			continue
 		}
 
-		// Execute node
+		// 执行节点
 		node.Status = NodeStatusRunning
 		result, execTokens, err := d.executeNode(ctx, node)
 		totalTokens += execTokens
@@ -295,7 +295,7 @@ func (d *DynamicPlanner) executePlan(ctx context.Context, task string) (string, 
 			node.Status = NodeStatusFailed
 			node.Error = err.Error()
 
-			// Try alternatives or backtrack
+			// 尝试其它选项或回路
 			if !d.tryAlternativeOrBacktrack(ctx, node) {
 				d.logger.Warn("no alternatives available, stopping")
 				break
@@ -309,7 +309,7 @@ func (d *DynamicPlanner) executePlan(ctx context.Context, task string) (string, 
 		node.CompletedAt = &now
 		lastResult = result
 
-		// Generate next steps based on result
+		// 根据结果生成下一步
 		if d.shouldContinue(ctx, task, node) {
 			nextSteps, genTokens, err := d.generateNextSteps(ctx, task, node)
 			totalTokens += genTokens
@@ -319,7 +319,7 @@ func (d *DynamicPlanner) executePlan(ctx context.Context, task string) (string, 
 		}
 	}
 
-	// Synthesize final answer
+	// 合成最终答案
 	if lastResult == "" {
 		answer, synthTokens, err := d.synthesizeFinalAnswer(ctx, task)
 		totalTokens += synthTokens
@@ -342,7 +342,7 @@ func (d *DynamicPlanner) findNextNodeRecursive(node *PlanNode) *PlanNode {
 		return nil
 	}
 
-	// Check children first (depth-first)
+	// 先检查孩子( 深度第一 )
 	for _, child := range node.Children {
 		if child.Status == NodeStatusPending {
 			return child
@@ -357,11 +357,11 @@ func (d *DynamicPlanner) findNextNodeRecursive(node *PlanNode) *PlanNode {
 
 func (d *DynamicPlanner) executeNode(ctx context.Context, node *PlanNode) (string, int, error) {
 	if node.Action == "think" || node.Action == "reason" {
-		// Use LLM for thinking
+		// 思考时使用 LLM
 		return d.executeLLMNode(ctx, node)
 	}
 
-	// Execute as tool
+	// 作为工具执行
 	argsJSON, _ := json.Marshal(map[string]string{"input": node.Description})
 	call := llm.ToolCall{
 		ID:        node.ID,
@@ -401,20 +401,20 @@ Think through this step and provide your reasoning and conclusion.`, node.Descri
 }
 
 func (d *DynamicPlanner) tryAlternativeOrBacktrack(ctx context.Context, failedNode *PlanNode) bool {
-	// Try alternatives first
+	// 先试试别的
 	for _, alt := range failedNode.Alternatives {
 		if alt.Status == NodeStatusPending {
 			d.logger.Info("trying alternative",
 				zap.String("failed", failedNode.ID),
 				zap.String("alternative", alt.ID))
 
-			// Replace failed node with alternative in parent's children
+			// 将失败的节点替换为父母子女中的选项
 			d.replaceNodeWithAlternative(failedNode, alt)
 			return true
 		}
 	}
 
-	// No alternatives, try backtracking
+	// 没有替代品, 尝试回溯
 	d.mu.Lock()
 	d.backtracks++
 	canBacktrack := d.backtracks <= d.config.MaxBacktracks
@@ -428,7 +428,7 @@ func (d *DynamicPlanner) tryAlternativeOrBacktrack(ctx context.Context, failedNo
 	d.logger.Info("backtracking", zap.Int("count", d.backtracks))
 	failedNode.Status = NodeStatusBacktrack
 
-	// Find parent and try its alternatives
+	// 找到父公司并尝试其替代品
 	parent := d.findParent(d.rootNode, failedNode.ID)
 	if parent != nil {
 		for _, alt := range parent.Alternatives {
@@ -465,12 +465,12 @@ func (d *DynamicPlanner) findParent(root *PlanNode, childID string) *PlanNode {
 }
 
 func (d *DynamicPlanner) shouldContinue(ctx context.Context, task string, node *PlanNode) bool {
-	// Check if result indicates completion
+	// 检查结果是否显示完成
 	if len(node.Result) > 100 && containsCompletionIndicator(node.Result) {
 		return false
 	}
 
-	// Check depth
+	// 检查深度
 	depth := d.getNodeDepth(node)
 	return depth < d.config.MaxPlanDepth
 }
@@ -504,7 +504,7 @@ func (d *DynamicPlanner) findNodeByID(root *PlanNode, id string) *PlanNode {
 }
 
 func (d *DynamicPlanner) synthesizeFinalAnswer(ctx context.Context, task string) (string, int, error) {
-	// Collect all completed results
+	// 收集所有已完成的结果
 	var results []string
 	d.collectResults(d.rootNode, &results)
 

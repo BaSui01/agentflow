@@ -1,147 +1,147 @@
-// Copyright 2024 AgentFlow Authors. All rights reserved.
-// Use of this source code is governed by a MIT license that can be
-// found in the LICENSE file.
+// 版权所有 2024 AgentFlow Authors. 版权所有。
+// 此源代码的使用由 MIT 许可规范,该许可可以是
+// 在LICENSE文件中找到。
 
 /*
-Package agent provides the core agent framework for AgentFlow.
+包代理为AgentFlow提供了核心代理框架.
 
-# Overview
+# 概览
 
-The agent package implements a flexible, extensible agent architecture that supports
-various AI agent patterns including ReAct, Chain-of-Thought, and custom workflows.
-It provides a unified interface for building intelligent agents that can reason,
-plan, and execute tasks using Large Language Models (LLMs).
+代理包执行一个灵活、可扩展的代理架构,支持
+各种AI代理模式,包括ReAct,Chain-of-Thought,以及自定义工作流程.
+它提供了一个统一的接口 用于建立智能代理 能够解释,
+计划,并使用大语言模型执行任务。
 
-# Architecture
+建筑
 
-The agent framework follows a layered architecture:
+代理框架遵循分层结构:
 
 	┌─────────────────────────────────────────────────────────────┐
-	│                      Agent Interface                        │
-	│  (ID, Name, Type, State, Init, Teardown, Plan, Execute)    │
+	代理接口
+	│  （标识、名称、类型、状态、初始化、清理、规划、执行）      │
 	├─────────────────────────────────────────────────────────────┤
-	│                      BaseAgent                              │
-	│  (Common functionality, lifecycle management, hooks)        │
+	基地探员
+	│  （通用能力、生命周期管理、钩子机制）                        │
 	├─────────────────────────────────────────────────────────────┤
 	│  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────┐ │
-	│  │   Memory    │  │    Tools    │  │     Guardrails      │ │
-	│  │  Manager    │  │   Manager   │  │   (Validators)      │ │
+	{\fn华文楷体\fs16\1cHE0E0E0}记忆 {\fn华文楷体\fs16\1cHE0E0E0}工具 {\fn华文楷体\fs16\1cHE0E0E0}守护者
+	## # # # # 管理者 # # # # # # # 管理者 # # # # # # # # # # 管理者 # # # # # # # 管理者 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # ## # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 	│  └─────────────┘  └─────────────┘  └─────────────────────┘ │
 	├─────────────────────────────────────────────────────────────┤
-	│                    LLM Provider                             │
+	LLM提供商
 	└─────────────────────────────────────────────────────────────┘
 
-# Core Components
+# 核心组件
 
-Agent Interface: Defines the contract for all agent implementations.
+代理接口:定义所有代理执行的合同.
 
-	type Agent interface {
-	    ID() string
-	    Name() string
-	    Type() AgentType
-	    State() State
-	    Init(ctx context.Context) error
-	    Teardown(ctx context.Context) error
-	    Plan(ctx context.Context, input *Input) (*PlanResult, error)
-	    Execute(ctx context.Context, input *Input) (*Output, error)
-	    Observe(ctx context.Context, feedback *Feedback) error
+	类型代理接口{
+	    ID()字符串
+	    名称( ) 字符串
+	    类型 () 代理类型
+	    国家( )
+	    Init( ctx 上下文 ). 背景)错误
+	    倒地( ctx 上下文) 。 背景)错误
+	    计划( ctx 上下文 ). 背景, 输入 * 输入 (* PlanResult, 错误)
+	    执行( ctx 上下文) 。 背景,输入 *输入 (*输出,出错)
+	    央视( ctx 上下文). 背景, 反馈 * Feedback) 错误
 	}
 
-BaseAgent: Provides common functionality for all agent types including:
-  - Lifecycle management (Init, Teardown)
-  - State machine (Idle → Running → Completed/Failed)
-  - Hook system (BeforeExecute, AfterExecute, OnError)
-  - Checkpoint/recovery support
+BaseAgent:为所有代理类型提供共同功能,包括:
+  - 生命周期管理(Init,Dear-down)
+  - 国家机器(运行)
+  - Hook系统(执行前,执行后,执行后,执行后)
+  - 检查站/复原支助
 
-MemoryManager: Manages agent memory across multiple layers:
-  - Working Memory: Short-term context storage
-  - Episodic Memory: Event-based experiences
-  - Semantic Memory: Factual knowledge
-  - Procedural Memory: How-to knowledge
+内存管理器: 跨多层管理代理内存 :
+  - 工作记忆:短期上下文存储
+  - 记忆:事件经验
+  - 语义记忆:事实知识
+  - 程序记忆:如何了解
 
-ToolManager: Handles tool registration, selection, and execution.
+ToolManager:处理工具的注册,选择,和执行.
 
-# Usage
+使用量
 
-Basic agent creation using the builder pattern:
+使用构建器模式创建基本代理 :
 
-	agent, err := agent.NewAgentBuilder(agent.Config{
-	    Name:        "my-agent",
-	    Type:        agent.TypeReAct,
-	    MaxIterations: 10,
+	代理,错误:=代理. NewAgentBuilder(代理). 配置{
+	    姓名:"我的代理人",
+	    类型:特工。 类型ReAct,
+	    最大强度: 10,
 	}).
-	    WithProvider(llmProvider).
-	    WithMemory(memoryManager).
-	    WithTools(toolManager).
-	    Build()
+	    与 Provider(llm Provider) 连接.
+	    带有 Memory( 记忆管理器) 。
+	    带有 Tools( 工具管理器) 。
+	    构建( C)
 
-	if err != nil {
-	    log.Fatal(err)
+	如果错误 ! = 无 {
+	    记录。 致命( err)
 	}
 
-	// Execute a task
-	output, err := agent.Execute(ctx, &agent.Input{
-	    Query: "What is the weather in Beijing?",
+	// 执行任务
+	输出,错误:=代理。 执行( ctx, & agent) 。 输入{
+	    问道:"北京天气如何?
 	})
 
-# Agent Types
+# 代理类型
 
-The framework supports multiple agent types:
+框架支持多种代理类型:
 
-  - TypeReAct: Reasoning and Acting pattern
-  - TypeCoT: Chain-of-Thought reasoning
-  - TypePlanAndExecute: Planning then execution
-  - TypeReflection: Self-reflection and improvement
-  - TypeCustom: User-defined agent logic
+  - TypeReAct:理由和行为模式
+  - TypeCoT:思维链推理
+  - TypePlanAndExecute:规划然后执行
+  - 类型参考:自我反射和改进
+  - TypeCustom:用户定义的代理逻辑
 
-# State Machine
+# 国家机器
 
-Agents follow a well-defined state machine:
+特工跟踪一个定义明确的状态机器:
 
-	Idle → Running → Completed
+	闲 —— 运行 —— 已完成
 	         ↓
-	       Failed
+	       失败
 
-State transitions are validated to ensure correct agent behavior.
+国家过渡得到验证,以确保正确的代理行为。
 
-# Checkpointing
+# 检查
 
-The framework supports checkpointing for long-running tasks:
+该框架支持检查长期任务:
 
-	// Enable checkpointing
-	agent.EnableCheckpointing(checkpointManager)
+	// 启用检查
+	代理。 允许检查( 检查点管理)
 
-	// Recover from checkpoint
-	agent.RecoverFromCheckpoint(ctx, checkpointID)
+	// 从检查站收回
+	代理。 从检查点( ctx, 检查点ID) 恢复
 
-# Error Handling
+# 处理错误
 
-The package defines structured errors with error codes:
+软件包用错误代码定义结构错误 :
 
-	var (
-	    ErrProviderNotSet = NewError(ErrCodeProviderNotSet, "LLM provider not configured")
-	    ErrAgentNotReady  = NewError(ErrCodeNotReady, "agent not in ready state")
-	    ErrAgentBusy      = NewError(ErrCodeBusy, "agent is busy executing another task")
+	var (英语:
+	    ErrProvider NotSet = NewError(ErrCodeProvider NotSet,"未配置 LLM 提供者")
+	    ErrAgent NotReady = NewError(ErrCodeNoReady,"代理未就绪状态")
+	    ErrAgentBusy = NewError(ErrCodeBusy,"代理正忙于执行另一个任务").
 	)
 
-# Thread Safety
+线索安全
 
-All agent implementations are designed to be thread-safe. The BaseAgent uses
-appropriate synchronization primitives to protect shared state.
+所有代理实施都设计为线性安全. BaseAgent 用途 :
+适当的同步原始物来保护共享状态.
 
-# Extensibility
+广度
 
-The framework is designed for extensibility:
-  - Custom agent types via AgentFactory registration
-  - Custom validators via Validator interface
-  - Custom memory stores via MemoryStore interface
-  - Custom tools via Tool interface
+该框架旨在扩大:
+  - 通过代理注册的定制代理类型
+  - 通过验证器接口自定义验证器
+  - 通过内存Store接口自定义内存存储器
+  - 通过工具界面定制工具
 
-See the subpackages for additional functionality:
-  - agent/guardrails: Input/output validation and security
-  - agent/memory: Memory management systems
-  - agent/evaluation: Agent evaluation and A/B testing
-  - agent/structured: Structured output parsing
-  - agent/protocol/a2a: Agent-to-Agent communication
+附加功能见子包 :
+  - 代理/护栏:输入/输出验证和安全
+  - 代理/记忆:内存管理系统
+  - 代理/评价:代理评价和A/B测试
+  - 代理/结构化:结构化输出剖析
+  - 代理/议定书/a2a:代理与代理通信
 */
 package agent

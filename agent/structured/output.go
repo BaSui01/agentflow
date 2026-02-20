@@ -1,4 +1,4 @@
-// Package structured provides structured output support with JSON Schema validation.
+// 结构化包在JSON Schema验证下提供结构化输出支持.
 package structured
 
 import (
@@ -12,28 +12,28 @@ import (
 	"github.com/BaSui01/agentflow/llm"
 )
 
-// StructuredOutputProvider extends llm.Provider with structured output capability detection.
-// Providers that support native structured output (like OpenAI's JSON mode) should implement this.
+// 结构输出输出输出扩展为 llm. 提供商具有结构化输出能力检测.
+// 支持本土结构输出(如OpenAI的JSON模式)的提供商应当执行.
 type StructuredOutputProvider interface {
 	llm.Provider
-	// SupportsStructuredOutput returns true if the provider supports native structured output.
+	// 如果提供者支持本地结构输出, 则支持StructuredOutput 返回 true 。
 	SupportsStructuredOutput() bool
 }
 
-// ParseResult represents the result of parsing structured output.
+// ParseResult代表了解析结构化输出的结果.
 type ParseResult[T any] struct {
 	Value  *T           `json:"value,omitempty"`
 	Raw    string       `json:"raw"`
 	Errors []ParseError `json:"errors,omitempty"`
 }
 
-// IsValid returns true if parsing was successful with no errors.
+// IsValid 如果解析成功且没有出错, 则返回为真 。
 func (r *ParseResult[T]) IsValid() bool {
 	return r.Value != nil && len(r.Errors) == 0
 }
 
-// StructuredOutput is a generic structured output processor that generates
-// type-safe outputs from LLM providers.
+// 结构化输出是一个通用结构化输出处理器,生成
+// LLM 提供者的类型安全输出。
 type StructuredOutput[T any] struct {
 	schema    *JSONSchema
 	provider  llm.Provider
@@ -41,8 +41,8 @@ type StructuredOutput[T any] struct {
 	generator *SchemaGenerator
 }
 
-// NewStructuredOutput creates a new structured output processor for type T.
-// It automatically generates a JSON Schema from the type parameter.
+// NewStructuredOutput为T型创建了新的结构化输出处理器.
+// 它从类型参数中自动生成了JSON Schema.
 func NewStructuredOutput[T any](provider llm.Provider) (*StructuredOutput[T], error) {
 	if provider == nil {
 		return nil, fmt.Errorf("provider cannot be nil")
@@ -63,7 +63,7 @@ func NewStructuredOutput[T any](provider llm.Provider) (*StructuredOutput[T], er
 	}, nil
 }
 
-// NewStructuredOutputWithSchema creates a new structured output processor with a custom schema.
+// NewStructured Output With Schema 创建了自定义的自定义计划的新结构化输出处理器.
 func NewStructuredOutputWithSchema[T any](provider llm.Provider, schema *JSONSchema) (*StructuredOutput[T], error) {
 	if provider == nil {
 		return nil, fmt.Errorf("provider cannot be nil")
@@ -80,14 +80,14 @@ func NewStructuredOutputWithSchema[T any](provider llm.Provider, schema *JSONSch
 	}, nil
 }
 
-// Schema returns the JSON Schema used for validation.
+// Schema返回用于验证的JSON Schema.
 func (s *StructuredOutput[T]) Schema() *JSONSchema {
 	return s.schema
 }
 
-// Generate generates a structured output from a prompt string.
-// It uses native structured output if the provider supports it,
-// otherwise falls back to prompt engineering.
+// 生成从快取字符串生成结构化输出 。
+// 它使用本地结构输出 如果提供者支持它,
+// 否则会回到即时工程
 func (s *StructuredOutput[T]) Generate(ctx context.Context, prompt string) (*T, error) {
 	messages := []llm.Message{
 		{Role: llm.RoleUser, Content: prompt},
@@ -95,9 +95,9 @@ func (s *StructuredOutput[T]) Generate(ctx context.Context, prompt string) (*T, 
 	return s.GenerateWithMessages(ctx, messages)
 }
 
-// GenerateWithMessages generates a structured output from a list of messages.
-// It uses native structured output if the provider supports it,
-// otherwise falls back to prompt engineering.
+// 生成 Messages 从信件列表中生成结构化输出 。
+// 它使用本地结构输出 如果提供者支持它,
+// 否则会回到即时工程
 func (s *StructuredOutput[T]) GenerateWithMessages(ctx context.Context, messages []llm.Message) (*T, error) {
 	if s.supportsNativeStructuredOutput() {
 		return s.generateNative(ctx, messages)
@@ -105,7 +105,7 @@ func (s *StructuredOutput[T]) GenerateWithMessages(ctx context.Context, messages
 	return s.generateWithPromptEngineering(ctx, messages)
 }
 
-// GenerateWithParse generates structured output and returns detailed parse result.
+// 生成 WithParse 生成结构化输出并返回详细解析结果 。
 func (s *StructuredOutput[T]) GenerateWithParse(ctx context.Context, prompt string) (*ParseResult[T], error) {
 	messages := []llm.Message{
 		{Role: llm.RoleUser, Content: prompt},
@@ -113,7 +113,7 @@ func (s *StructuredOutput[T]) GenerateWithParse(ctx context.Context, prompt stri
 	return s.GenerateWithMessagesAndParse(ctx, messages)
 }
 
-// GenerateWithMessagesAndParse generates structured output from messages and returns detailed parse result.
+// 生成与Messages AndParse 从消息中生成结构化输出并返回详细解析结果.
 func (s *StructuredOutput[T]) GenerateWithMessagesAndParse(ctx context.Context, messages []llm.Message) (*ParseResult[T], error) {
 	var raw string
 	var value *T
@@ -143,7 +143,7 @@ func (s *StructuredOutput[T]) GenerateWithMessagesAndParse(ctx context.Context, 
 	}, nil
 }
 
-// supportsNativeStructuredOutput checks if the provider supports native structured output.
+// 支持 NativeStructured Output 检查,如果提供者支持本地结构输出。
 func (s *StructuredOutput[T]) supportsNativeStructuredOutput() bool {
 	if sp, ok := s.provider.(StructuredOutputProvider); ok {
 		return sp.SupportsStructuredOutput()
@@ -151,21 +151,21 @@ func (s *StructuredOutput[T]) supportsNativeStructuredOutput() bool {
 	return false
 }
 
-// generateNative uses the provider's native structured output capability.
+// 生成 Native 使用提供者的本地结构输出能力.
 func (s *StructuredOutput[T]) generateNative(ctx context.Context, messages []llm.Message) (*T, error) {
 	value, _, err := s.generateNativeWithRaw(ctx, messages)
 	return value, err
 }
 
-// generateNativeWithRaw uses native structured output and returns raw response.
+// 生成 NativeWithRaw 使用本地结构输出并返回原始响应。
 func (s *StructuredOutput[T]) generateNativeWithRaw(ctx context.Context, messages []llm.Message) (*T, string, error) {
-	// Build schema JSON for the request
+	// 为请求构建 JSON 计划
 	schemaJSON, err := json.Marshal(s.schema)
 	if err != nil {
 		return nil, "", fmt.Errorf("failed to marshal schema: %w", err)
 	}
 
-	// Add system message with schema instruction
+	// 添加带有计划指令的系统消息
 	systemMsg := llm.Message{
 		Role: llm.RoleSystem,
 		Content: fmt.Sprintf(
@@ -174,7 +174,7 @@ func (s *StructuredOutput[T]) generateNativeWithRaw(ctx context.Context, message
 		),
 	}
 
-	// Prepend system message
+	// 预收系统消息
 	allMessages := append([]llm.Message{systemMsg}, messages...)
 
 	req := &llm.ChatRequest{
@@ -192,7 +192,7 @@ func (s *StructuredOutput[T]) generateNativeWithRaw(ctx context.Context, message
 
 	raw := resp.Choices[0].Message.Content
 
-	// Parse and validate the response
+	// 解析并验证响应
 	value, err := s.parseAndValidate(raw)
 	if err != nil {
 		return nil, raw, err
@@ -201,21 +201,21 @@ func (s *StructuredOutput[T]) generateNativeWithRaw(ctx context.Context, message
 	return value, raw, nil
 }
 
-// generateWithPromptEngineering uses prompt engineering to get structured output.
+// 生成WithPromptEngineering 使用即时工程来获得结构化输出.
 func (s *StructuredOutput[T]) generateWithPromptEngineering(ctx context.Context, messages []llm.Message) (*T, error) {
 	value, _, _, err := s.generateWithPromptEngineeringDetailed(ctx, messages)
 	return value, err
 }
 
-// generateWithPromptEngineeringDetailed uses prompt engineering and returns detailed results.
+// 生成与Prompt工程 详细使用即时工程并返回详细结果.
 func (s *StructuredOutput[T]) generateWithPromptEngineeringDetailed(ctx context.Context, messages []llm.Message) (*T, string, []ParseError, error) {
-	// Build schema JSON for the prompt
+	// 构建快捷的 JSON 计划
 	schemaJSON, err := s.schema.ToJSONIndent()
 	if err != nil {
 		return nil, "", nil, fmt.Errorf("failed to marshal schema: %w", err)
 	}
 
-	// Create a detailed system prompt for structured output
+	// 为结构化输出创建详细系统提示
 	systemPrompt := s.buildStructuredOutputPrompt(string(schemaJSON))
 
 	systemMsg := llm.Message{
@@ -223,7 +223,7 @@ func (s *StructuredOutput[T]) generateWithPromptEngineeringDetailed(ctx context.
 		Content: systemPrompt,
 	}
 
-	// Prepend system message
+	// 预收系统消息
 	allMessages := append([]llm.Message{systemMsg}, messages...)
 
 	req := &llm.ChatRequest{
@@ -241,16 +241,16 @@ func (s *StructuredOutput[T]) generateWithPromptEngineeringDetailed(ctx context.
 
 	raw := resp.Choices[0].Message.Content
 
-	// Extract JSON from the response (handle markdown code blocks, etc.)
+	// 从响应中提取 JSON( 处理下标记代码块等)
 	jsonStr := s.extractJSON(raw)
 
-	// Parse and validate
+	// 解析和验证
 	value, parseErrors := s.parseAndValidateDetailed(jsonStr)
 
 	return value, raw, parseErrors, nil
 }
 
-// buildStructuredOutputPrompt creates a detailed prompt for structured output generation.
+// 构建StructuredOutputPrompt为结构化输出生成创建了详细提示.
 func (s *StructuredOutput[T]) buildStructuredOutputPrompt(schemaJSON string) string {
 	var sb strings.Builder
 
@@ -270,13 +270,13 @@ func (s *StructuredOutput[T]) buildStructuredOutputPrompt(schemaJSON string) str
 	return sb.String()
 }
 
-// extractJSON extracts JSON from a response that may contain markdown or other text.
+// 取出JSON取出JSON从可能包含平分或其他文字的响应中取出.
 func (s *StructuredOutput[T]) extractJSON(response string) string {
 	response = strings.TrimSpace(response)
 
-	// Try to extract from markdown code block
+	// 尝试从 markdown 代码块提取
 	if strings.Contains(response, "```") {
-		// Match ```json ... ``` or ``` ... ```
+		// 火柴・杰森・・・或者・・・・・・
 		re := regexp.MustCompile("(?s)```(?:json)?\\s*\\n?(.*?)\\n?```")
 		matches := re.FindStringSubmatch(response)
 		if len(matches) > 1 {
@@ -284,14 +284,14 @@ func (s *StructuredOutput[T]) extractJSON(response string) string {
 		}
 	}
 
-	// Try to find JSON object boundaries
+	// 尝试找到 JSON 对象边界
 	start := strings.Index(response, "{")
 	end := strings.LastIndex(response, "}")
 	if start >= 0 && end > start {
 		return response[start : end+1]
 	}
 
-	// Try to find JSON array boundaries
+	// 尝试找到 JSON 阵列边界
 	start = strings.Index(response, "[")
 	end = strings.LastIndex(response, "]")
 	if start >= 0 && end > start {
@@ -301,7 +301,7 @@ func (s *StructuredOutput[T]) extractJSON(response string) string {
 	return response
 }
 
-// parseAndValidate parses JSON and validates against schema.
+// 解析AndValidate 解析JSON 并验证与计划。
 func (s *StructuredOutput[T]) parseAndValidate(jsonStr string) (*T, error) {
 	value, errors := s.parseAndValidateDetailed(jsonStr)
 	if len(errors) > 0 {
@@ -310,11 +310,11 @@ func (s *StructuredOutput[T]) parseAndValidate(jsonStr string) (*T, error) {
 	return value, nil
 }
 
-// parseAndValidateDetailed parses JSON and returns detailed validation errors.
+// parseAndValidate Detailed pares JSON并返回详细的验证错误。
 func (s *StructuredOutput[T]) parseAndValidateDetailed(jsonStr string) (*T, []ParseError) {
 	var errors []ParseError
 
-	// Validate against schema first
+	// 先对计划进行验证
 	if err := s.validator.Validate([]byte(jsonStr), s.schema); err != nil {
 		if ve, ok := err.(*ValidationErrors); ok {
 			errors = append(errors, ve.Errors...)
@@ -326,7 +326,7 @@ func (s *StructuredOutput[T]) parseAndValidateDetailed(jsonStr string) (*T, []Pa
 		}
 	}
 
-	// Parse into target type
+	// 分析为目标类型
 	var value T
 	if err := json.Unmarshal([]byte(jsonStr), &value); err != nil {
 		errors = append(errors, ParseError{
@@ -343,7 +343,7 @@ func (s *StructuredOutput[T]) parseAndValidateDetailed(jsonStr string) (*T, []Pa
 	return &value, nil
 }
 
-// ValidateValue validates a value against the schema.
+// 校验Value 对照 schema 验证一个值 。
 func (s *StructuredOutput[T]) ValidateValue(value *T) error {
 	if value == nil {
 		return fmt.Errorf("value cannot be nil")
@@ -357,12 +357,12 @@ func (s *StructuredOutput[T]) ValidateValue(value *T) error {
 	return s.validator.Validate(data, s.schema)
 }
 
-// Parse parses a JSON string into the target type with validation.
+// 解析将 JSON 字符串解析为目标类型,并进行验证。
 func (s *StructuredOutput[T]) Parse(jsonStr string) (*T, error) {
 	return s.parseAndValidate(jsonStr)
 }
 
-// ParseWithResult parses a JSON string and returns detailed result.
+// ParseWithResult 解析出 JSON 字符串并返回详细结果 。
 func (s *StructuredOutput[T]) ParseWithResult(jsonStr string) *ParseResult[T] {
 	value, errors := s.parseAndValidateDetailed(jsonStr)
 	return &ParseResult[T]{

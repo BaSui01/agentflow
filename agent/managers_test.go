@@ -31,7 +31,7 @@ func TestMemoryCoordinator_NoMemory(t *testing.T) {
 		t.Error("expected HasMemory to return false")
 	}
 
-	// Should not error when memory is nil
+	// 当内存为零时不应出错
 	err := mc.Save(context.Background(), "test", MemoryShortTerm, nil)
 	if err != nil {
 		t.Errorf("expected no error, got %v", err)
@@ -50,13 +50,13 @@ func TestMemoryCoordinator_RecentMemory(t *testing.T) {
 	logger := zap.NewNop()
 	mc := NewMemoryCoordinator("test-agent", nil, logger)
 
-	// Initially empty
+	// 最初为空
 	recent := mc.GetRecentMemory()
 	if len(recent) != 0 {
 		t.Errorf("expected empty recent memory, got %d", len(recent))
 	}
 
-	// Clear should not panic
+	// 清空不应该慌张
 	mc.ClearRecentMemory()
 }
 
@@ -68,7 +68,7 @@ func TestGuardrailsCoordinator_Disabled(t *testing.T) {
 		t.Error("expected guardrails to be disabled")
 	}
 
-	// Should pass through when disabled
+	// 残疾时应该通过
 	result, err := gc.ValidateInput(context.Background(), "test input")
 	if err != nil {
 		t.Errorf("expected no error, got %v", err)
@@ -110,12 +110,12 @@ func TestGuardrailsCoordinator_AddValidators(t *testing.T) {
 	logger := zap.NewNop()
 	gc := NewGuardrailsCoordinator(nil, logger)
 
-	// Initially disabled
+	// 最初已禁用
 	if gc.Enabled() {
 		t.Error("expected guardrails to be disabled initially")
 	}
 
-	// Add input validator should enable
+	// 添加输入验证器应启用
 	gc.AddInputValidator(guardrails.NewLengthValidator(&guardrails.LengthValidatorConfig{
 		MaxLength: 100,
 	}))
@@ -152,7 +152,7 @@ func TestFeatureManager_Basic(t *testing.T) {
 	logger := zap.NewNop()
 	fm := NewFeatureManager(logger)
 
-	// Initially all disabled
+	// 最初所有已禁用
 	features := fm.EnabledFeatures()
 	if len(features) != 0 {
 		t.Errorf("expected no enabled features, got %v", features)
@@ -163,7 +163,7 @@ func TestFeatureManager_EnableDisable(t *testing.T) {
 	logger := zap.NewNop()
 	fm := NewFeatureManager(logger)
 
-	// Enable reflection
+	// 启用反射
 	fm.EnableReflection("mock-executor")
 	if !fm.IsReflectionEnabled() {
 		t.Error("expected reflection to be enabled")
@@ -172,7 +172,7 @@ func TestFeatureManager_EnableDisable(t *testing.T) {
 		t.Error("expected to get mock executor")
 	}
 
-	// Disable reflection
+	// 禁用反射
 	fm.DisableReflection()
 	if fm.IsReflectionEnabled() {
 		t.Error("expected reflection to be disabled")
@@ -186,7 +186,7 @@ func TestFeatureManager_AllFeatures(t *testing.T) {
 	logger := zap.NewNop()
 	fm := NewFeatureManager(logger)
 
-	// Enable all features
+	// 启用所有特性
 	fm.EnableReflection("reflection")
 	fm.EnableToolSelection("tool-selector")
 	fm.EnablePromptEnhancer("prompt-enhancer")
@@ -200,7 +200,7 @@ func TestFeatureManager_AllFeatures(t *testing.T) {
 		t.Errorf("expected 7 enabled features, got %d: %v", len(features), features)
 	}
 
-	// Disable all
+	// 全部禁用
 	fm.DisableAll()
 	features = fm.EnabledFeatures()
 	if len(features) != 0 {
@@ -208,7 +208,7 @@ func TestFeatureManager_AllFeatures(t *testing.T) {
 	}
 }
 
-// Helper function
+// 帮助功能
 func contains(s, substr string) bool {
 	return len(s) >= len(substr) && (s == substr || len(s) > 0 && containsHelper(s, substr))
 }
@@ -222,7 +222,7 @@ func containsHelper(s, substr string) bool {
 	return false
 }
 
-// Mock memory manager for testing
+// 用于测试的模拟内存管理器
 type mockMemoryManager struct{}
 
 func (m *mockMemoryManager) Save(ctx context.Context, record MemoryRecord) error {

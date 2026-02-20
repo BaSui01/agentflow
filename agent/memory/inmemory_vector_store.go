@@ -13,10 +13,10 @@ import (
 )
 
 type InMemoryVectorStoreConfig struct {
-	// Dimension validates stored/search vectors when > 0.
+	// 尺寸在 > 0时验证存储/搜索向量。
 	Dimension int
 
-	// Now is used for testing. Defaults to time.Now.
+	// 现在用于测试。 默认时间 。 现在。
 	Now func() time.Time
 }
 
@@ -26,8 +26,8 @@ type vectorEntry struct {
 	createdAt time.Time
 }
 
-// InMemoryVectorStore is a basic VectorStore implementation for EnhancedMemorySystem.
-// It supports metadata filtering by equality and cosine similarity search.
+// InMemoryVectorStore是增强MemorySystem的基本矢量执行.
+// 它支持通过平等进行元数据过滤和同位素相似性搜索.
 type InMemoryVectorStore struct {
 	mu        sync.RWMutex
 	items     map[string]vectorEntry

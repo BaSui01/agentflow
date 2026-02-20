@@ -1,4 +1,4 @@
-// Package a2a provides A2A (Agent-to-Agent) protocol support.
+// a2a包提供A2A(代理对代理)协议支持.
 package a2a
 
 import (
@@ -10,8 +10,8 @@ import (
 	"github.com/BaSui01/agentflow/llm"
 )
 
-// AgentConfigProvider defines the interface for accessing agent configuration.
-// This allows the generator to work with any agent implementation.
+// Agent Config Provider 定义访问代理配置的接口.
+// 这使得生成器能够配合任何代理执行.
 type AgentConfigProvider interface {
 	ID() string
 	Name() string
@@ -21,46 +21,46 @@ type AgentConfigProvider interface {
 	Metadata() map[string]string
 }
 
-// AgentType represents the type of an agent.
+// AgentType代表着特工的类型.
 type AgentType string
 
-// ToolSchemaProvider provides tool schemas for an agent.
+// ToolSchema Provider为一代理提供了工具计划.
 type ToolSchemaProvider interface {
 	GetAllowedTools(agentID string) []llm.ToolSchema
 }
 
-// AgentCardGenerator generates Agent Cards from agent configurations.
+// AgentCardGenerator通过代理配置生成代理卡.
 type AgentCardGenerator struct {
-	// defaultVersion is used when the agent doesn't specify a version.
+	// 当代理商不指定一个版本时使用默认Version.
 	defaultVersion string
 }
 
-// NewAgentCardGenerator creates a new AgentCardGenerator.
+// 新代理CardGenerator创建了新的代理CardGenerator.
 func NewAgentCardGenerator() *AgentCardGenerator {
 	return &AgentCardGenerator{
 		defaultVersion: "1.0.0",
 	}
 }
 
-// NewAgentCardGeneratorWithVersion creates a new AgentCardGenerator with a custom default version.
+// NewAgentCardGenerator With Version 创建了自定义默认版本的新AgentCardGenerator.
 func NewAgentCardGeneratorWithVersion(version string) *AgentCardGenerator {
 	return &AgentCardGenerator{
 		defaultVersion: version,
 	}
 }
 
-// Generate creates an AgentCard from an agent configuration and base URL.
-// The baseURL should be the endpoint where the agent can be reached.
+// 从代理配置和基址生成 AgentCard 。
+// 碱基URL应该是能到达剂的终点.
 func (g *AgentCardGenerator) Generate(config AgentConfigProvider, baseURL string) *AgentCard {
 	return g.GenerateWithTools(config, baseURL, nil)
 }
 
-// GenerateWithTools creates an AgentCard with tool definitions from a ToolSchemaProvider.
+// 生成 With Tools 创建了 AgentCard 从 ToolSchema Provider 生成工具定义.
 func (g *AgentCardGenerator) GenerateWithTools(config AgentConfigProvider, baseURL string, toolProvider ToolSchemaProvider) *AgentCard {
-	// Build the agent URL
+	// 构建代理 URL
 	agentURL := buildAgentURL(baseURL, config.ID())
 
-	// Determine version from metadata or use default
+	// 从元数据或默认使用中确定版本
 	version := g.defaultVersion
 	if meta := config.Metadata(); meta != nil {
 		if v, ok := meta["version"]; ok && v != "" {
@@ -68,7 +68,7 @@ func (g *AgentCardGenerator) GenerateWithTools(config AgentConfigProvider, baseU
 		}
 	}
 
-	// Create the agent card
+	// 创建代理卡
 	card := NewAgentCard(
 		config.Name(),
 		config.Description(),
@@ -76,15 +76,15 @@ func (g *AgentCardGenerator) GenerateWithTools(config AgentConfigProvider, baseU
 		version,
 	)
 
-	// Add default capability based on agent type
+	// 根据代理类型添加默认能力
 	g.addCapabilitiesFromType(card, config.Type())
 
-	// Add tools if provider is available
+	// 可用提供者时添加工具
 	if toolProvider != nil {
 		g.addToolsFromProvider(card, config.ID(), toolProvider)
 	}
 
-	// Copy metadata
+	// 复制元数据
 	if meta := config.Metadata(); meta != nil {
 		for k, v := range meta {
 			if k != "version" { // version is already used
@@ -93,14 +93,14 @@ func (g *AgentCardGenerator) GenerateWithTools(config AgentConfigProvider, baseU
 		}
 	}
 
-	// Add agent type to metadata
+	// 添加代理类型到元数据
 	card.SetMetadata("agent_type", string(config.Type()))
 	card.SetMetadata("agent_id", config.ID())
 
 	return card
 }
 
-// addCapabilitiesFromType adds default capabilities based on agent type.
+// 添加基于代理类型的默认能力。
 func (g *AgentCardGenerator) addCapabilitiesFromType(card *AgentCard, agentType AgentType) {
 	typeStr := string(agentType)
 
@@ -117,12 +117,12 @@ func (g *AgentCardGenerator) addCapabilitiesFromType(card *AgentCard, agentType 
 	case "reviewer":
 		card.AddCapability("review", "Review and provide feedback on content", CapabilityTypeTask)
 	default:
-		// Generic agent gets a basic task capability
+		// 通用剂具有基本的任务能力
 		card.AddCapability("execute", "Execute general tasks", CapabilityTypeTask)
 	}
 }
 
-// addToolsFromProvider adds tool definitions from a ToolSchemaProvider.
+// 添加 ToolsFromProvider 从工具SchemaProvider中添加工具定义.
 func (g *AgentCardGenerator) addToolsFromProvider(card *AgentCard, agentID string, provider ToolSchemaProvider) {
 	schemas := provider.GetAllowedTools(agentID)
 	for _, schema := range schemas {
@@ -131,15 +131,15 @@ func (g *AgentCardGenerator) addToolsFromProvider(card *AgentCard, agentID strin
 	}
 }
 
-// convertToolSchema converts an llm.ToolSchema to a ToolDefinition.
+// 转换 ToolSchema 转换一个 llm。 ToolSchema 到工具定义。
 func convertToolSchema(schema llm.ToolSchema) ToolDefinition {
 	var params *structured.JSONSchema
 
-	// Parse the parameters JSON into a JSONSchema
+	// 将参数 JSON 分析为 JSONSchema
 	if len(schema.Parameters) > 0 {
 		params = &structured.JSONSchema{}
 		if err := json.Unmarshal(schema.Parameters, params); err != nil {
-			// If parsing fails, create a basic object schema
+			// 如果解析失败, 请创建基本对象计划
 			params = &structured.JSONSchema{
 				Type:        structured.TypeObject,
 				Description: "Tool parameters",
@@ -154,16 +154,16 @@ func convertToolSchema(schema llm.ToolSchema) ToolDefinition {
 	}
 }
 
-// buildAgentURL constructs the full agent URL from base URL and agent ID.
+// 构建 AgentURL 从基址和代理 ID 构建完整的代理 URL 。
 func buildAgentURL(baseURL, agentID string) string {
-	// Ensure baseURL doesn't end with slash
+	// 确保碱基URL不以斜线结束
 	baseURL = strings.TrimSuffix(baseURL, "/")
 
-	// Build the agent endpoint URL
+	// 构建代理端点 URL
 	return fmt.Sprintf("%s/agents/%s", baseURL, agentID)
 }
 
-// SimpleAgentConfig is a simple implementation of AgentConfigProvider for testing and basic usage.
+// SimpleAgentConfig是AgentConfig Provider的简单执行,用于测试和基本使用.
 type SimpleAgentConfig struct {
 	AgentID          string
 	AgentName        string
@@ -173,20 +173,20 @@ type SimpleAgentConfig struct {
 	AgentMetadata    map[string]string
 }
 
-// ID returns the agent ID.
+// ID返回代理ID.
 func (c *SimpleAgentConfig) ID() string { return c.AgentID }
 
-// Name returns the agent name.
+// 名称返回代理名称 。
 func (c *SimpleAgentConfig) Name() string { return c.AgentName }
 
-// Type returns the agent type.
+// 类型返回代理类型。
 func (c *SimpleAgentConfig) Type() AgentType { return c.AgentType }
 
-// Description returns the agent description.
+// 描述返回代理描述 。
 func (c *SimpleAgentConfig) Description() string { return c.AgentDescription }
 
-// Tools returns the list of tool names.
+// 工具返回工具名称列表 。
 func (c *SimpleAgentConfig) Tools() []string { return c.AgentTools }
 
-// Metadata returns the agent metadata.
+// 元数据返回代理元数据 。
 func (c *SimpleAgentConfig) Metadata() map[string]string { return c.AgentMetadata }

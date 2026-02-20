@@ -1,5 +1,5 @@
-// Package hosted provides hosted tool implementations like Web Search and File Search.
-// Implements OpenAI SDK-style hosted tools that run on provider infrastructure.
+// 包主机提供了所主机的工具执行,如Web搜索和文件搜索.
+// 执行运行在提供者基础设施上的OpenAI SDK风格主机工具.
 package hosted
 
 import (
@@ -16,7 +16,7 @@ import (
 	"go.uber.org/zap"
 )
 
-// HostedToolType defines the type of hosted tool.
+// Hosted ToolType 定义了主机工具的类型.
 type HostedToolType string
 
 const (
@@ -26,7 +26,7 @@ const (
 	ToolTypeRetrieval  HostedToolType = "retrieval"
 )
 
-// HostedTool represents a tool hosted by the provider.
+// HostToole 代表由提供者托管的工具.
 type HostedTool interface {
 	Type() HostedToolType
 	Name() string
@@ -35,14 +35,14 @@ type HostedTool interface {
 	Execute(ctx context.Context, args json.RawMessage) (json.RawMessage, error)
 }
 
-// ToolRegistry manages hosted tools.
+// ToolRegistry 管理主机工具 。
 type ToolRegistry struct {
 	tools  map[string]HostedTool
 	logger *zap.Logger
 	mu     sync.RWMutex
 }
 
-// NewToolRegistry creates a new hosted tool registry.
+// NewToolRegistry创建了新的主机工具注册.
 func NewToolRegistry(logger *zap.Logger) *ToolRegistry {
 	if logger == nil {
 		logger = zap.NewNop()
@@ -53,7 +53,7 @@ func NewToolRegistry(logger *zap.Logger) *ToolRegistry {
 	}
 }
 
-// Register registers a hosted tool.
+// 注册注册一个主机工具 。
 func (r *ToolRegistry) Register(tool HostedTool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -61,7 +61,7 @@ func (r *ToolRegistry) Register(tool HostedTool) {
 	r.logger.Info("registered hosted tool", zap.String("name", tool.Name()))
 }
 
-// Get retrieves a hosted tool by name.
+// 按名称获取主机工具 。
 func (r *ToolRegistry) Get(name string) (HostedTool, bool) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -69,7 +69,7 @@ func (r *ToolRegistry) Get(name string) (HostedTool, bool) {
 	return tool, ok
 }
 
-// List returns all registered tools.
+// 列表返回所有已注册的工具 。
 func (r *ToolRegistry) List() []HostedTool {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -80,7 +80,7 @@ func (r *ToolRegistry) List() []HostedTool {
 	return tools
 }
 
-// GetSchemas returns schemas for all tools.
+// GetSchemas 返回所有工具的策略 。
 func (r *ToolRegistry) GetSchemas() []llm.ToolSchema {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -91,7 +91,7 @@ func (r *ToolRegistry) GetSchemas() []llm.ToolSchema {
 	return schemas
 }
 
-// WebSearchTool implements web search functionality.
+// WebSearchTool执行网络搜索功能.
 type WebSearchTool struct {
 	httpClient *http.Client
 	apiKey     string
@@ -99,7 +99,7 @@ type WebSearchTool struct {
 	maxResults int
 }
 
-// WebSearchConfig configures the web search tool.
+// WebSearchConfig 配置了网络搜索工具.
 type WebSearchConfig struct {
 	APIKey     string
 	Endpoint   string
@@ -107,7 +107,7 @@ type WebSearchConfig struct {
 	Timeout    time.Duration
 }
 
-// NewWebSearchTool creates a new web search tool.
+// 新WebSearchTooll创建了新的网络搜索工具.
 func NewWebSearchTool(config WebSearchConfig) *WebSearchTool {
 	timeout := config.Timeout
 	if timeout == 0 {
@@ -141,13 +141,13 @@ func (t *WebSearchTool) Schema() llm.ToolSchema {
 	return llm.ToolSchema{Name: t.Name(), Description: t.Description(), Parameters: params}
 }
 
-// WebSearchArgs represents web search arguments.
+// WebSearchArgs 代表网络搜索参数.
 type WebSearchArgs struct {
 	Query      string `json:"query"`
 	MaxResults int    `json:"max_results,omitempty"`
 }
 
-// WebSearchResult represents a search result.
+// WebSearchResult代表搜索结果.
 type WebSearchResult struct {
 	Title   string `json:"title"`
 	URL     string `json:"url"`
@@ -165,7 +165,7 @@ func (t *WebSearchTool) Execute(ctx context.Context, args json.RawMessage) (json
 		maxResults = t.maxResults
 	}
 
-	// Build search URL
+	// 构建搜索 URL
 	searchURL := fmt.Sprintf("%s?q=%s&max=%d", t.endpoint, url.QueryEscape(searchArgs.Query), maxResults)
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, searchURL, nil)
@@ -190,19 +190,19 @@ func (t *WebSearchTool) Execute(ctx context.Context, args json.RawMessage) (json
 	return body, nil
 }
 
-// FileSearchTool implements file search functionality.
+// FileSearchTool 执行文件搜索功能.
 type FileSearchTool struct {
 	vectorStore VectorStore
 	maxResults  int
 }
 
-// VectorStore interface for file search.
+// 用于文件搜索的矢量Store接口.
 type VectorStore interface {
 	Search(ctx context.Context, query string, limit int) ([]FileSearchResult, error)
 	Index(ctx context.Context, fileID string, content []byte) error
 }
 
-// FileSearchResult represents a file search result.
+// FileSearchResult代表文件搜索结果.
 type FileSearchResult struct {
 	FileID   string         `json:"file_id"`
 	FileName string         `json:"file_name"`
@@ -211,7 +211,7 @@ type FileSearchResult struct {
 	Metadata map[string]any `json:"metadata,omitempty"`
 }
 
-// NewFileSearchTool creates a new file search tool.
+// NewFileSearchTool创建了一个新的文件搜索工具.
 func NewFileSearchTool(store VectorStore, maxResults int) *FileSearchTool {
 	if maxResults == 0 {
 		maxResults = 10

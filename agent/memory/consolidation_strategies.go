@@ -10,10 +10,10 @@ import (
 	"go.uber.org/zap"
 )
 
-// AddDefaultConsolidationStrategies installs a minimal, safe set of built-in strategies:
-// - Prune short-term to ShortTermMaxSize per agent
-// - Prune working memory to WorkingMemorySize per agent
-// - Optionally promote short-term memories that already contain a vector to long-term store
+// 添加 Default Construction 战略安装了一套最低限度的安全内置策略 :
+// - 短期至短期
+// - 工作记忆,每个代理
+// - 可选地促进已经包含向量的长期存储的短期记忆
 func (m *EnhancedMemorySystem) AddDefaultConsolidationStrategies() error {
 	if !m.config.ConsolidationEnabled || m.consolidator == nil {
 		return fmt.Errorf("memory consolidation not configured")
@@ -32,7 +32,7 @@ func (m *EnhancedMemorySystem) AddDefaultConsolidationStrategies() error {
 		m.logger,
 	))
 
-	// Promotion is best-effort and only triggers when vectors are already present.
+	// 推广是最佳的,只有在矢量已经存在时才会触发.
 	if m.config.LongTermEnabled && m.longTerm != nil && m.shortTerm != nil {
 		m.consolidator.AddStrategy(NewPromoteShortTermVectorToLongTermStrategy(m, m.logger))
 	}
@@ -40,8 +40,8 @@ func (m *EnhancedMemorySystem) AddDefaultConsolidationStrategies() error {
 	return nil
 }
 
-// MaxPerAgentPrunerStrategy keeps the newest N entries per agent for a given key prefix.
-// It requires each memory value to carry a "key" and "agent_id" field (or a parsable key).
+// MaxPerAgentPrunerStrategy为给定的密钥前缀保留每个代理的最新N条目.
+// 它要求每个内存值都携带"键"和"agent id"字段(或可解析键).
 type MaxPerAgentPrunerStrategy struct {
 	prefix string
 	store  MemoryStore
@@ -136,8 +136,8 @@ func (s *MaxPerAgentPrunerStrategy) Consolidate(ctx context.Context, memories []
 	return lastErr
 }
 
-// PromoteShortTermVectorToLongTermStrategy promotes short-term memories to long-term store
-// when they already carry a vector in metadata.
+// 促进短期记忆到长期存储
+// 当它们已经携带元数据中的向量时。
 type PromoteShortTermVectorToLongTermStrategy struct {
 	system *EnhancedMemorySystem
 	logger *zap.Logger

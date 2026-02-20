@@ -1,5 +1,5 @@
-// Package voice provides native multimodal audio reasoning (GPT-4o style).
-// Targets 232ms latency for real-time audio-to-audio processing.
+// 软件包语音提供本土多模式音频推理(GPT-4o风格).
+// 232ms潜伏 实时音频到音频处理。
 package voice
 
 import (
@@ -11,7 +11,7 @@ import (
 	"go.uber.org/zap"
 )
 
-// NativeAudioConfig configures native audio reasoning.
+// 原生AudioConfig配置了本土音频推理.
 type NativeAudioConfig struct {
 	TargetLatencyMS int           `json:"target_latency_ms"` // Target: 232ms
 	SampleRate      int           `json:"sample_rate"`
@@ -21,7 +21,7 @@ type NativeAudioConfig struct {
 	Timeout         time.Duration `json:"timeout"`
 }
 
-// DefaultNativeAudioConfig returns optimized defaults for low latency.
+// 默认 NativeAudioConfig 返回低延迟的优化默认值。
 func DefaultNativeAudioConfig() NativeAudioConfig {
 	return NativeAudioConfig{
 		TargetLatencyMS: 232,
@@ -33,7 +33,7 @@ func DefaultNativeAudioConfig() NativeAudioConfig {
 	}
 }
 
-// AudioFrame represents a single audio frame.
+// AudioFrame代表单一音频帧.
 type AudioFrame struct {
 	Data       []byte    `json:"data"`
 	SampleRate int       `json:"sample_rate"`
@@ -42,7 +42,7 @@ type AudioFrame struct {
 	Timestamp  time.Time `json:"timestamp"`
 }
 
-// MultimodalInput represents input for native audio reasoning.
+// 多式联运输入代表了本土音频推理的输入.
 type MultimodalInput struct {
 	Audio     []AudioFrame   `json:"audio,omitempty"`
 	Text      string         `json:"text,omitempty"`
@@ -51,7 +51,7 @@ type MultimodalInput struct {
 	Metadata  map[string]any `json:"metadata,omitempty"`
 }
 
-// MultimodalOutput represents output from native audio reasoning.
+// 多式联运输出代表了本地音频推理的输出.
 type MultimodalOutput struct {
 	Audio       []AudioFrame `json:"audio,omitempty"`
 	Text        string       `json:"text,omitempty"`
@@ -62,14 +62,14 @@ type MultimodalOutput struct {
 	Interrupted bool         `json:"interrupted"`
 }
 
-// NativeAudioProvider defines the interface for native audio models.
+// 土著AudioProvider定义了本地音频模型的界面.
 type NativeAudioProvider interface {
 	ProcessAudio(ctx context.Context, input MultimodalInput) (*MultimodalOutput, error)
 	StreamAudio(ctx context.Context, input <-chan AudioFrame) (<-chan AudioFrame, error)
 	Name() string
 }
 
-// NativeAudioReasoner provides GPT-4o style native audio reasoning.
+// 土著AudioReasoner提供GPT-4o风格的本土音频推理.
 type NativeAudioReasoner struct {
 	provider NativeAudioProvider
 	config   NativeAudioConfig
@@ -78,7 +78,7 @@ type NativeAudioReasoner struct {
 	mu       sync.Mutex
 }
 
-// AudioMetrics tracks audio processing metrics.
+// AudioMetrics追踪音频处理度量衡.
 type AudioMetrics struct {
 	TotalRequests  int64         `json:"total_requests"`
 	AverageLatency time.Duration `json:"average_latency"`
@@ -89,7 +89,7 @@ type AudioMetrics struct {
 	latencies      []time.Duration
 }
 
-// NewNativeAudioReasoner creates a new native audio reasoner.
+// NewNativeAudioReasoner创造出一个新的本土音频理性.
 func NewNativeAudioReasoner(provider NativeAudioProvider, config NativeAudioConfig, logger *zap.Logger) *NativeAudioReasoner {
 	if logger == nil {
 		logger = zap.NewNop()
@@ -102,7 +102,7 @@ func NewNativeAudioReasoner(provider NativeAudioProvider, config NativeAudioConf
 	}
 }
 
-// Process processes multimodal input with native audio reasoning.
+// 进程用本地音频推理处理多模式输入.
 func (r *NativeAudioReasoner) Process(ctx context.Context, input MultimodalInput) (*MultimodalOutput, error) {
 	start := time.Now()
 
@@ -127,14 +127,14 @@ func (r *NativeAudioReasoner) Process(ctx context.Context, input MultimodalInput
 	return output, nil
 }
 
-// StreamProcess processes audio in streaming mode for lowest latency.
+// StreamProcess在流化模式下处理音频,以达到最小的延迟.
 func (r *NativeAudioReasoner) StreamProcess(ctx context.Context, inputChan <-chan AudioFrame) (<-chan AudioFrame, error) {
 	outputChan, err := r.provider.StreamAudio(ctx, inputChan)
 	if err != nil {
 		return nil, err
 	}
 
-	// Wrap output channel to track metrics
+	// 环绕输出通道以跟踪度量
 	wrappedChan := make(chan AudioFrame, r.config.BufferSize)
 	go func() {
 		defer close(wrappedChan)
@@ -161,19 +161,19 @@ func (r *NativeAudioReasoner) updateMetrics(latency time.Duration) {
 	r.metrics.TotalRequests++
 	r.metrics.latencies = append(r.metrics.latencies, latency)
 
-	// Keep only last 1000 latencies
+	// 仅保留上千个滞期
 	if len(r.metrics.latencies) > 1000 {
 		r.metrics.latencies = r.metrics.latencies[1:]
 	}
 
-	// Calculate average
+	// 计算平均值
 	var total time.Duration
 	for _, l := range r.metrics.latencies {
 		total += l
 	}
 	r.metrics.AverageLatency = total / time.Duration(len(r.metrics.latencies))
 
-	// Calculate target hit rate
+	// 计算目标命中率
 	targetHits := 0
 	for _, l := range r.metrics.latencies {
 		if l.Milliseconds() <= int64(r.config.TargetLatencyMS) {
@@ -183,14 +183,14 @@ func (r *NativeAudioReasoner) updateMetrics(latency time.Duration) {
 	r.metrics.TargetHitRate = float64(targetHits) / float64(len(r.metrics.latencies))
 }
 
-// GetMetrics returns current metrics.
+// GetMetrics 返回当前度量衡 。
 func (r *NativeAudioReasoner) GetMetrics() AudioMetrics {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return r.metrics
 }
 
-// Interrupt interrupts current audio processing.
+// 中断中断当前音频处理.
 func (r *NativeAudioReasoner) Interrupt() {
 	r.mu.Lock()
 	r.metrics.Interruptions++

@@ -7,8 +7,8 @@ import (
 	"go.uber.org/zap"
 )
 
-// This package provides a stable import path for the MCP protocol implementation.
-// It re-exports the types and constructors from agent/protocol/mcp.
+// 这个软件包为MCP协议的执行提供了稳定的导入路径.
+// 它从代理商/protocol/mcp再出口各类和构造器。
 
 type (
 	DefaultMCPServer = proto.DefaultMCPServer

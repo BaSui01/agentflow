@@ -15,7 +15,7 @@ import (
 	"go.uber.org/zap"
 )
 
-// mockAgent implements agent.Agent for testing.
+// 模拟代理工具代理。 测试代理。
 type mockAgent struct {
 	id        string
 	name      string
@@ -202,7 +202,7 @@ func TestHTTPServer_HandleGetTaskResult(t *testing.T) {
 	ag := newMockAgent("test-agent", "Test Agent")
 	_ = server.RegisterAgent(ag)
 
-	// Submit async task
+	// 提交同步任务
 	msg := NewTaskMessage("client-agent", "test-agent", map[string]string{
 		"content": "Hello, async!",
 	})
@@ -218,10 +218,10 @@ func TestHTTPServer_HandleGetTaskResult(t *testing.T) {
 	_ = json.Unmarshal(w.Body.Bytes(), &resp)
 	taskID := resp.TaskID
 
-	// Wait for task to complete
+	// 等待任务完成
 	time.Sleep(200 * time.Millisecond)
 
-	// Get result
+	// 获取结果
 	req = httptest.NewRequest(http.MethodGet, "/a2a/tasks/"+taskID+"/result", nil)
 	w = httptest.NewRecorder()
 
@@ -257,20 +257,20 @@ func TestHTTPServer_Authentication(t *testing.T) {
 	ag := newMockAgent("test-agent", "Test Agent")
 	_ = server.RegisterAgent(ag)
 
-	// Request without auth
+	// 没有认证的请求
 	req := httptest.NewRequest(http.MethodGet, "/.well-known/agent.json", nil)
 	w := httptest.NewRecorder()
 	server.ServeHTTP(w, req)
 	assert.Equal(t, http.StatusUnauthorized, w.Code)
 
-	// Request with wrong token
+	// 用错误的符号请求
 	req = httptest.NewRequest(http.MethodGet, "/.well-known/agent.json", nil)
 	req.Header.Set("Authorization", "Bearer wrong-token")
 	w = httptest.NewRecorder()
 	server.ServeHTTP(w, req)
 	assert.Equal(t, http.StatusUnauthorized, w.Code)
 
-	// Request with correct token
+	// 以正确的符号请求
 	req = httptest.NewRequest(http.MethodGet, "/.well-known/agent.json", nil)
 	req.Header.Set("Authorization", "Bearer secret-token")
 	w = httptest.NewRecorder()
@@ -299,17 +299,17 @@ func TestHTTPServer_CleanupExpiredTasks(t *testing.T) {
 	ag := newMockAgent("test-agent", "Test Agent")
 	_ = server.RegisterAgent(ag)
 
-	// Submit async task
+	// 提交同步任务
 	msg := NewTaskMessage("client-agent", "test-agent", "test")
 	body, _ := json.Marshal(msg)
 	req := httptest.NewRequest(http.MethodPost, "/a2a/messages/async", bytes.NewReader(body))
 	w := httptest.NewRecorder()
 	server.ServeHTTP(w, req)
 
-	// Wait for completion
+	// 等待完成时
 	time.Sleep(200 * time.Millisecond)
 
-	// Cleanup with 0 duration should remove completed tasks
+	// 持续时间为0的清理应删除已完成的任务
 	count := server.CleanupExpiredTasks(0)
 	assert.Equal(t, 1, count)
 }
@@ -321,7 +321,7 @@ func TestHTTPServer_CancelTask(t *testing.T) {
 		Logger:         zap.NewNop(),
 	})
 
-	// Create a slow agent
+	// 创建缓冲代理
 	ag := newMockAgent("slow-agent", "Slow Agent")
 	ag.execFunc = func(ctx context.Context, input *agent.Input) (*agent.Output, error) {
 		select {
@@ -333,7 +333,7 @@ func TestHTTPServer_CancelTask(t *testing.T) {
 	}
 	_ = server.RegisterAgent(ag)
 
-	// Submit async task
+	// 提交同步任务
 	msg := NewTaskMessage("client-agent", "slow-agent", "test")
 	body, _ := json.Marshal(msg)
 	req := httptest.NewRequest(http.MethodPost, "/a2a/messages/async", bytes.NewReader(body))
@@ -343,7 +343,7 @@ func TestHTTPServer_CancelTask(t *testing.T) {
 	var resp AsyncResponse
 	_ = json.Unmarshal(w.Body.Bytes(), &resp)
 
-	// Cancel the task
+	// 取消任务
 	err := server.CancelTask(resp.TaskID)
 	require.NoError(t, err)
 

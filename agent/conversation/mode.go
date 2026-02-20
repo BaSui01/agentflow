@@ -1,4 +1,4 @@
-// Package conversation provides AutoGen-style multi-agent conversation orchestration.
+// 包式对话提供AutoGen式多代理对话管弦乐.
 package conversation
 
 import (
@@ -10,7 +10,7 @@ import (
 	"go.uber.org/zap"
 )
 
-// ConversationMode defines how agents interact.
+// 对话 模式定义代理如何互动 。
 type ConversationMode string
 
 const (
@@ -21,7 +21,7 @@ const (
 	ModeAutoReply    ConversationMode = "auto_reply"   // Automatic response chain
 )
 
-// ConversationAgent interface for agents in conversations.
+// 对话代理界面 。
 type ConversationAgent interface {
 	ID() string
 	Name() string
@@ -30,7 +30,7 @@ type ConversationAgent interface {
 	ShouldTerminate(messages []ChatMessage) bool
 }
 
-// ChatMessage represents a message in the conversation.
+// ChatMessage代表谈话中的信息.
 type ChatMessage struct {
 	ID        string         `json:"id"`
 	Role      string         `json:"role"` // user, assistant, system
@@ -40,12 +40,12 @@ type ChatMessage struct {
 	Metadata  map[string]any `json:"metadata,omitempty"`
 }
 
-// SpeakerSelector selects the next speaker.
+// 发言人选择下一位发言人.
 type SpeakerSelector interface {
 	SelectNext(ctx context.Context, agents []ConversationAgent, messages []ChatMessage) (ConversationAgent, error)
 }
 
-// Conversation orchestrates multi-agent conversations.
+// 对话管弦乐会多代理对话.
 type Conversation struct {
 	ID       string
 	Mode     ConversationMode
@@ -57,7 +57,7 @@ type Conversation struct {
 	mu       sync.RWMutex
 }
 
-// ConversationConfig configures the conversation.
+// 对话 Config 配置对话 。
 type ConversationConfig struct {
 	MaxRounds        int           `json:"max_rounds"`
 	MaxMessages      int           `json:"max_messages"`
@@ -66,7 +66,7 @@ type ConversationConfig struct {
 	TerminationWords []string      `json:"termination_words"`
 }
 
-// DefaultConversationConfig returns default configuration.
+// 默认 Conversation Config 返回默认配置 。
 func DefaultConversationConfig() ConversationConfig {
 	return ConversationConfig{
 		MaxRounds:        10,
@@ -77,7 +77,7 @@ func DefaultConversationConfig() ConversationConfig {
 	}
 }
 
-// NewConversation creates a new conversation.
+// 新联想创造了一个新的对话。
 func NewConversation(mode ConversationMode, agents []ConversationAgent, config ConversationConfig, logger *zap.Logger) *Conversation {
 	if logger == nil {
 		logger = zap.NewNop()
@@ -90,7 +90,7 @@ func NewConversation(mode ConversationMode, agents []ConversationAgent, config C
 		Config:   config,
 		logger:   logger.With(zap.String("component", "conversation")),
 	}
-	// Set default selector based on mode
+	// 基于模式设置默认选择器
 	switch mode {
 	case ModeRoundRobin:
 		c.Selector = &RoundRobinSelector{}
@@ -102,11 +102,11 @@ func NewConversation(mode ConversationMode, agents []ConversationAgent, config C
 	return c
 }
 
-// Start initiates the conversation with an initial message.
+// 以初始消息启动对话 。
 func (c *Conversation) Start(ctx context.Context, initialMessage string) (*ConversationResult, error) {
 	c.logger.Info("conversation started", zap.String("mode", string(c.Mode)), zap.Int("agents", len(c.Agents)))
 
-	// Add initial message
+	// 添加初始信件
 	c.addMessage(ChatMessage{
 		ID:        fmt.Sprintf("msg_%d", time.Now().UnixNano()),
 		Role:      "user",
@@ -132,14 +132,14 @@ func (c *Conversation) Start(ctx context.Context, initialMessage string) (*Conve
 		default:
 		}
 
-		// Select next speaker
+		// 选择下一个扬声器
 		speaker, err := c.Selector.SelectNext(ctx, c.Agents, c.Messages)
 		if err != nil {
 			c.logger.Warn("speaker selection failed", zap.Error(err))
 			break
 		}
 
-		// Get reply
+		// 得到回复
 		reply, err := speaker.Reply(ctx, c.Messages)
 		if err != nil {
 			c.logger.Warn("agent reply failed", zap.String("agent", speaker.ID()), zap.Error(err))
@@ -149,7 +149,7 @@ func (c *Conversation) Start(ctx context.Context, initialMessage string) (*Conve
 		reply.SenderID = speaker.ID()
 		c.addMessage(*reply)
 
-		// Check termination
+		// 检查终止
 		if c.shouldTerminate(reply.Content) || speaker.ShouldTerminate(c.Messages) {
 			result.TerminationReason = "agent_terminated"
 			break
@@ -191,14 +191,14 @@ func (c *Conversation) shouldTerminate(content string) bool {
 	return false
 }
 
-// GetMessages returns all messages.
+// GetMessages 返回所有信件 。
 func (c *Conversation) GetMessages() []ChatMessage {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	return append([]ChatMessage{}, c.Messages...)
 }
 
-// ConversationResult contains the conversation outcome.
+// 对话Result包含对话结果.
 type ConversationResult struct {
 	ConversationID    string        `json:"conversation_id"`
 	Messages          []ChatMessage `json:"messages"`
@@ -208,7 +208,7 @@ type ConversationResult struct {
 	TerminationReason string        `json:"termination_reason"`
 }
 
-// RoundRobinSelector selects agents in order.
+// roundRobinSelector按顺序选择代理.
 type RoundRobinSelector struct {
 	current int
 }
@@ -222,12 +222,12 @@ func (s *RoundRobinSelector) SelectNext(ctx context.Context, agents []Conversati
 	return agent, nil
 }
 
-// LLMSelector uses LLM to select the next speaker.
+// LLMSelector使用LLM来选择下一位扬声器.
 type LLMSelector struct {
 	LLM LLMClient
 }
 
-// LLMClient interface for LLM calls.
+// LLM电话的LLMClient接口.
 type LLMClient interface {
 	Complete(ctx context.Context, prompt string) (string, error)
 }
@@ -236,27 +236,27 @@ func (s *LLMSelector) SelectNext(ctx context.Context, agents []ConversationAgent
 	if len(agents) == 0 {
 		return nil, fmt.Errorf("no agents available")
 	}
-	// Fallback to round-robin if no LLM
+	// 如果没有 LLM , 回落到圆边
 	if s.LLM == nil {
 		return agents[len(messages)%len(agents)], nil
 	}
-	// Build selection prompt
+	// 构建选择提示
 	prompt := "Based on the conversation, select the next speaker:\n"
 	for i, a := range agents {
 		prompt += fmt.Sprintf("%d. %s: %s\n", i+1, a.Name(), a.SystemPrompt())
 	}
-	// For simplicity, return first agent
+	// 简而言之,返回第一代理
 	return agents[0], nil
 }
 
-// GroupChatManager manages group chat conversations.
+// GroupChatManager管理分组聊天对话.
 type GroupChatManager struct {
 	conversations map[string]*Conversation
 	logger        *zap.Logger
 	mu            sync.RWMutex
 }
 
-// NewGroupChatManager creates a new group chat manager.
+// NewGroupChatManager创建了新的分组聊天管理器.
 func NewGroupChatManager(logger *zap.Logger) *GroupChatManager {
 	if logger == nil {
 		logger = zap.NewNop()
@@ -267,7 +267,7 @@ func NewGroupChatManager(logger *zap.Logger) *GroupChatManager {
 	}
 }
 
-// CreateChat creates a new group chat.
+// CreateChat 创建了新的分组聊天.
 func (m *GroupChatManager) CreateChat(agents []ConversationAgent, config ConversationConfig) *Conversation {
 	conv := NewConversation(ModeGroupChat, agents, config, m.logger)
 	m.mu.Lock()
@@ -276,7 +276,7 @@ func (m *GroupChatManager) CreateChat(agents []ConversationAgent, config Convers
 	return conv
 }
 
-// GetChat retrieves a conversation by ID.
+// GetChat通过身份证检索谈话内容.
 func (m *GroupChatManager) GetChat(id string) (*Conversation, bool) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()

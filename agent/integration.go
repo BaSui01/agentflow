@@ -135,7 +135,7 @@ func (b *BaseAgent) ExecuteEnhanced(ctx context.Context, input *Input, options E
 		}
 		b.logger.Debug("discovering skills", zap.String("query", query))
 
-		// Prefer the built-in skills manager signature.
+		// 优先使用内置技能管理器签名.
 		if sm, ok := b.skillManager.(interface {
 			DiscoverSkills(ctx context.Context, task string) ([]*skills.Skill, error)
 		}); ok {
@@ -154,7 +154,7 @@ func (b *BaseAgent) ExecuteEnhanced(ctx context.Context, input *Input, options E
 		} else if sm, ok := b.skillManager.(interface {
 			DiscoverSkills(ctx context.Context, task string) (interface{}, error)
 		}); ok {
-			// Backwards-compatible fallback for custom implementations.
+			// 后向相容倒计时自定义执行.
 			raw, err := sm.DiscoverSkills(ctx, query)
 			if err != nil {
 				b.logger.Warn("skill discovery failed", zap.Error(err))

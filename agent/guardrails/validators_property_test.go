@@ -11,9 +11,9 @@ import (
 	"pgregory.net/rapid"
 )
 
-// Feature: agent-framework-2026-enhancements, Property 2: Input Length Limit
-// Validates: Requirements 1.3 - Truncate or reject input exceeding max length
-// This property test verifies that length validator correctly handles length limits.
+// 特性:代理框架-2026-增强,属性2:输入长度限制
+// 校验: 1.3要求 - 超过最大长度的输入截断或拒绝
+// 此属性测试可以验证长度验证器正确处理长度限制 。
 func TestProperty_LengthValidator_InputLengthLimit(t *testing.T) {
 	rapid.Check(t, func(rt *rapid.T) {
 		maxLength := rapid.IntRange(10, 100).Draw(rt, "maxLength")
@@ -24,14 +24,14 @@ func TestProperty_LengthValidator_InputLengthLimit(t *testing.T) {
 
 		ctx := context.Background()
 
-		// Test content within limit
+		// 在限度内测试内容
 		withinLimit := rapid.IntRange(1, maxLength).Draw(rt, "withinLimit")
 		shortContent := strings.Repeat("a", withinLimit)
 		result, err := validator.Validate(ctx, shortContent)
 		require.NoError(t, err)
 		assert.True(t, result.Valid, "Content within limit should pass: len=%d, max=%d", withinLimit, maxLength)
 
-		// Test content exceeding limit
+		// 测试内容超过限度
 		exceedBy := rapid.IntRange(1, 50).Draw(rt, "exceedBy")
 		longContent := strings.Repeat("a", maxLength+exceedBy)
 		result, err = validator.Validate(ctx, longContent)
@@ -42,7 +42,7 @@ func TestProperty_LengthValidator_InputLengthLimit(t *testing.T) {
 	})
 }
 
-// TestProperty_LengthValidator_TruncateMode tests truncation behavior
+// 测试Property LengthValidator Truncate Mode 测试分解行为
 func TestProperty_LengthValidator_TruncateMode(t *testing.T) {
 	rapid.Check(t, func(rt *rapid.T) {
 		maxLength := rapid.IntRange(10, 100).Draw(rt, "maxLength")
@@ -53,24 +53,24 @@ func TestProperty_LengthValidator_TruncateMode(t *testing.T) {
 
 		ctx := context.Background()
 
-		// Test content exceeding limit
+		// 测试内容超过限度
 		exceedBy := rapid.IntRange(1, 50).Draw(rt, "exceedBy")
 		longContent := strings.Repeat("x", maxLength+exceedBy)
 		result, err := validator.Validate(ctx, longContent)
 		require.NoError(t, err)
 
-		// Truncate mode should not invalidate, but add warning
+		// 截断模式不应无效, 但添加警告
 		assert.True(t, result.Valid, "Truncate mode should not invalidate")
 		assert.NotEmpty(t, result.Warnings, "Should have truncation warning")
 
-		// Check truncated content in metadata
+		// 检查元数据中截断的内容
 		truncated, ok := result.Metadata["truncated_content"].(string)
 		require.True(t, ok, "Should have truncated_content in metadata")
 		assert.Len(t, truncated, maxLength, "Truncated content should be exactly maxLength")
 	})
 }
 
-// TestProperty_LengthValidator_ChineseCharacters tests Chinese character counting
+// 测试 Property LengthValidator ChineseCharacters 测试中国字符计数
 func TestProperty_LengthValidator_ChineseCharacters(t *testing.T) {
 	rapid.Check(t, func(rt *rapid.T) {
 		maxLength := rapid.IntRange(5, 20).Draw(rt, "maxLength")
@@ -81,14 +81,14 @@ func TestProperty_LengthValidator_ChineseCharacters(t *testing.T) {
 
 		ctx := context.Background()
 
-		// Generate Chinese content within limit
+		// 在限制范围内生成中文内容
 		charCount := rapid.IntRange(1, maxLength).Draw(rt, "charCount")
 		chineseContent := strings.Repeat("中", charCount)
 		result, err := validator.Validate(ctx, chineseContent)
 		require.NoError(t, err)
 		assert.True(t, result.Valid, "Chinese content within limit should pass: chars=%d, max=%d", charCount, maxLength)
 
-		// Generate Chinese content exceeding limit
+		// 生成超过限制的中文内容
 		exceedCount := maxLength + rapid.IntRange(1, 10).Draw(rt, "exceedCount")
 		longChinese := strings.Repeat("文", exceedCount)
 		result, err = validator.Validate(ctx, longChinese)
@@ -97,7 +97,7 @@ func TestProperty_LengthValidator_ChineseCharacters(t *testing.T) {
 	})
 }
 
-// TestProperty_LengthValidator_TruncatePreservesPrefix tests truncation preserves content prefix
+// 测试Property LengthValidator TruncatePreserves Prefix 测试前缀保存内容前缀
 func TestProperty_LengthValidator_TruncatePreservesPrefix(t *testing.T) {
 	rapid.Check(t, func(rt *rapid.T) {
 		maxLength := rapid.IntRange(10, 50).Draw(rt, "maxLength")
@@ -106,20 +106,20 @@ func TestProperty_LengthValidator_TruncatePreservesPrefix(t *testing.T) {
 			Action:    LengthActionTruncate,
 		})
 
-		// Generate unique content
+		// 生成独有的内容
 		content := rapid.StringMatching(`[a-z]{60,100}`).Draw(rt, "content")
 		truncated := validator.Truncate(content)
 
-		// Truncated content should be prefix of original
+		// 截断内容应为原件的前缀
 		assert.True(t, strings.HasPrefix(content, truncated), "Truncated should be prefix of original")
 		assert.LessOrEqual(t, len(truncated), maxLength, "Truncated length should not exceed max")
 	})
 }
 
-// TestProperty_KeywordValidator_BlockedKeywordDetection tests keyword detection
+// 测试 Property 关键词服务器 BlockKeyword检测测试关键词检测
 func TestProperty_KeywordValidator_BlockedKeywordDetection(t *testing.T) {
 	rapid.Check(t, func(rt *rapid.T) {
-		// Generate random blocked keywords
+		// 生成随机被屏蔽的关键字
 		keywordCount := rapid.IntRange(1, 5).Draw(rt, "keywordCount")
 		keywords := make([]string, keywordCount)
 		for i := range keywords {
@@ -134,7 +134,7 @@ func TestProperty_KeywordValidator_BlockedKeywordDetection(t *testing.T) {
 
 		ctx := context.Background()
 
-		// Test content with blocked keyword
+		// 用被屏蔽的关键字测试内容
 		keyword := rapid.SampledFrom(keywords).Draw(rt, "selectedKeyword")
 		content := "some text " + keyword + " more text"
 		result, err := validator.Validate(ctx, content)
@@ -142,7 +142,7 @@ func TestProperty_KeywordValidator_BlockedKeywordDetection(t *testing.T) {
 		assert.False(t, result.Valid, "Should detect blocked keyword: %s", keyword)
 		assert.Equal(t, ErrCodeBlockedKeyword, result.Errors[0].Code)
 
-		// Test content without blocked keywords
+		// 测试没有被屏蔽的关键字的内容
 		cleanContent := rapid.StringMatching(`[0-9]{20,30}`).Draw(rt, "cleanContent")
 		result, err = validator.Validate(ctx, cleanContent)
 		require.NoError(t, err)
@@ -150,7 +150,7 @@ func TestProperty_KeywordValidator_BlockedKeywordDetection(t *testing.T) {
 	})
 }
 
-// TestProperty_KeywordValidator_CaseInsensitive tests case insensitive matching
+// 测试Property   关键词变异器  案件不敏感测试案例不敏感匹配
 func TestProperty_KeywordValidator_CaseInsensitive(t *testing.T) {
 	rapid.Check(t, func(rt *rapid.T) {
 		keyword := rapid.StringMatching(`[a-z]{5,10}`).Draw(rt, "keyword")
@@ -163,13 +163,13 @@ func TestProperty_KeywordValidator_CaseInsensitive(t *testing.T) {
 
 		ctx := context.Background()
 
-		// Test uppercase version
+		// 测试大写版本
 		upperContent := "text " + strings.ToUpper(keyword) + " text"
 		result, err := validator.Validate(ctx, upperContent)
 		require.NoError(t, err)
 		assert.False(t, result.Valid, "Should detect uppercase keyword")
 
-		// Test mixed case
+		// 测试混合情况
 		mixedCase := strings.ToUpper(keyword[:len(keyword)/2]) + keyword[len(keyword)/2:]
 		mixedContent := "text " + mixedCase + " text"
 		result, err = validator.Validate(ctx, mixedContent)
@@ -178,7 +178,7 @@ func TestProperty_KeywordValidator_CaseInsensitive(t *testing.T) {
 	})
 }
 
-// TestProperty_KeywordValidator_FilterMode tests keyword filtering
+// 测试Property   关键词变换器  FilterMode 测试关键词过滤
 func TestProperty_KeywordValidator_FilterMode(t *testing.T) {
 	rapid.Check(t, func(rt *rapid.T) {
 		keyword := rapid.StringMatching(`[a-z]{5,10}`).Draw(rt, "keyword")
@@ -196,10 +196,10 @@ func TestProperty_KeywordValidator_FilterMode(t *testing.T) {
 		result, err := validator.Validate(ctx, content)
 		require.NoError(t, err)
 
-		// Filter mode should not invalidate
+		// 过滤模式不应无效
 		assert.True(t, result.Valid, "Filter mode should not invalidate")
 
-		// Check filtered content
+		// 检查过滤内容
 		filtered, ok := result.Metadata["filtered_content"].(string)
 		require.True(t, ok, "Should have filtered_content")
 		assert.NotContains(t, filtered, keyword, "Filtered content should not contain keyword")
@@ -207,7 +207,7 @@ func TestProperty_KeywordValidator_FilterMode(t *testing.T) {
 	})
 }
 
-// TestProperty_KeywordValidator_SeverityMapping tests keyword severity mapping
+// 测试 Property 关键词变换器  重度映射测试关键词重度映射
 func TestProperty_KeywordValidator_SeverityMapping(t *testing.T) {
 	rapid.Check(t, func(rt *rapid.T) {
 		keyword := rapid.StringMatching(`[a-z]{5,10}`).Draw(rt, "keyword")
@@ -231,7 +231,7 @@ func TestProperty_KeywordValidator_SeverityMapping(t *testing.T) {
 	})
 }
 
-// TestProperty_KeywordValidator_MultipleKeywords tests multiple keyword detection
+// 测试 Property 关键词变换器 多键关键词测试多键检测
 func TestProperty_KeywordValidator_MultipleKeywords(t *testing.T) {
 	rapid.Check(t, func(rt *rapid.T) {
 		keywords := []string{
@@ -247,20 +247,20 @@ func TestProperty_KeywordValidator_MultipleKeywords(t *testing.T) {
 
 		ctx := context.Background()
 
-		// Content with multiple keywords
+		// 有多个关键字的内容
 		content := keywords[0] + " and " + keywords[1] + " and " + keywords[2]
 		result, err := validator.Validate(ctx, content)
 		require.NoError(t, err)
 		assert.False(t, result.Valid)
 
-		// Check metadata for keyword count
+		// 检查关键字计数的元数据
 		count, ok := result.Metadata["keyword_count"].(int)
 		require.True(t, ok, "Should have keyword_count")
 		assert.GreaterOrEqual(t, count, 3, "Should detect all keywords")
 	})
 }
 
-// TestProperty_KeywordValidator_AddRemoveKeyword tests dynamic keyword management
+// 测试Property   关键词服务器  AddRemoveKeyword 测试动态关键字管理
 func TestProperty_KeywordValidator_AddRemoveKeyword(t *testing.T) {
 	rapid.Check(t, func(rt *rapid.T) {
 		initialKeyword := rapid.StringMatching(`[a-z]{5,8}`).Draw(rt, "initialKeyword")
@@ -273,16 +273,16 @@ func TestProperty_KeywordValidator_AddRemoveKeyword(t *testing.T) {
 
 		ctx := context.Background()
 
-		// Initial keyword should be detected
+		// 应发现初始关键字
 		result, _ := validator.Validate(ctx, initialKeyword)
 		assert.False(t, result.Valid, "Initial keyword should be detected")
 
-		// Add new keyword
+		// 添加新关键字
 		validator.AddKeyword(newKeyword, SeverityHigh)
 		result, _ = validator.Validate(ctx, newKeyword)
 		assert.False(t, result.Valid, "New keyword should be detected")
 
-		// Remove initial keyword
+		// 删除初始关键字
 		validator.RemoveKeyword(initialKeyword)
 		result, _ = validator.Validate(ctx, initialKeyword)
 		assert.True(t, result.Valid, "Removed keyword should not be detected")

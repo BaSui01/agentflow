@@ -1,4 +1,4 @@
-// Package evaluation provides automated evaluation framework for AI agents.
+// 成套评价为AI代理提供了自动化的评价框架.
 package evaluation
 
 import (
@@ -35,7 +35,7 @@ const (
 )
 
 // Variant 实验变体
-// Validates: Requirements 11.1, 11.5
+// 审定:所需经费11.1、11.5
 type Variant struct {
 	ID        string         `json:"id"`
 	Name      string         `json:"name"`
@@ -45,7 +45,7 @@ type Variant struct {
 }
 
 // Experiment 实验定义
-// Validates: Requirements 11.1
+// 审定:所需经费11.1
 type Experiment struct {
 	ID          string           `json:"id"`
 	Name        string           `json:"name"`
@@ -58,7 +58,7 @@ type Experiment struct {
 }
 
 // VariantResult 变体结果
-// Validates: Requirements 11.3
+// 核证:所需经费 11.3
 type VariantResult struct {
 	VariantID   string             `json:"variant_id"`
 	SampleCount int                `json:"sample_count"`
@@ -69,7 +69,7 @@ type VariantResult struct {
 }
 
 // ExperimentResult 实验结果
-// Validates: Requirements 11.3, 11.4
+// 审定: 所需经费 11.3, 11.4
 type ExperimentResult struct {
 	ExperimentID   string                    `json:"experiment_id"`
 	VariantResults map[string]*VariantResult `json:"variant_results"`
@@ -100,7 +100,7 @@ type ExperimentStore interface {
 }
 
 // ABTester A/B 测试器
-// Validates: Requirements 11.1, 11.2, 11.3, 11.5
+// 11.1、11.2、11.3、11.5
 type ABTester struct {
 	experiments map[string]*Experiment
 	store       ExperimentStore
@@ -121,7 +121,7 @@ func NewABTester(store ExperimentStore, logger *zap.Logger) *ABTester {
 }
 
 // CreateExperiment 创建实验
-// Validates: Requirements 11.1
+// 审定:所需经费11.1
 func (t *ABTester) CreateExperiment(exp *Experiment) error {
 	if exp == nil {
 		return errors.New("experiment cannot be nil")
@@ -270,7 +270,7 @@ func (t *ABTester) CompleteExperiment(experimentID string) error {
 
 // Assign 分配变体
 // 使用一致性哈希确保同一用户始终分配到同一变体
-// Validates: Requirements 11.2
+// 审定:所需经费11.2
 func (t *ABTester) Assign(experimentID, userID string) (*Variant, error) {
 	exp, err := t.GetExperiment(experimentID)
 	if err != nil {
@@ -311,7 +311,7 @@ func (t *ABTester) Assign(experimentID, userID string) (*Variant, error) {
 }
 
 // assignByHash 使用哈希进行流量分配
-// Validates: Requirements 11.2
+// 审定:所需经费11.2
 func (t *ABTester) assignByHash(variants []Variant, experimentID, userID string) *Variant {
 	// 计算哈希值
 	hash := sha256.Sum256([]byte(experimentID + ":" + userID))
@@ -341,7 +341,7 @@ func (t *ABTester) assignByHash(variants []Variant, experimentID, userID string)
 }
 
 // RecordResult 记录结果
-// Validates: Requirements 11.3
+// 核证:所需经费 11.3
 func (t *ABTester) RecordResult(experimentID, variantID string, result *EvalResult) error {
 	exp, err := t.GetExperiment(experimentID)
 	if err != nil {
@@ -376,7 +376,7 @@ func (t *ABTester) RecordResult(experimentID, variantID string, result *EvalResu
 }
 
 // Analyze 分析实验结果
-// Validates: Requirements 11.3, 11.4
+// 审定: 所需经费 11.3, 11.4
 func (t *ABTester) Analyze(ctx context.Context, experimentID string) (*ExperimentResult, error) {
 	exp, err := t.GetExperiment(experimentID)
 	if err != nil {
@@ -461,7 +461,7 @@ func (t *ABTester) calculateVariantStats(variantID string, results []*EvalResult
 }
 
 // determineWinner 确定获胜者
-// Validates: Requirements 11.4
+// 审定:所需经费 11.4
 func (t *ABTester) determineWinner(result *ExperimentResult, exp *Experiment) {
 	if len(result.VariantResults) < 2 {
 		return
@@ -596,21 +596,21 @@ func (t *ABTester) DeleteExperiment(experimentID string) error {
 	return nil
 }
 
-// AutoSelectWinner automatically selects the winning variant configuration
-// when statistical significance is detected.
-// Validates: Requirements 11.6
+// 自动选择Winner 自动选择获胜的变量配置
+// 当检测到统计意义时。
+// 核实:所需经费 11.6
 func (t *ABTester) AutoSelectWinner(ctx context.Context, experimentID string, minConfidence float64) (*Variant, error) {
 	if minConfidence <= 0 || minConfidence > 1 {
 		minConfidence = 0.95 // Default 95% confidence
 	}
 
-	// Analyze the experiment
+	// 分析实验
 	result, err := t.Analyze(ctx, experimentID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to analyze experiment: %w", err)
 	}
 
-	// Check if there's a winner with sufficient confidence
+	// 看看有没有赢家有足够的自信
 	if result.Winner == "" {
 		return nil, fmt.Errorf("no statistically significant winner detected")
 	}
@@ -620,13 +620,13 @@ func (t *ABTester) AutoSelectWinner(ctx context.Context, experimentID string, mi
 			result.Confidence*100, minConfidence*100)
 	}
 
-	// Get the experiment to find the winning variant
+	// 让实验找到胜利的变体
 	exp, err := t.GetExperiment(experimentID)
 	if err != nil {
 		return nil, err
 	}
 
-	// Find and return the winning variant
+	// 查找并返回获胜的变体
 	for i := range exp.Variants {
 		if exp.Variants[i].ID == result.Winner {
 			t.logger.Info("auto-selected winner",
@@ -640,8 +640,8 @@ func (t *ABTester) AutoSelectWinner(ctx context.Context, experimentID string, mi
 	return nil, ErrVariantNotFound
 }
 
-// StatisticalReport represents a detailed statistical analysis report
-// Validates: Requirements 11.4
+// 统计报告是详细的统计分析报告
+// 审定:所需经费 11.4
 type StatisticalReport struct {
 	ExperimentID     string                    `json:"experiment_id"`
 	ExperimentName   string                    `json:"experiment_name"`
@@ -656,7 +656,7 @@ type StatisticalReport struct {
 	GeneratedAt      time.Time                 `json:"generated_at"`
 }
 
-// VariantReport contains detailed statistics for a single variant
+// 变量报告载有单一变量的详细统计数据
 type VariantReport struct {
 	VariantID    string                `json:"variant_id"`
 	VariantName  string                `json:"variant_name"`
@@ -667,7 +667,7 @@ type VariantReport struct {
 	ConfInterval map[string][2]float64 `json:"confidence_interval"` // 95% CI
 }
 
-// VariantComparison contains comparison results between two variants
+// 变量比较包含两个变量之间的比较结果
 type VariantComparison struct {
 	ControlID      string             `json:"control_id"`
 	TreatmentID    string             `json:"treatment_id"`
@@ -678,15 +678,15 @@ type VariantComparison struct {
 	Significant    map[string]bool    `json:"significant"` // at 95% level
 }
 
-// GenerateReport generates a comprehensive statistical significance analysis report
-// Validates: Requirements 11.4
+// 生成报告生成一份全面的统计意义分析报告
+// 审定:所需经费 11.4
 func (t *ABTester) GenerateReport(ctx context.Context, experimentID string) (*StatisticalReport, error) {
 	exp, err := t.GetExperiment(experimentID)
 	if err != nil {
 		return nil, err
 	}
 
-	// Get analysis results
+	// 获取分析结果
 	result, err := t.Analyze(ctx, experimentID)
 	if err != nil {
 		return nil, err
@@ -705,7 +705,7 @@ func (t *ABTester) GenerateReport(ctx context.Context, experimentID string) (*St
 		GeneratedAt:      time.Now(),
 	}
 
-	// Generate variant reports
+	// 生成变量报告
 	for _, variant := range exp.Variants {
 		vr := result.VariantResults[variant.ID]
 		if vr == nil {
@@ -722,12 +722,12 @@ func (t *ABTester) GenerateReport(ctx context.Context, experimentID string) (*St
 			ConfInterval: make(map[string][2]float64),
 		}
 
-		// Calculate 95% confidence intervals
+		// 计算95%的置信间隔
 		for metric, mean := range vr.Metrics {
 			stdDev := vr.StdDev[metric]
 			n := float64(vr.SampleCount)
 			if n > 1 {
-				// 95% CI: mean ± 1.96 * (stdDev / sqrt(n))
+				// 95% CI: 平均值± 1.96 * (stdDev / sqrt(n))
 				margin := 1.96 * stdDev / math.Sqrt(n)
 				variantReport.ConfInterval[metric] = [2]float64{mean - margin, mean + margin}
 			}
@@ -736,7 +736,7 @@ func (t *ABTester) GenerateReport(ctx context.Context, experimentID string) (*St
 		report.VariantReports[variant.ID] = variantReport
 	}
 
-	// Find control variant
+	// 查找控制变体
 	var controlID string
 	for _, v := range exp.Variants {
 		if v.IsControl {
@@ -754,7 +754,7 @@ func (t *ABTester) GenerateReport(ctx context.Context, experimentID string) (*St
 		return report, nil
 	}
 
-	// Generate comparisons between control and each treatment
+	// 生成控件和每种处理方法的比较
 	for _, variant := range exp.Variants {
 		if variant.ID == controlID {
 			continue
@@ -775,21 +775,21 @@ func (t *ABTester) GenerateReport(ctx context.Context, experimentID string) (*St
 			Significant:    make(map[string]bool),
 		}
 
-		// Compare each metric
+		// 比较每个度量
 		for metric := range controlResult.Metrics {
 			controlMean := controlResult.Metrics[metric]
 			treatmentMean := treatmentResult.Metrics[metric]
 
-			// Calculate delta
+			// 计算三角形
 			delta := treatmentMean - controlMean
 			comparison.MetricDeltas[metric] = delta
 
-			// Calculate relative change
+			// 计算相对变化
 			if controlMean != 0 {
 				comparison.RelativeChange[metric] = (delta / controlMean) * 100
 			}
 
-			// Calculate statistical significance
+			// 计算统计意义
 			controlData := controlResult.rawMetrics[metric]
 			treatmentData := treatmentResult.rawMetrics[metric]
 
@@ -805,13 +805,13 @@ func (t *ABTester) GenerateReport(ctx context.Context, experimentID string) (*St
 		report.Comparisons = append(report.Comparisons, comparison)
 	}
 
-	// Generate recommendation
+	// 生成建议
 	report.Recommendation = t.generateRecommendation(report)
 
 	return report, nil
 }
 
-// generateRecommendation generates a recommendation based on the analysis
+// 生成基于分析的建议
 func (t *ABTester) generateRecommendation(report *StatisticalReport) string {
 	if report.TotalSamples < 100 {
 		return "Insufficient sample size. Continue collecting data for reliable results."
@@ -827,7 +827,7 @@ func (t *ABTester) generateRecommendation(report *StatisticalReport) string {
 			report.Winner, report.WinnerConfidence*100)
 	}
 
-	// Check if any comparison shows significance
+	// 检查是否有任何比较显示意义
 	for _, comp := range report.Comparisons {
 		for metric, sig := range comp.Significant {
 			if sig {
@@ -839,7 +839,7 @@ func (t *ABTester) generateRecommendation(report *StatisticalReport) string {
 	return "No statistically significant difference detected. Consider continuing the experiment or reviewing hypothesis."
 }
 
-// Helper functions
+// 辅助功能
 
 func calculateMean(values []float64) float64 {
 	if len(values) == 0 {

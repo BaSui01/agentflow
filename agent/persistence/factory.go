@@ -6,7 +6,7 @@ import (
 	"os"
 )
 
-// NewMessageStore creates a new MessageStore based on the configuration
+// 新MessageStore 创建基于配置的新信件系统
 func NewMessageStore(config StoreConfig) (MessageStore, error) {
 	switch config.Type {
 	case StoreTypeMemory:
@@ -20,7 +20,7 @@ func NewMessageStore(config StoreConfig) (MessageStore, error) {
 	}
 }
 
-// NewTaskStore creates a new TaskStore based on the configuration
+// NewTaskStore 创建基于配置的新任务库
 func NewTaskStore(config StoreConfig) (TaskStore, error) {
 	switch config.Type {
 	case StoreTypeMemory:
@@ -34,16 +34,16 @@ func NewTaskStore(config StoreConfig) (TaskStore, error) {
 	}
 }
 
-// MustNewMessageStore creates a new MessageStore or panics on error.
+// Must NewMessageStore 创建了新信件存储器或对错误的恐慌 。
 //
-// WARNING: This function should ONLY be used during application initialization
-// (e.g., in main() or init()). Using panic in request handlers or business logic
-// is strongly discouraged. For runtime store creation, use NewMessageStore instead.
+// 警告:此功能只应在应用程序初始化时使用
+// (例如,主要()或init())。 在请求处理器或业务逻辑中使用恐慌
+// 强烈劝阻。 对于运行时商店创建,取而代之的是使用"NewMessageStore".
 //
-// Example usage:
+// 示例用法:
 //
-//	func main() {
-//	    store := persistence.MustNewMessageStore(config) // OK - initialization
+//	func 主 () {
+//	    存储 := 持久性. Must NewMessageStore(配置) // OK - 初始化
 //	    // ...
 //	}
 func MustNewMessageStore(config StoreConfig) MessageStore {
@@ -54,16 +54,16 @@ func MustNewMessageStore(config StoreConfig) MessageStore {
 	return store
 }
 
-// MustNewTaskStore creates a new TaskStore or panics on error.
+// MustNewTaskStore 创建了新的 TaskStore 或对错误的恐慌.
 //
-// WARNING: This function should ONLY be used during application initialization
-// (e.g., in main() or init()). Using panic in request handlers or business logic
-// is strongly discouraged. For runtime store creation, use NewTaskStore instead.
+// 警告:此功能只应在应用程序初始化时使用
+// (例如,主要()或init())。 在请求处理器或业务逻辑中使用恐慌
+// 强烈劝阻。 对于运行时间商店的创建,使用"NewTaskStore"代替.
 //
-// Example usage:
+// 示例用法:
 //
-//	func main() {
-//	    store := persistence.MustNewTaskStore(config) // OK - initialization
+//	func 主 () {
+//	    存储 := 持久性. MustNewTaskStore(配置) // OK - 初始化
 //	    // ...
 //	}
 func MustNewTaskStore(config StoreConfig) TaskStore {
@@ -74,8 +74,8 @@ func MustNewTaskStore(config StoreConfig) TaskStore {
 	return store
 }
 
-// NewMessageStoreOrExit creates a new MessageStore or exits the program on error.
-// This is a safer alternative to MustNewMessageStore for CLI applications.
+// NewMessageStore OrExit 创建了新的信件存储器,或在错误时退出程序.
+// 这是用于CLI应用的MustNewMessageStore的更安全的替代品.
 func NewMessageStoreOrExit(config StoreConfig) MessageStore {
 	store, err := NewMessageStore(config)
 	if err != nil {
@@ -85,8 +85,8 @@ func NewMessageStoreOrExit(config StoreConfig) MessageStore {
 	return store
 }
 
-// NewTaskStoreOrExit creates a new TaskStore or exits the program on error.
-// This is a safer alternative to MustNewTaskStore for CLI applications.
+// NewTaskStoreOrExit 创建了新的 TaskStore 程序,或者在出错时退出程序.
+// 这是用于CLI应用的MustNewTaskStore的更安全的替代品.
 func NewTaskStoreOrExit(config StoreConfig) TaskStore {
 	store, err := NewTaskStore(config)
 	if err != nil {

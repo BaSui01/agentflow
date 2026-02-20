@@ -1,5 +1,5 @@
-// Package deployment provides cloud deployment support for AI agents.
-// Implements Google ADK-style one-click deployment to K8s/Serverless.
+// 套件部署为AI代理提供云部署支持.
+// 执行 Google ADK 风格的一击部署到 K8s/ Serverless 。
 package deployment
 
 import (
@@ -12,7 +12,7 @@ import (
 	"go.uber.org/zap"
 )
 
-// DeploymentTarget defines the deployment target type.
+// 部署 目标定义了部署目标类型.
 type DeploymentTarget string
 
 const (
@@ -22,7 +22,7 @@ const (
 	TargetLocal      DeploymentTarget = "local"
 )
 
-// DeploymentStatus represents deployment status.
+// 部署状况是部署状况。
 type DeploymentStatus string
 
 const (
@@ -34,7 +34,7 @@ const (
 	StatusScaling   DeploymentStatus = "scaling"
 )
 
-// Deployment represents a deployed agent instance.
+// 部署是部署的代理人实例。
 type Deployment struct {
 	ID          string            `json:"id"`
 	Name        string            `json:"name"`
@@ -51,7 +51,7 @@ type Deployment struct {
 	HealthCheck *HealthCheck      `json:"health_check,omitempty"`
 }
 
-// DeploymentConfig contains deployment configuration.
+// 部署配置包含部署配置。
 type DeploymentConfig struct {
 	Image       string            `json:"image,omitempty"`
 	Port        int               `json:"port"`
@@ -61,7 +61,7 @@ type DeploymentConfig struct {
 	Timeout     time.Duration     `json:"timeout,omitempty"`
 }
 
-// ResourceConfig defines resource limits.
+// 资源Config定义了资源限制.
 type ResourceConfig struct {
 	CPURequest    string `json:"cpu_request,omitempty"`
 	CPULimit      string `json:"cpu_limit,omitempty"`
@@ -70,14 +70,14 @@ type ResourceConfig struct {
 	GPUCount      int    `json:"gpu_count,omitempty"`
 }
 
-// SecretRef references a secret.
+// 秘密参考文件提到一个秘密
 type SecretRef struct {
 	Name string `json:"name"`
 	Key  string `json:"key"`
 	Env  string `json:"env"`
 }
 
-// AutoScaleConfig configures auto-scaling.
+// 自动缩放配置自动缩放 。
 type AutoScaleConfig struct {
 	MinReplicas    int           `json:"min_replicas"`
 	MaxReplicas    int           `json:"max_replicas"`
@@ -87,7 +87,7 @@ type AutoScaleConfig struct {
 	ScaleDownDelay time.Duration `json:"scale_down_delay,omitempty"`
 }
 
-// HealthCheck defines health check configuration.
+// 健康检查定义了健康检查配置.
 type HealthCheck struct {
 	Path             string        `json:"path"`
 	Port             int           `json:"port"`
@@ -96,7 +96,7 @@ type HealthCheck struct {
 	FailureThreshold int           `json:"failure_threshold"`
 }
 
-// DeploymentProvider defines the interface for deployment backends.
+// 部署提供方定义了部署后端的接口.
 type DeploymentProvider interface {
 	Deploy(ctx context.Context, deployment *Deployment) error
 	Update(ctx context.Context, deployment *Deployment) error
@@ -106,7 +106,7 @@ type DeploymentProvider interface {
 	GetLogs(ctx context.Context, deploymentID string, lines int) ([]string, error)
 }
 
-// Deployer manages agent deployments.
+// 部署人员管理代理部署。
 type Deployer struct {
 	providers   map[DeploymentTarget]DeploymentProvider
 	deployments map[string]*Deployment
@@ -114,7 +114,7 @@ type Deployer struct {
 	mu          sync.RWMutex
 }
 
-// NewDeployer creates a new deployer.
+// 新部署者创建了新的部署者.
 func NewDeployer(logger *zap.Logger) *Deployer {
 	if logger == nil {
 		logger = zap.NewNop()
@@ -126,14 +126,14 @@ func NewDeployer(logger *zap.Logger) *Deployer {
 	}
 }
 
-// RegisterProvider registers a deployment provider.
+// 提供人员登记部署提供者。
 func (d *Deployer) RegisterProvider(target DeploymentTarget, provider DeploymentProvider) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	d.providers[target] = provider
 }
 
-// Deploy deploys an agent to the specified target.
+// 向指定目标部署特工。
 func (d *Deployer) Deploy(ctx context.Context, opts DeployOptions) (*Deployment, error) {
 	provider, ok := d.providers[opts.Target]
 	if !ok {
@@ -185,7 +185,7 @@ func (d *Deployer) Deploy(ctx context.Context, opts DeployOptions) (*Deployment,
 	return deployment, nil
 }
 
-// Update updates an existing deployment.
+// 更新现有部署。
 func (d *Deployer) Update(ctx context.Context, deploymentID string, config DeploymentConfig) error {
 	d.mu.Lock()
 	deployment, ok := d.deployments[deploymentID]
@@ -206,7 +206,7 @@ func (d *Deployer) Update(ctx context.Context, deploymentID string, config Deplo
 	return provider.Update(ctx, deployment)
 }
 
-// Delete removes a deployment.
+// 删除一个部署。
 func (d *Deployer) Delete(ctx context.Context, deploymentID string) error {
 	d.mu.Lock()
 	deployment, ok := d.deployments[deploymentID]
@@ -233,7 +233,7 @@ func (d *Deployer) Delete(ctx context.Context, deploymentID string) error {
 	return nil
 }
 
-// Scale scales a deployment.
+// 缩放一个部署。
 func (d *Deployer) Scale(ctx context.Context, deploymentID string, replicas int) error {
 	d.mu.RLock()
 	deployment, ok := d.deployments[deploymentID]
@@ -266,7 +266,7 @@ func (d *Deployer) Scale(ctx context.Context, deploymentID string, replicas int)
 	return nil
 }
 
-// GetDeployment returns a deployment by ID.
+// 得到部署返回一个部署的ID。
 func (d *Deployer) GetDeployment(deploymentID string) (*Deployment, error) {
 	d.mu.RLock()
 	defer d.mu.RUnlock()
@@ -278,7 +278,7 @@ func (d *Deployer) GetDeployment(deploymentID string) (*Deployment, error) {
 	return deployment, nil
 }
 
-// ListDeployments returns all deployments.
+// 列表调度返回所有部署 。
 func (d *Deployer) ListDeployments() []*Deployment {
 	d.mu.RLock()
 	defer d.mu.RUnlock()
@@ -290,7 +290,7 @@ func (d *Deployer) ListDeployments() []*Deployment {
 	return result
 }
 
-// DeployOptions configures deployment.
+// 部署选项配置部署 。
 type DeployOptions struct {
 	Name      string
 	AgentID   string
@@ -305,7 +305,7 @@ func generateDeploymentID() string {
 	return fmt.Sprintf("dep_%d", time.Now().UnixNano())
 }
 
-// ExportManifest exports deployment as K8s manifest.
+// 按 K8s 显示的“出口管理”出口部署。
 func (d *Deployer) ExportManifest(deploymentID string) ([]byte, error) {
 	deployment, err := d.GetDeployment(deploymentID)
 	if err != nil {

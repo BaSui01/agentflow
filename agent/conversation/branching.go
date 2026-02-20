@@ -1,4 +1,4 @@
-// Package conversation provides conversation management with branching and rollback.
+// 软件包对话提供对话管理,提供分行和回滚.
 package conversation
 
 import (
@@ -10,7 +10,7 @@ import (
 	"github.com/BaSui01/agentflow/llm"
 )
 
-// ConversationState represents the state of a conversation at a point in time.
+// 对话状态(Conversation State)代表时间点的对话状态.
 type ConversationState struct {
 	ID        string         `json:"id"`
 	ParentID  string         `json:"parent_id,omitempty"`
@@ -20,7 +20,7 @@ type ConversationState struct {
 	Label     string         `json:"label,omitempty"`
 }
 
-// Branch represents a conversation branch.
+// 分会代表谈话分会.
 type Branch struct {
 	ID          string               `json:"id"`
 	Name        string               `json:"name"`
@@ -31,7 +31,7 @@ type Branch struct {
 	IsActive    bool                 `json:"is_active"`
 }
 
-// ConversationTree manages conversation history with branching.
+// 对话 树用分支管理对话历史.
 type ConversationTree struct {
 	ID           string             `json:"id"`
 	RootState    *ConversationState `json:"root_state"`
@@ -41,7 +41,7 @@ type ConversationTree struct {
 	stateCounter int
 }
 
-// NewConversationTree creates a new conversation tree.
+// 新建组合 树创造出一棵新的对话树.
 func NewConversationTree(id string) *ConversationTree {
 	rootState := &ConversationState{
 		ID:        "state_0",
@@ -67,7 +67,7 @@ func NewConversationTree(id string) *ConversationTree {
 	}
 }
 
-// AddMessage adds a message to the active branch.
+// 添加 Message 为活动分支添加了消息 。
 func (t *ConversationTree) AddMessage(msg llm.Message) *ConversationState {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -77,10 +77,10 @@ func (t *ConversationTree) AddMessage(msg llm.Message) *ConversationState {
 		return nil
 	}
 
-	// Get current state
+	// 获取当前状态
 	currentState := branch.States[len(branch.States)-1]
 
-	// Create new state with the message
+	// 用信件创建新状态
 	t.stateCounter++
 	newState := &ConversationState{
 		ID:        fmt.Sprintf("state_%d", t.stateCounter),
@@ -96,7 +96,7 @@ func (t *ConversationTree) AddMessage(msg llm.Message) *ConversationState {
 	return newState
 }
 
-// GetCurrentState returns the current state of the active branch.
+// GetCurentState 返回活动分支当前状态 。
 func (t *ConversationTree) GetCurrentState() *ConversationState {
 	t.mu.RLock()
 	defer t.mu.RUnlock()
@@ -109,7 +109,7 @@ func (t *ConversationTree) GetCurrentState() *ConversationState {
 	return branch.States[len(branch.States)-1]
 }
 
-// GetMessages returns all messages in the current state.
+// GetMessages 返回当前状态下的所有信件 。
 func (t *ConversationTree) GetMessages() []llm.Message {
 	state := t.GetCurrentState()
 	if state == nil {
@@ -118,7 +118,7 @@ func (t *ConversationTree) GetMessages() []llm.Message {
 	return state.Messages
 }
 
-// Fork creates a new branch from the current state.
+// 叉从当前状态创建出一个新的分支.
 func (t *ConversationTree) Fork(branchName string) (*Branch, error) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -127,7 +127,7 @@ func (t *ConversationTree) Fork(branchName string) (*Branch, error) {
 		return nil, fmt.Errorf("branch %s already exists", branchName)
 	}
 
-	// Get current state
+	// 获取当前状态
 	currentBranch := t.Branches[t.ActiveBranch]
 	if currentBranch == nil {
 		return nil, fmt.Errorf("no active branch")
@@ -135,7 +135,7 @@ func (t *ConversationTree) Fork(branchName string) (*Branch, error) {
 
 	currentState := currentBranch.States[len(currentBranch.States)-1]
 
-	// Create fork state
+	// 创建分叉状态
 	t.stateCounter++
 	forkState := &ConversationState{
 		ID:        fmt.Sprintf("state_%d", t.stateCounter),
@@ -146,7 +146,7 @@ func (t *ConversationTree) Fork(branchName string) (*Branch, error) {
 		Metadata:  make(map[string]any),
 	}
 
-	// Create new branch
+	// 创建新分支
 	newBranch := &Branch{
 		ID:          branchName,
 		Name:        branchName,
@@ -161,7 +161,7 @@ func (t *ConversationTree) Fork(branchName string) (*Branch, error) {
 	return newBranch, nil
 }
 
-// SwitchBranch switches to a different branch.
+// 切换Branch切换到不同的分支.
 func (t *ConversationTree) SwitchBranch(branchName string) error {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -171,19 +171,19 @@ func (t *ConversationTree) SwitchBranch(branchName string) error {
 		return fmt.Errorf("branch %s not found", branchName)
 	}
 
-	// Deactivate current branch
+	// 取消当前分支
 	if currentBranch := t.Branches[t.ActiveBranch]; currentBranch != nil {
 		currentBranch.IsActive = false
 	}
 
-	// Activate new branch
+	// 启用新分支
 	branch.IsActive = true
 	t.ActiveBranch = branchName
 
 	return nil
 }
 
-// Rollback rolls back to a previous state in the current branch.
+// 后滚回当前分行的上个状态.
 func (t *ConversationTree) Rollback(stateID string) error {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -193,7 +193,7 @@ func (t *ConversationTree) Rollback(stateID string) error {
 		return fmt.Errorf("no active branch")
 	}
 
-	// Find state index
+	// 查找状态索引
 	stateIdx := -1
 	for i, state := range branch.States {
 		if state.ID == stateID {
@@ -206,14 +206,14 @@ func (t *ConversationTree) Rollback(stateID string) error {
 		return fmt.Errorf("state %s not found in branch %s", stateID, t.ActiveBranch)
 	}
 
-	// Truncate states after the rollback point
+	// 倒转点后断线状态
 	branch.States = branch.States[:stateIdx+1]
 	branch.UpdatedAt = time.Now()
 
 	return nil
 }
 
-// RollbackN rolls back N states.
+// 滚回N 滚回N州。
 func (t *ConversationTree) RollbackN(n int) error {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -233,7 +233,7 @@ func (t *ConversationTree) RollbackN(n int) error {
 	return nil
 }
 
-// GetHistory returns the state history of the current branch.
+// GetHistory还原了目前分行的州史.
 func (t *ConversationTree) GetHistory() []*ConversationState {
 	t.mu.RLock()
 	defer t.mu.RUnlock()
@@ -246,7 +246,7 @@ func (t *ConversationTree) GetHistory() []*ConversationState {
 	return branch.States
 }
 
-// ListBranches returns all branch names.
+// ListBranches 返回所有分支名称 。
 func (t *ConversationTree) ListBranches() []string {
 	t.mu.RLock()
 	defer t.mu.RUnlock()
@@ -258,7 +258,7 @@ func (t *ConversationTree) ListBranches() []string {
 	return names
 }
 
-// DeleteBranch deletes a branch (cannot delete active or main branch).
+// 删除Branch删除一个分支(不能删除活动分支或主分支).
 func (t *ConversationTree) DeleteBranch(branchName string) error {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -279,7 +279,7 @@ func (t *ConversationTree) DeleteBranch(branchName string) error {
 	return nil
 }
 
-// MergeBranch merges a branch into the active branch.
+// 合并Branch将一个分支合并到活动分支.
 func (t *ConversationTree) MergeBranch(sourceBranch string) error {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -294,7 +294,7 @@ func (t *ConversationTree) MergeBranch(sourceBranch string) error {
 		return fmt.Errorf("no active branch")
 	}
 
-	// Get messages from source that aren't in target
+	// 从没有目标的来源获取消息
 	targetMsgCount := len(target.States[len(target.States)-1].Messages)
 	sourceState := source.States[len(source.States)-1]
 
@@ -302,7 +302,7 @@ func (t *ConversationTree) MergeBranch(sourceBranch string) error {
 		return nil // Nothing to merge
 	}
 
-	// Add new messages from source
+	// 从源添加新信件
 	newMessages := sourceState.Messages[targetMsgCount:]
 	for _, msg := range newMessages {
 		t.stateCounter++
@@ -322,14 +322,14 @@ func (t *ConversationTree) MergeBranch(sourceBranch string) error {
 	return nil
 }
 
-// Export exports the conversation tree to JSON.
+// 导出对话树给 JSON 。
 func (t *ConversationTree) Export() ([]byte, error) {
 	t.mu.RLock()
 	defer t.mu.RUnlock()
 	return json.Marshal(t)
 }
 
-// Import imports a conversation tree from JSON.
+// 导入 JSON 的谈话树 。
 func Import(data []byte) (*ConversationTree, error) {
 	var tree ConversationTree
 	if err := json.Unmarshal(data, &tree); err != nil {
@@ -338,7 +338,7 @@ func Import(data []byte) (*ConversationTree, error) {
 	return &tree, nil
 }
 
-// Snapshot creates a labeled snapshot of the current state.
+// 抓图创建当前状态的标签快照.
 func (t *ConversationTree) Snapshot(label string) *ConversationState {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -356,7 +356,7 @@ func (t *ConversationTree) Snapshot(label string) *ConversationState {
 	return currentState
 }
 
-// FindSnapshot finds a snapshot by label.
+// FindSnapshot通过标签找到快照.
 func (t *ConversationTree) FindSnapshot(label string) *ConversationState {
 	t.mu.RLock()
 	defer t.mu.RUnlock()
@@ -371,21 +371,21 @@ func (t *ConversationTree) FindSnapshot(label string) *ConversationState {
 	return nil
 }
 
-// RestoreSnapshot restores to a labeled snapshot.
+// 还原Snapshot恢复到标签快照.
 func (t *ConversationTree) RestoreSnapshot(label string) error {
 	state := t.FindSnapshot(label)
 	if state == nil {
 		return fmt.Errorf("snapshot %s not found", label)
 	}
 
-	// Find which branch contains this state
+	// 查找哪个分支包含此状态
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
 	for branchName, branch := range t.Branches {
 		for i, s := range branch.States {
 			if s.ID == state.ID {
-				// Switch to this branch and rollback
+				// 切换到此分支并回滚
 				t.ActiveBranch = branchName
 				branch.IsActive = true
 				branch.States = branch.States[:i+1]

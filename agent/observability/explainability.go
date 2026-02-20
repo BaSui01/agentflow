@@ -1,4 +1,4 @@
-// Package observability provides explainability and reasoning trace capabilities.
+// 软件包可观察性提供了可解释性和推理跟踪能力.
 package observability
 
 import (
@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-// DecisionType represents the type of decision made.
+// 决定 类型代表所作决定的类型。
 type DecisionType string
 
 const (
@@ -21,7 +21,7 @@ const (
 	DecisionBudgetThrottle DecisionType = "budget_throttle"
 )
 
-// Decision represents a single decision made by the agent.
+// 决定是代理人作出的单一决定。
 type Decision struct {
 	ID           string            `json:"id"`
 	Type         DecisionType      `json:"type"`
@@ -37,7 +37,7 @@ type Decision struct {
 	Metadata     map[string]string `json:"metadata,omitempty"`
 }
 
-// Alternative represents an alternative decision that was considered.
+// 备选案文是经过审议的备选决定。
 type Alternative struct {
 	Option    string  `json:"option"`
 	Score     float64 `json:"score"`
@@ -45,7 +45,7 @@ type Alternative struct {
 	WasChosen bool    `json:"was_chosen"`
 }
 
-// Factor represents a factor that influenced a decision.
+// 因素是一个影响决定的因素。
 type Factor struct {
 	Name        string  `json:"name"`
 	Value       float64 `json:"value"`
@@ -54,7 +54,7 @@ type Factor struct {
 	Explanation string  `json:"explanation"`
 }
 
-// ReasoningStep represents a step in the reasoning process.
+// 理性步骤代表了推理过程的一步.
 type ReasoningStep struct {
 	StepNumber int           `json:"step_number"`
 	Type       string        `json:"type"` // thought, action, observation, decision
@@ -64,7 +64,7 @@ type ReasoningStep struct {
 	Duration   time.Duration `json:"duration,omitempty"`
 }
 
-// ReasoningTrace represents a complete reasoning trace.
+// 理由 Trace代表了一个完整的推理追踪.
 type ReasoningTrace struct {
 	ID          string          `json:"id"`
 	SessionID   string          `json:"session_id"`
@@ -81,7 +81,7 @@ type ReasoningTrace struct {
 	Metadata    map[string]any  `json:"metadata,omitempty"`
 }
 
-// ExplainabilityConfig configures the explainability system.
+// 可解释性 Config 配置可解释性系统.
 type ExplainabilityConfig struct {
 	Enabled            bool          `json:"enabled"`
 	DetailLevel        string        `json:"detail_level"` // minimal, standard, verbose
@@ -91,7 +91,7 @@ type ExplainabilityConfig struct {
 	RecordFactors      bool          `json:"record_factors"`
 }
 
-// DefaultExplainabilityConfig returns sensible defaults.
+// 默认解释性 Config 返回明智的默认 。
 func DefaultExplainabilityConfig() ExplainabilityConfig {
 	return ExplainabilityConfig{
 		Enabled:            true,
@@ -103,7 +103,7 @@ func DefaultExplainabilityConfig() ExplainabilityConfig {
 	}
 }
 
-// ExplainabilityTracker tracks and stores reasoning traces.
+// 可解释性 追踪器追踪和存储推理痕迹.
 type ExplainabilityTracker struct {
 	config       ExplainabilityConfig
 	traces       map[string]*ReasoningTrace
@@ -112,7 +112,7 @@ type ExplainabilityTracker struct {
 	traceCounter int64
 }
 
-// NewExplainabilityTracker creates a new explainability tracker.
+// 新建解释性 Tracker创建了新的可解释性跟踪器.
 func NewExplainabilityTracker(config ExplainabilityConfig) *ExplainabilityTracker {
 	return &ExplainabilityTracker{
 		config:      config,
@@ -121,7 +121,7 @@ func NewExplainabilityTracker(config ExplainabilityConfig) *ExplainabilityTracke
 	}
 }
 
-// StartTrace starts a new reasoning trace.
+// 启动 Trace 开始新的推理追踪 。
 func (t *ExplainabilityTracker) StartTrace(sessionID, agentID string) *ReasoningTrace {
 	if !t.config.Enabled {
 		return nil
@@ -144,13 +144,13 @@ func (t *ExplainabilityTracker) StartTrace(sessionID, agentID string) *Reasoning
 	t.traces[trace.ID] = trace
 	t.agentTraces[agentID] = append(t.agentTraces[agentID], trace.ID)
 
-	// Cleanup old traces
+	// 清理旧的痕迹
 	t.cleanupOldTraces(agentID)
 
 	return trace
 }
 
-// AddStep adds a reasoning step to a trace.
+// 添加Step为跟踪添加了推理步骤.
 func (t *ExplainabilityTracker) AddStep(traceID string, step ReasoningStep) {
 	if !t.config.Enabled {
 		return
@@ -169,7 +169,7 @@ func (t *ExplainabilityTracker) AddStep(traceID string, step ReasoningStep) {
 	trace.Steps = append(trace.Steps, step)
 }
 
-// RecordDecision records a decision in a trace.
+// 记录决定记录在一处。
 func (t *ExplainabilityTracker) RecordDecision(traceID string, decision Decision) {
 	if !t.config.Enabled {
 		return
@@ -188,7 +188,7 @@ func (t *ExplainabilityTracker) RecordDecision(traceID string, decision Decision
 		decision.ID = fmt.Sprintf("decision_%d", len(trace.Decisions)+1)
 	}
 
-	// Filter based on config
+	// 基于配置的过滤
 	if !t.config.RecordAlternatives {
 		decision.Alternatives = nil
 	}
@@ -199,7 +199,7 @@ func (t *ExplainabilityTracker) RecordDecision(traceID string, decision Decision
 	trace.Decisions = append(trace.Decisions, decision)
 }
 
-// EndTrace ends a reasoning trace.
+// EndTrace结束推理追踪.
 func (t *ExplainabilityTracker) EndTrace(traceID string, success bool, output, errorMsg string) {
 	if !t.config.Enabled {
 		return
@@ -220,14 +220,14 @@ func (t *ExplainabilityTracker) EndTrace(traceID string, success bool, output, e
 	trace.Error = errorMsg
 }
 
-// GetTrace retrieves a trace by ID.
+// Get Trace通过身份追踪到线索
 func (t *ExplainabilityTracker) GetTrace(traceID string) *ReasoningTrace {
 	t.mu.RLock()
 	defer t.mu.RUnlock()
 	return t.traces[traceID]
 }
 
-// GetAgentTraces retrieves all traces for an agent.
+// Get AgentTraces为特工检索所有痕迹.
 func (t *ExplainabilityTracker) GetAgentTraces(agentID string) []*ReasoningTrace {
 	t.mu.RLock()
 	defer t.mu.RUnlock()
@@ -242,7 +242,7 @@ func (t *ExplainabilityTracker) GetAgentTraces(agentID string) []*ReasoningTrace
 	return traces
 }
 
-// ExplainDecision generates a human-readable explanation for a decision.
+// 解释决定为决定产生人能读取的解释.
 func (t *ExplainabilityTracker) ExplainDecision(decision Decision) string {
 	explanation := fmt.Sprintf("Decision: %s\n", decision.Description)
 	explanation += fmt.Sprintf("Type: %s\n", decision.Type)
@@ -275,7 +275,7 @@ func (t *ExplainabilityTracker) ExplainDecision(decision Decision) string {
 	return explanation
 }
 
-// GenerateAuditReport generates an audit report for a trace.
+// 生成审计报告以进行追踪。
 func (t *ExplainabilityTracker) GenerateAuditReport(traceID string) (*AuditReport, error) {
 	trace := t.GetTrace(traceID)
 	if trace == nil {
@@ -299,7 +299,7 @@ func (t *ExplainabilityTracker) GenerateAuditReport(traceID string) (*AuditRepor
 		report.DecisionSummary[d.Type]++
 	}
 
-	// Generate timeline
+	// 生成时间表
 	for _, step := range trace.Steps {
 		report.Timeline = append(report.Timeline, TimelineEvent{
 			Timestamp:   step.Timestamp,
@@ -335,7 +335,7 @@ func (t *ExplainabilityTracker) cleanupOldTraces(agentID string) {
 		}
 	}
 
-	// Limit number of traces per agent
+	// 限制每个剂的痕量
 	if len(validIDs) > t.config.MaxTracesPerAgent {
 		for _, id := range validIDs[:len(validIDs)-t.config.MaxTracesPerAgent] {
 			delete(t.traces, id)
@@ -346,7 +346,7 @@ func (t *ExplainabilityTracker) cleanupOldTraces(agentID string) {
 	t.agentTraces[agentID] = validIDs
 }
 
-// AuditReport represents an audit report for a trace.
+// 审计报告是一份跟踪审计报告。
 type AuditReport struct {
 	TraceID         string               `json:"trace_id"`
 	SessionID       string               `json:"session_id"`
@@ -361,14 +361,14 @@ type AuditReport struct {
 	Timeline        []TimelineEvent      `json:"timeline"`
 }
 
-// TimelineEvent represents an event in the audit timeline.
+// 时间线Event代表审计时间表中的一个事件.
 type TimelineEvent struct {
 	Timestamp   time.Time `json:"timestamp"`
 	Type        string    `json:"type"`
 	Description string    `json:"description"`
 }
 
-// Export exports the audit report to JSON.
+// 将审计报告出口给JSON。
 func (r *AuditReport) Export() ([]byte, error) {
 	return json.Marshal(r)
 }

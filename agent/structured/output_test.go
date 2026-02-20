@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// mockProvider is a mock LLM provider for testing.
+// 模拟提供商是用于测试的模拟LLM供应商.
 type mockProvider struct {
 	response string
 	err      error
@@ -47,7 +47,7 @@ func (m *mockProvider) ListModels(ctx context.Context) ([]llm.Model, error) {
 	return nil, nil
 }
 
-// mockStructuredProvider supports native structured output.
+// 模拟Structured Provider支持本地结构输出.
 type mockStructuredProvider struct {
 	mockProvider
 }
@@ -56,7 +56,7 @@ func (m *mockStructuredProvider) SupportsStructuredOutput() bool {
 	return true
 }
 
-// TestTaskResult is a test struct for structured output.
+// TestTaskResult是结构化输出的测试结构.
 type TestTaskResult struct {
 	Status  string   `json:"status" jsonschema:"enum=success,failure,pending,required"`
 	Message string   `json:"message" jsonschema:"required"`
@@ -216,7 +216,7 @@ func TestStructuredOutput_Parse(t *testing.T) {
 		so, err := NewStructuredOutput[TestTaskResult](provider)
 		require.NoError(t, err)
 
-		// Score exceeds maximum
+		// 积分超过上限
 		_, err = so.Parse(`{"status":"success","message":"OK","score":150,"tags":["a"]}`)
 		assert.Error(t, err)
 	})
@@ -361,7 +361,7 @@ func TestParseResult_IsValid(t *testing.T) {
 	})
 }
 
-// TestComplexStruct tests structured output with nested types.
+// TestComplexStruct 测试结构化输出并有嵌入类型.
 type TestComplexStruct struct {
 	ID       int                    `json:"id" jsonschema:"required"`
 	Name     string                 `json:"name" jsonschema:"required,minLength=1"`
@@ -407,7 +407,7 @@ func TestStructuredOutput_ComplexTypes(t *testing.T) {
 	})
 }
 
-// Benchmark tests
+// 基准测试
 func BenchmarkStructuredOutput_Parse(b *testing.B) {
 	provider := &mockProvider{}
 	so, _ := NewStructuredOutput[TestTaskResult](provider)
@@ -446,7 +446,7 @@ func BenchmarkStructuredOutput_ValidateValue(b *testing.B) {
 	}
 }
 
-// Test schema generation for various types
+// 各种类型的测试计划生成
 func TestStructuredOutput_SchemaGeneration(t *testing.T) {
 	provider := &mockProvider{}
 
@@ -488,7 +488,7 @@ func TestStructuredOutput_SchemaGeneration(t *testing.T) {
 	})
 }
 
-// Test JSON marshaling of ParseResult
+// 测试 JSON 集合解析器
 func TestParseResult_JSON(t *testing.T) {
 	result := &ParseResult[TestTaskResult]{
 		Value: &TestTaskResult{

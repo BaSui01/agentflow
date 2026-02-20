@@ -8,12 +8,12 @@ import (
 )
 
 // MemoryKind 记忆类型
-// Deprecated: Use types.MemoryCategory instead for new code.
-// This alias is kept for backward compatibility.
+// 折旧:使用类型。 用于新代码的内存类型 。
+// 此别名用于后向相容性 。
 type MemoryKind = types.MemoryCategory
 
-// Memory kind constants - mapped to unified types.MemoryCategory
-// Deprecated: Use types.MemoryWorking, types.MemoryEpisodic, etc.
+// 记忆类型常数 - 映射到统一类型. 内存类型
+// 折旧:使用类型。 记忆工作,类型。 记忆 Essodic等.
 const (
 	MemoryShortTerm = types.MemoryWorking   // 短期记忆 -> Working
 	MemoryWorking   = types.MemoryWorking   // 工作记忆
@@ -24,7 +24,7 @@ const (
 )
 
 // MemoryRecord 统一记忆结构
-// Uses types.MemoryCategory for the Kind field to ensure consistency.
+// 用途类型。 用于 Kind 字段的内存类型,以确保一致性 。
 type MemoryRecord struct {
 	ID        string               `json:"id"`
 	AgentID   string               `json:"agent_id"`

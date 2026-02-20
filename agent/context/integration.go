@@ -1,4 +1,4 @@
-// Package context provides agent integration helpers.
+// 包上下文提供代理集成帮助.
 package context
 
 import (
@@ -8,8 +8,8 @@ import (
 	"go.uber.org/zap"
 )
 
-// AgentContextManager is the standard context management component for agents.
-// It wraps Engineer with agent-specific functionality.
+// Agent ContextManager是代理的标准上下文管理组件.
+// 它将工程师包裹在具有特定代理功能的容器上.
 type AgentContextManager struct {
 	engineer      *Engineer
 	summaryFunc   func(context.Context, []types.Message) (string, error)
@@ -17,22 +17,22 @@ type AgentContextManager struct {
 	enableMetrics bool
 }
 
-// AgentContextConfig configures the agent context manager.
+// Agent ContextConfig 配置代理上下文管理器.
 type AgentContextConfig struct {
-	// MaxContextTokens is the model's context window size.
+	// Max ContextTokens是模型的上下文窗口大小.
 	MaxContextTokens int `json:"max_context_tokens"`
 
-	// ReserveForOutput reserves tokens for model output.
+	// 储备输出为模型输出保留符.
 	ReserveForOutput int `json:"reserve_for_output"`
 
-	// Strategy determines compression behavior.
+	// 策略决定了压缩行为.
 	Strategy Strategy `json:"strategy"`
 
-	// EnableMetrics enables compression metrics collection.
+	// 启用度量衡允许压缩度量衡收集 。
 	EnableMetrics bool `json:"enable_metrics"`
 }
 
-// DefaultAgentContextConfig returns defaults for common models.
+// 默认 Agent ContextConfig 返回常见模型的默认值。
 func DefaultAgentContextConfig(modelFamily string) AgentContextConfig {
 	switch modelFamily {
 	case "gpt-4", "gpt-4o":
@@ -66,7 +66,7 @@ func DefaultAgentContextConfig(modelFamily string) AgentContextConfig {
 	}
 }
 
-// NewAgentContextManager creates a context manager for an agent.
+// NewAgent ContextManager为代理创建上下文管理器.
 func NewAgentContextManager(cfg AgentContextConfig, logger *zap.Logger) *AgentContextManager {
 	engineerCfg := Config{
 		MaxContextTokens: cfg.MaxContextTokens,
@@ -85,12 +85,12 @@ func NewAgentContextManager(cfg AgentContextConfig, logger *zap.Logger) *AgentCo
 	}
 }
 
-// SetSummaryProvider sets the LLM-based summary function.
+// SetSummary Provider 设置基于 LLM 的汇总函数.
 func (m *AgentContextManager) SetSummaryProvider(fn func(context.Context, []types.Message) (string, error)) {
 	m.summaryFunc = fn
 }
 
-// PrepareMessages optimizes messages before sending to LLM.
+// ReadyMessages在发送到 LLM 之前优化消息.
 func (m *AgentContextManager) PrepareMessages(
 	ctx context.Context,
 	messages []types.Message,
@@ -99,33 +99,33 @@ func (m *AgentContextManager) PrepareMessages(
 	return m.engineer.MustFit(ctx, messages, currentQuery)
 }
 
-// GetStatus returns current context status.
+// GetState 返回当前上下文状态 。
 func (m *AgentContextManager) GetStatus(messages []types.Message) Status {
 	return m.engineer.GetStatus(messages)
 }
 
-// CanAddMessage checks if a message can be added without overflow.
+// CanAddMessage 检查是否可以不溢出添加消息 。
 func (m *AgentContextManager) CanAddMessage(messages []types.Message, newMsg types.Message) bool {
 	return m.engineer.CanAddMessage(messages, newMsg)
 }
 
-// EstimateTokens returns token count for messages.
+// 估计Tokens返回消息的符号数 。
 func (m *AgentContextManager) EstimateTokens(messages []types.Message) int {
 	return m.engineer.EstimateTokens(messages)
 }
 
-// GetStats returns compression statistics.
+// GetStats 返回压缩统计.
 func (m *AgentContextManager) GetStats() Stats {
 	return m.engineer.GetStats()
 }
 
-// ShouldCompress checks if compression is recommended.
+// 如果建议压缩, 则应该压缩检查 。
 func (m *AgentContextManager) ShouldCompress(messages []types.Message) bool {
 	status := m.engineer.GetStatus(messages)
 	return status.Level >= LevelNormal
 }
 
-// GetRecommendation returns a human-readable recommendation.
+// Get Agreement return a human可读的推荐。
 func (m *AgentContextManager) GetRecommendation(messages []types.Message) string {
 	status := m.engineer.GetStatus(messages)
 	return status.Recommendation

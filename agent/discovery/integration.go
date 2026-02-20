@@ -10,62 +10,62 @@ import (
 	"go.uber.org/zap"
 )
 
-// AgentCapabilityProvider defines the interface for agents that provide capabilities.
+// Agent Capability Provider定义了提供能力的代理的接口.
 type AgentCapabilityProvider interface {
-	// ID returns the agent's unique identifier.
+	// ID 返回代理的唯一标识符 。
 	ID() string
 
-	// Name returns the agent's name.
+	// 名称返回代理名.
 	Name() string
 
-	// GetCapabilities returns the agent's capabilities.
+	// Get Capabilitys 返回代理的能力.
 	GetCapabilities() []a2a.Capability
 
-	// GetAgentCard returns the agent's A2A card.
+	// Get AgentCard返回代理的A2A卡.
 	GetAgentCard() *a2a.AgentCard
 }
 
-// AgentDiscoveryIntegration provides integration between agents and the discovery system.
+// Agent Discovery Introduction提供物剂与发现系统之间的融合.
 type AgentDiscoveryIntegration struct {
 	service *DiscoveryService
 	logger  *zap.Logger
 
-	// Registered agents
+	// 注册代理人
 	agents   map[string]AgentCapabilityProvider
 	agentsMu sync.RWMutex
 
-	// Load reporters
+	// 装入记者
 	loadReporters   map[string]func() float64
 	loadReportersMu sync.RWMutex
 
-	// Configuration
+	// 配置
 	config *IntegrationConfig
 
-	// State
+	// 状态
 	running bool
 	done    chan struct{}
 	wg      sync.WaitGroup
 }
 
-// IntegrationConfig holds configuration for agent discovery integration.
+// 集成Config持有代理发现集成的配置.
 type IntegrationConfig struct {
-	// AutoRegister enables automatic registration of agents.
+	// 自动登记使代理自动登记成为可能。
 	AutoRegister bool `json:"auto_register"`
 
-	// AutoUnregister enables automatic unregistration when agents stop.
+	// 自动注销记录器允许在代理停止时自动注销登记 。
 	AutoUnregister bool `json:"auto_unregister"`
 
-	// LoadReportInterval is the interval for reporting agent load.
+	// 加载报告Interval是报告代理加载的间隔.
 	LoadReportInterval time.Duration `json:"load_report_interval"`
 
-	// DefaultEndpoint is the default endpoint for local agents.
+	// 默认端点是本地代理的默认端点 。
 	DefaultEndpoint string `json:"default_endpoint"`
 
-	// DefaultVersion is the default version for agents.
+	// 默认版本是代理的默认版本.
 	DefaultVersion string `json:"default_version"`
 }
 
-// DefaultIntegrationConfig returns an IntegrationConfig with sensible defaults.
+// 默认集成Config 返回带有合理默认的集成Config 。
 func DefaultIntegrationConfig() *IntegrationConfig {
 	return &IntegrationConfig{
 		AutoRegister:       true,
@@ -76,7 +76,7 @@ func DefaultIntegrationConfig() *IntegrationConfig {
 	}
 }
 
-// NewAgentDiscoveryIntegration creates a new agent discovery integration.
+// NewAgent Discovery Introduction 创造了新的代理发现集成.
 func NewAgentDiscoveryIntegration(service *DiscoveryService, config *IntegrationConfig, logger *zap.Logger) *AgentDiscoveryIntegration {
 	if config == nil {
 		config = DefaultIntegrationConfig()
@@ -95,13 +95,13 @@ func NewAgentDiscoveryIntegration(service *DiscoveryService, config *Integration
 	}
 }
 
-// Start starts the integration.
+// 开始整合
 func (i *AgentDiscoveryIntegration) Start(ctx context.Context) error {
 	if i.running {
 		return fmt.Errorf("integration already running")
 	}
 
-	// Start load reporting loop
+	// 开始负载报告循环
 	i.wg.Add(1)
 	go i.loadReportLoop()
 
@@ -111,7 +111,7 @@ func (i *AgentDiscoveryIntegration) Start(ctx context.Context) error {
 	return nil
 }
 
-// Stop stops the integration.
+// 停止停止整合。
 func (i *AgentDiscoveryIntegration) Stop(ctx context.Context) error {
 	if !i.running {
 		return nil
@@ -120,7 +120,7 @@ func (i *AgentDiscoveryIntegration) Stop(ctx context.Context) error {
 	close(i.done)
 	i.wg.Wait()
 
-	// Unregister all agents if auto-unregister is enabled
+	// 启用自动注销注册时取消所有代理
 	if i.config.AutoUnregister {
 		i.agentsMu.RLock()
 		agentIDs := make([]string, 0, len(i.agents))
@@ -142,7 +142,7 @@ func (i *AgentDiscoveryIntegration) Stop(ctx context.Context) error {
 	return nil
 }
 
-// RegisterAgent registers an agent with the discovery system.
+// 物剂在发现系统登记。
 func (i *AgentDiscoveryIntegration) RegisterAgent(ctx context.Context, agent AgentCapabilityProvider) error {
 	if agent == nil {
 		return fmt.Errorf("agent is nil")
@@ -150,7 +150,7 @@ func (i *AgentDiscoveryIntegration) RegisterAgent(ctx context.Context, agent Age
 
 	agentID := agent.ID()
 
-	// Check if already registered
+	// 检查是否已经注册
 	i.agentsMu.RLock()
 	_, exists := i.agents[agentID]
 	i.agentsMu.RUnlock()
@@ -159,15 +159,15 @@ func (i *AgentDiscoveryIntegration) RegisterAgent(ctx context.Context, agent Age
 		return fmt.Errorf("agent %s already registered", agentID)
 	}
 
-	// Create agent info
+	// 创建代理信息
 	info := i.createAgentInfo(agent)
 
-	// Register with discovery service
+	// 有发现服务的登记
 	if err := i.service.RegisterAgent(ctx, info); err != nil {
 		return fmt.Errorf("failed to register agent with discovery service: %w", err)
 	}
 
-	// Store agent reference
+	// 存储代理参考
 	i.agentsMu.Lock()
 	i.agents[agentID] = agent
 	i.agentsMu.Unlock()
@@ -180,19 +180,19 @@ func (i *AgentDiscoveryIntegration) RegisterAgent(ctx context.Context, agent Age
 	return nil
 }
 
-// UnregisterAgent unregisters an agent from the discovery system.
+// 未注册的代理 未经注册 从发现系统。
 func (i *AgentDiscoveryIntegration) UnregisterAgent(ctx context.Context, agentID string) error {
-	// Remove from local storage
+	// 从本地存储中删除
 	i.agentsMu.Lock()
 	delete(i.agents, agentID)
 	i.agentsMu.Unlock()
 
-	// Remove load reporter
+	// 删除装入记录器
 	i.loadReportersMu.Lock()
 	delete(i.loadReporters, agentID)
 	i.loadReportersMu.Unlock()
 
-	// Unregister from discovery service
+	// 发现服务未注册
 	if err := i.service.UnregisterAgent(ctx, agentID); err != nil {
 		return fmt.Errorf("failed to unregister agent from discovery service: %w", err)
 	}
@@ -202,7 +202,7 @@ func (i *AgentDiscoveryIntegration) UnregisterAgent(ctx context.Context, agentID
 	return nil
 }
 
-// UpdateAgentCapabilities updates an agent's capabilities in the discovery system.
+// 更新代理能力更新一个代理在发现系统中的能力.
 func (i *AgentDiscoveryIntegration) UpdateAgentCapabilities(ctx context.Context, agentID string) error {
 	i.agentsMu.RLock()
 	agent, exists := i.agents[agentID]
@@ -212,10 +212,10 @@ func (i *AgentDiscoveryIntegration) UpdateAgentCapabilities(ctx context.Context,
 		return fmt.Errorf("agent %s not registered", agentID)
 	}
 
-	// Create updated agent info
+	// 创建更新代理信息
 	info := i.createAgentInfo(agent)
 
-	// Update in registry
+	// 登记册中的最新情况
 	if reg, ok := i.service.Registry().(*CapabilityRegistry); ok {
 		if err := reg.UpdateAgent(ctx, info); err != nil {
 			return fmt.Errorf("failed to update agent: %w", err)
@@ -227,7 +227,7 @@ func (i *AgentDiscoveryIntegration) UpdateAgentCapabilities(ctx context.Context,
 	return nil
 }
 
-// SetLoadReporter sets a load reporter function for an agent.
+// SetLoadReporter为代理设置了负载报告器功能.
 func (i *AgentDiscoveryIntegration) SetLoadReporter(agentID string, reporter func() float64) {
 	i.loadReportersMu.Lock()
 	defer i.loadReportersMu.Unlock()
@@ -235,32 +235,32 @@ func (i *AgentDiscoveryIntegration) SetLoadReporter(agentID string, reporter fun
 	i.loadReporters[agentID] = reporter
 }
 
-// RecordExecution records an execution result for an agent's capability.
+// RecordExecution 记录一个代理机能力的执行结果.
 func (i *AgentDiscoveryIntegration) RecordExecution(ctx context.Context, agentID, capabilityName string, success bool, latency time.Duration) error {
 	return i.service.RecordExecution(ctx, agentID, capabilityName, success, latency)
 }
 
-// FindAgentForTask finds the best agent for a task.
+// Find AgentForTask 找到任务的最佳代理 。
 func (i *AgentDiscoveryIntegration) FindAgentForTask(ctx context.Context, taskDescription string, requiredCapabilities []string) (*AgentInfo, error) {
 	return i.service.FindAgent(ctx, taskDescription, requiredCapabilities)
 }
 
-// FindAgentsForTask finds multiple agents for a task.
+// FindAgentsForTask为任务找到多个代理.
 func (i *AgentDiscoveryIntegration) FindAgentsForTask(ctx context.Context, req *MatchRequest) ([]*MatchResult, error) {
 	return i.service.FindAgents(ctx, req)
 }
 
-// ComposeAgentsForTask creates a composition of agents for a complex task.
+// Confose AgentsForTask为复杂的任务创建了代理组成.
 func (i *AgentDiscoveryIntegration) ComposeAgentsForTask(ctx context.Context, req *CompositionRequest) (*CompositionResult, error) {
 	return i.service.ComposeCapabilities(ctx, req)
 }
 
-// createAgentInfo creates an AgentInfo from an AgentCapabilityProvider.
+// 创建 AgentInfo 从 Agent Capability Provider 创建 AgentInfo。
 func (i *AgentDiscoveryIntegration) createAgentInfo(agent AgentCapabilityProvider) *AgentInfo {
-	// Try to get agent card
+	// 尝试获取代理卡
 	card := agent.GetAgentCard()
 	if card == nil {
-		// Create a basic card
+		// 创建基本牌
 		card = a2a.NewAgentCard(
 			agent.ID(),
 			agent.Name(),
@@ -268,13 +268,13 @@ func (i *AgentDiscoveryIntegration) createAgentInfo(agent AgentCapabilityProvide
 			i.config.DefaultVersion,
 		)
 
-		// Add capabilities
+		// 添加能力
 		for _, cap := range agent.GetCapabilities() {
 			card.AddCapability(cap.Name, cap.Description, cap.Type)
 		}
 	}
 
-	// Create capability info
+	// 创建能力信息
 	capabilities := make([]CapabilityInfo, 0)
 	for _, cap := range agent.GetCapabilities() {
 		capabilities = append(capabilities, CapabilityInfo{
@@ -294,7 +294,7 @@ func (i *AgentDiscoveryIntegration) createAgentInfo(agent AgentCapabilityProvide
 	}
 }
 
-// loadReportLoop periodically reports agent loads.
+// 载入 ReportLoop 定期报告代理载荷。
 func (i *AgentDiscoveryIntegration) loadReportLoop() {
 	defer i.wg.Done()
 
@@ -311,7 +311,7 @@ func (i *AgentDiscoveryIntegration) loadReportLoop() {
 	}
 }
 
-// reportLoads reports loads for all registered agents.
+// 报告LOADs报告所有注册代理的装入量。
 func (i *AgentDiscoveryIntegration) reportLoads() {
 	i.loadReportersMu.RLock()
 	reporters := make(map[string]func() float64)
@@ -332,7 +332,7 @@ func (i *AgentDiscoveryIntegration) reportLoads() {
 	}
 }
 
-// GetRegisteredAgents returns all registered agents.
+// GetRegistered Agents 返回所有注册代理.
 func (i *AgentDiscoveryIntegration) GetRegisteredAgents() []string {
 	i.agentsMu.RLock()
 	defer i.agentsMu.RUnlock()
@@ -344,7 +344,7 @@ func (i *AgentDiscoveryIntegration) GetRegisteredAgents() []string {
 	return ids
 }
 
-// IsAgentRegistered checks if an agent is registered.
+// 代理人注册的检查。
 func (i *AgentDiscoveryIntegration) IsAgentRegistered(agentID string) bool {
 	i.agentsMu.RLock()
 	defer i.agentsMu.RUnlock()
@@ -353,33 +353,33 @@ func (i *AgentDiscoveryIntegration) IsAgentRegistered(agentID string) bool {
 	return exists
 }
 
-// DiscoveryService returns the underlying discovery service.
+// Discovery Service返回基础的发现服务.
 func (i *AgentDiscoveryIntegration) DiscoveryService() *DiscoveryService {
 	return i.service
 }
 
-// Global integration instance
+// 全球一体化实例
 var (
 	globalIntegration     *AgentDiscoveryIntegration
 	globalIntegrationOnce sync.Once
 	globalIntegrationMu   sync.RWMutex
 )
 
-// InitGlobalIntegration initializes the global agent discovery integration.
+// InitGlobal集成初始化了全球物剂发现集成.
 func InitGlobalIntegration(service *DiscoveryService, config *IntegrationConfig, logger *zap.Logger) {
 	globalIntegrationOnce.Do(func() {
 		globalIntegration = NewAgentDiscoveryIntegration(service, config, logger)
 	})
 }
 
-// GetGlobalIntegration returns the global agent discovery integration.
+// Get Global Introduction返回全球代理发现集成.
 func GetGlobalIntegration() *AgentDiscoveryIntegration {
 	globalIntegrationMu.RLock()
 	defer globalIntegrationMu.RUnlock()
 	return globalIntegration
 }
 
-// SetGlobalIntegration sets the global agent discovery integration.
+// SetGlobal Introduction设定了全球物剂发现集成.
 func SetGlobalIntegration(integration *AgentDiscoveryIntegration) {
 	globalIntegrationMu.Lock()
 	defer globalIntegrationMu.Unlock()

@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// Test structs for schema generation
+// 用于生成计划的测试结构
 
 type SimpleStruct struct {
 	Name    string `json:"name"`
@@ -87,13 +87,13 @@ func TestSchemaGenerator_SimpleStruct(t *testing.T) {
 	assert.Equal(t, TypeObject, schema.Type)
 	assert.Len(t, schema.Properties, 4) // 4 exported fields
 
-	// Check field types
+	// 检查字段类型
 	assert.Equal(t, TypeString, schema.Properties["name"].Type)
 	assert.Equal(t, TypeInteger, schema.Properties["age"].Type)
 	assert.Equal(t, TypeBoolean, schema.Properties["active"].Type)
 	assert.Equal(t, TypeNumber, schema.Properties["Score"].Type) // No json tag, uses field name
 
-	// Unexported field should not be present
+	// 未导出字段不应存在
 	assert.Nil(t, schema.Properties["private"])
 }
 
@@ -104,39 +104,39 @@ func TestSchemaGenerator_StructWithTags(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, TypeObject, schema.Type)
 
-	// Check required fields
+	// 检查需要的字段
 	assert.Contains(t, schema.Required, "status")
 	assert.Contains(t, schema.Required, "message")
 	assert.NotContains(t, schema.Required, "score")
 
-	// Check enum
+	// 检查enum
 	statusSchema := schema.Properties["status"]
 	assert.Equal(t, []any{"success", "failure", "pending"}, statusSchema.Enum)
 
-	// Check description
+	// 检查描述
 	messageSchema := schema.Properties["message"]
 	assert.Equal(t, "The result message", messageSchema.Description)
 
-	// Check numeric constraints
+	// 检查数字限制
 	scoreSchema := schema.Properties["score"]
 	require.NotNil(t, scoreSchema.Minimum)
 	require.NotNil(t, scoreSchema.Maximum)
 	assert.Equal(t, 0.0, *scoreSchema.Minimum)
 	assert.Equal(t, 100.0, *scoreSchema.Maximum)
 
-	// Check array constraints
+	// 检查数组限制
 	tagsSchema := schema.Properties["tags"]
 	require.NotNil(t, tagsSchema.MinItems)
 	require.NotNil(t, tagsSchema.MaxItems)
 	assert.Equal(t, 1, *tagsSchema.MinItems)
 	assert.Equal(t, 10, *tagsSchema.MaxItems)
 
-	// Check format and pattern
+	// 检查格式和模式
 	emailSchema := schema.Properties["email"]
 	assert.Equal(t, StringFormat("email"), emailSchema.Format)
 	assert.Equal(t, "^[a-z]+@[a-z]+\\.[a-z]+$", emailSchema.Pattern)
 
-	// Check default value
+	// 检查默认值
 	countSchema := schema.Properties["count"]
 	assert.Equal(t, int64(0), countSchema.Default)
 }
@@ -148,17 +148,17 @@ func TestSchemaGenerator_NestedStruct(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, TypeObject, schema.Type)
 
-	// Check nested struct
+	// 检查嵌入式结构
 	innerSchema := schema.Properties["inner"]
 	assert.Equal(t, TypeObject, innerSchema.Type)
 	assert.Len(t, innerSchema.Properties, 4)
 
-	// Check pointer to struct (should be same as non-pointer)
+	// 检查指针来构造( 应与非指针相同)
 	innerPtrSchema := schema.Properties["inner_ptr"]
 	assert.Equal(t, TypeObject, innerPtrSchema.Type)
 	assert.Len(t, innerPtrSchema.Properties, 4)
 
-	// Check required
+	// 需要检查
 	assert.Contains(t, schema.Required, "id")
 }
 
@@ -169,17 +169,17 @@ func TestSchemaGenerator_ArrayTypes(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, TypeObject, schema.Type)
 
-	// Check string array
+	// 检查字符串阵列
 	itemsSchema := schema.Properties["items"]
 	assert.Equal(t, TypeArray, itemsSchema.Type)
 	assert.Equal(t, TypeString, itemsSchema.Items.Type)
 
-	// Check int array
+	// 检查输入数组
 	numbersSchema := schema.Properties["numbers"]
 	assert.Equal(t, TypeArray, numbersSchema.Type)
 	assert.Equal(t, TypeInteger, numbersSchema.Items.Type)
 
-	// Check nested struct array
+	// 检查嵌入式结构阵列
 	nestedSchema := schema.Properties["nested"]
 	assert.Equal(t, TypeArray, nestedSchema.Type)
 	assert.Equal(t, TypeObject, nestedSchema.Items.Type)
@@ -193,19 +193,19 @@ func TestSchemaGenerator_MapTypes(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, TypeObject, schema.Type)
 
-	// Check string map
+	// 检查字符串映射
 	stringMapSchema := schema.Properties["string_map"]
 	assert.Equal(t, TypeObject, stringMapSchema.Type)
 	require.NotNil(t, stringMapSchema.AdditionalProperties)
 	assert.Equal(t, TypeString, stringMapSchema.AdditionalProperties.Schema.Type)
 
-	// Check int map
+	// 检查入图
 	intMapSchema := schema.Properties["int_map"]
 	assert.Equal(t, TypeObject, intMapSchema.Type)
 	require.NotNil(t, intMapSchema.AdditionalProperties)
 	assert.Equal(t, TypeInteger, intMapSchema.AdditionalProperties.Schema.Type)
 
-	// Check nested map
+	// 检查嵌入式地图
 	nestedMapSchema := schema.Properties["nested_map"]
 	assert.Equal(t, TypeObject, nestedMapSchema.Type)
 	require.NotNil(t, nestedMapSchema.AdditionalProperties)
@@ -244,13 +244,13 @@ func TestSchemaGenerator_StringLengthConstraints(t *testing.T) {
 func TestSchemaGenerator_Pointer(t *testing.T) {
 	g := NewSchemaGenerator()
 
-	// Pointer to basic type
+	// 指向基本类型
 	var strPtr *string
 	schema, err := g.GenerateSchema(reflect.TypeOf(strPtr))
 	require.NoError(t, err)
 	assert.Equal(t, TypeString, schema.Type)
 
-	// Pointer to struct
+	// 要构造的指针
 	var structPtr *SimpleStruct
 	schema, err = g.GenerateSchema(reflect.TypeOf(structPtr))
 	require.NoError(t, err)
@@ -261,14 +261,14 @@ func TestSchemaGenerator_Pointer(t *testing.T) {
 func TestSchemaGenerator_Slice(t *testing.T) {
 	g := NewSchemaGenerator()
 
-	// Slice of strings
+	// 字符串片断
 	var strSlice []string
 	schema, err := g.GenerateSchema(reflect.TypeOf(strSlice))
 	require.NoError(t, err)
 	assert.Equal(t, TypeArray, schema.Type)
 	assert.Equal(t, TypeString, schema.Items.Type)
 
-	// Slice of ints
+	// 一分点
 	var intSlice []int
 	schema, err = g.GenerateSchema(reflect.TypeOf(intSlice))
 	require.NoError(t, err)
@@ -279,18 +279,18 @@ func TestSchemaGenerator_Slice(t *testing.T) {
 func TestSchemaGenerator_GenerateSchemaFromValue(t *testing.T) {
 	g := NewSchemaGenerator()
 
-	// From struct value
+	// 从结构值
 	schema, err := g.GenerateSchemaFromValue(SimpleStruct{})
 	require.NoError(t, err)
 	assert.Equal(t, TypeObject, schema.Type)
 	assert.Len(t, schema.Properties, 4)
 
-	// From pointer value
+	// 从指针值
 	schema, err = g.GenerateSchemaFromValue(&SimpleStruct{})
 	require.NoError(t, err)
 	assert.Equal(t, TypeObject, schema.Type)
 
-	// From nil value
+	// 从零值
 	_, err = g.GenerateSchemaFromValue(nil)
 	assert.Error(t, err)
 }
@@ -311,7 +311,7 @@ func TestSchemaGenerator_Interface(t *testing.T) {
 	schema, err := g.GenerateSchema(reflect.TypeOf(WithInterface{}))
 	require.NoError(t, err)
 
-	// Interface{} should produce an empty schema (any type)
+	// 接口%%%% 应能产生一个空计划( 任何类型)
 	dataSchema := schema.Properties["data"]
 	assert.NotNil(t, dataSchema)
 	assert.Empty(t, dataSchema.Type)
@@ -363,7 +363,7 @@ func TestParseTagOptions(t *testing.T) {
 	}
 }
 
-// Test recursive struct handling
+// 测试递归结构处理
 type RecursiveStruct struct {
 	Name     string            `json:"name"`
 	Children []RecursiveStruct `json:"children"`
@@ -378,12 +378,12 @@ func TestSchemaGenerator_RecursiveStruct(t *testing.T) {
 	assert.NotNil(t, schema.Properties["name"])
 	assert.NotNil(t, schema.Properties["children"])
 
-	// Children should be an array
+	// 儿童应该是一个阵列
 	childrenSchema := schema.Properties["children"]
 	assert.Equal(t, TypeArray, childrenSchema.Type)
 }
 
-// Test all supported formats
+// 测试所有支持的格式
 func TestSchemaGenerator_AllFormats(t *testing.T) {
 	type AllFormats struct {
 		DateTime string `json:"date_time" jsonschema:"format=date-time"`
@@ -413,7 +413,7 @@ func TestSchemaGenerator_AllFormats(t *testing.T) {
 	assert.Equal(t, StringFormat("ipv6"), schema.Properties["ipv6"].Format)
 }
 
-// Test default values for different types
+// 测试不同类型的默认值
 func TestSchemaGenerator_DefaultValues(t *testing.T) {
 	type WithDefaults struct {
 		StringVal string  `json:"string_val" jsonschema:"default=hello"`

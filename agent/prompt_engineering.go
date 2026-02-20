@@ -5,7 +5,7 @@ import (
 	"strings"
 )
 
-// PromptEnhancerConfig prompt engineering configuration
+// 快速EnhancerConfig 快速工程配置
 type PromptEnhancerConfig struct {
 	UseChainOfThought   bool `json:"use_chain_of_thought"`   // Use Chain of Thought (CoT)
 	UseSelfConsistency  bool `json:"use_self_consistency"`   // Use self-consistency
@@ -15,16 +15,16 @@ type PromptEnhancerConfig struct {
 	UseDelimiters       bool `json:"use_delimiters"`         // Use delimiters
 }
 
-// PromptEngineeringConfig is an alias for PromptEnhancerConfig for backward compatibility
+// ExpressEngineeringConfig 是用于向后兼容的ExpressEngineeringConfig的别名
 type PromptEngineeringConfig = PromptEnhancerConfig
 
-// DefaultPromptEnhancerConfig returns default prompt enhancer configuration
+// 默认Prompt EnhancerConfig 返回默认的快速增强器配置
 func DefaultPromptEnhancerConfig() *PromptEnhancerConfig {
 	config := DefaultPromptEngineeringConfig()
 	return &config
 }
 
-// DefaultPromptEngineeringConfig returns default prompt engineering configuration
+// 默认PromptEngineeringConfig 返回默认的快速工程配置
 func DefaultPromptEngineeringConfig() PromptEngineeringConfig {
 	return PromptEngineeringConfig{
 		UseChainOfThought:   true,

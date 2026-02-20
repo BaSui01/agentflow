@@ -11,7 +11,7 @@ import (
 )
 
 // ---------------------------------------------------------------------------
-// RoleRegistry CRUD
+// 角色注册 CRUD
 // ---------------------------------------------------------------------------
 
 func TestRoleRegistry_RegisterAndGet(t *testing.T) {
@@ -45,7 +45,7 @@ func TestRoleRegistry_List(t *testing.T) {
 
 	reg := NewRoleRegistry(zap.NewNop())
 
-	// Empty registry.
+	// 空注册.
 	assert.Empty(t, reg.List())
 
 	_ = reg.Register(&RoleDefinition{Type: RoleCollector, Name: "C"})
@@ -83,13 +83,13 @@ func TestRoleRegistry_NilLogger(t *testing.T) {
 	reg := NewRoleRegistry(nil)
 	assert.NotNil(t, reg)
 
-	// Should not panic on operations.
+	// 不应该惊慌失措
 	err := reg.Register(&RoleDefinition{Type: RoleCollector, Name: "C"})
 	assert.NoError(t, err)
 }
 
 // ---------------------------------------------------------------------------
-// Duplicate registration
+// 重复登记
 // ---------------------------------------------------------------------------
 
 func TestRoleRegistry_RegisterDuplicate(t *testing.T) {
@@ -106,7 +106,7 @@ func TestRoleRegistry_RegisterDuplicate(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// Predefined research roles
+// 预先确定的研究作用
 // ---------------------------------------------------------------------------
 
 func TestPredefinedRoles_CorrectTypes(t *testing.T) {
@@ -154,7 +154,7 @@ func TestPredefinedRoles_HaveTimeout(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// RegisterResearchRoles
+// 登记册研究
 // ---------------------------------------------------------------------------
 
 func TestRegisterResearchRoles(t *testing.T) {
@@ -167,7 +167,7 @@ func TestRegisterResearchRoles(t *testing.T) {
 	list := reg.List()
 	assert.Len(t, list, 5, "should register exactly 5 research roles")
 
-	// Verify each expected type is present.
+	// 验证每个预期类型 。
 	expected := []RoleType{RoleCollector, RoleFilter, RoleGenerator, RoleValidator, RoleWriter}
 	for _, rt := range expected {
 		_, ok := reg.Get(rt)
@@ -181,13 +181,13 @@ func TestRegisterResearchRoles_DuplicateError(t *testing.T) {
 	reg := NewRoleRegistry(zap.NewNop())
 	require.NoError(t, RegisterResearchRoles(reg))
 
-	// Registering again should fail.
+	// 重新登记应失败。
 	err := RegisterResearchRoles(reg)
 	assert.Error(t, err)
 }
 
 // ---------------------------------------------------------------------------
-// RolePipeline – AddStage and basic structure
+// 角色pipeline – 添加结构和基本结构
 // ---------------------------------------------------------------------------
 
 func TestRolePipeline_AddStage(t *testing.T) {

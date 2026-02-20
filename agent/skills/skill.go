@@ -226,7 +226,7 @@ func (s *Skill) RenderInstructions(vars map[string]string) string {
 	return instructions
 }
 
-// GetInstructions returns the skill instructions for prompt injection/augmentation.
+// Get Instructions返回技能说明,以便迅速注射/增强.
 func (s *Skill) GetInstructions() string {
 	if s == nil {
 		return ""

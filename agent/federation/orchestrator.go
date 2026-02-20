@@ -1,4 +1,4 @@
-// Package federation provides cross-organization agent collaboration.
+// 一揽子联合会提供跨组织代理协作。
 package federation
 
 import (
@@ -13,7 +13,7 @@ import (
 	"go.uber.org/zap"
 )
 
-// FederatedNode represents a node in the federation.
+// 联邦 节点代表联邦的一个节点.
 type FederatedNode struct {
 	ID           string            `json:"id"`
 	Name         string            `json:"name"`
@@ -25,7 +25,7 @@ type FederatedNode struct {
 	LastSeen     time.Time         `json:"last_seen"`
 }
 
-// NodeStatus represents the status of a federated node.
+// 节点状态代表一个联邦节点的地位.
 type NodeStatus string
 
 const (
@@ -34,7 +34,7 @@ const (
 	NodeStatusDegraded NodeStatus = "degraded"
 )
 
-// FederatedTask represents a task distributed across federation.
+// 联邦 这项任务是分配给各联邦的任务。
 type FederatedTask struct {
 	ID           string         `json:"id"`
 	Type         string         `json:"type"`
@@ -49,7 +49,7 @@ type FederatedTask struct {
 	Results      map[string]any `json:"results,omitempty"`
 }
 
-// TaskStatus represents federated task status.
+// 任务状态代表联合任务状态.
 type TaskStatus string
 
 const (
@@ -59,7 +59,7 @@ const (
 	TaskStatusFailed    TaskStatus = "failed"
 )
 
-// FederationConfig configures the federation orchestrator.
+// Federation Config配置了联邦管弦乐团.
 type FederationConfig struct {
 	NodeID            string
 	NodeName          string
@@ -69,7 +69,7 @@ type FederationConfig struct {
 	TaskTimeout       time.Duration
 }
 
-// Orchestrator manages federated agent collaboration.
+// Orchestrator管理联邦代理合作.
 type Orchestrator struct {
 	config     FederationConfig
 	nodes      map[string]*FederatedNode
@@ -81,10 +81,10 @@ type Orchestrator struct {
 	done       chan struct{}
 }
 
-// TaskHandler handles federated tasks.
+// 特劳斯·汉德勒处理联邦任务.
 type TaskHandler func(ctx context.Context, task *FederatedTask) (any, error)
 
-// NewOrchestrator creates a new federation orchestrator.
+// 新奥尔良创造了一个新的联邦管弦乐团.
 func NewOrchestrator(config FederationConfig, logger *zap.Logger) *Orchestrator {
 	if logger == nil {
 		logger = zap.NewNop()
@@ -110,7 +110,7 @@ func NewOrchestrator(config FederationConfig, logger *zap.Logger) *Orchestrator 
 	}
 }
 
-// RegisterNode registers a node in the federation.
+// 注册点在联邦登记一个节点。
 func (o *Orchestrator) RegisterNode(node *FederatedNode) {
 	o.mu.Lock()
 	defer o.mu.Unlock()
@@ -120,7 +120,7 @@ func (o *Orchestrator) RegisterNode(node *FederatedNode) {
 	o.logger.Info("node registered", zap.String("node_id", node.ID))
 }
 
-// UnregisterNode removes a node from the federation.
+// UnregisterNode从联邦中删除一个节点.
 func (o *Orchestrator) UnregisterNode(nodeID string) {
 	o.mu.Lock()
 	defer o.mu.Unlock()
@@ -128,14 +128,14 @@ func (o *Orchestrator) UnregisterNode(nodeID string) {
 	o.logger.Info("node unregistered", zap.String("node_id", nodeID))
 }
 
-// RegisterHandler registers a task handler.
+// 登记 Handler 登记任务处理器 。
 func (o *Orchestrator) RegisterHandler(taskType string, handler TaskHandler) {
 	o.mu.Lock()
 	defer o.mu.Unlock()
 	o.handlers[taskType] = handler
 }
 
-// SubmitTask submits a task to the federation.
+// 向联邦提交任务。
 func (o *Orchestrator) SubmitTask(ctx context.Context, task *FederatedTask) error {
 	task.ID = fmt.Sprintf("ftask_%d", time.Now().UnixNano())
 	task.SourceNode = o.config.NodeID
@@ -151,7 +151,7 @@ func (o *Orchestrator) SubmitTask(ctx context.Context, task *FederatedTask) erro
 	o.tasks[task.ID] = task
 	o.mu.Unlock()
 
-	// Find capable nodes
+	// 找到能够的节点
 	targetNodes := o.findCapableNodes(task)
 	if len(targetNodes) == 0 {
 		task.Status = TaskStatusFailed
@@ -161,7 +161,7 @@ func (o *Orchestrator) SubmitTask(ctx context.Context, task *FederatedTask) erro
 	task.TargetNodes = targetNodes
 	task.Status = TaskStatusRunning
 
-	// Distribute task
+	// 分配任务
 	go o.distributeTask(ctx, task)
 
 	return nil
@@ -180,7 +180,7 @@ func (o *Orchestrator) findCapableNodes(task *FederatedTask) []string {
 			capable = append(capable, node.ID)
 			continue
 		}
-		// Check capabilities
+		// 检查能力
 		hasAll := true
 		for _, req := range task.RequiredCaps {
 			found := false
@@ -254,7 +254,7 @@ func (o *Orchestrator) executeOnNode(ctx context.Context, nodeID string, task *F
 		return nil, fmt.Errorf("node not found: %s", nodeID)
 	}
 
-	// If local node, execute directly
+	// 如果本地节点, 直接执行
 	if nodeID == o.config.NodeID {
 		handler, ok := o.handlers[task.Type]
 		if !ok {
@@ -263,7 +263,7 @@ func (o *Orchestrator) executeOnNode(ctx context.Context, nodeID string, task *F
 		return handler(ctx, task)
 	}
 
-	// Remote execution via HTTP
+	// 通过 HTTP 远程执行
 	payload, _ := json.Marshal(task)
 	req, err := http.NewRequestWithContext(ctx, "POST", node.Endpoint+"/federation/task", nil)
 	if err != nil {
@@ -285,7 +285,7 @@ func (o *Orchestrator) executeOnNode(ctx context.Context, nodeID string, task *F
 	return result, nil
 }
 
-// GetTask retrieves a task by ID.
+// GetTask 以 ID 检索任务 。
 func (o *Orchestrator) GetTask(taskID string) (*FederatedTask, bool) {
 	o.mu.RLock()
 	defer o.mu.RUnlock()
@@ -293,7 +293,7 @@ func (o *Orchestrator) GetTask(taskID string) (*FederatedTask, bool) {
 	return task, ok
 }
 
-// ListNodes returns all registered nodes.
+// ListNodes 返回所有已注册的节点 。
 func (o *Orchestrator) ListNodes() []*FederatedNode {
 	o.mu.RLock()
 	defer o.mu.RUnlock()
@@ -304,7 +304,7 @@ func (o *Orchestrator) ListNodes() []*FederatedNode {
 	return nodes
 }
 
-// Start starts the orchestrator.
+// 开始指挥
 func (o *Orchestrator) Start(ctx context.Context) error {
 	o.logger.Info("federation orchestrator started")
 	go o.heartbeatLoop(ctx)
@@ -339,7 +339,7 @@ func (o *Orchestrator) checkNodeHealth() {
 	}
 }
 
-// Stop stops the orchestrator.
+// 停止停止指挥器。
 func (o *Orchestrator) Stop() {
 	close(o.done)
 	o.logger.Info("federation orchestrator stopped")

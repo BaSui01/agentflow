@@ -13,52 +13,52 @@ import (
 	"go.uber.org/zap"
 )
 
-// CapabilityMatcher is the default implementation of the Matcher interface.
-// It provides semantic matching, capability scoring, and load balancing.
+// 能力Matcher是Matcher接口的默认执行.
+// 它提供语义匹配,能力评分,和负载平衡.
 type CapabilityMatcher struct {
 	registry Registry
 	config   *MatcherConfig
 	logger   *zap.Logger
 
-	// roundRobinIndex tracks the current index for round-robin selection.
+	// roundRobinIndex 跟踪当前用于回合-robin选择的索引。
 	roundRobinIndex map[string]int
 	rrMu            sync.Mutex
 
-	// random source for random selection.
+	// 随机选择源。
 	rng *rand.Rand
 }
 
-// MatcherConfig holds configuration for the capability matcher.
+// MatcherConfig持有能力匹配器的配置.
 type MatcherConfig struct {
-	// DefaultStrategy is the default matching strategy.
+	// 默认策略是默认匹配策略.
 	DefaultStrategy MatchStrategy `json:"default_strategy"`
 
-	// DefaultLimit is the default limit for match results.
+	// 默认限制是匹配结果的默认限制 。
 	DefaultLimit int `json:"default_limit"`
 
-	// DefaultTimeout is the default timeout for match operations.
+	// 默认超时是匹配操作的默认超时.
 	DefaultTimeout time.Duration `json:"default_timeout"`
 
-	// MinScoreThreshold is the minimum score threshold for matches.
+	// MinScore Threershold是比赛的最低得分门槛.
 	MinScoreThreshold float64 `json:"min_score_threshold"`
 
-	// LoadWeight is the weight for load in scoring (0-1).
+	// 载重是积分(0-1)中载重.
 	LoadWeight float64 `json:"load_weight"`
 
-	// ScoreWeight is the weight for capability score in scoring (0-1).
+	// 分数(ScoreWight)是分数(0-1)中能力分数的权重.
 	ScoreWeight float64 `json:"score_weight"`
 
-	// LatencyWeight is the weight for latency in scoring (0-1).
+	// latencyWight是积分(0-1)中耐久的重量.
 	LatencyWeight float64 `json:"latency_weight"`
 
-	// EnableSemanticMatching enables semantic matching for task descriptions.
+	// 启用语义匹配可实现语义匹配任务描述.
 	EnableSemanticMatching bool `json:"enable_semantic_matching"`
 
-	// SemanticSimilarityThreshold is the threshold for semantic similarity.
+	// 语义相似 阈值是语义相似性的阈值.
 	SemanticSimilarityThreshold float64 `json:"semantic_similarity_threshold"`
 }
 
-// DefaultMatcherConfig returns a MatcherConfig with sensible defaults.
+// 默认 MatcherConfig 返回带有合理默认的 MatcherConfig 。
 func DefaultMatcherConfig() *MatcherConfig {
 	return &MatcherConfig{
 		DefaultStrategy:             MatchStrategyBestMatch,
@@ -73,7 +73,7 @@ func DefaultMatcherConfig() *MatcherConfig {
 	}
 }
 
-// NewCapabilityMatcher creates a new capability matcher.
+// 新能力 Matcher创建了新的能力匹配器.
 func NewCapabilityMatcher(registry Registry, config *MatcherConfig, logger *zap.Logger) *CapabilityMatcher {
 	if config == nil {
 		config = DefaultMatcherConfig()
@@ -91,13 +91,13 @@ func NewCapabilityMatcher(registry Registry, config *MatcherConfig, logger *zap.
 	}
 }
 
-// Match finds agents matching the given request.
+// Match 找到匹配给定请求的代理 。
 func (m *CapabilityMatcher) Match(ctx context.Context, req *MatchRequest) ([]*MatchResult, error) {
 	if req == nil {
 		return nil, fmt.Errorf("match request is nil")
 	}
 
-	// Apply defaults
+	// 应用默认
 	if req.Strategy == "" {
 		req.Strategy = m.config.DefaultStrategy
 	}
@@ -108,43 +108,43 @@ func (m *CapabilityMatcher) Match(ctx context.Context, req *MatchRequest) ([]*Ma
 		req.Timeout = m.config.DefaultTimeout
 	}
 
-	// Create context with timeout
+	// 以超时创建上下文
 	ctx, cancel := context.WithTimeout(ctx, req.Timeout)
 	defer cancel()
 
-	// Get all agents
+	// 找到所有探员
 	agents, err := m.registry.ListAgents(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list agents: %w", err)
 	}
 
-	// Filter and score agents
+	// 过滤和计分代理
 	results := make([]*MatchResult, 0)
 	for _, agent := range agents {
-		// Skip excluded agents
+		// 跳过排除的代理
 		if m.isExcluded(agent.Card.Name, req.ExcludedAgents) {
 			continue
 		}
 
-		// Skip offline agents
+		// 跳过线下代理
 		if agent.Status != AgentStatusOnline {
 			continue
 		}
 
-		// Check load constraint
+		// 检查负载约束
 		if req.MaxLoad > 0 && agent.Load > req.MaxLoad {
 			continue
 		}
 
-		// Calculate match score
+		// 计算匹配分数
 		score, matchedCaps, confidence, reason := m.calculateMatchScore(ctx, agent, req)
 
-		// Skip if below threshold
+		// 低于阈值时跳过
 		if score < req.MinScore && score < m.config.MinScoreThreshold {
 			continue
 		}
 
-		// Skip if no capabilities matched
+		// 如果没有匹配的能力就跳过
 		if len(matchedCaps) == 0 && len(req.RequiredCapabilities) > 0 {
 			continue
 		}
@@ -158,10 +158,10 @@ func (m *CapabilityMatcher) Match(ctx context.Context, req *MatchRequest) ([]*Ma
 		})
 	}
 
-	// Sort results based on strategy
+	// 根据战略排序结果
 	m.sortResults(results, req.Strategy)
 
-	// Apply limit
+	// 应用限制
 	if len(results) > req.Limit {
 		results = results[:req.Limit]
 	}
@@ -174,7 +174,7 @@ func (m *CapabilityMatcher) Match(ctx context.Context, req *MatchRequest) ([]*Ma
 	return results, nil
 }
 
-// MatchOne finds the best matching agent for the given request.
+// MatchOne 找到指定请求的最佳匹配代理 。
 func (m *CapabilityMatcher) MatchOne(ctx context.Context, req *MatchRequest) (*MatchResult, error) {
 	req.Limit = 1
 	results, err := m.Match(ctx, req)
@@ -189,7 +189,7 @@ func (m *CapabilityMatcher) MatchOne(ctx context.Context, req *MatchRequest) (*M
 	return results[0], nil
 }
 
-// Score calculates the match score for an agent against a request.
+// 分数根据请求计算代理商的比分。
 func (m *CapabilityMatcher) Score(ctx context.Context, agent *AgentInfo, req *MatchRequest) (float64, error) {
 	if agent == nil || req == nil {
 		return 0, fmt.Errorf("agent or request is nil")
@@ -199,14 +199,14 @@ func (m *CapabilityMatcher) Score(ctx context.Context, agent *AgentInfo, req *Ma
 	return score, nil
 }
 
-// calculateMatchScore calculates the match score for an agent.
+// 计算 MatchScore 为代理计算匹配分数。
 func (m *CapabilityMatcher) calculateMatchScore(ctx context.Context, agent *AgentInfo, req *MatchRequest) (float64, []CapabilityInfo, float64, string) {
 	var matchedCaps []CapabilityInfo
 	var reasons []string
 	var totalScore float64
 	var confidence float64 = 1.0
 
-	// 1. Check required capabilities
+	// 1. 检查所需能力
 	requiredMatched := 0
 	for _, reqCap := range req.RequiredCapabilities {
 		for _, agentCap := range agent.Capabilities {
@@ -220,19 +220,19 @@ func (m *CapabilityMatcher) calculateMatchScore(ctx context.Context, agent *Agen
 
 	if len(req.RequiredCapabilities) > 0 {
 		if requiredMatched < len(req.RequiredCapabilities) {
-			// Not all required capabilities matched
+			// 并非所有所需能力匹配
 			return 0, nil, 0, "missing required capabilities"
 		}
 		totalScore += 40.0 // Base score for matching all required capabilities
 		reasons = append(reasons, fmt.Sprintf("matched %d required capabilities", requiredMatched))
 	}
 
-	// 2. Check preferred capabilities
+	// 2. 检查首选能力
 	preferredMatched := 0
 	for _, prefCap := range req.PreferredCapabilities {
 		for _, agentCap := range agent.Capabilities {
 			if m.capabilityMatches(agentCap.Capability.Name, prefCap) {
-				// Only add if not already in matchedCaps
+				// 只添加尚未匹配的 Caps
 				found := false
 				for _, mc := range matchedCaps {
 					if mc.Capability.Name == agentCap.Capability.Name {
@@ -255,7 +255,7 @@ func (m *CapabilityMatcher) calculateMatchScore(ctx context.Context, agent *Agen
 		reasons = append(reasons, fmt.Sprintf("matched %d/%d preferred capabilities", preferredMatched, len(req.PreferredCapabilities)))
 	}
 
-	// 3. Check required tags
+	// 3. 检查所需标签
 	if len(req.RequiredTags) > 0 {
 		tagMatched := 0
 		for _, reqTag := range req.RequiredTags {
@@ -275,7 +275,7 @@ func (m *CapabilityMatcher) calculateMatchScore(ctx context.Context, agent *Agen
 		reasons = append(reasons, fmt.Sprintf("matched %d required tags", tagMatched))
 	}
 
-	// 4. Semantic matching for task description
+	// 4. 任务描述的语义匹配
 	if m.config.EnableSemanticMatching && req.TaskDescription != "" {
 		semanticScore, semanticConfidence := m.calculateSemanticScore(agent, req.TaskDescription)
 		if semanticScore > m.config.SemanticSimilarityThreshold {
@@ -285,7 +285,7 @@ func (m *CapabilityMatcher) calculateMatchScore(ctx context.Context, agent *Agen
 		}
 	}
 
-	// 5. Calculate capability-based score
+	// 5. 计算能力得分
 	if len(matchedCaps) > 0 {
 		var capScore float64
 		for _, cap := range matchedCaps {
@@ -295,42 +295,42 @@ func (m *CapabilityMatcher) calculateMatchScore(ctx context.Context, agent *Agen
 		totalScore += (avgCapScore / 100.0) * m.config.ScoreWeight * 10.0
 	}
 
-	// 6. Apply load penalty
+	// 6. 适用负载处罚
 	loadPenalty := agent.Load * m.config.LoadWeight * 10.0
 	totalScore -= loadPenalty
 
-	// 7. Apply latency penalty
+	// 7. 适用延迟处罚
 	if len(matchedCaps) > 0 {
 		var avgLatency time.Duration
 		for _, cap := range matchedCaps {
 			avgLatency += cap.AvgLatency
 		}
 		avgLatency /= time.Duration(len(matchedCaps))
-		// Normalize latency (assume 1s is baseline)
+		// 常态性(假设 1s 为基线)
 		latencyPenalty := float64(avgLatency) / float64(time.Second) * m.config.LatencyWeight * 5.0
 		totalScore -= latencyPenalty
 	}
 
-	// Normalize score to 0-100
+	// 将分数正常化到0-100
 	totalScore = math.Max(0, math.Min(100, totalScore))
 
 	reason := strings.Join(reasons, "; ")
 	return totalScore, matchedCaps, confidence, reason
 }
 
-// capabilityMatches checks if a capability name matches a required capability.
+// 能力 匹配一个匹配所需能力的能力名称 。
 func (m *CapabilityMatcher) capabilityMatches(capName, required string) bool {
-	// Exact match
+	// 准确匹配
 	if strings.EqualFold(capName, required) {
 		return true
 	}
 
-	// Prefix match (e.g., "code_review" matches "code_review_python")
+	// 前缀匹配(例如"code review"与"code review python"相匹配)
 	if strings.HasPrefix(strings.ToLower(capName), strings.ToLower(required)) {
 		return true
 	}
 
-	// Contains match
+	// 包含匹配
 	if strings.Contains(strings.ToLower(capName), strings.ToLower(required)) {
 		return true
 	}
@@ -338,10 +338,10 @@ func (m *CapabilityMatcher) capabilityMatches(capName, required string) bool {
 	return false
 }
 
-// calculateSemanticScore calculates semantic similarity between agent capabilities and task description.
+// 计算SemanticScore计算出代理能力和任务描述之间的语义相似性.
 func (m *CapabilityMatcher) calculateSemanticScore(agent *AgentInfo, taskDescription string) (float64, float64) {
-	// Simple keyword-based semantic matching
-	// In production, this would use embeddings or an LLM
+	// 基于简单关键字的语义匹配
+	// 在生产中,将使用嵌入或LLM
 	taskWords := m.tokenize(taskDescription)
 	if len(taskWords) == 0 {
 		return 0, 0
@@ -350,7 +350,7 @@ func (m *CapabilityMatcher) calculateSemanticScore(agent *AgentInfo, taskDescrip
 	var totalScore float64
 	var matchCount int
 
-	// Check agent description
+	// 检查代理描述
 	agentWords := m.tokenize(agent.Card.Description)
 	for _, tw := range taskWords {
 		for _, aw := range agentWords {
@@ -361,7 +361,7 @@ func (m *CapabilityMatcher) calculateSemanticScore(agent *AgentInfo, taskDescrip
 		}
 	}
 
-	// Check capability descriptions
+	// 检查能力描述
 	for _, cap := range agent.Capabilities {
 		capWords := m.tokenize(cap.Capability.Description)
 		for _, tw := range taskWords {
@@ -379,21 +379,21 @@ func (m *CapabilityMatcher) calculateSemanticScore(agent *AgentInfo, taskDescrip
 		totalScore = math.Min(1.0, totalScore)
 	}
 
-	// Confidence is based on how many words matched
+	// 自信是建立在几句话匹配的基础上的
 	confidence := math.Min(1.0, float64(matchCount)/5.0)
 
 	return totalScore, confidence
 }
 
-// tokenize splits text into words for matching.
+// 将文本分割成文字进行匹配。
 func (m *CapabilityMatcher) tokenize(text string) []string {
-	// Simple tokenization - split on whitespace and punctuation
+	// 简单的符号化 - 在白空和平分
 	text = strings.ToLower(text)
 	words := strings.FieldsFunc(text, func(r rune) bool {
 		return !((r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '_')
 	})
 
-	// Filter out common stop words
+	// 过滤出常见的句子
 	stopWords := map[string]bool{
 		"the": true, "a": true, "an": true, "and": true, "or": true,
 		"is": true, "are": true, "was": true, "were": true, "be": true,
@@ -412,17 +412,17 @@ func (m *CapabilityMatcher) tokenize(text string) []string {
 	return filtered
 }
 
-// sortResults sorts match results based on the strategy.
+// 排序结果类型匹配基于策略的结果。
 func (m *CapabilityMatcher) sortResults(results []*MatchResult, strategy MatchStrategy) {
 	switch strategy {
 	case MatchStrategyBestMatch:
-		// Sort by score descending
+		// 按分数递减排序
 		sort.Slice(results, func(i, j int) bool {
 			return results[i].Score > results[j].Score
 		})
 
 	case MatchStrategyLeastLoaded:
-		// Sort by load ascending, then by score descending
+		// 依负载升起排序,再由分数递减排序
 		sort.Slice(results, func(i, j int) bool {
 			if results[i].Agent.Load != results[j].Agent.Load {
 				return results[i].Agent.Load < results[j].Agent.Load
@@ -431,7 +431,7 @@ func (m *CapabilityMatcher) sortResults(results []*MatchResult, strategy MatchSt
 		})
 
 	case MatchStrategyHighestScore:
-		// Sort by capability score descending
+		// 按能力分数递减排序
 		sort.Slice(results, func(i, j int) bool {
 			var scoreI, scoreJ float64
 			for _, cap := range results[i].MatchedCapabilities {
@@ -444,20 +444,20 @@ func (m *CapabilityMatcher) sortResults(results []*MatchResult, strategy MatchSt
 		})
 
 	case MatchStrategyRoundRobin:
-		// Shuffle results for round-robin effect
+		// 轮旋效果的摇摆结果
 		m.rng.Shuffle(len(results), func(i, j int) {
 			results[i], results[j] = results[j], results[i]
 		})
 
 	case MatchStrategyRandom:
-		// Shuffle results randomly
+		// 随机打乱结果
 		m.rng.Shuffle(len(results), func(i, j int) {
 			results[i], results[j] = results[j], results[i]
 		})
 	}
 }
 
-// isExcluded checks if an agent ID is in the excluded list.
+// isexcused checked 如果被排除在外的名单上有代理ID。
 func (m *CapabilityMatcher) isExcluded(agentID string, excluded []string) bool {
 	for _, ex := range excluded {
 		if ex == agentID {
@@ -467,7 +467,7 @@ func (m *CapabilityMatcher) isExcluded(agentID string, excluded []string) bool {
 	return false
 }
 
-// GetNextRoundRobin returns the next agent in round-robin order for a given capability.
+// GetNextRound Robin 返回一个给定能力的下一个代理。
 func (m *CapabilityMatcher) GetNextRoundRobin(ctx context.Context, capabilityName string) (*AgentInfo, error) {
 	caps, err := m.registry.FindCapabilities(ctx, capabilityName)
 	if err != nil {
@@ -488,7 +488,7 @@ func (m *CapabilityMatcher) GetNextRoundRobin(ctx context.Context, capabilityNam
 	return m.registry.GetAgent(ctx, agentID)
 }
 
-// FindBestAgent finds the best agent for a task using the default strategy.
+// FindBestAgent 找到使用默认策略进行任务的最佳代理 。
 func (m *CapabilityMatcher) FindBestAgent(ctx context.Context, taskDescription string, requiredCapabilities []string) (*AgentInfo, error) {
 	result, err := m.MatchOne(ctx, &MatchRequest{
 		TaskDescription:      taskDescription,
@@ -501,7 +501,7 @@ func (m *CapabilityMatcher) FindBestAgent(ctx context.Context, taskDescription s
 	return result.Agent, nil
 }
 
-// FindLeastLoadedAgent finds the least loaded agent with the required capabilities.
+// FindLeastLoaded Agent 找到装入量最小的具有所需能力的代理.
 func (m *CapabilityMatcher) FindLeastLoadedAgent(ctx context.Context, requiredCapabilities []string) (*AgentInfo, error) {
 	result, err := m.MatchOne(ctx, &MatchRequest{
 		RequiredCapabilities: requiredCapabilities,
@@ -513,5 +513,5 @@ func (m *CapabilityMatcher) FindLeastLoadedAgent(ctx context.Context, requiredCa
 	return result.Agent, nil
 }
 
-// Ensure CapabilityMatcher implements Matcher interface.
+// 确保能力Matcher执行Matcher接口.
 var _ Matcher = (*CapabilityMatcher)(nil)

@@ -1,4 +1,4 @@
-// Package evaluation provides automated evaluation framework for AI agents.
+// 成套评价为AI代理提供了自动化的评价框架.
 package evaluation
 
 import (
@@ -14,18 +14,18 @@ import (
 
 // TestProperty_ABTest_TrafficAllocation tests Property 17: A/B 测试流量分配
 // For any 配置了多个 Variant 的实验，经过足够多次分配后，各 Variant 的实际分配比例应接近配置的 Weight 比例（在统计误差范围内）。
-// **Validates: Requirements 11.2**
+// ** 参数:要求11.2**
 func TestProperty_ABTest_TrafficAllocation(t *testing.T) {
 	rapid.Check(t, func(rt *rapid.T) {
-		// Generate random number of variants (2-5)
+		// 生成随机数的变体(2-5)
 		numVariants := rapid.IntRange(2, 5).Draw(rt, "numVariants")
 
-		// Generate random weights for each variant
+		// 生成每个变体的随机权重
 		variants := make([]Variant, numVariants)
 		totalWeight := 0.0
 
 		for i := 0; i < numVariants; i++ {
-			// Generate weight between 0.1 and 1.0 to ensure meaningful distribution
+			// 生成0.1至1.0之间的权重,以确保有意义的分布
 			weight := rapid.Float64Range(0.1, 1.0).Draw(rt, fmt.Sprintf("weight_%d", i))
 			variants[i] = Variant{
 				ID:        fmt.Sprintf("variant-%d", i),
@@ -36,13 +36,13 @@ func TestProperty_ABTest_TrafficAllocation(t *testing.T) {
 			totalWeight += weight
 		}
 
-		// Calculate expected ratios (normalized weights)
+		// 计算预期比率(正常加权)
 		expectedRatios := make(map[string]float64)
 		for _, v := range variants {
 			expectedRatios[v.ID] = v.Weight / totalWeight
 		}
 
-		// Create experiment
+		// 创建实验
 		experimentID := rapid.StringMatching(`exp-[a-z0-9]{8}`).Draw(rt, "experimentID")
 		exp := &Experiment{
 			ID:       experimentID,
@@ -51,7 +51,7 @@ func TestProperty_ABTest_TrafficAllocation(t *testing.T) {
 			Status:   ExperimentStatusRunning,
 		}
 
-		// Create tester
+		// 创建测试器
 		store := NewMemoryExperimentStore()
 		tester := NewABTester(store, nil)
 
@@ -61,7 +61,7 @@ func TestProperty_ABTest_TrafficAllocation(t *testing.T) {
 		err = tester.StartExperiment(experimentID)
 		require.NoError(rt, err, "StartExperiment should not return error")
 
-		// Perform many allocations
+		// 执行许多分配
 		numAllocations := 10000
 		counts := make(map[string]int)
 
@@ -72,8 +72,8 @@ func TestProperty_ABTest_TrafficAllocation(t *testing.T) {
 			counts[variant.ID]++
 		}
 
-		// Verify: actual allocation ratios are within statistical tolerance of expected ratios
-		// Using 5% tolerance as specified in the task
+		// 核实:实际分配比率在预期比率的统计容忍范围内
+		// 使用任务中指定的5%的容忍度
 		tolerance := 0.05
 
 		for variantID, expectedRatio := range expectedRatios {
@@ -86,13 +86,13 @@ func TestProperty_ABTest_TrafficAllocation(t *testing.T) {
 				variantID, expectedRatio, actualRatio, diff, tolerance)
 		}
 
-		// Verify: all variants received some traffic
+		// 校验:所有变体都收到一些流量
 		for _, v := range variants {
 			assert.Greater(rt, counts[v.ID], 0,
 				"Variant %s should receive some traffic", v.ID)
 		}
 
-		// Verify: total allocations match expected
+		// 校验: 拨款总额与预期相符
 		totalAllocated := 0
 		for _, count := range counts {
 			totalAllocated += count
@@ -102,11 +102,11 @@ func TestProperty_ABTest_TrafficAllocation(t *testing.T) {
 	})
 }
 
-// TestProperty_ABTest_TrafficAllocation_TwoVariants tests traffic allocation with exactly two variants
-// **Validates: Requirements 11.2**
+// Property AB Test TrafficAllication TwoVariants 测试流量分配,精确使用两个变体
+// ** 参数:要求11.2**
 func TestProperty_ABTest_TrafficAllocation_TwoVariants(t *testing.T) {
 	rapid.Check(t, func(rt *rapid.T) {
-		// Generate random weight split (ensuring both variants get meaningful traffic)
+		// 产生随机分量(确保两个变体都得到有意义的流量)
 		controlWeight := rapid.Float64Range(0.1, 0.9).Draw(rt, "controlWeight")
 		treatmentWeight := 1.0 - controlWeight
 
@@ -132,7 +132,7 @@ func TestProperty_ABTest_TrafficAllocation_TwoVariants(t *testing.T) {
 		err = tester.StartExperiment(experimentID)
 		require.NoError(rt, err)
 
-		// Perform allocations
+		// 执行分配
 		numAllocations := 10000
 		counts := make(map[string]int)
 
@@ -143,7 +143,7 @@ func TestProperty_ABTest_TrafficAllocation_TwoVariants(t *testing.T) {
 			counts[variant.ID]++
 		}
 
-		// Verify ratios within tolerance
+		// 验证容忍范围内的比率
 		tolerance := 0.05
 
 		controlRatio := float64(counts["control"]) / float64(numAllocations)
@@ -159,11 +159,11 @@ func TestProperty_ABTest_TrafficAllocation_TwoVariants(t *testing.T) {
 	})
 }
 
-// TestProperty_ABTest_TrafficAllocation_EqualWeights tests traffic allocation with equal weights
-// **Validates: Requirements 11.2**
+// 测试 Property AB Test TrafficAllocation 等重测试流量分配
+// ** 参数:要求11.2**
 func TestProperty_ABTest_TrafficAllocation_EqualWeights(t *testing.T) {
 	rapid.Check(t, func(rt *rapid.T) {
-		// Generate random number of variants with equal weights
+		// 生成等重的变体随机数
 		numVariants := rapid.IntRange(2, 6).Draw(rt, "numVariants")
 		equalWeight := 1.0 / float64(numVariants)
 
@@ -194,7 +194,7 @@ func TestProperty_ABTest_TrafficAllocation_EqualWeights(t *testing.T) {
 		err = tester.StartExperiment(experimentID)
 		require.NoError(rt, err)
 
-		// Perform allocations
+		// 执行分配
 		numAllocations := 10000
 		counts := make(map[string]int)
 
@@ -205,7 +205,7 @@ func TestProperty_ABTest_TrafficAllocation_EqualWeights(t *testing.T) {
 			counts[variant.ID]++
 		}
 
-		// Verify all variants have approximately equal traffic
+		// 检查所有变体的流量大致相同
 		tolerance := 0.05
 		expectedRatio := 1.0 / float64(numVariants)
 
@@ -220,11 +220,11 @@ func TestProperty_ABTest_TrafficAllocation_EqualWeights(t *testing.T) {
 	})
 }
 
-// TestProperty_ABTest_TrafficAllocation_SkewedWeights tests traffic allocation with heavily skewed weights
-// **Validates: Requirements 11.2**
+// 测试 Property AB Test TrafficAllocation SkewedWights 测试流量分配,重力严重扭曲
+// ** 参数:要求11.2**
 func TestProperty_ABTest_TrafficAllocation_SkewedWeights(t *testing.T) {
 	rapid.Check(t, func(rt *rapid.T) {
-		// Generate skewed weights: one dominant variant (70-95%) and others share the rest
+		// 产生扭曲加权:一个占优势的变体(70-95%),而其他变体分享其他变体
 		numVariants := rapid.IntRange(2, 4).Draw(rt, "numVariants")
 		dominantWeight := rapid.Float64Range(0.7, 0.95).Draw(rt, "dominantWeight")
 		remainingWeight := 1.0 - dominantWeight
@@ -237,7 +237,7 @@ func TestProperty_ABTest_TrafficAllocation_SkewedWeights(t *testing.T) {
 			IsControl: true,
 		}
 
-		// Distribute remaining weight among other variants
+		// 将剩余重量分配给其他变种
 		otherWeight := remainingWeight / float64(numVariants-1)
 		for i := 1; i < numVariants; i++ {
 			variants[i] = Variant{
@@ -264,7 +264,7 @@ func TestProperty_ABTest_TrafficAllocation_SkewedWeights(t *testing.T) {
 		err = tester.StartExperiment(experimentID)
 		require.NoError(rt, err)
 
-		// Perform allocations
+		// 执行分配
 		numAllocations := 10000
 		counts := make(map[string]int)
 
@@ -275,7 +275,7 @@ func TestProperty_ABTest_TrafficAllocation_SkewedWeights(t *testing.T) {
 			counts[variant.ID]++
 		}
 
-		// Verify dominant variant gets expected traffic
+		// 验证主变体获得预期流量
 		tolerance := 0.05
 		dominantRatio := float64(counts["dominant"]) / float64(numAllocations)
 
@@ -283,7 +283,7 @@ func TestProperty_ABTest_TrafficAllocation_SkewedWeights(t *testing.T) {
 			"Dominant variant: expected ratio %.4f, got %.4f",
 			dominantWeight, dominantRatio)
 
-		// Verify minor variants share remaining traffic appropriately
+		// 对小变体进行适当核查,以分享剩余流量
 		for i := 1; i < numVariants; i++ {
 			variantID := fmt.Sprintf("minor-%d", i)
 			actualRatio := float64(counts[variantID]) / float64(numAllocations)
@@ -296,11 +296,11 @@ func TestProperty_ABTest_TrafficAllocation_SkewedWeights(t *testing.T) {
 	})
 }
 
-// TestProperty_ABTest_TrafficAllocation_Consistency tests that same user always gets same variant
-// **Validates: Requirements 11.2**
+// 测试 Property AB Test TrafficAllocation 一致性测试 同一用户总是得到相同的变体
+// ** 参数:要求11.2**
 func TestProperty_ABTest_TrafficAllocation_Consistency(t *testing.T) {
 	rapid.Check(t, func(rt *rapid.T) {
-		// Generate random variants
+		// 生成随机变体
 		numVariants := rapid.IntRange(2, 4).Draw(rt, "numVariants")
 		variants := make([]Variant, numVariants)
 
@@ -330,11 +330,11 @@ func TestProperty_ABTest_TrafficAllocation_Consistency(t *testing.T) {
 		err = tester.StartExperiment(experimentID)
 		require.NoError(rt, err)
 
-		// Generate random user IDs
+		// 生成随机用户ID
 		numUsers := rapid.IntRange(10, 100).Draw(rt, "numUsers")
 		userAssignments := make(map[string]string)
 
-		// First pass: record initial assignments
+		// 第一次通过:记录初始任务
 		for i := 0; i < numUsers; i++ {
 			userID := fmt.Sprintf("user-%d", i)
 			variant, err := tester.Assign(experimentID, userID)
@@ -342,7 +342,7 @@ func TestProperty_ABTest_TrafficAllocation_Consistency(t *testing.T) {
 			userAssignments[userID] = variant.ID
 		}
 
-		// Second pass: verify consistency
+		// 第二通:验证一致性
 		numChecks := rapid.IntRange(3, 10).Draw(rt, "numChecks")
 		for check := 0; check < numChecks; check++ {
 			for userID, expectedVariantID := range userAssignments {
@@ -356,14 +356,14 @@ func TestProperty_ABTest_TrafficAllocation_Consistency(t *testing.T) {
 	})
 }
 
-// TestProperty_ABTest_TrafficAllocation_DifferentExperiments tests that same user can get different variants in different experiments
-// **Validates: Requirements 11.2**
+// 测试 Property AB Test TrafficAllocation  Different 实验,同一用户可以在不同的实验中获得不同的变体
+// ** 参数:要求11.2**
 func TestProperty_ABTest_TrafficAllocation_DifferentExperiments(t *testing.T) {
 	rapid.Check(t, func(rt *rapid.T) {
 		store := NewMemoryExperimentStore()
 		tester := NewABTester(store, nil)
 
-		// Create multiple experiments
+		// 创建多个实验
 		numExperiments := rapid.IntRange(2, 5).Draw(rt, "numExperiments")
 		experiments := make([]*Experiment, numExperiments)
 
@@ -390,7 +390,7 @@ func TestProperty_ABTest_TrafficAllocation_DifferentExperiments(t *testing.T) {
 			experiments[i] = exp
 		}
 
-		// Assign same user to all experiments
+		// 指定同一用户进行所有实验
 		userID := rapid.StringMatching(`user-[a-z0-9]{8}`).Draw(rt, "userID")
 		assignments := make(map[string]string)
 
@@ -400,23 +400,23 @@ func TestProperty_ABTest_TrafficAllocation_DifferentExperiments(t *testing.T) {
 			assignments[exp.ID] = variant.ID
 		}
 
-		// Verify: user got valid assignments in all experiments
+		// 校验: 用户在所有实验中都得到了有效的任务
 		for expID, variantID := range assignments {
 			assert.Contains(rt, []string{"control", "treatment"}, variantID,
 				"User should get valid variant in experiment %s", expID)
 		}
 
-		// Note: We don't assert that assignments are different across experiments
-		// because the hash function may produce the same result for some experiment/user combinations
-		// The key property is that each experiment independently assigns variants
+		// 注意:我们并不断言,各项实验的任务不同
+		// 因为散列函数可能对一些实验/用户组合产生相同的结果
+		// 关键属性是每个实验独立指定变体
 	})
 }
 
-// TestProperty_ABTest_TrafficAllocation_LargeScale tests traffic allocation at larger scale
-// **Validates: Requirements 11.2**
+// 测试 Property AB Test TrafficAllocation Large States 大规模测试流量分配
+// ** 参数:要求11.2**
 func TestProperty_ABTest_TrafficAllocation_LargeScale(t *testing.T) {
 	rapid.Check(t, func(rt *rapid.T) {
-		// Generate random weights
+		// 生成随机权重
 		weights := []float64{
 			rapid.Float64Range(0.1, 0.5).Draw(rt, "weight_0"),
 			rapid.Float64Range(0.1, 0.5).Draw(rt, "weight_1"),
@@ -454,7 +454,7 @@ func TestProperty_ABTest_TrafficAllocation_LargeScale(t *testing.T) {
 		err = tester.StartExperiment(experimentID)
 		require.NoError(rt, err)
 
-		// Perform large number of allocations
+		// 执行大量拨款
 		numAllocations := 50000
 		counts := make(map[string]int)
 
@@ -465,7 +465,7 @@ func TestProperty_ABTest_TrafficAllocation_LargeScale(t *testing.T) {
 			counts[variant.ID]++
 		}
 
-		// With larger sample size, we can use tighter tolerance
+		// 如果样本尺寸较大,我们可以使用更严格的耐受性
 		tolerance := 0.02
 
 		for variantID, expectedRatio := range expectedRatios {
@@ -483,20 +483,20 @@ func TestProperty_ABTest_TrafficAllocation_LargeScale(t *testing.T) {
 // Property 18: A/B 测试统计分析
 // For any 完成的实验，生成的 ExperimentResult 应包含所有 Variant 的 VariantResult，
 // 每个 VariantResult 应包含 SampleCount、Metrics 和 StdDev。
-// **Validates: Requirements 11.3, 11.4**
+// ** 参数:要求11.3、11.4**
 // =============================================================================
 
 // TestProperty_ABTest_StatisticalAnalysis tests Property 18: A/B 测试统计分析
-// For any completed experiment, the generated ExperimentResult should contain
-// VariantResult for ALL variants, and each VariantResult should contain
-// SampleCount, Metrics, and StdDev.
-// **Validates: Requirements 11.3, 11.4**
+// 对于完成的任何实验,生成的实验结果应包含
+// 所有变式的变式结果,每个变式结果应包含
+// (原始内容存档于2018-10-21). SampleCount, Metrics, and StdDev.
+// ** 参数:要求11.3、11.4**
 func TestProperty_ABTest_StatisticalAnalysis(t *testing.T) {
 	rapid.Check(t, func(rt *rapid.T) {
-		// Generate random number of variants (2-5)
+		// 生成随机数的变体(2-5)
 		numVariants := rapid.IntRange(2, 5).Draw(rt, "numVariants")
 
-		// Generate variants with random weights
+		// 生成随机加权的变体
 		variants := make([]Variant, numVariants)
 		for i := range numVariants {
 			variants[i] = Variant{
@@ -507,14 +507,14 @@ func TestProperty_ABTest_StatisticalAnalysis(t *testing.T) {
 			}
 		}
 
-		// Generate random metrics to track
+		// 生成随机度量衡以跟踪
 		numMetrics := rapid.IntRange(1, 4).Draw(rt, "numMetrics")
 		metrics := make([]string, numMetrics)
 		for i := range numMetrics {
 			metrics[i] = fmt.Sprintf("metric_%d", i)
 		}
 
-		// Create experiment
+		// 创建实验
 		experimentID := rapid.StringMatching(`exp-stat-[a-z0-9]{8}`).Draw(rt, "experimentID")
 		exp := &Experiment{
 			ID:       experimentID,
@@ -524,7 +524,7 @@ func TestProperty_ABTest_StatisticalAnalysis(t *testing.T) {
 			Status:   ExperimentStatusRunning,
 		}
 
-		// Create tester
+		// 创建测试器
 		store := NewMemoryExperimentStore()
 		tester := NewABTester(store, nil)
 
@@ -534,13 +534,13 @@ func TestProperty_ABTest_StatisticalAnalysis(t *testing.T) {
 		err = tester.StartExperiment(experimentID)
 		require.NoError(rt, err, "StartExperiment should not return error")
 
-		// Generate random number of samples per variant (at least 10 for meaningful stats)
+		// 生成每个变体的随机样本数(有意义的统计数据至少为10个)
 		samplesPerVariant := rapid.IntRange(10, 50).Draw(rt, "samplesPerVariant")
 
-		// Record results for each variant
+		// 每个变量的记录结果
 		for _, variant := range variants {
 			for j := range samplesPerVariant {
-				// Generate random score and metrics
+				// 生成随机得分和衡量标准
 				score := rapid.Float64Range(0.0, 1.0).Draw(rt, fmt.Sprintf("score_%s_%d", variant.ID, j))
 				metricValues := make(map[string]float64)
 				for _, m := range metrics {
@@ -559,17 +559,17 @@ func TestProperty_ABTest_StatisticalAnalysis(t *testing.T) {
 			}
 		}
 
-		// Complete the experiment
+		// 完成实验
 		err = tester.CompleteExperiment(experimentID)
 		require.NoError(rt, err, "CompleteExperiment should not return error")
 
-		// Analyze the experiment
+		// 分析实验
 		ctx := t.Context()
 		analysisResult, err := tester.Analyze(ctx, experimentID)
 		require.NoError(rt, err, "Analyze should not return error")
 
-		// Property 18 Verification:
-		// 1. ExperimentResult should contain VariantResult for ALL variants
+		// 核查:
+		// 1. 实验结果应包含所有变体的可变结果
 		assert.Equal(rt, experimentID, analysisResult.ExperimentID,
 			"ExperimentResult should have correct experiment ID")
 
@@ -582,33 +582,33 @@ func TestProperty_ABTest_StatisticalAnalysis(t *testing.T) {
 				"ExperimentResult should contain VariantResult for variant %s", variant.ID)
 
 			if exists {
-				// 2. Each VariantResult should contain SampleCount
+				// 2. 每种变式结果应包含样本
 				assert.Equal(rt, samplesPerVariant, vr.SampleCount,
 					"VariantResult for %s should have correct SampleCount", variant.ID)
 
-				// 3. Each VariantResult should contain Metrics (non-nil map)
+				// 3. 每种变式结果应包含计量(非无地图)
 				assert.NotNil(rt, vr.Metrics,
 					"VariantResult for %s should have non-nil Metrics", variant.ID)
 
-				// 4. Each VariantResult should contain StdDev (non-nil map)
+				// 4. 每种变式结果应包含StdDev(无地图)
 				assert.NotNil(rt, vr.StdDev,
 					"VariantResult for %s should have non-nil StdDev", variant.ID)
 
-				// 5. SampleCount should be non-negative
+				// 5. 抽样应非否定性
 				assert.GreaterOrEqual(rt, vr.SampleCount, 0,
 					"SampleCount for %s should be non-negative", variant.ID)
 
-				// 6. Metrics should contain the "score" metric
+				// 6. 计量应包含“分数”指标。
 				_, hasScore := vr.Metrics["score"]
 				assert.True(rt, hasScore,
 					"Metrics for %s should contain 'score'", variant.ID)
 
-				// 7. StdDev should contain the "score" metric
+				// 7. StdDev 应包含“分数”指标。
 				_, hasScoreStdDev := vr.StdDev["score"]
 				assert.True(rt, hasScoreStdDev,
 					"StdDev for %s should contain 'score'", variant.ID)
 
-				// 8. StdDev values should be non-negative
+				// 8. StdDev 值应当是非负值
 				for metricName, stdDevValue := range vr.StdDev {
 					assert.GreaterOrEqual(rt, stdDevValue, 0.0,
 						"StdDev for metric %s in variant %s should be non-negative", metricName, variant.ID)
@@ -616,16 +616,16 @@ func TestProperty_ABTest_StatisticalAnalysis(t *testing.T) {
 			}
 		}
 
-		// 9. Total sample size should be sum of all variant sample counts
+		// 9. 样本总规模应为所有可变样本数之和
 		expectedTotalSamples := numVariants * samplesPerVariant
 		assert.Equal(rt, expectedTotalSamples, analysisResult.SampleSize,
 			"Total sample size should be %d", expectedTotalSamples)
 
-		// 10. Duration should be non-negative
+		// 10. 期限应为非负数
 		assert.GreaterOrEqual(rt, analysisResult.Duration, 0*time.Second,
 			"Duration should be non-negative")
 
-		// 11. Confidence should be in valid range [0, 1]
+		// 11. 信任应在有效范围内[0、1]
 		assert.GreaterOrEqual(rt, analysisResult.Confidence, 0.0,
 			"Confidence should be >= 0")
 		assert.LessOrEqual(rt, analysisResult.Confidence, 1.0,
@@ -633,12 +633,12 @@ func TestProperty_ABTest_StatisticalAnalysis(t *testing.T) {
 	})
 }
 
-// TestProperty_ABTest_StatisticalAnalysis_EmptyVariants tests that analysis handles
-// variants with no recorded results gracefully
-// **Validates: Requirements 11.3, 11.4**
+// Property AB Test 统计分析 分析处理的变数测试
+// 没有记录结果的变体
+// ** 参数:要求11.3、11.4**
 func TestProperty_ABTest_StatisticalAnalysis_EmptyVariants(t *testing.T) {
 	rapid.Check(t, func(rt *rapid.T) {
-		// Create experiment with 2 variants
+		// 用两个变体创建实验
 		variants := []Variant{
 			{ID: "control", Name: "Control", Weight: 0.5, IsControl: true},
 			{ID: "treatment", Name: "Treatment", Weight: 0.5},
@@ -662,7 +662,7 @@ func TestProperty_ABTest_StatisticalAnalysis_EmptyVariants(t *testing.T) {
 		err = tester.StartExperiment(experimentID)
 		require.NoError(rt, err)
 
-		// Only record results for control, leave treatment empty
+		// 只记录控制结果, 留空处理
 		numSamples := rapid.IntRange(5, 20).Draw(rt, "numSamples")
 		for i := range numSamples {
 			result := &EvalResult{
@@ -674,23 +674,23 @@ func TestProperty_ABTest_StatisticalAnalysis_EmptyVariants(t *testing.T) {
 			require.NoError(rt, err)
 		}
 
-		// Analyze
+		// 分析
 		ctx := t.Context()
 		analysisResult, err := tester.Analyze(ctx, experimentID)
 		require.NoError(rt, err)
 
-		// Property verification: ALL variants should have VariantResult
+		// 财产核查:所有变体都应有变体结果
 		assert.Len(rt, analysisResult.VariantResults, 2,
 			"Should have VariantResult for all variants")
 
-		// Control should have samples
+		// 控制器应该有样本
 		controlResult := analysisResult.VariantResults["control"]
 		require.NotNil(rt, controlResult)
 		assert.Equal(rt, numSamples, controlResult.SampleCount)
 		assert.NotNil(rt, controlResult.Metrics)
 		assert.NotNil(rt, controlResult.StdDev)
 
-		// Treatment should exist but with 0 samples
+		// 应存在处理,但样品为0
 		treatmentResult := analysisResult.VariantResults["treatment"]
 		require.NotNil(rt, treatmentResult)
 		assert.Equal(rt, 0, treatmentResult.SampleCount)
@@ -699,12 +699,12 @@ func TestProperty_ABTest_StatisticalAnalysis_EmptyVariants(t *testing.T) {
 	})
 }
 
-// TestProperty_ABTest_StatisticalAnalysis_MetricsConsistency tests that metrics
-// are consistently calculated across variants
-// **Validates: Requirements 11.3, 11.4**
+// 测试 Property AB Test 统计分析 计量一致性测试
+// 在各种变量之间一致计算
+// ** 参数:要求11.3、11.4**
 func TestProperty_ABTest_StatisticalAnalysis_MetricsConsistency(t *testing.T) {
 	rapid.Check(t, func(rt *rapid.T) {
-		// Create experiment with multiple metrics
+		// 创建多个参数的实验
 		numMetrics := rapid.IntRange(2, 5).Draw(rt, "numMetrics")
 		metrics := make([]string, numMetrics)
 		for i := range numMetrics {
@@ -734,7 +734,7 @@ func TestProperty_ABTest_StatisticalAnalysis_MetricsConsistency(t *testing.T) {
 		err = tester.StartExperiment(experimentID)
 		require.NoError(rt, err)
 
-		// Record results with all metrics for both variants
+		// 记录两种变式的所有计量结果
 		numSamples := rapid.IntRange(20, 50).Draw(rt, "numSamples")
 		for _, variant := range variants {
 			for i := range numSamples {
@@ -754,28 +754,28 @@ func TestProperty_ABTest_StatisticalAnalysis_MetricsConsistency(t *testing.T) {
 			}
 		}
 
-		// Analyze
+		// 分析
 		ctx := t.Context()
 		analysisResult, err := tester.Analyze(ctx, experimentID)
 		require.NoError(rt, err)
 
-		// Verify metrics consistency for each variant
+		// 验证每个变量的参数一致性
 		for _, variant := range variants {
 			vr := analysisResult.VariantResults[variant.ID]
 			require.NotNil(rt, vr)
 
-			// Each configured metric should have a value in Metrics
+			// 每个被配置的度量衡在度量衡中应有一个值
 			for _, m := range metrics {
 				_, hasMetric := vr.Metrics[m]
 				assert.True(rt, hasMetric,
 					"Variant %s should have metric %s", variant.ID, m)
 
-				// Each metric should also have a StdDev value
+				// 每个度量衡还应有 StdDev 值
 				stdDev, hasStdDev := vr.StdDev[m]
 				assert.True(rt, hasStdDev,
 					"Variant %s should have StdDev for metric %s", variant.ID, m)
 
-				// StdDev should be non-negative
+				// StdDev 应该不是阴性
 				if hasStdDev {
 					assert.GreaterOrEqual(rt, stdDev, 0.0,
 						"StdDev for metric %s in variant %s should be non-negative", m, variant.ID)
@@ -785,9 +785,9 @@ func TestProperty_ABTest_StatisticalAnalysis_MetricsConsistency(t *testing.T) {
 	})
 }
 
-// TestProperty_ABTest_StatisticalAnalysis_ValidStatistics tests that statistical
-// values are mathematically valid
-// **Validates: Requirements 11.3, 11.4**
+// 检验 Property AB Test 统计分析 Valid Statistics tests that statistics
+// 数值在数学上是有效的
+// ** 参数:要求11.3、11.4**
 func TestProperty_ABTest_StatisticalAnalysis_ValidStatistics(t *testing.T) {
 	rapid.Check(t, func(rt *rapid.T) {
 		variants := []Variant{
@@ -813,15 +813,15 @@ func TestProperty_ABTest_StatisticalAnalysis_ValidStatistics(t *testing.T) {
 		err = tester.StartExperiment(experimentID)
 		require.NoError(rt, err)
 
-		// Record results with known value ranges
+		// 记录已知值范围的结果
 		numSamples := rapid.IntRange(30, 100).Draw(rt, "numSamples")
 		for _, variant := range variants {
 			for i := range numSamples {
-				// Score in [0, 1]
+				// 得分 [0, 1]
 				score := rapid.Float64Range(0.0, 1.0).Draw(rt, fmt.Sprintf("score_%s_%d", variant.ID, i))
-				// Latency in [10, 1000] ms
+				// 延迟值为[10,1000]毫秒
 				latency := rapid.Float64Range(10.0, 1000.0).Draw(rt, fmt.Sprintf("latency_%s_%d", variant.ID, i))
-				// Accuracy in [0, 100] percent
+				// 准确度[0,100%]
 				accuracy := rapid.Float64Range(0.0, 100.0).Draw(rt, fmt.Sprintf("accuracy_%s_%d", variant.ID, i))
 
 				result := &EvalResult{
@@ -838,54 +838,54 @@ func TestProperty_ABTest_StatisticalAnalysis_ValidStatistics(t *testing.T) {
 			}
 		}
 
-		// Analyze
+		// 分析
 		ctx := t.Context()
 		analysisResult, err := tester.Analyze(ctx, experimentID)
 		require.NoError(rt, err)
 
-		// Verify statistical validity for each variant
+		// 验证每个变量的统计有效性
 		for _, variant := range variants {
 			vr := analysisResult.VariantResults[variant.ID]
 			require.NotNil(rt, vr)
 
-			// SampleCount should match
+			// 样本应匹配
 			assert.Equal(rt, numSamples, vr.SampleCount,
 				"SampleCount for %s should be %d", variant.ID, numSamples)
 
-			// Score mean should be in [0, 1]
+			// 得分平均值应为 [0, 1]
 			scoreMean := vr.Metrics["score"]
 			assert.GreaterOrEqual(rt, scoreMean, 0.0,
 				"Score mean for %s should be >= 0", variant.ID)
 			assert.LessOrEqual(rt, scoreMean, 1.0,
 				"Score mean for %s should be <= 1", variant.ID)
 
-			// Latency mean should be in [10, 1000]
+			// 延迟平均值应为[10,1000]
 			latencyMean := vr.Metrics["latency"]
 			assert.GreaterOrEqual(rt, latencyMean, 10.0,
 				"Latency mean for %s should be >= 10", variant.ID)
 			assert.LessOrEqual(rt, latencyMean, 1000.0,
 				"Latency mean for %s should be <= 1000", variant.ID)
 
-			// Accuracy mean should be in [0, 100]
+			// 准确度平均值应为[0, 100]
 			accuracyMean := vr.Metrics["accuracy"]
 			assert.GreaterOrEqual(rt, accuracyMean, 0.0,
 				"Accuracy mean for %s should be >= 0", variant.ID)
 			assert.LessOrEqual(rt, accuracyMean, 100.0,
 				"Accuracy mean for %s should be <= 100", variant.ID)
 
-			// All StdDev values should be non-negative
+			// 所有 StdDev 值都应该是非负数
 			for metricName, stdDev := range vr.StdDev {
 				assert.GreaterOrEqual(rt, stdDev, 0.0,
 					"StdDev for %s in %s should be non-negative", metricName, variant.ID)
 
-				// StdDev should not be NaN or Inf
+				// StdDev 不应该是NaN 或 Inf
 				assert.False(rt, math.IsNaN(stdDev),
 					"StdDev for %s in %s should not be NaN", metricName, variant.ID)
 				assert.False(rt, math.IsInf(stdDev, 0),
 					"StdDev for %s in %s should not be Inf", metricName, variant.ID)
 			}
 
-			// All metric means should not be NaN or Inf
+			// 所有计量手段都不应是NaN或Inf
 			for metricName, mean := range vr.Metrics {
 				assert.False(rt, math.IsNaN(mean),
 					"Mean for %s in %s should not be NaN", metricName, variant.ID)
@@ -896,12 +896,12 @@ func TestProperty_ABTest_StatisticalAnalysis_ValidStatistics(t *testing.T) {
 	})
 }
 
-// TestProperty_ABTest_StatisticalAnalysis_MultiVariant tests statistical analysis
-// with more than 2 variants (multi-variant testing)
-// **Validates: Requirements 11.3, 11.4, 11.5**
+// 检测 Property AB 测试 统计分析 多变量测试 统计分析
+// 具有2个以上变种(多变量测试)
+// ** 变动情况:要求11.3、11.4、11.5**
 func TestProperty_ABTest_StatisticalAnalysis_MultiVariant(t *testing.T) {
 	rapid.Check(t, func(rt *rapid.T) {
-		// Generate 3-6 variants
+		// 生成3-6个变体
 		numVariants := rapid.IntRange(3, 6).Draw(rt, "numVariants")
 		variants := make([]Variant, numVariants)
 
@@ -932,7 +932,7 @@ func TestProperty_ABTest_StatisticalAnalysis_MultiVariant(t *testing.T) {
 		err = tester.StartExperiment(experimentID)
 		require.NoError(rt, err)
 
-		// Record results for all variants
+		// 所有变量的记录结果
 		numSamples := rapid.IntRange(20, 40).Draw(rt, "numSamples")
 		for _, variant := range variants {
 			for i := range numSamples {
@@ -949,7 +949,7 @@ func TestProperty_ABTest_StatisticalAnalysis_MultiVariant(t *testing.T) {
 			}
 		}
 
-		// Complete and analyze
+		// 完成和分析
 		err = tester.CompleteExperiment(experimentID)
 		require.NoError(rt, err)
 
@@ -957,11 +957,11 @@ func TestProperty_ABTest_StatisticalAnalysis_MultiVariant(t *testing.T) {
 		analysisResult, err := tester.Analyze(ctx, experimentID)
 		require.NoError(rt, err)
 
-		// Verify all variants have results
+		// 校验所有变种都有结果
 		assert.Len(rt, analysisResult.VariantResults, numVariants,
 			"Should have VariantResult for all %d variants", numVariants)
 
-		// Verify each variant has complete statistics
+		// 验证每个变体都有完整的统计
 		for _, variant := range variants {
 			vr, exists := analysisResult.VariantResults[variant.ID]
 			assert.True(rt, exists, "Should have result for variant %s", variant.ID)
@@ -972,7 +972,7 @@ func TestProperty_ABTest_StatisticalAnalysis_MultiVariant(t *testing.T) {
 				assert.NotNil(rt, vr.Metrics)
 				assert.NotNil(rt, vr.StdDev)
 
-				// Should have score and latency metrics
+				// 应该有分数和耐用度
 				_, hasScore := vr.Metrics["score"]
 				_, hasLatency := vr.Metrics["latency"]
 				assert.True(rt, hasScore, "Variant %s should have score metric", variant.ID)
@@ -980,14 +980,14 @@ func TestProperty_ABTest_StatisticalAnalysis_MultiVariant(t *testing.T) {
 			}
 		}
 
-		// Total samples should be correct
+		// 样本总数应正确无误
 		assert.Equal(rt, numVariants*numSamples, analysisResult.SampleSize)
 	})
 }
 
-// TestProperty_ABTest_StatisticalAnalysis_ReportGeneration tests that statistical
-// reports are generated correctly for completed experiments
-// **Validates: Requirements 11.4**
+// 检测结果 AB测试 统计分析 统计测试报告
+// 为已完成的实验正确生成报告
+// ** 参数:要求11.4**
 func TestProperty_ABTest_StatisticalAnalysis_ReportGeneration(t *testing.T) {
 	rapid.Check(t, func(rt *rapid.T) {
 		variants := []Variant{
@@ -1013,7 +1013,7 @@ func TestProperty_ABTest_StatisticalAnalysis_ReportGeneration(t *testing.T) {
 		err = tester.StartExperiment(experimentID)
 		require.NoError(rt, err)
 
-		// Record results
+		// 记录结果
 		numSamples := rapid.IntRange(50, 100).Draw(rt, "numSamples")
 		for _, variant := range variants {
 			for i := range numSamples {
@@ -1027,19 +1027,19 @@ func TestProperty_ABTest_StatisticalAnalysis_ReportGeneration(t *testing.T) {
 			}
 		}
 
-		// Generate report
+		// 生成报告
 		ctx := t.Context()
 		report, err := tester.GenerateReport(ctx, experimentID)
 		require.NoError(rt, err)
 
-		// Verify report structure
+		// 校验报告结构
 		assert.Equal(rt, experimentID, report.ExperimentID)
 		assert.Equal(rt, exp.Name, report.ExperimentName)
 		assert.Equal(rt, 2*numSamples, report.TotalSamples)
 		assert.False(rt, report.GeneratedAt.IsZero())
 		assert.NotEmpty(rt, report.Recommendation)
 
-		// Verify variant reports
+		// 核查变种报告
 		assert.Len(rt, report.VariantReports, 2)
 
 		for _, variant := range variants {
@@ -1057,10 +1057,10 @@ func TestProperty_ABTest_StatisticalAnalysis_ReportGeneration(t *testing.T) {
 			}
 		}
 
-		// Verify comparisons exist
+		// 验证比较存在
 		assert.NotEmpty(rt, report.Comparisons)
 
-		// Verify comparison structure
+		// 验证比较结构
 		for _, comp := range report.Comparisons {
 			assert.NotEmpty(rt, comp.ControlID)
 			assert.NotEmpty(rt, comp.TreatmentID)

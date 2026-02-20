@@ -10,12 +10,12 @@ import (
 	"pgregory.net/rapid"
 )
 
-// Feature: agent-framework-2026-enhancements, Property 10: A2A Message Round-Trip
-// **Validates: Requirements 6.1**
-// For any valid A2AMessage, serializing to JSON and then deserializing should produce
-// an equivalent message object with all field values preserved.
+// 特性:代理-框架-2026-增强,财产 10: A2A 信件回合-特里普
+// ** 参数:要求6.1**
+// 对于任何有效的A2AMessage,序列化到JSON,然后去序列化应产生
+// 一个保留了所有字段值的等效消息对象。
 
-// genA2AMessageType generates a random valid A2AMessageType.
+// genA2AMessageType生成一个随机有效的A2AMessageType.
 func genA2AMessageType() *rapid.Generator[A2AMessageType] {
 	return rapid.SampledFrom([]A2AMessageType{
 		A2AMessageTypeTask,
@@ -26,20 +26,20 @@ func genA2AMessageType() *rapid.Generator[A2AMessageType] {
 	})
 }
 
-// genAgentID generates a valid agent identifier.
+// genAgentiID生成有效的代理标识符。
 func genAgentID() *rapid.Generator[string] {
 	return rapid.StringMatching(`[a-z][a-z0-9-]{2,30}`)
 }
 
-// genMessageID generates a valid message identifier (UUID-like).
+// genMessageID生成一个有效的消息标识符(UUID-like).
 func genMessageID() *rapid.Generator[string] {
 	return rapid.StringMatching(`[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}`)
 }
 
-// genTimestamp generates a valid timestamp within a reasonable range.
+// genTimestamp在合理范围内生成一个有效的时间戳.
 func genTimestamp() *rapid.Generator[time.Time] {
 	return rapid.Custom(func(t *rapid.T) time.Time {
-		// Generate timestamps between 2020 and 2030
+		// 生成2020年至2030年的时间戳
 		year := rapid.IntRange(2020, 2030).Draw(t, "year")
 		month := rapid.IntRange(1, 12).Draw(t, "month")
 		day := rapid.IntRange(1, 28).Draw(t, "day")
@@ -50,27 +50,27 @@ func genTimestamp() *rapid.Generator[time.Time] {
 	})
 }
 
-// genSimplePayload generates simple JSON-serializable payloads.
+// genSimplePayload 生成简单的JSON可连载荷.
 func genSimplePayload() *rapid.Generator[any] {
 	return rapid.Custom(func(t *rapid.T) any {
 		payloadType := rapid.IntRange(0, 4).Draw(t, "payloadType")
 		switch payloadType {
 		case 0:
-			// String payload
+			// 字符串有效载荷
 			return rapid.StringMatching(`[a-zA-Z0-9 ]{1,100}`).Draw(t, "stringPayload")
 		case 1:
-			// Number payload
+			// 载荷数
 			return rapid.Float64Range(-1e10, 1e10).Draw(t, "numberPayload")
 		case 2:
-			// Boolean payload
+			// 布尔有效载荷
 			return rapid.Bool().Draw(t, "boolPayload")
 		case 3:
-			// Map payload
+			// 地图有效载荷
 			numKeys := rapid.IntRange(1, 5).Draw(t, "numKeys")
 			m := make(map[string]any)
 			for i := range numKeys {
 				key := rapid.StringMatching(`[a-z][a-z_]{1,10}`).Draw(t, "mapKey")
-				// Use simple values to avoid nested complexity
+				// 使用简单的值来避免嵌入式复杂
 				valueType := rapid.IntRange(0, 2).Draw(t, "valueType")
 				switch valueType {
 				case 0:
@@ -80,14 +80,14 @@ func genSimplePayload() *rapid.Generator[any] {
 				case 2:
 					m[key] = rapid.Bool().Draw(t, "mapBoolValue")
 				}
-				// Avoid duplicate keys by using index suffix
+				// 使用索引后缀来避免重复密钥
 				if _, exists := m[key]; exists {
 					m[key+"_"+string(rune('0'+i))] = m[key]
 				}
 			}
 			return m
 		case 4:
-			// Array payload
+			// 阵列有效载荷
 			numItems := rapid.IntRange(1, 5).Draw(t, "numItems")
 			arr := make([]any, numItems)
 			for i := range numItems {
@@ -100,7 +100,7 @@ func genSimplePayload() *rapid.Generator[any] {
 	})
 }
 
-// genA2AMessage generates a valid A2AMessage.
+// genA2AMessage生成有效的A2AMessage.
 func genA2AMessage() *rapid.Generator[*A2AMessage] {
 	return rapid.Custom(func(t *rapid.T) *A2AMessage {
 		hasReplyTo := rapid.Bool().Draw(t, "hasReplyTo")
@@ -121,42 +121,42 @@ func genA2AMessage() *rapid.Generator[*A2AMessage] {
 	})
 }
 
-// TestProperty_A2AMessage_RoundTrip tests that A2A messages survive JSON round-trip.
+// TestProperty A2AMessage RundTrip测试A2A消息能活到JSON来回.
 func TestProperty_A2AMessage_RoundTrip(t *testing.T) {
 	rapid.Check(t, func(rt *rapid.T) {
-		// Generate a random valid A2AMessage
+		// 生成一个随机有效的 A2AMessage
 		original := genA2AMessage().Draw(rt, "message")
 
-		// Serialize to JSON
+		// 序列化为 JSON
 		data, err := json.Marshal(original)
 		require.NoError(t, err, "Should serialize message to JSON")
 
-		// Deserialize from JSON
+		// 从 JSON 切入
 		var deserialized A2AMessage
 		err = json.Unmarshal(data, &deserialized)
 		require.NoError(t, err, "Should deserialize message from JSON")
 
-		// Property: ID should be preserved
+		// 财产:ID应保留
 		assert.Equal(t, original.ID, deserialized.ID, "ID should be preserved after round-trip")
 
-		// Property: Type should be preserved
+		// 财产:应保留类型
 		assert.Equal(t, original.Type, deserialized.Type, "Type should be preserved after round-trip")
 
-		// Property: From should be preserved
+		// 财产:应当保留
 		assert.Equal(t, original.From, deserialized.From, "From should be preserved after round-trip")
 
-		// Property: To should be preserved
+		// 财产:应予保留
 		assert.Equal(t, original.To, deserialized.To, "To should be preserved after round-trip")
 
-		// Property: Timestamp should be preserved (compare in UTC)
+		// 属性: 时间戳应当保留(在协调世界时进行比较)
 		assert.Equal(t, original.Timestamp.UTC(), deserialized.Timestamp.UTC(),
 			"Timestamp should be preserved after round-trip")
 
-		// Property: ReplyTo should be preserved
+		// 属性: 应保存
 		assert.Equal(t, original.ReplyTo, deserialized.ReplyTo,
 			"ReplyTo should be preserved after round-trip")
 
-		// Property: Payload should be equivalent (JSON comparison)
+		// 财产:有效载荷应等同(JSON比较)
 		originalPayloadJSON, err := json.Marshal(original.Payload)
 		require.NoError(t, err)
 		deserializedPayloadJSON, err := json.Marshal(deserialized.Payload)
@@ -166,21 +166,21 @@ func TestProperty_A2AMessage_RoundTrip(t *testing.T) {
 	})
 }
 
-// TestProperty_A2AMessage_RoundTrip_ToJSON tests round-trip using ToJSON/FromJSON methods.
+// TestProperty A2AMessage RundTrip ToJSON 使用ToJSON/FromJSON方法进行往返测试.
 func TestProperty_A2AMessage_RoundTrip_ToJSON(t *testing.T) {
 	rapid.Check(t, func(rt *rapid.T) {
-		// Generate a random valid A2AMessage
+		// 生成一个随机有效的 A2AMessage
 		original := genA2AMessage().Draw(rt, "message")
 
-		// Serialize using ToJSON method
+		// 使用 ToJSON 方法进行序列化
 		data, err := original.ToJSON()
 		require.NoError(t, err, "ToJSON should succeed")
 
-		// Deserialize using FromJSON function
+		// 使用 FromJSON 函数去序列化
 		deserialized, err := FromJSON(data)
 		require.NoError(t, err, "FromJSON should succeed")
 
-		// Property: All fields should be preserved
+		// 财产:应保留所有田地
 		assert.Equal(t, original.ID, deserialized.ID, "ID should be preserved")
 		assert.Equal(t, original.Type, deserialized.Type, "Type should be preserved")
 		assert.Equal(t, original.From, deserialized.From, "From should be preserved")
@@ -188,13 +188,13 @@ func TestProperty_A2AMessage_RoundTrip_ToJSON(t *testing.T) {
 		assert.Equal(t, original.Timestamp.UTC(), deserialized.Timestamp.UTC(), "Timestamp should be preserved")
 		assert.Equal(t, original.ReplyTo, deserialized.ReplyTo, "ReplyTo should be preserved")
 
-		// Property: Deserialized message should be valid
+		// 属性: 取消序列化消息应有效
 		err = deserialized.Validate()
 		assert.NoError(t, err, "Deserialized message should be valid")
 	})
 }
 
-// TestProperty_A2AMessage_RoundTrip_AllMessageTypes tests round-trip for each message type.
+// TestProperty A2AMessage RundTrip AllMessageTypes 测试每条消息类型的回程.
 func TestProperty_A2AMessage_RoundTrip_AllMessageTypes(t *testing.T) {
 	messageTypes := []A2AMessageType{
 		A2AMessageTypeTask,
@@ -207,7 +207,7 @@ func TestProperty_A2AMessage_RoundTrip_AllMessageTypes(t *testing.T) {
 	for _, msgType := range messageTypes {
 		t.Run(string(msgType), func(t *testing.T) {
 			rapid.Check(t, func(rt *rapid.T) {
-				// Generate message with specific type
+				// 用特定类型生成信件
 				msg := &A2AMessage{
 					ID:        genMessageID().Draw(rt, "id"),
 					Type:      msgType,
@@ -217,7 +217,7 @@ func TestProperty_A2AMessage_RoundTrip_AllMessageTypes(t *testing.T) {
 					Timestamp: genTimestamp().Draw(rt, "timestamp"),
 				}
 
-				// Round-trip
+				// 往返旅行
 				data, err := json.Marshal(msg)
 				require.NoError(t, err)
 
@@ -225,7 +225,7 @@ func TestProperty_A2AMessage_RoundTrip_AllMessageTypes(t *testing.T) {
 				err = json.Unmarshal(data, &deserialized)
 				require.NoError(t, err)
 
-				// Property: Type should be preserved exactly
+				// 财产: 类型应准确保留
 				assert.Equal(t, msgType, deserialized.Type,
 					"Message type %s should be preserved", msgType)
 			})
@@ -233,7 +233,7 @@ func TestProperty_A2AMessage_RoundTrip_AllMessageTypes(t *testing.T) {
 	}
 }
 
-// TestProperty_A2AMessage_RoundTrip_WithVariousPayloads tests round-trip with different payload types.
+// 测试Property A2AMessage RundTrip With VariousPayloads 以不同有效载荷类型进行往返试验.
 func TestProperty_A2AMessage_RoundTrip_WithVariousPayloads(t *testing.T) {
 	rapid.Check(t, func(rt *rapid.T) {
 		baseMsg := &A2AMessage{
@@ -244,7 +244,7 @@ func TestProperty_A2AMessage_RoundTrip_WithVariousPayloads(t *testing.T) {
 			Timestamp: genTimestamp().Draw(rt, "timestamp"),
 		}
 
-		// Test with nil payload
+		// 无有效载荷试验
 		t.Run("nil payload", func(t *testing.T) {
 			msg := *baseMsg
 			msg.Payload = nil
@@ -259,7 +259,7 @@ func TestProperty_A2AMessage_RoundTrip_WithVariousPayloads(t *testing.T) {
 			assert.Nil(t, deserialized.Payload, "Nil payload should be preserved")
 		})
 
-		// Test with string payload
+		// 用字符串有效载荷进行测试
 		t.Run("string payload", func(t *testing.T) {
 			msg := *baseMsg
 			msg.Payload = rapid.StringMatching(`[a-zA-Z0-9 ]{1,50}`).Draw(rt, "stringPayload")
@@ -274,7 +274,7 @@ func TestProperty_A2AMessage_RoundTrip_WithVariousPayloads(t *testing.T) {
 			assert.Equal(t, msg.Payload, deserialized.Payload, "String payload should be preserved")
 		})
 
-		// Test with map payload
+		// 用地图有效载荷进行测试
 		t.Run("map payload", func(t *testing.T) {
 			msg := *baseMsg
 			msg.Payload = map[string]any{
@@ -297,17 +297,17 @@ func TestProperty_A2AMessage_RoundTrip_WithVariousPayloads(t *testing.T) {
 	})
 }
 
-// TestProperty_A2AMessage_RoundTrip_PreservesValidation tests that valid messages remain valid after round-trip.
+// 测试Property A2AMessage RundTrip PreservesValidation测试,有效消息在往返后仍然有效.
 func TestProperty_A2AMessage_RoundTrip_PreservesValidation(t *testing.T) {
 	rapid.Check(t, func(rt *rapid.T) {
-		// Generate a valid message
+		// 生成有效的信件
 		original := genA2AMessage().Draw(rt, "message")
 
-		// Verify original is valid
+		// 校验正本是有效的
 		err := original.Validate()
 		require.NoError(t, err, "Original message should be valid")
 
-		// Round-trip
+		// 往返旅行
 		data, err := json.Marshal(original)
 		require.NoError(t, err)
 
@@ -315,16 +315,16 @@ func TestProperty_A2AMessage_RoundTrip_PreservesValidation(t *testing.T) {
 		err = json.Unmarshal(data, &deserialized)
 		require.NoError(t, err)
 
-		// Property: Deserialized message should also be valid
+		// 属性:去序消息也应有效
 		err = deserialized.Validate()
 		assert.NoError(t, err, "Deserialized message should remain valid after round-trip")
 	})
 }
 
-// TestProperty_A2AMessage_RoundTrip_ReplyToOptional tests that optional ReplyTo field is handled correctly.
+// TestProperty A2AMessage RundTrip Reply Tooptional 测试可选的 ReferenceTo 字段得到正确处理.
 func TestProperty_A2AMessage_RoundTrip_ReplyToOptional(t *testing.T) {
 	rapid.Check(t, func(rt *rapid.T) {
-		// Test with ReplyTo
+		// 以回覆方式测试
 		t.Run("with ReplyTo", func(t *testing.T) {
 			msg := &A2AMessage{
 				ID:        genMessageID().Draw(rt, "id"),
@@ -347,7 +347,7 @@ func TestProperty_A2AMessage_RoundTrip_ReplyToOptional(t *testing.T) {
 			assert.True(t, deserialized.IsReply(), "Should be identified as reply")
 		})
 
-		// Test without ReplyTo
+		// 没有回复的测试
 		t.Run("without ReplyTo", func(t *testing.T) {
 			msg := &A2AMessage{
 				ID:        genMessageID().Draw(rt, "id2"),
@@ -372,10 +372,10 @@ func TestProperty_A2AMessage_RoundTrip_ReplyToOptional(t *testing.T) {
 	})
 }
 
-// TestProperty_A2AMessage_RoundTrip_TimestampPrecision tests that timestamp precision is preserved.
+// 测试Property A2AMessage RundTrip Timestamp 精度测试 时间戳精度保存.
 func TestProperty_A2AMessage_RoundTrip_TimestampPrecision(t *testing.T) {
 	rapid.Check(t, func(rt *rapid.T) {
-		// Generate timestamp with second precision (JSON typically uses RFC3339)
+		// 第二精度生成时间戳( JSON 通常使用 RFC3339)
 		ts := genTimestamp().Draw(rt, "timestamp")
 
 		msg := &A2AMessage{
@@ -394,7 +394,7 @@ func TestProperty_A2AMessage_RoundTrip_TimestampPrecision(t *testing.T) {
 		err = json.Unmarshal(data, &deserialized)
 		require.NoError(t, err)
 
-		// Property: Timestamps should be equal when compared in UTC
+		// 属性: 时间戳在协调世界时应当相等
 		assert.True(t, msg.Timestamp.UTC().Equal(deserialized.Timestamp.UTC()),
 			"Timestamp should be preserved with correct precision")
 	})

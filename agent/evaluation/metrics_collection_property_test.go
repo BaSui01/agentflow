@@ -1,4 +1,4 @@
-// Package evaluation provides automated evaluation framework for AI agents.
+// 成套评价为AI代理提供了自动化的评价框架.
 package evaluation
 
 import (
@@ -14,27 +14,27 @@ import (
 
 // TestProperty_MetricsCollection_Completeness tests Property 15: 评估指标收集完整性
 // For any 配置了评估指标的 Agent 执行，执行完成后收集的 EvalResult 应包含所有配置指标的值，且值类型正确。
-// **Validates: Requirements 9.1, 9.2**
+// ** 参数:要求9.1、9.2**
 func TestProperty_MetricsCollection_Completeness(t *testing.T) {
 	rapid.Check(t, func(rt *rapid.T) {
-		// Generate random number of metrics (1-10)
+		// 随机生成度量衡(1-10)
 		numMetrics := rapid.IntRange(1, 10).Draw(rt, "numMetrics")
 
-		// Create a metric registry with generated metrics
+		// 创建一个带有生成的公分量的公分量登记册
 		registry := NewMetricRegistry()
 		expectedMetricNames := make([]string, numMetrics)
 
 		for i := 0; i < numMetrics; i++ {
 			metricName := fmt.Sprintf("metric_%d", i)
 			expectedMetricNames[i] = metricName
-			// Register a custom metric that returns a predictable value
+			// 注册返回可预见值的自定义度量表
 			registry.Register(&testMetric{
 				name:  metricName,
 				value: float64(i) * 0.1,
 			})
 		}
 
-		// Generate random input/output data
+		// 生成随机输入/输出数据
 		prompt := rapid.StringMatching(`[a-zA-Z0-9 ]{5,50}`).Draw(rt, "prompt")
 		response := rapid.StringMatching(`[a-zA-Z0-9 ]{5,100}`).Draw(rt, "response")
 		tokensUsed := rapid.IntRange(10, 1000).Draw(rt, "tokensUsed")
@@ -52,27 +52,27 @@ func TestProperty_MetricsCollection_Completeness(t *testing.T) {
 			Cost:       cost,
 		}
 
-		// Compute all metrics
+		// 计算所有参数
 		ctx := context.Background()
 		result, err := registry.ComputeAll(ctx, input, output)
 
-		// Verify: no error during computation
+		// 校验:在计算时没有出错
 		require.NoError(rt, err, "ComputeAll should not return error")
 
-		// Verify: result contains all configured metrics
+		// 校验:结果包含所有已配置的度量衡
 		assert.Equal(rt, numMetrics, len(result.Metrics),
 			"EvalResult should contain exactly %d metrics, got %d", numMetrics, len(result.Metrics))
 
-		// Verify: all expected metric names are present
+		// 校验: 所有预期的公尺名称都存在
 		for _, name := range expectedMetricNames {
 			_, exists := result.Metrics[name]
 			assert.True(rt, exists, "Metric '%s' should be present in result", name)
 		}
 
-		// Verify: all values are of correct type (float64)
-		// This is implicitly verified by the map type, but we check values are valid
+		// 校验:所有值都是正确的类型(活体64)
+		// 这被映射类型隐含地验证, 但我们检查值是有效的
 		for name, value := range result.Metrics {
-			// Check value is a valid float64 (not NaN or Inf)
+			// 检查值是有效的浮点64(不是NaN或Inf)
 			assert.False(rt, value != value, "Metric '%s' value should not be NaN", name) // NaN != NaN
 			assert.False(rt, value > 1e308 || value < -1e308,
 				"Metric '%s' value should not be Inf", name)
@@ -80,17 +80,17 @@ func TestProperty_MetricsCollection_Completeness(t *testing.T) {
 	})
 }
 
-// TestProperty_MetricsCollection_WithBuiltinMetrics tests that builtin metrics are collected correctly
-// **Validates: Requirements 9.1, 9.2**
+// 测试 Property Metrics Collection WithBuiltinMetrics 内置度量衡测试 正确收集
+// ** 参数:要求9.1、9.2**
 func TestProperty_MetricsCollection_WithBuiltinMetrics(t *testing.T) {
 	rapid.Check(t, func(rt *rapid.T) {
-		// Create registry with builtin metrics
+		// 创建内置参数的注册
 		registry := NewRegistryWithBuiltinMetrics()
 
-		// Expected builtin metric names
+		// 预期内置的计量名称
 		expectedMetrics := []string{"accuracy", "latency", "token_usage", "cost"}
 
-		// Generate random input/output data
+		// 生成随机输入/输出数据
 		prompt := rapid.StringMatching(`[a-zA-Z0-9 ]{5,50}`).Draw(rt, "prompt")
 		expected := rapid.StringMatching(`[a-zA-Z0-9 ]{5,50}`).Draw(rt, "expected")
 		response := rapid.StringMatching(`[a-zA-Z0-9 ]{5,100}`).Draw(rt, "response")
@@ -109,34 +109,34 @@ func TestProperty_MetricsCollection_WithBuiltinMetrics(t *testing.T) {
 			Cost:       cost,
 		}
 
-		// Compute all metrics
+		// 计算所有参数
 		ctx := context.Background()
 		result, err := registry.ComputeAll(ctx, input, output)
 
-		// Verify: no error during computation
+		// 校验:在计算时没有出错
 		require.NoError(rt, err, "ComputeAll should not return error")
 
-		// Verify: all builtin metrics are present
+		// 校验:所有内置度量衡都存在
 		for _, name := range expectedMetrics {
 			_, exists := result.Metrics[name]
 			assert.True(rt, exists, "Builtin metric '%s' should be present in result", name)
 		}
 
-		// Verify: metric values are valid float64
+		// 校验: 公尺值是有效的浮点64
 		for name, value := range result.Metrics {
 			assert.False(rt, value != value, "Metric '%s' value should not be NaN", name)
 		}
 	})
 }
 
-// TestProperty_MetricsCollection_MixedMetrics tests collection with both builtin and custom metrics
-// **Validates: Requirements 9.1, 9.2**
+// 测试 Property  metrics Collection  混合度量衡测试集 内建和自定义度量衡
+// ** 参数:要求9.1、9.2**
 func TestProperty_MetricsCollection_MixedMetrics(t *testing.T) {
 	rapid.Check(t, func(rt *rapid.T) {
-		// Create registry with builtin metrics
+		// 创建内置参数的注册
 		registry := NewRegistryWithBuiltinMetrics()
 
-		// Add custom metrics
+		// 添加自定义衡量标准
 		numCustomMetrics := rapid.IntRange(1, 5).Draw(rt, "numCustomMetrics")
 		customMetricNames := make([]string, numCustomMetrics)
 
@@ -149,10 +149,10 @@ func TestProperty_MetricsCollection_MixedMetrics(t *testing.T) {
 			})
 		}
 
-		// Expected total metrics = 4 builtin + custom
+		// 预期总衡量标准=4个内置+定制
 		expectedTotal := 4 + numCustomMetrics
 
-		// Generate random input/output data
+		// 生成随机输入/输出数据
 		input := &EvalInput{
 			Prompt:   rapid.StringMatching(`[a-zA-Z0-9 ]{5,50}`).Draw(rt, "prompt"),
 			Expected: rapid.StringMatching(`[a-zA-Z0-9 ]{5,50}`).Draw(rt, "expected"),
@@ -164,25 +164,25 @@ func TestProperty_MetricsCollection_MixedMetrics(t *testing.T) {
 			Cost:       rapid.Float64Range(0.001, 1.0).Draw(rt, "cost"),
 		}
 
-		// Compute all metrics
+		// 计算所有参数
 		ctx := context.Background()
 		result, err := registry.ComputeAll(ctx, input, output)
 
-		// Verify: no error during computation
+		// 校验:在计算时没有出错
 		require.NoError(rt, err, "ComputeAll should not return error")
 
-		// Verify: total metric count matches expected
+		// 校验: 公尺计数总数匹配
 		assert.Equal(rt, expectedTotal, len(result.Metrics),
 			"EvalResult should contain %d metrics (4 builtin + %d custom), got %d",
 			expectedTotal, numCustomMetrics, len(result.Metrics))
 
-		// Verify: all custom metrics are present
+		// 校验: 所有自定义度量衡都存在
 		for _, name := range customMetricNames {
 			_, exists := result.Metrics[name]
 			assert.True(rt, exists, "Custom metric '%s' should be present in result", name)
 		}
 
-		// Verify: all builtin metrics are present
+		// 校验:所有内置度量衡都存在
 		builtinMetrics := []string{"accuracy", "latency", "token_usage", "cost"}
 		for _, name := range builtinMetrics {
 			_, exists := result.Metrics[name]
@@ -191,14 +191,14 @@ func TestProperty_MetricsCollection_MixedMetrics(t *testing.T) {
 	})
 }
 
-// TestProperty_MetricsCollection_EmptyRegistry tests that empty registry returns empty metrics
-// **Validates: Requirements 9.1, 9.2**
+// 测试Property Metrics Collection Empty Registry 测试空注册返回空度量衡
+// ** 参数:要求9.1、9.2**
 func TestProperty_MetricsCollection_EmptyRegistry(t *testing.T) {
 	rapid.Check(t, func(rt *rapid.T) {
-		// Create empty registry
+		// 创建空注册
 		registry := NewMetricRegistry()
 
-		// Generate random input/output data
+		// 生成随机输入/输出数据
 		input := &EvalInput{
 			Prompt: rapid.StringMatching(`[a-zA-Z0-9 ]{5,50}`).Draw(rt, "prompt"),
 		}
@@ -206,33 +206,33 @@ func TestProperty_MetricsCollection_EmptyRegistry(t *testing.T) {
 			Response: rapid.StringMatching(`[a-zA-Z0-9 ]{5,100}`).Draw(rt, "response"),
 		}
 
-		// Compute all metrics
+		// 计算所有参数
 		ctx := context.Background()
 		result, err := registry.ComputeAll(ctx, input, output)
 
-		// Verify: no error during computation
+		// 校验:在计算时没有出错
 		require.NoError(rt, err, "ComputeAll should not return error for empty registry")
 
-		// Verify: result has empty metrics map
+		// 校验: 结果有空公尺映射
 		assert.Equal(rt, 0, len(result.Metrics),
 			"EvalResult should have empty metrics for empty registry")
 
-		// Verify: result is marked as passed (no failures)
+		// 校验:结果被标记为通过( 无失败)
 		assert.True(rt, result.Passed, "Result should be passed when no metrics fail")
 	})
 }
 
-// TestProperty_MetricsCollection_MetricErrorHandling tests that metric errors are properly recorded
-// **Validates: Requirements 9.1, 9.2**
+// 测试 Property Metrics Collection MetricErrorHandling 测试中正确记录了公制错误
+// ** 参数:要求9.1、9.2**
 func TestProperty_MetricsCollection_MetricErrorHandling(t *testing.T) {
 	rapid.Check(t, func(rt *rapid.T) {
-		// Create registry with mix of successful and failing metrics
+		// 建立包含成功和失败衡量标准组合的登记册
 		registry := NewMetricRegistry()
 
 		numSuccessMetrics := rapid.IntRange(1, 5).Draw(rt, "numSuccessMetrics")
 		numFailMetrics := rapid.IntRange(1, 3).Draw(rt, "numFailMetrics")
 
-		// Add successful metrics
+		// 添加成功的衡量标准
 		for i := 0; i < numSuccessMetrics; i++ {
 			registry.Register(&testMetric{
 				name:  fmt.Sprintf("success_metric_%d", i),
@@ -240,7 +240,7 @@ func TestProperty_MetricsCollection_MetricErrorHandling(t *testing.T) {
 			})
 		}
 
-		// Add failing metrics
+		// 添加失败的度量衡
 		for i := 0; i < numFailMetrics; i++ {
 			registry.Register(&testMetric{
 				name:      fmt.Sprintf("fail_metric_%d", i),
@@ -249,7 +249,7 @@ func TestProperty_MetricsCollection_MetricErrorHandling(t *testing.T) {
 			})
 		}
 
-		// Generate random input/output data
+		// 生成随机输入/输出数据
 		input := &EvalInput{
 			Prompt: rapid.StringMatching(`[a-zA-Z0-9 ]{5,50}`).Draw(rt, "prompt"),
 		}
@@ -257,31 +257,31 @@ func TestProperty_MetricsCollection_MetricErrorHandling(t *testing.T) {
 			Response: rapid.StringMatching(`[a-zA-Z0-9 ]{5,100}`).Draw(rt, "response"),
 		}
 
-		// Compute all metrics
+		// 计算所有参数
 		ctx := context.Background()
 		result, err := registry.ComputeAll(ctx, input, output)
 
-		// Verify: no error returned (errors are recorded in result)
+		// 校验:没有返回出错(结果记录错误)
 		require.NoError(rt, err, "ComputeAll should not return error")
 
-		// Verify: successful metrics are present
+		// 校验:有成功的衡量标准
 		assert.Equal(rt, numSuccessMetrics, len(result.Metrics),
 			"EvalResult should contain %d successful metrics", numSuccessMetrics)
 
-		// Verify: errors are recorded
+		// 校验: 记录出错
 		assert.Equal(rt, numFailMetrics, len(result.Errors),
 			"EvalResult should contain %d errors", numFailMetrics)
 
-		// Verify: result is marked as not passed due to errors
+		// 校验:结果被标记为因出错而未通过
 		assert.False(rt, result.Passed, "Result should not be passed when metrics fail")
 	})
 }
 
-// TestProperty_MetricsCollection_ValueCorrectness tests that metric values are computed correctly
-// **Validates: Requirements 9.1, 9.2**
+// 测试 Property  metrics Collection ValueCorrectness 测试,测量值计算正确
+// ** 参数:要求9.1、9.2**
 func TestProperty_MetricsCollection_ValueCorrectness(t *testing.T) {
 	rapid.Check(t, func(rt *rapid.T) {
-		// Create registry with metrics that return predictable values
+		// 创建带有返回可预见值的衡量标准的登记册
 		registry := NewMetricRegistry()
 
 		numMetrics := rapid.IntRange(1, 10).Draw(rt, "numMetrics")
@@ -297,7 +297,7 @@ func TestProperty_MetricsCollection_ValueCorrectness(t *testing.T) {
 			})
 		}
 
-		// Generate random input/output data
+		// 生成随机输入/输出数据
 		input := &EvalInput{
 			Prompt: rapid.StringMatching(`[a-zA-Z0-9 ]{5,50}`).Draw(rt, "prompt"),
 		}
@@ -305,14 +305,14 @@ func TestProperty_MetricsCollection_ValueCorrectness(t *testing.T) {
 			Response: rapid.StringMatching(`[a-zA-Z0-9 ]{5,100}`).Draw(rt, "response"),
 		}
 
-		// Compute all metrics
+		// 计算所有参数
 		ctx := context.Background()
 		result, err := registry.ComputeAll(ctx, input, output)
 
-		// Verify: no error during computation
+		// 校验:在计算时没有出错
 		require.NoError(rt, err, "ComputeAll should not return error")
 
-		// Verify: all metric values match expected values
+		// 校验:所有公尺值都符合预期值
 		for name, expectedValue := range expectedValues {
 			actualValue, exists := result.Metrics[name]
 			assert.True(rt, exists, "Metric '%s' should be present", name)
@@ -322,15 +322,15 @@ func TestProperty_MetricsCollection_ValueCorrectness(t *testing.T) {
 	})
 }
 
-// TestProperty_MetricsCollection_ContextCancellation tests behavior when context is cancelled
-// **Validates: Requirements 9.1, 9.2**
+// 取消上下文时的测试行为
+// ** 参数:要求9.1、9.2**
 func TestProperty_MetricsCollection_ContextCancellation(t *testing.T) {
 	rapid.Check(t, func(rt *rapid.T) {
-		// Create registry with a metric that respects context
+		// 创建一个尊重上下文的参数的登记册
 		registry := NewMetricRegistry()
 		registry.Register(&contextAwareMetric{name: "ctx_metric"})
 
-		// Generate random input/output data
+		// 生成随机输入/输出数据
 		input := &EvalInput{
 			Prompt: rapid.StringMatching(`[a-zA-Z0-9 ]{5,50}`).Draw(rt, "prompt"),
 		}
@@ -338,24 +338,24 @@ func TestProperty_MetricsCollection_ContextCancellation(t *testing.T) {
 			Response: rapid.StringMatching(`[a-zA-Z0-9 ]{5,100}`).Draw(rt, "response"),
 		}
 
-		// Create cancelled context
+		// 创建已取消的上下文
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel() // Cancel immediately
 
-		// Compute all metrics with cancelled context
+		// 计算所有已取消的上下文的度量
 		result, err := registry.ComputeAll(ctx, input, output)
 
-		// Verify: no panic occurred and result is returned
+		// 校验: 不发生惊慌, 结果返回
 		require.NoError(rt, err, "ComputeAll should not return error")
 		require.NotNil(rt, result, "Result should not be nil")
 
-		// Verify: context cancellation is handled (metric may fail or succeed depending on implementation)
-		// The key property is that the system doesn't panic and returns a valid result
+		// 校验: 已处理上下文取消( 计量可能失败或成功取决于执行)
+		// 关键属性是系统不惊慌,返回有效结果
 		assert.NotNil(rt, result.Metrics, "Metrics map should not be nil")
 	})
 }
 
-// testMetric is a test implementation of Metric interface
+// 测试Metric 是Metric接口的测试执行
 type testMetric struct {
 	name      string
 	value     float64
@@ -374,7 +374,7 @@ func (m *testMetric) Compute(ctx context.Context, input *EvalInput, output *Eval
 	return m.value, nil
 }
 
-// contextAwareMetric is a metric that respects context cancellation
+// 上下文 AwardMetric 是尊重上下文取消的衡量标准
 type contextAwareMetric struct {
 	name string
 }

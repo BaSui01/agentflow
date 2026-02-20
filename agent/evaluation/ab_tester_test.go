@@ -115,7 +115,7 @@ func TestCreateExperiment(t *testing.T) {
 				assert.Contains(t, err.Error(), tt.errMsg)
 			} else {
 				require.NoError(t, err)
-				// Verify experiment was stored
+				// 验证实验已存储
 				exp, err := tester.GetExperiment(tt.exp.ID)
 				require.NoError(t, err)
 				assert.Equal(t, tt.exp.ID, exp.ID)
@@ -138,35 +138,35 @@ func TestExperimentLifecycle(t *testing.T) {
 		},
 	}
 
-	// Create
+	// 创建
 	err := tester.CreateExperiment(exp)
 	require.NoError(t, err)
 
-	// Verify draft status
+	// 校验草稿状态
 	loaded, err := tester.GetExperiment(exp.ID)
 	require.NoError(t, err)
 	assert.Equal(t, ExperimentStatusDraft, loaded.Status)
 
-	// Start
+	// 开始
 	err = tester.StartExperiment(exp.ID)
 	require.NoError(t, err)
 	loaded, _ = tester.GetExperiment(exp.ID)
 	assert.Equal(t, ExperimentStatusRunning, loaded.Status)
 	assert.False(t, loaded.StartTime.IsZero())
 
-	// Pause
+	// 暂停
 	err = tester.PauseExperiment(exp.ID)
 	require.NoError(t, err)
 	loaded, _ = tester.GetExperiment(exp.ID)
 	assert.Equal(t, ExperimentStatusPaused, loaded.Status)
 
-	// Resume (start again)
+	// 恢复( 重新开始)
 	err = tester.StartExperiment(exp.ID)
 	require.NoError(t, err)
 	loaded, _ = tester.GetExperiment(exp.ID)
 	assert.Equal(t, ExperimentStatusRunning, loaded.Status)
 
-	// Complete
+	// 完成
 	err = tester.CompleteExperiment(exp.ID)
 	require.NoError(t, err)
 	loaded, _ = tester.GetExperiment(exp.ID)
@@ -190,21 +190,21 @@ func TestAssign(t *testing.T) {
 	err := tester.CreateExperiment(exp)
 	require.NoError(t, err)
 
-	// Cannot assign to non-running experiment
+	// 无法指定非运行中的实验
 	_, err = tester.Assign(exp.ID, "user-1")
 	assert.ErrorIs(t, err, ErrExperimentNotActive)
 
-	// Start experiment
+	// 开始实验
 	err = tester.StartExperiment(exp.ID)
 	require.NoError(t, err)
 
-	// Assign users
+	// 指定用户
 	variant, err := tester.Assign(exp.ID, "user-1")
 	require.NoError(t, err)
 	assert.NotNil(t, variant)
 	assert.Contains(t, []string{"control", "treatment"}, variant.ID)
 
-	// Same user should get same variant (consistency)
+	// 同一用户应获得相同的变体(一致性)
 	variant2, err := tester.Assign(exp.ID, "user-1")
 	require.NoError(t, err)
 	assert.Equal(t, variant.ID, variant2.ID)
@@ -228,7 +228,7 @@ func TestAssignConsistency(t *testing.T) {
 	err = tester.StartExperiment(exp.ID)
 	require.NoError(t, err)
 
-	// Assign same user multiple times
+	// 多次指定同一用户
 	userID := "consistent-user"
 	var firstVariant *Variant
 
@@ -245,7 +245,7 @@ func TestAssignConsistency(t *testing.T) {
 }
 
 // TestTrafficDistribution 测试流量分配比例
-// Validates: Requirements 11.2
+// 审定:所需经费11.2
 func TestTrafficDistribution(t *testing.T) {
 	store := NewMemoryExperimentStore()
 	tester := NewABTester(store, zap.NewNop())
@@ -299,7 +299,7 @@ func TestTrafficDistribution(t *testing.T) {
 			err = tester.StartExperiment(exp.ID)
 			require.NoError(t, err)
 
-			// Assign many users
+			// 指派许多用户
 			counts := make(map[string]int)
 			numUsers := 10000
 
@@ -310,7 +310,7 @@ func TestTrafficDistribution(t *testing.T) {
 				counts[variant.ID]++
 			}
 
-			// Check distribution
+			// 检查分布
 			for variantID, expectedRatio := range tt.expected {
 				actualRatio := float64(counts[variantID]) / float64(numUsers)
 				diff := math.Abs(actualRatio - expectedRatio)
@@ -339,7 +339,7 @@ func TestRecordResult(t *testing.T) {
 	err := tester.CreateExperiment(exp)
 	require.NoError(t, err)
 
-	// Record result for valid variant
+	// 有效变量的记录结果
 	result := &EvalResult{
 		TaskID:  "task-1",
 		Success: true,
@@ -350,11 +350,11 @@ func TestRecordResult(t *testing.T) {
 	err = tester.RecordResult(exp.ID, "control", result)
 	require.NoError(t, err)
 
-	// Record result for invalid variant
+	// 无效变量的记录结果
 	err = tester.RecordResult(exp.ID, "invalid-variant", result)
 	assert.ErrorIs(t, err, ErrVariantNotFound)
 
-	// Record result for invalid experiment
+	// 无效实验的记录结果
 	err = tester.RecordResult("invalid-exp", "control", result)
 	assert.ErrorIs(t, err, ErrExperimentNotFound)
 }
@@ -378,7 +378,7 @@ func TestAnalyze(t *testing.T) {
 	err = tester.StartExperiment(exp.ID)
 	require.NoError(t, err)
 
-	// Record results for control (lower scores)
+	// 控制记录结果( 分数更低)
 	for i := 0; i < 100; i++ {
 		result := &EvalResult{
 			TaskID:  fmt.Sprintf("control-task-%d", i),
@@ -390,7 +390,7 @@ func TestAnalyze(t *testing.T) {
 		require.NoError(t, err)
 	}
 
-	// Record results for treatment (higher scores)
+	// 治疗记录结果(分数较高)
 	for i := 0; i < 100; i++ {
 		result := &EvalResult{
 			TaskID:  fmt.Sprintf("treatment-task-%d", i),
@@ -402,29 +402,29 @@ func TestAnalyze(t *testing.T) {
 		require.NoError(t, err)
 	}
 
-	// Analyze
+	// 分析
 	ctx := context.Background()
 	result, err := tester.Analyze(ctx, exp.ID)
 	require.NoError(t, err)
 
-	// Verify results
+	// 核实结果
 	assert.Equal(t, exp.ID, result.ExperimentID)
 	assert.Equal(t, 200, result.SampleSize)
 	assert.Len(t, result.VariantResults, 2)
 
-	// Check control results
+	// 检查控制结果
 	controlResult := result.VariantResults["control"]
 	require.NotNil(t, controlResult)
 	assert.Equal(t, 100, controlResult.SampleCount)
 	assert.InDelta(t, 0.545, controlResult.Metrics["score"], 0.01)
 
-	// Check treatment results
+	// 检查处理结果
 	treatmentResult := result.VariantResults["treatment"]
 	require.NotNil(t, treatmentResult)
 	assert.Equal(t, 100, treatmentResult.SampleCount)
 	assert.InDelta(t, 0.745, treatmentResult.Metrics["score"], 0.01)
 
-	// Treatment should be winner with high confidence
+	// 治疗应该是很有自信的赢家
 	assert.Equal(t, "treatment", result.Winner)
 	assert.Greater(t, result.Confidence, 0.95)
 }
@@ -447,7 +447,7 @@ func TestAnalyzeNoSignificantDifference(t *testing.T) {
 	err = tester.StartExperiment(exp.ID)
 	require.NoError(t, err)
 
-	// Record similar results for both variants
+	// 记录两个变量的类似结果
 	for i := 0; i < 50; i++ {
 		score := 0.5 + float64(i%10)*0.01
 
@@ -464,12 +464,12 @@ func TestAnalyzeNoSignificantDifference(t *testing.T) {
 		require.NoError(t, err)
 	}
 
-	// Analyze
+	// 分析
 	ctx := context.Background()
 	result, err := tester.Analyze(ctx, exp.ID)
 	require.NoError(t, err)
 
-	// No clear winner expected
+	// 没有明确的赢家
 	assert.Empty(t, result.Winner)
 }
 
@@ -477,7 +477,7 @@ func TestListExperiments(t *testing.T) {
 	store := NewMemoryExperimentStore()
 	tester := NewABTester(store, zap.NewNop())
 
-	// Create multiple experiments
+	// 创建多个实验
 	for i := 0; i < 5; i++ {
 		exp := &Experiment{
 			ID:   fmt.Sprintf("exp-%d", i),
@@ -491,7 +491,7 @@ func TestListExperiments(t *testing.T) {
 		require.NoError(t, err)
 	}
 
-	// List experiments
+	// 列表实验
 	experiments := tester.ListExperiments()
 	assert.Len(t, experiments, 5)
 }
@@ -511,15 +511,15 @@ func TestDeleteExperiment(t *testing.T) {
 	err := tester.CreateExperiment(exp)
 	require.NoError(t, err)
 
-	// Verify exists
+	// 校验已存在
 	_, err = tester.GetExperiment(exp.ID)
 	require.NoError(t, err)
 
-	// Delete
+	// 删除
 	err = tester.DeleteExperiment(exp.ID)
 	require.NoError(t, err)
 
-	// Verify deleted
+	// 校验已删除
 	_, err = tester.GetExperiment(exp.ID)
 	assert.ErrorIs(t, err, ErrExperimentNotFound)
 }
@@ -545,7 +545,7 @@ func TestMultiVariantExperiment(t *testing.T) {
 	err = tester.StartExperiment(exp.ID)
 	require.NoError(t, err)
 
-	// Assign users and verify all variants get traffic
+	// 指定用户并核实所有变体获得流量
 	counts := make(map[string]int)
 	for i := 0; i < 1000; i++ {
 		variant, err := tester.Assign(exp.ID, fmt.Sprintf("user-%d", i))
@@ -553,7 +553,7 @@ func TestMultiVariantExperiment(t *testing.T) {
 		counts[variant.ID]++
 	}
 
-	// All variants should have some traffic
+	// 所有变体都有流量
 	for _, v := range exp.Variants {
 		assert.Greater(t, counts[v.ID], 0, "variant %s should have traffic", v.ID)
 	}
@@ -592,7 +592,7 @@ func TestVariantConfig(t *testing.T) {
 	err = tester.StartExperiment(exp.ID)
 	require.NoError(t, err)
 
-	// Get variant and verify config
+	// 获取变体并校验配置
 	variant, err := tester.Assign(exp.ID, "test-user")
 	require.NoError(t, err)
 	assert.NotNil(t, variant.Config)
@@ -618,7 +618,7 @@ func TestConcurrentAssignment(t *testing.T) {
 	err = tester.StartExperiment(exp.ID)
 	require.NoError(t, err)
 
-	// Concurrent assignments
+	// 并行任务
 	done := make(chan bool)
 	for i := 0; i < 100; i++ {
 		go func(userID string) {
@@ -628,7 +628,7 @@ func TestConcurrentAssignment(t *testing.T) {
 		}(fmt.Sprintf("user-%d", i))
 	}
 
-	// Wait for all goroutines
+	// 等待所有的去常规
 	for i := 0; i < 100; i++ {
 		<-done
 	}
@@ -645,11 +645,11 @@ func TestStatisticalFunctions(t *testing.T) {
 		assert.Equal(t, 0.0, calculateStdDeviation([]float64{}, 0))
 		assert.Equal(t, 0.0, calculateStdDeviation([]float64{5.0}, 5.0))
 
-		// Using sample standard deviation (n-1 denominator)
+		// 使用样本标准差 (n-1分母)
 		values := []float64{2.0, 4.0, 4.0, 4.0, 5.0, 5.0, 7.0, 9.0}
 		mean := calculateMean(values)
 		stdDev := calculateStdDeviation(values, mean)
-		// Sample std dev for this data is ~2.14
+		// 此数据的 sted dev 样本为 ~ 2. 14
 		assert.InDelta(t, 2.14, stdDev, 0.1)
 	})
 
@@ -657,11 +657,11 @@ func TestStatisticalFunctions(t *testing.T) {
 		assert.Equal(t, 0.0, calculateVariance([]float64{}, 0))
 		assert.Equal(t, 0.0, calculateVariance([]float64{5.0}, 5.0))
 
-		// Using sample variance (n-1 denominator)
+		// 使用样本差异(n-1分母)
 		values := []float64{2.0, 4.0, 4.0, 4.0, 5.0, 5.0, 7.0, 9.0}
 		mean := calculateMean(values)
 		variance := calculateVariance(values, mean)
-		// Sample variance for this data is ~4.57
+		// 此数据的样本差异为~4.57
 		assert.InDelta(t, 4.57, variance, 0.1)
 	})
 }
@@ -707,7 +707,7 @@ func TestMemoryExperimentStore(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, "variant-1", variantID)
 
-		// Non-existent assignment
+		// 不存在转让
 		variantID, err = store.GetAssignment(ctx, "exp-1", "user-2")
 		require.NoError(t, err)
 		assert.Empty(t, variantID)
@@ -751,31 +751,31 @@ func TestExperimentDuration(t *testing.T) {
 	err := tester.CreateExperiment(exp)
 	require.NoError(t, err)
 
-	// Start experiment
+	// 开始实验
 	err = tester.StartExperiment(exp.ID)
 	require.NoError(t, err)
 
-	// Wait a bit
+	// 等一会
 	time.Sleep(10 * time.Millisecond)
 
-	// Analyze should show duration
+	// 分析应显示持续时间
 	ctx := context.Background()
 	result, err := tester.Analyze(ctx, exp.ID)
 	require.NoError(t, err)
 	assert.Greater(t, result.Duration, time.Duration(0))
 
-	// Complete experiment
+	// 完整的实验
 	err = tester.CompleteExperiment(exp.ID)
 	require.NoError(t, err)
 
-	// Analyze again
+	// 再次分析
 	result, err = tester.Analyze(ctx, exp.ID)
 	require.NoError(t, err)
 	assert.Greater(t, result.Duration, time.Duration(0))
 }
 
-// TestAutoSelectWinner tests automatic winner selection
-// Validates: Requirements 11.6
+// TestAutoSelectWinner 测试自动赢家选择
+// 核实:所需经费 11.6
 func TestAutoSelectWinner(t *testing.T) {
 	store := NewMemoryExperimentStore()
 	tester := NewABTester(store, zap.NewNop())
@@ -794,16 +794,16 @@ func TestAutoSelectWinner(t *testing.T) {
 	err = tester.StartExperiment(exp.ID)
 	require.NoError(t, err)
 
-	// Record significantly different results
+	// 记录显著不同的结果
 	for i := 0; i < 100; i++ {
-		// Control: lower scores (0.40-0.49)
+		// 控制:分数较低(0.40-0.49)
 		err = tester.RecordResult(exp.ID, "control", &EvalResult{
 			TaskID: fmt.Sprintf("control-%d", i),
 			Score:  0.4 + float64(i%10)*0.01,
 		})
 		require.NoError(t, err)
 
-		// Treatment: higher scores (0.80-0.89)
+		// 治疗:分数较高(0.80-0.89)
 		err = tester.RecordResult(exp.ID, "treatment", &EvalResult{
 			TaskID: fmt.Sprintf("treatment-%d", i),
 			Score:  0.8 + float64(i%10)*0.01,
@@ -813,7 +813,7 @@ func TestAutoSelectWinner(t *testing.T) {
 
 	ctx := context.Background()
 
-	// Auto-select winner
+	// 自动选择胜者
 	winner, err := tester.AutoSelectWinner(ctx, exp.ID, 0.95)
 	require.NoError(t, err)
 	assert.Equal(t, "treatment", winner.ID)
@@ -837,7 +837,7 @@ func TestAutoSelectWinnerNoSignificance(t *testing.T) {
 	err = tester.StartExperiment(exp.ID)
 	require.NoError(t, err)
 
-	// Record similar results
+	// 记录类似结果
 	for i := 0; i < 50; i++ {
 		score := 0.5 + float64(i%10)*0.01
 		err = tester.RecordResult(exp.ID, "control", &EvalResult{
@@ -855,14 +855,14 @@ func TestAutoSelectWinnerNoSignificance(t *testing.T) {
 
 	ctx := context.Background()
 
-	// Should fail - no significant winner
+	// 应该失败 - 没有重要的赢家
 	_, err = tester.AutoSelectWinner(ctx, exp.ID, 0.95)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "no statistically significant winner")
 }
 
-// TestGenerateReport tests statistical report generation
-// Validates: Requirements 11.4
+// 统计报告的生成
+// 审定:所需经费 11.4
 func TestGenerateReport(t *testing.T) {
 	store := NewMemoryExperimentStore()
 	tester := NewABTester(store, zap.NewNop())
@@ -882,7 +882,7 @@ func TestGenerateReport(t *testing.T) {
 	err = tester.StartExperiment(exp.ID)
 	require.NoError(t, err)
 
-	// Record results with clear difference
+	// 记录结果明显不同
 	for i := 0; i < 100; i++ {
 		err = tester.RecordResult(exp.ID, "control", &EvalResult{
 			TaskID:  fmt.Sprintf("control-%d", i),
@@ -903,7 +903,7 @@ func TestGenerateReport(t *testing.T) {
 	report, err := tester.GenerateReport(ctx, exp.ID)
 	require.NoError(t, err)
 
-	// Verify report structure
+	// 校验报告结构
 	assert.Equal(t, exp.ID, report.ExperimentID)
 	assert.Equal(t, exp.Name, report.ExperimentName)
 	assert.Equal(t, 200, report.TotalSamples)
@@ -912,7 +912,7 @@ func TestGenerateReport(t *testing.T) {
 	assert.NotEmpty(t, report.Recommendation)
 	assert.False(t, report.GeneratedAt.IsZero())
 
-	// Verify variant reports
+	// 核查变种报告
 	controlReport := report.VariantReports["control"]
 	require.NotNil(t, controlReport)
 	assert.Equal(t, "control", controlReport.VariantID)
@@ -927,7 +927,7 @@ func TestGenerateReport(t *testing.T) {
 	assert.Equal(t, "treatment", treatmentReport.VariantID)
 	assert.False(t, treatmentReport.IsControl)
 
-	// Verify comparison
+	// 校验比较
 	require.Len(t, report.Comparisons, 1)
 	comparison := report.Comparisons[0]
 	assert.Equal(t, "control", comparison.ControlID)
@@ -937,7 +937,7 @@ func TestGenerateReport(t *testing.T) {
 	assert.NotEmpty(t, comparison.PValues)
 	assert.NotEmpty(t, comparison.Confidence)
 
-	// Treatment should be winner
+	// 治疗应该是赢家
 	assert.Equal(t, "treatment", report.Winner)
 	assert.Greater(t, report.WinnerConfidence, 0.95)
 }
@@ -960,7 +960,7 @@ func TestGenerateReportInsufficientData(t *testing.T) {
 	err = tester.StartExperiment(exp.ID)
 	require.NoError(t, err)
 
-	// Record only a few results
+	// 只记录几个结果
 	for i := 0; i < 10; i++ {
 		err = tester.RecordResult(exp.ID, "control", &EvalResult{
 			TaskID: fmt.Sprintf("control-%d", i),
@@ -973,7 +973,7 @@ func TestGenerateReportInsufficientData(t *testing.T) {
 	report, err := tester.GenerateReport(ctx, exp.ID)
 	require.NoError(t, err)
 
-	// Should recommend collecting more data
+	// 应建议收集更多数据
 	assert.Contains(t, report.Recommendation, "Insufficient")
 }
 
@@ -996,7 +996,7 @@ func TestGenerateReportMultiVariant(t *testing.T) {
 	err = tester.StartExperiment(exp.ID)
 	require.NoError(t, err)
 
-	// Record results
+	// 记录结果
 	for i := 0; i < 100; i++ {
 		err = tester.RecordResult(exp.ID, "control", &EvalResult{
 			TaskID: fmt.Sprintf("control-%d", i),
@@ -1021,9 +1021,9 @@ func TestGenerateReportMultiVariant(t *testing.T) {
 	report, err := tester.GenerateReport(ctx, exp.ID)
 	require.NoError(t, err)
 
-	// Should have 3 variant reports
+	// 应有3个变种报告
 	assert.Len(t, report.VariantReports, 3)
 
-	// Should have 2 comparisons (control vs variant-a, control vs variant-b)
+	// 应进行2个比较(控制与变体-a,控制与变体-b)
 	assert.Len(t, report.Comparisons, 2)
 }

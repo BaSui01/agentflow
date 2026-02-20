@@ -36,5 +36,5 @@ func CanTransition(from, to State) bool {
 	return false
 }
 
-// ErrInvalidTransition is now defined in errors.go
-// This comment is kept for backward compatibility
+// Err Invalid Transition 现在定义在错误中. go
+// 此注释用于向后兼容

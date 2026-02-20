@@ -1,4 +1,4 @@
-// Package guardrails provides input/output validation and content filtering for agents.
+// 包护栏为代理商提供输入/输出验证和内容过滤.
 package guardrails
 
 import (

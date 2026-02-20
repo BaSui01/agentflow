@@ -1,4 +1,4 @@
-// Package evaluation provides automated evaluation framework for AI agents.
+// 成套评价为AI代理提供了自动化的评价框架.
 package evaluation
 
 import (
@@ -15,7 +15,7 @@ import (
 
 // LLMJudge LLM 评判器
 // 使用 LLM 作为评估者来评估 Agent 输出质量
-// Validates: Requirements 10.1, 10.2, 10.3, 10.4, 10.5
+// 核证:要求10.1、10.2、10.3、10.4、10.5
 type LLMJudge struct {
 	provider llm.Provider
 	config   LLMJudgeConfig
@@ -23,21 +23,21 @@ type LLMJudge struct {
 }
 
 // LLMJudgeConfig LLM 评判配置
-// Validates: Requirements 10.1, 10.3
+// 审定:要求10.1、10.3
 type LLMJudgeConfig struct {
 	Model            string           `json:"model"`
 	Dimensions       []JudgeDimension `json:"dimensions"`
 	PromptTemplate   string           `json:"prompt_template"`
 	ScoreRange       [2]float64       `json:"score_range"` // [min, max]
 	RequireReasoning bool             `json:"require_reasoning"`
-	// Timeout for each judge call
+	// 每个法官拨打的超时
 	Timeout time.Duration `json:"timeout,omitempty"`
-	// MaxConcurrency for batch judging
+	// 批量判断的最大货币
 	MaxConcurrency int `json:"max_concurrency,omitempty"`
 }
 
 // JudgeDimension 评判维度
-// Validates: Requirements 10.3
+// 审定:要求
 type JudgeDimension struct {
 	Name        string  `json:"name"`
 	Description string  `json:"description"`
@@ -45,13 +45,13 @@ type JudgeDimension struct {
 }
 
 // JudgeResult 评判结果
-// Validates: Requirements 10.4
+// 审定:要求
 type JudgeResult struct {
 	OverallScore float64                   `json:"overall_score"`
 	Dimensions   map[string]DimensionScore `json:"dimensions"`
 	Reasoning    string                    `json:"reasoning"`
 	Confidence   float64                   `json:"confidence"`
-	// Additional metadata
+	// 其他元数据
 	Model     string    `json:"model,omitempty"`
 	Timestamp time.Time `json:"timestamp"`
 }
@@ -69,7 +69,7 @@ type InputOutputPair struct {
 }
 
 // AggregatedJudgeResult 聚合的评判结果
-// Validates: Requirements 10.5
+// 审定:所需经费
 type AggregatedJudgeResult struct {
 	Results       []*JudgeResult     `json:"results"`
 	AverageScore  float64            `json:"average_score"`
@@ -80,7 +80,7 @@ type AggregatedJudgeResult struct {
 }
 
 // DefaultPromptTemplate 默认评估提示模板
-// Validates: Requirements 10.2
+// 审定: 所需经费 10.2
 const DefaultPromptTemplate = `You are an expert evaluator assessing the quality of an AI assistant's response.
 
 ## Task
@@ -149,13 +149,13 @@ func DefaultLLMJudgeConfig() LLMJudgeConfig {
 }
 
 // NewLLMJudge 创建 LLM 评判器
-// Validates: Requirements 10.1
+// 审定:要求10.1
 func NewLLMJudge(provider llm.Provider, config LLMJudgeConfig, logger *zap.Logger) *LLMJudge {
 	if logger == nil {
 		logger = zap.NewNop()
 	}
 
-	// Apply defaults for missing config values
+	// 对缺失的配置值应用默认值
 	if config.PromptTemplate == "" {
 		config.PromptTemplate = DefaultPromptTemplate
 	}
@@ -180,26 +180,26 @@ func NewLLMJudge(provider llm.Provider, config LLMJudgeConfig, logger *zap.Logge
 }
 
 // Judge 执行评判
-// Validates: Requirements 10.2, 10.4
+// 审定:要求10.2、10.4
 func (j *LLMJudge) Judge(ctx context.Context, input *EvalInput, output *EvalOutput) (*JudgeResult, error) {
 	if input == nil || output == nil {
 		return nil, fmt.Errorf("input and output cannot be nil")
 	}
 
-	// Build the evaluation prompt
+	// 构建快速评价
 	prompt, err := j.buildPrompt(input, output)
 	if err != nil {
 		return nil, fmt.Errorf("failed to build prompt: %w", err)
 	}
 
-	// Apply timeout
+	// 应用超时
 	if j.config.Timeout > 0 {
 		var cancel context.CancelFunc
 		ctx, cancel = context.WithTimeout(ctx, j.config.Timeout)
 		defer cancel()
 	}
 
-	// Call LLM for evaluation
+	// 调用 LLM 进行评估
 	req := &llm.ChatRequest{
 		Model: j.config.Model,
 		Messages: []llm.Message{
@@ -217,13 +217,13 @@ func (j *LLMJudge) Judge(ctx context.Context, input *EvalInput, output *EvalOutp
 		return nil, fmt.Errorf("no response from LLM")
 	}
 
-	// Parse the response
+	// 解析响应
 	result, err := j.parseResponse(resp.Choices[0].Message.Content)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse LLM response: %w", err)
 	}
 
-	// Validate and normalize scores
+	// 校正和正常的分数
 	result = j.normalizeResult(result)
 	result.Model = j.config.Model
 	result.Timestamp = time.Now()
@@ -236,7 +236,7 @@ func (j *LLMJudge) Judge(ctx context.Context, input *EvalInput, output *EvalOutp
 }
 
 // JudgeBatch 批量评判
-// Validates: Requirements 10.4, 10.5
+// 审定:要求10.4、10.5
 func (j *LLMJudge) JudgeBatch(ctx context.Context, pairs []InputOutputPair) ([]*JudgeResult, error) {
 	if len(pairs) == 0 {
 		return []*JudgeResult{}, nil
@@ -247,7 +247,7 @@ func (j *LLMJudge) JudgeBatch(ctx context.Context, pairs []InputOutputPair) ([]*
 	var mu sync.Mutex
 	errs := make([]error, 0)
 
-	// Semaphore for concurrency control
+	// 用于货币控制的Semaphore
 	sem := make(chan struct{}, j.config.MaxConcurrency)
 
 	for i, pair := range pairs {
@@ -255,7 +255,7 @@ func (j *LLMJudge) JudgeBatch(ctx context.Context, pairs []InputOutputPair) ([]*
 		go func(idx int, p InputOutputPair) {
 			defer wg.Done()
 
-			// Acquire semaphore
+			// 获取分母
 			sem <- struct{}{}
 			defer func() { <-sem }()
 
@@ -284,7 +284,7 @@ func (j *LLMJudge) JudgeBatch(ctx context.Context, pairs []InputOutputPair) ([]*
 }
 
 // AggregateResults 聚合多个评判结果
-// Validates: Requirements 10.5
+// 审定:所需经费
 func (j *LLMJudge) AggregateResults(results []*JudgeResult) *AggregatedJudgeResult {
 	if len(results) == 0 {
 		return &AggregatedJudgeResult{
@@ -298,7 +298,7 @@ func (j *LLMJudge) AggregateResults(results []*JudgeResult) *AggregatedJudgeResu
 		DimensionAvgs: make(map[string]float64),
 	}
 
-	// Calculate average score
+	// 计算平均分
 	var totalScore float64
 	validCount := 0
 	scores := make([]float64, 0, len(results))
@@ -314,7 +314,7 @@ func (j *LLMJudge) AggregateResults(results []*JudgeResult) *AggregatedJudgeResu
 		scores = append(scores, r.OverallScore)
 		validCount++
 
-		// Aggregate dimension scores
+		// 总数分数
 		for name, ds := range r.Dimensions {
 			dimensionSums[name] += ds.Score
 			dimensionCounts[name]++
@@ -324,7 +324,7 @@ func (j *LLMJudge) AggregateResults(results []*JudgeResult) *AggregatedJudgeResu
 	if validCount > 0 {
 		agg.AverageScore = totalScore / float64(validCount)
 
-		// Calculate standard deviation
+		// 计算标准偏差
 		var sumSquares float64
 		for _, s := range scores {
 			diff := s - agg.AverageScore
@@ -332,14 +332,14 @@ func (j *LLMJudge) AggregateResults(results []*JudgeResult) *AggregatedJudgeResu
 		}
 		agg.ScoreStdDev = sqrt(sumSquares / float64(validCount))
 
-		// Calculate dimension averages
+		// 计算尺寸平均值
 		for name, sum := range dimensionSums {
 			if count := dimensionCounts[name]; count > 0 {
 				agg.DimensionAvgs[name] = sum / float64(count)
 			}
 		}
 
-		// Check if results need human review (high variance)
+		// 检查结果是否需要人审查(差异大)
 		// Validates: Requirements 10.6 (标记需要人工复核)
 		scoreRange := j.config.ScoreRange[1] - j.config.ScoreRange[0]
 		varianceThreshold := scoreRange * 0.2 // 20% of score range
@@ -355,22 +355,22 @@ func (j *LLMJudge) AggregateResults(results []*JudgeResult) *AggregatedJudgeResu
 
 // buildPrompt 构建评估提示
 func (j *LLMJudge) buildPrompt(input *EvalInput, output *EvalOutput) (string, error) {
-	// Simple template replacement
+	// 简单的模板替换
 	prompt := j.config.PromptTemplate
 
-	// Replace placeholders
+	// 替换占位符
 	prompt = strings.ReplaceAll(prompt, "{{.Prompt}}", input.Prompt)
 	prompt = strings.ReplaceAll(prompt, "{{.Response}}", output.Response)
 	prompt = strings.ReplaceAll(prompt, "{{.ScoreMin}}", fmt.Sprintf("%.0f", j.config.ScoreRange[0]))
 	prompt = strings.ReplaceAll(prompt, "{{.ScoreMax}}", fmt.Sprintf("%.0f", j.config.ScoreRange[1]))
 
-	// Handle optional fields
+	// 处理可选字段
 	if input.Reference != "" {
 		prompt = strings.ReplaceAll(prompt, "{{if .Reference}}", "")
 		prompt = strings.ReplaceAll(prompt, "{{end}}", "")
 		prompt = strings.ReplaceAll(prompt, "{{.Reference}}", input.Reference)
 	} else {
-		// Remove reference section
+		// 删除引用部分
 		prompt = removeSection(prompt, "{{if .Reference}}", "{{end}}")
 	}
 
@@ -378,18 +378,18 @@ func (j *LLMJudge) buildPrompt(input *EvalInput, output *EvalOutput) (string, er
 		prompt = strings.ReplaceAll(prompt, "{{if .Expected}}", "")
 		prompt = strings.ReplaceAll(prompt, "{{.Expected}}", input.Expected)
 	} else {
-		// Remove expected section
+		// 删除需要的段落
 		prompt = removeSection(prompt, "{{if .Expected}}", "{{end}}")
 	}
 
-	// Build dimensions section
+	// 构建维度部分
 	var dimensionsBuilder strings.Builder
 	for _, dim := range j.config.Dimensions {
 		dimensionsBuilder.WriteString(fmt.Sprintf("- **%s**: %s (Weight: %.2f)\n",
 			dim.Name, dim.Description, dim.Weight))
 	}
 
-	// Replace range template with actual dimensions
+	// 用实际尺寸替换范围模板
 	prompt = replaceDimensionsRange(prompt, dimensionsBuilder.String())
 
 	return prompt, nil
@@ -397,13 +397,13 @@ func (j *LLMJudge) buildPrompt(input *EvalInput, output *EvalOutput) (string, er
 
 // parseResponse 解析 LLM 响应
 func (j *LLMJudge) parseResponse(content string) (*JudgeResult, error) {
-	// Try to extract JSON from the response
+	// 尝试从响应中提取 JSON
 	jsonStr := extractJSON(content)
 	if jsonStr == "" {
 		return nil, fmt.Errorf("no JSON found in response")
 	}
 
-	// Parse the JSON response
+	// 解析 JSON 响应
 	var rawResult struct {
 		Dimensions   map[string]DimensionScore `json:"dimensions"`
 		OverallScore float64                   `json:"overall_score"`
@@ -422,7 +422,7 @@ func (j *LLMJudge) parseResponse(content string) (*JudgeResult, error) {
 		Confidence:   rawResult.Confidence,
 	}
 
-	// Validate required fields
+	// 验证所需字段
 	if j.config.RequireReasoning && result.Reasoning == "" {
 		return nil, fmt.Errorf("reasoning is required but not provided")
 	}
@@ -435,19 +435,19 @@ func (j *LLMJudge) normalizeResult(result *JudgeResult) *JudgeResult {
 	minScore := j.config.ScoreRange[0]
 	maxScore := j.config.ScoreRange[1]
 
-	// Clamp overall score
+	// 夹克总分
 	result.OverallScore = clamp(result.OverallScore, minScore, maxScore)
 
-	// Clamp dimension scores
+	// 凸出尺寸分数
 	for name, ds := range result.Dimensions {
 		ds.Score = clamp(ds.Score, minScore, maxScore)
 		result.Dimensions[name] = ds
 	}
 
-	// Clamp confidence
+	// 夹克信心
 	result.Confidence = clamp(result.Confidence, 0, 1)
 
-	// Recalculate overall score if dimensions have weights
+	// 如果尺寸有权重, 重新计算总分
 	if len(j.config.Dimensions) > 0 && len(result.Dimensions) > 0 {
 		var weightedSum, totalWeight float64
 		for _, dim := range j.config.Dimensions {
@@ -469,7 +469,7 @@ func (j *LLMJudge) GetConfig() LLMJudgeConfig {
 	return j.config
 }
 
-// Helper functions
+// 辅助功能
 
 func removeSection(s, start, end string) string {
 	startIdx := strings.Index(s, start)
@@ -477,19 +477,19 @@ func removeSection(s, start, end string) string {
 		return s
 	}
 
-	// Find the matching end after start
+	// 启动后查找匹配端
 	afterStart := s[startIdx+len(start):]
 	endIdx := strings.Index(afterStart, end)
 	if endIdx == -1 {
 		return s
 	}
 
-	// Remove the entire section including start and end markers
+	// 删除包括开始和结束标记的整个区域
 	return s[:startIdx] + s[startIdx+len(start)+endIdx+len(end):]
 }
 
 func replaceDimensionsRange(s, dimensions string) string {
-	// Find and replace {{range .Dimensions}}...{{end}}
+	// 查找并替换 . Dimensions . .
 	rangeStart := "{{range .Dimensions}}"
 	rangeEnd := "{{end}}"
 
@@ -508,7 +508,7 @@ func replaceDimensionsRange(s, dimensions string) string {
 }
 
 func extractJSON(s string) string {
-	// Find the first { and last }
+	// 查找第一个{和最后一个}
 	start := strings.Index(s, "{")
 	end := strings.LastIndex(s, "}")
 
@@ -533,7 +533,7 @@ func sqrt(x float64) float64 {
 	if x <= 0 {
 		return 0
 	}
-	// Newton's method for square root
+	// 牛顿平方根法
 	z := x / 2
 	for i := 0; i < 10; i++ {
 		z = z - (z*z-x)/(2*z)

@@ -1,14 +1,14 @@
-// Package persistence provides persistent storage interfaces and implementations
-// for messages and async tasks in the AgentFlow framework.
+// 软件包的持久性提供了持久的存储界面和执行
+// 用于 AgentFlow 框架中的信息和同步任务。
 //
-// This package addresses two critical production issues:
-// 1. Message loss when channels are full (MessageStore)
-// 2. Task state loss on service restart (TaskStore)
+// 这套方案涉及两个关键的生产问题:
+// 1. 频道满后信件丢失(MessageStore)
+// 2. 重新启动服务时的任务状态损失(任务)
 //
-// Supported backends:
-// - Memory: For development and testing (default)
-// - File: For single-node production deployments
-// - Redis: For distributed production deployments
+// 支持的后端 :
+// - 记忆:用于开发和测试(默认)
+// - 文件:用于单一节点生产部署
+// - Redis:用于分配生产部署
 package persistence
 
 import (
@@ -18,7 +18,7 @@ import (
 	"time"
 )
 
-// Common errors
+// 常见错误
 var (
 	ErrNotFound      = errors.New("not found")
 	ErrAlreadyExists = errors.New("already exists")
@@ -26,7 +26,7 @@ var (
 	ErrInvalidInput  = errors.New("invalid input")
 )
 
-// StoreType represents the type of storage backend
+// StoreType 代表存储后端的类型
 type StoreType string
 
 const (
@@ -35,23 +35,23 @@ const (
 	StoreTypeRedis  StoreType = "redis"
 )
 
-// RetryConfig defines retry behavior for message delivery
+// RetryConfig 定义消息发送的再试行为
 type RetryConfig struct {
-	// MaxRetries is the maximum number of retry attempts (default: 3)
+	// Max Retries 是重试尝试的最大次数( 默认 3)
 	MaxRetries int `json:"max_retries" yaml:"max_retries"`
 
-	// InitialBackoff is the initial backoff duration (default: 1s)
+	// 初始备份是初始备份期限( 默认:1s)
 	InitialBackoff time.Duration `json:"initial_backoff" yaml:"initial_backoff"`
 
-	// MaxBackoff is the maximum backoff duration (default: 30s)
+	// MaxBackoff 是最大后退持续时间( 默认: 30s)
 	MaxBackoff time.Duration `json:"max_backoff" yaml:"max_backoff"`
 
-	// BackoffMultiplier is the multiplier for exponential backoff (default: 2.0)
+	// 后置倍数是指数后置的乘数( 默认: 2. 0)
 	BackoffMultiplier float64 `json:"backoff_multiplier" yaml:"backoff_multiplier"`
 }
 
-// DefaultRetryConfig returns the default retry configuration
-// Conservative strategy: max 3 retries with exponential backoff 1s/2s/4s
+// 默认重试Config 返回默认重试配置
+// 保守策略:最大3个回推,以指数后置 1s/2s/4s
 func DefaultRetryConfig() RetryConfig {
 	return RetryConfig{
 		MaxRetries:        3,
@@ -61,7 +61,7 @@ func DefaultRetryConfig() RetryConfig {
 	}
 }
 
-// CalculateBackoff calculates the backoff duration for a given retry attempt
+// 计算 Backoff 计算给定重试的后退持续时间
 func (c RetryConfig) CalculateBackoff(attempt int) time.Duration {
 	if attempt <= 0 {
 		return c.InitialBackoff
@@ -77,22 +77,22 @@ func (c RetryConfig) CalculateBackoff(attempt int) time.Duration {
 	return backoff
 }
 
-// CleanupConfig defines cleanup behavior for completed tasks and old messages
+// 清理Config 为已完成的任务和旧消息定义清理行为
 type CleanupConfig struct {
-	// Enabled determines if automatic cleanup is enabled
+	// 启用后确定是否启用自动清理
 	Enabled bool `json:"enabled" yaml:"enabled"`
 
-	// Interval is how often cleanup runs (default: 1h)
+	// 间断是清理运行的频率( 默认:1 h)
 	Interval time.Duration `json:"interval" yaml:"interval"`
 
-	// MessageRetention is how long to keep acknowledged messages (default: 1h)
+	// 保留信件是保留已确认信件的时间( 默认为 1h)
 	MessageRetention time.Duration `json:"message_retention" yaml:"message_retention"`
 
-	// TaskRetention is how long to keep completed tasks (default: 24h)
+	// 任务保留是保存已完成任务的时间( 默认: 24h)
 	TaskRetention time.Duration `json:"task_retention" yaml:"task_retention"`
 }
 
-// DefaultCleanupConfig returns the default cleanup configuration
+// 默认CleanupConfig 返回默认清理配置
 func DefaultCleanupConfig() CleanupConfig {
 	return CleanupConfig{
 		Enabled:          true,
@@ -102,46 +102,46 @@ func DefaultCleanupConfig() CleanupConfig {
 	}
 }
 
-// StoreConfig is the base configuration for all store implementations
+// StoreConfig 是所有存储执行的基础配置
 type StoreConfig struct {
-	// Type is the storage backend type
+	// 类型是存储后端类型
 	Type StoreType `json:"type" yaml:"type"`
 
-	// BaseDir is the base directory for file-based storage
+	// BaseDir 是基于文件存储的基础目录
 	BaseDir string `json:"base_dir" yaml:"base_dir"`
 
-	// Redis configuration (only used when Type is "redis")
+	// Redis 配置( 仅在类型为 “ redis” 时使用)
 	Redis RedisStoreConfig `json:"redis" yaml:"redis"`
 
-	// Retry configuration
+	// 重试配置
 	Retry RetryConfig `json:"retry" yaml:"retry"`
 
-	// Cleanup configuration
+	// 清理配置
 	Cleanup CleanupConfig `json:"cleanup" yaml:"cleanup"`
 }
 
-// RedisStoreConfig contains Redis-specific configuration
+// RedisStore Config 包含 Redis 特定配置
 type RedisStoreConfig struct {
-	// Host is the Redis server host
+	// 主机是 Redis 服务器主机
 	Host string `json:"host" yaml:"host"`
 
-	// Port is the Redis server port
+	// 端口是 Redis 服务器端口
 	Port int `json:"port" yaml:"port"`
 
-	// Password is the Redis password (optional)
+	// 密码是 Redis 密码( 可选)
 	Password string `json:"password" yaml:"password"`
 
-	// DB is the Redis database number
+	// DB 为 Redis 数据库编号
 	DB int `json:"db" yaml:"db"`
 
-	// PoolSize is the connection pool size
+	// PoolSize 是连接池大小
 	PoolSize int `json:"pool_size" yaml:"pool_size"`
 
-	// KeyPrefix is the prefix for all Redis keys
+	// 密钥前缀是所有 Redis 密钥的前缀
 	KeyPrefix string `json:"key_prefix" yaml:"key_prefix"`
 }
 
-// DefaultStoreConfig returns the default store configuration
+// 默认StoreConfig 返回默认存储配置
 func DefaultStoreConfig() StoreConfig {
 	return StoreConfig{
 		Type:    StoreTypeMemory,
@@ -158,19 +158,19 @@ func DefaultStoreConfig() StoreConfig {
 	}
 }
 
-// Serializable is an interface for objects that can be serialized to JSON
+// 可序列化是可被序列化为JSON的对象的接口
 type Serializable interface {
-	// MarshalJSON returns the JSON encoding of the object
+	// 元帅JSON 返回对象的 JSON 编码
 	json.Marshaler
-	// UnmarshalJSON parses the JSON-encoded data
+	// UnmarshalJSON 解析 JSON 编码数据
 	json.Unmarshaler
 }
 
-// Store is the base interface for all persistent stores
+// 存储是所有持久存储的基础界面
 type Store interface {
-	// Close closes the store and releases resources
+	// 关闭存储并释放资源
 	Close() error
 
-	// Ping checks if the store is healthy
+	// 平平检查,如果商店是健康的
 	Ping(ctx context.Context) error
 }

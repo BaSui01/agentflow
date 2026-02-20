@@ -8,7 +8,7 @@ import (
 	"go.uber.org/zap"
 )
 
-// AgentFactory is a function that creates an Agent instance
+// Agent Factory 是创建 Agent 实例的函数
 type AgentFactory func(
 	config Config,
 	provider llm.Provider,
@@ -18,30 +18,30 @@ type AgentFactory func(
 	logger *zap.Logger,
 ) (Agent, error)
 
-// AgentRegistry manages agent type registration and creation
-// It provides a centralized way to register and instantiate different agent types
+// Agent Registry 管理代理类型注册和创建
+// 它提供了一种集中的方式 注册和即时处理不同的代理类型
 type AgentRegistry struct {
 	mu        sync.RWMutex
 	factories map[AgentType]AgentFactory
 	logger    *zap.Logger
 }
 
-// NewAgentRegistry creates a new agent registry
+// 新建代理注册
 func NewAgentRegistry(logger *zap.Logger) *AgentRegistry {
 	registry := &AgentRegistry{
 		factories: make(map[AgentType]AgentFactory),
 		logger:    logger,
 	}
 
-	// Register built-in agent types
+	// 注册内置代理类型
 	registry.registerBuiltinTypes()
 
 	return registry
 }
 
-// registerBuiltinTypes registers the default agent types
+// 注册 BuiltinTyps 注册默认代理类型
 func (r *AgentRegistry) registerBuiltinTypes() {
-	// Generic agent factory
+	// 通用代理工厂
 	r.Register(TypeGeneric, func(
 		config Config,
 		provider llm.Provider,
@@ -53,7 +53,7 @@ func (r *AgentRegistry) registerBuiltinTypes() {
 		return NewBaseAgent(config, provider, memory, toolManager, bus, logger), nil
 	})
 
-	// Assistant agent factory
+	// 助理代理工厂
 	r.Register(TypeAssistant, func(
 		config Config,
 		provider llm.Provider,
@@ -65,7 +65,7 @@ func (r *AgentRegistry) registerBuiltinTypes() {
 		return NewBaseAgent(config, provider, memory, toolManager, bus, logger), nil
 	})
 
-	// Analyzer agent factory
+	// 分析剂厂
 	r.Register(TypeAnalyzer, func(
 		config Config,
 		provider llm.Provider,
@@ -77,7 +77,7 @@ func (r *AgentRegistry) registerBuiltinTypes() {
 		return NewBaseAgent(config, provider, memory, toolManager, bus, logger), nil
 	})
 
-	// Translator agent factory
+	// 翻译代理工厂
 	r.Register(TypeTranslator, func(
 		config Config,
 		provider llm.Provider,
@@ -89,7 +89,7 @@ func (r *AgentRegistry) registerBuiltinTypes() {
 		return NewBaseAgent(config, provider, memory, toolManager, bus, logger), nil
 	})
 
-	// Summarizer agent factory
+	// 总结剂厂
 	r.Register(TypeSummarizer, func(
 		config Config,
 		provider llm.Provider,
@@ -101,7 +101,7 @@ func (r *AgentRegistry) registerBuiltinTypes() {
 		return NewBaseAgent(config, provider, memory, toolManager, bus, logger), nil
 	})
 
-	// Reviewer agent factory
+	// 审查员代理工厂
 	r.Register(TypeReviewer, func(
 		config Config,
 		provider llm.Provider,
@@ -114,7 +114,7 @@ func (r *AgentRegistry) registerBuiltinTypes() {
 	})
 }
 
-// Register registers a new agent type with its factory function
+// 登记册登记具有工厂功能的新代理类型
 func (r *AgentRegistry) Register(agentType AgentType, factory AgentFactory) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -125,7 +125,7 @@ func (r *AgentRegistry) Register(agentType AgentType, factory AgentFactory) {
 	)
 }
 
-// Unregister removes an agent type from the registry
+// 未注册从注册簿中删除代理类型
 func (r *AgentRegistry) Unregister(agentType AgentType) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -136,7 +136,7 @@ func (r *AgentRegistry) Unregister(agentType AgentType) {
 	)
 }
 
-// Create creates a new agent instance of the specified type
+// 创建指定类型的新代理实例
 func (r *AgentRegistry) Create(
 	config Config,
 	provider llm.Provider,
@@ -167,7 +167,7 @@ func (r *AgentRegistry) Create(
 	return agent, nil
 }
 
-// IsRegistered checks if an agent type is registered
+// 如果已注册代理类型, 正在注册检查
 func (r *AgentRegistry) IsRegistered(agentType AgentType) bool {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -176,7 +176,7 @@ func (r *AgentRegistry) IsRegistered(agentType AgentType) bool {
 	return exists
 }
 
-// ListTypes returns all registered agent types
+// 列表类型返回所有已注册代理类型
 func (r *AgentRegistry) ListTypes() []AgentType {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -189,44 +189,44 @@ func (r *AgentRegistry) ListTypes() []AgentType {
 	return types
 }
 
-// GlobalRegistry is the default agent registry instance
+// Global Registry 是默认代理注册实例
 var (
 	GlobalRegistry     *AgentRegistry
 	globalRegistryOnce sync.Once
 	globalRegistryMu   sync.RWMutex
 )
 
-// InitGlobalRegistry initializes the global agent registry.
-// This function is safe to call multiple times - only the first call will initialize.
+// Init Global Registry将全球代理登记初始化。
+// 此函数可以安全多次调用 - 只有第一个调用会初始化 。
 func InitGlobalRegistry(logger *zap.Logger) {
 	globalRegistryOnce.Do(func() {
 		GlobalRegistry = NewAgentRegistry(logger)
 	})
 }
 
-// GetGlobalRegistry returns the global registry, initializing it if necessary.
-// This is the recommended way to access the global registry.
+// Get GlobalRegistry 返回全球注册,必要时初始化它.
+// 这是访问全球登记册的建议方式。
 func GetGlobalRegistry(logger *zap.Logger) *AgentRegistry {
 	InitGlobalRegistry(logger)
 	return GlobalRegistry
 }
 
-// RegisterAgentType registers an agent type in the global registry.
-// If the global registry is not initialized, it will be initialized with a nop logger.
+// AgentType在全球登记册中登记一种代理类型。
+// 如果全球登记册没有初始化,它将以nop日志初始化。
 func RegisterAgentType(agentType AgentType, factory AgentFactory) {
 	globalRegistryMu.RLock()
 	registry := GlobalRegistry
 	globalRegistryMu.RUnlock()
 
 	if registry == nil {
-		// Auto-initialize with nop logger if not initialized
+		// 如果未初始化, 自动初始化 。
 		InitGlobalRegistry(zap.NewNop())
 		registry = GlobalRegistry
 	}
 	registry.Register(agentType, factory)
 }
 
-// CreateAgent creates an agent using the global registry
+// Create Agent 使用全球登记册创建代理
 func CreateAgent(
 	config Config,
 	provider llm.Provider,

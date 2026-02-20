@@ -11,7 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// mockProvider implements llm.Provider for testing
+// 模拟 Provider 工具 llm. 测试供应商
 type mockProvider struct {
 	response    string
 	err         error
@@ -232,7 +232,7 @@ func TestLLMJudge_normalizeResult(t *testing.T) {
 		}
 
 		normalized := judge.normalizeResult(result)
-		// Overall score is recalculated from dimension scores (quality=0 * weight=1.0)
+		// 整体分数由尺寸分数重新计算(质量=0 *重量=1.0).
 		assert.Equal(t, 0.0, normalized.OverallScore)
 		assert.Equal(t, 1.0, normalized.Confidence)
 		assert.Equal(t, 0.0, normalized.Dimensions["quality"].Score)
@@ -257,7 +257,7 @@ func TestLLMJudge_normalizeResult(t *testing.T) {
 		}
 
 		normalized := judge2.normalizeResult(result)
-		// Weighted average: (8.0 * 0.5 + 6.0 * 0.5) / 1.0 = 7.0
+		// 加权平均数:(8.0 * 0.5 + 6.0 * 0.5) / 1.0 = 7.0
 		assert.InDelta(t, 7.0, normalized.OverallScore, 0.01)
 	})
 }

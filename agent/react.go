@@ -105,7 +105,7 @@ func (b *BaseAgent) Execute(ctx context.Context, input *Input) (*Output, error) 
 		zap.String("agent_type", string(b.config.Type)),
 	)
 
-	// 4. Input validation (Guardrails)
+	// 4. 输入验证(监护)
 	if b.guardrailsEnabled && b.inputValidatorChain != nil {
 		validationResult, err := b.inputValidatorChain.Validate(ctx, input.Content)
 		if err != nil {
@@ -119,7 +119,7 @@ func (b *BaseAgent) Execute(ctx context.Context, input *Input) (*Output, error) 
 				zap.Any("errors", validationResult.Errors),
 			)
 
-			// Check failure action from config
+			// 从配置中检查失败动作
 			failureAction := guardrails.FailureActionReject
 			if b.config.Guardrails != nil {
 				failureAction = b.config.Guardrails.OnInputFailure
@@ -176,8 +176,8 @@ func (b *BaseAgent) Execute(ctx context.Context, input *Input) (*Output, error) 
 		Content: input.Content,
 	})
 
-	// 7. Execute with output validation and retry support
-	// Requirements 2.4: Retry on output validation failure
+	// 7. 执行产出验证和重试支持
+	// 要求2.4:对产出验证失败进行重试
 	maxRetries := 0
 	if b.config.Guardrails != nil {
 		maxRetries = b.config.Guardrails.MaxRetries
@@ -194,7 +194,7 @@ func (b *BaseAgent) Execute(ctx context.Context, input *Input) (*Output, error) 
 				zap.String("trace_id", input.TraceID),
 			)
 
-			// Add feedback about validation failure for retry
+			// 为重试添加验证失败的反馈
 			if lastValidationResult != nil {
 				feedbackMsg := b.buildValidationFeedbackMessage(lastValidationResult)
 				messages = append(messages, llm.Message{
@@ -204,7 +204,7 @@ func (b *BaseAgent) Execute(ctx context.Context, input *Input) (*Output, error) 
 			}
 		}
 
-		// Execute ReAct loop
+		// 执行重新行动循环
 		var err error
 		resp, err = b.ChatCompletion(ctx, messages)
 		if err != nil {
@@ -217,7 +217,7 @@ func (b *BaseAgent) Execute(ctx context.Context, input *Input) (*Output, error) 
 
 		outputContent = resp.Choices[0].Message.Content
 
-		// Output validation (Guardrails)
+		// 产出验证(护栏)
 		if b.guardrailsEnabled && b.outputValidator != nil {
 			var filteredContent string
 			filteredContent, lastValidationResult, err = b.outputValidator.ValidateAndFilter(ctx, outputContent)
@@ -233,18 +233,18 @@ func (b *BaseAgent) Execute(ctx context.Context, input *Input) (*Output, error) 
 					zap.Any("errors", lastValidationResult.Errors),
 				)
 
-				// Check failure action
+				// 检查失败动作
 				failureAction := guardrails.FailureActionReject
 				if b.config.Guardrails != nil {
 					failureAction = b.config.Guardrails.OnOutputFailure
 				}
 
-				// If retry is configured and we haven't exhausted retries, continue
+				// 如果重试已经配置, 我们还没有用尽重试, 请继续
 				if failureAction == guardrails.FailureActionRetry && attempt < maxRetries {
 					continue
 				}
 
-				// Handle based on failure action
+				// 基于失败动作的处理
 				switch failureAction {
 				case guardrails.FailureActionReject:
 					return nil, &GuardrailsError{
@@ -256,7 +256,7 @@ func (b *BaseAgent) Execute(ctx context.Context, input *Input) (*Output, error) 
 					b.logger.Warn("output validation warning, using filtered content")
 					outputContent = filteredContent
 				case guardrails.FailureActionRetry:
-					// Exhausted retries, reject
+					// 重复重复,拒绝
 					return nil, &GuardrailsError{
 						Type:    GuardrailsErrorTypeOutput,
 						Message: fmt.Sprintf("output validation failed after %d retries", maxRetries),
@@ -264,12 +264,12 @@ func (b *BaseAgent) Execute(ctx context.Context, input *Input) (*Output, error) 
 					}
 				}
 			} else {
-				// Validation passed, use filtered content
+				// 通过验证, 使用过滤内容
 				outputContent = filteredContent
 			}
 		}
 
-		// Validation passed or warning mode, break retry loop
+		// 通过验证或警告模式, 中断重试循环
 		break
 	}
 
@@ -314,7 +314,7 @@ func (b *BaseAgent) Execute(ctx context.Context, input *Input) (*Output, error) 
 	}, nil
 }
 
-// buildValidationFeedbackMessage creates a feedback message for retry
+// 构建 ValidationFeedBackMessage 为重试创建回馈消息
 func (b *BaseAgent) buildValidationFeedbackMessage(result *guardrails.ValidationResult) string {
 	var sb strings.Builder
 	sb.WriteString("Your previous response failed validation. Please regenerate your response addressing the following issues:\n")

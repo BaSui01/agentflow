@@ -1,4 +1,4 @@
-// Package evaluation provides automated evaluation framework for AI agents.
+// 成套评价为AI代理提供了自动化的评价框架.
 package evaluation
 
 import (
@@ -16,14 +16,14 @@ import (
 // TestProperty_LLMJudge_ResultStructure tests Property 16: LLM-as-Judge 结果结构
 // For any LLM-as-Judge 评估执行，返回的 JudgeResult 应包含 OverallScore（在配置的 ScoreRange 内）、
 // 所有配置维度的 DimensionScore、以及非空的 Reasoning。
-// **Validates: Requirements 10.1, 10.3, 10.4**
+// ** 变动情况:要求10.1、10.3、10.4**
 func TestProperty_LLMJudge_ResultStructure(t *testing.T) {
 	rapid.Check(t, func(rt *rapid.T) {
-		// Generate random score range
+		// 生成随机分数范围
 		minScore := rapid.Float64Range(0, 5).Draw(rt, "minScore")
 		maxScore := rapid.Float64Range(minScore+1, minScore+10).Draw(rt, "maxScore")
 
-		// Generate random dimensions (1-5)
+		// 生成随机尺寸(1-5)
 		numDimensions := rapid.IntRange(1, 5).Draw(rt, "numDimensions")
 		dimensions := make([]JudgeDimension, numDimensions)
 		dimensionNames := make([]string, numDimensions)
@@ -41,12 +41,12 @@ func TestProperty_LLMJudge_ResultStructure(t *testing.T) {
 			}
 		}
 
-		// Normalize weights
+		// 使权重正常化
 		for i := range dimensions {
 			dimensions[i].Weight = dimensions[i].Weight / totalWeight
 		}
 
-		// Generate mock LLM response with valid scores
+		// 生成具有有效分数的模拟 LLM 响应
 		mockDimensions := make(map[string]DimensionScore)
 		for _, dim := range dimensions {
 			score := rapid.Float64Range(minScore, maxScore).Draw(rt, fmt.Sprintf("score_%s", dim.Name))
@@ -75,10 +75,10 @@ func TestProperty_LLMJudge_ResultStructure(t *testing.T) {
 		responseJSON, err := json.Marshal(mockResponse)
 		require.NoError(rt, err)
 
-		// Create mock provider
+		// 创建模拟提供者
 		provider := &mockJudgeProvider{response: string(responseJSON)}
 
-		// Create LLMJudge with generated config
+		// 以生成的配置创建 LLM 判断器
 		config := LLMJudgeConfig{
 			Model:            "test-model",
 			Dimensions:       dimensions,
@@ -87,7 +87,7 @@ func TestProperty_LLMJudge_ResultStructure(t *testing.T) {
 		}
 		judge := NewLLMJudge(provider, config, nil)
 
-		// Generate random input/output
+		// 生成随机输入/输出
 		input := &EvalInput{
 			Prompt: rapid.StringMatching(`[a-zA-Z0-9 ]{5,50}`).Draw(rt, "prompt"),
 		}
@@ -95,24 +95,24 @@ func TestProperty_LLMJudge_ResultStructure(t *testing.T) {
 			Response: rapid.StringMatching(`[a-zA-Z0-9 ]{5,100}`).Draw(rt, "response"),
 		}
 
-		// Execute judge
+		// 执行法官
 		result, err := judge.Judge(context.Background(), input, output)
 		require.NoError(rt, err, "Judge should not return error")
 		require.NotNil(rt, result, "JudgeResult should not be nil")
 
-		// Property 16 Verification 1: OverallScore is within ScoreRange [min, max]
+		// 核查1:总得分在分数范围内[分,最大]
 		assert.GreaterOrEqual(rt, result.OverallScore, minScore,
 			"OverallScore (%.2f) should be >= minScore (%.2f)", result.OverallScore, minScore)
 		assert.LessOrEqual(rt, result.OverallScore, maxScore,
 			"OverallScore (%.2f) should be <= maxScore (%.2f)", result.OverallScore, maxScore)
 
-		// Property 16 Verification 2: All configured dimensions have DimensionScore entries
+		// 财产 16 核查 2: 所有配置的尺寸都有尺寸分数条目
 		assert.NotNil(rt, result.Dimensions, "Dimensions map should not be nil")
 		for _, dimName := range dimensionNames {
 			dimScore, exists := result.Dimensions[dimName]
 			assert.True(rt, exists, "Dimension '%s' should be present in result", dimName)
 			if exists {
-				// Verify dimension score is within range
+				// 校验尺寸分数在幅度内
 				assert.GreaterOrEqual(rt, dimScore.Score, minScore,
 					"Dimension '%s' score (%.2f) should be >= minScore (%.2f)", dimName, dimScore.Score, minScore)
 				assert.LessOrEqual(rt, dimScore.Score, maxScore,
@@ -120,29 +120,29 @@ func TestProperty_LLMJudge_ResultStructure(t *testing.T) {
 			}
 		}
 
-		// Property 16 Verification 3: Reasoning is non-empty when RequireReasoning is true
+		// 物业 16 核实 3 : 当要求重新交代属实时,理由不是空的
 		assert.NotEmpty(rt, result.Reasoning, "Reasoning should not be empty when RequireReasoning is true")
 
-		// Additional verification: Confidence is within [0, 1]
+		// 补充核查:信任在[0, 1]之内
 		assert.GreaterOrEqual(rt, result.Confidence, 0.0, "Confidence should be >= 0")
 		assert.LessOrEqual(rt, result.Confidence, 1.0, "Confidence should be <= 1")
 	})
 }
 
-// TestProperty_LLMJudge_ScoreRangeNormalization tests that scores outside range are normalized
-// **Validates: Requirements 10.1, 10.3, 10.4**
+// 测试Property LLM Judge 分数范围外的分数常规化测试实现常态化
+// ** 变动情况:要求10.1、10.3、10.4**
 func TestProperty_LLMJudge_ScoreRangeNormalization(t *testing.T) {
 	rapid.Check(t, func(rt *rapid.T) {
-		// Generate random score range
+		// 生成随机分数范围
 		minScore := rapid.Float64Range(0, 5).Draw(rt, "minScore")
 		maxScore := rapid.Float64Range(minScore+1, minScore+10).Draw(rt, "maxScore")
 
-		// Generate dimensions
+		// 生成维度
 		dimensions := []JudgeDimension{
 			{Name: "quality", Description: "Quality assessment", Weight: 1.0},
 		}
 
-		// Generate scores that may be outside the range
+		// 生成可能超出范围的分数
 		rawOverallScore := rapid.Float64Range(minScore-5, maxScore+5).Draw(rt, "rawOverallScore")
 		rawDimensionScore := rapid.Float64Range(minScore-5, maxScore+5).Draw(rt, "rawDimensionScore")
 		rawConfidence := rapid.Float64Range(-0.5, 1.5).Draw(rt, "rawConfidence")
@@ -181,7 +181,7 @@ func TestProperty_LLMJudge_ScoreRangeNormalization(t *testing.T) {
 		require.NoError(rt, err)
 		require.NotNil(rt, result)
 
-		// Verify scores are normalized to be within range
+		// 校验分数归正为在幅度内
 		assert.GreaterOrEqual(rt, result.OverallScore, minScore,
 			"Normalized OverallScore should be >= minScore")
 		assert.LessOrEqual(rt, result.OverallScore, maxScore,
@@ -194,17 +194,17 @@ func TestProperty_LLMJudge_ScoreRangeNormalization(t *testing.T) {
 				"Normalized dimension score should be <= maxScore")
 		}
 
-		// Verify confidence is normalized to [0, 1]
+		// 核查信任度正常化为 [0, 1]
 		assert.GreaterOrEqual(rt, result.Confidence, 0.0, "Confidence should be >= 0")
 		assert.LessOrEqual(rt, result.Confidence, 1.0, "Confidence should be <= 1")
 	})
 }
 
-// TestProperty_LLMJudge_AllDimensionsPresent tests that all configured dimensions are present in result
-// **Validates: Requirements 10.3, 10.4**
+// 测试 Property LLM Judge AllDimensions 测试结果中包含所有配置的维度
+// ** 参数:要求10.3、10.4**
 func TestProperty_LLMJudge_AllDimensionsPresent(t *testing.T) {
 	rapid.Check(t, func(rt *rapid.T) {
-		// Generate random number of dimensions (1-10)
+		// 生成任意维数( 1- 10)
 		numDimensions := rapid.IntRange(1, 10).Draw(rt, "numDimensions")
 		dimensions := make([]JudgeDimension, numDimensions)
 		dimensionNames := make([]string, numDimensions)
@@ -256,25 +256,25 @@ func TestProperty_LLMJudge_AllDimensionsPresent(t *testing.T) {
 		require.NoError(rt, err)
 		require.NotNil(rt, result)
 
-		// Verify all configured dimensions are present
+		// 校验所有配置的尺寸
 		for _, dimName := range dimensionNames {
 			_, exists := result.Dimensions[dimName]
 			assert.True(rt, exists, "Dimension '%s' should be present in result", dimName)
 		}
 
-		// Verify dimension count matches
+		// 校验尺寸计数匹配
 		assert.Equal(rt, numDimensions, len(result.Dimensions),
 			"Result should have exactly %d dimensions", numDimensions)
 	})
 }
 
-// TestProperty_LLMJudge_ReasoningRequirement tests reasoning requirement enforcement
-// **Validates: Requirements 10.4**
+// Property LLM 法官 重复要求测试 推理要求执行
+// ** 参数:要求10.4**
 func TestProperty_LLMJudge_ReasoningRequirement(t *testing.T) {
 	rapid.Check(t, func(rt *rapid.T) {
 		requireReasoning := rapid.Bool().Draw(rt, "requireReasoning")
 
-		// Generate reasoning that may be empty
+		// 生成可能是空的推理
 		var reasoning string
 		if rapid.Bool().Draw(rt, "hasReasoning") {
 			reasoning = rapid.StringMatching(`[a-zA-Z0-9 ]{10,100}`).Draw(rt, "reasoning")
@@ -315,10 +315,10 @@ func TestProperty_LLMJudge_ReasoningRequirement(t *testing.T) {
 		result, err := judge.Judge(context.Background(), input, output)
 
 		if requireReasoning && reasoning == "" {
-			// Should fail when reasoning is required but not provided
+			// 需要推理但未提供推理时应失败
 			assert.Error(rt, err, "Should error when reasoning is required but empty")
 		} else {
-			// Should succeed
+			// 应该成功
 			require.NoError(rt, err)
 			require.NotNil(rt, result)
 
@@ -329,11 +329,11 @@ func TestProperty_LLMJudge_ReasoningRequirement(t *testing.T) {
 	})
 }
 
-// TestProperty_LLMJudge_WeightedScoreCalculation tests that overall score is correctly calculated from weighted dimensions
-// **Validates: Requirements 10.3, 10.4**
+// 测试Property LLM Judge Wighted分数计算测试,总分从加权维度正确计算
+// ** 参数:要求10.3、10.4**
 func TestProperty_LLMJudge_WeightedScoreCalculation(t *testing.T) {
 	rapid.Check(t, func(rt *rapid.T) {
-		// Generate dimensions with specific weights
+		// 生成带有特定加权的维度
 		numDimensions := rapid.IntRange(2, 5).Draw(rt, "numDimensions")
 		dimensions := make([]JudgeDimension, numDimensions)
 		mockDimensions := make(map[string]DimensionScore)
@@ -362,7 +362,7 @@ func TestProperty_LLMJudge_WeightedScoreCalculation(t *testing.T) {
 			}
 		}
 
-		// Normalize weights and calculate expected weighted score
+		// 使权重正常化并计算预期加权分数
 		expectedWeightedScore := 0.0
 		for i := range numDimensions {
 			normalizedWeight := weights[i] / totalWeight
@@ -402,13 +402,13 @@ func TestProperty_LLMJudge_WeightedScoreCalculation(t *testing.T) {
 		require.NoError(rt, err)
 		require.NotNil(rt, result)
 
-		// Verify overall score is recalculated as weighted average
+		// 核实总分被重新计算为加权平均数
 		assert.InDelta(rt, expectedWeightedScore, result.OverallScore, 0.01,
 			"OverallScore should be weighted average of dimension scores")
 	})
 }
 
-// mockJudgeProvider implements llm.Provider for property testing
+// 模拟法官 财产测试供应商
 type mockJudgeProvider struct {
 	response string
 	err      error

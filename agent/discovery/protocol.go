@@ -14,70 +14,70 @@ import (
 	"go.uber.org/zap"
 )
 
-// DiscoveryProtocol is the default implementation of the Protocol interface.
-// It supports local (in-process), HTTP, and multicast discovery.
+// 发现协议是协议界面的默认执行.
+// 它支持本地(正在处理),HTTP,以及多播发现.
 type DiscoveryProtocol struct {
 	config   *ProtocolConfig
 	registry Registry
 	logger   *zap.Logger
 
-	// Local discovery
+	// 本地发现
 	localAgents map[string]*AgentInfo
 	localMu     sync.RWMutex
 
-	// HTTP server for remote discovery
+	// HTTP 远程发现服务器
 	httpServer *http.Server
 	httpMux    *http.ServeMux
 
-	// Multicast discovery
+	// 多播发现
 	multicastConn *net.UDPConn
 	multicastAddr *net.UDPAddr
 
-	// Event handlers
+	// 事件处理器
 	handlers   map[string]func(*AgentInfo)
 	handlerMu  sync.RWMutex
 	handlerSeq int
 
-	// State
+	// 状态
 	running bool
 	done    chan struct{}
 	wg      sync.WaitGroup
 }
 
-// ProtocolConfig holds configuration for the discovery protocol.
+// 协议Config持有发现协议的配置.
 type ProtocolConfig struct {
-	// EnableLocal enables local (in-process) discovery.
+	// 启用本地启用本地( 正在处理中) 发现 。
 	EnableLocal bool `json:"enable_local"`
 
-	// EnableHTTP enables HTTP-based remote discovery.
+	// 启用 HTTP 启用基于 HTTP 的远程发现 。
 	EnableHTTP bool `json:"enable_http"`
 
-	// HTTPPort is the port for HTTP discovery server.
+	// HTTPPort是HTTP发现服务器的端口.
 	HTTPPort int `json:"http_port"`
 
-	// HTTPHost is the host for HTTP discovery server.
+	// HTTPHost是HTTP发现服务器的主机.
 	HTTPHost string `json:"http_host"`
 
-	// EnableMulticast enables multicast-based discovery.
+	// 启用多播可以基于多播的发现.
 	EnableMulticast bool `json:"enable_multicast"`
 
-	// MulticastAddress is the multicast group address.
+	// 多播Address是多播组地址.
 	MulticastAddress string `json:"multicast_address"`
 
-	// MulticastPort is the multicast port.
+	// 多播口是多播口.
 	MulticastPort int `json:"multicast_port"`
 
-	// AnnounceInterval is the interval for periodic announcements.
+	// 公告Interval是定期公告的间隔.
 	AnnounceInterval time.Duration `json:"announce_interval"`
 
-	// DiscoveryTimeout is the timeout for discovery operations.
+	// 发现 超时是发现操作的超时.
 	DiscoveryTimeout time.Duration `json:"discovery_timeout"`
 
-	// MaxPeers is the maximum number of peers to track.
+	// MaxPeers是跟踪的最大对等者数量.
 	MaxPeers int `json:"max_peers"`
 }
 
-// DefaultProtocolConfig returns a ProtocolConfig with sensible defaults.
+// 默认协议 Config 返回带有合理默认的协议 Config 。
 func DefaultProtocolConfig() *ProtocolConfig {
 	return &ProtocolConfig{
 		EnableLocal:      true,
@@ -93,7 +93,7 @@ func DefaultProtocolConfig() *ProtocolConfig {
 	}
 }
 
-// NewDiscoveryProtocol creates a new discovery protocol.
+// 新发现协议创建了新的发现协议.
 func NewDiscoveryProtocol(config *ProtocolConfig, registry Registry, logger *zap.Logger) *DiscoveryProtocol {
 	if config == nil {
 		config = DefaultProtocolConfig()
@@ -112,24 +112,24 @@ func NewDiscoveryProtocol(config *ProtocolConfig, registry Registry, logger *zap
 	}
 }
 
-// Start starts the discovery protocol.
+// 启动发现协议 。
 func (p *DiscoveryProtocol) Start(ctx context.Context) error {
 	if p.running {
 		return fmt.Errorf("protocol already running")
 	}
 
-	// Start HTTP server if enabled
+	// 启用时启动 HTTP 服务器
 	if p.config.EnableHTTP {
 		if err := p.startHTTPServer(); err != nil {
 			return fmt.Errorf("failed to start HTTP server: %w", err)
 		}
 	}
 
-	// Start multicast listener if enabled
+	// 启用后启动多播收听器
 	if p.config.EnableMulticast {
 		if err := p.startMulticast(); err != nil {
 			p.logger.Warn("failed to start multicast", zap.Error(err))
-			// Don't fail if multicast fails
+			// 如果多播失败, 不要失败
 		}
 	}
 
@@ -142,7 +142,7 @@ func (p *DiscoveryProtocol) Start(ctx context.Context) error {
 	return nil
 }
 
-// Stop stops the discovery protocol.
+// 停止停止发现协议。
 func (p *DiscoveryProtocol) Stop(ctx context.Context) error {
 	if !p.running {
 		return nil
@@ -150,7 +150,7 @@ func (p *DiscoveryProtocol) Stop(ctx context.Context) error {
 
 	close(p.done)
 
-	// Stop HTTP server
+	// 停止 HTTP 服务器
 	if p.httpServer != nil {
 		shutdownCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 		defer cancel()
@@ -159,7 +159,7 @@ func (p *DiscoveryProtocol) Stop(ctx context.Context) error {
 		}
 	}
 
-	// Stop multicast
+	// 停止多播
 	if p.multicastConn != nil {
 		p.multicastConn.Close()
 	}
@@ -171,7 +171,7 @@ func (p *DiscoveryProtocol) Stop(ctx context.Context) error {
 	return nil
 }
 
-// Announce announces the local agent to the network.
+// 公告向网络宣布本地代理.
 func (p *DiscoveryProtocol) Announce(ctx context.Context, info *AgentInfo) error {
 	if info == nil || info.Card == nil {
 		return fmt.Errorf("invalid agent info")
@@ -179,24 +179,24 @@ func (p *DiscoveryProtocol) Announce(ctx context.Context, info *AgentInfo) error
 
 	agentID := info.Card.Name
 
-	// Register locally
+	// 本地注册
 	if p.config.EnableLocal {
 		p.localMu.Lock()
 		p.localAgents[agentID] = info
 		p.localMu.Unlock()
 	}
 
-	// Register with registry
+	// 向登记册登记
 	if p.registry != nil {
 		if err := p.registry.RegisterAgent(ctx, info); err != nil {
-			// Try update if already registered
+			// 如果已经注册, 请尝试更新
 			if updateErr := p.registry.UpdateAgent(ctx, info); updateErr != nil {
 				return fmt.Errorf("failed to register/update agent: %w", err)
 			}
 		}
 	}
 
-	// Announce via multicast if enabled
+	// 如果启用, 通过多播宣告
 	if p.config.EnableMulticast && p.multicastConn != nil {
 		if err := p.announceMulticast(info); err != nil {
 			p.logger.Warn("failed to announce via multicast", zap.Error(err))
@@ -205,18 +205,18 @@ func (p *DiscoveryProtocol) Announce(ctx context.Context, info *AgentInfo) error
 
 	p.logger.Debug("agent announced", zap.String("agent_id", agentID))
 
-	// Notify handlers
+	// 通知处理者
 	p.notifyHandlers(info)
 
 	return nil
 }
 
-// Discover discovers agents on the network.
+// 发现在网络上发现了特工.
 func (p *DiscoveryProtocol) Discover(ctx context.Context, filter *DiscoveryFilter) ([]*AgentInfo, error) {
 	agents := make([]*AgentInfo, 0)
 	seen := make(map[string]bool)
 
-	// Discover local agents
+	// 发现本地特工
 	if p.config.EnableLocal {
 		localAgents := p.discoverLocal(filter)
 		for _, agent := range localAgents {
@@ -227,7 +227,7 @@ func (p *DiscoveryProtocol) Discover(ctx context.Context, filter *DiscoveryFilte
 		}
 	}
 
-	// Discover from registry
+	// 从登记处发现
 	if p.registry != nil {
 		registryAgents, err := p.registry.ListAgents(ctx)
 		if err != nil {
@@ -242,7 +242,7 @@ func (p *DiscoveryProtocol) Discover(ctx context.Context, filter *DiscoveryFilte
 		}
 	}
 
-	// Discover via multicast if enabled
+	// 如果启用, 通过多播发现
 	if p.config.EnableMulticast {
 		multicastAgents, err := p.discoverMulticast(ctx, filter)
 		if err != nil {
@@ -262,7 +262,7 @@ func (p *DiscoveryProtocol) Discover(ctx context.Context, filter *DiscoveryFilte
 	return agents, nil
 }
 
-// Subscribe subscribes to agent announcements.
+// 订阅代理通知 。
 func (p *DiscoveryProtocol) Subscribe(handler func(*AgentInfo)) string {
 	p.handlerMu.Lock()
 	defer p.handlerMu.Unlock()
@@ -273,7 +273,7 @@ func (p *DiscoveryProtocol) Subscribe(handler func(*AgentInfo)) string {
 	return id
 }
 
-// Unsubscribe unsubscribes from agent announcements.
+// 从代理通知中取消订阅。
 func (p *DiscoveryProtocol) Unsubscribe(subscriptionID string) {
 	p.handlerMu.Lock()
 	defer p.handlerMu.Unlock()
@@ -281,11 +281,11 @@ func (p *DiscoveryProtocol) Unsubscribe(subscriptionID string) {
 	delete(p.handlers, subscriptionID)
 }
 
-// startHTTPServer starts the HTTP discovery server.
+// 启动HTTPServer启动HTTP发现服务器.
 func (p *DiscoveryProtocol) startHTTPServer() error {
 	p.httpMux = http.NewServeMux()
 
-	// Discovery endpoint
+	// 发现终点
 	p.httpMux.HandleFunc("/discovery/agents", p.handleListAgents)
 	p.httpMux.HandleFunc("/discovery/agents/", p.handleGetAgent)
 	p.httpMux.HandleFunc("/discovery/announce", p.handleAnnounce)
@@ -311,7 +311,7 @@ func (p *DiscoveryProtocol) startHTTPServer() error {
 	return nil
 }
 
-// handleListAgents handles GET /discovery/agents
+// 处理/发现/代理
 func (p *DiscoveryProtocol) handleListAgents(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -320,7 +320,7 @@ func (p *DiscoveryProtocol) handleListAgents(w http.ResponseWriter, r *http.Requ
 
 	ctx := r.Context()
 
-	// Parse filter from query params
+	// 从查询参数解析过滤器
 	filter := &DiscoveryFilter{}
 	if caps := r.URL.Query().Get("capabilities"); caps != "" {
 		filter.Capabilities = splitAndTrim(caps, ",")
@@ -339,14 +339,14 @@ func (p *DiscoveryProtocol) handleListAgents(w http.ResponseWriter, r *http.Requ
 	json.NewEncoder(w).Encode(agents)
 }
 
-// handleGetAgent handles GET /discovery/agents/{id}
+// handleGet Agent hands 获取/发现/代理/{id}
 func (p *DiscoveryProtocol) handleGetAgent(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 
-	// Extract agent ID from path
+	// 从路径提取代理 ID
 	agentID := r.URL.Path[len("/discovery/agents/"):]
 	if agentID == "" {
 		http.Error(w, "agent ID required", http.StatusBadRequest)
@@ -355,7 +355,7 @@ func (p *DiscoveryProtocol) handleGetAgent(w http.ResponseWriter, r *http.Reques
 
 	ctx := r.Context()
 
-	// Check local agents first
+	// 先检查一下本地特工
 	p.localMu.RLock()
 	agent, exists := p.localAgents[agentID]
 	p.localMu.RUnlock()
@@ -378,7 +378,7 @@ func (p *DiscoveryProtocol) handleGetAgent(w http.ResponseWriter, r *http.Reques
 	json.NewEncoder(w).Encode(agent)
 }
 
-// handleAnnounce handles POST /discovery/announce
+// 通知手柄 POST/发现/通知
 func (p *DiscoveryProtocol) handleAnnounce(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -407,13 +407,13 @@ func (p *DiscoveryProtocol) handleAnnounce(w http.ResponseWriter, r *http.Reques
 	w.Write([]byte(`{"status":"ok"}`))
 }
 
-// handleHealth handles GET /discovery/health
+// 获得/发现/健康
 func (p *DiscoveryProtocol) handleHealth(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.Write([]byte(`{"status":"healthy"}`))
 }
 
-// startMulticast starts the multicast listener.
+// 启动多收听器。
 func (p *DiscoveryProtocol) startMulticast() error {
 	addr, err := net.ResolveUDPAddr("udp", fmt.Sprintf("%s:%d", p.config.MulticastAddress, p.config.MulticastPort))
 	if err != nil {
@@ -427,10 +427,10 @@ func (p *DiscoveryProtocol) startMulticast() error {
 	}
 	p.multicastConn = conn
 
-	// Set read buffer
+	// 设定读取缓冲
 	conn.SetReadBuffer(65536)
 
-	// Start listener
+	// 开始收听器
 	p.wg.Add(1)
 	go p.multicastListener()
 
@@ -442,7 +442,7 @@ func (p *DiscoveryProtocol) startMulticast() error {
 	return nil
 }
 
-// multicastListener listens for multicast announcements.
+// 多播听众收听多播公告.
 func (p *DiscoveryProtocol) multicastListener() {
 	defer p.wg.Done()
 
@@ -462,20 +462,20 @@ func (p *DiscoveryProtocol) multicastListener() {
 				continue
 			}
 
-			// Parse announcement
+			// 解析通知
 			var info AgentInfo
 			if err := json.Unmarshal(buf[:n], &info); err != nil {
 				p.logger.Debug("failed to parse multicast announcement", zap.Error(err))
 				continue
 			}
 
-			// Process announcement
+			// 进程通知
 			p.processMulticastAnnouncement(&info)
 		}
 	}
 }
 
-// announceMulticast sends an announcement via multicast.
+// 宣布多播通过多播发送公告.
 func (p *DiscoveryProtocol) announceMulticast(info *AgentInfo) error {
 	if p.multicastConn == nil || p.multicastAddr == nil {
 		return fmt.Errorf("multicast not initialized")
@@ -490,7 +490,7 @@ func (p *DiscoveryProtocol) announceMulticast(info *AgentInfo) error {
 	return err
 }
 
-// processMulticastAnnouncement processes a received multicast announcement.
+// 处理多播通知。
 func (p *DiscoveryProtocol) processMulticastAnnouncement(info *AgentInfo) {
 	if info == nil || info.Card == nil {
 		return
@@ -499,30 +499,30 @@ func (p *DiscoveryProtocol) processMulticastAnnouncement(info *AgentInfo) {
 	info.IsLocal = false
 	agentID := info.Card.Name
 
-	// Store in local cache
+	// 在本地缓存中存储
 	p.localMu.Lock()
 	p.localAgents[agentID] = info
 	p.localMu.Unlock()
 
-	// Register with registry
+	// 向登记册登记
 	if p.registry != nil {
 		ctx := context.Background()
 		if err := p.registry.RegisterAgent(ctx, info); err != nil {
-			// Try update
+			// 尝试更新
 			p.registry.UpdateAgent(ctx, info)
 		}
 	}
 
-	// Notify handlers
+	// 通知处理者
 	p.notifyHandlers(info)
 
 	p.logger.Debug("received multicast announcement", zap.String("agent_id", agentID))
 }
 
-// discoverMulticast discovers agents via multicast.
+// 发现多播通过多播发现代理.
 func (p *DiscoveryProtocol) discoverMulticast(ctx context.Context, filter *DiscoveryFilter) ([]*AgentInfo, error) {
-	// For now, return cached multicast discoveries
-	// In a full implementation, this would send a discovery request
+	// 现在,返回缓存的多播发现
+	// 在全面实施过程中,这将发出一个发现请求
 	p.localMu.RLock()
 	defer p.localMu.RUnlock()
 
@@ -536,7 +536,7 @@ func (p *DiscoveryProtocol) discoverMulticast(ctx context.Context, filter *Disco
 	return agents, nil
 }
 
-// discoverLocal discovers local agents.
+// 发现本地代理。
 func (p *DiscoveryProtocol) discoverLocal(filter *DiscoveryFilter) []*AgentInfo {
 	p.localMu.RLock()
 	defer p.localMu.RUnlock()
@@ -551,27 +551,27 @@ func (p *DiscoveryProtocol) discoverLocal(filter *DiscoveryFilter) []*AgentInfo 
 	return agents
 }
 
-// matchesFilter checks if an agent matches the filter.
+// 匹配过滤器 。
 func (p *DiscoveryProtocol) matchesFilter(agent *AgentInfo, filter *DiscoveryFilter) bool {
 	if filter == nil {
 		return true
 	}
 
-	// Check local filter
+	// 检查本地过滤器
 	if filter.Local != nil {
 		if *filter.Local && !agent.IsLocal {
 			return false
 		}
 	}
 
-	// Check remote filter
+	// 检查远程过滤器
 	if filter.Remote != nil {
 		if *filter.Remote && agent.IsLocal {
 			return false
 		}
 	}
 
-	// Check status filter
+	// 检查状态过滤器
 	if len(filter.Status) > 0 {
 		matched := false
 		for _, status := range filter.Status {
@@ -585,7 +585,7 @@ func (p *DiscoveryProtocol) matchesFilter(agent *AgentInfo, filter *DiscoveryFil
 		}
 	}
 
-	// Check capabilities filter
+	// 检查能力过滤器
 	if len(filter.Capabilities) > 0 {
 		for _, reqCap := range filter.Capabilities {
 			found := false
@@ -601,7 +601,7 @@ func (p *DiscoveryProtocol) matchesFilter(agent *AgentInfo, filter *DiscoveryFil
 		}
 	}
 
-	// Check tags filter
+	// 检查标签过滤器
 	if len(filter.Tags) > 0 {
 		for _, reqTag := range filter.Tags {
 			found := false
@@ -625,7 +625,7 @@ func (p *DiscoveryProtocol) matchesFilter(agent *AgentInfo, filter *DiscoveryFil
 	return true
 }
 
-// notifyHandlers notifies all registered handlers of an agent announcement.
+// 通知所有登记在册的经办人 通知代理人
 func (p *DiscoveryProtocol) notifyHandlers(info *AgentInfo) {
 	p.handlerMu.RLock()
 	handlers := make([]func(*AgentInfo), 0, len(p.handlers))
@@ -639,7 +639,7 @@ func (p *DiscoveryProtocol) notifyHandlers(info *AgentInfo) {
 	}
 }
 
-// splitAndTrim splits a string and trims whitespace from each part.
+// 和Trim从每个部分分割出一个字符串并修剪白空间。
 func splitAndTrim(s, sep string) []string {
 	parts := make([]string, 0)
 	for _, part := range bytes.Split([]byte(s), []byte(sep)) {
@@ -651,9 +651,9 @@ func splitAndTrim(s, sep string) []string {
 	return parts
 }
 
-// DiscoverRemote discovers agents from a remote discovery server.
+// DiscoverRemote从远程发现服务器中发现了特工.
 func (p *DiscoveryProtocol) DiscoverRemote(ctx context.Context, serverURL string, filter *DiscoveryFilter) ([]*AgentInfo, error) {
-	// Build URL with query params
+	// 以查询参数构建 URL
 	url := serverURL + "/discovery/agents"
 	if filter != nil {
 		params := make([]string, 0)
@@ -668,13 +668,13 @@ func (p *DiscoveryProtocol) DiscoverRemote(ctx context.Context, serverURL string
 		}
 	}
 
-	// Create request
+	// 创建请求
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
 
-	// Execute request
+	// 执行请求
 	client := &http.Client{Timeout: p.config.DiscoveryTimeout}
 	resp, err := client.Do(req)
 	if err != nil {
@@ -686,7 +686,7 @@ func (p *DiscoveryProtocol) DiscoverRemote(ctx context.Context, serverURL string
 		return nil, fmt.Errorf("server returned status %d", resp.StatusCode)
 	}
 
-	// Parse response
+	// 解析响应
 	var agents []*AgentInfo
 	if err := json.NewDecoder(resp.Body).Decode(&agents); err != nil {
 		return nil, fmt.Errorf("failed to decode response: %w", err)
@@ -695,24 +695,24 @@ func (p *DiscoveryProtocol) DiscoverRemote(ctx context.Context, serverURL string
 	return agents, nil
 }
 
-// AnnounceRemote announces an agent to a remote discovery server.
+// 宣告向远程发现服务器发布代理消息.
 func (p *DiscoveryProtocol) AnnounceRemote(ctx context.Context, serverURL string, info *AgentInfo) error {
 	url := serverURL + "/discovery/announce"
 
-	// Serialize agent info
+	// 序列化代理信息
 	body, err := json.Marshal(info)
 	if err != nil {
 		return fmt.Errorf("failed to marshal agent info: %w", err)
 	}
 
-	// Create request
+	// 创建请求
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
 	if err != nil {
 		return fmt.Errorf("failed to create request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 
-	// Execute request
+	// 执行请求
 	client := &http.Client{Timeout: p.config.DiscoveryTimeout}
 	resp, err := client.Do(req)
 	if err != nil {
@@ -727,7 +727,7 @@ func (p *DiscoveryProtocol) AnnounceRemote(ctx context.Context, serverURL string
 	return nil
 }
 
-// joinStrings joins strings with a separator.
+// 加入 Strings 用分隔符加入字符串 。
 func joinStrings(strs []string, sep string) string {
 	if len(strs) == 0 {
 		return ""
@@ -739,5 +739,5 @@ func joinStrings(strs []string, sep string) string {
 	return result
 }
 
-// Ensure DiscoveryProtocol implements Protocol interface.
+// 确保发现协议执行协议接口。
 var _ Protocol = (*DiscoveryProtocol)(nil)

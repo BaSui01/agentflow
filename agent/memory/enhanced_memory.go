@@ -242,8 +242,8 @@ func NewEnhancedMemorySystem(
 	return system
 }
 
-// NewDefaultEnhancedMemorySystem creates an EnhancedMemorySystem with in-memory default stores.
-// It is intended for local development, tests, and quick starts.
+// NewDefault Enhanced MemorySystem 创建了带有memory默认商店的增强记忆系统.
+// 它旨在地方发展、测试和快速启动。
 func NewDefaultEnhancedMemorySystem(config EnhancedMemoryConfig, logger *zap.Logger) *EnhancedMemorySystem {
 	if logger == nil {
 		logger = zap.NewNop()
@@ -287,8 +287,8 @@ func (m *EnhancedMemorySystem) SaveShortTerm(ctx context.Context, agentID string
 	return m.shortTerm.Save(ctx, key, memory, m.config.ShortTermTTL)
 }
 
-// SaveShortTermWithVector saves a short-term memory entry and attaches a vector in metadata.
-// Built-in consolidation strategies can promote such entries to long-term memory.
+// 保存ShortTermWith Vector 保存一个短期内存条目并附加元数据中的向量.
+// 内建的合并战略可以促进此类条目的长期记忆。
 func (m *EnhancedMemorySystem) SaveShortTermWithVector(
 	ctx context.Context,
 	agentID string,
@@ -445,7 +445,7 @@ func (m *EnhancedMemorySystem) StopConsolidation() error {
 	return m.consolidator.Stop()
 }
 
-// ConsolidateOnce triggers one consolidation run (useful for manual runs and tests).
+// 合并后启动一次合并运行(对手工运行和测试有用)。
 func (m *EnhancedMemorySystem) ConsolidateOnce(ctx context.Context) error {
 	if !m.config.ConsolidationEnabled || m.consolidator == nil {
 		return fmt.Errorf("memory consolidation not configured")
@@ -453,7 +453,7 @@ func (m *EnhancedMemorySystem) ConsolidateOnce(ctx context.Context) error {
 	return m.consolidator.consolidate(ctx)
 }
 
-// AddConsolidationStrategy adds a consolidation strategy.
+// 添加整合战略增加了整合战略.
 func (m *EnhancedMemorySystem) AddConsolidationStrategy(strategy ConsolidationStrategy) error {
 	if !m.config.ConsolidationEnabled || m.consolidator == nil {
 		return fmt.Errorf("memory consolidation not configured")

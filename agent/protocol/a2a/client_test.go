@@ -116,12 +116,12 @@ func TestHTTPClient_Discover(t *testing.T) {
 
 		client := NewHTTPClient(nil)
 
-		// First call
+		// 第一通电话
 		_, err := client.Discover(context.Background(), server.URL)
 		require.NoError(t, err)
 		assert.Equal(t, 1, callCount)
 
-		// Second call should use cache
+		// 第二通电话应该使用缓存
 		_, err = client.Discover(context.Background(), server.URL)
 		require.NoError(t, err)
 		assert.Equal(t, 1, callCount)
@@ -328,7 +328,7 @@ func TestHTTPClient_GetResult(t *testing.T) {
 		defer server.Close()
 
 		client := NewHTTPClient(nil)
-		// Register the task manually
+		// 手动注册任务
 		client.RegisterTask("task-123", server.URL)
 
 		result, err := client.GetResult(context.Background(), "task-123")
@@ -372,12 +372,12 @@ func TestHTTPClient_GetResult(t *testing.T) {
 		client := NewHTTPClient(nil)
 		msg := NewTaskMessage("local-agent", server.URL, map[string]string{"task": "test"})
 
-		// Send async
+		// 发送同步
 		taskID, err := client.SendAsync(context.Background(), msg)
 		require.NoError(t, err)
 		assert.Equal(t, "task-456", taskID)
 
-		// Get result using the task ID
+		// 使用任务标识获取结果
 		result, err := client.GetResult(context.Background(), taskID)
 		require.NoError(t, err)
 		assert.Equal(t, A2AMessageTypeResult, result.Type)
@@ -463,15 +463,15 @@ func TestHTTPClient_ClearCache(t *testing.T) {
 
 	client := NewHTTPClient(nil)
 
-	// First call
+	// 第一通电话
 	_, err := client.Discover(context.Background(), server.URL)
 	require.NoError(t, err)
 	assert.Equal(t, 1, callCount)
 
-	// Clear cache
+	// 清除缓存
 	client.ClearCache()
 
-	// Second call should hit server again
+	// 第二通电话应该再打服务器
 	_, err = client.Discover(context.Background(), server.URL)
 	require.NoError(t, err)
 	assert.Equal(t, 2, callCount)
@@ -519,19 +519,19 @@ func TestHTTPClient_TaskRegistry(t *testing.T) {
 	t.Run("register and unregister task", func(t *testing.T) {
 		client := NewHTTPClient(nil)
 
-		// Register a task
+		// 注册任务
 		client.RegisterTask("task-001", "http://agent.example.com")
 
-		// Verify it's registered (by checking GetResult doesn't return ErrTaskNotFound)
+		// 检查它注册( 通过检查 GetResult 不返回 ErrTask NotFound)
 		_, err := client.GetResult(context.Background(), "task-001")
-		// Should fail with connection error, not ErrTaskNotFound
+		// 连接出错时应当失败, 而不是 ErrTask NotFound
 		assert.Error(t, err)
 		assert.NotErrorIs(t, err, ErrTaskNotFound)
 
-		// Unregister the task
+		// 未注册任务
 		client.UnregisterTask("task-001")
 
-		// Now it should return ErrTaskNotFound
+		// 现在它应该返回 ErrTask Not Found
 		_, err = client.GetResult(context.Background(), "task-001")
 		assert.ErrorIs(t, err, ErrTaskNotFound)
 	})
@@ -539,14 +539,14 @@ func TestHTTPClient_TaskRegistry(t *testing.T) {
 	t.Run("clear task registry", func(t *testing.T) {
 		client := NewHTTPClient(nil)
 
-		// Register multiple tasks
+		// 注册多个任务
 		client.RegisterTask("task-001", "http://agent1.example.com")
 		client.RegisterTask("task-002", "http://agent2.example.com")
 
-		// Clear the registry
+		// 清除登记册
 		client.ClearTaskRegistry()
 
-		// Both should return ErrTaskNotFound
+		// 两者应返回 ErrTask Not Found
 		_, err := client.GetResult(context.Background(), "task-001")
 		assert.ErrorIs(t, err, ErrTaskNotFound)
 
@@ -557,26 +557,26 @@ func TestHTTPClient_TaskRegistry(t *testing.T) {
 	t.Run("cleanup expired tasks", func(t *testing.T) {
 		client := NewHTTPClient(nil)
 
-		// Register a task
+		// 注册任务
 		client.RegisterTask("task-old", "http://agent.example.com")
 
-		// Manually set the creation time to be old
+		// 手动设定创建时间为旧
 		client.taskMu.Lock()
 		client.taskRegistry["task-old"].createdAt = time.Now().Add(-2 * time.Hour)
 		client.taskMu.Unlock()
 
-		// Register a new task
+		// 登记新任务
 		client.RegisterTask("task-new", "http://agent.example.com")
 
-		// Cleanup tasks older than 1 hour
+		// 1小时以上的清理任务
 		count := client.CleanupExpiredTasks(1 * time.Hour)
 		assert.Equal(t, 1, count)
 
-		// Old task should be gone
+		// 旧任务应该走了
 		_, err := client.GetResult(context.Background(), "task-old")
 		assert.ErrorIs(t, err, ErrTaskNotFound)
 
-		// New task should still exist
+		// 新任务应依然存在
 		_, err = client.GetResult(context.Background(), "task-new")
 		assert.NotErrorIs(t, err, ErrTaskNotFound)
 	})

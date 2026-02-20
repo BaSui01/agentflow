@@ -1,4 +1,4 @@
-// Package skills provides standardized skill definitions and discovery.
+// 成套技能提供了标准化的技能定义和发现.
 package skills
 
 import (
@@ -11,7 +11,7 @@ import (
 	"go.uber.org/zap"
 )
 
-// SkillCategory defines skill categories.
+// 技能类定义了技能类别.
 type SkillCategory string
 
 const (
@@ -23,7 +23,7 @@ const (
 	CategoryAutomation    SkillCategory = "automation"
 )
 
-// SkillDefinition defines a standardized skill.
+// SkillDefinition定义了一种标准化的技能.
 type SkillDefinition struct {
 	ID           string          `json:"id"`
 	Name         string          `json:"name"`
@@ -41,7 +41,7 @@ type SkillDefinition struct {
 	UpdatedAt    time.Time       `json:"updated_at"`
 }
 
-// SkillInstance represents a registered skill instance.
+// 技能Instance是一个注册技能案例。
 type SkillInstance struct {
 	Definition *SkillDefinition `json:"definition"`
 	Handler    SkillHandler     `json:"-"`
@@ -49,7 +49,7 @@ type SkillInstance struct {
 	Stats      SkillStats       `json:"stats"`
 }
 
-// SkillStats tracks skill usage statistics.
+// SkillStats跟踪技能使用统计.
 type SkillStats struct {
 	Invocations int64         `json:"invocations"`
 	Successes   int64         `json:"successes"`
@@ -58,10 +58,10 @@ type SkillStats struct {
 	LastInvoked *time.Time    `json:"last_invoked,omitempty"`
 }
 
-// SkillHandler executes a skill.
+// SkillHandler执行一种技能.
 type SkillHandler func(ctx context.Context, input json.RawMessage) (json.RawMessage, error)
 
-// Registry manages skill registration and discovery.
+// 书记官处管理技能登记和发现。
 type Registry struct {
 	skills     map[string]*SkillInstance
 	byCategory map[SkillCategory][]*SkillInstance
@@ -69,7 +69,7 @@ type Registry struct {
 	mu         sync.RWMutex
 }
 
-// NewRegistry creates a new skill registry.
+// NewRegistry创建了新的技能注册.
 func NewRegistry(logger *zap.Logger) *Registry {
 	if logger == nil {
 		logger = zap.NewNop()
@@ -81,7 +81,7 @@ func NewRegistry(logger *zap.Logger) *Registry {
 	}
 }
 
-// Register registers a skill.
+// 注册注册技能。
 func (r *Registry) Register(def *SkillDefinition, handler SkillHandler) error {
 	if def.ID == "" {
 		def.ID = fmt.Sprintf("skill_%d", time.Now().UnixNano())
@@ -112,7 +112,7 @@ func (r *Registry) Register(def *SkillDefinition, handler SkillHandler) error {
 	return nil
 }
 
-// Unregister removes a skill.
+// 未注册者删除一个技能。
 func (r *Registry) Unregister(skillID string) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -124,7 +124,7 @@ func (r *Registry) Unregister(skillID string) error {
 
 	delete(r.skills, skillID)
 
-	// Remove from category index
+	// 从类别索引中删除
 	cat := instance.Definition.Category
 	skills := r.byCategory[cat]
 	for i, s := range skills {
@@ -138,7 +138,7 @@ func (r *Registry) Unregister(skillID string) error {
 	return nil
 }
 
-// Get retrieves a skill by ID.
+// 以身份获取技能。
 func (r *Registry) Get(skillID string) (*SkillInstance, bool) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -146,7 +146,7 @@ func (r *Registry) Get(skillID string) (*SkillInstance, bool) {
 	return skill, ok
 }
 
-// GetByName retrieves a skill by name.
+// GetByName 按名称检索技能 。
 func (r *Registry) GetByName(name string) (*SkillInstance, bool) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -158,14 +158,14 @@ func (r *Registry) GetByName(name string) (*SkillInstance, bool) {
 	return nil, false
 }
 
-// ListByCategory returns skills in a category.
+// ListByCategory 在一个类别中返回技能.
 func (r *Registry) ListByCategory(category SkillCategory) []*SkillInstance {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return append([]*SkillInstance{}, r.byCategory[category]...)
 }
 
-// ListAll returns all registered skills.
+// ListAll 返回所有注册技能 。
 func (r *Registry) ListAll() []*SkillInstance {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -176,14 +176,14 @@ func (r *Registry) ListAll() []*SkillInstance {
 	return skills
 }
 
-// Search searches skills by tags or keywords.
+// 通过标签或关键词搜索搜索技能.
 func (r *Registry) Search(query string, tags []string) []*SkillInstance {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
 	var results []*SkillInstance
 	for _, skill := range r.skills {
-		// Match by name or description
+		// 按名称或描述匹配
 		if query != "" {
 			if contains(skill.Definition.Name, query) ||
 				contains(skill.Definition.Description, query) {
@@ -191,7 +191,7 @@ func (r *Registry) Search(query string, tags []string) []*SkillInstance {
 				continue
 			}
 		}
-		// Match by tags
+		// 按标签匹配
 		if len(tags) > 0 {
 			for _, tag := range tags {
 				for _, skillTag := range skill.Definition.Tags {
@@ -220,7 +220,7 @@ func findSubstring(s, substr string) bool {
 	return false
 }
 
-// Invoke invokes a skill.
+// Invoke 引用一个技能。
 func (r *Registry) Invoke(ctx context.Context, skillID string, input json.RawMessage) (json.RawMessage, error) {
 	r.mu.RLock()
 	skill, ok := r.skills[skillID]
@@ -238,7 +238,7 @@ func (r *Registry) Invoke(ctx context.Context, skillID string, input json.RawMes
 	result, err := skill.Handler(ctx, input)
 	latency := time.Since(start)
 
-	// Update stats
+	// 更新数据
 	r.mu.Lock()
 	skill.Stats.Invocations++
 	if err != nil {
@@ -248,7 +248,7 @@ func (r *Registry) Invoke(ctx context.Context, skillID string, input json.RawMes
 	}
 	now := time.Now()
 	skill.Stats.LastInvoked = &now
-	// Update average latency
+	// 更新平均延迟
 	n := skill.Stats.Invocations
 	skill.Stats.AvgLatency = time.Duration((int64(skill.Stats.AvgLatency)*(n-1) + int64(latency)) / n)
 	r.mu.Unlock()
@@ -256,7 +256,7 @@ func (r *Registry) Invoke(ctx context.Context, skillID string, input json.RawMes
 	return result, err
 }
 
-// Enable enables a skill.
+// 启用一个技能 。
 func (r *Registry) Enable(skillID string) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -268,7 +268,7 @@ func (r *Registry) Enable(skillID string) error {
 	return nil
 }
 
-// Disable disables a skill.
+// 禁用一个技能 。
 func (r *Registry) Disable(skillID string) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -280,7 +280,7 @@ func (r *Registry) Disable(skillID string) error {
 	return nil
 }
 
-// Export exports all skill definitions.
+// 出口所有技能定义。
 func (r *Registry) Export() ([]byte, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -292,7 +292,7 @@ func (r *Registry) Export() ([]byte, error) {
 	return json.MarshalIndent(defs, "", "  ")
 }
 
-// Import imports skill definitions (handlers must be registered separately).
+// 进口技能定义(手提人必须单独登记).
 func (r *Registry) Import(data []byte) error {
 	var defs []*SkillDefinition
 	if err := json.Unmarshal(data, &defs); err != nil {

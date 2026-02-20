@@ -100,7 +100,7 @@ type CheckpointManager struct {
 	store  CheckpointStore
 	logger *zap.Logger
 
-	// Auto-save configuration
+	// 自动保存配置
 	autoSaveEnabled  bool
 	autoSaveInterval time.Duration
 	autoSaveCancel   context.CancelFunc
@@ -192,7 +192,7 @@ func (m *CheckpointManager) ResumeFromCheckpoint(ctx context.Context, agent Agen
 	return nil
 }
 
-// EnableAutoSave enables automatic checkpoint saving with the specified interval
+// 启用自动保存以指定间隔自动保存检查点
 func (m *CheckpointManager) EnableAutoSave(ctx context.Context, agent Agent, threadID string, interval time.Duration) error {
 	m.autoSaveMu.Lock()
 	defer m.autoSaveMu.Unlock()
@@ -208,11 +208,11 @@ func (m *CheckpointManager) EnableAutoSave(ctx context.Context, agent Agent, thr
 	m.autoSaveInterval = interval
 	m.autoSaveEnabled = true
 
-	// Create cancellable context for auto-save goroutine
+	// 为自动保存 goroutine 创建可删除上下文
 	autoSaveCtx, cancel := context.WithCancel(ctx)
 	m.autoSaveCancel = cancel
 
-	// Start auto-save goroutine
+	// 开始自动保存出轨
 	go m.autoSaveLoop(autoSaveCtx, agent, threadID)
 
 	m.logger.Info("auto-save enabled",
@@ -223,7 +223,7 @@ func (m *CheckpointManager) EnableAutoSave(ctx context.Context, agent Agent, thr
 	return nil
 }
 
-// DisableAutoSave stops automatic checkpoint saving
+// 禁用自动保存停止自动检查
 func (m *CheckpointManager) DisableAutoSave() {
 	m.autoSaveMu.Lock()
 	defer m.autoSaveMu.Unlock()
@@ -242,7 +242,7 @@ func (m *CheckpointManager) DisableAutoSave() {
 	m.logger.Info("auto-save disabled")
 }
 
-// autoSaveLoop runs the automatic checkpoint saving loop
+// 自动保存环路运行自动检查点保存环路
 func (m *CheckpointManager) autoSaveLoop(ctx context.Context, agent Agent, threadID string) {
 	ticker := time.NewTicker(m.autoSaveInterval)
 	defer ticker.Stop()
@@ -262,19 +262,19 @@ func (m *CheckpointManager) autoSaveLoop(ctx context.Context, agent Agent, threa
 	}
 }
 
-// CreateCheckpoint captures the current agent state and saves it as a checkpoint
+// 创建检查点来抓取当前代理状态并将其保存为检查点
 func (m *CheckpointManager) CreateCheckpoint(ctx context.Context, agent Agent, threadID string) error {
 	m.logger.Debug("creating checkpoint",
 		zap.String("agent_id", agent.ID()),
 		zap.String("thread_id", threadID),
 	)
 
-	// Extract agent state
+	// 提取代理状态
 	state := agent.State()
 	messages := []CheckpointMessage{}
 	var executionContext *ExecutionContext
 
-	// Create checkpoint
+	// 创建检查站
 	checkpoint := &Checkpoint{
 		ID:               generateCheckpointID(),
 		ThreadID:         threadID,
@@ -286,7 +286,7 @@ func (m *CheckpointManager) CreateCheckpoint(ctx context.Context, agent Agent, t
 		ExecutionContext: executionContext,
 	}
 
-	// Save checkpoint
+	// 保存检查点
 	if err := m.SaveCheckpoint(ctx, checkpoint); err != nil {
 		return fmt.Errorf("failed to create checkpoint: %w", err)
 	}
@@ -300,26 +300,26 @@ func (m *CheckpointManager) CreateCheckpoint(ctx context.Context, agent Agent, t
 	return nil
 }
 
-// RollbackToVersion rolls back the agent to a specific checkpoint version
+// Rollback ToVersion 将代理拖回特定检查点版本
 func (m *CheckpointManager) RollbackToVersion(ctx context.Context, agent Agent, threadID string, version int) error {
 	m.logger.Info("rolling back to version",
 		zap.String("thread_id", threadID),
 		zap.Int("version", version),
 	)
 
-	// Load the target version
+	// 装入目标版本
 	checkpoint, err := m.store.LoadVersion(ctx, threadID, version)
 	if err != nil {
 		return fmt.Errorf("failed to load version %d: %w", version, err)
 	}
 
-	// Verify agent ID
+	// 验证代理标识
 	if agent.ID() != checkpoint.AgentID {
 		return fmt.Errorf("agent ID mismatch: expected %s, got %s", checkpoint.AgentID, agent.ID())
 	}
 
-	// Restore agent state
-	// Try to use Transition method if available (for BaseAgent and compatible types)
+	// 恢复代理状态
+	// 尝试在可用的情况下使用过渡方法( BaseAgent 和相容类型)
 	type transitioner interface {
 		Transition(ctx context.Context, newState State) error
 	}
@@ -334,7 +334,7 @@ func (m *CheckpointManager) RollbackToVersion(ctx context.Context, agent Agent, 
 		)
 	}
 
-	// Perform rollback in store (creates new checkpoint)
+	// 执行存储回滚( 创建新检查点)
 	if err := m.store.Rollback(ctx, threadID, version); err != nil {
 		return fmt.Errorf("failed to rollback in store: %w", err)
 	}
@@ -347,7 +347,7 @@ func (m *CheckpointManager) RollbackToVersion(ctx context.Context, agent Agent, 
 	return nil
 }
 
-// CompareVersions compares two checkpoint versions and returns the differences
+// 比较Version 比较两个检查点版本并返回差异
 func (m *CheckpointManager) CompareVersions(ctx context.Context, threadID string, version1, version2 int) (*CheckpointDiff, error) {
 	m.logger.Debug("comparing versions",
 		zap.String("thread_id", threadID),
@@ -355,7 +355,7 @@ func (m *CheckpointManager) CompareVersions(ctx context.Context, threadID string
 		zap.Int("version2", version2),
 	)
 
-	// Load both versions
+	// 装入两个版本
 	cp1, err := m.store.LoadVersion(ctx, threadID, version1)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load version %d: %w", version1, err)
@@ -366,7 +366,7 @@ func (m *CheckpointManager) CompareVersions(ctx context.Context, threadID string
 		return nil, fmt.Errorf("failed to load version %d: %w", version2, err)
 	}
 
-	// Generate diff
+	// 生成 diff
 	diff := &CheckpointDiff{
 		ThreadID:     threadID,
 		Version1:     version1,
@@ -382,7 +382,7 @@ func (m *CheckpointManager) CompareVersions(ctx context.Context, threadID string
 	return diff, nil
 }
 
-// ListVersions lists all checkpoint versions for a thread
+// ListVersion 列出用于线索的所有检查点版本
 func (m *CheckpointManager) ListVersions(ctx context.Context, threadID string) ([]CheckpointVersion, error) {
 	m.logger.Debug("listing versions", zap.String("thread_id", threadID))
 
@@ -394,7 +394,7 @@ func (m *CheckpointManager) ListVersions(ctx context.Context, threadID string) (
 	return versions, nil
 }
 
-// compareMessages compares two message slices and returns a summary
+// 比较Messages 比较两个消息切片并返回摘要
 func (m *CheckpointManager) compareMessages(msgs1, msgs2 []CheckpointMessage) string {
 	if len(msgs1) == len(msgs2) {
 		return fmt.Sprintf("No change (%d messages)", len(msgs1))
@@ -402,13 +402,13 @@ func (m *CheckpointManager) compareMessages(msgs1, msgs2 []CheckpointMessage) st
 	return fmt.Sprintf("Changed from %d to %d messages", len(msgs1), len(msgs2))
 }
 
-// compareMetadata compares two metadata maps and returns a summary
+// 比较Metadata 比较两个元数据地图并返回一个摘要
 func (m *CheckpointManager) compareMetadata(meta1, meta2 map[string]interface{}) string {
 	added := 0
 	removed := 0
 	changed := 0
 
-	// Check for added and changed keys
+	// 检查添加和更改的密钥
 	for k, v2 := range meta2 {
 		if v1, exists := meta1[k]; !exists {
 			added++
@@ -417,7 +417,7 @@ func (m *CheckpointManager) compareMetadata(meta1, meta2 map[string]interface{})
 		}
 	}
 
-	// Check for removed keys
+	// 检查已删除的密钥
 	for k := range meta1 {
 		if _, exists := meta2[k]; !exists {
 			removed++
@@ -431,7 +431,7 @@ func (m *CheckpointManager) compareMetadata(meta1, meta2 map[string]interface{})
 	return fmt.Sprintf("Added: %d, Removed: %d, Changed: %d", added, removed, changed)
 }
 
-// CheckpointDiff represents the differences between two checkpoint versions
+// 检查站 Diff 代表两个检查站版本之间的差异
 type CheckpointDiff struct {
 	ThreadID     string        `json:"thread_id"`
 	Version1     int           `json:"version1"`
