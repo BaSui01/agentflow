@@ -1038,3 +1038,194 @@ return fmt.Errorf("store does not support clearing")
 When adding/removing `mux.HandleFunc` routes in `cmd/agentflow/server.go` or `config/api.go`, you MUST update `api/openapi.yaml` to match. The contract test `tests/contracts/TestOpenAPIPathsMatchRuntimeRoutes` will fail otherwise.
 
 Note: `golangci-lint` is NOT run in CI — only locally via `make lint`. Developers must run `make lint` before pushing.
+
+---
+
+## §24 Channel Close Must Use sync.Once (P0 — Runtime Panic)
+
+Every `close(ch)` call on a shared channel MUST be protected by `sync.Once`. Unprotected `close()` causes runtime panic when called twice or when another goroutine sends to the closed channel.
+
+**Known violations (as of 2026-02-21 audit)**:
+
+| File | Line | Channel | Risk |
+|------|------|---------|------|
+| `agent/discovery/registry.go` | ~611 | `r.done` | Double-close on concurrent Shutdown |
+| `agent/federation/orchestrator.go` | ~343 | `o.done` | Double-close on concurrent Stop |
+| `llm/router/router.go` | ~457 | `h.stopCh` | Double-close on concurrent Stop |
+| `llm/idempotency/manager.go` | ~245 | `m.stopCh` | Double-close on concurrent Stop |
+| `agent/protocol/mcp/server.go` | ~340 | subscription channels | Close races with `notifySubscribers` |
+| `agent/browser/browser_pool.go` | ~152-170 | pool state | `Close()` vs `Release()` race |
+
+**Positive example** (already correct in codebase):
+
+```go
+// agent/event.go:127-131 — CORRECT pattern
+type EventBus struct {
+    done     chan struct{}
+    doneOnce sync.Once
+}
+
+func (eb *EventBus) Close() {
+    eb.doneOnce.Do(func() {
+        close(eb.done)
+    })
+}
+```
+
+**Fix pattern**:
+
+```go
+// WRONG — panic if called twice
+func (r *Registry) Shutdown() {
+    close(r.done)
+}
+
+// CORRECT — safe for concurrent calls
+func (r *Registry) Shutdown() {
+    r.closeOnce.Do(func() {
+        close(r.done)
+    })
+}
+```
+
+> **Rule**: Search for `close(` in any new code. If the channel is a struct field (not a local variable), it MUST have `sync.Once` protection.
+
+## §25 Streaming SSE Must Check ctx.Done() (P1 — Goroutine Leak)
+
+All SSE/streaming loops that read from a channel MUST include a `ctx.Done()` case in their `select` statement. Without it, client disconnect leaves the goroutine blocked forever.
+
+**Known violations**:
+
+| File | Method | Issue |
+|------|--------|-------|
+| `llm/providers/openaicompat/provider.go:319-345` | `StreamSSE` | No `ctx.Done()` in scan loop |
+| `llm/providers/anthropic/provider.go:420-447` | `StreamSSE` | No `ctx.Done()` in scan loop |
+| `llm/providers/gemini/provider.go:479-511` | `StreamSSE` | No `ctx.Done()` in scan loop |
+
+**Positive example** (already correct):
+
+```go
+// llm/tools/react.go:162-234 — CORRECT pattern
+for {
+    select {
+    case <-ctx.Done():
+        return ctx.Err()
+    case chunk, ok := <-streamCh:
+        if !ok {
+            return nil
+        }
+        // process chunk
+    }
+}
+```
+
+**Fix pattern for scanner-based SSE**:
+
+```go
+// WRONG — blocks forever if client disconnects
+scanner := bufio.NewScanner(resp.Body)
+for scanner.Scan() {
+    line := scanner.Text()
+    // process line, send to channel
+}
+
+// CORRECT — wrap in goroutine with ctx check
+go func() {
+    defer close(ch)
+    scanner := bufio.NewScanner(resp.Body)
+    for scanner.Scan() {
+        select {
+        case <-ctx.Done():
+            return
+        default:
+        }
+        line := scanner.Text()
+        // process line, send to channel
+    }
+}()
+```
+
+> **Rule**: Every `for scanner.Scan()` or `for { select { case chunk := <-ch } }` loop in streaming code must have a `ctx.Done()` exit path.
+
+## §26 Swallowed json.Marshal in Non-HTTP Code (P2 — Silent Data Loss)
+
+§6 covers `json.Marshal` in HTTP handlers. This section covers non-HTTP code where `json.Marshal` errors are silently discarded with `_`:
+
+**Known violations**:
+
+| File | Line | Context |
+|------|------|---------|
+| `agent/browser/vision_adapter.go` | ~77 | Vision request serialization |
+| `agent/hosted/tools.go` | ~131, ~225 | Tool execution payload |
+| `tools/openapi/generator.go` | ~283 | OpenAPI spec generation |
+
+**Fix**: Always check the error. If the marshal target is a known-safe struct, add a comment explaining why:
+
+```go
+// WRONG
+data, _ := json.Marshal(req)
+
+// CORRECT — check error
+data, err := json.Marshal(req)
+if err != nil {
+    return fmt.Errorf("marshal vision request: %w", err)
+}
+
+// ACCEPTABLE — with justification comment
+// json.Marshal cannot fail here: ToolSchema contains only string/bool/map fields
+data, err := json.Marshal(schema)
+if err != nil {
+    // unreachable for this type, but satisfy errcheck
+    return nil, fmt.Errorf("marshal tool schema: %w", err)
+}
+```
+
+## §27 EventBus Panic Recovery Must Log (P2 — Silent Failure)
+
+`recover()` in event handler dispatch MUST log the panic. Silent recovery hides bugs:
+
+```go
+// WRONG — agent/event.go:113-118 swallows panic silently
+defer func() {
+    if r := recover(); r != nil {
+        // silently swallowed — no logging, no metrics
+    }
+}()
+
+// CORRECT — log with stack trace
+defer func() {
+    if r := recover(); r != nil {
+        logger.Error("panic in event handler",
+            zap.Any("panic", r),
+            zap.String("event", event.Type),
+            zap.Stack("stack"),
+        )
+    }
+}()
+```
+
+> **Rule**: Every `recover()` call must either log the panic or re-panic. Silent swallowing is forbidden.
+
+## §28 No Raw Pointer Type Casts Between Structs (P1 — Silent Corruption)
+
+Go allows raw pointer type conversion between structs with identical memory layouts. This is fragile — adding a field to either struct silently corrupts data:
+
+```go
+// WRONG — api/handlers/chat.go:313
+Usage: (*api.ChatUsage)(chunk.Usage)  // breaks if llm.ChatUsage or api.ChatUsage adds a field
+
+// CORRECT — explicit field mapping
+Usage: &api.ChatUsage{
+    PromptTokens:     chunk.Usage.PromptTokens,
+    CompletionTokens: chunk.Usage.CompletionTokens,
+    TotalTokens:      chunk.Usage.TotalTokens,
+}
+```
+
+> **Rule**: Never use `(*TypeA)(ptrToTypeB)` between structs from different packages. Use field-by-field mapping or a conversion function.
+
+## §29 Duplicate Error Codes Must Be Consolidated
+
+`types/error.go` defines both `ErrRateLimit = "RATE_LIMIT"` and `ErrRateLimited = "RATE_LIMITED"`. Both map to HTTP 429. This creates ambiguity.
+
+**Rule**: One concept = one error code. Deprecate `ErrRateLimited` and use `ErrRateLimit` everywhere.

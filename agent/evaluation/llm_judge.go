@@ -456,7 +456,8 @@ func (j *LLMJudge) normalizeResult(result *JudgeResult) *JudgeResult {
 			}
 		}
 		if totalWeight > 0 {
-			result.OverallScore = weightedSum / totalWeight
+			// 加权平均后再次 clamp，防止 IEEE 754 浮点精度丢失导致越界
+			result.OverallScore = clamp(weightedSum/totalWeight, minScore, maxScore)
 		}
 	}
 
