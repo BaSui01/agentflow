@@ -1,0 +1,41 @@
+{
+  "id": "llm-provider-refactor",
+  "name": "llm-provider-refactor",
+  "title": "brainstorm: LLM Provider 层重构 - 消除重复代码",
+  "description": "",
+  "status": "completed",
+  "dev_type": null,
+  "scope": null,
+  "priority": "P2",
+  "creator": "BaSui",
+  "assignee": "BaSui",
+  "createdAt": "2026-02-20",
+  "completedAt": "2026-02-20",
+  "branch": null,
+  "base_branch": "master",
+  "worktree_path": null,
+  "current_phase": 0,
+  "next_action": [
+    {
+      "phase": 1,
+      "action": "implement"
+    },
+    {
+      "phase": 2,
+      "action": "check"
+    },
+    {
+      "phase": 3,
+      "action": "finish"
+    },
+    {
+      "phase": 4,
+      "action": "create-pr"
+    }
+  ],
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "relatedFiles": [],
+  "notes": ""
+}
