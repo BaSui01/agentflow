@@ -158,7 +158,12 @@ Create a plan (max %d steps). Output as JSON array:
 		return nil, 0, err
 	}
 
-	content := resp.Choices[0].Message.Content
+	choice, err := llm.FirstChoice(resp)
+	if err != nil {
+		return nil, 0, fmt.Errorf("plan generation returned no choices: %w", err)
+	}
+
+	content := choice.Message.Content
 	tokens := resp.Usage.TotalTokens
 
 	// 从回应中提取 JSON
@@ -312,7 +317,12 @@ Based on these results, provide a clear and complete answer to the task.`, task,
 		return "", 0, err
 	}
 
-	return resp.Choices[0].Message.Content, resp.Usage.TotalTokens, nil
+	choice, err := llm.FirstChoice(resp)
+	if err != nil {
+		return "", 0, fmt.Errorf("synthesis returned no choices: %w", err)
+	}
+
+	return choice.Message.Content, resp.Usage.TotalTokens, nil
 }
 
 // 辅助功能

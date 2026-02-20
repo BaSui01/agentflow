@@ -49,7 +49,7 @@ func NewChromeDPDriver(config BrowserConfig, logger *zap.Logger) (*ChromeDPDrive
 
 	allocCtx, allocCancel := chromedp.NewExecAllocator(context.Background(), opts...)
 	ctx, cancel := chromedp.NewContext(allocCtx,
-		chromedp.WithLogf(func(format string, args ...interface{}) {
+		chromedp.WithLogf(func(format string, args ...any) {
 			logger.Debug(fmt.Sprintf(format, args...))
 		}),
 	)

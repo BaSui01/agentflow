@@ -336,7 +336,11 @@ Respond as a JSON array of strings, e.g.: ["query 1", "query 2", "query 3"]`
 	}
 
 	tokens := resp.Usage.TotalTokens
-	content := resp.Choices[0].Message.Content
+	genChoice, choiceErr := llm.FirstChoice(resp)
+	if choiceErr != nil {
+		return nil, tokens, fmt.Errorf("query generation returned no choices: %w", choiceErr)
+	}
+	content := genChoice.Message.Content
 
 	var queries []string
 	jsonStr := extractJSONObject(content)
@@ -387,7 +391,11 @@ Focus on factual, specific, and actionable insights. Rate relevance from 0.0 to 
 	}
 
 	tokens := resp.Usage.TotalTokens
-	content := resp.Choices[0].Message.Content
+	analyzeChoice, choiceErr := llm.FirstChoice(resp)
+	if choiceErr != nil {
+		return nil, tokens, fmt.Errorf("query analysis returned no choices: %w", choiceErr)
+	}
+	content := analyzeChoice.Message.Content
 
 	var findings []researchFinding
 	jsonStr := extractJSONObject(content)
@@ -449,7 +457,11 @@ Priority should be 0.0-1.0 based on how important this direction is.`, task, fin
 	}
 
 	tokens := resp.Usage.TotalTokens
-	content := resp.Choices[0].Message.Content
+	dirChoice, choiceErr := llm.FirstChoice(resp)
+	if choiceErr != nil {
+		return nil, tokens, fmt.Errorf("direction generation returned no choices: %w", choiceErr)
+	}
+	content := dirChoice.Message.Content
 
 	var directions []researchDirection
 	jsonStr := extractJSONObject(content)
@@ -492,7 +504,11 @@ Be thorough but concise.`, task, findingsStr.String())
 		return "", 0, err
 	}
 
-	return resp.Choices[0].Message.Content, resp.Usage.TotalTokens, nil
+	synthChoice, choiceErr := llm.FirstChoice(resp)
+	if choiceErr != nil {
+		return "", resp.Usage.TotalTokens, fmt.Errorf("synthesis returned no choices: %w", choiceErr)
+	}
+	return synthChoice.Message.Content, resp.Usage.TotalTokens, nil
 }
 
 // 根据调查结果计算总体信心。

@@ -23,7 +23,7 @@ type Checkpoint struct {
 	Version   int                    `json:"version"` // 版本号（线程内递增）
 	State     State                  `json:"state"`
 	Messages  []CheckpointMessage    `json:"messages"`
-	Metadata  map[string]interface{} `json:"metadata"`
+	Metadata  map[string]any `json:"metadata"`
 	CreatedAt time.Time              `json:"created_at"`
 	ParentID  string                 `json:"parent_id,omitempty"` // 父检查点 ID
 
@@ -36,7 +36,7 @@ type CheckpointMessage struct {
 	Role      string                 `json:"role"`
 	Content   string                 `json:"content"`
 	ToolCalls []CheckpointToolCall   `json:"tool_calls,omitempty"`
-	Metadata  map[string]interface{} `json:"metadata,omitempty"`
+	Metadata  map[string]any `json:"metadata,omitempty"`
 }
 
 // CheckpointToolCall 工具调用记录
@@ -52,8 +52,8 @@ type CheckpointToolCall struct {
 type ExecutionContext struct {
 	WorkflowID  string                 `json:"workflow_id,omitempty"`
 	CurrentNode string                 `json:"current_node,omitempty"`
-	NodeResults map[string]interface{} `json:"node_results,omitempty"`
-	Variables   map[string]interface{} `json:"variables,omitempty"`
+	NodeResults map[string]any `json:"node_results,omitempty"`
+	Variables   map[string]any `json:"variables,omitempty"`
 }
 
 // CheckpointVersion 检查点版本元数据
@@ -281,7 +281,7 @@ func (m *CheckpointManager) CreateCheckpoint(ctx context.Context, agent Agent, t
 		AgentID:          agent.ID(),
 		State:            state,
 		Messages:         messages,
-		Metadata:         make(map[string]interface{}),
+		Metadata:         make(map[string]any),
 		CreatedAt:        time.Now(),
 		ExecutionContext: executionContext,
 	}
@@ -403,7 +403,7 @@ func (m *CheckpointManager) compareMessages(msgs1, msgs2 []CheckpointMessage) st
 }
 
 // 比较Metadata 比较两个元数据地图并返回一个摘要
-func (m *CheckpointManager) compareMetadata(meta1, meta2 map[string]interface{}) string {
+func (m *CheckpointManager) compareMetadata(meta1, meta2 map[string]any) string {
 	added := 0
 	removed := 0
 	changed := 0
@@ -685,7 +685,7 @@ func (s *RedisCheckpointStore) Rollback(ctx context.Context, threadID string, ve
 	newCheckpoint.Version = maxVersion + 1
 
 	if newCheckpoint.Metadata == nil {
-		newCheckpoint.Metadata = make(map[string]interface{})
+		newCheckpoint.Metadata = make(map[string]any)
 	}
 	newCheckpoint.Metadata["rollback_from_version"] = version
 
@@ -702,20 +702,20 @@ type PostgreSQLCheckpointStore struct {
 
 // PostgreSQLClient PostgreSQL 客户端接口
 type PostgreSQLClient interface {
-	Exec(ctx context.Context, query string, args ...interface{}) error
-	QueryRow(ctx context.Context, query string, args ...interface{}) Row
-	Query(ctx context.Context, query string, args ...interface{}) (Rows, error)
+	Exec(ctx context.Context, query string, args ...any) error
+	QueryRow(ctx context.Context, query string, args ...any) Row
+	Query(ctx context.Context, query string, args ...any) (Rows, error)
 }
 
 // Row 数据库行接口
 type Row interface {
-	Scan(dest ...interface{}) error
+	Scan(dest ...any) error
 }
 
 // Rows 数据库行集合接口
 type Rows interface {
 	Next() bool
-	Scan(dest ...interface{}) error
+	Scan(dest ...any) error
 	Close() error
 }
 
@@ -952,7 +952,7 @@ func (s *PostgreSQLCheckpointStore) Rollback(ctx context.Context, threadID strin
 	newCheckpoint.Version = maxVersion + 1
 
 	if newCheckpoint.Metadata == nil {
-		newCheckpoint.Metadata = make(map[string]interface{})
+		newCheckpoint.Metadata = make(map[string]any)
 	}
 	newCheckpoint.Metadata["rollback_from_version"] = version
 
@@ -1269,7 +1269,7 @@ func (s *FileCheckpointStore) Rollback(ctx context.Context, threadID string, ver
 	newCheckpoint.Version = maxVersion + 1
 
 	if newCheckpoint.Metadata == nil {
-		newCheckpoint.Metadata = make(map[string]interface{})
+		newCheckpoint.Metadata = make(map[string]any)
 	}
 	newCheckpoint.Metadata["rollback_from_version"] = version
 

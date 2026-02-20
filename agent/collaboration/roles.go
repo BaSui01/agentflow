@@ -89,8 +89,8 @@ type RoleInstance struct {
 	Definition RoleDefinition `json:"definition"`
 	AgentID    string         `json:"agent_id"`    // 绑定的 Agent ID
 	Status     RoleStatus     `json:"status"`
-	Input      interface{}    `json:"input,omitempty"`
-	Output     interface{}    `json:"output,omitempty"`
+	Input      any    `json:"input,omitempty"`
+	Output     any    `json:"output,omitempty"`
 	Error      string         `json:"error,omitempty"`
 	StartedAt  time.Time      `json:"started_at"`
 	CompletedAt *time.Time    `json:"completed_at,omitempty"`
@@ -101,7 +101,7 @@ type RoleInstance struct {
 type RoleTransition struct {
 	FromRole RoleType    `json:"from_role"`
 	ToRole   RoleType    `json:"to_role"`
-	Data     interface{} `json:"data"`
+	Data     any `json:"data"`
 	Timestamp time.Time  `json:"timestamp"`
 }
 
@@ -215,7 +215,7 @@ type RolePipeline struct {
 
 // RoleExecuteFunc 角色执行函数签名
 // 接收角色定义和输入，返回输出
-type RoleExecuteFunc func(ctx context.Context, role *RoleDefinition, input interface{}) (interface{}, error)
+type RoleExecuteFunc func(ctx context.Context, role *RoleDefinition, input any) (any, error)
 
 // NewRolePipeline 创建角色流水线
 func NewRolePipeline(config PipelineConfig, registry *RoleRegistry, executeFn RoleExecuteFunc, logger *zap.Logger) *RolePipeline {
@@ -250,7 +250,7 @@ func (p *RolePipeline) AddStage(roles ...RoleType) *RolePipeline {
 }
 
 // Execute 执行流水线
-func (p *RolePipeline) Execute(ctx context.Context, initialInput interface{}) (map[RoleType]interface{}, error) {
+func (p *RolePipeline) Execute(ctx context.Context, initialInput any) (map[RoleType]any, error) {
 	ctx, cancel := context.WithTimeout(ctx, p.config.Timeout)
 	defer cancel()
 
@@ -258,7 +258,7 @@ func (p *RolePipeline) Execute(ctx context.Context, initialInput interface{}) (m
 		zap.String("name", p.config.Name),
 		zap.Int("stages", len(p.stages)))
 
-	results := make(map[RoleType]interface{})
+	results := make(map[RoleType]any)
 	currentInput := initialInput
 
 	for stageIdx, stage := range p.stages {
@@ -293,10 +293,10 @@ func (p *RolePipeline) Execute(ctx context.Context, initialInput interface{}) (m
 func (p *RolePipeline) executeStage(
 	ctx context.Context,
 	roles []RoleType,
-	input interface{},
-	previousResults map[RoleType]interface{},
-) (map[RoleType]interface{}, error) {
-	results := make(map[RoleType]interface{})
+	input any,
+	previousResults map[RoleType]any,
+) (map[RoleType]any, error) {
+	results := make(map[RoleType]any)
 	var mu sync.Mutex
 	var wg sync.WaitGroup
 	var firstErr error
@@ -321,7 +321,7 @@ func (p *RolePipeline) executeStage(
 		}
 
 		wg.Add(1)
-		go func(rt RoleType, rd *RoleDefinition, ri interface{}) {
+		go func(rt RoleType, rd *RoleDefinition, ri any) {
 			defer wg.Done()
 
 			sem <- struct{}{}        // Acquire
@@ -353,7 +353,7 @@ func (p *RolePipeline) executeStage(
 			}
 
 			// 用重试执行
-			var output interface{}
+			var output any
 			var err error
 			maxAttempts := 1
 			if rd.RetryPolicy != nil {

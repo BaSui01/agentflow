@@ -190,7 +190,7 @@ func TestMemoryTaskStore(t *testing.T) {
 			AgentID: "agent-1",
 			Type:    "test",
 			Status:  TaskStatusPending,
-			Input:   map[string]interface{}{"key": "value"},
+			Input:   map[string]any{"key": "value"},
 		}
 
 		if err := store.SaveTask(ctx, task); err != nil {

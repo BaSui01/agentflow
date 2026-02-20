@@ -21,7 +21,7 @@ type TaskStore interface {
 	ListTasks(ctx context.Context, filter TaskFilter) ([]*AsyncTask, error)
 
 	// 更新状态更新任务状态
-	UpdateStatus(ctx context.Context, taskID string, status TaskStatus, result interface{}, errMsg string) error
+	UpdateStatus(ctx context.Context, taskID string, status TaskStatus, result any, errMsg string) error
 
 	// 更新进度更新任务进度
 	UpdateProgress(ctx context.Context, taskID string, progress float64) error
@@ -101,10 +101,10 @@ type AsyncTask struct {
 	Status TaskStatus `json:"status"`
 
 	// 输入包含任务输入数据
-	Input map[string]interface{} `json:"input,omitempty"`
+	Input map[string]any `json:"input,omitempty"`
 
 	// 结果包含任务结果(完成后)
-	Result interface{} `json:"result,omitempty"`
+	Result any `json:"result,omitempty"`
 
 	// 错误包含错误消息( 当失败时)
 	Error string `json:"error,omitempty"`

@@ -53,6 +53,22 @@ const (
 	LevelEmergency
 )
 
+// String returns the string representation of Level.
+func (l Level) String() string {
+	switch l {
+	case LevelNone:
+		return "none"
+	case LevelNormal:
+		return "normal"
+	case LevelAggressive:
+		return "aggressive"
+	case LevelEmergency:
+		return "emergency"
+	default:
+		return fmt.Sprintf("Level(%d)", l)
+	}
+}
+
 // Stats跟踪上下文工程统计.
 type Stats struct {
 	TotalCompressions   int64   `json:"total_compressions"`

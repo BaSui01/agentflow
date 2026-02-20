@@ -276,13 +276,13 @@ func TestProperty_CheckpointRecovery_WithCheckpointStore(t *testing.T) {
 			AgentID:   agentID,
 			State:     StateRunning,
 			Messages:  []CheckpointMessage{},
-			Metadata:  make(map[string]interface{}),
+			Metadata:  make(map[string]any),
 			CreatedAt: time.Now(),
 			ExecutionContext: &ExecutionContext{
 				WorkflowID:  "test-workflow",
 				CurrentNode: "step-" + string(rune('0'+currentStep)),
-				NodeResults: make(map[string]interface{}),
-				Variables: map[string]interface{}{
+				NodeResults: make(map[string]any),
+				Variables: map[string]any{
 					"current_step": currentStep,
 					"total_steps":  totalSteps,
 				},
@@ -323,7 +323,7 @@ func TestProperty_CheckpointRecovery_WithCheckpointStore(t *testing.T) {
 			"TotalSteps should be preserved after checkpoint load")
 
 		// 财产3:应保留已完成的步骤元数据
-		loadedCompletedSteps, ok := loaded.Metadata["completed_steps"].([]interface{})
+		loadedCompletedSteps, ok := loaded.Metadata["completed_steps"].([]any)
 		require.True(t, ok, "completed_steps should be preserved")
 		assert.Equal(t, currentStep, len(loadedCompletedSteps),
 			"Number of completed steps should match currentStep")

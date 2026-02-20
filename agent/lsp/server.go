@@ -95,7 +95,7 @@ type CodeActionOptions struct {
 }
 
 // RequestHandler 请求处理器
-type RequestHandler func(ctx context.Context, params json.RawMessage) (interface{}, error)
+type RequestHandler func(ctx context.Context, params json.RawMessage) (any, error)
 
 // NewLSPServer 创建 LSP 服务器
 func NewLSPServer(info ServerInfo, reader io.Reader, writer io.Writer, logger *zap.Logger) *LSPServer {
@@ -293,7 +293,7 @@ func (s *LSPServer) handleMessage(ctx context.Context, msg *LSPMessage) {
 }
 
 // sendResponse 发送响应
-func (s *LSPServer) sendResponse(id interface{}, result interface{}) {
+func (s *LSPServer) sendResponse(id any, result any) {
 	msg := &LSPMessage{
 		JSONRPC: "2.0",
 		ID:      id,
@@ -306,7 +306,7 @@ func (s *LSPServer) sendResponse(id interface{}, result interface{}) {
 }
 
 // sendError 发送错误
-func (s *LSPServer) sendError(id interface{}, code int, message string, data interface{}) {
+func (s *LSPServer) sendError(id any, code int, message string, data any) {
 	msg := &LSPMessage{
 		JSONRPC: "2.0",
 		ID:      id,
@@ -323,7 +323,7 @@ func (s *LSPServer) sendError(id interface{}, code int, message string, data int
 }
 
 // SendNotification 发送通知
-func (s *LSPServer) SendNotification(method string, params interface{}) error {
+func (s *LSPServer) SendNotification(method string, params any) error {
 	var rawParams json.RawMessage
 	if params != nil {
 		data, err := json.Marshal(params)
@@ -345,12 +345,12 @@ func (s *LSPServer) SendNotification(method string, params interface{}) error {
 // ====== 默认处理器 ======
 
 // handleInitialize 处理 initialize 请求
-func (s *LSPServer) handleInitialize(ctx context.Context, params json.RawMessage) (interface{}, error) {
+func (s *LSPServer) handleInitialize(ctx context.Context, params json.RawMessage) (any, error) {
 	s.mu.Lock()
 	s.initialized = true
 	s.mu.Unlock()
 
-	return map[string]interface{}{
+	return map[string]any{
 		"capabilities": s.capabilities,
 		"serverInfo": map[string]string{
 			"name":    s.info.Name,
@@ -360,13 +360,13 @@ func (s *LSPServer) handleInitialize(ctx context.Context, params json.RawMessage
 }
 
 // handleInitialized 处理 initialized 通知
-func (s *LSPServer) handleInitialized(ctx context.Context, params json.RawMessage) (interface{}, error) {
+func (s *LSPServer) handleInitialized(ctx context.Context, params json.RawMessage) (any, error) {
 	s.logger.Info("LSP server initialized")
 	return nil, nil
 }
 
 // handleShutdown 处理 shutdown 请求
-func (s *LSPServer) handleShutdown(ctx context.Context, params json.RawMessage) (interface{}, error) {
+func (s *LSPServer) handleShutdown(ctx context.Context, params json.RawMessage) (any, error) {
 	s.mu.Lock()
 	s.shutdown = true
 	s.mu.Unlock()
@@ -376,12 +376,12 @@ func (s *LSPServer) handleShutdown(ctx context.Context, params json.RawMessage) 
 }
 
 // handleExit 处理 exit 通知
-func (s *LSPServer) handleExit(ctx context.Context, params json.RawMessage) (interface{}, error) {
+func (s *LSPServer) handleExit(ctx context.Context, params json.RawMessage) (any, error) {
 	s.logger.Info("LSP server exiting")
 	return nil, nil
 }
 
-func (s *LSPServer) handleTextDocumentDidOpen(ctx context.Context, params json.RawMessage) (interface{}, error) {
+func (s *LSPServer) handleTextDocumentDidOpen(ctx context.Context, params json.RawMessage) (any, error) {
 	var req DidOpenTextDocumentParams
 	if err := json.Unmarshal(params, &req); err != nil {
 		return nil, fmt.Errorf("invalid didOpen params: %w", err)
@@ -404,7 +404,7 @@ func (s *LSPServer) handleTextDocumentDidOpen(ctx context.Context, params json.R
 	return nil, nil
 }
 
-func (s *LSPServer) handleTextDocumentDidChange(ctx context.Context, params json.RawMessage) (interface{}, error) {
+func (s *LSPServer) handleTextDocumentDidChange(ctx context.Context, params json.RawMessage) (any, error) {
 	var req DidChangeTextDocumentParams
 	if err := json.Unmarshal(params, &req); err != nil {
 		return nil, fmt.Errorf("invalid didChange params: %w", err)
@@ -439,7 +439,7 @@ func (s *LSPServer) handleTextDocumentDidChange(ctx context.Context, params json
 	return nil, nil
 }
 
-func (s *LSPServer) handleTextDocumentDidClose(ctx context.Context, params json.RawMessage) (interface{}, error) {
+func (s *LSPServer) handleTextDocumentDidClose(ctx context.Context, params json.RawMessage) (any, error) {
 	var req DidCloseTextDocumentParams
 	if err := json.Unmarshal(params, &req); err != nil {
 		return nil, fmt.Errorf("invalid didClose params: %w", err)
@@ -457,7 +457,7 @@ func (s *LSPServer) handleTextDocumentDidClose(ctx context.Context, params json.
 	return nil, nil
 }
 
-func (s *LSPServer) handleTextDocumentCompletion(ctx context.Context, params json.RawMessage) (interface{}, error) {
+func (s *LSPServer) handleTextDocumentCompletion(ctx context.Context, params json.RawMessage) (any, error) {
 	var req CompletionParams
 	if err := json.Unmarshal(params, &req); err != nil {
 		return nil, fmt.Errorf("invalid completion params: %w", err)
@@ -511,7 +511,7 @@ func (s *LSPServer) handleTextDocumentCompletion(ctx context.Context, params jso
 	return items, nil
 }
 
-func (s *LSPServer) handleTextDocumentHover(ctx context.Context, params json.RawMessage) (interface{}, error) {
+func (s *LSPServer) handleTextDocumentHover(ctx context.Context, params json.RawMessage) (any, error) {
 	var req HoverParams
 	if err := json.Unmarshal(params, &req); err != nil {
 		return nil, fmt.Errorf("invalid hover params: %w", err)
@@ -541,7 +541,7 @@ func (s *LSPServer) handleTextDocumentHover(ctx context.Context, params json.Raw
 	return hover, nil
 }
 
-func (s *LSPServer) handleTextDocumentDefinition(ctx context.Context, params json.RawMessage) (interface{}, error) {
+func (s *LSPServer) handleTextDocumentDefinition(ctx context.Context, params json.RawMessage) (any, error) {
 	var req DefinitionParams
 	if err := json.Unmarshal(params, &req); err != nil {
 		return nil, fmt.Errorf("invalid definition params: %w", err)
@@ -568,7 +568,7 @@ func (s *LSPServer) handleTextDocumentDefinition(ctx context.Context, params jso
 	return []Location{{URI: doc.URI, Range: defRange}}, nil
 }
 
-func (s *LSPServer) handleTextDocumentReferences(ctx context.Context, params json.RawMessage) (interface{}, error) {
+func (s *LSPServer) handleTextDocumentReferences(ctx context.Context, params json.RawMessage) (any, error) {
 	var req ReferenceParams
 	if err := json.Unmarshal(params, &req); err != nil {
 		return nil, fmt.Errorf("invalid references params: %w", err)
@@ -604,7 +604,7 @@ func (s *LSPServer) handleTextDocumentReferences(ctx context.Context, params jso
 	return locations, nil
 }
 
-func (s *LSPServer) handleTextDocumentDocumentSymbol(ctx context.Context, params json.RawMessage) (interface{}, error) {
+func (s *LSPServer) handleTextDocumentDocumentSymbol(ctx context.Context, params json.RawMessage) (any, error) {
 	var req DocumentSymbolParams
 	if err := json.Unmarshal(params, &req); err != nil {
 		return nil, fmt.Errorf("invalid documentSymbol params: %w", err)
@@ -618,7 +618,7 @@ func (s *LSPServer) handleTextDocumentDocumentSymbol(ctx context.Context, params
 	return parseDocumentSymbols(doc.Text), nil
 }
 
-func (s *LSPServer) handleTextDocumentCodeAction(ctx context.Context, params json.RawMessage) (interface{}, error) {
+func (s *LSPServer) handleTextDocumentCodeAction(ctx context.Context, params json.RawMessage) (any, error) {
 	var req CodeActionParams
 	if err := json.Unmarshal(params, &req); err != nil {
 		return nil, fmt.Errorf("invalid codeAction params: %w", err)
@@ -1029,10 +1029,10 @@ func isKeyword(word string) bool {
 // LSPMessage LSP 消息
 type LSPMessage struct {
 	JSONRPC string          `json:"jsonrpc"`
-	ID      interface{}     `json:"id,omitempty"`
+	ID      any     `json:"id,omitempty"`
 	Method  string          `json:"method,omitempty"`
 	Params  json.RawMessage `json:"params,omitempty"`
-	Result  interface{}     `json:"result,omitempty"`
+	Result  any     `json:"result,omitempty"`
 	Error   *LSPError       `json:"error,omitempty"`
 }
 
@@ -1040,5 +1040,5 @@ type LSPMessage struct {
 type LSPError struct {
 	Code    int         `json:"code"`
 	Message string      `json:"message"`
-	Data    interface{} `json:"data,omitempty"`
+	Data    any `json:"data,omitempty"`
 }

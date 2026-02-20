@@ -197,7 +197,7 @@ func TestRolePipeline_AddStage(t *testing.T) {
 	require.NoError(t, RegisterResearchRoles(reg))
 
 	cfg := DefaultPipelineConfig()
-	noop := func(_ context.Context, _ *RoleDefinition, input interface{}) (interface{}, error) {
+	noop := func(_ context.Context, _ *RoleDefinition, input any) (any, error) {
 		return input, nil
 	}
 
@@ -214,7 +214,7 @@ func TestRolePipeline_NilLogger(t *testing.T) {
 
 	reg := NewRoleRegistry(nil)
 	cfg := DefaultPipelineConfig()
-	noop := func(_ context.Context, _ *RoleDefinition, input interface{}) (interface{}, error) {
+	noop := func(_ context.Context, _ *RoleDefinition, input any) (any, error) {
 		return input, nil
 	}
 
@@ -231,8 +231,8 @@ func TestRolePipeline_Execute_SingleStage(t *testing.T) {
 	cfg := DefaultPipelineConfig()
 	cfg.Timeout = 5 * time.Second
 
-	executeFn := func(_ context.Context, role *RoleDefinition, input interface{}) (interface{}, error) {
-		return map[string]interface{}{
+	executeFn := func(_ context.Context, role *RoleDefinition, input any) (any, error) {
+		return map[string]any{
 			"role":   string(role.Type),
 			"result": "done",
 		}, nil

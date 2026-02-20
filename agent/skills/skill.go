@@ -24,7 +24,7 @@ type Skill struct {
 	// 核心内容
 	Instructions string                 `json:"instructions"` // 技能指令
 	Tools        []string               `json:"tools"`        // 需要的工具列表
-	Resources    map[string]interface{} `json:"resources"`    // 资源（文件、数据等）
+	Resources    map[string]any `json:"resources"`    // 资源（文件、数据等）
 	Examples     []SkillExample         `json:"examples"`     // 使用示例
 
 	// 加载策略
@@ -97,7 +97,7 @@ func LoadSkillFromDirectory(dir string) (*Skill, error) {
 // loadSkillResources 加载技能资源文件
 func loadSkillResources(dir string, skill *Skill, files []string) error {
 	if skill.Resources == nil {
-		skill.Resources = make(map[string]interface{})
+		skill.Resources = make(map[string]any)
 	}
 
 	for _, file := range files {
@@ -118,7 +118,7 @@ func loadSkillResources(dir string, skill *Skill, files []string) error {
 		ext := filepath.Ext(file)
 		switch ext {
 		case ".json":
-			var data interface{}
+			var data any
 			if err := json.Unmarshal(content, &data); err != nil {
 				skill.Resources[file] = string(content) // 解析失败，存储为字符串
 			} else {
@@ -189,10 +189,10 @@ func SaveSkillToDirectory(skill *Skill, dir string) error {
 // ToToolSchema 将技能转换为工具 Schema（如果技能可以作为工具使用）
 func (s *Skill) ToToolSchema() llm.ToolSchema {
 	// 构建参数 schema
-	parametersMap := map[string]interface{}{
+	parametersMap := map[string]any{
 		"type": "object",
-		"properties": map[string]interface{}{
-			"input": map[string]interface{}{
+		"properties": map[string]any{
+			"input": map[string]any{
 				"type":        "string",
 				"description": "Input for the skill",
 			},
@@ -256,7 +256,7 @@ func (s *Skill) GetResourceAsString(name string) (string, error) {
 }
 
 // GetResourceAsJSON 获取资源作为 JSON
-func (s *Skill) GetResourceAsJSON(name string, target interface{}) error {
+func (s *Skill) GetResourceAsJSON(name string, target any) error {
 	resource, ok := s.Resources[name]
 	if !ok {
 		return fmt.Errorf("resource %s not found", name)
@@ -337,7 +337,7 @@ func (s *Skill) Clone() *Skill {
 	clone.Dependencies = append([]string{}, s.Dependencies...)
 	clone.Examples = append([]SkillExample{}, s.Examples...)
 
-	clone.Resources = make(map[string]interface{})
+	clone.Resources = make(map[string]any)
 	for k, v := range s.Resources {
 		clone.Resources[k] = v
 	}
@@ -374,7 +374,7 @@ func NewSkillBuilder(id, name string) *SkillBuilder {
 			ID:        id,
 			Name:      name,
 			Version:   "1.0.0",
-			Resources: make(map[string]interface{}),
+			Resources: make(map[string]any),
 			CreatedAt: time.Now(),
 			UpdatedAt: time.Now(),
 		},
@@ -412,7 +412,7 @@ func (b *SkillBuilder) WithTools(tools ...string) *SkillBuilder {
 }
 
 // WithResource 添加资源
-func (b *SkillBuilder) WithResource(name string, content interface{}) *SkillBuilder {
+func (b *SkillBuilder) WithResource(name string, content any) *SkillBuilder {
 	b.skill.Resources[name] = content
 	return b
 }

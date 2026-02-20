@@ -61,7 +61,7 @@ func NewMaxPerAgentPrunerStrategy(prefix string, store MemoryStore, max int, log
 	}
 }
 
-func (s *MaxPerAgentPrunerStrategy) ShouldConsolidate(ctx context.Context, memory interface{}) bool {
+func (s *MaxPerAgentPrunerStrategy) ShouldConsolidate(ctx context.Context, memory any) bool {
 	key, ok := extractMemoryKey(memory)
 	if !ok {
 		return false
@@ -69,7 +69,7 @@ func (s *MaxPerAgentPrunerStrategy) ShouldConsolidate(ctx context.Context, memor
 	return strings.HasPrefix(key, s.prefix)
 }
 
-func (s *MaxPerAgentPrunerStrategy) Consolidate(ctx context.Context, memories []interface{}) error {
+func (s *MaxPerAgentPrunerStrategy) Consolidate(ctx context.Context, memories []any) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -153,7 +153,7 @@ func NewPromoteShortTermVectorToLongTermStrategy(system *EnhancedMemorySystem, l
 	}
 }
 
-func (s *PromoteShortTermVectorToLongTermStrategy) ShouldConsolidate(ctx context.Context, memory interface{}) bool {
+func (s *PromoteShortTermVectorToLongTermStrategy) ShouldConsolidate(ctx context.Context, memory any) bool {
 	key, ok := extractMemoryKey(memory)
 	if !ok || !strings.HasPrefix(key, "short_term:") {
 		return false
@@ -162,7 +162,7 @@ func (s *PromoteShortTermVectorToLongTermStrategy) ShouldConsolidate(ctx context
 	return ok
 }
 
-func (s *PromoteShortTermVectorToLongTermStrategy) Consolidate(ctx context.Context, memories []interface{}) error {
+func (s *PromoteShortTermVectorToLongTermStrategy) Consolidate(ctx context.Context, memories []any) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -197,7 +197,7 @@ func (s *PromoteShortTermVectorToLongTermStrategy) Consolidate(ctx context.Conte
 		content := extractMemoryContent(mem)
 		meta := extractMemoryMetadata(mem)
 		if meta == nil {
-			meta = make(map[string]interface{})
+			meta = make(map[string]any)
 		}
 		meta["agent_id"] = agentID
 		if content != "" {

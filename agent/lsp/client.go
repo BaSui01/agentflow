@@ -79,7 +79,7 @@ func (c *LSPClient) Initialize(ctx context.Context, params InitializeParams) (*I
 	c.mu.Unlock()
 
 	// 发送 initialized 通知
-	if err := c.sendNotification("initialized", map[string]interface{}{}); err != nil {
+	if err := c.sendNotification("initialized", map[string]any{}); err != nil {
 		return nil, err
 	}
 
@@ -234,7 +234,7 @@ func (c *LSPClient) Start(ctx context.Context) error {
 }
 
 // sendRequest 发送请求
-func (c *LSPClient) sendRequest(ctx context.Context, method string, params interface{}) (json.RawMessage, error) {
+func (c *LSPClient) sendRequest(ctx context.Context, method string, params any) (json.RawMessage, error) {
 	id := atomic.AddInt64(&c.nextID, 1)
 
 	// 创建响应通道
@@ -287,7 +287,7 @@ func (c *LSPClient) sendRequest(ctx context.Context, method string, params inter
 }
 
 // sendNotification 发送通知
-func (c *LSPClient) sendNotification(method string, params interface{}) error {
+func (c *LSPClient) sendNotification(method string, params any) error {
 	msg := &LSPMessage{
 		JSONRPC: "2.0",
 		Method:  method,
@@ -404,7 +404,7 @@ func (c *LSPClient) handleMessage(msg *LSPMessage) {
 	}
 }
 
-func parseMessageID(id interface{}) (int64, bool) {
+func parseMessageID(id any) (int64, bool) {
 	switch v := id.(type) {
 	case float64:
 		return int64(v), true
@@ -436,7 +436,7 @@ type InitializeParams struct {
 	ProcessID             int                `json:"processId"`
 	RootURI               string             `json:"rootUri"`
 	Capabilities          ClientCapabilities `json:"capabilities"`
-	InitializationOptions interface{}        `json:"initializationOptions,omitempty"`
+	InitializationOptions any        `json:"initializationOptions,omitempty"`
 }
 
 // ClientCapabilities 客户端能力

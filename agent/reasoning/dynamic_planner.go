@@ -204,7 +204,11 @@ Generate 1-3 next steps with alternatives. Output as JSON:
 		return nil, 0, err
 	}
 
-	content := extractJSONObject(resp.Choices[0].Message.Content)
+	stepChoice, choiceErr := llm.FirstChoice(resp)
+	if choiceErr != nil {
+		return nil, resp.Usage.TotalTokens, fmt.Errorf("plan generation returned no choices: %w", choiceErr)
+	}
+	content := extractJSONObject(stepChoice.Message.Content)
 	tokens := resp.Usage.TotalTokens
 
 	var planData struct {
@@ -396,7 +400,11 @@ Think through this step and provide your reasoning and conclusion.`, node.Descri
 		return "", 0, err
 	}
 
-	return resp.Choices[0].Message.Content, resp.Usage.TotalTokens, nil
+	llmChoice, choiceErr := llm.FirstChoice(resp)
+	if choiceErr != nil {
+		return "", resp.Usage.TotalTokens, fmt.Errorf("LLM node returned no choices: %w", choiceErr)
+	}
+	return llmChoice.Message.Content, resp.Usage.TotalTokens, nil
 }
 
 func (d *DynamicPlanner) tryAlternativeOrBacktrack(ctx context.Context, failedNode *PlanNode) bool {
@@ -526,7 +534,11 @@ Synthesize a final answer based on these results.`, task, joinStrings(results, "
 		return "", 0, err
 	}
 
-	return resp.Choices[0].Message.Content, resp.Usage.TotalTokens, nil
+	synthChoice, choiceErr := llm.FirstChoice(resp)
+	if choiceErr != nil {
+		return "", resp.Usage.TotalTokens, fmt.Errorf("synthesis returned no choices: %w", choiceErr)
+	}
+	return synthChoice.Message.Content, resp.Usage.TotalTokens, nil
 }
 
 func (d *DynamicPlanner) collectResults(node *PlanNode, results *[]string) {

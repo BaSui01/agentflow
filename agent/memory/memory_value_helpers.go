@@ -4,8 +4,8 @@ import (
 	"time"
 )
 
-func extractMemoryAgentID(memory interface{}) string {
-	m, ok := memory.(map[string]interface{})
+func extractMemoryAgentID(memory any) string {
+	m, ok := memory.(map[string]any)
 	if !ok {
 		return ""
 	}
@@ -13,8 +13,8 @@ func extractMemoryAgentID(memory interface{}) string {
 	return agentID
 }
 
-func extractMemoryTimestamp(memory interface{}) time.Time {
-	m, ok := memory.(map[string]interface{})
+func extractMemoryTimestamp(memory any) time.Time {
+	m, ok := memory.(map[string]any)
 	if !ok {
 		return time.Time{}
 	}
@@ -41,8 +41,8 @@ func extractMemoryTimestamp(memory interface{}) time.Time {
 	return time.Time{}
 }
 
-func extractMemoryContent(memory interface{}) string {
-	m, ok := memory.(map[string]interface{})
+func extractMemoryContent(memory any) string {
+	m, ok := memory.(map[string]any)
 	if !ok {
 		return ""
 	}
@@ -50,8 +50,8 @@ func extractMemoryContent(memory interface{}) string {
 	return content
 }
 
-func extractMemoryMetadata(memory interface{}) map[string]interface{} {
-	m, ok := memory.(map[string]interface{})
+func extractMemoryMetadata(memory any) map[string]any {
+	m, ok := memory.(map[string]any)
 	if !ok {
 		return nil
 	}
@@ -62,20 +62,20 @@ func extractMemoryMetadata(memory interface{}) map[string]interface{} {
 	}
 
 	switch v := raw.(type) {
-	case map[string]interface{}:
+	case map[string]any:
 		return v
 	default:
 		return nil
 	}
 }
 
-func extractMemoryVector(memory interface{}) ([]float64, bool) {
-	m, ok := memory.(map[string]interface{})
+func extractMemoryVector(memory any) ([]float64, bool) {
+	m, ok := memory.(map[string]any)
 	if !ok {
 		return nil, false
 	}
 
-	for _, raw := range []interface{}{m["vector"], m["embedding"]} {
+	for _, raw := range []any{m["vector"], m["embedding"]} {
 		if vec, ok := coerceVector(raw); ok {
 			return vec, true
 		}
@@ -83,7 +83,7 @@ func extractMemoryVector(memory interface{}) ([]float64, bool) {
 
 	meta := extractMemoryMetadata(memory)
 	if meta != nil {
-		for _, raw := range []interface{}{meta["vector"], meta["embedding"]} {
+		for _, raw := range []any{meta["vector"], meta["embedding"]} {
 			if vec, ok := coerceVector(raw); ok {
 				return vec, true
 			}
@@ -93,7 +93,7 @@ func extractMemoryVector(memory interface{}) ([]float64, bool) {
 	return nil, false
 }
 
-func coerceVector(raw interface{}) ([]float64, bool) {
+func coerceVector(raw any) ([]float64, bool) {
 	switch v := raw.(type) {
 	case []float64:
 		return append([]float64(nil), v...), true
@@ -103,7 +103,7 @@ func coerceVector(raw interface{}) ([]float64, bool) {
 			out = append(out, float64(x))
 		}
 		return out, true
-	case []interface{}:
+	case []any:
 		out := make([]float64, 0, len(v))
 		for _, x := range v {
 			switch n := x.(type) {

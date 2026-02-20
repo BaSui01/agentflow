@@ -34,14 +34,14 @@ func NewMCPClient(reader io.Reader, writer io.Writer, logger *zap.Logger) *proto
 	return proto.NewMCPClient(reader, writer, logger)
 }
 
-func NewMCPRequest(id interface{}, method string, params map[string]interface{}) *proto.MCPMessage {
+func NewMCPRequest(id any, method string, params map[string]any) *proto.MCPMessage {
 	return proto.NewMCPRequest(id, method, params)
 }
 
-func NewMCPResponse(id interface{}, result interface{}) *proto.MCPMessage {
+func NewMCPResponse(id any, result any) *proto.MCPMessage {
 	return proto.NewMCPResponse(id, result)
 }
 
-func NewMCPError(id interface{}, code int, message string, data interface{}) *proto.MCPMessage {
+func NewMCPError(id any, code int, message string, data any) *proto.MCPMessage {
 	return proto.NewMCPError(id, code, message, data)
 }

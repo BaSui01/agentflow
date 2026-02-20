@@ -40,7 +40,7 @@ func TestProperty_CheckpointRoundTripConsistency(t *testing.T) {
 				AgentID:  agentID,
 				State:    state,
 				Messages: messages,
-				Metadata: map[string]interface{}{
+				Metadata: map[string]any{
 					"test_key": "test_value",
 				},
 				CreatedAt: time.Now(),
@@ -118,7 +118,7 @@ func TestProperty_CheckpointIDAndTimestampAssignment(t *testing.T) {
 				AgentID:  agentID,
 				State:    StateReady,
 				Messages: []CheckpointMessage{},
-				Metadata: make(map[string]interface{}),
+				Metadata: make(map[string]any),
 				CreatedAt: time.Now(),
 			}
 
@@ -190,7 +190,7 @@ func TestProperty_CheckpointListingOrder(t *testing.T) {
 					AgentID:  agentID,
 					State:    StateReady,
 					Messages: []CheckpointMessage{},
-					Metadata: make(map[string]interface{}),
+					Metadata: make(map[string]any),
 				}
 
 				if err := store.Save(ctx, checkpoint); err != nil {
@@ -254,7 +254,7 @@ func TestProperty_SequentialVersionNumbering(t *testing.T) {
 					AgentID:  agentID,
 					State:    StateReady,
 					Messages: []CheckpointMessage{},
-					Metadata: make(map[string]interface{}),
+					Metadata: make(map[string]any),
 				}
 
 				if err := store.Save(ctx, checkpoint); err != nil {

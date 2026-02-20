@@ -931,7 +931,7 @@ func (h *HealthChecker) performHealthCheck(ctx context.Context, agent *AgentInfo
 }
 
 // must Marshal 向 JSON 输入数据, 错误时返回零 。
-func mustMarshal(v interface{}) json.RawMessage {
+func mustMarshal(v any) json.RawMessage {
 	data, err := json.Marshal(v)
 	if err != nil {
 		return nil
