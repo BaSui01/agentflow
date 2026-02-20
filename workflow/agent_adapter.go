@@ -14,7 +14,7 @@ import (
 // This allows workflow to use agents without direct dependency on agent package.
 type AgentExecutor interface {
 	// Execute executes the agent with the given input.
-	Execute(ctx context.Context, input interface{}) (interface{}, error)
+	Execute(ctx context.Context, input any) (any, error)
 	// ID returns the agent's unique identifier.
 	ID() string
 	// Name returns the agent's name.
@@ -24,10 +24,10 @@ type AgentExecutor interface {
 // AgentStep wraps an AgentExecutor as a workflow Step.
 // This allows agents to be used as steps in workflow chains.
 type AgentStep struct {
-	agent       AgentExecutor
-	name        string
-	inputMapper func(interface{}) (interface{}, error)
-	outputMapper func(interface{}) (interface{}, error)
+	agent        AgentExecutor
+	name         string
+	inputMapper  func(any) (any, error)
+	outputMapper func(any) (any, error)
 }
 
 // AgentStepOption configures an AgentStep.
@@ -41,14 +41,14 @@ func WithStepName(name string) AgentStepOption {
 }
 
 // WithInputMapper sets a function to transform input before agent execution.
-func WithInputMapper(mapper func(interface{}) (interface{}, error)) AgentStepOption {
+func WithInputMapper(mapper func(any) (any, error)) AgentStepOption {
 	return func(s *AgentStep) {
 		s.inputMapper = mapper
 	}
 }
 
 // WithOutputMapper sets a function to transform output after agent execution.
-func WithOutputMapper(mapper func(interface{}) (interface{}, error)) AgentStepOption {
+func WithOutputMapper(mapper func(any) (any, error)) AgentStepOption {
 	return func(s *AgentStep) {
 		s.outputMapper = mapper
 	}
@@ -67,7 +67,7 @@ func NewAgentStep(agent AgentExecutor, opts ...AgentStepOption) *AgentStep {
 }
 
 // Execute implements the Step interface.
-func (s *AgentStep) Execute(ctx context.Context, input interface{}) (interface{}, error) {
+func (s *AgentStep) Execute(ctx context.Context, input any) (any, error) {
 	// Apply input mapper if configured
 	if s.inputMapper != nil {
 		var err error
@@ -111,11 +111,11 @@ func (s *AgentStep) AgentID() string {
 // AgentRouter routes tasks to appropriate agents based on criteria.
 type AgentRouter struct {
 	agents   map[string]AgentExecutor
-	selector func(ctx context.Context, input interface{}, agents map[string]AgentExecutor) (AgentExecutor, error)
+	selector func(ctx context.Context, input any, agents map[string]AgentExecutor) (AgentExecutor, error)
 }
 
 // NewAgentRouter creates a new AgentRouter.
-func NewAgentRouter(selector func(ctx context.Context, input interface{}, agents map[string]AgentExecutor) (AgentExecutor, error)) *AgentRouter {
+func NewAgentRouter(selector func(ctx context.Context, input any, agents map[string]AgentExecutor) (AgentExecutor, error)) *AgentRouter {
 	return &AgentRouter{
 		agents:   make(map[string]AgentExecutor),
 		selector: selector,
@@ -128,7 +128,7 @@ func (r *AgentRouter) RegisterAgent(agent AgentExecutor) {
 }
 
 // Execute implements the Step interface by routing to the appropriate agent.
-func (r *AgentRouter) Execute(ctx context.Context, input interface{}) (interface{}, error) {
+func (r *AgentRouter) Execute(ctx context.Context, input any) (any, error) {
 	if r.selector == nil {
 		return nil, fmt.Errorf("no agent selector configured")
 	}
@@ -156,13 +156,13 @@ func (r *AgentRouter) Name() string {
 
 // ParallelAgentStep executes multiple agents in parallel.
 type ParallelAgentStep struct {
-	agents   []AgentExecutor
-	merger   func(results []interface{}) (interface{}, error)
-	name     string
+	agents []AgentExecutor
+	merger func(results []any) (any, error)
+	name   string
 }
 
 // NewParallelAgentStep creates a step that executes agents in parallel.
-func NewParallelAgentStep(agents []AgentExecutor, merger func([]interface{}) (interface{}, error)) *ParallelAgentStep {
+func NewParallelAgentStep(agents []AgentExecutor, merger func([]any) (any, error)) *ParallelAgentStep {
 	return &ParallelAgentStep{
 		agents: agents,
 		merger: merger,
@@ -171,14 +171,14 @@ func NewParallelAgentStep(agents []AgentExecutor, merger func([]interface{}) (in
 }
 
 // Execute runs all agents in parallel and merges results.
-func (p *ParallelAgentStep) Execute(ctx context.Context, input interface{}) (interface{}, error) {
+func (p *ParallelAgentStep) Execute(ctx context.Context, input any) (any, error) {
 	if len(p.agents) == 0 {
 		return nil, fmt.Errorf("no agents configured")
 	}
 
 	type result struct {
 		index  int
-		output interface{}
+		output any
 		err    error
 	}
 
@@ -193,7 +193,7 @@ func (p *ParallelAgentStep) Execute(ctx context.Context, input interface{}) (int
 	}
 
 	// Collect results
-	results := make([]interface{}, len(p.agents))
+	results := make([]any, len(p.agents))
 	var firstErr error
 	for i := 0; i < len(p.agents); i++ {
 		r := <-resultCh
@@ -227,7 +227,7 @@ func (p *ParallelAgentStep) Name() string {
 // ConditionalAgentStep executes different agents based on conditions.
 type ConditionalAgentStep struct {
 	conditions []struct {
-		check func(ctx context.Context, input interface{}) bool
+		check func(ctx context.Context, input any) bool
 		agent AgentExecutor
 	}
 	defaultAgent AgentExecutor
@@ -242,9 +242,9 @@ func NewConditionalAgentStep() *ConditionalAgentStep {
 }
 
 // When adds a condition-agent pair.
-func (c *ConditionalAgentStep) When(check func(ctx context.Context, input interface{}) bool, agent AgentExecutor) *ConditionalAgentStep {
+func (c *ConditionalAgentStep) When(check func(ctx context.Context, input any) bool, agent AgentExecutor) *ConditionalAgentStep {
 	c.conditions = append(c.conditions, struct {
-		check func(ctx context.Context, input interface{}) bool
+		check func(ctx context.Context, input any) bool
 		agent AgentExecutor
 	}{check: check, agent: agent})
 	return c
@@ -257,7 +257,7 @@ func (c *ConditionalAgentStep) Default(agent AgentExecutor) *ConditionalAgentSte
 }
 
 // Execute implements the Step interface.
-func (c *ConditionalAgentStep) Execute(ctx context.Context, input interface{}) (interface{}, error) {
+func (c *ConditionalAgentStep) Execute(ctx context.Context, input any) (any, error) {
 	for _, cond := range c.conditions {
 		if cond.check(ctx, input) {
 			return cond.agent.Execute(ctx, input)
@@ -274,4 +274,95 @@ func (c *ConditionalAgentStep) Execute(ctx context.Context, input interface{}) (
 // Name implements the Step interface.
 func (c *ConditionalAgentStep) Name() string {
 	return c.name
+}
+
+// ============================================================
+// Agent Adapter — bridges external Agent implementations to AgentExecutor
+// ============================================================
+
+// AgentInterface is a minimal agent contract defined in the workflow package
+// to avoid importing the agent package (which would cause circular imports).
+// The agent.Agent interface uses (ctx, *Input) -> (*Output, error), but
+// this interface uses plain string I/O for simplicity. Callers can use
+// AgentAdapterOption functions to customize input/output conversion.
+type AgentInterface interface {
+	// Execute runs the agent with a string prompt and returns a string response.
+	Execute(ctx context.Context, input string) (string, error)
+	// ID returns the agent's unique identifier.
+	ID() string
+	// Name returns the agent's display name.
+	Name() string
+}
+
+// AgentAdapter adapts an AgentInterface to the AgentExecutor interface,
+// allowing any agent implementation to be used in workflow steps.
+type AgentAdapter struct {
+	agent        AgentInterface
+	inputMapper  func(any) (string, error)
+	outputMapper func(string) (any, error)
+}
+
+// AgentAdapterOption configures an AgentAdapter.
+type AgentAdapterOption func(*AgentAdapter)
+
+// WithAgentInputMapper sets a custom function to convert workflow input to agent string input.
+func WithAgentInputMapper(mapper func(any) (string, error)) AgentAdapterOption {
+	return func(a *AgentAdapter) {
+		a.inputMapper = mapper
+	}
+}
+
+// WithAgentOutputMapper sets a custom function to convert agent string output to workflow output.
+func WithAgentOutputMapper(mapper func(string) (any, error)) AgentAdapterOption {
+	return func(a *AgentAdapter) {
+		a.outputMapper = mapper
+	}
+}
+
+// NewAgentAdapter creates an AgentAdapter that implements AgentExecutor.
+func NewAgentAdapter(agent AgentInterface, opts ...AgentAdapterOption) *AgentAdapter {
+	a := &AgentAdapter{agent: agent}
+	for _, opt := range opts {
+		opt(a)
+	}
+	return a
+}
+
+// Execute implements AgentExecutor. It converts the workflow input to a string,
+// calls the agent, and converts the string output back.
+func (a *AgentAdapter) Execute(ctx context.Context, input any) (any, error) {
+	// Convert input to string
+	var strInput string
+	if a.inputMapper != nil {
+		var err error
+		strInput, err = a.inputMapper(input)
+		if err != nil {
+			return nil, fmt.Errorf("AgentAdapter: input mapping failed: %w", err)
+		}
+	} else {
+		// Default: use fmt.Sprintf for conversion
+		strInput = fmt.Sprintf("%v", input)
+	}
+
+	// Execute agent
+	strOutput, err := a.agent.Execute(ctx, strInput)
+	if err != nil {
+		return nil, fmt.Errorf("AgentAdapter: agent execution failed: %w", err)
+	}
+
+	// Convert output
+	if a.outputMapper != nil {
+		return a.outputMapper(strOutput)
+	}
+	return strOutput, nil
+}
+
+// ID implements AgentExecutor.
+func (a *AgentAdapter) ID() string {
+	return a.agent.ID()
+}
+
+// Name implements AgentExecutor.
+func (a *AgentAdapter) Name() string {
+	return a.agent.Name()
 }

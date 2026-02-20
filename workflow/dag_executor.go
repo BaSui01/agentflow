@@ -20,7 +20,7 @@ type DAGExecutor struct {
 	// Execution state
 	executionID  string
 	threadID     string
-	nodeResults  map[string]interface{}
+	nodeResults  map[string]any
 	visitedNodes map[string]bool
 	loopDepth    map[string]int // 循环深度追踪
 	history      *ExecutionHistory
@@ -32,7 +32,7 @@ const maxLoopDepth = 1000
 
 // CheckpointManager interface for checkpoint integration
 type CheckpointManager interface {
-	SaveCheckpoint(ctx context.Context, checkpoint interface{}) error
+	SaveCheckpoint(ctx context.Context, checkpoint any) error
 }
 
 // NewDAGExecutor creates a new DAG executor
@@ -44,7 +44,7 @@ func NewDAGExecutor(checkpointMgr CheckpointManager, logger *zap.Logger) *DAGExe
 		checkpointMgr:   checkpointMgr,
 		historyStore:    NewExecutionHistoryStore(),
 		logger:          logger.With(zap.String("component", "dag_executor")),
-		nodeResults:     make(map[string]interface{}),
+		nodeResults:     make(map[string]any),
 		visitedNodes:    make(map[string]bool),
 		circuitBreakers: NewCircuitBreakerRegistry(DefaultCircuitBreakerConfig(), nil, logger),
 	}
@@ -66,7 +66,7 @@ func (e *DAGExecutor) GetCircuitBreakerStates() map[string]CircuitState {
 }
 
 // Execute runs the DAG workflow with dependency resolution
-func (e *DAGExecutor) Execute(ctx context.Context, graph *DAGGraph, input interface{}) (interface{}, error) {
+func (e *DAGExecutor) Execute(ctx context.Context, graph *DAGGraph, input any) (any, error) {
 	if graph == nil {
 		return nil, fmt.Errorf("graph cannot be nil")
 	}
@@ -74,7 +74,7 @@ func (e *DAGExecutor) Execute(ctx context.Context, graph *DAGGraph, input interf
 	// Initialize execution state
 	e.mu.Lock()
 	e.executionID = generateExecutionID()
-	e.nodeResults = make(map[string]interface{})
+	e.nodeResults = make(map[string]any)
 	e.visitedNodes = make(map[string]bool)
 	e.loopDepth = make(map[string]int)
 	e.history = NewExecutionHistory(e.executionID, "")
@@ -134,7 +134,7 @@ func (e *DAGExecutor) GetHistoryStore() *ExecutionHistoryStore {
 }
 
 // executeNode executes a single node based on its type
-func (e *DAGExecutor) executeNode(ctx context.Context, graph *DAGGraph, node *DAGNode, input interface{}) (interface{}, error) {
+func (e *DAGExecutor) executeNode(ctx context.Context, graph *DAGGraph, node *DAGNode, input any) (any, error) {
 	// Check if already visited and mark atomically (prevent cycles and duplicate execution)
 	e.mu.Lock()
 	if e.visitedNodes[node.ID] {
@@ -177,7 +177,7 @@ func (e *DAGExecutor) executeNode(ctx context.Context, graph *DAGGraph, node *DA
 	}
 
 	startTime := time.Now()
-	var result interface{}
+	var result any
 	var err error
 
 	// Execute based on node type
@@ -235,7 +235,7 @@ func (e *DAGExecutor) executeNode(ctx context.Context, graph *DAGGraph, node *DA
 }
 
 // handleNodeError handles errors based on the node's error strategy
-func (e *DAGExecutor) handleNodeError(ctx context.Context, graph *DAGGraph, node *DAGNode, input interface{}, originalErr error, duration time.Duration) (interface{}, error) {
+func (e *DAGExecutor) handleNodeError(ctx context.Context, graph *DAGGraph, node *DAGNode, input any, originalErr error, duration time.Duration) (any, error) {
 	// Default to fail-fast if no error config
 	if node.ErrorConfig == nil {
 		e.logger.Error("node execution failed",
@@ -270,7 +270,7 @@ func (e *DAGExecutor) handleNodeError(ctx context.Context, graph *DAGGraph, node
 }
 
 // retryNode retries a failed node based on its retry configuration
-func (e *DAGExecutor) retryNode(ctx context.Context, graph *DAGGraph, node *DAGNode, input interface{}, originalErr error) (interface{}, error) {
+func (e *DAGExecutor) retryNode(ctx context.Context, graph *DAGGraph, node *DAGNode, input any, originalErr error) (any, error) {
 	maxRetries := node.ErrorConfig.MaxRetries
 	if maxRetries <= 0 {
 		maxRetries = 3 // Default
@@ -302,7 +302,7 @@ func (e *DAGExecutor) retryNode(ctx context.Context, graph *DAGGraph, node *DAGN
 		e.mu.Unlock()
 
 		// Re-execute the node's step directly (not the full node to avoid recursion issues)
-		var result interface{}
+		var result any
 		var err error
 
 		if node.Type == NodeTypeAction && node.Step != nil {
@@ -337,7 +337,7 @@ func (e *DAGExecutor) retryNode(ctx context.Context, graph *DAGGraph, node *DAGN
 }
 
 // executeActionNode executes an action node and continues to next nodes
-func (e *DAGExecutor) executeActionNode(ctx context.Context, graph *DAGGraph, node *DAGNode, input interface{}) (interface{}, error) {
+func (e *DAGExecutor) executeActionNode(ctx context.Context, graph *DAGGraph, node *DAGNode, input any) (any, error) {
 	if node.Step == nil {
 		return nil, fmt.Errorf("action node %s has no step", node.ID)
 	}
@@ -366,7 +366,7 @@ func (e *DAGExecutor) executeActionNode(ctx context.Context, graph *DAGGraph, no
 }
 
 // executeConditionNode executes a conditional node and routes to next nodes
-func (e *DAGExecutor) executeConditionNode(ctx context.Context, graph *DAGGraph, node *DAGNode, input interface{}) (interface{}, error) {
+func (e *DAGExecutor) executeConditionNode(ctx context.Context, graph *DAGGraph, node *DAGNode, input any) (any, error) {
 	if node.Condition == nil {
 		return nil, fmt.Errorf("condition node %s has no condition function", node.ID)
 	}
@@ -391,7 +391,7 @@ func (e *DAGExecutor) executeConditionNode(ctx context.Context, graph *DAGGraph,
 	}
 
 	// Execute next nodes
-	var lastResult interface{} = input
+	var lastResult any = input
 	for _, nextNode := range nextNodes {
 		lastResult, err = e.executeNode(ctx, graph, nextNode, lastResult)
 		if err != nil {
@@ -403,7 +403,7 @@ func (e *DAGExecutor) executeConditionNode(ctx context.Context, graph *DAGGraph,
 }
 
 // executeLoopNode executes a loop node
-func (e *DAGExecutor) executeLoopNode(ctx context.Context, graph *DAGGraph, node *DAGNode, input interface{}) (interface{}, error) {
+func (e *DAGExecutor) executeLoopNode(ctx context.Context, graph *DAGGraph, node *DAGNode, input any) (any, error) {
 	if node.LoopConfig == nil {
 		return nil, fmt.Errorf("loop node %s has no loop configuration", node.ID)
 	}
@@ -431,7 +431,7 @@ func (e *DAGExecutor) executeLoopNode(ctx context.Context, graph *DAGGraph, node
 		e.mu.Unlock()
 	}()
 
-	var result interface{} = input
+	var result any = input
 	iteration := 0
 
 	switch config.Type {
@@ -529,7 +529,7 @@ func (e *DAGExecutor) executeLoopNode(ctx context.Context, graph *DAGGraph, node
 			return nil, fmt.Errorf("iterator failed: %w", err)
 		}
 
-		results := make([]interface{}, 0, len(items))
+		results := make([]any, 0, len(items))
 		for i, item := range items {
 			// Check max iterations
 			if config.MaxIterations > 0 && i >= config.MaxIterations {
@@ -538,7 +538,7 @@ func (e *DAGExecutor) executeLoopNode(ctx context.Context, graph *DAGGraph, node
 
 			// Execute loop body for each item
 			nextNodes := graph.GetEdges(node.ID)
-			var itemResult interface{} = item
+			var itemResult any = item
 			for _, nextNodeID := range nextNodes {
 				nextNode, exists := graph.GetNode(nextNodeID)
 				if !exists {
@@ -571,7 +571,7 @@ func (e *DAGExecutor) executeLoopNode(ctx context.Context, graph *DAGGraph, node
 }
 
 // executeParallelNode executes parallel nodes concurrently
-func (e *DAGExecutor) executeParallelNode(ctx context.Context, graph *DAGGraph, node *DAGNode, input interface{}) (interface{}, error) {
+func (e *DAGExecutor) executeParallelNode(ctx context.Context, graph *DAGGraph, node *DAGNode, input any) (any, error) {
 	nextNodeIDs := graph.GetEdges(node.ID)
 	if len(nextNodeIDs) == 0 {
 		return input, nil
@@ -585,7 +585,7 @@ func (e *DAGExecutor) executeParallelNode(ctx context.Context, graph *DAGGraph, 
 	// Execute all next nodes in parallel
 	type result struct {
 		nodeID string
-		output interface{}
+		output any
 		err    error
 	}
 
@@ -620,7 +620,7 @@ func (e *DAGExecutor) executeParallelNode(ctx context.Context, graph *DAGGraph, 
 	close(resultChan)
 
 	// Collect results
-	results := make(map[string]interface{})
+	results := make(map[string]any)
 	var errors []error
 
 	for res := range resultChan {
@@ -645,7 +645,7 @@ func (e *DAGExecutor) executeParallelNode(ctx context.Context, graph *DAGGraph, 
 }
 
 // executeSubGraphNode executes a nested subgraph
-func (e *DAGExecutor) executeSubGraphNode(ctx context.Context, node *DAGNode, input interface{}) (interface{}, error) {
+func (e *DAGExecutor) executeSubGraphNode(ctx context.Context, node *DAGNode, input any) (any, error) {
 	if node.SubGraph == nil {
 		return nil, fmt.Errorf("subgraph node %s has no subgraph", node.ID)
 	}
@@ -665,7 +665,7 @@ func (e *DAGExecutor) executeSubGraphNode(ctx context.Context, node *DAGNode, in
 }
 
 // executeCheckpointNode creates a checkpoint
-func (e *DAGExecutor) executeCheckpointNode(ctx context.Context, node *DAGNode, input interface{}) (interface{}, error) {
+func (e *DAGExecutor) executeCheckpointNode(ctx context.Context, node *DAGNode, input any) (any, error) {
 	if e.checkpointMgr == nil {
 		e.logger.Warn("checkpoint manager not configured, skipping checkpoint",
 			zap.String("node_id", node.ID),
@@ -680,8 +680,8 @@ func (e *DAGExecutor) executeCheckpointNode(ctx context.Context, node *DAGNode, 
 	execCtx := &ExecutionContext{
 		WorkflowID:     e.executionID,
 		CurrentNode:    node.ID,
-		NodeResults:    make(map[string]interface{}),
-		Variables:      make(map[string]interface{}),
+		NodeResults:    make(map[string]any),
+		Variables:      make(map[string]any),
 		StartTime:      time.Now(),
 		LastUpdateTime: time.Now(),
 	}
@@ -705,7 +705,7 @@ func (e *DAGExecutor) executeCheckpointNode(ctx context.Context, node *DAGNode, 
 }
 
 // resolveNextNodes determines which nodes to execute next based on condition result
-func (e *DAGExecutor) resolveNextNodes(ctx context.Context, graph *DAGGraph, node *DAGNode, conditionResult interface{}) ([]*DAGNode, error) {
+func (e *DAGExecutor) resolveNextNodes(ctx context.Context, graph *DAGGraph, node *DAGNode, conditionResult any) ([]*DAGNode, error) {
 	// For condition nodes, use metadata to determine routing
 	// Expected metadata format:
 	// - "on_true": []string - node IDs to execute when condition is true
@@ -750,7 +750,7 @@ func (e *DAGExecutor) resolveNextNodes(ctx context.Context, graph *DAGGraph, nod
 }
 
 // GetNodeResult retrieves the result of a completed node
-func (e *DAGExecutor) GetNodeResult(nodeID string) (interface{}, bool) {
+func (e *DAGExecutor) GetNodeResult(nodeID string) (any, bool) {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
 	result, exists := e.nodeResults[nodeID]
@@ -759,6 +759,8 @@ func (e *DAGExecutor) GetNodeResult(nodeID string) (interface{}, bool) {
 
 // GetExecutionID returns the current execution ID
 func (e *DAGExecutor) GetExecutionID() string {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
 	return e.executionID
 }
 

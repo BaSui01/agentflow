@@ -13,7 +13,7 @@ import (
 // Parser DSL 解析器
 type Parser struct {
 	// stepRegistry 步骤注册表（step name -> Step 工厂函数）
-	stepRegistry map[string]func(config map[string]interface{}) (workflow.Step, error)
+	stepRegistry map[string]func(config map[string]any) (workflow.Step, error)
 	// conditionRegistry 条件表达式注册表
 	conditionRegistry map[string]workflow.ConditionFunc
 }
@@ -21,7 +21,7 @@ type Parser struct {
 // NewParser 创建 DSL 解析器
 func NewParser() *Parser {
 	p := &Parser{
-		stepRegistry:      make(map[string]func(config map[string]interface{}) (workflow.Step, error)),
+		stepRegistry:      make(map[string]func(config map[string]any) (workflow.Step, error)),
 		conditionRegistry: make(map[string]workflow.ConditionFunc),
 	}
 	p.registerBuiltinSteps()
@@ -29,7 +29,7 @@ func NewParser() *Parser {
 }
 
 // RegisterStep 注册自定义步骤工厂
-func (p *Parser) RegisterStep(name string, factory func(config map[string]interface{}) (workflow.Step, error)) {
+func (p *Parser) RegisterStep(name string, factory func(config map[string]any) (workflow.Step, error)) {
 	p.stepRegistry[name] = factory
 }
 
@@ -92,8 +92,8 @@ func (p *Parser) validate(dsl *WorkflowDSL) error {
 }
 
 // resolveVariables 解析变量默认值
-func (p *Parser) resolveVariables(varDefs map[string]VariableDef) map[string]interface{} {
-	vars := make(map[string]interface{})
+func (p *Parser) resolveVariables(varDefs map[string]VariableDef) map[string]any {
+	vars := make(map[string]any)
 	for name, def := range varDefs {
 		if def.Default != nil {
 			vars[name] = def.Default
@@ -103,7 +103,7 @@ func (p *Parser) resolveVariables(varDefs map[string]VariableDef) map[string]int
 }
 
 // interpolate 变量插值（替换 ${var_name}）
-func (p *Parser) interpolate(template string, vars map[string]interface{}) string {
+func (p *Parser) interpolate(template string, vars map[string]any) string {
 	result := template
 	for name, value := range vars {
 		placeholder := "${" + name + "}"
@@ -113,7 +113,7 @@ func (p *Parser) interpolate(template string, vars map[string]interface{}) strin
 }
 
 // buildGraph 从 DSL 构建 DAGGraph
-func (p *Parser) buildGraph(dsl *WorkflowDSL, vars map[string]interface{}) (*workflow.DAGGraph, error) {
+func (p *Parser) buildGraph(dsl *WorkflowDSL, vars map[string]any) (*workflow.DAGGraph, error) {
 	graph := workflow.NewDAGGraph()
 
 	for _, nodeDef := range dsl.Workflow.Nodes {
@@ -142,7 +142,7 @@ func (p *Parser) buildGraph(dsl *WorkflowDSL, vars map[string]interface{}) (*wor
 }
 
 // buildNode 构建单个节点
-func (p *Parser) buildNode(def *NodeDef, dsl *WorkflowDSL, vars map[string]interface{}) (*workflow.DAGNode, error) {
+func (p *Parser) buildNode(def *NodeDef, dsl *WorkflowDSL, vars map[string]any) (*workflow.DAGNode, error) {
 	node := &workflow.DAGNode{
 		ID:       def.ID,
 		Type:     workflow.NodeType(def.Type),
@@ -216,7 +216,7 @@ func (p *Parser) buildNode(def *NodeDef, dsl *WorkflowDSL, vars map[string]inter
 }
 
 // resolveStep 解析步骤（引用或内联）
-func (p *Parser) resolveStep(def *NodeDef, dsl *WorkflowDSL, vars map[string]interface{}) (workflow.Step, error) {
+func (p *Parser) resolveStep(def *NodeDef, dsl *WorkflowDSL, vars map[string]any) (workflow.Step, error) {
 	var stepDef *StepDef
 
 	if def.StepDef != nil {
@@ -275,7 +275,7 @@ func (p *Parser) resolveStep(def *NodeDef, dsl *WorkflowDSL, vars map[string]int
 }
 
 // resolveCondition 解析条件表达式
-func (p *Parser) resolveCondition(expr string, vars map[string]interface{}) (workflow.ConditionFunc, error) {
+func (p *Parser) resolveCondition(expr string, vars map[string]any) (workflow.ConditionFunc, error) {
 	// 1. 检查是否是注册的命名条件
 	if fn, ok := p.conditionRegistry[expr]; ok {
 		return fn, nil
@@ -285,18 +285,41 @@ func (p *Parser) resolveCondition(expr string, vars map[string]interface{}) (wor
 	return p.parseSimpleExpression(expr, vars)
 }
 
-// parseSimpleExpression 解析简单条件表达式
-func (p *Parser) parseSimpleExpression(expr string, vars map[string]interface{}) (workflow.ConditionFunc, error) {
-	return func(_ context.Context, _ interface{}) (bool, error) {
-		// 运行时求值
-		resolved := p.interpolate(expr, vars)
-		// 简化实现：非空字符串为 true
-		return resolved != "" && resolved != "false" && resolved != "0", nil
+// parseSimpleExpression 解析条件表达式。
+// 支持比较运算符 (==, !=, >, <, >=, <=)、逻辑运算符 (&&, ||, !)、
+// 字段访问 (result.score)、字面量 (数字、字符串、布尔) 和括号分组。
+// 表达式求值失败时回退到旧逻辑（非空即 true），保持向后兼容。
+func (p *Parser) parseSimpleExpression(expr string, vars map[string]any) (workflow.ConditionFunc, error) {
+	eval := &exprEvaluator{}
+	return func(_ context.Context, input any) (bool, error) {
+		// Merge static vars with runtime input
+		mergedVars := make(map[string]any, len(vars)+1)
+		for k, v := range vars {
+			mergedVars[k] = v
+		}
+		if inputMap, ok := input.(map[string]any); ok {
+			for k, v := range inputMap {
+				mergedVars[k] = v
+			}
+		} else if input != nil {
+			mergedVars["input"] = input
+		}
+
+		// Interpolate ${var} placeholders first
+		resolved := p.interpolate(expr, mergedVars)
+
+		// Try expression evaluation
+		result, err := eval.Evaluate(resolved, mergedVars)
+		if err != nil {
+			// Fallback: non-empty and non-false is true (backward compatible)
+			return resolved != "" && resolved != "false" && resolved != "0", nil
+		}
+		return result, nil
 	}, nil
 }
 
 // resolveLoop 解析循环配置
-func (p *Parser) resolveLoop(def *LoopDef, vars map[string]interface{}) (*workflow.LoopConfig, error) {
+func (p *Parser) resolveLoop(def *LoopDef, vars map[string]any) (*workflow.LoopConfig, error) {
 	config := &workflow.LoopConfig{
 		Type:          workflow.LoopType(def.Type),
 		MaxIterations: def.MaxIterations,
@@ -315,7 +338,7 @@ func (p *Parser) resolveLoop(def *LoopDef, vars map[string]interface{}) (*workfl
 
 // registerBuiltinSteps 注册内置步骤
 func (p *Parser) registerBuiltinSteps() {
-	p.RegisterStep("passthrough", func(_ map[string]interface{}) (workflow.Step, error) {
+	p.RegisterStep("passthrough", func(_ map[string]any) (workflow.Step, error) {
 		return &workflow.PassthroughStep{}, nil
 	})
 }

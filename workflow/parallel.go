@@ -9,13 +9,13 @@ import (
 // Task 并行任务接口
 type Task interface {
 	// Execute 执行任务
-	Execute(ctx context.Context, input interface{}) (interface{}, error)
+	Execute(ctx context.Context, input any) (any, error)
 	// Name 返回任务名称
 	Name() string
 }
 
 // TaskFunc 任务函数类型
-type TaskFunc func(ctx context.Context, input interface{}) (interface{}, error)
+type TaskFunc func(ctx context.Context, input any) (any, error)
 
 // FuncTask 函数任务
 type FuncTask struct {
@@ -31,7 +31,7 @@ func NewFuncTask(name string, fn TaskFunc) *FuncTask {
 	}
 }
 
-func (t *FuncTask) Execute(ctx context.Context, input interface{}) (interface{}, error) {
+func (t *FuncTask) Execute(ctx context.Context, input any) (any, error) {
 	return t.fn(ctx, input)
 }
 
@@ -42,7 +42,7 @@ func (t *FuncTask) Name() string {
 // TaskResult 任务结果
 type TaskResult struct {
 	TaskName string
-	Result   interface{}
+	Result   any
 	Error    error
 }
 
@@ -50,11 +50,11 @@ type TaskResult struct {
 // 将多个任务的结果聚合为最终输出
 type Aggregator interface {
 	// Aggregate 聚合结果
-	Aggregate(ctx context.Context, results []TaskResult) (interface{}, error)
+	Aggregate(ctx context.Context, results []TaskResult) (any, error)
 }
 
 // AggregatorFunc 聚合器函数类型
-type AggregatorFunc func(ctx context.Context, results []TaskResult) (interface{}, error)
+type AggregatorFunc func(ctx context.Context, results []TaskResult) (any, error)
 
 // FuncAggregator 函数聚合器
 type FuncAggregator struct {
@@ -66,7 +66,7 @@ func NewFuncAggregator(fn AggregatorFunc) *FuncAggregator {
 	return &FuncAggregator{fn: fn}
 }
 
-func (a *FuncAggregator) Aggregate(ctx context.Context, results []TaskResult) (interface{}, error) {
+func (a *FuncAggregator) Aggregate(ctx context.Context, results []TaskResult) (any, error) {
 	return a.fn(ctx, results)
 }
 
@@ -93,7 +93,7 @@ func NewParallelWorkflow(name, description string, aggregator Aggregator, tasks 
 // 1. 并行执行所有任务
 // 2. 收集所有结果
 // 3. 使用聚合器聚合结果
-func (w *ParallelWorkflow) Execute(ctx context.Context, input interface{}) (interface{}, error) {
+func (w *ParallelWorkflow) Execute(ctx context.Context, input any) (any, error) {
 	if len(w.tasks) == 0 {
 		return nil, fmt.Errorf("no tasks to execute")
 	}

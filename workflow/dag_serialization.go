@@ -27,7 +27,7 @@ func (d *DAGDefinition) UnmarshalJSON(data []byte) error {
 }
 
 // MarshalYAML serializes a DAGDefinition to YAML
-func (d *DAGDefinition) MarshalYAML() (interface{}, error) {
+func (d *DAGDefinition) MarshalYAML() (any, error) {
 	// Return the struct itself for YAML marshaling
 	type Alias DAGDefinition
 	return (*Alias)(d), nil
@@ -301,7 +301,7 @@ func (w *DAGWorkflow) ToDAGDefinition() *DAGDefinition {
 				name:        w.name + "_subgraph",
 				description: "Subgraph",
 				graph:       node.SubGraph,
-				metadata:    make(map[string]interface{}),
+				metadata:    make(map[string]any),
 			}
 			nodeDef.SubGraph = subWorkflow.ToDAGDefinition()
 		}

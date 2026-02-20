@@ -25,8 +25,8 @@ type NodeExecution struct {
 	EndTime   time.Time       `json:"end_time"`
 	Duration  time.Duration   `json:"duration"`
 	Status    ExecutionStatus `json:"status"`
-	Input     interface{}     `json:"input,omitempty"`
-	Output    interface{}     `json:"output,omitempty"`
+	Input     any     `json:"input,omitempty"`
+	Output    any     `json:"output,omitempty"`
 	Error     string          `json:"error,omitempty"`
 }
 
@@ -57,7 +57,7 @@ func NewExecutionHistory(executionID, workflowID string) *ExecutionHistory {
 }
 
 // RecordNodeStart records the start of a node execution
-func (h *ExecutionHistory) RecordNodeStart(nodeID string, nodeType NodeType, input interface{}) *NodeExecution {
+func (h *ExecutionHistory) RecordNodeStart(nodeID string, nodeType NodeType, input any) *NodeExecution {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
@@ -73,7 +73,7 @@ func (h *ExecutionHistory) RecordNodeStart(nodeID string, nodeType NodeType, inp
 }
 
 // RecordNodeEnd records the end of a node execution
-func (h *ExecutionHistory) RecordNodeEnd(node *NodeExecution, output interface{}, err error) {
+func (h *ExecutionHistory) RecordNodeEnd(node *NodeExecution, output any, err error) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 

@@ -56,14 +56,14 @@ type ErrorConfig struct {
 	// RetryDelayMs is the delay between retries in milliseconds
 	RetryDelayMs int
 	// FallbackValue is the value to use when skipping a failed node
-	FallbackValue interface{}
+	FallbackValue any
 }
 
 // ConditionFunc evaluates a condition and returns true or false
-type ConditionFunc func(ctx context.Context, input interface{}) (bool, error)
+type ConditionFunc func(ctx context.Context, input any) (bool, error)
 
 // IteratorFunc generates a collection of items for iteration
-type IteratorFunc func(ctx context.Context, input interface{}) ([]interface{}, error)
+type IteratorFunc func(ctx context.Context, input any) ([]any, error)
 
 // LoopConfig defines loop behavior
 type LoopConfig struct {
@@ -168,7 +168,7 @@ type DAGDefinition struct {
 	// Nodes contains all node definitions
 	Nodes []NodeDefinition `json:"nodes" yaml:"nodes"`
 	// Metadata stores additional workflow information
-	Metadata map[string]interface{} `json:"metadata,omitempty" yaml:"metadata,omitempty"`
+	Metadata map[string]any `json:"metadata,omitempty" yaml:"metadata,omitempty"`
 }
 
 // NodeDefinition represents a serializable node definition
@@ -192,7 +192,7 @@ type NodeDefinition struct {
 	// SubGraph defines a nested workflow (for subgraph nodes)
 	SubGraph *DAGDefinition `json:"subgraph,omitempty" yaml:"subgraph,omitempty"`
 	// Metadata stores additional node information
-	Metadata map[string]interface{} `json:"metadata,omitempty" yaml:"metadata,omitempty"`
+	Metadata map[string]any `json:"metadata,omitempty" yaml:"metadata,omitempty"`
 }
 
 // LoopDefinition represents a serializable loop configuration
@@ -210,7 +210,7 @@ type DAGWorkflow struct {
 	name        string
 	description string
 	graph       *DAGGraph
-	metadata    map[string]interface{}
+	metadata    map[string]any
 	executor    *DAGExecutor // Optional custom executor
 }
 
@@ -220,7 +220,7 @@ func NewDAGWorkflow(name, description string, graph *DAGGraph) *DAGWorkflow {
 		name:        name,
 		description: description,
 		graph:       graph,
-		metadata:    make(map[string]interface{}),
+		metadata:    make(map[string]any),
 	}
 }
 
@@ -240,18 +240,18 @@ func (w *DAGWorkflow) Graph() *DAGGraph {
 }
 
 // SetMetadata sets a metadata value
-func (w *DAGWorkflow) SetMetadata(key string, value interface{}) {
+func (w *DAGWorkflow) SetMetadata(key string, value any) {
 	w.metadata[key] = value
 }
 
 // GetMetadata retrieves a metadata value
-func (w *DAGWorkflow) GetMetadata(key string) (interface{}, bool) {
+func (w *DAGWorkflow) GetMetadata(key string) (any, bool) {
 	value, exists := w.metadata[key]
 	return value, exists
 }
 
 // Execute executes the DAG workflow using DAGExecutor
-func (w *DAGWorkflow) Execute(ctx context.Context, input interface{}) (interface{}, error) {
+func (w *DAGWorkflow) Execute(ctx context.Context, input any) (any, error) {
 	// Use custom executor if set, otherwise create default
 	executor := w.executor
 	if executor == nil {
@@ -274,9 +274,9 @@ type ExecutionContext struct {
 	// CurrentNode is the ID of the currently executing node
 	CurrentNode string `json:"current_node,omitempty"`
 	// NodeResults stores the results of completed nodes
-	NodeResults map[string]interface{} `json:"node_results,omitempty"`
+	NodeResults map[string]any `json:"node_results,omitempty"`
 	// Variables stores workflow variables
-	Variables map[string]interface{} `json:"variables,omitempty"`
+	Variables map[string]any `json:"variables,omitempty"`
 	// StartTime is when the workflow execution started
 	StartTime time.Time `json:"start_time,omitempty"`
 	// LastUpdateTime is when the context was last updated
@@ -288,8 +288,8 @@ func NewExecutionContext(workflowID string) *ExecutionContext {
 	now := time.Now()
 	return &ExecutionContext{
 		WorkflowID:     workflowID,
-		NodeResults:    make(map[string]interface{}),
-		Variables:      make(map[string]interface{}),
+		NodeResults:    make(map[string]any),
+		Variables:      make(map[string]any),
 		StartTime:      now,
 		LastUpdateTime: now,
 	}
@@ -302,25 +302,25 @@ func (ec *ExecutionContext) SetCurrentNode(nodeID string) {
 }
 
 // SetNodeResult stores the result of a completed node
-func (ec *ExecutionContext) SetNodeResult(nodeID string, result interface{}) {
+func (ec *ExecutionContext) SetNodeResult(nodeID string, result any) {
 	ec.NodeResults[nodeID] = result
 	ec.LastUpdateTime = time.Now()
 }
 
 // GetNodeResult retrieves the result of a completed node
-func (ec *ExecutionContext) GetNodeResult(nodeID string) (interface{}, bool) {
+func (ec *ExecutionContext) GetNodeResult(nodeID string) (any, bool) {
 	result, exists := ec.NodeResults[nodeID]
 	return result, exists
 }
 
 // SetVariable sets a workflow variable
-func (ec *ExecutionContext) SetVariable(key string, value interface{}) {
+func (ec *ExecutionContext) SetVariable(key string, value any) {
 	ec.Variables[key] = value
 	ec.LastUpdateTime = time.Now()
 }
 
 // GetVariable retrieves a workflow variable
-func (ec *ExecutionContext) GetVariable(key string) (interface{}, bool) {
+func (ec *ExecutionContext) GetVariable(key string) (any, bool) {
 	value, exists := ec.Variables[key]
 	return value, exists
 }
