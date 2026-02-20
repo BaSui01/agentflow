@@ -34,6 +34,27 @@ type PluginMetadata struct {
 	Metadata    map[string]string `json:"metadata,omitempty"`
 }
 
+// MetadataProvider is an optional interface that plugins can implement
+// to supply their own metadata. When a plugin implements this interface,
+// callers can use ExtractMetadata to obtain metadata without requiring
+// it to be passed separately.
+type MetadataProvider interface {
+	Metadata() PluginMetadata
+}
+
+// ExtractMetadata returns metadata from a plugin. If the plugin implements
+// MetadataProvider, its Metadata method is called. Otherwise, a minimal
+// PluginMetadata is constructed from Name() and Version().
+func ExtractMetadata(p Plugin) PluginMetadata {
+	if mp, ok := p.(MetadataProvider); ok {
+		return mp.Metadata()
+	}
+	return PluginMetadata{
+		Name:    p.Name(),
+		Version: p.Version(),
+	}
+}
+
 // PluginInfo bundles a plugin instance with its metadata and current state.
 type PluginInfo struct {
 	Plugin   Plugin         `json:"-"`

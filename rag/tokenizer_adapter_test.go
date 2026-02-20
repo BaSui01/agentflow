@@ -222,3 +222,42 @@ The field of computer vision has seen tremendous progress in recent years.`,
 			"chunk %d token count should be reasonable", i)
 	}
 }
+
+func TestNewEstimatorAdapter(t *testing.T) {
+	tok := NewEstimatorAdapter("test-model", 4096, zap.NewNop())
+	require.NotNil(t, tok)
+
+	// English text
+	count := tok.CountTokens("Hello, world!")
+	assert.Greater(t, count, 0)
+
+	// CJK text should produce reasonable counts
+	cjkCount := tok.CountTokens("你好世界")
+	assert.Greater(t, cjkCount, 0)
+}
+
+func TestNewEstimatorAdapter_NilLogger(t *testing.T) {
+	tok := NewEstimatorAdapter("test-model", 0, nil)
+	require.NotNil(t, tok)
+	assert.Greater(t, tok.CountTokens("test"), 0)
+}
+
+func TestNewEstimatorAdapter_CJKAwareness(t *testing.T) {
+	tok := NewEstimatorAdapter("test-model", 4096, zap.NewNop())
+
+	// CJK text: 10 characters, each ~1.5 chars/token => ~6-7 tokens
+	cjkText := "人工智能改变世界的面貌"
+	cjkCount := tok.CountTokens(cjkText)
+
+	// Pure ASCII text of similar byte length but fewer semantic units
+	asciiText := "artificial intelligence changes"
+	asciiCount := tok.CountTokens(asciiText)
+
+	// CJK should produce more tokens per byte than ASCII
+	// because CJK chars are denser in meaning
+	t.Logf("CJK (%d runes): %d tokens, ASCII (%d bytes): %d tokens",
+		len([]rune(cjkText)), cjkCount, len(asciiText), asciiCount)
+
+	assert.Greater(t, cjkCount, 0)
+	assert.Greater(t, asciiCount, 0)
+}

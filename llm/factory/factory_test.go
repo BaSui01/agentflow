@@ -275,3 +275,89 @@ func TestProviderRegistry_ConcurrentAccess(t *testing.T) {
 	wg.Wait()
 	// No panic = pass
 }
+
+// =============================================================================
+// NewRegistryFromConfig Tests
+// =============================================================================
+
+func TestNewRegistryFromConfig_MultipleProviders(t *testing.T) {
+	cfg := RegistryConfig{
+		Default: "deepseek",
+		Providers: map[string]ProviderConfig{
+			"deepseek": {APIKey: "sk-ds"},
+			"qwen":     {APIKey: "sk-qw"},
+		},
+	}
+
+	reg, err := NewRegistryFromConfig(cfg, nil)
+	require.NoError(t, err)
+	assert.Equal(t, 2, reg.Len())
+
+	p, ok := reg.Get("deepseek")
+	assert.True(t, ok)
+	assert.Equal(t, "deepseek", p.Name())
+
+	p, ok = reg.Get("qwen")
+	assert.True(t, ok)
+	assert.Equal(t, "qwen", p.Name())
+
+	def, err := reg.Default()
+	require.NoError(t, err)
+	assert.Equal(t, "deepseek", def.Name())
+}
+
+func TestNewRegistryFromConfig_EmptyProviders(t *testing.T) {
+	cfg := RegistryConfig{
+		Providers: map[string]ProviderConfig{},
+	}
+
+	reg, err := NewRegistryFromConfig(cfg, nil)
+	require.NoError(t, err)
+	assert.Equal(t, 0, reg.Len())
+}
+
+func TestNewRegistryFromConfig_SkipsUnknownProvider(t *testing.T) {
+	cfg := RegistryConfig{
+		Providers: map[string]ProviderConfig{
+			"deepseek":    {APIKey: "sk-ds"},
+			"nonexistent": {APIKey: "sk-xx"},
+		},
+	}
+
+	reg, err := NewRegistryFromConfig(cfg, nil)
+	require.NoError(t, err)
+	assert.Equal(t, 1, reg.Len())
+
+	_, ok := reg.Get("nonexistent")
+	assert.False(t, ok)
+}
+
+func TestNewRegistryFromConfig_DefaultNotRegistered(t *testing.T) {
+	cfg := RegistryConfig{
+		Default: "nonexistent",
+		Providers: map[string]ProviderConfig{
+			"deepseek": {APIKey: "sk-ds"},
+		},
+	}
+
+	reg, err := NewRegistryFromConfig(cfg, nil)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to set default provider")
+	// Registry should still have the valid provider
+	assert.Equal(t, 1, reg.Len())
+}
+
+func TestNewRegistryFromConfig_NoDefault(t *testing.T) {
+	cfg := RegistryConfig{
+		Providers: map[string]ProviderConfig{
+			"deepseek": {APIKey: "sk-ds"},
+		},
+	}
+
+	reg, err := NewRegistryFromConfig(cfg, nil)
+	require.NoError(t, err)
+	assert.Equal(t, 1, reg.Len())
+
+	_, err = reg.Default()
+	require.Error(t, err) // no default set
+}

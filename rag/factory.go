@@ -21,6 +21,7 @@ const (
 	VectorStoreQdrant   VectorStoreType = "qdrant"
 	VectorStoreWeaviate VectorStoreType = "weaviate"
 	VectorStoreMilvus   VectorStoreType = "milvus"
+	VectorStorePinecone VectorStoreType = "pinecone"
 )
 
 // NewVectorStoreFromConfig 根据指定的后端类型和全局配置创建 VectorStore。
@@ -48,6 +49,12 @@ func NewVectorStoreFromConfig(cfg *config.Config, storeType VectorStoreType, log
 	case VectorStoreMilvus:
 		ragCfg := mapMilvusConfig(&cfg.Milvus)
 		return NewMilvusStore(ragCfg, logger), nil
+
+	case VectorStorePinecone:
+		// Pinecone has no config.Config entry; use NewPineconeVectorStore directly
+		// for full control. This path creates a store with empty PineconeConfig
+		// (API key / index must be set via environment or direct construction).
+		return NewPineconeStore(PineconeConfig{}, logger), nil
 
 	default:
 		return nil, fmt.Errorf("unsupported vector store type: %s", storeType)
@@ -238,4 +245,10 @@ func newRerankProvider(cfg *config.Config, t RerankProviderType) (RerankProvider
 	default:
 		return nil, fmt.Errorf("unsupported rerank provider type: %s", t)
 	}
+}
+
+// NewPineconeVectorStore creates a Pinecone-backed VectorStore from a PineconeConfig.
+// Use this when Pinecone configuration is not part of the global config.Config.
+func NewPineconeVectorStore(cfg PineconeConfig, logger *zap.Logger) VectorStore {
+	return NewPineconeStore(cfg, logger)
 }

@@ -1002,4 +1002,39 @@ From `.github/workflows/ci.yml`:
 5. Security scan via `govulncheck` (non-blocking, separate job)
 6. Cross-platform builds: `linux/amd64`, `linux/arm64`, `darwin/amd64`, `windows/amd64` (separate job)
 
+---
+
+## §12 Workflow-Local Interfaces (Dependency Inversion)
+
+When a workflow step needs a capability from another layer (e.g., `agent.ToolManager`), define a **workflow-local interface** instead of importing the other package directly:
+
+```go
+// In workflow/steps.go — NOT importing agent/
+type ToolExecutor interface {
+    ExecuteTool(ctx context.Context, name string, args map[string]any) (any, error)
+}
+```
+
+Then provide an adapter in the bridge file (`workflow/agent_adapter.go`) that imports both packages.
+
+## §13 Optional Interface Pattern for VectorStore Extensions
+
+When extending an interface would break all implementations, use optional interfaces with type assertions:
+
+```go
+type Clearable interface {
+    ClearAll(ctx context.Context) error
+}
+
+// In SemanticCache.Clear():
+if c, ok := s.store.(Clearable); ok {
+    return c.ClearAll(ctx)
+}
+return fmt.Errorf("store does not support clearing")
+```
+
+## §14 OpenAPI Contract Sync
+
+When adding/removing `mux.HandleFunc` routes in `cmd/agentflow/server.go` or `config/api.go`, you MUST update `api/openapi.yaml` to match. The contract test `tests/contracts/TestOpenAPIPathsMatchRuntimeRoutes` will fail otherwise.
+
 Note: `golangci-lint` is NOT run in CI — only locally via `make lint`. Developers must run `make lint` before pushing.

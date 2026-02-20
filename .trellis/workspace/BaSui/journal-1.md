@@ -233,3 +233,104 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 4: Session 3: Sprint 1-5 框架架构优化 + 分批提交 + 质量检查
+
+**Date**: 2026-02-21
+**Task**: Session 3: Sprint 1-5 框架架构优化 + 分批提交 + 质量检查
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+## 工作内容
+
+本次会话完成了 Sprint 1-5 框架架构优化的全部代码提交、质量检查和规范沉淀。
+
+### Sprint 验证 (延续上次会话)
+- 验证 Sprint 3 结果: streaming/mcp/plugins/declarative 4 个包全部编译+测试通过
+- 架构分析: 对比 9 大 Agent 框架 (LangGraph/AutoGen/CrewAI/Semantic Kernel/OpenAI SDK/Google ADK/Dify/Coze/Claude SDK)
+- 识别 11 个内部架构问题 (A1-A11) 和 P0/P1/P2 缺失特性
+
+### Sprint 5 — P0 新特性 (4 个并行 Agent 实现)
+- **Agent-as-Tool**: `agent/agent_tool.go` — 将 Agent 包装为 Tool 供其他 Agent 调用 (10 tests)
+- **RunConfig**: `agent/run_config.go` — 通过 context.Context 传递运行时配置覆盖 (16 tests)
+- **Guardrails Tripwire+Parallel**: `agent/guardrails/` — 熔断语义 + errgroup 并行验证 (16 tests)
+- **Context Window**: `agent/context/window.go` — 3 种策略 SlidingWindow/TokenBudget/Summarize (14 tests)
+
+### 代码规范沉淀
+- `quality-guidelines.md` 新增 §18-§23 共 6 个可执行契约
+- `guides/index.md` 新增 4 组思维触发器
+
+### 分批提交 (16 批次 → --no-ff 合并)
+按功能模块分 16 批提交到临时分支，合并到 master 保留合并线
+
+### 质量检查 (finish-work)
+- `go vet ./...` ✅ | `go build ./...` ✅ | `gofmt` ✅
+- 所有 Sprint 1-5 测试通过，零回归
+
+## 关键文件
+| 模块 | 新增文件 | 说明 |
+|------|----------|------|
+| agent | agent_tool.go, run_config.go | Agent-as-Tool + RunConfig |
+| agent/context | window.go | Context Window 管理 |
+| agent/guardrails | tripwire_test.go + types/chain 修改 | Tripwire + Parallel |
+| agent/plugins | plugin.go, registry.go | 插件系统 |
+| agent/declarative | definition/factory/loader.go | 声明式 Agent |
+| agent/streaming | ws_adapter.go | WebSocket 适配器 |
+| agent/protocol/mcp | transport_ws_test.go | MCP WS 测试 |
+| llm/factory | factory.go | Provider 工厂 |
+| llm | registry.go, response_helpers.go | 注册表 + 响应工具 |
+| llm/circuitbreaker | generic.go | 泛型熔断器 |
+| llm/idempotency | generic.go | 泛型幂等 |
+| llm/retry | generic.go | 泛型重试 |
+| rag/loader | loader/text/md/json/csv/adapter.go | DocumentLoader |
+| rag | factory.go, vector_convert.go, tokenizer_adapter.go | 工厂+转换 |
+| workflow | steps_test.go, agent_adapter_test.go | 步骤测试 |
+| workflow/dsl | expr.go | 表达式引擎 |
+| spec | quality-guidelines §18-§23, guides/index | 规范沉淀 |
+
+## 统计
+- 208 文件变更, +11,583 / -1,393 行
+- 56 个新测试 (Agent-as-Tool 10 + RunConfig 16 + Tripwire 16 + ContextWindow 14)
+- 16 个分批提交 + 2 个 gofmt 修复提交
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `82f15ae` | (see git log) |
+| `30438a2` | (see git log) |
+| `eaaa896` | (see git log) |
+| `46bd0a3` | (see git log) |
+| `36e308f` | (see git log) |
+| `770548e` | (see git log) |
+| `fe5ea6e` | (see git log) |
+| `7820eaa` | (see git log) |
+| `58f4736` | (see git log) |
+| `18fd504` | (see git log) |
+| `be68d07` | (see git log) |
+| `0ad300b` | (see git log) |
+| `0abcce4` | (see git log) |
+| `5bb4de4` | (see git log) |
+| `7b8d5e0` | (see git log) |
+| `b48f17e` | (see git log) |
+| `8f549f5` | (see git log) |
+| `0ed2bc5` | (see git log) |
+| `0b140c3` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

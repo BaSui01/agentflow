@@ -62,7 +62,8 @@ agentflow/
 │   ├── moderation/             # Content moderation
 │   ├── rerank/                 # Reranking providers
 │   ├── tokenizer/              # Tokenizer implementations
-│   └── observability/          # Cost, metrics, tracing
+│   ├── observability/          # Cost, metrics, tracing
+│   └── factory/                # Provider factory (NewProviderFromConfig, NewRegistryFromConfig)
 │
 ├── agent/                      # Core agent framework
 │   ├── base.go                 # BaseAgent implementation
@@ -101,6 +102,8 @@ agentflow/
 │   ├── reasoning/              # Reasoning framework
 │   ├── runtime/                # Agent runtime
 │   ├── streaming/              # Agent streaming
+│   ├── declarative/            # Declarative Agent loader (YAML/JSON → AgentConfig)
+│   ├── plugins/                # Plugin registry interface + InMemory implementation
 │   └── voice/                  # Voice agent support
 │
 ├── workflow/                   # Workflow engine

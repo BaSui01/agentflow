@@ -51,6 +51,11 @@ func TestNewVectorStoreFromConfig(t *testing.T) {
 			wantType:  "*rag.MilvusStore",
 		},
 		{
+			name:      "pinecone type",
+			storeType: VectorStorePinecone,
+			wantType:  "*rag.PineconeStore",
+		},
+		{
 			name:      "unsupported type returns error",
 			storeType: VectorStoreType("redis"),
 			wantErr:   true,
@@ -279,6 +284,19 @@ func TestNewRetrieverFromConfig_InvalidRerank(t *testing.T) {
 	_, err := NewRetrieverFromConfig(cfg, WithRerankType("bad"))
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "unsupported rerank provider type")
+}
+
+// ---------------------------------------------------------------------------
+// NewPineconeVectorStore convenience function
+// ---------------------------------------------------------------------------
+
+func TestNewPineconeVectorStore(t *testing.T) {
+	store := NewPineconeVectorStore(PineconeConfig{
+		APIKey: "test-key",
+		Index:  "my-index",
+	}, zap.NewNop())
+	require.NotNil(t, store)
+	assert.Contains(t, typeName(store), "*rag.PineconeStore")
 }
 
 // ---------------------------------------------------------------------------

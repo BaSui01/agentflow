@@ -121,3 +121,43 @@ func SupportedProviders() []string {
 		"minimax", "hunyuan", "doubao", "llama",
 	}
 }
+
+// RegistryConfig describes multiple providers and which one is the default.
+// Use this with NewRegistryFromConfig to build a ProviderRegistry in one call.
+type RegistryConfig struct {
+	// Default is the name of the default provider (must match a key in Providers).
+	Default string `json:"default" yaml:"default"`
+	// Providers maps provider names to their configurations.
+	Providers map[string]ProviderConfig `json:"providers" yaml:"providers"`
+}
+
+// NewRegistryFromConfig creates a ProviderRegistry populated with all providers
+// defined in the RegistryConfig. It sets the default provider if specified.
+// Any provider that fails to initialize is logged as a warning and skipped.
+func NewRegistryFromConfig(cfg RegistryConfig, logger *zap.Logger) (*llm.ProviderRegistry, error) {
+	if logger == nil {
+		logger = zap.NewNop()
+	}
+
+	reg := llm.NewProviderRegistry()
+
+	for name, pcfg := range cfg.Providers {
+		p, err := NewProviderFromConfig(name, pcfg, logger)
+		if err != nil {
+			logger.Warn("skipping provider: initialization failed",
+				zap.String("provider", name),
+				zap.Error(err))
+			continue
+		}
+		reg.Register(name, p)
+		logger.Info("provider registered", zap.String("provider", name))
+	}
+
+	if cfg.Default != "" {
+		if err := reg.SetDefault(cfg.Default); err != nil {
+			return reg, fmt.Errorf("failed to set default provider %q: %w", cfg.Default, err)
+		}
+	}
+
+	return reg, nil
+}

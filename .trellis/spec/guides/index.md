@@ -105,6 +105,14 @@ These guides help you **ask the right questions before coding**.
 
 → Read [Cross-Platform Thinking Guide](./cross-platform-thinking-guide.md)
 
+### When to Think About HTTP Mock Pagination
+
+- [ ] Writing tests for an external store that supports `ListDocumentIDs` or similar paginated API
+- [ ] Mock returns a fixed response regardless of `offset`/`limit` parameters
+- [ ] Store uses server-side pagination (offset passed to remote API) vs client-side (fetch-then-slice)
+
+→ Read [unit-test/index.md § HTTP Mock Patterns](../unit-test/index.md) for pagination strategy matrix
+
 ---
 
 ## Pre-Modification Rule (CRITICAL)

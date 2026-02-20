@@ -459,6 +459,69 @@ func TestPIIDetector_ImplementsValidator(t *testing.T) {
 
 ---
 
+## HTTP Mock Patterns for External Stores
+
+All external VectorStore implementations (`rag/` package) use `httptest.NewServer` to mock HTTP APIs. When testing paginated endpoints, the mock must match the store's pagination strategy.
+
+### Pagination Strategy Matrix
+
+| Store | Pagination Type | Mock Behavior |
+|-------|----------------|---------------|
+| Qdrant | Server-side (`offset`/`limit` in REST body) | Parse request body, return correct slice |
+| Weaviate | Server-side (`offset`/`limit` in GraphQL query) | Parse GraphQL query params, return correct slice |
+| Milvus | Server-side (`offset`/`limit` in gRPC-like body) | Parse request body, return correct slice |
+| Pinecone | Client-side (fetch `offset+limit`, then slice in Go) | Return full dataset, implementation slices |
+| InMemory | Direct slice on `[]Document` | No HTTP mock needed |
+
+### Server-Side Pagination Mock (Weaviate example)
+
+When the store delegates pagination to the server, the mock must parse and respect `limit`/`offset`:
+
+```go
+allDocs := []string{"doc1", "doc2", "doc3", "doc4", "doc5"}
+
+mux.HandleFunc("/v1/graphql", func(w http.ResponseWriter, r *http.Request) {
+    var req struct{ Query string `json:"query"` }
+    json.NewDecoder(r.Body).Decode(&req)
+
+    // Parse limit/offset from the query
+    var qLimit, qOffset int
+    fmt.Sscanf(extractBetween(req.Query, "limit:", "\n"), "%d", &qLimit)
+    fmt.Sscanf(extractBetween(req.Query, "offset:", "\n"), "%d", &qOffset)
+
+    // Apply server-side pagination
+    start := min(qOffset, len(allDocs))
+    end := min(start+qLimit, len(allDocs))
+    page := allDocs[start:end]
+    // ... write JSON response with page ...
+})
+```
+
+### Client-Side Pagination Mock (Pinecone example)
+
+When the store fetches all IDs and slices locally, the mock returns the full dataset:
+
+```go
+mux.HandleFunc("/vectors/list", func(w http.ResponseWriter, r *http.Request) {
+    // Always return all vectors — the Go implementation handles offset/limit
+    w.Write([]byte(`{"vectors": [{"id":"doc1"},{"id":"doc2"},{"id":"doc3"}]}`))
+})
+```
+
+### Required Test Scenarios for `ListDocumentIDs`
+
+All VectorStore implementations should cover these pagination scenarios:
+
+| Scenario | Call | Expected |
+|----------|------|----------|
+| All documents | `ListDocumentIDs(ctx, 10, 0)` | Full list |
+| With offset | `ListDocumentIDs(ctx, 2, 2)` | Subset starting at offset |
+| Offset beyond length | `ListDocumentIDs(ctx, 10, 100)` | Empty slice, no error |
+| Zero limit | `ListDocumentIDs(ctx, 0, 0)` | Empty slice, no error |
+| Missing required config | e.g., no `ClassName` | Descriptive error |
+
+---
+
 ## Coverage Targets
 
 From `codecov.yml`:

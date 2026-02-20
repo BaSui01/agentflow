@@ -19,6 +19,7 @@ const (
 	WSStateConnecting   WSState = "connecting"
 	WSStateConnected    WSState = "connected"
 	WSStateReconnecting WSState = "reconnecting"
+	WSStateFailed       WSState = "failed"
 	WSStateClosed       WSState = "closed"
 )
 
@@ -26,10 +27,14 @@ const (
 type WSTransportConfig struct {
 	HeartbeatInterval time.Duration // Interval between heartbeat pings (default 30s)
 	HeartbeatTimeout  time.Duration // Max time without a pong before considering dead (default 10s)
-	MaxReconnects     int           // Maximum reconnection attempts (default 5)
+	MaxReconnects     int           // Maximum reconnection attempts (default 5, 0 = no reconnect)
 	ReconnectDelay    time.Duration // Base delay for exponential backoff (default 1s)
+	MaxBackoff        time.Duration // Maximum backoff duration (default 30s)
+	BackoffMultiplier float64       // Backoff multiplier (default 2.0)
+	ReconnectEnabled  bool          // Whether auto-reconnect is enabled (default true)
 	EnableHeartbeat   bool          // Whether to enable heartbeat (default true)
 	Subprotocols      []string      // WebSocket subprotocols (default ["mcp"])
+	SendBufferSize    int           // Outbound message buffer size during reconnect (default 64)
 }
 
 // DefaultWSTransportConfig returns a WSTransportConfig with sensible defaults.
@@ -39,8 +44,12 @@ func DefaultWSTransportConfig() WSTransportConfig {
 		HeartbeatTimeout:  10 * time.Second,
 		MaxReconnects:     5,
 		ReconnectDelay:    time.Second,
+		MaxBackoff:        30 * time.Second,
+		BackoffMultiplier: 2.0,
+		ReconnectEnabled:  true,
 		EnableHeartbeat:   true,
 		Subprotocols:      []string{"mcp"},
+		SendBufferSize:    64,
 	}
 }
 
@@ -59,6 +68,8 @@ type WebSocketTransport struct {
 	reconnectCount int
 	lastHeartbeat  time.Time
 	done           chan struct{}
+	reconnecting   bool // guards against concurrent reconnect attempts
+	sendBuffer     []*MCPMessage
 }
 
 // NewWebSocketTransport creates a WebSocket transport with default configuration.
@@ -72,9 +83,19 @@ func NewWebSocketTransportWithConfig(url string, config WSTransportConfig, logge
 	if logger == nil {
 		logger = zap.NewNop()
 	}
+	// Apply defaults for zero-value fields so callers can set only what they care about.
+	if config.MaxBackoff == 0 {
+		config.MaxBackoff = 30 * time.Second
+	}
+	if config.BackoffMultiplier == 0 {
+		config.BackoffMultiplier = 2.0
+	}
+	if config.SendBufferSize == 0 {
+		config.SendBufferSize = 64
+	}
 	return &WebSocketTransport{
 		url:    url,
-		logger: logger,
+		logger: logger.With(zap.String("component", "mcp_ws_transport")),
 		config: config,
 		state:  WSStateDisconnected,
 		done:   make(chan struct{}),
@@ -107,6 +128,13 @@ func (t *WebSocketTransport) IsConnected() bool {
 	return t.state == WSStateConnected && !t.closed
 }
 
+// State returns the current connection state.
+func (t *WebSocketTransport) State() WSState {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return t.state
+}
+
 // Connect establishes the WebSocket connection and starts the heartbeat goroutine.
 func (t *WebSocketTransport) Connect(ctx context.Context) error {
 	t.setState(WSStateConnecting)
@@ -134,6 +162,8 @@ func (t *WebSocketTransport) Connect(ctx context.Context) error {
 
 // Send writes a JSON-RPC message over the WebSocket connection.
 // The write is mutex-protected to be safe for concurrent callers.
+// If the write fails and reconnect is enabled, it attempts to reconnect
+// and retries the send once. Messages are buffered during reconnection.
 func (t *WebSocketTransport) Send(ctx context.Context, msg *MCPMessage) error {
 	body, err := json.Marshal(msg)
 	if err != nil {
@@ -142,23 +172,62 @@ func (t *WebSocketTransport) Send(ctx context.Context, msg *MCPMessage) error {
 
 	t.mu.Lock()
 	conn := t.conn
+	closed := t.closed
+	reconnecting := t.reconnecting
 	t.mu.Unlock()
+
+	if closed {
+		return fmt.Errorf("websocket: transport is closed")
+	}
+
+	// If currently reconnecting, buffer the message
+	if reconnecting {
+		return t.bufferMessage(msg)
+	}
 
 	if conn == nil {
 		return fmt.Errorf("websocket: not connected")
 	}
 
+	writeErr := conn.Write(ctx, websocket.MessageText, body)
+	if writeErr == nil {
+		return nil
+	}
+
+	// Write failed — attempt reconnect if enabled
+	if !t.config.ReconnectEnabled {
+		return writeErr
+	}
+
+	t.logger.Warn("send failed, attempting reconnect", zap.Error(writeErr))
+	if reconnErr := t.tryReconnect(ctx); reconnErr != nil {
+		return fmt.Errorf("send failed and reconnect failed: %w", writeErr)
+	}
+
+	// Retry the write on the new connection
+	t.mu.Lock()
+	conn = t.conn
+	t.mu.Unlock()
+	if conn == nil {
+		return fmt.Errorf("websocket: not connected after reconnect")
+	}
 	return conn.Write(ctx, websocket.MessageText, body)
 }
 
 // Receive reads the next JSON-RPC message from the WebSocket connection.
 // If the received message is a heartbeat pong (method "pong"), it updates
 // lastHeartbeat and reads the next message instead.
+// On read errors, it attempts reconnection if enabled before returning the error.
 func (t *WebSocketTransport) Receive(ctx context.Context) (*MCPMessage, error) {
 	for {
 		t.mu.Lock()
 		conn := t.conn
+		closed := t.closed
 		t.mu.Unlock()
+
+		if closed {
+			return nil, fmt.Errorf("websocket: transport is closed")
+		}
 
 		if conn == nil {
 			return nil, fmt.Errorf("websocket: not connected")
@@ -166,7 +235,25 @@ func (t *WebSocketTransport) Receive(ctx context.Context) (*MCPMessage, error) {
 
 		_, data, err := conn.Read(ctx)
 		if err != nil {
-			return nil, err
+			// Don't reconnect if context was cancelled or transport is closing
+			select {
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			case <-t.done:
+				return nil, fmt.Errorf("websocket: transport is closed")
+			default:
+			}
+
+			if !t.config.ReconnectEnabled {
+				return nil, err
+			}
+
+			t.logger.Warn("receive failed, attempting reconnect", zap.Error(err))
+			if reconnErr := t.tryReconnect(ctx); reconnErr != nil {
+				return nil, fmt.Errorf("receive failed and reconnect failed: %w", err)
+			}
+			// Reconnected — loop back to read from the new connection
+			continue
 		}
 
 		var msg MCPMessage
@@ -256,42 +343,34 @@ func (t *WebSocketTransport) startHeartbeat(ctx context.Context) {
 }
 
 // tryReconnect attempts to re-establish the WebSocket connection using
-// exponential backoff. Returns nil on success or an error when max attempts
-// are exhausted.
+// exponential backoff with configurable multiplier and max delay.
+// It retries up to MaxReconnects times. Returns nil on success or an error
+// when max attempts are exhausted or the transport is closed.
+// Only one reconnect loop runs at a time; concurrent callers wait for the
+// in-progress attempt to finish.
 func (t *WebSocketTransport) tryReconnect(ctx context.Context) error {
 	t.mu.Lock()
 	if t.closed {
 		t.mu.Unlock()
 		return fmt.Errorf("transport is closed")
 	}
-	if t.reconnectCount >= t.config.MaxReconnects {
+	// If another goroutine is already reconnecting, wait for it.
+	if t.reconnecting {
 		t.mu.Unlock()
-		return fmt.Errorf("max reconnect attempts (%d) reached", t.config.MaxReconnects)
+		return t.waitForReconnect(ctx)
 	}
-	t.reconnectCount++
-	attempt := t.reconnectCount
+	t.reconnecting = true
 	t.mu.Unlock()
 
+	defer func() {
+		t.mu.Lock()
+		t.reconnecting = false
+		t.mu.Unlock()
+	}()
+
 	t.setState(WSStateReconnecting)
-	t.logger.Info("attempting reconnect",
-		zap.Int("attempt", attempt),
-		zap.Int("max", t.config.MaxReconnects))
 
-	// Exponential backoff with 30s cap
-	delay := t.config.ReconnectDelay * time.Duration(1<<uint(attempt-1))
-	if delay > 30*time.Second {
-		delay = 30 * time.Second
-	}
-
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	case <-t.done:
-		return fmt.Errorf("transport is closed")
-	case <-time.After(delay):
-	}
-
-	// Close old connection
+	// Close old connection once before the retry loop
 	t.mu.Lock()
 	oldConn := t.conn
 	t.conn = nil
@@ -300,22 +379,120 @@ func (t *WebSocketTransport) tryReconnect(ctx context.Context) error {
 		_ = oldConn.Close(websocket.StatusNormalClosure, "reconnecting")
 	}
 
-	// Dial new connection
-	conn, _, err := websocket.Dial(ctx, t.url, &websocket.DialOptions{
-		Subprotocols: t.config.Subprotocols,
-	})
-	if err != nil {
-		t.logger.Error("reconnect failed", zap.Error(err), zap.Int("attempt", attempt))
-		return fmt.Errorf("reconnect attempt %d failed: %w", attempt, err)
-	}
+	delay := t.config.ReconnectDelay
+	maxBackoff := t.config.MaxBackoff
+	multiplier := t.config.BackoffMultiplier
 
+	for attempt := 1; ; attempt++ {
+		t.mu.Lock()
+		if t.reconnectCount >= t.config.MaxReconnects {
+			t.mu.Unlock()
+			t.setState(WSStateFailed)
+			return fmt.Errorf("max reconnect attempts (%d) reached", t.config.MaxReconnects)
+		}
+		t.reconnectCount++
+		t.mu.Unlock()
+
+		t.logger.Info("attempting reconnect",
+			zap.Int("attempt", attempt),
+			zap.Int("max", t.config.MaxReconnects),
+			zap.Duration("delay", delay))
+
+		// Wait with backoff
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-t.done:
+			return fmt.Errorf("transport is closed")
+		case <-time.After(delay):
+		}
+
+		// Dial new connection
+		conn, _, err := websocket.Dial(ctx, t.url, &websocket.DialOptions{
+			Subprotocols: t.config.Subprotocols,
+		})
+		if err != nil {
+			t.logger.Error("reconnect dial failed",
+				zap.Error(err),
+				zap.Int("attempt", attempt))
+
+			// Increase delay for next attempt
+			delay = time.Duration(float64(delay) * multiplier)
+			if delay > maxBackoff {
+				delay = maxBackoff
+			}
+			continue
+		}
+
+		// Success — install new connection and reset counter
+		t.mu.Lock()
+		t.conn = conn
+		t.lastHeartbeat = time.Now()
+		t.reconnectCount = 0
+		t.mu.Unlock()
+
+		t.setState(WSStateConnected)
+		t.logger.Info("reconnected successfully", zap.Int("attempt", attempt))
+
+		// Flush buffered messages
+		t.flushSendBuffer(ctx)
+
+		return nil
+	}
+}
+
+// waitForReconnect blocks until the in-progress reconnect finishes, then
+// returns nil if the transport is connected or an error otherwise.
+func (t *WebSocketTransport) waitForReconnect(ctx context.Context) error {
+	ticker := time.NewTicker(50 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-t.done:
+			return fmt.Errorf("transport is closed")
+		case <-ticker.C:
+			t.mu.Lock()
+			reconnecting := t.reconnecting
+			state := t.state
+			t.mu.Unlock()
+			if !reconnecting {
+				if state == WSStateConnected {
+					return nil
+				}
+				return fmt.Errorf("reconnect finished in state %s", state)
+			}
+		}
+	}
+}
+
+// bufferMessage stores a message for later delivery after reconnection.
+// If the buffer is full, the oldest message is dropped.
+func (t *WebSocketTransport) bufferMessage(msg *MCPMessage) error {
 	t.mu.Lock()
-	t.conn = conn
-	t.lastHeartbeat = time.Now()
-	t.reconnectCount = 0
+	defer t.mu.Unlock()
+	if len(t.sendBuffer) >= t.config.SendBufferSize {
+		// Drop oldest
+		t.sendBuffer = t.sendBuffer[1:]
+		t.logger.Warn("send buffer full, dropping oldest message")
+	}
+	t.sendBuffer = append(t.sendBuffer, msg)
+	return nil
+}
+
+// flushSendBuffer sends all buffered messages over the current connection.
+func (t *WebSocketTransport) flushSendBuffer(ctx context.Context) {
+	t.mu.Lock()
+	buf := t.sendBuffer
+	t.sendBuffer = nil
 	t.mu.Unlock()
 
-	t.setState(WSStateConnected)
-	t.logger.Info("reconnected successfully", zap.Int("attempt", attempt))
-	return nil
+	for _, msg := range buf {
+		if err := t.Send(ctx, msg); err != nil {
+			t.logger.Warn("failed to flush buffered message",
+				zap.String("method", msg.Method),
+				zap.Error(err))
+		}
+	}
 }

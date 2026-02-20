@@ -369,6 +369,100 @@ func TestAgentFactory_ToAgentConfig_NilLogger(t *testing.T) {
 	assert.Equal(t, "test", m["name"])
 }
 
+func TestYAMLLoader_LoadFile_WithMemoryAndGuardrails(t *testing.T) {
+	content := `
+name: Guarded Agent
+model: gpt-4
+type: react
+memory:
+  type: short_term
+  capacity: 100
+guardrails:
+  max_retries: 3
+  on_input_failure: reject
+  on_output_failure: warn
+tool_definitions:
+  - name: calculator
+    description: Performs arithmetic
+  - name: search
+    description: Web search
+`
+	path := writeTemp(t, "guarded.yaml", content)
+	loader := NewYAMLLoader()
+
+	def, err := loader.LoadFile(path)
+	require.NoError(t, err)
+
+	assert.Equal(t, "Guarded Agent", def.Name)
+	assert.Equal(t, "react", def.Type)
+
+	require.NotNil(t, def.Memory)
+	assert.Equal(t, "short_term", def.Memory.Type)
+	assert.Equal(t, 100, def.Memory.Capacity)
+
+	require.NotNil(t, def.Guardrails)
+	assert.Equal(t, 3, def.Guardrails.MaxRetries)
+	assert.Equal(t, "reject", def.Guardrails.OnInputFailure)
+	assert.Equal(t, "warn", def.Guardrails.OnOutputFailure)
+
+	require.Len(t, def.ToolDefinitions, 2)
+	assert.Equal(t, "calculator", def.ToolDefinitions[0].Name)
+	assert.Equal(t, "Performs arithmetic", def.ToolDefinitions[0].Description)
+	assert.Equal(t, "search", def.ToolDefinitions[1].Name)
+}
+
+func TestAgentFactory_ToAgentConfig_WithNewFields(t *testing.T) {
+	def := &AgentDefinition{
+		Name:  "Full Agent",
+		Model: "gpt-4",
+		Type:  "plan_execute",
+		Memory: &MemoryConfig{
+			Type:     "both",
+			Capacity: 500,
+		},
+		Guardrails: &GuardrailsConfig{
+			MaxRetries:      2,
+			OnInputFailure:  "reject",
+			OnOutputFailure: "ignore",
+		},
+		ToolDefinitions: []ToolDefinition{
+			{Name: "calc", Description: "Calculator"},
+		},
+	}
+
+	factory := NewAgentFactory(zap.NewNop())
+	m := factory.ToAgentConfig(def)
+
+	assert.Equal(t, "plan_execute", m["type"])
+
+	mem := m["memory"].(*MemoryConfig)
+	assert.Equal(t, "both", mem.Type)
+	assert.Equal(t, 500, mem.Capacity)
+
+	gr := m["guardrails"].(*GuardrailsConfig)
+	assert.Equal(t, 2, gr.MaxRetries)
+	assert.Equal(t, "reject", gr.OnInputFailure)
+
+	tds := m["tool_definitions"].([]ToolDefinition)
+	assert.Len(t, tds, 1)
+	assert.Equal(t, "calc", tds[0].Name)
+}
+
+func TestAgentFactory_ToAgentConfig_NilMemoryAndGuardrails(t *testing.T) {
+	def := &AgentDefinition{
+		Name:  "Simple",
+		Model: "gpt-4",
+	}
+
+	factory := NewAgentFactory(zap.NewNop())
+	m := factory.ToAgentConfig(def)
+
+	assert.NotContains(t, m, "type")
+	assert.NotContains(t, m, "memory")
+	assert.NotContains(t, m, "guardrails")
+	assert.NotContains(t, m, "tool_definitions")
+}
+
 // ============================================================
 // detectFormat tests
 // ============================================================
