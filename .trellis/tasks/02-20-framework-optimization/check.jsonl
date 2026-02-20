@@ -3,3 +3,5 @@
 {"file": ".claude/commands/trellis/check-backend.md", "reason": "Backend check spec"}
 {"file": "llm/providers/config.go", "reason": "验证 Config 去重"}
 {"file": "llm/providers/common.go", "reason": "验证通用函数复用"}
+{"file": ".trellis/spec/unit-test/index.md", "reason": "测试规范验证"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "错误处理规范验证"}

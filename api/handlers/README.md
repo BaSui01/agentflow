@@ -84,7 +84,7 @@ http.HandleFunc("/v1/chat/completions/stream", chatHandler.HandleStream)
 ### Agent 管理
 
 ```go
-agentHandler := handlers.NewAgentHandler(logger)
+agentHandler := handlers.NewAgentHandler(discoveryRegistry, agentRegistry, logger)
 
 // 注册路由
 http.HandleFunc("/v1/agents", agentHandler.HandleListAgents)

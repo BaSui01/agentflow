@@ -192,7 +192,34 @@ func PreviousResponseIDFromContext(ctx context.Context) (string, bool) {
 
 See `llm/credentials.go` for the canonical pattern (`credentialOverrideKey struct{}`).
 
-### 9. Hardcoded CORS Wildcard
+### 9. Re-implementing Standard Library Functions
+
+Do not write custom implementations of functions already available in Go's standard library:
+
+```go
+// WRONG — custom splitPath reimplements strings.Split with minor behavior difference
+func splitPath(path string) []string {
+    var parts []string
+    var current string
+    for _, c := range path { ... }
+    return parts
+}
+
+// CORRECT — use standard library
+parts := strings.FieldsFunc(path, func(c rune) bool { return c == '.' })
+// or simply: parts := strings.Split(path, ".")
+```
+
+Common offenders:
+- `toLower` / `toUpper` → `strings.ToLower` / `strings.ToUpper`
+- `contains` → `strings.Contains`
+- `indexOf` → `strings.Index`
+- `replaceAll` → `strings.ReplaceAll`
+- Custom sort → `sort.Slice` / `slices.SortFunc`
+
+> **Historical lesson**: `config/hotreload.go` had a 20-line custom `splitPath` function that was replaced with a one-liner `strings.FieldsFunc`. `agent/protocol/mcp/` had custom `replaceAll`/`indexOf` implementations.
+
+### 10. Hardcoded CORS Wildcard
 
 ```go
 // WRONG — not suitable for production
@@ -203,6 +230,17 @@ if h.allowedOrigin != "" {
     w.Header().Set("Access-Control-Allow-Origin", h.allowedOrigin)
 }
 ```
+
+### 11. Zero-Test Core Modules
+
+Core modules that other packages depend on must have direct unit tests, not just indirect coverage through downstream consumers. Indirect coverage misses edge cases (nil inputs, default values, error paths).
+
+Priority modules for direct testing:
+- Shared base classes (e.g., `openaicompat.Provider` — 9 providers depend on it)
+- Reliability infrastructure (e.g., `circuitbreaker`, `idempotency`)
+- Config subsystems (e.g., `api.go`, `watcher.go`, `defaults.go`)
+
+> **Historical lesson**: `openaicompat` base class had zero direct tests despite being the foundation for 9 providers. `circuitbreaker` and `idempotency` — production reliability components — also had zero tests. All were covered in the framework optimization task.
 
 ---
 

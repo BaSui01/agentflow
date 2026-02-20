@@ -956,25 +956,7 @@ func setNestedField(v reflect.Value, path string, value interface{}) error {
 
 // splitPath 分割点分隔的路径
 func splitPath(path string) []string {
-	var parts []string
-	var current string
-
-	for _, c := range path {
-		if c == '.' {
-			if current != "" {
-				parts = append(parts, current)
-				current = ""
-			}
-		} else {
-			current += string(c)
-		}
-	}
-
-	if current != "" {
-		parts = append(parts, current)
-	}
-
-	return parts
+	return strings.FieldsFunc(path, func(c rune) bool { return c == '.' })
 }
 
 // GetHotReloadableFields 返回可热重载字段的列表

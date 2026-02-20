@@ -6,3 +6,6 @@
 {"file": "llm/providers/config.go", "reason": "Provider Config 结构体去重"}
 {"file": "llm/providers/common.go", "reason": "通用函数复用"}
 {"file": "llm/providers/multimodal_helpers.go", "reason": "Multimodal helpers 去重"}
+{"file": ".trellis/spec/unit-test/index.md", "reason": "测试规范：mock模式、fixture工厂、rapid/gopter"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "错误处理规范"}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "代码复用指南"}
