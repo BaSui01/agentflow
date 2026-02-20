@@ -334,3 +334,161 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 5: Sprint 6: 跨层检查 + Weaviate offset 测试 + 规范沉淀 + 分批提交
+
+**Date**: 2026-02-21
+**Task**: Sprint 6: 跨层检查 + Weaviate offset 测试 + 规范沉淀 + 分批提交
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+## 本次会话工作内容
+
+### 1. 跨层检查（/trellis:check-cross-layer）
+- 对 Pinecone/Weaviate ListDocumentIDs 测试变更执行跨层检查
+- 验证 DocumentLister 可选接口 5/5 实现一致性
+- 发现 Weaviate/Milvus 缺少 offset 分页测试场景
+
+### 2. Weaviate offset 测试补齐
+- 改造 mock handler：解析 GraphQL query 中的 limit/offset，模拟服务端分页
+- 新增 extractBetween 辅助函数
+- 补齐 offset 分页、超界 offset 测试场景
+- 数据集从 3 条扩展到 5 条，与 Qdrant/Pinecone 测试覆盖度对齐
+
+### 3. 规范沉淀（/trellis:update-spec）
+- unit-test/index.md: 新增 "HTTP Mock Patterns for External Stores" 章节
+  - 分页策略矩阵（server-side vs client-side）
+  - 两种 mock 模式代码示例
+  - ListDocumentIDs 5 个必测场景清单
+- guides/index.md: 新增 "When to Think About HTTP Mock Pagination" 思维触发条件
+
+### 4. 分批提交（/git-batch-commit）
+6 批提交合并到 master：
+1. test(rag): Pinecone/Weaviate 测试 + tokenizer/factory
+2. feat(llm): Provider 工厂函数
+3. feat(mcp): WebSocket 心跳重连增强
+4. feat(agent): 声明式 Agent + 插件生命周期
+5. test: collaboration/guardrails/dag_executor 测试
+6. docs: OpenAPI + 代码规范 + 工作区日志
+
+**变更统计**: 29 files, +3638 -64 lines
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `0d674c6` | (see git log) |
+| `2d17b05` | (see git log) |
+| `ab28054` | (see git log) |
+| `00de1ce` | (see git log) |
+| `49e470b` | (see git log) |
+| `ccce915` | (see git log) |
+| `18ca491` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 6: Sprint 6: 框架优化收尾 — P1类型统一 + OP1-OP16架构优化 + 规范沉淀
+
+**Date**: 2026-02-21
+**Task**: Sprint 6: 框架优化收尾 — P1类型统一 + OP1-OP16架构优化 + 规范沉淀
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+## 概述
+
+本次会话完成了 `02-20-framework-optimization` PRD 的全部剩余工作：P1 类型统一（4 项）、P3 泛型化（1 项）、OP1-OP16 架构优化（16 项），以及代码规范沉淀。
+
+## 完成的工作
+
+### Round 3: P1 类型统一 + P3 泛型化（4 并行 Agent）
+
+| Agent | 任务 | 结果 |
+|-------|------|------|
+| P1-3 | 接口签名统一（`interface{}` → `any`） | ✅ 全局替换 |
+| P1-4 | HealthStatus 统一 | ✅ type alias 桥接 |
+| P1-5 | IsRetryable 统一 | ✅ 统一到 types.IsRetryable |
+| P1-6 | CircuitBreaker 状态统一 | ✅ CircuitState 统一 |
+| P1-8 | llm/cache.go 重复清理 | ✅ 移除冗余代码 |
+| P3-1 | 泛型包装函数 | ✅ SafeResult[T] |
+
+### Round 4-7: OP1-OP16 架构优化（16 并行 Agent，分 4 轮）
+
+| 轮次 | 任务 | 结果 |
+|------|------|------|
+| R4 | OP4 NativeAgentAdapter + OP11 SemanticCache.Clear + OP3 float统一 + P1-7 重复分析 | ✅ 全部完成 |
+| R5 | OP13 MCP WebSocket重连 + OP16 Plugin Registry + OP1 DocumentLoader + OP2 Config→RAG | ✅ 全部完成 |
+| R6 | OP10 Pinecone Store + OP15 Declarative Agent + OP4b DSL Engine + OP5 Provider Factory | ✅ 全部完成 |
+| R7 | OP14 核心模块测试(70个) + OP12 CJK Tokenizer + OP6 WebSocket Stream | ✅ 全部完成 |
+
+### 质量保证
+
+- `go build ./...` ✅ `go vet ./...` ✅
+- 修复 OpenAPI 契约测试失败（`api/openapi.yaml` 同步 chat 端点）
+- 2 个预存在的 flaky test 未受影响
+
+### 规范沉淀（6 个文件）
+
+- `quality-guidelines.md` — §12 Workflow-Local Interfaces、§13 Optional Interface、§14 OpenAPI Sync
+- `error-handling.md` — Channel Double-Close Protection（sync.Once + select+default）
+- `cross-layer-thinking-guide.md` — Config→Domain Factory + Workflow-Local Interface
+- `code-reuse-thinking-guide.md` — "When NOT to Unify" 合理重复判断
+- `guides/index.md` — 并发安全思维触发清单
+- `directory-structure.md` — 新增 declarative/plugins/factory 包
+
+## 关键文件
+
+- `workflow/agent_adapter.go` — NativeAgentAdapter
+- `agent/protocol/mcp/transport_ws.go` — 重连+心跳+缓冲
+- `agent/plugins/lifecycle.go` — PluginManager
+- `agent/declarative/definition.go` — 扩展 YAML schema
+- `llm/factory/factory.go` — NewRegistryFromConfig
+- `rag/factory.go` — Pinecone 支持
+- `rag/chunking.go` — EnhancedTokenizer (CJK)
+- `api/openapi.yaml` — Chat 端点同步
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `5ca967d` | (see git log) |
+| `18ca491` | (see git log) |
+| `ccce915` | (see git log) |
+| `49e470b` | (see git log) |
+| `00de1ce` | (see git log) |
+| `ab28054` | (see git log) |
+| `2d17b05` | (see git log) |
+| `0d674c6` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

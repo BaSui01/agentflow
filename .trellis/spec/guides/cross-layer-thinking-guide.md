@@ -145,3 +145,72 @@ After implementation:
 - [ ] Tested error propagation from deepest layer to HTTP response
 - [ ] No provider-specific types leaked above `llm/`
 - [ ] No `agent.Error` passed directly to API handlers (use `ToTypesError()`)
+
+---
+
+## Config→Domain Factory Pattern
+
+当配置层（`config/`）需要创建领域对象（`llm/`、`rag/`、`agent/`）时，使用 factory 函数桥接，避免配置层直接依赖领域实现。
+
+### Pattern
+
+```go
+// rag/factory.go — 桥接 config 到 domain
+func NewVectorStoreFromConfig(cfg types.VectorStoreConfig, opts ...Option) (VectorStore, error) {
+    switch cfg.Type {
+    case "qdrant":
+        return NewQdrantStore(mapQdrantConfig(cfg)), nil
+    case "pinecone":
+        return NewPineconeStore(mapPineconeConfig(cfg)), nil
+    default:
+        return nil, fmt.Errorf("unknown vector store type: %s", cfg.Type)
+    }
+}
+```
+
+### Checklist
+
+- [ ] Factory 函数放在领域包中（`rag/factory.go`、`llm/factory/factory.go`），不是 `config/`
+- [ ] 使用 `mapXxxConfig` 内部函数转换配置结构体
+- [ ] 支持 functional options（`WithLogger`、`WithTimeout`）
+- [ ] 未知类型返回明确错误，不要 panic
+- [ ] 新增 provider/store 时同步更新 factory 的 switch 分支
+
+### Reference
+
+→ See [quality-guidelines.md §12](../backend/quality-guidelines.md) for Workflow-Local Interfaces
+→ See [quality-guidelines.md §13](../backend/quality-guidelines.md) for Optional Interface Pattern
+
+---
+
+## Workflow-Local Interface Pattern
+
+当 workflow 层需要调用 agent/llm 层的能力时，不要直接 import 那个包。定义一个 workflow-local 的接口，让调用方通过依赖注入传入实现。
+
+### Why
+
+直接 import 会导致 `workflow/ → agent/` 的依赖，而 `agent/` 已经依赖 `workflow/`（通过 adapter），形成循环。
+
+### Pattern
+
+```go
+// workflow/steps.go — workflow-local interface
+type LLMProvider interface {
+    ChatCompletion(ctx context.Context, req ChatRequest) (ChatResponse, error)
+}
+
+type LLMStep struct {
+    Provider LLMProvider  // optional — nil means placeholder mode
+}
+
+func (s *LLMStep) Execute(ctx context.Context, input any) (any, error) {
+    if s.Provider == nil {
+        return map[string]any{"placeholder": true}, nil
+    }
+    // real execution
+}
+```
+
+### Reference
+
+→ See [quality-guidelines.md §12](../backend/quality-guidelines.md) for full pattern details

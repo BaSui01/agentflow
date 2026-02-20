@@ -203,6 +203,43 @@ rg "keyword" testutil/ --type go
 
 ---
 
+## When NOT to Unify (Reasonable Duplication)
+
+有时候两个看起来相似的接口/类型不应该统一。强行统一会引入循环依赖或不必要的耦合。
+
+### 判断标准
+
+| 情况 | 决策 | 原因 |
+|------|------|------|
+| 方法签名完全相同，且在同一依赖层 | ✅ 统一 | 真正的重复 |
+| 方法签名不同（参数/返回值差异） | ❌ 保持分离 | 不是真正的重复 |
+| 统一会导致循环依赖 | ❌ 保持分离 | 架构约束 |
+| 接口在不同层有不同的语义 | ❌ 保持分离 | 语义不同 |
+
+### 实际案例（P1-7 分析结论）
+
+以下类型在本项目中看似重复，但经分析后决定保持分离：
+
+- `llm/tokenizer.Tokenizer` vs `rag/chunking.Tokenizer` — 方法签名不同（`CountTokens` vs `Encode/Decode`）
+- `agent/observability.AuditLogger` vs `llm/observability.AuditLogger` — 统一需要 `agent/ → llm/` 或反向依赖
+- `agent/persistence.CheckpointStore` vs `workflow.CheckpointManager` — 方法签名完全不同
+
+### Pattern: Document Instead of Unify
+
+当决定保持分离时，在两个类型上添加注释说明关系：
+
+```go
+// Tokenizer defines the tokenizer interface for RAG chunking.
+// NOTE: This is intentionally separate from llm/tokenizer.Tokenizer
+// which has different method signatures (Encode/Decode vs CountTokens).
+// See rag/tokenizer_adapter.go for bridging between the two.
+type Tokenizer interface {
+    CountTokens(text string) int
+}
+```
+
+---
+
 ## Checklist Before Commit
 
 - [ ] Searched `testutil/` for existing mocks and helpers
@@ -211,3 +248,4 @@ rg "keyword" testutil/ --type go
 - [ ] Constants defined in one place (check `types/` first)
 - [ ] Error types use existing `types.Error` or `agent.Error` where possible
 - [ ] New provider follows `llm/providers/` template exactly (OpenAI-compat → embed `openaicompat.Provider`)
+- [ ] 看似重复的接口是否真的可以统一？（检查方法签名 + 依赖方向）
