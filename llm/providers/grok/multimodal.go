@@ -11,7 +11,7 @@ import (
 // Endpoint: POST /v1/images/generations
 // Models: grok-2-image, grok-2-image-latest
 func (p *GrokProvider) GenerateImage(ctx context.Context, req *llm.ImageGenerationRequest) (*llm.ImageGenerationResponse, error) {
-	return providers.GenerateImageOpenAICompat(ctx, p.client, p.cfg.BaseURL, p.cfg.APIKey, p.Name(), "/v1/images/generations", req, p.buildHeaders)
+	return providers.GenerateImageOpenAICompat(ctx, p.Client, p.Cfg.BaseURL, p.Cfg.APIKey, p.Name(), "/v1/images/generations", req, providers.BearerTokenHeaders)
 }
 
 // GenerateVideo Grok 不支持视频生成.
@@ -33,7 +33,7 @@ func (p *GrokProvider) TranscribeAudio(ctx context.Context, req *llm.AudioTransc
 // Endpoint: POST /v1/embeddings
 // Models: grok-embedding-beta
 func (p *GrokProvider) CreateEmbedding(ctx context.Context, req *llm.EmbeddingRequest) (*llm.EmbeddingResponse, error) {
-	return providers.CreateEmbeddingOpenAICompat(ctx, p.client, p.cfg.BaseURL, p.cfg.APIKey, p.Name(), "/v1/embeddings", req, p.buildHeaders)
+	return providers.CreateEmbeddingOpenAICompat(ctx, p.Client, p.Cfg.BaseURL, p.Cfg.APIKey, p.Name(), "/v1/embeddings", req, providers.BearerTokenHeaders)
 }
 
 // CreateFineTuningJob Grok 不支持微调.

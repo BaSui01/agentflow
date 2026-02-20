@@ -9,12 +9,12 @@ import (
 
 // GenerateImage 使用 GLM CogView 生成图像.
 func (p *GLMProvider) GenerateImage(ctx context.Context, req *llm.ImageGenerationRequest) (*llm.ImageGenerationResponse, error) {
-	return providers.GenerateImageOpenAICompat(ctx, p.client, p.cfg.BaseURL, p.cfg.APIKey, p.Name(), "/api/paas/v4/images/generations", req, p.buildHeaders)
+	return providers.GenerateImageOpenAICompat(ctx, p.Client, p.Cfg.BaseURL, p.Cfg.APIKey, p.Name(), "/api/paas/v4/images/generations", req, providers.BearerTokenHeaders)
 }
 
 // GenerateVideo 使用 GLM CogVideo 生成视频.
 func (p *GLMProvider) GenerateVideo(ctx context.Context, req *llm.VideoGenerationRequest) (*llm.VideoGenerationResponse, error) {
-	return providers.GenerateVideoOpenAICompat(ctx, p.client, p.cfg.BaseURL, p.cfg.APIKey, p.Name(), "/api/paas/v4/videos/generations", req, p.buildHeaders)
+	return providers.GenerateVideoOpenAICompat(ctx, p.Client, p.Cfg.BaseURL, p.Cfg.APIKey, p.Name(), "/api/paas/v4/videos/generations", req, providers.BearerTokenHeaders)
 }
 
 // GenerateAudio GLM 不支持音频生成.
@@ -29,7 +29,7 @@ func (p *GLMProvider) TranscribeAudio(ctx context.Context, req *llm.AudioTranscr
 
 // CreateEmbedding 使用 GLM 创建嵌入.
 func (p *GLMProvider) CreateEmbedding(ctx context.Context, req *llm.EmbeddingRequest) (*llm.EmbeddingResponse, error) {
-	return providers.CreateEmbeddingOpenAICompat(ctx, p.client, p.cfg.BaseURL, p.cfg.APIKey, p.Name(), "/api/paas/v4/embeddings", req, p.buildHeaders)
+	return providers.CreateEmbeddingOpenAICompat(ctx, p.Client, p.Cfg.BaseURL, p.Cfg.APIKey, p.Name(), "/api/paas/v4/embeddings", req, providers.BearerTokenHeaders)
 }
 
 // CreateFineTuningJob GLM 不支持微调.
