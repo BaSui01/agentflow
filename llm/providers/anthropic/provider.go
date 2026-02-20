@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/BaSui01/agentflow/internal/tlsutil"
 	"github.com/BaSui01/agentflow/llm"
 	"github.com/BaSui01/agentflow/llm/middleware"
 	"github.com/BaSui01/agentflow/llm/providers"
@@ -43,10 +44,8 @@ func NewClaudeProvider(cfg providers.ClaudeConfig, logger *zap.Logger) *ClaudePr
 	}
 
 	return &ClaudeProvider{
-		cfg: cfg,
-		client: &http.Client{
-			Timeout: timeout,
-		},
+		cfg:    cfg,
+		client: tlsutil.SecureHTTPClient(timeout),
 		logger: logger,
 		rewriterChain: middleware.NewRewriterChain(
 			middleware.NewEmptyToolsCleaner(),
@@ -433,7 +432,10 @@ func (p *ClaudeProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-ch
 			line, err := reader.ReadString('\n')
 			if err != nil {
 				if err != io.EOF {
-					ch <- llm.StreamChunk{
+					select {
+					case <-ctx.Done():
+						return
+					case ch <- llm.StreamChunk{
 						Err: &llm.Error{
 							Code:       llm.ErrUpstreamError,
 							Message:    err.Error(),
@@ -441,6 +443,7 @@ func (p *ClaudeProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-ch
 							Retryable:  true,
 							Provider:   p.Name(),
 						},
+					}:
 					}
 				}
 				return
@@ -468,7 +471,10 @@ func (p *ClaudeProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-ch
 
 			var event claudeStreamEvent
 			if err := json.Unmarshal([]byte(data), &event); err != nil {
-				ch <- llm.StreamChunk{
+				select {
+				case <-ctx.Done():
+					return
+				case ch <- llm.StreamChunk{
 					Err: &llm.Error{
 						Code:       llm.ErrUpstreamError,
 						Message:    err.Error(),
@@ -476,6 +482,7 @@ func (p *ClaudeProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-ch
 						Retryable:  true,
 						Provider:   p.Name(),
 					},
+				}:
 				}
 				return
 			}
@@ -520,13 +527,20 @@ func (p *ClaudeProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-ch
 						}
 					}
 
-					ch <- chunk
+					select {
+					case <-ctx.Done():
+						return
+					case ch <- chunk:
+					}
 				}
 
 			case "content_block_stop":
 				// 工具调用块结束，发送完整的工具调用
 				if tc, ok := toolCallAccumulator[event.Index]; ok {
-					ch <- llm.StreamChunk{
+					select {
+					case <-ctx.Done():
+						return
+					case ch <- llm.StreamChunk{
 						ID:       currentID,
 						Provider: p.Name(),
 						Model:    currentModel,
@@ -535,24 +549,32 @@ func (p *ClaudeProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-ch
 							Role:      llm.RoleAssistant,
 							ToolCalls: []llm.ToolCall{*tc},
 						},
+					}:
 					}
 					delete(toolCallAccumulator, event.Index)
 				}
 
 			case "message_delta":
 				if event.Delta != nil && event.Delta.StopReason != "" {
-					ch <- llm.StreamChunk{
+					select {
+					case <-ctx.Done():
+						return
+					case ch <- llm.StreamChunk{
 						ID:           currentID,
 						Provider:     p.Name(),
 						Model:        currentModel,
 						FinishReason: event.Delta.StopReason,
+					}:
 					}
 				}
 
 			case "message_stop":
 				// 消息结束
 				if event.Usage != nil {
-					ch <- llm.StreamChunk{
+					select {
+					case <-ctx.Done():
+						return
+					case ch <- llm.StreamChunk{
 						ID:       currentID,
 						Provider: p.Name(),
 						Model:    currentModel,
@@ -561,6 +583,7 @@ func (p *ClaudeProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-ch
 							CompletionTokens: event.Usage.OutputTokens,
 							TotalTokens:      event.Usage.InputTokens + event.Usage.OutputTokens,
 						},
+					}:
 					}
 				}
 				return

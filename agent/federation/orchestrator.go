@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/BaSui01/agentflow/internal/tlsutil"
 	"go.uber.org/zap"
 )
 
@@ -78,6 +79,7 @@ type Orchestrator struct {
 	logger     *zap.Logger
 	mu         sync.RWMutex
 	done       chan struct{}
+	closeOnce  sync.Once
 }
 
 // 特劳斯·汉德勒处理联邦任务.
@@ -95,6 +97,11 @@ func NewOrchestrator(config FederationConfig, logger *zap.Logger) *Orchestrator 
 		config.TaskTimeout = 5 * time.Minute
 	}
 
+	tlsCfg := config.TLSConfig
+	if tlsCfg == nil {
+		tlsCfg = tlsutil.DefaultTLSConfig()
+	}
+
 	return &Orchestrator{
 		config:   config,
 		nodes:    make(map[string]*FederatedNode),
@@ -102,7 +109,7 @@ func NewOrchestrator(config FederationConfig, logger *zap.Logger) *Orchestrator 
 		handlers: make(map[string]TaskHandler),
 		httpClient: &http.Client{
 			Timeout:   30 * time.Second,
-			Transport: &http.Transport{TLSClientConfig: config.TLSConfig},
+			Transport: &http.Transport{TLSClientConfig: tlsCfg},
 		},
 		logger: logger.With(zap.String("component", "federation")),
 		done:   make(chan struct{}),
@@ -340,6 +347,6 @@ func (o *Orchestrator) checkNodeHealth() {
 
 // 停止停止指挥器。
 func (o *Orchestrator) Stop() {
-	close(o.done)
+	o.closeOnce.Do(func() { close(o.done) })
 	o.logger.Info("federation orchestrator stopped")
 }

@@ -11,6 +11,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/BaSui01/agentflow/internal/tlsutil"
 	"go.uber.org/zap"
 )
 
@@ -71,6 +72,7 @@ func NewManager(handler http.Handler, config Config, logger *zap.Logger) *Manage
 		WriteTimeout:   config.WriteTimeout,
 		IdleTimeout:    config.IdleTimeout,
 		MaxHeaderBytes: config.MaxHeaderBytes,
+		TLSConfig:      tlsutil.DefaultTLSConfig(),
 	}
 
 	return &Manager{

@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/BaSui01/agentflow/internal/tlsutil"
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 )
@@ -47,6 +48,9 @@ type Config struct {
 	// 最小空闲连接数
 	MinIdleConns int `yaml:"min_idle_conns" json:"min_idle_conns"`
 
+	// 是否启用 TLS
+	TLSEnabled bool `yaml:"tls_enabled" json:"tls_enabled"`
+
 	// 健康检查间隔
 	HealthCheckInterval time.Duration `yaml:"health_check_interval" json:"health_check_interval"`
 }
@@ -67,14 +71,18 @@ func DefaultConfig() Config {
 
 // NewManager 创建缓存管理器
 func NewManager(config Config, logger *zap.Logger) (*Manager, error) {
-	client := redis.NewClient(&redis.Options{
+	opts := &redis.Options{
 		Addr:         config.Addr,
 		Password:     config.Password,
 		DB:           config.DB,
 		MaxRetries:   config.MaxRetries,
 		PoolSize:     config.PoolSize,
 		MinIdleConns: config.MinIdleConns,
-	})
+	}
+	if config.TLSEnabled {
+		opts.TLSConfig = tlsutil.DefaultTLSConfig()
+	}
+	client := redis.NewClient(opts)
 
 	// 测试连接
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)

@@ -128,6 +128,9 @@ type RedisStoreConfig struct {
 
 	// 密钥前缀是所有 Redis 密钥的前缀
 	KeyPrefix string `json:"key_prefix" yaml:"key_prefix"`
+
+	// TLSEnabled 是否启用 TLS 连接
+	TLSEnabled bool `json:"tls_enabled" yaml:"tls_enabled"`
 }
 
 // 默认StoreConfig 返回默认存储配置

@@ -19,6 +19,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/BaSui01/agentflow/internal/tlsutil"
 	"github.com/BaSui01/agentflow/llm"
 	"github.com/BaSui01/agentflow/llm/middleware"
 	"github.com/BaSui01/agentflow/llm/providers"
@@ -89,10 +90,8 @@ func New(cfg Config, logger *zap.Logger) *Provider {
 		logger = zap.NewNop()
 	}
 	return &Provider{
-		Cfg: cfg,
-		Client: &http.Client{
-			Timeout: timeout,
-		},
+		Cfg:    cfg,
+		Client: tlsutil.SecureHTTPClient(timeout),
 		Logger: logger,
 		RewriterChain: middleware.NewRewriterChain(
 			middleware.NewEmptyToolsCleaner(),
@@ -310,13 +309,13 @@ func (p *Provider) Stream(ctx context.Context, req *llm.ChatRequest) (<-chan llm
 		return nil, providers.MapHTTPError(resp.StatusCode, msg, p.Name())
 	}
 
-	return StreamSSE(resp.Body, p.Name()), nil
+	return StreamSSE(ctx, resp.Body, p.Name()), nil
 }
 
 // StreamSSE parses an SSE stream from an OpenAI-compatible API and returns a channel of StreamChunks.
 // This is the shared SSE parsing logic used by all OpenAI-compatible providers.
 // The caller is responsible for ensuring the response status is OK before calling this.
-func StreamSSE(body io.ReadCloser, providerName string) <-chan llm.StreamChunk {
+func StreamSSE(ctx context.Context, body io.ReadCloser, providerName string) <-chan llm.StreamChunk {
 	ch := make(chan llm.StreamChunk)
 	go func() {
 		defer body.Close()
@@ -326,10 +325,14 @@ func StreamSSE(body io.ReadCloser, providerName string) <-chan llm.StreamChunk {
 			line, err := reader.ReadString('\n')
 			if err != nil {
 				if err != io.EOF {
-					ch <- llm.StreamChunk{Err: &llm.Error{
+					select {
+					case <-ctx.Done():
+						return
+					case ch <- llm.StreamChunk{Err: &llm.Error{
 						Code: llm.ErrUpstreamError, Message: err.Error(),
 						HTTPStatus: http.StatusBadGateway, Retryable: true, Provider: providerName,
-					}}
+					}}:
+					}
 				}
 				return
 			}
@@ -344,10 +347,14 @@ func StreamSSE(body io.ReadCloser, providerName string) <-chan llm.StreamChunk {
 
 			var oaResp providers.OpenAICompatResponse
 			if err := json.Unmarshal([]byte(data), &oaResp); err != nil {
-				ch <- llm.StreamChunk{Err: &llm.Error{
+				select {
+				case <-ctx.Done():
+					return
+				case ch <- llm.StreamChunk{Err: &llm.Error{
 					Code: llm.ErrUpstreamError, Message: err.Error(),
 					HTTPStatus: http.StatusBadGateway, Retryable: true, Provider: providerName,
-				}}
+				}}:
+				}
 				return
 			}
 
@@ -375,7 +382,11 @@ func StreamSSE(body io.ReadCloser, providerName string) <-chan llm.StreamChunk {
 						}
 					}
 				}
-				ch <- chunk
+				select {
+				case <-ctx.Done():
+					return
+				case ch <- chunk:
+				}
 			}
 		}
 	}()

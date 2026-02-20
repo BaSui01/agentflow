@@ -505,7 +505,7 @@ func BuildDatabaseURL(dbType DatabaseType, host string, port int, database, user
 	switch dbType {
 	case DatabaseTypePostgres:
 		if sslMode == "" {
-			sslMode = "disable"
+			sslMode = "require"
 		}
 		return fmt.Sprintf("postgres://%s:%s@%s:%d/%s?sslmode=%s",
 			username, password, host, port, database, sslMode)
