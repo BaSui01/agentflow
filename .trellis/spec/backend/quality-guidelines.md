@@ -140,7 +140,7 @@ import (
 
 ### 5. Package Documentation via `doc.go`
 
-Every significant package should have a `doc.go` file with godoc-style comments. Currently 25 `doc.go` files exist across the project. Comments are written in Chinese for domain packages.
+Every significant package should have a `doc.go` file with godoc-style comments. Currently ~79 `doc.go` files exist across the project. Comments are written in Chinese for domain packages.
 
 ### 6. File-Level Header Blocks
 
@@ -198,18 +198,43 @@ From `codecov.yml`:
 
 ### Mock Pattern
 
-Mocks are defined in the same test file using `testify/mock`, prefixed with `Mock`:
+Mocks are organized in two locations:
+
+1. **Shared mocks** in `testutil/mocks/` — reusable across packages:
+
+```go
+// testutil/mocks/provider.go
+type MockProvider struct {
+    mock.Mock
+}
+
+// testutil/mocks/memory.go
+type MockMemoryManager struct {
+    mock.Mock
+}
+```
+
+2. **Local mocks** in test files — for package-specific interfaces:
 
 ```go
 // agent/base_test.go
 type MockProvider struct {
     mock.Mock
 }
-
-type MockMemoryManager struct {
-    mock.Mock
-}
 ```
+
+### Test Fixtures
+
+Shared fixtures live in `testutil/fixtures/`:
+
+```go
+// testutil/fixtures/agents.go — pre-configured agent configs for tests
+// testutil/fixtures/responses.go — pre-built LLM responses for tests
+```
+
+### Test Helpers
+
+Common test utilities in `testutil/helpers.go` — shared setup/teardown, assertion helpers.
 
 ---
 
@@ -234,8 +259,11 @@ type MockMemoryManager struct {
 
 From `.github/workflows/ci.yml`:
 
-1. `go vet` on selected packages
-2. Tests with coverage
-3. Security scan via `govulncheck` (non-blocking)
-4. Cross-platform builds: `linux/amd64`, `linux/arm64`, `darwin/amd64`, `windows/amd64`
-5. API contract consistency check (`go test ./tests/contracts`)
+1. Build all packages
+2. API contract consistency check (`go test ./tests/contracts`)
+3. `go vet` on selected packages
+4. Tests with coverage
+5. Security scan via `govulncheck` (non-blocking, separate job)
+6. Cross-platform builds: `linux/amd64`, `linux/arm64`, `darwin/amd64`, `windows/amd64` (separate job)
+
+Note: `golangci-lint` is NOT run in CI — only locally via `make lint`. Developers must run `make lint` before pushing.

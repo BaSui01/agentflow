@@ -63,14 +63,13 @@ err := p.db.Where(...).Find(&result).Error
 Models are defined in `llm/types.go` with struct tags for GORM, JSON, and validation:
 
 ```go
-// llm/types.go:19-40
+// llm/types.go:34-46
 type LLMProvider struct {
     ID          uint              `gorm:"primaryKey" json:"id"`
     Code        string            `gorm:"size:50;not null;uniqueIndex" json:"code"`
     Name        string            `gorm:"size:200;not null" json:"name"`
+    Description string            `gorm:"type:text" json:"description"`
     Status      LLMProviderStatus `gorm:"default:1" json:"status"`
-    Description string            `gorm:"size:500" json:"description"`
-    BaseURL     string            `gorm:"size:500" json:"base_url"`
     CreatedAt   time.Time         `json:"created_at"`
     UpdatedAt   time.Time         `json:"updated_at"`
 }

@@ -47,8 +47,8 @@ Implements `error` and `Unwrap()` for `errors.Is` / `errors.As` compatibility.
 
 | Domain | Codes |
 |--------|-------|
-| LLM | `INVALID_REQUEST`, `AUTHENTICATION`, `RATE_LIMIT`, `TIMEOUT`, `UPSTREAM_ERROR`, `MODEL_NOT_FOUND`, `CONTEXT_TOO_LONG`, `CONTENT_FILTERED`, `QUOTA_EXCEEDED`, `SERVICE_UNAVAILABLE` |
-| Agent | `AGENT_NOT_READY`, `AGENT_BUSY`, `GUARDRAILS_VIOLATED`, `TOOL_VALIDATION` |
+| LLM | `INVALID_REQUEST`, `AUTHENTICATION`, `UNAUTHORIZED`, `FORBIDDEN`, `RATE_LIMIT`, `RATE_LIMITED`, `QUOTA_EXCEEDED`, `MODEL_NOT_FOUND`, `CONTEXT_TOO_LONG`, `CONTENT_FILTERED`, `TOOL_VALIDATION`, `ROUTING_UNAVAILABLE`, `MODEL_OVERLOADED`, `UPSTREAM_TIMEOUT`, `TIMEOUT`, `UPSTREAM_ERROR`, `INTERNAL_ERROR`, `SERVICE_UNAVAILABLE`, `PROVIDER_UNAVAILABLE` |
+| Agent | `AGENT_NOT_READY`, `AGENT_BUSY`, `INVALID_TRANSITION`, `PROVIDER_NOT_SET`, `GUARDRAILS_VIOLATED` |
 | Context | `CONTEXT_OVERFLOW`, `COMPRESSION_FAILED`, `TOKENIZER_ERROR` |
 
 #### Convenience Constructors
@@ -164,8 +164,9 @@ apiErr := types.NewError(types.ErrInvalidRequest, "invalid JSON body").
 Converts plain `error` to `*types.Error`, preserving original as `Cause`:
 
 ```go
-// types/error.go:123-143
-typedErr := types.WrapError(types.ErrInternalError, "operation failed", err)
+// types/error.go:122-134
+// Signature: WrapError(err error, code ErrorCode, message string) *Error
+typedErr := types.WrapError(err, types.ErrInternalError, "operation failed")
 ```
 
 ### Bridge: Provider Error to API Response

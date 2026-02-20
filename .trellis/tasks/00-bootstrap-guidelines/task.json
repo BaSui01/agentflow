@@ -2,26 +2,40 @@
   "id": "00-bootstrap-guidelines",
   "name": "Bootstrap Guidelines",
   "description": "Fill in project development guidelines for AI agents",
-  "status": "in_progress",
+  "status": "completed",
   "dev_type": "docs",
   "priority": "P1",
   "creator": "BaSui",
   "assignee": "BaSui",
   "createdAt": "2026-02-20",
-  "completedAt": null,
+  "completedAt": "2026-02-20",
   "commit": null,
   "subtasks": [
     {
       "name": "Fill backend guidelines",
-      "status": "pending"
+      "status": "completed"
     },
     {
       "name": "Add code examples",
-      "status": "pending"
+      "status": "completed"
+    },
+    {
+      "name": "Review and fix inaccuracies",
+      "status": "completed"
+    },
+    {
+      "name": "Create unit-test guidelines",
+      "status": "completed"
+    },
+    {
+      "name": "Mark frontend as N/A",
+      "status": "completed"
     }
   ],
   "relatedFiles": [
-    ".trellis/spec/backend/"
+    ".trellis/spec/backend/",
+    ".trellis/spec/unit-test/",
+    ".trellis/spec/frontend/"
   ],
-  "notes": "First-time setup task created by trellis init (backend project)"
+  "notes": "First-time setup task created by trellis init (backend project). All backend guidelines verified against codebase and corrected. Unit-test guidelines created from scratch. Frontend marked as N/A (pure Go backend)."
 }
