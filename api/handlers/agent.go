@@ -2,36 +2,40 @@ package handlers
 
 import (
 	"net/http"
+	"strings"
 	"sync"
+	"time"
 
+	"github.com/BaSui01/agentflow/agent"
+	"github.com/BaSui01/agentflow/agent/discovery"
 	"github.com/BaSui01/agentflow/types"
 	"go.uber.org/zap"
 )
 
 // =============================================================================
-// 🤖 Agent 管理 Handler
+// Agent Management Handler
 // =============================================================================
 
-// AgentHandler Agent 管理处理器
+// AgentHandler Agent management handler
 type AgentHandler struct {
-	// TODO: 使用 agent.Registry 需要先导入 agent 包
-	// 注册表 *agent.Registry
-	logger *zap.Logger
-	mu     sync.RWMutex
+	registry      discovery.Registry
+	agentRegistry *agent.AgentRegistry
+	logger        *zap.Logger
+	mu            sync.RWMutex
 }
 
-// AgentInfo Agent 信息
+// AgentInfo Agent information returned by the API
 type AgentInfo struct {
-	ID          string `json:"id"`
-	Name        string `json:"name"`
-	Type        string `json:"type"`  // TODO: 使用 agent.AgentType
-	State       string `json:"state"` // TODO: 使用 agent.State
-	Description string `json:"description,omitempty"`
-	Model       string `json:"model,omitempty"`
-	CreatedAt   string `json:"created_at,omitempty"`
+	ID          string          `json:"id"`
+	Name        string          `json:"name"`
+	Type        agent.AgentType `json:"type"`
+	State       string          `json:"state"`
+	Description string          `json:"description,omitempty"`
+	Model       string          `json:"model,omitempty"`
+	CreatedAt   string          `json:"created_at,omitempty"`
 }
 
-// AgentExecuteRequest Agent 执行请求
+// AgentExecuteRequest Agent execution request
 type AgentExecuteRequest struct {
 	AgentID   string            `json:"agent_id" binding:"required"`
 	Content   string            `json:"content" binding:"required"`
@@ -39,7 +43,7 @@ type AgentExecuteRequest struct {
 	Variables map[string]string `json:"variables,omitempty"`
 }
 
-// AgentExecuteResponse Agent 执行响应
+// AgentExecuteResponse Agent execution response
 type AgentExecuteResponse struct {
 	TraceID      string         `json:"trace_id"`
 	Content      string         `json:"content"`
@@ -50,23 +54,32 @@ type AgentExecuteResponse struct {
 	FinishReason string         `json:"finish_reason,omitempty"`
 }
 
-// NewAgentHandler 创建 Agent 处理器
-func NewAgentHandler(logger *zap.Logger) *AgentHandler {
-	// TODO: 接受 registry 参数
-	// func NewAgentHandler(registry *agent.Registry, logger *zap.Logger) *AgentHandler {
+// AgentHealthResponse Agent health check response
+type AgentHealthResponse struct {
+	AgentID   string `json:"agent_id"`
+	Status    string `json:"status"`
+	Healthy   bool   `json:"healthy"`
+	Endpoint  string `json:"endpoint,omitempty"`
+	Load      float64 `json:"load"`
+	CheckedAt string `json:"checked_at"`
+}
+
+// NewAgentHandler creates an Agent handler
+func NewAgentHandler(registry discovery.Registry, agentRegistry *agent.AgentRegistry, logger *zap.Logger) *AgentHandler {
 	return &AgentHandler{
-		// 注册表：注册表，
-		logger: logger,
+		registry:      registry,
+		agentRegistry: agentRegistry,
+		logger:        logger,
 	}
 }
 
 // =============================================================================
-// 🎯 HTTP 处理程序
+// HTTP Handlers
 // =============================================================================
 
-// HandleListAgents 列出所有 Agent
-// @Summary 列出代理
-// @Description 获取所有注册代理的列表
+// HandleListAgents lists all registered agents
+// @Summary List agents
+// @Description Get a list of all registered agents
 // @Tags agent
 // @Produce json
 // @Success 200 {object} Response{data=[]AgentInfo} "Agent list"
@@ -74,17 +87,23 @@ func NewAgentHandler(logger *zap.Logger) *AgentHandler {
 // @Security ApiKeyAuth
 // @Router /v1/agents [get]
 func (h *AgentHandler) HandleListAgents(w http.ResponseWriter, r *http.Request) {
-	// TODO: 实现 agent registry 后启用
-	// 代理 := h.registry.ListAgents()
-	// ...
+	agents, err := h.registry.ListAgents(r.Context())
+	if err != nil {
+		h.handleAgentError(w, err)
+		return
+	}
 
-	// 暂时返回空列表
-	WriteSuccess(w, []AgentInfo{})
+	result := make([]AgentInfo, 0, len(agents))
+	for _, a := range agents {
+		result = append(result, toAgentInfo(a))
+	}
+
+	WriteSuccess(w, result)
 }
 
-// HandleGetAgent 获取单个 Agent 信息
-// @Summary 获取代理
-// @Description 获取有关特定代理的信息
+// HandleGetAgent gets a single agent's information
+// @Summary Get agent
+// @Description Get information about a specific agent
 // @Tags agent
 // @Produce json
 // @Param id path string true "Agent ID"
@@ -93,81 +112,207 @@ func (h *AgentHandler) HandleListAgents(w http.ResponseWriter, r *http.Request) 
 // @Security ApiKeyAuth
 // @Router /v1/agents/{id} [get]
 func (h *AgentHandler) HandleGetAgent(w http.ResponseWriter, r *http.Request) {
-	// TODO: 实现 agent registry 后启用
-	err := types.NewNotFoundError("agent not found")
-	WriteError(w, err, h.logger)
+	agentID := extractAgentID(r)
+	if agentID == "" {
+		WriteErrorMessage(w, http.StatusBadRequest, types.ErrInvalidRequest, "agent ID is required", h.logger)
+		return
+	}
+
+	info, err := h.registry.GetAgent(r.Context(), agentID)
+	if err != nil {
+		WriteError(w, types.NewNotFoundError("agent not found"), h.logger)
+		return
+	}
+
+	WriteSuccess(w, toAgentInfo(info))
 }
 
-// HandleExecuteAgent 执行 Agent
-// @Summary 执行代理
-// @Description 使用给定的输入执行代理
+// HandleExecuteAgent executes an agent
+// @Summary Execute agent
+// @Description Execute an agent with the given input
 // @Tags agent
 // @Accept json
 // @Produce json
-// @Param request body AgentExecuteRequest true "执行请求"
-// @Success 200 {object} Response{data=AgentExecuteResponse} "执行结果"
-// @Failure 400 {object} Response "无效请求"
-// @Failure 404 {object} Response "未找到代理"
-// @Failure 500 {object} Response "执行失败"
+// @Param request body AgentExecuteRequest true "Execution request"
+// @Success 200 {object} Response{data=AgentExecuteResponse} "Execution result"
+// @Failure 400 {object} Response "Invalid request"
+// @Failure 404 {object} Response "Agent not found"
+// @Failure 500 {object} Response "Execution failed"
 // @Security ApiKeyAuth
 // @Router /v1/agents/execute [post]
 func (h *AgentHandler) HandleExecuteAgent(w http.ResponseWriter, r *http.Request) {
-	// TODO: 实现 agent registry 后启用
-	err := types.NewError(types.ErrInternalError, "not implemented")
-	WriteError(w, err, h.logger)
+	var req AgentExecuteRequest
+	if err := DecodeJSONBody(w, r, &req, h.logger); err != nil {
+		return
+	}
+
+	if req.AgentID == "" || req.Content == "" {
+		WriteErrorMessage(w, http.StatusBadRequest, types.ErrInvalidRequest, "agent_id and content are required", h.logger)
+		return
+	}
+
+	// Verify the agent exists in the discovery registry
+	info, err := h.registry.GetAgent(r.Context(), req.AgentID)
+	if err != nil {
+		WriteError(w, types.NewNotFoundError("agent not found"), h.logger)
+		return
+	}
+
+	// Agent execution requires runtime dependencies (provider, memory, tools)
+	// that are not available through the discovery registry alone.
+	// For remote agents with an endpoint, we could proxy the request;
+	// for local agents, a full runtime context is needed.
+	if info.Endpoint != "" {
+		h.logger.Info("agent execution requested for remote agent",
+			zap.String("agent_id", req.AgentID),
+			zap.String("endpoint", info.Endpoint),
+		)
+		WriteError(w, types.NewError(types.ErrInternalError,
+			"remote agent execution via proxy is not yet supported").
+			WithHTTPStatus(http.StatusNotImplemented), h.logger)
+		return
+	}
+
+	h.logger.Info("agent execution requested for local agent",
+		zap.String("agent_id", req.AgentID),
+	)
+	WriteError(w, types.NewError(types.ErrInternalError,
+		"local agent execution requires runtime dependencies (provider, memory, tools) which are not yet wired").
+		WithHTTPStatus(http.StatusNotImplemented), h.logger)
 }
 
-// HandlePlanAgent 规划 Agent 执行
-// @Summary 计划代理执行
-// @Description 获取代理的执行计划
+// HandlePlanAgent plans agent execution
+// @Summary Plan agent execution
+// @Description Get an execution plan for an agent
 // @Tags agent
 // @Accept json
 // @Produce json
-// @Param request body AgentExecuteRequest true "计划请求"
-// @Success 200 {object} Response{data=map[string]interface{}} "执行计划"
-// @Failure 400 {object} Response "无效请求"
-// @Failure 404 {object} Response "未找到代理"
-// @Failure 500 {object} Response "计划失败"
+// @Param request body AgentExecuteRequest true "Plan request"
+// @Success 200 {object} Response{data=map[string]interface{}} "Execution plan"
+// @Failure 400 {object} Response "Invalid request"
+// @Failure 404 {object} Response "Agent not found"
+// @Failure 500 {object} Response "Plan failed"
 // @Security ApiKeyAuth
 // @Router /v1/agents/plan [post]
 func (h *AgentHandler) HandlePlanAgent(w http.ResponseWriter, r *http.Request) {
-	// TODO: 实现 agent registry 后启用
-	err := types.NewError(types.ErrInternalError, "not implemented")
-	WriteError(w, err, h.logger)
+	var req AgentExecuteRequest
+	if err := DecodeJSONBody(w, r, &req, h.logger); err != nil {
+		return
+	}
+
+	if req.AgentID == "" || req.Content == "" {
+		WriteErrorMessage(w, http.StatusBadRequest, types.ErrInvalidRequest, "agent_id and content are required", h.logger)
+		return
+	}
+
+	// Verify the agent exists in the discovery registry
+	info, err := h.registry.GetAgent(r.Context(), req.AgentID)
+	if err != nil {
+		WriteError(w, types.NewNotFoundError("agent not found"), h.logger)
+		return
+	}
+
+	if info.Endpoint != "" {
+		WriteError(w, types.NewError(types.ErrInternalError,
+			"remote agent planning via proxy is not yet supported").
+			WithHTTPStatus(http.StatusNotImplemented), h.logger)
+		return
+	}
+
+	WriteError(w, types.NewError(types.ErrInternalError,
+		"local agent planning requires runtime dependencies (provider, memory, tools) which are not yet wired").
+		WithHTTPStatus(http.StatusNotImplemented), h.logger)
 }
 
-// HandleAgentHealth 检查 Agent 健康状态
-// @Summary 代理健康检查
-// @Description 检查代理是否健康并准备就绪
+// HandleAgentHealth checks agent health status
+// @Summary Agent health check
+// @Description Check if an agent is healthy and ready
 // @Tags agent
 // @Produce json
 // @Param id query string true "Agent ID"
-// @Success 200 {object} Response{data=map[string]interface{}} "Agent health"
-// @Failure 404 {object} Response "未找到代理"
-// @Failure 503 {object} Response "代理尚未准备好"
+// @Success 200 {object} Response{data=AgentHealthResponse} "Agent health"
+// @Failure 404 {object} Response "Agent not found"
+// @Failure 503 {object} Response "Agent not ready"
 // @Security ApiKeyAuth
 // @Router /v1/agents/health [get]
 func (h *AgentHandler) HandleAgentHealth(w http.ResponseWriter, r *http.Request) {
-	// TODO: 实现 agent registry 后启用
-	err := types.NewNotFoundError("agent not found")
-	WriteError(w, err, h.logger)
+	agentID := r.URL.Query().Get("id")
+	if agentID == "" {
+		WriteErrorMessage(w, http.StatusBadRequest, types.ErrInvalidRequest, "query parameter 'id' is required", h.logger)
+		return
+	}
+
+	info, err := h.registry.GetAgent(r.Context(), agentID)
+	if err != nil {
+		WriteError(w, types.NewNotFoundError("agent not found"), h.logger)
+		return
+	}
+
+	healthy := info.Status == discovery.AgentStatusOnline
+	resp := AgentHealthResponse{
+		AgentID:   agentID,
+		Status:    string(info.Status),
+		Healthy:   healthy,
+		Endpoint:  info.Endpoint,
+		Load:      info.Load,
+		CheckedAt: time.Now().UTC().Format(time.RFC3339),
+	}
+
+	if !healthy {
+		WriteJSON(w, http.StatusServiceUnavailable, Response{
+			Success:   true,
+			Data:      resp,
+			Timestamp: time.Now(),
+		})
+		return
+	}
+
+	WriteSuccess(w, resp)
 }
 
 // =============================================================================
-// 🔧 辅助函数
+// Helper Functions
 // =============================================================================
 
-// handleAgentError 处理 Agent 错误
+// handleAgentError handles agent errors
 func (h *AgentHandler) handleAgentError(w http.ResponseWriter, err error) {
 	if typedErr, ok := err.(*types.Error); ok {
 		WriteError(w, typedErr, h.logger)
 		return
 	}
 
-	// 未知错误，包装为内部错误
-	internalErr := types.NewError(types.ErrInternalError, "agent execution failed").
+	internalErr := types.NewError(types.ErrInternalError, "agent operation failed").
 		WithCause(err).
 		WithRetryable(false)
 
 	WriteError(w, internalErr, h.logger)
+}
+
+// toAgentInfo converts a discovery.AgentInfo to the API AgentInfo
+func toAgentInfo(info *discovery.AgentInfo) AgentInfo {
+	ai := AgentInfo{
+		State: string(info.Status),
+	}
+	if info.Card != nil {
+		ai.ID = info.Card.Name
+		ai.Name = info.Card.Name
+		ai.Description = info.Card.Description
+		ai.CreatedAt = info.RegisteredAt.UTC().Format(time.RFC3339)
+	}
+	return ai
+}
+
+// extractAgentID extracts the agent ID from the URL path.
+// Supports both /v1/agents/{id} (PathValue) and /v1/agents/some-id (prefix trim).
+func extractAgentID(r *http.Request) string {
+	// Try Go 1.22+ PathValue first
+	if id := r.PathValue("id"); id != "" {
+		return id
+	}
+	// Fallback: extract from URL path by trimming the /v1/agents/ prefix
+	path := strings.TrimPrefix(r.URL.Path, "/v1/agents/")
+	if path != "" && path != r.URL.Path && !strings.Contains(path, "/") {
+		return path
+	}
+	return ""
 }

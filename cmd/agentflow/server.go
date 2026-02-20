@@ -103,7 +103,7 @@ func (s *Server) initHandlers() error {
 	// TODO: 初始化其他 handlers
 	// 需要先初始化 Provider 和 Registry
 	// s.chatHandler = handlers.NewChatHandler(provider, s.logger)
-	// s.agentHandler = handlers.NewAgentHandler(registry, s.logger)
+	// s.agentHandler = handlers.NewAgentHandler(discoveryRegistry, agentRegistry, s.logger)
 
 	s.logger.Info("Handlers initialized")
 	return nil
