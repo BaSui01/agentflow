@@ -1,4 +1,3 @@
-// 结构化包在JSON Schema验证下提供结构化输出支持.
 package structured
 
 import (

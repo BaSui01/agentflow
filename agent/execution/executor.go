@@ -1,4 +1,3 @@
-// 软件包执行为AI生成代码提供了安全代码执行.
 package execution
 
 import (

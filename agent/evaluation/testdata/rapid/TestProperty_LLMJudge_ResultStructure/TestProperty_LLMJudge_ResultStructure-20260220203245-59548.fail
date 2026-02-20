@@ -1,0 +1,190 @@
+# 2026/02/20 20:32:45.370192 [TestProperty_LLMJudge_ResultStructure] [rapid] draw minScore: 4.4668989377096295
+# 2026/02/20 20:32:45.370192 [TestProperty_LLMJudge_ResultStructure] [rapid] draw maxScore: 5.4668989377096295
+# 2026/02/20 20:32:45.370192 [TestProperty_LLMJudge_ResultStructure] [rapid] draw numDimensions: 2
+# 2026/02/20 20:32:45.370192 [TestProperty_LLMJudge_ResultStructure] [rapid] draw weight_0: 0.10068050026893616
+# 2026/02/20 20:32:45.370192 [TestProperty_LLMJudge_ResultStructure] [rapid] draw weight_1: 1
+# 2026/02/20 20:32:45.370192 [TestProperty_LLMJudge_ResultStructure] [rapid] draw score_dimension_0: 4.4668989377096295
+# 2026/02/20 20:32:45.370192 [TestProperty_LLMJudge_ResultStructure] [rapid] draw score_dimension_1: 4.4668989377096295
+# 2026/02/20 20:32:45.370192 [TestProperty_LLMJudge_ResultStructure] [rapid] draw overallScore: 4.774554489180446
+# 2026/02/20 20:32:45.370192 [TestProperty_LLMJudge_ResultStructure] [rapid] draw confidence: 6.002733061753824e-90
+# 2026/02/20 20:32:45.370192 [TestProperty_LLMJudge_ResultStructure] [rapid] draw reasoning: " m2y 0BqhO "
+# 2026/02/20 20:32:45.370192 [TestProperty_LLMJudge_ResultStructure] [rapid] draw prompt: "M3l0 cyp"
+# 2026/02/20 20:32:45.370192 [TestProperty_LLMJudge_ResultStructure] [rapid] draw response: "y0tz2SB"
+# 2026/02/20 20:32:45.370192 [TestProperty_LLMJudge_ResultStructure] 
+# 	Error Trace:	D:/code/agentflow/agent/evaluation/llm_judge_property_test.go:103
+# 	            				C:/Users/Administrator/go/pkg/mod/pgregory.net/rapid@v1.2.0/engine.go:371
+# 	            				C:/Users/Administrator/go/pkg/mod/pgregory.net/rapid@v1.2.0/engine.go:380
+# 	            				C:/Users/Administrator/go/pkg/mod/pgregory.net/rapid@v1.2.0/engine.go:205
+# 	            				C:/Users/Administrator/go/pkg/mod/pgregory.net/rapid@v1.2.0/engine.go:120
+# 	            				D:/code/agentflow/agent/evaluation/llm_judge_property_test.go:20
+# 	Error:      	"4.466898937709629" is not greater than or equal to "4.4668989377096295"
+# 	Test:       	TestProperty_LLMJudge_ResultStructure
+# 	Messages:   	OverallScore (4.47) should be >= minScore (4.47)
+# 
+v0.4.8#11456538816017013785
+0x7baf61dec290b
+0x3179a25f1f02d
+0xa6d0218e9790b
+0x2
+0x0
+0x1e
+0x1de1ac15c9939
+0x11cb05b6d51472
+0xfb558d57518ba
+0x104a88ad4014b
+0x0
+0x0
+0x0
+0x0
+0x1d3baa80aa5e87
+0x6f58b58b3ef0b
+0x1
+0x1403648f4bfdae
+0xcb30350cf4834
+0xc5a11a9247835
+0x4
+0x0
+0x14
+0x2c99280d91c0
+0xf184ab2353dfe
+0xfcb43ff9a8e20
+0x382c07631fd53
+0x0
+0x0
+0x0
+0x0
+0x1bf77deb671148
+0xeef9cde095b78
+0x245580ad61947
+0x0
+0x0
+0x0
+0x0
+0xe185c6876bc50
+0x1085f3dd628b2e
+0x2a2d94b1db26b
+0x0
+0x0
+0x0
+0x0
+0x18282b01f8a6c5
+0x100308e592da3d
+0x8c030bc81ba99
+0x0
+0x0
+0x1d
+0x13b0a0ea5076d
+0x10d6fcbb813e4a
+0x4de7ffc78310c
+0x18b4cb766e5b39
+0x129
+0x0
+0xf
+0x874a64737ae38
+0xe3e84e6a0820d
+0x0
+0x20ed049e0c401
+0x0
+0x6653359ace87b
+0x0
+0x1d5b89eee35d17
+0x31
+0x13ee53c043d116
+0x0
+0x51006069d6364
+0x3
+0x1d51400a4844c4
+0x0
+0x1425632e32856c
+0x3d
+0xf9416642e4809
+0x0
+0x17a0c8612c52b
+0x0
+0x148b330c65131
+0x0
+0xcbc72c138b0a4
+0x1
+0x9efb4a461a06e
+0x0
+0xbc9a7f7d69405
+0xc
+0x1841c2dd327d66
+0x0
+0x1e5dccd7e55943
+0x35
+0x4d6b3cf02b56d
+0x0
+0x1b7408f0fa04e9
+0x2c
+0x7601cb477888b
+0x0
+0xf2eaefd079405
+0x19
+0x1b6b9f8f178417
+0x0
+0x9c652ccdffd4
+0x0
+0x23636d02e5b39
+0x1b6c98bb91e911
+0x0
+0x144dcf5a97ff67
+0x17
+0x132f8ee1a41b1
+0x0
+0xf763960424f6b
+0x4
+0x4bbcaf658c76d
+0x0
+0x19df27aaf3ae1b
+0x30
+0x9e524d6035a72
+0x0
+0x14341639ee6b0
+0x1
+0xf4126b4d5d5d7
+0x0
+0x6b6ab21b61ca
+0x0
+0xd009140583a98
+0x0
+0x18bbc8db4eba9a
+0x27
+0x1235d451b12fa8
+0x0
+0x12bdc17995f904
+0x3d
+0x12fbeb9000d990
+0x0
+0x17732df45424eb
+0x34
+0x26f2ffacead67
+0x14e18ea81b724
+0x0
+0x1b13228f8e1b76
+0x3d
+0x1f154239b90a89
+0x0
+0x6aea4e13a2fd8
+0x1
+0xc47825bd25551
+0x0
+0x1dce1dfb7ecada
+0x38
+0x15046a17b665e4
+0x0
+0x1f55fb3020dc23
+0xffffffffffffffff
+0x1899d82d28dd4b
+0x0
+0x555a6b5460110
+0x3
+0x15d22f667024f2
+0x0
+0x1e51637a55257c
+0x1d
+0x15d1bb02cb21cb
+0x0
+0xcefacea20f683
+0xc
+0x27e51e26b817d

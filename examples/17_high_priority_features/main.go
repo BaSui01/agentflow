@@ -1,5 +1,5 @@
-// Example 17: High Priority Features Demo
-// Demonstrates: Artifacts, HITL Interrupts, OpenAPI Tools, Deployment, Enhanced Checkpoints, Visual Builder
+// 示例 17：高优先级功能演示
+// 演示内容：产物管理、HITL 中断、OpenAPI 工具、部署、增强检查点与可视化构建
 package main
 
 import (

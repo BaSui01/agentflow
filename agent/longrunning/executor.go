@@ -1,4 +1,3 @@
-// 包长跑为长跑代理任务(日-等)提供支持.
 package longrunning
 
 import (

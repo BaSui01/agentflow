@@ -1,4 +1,4 @@
-// Example: Using multimodal providers (embedding, rerank, TTS, STT, image)
+// 示例：使用多模态能力（向量、重排、语音合成、语音识别、图像）
 package main
 
 import (

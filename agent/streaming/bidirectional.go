@@ -1,4 +1,3 @@
-// 包流为音频/文本提供双向实时流.
 package streaming
 
 import (

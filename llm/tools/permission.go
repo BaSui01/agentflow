@@ -1,4 +1,3 @@
-// Package tools 为企业 AI Agent 框架提供工具权限控制.
 package tools
 
 import (

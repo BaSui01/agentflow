@@ -1,5 +1,3 @@
-// Package migration provides database migration functionality for AgentFlow.
-// It supports PostgreSQL, MySQL, and SQLite databases using golang-migrate.
 package migration
 
 import (

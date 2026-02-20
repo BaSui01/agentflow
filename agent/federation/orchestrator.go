@@ -1,4 +1,3 @@
-// 一揽子联合会提供跨组织代理协作。
 package federation
 
 import (

@@ -1,4 +1,3 @@
-// 包内存为AI代理提供了分层内存系统.
 package memory
 
 import (

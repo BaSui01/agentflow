@@ -1,5 +1,3 @@
-// 包代理为AgentFlow提供了核心代理框架.
-// 此文件执行 Guardrails 协调员管理输入/输出验证 。
 package agent
 
 import (

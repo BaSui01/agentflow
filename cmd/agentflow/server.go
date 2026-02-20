@@ -1,4 +1,3 @@
-// Package main provides the AgentFlow server implementation.
 package main
 
 import (

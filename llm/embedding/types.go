@@ -1,4 +1,3 @@
-// Package embedding 提供统一的嵌入提供者接口和实现.
 package embedding
 
 import (

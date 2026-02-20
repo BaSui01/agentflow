@@ -1,4 +1,3 @@
-// 包推理为自我改进推理提供了折射模式.
 package reasoning
 
 import (

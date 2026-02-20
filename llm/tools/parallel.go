@@ -1,4 +1,3 @@
-// 包工具为LLM代理提供了工具执行能力.
 package tools
 
 import (

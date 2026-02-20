@@ -1,5 +1,3 @@
-// Package workflow provides enhanced checkpoint capabilities for DAG workflows.
-// Implements LangGraph-style persistent checkpointing with time-travel debugging.
 package workflow
 
 import (

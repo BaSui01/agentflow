@@ -1,5 +1,3 @@
-// Package main demonstrates the Guardrails module for input/output validation.
-// This example shows PII detection, prompt injection detection, and content filtering.
 package main
 
 import (

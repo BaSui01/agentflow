@@ -1,4 +1,3 @@
-// Package video 提供统一的视频处理提供者接口.
 package video
 
 import (

@@ -1,4 +1,3 @@
-// 3d包提供了AI 三维模型生成能力.
 package threed
 
 import (

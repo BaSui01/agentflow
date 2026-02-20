@@ -1,5 +1,3 @@
-// 套接字提供Human-in-the-Loop工作流程中断并恢复能力.
-// 执行 LangGraph 风格的中断/重置工作流程控制机制。
 package hitl
 
 import (

@@ -1,4 +1,3 @@
-// 包件批次为LLM请求提供批次处理.
 package batch
 
 import (

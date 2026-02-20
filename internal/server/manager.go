@@ -1,5 +1,3 @@
-// 包服务器提供内部 HTTP 服务器管理。
-// 该包是内部的，不应由外部项目导入。
 package server
 
 import (

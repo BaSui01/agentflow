@@ -1,4 +1,3 @@
-// 包代理为AgentFlow提供了核心代理框架.
 package agent
 
 import (

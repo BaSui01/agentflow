@@ -1,4 +1,3 @@
-// 包上下文提供代理集成帮助.
 package context
 
 import (

@@ -1,4 +1,3 @@
-// Package rerank 提供统一的重排序提供者接口和实现.
 package rerank
 
 import (

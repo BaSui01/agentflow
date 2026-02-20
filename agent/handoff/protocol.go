@@ -1,5 +1,3 @@
-// 包交接提供了代理汉道克(Agent Handoff)协议,用于代理之间的任务授权.
-// 实施OpenAI SDK型代理交接机制.
 package handoff
 
 import (

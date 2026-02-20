@@ -1,6 +1,3 @@
-// Package types provides core types used across the agentflow framework.
-// This package has ZERO dependencies on other agentflow packages to avoid circular imports.
-// All other packages should import types from here.
 package types
 
 import (

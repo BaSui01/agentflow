@@ -1,4 +1,3 @@
-// Package main demonstrates medium priority features.
 package main
 
 import (

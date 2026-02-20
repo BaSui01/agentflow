@@ -1,4 +1,3 @@
-// Package observability 为多回合对话提供 LangSmith 风格的追踪.
 package observability
 
 import (

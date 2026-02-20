@@ -1,4 +1,3 @@
-// 软件包审议提供了CrewAI风格的自主推理模式.
 package deliberation
 
 import (

@@ -1,5 +1,3 @@
-// 包主机提供了所主机的工具执行,如Web搜索和文件搜索.
-// 执行运行在提供者基础设施上的OpenAI SDK风格主机工具.
 package hosted
 
 import (

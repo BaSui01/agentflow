@@ -1,4 +1,3 @@
-// Package streaming 为高吞吐量 LLM 响应提供支持背压的流式传输.
 package streaming
 
 import (

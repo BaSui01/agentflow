@@ -1,5 +1,3 @@
-// Package main demonstrates the A2A (Agent-to-Agent) Protocol module.
-// This example shows Agent Card generation, message creation, and client/server setup.
 package main
 
 import (

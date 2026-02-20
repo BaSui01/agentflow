@@ -1,4 +1,3 @@
-// 软件包语音提供实时语音代理能力.
 package voice
 
 import (

@@ -1,4 +1,3 @@
-// Package workflow provides state reducer for graph-based agent orchestration.
 package workflow
 
 import (

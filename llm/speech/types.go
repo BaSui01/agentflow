@@ -1,4 +1,3 @@
-// Package speech 提供统一的 TTS 和 STT 提供者接口.
 package speech
 
 import (

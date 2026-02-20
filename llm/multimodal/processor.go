@@ -1,4 +1,3 @@
-// Package multimodal 为 LLM 提供者提供多模态内容处理.
 package multimodal
 
 import (

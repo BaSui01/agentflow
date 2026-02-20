@@ -1,4 +1,3 @@
-// 软件包上下文为代理商提供了统一的上下文管理.
 package context
 
 import (

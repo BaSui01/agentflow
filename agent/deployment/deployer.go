@@ -1,5 +1,3 @@
-// 套件部署为AI代理提供云部署支持.
-// 执行 Google ADK 风格的一击部署到 K8s/ Serverless 。
 package deployment
 
 import (

@@ -1,6 +1,3 @@
-// Package llm 为维持推理链连续性提供思维签名支持。
-// 思维签名是 OpenAI/Gemini 用于保存推理上下文的加密签名，
-// 使推理上下文可以跨多次 API 调用延续。
 package llm
 
 import (

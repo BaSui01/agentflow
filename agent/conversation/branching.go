@@ -1,4 +1,3 @@
-// 软件包对话提供对话管理,提供分行和回滚.
 package conversation
 
 import (

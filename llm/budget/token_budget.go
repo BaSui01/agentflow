@@ -1,4 +1,3 @@
-// 一揽子预算提供象征性的预算管理和成本控制。
 package budget
 
 import (

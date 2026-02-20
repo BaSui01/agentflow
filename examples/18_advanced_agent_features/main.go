@@ -1,4 +1,3 @@
-// Package main demonstrates advanced agent features.
 package main
 
 import (

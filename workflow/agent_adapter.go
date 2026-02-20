@@ -1,4 +1,3 @@
-// Package workflow provides workflow orchestration for AI agents.
 package workflow
 
 import (

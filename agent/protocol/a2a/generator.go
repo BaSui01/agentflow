@@ -1,4 +1,3 @@
-// a2a包提供A2A(代理对代理)协议支持.
 package a2a
 
 import (
