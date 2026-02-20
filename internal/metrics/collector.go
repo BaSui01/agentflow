@@ -1,5 +1,3 @@
-// Package metrics provides internal metrics collection.
-// This package is internal and should not be imported by external projects.
 package metrics
 
 import (

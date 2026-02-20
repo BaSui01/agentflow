@@ -1,5 +1,3 @@
-// Package database provides internal database connection management.
-// This package is internal and should not be imported by external projects.
 package database
 
 import (

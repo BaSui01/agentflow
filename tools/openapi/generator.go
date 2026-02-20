@@ -1,5 +1,3 @@
-// Package openapi provides automatic tool generation from OpenAPI specifications.
-// Implements Google ADK-style OpenAPI to Tool conversion.
 package openapi
 
 import (

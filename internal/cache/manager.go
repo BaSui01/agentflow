@@ -1,5 +1,3 @@
-// Package cache provides internal cache management.
-// This package is internal and should not be imported by external projects.
 package cache
 
 import (
