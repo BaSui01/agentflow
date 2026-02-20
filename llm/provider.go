@@ -73,10 +73,12 @@ type Provider interface {
 }
 
 // HealthStatus 表示提供者的健康检查结果。
+// 这是 Provider 级别的统一健康状态类型，同时被 llm.Provider 和 llm/embedding.Provider 使用。
 type HealthStatus struct {
 	Healthy   bool          `json:"healthy"`
 	Latency   time.Duration `json:"latency"`
 	ErrorRate float64       `json:"error_rate"`
+	Message   string        `json:"message,omitempty"`
 }
 
 // ChatRequest 表示聊天补全请求.
@@ -151,9 +153,7 @@ type Model struct {
 }
 
 // IsRetryable 判断错误是否可重试。
-func IsRetryable(err error) bool {
-	if e, ok := err.(*Error); ok {
-		return e.Retryable
-	}
-	return false
-}
+//
+// Deprecated: 这是 types.IsRetryable 的完全重复。
+// 新代码请直接使用 types.IsRetryable。保留此变量仅为向后兼容。
+var IsRetryable = types.IsRetryable
