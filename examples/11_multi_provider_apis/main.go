@@ -46,9 +46,11 @@ func main() {
 // testOpenAIResponsesAPI 测试 OpenAI 新的 Responses API
 func testOpenAIResponsesAPI(ctx context.Context, logger *zap.Logger) {
 	cfg := providers.OpenAIConfig{
-		APIKey:          os.Getenv("OPENAI_API_KEY"),
-		BaseURL:         "https://api.openai.com",
-		Model:           "gpt-4o-mini",
+		BaseProviderConfig: providers.BaseProviderConfig{
+			APIKey:          os.Getenv("OPENAI_API_KEY"),
+			BaseURL:         "https://api.openai.com",
+			Model:           "gpt-4o-mini",
+		},
 		UseResponsesAPI: true, // 启用新 API
 	}
 
@@ -77,9 +79,11 @@ func testOpenAIResponsesAPI(ctx context.Context, logger *zap.Logger) {
 // testOpenAIChatCompletions 测试 OpenAI 传统 API
 func testOpenAIChatCompletions(ctx context.Context, logger *zap.Logger) {
 	cfg := providers.OpenAIConfig{
-		APIKey:          os.Getenv("OPENAI_API_KEY"),
-		BaseURL:         "https://api.openai.com",
-		Model:           "gpt-4o-mini",
+		BaseProviderConfig: providers.BaseProviderConfig{
+			APIKey:          os.Getenv("OPENAI_API_KEY"),
+			BaseURL:         "https://api.openai.com",
+			Model:           "gpt-4o-mini",
+		},
 		UseResponsesAPI: false, // 使用传统 API
 	}
 
@@ -108,9 +112,11 @@ func testOpenAIChatCompletions(ctx context.Context, logger *zap.Logger) {
 // testClaudeMessagesAPI 测试 Claude Messages API
 func testClaudeMessagesAPI(ctx context.Context, logger *zap.Logger) {
 	cfg := providers.ClaudeConfig{
-		APIKey:  os.Getenv("ANTHROPIC_API_KEY"),
-		BaseURL: "https://api.anthropic.com",
-		Model:   "claude-3-5-sonnet-20241022",
+		BaseProviderConfig: providers.BaseProviderConfig{
+			APIKey:  os.Getenv("ANTHROPIC_API_KEY"),
+			BaseURL: "https://api.anthropic.com",
+			Model:   "claude-3-5-sonnet-20241022",
+		},
 	}
 
 	provider := claude.NewClaudeProvider(cfg, logger)
@@ -139,9 +145,11 @@ func testClaudeMessagesAPI(ctx context.Context, logger *zap.Logger) {
 // testGeminiGenerateContent 测试 Gemini Generate Content API
 func testGeminiGenerateContent(ctx context.Context, logger *zap.Logger) {
 	cfg := providers.GeminiConfig{
-		APIKey:  os.Getenv("GEMINI_API_KEY"),
-		BaseURL: "https://generativelanguage.googleapis.com",
-		Model:   "gemini-2.5-flash",
+		BaseProviderConfig: providers.BaseProviderConfig{
+			APIKey:  os.Getenv("GEMINI_API_KEY"),
+			BaseURL: "https://generativelanguage.googleapis.com",
+			Model:   "gemini-2.5-flash",
+		},
 	}
 
 	provider := gemini.NewGeminiProvider(cfg, logger)
@@ -205,25 +213,31 @@ func testProviderToolCalling(ctx context.Context, logger *zap.Logger, providerNa
 	switch providerName {
 	case "openai":
 		cfg := providers.OpenAIConfig{
-			APIKey:  os.Getenv("OPENAI_API_KEY"),
-			BaseURL: "https://api.openai.com",
-			Model:   "gpt-4o-mini",
+			BaseProviderConfig: providers.BaseProviderConfig{
+				APIKey:  os.Getenv("OPENAI_API_KEY"),
+				BaseURL: "https://api.openai.com",
+				Model:   "gpt-4o-mini",
+			},
 		}
 		provider = openai.NewOpenAIProvider(cfg, logger)
 
 	case "claude":
 		cfg := providers.ClaudeConfig{
-			APIKey:  os.Getenv("ANTHROPIC_API_KEY"),
-			BaseURL: "https://api.anthropic.com",
-			Model:   "claude-3-5-sonnet-20241022",
+			BaseProviderConfig: providers.BaseProviderConfig{
+				APIKey:  os.Getenv("ANTHROPIC_API_KEY"),
+				BaseURL: "https://api.anthropic.com",
+				Model:   "claude-3-5-sonnet-20241022",
+			},
 		}
 		provider = claude.NewClaudeProvider(cfg, logger)
 
 	case "gemini":
 		cfg := providers.GeminiConfig{
-			APIKey:  os.Getenv("GEMINI_API_KEY"),
-			BaseURL: "https://generativelanguage.googleapis.com",
-			Model:   "gemini-2.5-flash",
+			BaseProviderConfig: providers.BaseProviderConfig{
+				APIKey:  os.Getenv("GEMINI_API_KEY"),
+				BaseURL: "https://generativelanguage.googleapis.com",
+				Model:   "gemini-2.5-flash",
+			},
 		}
 		provider = gemini.NewGeminiProvider(cfg, logger)
 

@@ -27,9 +27,11 @@ func main() {
 
 	// 创建 Provider
 	provider := openai.NewOpenAIProvider(providers.OpenAIConfig{
-		APIKey:  apiKey,
-		BaseURL: "https://api.openai.com/v1",
-		Model:   "gpt-3.5-turbo",
+		BaseProviderConfig: providers.BaseProviderConfig{
+			APIKey:  apiKey,
+			BaseURL: "https://api.openai.com/v1",
+			Model:   "gpt-3.5-turbo",
+		},
 	}, logger)
 
 	ctx := context.Background()

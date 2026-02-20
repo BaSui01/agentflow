@@ -47,9 +47,11 @@ func testMistral(ctx context.Context, logger *zap.Logger) {
 	}
 
 	provider := mistral.NewMistralProvider(providers.MistralConfig{
-		APIKey:  apiKey,
-		Model:   "mistral-large-latest",
-		Timeout: 30 * time.Second,
+		BaseProviderConfig: providers.BaseProviderConfig{
+			APIKey:  apiKey,
+			Model:   "mistral-large-latest",
+			Timeout: 30 * time.Second,
+		},
 	}, logger)
 
 	// Health check
@@ -88,9 +90,11 @@ func testHunyuan(ctx context.Context, logger *zap.Logger) {
 	}
 
 	provider := hunyuan.NewHunyuanProvider(providers.HunyuanConfig{
-		APIKey:  apiKey,
-		Model:   "hunyuan-lite",
-		Timeout: 30 * time.Second,
+		BaseProviderConfig: providers.BaseProviderConfig{
+			APIKey:  apiKey,
+			Model:   "hunyuan-lite",
+			Timeout: 30 * time.Second,
+		},
 	}, logger)
 
 	// Health check
@@ -129,9 +133,11 @@ func testKimi(ctx context.Context, logger *zap.Logger) {
 	}
 
 	provider := kimi.NewKimiProvider(providers.KimiConfig{
-		APIKey:  apiKey,
-		Model:   "moonshot-v1-8k",
-		Timeout: 30 * time.Second,
+		BaseProviderConfig: providers.BaseProviderConfig{
+			APIKey:  apiKey,
+			Model:   "moonshot-v1-8k",
+			Timeout: 30 * time.Second,
+		},
 	}, logger)
 
 	// Health check
@@ -170,10 +176,12 @@ func testLlama(ctx context.Context, logger *zap.Logger) {
 	}
 
 	provider := llama.NewLlamaProvider(providers.LlamaConfig{
-		APIKey:   apiKey,
-		Model:    "meta-llama/Llama-3.3-70B-Instruct-Turbo",
+		BaseProviderConfig: providers.BaseProviderConfig{
+			APIKey:   apiKey,
+			Model:    "meta-llama/Llama-3.3-70B-Instruct-Turbo",
+			Timeout:  30 * time.Second,
+		},
 		Provider: "together",
-		Timeout:  30 * time.Second,
 	}, logger)
 
 	// Health check

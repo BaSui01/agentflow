@@ -28,8 +28,10 @@ func main() {
 
 	// 2. 配置 Provider
 	cfg := providers.OpenAIConfig{
-		APIKey:  "your-api-key-here",
-		BaseURL: "https://api.openai.com/v1",
+		BaseProviderConfig: providers.BaseProviderConfig{
+			APIKey:  "your-api-key-here",
+			BaseURL: "https://api.openai.com/v1",
+		},
 	}
 	provider := openai.NewOpenAIProvider(cfg, logger)
 
