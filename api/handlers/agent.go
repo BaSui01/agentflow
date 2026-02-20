@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"net/http"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -11,6 +12,9 @@ import (
 	"github.com/BaSui01/agentflow/types"
 	"go.uber.org/zap"
 )
+
+// validAgentID validates agent ID format: alphanumeric start, up to 128 chars.
+var validAgentID = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$`)
 
 // =============================================================================
 // Agent Management Handler
@@ -242,6 +246,11 @@ func (h *AgentHandler) HandleAgentHealth(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
+	if !validAgentID.MatchString(agentID) {
+		WriteErrorMessage(w, http.StatusBadRequest, types.ErrInvalidRequest, "invalid agent ID format", h.logger)
+		return
+	}
+
 	info, err := h.registry.GetAgent(r.Context(), agentID)
 	if err != nil {
 		WriteError(w, types.NewNotFoundError("agent not found"), h.logger)
@@ -307,11 +316,17 @@ func toAgentInfo(info *discovery.AgentInfo) AgentInfo {
 func extractAgentID(r *http.Request) string {
 	// Try Go 1.22+ PathValue first
 	if id := r.PathValue("id"); id != "" {
+		if !validAgentID.MatchString(id) {
+			return ""
+		}
 		return id
 	}
 	// Fallback: extract from URL path by trimming the /v1/agents/ prefix
 	path := strings.TrimPrefix(r.URL.Path, "/v1/agents/")
 	if path != "" && path != r.URL.Path && !strings.Contains(path, "/") {
+		if !validAgentID.MatchString(path) {
+			return ""
+		}
 		return path
 	}
 	return ""
