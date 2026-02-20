@@ -12,8 +12,8 @@ import (
 // ** 参数:要求9.1-9.8**
 //
 // 此属性测试验证所有 HTTP 状态代码被正确映射到 llm 。 错误代码值
-// * 适当重试旗帜、供应商名称和配额/信用检测。
-// 通过涵盖所有状态代码的综合测试案例,实现至少100次重复。
+// * 适当重试旗帜、提供者名称和配额/信用检测。
+// 通过涵盖所有状态代码的综合测试用例,实现至少100次重复。
 func TestProperty12_HTTPStatusToErrorCodeMapping(t *testing.T) {
 	// 测试所有应该映射的 HTTP 标准状态代码
 	testCases := []struct {
@@ -474,7 +474,7 @@ func TestProperty12_HTTPStatusToErrorCodeMapping(t *testing.T) {
 			requirement:    "9.6",
 		},
 
-		// 额外测试案例达到100+重复
+		// 额外测试用例达到100+重复
 		// 更多401个变化
 		{
 			name:           "401 Unauthorized - token expired",
@@ -971,7 +971,7 @@ func TestProperty12_HTTPStatusToErrorCodeMapping(t *testing.T) {
 			requirement:    "9.6",
 		},
 
-		// 额外测试病例达到100+
+		// 额外测试用例达到100+
 		{
 			name:           "403 - provider openai",
 			status:         http.StatusForbidden,
@@ -1085,13 +1085,13 @@ func TestProperty12_HTTPStatusToErrorCodeMapping(t *testing.T) {
 		})
 	}
 
-	// 核实我们至少有100个测试案例(如任务所指明)
+	// 核实我们至少有100个测试用例(如任务所指明)
 	assert.GreaterOrEqual(t, len(testCases), 100,
 		"Property test should have minimum 100 iterations")
 }
 
-// Property12  所有提供方使用一致的映射验证所有提供者
-// 使用相同的误差映射逻辑( 要求 9. 8)
+// TestProperty12_AllProvidersUseConsistentMapping 验证所有提供者使用一致的错误映射
+// 使用相同的错误映射逻辑（要求 9.8）
 func TestProperty12_AllProvidersUseConsistentMapping(t *testing.T) {
 	providers := []string{"openai", "grok", "qwen", "deepseek", "glm", "minimax", "claude"}
 	statuses := []int{401, 403, 429, 400, 503, 502, 504, 529, 500, 501, 404}
@@ -1113,7 +1113,7 @@ func TestProperty12_AllProvidersUseConsistentMapping(t *testing.T) {
 				assert.NotEmpty(t, err.Code,
 					"Error code must be set")
 
-				// 校验信件被保存
+				// 校验消息被保存
 				assert.Equal(t, "test error", err.Message,
 					"Error message must be preserved")
 			})

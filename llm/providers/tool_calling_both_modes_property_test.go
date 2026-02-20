@@ -19,7 +19,7 @@ import (
 // 特性: 多提供者支持, 属性 21: 在两种模式下调用工具
 // ** 参数:要求11.6**
 //
-// 这项财产测试验证了任何供应商和任何带有工具的聊天请求,
+// 这项属性测试验证了任何提供者和任何带有工具的聊天请求,
 // 完成()和Stream()应成功处理工具呼叫和
 // 返回/邮件工具调用信息。
 
@@ -625,7 +625,7 @@ func TestProperty21_ToolCallingBothModes_TableDriven(t *testing.T) {
 		},
 	}
 
-	// 添加更多的测试案例以达到100+重复
+	// 添加更多的测试用例以达到100+重复
 	providers := []string{"grok", "qwen", "deepseek", "glm", "minimax"}
 	modes := []string{"completion", "stream"}
 	toolNames := []string{"search", "calculate", "get_weather", "translate", "summarize", "fetch_data", "process", "validate", "analyze", "generate"}
@@ -652,7 +652,7 @@ func TestProperty21_ToolCallingBothModes_TableDriven(t *testing.T) {
 		}
 	}
 
-	// 检查我们至少有100个测试病例
+	// 检查我们至少有100个测试用例
 	require.GreaterOrEqual(t, len(testCases), 100, "Should have at least 100 test cases")
 
 	for _, tc := range testCases {

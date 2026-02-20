@@ -17,7 +17,7 @@ type MeshyProvider struct {
 	client *http.Client
 }
 
-// NewMeshyProvider创建了新的Meshy 3D供应商.
+// NewMeshyProvider 创建新的 Meshy 3D 提供者.
 func NewMeshyProvider(cfg MeshyConfig) *MeshyProvider {
 	if cfg.BaseURL == "" {
 		cfg.BaseURL = "https://api.meshy.ai/v2"

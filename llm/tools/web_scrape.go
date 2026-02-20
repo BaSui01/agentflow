@@ -215,7 +215,7 @@ func NewWebScrapeTool(config WebScrapeToolConfig, logger *zap.Logger) (ToolFunc,
 	return fn, metadata
 }
 
-// RegisterWebScrapeToole是一个创建并注册web刮取工具的便利功能.
+// RegisterWebScrapeTool 是创建并注册网页抓取工具的便捷函数.
 func RegisterWebScrapeTool(registry ToolRegistry, config WebScrapeToolConfig, logger *zap.Logger) error {
 	fn, metadata := NewWebScrapeTool(config, logger)
 	return registry.Register("web_scrape", fn, metadata)

@@ -18,7 +18,7 @@ type ElevenLabsProvider struct {
 	client *http.Client
 }
 
-// NewElevenLabs Provider 创建了新的"11Labs TTS"供应商.
+// NewElevenLabsProvider 创建新的 ElevenLabs TTS 提供者.
 func NewElevenLabsProvider(cfg ElevenLabsConfig) *ElevenLabsProvider {
 	if cfg.BaseURL == "" {
 		cfg.BaseURL = "https://api.elevenlabs.io"

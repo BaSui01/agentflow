@@ -14,7 +14,7 @@ import (
 // 这个属性测试验证了对于任何提供商和任何带有非空工具阵列的聊天请求,
 // 提供者转换每个 llm。 工具Schema 到特定提供者的工具格式保存
 // 名称、描述和参数。
-// 通过综合测试案例实现至少100次重复。
+// 通过综合测试用例实现至少100次重复。
 func TestProperty17_ToolSchemaConversion(t *testing.T) {
 	testCases := []struct {
 		name        string
@@ -414,7 +414,7 @@ func TestProperty17_ToolSchemaConversion(t *testing.T) {
 		},
 	}
 
-	// 通过对所有提供商进行每个案例的测试,将测试案例扩展至100+重复
+	// 通过对所有提供商进行每个用例的测试,将测试用例扩展至100+重复
 	providers := []string{"grok", "qwen", "deepseek", "glm", "minimax"}
 	expandedTestCases := make([]struct {
 		name        string
@@ -424,7 +424,7 @@ func TestProperty17_ToolSchemaConversion(t *testing.T) {
 		description string
 	}, 0, len(testCases)*len(providers))
 
-	// 添加原始测试案例
+	// 添加原始测试用例
 	expandedTestCases = append(expandedTestCases, testCases...)
 
 	// 添加不同提供者的变量
@@ -445,7 +445,7 @@ func TestProperty17_ToolSchemaConversion(t *testing.T) {
 			// 根据提供者类型测试转换
 			switch tc.provider {
 			case "grok", "qwen", "deepseek", "glm":
-				// OpenAI 兼容供应商
+				// OpenAI 兼容提供者
 				testOpenAICompatibleConversion(t, tc.tools, tc.provider, tc.requirement, tc.description)
 			case "minimax":
 				// MiniMax 有自定义格式
@@ -456,12 +456,12 @@ func TestProperty17_ToolSchemaConversion(t *testing.T) {
 		})
 	}
 
-	// 检查我们至少有100个测试病例
+	// 检查我们至少有100个测试用例
 	assert.GreaterOrEqual(t, len(expandedTestCases), 100,
 		"Property test should have minimum 100 iterations")
 }
 
-// 测试 OpenAI 兼容性转换测试工具转换 OpenAI 兼容供应商
+// 测试 OpenAI 兼容性转换测试工具转换 OpenAI 兼容提供者
 func testOpenAICompatibleConversion(t *testing.T, tools []llm.ToolSchema, provider, requirement, description string) {
 	// 使用光谱之后的模拟函数转换
 	converted := mockConvertToolsOpenAI(tools)

@@ -62,7 +62,7 @@ func (p *OpenAIProvider) Moderate(ctx context.Context, req *ModerationRequest) (
 	// 构建输入 - 仅文本或多模式
 	var input any
 	if len(req.Images) > 0 {
-		// 多式联运投入
+		// 多模态输入
 		var items []map[string]any
 		for _, text := range req.Input {
 			items = append(items, map[string]any{"type": "text", "text": text})

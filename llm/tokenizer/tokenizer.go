@@ -7,40 +7,40 @@ import (
 
 // Tokenizer是统一的代号计数界面.
 type Tokenizer interface {
-	// 伯爵托肯斯返回给定文本中的符号数.
+	// CountTokens 返回给定文本的 token 数.
 	CountTokens(text string) (int, error)
 
-	// CounterMessages 返回信件列表的总符号数,
-	// 包括每条消息的间接费用(作用标记、分离器等)。
+	// CountMessages 返回消息列表的总 token 数,
+	// 包括每条消息的开销（角色标记、分隔符等）。
 	CountMessages(messages []Message) (int, error)
 
-	// Encode 将文本转换为符号ID列表.
+	// Encode 将文本转换为 token ID 列表.
 	Encode(text string) ([]int, error)
 
-	// 解码后将符号ID转换回文本.
+	// Decode 将 token ID 转换回文本.
 	Decode(tokens []int) (string, error)
 
-	// MaxTokens返回模型的最大上下文长度.
+	// MaxTokens 返回模型的最大上下文长度.
 	MaxTokens() int
 
-	// 名称返回一个人类可读的标致器名.
+	// Name 返回分词器的名称.
 	Name() string
 }
 
-// 信件是一个轻量级信件, 由指示器包使用
+// Message 是一个轻量级消息结构, 由 tokenizer 包使用
 // 以避免与 llm 包的循环依赖。
 type Message struct {
 	Role    string
 	Content string
 }
 
-// 全球标致器注册.
+// 全局分词器注册表.
 var (
 	modelTokenizers   = make(map[string]Tokenizer)
 	modelTokenizersMu sync.RWMutex
 )
 
-// RegisterTokenizer 为给定的型号名称注册了一个标注符.
+// RegisterTokenizer 为给定的模型名称注册分词器.
 func RegisterTokenizer(model string, t Tokenizer) {
 	modelTokenizersMu.Lock()
 	defer modelTokenizersMu.Unlock()

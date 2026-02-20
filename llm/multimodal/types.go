@@ -1,4 +1,4 @@
-// 套件多式为LLM供应商提供多式内容处理.
+// Package multimodal 为 LLM 提供者提供多模态内容处理.
 package multimodal
 
 import (
@@ -11,7 +11,7 @@ import (
 	"strings"
 )
 
-// 内容Type代表了多式内容的类型.
+// ContentType 表示多模态内容的类型.
 type ContentType string
 
 const (
@@ -22,7 +22,7 @@ const (
 	ContentTypeDocument ContentType = "document"
 )
 
-// ImageFormat 代表支持的图像格式.
+// ImageFormat 表示支持的图像格式.
 type ImageFormat string
 
 const (
@@ -32,7 +32,7 @@ const (
 	ImageFormatWebP ImageFormat = "webp"
 )
 
-// AudioFormat 代表支持的音频格式 。
+// AudioFormat 表示支持的音频格式.
 type AudioFormat string
 
 const (
@@ -43,7 +43,7 @@ const (
 	AudioFormatM4A  AudioFormat = "m4a"
 )
 
-// 内容代表着一款多式内容.
+// Content 表示一个多模态内容项.
 type Content struct {
 	Type     ContentType `json:"type"`
 	Text     string      `json:"text,omitempty"`
@@ -63,19 +63,19 @@ type Content struct {
 	Metadata   map[string]string `json:"metadata,omitempty"`
 }
 
-// 图像Dimensions代表图像维度.
+// ImageDimensions 表示图像尺寸.
 type ImageDimensions struct {
 	Width  int `json:"width"`
 	Height int `json:"height"`
 }
 
-// 多式联运(MultimoduleMessage)代表具有多种内容类型的消息.
+// MultimodalMessage 表示包含多种内容类型的消息.
 type MultimodalMessage struct {
 	Role     string    `json:"role"`
 	Contents []Content `json:"contents"`
 }
 
-// NewTextContent创建了文本内容.
+// NewTextContent 创建文本内容.
 func NewTextContent(text string) Content {
 	return Content{
 		Type: ContentTypeText,
@@ -83,7 +83,7 @@ func NewTextContent(text string) Content {
 	}
 }
 
-// NewImageURL Content从URL创建了图像内容.
+// NewImageURLContent 从 URL 创建图像内容.
 func NewImageURLContent(url string) Content {
 	return Content{
 		Type:     ContentTypeImage,
@@ -91,7 +91,7 @@ func NewImageURLContent(url string) Content {
 	}
 }
 
-// NewImageBase64 Content从基础64数据创建了图像内容.
+// NewImageBase64Content 从 Base64 数据创建图像内容.
 func NewImageBase64Content(data string, format ImageFormat) Content {
 	return Content{
 		Type:      ContentTypeImage,
@@ -100,7 +100,7 @@ func NewImageBase64Content(data string, format ImageFormat) Content {
 	}
 }
 
-// NewAudioURL Content从URL创建音频内容.
+// NewAudioURLContent 从 URL 创建音频内容.
 func NewAudioURLContent(url string) Content {
 	return Content{
 		Type:     ContentTypeAudio,
@@ -108,7 +108,7 @@ func NewAudioURLContent(url string) Content {
 	}
 }
 
-// NewAudioBase64 Content从基础64数据创建了音频内容.
+// NewAudioBase64Content 从 Base64 数据创建音频内容.
 func NewAudioBase64Content(data string, format AudioFormat) Content {
 	return Content{
 		Type:      ContentTypeAudio,
@@ -117,7 +117,7 @@ func NewAudioBase64Content(data string, format AudioFormat) Content {
 	}
 }
 
-// 从文件路径装入图像。
+// LoadImageFromFile 从文件路径加载图像.
 func LoadImageFromFile(path string) (Content, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -147,7 +147,7 @@ func LoadImageFromFile(path string) (Content, error) {
 	return content, nil
 }
 
-// 从 URL 中装入图像 。
+// LoadImageFromURL 从 URL 加载图像.
 func LoadImageFromURL(url string) (Content, error) {
 	resp, err := http.Get(url)
 	if err != nil {
@@ -187,7 +187,7 @@ func LoadImageFromURL(url string) (Content, error) {
 	return content, nil
 }
 
-// LoadAudio FromFile 加载音频文件.
+// LoadAudioFromFile 加载音频文件.
 func LoadAudioFromFile(path string) (Content, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -248,7 +248,7 @@ func detectImageFormat(data []byte) ImageFormat {
 	return ImageFormatJPEG // default
 }
 
-// 分辨率Preset代表视觉模型的图像分辨率预设.
+// ResolutionPreset 表示视觉模型的图像分辨率预设.
 type ResolutionPreset string
 
 const (
@@ -258,7 +258,7 @@ const (
 	ResolutionAuto   ResolutionPreset = "auto"   // Let the model decide
 )
 
-// VisionConfig配置了视觉处理.
+// VisionConfig 配置视觉处理.
 type VisionConfig struct {
 	Resolution     ResolutionPreset `json:"resolution"`
 	MaxImageSize   int64            `json:"max_image_size"` // Max file size in bytes
@@ -266,7 +266,7 @@ type VisionConfig struct {
 	AllowedFormats []ImageFormat    `json:"allowed_formats"`
 }
 
-// 默认视觉 Config 返回默认视觉配置 。
+// DefaultVisionConfig 返回默认视觉配置.
 func DefaultVisionConfig() VisionConfig {
 	return VisionConfig{
 		Resolution:     ResolutionAuto,
@@ -276,7 +276,7 @@ func DefaultVisionConfig() VisionConfig {
 	}
 }
 
-// AudioConfig配置音频处理.
+// AudioConfig 配置音频处理.
 type AudioConfig struct {
 	MaxDuration    float64       `json:"max_duration"`  // Max duration in seconds
 	MaxFileSize    int64         `json:"max_file_size"` // Max file size in bytes
@@ -284,7 +284,7 @@ type AudioConfig struct {
 	AllowedFormats []AudioFormat `json:"allowed_formats"`
 }
 
-// 默认 AudioConfig 返回默认音频配置 。
+// DefaultAudioConfig 返回默认音频配置.
 func DefaultAudioConfig() AudioConfig {
 	return AudioConfig{
 		MaxDuration:    300,              // 5 minutes

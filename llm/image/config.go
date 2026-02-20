@@ -2,7 +2,7 @@ package image
 
 import "time"
 
-// OpenAIConfig配置了OpenAI DALL-E供应商.
+// OpenAIConfig 配置 OpenAI DALL-E 提供者.
 type OpenAIConfig struct {
 	APIKey  string        `json:"api_key" yaml:"api_key"`
 	BaseURL string        `json:"base_url" yaml:"base_url"`
@@ -10,7 +10,7 @@ type OpenAIConfig struct {
 	Timeout time.Duration `json:"timeout,omitempty" yaml:"timeout,omitempty"`
 }
 
-// FluxConfig配置了黑森林实验室Flux供应商.
+// FluxConfig 配置 Black Forest Labs Flux 提供者.
 type FluxConfig struct {
 	APIKey  string        `json:"api_key" yaml:"api_key"`
 	BaseURL string        `json:"base_url" yaml:"base_url"`
@@ -18,7 +18,7 @@ type FluxConfig struct {
 	Timeout time.Duration `json:"timeout,omitempty" yaml:"timeout,omitempty"`
 }
 
-// 稳定Config配置稳定AI提供者.
+// StabilityConfig 配置 Stability AI 提供者.
 type StabilityConfig struct {
 	APIKey  string        `json:"api_key" yaml:"api_key"`
 	BaseURL string        `json:"base_url" yaml:"base_url"`
@@ -26,7 +26,7 @@ type StabilityConfig struct {
 	Timeout time.Duration `json:"timeout,omitempty" yaml:"timeout,omitempty"`
 }
 
-// 默认 OpenAIConfig 返回默认 OpenAI 图像配置 。
+// DefaultOpenAIConfig 返回默认 OpenAI 图像配置.
 func DefaultOpenAIConfig() OpenAIConfig {
 	return OpenAIConfig{
 		BaseURL: "https://api.openai.com",
@@ -35,7 +35,7 @@ func DefaultOpenAIConfig() OpenAIConfig {
 	}
 }
 
-// 默认FluxConfig 返回默认Flux配置 。
+// DefaultFluxConfig 返回默认 Flux 配置.
 func DefaultFluxConfig() FluxConfig {
 	return FluxConfig{
 		BaseURL: "https://api.bfl.ml",
@@ -44,7 +44,7 @@ func DefaultFluxConfig() FluxConfig {
 	}
 }
 
-// 默认稳定 Config 返回默认稳定 AI 配置 。
+// DefaultStabilityConfig 返回默认 Stability AI 配置.
 func DefaultStabilityConfig() StabilityConfig {
 	return StabilityConfig{
 		BaseURL: "https://api.stability.ai",
@@ -53,14 +53,14 @@ func DefaultStabilityConfig() StabilityConfig {
 	}
 }
 
-// 双子座Config配置了谷歌双子座图像生成提供者.
+// GeminiConfig 配置 Google Gemini 图像生成提供者.
 type GeminiConfig struct {
 	APIKey  string        `json:"api_key" yaml:"api_key"`
 	Model   string        `json:"model,omitempty" yaml:"model,omitempty"` // gemini-3-pro-image-preview
 	Timeout time.Duration `json:"timeout,omitempty" yaml:"timeout,omitempty"`
 }
 
-// 默认GeminiConfig返回默认双子星图像配置.
+// DefaultGeminiConfig 返回默认 Gemini 图像配置.
 func DefaultGeminiConfig() GeminiConfig {
 	return GeminiConfig{
 		Model:   "gemini-3-pro-image-preview",
@@ -68,14 +68,14 @@ func DefaultGeminiConfig() GeminiConfig {
 	}
 }
 
-// Imagen4Config配置了Google Imagen 4供应商.
+// Imagen4Config 配置 Google Imagen 4 提供者.
 type Imagen4Config struct {
 	APIKey  string        `json:"api_key" yaml:"api_key"`
 	Model   string        `json:"model,omitempty" yaml:"model,omitempty"` // imagen-4.0-generate-preview
 	Timeout time.Duration `json:"timeout,omitempty" yaml:"timeout,omitempty"`
 }
 
-// 默认 Imagen4Config 返回默认 Imisn 4 config 。
+// DefaultImagen4Config 返回默认 Imagen 4 配置.
 func DefaultImagen4Config() Imagen4Config {
 	return Imagen4Config{
 		Model:   "imagen-4.0-generate-preview",

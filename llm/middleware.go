@@ -6,24 +6,24 @@ import (
 	"time"
 )
 
-// Handler处理一个请求并返回一个响应.
+// Handler 处理请求并返回响应.
 type Handler func(ctx context.Context, req *ChatRequest) (*ChatResponse, error)
 
-// Middleware 将处理器包裹在外加功能.
+// Middleware 用附加功能包装处理器.
 type Middleware func(next Handler) Handler
 
-// 链条代表了中件链.
+// Chain 表示中间件链.
 type Chain struct {
 	middlewares []Middleware
 	mu          sync.RWMutex
 }
 
-// NewChain创建了新的中件链.
+// NewChain 创建新的中间件链.
 func NewChain(middlewares ...Middleware) *Chain {
 	return &Chain{middlewares: middlewares}
 }
 
-// 使用将中间软件添加到链中 。
+// Use 将中间件添加到链中。
 func (c *Chain) Use(m Middleware) *Chain {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -31,7 +31,7 @@ func (c *Chain) Use(m Middleware) *Chain {
 	return c
 }
 
-// 然后用所有中间软件包住一个处理器.
+// Then 用所有中间件包装处理器.
 func (c *Chain) Then(h Handler) Handler {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
@@ -42,14 +42,14 @@ func (c *Chain) Then(h Handler) Handler {
 	return h
 }
 
-// Len 返回中间软件的数量 。
+// Len 返回中间件的数量。
 func (c *Chain) Len() int {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	return len(c.middlewares)
 }
 
-// 日志Middleware日志请求/回复细节 。
+// LoggingMiddleware 记录请求/响应详情。
 func LoggingMiddleware(logger func(format string, args ...any)) Middleware {
 	return func(next Handler) Handler {
 		return func(ctx context.Context, req *ChatRequest) (*ChatResponse, error) {
@@ -70,7 +70,7 @@ func LoggingMiddleware(logger func(format string, args ...any)) Middleware {
 	}
 }
 
-// 超时Middleware 对请求添加超时.
+// TimeoutMiddleware 为请求添加超时控制.
 func TimeoutMiddleware(timeout time.Duration) Middleware {
 	return func(next Handler) Handler {
 		return func(ctx context.Context, req *ChatRequest) (*ChatResponse, error) {
@@ -81,7 +81,7 @@ func TimeoutMiddleware(timeout time.Duration) Middleware {
 	}
 }
 
-// 恢复Middleware从恐慌中恢复过来.
+// RecoveryMiddleware 从 panic 中恢复.
 func RecoveryMiddleware(onPanic func(any)) Middleware {
 	return func(next Handler) Handler {
 		return func(ctx context.Context, req *ChatRequest) (resp *ChatResponse, err error) {
@@ -98,7 +98,7 @@ func RecoveryMiddleware(onPanic func(any)) Middleware {
 	}
 }
 
-// 恐慌代表了恢复的恐慌。
+// PanicError 表示已恢复的 panic。
 type PanicError struct {
 	Value any
 }
@@ -107,7 +107,7 @@ func (e *PanicError) Error() string {
 	return "panic recovered"
 }
 
-// MetricsMiddleware 收集请求的度量衡.
+// MetricsMiddleware 收集请求指标.
 func MetricsMiddleware(collector MetricsCollector) Middleware {
 	return func(next Handler) Handler {
 		return func(ctx context.Context, req *ChatRequest) (*ChatResponse, error) {
@@ -125,7 +125,7 @@ func MetricsMiddleware(collector MetricsCollector) Middleware {
 	}
 }
 
-// Metrics Collector定义了度量衡收集界面.
+// MetricsCollector 定义指标收集接口.
 type MetricsCollector interface {
 	RecordRequest(model string, duration time.Duration, success bool)
 	RecordTokens(model string, tokens int)

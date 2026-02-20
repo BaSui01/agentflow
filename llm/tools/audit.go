@@ -1,4 +1,4 @@
-// 软件包工具为企业AI代理框架中的工具执行提供了审计记录.
+// Package tools 为企业 AI Agent 框架中的工具执行提供审计日志.
 package tools
 
 import (
@@ -13,7 +13,7 @@ import (
 	"go.uber.org/zap"
 )
 
-// AuditEventType代表审计事件的类型.
+// AuditEventType 表示审计事件的类型.
 type AuditEventType string
 
 const (
@@ -24,7 +24,7 @@ const (
 	AuditEventCostAlert      AuditEventType = "cost_alert"
 )
 
-// Auditry代表单一的审计记录条目.
+// AuditEntry 表示单条审计记录.
 type AuditEntry struct {
 	ID            string            `json:"id"`
 	Timestamp     time.Time         `json:"timestamp"`
@@ -44,22 +44,22 @@ type AuditEntry struct {
 	RequestIP     string            `json:"request_ip,omitempty"`
 }
 
-// AuditLogger定义了审计日志的接口.
+// AuditLogger 定义审计日志的接口.
 type AuditLogger interface {
-	// 日志记录了一个审计条目。
+	// Log 同步记录一条审计条目。
 	Log(ctx context.Context, entry *AuditEntry) error
 
-	// LogAsync同步记录审计条目.
+	// LogAsync 异步记录审计条目.
 	LogAsync(entry *AuditEntry)
 
-	// 查询根据过滤器检索审计条目。
+	// Query 根据过滤器检索审计条目。
 	Query(ctx context.Context, filter *AuditFilter) ([]*AuditEntry, error)
 
-	// 关闭审计日志并冲出待录条目 。
+	// Close 关闭审计日志并刷新待写入条目。
 	Close() error
 }
 
-// AuditFilter定义了查询审计条目的过滤器.
+// AuditFilter 定义查询审计条目的过滤器.
 type AuditFilter struct {
 	AgentID    string         `json:"agent_id,omitempty"`
 	UserID     string         `json:"user_id,omitempty"`
@@ -73,19 +73,19 @@ type AuditFilter struct {
 	Offset     int            `json:"offset,omitempty"`
 }
 
-// 审计后端定义了审计存储后端的接口.
+// AuditBackend 定义审计存储后端的接口.
 type AuditBackend interface {
-	// 写入后端的审计条目 。
+	// Write 将审计条目写入后端。
 	Write(ctx context.Context, entry *AuditEntry) error
 
-	// 查询从后端检索审计条目.
+	// Query 从后端检索审计条目.
 	Query(ctx context.Context, filter *AuditFilter) ([]*AuditEntry, error)
 
-	// 关闭后端 。
+	// Close 关闭后端。
 	Close() error
 }
 
-// 默认AuditLogger是AuditLogger的默认执行.
+// DefaultAuditLogger 是 AuditLogger 的默认实现.
 type DefaultAuditLogger struct {
 	backends     []AuditBackend
 	asyncQueue   chan *AuditEntry
@@ -96,7 +96,7 @@ type DefaultAuditLogger struct {
 	idGenerator  func() string
 }
 
-// 审计LoggerConfig 配置审计日志 。
+// AuditLoggerConfig 配置审计日志。
 type AuditLoggerConfig struct {
 	Backends       []AuditBackend
 	AsyncQueueSize int
@@ -104,7 +104,7 @@ type AuditLoggerConfig struct {
 	IDGenerator    func() string
 }
 
-// NewAuditLogger创建了新的审计日志.
+// NewAuditLogger 创建新的审计日志.
 func NewAuditLogger(cfg *AuditLoggerConfig, logger *zap.Logger) *DefaultAuditLogger {
 	if logger == nil {
 		logger = zap.NewNop()
@@ -127,7 +127,7 @@ func NewAuditLogger(cfg *AuditLoggerConfig, logger *zap.Logger) *DefaultAuditLog
 		idGenerator: cfg.IDGenerator,
 	}
 
-	// 启动同步工作
+	// 启动异步工作协程
 	for i := 0; i < cfg.AsyncWorkers; i++ {
 		al.wg.Add(1)
 		go al.asyncWorker()
@@ -136,7 +136,7 @@ func NewAuditLogger(cfg *AuditLoggerConfig, logger *zap.Logger) *DefaultAuditLog
 	return al
 }
 
-// ayncWorker 同步处理审计条目。
+// asyncWorker 异步处理审计条目。
 func (al *DefaultAuditLogger) asyncWorker() {
 	defer al.wg.Done()
 
@@ -150,7 +150,7 @@ func (al *DefaultAuditLogger) asyncWorker() {
 	}
 }
 
-// 写入 ToBackends 为所有后端写出一个条目 。
+// writeToBackends 将条目写入所有后端。
 func (al *DefaultAuditLogger) writeToBackends(ctx context.Context, entry *AuditEntry) error {
 	var lastErr error
 	for _, backend := range al.backends {
@@ -165,7 +165,7 @@ func (al *DefaultAuditLogger) writeToBackends(ctx context.Context, entry *AuditE
 	return lastErr
 }
 
-// 日志同步记录审计条目。
+// Log 同步记录审计条目。
 func (al *DefaultAuditLogger) Log(ctx context.Context, entry *AuditEntry) error {
 	al.closeMu.Lock()
 	if al.closed {
@@ -184,7 +184,7 @@ func (al *DefaultAuditLogger) Log(ctx context.Context, entry *AuditEntry) error 
 	return al.writeToBackends(ctx, entry)
 }
 
-// LogAsync同步记录审计条目.
+// LogAsync 异步记录审计条目.
 func (al *DefaultAuditLogger) LogAsync(entry *AuditEntry) {
 	al.closeMu.Lock()
 	if al.closed {
@@ -211,7 +211,7 @@ func (al *DefaultAuditLogger) LogAsync(entry *AuditEntry) {
 	}
 }
 
-// 查询根据过滤器检索审计条目。
+// Query 根据过滤器检索审计条目。
 func (al *DefaultAuditLogger) Query(ctx context.Context, filter *AuditFilter) ([]*AuditEntry, error) {
 	if len(al.backends) == 0 {
 		return nil, fmt.Errorf("no backends configured")
@@ -221,7 +221,7 @@ func (al *DefaultAuditLogger) Query(ctx context.Context, filter *AuditFilter) ([
 	return al.backends[0].Query(ctx, filter)
 }
 
-// 关闭审计日志并冲出待录条目 。
+// Close 关闭审计日志并刷新待写入条目。
 func (al *DefaultAuditLogger) Close() error {
 	al.closeMu.Lock()
 	if al.closed {
@@ -231,7 +231,7 @@ func (al *DefaultAuditLogger) Close() error {
 	al.closed = true
 	al.closeMu.Unlock()
 
-	// 关闭同步队列并等待工人完成
+	// 关闭异步队列并等待工作协程完成
 	close(al.asyncQueue)
 	al.wg.Wait()
 
@@ -247,16 +247,16 @@ func (al *DefaultAuditLogger) Close() error {
 	return lastErr
 }
 
-// QQ 内存后端QQ
+// ====== 内存后端 ======
 
-// MemoryAuditBackend将审计条目存储于内存.
+// MemoryAuditBackend 将审计条目存储在内存中.
 type MemoryAuditBackend struct {
 	entries  []*AuditEntry
 	maxSize  int
 	mu       sync.RWMutex
 }
 
-// New Memory AuditBackend创建了新的内存审计后端.
+// NewMemoryAuditBackend 创建新的内存审计后端.
 func NewMemoryAuditBackend(maxSize int) *MemoryAuditBackend {
 	if maxSize <= 0 {
 		maxSize = 100000
@@ -267,12 +267,12 @@ func NewMemoryAuditBackend(maxSize int) *MemoryAuditBackend {
 	}
 }
 
-// 写一个审计条目到内存 。
+// Write 将审计条目写入内存。
 func (m *MemoryAuditBackend) Write(ctx context.Context, entry *AuditEntry) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	// 如果具备能力, 将保留最老条目
+	// 如果达到容量上限，淘汰最旧的条目
 	if len(m.entries) >= m.maxSize {
 		// 删除最老的10%
 		removeCount := m.maxSize / 10
@@ -286,7 +286,7 @@ func (m *MemoryAuditBackend) Write(ctx context.Context, entry *AuditEntry) error
 	return nil
 }
 
-// 查询从内存中检索审计条目 。
+// Query 从内存中检索审计条目。
 func (m *MemoryAuditBackend) Query(ctx context.Context, filter *AuditFilter) ([]*AuditEntry, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
@@ -314,7 +314,7 @@ func (m *MemoryAuditBackend) Query(ctx context.Context, filter *AuditFilter) ([]
 	return results, nil
 }
 
-// 匹配过滤器。
+// matchesFilter 检查条目是否匹配过滤器。
 func (m *MemoryAuditBackend) matchesFilter(entry *AuditEntry, filter *AuditFilter) bool {
 	if filter.AgentID != "" && entry.AgentID != filter.AgentID {
 		return false
@@ -343,14 +343,14 @@ func (m *MemoryAuditBackend) matchesFilter(entry *AuditEntry, filter *AuditFilte
 	return true
 }
 
-// 关闭内存后端 。
+// Close 关闭内存后端。
 func (m *MemoryAuditBackend) Close() error {
 	return nil
 }
 
-// QQ 文件后端 QQ
+// ====== 文件后端 ======
 
-// FileAuditBackend将审计条目存储在文件中.
+// FileAuditBackend 将审计条目存储在文件中.
 type FileAuditBackend struct {
 	dir         string
 	currentFile *os.File
@@ -360,13 +360,13 @@ type FileAuditBackend struct {
 	logger      *zap.Logger
 }
 
-// FileAuditBackendConfig配置文件审计后端.
+// FileAuditBackendConfig 配置文件审计后端.
 type FileAuditBackendConfig struct {
 	Directory   string
 	MaxFileSize int64 // Max file size in bytes before rotation
 }
 
-// NewFileAuditBackend创建了一个新的文件审计后端.
+// NewFileAuditBackend 创建新的文件审计后端.
 func NewFileAuditBackend(cfg *FileAuditBackendConfig, logger *zap.Logger) (*FileAuditBackend, error) {
 	if logger == nil {
 		logger = zap.NewNop()
@@ -391,12 +391,12 @@ func NewFileAuditBackend(cfg *FileAuditBackendConfig, logger *zap.Logger) (*File
 	}, nil
 }
 
-// 写入文件的审计条目 。
+// Write 将审计条目写入文件。
 func (f *FileAuditBackend) Write(ctx context.Context, entry *AuditEntry) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
-	// 检查是否需要旋转文件
+	// 检查是否需要轮转文件
 	currentDate := entry.Timestamp.Format("2006-01-02")
 	if f.currentFile == nil || f.currentDate != currentDate {
 		if err := f.rotateFile(currentDate); err != nil {
@@ -427,7 +427,7 @@ func (f *FileAuditBackend) Write(ctx context.Context, entry *AuditEntry) error {
 	return nil
 }
 
-// 旋转文件旋转为新文件 。
+// rotateFile 轮转到新文件。
 func (f *FileAuditBackend) rotateFile(date string) error {
 	// 关闭当前文件
 	if f.currentFile != nil {
@@ -448,10 +448,10 @@ func (f *FileAuditBackend) rotateFile(date string) error {
 	return nil
 }
 
-// 查询从文件中检索审计条目(执行有限).
+// Query 从文件中检索审计条目（功能有限）.
 func (f *FileAuditBackend) Query(ctx context.Context, filter *AuditFilter) ([]*AuditEntry, error) {
-	// 说明: 这是一个只读取当前文件的简化执行
-	// 生产实施需要根据过滤器从多个文件中读取
+	// 注意: 这是一个仅读取当前文件的简化实现
+	// 生产环境需要根据过滤器从多个文件中读取
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
@@ -459,16 +459,16 @@ func (f *FileAuditBackend) Query(ctx context.Context, filter *AuditFilter) ([]*A
 		return []*AuditEntry{}, nil
 	}
 
-	// 为了充分执行,你们将:
+	// 完整实现需要:
 	// 1. 列出目录中的所有文件
-	// 2. 基于日期范围的过滤文件
-	// 3. 阅读并分析每个文件
-	// 4. 应用过滤并返回结果
+	// 2. 根据日期范围过滤文件
+	// 3. 读取并解析每个文件
+	// 4. 应用过滤器并返回结果
 
 	return []*AuditEntry{}, fmt.Errorf("file query not fully implemented; use memory backend for queries")
 }
 
-// 关闭文件后端 。
+// Close 关闭文件后端。
 func (f *FileAuditBackend) Close() error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -481,23 +481,23 @@ func (f *FileAuditBackend) Close() error {
 	return nil
 }
 
-// QQ 数据库后端接口QQ
+// ====== 数据库后端接口 ======
 
-// DatabaseAuditBackend定义了数据库审计后端的接口.
-// 执行可以使用PostgreSQL,MySQL,MongoDB等.
+// DatabaseAuditBackend 定义数据库审计后端的接口.
+// 实现可以使用 PostgreSQL、MySQL、MongoDB 等.
 type DatabaseAuditBackend interface {
 	AuditBackend
-	// 迁移创建或更新数据库计划。
+	// Migrate 创建或更新数据库表结构。
 	Migrate(ctx context.Context) error
 }
 
-// 审计中间软件
+// ====== 审计中间件 ======
 
-// AuditleMiddleware创建了一个记录工具执行的中间软件.
+// AuditMiddleware 创建记录工具执行的中间件.
 func AuditMiddleware(auditLogger AuditLogger) func(ToolFunc) ToolFunc {
 	return func(next ToolFunc) ToolFunc {
 		return func(ctx context.Context, args json.RawMessage) (json.RawMessage, error) {
-			// 摘录上下文信息
+			// 提取上下文信息
 			permCtx, _ := GetPermissionContext(ctx)
 
 			entry := &AuditEntry{
@@ -528,7 +528,7 @@ func AuditMiddleware(auditLogger AuditLogger) func(ToolFunc) ToolFunc {
 				entry.Result = result
 			}
 
-			// 同步日志
+			// 异步记录日志
 			auditLogger.LogAsync(entry)
 
 			return result, err
@@ -536,7 +536,7 @@ func AuditMiddleware(auditLogger AuditLogger) func(ToolFunc) ToolFunc {
 	}
 }
 
-// 帮助函数
+// ====== 辅助函数 ======
 
 var auditIDCounter uint64
 var auditIDMu sync.Mutex
@@ -548,7 +548,7 @@ func generateAuditID() string {
 	return fmt.Sprintf("audit_%d_%d", time.Now().UnixNano(), auditIDCounter)
 }
 
-// LogToolCall是登录工具调用的一种便利功能.
+// LogToolCall 是记录工具调用的便捷函数.
 func LogToolCall(auditLogger AuditLogger, agentID, userID, toolName string, args json.RawMessage) {
 	auditLogger.LogAsync(&AuditEntry{
 		EventType: AuditEventToolCall,
@@ -559,7 +559,7 @@ func LogToolCall(auditLogger AuditLogger, agentID, userID, toolName string, args
 	})
 }
 
-// LogToolResult是记录工具结果的便利功能.
+// LogToolResult 是记录工具结果的便捷函数.
 func LogToolResult(auditLogger AuditLogger, agentID, userID, toolName string, result json.RawMessage, err error, duration time.Duration) {
 	entry := &AuditEntry{
 		EventType: AuditEventToolResult,
@@ -575,7 +575,7 @@ func LogToolResult(auditLogger AuditLogger, agentID, userID, toolName string, re
 	auditLogger.LogAsync(entry)
 }
 
-// LogPermissionCheck是登录权限检查的便利功能.
+// LogPermissionCheck 是记录权限检查的便捷函数.
 func LogPermissionCheck(auditLogger AuditLogger, permCtx *PermissionContext, decision PermissionDecision, reason string) {
 	auditLogger.LogAsync(&AuditEntry{
 		EventType: AuditEventPermissionCheck,
@@ -590,7 +590,7 @@ func LogPermissionCheck(auditLogger AuditLogger, permCtx *PermissionContext, dec
 	})
 }
 
-// LogRateLimitHit是记录速率限制命中的便利功能.
+// LogRateLimitHit 是记录速率限制触发的便捷函数.
 func LogRateLimitHit(auditLogger AuditLogger, agentID, userID, toolName, limitType string) {
 	auditLogger.LogAsync(&AuditEntry{
 		EventType: AuditEventRateLimitHit,
@@ -601,7 +601,7 @@ func LogRateLimitHit(auditLogger AuditLogger, agentID, userID, toolName, limitTy
 	})
 }
 
-// LogCostAlert是登录成本提示的便利功能.
+// LogCostAlert 是记录成本告警的便捷函数.
 func LogCostAlert(auditLogger AuditLogger, agentID, userID string, cost float64, alertType string) {
 	auditLogger.LogAsync(&AuditEntry{
 		EventType: AuditEventCostAlert,

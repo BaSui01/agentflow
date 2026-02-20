@@ -16,8 +16,8 @@ type ReActConfig struct {
 	StopOnError   bool // Stop on tool execution error
 }
 
-// ReActExecutor执行ReAct(重复和代理)循环.
-// 自动处理"LLM - > Tool - > LLM"多回合对话.
+// ReActExecutor 执行 ReAct（推理与行动）循环.
+// 自动处理 LLM -> Tool -> LLM 多轮对话.
 type ReActExecutor struct {
 	provider     llm.Provider
 	toolExecutor ToolExecutor
@@ -25,7 +25,7 @@ type ReActExecutor struct {
 	config       ReActConfig
 }
 
-// NewReActExecutor创建了ReAct执行器.
+// NewReActExecutor 创建 ReAct 执行器.
 func NewReActExecutor(provider llm.Provider, toolExecutor ToolExecutor, config ReActConfig, logger *zap.Logger) *ReActExecutor {
 	if logger == nil {
 		logger = zap.NewNop()
@@ -41,7 +41,7 @@ func NewReActExecutor(provider llm.Provider, toolExecutor ToolExecutor, config R
 	}
 }
 
-// 执行运行ReAct回路,返回最终响应和所有步骤.
+// Execute 运行 ReAct 循环，返回最终响应和所有步骤.
 func (r *ReActExecutor) Execute(ctx context.Context, req *llm.ChatRequest) (*llm.ChatResponse, []ReActStep, error) {
 	steps := make([]ReActStep, 0)
 	messages := append([]llm.Message{}, req.Messages...)
@@ -105,7 +105,7 @@ func (r *ReActExecutor) Execute(ctx context.Context, req *llm.ChatRequest) (*llm
 	return nil, steps, fmt.Errorf("max iterations reached (%d)", r.config.MaxIterations)
 }
 
-// 执行With Trace 执行 ReAct 循环并返回全部跟踪 。
+// ExecuteWithTrace 执行 ReAct 循环并返回完整跟踪信息.
 func (r *ReActExecutor) ExecuteWithTrace(ctx context.Context, req *llm.ChatRequest) (*llm.ChatResponse, *ReActTrace, error) {
 	resp, steps, err := r.Execute(ctx, req)
 
@@ -131,7 +131,7 @@ func (r *ReActExecutor) ExecuteWithTrace(ctx context.Context, req *llm.ChatReque
 	return resp, trace, err
 }
 
-// ReActStep代表了ReAct环路(Thought → Action → Observation)的一步.
+// ReActStep 表示 ReAct 循环（Thought -> Action -> Observation）的一步.
 type ReActStep struct {
 	StepNumber   int            `json:"step_number"`
 	Thought      string         `json:"thought,omitempty"`
@@ -141,7 +141,7 @@ type ReActStep struct {
 	TokensUsed   int            `json:"tokens_used,omitempty"`
 }
 
-// ReActTrace代表完整的ReAct执行追踪.
+// ReActTrace 表示完整的 ReAct 执行追踪.
 type ReActTrace struct {
 	TraceID      string      `json:"trace_id"`
 	Steps        []ReActStep `json:"steps"`
@@ -152,13 +152,13 @@ type ReActTrace struct {
 	ErrorMessage string      `json:"error_message,omitempty"`
 }
 
-// LLMCallInfo记录了LLM调用细节(用于后向相容性).
+// LLMCallInfo 记录 LLM 调用详情（用于向后兼容）.
 type LLMCallInfo struct {
 	Request  llm.ChatRequest  `json:"request"`
 	Response llm.ChatResponse `json:"response"`
 }
 
-// 执行 Stream 执行流式 ReAct 循环 。
+// ExecuteStream 执行流式 ReAct 循环.
 func (r *ReActExecutor) ExecuteStream(ctx context.Context, req *llm.ChatRequest) (<-chan ReActStreamEvent, error) {
 	eventCh := make(chan ReActStreamEvent)
 
@@ -334,7 +334,7 @@ func (r *ReActExecutor) ExecuteStream(ctx context.Context, req *llm.ChatRequest)
 	return eventCh, nil
 }
 
-// ReActStreamEvent 代表了流线性ReAct循环事件.
+// ReActStreamEvent 表示流式 ReAct 循环事件.
 type ReActStreamEvent struct {
 	Type          string            `json:"type"`
 	Iteration     int               `json:"iteration,omitempty"`
@@ -345,7 +345,7 @@ type ReActStreamEvent struct {
 	Error         string            `json:"error,omitempty"`
 }
 
-// ToMessage 将 ToolResult 转换为 LLM 信件 。
+// ToMessage 将 ToolResult 转换为 LLM 消息.
 func (tr ToolResult) ToMessage() llm.Message {
 	msg := llm.Message{
 		Role:       llm.RoleTool,
@@ -360,7 +360,7 @@ func (tr ToolResult) ToMessage() llm.Message {
 	return msg
 }
 
-// ToJSON将工具Result序列化为JSON.
+// ToJSON 将 ToolResult 序列化为 JSON.
 func (tr ToolResult) ToJSON() (json.RawMessage, error) {
 	return json.Marshal(tr)
 }

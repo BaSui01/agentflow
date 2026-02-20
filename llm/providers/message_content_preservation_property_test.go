@@ -8,13 +8,13 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-// 特性:多提供者支持,财产 23:信件内容保存
+// 特性:多提供者支持,属性 23:消息内容保存
 // ** 变动情况:要求12.5、12.6、12.7**
 //
-// 这一财产测试对任何供应商和任何商家进行验证。 信件为
+// 这一属性测试对任何提供者和任何商家进行验证。 消息为
 // 内容、名称、工具呼叫或工具CallID字段,提供者应当保留
 // 转换到提供者格式时的所有非空字段。
-// 通过对所有供应商进行全面测试,实现至少100次重复。
+// 通过对所有提供者进行全面测试,实现至少100次重复。
 
 // 测试Property23  内容保存测试
 func TestProperty23_MessageContentPreservation(t *testing.T) {
@@ -38,7 +38,7 @@ func TestProperty23_MessageContentPreservation(t *testing.T) {
 
 	roles := []llm.Role{llm.RoleSystem, llm.RoleUser, llm.RoleAssistant}
 
-	// 生成测试案例:5个供应商 * 10个内容变化 * 3个角色=150个案例
+	// 生成测试用例:5个提供者 * 10个内容变化 * 3个角色=150个用例
 	testCount := 0
 	for _, provider := range providers {
 		for _, cv := range contentVariations {
@@ -398,7 +398,7 @@ type miniMaxMessageFormat struct {
 	Name    string `json:"name,omitempty"`
 }
 
-// 转换 Message OpenAIFormat 转换单个 llm。 信件到 OpenAI 格式
+// 转换 Message OpenAIFormat 转换单个 llm。 消息到 OpenAI 格式
 func convertMessageOpenAIFormat(msg llm.Message) openAIMessageFormat {
 	converted := openAIMessageFormat{
 		Role:       string(msg.Role),
@@ -424,7 +424,7 @@ func convertMessageOpenAIFormat(msg llm.Message) openAIMessageFormat {
 	return converted
 }
 
-// 转换Messages OpenAIFormat 转换多个 llm 。 信件到 OpenAI 格式
+// 转换Messages OpenAIFormat 转换多个 llm 。 消息到 OpenAI 格式
 func convertMessagesOpenAIFormat(msgs []llm.Message) []openAIMessageFormat {
 	out := make([]openAIMessageFormat, 0, len(msgs))
 	for _, m := range msgs {
@@ -433,7 +433,7 @@ func convertMessagesOpenAIFormat(msgs []llm.Message) []openAIMessageFormat {
 	return out
 }
 
-// 转换 MessageMiniMax Format 转换单个 llm 。 信件到 MiniMax 格式
+// 转换 MessageMiniMax Format 转换单个 llm 。 消息到 MiniMax 格式
 func convertMessageMiniMaxFormat(msg llm.Message) miniMaxMessageFormat {
 	converted := miniMaxMessageFormat{
 		Role:    string(msg.Role),
@@ -441,7 +441,7 @@ func convertMessageMiniMaxFormat(msg llm.Message) miniMaxMessageFormat {
 		Name:    msg.Name,
 	}
 
-	// 如果信件有工具调用, 请将其格式化为 XML
+	// 如果消息有工具调用, 请将其格式化为 XML
 	if len(msg.ToolCalls) > 0 {
 		toolCallsXML := "<tool_calls>\n"
 		for _, tc := range msg.ToolCalls {
@@ -458,7 +458,7 @@ func convertMessageMiniMaxFormat(msg llm.Message) miniMaxMessageFormat {
 	return converted
 }
 
-// 转换MessagesMiniMaxFormat 转换多个 llm. 信件到 MiniMax 格式
+// 转换MessagesMiniMaxFormat 转换多个 llm. 消息到 MiniMax 格式
 func convertMessagesMiniMaxFormat(msgs []llm.Message) []miniMaxMessageFormat {
 	out := make([]miniMaxMessageFormat, 0, len(msgs))
 	for _, m := range msgs {

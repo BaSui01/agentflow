@@ -19,7 +19,7 @@ type OpenAISTTProvider struct {
 	client *http.Client
 }
 
-// NewOpenAISTTProvider创建了新的OpenAI STT供应商.
+// NewOpenAISTTProvider 创建新的 OpenAI STT 提供者.
 func NewOpenAISTTProvider(cfg OpenAISTTConfig) *OpenAISTTProvider {
 	if cfg.BaseURL == "" {
 		cfg.BaseURL = "https://api.openai.com"

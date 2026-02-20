@@ -11,7 +11,7 @@ import (
 )
 
 // =============================================================================
-// XQ 图像生成助手
+// 图像生成助手
 // =============================================================================
 
 // GenerateImageOpenAICompat 通用的 OpenAI 兼容图像生成函数
@@ -103,7 +103,7 @@ func GenerateVideoOpenAICompat(ctx context.Context, client *http.Client, baseURL
 }
 
 // =============================================================================
-// QQ 音频生成助手
+// 音频生成助手
 // =============================================================================
 
 // GenerateAudioOpenAICompat 通用的 OpenAI 兼容音频生成函数
@@ -134,19 +134,7 @@ func GenerateAudioOpenAICompat(ctx context.Context, client *http.Client, baseURL
 		return nil, MapHTTPError(resp.StatusCode, msg, providerName)
 	}
 
-	// 读取音频数据
-	audioData, err := http.DefaultClient.Do(httpReq)
-	if err != nil {
-		return nil, &llm.Error{
-			Code:       llm.ErrUpstreamError,
-			Message:    err.Error(),
-			HTTPStatus: http.StatusBadGateway,
-			Retryable:  true,
-			Provider:   providerName,
-		}
-	}
-	defer audioData.Body.Close()
-
+	// 读取音频数据（直接从已有的 resp.Body 读取）
 	var buf bytes.Buffer
 	if _, err := buf.ReadFrom(resp.Body); err != nil {
 		return nil, &llm.Error{
@@ -164,7 +152,7 @@ func GenerateAudioOpenAICompat(ctx context.Context, client *http.Client, baseURL
 }
 
 // =============================================================================
-// * 嵌入帮助者
+// 嵌入助手
 // =============================================================================
 
 // CreateEmbeddingOpenAICompat 通用的 OpenAI 兼容 Embedding 函数
@@ -210,7 +198,7 @@ func CreateEmbeddingOpenAICompat(ctx context.Context, client *http.Client, baseU
 }
 
 // =============================================================================
-// 未支持的帮助者
+// 不支持功能助手
 // =============================================================================
 
 // NotSupportedError 返回不支持的错误

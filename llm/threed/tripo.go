@@ -17,7 +17,7 @@ type TripoProvider struct {
 	client *http.Client
 }
 
-// NewTripoProvider创建了新的Tripo3D供应商.
+// NewTripoProvider 创建新的 Tripo3D 提供者.
 func NewTripoProvider(cfg TripoConfig) *TripoProvider {
 	if cfg.BaseURL == "" {
 		cfg.BaseURL = "https://api.tripo3d.ai/v2"

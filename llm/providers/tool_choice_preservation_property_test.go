@@ -8,12 +8,12 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-// 特性:多提供者支持,财产 18:工具选择保存
+// 特性:多提供者支持,属性 18:工具选择保存
 // ** 参数:要求11.2**
 //
 // 这个属性测试验证了对于任何提供商和任何使用非空工具选择字符串的聊天请求,
 // 提供者在 API 请求中包含具有相同值的工具 选择字段。
-// 通过综合测试案例实现至少100次重复。
+// 通过综合测试用例实现至少100次重复。
 func TestProperty18_ToolChoicePreservation(t *testing.T) {
 	testCases := []struct {
 		name        string
@@ -228,7 +228,7 @@ func TestProperty18_ToolChoicePreservation(t *testing.T) {
 		},
 	}
 
-	// 通过对所有提供商进行每个案例的测试,将测试案例扩展至100+重复
+	// 通过对所有提供商进行每个用例的测试,将测试用例扩展至100+重复
 	providers := []string{"grok", "qwen", "deepseek", "glm", "minimax"}
 	expandedTestCases := make([]struct {
 		name        string
@@ -238,7 +238,7 @@ func TestProperty18_ToolChoicePreservation(t *testing.T) {
 		description string
 	}, 0, len(testCases)*len(providers))
 
-	// 添加原始测试案例
+	// 添加原始测试用例
 	expandedTestCases = append(expandedTestCases, testCases...)
 
 	// 添加不同提供者的变量
@@ -259,7 +259,7 @@ func TestProperty18_ToolChoicePreservation(t *testing.T) {
 			// 根据提供者类型测试转换
 			switch tc.provider {
 			case "grok", "qwen", "deepseek", "glm":
-				// OpenAI 兼容供应商
+				// OpenAI 兼容提供者
 				testOpenAICompatibleToolChoice(t, tc.toolChoice, tc.provider, tc.requirement, tc.description)
 			case "minimax":
 				// MiniMax 具有自定义格式,但仍应当保存工具  选择
@@ -270,12 +270,12 @@ func TestProperty18_ToolChoicePreservation(t *testing.T) {
 		})
 	}
 
-	// 检查我们至少有100个测试病例
+	// 检查我们至少有100个测试用例
 	assert.GreaterOrEqual(t, len(expandedTestCases), 100,
 		"Property test should have minimum 100 iterations")
 }
 
-// 测试 OpenAI 兼容 ToolChoice 测试工具选择保存 OpenAI 兼容供应商
+// 测试 OpenAI 兼容 ToolChoice 测试工具选择保存 OpenAI 兼容提供者
 func testOpenAICompatibleToolChoice(t *testing.T, toolChoice, provider, requirement, description string) {
 	// 用工具选择创建模拟请求
 	req := &llm.ChatRequest{

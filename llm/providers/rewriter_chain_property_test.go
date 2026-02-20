@@ -14,7 +14,7 @@ import (
 //
 // 此属性测试验证 ReriterChan 既适用于补全( ) 方法, 也适用于 Stream( ) 方法
 // 而"空工具清除器"则去除"空工具"阵列.
-// 通过综合测试案例实现至少100次重复。
+// 通过综合测试用例实现至少100次重复。
 func TestProperty8_RewriterChainApplication(t *testing.T) {
 	testCases := []struct {
 		name               string
@@ -102,7 +102,7 @@ func TestProperty8_RewriterChainApplication(t *testing.T) {
 			description:        "EmptyToolsCleaner should preserve tools even without tool_choice",
 		},
 
-		// 额外测试案例达到100+重复
+		// 额外测试用例达到100+重复
 		// 使用空工具选择各种工具( C)
 		{
 			name:               "Empty tools with tool_choice 'none'",
@@ -197,7 +197,7 @@ func TestProperty8_RewriterChainApplication(t *testing.T) {
 		},
 	}
 
-	// 重复测试案例,可有变化,达到100+重复
+	// 重复测试用例,可有变化,达到100+重复
 	// 我们用不同的环境来测试每个情景
 	expandedTestCases := make([]struct {
 		name               string
@@ -209,7 +209,7 @@ func TestProperty8_RewriterChainApplication(t *testing.T) {
 		description        string
 	}, 0, len(testCases)*8)
 
-	// 添加原始测试案例
+	// 添加原始测试用例
 	expandedTestCases = append(expandedTestCases, testCases...)
 
 	// 添加不同提供者的变量
@@ -269,7 +269,7 @@ func TestProperty8_RewriterChainApplication(t *testing.T) {
 		})
 	}
 
-	// 检查我们至少有100个测试病例
+	// 检查我们至少有100个测试用例
 	assert.GreaterOrEqual(t, len(expandedTestCases), 100,
 		"Property test should have minimum 100 iterations")
 }

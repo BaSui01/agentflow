@@ -11,16 +11,16 @@ import (
 	"go.uber.org/zap"
 )
 
-// Llama Provider通过第三方OpenAI兼容API执行Meta Llama Productor.
-// 支持共同AI,再版和OpenRouter.
+// LlamaProvider 通过第三方 OpenAI 兼容 API 实现 Meta Llama 提供者.
+// 支持 Together AI、Replicate 和 OpenRouter.
 type LlamaProvider struct {
 	*openai.OpenAIProvider
 	cfg providers.LlamaConfig
 }
 
-// NewLlama Provider创建了一个新的Llama供应商实例.
+// NewLlamaProvider 创建新的 Llama 提供者实例.
 func NewLlamaProvider(cfg providers.LlamaConfig, logger *zap.Logger) *LlamaProvider {
-	// 如果不提供默认提供者和 BaseURL 设置
+	// 如果未提供则设置默认提供者和 BaseURL
 	if cfg.Provider == "" {
 		cfg.Provider = "together" // Default to Together AI
 	}
@@ -71,7 +71,7 @@ func (p *LlamaProvider) HealthCheck(ctx context.Context) (*llm.HealthStatus, err
 
 func (p *LlamaProvider) SupportsNativeFunctionCalling() bool { return true }
 
-// 完成超过 OpenAI 的补全来修正提供方字段 。
+// Completion 覆盖 OpenAI 的补全以修正提供者字段.
 func (p *LlamaProvider) Completion(ctx context.Context, req *llm.ChatRequest) (*llm.ChatResponse, error) {
 	resp, err := p.OpenAIProvider.Completion(ctx, req)
 	if err != nil {
@@ -85,7 +85,7 @@ func (p *LlamaProvider) Completion(ctx context.Context, req *llm.ChatRequest) (*
 	return resp, nil
 }
 
-// Cream 覆盖 OpenAI 的 Stream 来修正每个块上的提供方字段 。
+// Stream 覆盖 OpenAI 的 Stream 以修正每个块上的提供者字段.
 func (p *LlamaProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-chan llm.StreamChunk, error) {
 	ch, err := p.OpenAIProvider.Stream(ctx, req)
 	if err != nil {

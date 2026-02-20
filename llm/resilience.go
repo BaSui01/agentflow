@@ -150,8 +150,8 @@ type ResilientConfig struct {
 	IdempotencyTTL    time.Duration
 }
 
-// NewReselient ProviderSimple创建了具有弹性的提供者并默认配置.
-// 这是简单使用案件的便利功能。
+// NewResilientProviderSimple 使用默认配置创建弹性 Provider.
+// 这是简单用例的便捷函数。
 func NewResilientProviderSimple(provider Provider, _ interface{}, logger *zap.Logger) *ResilientProvider {
 	return NewResilientProvider(provider, nil, logger)
 }

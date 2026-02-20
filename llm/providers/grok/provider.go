@@ -17,8 +17,8 @@ import (
 	"go.uber.org/zap"
 )
 
-// Grok Provider 执行 XAI Grok LLM 提供者.
-// Grok使用OpenAI相容的API格式,允许OpenAI提供商的代码再用.
+// GrokProvider 实现 xAI Grok LLM 提供者.
+// Grok 使用 OpenAI 兼容的 API 格式，可复用 OpenAI 提供者的代码.
 type GrokProvider struct {
 	cfg           providers.GrokConfig
 	client        *http.Client
@@ -26,7 +26,7 @@ type GrokProvider struct {
 	rewriterChain *middleware.RewriterChain
 }
 
-// NewGrok Provider创建了一个新的 Grok 提供者实例.
+// NewGrokProvider 创建新的 Grok 提供者实例.
 func NewGrokProvider(cfg providers.GrokConfig, logger *zap.Logger) *GrokProvider {
 	timeout := cfg.Timeout
 	if timeout == 0 {

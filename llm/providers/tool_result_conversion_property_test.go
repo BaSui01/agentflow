@@ -8,12 +8,12 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-// 特性: 多提供者支持, 属性 20: 工具结果信件转换
+// 特性: 多提供者支持, 属性 20: 工具结果消息转换
 // ** 参数:要求11.5**
 //
-// 这一财产测试对任何供应商和任何商家进行验证。 带角色的讯息= RoleTool,
+// 这一属性测试对任何提供者和任何商家进行验证。 带角色的讯息= RoleTool,
 // 提供者将其转换为特定工具的结果格式,包括工具CallID参考。
-// 通过综合测试案例实现至少100次重复。
+// 通过综合测试用例实现至少100次重复。
 func TestProperty20_ToolResultMessageConversion(t *testing.T) {
 	testCases := []struct {
 		name        string
@@ -358,7 +358,7 @@ func TestProperty20_ToolResultMessageConversion(t *testing.T) {
 		},
 	}
 
-	// 通过对所有提供商进行每个案例的测试,将测试案例扩展至100+重复
+	// 通过对所有提供商进行每个用例的测试,将测试用例扩展至100+重复
 	providers := []string{"openai", "grok", "qwen", "deepseek", "glm"}
 	expandedTestCases := make([]struct {
 		name        string
@@ -368,7 +368,7 @@ func TestProperty20_ToolResultMessageConversion(t *testing.T) {
 		description string
 	}, 0, len(testCases)*len(providers))
 
-	// 添加原始测试案例
+	// 添加原始测试用例
 	expandedTestCases = append(expandedTestCases, testCases...)
 
 	// 添加不同提供者的变量
@@ -389,7 +389,7 @@ func TestProperty20_ToolResultMessageConversion(t *testing.T) {
 			// 根据提供者类型测试转换
 			switch tc.provider {
 			case "openai", "grok", "qwen", "deepseek", "glm":
-				// OpenAI 兼容供应商
+				// OpenAI 兼容提供者
 				testOpenAICompatibleToolResultConversion(t, tc.message, tc.provider, tc.requirement, tc.description)
 			default:
 				t.Fatalf("Unknown provider: %s", tc.provider)
@@ -397,12 +397,12 @@ func TestProperty20_ToolResultMessageConversion(t *testing.T) {
 		})
 	}
 
-	// 检查我们至少有100个测试病例
+	// 检查我们至少有100个测试用例
 	assert.GreaterOrEqual(t, len(expandedTestCases), 100,
 		"Property test should have minimum 100 iterations")
 }
 
-// 测试 OpenAI 兼容 ToolResult 转换测试工具结果转换 OpenAI 兼容供应商
+// 测试 OpenAI 兼容 ToolResult 转换测试工具结果转换 OpenAI 兼容提供者
 func testOpenAICompatibleToolResultConversion(t *testing.T, msg llm.Message, provider, requirement, description string) {
 	// 使用光谱之后的模拟函数转换
 	converted := mockConvertToolResultOpenAI(msg)

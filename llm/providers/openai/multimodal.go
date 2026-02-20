@@ -15,10 +15,12 @@ import (
 )
 
 // =============================================================================
-// QQ 图像生成
+// 图像生成
 // =============================================================================
 
-// 生成图像会使用 DALL- E 从文本提示生成图像 。
+// GenerateImage 使用 DALL·E / gpt-image-1 从文本提示生成图像.
+// Endpoint: POST /v1/images/generations
+// Models: dall-e-3, dall-e-2, gpt-image-1
 func (p *OpenAIProvider) GenerateImage(ctx context.Context, req *llm.ImageGenerationRequest) (*llm.ImageGenerationResponse, error) {
 	endpoint := fmt.Sprintf("%s/v1/images/generations", strings.TrimRight(p.cfg.BaseURL, "/"))
 
@@ -60,7 +62,7 @@ func (p *OpenAIProvider) GenerateImage(ctx context.Context, req *llm.ImageGenera
 	return &imageResp, nil
 }
 
-// GenerateVideo 不被 OpenAI 支持.
+// GenerateVideo OpenAI 不支持视频生成.
 func (p *OpenAIProvider) GenerateVideo(ctx context.Context, req *llm.VideoGenerationRequest) (*llm.VideoGenerationResponse, error) {
 	return nil, &llm.Error{
 		Code:       llm.ErrInvalidRequest,
@@ -71,10 +73,12 @@ func (p *OpenAIProvider) GenerateVideo(ctx context.Context, req *llm.VideoGenera
 }
 
 // =============================================================================
-// QQ 音频生成和转录
+// 音频生成和转录
 // =============================================================================
 
-// 生成Audio通过TTS从文本中生成音频/语音.
+// GenerateAudio 使用 TTS 从文本生成音频/语音.
+// Endpoint: POST /v1/audio/speech
+// Models: tts-1, tts-1-hd, gpt-4o-mini-tts
 func (p *OpenAIProvider) GenerateAudio(ctx context.Context, req *llm.AudioGenerationRequest) (*llm.AudioGenerationResponse, error) {
 	endpoint := fmt.Sprintf("%s/v1/audio/speech", strings.TrimRight(p.cfg.BaseURL, "/"))
 
@@ -119,7 +123,9 @@ func (p *OpenAIProvider) GenerateAudio(ctx context.Context, req *llm.AudioGenera
 	}, nil
 }
 
-// 将音频转换为文字使用Whisper.
+// TranscribeAudio 使用 Whisper / gpt-4o-transcribe 将音频转为文字.
+// Endpoint: POST /v1/audio/transcriptions
+// Models: whisper-1, gpt-4o-transcribe, gpt-4o-mini-transcribe
 func (p *OpenAIProvider) TranscribeAudio(ctx context.Context, req *llm.AudioTranscriptionRequest) (*llm.AudioTranscriptionResponse, error) {
 	endpoint := fmt.Sprintf("%s/v1/audio/transcriptions", strings.TrimRight(p.cfg.BaseURL, "/"))
 
@@ -192,10 +198,12 @@ func (p *OpenAIProvider) TranscribeAudio(ctx context.Context, req *llm.AudioTran
 }
 
 // =============================================================================
-// * 嵌入物
+// 嵌入
 // =============================================================================
 
 // CreateEmbedding 为给定输入创建嵌入.
+// Endpoint: POST /v1/embeddings
+// Models: text-embedding-3-small, text-embedding-3-large, text-embedding-ada-002
 func (p *OpenAIProvider) CreateEmbedding(ctx context.Context, req *llm.EmbeddingRequest) (*llm.EmbeddingResponse, error) {
 	endpoint := fmt.Sprintf("%s/v1/embeddings", strings.TrimRight(p.cfg.BaseURL, "/"))
 
@@ -238,10 +246,11 @@ func (p *OpenAIProvider) CreateEmbedding(ctx context.Context, req *llm.Embedding
 }
 
 // =============================================================================
-// {\fn黑体\fs22\bord1\shad0\3aHBE\4aH00\fscx67\fscy66\2cHFFFFFF\3cH808080}好图宁 {\fn黑体\fs22\bord1\shad0\3aHBE\4aH00\fscx67\fscy66\2cHFFFFFF\3cH808080}好图宁
+// 微调
 // =============================================================================
 
-// 创建 FineTuningJob 创建微调任务.
+// CreateFineTuningJob 创建微调任务.
+// Endpoint: POST /v1/fine_tuning/jobs
 func (p *OpenAIProvider) CreateFineTuningJob(ctx context.Context, req *llm.FineTuningJobRequest) (*llm.FineTuningJob, error) {
 	endpoint := fmt.Sprintf("%s/v1/fine_tuning/jobs", strings.TrimRight(p.cfg.BaseURL, "/"))
 
@@ -283,7 +292,8 @@ func (p *OpenAIProvider) CreateFineTuningJob(ctx context.Context, req *llm.FineT
 	return &job, nil
 }
 
-// ListFineTuningJobs列出微调工作.
+// ListFineTuningJobs 列出微调任务.
+// Endpoint: GET /v1/fine_tuning/jobs
 func (p *OpenAIProvider) ListFineTuningJobs(ctx context.Context) ([]llm.FineTuningJob, error) {
 	endpoint := fmt.Sprintf("%s/v1/fine_tuning/jobs", strings.TrimRight(p.cfg.BaseURL, "/"))
 
@@ -326,7 +336,8 @@ func (p *OpenAIProvider) ListFineTuningJobs(ctx context.Context) ([]llm.FineTuni
 	return jobsResp.Data, nil
 }
 
-// Get FineTuningJob通过ID检索微调工作.
+// GetFineTuningJob 通过 ID 获取微调任务.
+// Endpoint: GET /v1/fine_tuning/jobs/{job_id}
 func (p *OpenAIProvider) GetFineTuningJob(ctx context.Context, jobID string) (*llm.FineTuningJob, error) {
 	endpoint := fmt.Sprintf("%s/v1/fine_tuning/jobs/%s", strings.TrimRight(p.cfg.BaseURL, "/"), jobID)
 
@@ -367,7 +378,8 @@ func (p *OpenAIProvider) GetFineTuningJob(ctx context.Context, jobID string) (*l
 	return &job, nil
 }
 
-// 取消FineTuningJob取消微调任务.
+// CancelFineTuningJob 取消微调任务.
+// Endpoint: POST /v1/fine_tuning/jobs/{job_id}/cancel
 func (p *OpenAIProvider) CancelFineTuningJob(ctx context.Context, jobID string) error {
 	endpoint := fmt.Sprintf("%s/v1/fine_tuning/jobs/%s/cancel", strings.TrimRight(p.cfg.BaseURL, "/"), jobID)
 

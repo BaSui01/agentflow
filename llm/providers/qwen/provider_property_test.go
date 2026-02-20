@@ -13,7 +13,7 @@ import (
 	"go.uber.org/zap"
 )
 
-// 特性: 多提供者支持, 属性 3: OpenAI 格式转换兼容供应商
+// 特性: 多提供者支持, 属性 3: OpenAI 格式转换兼容提供者
 // 审定:要求4.4
 func TestProperty3_OpenAIFormatConversion(t *testing.T) {
 	testCases := []struct {
@@ -149,7 +149,7 @@ func TestProperty3_OpenAIFormatConversion(t *testing.T) {
 			assert.Equal(t, tc.expectedTools, len(capturedRequest.Tools),
 				"Number of tools should match")
 
-			// 校验信件角色保存
+			// 校验消息角色保存
 			for i, msg := range tc.messages {
 				assert.Equal(t, string(msg.Role), capturedRequest.Messages[i].Role,
 					"Message role should be preserved")

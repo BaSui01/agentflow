@@ -17,8 +17,8 @@ import (
 	"go.uber.org/zap"
 )
 
-// QwenProvider implements Alibaba Qwen (通义千问) LLM Provider.
-// Quen通过DashScope使用OpenAI相容的API格式.
+// QwenProvider 实现阿里巴巴 Qwen (通义千问) LLM 提供者.
+// Qwen 通过 DashScope 使用 OpenAI 兼容的 API 格式.
 type QwenProvider struct {
 	cfg           providers.QwenConfig
 	client        *http.Client
@@ -26,7 +26,7 @@ type QwenProvider struct {
 	rewriterChain *middleware.RewriterChain
 }
 
-// 新QuenProvider创建了新的Quen提供者实例.
+// NewQwenProvider 创建新的 Qwen 提供者实例.
 func NewQwenProvider(cfg providers.QwenConfig, logger *zap.Logger) *QwenProvider {
 	timeout := cfg.Timeout
 	if timeout == 0 {

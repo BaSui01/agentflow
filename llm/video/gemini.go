@@ -10,13 +10,13 @@ import (
 	"time"
 )
 
-// 双子公司使用谷歌双子公司执行视频分析.
+// GeminiProvider 使用 Google Gemini 执行视频分析.
 type GeminiProvider struct {
 	cfg    GeminiConfig
 	client *http.Client
 }
 
-// NewGemini Provider创建了新的双子座视频提供商.
+// NewGeminiProvider 创建新的 Gemini 视频提供者.
 func NewGeminiProvider(cfg GeminiConfig) *GeminiProvider {
 	if cfg.Model == "" {
 		cfg.Model = "gemini-3-flash-preview"
@@ -85,7 +85,7 @@ type geminiResponse struct {
 	} `json:"usageMetadata"`
 }
 
-// 利用双子座多模式能力分析视频内容.
+// Analyze 利用 Gemini 多模态能力分析视频内容.
 func (p *GeminiProvider) Analyze(ctx context.Context, req *AnalyzeRequest) (*AnalyzeResponse, error) {
 	model := req.Model
 	if model == "" {
@@ -169,7 +169,7 @@ func (p *GeminiProvider) Analyze(ctx context.Context, req *AnalyzeRequest) (*Ana
 	}, nil
 }
 
-// 生成不由双子座视频提供商支持.
+// Generate 不被 Gemini 视频提供者支持.
 func (p *GeminiProvider) Generate(ctx context.Context, req *GenerateRequest) (*GenerateResponse, error) {
 	return nil, fmt.Errorf("video generation not supported by gemini provider")
 }

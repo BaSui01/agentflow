@@ -208,7 +208,7 @@ func NewWebSearchTool(config WebSearchToolConfig, logger *zap.Logger) (ToolFunc,
 	return fn, metadata
 }
 
-// RegisterWebSearchToole是一个创建并注册网络搜索工具的便利功能.
+// RegisterWebSearchTool 是创建并注册网络搜索工具的便捷函数.
 func RegisterWebSearchTool(registry ToolRegistry, config WebSearchToolConfig, logger *zap.Logger) error {
 	fn, metadata := NewWebSearchTool(config, logger)
 	return registry.Register("web_search", fn, metadata)

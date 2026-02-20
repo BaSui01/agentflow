@@ -88,7 +88,7 @@ func (t *TiktokenTokenizer) CountMessages(messages []Message) (int, error) {
 
 	total := 0
 	for _, msg := range messages {
-		// 每封信件的间接费用: <| start|>role\n 内容<|end|>\n
+		// 每条消息的开销: <|start|>role\n content<|end|>\n
 		total += 4
 		tokens := t.enc.Encode(msg.Content, nil, nil)
 		total += len(tokens)

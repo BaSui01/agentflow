@@ -19,7 +19,7 @@ import (
 	"go.uber.org/zap"
 )
 
-// 特性:多供应商支持,财产4:双重完成模式支持
+// 特性:多提供者支持,属性4:双重完成模式支持
 // ** 参数:要求1.5、2.4、3.4、4.5、5.5**
 
 // 测试Property4  双重补全模块支持测试两种完成模式的工作
@@ -367,11 +367,11 @@ func TestProperty4_StreamWithTools(t *testing.T) {
 
 // Property4  测试国家验证我们至少有100个测试重复
 func TestProperty4_IterationCount(t *testing.T) {
-	// 完成:5个供应商* 4个变数=20
-	// 流:5个供应商 * 4个变数=20
-	// 完成 使用工具:5个供应商 * 3个变化=15
-	// 完成量表:5个供应商 * 7个变数=35
-	// StreamWithTools(添加):5个供应商 * 2个变数=10
+	// 完成:5个提供者* 4个变数=20
+	// 流:5个提供者 * 4个变数=20
+	// 完成 使用工具:5个提供者 * 3个变化=15
+	// 完成量表:5个提供者 * 7个变数=35
+	// StreamWithTools(添加):5个提供者 * 2个变数=10
 	totalIterations := 20 + 20 + 15 + 35 + 10
 	assert.GreaterOrEqual(t, totalIterations, 100,
 		"Property 4 should have at least 100 test iterations, got %d", totalIterations)

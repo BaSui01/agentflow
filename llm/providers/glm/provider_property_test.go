@@ -162,7 +162,7 @@ func TestProperty12_HTTPStatusToErrorCodeMapping(t *testing.T) {
 			assert.Equal(t, "glm", llmErr.Provider,
 				"Provider name should be 'glm'")
 
-			// 校验错误信件包含原始信件
+			// 校验错误消息包含原始消息
 			assert.Contains(t, llmErr.Message, tc.errorMessage,
 				"Error message should contain original error message")
 		})
