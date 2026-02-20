@@ -9,3 +9,11 @@
 {"file": ".trellis/spec/unit-test/index.md", "reason": "测试规范：mock模式、fixture工厂、rapid/gopter"}
 {"file": ".trellis/spec/backend/error-handling.md", "reason": "错误处理规范"}
 {"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "代码复用指南"}
+{"file": "rag/vector_store.go", "reason": "OP8: sortByScore冒泡排序需替换"}
+{"file": "rag/hybrid_retrieval.go", "reason": "OP1: DocumentLoader需参考现有Document类型"}
+{"file": "rag/graph_rag.go", "reason": "OP3: float32/float64类型统一"}
+{"file": "rag/graph_embedder.go", "reason": "OP3: GraphEmbedder用float32需统一"}
+{"file": "workflow/steps.go", "reason": "OP4: Workflow步骤placeholder需集成"}
+{"file": "workflow/agent_adapter.go", "reason": "OP4: AgentExecutor接口适配"}
+{"file": "config/loader.go", "reason": "OP2: Config结构体需桥接到RAG"}
+{"file": "rag/provider_integration.go", "reason": "OP2: 现有Provider集成层参考"}

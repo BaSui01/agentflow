@@ -24,6 +24,7 @@ These guides help you **ask the right questions before coding**.
 | [Code Reuse Thinking Guide](./code-reuse-thinking-guide.md) | Identify patterns and reduce duplication | When you notice repeated patterns |
 | [Cross-Layer Thinking Guide](./cross-layer-thinking-guide.md) | Think through data flow across layers | Features spanning multiple layers |
 | [Cross-Platform Thinking Guide](./cross-platform-thinking-guide.md) | Catch platform-specific assumptions | Scripts, paths, commands |
+| [quality-guidelines.md §18-§23](../backend/quality-guidelines.md) | Agent composition, guardrails, context window patterns | Multi-agent design, runtime config, validation chains |
 
 ---
 
@@ -35,6 +36,8 @@ These guides help you **ask the right questions before coding**.
 - [ ] Data format changes between layers (e.g., `*types.Error` ↔ `*agent.Error`)
 - [ ] Error needs to propagate from LLM provider to HTTP response
 - [ ] Config hot-reload affects runtime behavior
+- [ ] **New step/component needs a dependency from another package** ← Use workflow-local interfaces (§15)
+- [ ] **Config struct needs to create domain objects** ← Use Config→Domain bridge pattern (§16)
 
 → Read [Cross-Layer Thinking Guide](./cross-layer-thinking-guide.md)
 
@@ -45,8 +48,53 @@ These guides help you **ask the right questions before coding**.
 - [ ] You're creating a new error type or mock
 - [ ] You see the same pattern repeated 3+ times
 - [ ] **You're creating a new utility/helper function** ← Search `testutil/` first!
+- [ ] **You're adding optional dependencies to a struct** ← Use Optional Injection pattern (§14)
 
 → Read [Code Reuse Thinking Guide](./code-reuse-thinking-guide.md)
+
+### When to Think About Type Consistency
+
+- [ ] Working with numeric types across package boundaries (`float32` vs `float64`)
+- [ ] Adding new fields to domain structs that interact with external APIs
+- [ ] Conversion functions exist in the package — check `vector_convert.go` pattern (§17)
+- [ ] Interface signatures use different numeric widths than internal storage
+
+→ Read [quality-guidelines.md §17](../backend/quality-guidelines.md) for Numeric Type Consistency rules
+
+### When to Think About Multi-Agent Composition
+
+- [ ] One agent needs to delegate subtasks to another agent → Agent-as-Tool adapter (§18)
+- [ ] Caller needs to override model/temperature/maxTokens per request → RunConfig via context (§19)
+- [ ] You're choosing between Agent-as-Tool vs Handoff vs Crew → See decision matrix in §18
+- [ ] Agent output will be consumed as tool result by another agent → Ensure JSON-serializable output
+
+→ Read [quality-guidelines.md §18-§19](../backend/quality-guidelines.md) for Agent-as-Tool and RunConfig patterns
+
+### When to Think About Guardrails Design
+
+- [ ] A validation failure should abort the entire chain immediately → Use Tripwire (§20)
+- [ ] Multiple validators are independent and can run concurrently → Use `ChainModeParallel` (§20)
+- [ ] Adding a new validator to an existing chain → Check if Tripwire semantics are needed
+- [ ] Guardrails latency is a concern → Parallel mode reduces wall-clock time
+
+→ Read [quality-guidelines.md §20](../backend/quality-guidelines.md) for Tripwire + Parallel Execution
+
+### When to Think About Context Window Management
+
+- [ ] Conversation history may exceed model's context limit → Use WindowManager (§21)
+- [ ] Need to preserve system message and recent messages while trimming old ones → SlidingWindow strategy
+- [ ] Token budget matters (cost control) → TokenBudget strategy with ReserveTokens
+- [ ] Long conversations need compression without losing key info → Summarize strategy
+
+→ Read [quality-guidelines.md §21](../backend/quality-guidelines.md) for Context Window strategies
+
+### When to Think About Backward-Compatible Extensions
+
+- [ ] Adding new capabilities to an existing interface → Use Optional Interface pattern (§23)
+- [ ] Provider/component needs new method but callers shouldn't break → Type assertion at call site
+- [ ] `any` field in struct could be replaced with typed optional interface → Check §23 checklist
+
+→ Read [quality-guidelines.md §23](../backend/quality-guidelines.md) for Optional Interface pattern
 
 ### When to Think About Cross-Platform Issues
 

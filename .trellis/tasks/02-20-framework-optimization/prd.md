@@ -189,47 +189,33 @@
 - **复杂度**: 中等
 - **依赖**: OP4
 
-### 优化 Phase 2: 打通 API 层 🌐
+### 优化 Phase 2: 框架初始化链路 + 传输层 🌐
 
-> 目标：端到端 API 可调用 + 协议路由注册 + 实时通信
+> 目标：打通 Provider 工厂链路 + 完善传输层适配器
+> 注意：`cmd/agentflow/` HTTP 服务器定位为**参考实现**，不是框架核心交付物
 
-#### OP5. 启用 Chat/Agent/协议 API 路由
-- **位置**: `cmd/agentflow/server.go`, `api/handlers/agent.go`
-- **现状**:
-  - `server.go:173-176` 四条路由被注释（chat completions/stream, agents list/execute）
-  - `server.go:34-35` handler 字段被注释，`initHandlers():103-106` 初始化被注释
-  - `AgentHandler` 5 个方法全是 TODO 桩（返回空列表/404/500）
-  - `ChatHandler` 代码 ~90% 完整，缺 Provider 注入
-  - MCP `MCPHandler`（HTTP + SSE）未注册到路由
-  - A2A `HTTPServer` 路由（`/.well-known/agent.json`, `/a2a/*`）未注册
-- **操作**:
-  1. 打通 Provider 初始化链路（从 config → llm.Provider 实例）
-  2. 取消注释 Chat handler 路由，验证端到端 Completion + Stream
-  3. 实现 `AgentHandler` 5 个方法（集成 agent registry）
-  4. 注册 MCP handler 到 `/mcp/*` 路由
-  5. 注册 A2A handler 到 `/.well-known/agent.json` + `/a2a/*` 路由
-  6. 添加 RequestID 中间件（当前缺失）
-- **复杂度**: 复杂（涉及初始化链路重构）
-- **依赖**: 无（handler 代码已就绪）
+#### OP5. Provider 初始化工厂 + 参考服务器
+- **位置**: `llm/factory.go` (新建), `cmd/agentflow/server.go`
+- **框架层操作**（核心）:
+  1. 创建 `llm.NewProviderFromConfig(cfg *config.ProviderConfig) (Provider, error)` 工厂函数
+  2. 创建 `llm.NewProviderRegistry(cfg *config.Config) (*ProviderRegistry, error)` 多 Provider 注册表
+  3. 创建 `agent.NewRegistryFromConfig(cfg *config.Config) (*Registry, error)` Agent 注册表工厂
+- **参考实现操作**（cmd/ 附属）:
+  4. 取消注释 Chat/Agent handler 路由，作为框架使用示例
+  5. 注册 MCP/A2A handler，展示协议集成方式
+  6. 添加 RequestID 中间件
+- **复杂度**: 复杂
+- **依赖**: 无
 
-#### OP6. WebSocket 实时通信端点
-- **位置**: `api/handlers/ws.go` (新建)
-- **现状**:
-  - `nhooyr.io/websocket` 已引入，MCP transport_ws.go 仅客户端侧
-  - `agent/streaming/bidirectional.go` 有完整双向流框架（心跳/重连/多适配器），但 `StreamConnection` 接口无 WebSocket 实现
-- **操作**:
+#### OP6. WebSocket StreamConnection 适配器
+- **位置**: `agent/streaming/ws_adapter.go` (新建)
+- **框架层操作**（核心）:
   1. 实现 `WebSocketStreamConnection` 适配 `bidirectional.StreamConnection` 接口
-  2. 创建 WebSocket 升级 handler，支持 Agent 对话流 + 事件推送
-  3. 复用 `StreamManager` 管理多条 WebSocket 连接
+  2. 复用 `bidirectional.go` 的心跳/重连/多适配器框架
+- **参考实现操作**（cmd/ 附属）:
+  3. 在参考服务器中添加 WebSocket 升级 handler 作为使用示例
 - **复杂度**: 中等
-- **依赖**: OP5
-
-#### OP7. OpenAPI 文档自动生成
-- **位置**: `api/openapi.yaml` (已有基础) + handler 注释
-- **现状**: `api/openapi.yaml` 只声明了 Health 和 Config 两组 tag
-- **操作**: 补充 Chat/Agent/MCP/A2A 端点的 OpenAPI spec，或集成 swaggo/swag 从注释自动生成
-- **复杂度**: 简单
-- **依赖**: OP5
+- **依赖**: OP5（工厂函数需就绪）
 
 ### 优化 Phase 3: 生产化质量提升 🏭
 
@@ -275,52 +261,42 @@
 - **目标**: 测试文件覆盖率从 150/433 提升至 250/433+
 - **复杂度**: 持续性工作
 
-### 优化 Phase 4: 生态建设 🌱
+### 优化 Phase 4: 框架扩展机制 🌱
 
-> 目标：降低使用门槛 + 建立开发者生态
+> 目标：提供可选的便利层 + 扩展注册机制
+> 注意：框架提供机制和接口，不提供具体业务模板
 
-#### OP15. 声明式 Agent 定义
+#### OP15. 声明式 Agent 加载器（可选模块）
 - **位置**: `agent/declarative/` (新建子包)
-- **现状**: `workflow/dsl/schema.go` 已有 `AgentDef`（model/provider/system_prompt/temperature/tools），但仅限 workflow 上下文，无独立 Agent 声明式系统
+- **定位**: 可选便利层，用户可以选择编程式 Builder 或声明式 YAML，框架两种都支持
+- **现状**: `workflow/dsl/schema.go` 已有 `AgentDef`（model/provider/system_prompt/temperature/tools），但仅限 workflow 上下文
 - **操作**:
-  1. 扩展 `AgentDef` 为独立的 Agent 定义格式（添加 memory/guardrails/reasoning/protocol 字段）
-  2. 实现 `AgentLoader` 从 YAML 文件加载 Agent 定义
-  3. 实现 `AgentFactory` 从定义创建运行时 `agent.Agent` 实例
-  4. 复用已有的 Builder 模式（`agent/builder.go`）
-- **示例**:
-  ```yaml
-  name: research-assistant
-  model: openai/gpt-4
-  provider: openai
-  tools: [web_search, file_reader]
-  memory: {type: buffer, max_messages: 50}
-  guardrails: [pii_detection, injection_detection]
-  reasoning: react
-  protocol:
-    a2a: {enabled: true}
-    mcp: {enabled: true, tools: [web_search]}
-  ```
-- **复杂度**: 复杂
-- **依赖**: OP4（步骤需可用）、OP5（API 需可用）
-
-#### OP16. Agent 模板预设
-- **位置**: `agent/templates/` (新建子包)
-- **操作**: 提供开箱即用的 Agent 模板（研究助手、代码助手、数据分析、客服机器人等）
+  1. 定义 `AgentDefinition` schema（扩展 `AgentDef`，添加 memory/guardrails/reasoning/protocol）
+  2. 实现 `AgentLoader` 接口：从 YAML/JSON 文件解析 `AgentDefinition`
+  3. 实现 `AgentFactory`：从 `AgentDefinition` 调用 `AgentBuilder` 创建运行时实例
+  4. 不预设任何具体 Agent 模板 — 用户自己定义
 - **复杂度**: 中等
-- **依赖**: OP15
+- **依赖**: OP4
 
-#### OP17. 工作流可视化前端
-- **位置**: `web/` (新建目录)
-- **操作**: 基于 React Flow 或 Vue Flow 实现工作流可视化编辑器，对接 `workflow/builder_visual.go` 后端
-- **复杂度**: 复杂
-- **依赖**: OP5、OP6
+#### OP16. 插件注册表接口
+- **位置**: `agent/plugins/registry.go` (新建)
+- **定位**: 框架层扩展机制，提供插件注册/发现/加载的接口和内存实现
+- **操作**:
+  1. 定义 `Plugin` 接口（Name/Version/Init/Shutdown）
+  2. 定义 `PluginRegistry` 接口（Register/Get/List/Unregister）
+  3. 实现 `InMemoryPluginRegistry`
+  4. 与 MCP 工具发现协议对接（可选）
+- **不做**: 插件市场、版本管理 UI、远程插件仓库（这些是应用层）
+- **复杂度**: 中等
+- **依赖**: 无
 
-#### OP18. 插件系统与发现机制
-- **位置**: `agent/plugins/` (新建子包)
-- **操作**: 实现插件注册、发现、版本管理机制，支持社区贡献工具/技能
-- **参考**: Coze 插件市场、MCP 工具发现协议
-- **复杂度**: 复杂
-- **依赖**: OP15
+#### ~~OP17. 工作流可视化前端~~ → 移除
+- **原因**: 前端 UI 是应用层，Go 框架不应包含 React/Vue 代码
+- **替代**: `workflow/builder_visual.go` 后端 API 保留，前端由框架使用者自行实现
+
+#### ~~OP18. Agent 模板预设~~ → 降级为 examples/
+- **原因**: "研究助手""代码助手"是具体业务场景，框架不该预设
+- **替代**: 在 `examples/agents/` 目录下提供示例 YAML 文件，展示声明式 Agent 的用法
 
 ---
 
@@ -333,10 +309,9 @@
 - [ ] OP4: LLMStep 调用 llm.Provider 返回真实结果；ToolStep 调用工具返回真实结果
 - [ ] OP4b: DSL 条件表达式支持 `score > 0.8 && status == "active"` 语法
 
-### Phase 2: 打通 API 层
-- [ ] OP5: `curl /v1/chat/completions` 端到端返回 LLM 响应；MCP/A2A 端点可访问
-- [ ] OP6: WebSocket 端点可连接并接收 Agent 流式输出
-- [ ] OP7: OpenAPI spec 覆盖所有已启用端点
+### Phase 2: 框架初始化链路 + 传输层
+- [ ] OP5: `llm.NewProviderFromConfig` 工厂函数可创建 Provider 实例；参考服务器端到端可用
+- [ ] OP6: `WebSocketStreamConnection` 实现 `StreamConnection` 接口，通过单元测试
 
 ### Phase 3: 生产化质量
 - [ ] OP8: sortByScore 使用 sort.Slice
@@ -347,11 +322,18 @@
 - [ ] OP13: MCP WebSocket 支持心跳和重连
 - [ ] OP14: 测试文件数 ≥ 250
 
-### Phase 4: 生态建设
-- [ ] OP15: YAML 定义的 Agent 可正常运行
-- [ ] OP16: 至少 3 个 Agent 模板可用
-- [ ] OP17: 可视化编辑器可拖拽创建工作流
-- [ ] OP18: 插件可注册、发现、加载
+### Phase 4: 框架扩展机制
+- [ ] OP15: `AgentLoader` 可从 YAML 创建 Agent 实例
+- [ ] OP16: `PluginRegistry` 接口 + InMemory 实现通过测试
+
+## 范围外（明确排除）
+
+* ❌ OpenAPI 文档自动生成（应用层，由框架使用者自行添加）
+* ❌ Agent 模板预设（业务层，降级为 `examples/agents/` 示例文件）
+* ❌ 工作流可视化前端（应用层，Go 框架不含前端代码）
+* ❌ 插件市场/远程仓库（应用层，框架只提供注册表接口）
+* ❌ JWT/OAuth 认证和多租户隔离（应用层）
+* ❌ Provider 不可用时的优雅降级策略（未来迭代）
 
 ## 优化依赖关系图
 
@@ -364,11 +346,10 @@ Phase 1 (可并行):
   OP4b (DSL表达式引擎)     ── 依赖 OP4
 
 Phase 2 (依赖 Phase 1 部分完成):
-  OP5 (API路由)            ── 独立（但 Agent handler 依赖 OP4）
-  OP6 (WebSocket)          ── 依赖 OP5
-  OP7 (OpenAPI)            ── 依赖 OP5
+  OP5 (Provider工厂+参考服务器) ── 独立（Agent handler 依赖 OP4）
+  OP6 (WS StreamConnection)    ── 依赖 OP5
 
-Phase 3 (大部分独立):
+Phase 3 (大部分独立，可与 Phase 1/2 并行):
   OP8  (sort.Slice)        ── 独立，随时可做
   OP9  (MCP标准库)         ── 独立，随时可做
   OP10 (Pinecone)          ── 独立
@@ -377,11 +358,9 @@ Phase 3 (大部分独立):
   OP13 (MCP WS增强)        ── 独立
   OP14 (测试补齐)          ── 持续性
 
-Phase 4 (依赖 Phase 1+2):
-  OP15 (声明式Agent)       ── 依赖 OP4 + OP5
-  OP16 (Agent模板)         ── 依赖 OP15
-  OP17 (可视化前端)        ── 依赖 OP5 + OP6
-  OP18 (插件系统)          ── 依赖 OP15
+Phase 4 (依赖 Phase 1):
+  OP15 (声明式Agent加载器) ── 依赖 OP4
+  OP16 (插件注册表)        ── 独立
 ```
 
 ## 并行实施策略
@@ -393,20 +372,16 @@ Sprint 1 (并行) ───├─ OP3 (float统一)
                     ├─ OP4 (Workflow步骤)
                     └─ OP8+OP9 (快速修复)
 
-                    ┌─ OP5 (API路由) ←── OP4完成后
+                    ┌─ OP5 (Provider工厂) ←── OP4完成后
 Sprint 2 (并行) ───├─ OP10 (Pinecone)
                     ├─ OP11 (SemanticCache)
                     └─ OP12 (Tokenizer)
 
-                    ┌─ OP6 (WebSocket) ←── OP5完成后
+                    ┌─ OP6 (WS适配器) ←── OP5完成后
 Sprint 3 (并行) ───├─ OP4b (DSL表达式)
                     ├─ OP13 (MCP WS增强)
-                    └─ OP7 (OpenAPI)
+                    └─ OP15 (声明式Agent)
 
-                    ┌─ OP15 (声明式Agent)
-Sprint 4 (并行) ───├─ OP14 (测试补齐)
-                    └─ OP17 (可视化前端)
-
-Sprint 5 (并行) ───├─ OP16 (Agent模板)
-                    └─ OP18 (插件系统)
+Sprint 4 (并行) ───├─ OP16 (插件注册表)
+                    └─ OP14 (测试补齐)
 ```
