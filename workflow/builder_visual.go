@@ -1,5 +1,3 @@
-// Package workflow provides visual workflow builder support.
-// Implements OpenAI AgentKit-style drag-and-drop workflow design.
 package workflow
 
 import (
