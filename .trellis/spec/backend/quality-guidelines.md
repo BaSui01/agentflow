@@ -155,6 +155,139 @@ Every significant package should have a `doc.go` file with godoc-style comments.
 
 Used in: `config/watcher.go`, `config/hotreload.go`, `cmd/agentflow/main.go`.
 
+### 7. Builder Pattern for Complex Objects
+
+The `AgentBuilder` (agent/builder.go:16-38) is the canonical example:
+
+```go
+// Fluent chain — each With* returns *AgentBuilder
+agent, err := NewAgentBuilder().
+    WithProvider(provider).          // required — Build() fails without it
+    WithToolProvider(toolProvider).   // optional — dual-model support
+    WithLogger(logger).              // optional — defaults to zap.NewNop()
+    WithMemory(memory).
+    WithReflection(reflectionCfg).   // uses interface{} to avoid circular imports
+    Build()                          // validates, returns first error
+```
+
+Key conventions:
+- Errors are collected during chaining, `Build()` returns the first one (line 226-227)
+- Required fields (`provider`) are validated in `Build()` (line 231-233)
+- Optional features use `interface{}` fields to avoid circular dependencies (line 31-35) — always add a comment explaining why
+- Default logger is `zap.NewNop()` — production code must set an explicit logger
+
+### 8. Agent Lifecycle State Machine
+
+Agents follow a strict state machine (agent/base.go:372-395):
+
+```
+StateCreated → StateReady → StateRunning → StateStopped
+                   ↑            ↓
+                   └── StateError
+```
+
+- `Init()` loads recent memory and transitions to `StateReady` (line 398-414)
+- `Teardown()` cleans up LSP resources (line 417-438)
+- `Transition()` validates legal transitions and publishes events — invalid transitions return `ErrInvalidTransition`
+
+### 9. Config Hot-Reload with Automatic Rollback
+
+The `HotReloadManager` (config/hotreload.go:19-51) implements production-grade config management:
+
+```go
+// Field registry defines what can be hot-reloaded (line 132-295)
+hotReloadableFields map[string]HotReloadableField
+
+// Reload flow:
+// FileWatcher detects change → ReloadFromFile() → ApplyConfig()
+//   → validateFunc() → apply callbacks → on failure: rollbackLocked()
+```
+
+Key conventions:
+- Sensitive fields auto-redacted: passwords, API keys show as `[REDACTED]` (line 543-546)
+- Validation hook `validateFunc` runs before applying (line 516-530)
+- Callback panics are caught and trigger rollback (line 605-609)
+- Config history uses a ring buffer with `maxHistorySize` limit (line 371-374)
+- Deep copy via JSON serialization (line 378-388)
+
+### 10. LLM Provider Implementation Pattern
+
+Every provider under `llm/providers/` follows this structure (e.g., openai/provider.go:20-25):
+
+```go
+type OpenAIProvider struct {
+    cfg            providers.OpenAIConfig
+    client         *http.Client           // default timeout 30s
+    logger         *zap.Logger
+    rewriterChain  *middleware.RewriterChain
+}
+```
+
+Required methods:
+- `Name() string` — provider identifier
+- `HealthCheck(ctx) error` — connectivity + latency check
+- `ListModels(ctx) ([]string, error)` — supported models
+- `Completion(ctx, *ChatRequest) (*ChatResponse, error)` — non-streaming
+- `Stream(ctx, *ChatRequest) (<-chan StreamEvent, error)` — streaming (SSE, `[DONE]` marker)
+- `SupportsNativeFunctionCalling() bool` — capability declaration
+
+Conventions:
+- Model selection priority: request-specified > config default > hardcoded default
+- Credential override: read API key from context (line 251-255)
+- Tool conversion: `llm.ToolSchema` ↔ provider-native format
+- Empty tool lists must be cleaned (`EmptyToolsCleaner` rewriter)
+
+### 11. Protocol Implementation Pattern (A2A / MCP)
+
+**A2A** (agent/protocol/a2a/):
+- `AgentCard` describes capabilities, tools, input/output schemas (types.go:39-60)
+- Capability types: `Task`, `Query`, `Stream` (types.go:12-16)
+- Async task management with states: `pending` → `processing` → `completed`/`failed`
+- Task recovery from persistent store on restart (server.go:127-150)
+
+**MCP** (agent/protocol/mcp/):
+- JSON-RPC 2.0 communication (`MCPMessage`, protocol.go:131-139)
+- Resource management via URI, with subscription support (protocol.go:74-132)
+- Tool registration: `ToolHandler` function type (protocol.go:36-37)
+- Prompt templates with `{{varName}}` placeholders (server.go:222-236)
+- Protocol version: `MCPVersion = "2024-11-05"` (protocol.go:16)
+- Subscription channel buffer size 10, full channels are skipped (server.go:126, 142-145)
+
+### 12. Workflow Engine Patterns
+
+**Chain Workflow** (workflow/workflow.go:54-92):
+- Sequential step execution, previous output feeds next input
+- Context cancellation checked before each step
+- Error includes step index and name: `"step %d (%s) failed: %w"`
+
+**DAG Workflow** (workflow/dag.go, dag_executor.go):
+- Node types: `Action`, `Condition`, `Loop`, `Parallel`, `SubGraph`, `Checkpoint`
+- Error strategies per node: `FailFast`, `Skip`, `Retry`
+- Loop depth limit: `maxLoopDepth = 1000` (dag_executor.go:31)
+- Visited node tracking prevents re-execution (dag_executor.go:140-149)
+- Circuit breaker integration via `CircuitBreakerRegistry`
+- DAG must have an `entry` node — execution fails without it
+
+### 13. RAG Hybrid Retrieval Pattern
+
+The `HybridRetriever` (rag/hybrid_retrieval.go:68-83) combines BM25 + vector search:
+
+```go
+// Execution flow:
+// 1. BM25 retrieval (keyword matching)
+// 2. Vector retrieval (semantic similarity)
+// 3. Score normalization + weighted merge (BM25Weight + VectorWeight)
+// 4. Optional reranking
+// 5. Top-K filtering
+```
+
+Key conventions:
+- BM25 parameters: `k1=1.5`, `b=0.75` (line 38-39)
+- Minimum similarity threshold: `MinScore=0.3` (line 45)
+- Pre-computed term frequencies and IDF for performance (line 75-77)
+- `VectorStore` interface: `AddDocuments`, `Search`, `DeleteDocuments`, `UpdateDocument`, `Count`
+- Reranking uses simplified word-overlap — production should use Cross-Encoder (line 398-438)
+
 ---
 
 ## Testing Requirements

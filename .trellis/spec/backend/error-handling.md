@@ -110,6 +110,50 @@ Used across packages with `errors.New`:
 | `RetryableError` | `llm/retry/backoff.go:206` | Marks error as retryable |
 | `ErrInvalidTransition` | `agent/errors.go:179` | State machine transition error |
 
+### Protocol Error Types (A2A / MCP)
+
+**A2A Protocol** (`agent/protocol/a2a/errors.go`):
+14 sentinel errors for agent-to-agent communication:
+
+| Sentinel | Meaning |
+|----------|---------|
+| `ErrMissingName` | Agent card missing required name |
+| `ErrAgentNotFound` | Target agent not in registry |
+| `ErrTaskNotFound` | Async task ID not found |
+| + 11 others | Validation, capability, and task lifecycle errors |
+
+**MCP Protocol** (`agent/protocol/mcp/protocol.go:142-155`):
+JSON-RPC 2.0 standard error codes:
+
+| Code | Constant | Meaning |
+|------|----------|---------|
+| -32700 | `ParseError` | Invalid JSON |
+| -32600 | `InvalidRequest` | Malformed request |
+| -32601 | `MethodNotFound` | Unknown method |
+| -32602 | `InvalidParams` | Bad parameters |
+| -32603 | `InternalError` | Server-side failure |
+
+### Workflow Error Handling
+
+DAG nodes support per-node error strategies (`workflow/dag.go:42-48`):
+
+| Strategy | Behavior |
+|----------|----------|
+| `FailFast` | Abort entire workflow on first error |
+| `Skip` | Skip failed node, continue execution |
+| `Retry` | Retry with backoff before failing |
+
+Chain workflows wrap errors with step context: `"step %d (%s) failed: %w"` (workflow/workflow.go:85)
+
+### Config Hot-Reload Error Recovery
+
+The `HotReloadManager` has a multi-layer error recovery strategy (config/hotreload.go):
+
+1. `validateFunc()` rejects invalid config before applying (line 516-530)
+2. Callback failure triggers automatic `rollbackLocked()` to `previousConfig` (line 568-579)
+3. Callback panics are caught via `recover()` and converted to errors (line 605-609)
+4. Version-based rollback to historical snapshots via ring buffer (line 714-724)
+
 ---
 
 ## Error Handling Patterns

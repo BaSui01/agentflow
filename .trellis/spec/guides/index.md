@@ -31,29 +31,29 @@ These guides help you **ask the right questions before coding**.
 
 ### When to Think About Cross-Layer Issues
 
-- [ ] Feature touches 3+ layers (API, Service, Component, Database)
-- [ ] Data format changes between layers
-- [ ] Multiple consumers need the same data
-- [ ] You're not sure where to put some logic
+- [ ] Feature touches 3+ layers (`types/` → `llm/` → `agent/` → `workflow/` → `api/` → `cmd/`)
+- [ ] Data format changes between layers (e.g., `*types.Error` ↔ `*agent.Error`)
+- [ ] Error needs to propagate from LLM provider to HTTP response
+- [ ] Config hot-reload affects runtime behavior
 
 → Read [Cross-Layer Thinking Guide](./cross-layer-thinking-guide.md)
 
 ### When to Think About Code Reuse
 
 - [ ] You're writing similar code to something that exists
+- [ ] You're adding a new LLM provider, vector store, or agent protocol
+- [ ] You're creating a new error type or mock
 - [ ] You see the same pattern repeated 3+ times
-- [ ] You're adding a new field to multiple places
-- [ ] **You're modifying any constant or config**
-- [ ] **You're creating a new utility/helper function** ← Search first!
+- [ ] **You're creating a new utility/helper function** ← Search `testutil/` first!
 
 → Read [Code Reuse Thinking Guide](./code-reuse-thinking-guide.md)
 
 ### When to Think About Cross-Platform Issues
 
-- [ ] Writing scripts that users will run directly
-- [ ] Adding usage examples or help text
-- [ ] Working with file paths or commands
-- [ ] **Migrating from shell scripts to Python**
+- [ ] Writing code that creates files or directories
+- [ ] Using temporary paths (use `t.TempDir()`, not `/tmp/`)
+- [ ] Adding signal handling (SIGTERM unreliable on Windows)
+- [ ] Working with environment variables or home directory paths
 
 → Read [Cross-Platform Thinking Guide](./cross-platform-thinking-guide.md)
 
