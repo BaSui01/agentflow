@@ -326,7 +326,7 @@ func TestBreaker_CallWithResult(t *testing.T) {
 		Timeout:   5 * time.Second,
 	}, zap.NewNop())
 
-	result, err := cb.CallWithResult(context.Background(), func() (interface{}, error) {
+	result, err := cb.CallWithResult(context.Background(), func() (any, error) {
 		return 42, nil
 	})
 	require.NoError(t, err)
@@ -384,4 +384,89 @@ func TestBreaker_ConcurrentSafety(t *testing.T) {
 	wg.Wait()
 	assert.Equal(t, int64(50), successCount.Load())
 	assert.Equal(t, StateClosed, cb.State())
+}
+
+// ---------------------------------------------------------------------------
+// CallWithResultTyped (generic wrapper)
+// ---------------------------------------------------------------------------
+
+func TestCallWithResultTyped(t *testing.T) {
+	tests := []struct {
+		name    string
+		fn      func() (int, error)
+		wantVal int
+		wantErr bool
+	}{
+		{
+			name:    "success returns typed value",
+			fn:      func() (int, error) { return 42, nil },
+			wantVal: 42,
+			wantErr: false,
+		},
+		{
+			name:    "error returns zero value",
+			fn:      func() (int, error) { return 0, errors.New("fail") },
+			wantVal: 0,
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cb := NewCircuitBreaker(nil, zap.NewNop())
+			val, err := CallWithResultTyped[int](cb, context.Background(), tt.fn)
+			if tt.wantErr {
+				assert.Error(t, err)
+				assert.Equal(t, tt.wantVal, val)
+			} else {
+				assert.NoError(t, err)
+				assert.Equal(t, tt.wantVal, val)
+			}
+		})
+	}
+}
+
+func TestCallWithResultTyped_String(t *testing.T) {
+	cb := NewCircuitBreaker(nil, zap.NewNop())
+	val, err := CallWithResultTyped[string](cb, context.Background(), func() (string, error) {
+		return "hello", nil
+	})
+	assert.NoError(t, err)
+	assert.Equal(t, "hello", val)
+}
+
+func TestCallWithResultTyped_Struct(t *testing.T) {
+	type response struct {
+		Code    int
+		Message string
+	}
+
+	cb := NewCircuitBreaker(nil, zap.NewNop())
+	val, err := CallWithResultTyped[response](cb, context.Background(), func() (response, error) {
+		return response{Code: 200, Message: "ok"}, nil
+	})
+	assert.NoError(t, err)
+	assert.Equal(t, 200, val.Code)
+	assert.Equal(t, "ok", val.Message)
+}
+
+func TestCallWithResultTyped_CircuitOpen(t *testing.T) {
+	cb := NewCircuitBreaker(&Config{
+		Threshold:    1,
+		Timeout:      5 * time.Second,
+		ResetTimeout: 1 * time.Hour,
+	}, zap.NewNop())
+
+	// Trip the breaker
+	_, _ = CallWithResultTyped[int](cb, context.Background(), func() (int, error) {
+		return 0, errors.New("fail")
+	})
+	require.Equal(t, StateOpen, cb.State())
+
+	// Should get ErrCircuitOpen
+	val, err := CallWithResultTyped[int](cb, context.Background(), func() (int, error) {
+		return 99, nil
+	})
+	assert.ErrorIs(t, err, ErrCircuitOpen)
+	assert.Equal(t, 0, val)
 }

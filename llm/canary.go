@@ -132,7 +132,7 @@ func (c *CanaryConfig) SetDeployment(deployment *CanaryDeployment) error {
 	defer c.mu.Unlock()
 
 	// 写入数据库
-	record := map[string]interface{}{
+	record := map[string]any{
 		"provider_id":        deployment.ProviderID,
 		"canary_version":     deployment.CanaryVersion,
 		"stable_version":     deployment.StableVersion,
@@ -186,7 +186,7 @@ func (c *CanaryConfig) UpdateStage(providerID uint, newStage CanaryStage) error 
 	}
 
 	// 写入数据库
-	updates := map[string]interface{}{
+	updates := map[string]any{
 		"stage":           string(newStage),
 		"traffic_percent": deployment.TrafficPercent,
 	}
@@ -221,7 +221,7 @@ func (c *CanaryConfig) TriggerRollback(providerID uint, reason string) error {
 	deployment.RollbackReason = reason
 
 	// 写入数据库
-	c.db.Table("sc_llm_canary_deployments").Where("id = ?", deployment.ID).Updates(map[string]interface{}{
+	c.db.Table("sc_llm_canary_deployments").Where("id = ?", deployment.ID).Updates(map[string]any{
 		"stage":           "rollback",
 		"traffic_percent": 0,
 		"rollback_reason": reason,
@@ -232,7 +232,7 @@ func (c *CanaryConfig) TriggerRollback(providerID uint, reason string) error {
 		Action:       "canary_rollback",
 		ResourceType: "llm_provider",
 		ResourceID:   strconv.FormatUint(uint64(providerID), 10),
-		Details: map[string]interface{}{
+		Details: map[string]any{
 			"reason":         reason,
 			"canary_version": deployment.CanaryVersion,
 			"stable_version": deployment.StableVersion,

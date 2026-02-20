@@ -187,7 +187,7 @@ type Cache interface {
 }
 
 // RateLimitMiddleware 应用速率限制.
-func RateLimitMiddleware(limiter RateLimiter) Middleware {
+func RateLimitMiddleware(limiter BlockingRateLimiter) Middleware {
 	return func(next Handler) Handler {
 		return func(ctx context.Context, req *llmpkg.ChatRequest) (*llmpkg.ChatResponse, error) {
 			if err := limiter.Wait(ctx); err != nil {
@@ -198,8 +198,10 @@ func RateLimitMiddleware(limiter RateLimiter) Middleware {
 	}
 }
 
-// RateLimiter 定义速率限制接口.
-type RateLimiter interface {
+// BlockingRateLimiter 定义阻塞式速率限制接口.
+// 与 llm.RateLimiter（非阻塞式 Allow/AllowN/Reset）不同，
+// BlockingRateLimiter 在超出速率时阻塞等待，适用于中间件链场景.
+type BlockingRateLimiter interface {
 	Wait(ctx context.Context) error
 }
 
@@ -230,10 +232,10 @@ func (e *PanicError) Error() string {
 }
 
 // TracingMiddleware 添加分布式追踪.
-func TracingMiddleware(tracer Tracer) Middleware {
+func TracingMiddleware(tracer llmpkg.Tracer) Middleware {
 	return func(next Handler) Handler {
 		return func(ctx context.Context, req *llmpkg.ChatRequest) (*llmpkg.ChatResponse, error) {
-			ctx, span := tracer.Start(ctx, "llm.request")
+			ctx, span := tracer.StartSpan(ctx, "llm.request")
 			defer span.End()
 
 			span.SetAttribute("model", req.Model)
@@ -250,18 +252,6 @@ func TracingMiddleware(tracer Tracer) Middleware {
 			return resp, err
 		}
 	}
-}
-
-// Tracer 定义追踪接口.
-type Tracer interface {
-	Start(ctx context.Context, name string) (context.Context, Span)
-}
-
-// Span 定义追踪 span 接口.
-type Span interface {
-	SetAttribute(key string, value any)
-	SetError(err error)
-	End()
 }
 
 // ValidatorMiddleware 在处理前对请求进行验证.

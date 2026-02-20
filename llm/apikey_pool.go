@@ -246,7 +246,7 @@ func (p *APIKeyPool) RecordSuccess(ctx context.Context, keyID uint) error {
 
 				err := p.db.WithContext(updateCtx).Model(&LLMProviderAPIKey{}).
 					Where("id = ?", s.ID).
-					Updates(map[string]interface{}{
+					Updates(map[string]any{
 						"total_requests": s.TotalRequests,
 						"last_used_at":   s.LastUsedAt,
 						"current_rpm":    s.CurrentRPM,
@@ -330,7 +330,7 @@ func (p *APIKeyPool) RecordFailure(ctx context.Context, keyID uint, errMsg strin
 
 				err := p.db.WithContext(updateCtx).Model(&LLMProviderAPIKey{}).
 					Where("id = ?", s.ID).
-					Updates(map[string]interface{}{
+					Updates(map[string]any{
 						"total_requests":  s.TotalRequests,
 						"failed_requests": s.FailedRequests,
 						"last_used_at":    s.LastUsedAt,

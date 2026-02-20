@@ -26,13 +26,13 @@ type IdempotencyKey struct {
 // 提供幂等键的生成、存储和查询能力
 type Manager interface {
 	// GenerateKey 根据输入生成幂等键
-	GenerateKey(inputs ...interface{}) (string, error)
+	GenerateKey(inputs ...any) (string, error)
 
 	// Get 获取缓存的结果
 	Get(ctx context.Context, key string) (json.RawMessage, bool, error)
 
 	// Set 设置缓存结果
-	Set(ctx context.Context, key string, result interface{}, ttl time.Duration) error
+	Set(ctx context.Context, key string, result any, ttl time.Duration) error
 
 	// Delete 删除缓存
 	Delete(ctx context.Context, key string) error
@@ -63,7 +63,7 @@ func NewRedisManager(redis *redis.Client, prefix string, logger *zap.Logger) Man
 
 // GenerateKey 实现 Manager.GenerateKey
 // 使用 SHA256 生成幂等键，确保相同输入生成相同的键
-func (m *redisManager) GenerateKey(inputs ...interface{}) (string, error) {
+func (m *redisManager) GenerateKey(inputs ...any) (string, error) {
 	if len(inputs) == 0 {
 		return "", errors.New("至少需要一个输入参数")
 	}
@@ -109,7 +109,7 @@ func (m *redisManager) Get(ctx context.Context, key string) (json.RawMessage, bo
 }
 
 // Set 实现 Manager.Set
-func (m *redisManager) Set(ctx context.Context, key string, result interface{}, ttl time.Duration) error {
+func (m *redisManager) Set(ctx context.Context, key string, result any, ttl time.Duration) error {
 	redisKey := m.prefix + key
 
 	// 序列化结果
@@ -246,7 +246,7 @@ func (m *memoryManager) Close() {
 }
 
 // GenerateKey 实现 Manager.GenerateKey（同 redisManager）
-func (m *memoryManager) GenerateKey(inputs ...interface{}) (string, error) {
+func (m *memoryManager) GenerateKey(inputs ...any) (string, error) {
 	if len(inputs) == 0 {
 		return "", errors.New("至少需要一个输入参数")
 	}
@@ -284,7 +284,7 @@ func (m *memoryManager) Get(ctx context.Context, key string) (json.RawMessage, b
 }
 
 // Set 实现 Manager.Set
-func (m *memoryManager) Set(ctx context.Context, key string, result interface{}, ttl time.Duration) error {
+func (m *memoryManager) Set(ctx context.Context, key string, result any, ttl time.Duration) error {
 	data, err := json.Marshal(result)
 	if err != nil {
 		return fmt.Errorf("序列化结果失败: %w", err)
