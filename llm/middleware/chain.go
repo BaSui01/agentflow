@@ -1,4 +1,3 @@
-// Package middleware 为 LLM 请求提供可扩展的中间件链.
 package middleware
 
 import (

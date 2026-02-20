@@ -1,4 +1,3 @@
-// 包音乐提供AI音乐生成能力.
 package music
 
 import (

@@ -1,4 +1,3 @@
-// Package tools 为企业 AI Agent 框架中的工具执行提供审计日志.
 package tools
 
 import (

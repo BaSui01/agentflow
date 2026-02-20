@@ -1,4 +1,3 @@
-// 一揽子节制提供了内容节制能力。
 package moderation
 
 import (

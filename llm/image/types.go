@@ -1,4 +1,3 @@
-// 包图像提供统一的图像生成提供者接口.
 package image
 
 import (

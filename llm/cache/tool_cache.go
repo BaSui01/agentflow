@@ -1,4 +1,3 @@
-// Package cache 为 LLM 操作提供缓存能力.
 package cache
 
 import (

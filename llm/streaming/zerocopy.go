@@ -1,4 +1,3 @@
-// 包流为高性能LLM响应提供零拷贝流.
 package streaming
 
 import (

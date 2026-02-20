@@ -1,4 +1,3 @@
-// 包式多模式为所有AI能力提供统一的路由.
 package multimodal
 
 import (
