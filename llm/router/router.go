@@ -414,6 +414,7 @@ type HealthChecker struct {
 	timeout   time.Duration
 	providers map[string]llmpkg.Provider
 	stopCh    chan struct{}
+	closeOnce sync.Once
 	logger    *zap.Logger
 }
 
@@ -454,7 +455,7 @@ func (h *HealthChecker) Start(ctx context.Context) {
 
 // Stop 停止健康检查
 func (h *HealthChecker) Stop() {
-	close(h.stopCh)
+	h.closeOnce.Do(func() { close(h.stopCh) })
 }
 
 func (h *HealthChecker) checkAll(ctx context.Context) {

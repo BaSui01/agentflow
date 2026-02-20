@@ -194,9 +194,10 @@ type MemoryConsolidator struct {
 	strategies []ConsolidationStrategy
 
 	// 运行状态
-	running bool
-	stopCh  chan struct{}
-	mu      sync.Mutex
+	running   bool
+	stopCh    chan struct{}
+	closeOnce sync.Once
+	mu        sync.Mutex
 
 	logger *zap.Logger
 }
@@ -502,7 +503,7 @@ func (c *MemoryConsolidator) Stop() error {
 	}
 
 	if c.stopCh != nil {
-		close(c.stopCh)
+		c.closeOnce.Do(func() { close(c.stopCh) })
 	}
 	c.running = false
 

@@ -110,7 +110,7 @@ func mapErrorCodeToHTTPStatus(code types.ErrorCode) int {
 		return http.StatusForbidden
 	case types.ErrModelNotFound:
 		return http.StatusNotFound
-	case types.ErrRateLimit, types.ErrRateLimited:
+	case types.ErrRateLimit:
 		return http.StatusTooManyRequests
 	case types.ErrQuotaExceeded:
 		return http.StatusPaymentRequired

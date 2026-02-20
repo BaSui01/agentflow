@@ -89,6 +89,7 @@ type BidirectionalStream struct {
 	logger   *zap.Logger
 	mu       sync.RWMutex
 	done     chan struct{}
+	closeOnce sync.Once
 	sequence int64
 	// 新增字段
 	connFactory    func() (StreamConnection, error) // 连接工厂，用于重连
@@ -228,7 +229,7 @@ func (s *BidirectionalStream) Close() error {
 		return nil
 	}
 
-	close(s.done)
+	s.closeOnce.Do(func() { close(s.done) })
 	s.State = StateDisconnected
 
 	// 关闭底层连接

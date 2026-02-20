@@ -75,6 +75,7 @@ type BackpressureStream struct {
 	buffer chan Token
 	done   chan struct{}
 	closed atomic.Bool
+	closeOnce sync.Once
 	mu     sync.RWMutex
 
 	// 指标
@@ -198,8 +199,7 @@ func (s *BackpressureStream) Close() error {
 	if s.closed.Swap(true) {
 		return nil // Already closed
 	}
-	close(s.done)
-	close(s.buffer)
+	s.closeOnce.Do(func() { close(s.done); close(s.buffer) })
 	return nil
 }
 

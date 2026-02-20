@@ -92,9 +92,10 @@ type InterruptManager struct {
 }
 
 type pendingInterrupt struct {
-	interrupt  *Interrupt
-	responseCh chan *Response
-	cancelFn   context.CancelFunc
+	interrupt   *Interrupt
+	responseCh  chan *Response
+	cancelFn    context.CancelFunc
+	resolveOnce sync.Once
 }
 
 // 新干扰管理器创建了新的中断管理器 。
@@ -207,12 +208,13 @@ func (m *InterruptManager) ResolveInterrupt(ctx context.Context, interruptID str
 	}
 
 	// 发送对等待goroutine的响应
-	select {
-	case pending.responseCh <- response:
-	default:
-	}
-
-	pending.cancelFn()
+	pending.resolveOnce.Do(func() {
+		select {
+		case pending.responseCh <- response:
+		default:
+		}
+		pending.cancelFn()
+	})
 	return nil
 }
 
@@ -235,8 +237,10 @@ func (m *InterruptManager) CancelInterrupt(ctx context.Context, interruptID stri
 		return err
 	}
 
-	pending.cancelFn()
-	close(pending.responseCh)
+	pending.resolveOnce.Do(func() {
+		pending.cancelFn()
+		close(pending.responseCh)
+	})
 
 	m.logger.Info("interrupt canceled", zap.String("id", interruptID))
 	return nil
