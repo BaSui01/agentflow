@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
@@ -12,6 +13,18 @@ import (
 	"go.uber.org/zap"
 	"golang.org/x/time/rate"
 )
+
+// requestIDKey is the context key for the request ID.
+type requestIDKey struct{}
+
+// RequestIDFromContext extracts the request ID from the context.
+// Returns an empty string if no request ID is present.
+func RequestIDFromContext(ctx context.Context) string {
+	if v, ok := ctx.Value(requestIDKey{}).(string); ok {
+		return v
+	}
+	return ""
+}
 
 // Middleware 类型定义
 type Middleware func(http.Handler) http.Handler
@@ -171,8 +184,9 @@ func CORS(allowedOrigins []string) Middleware {
 	}
 }
 
-// RequestID adds a unique request ID to each request via the X-Request-ID header.
-// If the client already provides one, it is preserved.
+// RequestID adds a unique request ID to each request via the X-Request-ID header
+// and injects it into the request context. If the client already provides one,
+// it is preserved. Downstream handlers can retrieve the ID via RequestIDFromContext.
 func RequestID() Middleware {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -181,7 +195,8 @@ func RequestID() Middleware {
 				id = generateRequestID()
 			}
 			w.Header().Set("X-Request-ID", id)
-			next.ServeHTTP(w, r)
+			ctx := context.WithValue(r.Context(), requestIDKey{}, id)
+			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
 }

@@ -24,6 +24,8 @@ tags:
     description: Health and readiness endpoints
   - name: Config
     description: Runtime configuration management endpoints
+  - name: Chat
+    description: LLM chat completion endpoints
 
 paths:
   /health:
@@ -102,6 +104,56 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Envelope'
+
+  /v1/chat/completions:
+    post:
+      tags: [Chat]
+      summary: Chat completion
+      operationId: chatCompletion
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChatRequest'
+      responses:
+        '200':
+          description: Chat completion response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Envelope'
+        '400':
+          description: Invalid request
+        '500':
+          description: Internal error
+
+  /v1/chat/completions/stream:
+    post:
+      tags: [Chat]
+      summary: Streaming chat completion (SSE)
+      operationId: chatCompletionStream
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChatRequest'
+      responses:
+        '200':
+          description: SSE stream of chat completion chunks
+          content:
+            text/event-stream:
+              schema:
+                type: string
+        '400':
+          description: Invalid request
+        '500':
+          description: Internal error
 
   /api/v1/config:
     get:
@@ -284,3 +336,26 @@ components:
         timestamp:
           type: string
           format: date-time
+
+    ChatRequest:
+      type: object
+      required: [messages]
+      properties:
+        model:
+          type: string
+        messages:
+          type: array
+          items:
+            type: object
+            properties:
+              role:
+                type: string
+                enum: [system, user, assistant]
+              content:
+                type: string
+        max_tokens:
+          type: integer
+        temperature:
+          type: number
+        stream:
+          type: boolean
