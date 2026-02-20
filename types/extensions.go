@@ -1,4 +1,3 @@
-// Package types provides unified type definitions for the AgentFlow framework.
 package types
 
 import "context"
