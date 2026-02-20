@@ -14,7 +14,7 @@ import (
 	"go.uber.org/zap"
 )
 
-// BuildOptions controls out-of-the-box wiring for optional subsystems.
+// 为可选子系统构建可选控件外接线.
 type BuildOptions struct {
 	EnableAll bool
 
@@ -34,10 +34,10 @@ type BuildOptions struct {
 
 	EnhancedMemoryConfig *memory.EnhancedMemoryConfig
 
-	// ObservabilitySystem, when set, is used instead of the default implementation.
+	// 设定时使用可观察性系统代替默认执行.
 	ObservabilitySystem interface{}
 
-	// InitAgent calls Init(ctx) after wiring.
+	// InitAgent在接线后呼叫Init(ctx).
 	InitAgent bool
 }
 
@@ -60,7 +60,7 @@ func DefaultBuildOptions() BuildOptions {
 
 func enabled(all bool, v bool) bool { return all || v }
 
-// BuildAgent constructs an agent.BaseAgent and wires optional features with sensible defaults.
+// BuildAgent 构造一个代理. BaseAgent和有线的可选特性,带有合理的默认.
 func BuildAgent(ctx context.Context, cfg agent.Config, provider llm.Provider, logger *zap.Logger, opts BuildOptions) (*agent.BaseAgent, error) {
 	if logger == nil {
 		logger = zap.NewNop()
@@ -123,8 +123,8 @@ func BuildAgent(ctx context.Context, cfg agent.Config, provider llm.Provider, lo
 	return ag, nil
 }
 
-// QuickSetup wires defaults onto an already-constructed BaseAgent.
-// This is useful when callers instantiate BaseAgent manually but still want the default subsystems.
+// QuickSetup 电线默认为已经构建的 Base Agent 。
+// 当呼叫者手动即时BaseAgent但仍然想要默认子系统时,此功能是有用的.
 func QuickSetup(ctx context.Context, ag *agent.BaseAgent, opts BuildOptions) error {
 	if ag == nil {
 		return fmt.Errorf("agent is nil")

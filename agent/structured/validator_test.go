@@ -797,7 +797,7 @@ func TestParseError_Error(t *testing.T) {
 func TestValidator_RegisterFormat(t *testing.T) {
 	v := NewValidator()
 
-	// Register custom format
+	// 注册自定义格式
 	v.RegisterFormat("custom", func(s string) bool {
 		return s == "valid"
 	})
@@ -811,7 +811,7 @@ func TestValidator_RegisterFormat(t *testing.T) {
 	require.Error(t, err)
 }
 
-// TestValidator_RequiredFieldValidation validates requirement 3.6
+// 验证要求 3.6
 // WHEN Schema 定义了必需字段 THEN Structured_Output 系统 SHALL 验证所有必需字段存在且非空
 func TestValidator_RequiredFieldValidation(t *testing.T) {
 	v := NewValidator()
@@ -865,7 +865,7 @@ func TestValidator_RequiredFieldValidation(t *testing.T) {
 	}
 }
 
-// TestValidator_FieldLevelErrors validates requirement 3.2
+// 测试变量   实地级别错误验证要求 3.2
 // WHEN Agent 输出不符合 Schema THEN Structured_Output 系统 SHALL 返回验证错误并包含具体违规字段
 func TestValidator_FieldLevelErrors(t *testing.T) {
 	v := NewValidator()
@@ -884,22 +884,22 @@ func TestValidator_FieldLevelErrors(t *testing.T) {
 	validationErr, ok := err.(*ValidationErrors)
 	require.True(t, ok)
 
-	// Should have errors for name (minLength), age (maximum), and email (format)
+	// 名称( minLength)、 年龄( 最大值) 和电子邮件( 格式) 应该有错误
 	assert.GreaterOrEqual(t, len(validationErr.Errors), 3)
 
-	// Check that each error has a path
+	// 检查每个错误是否有路径
 	for _, e := range validationErr.Errors {
 		assert.NotEmpty(t, e.Path, "error should have a path")
 		assert.NotEmpty(t, e.Message, "error should have a message")
 	}
 }
 
-// TestValidator_ComplexSchemaTypes validates requirement 3.5
+// 测试变量  ComplexSchematypes 验证要求3.5
 // THE Structured_Output 系统 SHALL 支持嵌套对象、数组、枚举等复杂 Schema 类型
 func TestValidator_ComplexSchemaTypes(t *testing.T) {
 	v := NewValidator()
 
-	// Complex schema with nested objects, arrays, and enums
+	// 配有嵌入式物体、阵列和 en的复杂方案
 	schema := NewObjectSchema().
 		AddProperty("status", NewEnumSchema("active", "inactive", "pending")).
 		AddProperty("user", NewObjectSchema().

@@ -12,8 +12,8 @@ import (
 	"github.com/google/uuid"
 )
 
-// FileMessageStore is a file-based implementation of MessageStore.
-// Suitable for single-node production deployments.
+// FileMessageStore是基于文件执行的MessageStore.
+// 适合单节点生产部署.
 type FileMessageStore struct {
 	baseDir  string
 	messages map[string]*Message // in-memory cache
@@ -23,7 +23,7 @@ type FileMessageStore struct {
 	config   StoreConfig
 }
 
-// NewFileMessageStore creates a new file-based message store
+// NewFileMessageStore 创建一个新的基于文件的信息存储
 func NewFileMessageStore(config StoreConfig) (*FileMessageStore, error) {
 	baseDir := filepath.Join(config.BaseDir, "messages")
 	if err := os.MkdirAll(baseDir, 0755); err != nil {
@@ -37,12 +37,12 @@ func NewFileMessageStore(config StoreConfig) (*FileMessageStore, error) {
 		config:   config,
 	}
 
-	// Load existing messages
+	// 装入已有信件
 	if err := store.loadFromDisk(); err != nil {
 		return nil, fmt.Errorf("failed to load messages from disk: %w", err)
 	}
 
-	// Start cleanup goroutine if enabled
+	// 启用后开始清理 goroutine
 	if config.Cleanup.Enabled {
 		go store.cleanupLoop(config.Cleanup.Interval)
 	}
@@ -50,7 +50,7 @@ func NewFileMessageStore(config StoreConfig) (*FileMessageStore, error) {
 	return store, nil
 }
 
-// loadFromDisk loads all messages from disk into memory
+// 从磁盘装入全部信件到内存
 func (s *FileMessageStore) loadFromDisk() error {
 	indexPath := filepath.Join(s.baseDir, "index.json")
 	data, err := os.ReadFile(indexPath)
@@ -83,7 +83,7 @@ func (s *FileMessageStore) loadFromDisk() error {
 	return nil
 }
 
-// saveToDisk persists all messages to disk
+// 保存ToDisk 坚持到磁盘的所有信件
 func (s *FileMessageStore) saveToDisk() error {
 	index := struct {
 		Messages map[string]*Message `json:"messages"`
@@ -98,7 +98,7 @@ func (s *FileMessageStore) saveToDisk() error {
 		return err
 	}
 
-	// Atomic write: write to temp file then rename
+	// 原子写: 写入临时文件后重命名
 	indexPath := filepath.Join(s.baseDir, "index.json")
 	tempPath := indexPath + ".tmp"
 
@@ -109,7 +109,7 @@ func (s *FileMessageStore) saveToDisk() error {
 	return os.Rename(tempPath, indexPath)
 }
 
-// Close closes the store
+// 关闭商店
 func (s *FileMessageStore) Close() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -122,7 +122,7 @@ func (s *FileMessageStore) Close() error {
 	return s.saveToDisk()
 }
 
-// Ping checks if the store is healthy
+// 平平检查,如果商店是健康的
 func (s *FileMessageStore) Ping(ctx context.Context) error {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -132,7 +132,7 @@ func (s *FileMessageStore) Ping(ctx context.Context) error {
 	return nil
 }
 
-// SaveMessage persists a single message
+// 保存信件坚持一个消息
 func (s *FileMessageStore) SaveMessage(ctx context.Context, msg *Message) error {
 	if msg == nil {
 		return ErrInvalidInput
@@ -145,20 +145,20 @@ func (s *FileMessageStore) SaveMessage(ctx context.Context, msg *Message) error 
 		return ErrStoreClosed
 	}
 
-	// Generate ID if not set
+	// 如果没有设定则生成 ID
 	if msg.ID == "" {
 		msg.ID = uuid.New().String()
 	}
 
-	// Set created time if not set
+	// 设定未设定的创建时间
 	if msg.CreatedAt.IsZero() {
 		msg.CreatedAt = time.Now()
 	}
 
-	// Store message
+	// 存储信件
 	s.messages[msg.ID] = msg
 
-	// Add to topic index
+	// 添加到主题索引
 	if msg.Topic != "" {
 		s.topics[msg.Topic] = append(s.topics[msg.Topic], msg.ID)
 	}
@@ -166,7 +166,7 @@ func (s *FileMessageStore) SaveMessage(ctx context.Context, msg *Message) error 
 	return s.saveToDisk()
 }
 
-// SaveMessages persists multiple messages atomically
+// 保存消息在解剖上持续了多个消息
 func (s *FileMessageStore) SaveMessages(ctx context.Context, msgs []*Message) error {
 	if len(msgs) == 0 {
 		return nil
@@ -201,7 +201,7 @@ func (s *FileMessageStore) SaveMessages(ctx context.Context, msgs []*Message) er
 	return s.saveToDisk()
 }
 
-// GetMessage retrieves a message by ID
+// 通过 ID 获取信件
 func (s *FileMessageStore) GetMessage(ctx context.Context, msgID string) (*Message, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -218,7 +218,7 @@ func (s *FileMessageStore) GetMessage(ctx context.Context, msgID string) (*Messa
 	return msg, nil
 }
 
-// GetMessages retrieves messages for a topic with pagination
+// GetMessages 获取带有 pagination 主题的信息
 func (s *FileMessageStore) GetMessages(ctx context.Context, topic string, cursor string, limit int) ([]*Message, string, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -232,7 +232,7 @@ func (s *FileMessageStore) GetMessages(ctx context.Context, topic string, cursor
 		return []*Message{}, "", nil
 	}
 
-	// Find start index based on cursor
+	// 根据光标查找启动索引
 	startIdx := 0
 	if cursor != "" {
 		for i, id := range msgIDs {
@@ -243,7 +243,7 @@ func (s *FileMessageStore) GetMessages(ctx context.Context, topic string, cursor
 		}
 	}
 
-	// Apply limit
+	// 应用限制
 	if limit <= 0 {
 		limit = 100
 	}
@@ -253,7 +253,7 @@ func (s *FileMessageStore) GetMessages(ctx context.Context, topic string, cursor
 		endIdx = len(msgIDs)
 	}
 
-	// Collect messages
+	// 收集信件
 	result := make([]*Message, 0, endIdx-startIdx)
 	for i := startIdx; i < endIdx; i++ {
 		if msg, ok := s.messages[msgIDs[i]]; ok {
@@ -261,7 +261,7 @@ func (s *FileMessageStore) GetMessages(ctx context.Context, topic string, cursor
 		}
 	}
 
-	// Determine next cursor
+	// 确定下一个光标
 	nextCursor := ""
 	if endIdx < len(msgIDs) {
 		nextCursor = msgIDs[endIdx-1]
@@ -270,7 +270,7 @@ func (s *FileMessageStore) GetMessages(ctx context.Context, topic string, cursor
 	return result, nextCursor, nil
 }
 
-// AckMessage marks a message as acknowledged
+// AckMessage 是一个被承认的信息
 func (s *FileMessageStore) AckMessage(ctx context.Context, msgID string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -290,7 +290,7 @@ func (s *FileMessageStore) AckMessage(ctx context.Context, msgID string) error {
 	return s.saveToDisk()
 }
 
-// GetUnackedMessages retrieves unacknowledged messages older than the specified duration
+// 获取未保存的邮件获取未确认的比指定时间长的信件
 func (s *FileMessageStore) GetUnackedMessages(ctx context.Context, topic string, olderThan time.Duration) ([]*Message, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -313,7 +313,7 @@ func (s *FileMessageStore) GetUnackedMessages(ctx context.Context, topic string,
 			continue
 		}
 
-		// Check if unacked and old enough
+		// 检查是否未打开和足够老
 		if msg.AckedAt == nil && msg.CreatedAt.Before(cutoff) {
 			result = append(result, msg)
 		}
@@ -322,7 +322,7 @@ func (s *FileMessageStore) GetUnackedMessages(ctx context.Context, topic string,
 	return result, nil
 }
 
-// GetPendingMessages retrieves messages that need to be delivered
+// GetPendingMessages 检索需要发送的信件
 func (s *FileMessageStore) GetPendingMessages(ctx context.Context, topic string, limit int) ([]*Message, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -345,12 +345,12 @@ func (s *FileMessageStore) GetPendingMessages(ctx context.Context, topic string,
 			continue
 		}
 
-		// Skip acked or expired messages
+		// 跳过已锁定或已过期的信件
 		if msg.AckedAt != nil || msg.IsExpired() {
 			continue
 		}
 
-		// Check if ready for retry
+		// 检查是否准备好重试
 		if msg.RetryCount > 0 {
 			nextRetry := msg.NextRetryTime(s.config.Retry)
 			if now.Before(nextRetry) {
@@ -358,7 +358,7 @@ func (s *FileMessageStore) GetPendingMessages(ctx context.Context, topic string,
 			}
 		}
 
-		// Check max retries
+		// 检查最大重试
 		if msg.RetryCount >= s.config.Retry.MaxRetries {
 			continue
 		}
@@ -373,7 +373,7 @@ func (s *FileMessageStore) GetPendingMessages(ctx context.Context, topic string,
 	return result, nil
 }
 
-// IncrementRetry increments the retry count for a message
+// 递增
 func (s *FileMessageStore) IncrementRetry(ctx context.Context, msgID string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -394,7 +394,7 @@ func (s *FileMessageStore) IncrementRetry(ctx context.Context, msgID string) err
 	return s.saveToDisk()
 }
 
-// DeleteMessage removes a message from the store
+// 删除信件从存储处删除
 func (s *FileMessageStore) DeleteMessage(ctx context.Context, msgID string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -408,7 +408,7 @@ func (s *FileMessageStore) DeleteMessage(ctx context.Context, msgID string) erro
 		return ErrNotFound
 	}
 
-	// Remove from topic index
+	// 从主题索引中删除
 	if msg.Topic != "" {
 		msgIDs := s.topics[msg.Topic]
 		for i, id := range msgIDs {
@@ -424,7 +424,7 @@ func (s *FileMessageStore) DeleteMessage(ctx context.Context, msgID string) erro
 	return s.saveToDisk()
 }
 
-// Cleanup removes old acknowledged messages
+// 清理删除旧消息
 func (s *FileMessageStore) Cleanup(ctx context.Context, olderThan time.Duration) (int, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -439,18 +439,18 @@ func (s *FileMessageStore) Cleanup(ctx context.Context, olderThan time.Duration)
 	for msgID, msg := range s.messages {
 		shouldDelete := false
 
-		// Remove acked messages older than cutoff
+		// 删除比截取时间长的被敲击的信件
 		if msg.AckedAt != nil && msg.AckedAt.Before(cutoff) {
 			shouldDelete = true
 		}
 
-		// Also remove expired messages
+		// 同时删除已过期的信件
 		if msg.IsExpired() {
 			shouldDelete = true
 		}
 
 		if shouldDelete {
-			// Remove from topic index
+			// 从主题索引中删除
 			if msg.Topic != "" {
 				msgIDs := s.topics[msg.Topic]
 				for i, id := range msgIDs {
@@ -474,7 +474,7 @@ func (s *FileMessageStore) Cleanup(ctx context.Context, olderThan time.Duration)
 	return count, nil
 }
 
-// Stats returns statistics about the message store
+// Stats 返回关于消息库的统计数据
 func (s *FileMessageStore) Stats(ctx context.Context) (*MessageStoreStats, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -515,7 +515,7 @@ func (s *FileMessageStore) Stats(ctx context.Context) (*MessageStoreStats, error
 	return stats, nil
 }
 
-// cleanupLoop runs periodic cleanup
+// 清理Loop 运行定期清理
 func (s *FileMessageStore) cleanupLoop(interval time.Duration) {
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
@@ -533,5 +533,5 @@ func (s *FileMessageStore) cleanupLoop(interval time.Duration) {
 	}
 }
 
-// Ensure FileMessageStore implements MessageStore
+// 确保文件MessageStore执行信件Store
 var _ MessageStore = (*FileMessageStore)(nil)

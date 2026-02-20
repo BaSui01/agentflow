@@ -1,4 +1,4 @@
-// Package k8s provides Kubernetes operator capabilities for agent management.
+// 软件包 k8s提供Kubernetes操作员的代理管理能力.
 package k8s
 
 import (
@@ -11,7 +11,7 @@ import (
 	"go.uber.org/zap"
 )
 
-// AgentCRD represents the Custom Resource Definition for an Agent.
+// AgentCRD代表一个代理的自定义资源定义.
 type AgentCRD struct {
 	APIVersion string         `json:"apiVersion"`
 	Kind       string         `json:"kind"`
@@ -20,7 +20,7 @@ type AgentCRD struct {
 	Status     AgentCRDStatus `json:"status,omitempty"`
 }
 
-// ObjectMeta contains standard Kubernetes object metadata.
+// ObjectMeta包含标准Kubernetes对象元数据.
 type ObjectMeta struct {
 	Name            string            `json:"name"`
 	Namespace       string            `json:"namespace"`
@@ -32,7 +32,7 @@ type ObjectMeta struct {
 	CreationTime    time.Time         `json:"creationTimestamp,omitempty"`
 }
 
-// AgentSpec defines the desired state of an Agent.
+// AgentSpec定义了Agent的理想状态.
 type AgentSpec struct {
 	AgentType    string            `json:"agentType"`
 	Replicas     int32             `json:"replicas"`
@@ -45,7 +45,7 @@ type AgentSpec struct {
 	SecretRef    string            `json:"secretRef,omitempty"`
 }
 
-// ModelSpec defines the LLM model configuration.
+// ModelSpec定义了LLM模型配置.
 type ModelSpec struct {
 	Provider    string  `json:"provider"`
 	Model       string  `json:"model"`
@@ -53,20 +53,20 @@ type ModelSpec struct {
 	MaxTokens   int     `json:"maxTokens,omitempty"`
 }
 
-// ResourceSpec defines resource requirements.
+// 资源Spec定义了所需资源.
 type ResourceSpec struct {
 	Requests ResourceQuantity `json:"requests,omitempty"`
 	Limits   ResourceQuantity `json:"limits,omitempty"`
 }
 
-// ResourceQuantity defines CPU and memory quantities.
+// 资源数量定义了CPU和内存数量.
 type ResourceQuantity struct {
 	CPU    string `json:"cpu,omitempty"`
 	Memory string `json:"memory,omitempty"`
 	GPU    string `json:"gpu,omitempty"`
 }
 
-// ScalingSpec defines auto-scaling configuration.
+// 缩放Spec 定义自动缩放配置 。
 type ScalingSpec struct {
 	Enabled        bool             `json:"enabled"`
 	MinReplicas    int32            `json:"minReplicas"`
@@ -78,7 +78,7 @@ type ScalingSpec struct {
 	CustomBehavior *ScalingBehavior `json:"behavior,omitempty"`
 }
 
-// TargetMetric defines a metric target for scaling.
+// 目标计量定义了衡量尺度目标。
 type TargetMetric struct {
 	Type               string `json:"type"` // cpu, memory, custom, requests_per_second, latency
 	Name               string `json:"name,omitempty"`
@@ -86,26 +86,26 @@ type TargetMetric struct {
 	TargetAverageValue int64  `json:"targetAverageValue,omitempty"`
 }
 
-// ScalingBehavior defines custom scaling behavior.
+// 缩放行为定义自定义缩放行为 。
 type ScalingBehavior struct {
 	ScaleUp   *ScalingRules `json:"scaleUp,omitempty"`
 	ScaleDown *ScalingRules `json:"scaleDown,omitempty"`
 }
 
-// ScalingRules defines scaling rules.
+// 缩放规则定义了缩放规则.
 type ScalingRules struct {
 	StabilizationWindowSeconds int32           `json:"stabilizationWindowSeconds,omitempty"`
 	Policies                   []ScalingPolicy `json:"policies,omitempty"`
 }
 
-// ScalingPolicy defines a single scaling policy.
+// 缩放政策界定了单一缩放政策.
 type ScalingPolicy struct {
 	Type          string `json:"type"` // Pods, Percent
 	Value         int32  `json:"value"`
 	PeriodSeconds int32  `json:"periodSeconds"`
 }
 
-// HealthCheckSpec defines health check configuration.
+// 健康检查Spec定义健康检查配置.
 type HealthCheckSpec struct {
 	Enabled             bool          `json:"enabled"`
 	Interval            time.Duration `json:"interval"`
@@ -115,7 +115,7 @@ type HealthCheckSpec struct {
 	InitialDelaySeconds int32         `json:"initialDelaySeconds,omitempty"`
 }
 
-// AgentCRDStatus represents the observed state of an Agent.
+// AgentCRD status 代表被观察到的特工状态.
 type AgentCRDStatus struct {
 	Phase              AgentPhase       `json:"phase"`
 	Replicas           int32            `json:"replicas"`
@@ -127,7 +127,7 @@ type AgentCRDStatus struct {
 	ObservedGeneration int64            `json:"observedGeneration,omitempty"`
 }
 
-// AgentPhase represents the phase of an Agent.
+// 代理阶段代表代理阶段.
 type AgentPhase string
 
 const (
@@ -139,7 +139,7 @@ const (
 	AgentPhaseTerminating AgentPhase = "Terminating"
 )
 
-// AgentCondition represents a condition of an Agent.
+// 代理条件代表着代理的条件.
 type AgentCondition struct {
 	Type               string    `json:"type"`
 	Status             string    `json:"status"` // True, False, Unknown
@@ -148,14 +148,14 @@ type AgentCondition struct {
 	Message            string    `json:"message,omitempty"`
 }
 
-// MetricValue represents a current metric value.
+// MetricValue 代表当前计量值。
 type MetricValue struct {
 	Name         string `json:"name"`
 	CurrentValue int64  `json:"currentValue"`
 	TargetValue  int64  `json:"targetValue"`
 }
 
-// OperatorConfig configures the Kubernetes operator.
+// 操作员Config 配置 Kubernetes 操作员 。
 type OperatorConfig struct {
 	Namespace               string        `json:"namespace"`
 	ReconcileInterval       time.Duration `json:"reconcileInterval"`
@@ -169,7 +169,7 @@ type OperatorConfig struct {
 	MaxConcurrentReconciles int           `json:"maxConcurrentReconciles"`
 }
 
-// DefaultOperatorConfig returns sensible defaults.
+// 默认操作器 Config 返回合理的默认值 。
 func DefaultOperatorConfig() OperatorConfig {
 	return OperatorConfig{
 		Namespace:               "default",
@@ -183,7 +183,7 @@ func DefaultOperatorConfig() OperatorConfig {
 	}
 }
 
-// AgentOperator implements the Kubernetes operator for agents.
+// AgentOperator为特工执行Kubernetes操作器.
 type AgentOperator struct {
 	config    OperatorConfig
 	agents    map[string]*AgentCRD
@@ -192,17 +192,17 @@ type AgentOperator struct {
 	logger    *zap.Logger
 	mu        sync.RWMutex
 
-	// Callbacks
+	// 回电
 	onReconcile   func(agent *AgentCRD) error
 	onScale       func(agent *AgentCRD, replicas int32) error
 	onHealthCheck func(agent *AgentCRD) (bool, error)
 
-	// Control
+	// 控制权
 	stopCh  chan struct{}
 	running bool
 }
 
-// AgentInstance represents a running agent instance.
+// 代理Instance代表运行的代理实例.
 type AgentInstance struct {
 	ID          string            `json:"id"`
 	AgentName   string            `json:"agentName"`
@@ -214,7 +214,7 @@ type AgentInstance struct {
 	Labels      map[string]string `json:"labels,omitempty"`
 }
 
-// InstanceStatus represents the status of an agent instance.
+// 案件状况代表代理人案件的状况。
 type InstanceStatus string
 
 const (
@@ -225,7 +225,7 @@ const (
 	InstanceStatusFailed    InstanceStatus = "Failed"
 )
 
-// InstanceMetrics contains metrics for an agent instance.
+// 实例计量包含一个代理实例的衡量标准。
 type InstanceMetrics struct {
 	RequestsTotal     int64         `json:"requestsTotal"`
 	RequestsPerSecond float64       `json:"requestsPerSecond"`
@@ -236,7 +236,7 @@ type InstanceMetrics struct {
 	TokensUsed        int64         `json:"tokensUsed"`
 }
 
-// OperatorMetrics contains operator-level metrics.
+// 运算仪包含运算器级的度量衡.
 type OperatorMetrics struct {
 	ReconcileTotal       int64         `json:"reconcileTotal"`
 	ReconcileErrors      int64         `json:"reconcileErrors"`
@@ -246,7 +246,7 @@ type OperatorMetrics struct {
 	AverageReconcileTime time.Duration `json:"averageReconcileTime"`
 }
 
-// NewAgentOperator creates a new agent operator.
+// 新代理运营商创建了新的代理运营商.
 func NewAgentOperator(config OperatorConfig, logger *zap.Logger) *AgentOperator {
 	if logger == nil {
 		logger = zap.NewNop()
@@ -261,22 +261,22 @@ func NewAgentOperator(config OperatorConfig, logger *zap.Logger) *AgentOperator 
 	}
 }
 
-// SetReconcileCallback sets the reconcile callback.
+// 设置调和 Callback 设置调和调回调 。
 func (o *AgentOperator) SetReconcileCallback(fn func(agent *AgentCRD) error) {
 	o.onReconcile = fn
 }
 
-// SetScaleCallback sets the scale callback.
+// 设置缩放Callback 设置缩放回调 。
 func (o *AgentOperator) SetScaleCallback(fn func(agent *AgentCRD, replicas int32) error) {
 	o.onScale = fn
 }
 
-// SetHealthCheckCallback sets the health check callback.
+// SetHealthCheckCallback 设置健康检查回调.
 func (o *AgentOperator) SetHealthCheckCallback(fn func(agent *AgentCRD) (bool, error)) {
 	o.onHealthCheck = fn
 }
 
-// Start starts the operator.
+// 启动操作员 。
 func (o *AgentOperator) Start(ctx context.Context) error {
 	o.mu.Lock()
 	if o.running {
@@ -291,19 +291,19 @@ func (o *AgentOperator) Start(ctx context.Context) error {
 		zap.String("namespace", o.config.Namespace),
 		zap.Duration("reconcileInterval", o.config.ReconcileInterval))
 
-	// Start reconcile loop
+	// 开始调节循环
 	go o.reconcileLoop(ctx)
 
-	// Start health check loop
+	// 开始健康检查循环
 	go o.healthCheckLoop(ctx)
 
-	// Start metrics collection
+	// 开始收集衡量标准
 	go o.metricsLoop(ctx)
 
 	return nil
 }
 
-// Stop stops the operator.
+// 停止停止操作员。
 func (o *AgentOperator) Stop() {
 	o.mu.Lock()
 	defer o.mu.Unlock()
@@ -317,14 +317,14 @@ func (o *AgentOperator) Stop() {
 	o.logger.Info("agent operator stopped")
 }
 
-// RegisterAgent registers an agent CRD.
+// 注册代理注册代理CRD.
 func (o *AgentOperator) RegisterAgent(agent *AgentCRD) error {
 	o.mu.Lock()
 	defer o.mu.Unlock()
 
 	key := fmt.Sprintf("%s/%s", agent.Metadata.Namespace, agent.Metadata.Name)
 
-	// Initialize status
+	// 初始状态
 	agent.Status = AgentCRDStatus{
 		Phase:    AgentPhasePending,
 		Replicas: 0,
@@ -333,13 +333,13 @@ func (o *AgentOperator) RegisterAgent(agent *AgentCRD) error {
 	o.agents[key] = agent
 	o.logger.Info("agent registered", zap.String("key", key))
 
-	// Trigger initial reconcile
+	// 触发初始调节
 	go o.reconcileAgent(agent)
 
 	return nil
 }
 
-// UnregisterAgent removes an agent CRD.
+// 未注册代理删除代理CRD.
 func (o *AgentOperator) UnregisterAgent(namespace, name string) error {
 	o.mu.Lock()
 	defer o.mu.Unlock()
@@ -352,7 +352,7 @@ func (o *AgentOperator) UnregisterAgent(namespace, name string) error {
 
 	agent.Status.Phase = AgentPhaseTerminating
 
-	// Remove instances
+	// 删除实例
 	for id, inst := range o.instances {
 		if inst.AgentName == name && inst.Namespace == namespace {
 			delete(o.instances, id)
@@ -364,14 +364,14 @@ func (o *AgentOperator) UnregisterAgent(namespace, name string) error {
 	return nil
 }
 
-// GetAgent retrieves an agent by namespace and name.
+// Get Agent 以命名空间和名称检索代理 。
 func (o *AgentOperator) GetAgent(namespace, name string) *AgentCRD {
 	o.mu.RLock()
 	defer o.mu.RUnlock()
 	return o.agents[fmt.Sprintf("%s/%s", namespace, name)]
 }
 
-// ListAgents lists all registered agents.
+// ListAgents列出所有注册代理.
 func (o *AgentOperator) ListAgents() []*AgentCRD {
 	o.mu.RLock()
 	defer o.mu.RUnlock()
@@ -420,7 +420,7 @@ func (o *AgentOperator) reconcileAgent(agent *AgentCRD) {
 		zap.String("name", agent.Metadata.Name),
 		zap.String("namespace", agent.Metadata.Namespace))
 
-	// Call custom reconcile callback
+	// 调用自定义调试回调
 	if o.onReconcile != nil {
 		if err := o.onReconcile(agent); err != nil {
 			o.metrics.ReconcileErrors++
@@ -430,14 +430,14 @@ func (o *AgentOperator) reconcileAgent(agent *AgentCRD) {
 		}
 	}
 
-	// Check desired vs actual replicas
+	// 检查想要的复制品与实际复制品
 	o.mu.RLock()
 	currentReplicas := o.countInstances(agent.Metadata.Namespace, agent.Metadata.Name)
 	o.mu.RUnlock()
 
 	desiredReplicas := agent.Spec.Replicas
 
-	// Handle scaling
+	// 处理缩放
 	if agent.Spec.Scaling.Enabled {
 		desiredReplicas = o.calculateDesiredReplicas(agent, currentReplicas)
 	}
@@ -446,7 +446,7 @@ func (o *AgentOperator) reconcileAgent(agent *AgentCRD) {
 		o.scaleAgent(agent, desiredReplicas)
 	}
 
-	// Update status
+	// 更新状态
 	o.mu.Lock()
 	agent.Status.Replicas = currentReplicas
 	agent.Status.ReadyReplicas = o.countReadyInstances(agent.Metadata.Namespace, agent.Metadata.Name)
@@ -475,19 +475,19 @@ func (o *AgentOperator) calculateDesiredReplicas(agent *AgentCRD, current int32)
 
 	desired := current
 
-	// Evaluate metrics
+	// 评价尺度
 	for _, metric := range agent.Spec.Scaling.TargetMetrics {
 		currentValue := o.getCurrentMetricValue(agent, metric.Name)
 
 		if currentValue > metric.TargetValue {
-			// Scale up
+			// 缩放
 			ratio := float64(currentValue) / float64(metric.TargetValue)
 			newDesired := int32(float64(current) * ratio)
 			if newDesired > desired {
 				desired = newDesired
 			}
 		} else if currentValue < metric.TargetValue/2 {
-			// Scale down (only if significantly below target)
+			// 缩放( 如果明显低于目标)
 			ratio := float64(currentValue) / float64(metric.TargetValue)
 			newDesired := int32(float64(current) * ratio)
 			if newDesired < desired && newDesired >= agent.Spec.Scaling.MinReplicas {
@@ -496,7 +496,7 @@ func (o *AgentOperator) calculateDesiredReplicas(agent *AgentCRD, current int32)
 		}
 	}
 
-	// Apply bounds
+	// 应用界限
 	if desired < agent.Spec.Scaling.MinReplicas {
 		desired = agent.Spec.Scaling.MinReplicas
 	}
@@ -508,7 +508,7 @@ func (o *AgentOperator) calculateDesiredReplicas(agent *AgentCRD, current int32)
 }
 
 func (o *AgentOperator) getCurrentMetricValue(agent *AgentCRD, metricName string) int64 {
-	// Aggregate metrics from instances
+	// 实例的总指标
 	o.mu.RLock()
 	defer o.mu.RUnlock()
 
@@ -543,7 +543,7 @@ func (o *AgentOperator) scaleAgent(agent *AgentCRD, replicas int32) {
 	o.mu.Unlock()
 
 	if replicas > currentReplicas {
-		// Scale up
+		// 缩放
 		o.metrics.ScaleUpEvents++
 		o.logger.Info("scaling up agent",
 			zap.String("name", agent.Metadata.Name),
@@ -554,7 +554,7 @@ func (o *AgentOperator) scaleAgent(agent *AgentCRD, replicas int32) {
 			o.createInstance(agent)
 		}
 	} else if replicas < currentReplicas {
-		// Scale down
+		// 缩放
 		o.metrics.ScaleDownEvents++
 		o.logger.Info("scaling down agent",
 			zap.String("name", agent.Metadata.Name),
@@ -564,7 +564,7 @@ func (o *AgentOperator) scaleAgent(agent *AgentCRD, replicas int32) {
 		o.removeInstances(agent, currentReplicas-replicas)
 	}
 
-	// Call scale callback
+	// 调用缩放回调
 	if o.onScale != nil {
 		if err := o.onScale(agent, replicas); err != nil {
 			o.logger.Error("scale callback failed", zap.Error(err))
@@ -663,7 +663,7 @@ func (o *AgentOperator) checkAllHealth() {
 			inst.LastHealthy = time.Now()
 		} else {
 			inst.Status = InstanceStatusUnhealthy
-			// Self-healing: restart unhealthy instances
+			// 自愈:重启不健康事件
 			if time.Since(inst.LastHealthy) > agent.Spec.HealthCheck.Timeout*time.Duration(agent.Spec.HealthCheck.FailureThreshold) {
 				o.selfHeal(inst, agent)
 			}
@@ -681,7 +681,7 @@ func (o *AgentOperator) checkInstanceHealth(inst *AgentInstance, agent *AgentCRD
 		return healthy
 	}
 
-	// Default health check: instance is running and has recent activity
+	// 默认健康检查: 实例正在运行并有最近的活动
 	if inst.Status == InstanceStatusFailed {
 		return false
 	}
@@ -694,10 +694,10 @@ func (o *AgentOperator) selfHeal(inst *AgentInstance, agent *AgentCRD) {
 		zap.String("instance", inst.ID),
 		zap.String("agent", agent.Metadata.Name))
 
-	// Mark as failed and create replacement
+	// 标记为失败并创建替换
 	inst.Status = InstanceStatusFailed
 
-	// Create replacement instance
+	// 创建替换实例
 	newInst := &AgentInstance{
 		ID:        fmt.Sprintf("%s-%s-%d", agent.Metadata.Namespace, agent.Metadata.Name, time.Now().UnixNano()),
 		AgentName: agent.Metadata.Name,
@@ -708,7 +708,7 @@ func (o *AgentOperator) selfHeal(inst *AgentInstance, agent *AgentCRD) {
 	}
 	o.instances[newInst.ID] = newInst
 
-	// Remove failed instance
+	// 删除失败实例
 	delete(o.instances, inst.ID)
 
 	o.updateAgentCondition(agent, "SelfHealed", "True", "InstanceReplaced",
@@ -735,7 +735,7 @@ func (o *AgentOperator) collectMetrics() {
 	o.mu.Lock()
 	defer o.mu.Unlock()
 
-	// Update agent status with current metrics
+	// 更新当前计量的代理状态
 	for _, agent := range o.agents {
 		var metrics []MetricValue
 		for _, targetMetric := range agent.Spec.Scaling.TargetMetrics {
@@ -789,7 +789,7 @@ func (o *AgentOperator) updateAgentCondition(agent *AgentCRD, condType, status, 
 		Message:            message,
 	}
 
-	// Update or append condition
+	// 更新或附加条件
 	found := false
 	for i, c := range agent.Status.Conditions {
 		if c.Type == condType {
@@ -803,7 +803,7 @@ func (o *AgentOperator) updateAgentCondition(agent *AgentCRD, condType, status, 
 	}
 }
 
-// UpdateInstanceMetrics updates metrics for an instance.
+// 更新InstanceMetrics为实例更新了度量衡.
 func (o *AgentOperator) UpdateInstanceMetrics(instanceID string, metrics InstanceMetrics) {
 	o.mu.Lock()
 	defer o.mu.Unlock()
@@ -816,14 +816,14 @@ func (o *AgentOperator) UpdateInstanceMetrics(instanceID string, metrics Instanc
 	}
 }
 
-// GetMetrics returns operator metrics.
+// GetMetrics 返回操作员的度量衡 。
 func (o *AgentOperator) GetMetrics() *OperatorMetrics {
 	o.mu.RLock()
 	defer o.mu.RUnlock()
 	return o.metrics
 }
 
-// GetInstances returns all instances for an agent.
+// GetInstances 为代理返回所有实例 。
 func (o *AgentOperator) GetInstances(namespace, name string) []*AgentInstance {
 	o.mu.RLock()
 	defer o.mu.RUnlock()
@@ -837,7 +837,7 @@ func (o *AgentOperator) GetInstances(namespace, name string) []*AgentInstance {
 	return instances
 }
 
-// ExportCRD exports an agent CRD to JSON.
+// ExportCRD向JSON出口一名代理CRD.
 func (o *AgentOperator) ExportCRD(namespace, name string) ([]byte, error) {
 	agent := o.GetAgent(namespace, name)
 	if agent == nil {
@@ -846,7 +846,7 @@ func (o *AgentOperator) ExportCRD(namespace, name string) ([]byte, error) {
 	return json.Marshal(agent)
 }
 
-// ImportCRD imports an agent CRD from JSON.
+// 进口CRD从JSON进口一个代理CRD.
 func (o *AgentOperator) ImportCRD(data []byte) error {
 	var agent AgentCRD
 	if err := json.Unmarshal(data, &agent); err != nil {

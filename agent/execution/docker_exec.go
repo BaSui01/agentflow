@@ -1,4 +1,4 @@
-// package execution provides the actual Docker execution implementation.
+// 软件包执行提供了 Docker 实际执行。
 package execution
 
 import (
@@ -15,19 +15,19 @@ import (
 	"go.uber.org/zap"
 )
 
-// RealDockerBackend implements ExecutionBackend using actual Docker CLI.
+// RealDockerBackend使用实际的多克CLI执行ExecutiveBackend.
 type RealDockerBackend struct {
 	*DockerBackend
 }
 
-// NewRealDockerBackend creates a Docker backend that actually executes code.
+// NewReal DockerBackend创建了一个实际执行代码的Docker后端.
 func NewRealDockerBackend(logger *zap.Logger) *RealDockerBackend {
 	return &RealDockerBackend{
 		DockerBackend: NewDockerBackend(logger),
 	}
 }
 
-// Execute runs code in a real Docker container.
+// 执行在真正的多克容器中运行代码 。
 func (d *RealDockerBackend) Execute(ctx context.Context, req *ExecutionRequest, config SandboxConfig) (*ExecutionResult, error) {
 	start := time.Now()
 
@@ -37,17 +37,17 @@ func (d *RealDockerBackend) Execute(ctx context.Context, req *ExecutionRequest, 
 		ExitCode: -1,
 	}
 
-	// Get image for language
+	// 获取语言图像
 	image, ok := d.images[req.Language]
 	if !ok {
 		result.Error = fmt.Sprintf("no image configured for language: %s", req.Language)
 		return result, nil
 	}
 
-	// Generate unique container name
+	// 生成唯一容器名称
 	containerName := fmt.Sprintf("%s%s_%d", d.containerPrefix, sanitizeID(req.ID), time.Now().UnixNano())
 
-	// Create temp directory for code files
+	// 为代码文件创建临时目录
 	tempDir, err := os.MkdirTemp("", "sandbox_")
 	if err != nil {
 		result.Error = fmt.Sprintf("failed to create temp dir: %v", err)
@@ -55,14 +55,14 @@ func (d *RealDockerBackend) Execute(ctx context.Context, req *ExecutionRequest, 
 	}
 	defer os.RemoveAll(tempDir)
 
-	// Write code to temp file
+	// 将代码写入临时文件
 	codeFile, err := d.writeCodeFile(tempDir, req)
 	if err != nil {
 		result.Error = fmt.Sprintf("failed to write code file: %v", err)
 		return result, nil
 	}
 
-	// Write additional files
+	// 写入额外文件
 	for filename, content := range req.Files {
 		filePath := filepath.Join(tempDir, filename)
 		if err := os.WriteFile(filePath, []byte(content), 0644); err != nil {
@@ -71,7 +71,7 @@ func (d *RealDockerBackend) Execute(ctx context.Context, req *ExecutionRequest, 
 		}
 	}
 
-	// Build docker command
+	// 构建嵌入命令
 	args := d.buildRealDockerArgs(containerName, image, tempDir, codeFile, req, config)
 
 	d.logger.Debug("executing docker command",
@@ -80,7 +80,7 @@ func (d *RealDockerBackend) Execute(ctx context.Context, req *ExecutionRequest, 
 		zap.Strings("args", args),
 	)
 
-	// Track container
+	// 跟踪容器
 	d.mu.Lock()
 	d.activeContainers[containerName] = struct{}{}
 	d.mu.Unlock()
@@ -95,7 +95,7 @@ func (d *RealDockerBackend) Execute(ctx context.Context, req *ExecutionRequest, 
 		}
 	}()
 
-	// Execute docker run
+	// 执行嵌入器运行
 	cmd := exec.CommandContext(ctx, "docker", args...)
 
 	var stdoutBuf, stderrBuf bytes.Buffer
@@ -122,7 +122,7 @@ func (d *RealDockerBackend) Execute(ctx context.Context, req *ExecutionRequest, 
 			d.forceKillContainer(containerName)
 		} else if exitErr, ok := err.(*exec.ExitError); ok {
 			result.ExitCode = exitErr.ExitCode()
-			// Non-zero exit is not necessarily an error
+			// 非零退出不一定是一个错误
 		} else {
 			result.Error = err.Error()
 		}
@@ -165,35 +165,35 @@ func (d *RealDockerBackend) buildRealDockerArgs(containerName, image, tempDir, c
 		"--rm",
 	}
 
-	// Memory limit
+	// 内存限制
 	if config.MaxMemoryMB > 0 {
 		args = append(args, "--memory", fmt.Sprintf("%dm", config.MaxMemoryMB))
 		args = append(args, "--memory-swap", fmt.Sprintf("%dm", config.MaxMemoryMB))
 	}
 
-	// CPU limit
+	// CPU 限制
 	if config.MaxCPUPercent > 0 {
 		cpus := float64(config.MaxCPUPercent) / 100.0
 		args = append(args, "--cpus", fmt.Sprintf("%.2f", cpus))
 	}
 
-	// Network
+	// 网络
 	if !config.NetworkEnabled {
 		args = append(args, "--network", "none")
 	}
 
-	// Security options
+	// 安全选项
 	args = append(args,
 		"--security-opt", "no-new-privileges",
 		"--cap-drop", "ALL",
 		"--pids-limit", "100",
 	)
 
-	// Mount code directory
+	// 挂载代码目录
 	args = append(args, "-v", fmt.Sprintf("%s:/code:ro", tempDir))
 	args = append(args, "-w", "/code")
 
-	// Environment variables
+	// 环境变量
 	for k, v := range config.EnvVars {
 		args = append(args, "-e", fmt.Sprintf("%s=%s", k, v))
 	}
@@ -201,10 +201,10 @@ func (d *RealDockerBackend) buildRealDockerArgs(containerName, image, tempDir, c
 		args = append(args, "-e", fmt.Sprintf("%s=%s", k, v))
 	}
 
-	// Image
+	// 图像
 	args = append(args, image)
 
-	// Command based on language
+	// 基于语言的命令
 	cmd := d.buildRealCommand(codeFile, req)
 	args = append(args, cmd...)
 
@@ -218,7 +218,7 @@ func (d *RealDockerBackend) buildRealCommand(codeFile string, req *ExecutionRequ
 	case LangJavaScript:
 		return []string{"node", codeFile}
 	case LangTypeScript:
-		// Requires ts-node or transpilation
+		// 需要 ts- 节点或转接
 		return []string{"npx", "ts-node", codeFile}
 	case LangGo:
 		return []string{"go", "run", codeFile}
@@ -251,7 +251,7 @@ func (d *RealDockerBackend) forceRemoveContainer(name string) {
 	d.logger.Debug("removed container", zap.String("name", name))
 }
 
-// Cleanup removes all active containers.
+// 清除所有活动容器。
 func (d *RealDockerBackend) Cleanup() error {
 	d.mu.Lock()
 	containers := make([]string, 0, len(d.activeContainers))
@@ -270,7 +270,7 @@ func (d *RealDockerBackend) Cleanup() error {
 }
 
 func sanitizeID(id string) string {
-	// Remove characters not allowed in container names
+	// 删除容器名称中不允许的字符
 	var result strings.Builder
 	for _, c := range id {
 		if (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_' || c == '-' {
@@ -284,14 +284,14 @@ func sanitizeID(id string) string {
 	return s
 }
 
-// RealProcessBackend implements ExecutionBackend using actual os/exec.
+// RealProcessBackend 执行 ExecutiveBackend 使用实际的 os/ exec.
 type RealProcessBackend struct {
 	*ProcessBackend
 	validator *CodeValidator
 }
 
-// NewRealProcessBackend creates a process backend that actually executes code.
-// WARNING: Only use in trusted environments with proper sandboxing at OS level.
+// New Real ProcessBackend 创建一个进程后端,可以实际执行代码.
+// 警告(Warning):只在可信任的环境中使用,在OS级别有适当的沙箱.
 func NewRealProcessBackend(logger *zap.Logger, enabled bool) *RealProcessBackend {
 	return &RealProcessBackend{
 		ProcessBackend: NewProcessBackendWithConfig(logger, ProcessBackendConfig{
@@ -301,7 +301,7 @@ func NewRealProcessBackend(logger *zap.Logger, enabled bool) *RealProcessBackend
 	}
 }
 
-// Execute runs code using local process.
+// 使用本地进程执行代码 。
 func (p *RealProcessBackend) Execute(ctx context.Context, req *ExecutionRequest, config SandboxConfig) (*ExecutionResult, error) {
 	start := time.Now()
 
@@ -316,14 +316,14 @@ func (p *RealProcessBackend) Execute(ctx context.Context, req *ExecutionRequest,
 		return result, nil
 	}
 
-	// Validate code for dangerous patterns
+	// 验证危险模式的代码
 	warnings := p.validator.Validate(req.Language, req.Code)
 	if len(warnings) > 0 {
 		p.logger.Warn("code validation warnings",
 			zap.Strings("warnings", warnings),
 			zap.String("language", string(req.Language)),
 		)
-		// Block execution if dangerous patterns found
+		// 如果找到危险模式, 将执行封杀
 		result.Error = fmt.Sprintf("code validation failed: %v", warnings)
 		return result, nil
 	}
@@ -334,7 +334,7 @@ func (p *RealProcessBackend) Execute(ctx context.Context, req *ExecutionRequest,
 		return result, nil
 	}
 
-	// Create temp file for code
+	// 创建代码的临时文件
 	tempDir, err := os.MkdirTemp("", "sandbox_proc_")
 	if err != nil {
 		result.Error = fmt.Sprintf("failed to create temp dir: %v", err)
@@ -348,7 +348,7 @@ func (p *RealProcessBackend) Execute(ctx context.Context, req *ExecutionRequest,
 		return result, nil
 	}
 
-	// Build command
+	// 构建命令
 	var cmd *exec.Cmd
 	switch req.Language {
 	case LangPython:
@@ -363,7 +363,7 @@ func (p *RealProcessBackend) Execute(ctx context.Context, req *ExecutionRequest,
 
 	cmd.Dir = tempDir
 
-	// Set environment
+	// 设置环境
 	cmd.Env = os.Environ()
 	for k, v := range config.EnvVars {
 		cmd.Env = append(cmd.Env, fmt.Sprintf("%s=%s", k, v))
@@ -409,9 +409,9 @@ func (p *RealProcessBackend) Execute(ctx context.Context, req *ExecutionRequest,
 	return result, nil
 }
 
-// PullImage pulls a Docker image if not present.
+// PullImage 若不显示则会拉出一个多克图像 。
 func PullImage(ctx context.Context, image string, logger *zap.Logger) error {
-	// Check if image exists
+	// 检查图像是否存在
 	checkCmd := exec.CommandContext(ctx, "docker", "image", "inspect", image)
 	if err := checkCmd.Run(); err == nil {
 		return nil // Image exists
@@ -426,7 +426,7 @@ func PullImage(ctx context.Context, image string, logger *zap.Logger) error {
 	return cmd.Run()
 }
 
-// EnsureImages pulls all required images for the sandbox.
+// 保证图像为沙盒拉出所有所需的图像 。
 func EnsureImages(ctx context.Context, languages []Language, logger *zap.Logger) error {
 	images := map[Language]string{
 		LangPython:     "python:3.12-slim",

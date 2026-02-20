@@ -14,14 +14,14 @@ import (
 	"time"
 )
 
-// FileStore implements ArtifactStore using local filesystem.
+// FileStore使用本地文件系统执行ArtifactStore.
 type FileStore struct {
 	basePath string
 	mu       sync.RWMutex
 	index    map[string]*Artifact
 }
 
-// NewFileStore creates a new file-based artifact store.
+// NewFileStore创建了一个新的基于文件的文物商店.
 func NewFileStore(basePath string) (*FileStore, error) {
 	if err := os.MkdirAll(basePath, 0755); err != nil {
 		return nil, fmt.Errorf("failed to create base path: %w", err)
@@ -43,7 +43,7 @@ func (s *FileStore) Save(ctx context.Context, artifact *Artifact, data io.Reader
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	// Read all data to compute checksum and size
+	// 读取所有数据以计算校验和大小
 	buf := new(bytes.Buffer)
 	size, err := io.Copy(buf, data)
 	if err != nil {
@@ -55,20 +55,20 @@ func (s *FileStore) Save(ctx context.Context, artifact *Artifact, data io.Reader
 	artifact.Checksum = hex.EncodeToString(hash[:])
 	artifact.Size = size
 
-	// Create storage path
+	// 创建存储路径
 	artifactDir := filepath.Join(s.basePath, artifact.ID)
 	if err := os.MkdirAll(artifactDir, 0755); err != nil {
 		return fmt.Errorf("failed to create artifact dir: %w", err)
 	}
 
-	// Write data file
+	// 写入数据文件
 	dataPath := filepath.Join(artifactDir, "data")
 	if err := os.WriteFile(dataPath, dataBytes, 0644); err != nil {
 		return fmt.Errorf("failed to write data: %w", err)
 	}
 	artifact.StoragePath = dataPath
 
-	// Write metadata
+	// 写入元数据
 	metaPath := filepath.Join(artifactDir, "metadata.json")
 	metaData, err := json.MarshalIndent(artifact, "", "  ")
 	if err != nil {

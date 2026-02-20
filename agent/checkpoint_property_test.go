@@ -11,8 +11,8 @@ import (
 	"go.uber.org/zap"
 )
 
-// Feature: agent-framework-enhancements, Property 1: Checkpoint Round-Trip Consistency
-// Validates: Requirements 1.1, 1.4
+// 特征:代理-框架增强,财产1:检查站圆通-Trip一致性
+// 审定:要求1.1、1.4
 func TestProperty_CheckpointRoundTripConsistency(t *testing.T) {
 	parameters := gopter.DefaultTestParameters()
 	parameters.MinSuccessfulTests = 100
@@ -25,7 +25,7 @@ func TestProperty_CheckpointRoundTripConsistency(t *testing.T) {
 			logger, _ := zap.NewDevelopment()
 			store, _ := NewFileCheckpointStore(t.TempDir(), logger)
 
-			// Create checkpoint with generated data
+			// 使用生成的数据创建检查点
 			messages := make([]CheckpointMessage, messageCount)
 			for i := 0; i < messageCount; i++ {
 				messages[i] = CheckpointMessage{
@@ -46,20 +46,20 @@ func TestProperty_CheckpointRoundTripConsistency(t *testing.T) {
 				CreatedAt: time.Now(),
 			}
 
-			// Save checkpoint
+			// 保存检查点
 			if err := store.Save(ctx, original); err != nil {
 				t.Logf("Save failed: %v", err)
 				return false
 			}
 
-			// Load checkpoint
+			// 装入检查站
 			loaded, err := store.Load(ctx, original.ID)
 			if err != nil {
 				t.Logf("Load failed: %v", err)
 				return false
 			}
 
-			// Verify all fields are preserved
+			// 验证所有字段保存
 			if loaded.ID != original.ID {
 				t.Logf("ID mismatch: expected %s, got %s", original.ID, loaded.ID)
 				return false
@@ -96,8 +96,8 @@ func TestProperty_CheckpointRoundTripConsistency(t *testing.T) {
 	properties.TestingRun(t)
 }
 
-// Feature: agent-framework-enhancements, Property 2: Checkpoint ID and Timestamp Assignment
-// Validates: Requirements 1.2
+// 特性:代理-框架强化,财产2:检查站ID和时间戳
+// 审定:要求1.2
 func TestProperty_CheckpointIDAndTimestampAssignment(t *testing.T) {
 	parameters := gopter.DefaultTestParameters()
 	parameters.MinSuccessfulTests = 100
@@ -122,7 +122,7 @@ func TestProperty_CheckpointIDAndTimestampAssignment(t *testing.T) {
 				CreatedAt: time.Now(),
 			}
 
-			// Save checkpoint
+			// 保存检查点
 			if err := store.Save(ctx, checkpoint); err != nil {
 				t.Logf("Save failed: %v", err)
 				return false
@@ -130,19 +130,19 @@ func TestProperty_CheckpointIDAndTimestampAssignment(t *testing.T) {
 
 			afterSave := time.Now()
 
-			// Verify ID is non-empty
+			// 校验身份是非空的
 			if checkpoint.ID == "" {
 				t.Logf("Checkpoint ID is empty")
 				return false
 			}
 
-			// Verify timestamp is valid (between before and after save)
+			// 验证时间戳是有效的( 在保存前后之间)
 			if checkpoint.CreatedAt.Before(beforeSave) || checkpoint.CreatedAt.After(afterSave) {
 				t.Logf("Timestamp out of range: %v not between %v and %v", checkpoint.CreatedAt, beforeSave, afterSave)
 				return false
 			}
 
-			// Load and verify
+			// 装入并验证
 			loaded, err := store.Load(ctx, checkpoint.ID)
 			if err != nil {
 				t.Logf("Load failed: %v", err)
@@ -168,8 +168,8 @@ func TestProperty_CheckpointIDAndTimestampAssignment(t *testing.T) {
 	properties.TestingRun(t)
 }
 
-// Feature: agent-framework-enhancements, Property 4: Checkpoint Listing Order
-// Validates: Requirements 1.5
+// 特征:代理框架增强,财产4:检查站列名令
+// 验证:要求 1.5
 func TestProperty_CheckpointListingOrder(t *testing.T) {
 	parameters := gopter.DefaultTestParameters()
 	parameters.MinSuccessfulTests = 100
@@ -182,7 +182,7 @@ func TestProperty_CheckpointListingOrder(t *testing.T) {
 			logger, _ := zap.NewDevelopment()
 			store, _ := NewFileCheckpointStore(t.TempDir(), logger)
 
-			// Save multiple checkpoints with small delays
+			// 节省多处检查站,稍有延误
 			for i := 0; i < count; i++ {
 				checkpoint := &Checkpoint{
 					ID:       generateCheckpointID(),
@@ -198,11 +198,11 @@ func TestProperty_CheckpointListingOrder(t *testing.T) {
 					return false
 				}
 
-				// Small delay to ensure different timestamps
+				// 确保不同时间戳的少量延迟
 				time.Sleep(2 * time.Millisecond)
 			}
 
-			// List checkpoints
+			// 列出检查站名单
 			checkpoints, err := store.List(ctx, threadID, count)
 			if err != nil {
 				t.Logf("List failed: %v", err)
@@ -214,7 +214,7 @@ func TestProperty_CheckpointListingOrder(t *testing.T) {
 				return false
 			}
 
-			// Verify reverse chronological order (newest first)
+			// 校验反向时间顺序( 最新第一)
 			for i := 0; i < len(checkpoints)-1; i++ {
 				if checkpoints[i].CreatedAt.Before(checkpoints[i+1].CreatedAt) {
 					t.Logf("Checkpoints not in reverse chronological order at index %d", i)
@@ -232,8 +232,8 @@ func TestProperty_CheckpointListingOrder(t *testing.T) {
 	properties.TestingRun(t)
 }
 
-// Feature: agent-framework-enhancements, Property 7: Sequential Version Numbering
-// Validates: Requirements 1.10, 5.1
+// 特征:代理框架增强, 属性 7: 顺序版本编号
+// 审定:要求 1.10, 5.1
 func TestProperty_SequentialVersionNumbering(t *testing.T) {
 	parameters := gopter.DefaultTestParameters()
 	parameters.MinSuccessfulTests = 100
@@ -246,7 +246,7 @@ func TestProperty_SequentialVersionNumbering(t *testing.T) {
 			logger, _ := zap.NewDevelopment()
 			store, _ := NewFileCheckpointStore(t.TempDir(), logger)
 
-			// Save multiple checkpoints
+			// 保存多个检查站
 			for i := 0; i < count; i++ {
 				checkpoint := &Checkpoint{
 					ID:       generateCheckpointID(),
@@ -263,7 +263,7 @@ func TestProperty_SequentialVersionNumbering(t *testing.T) {
 				}
 			}
 
-			// List versions
+			// 列表版本
 			versions, err := store.ListVersions(ctx, threadID)
 			if err != nil {
 				t.Logf("ListVersions failed: %v", err)
@@ -275,7 +275,7 @@ func TestProperty_SequentialVersionNumbering(t *testing.T) {
 				return false
 			}
 
-			// Verify sequential numbering starting from 1
+			// 从 1 开始验证相继编号
 			for i, version := range versions {
 				expectedVersion := i + 1
 				if version.Version != expectedVersion {
@@ -284,7 +284,7 @@ func TestProperty_SequentialVersionNumbering(t *testing.T) {
 				}
 			}
 
-			// Verify each version increments by 1
+			// 以 1 验证每个版本的增量
 			for i := 0; i < len(versions)-1; i++ {
 				if versions[i+1].Version != versions[i].Version+1 {
 					t.Logf("Non-sequential version numbers: %d followed by %d", versions[i].Version, versions[i+1].Version)

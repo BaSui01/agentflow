@@ -1,177 +1,177 @@
-// Copyright 2024 AgentFlow Authors. All rights reserved.
-// Use of this source code is governed by a MIT license that can be
-// found in the LICENSE file.
+// 版权所有 2024 AgentFlow Authors. 版权所有。
+// 此源代码的使用由 MIT 许可规范,该许可可以是
+// 在LICENSE文件中找到。
 
 /*
-Package guardrails provides input/output validation and content filtering for agents.
+包护栏为代理商提供输入/输出验证和内容过滤.
 
-# Overview
+# 概览
 
-The guardrails package implements security guardrails for AI agents, including
-PII detection, prompt injection prevention, content filtering, and customizable
-validation rules. It helps ensure that agent inputs and outputs are safe,
-compliant, and appropriate.
+护栏包为人工智能特工安装安全护栏,包括:
+PII 检测、快速注射预防、内容过滤和定制
+审定规则。 它有助于确保代理投入和产出的安全,
+顺从和适当。
 
-# Architecture
+建筑
 
 	┌─────────────────────────────────────────────────────────────┐
-	│                    ValidatorChain                           │
-	│  (Orchestrates multiple validators in priority order)       │
+	校验器
+	QQ( 按优先级顺序排列多个验证器) QQ
 	├─────────────────────────────────────────────────────────────┤
 	│  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────┐ │
-	│  │   Length    │  │    PII      │  │     Injection       │ │
-	│  │  Validator  │  │  Detector   │  │     Detector        │ │
+	时间 时间 时间 时间
+	探测器 探测器
 	│  └─────────────┘  └─────────────┘  └─────────────────────┘ │
 	│  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────┐ │
-	│  │  Content    │  │   Output    │  │      Custom         │ │
-	│  │   Type      │  │  Validator  │  │    Validators       │ │
+	================================================================================================================================ (=============================================================
+	校正器 校正器
 	│  └─────────────┘  └─────────────┘  └─────────────────────┘ │
 	└─────────────────────────────────────────────────────────────┘
 
-# Validator Interface
+# 验证器接口
 
-All validators implement the Validator interface:
+所有验证器执行验证器接口 :
 
-	type Validator interface {
-	    Validate(ctx context.Context, content string) (*ValidationResult, error)
-	    Name() string
-	    Priority() int
+	类型验证器接口{
+	    校验( ctx) 上下文 。 背景, 内容字符串 (* Validation Result, 错误)
+	    名称( ) 字符串
+	    优先级( ) 英寸
 	}
 
-# Built-in Validators
+# 内置验证器
 
-LengthValidator: Validates input length constraints.
+长度变量:验证输入长度限制.
 
-	validator := guardrails.NewLengthValidator(&guardrails.LengthValidatorConfig{
-	    MaxLength: 10000,
-	    Action:    guardrails.LengthActionReject,
+	校验器 : = 守护道. NewLengthValidator (和守护道. LengthValidator Config{
+	    马克斯伦斯: 10000,
+	    行动:护栏。 长度动作拒绝,
 	})
 
-PIIDetector: Detects personally identifiable information.
+PII探测器:探测到个人可识别的信息.
 
-	detector := guardrails.NewPIIDetector(&guardrails.PIIDetectorConfig{
-	    DetectEmail:      true,
-	    DetectPhone:      true,
-	    DetectCreditCard: true,
-	    DetectSSN:        true,
-	    Action:           guardrails.PIIActionMask,
+	探测器 := 护栏. NewPII 探测器(和护栏. PII 探测器 Config{
+	    检测邮件: 是真的,
+	    检测电话:真实的,
+	    检测卡:真实,
+	    探测SSN:是的,
+	    行动:护栏。 行动任务
 	})
 
-InjectionDetector: Detects prompt injection attempts.
+注射检测器:检测出即时注射尝试.
 
-	detector := guardrails.NewInjectionDetector(&guardrails.InjectionDetectorConfig{
-	    Sensitivity: guardrails.SensitivityMedium,
-	    Action:      guardrails.InjectionActionBlock,
+	探测器 := 护栏. New Injection 探测器(和护栏. Injection 探测器 Config{
+	    灵敏:护栏. 敏感性 中间
+	    行动:护栏。 注射动作锁定,
 	})
 
-OutputValidator: Validates agent outputs for safety and compliance.
+输出变量:验证剂输出安全和合规性。
 
-	validator := guardrails.NewOutputValidator(&guardrails.OutputValidatorConfig{
-	    BlockHarmfulContent: true,
-	    BlockPII:            true,
+	校验符 : = 守护符. NewOutputValidator (和守护符. OutputValidator Config{
+	    屏蔽有害因素:真实,
+	    BlockPII:没错,
 	})
 
-# Validator Chain
+# 验证器链
 
-The ValidatorChain orchestrates multiple validators:
+验证员钱管弦乐团将多个验证器:
 
-	chain := guardrails.NewValidatorChain(&guardrails.ValidatorChainConfig{
-	    Mode: guardrails.ChainModeCollectAll, // or ChainModeFailFast
+	链:=护栏. NewValidator Chain (和护栏. Validator ChainConfig{
+	    模式: 护栏. ChainMode Collecting All, // 或 ChainModeFailFast
 	})
 
-	chain.Add(
-	    guardrails.NewLengthValidator(nil),
-	    guardrails.NewPIIDetector(nil),
-	    guardrails.NewInjectionDetector(nil),
+	链条。 添加( E)
+	    护栏。
+	    新PII探测器(无),
+	    护栏,新注射探测器(无),
 	)
 
-	result, err := chain.Validate(ctx, userInput)
-	if err != nil {
-	    log.Fatal(err)
+	结果,错误:=链条。 验证( ctx, 用户输入)
+	如果错误 ! = 无 {
+	    记录。 致命( err)
 	}
 
-	if !result.Valid {
-	    for _, e := range result.Errors {
-	        log.Printf("Validation error: %s - %s", e.Code, e.Message)
+	如果结果。 无效 {
+	    e = 范围结果。 错误{
+	        log.Printf (“ 校验错误:%s - %s” , e.Code, e.Message)
 	    }
 	}
 
-# Chain Modes
+# 连锁模式
 
-  - ChainModeFailFast: Stop at first validation error (faster)
-  - ChainModeCollectAll: Run all validators and collect all errors (comprehensive)
+  - 链路FailFast: 初时停止验证错误( 更快)
+  - 链条ModeCollect All:运行所有验证器并收集所有错误(综合)
 
-# Validation Result
+# 验证结果
 
-The ValidationResult contains detailed validation information:
+审定结果包含详细的审定信息:
 
-	type ValidationResult struct {
-	    Valid    bool              // Overall validation status
-	    Errors   []ValidationError // List of validation errors
-	    Warnings []string          // Non-blocking warnings
-	    Metadata map[string]any    // Additional metadata
+	类型验证 Result struct {
+	    有效布尔 // 总体审定情况
+	    错误 [] 校正 错误 // 校验错误列表
+	    警告 [] 字符串 // 非屏蔽警告
+	    元数据映射 任何 // 其他元数据
 	}
 
-# Error Codes
+# 错误代码
 
-Predefined error codes for common validation failures:
+常见验证失败的预定义错误代码 :
 
-	const (
-	    ErrCodeMaxLengthExceeded = "max_length_exceeded"
-	    ErrCodePIIDetected       = "pii_detected"
-	    ErrCodeInjectionDetected = "injection_detected"
-	    ErrCodeContentBlocked    = "content_blocked"
+	康斯特( Const) (
+	    ErrCodeMaxLength 超越 = "最大长度"
+	    ErrCodePII 被检测到 = “ pii 被检测到 ”
+	    ErrCode 注射检测出="注射 被检测出"
+	    ErrCode ContentBlocked = "content blocked" (“ 内容” )
 	)
 
-# Custom Validators
+# 自定义验证器
 
-Implement the Validator interface to create custom validators:
+执行验证器接口以创建自定义验证器 :
 
-	type MyValidator struct {
-	    priority int
+	类型 MyValidator 结构{
+	    优先级
 	}
 
-	func (v *MyValidator) Validate(ctx context.Context, content string) (*ValidationResult, error) {
-	    result := guardrails.NewValidationResult()
-	    // Custom validation logic
-	    if containsBadWord(content) {
-	        result.AddError(guardrails.ValidationError{
-	            Code:     "bad_word_detected",
-	            Message:  "Content contains inappropriate language",
-	            Severity: guardrails.SeverityHigh,
+	func (v *MyValidator) 验证(ctx上下文). 上下文,内容字符串 (*ValidationResult, 错误) {
+	    结果:= 护栏. NewValidationResult ()
+	    // 自定义验证逻辑
+	    如果包含 BadWord( 内容) {
+	        结果。 添加 Error( 护栏 ) 。 校验错误{
+	            代码:"bad word detected",
+	            信息:"内含不适当的语言",
+	            严重:护栏. 塞维蒂高地
 	        })
 	    }
-	    return result, nil
+	    返回结果, 无
 	}
 
-	func (v *MyValidator) Name() string     { return "my_validator" }
-	func (v *MyValidator) Priority() int    { return v.priority }
+	func (v *MyValidator) 名称 () 字符串 {返回"我的 验证符"}
+	func (v *MyValidator) 优先级 () int {返回 v. 优先级 }
 
-# Integration with Agents
+# 与代理人融合
 
-Guardrails integrate seamlessly with the agent framework:
+护栏与代理框架紧密结合:
 
-	agent, err := agent.NewAgentBuilder(config).
-	    WithProvider(provider).
-	    WithInputGuardrails(inputChain).
-	    WithOutputGuardrails(outputChain).
-	    Build()
+	代理, 错误 := 代理. NewAgentBuilder( config).
+	    与 Provider( 提供者) 。
+	    与InputGuardrails (InputChain) (英语).
+	    与输出保护铁路( OutputChain) 。
+	    构建( C)
 
-# Thread Safety
+线索安全
 
-All validators and the ValidatorChain are thread-safe and can be used
-concurrently from multiple goroutines.
+所有验证器和验证器 Chain 都无线性,可以使用
+同时从多条出轨
 
-# Performance
+# 表现
 
-The package is optimized for performance:
-  - Compiled regex patterns are cached
-  - Validators run in priority order (fail-fast mode)
-  - Minimal allocations in hot paths
+软件包对性能进行了优化:
+  - 编译的regex图案被缓存
+  - 优先运行的验证器(故障快速模式)
+  - 热道最低分配
 
-See benchmark results:
+见基准结果:
 
-	BenchmarkValidatorChain_Validate-12       23475    4613 ns/op    680 B/op    13 allocs/op
-	BenchmarkPIIDetector_Detect-12            15234    7823 ns/op    512 B/op     8 allocs/op
+	基准参数Chain Validate-12 23475 4613 ns/op 680 B/op 13 alogs/op
+	基准PII 探测器-探测-12 15234 7823 ns/op 512 B/op 8同位素/op
 */
 package guardrails

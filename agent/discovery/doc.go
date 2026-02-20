@@ -1,128 +1,128 @@
-// Package discovery provides Agent capability discovery and matching for multi-agent collaboration.
+// 套件发现提供代理能力发现并匹配多代理协作.
 //
-// The discovery package implements a comprehensive system for:
-//   - Capability Registration: Agents can register their capabilities with the registry
-//   - Capability Matching: Find the best agent for a given task based on capabilities
-//   - Capability Composition: Combine capabilities from multiple agents for complex tasks
-//   - Service Discovery: Discover agents via local, HTTP, or multicast protocols
+// 发现包实施一个综合系统,用于:
+//   - 能力登记:代理人可向登记册登记其能力
+//   - 能力匹配:根据能力寻找特定任务的最佳代理
+//   - 能力构成:将多种代理人的能力结合起来,执行复杂的任务
+//   - 服务发现:通过本地、HTTP或多播协议发现代理
 //
-// # Architecture
+// # 建筑
 //
-// The package consists of several key components:
+// 该套件由几个关键组成部分组成:
 //
-//   - Registry: Stores and manages agent and capability information
-//   - Matcher: Finds agents matching specific criteria using various strategies
-//   - Composer: Creates compositions of capabilities from multiple agents
-//   - Protocol: Handles service discovery via different protocols
-//   - Service: Unified interface combining all components
+//   - 登记:储存和管理代理和能力信息
+//   - 匹配者:利用各种策略寻找符合具体标准的代理商
+//   - 作曲家:从多个代理创建能力构成
+//   - 协议:通过不同协议处理服务发现
+//   - 服务:合并所有组件的统一接口
 //
-// # Basic Usage
+// # 基本用途
 //
-// Create and start a discovery service:
+// 创建并启动发现服务 :
 //
-//	config := discovery.DefaultServiceConfig()
-//	logger, _ := zap.NewProduction()
-//	service := discovery.NewDiscoveryService(config, logger)
+//	配置 : = 发现. Default Service Config ()
+//	logger,  : =zap. 新出产 ()
+//	服务 : = 发现. New Discovery Service(配置,日志)
 //
-//	ctx := context.Background()
-//	if err := service.Start(ctx); err != nil {
-//	    log.Fatal(err)
+//	ctx:=上下文. 背景情况( )
+//	如果错误:=服务。 启动( ctx); 错误 != 无 {
+//	    记录。 致命( err)
 //	}
-//	defer service.Stop(ctx)
+//	推迟服务。 停止( ctx)
 //
-// Register an agent:
+// 注册代理人:
 //
-//	card := a2a.NewAgentCard("code-reviewer", "Code Review Agent", "http://localhost:8080", "1.0.0")
-//	card.AddCapability("code_review", "Review code quality", a2a.CapabilityTypeTask)
+//	卡:= a2a. NewAgentCard ("代码审查员","代码审查代理人","http://localhost:8080","1.0.0")
+//	纸牌。 添加可操作性("code review","review code 质素", a2a. capaliableTypeTask) :
 //
-//	info := discovery.AgentInfoFromCard(card, true)
-//	if err := service.RegisterAgent(ctx, info); err != nil {
-//	    log.Fatal(err)
+//	info:=发现. AgentInfoFromCard(卡,真实)
+//	如果错误:=服务。 注册代理( ctx, 信息); 错误 ! = 无 {
+//	    记录。 致命( err)
 //	}
 //
-// Find an agent for a task:
+// 为任务找到代理 :
 //
-//	agent, err := service.FindAgent(ctx, "review my Go code", []string{"code_review"})
-//	if err != nil {
-//	    log.Fatal(err)
+//	代理,错误:=服务。 Find Agent( ctx, "Review my Go code", [] string{"code  review"] ) 搜索代理(ctx, "审查我的去代码" )
+//	如果错误 ! = 无 {
+//	    记录。 致命( err)
 //	}
-//	fmt.Printf("Found agent: %s\n", agent.Card.Name)
+//	fmt.Printf ("Found Agent: %s\n"),代理人. 纸牌 名称)
 //
-// # Matching Strategies
+// # 匹配策略
 //
-// The matcher supports several strategies:
+// 匹配者支持几种策略:
 //
-//   - BestMatch: Returns the best matching agent based on overall score
-//   - LeastLoaded: Returns the least loaded matching agent
-//   - HighestScore: Returns the agent with the highest capability score
-//   - RoundRobin: Returns agents in round-robin order
-//   - Random: Returns a random matching agent
+//   - BestMatch:根据总分返回最佳匹配代理
+//   - 最小值: 返回装入最少的匹配代理
+//   - 最高分:返回能力分数最高的代理人
+//   - Robin:按 Robin 顺序返回代理
+//   - 随机:返回随机匹配代理
 //
-// Example with specific strategy:
+// 有具体战略的例子:
 //
-//	results, err := service.FindAgents(ctx, &discovery.MatchRequest{
-//	    TaskDescription:      "analyze code for security issues",
-//	    RequiredCapabilities: []string{"security_analysis"},
-//	    Strategy:             discovery.MatchStrategyLeastLoaded,
-//	    MaxLoad:              0.8,
-//	    Limit:                5,
+//	结果,错误:=服务。 FindAgents( ctx, & 发现). 匹配请求{
+//	    任务描述:"分析安全问题的代码",
+//	    所需能力: [] string{"security analysis"},
+//	    策略:发现. 与战略相匹配的东侧
+//	    麦斯路德:0.8,
+//	    限制:5,
 //	})
 //
-// # Capability Composition
+// # 能力构成
 //
-// For complex tasks requiring multiple capabilities:
+// 对于需要多种能力的复杂任务:
 //
-//	result, err := service.ComposeCapabilities(ctx, &discovery.CompositionRequest{
-//	    TaskDescription:      "full code review pipeline",
-//	    RequiredCapabilities: []string{"code_review", "security_analysis", "testing"},
-//	    AllowPartial:         false,
+//	结果, 错误 : = 服务。 组成能力( ctx, & discovery) 。 组成 请求{
+//	    任务描述:"完整代码审查管道",
+//	    必要能力: [] string{"code review","security analysis","testing"],
+//	    允许参与:虚假,
 //	})
 //
-//	if result.Complete {
-//	    for cap, agentID := range result.CapabilityMap {
-//	        fmt.Printf("Capability %s -> Agent %s\n", cap, agentID)
+//	如果结果。 完成 {
+//	    对于上限,代理ID:=范围结果。 能力映射{
+//	        fmt.printf (“能力 %s ->) 代理 %s\n, 顶部,代理ID)
 //	    }
 //	}
 //
-// # Health Checking
+// # 健康检查
 //
-// The registry includes automatic health checking:
+// 登记册包括自动健康检查:
 //
-//	config := discovery.DefaultRegistryConfig()
-//	config.EnableHealthCheck = true
-//	config.HealthCheckInterval = 30 * time.Second
-//	config.UnhealthyThreshold = 3
+//	配置 := 发现. Default Registry Config ()
+//	配置。 允许健康检查 = true
+//	腾讯. 健康检查Interval = 30 *时间。 第二届
+//	腾讯. 体质不健康 门槛=3
 //
-// # Event Subscription
+// # 事件订阅
 //
-// Subscribe to discovery events:
+// 订阅发现事件:
 //
-//	subID := service.Subscribe(func(event *discovery.DiscoveryEvent) {
-//	    switch event.Type {
-//	    case discovery.DiscoveryEventAgentRegistered:
-//	        fmt.Printf("Agent registered: %s\n", event.AgentID)
-//	    case discovery.DiscoveryEventHealthCheckFailed:
-//	        fmt.Printf("Agent unhealthy: %s\n", event.AgentID)
+//	子ID := 服务. Sublits(func (event * Discovery. Discovery Event) {
+//	    切换事件。 类型{
+//	    案件发现。 发现Event Agent 注册 :
+//	        fmt.Printf ("注册代理:%s\n"),事件. 代理编号)
+//	    案件发现。 发现Event健康检查失败 :
+//	        fmt.Printf(“代理人不健康:%s\n”,事件)。 代理编号)
 //	    }
 //	})
-//	defer service.Unsubscribe(subID)
+//	推迟服务。 取消订阅( subID)
 //
-// # Integration with Agents
+// # 与代理人的融合
 //
-// Use the AgentDiscoveryIntegration for seamless integration:
+// 使用代理发现集成进行无缝整合 :
 //
-//	integration := discovery.NewAgentDiscoveryIntegration(service, nil, logger)
-//	integration.Start(ctx)
-//	defer integration.Stop(ctx)
+//	集成:=发现. 新发现集成(服务,无,日志)
+//	一体化。 开始( ctx)
+//	推迟整合。 停止( ctx)
 //
-//	// Register an agent that implements AgentCapabilityProvider
-//	integration.RegisterAgent(ctx, myAgent)
+//	// 登记执行代理能力的代理人
+//	一体化。 注册代理( ctx, MyAgent)
 //
-//	// Set load reporter for automatic load updates
-//	integration.SetLoadReporter(myAgent.ID(), func() float64 {
-//	    return calculateCurrentLoad()
+//	/ 设置自动加载更新的加载报告器
+//	集成.SetLoad Reporter(myAgent.ID (), func () 浮点64 {
+//	    返回计算当前LOAD ()
 //	})
 //
-//	// Record execution results for capability scoring
-//	integration.RecordExecution(ctx, myAgent.ID(), "code_review", true, 100*time.Millisecond)
+//	//记录能力评分的执行结果
+//	一体化。 RecordExecution(ctx, myAgent.ID ()),"code review", true, 100*时间. 毫秒( 毫秒)
 package discovery

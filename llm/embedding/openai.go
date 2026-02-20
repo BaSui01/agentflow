@@ -6,13 +6,13 @@ import (
 	"time"
 )
 
-// OpenAIProvider implements embedding using OpenAI's API.
+// OpenAIProvider 执行使用 OpenAI 的 API 嵌入.
 type OpenAIProvider struct {
 	*BaseProvider
 	cfg OpenAIConfig
 }
 
-// NewOpenAIProvider creates a new OpenAI embedding provider.
+// NewOpenAIProvider创建了新的OpenAI嵌入提供商.
 func NewOpenAIProvider(cfg OpenAIConfig) *OpenAIProvider {
 	if cfg.BaseURL == "" {
 		cfg.BaseURL = "https://api.openai.com"
@@ -59,7 +59,7 @@ type openAIEmbedResponse struct {
 	} `json:"usage"`
 }
 
-// Embed generates embeddings for the given inputs.
+// 嵌入为给定输入生成嵌入.
 func (p *OpenAIProvider) Embed(ctx context.Context, req *EmbeddingRequest) (*EmbeddingResponse, error) {
 	model := ChooseModel(req.Model, p.cfg.Model, "text-embedding-3-large")
 	dims := req.Dimensions
@@ -109,12 +109,12 @@ func (p *OpenAIProvider) Embed(ctx context.Context, req *EmbeddingRequest) (*Emb
 	}, nil
 }
 
-// EmbedQuery embeds a single query.
+// 嵌入查询嵌入了单个查询.
 func (p *OpenAIProvider) EmbedQuery(ctx context.Context, query string) ([]float64, error) {
 	return p.BaseProvider.EmbedQuery(ctx, query, p.Embed)
 }
 
-// EmbedDocuments embeds multiple documents.
+// 嵌入文件嵌入多个文档。
 func (p *OpenAIProvider) EmbedDocuments(ctx context.Context, documents []string) ([][]float64, error) {
 	return p.BaseProvider.EmbedDocuments(ctx, documents, p.Embed)
 }

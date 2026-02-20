@@ -12,20 +12,20 @@ import (
 )
 
 // ============================================================================
-// Research Quality Evaluation Framework
+// 研究质量评价框架
 // ============================================================================
 //
-// Provides specialized metrics and evaluation tools for assessing the quality
-// of AI-generated research outputs, inspired by AI-Researcher's hierarchical
-// evaluation methodology.
+// 为评估质量提供专门的衡量和评价工具
+// 受AI-Researcher分级研究启发
+// 评价方法。
 //
-// Evaluation dimensions:
-//   - Novelty: How original and innovative is the research?
-//   - Rigor: How methodologically sound is the approach?
-//   - Clarity: How well-written and understandable is the output?
-//   - Relevance: How relevant is the research to the given topic?
-//   - Completeness: How thorough is the coverage of the topic?
-//   - Reproducibility: Can the results be reproduced?
+// 评价方面:
+//   ——小说:研究有多独创和创新性?.
+//   - 严格:方法是否合理?
+//   - 明晰:产出如何写得通和易懂?
+//   - 相关性:研究与特定专题有多相关?
+//   - 完整性:对专题的涵盖程度如何?
+//   - 复制:结果能否复制?
 // ============================================================================
 
 // ResearchDimension 研究评估维度
@@ -42,17 +42,17 @@ const (
 
 // ResearchEvalConfig 研究评估配置
 type ResearchEvalConfig struct {
-	// Dimension weights (must sum to 1.0)
+	// 尺寸权重( 一定和 1. 0)
 	Weights map[ResearchDimension]float64 `json:"weights"`
 
-	// Evaluation settings
+	// 评价设置
 	UseLLMJudge     bool          `json:"use_llm_judge"`     // Use LLM as judge
 	NumJudges       int           `json:"num_judges"`        // Number of LLM judges (for voting)
 	JudgeModel      string        `json:"judge_model"`       // Model for LLM judge
 	Timeout         time.Duration `json:"timeout"`           // Per-evaluation timeout
 	PassThreshold   float64       `json:"pass_threshold"`    // Minimum score to pass (0-1)
 
-	// Reference-based evaluation
+	// 基于参考的评价
 	UseReferences   bool `json:"use_references"`   // Compare against reference papers
 	MaxReferences   int  `json:"max_references"`   // Maximum reference papers to compare
 }
@@ -92,7 +92,7 @@ type ResearchEvalResult struct {
 }
 
 // ============================================================================
-// Research-Specific Metrics
+// 研究 -- -- 具体计量
 // ============================================================================
 
 // NoveltyMetric 新颖性指标
@@ -114,10 +114,10 @@ func (m *NoveltyMetric) Name() string { return string(DimensionNovelty) }
 func (m *NoveltyMetric) Compute(ctx context.Context, input *EvalInput, output *EvalOutput) (float64, error) {
 	response := output.Response
 
-	// Heuristic-based novelty scoring
+	// 高压新颖评分
 	score := 0.5 // Base score
 
-	// Check for novel terminology and concepts
+	// 检查新术语和概念
 	novelIndicators := []string{
 		"novel", "new approach", "first", "innovative", "propose",
 		"introduce", "unprecedented", "unique", "original",
@@ -128,7 +128,7 @@ func (m *NoveltyMetric) Compute(ctx context.Context, input *EvalInput, output *E
 		}
 	}
 
-	// Check for comparison with existing work (shows awareness)
+	// 与现有工作进行比较(显示认识)
 	comparisonIndicators := []string{
 		"compared to", "unlike", "in contrast", "improves upon",
 		"outperforms", "differs from", "extends",
@@ -139,7 +139,7 @@ func (m *NoveltyMetric) Compute(ctx context.Context, input *EvalInput, output *E
 		}
 	}
 
-	// Penalize if too similar to common patterns
+	// 如果与常见模式过于相近,则予以处罚
 	genericPatterns := []string{
 		"as shown in previous work", "following the standard approach",
 		"using the conventional method",
@@ -173,7 +173,7 @@ func (m *RigorMetric) Compute(ctx context.Context, input *EvalInput, output *Eva
 	response := output.Response
 	score := 0.4 // Base score
 
-	// Check for methodology indicators
+	// 检查方法指标
 	methodIndicators := []string{
 		"methodology", "experiment", "evaluation", "baseline",
 		"dataset", "metric", "statistical", "significance",
@@ -185,7 +185,7 @@ func (m *RigorMetric) Compute(ctx context.Context, input *EvalInput, output *Eva
 		}
 	}
 
-	// Check for quantitative results
+	// 定量结果检查
 	quantIndicators := []string{
 		"accuracy", "precision", "recall", "f1", "auc",
 		"p-value", "confidence interval", "standard deviation",
@@ -197,7 +197,7 @@ func (m *RigorMetric) Compute(ctx context.Context, input *EvalInput, output *Eva
 		}
 	}
 
-	// Check for limitations acknowledgment
+	// 检查限制确认
 	if containsIgnoreCase(response, "limitation") || containsIgnoreCase(response, "future work") {
 		score += 0.1
 	}
@@ -225,7 +225,7 @@ func (m *ClarityMetric) Compute(ctx context.Context, input *EvalInput, output *E
 	response := output.Response
 	score := 0.5 // Base score
 
-	// Check structure indicators
+	// 检查结构指标
 	structureIndicators := []string{
 		"introduction", "methodology", "results", "conclusion",
 		"abstract", "background", "discussion",
@@ -238,7 +238,7 @@ func (m *ClarityMetric) Compute(ctx context.Context, input *EvalInput, output *E
 	}
 	score += float64(structureCount) * 0.05
 
-	// Sentence length analysis (prefer moderate length)
+	// 句长分析(偏好中长)
 	sentences := strings.Split(response, ".")
 	if len(sentences) > 0 {
 		totalWords := 0
@@ -248,7 +248,7 @@ func (m *ClarityMetric) Compute(ctx context.Context, input *EvalInput, output *E
 		}
 		avgWordsPerSentence := float64(totalWords) / float64(len(sentences))
 
-		// Optimal range: 15-25 words per sentence
+		// 优化范围:每句15-25个字
 		if avgWordsPerSentence >= 15 && avgWordsPerSentence <= 25 {
 			score += 0.15
 		} else if avgWordsPerSentence >= 10 && avgWordsPerSentence <= 30 {
@@ -256,7 +256,7 @@ func (m *ClarityMetric) Compute(ctx context.Context, input *EvalInput, output *E
 		}
 	}
 
-	// Check for transition words (indicates logical flow)
+	// 检查过渡词( 表示逻辑流)
 	transitions := []string{
 		"therefore", "however", "moreover", "furthermore",
 		"consequently", "in addition", "specifically",
@@ -291,7 +291,7 @@ func (m *CompletenessMetric) Compute(ctx context.Context, input *EvalInput, outp
 	response := output.Response
 	score := 0.3 // Base score
 
-	// Check for essential research sections
+	// 检查基本研究部分
 	essentialSections := map[string]float64{
 		"introduction":  0.10,
 		"methodology":   0.15,
@@ -308,7 +308,7 @@ func (m *CompletenessMetric) Compute(ctx context.Context, input *EvalInput, outp
 		}
 	}
 
-	// Length-based completeness (longer = more complete, with diminishing returns)
+	// 基于长度的完整度( 更长 = 更完整, 回报减少)
 	wordCount := len(strings.Fields(response))
 	if wordCount > 500 {
 		score += 0.1
@@ -324,7 +324,7 @@ func (m *CompletenessMetric) Compute(ctx context.Context, input *EvalInput, outp
 }
 
 // ============================================================================
-// Helper Functions
+// 帮助函数
 // ============================================================================
 
 // containsIgnoreCase 大小写不敏感的字符串包含检查
@@ -338,7 +338,7 @@ func clampScore(score float64) float64 {
 }
 
 // ============================================================================
-// Research Evaluator (Orchestrator)
+// 研究评估员(Orchestrator)
 // ============================================================================
 
 // ResearchEvaluator 研究评估器 - 编排多维度评估

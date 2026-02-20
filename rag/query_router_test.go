@@ -73,7 +73,7 @@ func TestQueryRouter_Route_WithQueryTransformer(t *testing.T) {
 		t.Fatal("expected decision to be returned")
 	}
 
-	// Check that features were analyzed
+	// 检查是否分析过特性
 	if decision.Metadata == nil {
 		t.Error("expected metadata to be set")
 	}
@@ -104,7 +104,7 @@ func TestQueryRouter_Route_WithLLM(t *testing.T) {
 	}
 }
 
-// mockRouterLLMProvider is a mock LLM provider for router testing
+// 模拟路由器测试的模拟LLM供应商
 type mockRouterLLMProvider struct{}
 
 func (m *mockRouterLLMProvider) Complete(ctx context.Context, prompt string) (string, error) {
@@ -122,19 +122,19 @@ func TestQueryRouter_Route_Cache(t *testing.T) {
 	ctx := context.Background()
 	query := "What is machine learning?"
 
-	// First call
+	// 第一通电话
 	decision1, err := router.Route(ctx, query)
 	if err != nil {
 		t.Fatalf("Route failed: %v", err)
 	}
 
-	// Second call should hit cache
+	// 二通电话应打缓存
 	decision2, err := router.Route(ctx, query)
 	if err != nil {
 		t.Fatalf("Route failed: %v", err)
 	}
 
-	// Should be the same decision (from cache)
+	// 应该是同一决定(来自缓存)
 	if decision1.SelectedStrategy != decision2.SelectedStrategy {
 		t.Error("expected cached decision to match")
 	}
@@ -315,7 +315,7 @@ func TestQueryRouter_RouteMulti(t *testing.T) {
 		t.Errorf("expected at most 3 strategies, got %d", len(decision.Strategies))
 	}
 
-	// Check that weights sum to approximately 1
+	// 请检查access-date=中的日期值 (帮助)
 	totalWeight := 0.0
 	for _, s := range decision.Strategies {
 		totalWeight += s.Weight
@@ -373,7 +373,7 @@ func TestQueryRouter_RecordFeedback(t *testing.T) {
 
 	router.RecordFeedback(feedback)
 
-	// Record more feedback
+	// 记录更多的反馈
 	for i := 0; i < 10; i++ {
 		router.RecordFeedback(RoutingFeedback{
 			Query:            "test query",
@@ -397,7 +397,7 @@ func TestQueryRouter_GetStrategyStats(t *testing.T) {
 	config.EnableAdaptiveRouting = true
 	router := NewQueryRouter(config, nil, nil, zap.NewNop())
 
-	// Record some feedback
+	// 记录一些反馈
 	for i := 0; i < 10; i++ {
 		router.RecordFeedback(RoutingFeedback{
 			Query:            "test",
@@ -435,13 +435,13 @@ func TestRoutingDecision_JSON(t *testing.T) {
 		Timestamp: time.Now(),
 	}
 
-	// Serialize
+	// 序列化
 	data, err := decision.ToJSON()
 	if err != nil {
 		t.Fatalf("ToJSON failed: %v", err)
 	}
 
-	// Deserialize
+	// 淡化
 	decision2 := &RoutingDecision{}
 	err = decision2.FromJSON(data)
 	if err != nil {
@@ -494,7 +494,7 @@ func TestRoutingCache(t *testing.T) {
 		Timestamp:        time.Now(),
 	}
 
-	// Set and get
+	// 准备就绪
 	cache.set("key1", decision)
 	result, ok := cache.get("key1")
 	if !ok {
@@ -504,13 +504,13 @@ func TestRoutingCache(t *testing.T) {
 		t.Error("expected cached value to match")
 	}
 
-	// Non-existent key
+	// 不存在密钥
 	_, ok = cache.get("nonexistent")
 	if ok {
 		t.Error("expected cache miss for non-existent key")
 	}
 
-	// Wait for expiration
+	// 等待过期
 	time.Sleep(150 * time.Millisecond)
 	_, ok = cache.get("key1")
 	if ok {
@@ -521,7 +521,7 @@ func TestRoutingCache(t *testing.T) {
 func TestFeedbackStore(t *testing.T) {
 	store := newFeedbackStore()
 
-	// Add feedback
+	// 添加反馈
 	for i := 0; i < 10; i++ {
 		store.add(RoutingFeedback{
 			Query:            "test",
@@ -536,7 +536,7 @@ func TestFeedbackStore(t *testing.T) {
 		t.Errorf("expected success rate ~0.8, got %f", successRate)
 	}
 
-	// Unknown strategy should return 0.5
+	// 未知策略应返回 0.5
 	unknownRate := store.getSuccessRate(StrategyGraphRAG)
 	if unknownRate != 0.5 {
 		t.Errorf("expected 0.5 for unknown strategy, got %f", unknownRate)
@@ -560,7 +560,7 @@ func TestQueryRouter_Fallback(t *testing.T) {
 		t.Fatalf("Route failed: %v", err)
 	}
 
-	// Should use fallback due to low confidence
+	// 应因信心低而使用回落
 	if decision.Metadata["fallback_used"] == true {
 		if decision.SelectedStrategy != StrategyBM25 {
 			t.Errorf("expected fallback strategy BM25, got %s", decision.SelectedStrategy)

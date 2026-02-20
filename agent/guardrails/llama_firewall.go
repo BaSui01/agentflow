@@ -1,5 +1,5 @@
-// Package guardrails provides Shadow AI detection for enterprise environments.
-// Detects unauthorized AI usage within organizations.
+// 包护栏为企业环境提供影子AI检测.
+// 检测组织内部未经授权使用AI的情况.
 package guardrails
 
 import (
@@ -12,7 +12,7 @@ import (
 	"go.uber.org/zap"
 )
 
-// ShadowAIConfig configures shadow AI detection.
+// ShadowAIConfig配置了阴影AI检测.
 type ShadowAIConfig struct {
 	EnableNetworkMonitor bool          `json:"enable_network_monitor"`
 	EnableContentScan    bool          `json:"enable_content_scan"`
@@ -22,7 +22,7 @@ type ShadowAIConfig struct {
 	WhitelistedApps      []string      `json:"whitelisted_apps"`
 }
 
-// DefaultShadowAIConfig returns default configuration.
+// 默认 ShadowAIConfig 返回默认配置 。
 func DefaultShadowAIConfig() ShadowAIConfig {
 	return ShadowAIConfig{
 		EnableNetworkMonitor: true,
@@ -34,7 +34,7 @@ func DefaultShadowAIConfig() ShadowAIConfig {
 	}
 }
 
-// ShadowAIDetector detects unauthorized AI usage.
+// ShadowAI探测器检测出未经授权的AI用法.
 type ShadowAIDetector struct {
 	config     ShadowAIConfig
 	patterns   []*AIPattern
@@ -43,7 +43,7 @@ type ShadowAIDetector struct {
 	mu         sync.RWMutex
 }
 
-// AIPattern represents a pattern for detecting AI services.
+// AIPattern是检测AI服务的一种模式.
 type AIPattern struct {
 	Name        string         `json:"name"`
 	Type        string         `json:"type"` // domain, content, api
@@ -53,7 +53,7 @@ type AIPattern struct {
 	Description string         `json:"description"`
 }
 
-// Detection represents a detected shadow AI usage.
+// 检测代表检测到的阴影AI用法.
 type Detection struct {
 	ID          string         `json:"id"`
 	PatternName string         `json:"pattern_name"`
@@ -66,7 +66,7 @@ type Detection struct {
 	Metadata    map[string]any `json:"metadata,omitempty"`
 }
 
-// NewShadowAIDetector creates a new shadow AI detector.
+// NewShadowAI探测器制造出一个新的阴影AI探测器.
 func NewShadowAIDetector(config ShadowAIConfig, logger *zap.Logger) *ShadowAIDetector {
 	if logger == nil {
 		logger = zap.NewNop()
@@ -82,10 +82,10 @@ func NewShadowAIDetector(config ShadowAIConfig, logger *zap.Logger) *ShadowAIDet
 	return detector
 }
 
-// getDefaultAIPatterns returns default AI service detection patterns.
+// 得到DefaultAIPatters返回默认的AI服务检测模式.
 func getDefaultAIPatterns() []*AIPattern {
 	patterns := []*AIPattern{
-		// Domain patterns
+		// 域图案
 		{Name: "OpenAI API", Type: "domain", PatternStr: `api\.openai\.com`, Severity: SeverityHigh, Description: "OpenAI API access"},
 		{Name: "Claude API", Type: "domain", PatternStr: `api\.anthropic\.com`, Severity: SeverityHigh, Description: "Anthropic Claude API"},
 		{Name: "ChatGPT", Type: "domain", PatternStr: `chat\.openai\.com|chatgpt\.com`, Severity: SeverityMedium, Description: "ChatGPT web access"},
@@ -95,16 +95,16 @@ func getDefaultAIPatterns() []*AIPattern {
 		{Name: "Perplexity", Type: "domain", PatternStr: `perplexity\.ai`, Severity: SeverityLow, Description: "Perplexity AI"},
 		{Name: "Hugging Face", Type: "domain", PatternStr: `api\.huggingface\.co|huggingface\.co/api`, Severity: SeverityMedium, Description: "Hugging Face API"},
 
-		// Content patterns (API keys in code/config)
+		// 内容模式( 代码/ 配置中的 API 密钥)
 		{Name: "OpenAI Key", Type: "content", PatternStr: `sk-[a-zA-Z0-9]{48}`, Severity: SeverityCritical, Description: "OpenAI API key detected"},
 		{Name: "Anthropic Key", Type: "content", PatternStr: `sk-ant-[a-zA-Z0-9-]{95}`, Severity: SeverityCritical, Description: "Anthropic API key detected"},
 
-		// API request patterns
+		// API 请求模式
 		{Name: "Chat Completion", Type: "api", PatternStr: `/v1/chat/completions`, Severity: SeverityHigh, Description: "Chat completion API call"},
 		{Name: "Embeddings", Type: "api", PatternStr: `/v1/embeddings`, Severity: SeverityMedium, Description: "Embeddings API call"},
 	}
 
-	// Compile patterns
+	// 编译图案
 	for _, p := range patterns {
 		p.Pattern = regexp.MustCompile("(?i)" + p.PatternStr)
 	}
@@ -112,7 +112,7 @@ func getDefaultAIPatterns() []*AIPattern {
 	return patterns
 }
 
-// ScanContent scans content for shadow AI indicators.
+// ScanContent为阴影AI指标扫描内容.
 func (d *ShadowAIDetector) ScanContent(ctx context.Context, content, source, userID string) []Detection {
 	if !d.config.EnableContentScan {
 		return nil
@@ -145,9 +145,9 @@ func (d *ShadowAIDetector) ScanContent(ctx context.Context, content, source, use
 	return detections
 }
 
-// CheckDomain checks if a domain is an AI service.
+// 检查域名检查是否为AI服务.
 func (d *ShadowAIDetector) CheckDomain(domain string) *Detection {
-	// Check whitelist
+	// 检查白名单
 	for _, w := range d.config.WhitelistedDomains {
 		if domain == w {
 			return nil
@@ -184,7 +184,7 @@ func (d *ShadowAIDetector) recordDetections(detections []Detection) {
 
 	d.mu.Lock()
 	d.detections = append(d.detections, detections...)
-	// Keep last 10000 detections
+	// 保留最后的一万次检测
 	if len(d.detections) > 10000 {
 		d.detections = d.detections[len(d.detections)-10000:]
 	}
@@ -199,7 +199,7 @@ func (d *ShadowAIDetector) recordDetections(detections []Detection) {
 	}
 }
 
-// GetDetections returns recent detections.
+// Get Detections 返回最近的检测。
 func (d *ShadowAIDetector) GetDetections(limit int) []Detection {
 	d.mu.RLock()
 	defer d.mu.RUnlock()
@@ -212,7 +212,7 @@ func (d *ShadowAIDetector) GetDetections(limit int) []Detection {
 	return append([]Detection{}, d.detections[start:]...)
 }
 
-// GetStats returns detection statistics.
+// GetStats 返回检测统计.
 func (d *ShadowAIDetector) GetStats() ShadowAIStats {
 	d.mu.RLock()
 	defer d.mu.RUnlock()
@@ -231,14 +231,14 @@ func (d *ShadowAIDetector) GetStats() ShadowAIStats {
 	return stats
 }
 
-// ShadowAIStats contains detection statistics.
+// ShadowAIStats包含检测统计数据.
 type ShadowAIStats struct {
 	TotalDetections int            `json:"total_detections"`
 	BySeverity      map[string]int `json:"by_severity"`
 	ByPattern       map[string]int `json:"by_pattern"`
 }
 
-// AddPattern adds a custom detection pattern.
+// 添加Pattern 添加自定义检测模式 。
 func (d *ShadowAIDetector) AddPattern(name, patternType, patternStr, severity, description string) error {
 	re, err := regexp.Compile("(?i)" + patternStr)
 	if err != nil {

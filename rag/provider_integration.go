@@ -9,20 +9,20 @@ import (
 	"go.uber.org/zap"
 )
 
-// EmbeddingProvider wraps embedding.Provider for retrieval use.
+// 嵌入 Provider 包装嵌入. 供检索使用的提供者。
 type EmbeddingProvider interface {
 	EmbedQuery(ctx context.Context, query string) ([]float64, error)
 	EmbedDocuments(ctx context.Context, documents []string) ([][]float64, error)
 	Name() string
 }
 
-// RerankProvider wraps rerank.Provider for retrieval use.
+// Provider包装重新排序. 供检索使用的提供者。
 type RerankProvider interface {
 	RerankSimple(ctx context.Context, query string, documents []string, topN int) ([]rerank.RerankResult, error)
 	Name() string
 }
 
-// EnhancedRetriever extends HybridRetriever with external embedding and rerank providers.
+// University Retriever扩展了HybridRetriever,由外部嵌入并重新排序提供者.
 type EnhancedRetriever struct {
 	*HybridRetriever
 	embeddingProvider EmbeddingProvider
@@ -30,14 +30,14 @@ type EnhancedRetriever struct {
 	logger            *zap.Logger
 }
 
-// EnhancedRetrieverConfig configuration for enhanced retriever.
+// 增强检索器的增强RetrieverConfig配置 。
 type EnhancedRetrieverConfig struct {
 	HybridConfig      HybridRetrievalConfig
 	EmbeddingProvider EmbeddingProvider
 	RerankProvider    RerankProvider
 }
 
-// NewEnhancedRetriever creates a retriever with external providers.
+// NewEnhancedRetriever 创建了外部提供者的检索器 。
 func NewEnhancedRetriever(cfg EnhancedRetrieverConfig, logger *zap.Logger) *EnhancedRetriever {
 	return &EnhancedRetriever{
 		HybridRetriever:   NewHybridRetriever(cfg.HybridConfig, logger),
@@ -47,25 +47,25 @@ func NewEnhancedRetriever(cfg EnhancedRetrieverConfig, logger *zap.Logger) *Enha
 	}
 }
 
-// IndexDocumentsWithEmbedding indexes documents and generates embeddings.
+// 索引文件 带有Embedding索引文档并生成嵌入.
 func (r *EnhancedRetriever) IndexDocumentsWithEmbedding(ctx context.Context, docs []Document) error {
 	if r.embeddingProvider == nil {
 		return r.IndexDocuments(docs)
 	}
 
-	// Extract content for embedding
+	// 提取嵌入内容
 	contents := make([]string, len(docs))
 	for i, doc := range docs {
 		contents[i] = doc.Content
 	}
 
-	// Generate embeddings in batches
+	// 生成分批嵌入
 	embeddings, err := r.embeddingProvider.EmbedDocuments(ctx, contents)
 	if err != nil {
 		return fmt.Errorf("failed to generate embeddings: %w", err)
 	}
 
-	// Attach embeddings to documents
+	// 在文档中附加嵌入
 	for i := range docs {
 		if i < len(embeddings) {
 			docs[i].Embedding = embeddings[i]
@@ -79,9 +79,9 @@ func (r *EnhancedRetriever) IndexDocumentsWithEmbedding(ctx context.Context, doc
 	return r.IndexDocuments(docs)
 }
 
-// RetrieveWithProviders performs retrieval using external providers.
+// 利用外部提供者检索。
 func (r *EnhancedRetriever) RetrieveWithProviders(ctx context.Context, query string) ([]RetrievalResult, error) {
-	// Generate query embedding
+	// 生成查询嵌入
 	var queryEmbedding []float64
 	if r.embeddingProvider != nil && r.config.UseVector {
 		var err error
@@ -92,13 +92,13 @@ func (r *EnhancedRetriever) RetrieveWithProviders(ctx context.Context, query str
 		}
 	}
 
-	// Perform hybrid retrieval
+	// 执行混合检索
 	results, err := r.Retrieve(ctx, query, queryEmbedding)
 	if err != nil {
 		return nil, err
 	}
 
-	// Apply external reranking if available
+	// 如果可用, 应用外部重排
 	if r.rerankProvider != nil && r.config.UseReranking && len(results) > 0 {
 		results, err = r.applyExternalRerank(ctx, query, results)
 		if err != nil {
@@ -110,15 +110,15 @@ func (r *EnhancedRetriever) RetrieveWithProviders(ctx context.Context, query str
 	return results, nil
 }
 
-// applyExternalRerank applies external reranker to results.
+// 应用External Rerank对结果应用了外部的再排名.
 func (r *EnhancedRetriever) applyExternalRerank(ctx context.Context, query string, results []RetrievalResult) ([]RetrievalResult, error) {
-	// Extract documents for reranking
+	// 提取文档重新排序
 	docs := make([]string, len(results))
 	for i, res := range results {
 		docs[i] = res.Document.Content
 	}
 
-	// Call external reranker
+	// 调用外部重新排序器
 	topN := r.config.TopK
 	if topN > len(results) {
 		topN = len(results)
@@ -129,7 +129,7 @@ func (r *EnhancedRetriever) applyExternalRerank(ctx context.Context, query strin
 		return results, err
 	}
 
-	// Reorder results based on rerank scores
+	// 根据分数重新排序结果
 	reranked := make([]RetrievalResult, 0, len(rerankResults))
 	for _, rr := range rerankResults {
 		if rr.Index < len(results) {
@@ -149,10 +149,10 @@ func (r *EnhancedRetriever) applyExternalRerank(ctx context.Context, query strin
 }
 
 // ============================================================
-// Factory functions for common provider combinations
+// 常见供应商组合的工厂功能
 // ============================================================
 
-// NewOpenAIRetriever creates retriever with OpenAI embedding.
+// 新 OpenAIREtriever 创建了带有 OpenAI 嵌入式的检索器 。
 func NewOpenAIRetriever(apiKey string, logger *zap.Logger) *EnhancedRetriever {
 	embProvider := embedding.NewOpenAIProvider(embedding.OpenAIConfig{
 		APIKey: apiKey,
@@ -164,7 +164,7 @@ func NewOpenAIRetriever(apiKey string, logger *zap.Logger) *EnhancedRetriever {
 	}, logger)
 }
 
-// NewCohereRetriever creates retriever with Cohere embedding and reranking.
+// NewCohere Retriever创建了由Cohere嵌入并重排的取回器.
 func NewCohereRetriever(apiKey string, logger *zap.Logger) *EnhancedRetriever {
 	embProvider := embedding.NewCohereProvider(embedding.CohereConfig{
 		APIKey: apiKey,
@@ -180,7 +180,7 @@ func NewCohereRetriever(apiKey string, logger *zap.Logger) *EnhancedRetriever {
 	}, logger)
 }
 
-// NewVoyageRetriever creates retriever with Voyage AI embedding and reranking.
+// NewVoyage Retriever 创建取回器,由Voyage AI嵌入并重排.
 func NewVoyageRetriever(apiKey string, logger *zap.Logger) *EnhancedRetriever {
 	embProvider := embedding.NewVoyageProvider(embedding.VoyageConfig{
 		APIKey: apiKey,
@@ -196,7 +196,7 @@ func NewVoyageRetriever(apiKey string, logger *zap.Logger) *EnhancedRetriever {
 	}, logger)
 }
 
-// NewJinaRetriever creates retriever with Jina AI embedding and reranking.
+// 新JinaRetriever创建取回器,由Jina AI嵌入并重排.
 func NewJinaRetriever(apiKey string, logger *zap.Logger) *EnhancedRetriever {
 	embProvider := embedding.NewJinaProvider(embedding.JinaConfig{
 		APIKey: apiKey,

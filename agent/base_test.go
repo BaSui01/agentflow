@@ -179,11 +179,11 @@ func TestBaseAgent_Init(t *testing.T) {
 
 	agent := NewBaseAgent(config, provider, memory, toolManager, bus, logger)
 
-	// Mock memory loading
+	// 模拟内存装入
 	memory.On("LoadRecent", mock.Anything, "test-agent", MemoryShortTerm, 10).
 		Return([]MemoryRecord{}, nil)
 
-	// Mock event publishing - Publish takes a single Event argument
+	// 模拟事件发布 - 发布需要单个事件参数
 	bus.On("Publish", mock.AnythingOfType("*agent.StateChangeEvent")).
 		Return()
 
@@ -214,23 +214,23 @@ func TestBaseAgent_StateTransition(t *testing.T) {
 
 	agent := NewBaseAgent(config, provider, memory, toolManager, bus, logger)
 
-	// Mock event publishing - Publish takes a single Event argument
+	// 模拟事件发布 - 发布需要单个事件参数
 	bus.On("Publish", mock.AnythingOfType("*agent.StateChangeEvent")).
 		Return()
 
 	ctx := context.Background()
 
-	// Valid transition: Init -> Ready
+	// 有效过渡: init - > 准备
 	err := agent.Transition(ctx, StateReady)
 	assert.NoError(t, err)
 	assert.Equal(t, StateReady, agent.State())
 
-	// Valid transition: Ready -> Running
+	// 有效过渡:准备 - > 运行
 	err = agent.Transition(ctx, StateRunning)
 	assert.NoError(t, err)
 	assert.Equal(t, StateRunning, agent.State())
 
-	// Invalid transition: Running -> Init
+	// 无效的过渡: 运行 - > 输入
 	err = agent.Transition(ctx, StateInit)
 	assert.Error(t, err)
 	assert.IsType(t, ErrInvalidTransition{}, err)
@@ -261,7 +261,7 @@ func TestBaseAgent_Execute(t *testing.T) {
 
 	agent := NewBaseAgent(config, provider, memory, toolManager, bus, logger)
 
-	// Initialize agent
+	// 初始化代理
 	memory.On("LoadRecent", mock.Anything, "test-agent", MemoryShortTerm, 10).
 		Return([]MemoryRecord{}, nil)
 	bus.On("Publish", mock.AnythingOfType("*agent.StateChangeEvent")).
@@ -271,7 +271,7 @@ func TestBaseAgent_Execute(t *testing.T) {
 	err := agent.Init(ctx)
 	assert.NoError(t, err)
 
-	// Mock LLM response
+	// Mock LLM 响应
 	mockResponse := &llm.ChatResponse{
 		ID:       "test-response",
 		Provider: "mock",
@@ -296,11 +296,11 @@ func TestBaseAgent_Execute(t *testing.T) {
 	provider.On("Completion", mock.Anything, mock.Anything).
 		Return(mockResponse, nil)
 
-	// Mock memory saving
+	// 保存记忆
 	memory.On("Save", mock.Anything, mock.Anything).
 		Return(nil)
 
-	// Execute task
+	// 执行任务
 	input := &Input{
 		TraceID: "test-trace",
 		Content: "Hello",
@@ -342,7 +342,7 @@ func TestBaseAgent_ExecuteNotReady(t *testing.T) {
 		Content: "Hello",
 	}
 
-	// Agent is in Init state, should fail
+	// 特工在伊尼特状态,应该失败了
 	output, err := agent.Execute(ctx, input)
 
 	assert.Error(t, err)
@@ -369,7 +369,7 @@ func TestBaseAgent_SaveMemory(t *testing.T) {
 
 	ctx := context.Background()
 
-	// Mock memory saving
+	// 保存记忆
 	memory.On("Save", mock.Anything, mock.MatchedBy(func(rec MemoryRecord) bool {
 		return rec.AgentID == "test-agent" &&
 			rec.Kind == MemoryShortTerm &&
@@ -403,7 +403,7 @@ func TestBaseAgent_RecallMemory(t *testing.T) {
 
 	ctx := context.Background()
 
-	// Mock memory search
+	// 模拟内存搜索
 	expectedRecords := []MemoryRecord{
 		{
 			ID:      "mem-1",
@@ -444,14 +444,14 @@ func TestBaseAgent_Observe(t *testing.T) {
 
 	ctx := context.Background()
 
-	// Mock memory saving
+	// 保存记忆
 	memory.On("Save", mock.Anything, mock.MatchedBy(func(rec MemoryRecord) bool {
 		return rec.AgentID == "test-agent" &&
 			rec.Kind == MemoryLongTerm &&
 			rec.Content == "feedback content"
 	})).Return(nil)
 
-	// Mock event publishing - Publish takes a single Event argument
+	// 模拟事件发布 - 发布需要单个事件参数
 	bus.On("Publish", mock.AnythingOfType("*agent.FeedbackEvent")).
 		Return()
 
@@ -494,7 +494,7 @@ func TestBaseAgent_Plan(t *testing.T) {
 
 	ctx := context.Background()
 
-	// Mock LLM response with plan
+	// Mock LLM 与计划的反应
 	mockResponse := &llm.ChatResponse{
 		ID:       "test-response",
 		Provider: "mock",
@@ -556,7 +556,7 @@ func BenchmarkBaseAgent_Execute(b *testing.B) {
 
 	agent := NewBaseAgent(config, provider, memory, toolManager, bus, logger)
 
-	// Setup mocks
+	// 设置模拟
 	memory.On("LoadRecent", mock.Anything, "test-agent", MemoryShortTerm, 10).
 		Return([]MemoryRecord{}, nil)
 	bus.On("Publish", mock.AnythingOfType("*agent.StateChangeEvent")).

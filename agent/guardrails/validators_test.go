@@ -10,7 +10,7 @@ import (
 )
 
 // ============================================================================
-// LengthValidator Tests
+// 长度变量测试
 // ============================================================================
 
 func TestNewLengthValidator(t *testing.T) {
@@ -193,7 +193,7 @@ func TestLengthValidator_Metadata(t *testing.T) {
 }
 
 // ============================================================================
-// KeywordValidator Tests
+// 关键词校正测试
 // ============================================================================
 
 func TestNewKeywordValidator(t *testing.T) {
@@ -494,11 +494,11 @@ func TestKeywordValidator_Metadata(t *testing.T) {
 }
 
 // ============================================================================
-// Integration Tests
+// 整合测试
 // ============================================================================
 
 func TestValidators_ImplementInterface(t *testing.T) {
-	// Ensure both validators implement the Validator interface
+	// 确保两个验证器执行验证器接口
 	var _ Validator = (*LengthValidator)(nil)
 	var _ Validator = (*KeywordValidator)(nil)
 }
@@ -511,7 +511,7 @@ func TestValidators_PriorityOrder(t *testing.T) {
 
 	validators := []Validator{piiDetector, keywordValidator, lengthValidator, injectionDetector}
 
-	// Sort by priority (lower number = higher priority)
+	// 按优先级排序( 下数 = 高优先级)
 	for i := 0; i < len(validators)-1; i++ {
 		for j := i + 1; j < len(validators); j++ {
 			if validators[i].Priority() > validators[j].Priority() {
@@ -520,7 +520,7 @@ func TestValidators_PriorityOrder(t *testing.T) {
 		}
 	}
 
-	// Verify order: length (10) -> keyword (20) -> injection (50) -> pii (100)
+	// 校验顺序:长度(10) - > 关键词(20) - > 注射(50) - > pii (100)
 	assert.Equal(t, "length_validator", validators[0].Name())
 	assert.Equal(t, "keyword_validator", validators[1].Name())
 	assert.Equal(t, "injection_detector", validators[2].Name())

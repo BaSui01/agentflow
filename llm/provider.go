@@ -1,4 +1,4 @@
-// Package llm provides unified LLM provider abstraction and routing.
+// package llm提供统一的LLM提供者抽象和路由.
 package llm
 
 import (
@@ -8,8 +8,8 @@ import (
 	"github.com/BaSui01/agentflow/types"
 )
 
-// Re-export types for backward compatibility during migration.
-// These will be removed after full migration.
+// 迁移时向后兼容的再出口类型 。
+// 这些将在完全迁移后被删除。
 type (
 	Message      = types.Message
 	Role         = types.Role
@@ -22,7 +22,7 @@ type (
 	ImageContent = types.ImageContent
 )
 
-// Re-export constants.
+// 再出口常数.
 const (
 	RoleSystem    = types.RoleSystem
 	RoleUser      = types.RoleUser
@@ -30,7 +30,7 @@ const (
 	RoleTool      = types.RoleTool
 )
 
-// Re-export error codes.
+// 再出口出错代码.
 const (
 	ErrInvalidRequest      = types.ErrInvalidRequest
 	ErrAuthentication      = types.ErrAuthentication
@@ -51,36 +51,36 @@ const (
 	ErrProviderUnavailable = types.ErrProviderUnavailable
 )
 
-// Provider defines the unified LLM adapter interface.
+// 提供方定义了统一的LLM适配器接口.
 type Provider interface {
-	// Completion sends a synchronous chat request.
+	// 补全发送同步聊天请求 。
 	Completion(ctx context.Context, req *ChatRequest) (*ChatResponse, error)
 
-	// Stream sends a streaming chat request.
+	// Stream 发送流式聊天请求 。
 	Stream(ctx context.Context, req *ChatRequest) (<-chan StreamChunk, error)
 
-	// HealthCheck performs a lightweight health check.
+	// 健康检查进行轻量级健康检查。
 	HealthCheck(ctx context.Context) (*HealthStatus, error)
 
-	// Name returns the provider's unique identifier.
+	// 名称返回提供者唯一的标识符 。
 	Name() string
 
-	// SupportsNativeFunctionCalling returns whether native function calling is supported.
+	// 支持 NativeFunctionCalling 返回是否支持本地函数调用 。
 	SupportsNativeFunctionCalling() bool
 
-	// ListModels returns the list of available models from the provider.
-	// Returns nil if the provider doesn't support model listing.
+	// ListModels 从提供者返回可用的模型列表 。
+	// 如果供应商不支持模式列表,则返回为零。
 	ListModels(ctx context.Context) ([]Model, error)
 }
 
-// HealthStatus represents provider health check result.
+// 健康状况代表提供者的健康检查结果。
 type HealthStatus struct {
 	Healthy   bool          `json:"healthy"`
 	Latency   time.Duration `json:"latency"`
 	ErrorRate float64       `json:"error_rate"`
 }
 
-// ChatRequest represents a chat completion request.
+// 聊天请求代表聊天完成请求.
 type ChatRequest struct {
 	TraceID     string            `json:"trace_id"`
 	TenantID    string            `json:"tenant_id,omitempty"`
@@ -97,13 +97,13 @@ type ChatRequest struct {
 	Metadata    map[string]string `json:"metadata,omitempty"`
 	Tags        []string          `json:"tags,omitempty"`
 
-	// Extended fields
+	// 扩展字段
 	ReasoningMode      string   `json:"reasoning_mode,omitempty"`
 	PreviousResponseID string   `json:"previous_response_id,omitempty"`
 	ThoughtSignatures  []string `json:"thought_signatures,omitempty"`
 }
 
-// ChatResponse represents a chat completion response.
+// ChatResponse 代表聊天完成响应.
 type ChatResponse struct {
 	ID                string       `json:"id,omitempty"`
 	Provider          string       `json:"provider,omitempty"`
@@ -114,21 +114,21 @@ type ChatResponse struct {
 	ThoughtSignatures []string     `json:"thought_signatures,omitempty"`
 }
 
-// ChatChoice represents a single choice in the response.
+// ChatChoice代表了回应中的单一选择.
 type ChatChoice struct {
 	Index        int     `json:"index"`
 	FinishReason string  `json:"finish_reason,omitempty"`
 	Message      Message `json:"message"`
 }
 
-// ChatUsage represents token usage in a response.
+// ChatUsage 表示一个响应中的符号用法 。
 type ChatUsage struct {
 	PromptTokens     int `json:"prompt_tokens"`
 	CompletionTokens int `json:"completion_tokens"`
 	TotalTokens      int `json:"total_tokens"`
 }
 
-// StreamChunk represents a streaming response chunk.
+// StreamChunk 代表了流源响应块.
 type StreamChunk struct {
 	ID           string     `json:"id,omitempty"`
 	Provider     string     `json:"provider,omitempty"`
@@ -140,7 +140,7 @@ type StreamChunk struct {
 	Err          *Error     `json:"error,omitempty"`
 }
 
-// Model represents a model available from a provider.
+// 模型代表一个提供商提供的一种模型.
 type Model struct {
 	ID          string    `json:"id"`           // 模型 ID（API 调用时使用）
 	Object      string    `json:"object"`       // 对象类型（通常是 "model"）
@@ -151,7 +151,7 @@ type Model struct {
 	Parent      string    `json:"parent"`       // 父模型
 }
 
-// IsRetryable checks if an error is retryable.
+// 如果错误可以重试, 可重试 。
 func IsRetryable(err error) bool {
 	if e, ok := err.(*Error); ok {
 		return e.Retryable

@@ -14,12 +14,12 @@ import (
 	"pgregory.net/rapid"
 )
 
-// Feature: agent-framework-2026-enhancements, Property 9: Agent Card Completeness
-// Validates: Requirements 5.1, 5.2, 5.3
-// For any registered Agent, the generated AgentCard should contain non-empty Name, Description,
-// URL, Version fields, and the Capabilities list should reflect the Agent's actual capabilities.
+// 特征:代理-框架-2026-增强,财产9:代理卡完整性
+// 审定:要求5.1、5.2、5.3
+// 对于任何注册的代理,生成的代理卡应包含非空名,说明,
+// URL,版本字段,以及能力列表应反映代理的实际能力.
 
-// propMockAgent implements agent.Agent interface for property testing.
+// propMock Agent 仪器代理. 属性测试代理界面 。
 type propMockAgent struct {
 	id          string
 	name        string
@@ -43,16 +43,16 @@ func (m *propMockAgent) Execute(ctx context.Context, input *agent.Input) (*agent
 }
 func (m *propMockAgent) Observe(ctx context.Context, feedback *agent.Feedback) error { return nil }
 
-// Description returns the agent description.
+// 描述返回代理描述 。
 func (m *propMockAgent) Description() string { return m.description }
 
-// Tools returns the agent tools.
+// 工具返回代理工具。
 func (m *propMockAgent) Tools() []string { return m.tools }
 
-// Metadata returns the agent metadata.
+// 元数据返回代理元数据 。
 func (m *propMockAgent) Metadata() map[string]string { return m.metadata }
 
-// propToolProvider implements ToolSchemaProvider for property testing.
+// propTool Provider执行工具Schema Provider用于属性测试.
 type propToolProvider struct {
 	tools map[string][]llm.ToolSchema
 }
@@ -64,10 +64,10 @@ func (p *propToolProvider) GetAllowedTools(agentID string) []llm.ToolSchema {
 	return nil
 }
 
-// TestProperty_AgentCard_Completeness tests that generated AgentCards have all required fields.
+// 生成 AgentCard 的 Property  AgentCard  完成性测试 拥有所有所需的字段 。
 func TestProperty_AgentCard_Completeness(t *testing.T) {
 	rapid.Check(t, func(rt *rapid.T) {
-		// Generate random agent configuration
+		// 生成随机代理配置
 		agentID := rapid.StringMatching(`[a-z][a-z0-9-]{2,20}`).Draw(rt, "agentID")
 		agentName := rapid.StringMatching(`[A-Z][a-zA-Z0-9 ]{2,30}`).Draw(rt, "agentName")
 		agentDesc := rapid.StringMatching(`[A-Za-z][a-zA-Z0-9 ,.]{10,100}`).Draw(rt, "agentDesc")
@@ -84,7 +84,7 @@ func TestProperty_AgentCard_Completeness(t *testing.T) {
 			"https://agents.mycompany.io",
 		}).Draw(rt, "baseURL")
 
-		// Create mock agent
+		// 创建模拟代理
 		ag := &propMockAgent{
 			id:          agentID,
 			name:        agentName,
@@ -92,32 +92,32 @@ func TestProperty_AgentCard_Completeness(t *testing.T) {
 			description: agentDesc,
 		}
 
-		// Generate agent card
+		// 生成代理卡
 		gen := NewAgentCardGenerator()
 		card := gen.Generate(newAgentAdapter(ag), baseURL)
 
-		// Property: Name must be non-empty
+		// 属性: 名称必须是非空的
 		assert.NotEmpty(t, card.Name, "AgentCard.Name should not be empty")
 
-		// Property: Description must be non-empty
+		// 属性: 描述必须是非空的
 		assert.NotEmpty(t, card.Description, "AgentCard.Description should not be empty")
 
-		// Property: URL must be non-empty
+		// 属性: URL 必须是非空的
 		assert.NotEmpty(t, card.URL, "AgentCard.URL should not be empty")
 
-		// Property: Version must be non-empty
+		// 属性: 版本必须是非空的
 		assert.NotEmpty(t, card.Version, "AgentCard.Version should not be empty")
 
-		// Property: Card should pass validation
+		// 属性: 卡片应该通过验证
 		err := card.Validate()
 		assert.NoError(t, err, "AgentCard should pass validation")
 	})
 }
 
-// TestProperty_AgentCard_CapabilitiesReflectAgentType tests that capabilities reflect agent type.
+// 测试 Property AgentCard Capabilitys ReflectAgentType 测试能力反映代理类型.
 func TestProperty_AgentCard_CapabilitiesReflectAgentType(t *testing.T) {
 	rapid.Check(t, func(rt *rapid.T) {
-		// Map agent types to expected capabilities
+		// 将代理类型映射到预期能力
 		typeCapabilities := map[agent.AgentType]string{
 			agent.TypeAssistant:  "chat",
 			agent.TypeAnalyzer:   "analysis",
@@ -144,22 +144,22 @@ func TestProperty_AgentCard_CapabilitiesReflectAgentType(t *testing.T) {
 		gen := NewAgentCardGenerator()
 		card := gen.Generate(newAgentAdapter(ag), "https://api.example.com")
 
-		// Property: Capabilities list should not be empty
+		// 属性: 能力列表不应为空
 		assert.NotEmpty(t, card.Capabilities, "AgentCard.Capabilities should not be empty")
 
-		// Property: Capabilities should reflect agent type
+		// 属性: 能力应反映代理类型
 		expectedCap := typeCapabilities[agentType]
 		assert.True(t, card.HasCapability(expectedCap),
 			"AgentCard should have capability '%s' for agent type '%s'", expectedCap, agentType)
 	})
 }
 
-// TestProperty_AgentCard_ToolsReflectAgentTools tests that tools list reflects agent's actual tools.
+// 测试Property AgentCard Tools ReflectAgentTools 测试工具列表反映了代理的实际工具.
 func TestProperty_AgentCard_ToolsReflectAgentTools(t *testing.T) {
 	rapid.Check(t, func(rt *rapid.T) {
 		agentID := rapid.StringMatching(`[a-z][a-z0-9-]{2,20}`).Draw(rt, "agentID")
 
-		// Generate random number of tools
+		// 生成工具的随机数量
 		numTools := rapid.IntRange(0, 5).Draw(rt, "numTools")
 		toolSchemas := make([]llm.ToolSchema, numTools)
 		toolNames := make([]string, numTools)
@@ -193,10 +193,10 @@ func TestProperty_AgentCard_ToolsReflectAgentTools(t *testing.T) {
 		gen := NewAgentCardGenerator()
 		card := gen.GenerateWithTools(newAgentAdapter(ag), "https://api.example.com", toolProvider)
 
-		// Property: Tools count should match
+		// 属性: 工具计数应匹配
 		assert.Len(t, card.Tools, numTools, "AgentCard.Tools count should match agent tools")
 
-		// Property: All tool names should be present
+		// 属性: 所有工具名称都应存在
 		for _, toolName := range toolNames {
 			assert.True(t, card.HasTool(toolName),
 				"AgentCard should have tool '%s'", toolName)
@@ -204,17 +204,17 @@ func TestProperty_AgentCard_ToolsReflectAgentTools(t *testing.T) {
 	})
 }
 
-// TestProperty_AgentCard_MetadataPreserved tests that metadata is preserved in agent card.
+// 测试Property AgentCard Metadata 预留测试元数据保存在代理卡.
 func TestProperty_AgentCard_MetadataPreserved(t *testing.T) {
 	rapid.Check(t, func(rt *rapid.T) {
-		// Generate random metadata
+		// 生成随机元数据
 		numMeta := rapid.IntRange(1, 5).Draw(rt, "numMeta")
 		metadata := make(map[string]string)
 
 		for i := 0; i < numMeta; i++ {
 			key := rapid.StringMatching(`[a-z][a-z_]{2,10}`).Draw(rt, fmt.Sprintf("metaKey_%d", i))
 			value := rapid.StringMatching(`[a-zA-Z0-9]{3,20}`).Draw(rt, fmt.Sprintf("metaValue_%d", i))
-			// Skip "version" key as it's handled specially
+			// 跳过特殊处理的“ 版本” 密钥
 			if key != "version" {
 				metadata[key] = value
 			}
@@ -231,7 +231,7 @@ func TestProperty_AgentCard_MetadataPreserved(t *testing.T) {
 		gen := NewAgentCardGenerator()
 		card := gen.Generate(newAgentAdapter(ag), "https://api.example.com")
 
-		// Property: All metadata should be preserved (except version)
+		// 属性: 所有元数据应当保存(版本除外)
 		for key, value := range metadata {
 			if key != "version" {
 				cardValue, ok := card.GetMetadata(key)
@@ -240,7 +240,7 @@ func TestProperty_AgentCard_MetadataPreserved(t *testing.T) {
 			}
 		}
 
-		// Property: agent_type and agent_id should be in metadata
+		// 属性:代理 类型和代理 id应在元数据中
 		agentType, ok := card.GetMetadata("agent_type")
 		assert.True(t, ok, "agent_type should be in metadata")
 		assert.Equal(t, string(ag.agentType), agentType)
@@ -251,7 +251,7 @@ func TestProperty_AgentCard_MetadataPreserved(t *testing.T) {
 	})
 }
 
-// TestProperty_AgentCard_VersionFromMetadata tests that version is taken from metadata if present.
+// 测试Property AgentCard Version FromMetadata测试,如果存在,该版本取自元数据.
 func TestProperty_AgentCard_VersionFromMetadata(t *testing.T) {
 	rapid.Check(t, func(rt *rapid.T) {
 		version := rapid.StringMatching(`[0-9]+\.[0-9]+\.[0-9]+`).Draw(rt, "version")
@@ -269,12 +269,12 @@ func TestProperty_AgentCard_VersionFromMetadata(t *testing.T) {
 		gen := NewAgentCardGenerator()
 		card := gen.Generate(newAgentAdapter(ag), "https://api.example.com")
 
-		// Property: Version should come from metadata
+		// 属性: 版本应来自元数据
 		assert.Equal(t, version, card.Version, "Version should be taken from metadata")
 	})
 }
 
-// TestProperty_AgentCard_URLFormat tests that URL is correctly formatted.
+// TestProperty AgentCard URLFormat 测试 URL 正确格式化.
 func TestProperty_AgentCard_URLFormat(t *testing.T) {
 	rapid.Check(t, func(rt *rapid.T) {
 		agentID := rapid.StringMatching(`[a-z][a-z0-9-]{2,20}`).Draw(rt, "agentID")
@@ -295,16 +295,16 @@ func TestProperty_AgentCard_URLFormat(t *testing.T) {
 		gen := NewAgentCardGenerator()
 		card := gen.Generate(newAgentAdapter(ag), baseURL)
 
-		// Property: URL should contain agent ID
+		// 属性: URL 应包含代理ID
 		assert.Contains(t, card.URL, agentID, "URL should contain agent ID")
 
-		// Property: URL should not have double slashes (except protocol)
+		// 属性: URL 不应有双斜线( 协议除外)
 		urlWithoutProtocol := card.URL[8:] // Skip "https://" or "http://"
 		assert.NotContains(t, urlWithoutProtocol, "//", "URL should not have double slashes")
 	})
 }
 
-// TestProperty_AgentCard_RegisteredAgentHasValidCard tests that registered agents have valid cards.
+// 测试Property AgentCard Registered AgentHasValidCard测试 注册代理持有有效卡.
 func TestProperty_AgentCard_RegisteredAgentHasValidCard(t *testing.T) {
 	rapid.Check(t, func(rt *rapid.T) {
 		agentID := rapid.StringMatching(`[a-z][a-z0-9-]{2,20}`).Draw(rt, "agentID")
@@ -318,7 +318,7 @@ func TestProperty_AgentCard_RegisteredAgentHasValidCard(t *testing.T) {
 			description: agentDesc,
 		}
 
-		// Create server and register agent
+		// 创建服务器和注册代理
 		server := NewHTTPServer(&ServerConfig{
 			BaseURL: "https://api.example.com",
 		})
@@ -326,32 +326,32 @@ func TestProperty_AgentCard_RegisteredAgentHasValidCard(t *testing.T) {
 		err := server.RegisterAgent(ag)
 		require.NoError(t, err, "Should register agent successfully")
 
-		// Get agent card
+		// 获取代理卡
 		card, err := server.GetAgentCard(agentID)
 		require.NoError(t, err, "Should get agent card")
 
-		// Property: Card should have all required fields
+		// 属性: 卡片应包含所有需要的字段
 		assert.NotEmpty(t, card.Name, "Name should not be empty")
 		assert.NotEmpty(t, card.Description, "Description should not be empty")
 		assert.NotEmpty(t, card.URL, "URL should not be empty")
 		assert.NotEmpty(t, card.Version, "Version should not be empty")
 
-		// Property: Card should pass validation
+		// 属性: 卡片应该通过验证
 		err = card.Validate()
 		assert.NoError(t, err, "Card should pass validation")
 
-		// Property: Capabilities should not be empty
+		// 属性: 能力不应为空
 		assert.NotEmpty(t, card.Capabilities, "Capabilities should not be empty")
 	})
 }
 
-// TestProperty_AgentCard_ToolDefinitionCompleteness tests that tool definitions are complete.
+// 测试Property AgentCard  ToolDefinition Information 测试工具定义完成.
 func TestProperty_AgentCard_ToolDefinitionCompleteness(t *testing.T) {
 	rapid.Check(t, func(rt *rapid.T) {
 		toolName := rapid.StringMatching(`[a-z][a-z_]{2,15}`).Draw(rt, "toolName")
 		toolDesc := rapid.StringMatching(`[A-Za-z][a-zA-Z0-9 ]{5,50}`).Draw(rt, "toolDesc")
 
-		// Create tool schema with parameters
+		// 创建带有参数的工具计划
 		params := &structured.JSONSchema{
 			Type: structured.TypeObject,
 			Properties: map[string]*structured.JSONSchema{
@@ -372,13 +372,13 @@ func TestProperty_AgentCard_ToolDefinitionCompleteness(t *testing.T) {
 
 		toolDef := convertToolSchema(toolSchema)
 
-		// Property: Tool definition should have name
+		// 属性: 工具定义应该有名称
 		assert.Equal(t, toolName, toolDef.Name, "Tool name should match")
 
-		// Property: Tool definition should have description
+		// 属性: 工具定义应当有描述
 		assert.Equal(t, toolDesc, toolDef.Description, "Tool description should match")
 
-		// Property: Tool definition should have parameters
+		// 属性: 工具定义应当有参数
 		assert.NotNil(t, toolDef.Parameters, "Tool parameters should not be nil")
 	})
 }

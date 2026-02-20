@@ -8,11 +8,11 @@ import (
 )
 
 // ErrorCode 定义 Agent 错误码
-// Uses types.ErrorCode as the underlying type for consistency with the framework.
+// 用途类型。 ErrorCode作为与框架保持一致的基础类型.
 type ErrorCode = types.ErrorCode
 
-// Agent-specific error codes
-// These extend the base error codes defined in types/error.go
+// 特定代理错误代码
+// 这些扩展了类型/error.go中定义的基础错误代码
 const (
 	// 状态相关错误
 	ErrCodeInvalidTransition ErrorCode = "AGENT_INVALID_TRANSITION"
@@ -52,7 +52,7 @@ const (
 )
 
 // Error Agent 统一错误类型
-// Extends types.Error with Agent-specific fields.
+// 扩展类型 。 特定代理字段出错 。
 type Error struct {
 	Code      ErrorCode              `json:"code"`
 	Message   string                 `json:"message"`
@@ -98,7 +98,7 @@ func NewErrorWithCause(code ErrorCode, message string, cause error) *Error {
 	}
 }
 
-// FromTypesError converts a types.Error to an agent.Error
+// 从 TypesError 转换一个类型。 代理错误 。 错误
 func FromTypesError(err *types.Error) *Error {
 	if err == nil {
 		return nil
@@ -113,7 +113,7 @@ func FromTypesError(err *types.Error) *Error {
 	}
 }
 
-// ToTypesError converts an agent.Error to a types.Error
+// ToTypesError 转换一个代理 。 错误为类型 。 错误
 func (e *Error) ToTypesError() *types.Error {
 	return &types.Error{
 		Code:      e.Code,
@@ -151,16 +151,16 @@ func (e *Error) WithCause(cause error) *Error {
 	return e
 }
 
-// IsRetryable checks if an agent error is retryable
+// 如果代理错误可以重试, 是否可重试
 func IsRetryable(err error) bool {
 	if e, ok := err.(*Error); ok {
 		return e.Retryable
 	}
-	// Also check types.Error
+	// 还要检查类型 错误
 	return types.IsRetryable(err)
 }
 
-// GetErrorCode extracts the error code from an error
+// GetErrorCode 从错误中提取出错误代码
 func GetErrorCode(err error) ErrorCode {
 	if e, ok := err.(*Error); ok {
 		return e.Code

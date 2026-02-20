@@ -1,4 +1,4 @@
-// Package deliberation provides CrewAI-style autonomous reasoning mode.
+// 软件包审议提供了CrewAI风格的自主推理模式.
 package deliberation
 
 import (
@@ -10,7 +10,7 @@ import (
 	"go.uber.org/zap"
 )
 
-// DeliberationMode controls how agents reason before acting.
+// 审议 模式控制代理在行动前的理性.
 type DeliberationMode string
 
 const (
@@ -19,7 +19,7 @@ const (
 	ModeAdaptive   DeliberationMode = "adaptive"   // Context-dependent
 )
 
-// DeliberationConfig configures the deliberation engine.
+// Deconfig 配置审议引擎 。
 type DeliberationConfig struct {
 	Mode               DeliberationMode `json:"mode"`
 	MaxThinkingTime    time.Duration    `json:"max_thinking_time"`
@@ -28,7 +28,7 @@ type DeliberationConfig struct {
 	MaxIterations      int              `json:"max_iterations"`
 }
 
-// DefaultDeliberationConfig returns default configuration.
+// 默认De ReleaseConfig 返回默认配置 。
 func DefaultDeliberationConfig() DeliberationConfig {
 	return DeliberationConfig{
 		Mode:               ModeDeliberate,
@@ -39,7 +39,7 @@ func DefaultDeliberationConfig() DeliberationConfig {
 	}
 }
 
-// ThoughtProcess represents a single reasoning step.
+// ThoughtProcess代表了单一的推理步骤.
 type ThoughtProcess struct {
 	ID         string    `json:"id"`
 	Step       int       `json:"step"`
@@ -49,7 +49,7 @@ type ThoughtProcess struct {
 	Timestamp  time.Time `json:"timestamp"`
 }
 
-// DeliberationResult contains the outcome of deliberation.
+// 审议结果载有审议结果。
 type DeliberationResult struct {
 	TaskID          string           `json:"task_id"`
 	Thoughts        []ThoughtProcess `json:"thoughts"`
@@ -59,7 +59,7 @@ type DeliberationResult struct {
 	FinalConfidence float64          `json:"final_confidence"`
 }
 
-// Decision represents the final decision after deliberation.
+// 决定是审议后的最后决定。
 type Decision struct {
 	Action     string         `json:"action"`
 	Tool       string         `json:"tool,omitempty"`
@@ -68,12 +68,12 @@ type Decision struct {
 	Confidence float64        `json:"confidence"`
 }
 
-// Reasoner interface for LLM-based reasoning.
+// 基于LLM的推理的理性界面.
 type Reasoner interface {
 	Think(ctx context.Context, prompt string) (string, float64, error)
 }
 
-// Engine provides deliberation capabilities.
+// 发动机提供考虑能力.
 type Engine struct {
 	config   DeliberationConfig
 	reasoner Reasoner
@@ -81,7 +81,7 @@ type Engine struct {
 	mu       sync.RWMutex
 }
 
-// NewEngine creates a new deliberation engine.
+// NewEngine创造了一个新的审议引擎.
 func NewEngine(config DeliberationConfig, reasoner Reasoner, logger *zap.Logger) *Engine {
 	if logger == nil {
 		logger = zap.NewNop()
@@ -93,7 +93,7 @@ func NewEngine(config DeliberationConfig, reasoner Reasoner, logger *zap.Logger)
 	}
 }
 
-// Deliberate performs reasoning before action.
+// 故意在行动前进行推理。
 func (e *Engine) Deliberate(ctx context.Context, task Task) (*DeliberationResult, error) {
 	if e.config.Mode == ModeImmediate {
 		return e.immediateDecision(task)
@@ -114,21 +114,21 @@ func (e *Engine) Deliberate(ctx context.Context, task Task) (*DeliberationResult
 	for i := 0; i < e.config.MaxIterations; i++ {
 		result.Iterations = i + 1
 
-		// Step 1: Understand the task
+		// 步骤1:了解任务
 		thought, err := e.understand(ctx, task, i)
 		if err != nil {
 			return result, err
 		}
 		result.Thoughts = append(result.Thoughts, *thought)
 
-		// Step 2: Evaluate options
+		// 步骤2:评估选项
 		evalThought, err := e.evaluate(ctx, task, result.Thoughts, i)
 		if err != nil {
 			return result, err
 		}
 		result.Thoughts = append(result.Thoughts, *evalThought)
 
-		// Step 3: Plan action
+		// 步骤3:计划行动
 		decision, planThought, err := e.plan(ctx, task, result.Thoughts, i)
 		if err != nil {
 			return result, err
@@ -136,7 +136,7 @@ func (e *Engine) Deliberate(ctx context.Context, task Task) (*DeliberationResult
 		result.Thoughts = append(result.Thoughts, *planThought)
 		confidence = decision.Confidence
 
-		// Step 4: Self-critique (optional)
+		// 第4步:自律(可选)
 		if e.config.EnableSelfCritique && confidence < e.config.MinConfidence {
 			critiqueThought, err := e.critique(ctx, decision, i)
 			if err != nil {
@@ -265,7 +265,7 @@ func (e *Engine) critique(ctx context.Context, decision *Decision, step int) (*T
 	}, nil
 }
 
-// SetMode changes the deliberation mode at runtime.
+// 设置模式在运行时更改审议模式 。
 func (e *Engine) SetMode(mode DeliberationMode) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
@@ -273,14 +273,14 @@ func (e *Engine) SetMode(mode DeliberationMode) {
 	e.logger.Info("deliberation mode changed", zap.String("mode", string(mode)))
 }
 
-// GetMode returns the current deliberation mode.
+// GetMode 返回当前审议模式 。
 func (e *Engine) GetMode() DeliberationMode {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
 	return e.config.Mode
 }
 
-// Task represents a task for deliberation.
+// 任务是一项需要审议的任务。
 type Task struct {
 	ID             string         `json:"id"`
 	Description    string         `json:"description"`

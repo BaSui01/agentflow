@@ -13,13 +13,13 @@ import (
 	"time"
 )
 
-// DeepgramProvider implements STT using Deepgram API.
+// DeepgramProvider使用Deepgram API执行STT.
 type DeepgramProvider struct {
 	cfg    DeepgramConfig
 	client *http.Client
 }
 
-// NewDeepgramProvider creates a new Deepgram STT provider.
+// NewDepgram Provider 创建了新的 Deepgram STT 供应商.
 func NewDeepgramProvider(cfg DeepgramConfig) *DeepgramProvider {
 	if cfg.BaseURL == "" {
 		cfg.BaseURL = "https://api.deepgram.com"
@@ -88,7 +88,7 @@ type deepgramResponse struct {
 	} `json:"results"`
 }
 
-// Transcribe converts speech to text using Deepgram.
+// 将语音转换为使用Deepgram的文本。
 func (p *DeepgramProvider) Transcribe(ctx context.Context, req *STTRequest) (*STTResponse, error) {
 	if req.Audio == nil && req.AudioURL == "" {
 		return nil, fmt.Errorf("audio input or URL is required")
@@ -99,7 +99,7 @@ func (p *DeepgramProvider) Transcribe(ctx context.Context, req *STTRequest) (*ST
 		model = p.cfg.Model
 	}
 
-	// Build query params
+	// 构建查询参数
 	params := url.Values{}
 	params.Set("model", model)
 	params.Set("smart_format", "true")
@@ -118,7 +118,7 @@ func (p *DeepgramProvider) Transcribe(ctx context.Context, req *STTRequest) (*ST
 	var err error
 
 	if req.AudioURL != "" {
-		// URL-based transcription
+		// 基于 URL 的复制
 		body := map[string]string{"url": req.AudioURL}
 		payload, _ := json.Marshal(body)
 		httpReq, err = http.NewRequestWithContext(ctx, "POST", endpoint, bytes.NewReader(payload))
@@ -127,7 +127,7 @@ func (p *DeepgramProvider) Transcribe(ctx context.Context, req *STTRequest) (*ST
 		}
 		httpReq.Header.Set("Content-Type", "application/json")
 	} else {
-		// Direct audio upload
+		// 直接音频上传
 		audioData, err := io.ReadAll(req.Audio)
 		if err != nil {
 			return nil, fmt.Errorf("failed to read audio: %w", err)
@@ -164,13 +164,13 @@ func (p *DeepgramProvider) Transcribe(ctx context.Context, req *STTRequest) (*ST
 		CreatedAt: time.Now(),
 	}
 
-	// Extract transcript from first channel
+	// 从第一个频道提取记录
 	if len(dResp.Results.Channels) > 0 && len(dResp.Results.Channels[0].Alternatives) > 0 {
 		alt := dResp.Results.Channels[0].Alternatives[0]
 		result.Text = alt.Transcript
 		result.Confidence = alt.Confidence
 
-		// Convert words
+		// 转换单词
 		for _, w := range alt.Words {
 			word := Word{
 				Word:       w.Word,
@@ -185,7 +185,7 @@ func (p *DeepgramProvider) Transcribe(ctx context.Context, req *STTRequest) (*ST
 		}
 	}
 
-	// Convert utterances to segments (if diarization enabled)
+	// 将语句转换为分区( 如果启用对号)
 	for i, u := range dResp.Results.Utterances {
 		result.Segments = append(result.Segments, Segment{
 			ID:         i,
@@ -200,7 +200,7 @@ func (p *DeepgramProvider) Transcribe(ctx context.Context, req *STTRequest) (*ST
 	return result, nil
 }
 
-// TranscribeFile transcribes an audio file.
+// 转录File转录音频文件.
 func (p *DeepgramProvider) TranscribeFile(ctx context.Context, filepath string, opts *STTRequest) (*STTResponse, error) {
 	file, err := os.Open(filepath)
 	if err != nil {

@@ -5,18 +5,18 @@ import (
 	"unicode/utf8"
 )
 
-// EstimatorTokenizer is a character-count-based token estimator.
-// It distinguishes CJK and ASCII characters for better accuracy
-// compared to a naive len/4 approach.
+// 估计器Tokenizer是一个基于字符计数的符号估计器.
+// 它区分 CJK 和 ASCII 字符, 使其更准确
+// 与天真的Len/4方法相比
 type EstimatorTokenizer struct {
 	model     string
 	maxTokens int
 
-	// charsPerToken is the default ratio (used only as a fallback).
+	// charsPerToken是默认比率(仅用作倒计时).
 	charsPerToken float64
 }
 
-// NewEstimatorTokenizer creates a generic estimator.
+// 新估计器Tokenizer创建了通用估计器.
 func NewEstimatorTokenizer(model string, maxTokens int) *EstimatorTokenizer {
 	if maxTokens <= 0 {
 		maxTokens = 4096
@@ -28,7 +28,7 @@ func NewEstimatorTokenizer(model string, maxTokens int) *EstimatorTokenizer {
 	}
 }
 
-// WithCharsPerToken overrides the default chars-per-token ratio.
+// 使用 CharsPerToken 来覆盖默认的字符/ 每个字的比值 。
 func (e *EstimatorTokenizer) WithCharsPerToken(ratio float64) *EstimatorTokenizer {
 	e.charsPerToken = ratio
 	return e
@@ -47,7 +47,7 @@ func (e *EstimatorTokenizer) CountTokens(text string) (int, error) {
 		}
 	}
 
-	// CJK characters ~1.5 chars/token, ASCII ~4 chars/token.
+	// CJK字符~1.5个字符/托克,ASCII~4个字符/托克.
 	cjkTokens := float64(cjkCount) / 1.5
 	asciiTokens := float64(totalChars-cjkCount) / 4.0
 	estimated := int(cjkTokens + asciiTokens)
@@ -61,20 +61,20 @@ func (e *EstimatorTokenizer) CountTokens(text string) (int, error) {
 func (e *EstimatorTokenizer) CountMessages(messages []Message) (int, error) {
 	total := 0
 	for _, msg := range messages {
-		// Each message has ~4 tokens of overhead (role markers, separators).
+		// 每条消息都有~4个标语(作用标记,分出符).
 		tokens, err := e.CountTokens(msg.Content)
 		if err != nil {
 			return 0, err
 		}
 		total += tokens + 4
 	}
-	// Conversation-end overhead.
+	// 对话端上方。
 	total += 3
 	return total, nil
 }
 
 func (e *EstimatorTokenizer) Encode(text string) ([]int, error) {
-	// The estimator cannot truly encode; return pseudo token IDs.
+	// 估计器不能真正编码; 返回伪代号 ID 。
 	count, err := e.CountTokens(text)
 	if err != nil {
 		return nil, err
@@ -98,7 +98,7 @@ func (e *EstimatorTokenizer) Name() string {
 	return "estimator"
 }
 
-// isCJK returns true if the rune is a CJK character.
+// 如果 une 是 CJK 字符, 则返回 true 。
 func isCJK(r rune) bool {
 	return (r >= 0x4E00 && r <= 0x9FFF) || // CJK Unified Ideographs
 		(r >= 0x3400 && r <= 0x4DBF) || // CJK Extension A

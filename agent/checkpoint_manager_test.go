@@ -17,7 +17,7 @@ func TestCheckpointManager_CreateCheckpoint(t *testing.T) {
 
 	manager := NewCheckpointManager(store, logger)
 
-	// Create a mock agent
+	// 创建模拟代理
 	agent := &mockAgent{
 		id:    "test-agent",
 		state: StateReady,
@@ -25,11 +25,11 @@ func TestCheckpointManager_CreateCheckpoint(t *testing.T) {
 
 	threadID := "test-thread"
 
-	// Create checkpoint
+	// 创建检查站
 	err = manager.CreateCheckpoint(context.Background(), agent, threadID)
 	require.NoError(t, err)
 
-	// Verify checkpoint was created
+	// 检查检查站已经建立
 	checkpoints, err := store.List(context.Background(), threadID, 10)
 	require.NoError(t, err)
 	assert.Len(t, checkpoints, 1)
@@ -44,7 +44,7 @@ func TestCheckpointManager_RollbackToVersion(t *testing.T) {
 
 	manager := NewCheckpointManager(store, logger)
 
-	// Create a mock agent
+	// 创建模拟代理
 	agent := &mockAgent{
 		id:    "test-agent",
 		state: StateInit,
@@ -53,33 +53,33 @@ func TestCheckpointManager_RollbackToVersion(t *testing.T) {
 	threadID := "test-thread"
 	ctx := context.Background()
 
-	// Create first checkpoint (version 1)
+	// 创建第一个检查站( 第1版)
 	err = manager.CreateCheckpoint(ctx, agent, threadID)
 	require.NoError(t, err)
 
-	// Change state and create second checkpoint (version 2)
+	// 更改状态并创建第二个检查点( 第2版)
 	agent.state = StateRunning
 	err = manager.CreateCheckpoint(ctx, agent, threadID)
 	require.NoError(t, err)
 
-	// Change state and create third checkpoint (version 3)
+	// 更改状态并创建第三个检查站(第3版)
 	agent.state = StateReady
 	err = manager.CreateCheckpoint(ctx, agent, threadID)
 	require.NoError(t, err)
 
-	// Verify we have 3 versions
+	// 核实我们有3个版本
 	versions, err := manager.ListVersions(ctx, threadID)
 	require.NoError(t, err)
 	assert.Len(t, versions, 3)
 
-	// Rollback to version 1
+	// 回滚到第一版
 	err = manager.RollbackToVersion(ctx, agent, threadID, 1)
 	require.NoError(t, err)
 
-	// Verify agent state was restored
+	// 验证代理状态已恢复
 	assert.Equal(t, StateInit, agent.state)
 
-	// Verify a new checkpoint was created (version 4)
+	// 核查新检查站(第4版)
 	versions, err = manager.ListVersions(ctx, threadID)
 	require.NoError(t, err)
 	assert.Len(t, versions, 4)
@@ -101,18 +101,18 @@ func TestCheckpointManager_CompareVersions(t *testing.T) {
 	threadID := "test-thread"
 	ctx := context.Background()
 
-	// Create first checkpoint
+	// 创建第一个检查站
 	err = manager.CreateCheckpoint(ctx, agent, threadID)
 	require.NoError(t, err)
 
 	time.Sleep(10 * time.Millisecond)
 
-	// Change state and create second checkpoint
+	// 更改状态并创建第二个检查站
 	agent.state = StateReady
 	err = manager.CreateCheckpoint(ctx, agent, threadID)
 	require.NoError(t, err)
 
-	// Compare versions
+	// 比较版本
 	diff, err := manager.CompareVersions(ctx, threadID, 1, 2)
 	require.NoError(t, err)
 
@@ -140,23 +140,23 @@ func TestCheckpointManager_AutoSave(t *testing.T) {
 	threadID := "test-thread"
 	ctx := context.Background()
 
-	// Enable auto-save with short interval
+	// 启用短间隔自动保存
 	err = manager.EnableAutoSave(ctx, agent, threadID, 50*time.Millisecond)
 	require.NoError(t, err)
 
-	// Wait for a few auto-saves
+	// 等几个自动取出
 	time.Sleep(200 * time.Millisecond)
 
-	// Disable auto-save
+	// 禁用自动保存
 	manager.DisableAutoSave()
 
-	// Verify multiple checkpoints were created
+	// 核查设立了多个检查站
 	checkpoints, err := store.List(ctx, threadID, 10)
 	require.NoError(t, err)
 	assert.GreaterOrEqual(t, len(checkpoints), 2, "Expected at least 2 auto-saved checkpoints")
 }
 
-// mockAgent is a simple mock implementation of Agent interface for testing
+// 模拟 Agent 是 Agent 接口的简单模拟执行,用于测试
 type mockAgent struct {
 	id    string
 	state State

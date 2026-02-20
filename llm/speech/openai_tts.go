@@ -12,13 +12,13 @@ import (
 	"time"
 )
 
-// OpenAITTSProvider implements TTS using OpenAI's API.
+// OpenATSProvider使用OpenAI的API执行TTS.
 type OpenAITTSProvider struct {
 	cfg    OpenAITTSConfig
 	client *http.Client
 }
 
-// NewOpenAITTSProvider creates a new OpenAI TTS provider.
+// NewOpenAITSProvider创建了新的OpenAI TTS供应商.
 func NewOpenAITTSProvider(cfg OpenAITTSConfig) *OpenAITTSProvider {
 	if cfg.BaseURL == "" {
 		cfg.BaseURL = "https://api.openai.com"
@@ -50,7 +50,7 @@ type openAITTSRequest struct {
 	Speed          float64 `json:"speed,omitempty"`
 }
 
-// Synthesize converts text to speech.
+// 合成大小将文本转换为语音.
 func (p *OpenAITTSProvider) Synthesize(ctx context.Context, req *TTSRequest) (*TTSResponse, error) {
 	model := req.Model
 	if model == "" {
@@ -106,7 +106,7 @@ func (p *OpenAITTSProvider) Synthesize(ctx context.Context, req *TTSRequest) (*T
 	}, nil
 }
 
-// SynthesizeToFile converts text to speech and saves to file.
+// 将文本转换为语音并保存为文件。
 func (p *OpenAITTSProvider) SynthesizeToFile(ctx context.Context, req *TTSRequest, filepath string) error {
 	resp, err := p.Synthesize(ctx, req)
 	if err != nil {
@@ -124,7 +124,7 @@ func (p *OpenAITTSProvider) SynthesizeToFile(ctx context.Context, req *TTSReques
 	return err
 }
 
-// ListVoices returns available OpenAI voices.
+// ListVoices 返回可用的 OpenAI 语音 。
 func (p *OpenAITTSProvider) ListVoices(ctx context.Context) ([]Voice, error) {
 	return []Voice{
 		{ID: "alloy", Name: "Alloy", Gender: "neutral", Description: "Neutral, balanced voice"},

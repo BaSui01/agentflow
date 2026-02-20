@@ -8,14 +8,14 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-// Feature: multi-provider-support, Property 12: HTTP Status to Error Code Mapping
-// **Validates: Requirements 9.1-9.8**
+// 特性: 多提供者支持, 属性 12: HTTP 状态到错误代码映射
+// ** 参数:要求9.1-9.8**
 //
-// This property test verifies that all HTTP status codes are correctly mapped to llm.ErrorCode values
-// with appropriate retry flags, provider names, and quota/credit detection.
-// Minimum 100 iterations are achieved through comprehensive test cases covering all status codes.
+// 此属性测试验证所有 HTTP 状态代码被正确映射到 llm 。 错误代码值
+// * 适当重试旗帜、供应商名称和配额/信用检测。
+// 通过涵盖所有状态代码的综合测试案例,实现至少100次重复。
 func TestProperty12_HTTPStatusToErrorCodeMapping(t *testing.T) {
-	// Test all standard HTTP status codes that should be mapped
+	// 测试所有应该映射的 HTTP 标准状态代码
 	testCases := []struct {
 		name           string
 		status         int
@@ -26,7 +26,7 @@ func TestProperty12_HTTPStatusToErrorCodeMapping(t *testing.T) {
 		expectedStatus int
 		requirement    string
 	}{
-		// Requirement 9.1: 401 → ErrUnauthorized
+		// 要求9.1:401 —— 未经授权
 		{
 			name:           "401 Unauthorized - standard message",
 			status:         http.StatusUnauthorized,
@@ -68,7 +68,7 @@ func TestProperty12_HTTPStatusToErrorCodeMapping(t *testing.T) {
 			requirement:    "9.1",
 		},
 
-		// Requirement 9.2: 403 → ErrForbidden
+		// 要求9.2:403 / 禁止错误
 		{
 			name:           "403 Forbidden - standard message",
 			status:         http.StatusForbidden,
@@ -100,7 +100,7 @@ func TestProperty12_HTTPStatusToErrorCodeMapping(t *testing.T) {
 			requirement:    "9.2",
 		},
 
-		// Requirement 9.3: 429 → ErrRateLimited (Retryable=true)
+		// 要求9.3:429 − 限制错误(可重复=真实)
 		{
 			name:           "429 Rate Limited - standard message",
 			status:         http.StatusTooManyRequests,
@@ -132,7 +132,7 @@ func TestProperty12_HTTPStatusToErrorCodeMapping(t *testing.T) {
 			requirement:    "9.3",
 		},
 
-		// Requirement 9.4: 400 → ErrInvalidRequest (without quota/credit keywords)
+		// 要求9.4:400 − 无效请求(没有配额/信用关键词)
 		{
 			name:           "400 Bad Request - invalid parameter",
 			status:         http.StatusBadRequest,
@@ -174,7 +174,7 @@ func TestProperty12_HTTPStatusToErrorCodeMapping(t *testing.T) {
 			requirement:    "9.4",
 		},
 
-		// Requirement 9.7: 400 with quota/credit keywords → ErrQuotaExceeded
+		// 要求:9.7:400项有配额/信用关键词 + 配额过错
 		{
 			name:           "400 Bad Request - quota lowercase",
 			status:         http.StatusBadRequest,
@@ -256,7 +256,7 @@ func TestProperty12_HTTPStatusToErrorCodeMapping(t *testing.T) {
 			requirement:    "9.7",
 		},
 
-		// Requirement 9.5: 503/502/504 → ErrUpstreamError (Retryable=true)
+		// 要求9.5: 503/502/504 → 上游错误(可重复=真实)
 		{
 			name:           "503 Service Unavailable",
 			status:         http.StatusServiceUnavailable,
@@ -288,7 +288,7 @@ func TestProperty12_HTTPStatusToErrorCodeMapping(t *testing.T) {
 			requirement:    "9.5",
 		},
 
-		// Requirement 9.6: 5xx → ErrUpstreamError (Retryable=true)
+		// 要求9.6: 5xx → 错误上游错误(可重审=正确)
 		{
 			name:           "500 Internal Server Error",
 			status:         http.StatusInternalServerError,
@@ -360,7 +360,7 @@ func TestProperty12_HTTPStatusToErrorCodeMapping(t *testing.T) {
 			requirement:    "9.6",
 		},
 
-		// Special case: 529 Model Overloaded
+		// 特例:529型超载
 		{
 			name:           "529 Model Overloaded",
 			status:         529,
@@ -372,7 +372,7 @@ func TestProperty12_HTTPStatusToErrorCodeMapping(t *testing.T) {
 			requirement:    "9.5",
 		},
 
-		// Edge cases: Other 4xx errors (non-retryable)
+		// 边缘情况: 其他 4xx 错误(不可重审)
 		{
 			name:           "404 Not Found",
 			status:         http.StatusNotFound,
@@ -474,8 +474,8 @@ func TestProperty12_HTTPStatusToErrorCodeMapping(t *testing.T) {
 			requirement:    "9.6",
 		},
 
-		// Additional test cases to reach 100+ iterations
-		// More 401 variations
+		// 额外测试案例达到100+重复
+		// 更多401个变化
 		{
 			name:           "401 Unauthorized - token expired",
 			status:         http.StatusUnauthorized,
@@ -507,7 +507,7 @@ func TestProperty12_HTTPStatusToErrorCodeMapping(t *testing.T) {
 			requirement:    "9.1",
 		},
 
-		// More 403 variations
+		// 更多403个变化
 		{
 			name:           "403 Forbidden - IP blocked",
 			status:         http.StatusForbidden,
@@ -529,7 +529,7 @@ func TestProperty12_HTTPStatusToErrorCodeMapping(t *testing.T) {
 			requirement:    "9.2",
 		},
 
-		// More 429 variations
+		// 429起变化
 		{
 			name:           "429 Rate Limited - daily limit",
 			status:         http.StatusTooManyRequests,
@@ -551,7 +551,7 @@ func TestProperty12_HTTPStatusToErrorCodeMapping(t *testing.T) {
 			requirement:    "9.3",
 		},
 
-		// More 400 variations
+		// 400多个变化
 		{
 			name:           "400 Bad Request - invalid model",
 			status:         http.StatusBadRequest,
@@ -593,7 +593,7 @@ func TestProperty12_HTTPStatusToErrorCodeMapping(t *testing.T) {
 			requirement:    "9.4",
 		},
 
-		// More quota/credit variations
+		// 增加配额/信贷变化
 		{
 			name:           "400 Bad Request - monthly quota",
 			status:         http.StatusBadRequest,
@@ -635,7 +635,7 @@ func TestProperty12_HTTPStatusToErrorCodeMapping(t *testing.T) {
 			requirement:    "9.7",
 		},
 
-		// More 5xx variations
+		// 更多5xx变数
 		{
 			name:           "500 Internal Server Error - database error",
 			status:         http.StatusInternalServerError,
@@ -697,7 +697,7 @@ func TestProperty12_HTTPStatusToErrorCodeMapping(t *testing.T) {
 			requirement:    "9.5",
 		},
 
-		// More 4xx edge cases
+		// 更多4xx边缘案例
 		{
 			name:           "406 Not Acceptable",
 			status:         http.StatusNotAcceptable,
@@ -819,7 +819,7 @@ func TestProperty12_HTTPStatusToErrorCodeMapping(t *testing.T) {
 			requirement:    "9.6",
 		},
 
-		// Cross-provider consistency tests
+		// 交叉提供者一致性测试
 		{
 			name:           "401 - provider grok",
 			status:         http.StatusUnauthorized,
@@ -971,7 +971,7 @@ func TestProperty12_HTTPStatusToErrorCodeMapping(t *testing.T) {
 			requirement:    "9.6",
 		},
 
-		// Additional test cases to reach 100+
+		// 额外测试病例达到100+
 		{
 			name:           "403 - provider openai",
 			status:         http.StatusForbidden,
@@ -1064,13 +1064,13 @@ func TestProperty12_HTTPStatusToErrorCodeMapping(t *testing.T) {
 		},
 	}
 
-	// Run all test cases
+	// 运行所有测试大小写
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			// Use the mock implementation that follows the spec
+			// 使用 spec 之后的模拟执行
 			err := mockMapError(tc.status, tc.msg, tc.provider)
 
-			// Verify all properties
+			// 校验所有属性
 			assert.NotNil(t, err, "Error should not be nil")
 			assert.Equal(t, tc.expectedCode, err.Code,
 				"Error code mismatch for status %d (Requirement %s)", tc.status, tc.requirement)
@@ -1085,13 +1085,13 @@ func TestProperty12_HTTPStatusToErrorCodeMapping(t *testing.T) {
 		})
 	}
 
-	// Verify we have at least 100 test cases (as specified in the task)
+	// 核实我们至少有100个测试案例(如任务所指明)
 	assert.GreaterOrEqual(t, len(testCases), 100,
 		"Property test should have minimum 100 iterations")
 }
 
-// TestProperty12_AllProvidersUseConsistentMapping verifies that all providers
-// use the same error mapping logic (Requirement 9.8)
+// Property12  所有提供方使用一致的映射验证所有提供者
+// 使用相同的误差映射逻辑( 要求 9. 8)
 func TestProperty12_AllProvidersUseConsistentMapping(t *testing.T) {
 	providers := []string{"openai", "grok", "qwen", "deepseek", "glm", "minimax", "claude"}
 	statuses := []int{401, 403, 429, 400, 503, 502, 504, 529, 500, 501, 404}
@@ -1101,19 +1101,19 @@ func TestProperty12_AllProvidersUseConsistentMapping(t *testing.T) {
 			t.Run(provider+"_status_"+http.StatusText(status), func(t *testing.T) {
 				err := mockMapError(status, "test error", provider)
 
-				// Verify provider name is always included
+				// 总是包含验证提供者名称
 				assert.Equal(t, provider, err.Provider,
 					"Provider name must be included in all errors (Requirement 9.8)")
 
-				// Verify HTTP status is preserved
+				// 验证 HTTP 状态得到保存
 				assert.Equal(t, status, err.HTTPStatus,
 					"HTTP status must be preserved")
 
-				// Verify error code is set
+				// 校验错误代码已设定
 				assert.NotEmpty(t, err.Code,
 					"Error code must be set")
 
-				// Verify message is preserved
+				// 校验信件被保存
 				assert.Equal(t, "test error", err.Message,
 					"Error message must be preserved")
 			})
@@ -1121,8 +1121,8 @@ func TestProperty12_AllProvidersUseConsistentMapping(t *testing.T) {
 	}
 }
 
-// TestProperty12_QuotaCreditDetectionCaseInsensitive verifies that quota/credit
-// detection is case-insensitive (Requirement 9.7)
+// 检验 Property12 ++ 配额 检测 案件不敏感 验证配额/信用
+// 检测对案件不敏感(要求9.7)
 func TestProperty12_QuotaCreditDetectionCaseInsensitive(t *testing.T) {
 	quotaVariations := []string{
 		"quota", "QUOTA", "Quota", "QuOtA", "qUoTa",
@@ -1151,8 +1151,8 @@ func TestProperty12_QuotaCreditDetectionCaseInsensitive(t *testing.T) {
 	}
 }
 
-// TestProperty12_RetryableFlagConsistency verifies that the Retryable flag
-// is set correctly for all status codes (Requirements 9.3, 9.5, 9.6)
+// Property12  可重试旗 校验可重试旗
+// 为所有地位代码正确设定(要求9.3、9.5、9.6)
 func TestProperty12_RetryableFlagConsistency(t *testing.T) {
 	testCases := []struct {
 		name          string
@@ -1160,7 +1160,7 @@ func TestProperty12_RetryableFlagConsistency(t *testing.T) {
 		expectedRetry bool
 		requirement   string
 	}{
-		// Retryable errors
+		// 可重试错误
 		{"429 is retryable", 429, true, "9.3"},
 		{"500 is retryable", 500, true, "9.6"},
 		{"501 is retryable", 501, true, "9.6"},
@@ -1170,7 +1170,7 @@ func TestProperty12_RetryableFlagConsistency(t *testing.T) {
 		{"529 is retryable", 529, true, "9.5"},
 		{"599 is retryable", 599, true, "9.6"},
 
-		// Non-retryable errors
+		// 不可重复错误
 		{"400 is not retryable", 400, false, "9.4"},
 		{"401 is not retryable", 401, false, "9.1"},
 		{"403 is not retryable", 403, false, "9.2"},

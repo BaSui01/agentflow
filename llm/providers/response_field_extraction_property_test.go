@@ -9,15 +9,15 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-// Feature: multi-provider-support, Property 24: Response Field Extraction
-// **Validates: Requirements 13.1, 13.2, 13.3, 13.4, 13.5, 13.6, 13.7**
+// 特性:多供应商支助,财产24:反应外地采掘
+// ** 变动情况:要求13.1、13.2、13.3、13.4、13.5、13.6、13.7**
 //
-// This property test verifies that for any provider response, the converted
-// llm.ChatResponse should contain the response ID, model name, provider name,
-// choices array, usage information (if present), and finish reason.
-// Minimum 100 iterations are achieved through comprehensive test cases across all providers.
+// 该属性测试验证了对于任何提供者的响应,转换器
+// 垛 聊天响应应当包含响应ID,模型名,提供者名,
+// 选项数组、使用信息(如果有)和完成理由。
+// 通过对所有供应商进行全面测试,实现至少100次重复。
 
-// OpenAI-compatible response types for testing
+// OpenAI 兼容测试反应类型
 type testOpenAIResponse struct {
 	ID      string             `json:"id"`
 	Model   string             `json:"model"`
@@ -56,7 +56,7 @@ type testOpenAIUsage struct {
 	TotalTokens      int `json:"total_tokens"`
 }
 
-// MiniMax response types for testing
+// 用于测试的最小最大响应类型
 type testMiniMaxResponse struct {
 	ID      string              `json:"id"`
 	Model   string              `json:"model"`
@@ -83,7 +83,7 @@ type testMiniMaxUsage struct {
 	TotalTokens      int `json:"total_tokens"`
 }
 
-// toChatResponseOpenAI converts OpenAI-compatible response to llm.ChatResponse
+// toChatResponse OpenAI 将 OpenAI 兼容的响应转换为 llm 。 聊天响应
 func toChatResponseOpenAI(oa testOpenAIResponse, provider string) *llm.ChatResponse {
 	choices := make([]llm.ChatChoice, 0, len(oa.Choices))
 	for _, c := range oa.Choices {
@@ -127,7 +127,7 @@ func toChatResponseOpenAI(oa testOpenAIResponse, provider string) *llm.ChatRespo
 	return resp
 }
 
-// toChatResponseMiniMax converts MiniMax response to llm.ChatResponse
+// toChatResponseMiniMax 将 MiniMax 响应转换为 llm. 聊天响应
 func toChatResponseMiniMax(mm testMiniMaxResponse, provider string) *llm.ChatResponse {
 	choices := make([]llm.ChatChoice, 0, len(mm.Choices))
 	for _, c := range mm.Choices {
@@ -161,8 +161,8 @@ func toChatResponseMiniMax(mm testMiniMaxResponse, provider string) *llm.ChatRes
 	return resp
 }
 
-// TestProperty24_ResponseIDExtraction tests that response ID is correctly extracted
-// Validates: Requirement 13.1
+// 测试Property24  响应IDextraction测试, 反应ID被正确提取
+// 审定:要求 13.1
 func TestProperty24_ResponseIDExtraction(t *testing.T) {
 	providers := []string{"grok", "qwen", "deepseek", "glm", "minimax"}
 
@@ -179,7 +179,7 @@ func TestProperty24_ResponseIDExtraction(t *testing.T) {
 		{"provider prefix", "grok-response-001"},
 	}
 
-	// 5 providers * 7 id variations = 35 test cases
+	// 5个供应商 * 7个差数=35个测试案例
 	for _, provider := range providers {
 		for _, idv := range idVariations {
 			t.Run(provider+"_"+idv.name, func(t *testing.T) {
@@ -212,8 +212,8 @@ func TestProperty24_ResponseIDExtraction(t *testing.T) {
 	}
 }
 
-// TestProperty24_ModelNameExtraction tests that model name is correctly extracted
-// Validates: Requirement 13.2
+// 测试Property24 ModelName 模型名称被正确提取的测试
+// 验证:要求 13.2
 func TestProperty24_ModelNameExtraction(t *testing.T) {
 	providers := []string{"grok", "qwen", "deepseek", "glm", "minimax"}
 
@@ -230,7 +230,7 @@ func TestProperty24_ModelNameExtraction(t *testing.T) {
 		{"model with suffix", "claude-3-opus-20240229"},
 	}
 
-	// 5 providers * 7 model variations = 35 test cases
+	// * 7个模型变化=35个测试案例
 	for _, provider := range providers {
 		for _, mv := range modelVariations {
 			t.Run(provider+"_"+mv.name, func(t *testing.T) {
@@ -263,12 +263,12 @@ func TestProperty24_ModelNameExtraction(t *testing.T) {
 	}
 }
 
-// TestProperty24_ProviderNameExtraction tests that provider name is correctly set
-// Validates: Requirement 13.3
+// 测试Property24  提供商名正确设置的扩展测试Name
+// 鉴定:要求 13.3
 func TestProperty24_ProviderNameExtraction(t *testing.T) {
 	providers := []string{"grok", "qwen", "deepseek", "glm", "minimax"}
 
-	// 5 providers * 4 response variations = 20 test cases
+	// * 4个答复变化=20个测试病例
 	responseVariations := []struct {
 		name    string
 		content string
@@ -311,8 +311,8 @@ func TestProperty24_ProviderNameExtraction(t *testing.T) {
 	}
 }
 
-// TestProperty24_ChoicesArrayExtraction tests that choices array is correctly converted
-// Validates: Requirement 13.4
+// 测试Property24 ChoicesArray 选择数组正确转换的外延测试
+// 审定:要求 13.4
 func TestProperty24_ChoicesArrayExtraction(t *testing.T) {
 	providers := []string{"grok", "qwen", "deepseek", "glm", "minimax"}
 
@@ -329,7 +329,7 @@ func TestProperty24_ChoicesArrayExtraction(t *testing.T) {
 		{"length finish", 1, []string{"Truncated..."}, "length"},
 	}
 
-	// 5 providers * 5 variations = 25 test cases
+	// * 5个变体=25个测试病例
 	for _, provider := range providers {
 		for _, cv := range choicesVariations {
 			t.Run(provider+"_"+cv.name, func(t *testing.T) {
@@ -378,8 +378,8 @@ func TestProperty24_ChoicesArrayExtraction(t *testing.T) {
 	}
 }
 
-// TestProperty24_UsageInformationExtraction tests that usage information is correctly mapped
-// Validates: Requirement 13.5
+// 测试Property24  Usage Information 测试 使用信息正确映射
+// 鉴定:要求 13.5
 func TestProperty24_UsageInformationExtraction(t *testing.T) {
 	providers := []string{"grok", "qwen", "deepseek", "glm", "minimax"}
 
@@ -398,7 +398,7 @@ func TestProperty24_UsageInformationExtraction(t *testing.T) {
 		{"completion only", 0, 50, 50, true},
 	}
 
-	// 5 providers * 6 variations = 30 test cases
+	// * 6个变数=30个测试案例
 	for _, provider := range providers {
 		for _, uv := range usageVariations {
 			t.Run(provider+"_"+uv.name, func(t *testing.T) {
@@ -455,8 +455,8 @@ func TestProperty24_UsageInformationExtraction(t *testing.T) {
 	}
 }
 
-// TestProperty24_TimestampExtraction tests that timestamp is correctly converted
-// Validates: Requirement 13.6
+// 测试Property24  Timestamp 测试时间戳被正确转换
+// 审定: 要求 13.6
 func TestProperty24_TimestampExtraction(t *testing.T) {
 	providers := []string{"grok", "qwen", "deepseek", "glm", "minimax"}
 
@@ -472,7 +472,7 @@ func TestProperty24_TimestampExtraction(t *testing.T) {
 		{"epoch time", 1, true},
 	}
 
-	// 5 providers * 5 variations = 25 test cases
+	// * 5个变体=25个测试病例
 	for _, provider := range providers {
 		for _, tv := range timestampVariations {
 			t.Run(provider+"_"+tv.name, func(t *testing.T) {
@@ -513,8 +513,8 @@ func TestProperty24_TimestampExtraction(t *testing.T) {
 	}
 }
 
-// TestProperty24_FinishReasonExtraction tests that finish reason is correctly preserved
-// Validates: Requirement 13.7
+// 测试Property24  FinishReason 完成理由的外延测试被正确保存
+// 审定:要求 13.7
 func TestProperty24_FinishReasonExtraction(t *testing.T) {
 	providers := []string{"grok", "qwen", "deepseek", "glm", "minimax"}
 
@@ -531,7 +531,7 @@ func TestProperty24_FinishReasonExtraction(t *testing.T) {
 		{"custom reason", "custom_stop_reason"},
 	}
 
-	// 5 providers * 7 variations = 35 test cases
+	// * 7个变数=35个测试病例
 	for _, provider := range providers {
 		for _, frv := range finishReasonVariations {
 			t.Run(provider+"_"+frv.name, func(t *testing.T) {
@@ -565,8 +565,8 @@ func TestProperty24_FinishReasonExtraction(t *testing.T) {
 	}
 }
 
-// TestProperty24_AllFieldsExtraction tests that all fields are extracted together
-// Validates: Requirements 13.1-13.7
+// 测试Property24  all 所有字段一起提取的外延测试
+// 审定:要求 13.1-13.7
 func TestProperty24_AllFieldsExtraction(t *testing.T) {
 	providers := []string{"grok", "qwen", "deepseek", "glm", "minimax"}
 
@@ -627,7 +627,7 @@ func TestProperty24_AllFieldsExtraction(t *testing.T) {
 		},
 	}
 
-	// 5 providers * 4 test cases = 20 test cases
+	// * 4个测试案例=20个测试案例
 	for _, provider := range providers {
 		for _, tc := range testCases {
 			t.Run(provider+"_"+tc.name, func(t *testing.T) {
@@ -665,7 +665,7 @@ func TestProperty24_AllFieldsExtraction(t *testing.T) {
 					resp = toChatResponseOpenAI(oaResp, provider)
 				}
 
-				// Verify all fields (Requirements 13.1-13.7)
+				// 核查所有字段(要求13.1-13.7)
 				assert.Equal(t, tc.id, resp.ID, "ID should be extracted (13.1)")
 				assert.Equal(t, tc.model, resp.Model, "Model should be extracted (13.2)")
 				assert.Equal(t, provider, resp.Provider, "Provider should be set (13.3)")
@@ -682,8 +682,8 @@ func TestProperty24_AllFieldsExtraction(t *testing.T) {
 	}
 }
 
-// TestProperty24_ToolCallsInResponse tests that tool calls in response are correctly extracted
-// Validates: Requirements 13.4 (choices array with tool calls)
+// 测试Property24  ToolCallsInResponse 测试 工具响应的调取正确
+// 验证符:要求 13.4(带有工具调用的选择阵列)
 func TestProperty24_ToolCallsInResponse(t *testing.T) {
 	providers := []string{"grok", "qwen", "deepseek", "glm"}
 
@@ -710,7 +710,7 @@ func TestProperty24_ToolCallsInResponse(t *testing.T) {
 		},
 	}
 
-	// 4 providers * 3 variations = 12 test cases
+	// * 3个变数=12个测试案例
 	for _, provider := range providers {
 		for _, tcv := range toolCallVariations {
 			t.Run(provider+"_"+tcv.name, func(t *testing.T) {
@@ -746,19 +746,19 @@ func TestProperty24_ToolCallsInResponse(t *testing.T) {
 	}
 }
 
-// TestProperty24_IterationCount verifies we have at least 100 test iterations
+// Property24  测试国家验证我们至少有100个测试重复
 func TestProperty24_IterationCount(t *testing.T) {
-	// Count all test cases:
-	// - ResponseIDExtraction: 5 providers * 7 variations = 35
-	// - ModelNameExtraction: 5 providers * 7 variations = 35
-	// - ProviderNameExtraction: 5 providers * 4 variations = 20
-	// - ChoicesArrayExtraction: 5 providers * 5 variations = 25
-	// - UsageInformationExtraction: 5 providers * 6 variations = 30
-	// - TimestampExtraction: 5 providers * 5 variations = 25
-	// - FinishReasonExtraction: 5 providers * 7 variations = 35
-	// - AllFieldsExtraction: 5 providers * 4 variations = 20
-	// - ToolCallsInResponse: 4 providers * 3 variations = 12
-	// Total: 237 test cases (exceeds 100 minimum)
+	// 计算所有测试案例 :
+	// - 应变:5个供应商* 7个变数=35
+	// - 模型名称:5个供应商 * 7个变式=35
+	// - 供应商名称:5个供应商 * 4个变式=20
+	// - 选择阵列:5个供应商 * 5个变数=25
+	// - 使用信息外包:5个供应商 * 6个变化=30
+	// - 时间戳:5个供应商* 5个变化=25
+	// - FinishReason Extraction:5个供应商 * 7个变数=35
+	// - 所有外地:5个供应商* 4个变数=20
+	// - ToolCallsInresponse:4个供应商 * 3个变数=12
+	// 共计:237个测试案例(超过最低100个案例)
 
 	totalIterations := 35 + 35 + 20 + 25 + 30 + 25 + 35 + 20 + 12
 	assert.GreaterOrEqual(t, totalIterations, 100,

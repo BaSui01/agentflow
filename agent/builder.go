@@ -128,13 +128,13 @@ func (b *AgentBuilder) WithPromptEnhancer(config *PromptEnhancerConfig) *AgentBu
 	return b
 }
 
-// SkillsOptions configures how the builder creates a default skills manager.
+// 技能选项配置构建者如何创建默认的技能管理器 。
 type SkillsOptions struct {
 	Directory string
 	Config    skills.SkillManagerConfig
 }
 
-// MCPServerOptions configures how the builder creates a default MCP server.
+// MCPServer 选项配置构建器如何创建默认的 MCP 服务器.
 type MCPServerOptions struct {
 	Name    string
 	Version string
@@ -147,7 +147,7 @@ func (b *AgentBuilder) WithSkills(config interface{}) *AgentBuilder {
 	return b
 }
 
-// WithDefaultSkills enables the built-in skills manager and optionally scans a directory.
+// With DefaultSkills 启用了内置的技能管理器,并可以选择扫描一个目录.
 func (b *AgentBuilder) WithDefaultSkills(directory string, config *skills.SkillManagerConfig) *AgentBuilder {
 	opts := SkillsOptions{
 		Directory: strings.TrimSpace(directory),
@@ -166,7 +166,7 @@ func (b *AgentBuilder) WithMCP(config interface{}) *AgentBuilder {
 	return b
 }
 
-// WithDefaultMCPServer enables the built-in MCP server with a default name/version.
+// With DefaultMCPServer 启用默认名称/版本的内置的MCP服务器.
 func (b *AgentBuilder) WithDefaultMCPServer(name, version string) *AgentBuilder {
 	return b.WithMCP(MCPServerOptions{
 		Name:    strings.TrimSpace(name),
@@ -181,7 +181,7 @@ func (b *AgentBuilder) WithEnhancedMemory(config interface{}) *AgentBuilder {
 	return b
 }
 
-// WithDefaultEnhancedMemory enables the built-in enhanced memory system with in-memory stores.
+// 通过DefaultEnhancedMemory,可以使内置增强的内存系统与内存存储相通.
 func (b *AgentBuilder) WithDefaultEnhancedMemory(config *memory.EnhancedMemoryConfig) *AgentBuilder {
 	if config == nil {
 		cfg := memory.DefaultEnhancedMemoryConfig()
@@ -229,7 +229,7 @@ func (b *AgentBuilder) Build() (*BaseAgent, error) {
 		agent.toolProvider = b.toolProvider
 	}
 
-	// If feature flags were enabled directly on Config, fall back to default configs.
+	// 如果直接在配置上启用了特性标记, 请返回默认配置 。
 	if b.config.EnableReflection && b.reflectionConfig == nil {
 		b.reflectionConfig = DefaultReflectionConfig()
 	}
@@ -240,7 +240,7 @@ func (b *AgentBuilder) Build() (*BaseAgent, error) {
 		b.promptEnhancerConfig = DefaultPromptEnhancerConfig()
 	}
 
-	// Enable advanced features
+	// 启用高级特性
 	if b.config.EnableReflection && b.reflectionConfig != nil {
 		reflectionExecutor := NewReflectionExecutor(agent, *b.reflectionConfig)
 		agent.EnableReflection(reflectionExecutor)
@@ -279,8 +279,8 @@ func (b *AgentBuilder) enableOptionalFeatures(agent *BaseAgent) error {
 			return fmt.Errorf("enable enhanced memory: %w", err)
 		}
 	}
-	// Observability has an import-cycle with agent/observability (it imports agent).
-	// Builders can still accept a provided instance; for out-of-the-box wiring use agent/runtime.
+	// 可观察性有一个具有代理/可观察性的进口周期(其进口代理)。
+	// 构建者仍然可以接受一个提供的例子;对于箱外接线使用代理/运行时间.
 	if b.config.EnableObservability && b.observabilityConfig != nil {
 		agent.EnableObservability(b.observabilityConfig)
 	}

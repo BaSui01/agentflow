@@ -26,25 +26,25 @@ type ToolScore struct {
 type ToolSelectionConfig struct {
 	Enabled bool `json:"enabled"`
 
-	// Scoring weights
+	// 分数
 	SemanticWeight    float64 `json:"semantic_weight"`    // Semantic similarity weight
 	CostWeight        float64 `json:"cost_weight"`        // Cost weight
 	LatencyWeight     float64 `json:"latency_weight"`     // Latency weight
 	ReliabilityWeight float64 `json:"reliability_weight"` // Reliability weight
 
-	// Selection strategy
+	// 甄选战略
 	MaxTools      int     `json:"max_tools"`       // Maximum number of tools to select
 	MinScore      float64 `json:"min_score"`       // Minimum score threshold
 	UseLLMRanking bool    `json:"use_llm_ranking"` // Whether to use LLM-assisted ranking
 }
 
-// DefaultToolSelectionConfig returns default tool selection configuration
+// 默认工具SecutConfig 返回默认工具选择配置
 func DefaultToolSelectionConfig() *ToolSelectionConfig {
 	config := defaultToolSelectionConfigValue()
 	return &config
 }
 
-// defaultToolSelectionConfigValue returns default tool selection configuration value
+// 默认工具Secution ConfigValue 返回默认工具选择配置值
 func defaultToolSelectionConfigValue() ToolSelectionConfig {
 	return ToolSelectionConfig{
 		Enabled:           true,
@@ -72,7 +72,7 @@ type DynamicToolSelector struct {
 	agent  *BaseAgent
 	config ToolSelectionConfig
 
-	// Tool statistics (can be loaded from database)
+	// 工具统计(可以从数据库中加载)
 	toolStats map[string]*ToolStats
 
 	logger *zap.Logger
@@ -186,16 +186,16 @@ func (s *DynamicToolSelector) ScoreTools(ctx context.Context, task string, tools
 	return scores, nil
 }
 
-// calculateSemanticSimilarity calculates semantic similarity between task and tool
+// 计算任务和工具之间的语义相似性
 func (s *DynamicToolSelector) calculateSemanticSimilarity(task string, tool llm.ToolSchema) float64 {
-	// Simplified version: keyword-based matching
-	// Production should use vector embeddings + cosine similarity
+	// 简化版本:基于关键字的匹配
+	// 生产应使用矢量嵌入法+余弦相近性
 
 	taskLower := strings.ToLower(task)
 	toolDesc := strings.ToLower(tool.Description)
 	toolName := strings.ToLower(tool.Name)
 
-	// Extract task keywords
+	// 提取任务关键字
 	keywords := extractKeywords(taskLower)
 
 	matchCount := 0
@@ -211,7 +211,7 @@ func (s *DynamicToolSelector) calculateSemanticSimilarity(task string, tool llm.
 
 	similarity := float64(matchCount) / float64(len(keywords))
 
-	// Bonus for exact name match
+	// 准确姓名匹配的奖金
 	for _, keyword := range keywords {
 		if strings.Contains(toolName, keyword) {
 			similarity = math.Min(1.0, similarity+0.2)
@@ -221,24 +221,24 @@ func (s *DynamicToolSelector) calculateSemanticSimilarity(task string, tool llm.
 	return similarity
 }
 
-// estimateCost estimates tool execution cost
+// 成本估计工具执行费用
 func (s *DynamicToolSelector) estimateCost(tool llm.ToolSchema) float64 {
-	// Simplified version: estimate based on tool type
-	// Production should use historical data statistics
+	// 简化版本:根据工具类型估算
+	// 制作应使用历史数据统计
 
 	name := strings.ToLower(tool.Name)
 
-	// High-cost tools
+	// 高成本工具
 	if strings.Contains(name, "api") || strings.Contains(name, "external") {
 		return 0.1
 	}
 
-	// Medium-cost tools
+	// 中成本工具
 	if strings.Contains(name, "search") || strings.Contains(name, "query") {
 		return 0.05
 	}
 
-	// Low-cost tools
+	// 低成本工具
 	return 0.01
 }
 
@@ -248,7 +248,7 @@ func (s *DynamicToolSelector) getAvgLatency(toolName string) time.Duration {
 		return stats.TotalLatency / time.Duration(stats.TotalCalls)
 	}
 
-	// Default latency estimate
+	// 默认延迟估计
 	return 500 * time.Millisecond
 }
 
@@ -258,24 +258,24 @@ func (s *DynamicToolSelector) getReliability(toolName string) float64 {
 		return float64(stats.SuccessfulCalls) / float64(stats.TotalCalls)
 	}
 
-	// Default reliability for new tools
+	// 新工具的默认可靠性
 	return 0.8
 }
 
-// calculateTotalScore calculates the total weighted score
+// 计算总加权分数
 func (s *DynamicToolSelector) calculateTotalScore(score ToolScore) float64 {
-	// Normalize each metric
+	// 使每个度量标准规范化
 	semanticScore := score.SemanticSimilarity
 
-	// Lower cost is better (inverse)
+	// 降低成本更好(倒数)
 	costScore := 1.0 - math.Min(1.0, score.EstimatedCost*10)
 
-	// Lower latency is better (inverse, assuming 5s is worst)
+	// 更低的延迟度(反之,假设5分为最差)
 	latencyScore := 1.0 - math.Min(1.0, float64(score.AvgLatency)/float64(5*time.Second))
 
 	reliabilityScore := score.ReliabilityScore
 
-	// Weighted sum
+	// 加权总和
 	total := semanticScore*s.config.SemanticWeight +
 		costScore*s.config.CostWeight +
 		latencyScore*s.config.LatencyWeight +
@@ -284,9 +284,9 @@ func (s *DynamicToolSelector) calculateTotalScore(score ToolScore) float64 {
 	return total
 }
 
-// llmRanking uses LLM for secondary ranking
+// llmRanking 使用 LLM 进行二级排名
 func (s *DynamicToolSelector) llmRanking(ctx context.Context, task string, scores []ToolScore) ([]ToolScore, error) {
-	// Build tool list description
+	// 构建工具列表描述
 	toolList := []string{}
 	for i, score := range scores {
 		if i >= s.config.MaxTools*2 { // Only let LLM rank top 2*MaxTools
@@ -324,10 +324,10 @@ func (s *DynamicToolSelector) llmRanking(ctx context.Context, task string, score
 		return scores, err
 	}
 
-	// Parse tool indices returned by LLM
+	// LLM 返回的解析工具索引
 	selected := parseToolIndices(resp.Choices[0].Message.Content)
 
-	// Reorder tools
+	// 重排工具
 	reordered := []ToolScore{}
 	for _, idx := range selected {
 		if idx > 0 && idx <= len(scores) {
@@ -335,7 +335,7 @@ func (s *DynamicToolSelector) llmRanking(ctx context.Context, task string, score
 		}
 	}
 
-	// Add remaining tools
+	// 添加剩余工具
 	usedIndices := make(map[int]bool)
 	for _, idx := range selected {
 		usedIndices[idx] = true
@@ -366,7 +366,7 @@ func (s *DynamicToolSelector) UpdateToolStats(toolName string, success bool, lat
 	}
 	stats.TotalLatency += latency
 
-	// Update average cost (moving average)
+	// 更新平均费用(变动平均数)
 	if stats.TotalCalls == 1 {
 		stats.AvgCost = cost
 	} else {
@@ -374,9 +374,9 @@ func (s *DynamicToolSelector) UpdateToolStats(toolName string, success bool, lat
 	}
 }
 
-// extractKeywords extracts keywords from text (simplified version)
+// 取出关键字从文本中取出关键字(简化版)
 func extractKeywords(text string) []string {
-	// Remove common stop words
+	// 删除常见的句号
 	stopWords := map[string]bool{
 		"the": true, "a": true, "an": true, "and": true, "or": true,
 		"but": true, "in": true, "on": true, "at": true, "to": true,
@@ -388,7 +388,7 @@ func extractKeywords(text string) []string {
 	words := strings.Fields(text)
 	keywords := []string{}
 
-	// Define punctuation to remove (using raw string to avoid escaping)
+	// 定义要删除的标点( 使用原始字符串来避免逃跑)
 	punctuation := `,.!?;:"'()[]{}，。！？；：（）【】`
 
 	for _, word := range words {
@@ -401,21 +401,21 @@ func extractKeywords(text string) []string {
 	return keywords
 }
 
-// parseToolIndices parses tool indices from text
-// Only parses comma-separated format, returns empty for newline-separated
+// 解析工具索引
+// 只解析逗号分隔格式, 返回新行分隔为空
 func parseToolIndices(text string) []int {
 	indices := []int{}
 
-	// Check if text contains newlines without commas - return empty
+	// 检查文本是否包含不含逗号的新行 - 返回为空
 	if strings.Contains(text, "\n") && !strings.Contains(text, ",") {
 		return indices
 	}
 
-	// Remove all spaces and newlines
+	// 删除所有空格和新行
 	text = strings.ReplaceAll(text, " ", "")
 	text = strings.ReplaceAll(text, "\n", "")
 
-	// Split by comma
+	// 以逗号分隔
 	parts := strings.Split(text, ",")
 
 	for _, part := range parts {

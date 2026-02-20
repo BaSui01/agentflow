@@ -1,4 +1,4 @@
-// Package streaming provides zero-copy streaming for high-performance LLM responses.
+// 包流为高性能LLM响应提供零拷贝流.
 package streaming
 
 import (
@@ -7,7 +7,7 @@ import (
 	"unsafe"
 )
 
-// ZeroCopyBuffer provides zero-copy buffer operations.
+// ZeroCopyBuffer提供零拷贝缓冲操作.
 type ZeroCopyBuffer struct {
 	data     []byte
 	readPos  int
@@ -15,21 +15,21 @@ type ZeroCopyBuffer struct {
 	mu       sync.RWMutex
 }
 
-// NewZeroCopyBuffer creates a new zero-copy buffer.
+// NewZero CopyBuffer创建了新的零拷贝缓冲器.
 func NewZeroCopyBuffer(size int) *ZeroCopyBuffer {
 	return &ZeroCopyBuffer{
 		data: make([]byte, size),
 	}
 }
 
-// Write writes data without copying.
+// 写入数据而不复制.
 func (b *ZeroCopyBuffer) Write(p []byte) (int, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
 	available := len(b.data) - b.writePos
 	if len(p) > available {
-		// Grow buffer
+		// 增加缓冲
 		newSize := len(b.data) * 2
 		if newSize < b.writePos+len(p) {
 			newSize = b.writePos + len(p)
@@ -44,7 +44,7 @@ func (b *ZeroCopyBuffer) Write(p []byte) (int, error) {
 	return len(p), nil
 }
 
-// Read reads data without copying (returns slice of internal buffer).
+// 在不复制的情况下读取数据(返回部分为内部缓冲).
 func (b *ZeroCopyBuffer) Read(p []byte) (int, error) {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
@@ -58,19 +58,19 @@ func (b *ZeroCopyBuffer) Read(p []byte) (int, error) {
 	return n, nil
 }
 
-// Bytes returns the unread portion without copying.
+// 字节返回未读部分而不复制 。
 func (b *ZeroCopyBuffer) Bytes() []byte {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
 	return b.data[b.readPos:b.writePos]
 }
 
-// BytesUnsafe returns bytes without lock (caller must ensure safety).
+// 字节不安全返回字节没有锁(调用器必须确保安全).
 func (b *ZeroCopyBuffer) BytesUnsafe() []byte {
 	return b.data[b.readPos:b.writePos]
 }
 
-// Reset resets the buffer for reuse.
+// 重置缓冲器用于再利用 。
 func (b *ZeroCopyBuffer) Reset() {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -78,24 +78,24 @@ func (b *ZeroCopyBuffer) Reset() {
 	b.writePos = 0
 }
 
-// Len returns the number of unread bytes.
+// Len 返回未读字节数 。
 func (b *ZeroCopyBuffer) Len() int {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
 	return b.writePos - b.readPos
 }
 
-// StringView provides zero-copy string view of bytes.
+// StringView提供字节的零复制字符串视图.
 type StringView struct {
 	data []byte
 }
 
-// NewStringView creates a string view from bytes without copying.
+// NewStringView 不复制就从字节创建了字符串视图.
 func NewStringView(data []byte) StringView {
 	return StringView{data: data}
 }
 
-// String returns string without copying (unsafe if underlying bytes change).
+// 字符串不复制返回字符串( 如果隐藏字节更改, 则不安全) 。
 func (s StringView) String() string {
 	if len(s.data) == 0 {
 		return ""
@@ -103,17 +103,17 @@ func (s StringView) String() string {
 	return unsafe.String(&s.data[0], len(s.data))
 }
 
-// Bytes returns the underlying bytes.
+// 字节返回基本的字节 。
 func (s StringView) Bytes() []byte {
 	return s.data
 }
 
-// Len returns the length.
+// Len返回长度。
 func (s StringView) Len() int {
 	return len(s.data)
 }
 
-// BytesToString converts bytes to string without copying.
+// BytesToString 不复制便将字节转换为字符串.
 func BytesToString(b []byte) string {
 	if len(b) == 0 {
 		return ""
@@ -121,7 +121,7 @@ func BytesToString(b []byte) string {
 	return unsafe.String(&b[0], len(b))
 }
 
-// StringToBytes converts string to bytes without copying.
+// StringToBytes 不复制就将字符串转换为字节.
 func StringToBytes(s string) []byte {
 	if s == "" {
 		return nil
@@ -129,14 +129,14 @@ func StringToBytes(s string) []byte {
 	return unsafe.Slice(unsafe.StringData(s), len(s))
 }
 
-// ChunkReader provides zero-copy chunk reading.
+// ChunkReader 提供零拷贝块读取.
 type ChunkReader struct {
 	data      []byte
 	chunkSize int
 	pos       int
 }
 
-// NewChunkReader creates a new chunk reader.
+// NewChunkReader 创建了新的块读取器 。
 func NewChunkReader(data []byte, chunkSize int) *ChunkReader {
 	return &ChunkReader{
 		data:      data,
@@ -144,7 +144,7 @@ func NewChunkReader(data []byte, chunkSize int) *ChunkReader {
 	}
 }
 
-// Next returns the next chunk without copying.
+// 下一个不复制则返回下一个块 。
 func (r *ChunkReader) Next() ([]byte, bool) {
 	if r.pos >= len(r.data) {
 		return nil, false
@@ -160,12 +160,12 @@ func (r *ChunkReader) Next() ([]byte, bool) {
 	return chunk, true
 }
 
-// Reset resets the reader.
+// 重置读者.
 func (r *ChunkReader) Reset() {
 	r.pos = 0
 }
 
-// RingBuffer provides a lock-free ring buffer for streaming.
+// RingBuffer提供无锁环缓冲来进行流.
 type RingBuffer struct {
 	data     []byte
 	size     int
@@ -174,9 +174,9 @@ type RingBuffer struct {
 	mask     uint64
 }
 
-// NewRingBuffer creates a new ring buffer (size must be power of 2).
+// NewRingBuffer创建了新的环缓冲(尺寸必须是2的功率).
 func NewRingBuffer(size int) *RingBuffer {
-	// Round up to power of 2
+	// 圆通为二相.
 	size--
 	size |= size >> 1
 	size |= size >> 2
@@ -192,12 +192,12 @@ func NewRingBuffer(size int) *RingBuffer {
 	}
 }
 
-// Put writes a single byte.
+// 写一个字节
 func (r *RingBuffer) Put(b byte) bool {
 	writeIdx := r.writeIdx
 	nextWrite := writeIdx + 1
 
-	// Check if buffer is full
+	// 检查缓冲器是否满了
 	if nextWrite-r.readIdx > uint64(r.size) {
 		return false
 	}
@@ -207,11 +207,11 @@ func (r *RingBuffer) Put(b byte) bool {
 	return true
 }
 
-// Get reads a single byte.
+// 读取一个字节。
 func (r *RingBuffer) Get() (byte, bool) {
 	readIdx := r.readIdx
 
-	// Check if buffer is empty
+	// 检查缓冲是否为空
 	if readIdx >= r.writeIdx {
 		return 0, false
 	}
@@ -221,12 +221,12 @@ func (r *RingBuffer) Get() (byte, bool) {
 	return b, true
 }
 
-// Available returns the number of bytes available to read.
+// 可用返回可用的字节数 。
 func (r *RingBuffer) Available() int {
 	return int(r.writeIdx - r.readIdx)
 }
 
-// Free returns the number of bytes free for writing.
+// 自由返回自由写入的字节数 。
 func (r *RingBuffer) Free() int {
 	return r.size - int(r.writeIdx-r.readIdx)
 }

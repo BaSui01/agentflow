@@ -17,10 +17,10 @@ import (
 	"go.uber.org/zap"
 )
 
-// Feature: multi-provider-support, Property 7: Default Timeout Configuration
-// **Validates: Requirements 6.6, 15.1**
+// 特性: 多提供者支持, 属性 7: 默认超时配置
+// ** 变动情况:要求6.6、15.1**
 
-// TestProperty7_DefaultTimeoutConfiguration tests that providers use 30s default timeout
+// 测试Property7  Default Timeout 配置测试 供应商使用 30s 默认超时
 func TestProperty7_DefaultTimeoutConfiguration(t *testing.T) {
 	logger := zap.NewNop()
 
@@ -68,7 +68,7 @@ func TestProperty7_DefaultTimeoutConfiguration(t *testing.T) {
 	}
 }
 
-// TestProperty7_TimeoutBehavior tests that timeout actually works
+// 测试Property7  Timeout 行为测试 超时实际有效
 func TestProperty7_TimeoutBehavior(t *testing.T) {
 	logger := zap.NewNop()
 
@@ -116,7 +116,7 @@ func TestProperty7_TimeoutBehavior(t *testing.T) {
 	}
 }
 
-// TestProperty7_DefaultTimeoutVariations tests various timeout scenarios
+// Property7  Default Timeout Variation 测试各种超时方案
 func TestProperty7_DefaultTimeoutVariations(t *testing.T) {
 	logger := zap.NewNop()
 
@@ -173,7 +173,7 @@ func TestProperty7_DefaultTimeoutVariations(t *testing.T) {
 	}
 }
 
-// TestProperty7_IterationCount verifies we have at least 100 test iterations
+// Property7  检验我们至少100个测试重复
 func TestProperty7_IterationCount(t *testing.T) {
 	totalIterations := 25 + 5 + 75
 	assert.GreaterOrEqual(t, totalIterations, 100,

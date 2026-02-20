@@ -1,4 +1,4 @@
-// Package image provides unified image generation provider interfaces.
+// 包图像提供统一的图像生成提供者接口.
 package image
 
 import (
@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-// GenerateRequest represents an image generation request.
+// 生成请求代表图像生成请求 。
 type GenerateRequest struct {
 	Prompt         string            `json:"prompt"`
 	NegativePrompt string            `json:"negative_prompt,omitempty"`
@@ -23,7 +23,7 @@ type GenerateRequest struct {
 	Metadata       map[string]string `json:"metadata,omitempty"`
 }
 
-// GenerateResponse represents the response from image generation.
+// 生成响应(Generate Response)代表图像生成的响应.
 type GenerateResponse struct {
 	Provider  string      `json:"provider"`
 	Model     string      `json:"model"`
@@ -32,7 +32,7 @@ type GenerateResponse struct {
 	CreatedAt time.Time   `json:"created_at"`
 }
 
-// ImageData represents a generated image.
+// ImageData代表生成的图像.
 type ImageData struct {
 	URL           string `json:"url,omitempty"`
 	B64JSON       string `json:"b64_json,omitempty"`
@@ -40,13 +40,13 @@ type ImageData struct {
 	Seed          int64  `json:"seed,omitempty"`
 }
 
-// ImageUsage represents usage statistics.
+// ImageUsage代表使用统计.
 type ImageUsage struct {
 	ImagesGenerated int     `json:"images_generated"`
 	Cost            float64 `json:"cost,omitempty"`
 }
 
-// EditRequest represents an image editing request.
+// 编辑请求代表图像编辑请求 。
 type EditRequest struct {
 	Image          io.Reader         `json:"-"`
 	Mask           io.Reader         `json:"-"`
@@ -58,7 +58,7 @@ type EditRequest struct {
 	Metadata       map[string]string `json:"metadata,omitempty"`
 }
 
-// VariationRequest represents an image variation request.
+// 变异请求代表图像变异请求.
 type VariationRequest struct {
 	Image          io.Reader         `json:"-"`
 	Model          string            `json:"model,omitempty"`
@@ -68,20 +68,20 @@ type VariationRequest struct {
 	Metadata       map[string]string `json:"metadata,omitempty"`
 }
 
-// Provider defines the image generation provider interface.
+// 提供方定义了图像生成提供者接口.
 type Provider interface {
-	// Generate creates images from text prompts.
+	// 从文本提示生成图像 。
 	Generate(ctx context.Context, req *GenerateRequest) (*GenerateResponse, error)
 
-	// Edit modifies an existing image based on a prompt.
+	// 编辑根据快讯修改已存在的图像。
 	Edit(ctx context.Context, req *EditRequest) (*GenerateResponse, error)
 
-	// CreateVariation creates variations of an existing image.
+	// CreateVariation 创建现有图像的变体.
 	CreateVariation(ctx context.Context, req *VariationRequest) (*GenerateResponse, error)
 
-	// Name returns the provider name.
+	// 名称返回提供者名称 。
 	Name() string
 
-	// SupportedSizes returns supported image sizes.
+	// 支持的返回大小支持的图像大小 。
 	SupportedSizes() []string
 }

@@ -1,6 +1,6 @@
-// Package sources provides external data source adapters for the RAG system.
-// These adapters enable retrieval from academic databases, code repositories,
-// and other external knowledge sources beyond local vector stores.
+// 包源为RAG系统提供外部数据源适配器.
+// 这些适配器能够从学术数据库、代码库、
+// 以及本地病媒储存之外的其他外部知识来源。
 package sources
 
 import (
@@ -17,7 +17,7 @@ import (
 	"go.uber.org/zap"
 )
 
-// ArxivConfig configures the arXiv data source adapter.
+// ArxivConfig配置了arXiv数据源适配器.
 type ArxivConfig struct {
 	BaseURL      string        `json:"base_url"`       // arXiv API base URL
 	MaxResults   int           `json:"max_results"`    // Maximum results per query
@@ -29,7 +29,7 @@ type ArxivConfig struct {
 	Categories   []string      `json:"categories"`     // Filter by arXiv categories (e.g., "cs.AI", "cs.CL")
 }
 
-// DefaultArxivConfig returns sensible defaults for arXiv queries.
+// 默认 ArxivConfig 返回 arXiv 查询的合理默认值 。
 func DefaultArxivConfig() ArxivConfig {
 	return ArxivConfig{
 		BaseURL:    "http://export.arxiv.org/api/query",
@@ -42,7 +42,7 @@ func DefaultArxivConfig() ArxivConfig {
 	}
 }
 
-// ArxivPaper represents a paper from arXiv.
+// ArxivPaper代表了ArXiv的论文.
 type ArxivPaper struct {
 	ID          string    `json:"id"`
 	Title       string    `json:"title"`
@@ -57,14 +57,14 @@ type ArxivPaper struct {
 	Comment     string    `json:"comment,omitempty"`
 }
 
-// ArxivSource provides access to arXiv papers for RAG retrieval.
+// Arxiv Source提供对arXiv文件的访问,供RAG检索.
 type ArxivSource struct {
 	config ArxivConfig
 	client *http.Client
 	logger *zap.Logger
 }
 
-// NewArxivSource creates a new arXiv data source adapter.
+// NewArxiv Source创建了新的arXiv数据源适配器.
 func NewArxivSource(config ArxivConfig, logger *zap.Logger) *ArxivSource {
 	if logger == nil {
 		logger = zap.NewNop()
@@ -76,16 +76,16 @@ func NewArxivSource(config ArxivConfig, logger *zap.Logger) *ArxivSource {
 	}
 }
 
-// Name returns the data source name.
+// 名称返回数据源名称 。
 func (a *ArxivSource) Name() string { return "arxiv" }
 
-// Search queries arXiv for papers matching the given query.
+// 搜索匹配给定查询的文件 arXiv 。
 func (a *ArxivSource) Search(ctx context.Context, query string, maxResults int) ([]ArxivPaper, error) {
 	if maxResults <= 0 {
 		maxResults = a.config.MaxResults
 	}
 
-	// Build arXiv API query
+	// 构建 arXiv API 查询
 	searchQuery := a.buildQuery(query)
 	params := url.Values{
 		"search_query": {searchQuery},
@@ -102,7 +102,7 @@ func (a *ArxivSource) Search(ctx context.Context, query string, maxResults int) 
 		zap.Int("max_results", maxResults),
 		zap.String("url", requestURL))
 
-	// Execute with retry
+	// 用重试执行
 	var body []byte
 	var err error
 	for attempt := 0; attempt <= a.config.RetryCount; attempt++ {
@@ -125,7 +125,7 @@ func (a *ArxivSource) Search(ctx context.Context, query string, maxResults int) 
 		return nil, fmt.Errorf("arXiv query failed after %d retries: %w", a.config.RetryCount, err)
 	}
 
-	// Parse Atom XML response
+	// 解析原子 XML 响应
 	papers, err := a.parseResponse(body)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse arXiv response: %w", err)
@@ -138,9 +138,9 @@ func (a *ArxivSource) Search(ctx context.Context, query string, maxResults int) 
 	return papers, nil
 }
 
-// buildQuery constructs an arXiv search query string.
+// 构建查询 arXiv 搜索查询字符串 。
 func (a *ArxivSource) buildQuery(query string) string {
-	// Build search query with optional category filtering
+	// 用可选分类过滤构建搜索查询
 	searchParts := []string{fmt.Sprintf("all:%s", query)}
 
 	if len(a.config.Categories) > 0 {
@@ -155,7 +155,7 @@ func (a *ArxivSource) buildQuery(query string) string {
 	return strings.Join(searchParts, "+AND+")
 }
 
-// doRequest executes an HTTP GET request.
+// do request 执行 HTTP 请求。
 func (a *ArxivSource) doRequest(ctx context.Context, requestURL string) ([]byte, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, requestURL, nil)
 	if err != nil {
@@ -180,13 +180,13 @@ func (a *ArxivSource) doRequest(ctx context.Context, requestURL string) ([]byte,
 	return body, nil
 }
 
-// arxivFeed represents the Atom XML feed from arXiv.
+// arxivFeed代表来自arXiv的原子XML种子.
 type arxivFeed struct {
 	XMLName xml.Name     `xml:"feed"`
 	Entries []arxivEntry `xml:"entry"`
 }
 
-// arxivEntry represents a single entry in the arXiv Atom feed.
+// arxiv Entry代表了arXiv原子种子中的单个条目.
 type arxivEntry struct {
 	ID         string          `xml:"id"`
 	Title      string          `xml:"title"`
@@ -215,7 +215,7 @@ type arxivCategory struct {
 	Term string `xml:"term,attr"`
 }
 
-// parseResponse parses the arXiv Atom XML response into ArxivPaper structs.
+// parseResponse 将 arXiv Atom XML 响应分解为 ArxivPaper structs 。
 func (a *ArxivSource) parseResponse(body []byte) ([]ArxivPaper, error) {
 	var feed arxivFeed
 	if err := xml.Unmarshal(body, &feed); err != nil {
@@ -232,17 +232,17 @@ func (a *ArxivSource) parseResponse(body []byte) ([]ArxivPaper, error) {
 			Comment: entry.Comment,
 		}
 
-		// Parse authors
+		// 解析作者
 		for _, author := range entry.Authors {
 			paper.Authors = append(paper.Authors, author.Name)
 		}
 
-		// Parse categories
+		// 分析类别
 		for _, cat := range entry.Categories {
 			paper.Categories = append(paper.Categories, cat.Term)
 		}
 
-		// Parse dates
+		// 分析日期
 		if t, err := time.Parse(time.RFC3339, entry.Published); err == nil {
 			paper.Published = t
 		}
@@ -250,7 +250,7 @@ func (a *ArxivSource) parseResponse(body []byte) ([]ArxivPaper, error) {
 			paper.Updated = t
 		}
 
-		// Extract URLs
+		// 提取 URL
 		for _, link := range entry.Links {
 			switch {
 			case link.Type == "application/pdf":
@@ -266,7 +266,7 @@ func (a *ArxivSource) parseResponse(body []byte) ([]ArxivPaper, error) {
 	return papers, nil
 }
 
-// ToJSON serializes papers to JSON for debugging/logging.
+// ToJSON将论文串行到JSON调试/博客.
 func (a *ArxivSource) ToJSON(papers []ArxivPaper) (string, error) {
 	data, err := json.MarshalIndent(papers, "", "  ")
 	if err != nil {

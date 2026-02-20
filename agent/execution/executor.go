@@ -1,4 +1,4 @@
-// package execution provides secure code execution for AI-generated code.
+// 软件包执行为AI生成代码提供了安全代码执行.
 package execution
 
 import (
@@ -11,7 +11,7 @@ import (
 	"go.uber.org/zap"
 )
 
-// ExecutionMode defines the sandbox execution mode.
+// ExecutiveMode定义了沙盒执行模式.
 type ExecutionMode string
 
 const (
@@ -20,7 +20,7 @@ const (
 	ModeNative ExecutionMode = "native" // For trusted environments only
 )
 
-// Language represents supported programming languages.
+// 语言代表支持的编程语言.
 type Language string
 
 const (
@@ -32,7 +32,7 @@ const (
 	LangBash       Language = "bash"
 )
 
-// SandboxConfig configures the sandbox executor.
+// Sandbox Config 配置了 sandbox 执行器 。
 type SandboxConfig struct {
 	Mode             ExecutionMode     `json:"mode"`
 	Timeout          time.Duration     `json:"timeout"`
@@ -46,7 +46,7 @@ type SandboxConfig struct {
 	AllowedLanguages []Language        `json:"allowed_languages"`
 }
 
-// DefaultSandboxConfig returns secure defaults.
+// 默认SandboxConfig返回安全默认 。
 func DefaultSandboxConfig() SandboxConfig {
 	return SandboxConfig{
 		Mode:             ModeDocker,
@@ -59,7 +59,7 @@ func DefaultSandboxConfig() SandboxConfig {
 	}
 }
 
-// ExecutionRequest represents a code execution request.
+// 执行请求代表代码执行请求.
 type ExecutionRequest struct {
 	ID       string            `json:"id"`
 	Language Language          `json:"language"`
@@ -71,7 +71,7 @@ type ExecutionRequest struct {
 	Timeout  time.Duration     `json:"timeout,omitempty"`
 }
 
-// ExecutionResult represents the result of code execution.
+// 执行Result代表代码执行的结果.
 type ExecutionResult struct {
 	ID         string        `json:"id"`
 	Success    bool          `json:"success"`
@@ -84,7 +84,7 @@ type ExecutionResult struct {
 	Truncated  bool          `json:"truncated,omitempty"`
 }
 
-// SandboxExecutor executes code in an isolated environment.
+// SandboxExecutor在孤立的环境中执行代码.
 type SandboxExecutor struct {
 	config  SandboxConfig
 	backend ExecutionBackend
@@ -93,7 +93,7 @@ type SandboxExecutor struct {
 	stats   ExecutorStats
 }
 
-// ExecutorStats tracks execution statistics.
+// 执行者Stats跟踪执行统计.
 type ExecutorStats struct {
 	TotalExecutions   int64         `json:"total_executions"`
 	SuccessExecutions int64         `json:"success_executions"`
@@ -102,14 +102,14 @@ type ExecutorStats struct {
 	TotalDuration     time.Duration `json:"total_duration"`
 }
 
-// ExecutionBackend defines the interface for execution backends.
+// ExecutiveBackend定义执行后端的接口.
 type ExecutionBackend interface {
 	Execute(ctx context.Context, req *ExecutionRequest, config SandboxConfig) (*ExecutionResult, error)
 	Cleanup() error
 	Name() string
 }
 
-// NewSandboxExecutor creates a new sandbox executor.
+// NewSandboxExecutor创建了新的沙盒执行器.
 func NewSandboxExecutor(config SandboxConfig, backend ExecutionBackend, logger *zap.Logger) *SandboxExecutor {
 	if logger == nil {
 		logger = zap.NewNop()
@@ -121,16 +121,16 @@ func NewSandboxExecutor(config SandboxConfig, backend ExecutionBackend, logger *
 	}
 }
 
-// Execute runs code in the sandbox.
+// 执行在沙盒中运行代码.
 func (s *SandboxExecutor) Execute(ctx context.Context, req *ExecutionRequest) (*ExecutionResult, error) {
 	start := time.Now()
 
-	// Validate request
+	// 验证请求
 	if err := s.validate(req); err != nil {
 		return nil, err
 	}
 
-	// Apply timeout
+	// 应用超时
 	timeout := s.config.Timeout
 	if req.Timeout > 0 && req.Timeout < timeout {
 		timeout = req.Timeout
@@ -143,10 +143,10 @@ func (s *SandboxExecutor) Execute(ctx context.Context, req *ExecutionRequest) (*
 		zap.String("language", string(req.Language)),
 		zap.Int("code_length", len(req.Code)))
 
-	// Execute
+	// 执行
 	result, err := s.backend.Execute(ctx, req, s.config)
 
-	// Update stats
+	// 更新数据
 	s.mu.Lock()
 	s.stats.TotalExecutions++
 	s.stats.TotalDuration += time.Since(start)
@@ -164,7 +164,7 @@ func (s *SandboxExecutor) Execute(ctx context.Context, req *ExecutionRequest) (*
 		return nil, err
 	}
 
-	// Truncate output if needed
+	// 需要时断线输出
 	if len(result.Stdout) > s.config.MaxOutputBytes {
 		result.Stdout = result.Stdout[:s.config.MaxOutputBytes]
 		result.Truncated = true
@@ -183,7 +183,7 @@ func (s *SandboxExecutor) validate(req *ExecutionRequest) error {
 		return fmt.Errorf("code is required")
 	}
 
-	// Check language is allowed
+	// 允许检查语言
 	allowed := false
 	for _, lang := range s.config.AllowedLanguages {
 		if lang == req.Language {
@@ -198,19 +198,19 @@ func (s *SandboxExecutor) validate(req *ExecutionRequest) error {
 	return nil
 }
 
-// Stats returns execution statistics.
+// Stats 返回执行统计 。
 func (s *SandboxExecutor) Stats() ExecutorStats {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.stats
 }
 
-// Cleanup releases resources.
+// 清理释放出资源.
 func (s *SandboxExecutor) Cleanup() error {
 	return s.backend.Cleanup()
 }
 
-// DockerBackend implements ExecutionBackend using Docker.
+// DockerBackend使用Docker执行Backend.
 type DockerBackend struct {
 	images           map[Language]string
 	logger           *zap.Logger
@@ -220,14 +220,14 @@ type DockerBackend struct {
 	mu               sync.Mutex
 }
 
-// DockerBackendConfig configures the Docker backend.
+// DockerBackendConfig配置了多克后端.
 type DockerBackendConfig struct {
 	ContainerPrefix string              // Prefix for container names
 	CleanupOnExit   bool                // Remove containers after execution
 	CustomImages    map[Language]string // Override default images
 }
 
-// NewDockerBackend creates a Docker execution backend.
+// NewDockerBackend创建了多克执行后端.
 func NewDockerBackend(logger *zap.Logger) *DockerBackend {
 	return NewDockerBackendWithConfig(logger, DockerBackendConfig{
 		ContainerPrefix: "sandbox_",
@@ -235,7 +235,7 @@ func NewDockerBackend(logger *zap.Logger) *DockerBackend {
 	})
 }
 
-// NewDockerBackendWithConfig creates a Docker backend with custom config.
+// NewDockerBackendWithConfig创建了自定义配置的多克后端.
 func NewDockerBackendWithConfig(logger *zap.Logger, cfg DockerBackendConfig) *DockerBackend {
 	if logger == nil {
 		logger = zap.NewNop()
@@ -250,7 +250,7 @@ func NewDockerBackendWithConfig(logger *zap.Logger, cfg DockerBackendConfig) *Do
 		LangBash:       "alpine:latest",
 	}
 
-	// Apply custom images
+	// 应用自定义图像
 	for lang, img := range cfg.CustomImages {
 		images[lang] = img
 	}
@@ -280,17 +280,17 @@ func (d *DockerBackend) Execute(ctx context.Context, req *ExecutionRequest, conf
 		ExitCode: -1,
 	}
 
-	// Get image for language
+	// 获取语言图像
 	image, ok := d.images[req.Language]
 	if !ok {
 		result.Error = fmt.Sprintf("no image configured for language: %s", req.Language)
 		return result, nil
 	}
 
-	// Generate container name
+	// 生成容器名称
 	containerName := fmt.Sprintf("%s%s_%d", d.containerPrefix, req.ID, time.Now().UnixNano())
 
-	// Build docker run command
+	// 构建嵌入器运行命令
 	args := d.buildDockerArgs(containerName, image, req, config)
 
 	d.logger.Debug("executing in docker",
@@ -299,7 +299,7 @@ func (d *DockerBackend) Execute(ctx context.Context, req *ExecutionRequest, conf
 		zap.String("language", string(req.Language)),
 	)
 
-	// Track active container
+	// 跟踪活动容器
 	d.mu.Lock()
 	d.activeContainers[containerName] = struct{}{}
 	d.mu.Unlock()
@@ -314,7 +314,7 @@ func (d *DockerBackend) Execute(ctx context.Context, req *ExecutionRequest, conf
 		}
 	}()
 
-	// Execute docker run
+	// 执行嵌入器运行
 	stdout, stderr, exitCode, err := d.runDocker(ctx, args, req.Stdin)
 
 	result.Duration = time.Since(start)
@@ -343,24 +343,24 @@ func (d *DockerBackend) buildDockerArgs(containerName, image string, req *Execut
 		"--rm",
 	}
 
-	// Memory limit
+	// 内存限制
 	if config.MaxMemoryMB > 0 {
 		args = append(args, "--memory", fmt.Sprintf("%dm", config.MaxMemoryMB))
 		args = append(args, "--memory-swap", fmt.Sprintf("%dm", config.MaxMemoryMB)) // Disable swap
 	}
 
-	// CPU limit
+	// CPU 限制
 	if config.MaxCPUPercent > 0 {
 		cpus := float64(config.MaxCPUPercent) / 100.0
 		args = append(args, "--cpus", fmt.Sprintf("%.2f", cpus))
 	}
 
-	// Network
+	// 网络
 	if !config.NetworkEnabled {
 		args = append(args, "--network", "none")
 	}
 
-	// Security options
+	// 安全选项
 	args = append(args,
 		"--security-opt", "no-new-privileges",
 		"--cap-drop", "ALL",
@@ -368,7 +368,7 @@ func (d *DockerBackend) buildDockerArgs(containerName, image string, req *Execut
 		"--tmpfs", "/tmp:rw,noexec,nosuid,size=64m",
 	)
 
-	// Environment variables
+	// 环境变量
 	for k, v := range config.EnvVars {
 		args = append(args, "-e", fmt.Sprintf("%s=%s", k, v))
 	}
@@ -376,15 +376,15 @@ func (d *DockerBackend) buildDockerArgs(containerName, image string, req *Execut
 		args = append(args, "-e", fmt.Sprintf("%s=%s", k, v))
 	}
 
-	// Mount paths (read-only by default)
+	// 挂载路径( 默认只读)
 	for hostPath, containerPath := range config.MountPaths {
 		args = append(args, "-v", fmt.Sprintf("%s:%s:ro", hostPath, containerPath))
 	}
 
-	// Image
+	// 图像
 	args = append(args, image)
 
-	// Command based on language
+	// 基于语言的命令
 	cmd := d.buildCommand(req)
 	args = append(args, cmd...)
 
@@ -398,13 +398,13 @@ func (d *DockerBackend) buildCommand(req *ExecutionRequest) []string {
 	case LangJavaScript:
 		return []string{"node", "-e", req.Code}
 	case LangTypeScript:
-		// TypeScript needs compilation, use ts-node or transpile first
+		// TypeScript 需要编译, 先使用 ts- node 或 transpile
 		return []string{"node", "-e", req.Code}
 	case LangGo:
-		// Go needs compilation, use go run with temp file
+		// 需要编辑, 使用临时文件运行
 		return []string{"sh", "-c", fmt.Sprintf("echo '%s' > /tmp/main.go && go run /tmp/main.go", escapeShellArg(req.Code))}
 	case LangRust:
-		// Rust needs compilation
+		// 需要汇编
 		return []string{"sh", "-c", fmt.Sprintf("echo '%s' > /tmp/main.rs && rustc /tmp/main.rs -o /tmp/main && /tmp/main", escapeShellArg(req.Code))}
 	case LangBash:
 		return []string{"sh", "-c", req.Code}
@@ -414,7 +414,7 @@ func (d *DockerBackend) buildCommand(req *ExecutionRequest) []string {
 }
 
 func (d *DockerBackend) runDocker(ctx context.Context, args []string, stdin string) (stdout, stderr string, exitCode int, err error) {
-	// Use os/exec to run docker command
+	// 使用 os/ exec 来运行 Docker 命令
 	cmd := execCommandContext(ctx, "docker", args...)
 
 	if stdin != "" {
@@ -466,7 +466,7 @@ func (d *DockerBackend) Cleanup() error {
 	return nil
 }
 
-// execCommand wraps os/exec for testability
+// 执行命令包接 OS/ Executive 测试
 type execCommand struct {
 	cmd      string
 	args     []string
@@ -490,19 +490,19 @@ func (c *execCommand) SetStdin(stdin string) {
 }
 
 func (c *execCommand) Run() (stdout, stderr string, err error) {
-	// Import os/exec at runtime to avoid import cycle issues
-	// In production, this would use exec.CommandContext directly
+	// 运行时导入 os/ exec 以避免进口周期问题
+	// 在生产中,这将使用执行。 直接命令内容
 
-	// Simulated execution for now - in production use:
-	// cmd := exec.CommandContext(c.ctx, c.cmd, c.args...)
-	// var stdoutBuf, stderrBuf bytes.Buffer
-	// cmd.Stdout = &stdoutBuf
-	// cmd.Stderr = &stderrBuf
-	// if c.stdin != "" {
-	//     cmd.Stdin = strings.NewReader(c.stdin)
+	// 目前模拟执行 -- -- 用于生产:
+	// cmd:=exec.command Context(c.ctx,c.cmd,c.args.) (中文(简体) ).
+	// var stdout Buf, stderr Buf 字节. 缓冲
+	// (原始内容存档于2018-09-29). Cmd. Stdout = &stdout Buf 调制组
+	// (原始内容存档于2018-09-29). Cmd. Stderr = &stderr Buf
+	// 如果 c.stdin != "" { 请检查url=值 (帮助)
+	//     cmd.Stdin = 字符串. NewReader (c.stdin) 互联网档案馆的存檔,存档日期2013-12-21.
 	// }
-	// err = cmd.Run()
-	// return stdoutBuf.String(), stderrBuf.String(), err
+	// 错误=cmd. 运行( C)
+	// 返回 stdoutBuf.String (), stderrBuf.String (), 错误
 
 	c.stdout = ""
 	c.stderr = ""
@@ -515,7 +515,7 @@ func (c *execCommand) ExitCode() int {
 }
 
 func escapeShellArg(s string) string {
-	// Escape single quotes for shell
+	// 为 shell 逃出单引号
 	result := make([]byte, 0, len(s)+10)
 	for i := 0; i < len(s); i++ {
 		if s[i] == '\'' {
@@ -527,8 +527,8 @@ func escapeShellArg(s string) string {
 	return string(result)
 }
 
-// ProcessBackend implements ExecutionBackend using local processes.
-// WARNING: Less secure than Docker - use only in trusted environments.
+// processBackend使用本地进程执行 ElectionBackend.
+// 警告: 不如多克安全 - 只在信任的环境中使用.
 type ProcessBackend struct {
 	interpreters map[Language]string
 	logger       *zap.Logger
@@ -536,21 +536,21 @@ type ProcessBackend struct {
 	enabled      bool
 }
 
-// ProcessBackendConfig configures the process backend.
+// processBackendConfig 配置进程后端.
 type ProcessBackendConfig struct {
 	WorkDir            string // Working directory for execution
 	Enabled            bool   // Must explicitly enable (security)
 	CustomInterpreters map[Language]string
 }
 
-// NewProcessBackend creates a process-based execution backend.
+// NewProcessBackend创建基于进程的执行后端.
 func NewProcessBackend(logger *zap.Logger) *ProcessBackend {
 	return NewProcessBackendWithConfig(logger, ProcessBackendConfig{
 		Enabled: false, // Disabled by default for security
 	})
 }
 
-// NewProcessBackendWithConfig creates a process backend with custom config.
+// NewProcessBackendWithConfig创建了自定义配置的流程后端.
 func NewProcessBackendWithConfig(logger *zap.Logger, cfg ProcessBackendConfig) *ProcessBackend {
 	if logger == nil {
 		logger = zap.NewNop()
@@ -591,13 +591,13 @@ func (p *ProcessBackend) Execute(ctx context.Context, req *ExecutionRequest, con
 		ExitCode: -1,
 	}
 
-	// Security check
+	// 安全检查
 	if !p.enabled {
 		result.Error = "process backend disabled for security - enable explicitly or use docker backend"
 		return result, nil
 	}
 
-	// Get interpreter
+	// 获取口译
 	interpreter, ok := p.interpreters[req.Language]
 	if !ok {
 		result.Error = fmt.Sprintf("no interpreter configured for language: %s", req.Language)
@@ -609,10 +609,10 @@ func (p *ProcessBackend) Execute(ctx context.Context, req *ExecutionRequest, con
 		zap.String("language", string(req.Language)),
 	)
 
-	// Build command
+	// 构建命令
 	args := p.buildArgs(req)
 
-	// Execute
+	// 执行
 	cmd := execCommandContext(ctx, interpreter, args...)
 	if req.Stdin != "" {
 		cmd.SetStdin(req.Stdin)
@@ -657,12 +657,12 @@ func (p *ProcessBackend) Cleanup() error {
 	return nil
 }
 
-// CodeValidator validates code before execution.
+// 代码Validator执行前验证代码.
 type CodeValidator struct {
 	blockedPatterns map[Language][]string
 }
 
-// NewCodeValidator creates a code validator.
+// NewCodeValidator创建了代码验证器.
 func NewCodeValidator() *CodeValidator {
 	return &CodeValidator{
 		blockedPatterns: map[Language][]string{
@@ -734,7 +734,7 @@ func NewCodeValidator() *CodeValidator {
 	}
 }
 
-// Validate checks code for dangerous patterns.
+// 验证危险模式的检查代码 。
 func (v *CodeValidator) Validate(lang Language, code string) []string {
 	var warnings []string
 	patterns, ok := v.blockedPatterns[lang]
@@ -764,14 +764,14 @@ func findPattern(s, pattern string) int {
 	return -1
 }
 
-// SandboxTool wraps the sandbox executor as an agent tool.
+// Sandbox Tool将 sandbox 执行器包成代理工具.
 type SandboxTool struct {
 	executor  *SandboxExecutor
 	validator *CodeValidator
 	logger    *zap.Logger
 }
 
-// NewSandboxTool creates a sandbox tool.
+// NewSandbox Tool创建了沙盒工具.
 func NewSandboxTool(executor *SandboxExecutor, logger *zap.Logger) *SandboxTool {
 	return &SandboxTool{
 		executor:  executor,
@@ -780,20 +780,20 @@ func NewSandboxTool(executor *SandboxExecutor, logger *zap.Logger) *SandboxTool 
 	}
 }
 
-// Execute runs code through the sandbox.
+// 执行通过沙盒执行代码.
 func (t *SandboxTool) Execute(ctx context.Context, args json.RawMessage) (json.RawMessage, error) {
 	var req ExecutionRequest
 	if err := json.Unmarshal(args, &req); err != nil {
 		return nil, fmt.Errorf("invalid arguments: %w", err)
 	}
 
-	// Validate code
+	// 验证代码
 	warnings := t.validator.Validate(req.Language, req.Code)
 	if len(warnings) > 0 {
 		t.logger.Warn("code validation warnings", zap.Strings("warnings", warnings))
 	}
 
-	// Execute
+	// 执行
 	result, err := t.executor.Execute(ctx, &req)
 	if err != nil {
 		return nil, err

@@ -12,11 +12,11 @@ import (
 )
 
 type InMemoryMemoryStoreConfig struct {
-	// MaxEntries is a global cap for entries in this store.
-	// 0 means unlimited.
+	// Max Entries是本商店条目的全球封顶.
+	// 0表示无限.
 	MaxEntries int
 
-	// Now is used for testing. Defaults to time.Now.
+	// 现在用于测试。 默认时间 。 现在。
 	Now func() time.Time
 }
 
@@ -26,8 +26,8 @@ type inMemoryEntry struct {
 	expiresAt time.Time
 }
 
-// InMemoryMemoryStore is a simple MemoryStore implementation with TTL support.
-// It is intended for local development, tests, and small deployments.
+// InMemory MemoryStore是一款在TTL支持下的简单记忆Store执行.
+// 它用于地方发展、测试和小规模部署。
 type InMemoryMemoryStore struct {
 	mu      sync.RWMutex
 	entries map[string]inMemoryEntry

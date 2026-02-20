@@ -1,173 +1,173 @@
-// Copyright 2024 AgentFlow Authors. All rights reserved.
-// Use of this source code is governed by a MIT license that can be
-// found in the LICENSE file.
+// 版权所有 2024 AgentFlow Authors. 版权所有。
+// 此源代码的使用由 MIT 许可规范,该许可可以是
+// 在LICENSE文件中找到。
 
 /*
-Package memory provides layered memory systems for AI agents.
+包内存为AI代理提供了分层内存系统.
 
-# Overview
+# 概览
 
-The memory package implements a multi-layered memory architecture inspired by
-human cognitive systems. It provides different memory types optimized for
-various use cases, enabling agents to maintain context, learn from experiences,
-and recall relevant information.
+内存包执行一个多层次的内存架构,灵感来自
+人类认知系统. 它提供不同的内存类型 优化用于
+各种使用案例,使代理人能够保持环境,学习经验,
+并回顾有关资料。
 
-# Memory Architecture
+# 记忆结构
 
 	┌─────────────────────────────────────────────────────────────┐
-	│                    Memory Manager                           │
-	│  (Coordinates all memory layers, handles consolidation)     │
+	QQ 内存管理器 QQ
+	* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * ** * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * ** * * * * * * * * * * * * * * **** *** *******
 	├─────────────────────────────────────────────────────────────┤
 	│  ┌─────────────────────────────────────────────────────────┐│
-	│  │                  Working Memory                         ││
-	│  │  (Short-term, high-priority, TTL-based expiration)     ││
+	工作记忆
+	QQ (短期、 高优先级、 TTL 到期) QQ
 	│  └─────────────────────────────────────────────────────────┘│
 	│  ┌─────────────────────────────────────────────────────────┐│
-	│  │                  Episodic Memory                        ││
-	│  │  (Event-based experiences, temporal ordering)          ││
+	{\fn黑体\fs22\bord1\shad0\3aHBE\4aH00\fscx67\fscy66\2cHFFFFFF\3cH808080}我记得你
+	* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * ******************************************
 	│  └─────────────────────────────────────────────────────────┘│
 	│  ┌─────────────────────────────────────────────────────────┐│
-	│  │                  Semantic Memory                        ││
-	│  │  (Factual knowledge, subject-predicate-object)         ││
+	语义记忆
+	QQ( 事实知识, 主题 - 对象) QQ
 	│  └─────────────────────────────────────────────────────────┘│
 	│  ┌─────────────────────────────────────────────────────────┐│
-	│  │                 Procedural Memory                       ││
-	│  │  (How-to knowledge, skills, procedures)                ││
+	程序记忆
+	(如何掌握知识、技能、程序)
 	│  └─────────────────────────────────────────────────────────┘│
 	└─────────────────────────────────────────────────────────────┘
 
-# Memory Types
+# 记忆类型
 
-Working Memory: Short-term context storage with TTL-based expiration.
-Best for: Current conversation context, temporary variables, active goals.
+工作内存:以TTL为基础的短期上下文存储.
+最佳对象:当前对话背景,临时变量,活性目标.
 
-	mem := memory.NewWorkingMemory(100, 5*time.Minute, logger)
-	mem.Set("current_topic", "weather", 1)
-	value, ok := mem.Get("current_topic")
+	mim:=内存. New Working Memory (100, 5* time). 分钟,伐木机)
+	妈妈。 设置( “当前  专题”、“ 天气” 1)
+	值, OK: = mem.Get( “当前  专题”)
 
-Episodic Memory: Event-based experiences with temporal ordering.
-Best for: Conversation history, user interactions, task outcomes.
+Episodic Memory:基于事件的经验与时序.
+最佳用途:对话历史,用户互动,任务结果.
 
-	mem := memory.NewEpisodicMemory(10000, logger)
-	mem.Store(&memory.Episode{
-	    Context:    "User asked about weather",
-	    Action:     "Called weather API",
-	    Result:     "Returned sunny, 25°C",
-	    Importance: 0.8,
+	mem:=内存. NewEpisodic Memory (10,000, logger) (英语).
+	妈妈。 存储( M) 。 第1集{
+	    背景:"用户询问天气",
+	    行动: "呼叫天气API",
+	    结果:"回光了,25°C"
+	    重要性:0.8,
 	})
-	recent := mem.Recall(10)
+	最近:=mem. 回顾(10)
 
-Semantic Memory: Factual knowledge stored as subject-predicate-object triples.
-Best for: Domain knowledge, user preferences, learned facts.
+语义记忆:将事实知识作为主体-先入为主-对象三重存储.
+最佳用途:域知识,用户偏好,学到的事实.
 
-	mem := memory.NewSemanticMemory(embedder, logger)
-	mem.StoreFact(ctx, &memory.Fact{
-	    Subject:    "Paris",
-	    Predicate:  "is_capital_of",
-	    Object:     "France",
-	    Confidence: 0.99,
+	mem:=内存. NewSemantic Memory (embedder, logger) (英语).
+	mem.StoreFact(ctx, & memory). 事实{
+	    题目: "巴黎",
+	    预告:"是资本",
+	    对象:"法国",
+	    信任度:0.99,
 	})
-	facts := mem.Query("Paris")
+	事实 := mem.Query ("巴黎")
 
-Procedural Memory: How-to knowledge and skills.
-Best for: Task procedures, workflows, learned behaviors.
+程序记忆:如何掌握知识和技能.
+最佳用途:任务程序,工作流程,学习行为.
 
-# Memory Entry
+# 内存条目
 
-The base MemoryEntry structure used across memory types:
+跨内存类型使用的基础内存 Entry 结构 :
 
-	type MemoryEntry struct {
-	    ID          string
-	    Type        MemoryType
-	    Content     string
-	    Embedding   []float32
-	    Importance  float64
-	    AccessCount int
-	    CreatedAt   time.Time
-	    LastAccess  time.Time
-	    ExpiresAt   *time.Time
-	    Metadata    map[string]any
-	    Relations   []string
+	类型 内存 Entry struct {
+	    标识字符串
+	    类型内存类型
+	    内容字符串
+	    嵌入 [] float32
+	    重要性浮点64
+	    访问输入
+	    时所造已. 时间
+	    最后一次进入时间。 时间
+	    过期时间 。 时间
+	    元数据映射[字符串]
+	    关系
 	}
 
-# Consolidation Strategies
+# 巩固战略
 
-The package supports memory consolidation strategies for transferring
-information between memory layers:
+该软件包支持用于传输的内存整合策略
+内存层间的信息 :
 
-	strategy := memory.NewImportanceBasedConsolidation(&memory.ConsolidationConfig{
-	    ImportanceThreshold: 0.7,
-	    MinAccessCount:      3,
-	    MaxAge:              24 * time.Hour,
+	策略 := 内存. NewImport Configation( & memory. Config{
+	    重要门槛:0.7,
+	    最小访问数 : 3,
+	    24*时间。 小时
 	})
 
-	// Consolidate working memory to episodic
-	strategy.Consolidate(ctx, workingMem, episodicMem)
+	// 将工作记忆整合为零星记忆
+	战略。 合并( ctx, 工作备忘录, 缩写)
 
-# Intelligent Decay
+# 聪明的衰败
 
-Memory importance decays over time using configurable decay functions:
+使用可配置的衰变函数,内存重要性随时间推移而衰减:
 
-	decay := memory.NewIntelligentDecay(&memory.DecayConfig{
-	    HalfLife:     7 * 24 * time.Hour,
-	    MinImportance: 0.1,
-	    DecayFunction: memory.ExponentialDecay,
+	衰减 := 内存. NewIntelligentDecay( &memory.Decay Config{
+	    半生:7 *24 *时间. 小时
+	    重要性:0.1,
+	    衰变功能:记忆. 鉴证Decay,
 	})
 
-# Vector Store Integration
+# 向量存储集成
 
-Semantic memory supports vector embeddings for similarity search:
+语义内存支持向量嵌入相似性搜索:
 
-	// With embedder for semantic search
-	mem := memory.NewSemanticMemory(embedder, logger)
+	// 用嵌入器进行语义搜索
+	mem:=内存. NewSemantic Memory (embedder, logger) (英语).
 
-	// Search by similarity
-	results := mem.SearchSimilar(ctx, queryEmbedding, 10)
+	// 以相似性搜索
+	结果 : = mem.SearchSimular(ctx,查询Embedding, 10)
 
-# In-Memory Store
+记忆存储器
 
-A simple key-value store for basic memory needs:
+用于基本内存需要的简单密钥值存储 :
 
-	store := memory.NewInMemoryStore(1000, logger)
-	store.Set(ctx, "key", value, ttl)
-	value, err := store.Get(ctx, "key")
+	存储 := 内存. New InMemoryStore (1000, 日志)
+	存储。 设置( ctx, “ key”, 值, ttl)
+	值,错误:=存储。 获取( ctx, "键" )
 
-# Thread Safety
+线索安全
 
-All memory implementations are thread-safe and can be used concurrently
-from multiple goroutines. They use appropriate synchronization primitives
-(sync.RWMutex) to protect shared state.
+所有内存执行都是安全的,可以同时使用
+从多条出道道。 他们使用适当的同步原始
+(sync.RWMutex)保护共享状态.
 
-# Performance
+# 表现
 
-The package is optimized for performance:
+软件包对性能进行了优化:
 
-	BenchmarkEpisodicMemory_Store-12      449977    292.6 ns/op    198 B/op    3 allocs/op
-	BenchmarkEpisodicMemory_Recall-12    1302644     90.26 ns/op    80 B/op    1 allocs/op
-	BenchmarkSemanticMemory_Query-12      234567    456.7 ns/op   120 B/op    2 allocs/op
+	基准Episodic Memory Store-12 449977 292.6 ns/op 198 B/op 3 alogs/op
+	基准记忆 回顾12 1302644 90.26 ns/op 80 B/op 1 alogs/op
+	基准语义记忆- 12 234567 456.7 ns/op 120 B/op 2 alogs/op
 
-# Integration with Agents
+# 与代理人融合
 
-Memory integrates seamlessly with the agent framework:
+内存与代理框架无缝地融合:
 
-	agent, err := agent.NewAgentBuilder(config).
-	    WithProvider(provider).
-	    WithMemory(memoryManager).
-	    Build()
+	代理, 错误 := 代理. NewAgentBuilder( config).
+	    与 Provider( 提供者) 。
+	    带有 Memory( 记忆管理器) 。
+	    构建( C)
 
-The agent automatically uses memory for:
-  - Maintaining conversation context
-  - Storing and retrieving relevant experiences
-  - Learning from interactions
-  - Personalizing responses
+代理自动使用内存 :
+  - 保持对话的背景
+  - 积累和总结相关经验
+  - 从互动中学习
+  - 个性化对策
 
-# Best Practices
+# 最佳做法
 
-1. Choose the right memory type for your use case
-2. Set appropriate capacity limits to prevent unbounded growth
-3. Use importance scores to prioritize valuable memories
-4. Implement consolidation for long-running agents
-5. Consider TTL for time-sensitive information
-6. Use embeddings for semantic similarity search
+1. 为您的使用选择正确的内存类型
+2. 制定适当的能力限制,防止无限制的增长
+3. 利用重要分数确定有价值记忆的优先次序
+4. 实施长期机构合并
+5. 将TTL视为具有时间敏感性的信息
+6. 语义相似性搜索使用嵌入
 */
 package memory

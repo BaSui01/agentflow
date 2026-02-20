@@ -1,4 +1,4 @@
-// Package streaming provides bidirectional real-time streaming for audio/text.
+// 包流为音频/文本提供双向实时流.
 package streaming
 
 import (
@@ -11,7 +11,7 @@ import (
 	"go.uber.org/zap"
 )
 
-// StreamType defines the type of stream content.
+// StreamType 定义了流内容的类型.
 type StreamType string
 
 const (
@@ -21,7 +21,7 @@ const (
 	StreamTypeMixed StreamType = "mixed"
 )
 
-// StreamChunk represents a chunk of streaming data.
+// StreamChunk代表了一整批流数据.
 type StreamChunk struct {
 	ID        string         `json:"id"`
 	Type      StreamType     `json:"type"`
@@ -45,7 +45,7 @@ type StreamConnection interface {
 	IsAlive() bool
 }
 
-// StreamConfig configures bidirectional streaming.
+// StreamConfig 配置双向流.
 type StreamConfig struct {
 	BufferSize     int           `json:"buffer_size"`
 	MaxLatencyMS   int           `json:"max_latency_ms"`
@@ -61,7 +61,7 @@ type StreamConfig struct {
 	EnableHeartbeat   bool          `json:"enable_heartbeat"`   // 是否启用心跳
 }
 
-// DefaultStreamConfig returns default streaming configuration.
+// 默认 StreamConfig 返回默认流化配置 。
 func DefaultStreamConfig() StreamConfig {
 	return StreamConfig{
 		BufferSize:        1024,
@@ -78,7 +78,7 @@ func DefaultStreamConfig() StreamConfig {
 	}
 }
 
-// BidirectionalStream manages real-time bidirectional communication.
+// 双向结构管理实时双向通信.
 type BidirectionalStream struct {
 	ID       string
 	Config   StreamConfig
@@ -98,7 +98,7 @@ type BidirectionalStream struct {
 	errChan        chan error // 内部错误通道
 }
 
-// StreamState represents the stream state.
+// 流州代表流州.
 type StreamState string
 
 const (
@@ -110,14 +110,14 @@ const (
 	StateError        StreamState = "error"
 )
 
-// StreamHandler processes stream data.
+// StreamHandler处理流数据.
 type StreamHandler interface {
 	OnInbound(ctx context.Context, chunk StreamChunk) (*StreamChunk, error)
 	OnOutbound(ctx context.Context, chunk StreamChunk) error
 	OnStateChange(state StreamState)
 }
 
-// NewBidirectionalStream creates a new bidirectional stream.
+// NewBiFireStream 创建了新的双向流.
 func NewBidirectionalStream(
 	config StreamConfig,
 	handler StreamHandler,
@@ -143,7 +143,7 @@ func NewBidirectionalStream(
 	}
 }
 
-// Start begins the bidirectional stream.
+// 开始双向流 。
 func (s *BidirectionalStream) Start(ctx context.Context) error {
 	s.setState(StateConnecting)
 	s.logger.Info("starting bidirectional stream")
@@ -196,7 +196,7 @@ func (s *BidirectionalStream) monitorErrors(ctx context.Context) {
 	}
 }
 
-// Send sends data to the outbound stream.
+// 发送数据到外出流.
 func (s *BidirectionalStream) Send(chunk StreamChunk) error {
 	s.mu.Lock()
 	s.sequence++
@@ -215,12 +215,12 @@ func (s *BidirectionalStream) Send(chunk StreamChunk) error {
 	}
 }
 
-// Receive returns the inbound channel for receiving data.
+// 接收输入通道以接收数据 。
 func (s *BidirectionalStream) Receive() <-chan StreamChunk {
 	return s.inbound
 }
 
-// Close closes the stream.
+// 关上溪口.
 func (s *BidirectionalStream) Close() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -484,14 +484,14 @@ func (s *BidirectionalStream) tryReconnect(ctx context.Context) bool {
 	return true
 }
 
-// GetState returns the current stream state.
+// GetState 返回当前流状态 。
 func (s *BidirectionalStream) GetState() StreamState {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.State
 }
 
-// StreamSession manages a complete streaming session.
+// 串流会管理完整的串流会话。
 type StreamSession struct {
 	ID         string
 	Stream     *BidirectionalStream
@@ -504,7 +504,7 @@ type StreamSession struct {
 	mu         sync.Mutex
 }
 
-// NewStreamSession creates a new stream session.
+// NewStream Session 创建了新流会话.
 func NewStreamSession(stream *BidirectionalStream) *StreamSession {
 	return &StreamSession{
 		ID:        fmt.Sprintf("session_%d", time.Now().UnixNano()),
@@ -513,7 +513,7 @@ func NewStreamSession(stream *BidirectionalStream) *StreamSession {
 	}
 }
 
-// RecordSent records sent data.
+// 记录发送数据。
 func (s *StreamSession) RecordSent(bytes int64) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -521,7 +521,7 @@ func (s *StreamSession) RecordSent(bytes int64) {
 	s.ChunksSent++
 }
 
-// RecordReceived records received data.
+// 记录收到数据。
 func (s *StreamSession) RecordReceived(bytes int64) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -529,14 +529,14 @@ func (s *StreamSession) RecordReceived(bytes int64) {
 	s.ChunksRecv++
 }
 
-// StreamManager manages multiple streams.
+// StreamManager管理多条流.
 type StreamManager struct {
 	streams map[string]*BidirectionalStream
 	logger  *zap.Logger
 	mu      sync.RWMutex
 }
 
-// NewStreamManager creates a new stream manager.
+// NewStreamManager创建了新流管理器.
 func NewStreamManager(logger *zap.Logger) *StreamManager {
 	if logger == nil {
 		logger = zap.NewNop()
@@ -547,7 +547,7 @@ func NewStreamManager(logger *zap.Logger) *StreamManager {
 	}
 }
 
-// CreateStream creates a new stream.
+// 创建 Stream 创建一个新流 。
 func (m *StreamManager) CreateStream(
 	config StreamConfig,
 	handler StreamHandler,
@@ -561,7 +561,7 @@ func (m *StreamManager) CreateStream(
 	return stream
 }
 
-// GetStream retrieves a stream by ID.
+// Get Stream通过ID检索出一条流.
 func (m *StreamManager) GetStream(id string) (*BidirectionalStream, bool) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
@@ -569,7 +569,7 @@ func (m *StreamManager) GetStream(id string) (*BidirectionalStream, bool) {
 	return stream, ok
 }
 
-// CloseStream closes and removes a stream.
+// 关闭 Stream 关闭并去除一串流.
 func (m *StreamManager) CloseStream(id string) error {
 	m.mu.Lock()
 	stream, ok := m.streams[id]
@@ -584,7 +584,7 @@ func (m *StreamManager) CloseStream(id string) error {
 	return nil
 }
 
-// AudioStreamAdapter adapts audio streams for bidirectional communication.
+// AudioStreamAdapter 调整音频流用于双向通信.
 type AudioStreamAdapter struct {
 	stream     *BidirectionalStream
 	sampleRate int
@@ -593,17 +593,17 @@ type AudioStreamAdapter struct {
 	decoder    AudioDecoder
 }
 
-// AudioEncoder encodes audio data.
+// 音频编码器编码音频数据.
 type AudioEncoder interface {
 	Encode(pcm []byte) ([]byte, error)
 }
 
-// AudioDecoder decodes audio data.
+// AudioDecoder解码音频数据.
 type AudioDecoder interface {
 	Decode(data []byte) ([]byte, error)
 }
 
-// NewAudioStreamAdapter creates a new audio stream adapter.
+// 新AudioStreamAdapter创建了一个新的音频流适配器.
 func NewAudioStreamAdapter(stream *BidirectionalStream, sampleRate, channels int) *AudioStreamAdapter {
 	return &AudioStreamAdapter{
 		stream:     stream,
@@ -612,7 +612,7 @@ func NewAudioStreamAdapter(stream *BidirectionalStream, sampleRate, channels int
 	}
 }
 
-// SendAudio sends audio data.
+// SendAudio发送音频数据.
 func (a *AudioStreamAdapter) SendAudio(pcm []byte) error {
 	data := pcm
 	if a.encoder != nil {
@@ -632,7 +632,7 @@ func (a *AudioStreamAdapter) SendAudio(pcm []byte) error {
 	})
 }
 
-// ReceiveAudio returns decoded audio chunks.
+// DuiceAudio返回已解码的音频块 。
 func (a *AudioStreamAdapter) ReceiveAudio() <-chan []byte {
 	out := make(chan []byte, 100)
 	go func() {
@@ -655,17 +655,17 @@ func (a *AudioStreamAdapter) ReceiveAudio() <-chan []byte {
 	return out
 }
 
-// TextStreamAdapter adapts text streams.
+// TextStreamAdapter 适应文本流.
 type TextStreamAdapter struct {
 	stream *BidirectionalStream
 }
 
-// NewTextStreamAdapter creates a new text stream adapter.
+// 新TextStreamAdapter创建了新的文本流适配器.
 func NewTextStreamAdapter(stream *BidirectionalStream) *TextStreamAdapter {
 	return &TextStreamAdapter{stream: stream}
 }
 
-// SendText sends text data.
+// 发送文本数据 。
 func (t *TextStreamAdapter) SendText(text string, isFinal bool) error {
 	return t.stream.Send(StreamChunk{
 		Type:    StreamTypeText,
@@ -674,7 +674,7 @@ func (t *TextStreamAdapter) SendText(text string, isFinal bool) error {
 	})
 }
 
-// ReceiveText returns text chunks.
+// 接收文本返回文本块 。
 func (t *TextStreamAdapter) ReceiveText() <-chan string {
 	out := make(chan string, 100)
 	go func() {
@@ -688,13 +688,13 @@ func (t *TextStreamAdapter) ReceiveText() <-chan string {
 	return out
 }
 
-// StreamReader wraps a stream as io.Reader.
+// StreamReader将一流包裹为io. 读者.
 type StreamReader struct {
 	stream *BidirectionalStream
 	buffer []byte
 }
 
-// NewStreamReader creates a new stream reader.
+// NewStream Reader创建了新流读取器.
 func NewStreamReader(stream *BidirectionalStream) *StreamReader {
 	return &StreamReader{stream: stream}
 }
@@ -718,12 +718,12 @@ func (r *StreamReader) Read(p []byte) (n int, err error) {
 	return n, nil
 }
 
-// StreamWriter wraps a stream as io.Writer.
+// StreamWriter)将一流包裹为io. 编剧.
 type StreamWriter struct {
 	stream *BidirectionalStream
 }
 
-// NewStreamWriter creates a new stream writer.
+// NewStreamWriter创建了新流作家.
 func NewStreamWriter(stream *BidirectionalStream) *StreamWriter {
 	return &StreamWriter{stream: stream}
 }

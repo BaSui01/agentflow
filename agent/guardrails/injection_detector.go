@@ -1,4 +1,4 @@
-// Package guardrails provides input/output validation and content filtering for agents.
+// 包护栏为代理商提供输入/输出验证和内容过滤.
 package guardrails
 
 import (
@@ -109,7 +109,7 @@ func getDefaultInjectionPatterns(caseSensitive bool) []*InjectionPattern {
 	}
 
 	patterns := []*InjectionPattern{
-		// English patterns - Instruction override attempts
+		// 英语模式 - 指令覆盖尝试
 		{
 			Pattern:     regexp.MustCompile(flags + `ignore\s+(all\s+)?(previous|prior|above|earlier)\s+(instructions?|prompts?|rules?|guidelines?)`),
 			Description: "Attempt to ignore previous instructions",
@@ -134,7 +134,7 @@ func getDefaultInjectionPatterns(caseSensitive bool) []*InjectionPattern {
 			Severity:    SeverityHigh,
 			Language:    "en",
 		},
-		// Role manipulation attempts
+		// 角色操纵尝试
 		{
 			Pattern:     regexp.MustCompile(flags + `you\s+are\s+now\s+(a|an|the)?`),
 			Description: "Attempt to change model role",
@@ -153,7 +153,7 @@ func getDefaultInjectionPatterns(caseSensitive bool) []*InjectionPattern {
 			Severity:    SeverityMedium,
 			Language:    "en",
 		},
-		// System/role markers
+		// 系统/作用标记
 		{
 			Pattern:     regexp.MustCompile(flags + `^\s*system\s*:\s*`),
 			Description: "System role marker injection",
@@ -184,7 +184,7 @@ func getDefaultInjectionPatterns(caseSensitive bool) []*InjectionPattern {
 			Severity:    SeverityHigh,
 			Language:    "universal",
 		},
-		// Jailbreak attempts
+		// 越狱未遂
 		{
 			Pattern:     regexp.MustCompile(flags + `(do\s+)?anything\s+now`),
 			Description: "DAN jailbreak attempt",
@@ -222,7 +222,7 @@ func getDefaultInjectionPatterns(caseSensitive bool) []*InjectionPattern {
 			Severity:    SeverityCritical,
 			Language:    "zh",
 		},
-		// Chinese role manipulation
+		// 中国角色操纵
 		{
 			Pattern:     regexp.MustCompile(`你现在是(一个|一名)?`),
 			Description: "尝试改变模型角色",
@@ -241,7 +241,7 @@ func getDefaultInjectionPatterns(caseSensitive bool) []*InjectionPattern {
 			Severity:    SeverityHigh,
 			Language:    "zh",
 		},
-		// Delimiter escape attempts
+		// 破坏者逃跑未遂
 		{
 			Pattern:     regexp.MustCompile(flags + `---+\s*(system|instructions?|rules?)\s*---+`),
 			Description: "Delimiter-based injection attempt",

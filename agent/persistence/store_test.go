@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-// TestMemoryMessageStore tests the in-memory message store
+// 测试记忆MessageStore 测试记忆中的信息存储
 func TestMemoryMessageStore(t *testing.T) {
 	config := DefaultStoreConfig()
 	config.Cleanup.Enabled = false // Disable auto cleanup for tests
@@ -69,7 +69,7 @@ func TestMemoryMessageStore(t *testing.T) {
 	})
 
 	t.Run("GetMessages", func(t *testing.T) {
-		// Get messages from batch-topic
+		// 从批量专题获取消息
 		msgs, cursor, err := store.GetMessages(ctx, "batch-topic", "", 10)
 		if err != nil {
 			t.Fatalf("GetMessages failed: %v", err)
@@ -79,7 +79,7 @@ func TestMemoryMessageStore(t *testing.T) {
 			t.Errorf("Expected 3 messages, got %d", len(msgs))
 		}
 
-		// Test pagination
+		// 测试标记
 		msgs, _, err = store.GetMessages(ctx, "batch-topic", "", 2)
 		if err != nil {
 			t.Fatalf("GetMessages with limit failed: %v", err)
@@ -111,7 +111,7 @@ func TestMemoryMessageStore(t *testing.T) {
 	})
 
 	t.Run("GetUnackedMessages", func(t *testing.T) {
-		// Create an old unacked message
+		// 创建旧的未保存信件
 		oldMsg := &Message{
 			ID:        "old-unacked",
 			Topic:     "unacked-topic",
@@ -120,7 +120,7 @@ func TestMemoryMessageStore(t *testing.T) {
 		}
 		store.SaveMessage(ctx, oldMsg)
 
-		// Create a new unacked message
+		// 创建新未保存的消息
 		newMsg := &Message{
 			ID:      "new-unacked",
 			Topic:   "unacked-topic",
@@ -128,7 +128,7 @@ func TestMemoryMessageStore(t *testing.T) {
 		}
 		store.SaveMessage(ctx, newMsg)
 
-		// Get messages older than 5 minutes
+		// 获取超过5分钟的信息
 		msgs, err := store.GetUnackedMessages(ctx, "unacked-topic", 5*time.Minute)
 		if err != nil {
 			t.Fatalf("GetUnackedMessages failed: %v", err)
@@ -169,7 +169,7 @@ func TestMemoryMessageStore(t *testing.T) {
 	})
 }
 
-// TestMemoryTaskStore tests the in-memory task store
+// 模拟任务测试库
 func TestMemoryTaskStore(t *testing.T) {
 	config := DefaultStoreConfig()
 	config.Cleanup.Enabled = false
@@ -249,7 +249,7 @@ func TestMemoryTaskStore(t *testing.T) {
 	})
 
 	t.Run("ListTasks", func(t *testing.T) {
-		// Create tasks with different statuses
+		// 创建不同状态的任务
 		tasks := []*AsyncTask{
 			{ID: "list-1", AgentID: "agent-1", Status: TaskStatusPending},
 			{ID: "list-2", AgentID: "agent-1", Status: TaskStatusRunning},
@@ -259,7 +259,7 @@ func TestMemoryTaskStore(t *testing.T) {
 			store.SaveTask(ctx, task)
 		}
 
-		// Filter by status
+		// 按状态过滤
 		filter := TaskFilter{Status: []TaskStatus{TaskStatusPending}}
 		result, err := store.ListTasks(ctx, filter)
 		if err != nil {
@@ -276,7 +276,7 @@ func TestMemoryTaskStore(t *testing.T) {
 			t.Error("Expected at least one pending task")
 		}
 
-		// Filter by agent
+		// 通过代理过滤
 		filter = TaskFilter{AgentID: "agent-2"}
 		result, err = store.ListTasks(ctx, filter)
 		if err != nil {
@@ -291,7 +291,7 @@ func TestMemoryTaskStore(t *testing.T) {
 	})
 
 	t.Run("GetRecoverableTasks", func(t *testing.T) {
-		// Create recoverable tasks
+		// 创建可恢复的任务
 		tasks := []*AsyncTask{
 			{ID: "recover-1", AgentID: "agent-1", Status: TaskStatusPending, Priority: 1},
 			{ID: "recover-2", AgentID: "agent-1", Status: TaskStatusRunning, Priority: 2},
@@ -306,14 +306,14 @@ func TestMemoryTaskStore(t *testing.T) {
 			t.Fatalf("GetRecoverableTasks failed: %v", err)
 		}
 
-		// Should only get pending and running tasks
+		// 只应获得待决和运行的任务
 		for _, task := range result {
 			if task.Status != TaskStatusPending && task.Status != TaskStatusRunning {
 				t.Errorf("Got non-recoverable task: %s", task.Status)
 			}
 		}
 
-		// Should be sorted by priority (higher first)
+		// 应按优先顺序排序( 先高一些)
 		if len(result) >= 2 && result[0].Priority < result[1].Priority {
 			t.Error("Tasks should be sorted by priority descending")
 		}
@@ -338,7 +338,7 @@ func TestMemoryTaskStore(t *testing.T) {
 	})
 
 	t.Run("Cleanup", func(t *testing.T) {
-		// Create old completed task
+		// 创建已完成的旧任务
 		oldTask := &AsyncTask{
 			ID:        "old-completed",
 			AgentID:   "agent-1",
@@ -350,7 +350,7 @@ func TestMemoryTaskStore(t *testing.T) {
 		oldTask.CompletedAt = &now
 		store.SaveTask(ctx, oldTask)
 
-		// Cleanup tasks older than 24 hours
+		// 超过24小时的清理任务
 		count, err := store.Cleanup(ctx, 24*time.Hour)
 		if err != nil {
 			t.Fatalf("Cleanup failed: %v", err)
@@ -373,9 +373,9 @@ func TestMemoryTaskStore(t *testing.T) {
 	})
 }
 
-// TestFileMessageStore tests the file-based message store
+// 测试FileMessageStore 测试基于文件的信息存储
 func TestFileMessageStore(t *testing.T) {
-	// Create temp directory
+	// 创建临时目录
 	tmpDir, err := os.MkdirTemp("", "persistence-test-*")
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
@@ -423,7 +423,7 @@ func TestFileMessageStore(t *testing.T) {
 		}
 		store.SaveMessage(ctx, msg)
 
-		// Close and reopen store
+		// 关闭并重新打开商店
 		store.Close()
 
 		store2, err := NewFileMessageStore(config)
@@ -443,9 +443,9 @@ func TestFileMessageStore(t *testing.T) {
 	})
 }
 
-// TestFileTaskStore tests the file-based task store
+// 测试文件任务堆
 func TestFileTaskStore(t *testing.T) {
-	// Create temp directory
+	// 创建临时目录
 	tmpDir, err := os.MkdirTemp("", "persistence-test-*")
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
@@ -493,7 +493,7 @@ func TestFileTaskStore(t *testing.T) {
 		}
 		store.SaveTask(ctx, task)
 
-		// Close and reopen store
+		// 关闭并重新打开商店
 		store.Close()
 
 		store2, err := NewFileTaskStore(config)
@@ -513,7 +513,7 @@ func TestFileTaskStore(t *testing.T) {
 	})
 
 	t.Run("RecoverableTasksAfterRestart", func(t *testing.T) {
-		// Create recoverable tasks
+		// 创建可恢复的任务
 		tasks := []*AsyncTask{
 			{ID: "recover-file-1", AgentID: "agent-1", Status: TaskStatusPending},
 			{ID: "recover-file-2", AgentID: "agent-1", Status: TaskStatusRunning},
@@ -522,7 +522,7 @@ func TestFileTaskStore(t *testing.T) {
 			store.SaveTask(ctx, task)
 		}
 
-		// Close and reopen store
+		// 关闭并重新打开商店
 		store.Close()
 
 		store2, err := NewFileTaskStore(config)
@@ -542,24 +542,24 @@ func TestFileTaskStore(t *testing.T) {
 	})
 }
 
-// TestRetryConfig tests the retry configuration
+// 测试RetryConfig 测试重试配置
 func TestRetryConfig(t *testing.T) {
 	config := DefaultRetryConfig()
 
 	t.Run("CalculateBackoff", func(t *testing.T) {
-		// First retry: 1s
+		// 第一次重试: 1s
 		backoff := config.CalculateBackoff(0)
 		if backoff != 1*time.Second {
 			t.Errorf("Expected 1s, got %v", backoff)
 		}
 
-		// Second retry: 2s
+		// 第二次重试: 2s
 		backoff = config.CalculateBackoff(1)
 		if backoff != 2*time.Second {
 			t.Errorf("Expected 2s, got %v", backoff)
 		}
 
-		// Third retry: 4s
+		// 第三次重试: 4s
 		backoff = config.CalculateBackoff(2)
 		if backoff != 4*time.Second {
 			t.Errorf("Expected 4s, got %v", backoff)
@@ -567,7 +567,7 @@ func TestRetryConfig(t *testing.T) {
 	})
 
 	t.Run("MaxBackoff", func(t *testing.T) {
-		// Should not exceed max backoff
+		// 不应超过最大后退
 		backoff := config.CalculateBackoff(100)
 		if backoff > config.MaxBackoff {
 			t.Errorf("Backoff %v exceeds max %v", backoff, config.MaxBackoff)
@@ -575,7 +575,7 @@ func TestRetryConfig(t *testing.T) {
 	})
 }
 
-// TestTaskStatus tests task status methods
+// 任务状态测试任务状态方法
 func TestTaskStatus(t *testing.T) {
 	t.Run("IsTerminal", func(t *testing.T) {
 		terminalStatuses := []TaskStatus{
@@ -617,23 +617,23 @@ func TestTaskStatus(t *testing.T) {
 	})
 }
 
-// TestMessage tests message methods
+// 测试Message 测试消息方法
 func TestMessage(t *testing.T) {
 	t.Run("IsExpired", func(t *testing.T) {
-		// Not expired (no expiry set)
+		// 未过期( 未设定过期)
 		msg := &Message{ID: "test"}
 		if msg.IsExpired() {
 			t.Error("Message without expiry should not be expired")
 		}
 
-		// Not expired (future expiry)
+		// 未过期( 未来过期)
 		future := time.Now().Add(1 * time.Hour)
 		msg.ExpiresAt = &future
 		if msg.IsExpired() {
 			t.Error("Message with future expiry should not be expired")
 		}
 
-		// Expired
+		// 过期
 		past := time.Now().Add(-1 * time.Hour)
 		msg.ExpiresAt = &past
 		if !msg.IsExpired() {
@@ -644,20 +644,20 @@ func TestMessage(t *testing.T) {
 	t.Run("ShouldRetry", func(t *testing.T) {
 		config := DefaultRetryConfig()
 
-		// Should retry (not acked, not expired, under max retries)
+		// 应重试( 不敲, 未过期, 在最大重试下)
 		msg := &Message{ID: "test", RetryCount: 0}
 		if !msg.ShouldRetry(config) {
 			t.Error("Message should be retried")
 		}
 
-		// Should not retry (acked)
+		// 不应重试( 已保存)
 		now := time.Now()
 		msg.AckedAt = &now
 		if msg.ShouldRetry(config) {
 			t.Error("Acked message should not be retried")
 		}
 
-		// Should not retry (max retries exceeded)
+		// 不应重试( 超过最大重试)
 		msg.AckedAt = nil
 		msg.RetryCount = config.MaxRetries
 		if msg.ShouldRetry(config) {
@@ -666,17 +666,17 @@ func TestMessage(t *testing.T) {
 	})
 }
 
-// TestAsyncTask tests async task methods
+// TestAsync 任务测试合成任务方法
 func TestAsyncTask(t *testing.T) {
 	t.Run("Duration", func(t *testing.T) {
 		task := &AsyncTask{ID: "test"}
 
-		// No start time
+		// 没有开始时间
 		if task.Duration() != 0 {
 			t.Error("Duration should be 0 without start time")
 		}
 
-		// Running task
+		// 运行中的任务
 		start := time.Now().Add(-5 * time.Minute)
 		task.StartedAt = &start
 		duration := task.Duration()
@@ -684,7 +684,7 @@ func TestAsyncTask(t *testing.T) {
 			t.Errorf("Duration should be at least 5 minutes, got %v", duration)
 		}
 
-		// Completed task
+		// 已完成的任务
 		end := start.Add(2 * time.Minute)
 		task.CompletedAt = &end
 		if task.Duration() != 2*time.Minute {
@@ -698,19 +698,19 @@ func TestAsyncTask(t *testing.T) {
 			Timeout: 1 * time.Minute,
 		}
 
-		// Not started
+		// 未开始
 		if task.IsTimedOut() {
 			t.Error("Task without start time should not be timed out")
 		}
 
-		// Not timed out
+		// 未超时
 		recent := time.Now().Add(-30 * time.Second)
 		task.StartedAt = &recent
 		if task.IsTimedOut() {
 			t.Error("Recent task should not be timed out")
 		}
 
-		// Timed out
+		// 超时
 		old := time.Now().Add(-2 * time.Minute)
 		task.StartedAt = &old
 		if !task.IsTimedOut() {
@@ -743,7 +743,7 @@ func TestAsyncTask(t *testing.T) {
 	})
 }
 
-// TestFactory tests the factory functions
+// 工厂的功能
 func TestFactory(t *testing.T) {
 	t.Run("NewMessageStore_Memory", func(t *testing.T) {
 		config := DefaultStoreConfig()

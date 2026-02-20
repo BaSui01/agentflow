@@ -57,19 +57,19 @@ func TestObjectSchemaBuilder(t *testing.T) {
 	assert.Len(t, schema.Properties, 3)
 	assert.Equal(t, []string{"name", "age"}, schema.Required)
 
-	// Check name property
+	// 检查名称属性
 	nameProp := schema.GetProperty("name")
 	require.NotNil(t, nameProp)
 	assert.Equal(t, TypeString, nameProp.Type)
 	assert.Equal(t, 1, *nameProp.MinLength)
 
-	// Check age property
+	// 检查年龄属性
 	ageProp := schema.GetProperty("age")
 	require.NotNil(t, ageProp)
 	assert.Equal(t, TypeInteger, ageProp.Type)
 	assert.Equal(t, 0.0, *ageProp.Minimum)
 
-	// Check email property
+	// 检查电子邮件属性
 	emailProp := schema.GetProperty("email")
 	require.NotNil(t, emailProp)
 	assert.Equal(t, FormatEmail, emailProp.Format)
@@ -158,7 +158,7 @@ func TestNestedObjectSchema(t *testing.T) {
 		AddProperty("address", addressSchema).
 		AddRequired("name")
 
-	// Verify nested structure
+	// 验证嵌入式结构
 	assert.True(t, personSchema.HasProperty("address"))
 	addrProp := personSchema.GetProperty("address")
 	require.NotNil(t, addrProp)
@@ -191,11 +191,11 @@ func TestSchemaJSONSerialization(t *testing.T) {
 		AddProperty("priority", NewIntegerSchema().WithMinimum(1).WithMaximum(5)).
 		AddRequired("status")
 
-	// Serialize to JSON
+	// 序列化为 JSON
 	data, err := schema.ToJSON()
 	require.NoError(t, err)
 
-	// Deserialize back
+	// 切换回
 	parsed, err := FromJSON(data)
 	require.NoError(t, err)
 
@@ -213,7 +213,7 @@ func TestSchemaJSONIndent(t *testing.T) {
 	data, err := schema.ToJSONIndent()
 	require.NoError(t, err)
 
-	// Should contain indentation
+	// 应包含缩进
 	assert.Contains(t, string(data), "\n")
 	assert.Contains(t, string(data), "  ")
 }
@@ -229,12 +229,12 @@ func TestSchemaClone(t *testing.T) {
 
 	clone := original.Clone()
 
-	// Verify clone is equal
+	// 校验复制为等效
 	assert.Equal(t, original.Title, clone.Title)
 	assert.Equal(t, original.Description, clone.Description)
 	assert.Equal(t, original.Required, clone.Required)
 
-	// Modify clone and verify original is unchanged
+	// 修改复制并验证原件不变
 	clone.Title = "Modified"
 	clone.Properties["name"].MinLength = nil
 	clone.Required = append(clone.Required, "extra")
@@ -354,7 +354,7 @@ func TestAdditionalPropertiesUnmarshalJSON(t *testing.T) {
 }
 
 func TestComplexSchemaRoundTrip(t *testing.T) {
-	// Create a complex schema with nested objects, arrays, and various constraints
+	// 创建包含嵌入对象、阵列和各种约束的复杂方案
 	schema := &JSONSchema{
 		Schema:      "https://json-schema.org/draft/2020-12/schema",
 		Title:       "TaskResult",
@@ -398,22 +398,22 @@ func TestComplexSchemaRoundTrip(t *testing.T) {
 		Required: []string{"status", "message"},
 	}
 
-	// Serialize
+	// 序列化
 	data, err := schema.ToJSONIndent()
 	require.NoError(t, err)
 
-	// Deserialize
+	// 淡化
 	parsed, err := FromJSON(data)
 	require.NoError(t, err)
 
-	// Verify
+	// 校验
 	assert.Equal(t, schema.Schema, parsed.Schema)
 	assert.Equal(t, schema.Title, parsed.Title)
 	assert.Equal(t, schema.Type, parsed.Type)
 	assert.Equal(t, schema.Required, parsed.Required)
 	assert.Len(t, parsed.Properties, 6)
 
-	// Verify nested properties
+	// 校验嵌入属性
 	statusProp := parsed.GetProperty("status")
 	require.NotNil(t, statusProp)
 	assert.Equal(t, []any{"success", "failure", "pending"}, statusProp.Enum)
@@ -425,7 +425,7 @@ func TestComplexSchemaRoundTrip(t *testing.T) {
 }
 
 func TestSchemaWithComposition(t *testing.T) {
-	// Test allOf
+	// 测试全部
 	schema := &JSONSchema{
 		AllOf: []*JSONSchema{
 			NewObjectSchema().AddProperty("name", NewStringSchema()),
@@ -497,7 +497,7 @@ func TestSchemaWithDefs(t *testing.T) {
 	assert.NotNil(t, parsed.Defs["address"])
 }
 
-// Helper functions
+// 辅助功能
 func intPtr(i int) *int {
 	return &i
 }

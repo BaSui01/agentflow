@@ -11,7 +11,7 @@ import (
 	"go.uber.org/zap"
 )
 
-// RetryPolicy defines retry behavior.
+// 重试政策定义了重试行为 。
 type RetryPolicy struct {
 	MaxRetries     int           `json:"max_retries"`
 	InitialBackoff time.Duration `json:"initial_backoff"`
@@ -19,7 +19,7 @@ type RetryPolicy struct {
 	Multiplier     float64       `json:"multiplier"`
 }
 
-// DefaultRetryPolicy returns sensible defaults.
+// 默认重试政策返回合理默认 。
 func DefaultRetryPolicy() *RetryPolicy {
 	return &RetryPolicy{
 		MaxRetries:     3,
@@ -29,7 +29,7 @@ func DefaultRetryPolicy() *RetryPolicy {
 	}
 }
 
-// CircuitState represents circuit breaker state.
+// 电路状态代表断路器状态.
 type CircuitState int32
 
 const (
@@ -38,14 +38,14 @@ const (
 	CircuitHalfOpen
 )
 
-// CircuitBreakerConfig configures the circuit breaker.
+// CircuitBreakerConfig配置断路器.
 type CircuitBreakerConfig struct {
 	FailureThreshold int           `json:"failure_threshold"`
 	SuccessThreshold int           `json:"success_threshold"`
 	Timeout          time.Duration `json:"timeout"`
 }
 
-// DefaultCircuitBreakerConfig returns sensible defaults.
+// 默认 CircuitBreakerConfig 返回合理的默认值 。
 func DefaultCircuitBreakerConfig() *CircuitBreakerConfig {
 	return &CircuitBreakerConfig{
 		FailureThreshold: 5,
@@ -54,7 +54,7 @@ func DefaultCircuitBreakerConfig() *CircuitBreakerConfig {
 	}
 }
 
-// CircuitBreaker implements the circuit breaker pattern.
+// CircuitBreaker执行断路器模式.
 type CircuitBreaker struct {
 	config          *CircuitBreakerConfig
 	state           atomic.Int32
@@ -65,10 +65,10 @@ type CircuitBreaker struct {
 	logger          *zap.Logger
 }
 
-// ErrCircuitOpen is returned when circuit is open.
+// 打开电路时返回 Err Circuit Open 。
 var ErrCircuitOpen = errors.New("circuit breaker is open")
 
-// NewCircuitBreaker creates a new circuit breaker.
+// 新CircuitBreaker创建了新的断路器.
 func NewCircuitBreaker(config *CircuitBreakerConfig, logger *zap.Logger) *CircuitBreaker {
 	if config == nil {
 		config = DefaultCircuitBreakerConfig()
@@ -79,12 +79,12 @@ func NewCircuitBreaker(config *CircuitBreakerConfig, logger *zap.Logger) *Circui
 	}
 }
 
-// State returns current circuit state.
+// 状态返回当前电路状态 。
 func (cb *CircuitBreaker) State() CircuitState {
 	return CircuitState(cb.state.Load())
 }
 
-// Call executes the function with circuit breaker protection.
+// 调用以断路器保护功能执行 。
 func (cb *CircuitBreaker) Call(ctx context.Context, fn func() error) error {
 	state := cb.State()
 
@@ -132,7 +132,7 @@ func (cb *CircuitBreaker) recordSuccess() {
 	}
 }
 
-// ResilientProvider wraps a provider with retry, circuit breaker, and idempotency.
+// 耐活性 Provider用重试,断路器和一能来包裹一个提供者.
 type ResilientProvider struct {
 	provider       Provider
 	retryPolicy    *RetryPolicy
@@ -142,7 +142,7 @@ type ResilientProvider struct {
 	logger         *zap.Logger
 }
 
-// ResilientConfig configures resilient provider.
+// 具有弹性的Config配置有弹性的提供者.
 type ResilientConfig struct {
 	RetryPolicy       *RetryPolicy
 	CircuitBreaker    *CircuitBreakerConfig
@@ -150,13 +150,13 @@ type ResilientConfig struct {
 	IdempotencyTTL    time.Duration
 }
 
-// NewResilientProviderSimple creates a resilient provider with default config.
-// This is a convenience function for simple use cases.
+// NewReselient ProviderSimple创建了具有弹性的提供者并默认配置.
+// 这是简单使用案件的便利功能。
 func NewResilientProviderSimple(provider Provider, _ interface{}, logger *zap.Logger) *ResilientProvider {
 	return NewResilientProvider(provider, nil, logger)
 }
 
-// NewResilientProvider creates a resilient provider wrapper.
+// NewResylient Provider创建了具有弹性的提供者包装.
 func NewResilientProvider(provider Provider, config *ResilientConfig, logger *zap.Logger) *ResilientProvider {
 	if config == nil {
 		config = &ResilientConfig{
@@ -176,7 +176,7 @@ func NewResilientProvider(provider Provider, config *ResilientConfig, logger *za
 	}
 }
 
-// Completion implements Provider with resilience.
+// 完成器具有弹性。
 func (rp *ResilientProvider) Completion(ctx context.Context, req *ChatRequest) (*ChatResponse, error) {
 	key := rp.generateIdempotencyKey(req)
 	if cached, ok := rp.idempotencyMap.Load(key); ok {
@@ -233,7 +233,7 @@ func (rp *ResilientProvider) Completion(ctx context.Context, req *ChatRequest) (
 	return resp, nil
 }
 
-// Stream implements Provider (no retry for streaming).
+// Stream 执行器 提供器( 不重试进行 streaming) 。
 func (rp *ResilientProvider) Stream(ctx context.Context, req *ChatRequest) (<-chan StreamChunk, error) {
 	if rp.circuitBreaker.State() == CircuitOpen {
 		return nil, ErrCircuitOpen
@@ -241,22 +241,22 @@ func (rp *ResilientProvider) Stream(ctx context.Context, req *ChatRequest) (<-ch
 	return rp.provider.Stream(ctx, req)
 }
 
-// HealthCheck implements Provider.
+// 健康检查工具 提供者。
 func (rp *ResilientProvider) HealthCheck(ctx context.Context) (*HealthStatus, error) {
 	return rp.provider.HealthCheck(ctx)
 }
 
-// Name implements Provider.
+// 名称执行提供方.
 func (rp *ResilientProvider) Name() string {
 	return rp.provider.Name()
 }
 
-// SupportsNativeFunctionCalling implements Provider.
+// 支持 NativeFunctionCalling 执行提供者.
 func (rp *ResilientProvider) SupportsNativeFunctionCalling() bool {
 	return rp.provider.SupportsNativeFunctionCalling()
 }
 
-// ListModels implements Provider.
+// ListModels 执行提供者 。
 func (rp *ResilientProvider) ListModels(ctx context.Context) ([]Model, error) {
 	return rp.provider.ListModels(ctx)
 }

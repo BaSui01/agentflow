@@ -12,57 +12,57 @@ import (
 	"go.uber.org/zap"
 )
 
-// CapabilityRegistry is the default implementation of the Registry interface.
-// It provides in-memory storage for agent and capability information with
-// support for health checking and event notifications.
+// 能力登记是书记官处接口的默认执行。
+// 它为特工提供内存,并提供能力信息
+// 支持健康检查和事件通知。
 type CapabilityRegistry struct {
 	mu sync.RWMutex
 
-	// agents stores registered agents by ID.
+	// 特工用身份证储存注册探员
 	agents map[string]*AgentInfo
 
-	// capabilityIndex indexes capabilities by name for fast lookup.
+	// 能力 按名称索引快速检索的能力。
 	capabilityIndex map[string]map[string]*CapabilityInfo // capability name -> agent ID -> capability
 
-	// eventHandlers stores event handlers.
+	// 事件 Handlers 存储事件处理器。
 	eventHandlers map[string]DiscoveryEventHandler
 	handlerMu     sync.RWMutex
 
-	// healthChecker performs periodic health checks.
+	// 健康检查员定期进行健康检查。
 	healthChecker *HealthChecker
 
-	// config holds registry configuration.
+	// 配置包含注册配置 。
 	config *RegistryConfig
 
-	// logger is the logger instance.
+	// logger 是日志实例 。
 	logger *zap.Logger
 
-	// done signals shutdown.
+	// 信号关闭了
 	done chan struct{}
 }
 
-// RegistryConfig holds configuration for the capability registry.
+// 登记册Config拥有能力登记册的配置。
 type RegistryConfig struct {
-	// HealthCheckInterval is the interval between health checks.
+	// 健康检查Interval是健康检查的间隔.
 	HealthCheckInterval time.Duration `json:"health_check_interval"`
 
-	// HealthCheckTimeout is the timeout for health checks.
+	// 健康检查 暂停是健康检查的暂停。
 	HealthCheckTimeout time.Duration `json:"health_check_timeout"`
 
-	// UnhealthyThreshold is the number of failed health checks before marking unhealthy.
+	// 体质不健康 阈值是指在标记不健康之前,健康检查失败的次数.
 	UnhealthyThreshold int `json:"unhealthy_threshold"`
 
-	// RemoveUnhealthyAfter is the duration after which unhealthy agents are removed.
+	// 移除Unhealty 之后是清除不健康剂的期限。
 	RemoveUnhealthyAfter time.Duration `json:"remove_unhealthy_after"`
 
-	// EnableHealthCheck enables periodic health checking.
+	// 启用健康检查可以定期进行健康检查。
 	EnableHealthCheck bool `json:"enable_health_check"`
 
-	// DefaultCapabilityScore is the default score for new capabilities.
+	// 默认能力分数是新能力的默认分数.
 	DefaultCapabilityScore float64 `json:"default_capability_score"`
 }
 
-// DefaultRegistryConfig returns a RegistryConfig with sensible defaults.
+// 默认 RegistryConfig 返回带有合理默认的注册Config 。
 func DefaultRegistryConfig() *RegistryConfig {
 	return &RegistryConfig{
 		HealthCheckInterval:    30 * time.Second,
@@ -74,7 +74,7 @@ func DefaultRegistryConfig() *RegistryConfig {
 	}
 }
 
-// NewCapabilityRegistry creates a new capability registry.
+// 新能力登记系统建立了一个新的能力登记册。
 func NewCapabilityRegistry(config *RegistryConfig, logger *zap.Logger) *CapabilityRegistry {
 	if config == nil {
 		config = DefaultRegistryConfig()
@@ -92,7 +92,7 @@ func NewCapabilityRegistry(config *RegistryConfig, logger *zap.Logger) *Capabili
 		done:            make(chan struct{}),
 	}
 
-	// Initialize health checker if enabled
+	// 如果启用, 初始化健康检查器
 	if config.EnableHealthCheck {
 		r.healthChecker = NewHealthChecker(&HealthCheckerConfig{
 			Interval:           config.HealthCheckInterval,
@@ -104,7 +104,7 @@ func NewCapabilityRegistry(config *RegistryConfig, logger *zap.Logger) *Capabili
 	return r
 }
 
-// Start starts the registry background processes.
+// 启动登记册背景进程。
 func (r *CapabilityRegistry) Start(ctx context.Context) error {
 	if r.healthChecker != nil {
 		if err := r.healthChecker.Start(ctx); err != nil {
@@ -116,7 +116,7 @@ func (r *CapabilityRegistry) Start(ctx context.Context) error {
 	return nil
 }
 
-// RegisterAgent registers an agent with its capabilities.
+// 代理人对具有其能力的代理人进行登记。
 func (r *CapabilityRegistry) RegisterAgent(ctx context.Context, info *AgentInfo) error {
 	if info == nil {
 		return fmt.Errorf("agent info is nil")
@@ -133,12 +133,12 @@ func (r *CapabilityRegistry) RegisterAgent(ctx context.Context, info *AgentInfo)
 
 	agentID := info.Card.Name
 
-	// Check if agent already exists
+	// 检查代理已存在
 	if _, exists := r.agents[agentID]; exists {
 		return fmt.Errorf("agent %s already registered", agentID)
 	}
 
-	// Set defaults
+	// 设定默认
 	now := time.Now()
 	info.RegisteredAt = now
 	info.LastHeartbeat = now
@@ -146,7 +146,7 @@ func (r *CapabilityRegistry) RegisterAgent(ctx context.Context, info *AgentInfo)
 		info.Status = AgentStatusOnline
 	}
 
-	// Initialize capabilities
+	// 初始化能力
 	for i := range info.Capabilities {
 		cap := &info.Capabilities[i]
 		cap.AgentID = agentID
@@ -161,11 +161,11 @@ func (r *CapabilityRegistry) RegisterAgent(ctx context.Context, info *AgentInfo)
 			cap.Score = r.config.DefaultCapabilityScore
 		}
 
-		// Add to capability index
+		// 添加到能力指数
 		r.indexCapability(cap)
 	}
 
-	// Store agent
+	// 存储代理
 	r.agents[agentID] = info
 
 	r.logger.Info("agent registered",
@@ -173,7 +173,7 @@ func (r *CapabilityRegistry) RegisterAgent(ctx context.Context, info *AgentInfo)
 		zap.Int("capabilities", len(info.Capabilities)),
 	)
 
-	// Emit event
+	// 释放事件
 	r.emitEvent(&DiscoveryEvent{
 		Type:      DiscoveryEventAgentRegistered,
 		AgentID:   agentID,
@@ -183,7 +183,7 @@ func (r *CapabilityRegistry) RegisterAgent(ctx context.Context, info *AgentInfo)
 	return nil
 }
 
-// UnregisterAgent unregisters an agent.
+// 未注册代理 未经注册代理。
 func (r *CapabilityRegistry) UnregisterAgent(ctx context.Context, agentID string) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -193,17 +193,17 @@ func (r *CapabilityRegistry) UnregisterAgent(ctx context.Context, agentID string
 		return fmt.Errorf("agent %s not found", agentID)
 	}
 
-	// Remove capabilities from index
+	// 从索引中删除能力
 	for _, cap := range info.Capabilities {
 		r.removeCapabilityFromIndex(cap.Capability.Name, agentID)
 	}
 
-	// Remove agent
+	// 删除代理
 	delete(r.agents, agentID)
 
 	r.logger.Info("agent unregistered", zap.String("agent_id", agentID))
 
-	// Emit event
+	// 释放事件
 	r.emitEvent(&DiscoveryEvent{
 		Type:      DiscoveryEventAgentUnregistered,
 		AgentID:   agentID,
@@ -213,7 +213,7 @@ func (r *CapabilityRegistry) UnregisterAgent(ctx context.Context, agentID string
 	return nil
 }
 
-// UpdateAgent updates an agent's information.
+// 更新代理更新一个代理的信息 。
 func (r *CapabilityRegistry) UpdateAgent(ctx context.Context, info *AgentInfo) error {
 	if info == nil || info.Card == nil {
 		return fmt.Errorf("invalid agent info")
@@ -228,18 +228,18 @@ func (r *CapabilityRegistry) UpdateAgent(ctx context.Context, info *AgentInfo) e
 		return fmt.Errorf("agent %s not found", agentID)
 	}
 
-	// Update fields
+	// 更新字段
 	now := time.Now()
 	info.RegisteredAt = existing.RegisteredAt
 	info.LastHeartbeat = now
 
-	// Update capability index
-	// First, remove old capabilities
+	// 更新能力指数
+	// 首先去掉旧能力
 	for _, cap := range existing.Capabilities {
 		r.removeCapabilityFromIndex(cap.Capability.Name, agentID)
 	}
 
-	// Then, add new capabilities
+	// 然后,增加新的能力
 	for i := range info.Capabilities {
 		cap := &info.Capabilities[i]
 		cap.AgentID = agentID
@@ -251,12 +251,12 @@ func (r *CapabilityRegistry) UpdateAgent(ctx context.Context, info *AgentInfo) e
 		r.indexCapability(cap)
 	}
 
-	// Store updated agent
+	// 存储更新代理
 	r.agents[agentID] = info
 
 	r.logger.Info("agent updated", zap.String("agent_id", agentID))
 
-	// Emit event
+	// 释放事件
 	r.emitEvent(&DiscoveryEvent{
 		Type:      DiscoveryEventAgentUpdated,
 		AgentID:   agentID,
@@ -266,7 +266,7 @@ func (r *CapabilityRegistry) UpdateAgent(ctx context.Context, info *AgentInfo) e
 	return nil
 }
 
-// GetAgent retrieves an agent by ID.
+// Get Agent通过身份识别找到一个特工.
 func (r *CapabilityRegistry) GetAgent(ctx context.Context, agentID string) (*AgentInfo, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -276,11 +276,11 @@ func (r *CapabilityRegistry) GetAgent(ctx context.Context, agentID string) (*Age
 		return nil, fmt.Errorf("agent %s not found", agentID)
 	}
 
-	// Return a copy
+	// 返回副本
 	return r.copyAgentInfo(info), nil
 }
 
-// ListAgents lists all registered agents.
+// ListAgents列出所有注册代理.
 func (r *CapabilityRegistry) ListAgents(ctx context.Context) ([]*AgentInfo, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -293,7 +293,7 @@ func (r *CapabilityRegistry) ListAgents(ctx context.Context) ([]*AgentInfo, erro
 	return agents, nil
 }
 
-// RegisterCapability registers a capability for an agent.
+// 注册能力登记一种代理的能力。
 func (r *CapabilityRegistry) RegisterCapability(ctx context.Context, agentID string, cap *CapabilityInfo) error {
 	if cap == nil {
 		return fmt.Errorf("capability info is nil")
@@ -307,14 +307,14 @@ func (r *CapabilityRegistry) RegisterCapability(ctx context.Context, agentID str
 		return fmt.Errorf("agent %s not found", agentID)
 	}
 
-	// Check if capability already exists
+	// 检查是否已经存在能力
 	for _, existing := range info.Capabilities {
 		if existing.Capability.Name == cap.Capability.Name {
 			return fmt.Errorf("capability %s already registered for agent %s", cap.Capability.Name, agentID)
 		}
 	}
 
-	// Set defaults
+	// 设定默认
 	now := time.Now()
 	cap.AgentID = agentID
 	cap.AgentName = info.Card.Name
@@ -328,10 +328,10 @@ func (r *CapabilityRegistry) RegisterCapability(ctx context.Context, agentID str
 		cap.Score = r.config.DefaultCapabilityScore
 	}
 
-	// Add to agent
+	// 添加到代理服务器
 	info.Capabilities = append(info.Capabilities, *cap)
 
-	// Add to index
+	// 添加到索引中
 	r.indexCapability(cap)
 
 	r.logger.Info("capability registered",
@@ -339,7 +339,7 @@ func (r *CapabilityRegistry) RegisterCapability(ctx context.Context, agentID str
 		zap.String("capability", cap.Capability.Name),
 	)
 
-	// Emit event
+	// 释放事件
 	r.emitEvent(&DiscoveryEvent{
 		Type:       DiscoveryEventCapabilityAdded,
 		AgentID:    agentID,
@@ -350,7 +350,7 @@ func (r *CapabilityRegistry) RegisterCapability(ctx context.Context, agentID str
 	return nil
 }
 
-// UnregisterCapability unregisters a capability.
+// 未注册能力不注册 一种能力。
 func (r *CapabilityRegistry) UnregisterCapability(ctx context.Context, agentID string, capabilityName string) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -360,7 +360,7 @@ func (r *CapabilityRegistry) UnregisterCapability(ctx context.Context, agentID s
 		return fmt.Errorf("agent %s not found", agentID)
 	}
 
-	// Find and remove capability
+	// 查找并删除能力
 	found := false
 	for i, cap := range info.Capabilities {
 		if cap.Capability.Name == capabilityName {
@@ -374,7 +374,7 @@ func (r *CapabilityRegistry) UnregisterCapability(ctx context.Context, agentID s
 		return fmt.Errorf("capability %s not found for agent %s", capabilityName, agentID)
 	}
 
-	// Remove from index
+	// 从索引中删除
 	r.removeCapabilityFromIndex(capabilityName, agentID)
 
 	r.logger.Info("capability unregistered",
@@ -382,7 +382,7 @@ func (r *CapabilityRegistry) UnregisterCapability(ctx context.Context, agentID s
 		zap.String("capability", capabilityName),
 	)
 
-	// Emit event
+	// 释放事件
 	r.emitEvent(&DiscoveryEvent{
 		Type:       DiscoveryEventCapabilityRemoved,
 		AgentID:    agentID,
@@ -393,7 +393,7 @@ func (r *CapabilityRegistry) UnregisterCapability(ctx context.Context, agentID s
 	return nil
 }
 
-// UpdateCapability updates a capability.
+// 更新能力更新一个能力.
 func (r *CapabilityRegistry) UpdateCapability(ctx context.Context, agentID string, cap *CapabilityInfo) error {
 	if cap == nil {
 		return fmt.Errorf("capability info is nil")
@@ -407,11 +407,11 @@ func (r *CapabilityRegistry) UpdateCapability(ctx context.Context, agentID strin
 		return fmt.Errorf("agent %s not found", agentID)
 	}
 
-	// Find and update capability
+	// 查找和更新能力
 	found := false
 	for i, existing := range info.Capabilities {
 		if existing.Capability.Name == cap.Capability.Name {
-			// Preserve registration time
+			// 保留注册时间
 			cap.RegisteredAt = existing.RegisteredAt
 			cap.AgentID = agentID
 			cap.AgentName = info.Card.Name
@@ -420,7 +420,7 @@ func (r *CapabilityRegistry) UpdateCapability(ctx context.Context, agentID strin
 			info.Capabilities[i] = *cap
 			found = true
 
-			// Update index
+			// 更新索引
 			r.indexCapability(cap)
 			break
 		}
@@ -435,7 +435,7 @@ func (r *CapabilityRegistry) UpdateCapability(ctx context.Context, agentID strin
 		zap.String("capability", cap.Capability.Name),
 	)
 
-	// Emit event
+	// 释放事件
 	r.emitEvent(&DiscoveryEvent{
 		Type:       DiscoveryEventCapabilityUpdated,
 		AgentID:    agentID,
@@ -446,7 +446,7 @@ func (r *CapabilityRegistry) UpdateCapability(ctx context.Context, agentID strin
 	return nil
 }
 
-// GetCapability retrieves a capability by agent ID and name.
+// Get Capability通过代理身份和姓名检索能力.
 func (r *CapabilityRegistry) GetCapability(ctx context.Context, agentID string, capabilityName string) (*CapabilityInfo, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -466,7 +466,7 @@ func (r *CapabilityRegistry) GetCapability(ctx context.Context, agentID string, 
 	return nil, fmt.Errorf("capability %s not found for agent %s", capabilityName, agentID)
 }
 
-// ListCapabilities lists all capabilities for an agent.
+// List Capabilitys 列出一个代理的所有能力.
 func (r *CapabilityRegistry) ListCapabilities(ctx context.Context, agentID string) ([]CapabilityInfo, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -476,13 +476,13 @@ func (r *CapabilityRegistry) ListCapabilities(ctx context.Context, agentID strin
 		return nil, fmt.Errorf("agent %s not found", agentID)
 	}
 
-	// Return a copy
+	// 返回副本
 	caps := make([]CapabilityInfo, len(info.Capabilities))
 	copy(caps, info.Capabilities)
 	return caps, nil
 }
 
-// FindCapabilities finds capabilities by name across all agents.
+// Find Capabilitys 在所有特工中按名称找到能力.
 func (r *CapabilityRegistry) FindCapabilities(ctx context.Context, capabilityName string) ([]CapabilityInfo, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -500,7 +500,7 @@ func (r *CapabilityRegistry) FindCapabilities(ctx context.Context, capabilityNam
 	return caps, nil
 }
 
-// UpdateAgentStatus updates an agent's status.
+// 更新代理状态更新代理状态 。
 func (r *CapabilityRegistry) UpdateAgentStatus(ctx context.Context, agentID string, status AgentStatus) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -523,7 +523,7 @@ func (r *CapabilityRegistry) UpdateAgentStatus(ctx context.Context, agentID stri
 	return nil
 }
 
-// UpdateAgentLoad updates an agent's load.
+// 更新 AgentLoad 更新一个代理的负载 。
 func (r *CapabilityRegistry) UpdateAgentLoad(ctx context.Context, agentID string, load float64) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -536,7 +536,7 @@ func (r *CapabilityRegistry) UpdateAgentLoad(ctx context.Context, agentID string
 	info.Load = load
 	info.LastHeartbeat = time.Now()
 
-	// Update capability loads
+	// 更新容量负荷
 	for i := range info.Capabilities {
 		info.Capabilities[i].Load = load
 	}
@@ -544,7 +544,7 @@ func (r *CapabilityRegistry) UpdateAgentLoad(ctx context.Context, agentID string
 	return nil
 }
 
-// RecordExecution records an execution result for a capability.
+// 记录 Execution 记录一个执行结果 一个能力。
 func (r *CapabilityRegistry) RecordExecution(ctx context.Context, agentID string, capabilityName string, success bool, latency time.Duration) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -562,23 +562,23 @@ func (r *CapabilityRegistry) RecordExecution(ctx context.Context, agentID string
 				info.Capabilities[i].FailureCount++
 			}
 
-			// Update average latency
+			// 更新平均延迟
 			totalCount := info.Capabilities[i].SuccessCount + info.Capabilities[i].FailureCount
 			if totalCount == 1 {
 				info.Capabilities[i].AvgLatency = latency
 			} else {
-				// Exponential moving average
+				// 指示移动平均值
 				alpha := 0.2
 				info.Capabilities[i].AvgLatency = time.Duration(
 					float64(info.Capabilities[i].AvgLatency)*(1-alpha) + float64(latency)*alpha,
 				)
 			}
 
-			// Update score based on success rate
+			// 根据成功率更新分数
 			successRate := float64(info.Capabilities[i].SuccessCount) / float64(totalCount)
 			info.Capabilities[i].Score = successRate * 100
 
-			// Update index
+			// 更新索引
 			r.indexCapability(&info.Capabilities[i])
 
 			return nil
@@ -588,7 +588,7 @@ func (r *CapabilityRegistry) RecordExecution(ctx context.Context, agentID string
 	return fmt.Errorf("capability %s not found for agent %s", capabilityName, agentID)
 }
 
-// Subscribe subscribes to discovery events.
+// 订阅了发现事件。
 func (r *CapabilityRegistry) Subscribe(handler DiscoveryEventHandler) string {
 	r.handlerMu.Lock()
 	defer r.handlerMu.Unlock()
@@ -598,7 +598,7 @@ func (r *CapabilityRegistry) Subscribe(handler DiscoveryEventHandler) string {
 	return id
 }
 
-// Unsubscribe unsubscribes from discovery events.
+// 不订阅来自发现事件的用户 。
 func (r *CapabilityRegistry) Unsubscribe(subscriptionID string) {
 	r.handlerMu.Lock()
 	defer r.handlerMu.Unlock()
@@ -606,7 +606,7 @@ func (r *CapabilityRegistry) Unsubscribe(subscriptionID string) {
 	delete(r.eventHandlers, subscriptionID)
 }
 
-// Close closes the registry.
+// 关闭注册 。
 func (r *CapabilityRegistry) Close() error {
 	close(r.done)
 
@@ -620,7 +620,7 @@ func (r *CapabilityRegistry) Close() error {
 	return nil
 }
 
-// indexCapability adds a capability to the index.
+// 指数能力为指数增加了一种能力。
 func (r *CapabilityRegistry) indexCapability(cap *CapabilityInfo) {
 	capName := cap.Capability.Name
 	if r.capabilityIndex[capName] == nil {
@@ -629,7 +629,7 @@ func (r *CapabilityRegistry) indexCapability(cap *CapabilityInfo) {
 	r.capabilityIndex[capName][cap.AgentID] = cap
 }
 
-// removeCapabilityFromIndex removes a capability from the index.
+// 从Index中去掉Capability,从索引中去掉一个能力.
 func (r *CapabilityRegistry) removeCapabilityFromIndex(capabilityName, agentID string) {
 	if agentCaps, exists := r.capabilityIndex[capabilityName]; exists {
 		delete(agentCaps, agentID)
@@ -639,7 +639,7 @@ func (r *CapabilityRegistry) removeCapabilityFromIndex(capabilityName, agentID s
 	}
 }
 
-// emitEvent emits a discovery event to all subscribers.
+// Event向所有订阅者发布发现事件。
 func (r *CapabilityRegistry) emitEvent(event *DiscoveryEvent) {
 	r.handlerMu.RLock()
 	handlers := make([]DiscoveryEventHandler, 0, len(r.eventHandlers))
@@ -653,7 +653,7 @@ func (r *CapabilityRegistry) emitEvent(event *DiscoveryEvent) {
 	}
 }
 
-// copyAgentInfo creates a deep copy of AgentInfo.
+// 复制 AgentInfo 创建 AgentInfo 的深层副本.
 func (r *CapabilityRegistry) copyAgentInfo(info *AgentInfo) *AgentInfo {
 	if info == nil {
 		return nil
@@ -691,7 +691,7 @@ func (r *CapabilityRegistry) copyAgentInfo(info *AgentInfo) *AgentInfo {
 	return copy
 }
 
-// GetAgentsByCapability returns all agents that have a specific capability.
+// Get AgentsBy Capability 返回所有具有特定能力的代理.
 func (r *CapabilityRegistry) GetAgentsByCapability(ctx context.Context, capabilityName string) ([]*AgentInfo, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -711,7 +711,7 @@ func (r *CapabilityRegistry) GetAgentsByCapability(ctx context.Context, capabili
 	return agents, nil
 }
 
-// GetActiveAgents returns all agents with online status.
+// GetAactiveAgents返回所有具有在线状态的代理.
 func (r *CapabilityRegistry) GetActiveAgents(ctx context.Context) ([]*AgentInfo, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -726,7 +726,7 @@ func (r *CapabilityRegistry) GetActiveAgents(ctx context.Context) ([]*AgentInfo,
 	return agents, nil
 }
 
-// Heartbeat updates the heartbeat timestamp for an agent.
+// Heartbeat为代理更新了心跳时间戳.
 func (r *CapabilityRegistry) Heartbeat(ctx context.Context, agentID string) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -740,13 +740,13 @@ func (r *CapabilityRegistry) Heartbeat(ctx context.Context, agentID string) erro
 	return nil
 }
 
-// HealthChecker performs periodic health checks on registered agents.
+// 健康检查员定期对注册的代理人进行健康检查。
 type HealthChecker struct {
 	config   *HealthCheckerConfig
 	registry *CapabilityRegistry
 	logger   *zap.Logger
 
-	// failureCounts tracks consecutive failures per agent.
+	// 失败 。
 	failureCounts map[string]int
 	failureMu     sync.Mutex
 
@@ -754,19 +754,19 @@ type HealthChecker struct {
 	wg   sync.WaitGroup
 }
 
-// HealthCheckerConfig holds configuration for the health checker.
+// 健康检查员Config拥有健康检查员的配置.
 type HealthCheckerConfig struct {
-	// Interval is the interval between health checks.
+	// 间距是指健康检查之间的间隔.
 	Interval time.Duration
 
-	// Timeout is the timeout for health checks.
+	// 暂停是健康检查的暂停。
 	Timeout time.Duration
 
-	// UnhealthyThreshold is the number of consecutive failures before marking unhealthy.
+	// 体质不健康 阈值是标记不健康前连续失败的次数.
 	UnhealthyThreshold int
 }
 
-// NewHealthChecker creates a new health checker.
+// 新健康检查器创造了一个新的健康检查器。
 func NewHealthChecker(config *HealthCheckerConfig, registry *CapabilityRegistry, logger *zap.Logger) *HealthChecker {
 	return &HealthChecker{
 		config:        config,
@@ -777,7 +777,7 @@ func NewHealthChecker(config *HealthCheckerConfig, registry *CapabilityRegistry,
 	}
 }
 
-// Start starts the health checker.
+// 开始体检
 func (h *HealthChecker) Start(ctx context.Context) error {
 	h.wg.Add(1)
 	go h.run()
@@ -785,7 +785,7 @@ func (h *HealthChecker) Start(ctx context.Context) error {
 	return nil
 }
 
-// Stop stops the health checker.
+// 停止停止健康检查。
 func (h *HealthChecker) Stop(ctx context.Context) error {
 	close(h.done)
 	h.wg.Wait()
@@ -793,7 +793,7 @@ func (h *HealthChecker) Stop(ctx context.Context) error {
 	return nil
 }
 
-// run is the main health check loop.
+// 运行是主要的健康检查循环。
 func (h *HealthChecker) run() {
 	defer h.wg.Done()
 
@@ -810,7 +810,7 @@ func (h *HealthChecker) run() {
 	}
 }
 
-// checkAll performs health checks on all registered agents.
+// 对所有注册代理人进行健康检查。
 func (h *HealthChecker) checkAll() {
 	ctx, cancel := context.WithTimeout(context.Background(), h.config.Timeout)
 	defer cancel()
@@ -826,7 +826,7 @@ func (h *HealthChecker) checkAll() {
 	}
 }
 
-// checkAgent performs a health check on a single agent.
+// 代理对单一代理进行健康检查。
 func (h *HealthChecker) checkAgent(ctx context.Context, agent *AgentInfo) {
 	agentID := agent.Card.Name
 	result := h.performHealthCheck(ctx, agent)
@@ -835,7 +835,7 @@ func (h *HealthChecker) checkAgent(ctx context.Context, agent *AgentInfo) {
 	defer h.failureMu.Unlock()
 
 	if result.Healthy {
-		// Reset failure count on success
+		// 重设失败取决于成功
 		if h.failureCounts[agentID] > 0 {
 			h.logger.Info("agent health recovered",
 				zap.String("agent_id", agentID),
@@ -868,7 +868,7 @@ func (h *HealthChecker) checkAgent(ctx context.Context, agent *AgentInfo) {
 	}
 }
 
-// performHealthCheck performs the actual health check.
+// 进行健康检查
 func (h *HealthChecker) performHealthCheck(ctx context.Context, agent *AgentInfo) *HealthCheckResult {
 	start := time.Now()
 	result := &HealthCheckResult{
@@ -876,9 +876,9 @@ func (h *HealthChecker) performHealthCheck(ctx context.Context, agent *AgentInfo
 		Timestamp: start,
 	}
 
-	// For local agents, check if they're still registered and responsive
+	// 对本地特工,请检查他们是否还在登记和反应
 	if agent.IsLocal {
-		// Check heartbeat freshness
+		// 检查心跳新鲜度
 		if time.Since(agent.LastHeartbeat) > h.config.Interval*3 {
 			result.Healthy = false
 			result.Status = AgentStatusUnhealthy
@@ -891,7 +891,7 @@ func (h *HealthChecker) performHealthCheck(ctx context.Context, agent *AgentInfo
 		return result
 	}
 
-	// For remote agents, perform HTTP health check
+	// 对远程特工进行HTTP健康检查
 	if agent.Endpoint != "" {
 		healthURL := strings.TrimRight(agent.Endpoint, "/") + "/health"
 		client := &http.Client{Timeout: 5 * time.Second}
@@ -930,7 +930,7 @@ func (h *HealthChecker) performHealthCheck(ctx context.Context, agent *AgentInfo
 	return result
 }
 
-// mustMarshal marshals data to JSON, returning nil on error.
+// must Marshal 向 JSON 输入数据, 错误时返回零 。
 func mustMarshal(v interface{}) json.RawMessage {
 	data, err := json.Marshal(v)
 	if err != nil {
@@ -939,5 +939,5 @@ func mustMarshal(v interface{}) json.RawMessage {
 	return data
 }
 
-// Ensure CapabilityRegistry implements Registry interface.
+// 确保能力登记工具注册界面。
 var _ Registry = (*CapabilityRegistry)(nil)

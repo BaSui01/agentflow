@@ -11,13 +11,13 @@ import (
 	"time"
 )
 
-// JinaProvider implements reranking using Jina AI's API.
+// Jina Provider执行重排 使用 Jina AI 的 API.
 type JinaProvider struct {
 	cfg    JinaConfig
 	client *http.Client
 }
 
-// NewJinaProvider creates a new Jina reranker provider.
+// 新JinaProvider创建了新的Jina reranker供应商.
 func NewJinaProvider(cfg JinaConfig) *JinaProvider {
 	if cfg.BaseURL == "" {
 		cfg.BaseURL = "https://api.jina.ai"
@@ -62,7 +62,7 @@ type jinaRerankResponse struct {
 	} `json:"usage"`
 }
 
-// Rerank reranks documents using Jina AI.
+// 重新排序使用Jina AI的文件重新排序.
 func (p *JinaProvider) Rerank(ctx context.Context, req *RerankRequest) (*RerankResponse, error) {
 	model := req.Model
 	if model == "" {
@@ -133,7 +133,7 @@ func (p *JinaProvider) Rerank(ctx context.Context, req *RerankRequest) (*RerankR
 	}, nil
 }
 
-// RerankSimple is a convenience method for simple reranking.
+// RerankSimple是简单的再排的一种方便方法.
 func (p *JinaProvider) RerankSimple(ctx context.Context, query string, documents []string, topN int) ([]RerankResult, error) {
 	docs := make([]Document, len(documents))
 	for i, d := range documents {

@@ -58,7 +58,7 @@ func TestMultiProviderRouter_SelectProviderWithModel(t *testing.T) {
 		t.Fatalf("InitDatabase: %v", err)
 	}
 
-	// Seed providers/models.
+	// 种子提供者/模型。
 	pA := LLMProvider{Code: "mockA", Name: "Mock A", Status: LLMProviderStatusActive}
 	pB := LLMProvider{Code: "mockB", Name: "Mock B", Status: LLMProviderStatusActive}
 	if err := db.Create(&pA).Error; err != nil {
@@ -73,7 +73,7 @@ func TestMultiProviderRouter_SelectProviderWithModel(t *testing.T) {
 		t.Fatalf("create model: %v", err)
 	}
 
-	// Provider-model mapping (different costs).
+	// 供应商模式制图(成本不同)。
 	pmA := LLMProviderModel{
 		ModelID:         model.ID,
 		ProviderID:      pA.ID,
@@ -101,7 +101,7 @@ func TestMultiProviderRouter_SelectProviderWithModel(t *testing.T) {
 		t.Fatalf("create provider model B: %v", err)
 	}
 
-	// API keys (enabled).
+	// API 密钥 (启用).
 	keyA := LLMProviderAPIKey{ProviderID: pA.ID, APIKey: "kA", Enabled: true, Weight: 100, Priority: 10}
 	keyB := LLMProviderAPIKey{ProviderID: pB.ID, APIKey: "kB", Enabled: true, Weight: 100, Priority: 10}
 	if err := db.Create(&keyA).Error; err != nil {
@@ -122,7 +122,7 @@ func TestMultiProviderRouter_SelectProviderWithModel(t *testing.T) {
 		t.Fatalf("InitAPIKeyPools: %v", err)
 	}
 
-	// Cost-based should pick mockA (cheaper).
+	// 基于成本的应选择模拟A(便宜)。
 	selection, err := router.SelectProviderWithModel(context.Background(), "gpt-4o", StrategyCostBased)
 	if err != nil {
 		t.Fatalf("SelectProviderWithModel: %v", err)
@@ -134,7 +134,7 @@ func TestMultiProviderRouter_SelectProviderWithModel(t *testing.T) {
 		t.Fatalf("expected model gpt-4o, got %s", selection.ModelName)
 	}
 
-	// Health-based should pick lowest priority when scores tie (mockA).
+	// 以健康为基础,在打平分时应选择最低优先。
 	selection2, err := router.SelectProviderWithModel(context.Background(), "gpt-4o", StrategyHealthBased)
 	if err != nil {
 		t.Fatalf("SelectProviderWithModel (health): %v", err)
@@ -143,7 +143,7 @@ func TestMultiProviderRouter_SelectProviderWithModel(t *testing.T) {
 		t.Fatalf("expected provider mockA, got %s", selection2.ProviderCode)
 	}
 
-	// Unknown model should return a typed Error.
+	// 未知的模型应该返回已输入错误 。
 	if _, err := router.SelectProviderWithModel(context.Background(), "no-such-model", StrategyCostBased); err == nil {
 		t.Fatalf("expected error for unknown model")
 	}

@@ -1,5 +1,5 @@
-// Package evaluation provides automated evaluation framework for AI agents.
-// Validates: Requirements 9.2, 9.4, 9.5, 9.6
+// 成套评价为AI代理提供了自动化的评价框架.
+// 核实:要求9.2、9.4、9.5、9.6
 package evaluation
 
 import (
@@ -14,7 +14,7 @@ import (
 	"go.uber.org/zap"
 )
 
-// AlertLevel defines the severity of an alert.
+// 警报等级定义了警报的严重程度.
 type AlertLevel string
 
 const (
@@ -23,8 +23,8 @@ const (
 	AlertLevelCritical AlertLevel = "critical"
 )
 
-// Alert represents an evaluation alert triggered when metrics exceed thresholds.
-// Validates: Requirements 9.6
+// 警报是指在计量标准超过阈值时触发的评价警报.
+// 核实:要求9.6
 type Alert struct {
 	Level      AlertLevel `json:"level"`
 	MetricName string     `json:"metric_name"`
@@ -35,7 +35,7 @@ type Alert struct {
 	Timestamp  time.Time  `json:"timestamp"`
 }
 
-// AlertThreshold defines a threshold for triggering alerts.
+// 警报压力定义了触发警报的门槛.
 type AlertThreshold struct {
 	MetricName string     `json:"metric_name"`
 	Operator   string     `json:"operator"` // "gt", "lt", "gte", "lte", "eq"
@@ -44,10 +44,10 @@ type AlertThreshold struct {
 	Message    string     `json:"message,omitempty"`
 }
 
-// AlertHandler is called when an alert is triggered.
+// 当警报被触发时,会呼叫警报汉德勒.
 type AlertHandler func(alert *Alert)
 
-// EvalTask represents an evaluation task.
+// EvalTask代表着一项评价任务.
 type EvalTask struct {
 	ID          string            `json:"id"`
 	Name        string            `json:"name"`
@@ -59,7 +59,7 @@ type EvalTask struct {
 	Timeout     time.Duration     `json:"timeout,omitempty"`
 }
 
-// EvalResult represents the result of evaluating a single task.
+// EvalResult是评价一项单一任务的结果。
 type EvalResult struct {
 	TaskID     string             `json:"task_id"`
 	Success    bool               `json:"success"`
@@ -73,7 +73,7 @@ type EvalResult struct {
 	Cost       float64            `json:"cost,omitempty"`
 }
 
-// EvalSuite represents a collection of evaluation tasks.
+// EvalSuite代表了一系列评价任务。
 type EvalSuite struct {
 	ID          string     `json:"id"`
 	Name        string     `json:"name"`
@@ -82,7 +82,7 @@ type EvalSuite struct {
 	Version     string     `json:"version"`
 }
 
-// EvalReport represents the complete evaluation report.
+// Eval报告是完整的评价报告。
 type EvalReport struct {
 	SuiteID   string            `json:"suite_id"`
 	SuiteName string            `json:"suite_name"`
@@ -95,8 +95,8 @@ type EvalReport struct {
 	Metadata  map[string]string `json:"metadata,omitempty"`
 }
 
-// EvalSummary contains aggregated evaluation metrics.
-// Validates: Requirements 9.5
+// 评估摘要载有综合评价指标。
+// 审定:要求9.5
 type EvalSummary struct {
 	TotalTasks     int                `json:"total_tasks"`
 	PassedTasks    int                `json:"passed_tasks"`
@@ -107,7 +107,7 @@ type EvalSummary struct {
 	TotalCost      float64            `json:"total_cost"`
 	TotalDuration  time.Duration      `json:"total_duration"`
 	MetricAverages map[string]float64 `json:"metric_averages,omitempty"`
-	// Statistical metrics
+	// 统计衡量标准
 	ScoreStdDev float64            `json:"score_std_dev"`
 	ScoreMin    float64            `json:"score_min"`
 	ScoreMax    float64            `json:"score_max"`
@@ -115,8 +115,8 @@ type EvalSummary struct {
 	Percentiles map[string]float64 `json:"percentiles,omitempty"` // p50, p90, p95, p99
 }
 
-// EvaluatorConfig configures the evaluator.
-// Validates: Requirements 9.4, 9.6
+// 评价员 Config 配置评价员。
+// 审定: 要求9.4、9.6
 type EvaluatorConfig struct {
 	Concurrency     int              `json:"concurrency"`
 	DefaultTimeout  time.Duration    `json:"default_timeout"`
@@ -125,13 +125,13 @@ type EvaluatorConfig struct {
 	MaxRetries      int              `json:"max_retries"`
 	PassThreshold   float64          `json:"pass_threshold"` // Score threshold to pass
 	AlertThresholds []AlertThreshold `json:"alert_thresholds,omitempty"`
-	// Batch evaluation settings
+	// 批量评价设置
 	BatchSize      int  `json:"batch_size"`      // Number of tasks per batch
 	CollectMetrics bool `json:"collect_metrics"` // Auto-collect metrics after execution
 	EnableAlerts   bool `json:"enable_alerts"`   // Enable alert triggering
 }
 
-// DefaultEvaluatorConfig returns sensible defaults.
+// 默认评估器 Config 返回合理的默认值 。
 func DefaultEvaluatorConfig() EvaluatorConfig {
 	return EvaluatorConfig{
 		Concurrency:    5,
@@ -146,18 +146,18 @@ func DefaultEvaluatorConfig() EvaluatorConfig {
 	}
 }
 
-// AgentExecutor defines the interface for executing agent tasks.
+// AgentExecutor定义了执行代理任务的接口.
 type AgentExecutor interface {
 	Execute(ctx context.Context, input string) (output string, tokens int, err error)
 }
 
-// Scorer defines the interface for scoring evaluation results.
+// 分分器定义了评分评价结果的界面.
 type Scorer interface {
 	Score(ctx context.Context, task *EvalTask, output string) (float64, map[string]float64, error)
 }
 
-// Evaluator runs evaluation suites against agents.
-// Validates: Requirements 9.2, 9.4, 9.5, 9.6
+// 评价员对代理人进行成套评价。
+// 核实:要求9.2、9.4、9.5、9.6
 type Evaluator struct {
 	config        EvaluatorConfig
 	scorers       map[string]Scorer
@@ -168,7 +168,7 @@ type Evaluator struct {
 	logger        *zap.Logger
 }
 
-// NewEvaluator creates a new evaluator.
+// 新评价员创建了新的评价员.
 func NewEvaluator(config EvaluatorConfig, logger *zap.Logger) *Evaluator {
 	if logger == nil {
 		logger = zap.NewNop()
@@ -183,18 +183,18 @@ func NewEvaluator(config EvaluatorConfig, logger *zap.Logger) *Evaluator {
 	}
 }
 
-// SetMetricRegistry sets a custom metric registry.
+// SetMetric Registry设置了自定义的度量衡注册.
 func (e *Evaluator) SetMetricRegistry(registry *MetricRegistry) {
 	e.metrics = registry
 }
 
-// AddAlertHandler adds a handler for alerts.
-// Validates: Requirements 9.6
+// 添加AlertHandler为提醒添加了处理器.
+// 核实:要求9.6
 func (e *Evaluator) AddAlertHandler(handler AlertHandler) {
 	e.alertHandlers = append(e.alertHandlers, handler)
 }
 
-// GetAlerts returns all triggered alerts.
+// GetAlerts 返回所有被触发的提醒 。
 func (e *Evaluator) GetAlerts() []Alert {
 	e.alertMu.RLock()
 	defer e.alertMu.RUnlock()
@@ -203,20 +203,20 @@ func (e *Evaluator) GetAlerts() []Alert {
 	return result
 }
 
-// ClearAlerts clears all triggered alerts.
+// ClearAlerts清除了所有被触发的警报.
 func (e *Evaluator) ClearAlerts() {
 	e.alertMu.Lock()
 	defer e.alertMu.Unlock()
 	e.alerts = make([]Alert, 0)
 }
 
-// RegisterScorer registers a scorer for a specific task type.
+// RegisterScounter为特定任务类型注册了计分器.
 func (e *Evaluator) RegisterScorer(taskType string, scorer Scorer) {
 	e.scorers[taskType] = scorer
 }
 
-// Evaluate runs an evaluation suite against an agent.
-// Validates: Requirements 9.2, 9.5
+// 评估运行一个评估套房 对代理。
+// 审定:要求9.2、9.5
 func (e *Evaluator) Evaluate(ctx context.Context, suite *EvalSuite, agent AgentExecutor) (*EvalReport, error) {
 	startTime := time.Now()
 
@@ -228,7 +228,7 @@ func (e *Evaluator) Evaluate(ctx context.Context, suite *EvalSuite, agent AgentE
 		Metadata:  make(map[string]string),
 	}
 
-	// Create semaphore for concurrency control
+	// 为货币控制创建 semaprore
 	sem := make(chan struct{}, e.config.Concurrency)
 	var wg sync.WaitGroup
 	var mu sync.Mutex
@@ -246,11 +246,11 @@ func (e *Evaluator) Evaluate(ctx context.Context, suite *EvalSuite, agent AgentE
 		go func(idx int, t EvalTask) {
 			defer wg.Done()
 
-			// Acquire semaphore
+			// 获取分母
 			sem <- struct{}{}
 			defer func() { <-sem }()
 
-			// Check stop flag
+			// 检查停止旗
 			mu.Lock()
 			if stopFlag {
 				mu.Unlock()
@@ -258,15 +258,15 @@ func (e *Evaluator) Evaluate(ctx context.Context, suite *EvalSuite, agent AgentE
 			}
 			mu.Unlock()
 
-			// Execute task
+			// 执行任务
 			result := e.evaluateTask(ctx, &t, agent)
 
-			// Auto-collect metrics if enabled (Validates: Requirements 9.2)
+			// 如果启用自动收集指标(参数:要求9.2)
 			if e.config.CollectMetrics && e.metrics != nil {
 				e.collectMetrics(ctx, &t, &result)
 			}
 
-			// Check alert thresholds (Validates: Requirements 9.6)
+			// 检查警戒阈值(参数:要求9.6)
 			if e.config.EnableAlerts {
 				e.checkAlertThresholds(&result)
 			}
@@ -287,7 +287,7 @@ func (e *Evaluator) Evaluate(ctx context.Context, suite *EvalSuite, agent AgentE
 
 	wg.Wait()
 
-	// Calculate summary with statistics (Validates: Requirements 9.5)
+	// 以统计方式计算汇总(参数:要求9.5)
 	report.Summary = e.calculateSummary(report.Results)
 	report.EndTime = time.Now()
 	report.Duration = report.EndTime.Sub(startTime)
@@ -302,7 +302,7 @@ func (e *Evaluator) evaluateTask(ctx context.Context, task *EvalTask, agent Agen
 		Expected: task.Expected,
 	}
 
-	// Apply timeout
+	// 应用超时
 	timeout := e.config.DefaultTimeout
 	if task.Timeout > 0 {
 		timeout = task.Timeout
@@ -310,7 +310,7 @@ func (e *Evaluator) evaluateTask(ctx context.Context, task *EvalTask, agent Agen
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
-	// Execute with retry
+	// 用重试执行
 	var output string
 	var tokens int
 	var err error
@@ -337,7 +337,7 @@ func (e *Evaluator) evaluateTask(ctx context.Context, task *EvalTask, agent Agen
 		return result
 	}
 
-	// Score the result
+	// 计分结果
 	scorer := e.getScorer(task)
 	score, metrics, err := scorer.Score(ctx, task, output)
 	if err != nil {
@@ -355,13 +355,13 @@ func (e *Evaluator) evaluateTask(ctx context.Context, task *EvalTask, agent Agen
 }
 
 func (e *Evaluator) getScorer(task *EvalTask) Scorer {
-	// Check for task-specific scorer
+	// 检查特定任务的计分器
 	if taskType, ok := task.Metadata["type"]; ok {
 		if scorer, ok := e.scorers[taskType]; ok {
 			return scorer
 		}
 	}
-	// Return default scorer
+	// 返回默认计分器
 	return &ExactMatchScorer{}
 }
 
@@ -406,14 +406,14 @@ func (e *Evaluator) calculateSummary(results []EvalResult) EvalSummary {
 		summary.MetricAverages[k] = sum / float64(metricCounts[k])
 	}
 
-	// Calculate statistical metrics (Validates: Requirements 9.5)
+	// 计算统计指标(参数:要求9.5)
 	sort.Float64s(scores)
 	summary.ScoreMin = scores[0]
 	summary.ScoreMax = scores[len(scores)-1]
 	summary.ScoreMedian = calculatePercentile(scores, 50)
 	summary.ScoreStdDev = calculateStdDev(scores, summary.AverageScore)
 
-	// Calculate percentiles
+	// 计算百分位数
 	summary.Percentiles["p50"] = summary.ScoreMedian
 	summary.Percentiles["p90"] = calculatePercentile(scores, 90)
 	summary.Percentiles["p95"] = calculatePercentile(scores, 95)
@@ -422,8 +422,8 @@ func (e *Evaluator) calculateSummary(results []EvalResult) EvalSummary {
 	return summary
 }
 
-// collectMetrics collects configured metrics for a task result.
-// Validates: Requirements 9.2
+// 收集 Metrics 为任务结果收集配置的度量衡 。
+// 核证:要求9.2
 func (e *Evaluator) collectMetrics(ctx context.Context, task *EvalTask, result *EvalResult) {
 	if e.metrics == nil {
 		return
@@ -446,7 +446,7 @@ func (e *Evaluator) collectMetrics(ctx context.Context, task *EvalTask, result *
 		return
 	}
 
-	// Merge computed metrics into result
+	// 将计算出的衡量标准合并为结果
 	if result.Metrics == nil {
 		result.Metrics = make(map[string]float64)
 	}
@@ -455,13 +455,13 @@ func (e *Evaluator) collectMetrics(ctx context.Context, task *EvalTask, result *
 	}
 }
 
-// checkAlertThresholds checks if any metrics exceed configured thresholds.
-// Validates: Requirements 9.6
+// 检查AlertRholds 检查,如果任何度量超过配置的阈值。
+// 核实:要求9.6
 func (e *Evaluator) checkAlertThresholds(result *EvalResult) {
 	for _, threshold := range e.config.AlertThresholds {
 		value, ok := result.Metrics[threshold.MetricName]
 		if !ok {
-			// Check built-in result fields
+			// 检查内置结果字段
 			switch threshold.MetricName {
 			case "score":
 				value = result.Score
@@ -524,14 +524,14 @@ func (e *Evaluator) triggerAlert(alert *Alert) {
 		zap.Float64("threshold", alert.Threshold),
 		zap.Float64("actual", alert.Actual))
 
-	// Call registered handlers
+	// 呼叫注册处理器
 	for _, handler := range e.alertHandlers {
 		handler(alert)
 	}
 }
 
-// EvaluateBatch runs batch evaluation on multiple suites.
-// Validates: Requirements 9.4
+// 评估批量在多个套间进行批量评价.
+// 核证:要求9.4
 func (e *Evaluator) EvaluateBatch(ctx context.Context, suites []*EvalSuite, agent AgentExecutor) ([]*EvalReport, error) {
 	reports := make([]*EvalReport, len(suites))
 	var wg sync.WaitGroup
@@ -572,8 +572,8 @@ func (e *Evaluator) EvaluateBatch(ctx context.Context, suites []*EvalSuite, agen
 	return reports, nil
 }
 
-// GenerateReport generates a comprehensive evaluation report.
-// Validates: Requirements 9.5
+// 生成报告产生一份全面的评价报告。
+// 审定:要求9.5
 func (e *Evaluator) GenerateReport(reports []*EvalReport) *BatchEvalReport {
 	batchReport := &BatchEvalReport{
 		Reports:   reports,
@@ -581,7 +581,7 @@ func (e *Evaluator) GenerateReport(reports []*EvalReport) *BatchEvalReport {
 		Alerts:    e.GetAlerts(),
 	}
 
-	// Aggregate statistics across all reports
+	// 所有报告的总统计数据
 	var totalTasks, passedTasks int
 	var totalScore float64
 	allScores := make([]float64, 0)
@@ -625,8 +625,8 @@ func (e *Evaluator) GenerateReport(reports []*EvalReport) *BatchEvalReport {
 	return batchReport
 }
 
-// BatchEvalReport represents a batch evaluation report.
-// Validates: Requirements 9.5
+// 批量Eval报告代表批量评价报告.
+// 审定:要求9.5
 type BatchEvalReport struct {
 	Reports           []*EvalReport `json:"reports"`
 	AggregatedSummary EvalSummary   `json:"aggregated_summary"`
@@ -634,7 +634,7 @@ type BatchEvalReport struct {
 	Timestamp         time.Time     `json:"timestamp"`
 }
 
-// calculatePercentile calculates the p-th percentile of sorted values.
+// 计算百分数计算排序值的p-th百分数。
 func calculatePercentile(sorted []float64, p float64) float64 {
 	if len(sorted) == 0 {
 		return 0
@@ -655,7 +655,7 @@ func calculatePercentile(sorted []float64, p float64) float64 {
 	return sorted[lower]*(1-weight) + sorted[upper]*weight
 }
 
-// calculateStdDev calculates standard deviation.
+// 计算StdDev计算出标准偏差.
 func calculateStdDev(values []float64, mean float64) float64 {
 	if len(values) == 0 {
 		return 0
@@ -670,7 +670,7 @@ func calculateStdDev(values []float64, mean float64) float64 {
 	return math.Sqrt(sumSquares / float64(len(values)))
 }
 
-// ExactMatchScorer scores based on exact string match.
+// 基于精确字符串匹配的精确Match分数.
 type ExactMatchScorer struct{}
 
 func (s *ExactMatchScorer) Score(ctx context.Context, task *EvalTask, output string) (float64, map[string]float64, error) {
@@ -682,7 +682,7 @@ func (s *ExactMatchScorer) Score(ctx context.Context, task *EvalTask, output str
 		return 1.0, map[string]float64{"exact_match": 1.0}, nil
 	}
 
-	// Partial match score
+	// 部分匹配分数
 	similarity := calculateSimilarity(output, task.Expected)
 	return similarity, map[string]float64{
 		"exact_match": 0.0,
@@ -690,7 +690,7 @@ func (s *ExactMatchScorer) Score(ctx context.Context, task *EvalTask, output str
 	}, nil
 }
 
-// ContainsScorer scores based on whether output contains expected.
+// 包含基于输出是否包含预期值的分数。
 type ContainsScorer struct{}
 
 func (s *ContainsScorer) Score(ctx context.Context, task *EvalTask, output string) (float64, map[string]float64, error) {
@@ -705,7 +705,7 @@ func (s *ContainsScorer) Score(ctx context.Context, task *EvalTask, output strin
 	return 0.0, map[string]float64{"contains": 0.0}, nil
 }
 
-// JSONScorer scores based on JSON structure matching.
+// 基于JSON结构匹配的JSONS分数.
 type JSONScorer struct{}
 
 func (s *JSONScorer) Score(ctx context.Context, task *EvalTask, output string) (float64, map[string]float64, error) {
@@ -719,7 +719,7 @@ func (s *JSONScorer) Score(ctx context.Context, task *EvalTask, output string) (
 		return 0, map[string]float64{"valid_json": 0.0}, nil
 	}
 
-	// Compare JSON structures
+	// 比较 JSON 结构
 	score := compareJSON(expectedJSON, outputJSON)
 	return score, map[string]float64{
 		"valid_json":      1.0,
@@ -735,7 +735,7 @@ func calculateSimilarity(a, b string) float64 {
 		return 0.0
 	}
 
-	// Simple character-based similarity
+	// 基于字符的简单相似性
 	matches := 0
 	shorter := a
 	longer := b

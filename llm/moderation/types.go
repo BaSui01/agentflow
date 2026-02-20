@@ -1,4 +1,4 @@
-// Package moderation provides content moderation capabilities.
+// 一揽子节制提供了内容节制能力。
 package moderation
 
 import (
@@ -6,20 +6,20 @@ import (
 	"time"
 )
 
-// ModerationProvider defines the interface for content moderation.
+// 调和 Provider 为内容节制定义了接口.
 type ModerationProvider interface {
 	Name() string
 	Moderate(ctx context.Context, req *ModerationRequest) (*ModerationResponse, error)
 }
 
-// ModerationRequest represents a moderation request.
+// 温和请求是温和请求。
 type ModerationRequest struct {
 	Input  []string `json:"input"`            // Text inputs to moderate
 	Images []string `json:"images,omitempty"` // Base64 images (optional)
 	Model  string   `json:"model,omitempty"`  // Model to use
 }
 
-// ModerationResponse represents a moderation response.
+// 温和反应是一种温和的反应。
 type ModerationResponse struct {
 	Provider  string             `json:"provider"`
 	Model     string             `json:"model"`
@@ -27,14 +27,14 @@ type ModerationResponse struct {
 	CreatedAt time.Time          `json:"created_at"`
 }
 
-// ModerationResult represents the result for a single input.
+// 中度Result代表单一输入的结果.
 type ModerationResult struct {
 	Flagged    bool               `json:"flagged"`
 	Categories ModerationCategory `json:"categories"`
 	Scores     ModerationScores   `json:"scores"`
 }
 
-// ModerationCategory indicates which categories were flagged.
+// 中度类别表示标出哪些类别 。
 type ModerationCategory struct {
 	Hate            bool `json:"hate"`
 	HateThreatening bool `json:"hate_threatening"`
@@ -49,7 +49,7 @@ type ModerationCategory struct {
 	IllicitViolent  bool `json:"illicit_violent"`
 }
 
-// ModerationScores contains confidence scores for each category.
+// 中调分数包含每个类别的信心分数.
 type ModerationScores struct {
 	Hate            float64 `json:"hate"`
 	HateThreatening float64 `json:"hate_threatening"`

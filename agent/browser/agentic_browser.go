@@ -1,4 +1,4 @@
-// Package browser provides Agentic Browser with Vision-Action Loop.
+// 软件包浏览器为代理浏览器提供了Vision-Action Loop.
 package browser
 
 import (
@@ -10,7 +10,7 @@ import (
 	"go.uber.org/zap"
 )
 
-// AgenticAction represents a browser action for agentic browser.
+// AgenticAction代表了代理浏览器的浏览器动作.
 type AgenticAction struct {
 	Type     Action         `json:"type"`
 	Selector string         `json:"selector,omitempty"`
@@ -21,7 +21,7 @@ type AgenticAction struct {
 	Metadata map[string]any `json:"metadata,omitempty"`
 }
 
-// Screenshot represents a browser screenshot.
+// 屏幕截图代表了浏览器截图.
 type Screenshot struct {
 	Data      []byte    `json:"data"`
 	Width     int       `json:"width"`
@@ -30,7 +30,7 @@ type Screenshot struct {
 	URL       string    `json:"url"`
 }
 
-// Element represents a detected UI element.
+// 元素代表被检测到的UI元素.
 type Element struct {
 	ID         string  `json:"id"`
 	Type       string  `json:"type"` // button, input, link, text, image
@@ -43,13 +43,13 @@ type Element struct {
 	Confidence float64 `json:"confidence"`
 }
 
-// VisionModel analyzes screenshots.
+// VisionModel分析截图.
 type VisionModel interface {
 	Analyze(ctx context.Context, screenshot *Screenshot) (*VisionAnalysis, error)
 	PlanActions(ctx context.Context, goal string, analysis *VisionAnalysis) ([]AgenticAction, error)
 }
 
-// VisionAnalysis represents vision model analysis results.
+// 远景分析是远景模型分析的结果。
 type VisionAnalysis struct {
 	Elements    []Element `json:"elements"`
 	PageTitle   string    `json:"page_title"`
@@ -58,7 +58,7 @@ type VisionAnalysis struct {
 	Suggestions []string  `json:"suggestions,omitempty"`
 }
 
-// BrowserDriver interface for browser control.
+// 浏览器Driver接口用于浏览器控制.
 type BrowserDriver interface {
 	Navigate(ctx context.Context, url string) error
 	Screenshot(ctx context.Context) (*Screenshot, error)
@@ -69,7 +69,7 @@ type BrowserDriver interface {
 	Close() error
 }
 
-// AgenticBrowser provides Vision-Action Loop browser automation.
+// Agentic Browser提供Vision-Action Loop浏览器自动化.
 type AgenticBrowser struct {
 	driver  BrowserDriver
 	vision  VisionModel
@@ -79,7 +79,7 @@ type AgenticBrowser struct {
 	mu      sync.Mutex
 }
 
-// AgenticBrowserConfig configures the agentic browser.
+// 代理浏览器Config配置代理浏览器.
 type AgenticBrowserConfig struct {
 	MaxActions      int           `json:"max_actions"`
 	ActionDelay     time.Duration `json:"action_delay"`
@@ -89,7 +89,7 @@ type AgenticBrowserConfig struct {
 	MaxRetries      int           `json:"max_retries"`
 }
 
-// DefaultAgenticBrowserConfig returns default configuration.
+// 默认代理浏览器 Config 返回默认配置 。
 func DefaultAgenticBrowserConfig() AgenticBrowserConfig {
 	return AgenticBrowserConfig{
 		MaxActions:      50,
@@ -101,7 +101,7 @@ func DefaultAgenticBrowserConfig() AgenticBrowserConfig {
 	}
 }
 
-// ActionRecord records an executed action.
+// 动作记录记录已执行动作 。
 type ActionRecord struct {
 	Action     AgenticAction `json:"action"`
 	Screenshot *Screenshot   `json:"screenshot,omitempty"`
@@ -110,7 +110,7 @@ type ActionRecord struct {
 	Timestamp  time.Time     `json:"timestamp"`
 }
 
-// NewAgenticBrowser creates a new agentic browser.
+// 新代理浏览器创建了新的代理浏览器.
 func NewAgenticBrowser(driver BrowserDriver, vision VisionModel, config AgenticBrowserConfig, logger *zap.Logger) *AgenticBrowser {
 	if logger == nil {
 		logger = zap.NewNop()
@@ -124,7 +124,7 @@ func NewAgenticBrowser(driver BrowserDriver, vision VisionModel, config AgenticB
 	}
 }
 
-// ExecuteTask executes a task using Vision-Action Loop.
+// 执行任务使用 Vision-Action Loop执行任务.
 func (b *AgenticBrowser) ExecuteTask(ctx context.Context, task BrowserTask) (*TaskResult, error) {
 	ctx, cancel := context.WithTimeout(ctx, b.config.Timeout)
 	defer cancel()
@@ -137,7 +137,7 @@ func (b *AgenticBrowser) ExecuteTask(ctx context.Context, task BrowserTask) (*Ta
 
 	b.logger.Info("starting browser task", zap.String("task_id", task.ID), zap.String("goal", task.Goal))
 
-	// Navigate to start URL if provided
+	// 如果提供则启动 URL 导航
 	if task.StartURL != "" {
 		if err := b.driver.Navigate(ctx, task.StartURL); err != nil {
 			result.Error = err.Error()
@@ -146,7 +146,7 @@ func (b *AgenticBrowser) ExecuteTask(ctx context.Context, task BrowserTask) (*Ta
 		time.Sleep(b.config.ScreenshotDelay)
 	}
 
-	// Vision-Action Loop
+	// 愿景-行动循环
 	for i := 0; i < b.config.MaxActions; i++ {
 		select {
 		case <-ctx.Done():
@@ -155,27 +155,27 @@ func (b *AgenticBrowser) ExecuteTask(ctx context.Context, task BrowserTask) (*Ta
 		default:
 		}
 
-		// Take screenshot
+		// 抓取截图
 		screenshot, err := b.driver.Screenshot(ctx)
 		if err != nil {
 			b.logger.Error("screenshot failed", zap.Error(err))
 			continue
 		}
 
-		// Analyze with vision model
+		// 用视觉模型分析
 		analysis, err := b.vision.Analyze(ctx, screenshot)
 		if err != nil {
 			b.logger.Error("vision analysis failed", zap.Error(err))
 			continue
 		}
 
-		// Check if goal is achieved
+		// 检查目标是否实现
 		if b.isGoalAchieved(task.Goal, analysis) {
 			result.Success = true
 			break
 		}
 
-		// Plan next actions
+		// 规划下一步行动
 		actions, err := b.vision.PlanActions(ctx, task.Goal, analysis)
 		if err != nil {
 			b.logger.Error("action planning failed", zap.Error(err))
@@ -187,7 +187,7 @@ func (b *AgenticBrowser) ExecuteTask(ctx context.Context, task BrowserTask) (*Ta
 			break
 		}
 
-		// Execute first action
+		// 执行第一个动作
 		action := actions[0]
 		record := b.executeAction(ctx, action, screenshot)
 		result.Actions = append(result.Actions, record)
@@ -248,7 +248,7 @@ func (b *AgenticBrowser) executeAction(ctx context.Context, action AgenticAction
 }
 
 func (b *AgenticBrowser) isGoalAchieved(goal string, analysis *VisionAnalysis) bool {
-	// Simple heuristic - can be enhanced with LLM
+	// 简单的heuristic - 可以用 LLM 增强
 	for _, suggestion := range analysis.Suggestions {
 		if suggestion == "goal_achieved" {
 			return true
@@ -257,7 +257,7 @@ func (b *AgenticBrowser) isGoalAchieved(goal string, analysis *VisionAnalysis) b
 	return false
 }
 
-// BrowserTask represents a browser automation task.
+// 浏览器Task代表浏览器自动化任务.
 type BrowserTask struct {
 	ID           string         `json:"id"`
 	Goal         string         `json:"goal"`
@@ -266,7 +266,7 @@ type BrowserTask struct {
 	Metadata     map[string]any `json:"metadata,omitempty"`
 }
 
-// TaskResult represents the result of a browser task.
+// TaskResult代表了浏览器任务的结果.
 type TaskResult struct {
 	TaskID    string         `json:"task_id"`
 	Success   bool           `json:"success"`
@@ -277,14 +277,14 @@ type TaskResult struct {
 	Error     string         `json:"error,omitempty"`
 }
 
-// GetHistory returns action history.
+// GetHistory返回动作历史.
 func (b *AgenticBrowser) GetHistory() []ActionRecord {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	return append([]ActionRecord{}, b.history...)
 }
 
-// ScreenshotToBase64 converts screenshot to base64.
+// 屏幕截图 ToBase64将截图转换为 Base64.
 func ScreenshotToBase64(s *Screenshot) string {
 	return base64.StdEncoding.EncodeToString(s.Data)
 }

@@ -1,5 +1,5 @@
-// Package handoff provides Agent Handoff protocol for task delegation between agents.
-// Implements OpenAI SDK-style agent handoff mechanism.
+// 包交接提供了代理汉道克(Agent Handoff)协议,用于代理之间的任务授权.
+// 实施OpenAI SDK型代理交接机制.
 package handoff
 
 import (
@@ -11,7 +11,7 @@ import (
 	"go.uber.org/zap"
 )
 
-// HandoffStatus represents the status of a handoff.
+// 交接状态代表交接状态.
 type HandoffStatus string
 
 const (
@@ -23,7 +23,7 @@ const (
 	StatusFailed     HandoffStatus = "failed"
 )
 
-// Handoff represents a task delegation from one agent to another.
+// Handoff代表着从一个代理人到另一个代理人的任务代表团.
 type Handoff struct {
 	ID          string         `json:"id"`
 	FromAgentID string         `json:"from_agent_id"`
@@ -40,7 +40,7 @@ type Handoff struct {
 	MaxRetries  int            `json:"max_retries"`
 }
 
-// Task represents the task being handed off.
+// 任务代表着正在移交的任务。
 type Task struct {
 	Type        string         `json:"type"`
 	Description string         `json:"description"`
@@ -49,7 +49,7 @@ type Task struct {
 	Metadata    map[string]any `json:"metadata,omitempty"`
 }
 
-// HandoffContext provides context for the handoff.
+// HandoffContext为交接提供了上下文.
 type HandoffContext struct {
 	ConversationID string         `json:"conversation_id,omitempty"`
 	Messages       []Message      `json:"messages,omitempty"`
@@ -57,20 +57,20 @@ type HandoffContext struct {
 	ParentHandoff  string         `json:"parent_handoff,omitempty"`
 }
 
-// Message represents a conversation message.
+// 信件代表对话信息 。
 type Message struct {
 	Role    string `json:"role"`
 	Content string `json:"content"`
 }
 
-// HandoffResult contains the result of a completed handoff.
+// HandoffResult包含完成交接的结果.
 type HandoffResult struct {
 	Output   any    `json:"output"`
 	Error    string `json:"error,omitempty"`
 	Duration int64  `json:"duration_ms"`
 }
 
-// AgentCapability describes what an agent can do.
+// Agent Captainable 描述一个代理能够做什么.
 type AgentCapability struct {
 	Name        string   `json:"name"`
 	Description string   `json:"description"`
@@ -78,7 +78,7 @@ type AgentCapability struct {
 	Priority    int      `json:"priority"`
 }
 
-// HandoffAgent interface for agents that support handoff.
+// 支持交接的代理商的交接代理接口.
 type HandoffAgent interface {
 	ID() string
 	Capabilities() []AgentCapability
@@ -87,7 +87,7 @@ type HandoffAgent interface {
 	ExecuteHandoff(ctx context.Context, handoff *Handoff) (*HandoffResult, error)
 }
 
-// HandoffManager manages agent handoffs.
+// HandoffManager管理代理人的交割.
 type HandoffManager struct {
 	agents   map[string]HandoffAgent
 	handoffs map[string]*Handoff
@@ -96,7 +96,7 @@ type HandoffManager struct {
 	mu       sync.RWMutex
 }
 
-// NewHandoffManager creates a new handoff manager.
+// NewHandoffManager创建了新的交接管理器.
 func NewHandoffManager(logger *zap.Logger) *HandoffManager {
 	if logger == nil {
 		logger = zap.NewNop()
@@ -109,7 +109,7 @@ func NewHandoffManager(logger *zap.Logger) *HandoffManager {
 	}
 }
 
-// RegisterAgent registers an agent for handoffs.
+// 代理人登记代理人进行交割.
 func (m *HandoffManager) RegisterAgent(agent HandoffAgent) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -117,14 +117,14 @@ func (m *HandoffManager) RegisterAgent(agent HandoffAgent) {
 	m.logger.Info("registered agent", zap.String("id", agent.ID()))
 }
 
-// UnregisterAgent removes an agent.
+// 未注册代理删除代理 。
 func (m *HandoffManager) UnregisterAgent(agentID string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	delete(m.agents, agentID)
 }
 
-// FindAgent finds the best agent for a task.
+// FindAgent 找到任务的最佳代理 。
 func (m *HandoffManager) FindAgent(task Task) (HandoffAgent, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
@@ -149,9 +149,9 @@ func (m *HandoffManager) FindAgent(task Task) (HandoffAgent, error) {
 	return bestAgent, nil
 }
 
-// Handoff initiates a handoff to another agent.
+// Handoff会向另一个特工交接
 func (m *HandoffManager) Handoff(ctx context.Context, opts HandoffOptions) (*Handoff, error) {
-	// Find target agent if not specified
+	// 未指定时查找目标代理
 	var targetAgent HandoffAgent
 	var err error
 
@@ -191,14 +191,14 @@ func (m *HandoffManager) Handoff(ctx context.Context, opts HandoffOptions) (*Han
 		zap.String("to", handoff.ToAgentID),
 	)
 
-	// Store handoff
+	// 存储交接
 	m.mu.Lock()
 	m.handoffs[handoff.ID] = handoff
 	resultCh := make(chan *HandoffResult, 1)
 	m.pending[handoff.ID] = resultCh
 	m.mu.Unlock()
 
-	// Accept handoff
+	// 接受移交
 	if err := targetAgent.AcceptHandoff(ctx, handoff); err != nil {
 		handoff.Status = StatusRejected
 		return handoff, fmt.Errorf("handoff rejected: %w", err)
@@ -208,13 +208,13 @@ func (m *HandoffManager) Handoff(ctx context.Context, opts HandoffOptions) (*Han
 	handoff.AcceptedAt = &now
 	handoff.Status = StatusAccepted
 
-	// Execute async if not waiting
+	// 不等待则执行同步
 	if !opts.Wait {
 		go m.executeHandoff(ctx, targetAgent, handoff, resultCh)
 		return handoff, nil
 	}
 
-	// Execute and wait
+	// 执行和等待
 	go m.executeHandoff(ctx, targetAgent, handoff, resultCh)
 
 	select {
@@ -258,7 +258,7 @@ func (m *HandoffManager) executeHandoff(ctx context.Context, agent HandoffAgent,
 	}
 }
 
-// GetHandoff retrieves a handoff by ID.
+// 找汉多夫拿回身份证
 func (m *HandoffManager) GetHandoff(handoffID string) (*Handoff, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
@@ -269,7 +269,7 @@ func (m *HandoffManager) GetHandoff(handoffID string) (*Handoff, error) {
 	return handoff, nil
 }
 
-// HandoffOptions configures a handoff.
+// 交接选项配置交接。
 type HandoffOptions struct {
 	FromAgentID string
 	ToAgentID   string

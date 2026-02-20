@@ -14,8 +14,8 @@ import (
 	"go.uber.org/zap"
 )
 
-// Feature: multi-provider-support, Property 1: Default BaseURL Configuration
-// Validates: Requirements 1.2
+// 特性: 多提供者支持, 属性 1: 默认 BaseURL 配置
+// 审定:要求1.2
 func TestProperty1_DefaultBaseURLConfiguration(t *testing.T) {
 	testCases := []struct {
 		name            string
@@ -58,8 +58,8 @@ func TestProperty1_DefaultBaseURLConfiguration(t *testing.T) {
 	}
 }
 
-// Feature: multi-provider-support, Property 2: Bearer Token Authentication
-// Validates: Requirements 1.3
+// 特性: 多提供者支持, 属性 2: Bearer Token 认证
+// 审定:要求1.3
 func TestProperty2_BearerTokenAuthentication(t *testing.T) {
 	testCases := []struct {
 		name   string
@@ -213,8 +213,8 @@ func TestProperty2_BearerTokenAuthentication(t *testing.T) {
 	})
 }
 
-// Feature: multi-provider-support, Property 5: Default Model Selection Priority
-// Validates: Requirements 1.7, 14.1, 14.2, 14.3
+// 特性: 多提供者支持, 属性 5: 默认模式选择优先级
+// 审定:要求1.7、14.1、14.2、14.3
 func TestProperty5_DefaultModelSelectionPriority(t *testing.T) {
 	testCases := []struct {
 		name          string

@@ -1,4 +1,4 @@
-// package execution provides pluggable persistence backends for agent state.
+// 软件包执行为代理状态提供了可插接的持久后端。
 package execution
 
 import (
@@ -15,7 +15,7 @@ var (
 	ErrStorageFull   = errors.New("storage capacity exceeded")
 )
 
-// Checkpoint represents a saved state at a point in time.
+// 检查点代表一个时间点的保存状态.
 type Checkpoint struct {
 	ID        string         `json:"id"`
 	ThreadID  string         `json:"thread_id"`
@@ -25,7 +25,7 @@ type Checkpoint struct {
 	CreatedAt time.Time      `json:"created_at"`
 }
 
-// Metadata contains checkpoint metadata.
+// 元数据包含检查站元数据。
 type Metadata struct {
 	Step   int               `json:"step"`
 	NodeID string            `json:"node_id,omitempty"`
@@ -33,42 +33,42 @@ type Metadata struct {
 	Custom map[string]string `json:"custom,omitempty"`
 }
 
-// Checkpointer defines the interface for checkpoint storage backends.
+// 检查站定义了检查站存储后端的接口.
 type Checkpointer interface {
-	// Put saves a checkpoint.
+	// 设取取取取取取取取取取取取取取取取取取取取取取取取取取取取取取取取取取取取取取取取取取取取取取取取取取取取取取取取取取取取取取取取取取取取取取取取取取取取取取取取取取取取取取取取取取取取取取取取取取取取取取取取取取取取取取取取取取取取取取取取取取取取取取取取取取取取取取取取取取取取取取出取取取取取取取取取取取取取取取取取取取取取取取取取取取取取取取取取取取取取取取取取取取取取取取取取取取取取取取取取取取取取取出取取取取取取取取取取取取取取取取取取取取取取取取取取取取取取取取取取取取取取取取取取取取取取取取
 	Put(ctx context.Context, cp *Checkpoint) error
 
-	// Get retrieves a checkpoint by ID.
+	// 以身份证取回检查站
 	Get(ctx context.Context, threadID, checkpointID string) (*Checkpoint, error)
 
-	// GetLatest retrieves the most recent checkpoint for a thread.
+	// GetLatest 为线索检索最近的检查点 。
 	GetLatest(ctx context.Context, threadID string) (*Checkpoint, error)
 
-	// List returns checkpoints for a thread, ordered by creation time.
+	// 按创建时间顺序列出返回检查点。
 	List(ctx context.Context, threadID string, opts ListOptions) ([]*Checkpoint, error)
 
-	// Delete removes a checkpoint.
+	// 删除一个检查站。
 	Delete(ctx context.Context, threadID, checkpointID string) error
 
-	// DeleteThread removes all checkpoints for a thread.
+	// 删除 Thread 为线索删除所有检查点 。
 	DeleteThread(ctx context.Context, threadID string) error
 }
 
-// ListOptions configures checkpoint listing.
+// 列表选项配置检查站列表 。
 type ListOptions struct {
 	Limit  int       `json:"limit"`
 	Before time.Time `json:"before,omitempty"`
 	After  time.Time `json:"after,omitempty"`
 }
 
-// MemoryCheckpointer implements in-memory checkpoint storage.
+// 内存检查点器执行内存检查点存储.
 type MemoryCheckpointer struct {
 	threads map[string][]*Checkpoint
 	mu      sync.RWMutex
 	maxSize int
 }
 
-// NewMemoryCheckpointer creates a new in-memory checkpointer.
+// 新记忆检查点创建了新的记忆检查点.
 func NewMemoryCheckpointer(maxSize int) *MemoryCheckpointer {
 	return &MemoryCheckpointer{
 		threads: make(map[string][]*Checkpoint),
@@ -87,7 +87,7 @@ func (m *MemoryCheckpointer) Put(ctx context.Context, cp *Checkpoint) error {
 	cp.CreatedAt = time.Now()
 	m.threads[cp.ThreadID] = append(m.threads[cp.ThreadID], cp)
 
-	// Enforce max size per thread
+	// 每个线程执行最大尺寸
 	if m.maxSize > 0 && len(m.threads[cp.ThreadID]) > m.maxSize {
 		m.threads[cp.ThreadID] = m.threads[cp.ThreadID][1:]
 	}
@@ -177,13 +177,13 @@ func (m *MemoryCheckpointer) DeleteThread(ctx context.Context, threadID string) 
 	return nil
 }
 
-// Serde defines serialization/deserialization interface.
+// Serde定义了序列化/去序列化接口.
 type Serde interface {
 	Serialize(v any) ([]byte, error)
 	Deserialize(data []byte, v any) error
 }
 
-// JSONSerde implements JSON serialization.
+// JSONSerde执行JSON系列化.
 type JSONSerde struct{}
 
 func (JSONSerde) Serialize(v any) ([]byte, error) {
@@ -194,14 +194,14 @@ func (JSONSerde) Deserialize(data []byte, v any) error {
 	return json.Unmarshal(data, v)
 }
 
-// CheckpointerConfig configures checkpointer behavior.
+// 检查器Config配置检查器行为.
 type CheckpointerConfig struct {
 	MaxCheckpointsPerThread int           `json:"max_checkpoints_per_thread"`
 	TTL                     time.Duration `json:"ttl"`
 	Serde                   Serde         `json:"-"`
 }
 
-// DefaultCheckpointerConfig returns sensible defaults.
+// 默认检查指定符 Config 返回合理的默认值 。
 func DefaultCheckpointerConfig() CheckpointerConfig {
 	return CheckpointerConfig{
 		MaxCheckpointsPerThread: 100,
@@ -210,14 +210,14 @@ func DefaultCheckpointerConfig() CheckpointerConfig {
 	}
 }
 
-// ThreadManager manages multiple threads with checkpointing.
+// ThreadManager通过检查站管理多条线程.
 type ThreadManager struct {
 	checkpointer Checkpointer
 	config       CheckpointerConfig
 	mu           sync.RWMutex
 }
 
-// NewThreadManager creates a new thread manager.
+// NewThreadManager 创建了新线程管理器.
 func NewThreadManager(cp Checkpointer, config CheckpointerConfig) *ThreadManager {
 	return &ThreadManager{
 		checkpointer: cp,
@@ -225,7 +225,7 @@ func NewThreadManager(cp Checkpointer, config CheckpointerConfig) *ThreadManager
 	}
 }
 
-// SaveState saves the current state for a thread.
+// 保存状态保存为线程 。
 func (tm *ThreadManager) SaveState(ctx context.Context, threadID string, state map[string]any, meta Metadata) (*Checkpoint, error) {
 	cp := &Checkpoint{
 		ID:       generateCheckpointID(),
@@ -234,7 +234,7 @@ func (tm *ThreadManager) SaveState(ctx context.Context, threadID string, state m
 		Metadata: meta,
 	}
 
-	// Get parent ID from latest checkpoint
+	// 从最近的检查站获取父母身份
 	if latest, err := tm.checkpointer.GetLatest(ctx, threadID); err == nil {
 		cp.ParentID = latest.ID
 	}
@@ -246,7 +246,7 @@ func (tm *ThreadManager) SaveState(ctx context.Context, threadID string, state m
 	return cp, nil
 }
 
-// LoadState loads the latest state for a thread.
+// 装入状态为线程加载最新状态 。
 func (tm *ThreadManager) LoadState(ctx context.Context, threadID string) (map[string]any, error) {
 	cp, err := tm.checkpointer.GetLatest(ctx, threadID)
 	if err != nil {
@@ -255,12 +255,12 @@ func (tm *ThreadManager) LoadState(ctx context.Context, threadID string) (map[st
 	return cp.State, nil
 }
 
-// Rollback rolls back to a specific checkpoint.
+// 倒滚回某个特定的检查站。
 func (tm *ThreadManager) Rollback(ctx context.Context, threadID, checkpointID string) (*Checkpoint, error) {
 	return tm.checkpointer.Get(ctx, threadID, checkpointID)
 }
 
-// GetHistory returns checkpoint history for a thread.
+// GetHistory 返回检查点历史为一线程 。
 func (tm *ThreadManager) GetHistory(ctx context.Context, threadID string, limit int) ([]*Checkpoint, error) {
 	return tm.checkpointer.List(ctx, threadID, ListOptions{Limit: limit})
 }

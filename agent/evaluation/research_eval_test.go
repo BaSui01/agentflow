@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// sampleResearchText is a realistic research snippet used across metric tests.
+// 样本ResearchText是跨度量测试所使用的现实研究片段.
 const sampleResearchText = `Introduction: We propose a novel approach to neural architecture search.
 Our methodology introduces an unprecedented technique that improves upon existing baselines.
 Compared to previous work, our method outperforms state-of-the-art models with 95.2% accuracy
@@ -23,7 +23,7 @@ func newTestEvalPair(response string) (*EvalInput, *EvalOutput) {
 }
 
 // ---------------------------------------------------------------------------
-// Metric Compute tests
+// 计算测试
 // ---------------------------------------------------------------------------
 
 func TestNoveltyMetric_Compute(t *testing.T) {
@@ -84,7 +84,7 @@ func TestNoveltyMetric_LowScore(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// ResearchEvaluator tests
+// 研究评估员测试
 // ---------------------------------------------------------------------------
 
 func TestResearchEvaluator_Evaluate(t *testing.T) {
@@ -104,7 +104,7 @@ func TestResearchEvaluator_Evaluate(t *testing.T) {
 	assert.NotEmpty(t, result.DimensionScores)
 	assert.GreaterOrEqual(t, result.Duration.Nanoseconds(), int64(0))
 
-	// All registered dimensions should have scores
+	// 所有注册的维度都应该有分数
 	for _, dim := range []ResearchDimension{DimensionNovelty, DimensionRigor, DimensionClarity, DimensionCompleteness} {
 		_, ok := result.DimensionScores[dim]
 		assert.True(t, ok, "missing score for dimension %s", dim)
@@ -112,7 +112,7 @@ func TestResearchEvaluator_Evaluate(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// Helper function tests
+// 帮助功能测试
 // ---------------------------------------------------------------------------
 
 func TestClampScore(t *testing.T) {

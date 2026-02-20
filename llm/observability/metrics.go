@@ -16,18 +16,18 @@ const instrumentationName = "github.com/BaSui01/agentflow/llm"
 type Metrics struct {
 	tracer trace.Tracer
 	meter  metric.Meter
-	// Counters
+	// 柜台
 	requestTotal   metric.Int64Counter
 	tokenTotal     metric.Int64Counter
 	errorTotal     metric.Int64Counter
 	fallbackTotal  metric.Int64Counter
 	cacheHitTotal  metric.Int64Counter
 	cacheMissTotal metric.Int64Counter
-	// Histograms
+	// 直方图
 	requestDuration metric.Float64Histogram
 	tokenCount      metric.Int64Histogram
 	costPerRequest  metric.Float64Histogram
-	// Gauges
+	// 高地语
 	activeRequests metric.Int64UpDownCounter
 	circuitState   metric.Int64ObservableGauge
 }

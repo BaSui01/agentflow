@@ -236,15 +236,15 @@ func TestA2AMessage_JSONSerialization(t *testing.T) {
 		ReplyTo:   "prev-msg",
 	}
 
-	// Serialize
+	// 序列化
 	data, err := original.ToJSON()
 	require.NoError(t, err)
 
-	// Deserialize
+	// 淡化
 	parsed, err := FromJSON(data)
 	require.NoError(t, err)
 
-	// Verify
+	// 校验
 	assert.Equal(t, original.ID, parsed.ID)
 	assert.Equal(t, original.Type, parsed.Type)
 	assert.Equal(t, original.From, parsed.From)
@@ -252,7 +252,7 @@ func TestA2AMessage_JSONSerialization(t *testing.T) {
 	assert.Equal(t, original.ReplyTo, parsed.ReplyTo)
 	assert.Equal(t, original.Timestamp.UTC(), parsed.Timestamp.UTC())
 
-	// Payload comparison (JSON unmarshals to map[string]any)
+	// 有效载荷比较(JSON unmarshals to map[string] any)
 	payloadMap, ok := parsed.Payload.(map[string]any)
 	require.True(t, ok)
 	assert.Equal(t, "value", payloadMap["key"])
@@ -288,7 +288,7 @@ func TestA2AMessage_Clone(t *testing.T) {
 
 	clone := original.Clone()
 
-	// Verify values are equal
+	// 校验值相等
 	assert.Equal(t, original.ID, clone.ID)
 	assert.Equal(t, original.Type, clone.Type)
 	assert.Equal(t, original.From, clone.From)
@@ -296,7 +296,7 @@ func TestA2AMessage_Clone(t *testing.T) {
 	assert.Equal(t, original.ReplyTo, clone.ReplyTo)
 	assert.Equal(t, original.Timestamp, clone.Timestamp)
 
-	// Verify it's a deep copy (modifying clone doesn't affect original)
+	// 验证它是一个深层的复制( 修改的克隆不影响原件)
 	if payloadMap, ok := clone.Payload.(map[string]any); ok {
 		payloadMap["key"] = "modified"
 	}

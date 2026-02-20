@@ -30,16 +30,16 @@ func NewCostCalculator() *CostCalculator {
 // loadDefaultPrices 加载默认价格（可从配置/数据库覆盖）
 func (c *CostCalculator) loadDefaultPrices() {
 	defaults := []ModelPrice{
-		// OpenAI
+		// 开放AI
 		{Provider: "openai", Model: "gpt-4o", PriceInput: 0.005, PriceOutput: 0.015},
 		{Provider: "openai", Model: "gpt-4o-mini", PriceInput: 0.00015, PriceOutput: 0.0006},
 		{Provider: "openai", Model: "gpt-4-turbo", PriceInput: 0.01, PriceOutput: 0.03},
 		{Provider: "openai", Model: "gpt-3.5-turbo", PriceInput: 0.0005, PriceOutput: 0.0015},
-		// Claude
+		// 克劳德
 		{Provider: "claude", Model: "claude-3-5-sonnet-20241022", PriceInput: 0.003, PriceOutput: 0.015},
 		{Provider: "claude", Model: "claude-3-opus-20240229", PriceInput: 0.015, PriceOutput: 0.075},
 		{Provider: "claude", Model: "claude-3-haiku-20240307", PriceInput: 0.00025, PriceOutput: 0.00125},
-		// Gemini
+		// 双子座
 		{Provider: "gemini", Model: "gemini-1.5-pro", PriceInput: 0.00125, PriceOutput: 0.005},
 		{Provider: "gemini", Model: "gemini-1.5-flash", PriceInput: 0.000075, PriceOutput: 0.0003},
 		// 通义千问

@@ -1,5 +1,5 @@
-// Package hitl provides Human-in-the-Loop workflow interrupt and resume capabilities.
-// Implements LangGraph-style interrupt/resume mechanism for workflow control.
+// 套接字提供Human-in-the-Loop工作流程中断并恢复能力.
+// 执行 LangGraph 风格的中断/重置工作流程控制机制。
 package hitl
 
 import (
@@ -12,7 +12,7 @@ import (
 	"go.uber.org/zap"
 )
 
-// InterruptType defines the type of workflow interrupt.
+// 中断Type定义了工作流程中断的类型.
 type InterruptType string
 
 const (
@@ -23,7 +23,7 @@ const (
 	InterruptTypeError      InterruptType = "error"
 )
 
-// InterruptStatus represents the status of an interrupt.
+// 中断状态代表中断状态.
 type InterruptStatus string
 
 const (
@@ -34,7 +34,7 @@ const (
 	InterruptStatusCanceled InterruptStatus = "canceled"
 )
 
-// Interrupt represents a workflow interrupt point.
+// 中断代表工作流程中断点.
 type Interrupt struct {
 	ID           string          `json:"id"`
 	WorkflowID   string          `json:"workflow_id"`
@@ -54,7 +54,7 @@ type Interrupt struct {
 	Metadata     map[string]any  `json:"metadata,omitempty"`
 }
 
-// Option represents a selectable option for approval interrupts.
+// 备选办法是可选择的核准中断的备选办法。
 type Option struct {
 	ID          string `json:"id"`
 	Label       string `json:"label"`
@@ -62,7 +62,7 @@ type Option struct {
 	IsDefault   bool   `json:"is_default,omitempty"`
 }
 
-// Response represents the human response to an interrupt.
+// 反应代表了人类对中断的反应。
 type Response struct {
 	OptionID  string         `json:"option_id,omitempty"`
 	Input     any            `json:"input,omitempty"`
@@ -73,7 +73,7 @@ type Response struct {
 	Metadata  map[string]any `json:"metadata,omitempty"`
 }
 
-// InterruptStore defines storage interface for interrupts.
+// InterruptStore定义了中断的存储接口.
 type InterruptStore interface {
 	Save(ctx context.Context, interrupt *Interrupt) error
 	Load(ctx context.Context, interruptID string) (*Interrupt, error)
@@ -81,10 +81,10 @@ type InterruptStore interface {
 	Update(ctx context.Context, interrupt *Interrupt) error
 }
 
-// InterruptHandler handles interrupt events.
+// 中断汉德勒处理中断事件.
 type InterruptHandler func(ctx context.Context, interrupt *Interrupt) error
 
-// InterruptManager manages workflow interrupts.
+// 中断管理者管理工作流程中断 。
 type InterruptManager struct {
 	store    InterruptStore
 	logger   *zap.Logger
@@ -99,7 +99,7 @@ type pendingInterrupt struct {
 	cancelFn   context.CancelFunc
 }
 
-// NewInterruptManager creates a new interrupt manager.
+// 新干扰管理器创建了新的中断管理器 。
 func NewInterruptManager(store InterruptStore, logger *zap.Logger) *InterruptManager {
 	if logger == nil {
 		logger = zap.NewNop()
@@ -112,14 +112,14 @@ func NewInterruptManager(store InterruptStore, logger *zap.Logger) *InterruptMan
 	}
 }
 
-// RegisterHandler registers a handler for an interrupt type.
+// 登记 Handler 为中断类型登记处理器 。
 func (m *InterruptManager) RegisterHandler(interruptType InterruptType, handler InterruptHandler) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.handlers[interruptType] = append(m.handlers[interruptType], handler)
 }
 
-// CreateInterrupt creates and waits for an interrupt to be resolved.
+// 创建中断创建并等待中断解决 。
 func (m *InterruptManager) CreateInterrupt(ctx context.Context, opts InterruptOptions) (*Response, error) {
 	interrupt := &Interrupt{
 		ID:          generateInterruptID(),
@@ -151,10 +151,10 @@ func (m *InterruptManager) CreateInterrupt(ctx context.Context, opts InterruptOp
 		return nil, fmt.Errorf("failed to save interrupt: %w", err)
 	}
 
-	// Notify handlers
+	// 通知处理者
 	m.notifyHandlers(ctx, interrupt)
 
-	// Create pending interrupt with response channel
+	// 以响应频道创建待补中断
 	interruptCtx, cancel := context.WithTimeout(ctx, interrupt.Timeout)
 	pending := &pendingInterrupt{
 		interrupt:  interrupt,
@@ -166,7 +166,7 @@ func (m *InterruptManager) CreateInterrupt(ctx context.Context, opts InterruptOp
 	m.pending[interrupt.ID] = pending
 	m.mu.Unlock()
 
-	// Wait for response
+	// 等待回应
 	select {
 	case response := <-pending.responseCh:
 		return response, nil
@@ -176,7 +176,7 @@ func (m *InterruptManager) CreateInterrupt(ctx context.Context, opts InterruptOp
 	}
 }
 
-// ResolveInterrupt resolves a pending interrupt.
+// 解析中断解决待决中断 。
 func (m *InterruptManager) ResolveInterrupt(ctx context.Context, interruptID string, response *Response) error {
 	m.mu.Lock()
 	pending, ok := m.pending[interruptID]
@@ -208,7 +208,7 @@ func (m *InterruptManager) ResolveInterrupt(ctx context.Context, interruptID str
 		return fmt.Errorf("failed to update interrupt: %w", err)
 	}
 
-	// Send response to waiting goroutine
+	// 发送对等待goroutine的响应
 	select {
 	case pending.responseCh <- response:
 	default:
@@ -218,7 +218,7 @@ func (m *InterruptManager) ResolveInterrupt(ctx context.Context, interruptID str
 	return nil
 }
 
-// CancelInterrupt cancels a pending interrupt.
+// 取消中断取消待决中断 。
 func (m *InterruptManager) CancelInterrupt(ctx context.Context, interruptID string) error {
 	m.mu.Lock()
 	pending, ok := m.pending[interruptID]
@@ -244,7 +244,7 @@ func (m *InterruptManager) CancelInterrupt(ctx context.Context, interruptID stri
 	return nil
 }
 
-// GetPendingInterrupts returns all pending interrupts for a workflow.
+// 获得待定 中断返回工作流程中所有待处理中断 。
 func (m *InterruptManager) GetPendingInterrupts(workflowID string) []*Interrupt {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
@@ -285,7 +285,7 @@ func (m *InterruptManager) handleTimeout(ctx context.Context, interrupt *Interru
 	m.logger.Warn("interrupt timeout", zap.String("id", interrupt.ID))
 }
 
-// InterruptOptions configures interrupt creation.
+// 中断选项配置中断创建 。
 type InterruptOptions struct {
 	WorkflowID   string
 	NodeID       string
@@ -304,13 +304,13 @@ func generateInterruptID() string {
 	return fmt.Sprintf("int_%d", time.Now().UnixNano())
 }
 
-// InMemoryInterruptStore provides in-memory storage for interrupts.
+// 在MemoryInterruptStore中为中断提供内存.
 type InMemoryInterruptStore struct {
 	interrupts map[string]*Interrupt
 	mu         sync.RWMutex
 }
 
-// NewInMemoryInterruptStore creates a new in-memory interrupt store.
+// New InMemory InterruptStore 创建了新的内存中断商店.
 func NewInMemoryInterruptStore() *InMemoryInterruptStore {
 	return &InMemoryInterruptStore{
 		interrupts: make(map[string]*Interrupt),

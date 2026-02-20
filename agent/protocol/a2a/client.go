@@ -11,33 +11,33 @@ import (
 	"time"
 )
 
-// A2AClient defines the interface for A2A client operations.
+// A2AClient定义了A2A客户端操作的接口.
 type A2AClient interface {
-	// Discover retrieves the AgentCard from a remote agent.
+	// 发现从远程特工处取回特工卡
 	Discover(ctx context.Context, url string) (*AgentCard, error)
-	// Send sends a message synchronously and waits for a response.
+	// 发送消息同步并等待回复.
 	Send(ctx context.Context, msg *A2AMessage) (*A2AMessage, error)
-	// SendAsync sends a message asynchronously and returns a task ID.
+	// SendAsync 同步发送消息并返回任务ID.
 	SendAsync(ctx context.Context, msg *A2AMessage) (string, error)
-	// GetResult retrieves the result of an async task by task ID.
+	// GetResult通过任务ID检索一个同步任务的结果.
 	GetResult(ctx context.Context, taskID string) (*A2AMessage, error)
 }
 
-// ClientConfig holds configuration for the A2A client.
+// 客户端Config为A2A客户端持有配置.
 type ClientConfig struct {
-	// Timeout is the default timeout for HTTP requests.
+	// 超时是HTTP请求的默认超时.
 	Timeout time.Duration
-	// RetryCount is the number of retries for failed requests.
+	// RetryCount 是失败请求的重试次数 。
 	RetryCount int
-	// RetryDelay is the delay between retries.
+	// RetryDelay是重试之间的延迟.
 	RetryDelay time.Duration
-	// Headers are additional headers to include in requests.
+	// 信头是请求中要包含的额外信头 。
 	Headers map[string]string
-	// AgentID is the identifier of the local agent making requests.
+	// AgentID 是本地代理提出请求的标识符 。
 	AgentID string
 }
 
-// DefaultClientConfig returns a ClientConfig with sensible defaults.
+// 默认 ClientConfig 返回有合理默认的客户端Config 。
 func DefaultClientConfig() *ClientConfig {
 	return &ClientConfig{
 		Timeout:    30 * time.Second,
@@ -48,14 +48,14 @@ func DefaultClientConfig() *ClientConfig {
 	}
 }
 
-// HTTPClient is the default implementation of A2AClient using HTTP.
+// HTTPClient是A2AClient使用HTTP的默认执行.
 type HTTPClient struct {
 	config     *ClientConfig
 	httpClient *http.Client
-	// cardCache caches discovered agent cards
+	// 已发现代理卡缓存
 	cardCache map[string]*cachedCard
 	cacheMu   sync.RWMutex
-	// taskRegistry tracks task ID to agent URL mappings for async operations
+	// 任务 Registry 跟踪任务ID 代理 URL 映射用于合成操作
 	taskRegistry map[string]*taskInfo
 	taskMu       sync.RWMutex
 }
@@ -65,14 +65,14 @@ type cachedCard struct {
 	expiresAt time.Time
 }
 
-// taskInfo stores information about an async task.
+// 任务 信息存储关于一个同步任务的信息 。
 type taskInfo struct {
 	agentURL  string
 	messageID string
 	createdAt time.Time
 }
 
-// NewHTTPClient creates a new HTTPClient with the given configuration.
+// NewHTTPClient以给定的配置创建了新的HTTPClient.
 func NewHTTPClient(config *ClientConfig) *HTTPClient {
 	if config == nil {
 		config = DefaultClientConfig()
@@ -88,15 +88,15 @@ func NewHTTPClient(config *ClientConfig) *HTTPClient {
 	}
 }
 
-// Discover retrieves the AgentCard from a remote agent at the given URL.
-// The URL should be the base URL of the agent (e.g., "https://agent.example.com").
-// The agent card is expected to be available at "/.well-known/agent.json".
+// 发现从给定的 URL 的远程代理取回 AgentCard 。
+// URL应该是代理商的基础URL(例如"https://agent.example.com").
+// 代理卡预计在"/. well-known/agent.json"提供.
 func (c *HTTPClient) Discover(ctx context.Context, url string) (*AgentCard, error) {
 	if url == "" {
 		return nil, fmt.Errorf("%w: empty url", ErrRemoteUnavailable)
 	}
 
-	// Check cache first
+	// 先检查缓存
 	c.cacheMu.RLock()
 	if cached, ok := c.cardCache[url]; ok && time.Now().Before(cached.expiresAt) {
 		c.cacheMu.RUnlock()
@@ -104,22 +104,22 @@ func (c *HTTPClient) Discover(ctx context.Context, url string) (*AgentCard, erro
 	}
 	c.cacheMu.RUnlock()
 
-	// Build the discovery URL
+	// 构建发现 URL
 	discoveryURL := url + "/.well-known/agent.json"
 
-	// Create request
+	// 创建请求
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, discoveryURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
 
-	// Add headers
+	// 添加信头
 	req.Header.Set("Accept", "application/json")
 	for k, v := range c.config.Headers {
 		req.Header.Set(k, v)
 	}
 
-	// Execute request with retry
+	// 通过重试执行请求
 	var resp *http.Response
 	var lastErr error
 	for i := 0; i <= c.config.RetryCount; i++ {
@@ -148,7 +148,7 @@ func (c *HTTPClient) Discover(ctx context.Context, url string) (*AgentCard, erro
 		return nil, fmt.Errorf("%w: status code %d", ErrRemoteUnavailable, resp.StatusCode)
 	}
 
-	// Parse response
+	// 解析响应
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read response: %w", err)
@@ -159,12 +159,12 @@ func (c *HTTPClient) Discover(ctx context.Context, url string) (*AgentCard, erro
 		return nil, fmt.Errorf("%w: %v", ErrInvalidMessage, err)
 	}
 
-	// Validate the card
+	// 验证卡片
 	if err := card.Validate(); err != nil {
 		return nil, err
 	}
 
-	// Cache the card (5 minutes TTL)
+	// 缓存卡( 5分 TTL )
 	c.cacheMu.Lock()
 	c.cardCache[url] = &cachedCard{
 		card:      &card,
@@ -175,48 +175,48 @@ func (c *HTTPClient) Discover(ctx context.Context, url string) (*AgentCard, erro
 	return &card, nil
 }
 
-// Send sends a message synchronously and waits for a response.
-// The message is sent to the agent specified in the message's To field.
+// 发送消息同步并等待回复.
+// 消息发送到消息"to field"中指定的代理.
 func (c *HTTPClient) Send(ctx context.Context, msg *A2AMessage) (*A2AMessage, error) {
 	if msg == nil {
 		return nil, fmt.Errorf("%w: nil message", ErrInvalidMessage)
 	}
 
-	// Validate message
+	// 验证信件
 	if err := msg.Validate(); err != nil {
 		return nil, err
 	}
 
-	// Discover the target agent to get its URL
+	// 发现目标代理以获取其 URL
 	card, err := c.Discover(ctx, msg.To)
 	if err != nil {
-		// If discovery fails, assume msg.To is the URL
+		// 如果发现失败,假设msg. 为 URL
 		card = &AgentCard{URL: msg.To}
 	}
 
-	// Build the message endpoint URL
+	// 构建信件端点 URL
 	messageURL := card.URL + "/a2a/messages"
 
-	// Serialize message
+	// 序列化信件
 	body, err := json.Marshal(msg)
 	if err != nil {
 		return nil, fmt.Errorf("failed to serialize message: %w", err)
 	}
 
-	// Create request
+	// 创建请求
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, messageURL, bytes.NewReader(body))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
 
-	// Add headers
+	// 添加信头
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
 	for k, v := range c.config.Headers {
 		req.Header.Set(k, v)
 	}
 
-	// Execute request with retry
+	// 通过重试执行请求
 	var resp *http.Response
 	var lastErr error
 	for i := 0; i <= c.config.RetryCount; i++ {
@@ -241,13 +241,13 @@ func (c *HTTPClient) Send(ctx context.Context, msg *A2AMessage) (*A2AMessage, er
 	}
 	defer resp.Body.Close()
 
-	// Handle error responses
+	// 处理错误回复
 	if resp.StatusCode >= 400 {
 		respBody, _ := io.ReadAll(resp.Body)
 		return nil, fmt.Errorf("%w: status %d, body: %s", ErrRemoteUnavailable, resp.StatusCode, string(respBody))
 	}
 
-	// Parse response
+	// 解析响应
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read response: %w", err)
@@ -261,64 +261,64 @@ func (c *HTTPClient) Send(ctx context.Context, msg *A2AMessage) (*A2AMessage, er
 	return &response, nil
 }
 
-// SendAsync sends a message asynchronously and returns a task ID.
-// The caller can use GetResult to poll for the result.
+// SendAsync 同步发送消息并返回任务ID.
+// 呼叫者可以使用GetResult对结果进行投票.
 func (c *HTTPClient) SendAsync(ctx context.Context, msg *A2AMessage) (string, error) {
 	if msg == nil {
 		return "", fmt.Errorf("%w: nil message", ErrInvalidMessage)
 	}
 
-	// Validate message
+	// 验证信件
 	if err := msg.Validate(); err != nil {
 		return "", err
 	}
 
-	// Discover the target agent to get its URL
+	// 发现目标代理以获取其 URL
 	agentURL := msg.To
 	card, err := c.Discover(ctx, msg.To)
 	if err != nil {
-		// If discovery fails, assume msg.To is the URL
+		// 如果发现失败,假设msg. 为 URL
 		card = &AgentCard{URL: msg.To}
 	} else {
 		agentURL = card.URL
 	}
 
-	// Build the async message endpoint URL
+	// 构建消息端点 URL
 	asyncURL := card.URL + "/a2a/messages/async"
 
-	// Serialize message
+	// 序列化信件
 	body, err := json.Marshal(msg)
 	if err != nil {
 		return "", fmt.Errorf("failed to serialize message: %w", err)
 	}
 
-	// Create request
+	// 创建请求
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, asyncURL, bytes.NewReader(body))
 	if err != nil {
 		return "", fmt.Errorf("failed to create request: %w", err)
 	}
 
-	// Add headers
+	// 添加信头
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
 	for k, v := range c.config.Headers {
 		req.Header.Set(k, v)
 	}
 
-	// Execute request
+	// 执行请求
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
 		return "", fmt.Errorf("%w: %v", ErrRemoteUnavailable, err)
 	}
 	defer resp.Body.Close()
 
-	// Handle error responses
+	// 处理错误回复
 	if resp.StatusCode >= 400 {
 		respBody, _ := io.ReadAll(resp.Body)
 		return "", fmt.Errorf("%w: status %d, body: %s", ErrRemoteUnavailable, resp.StatusCode, string(respBody))
 	}
 
-	// Parse response to get task ID
+	// 分析获取任务ID的响应
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return "", fmt.Errorf("failed to read response: %w", err)
@@ -333,7 +333,7 @@ func (c *HTTPClient) SendAsync(ctx context.Context, msg *A2AMessage) (string, er
 		return "", fmt.Errorf("%w: missing task_id in response", ErrInvalidMessage)
 	}
 
-	// Register the task for later retrieval
+	// 注册任务供以后检索
 	c.taskMu.Lock()
 	c.taskRegistry[asyncResp.TaskID] = &taskInfo{
 		agentURL:  agentURL,
@@ -345,15 +345,15 @@ func (c *HTTPClient) SendAsync(ctx context.Context, msg *A2AMessage) (string, er
 	return asyncResp.TaskID, nil
 }
 
-// GetResult retrieves the result of an async task by task ID.
-// Returns ErrTaskNotReady if the task is still processing.
-// Returns ErrTaskNotFound if the task ID is not registered.
+// GetResult通过任务ID检索一个同步任务的结果.
+// 如果任务仍在处理中, 返回 ErrTask NotReady 。
+// 如果任务ID没有注册, 返回 ErrTask NotFound 。
 func (c *HTTPClient) GetResult(ctx context.Context, taskID string) (*A2AMessage, error) {
 	if taskID == "" {
 		return nil, fmt.Errorf("%w: empty task_id", ErrInvalidMessage)
 	}
 
-	// Look up the task in the registry
+	// 在登记册中查找任务
 	c.taskMu.RLock()
 	info, ok := c.taskRegistry[taskID]
 	c.taskMu.RUnlock()
@@ -362,11 +362,11 @@ func (c *HTTPClient) GetResult(ctx context.Context, taskID string) (*A2AMessage,
 		return nil, fmt.Errorf("%w: task %s not found in registry", ErrTaskNotFound, taskID)
 	}
 
-	// Use the stored agent URL to retrieve the result
+	// 使用存储代理 URL 获取结果
 	return c.GetResultFromAgent(ctx, info.agentURL, taskID)
 }
 
-// GetResultFromAgent retrieves the result of an async task from a specific agent.
+// GetResultFrom Agent从特定代理中获取了某项协同任务的结果.
 func (c *HTTPClient) GetResultFromAgent(ctx context.Context, agentURL, taskID string) (*A2AMessage, error) {
 	if taskID == "" {
 		return nil, fmt.Errorf("%w: empty task_id", ErrInvalidMessage)
@@ -375,34 +375,34 @@ func (c *HTTPClient) GetResultFromAgent(ctx context.Context, agentURL, taskID st
 		return nil, fmt.Errorf("%w: empty agent_url", ErrRemoteUnavailable)
 	}
 
-	// Build the result endpoint URL
+	// 构建结果终点 URL
 	resultURL := fmt.Sprintf("%s/a2a/tasks/%s/result", agentURL, taskID)
 
-	// Create request
+	// 创建请求
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, resultURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
 
-	// Add headers
+	// 添加信头
 	req.Header.Set("Accept", "application/json")
 	for k, v := range c.config.Headers {
 		req.Header.Set(k, v)
 	}
 
-	// Execute request
+	// 执行请求
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrRemoteUnavailable, err)
 	}
 	defer resp.Body.Close()
 
-	// Handle specific status codes
+	// 处理特定状态代码
 	switch resp.StatusCode {
 	case http.StatusOK:
-		// Task completed, parse result
+		// 任务完成, 分析结果
 	case http.StatusAccepted:
-		// Task still processing
+		// 任务仍在处理
 		return nil, ErrTaskNotReady
 	case http.StatusNotFound:
 		return nil, fmt.Errorf("%w: task %s", ErrAgentNotFound, taskID)
@@ -411,7 +411,7 @@ func (c *HTTPClient) GetResultFromAgent(ctx context.Context, agentURL, taskID st
 		return nil, fmt.Errorf("%w: status %d, body: %s", ErrRemoteUnavailable, resp.StatusCode, string(respBody))
 	}
 
-	// Parse response
+	// 解析响应
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read response: %w", err)
@@ -425,7 +425,7 @@ func (c *HTTPClient) GetResultFromAgent(ctx context.Context, agentURL, taskID st
 	return &result, nil
 }
 
-// AsyncResponse represents the response from an async message submission.
+// AsyncResponse代表了从一个Async消息提交中获取的响应.
 type AsyncResponse struct {
 	TaskID        string `json:"task_id"`
 	Status        string `json:"status"`
@@ -433,22 +433,22 @@ type AsyncResponse struct {
 	EstimatedTime int    `json:"estimated_time,omitempty"` // seconds
 }
 
-// ClearCache clears the agent card cache.
+// ClearCache 清除代理卡缓存 。
 func (c *HTTPClient) ClearCache() {
 	c.cacheMu.Lock()
 	c.cardCache = make(map[string]*cachedCard)
 	c.cacheMu.Unlock()
 }
 
-// ClearTaskRegistry clears the task registry.
+// ClearTaskRegistry 清除任务注册 。
 func (c *HTTPClient) ClearTaskRegistry() {
 	c.taskMu.Lock()
 	c.taskRegistry = make(map[string]*taskInfo)
 	c.taskMu.Unlock()
 }
 
-// RegisterTask manually registers a task ID with an agent URL.
-// This is useful when the task was created outside of SendAsync.
+// 注册任务用代理 URL 手动注册任务ID 。
+// 当任务在 SendAsync 之外创建时, 这一点是有用的 。
 func (c *HTTPClient) RegisterTask(taskID, agentURL string) {
 	c.taskMu.Lock()
 	c.taskRegistry[taskID] = &taskInfo{
@@ -458,14 +458,14 @@ func (c *HTTPClient) RegisterTask(taskID, agentURL string) {
 	c.taskMu.Unlock()
 }
 
-// UnregisterTask removes a task from the registry.
+// 未注册的任务从登记簿中删除 。
 func (c *HTTPClient) UnregisterTask(taskID string) {
 	c.taskMu.Lock()
 	delete(c.taskRegistry, taskID)
 	c.taskMu.Unlock()
 }
 
-// CleanupExpiredTasks removes tasks older than the specified duration.
+// 清理已过期 任务会删除比指定时间长的任务 。
 func (c *HTTPClient) CleanupExpiredTasks(maxAge time.Duration) int {
 	c.taskMu.Lock()
 	defer c.taskMu.Unlock()
@@ -481,16 +481,16 @@ func (c *HTTPClient) CleanupExpiredTasks(maxAge time.Duration) int {
 	return count
 }
 
-// SetHeader sets a custom header for all requests.
+// Setheader 为所有请求设置自定义标题 。
 func (c *HTTPClient) SetHeader(key, value string) {
 	c.config.Headers[key] = value
 }
 
-// SetTimeout sets the HTTP client timeout.
+// SetTimeout 设置 HTTP 客户端超时.
 func (c *HTTPClient) SetTimeout(timeout time.Duration) {
 	c.config.Timeout = timeout
 	c.httpClient.Timeout = timeout
 }
 
-// Ensure HTTPClient implements A2AClient interface.
+// 确保 HTTPClient 执行 A2AClient 接口.
 var _ A2AClient = (*HTTPClient)(nil)

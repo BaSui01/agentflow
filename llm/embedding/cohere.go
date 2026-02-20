@@ -6,13 +6,13 @@ import (
 	"time"
 )
 
-// CohereProvider implements embedding using Cohere's API.
+// Cohere Provider 执行使用 Cohere API的嵌入.
 type CohereProvider struct {
 	*BaseProvider
 	cfg CohereConfig
 }
 
-// NewCohereProvider creates a new Cohere embedding provider.
+// NewCohere Provider创建了一个新的Cohere嵌入提供商.
 func NewCohereProvider(cfg CohereConfig) *CohereProvider {
 	if cfg.BaseURL == "" {
 		cfg.BaseURL = "https://api.cohere.ai"
@@ -59,7 +59,7 @@ type cohereEmbedResponse struct {
 	} `json:"meta"`
 }
 
-// Embed generates embeddings using Cohere.
+// 嵌入会使用Cohere生成嵌入.
 func (p *CohereProvider) Embed(ctx context.Context, req *EmbeddingRequest) (*EmbeddingResponse, error) {
 	model := ChooseModel(req.Model, p.cfg.Model, "embed-v3.5")
 
@@ -69,7 +69,7 @@ func (p *CohereProvider) Embed(ctx context.Context, req *EmbeddingRequest) (*Emb
 		EmbeddingType: []string{"float"},
 	}
 
-	// Map input type
+	// 地图输入类型
 	switch req.InputType {
 	case InputTypeQuery:
 		body.InputType = "search_query"
@@ -120,12 +120,12 @@ func (p *CohereProvider) Embed(ctx context.Context, req *EmbeddingRequest) (*Emb
 	}, nil
 }
 
-// EmbedQuery embeds a single query.
+// 嵌入查询嵌入了单个查询.
 func (p *CohereProvider) EmbedQuery(ctx context.Context, query string) ([]float64, error) {
 	return p.BaseProvider.EmbedQuery(ctx, query, p.Embed)
 }
 
-// EmbedDocuments embeds multiple documents.
+// 嵌入文件嵌入多个文档。
 func (p *CohereProvider) EmbedDocuments(ctx context.Context, documents []string) ([][]float64, error) {
 	return p.BaseProvider.EmbedDocuments(ctx, documents, p.Embed)
 }

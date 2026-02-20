@@ -1,4 +1,4 @@
-// Package reasoning provides Reflexion pattern for self-improving reasoning.
+// 包推理为自我改进推理提供了折射模式.
 package reasoning
 
 import (
@@ -14,7 +14,7 @@ import (
 	"go.uber.org/zap"
 )
 
-// ReflexionConfig configures the Reflexion executor.
+// ReflexionConfig 配置了 Reflexion 执行器.
 type ReflexionConfig struct {
 	MaxTrials        int           `json:"max_trials"`
 	SuccessThreshold float64       `json:"success_threshold"`
@@ -22,12 +22,12 @@ type ReflexionConfig struct {
 	EnableMemory     bool          `json:"enable_memory"`
 }
 
-// DefaultReflexionConfig returns sensible defaults.
+// 默认 Reflexion Config 返回合理的默认值 。
 func DefaultReflexionConfig() ReflexionConfig {
 	return ReflexionConfig{MaxTrials: 5, SuccessThreshold: 0.8, Timeout: 300 * time.Second, EnableMemory: true}
 }
 
-// Trial represents a single attempt at solving the task.
+// 审判是解决这项任务的一次尝试。
 type Trial struct {
 	Number     int         `json:"number"`
 	Action     string      `json:"action"`
@@ -36,26 +36,26 @@ type Trial struct {
 	Reflection *Reflection `json:"reflection,omitempty"`
 }
 
-// Reflection represents feedback on a trial.
+// 反思是对审判的反馈。
 type Reflection struct {
 	Analysis     string   `json:"analysis"`
 	Mistakes     []string `json:"mistakes"`
 	NextStrategy string   `json:"next_strategy"`
 }
 
-// ReflexionMemory stores past experiences.
+// 折射记忆存储过去的经验。
 type ReflexionMemory struct {
 	mu      sync.RWMutex
 	entries []MemoryEntry
 }
 
-// MemoryEntry represents a stored experience.
+// 内存 Entry 代表存储的经验 。
 type MemoryEntry struct {
 	Task       string      `json:"task"`
 	Reflection *Reflection `json:"reflection"`
 }
 
-// ReflexionExecutor implements the Reflexion pattern.
+// ReflexionExecutor执行Reflexion模式.
 type ReflexionExecutor struct {
 	provider     llm.Provider
 	toolExecutor tools.ToolExecutor
@@ -65,7 +65,7 @@ type ReflexionExecutor struct {
 	logger       *zap.Logger
 }
 
-// NewReflexionExecutor creates a new Reflexion executor.
+// 新ReflexionExecutor创建了新的Reflexion执行器.
 func NewReflexionExecutor(provider llm.Provider, executor tools.ToolExecutor, schemas []llm.ToolSchema, config ReflexionConfig, logger *zap.Logger) *ReflexionExecutor {
 	if logger == nil {
 		logger = zap.NewNop()
@@ -78,7 +78,7 @@ func NewReflexionExecutor(provider llm.Provider, executor tools.ToolExecutor, sc
 
 func (r *ReflexionExecutor) Name() string { return "reflexion" }
 
-// Execute runs the Reflexion loop.
+// 执行运行折射回路.
 func (r *ReflexionExecutor) Execute(ctx context.Context, task string) (*ReasoningResult, error) {
 	start := time.Now()
 	ctx, cancel := context.WithTimeout(ctx, r.config.Timeout)
@@ -128,7 +128,7 @@ func (r *ReflexionExecutor) Execute(ctx context.Context, task string) (*Reasonin
 func (r *ReflexionExecutor) executeTrial(ctx context.Context, task string, trialNum int, prevTrials []Trial) (*Trial, int, error) {
 	trial := &Trial{Number: trialNum}
 
-	// Use strings.Builder for efficient string concatenation
+	// 使用字符串。 高效字符串连接的构建器
 	var sb strings.Builder
 	sb.WriteString(fmt.Sprintf("Task: %s\nTrial: %d\n", task, trialNum))
 	if len(prevTrials) > 0 {

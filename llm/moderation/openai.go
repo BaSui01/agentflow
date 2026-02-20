@@ -11,13 +11,13 @@ import (
 	"time"
 )
 
-// OpenAIProvider implements moderation using OpenAI API.
+// OpenAIProvider使用OpenAI API执行节制.
 type OpenAIProvider struct {
 	cfg    OpenAIConfig
 	client *http.Client
 }
 
-// NewOpenAIProvider creates a new OpenAI moderation provider.
+// NewOpenAIProvider创建了一个新的OpenAI温和提供商.
 func NewOpenAIProvider(cfg OpenAIConfig) *OpenAIProvider {
 	if cfg.BaseURL == "" {
 		cfg.BaseURL = "https://api.openai.com/v1"
@@ -52,17 +52,17 @@ type openAIModerationResponse struct {
 	} `json:"results"`
 }
 
-// Moderate checks content for policy violations.
+// 适度检查政策违规内容.
 func (p *OpenAIProvider) Moderate(ctx context.Context, req *ModerationRequest) (*ModerationResponse, error) {
 	model := req.Model
 	if model == "" {
 		model = p.cfg.Model
 	}
 
-	// Build input - text only or multimodal
+	// 构建输入 - 仅文本或多模式
 	var input any
 	if len(req.Images) > 0 {
-		// Multimodal input
+		// 多式联运投入
 		var items []map[string]any
 		for _, text := range req.Input {
 			items = append(items, map[string]any{"type": "text", "text": text})

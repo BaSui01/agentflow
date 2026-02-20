@@ -1,147 +1,51 @@
-// Copyright 2024 AgentFlow Authors. All rights reserved.
-// Use of this source code is governed by a MIT license that can be
-// found in the LICENSE file.
+// 版权所有 2024 AgentFlow Authors. 版权所有。
+// 此源代码的使用由 MIT 许可规范,该许可可以是
+// 在LICENSE文件中找到。
 
 /*
-Package agent provides the core agent framework for AgentFlow.
+包 agent 提供 AgentFlow 的核心智能体框架。
 
-# Overview
+# 概述
 
-The agent package implements a flexible, extensible agent architecture that supports
-various AI agent patterns including ReAct, Chain-of-Thought, and custom workflows.
-It provides a unified interface for building intelligent agents that can reason,
-plan, and execute tasks using Large Language Models (LLMs).
+本包面向“可编排、可扩展、可观测”的智能体开发场景，统一了
+智能体生命周期管理、任务执行流程、工具调用、记忆管理与状态控制。
 
-# Architecture
+框架支持多种推理与执行模式，包括 ReAct、链式推理、计划后执行、
+反思式迭代以及自定义策略，适合从简单任务型 Agent 到复杂多阶段
+协作流程的实现。
 
-The agent framework follows a layered architecture:
+# 架构分层
 
-	┌─────────────────────────────────────────────────────────────┐
-	│                      Agent Interface                        │
-	│  (ID, Name, Type, State, Init, Teardown, Plan, Execute)    │
-	├─────────────────────────────────────────────────────────────┤
-	│                      BaseAgent                              │
-	│  (Common functionality, lifecycle management, hooks)        │
-	├─────────────────────────────────────────────────────────────┤
-	│  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────┐ │
-	│  │   Memory    │  │    Tools    │  │     Guardrails      │ │
-	│  │  Manager    │  │   Manager   │  │   (Validators)      │ │
-	│  └─────────────┘  └─────────────┘  └─────────────────────┘ │
-	├─────────────────────────────────────────────────────────────┤
-	│                    LLM Provider                             │
-	└─────────────────────────────────────────────────────────────┘
+整体能力由以下层次组成：
 
-# Core Components
+- `Agent` 接口层：定义统一能力边界，如 `Init`、`Plan`、`Execute`。
+- `BaseAgent` 基础层：提供状态机、钩子、并发保护等通用能力。
+- 组件层：记忆、工具、护栏、观测、持久化等可插拔模块。
+- LLM 适配层：通过 `llm.Provider` 抽象接入不同模型提供商。
 
-Agent Interface: Defines the contract for all agent implementations.
+# 核心能力
 
-	type Agent interface {
-	    ID() string
-	    Name() string
-	    Type() AgentType
-	    State() State
-	    Init(ctx context.Context) error
-	    Teardown(ctx context.Context) error
-	    Plan(ctx context.Context, input *Input) (*PlanResult, error)
-	    Execute(ctx context.Context, input *Input) (*Output, error)
-	    Observe(ctx context.Context, feedback *Feedback) error
-	}
+- 生命周期管理：统一初始化、执行、收尾与状态转换流程。
+- 状态机约束：保证状态流转合法，减少异常路径下的行为漂移。
+- 组件注入：通过构建器按需启用记忆、工具、护栏、反思与观测能力。
+- 错误语义化：通过统一错误类型与错误码提升调试与恢复效率。
+- 并发安全：基础实现内置必要同步机制，保护共享状态一致性。
 
-BaseAgent: Provides common functionality for all agent types including:
-  - Lifecycle management (Init, Teardown)
-  - State machine (Idle → Running → Completed/Failed)
-  - Hook system (BeforeExecute, AfterExecute, OnError)
-  - Checkpoint/recovery support
+# 使用方式
 
-MemoryManager: Manages agent memory across multiple layers:
-  - Working Memory: Short-term context storage
-  - Episodic Memory: Event-based experiences
-  - Semantic Memory: Factual knowledge
-  - Procedural Memory: How-to knowledge
+推荐通过构建器创建 Agent，并按需开启增强能力：
 
-ToolManager: Handles tool registration, selection, and execution.
+- 使用 `NewAgentBuilder` 配置名称、类型与执行参数。
+- 通过 `WithProvider` 绑定主模型，必要时通过 `WithToolProvider` 分离工具调用模型。
+- 通过 `WithMemory`、`WithToolManager`、`WithReflection` 等接口启用扩展能力。
+- 通过 `Build` 生成可执行实例，再调用 `Execute` 处理输入任务。
 
-# Usage
+# 相关子包
 
-Basic agent creation using the builder pattern:
-
-	agent, err := agent.NewAgentBuilder(agent.Config{
-	    Name:        "my-agent",
-	    Type:        agent.TypeReAct,
-	    MaxIterations: 10,
-	}).
-	    WithProvider(llmProvider).
-	    WithMemory(memoryManager).
-	    WithTools(toolManager).
-	    Build()
-
-	if err != nil {
-	    log.Fatal(err)
-	}
-
-	// Execute a task
-	output, err := agent.Execute(ctx, &agent.Input{
-	    Query: "What is the weather in Beijing?",
-	})
-
-# Agent Types
-
-The framework supports multiple agent types:
-
-  - TypeReAct: Reasoning and Acting pattern
-  - TypeCoT: Chain-of-Thought reasoning
-  - TypePlanAndExecute: Planning then execution
-  - TypeReflection: Self-reflection and improvement
-  - TypeCustom: User-defined agent logic
-
-# State Machine
-
-Agents follow a well-defined state machine:
-
-	Idle → Running → Completed
-	         ↓
-	       Failed
-
-State transitions are validated to ensure correct agent behavior.
-
-# Checkpointing
-
-The framework supports checkpointing for long-running tasks:
-
-	// Enable checkpointing
-	agent.EnableCheckpointing(checkpointManager)
-
-	// Recover from checkpoint
-	agent.RecoverFromCheckpoint(ctx, checkpointID)
-
-# Error Handling
-
-The package defines structured errors with error codes:
-
-	var (
-	    ErrProviderNotSet = NewError(ErrCodeProviderNotSet, "LLM provider not configured")
-	    ErrAgentNotReady  = NewError(ErrCodeNotReady, "agent not in ready state")
-	    ErrAgentBusy      = NewError(ErrCodeBusy, "agent is busy executing another task")
-	)
-
-# Thread Safety
-
-All agent implementations are designed to be thread-safe. The BaseAgent uses
-appropriate synchronization primitives to protect shared state.
-
-# Extensibility
-
-The framework is designed for extensibility:
-  - Custom agent types via AgentFactory registration
-  - Custom validators via Validator interface
-  - Custom memory stores via MemoryStore interface
-  - Custom tools via Tool interface
-
-See the subpackages for additional functionality:
-  - agent/guardrails: Input/output validation and security
-  - agent/memory: Memory management systems
-  - agent/evaluation: Agent evaluation and A/B testing
-  - agent/structured: Structured output parsing
-  - agent/protocol/a2a: Agent-to-Agent communication
+- `agent/guardrails`：输入与输出约束、注入防护、安全校验。
+- `agent/memory`：多层记忆与检索能力。
+- `agent/evaluation`：效果评测、指标采集与实验能力。
+- `agent/structured`：结构化输出生成与校验。
+- `agent/protocol/a2a`：智能体间通信协议与实现。
 */
 package agent

@@ -10,8 +10,8 @@ import (
 	"go.uber.org/zap"
 )
 
-// DiscoveryService provides a unified interface for agent capability discovery.
-// It combines the registry, matcher, composer, and protocol into a single service.
+// 发现服务为代理能力发现提供了一个统一的接口.
+// 它将注册,配对,作曲,协议合并为单一服务.
 type DiscoveryService struct {
 	registry Registry
 	matcher  Matcher
@@ -21,41 +21,41 @@ type DiscoveryService struct {
 	config *ServiceConfig
 	logger *zap.Logger
 
-	// Local agent info for auto-registration
+	// 用于自动登记的当地代理信息
 	localAgent *AgentInfo
 	localMu    sync.RWMutex
 
-	// State
+	// 状态
 	running bool
 	done    chan struct{}
 	wg      sync.WaitGroup
 }
 
-// ServiceConfig holds configuration for the discovery service.
+// ServiceConfig持有发现服务配置.
 type ServiceConfig struct {
-	// Registry configuration
+	// 书记官处配置
 	Registry *RegistryConfig `json:"registry"`
 
-	// Matcher configuration
+	// 匹配器配置
 	Matcher *MatcherConfig `json:"matcher"`
 
-	// Composer configuration
+	// 作曲家配置
 	Composer *ComposerConfig `json:"composer"`
 
-	// Protocol configuration
+	// 协议配置
 	Protocol *ProtocolConfig `json:"protocol"`
 
-	// EnableAutoRegistration enables automatic registration of local agents.
+	// 启用自动注册可自动注册本地代理。
 	EnableAutoRegistration bool `json:"enable_auto_registration"`
 
-	// HeartbeatInterval is the interval for sending heartbeats.
+	// Heartbeat Interval是发送心跳的间隔.
 	HeartbeatInterval time.Duration `json:"heartbeat_interval"`
 
-	// EnableMetrics enables metrics collection.
+	// 启用度量衡启用了度量衡收集 。
 	EnableMetrics bool `json:"enable_metrics"`
 }
 
-// DefaultServiceConfig returns a ServiceConfig with sensible defaults.
+// 默认ServiceConfig 返回带有合理默认的ServiceConfig 。
 func DefaultServiceConfig() *ServiceConfig {
 	return &ServiceConfig{
 		Registry:               DefaultRegistryConfig(),
@@ -68,7 +68,7 @@ func DefaultServiceConfig() *ServiceConfig {
 	}
 }
 
-// NewDiscoveryService creates a new discovery service.
+// 新发现服务创建了新的发现服务.
 func NewDiscoveryService(config *ServiceConfig, logger *zap.Logger) *DiscoveryService {
 	if config == nil {
 		config = DefaultServiceConfig()
@@ -77,16 +77,16 @@ func NewDiscoveryService(config *ServiceConfig, logger *zap.Logger) *DiscoverySe
 		logger = zap.NewNop()
 	}
 
-	// Create registry
+	// 创建注册
 	registry := NewCapabilityRegistry(config.Registry, logger)
 
-	// Create matcher
+	// 创建匹配器
 	matcher := NewCapabilityMatcher(registry, config.Matcher, logger)
 
-	// Create composer
+	// 创建作曲
 	composer := NewCapabilityComposer(registry, matcher, config.Composer, logger)
 
-	// Create protocol
+	// 创建协议
 	protocol := NewDiscoveryProtocol(config.Protocol, registry, logger)
 
 	return &DiscoveryService{
@@ -100,25 +100,25 @@ func NewDiscoveryService(config *ServiceConfig, logger *zap.Logger) *DiscoverySe
 	}
 }
 
-// Start starts the discovery service.
+// 启动发现服务.
 func (s *DiscoveryService) Start(ctx context.Context) error {
 	if s.running {
 		return fmt.Errorf("service already running")
 	}
 
-	// Start registry
+	// 开始注册
 	if reg, ok := s.registry.(*CapabilityRegistry); ok {
 		if err := reg.Start(ctx); err != nil {
 			return fmt.Errorf("failed to start registry: %w", err)
 		}
 	}
 
-	// Start protocol
+	// 开始协议
 	if err := s.protocol.Start(ctx); err != nil {
 		return fmt.Errorf("failed to start protocol: %w", err)
 	}
 
-	// Start heartbeat if auto-registration is enabled
+	// 如果启用自动注册, 启动心跳
 	if s.config.EnableAutoRegistration {
 		s.wg.Add(1)
 		go s.heartbeatLoop()
@@ -130,7 +130,7 @@ func (s *DiscoveryService) Start(ctx context.Context) error {
 	return nil
 }
 
-// Stop stops the discovery service.
+// 停止发现服务。
 func (s *DiscoveryService) Stop(ctx context.Context) error {
 	if !s.running {
 		return nil
@@ -139,12 +139,12 @@ func (s *DiscoveryService) Stop(ctx context.Context) error {
 	close(s.done)
 	s.wg.Wait()
 
-	// Stop protocol
+	// 停止协议
 	if err := s.protocol.Stop(ctx); err != nil {
 		s.logger.Error("failed to stop protocol", zap.Error(err))
 	}
 
-	// Stop registry
+	// 停止注册
 	if err := s.registry.Close(); err != nil {
 		s.logger.Error("failed to close registry", zap.Error(err))
 	}
@@ -155,14 +155,14 @@ func (s *DiscoveryService) Stop(ctx context.Context) error {
 	return nil
 }
 
-// RegisterAgent registers an agent with the discovery service.
+// 代理人在发现处登记。
 func (s *DiscoveryService) RegisterAgent(ctx context.Context, info *AgentInfo) error {
-	// Register with registry
+	// 向登记册登记
 	if err := s.registry.RegisterAgent(ctx, info); err != nil {
 		return err
 	}
 
-	// Announce via protocol
+	// 通过协议宣布
 	if err := s.protocol.Announce(ctx, info); err != nil {
 		s.logger.Warn("failed to announce agent", zap.Error(err))
 	}
@@ -170,12 +170,12 @@ func (s *DiscoveryService) RegisterAgent(ctx context.Context, info *AgentInfo) e
 	return nil
 }
 
-// UnregisterAgent unregisters an agent from the discovery service.
+// 未注册代理 未经注册的代理 从发现服务。
 func (s *DiscoveryService) UnregisterAgent(ctx context.Context, agentID string) error {
 	return s.registry.UnregisterAgent(ctx, agentID)
 }
 
-// RegisterLocalAgent registers the local agent for auto-heartbeat.
+// 注册本地代理 注册本地代理自动心跳。
 func (s *DiscoveryService) RegisterLocalAgent(info *AgentInfo) error {
 	s.localMu.Lock()
 	defer s.localMu.Unlock()
@@ -183,12 +183,12 @@ func (s *DiscoveryService) RegisterLocalAgent(info *AgentInfo) error {
 	info.IsLocal = true
 	s.localAgent = info
 
-	// Register immediately
+	// 立即登记
 	ctx := context.Background()
 	return s.RegisterAgent(ctx, info)
 }
 
-// UpdateLocalAgentLoad updates the load of the local agent.
+// 更新本地代理Load 更新本地代理的负载 。
 func (s *DiscoveryService) UpdateLocalAgentLoad(load float64) error {
 	s.localMu.RLock()
 	agent := s.localAgent
@@ -202,7 +202,7 @@ func (s *DiscoveryService) UpdateLocalAgentLoad(load float64) error {
 	return s.registry.UpdateAgentLoad(ctx, agent.Card.Name, load)
 }
 
-// FindAgent finds the best agent for a task.
+// FindAgent 找到任务的最佳代理 。
 func (s *DiscoveryService) FindAgent(ctx context.Context, taskDescription string, requiredCapabilities []string) (*AgentInfo, error) {
 	result, err := s.matcher.MatchOne(ctx, &MatchRequest{
 		TaskDescription:      taskDescription,
@@ -215,81 +215,81 @@ func (s *DiscoveryService) FindAgent(ctx context.Context, taskDescription string
 	return result.Agent, nil
 }
 
-// FindAgents finds multiple agents matching the criteria.
+// FindAgents发现多个符合标准的代理.
 func (s *DiscoveryService) FindAgents(ctx context.Context, req *MatchRequest) ([]*MatchResult, error) {
 	return s.matcher.Match(ctx, req)
 }
 
-// ComposeCapabilities creates a composition of capabilities from multiple agents.
+// 由多种物剂构成的能力组成。
 func (s *DiscoveryService) ComposeCapabilities(ctx context.Context, req *CompositionRequest) (*CompositionResult, error) {
 	return s.composer.Compose(ctx, req)
 }
 
-// DiscoverAgents discovers agents on the network.
+// 发现特工在网络上发现了特工.
 func (s *DiscoveryService) DiscoverAgents(ctx context.Context, filter *DiscoveryFilter) ([]*AgentInfo, error) {
 	return s.protocol.Discover(ctx, filter)
 }
 
-// GetAgent retrieves an agent by ID.
+// Get Agent通过身份识别找到一个特工.
 func (s *DiscoveryService) GetAgent(ctx context.Context, agentID string) (*AgentInfo, error) {
 	return s.registry.GetAgent(ctx, agentID)
 }
 
-// ListAgents lists all registered agents.
+// ListAgents列出所有注册代理.
 func (s *DiscoveryService) ListAgents(ctx context.Context) ([]*AgentInfo, error) {
 	return s.registry.ListAgents(ctx)
 }
 
-// GetCapability retrieves a capability by agent ID and name.
+// Get Capability通过代理身份和姓名检索能力.
 func (s *DiscoveryService) GetCapability(ctx context.Context, agentID, capabilityName string) (*CapabilityInfo, error) {
 	return s.registry.GetCapability(ctx, agentID, capabilityName)
 }
 
-// FindCapabilities finds capabilities by name across all agents.
+// Find Capabilitys 在所有特工中按名称找到能力.
 func (s *DiscoveryService) FindCapabilities(ctx context.Context, capabilityName string) ([]CapabilityInfo, error) {
 	return s.registry.FindCapabilities(ctx, capabilityName)
 }
 
-// RecordExecution records an execution result for a capability.
+// 记录 Execution 记录一个执行结果 一个能力。
 func (s *DiscoveryService) RecordExecution(ctx context.Context, agentID, capabilityName string, success bool, latency time.Duration) error {
 	return s.registry.RecordExecution(ctx, agentID, capabilityName, success, latency)
 }
 
-// Subscribe subscribes to discovery events.
+// 订阅了发现事件。
 func (s *DiscoveryService) Subscribe(handler DiscoveryEventHandler) string {
 	return s.registry.Subscribe(handler)
 }
 
-// Unsubscribe unsubscribes from discovery events.
+// 不订阅来自发现事件的用户 。
 func (s *DiscoveryService) Unsubscribe(subscriptionID string) {
 	s.registry.Unsubscribe(subscriptionID)
 }
 
-// SubscribeToAnnouncements subscribes to agent announcements.
+// 订阅通知订阅代理通知 。
 func (s *DiscoveryService) SubscribeToAnnouncements(handler func(*AgentInfo)) string {
 	return s.protocol.Subscribe(handler)
 }
 
-// UnsubscribeFromAnnouncements unsubscribes from agent announcements.
+// 从代理通知中取消订阅 。
 func (s *DiscoveryService) UnsubscribeFromAnnouncements(subscriptionID string) {
 	s.protocol.Unsubscribe(subscriptionID)
 }
 
-// RegisterDependency registers a dependency between capabilities.
+// 登记册的依赖性对各种能力之间的依赖性进行登记。
 func (s *DiscoveryService) RegisterDependency(capability string, dependencies []string) {
 	if comp, ok := s.composer.(*CapabilityComposer); ok {
 		comp.RegisterDependency(capability, dependencies)
 	}
 }
 
-// RegisterExclusiveGroup registers a group of mutually exclusive capabilities.
+// 登记小组登记一组相互排斥的能力。
 func (s *DiscoveryService) RegisterExclusiveGroup(capabilities []string) {
 	if comp, ok := s.composer.(*CapabilityComposer); ok {
 		comp.RegisterExclusiveGroup(capabilities)
 	}
 }
 
-// heartbeatLoop sends periodic heartbeats for the local agent.
+// 心跳Loop为本地代理发送定期心跳.
 func (s *DiscoveryService) heartbeatLoop() {
 	defer s.wg.Done()
 
@@ -306,7 +306,7 @@ func (s *DiscoveryService) heartbeatLoop() {
 	}
 }
 
-// sendHeartbeat sends a heartbeat for the local agent.
+// 让Heartbeat为本地特工发送心跳
 func (s *DiscoveryService) sendHeartbeat() {
 	s.localMu.RLock()
 	agent := s.localAgent
@@ -324,27 +324,27 @@ func (s *DiscoveryService) sendHeartbeat() {
 	}
 }
 
-// Registry returns the underlying registry.
+// 登记册返回基本登记册。
 func (s *DiscoveryService) Registry() Registry {
 	return s.registry
 }
 
-// Matcher returns the underlying matcher.
+// 匹配者返回基本匹配者 。
 func (s *DiscoveryService) Matcher() Matcher {
 	return s.matcher
 }
 
-// Composer returns the underlying composer.
+// 作曲家返回了基础作曲家.
 func (s *DiscoveryService) Composer() Composer {
 	return s.composer
 }
 
-// Protocol returns the underlying protocol.
+// 协议返回基本协议。
 func (s *DiscoveryService) Protocol() Protocol {
 	return s.protocol
 }
 
-// AgentInfoFromCard creates an AgentInfo from an A2A AgentCard.
+// Agent InfoFromCard从A2A AgentCard中创建了AgentInfo.
 func AgentInfoFromCard(card *a2a.AgentCard, isLocal bool) *AgentInfo {
 	if card == nil {
 		return nil
@@ -358,7 +358,7 @@ func AgentInfoFromCard(card *a2a.AgentCard, isLocal bool) *AgentInfo {
 		Metadata: card.Metadata,
 	}
 
-	// Convert capabilities
+	// 转换能力
 	for _, cap := range card.Capabilities {
 		info.Capabilities = append(info.Capabilities, CapabilityInfo{
 			Capability: cap,
@@ -370,7 +370,7 @@ func AgentInfoFromCard(card *a2a.AgentCard, isLocal bool) *AgentInfo {
 	return info
 }
 
-// CreateAgentCard creates an A2A AgentCard from agent configuration.
+// CreateAgentCard通过代理配置创建了A2A AgentCard.
 func CreateAgentCard(name, description, url, version string, capabilities []a2a.Capability) *a2a.AgentCard {
 	card := a2a.NewAgentCard(name, description, url, version)
 	for _, cap := range capabilities {
@@ -379,28 +379,28 @@ func CreateAgentCard(name, description, url, version string, capabilities []a2a.
 	return card
 }
 
-// Global discovery service instance
+// 全球发现服务实例
 var (
 	globalService     *DiscoveryService
 	globalServiceOnce sync.Once
 	globalServiceMu   sync.RWMutex
 )
 
-// InitGlobalDiscoveryService initializes the global discovery service.
+// InitGlobal Discovery Service初始化了全球发现服务.
 func InitGlobalDiscoveryService(config *ServiceConfig, logger *zap.Logger) {
 	globalServiceOnce.Do(func() {
 		globalService = NewDiscoveryService(config, logger)
 	})
 }
 
-// GetGlobalDiscoveryService returns the global discovery service.
+// 获取全球 Discovery Service返回了全球发现服务.
 func GetGlobalDiscoveryService() *DiscoveryService {
 	globalServiceMu.RLock()
 	defer globalServiceMu.RUnlock()
 	return globalService
 }
 
-// SetGlobalDiscoveryService sets the global discovery service.
+// 设置全局 发现服务设置全球发现服务.
 func SetGlobalDiscoveryService(service *DiscoveryService) {
 	globalServiceMu.Lock()
 	defer globalServiceMu.Unlock()

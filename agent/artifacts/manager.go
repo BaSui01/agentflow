@@ -1,5 +1,5 @@
-// Package artifacts provides artifact lifecycle management for AI agents.
-// Implements Google ADK-style artifact management for files, data, and outputs.
+// 包裹出品为AI代理提供出品生命周期管理.
+// 对文件,数据和产出实施Google ADK风格的文物管理.
 package artifacts
 
 import (
@@ -14,7 +14,7 @@ import (
 	"go.uber.org/zap"
 )
 
-// ArtifactType defines the type of artifact.
+// 工艺品Type定义了文物的类型.
 type ArtifactType string
 
 const (
@@ -26,7 +26,7 @@ const (
 	ArtifactTypeModel  ArtifactType = "model"
 )
 
-// ArtifactStatus represents the lifecycle status of an artifact.
+// 人工活性状态代表文物的生命周期状态。
 type ArtifactStatus string
 
 const (
@@ -37,7 +37,7 @@ const (
 	StatusDeleted   ArtifactStatus = "deleted"
 )
 
-// Artifact represents a managed artifact in the system.
+// 人工活性代表系统中的受管文物.
 type Artifact struct {
 	ID          string         `json:"id"`
 	Name        string         `json:"name"`
@@ -59,7 +59,7 @@ type Artifact struct {
 	Version     int            `json:"version"`
 }
 
-// ArtifactStore defines the storage interface for artifacts.
+// ArtifactStore定义了文物的存储界面.
 type ArtifactStore interface {
 	Save(ctx context.Context, artifact *Artifact, data io.Reader) error
 	Load(ctx context.Context, artifactID string) (*Artifact, io.ReadCloser, error)
@@ -69,7 +69,7 @@ type ArtifactStore interface {
 	Archive(ctx context.Context, artifactID string) error
 }
 
-// ArtifactQuery defines query parameters for listing artifacts.
+// ArtifactQuery定义了列出文物的查询参数.
 type ArtifactQuery struct {
 	SessionID string         `json:"session_id,omitempty"`
 	Type      ArtifactType   `json:"type,omitempty"`
@@ -80,7 +80,7 @@ type ArtifactQuery struct {
 	Offset    int            `json:"offset,omitempty"`
 }
 
-// Manager handles artifact lifecycle management.
+// 经理处理文物生命周期管理.
 type Manager struct {
 	store     ArtifactStore
 	logger    *zap.Logger
@@ -92,14 +92,14 @@ type Manager struct {
 	mu        sync.RWMutex
 }
 
-// ManagerConfig configures the artifact manager.
+// Manager Config 配置了文物管理器 。
 type ManagerConfig struct {
 	BasePath   string        `json:"base_path"`
 	MaxSize    int64         `json:"max_size"`
 	DefaultTTL time.Duration `json:"default_ttl"`
 }
 
-// DefaultManagerConfig returns sensible defaults.
+// 默认管理器 Config 返回合理的默认值 。
 func DefaultManagerConfig() ManagerConfig {
 	return ManagerConfig{
 		BasePath:   "./artifacts",
@@ -108,7 +108,7 @@ func DefaultManagerConfig() ManagerConfig {
 	}
 }
 
-// NewManager creates a new artifact manager.
+// NewManager创建了新的文物管理器.
 func NewManager(config ManagerConfig, store ArtifactStore, logger *zap.Logger) *Manager {
 	if logger == nil {
 		logger = zap.NewNop()
@@ -123,7 +123,7 @@ func NewManager(config ManagerConfig, store ArtifactStore, logger *zap.Logger) *
 	}
 }
 
-// Create creates a new artifact from data.
+// 从数据创建出新的文物 。
 func (m *Manager) Create(ctx context.Context, name string, artifactType ArtifactType, data io.Reader, opts ...CreateOption) (*Artifact, error) {
 	options := &createOptions{}
 	for _, opt := range opts {
@@ -184,12 +184,12 @@ func (m *Manager) Create(ctx context.Context, name string, artifactType Artifact
 	return artifact, nil
 }
 
-// Get retrieves an artifact by ID.
+// 凭身份证取回文物
 func (m *Manager) Get(ctx context.Context, artifactID string) (*Artifact, io.ReadCloser, error) {
 	return m.store.Load(ctx, artifactID)
 }
 
-// GetMetadata retrieves artifact metadata without data.
+// GetMetadata检索没有数据的文物元数据.
 func (m *Manager) GetMetadata(ctx context.Context, artifactID string) (*Artifact, error) {
 	m.mu.RLock()
 	if artifact, ok := m.artifacts[artifactID]; ok {
@@ -201,7 +201,7 @@ func (m *Manager) GetMetadata(ctx context.Context, artifactID string) (*Artifact
 	return m.store.GetMetadata(ctx, artifactID)
 }
 
-// Delete removes an artifact.
+// 删除一个文物。
 func (m *Manager) Delete(ctx context.Context, artifactID string) error {
 	m.logger.Info("deleting artifact", zap.String("id", artifactID))
 
@@ -216,18 +216,18 @@ func (m *Manager) Delete(ctx context.Context, artifactID string) error {
 	return nil
 }
 
-// List lists artifacts matching the query.
+// 列表列出符合查询的文物.
 func (m *Manager) List(ctx context.Context, query ArtifactQuery) ([]*Artifact, error) {
 	return m.store.List(ctx, query)
 }
 
-// Archive archives an artifact.
+// 档案馆收藏了一件文物
 func (m *Manager) Archive(ctx context.Context, artifactID string) error {
 	m.logger.Info("archiving artifact", zap.String("id", artifactID))
 	return m.store.Archive(ctx, artifactID)
 }
 
-// CreateVersion creates a new version of an existing artifact.
+// CreateVersion 创建了新版本的已有文物.
 func (m *Manager) CreateVersion(ctx context.Context, parentID string, data io.Reader) (*Artifact, error) {
 	parent, err := m.GetMetadata(ctx, parentID)
 	if err != nil {
@@ -244,7 +244,7 @@ func (m *Manager) CreateVersion(ctx context.Context, parentID string, data io.Re
 	)
 }
 
-// Cleanup removes expired artifacts.
+// 清理清除过期文物.
 func (m *Manager) Cleanup(ctx context.Context) (int, error) {
 	m.cleanupMu.Lock()
 	defer m.cleanupMu.Unlock()
@@ -276,7 +276,7 @@ func (m *Manager) Cleanup(ctx context.Context) (int, error) {
 	return deleted, nil
 }
 
-// CreateOption configures artifact creation.
+// 创建可选配置文物创建 。
 type CreateOption func(*createOptions)
 
 type createOptions struct {

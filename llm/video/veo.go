@@ -10,13 +10,13 @@ import (
 	"time"
 )
 
-// VeoProvider implements video generation using Google Veo 3.1.
+// VeoProvider使用Google Veo 3.1执行视频生成.
 type VeoProvider struct {
 	cfg    VeoConfig
 	client *http.Client
 }
 
-// NewVeoProvider creates a new Veo video provider.
+// NewVeoProvider创建了一个新的Veo视频提供商.
 func NewVeoProvider(cfg VeoConfig) *VeoProvider {
 	if cfg.Model == "" {
 		cfg.Model = "veo-3.1-generate-preview"
@@ -69,12 +69,12 @@ type veoResponse struct {
 	} `json:"predictions"`
 }
 
-// Analyze is not supported by Veo.
+// Veo不支持分析。
 func (p *VeoProvider) Analyze(ctx context.Context, req *AnalyzeRequest) (*AnalyzeResponse, error) {
 	return nil, fmt.Errorf("video analysis not supported by veo provider, use gemini instead")
 }
 
-// Generate creates videos using Veo 3.1.
+// 生成视频使用Veo 3.1.
 func (p *VeoProvider) Generate(ctx context.Context, req *GenerateRequest) (*GenerateResponse, error) {
 	model := req.Model
 	if model == "" {
@@ -111,7 +111,7 @@ func (p *VeoProvider) Generate(ctx context.Context, req *GenerateRequest) (*Gene
 	}
 
 	payload, _ := json.Marshal(body)
-	// Veo 3.1 uses Gemini API endpoint: /models/{model}:generateVideos
+	// Veo 3.1使用双子座API端点:/models/{model}:generateVideos
 	url := fmt.Sprintf("https://generativelanguage.googleapis.com/v1beta/models/%s:generateVideos?key=%s",
 		model, p.cfg.APIKey)
 
@@ -139,7 +139,7 @@ func (p *VeoProvider) Generate(ctx context.Context, req *GenerateRequest) (*Gene
 		return nil, fmt.Errorf("failed to decode veo response: %w", err)
 	}
 
-	// Poll for completion
+	// 完成投票
 	result, err := p.pollOperation(ctx, opResp.Name)
 	if err != nil {
 		return nil, err

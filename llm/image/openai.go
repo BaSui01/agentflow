@@ -12,13 +12,13 @@ import (
 	"time"
 )
 
-// OpenAIProvider implements image generation using OpenAI DALL-E.
+// OpenAIProvider使用OpenAI DALL-E执行图像生成.
 type OpenAIProvider struct {
 	cfg    OpenAIConfig
 	client *http.Client
 }
 
-// NewOpenAIProvider creates a new OpenAI image provider.
+// 新OpenAIProvider创建了新的OpenAI图像提供商.
 func NewOpenAIProvider(cfg OpenAIConfig) *OpenAIProvider {
 	if cfg.BaseURL == "" {
 		cfg.BaseURL = "https://api.openai.com"
@@ -62,7 +62,7 @@ type dalleResponse struct {
 	} `json:"data"`
 }
 
-// Generate creates images from text prompts.
+// 从文本提示生成图像 。
 func (p *OpenAIProvider) Generate(ctx context.Context, req *GenerateRequest) (*GenerateResponse, error) {
 	model := req.Model
 	if model == "" {
@@ -137,7 +137,7 @@ func (p *OpenAIProvider) Generate(ctx context.Context, req *GenerateRequest) (*G
 	}, nil
 }
 
-// Edit modifies an existing image.
+// 编辑修改已存在的图像。
 func (p *OpenAIProvider) Edit(ctx context.Context, req *EditRequest) (*GenerateResponse, error) {
 	if req.Image == nil {
 		return nil, fmt.Errorf("image is required")
@@ -146,7 +146,7 @@ func (p *OpenAIProvider) Edit(ctx context.Context, req *EditRequest) (*GenerateR
 	var buf bytes.Buffer
 	writer := multipart.NewWriter(&buf)
 
-	// Add image
+	// 添加图像
 	part, err := writer.CreateFormFile("image", "image.png")
 	if err != nil {
 		return nil, err
@@ -155,7 +155,7 @@ func (p *OpenAIProvider) Edit(ctx context.Context, req *EditRequest) (*GenerateR
 		return nil, err
 	}
 
-	// Add mask if provided
+	// 提供后添加口罩
 	if req.Mask != nil {
 		maskPart, err := writer.CreateFormFile("mask", "mask.png")
 		if err != nil {
@@ -217,7 +217,7 @@ func (p *OpenAIProvider) Edit(ctx context.Context, req *EditRequest) (*GenerateR
 	}, nil
 }
 
-// CreateVariation creates variations of an image.
+// Create Variation 创建图像的变体 。
 func (p *OpenAIProvider) CreateVariation(ctx context.Context, req *VariationRequest) (*GenerateResponse, error) {
 	if req.Image == nil {
 		return nil, fmt.Errorf("image is required")

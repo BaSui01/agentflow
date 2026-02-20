@@ -1,67 +1,67 @@
-// Package a2a provides A2A (Agent-to-Agent) protocol support for cross-system agent interoperability.
-// It implements the Google A2A specification for agent discovery, capability description, and message exchange.
+// a2a包为跨系统代理互操作性提供A2A(代理对代理)协议支持.
+// 它执行Google A2A的规格,用于代理发现,能力描述和消息交换.
 package a2a
 
 import (
 	"github.com/BaSui01/agentflow/agent/structured"
 )
 
-// CapabilityType represents the type of capability an agent provides.
+// 能力 类型代表一种代理人提供的能力类型。
 type CapabilityType string
 
 const (
-	// CapabilityTypeTask indicates the agent can execute tasks.
+	// 能力TypeTask表示代理可以执行任务.
 	CapabilityTypeTask CapabilityType = "task"
-	// CapabilityTypeQuery indicates the agent can answer queries.
+	// 能力 TypeQuery表示代理可以回答询问.
 	CapabilityTypeQuery CapabilityType = "query"
-	// CapabilityTypeStream indicates the agent supports streaming responses.
+	// 能力 TypeStream 表示代理支持流响应.
 	CapabilityTypeStream CapabilityType = "stream"
 )
 
-// Capability defines an agent's capability in the A2A protocol.
+// 能力在A2A协议中定义了代理的能力.
 type Capability struct {
-	// Name is the unique identifier for this capability.
+	// 名称是此能力的唯一标识符 。
 	Name string `json:"name"`
-	// Description provides a human-readable description of what this capability does.
+	// 描述为人们提供了这种能力的可读性描述.
 	Description string `json:"description"`
-	// Type indicates the capability type (task, query, stream).
+	// 类型表示能力类型(任务,查询,流).
 	Type CapabilityType `json:"type"`
 }
 
-// ToolDefinition defines a tool that an agent can use or expose.
+// Tool Definition定义了代理人可以使用或曝光的工具.
 type ToolDefinition struct {
-	// Name is the unique identifier for this tool.
+	// 名称是此工具的唯一标识符 。
 	Name string `json:"name"`
-	// Description provides a human-readable description of what this tool does.
+	// 描述提供了一种人类可以读取的描述,说明这个工具是做什么的.
 	Description string `json:"description"`
-	// Parameters defines the JSON Schema for the tool's input parameters.
+	// 参数定义了该工具的输入参数的JSON Schema.
 	Parameters *structured.JSONSchema `json:"parameters"`
 }
 
-// AgentCard represents an A2A Agent Card that describes an agent's capabilities and metadata.
-// It follows the Google A2A specification for agent discovery and interoperability.
+// AgentCard代表一个描述代理能力和元数据的A2A代理卡.
+// 它遵循了Google A2A关于特工发现和互操作性的规格.
 type AgentCard struct {
-	// Name is the unique identifier for this agent.
+	// 名称是此代理的唯一标识符 。
 	Name string `json:"name"`
-	// Description provides a human-readable description of the agent's purpose.
+	// 描述提供了一种人能读取的关于该剂目的的描述.
 	Description string `json:"description"`
-	// URL is the endpoint where this agent can be reached.
+	// URL是能够到达此代理的终点 。
 	URL string `json:"url"`
-	// Version indicates the agent's version.
+	// 版本表示代理的版本.
 	Version string `json:"version"`
-	// Capabilities lists the capabilities this agent provides.
+	// 能力列出这个代理提供的能力.
 	Capabilities []Capability `json:"capabilities"`
-	// InputSchema defines the JSON Schema for the agent's expected input format.
+	// 输入Schema定义了代理商的预期输入格式的JSON Schema.
 	InputSchema *structured.JSONSchema `json:"input_schema,omitempty"`
-	// OutputSchema defines the JSON Schema for the agent's output format.
+	// OutsionSchema定义了代理输出格式的JSON Schema.
 	OutputSchema *structured.JSONSchema `json:"output_schema,omitempty"`
-	// Tools lists the tools this agent can use or expose.
+	// 工具列出这个代理可以使用或曝光的工具.
 	Tools []ToolDefinition `json:"tools,omitempty"`
-	// Metadata contains additional key-value pairs for extensibility.
+	// 元数据包含额外的可扩展性的密钥值对.
 	Metadata map[string]string `json:"metadata,omitempty"`
 }
 
-// NewAgentCard creates a new AgentCard with the required fields.
+// NewAgentCard创建了具有所需字段的新AgentCard.
 func NewAgentCard(name, description, url, version string) *AgentCard {
 	return &AgentCard{
 		Name:         name,
@@ -74,7 +74,7 @@ func NewAgentCard(name, description, url, version string) *AgentCard {
 	}
 }
 
-// AddCapability adds a capability to the agent card.
+// 添加能力在代理卡上增加了一个能力.
 func (c *AgentCard) AddCapability(name, description string, capType CapabilityType) *AgentCard {
 	c.Capabilities = append(c.Capabilities, Capability{
 		Name:        name,
@@ -84,7 +84,7 @@ func (c *AgentCard) AddCapability(name, description string, capType CapabilityTy
 	return c
 }
 
-// AddTool adds a tool definition to the agent card.
+// AddTool在代理卡上添加了工具定义.
 func (c *AgentCard) AddTool(name, description string, parameters *structured.JSONSchema) *AgentCard {
 	c.Tools = append(c.Tools, ToolDefinition{
 		Name:        name,
@@ -94,19 +94,19 @@ func (c *AgentCard) AddTool(name, description string, parameters *structured.JSO
 	return c
 }
 
-// SetInputSchema sets the input schema for the agent card.
+// SetInputSchema为代理卡设置输入方案.
 func (c *AgentCard) SetInputSchema(schema *structured.JSONSchema) *AgentCard {
 	c.InputSchema = schema
 	return c
 }
 
-// SetOutputSchema sets the output schema for the agent card.
+// SetOutputSchema为代理卡设置输出计划.
 func (c *AgentCard) SetOutputSchema(schema *structured.JSONSchema) *AgentCard {
 	c.OutputSchema = schema
 	return c
 }
 
-// SetMetadata sets a metadata key-value pair.
+// SetMetadata 设置了元数据密钥值对.
 func (c *AgentCard) SetMetadata(key, value string) *AgentCard {
 	if c.Metadata == nil {
 		c.Metadata = make(map[string]string)
@@ -115,7 +115,7 @@ func (c *AgentCard) SetMetadata(key, value string) *AgentCard {
 	return c
 }
 
-// GetMetadata retrieves a metadata value by key.
+// GetMetadata 按键检索元数据值 。
 func (c *AgentCard) GetMetadata(key string) (string, bool) {
 	if c.Metadata == nil {
 		return "", false
@@ -124,7 +124,7 @@ func (c *AgentCard) GetMetadata(key string) (string, bool) {
 	return value, ok
 }
 
-// HasCapability checks if the agent has a specific capability by name.
+// 如果代理人有特定的能力,则进行能力检查。
 func (c *AgentCard) HasCapability(name string) bool {
 	for _, cap := range c.Capabilities {
 		if cap.Name == name {
@@ -134,7 +134,7 @@ func (c *AgentCard) HasCapability(name string) bool {
 	return false
 }
 
-// GetCapability retrieves a capability by name.
+// Get Capability 按名称检索一个能力.
 func (c *AgentCard) GetCapability(name string) *Capability {
 	for i := range c.Capabilities {
 		if c.Capabilities[i].Name == name {
@@ -144,7 +144,7 @@ func (c *AgentCard) GetCapability(name string) *Capability {
 	return nil
 }
 
-// HasTool checks if the agent has a specific tool by name.
+// HasTool检查代理人是否有特定的名称工具.
 func (c *AgentCard) HasTool(name string) bool {
 	for _, tool := range c.Tools {
 		if tool.Name == name {
@@ -154,7 +154,7 @@ func (c *AgentCard) HasTool(name string) bool {
 	return false
 }
 
-// GetTool retrieves a tool definition by name.
+// GetTool 检索一个工具名称定义 。
 func (c *AgentCard) GetTool(name string) *ToolDefinition {
 	for i := range c.Tools {
 		if c.Tools[i].Name == name {
@@ -164,7 +164,7 @@ func (c *AgentCard) GetTool(name string) *ToolDefinition {
 	return nil
 }
 
-// Validate checks if the AgentCard has all required fields.
+// 验证AgentCard是否拥有所有需要的字段 。
 func (c *AgentCard) Validate() error {
 	if c.Name == "" {
 		return ErrMissingName

@@ -1,6 +1,6 @@
-// Package guardrails provides input/output validation and content filtering for agents.
-// It implements security guardrails including PII detection, prompt injection prevention,
-// and customizable validation rules.
+// 包护栏为代理商提供输入/输出验证和内容过滤.
+// 它实施安全护栏,包括PII检测、快速注射预防,
+// 和可定制的验证规则。
 package guardrails
 
 import (

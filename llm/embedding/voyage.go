@@ -6,13 +6,13 @@ import (
 	"time"
 )
 
-// VoyageProvider implements embedding using Voyage AI's API.
+// Voyage Provider 执行使用 Voyage AI 的 API 嵌入.
 type VoyageProvider struct {
 	*BaseProvider
 	cfg VoyageConfig
 }
 
-// NewVoyageProvider creates a new Voyage AI embedding provider.
+// NewVoyage Provider创建了一个新的Voyage AI嵌入提供商.
 func NewVoyageProvider(cfg VoyageConfig) *VoyageProvider {
 	if cfg.BaseURL == "" {
 		cfg.BaseURL = "https://api.voyageai.com"
@@ -55,7 +55,7 @@ type voyageEmbedResponse struct {
 	} `json:"usage"`
 }
 
-// Embed generates embeddings using Voyage AI.
+// Embed使用Voyage AI生成嵌入.
 func (p *VoyageProvider) Embed(ctx context.Context, req *EmbeddingRequest) (*EmbeddingResponse, error) {
 	model := ChooseModel(req.Model, p.cfg.Model, "voyage-3-large")
 
@@ -65,7 +65,7 @@ func (p *VoyageProvider) Embed(ctx context.Context, req *EmbeddingRequest) (*Emb
 		Truncate: req.Truncate,
 	}
 
-	// Map input type
+	// 地图输入类型
 	switch req.InputType {
 	case InputTypeQuery, InputTypeCodeQuery:
 		body.InputType = "query"
@@ -104,12 +104,12 @@ func (p *VoyageProvider) Embed(ctx context.Context, req *EmbeddingRequest) (*Emb
 	}, nil
 }
 
-// EmbedQuery embeds a single query.
+// 嵌入查询嵌入了单个查询.
 func (p *VoyageProvider) EmbedQuery(ctx context.Context, query string) ([]float64, error) {
 	return p.BaseProvider.EmbedQuery(ctx, query, p.Embed)
 }
 
-// EmbedDocuments embeds multiple documents.
+// 嵌入文件嵌入多个文档。
 func (p *VoyageProvider) EmbedDocuments(ctx context.Context, documents []string) ([][]float64, error) {
 	return p.BaseProvider.EmbedDocuments(ctx, documents, p.Embed)
 }

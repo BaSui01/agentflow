@@ -13,9 +13,9 @@ import (
 	"go.uber.org/zap"
 )
 
-// IterativeDeepeningConfig configures the Iterative Deepening Research reasoning pattern.
-// Inspired by deep-research's recursive exploration approach, this pattern
-// performs breadth-first query generation followed by depth-first recursive exploration.
+// 迭代深化Config配置了迭代深化研究推理模式.
+// 在深层研究的循环探索方法的启发下,这种模式
+// 进行宽度第一查询生成,然后进行深度第一回溯探索。
 type IterativeDeepeningConfig struct {
 	Breadth         int           // Number of parallel search queries per level
 	MaxDepth        int           // Maximum recursion depth for exploration
@@ -26,7 +26,7 @@ type IterativeDeepeningConfig struct {
 	SynthesisModel  string        // Model to use for final synthesis (empty = default)
 }
 
-// DefaultIterativeDeepeningConfig returns sensible defaults for iterative deepening research.
+// 默认的深度 Config 返回用于迭代深化研究的合理默认值 。
 func DefaultIterativeDeepeningConfig() IterativeDeepeningConfig {
 	return IterativeDeepeningConfig{
 		Breadth:         3,
@@ -39,16 +39,16 @@ func DefaultIterativeDeepeningConfig() IterativeDeepeningConfig {
 	}
 }
 
-// IterativeDeepening implements the Iterative Deepening Research reasoning pattern.
-// It recursively explores a topic by generating search queries, analyzing results,
-// identifying new research directions, and deepening exploration until sufficient
-// understanding is achieved or depth limits are reached.
+// 迭代深化实施迭代深化研究推理模式.
+// 它通过生成搜索查询,分析结果,来循环地探索一个话题,
+// 确定新的研究方向,深化探索直至充分
+// 实现理解或达到深度限制。
 //
-// This pattern is particularly effective for:
-// - Open-ended research questions requiring multi-faceted exploration
-// - Topics where initial queries reveal unexpected sub-topics
-// - Comprehensive literature/information surveys
-// - Building deep understanding through progressive refinement
+// 这种模式对以下方面特别有效:
+// - 需要多方面探索的不限成员名额的研究问题
+// - 初步询问显示意外分专题的专题
+// - 综合文献/信息调查
+// - 通过逐步完善,加深理解
 type IterativeDeepening struct {
 	provider     llm.Provider
 	toolExecutor tools.ToolExecutor
@@ -56,7 +56,7 @@ type IterativeDeepening struct {
 	logger       *zap.Logger
 }
 
-// NewIterativeDeepening creates a new Iterative Deepening Research reasoner.
+// NewIterative Deepenning 创造了一个新的"活泼"Deepenning Research causeer. 互联网档案馆的存檔,存档日期2013-12-21.
 func NewIterativeDeepening(provider llm.Provider, executor tools.ToolExecutor, config IterativeDeepeningConfig, logger *zap.Logger) *IterativeDeepening {
 	if logger == nil {
 		logger = zap.NewNop()
@@ -69,10 +69,10 @@ func NewIterativeDeepening(provider llm.Provider, executor tools.ToolExecutor, c
 	}
 }
 
-// Name returns the pattern identifier.
+// 名称返回模式标识符 。
 func (id *IterativeDeepening) Name() string { return "iterative_deepening" }
 
-// researchFinding represents a single finding from a research query.
+// 寻找是研究查询得出的单一发现。
 type researchFinding struct {
 	Query     string  `json:"query"`
 	Finding   string  `json:"finding"`
@@ -80,14 +80,14 @@ type researchFinding struct {
 	Relevance float64 `json:"relevance"`
 }
 
-// researchDirection represents a new direction to explore.
+// 研究方向是探索的新方向。
 type researchDirection struct {
 	Query      string  `json:"query"`
 	Rationale  string  `json:"rationale"`
 	Priority   float64 `json:"priority"`
 }
 
-// Execute runs the Iterative Deepening Research reasoning pattern.
+// Execute运行"惯性深化研究"推理模式.
 func (id *IterativeDeepening) Execute(ctx context.Context, task string) (*ReasoningResult, error) {
 	start := time.Now()
 	ctx, cancel := context.WithTimeout(ctx, id.config.Timeout)
@@ -99,7 +99,7 @@ func (id *IterativeDeepening) Execute(ctx context.Context, task string) (*Reason
 		Metadata: make(map[string]any),
 	}
 
-	// Phase 1: Generate initial research queries
+	// 第一阶段:提出初步研究询问
 	id.logger.Info("starting iterative deepening research",
 		zap.String("task", truncate(task, 100)),
 		zap.Int("breadth", id.config.Breadth),
@@ -117,23 +117,23 @@ func (id *IterativeDeepening) Execute(ctx context.Context, task string) (*Reason
 		Content: fmt.Sprintf("Generated %d initial research queries for: %s", len(queries), truncate(task, 80)),
 	})
 
-	// Phase 2: Recursive exploration
+	// 第2阶段:循环勘探
 	allFindings := make([]researchFinding, 0)
 	exploredQueries := make(map[string]bool)
 
 	err = id.explore(ctx, task, queries, 0, &allFindings, exploredQueries, result)
 	if err != nil {
 		id.logger.Warn("exploration ended with error", zap.Error(err))
-		// Don't fail entirely - we may have partial results
+		// 不要完全失败 我们可能会有部分结果
 	}
 
-	// Phase 3: Synthesize findings into final answer
+	// 第3阶段:将调查结果合成最终答案
 	id.logger.Info("synthesizing findings",
 		zap.Int("total_findings", len(allFindings)),
 		zap.Int("explored_queries", len(exploredQueries)))
 	synthesis, synthTokens, err := id.synthesize(ctx, task, allFindings)
 	if err != nil {
-		// Fallback: concatenate findings
+		// 倒置: 连结结果
 		var sb strings.Builder
 		for _, f := range allFindings {
 			sb.WriteString(fmt.Sprintf("- %s\n", f.Finding))
@@ -164,7 +164,7 @@ func (id *IterativeDeepening) Execute(ctx context.Context, task string) (*Reason
 	return result, nil
 }
 
-// explore recursively explores research directions at increasing depth.
+// 探索递归地探索研究方向,深度不断提高.
 func (id *IterativeDeepening) explore(
 	ctx context.Context,
 	originalTask string,
@@ -189,11 +189,11 @@ func (id *IterativeDeepening) explore(
 		zap.Int("depth", depth),
 		zap.Int("queries", len(queries)))
 
-	// Execute queries (parallel or sequential)
+	// 执行查询(平行或相继)
 	levelFindings, tokens := id.executeQueries(ctx, queries, explored, result)
 	result.TotalTokens += tokens
 
-	// Append findings
+	// 附加调查结果
 	*findings = append(*findings, levelFindings...)
 
 	result.Steps = append(result.Steps, ReasoningStep{
@@ -203,13 +203,13 @@ func (id *IterativeDeepening) explore(
 		TokensUsed: tokens,
 	})
 
-	// Check if we have enough confidence to stop early
+	// 检查我们是否有足够的信心 提早停止
 	if id.calculateConfidence(levelFindings) >= 0.9 {
 		id.logger.Info("high confidence reached, stopping early", zap.Int("depth", depth))
 		return nil
 	}
 
-	// Generate new research directions based on findings
+	// 根据研究结果制定新的研究方向
 	directions, dirTokens, err := id.generateDirections(ctx, originalTask, levelFindings)
 	if err != nil {
 		id.logger.Warn("failed to generate new directions", zap.Error(err))
@@ -217,7 +217,7 @@ func (id *IterativeDeepening) explore(
 	}
 	result.TotalTokens += dirTokens
 
-	// Filter out already-explored directions
+	// 过滤已探索的方向
 	newQueries := make([]string, 0)
 	for _, dir := range directions {
 		if !explored[dir.Query] && dir.Priority >= id.config.MinConfidence {
@@ -230,7 +230,7 @@ func (id *IterativeDeepening) explore(
 		return nil
 	}
 
-	// Limit to breadth
+	// 限制宽度
 	if len(newQueries) > id.config.Breadth {
 		newQueries = newQueries[:id.config.Breadth]
 	}
@@ -241,11 +241,11 @@ func (id *IterativeDeepening) explore(
 		Content: fmt.Sprintf("Depth %d: identified %d new research directions, exploring %d", depth, len(directions), len(newQueries)),
 	})
 
-	// Recurse deeper
+	// 更深入地递回
 	return id.explore(ctx, originalTask, newQueries, depth+1, findings, explored, result)
 }
 
-// executeQueries runs search queries and extracts findings.
+// 执行查询运行搜索查询并提取发现 。
 func (id *IterativeDeepening) executeQueries(
 	ctx context.Context,
 	queries []string,
@@ -256,7 +256,7 @@ func (id *IterativeDeepening) executeQueries(
 	var totalTokens int
 	var mu sync.Mutex
 
-	// Filter already-explored queries
+	// 过滤已探索的查询
 	newQueries := make([]string, 0)
 	for _, q := range queries {
 		if !explored[q] {
@@ -266,7 +266,7 @@ func (id *IterativeDeepening) executeQueries(
 	}
 
 	if !id.config.ParallelSearch {
-		// Sequential execution
+		// 顺序处决
 		for _, query := range newQueries {
 			findings, tokens, err := id.analyzeQuery(ctx, query)
 			if err != nil {
@@ -279,7 +279,7 @@ func (id *IterativeDeepening) executeQueries(
 		return allFindings, totalTokens
 	}
 
-	// Parallel execution
+	// 并行执行
 	var wg sync.WaitGroup
 	for _, query := range newQueries {
 		wg.Add(1)
@@ -301,7 +301,7 @@ func (id *IterativeDeepening) executeQueries(
 	return allFindings, totalTokens
 }
 
-// generateQueries generates search queries for a given task and context.
+// 生成查询为特定任务和上下文生成搜索查询。
 func (id *IterativeDeepening) generateQueries(ctx context.Context, task string, context []researchFinding, count int) ([]string, int, error) {
 	prompt := fmt.Sprintf(`You are a research assistant. Generate %d specific, targeted search queries to investigate the following topic.
 
@@ -341,7 +341,7 @@ Respond as a JSON array of strings, e.g.: ["query 1", "query 2", "query 3"]`
 	var queries []string
 	jsonStr := extractJSONObject(content)
 	if err := json.Unmarshal([]byte(jsonStr), &queries); err != nil {
-		// Fallback: split by newlines
+		// 倒置: 被新行分割
 		lines := strings.Split(content, "\n")
 		for _, line := range lines {
 			line = strings.TrimSpace(line)
@@ -361,7 +361,7 @@ Respond as a JSON array of strings, e.g.: ["query 1", "query 2", "query 3"]`
 	return queries, tokens, nil
 }
 
-// analyzeQuery analyzes a single query and extracts findings.
+// 分析 Query 分析单个查询并提取发现.
 func (id *IterativeDeepening) analyzeQuery(ctx context.Context, query string) ([]researchFinding, int, error) {
 	prompt := fmt.Sprintf(`You are a research analyst. Analyze the following research query and provide key findings.
 
@@ -392,7 +392,7 @@ Focus on factual, specific, and actionable insights. Rate relevance from 0.0 to 
 	var findings []researchFinding
 	jsonStr := extractJSONObject(content)
 	if err := json.Unmarshal([]byte(jsonStr), &findings); err != nil {
-		// Fallback: treat entire response as single finding
+		// 倒置: 将整个响应视为单一发现
 		findings = []researchFinding{{
 			Query:     query,
 			Finding:   content,
@@ -401,12 +401,12 @@ Focus on factual, specific, and actionable insights. Rate relevance from 0.0 to 
 		}}
 	}
 
-	// Tag findings with their source query
+	// 用源码查询标记结果
 	for i := range findings {
 		findings[i].Query = query
 	}
 
-	// Limit results per query
+	// 限制每次查询的结果
 	if len(findings) > id.config.ResultsPerQuery {
 		findings = findings[:id.config.ResultsPerQuery]
 	}
@@ -414,7 +414,7 @@ Focus on factual, specific, and actionable insights. Rate relevance from 0.0 to 
 	return findings, tokens, nil
 }
 
-// generateDirections identifies new research directions based on findings.
+// 生成指令根据研究结果确定新的研究方向。
 func (id *IterativeDeepening) generateDirections(ctx context.Context, task string, findings []researchFinding) ([]researchDirection, int, error) {
 	var findingsStr strings.Builder
 	for _, f := range findings {
@@ -460,7 +460,7 @@ Priority should be 0.0-1.0 based on how important this direction is.`, task, fin
 	return directions, tokens, nil
 }
 
-// synthesize combines all findings into a comprehensive final answer.
+// 将所有结论综合为一个全面的最终答案。
 func (id *IterativeDeepening) synthesize(ctx context.Context, task string, findings []researchFinding) (string, int, error) {
 	var findingsStr strings.Builder
 	for i, f := range findings {
@@ -495,7 +495,7 @@ Be thorough but concise.`, task, findingsStr.String())
 	return resp.Choices[0].Message.Content, resp.Usage.TotalTokens, nil
 }
 
-// calculateConfidence computes overall confidence based on findings.
+// 根据调查结果计算总体信心。
 func (id *IterativeDeepening) calculateConfidence(findings []researchFinding) float64 {
 	if len(findings) == 0 {
 		return 0.0
@@ -508,7 +508,7 @@ func (id *IterativeDeepening) calculateConfidence(findings []researchFinding) fl
 
 	avgRelevance := totalRelevance / float64(len(findings))
 
-	// Factor in quantity: more findings = higher confidence (with diminishing returns)
+	// 数量因素:调查结果多=信心高(回报减少)
 	quantityFactor := 1.0 - 1.0/float64(1+len(findings))
 
 	confidence := avgRelevance*0.6 + quantityFactor*0.4

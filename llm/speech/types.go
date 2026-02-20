@@ -1,4 +1,4 @@
-// Package speech provides unified TTS and STT provider interfaces.
+// 软件包语音提供统一的TTS和STT供应商接口.
 package speech
 
 import (
@@ -8,10 +8,10 @@ import (
 )
 
 // ============================================================
-// Text-to-Speech (TTS)
+// 文字对语言( TTS)
 // ============================================================
 
-// TTSRequest represents a text-to-speech request.
+// TTS请求代表了文本对语音请求.
 type TTSRequest struct {
 	Text           string            `json:"text"`
 	Model          string            `json:"model,omitempty"`
@@ -22,7 +22,7 @@ type TTSRequest struct {
 	Metadata       map[string]string `json:"metadata,omitempty"`
 }
 
-// TTSResponse represents the response from a TTS request.
+// TTSResponse代表来自TTS请求的回应.
 type TTSResponse struct {
 	Provider  string        `json:"provider"`
 	Model     string        `json:"model"`
@@ -34,22 +34,22 @@ type TTSResponse struct {
 	CreatedAt time.Time     `json:"created_at"`
 }
 
-// TTSProvider defines the TTS provider interface.
+// TTS Provider定义了 TTS 提供者接口.
 type TTSProvider interface {
-	// Synthesize converts text to speech.
+	// 合成大小将文本转换为语音.
 	Synthesize(ctx context.Context, req *TTSRequest) (*TTSResponse, error)
 
-	// SynthesizeToFile converts text to speech and saves to file.
+	// 将文本转换为语音并保存为文件。
 	SynthesizeToFile(ctx context.Context, req *TTSRequest, filepath string) error
 
-	// ListVoices returns available voices.
+	// ListVoices 返回可用声音 。
 	ListVoices(ctx context.Context) ([]Voice, error)
 
-	// Name returns the provider name.
+	// 名称返回提供者名称 。
 	Name() string
 }
 
-// Voice represents an available voice.
+// 声音代表一个可用的声音。
 type Voice struct {
 	ID          string   `json:"id"`
 	Name        string   `json:"name"`
@@ -61,10 +61,10 @@ type Voice struct {
 }
 
 // ============================================================
-// Speech-to-Text (STT)
+// 语音对文本( STT)
 // ============================================================
 
-// STTRequest represents a speech-to-text request.
+// STT 请求代表语音对文本请求.
 type STTRequest struct {
 	Audio                  io.Reader         `json:"-"`
 	AudioURL               string            `json:"audio_url,omitempty"`
@@ -78,7 +78,7 @@ type STTRequest struct {
 	Metadata               map[string]string `json:"metadata,omitempty"`
 }
 
-// STTResponse represents the response from an STT request.
+// STTResponse代表来自STT请求的答复.
 type STTResponse struct {
 	Provider   string        `json:"provider"`
 	Model      string        `json:"model"`
@@ -91,7 +91,7 @@ type STTResponse struct {
 	CreatedAt  time.Time     `json:"created_at"`
 }
 
-// Segment represents a transcription segment.
+// 部分代表了抄录部分.
 type Segment struct {
 	ID         int           `json:"id"`
 	Start      time.Duration `json:"start"`
@@ -101,7 +101,7 @@ type Segment struct {
 	Confidence float64       `json:"confidence,omitempty"`
 }
 
-// Word represents a transcribed word with timing.
+// 单词代表了有时间的转写词.
 type Word struct {
 	Word       string        `json:"word"`
 	Start      time.Duration `json:"start"`
@@ -110,17 +110,17 @@ type Word struct {
 	Speaker    string        `json:"speaker,omitempty"`
 }
 
-// STTProvider defines the STT provider interface.
+// STTProvider定义了STT提供者接口.
 type STTProvider interface {
-	// Transcribe converts speech to text.
+	// 将语音转换为文本 。
 	Transcribe(ctx context.Context, req *STTRequest) (*STTResponse, error)
 
-	// TranscribeFile transcribes an audio file.
+	// 转录File转录音频文件.
 	TranscribeFile(ctx context.Context, filepath string, opts *STTRequest) (*STTResponse, error)
 
-	// Name returns the provider name.
+	// 名称返回提供者名称 。
 	Name() string
 
-	// SupportedFormats returns supported audio formats.
+	// 支持Formats返回支持的音频格式 。
 	SupportedFormats() []string
 }

@@ -1,5 +1,5 @@
-// Package rag provides RAG query transformation capabilities inspired by LlamaIndex.
-// This module implements query expansion, rewriting, intent detection, and sub-query decomposition.
+// 包布提供由LlamaIndex所启发的RAG查询转换能力.
+// 这个模块执行查询扩展,重写,意向检测,和子克分解等功能.
 package rag
 
 import (
@@ -14,9 +14,9 @@ import (
 	"go.uber.org/zap"
 )
 
-// ====== Query Transformation Types ======
+// QQ 查询转换类型QQ
 
-// QueryIntent represents the detected intent of a user query
+// 查询意向表示用户查询的检测意图
 type QueryIntent string
 
 const (
@@ -33,7 +33,7 @@ const (
 	IntentUnknown       QueryIntent = "unknown"        // Cannot determine intent
 )
 
-// TransformationType represents the type of query transformation
+// 转变 类型代表查询转换类型
 type TransformationType string
 
 const (
@@ -44,7 +44,7 @@ const (
 	TransformStepBack      TransformationType = "step_back"      // Step-back prompting
 )
 
-// TransformedQuery represents a transformed query with metadata
+// 已变形查询代表一个带有元数据的已变形查询
 type TransformedQuery struct {
 	Original       string             `json:"original"`
 	Transformed    string             `json:"transformed"`
@@ -57,42 +57,42 @@ type TransformedQuery struct {
 	Metadata       map[string]any     `json:"metadata,omitempty"`
 }
 
-// QueryTransformConfig configures the query transformer
+// 查询 TransformConfig 配置查询转换器
 type QueryTransformConfig struct {
-	// Expansion settings
+	// 扩展设置
 	EnableExpansion     bool    `json:"enable_expansion"`
 	MaxExpansions       int     `json:"max_expansions"`        // Max expanded queries (3-5)
 	ExpansionDiversity  float64 `json:"expansion_diversity"`   // 0-1, higher = more diverse
 
-	// Rewriting settings
+	// 重写设置
 	EnableRewriting     bool    `json:"enable_rewriting"`
 	RewriteForRetrieval bool    `json:"rewrite_for_retrieval"` // Optimize for retrieval
 
-	// Decomposition settings
+	// 分解设置
 	EnableDecomposition bool    `json:"enable_decomposition"`
 	MaxSubQueries       int     `json:"max_sub_queries"`       // Max sub-queries (2-5)
 	DecomposeThreshold  float64 `json:"decompose_threshold"`   // Complexity threshold
 
-	// Intent detection
+	// 有意检测
 	EnableIntentDetection bool   `json:"enable_intent_detection"`
 
-	// HyDE (Hypothetical Document Embedding)
+	// HyDE( 嵌入式文档)
 	EnableHyDE          bool    `json:"enable_hyde"`
 	HyDEDocumentCount   int     `json:"hyde_document_count"`   // Number of hypothetical docs
 
-	// Step-back prompting
+	// 后退提示
 	EnableStepBack      bool    `json:"enable_step_back"`
 
-	// Caching
+	// 缓存
 	EnableCache         bool          `json:"enable_cache"`
 	CacheTTL            time.Duration `json:"cache_ttl"`
 
-	// LLM settings
+	// LLM 设置
 	UseLLM              bool    `json:"use_llm"`               // Use LLM for transformations
 	Temperature         float64 `json:"temperature"`           // LLM temperature
 }
 
-// DefaultQueryTransformConfig returns default configuration
+// 默认查询 TransformConfig 返回默认配置
 func DefaultQueryTransformConfig() QueryTransformConfig {
 	return QueryTransformConfig{
 		EnableExpansion:       true,
@@ -114,17 +114,17 @@ func DefaultQueryTransformConfig() QueryTransformConfig {
 	}
 }
 
-// ====== LLM Provider Interface ======
+// * LLM 提供者接口 {}
 
-// QueryLLMProvider interface for LLM-based query transformation
+// 基于 LLM 的查询界面
 type QueryLLMProvider interface {
-	// Complete generates a completion for the given prompt
+	// 完整生成给定快件的补全
 	Complete(ctx context.Context, prompt string) (string, error)
 }
 
-// ====== Query Transformer ======
+// QQ 查询变换器
 
-// QueryTransformer transforms queries for better retrieval
+// Query Transfer 为更好的检索而转换查询
 type QueryTransformer struct {
 	config      QueryTransformConfig
 	llmProvider QueryLLMProvider
@@ -132,7 +132,7 @@ type QueryTransformer struct {
 	logger      *zap.Logger
 }
 
-// transformCache caches transformation results
+// 切换缓存转换结果
 type transformCache struct {
 	entries map[string]*cacheEntry
 	mu      sync.RWMutex
@@ -172,7 +172,7 @@ func (c *transformCache) set(key string, result *TransformedQuery) {
 	}
 }
 
-// NewQueryTransformer creates a new query transformer
+// 新建查询转换器创建新查询转换器
 func NewQueryTransformer(
 	config QueryTransformConfig,
 	llmProvider QueryLLMProvider,
@@ -195,9 +195,9 @@ func NewQueryTransformer(
 	}
 }
 
-// Transform applies all enabled transformations to a query
+// 将所有启用的转换应用到查询中
 func (t *QueryTransformer) Transform(ctx context.Context, query string) (*TransformedQuery, error) {
-	// Check cache
+	// 检查缓存
 	if t.cache != nil {
 		if cached, ok := t.cache.get(query); ok {
 			t.logger.Debug("cache hit", zap.String("query", query))
@@ -212,7 +212,7 @@ func (t *QueryTransformer) Transform(ctx context.Context, query string) (*Transf
 		Metadata:   make(map[string]any),
 	}
 
-	// 1. Detect intent
+	// 1. 侦测意图
 	if t.config.EnableIntentDetection {
 		intent, confidence := t.detectIntent(ctx, query)
 		result.Intent = intent
@@ -220,11 +220,11 @@ func (t *QueryTransformer) Transform(ctx context.Context, query string) (*Transf
 		result.Metadata["intent_confidence"] = confidence
 	}
 
-	// 2. Extract keywords and entities
+	// 2. 摘录关键词和实体
 	result.Keywords = t.extractKeywords(query)
 	result.Entities = t.extractEntities(query)
 
-	// 3. Determine if decomposition is needed
+	// 3. 确定是否需要分解
 	if t.config.EnableDecomposition && t.shouldDecompose(query, result.Intent) {
 		subQueries, err := t.decompose(ctx, query)
 		if err != nil {
@@ -235,7 +235,7 @@ func (t *QueryTransformer) Transform(ctx context.Context, query string) (*Transf
 		}
 	}
 
-	// 4. Rewrite query for retrieval
+	// 4. 重写检索查询
 	if t.config.EnableRewriting {
 		rewritten, err := t.rewrite(ctx, query, result.Intent)
 		if err != nil {
@@ -248,7 +248,7 @@ func (t *QueryTransformer) Transform(ctx context.Context, query string) (*Transf
 		}
 	}
 
-	// 5. Generate HyDE if enabled
+	// 5. 如果启用, 生成 HyDE
 	if t.config.EnableHyDE {
 		hydeDoc, err := t.generateHyDE(ctx, query)
 		if err != nil {
@@ -258,7 +258,7 @@ func (t *QueryTransformer) Transform(ctx context.Context, query string) (*Transf
 		}
 	}
 
-	// 6. Step-back prompting if enabled
+	// 6. 启用后退提示
 	if t.config.EnableStepBack {
 		stepBackQuery, err := t.stepBack(ctx, query)
 		if err != nil {
@@ -268,7 +268,7 @@ func (t *QueryTransformer) Transform(ctx context.Context, query string) (*Transf
 		}
 	}
 
-	// Cache result
+	// 缓存结果
 	if t.cache != nil {
 		t.cache.set(query, result)
 	}
@@ -282,7 +282,7 @@ func (t *QueryTransformer) Transform(ctx context.Context, query string) (*Transf
 	return result, nil
 }
 
-// Expand generates multiple related queries for better recall
+// 扩展生成多个相关查询以更好地召回
 func (t *QueryTransformer) Expand(ctx context.Context, query string) ([]string, error) {
 	if !t.config.EnableExpansion {
 		return []string{query}, nil
@@ -306,13 +306,13 @@ Alternative queries:`, t.config.MaxExpansions, query)
 		return t.expandWithRules(query), nil
 	}
 
-	// Parse response
+	// 解析响应
 	lines := strings.Split(strings.TrimSpace(response), "\n")
 	expansions := []string{query} // Include original
 
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
-		// Remove numbering if present
+		// 删除当前编号
 		line = regexp.MustCompile(`^\d+[\.\)]\s*`).ReplaceAllString(line, "")
 		if line != "" && line != query {
 			expansions = append(expansions, line)
@@ -325,11 +325,11 @@ Alternative queries:`, t.config.MaxExpansions, query)
 	return expansions, nil
 }
 
-// expandWithRules generates expansions using rule-based methods
+// With Rules 使用基于规则的方法生成扩展
 func (t *QueryTransformer) expandWithRules(query string) []string {
 	expansions := []string{query}
 
-	// Add synonym-based expansions
+	// 添加以同义词为基础的扩展
 	words := strings.Fields(strings.ToLower(query))
 	synonymMap := map[string][]string{
 		"how":        {"what way", "method"},
@@ -361,11 +361,11 @@ func (t *QueryTransformer) expandWithRules(query string) []string {
 	return expansions
 }
 
-// detectIntent identifies the intent behind a query
+// 检测意图识别查询背后的意图
 func (t *QueryTransformer) detectIntent(ctx context.Context, query string) (QueryIntent, float64) {
 	queryLower := strings.ToLower(query)
 
-	// Rule-based intent detection
+	// 根据规则侦测意图
 	patterns := map[QueryIntent][]string{
 		IntentFactual:      {"what is", "who is", "when was", "where is", "define"},
 		IntentComparison:   {"compare", "difference between", "versus", "vs", "better than", "or"},
@@ -387,7 +387,7 @@ func (t *QueryTransformer) detectIntent(ctx context.Context, query string) (Quer
 		}
 	}
 
-	// Use LLM for complex cases
+	// 对复杂案件使用 LLM
 	if t.llmProvider != nil && t.config.UseLLM {
 		intent, confidence := t.detectIntentWithLLM(ctx, query)
 		if confidence > 0.5 {
@@ -398,7 +398,7 @@ func (t *QueryTransformer) detectIntent(ctx context.Context, query string) (Quer
 	return IntentUnknown, 0.3
 }
 
-// detectIntentWithLLM uses LLM for intent detection
+// 检测intentWithLLM 使用 LLM 进行意图检测
 func (t *QueryTransformer) detectIntentWithLLM(ctx context.Context, query string) (QueryIntent, float64) {
 	prompt := fmt.Sprintf(`Classify the following query into one of these intents:
 - factual: Simple fact lookup
@@ -433,9 +433,9 @@ Example: factual, 0.9`, query)
 	return IntentUnknown, 0.0
 }
 
-// shouldDecompose determines if a query should be decomposed
+// 应解析是否要解析查询
 func (t *QueryTransformer) shouldDecompose(query string, intent QueryIntent) bool {
-	// Complex intents benefit from decomposition
+	// 复杂的意图受益于分解
 	complexIntents := map[QueryIntent]bool{
 		IntentComparison:  true,
 		IntentAnalytical:  true,
@@ -447,13 +447,13 @@ func (t *QueryTransformer) shouldDecompose(query string, intent QueryIntent) boo
 		return true
 	}
 
-	// Check query complexity
+	// 检查查询的复杂度
 	words := strings.Fields(query)
 	if len(words) > 15 {
 		return true
 	}
 
-	// Check for conjunctions indicating multiple parts
+	// 检查显示多个部件的连接
 	conjunctions := []string{" and ", " or ", " also ", " as well as ", " both "}
 	queryLower := strings.ToLower(query)
 	for _, conj := range conjunctions {
@@ -465,7 +465,7 @@ func (t *QueryTransformer) shouldDecompose(query string, intent QueryIntent) boo
 	return false
 }
 
-// decompose breaks a complex query into simpler sub-queries
+// 将一个复杂的查询分解为更简单的子序列
 func (t *QueryTransformer) decompose(ctx context.Context, query string) ([]string, error) {
 	if t.llmProvider == nil || !t.config.UseLLM {
 		return t.decomposeWithRules(query), nil
@@ -501,11 +501,11 @@ Sub-queries:`, t.config.MaxSubQueries, query)
 	return subQueries, nil
 }
 
-// decomposeWithRules uses rule-based decomposition
+// 使用规则分解
 func (t *QueryTransformer) decomposeWithRules(query string) []string {
 	subQueries := []string{}
 
-	// Split on conjunctions
+	// 组合分割
 	separators := []string{" and ", " or ", " also ", " as well as "}
 	parts := []string{query}
 
@@ -523,7 +523,7 @@ func (t *QueryTransformer) decomposeWithRules(query string) []string {
 		parts = newParts
 	}
 
-	// Ensure each part is a valid query
+	// 确保每个部分都是有效的查询
 	for _, part := range parts {
 		if len(strings.Fields(part)) >= 2 {
 			subQueries = append(subQueries, part)
@@ -537,7 +537,7 @@ func (t *QueryTransformer) decomposeWithRules(query string) []string {
 	return subQueries
 }
 
-// rewrite transforms a query for better retrieval
+// 重写更改查询以更好地检索
 func (t *QueryTransformer) rewrite(ctx context.Context, query string, intent QueryIntent) (string, error) {
 	if t.llmProvider == nil || !t.config.UseLLM {
 		return t.rewriteWithRules(query), nil
@@ -562,9 +562,9 @@ Rewritten query:`, query, intent)
 	return strings.TrimSpace(response), nil
 }
 
-// rewriteWithRules applies rule-based query rewriting
+// 重写“ 规则” 应用基于规则的查询重写
 func (t *QueryTransformer) rewriteWithRules(query string) string {
-	// Remove common filler words
+	// 删除常用的填充词
 	fillers := []string{
 		"can you tell me",
 		"i want to know",
@@ -581,12 +581,12 @@ func (t *QueryTransformer) rewriteWithRules(query string) string {
 		result = strings.Replace(result, filler, "", 1)
 	}
 
-	// Remove question marks and clean up
+	// 删除问题标记并清理
 	result = strings.TrimSpace(result)
 	result = strings.TrimSuffix(result, "?")
 	result = strings.TrimSpace(result)
 
-	// Capitalize first letter
+	// 将第一个字母大写
 	if len(result) > 0 {
 		result = strings.ToUpper(string(result[0])) + result[1:]
 	}
@@ -594,7 +594,7 @@ func (t *QueryTransformer) rewriteWithRules(query string) string {
 	return result
 }
 
-// generateHyDE creates a hypothetical document for the query
+// 生成HyDE 为查询创建一个假设文档
 func (t *QueryTransformer) generateHyDE(ctx context.Context, query string) (string, error) {
 	if t.llmProvider == nil {
 		return "", fmt.Errorf("LLM provider required for HyDE")
@@ -616,7 +616,7 @@ Hypothetical document passage:`, query)
 	return strings.TrimSpace(response), nil
 }
 
-// stepBack generates a more general query for step-back prompting
+// stepBack 生成一个更一般性的后退查询,以提示
 func (t *QueryTransformer) stepBack(ctx context.Context, query string) (string, error) {
 	if t.llmProvider == nil {
 		return "", fmt.Errorf("LLM provider required for step-back")
@@ -637,9 +637,9 @@ Step-back query:`, query)
 	return strings.TrimSpace(response), nil
 }
 
-// extractKeywords extracts important keywords from a query
+// 从查询中提取关键字
 func (t *QueryTransformer) extractKeywords(query string) []string {
-	// Simple keyword extraction
+	// 简单关键字提取
 	stopWords := map[string]bool{
 		"a": true, "an": true, "the": true, "is": true, "are": true,
 		"was": true, "were": true, "be": true, "been": true, "being": true,
@@ -662,7 +662,7 @@ func (t *QueryTransformer) extractKeywords(query string) []string {
 	keywords := make([]string, 0)
 
 	for _, word := range words {
-		// Remove punctuation
+		// 删除标点
 		word = regexp.MustCompile(`[^\w]`).ReplaceAllString(word, "")
 		if word != "" && !stopWords[word] && len(word) > 2 {
 			keywords = append(keywords, word)
@@ -672,21 +672,21 @@ func (t *QueryTransformer) extractKeywords(query string) []string {
 	return keywords
 }
 
-// extractEntities extracts named entities from a query
+// 从查询中提取实体
 func (t *QueryTransformer) extractEntities(query string) []string {
-	// Simple entity extraction based on capitalization
+	// 基于资本化的简单实体提取
 	words := strings.Fields(query)
 	entities := make([]string, 0)
 
 	for i, word := range words {
-		// Skip first word (often capitalized)
+		// 跳过第一个单词( 通常为资本化)
 		if i == 0 {
 			continue
 		}
 
-		// Check if word starts with uppercase
+		// 检查单词是否以大写开头
 		if len(word) > 0 && word[0] >= 'A' && word[0] <= 'Z' {
-			// Remove trailing punctuation
+			// 删除后接点
 			word = regexp.MustCompile(`[^\w]$`).ReplaceAllString(word, "")
 			if len(word) > 1 {
 				entities = append(entities, word)
@@ -697,9 +697,9 @@ func (t *QueryTransformer) extractEntities(query string) []string {
 	return entities
 }
 
-// ====== Query Expansion Result ======
+// QQ 查询扩展结果 QQ
 
-// ExpansionResult contains expanded queries with metadata
+// 扩展Result包含带有元数据的扩展查询
 type ExpansionResult struct {
 	Original   string   `json:"original"`
 	Expansions []string `json:"expansions"`
@@ -707,7 +707,7 @@ type ExpansionResult struct {
 	Intent     QueryIntent `json:"intent"`
 }
 
-// ExpandWithMetadata expands a query and returns detailed results
+// 展开WithMetadata 扩展查询并返回详细结果
 func (t *QueryTransformer) ExpandWithMetadata(ctx context.Context, query string) (*ExpansionResult, error) {
 	expansions, err := t.Expand(ctx, query)
 	if err != nil {
@@ -725,9 +725,9 @@ func (t *QueryTransformer) ExpandWithMetadata(ctx context.Context, query string)
 	}, nil
 }
 
-// ====== Batch Processing ======
+// 批处理
 
-// TransformBatch transforms multiple queries in parallel
+// TransformBatch 同步转换多个查询
 func (t *QueryTransformer) TransformBatch(ctx context.Context, queries []string) ([]*TransformedQuery, error) {
 	results := make([]*TransformedQuery, len(queries))
 	var wg sync.WaitGroup
@@ -754,14 +754,14 @@ func (t *QueryTransformer) TransformBatch(ctx context.Context, queries []string)
 	return results, firstErr
 }
 
-// ====== JSON Serialization ======
+// JSON 序列化
 
-// ToJSON serializes a TransformedQuery to JSON
+// ToJSON 将变形查询序列化为 JSON
 func (tq *TransformedQuery) ToJSON() ([]byte, error) {
 	return json.Marshal(tq)
 }
 
-// FromJSON deserializes a TransformedQuery from JSON
+// 从 JSON 解析出一个变形查询
 func (tq *TransformedQuery) FromJSON(data []byte) error {
 	return json.Unmarshal(data, tq)
 }

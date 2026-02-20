@@ -11,13 +11,13 @@ import (
 	"time"
 )
 
-// MiniMaxProvider implements music generation using MiniMax API.
+// MiniMax Provider使用MiniMax API执行音乐生成.
 type MiniMaxProvider struct {
 	cfg    MiniMaxMusicConfig
 	client *http.Client
 }
 
-// NewMiniMaxProvider creates a new MiniMax music provider.
+// 新MiniMax Provider创建了一个新的MiniMax音乐提供商.
 func NewMiniMaxProvider(cfg MiniMaxMusicConfig) *MiniMaxProvider {
 	if cfg.BaseURL == "" {
 		cfg.BaseURL = "https://api.minimax.io"
@@ -63,7 +63,7 @@ type miniMaxMusicResponse struct {
 	} `json:"extra_info"`
 }
 
-// Generate creates music using MiniMax API.
+// 生成音乐使用MiniMax API创建.
 func (p *MiniMaxProvider) Generate(ctx context.Context, req *GenerateRequest) (*GenerateResponse, error) {
 	model := req.Model
 	if model == "" {

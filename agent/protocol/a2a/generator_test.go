@@ -88,10 +88,10 @@ func TestAgentCardGenerator_GenerateWithMetadata(t *testing.T) {
 
 	card := gen.Generate(config, "https://api.example.com")
 
-	// Version should come from metadata
+	// 版本应来自元数据
 	assert.Equal(t, "3.0.0", card.Version)
 
-	// Other metadata should be copied
+	// 其他元数据应复制
 	author, ok := card.GetMetadata("author")
 	assert.True(t, ok)
 	assert.Equal(t, "test", author)
@@ -100,7 +100,7 @@ func TestAgentCardGenerator_GenerateWithMetadata(t *testing.T) {
 	assert.True(t, ok)
 	assert.Equal(t, "production", env)
 
-	// Agent type and ID should be in metadata
+	// 代理类型和ID应在元数据中
 	agentType, ok := card.GetMetadata("agent_type")
 	assert.True(t, ok)
 	assert.Equal(t, "generic", agentType)
@@ -141,7 +141,7 @@ func TestAgentCardGenerator_CapabilitiesByType(t *testing.T) {
 	}
 }
 
-// mockToolProvider implements ToolSchemaProvider for testing.
+// 模拟工具 Provider 执行工具Schema 提供测试。
 type mockToolProvider struct {
 	tools map[string][]llm.ToolSchema
 }
@@ -216,7 +216,7 @@ func TestAgentCardGenerator_GenerateValidCard(t *testing.T) {
 
 	card := gen.Generate(config, "https://api.example.com")
 
-	// Card should pass validation
+	// 卡片应该通过验证
 	err := card.Validate()
 	assert.NoError(t, err)
 }
@@ -267,7 +267,7 @@ func TestConvertToolSchema_InvalidJSON(t *testing.T) {
 	toolDef := convertToolSchema(schema)
 
 	assert.Equal(t, "bad_tool", toolDef.Name)
-	// Should have a fallback schema
+	// 应该有一个倒计时
 	assert.NotNil(t, toolDef.Parameters)
 	assert.Equal(t, structured.TypeObject, toolDef.Parameters.Type)
 }

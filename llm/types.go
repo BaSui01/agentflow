@@ -3,10 +3,10 @@ package llm
 import "time"
 
 // ============================================================
-// Provider & Model Base Types
+// 提供者和模型基础类型
 // ============================================================
 
-// LLMProviderStatus represents the status of an LLM provider
+// LLMProvider 状态代表 LLM 提供者的地位
 type LLMProviderStatus int16
 
 const (
@@ -15,7 +15,7 @@ const (
 	LLMProviderStatusDisabled LLMProviderStatus = 2
 )
 
-// LLMModel represents an abstract model (e.g., gpt-4, claude-3-opus)
+// LLMMOdel代表抽象模型(例如gpt-4,claude-3-opus).
 type LLMModel struct {
 	ID          uint      `gorm:"primaryKey" json:"id"`
 	ModelName   string    `gorm:"size:100;not null;uniqueIndex" json:"model_name"`
@@ -30,7 +30,7 @@ func (LLMModel) TableName() string {
 	return "sc_llm_models"
 }
 
-// LLMProvider represents a provider (e.g., OpenAI, Anthropic, DeepSeek)
+// LLMProvider 代表提供商( 如 OpenAI, Anthropic, DeepSeek)
 type LLMProvider struct {
 	ID          uint              `gorm:"primaryKey" json:"id"`
 	Code        string            `gorm:"size:50;not null;uniqueIndex" json:"code"`
@@ -46,11 +46,11 @@ func (LLMProvider) TableName() string {
 }
 
 // ============================================================
-// Multi-Provider Support (Many-to-Many)
+// 多服务支持( 多对多)
 // ============================================================
 
-// LLMProviderModel represents a provider's model instance (many-to-many mapping)
-// One model (e.g., gpt-4) can be provided by multiple providers (OpenAI, Azure, Cloudflare)
+// LLMProvider Model 代表提供商的模型实例( 多人对多人映射)
+// 多种供应商(OpenAI、Azure、Cloudflare)可提供一种模式(例如gpt-4)
 type LLMProviderModel struct {
 	ID              uint      `gorm:"primaryKey" json:"id"`
 	ModelID         uint      `gorm:"not null;index:idx_model_provider" json:"model_id"`
@@ -74,11 +74,11 @@ func (LLMProviderModel) TableName() string {
 }
 
 // ============================================================
-// API Key Pool
+// API 密钥池
 // ============================================================
 
-// LLMProviderAPIKey represents an API key in the pool
-// Supports multiple API keys per provider for load balancing and failover
+// LLMProviderAPIKey 代表池中的 API 密钥
+// 每个提供者支持多个 API 密钥进行负载平衡和失效
 type LLMProviderAPIKey struct {
 	ID         uint   `gorm:"primaryKey" json:"id"`
 	ProviderID uint   `gorm:"not null;index:idx_provider_api_keys_provider_id" json:"provider_id"`
@@ -88,14 +88,14 @@ type LLMProviderAPIKey struct {
 	Weight     int    `gorm:"default:100" json:"weight"`
 	Enabled    bool   `gorm:"default:true" json:"enabled"`
 
-	// Usage statistics
+	// 使用统计
 	TotalRequests  int64      `gorm:"default:0" json:"total_requests"`
 	FailedRequests int64      `gorm:"default:0" json:"failed_requests"`
 	LastUsedAt     *time.Time `json:"last_used_at"`
 	LastErrorAt    *time.Time `json:"last_error_at"`
 	LastError      string     `gorm:"type:text" json:"last_error"`
 
-	// Rate limiting
+	// 限制费率
 	RateLimitRPM int       `gorm:"default:0" json:"rate_limit_rpm"`
 	RateLimitRPD int       `gorm:"default:0" json:"rate_limit_rpd"`
 	CurrentRPM   int       `gorm:"default:0" json:"current_rpm"`
@@ -113,7 +113,7 @@ func (LLMProviderAPIKey) TableName() string {
 	return "sc_llm_provider_api_keys"
 }
 
-// IsHealthy checks if the API key is healthy
+// API 键是否健康 健康检查
 func (k *LLMProviderAPIKey) IsHealthy() bool {
 	if !k.Enabled {
 		return false
@@ -121,7 +121,7 @@ func (k *LLMProviderAPIKey) IsHealthy() bool {
 
 	now := time.Now()
 
-	// Check rate limits
+	// 检查率限制
 	if k.RateLimitRPM > 0 && now.Before(k.RPMResetAt) && k.CurrentRPM >= k.RateLimitRPM {
 		return false
 	}
@@ -129,7 +129,7 @@ func (k *LLMProviderAPIKey) IsHealthy() bool {
 		return false
 	}
 
-	// Check error rate (fail rate > 50%)
+	// 检查出错率( 不及格率 > 50%)
 	if k.TotalRequests >= 100 {
 		failRate := float64(k.FailedRequests) / float64(k.TotalRequests)
 		if failRate > 0.5 {
@@ -140,7 +140,7 @@ func (k *LLMProviderAPIKey) IsHealthy() bool {
 	return true
 }
 
-// IncrementUsage increments usage counters
+// 递增使用计数器
 func (k *LLMProviderAPIKey) IncrementUsage(success bool) {
 	now := time.Now()
 	k.TotalRequests++
@@ -151,14 +151,14 @@ func (k *LLMProviderAPIKey) IncrementUsage(success bool) {
 		k.LastErrorAt = &now
 	}
 
-	// Reset RPM counter
+	// 重置 RPM 计数器
 	if now.After(k.RPMResetAt) {
 		k.CurrentRPM = 0
 		k.RPMResetAt = now.Add(time.Minute)
 	}
 	k.CurrentRPM++
 
-	// Reset RPD counter
+	// 重置 RPD 计数器
 	if now.After(k.RPDResetAt) {
 		k.CurrentRPD = 0
 		k.RPDResetAt = now.Add(24 * time.Hour)
@@ -167,16 +167,16 @@ func (k *LLMProviderAPIKey) IncrementUsage(success bool) {
 }
 
 // ============================================================
-// Extended Types (with associations)
+// 扩展类型(与协会)
 // ============================================================
 
-// LLMModelExtended extends LLMModel with associations
+// LLMMOdel Extended 扩展 LLMMOdel 与协会
 type LLMModelExtended struct {
 	LLMModel
 	ProviderModels []LLMProviderModel `gorm:"foreignKey:ModelID" json:"provider_models,omitempty"`
 }
 
-// LLMProviderExtended extends LLMProvider with associations
+// LLMProvider Extended 扩展 LLMProvider 协会
 type LLMProviderExtended struct {
 	LLMProvider
 	APIKeys        []LLMProviderAPIKey `gorm:"foreignKey:ProviderID" json:"api_keys,omitempty"`
@@ -184,10 +184,10 @@ type LLMProviderExtended struct {
 }
 
 // ============================================================
-// Audit Log
+// 审计日志
 // ============================================================
 
-// AuditLog represents an audit log entry
+// 审计日志代表审计日志条目
 type AuditLog struct {
 	ID           uint
 	TenantID     uint

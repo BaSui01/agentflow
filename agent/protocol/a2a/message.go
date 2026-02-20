@@ -7,23 +7,23 @@ import (
 	"github.com/google/uuid"
 )
 
-// A2AMessageType represents the type of A2A message.
+// A2AMessageType代表A2A消息的类型.
 type A2AMessageType string
 
 const (
-	// A2AMessageTypeTask indicates a task request message.
+	// A2AMessage TypeTask 表示任务请求消息 。
 	A2AMessageTypeTask A2AMessageType = "task"
-	// A2AMessageTypeResult indicates a task result message.
+	// A2AMessageTypeResult表示任务结果消息.
 	A2AMessageTypeResult A2AMessageType = "result"
-	// A2AMessageTypeError indicates an error message.
+	// A2AMessage TypeError 表示错误消息 。
 	A2AMessageTypeError A2AMessageType = "error"
-	// A2AMessageTypeStatus indicates a status update message.
+	// A2AMessage Type Status 表示状态更新消息.
 	A2AMessageTypeStatus A2AMessageType = "status"
-	// A2AMessageTypeCancel indicates a task cancellation message.
+	// A2AMessage TypeCancel 表示任务取消消息.
 	A2AMessageTypeCancel A2AMessageType = "cancel"
 )
 
-// IsValid checks if the message type is a valid A2A message type.
+// IsValid 检查信件类型是否为有效的 A2A 信件类型 。
 func (t A2AMessageType) IsValid() bool {
 	switch t {
 	case A2AMessageTypeTask, A2AMessageTypeResult, A2AMessageTypeError,
@@ -34,30 +34,30 @@ func (t A2AMessageType) IsValid() bool {
 	}
 }
 
-// String returns the string representation of the message type.
+// 字符串返回消息类型的字符串表示。
 func (t A2AMessageType) String() string {
 	return string(t)
 }
 
-// A2AMessage represents an A2A standard message for agent-to-agent communication.
+// A2AMessage代表了代理对代理通信的A2A标准消息.
 type A2AMessage struct {
-	// ID is the unique identifier for this message.
+	// ID是此消息的唯一标识符 。
 	ID string `json:"id"`
-	// Type indicates the message type (task, result, error, status, cancel).
+	// 类型表示信件类型(任务,结果,出错,状态,取消).
 	Type A2AMessageType `json:"type"`
-	// From is the identifier of the sending agent.
+	// 从是发件人的标识符.
 	From string `json:"from"`
-	// To is the identifier of the receiving agent.
+	// 为接收代理的识别符.
 	To string `json:"to"`
-	// Payload contains the message data.
+	// 有效载荷包含消息数据.
 	Payload any `json:"payload"`
-	// Timestamp is when the message was created.
+	// 时间戳是消息创建时.
 	Timestamp time.Time `json:"timestamp"`
-	// ReplyTo is the ID of the message this is replying to (optional).
+	// PresidentTo 是此回复信件的ID( 可选) 。
 	ReplyTo string `json:"reply_to,omitempty"`
 }
 
-// NewA2AMessage creates a new A2AMessage with a generated ID and current timestamp.
+// 新建A2 AMessage创建了一个新的A2AMessage,并带有生成的ID和当前时间戳.
 func NewA2AMessage(msgType A2AMessageType, from, to string, payload any) *A2AMessage {
 	return &A2AMessage{
 		ID:        uuid.New().String(),
@@ -69,38 +69,38 @@ func NewA2AMessage(msgType A2AMessageType, from, to string, payload any) *A2AMes
 	}
 }
 
-// NewTaskMessage creates a new task request message.
+// NewTaskMessage 创建了新任务请求消息.
 func NewTaskMessage(from, to string, payload any) *A2AMessage {
 	return NewA2AMessage(A2AMessageTypeTask, from, to, payload)
 }
 
-// NewResultMessage creates a new result message in reply to a task.
+// NewResultMessage在回复任务时创建了一个新的结果信息.
 func NewResultMessage(from, to string, payload any, replyTo string) *A2AMessage {
 	msg := NewA2AMessage(A2AMessageTypeResult, from, to, payload)
 	msg.ReplyTo = replyTo
 	return msg
 }
 
-// NewErrorMessage creates a new error message in reply to a task.
+// NewErrorMessage 创建新错误消息以响应任务 。
 func NewErrorMessage(from, to string, payload any, replyTo string) *A2AMessage {
 	msg := NewA2AMessage(A2AMessageTypeError, from, to, payload)
 	msg.ReplyTo = replyTo
 	return msg
 }
 
-// NewStatusMessage creates a new status update message.
+// 新状态消息创建新状态更新消息 。
 func NewStatusMessage(from, to string, payload any, replyTo string) *A2AMessage {
 	msg := NewA2AMessage(A2AMessageTypeStatus, from, to, payload)
 	msg.ReplyTo = replyTo
 	return msg
 }
 
-// NewCancelMessage creates a new cancellation message.
+// NewCancelMessage创建了新的取消消息.
 func NewCancelMessage(from, to string, taskID string) *A2AMessage {
 	return NewA2AMessage(A2AMessageTypeCancel, from, to, map[string]string{"task_id": taskID})
 }
 
-// Validate checks if the A2AMessage has all required fields and valid values.
+// 验证 A2AMessage 是否有所有所需的字段和有效值 。
 func (m *A2AMessage) Validate() error {
 	if m.ID == "" {
 		return ErrMessageMissingID
@@ -120,37 +120,37 @@ func (m *A2AMessage) Validate() error {
 	return nil
 }
 
-// IsReply checks if this message is a reply to another message.
+// IsReply 检查此信件是否是对另一个信件的回复 。
 func (m *A2AMessage) IsReply() bool {
 	return m.ReplyTo != ""
 }
 
-// IsTask checks if this is a task request message.
+// 如果这是任务请求信件, 请检查任务 。
 func (m *A2AMessage) IsTask() bool {
 	return m.Type == A2AMessageTypeTask
 }
 
-// IsResult checks if this is a result message.
+// 是否是结果信息 。
 func (m *A2AMessage) IsResult() bool {
 	return m.Type == A2AMessageTypeResult
 }
 
-// IsError checks if this is an error message.
+// IsError 检查是否为错误消息 。
 func (m *A2AMessage) IsError() bool {
 	return m.Type == A2AMessageTypeError
 }
 
-// IsStatus checks if this is a status message.
+// 如果这是状态消息, 请检查状态 。
 func (m *A2AMessage) IsStatus() bool {
 	return m.Type == A2AMessageTypeStatus
 }
 
-// IsCancel checks if this is a cancellation message.
+// IsCancel 检查是否是取消消息 。
 func (m *A2AMessage) IsCancel() bool {
 	return m.Type == A2AMessageTypeCancel
 }
 
-// MarshalJSON implements json.Marshaler for A2AMessage.
+// JSON警长执行JSON。 A2AMessage的元帅
 func (m *A2AMessage) MarshalJSON() ([]byte, error) {
 	type Alias A2AMessage
 	return json.Marshal(&struct {
@@ -160,7 +160,7 @@ func (m *A2AMessage) MarshalJSON() ([]byte, error) {
 	})
 }
 
-// UnmarshalJSON implements json.Unmarshaler for A2AMessage.
+// UnmarshalJSON 执行json。 A2AMessage的解马沙勒.
 func (m *A2AMessage) UnmarshalJSON(data []byte) error {
 	type Alias A2AMessage
 	aux := &struct {
@@ -174,7 +174,7 @@ func (m *A2AMessage) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-// Clone creates a deep copy of the message.
+// 克隆人创建了消息的深层拷贝.
 func (m *A2AMessage) Clone() *A2AMessage {
 	clone := &A2AMessage{
 		ID:        m.ID,
@@ -185,7 +185,7 @@ func (m *A2AMessage) Clone() *A2AMessage {
 		ReplyTo:   m.ReplyTo,
 	}
 
-	// Deep copy payload if it's a map or slice
+	// 深复制有效载荷,如果它是地图或切片
 	if m.Payload != nil {
 		data, err := json.Marshal(m.Payload)
 		if err == nil {
@@ -203,7 +203,7 @@ func (m *A2AMessage) Clone() *A2AMessage {
 	return clone
 }
 
-// CreateReply creates a reply message to this message.
+// CreatReply 创建此信件的回覆信件 。
 func (m *A2AMessage) CreateReply(msgType A2AMessageType, payload any) *A2AMessage {
 	return &A2AMessage{
 		ID:        uuid.New().String(),
@@ -216,12 +216,12 @@ func (m *A2AMessage) CreateReply(msgType A2AMessageType, payload any) *A2AMessag
 	}
 }
 
-// ToJSON serializes the message to JSON bytes.
+// ToJSON将消息序列化给JSON字节.
 func (m *A2AMessage) ToJSON() ([]byte, error) {
 	return json.Marshal(m)
 }
 
-// FromJSON deserializes a message from JSON bytes.
+// JSON将JSON字节中的信息解析出来.
 func FromJSON(data []byte) (*A2AMessage, error) {
 	var msg A2AMessage
 	if err := json.Unmarshal(data, &msg); err != nil {
@@ -230,7 +230,7 @@ func FromJSON(data []byte) (*A2AMessage, error) {
 	return &msg, nil
 }
 
-// ParseA2AMessage parses JSON data into an A2AMessage and validates it.
+// ParseA2AMessage将JSON数据分解为A2AMessage并验证.
 func ParseA2AMessage(data []byte) (*A2AMessage, error) {
 	msg, err := FromJSON(data)
 	if err != nil {

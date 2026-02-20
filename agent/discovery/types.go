@@ -1,5 +1,5 @@
-// Package discovery provides Agent capability discovery and matching for multi-agent collaboration.
-// It implements a capability registry, semantic matching engine, and service discovery protocols.
+// 套件发现提供代理能力发现并匹配多代理协作.
+// 它执行能力登记、语义匹配引擎和服务发现协议。
 package discovery
 
 import (
@@ -10,430 +10,430 @@ import (
 	"github.com/BaSui01/agentflow/agent/protocol/a2a"
 )
 
-// CapabilityStatus represents the status of a capability.
+// 能力 地位代表一种能力的地位。
 type CapabilityStatus string
 
 const (
-	// CapabilityStatusActive indicates the capability is active and available.
+	// 能力状态表示该能力是主动的和可用的。
 	CapabilityStatusActive CapabilityStatus = "active"
-	// CapabilityStatusInactive indicates the capability is temporarily unavailable.
+	// 能力现状 不活动表明暂时没有能力。
 	CapabilityStatusInactive CapabilityStatus = "inactive"
-	// CapabilityStatusDegraded indicates the capability is available but with reduced performance.
+	// 降级表明,该能力是可用的,但性能有所降低。
 	CapabilityStatusDegraded CapabilityStatus = "degraded"
-	// CapabilityStatusUnknown indicates the capability status is unknown.
+	// 能力状态不明表示能力状态不明.
 	CapabilityStatusUnknown CapabilityStatus = "unknown"
 )
 
-// AgentStatus represents the status of an agent.
+// 代理状态代表代理状态.
 type AgentStatus string
 
 const (
-	// AgentStatusOnline indicates the agent is online and healthy.
+	// Agent Statistics Online表示该代理在线健康.
 	AgentStatusOnline AgentStatus = "online"
-	// AgentStatusOffline indicates the agent is offline.
+	// Agent StatusOffline表示代理机已下线.
 	AgentStatusOffline AgentStatus = "offline"
-	// AgentStatusBusy indicates the agent is busy processing tasks.
+	// Agent StatusBusy表示代理正在忙于处理任务.
 	AgentStatusBusy AgentStatus = "busy"
-	// AgentStatusUnhealthy indicates the agent is unhealthy.
+	// 状态不健康 显示该剂是不健康的。
 	AgentStatusUnhealthy AgentStatus = "unhealthy"
 )
 
-// CapabilityInfo contains detailed information about a capability.
+// 能力 信息包含关于某一能力的详细信息。
 type CapabilityInfo struct {
-	// Capability is the base capability definition from A2A protocol.
+	// 能力是A2A协议中的基础能力定义.
 	Capability a2a.Capability `json:"capability"`
 
-	// AgentID is the ID of the agent providing this capability.
+	// AgentID是提供这种能力的代理的身份.
 	AgentID string `json:"agent_id"`
 
-	// AgentName is the name of the agent providing this capability.
+	// 代理名称是提供这种能力的代理的名称 。
 	AgentName string `json:"agent_name"`
 
-	// Status is the current status of this capability.
+	// 地位是这一能力的现状。
 	Status CapabilityStatus `json:"status"`
 
-	// Score is the capability score based on historical performance (0-100).
+	// 得分是依据历史表现(0-100)而得的能力分.
 	Score float64 `json:"score"`
 
-	// Load is the current load of the agent (0-1).
+	// 负载是代理的当前负载 (0-1).
 	Load float64 `json:"load"`
 
-	// Tags are additional tags for capability categorization.
+	// 标记是能力分类的附加标记.
 	Tags []string `json:"tags,omitempty"`
 
-	// Metadata contains additional metadata.
+	// 元数据包含额外的元数据.
 	Metadata map[string]string `json:"metadata,omitempty"`
 
-	// RegisteredAt is when this capability was registered.
+	// 注册是登记这种能力的时候。
 	RegisteredAt time.Time `json:"registered_at"`
 
-	// LastUpdatedAt is when this capability was last updated.
+	// 上次更新是上次更新时。
 	LastUpdatedAt time.Time `json:"last_updated_at"`
 
-	// LastHealthCheck is when the last health check was performed.
+	// 最后一次健康检查是最后一次健康检查的时间。
 	LastHealthCheck time.Time `json:"last_health_check"`
 
-	// SuccessCount is the number of successful executions.
+	// 成功处决是成功处决的数量。
 	SuccessCount int64 `json:"success_count"`
 
-	// FailureCount is the number of failed executions.
+	// 失败是被处决的次数。
 	FailureCount int64 `json:"failure_count"`
 
-	// AvgLatency is the average execution latency.
+	// AvgLatency是平均行刑时间.
 	AvgLatency time.Duration `json:"avg_latency"`
 }
 
-// AgentInfo contains detailed information about a registered agent.
+// AgentInfo包含了注册代理的详细信息.
 type AgentInfo struct {
-	// Card is the A2A agent card.
+	// 卡为A2A代理卡.
 	Card *a2a.AgentCard `json:"card"`
 
-	// Status is the current status of the agent.
+	// 状态是代理人的现状.
 	Status AgentStatus `json:"status"`
 
-	// Capabilities is the list of capabilities provided by this agent.
+	// 能力是这种代理人提供的能力清单。
 	Capabilities []CapabilityInfo `json:"capabilities"`
 
-	// Load is the current load of the agent (0-1).
+	// 负载是代理的当前负载 (0-1).
 	Load float64 `json:"load"`
 
-	// Priority is the agent's priority for task assignment.
+	// 优先权是代理人对任务分配的优先权.
 	Priority int `json:"priority"`
 
-	// Endpoint is the agent's endpoint URL (for remote agents).
+	// 端点是代理商的端点URL(用于远程代理).
 	Endpoint string `json:"endpoint,omitempty"`
 
-	// IsLocal indicates if this is a local (in-process) agent.
+	// Is Local 表示是否为本地( 正在处理) 代理 。
 	IsLocal bool `json:"is_local"`
 
-	// RegisteredAt is when this agent was registered.
+	// 注册的At是该代理注册时.
 	RegisteredAt time.Time `json:"registered_at"`
 
-	// LastHeartbeat is when the last heartbeat was received.
+	// 最后的心跳是收到最后的心跳的时候.
 	LastHeartbeat time.Time `json:"last_heartbeat"`
 
-	// Metadata contains additional metadata.
+	// 元数据包含额外的元数据.
 	Metadata map[string]string `json:"metadata,omitempty"`
 }
 
-// MatchRequest represents a request to find matching agents.
+// Match Request 是寻找匹配代理的请求 。
 type MatchRequest struct {
-	// TaskDescription is the natural language description of the task.
+	// TaskDescription是任务的自然语言描述.
 	TaskDescription string `json:"task_description"`
 
-	// RequiredCapabilities is the list of required capability names.
+	// 所需能力是所需能力名称的清单。
 	RequiredCapabilities []string `json:"required_capabilities,omitempty"`
 
-	// PreferredCapabilities is the list of preferred capability names.
+	// 首选能力是首选能力名列表.
 	PreferredCapabilities []string `json:"preferred_capabilities,omitempty"`
 
-	// RequiredTags is the list of required tags.
+	// 需求 标记是需要标记的列表.
 	RequiredTags []string `json:"required_tags,omitempty"`
 
-	// ExcludedAgents is the list of agent IDs to exclude.
+	// 被排除的代理人是被排除的代理人身份列表.
 	ExcludedAgents []string `json:"excluded_agents,omitempty"`
 
-	// MinScore is the minimum capability score required.
+	// MinScore是所需的最低能力分数.
 	MinScore float64 `json:"min_score,omitempty"`
 
-	// MaxLoad is the maximum acceptable load.
+	// MaxLoad是最大可接受负载.
 	MaxLoad float64 `json:"max_load,omitempty"`
 
-	// Limit is the maximum number of results to return.
+	// 限制是返回的最大结果数。
 	Limit int `json:"limit,omitempty"`
 
-	// Strategy is the matching strategy to use.
+	// 战略是使用的匹配战略。
 	Strategy MatchStrategy `json:"strategy,omitempty"`
 
-	// Timeout is the timeout for the match operation.
+	// 超时是匹配操作的超时.
 	Timeout time.Duration `json:"timeout,omitempty"`
 }
 
-// MatchStrategy defines the strategy for matching agents.
+// MatchStrategy定义了匹配代理的战略.
 type MatchStrategy string
 
 const (
-	// MatchStrategyBestMatch returns the best matching agent.
+	// MatchStrategyBestMatch返回最佳匹配代理.
 	MatchStrategyBestMatch MatchStrategy = "best_match"
-	// MatchStrategyLeastLoaded returns the least loaded matching agent.
+	// MatchStrategyLeastLoaded 返回最小装入的匹配代理 。
 	MatchStrategyLeastLoaded MatchStrategy = "least_loaded"
-	// MatchStrategyHighestScore returns the highest scoring matching agent.
+	// MatchStrategy 最高分返回最高分匹配代理.
 	MatchStrategyHighestScore MatchStrategy = "highest_score"
-	// MatchStrategyRoundRobin returns agents in round-robin order.
+	// Match Strategy Round Robin 以圆形Robin顺序返回代理.
 	MatchStrategyRoundRobin MatchStrategy = "round_robin"
-	// MatchStrategyRandom returns a random matching agent.
+	// MatchStrategyRandom 返回随机匹配代理.
 	MatchStrategyRandom MatchStrategy = "random"
 )
 
-// MatchResult represents the result of a capability match.
+// MatchResult代表能力匹配的结果.
 type MatchResult struct {
-	// Agent is the matched agent information.
+	// 代理是匹配的代理信息。
 	Agent *AgentInfo `json:"agent"`
 
-	// MatchedCapabilities is the list of matched capabilities.
+	// 匹配能力是匹配能力列表.
 	MatchedCapabilities []CapabilityInfo `json:"matched_capabilities"`
 
-	// Score is the overall match score (0-100).
+	// 得分为总比分(0-100).
 	Score float64 `json:"score"`
 
-	// Confidence is the confidence level of the match (0-1).
+	// 信心是比赛的信心水平 (0-1).
 	Confidence float64 `json:"confidence"`
 
-	// Reason is the reason for the match.
+	// 理由就是比赛的原因
 	Reason string `json:"reason,omitempty"`
 }
 
-// CompositionRequest represents a request to compose capabilities.
+// 要求构成要求构成能力。
 type CompositionRequest struct {
-	// TaskDescription is the natural language description of the task.
+	// TaskDescription是任务的自然语言描述.
 	TaskDescription string `json:"task_description"`
 
-	// RequiredCapabilities is the list of required capability names.
+	// 所需能力是所需能力名称的清单。
 	RequiredCapabilities []string `json:"required_capabilities"`
 
-	// AllowPartial allows partial composition if not all capabilities are available.
+	// 如果并非所有能力都具备,允许参与则允许部分组成。
 	AllowPartial bool `json:"allow_partial"`
 
-	// MaxAgents is the maximum number of agents to include in the composition.
+	// MaxAgents是包含在成分中的最大剂数.
 	MaxAgents int `json:"max_agents,omitempty"`
 
-	// Timeout is the timeout for the composition operation.
+	// 超时是组成操作的超时.
 	Timeout time.Duration `json:"timeout,omitempty"`
 }
 
-// CompositionResult represents the result of a capability composition.
+// 能力构成的结果。
 type CompositionResult struct {
-	// Agents is the list of agents in the composition.
+	// 代理是构成中的代理名单.
 	Agents []*AgentInfo `json:"agents"`
 
-	// CapabilityMap maps capability names to agent IDs.
+	// 能力映射能力名称到代理ID.
 	CapabilityMap map[string]string `json:"capability_map"`
 
-	// Dependencies is the dependency graph between capabilities.
+	// 依赖是能力之间的依赖图.
 	Dependencies map[string][]string `json:"dependencies,omitempty"`
 
-	// ExecutionOrder is the recommended execution order.
+	// 执行命令是推荐的执行命令.
 	ExecutionOrder []string `json:"execution_order,omitempty"`
 
-	// Conflicts is the list of detected conflicts.
+	// 冲突是已发现的冲突清单。
 	Conflicts []Conflict `json:"conflicts,omitempty"`
 
-	// Complete indicates if all required capabilities are satisfied.
+	// 完整表示是否满足所有要求的能力。
 	Complete bool `json:"complete"`
 
-	// MissingCapabilities is the list of missing capabilities.
+	// 缺失能力是缺失能力列表.
 	MissingCapabilities []string `json:"missing_capabilities,omitempty"`
 }
 
-// Conflict represents a conflict between capabilities.
+// 冲突是能力之间的冲突。
 type Conflict struct {
-	// Type is the type of conflict.
+	// 类型是冲突的类型。
 	Type ConflictType `json:"type"`
 
-	// Capabilities is the list of conflicting capabilities.
+	// 能力是相互冲突的能力清单。
 	Capabilities []string `json:"capabilities"`
 
-	// Agents is the list of agents involved in the conflict.
+	// 特工是卷入冲突的特工名单.
 	Agents []string `json:"agents"`
 
-	// Description is a description of the conflict.
+	// 描述是对冲突的描述.
 	Description string `json:"description"`
 
-	// Resolution is the suggested resolution.
+	// 决议就是所建议的决议。
 	Resolution string `json:"resolution,omitempty"`
 }
 
-// ConflictType defines the type of conflict.
+// 相冲突Type定义了相冲突的类型.
 type ConflictType string
 
 const (
-	// ConflictTypeResource indicates a resource conflict.
+	// 冲突类型资源表示资源冲突.
 	ConflictTypeResource ConflictType = "resource"
-	// ConflictTypeDependency indicates a dependency conflict.
+	// 冲突类型依赖表示依赖冲突。
 	ConflictTypeDependency ConflictType = "dependency"
-	// ConflictTypeExclusive indicates mutually exclusive capabilities.
+	// 冲突类型排除表明相互排斥的能力。
 	ConflictTypeExclusive ConflictType = "exclusive"
-	// ConflictTypeVersion indicates a version conflict.
+	// 相冲突TypeVersion表示版本冲突.
 	ConflictTypeVersion ConflictType = "version"
 )
 
-// DiscoveryEvent represents an event in the discovery system.
+// 发现Event代表了发现系统中的一个事件.
 type DiscoveryEvent struct {
-	// Type is the event type.
+	// 类型是事件类型 。
 	Type DiscoveryEventType `json:"type"`
 
-	// AgentID is the ID of the agent involved.
+	// AgentID是涉案特工的身份证明.
 	AgentID string `json:"agent_id"`
 
-	// Capability is the capability involved (if applicable).
+	// 能力是所涉及的能力(如果适用的话)。
 	Capability string `json:"capability,omitempty"`
 
-	// Data contains additional event data.
+	// 数据包含额外事件数据.
 	Data json.RawMessage `json:"data,omitempty"`
 
-	// Timestamp is when the event occurred.
+	// 时间戳是事件发生的时间 。
 	Timestamp time.Time `json:"timestamp"`
 }
 
-// DiscoveryEventType defines the type of discovery event.
+// 发现EventType定义了发现事件的类型.
 type DiscoveryEventType string
 
 const (
-	// DiscoveryEventAgentRegistered indicates an agent was registered.
+	// 发现Event Agent Registered表示某代理公司注册.
 	DiscoveryEventAgentRegistered DiscoveryEventType = "agent_registered"
-	// DiscoveryEventAgentUnregistered indicates an agent was unregistered.
+	// 发现Event Agent 注册未注册显示某代理未注册.
 	DiscoveryEventAgentUnregistered DiscoveryEventType = "agent_unregistered"
-	// DiscoveryEventAgentUpdated indicates an agent was updated.
+	// 发现Event Agent Updated 显示一个代理被更新.
 	DiscoveryEventAgentUpdated DiscoveryEventType = "agent_updated"
-	// DiscoveryEventCapabilityAdded indicates a capability was added.
+	// 发现Event Capability added表示增加了一种能力.
 	DiscoveryEventCapabilityAdded DiscoveryEventType = "capability_added"
-	// DiscoveryEventCapabilityRemoved indicates a capability was removed.
+	// 发现Event Capability Removed表示能力被移除.
 	DiscoveryEventCapabilityRemoved DiscoveryEventType = "capability_removed"
-	// DiscoveryEventCapabilityUpdated indicates a capability was updated.
+	// 更新后显示已更新能力。
 	DiscoveryEventCapabilityUpdated DiscoveryEventType = "capability_updated"
-	// DiscoveryEventHealthCheckFailed indicates a health check failed.
+	// 发现EventHealth检查失败 显示健康检查失败 。
 	DiscoveryEventHealthCheckFailed DiscoveryEventType = "health_check_failed"
-	// DiscoveryEventHealthCheckRecovered indicates a health check recovered.
+	// 发现Event Health Check Recovered 表示恢复了健康检查.
 	DiscoveryEventHealthCheckRecovered DiscoveryEventType = "health_check_recovered"
 )
 
-// DiscoveryEventHandler is a function that handles discovery events.
+// 发现EventHandler是一个处理发现事件的函数.
 type DiscoveryEventHandler func(event *DiscoveryEvent)
 
-// HealthCheckResult represents the result of a health check.
+// 健康检查结果代表健康检查的结果。
 type HealthCheckResult struct {
-	// AgentID is the ID of the agent.
+	// 代理ID是代理的身份证明.
 	AgentID string `json:"agent_id"`
 
-	// Healthy indicates if the agent is healthy.
+	// 健康指示剂是否健康.
 	Healthy bool `json:"healthy"`
 
-	// Status is the agent status.
+	// 状态是代理状态.
 	Status AgentStatus `json:"status"`
 
-	// Latency is the health check latency.
+	// 短暂性是健康检查的短暂性。
 	Latency time.Duration `json:"latency"`
 
-	// Message is an optional message.
+	// 信件是可选信件 。
 	Message string `json:"message,omitempty"`
 
-	// Timestamp is when the health check was performed.
+	// 时间戳是进行健康检查的时候。
 	Timestamp time.Time `json:"timestamp"`
 }
 
-// Registry defines the interface for capability registry operations.
+// 登记册界定了能力登记册业务的接口。
 type Registry interface {
-	// RegisterAgent registers an agent with its capabilities.
+	// 代理人对具有其能力的代理人进行登记。
 	RegisterAgent(ctx context.Context, info *AgentInfo) error
 
-	// UnregisterAgent unregisters an agent.
+	// 未注册代理 未经注册代理。
 	UnregisterAgent(ctx context.Context, agentID string) error
 
-	// UpdateAgent updates an agent's information.
+	// 更新代理更新一个代理的信息 。
 	UpdateAgent(ctx context.Context, info *AgentInfo) error
 
-	// GetAgent retrieves an agent by ID.
+	// Get Agent通过身份识别找到一个特工.
 	GetAgent(ctx context.Context, agentID string) (*AgentInfo, error)
 
-	// ListAgents lists all registered agents.
+	// ListAgents列出所有注册代理.
 	ListAgents(ctx context.Context) ([]*AgentInfo, error)
 
-	// RegisterCapability registers a capability for an agent.
+	// 注册能力登记一种代理的能力。
 	RegisterCapability(ctx context.Context, agentID string, cap *CapabilityInfo) error
 
-	// UnregisterCapability unregisters a capability.
+	// 未注册能力不注册 一种能力。
 	UnregisterCapability(ctx context.Context, agentID string, capabilityName string) error
 
-	// UpdateCapability updates a capability.
+	// 更新能力更新一个能力.
 	UpdateCapability(ctx context.Context, agentID string, cap *CapabilityInfo) error
 
-	// GetCapability retrieves a capability by agent ID and name.
+	// Get Capability通过代理身份和姓名检索能力.
 	GetCapability(ctx context.Context, agentID string, capabilityName string) (*CapabilityInfo, error)
 
-	// ListCapabilities lists all capabilities for an agent.
+	// List Capabilitys 列出一个代理的所有能力.
 	ListCapabilities(ctx context.Context, agentID string) ([]CapabilityInfo, error)
 
-	// FindCapabilities finds capabilities by name across all agents.
+	// Find Capabilitys 在所有特工中按名称找到能力.
 	FindCapabilities(ctx context.Context, capabilityName string) ([]CapabilityInfo, error)
 
-	// UpdateAgentStatus updates an agent's status.
+	// 更新代理状态更新代理状态 。
 	UpdateAgentStatus(ctx context.Context, agentID string, status AgentStatus) error
 
-	// UpdateAgentLoad updates an agent's load.
+	// 更新 AgentLoad 更新一个代理的负载 。
 	UpdateAgentLoad(ctx context.Context, agentID string, load float64) error
 
-	// RecordExecution records an execution result for a capability.
+	// 记录 Execution 记录一个执行结果 一个能力。
 	RecordExecution(ctx context.Context, agentID string, capabilityName string, success bool, latency time.Duration) error
 
-	// Subscribe subscribes to discovery events.
+	// 订阅了发现事件。
 	Subscribe(handler DiscoveryEventHandler) string
 
-	// Unsubscribe unsubscribes from discovery events.
+	// 不订阅来自发现事件的用户 。
 	Unsubscribe(subscriptionID string)
 
-	// Close closes the registry.
+	// 关闭注册 。
 	Close() error
 }
 
-// Matcher defines the interface for capability matching operations.
+// Matcher定义了能力匹配操作的接口.
 type Matcher interface {
-	// Match finds agents matching the given request.
+	// Match 找到匹配给定请求的代理 。
 	Match(ctx context.Context, req *MatchRequest) ([]*MatchResult, error)
 
-	// MatchOne finds the best matching agent for the given request.
+	// MatchOne 找到指定请求的最佳匹配代理 。
 	MatchOne(ctx context.Context, req *MatchRequest) (*MatchResult, error)
 
-	// Score calculates the match score for an agent against a request.
+	// 分数根据请求计算代理商的比分。
 	Score(ctx context.Context, agent *AgentInfo, req *MatchRequest) (float64, error)
 }
 
-// Composer defines the interface for capability composition operations.
+// 作曲家定义了能力构成操作的接口.
 type Composer interface {
-	// Compose creates a composition of capabilities from multiple agents.
+	// 作曲从多个代理中产生能力组成.
 	Compose(ctx context.Context, req *CompositionRequest) (*CompositionResult, error)
 
-	// ResolveDependencies resolves dependencies between capabilities.
+	// 解决依赖解决了能力之间的依赖.
 	ResolveDependencies(ctx context.Context, capabilities []string) (map[string][]string, error)
 
-	// DetectConflicts detects conflicts between capabilities.
+	// 侦测冲突能发现能力之间的冲突。
 	DetectConflicts(ctx context.Context, capabilities []string) ([]Conflict, error)
 }
 
-// Protocol defines the interface for service discovery protocol operations.
+// 协议定义了服务发现协议操作的接口.
 type Protocol interface {
-	// Start starts the discovery protocol.
+	// 启动发现协议 。
 	Start(ctx context.Context) error
 
-	// Stop stops the discovery protocol.
+	// 停止停止发现协议。
 	Stop(ctx context.Context) error
 
-	// Announce announces the local agent to the network.
+	// 公告向网络宣布本地代理.
 	Announce(ctx context.Context, info *AgentInfo) error
 
-	// Discover discovers agents on the network.
+	// 发现在网络上发现了特工.
 	Discover(ctx context.Context, filter *DiscoveryFilter) ([]*AgentInfo, error)
 
-	// Subscribe subscribes to agent announcements.
+	// 订阅代理通知 。
 	Subscribe(handler func(*AgentInfo)) string
 
-	// Unsubscribe unsubscribes from agent announcements.
+	// 从代理通知中取消订阅。
 	Unsubscribe(subscriptionID string)
 }
 
-// DiscoveryFilter defines filters for agent discovery.
+// DiscoveryFilter定义了特工发现的过滤器.
 type DiscoveryFilter struct {
-	// Capabilities filters by capability names.
+	// 能力过滤 通过能力名称。
 	Capabilities []string `json:"capabilities,omitempty"`
 
-	// Tags filters by tags.
+	// 通过标签过滤标记 。
 	Tags []string `json:"tags,omitempty"`
 
-	// Status filters by agent status.
+	// 按代理状态进行状态过滤.
 	Status []AgentStatus `json:"status,omitempty"`
 
-	// Local filters for local agents only.
+	// 仅针对本地代理的本地过滤器 。
 	Local *bool `json:"local,omitempty"`
 
-	// Remote filters for remote agents only.
+	// 仅用于远程代理的远程过滤器 。
 	Remote *bool `json:"remote,omitempty"`
 }

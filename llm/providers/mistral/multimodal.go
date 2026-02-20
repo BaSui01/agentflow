@@ -7,27 +7,27 @@ import (
 	"github.com/BaSui01/agentflow/llm/providers"
 )
 
-// GenerateImage is not supported by Mistral.
+// 生成图像不被Mistral支持.
 func (p *MistralProvider) GenerateImage(ctx context.Context, req *llm.ImageGenerationRequest) (*llm.ImageGenerationResponse, error) {
 	return nil, providers.NotSupportedError(p.Name(), "image generation")
 }
 
-// GenerateVideo is not supported by Mistral.
+// 生成Video不被Mistral支持.
 func (p *MistralProvider) GenerateVideo(ctx context.Context, req *llm.VideoGenerationRequest) (*llm.VideoGenerationResponse, error) {
 	return nil, providers.NotSupportedError(p.Name(), "video generation")
 }
 
-// GenerateAudio is not supported by Mistral.
+// 生成Audio不被Mistral支持.
 func (p *MistralProvider) GenerateAudio(ctx context.Context, req *llm.AudioGenerationRequest) (*llm.AudioGenerationResponse, error) {
 	return nil, providers.NotSupportedError(p.Name(), "audio generation")
 }
 
-// TranscribeAudio is not supported by Mistral.
+// TrancisAudio不被米斯特拉尔支持.
 func (p *MistralProvider) TranscribeAudio(ctx context.Context, req *llm.AudioTranscriptionRequest) (*llm.AudioTranscriptionResponse, error) {
 	return nil, providers.NotSupportedError(p.Name(), "audio transcription")
 }
 
-// CreateEmbedding creates embeddings using Mistral (delegates to OpenAI implementation).
+// CreateEmbedding 创建了使用Mistral(授权到 OpenAI 执行)的嵌入.
 func (p *MistralProvider) CreateEmbedding(ctx context.Context, req *llm.EmbeddingRequest) (*llm.EmbeddingResponse, error) {
 	resp, err := p.OpenAIProvider.CreateEmbedding(ctx, req)
 	if err != nil {
@@ -40,22 +40,22 @@ func (p *MistralProvider) CreateEmbedding(ctx context.Context, req *llm.Embeddin
 	return resp, nil
 }
 
-// CreateFineTuningJob is not supported by Mistral.
+// CreateFineTuningJob 不为米斯特拉尔所支持.
 func (p *MistralProvider) CreateFineTuningJob(ctx context.Context, req *llm.FineTuningJobRequest) (*llm.FineTuningJob, error) {
 	return nil, providers.NotSupportedError(p.Name(), "fine-tuning")
 }
 
-// ListFineTuningJobs is not supported by Mistral.
+// ListFineTuningJobs 不为米斯特拉尔所支持.
 func (p *MistralProvider) ListFineTuningJobs(ctx context.Context) ([]llm.FineTuningJob, error) {
 	return nil, providers.NotSupportedError(p.Name(), "fine-tuning")
 }
 
-// GetFineTuningJob is not supported by Mistral.
+// Get FineTuningJob 不支持米斯特拉尔.
 func (p *MistralProvider) GetFineTuningJob(ctx context.Context, jobID string) (*llm.FineTuningJob, error) {
 	return nil, providers.NotSupportedError(p.Name(), "fine-tuning")
 }
 
-// CancelFineTuningJob is not supported by Mistral.
+// 取消FineTuningJob不被Mistral支持.
 func (p *MistralProvider) CancelFineTuningJob(ctx context.Context, jobID string) error {
 	return providers.NotSupportedError(p.Name(), "fine-tuning")
 }

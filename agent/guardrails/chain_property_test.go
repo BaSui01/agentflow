@@ -10,12 +10,12 @@ import (
 	"pgregory.net/rapid"
 )
 
-// Feature: agent-framework-2026-enhancements, Property 3: Validator Priority Execution Order
-// Validates: Requirements 1.5 - Execute all rules in priority order
-// This property test verifies that validators are executed in priority order.
+// 特征:代理-框架-2026-增强,财产3:验证人优先执行令
+// 审定:要求1.5 - 按优先顺序执行所有规则
+// 此属性测试可验证验证器按优先级执行 。
 func TestProperty_ValidatorChain_PriorityExecutionOrder(t *testing.T) {
 	rapid.Check(t, func(rt *rapid.T) {
-		// Generate random priorities
+		// 生成随机优先级
 		numValidators := rapid.IntRange(2, 5).Draw(rt, "numValidators")
 		priorities := make([]int, numValidators)
 		for i := range priorities {
@@ -26,7 +26,7 @@ func TestProperty_ValidatorChain_PriorityExecutionOrder(t *testing.T) {
 			Mode: ChainModeCollectAll,
 		})
 
-		// Add validators with different priorities
+		// 添加具有不同优先级的验证符
 		for i, priority := range priorities {
 			chain.Add(&propMockValidator{
 				name:     fmt.Sprintf("validator_%d", i),
@@ -38,12 +38,12 @@ func TestProperty_ValidatorChain_PriorityExecutionOrder(t *testing.T) {
 		result, err := chain.Validate(ctx, "test content")
 		require.NoError(t, err)
 
-		// Check execution order from metadata
+		// 从元数据检查执行命令
 		executionOrder, ok := result.Metadata["execution_order"].([]string)
 		require.True(t, ok, "Should have execution_order in metadata")
 		require.Len(t, executionOrder, numValidators, "All validators should be executed")
 
-		// Verify validators are sorted by priority
+		// 校验验证符按优先级排序
 		validators := chain.Validators()
 		for i := 0; i < len(validators)-1; i++ {
 			assert.LessOrEqual(t, validators[i].Priority(), validators[i+1].Priority(),
@@ -52,16 +52,16 @@ func TestProperty_ValidatorChain_PriorityExecutionOrder(t *testing.T) {
 	})
 }
 
-// Feature: agent-framework-2026-enhancements, Property 4: Validation Error Information Completeness
-// Validates: Requirements 1.6 - Return detailed error information with failure reasons
-// This property test verifies that validation errors contain complete information.
+// 特性:代理框架-2026-增强,属性4:验证错误信息完整性
+// 校验: 要求1.6 - 以失败原因返回详细错误信息
+// 此属性测试验证验证错误包含完整信息 。
 func TestProperty_ValidatorChain_ErrorInformationCompleteness(t *testing.T) {
 	rapid.Check(t, func(rt *rapid.T) {
 		chain := NewValidatorChain(&ValidatorChainConfig{
 			Mode: ChainModeCollectAll,
 		})
 
-		// Add validators that will fail
+		// 添加将失败的验证符
 		errorCode := rapid.SampledFrom([]string{
 			ErrCodeInjectionDetected,
 			ErrCodePIIDetected,
@@ -87,7 +87,7 @@ func TestProperty_ValidatorChain_ErrorInformationCompleteness(t *testing.T) {
 		require.NoError(t, err)
 		assert.False(t, result.Valid, "Should be invalid when validator fails")
 
-		// Verify error completeness
+		// 校验出错的完整性
 		require.NotEmpty(t, result.Errors, "Should have errors")
 		validationErr := result.Errors[0]
 		assert.Equal(t, errorCode, validationErr.Code, "Error code should match")
@@ -96,14 +96,14 @@ func TestProperty_ValidatorChain_ErrorInformationCompleteness(t *testing.T) {
 	})
 }
 
-// TestProperty_ValidatorChain_FailFastMode tests fail-fast execution mode
+// 测试Property ValidatorChan FailFastMode 测试失败-快速执行模式
 func TestProperty_ValidatorChain_FailFastMode(t *testing.T) {
 	rapid.Check(t, func(rt *rapid.T) {
 		chain := NewValidatorChain(&ValidatorChainConfig{
 			Mode: ChainModeFailFast,
 		})
 
-		// Add multiple validators, first one fails
+		// 添加多个验证符, 第一个失败
 		chain.Add(&propMockFailingValidator{
 			name:         "first_failing",
 			priority:     10,
@@ -125,14 +125,14 @@ func TestProperty_ValidatorChain_FailFastMode(t *testing.T) {
 		require.NoError(t, err)
 		assert.False(t, result.Valid)
 
-		// In fail-fast mode, should stop after first failure
+		// 在故障快模式下,在第一次故障后应停止
 		executionOrder, ok := result.Metadata["execution_order"].([]string)
 		require.True(t, ok)
 		assert.Len(t, executionOrder, 1, "Should stop after first failure in fail-fast mode")
 	})
 }
 
-// TestProperty_ValidatorChain_CollectAllMode tests collect-all execution mode
+// 测试Property  ValidatorChan  Collect AllMode 测试收集全部执行模式
 func TestProperty_ValidatorChain_CollectAllMode(t *testing.T) {
 	rapid.Check(t, func(rt *rapid.T) {
 		chain := NewValidatorChain(&ValidatorChainConfig{
@@ -163,21 +163,21 @@ func TestProperty_ValidatorChain_CollectAllMode(t *testing.T) {
 		result, err := chain.Validate(ctx, "test content")
 		require.NoError(t, err)
 
-		// In collect-all mode, all validators should be executed
+		// 在收集- 全部模式下, 所有验证符都应该执行
 		executionOrder, ok := result.Metadata["execution_order"].([]string)
 		require.True(t, ok)
 		assert.Len(t, executionOrder, numValidators, "All validators should be executed in collect-all mode")
 	})
 }
 
-// TestProperty_ValidatorChain_MergesResults tests result merging
+// 测试结果合并
 func TestProperty_ValidatorChain_MergesResults(t *testing.T) {
 	rapid.Check(t, func(rt *rapid.T) {
 		chain := NewValidatorChain(&ValidatorChainConfig{
 			Mode: ChainModeCollectAll,
 		})
 
-		// Add multiple failing validators
+		// 添加多个失败验证符
 		numFailures := rapid.IntRange(2, 4).Draw(rt, "numFailures")
 		for i := 0; i < numFailures; i++ {
 			chain.Add(&propMockFailingValidator{
@@ -194,17 +194,17 @@ func TestProperty_ValidatorChain_MergesResults(t *testing.T) {
 		require.NoError(t, err)
 		assert.False(t, result.Valid)
 
-		// All errors should be collected
+		// 应收集所有错误
 		assert.Len(t, result.Errors, numFailures, "Should collect all errors")
 	})
 }
 
-// TestProperty_ValidatorChain_AddRemoveValidators tests dynamic validator management
+// 测试Property  Validator Chain Add 移动参数测试动态验证器管理
 func TestProperty_ValidatorChain_AddRemoveValidators(t *testing.T) {
 	rapid.Check(t, func(rt *rapid.T) {
 		chain := NewValidatorChain(nil)
 
-		// Add validators
+		// 添加验证符
 		numToAdd := rapid.IntRange(2, 5).Draw(rt, "numToAdd")
 		names := make([]string, numToAdd)
 		for i := 0; i < numToAdd; i++ {
@@ -217,26 +217,26 @@ func TestProperty_ValidatorChain_AddRemoveValidators(t *testing.T) {
 
 		assert.Equal(t, numToAdd, chain.Len(), "Should have correct number of validators")
 
-		// Remove one validator
+		// 删除一个校验符
 		removeIndex := rapid.IntRange(0, numToAdd-1).Draw(rt, "removeIndex")
 		removed := chain.Remove(names[removeIndex])
 		assert.True(t, removed, "Should successfully remove validator")
 		assert.Equal(t, numToAdd-1, chain.Len(), "Should have one less validator")
 
-		// Clear all
+		// 全部清除
 		chain.Clear()
 		assert.Equal(t, 0, chain.Len(), "Should be empty after clear")
 	})
 }
 
-// TestProperty_ValidatorChain_ContextCancellation tests context cancellation handling
+// 测试Property ValidatorChan ContextConcellation 测试上下文取消处理
 func TestProperty_ValidatorChain_ContextCancellation(t *testing.T) {
 	rapid.Check(t, func(rt *rapid.T) {
 		chain := NewValidatorChain(&ValidatorChainConfig{
 			Mode: ChainModeCollectAll,
 		})
 
-		// Add validators
+		// 添加验证符
 		for i := 0; i < 3; i++ {
 			chain.Add(&propMockValidator{
 				name:     fmt.Sprintf("validator_%d", i),
@@ -244,7 +244,7 @@ func TestProperty_ValidatorChain_ContextCancellation(t *testing.T) {
 			})
 		}
 
-		// Create cancelled context
+		// 创建已取消的上下文
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel() // Cancel immediately
 
@@ -254,7 +254,7 @@ func TestProperty_ValidatorChain_ContextCancellation(t *testing.T) {
 	})
 }
 
-// propMockValidator is a simple validator for property testing
+// PropMockValidator 是用于属性测试的简单验证器
 type propMockValidator struct {
 	name     string
 	priority int
@@ -266,7 +266,7 @@ func (v *propMockValidator) Validate(ctx context.Context, content string) (*Vali
 	return NewValidationResult(), nil
 }
 
-// propMockFailingValidator is a validator that always fails for property testing
+// PropMock FailingValidator 是属性测试总是失败的验证器
 type propMockFailingValidator struct {
 	name         string
 	priority     int

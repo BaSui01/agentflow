@@ -1,5 +1,5 @@
-// Package crews provides role-based agent teams with autonomous negotiation.
-// Implements CrewAI-style role definitions and collaborative task execution.
+// 包机组提供基于角色的代理团队进行自主谈判.
+// 实施CrewAI风格的角色定义和协作任务执行.
 package crews
 
 import (
@@ -11,7 +11,7 @@ import (
 	"go.uber.org/zap"
 )
 
-// Role defines an agent's role in a crew.
+// 角色定义了代理人在船员中的角色.
 type Role struct {
 	Name            string   `json:"name"`
 	Description     string   `json:"description"`
@@ -22,7 +22,7 @@ type Role struct {
 	AllowDelegation bool     `json:"allow_delegation"`
 }
 
-// CrewMember represents an agent in a crew.
+// 船员代表一个船员的特工
 type CrewMember struct {
 	ID       string         `json:"id"`
 	Role     Role           `json:"role"`
@@ -31,7 +31,7 @@ type CrewMember struct {
 	Metadata map[string]any `json:"metadata,omitempty"`
 }
 
-// MemberStatus represents a crew member's status.
+// 成员地位代表船员地位。
 type MemberStatus string
 
 const (
@@ -40,14 +40,14 @@ const (
 	MemberStatusWaiting MemberStatus = "waiting"
 )
 
-// CrewAgent interface for agents in a crew.
+// 机组特工的机组接口
 type CrewAgent interface {
 	ID() string
 	Execute(ctx context.Context, task CrewTask) (*TaskResult, error)
 	Negotiate(ctx context.Context, proposal Proposal) (*NegotiationResult, error)
 }
 
-// CrewTask represents a task for the crew.
+// 船员任务代表着船员的任务.
 type CrewTask struct {
 	ID           string         `json:"id"`
 	Description  string         `json:"description"`
@@ -59,7 +59,7 @@ type CrewTask struct {
 	Metadata     map[string]any `json:"metadata,omitempty"`
 }
 
-// TaskResult represents the result of a task.
+// TaskResult代表着一项任务的结果.
 type TaskResult struct {
 	TaskID   string `json:"task_id"`
 	Output   any    `json:"output"`
@@ -67,7 +67,7 @@ type TaskResult struct {
 	Duration int64  `json:"duration_ms"`
 }
 
-// Proposal represents a negotiation proposal.
+// 提案是谈判提案。
 type Proposal struct {
 	Type       ProposalType   `json:"type"`
 	FromMember string         `json:"from_member"`
@@ -77,7 +77,7 @@ type Proposal struct {
 	Metadata   map[string]any `json:"metadata,omitempty"`
 }
 
-// ProposalType defines types of proposals.
+// 提案Type定义了提案的类型.
 type ProposalType string
 
 const (
@@ -87,14 +87,14 @@ const (
 	ProposalTypeRequest  ProposalType = "request"
 )
 
-// NegotiationResult represents the result of a negotiation.
+// 谈判成果是谈判的结果。
 type NegotiationResult struct {
 	Accepted bool      `json:"accepted"`
 	Response string    `json:"response"`
 	Counter  *Proposal `json:"counter_proposal,omitempty"`
 }
 
-// Crew represents a team of agents working together.
+// 船员代表一组特工一起工作.
 type Crew struct {
 	ID          string                 `json:"id"`
 	Name        string                 `json:"name"`
@@ -107,7 +107,7 @@ type Crew struct {
 	mu          sync.RWMutex
 }
 
-// ProcessType defines how tasks are processed.
+// ProcessType定义任务处理方式.
 type ProcessType string
 
 const (
@@ -116,7 +116,7 @@ const (
 	ProcessConsensus    ProcessType = "consensus"
 )
 
-// CrewConfig configures a crew.
+// CrewConfig配置一个船员.
 type CrewConfig struct {
 	Name        string
 	Description string
@@ -124,7 +124,7 @@ type CrewConfig struct {
 	Verbose     bool
 }
 
-// NewCrew creates a new crew.
+// NewCrew创建了新的团队.
 func NewCrew(config CrewConfig, logger *zap.Logger) *Crew {
 	if logger == nil {
 		logger = zap.NewNop()
@@ -141,7 +141,7 @@ func NewCrew(config CrewConfig, logger *zap.Logger) *Crew {
 	}
 }
 
-// AddMember adds a member to the crew.
+// 添加"成员"为机组增加一名成员.
 func (c *Crew) AddMember(agent CrewAgent, role Role) *CrewMember {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -157,7 +157,7 @@ func (c *Crew) AddMember(agent CrewAgent, role Role) *CrewMember {
 	return member
 }
 
-// AddTask adds a task to the crew.
+// 添加任务给船员添加了任务.
 func (c *Crew) AddTask(task CrewTask) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -167,7 +167,7 @@ func (c *Crew) AddTask(task CrewTask) {
 	c.Tasks = append(c.Tasks, &task)
 }
 
-// Execute executes all tasks with the crew.
+// 执行与船员一起执行所有任务.
 func (c *Crew) Execute(ctx context.Context) (*CrewResult, error) {
 	c.logger.Info("starting crew execution", zap.Int("tasks", len(c.Tasks)))
 	start := time.Now()
@@ -219,7 +219,7 @@ func (c *Crew) executeSequential(ctx context.Context, result *CrewResult) error 
 }
 
 func (c *Crew) executeHierarchical(ctx context.Context, result *CrewResult) error {
-	// Find manager (highest priority member)
+	// 查找管理器( 最优先的成员)
 	var manager *CrewMember
 	for _, m := range c.Members {
 		if manager == nil || m.Role.AllowDelegation {
@@ -231,14 +231,14 @@ func (c *Crew) executeHierarchical(ctx context.Context, result *CrewResult) erro
 		return fmt.Errorf("no manager found")
 	}
 
-	// Manager delegates tasks
+	// 经理代表的任务
 	for _, task := range c.Tasks {
 		delegatee := c.findBestMember(task)
 		if delegatee == nil || delegatee.ID == manager.ID {
 			delegatee = manager
 		}
 
-		// Negotiate delegation
+		// 谈判代表团
 		if delegatee.ID != manager.ID {
 			proposal := Proposal{
 				Type:       ProposalTypeDelegate,
@@ -267,7 +267,7 @@ func (c *Crew) executeHierarchical(ctx context.Context, result *CrewResult) erro
 
 func (c *Crew) executeConsensus(ctx context.Context, result *CrewResult) error {
 	for _, task := range c.Tasks {
-		// All members vote on who should handle the task
+		// 所有成员投票表决谁应承担这项任务
 		votes := make(map[string]int)
 		for _, member := range c.Members {
 			proposal := Proposal{
@@ -281,7 +281,7 @@ func (c *Crew) executeConsensus(ctx context.Context, result *CrewResult) error {
 			}
 		}
 
-		// Find winner
+		// 找到赢家
 		var winner *CrewMember
 		maxVotes := 0
 		for memberID, count := range votes {
@@ -315,7 +315,7 @@ func (c *Crew) findBestMember(task *CrewTask) *CrewMember {
 		}
 	}
 
-	// Find by skills match
+	// 通过技能匹配查找
 	for _, member := range c.Members {
 		if member.Status == MemberStatusIdle {
 			return member
@@ -324,7 +324,7 @@ func (c *Crew) findBestMember(task *CrewTask) *CrewMember {
 	return nil
 }
 
-// CrewResult contains the results of crew execution.
+// CrewResult载有船员行刑的结果.
 type CrewResult struct {
 	CrewID      string                 `json:"crew_id"`
 	TaskResults map[string]*TaskResult `json:"task_results"`

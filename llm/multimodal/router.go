@@ -1,4 +1,4 @@
-// Package multimodal provides unified routing for all AI capabilities.
+// 包式多模式为所有AI能力提供统一的路由.
 package multimodal
 
 import (
@@ -16,7 +16,7 @@ import (
 	"github.com/BaSui01/agentflow/llm/video"
 )
 
-// Capability represents a type of AI capability.
+// 能力代表一种AI能力.
 type Capability string
 
 const (
@@ -31,7 +31,7 @@ const (
 	CapabilityModeration Capability = "moderation"
 )
 
-// Router provides unified access to all multimodal providers.
+// 路由器向所有多式联运供应商提供统一准入。
 type Router struct {
 	mu sync.RWMutex
 
@@ -56,7 +56,7 @@ type Router struct {
 	defaultModeration string
 }
 
-// NewRouter creates a new multimodal router.
+// 新路特创建了新的多模式路由器.
 func NewRouter() *Router {
 	return &Router{
 		embeddingProviders:  make(map[string]embedding.Provider),
@@ -72,10 +72,10 @@ func NewRouter() *Router {
 }
 
 // ============================================================
-// Registration methods
+// 登记方法
 // ============================================================
 
-// RegisterEmbedding registers an embedding provider.
+// 注册 Embedding 注册一个嵌入式提供者 。
 func (r *Router) RegisterEmbedding(name string, provider embedding.Provider, isDefault bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -85,7 +85,7 @@ func (r *Router) RegisterEmbedding(name string, provider embedding.Provider, isD
 	}
 }
 
-// RegisterRerank registers a rerank provider.
+// Register Rerank 注册一个重新排序的提供者 。
 func (r *Router) RegisterRerank(name string, provider rerank.Provider, isDefault bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -95,7 +95,7 @@ func (r *Router) RegisterRerank(name string, provider rerank.Provider, isDefault
 	}
 }
 
-// RegisterTTS registers a TTS provider.
+// 注册TTS注册一个TTS供应商.
 func (r *Router) RegisterTTS(name string, provider speech.TTSProvider, isDefault bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -105,7 +105,7 @@ func (r *Router) RegisterTTS(name string, provider speech.TTSProvider, isDefault
 	}
 }
 
-// RegisterSTT registers an STT provider.
+// 注册STT 注册 STT 提供者 。
 func (r *Router) RegisterSTT(name string, provider speech.STTProvider, isDefault bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -115,7 +115,7 @@ func (r *Router) RegisterSTT(name string, provider speech.STTProvider, isDefault
 	}
 }
 
-// RegisterImage registers an image provider.
+// 注册图像注册图像提供者 。
 func (r *Router) RegisterImage(name string, provider image.Provider, isDefault bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -125,7 +125,7 @@ func (r *Router) RegisterImage(name string, provider image.Provider, isDefault b
 	}
 }
 
-// RegisterVideo registers a video provider.
+// RegisterVideo 注册一个视频提供者。
 func (r *Router) RegisterVideo(name string, provider video.Provider, isDefault bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -135,7 +135,7 @@ func (r *Router) RegisterVideo(name string, provider video.Provider, isDefault b
 	}
 }
 
-// RegisterMusic registers a music provider.
+// 注册Music 注册音乐提供者 。
 func (r *Router) RegisterMusic(name string, provider music.MusicProvider, isDefault bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -145,7 +145,7 @@ func (r *Router) RegisterMusic(name string, provider music.MusicProvider, isDefa
 	}
 }
 
-// RegisterThreeD registers a 3D provider.
+// 注册三维注册三维供应商.
 func (r *Router) RegisterThreeD(name string, provider threed.ThreeDProvider, isDefault bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -155,7 +155,7 @@ func (r *Router) RegisterThreeD(name string, provider threed.ThreeDProvider, isD
 	}
 }
 
-// RegisterModeration registers a moderation provider.
+// 登记册修改登记了一个温和提供方。
 func (r *Router) RegisterModeration(name string, provider moderation.ModerationProvider, isDefault bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -166,10 +166,10 @@ func (r *Router) RegisterModeration(name string, provider moderation.ModerationP
 }
 
 // ============================================================
-// Provider getter methods
+// 提供者获取方法
 // ============================================================
 
-// Embedding returns an embedding provider by name or default.
+// 嵌入通过名称或默认返回嵌入提供者 。
 func (r *Router) Embedding(name string) (embedding.Provider, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -182,7 +182,7 @@ func (r *Router) Embedding(name string) (embedding.Provider, error) {
 	return nil, fmt.Errorf("embedding provider %q not found", name)
 }
 
-// Rerank returns a rerank provider by name or default.
+// Rerank 返回按名称或默认排序的提供者 。
 func (r *Router) Rerank(name string) (rerank.Provider, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -195,7 +195,7 @@ func (r *Router) Rerank(name string) (rerank.Provider, error) {
 	return nil, fmt.Errorf("rerank provider %q not found", name)
 }
 
-// TTS returns a TTS provider by name or default.
+// TTS通过名称或默认返回一个 TTS 提供者.
 func (r *Router) TTS(name string) (speech.TTSProvider, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -208,7 +208,7 @@ func (r *Router) TTS(name string) (speech.TTSProvider, error) {
 	return nil, fmt.Errorf("TTS provider %q not found", name)
 }
 
-// STT returns an STT provider by name or default.
+// STT 按名称或默认返回一个 STT 提供者 。
 func (r *Router) STT(name string) (speech.STTProvider, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -221,7 +221,7 @@ func (r *Router) STT(name string) (speech.STTProvider, error) {
 	return nil, fmt.Errorf("STT provider %q not found", name)
 }
 
-// Image returns an image provider by name or default.
+// 图像通过名称或默认返回图像提供者 。
 func (r *Router) Image(name string) (image.Provider, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -234,7 +234,7 @@ func (r *Router) Image(name string) (image.Provider, error) {
 	return nil, fmt.Errorf("image provider %q not found", name)
 }
 
-// Video returns a video provider by name or default.
+// 视频通过名称或默认返回视频提供者.
 func (r *Router) Video(name string) (video.Provider, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -247,7 +247,7 @@ func (r *Router) Video(name string) (video.Provider, error) {
 	return nil, fmt.Errorf("video provider %q not found", name)
 }
 
-// Music returns a music provider by name or default.
+// 音乐通过名称或默认返回音乐提供者.
 func (r *Router) Music(name string) (music.MusicProvider, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -260,7 +260,7 @@ func (r *Router) Music(name string) (music.MusicProvider, error) {
 	return nil, fmt.Errorf("music provider %q not found", name)
 }
 
-// ThreeD returns a 3D provider by name or default.
+// 三维通过名称或默认返回一个三维提供者.
 func (r *Router) ThreeD(name string) (threed.ThreeDProvider, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -273,7 +273,7 @@ func (r *Router) ThreeD(name string) (threed.ThreeDProvider, error) {
 	return nil, fmt.Errorf("3D provider %q not found", name)
 }
 
-// Moderation returns a moderation provider by name or default.
+// 中度通过名称或默认返回温和提供方 。
 func (r *Router) Moderation(name string) (moderation.ModerationProvider, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -287,10 +287,10 @@ func (r *Router) Moderation(name string) (moderation.ModerationProvider, error) 
 }
 
 // ============================================================
-// Convenience methods for direct operations
+// 直接行动的方便方法
 // ============================================================
 
-// Embed generates embeddings using the default or specified provider.
+// 嵌入使用默认或指定的提供者生成嵌入.
 func (r *Router) Embed(ctx context.Context, req *embedding.EmbeddingRequest, providerName string) (*embedding.EmbeddingResponse, error) {
 	p, err := r.Embedding(providerName)
 	if err != nil {
@@ -299,7 +299,7 @@ func (r *Router) Embed(ctx context.Context, req *embedding.EmbeddingRequest, pro
 	return p.Embed(ctx, req)
 }
 
-// RerankDocs reranks documents using the default or specified provider.
+// 重新排序 Docs 使用默认或指定的提供者重新排序文档 。
 func (r *Router) RerankDocs(ctx context.Context, req *rerank.RerankRequest, providerName string) (*rerank.RerankResponse, error) {
 	p, err := r.Rerank(providerName)
 	if err != nil {
@@ -308,7 +308,7 @@ func (r *Router) RerankDocs(ctx context.Context, req *rerank.RerankRequest, prov
 	return p.Rerank(ctx, req)
 }
 
-// Synthesize generates speech using the default or specified provider.
+// 合成大小使用默认或指定的提供者生成语音.
 func (r *Router) Synthesize(ctx context.Context, req *speech.TTSRequest, providerName string) (*speech.TTSResponse, error) {
 	p, err := r.TTS(providerName)
 	if err != nil {
@@ -317,7 +317,7 @@ func (r *Router) Synthesize(ctx context.Context, req *speech.TTSRequest, provide
 	return p.Synthesize(ctx, req)
 }
 
-// Transcribe converts speech to text using the default or specified provider.
+// 使用默认或指定的提供者将语音转换为文本。
 func (r *Router) Transcribe(ctx context.Context, req *speech.STTRequest, providerName string) (*speech.STTResponse, error) {
 	p, err := r.STT(providerName)
 	if err != nil {
@@ -326,7 +326,7 @@ func (r *Router) Transcribe(ctx context.Context, req *speech.STTRequest, provide
 	return p.Transcribe(ctx, req)
 }
 
-// GenerateImage generates images using the default or specified provider.
+// 生成图像使用默认或指定的提供者生成图像.
 func (r *Router) GenerateImage(ctx context.Context, req *image.GenerateRequest, providerName string) (*image.GenerateResponse, error) {
 	p, err := r.Image(providerName)
 	if err != nil {
@@ -335,7 +335,7 @@ func (r *Router) GenerateImage(ctx context.Context, req *image.GenerateRequest, 
 	return p.Generate(ctx, req)
 }
 
-// GenerateVideo generates videos using the default or specified provider.
+// 生成视频使用默认或指定的提供者生成.
 func (r *Router) GenerateVideo(ctx context.Context, req *video.GenerateRequest, providerName string) (*video.GenerateResponse, error) {
 	p, err := r.Video(providerName)
 	if err != nil {
@@ -344,7 +344,7 @@ func (r *Router) GenerateVideo(ctx context.Context, req *video.GenerateRequest, 
 	return p.Generate(ctx, req)
 }
 
-// GenerateMusic generates music using the default or specified provider.
+// 生成音乐使用默认或指定的提供者生成音乐.
 func (r *Router) GenerateMusic(ctx context.Context, req *music.GenerateRequest, providerName string) (*music.GenerateResponse, error) {
 	p, err := r.Music(providerName)
 	if err != nil {
@@ -353,7 +353,7 @@ func (r *Router) GenerateMusic(ctx context.Context, req *music.GenerateRequest, 
 	return p.Generate(ctx, req)
 }
 
-// Generate3D generates 3D models using the default or specified provider.
+// 生成3D使用默认或指定的提供者生成3D模型.
 func (r *Router) Generate3D(ctx context.Context, req *threed.GenerateRequest, providerName string) (*threed.GenerateResponse, error) {
 	p, err := r.ThreeD(providerName)
 	if err != nil {
@@ -362,7 +362,7 @@ func (r *Router) Generate3D(ctx context.Context, req *threed.GenerateRequest, pr
 	return p.Generate(ctx, req)
 }
 
-// Moderate checks content for policy violations.
+// 适度检查政策违规内容.
 func (r *Router) Moderate(ctx context.Context, req *moderation.ModerationRequest, providerName string) (*moderation.ModerationResponse, error) {
 	p, err := r.Moderation(providerName)
 	if err != nil {
@@ -372,10 +372,10 @@ func (r *Router) Moderate(ctx context.Context, req *moderation.ModerationRequest
 }
 
 // ============================================================
-// Utility methods
+// 使用方法
 // ============================================================
 
-// ListProviders returns all registered provider names by capability.
+// ListProviders按能力返回所有注册的提供者名称.
 func (r *Router) ListProviders() map[Capability][]string {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -413,7 +413,7 @@ func (r *Router) ListProviders() map[Capability][]string {
 	return result
 }
 
-// HasCapability checks if a capability is available.
+// 如果具备能力,则进行能力检查。
 func (r *Router) HasCapability(cap Capability) bool {
 	r.mu.RLock()
 	defer r.mu.RUnlock()

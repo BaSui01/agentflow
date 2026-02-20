@@ -1,4 +1,4 @@
-// Package cache provides caching capabilities for LLM operations.
+// 包缓存为LLM操作提供缓存能力.
 package cache
 
 import (
@@ -14,7 +14,7 @@ import (
 	"go.uber.org/zap"
 )
 
-// ToolResultCache caches tool execution results to avoid redundant calls.
+// ToolResultCache缓存工具执行结果来避免冗余调用.
 type ToolResultCache struct {
 	entries map[string]*toolCacheEntry
 	mu      sync.RWMutex
@@ -23,7 +23,7 @@ type ToolResultCache struct {
 	stats   CacheStats
 }
 
-// ToolCacheConfig configures the tool result cache.
+// ToolCacheConfig 配置工具结果缓存 。
 type ToolCacheConfig struct {
 	MaxEntries          int                      `json:"max_entries"`
 	DefaultTTL          time.Duration            `json:"default_ttl"`
@@ -33,7 +33,7 @@ type ToolCacheConfig struct {
 	ExcludedTools       []string                 `json:"excluded_tools"`     // Tools to never cache
 }
 
-// DefaultToolCacheConfig returns sensible defaults.
+// 默认工具CacheConfig 返回合理的默认值 。
 func DefaultToolCacheConfig() ToolCacheConfig {
 	return ToolCacheConfig{
 		MaxEntries:          10000,
@@ -45,7 +45,7 @@ func DefaultToolCacheConfig() ToolCacheConfig {
 	}
 }
 
-// CacheStats tracks cache performance.
+// 快取Stats 跟踪缓存性能 。
 type CacheStats struct {
 	Hits      int64 `json:"hits"`
 	Misses    int64 `json:"misses"`
@@ -64,7 +64,7 @@ type toolCacheEntry struct {
 	HitCount  int             `json:"hit_count"`
 }
 
-// NewToolResultCache creates a new tool result cache.
+// NewToolResultCache创建了新的工具结果缓存.
 func NewToolResultCache(config ToolCacheConfig, logger *zap.Logger) *ToolResultCache {
 	if logger == nil {
 		logger = zap.NewNop()
@@ -76,9 +76,9 @@ func NewToolResultCache(config ToolCacheConfig, logger *zap.Logger) *ToolResultC
 	}
 }
 
-// Get retrieves a cached result for a tool call.
+// 获取工具呼叫的缓存结果 。
 func (c *ToolResultCache) Get(toolName string, arguments json.RawMessage) (*CachedToolResult, bool) {
-	// Check if tool is excluded
+	// 检查是否排除工具
 	if c.isExcluded(toolName) {
 		return nil, false
 	}
@@ -96,7 +96,7 @@ func (c *ToolResultCache) Get(toolName string, arguments json.RawMessage) (*Cach
 		return nil, false
 	}
 
-	// Check expiration
+	// 检查过期
 	if time.Now().After(entry.ExpiresAt) {
 		c.mu.Lock()
 		delete(c.entries, key)
@@ -123,9 +123,9 @@ func (c *ToolResultCache) Get(toolName string, arguments json.RawMessage) (*Cach
 	}, true
 }
 
-// Set stores a tool result in the cache.
+// 在缓存中设置一个工具结果 。
 func (c *ToolResultCache) Set(toolName string, arguments json.RawMessage, result json.RawMessage, err string) {
-	// Check if tool is excluded
+	// 检查是否排除工具
 	if c.isExcluded(toolName) {
 		return
 	}
@@ -136,7 +136,7 @@ func (c *ToolResultCache) Set(toolName string, arguments json.RawMessage, result
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	// Evict if at capacity
+	// 如果有能力, 则取消
 	if len(c.entries) >= c.config.MaxEntries {
 		c.evictOldest()
 	}
@@ -158,7 +158,7 @@ func (c *ToolResultCache) Set(toolName string, arguments json.RawMessage, result
 		zap.Duration("ttl", ttl))
 }
 
-// Invalidate removes a specific cache entry.
+// 无效删除特定缓存项。
 func (c *ToolResultCache) Invalidate(toolName string, arguments json.RawMessage) {
 	key := c.buildKey(toolName, arguments)
 	c.mu.Lock()
@@ -167,7 +167,7 @@ func (c *ToolResultCache) Invalidate(toolName string, arguments json.RawMessage)
 	c.stats.Size = len(c.entries)
 }
 
-// InvalidateTool removes all cache entries for a tool.
+// 无效工具删除工具的所有缓存项 。
 func (c *ToolResultCache) InvalidateTool(toolName string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -180,7 +180,7 @@ func (c *ToolResultCache) InvalidateTool(toolName string) {
 	c.stats.Size = len(c.entries)
 }
 
-// Clear removes all cache entries.
+// 清除所有缓存条目。
 func (c *ToolResultCache) Clear() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -188,14 +188,14 @@ func (c *ToolResultCache) Clear() {
 	c.stats.Size = 0
 }
 
-// Stats returns cache statistics.
+// Stats 返回缓存统计 。
 func (c *ToolResultCache) Stats() CacheStats {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	return c.stats
 }
 
-// CachedToolResult represents a cached tool execution result.
+// CachedTooLResult 代表了缓存的工具执行结果.
 type CachedToolResult struct {
 	Result    json.RawMessage `json:"result"`
 	Error     string          `json:"error,omitempty"`
@@ -204,7 +204,7 @@ type CachedToolResult struct {
 }
 
 func (c *ToolResultCache) buildKey(toolName string, arguments json.RawMessage) string {
-	// Normalize arguments for consistent hashing
+	// 将持续散列的参数规范化
 	var normalized interface{}
 	if err := json.Unmarshal(arguments, &normalized); err == nil {
 		if sortedArgs, err := json.Marshal(normalized); err == nil {
@@ -250,19 +250,19 @@ func (c *ToolResultCache) evictOldest() {
 	}
 }
 
-// CachingToolExecutor wraps a tool executor with caching.
+// CachingTooleExecutor 将工具执行器用caching来包裹.
 type CachingToolExecutor struct {
 	executor ToolExecutor
 	cache    *ToolResultCache
 	logger   *zap.Logger
 }
 
-// ToolExecutor interface for tool execution.
+// 工具执行的工具执行器接口 。
 type ToolExecutor interface {
 	Execute(ctx context.Context, calls []llm.ToolCall) []ToolResult
 }
 
-// ToolResult represents a tool execution result.
+// ToolResult代表工具执行结果.
 type ToolResult struct {
 	ToolCallID string          `json:"tool_call_id"`
 	Name       string          `json:"name"`
@@ -272,7 +272,7 @@ type ToolResult struct {
 	FromCache  bool            `json:"from_cache"`
 }
 
-// NewCachingToolExecutor creates a caching tool executor.
+// NewCachingTooleExecutor 创建了快取工具执行器.
 func NewCachingToolExecutor(executor ToolExecutor, cache *ToolResultCache, logger *zap.Logger) *CachingToolExecutor {
 	return &CachingToolExecutor{
 		executor: executor,
@@ -281,13 +281,13 @@ func NewCachingToolExecutor(executor ToolExecutor, cache *ToolResultCache, logge
 	}
 }
 
-// Execute executes tool calls with caching.
+// 用缓存执行工具调用 。
 func (e *CachingToolExecutor) Execute(ctx context.Context, calls []llm.ToolCall) []ToolResult {
 	results := make([]ToolResult, len(calls))
 	var uncachedCalls []llm.ToolCall
 	var uncachedIndices []int
 
-	// Check cache for each call
+	// 检查每次呼叫的缓存
 	for i, call := range calls {
 		if cached, ok := e.cache.Get(call.Name, call.Arguments); ok {
 			results[i] = ToolResult{
@@ -303,7 +303,7 @@ func (e *CachingToolExecutor) Execute(ctx context.Context, calls []llm.ToolCall)
 		}
 	}
 
-	// Execute uncached calls
+	// 执行无标记的电话
 	if len(uncachedCalls) > 0 {
 		execResults := e.executor.Execute(ctx, uncachedCalls)
 		for j, execResult := range execResults {
@@ -317,7 +317,7 @@ func (e *CachingToolExecutor) Execute(ctx context.Context, calls []llm.ToolCall)
 				FromCache:  false,
 			}
 
-			// Cache the result
+			// 缓存结果
 			e.cache.Set(execResult.Name, uncachedCalls[j].Arguments, execResult.Result, execResult.Error)
 		}
 	}

@@ -11,9 +11,9 @@ import (
 	"pgregory.net/rapid"
 )
 
-// Feature: agent-framework-2026-enhancements, Property 6: Output Validation Failure Logging
-// Validates: Requirements 2.5 - Log all validation failure events for audit
-// This property test verifies that validation failures are properly logged.
+// 特性:代理框架-2026-增强,财产6:产出验证失败记录
+// 审定:要求2.5 - 记录所有审定失败事件以供审计
+// 此属性测试验证验证失败被正确记录 。
 func TestProperty_OutputValidator_FailureLogging(t *testing.T) {
 	rapid.Check(t, func(rt *rapid.T) {
 		auditLogger := NewMemoryAuditLogger(100)
@@ -23,7 +23,7 @@ func TestProperty_OutputValidator_FailureLogging(t *testing.T) {
 			AuditLogger:    auditLogger,
 		})
 
-		// Add a failing validator
+		// 添加失败的验证符
 		errorCode := rapid.SampledFrom([]string{
 			ErrCodePIIDetected,
 			ErrCodeContentBlocked,
@@ -46,7 +46,7 @@ func TestProperty_OutputValidator_FailureLogging(t *testing.T) {
 		_, err := outputValidator.Validate(ctx, content)
 		require.NoError(t, err)
 
-		// Verify audit log entry was created
+		// 已创建审计日志条目
 		entries := auditLogger.GetEntries()
 		require.NotEmpty(t, entries, "Should have audit log entries")
 
@@ -59,12 +59,12 @@ func TestProperty_OutputValidator_FailureLogging(t *testing.T) {
 	})
 }
 
-// TestProperty_OutputValidator_AuditLogQuery tests audit log querying
+// 测试 Property outputValidator AuditLogQuery 测试审计日志查询
 func TestProperty_OutputValidator_AuditLogQuery(t *testing.T) {
 	rapid.Check(t, func(rt *rapid.T) {
 		auditLogger := NewMemoryAuditLogger(100)
 
-		// Generate multiple log entries
+		// 生成多个日志条目
 		numEntries := rapid.IntRange(5, 20).Draw(rt, "numEntries")
 		eventTypes := []AuditEventType{
 			AuditEventValidationFailed,
@@ -85,12 +85,12 @@ func TestProperty_OutputValidator_AuditLogQuery(t *testing.T) {
 			require.NoError(t, err)
 		}
 
-		// Query all entries
+		// 查询所有条目
 		allEntries, err := auditLogger.Query(ctx, nil)
 		require.NoError(t, err)
 		assert.Len(t, allEntries, numEntries, "Should return all entries")
 
-		// Query with event type filter
+		// 使用事件类型过滤器查询
 		filterType := rapid.SampledFrom(eventTypes).Draw(rt, "filterType")
 		filtered, err := auditLogger.Query(ctx, &AuditLogFilter{
 			EventTypes: []AuditEventType{filterType},
@@ -100,7 +100,7 @@ func TestProperty_OutputValidator_AuditLogQuery(t *testing.T) {
 			assert.Equal(t, filterType, entry.EventType, "Filtered entries should match event type")
 		}
 
-		// Query with limit
+		// 查询限制
 		limit := rapid.IntRange(1, numEntries).Draw(rt, "limit")
 		limited, err := auditLogger.Query(ctx, &AuditLogFilter{
 			Limit: limit,
@@ -110,10 +110,10 @@ func TestProperty_OutputValidator_AuditLogQuery(t *testing.T) {
 	})
 }
 
-// TestProperty_OutputValidator_ContentFiltering tests content filtering
+// 测试Property outputValidator 连接测试内容过滤
 func TestProperty_OutputValidator_ContentFiltering(t *testing.T) {
 	rapid.Check(t, func(rt *rapid.T) {
-		// Create content filter with blocked patterns
+		// 以被屏蔽的模式创建内容过滤器
 		blockedWord := rapid.StringMatching(`[a-z]{5,10}`).Draw(rt, "blockedWord")
 		filter, err := NewContentFilter(&ContentFilterConfig{
 			BlockedPatterns: []string{blockedWord},
@@ -127,7 +127,7 @@ func TestProperty_OutputValidator_ContentFiltering(t *testing.T) {
 
 		ctx := context.Background()
 
-		// Content with blocked word
+		// 含有被封锁单词的内容
 		content := "prefix " + blockedWord + " suffix"
 		filtered, result, err := outputValidator.ValidateAndFilter(ctx, content)
 		require.NoError(t, err)
@@ -137,7 +137,7 @@ func TestProperty_OutputValidator_ContentFiltering(t *testing.T) {
 	})
 }
 
-// TestProperty_OutputValidator_SafeReplacement tests safe replacement for critical errors
+// 检测 Property outputValidator 安全更换测试 关键错误的安全替换
 func TestProperty_OutputValidator_SafeReplacement(t *testing.T) {
 	rapid.Check(t, func(rt *rapid.T) {
 		safeReplacement := rapid.StringMatching(`\[SAFE: [a-z]{5,10}\]`).Draw(rt, "safeReplacement")
@@ -146,7 +146,7 @@ func TestProperty_OutputValidator_SafeReplacement(t *testing.T) {
 			SafeReplacement: safeReplacement,
 		})
 
-		// Add validator that returns critical error
+		// 添加返回关键错误的验证符
 		outputValidator.AddValidator(&propMockFailingValidator{
 			name:         "critical_validator",
 			priority:     10,
@@ -168,10 +168,10 @@ func TestProperty_OutputValidator_SafeReplacement(t *testing.T) {
 	})
 }
 
-// TestProperty_ContentFilter_PatternMatching tests content filter pattern matching
+// 测试Property ContentFilter PatternMatching 测试内容过滤模式匹配
 func TestProperty_ContentFilter_PatternMatching(t *testing.T) {
 	rapid.Check(t, func(rt *rapid.T) {
-		// Generate patterns
+		// 生成图案
 		numPatterns := rapid.IntRange(1, 3).Draw(rt, "numPatterns")
 		patterns := make([]string, numPatterns)
 		for i := range patterns {
@@ -187,7 +187,7 @@ func TestProperty_ContentFilter_PatternMatching(t *testing.T) {
 
 		ctx := context.Background()
 
-		// Test each pattern is detected
+		// 检测到每个模式
 		for _, pattern := range patterns {
 			content := "text " + pattern + " more"
 			matches := filter.Detect(content)
@@ -200,7 +200,7 @@ func TestProperty_ContentFilter_PatternMatching(t *testing.T) {
 	})
 }
 
-// TestProperty_ContentFilter_AddRemovePattern tests dynamic pattern management
+// 测试Property ContentFilter Add RemovePattern 测试动态模式管理
 func TestProperty_ContentFilter_AddRemovePattern(t *testing.T) {
 	rapid.Check(t, func(rt *rapid.T) {
 		filter, err := NewContentFilter(&ContentFilterConfig{
@@ -208,7 +208,7 @@ func TestProperty_ContentFilter_AddRemovePattern(t *testing.T) {
 		})
 		require.NoError(t, err)
 
-		// Add patterns
+		// 添加图案
 		numPatterns := rapid.IntRange(2, 5).Draw(rt, "numPatterns")
 		patterns := make([]string, numPatterns)
 		for i := range patterns {
@@ -219,7 +219,7 @@ func TestProperty_ContentFilter_AddRemovePattern(t *testing.T) {
 
 		assert.Len(t, filter.GetPatterns(), numPatterns, "Should have all patterns")
 
-		// Remove one pattern
+		// 删除一个图案
 		removeIndex := rapid.IntRange(0, numPatterns-1).Draw(rt, "removeIndex")
 		removed := filter.RemovePattern(patterns[removeIndex])
 		assert.True(t, removed, "Should successfully remove pattern")
@@ -227,7 +227,7 @@ func TestProperty_ContentFilter_AddRemovePattern(t *testing.T) {
 	})
 }
 
-// TestProperty_AuditLogger_MaxSize tests audit logger max size enforcement
+// 测试Property  AuditLogger MaxSize 测试 最大大小的审计日志执行
 func TestProperty_AuditLogger_MaxSize(t *testing.T) {
 	rapid.Check(t, func(rt *rapid.T) {
 		maxSize := rapid.IntRange(5, 20).Draw(rt, "maxSize")
@@ -235,7 +235,7 @@ func TestProperty_AuditLogger_MaxSize(t *testing.T) {
 
 		ctx := context.Background()
 
-		// Add more entries than max size
+		// 添加大于最大大小的条目
 		numEntries := maxSize + rapid.IntRange(5, 15).Draw(rt, "extraEntries")
 		for i := 0; i < numEntries; i++ {
 			entry := &AuditLogEntry{
@@ -248,13 +248,13 @@ func TestProperty_AuditLogger_MaxSize(t *testing.T) {
 			require.NoError(t, err)
 		}
 
-		// Should not exceed max size
+		// 不应超过最大尺寸
 		entries := logger.GetEntries()
 		assert.LessOrEqual(t, len(entries), maxSize, "Should not exceed max size")
 	})
 }
 
-// TestProperty_AuditLogger_TimeRangeFilter tests time range filtering
+// 测试Property  AuditLogger  TimeRangFilter 测试时间范围过滤
 func TestProperty_AuditLogger_TimeRangeFilter(t *testing.T) {
 	rapid.Check(t, func(rt *rapid.T) {
 		logger := NewMemoryAuditLogger(100)
@@ -262,7 +262,7 @@ func TestProperty_AuditLogger_TimeRangeFilter(t *testing.T) {
 
 		baseTime := time.Now()
 
-		// Add entries with different timestamps
+		// 添加带有不同时间戳的条目
 		for i := 0; i < 10; i++ {
 			entry := &AuditLogEntry{
 				Timestamp:     baseTime.Add(time.Duration(i) * time.Hour),
@@ -274,7 +274,7 @@ func TestProperty_AuditLogger_TimeRangeFilter(t *testing.T) {
 			require.NoError(t, err)
 		}
 
-		// Query with time range
+		// 查询时间范围
 		startTime := baseTime.Add(2 * time.Hour)
 		endTime := baseTime.Add(7 * time.Hour)
 
@@ -291,7 +291,7 @@ func TestProperty_AuditLogger_TimeRangeFilter(t *testing.T) {
 	})
 }
 
-// TestProperty_ContentFilterValidator_Integration tests ContentFilterValidator integration
+// 测试Property ContentFilterValidator 集成测试 内容FilterValidator集成
 func TestProperty_ContentFilterValidator_Integration(t *testing.T) {
 	rapid.Check(t, func(rt *rapid.T) {
 		blockedWord := rapid.StringMatching(`[a-z]{5,10}`).Draw(rt, "blockedWord")
@@ -306,14 +306,14 @@ func TestProperty_ContentFilterValidator_Integration(t *testing.T) {
 
 		ctx := context.Background()
 
-		// Content with blocked word
+		// 含有被封锁单词的内容
 		content := "some " + blockedWord + " text"
 		result, err := validator.Validate(ctx, content)
 		require.NoError(t, err)
 		assert.False(t, result.Valid, "Should detect blocked content")
 		assert.Equal(t, ErrCodeContentBlocked, result.Errors[0].Code)
 
-		// Check filtered content in metadata
+		// 检查元数据中过滤的内容
 		filtered, ok := result.Metadata["filtered_content"].(string)
 		require.True(t, ok, "Should have filtered_content")
 		assert.NotContains(t, filtered, blockedWord)

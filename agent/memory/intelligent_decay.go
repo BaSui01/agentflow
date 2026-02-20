@@ -1,5 +1,5 @@
-// Package memory provides Intelligent Decay mechanism for memory management.
-// Implements smart memory pruning based on recency, relevance, and utility scores.
+// 包内存为内存管理提供了智能衰变机制.
+// 执行基于惯用性、相关性和功用分数的智能内存回流。
 package memory
 
 import (
@@ -13,7 +13,7 @@ import (
 	"go.uber.org/zap"
 )
 
-// DecayConfig configures the intelligent decay mechanism.
+// DecayConfig配置了智能衰变机制.
 type DecayConfig struct {
 	RecencyWeight   float64       `json:"recency_weight"`   // Weight for recency score (0-1)
 	RelevanceWeight float64       `json:"relevance_weight"` // Weight for relevance score (0-1)
@@ -24,7 +24,7 @@ type DecayConfig struct {
 	HalfLife        time.Duration `json:"half_life"`        // Time for recency score to halve
 }
 
-// DefaultDecayConfig returns sensible defaults.
+// 默认DecayConfig 返回合理的默认值 。
 func DefaultDecayConfig() DecayConfig {
 	return DecayConfig{
 		RecencyWeight:   0.3,
@@ -37,7 +37,7 @@ func DefaultDecayConfig() DecayConfig {
 	}
 }
 
-// MemoryItem represents a memory item with decay metadata.
+// 内存项目代表着一个带有衰变元数据的内存项目.
 type MemoryItem struct {
 	ID           string                 `json:"id"`
 	Content      string                 `json:"content"`
@@ -51,7 +51,7 @@ type MemoryItem struct {
 	Metadata     map[string]interface{} `json:"metadata,omitempty"`
 }
 
-// CompositeScore calculates the composite decay score.
+// 复合分数计算出复合衰减分数.
 func (m *MemoryItem) CompositeScore(config DecayConfig) float64 {
 	recency := m.RecencyScore(config.HalfLife)
 	return config.RecencyWeight*recency +
@@ -59,14 +59,14 @@ func (m *MemoryItem) CompositeScore(config DecayConfig) float64 {
 		config.UtilityWeight*m.Utility
 }
 
-// RecencyScore calculates the recency score using exponential decay.
+// RecencyScore使用指数衰减计算Recency分数.
 func (m *MemoryItem) RecencyScore(halfLife time.Duration) float64 {
 	age := time.Since(m.LastAccessed)
 	lambda := math.Ln2 / halfLife.Seconds()
 	return math.Exp(-lambda * age.Seconds())
 }
 
-// IntelligentDecay manages memory with intelligent decay.
+// IntelligentDecay以智能衰变管理内存.
 type IntelligentDecay struct {
 	config   DecayConfig
 	memories map[string]*MemoryItem
@@ -77,12 +77,12 @@ type IntelligentDecay struct {
 	stopCh  chan struct{}
 }
 
-// NewIntelligentDecay creates a new intelligent decay manager.
+// 新智能Decay创建了新的智能衰变管理器.
 func NewIntelligentDecay(config DecayConfig, logger *zap.Logger) *IntelligentDecay {
 	if logger == nil {
 		logger = zap.NewNop()
 	}
-	// Normalize weights
+	// 使权重正常化
 	total := config.RecencyWeight + config.RelevanceWeight + config.UtilityWeight
 	if total > 0 {
 		config.RecencyWeight /= total
@@ -97,7 +97,7 @@ func NewIntelligentDecay(config DecayConfig, logger *zap.Logger) *IntelligentDec
 	}
 }
 
-// Add adds a memory item.
+// 添加一个内存项 。
 func (d *IntelligentDecay) Add(item *MemoryItem) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
@@ -116,7 +116,7 @@ func (d *IntelligentDecay) Add(item *MemoryItem) {
 	d.logger.Debug("memory added", zap.String("id", item.ID))
 }
 
-// Get retrieves a memory item and updates access metadata.
+// 获取一个内存项目并更新访问元数据 。
 func (d *IntelligentDecay) Get(id string) *MemoryItem {
 	d.mu.Lock()
 	defer d.mu.Unlock()
@@ -126,7 +126,7 @@ func (d *IntelligentDecay) Get(id string) *MemoryItem {
 		return nil
 	}
 
-	// Update access metadata
+	// 更新访问元数据
 	item.LastAccessed = time.Now()
 	item.AccessCount++
 	item.Utility = d.calculateUtility(item)
@@ -134,7 +134,7 @@ func (d *IntelligentDecay) Get(id string) *MemoryItem {
 	return item
 }
 
-// Search finds memories by relevance to a query vector.
+// 搜索通过对查询向量的关联找到记忆 。
 func (d *IntelligentDecay) Search(queryVector []float64, topK int) []*MemoryItem {
 	d.mu.RLock()
 	defer d.mu.RUnlock()
@@ -151,7 +151,7 @@ func (d *IntelligentDecay) Search(queryVector []float64, topK int) []*MemoryItem
 		}
 		similarity := cosineSimilarity(queryVector, item.Vector)
 		composite := item.CompositeScore(d.config)
-		// Combine similarity with composite score
+		// 将相似性与综合分数合并
 		finalScore := 0.6*similarity + 0.4*composite
 		results = append(results, scored{item: item, score: finalScore})
 	}
@@ -171,7 +171,7 @@ func (d *IntelligentDecay) Search(queryVector []float64, topK int) []*MemoryItem
 	return items
 }
 
-// Decay runs the decay process once.
+// 衰变运行了一次衰变过程.
 func (d *IntelligentDecay) Decay(ctx context.Context) DecayResult {
 	d.mu.Lock()
 	defer d.mu.Unlock()
@@ -181,7 +181,7 @@ func (d *IntelligentDecay) Decay(ctx context.Context) DecayResult {
 		TotalBefore: len(d.memories),
 	}
 
-	// Calculate scores and identify items to prune
+	// 计算分数并识别要分数的项目
 	type scored struct {
 		id    string
 		score float64
@@ -193,12 +193,12 @@ func (d *IntelligentDecay) Decay(ctx context.Context) DecayResult {
 		items = append(items, scored{id: id, score: score})
 	}
 
-	// Sort by score (lowest first for pruning)
+	// 按分数排序( 最先刷分)
 	sort.Slice(items, func(i, j int) bool {
 		return items[i].score < items[j].score
 	})
 
-	// Prune items below threshold or exceeding max
+	// 低于阈值或超过最大值的倾角项目
 	pruneCount := 0
 	for _, item := range items {
 		shouldPrune := item.score < d.config.DecayThreshold ||
@@ -221,7 +221,7 @@ func (d *IntelligentDecay) Decay(ctx context.Context) DecayResult {
 	return result
 }
 
-// DecayResult contains the results of a decay operation.
+// 衰变Result包含衰变操作的结果.
 type DecayResult struct {
 	Timestamp   time.Time `json:"timestamp"`
 	TotalBefore int       `json:"total_before"`
@@ -230,7 +230,7 @@ type DecayResult struct {
 	PrunedIDs   []string  `json:"pruned_ids,omitempty"`
 }
 
-// Start starts the automatic decay process.
+// 启动自动衰变进程 。
 func (d *IntelligentDecay) Start(ctx context.Context) error {
 	d.mu.Lock()
 	if d.running {
@@ -245,7 +245,7 @@ func (d *IntelligentDecay) Start(ctx context.Context) error {
 	return nil
 }
 
-// Stop stops the automatic decay process.
+// 停止自动衰变过程 。
 func (d *IntelligentDecay) Stop() {
 	d.mu.Lock()
 	defer d.mu.Unlock()
@@ -272,23 +272,23 @@ func (d *IntelligentDecay) runDecayLoop(ctx context.Context) {
 }
 
 func (d *IntelligentDecay) calculateUtility(item *MemoryItem) float64 {
-	// Utility based on access frequency and recency
+	// 基于接入频率和惯性
 	if item.AccessCount == 0 {
 		return 0.1
 	}
 
-	// Log-scale access count (diminishing returns)
+	// 日志比例访问次数( 减少返回)
 	accessScore := math.Log1p(float64(item.AccessCount)) / 10.0
 	if accessScore > 1.0 {
 		accessScore = 1.0
 	}
 
-	// Combine with recency
+	// 与审慎相结合
 	recency := item.RecencyScore(d.config.HalfLife)
 	return 0.5*accessScore + 0.5*recency
 }
 
-// UpdateRelevance updates the relevance score of a memory.
+// 更新关联更新一个内存的相关分数.
 func (d *IntelligentDecay) UpdateRelevance(id string, relevance float64) error {
 	d.mu.Lock()
 	defer d.mu.Unlock()
@@ -307,7 +307,7 @@ func (d *IntelligentDecay) UpdateRelevance(id string, relevance float64) error {
 	return nil
 }
 
-// GetStats returns statistics about the memory store.
+// GetStats 返回关于记忆库的统计数据.
 func (d *IntelligentDecay) GetStats() DecayStats {
 	d.mu.RLock()
 	defer d.mu.RUnlock()
@@ -338,7 +338,7 @@ func (d *IntelligentDecay) GetStats() DecayStats {
 	return stats
 }
 
-// DecayStats contains statistics about the memory store.
+// DecayStats包含了关于记忆库的统计数据.
 type DecayStats struct {
 	TotalMemories    int     `json:"total_memories"`
 	AverageScore     float64 `json:"average_score"`
@@ -347,7 +347,7 @@ type DecayStats struct {
 	AverageUtility   float64 `json:"average_utility"`
 }
 
-// ErrMemoryNotFound is returned when a memory is not found.
+// 未找到内存时返回 Err Memory Not Found 。
 var ErrMemoryNotFound = fmt.Errorf("memory not found")
 
 func cosineSimilarity(a, b []float64) float64 {

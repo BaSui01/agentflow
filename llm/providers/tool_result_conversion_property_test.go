@@ -8,12 +8,12 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-// Feature: multi-provider-support, Property 20: Tool Result Message Conversion
-// **Validates: Requirements 11.5**
+// 特性: 多提供者支持, 属性 20: 工具结果信件转换
+// ** 参数:要求11.5**
 //
-// This property test verifies that for any provider and any llm.Message with Role=RoleTool,
-// the provider converts it to the provider-specific tool result format including the ToolCallID reference.
-// Minimum 100 iterations are achieved through comprehensive test cases.
+// 这一财产测试对任何供应商和任何商家进行验证。 带角色的讯息= RoleTool,
+// 提供者将其转换为特定工具的结果格式,包括工具CallID参考。
+// 通过综合测试案例实现至少100次重复。
 func TestProperty20_ToolResultMessageConversion(t *testing.T) {
 	testCases := []struct {
 		name        string
@@ -22,7 +22,7 @@ func TestProperty20_ToolResultMessageConversion(t *testing.T) {
 		requirement string
 		description string
 	}{
-		// Basic tool result cases
+		// 基本工具结果案例
 		{
 			name: "Simple tool result with string content",
 			message: llm.Message{
@@ -84,7 +84,7 @@ func TestProperty20_ToolResultMessageConversion(t *testing.T) {
 			description: "Should preserve nested objects in tool result",
 		},
 
-		// Complex content cases
+		// 复杂内容案件
 		{
 			name: "Tool result with complex JSON",
 			message: llm.Message{
@@ -155,7 +155,7 @@ func TestProperty20_ToolResultMessageConversion(t *testing.T) {
 			description: "Should preserve Unicode characters in tool result",
 		},
 
-		// ToolCallID variations
+		// 工具CallID 变量
 		{
 			name: "Tool result with short ToolCallID",
 			message: llm.Message{
@@ -217,7 +217,7 @@ func TestProperty20_ToolResultMessageConversion(t *testing.T) {
 			description: "Should handle ToolCallID with underscores",
 		},
 
-		// Tool name variations
+		// 工具名称变化
 		{
 			name: "Tool result with simple name",
 			message: llm.Message{
@@ -279,7 +279,7 @@ func TestProperty20_ToolResultMessageConversion(t *testing.T) {
 			description: "Should handle camelCase tool name",
 		},
 
-		// Error result cases
+		// 错误结果大小写
 		{
 			name: "Tool result with error",
 			message: llm.Message{
@@ -317,7 +317,7 @@ func TestProperty20_ToolResultMessageConversion(t *testing.T) {
 			description: "Should handle tool timeout results",
 		},
 
-		// Large content cases
+		// 内容大的案件
 		{
 			name: "Tool result with large array",
 			message: llm.Message{
@@ -343,7 +343,7 @@ func TestProperty20_ToolResultMessageConversion(t *testing.T) {
 			description: "Should handle long string results",
 		},
 
-		// Multiple field cases
+		// 多个外地案件
 		{
 			name: "Tool result with many fields",
 			message: llm.Message{
@@ -358,7 +358,7 @@ func TestProperty20_ToolResultMessageConversion(t *testing.T) {
 		},
 	}
 
-	// Expand test cases to reach 100+ iterations by testing each case with all providers
+	// 通过对所有提供商进行每个案例的测试,将测试案例扩展至100+重复
 	providers := []string{"openai", "grok", "qwen", "deepseek", "glm"}
 	expandedTestCases := make([]struct {
 		name        string
@@ -368,10 +368,10 @@ func TestProperty20_ToolResultMessageConversion(t *testing.T) {
 		description string
 	}, 0, len(testCases)*len(providers))
 
-	// Add original test cases
+	// 添加原始测试案例
 	expandedTestCases = append(expandedTestCases, testCases...)
 
-	// Add variations with different providers
+	// 添加不同提供者的变量
 	for _, provider := range providers {
 		for _, tc := range testCases {
 			if tc.provider != provider {
@@ -383,13 +383,13 @@ func TestProperty20_ToolResultMessageConversion(t *testing.T) {
 		}
 	}
 
-	// Run all test cases
+	// 运行所有测试大小写
 	for _, tc := range expandedTestCases {
 		t.Run(tc.name, func(t *testing.T) {
-			// Test the conversion based on provider type
+			// 根据提供者类型测试转换
 			switch tc.provider {
 			case "openai", "grok", "qwen", "deepseek", "glm":
-				// OpenAI-compatible providers
+				// OpenAI 兼容供应商
 				testOpenAICompatibleToolResultConversion(t, tc.message, tc.provider, tc.requirement, tc.description)
 			default:
 				t.Fatalf("Unknown provider: %s", tc.provider)
@@ -397,42 +397,42 @@ func TestProperty20_ToolResultMessageConversion(t *testing.T) {
 		})
 	}
 
-	// Verify we have at least 100 test cases
+	// 检查我们至少有100个测试病例
 	assert.GreaterOrEqual(t, len(expandedTestCases), 100,
 		"Property test should have minimum 100 iterations")
 }
 
-// testOpenAICompatibleToolResultConversion tests tool result conversion for OpenAI-compatible providers
+// 测试 OpenAI 兼容 ToolResult 转换测试工具结果转换 OpenAI 兼容供应商
 func testOpenAICompatibleToolResultConversion(t *testing.T, msg llm.Message, provider, requirement, description string) {
-	// Convert using the mock function that follows the spec
+	// 使用光谱之后的模拟函数转换
 	converted := mockConvertToolResultOpenAI(msg)
 
-	// Verify role is preserved as "tool"
+	// 校验角色保存为"工具"
 	assert.Equal(t, "tool", converted.Role,
 		"Tool result role should be 'tool' (Requirement %s): %s", requirement, description)
 
-	// Verify ToolCallID is preserved
+	// 校验工具CallID被保存
 	assert.Equal(t, msg.ToolCallID, converted.ToolCallID,
 		"ToolCallID should be preserved (Requirement %s): %s", requirement, description)
 
-	// Verify content is preserved
+	// 校验内容保存
 	assert.Equal(t, msg.Content, converted.Content,
 		"Tool result content should be preserved (Requirement %s): %s", requirement, description)
 
-	// Verify name is preserved if present
+	// 校验名称如果存在则保留
 	if msg.Name != "" {
 		assert.Equal(t, msg.Name, converted.Name,
 			"Tool name should be preserved (Requirement %s): %s", requirement, description)
 	}
 
-	// Verify content is valid JSON if it's supposed to be JSON
+	// 校验内容是有效的 JSON 如果它应该是 JSON
 	if msg.Content != "" && (msg.Content[0] == '{' || msg.Content[0] == '[') {
 		assert.True(t, json.Valid([]byte(converted.Content)),
 			"Tool result content should remain valid JSON (Requirement %s): %s", requirement, description)
 	}
 }
 
-// TestProperty20_EmptyToolCallID verifies that empty ToolCallID is handled
+// TestProperty20 Empty ToolCallID 验证空工具CallID的处理
 func TestProperty20_EmptyToolCallID(t *testing.T) {
 	providers := []string{"openai", "grok", "qwen", "deepseek", "glm"}
 
@@ -447,7 +447,7 @@ func TestProperty20_EmptyToolCallID(t *testing.T) {
 
 			converted := mockConvertToolResultOpenAI(msg)
 
-			// Should still convert but with empty ToolCallID
+			// 仍然应该转换, 但使用空工具CallID
 			assert.Equal(t, "tool", converted.Role)
 			assert.Equal(t, "", converted.ToolCallID)
 			assert.Equal(t, msg.Content, converted.Content)
@@ -455,7 +455,7 @@ func TestProperty20_EmptyToolCallID(t *testing.T) {
 	}
 }
 
-// TestProperty20_NonToolRole verifies that non-tool messages are not converted as tool results
+// TestProperty20  NonToolRole 验证非工具消息不是转换为工具结果
 func TestProperty20_NonToolRole(t *testing.T) {
 	testCases := []struct {
 		role llm.Role
@@ -476,9 +476,9 @@ func TestProperty20_NonToolRole(t *testing.T) {
 
 			converted := mockConvertToolResultOpenAI(msg)
 
-			// Should convert role but not treat as tool result
+			// 应转换角色但不作为工具处理
 			assert.Equal(t, string(tc.role), converted.Role)
-			// ToolCallID should only be set for tool role
+			// 工具CallID 只能设定为工具角色
 			if tc.role != llm.RoleTool {
 				assert.Equal(t, "", converted.ToolCallID,
 					"ToolCallID should not be set for non-tool roles")
@@ -487,7 +487,7 @@ func TestProperty20_NonToolRole(t *testing.T) {
 	}
 }
 
-// TestProperty20_ContentPreservation verifies that content is preserved exactly
+// Property20  ContentPreaty 验证内容是否得到准确保存
 func TestProperty20_ContentPreservation(t *testing.T) {
 	testCases := []struct {
 		name    string
@@ -513,14 +513,14 @@ func TestProperty20_ContentPreservation(t *testing.T) {
 
 			converted := mockConvertToolResultOpenAI(msg)
 
-			// Content should be preserved exactly
+			// 应准确保留内容
 			assert.Equal(t, tc.content, converted.Content,
 				"Content should be preserved exactly including whitespace")
 		})
 	}
 }
 
-// TestProperty20_JSONValidity verifies that valid JSON remains valid after conversion
+// Property20 JSONValidity 验证有效的JSON在转换后仍然有效
 func TestProperty20_JSONValidity(t *testing.T) {
 	testCases := []struct {
 		name    string
@@ -536,7 +536,7 @@ func TestProperty20_JSONValidity(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			// Verify input is valid JSON
+			// 校验输入是有效的 JSON
 			assert.True(t, json.Valid([]byte(tc.content)),
 				"Test case should have valid JSON input")
 
@@ -549,11 +549,11 @@ func TestProperty20_JSONValidity(t *testing.T) {
 
 			converted := mockConvertToolResultOpenAI(msg)
 
-			// Verify output is still valid JSON
+			// 校验输出仍然有效 JSON
 			assert.True(t, json.Valid([]byte(converted.Content)),
 				"Converted content should remain valid JSON")
 
-			// Verify JSON content is semantically equivalent
+			// 校验 JSON 内容在内容上相当
 			var inputJSON, outputJSON interface{}
 			json.Unmarshal([]byte(tc.content), &inputJSON)
 			json.Unmarshal([]byte(converted.Content), &outputJSON)
@@ -563,7 +563,7 @@ func TestProperty20_JSONValidity(t *testing.T) {
 	}
 }
 
-// Mock conversion function that follows the OpenAI spec for tool results
+// 工具结果 OpenAI spec 之后的模拟转换函数
 
 type mockOpenAIToolResultMessage struct {
 	Role       string `json:"role"`
@@ -579,7 +579,7 @@ func mockConvertToolResultOpenAI(msg llm.Message) mockOpenAIToolResultMessage {
 		Name:    msg.Name,
 	}
 
-	// Only set ToolCallID for tool role messages
+	// 只设置工具角色信息的工具CallID
 	if msg.Role == llm.RoleTool {
 		converted.ToolCallID = msg.ToolCallID
 	}

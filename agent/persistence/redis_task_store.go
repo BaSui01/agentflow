@@ -12,16 +12,16 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-// RedisTaskStore is a Redis-based implementation of TaskStore.
-// Suitable for distributed production deployments.
-// Uses Redis Hash for task storage with sorted sets for indexing.
+// RedisTaskStore是一个基于Redis的"TaskStore"执行.
+// 适合分布式生产部署.
+// 使用 Redis Hash 来进行任务存储, 并排序集进行索引 。
 type RedisTaskStore struct {
 	client    *redis.Client
 	keyPrefix string
 	config    StoreConfig
 }
 
-// NewRedisTaskStore creates a new Redis-based task store
+// 新建基于 Redis 的任务库
 func NewRedisTaskStore(config StoreConfig) (*RedisTaskStore, error) {
 	client := redis.NewClient(&redis.Options{
 		Addr:     fmt.Sprintf("%s:%d", config.Redis.Host, config.Redis.Port),
@@ -30,7 +30,7 @@ func NewRedisTaskStore(config StoreConfig) (*RedisTaskStore, error) {
 		PoolSize: config.Redis.PoolSize,
 	})
 
-	// Test connection
+	// 测试连接
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
@@ -52,63 +52,63 @@ func NewRedisTaskStore(config StoreConfig) (*RedisTaskStore, error) {
 	return store, nil
 }
 
-// Close closes the store
+// 关闭商店
 func (s *RedisTaskStore) Close() error {
 	return s.client.Close()
 }
 
-// Ping checks if the store is healthy
+// 平平检查,如果商店是健康的
 func (s *RedisTaskStore) Ping(ctx context.Context) error {
 	return s.client.Ping(ctx).Err()
 }
 
-// taskKey returns the Redis key for a task
+// 任务密钥返回 Redis 密钥
 func (s *RedisTaskStore) taskKey(taskID string) string {
 	return s.keyPrefix + "data:" + taskID
 }
 
-// statusKey returns the Redis key for a status index
+// 状态Key 返回状态索引的 Redis 密钥
 func (s *RedisTaskStore) statusKey(status TaskStatus) string {
 	return s.keyPrefix + "status:" + string(status)
 }
 
-// agentKey returns the Redis key for an agent's task index
+// 代理 Key 返回代理任务索引的 Redis 密钥
 func (s *RedisTaskStore) agentKey(agentID string) string {
 	return s.keyPrefix + "agent:" + agentID
 }
 
-// sessionKey returns the Redis key for a session's task index
+// 会话Key 返回会话任务索引的 Redis 密钥
 func (s *RedisTaskStore) sessionKey(sessionID string) string {
 	return s.keyPrefix + "session:" + sessionID
 }
 
-// allTasksKey returns the Redis key for all tasks index
+// 全部任务Key 返回所有任务索引的 Redis 密钥
 func (s *RedisTaskStore) allTasksKey() string {
 	return s.keyPrefix + "all"
 }
 
-// SaveTask persists a task to the store
+// 保存任务持续执行商店的任务
 func (s *RedisTaskStore) SaveTask(ctx context.Context, task *AsyncTask) error {
 	if task == nil {
 		return ErrInvalidInput
 	}
 
-	// Generate ID if not set
+	// 如果没有设定则生成 ID
 	if task.ID == "" {
 		task.ID = uuid.New().String()
 	}
 
-	// Set timestamps
+	// 设置时间戳
 	now := time.Now()
 	if task.CreatedAt.IsZero() {
 		task.CreatedAt = now
 	}
 	task.UpdatedAt = now
 
-	// Get old task for index cleanup
+	// 获取索引清理的旧任务
 	oldTask, _ := s.GetTask(ctx, task.ID)
 
-	// Serialize task
+	// 序列化任务
 	data, err := json.Marshal(task)
 	if err != nil {
 		return fmt.Errorf("failed to marshal task: %w", err)
@@ -116,29 +116,29 @@ func (s *RedisTaskStore) SaveTask(ctx context.Context, task *AsyncTask) error {
 
 	pipe := s.client.Pipeline()
 
-	// Store task data
+	// 存储任务数据
 	pipe.Set(ctx, s.taskKey(task.ID), data, 0)
 
-	// Update indexes
+	// 更新索引
 	score := float64(task.CreatedAt.UnixNano())
 
-	// Remove from old status index if status changed
+	// 如果状态改变, 从旧状态索引中删除
 	if oldTask != nil && oldTask.Status != task.Status {
 		pipe.ZRem(ctx, s.statusKey(oldTask.Status), task.ID)
 	}
 
-	// Add to status index
+	// 添加到状态索引
 	pipe.ZAdd(ctx, s.statusKey(task.Status), redis.Z{Score: score, Member: task.ID})
 
-	// Add to all tasks index
+	// 添加到所有任务索引
 	pipe.ZAdd(ctx, s.allTasksKey(), redis.Z{Score: score, Member: task.ID})
 
-	// Add to agent index
+	// 添加到代理索引
 	if task.AgentID != "" {
 		pipe.ZAdd(ctx, s.agentKey(task.AgentID), redis.Z{Score: score, Member: task.ID})
 	}
 
-	// Add to session index
+	// 添加到会话索引
 	if task.SessionID != "" {
 		pipe.ZAdd(ctx, s.sessionKey(task.SessionID), redis.Z{Score: score, Member: task.ID})
 	}
@@ -147,7 +147,7 @@ func (s *RedisTaskStore) SaveTask(ctx context.Context, task *AsyncTask) error {
 	return err
 }
 
-// GetTask retrieves a task by ID
+// 通过 ID 获取任务
 func (s *RedisTaskStore) GetTask(ctx context.Context, taskID string) (*AsyncTask, error) {
 	data, err := s.client.Get(ctx, s.taskKey(taskID)).Bytes()
 	if err == redis.Nil {
@@ -165,23 +165,23 @@ func (s *RedisTaskStore) GetTask(ctx context.Context, taskID string) (*AsyncTask
 	return &task, nil
 }
 
-// ListTasks retrieves tasks matching the filter criteria
+// ListTasks 检索匹配过滤标准的任务
 func (s *RedisTaskStore) ListTasks(ctx context.Context, filter TaskFilter) ([]*AsyncTask, error) {
 	var taskIDs []string
 	var err error
 
-	// Determine which index to use
+	// 确定要使用的索引
 	if len(filter.Status) == 1 {
-		// Use status index
+		// 使用状态索引
 		taskIDs, err = s.client.ZRange(ctx, s.statusKey(filter.Status[0]), 0, -1).Result()
 	} else if filter.AgentID != "" {
-		// Use agent index
+		// 使用代理索引
 		taskIDs, err = s.client.ZRange(ctx, s.agentKey(filter.AgentID), 0, -1).Result()
 	} else if filter.SessionID != "" {
-		// Use session index
+		// 使用会话索引
 		taskIDs, err = s.client.ZRange(ctx, s.sessionKey(filter.SessionID), 0, -1).Result()
 	} else {
-		// Use all tasks index
+		// 使用全部任务索引
 		taskIDs, err = s.client.ZRange(ctx, s.allTasksKey(), 0, -1).Result()
 	}
 
@@ -189,7 +189,7 @@ func (s *RedisTaskStore) ListTasks(ctx context.Context, filter TaskFilter) ([]*A
 		return nil, err
 	}
 
-	// Get tasks and apply filters
+	// 获取任务并应用过滤器
 	result := make([]*AsyncTask, 0)
 	for _, taskID := range taskIDs {
 		task, err := s.GetTask(ctx, taskID)
@@ -202,10 +202,10 @@ func (s *RedisTaskStore) ListTasks(ctx context.Context, filter TaskFilter) ([]*A
 		}
 	}
 
-	// Sort results
+	// 排序结果
 	s.sortTasks(result, filter.OrderBy, filter.OrderDesc)
 
-	// Apply offset and limit
+	// 应用偏移和限制
 	if filter.Offset > 0 {
 		if filter.Offset >= len(result) {
 			return []*AsyncTask{}, nil
@@ -220,7 +220,7 @@ func (s *RedisTaskStore) ListTasks(ctx context.Context, filter TaskFilter) ([]*A
 	return result, nil
 }
 
-// matchesFilter checks if a task matches the filter criteria
+// 匹配Filter 检查任务是否匹配过滤标准
 func (s *RedisTaskStore) matchesFilter(task *AsyncTask, filter TaskFilter) bool {
 	if filter.SessionID != "" && task.SessionID != filter.SessionID {
 		return false
@@ -262,7 +262,7 @@ func (s *RedisTaskStore) matchesFilter(task *AsyncTask, filter TaskFilter) bool 
 	return true
 }
 
-// sortTasks sorts tasks by the specified field
+// 按指定字段排序任务类型
 func (s *RedisTaskStore) sortTasks(tasks []*AsyncTask, orderBy string, desc bool) {
 	if orderBy == "" {
 		orderBy = "created_at"
@@ -290,7 +290,7 @@ func (s *RedisTaskStore) sortTasks(tasks []*AsyncTask, orderBy string, desc bool
 	})
 }
 
-// UpdateStatus updates the status of a task
+// 更新状态更新任务状态
 func (s *RedisTaskStore) UpdateStatus(ctx context.Context, taskID string, status TaskStatus, result interface{}, errMsg string) error {
 	task, err := s.GetTask(ctx, taskID)
 	if err != nil {
@@ -310,17 +310,17 @@ func (s *RedisTaskStore) UpdateStatus(ctx context.Context, taskID string, status
 		task.Error = errMsg
 	}
 
-	// Set started time when transitioning to running
+	// 设定向运行过渡时的起始时间
 	if status == TaskStatusRunning && task.StartedAt == nil {
 		task.StartedAt = &now
 	}
 
-	// Set completed time for terminal states
+	// 设定终端状态的完成时间
 	if status.IsTerminal() && task.CompletedAt == nil {
 		task.CompletedAt = &now
 	}
 
-	// Serialize task
+	// 序列化任务
 	data, err := json.Marshal(task)
 	if err != nil {
 		return err
@@ -328,10 +328,10 @@ func (s *RedisTaskStore) UpdateStatus(ctx context.Context, taskID string, status
 
 	pipe := s.client.Pipeline()
 
-	// Update task data
+	// 更新任务数据
 	pipe.Set(ctx, s.taskKey(taskID), data, 0)
 
-	// Update status indexes
+	// 更新状态索引
 	if oldStatus != status {
 		pipe.ZRem(ctx, s.statusKey(oldStatus), taskID)
 		pipe.ZAdd(ctx, s.statusKey(status), redis.Z{
@@ -344,7 +344,7 @@ func (s *RedisTaskStore) UpdateStatus(ctx context.Context, taskID string, status
 	return err
 }
 
-// UpdateProgress updates the progress of a task
+// 更新进度更新任务进度
 func (s *RedisTaskStore) UpdateProgress(ctx context.Context, taskID string, progress float64) error {
 	task, err := s.GetTask(ctx, taskID)
 	if err != nil {
@@ -362,7 +362,7 @@ func (s *RedisTaskStore) UpdateProgress(ctx context.Context, taskID string, prog
 	return s.client.Set(ctx, s.taskKey(taskID), data, 0).Err()
 }
 
-// DeleteTask removes a task from the store
+// 删除任务从商店中删除任务
 func (s *RedisTaskStore) DeleteTask(ctx context.Context, taskID string) error {
 	task, err := s.GetTask(ctx, taskID)
 	if err != nil {
@@ -371,10 +371,10 @@ func (s *RedisTaskStore) DeleteTask(ctx context.Context, taskID string) error {
 
 	pipe := s.client.Pipeline()
 
-	// Delete task data
+	// 删除任务数据
 	pipe.Del(ctx, s.taskKey(taskID))
 
-	// Remove from indexes
+	// 从索引中删除
 	pipe.ZRem(ctx, s.statusKey(task.Status), taskID)
 	pipe.ZRem(ctx, s.allTasksKey(), taskID)
 
@@ -390,11 +390,11 @@ func (s *RedisTaskStore) DeleteTask(ctx context.Context, taskID string) error {
 	return err
 }
 
-// GetRecoverableTasks retrieves tasks that need to be recovered after restart
+// 获取可回收的任务检索重启后需要回收的任务
 func (s *RedisTaskStore) GetRecoverableTasks(ctx context.Context) ([]*AsyncTask, error) {
 	result := make([]*AsyncTask, 0)
 
-	// Get pending tasks
+	// 获得待定任务
 	pendingIDs, err := s.client.ZRange(ctx, s.statusKey(TaskStatusPending), 0, -1).Result()
 	if err != nil {
 		return nil, err
@@ -408,7 +408,7 @@ func (s *RedisTaskStore) GetRecoverableTasks(ctx context.Context) ([]*AsyncTask,
 		result = append(result, task)
 	}
 
-	// Get running tasks
+	// 获得运行中的任务
 	runningIDs, err := s.client.ZRange(ctx, s.statusKey(TaskStatusRunning), 0, -1).Result()
 	if err != nil {
 		return nil, err
@@ -422,7 +422,7 @@ func (s *RedisTaskStore) GetRecoverableTasks(ctx context.Context) ([]*AsyncTask,
 		result = append(result, task)
 	}
 
-	// Sort by priority (higher first) then by created time (older first)
+	// 按优先级排序( 先高一些) 然后按创建时间排序( 先高一些)
 	sort.Slice(result, func(i, j int) bool {
 		if result[i].Priority != result[j].Priority {
 			return result[i].Priority > result[j].Priority
@@ -433,12 +433,12 @@ func (s *RedisTaskStore) GetRecoverableTasks(ctx context.Context) ([]*AsyncTask,
 	return result, nil
 }
 
-// Cleanup removes completed/failed tasks older than the specified duration
+// 清除完成/ 失败的任务超过指定期限
 func (s *RedisTaskStore) Cleanup(ctx context.Context, olderThan time.Duration) (int, error) {
 	cutoff := time.Now().Add(-olderThan).UnixNano()
 	count := 0
 
-	// Cleanup completed tasks
+	// 清理已完成的任务
 	completedIDs, err := s.client.ZRangeByScore(ctx, s.statusKey(TaskStatusCompleted), &redis.ZRangeBy{
 		Min: "-inf",
 		Max: strconv.FormatInt(cutoff, 10),
@@ -451,7 +451,7 @@ func (s *RedisTaskStore) Cleanup(ctx context.Context, olderThan time.Duration) (
 		}
 	}
 
-	// Cleanup failed tasks
+	// 清理失败的任务
 	failedIDs, err := s.client.ZRangeByScore(ctx, s.statusKey(TaskStatusFailed), &redis.ZRangeBy{
 		Min: "-inf",
 		Max: strconv.FormatInt(cutoff, 10),
@@ -464,7 +464,7 @@ func (s *RedisTaskStore) Cleanup(ctx context.Context, olderThan time.Duration) (
 		}
 	}
 
-	// Cleanup cancelled tasks
+	// 清理已取消的任务
 	cancelledIDs, err := s.client.ZRangeByScore(ctx, s.statusKey(TaskStatusCancelled), &redis.ZRangeBy{
 		Min: "-inf",
 		Max: strconv.FormatInt(cutoff, 10),
@@ -480,20 +480,20 @@ func (s *RedisTaskStore) Cleanup(ctx context.Context, olderThan time.Duration) (
 	return count, nil
 }
 
-// Stats returns statistics about the task store
+// Stats 返回关于任务存储的统计
 func (s *RedisTaskStore) Stats(ctx context.Context) (*TaskStoreStats, error) {
 	stats := &TaskStoreStats{
 		StatusCounts: make(map[TaskStatus]int64),
 		AgentCounts:  make(map[string]int64),
 	}
 
-	// Get total tasks
+	// 获得全部任务
 	total, err := s.client.ZCard(ctx, s.allTasksKey()).Result()
 	if err == nil {
 		stats.TotalTasks = total
 	}
 
-	// Get status counts
+	// 获取状态计数
 	statuses := []TaskStatus{
 		TaskStatusPending,
 		TaskStatusRunning,
@@ -522,14 +522,14 @@ func (s *RedisTaskStore) Stats(ctx context.Context) (*TaskStoreStats, error) {
 		}
 	}
 
-	// Get oldest pending task age
+	// 获得最年长的任务年龄
 	oldest, err := s.client.ZRangeWithScores(ctx, s.statusKey(TaskStatusPending), 0, 0).Result()
 	if err == nil && len(oldest) > 0 {
 		ts := time.Unix(0, int64(oldest[0].Score))
 		stats.OldestPendingAge = time.Since(ts)
 	}
 
-	// Get agent counts
+	// 获取代理数
 	agentKeys, err := s.client.Keys(ctx, s.keyPrefix+"agent:*").Result()
 	if err == nil {
 		for _, key := range agentKeys {
@@ -544,5 +544,5 @@ func (s *RedisTaskStore) Stats(ctx context.Context) (*TaskStoreStats, error) {
 	return stats, nil
 }
 
-// Ensure RedisTaskStore implements TaskStore
+// 确保重复任务执行任务
 var _ TaskStore = (*RedisTaskStore)(nil)

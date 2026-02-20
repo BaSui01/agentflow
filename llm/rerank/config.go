@@ -2,7 +2,7 @@ package rerank
 
 import "time"
 
-// CohereConfig configures the Cohere reranker provider.
+// Cohere Config 配置 Cohere 重排提供者 。
 type CohereConfig struct {
 	APIKey  string        `json:"api_key" yaml:"api_key"`
 	BaseURL string        `json:"base_url" yaml:"base_url"`
@@ -10,7 +10,7 @@ type CohereConfig struct {
 	Timeout time.Duration `json:"timeout,omitempty" yaml:"timeout,omitempty"`
 }
 
-// JinaConfig configures the Jina AI reranker provider.
+// JinaConfig配置了Jina AI重排提供者.
 type JinaConfig struct {
 	APIKey  string        `json:"api_key" yaml:"api_key"`
 	BaseURL string        `json:"base_url" yaml:"base_url"`
@@ -18,7 +18,7 @@ type JinaConfig struct {
 	Timeout time.Duration `json:"timeout,omitempty" yaml:"timeout,omitempty"`
 }
 
-// VoyageConfig configures the Voyage AI reranker provider.
+// VoyageConfig 配置 Voyage AI 重排提供者 。
 type VoyageConfig struct {
 	APIKey  string        `json:"api_key" yaml:"api_key"`
 	BaseURL string        `json:"base_url" yaml:"base_url"`
@@ -26,7 +26,7 @@ type VoyageConfig struct {
 	Timeout time.Duration `json:"timeout,omitempty" yaml:"timeout,omitempty"`
 }
 
-// DefaultCohereConfig returns default Cohere reranker config.
+// 默认 Cohere Config 返回默认 Cohere 重排配置 。
 func DefaultCohereConfig() CohereConfig {
 	return CohereConfig{
 		BaseURL: "https://api.cohere.ai",
@@ -35,7 +35,7 @@ func DefaultCohereConfig() CohereConfig {
 	}
 }
 
-// DefaultJinaConfig returns default Jina reranker config.
+// 默认 JinaConfig 返回默认 Jina 重排配置 。
 func DefaultJinaConfig() JinaConfig {
 	return JinaConfig{
 		BaseURL: "https://api.jina.ai",
@@ -44,7 +44,7 @@ func DefaultJinaConfig() JinaConfig {
 	}
 }
 
-// DefaultVoyageConfig returns default Voyage reranker config.
+// 默认 VoyageConfig 返回默认 Voyage 重排配置 。
 func DefaultVoyageConfig() VoyageConfig {
 	return VoyageConfig{
 		BaseURL: "https://api.voyageai.com",

@@ -13,8 +13,8 @@ import (
 	"go.uber.org/zap"
 )
 
-// Feature: multi-provider-support, Property 19: Tool Call Response Parsing
-// Validates: Requirements 3.8, 11.3
+// 特性: 多提供者支持, 属性 19: 工具呼叫响应解析
+// 核实:所需经费3.8、11.3
 func TestProperty19_ToolCallResponseParsing(t *testing.T) {
 	testCases := []struct {
 		name              string
@@ -67,7 +67,7 @@ I'll get that information.`,
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			// Create a test server that returns the specified response
+			// 创建返回指定响应的测试服务器
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusOK)
@@ -93,14 +93,14 @@ I'll get that information.`,
 			}))
 			defer server.Close()
 
-			// Create provider with test server URL
+			// 以测试服务器 URL 创建提供者
 			cfg := providers.MiniMaxConfig{
 				APIKey:  "test-key",
 				BaseURL: server.URL,
 			}
 			provider := NewMiniMaxProvider(cfg, zap.NewNop())
 
-			// Make a completion request
+			// 提出完成请求
 			ctx := context.Background()
 			req := &llm.ChatRequest{
 				Messages: []llm.Message{
@@ -111,14 +111,14 @@ I'll get that information.`,
 			resp, err := provider.Completion(ctx, req)
 			assert.NoError(t, err, "Completion should succeed")
 
-			// Verify tool calls were parsed correctly
+			// 校验工具呼叫被正确解析
 			assert.Equal(t, 1, len(resp.Choices), "Should have one choice")
 
 			toolCalls := resp.Choices[0].Message.ToolCalls
 			assert.Equal(t, tc.expectedToolCalls, len(toolCalls),
 				"Number of tool calls should match")
 
-			// Verify tool names
+			// 校验工具名称
 			for i, expectedName := range tc.expectedToolNames {
 				assert.Equal(t, expectedName, toolCalls[i].Name,
 					"Tool name should match")
@@ -128,7 +128,7 @@ I'll get that information.`,
 					"Tool call arguments should not be nil")
 			}
 
-			// Verify content is cleaned (XML removed)
+			// 校验内容被清理( XML 已删除)
 			if tc.expectedToolCalls > 0 {
 				assert.NotContains(t, resp.Choices[0].Message.Content, "<tool_calls>",
 					"Content should not contain XML tags")
@@ -136,7 +136,7 @@ I'll get that information.`,
 		})
 	}
 
-	// Test parseMiniMaxToolCalls function directly
+	// 测试 parseMiniMax ToolCalls 直接函数
 	t.Run("parseMiniMaxToolCalls function", func(t *testing.T) {
 		testCases := []struct {
 			name     string

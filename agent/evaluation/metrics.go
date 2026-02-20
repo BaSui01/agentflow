@@ -1,4 +1,4 @@
-// Package evaluation provides automated evaluation framework for AI agents.
+// 成套评价为AI代理提供了自动化的评价框架.
 package evaluation
 
 import (
@@ -7,7 +7,7 @@ import (
 )
 
 // Metric 评估指标接口
-// Validates: Requirements 9.1
+// 审定:要求9.1
 type Metric interface {
 	// Name 指标名称
 	Name() string

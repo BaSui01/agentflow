@@ -17,7 +17,7 @@ func TestCapabilityRegistry_RegisterAgent(t *testing.T) {
 
 	ctx := context.Background()
 
-	// Create test agent
+	// 创建测试代理
 	card := a2a.NewAgentCard("test-agent", "Test Agent", "http://localhost:8080", "1.0.0")
 	card.AddCapability("code_review", "Review code", a2a.CapabilityTypeTask)
 	card.AddCapability("code_analysis", "Analyze code", a2a.CapabilityTypeQuery)
@@ -38,13 +38,13 @@ func TestCapabilityRegistry_RegisterAgent(t *testing.T) {
 		},
 	}
 
-	// Register agent
+	// 注册代理商
 	err := registry.RegisterAgent(ctx, info)
 	if err != nil {
 		t.Fatalf("failed to register agent: %v", err)
 	}
 
-	// Verify agent is registered
+	// 验证代理已注册
 	retrieved, err := registry.GetAgent(ctx, "test-agent")
 	if err != nil {
 		t.Fatalf("failed to get agent: %v", err)
@@ -58,7 +58,7 @@ func TestCapabilityRegistry_RegisterAgent(t *testing.T) {
 		t.Errorf("expected 2 capabilities, got %d", len(retrieved.Capabilities))
 	}
 
-	// Try to register same agent again (should fail)
+	// 尝试再次注册同一代理( 应失败 )
 	err = registry.RegisterAgent(ctx, info)
 	if err == nil {
 		t.Error("expected error when registering duplicate agent")
@@ -73,7 +73,7 @@ func TestCapabilityRegistry_UnregisterAgent(t *testing.T) {
 
 	ctx := context.Background()
 
-	// Create and register test agent
+	// 创建和注册测试代理
 	card := a2a.NewAgentCard("test-agent", "Test Agent", "http://localhost:8080", "1.0.0")
 	info := &AgentInfo{
 		Card:    card,
@@ -86,13 +86,13 @@ func TestCapabilityRegistry_UnregisterAgent(t *testing.T) {
 		t.Fatalf("failed to register agent: %v", err)
 	}
 
-	// Unregister agent
+	// 未注册代理
 	err = registry.UnregisterAgent(ctx, "test-agent")
 	if err != nil {
 		t.Fatalf("failed to unregister agent: %v", err)
 	}
 
-	// Verify agent is unregistered
+	// 校验代理未注册
 	_, err = registry.GetAgent(ctx, "test-agent")
 	if err == nil {
 		t.Error("expected error when getting unregistered agent")
@@ -107,7 +107,7 @@ func TestCapabilityRegistry_FindCapabilities(t *testing.T) {
 
 	ctx := context.Background()
 
-	// Register multiple agents with same capability
+	// 登记具有相同能力的多个代理人
 	for i := 1; i <= 3; i++ {
 		card := a2a.NewAgentCard(
 			"agent-"+string(rune('0'+i)),
@@ -133,7 +133,7 @@ func TestCapabilityRegistry_FindCapabilities(t *testing.T) {
 		}
 	}
 
-	// Find capabilities
+	// 查找能力
 	caps, err := registry.FindCapabilities(ctx, "code_review")
 	if err != nil {
 		t.Fatalf("failed to find capabilities: %v", err)
@@ -152,7 +152,7 @@ func TestCapabilityRegistry_RecordExecution(t *testing.T) {
 
 	ctx := context.Background()
 
-	// Register agent
+	// 注册代理商
 	card := a2a.NewAgentCard("test-agent", "Test Agent", "http://localhost:8080", "1.0.0")
 	info := &AgentInfo{
 		Card:    card,
@@ -171,7 +171,7 @@ func TestCapabilityRegistry_RecordExecution(t *testing.T) {
 		t.Fatalf("failed to register agent: %v", err)
 	}
 
-	// Record successful executions
+	// 记录成功处决的情况
 	for i := 0; i < 5; i++ {
 		err = registry.RecordExecution(ctx, "test-agent", "code_review", true, 100*time.Millisecond)
 		if err != nil {
@@ -179,13 +179,13 @@ func TestCapabilityRegistry_RecordExecution(t *testing.T) {
 		}
 	}
 
-	// Record failed execution
+	// 记录失败的执行
 	err = registry.RecordExecution(ctx, "test-agent", "code_review", false, 200*time.Millisecond)
 	if err != nil {
 		t.Fatalf("failed to record execution: %v", err)
 	}
 
-	// Verify stats
+	// 验证数据
 	cap, err := registry.GetCapability(ctx, "test-agent", "code_review")
 	if err != nil {
 		t.Fatalf("failed to get capability: %v", err)
@@ -199,7 +199,7 @@ func TestCapabilityRegistry_RecordExecution(t *testing.T) {
 		t.Errorf("expected 1 failure, got %d", cap.FailureCount)
 	}
 
-	// Score should be updated based on success rate (5/6 = 83.33%)
+	// 应根据成功率更新分数(5/6=83.33%)
 	expectedScore := (5.0 / 6.0) * 100
 	if cap.Score < expectedScore-1 || cap.Score > expectedScore+1 {
 		t.Errorf("expected score around %.2f, got %.2f", expectedScore, cap.Score)
@@ -217,7 +217,7 @@ func TestCapabilityMatcher_Match(t *testing.T) {
 
 	ctx := context.Background()
 
-	// Register agents with different capabilities
+	// 能力不同的登记代理人
 	agents := []struct {
 		name         string
 		capabilities []string
@@ -253,7 +253,7 @@ func TestCapabilityMatcher_Match(t *testing.T) {
 		}
 	}
 
-	// Test matching with required capabilities
+	// 测试匹配所需能力
 	results, err := matcher.Match(ctx, &MatchRequest{
 		RequiredCapabilities: []string{"code_review"},
 		Strategy:             MatchStrategyBestMatch,
@@ -266,7 +266,7 @@ func TestCapabilityMatcher_Match(t *testing.T) {
 		t.Errorf("expected 2 results, got %d", len(results))
 	}
 
-	// Test matching with least loaded strategy
+	// 测试匹配最小装入的策略
 	results, err = matcher.Match(ctx, &MatchRequest{
 		RequiredCapabilities: []string{"code_review"},
 		Strategy:             MatchStrategyLeastLoaded,
@@ -291,7 +291,7 @@ func TestCapabilityMatcher_MatchOne(t *testing.T) {
 
 	ctx := context.Background()
 
-	// Register agent
+	// 注册代理商
 	card := a2a.NewAgentCard("test-agent", "Test Agent", "http://localhost:8080", "1.0.0")
 	info := &AgentInfo{
 		Card:    card,
@@ -310,7 +310,7 @@ func TestCapabilityMatcher_MatchOne(t *testing.T) {
 		t.Fatalf("failed to register agent: %v", err)
 	}
 
-	// Test MatchOne
+	// 测试匹配一
 	result, err := matcher.MatchOne(ctx, &MatchRequest{
 		RequiredCapabilities: []string{"code_review"},
 	})
@@ -322,7 +322,7 @@ func TestCapabilityMatcher_MatchOne(t *testing.T) {
 		t.Errorf("expected test-agent, got %s", result.Agent.Card.Name)
 	}
 
-	// Test MatchOne with no matching capability
+	// 没有匹配能力的测试匹配一
 	_, err = matcher.MatchOne(ctx, &MatchRequest{
 		RequiredCapabilities: []string{"nonexistent"},
 	})
@@ -345,7 +345,7 @@ func TestCapabilityComposer_Compose(t *testing.T) {
 
 	ctx := context.Background()
 
-	// Register agents with different capabilities
+	// 能力不同的登记代理人
 	agents := []struct {
 		name         string
 		capabilities []string
@@ -377,7 +377,7 @@ func TestCapabilityComposer_Compose(t *testing.T) {
 		}
 	}
 
-	// Test composition
+	// 测试成分
 	result, err := composer.Compose(ctx, &CompositionRequest{
 		RequiredCapabilities: []string{"code_review", "testing"},
 	})
@@ -410,12 +410,12 @@ func TestCapabilityComposer_DetectConflicts(t *testing.T) {
 	composerConfig := DefaultComposerConfig()
 	composer := NewCapabilityComposer(registry, matcher, composerConfig, logger)
 
-	// Register exclusive group
+	// 登记专属组
 	composer.RegisterExclusiveGroup([]string{"gpu_compute", "cpu_compute"})
 
 	ctx := context.Background()
 
-	// Test conflict detection
+	// 测试冲突检测
 	conflicts, err := composer.DetectConflicts(ctx, []string{"gpu_compute", "cpu_compute"})
 	if err != nil {
 		t.Fatalf("failed to detect conflicts: %v", err)
@@ -442,13 +442,13 @@ func TestCapabilityComposer_ResolveDependencies(t *testing.T) {
 	composerConfig := DefaultComposerConfig()
 	composer := NewCapabilityComposer(registry, matcher, composerConfig, logger)
 
-	// Register dependencies
+	// 登记册的依赖性
 	composer.RegisterDependency("testing", []string{"code_review"})
 	composer.RegisterDependency("deployment", []string{"testing", "documentation"})
 
 	ctx := context.Background()
 
-	// Test dependency resolution
+	// 测试依赖性分辨率
 	deps, err := composer.ResolveDependencies(ctx, []string{"deployment"})
 	if err != nil {
 		t.Fatalf("failed to resolve dependencies: %v", err)
@@ -458,7 +458,7 @@ func TestCapabilityComposer_ResolveDependencies(t *testing.T) {
 		t.Errorf("expected 2 dependency entries, got %d", len(deps))
 	}
 
-	// Check deployment dependencies
+	// 检查部署依赖性
 	deployDeps, ok := deps["deployment"]
 	if !ok {
 		t.Error("expected deployment dependencies")
@@ -481,14 +481,14 @@ func TestDiscoveryService_Integration(t *testing.T) {
 
 	ctx := context.Background()
 
-	// Start service
+	// 开始服务
 	err := service.Start(ctx)
 	if err != nil {
 		t.Fatalf("failed to start service: %v", err)
 	}
 	defer service.Stop(ctx)
 
-	// Register agent
+	// 注册代理商
 	card := a2a.NewAgentCard("test-agent", "Test Agent", "http://localhost:8080", "1.0.0")
 	info := &AgentInfo{
 		Card:    card,
@@ -508,7 +508,7 @@ func TestDiscoveryService_Integration(t *testing.T) {
 		t.Fatalf("failed to register agent: %v", err)
 	}
 
-	// Find agent
+	// 查找代理人
 	agent, err := service.FindAgent(ctx, "review my code", []string{"code_review"})
 	if err != nil {
 		t.Fatalf("failed to find agent: %v", err)
@@ -518,13 +518,13 @@ func TestDiscoveryService_Integration(t *testing.T) {
 		t.Errorf("expected test-agent, got %s", agent.Card.Name)
 	}
 
-	// Record execution
+	// 记录执行
 	err = service.RecordExecution(ctx, "test-agent", "code_review", true, 100*time.Millisecond)
 	if err != nil {
 		t.Fatalf("failed to record execution: %v", err)
 	}
 
-	// Unregister agent
+	// 未注册代理
 	err = service.UnregisterAgent(ctx, "test-agent")
 	if err != nil {
 		t.Fatalf("failed to unregister agent: %v", err)
@@ -563,14 +563,14 @@ func TestCapabilityRegistry_EventSubscription(t *testing.T) {
 
 	ctx := context.Background()
 
-	// Subscribe to events
+	// 订阅事件
 	eventReceived := make(chan *DiscoveryEvent, 10)
 	subID := registry.Subscribe(func(event *DiscoveryEvent) {
 		eventReceived <- event
 	})
 	defer registry.Unsubscribe(subID)
 
-	// Register agent
+	// 注册代理商
 	card := a2a.NewAgentCard("test-agent", "Test Agent", "http://localhost:8080", "1.0.0")
 	info := &AgentInfo{
 		Card:    card,
@@ -583,7 +583,7 @@ func TestCapabilityRegistry_EventSubscription(t *testing.T) {
 		t.Fatalf("failed to register agent: %v", err)
 	}
 
-	// Wait for event
+	// 等待活动
 	select {
 	case event := <-eventReceived:
 		if event.Type != DiscoveryEventAgentRegistered {

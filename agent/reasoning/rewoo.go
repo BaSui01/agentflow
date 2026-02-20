@@ -1,4 +1,4 @@
-// Package reasoning provides advanced reasoning patterns for AI agents.
+// 包推理为AI代理提供了先进的推理模式.
 package reasoning
 
 import (
@@ -15,17 +15,17 @@ import (
 )
 
 // ============================================================
-// ReWOO (Reasoning Without Observation) Pattern
+// ReWOO( 无观测重振) 模式
 // ============================================================
 
-// ReWOOConfig configures the ReWOO reasoning pattern.
+// ReWOOConfig配置了ReWOO推理模式.
 type ReWOOConfig struct {
 	MaxPlanSteps    int           // Maximum steps in the plan
 	Timeout         time.Duration // Overall timeout
 	ParallelWorkers int           // Number of parallel workers for independent steps
 }
 
-// DefaultReWOOConfig returns sensible defaults.
+// 默认 ReWOOConfig 返回合理的默认值 。
 func DefaultReWOOConfig() ReWOOConfig {
 	return ReWOOConfig{
 		MaxPlanSteps:    10,
@@ -34,9 +34,9 @@ func DefaultReWOOConfig() ReWOOConfig {
 	}
 }
 
-// ReWOO implements the Reasoning Without Observation pattern.
-// It generates a complete plan upfront, then executes all steps,
-// and finally synthesizes the answer from all observations.
+// ReWOO执行无观测理性模式.
+// 它产生一个完整的计划前, 然后执行所有步骤,
+// 最后从所有观测中合成答案。
 type ReWOO struct {
 	provider     llm.Provider
 	toolExecutor tools.ToolExecutor
@@ -45,7 +45,7 @@ type ReWOO struct {
 	logger       *zap.Logger
 }
 
-// NewReWOO creates a new ReWOO reasoner.
+// NewReWOO创建了新的ReWOO理性.
 func NewReWOO(provider llm.Provider, executor tools.ToolExecutor, schemas []llm.ToolSchema, config ReWOOConfig, logger *zap.Logger) *ReWOO {
 	if logger == nil {
 		logger = zap.NewNop()
@@ -61,7 +61,7 @@ func NewReWOO(provider llm.Provider, executor tools.ToolExecutor, schemas []llm.
 
 func (r *ReWOO) Name() string { return "rewoo" }
 
-// PlanStep represents a step in the ReWOO plan.
+// PlanStep代表了ReWOO计划中的一步.
 type PlanStep struct {
 	ID           string   `json:"id"`           // e.g., #E1, #E2
 	Tool         string   `json:"tool"`         // Tool name to call
@@ -70,7 +70,7 @@ type PlanStep struct {
 	Reasoning    string   `json:"reasoning"`    // Why this step is needed
 }
 
-// Execute runs the ReWOO reasoning pattern.
+// 执行运行了ReWOO推理模式.
 func (r *ReWOO) Execute(ctx context.Context, task string) (*ReasoningResult, error) {
 	start := time.Now()
 	ctx, cancel := context.WithTimeout(ctx, r.config.Timeout)
@@ -82,7 +82,7 @@ func (r *ReWOO) Execute(ctx context.Context, task string) (*ReasoningResult, err
 		Metadata: make(map[string]any),
 	}
 
-	// Phase 1: Planner - Generate complete plan
+	// 第一阶段:规划人员-制定完整的计划
 	r.logger.Info("ReWOO Phase 1: Planning")
 	plan, planTokens, err := r.generatePlan(ctx, task)
 	if err != nil {
@@ -96,7 +96,7 @@ func (r *ReWOO) Execute(ctx context.Context, task string) (*ReasoningResult, err
 		TokensUsed: planTokens,
 	})
 
-	// Phase 2: Worker - Execute all steps
+	// 第2阶段:工人-执行所有步骤
 	r.logger.Info("ReWOO Phase 2: Executing", zap.Int("steps", len(plan)))
 	observations, execTokens := r.executeSteps(ctx, plan)
 	result.TotalTokens += execTokens
@@ -109,7 +109,7 @@ func (r *ReWOO) Execute(ctx context.Context, task string) (*ReasoningResult, err
 		})
 	}
 
-	// Phase 3: Solver - Synthesize final answer
+	// 第3阶段:解决方案 - 合成最终答案
 	r.logger.Info("ReWOO Phase 3: Solving")
 	answer, solveTokens, err := r.synthesize(ctx, task, plan, observations)
 	if err != nil {
@@ -126,7 +126,7 @@ func (r *ReWOO) Execute(ctx context.Context, task string) (*ReasoningResult, err
 }
 
 func (r *ReWOO) generatePlan(ctx context.Context, task string) ([]PlanStep, int, error) {
-	// Build tool descriptions
+	// 构建工具描述
 	var toolDescs []string
 	for _, t := range r.toolSchemas {
 		toolDescs = append(toolDescs, fmt.Sprintf("- %s: %s", t.Name, t.Description))
@@ -162,17 +162,17 @@ Create a plan (max %d steps). Output as JSON array:
 	content := resp.Choices[0].Message.Content
 	tokens := resp.Usage.TotalTokens
 
-	// Extract JSON from response
+	// 从回应中提取 JSON
 	content = extractJSON(content)
 
 	var plan []PlanStep
 	if err := json.Unmarshal([]byte(content), &plan); err != nil {
 		r.logger.Warn("failed to parse plan JSON", zap.Error(err), zap.String("content", content))
-		// Try to parse manually
+		// 尝试手动分析
 		plan = r.parsePlanManually(content)
 	}
 
-	// Build dependency graph
+	// 构建依赖图
 	for i := range plan {
 		plan[i].Dependencies = r.extractDependencies(plan[i].Arguments)
 	}
@@ -214,11 +214,11 @@ func (r *ReWOO) executeSteps(ctx context.Context, plan []PlanStep) (map[string]s
 	observations := make(map[string]string)
 	totalTokens := 0
 
-	// Build execution order based on dependencies
+	// 根据依赖关系构建执行命令
 	executed := make(map[string]bool)
 
 	for len(executed) < len(plan) {
-		// Find steps that can be executed (all deps satisfied)
+		// 查找可以执行的步骤( 所有已满足的道克)
 		var ready []PlanStep
 		for _, step := range plan {
 			if executed[step.ID] {
@@ -241,15 +241,15 @@ func (r *ReWOO) executeSteps(ctx context.Context, plan []PlanStep) (map[string]s
 			break
 		}
 
-		// Execute ready steps (could be parallelized)
+		// 执行已准备好的步骤(可并行)
 		for _, step := range ready {
-			// Substitute dependencies in arguments
+			// 参数中的替代依赖性
 			args := step.Arguments
 			for dep, obs := range observations {
 				args = strings.ReplaceAll(args, dep, obs)
 			}
 
-			// Execute tool
+			// 执行工具
 			result := r.executeTool(ctx, step.Tool, args)
 			observations[step.ID] = result
 			executed[step.ID] = true
@@ -265,7 +265,7 @@ func (r *ReWOO) executeSteps(ctx context.Context, plan []PlanStep) (map[string]s
 }
 
 func (r *ReWOO) executeTool(ctx context.Context, toolName, args string) string {
-	// Build tool call
+	// 构建工具调用
 	argsJSON, _ := json.Marshal(map[string]string{"input": args})
 	call := llm.ToolCall{
 		ID:        fmt.Sprintf("rewoo_%d", time.Now().UnixNano()),
@@ -284,7 +284,7 @@ func (r *ReWOO) executeTool(ctx context.Context, toolName, args string) string {
 }
 
 func (r *ReWOO) synthesize(ctx context.Context, task string, plan []PlanStep, observations map[string]string) (string, int, error) {
-	// Build context from plan and observations
+	// 从计划和观察中构建环境
 	var planSummary []string
 	for _, step := range plan {
 		obs := observations[step.ID]
@@ -316,10 +316,10 @@ Based on these results, provide a clear and complete answer to the task.`, task,
 	return resp.Choices[0].Message.Content, resp.Usage.TotalTokens, nil
 }
 
-// Helper functions
+// 辅助功能
 
 func extractJSON(s string) string {
-	// Find JSON array in response
+	// 在响应中查找 JSON 阵列
 	start := strings.Index(s, "[")
 	end := strings.LastIndex(s, "]")
 	if start >= 0 && end > start {

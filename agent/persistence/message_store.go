@@ -6,91 +6,91 @@ import (
 	"time"
 )
 
-// MessageStore defines the interface for message persistence.
-// It provides reliable message delivery with acknowledgment and retry support.
+// MessageStore定义了信件持久性的界面.
+// 它提供可靠的信息传送,并附有确认和重新测试支持。
 type MessageStore interface {
 	Store
 
-	// SaveMessage persists a single message to the store
+	// 保存Message 坚持给商店的单个消息
 	SaveMessage(ctx context.Context, msg *Message) error
 
-	// SaveMessages persists multiple messages atomically
+	// 保存消息在解剖上持续了多个消息
 	SaveMessages(ctx context.Context, msgs []*Message) error
 
-	// GetMessage retrieves a message by ID
+	// 通过 ID 获取信件
 	GetMessage(ctx context.Context, msgID string) (*Message, error)
 
-	// GetMessages retrieves messages for a topic with pagination
-	// Returns messages, next cursor, and error
+	// GetMessages 获取带有 pagination 主题的信息
+	// 返回信件、 下个光标和错误
 	GetMessages(ctx context.Context, topic string, cursor string, limit int) ([]*Message, string, error)
 
-	// AckMessage marks a message as acknowledged/processed
+	// AckMessage 标记已确认/处理的信息
 	AckMessage(ctx context.Context, msgID string) error
 
-	// GetUnackedMessages retrieves unacknowledged messages older than the specified duration
-	// These messages are candidates for retry
+	// 获取未保存的邮件获取未确认的比指定时间长的信件
+	// 这些留言是重试的候选人
 	GetUnackedMessages(ctx context.Context, topic string, olderThan time.Duration) ([]*Message, error)
 
-	// GetPendingMessages retrieves messages that need to be delivered
-	// This includes new messages and messages that need retry
+	// GetPendingMessages 检索需要发送的信件
+	// 这包括需要重试的新信件和信件
 	GetPendingMessages(ctx context.Context, topic string, limit int) ([]*Message, error)
 
-	// IncrementRetry increments the retry count for a message
+	// 递增
 	IncrementRetry(ctx context.Context, msgID string) error
 
-	// DeleteMessage removes a message from the store
+	// 删除信件从存储处删除
 	DeleteMessage(ctx context.Context, msgID string) error
 
-	// Cleanup removes old acknowledged messages
+	// 清理删除旧消息
 	Cleanup(ctx context.Context, olderThan time.Duration) (int, error)
 
-	// Stats returns statistics about the message store
+	// Stats 返回关于消息库的统计数据
 	Stats(ctx context.Context) (*MessageStoreStats, error)
 }
 
-// Message represents a persistent message in the system
+// 信件代表系统中的持久信息
 type Message struct {
-	// ID is the unique identifier for the message
+	// ID 是信件的唯一标识符
 	ID string `json:"id"`
 
-	// Topic is the message topic/channel
+	// 题目是信息主题/频道
 	Topic string `json:"topic"`
 
-	// FromID is the sender agent ID
+	// FromID 是发送代理 ID
 	FromID string `json:"from_id"`
 
-	// ToID is the recipient agent ID (empty for broadcast)
+	// ToID 是接收代理ID( 空来播放)
 	ToID string `json:"to_id,omitempty"`
 
-	// Type is the message type (proposal, response, vote, etc.)
+	// 类型是信件类型(提议、回应、表决等)
 	Type string `json:"type"`
 
-	// Content is the message content
+	// 内容是信件内容
 	Content string `json:"content"`
 
-	// Payload contains additional structured data
+	// 有效载荷包含额外的结构化数据
 	Payload map[string]interface{} `json:"payload,omitempty"`
 
-	// Metadata contains message metadata
+	// 元数据包含信件元数据
 	Metadata map[string]string `json:"metadata,omitempty"`
 
-	// CreatedAt is when the message was created
+	// 创建到信件创建时
 	CreatedAt time.Time `json:"created_at"`
 
-	// AckedAt is when the message was acknowledged (nil if not acked)
+	// AckedAt是消息被承认的时候(即使没有被承认也没有)
 	AckedAt *time.Time `json:"acked_at,omitempty"`
 
-	// RetryCount is the number of delivery attempts
+	// 重试( Rettry Count) 是送货尝试的次数
 	RetryCount int `json:"retry_count"`
 
-	// LastRetryAt is when the last retry was attempted
+	// Last RetryAt 是上次尝试重试时
 	LastRetryAt *time.Time `json:"last_retry_at,omitempty"`
 
-	// ExpiresAt is when the message expires (optional)
+	// 过期是信件过期时( 可选)
 	ExpiresAt *time.Time `json:"expires_at,omitempty"`
 }
 
-// MarshalJSON implements json.Marshaler
+// JSON警长执行JSON。 元目录
 func (m *Message) MarshalJSON() ([]byte, error) {
 	type Alias Message
 	return json.Marshal(&struct {
@@ -100,7 +100,7 @@ func (m *Message) MarshalJSON() ([]byte, error) {
 	})
 }
 
-// UnmarshalJSON implements json.Unmarshaler
+// UnmarshalJSON 执行json。 解马沙勒
 func (m *Message) UnmarshalJSON(data []byte) error {
 	type Alias Message
 	aux := &struct {
@@ -111,7 +111,7 @@ func (m *Message) UnmarshalJSON(data []byte) error {
 	return json.Unmarshal(data, aux)
 }
 
-// IsExpired checks if the message has expired
+// 如果信件已过期, 检查已过期
 func (m *Message) IsExpired() bool {
 	if m.ExpiresAt == nil {
 		return false
@@ -119,12 +119,12 @@ func (m *Message) IsExpired() bool {
 	return time.Now().After(*m.ExpiresAt)
 }
 
-// IsAcked checks if the message has been acknowledged
+// 如果信件已被确认, 将会被检查
 func (m *Message) IsAcked() bool {
 	return m.AckedAt != nil
 }
 
-// ShouldRetry checks if the message should be retried based on the retry config
+// 是否应根据重试配置重试信件
 func (m *Message) ShouldRetry(config RetryConfig) bool {
 	if m.IsAcked() || m.IsExpired() {
 		return false
@@ -132,7 +132,7 @@ func (m *Message) ShouldRetry(config RetryConfig) bool {
 	return m.RetryCount < config.MaxRetries
 }
 
-// NextRetryTime calculates when the next retry should occur
+// 下次重试时计算
 func (m *Message) NextRetryTime(config RetryConfig) time.Time {
 	backoff := config.CalculateBackoff(m.RetryCount)
 	if m.LastRetryAt != nil {
@@ -141,70 +141,70 @@ func (m *Message) NextRetryTime(config RetryConfig) time.Time {
 	return m.CreatedAt.Add(backoff)
 }
 
-// MessageStoreStats contains statistics about the message store
+// 信件Stats 包含关于信件存储的统计数据
 type MessageStoreStats struct {
-	// TotalMessages is the total number of messages in the store
+	// TotalMessages 为商店中信件的总数
 	TotalMessages int64 `json:"total_messages"`
 
-	// PendingMessages is the number of unacknowledged messages
+	// 未决信件是未确认信件的数量
 	PendingMessages int64 `json:"pending_messages"`
 
-	// AckedMessages is the number of acknowledged messages
+	// AckedMessages 是确认消息的数量
 	AckedMessages int64 `json:"acked_messages"`
 
-	// ExpiredMessages is the number of expired messages
+	// 过期信件是过期信件的数量
 	ExpiredMessages int64 `json:"expired_messages"`
 
-	// TopicCounts is the message count per topic
+	// 主题计数为每个主题的信息数
 	TopicCounts map[string]int64 `json:"topic_counts"`
 
-	// OldestPendingAge is the age of the oldest pending message
+	// 最老的PendingAge是最老的待发消息的年龄
 	OldestPendingAge time.Duration `json:"oldest_pending_age"`
 }
 
-// MessageFilter defines criteria for filtering messages
+// MessageFilter 定义过滤信件的标准
 type MessageFilter struct {
-	// Topic filters by topic
+	// 按主题划分的专题过滤器
 	Topic string `json:"topic,omitempty"`
 
-	// FromID filters by sender
+	// 发送者从ID中过滤
 	FromID string `json:"from_id,omitempty"`
 
-	// ToID filters by recipient
+	// 收件人的 ToID 过滤器
 	ToID string `json:"to_id,omitempty"`
 
-	// Type filters by message type
+	// 按信件类型输入过滤器
 	Type string `json:"type,omitempty"`
 
-	// Status filters by acknowledgment status
+	// 通过承认状态进行状态过滤
 	Status MessageStatus `json:"status,omitempty"`
 
-	// CreatedAfter filters messages created after this time
+	// 在此时间之后创建过滤信件
 	CreatedAfter *time.Time `json:"created_after,omitempty"`
 
-	// CreatedBefore filters messages created before this time
+	// 在此之前创建过滤信件
 	CreatedBefore *time.Time `json:"created_before,omitempty"`
 
-	// Limit is the maximum number of messages to return
+	// 限定要返回的信件的最大数量
 	Limit int `json:"limit,omitempty"`
 
-	// Offset is the number of messages to skip
+	// 偏移为要跳过的信件数量
 	Offset int `json:"offset,omitempty"`
 }
 
-// MessageStatus represents the status of a message
+// 信件状态代表信件状态
 type MessageStatus string
 
 const (
-	// MessageStatusPending indicates the message is waiting to be processed
+	// 信件状态显示信件正在等待处理
 	MessageStatusPending MessageStatus = "pending"
 
-	// MessageStatusAcked indicates the message has been acknowledged
+	// 信件状态显示信件已被确认
 	MessageStatusAcked MessageStatus = "acked"
 
-	// MessageStatusExpired indicates the message has expired
+	// 信件状态已过期 。
 	MessageStatusExpired MessageStatus = "expired"
 
-	// MessageStatusFailed indicates the message failed after max retries
+	// 信件状态失败, 表示信件在最大重试后失败
 	MessageStatusFailed MessageStatus = "failed"
 )

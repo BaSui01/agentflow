@@ -11,7 +11,7 @@ import (
 	"go.uber.org/zap"
 )
 
-// TestNewDynamicToolSelector tests creating tool selector
+// 测试新DynamicTooSelector 测试创建工具选择器
 func TestNewDynamicToolSelector(t *testing.T) {
 	logger, _ := zap.NewDevelopment()
 	provider := new(MockProvider)
@@ -36,7 +36,7 @@ func TestNewDynamicToolSelector(t *testing.T) {
 	assert.Equal(t, 0.3, selector.config.MinScore)
 }
 
-// TestDynamicToolSelector_SelectTools_Disabled tests disabled selector
+// TestDynamicTooSelector SelectedTools 失效测试选择器
 func TestDynamicToolSelector_SelectTools_Disabled(t *testing.T) {
 	logger, _ := zap.NewDevelopment()
 	provider := new(MockProvider)
@@ -69,7 +69,7 @@ func TestDynamicToolSelector_SelectTools_Disabled(t *testing.T) {
 	assert.Equal(t, tools, selected)
 }
 
-// TestDynamicToolSelector_SelectTools_Success tests successful tool selection
+// TestDynamicTooL 选择器 SelectTools 成功测试工具选择
 func TestDynamicToolSelector_SelectTools_Success(t *testing.T) {
 	logger, _ := zap.NewDevelopment()
 	provider := new(MockProvider)
@@ -102,13 +102,13 @@ func TestDynamicToolSelector_SelectTools_Success(t *testing.T) {
 
 	assert.NoError(t, err)
 	assert.LessOrEqual(t, len(selected), 2)
-	// search_web should be selected due to semantic similarity
+	// 由于语义相似, 搜索  web 应当选中
 	if len(selected) > 0 {
 		assert.Equal(t, "search_web", selected[0].Name)
 	}
 }
 
-// TestDynamicToolSelector_ScoreTools tests tool scoring
+// 测试DynamicTooSelector ScoreTools 测试工具评分
 func TestDynamicToolSelector_ScoreTools(t *testing.T) {
 	logger, _ := zap.NewDevelopment()
 	provider := new(MockProvider)
@@ -142,7 +142,7 @@ func TestDynamicToolSelector_ScoreTools(t *testing.T) {
 	assert.LessOrEqual(t, scores[0].TotalScore, 1.0)
 }
 
-// TestDynamicToolSelector_calculateSemanticSimilarity tests semantic similarity
+// Test Dynamic ToolSelector 计算语义相似性测试语义相似性
 func TestDynamicToolSelector_calculateSemanticSimilarity(t *testing.T) {
 	logger, _ := zap.NewDevelopment()
 	provider := new(MockProvider)
@@ -197,7 +197,7 @@ func TestDynamicToolSelector_calculateSemanticSimilarity(t *testing.T) {
 	}
 }
 
-// TestDynamicToolSelector_UpdateToolStats tests updating tool statistics
+// TestDynamic ToolSelector  Update ToolStats 测试更新工具统计
 func TestDynamicToolSelector_UpdateToolStats(t *testing.T) {
 	logger, _ := zap.NewDevelopment()
 	provider := new(MockProvider)
@@ -217,7 +217,7 @@ func TestDynamicToolSelector_UpdateToolStats(t *testing.T) {
 
 	selector := NewDynamicToolSelector(agent, selectorConfig)
 
-	// Update stats for successful call
+	// 更新成功调用的数据
 	selector.UpdateToolStats("search_web", true, 100*time.Millisecond, 0.05)
 
 	stats := selector.toolStats["search_web"]
@@ -228,7 +228,7 @@ func TestDynamicToolSelector_UpdateToolStats(t *testing.T) {
 	assert.Equal(t, 100*time.Millisecond, stats.TotalLatency)
 	assert.Equal(t, 0.05, stats.AvgCost)
 
-	// Update stats for failed call
+	// 更新无法调用的数据
 	selector.UpdateToolStats("search_web", false, 200*time.Millisecond, 0.03)
 
 	assert.Equal(t, int64(2), stats.TotalCalls)
@@ -238,7 +238,7 @@ func TestDynamicToolSelector_UpdateToolStats(t *testing.T) {
 	assert.Equal(t, 0.04, stats.AvgCost) // (0.05 + 0.03) / 2
 }
 
-// TestDynamicToolSelector_getReliability tests reliability calculation
+// 测试动态工具Selector 获得可靠性测试可靠性计算
 func TestDynamicToolSelector_getReliability(t *testing.T) {
 	logger, _ := zap.NewDevelopment()
 	provider := new(MockProvider)
@@ -258,7 +258,7 @@ func TestDynamicToolSelector_getReliability(t *testing.T) {
 
 	selector := NewDynamicToolSelector(agent, selectorConfig)
 
-	// Add stats
+	// 添加数据
 	selector.toolStats["reliable_tool"] = &ToolStats{
 		Name:            "reliable_tool",
 		TotalCalls:      10,
@@ -269,12 +269,12 @@ func TestDynamicToolSelector_getReliability(t *testing.T) {
 	reliability := selector.getReliability("reliable_tool")
 	assert.Equal(t, 0.9, reliability)
 
-	// Unknown tool should return default
+	// 未知工具应返回默认值
 	defaultReliability := selector.getReliability("unknown_tool")
 	assert.Equal(t, 0.8, defaultReliability)
 }
 
-// TestExtractKeywords tests keyword extraction
+// TestExtractKeywords 测试关键字提取
 func TestExtractKeywords(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -306,7 +306,7 @@ func TestExtractKeywords(t *testing.T) {
 	}
 }
 
-// TestParseToolIndices tests tool index parsing
+// 测试工具索引
 func TestParseToolIndices(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -343,7 +343,7 @@ func TestParseToolIndices(t *testing.T) {
 	}
 }
 
-// TestDynamicToolSelector_SelectTools_WithLLMRanking tests LLM-assisted ranking
+// TestDynamicTooL 选择器 SelectTools WithLLMRanging 测试 LLM 辅助排名
 func TestDynamicToolSelector_SelectTools_WithLLMRanking(t *testing.T) {
 	logger, _ := zap.NewDevelopment()
 	provider := new(MockProvider)
@@ -375,7 +375,7 @@ func TestDynamicToolSelector_SelectTools_WithLLMRanking(t *testing.T) {
 		{Name: "api_call", Description: "Call API"},
 	}
 
-	// Mock LLM ranking response
+	// Mock LLM 排名响应
 	rankingResponse := &llm.ChatResponse{
 		ID:       "ranking-response",
 		Provider: "mock",
@@ -404,7 +404,7 @@ func TestDynamicToolSelector_SelectTools_WithLLMRanking(t *testing.T) {
 	provider.AssertExpectations(t)
 }
 
-// BenchmarkDynamicToolSelector_SelectTools benchmarks tool selection
+// 基准动态工具Selector SelectTools 基准工具选择
 func BenchmarkDynamicToolSelector_SelectTools(b *testing.B) {
 	logger, _ := zap.NewDevelopment()
 	provider := new(MockProvider)

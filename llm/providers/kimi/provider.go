@@ -11,21 +11,21 @@ import (
 	"go.uber.org/zap"
 )
 
-// KimiProvider implements Moonshot Kimi Provider.
-// Kimi uses OpenAI-compatible API format.
+// Kimi Provider 执行月球射击 Kimi Profer.
+// Kimi使用OpenAI相容的API格式.
 type KimiProvider struct {
 	*openai.OpenAIProvider
 	cfg providers.KimiConfig
 }
 
-// NewKimiProvider creates a new Kimi provider instance.
+// NewKimi Provider创建了一个新的 Kimi 提供者实例 。
 func NewKimiProvider(cfg providers.KimiConfig, logger *zap.Logger) *KimiProvider {
-	// Set default BaseURL if not provided
+	// 如果未提供则设置默认 BaseURL
 	if cfg.BaseURL == "" {
 		cfg.BaseURL = "https://api.moonshot.cn"
 	}
 
-	// Convert to OpenAI config
+	// 转换为 OpenAI 配置
 	openaiCfg := providers.OpenAIConfig{
 		APIKey:  cfg.APIKey,
 		BaseURL: cfg.BaseURL,
@@ -43,7 +43,7 @@ func (p *KimiProvider) Name() string { return "kimi" }
 
 func (p *KimiProvider) HealthCheck(ctx context.Context) (*llm.HealthStatus, error) {
 	start := time.Now()
-	// Reuse OpenAI health check logic
+	// 重新使用 OpenAI 健康检查逻辑
 	status, err := p.OpenAIProvider.HealthCheck(ctx)
 	if err != nil {
 		return &llm.HealthStatus{
@@ -56,7 +56,7 @@ func (p *KimiProvider) HealthCheck(ctx context.Context) (*llm.HealthStatus, erro
 
 func (p *KimiProvider) SupportsNativeFunctionCalling() bool { return true }
 
-// Completion overrides OpenAI's Completion to fix the Provider field.
+// 完成超过 OpenAI 的补全来修正提供方字段 。
 func (p *KimiProvider) Completion(ctx context.Context, req *llm.ChatRequest) (*llm.ChatResponse, error) {
 	resp, err := p.OpenAIProvider.Completion(ctx, req)
 	if err != nil {
@@ -70,7 +70,7 @@ func (p *KimiProvider) Completion(ctx context.Context, req *llm.ChatRequest) (*l
 	return resp, nil
 }
 
-// Stream overrides OpenAI's Stream to fix the Provider field on each chunk.
+// Cream 覆盖 OpenAI 的 Stream 来修正每个块上的提供方字段 。
 func (p *KimiProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-chan llm.StreamChunk, error) {
 	ch, err := p.OpenAIProvider.Stream(ctx, req)
 	if err != nil {

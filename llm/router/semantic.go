@@ -1,4 +1,4 @@
-// Package router provides intelligent routing for LLM requests.
+// 包路由器为LLM请求提供智能路由.
 package router
 
 import (
@@ -12,7 +12,7 @@ import (
 	"go.uber.org/zap"
 )
 
-// IntentType represents a classified intent.
+// intentType代表一种分类意图.
 type IntentType string
 
 const (
@@ -30,7 +30,7 @@ const (
 	IntentUnknown         IntentType = "unknown"
 )
 
-// IntentClassification represents the result of intent classification.
+// 意向分类代表意向分类的结果.
 type IntentClassification struct {
 	Intent     IntentType        `json:"intent"`
 	Confidence float64           `json:"confidence"`
@@ -39,7 +39,7 @@ type IntentClassification struct {
 	Metadata   map[string]any    `json:"metadata,omitempty"`
 }
 
-// RouteConfig defines routing configuration for an intent.
+// RouteConfig定义了意图的路由配置.
 type RouteConfig struct {
 	Intent           IntentType `json:"intent"`
 	PreferredModels  []string   `json:"preferred_models"`
@@ -49,7 +49,7 @@ type RouteConfig struct {
 	RequiredFeatures []string   `json:"required_features,omitempty"` // e.g., "function_calling", "vision"
 }
 
-// SemanticRouterConfig configures the semantic router.
+// 语义路由器 Config 配置语义路由器.
 type SemanticRouterConfig struct {
 	ClassifierModel      string                     `json:"classifier_model"`
 	DefaultRoute         RouteConfig                `json:"default_route"`
@@ -58,7 +58,7 @@ type SemanticRouterConfig struct {
 	CacheTTL             time.Duration              `json:"cache_ttl"`
 }
 
-// DefaultSemanticRouterConfig returns sensible defaults.
+// 默认Semantic Router Config 返回合理的默认值 。
 func DefaultSemanticRouterConfig() SemanticRouterConfig {
 	return SemanticRouterConfig{
 		ClassifierModel: "gpt-4o-mini",
@@ -105,7 +105,7 @@ func DefaultSemanticRouterConfig() SemanticRouterConfig {
 	}
 }
 
-// SemanticRouter routes requests based on intent classification.
+// 语义鲁特路线请求基于意向分类.
 type SemanticRouter struct {
 	classifier llm.Provider
 	providers  map[string]llm.Provider
@@ -115,7 +115,7 @@ type SemanticRouter struct {
 	mu         sync.RWMutex
 }
 
-// NewSemanticRouter creates a new semantic router.
+// 新语义路透创造出一个新的语义路由器.
 func NewSemanticRouter(classifier llm.Provider, providers map[string]llm.Provider, config SemanticRouterConfig, logger *zap.Logger) *SemanticRouter {
 	if logger == nil {
 		logger = zap.NewNop()
@@ -129,9 +129,9 @@ func NewSemanticRouter(classifier llm.Provider, providers map[string]llm.Provide
 	}
 }
 
-// Route classifies the request and routes to appropriate provider.
+// 路线将请求和路线分类到适当的提供者.
 func (r *SemanticRouter) Route(ctx context.Context, req *llm.ChatRequest) (*llm.ChatResponse, error) {
-	// Classify intent
+	// 分类意图
 	classification, err := r.ClassifyIntent(ctx, req)
 	if err != nil {
 		r.logger.Warn("intent classification failed, using default route", zap.Error(err))
@@ -142,10 +142,10 @@ func (r *SemanticRouter) Route(ctx context.Context, req *llm.ChatRequest) (*llm.
 		zap.String("intent", string(classification.Intent)),
 		zap.Float64("confidence", classification.Confidence))
 
-	// Get route config
+	// 获取路由配置
 	routeConfig := r.getRouteConfig(classification.Intent)
 
-	// Apply route config to request
+	// 应用路由配置以请求
 	if routeConfig.MaxTokens > 0 && req.MaxTokens == 0 {
 		req.MaxTokens = routeConfig.MaxTokens
 	}
@@ -153,7 +153,7 @@ func (r *SemanticRouter) Route(ctx context.Context, req *llm.ChatRequest) (*llm.
 		req.Temperature = routeConfig.Temperature
 	}
 
-	// Try preferred models in order
+	// 按顺序尝试首选模式
 	var lastErr error
 	for _, modelName := range routeConfig.PreferredModels {
 		provider := r.findProviderForModel(modelName)
@@ -161,7 +161,7 @@ func (r *SemanticRouter) Route(ctx context.Context, req *llm.ChatRequest) (*llm.
 			continue
 		}
 
-		// Check required features
+		// 检查所需的特性
 		if !r.checkFeatures(provider, routeConfig.RequiredFeatures) {
 			continue
 		}
@@ -175,7 +175,7 @@ func (r *SemanticRouter) Route(ctx context.Context, req *llm.ChatRequest) (*llm.
 		r.logger.Warn("preferred model failed", zap.String("model", modelName), zap.Error(err))
 	}
 
-	// Try fallback models
+	// 尝试后退模式
 	for _, modelName := range routeConfig.FallbackModels {
 		provider := r.findProviderForModel(modelName)
 		if provider == nil {
@@ -196,9 +196,9 @@ func (r *SemanticRouter) Route(ctx context.Context, req *llm.ChatRequest) (*llm.
 	return nil, fmt.Errorf("no available provider for intent: %s", classification.Intent)
 }
 
-// ClassifyIntent classifies the intent of a request.
+// 分类意向对请求的意图进行分类.
 func (r *SemanticRouter) ClassifyIntent(ctx context.Context, req *llm.ChatRequest) (*IntentClassification, error) {
-	// Check cache
+	// 检查缓存
 	cacheKey := r.buildCacheKey(req)
 	if r.config.CacheClassifications {
 		if cached := r.cache.get(cacheKey); cached != nil {
@@ -206,7 +206,7 @@ func (r *SemanticRouter) ClassifyIntent(ctx context.Context, req *llm.ChatReques
 		}
 	}
 
-	// Build classification prompt
+	// 构建分类提示
 	userMessage := extractUserMessage(req.Messages)
 	prompt := fmt.Sprintf(`Classify the intent of this user message. Choose from:
 - code_generation: Writing new code
@@ -238,16 +238,16 @@ Respond with JSON: {"intent": "intent_type", "confidence": 0.0-1.0, "entities": 
 		return nil, err
 	}
 
-	// Parse classification
+	// 分析分类
 	var classification IntentClassification
 	content := resp.Choices[0].Message.Content
 	content = extractJSONFromResponse(content)
 	if err := json.Unmarshal([]byte(content), &classification); err != nil {
-		// Default to unknown
+		// 默认为未知
 		classification = IntentClassification{Intent: IntentUnknown, Confidence: 0.5}
 	}
 
-	// Cache result
+	// 缓存结果
 	if r.config.CacheClassifications {
 		r.cache.set(cacheKey, &classification)
 	}
@@ -269,14 +269,14 @@ func (r *SemanticRouter) findProviderForModel(model string) llm.Provider {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	// Direct match
+	// 直接匹配
 	if p, ok := r.providers[model]; ok {
 		return p
 	}
 
-	// Check if any provider supports this model
+	// 检查是否有任何提供者支持此模式
 	for _, p := range r.providers {
-		// Simple heuristic: check provider name prefix
+		// 简单的heuristic: 检查提供者名前缀
 		if matchesProvider(model, p.Name()) {
 			return p
 		}
@@ -301,21 +301,21 @@ func (r *SemanticRouter) buildCacheKey(req *llm.ChatRequest) string {
 	return msg
 }
 
-// AddRoute adds or updates a route configuration.
+// 添加Route 添加或更新一个路由配置 。
 func (r *SemanticRouter) AddRoute(intent IntentType, config RouteConfig) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.config.Routes[intent] = config
 }
 
-// AddProvider adds a provider.
+// 添加提供者 。
 func (r *SemanticRouter) AddProvider(name string, provider llm.Provider) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.providers[name] = provider
 }
 
-// Classification cache
+// 分类缓存
 type classificationCache struct {
 	mu      sync.RWMutex
 	entries map[string]*cacheEntry
@@ -355,7 +355,7 @@ func (c *classificationCache) set(key string, classification *IntentClassificati
 	}
 }
 
-// Helper functions
+// 辅助功能
 func extractUserMessage(messages []llm.Message) string {
 	for i := len(messages) - 1; i >= 0; i-- {
 		if messages[i].Role == llm.RoleUser {

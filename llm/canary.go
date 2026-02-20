@@ -69,7 +69,7 @@ func (c *CanaryConfig) Stop() {
 
 // loadFromDB 从数据库加载活跃的金丝雀部署
 func (c *CanaryConfig) loadFromDB() {
-	// Skip if db is nil (e.g., in tests)
+	// 如果 db 为零, 请跳过( 如在测试中)
 	if c.db == nil {
 		return
 	}
@@ -259,7 +259,7 @@ func (c *CanaryConfig) GetAllDeployments() []*CanaryDeployment {
 }
 
 // =========================================
-// Canary Monitor
+// 加那利监视器
 // =========================================
 
 type CanaryMonitor struct {

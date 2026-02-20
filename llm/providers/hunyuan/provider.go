@@ -11,22 +11,22 @@ import (
 	"go.uber.org/zap"
 )
 
-// HunyuanProvider implements Tencent Hunyuan Provider.
-// Hunyuan uses OpenAI-compatible API format.
+// 匈奴提供商执行"特能匈奴提供商".
+// Hunyuan使用OpenAI相容的API格式.
 type HunyuanProvider struct {
 	*openai.OpenAIProvider
 	cfg providers.HunyuanConfig
 }
 
-// NewHunyuanProvider creates a new Hunyuan provider instance.
+// NewHunyuan Provider创建了新的Hunyuan供应商实例.
 func NewHunyuanProvider(cfg providers.HunyuanConfig, logger *zap.Logger) *HunyuanProvider {
-	// Set default BaseURL if not provided
-	// Hunyuan OpenAI-compatible API: https://api.hunyuan.cloud.tencent.com/v1
+	// 如果未提供则设置默认 BaseURL
+	// Hunyuan OpenAI相容的API:https://api.hunyuan.cloud.tencent.com/v1 互联网档案馆的存檔,存档日期2013-12-11.
 	if cfg.BaseURL == "" {
 		cfg.BaseURL = "https://api.hunyuan.cloud.tencent.com/v1"
 	}
 
-	// Convert to OpenAI config
+	// 转换为 OpenAI 配置
 	openaiCfg := providers.OpenAIConfig{
 		APIKey:  cfg.APIKey,
 		BaseURL: cfg.BaseURL,
@@ -44,7 +44,7 @@ func (p *HunyuanProvider) Name() string { return "hunyuan" }
 
 func (p *HunyuanProvider) HealthCheck(ctx context.Context) (*llm.HealthStatus, error) {
 	start := time.Now()
-	// Reuse OpenAI health check logic
+	// 重新使用 OpenAI 健康检查逻辑
 	status, err := p.OpenAIProvider.HealthCheck(ctx)
 	if err != nil {
 		return &llm.HealthStatus{
@@ -57,7 +57,7 @@ func (p *HunyuanProvider) HealthCheck(ctx context.Context) (*llm.HealthStatus, e
 
 func (p *HunyuanProvider) SupportsNativeFunctionCalling() bool { return true }
 
-// Completion overrides OpenAI's Completion to fix the Provider field.
+// 完成超过 OpenAI 的补全来修正提供方字段 。
 func (p *HunyuanProvider) Completion(ctx context.Context, req *llm.ChatRequest) (*llm.ChatResponse, error) {
 	resp, err := p.OpenAIProvider.Completion(ctx, req)
 	if err != nil {
@@ -71,7 +71,7 @@ func (p *HunyuanProvider) Completion(ctx context.Context, req *llm.ChatRequest) 
 	return resp, nil
 }
 
-// Stream overrides OpenAI's Stream to fix the Provider field on each chunk.
+// Cream 覆盖 OpenAI 的 Stream 来修正每个块上的提供方字段 。
 func (p *HunyuanProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-chan llm.StreamChunk, error) {
 	ch, err := p.OpenAIProvider.Stream(ctx, req)
 	if err != nil {

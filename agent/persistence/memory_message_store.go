@@ -8,8 +8,8 @@ import (
 	"github.com/google/uuid"
 )
 
-// MemoryMessageStore is an in-memory implementation of MessageStore.
-// Suitable for development and testing. Data is lost on restart.
+// 记忆MessageStore是MessageStore的内在执行.
+// 适合开发和测试。 数据在重新启动时丢失 。
 type MemoryMessageStore struct {
 	messages map[string]*Message // msgID -> Message
 	topics   map[string][]string // topic -> []msgID
@@ -18,7 +18,7 @@ type MemoryMessageStore struct {
 	config   StoreConfig
 }
 
-// NewMemoryMessageStore creates a new in-memory message store
+// 新记忆MessageStore 创建了新的记忆信息存储器
 func NewMemoryMessageStore(config StoreConfig) *MemoryMessageStore {
 	store := &MemoryMessageStore{
 		messages: make(map[string]*Message),
@@ -26,7 +26,7 @@ func NewMemoryMessageStore(config StoreConfig) *MemoryMessageStore {
 		config:   config,
 	}
 
-	// Start cleanup goroutine if enabled
+	// 启用后开始清理 goroutine
 	if config.Cleanup.Enabled {
 		go store.cleanupLoop(config.Cleanup.Interval)
 	}
@@ -34,7 +34,7 @@ func NewMemoryMessageStore(config StoreConfig) *MemoryMessageStore {
 	return store
 }
 
-// Close closes the store
+// 关闭商店
 func (s *MemoryMessageStore) Close() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -42,7 +42,7 @@ func (s *MemoryMessageStore) Close() error {
 	return nil
 }
 
-// Ping checks if the store is healthy
+// 平平检查,如果商店是健康的
 func (s *MemoryMessageStore) Ping(ctx context.Context) error {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -52,7 +52,7 @@ func (s *MemoryMessageStore) Ping(ctx context.Context) error {
 	return nil
 }
 
-// SaveMessage persists a single message
+// 保存信件坚持一个消息
 func (s *MemoryMessageStore) SaveMessage(ctx context.Context, msg *Message) error {
 	if msg == nil {
 		return ErrInvalidInput
@@ -65,20 +65,20 @@ func (s *MemoryMessageStore) SaveMessage(ctx context.Context, msg *Message) erro
 		return ErrStoreClosed
 	}
 
-	// Generate ID if not set
+	// 如果没有设定则生成 ID
 	if msg.ID == "" {
 		msg.ID = uuid.New().String()
 	}
 
-	// Set created time if not set
+	// 设定未设定的创建时间
 	if msg.CreatedAt.IsZero() {
 		msg.CreatedAt = time.Now()
 	}
 
-	// Store message
+	// 存储信件
 	s.messages[msg.ID] = msg
 
-	// Add to topic index
+	// 添加到主题索引
 	if msg.Topic != "" {
 		s.topics[msg.Topic] = append(s.topics[msg.Topic], msg.ID)
 	}
@@ -86,7 +86,7 @@ func (s *MemoryMessageStore) SaveMessage(ctx context.Context, msg *Message) erro
 	return nil
 }
 
-// SaveMessages persists multiple messages atomically
+// 保存消息在解剖上持续了多个消息
 func (s *MemoryMessageStore) SaveMessages(ctx context.Context, msgs []*Message) error {
 	if len(msgs) == 0 {
 		return nil
@@ -121,7 +121,7 @@ func (s *MemoryMessageStore) SaveMessages(ctx context.Context, msgs []*Message) 
 	return nil
 }
 
-// GetMessage retrieves a message by ID
+// 通过 ID 获取信件
 func (s *MemoryMessageStore) GetMessage(ctx context.Context, msgID string) (*Message, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -138,7 +138,7 @@ func (s *MemoryMessageStore) GetMessage(ctx context.Context, msgID string) (*Mes
 	return msg, nil
 }
 
-// GetMessages retrieves messages for a topic with pagination
+// GetMessages 获取带有 pagination 主题的信息
 func (s *MemoryMessageStore) GetMessages(ctx context.Context, topic string, cursor string, limit int) ([]*Message, string, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -152,7 +152,7 @@ func (s *MemoryMessageStore) GetMessages(ctx context.Context, topic string, curs
 		return []*Message{}, "", nil
 	}
 
-	// Find start index based on cursor
+	// 根据光标查找启动索引
 	startIdx := 0
 	if cursor != "" {
 		for i, id := range msgIDs {
@@ -163,7 +163,7 @@ func (s *MemoryMessageStore) GetMessages(ctx context.Context, topic string, curs
 		}
 	}
 
-	// Apply limit
+	// 应用限制
 	if limit <= 0 {
 		limit = 100
 	}
@@ -173,7 +173,7 @@ func (s *MemoryMessageStore) GetMessages(ctx context.Context, topic string, curs
 		endIdx = len(msgIDs)
 	}
 
-	// Collect messages
+	// 收集信件
 	result := make([]*Message, 0, endIdx-startIdx)
 	for i := startIdx; i < endIdx; i++ {
 		if msg, ok := s.messages[msgIDs[i]]; ok {
@@ -181,7 +181,7 @@ func (s *MemoryMessageStore) GetMessages(ctx context.Context, topic string, curs
 		}
 	}
 
-	// Determine next cursor
+	// 确定下一个光标
 	nextCursor := ""
 	if endIdx < len(msgIDs) {
 		nextCursor = msgIDs[endIdx-1]
@@ -190,7 +190,7 @@ func (s *MemoryMessageStore) GetMessages(ctx context.Context, topic string, curs
 	return result, nextCursor, nil
 }
 
-// AckMessage marks a message as acknowledged
+// AckMessage 是一个被承认的信息
 func (s *MemoryMessageStore) AckMessage(ctx context.Context, msgID string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -210,7 +210,7 @@ func (s *MemoryMessageStore) AckMessage(ctx context.Context, msgID string) error
 	return nil
 }
 
-// GetUnackedMessages retrieves unacknowledged messages older than the specified duration
+// 获取未保存的邮件获取未确认的比指定时间长的信件
 func (s *MemoryMessageStore) GetUnackedMessages(ctx context.Context, topic string, olderThan time.Duration) ([]*Message, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -233,7 +233,7 @@ func (s *MemoryMessageStore) GetUnackedMessages(ctx context.Context, topic strin
 			continue
 		}
 
-		// Check if unacked and old enough
+		// 检查是否未打开和足够老
 		if msg.AckedAt == nil && msg.CreatedAt.Before(cutoff) {
 			result = append(result, msg)
 		}
@@ -242,7 +242,7 @@ func (s *MemoryMessageStore) GetUnackedMessages(ctx context.Context, topic strin
 	return result, nil
 }
 
-// GetPendingMessages retrieves messages that need to be delivered
+// GetPendingMessages 检索需要发送的信件
 func (s *MemoryMessageStore) GetPendingMessages(ctx context.Context, topic string, limit int) ([]*Message, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -265,12 +265,12 @@ func (s *MemoryMessageStore) GetPendingMessages(ctx context.Context, topic strin
 			continue
 		}
 
-		// Skip acked or expired messages
+		// 跳过已锁定或已过期的信件
 		if msg.AckedAt != nil || msg.IsExpired() {
 			continue
 		}
 
-		// Check if ready for retry
+		// 检查是否准备好重试
 		if msg.RetryCount > 0 {
 			nextRetry := msg.NextRetryTime(s.config.Retry)
 			if now.Before(nextRetry) {
@@ -278,7 +278,7 @@ func (s *MemoryMessageStore) GetPendingMessages(ctx context.Context, topic strin
 			}
 		}
 
-		// Check max retries
+		// 检查最大重试
 		if msg.RetryCount >= s.config.Retry.MaxRetries {
 			continue
 		}
@@ -293,7 +293,7 @@ func (s *MemoryMessageStore) GetPendingMessages(ctx context.Context, topic strin
 	return result, nil
 }
 
-// IncrementRetry increments the retry count for a message
+// 递增
 func (s *MemoryMessageStore) IncrementRetry(ctx context.Context, msgID string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -314,7 +314,7 @@ func (s *MemoryMessageStore) IncrementRetry(ctx context.Context, msgID string) e
 	return nil
 }
 
-// DeleteMessage removes a message from the store
+// 删除信件从存储处删除
 func (s *MemoryMessageStore) DeleteMessage(ctx context.Context, msgID string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -328,7 +328,7 @@ func (s *MemoryMessageStore) DeleteMessage(ctx context.Context, msgID string) er
 		return ErrNotFound
 	}
 
-	// Remove from topic index
+	// 从主题索引中删除
 	if msg.Topic != "" {
 		msgIDs := s.topics[msg.Topic]
 		for i, id := range msgIDs {
@@ -344,7 +344,7 @@ func (s *MemoryMessageStore) DeleteMessage(ctx context.Context, msgID string) er
 	return nil
 }
 
-// Cleanup removes old acknowledged messages
+// 清理删除旧消息
 func (s *MemoryMessageStore) Cleanup(ctx context.Context, olderThan time.Duration) (int, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -357,9 +357,9 @@ func (s *MemoryMessageStore) Cleanup(ctx context.Context, olderThan time.Duratio
 	count := 0
 
 	for msgID, msg := range s.messages {
-		// Remove acked messages older than cutoff
+		// 删除比截取时间长的被敲击的信件
 		if msg.AckedAt != nil && msg.AckedAt.Before(cutoff) {
-			// Remove from topic index
+			// 从主题索引中删除
 			if msg.Topic != "" {
 				msgIDs := s.topics[msg.Topic]
 				for i, id := range msgIDs {
@@ -373,7 +373,7 @@ func (s *MemoryMessageStore) Cleanup(ctx context.Context, olderThan time.Duratio
 			count++
 		}
 
-		// Also remove expired messages
+		// 同时删除已过期的信件
 		if msg.IsExpired() {
 			if msg.Topic != "" {
 				msgIDs := s.topics[msg.Topic]
@@ -392,7 +392,7 @@ func (s *MemoryMessageStore) Cleanup(ctx context.Context, olderThan time.Duratio
 	return count, nil
 }
 
-// Stats returns statistics about the message store
+// Stats 返回关于消息库的统计数据
 func (s *MemoryMessageStore) Stats(ctx context.Context) (*MessageStoreStats, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -433,7 +433,7 @@ func (s *MemoryMessageStore) Stats(ctx context.Context) (*MessageStoreStats, err
 	return stats, nil
 }
 
-// cleanupLoop runs periodic cleanup
+// 清理Loop 运行定期清理
 func (s *MemoryMessageStore) cleanupLoop(interval time.Duration) {
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
@@ -451,5 +451,5 @@ func (s *MemoryMessageStore) cleanupLoop(interval time.Duration) {
 	}
 }
 
-// Ensure MemoryMessageStore implements MessageStore
+// 确保内存MessageStore执行信件Store
 var _ MessageStore = (*MemoryMessageStore)(nil)

@@ -178,7 +178,7 @@ func NewBaseAgent(
 		logger:      logger.With(zap.String("agent_id", cfg.ID), zap.String("agent_type", string(cfg.Type))),
 	}
 
-	// Initialize guardrails if configured
+	// 如果配置, 初始化守护栏
 	if cfg.Guardrails != nil {
 		ba.initGuardrails(cfg.Guardrails)
 	}
@@ -186,22 +186,22 @@ func NewBaseAgent(
 	return ba
 }
 
-// initGuardrails initializes the guardrails system
-// Requirements 1.7: Support custom validation rule registration and extension
+// 护卫系统启动
+// 1.7: 支持海关验证规则的登记和延期
 func (b *BaseAgent) initGuardrails(cfg *guardrails.GuardrailsConfig) {
 	b.guardrailsEnabled = true
 
-	// Initialize input validator chain
+	// 初始化输入验证链
 	b.inputValidatorChain = guardrails.NewValidatorChain(&guardrails.ValidatorChainConfig{
 		Mode: guardrails.ChainModeCollectAll,
 	})
 
-	// Add configured input validators
+	// 添加已配置的输入验证符
 	for _, v := range cfg.InputValidators {
 		b.inputValidatorChain.Add(v)
 	}
 
-	// Add built-in validators based on config
+	// 根据配置添加内置验证符
 	if cfg.MaxInputLength > 0 {
 		b.inputValidatorChain.Add(guardrails.NewLengthValidator(&guardrails.LengthValidatorConfig{
 			MaxLength: cfg.MaxInputLength,
@@ -224,7 +224,7 @@ func (b *BaseAgent) initGuardrails(cfg *guardrails.GuardrailsConfig) {
 		b.inputValidatorChain.Add(guardrails.NewPIIDetector(nil))
 	}
 
-	// Initialize output validator
+	// 初始化输出验证符
 	outputConfig := &guardrails.OutputValidatorConfig{
 		Validators:     cfg.OutputValidators,
 		Filters:        cfg.OutputFilters,
@@ -503,25 +503,25 @@ func (b *BaseAgent) ContextEngineEnabled() bool {
 	return b.contextEngineEnabled
 }
 
-// GuardrailsErrorType defines the type of guardrails error
+// Guardrails ErrorType 定义了 Guardrails 错误的类型
 type GuardrailsErrorType string
 
 const (
-	// GuardrailsErrorTypeInput indicates input validation failure
+	// Guardrails 错误输入表示输入验证失败
 	GuardrailsErrorTypeInput GuardrailsErrorType = "input"
-	// GuardrailsErrorTypeOutput indicates output validation failure
+	// Guardrails ErrorTypeOutput 表示输出验证失败
 	GuardrailsErrorTypeOutput GuardrailsErrorType = "output"
 )
 
-// GuardrailsError represents a guardrails validation error
-// Requirements 1.6: Return detailed error information with failure reasons
+// Guardrails Error 代表一个 Guardrails 验证错误
+// 要求1.6:有故障原因退回详细错误信息
 type GuardrailsError struct {
 	Type    GuardrailsErrorType          `json:"type"`
 	Message string                       `json:"message"`
 	Errors  []guardrails.ValidationError `json:"errors"`
 }
 
-// Error implements the error interface
+// 执行错误接口时出错
 func (e *GuardrailsError) Error() string {
 	if len(e.Errors) == 0 {
 		return fmt.Sprintf("guardrails %s validation failed: %s", e.Type, e.Message)
@@ -538,8 +538,8 @@ func (e *GuardrailsError) Error() string {
 	return sb.String()
 }
 
-// SetGuardrails configures guardrails for the agent
-// Requirements 1.7: Support custom validation rule registration and extension
+// 设置守护栏为代理设置守护栏
+// 1.7: 支持海关验证规则的登记和延期
 func (b *BaseAgent) SetGuardrails(cfg *guardrails.GuardrailsConfig) {
 	if cfg == nil {
 		b.guardrailsEnabled = false
@@ -551,13 +551,13 @@ func (b *BaseAgent) SetGuardrails(cfg *guardrails.GuardrailsConfig) {
 	b.initGuardrails(cfg)
 }
 
-// GuardrailsEnabled returns whether guardrails are enabled
+// 是否启用了护栏
 func (b *BaseAgent) GuardrailsEnabled() bool {
 	return b.guardrailsEnabled
 }
 
-// AddInputValidator adds a custom input validator
-// Requirements 1.7: Support custom validation rule registration and extension
+// 添加自定义输入验证器
+// 1.7: 支持海关验证规则的登记和延期
 func (b *BaseAgent) AddInputValidator(v guardrails.Validator) {
 	if b.inputValidatorChain == nil {
 		b.inputValidatorChain = guardrails.NewValidatorChain(nil)
@@ -566,8 +566,8 @@ func (b *BaseAgent) AddInputValidator(v guardrails.Validator) {
 	b.inputValidatorChain.Add(v)
 }
 
-// AddOutputValidator adds a custom output validator
-// Requirements 1.7: Support custom validation rule registration and extension
+// 添加输出变量添加自定义输出验证器
+// 1.7: 支持海关验证规则的登记和延期
 func (b *BaseAgent) AddOutputValidator(v guardrails.Validator) {
 	if b.outputValidator == nil {
 		b.outputValidator = guardrails.NewOutputValidator(nil)
@@ -576,7 +576,7 @@ func (b *BaseAgent) AddOutputValidator(v guardrails.Validator) {
 	b.outputValidator.AddValidator(v)
 }
 
-// AddOutputFilter adds a custom output filter
+// 添加 OutputFilter 添加自定义输出过滤器
 func (b *BaseAgent) AddOutputFilter(f guardrails.Filter) {
 	if b.outputValidator == nil {
 		b.outputValidator = guardrails.NewOutputValidator(nil)

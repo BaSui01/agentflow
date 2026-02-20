@@ -11,13 +11,13 @@ import (
 	"time"
 )
 
-// GeminiProvider implements image generation using Google Gemini's native multimodal capabilities.
+// 双子公司利用Google双子公司本土多模式能力实现图像生成.
 type GeminiProvider struct {
 	cfg    GeminiConfig
 	client *http.Client
 }
 
-// NewGeminiProvider creates a new Gemini image provider.
+// NewGemini Provider创建了新的双子星图像提供者.
 func NewGeminiProvider(cfg GeminiConfig) *GeminiProvider {
 	if cfg.Model == "" {
 		cfg.Model = "gemini-3-pro-image-preview"
@@ -82,7 +82,7 @@ type geminiImageResponse struct {
 	} `json:"usageMetadata"`
 }
 
-// Generate creates images using Gemini's native image generation.
+// 利用双子座的原生图像生成图像.
 func (p *GeminiProvider) Generate(ctx context.Context, req *GenerateRequest) (*GenerateResponse, error) {
 	model := req.Model
 	if model == "" {
@@ -149,7 +149,7 @@ func (p *GeminiProvider) Generate(ctx context.Context, req *GenerateRequest) (*G
 	}, nil
 }
 
-// Edit modifies an existing image using Gemini's multimodal capabilities.
+// 利用双子座多模式能力编辑修改已存在的图像.
 func (p *GeminiProvider) Edit(ctx context.Context, req *EditRequest) (*GenerateResponse, error) {
 	if req.Image == nil {
 		return nil, fmt.Errorf("image is required")
@@ -230,7 +230,7 @@ func (p *GeminiProvider) Edit(ctx context.Context, req *EditRequest) (*GenerateR
 	}, nil
 }
 
-// CreateVariation creates variations using Gemini.
+// 创建变异使用双子座创建变异.
 func (p *GeminiProvider) CreateVariation(ctx context.Context, req *VariationRequest) (*GenerateResponse, error) {
 	if req.Image == nil {
 		return nil, fmt.Errorf("image is required")

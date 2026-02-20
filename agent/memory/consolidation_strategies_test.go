@@ -42,7 +42,7 @@ func TestMaxPerAgentPrunerStrategy_ShortTerm(t *testing.T) {
 
 	require.NoError(t, system.ConsolidateOnce(ctx))
 
-	// Oldest should be pruned.
+	// 最老的应该被打压。
 	_, err := shortTerm.Load(ctx, "short_term:a:1")
 	require.Error(t, err)
 

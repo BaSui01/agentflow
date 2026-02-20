@@ -9,8 +9,8 @@ import (
 	"github.com/google/uuid"
 )
 
-// MemoryTaskStore is an in-memory implementation of TaskStore.
-// Suitable for development and testing. Data is lost on restart.
+// MemoryTaskStore是TaskStore的一个内在执行.
+// 适合开发和测试。 数据在重新启动时丢失 。
 type MemoryTaskStore struct {
 	tasks  map[string]*AsyncTask
 	mu     sync.RWMutex
@@ -18,14 +18,14 @@ type MemoryTaskStore struct {
 	config StoreConfig
 }
 
-// NewMemoryTaskStore creates a new in-memory task store
+// 新建记忆任务存储器
 func NewMemoryTaskStore(config StoreConfig) *MemoryTaskStore {
 	store := &MemoryTaskStore{
 		tasks:  make(map[string]*AsyncTask),
 		config: config,
 	}
 
-	// Start cleanup goroutine if enabled
+	// 启用后开始清理 goroutine
 	if config.Cleanup.Enabled {
 		go store.cleanupLoop(config.Cleanup.Interval)
 	}
@@ -33,7 +33,7 @@ func NewMemoryTaskStore(config StoreConfig) *MemoryTaskStore {
 	return store
 }
 
-// Close closes the store
+// 关闭商店
 func (s *MemoryTaskStore) Close() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -41,7 +41,7 @@ func (s *MemoryTaskStore) Close() error {
 	return nil
 }
 
-// Ping checks if the store is healthy
+// 平平检查,如果商店是健康的
 func (s *MemoryTaskStore) Ping(ctx context.Context) error {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -51,7 +51,7 @@ func (s *MemoryTaskStore) Ping(ctx context.Context) error {
 	return nil
 }
 
-// SaveTask persists a task to the store
+// 保存任务持续执行商店的任务
 func (s *MemoryTaskStore) SaveTask(ctx context.Context, task *AsyncTask) error {
 	if task == nil {
 		return ErrInvalidInput
@@ -64,25 +64,25 @@ func (s *MemoryTaskStore) SaveTask(ctx context.Context, task *AsyncTask) error {
 		return ErrStoreClosed
 	}
 
-	// Generate ID if not set
+	// 如果没有设定则生成 ID
 	if task.ID == "" {
 		task.ID = uuid.New().String()
 	}
 
-	// Set timestamps
+	// 设置时间戳
 	now := time.Now()
 	if task.CreatedAt.IsZero() {
 		task.CreatedAt = now
 	}
 	task.UpdatedAt = now
 
-	// Store task
+	// 存储任务
 	s.tasks[task.ID] = task
 
 	return nil
 }
 
-// GetTask retrieves a task by ID
+// 通过 ID 获取任务
 func (s *MemoryTaskStore) GetTask(ctx context.Context, taskID string) (*AsyncTask, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -99,7 +99,7 @@ func (s *MemoryTaskStore) GetTask(ctx context.Context, taskID string) (*AsyncTas
 	return task, nil
 }
 
-// ListTasks retrieves tasks matching the filter criteria
+// ListTasks 检索匹配过滤标准的任务
 func (s *MemoryTaskStore) ListTasks(ctx context.Context, filter TaskFilter) ([]*AsyncTask, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -116,10 +116,10 @@ func (s *MemoryTaskStore) ListTasks(ctx context.Context, filter TaskFilter) ([]*
 		}
 	}
 
-	// Sort results
+	// 排序结果
 	s.sortTasks(result, filter.OrderBy, filter.OrderDesc)
 
-	// Apply offset and limit
+	// 应用偏移和限制
 	if filter.Offset > 0 {
 		if filter.Offset >= len(result) {
 			return []*AsyncTask{}, nil
@@ -134,7 +134,7 @@ func (s *MemoryTaskStore) ListTasks(ctx context.Context, filter TaskFilter) ([]*
 	return result, nil
 }
 
-// matchesFilter checks if a task matches the filter criteria
+// 匹配Filter 检查任务是否匹配过滤标准
 func (s *MemoryTaskStore) matchesFilter(task *AsyncTask, filter TaskFilter) bool {
 	if filter.SessionID != "" && task.SessionID != filter.SessionID {
 		return false
@@ -176,7 +176,7 @@ func (s *MemoryTaskStore) matchesFilter(task *AsyncTask, filter TaskFilter) bool
 	return true
 }
 
-// sortTasks sorts tasks by the specified field
+// 按指定字段排序任务类型
 func (s *MemoryTaskStore) sortTasks(tasks []*AsyncTask, orderBy string, desc bool) {
 	if orderBy == "" {
 		orderBy = "created_at"
@@ -204,7 +204,7 @@ func (s *MemoryTaskStore) sortTasks(tasks []*AsyncTask, orderBy string, desc boo
 	})
 }
 
-// UpdateStatus updates the status of a task
+// 更新状态更新任务状态
 func (s *MemoryTaskStore) UpdateStatus(ctx context.Context, taskID string, status TaskStatus, result interface{}, errMsg string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -230,12 +230,12 @@ func (s *MemoryTaskStore) UpdateStatus(ctx context.Context, taskID string, statu
 		task.Error = errMsg
 	}
 
-	// Set started time when transitioning to running
+	// 设定向运行过渡时的起始时间
 	if status == TaskStatusRunning && task.StartedAt == nil {
 		task.StartedAt = &now
 	}
 
-	// Set completed time for terminal states
+	// 设定终端状态的完成时间
 	if status.IsTerminal() && task.CompletedAt == nil {
 		task.CompletedAt = &now
 	}
@@ -243,7 +243,7 @@ func (s *MemoryTaskStore) UpdateStatus(ctx context.Context, taskID string, statu
 	return nil
 }
 
-// UpdateProgress updates the progress of a task
+// 更新进度更新任务进度
 func (s *MemoryTaskStore) UpdateProgress(ctx context.Context, taskID string, progress float64) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -263,7 +263,7 @@ func (s *MemoryTaskStore) UpdateProgress(ctx context.Context, taskID string, pro
 	return nil
 }
 
-// DeleteTask removes a task from the store
+// 删除任务从商店中删除任务
 func (s *MemoryTaskStore) DeleteTask(ctx context.Context, taskID string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -281,7 +281,7 @@ func (s *MemoryTaskStore) DeleteTask(ctx context.Context, taskID string) error {
 	return nil
 }
 
-// GetRecoverableTasks retrieves tasks that need to be recovered after restart
+// 获取可回收的任务检索重启后需要回收的任务
 func (s *MemoryTaskStore) GetRecoverableTasks(ctx context.Context) ([]*AsyncTask, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -298,7 +298,7 @@ func (s *MemoryTaskStore) GetRecoverableTasks(ctx context.Context) ([]*AsyncTask
 		}
 	}
 
-	// Sort by priority (higher first) then by created time (older first)
+	// 按优先级排序( 先高一些) 然后按创建时间排序( 先高一些)
 	sort.Slice(result, func(i, j int) bool {
 		if result[i].Priority != result[j].Priority {
 			return result[i].Priority > result[j].Priority
@@ -309,7 +309,7 @@ func (s *MemoryTaskStore) GetRecoverableTasks(ctx context.Context) ([]*AsyncTask
 	return result, nil
 }
 
-// Cleanup removes completed/failed tasks older than the specified duration
+// 清除完成/ 失败的任务超过指定期限
 func (s *MemoryTaskStore) Cleanup(ctx context.Context, olderThan time.Duration) (int, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -322,12 +322,12 @@ func (s *MemoryTaskStore) Cleanup(ctx context.Context, olderThan time.Duration) 
 	count := 0
 
 	for taskID, task := range s.tasks {
-		// Only cleanup terminal tasks
+		// 只清理终端任务
 		if !task.Status.IsTerminal() {
 			continue
 		}
 
-		// Check if old enough
+		// 检查是否足够老
 		checkTime := task.UpdatedAt
 		if task.CompletedAt != nil {
 			checkTime = *task.CompletedAt
@@ -342,7 +342,7 @@ func (s *MemoryTaskStore) Cleanup(ctx context.Context, olderThan time.Duration) 
 	return count, nil
 }
 
-// Stats returns statistics about the task store
+// Stats 返回关于任务存储的统计
 func (s *MemoryTaskStore) Stats(ctx context.Context) (*TaskStoreStats, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -400,7 +400,7 @@ func (s *MemoryTaskStore) Stats(ctx context.Context) (*TaskStoreStats, error) {
 	return stats, nil
 }
 
-// cleanupLoop runs periodic cleanup
+// 清理Loop 运行定期清理
 func (s *MemoryTaskStore) cleanupLoop(interval time.Duration) {
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
@@ -418,5 +418,5 @@ func (s *MemoryTaskStore) cleanupLoop(interval time.Duration) {
 	}
 }
 
-// Ensure MemoryTaskStore implements TaskStore
+// 确保内存任务执行任务任务
 var _ TaskStore = (*MemoryTaskStore)(nil)

@@ -17,8 +17,8 @@ import (
 	"go.uber.org/zap"
 )
 
-// GrokProvider implements xAI Grok LLM Provider.
-// Grok uses OpenAI-compatible API format, allowing code reuse from OpenAI provider.
+// Grok Provider 执行 XAI Grok LLM 提供者.
+// Grok使用OpenAI相容的API格式,允许OpenAI提供商的代码再用.
 type GrokProvider struct {
 	cfg           providers.GrokConfig
 	client        *http.Client
@@ -26,14 +26,14 @@ type GrokProvider struct {
 	rewriterChain *middleware.RewriterChain
 }
 
-// NewGrokProvider creates a new Grok provider instance.
+// NewGrok Provider创建了一个新的 Grok 提供者实例.
 func NewGrokProvider(cfg providers.GrokConfig, logger *zap.Logger) *GrokProvider {
 	timeout := cfg.Timeout
 	if timeout == 0 {
 		timeout = 30 * time.Second
 	}
 
-	// Set default BaseURL if not provided
+	// 如果未提供则设置默认 BaseURL
 	if cfg.BaseURL == "" {
 		cfg.BaseURL = "https://api.x.ai"
 	}
@@ -83,7 +83,7 @@ func (p *GrokProvider) HealthCheck(ctx context.Context) (*llm.HealthStatus, erro
 	return &llm.HealthStatus{Healthy: true, Latency: latency}, nil
 }
 
-// OpenAI-compatible types (reused from OpenAI provider pattern)
+// OpenAI 兼容类型(从 OpenAI 提供者模式中重新使用)
 type openAIMessage struct {
 	Role         string           `json:"role"`
 	Content      string           `json:"content,omitempty"`
@@ -212,7 +212,7 @@ func mapError(status int, msg string, provider string) *llm.Error {
 	case http.StatusTooManyRequests:
 		return &llm.Error{Code: llm.ErrRateLimited, Message: msg, HTTPStatus: status, Retryable: true, Provider: provider}
 	case http.StatusBadRequest:
-		// Check for quota/credit keywords
+		// 检查配额/信用关键字
 		if strings.Contains(strings.ToLower(msg), "quota") ||
 			strings.Contains(strings.ToLower(msg), "credit") {
 			return &llm.Error{Code: llm.ErrQuotaExceeded, Message: msg, HTTPStatus: status, Provider: provider}
@@ -228,7 +228,7 @@ func mapError(status int, msg string, provider string) *llm.Error {
 }
 
 func (p *GrokProvider) Completion(ctx context.Context, req *llm.ChatRequest) (*llm.ChatResponse, error) {
-	// Apply rewriter chain
+	// 应用重写链
 	rewrittenReq, err := p.rewriterChain.Execute(ctx, req)
 	if err != nil {
 		return nil, &llm.Error{
@@ -240,7 +240,7 @@ func (p *GrokProvider) Completion(ctx context.Context, req *llm.ChatRequest) (*l
 	}
 	req = rewrittenReq
 
-	// Handle credential override from context
+	// 从上下文处理证书覆盖
 	apiKey := p.cfg.APIKey
 	if c, ok := llm.CredentialOverrideFromContext(ctx); ok {
 		if strings.TrimSpace(c.APIKey) != "" {
@@ -288,7 +288,7 @@ func (p *GrokProvider) Completion(ctx context.Context, req *llm.ChatRequest) (*l
 }
 
 func (p *GrokProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-chan llm.StreamChunk, error) {
-	// Apply rewriter chain
+	// 应用重写链
 	rewrittenReq, err := p.rewriterChain.Execute(ctx, req)
 	if err != nil {
 		return nil, &llm.Error{
@@ -300,7 +300,7 @@ func (p *GrokProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-chan
 	}
 	req = rewrittenReq
 
-	// Handle credential override from context
+	// 从上下文处理证书覆盖
 	apiKey := p.cfg.APIKey
 	if c, ok := llm.CredentialOverrideFromContext(ctx); ok {
 		if strings.TrimSpace(c.APIKey) != "" {

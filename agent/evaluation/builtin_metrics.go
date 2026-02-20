@@ -1,4 +1,4 @@
-// Package evaluation provides automated evaluation framework for AI agents.
+// 成套评价为AI代理提供了自动化的评价框架.
 package evaluation
 
 import (
@@ -8,7 +8,7 @@ import (
 
 // AccuracyMetric 准确率指标
 // 通过比较实际输出与期望输出计算准确率
-// Validates: Requirements 9.3
+// 核证:要求9.3
 type AccuracyMetric struct {
 	// CaseSensitive 是否区分大小写
 	CaseSensitive bool
@@ -76,7 +76,7 @@ func (m *AccuracyMetric) Compute(ctx context.Context, input *EvalInput, output *
 
 // LatencyMetric 延迟指标
 // 返回响应延迟（毫秒）
-// Validates: Requirements 9.3
+// 核证:要求9.3
 type LatencyMetric struct {
 	// ThresholdMs 延迟阈值（毫秒），用于归一化
 	// 如果设置，返回值为 max(0, 1 - latency/threshold)
@@ -128,7 +128,7 @@ func (m *LatencyMetric) Compute(ctx context.Context, input *EvalInput, output *E
 
 // TokenUsageMetric Token 使用量指标
 // 返回 Token 使用量
-// Validates: Requirements 9.3
+// 核证:要求9.3
 type TokenUsageMetric struct {
 	// MaxTokens 最大 Token 数，用于归一化
 	// 如果设置，返回值为 max(0, 1 - tokens/maxTokens)
@@ -180,7 +180,7 @@ func (m *TokenUsageMetric) Compute(ctx context.Context, input *EvalInput, output
 
 // CostMetric 成本指标
 // 返回 API 调用成本
-// Validates: Requirements 9.3
+// 核证:要求9.3
 type CostMetric struct {
 	// MaxCost 最大成本，用于归一化
 	// 如果设置，返回值为 max(0, 1 - cost/maxCost)

@@ -11,13 +11,13 @@ import (
 	"time"
 )
 
-// SunoProvider implements music generation using Suno API.
+// SunoProvider使用Suno API执行音乐生成.
 type SunoProvider struct {
 	cfg    SunoConfig
 	client *http.Client
 }
 
-// NewSunoProvider creates a new Suno music provider.
+// NewSunoProvider创建了新的Suno音乐提供商.
 func NewSunoProvider(cfg SunoConfig) *SunoProvider {
 	if cfg.BaseURL == "" {
 		cfg.BaseURL = "https://api.sunoapi.com/v1"
@@ -58,7 +58,7 @@ type sunoResponse struct {
 	} `json:"data"`
 }
 
-// Generate creates music using Suno API.
+// 生成音乐使用Suno API创建.
 func (p *SunoProvider) Generate(ctx context.Context, req *GenerateRequest) (*GenerateResponse, error) {
 	model := req.Model
 	if model == "" {
@@ -99,7 +99,7 @@ func (p *SunoProvider) Generate(ctx context.Context, req *GenerateRequest) (*Gen
 		return nil, fmt.Errorf("failed to decode response: %w", err)
 	}
 
-	// Poll for completion if async
+	// Async 需要填写
 	if sResp.Status == "pending" || sResp.Status == "processing" {
 		result, err := p.pollTask(ctx, sResp.TaskID)
 		if err != nil {

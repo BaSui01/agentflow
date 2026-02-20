@@ -13,13 +13,13 @@ import (
 	"time"
 )
 
-// OpenAISTTProvider implements STT using OpenAI Whisper API.
+// OpenAISTTProvider使用OpenAI Whisper API执行STT.
 type OpenAISTTProvider struct {
 	cfg    OpenAISTTConfig
 	client *http.Client
 }
 
-// NewOpenAISTTProvider creates a new OpenAI STT provider.
+// NewOpenAISTTProvider创建了新的OpenAI STT供应商.
 func NewOpenAISTTProvider(cfg OpenAISTTConfig) *OpenAISTTProvider {
 	if cfg.BaseURL == "" {
 		cfg.BaseURL = "https://api.openai.com"
@@ -64,7 +64,7 @@ type whisperResponse struct {
 	} `json:"words,omitempty"`
 }
 
-// Transcribe converts speech to text.
+// 将语音转换为文本 。
 func (p *OpenAISTTProvider) Transcribe(ctx context.Context, req *STTRequest) (*STTResponse, error) {
 	if req.Audio == nil {
 		return nil, fmt.Errorf("audio input is required")
@@ -75,11 +75,11 @@ func (p *OpenAISTTProvider) Transcribe(ctx context.Context, req *STTRequest) (*S
 		model = p.cfg.Model
 	}
 
-	// Build multipart form
+	// 构建多部分形式
 	var buf bytes.Buffer
 	writer := multipart.NewWriter(&buf)
 
-	// Add audio file
+	// 添加音频文件
 	part, err := writer.CreateFormFile("file", "audio.mp3")
 	if err != nil {
 		return nil, fmt.Errorf("failed to create form file: %w", err)
@@ -88,10 +88,10 @@ func (p *OpenAISTTProvider) Transcribe(ctx context.Context, req *STTRequest) (*S
 		return nil, fmt.Errorf("failed to copy audio: %w", err)
 	}
 
-	// Add model
+	// 添加模式
 	_ = writer.WriteField("model", model)
 
-	// Add optional fields
+	// 添加可选字段
 	if req.Language != "" {
 		_ = writer.WriteField("language", req.Language)
 	}
@@ -146,7 +146,7 @@ func (p *OpenAISTTProvider) Transcribe(ctx context.Context, req *STTRequest) (*S
 		CreatedAt: time.Now(),
 	}
 
-	// Convert segments
+	// 转换片段
 	for _, s := range wResp.Segments {
 		result.Segments = append(result.Segments, Segment{
 			ID:    s.ID,
@@ -156,7 +156,7 @@ func (p *OpenAISTTProvider) Transcribe(ctx context.Context, req *STTRequest) (*S
 		})
 	}
 
-	// Convert words
+	// 转换单词
 	for _, w := range wResp.Words {
 		result.Words = append(result.Words, Word{
 			Word:  w.Word,
@@ -168,7 +168,7 @@ func (p *OpenAISTTProvider) Transcribe(ctx context.Context, req *STTRequest) (*S
 	return result, nil
 }
 
-// TranscribeFile transcribes an audio file.
+// 转录File转录音频文件.
 func (p *OpenAISTTProvider) TranscribeFile(ctx context.Context, filepath string, opts *STTRequest) (*STTResponse, error) {
 	file, err := os.Open(filepath)
 	if err != nil {

@@ -16,11 +16,11 @@ import (
 	"go.uber.org/zap"
 )
 
-// QdrantConfig configures the Qdrant VectorStore implementation.
+// QdrantConfig 配置了 Qdrant 矢量Store 执行 。
 //
-// Notes:
-// - Qdrant point IDs are UUIDs; AgentFlow derives a stable UUID from Document.ID.
-// - Document content/metadata are stored in payload (best-effort JSON).
+// 注释:
+// - Qdrant点ID是UUID;AgentFlow从文档中获得稳定的UUID. 身份证
+// - 文件内容/元数据储存在有效载荷中(最佳JSON)。
 type QdrantConfig struct {
 	Host       string        `json:"host"`
 	Port       int           `json:"port"`
@@ -38,7 +38,7 @@ type QdrantConfig struct {
 	PayloadIDField       string `json:"payload_id_field"`       // Payload key for original document ID (default "doc_id")
 }
 
-// QdrantStore implements VectorStore using Qdrant's REST API.
+// QdrantStore使用Qdrant的REST API执行矢量Store.
 type QdrantStore struct {
 	cfg QdrantConfig
 
@@ -50,7 +50,7 @@ type QdrantStore struct {
 	ensureErr  error
 }
 
-// NewQdrantStore creates a Qdrant-backed VectorStore.
+// 新克德兰特斯多尔创建了克德兰特后卫矢量斯多尔.
 func NewQdrantStore(cfg QdrantConfig, logger *zap.Logger) *QdrantStore {
 	if logger == nil {
 		logger = zap.NewNop()
@@ -97,7 +97,7 @@ func NewQdrantStore(cfg QdrantConfig, logger *zap.Logger) *QdrantStore {
 var qdrantNamespace = uuid.MustParse("d9bde6d4-4f3a-4e6b-8f7a-5d8d2f3b4c1a")
 
 func qdrantPointID(docID string) string {
-	// Stable UUID derived from document ID (supports any string input).
+	// 从文档 ID (支持任意字符串输入) 得到的稳定 UUID 。
 	return uuid.NewSHA1(qdrantNamespace, []byte(docID)).String()
 }
 
@@ -136,7 +136,7 @@ func (s *QdrantStore) ensureCollection(ctx context.Context, vectorSize int) erro
 		}
 		defer resp.Body.Close()
 
-		// Qdrant returns 409 if collection exists.
+		// 如果收藏存在, Qdrant 返回 409 。
 		if resp.StatusCode == http.StatusConflict {
 			s.ensureErr = nil
 			return
@@ -159,7 +159,7 @@ func (s *QdrantStore) ensureCollection(ctx context.Context, vectorSize int) erro
 func (s *QdrantStore) applyHeaders(req *http.Request) {
 	req.Header.Set("Content-Type", "application/json")
 	if strings.TrimSpace(s.cfg.APIKey) != "" {
-		// Qdrant convention.
+		// 克德兰特公约。
 		req.Header.Set("api-key", s.cfg.APIKey)
 	}
 }
@@ -214,7 +214,7 @@ func (s *QdrantStore) AddDocuments(ctx context.Context, docs []Document) error {
 		return fmt.Errorf("qdrant collection is required")
 	}
 
-	// Validate embeddings and determine vector size.
+	// 验证嵌入并确定矢量大小。
 	vectorSize := s.cfg.VectorSize
 	for i, doc := range docs {
 		if doc.ID == "" {
@@ -317,7 +317,7 @@ func (s *QdrantStore) Search(ctx context.Context, queryEmbedding []float64, topK
 	for _, r := range resp.Result {
 		doc := Document{}
 
-		// Recover original doc ID from payload (preferred).
+		// 从有效载荷(首选)中恢复原始的 doc ID.
 		if r.Payload != nil {
 			if v, ok := r.Payload[s.cfg.PayloadIDField]; ok {
 				if s, ok := v.(string); ok {
@@ -337,7 +337,7 @@ func (s *QdrantStore) Search(ctx context.Context, queryEmbedding []float64, topK
 		}
 
 		if doc.ID == "" {
-			// Fallback to point ID if payload does not include doc_id.
+			// 如果有效载荷不包括 doc id,则返回到指向ID.
 			doc.ID = fmt.Sprint(r.ID)
 		}
 

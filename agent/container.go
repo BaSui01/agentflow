@@ -1,4 +1,4 @@
-// Package agent provides the core agent framework for AgentFlow.
+// 包代理为AgentFlow提供了核心代理框架.
 package agent
 
 import (
@@ -7,20 +7,20 @@ import (
 )
 
 // ============================================================
-// Dependency Injection Container
-// Provides a centralized way to manage agent dependencies.
+// 依赖性注射容器
+// 提供了管理代理依赖的集中方式.
 // ============================================================
 
-// Container holds all dependencies for agent creation.
+// 集装箱拥有建立代理的所有依赖性。
 type Container struct {
-	// Core dependencies
+	// 核心依赖关系
 	provider    llm.Provider
 	memory      MemoryManager
 	toolManager ToolManager
 	bus         EventBus
 	logger      *zap.Logger
 
-	// Factory functions for extensions
+	// 用于扩展的工厂功能
 	reflectionFactory     func() interface{}
 	toolSelectionFactory  func() interface{}
 	promptEnhancerFactory func() interface{}
@@ -31,72 +31,72 @@ type Container struct {
 	guardrailsFactory     func() interface{}
 }
 
-// NewContainer creates a new dependency container.
+// NewContaner创建了新的依赖容器.
 func NewContainer() *Container {
 	return &Container{}
 }
 
-// WithProvider sets the LLM provider.
+// 由Provider设置 LLM 提供者.
 func (c *Container) WithProvider(provider llm.Provider) *Container {
 	c.provider = provider
 	return c
 }
 
-// WithMemory sets the memory manager.
+// 与记忆设定内存管理器.
 func (c *Container) WithMemory(memory MemoryManager) *Container {
 	c.memory = memory
 	return c
 }
 
-// WithToolManager sets the tool manager.
+// 与 ToolManager 设置工具管理器 。
 func (c *Container) WithToolManager(toolManager ToolManager) *Container {
 	c.toolManager = toolManager
 	return c
 }
 
-// WithEventBus sets the event bus.
+// 用 EventBus 设置活动总线 。
 func (c *Container) WithEventBus(bus EventBus) *Container {
 	c.bus = bus
 	return c
 }
 
-// WithLogger sets the logger.
+// 由Logger设置日志 。
 func (c *Container) WithLogger(logger *zap.Logger) *Container {
 	c.logger = logger
 	return c
 }
 
-// WithReflectionFactory sets the reflection extension factory.
+// 随着ReflectionFactory设置了反射延伸工厂.
 func (c *Container) WithReflectionFactory(factory func() interface{}) *Container {
 	c.reflectionFactory = factory
 	return c
 }
 
-// WithToolSelectionFactory sets the tool selection extension factory.
+// With ToolSelectFactory 设置工具选择扩展厂.
 func (c *Container) WithToolSelectionFactory(factory func() interface{}) *Container {
 	c.toolSelectionFactory = factory
 	return c
 }
 
-// WithGuardrailsFactory sets the guardrails extension factory.
+// 与Guardrails Factory 设置了护栏延长工厂.
 func (c *Container) WithGuardrailsFactory(factory func() interface{}) *Container {
 	c.guardrailsFactory = factory
 	return c
 }
 
-// Provider returns the LLM provider.
+// 提供方返回 LLM 提供者 。
 func (c *Container) Provider() llm.Provider { return c.provider }
 
-// Memory returns the memory manager.
+// 内存返回内存管理器.
 func (c *Container) Memory() MemoryManager { return c.memory }
 
-// ToolManager returns the tool manager.
+// ToolManager返回工具管理器.
 func (c *Container) ToolManager() ToolManager { return c.toolManager }
 
-// EventBus returns the event bus.
+// EventBus 返回事件总线 。
 func (c *Container) EventBus() EventBus { return c.bus }
 
-// Logger returns the logger.
+// Logger 返回记录器 。
 func (c *Container) Logger() *zap.Logger {
 	if c.logger == nil {
 		return zap.NewNop()
@@ -104,7 +104,7 @@ func (c *Container) Logger() *zap.Logger {
 	return c.logger
 }
 
-// CreateBaseAgent creates a BaseAgent using container dependencies.
+// CreatBaseAgent 使用容器依赖性创建 BaseAgent 。
 func (c *Container) CreateBaseAgent(config Config) (*BaseAgent, error) {
 	return NewBaseAgent(
 		config,
@@ -116,7 +116,7 @@ func (c *Container) CreateBaseAgent(config Config) (*BaseAgent, error) {
 	), nil
 }
 
-// CreateModularAgent creates a ModularAgent using container dependencies.
+// 创建 ModularAgent 使用容器依赖性创建了 ModularAgent 。
 func (c *Container) CreateModularAgent(config ModularAgentConfig) (*ModularAgent, error) {
 	return NewModularAgent(
 		config,
@@ -129,58 +129,58 @@ func (c *Container) CreateModularAgent(config ModularAgentConfig) (*ModularAgent
 }
 
 // ============================================================
-// Agent Factory
-// Provides factory methods for creating different agent types.
+// 代理工厂
+// 提供制造不同剂型的工厂方法.
 // ============================================================
 
-// AgentFactoryFunc creates agents with pre-configured dependencies.
+// Agent FactoryFunc 创建具有预配置依赖关系的代理.
 type AgentFactoryFunc struct {
 	container *Container
 }
 
-// NewAgentFactoryFunc creates a new agent factory.
+// 新AgentFactoryFunc创建了新的代理工厂.
 func NewAgentFactoryFunc(container *Container) *AgentFactoryFunc {
 	return &AgentFactoryFunc{container: container}
 }
 
-// CreateAgent creates an agent based on the provided configuration.
+// Create Agent 根据提供的配置创建代理 。
 func (f *AgentFactoryFunc) CreateAgent(config Config) (Agent, error) {
 	return f.container.CreateBaseAgent(config)
 }
 
-// CreateModular creates a modular agent.
+// Create Modular 创建模块化代理.
 func (f *AgentFactoryFunc) CreateModular(config ModularAgentConfig) (*ModularAgent, error) {
 	return f.container.CreateModularAgent(config)
 }
 
 // ============================================================
-// Service Locator Pattern (Alternative to DI)
+// 服务定位器模式(取代DI)
 // ============================================================
 
-// ServiceLocator provides a global service registry.
+// 服务管理员提供全球服务登记处。
 type ServiceLocator struct {
 	services map[string]interface{}
 }
 
-// NewServiceLocator creates a new service locator.
+// 新服务定位器创建了新的服务定位器.
 func NewServiceLocator() *ServiceLocator {
 	return &ServiceLocator{
 		services: make(map[string]interface{}),
 	}
 }
 
-// Register registers a service.
+// 登记服务。
 func (sl *ServiceLocator) Register(name string, service interface{}) {
 	sl.services[name] = service
 }
 
-// Get retrieves a service by name.
+// 获取服务的名称 。
 func (sl *ServiceLocator) Get(name string) (interface{}, bool) {
 	service, ok := sl.services[name]
 	return service, ok
 }
 
-// MustGet retrieves a service or panics if not found.
+// 如果找不到, 必须获取服务或恐慌 。
 func (sl *ServiceLocator) MustGet(name string) interface{} {
 	service, ok := sl.services[name]
 	if !ok {
@@ -189,7 +189,7 @@ func (sl *ServiceLocator) MustGet(name string) interface{} {
 	return service
 }
 
-// GetProvider retrieves the LLM provider.
+// Get Provider 获取 LLM 提供者 。
 func (sl *ServiceLocator) GetProvider() (llm.Provider, bool) {
 	service, ok := sl.services["provider"]
 	if !ok {
@@ -199,7 +199,7 @@ func (sl *ServiceLocator) GetProvider() (llm.Provider, bool) {
 	return provider, ok
 }
 
-// GetMemory retrieves the memory manager.
+// 让Memory找回记忆管理器
 func (sl *ServiceLocator) GetMemory() (MemoryManager, bool) {
 	service, ok := sl.services["memory"]
 	if !ok {
@@ -209,7 +209,7 @@ func (sl *ServiceLocator) GetMemory() (MemoryManager, bool) {
 	return memory, ok
 }
 
-// GetToolManager retrieves the tool manager.
+// GetToolManager检索工具管理器.
 func (sl *ServiceLocator) GetToolManager() (ToolManager, bool) {
 	service, ok := sl.services["tool_manager"]
 	if !ok {
@@ -219,7 +219,7 @@ func (sl *ServiceLocator) GetToolManager() (ToolManager, bool) {
 	return tm, ok
 }
 
-// GetEventBus retrieves the event bus.
+// GetEventBus 检索活动总线 。
 func (sl *ServiceLocator) GetEventBus() (EventBus, bool) {
 	service, ok := sl.services["event_bus"]
 	if !ok {
@@ -229,7 +229,7 @@ func (sl *ServiceLocator) GetEventBus() (EventBus, bool) {
 	return bus, ok
 }
 
-// GetLogger retrieves the logger.
+// 让Logger拿回日志
 func (sl *ServiceLocator) GetLogger() (*zap.Logger, bool) {
 	service, ok := sl.services["logger"]
 	if !ok {
@@ -239,7 +239,7 @@ func (sl *ServiceLocator) GetLogger() (*zap.Logger, bool) {
 	return logger, ok
 }
 
-// Well-known service names
+// 众所周知的服务名称
 const (
 	ServiceProvider    = "provider"
 	ServiceMemory      = "memory"

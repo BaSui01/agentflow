@@ -1,4 +1,4 @@
-// Package tools provides rate limiting for tool execution in enterprise AI Agent frameworks.
+// 包工具为企业AI Agent框架中的工具执行提供了费率限制.
 package tools
 
 import (
@@ -11,7 +11,7 @@ import (
 	"go.uber.org/zap"
 )
 
-// RateLimitStrategy defines the rate limiting strategy.
+// rateLimit战略定义了限速策略.
 type RateLimitStrategy string
 
 const (
@@ -20,7 +20,7 @@ const (
 	RateLimitStrategyFixedWindow   RateLimitStrategy = "fixed_window"
 )
 
-// RateLimitAction defines the action to take when rate limit is exceeded.
+// PrateLimit Action 定义了超过利率限制时要采取的行动.
 type RateLimitAction string
 
 const (
@@ -29,7 +29,7 @@ const (
 	RateLimitActionDegrade RateLimitAction = "degrade" // Degrade service (e.g., use cached response)
 )
 
-// RateLimitScope defines the scope of rate limiting.
+// rateLimitScope定义了限制费率的范围.
 type RateLimitScope string
 
 const (
@@ -40,7 +40,7 @@ const (
 	RateLimitScopeSession RateLimitScope = "session"  // Per-session rate limit
 )
 
-// RateLimitRule defines a rate limit rule.
+// LeaderLimit规则定义了费率限制规则.
 type RateLimitRule struct {
 	ID          string            `json:"id"`
 	Name        string            `json:"name"`
@@ -59,7 +59,7 @@ type RateLimitRule struct {
 	UpdatedAt   time.Time         `json:"updated_at"`
 }
 
-// RateLimitContext provides context for rate limit checks.
+// LeaderLimitContext为费率限制检查提供了上下文.
 type RateLimitContext struct {
 	AgentID   string `json:"agent_id"`
 	UserID    string `json:"user_id"`
@@ -68,7 +68,7 @@ type RateLimitContext struct {
 	RequestAt time.Time `json:"request_at"`
 }
 
-// RateLimitResult contains the result of a rate limit check.
+// LeaderLimitResult包含一个速率限制检查的结果.
 type RateLimitResult struct {
 	Allowed       bool            `json:"allowed"`
 	Rule          *RateLimitRule  `json:"rule,omitempty"`
@@ -79,31 +79,31 @@ type RateLimitResult struct {
 	Reason        string          `json:"reason,omitempty"`
 }
 
-// RateLimitManager manages rate limiting.
+// rateLimitManager管理限制费率.
 type RateLimitManager interface {
-	// CheckRateLimit checks if a request is allowed.
+	// 请检查是否允许请求 。
 	CheckRateLimit(ctx context.Context, rlCtx *RateLimitContext) (*RateLimitResult, error)
 
-	// AddRule adds a rate limit rule.
+	// 添加规则添加了费率限制规则 。
 	AddRule(rule *RateLimitRule) error
 
-	// RemoveRule removes a rate limit rule.
+	// 删除规则删除利率限制规则。
 	RemoveRule(ruleID string) error
 
-	// GetRule retrieves a rate limit rule by ID.
+	// Get Rule 以 ID 检索费率限制规则 。
 	GetRule(ruleID string) (*RateLimitRule, bool)
 
-	// ListRules lists all rate limit rules.
+	// 列表规则列出所有费率限制规则 。
 	ListRules() []*RateLimitRule
 
-	// GetStats returns rate limit statistics.
+	// GetStats 返回率限制统计.
 	GetStats(scope RateLimitScope, key string) *RateLimitStats
 
-	// Reset resets rate limit counters for a specific key.
+	// 重置特定密钥的速率限制计数器 。
 	Reset(scope RateLimitScope, key string) error
 }
 
-// RateLimitStats contains rate limit statistics.
+// rateLimitStats包含速率限制统计.
 type RateLimitStats struct {
 	Scope          RateLimitScope `json:"scope"`
 	Key            string         `json:"key"`
@@ -115,7 +115,7 @@ type RateLimitStats struct {
 	WindowEnd      time.Time      `json:"window_end"`
 }
 
-// DefaultRateLimitManager is the default implementation of RateLimitManager.
+// 默认RateLimitManager是RateLimitManager的默认执行.
 type DefaultRateLimitManager struct {
 	rules          map[string]*RateLimitRule
 	limiters       map[string]Limiter // key -> limiter
@@ -126,7 +126,7 @@ type DefaultRateLimitManager struct {
 	mu             sync.RWMutex
 }
 
-// Limiter defines the interface for rate limiters.
+// 限制器定义了限速器的接口.
 type Limiter interface {
 	Allow() bool
 	Remaining() int
@@ -134,18 +134,18 @@ type Limiter interface {
 	Reset()
 }
 
-// QueueHandler handles queued requests.
+// QueHandler 处理已排队的请求 。
 type QueueHandler interface {
 	Enqueue(ctx context.Context, rlCtx *RateLimitContext) error
 	Dequeue(ctx context.Context) (*RateLimitContext, error)
 }
 
-// DegradeHandler handles degraded service.
+// 降解汉德勒处理退化的服务.
 type DegradeHandler interface {
 	GetDegradedResponse(ctx context.Context, rlCtx *RateLimitContext) (json.RawMessage, error)
 }
 
-// NewRateLimitManager creates a new rate limit manager.
+// NewRateLimitManager创建了新的费率限制管理器.
 func NewRateLimitManager(logger *zap.Logger) *DefaultRateLimitManager {
 	if logger == nil {
 		logger = zap.NewNop()
@@ -158,21 +158,21 @@ func NewRateLimitManager(logger *zap.Logger) *DefaultRateLimitManager {
 	}
 }
 
-// SetQueueHandler sets the queue handler.
+// 设置 QueeHandler 设置队列处理器 。
 func (rlm *DefaultRateLimitManager) SetQueueHandler(handler QueueHandler) {
 	rlm.mu.Lock()
 	defer rlm.mu.Unlock()
 	rlm.queueHandler = handler
 }
 
-// SetDegradeHandler sets the degrade handler.
+// 设置 DegradeHandler 设置可降解处理器 。
 func (rlm *DefaultRateLimitManager) SetDegradeHandler(handler DegradeHandler) {
 	rlm.mu.Lock()
 	defer rlm.mu.Unlock()
 	rlm.degradeHandler = handler
 }
 
-// CheckRateLimit checks if a request is allowed.
+// 请检查是否允许请求 。
 func (rlm *DefaultRateLimitManager) CheckRateLimit(ctx context.Context, rlCtx *RateLimitContext) (*RateLimitResult, error) {
 	rlm.mu.Lock()
 	defer rlm.mu.Unlock()
@@ -181,7 +181,7 @@ func (rlm *DefaultRateLimitManager) CheckRateLimit(ctx context.Context, rlCtx *R
 		Allowed: true,
 	}
 
-	// Find applicable rules sorted by priority
+	// 查找按优先权排序的适用规则
 	applicableRules := rlm.findApplicableRules(rlCtx)
 
 	for _, rule := range applicableRules {
@@ -200,7 +200,7 @@ func (rlm *DefaultRateLimitManager) CheckRateLimit(ctx context.Context, rlCtx *R
 			result.ResetAt = limiter.ResetAt()
 			result.Reason = fmt.Sprintf("rate limit exceeded for rule: %s", rule.Name)
 
-			// Update stats
+			// 更新数据
 			rlm.updateStats(key, false)
 
 			rlm.logger.Warn("rate limit exceeded",
@@ -215,14 +215,14 @@ func (rlm *DefaultRateLimitManager) CheckRateLimit(ctx context.Context, rlCtx *R
 		result.RemainingCalls = limiter.Remaining()
 		result.ResetAt = limiter.ResetAt()
 
-		// Update stats
+		// 更新数据
 		rlm.updateStats(key, true)
 	}
 
 	return result, nil
 }
 
-// findApplicableRules finds rules applicable to the context.
+// find Applicable Rules 查找适用于上下文的规则。
 func (rlm *DefaultRateLimitManager) findApplicableRules(rlCtx *RateLimitContext) []*RateLimitRule {
 	var rules []*RateLimitRule
 
@@ -232,7 +232,7 @@ func (rlm *DefaultRateLimitManager) findApplicableRules(rlCtx *RateLimitContext)
 		}
 	}
 
-	// Sort by priority (higher first)
+	// 按优先排序( 先高一点)
 	for i := 0; i < len(rules)-1; i++ {
 		for j := i + 1; j < len(rules); j++ {
 			if rules[j].Priority > rules[i].Priority {
@@ -244,14 +244,14 @@ func (rlm *DefaultRateLimitManager) findApplicableRules(rlCtx *RateLimitContext)
 	return rules
 }
 
-// ruleApplies checks if a rule applies to the context.
+// 使用规则检查规则是否适用于上下文。
 func (rlm *DefaultRateLimitManager) ruleApplies(rule *RateLimitRule, rlCtx *RateLimitContext) bool {
-	// Check tool pattern
+	// 检查工具模式
 	if rule.ToolPattern != "" && !matchPattern(rule.ToolPattern, rlCtx.ToolName) {
 		return false
 	}
 
-	// Check scope
+	// 检查范围
 	switch rule.Scope {
 	case RateLimitScopeGlobal:
 		return true
@@ -268,7 +268,7 @@ func (rlm *DefaultRateLimitManager) ruleApplies(rule *RateLimitRule, rlCtx *Rate
 	return true
 }
 
-// buildLimiterKey builds a unique key for the limiter.
+// 构建 LimiterKey 为限制器构建一个独特的密钥 。
 func (rlm *DefaultRateLimitManager) buildLimiterKey(rule *RateLimitRule, rlCtx *RateLimitContext) string {
 	switch rule.Scope {
 	case RateLimitScopeGlobal:
@@ -285,7 +285,7 @@ func (rlm *DefaultRateLimitManager) buildLimiterKey(rule *RateLimitRule, rlCtx *
 	return fmt.Sprintf("unknown:%s", rule.ID)
 }
 
-// getOrCreateLimiter gets or creates a limiter for the key.
+// 获得 OrCreateLimiter 键得到或创建限制键。
 func (rlm *DefaultRateLimitManager) getOrCreateLimiter(key string, rule *RateLimitRule) Limiter {
 	if limiter, ok := rlm.limiters[key]; ok {
 		return limiter
@@ -305,7 +305,7 @@ func (rlm *DefaultRateLimitManager) getOrCreateLimiter(key string, rule *RateLim
 	return limiter
 }
 
-// updateStats updates rate limit statistics.
+// 更新 Stats 更新率限制统计.
 func (rlm *DefaultRateLimitManager) updateStats(key string, allowed bool) {
 	stats, ok := rlm.stats[key]
 	if !ok {
@@ -324,7 +324,7 @@ func (rlm *DefaultRateLimitManager) updateStats(key string, allowed bool) {
 	}
 }
 
-// AddRule adds a rate limit rule.
+// 添加规则添加了费率限制规则 。
 func (rlm *DefaultRateLimitManager) AddRule(rule *RateLimitRule) error {
 	if rule.ID == "" {
 		return fmt.Errorf("rule ID is required")
@@ -346,7 +346,7 @@ func (rlm *DefaultRateLimitManager) AddRule(rule *RateLimitRule) error {
 	return nil
 }
 
-// RemoveRule removes a rate limit rule.
+// 删除规则删除利率限制规则。
 func (rlm *DefaultRateLimitManager) RemoveRule(ruleID string) error {
 	rlm.mu.Lock()
 	defer rlm.mu.Unlock()
@@ -360,7 +360,7 @@ func (rlm *DefaultRateLimitManager) RemoveRule(ruleID string) error {
 	return nil
 }
 
-// GetRule retrieves a rate limit rule by ID.
+// Get Rule 以 ID 检索费率限制规则 。
 func (rlm *DefaultRateLimitManager) GetRule(ruleID string) (*RateLimitRule, bool) {
 	rlm.mu.RLock()
 	defer rlm.mu.RUnlock()
@@ -368,7 +368,7 @@ func (rlm *DefaultRateLimitManager) GetRule(ruleID string) (*RateLimitRule, bool
 	return rule, ok
 }
 
-// ListRules lists all rate limit rules.
+// 列表规则列出所有费率限制规则 。
 func (rlm *DefaultRateLimitManager) ListRules() []*RateLimitRule {
 	rlm.mu.RLock()
 	defer rlm.mu.RUnlock()
@@ -380,7 +380,7 @@ func (rlm *DefaultRateLimitManager) ListRules() []*RateLimitRule {
 	return rules
 }
 
-// GetStats returns rate limit statistics.
+// GetStats 返回率限制统计.
 func (rlm *DefaultRateLimitManager) GetStats(scope RateLimitScope, key string) *RateLimitStats {
 	rlm.mu.RLock()
 	defer rlm.mu.RUnlock()
@@ -389,7 +389,7 @@ func (rlm *DefaultRateLimitManager) GetStats(scope RateLimitScope, key string) *
 	return rlm.stats[fullKey]
 }
 
-// Reset resets rate limit counters for a specific key.
+// 重置特定密钥的速率限制计数器 。
 func (rlm *DefaultRateLimitManager) Reset(scope RateLimitScope, key string) error {
 	rlm.mu.Lock()
 	defer rlm.mu.Unlock()
@@ -408,9 +408,9 @@ func (rlm *DefaultRateLimitManager) Reset(scope RateLimitScope, key string) erro
 	return nil
 }
 
-// ====== Sliding Window Limiter ======
+// * 滑动窗口限制器 * *
 
-// SlidingWindowLimiter implements sliding window rate limiting.
+// 滑动WindowLimiter执行滑动窗口速率限制.
 type SlidingWindowLimiter struct {
 	maxRequests int
 	window      time.Duration
@@ -418,7 +418,7 @@ type SlidingWindowLimiter struct {
 	mu          sync.Mutex
 }
 
-// NewSlidingWindowLimiter creates a new sliding window limiter.
+// NewSliding WindowLimiter创建了新的滑动窗口限制器.
 func NewSlidingWindowLimiter(maxRequests int, window time.Duration) *SlidingWindowLimiter {
 	return &SlidingWindowLimiter{
 		maxRequests: maxRequests,
@@ -427,7 +427,7 @@ func NewSlidingWindowLimiter(maxRequests int, window time.Duration) *SlidingWind
 	}
 }
 
-// Allow checks if a request is allowed.
+// 允许检查请求是否被允许 。
 func (l *SlidingWindowLimiter) Allow() bool {
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -435,7 +435,7 @@ func (l *SlidingWindowLimiter) Allow() bool {
 	now := time.Now()
 	cutoff := now.Add(-l.window)
 
-	// Remove expired requests
+	// 删除已过期的请求
 	validRequests := make([]time.Time, 0)
 	for _, t := range l.requests {
 		if t.After(cutoff) {
@@ -444,17 +444,17 @@ func (l *SlidingWindowLimiter) Allow() bool {
 	}
 	l.requests = validRequests
 
-	// Check if limit exceeded
+	// 检查是否超过了限制
 	if len(l.requests) >= l.maxRequests {
 		return false
 	}
 
-	// Record this request
+	// 记录此请求
 	l.requests = append(l.requests, now)
 	return true
 }
 
-// Remaining returns the number of remaining requests.
+// 剩余请求数返回 。
 func (l *SlidingWindowLimiter) Remaining() int {
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -476,7 +476,7 @@ func (l *SlidingWindowLimiter) Remaining() int {
 	return remaining
 }
 
-// ResetAt returns when the rate limit will reset.
+// 重置时返回 。
 func (l *SlidingWindowLimiter) ResetAt() time.Time {
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -485,21 +485,21 @@ func (l *SlidingWindowLimiter) ResetAt() time.Time {
 		return time.Now()
 	}
 
-	// Find the oldest request in the window
+	// 在窗口中查找最老的请求
 	oldest := l.requests[0]
 	return oldest.Add(l.window)
 }
 
-// Reset resets the limiter.
+// 重置限制器 。
 func (l *SlidingWindowLimiter) Reset() {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	l.requests = make([]time.Time, 0)
 }
 
-// ====== Token Bucket Limiter ======
+// 键盘限制器
 
-// TokenBucketLimiter implements token bucket rate limiting.
+// TokenBucketLimiter 执行符号桶率限制 。
 type TokenBucketLimiter struct {
 	bucketSize  int
 	refillRate  float64 // tokens per second
@@ -508,7 +508,7 @@ type TokenBucketLimiter struct {
 	mu          sync.Mutex
 }
 
-// NewTokenBucketLimiter creates a new token bucket limiter.
+// NewTokenBucketLimiter 创建了新的符号桶限制器.
 func NewTokenBucketLimiter(bucketSize int, refillRate float64) *TokenBucketLimiter {
 	return &TokenBucketLimiter{
 		bucketSize: bucketSize,
@@ -518,7 +518,7 @@ func NewTokenBucketLimiter(bucketSize int, refillRate float64) *TokenBucketLimit
 	}
 }
 
-// Allow checks if a request is allowed.
+// 允许检查请求是否被允许 。
 func (l *TokenBucketLimiter) Allow() bool {
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -533,7 +533,7 @@ func (l *TokenBucketLimiter) Allow() bool {
 	return true
 }
 
-// refill adds tokens based on elapsed time.
+// 重新填充根据已过期时间添加符号 。
 func (l *TokenBucketLimiter) refill() {
 	now := time.Now()
 	elapsed := now.Sub(l.lastRefill).Seconds()
@@ -546,7 +546,7 @@ func (l *TokenBucketLimiter) refill() {
 	l.lastRefill = now
 }
 
-// Remaining returns the number of remaining tokens.
+// 剩余符号返回所剩符号数 。
 func (l *TokenBucketLimiter) Remaining() int {
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -555,7 +555,7 @@ func (l *TokenBucketLimiter) Remaining() int {
 	return int(l.tokens)
 }
 
-// ResetAt returns when the bucket will be full.
+// 重置 Att 返回时桶将满 。
 func (l *TokenBucketLimiter) ResetAt() time.Time {
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -571,7 +571,7 @@ func (l *TokenBucketLimiter) ResetAt() time.Time {
 	return time.Now().Add(time.Duration(secondsNeeded * float64(time.Second)))
 }
 
-// Reset resets the limiter.
+// 重置限制器 。
 func (l *TokenBucketLimiter) Reset() {
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -579,9 +579,9 @@ func (l *TokenBucketLimiter) Reset() {
 	l.lastRefill = time.Now()
 }
 
-// ====== Fixed Window Limiter ======
+// 固定窗口限制器
 
-// FixedWindowLimiter implements fixed window rate limiting.
+// FixtWindowLimiter执行固定窗口率限制.
 type FixedWindowLimiter struct {
 	maxRequests int
 	window      time.Duration
@@ -590,7 +590,7 @@ type FixedWindowLimiter struct {
 	mu          sync.Mutex
 }
 
-// NewFixedWindowLimiter creates a new fixed window limiter.
+// 新Fixed WindowLimiter创建了新的固定窗口限制器.
 func NewFixedWindowLimiter(maxRequests int, window time.Duration) *FixedWindowLimiter {
 	return &FixedWindowLimiter{
 		maxRequests: maxRequests,
@@ -599,20 +599,20 @@ func NewFixedWindowLimiter(maxRequests int, window time.Duration) *FixedWindowLi
 	}
 }
 
-// Allow checks if a request is allowed.
+// 允许检查请求是否被允许 。
 func (l *FixedWindowLimiter) Allow() bool {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
 	now := time.Now()
 
-	// Check if window has expired
+	// 检查窗口是否过期
 	if now.Sub(l.windowStart) >= l.window {
 		l.windowStart = now
 		l.count = 0
 	}
 
-	// Check if limit exceeded
+	// 检查是否超过了限制
 	if l.count >= l.maxRequests {
 		return false
 	}
@@ -621,14 +621,14 @@ func (l *FixedWindowLimiter) Allow() bool {
 	return true
 }
 
-// Remaining returns the number of remaining requests.
+// 剩余请求数返回 。
 func (l *FixedWindowLimiter) Remaining() int {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
 	now := time.Now()
 
-	// Check if window has expired
+	// 检查窗口是否过期
 	if now.Sub(l.windowStart) >= l.window {
 		return l.maxRequests
 	}
@@ -640,14 +640,14 @@ func (l *FixedWindowLimiter) Remaining() int {
 	return remaining
 }
 
-// ResetAt returns when the window will reset.
+// 重置At 返回窗口重置时 。
 func (l *FixedWindowLimiter) ResetAt() time.Time {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	return l.windowStart.Add(l.window)
 }
 
-// Reset resets the limiter.
+// 重置限制器 。
 func (l *FixedWindowLimiter) Reset() {
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -655,13 +655,13 @@ func (l *FixedWindowLimiter) Reset() {
 	l.windowStart = time.Now()
 }
 
-// ====== Rate Limit Middleware ======
+// QQ 速率限制中件QQ
 
-// RateLimitMiddleware creates a middleware that enforces rate limits.
+// rateLimitMiddleware创建了一个执行速率限制的中间软件.
 func RateLimitMiddleware(rlm RateLimitManager, auditLogger AuditLogger) func(ToolFunc) ToolFunc {
 	return func(next ToolFunc) ToolFunc {
 		return func(ctx context.Context, args json.RawMessage) (json.RawMessage, error) {
-			// Extract context information
+			// 摘录上下文信息
 			permCtx, _ := GetPermissionContext(ctx)
 
 			rlCtx := &RateLimitContext{
@@ -675,14 +675,14 @@ func RateLimitMiddleware(rlm RateLimitManager, auditLogger AuditLogger) func(Too
 				rlCtx.ToolName = permCtx.ToolName
 			}
 
-			// Check rate limit
+			// 检查率限制
 			result, err := rlm.CheckRateLimit(ctx, rlCtx)
 			if err != nil {
 				return nil, fmt.Errorf("rate limit check failed: %w", err)
 			}
 
 			if !result.Allowed {
-				// Log rate limit hit
+				// 日志速率限制
 				if auditLogger != nil {
 					LogRateLimitHit(auditLogger, rlCtx.AgentID, rlCtx.UserID, rlCtx.ToolName, string(result.Rule.Scope))
 				}
@@ -691,10 +691,10 @@ func RateLimitMiddleware(rlm RateLimitManager, auditLogger AuditLogger) func(Too
 				case RateLimitActionReject:
 					return nil, fmt.Errorf("rate limit exceeded: %s (retry after %s)", result.Reason, result.RetryAfter)
 				case RateLimitActionQueue:
-					// Queue handling would be implemented here
+					// 队列处理将在此执行
 					return nil, fmt.Errorf("request queued due to rate limit: %s", result.Reason)
 				case RateLimitActionDegrade:
-					// Degrade handling would be implemented here
+					// 这里将实行有辱人格的处理
 					return nil, fmt.Errorf("service degraded due to rate limit: %s", result.Reason)
 				}
 			}
@@ -704,9 +704,9 @@ func RateLimitMiddleware(rlm RateLimitManager, auditLogger AuditLogger) func(Too
 	}
 }
 
-// ====== Convenience Functions ======
+// • 方便功能
 
-// CreateGlobalRateLimit creates a global rate limit rule.
+// 创建 GlobalRateLimit 创建全局速率限制规则 。
 func CreateGlobalRateLimit(id, name string, maxRequests int, window time.Duration) *RateLimitRule {
 	return &RateLimitRule{
 		ID:          id,
@@ -720,7 +720,7 @@ func CreateGlobalRateLimit(id, name string, maxRequests int, window time.Duratio
 	}
 }
 
-// CreateToolRateLimit creates a per-tool rate limit rule.
+// CreateTooRateLimit 创建了每工具速率限制规则.
 func CreateToolRateLimit(id, name, toolPattern string, maxRequests int, window time.Duration) *RateLimitRule {
 	return &RateLimitRule{
 		ID:          id,
@@ -735,7 +735,7 @@ func CreateToolRateLimit(id, name, toolPattern string, maxRequests int, window t
 	}
 }
 
-// CreateUserRateLimit creates a per-user rate limit rule.
+// CreateUserRateLimit 创建了每个用户率限制规则.
 func CreateUserRateLimit(id, name string, maxRequests int, window time.Duration) *RateLimitRule {
 	return &RateLimitRule{
 		ID:          id,
@@ -749,7 +749,7 @@ func CreateUserRateLimit(id, name string, maxRequests int, window time.Duration)
 	}
 }
 
-// CreateAgentRateLimit creates a per-agent rate limit rule.
+// 创建 AgentRateLimit 创建每代理费率限制规则。
 func CreateAgentRateLimit(id, name string, maxRequests int, window time.Duration) *RateLimitRule {
 	return &RateLimitRule{
 		ID:          id,
@@ -763,7 +763,7 @@ func CreateAgentRateLimit(id, name string, maxRequests int, window time.Duration
 	}
 }
 
-// CreateTokenBucketRateLimit creates a token bucket rate limit rule.
+// CreateTokenBucketRateLimit 创建了符号桶速率限制规则 。
 func CreateTokenBucketRateLimit(id, name string, bucketSize int, refillRate float64) *RateLimitRule {
 	return &RateLimitRule{
 		ID:         id,

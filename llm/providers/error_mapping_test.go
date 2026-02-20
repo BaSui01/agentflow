@@ -8,8 +8,8 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-// TestErrorMapping_HTTPStatusCodes tests that all HTTP status codes are correctly mapped
-// to llm.ErrorCode values according to Requirements 9.1-9.8
+// 测试错误映射  HTTP StatusCodes 测试所有 HTTP 状态代码都正确映射
+// {\fn黑体\fs22\bord1\shad0\3aHBE\4aH00\fscx67\fscy66\2cHFFFFFF\3cH808080}请说 根据要求提出的代码值 9.1-9.8
 func TestErrorMapping_HTTPStatusCodes(t *testing.T) {
 	tests := []struct {
 		name           string
@@ -168,7 +168,7 @@ func TestErrorMapping_HTTPStatusCodes(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Test with a mock mapError function that follows the spec
+			// 使用模拟映射函数进行测试
 			err := mockMapError(tt.status, tt.msg, tt.provider)
 
 			assert.NotNil(t, err, "Error should not be nil")
@@ -181,8 +181,8 @@ func TestErrorMapping_HTTPStatusCodes(t *testing.T) {
 	}
 }
 
-// TestErrorMapping_QuotaCreditDetection tests quota/credit keyword detection
-// in 400 error messages (Requirement 9.7)
+// 检测配额/信用关键字检测
+// 在400个错误消息中(要求9.7)
 func TestErrorMapping_QuotaCreditDetection(t *testing.T) {
 	tests := []struct {
 		name         string
@@ -234,8 +234,8 @@ func TestErrorMapping_QuotaCreditDetection(t *testing.T) {
 	}
 }
 
-// TestErrorMapping_ProviderNameIncluded tests that provider name is included
-// in all error responses (Requirement 9.8)
+// 测试错误映射  提供方Name 包含提供者名称的测试
+// 在所有错误反应中(要求9.8)
 func TestErrorMapping_ProviderNameIncluded(t *testing.T) {
 	providers := []string{"openai", "grok", "qwen", "deepseek", "glm", "minimax"}
 	statuses := []int{401, 403, 429, 400, 503, 502, 504, 529, 500}
@@ -250,8 +250,8 @@ func TestErrorMapping_ProviderNameIncluded(t *testing.T) {
 	}
 }
 
-// mockMapError is a reference implementation that matches the spec requirements
-// This is used for testing to ensure all providers follow the same pattern
+// 模拟地图是符合光谱要求的参考执行
+// 用于测试,以确保所有供应商遵循相同的模式
 func mockMapError(status int, msg string, provider string) *llm.Error {
 	switch status {
 	case http.StatusUnauthorized:
@@ -261,7 +261,7 @@ func mockMapError(status int, msg string, provider string) *llm.Error {
 	case http.StatusTooManyRequests:
 		return &llm.Error{Code: llm.ErrRateLimited, Message: msg, HTTPStatus: status, Retryable: true, Provider: provider}
 	case http.StatusBadRequest:
-		// Check for quota/credit keywords (case-insensitive)
+		// 检查配额/信用关键字( 对大小写不敏感)
 		msgLower := ""
 		for _, c := range msg {
 			if c >= 'A' && c <= 'Z' {
@@ -283,7 +283,7 @@ func mockMapError(status int, msg string, provider string) *llm.Error {
 	}
 }
 
-// containsSubstring checks if s contains substr (simple implementation for testing)
+// 包含 Substring 检查, 如果 s 包含 substr (简单执行测试)
 func containsSubstring(s, substr string) bool {
 	if len(substr) > len(s) {
 		return false

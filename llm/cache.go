@@ -14,10 +14,10 @@ import (
 	"go.uber.org/zap"
 )
 
-// ErrCacheMiss indicates cache miss.
+// ErrCacheMiss 显示缓存丢失 。
 var ErrCacheMiss = errors.New("cache miss")
 
-// CacheEntry represents a cached response.
+// 快取 Entry 代表缓存响应 。
 type CacheEntry struct {
 	Response    *ChatResponse `json:"response"`
 	TokensSaved int           `json:"tokens_saved"`
@@ -26,7 +26,7 @@ type CacheEntry struct {
 	HitCount    int           `json:"hit_count"`
 }
 
-// CacheConfig configures the cache.
+// 快取Config 配置缓存 。
 type CacheConfig struct {
 	LocalMaxSize int           `json:"local_max_size"`
 	LocalTTL     time.Duration `json:"local_ttl"`
@@ -35,7 +35,7 @@ type CacheConfig struct {
 	EnableRedis  bool          `json:"enable_redis"`
 }
 
-// DefaultCacheConfig returns sensible defaults.
+// 默认CacheConfig 返回合理的默认值 。
 func DefaultCacheConfig() *CacheConfig {
 	return &CacheConfig{
 		LocalMaxSize: 1000,
@@ -46,7 +46,7 @@ func DefaultCacheConfig() *CacheConfig {
 	}
 }
 
-// MultiLevelCache provides local + Redis caching.
+// 多级缓存提供本地 + Redis 缓存.
 type MultiLevelCache struct {
 	local  *LRUCache
 	redis  *redis.Client
@@ -54,7 +54,7 @@ type MultiLevelCache struct {
 	logger *zap.Logger
 }
 
-// NewMultiLevelCache creates a multi-level cache.
+// 新建多级缓存创建多级缓存 。
 func NewMultiLevelCache(rdb *redis.Client, config *CacheConfig, logger *zap.Logger) *MultiLevelCache {
 	if config == nil {
 		config = DefaultCacheConfig()
@@ -73,7 +73,7 @@ func NewMultiLevelCache(rdb *redis.Client, config *CacheConfig, logger *zap.Logg
 	}
 }
 
-// Get retrieves from cache.
+// 从缓存取来
 func (c *MultiLevelCache) Get(ctx context.Context, key string) (*CacheEntry, error) {
 	if c.config.EnableLocal && c.local != nil {
 		if entry, ok := c.local.Get(key); ok {
@@ -97,7 +97,7 @@ func (c *MultiLevelCache) Get(ctx context.Context, key string) (*CacheEntry, err
 	return nil, ErrCacheMiss
 }
 
-// Set stores in cache.
+// 设置缓存存储 。
 func (c *MultiLevelCache) Set(ctx context.Context, key string, entry *CacheEntry) error {
 	entry.CreatedAt = time.Now()
 	entry.ExpiresAt = time.Now().Add(c.config.RedisTTL)
@@ -117,7 +117,7 @@ func (c *MultiLevelCache) Set(ctx context.Context, key string, entry *CacheEntry
 	return nil
 }
 
-// GenerateKey generates cache key from request.
+// 生成 Key 从请求生成缓存密钥 。
 func (c *MultiLevelCache) GenerateKey(req *ChatRequest) string {
 	data, _ := json.Marshal(struct {
 		Model    string `json:"model"`
@@ -130,7 +130,7 @@ func (c *MultiLevelCache) GenerateKey(req *ChatRequest) string {
 	return hex.EncodeToString(hash[:16])
 }
 
-// IsCacheable checks if request is cacheable.
+// 如果请求是可缓存的, 则可以缓存 。
 func (c *MultiLevelCache) IsCacheable(req *ChatRequest) bool {
 	return len(req.Tools) == 0
 }
@@ -139,7 +139,7 @@ func (c *MultiLevelCache) redisKey(key string) string {
 	return "llm:cache:" + key
 }
 
-// LRUCache is a simple LRU cache.
+// LRUCache是一个简单的LRU缓存.
 type LRUCache struct {
 	mu       sync.RWMutex
 	capacity int
@@ -157,7 +157,7 @@ type lruNode struct {
 	next      *lruNode
 }
 
-// NewLRUCache creates a new LRU cache.
+// NewLRUCAche创建了新的LRU缓存.
 func NewLRUCache(capacity int, ttl time.Duration) *LRUCache {
 	return &LRUCache{
 		capacity: capacity,
@@ -166,7 +166,7 @@ func NewLRUCache(capacity int, ttl time.Duration) *LRUCache {
 	}
 }
 
-// Get retrieves from cache.
+// 从缓存取来
 func (c *LRUCache) Get(key string) (*CacheEntry, bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -187,7 +187,7 @@ func (c *LRUCache) Get(key string) (*CacheEntry, bool) {
 	return node.entry, true
 }
 
-// Set stores in cache.
+// 设置缓存存储 。
 func (c *LRUCache) Set(key string, entry *CacheEntry) {
 	c.mu.Lock()
 	defer c.mu.Unlock()

@@ -1,5 +1,5 @@
-// Package agent provides the core agent framework for AgentFlow.
-// This file implements MemoryCoordinator for coordinating memory operations.
+// 包代理为AgentFlow提供了核心代理框架.
+// 此文件执行内存协调员来协调内存操作.
 package agent
 
 import (
@@ -10,8 +10,8 @@ import (
 	"go.uber.org/zap"
 )
 
-// MemoryCoordinator coordinates memory operations with caching support.
-// It encapsulates memory management logic that was previously in BaseAgent.
+// 内存协调员在缓存支持下协调内存操作.
+// 它囊括了先前在BaseAgent中的内存管理逻辑.
 type MemoryCoordinator struct {
 	memory         MemoryManager
 	recentMemory   []MemoryRecord
@@ -20,7 +20,7 @@ type MemoryCoordinator struct {
 	logger         *zap.Logger
 }
 
-// NewMemoryCoordinator creates a new memory coordinator.
+// 新记忆协调员创建了新的记忆协调员.
 func NewMemoryCoordinator(agentID string, memory MemoryManager, logger *zap.Logger) *MemoryCoordinator {
 	return &MemoryCoordinator{
 		memory:       memory,
@@ -30,7 +30,7 @@ func NewMemoryCoordinator(agentID string, memory MemoryManager, logger *zap.Logg
 	}
 }
 
-// LoadRecent loads recent memories into the cache.
+// 最近将最近的记忆加载到缓存中 。
 func (mc *MemoryCoordinator) LoadRecent(ctx context.Context, kind MemoryKind, limit int) error {
 	if mc.memory == nil {
 		return nil
@@ -53,7 +53,7 @@ func (mc *MemoryCoordinator) LoadRecent(ctx context.Context, kind MemoryKind, li
 	return nil
 }
 
-// Save saves a memory record.
+// 保存内存记录 。
 func (mc *MemoryCoordinator) Save(ctx context.Context, content string, kind MemoryKind, metadata map[string]any) error {
 	if mc.memory == nil {
 		return nil
@@ -79,7 +79,7 @@ func (mc *MemoryCoordinator) Save(ctx context.Context, content string, kind Memo
 	return nil
 }
 
-// Search searches for memories matching the query.
+// 搜索匹配查询的记忆 。
 func (mc *MemoryCoordinator) Search(ctx context.Context, query string, topK int) ([]MemoryRecord, error) {
 	if mc.memory == nil {
 		return nil, nil
@@ -87,41 +87,41 @@ func (mc *MemoryCoordinator) Search(ctx context.Context, query string, topK int)
 	return mc.memory.Search(ctx, mc.agentID, query, topK)
 }
 
-// GetRecentMemory returns the cached recent memories.
+// GetRecentMemory 返回缓存的最近记忆 。
 func (mc *MemoryCoordinator) GetRecentMemory() []MemoryRecord {
 	mc.recentMemoryMu.RLock()
 	defer mc.recentMemoryMu.RUnlock()
 
-	// Return a copy to prevent external modification
+	// 返回副本以防止外部修改
 	result := make([]MemoryRecord, len(mc.recentMemory))
 	copy(result, mc.recentMemory)
 	return result
 }
 
-// ClearRecentMemory clears the cached recent memories.
+// ClearRecent Memory 清除了被缓存的最近记忆.
 func (mc *MemoryCoordinator) ClearRecentMemory() {
 	mc.recentMemoryMu.Lock()
 	defer mc.recentMemoryMu.Unlock()
 	mc.recentMemory = make([]MemoryRecord, 0)
 }
 
-// HasMemory checks if a memory manager is configured.
+// 是否配置了内存管理器 。
 func (mc *MemoryCoordinator) HasMemory() bool {
 	return mc.memory != nil
 }
 
-// GetMemoryManager returns the underlying memory manager.
+// Get MemoryManager 返回基本内存管理器.
 func (mc *MemoryCoordinator) GetMemoryManager() MemoryManager {
 	return mc.memory
 }
 
-// SaveConversation saves a conversation turn (input and output).
+// 保存 Conversation 保存一个对话转折(输入和输出).
 func (mc *MemoryCoordinator) SaveConversation(ctx context.Context, input, output string) error {
 	if mc.memory == nil {
 		return nil
 	}
 
-	// Save input
+	// 保存输入
 	if err := mc.Save(ctx, input, MemoryShortTerm, map[string]any{
 		"role": "user",
 		"type": "conversation",
@@ -129,7 +129,7 @@ func (mc *MemoryCoordinator) SaveConversation(ctx context.Context, input, output
 		return err
 	}
 
-	// Save output
+	// 保存输出
 	if err := mc.Save(ctx, output, MemoryShortTerm, map[string]any{
 		"role": "assistant",
 		"type": "conversation",
@@ -140,7 +140,7 @@ func (mc *MemoryCoordinator) SaveConversation(ctx context.Context, input, output
 	return nil
 }
 
-// RecallRelevant recalls memories relevant to the query.
+// RecallRelvant 回顾与查询相关的记忆.
 func (mc *MemoryCoordinator) RecallRelevant(ctx context.Context, query string, topK int) ([]MemoryRecord, error) {
 	if mc.memory == nil {
 		return nil, nil

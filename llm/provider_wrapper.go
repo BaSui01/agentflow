@@ -5,14 +5,14 @@ import (
 	"fmt"
 )
 
-// ProviderWrapper wraps a Provider with dynamic API Key and BaseURL support
+// ProverWrapper 用动态 API 密钥和 BaseURL 支持包装 Prover
 type ProviderWrapper struct {
 	baseProvider Provider
 	apiKey       string
 	baseURL      string
 }
 
-// NewProviderWrapper creates a new provider wrapper
+// NewProviderWrapper 创建了新的提供者包装器
 func NewProviderWrapper(baseProvider Provider, apiKey, baseURL string) *ProviderWrapper {
 	return &ProviderWrapper{
 		baseProvider: baseProvider,
@@ -21,71 +21,71 @@ func NewProviderWrapper(baseProvider Provider, apiKey, baseURL string) *Provider
 	}
 }
 
-// Completion implements Provider interface
+// 提供方接口
 func (w *ProviderWrapper) Completion(ctx context.Context, req *ChatRequest) (*ChatResponse, error) {
-	// Inject API key and BaseURL into request context if needed
-	// This is a simplified implementation - actual implementation depends on provider
+	// 必要时将 API 密钥和 BaseURL 输入请求上下文
+	// 这是简化执行----实际执行取决于提供者
 	return w.baseProvider.Completion(ctx, req)
 }
 
-// Stream implements Provider interface
+// Stream 设备提供接口
 func (w *ProviderWrapper) Stream(ctx context.Context, req *ChatRequest) (<-chan StreamChunk, error) {
 	return w.baseProvider.Stream(ctx, req)
 }
 
-// HealthCheck implements Provider interface
+// 健康检查工具
 func (w *ProviderWrapper) HealthCheck(ctx context.Context) (*HealthStatus, error) {
 	return w.baseProvider.HealthCheck(ctx)
 }
 
-// Name implements Provider interface
+// 名称工具 提供者接口
 func (w *ProviderWrapper) Name() string {
 	return w.baseProvider.Name()
 }
 
-// SupportsNativeFunctionCalling implements Provider interface
+// 支持 NativeFunctionCalling 工具 提供者接口
 func (w *ProviderWrapper) SupportsNativeFunctionCalling() bool {
 	return w.baseProvider.SupportsNativeFunctionCalling()
 }
 
-// ListModels implements Provider interface.
+// ListModels 执行提供者接口 。
 func (w *ProviderWrapper) ListModels(ctx context.Context) ([]Model, error) {
 	return w.baseProvider.ListModels(ctx)
 }
 
-// GetAPIKey returns the API key
+// GetAPIKey 返回 API 密钥
 func (w *ProviderWrapper) GetAPIKey() string {
 	return w.apiKey
 }
 
-// GetBaseURL returns the base URL
+// GetBaseURL 返回基址
 func (w *ProviderWrapper) GetBaseURL() string {
 	return w.baseURL
 }
 
-// ProviderFactory creates provider instances with API key and BaseURL
+// API 键和 BaseURL 创建提供者实例
 type ProviderFactory interface {
 	CreateProvider(providerCode string, apiKey string, baseURL string) (Provider, error)
 }
 
-// DefaultProviderFactory is the default implementation
+// 默认执行
 type DefaultProviderFactory struct {
 	constructors map[string]func(apiKey, baseURL string) (Provider, error)
 }
 
-// NewDefaultProviderFactory creates a new default provider factory
+// 新建默认提供者工厂
 func NewDefaultProviderFactory() *DefaultProviderFactory {
 	return &DefaultProviderFactory{
 		constructors: make(map[string]func(apiKey, baseURL string) (Provider, error)),
 	}
 }
 
-// RegisterProvider registers a provider constructor
+// 提供方 注册 提供方 构造器
 func (f *DefaultProviderFactory) RegisterProvider(code string, constructor func(apiKey, baseURL string) (Provider, error)) {
 	f.constructors[code] = constructor
 }
 
-// CreateProvider creates a provider instance
+// 创建提供者实例
 func (f *DefaultProviderFactory) CreateProvider(providerCode string, apiKey string, baseURL string) (Provider, error) {
 	constructor, exists := f.constructors[providerCode]
 	if !exists {

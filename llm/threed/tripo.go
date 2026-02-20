@@ -11,13 +11,13 @@ import (
 	"time"
 )
 
-// TripoProvider implements 3D generation using Tripo3D API.
+// Tripo Provider使用 Tripo3D API执行3D生成.
 type TripoProvider struct {
 	cfg    TripoConfig
 	client *http.Client
 }
 
-// NewTripoProvider creates a new Tripo3D provider.
+// NewTripoProvider创建了新的Tripo3D供应商.
 func NewTripoProvider(cfg TripoConfig) *TripoProvider {
 	if cfg.BaseURL == "" {
 		cfg.BaseURL = "https://api.tripo3d.ai/v2"
@@ -60,7 +60,7 @@ type tripoResponse struct {
 	} `json:"data"`
 }
 
-// Generate creates 3D models using Tripo3D API.
+// 生成使用Tripo3D API创建了3D模型.
 func (p *TripoProvider) Generate(ctx context.Context, req *GenerateRequest) (*GenerateResponse, error) {
 	var taskID string
 	var err error

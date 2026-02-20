@@ -10,16 +10,16 @@ import (
 	"go.uber.org/zap"
 )
 
-// WebSearchProvider defines the interface for web search backends.
-// Implementations can wrap Firecrawl, SerpAPI, Tavily, Jina, Google Custom Search, etc.
+// WebSearch Provider定义了网络搜索后端的界面.
+// 执行可以将Firecrawl,SerpAPI,Tavily,Jina,Google自定义搜索等包装.
 type WebSearchProvider interface {
-	// Search performs a web search and returns results.
+	// 搜索进行网络搜索并返回结果 。
 	Search(ctx context.Context, query string, opts WebSearchOptions) ([]WebSearchResult, error)
-	// Name returns the provider name.
+	// 名称返回提供者名称 。
 	Name() string
 }
 
-// WebSearchOptions configures a web search request.
+// WebSearch 选项配置网络搜索请求。
 type WebSearchOptions struct {
 	MaxResults  int      `json:"max_results"`            // Maximum number of results (default: 10)
 	Language    string   `json:"language,omitempty"`      // Language code (e.g., "en", "zh")
@@ -30,7 +30,7 @@ type WebSearchOptions struct {
 	ExcludeDomains []string `json:"exclude_domains,omitempty"` // Exclude specific domains
 }
 
-// DefaultWebSearchOptions returns sensible defaults.
+// 默认WebSearch 选项返回合理的默认值 。
 func DefaultWebSearchOptions() WebSearchOptions {
 	return WebSearchOptions{
 		MaxResults: 10,
@@ -39,7 +39,7 @@ func DefaultWebSearchOptions() WebSearchOptions {
 	}
 }
 
-// WebSearchResult represents a single search result.
+// WebSearchResult代表单一搜索结果.
 type WebSearchResult struct {
 	Title       string         `json:"title"`
 	URL         string         `json:"url"`
@@ -50,7 +50,7 @@ type WebSearchResult struct {
 	Metadata    map[string]any `json:"metadata,omitempty"`
 }
 
-// WebSearchToolConfig configures the web search tool.
+// WebSearchToolFig 配置了网络搜索工具.
 type WebSearchToolConfig struct {
 	Provider    WebSearchProvider // Search backend provider
 	DefaultOpts WebSearchOptions  // Default search options
@@ -58,7 +58,7 @@ type WebSearchToolConfig struct {
 	RateLimit   *RateLimitConfig  // Rate limiting
 }
 
-// DefaultWebSearchToolConfig returns sensible defaults.
+// 默认WebSearch ToolFig 返回合理的默认值 。
 func DefaultWebSearchToolConfig() WebSearchToolConfig {
 	return WebSearchToolConfig{
 		DefaultOpts: DefaultWebSearchOptions(),
@@ -70,7 +70,7 @@ func DefaultWebSearchToolConfig() WebSearchToolConfig {
 	}
 }
 
-// webSearchArgs defines the input arguments for the web search tool.
+// WebSearchArgs 定义了网络搜索工具的输入参数.
 type webSearchArgs struct {
 	Query          string   `json:"query"`
 	MaxResults     int      `json:"max_results,omitempty"`
@@ -81,7 +81,7 @@ type webSearchArgs struct {
 	ExcludeDomains []string `json:"exclude_domains,omitempty"`
 }
 
-// webSearchResponse defines the output of the web search tool.
+// WebSearchResponse定义了网页搜索工具的输出.
 type webSearchResponse struct {
 	Query      string            `json:"query"`
 	Results    []WebSearchResult `json:"results"`
@@ -89,8 +89,8 @@ type webSearchResponse struct {
 	Duration   string            `json:"duration"`
 }
 
-// NewWebSearchTool creates a ToolFunc for web searching.
-// Register this with a ToolRegistry to make it available to agents.
+// 新WebSearchTool创建了用于网页搜索的工具Func.
+// 用工具登记器注册, 以便提供给代理商 。
 func NewWebSearchTool(config WebSearchToolConfig, logger *zap.Logger) (ToolFunc, ToolMetadata) {
 	if logger == nil {
 		logger = zap.NewNop()
@@ -110,7 +110,7 @@ func NewWebSearchTool(config WebSearchToolConfig, logger *zap.Logger) (ToolFunc,
 			return nil, fmt.Errorf("web search provider not configured")
 		}
 
-		// Build search options from args + defaults
+		// 从参数 + 默认值构建搜索选项
 		opts := config.DefaultOpts
 		if params.MaxResults > 0 {
 			opts.MaxResults = params.MaxResults
@@ -208,7 +208,7 @@ func NewWebSearchTool(config WebSearchToolConfig, logger *zap.Logger) (ToolFunc,
 	return fn, metadata
 }
 
-// RegisterWebSearchTool is a convenience function that creates and registers the web search tool.
+// RegisterWebSearchToole是一个创建并注册网络搜索工具的便利功能.
 func RegisterWebSearchTool(registry ToolRegistry, config WebSearchToolConfig, logger *zap.Logger) error {
 	fn, metadata := NewWebSearchTool(config, logger)
 	return registry.Register("web_search", fn, metadata)

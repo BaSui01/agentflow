@@ -1,4 +1,4 @@
-// Package reasoning provides advanced reasoning patterns for AI agents.
+// 包推理为AI代理提供了先进的推理模式.
 package reasoning
 
 import (
@@ -14,15 +14,15 @@ import (
 	"go.uber.org/zap"
 )
 
-// ReasoningPattern defines the interface for different reasoning strategies.
+// 理由 图案定义了不同推理策略的界面.
 type ReasoningPattern interface {
-	// Execute runs the reasoning pattern and returns the final result.
+	// 执行运行推理模式并返回最终结果.
 	Execute(ctx context.Context, task string) (*ReasoningResult, error)
-	// Name returns the pattern name.
+	// 名称返回图案名称 。
 	Name() string
 }
 
-// ReasoningResult contains the output of a reasoning pattern.
+// 理由 结果包含一个推理模式的输出.
 type ReasoningResult struct {
 	Pattern      string          `json:"pattern"`
 	Task         string          `json:"task"`
@@ -34,7 +34,7 @@ type ReasoningResult struct {
 	Metadata     map[string]any  `json:"metadata,omitempty"`
 }
 
-// ReasoningStep represents a single step in the reasoning process.
+// ReasoningStep代表了推理过程中的一阶.
 type ReasoningStep struct {
 	StepID     string          `json:"step_id"`
 	Type       string          `json:"type"` // thought, action, observation, evaluation, backtrack
@@ -46,7 +46,7 @@ type ReasoningStep struct {
 }
 
 // ============================================================
-// Pattern Registry
+// 图案登记
 // ============================================================
 
 // PatternRegistry 推理模式注册表 - 管理和发现可用的推理模式
@@ -116,10 +116,10 @@ func (r *PatternRegistry) MustGet(name string) ReasoningPattern {
 }
 
 // ============================================================
-// Tree of Thought (ToT) Pattern
+// 思维树图案
 // ============================================================
 
-// TreeOfThoughtConfig configures the Tree of Thought reasoning pattern.
+// TreatyOfThoughtConfig 配置"思想之树"推理模式.
 type TreeOfThoughtConfig struct {
 	BranchingFactor int           // Number of thoughts to generate at each step
 	MaxDepth        int           // Maximum depth of the thought tree
@@ -130,7 +130,7 @@ type TreeOfThoughtConfig struct {
 	ParallelEval    bool          // Evaluate branches in parallel
 }
 
-// DefaultTreeOfThoughtConfig returns sensible defaults.
+// 默认TreeOfThoughtConfig 返回合理的默认值 。
 func DefaultTreeOfThoughtConfig() TreeOfThoughtConfig {
 	return TreeOfThoughtConfig{
 		BranchingFactor: 3,
@@ -143,8 +143,8 @@ func DefaultTreeOfThoughtConfig() TreeOfThoughtConfig {
 	}
 }
 
-// TreeOfThought implements the Tree of Thought reasoning pattern.
-// It explores multiple reasoning paths in parallel and selects the best one.
+// Tree Of Thought 执行思想之树推理模式.
+// 它平行地探索多条推理路径,并选择了最好的一条.
 type TreeOfThought struct {
 	provider     llm.Provider
 	toolExecutor tools.ToolExecutor
@@ -152,7 +152,7 @@ type TreeOfThought struct {
 	logger       *zap.Logger
 }
 
-// NewTreeOfThought creates a new Tree of Thought reasoner.
+// NewTreeOfThought创造出"思想理性之树".
 func NewTreeOfThought(provider llm.Provider, executor tools.ToolExecutor, config TreeOfThoughtConfig, logger *zap.Logger) *TreeOfThought {
 	if logger == nil {
 		logger = zap.NewNop()
@@ -167,7 +167,7 @@ func NewTreeOfThought(provider llm.Provider, executor tools.ToolExecutor, config
 
 func (t *TreeOfThought) Name() string { return "tree_of_thought" }
 
-// Execute runs the Tree of Thought reasoning pattern.
+// 执行运行"思想之树"推理模式.
 func (t *TreeOfThought) Execute(ctx context.Context, task string) (*ReasoningResult, error) {
 	start := time.Now()
 	ctx, cancel := context.WithTimeout(ctx, t.config.Timeout)
@@ -179,29 +179,29 @@ func (t *TreeOfThought) Execute(ctx context.Context, task string) (*ReasoningRes
 		Metadata: make(map[string]any),
 	}
 
-	// Generate initial thoughts
+	// 生成初始想法
 	thoughts, tokens, err := t.generateThoughts(ctx, task, nil, t.config.BranchingFactor)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate initial thoughts: %w", err)
 	}
 	result.TotalTokens += tokens
 
-	// Build tree with beam search
+	// 用光束搜索构建树
 	currentLevel := thoughts
 	for depth := 0; depth < t.config.MaxDepth && len(currentLevel) > 0; depth++ {
 		t.logger.Debug("ToT depth", zap.Int("depth", depth), zap.Int("branches", len(currentLevel)))
 
-		// Evaluate current level
+		// 评价当前水平
 		evaluated, evalTokens := t.evaluateThoughts(ctx, task, currentLevel)
 		result.TotalTokens += evalTokens
 
-		// Prune and select top branches
+		// 倾斜并选择顶端分支
 		selected := t.selectTopBranches(evaluated, t.config.BeamWidth)
 		if len(selected) == 0 {
 			break
 		}
 
-		// Check if any branch is a final answer
+		// 检查是否有分支是最后答案
 		for _, s := range selected {
 			if s.Score >= 0.9 {
 				result.FinalAnswer = s.Content
@@ -212,7 +212,7 @@ func (t *TreeOfThought) Execute(ctx context.Context, task string) (*ReasoningRes
 			}
 		}
 
-		// Generate next level thoughts
+		// 生成下一个层次的想法
 		var nextLevel []ReasoningStep
 		var mu sync.Mutex
 		var wg sync.WaitGroup
@@ -237,7 +237,7 @@ func (t *TreeOfThought) Execute(ctx context.Context, task string) (*ReasoningRes
 		currentLevel = nextLevel
 	}
 
-	// Select best final answer from remaining branches
+	// 从剩余分支中选择最佳最后答案
 	if len(currentLevel) > 0 {
 		best := t.selectTopBranches(currentLevel, 1)
 		if len(best) > 0 {
@@ -284,13 +284,13 @@ Format as JSON array: [{"thought": "next step", "reasoning": "why"}]`, task, par
 	tokens := resp.Usage.TotalTokens
 	content := resp.Choices[0].Message.Content
 
-	// Parse thoughts from response
+	// 从反应中解析想法
 	var thoughtsData []struct {
 		Thought   string `json:"thought"`
 		Reasoning string `json:"reasoning"`
 	}
 	if err := json.Unmarshal([]byte(content), &thoughtsData); err != nil {
-		// Fallback: treat entire response as single thought
+		// 倒计时:将整个反应视为单一想法
 		return []ReasoningStep{{
 			StepID:  fmt.Sprintf("thought_%d", time.Now().UnixNano()),
 			Type:    "thought",
@@ -375,7 +375,7 @@ Respond with only a number between 0.0 and 1.0`, task, thought.Content)
 }
 
 func (t *TreeOfThought) selectTopBranches(thoughts []ReasoningStep, n int) []ReasoningStep {
-	// Filter by threshold
+	// 按阈值过滤
 	var filtered []ReasoningStep
 	for _, th := range thoughts {
 		if th.Score >= t.config.PruneThreshold {
@@ -383,7 +383,7 @@ func (t *TreeOfThought) selectTopBranches(thoughts []ReasoningStep, n int) []Rea
 		}
 	}
 
-	// Sort by score (optimized: O(n log n) instead of O(n²))
+	// 按分数排序(优化:O(n logn n)而不是O(n2))
 	sort.Slice(filtered, func(i, j int) bool {
 		return filtered[i].Score > filtered[j].Score
 	})

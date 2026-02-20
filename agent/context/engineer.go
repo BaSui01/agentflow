@@ -1,4 +1,4 @@
-// Package context provides unified context management for agents.
+// 软件包上下文为代理商提供了统一的上下文管理.
 package context
 
 import (
@@ -11,8 +11,8 @@ import (
 	"go.uber.org/zap"
 )
 
-// Engineer is the unified context management component for agents.
-// It handles compression, pruning, and adaptive focus strategies.
+// 工程师是代理商的统一上下文管理部分.
+// 它处理压缩,打压,以及适应性聚焦策略.
 type Engineer struct {
 	config    Config
 	tokenizer types.Tokenizer
@@ -22,7 +22,7 @@ type Engineer struct {
 	stats Stats
 }
 
-// Config defines context engineering configuration.
+// 配置定义上下文工程配置 。
 type Config struct {
 	MaxContextTokens int      `json:"max_context_tokens"`
 	ReserveForOutput int      `json:"reserve_for_output"`
@@ -33,7 +33,7 @@ type Config struct {
 	Strategy         Strategy `json:"strategy"`
 }
 
-// Strategy defines the context management strategy.
+// 战略确定了背景管理战略。
 type Strategy string
 
 const (
@@ -44,7 +44,7 @@ const (
 	StrategyAggressive Strategy = "aggressive"
 )
 
-// Level represents compression urgency level.
+// 关卡代表压缩紧急关卡.
 type Level int
 
 const (
@@ -54,7 +54,7 @@ const (
 	LevelEmergency
 )
 
-// Stats tracks context engineering statistics.
+// Stats跟踪上下文工程统计.
 type Stats struct {
 	TotalCompressions   int64   `json:"total_compressions"`
 	EmergencyCount      int64   `json:"emergency_count"`
@@ -62,7 +62,7 @@ type Stats struct {
 	TokensSaved         int64   `json:"tokens_saved"`
 }
 
-// Status represents current context status.
+// 状况代表当前背景状况。
 type Status struct {
 	CurrentTokens  int     `json:"current_tokens"`
 	MaxTokens      int     `json:"max_tokens"`
@@ -71,7 +71,7 @@ type Status struct {
 	Recommendation string  `json:"recommendation"`
 }
 
-// DefaultConfig returns sensible defaults for 200k context models.
+// 默认Config返回200k上下文模型的合理默认值.
 func DefaultConfig() Config {
 	return Config{
 		MaxContextTokens: 200000,
@@ -84,7 +84,7 @@ func DefaultConfig() Config {
 	}
 }
 
-// New creates a new context Engineer.
+// 新创建了新的上下文工程师.
 func New(config Config, logger *zap.Logger) *Engineer {
 	return &Engineer{
 		config:    config,
@@ -93,7 +93,7 @@ func New(config Config, logger *zap.Logger) *Engineer {
 	}
 }
 
-// GetStatus returns current context status.
+// GetState 返回当前上下文状态 。
 func (e *Engineer) GetStatus(msgs []types.Message) Status {
 	currentTokens := e.tokenizer.CountMessagesTokens(msgs)
 	effectiveMax := e.config.MaxContextTokens - e.config.ReserveForOutput
@@ -133,7 +133,7 @@ func (e *Engineer) getLevel(usage float64) Level {
 	}
 }
 
-// Manage processes messages based on current context usage.
+// 根据当前上下文使用管理处理信件 。
 func (e *Engineer) Manage(ctx context.Context, msgs []types.Message, query string) ([]types.Message, error) {
 	if len(msgs) == 0 {
 		return msgs, nil
@@ -157,7 +157,7 @@ func (e *Engineer) Manage(ctx context.Context, msgs []types.Message, query strin
 	}
 }
 
-// emergencyCompress handles critical context overflow.
+// EmergencyCompress处理紧急环境溢出。
 func (e *Engineer) emergencyCompress(msgs []types.Message) ([]types.Message, error) {
 	e.logger.Warn("EMERGENCY compression triggered")
 
@@ -168,7 +168,7 @@ func (e *Engineer) emergencyCompress(msgs []types.Message) ([]types.Message, err
 	originalTokens := e.tokenizer.CountMessagesTokens(msgs)
 	targetTokens := int(float64(e.config.MaxContextTokens-e.config.ReserveForOutput) * e.config.TargetUsage)
 
-	// Separate system and other messages
+	// 单独的系统和其他信息
 	var systemMsgs, otherMsgs []types.Message
 	for _, msg := range msgs {
 		if msg.Role == types.RoleSystem {
@@ -178,7 +178,7 @@ func (e *Engineer) emergencyCompress(msgs []types.Message) ([]types.Message, err
 		}
 	}
 
-	// Truncate system messages if too long
+	// 如果系统消息时间太长, 则中断
 	systemMsgs = e.truncateMessages(systemMsgs, 4000)
 	systemTokens := e.tokenizer.CountMessagesTokens(systemMsgs)
 
@@ -187,7 +187,7 @@ func (e *Engineer) emergencyCompress(msgs []types.Message) ([]types.Message, err
 		remainingBudget = 1000
 	}
 
-	// Keep only last 2 messages
+	// 只保留上两个消息
 	preserveCount := 2
 	if preserveCount > len(otherMsgs) {
 		preserveCount = len(otherMsgs)
@@ -201,7 +201,7 @@ func (e *Engineer) emergencyCompress(msgs []types.Message) ([]types.Message, err
 
 	recentMsgs = e.truncateMessages(recentMsgs, 4000)
 
-	// Create summary
+	// 创建摘要
 	summary := e.createEmergencySummary(toCompress)
 	summaryMsg := types.Message{
 		Role:    types.RoleSystem,
@@ -217,24 +217,24 @@ func (e *Engineer) emergencyCompress(msgs []types.Message) ([]types.Message, err
 	return result, nil
 }
 
-// aggressiveCompress handles high context usage (85-95%).
+// 积极的Compress处理高上下文使用率(85-95%).
 func (e *Engineer) aggressiveCompress(msgs []types.Message, _ string) ([]types.Message, error) {
 	e.logger.Info("aggressive compression triggered")
 
 	originalTokens := e.tokenizer.CountMessagesTokens(msgs)
 
-	// First do normal compression
+	// 首先做正常压缩
 	result, err := e.normalCompress(msgs)
 	if err != nil {
 		return nil, err
 	}
 
-	// If still over target, truncate further
+	// 如果还超过目标,再往前划
 	targetTokens := int(float64(e.config.MaxContextTokens-e.config.ReserveForOutput) * e.config.TargetUsage)
 	if e.tokenizer.CountMessagesTokens(result) > targetTokens {
 		result = e.truncateMessages(result, 2000)
 
-		// Remove middle messages if still over
+		// 如果仍然结束, 删除中间信件
 		for e.tokenizer.CountMessagesTokens(result) > targetTokens && len(result) > 3 {
 			result = append(result[:1], result[len(result)-2:]...)
 		}
@@ -244,11 +244,11 @@ func (e *Engineer) aggressiveCompress(msgs []types.Message, _ string) ([]types.M
 	return result, nil
 }
 
-// normalCompress handles moderate context usage (70-85%).
+// 普通Compress处理中度上下文使用(70-85%).
 func (e *Engineer) normalCompress(msgs []types.Message) ([]types.Message, error) {
 	e.logger.Debug("normal compression triggered")
 
-	// Compress tool results
+	// 压缩工具结果
 	result := make([]types.Message, len(msgs))
 	maxToolLen := 2000
 
@@ -262,7 +262,7 @@ func (e *Engineer) normalCompress(msgs []types.Message) ([]types.Message, error)
 	return result, nil
 }
 
-// truncateMessages truncates messages that exceed maxTokens per message.
+// 切换Messages 切换信件, 超过每封信的最大切换量 。
 func (e *Engineer) truncateMessages(msgs []types.Message, maxTokens int) []types.Message {
 	result := make([]types.Message, len(msgs))
 	for i, msg := range msgs {
@@ -282,7 +282,7 @@ func (e *Engineer) truncateMessages(msgs []types.Message, maxTokens int) []types
 	return result
 }
 
-// createEmergencySummary creates a minimal summary without LLM.
+// 创建 Emergency 概要创建一个没有 LLM 的最小摘要。
 func (e *Engineer) createEmergencySummary(msgs []types.Message) string {
 	if len(msgs) == 0 {
 		return "No previous messages"
@@ -308,7 +308,7 @@ func (e *Engineer) createEmergencySummary(msgs []types.Message) string {
 	}
 	sb.WriteString("\nKey fragments:\n")
 
-	// Show last few non-tool messages
+	// 显示最后几个非工具消息
 	shown := 0
 	for i := len(msgs) - 1; i >= 0 && shown < 5; i-- {
 		msg := msgs[i]
@@ -338,14 +338,14 @@ func (e *Engineer) updateStats(originalTokens, finalTokens int) {
 	e.stats.AvgCompressionRatio = (e.stats.AvgCompressionRatio*float64(e.stats.TotalCompressions-1) + ratio) / float64(e.stats.TotalCompressions)
 }
 
-// GetStats returns compression statistics.
+// GetStats 返回压缩统计.
 func (e *Engineer) GetStats() Stats {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
 	return e.stats
 }
 
-// MustFit ensures messages fit within context window.
+// 必须 适合可确保消息符合上下文窗口。
 func (e *Engineer) MustFit(ctx context.Context, msgs []types.Message, query string) ([]types.Message, error) {
 	maxTokens := e.config.MaxContextTokens - e.config.ReserveForOutput
 
@@ -361,7 +361,7 @@ func (e *Engineer) MustFit(ctx context.Context, msgs []types.Message, query stri
 		}
 	}
 
-	// Last resort: hard truncate
+	// 最后手段:硬截断
 	return e.hardTruncate(msgs, maxTokens), nil
 }
 
@@ -377,14 +377,14 @@ func (e *Engineer) hardTruncate(msgs []types.Message, maxTokens int) []types.Mes
 		}
 	}
 
-	// Truncate system messages
+	// 截断系统消息
 	for i := range systemMsgs {
 		if len(systemMsgs[i].Content) > 1000 {
 			systemMsgs[i].Content = systemMsgs[i].Content[:1000] + "\n...[truncated]"
 		}
 	}
 
-	// Keep only last 2 other messages
+	// 只保留最后两个其他信件
 	if len(otherMsgs) > 2 {
 		otherMsgs = otherMsgs[len(otherMsgs)-2:]
 	}
@@ -394,9 +394,9 @@ func (e *Engineer) hardTruncate(msgs []types.Message, maxTokens int) []types.Mes
 		return result
 	}
 
-	// Ensure we actually fit within the requested budget.
+	// 确保我们实际符合所要求的预算。
 	for tries := 0; tries < 20 && e.tokenizer.CountMessagesTokens(result) > maxTokens; tries++ {
-		// Prefer dropping older non-system messages first.
+		// 最好先扔出旧的非系统消息
 		if len(result) > 1 {
 			dropIdx := -1
 			for i := 0; i < len(result); i++ {
@@ -412,11 +412,11 @@ func (e *Engineer) hardTruncate(msgs []types.Message, maxTokens int) []types.Mes
 			continue
 		}
 
-		// Single message left: truncate aggressively to fit.
+		// 左边的单条信息: 快速切入以适应。
 		result = e.truncateMessages(result, maxTokens)
 	}
 
-	// If we still overflow, try truncating with a per-message budget.
+	// 如果我们仍然溢出,尝试缩短 与每个消息的预算。
 	for tries := 0; tries < 10 && e.tokenizer.CountMessagesTokens(result) > maxTokens && len(result) > 0; tries++ {
 		perMsg := maxTokens / len(result)
 		if perMsg < 1 {
@@ -434,12 +434,12 @@ func (e *Engineer) hardTruncate(msgs []types.Message, maxTokens int) []types.Mes
 	return result
 }
 
-// EstimateTokens returns token count for messages.
+// 估计Tokens返回消息的符号数 。
 func (e *Engineer) EstimateTokens(msgs []types.Message) int {
 	return e.tokenizer.CountMessagesTokens(msgs)
 }
 
-// CanAddMessage checks if a new message can be added.
+// CanAddMessage 检查是否可以添加新信件 。
 func (e *Engineer) CanAddMessage(msgs []types.Message, newMsg types.Message) bool {
 	currentTokens := e.tokenizer.CountMessagesTokens(msgs)
 	newTokens := e.tokenizer.CountMessageTokens(newMsg)

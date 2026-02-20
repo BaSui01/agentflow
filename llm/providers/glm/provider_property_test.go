@@ -13,8 +13,8 @@ import (
 	"go.uber.org/zap"
 )
 
-// Feature: multi-provider-support, Property 12: HTTP Status to Error Code Mapping
-// Validates: Requirements 2.8, 9.1-9.8
+// 特性: 多提供者支持, 属性 12: HTTP 状态到错误代码映射
+// 审定:要求2.8、9.1-9.8
 func TestProperty12_HTTPStatusToErrorCodeMapping(t *testing.T) {
 	testCases := []struct {
 		name          string
@@ -104,7 +104,7 @@ func TestProperty12_HTTPStatusToErrorCodeMapping(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			// Create a test server that returns the specified error
+			// 创建返回指定错误的测试服务器
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(tc.httpStatus)
@@ -122,14 +122,14 @@ func TestProperty12_HTTPStatusToErrorCodeMapping(t *testing.T) {
 			}))
 			defer server.Close()
 
-			// Create provider with test server URL
+			// 以测试服务器 URL 创建提供者
 			cfg := providers.GLMConfig{
 				APIKey:  "test-key",
 				BaseURL: server.URL,
 			}
 			provider := NewGLMProvider(cfg, zap.NewNop())
 
-			// Make a completion request
+			// 提出完成请求
 			ctx := context.Background()
 			req := &llm.ChatRequest{
 				Messages: []llm.Message{
@@ -139,36 +139,36 @@ func TestProperty12_HTTPStatusToErrorCodeMapping(t *testing.T) {
 
 			_, err := provider.Completion(ctx, req)
 
-			// Verify error is returned
+			// 校验出错被返回
 			assert.Error(t, err, "Should return an error")
 
-			// Verify error is of type llm.Error
+			// 校验错误是类型 llm 。 错误
 			llmErr, ok := err.(*llm.Error)
 			assert.True(t, ok, "Error should be of type *llm.Error")
 
-			// Verify error code
+			// 校验错误代码
 			assert.Equal(t, tc.expectedCode, llmErr.Code,
 				"Error code should match expected value")
 
-			// Verify HTTP status
+			// 验证 HTTP 状态
 			assert.Equal(t, tc.httpStatus, llmErr.HTTPStatus,
 				"HTTP status should match")
 
-			// Verify retryable flag
+			// 校验可重试的旗帜
 			assert.Equal(t, tc.expectedRetry, llmErr.Retryable,
 				"Retryable flag should match expected value")
 
-			// Verify provider name
+			// 验证提供者名称
 			assert.Equal(t, "glm", llmErr.Provider,
 				"Provider name should be 'glm'")
 
-			// Verify error message contains original message
+			// 校验错误信件包含原始信件
 			assert.Contains(t, llmErr.Message, tc.errorMessage,
 				"Error message should contain original error message")
 		})
 	}
 
-	// Test error mapping in streaming mode
+	// 测试流中的错误映射模式
 	t.Run("error mapping in streaming mode", func(t *testing.T) {
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "application/json")
@@ -202,14 +202,14 @@ func TestProperty12_HTTPStatusToErrorCodeMapping(t *testing.T) {
 
 		_, err := provider.Stream(ctx, req)
 
-		// Verify error is returned
+		// 校验出错被返回
 		assert.Error(t, err, "Should return an error")
 
-		// Verify error is of type llm.Error
+		// 校验错误是类型 llm 。 错误
 		llmErr, ok := err.(*llm.Error)
 		assert.True(t, ok, "Error should be of type *llm.Error")
 
-		// Verify error code
+		// 校验错误代码
 		assert.Equal(t, llm.ErrUnauthorized, llmErr.Code,
 			"Error code should be ErrUnauthorized")
 	})

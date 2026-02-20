@@ -6,13 +6,13 @@ import (
 	"time"
 )
 
-// JinaProvider implements embedding using Jina AI's API.
+// Jina Provider 执行使用 Jina AI 的 API 嵌入.
 type JinaProvider struct {
 	*BaseProvider
 	cfg JinaConfig
 }
 
-// NewJinaProvider creates a new Jina AI embedding provider.
+// 新JinaProvider创建了新的Jina AI嵌入服务商.
 func NewJinaProvider(cfg JinaConfig) *JinaProvider {
 	if cfg.BaseURL == "" {
 		cfg.BaseURL = "https://api.jina.ai"
@@ -58,7 +58,7 @@ type jinaEmbedResponse struct {
 	} `json:"usage"`
 }
 
-// Embed generates embeddings using Jina AI.
+// 嵌入会使用Jina AI生成嵌入.
 func (p *JinaProvider) Embed(ctx context.Context, req *EmbeddingRequest) (*EmbeddingResponse, error) {
 	model := ChooseModel(req.Model, p.cfg.Model, "jina-embeddings-v3")
 
@@ -67,7 +67,7 @@ func (p *JinaProvider) Embed(ctx context.Context, req *EmbeddingRequest) (*Embed
 		Model: model,
 	}
 
-	// Map input type to Jina task
+	// 映射 Jina 任务的输入类型
 	switch req.InputType {
 	case InputTypeQuery:
 		body.Task = "retrieval.query"
@@ -83,7 +83,7 @@ func (p *JinaProvider) Embed(ctx context.Context, req *EmbeddingRequest) (*Embed
 		body.Task = "retrieval.passage"
 	}
 
-	// Support Matryoshka dimensions
+	// 支持 Matryoshka 维度
 	if req.Dimensions > 0 {
 		body.Dimensions = req.Dimensions
 	}
@@ -120,12 +120,12 @@ func (p *JinaProvider) Embed(ctx context.Context, req *EmbeddingRequest) (*Embed
 	}, nil
 }
 
-// EmbedQuery embeds a single query.
+// 嵌入查询嵌入了单个查询.
 func (p *JinaProvider) EmbedQuery(ctx context.Context, query string) ([]float64, error) {
 	return p.BaseProvider.EmbedQuery(ctx, query, p.Embed)
 }
 
-// EmbedDocuments embeds multiple documents.
+// 嵌入文件嵌入多个文档。
 func (p *JinaProvider) EmbedDocuments(ctx context.Context, documents []string) ([][]float64, error) {
 	return p.BaseProvider.EmbedDocuments(ctx, documents, p.Embed)
 }

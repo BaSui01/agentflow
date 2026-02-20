@@ -1,4 +1,4 @@
-// Package reasoning provides advanced reasoning patterns for AI agents.
+// 包推理为AI代理提供了先进的推理模式.
 package reasoning
 
 import (
@@ -14,10 +14,10 @@ import (
 )
 
 // ============================================================
-// Plan-and-Execute Pattern
+// 计划和执行模式
 // ============================================================
 
-// PlanExecuteConfig configures the Plan-and-Execute reasoning pattern.
+// PlanExecuteConfig 配置了 Plan- and-Execute 推理模式.
 type PlanExecuteConfig struct {
 	MaxPlanSteps      int           // Maximum steps in initial plan
 	MaxReplanAttempts int           // Maximum replanning attempts on failure
@@ -25,7 +25,7 @@ type PlanExecuteConfig struct {
 	AdaptivePlanning  bool          // Allow plan modification during execution
 }
 
-// DefaultPlanExecuteConfig returns sensible defaults.
+// 默认 PlanExecuteConfig 返回合理的默认值 。
 func DefaultPlanExecuteConfig() PlanExecuteConfig {
 	return PlanExecuteConfig{
 		MaxPlanSteps:      15,
@@ -35,8 +35,8 @@ func DefaultPlanExecuteConfig() PlanExecuteConfig {
 	}
 }
 
-// PlanAndExecute implements the Plan-and-Execute reasoning pattern.
-// Unlike ReWOO, it can adapt the plan based on intermediate results.
+// PlanAndExecute执行"计划与执行"推理模式.
+// 与ReWOO不同,它可以根据中间结果来调整计划.
 type PlanAndExecute struct {
 	provider     llm.Provider
 	toolExecutor tools.ToolExecutor
@@ -45,7 +45,7 @@ type PlanAndExecute struct {
 	logger       *zap.Logger
 }
 
-// NewPlanAndExecute creates a new Plan-and-Execute reasoner.
+// NewPlanAndExecute创建了一个新的"计划"和"执行"推理器.
 func NewPlanAndExecute(provider llm.Provider, executor tools.ToolExecutor, schemas []llm.ToolSchema, config PlanExecuteConfig, logger *zap.Logger) *PlanAndExecute {
 	if logger == nil {
 		logger = zap.NewNop()
@@ -61,7 +61,7 @@ func NewPlanAndExecute(provider llm.Provider, executor tools.ToolExecutor, schem
 
 func (p *PlanAndExecute) Name() string { return "plan_and_execute" }
 
-// ExecutionPlan represents the current plan state.
+// 执行计划代表目前的计划状态.
 type ExecutionPlan struct {
 	Goal           string          `json:"goal"`
 	Steps          []ExecutionStep `json:"steps"`
@@ -70,7 +70,7 @@ type ExecutionPlan struct {
 	Status         string          `json:"status"` // planning, executing, replanning, completed, failed
 }
 
-// ExecutionStep represents a single step in the plan.
+// "执行步骤"代表了计划的一个步骤.
 type ExecutionStep struct {
 	ID          string `json:"id"`
 	Description string `json:"description"`
@@ -81,7 +81,7 @@ type ExecutionStep struct {
 	Error       string `json:"error,omitempty"`
 }
 
-// Execute runs the Plan-and-Execute reasoning pattern.
+// Execute运行"计划与执行"推理模式.
 func (p *PlanAndExecute) Execute(ctx context.Context, task string) (*ReasoningResult, error) {
 	start := time.Now()
 	ctx, cancel := context.WithTimeout(ctx, p.config.Timeout)
@@ -93,7 +93,7 @@ func (p *PlanAndExecute) Execute(ctx context.Context, task string) (*ReasoningRe
 		Metadata: make(map[string]any),
 	}
 
-	// Phase 1: Create initial plan
+	// 第一阶段:制定初步计划
 	p.logger.Info("Plan-and-Execute: Creating initial plan")
 	plan, planTokens, err := p.createPlan(ctx, task)
 	if err != nil {
@@ -107,7 +107,7 @@ func (p *PlanAndExecute) Execute(ctx context.Context, task string) (*ReasoningRe
 		TokensUsed: planTokens,
 	})
 
-	// Phase 2: Execute plan with adaptive replanning
+	// 第二阶段:实施适应性再规划计划
 	replanAttempts := 0
 	for plan.Status != "completed" && plan.Status != "failed" {
 		select {
@@ -116,7 +116,7 @@ func (p *PlanAndExecute) Execute(ctx context.Context, task string) (*ReasoningRe
 		default:
 		}
 
-		// Execute next step
+		// 执行下一步
 		stepResult, stepTokens, err := p.executeStep(ctx, plan)
 		result.TotalTokens += stepTokens
 
@@ -124,7 +124,7 @@ func (p *PlanAndExecute) Execute(ctx context.Context, task string) (*ReasoningRe
 			p.logger.Warn("step execution failed", zap.Error(err))
 
 			if p.config.AdaptivePlanning && replanAttempts < p.config.MaxReplanAttempts {
-				// Attempt to replan
+				// 试图重新规划
 				p.logger.Info("attempting to replan", zap.Int("attempt", replanAttempts+1))
 				newPlan, replanTokens, replanErr := p.replan(ctx, task, plan, err.Error())
 				result.TotalTokens += replanTokens
@@ -160,19 +160,19 @@ func (p *PlanAndExecute) Execute(ctx context.Context, task string) (*ReasoningRe
 			TokensUsed: stepTokens,
 		})
 
-		// Check if plan is complete
+		// 检查计划是否完成
 		if plan.CurrentStep >= len(plan.Steps) {
 			plan.Status = "completed"
 		}
 	}
 
-	// Phase 3: Synthesize final answer
+	// 第3阶段:合成最后答案
 	if plan.Status == "completed" {
 		answer, synthTokens, err := p.synthesizeAnswer(ctx, task, plan)
 		result.TotalTokens += synthTokens
 		if err != nil {
 			p.logger.Warn("synthesis failed", zap.Error(err))
-			// Use last step result as answer
+			// 使用最后一个步骤结果作为答案
 			if len(plan.Steps) > 0 {
 				result.FinalAnswer = plan.Steps[len(plan.Steps)-1].Result
 			}
@@ -195,7 +195,7 @@ func (p *PlanAndExecute) Execute(ctx context.Context, task string) (*ReasoningRe
 }
 
 func (p *PlanAndExecute) createPlan(ctx context.Context, task string) (*ExecutionPlan, int, error) {
-	// Build tool descriptions
+	// 构建工具描述
 	var toolDescs []string
 	for _, t := range p.toolSchemas {
 		toolDescs = append(toolDescs, fmt.Sprintf("- %s: %s", t.Name, t.Description))
@@ -234,13 +234,13 @@ Keep the plan focused and achievable (max %d steps).`, strings.Join(toolDescs, "
 	content := resp.Choices[0].Message.Content
 	tokens := resp.Usage.TotalTokens
 
-	// Extract JSON
+	// 摘录 JSON
 	content = extractJSONObject(content)
 
 	var plan ExecutionPlan
 	if err := json.Unmarshal([]byte(content), &plan); err != nil {
 		p.logger.Warn("failed to parse plan", zap.Error(err))
-		// Create minimal plan
+		// 创建最小计划
 		plan = ExecutionPlan{
 			Goal: task,
 			Steps: []ExecutionStep{{
@@ -275,7 +275,7 @@ func (p *PlanAndExecute) executeStep(ctx context.Context, plan *ExecutionPlan) (
 		zap.String("description", step.Description))
 
 	if step.Tool != "" {
-		// Execute tool
+		// 执行工具
 		argsJSON, _ := json.Marshal(map[string]string{"input": step.Arguments})
 		call := llm.ToolCall{
 			ID:        step.ID,
@@ -293,7 +293,7 @@ func (p *PlanAndExecute) executeStep(ctx context.Context, plan *ExecutionPlan) (
 			step.Result = string(results[0].Result)
 		}
 	} else {
-		// No tool specified, use LLM to execute step
+		// 没有指定工具, 请使用 LLM 执行步骤
 		result, stepTokens, err := p.executeLLMStep(ctx, plan, step)
 		tokens += stepTokens
 		if err != nil {
@@ -312,7 +312,7 @@ func (p *PlanAndExecute) executeStep(ctx context.Context, plan *ExecutionPlan) (
 }
 
 func (p *PlanAndExecute) executeLLMStep(ctx context.Context, plan *ExecutionPlan, step *ExecutionStep) (string, int, error) {
-	// Build context from completed steps
+	// 从已完成的步骤建立背景
 	var context []string
 	for i := 0; i < plan.CurrentStep; i++ {
 		s := plan.Steps[i]
@@ -347,7 +347,7 @@ Execute this step and provide the result.`, plan.Goal, strings.Join(context, "\n
 }
 
 func (p *PlanAndExecute) replan(ctx context.Context, task string, currentPlan *ExecutionPlan, errorMsg string) (*ExecutionPlan, int, error) {
-	// Build context from completed steps
+	// 从已完成的步骤建立背景
 	var completedContext []string
 	for i := 0; i < currentPlan.CurrentStep; i++ {
 		s := currentPlan.Steps[i]
@@ -393,7 +393,7 @@ Create a new plan to continue from here. Output as JSON:
 		return nil, tokens, fmt.Errorf("failed to parse new plan: %w", err)
 	}
 
-	// Preserve completed steps
+	// 保留已完成的步骤
 	newPlan.Steps = append(currentPlan.Steps[:currentPlan.CurrentStep], newPlan.Steps...)
 	newPlan.CurrentStep = currentPlan.CurrentStep
 	newPlan.CompletedSteps = currentPlan.CompletedSteps

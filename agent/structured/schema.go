@@ -1,4 +1,4 @@
-// Package structured provides structured output support with JSON Schema validation.
+// 结构化包在JSON Schema验证下提供结构化输出支持.
 package structured
 
 import (
@@ -6,7 +6,7 @@ import (
 	"fmt"
 )
 
-// SchemaType represents JSON Schema types.
+// SchemaType代表JSON Schema类型.
 type SchemaType string
 
 const (
@@ -19,7 +19,7 @@ const (
 	TypeArray   SchemaType = "array"
 )
 
-// StringFormat represents common string format constraints.
+// StringFormat 代表常见的字符串格式限制.
 type StringFormat string
 
 const (
@@ -34,20 +34,20 @@ const (
 	FormatIPv6     StringFormat = "ipv6"
 )
 
-// JSONSchema represents a JSON Schema definition.
-// It supports nested objects, arrays, enums, and various validation constraints.
+// JSONSchema代表了JSON Schema的定义.
+// 它支持嵌入对象,阵列,enum以及各种验证约束.
 type JSONSchema struct {
-	// Core schema metadata
+	// 核心元数据
 	Schema      string `json:"$schema,omitempty"`
 	ID          string `json:"$id,omitempty"`
 	Ref         string `json:"$ref,omitempty"`
 	Title       string `json:"title,omitempty"`
 	Description string `json:"description,omitempty"`
 
-	// Type definition
+	// 类型定义
 	Type SchemaType `json:"type,omitempty"`
 
-	// Object properties
+	// 对象属性
 	Properties           map[string]*JSONSchema `json:"properties,omitempty"`
 	Required             []string               `json:"required,omitempty"`
 	AdditionalProperties *AdditionalProperties  `json:"additionalProperties,omitempty"`
@@ -56,7 +56,7 @@ type JSONSchema struct {
 	PatternProperties    map[string]*JSONSchema `json:"patternProperties,omitempty"`
 	PropertyNames        *JSONSchema            `json:"propertyNames,omitempty"`
 
-	// Array items
+	// 矩阵项目
 	Items       *JSONSchema   `json:"items,omitempty"`
 	PrefixItems []*JSONSchema `json:"prefixItems,omitempty"`
 	Contains    *JSONSchema   `json:"contains,omitempty"`
@@ -66,52 +66,52 @@ type JSONSchema struct {
 	MinContains *int          `json:"minContains,omitempty"`
 	MaxContains *int          `json:"maxContains,omitempty"`
 
-	// Enum and const
+	// 凸起和凸起
 	Enum  []any `json:"enum,omitempty"`
 	Const any   `json:"const,omitempty"`
 
-	// String constraints
+	// 字符串制约
 	MinLength *int         `json:"minLength,omitempty"`
 	MaxLength *int         `json:"maxLength,omitempty"`
 	Pattern   string       `json:"pattern,omitempty"`
 	Format    StringFormat `json:"format,omitempty"`
 
-	// Numeric constraints
+	// 数字限制
 	Minimum          *float64 `json:"minimum,omitempty"`
 	Maximum          *float64 `json:"maximum,omitempty"`
 	ExclusiveMinimum *float64 `json:"exclusiveMinimum,omitempty"`
 	ExclusiveMaximum *float64 `json:"exclusiveMaximum,omitempty"`
 	MultipleOf       *float64 `json:"multipleOf,omitempty"`
 
-	// Default value
+	// 默认值
 	Default any `json:"default,omitempty"`
 
-	// Examples
+	// 实例
 	Examples []any `json:"examples,omitempty"`
 
-	// Composition keywords
+	// 组成关键词
 	AllOf []*JSONSchema `json:"allOf,omitempty"`
 	AnyOf []*JSONSchema `json:"anyOf,omitempty"`
 	OneOf []*JSONSchema `json:"oneOf,omitempty"`
 	Not   *JSONSchema   `json:"not,omitempty"`
 
-	// Conditional keywords
+	// 有条件的关键词
 	If   *JSONSchema `json:"if,omitempty"`
 	Then *JSONSchema `json:"then,omitempty"`
 	Else *JSONSchema `json:"else,omitempty"`
 
-	// Definitions for reuse
+	// 重复使用的定义
 	Defs map[string]*JSONSchema `json:"$defs,omitempty"`
 }
 
-// AdditionalProperties represents the additionalProperties field which can be
-// either a boolean or a schema.
+// 附加Properties 代表额外的Properties字段,可以是
+// 或布林克或计划。
 type AdditionalProperties struct {
 	Allowed bool
 	Schema  *JSONSchema
 }
 
-// MarshalJSON implements json.Marshaler for AdditionalProperties.
+// JSON警长执行JSON。 增产元帅.
 func (ap *AdditionalProperties) MarshalJSON() ([]byte, error) {
 	if ap == nil {
 		return json.Marshal(nil)
@@ -122,9 +122,9 @@ func (ap *AdditionalProperties) MarshalJSON() ([]byte, error) {
 	return json.Marshal(ap.Allowed)
 }
 
-// UnmarshalJSON implements json.Unmarshaler for AdditionalProperties.
+// UnmarshalJSON 执行json。 (原始内容存档于2018-10-21). Unmarshaler for Purposities.
 func (ap *AdditionalProperties) UnmarshalJSON(data []byte) error {
-	// Try boolean first
+	// 先试试布尔
 	var b bool
 	if err := json.Unmarshal(data, &b); err == nil {
 		ap.Allowed = b
@@ -132,7 +132,7 @@ func (ap *AdditionalProperties) UnmarshalJSON(data []byte) error {
 		return nil
 	}
 
-	// Try schema
+	// 尝试计划
 	var schema JSONSchema
 	if err := json.Unmarshal(data, &schema); err == nil {
 		ap.Allowed = true
@@ -143,12 +143,12 @@ func (ap *AdditionalProperties) UnmarshalJSON(data []byte) error {
 	return fmt.Errorf("additionalProperties must be boolean or schema")
 }
 
-// NewSchema creates a new JSONSchema with the specified type.
+// NewSchema创建了具有指定类型的新的JSONSchema.
 func NewSchema(t SchemaType) *JSONSchema {
 	return &JSONSchema{Type: t}
 }
 
-// NewObjectSchema creates a new object schema.
+// 新对象计划创建了新对象计划.
 func NewObjectSchema() *JSONSchema {
 	return &JSONSchema{
 		Type:       TypeObject,
@@ -156,7 +156,7 @@ func NewObjectSchema() *JSONSchema {
 	}
 }
 
-// NewArraySchema creates a new array schema with the specified items schema.
+// NewArraySchema 创建一个带有指定项目 schema 的新阵列计划.
 func NewArraySchema(items *JSONSchema) *JSONSchema {
 	return &JSONSchema{
 		Type:  TypeArray,
@@ -164,56 +164,56 @@ func NewArraySchema(items *JSONSchema) *JSONSchema {
 	}
 }
 
-// NewStringSchema creates a new string schema.
+// NewStringSchema创建了一个新的字符串Schema.
 func NewStringSchema() *JSONSchema {
 	return &JSONSchema{Type: TypeString}
 }
 
-// NewNumberSchema creates a new number schema.
+// NumberSchema创建了新的编号Schema.
 func NewNumberSchema() *JSONSchema {
 	return &JSONSchema{Type: TypeNumber}
 }
 
-// NewIntegerSchema creates a new integer schema.
+// NewIntegerSchema创建了新的整数计划.
 func NewIntegerSchema() *JSONSchema {
 	return &JSONSchema{Type: TypeInteger}
 }
 
-// NewBooleanSchema creates a new boolean schema.
+// NewBooleanSchema 创建了一个新的布尔计划.
 func NewBooleanSchema() *JSONSchema {
 	return &JSONSchema{Type: TypeBoolean}
 }
 
-// NewEnumSchema creates a new enum schema with the specified values.
+// NewEnumSchema 创建一个带有指定值的新的enumschema.
 func NewEnumSchema(values ...any) *JSONSchema {
 	return &JSONSchema{Enum: values}
 }
 
-// WithTitle sets the title and returns the schema for chaining.
+// 使用 Title 设置标题并返回用于连锁的图案 。
 func (s *JSONSchema) WithTitle(title string) *JSONSchema {
 	s.Title = title
 	return s
 }
 
-// WithDescription sets the description and returns the schema for chaining.
+// 使用Description 设置描述并返回链路的策略 。
 func (s *JSONSchema) WithDescription(desc string) *JSONSchema {
 	s.Description = desc
 	return s
 }
 
-// WithDefault sets the default value and returns the schema for chaining.
+// With Default 设置了默认值并返回用于链路的图案.
 func (s *JSONSchema) WithDefault(def any) *JSONSchema {
 	s.Default = def
 	return s
 }
 
-// WithExamples sets the examples and returns the schema for chaining.
+// 以实例设置示例并返回链条的图案。
 func (s *JSONSchema) WithExamples(examples ...any) *JSONSchema {
 	s.Examples = examples
 	return s
 }
 
-// AddProperty adds a property to an object schema.
+// 添加 Property 为对象计划添加属性。
 func (s *JSONSchema) AddProperty(name string, prop *JSONSchema) *JSONSchema {
 	if s.Properties == nil {
 		s.Properties = make(map[string]*JSONSchema)
@@ -222,121 +222,121 @@ func (s *JSONSchema) AddProperty(name string, prop *JSONSchema) *JSONSchema {
 	return s
 }
 
-// AddRequired adds required field names to an object schema.
+// 添加所需的字段名称到对象计划 。
 func (s *JSONSchema) AddRequired(names ...string) *JSONSchema {
 	s.Required = append(s.Required, names...)
 	return s
 }
 
-// WithMinLength sets the minimum length for string schema.
+// 通过MinLength设定了字符串计划的最低长度.
 func (s *JSONSchema) WithMinLength(min int) *JSONSchema {
 	s.MinLength = &min
 	return s
 }
 
-// WithMaxLength sets the maximum length for string schema.
+// 通过MaxLength设定了字符串计划的最大长度.
 func (s *JSONSchema) WithMaxLength(max int) *JSONSchema {
 	s.MaxLength = &max
 	return s
 }
 
-// WithPattern sets the pattern for string schema.
+// WithPattern设定了字符串计划的模式.
 func (s *JSONSchema) WithPattern(pattern string) *JSONSchema {
 	s.Pattern = pattern
 	return s
 }
 
-// WithFormat sets the format for string schema.
+// 用Format设置字符串计划的格式。
 func (s *JSONSchema) WithFormat(format StringFormat) *JSONSchema {
 	s.Format = format
 	return s
 }
 
-// WithMinimum sets the minimum value for numeric schema.
+// 以最小值设定数值方案的最低值。
 func (s *JSONSchema) WithMinimum(min float64) *JSONSchema {
 	s.Minimum = &min
 	return s
 }
 
-// WithMaximum sets the maximum value for numeric schema.
+// 使用 Maximum 设置了数值计数的最大值 。
 func (s *JSONSchema) WithMaximum(max float64) *JSONSchema {
 	s.Maximum = &max
 	return s
 }
 
-// WithExclusiveMinimum sets the exclusive minimum value for numeric schema.
+// 以排除最小值设置数值计的专属最小值。
 func (s *JSONSchema) WithExclusiveMinimum(min float64) *JSONSchema {
 	s.ExclusiveMinimum = &min
 	return s
 }
 
-// WithExclusiveMaximum sets the exclusive maximum value for numeric schema.
+// With Exclusive Maximum 为数值计设置了独有的最大值.
 func (s *JSONSchema) WithExclusiveMaximum(max float64) *JSONSchema {
 	s.ExclusiveMaximum = &max
 	return s
 }
 
-// WithMultipleOf sets the multipleOf constraint for numeric schema.
+// MultipleOf 设置了数值图的多 Of 约束。
 func (s *JSONSchema) WithMultipleOf(val float64) *JSONSchema {
 	s.MultipleOf = &val
 	return s
 }
 
-// WithMinItems sets the minimum items for array schema.
+// With Min Projects 为阵列计划设定最小项目 。
 func (s *JSONSchema) WithMinItems(min int) *JSONSchema {
 	s.MinItems = &min
 	return s
 }
 
-// WithMaxItems sets the maximum items for array schema.
+// With Max Projects为阵列计划设定了最大项目.
 func (s *JSONSchema) WithMaxItems(max int) *JSONSchema {
 	s.MaxItems = &max
 	return s
 }
 
-// WithUniqueItems sets the uniqueItems constraint for array schema.
+// 独有的项目设置了数组计划唯一的项目限制 。
 func (s *JSONSchema) WithUniqueItems(unique bool) *JSONSchema {
 	s.UniqueItems = &unique
 	return s
 }
 
-// WithMinProperties sets the minimum properties for object schema.
+// 与 MinProperties 设定对象方案的最低属性 。
 func (s *JSONSchema) WithMinProperties(min int) *JSONSchema {
 	s.MinProperties = &min
 	return s
 }
 
-// WithMaxProperties sets the maximum properties for object schema.
+// 与MaxProperties设定对象计划的最大属性.
 func (s *JSONSchema) WithMaxProperties(max int) *JSONSchema {
 	s.MaxProperties = &max
 	return s
 }
 
-// WithAdditionalProperties sets the additionalProperties constraint.
+// 附加物业设置附加物业约束.
 func (s *JSONSchema) WithAdditionalProperties(allowed bool) *JSONSchema {
 	s.AdditionalProperties = &AdditionalProperties{Allowed: allowed}
 	return s
 }
 
-// WithAdditionalPropertiesSchema sets the additionalProperties to a schema.
+// 附加的PropertiesSchema将附加的Properties设定为一个 schema.
 func (s *JSONSchema) WithAdditionalPropertiesSchema(schema *JSONSchema) *JSONSchema {
 	s.AdditionalProperties = &AdditionalProperties{Allowed: true, Schema: schema}
 	return s
 }
 
-// WithEnum sets the enum values.
+// 用 Enum 设置 enum 值 。
 func (s *JSONSchema) WithEnum(values ...any) *JSONSchema {
 	s.Enum = values
 	return s
 }
 
-// WithConst sets the const value.
+// 用 Const 设置 Const 值 。
 func (s *JSONSchema) WithConst(value any) *JSONSchema {
 	s.Const = value
 	return s
 }
 
-// Clone creates a deep copy of the schema.
+// 克隆人创造出一个深层的复制图案.
 func (s *JSONSchema) Clone() *JSONSchema {
 	if s == nil {
 		return nil
@@ -355,7 +355,7 @@ func (s *JSONSchema) Clone() *JSONSchema {
 		Const:       s.Const,
 	}
 
-	// Clone properties
+	// 克隆属性
 	if s.Properties != nil {
 		clone.Properties = make(map[string]*JSONSchema, len(s.Properties))
 		for k, v := range s.Properties {
@@ -363,16 +363,16 @@ func (s *JSONSchema) Clone() *JSONSchema {
 		}
 	}
 
-	// Clone required
+	// 需要克隆铁
 	if s.Required != nil {
 		clone.Required = make([]string, len(s.Required))
 		copy(clone.Required, s.Required)
 	}
 
-	// Clone items
+	// 克隆项目
 	clone.Items = s.Items.Clone()
 
-	// Clone prefix items
+	// 克隆前缀项目
 	if s.PrefixItems != nil {
 		clone.PrefixItems = make([]*JSONSchema, len(s.PrefixItems))
 		for i, item := range s.PrefixItems {
@@ -380,22 +380,22 @@ func (s *JSONSchema) Clone() *JSONSchema {
 		}
 	}
 
-	// Clone contains
+	// 克隆包含
 	clone.Contains = s.Contains.Clone()
 
-	// Clone enum
+	// 克隆铁
 	if s.Enum != nil {
 		clone.Enum = make([]any, len(s.Enum))
 		copy(clone.Enum, s.Enum)
 	}
 
-	// Clone examples
+	// 克隆实例
 	if s.Examples != nil {
 		clone.Examples = make([]any, len(s.Examples))
 		copy(clone.Examples, s.Examples)
 	}
 
-	// Clone numeric pointers
+	// 克隆数字指针
 	if s.MinLength != nil {
 		v := *s.MinLength
 		clone.MinLength = &v
@@ -453,7 +453,7 @@ func (s *JSONSchema) Clone() *JSONSchema {
 		clone.MaxProperties = &v
 	}
 
-	// Clone additionalProperties
+	// 克隆额外财产
 	if s.AdditionalProperties != nil {
 		clone.AdditionalProperties = &AdditionalProperties{
 			Allowed: s.AdditionalProperties.Allowed,
@@ -461,7 +461,7 @@ func (s *JSONSchema) Clone() *JSONSchema {
 		}
 	}
 
-	// Clone patternProperties
+	// 克隆图案
 	if s.PatternProperties != nil {
 		clone.PatternProperties = make(map[string]*JSONSchema, len(s.PatternProperties))
 		for k, v := range s.PatternProperties {
@@ -469,10 +469,10 @@ func (s *JSONSchema) Clone() *JSONSchema {
 		}
 	}
 
-	// Clone propertyNames
+	// 克隆属性Names
 	clone.PropertyNames = s.PropertyNames.Clone()
 
-	// Clone composition keywords
+	// 克隆组成关键词
 	if s.AllOf != nil {
 		clone.AllOf = make([]*JSONSchema, len(s.AllOf))
 		for i, schema := range s.AllOf {
@@ -493,12 +493,12 @@ func (s *JSONSchema) Clone() *JSONSchema {
 	}
 	clone.Not = s.Not.Clone()
 
-	// Clone conditional keywords
+	// 克隆条件关键字
 	clone.If = s.If.Clone()
 	clone.Then = s.Then.Clone()
 	clone.Else = s.Else.Clone()
 
-	// Clone defs
+	// 克隆齿轮
 	if s.Defs != nil {
 		clone.Defs = make(map[string]*JSONSchema, len(s.Defs))
 		for k, v := range s.Defs {
@@ -509,17 +509,17 @@ func (s *JSONSchema) Clone() *JSONSchema {
 	return clone
 }
 
-// ToJSON serializes the schema to JSON.
+// JSON将计划序列化为JSON.
 func (s *JSONSchema) ToJSON() ([]byte, error) {
 	return json.Marshal(s)
 }
 
-// ToJSONIndent serializes the schema to indented JSON.
+// 给JSON缩进序列化计划为JSON缩入.
 func (s *JSONSchema) ToJSONIndent() ([]byte, error) {
 	return json.MarshalIndent(s, "", "  ")
 }
 
-// FromJSON deserializes a schema from JSON.
+// 从JSON 解析出一个计划 从JSON。
 func FromJSON(data []byte) (*JSONSchema, error) {
 	var schema JSONSchema
 	if err := json.Unmarshal(data, &schema); err != nil {
@@ -528,7 +528,7 @@ func FromJSON(data []byte) (*JSONSchema, error) {
 	return &schema, nil
 }
 
-// IsRequired checks if a property is required.
+// 如果需要财产,则需要进行检查。
 func (s *JSONSchema) IsRequired(name string) bool {
 	for _, req := range s.Required {
 		if req == name {
@@ -538,7 +538,7 @@ func (s *JSONSchema) IsRequired(name string) bool {
 	return false
 }
 
-// GetProperty returns a property schema by name.
+// GetProperty 以名称返回财产计划 。
 func (s *JSONSchema) GetProperty(name string) *JSONSchema {
 	if s.Properties == nil {
 		return nil
@@ -546,7 +546,7 @@ func (s *JSONSchema) GetProperty(name string) *JSONSchema {
 	return s.Properties[name]
 }
 
-// HasProperty checks if a property exists.
+// 是否有财产 。
 func (s *JSONSchema) HasProperty(name string) bool {
 	if s.Properties == nil {
 		return false

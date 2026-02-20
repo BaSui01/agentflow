@@ -23,12 +23,12 @@ func TestWeaviateStore_BasicFlow(t *testing.T) {
 
 	mux := http.NewServeMux()
 
-	// Schema check endpoint
+	// Schema 检查终点
 	mux.HandleFunc("/v1/schema/TestClass", func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case http.MethodGet:
 			schemaCheckCalls.Add(1)
-			// Return 404 to trigger schema creation
+			// 返回404来触发计划创建
 			if schemaCheckCalls.Load() == 1 {
 				w.WriteHeader(http.StatusNotFound)
 				return
@@ -42,7 +42,7 @@ func TestWeaviateStore_BasicFlow(t *testing.T) {
 		}
 	})
 
-	// Schema create endpoint
+	// Schema 创建终点
 	mux.HandleFunc("/v1/schema", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			t.Fatalf("unexpected method: %s", r.Method)
@@ -62,7 +62,7 @@ func TestWeaviateStore_BasicFlow(t *testing.T) {
 		_, _ = w.Write([]byte(`{"class":"TestClass"}`))
 	})
 
-	// Batch objects endpoint
+	// 批量对象端点
 	mux.HandleFunc("/v1/batch/objects", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			t.Fatalf("unexpected method: %s", r.Method)
@@ -100,7 +100,7 @@ func TestWeaviateStore_BasicFlow(t *testing.T) {
 			}
 		}
 
-		// Return success response
+		// 返回成功对策
 		results := make([]map[string]any, len(req.Objects))
 		for i, obj := range req.Objects {
 			results[i] = map[string]any{
@@ -114,7 +114,7 @@ func TestWeaviateStore_BasicFlow(t *testing.T) {
 		_, _ = w.Write(resp)
 	})
 
-	// GraphQL endpoint
+	// 图QL 结束点
 	mux.HandleFunc("/v1/graphql", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			t.Fatalf("unexpected method: %s", r.Method)
@@ -130,7 +130,7 @@ func TestWeaviateStore_BasicFlow(t *testing.T) {
 
 		w.Header().Set("Content-Type", "application/json")
 
-		// Check if it's an aggregate query (for Count)
+		// 检查它是否是一个聚合查询( 用于计算)
 		if strings.Contains(req.Query, "Aggregate") {
 			_, _ = w.Write([]byte(`{
 				"data": {
@@ -142,7 +142,7 @@ func TestWeaviateStore_BasicFlow(t *testing.T) {
 			return
 		}
 
-		// Search query response
+		// 搜索查询回复
 		_, _ = w.Write([]byte(`{
 			"data": {
 				"Get": {
@@ -165,7 +165,7 @@ func TestWeaviateStore_BasicFlow(t *testing.T) {
 		}`))
 	})
 
-	// Delete object endpoint
+	// 删除对象终点
 	mux.HandleFunc("/v1/objects/TestClass/", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodDelete {
 			t.Fatalf("unexpected method: %s", r.Method)
@@ -186,7 +186,7 @@ func TestWeaviateStore_BasicFlow(t *testing.T) {
 
 	ctx := context.Background()
 
-	// Test AddDocuments
+	// 测试添加文档
 	docs := []Document{
 		{ID: "doc1", Content: "hello world", Metadata: map[string]any{"key": "value1"}, Embedding: []float64{0.1, 0.2, 0.3}},
 		{ID: "doc2", Content: "goodbye world", Metadata: map[string]any{"key": "value2"}, Embedding: []float64{0.3, 0.2, 0.1}},
@@ -196,7 +196,7 @@ func TestWeaviateStore_BasicFlow(t *testing.T) {
 		t.Fatalf("AddDocuments: %v", err)
 	}
 
-	// Test Search
+	// 测试搜索
 	results, err := store.Search(ctx, []float64{0.1, 0.2, 0.3}, 2)
 	if err != nil {
 		t.Fatalf("Search: %v", err)
@@ -211,7 +211,7 @@ func TestWeaviateStore_BasicFlow(t *testing.T) {
 		t.Fatalf("expected score 0.9, got %f", results[0].Score)
 	}
 
-	// Test Count
+	// 测试计数
 	n, err := store.Count(ctx)
 	if err != nil {
 		t.Fatalf("Count: %v", err)
@@ -220,12 +220,12 @@ func TestWeaviateStore_BasicFlow(t *testing.T) {
 		t.Fatalf("expected count=2, got %d", n)
 	}
 
-	// Test DeleteDocuments
+	// 测试删除文档
 	if err := store.DeleteDocuments(ctx, []string{"doc1", "doc2"}); err != nil {
 		t.Fatalf("DeleteDocuments: %v", err)
 	}
 
-	// Verify endpoint calls
+	// 校验端点呼叫
 	if schemaCheckCalls.Load() < 1 {
 		t.Fatalf("expected at least 1 schema check call, got %d", schemaCheckCalls.Load())
 	}
@@ -260,7 +260,7 @@ func TestWeaviateStore_HybridSearch(t *testing.T) {
 			t.Fatalf("decode graphql: %v", err)
 		}
 
-		// Verify hybrid search query
+		// 验证混合搜索查询
 		if !strings.Contains(req.Query, "hybrid") {
 			t.Fatalf("expected hybrid query, got: %s", req.Query)
 		}
@@ -329,7 +329,7 @@ func TestWeaviateStore_BM25Search(t *testing.T) {
 			t.Fatalf("decode graphql: %v", err)
 		}
 
-		// Verify BM25 search query
+		// 校验 BM25 搜索查询
 		if !strings.Contains(req.Query, "bm25") {
 			t.Fatalf("expected bm25 query, got: %s", req.Query)
 		}
@@ -477,7 +477,7 @@ func TestWeaviateStore_DefaultConfig(t *testing.T) {
 		ClassName: "TestClass",
 	}, nil)
 
-	// Verify defaults
+	// 校验默认
 	if store.cfg.Host != "localhost" {
 		t.Fatalf("expected default host localhost, got %s", store.cfg.Host)
 	}
@@ -627,7 +627,7 @@ func TestWeaviateStore_GraphQLError(t *testing.T) {
 func TestWeaviateObjectID(t *testing.T) {
 	t.Parallel()
 
-	// Test deterministic UUID generation
+	// 测试决定UUID 生成
 	id1 := weaviateObjectID("doc1")
 	id2 := weaviateObjectID("doc1")
 	id3 := weaviateObjectID("doc2")
@@ -639,7 +639,7 @@ func TestWeaviateObjectID(t *testing.T) {
 		t.Fatalf("expected different UUIDs for different inputs")
 	}
 
-	// Verify it's a valid UUID format
+	// 校验它是有效的 UUID 格式
 	if len(id1) != 36 {
 		t.Fatalf("expected UUID length 36, got %d", len(id1))
 	}

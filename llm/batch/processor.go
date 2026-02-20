@@ -1,4 +1,4 @@
-// Package batch provides batch processing for LLM requests.
+// 包件批次为LLM请求提供批次处理.
 package batch
 
 import (
@@ -15,7 +15,7 @@ var (
 	ErrBatchFull    = errors.New("batch queue full")
 )
 
-// Request represents a single LLM request in a batch.
+// 请求是一组中单个LLM请求.
 type Request struct {
 	ID       string         `json:"id"`
 	Model    string         `json:"model"`
@@ -23,13 +23,13 @@ type Request struct {
 	Params   map[string]any `json:"params,omitempty"`
 }
 
-// Message represents a chat message.
+// 信件代表聊天信件 。
 type Message struct {
 	Role    string `json:"role"`
 	Content string `json:"content"`
 }
 
-// Response represents a single LLM response.
+// 反应代表单一的LLM反应.
 type Response struct {
 	ID      string `json:"id"`
 	Content string `json:"content"`
@@ -37,10 +37,10 @@ type Response struct {
 	Tokens  int    `json:"tokens"`
 }
 
-// BatchHandler processes a batch of requests.
+// BatchHandler处理一批请求.
 type BatchHandler func(ctx context.Context, requests []*Request) []*Response
 
-// BatchConfig configures the batch processor.
+// BatchConfig 配置批处理器。
 type BatchConfig struct {
 	MaxBatchSize   int           `json:"max_batch_size"`
 	MaxWaitTime    time.Duration `json:"max_wait_time"`
@@ -49,7 +49,7 @@ type BatchConfig struct {
 	RetryOnFailure bool          `json:"retry_on_failure"`
 }
 
-// DefaultBatchConfig returns sensible defaults.
+// 默认BatchConfig 返回合理的默认值 。
 func DefaultBatchConfig() BatchConfig {
 	return BatchConfig{
 		MaxBatchSize:   10,
@@ -60,7 +60,7 @@ func DefaultBatchConfig() BatchConfig {
 	}
 }
 
-// BatchProcessor batches multiple LLM requests for efficient processing.
+// 批量处理器为高效处理而批出多个LLM请求.
 type BatchProcessor struct {
 	config  BatchConfig
 	handler BatchHandler
@@ -68,7 +68,7 @@ type BatchProcessor struct {
 	closed  atomic.Bool
 	wg      sync.WaitGroup
 
-	// Metrics
+	// 计量
 	submitted atomic.Int64
 	batched   atomic.Int64
 	completed atomic.Int64
@@ -81,7 +81,7 @@ type pendingRequest struct {
 	ctx      context.Context
 }
 
-// NewBatchProcessor creates a new batch processor.
+// NewBatchProcessor创建了新的分批处理器.
 func NewBatchProcessor(config BatchConfig, handler BatchHandler) *BatchProcessor {
 	bp := &BatchProcessor{
 		config:  config,
@@ -89,7 +89,7 @@ func NewBatchProcessor(config BatchConfig, handler BatchHandler) *BatchProcessor
 		queue:   make(chan *pendingRequest, config.QueueSize),
 	}
 
-	// Start workers
+	// 开始工作
 	for i := 0; i < config.Workers; i++ {
 		bp.wg.Add(1)
 		go bp.worker()
@@ -98,7 +98,7 @@ func NewBatchProcessor(config BatchConfig, handler BatchHandler) *BatchProcessor
 	return bp
 }
 
-// Submit submits a request and returns a channel for the response.
+// 提交请求并返回响应的通道 。
 func (bp *BatchProcessor) Submit(ctx context.Context, req *Request) <-chan *Response {
 	respCh := make(chan *Response, 1)
 
@@ -129,7 +129,7 @@ func (bp *BatchProcessor) Submit(ctx context.Context, req *Request) <-chan *Resp
 	return respCh
 }
 
-// SubmitSync submits a request and waits for the response.
+// SontentSync 提交请求并等待回复.
 func (bp *BatchProcessor) SubmitSync(ctx context.Context, req *Request) (*Response, error) {
 	respCh := bp.Submit(ctx, req)
 
@@ -155,7 +155,7 @@ func (bp *BatchProcessor) worker() {
 		select {
 		case pending, ok := <-bp.queue:
 			if !ok {
-				// Process remaining batch
+				// 加工剩余批次
 				if len(batch) > 0 {
 					bp.processBatch(batch)
 				}
@@ -187,19 +187,19 @@ func (bp *BatchProcessor) processBatch(batch []*pendingRequest) {
 
 	bp.batched.Add(1)
 
-	// Build request slice
+	// 构建请求切片
 	requests := make([]*Request, len(batch))
 	for i, p := range batch {
 		requests[i] = p.request
 	}
 
-	// Use first request's context (or create combined context)
+	// 使用第一个请求的上下文( 或创建合并上下文)
 	ctx := batch[0].ctx
 
-	// Process batch
+	// 工艺批次
 	responses := bp.handler(ctx, requests)
 
-	// Distribute responses
+	// 分发答复
 	responseMap := make(map[string]*Response)
 	for _, resp := range responses {
 		responseMap[resp.ID] = resp
@@ -227,7 +227,7 @@ func (bp *BatchProcessor) processBatch(batch []*pendingRequest) {
 	}
 }
 
-// Close closes the batch processor.
+// 关闭批量处理器 。
 func (bp *BatchProcessor) Close() {
 	if bp.closed.Swap(true) {
 		return
@@ -236,7 +236,7 @@ func (bp *BatchProcessor) Close() {
 	bp.wg.Wait()
 }
 
-// Stats returns processor statistics.
+// Stats 返回处理器统计 。
 func (bp *BatchProcessor) Stats() BatchStats {
 	return BatchStats{
 		Submitted: bp.submitted.Load(),
@@ -247,7 +247,7 @@ func (bp *BatchProcessor) Stats() BatchStats {
 	}
 }
 
-// BatchStats contains processor statistics.
+// BatchStats包含处理器统计.
 type BatchStats struct {
 	Submitted int64 `json:"submitted"`
 	Batched   int64 `json:"batched"`
@@ -256,7 +256,7 @@ type BatchStats struct {
 	Queued    int   `json:"queued"`
 }
 
-// BatchEfficiency returns the average batch size.
+// 批量效果返回平均批量大小 。
 func (s BatchStats) BatchEfficiency() float64 {
 	if s.Batched == 0 {
 		return 0

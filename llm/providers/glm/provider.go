@@ -17,8 +17,8 @@ import (
 	"go.uber.org/zap"
 )
 
-// GLMProvider implements Zhipu AI GLM LLM Provider.
-// GLM uses OpenAI-compatible API format.
+// GLMProvider 执行 Zhipu AI GLM LLM 提供者.
+// GLM使用OpenAI相容的API格式.
 type GLMProvider struct {
 	cfg           providers.GLMConfig
 	client        *http.Client
@@ -26,14 +26,14 @@ type GLMProvider struct {
 	rewriterChain *middleware.RewriterChain
 }
 
-// NewGLMProvider creates a new Qwen provider instance.
+// NewGLMProvider创建了新的 Quen 提供者实例 。
 func NewGLMProvider(cfg providers.GLMConfig, logger *zap.Logger) *GLMProvider {
 	timeout := cfg.Timeout
 	if timeout == 0 {
 		timeout = 30 * time.Second
 	}
 
-	// Set default BaseURL if not provided
+	// 如果未提供则设置默认 BaseURL
 	if cfg.BaseURL == "" {
 		cfg.BaseURL = "https://open.bigmodel.cn"
 	}
@@ -83,7 +83,7 @@ func (p *GLMProvider) HealthCheck(ctx context.Context) (*llm.HealthStatus, error
 	return &llm.HealthStatus{Healthy: true, Latency: latency}, nil
 }
 
-// OpenAI-compatible types (reused from OpenAI provider pattern)
+// OpenAI 兼容类型(从 OpenAI 提供者模式中重新使用)
 type openAIMessage struct {
 	Role         string           `json:"role"`
 	Content      string           `json:"content,omitempty"`
@@ -212,7 +212,7 @@ func mapError(status int, msg string, provider string) *llm.Error {
 	case http.StatusTooManyRequests:
 		return &llm.Error{Code: llm.ErrRateLimited, Message: msg, HTTPStatus: status, Retryable: true, Provider: provider}
 	case http.StatusBadRequest:
-		// Check for quota/credit keywords
+		// 检查配额/信用关键字
 		if strings.Contains(strings.ToLower(msg), "quota") ||
 			strings.Contains(strings.ToLower(msg), "credit") {
 			return &llm.Error{Code: llm.ErrQuotaExceeded, Message: msg, HTTPStatus: status, Provider: provider}
@@ -228,7 +228,7 @@ func mapError(status int, msg string, provider string) *llm.Error {
 }
 
 func (p *GLMProvider) Completion(ctx context.Context, req *llm.ChatRequest) (*llm.ChatResponse, error) {
-	// Apply rewriter chain
+	// 应用重写链
 	rewrittenReq, err := p.rewriterChain.Execute(ctx, req)
 	if err != nil {
 		return nil, &llm.Error{
@@ -240,7 +240,7 @@ func (p *GLMProvider) Completion(ctx context.Context, req *llm.ChatRequest) (*ll
 	}
 	req = rewrittenReq
 
-	// Handle credential override from context
+	// 从上下文处理证书覆盖
 	apiKey := p.cfg.APIKey
 	if c, ok := llm.CredentialOverrideFromContext(ctx); ok {
 		if strings.TrimSpace(c.APIKey) != "" {
@@ -288,7 +288,7 @@ func (p *GLMProvider) Completion(ctx context.Context, req *llm.ChatRequest) (*ll
 }
 
 func (p *GLMProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-chan llm.StreamChunk, error) {
-	// Apply rewriter chain
+	// 应用重写链
 	rewrittenReq, err := p.rewriterChain.Execute(ctx, req)
 	if err != nil {
 		return nil, &llm.Error{
@@ -300,7 +300,7 @@ func (p *GLMProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-chan 
 	}
 	req = rewrittenReq
 
-	// Handle credential override from context
+	// 从上下文处理证书覆盖
 	apiKey := p.cfg.APIKey
 	if c, ok := llm.CredentialOverrideFromContext(ctx); ok {
 		if strings.TrimSpace(c.APIKey) != "" {

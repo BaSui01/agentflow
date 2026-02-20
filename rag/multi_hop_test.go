@@ -30,7 +30,7 @@ func TestMultiHopReasoner_Reason_Basic(t *testing.T) {
 	retrieverConfig := DefaultHybridRetrievalConfig()
 	retriever := NewHybridRetriever(retrieverConfig, zap.NewNop())
 
-	// Index some test documents
+	// 索引一些测试文档
 	docs := []Document{
 		{ID: "doc1", Content: "Machine learning is a subset of artificial intelligence."},
 		{ID: "doc2", Content: "Python is a popular programming language for machine learning."},
@@ -97,7 +97,7 @@ func TestMultiHopReasoner_Reason_WithQueryTransformer(t *testing.T) {
 		t.Errorf("expected status to be completed, got %s", chain.Status)
 	}
 
-	// Check that intent was detected
+	// 检查是否发现意图
 	if _, ok := chain.Metadata["intent"]; !ok {
 		t.Log("intent metadata not set (expected when transformer is used)")
 	}
@@ -148,7 +148,7 @@ func TestMultiHopReasoner_Reason_Timeout(t *testing.T) {
 
 	chain, err := reasoner.Reason(ctx, query)
 
-	// Should either timeout or complete quickly
+	// 要么暂停,要么迅速完成
 	if err != nil && err != context.DeadlineExceeded {
 		t.Logf("Got error: %v", err)
 	}
@@ -213,19 +213,19 @@ func TestMultiHopReasoner_Cache(t *testing.T) {
 	ctx := context.Background()
 	query := "What is machine learning?"
 
-	// First call
+	// 第一通电话
 	chain1, err := reasoner.Reason(ctx, query)
 	if err != nil {
 		t.Fatalf("Reason failed: %v", err)
 	}
 
-	// Second call should hit cache
+	// 二通电话应打缓存
 	chain2, err := reasoner.Reason(ctx, query)
 	if err != nil {
 		t.Fatalf("Reason failed: %v", err)
 	}
 
-	// Should be the same chain (from cache)
+	// 应该是同一链条(从缓存)
 	if chain1.ID != chain2.ID {
 		t.Error("expected cached chain to be returned")
 	}
@@ -255,7 +255,7 @@ func TestReasoningChain_GetHop(t *testing.T) {
 		t.Errorf("expected Query to be 'query2', got %q", hop.Query)
 	}
 
-	// Out of bounds
+	// 超出范围
 	hop = chain.GetHop(5)
 	if hop != nil {
 		t.Error("expected nil for out of bounds hop")
@@ -291,7 +291,7 @@ func TestReasoningChain_GetAllDocuments(t *testing.T) {
 		t.Errorf("expected 3 unique documents, got %d", len(docs))
 	}
 
-	// Check that duplicates are removed
+	// 检查复制件是否被删除
 	seen := make(map[string]bool)
 	for _, doc := range docs {
 		if seen[doc.ID] {
@@ -325,7 +325,7 @@ func TestReasoningChain_GetTopDocuments(t *testing.T) {
 		t.Errorf("expected 2 documents, got %d", len(topDocs))
 	}
 
-	// Should be sorted by score
+	// 应该按分数排序
 	if topDocs[0].FinalScore < topDocs[1].FinalScore {
 		t.Error("expected documents to be sorted by score descending")
 	}
@@ -357,12 +357,12 @@ func TestReasoningChain_Visualize(t *testing.T) {
 		t.Fatal("expected visualization to be returned")
 	}
 
-	// Should have query node, hop node, document node, and answer node
+	// 应该有查询节点, hop节点,文档节点, 并回答节点
 	if len(viz.Nodes) < 4 {
 		t.Errorf("expected at least 4 nodes, got %d", len(viz.Nodes))
 	}
 
-	// Check node types
+	// 检查节点类型
 	nodeTypes := make(map[string]int)
 	for _, node := range viz.Nodes {
 		nodeTypes[node.Type]++
@@ -378,7 +378,7 @@ func TestReasoningChain_Visualize(t *testing.T) {
 		t.Error("expected 1 answer node")
 	}
 
-	// Check edges
+	// 检查边缘
 	if len(viz.Edges) < 3 {
 		t.Errorf("expected at least 3 edges, got %d", len(viz.Edges))
 	}
@@ -394,13 +394,13 @@ func TestReasoningChain_JSON(t *testing.T) {
 		},
 	}
 
-	// Serialize
+	// 序列化
 	data, err := chain.ToJSON()
 	if err != nil {
 		t.Fatalf("ToJSON failed: %v", err)
 	}
 
-	// Deserialize
+	// 淡化
 	chain2 := &ReasoningChain{}
 	err = chain2.FromJSON(data)
 	if err != nil {
@@ -499,7 +499,7 @@ func TestReasoningCache(t *testing.T) {
 		CreatedAt:     time.Now(),
 	}
 
-	// Set and get
+	// 准备就绪
 	cache.set("key1", chain)
 	result, ok := cache.get("key1")
 	if !ok {
@@ -509,13 +509,13 @@ func TestReasoningCache(t *testing.T) {
 		t.Error("expected cached value to match")
 	}
 
-	// Non-existent key
+	// 不存在密钥
 	_, ok = cache.get("nonexistent")
 	if ok {
 		t.Error("expected cache miss for non-existent key")
 	}
 
-	// Wait for expiration
+	// 等待过期
 	time.Sleep(150 * time.Millisecond)
 	_, ok = cache.get("key1")
 	if ok {
@@ -552,8 +552,8 @@ func TestGenerateChainID(t *testing.T) {
 		t.Error("expected non-empty chain ID")
 	}
 
-	// IDs should be unique (based on nanosecond timestamp)
-	// Note: In very fast execution, IDs might be the same, so we just check format
+	// ID应该是独一无二的(基于纳米秒印)
+	// 注意: 在非常快的执行中, ID可能是相同的, 所以我们只是检查格式
 	if !contains(id1, "chain_") {
 		t.Error("expected chain ID to start with 'chain_'")
 	}
@@ -594,7 +594,7 @@ func TestMultiHopReasoner_QueryDeduplication(t *testing.T) {
 	retrieverConfig := DefaultHybridRetrievalConfig()
 	retriever := NewHybridRetriever(retrieverConfig, zap.NewNop())
 
-	// Index test documents
+	// 索引测试文档
 	docs := []Document{
 		{ID: "doc1", Content: "Machine learning is a subset of artificial intelligence."},
 		{ID: "doc2", Content: "Deep learning uses neural networks."},
@@ -615,8 +615,8 @@ func TestMultiHopReasoner_QueryDeduplication(t *testing.T) {
 		t.Fatal("expected chain to be returned")
 	}
 
-	// With deduplication, even with MaxHops=5, we should not execute duplicate queries
-	// The first hop executes the query, subsequent hops with the same query should be skipped
+	// 分解,即使与 MaxHops= 5, 我们不应该执行重复的查询
+	// 第一个 hop 执行查询, 后面使用相同查询的 hop 将被跳过
 	if chain.Status != StatusCompleted {
 		t.Errorf("expected status to be completed, got %s", chain.Status)
 	}

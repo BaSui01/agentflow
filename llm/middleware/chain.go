@@ -1,4 +1,4 @@
-// Package middleware provides extensible middleware chain for LLM requests.
+// 包中件为LLM请求提供可扩展的中件链.
 package middleware
 
 import (
@@ -9,26 +9,26 @@ import (
 	llmpkg "github.com/BaSui01/agentflow/llm"
 )
 
-// Handler processes a request and returns a response.
+// Handler处理一个请求并返回一个响应.
 type Handler func(ctx context.Context, req *llmpkg.ChatRequest) (*llmpkg.ChatResponse, error)
 
-// Middleware wraps a handler with additional functionality.
+// Middleware 将处理器包裹在外加功能.
 type Middleware func(next Handler) Handler
 
-// Chain represents a middleware chain.
+// 链条代表了中件链.
 type Chain struct {
 	middlewares []Middleware
 	mu          sync.RWMutex
 }
 
-// NewChain creates a new middleware chain.
+// NewChain创建了新的中件链.
 func NewChain(middlewares ...Middleware) *Chain {
 	return &Chain{
 		middlewares: middlewares,
 	}
 }
 
-// Use adds middleware to the chain.
+// 使用将中间软件添加到链中 。
 func (c *Chain) Use(m Middleware) *Chain {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -36,7 +36,7 @@ func (c *Chain) Use(m Middleware) *Chain {
 	return c
 }
 
-// UseFront adds middleware to the front of the chain.
+// UserFront在链条前部添加了中间软件.
 func (c *Chain) UseFront(m Middleware) *Chain {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -44,28 +44,28 @@ func (c *Chain) UseFront(m Middleware) *Chain {
 	return c
 }
 
-// Then wraps a handler with all middleware in the chain.
+// 然后用链中的所有中间器件包裹一个处理器.
 func (c *Chain) Then(h Handler) Handler {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
-	// Apply middleware in reverse order
+	// 按倒序应用中间软件
 	for i := len(c.middlewares) - 1; i >= 0; i-- {
 		h = c.middlewares[i](h)
 	}
 	return h
 }
 
-// Len returns the number of middleware in the chain.
+// Len 返回链中的中间软件数 。
 func (c *Chain) Len() int {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	return len(c.middlewares)
 }
 
-// Built-in middleware
+// 内置中间软件
 
-// LoggingMiddleware logs request/response details.
+// 日志Middleware日志请求/回复细节 。
 func LoggingMiddleware(logger func(format string, args ...any)) Middleware {
 	return func(next Handler) Handler {
 		return func(ctx context.Context, req *llmpkg.ChatRequest) (*llmpkg.ChatResponse, error) {
@@ -86,7 +86,7 @@ func LoggingMiddleware(logger func(format string, args ...any)) Middleware {
 	}
 }
 
-// TimeoutMiddleware adds timeout to requests.
+// 超时Middleware 对请求添加超时.
 func TimeoutMiddleware(timeout time.Duration) Middleware {
 	return func(next Handler) Handler {
 		return func(ctx context.Context, req *llmpkg.ChatRequest) (*llmpkg.ChatResponse, error) {
@@ -97,7 +97,7 @@ func TimeoutMiddleware(timeout time.Duration) Middleware {
 	}
 }
 
-// RetryMiddleware retries failed requests.
+// 重试Middleware 重试失败的请求 。
 func RetryMiddleware(maxRetries int, backoff time.Duration) Middleware {
 	return func(next Handler) Handler {
 		return func(ctx context.Context, req *llmpkg.ChatRequest) (*llmpkg.ChatResponse, error) {
@@ -122,7 +122,7 @@ func RetryMiddleware(maxRetries int, backoff time.Duration) Middleware {
 	}
 }
 
-// MetricsMiddleware collects request metrics.
+// MetricsMiddleware 收集请求的度量衡.
 func MetricsMiddleware(collector MetricsCollector) Middleware {
 	return func(next Handler) Handler {
 		return func(ctx context.Context, req *llmpkg.ChatRequest) (*llmpkg.ChatResponse, error) {
@@ -140,13 +140,13 @@ func MetricsMiddleware(collector MetricsCollector) Middleware {
 	}
 }
 
-// MetricsCollector defines metrics collection interface.
+// Metrics Collector定义了度量衡收集界面.
 type MetricsCollector interface {
 	RecordRequest(model string, duration time.Duration, success bool)
 	RecordTokens(model string, tokens int)
 }
 
-// HeadersMiddleware adds custom headers to request metadata.
+// HeadersMiddleware 添加自定义头来请求元数据.
 func HeadersMiddleware(headers map[string]string) Middleware {
 	return func(next Handler) Handler {
 		return func(ctx context.Context, req *llmpkg.ChatRequest) (*llmpkg.ChatResponse, error) {
@@ -161,7 +161,7 @@ func HeadersMiddleware(headers map[string]string) Middleware {
 	}
 }
 
-// CacheMiddleware caches responses.
+// 缓存器件缓存响应 。
 func CacheMiddleware(cache Cache) Middleware {
 	return func(next Handler) Handler {
 		return func(ctx context.Context, req *llmpkg.ChatRequest) (*llmpkg.ChatResponse, error) {
@@ -180,14 +180,14 @@ func CacheMiddleware(cache Cache) Middleware {
 	}
 }
 
-// Cache defines caching interface.
+// 快取定义缓存接口 。
 type Cache interface {
 	Key(req *llmpkg.ChatRequest) string
 	Get(key string) (*llmpkg.ChatResponse, bool)
 	Set(key string, resp *llmpkg.ChatResponse)
 }
 
-// RateLimitMiddleware applies rate limiting.
+// PrateLimitMiddleware 应用率限制 。
 func RateLimitMiddleware(limiter RateLimiter) Middleware {
 	return func(next Handler) Handler {
 		return func(ctx context.Context, req *llmpkg.ChatRequest) (*llmpkg.ChatResponse, error) {
@@ -199,12 +199,12 @@ func RateLimitMiddleware(limiter RateLimiter) Middleware {
 	}
 }
 
-// RateLimiter defines rate limiting interface.
+// PrateLimiter 定义了速率限制接口.
 type RateLimiter interface {
 	Wait(ctx context.Context) error
 }
 
-// RecoveryMiddleware recovers from panics.
+// 恢复Middleware从恐慌中恢复过来.
 func RecoveryMiddleware(onPanic func(any)) Middleware {
 	return func(next Handler) Handler {
 		return func(ctx context.Context, req *llmpkg.ChatRequest) (resp *llmpkg.ChatResponse, err error) {
@@ -221,7 +221,7 @@ func RecoveryMiddleware(onPanic func(any)) Middleware {
 	}
 }
 
-// PanicError represents a recovered panic.
+// 恐慌代表了恢复的恐慌。
 type PanicError struct {
 	Value any
 }
@@ -230,7 +230,7 @@ func (e *PanicError) Error() string {
 	return "panic recovered"
 }
 
-// TracingMiddleware adds distributed tracing.
+// 追踪Middleware增加了分布式追踪.
 func TracingMiddleware(tracer Tracer) Middleware {
 	return func(next Handler) Handler {
 		return func(ctx context.Context, req *llmpkg.ChatRequest) (*llmpkg.ChatResponse, error) {
@@ -253,19 +253,19 @@ func TracingMiddleware(tracer Tracer) Middleware {
 	}
 }
 
-// Tracer defines tracing interface.
+// Tracer定义了追踪接口.
 type Tracer interface {
 	Start(ctx context.Context, name string) (context.Context, Span)
 }
 
-// Span defines a trace span.
+// Span 定义了跟踪跨度 。
 type Span interface {
 	SetAttribute(key string, value any)
 	SetError(err error)
 	End()
 }
 
-// ValidatorMiddleware validates requests before processing.
+// 验证器Middleware在处理前对请求进行验证.
 func ValidatorMiddleware(validators ...Validator) Middleware {
 	return func(next Handler) Handler {
 		return func(ctx context.Context, req *llmpkg.ChatRequest) (*llmpkg.ChatResponse, error) {
@@ -279,12 +279,12 @@ func ValidatorMiddleware(validators ...Validator) Middleware {
 	}
 }
 
-// Validator defines request validation interface.
+// 验证器定义请求验证接口.
 type Validator interface {
 	Validate(req *llmpkg.ChatRequest) error
 }
 
-// TransformMiddleware transforms requests/responses.
+// TransformMiddleware 转换请求/响应.
 func TransformMiddleware(reqTransform func(*llmpkg.ChatRequest), respTransform func(*llmpkg.ChatResponse)) Middleware {
 	return func(next Handler) Handler {
 		return func(ctx context.Context, req *llmpkg.ChatRequest) (*llmpkg.ChatResponse, error) {
