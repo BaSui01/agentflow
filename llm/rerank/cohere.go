@@ -11,13 +11,13 @@ import (
 	"time"
 )
 
-// CohereProvider implements reranking using Cohere's API.
+// Cohere Provider执行重排 使用 Cohere API.
 type CohereProvider struct {
 	cfg    CohereConfig
 	client *http.Client
 }
 
-// NewCohereProvider creates a new Cohere reranker provider.
+// NewCohere Provider创建了新的Cohere reranker供应商.
 func NewCohereProvider(cfg CohereConfig) *CohereProvider {
 	if cfg.BaseURL == "" {
 		cfg.BaseURL = "https://api.cohere.ai"
@@ -64,7 +64,7 @@ type cohereRerankResponse struct {
 	} `json:"meta"`
 }
 
-// Rerank reranks documents using Cohere.
+// 使用 Cohere 对文档进行重新排序 。
 func (p *CohereProvider) Rerank(ctx context.Context, req *RerankRequest) (*RerankResponse, error) {
 	model := req.Model
 	if model == "" {
@@ -137,7 +137,7 @@ func (p *CohereProvider) Rerank(ctx context.Context, req *RerankRequest) (*Reran
 	}, nil
 }
 
-// RerankSimple is a convenience method for simple reranking.
+// RerankSimple是简单的再排的一种方便方法.
 func (p *CohereProvider) RerankSimple(ctx context.Context, query string, documents []string, topN int) ([]RerankResult, error) {
 	docs := make([]Document, len(documents))
 	for i, d := range documents {

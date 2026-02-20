@@ -11,16 +11,16 @@ import (
 	"go.uber.org/zap"
 )
 
-// LlamaProvider implements Meta Llama Provider via third-party OpenAI-compatible APIs.
-// Supports Together AI, Replicate, and OpenRouter.
+// Llama Provider通过第三方OpenAI兼容API执行Meta Llama Productor.
+// 支持共同AI,再版和OpenRouter.
 type LlamaProvider struct {
 	*openai.OpenAIProvider
 	cfg providers.LlamaConfig
 }
 
-// NewLlamaProvider creates a new Llama provider instance.
+// NewLlama Provider创建了一个新的Llama供应商实例.
 func NewLlamaProvider(cfg providers.LlamaConfig, logger *zap.Logger) *LlamaProvider {
-	// Set default provider and BaseURL if not provided
+	// 如果不提供默认提供者和 BaseURL 设置
 	if cfg.Provider == "" {
 		cfg.Provider = "together" // Default to Together AI
 	}
@@ -38,7 +38,7 @@ func NewLlamaProvider(cfg providers.LlamaConfig, logger *zap.Logger) *LlamaProvi
 		}
 	}
 
-	// Convert to OpenAI config
+	// 转换为 OpenAI 配置
 	openaiCfg := providers.OpenAIConfig{
 		APIKey:  cfg.APIKey,
 		BaseURL: cfg.BaseURL,
@@ -58,7 +58,7 @@ func (p *LlamaProvider) Name() string {
 
 func (p *LlamaProvider) HealthCheck(ctx context.Context) (*llm.HealthStatus, error) {
 	start := time.Now()
-	// Reuse OpenAI health check logic
+	// 重新使用 OpenAI 健康检查逻辑
 	status, err := p.OpenAIProvider.HealthCheck(ctx)
 	if err != nil {
 		return &llm.HealthStatus{
@@ -71,7 +71,7 @@ func (p *LlamaProvider) HealthCheck(ctx context.Context) (*llm.HealthStatus, err
 
 func (p *LlamaProvider) SupportsNativeFunctionCalling() bool { return true }
 
-// Completion overrides OpenAI's Completion to fix the Provider field.
+// 完成超过 OpenAI 的补全来修正提供方字段 。
 func (p *LlamaProvider) Completion(ctx context.Context, req *llm.ChatRequest) (*llm.ChatResponse, error) {
 	resp, err := p.OpenAIProvider.Completion(ctx, req)
 	if err != nil {
@@ -85,7 +85,7 @@ func (p *LlamaProvider) Completion(ctx context.Context, req *llm.ChatRequest) (*
 	return resp, nil
 }
 
-// Stream overrides OpenAI's Stream to fix the Provider field on each chunk.
+// Cream 覆盖 OpenAI 的 Stream 来修正每个块上的提供方字段 。
 func (p *LlamaProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-chan llm.StreamChunk, error) {
 	ch, err := p.OpenAIProvider.Stream(ctx, req)
 	if err != nil {

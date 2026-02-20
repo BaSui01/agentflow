@@ -1,4 +1,4 @@
-// Package streaming provides backpressure-aware streaming for high-throughput LLM responses.
+// 包流为高通量LLM响应提供回压-意识流.
 package streaming
 
 import (
@@ -15,7 +15,7 @@ var (
 	ErrSlowConsumer = errors.New("consumer too slow")
 )
 
-// Token represents a streaming token.
+// Token 代表着流体符号 。
 type Token struct {
 	Content   string    `json:"content"`
 	Index     int       `json:"index"`
@@ -23,7 +23,7 @@ type Token struct {
 	Final     bool      `json:"final"`
 }
 
-// BackpressureConfig configures backpressure behavior.
+// 后压Config配置后压行为.
 type BackpressureConfig struct {
 	BufferSize      int           `json:"buffer_size"`
 	HighWaterMark   float64       `json:"high_water_mark"` // 0.0-1.0
@@ -32,7 +32,7 @@ type BackpressureConfig struct {
 	DropPolicy      DropPolicy    `json:"drop_policy"`
 }
 
-// DropPolicy defines what to do when buffer is full.
+// DroppPolicy定义了缓冲器满后要做什么.
 type DropPolicy int
 
 const (
@@ -42,7 +42,7 @@ const (
 	DropPolicyError                    // Return error
 )
 
-// DefaultBackpressureConfig returns optimized defaults.
+// 默认压缩 Config 返回优化默认值 。
 func DefaultBackpressureConfig() BackpressureConfig {
 	return BackpressureConfig{
 		BufferSize:      1024,
@@ -53,7 +53,7 @@ func DefaultBackpressureConfig() BackpressureConfig {
 	}
 }
 
-// BackpressureStream implements backpressure-aware token streaming.
+// 后压Stream 执行后压-知觉信号流.
 type BackpressureStream struct {
 	config BackpressureConfig
 	buffer chan Token
@@ -61,7 +61,7 @@ type BackpressureStream struct {
 	closed atomic.Bool
 	mu     sync.RWMutex
 
-	// Metrics
+	// 计量
 	produced  atomic.Int64
 	consumed  atomic.Int64
 	dropped   atomic.Int64
@@ -69,13 +69,13 @@ type BackpressureStream struct {
 	lastWrite atomic.Int64
 	lastRead  atomic.Int64
 
-	// Flow control
+	// 流量控制
 	paused   atomic.Bool
 	pauseCh  chan struct{}
 	resumeCh chan struct{}
 }
 
-// NewBackpressureStream creates a new backpressure-aware stream.
+// NewBackpressure Stream 创造出新的后压-意识流.
 func NewBackpressureStream(config BackpressureConfig) *BackpressureStream {
 	return &BackpressureStream{
 		config:   config,
@@ -86,7 +86,7 @@ func NewBackpressureStream(config BackpressureConfig) *BackpressureStream {
 	}
 }
 
-// Write sends a token to the stream with backpressure handling.
+// 写给溪流发一个有后压处理的令牌.
 func (s *BackpressureStream) Write(ctx context.Context, token Token) error {
 	if s.closed.Load() {
 		return ErrStreamClosed
@@ -94,17 +94,17 @@ func (s *BackpressureStream) Write(ctx context.Context, token Token) error {
 
 	s.lastWrite.Store(time.Now().UnixNano())
 
-	// Check buffer level
+	// 检查缓冲级别
 	level := float64(len(s.buffer)) / float64(s.config.BufferSize)
 
-	// Apply backpressure at high water mark
+	// 高水分时应用回压
 	if level >= s.config.HighWaterMark {
 		s.paused.Store(true)
 		s.blocked.Add(1)
 
 		switch s.config.DropPolicy {
 		case DropPolicyBlock:
-			// Wait for buffer to drain
+			// 等待缓冲排出
 			select {
 			case <-ctx.Done():
 				return ctx.Err()
@@ -116,7 +116,7 @@ func (s *BackpressureStream) Write(ctx context.Context, token Token) error {
 			}
 
 		case DropPolicyOldest:
-			// Drop oldest token
+			// 丢弃最旧的符号
 			select {
 			case <-s.buffer:
 				s.dropped.Add(1)
@@ -127,7 +127,7 @@ func (s *BackpressureStream) Write(ctx context.Context, token Token) error {
 			return nil
 
 		case DropPolicyNewest:
-			// Drop this token
+			// 丢弃此标志
 			s.dropped.Add(1)
 			return nil
 
@@ -136,7 +136,7 @@ func (s *BackpressureStream) Write(ctx context.Context, token Token) error {
 		}
 	}
 
-	// Resume at low water mark
+	// 低水分恢复状态
 	if level <= s.config.LowWaterMark {
 		s.paused.Store(false)
 	}
@@ -152,7 +152,7 @@ func (s *BackpressureStream) Write(ctx context.Context, token Token) error {
 	}
 }
 
-// Read receives tokens from the stream.
+// 读取从溪来接取符.
 func (s *BackpressureStream) Read(ctx context.Context) (Token, error) {
 	if s.closed.Load() && len(s.buffer) == 0 {
 		return Token{}, ErrStreamClosed
@@ -172,12 +172,12 @@ func (s *BackpressureStream) Read(ctx context.Context) (Token, error) {
 	}
 }
 
-// ReadChan returns a channel for reading tokens.
+// ReadChan返回读取符的通道.
 func (s *BackpressureStream) ReadChan() <-chan Token {
 	return s.buffer
 }
 
-// Close closes the stream.
+// 关上溪口.
 func (s *BackpressureStream) Close() error {
 	if s.closed.Swap(true) {
 		return nil // Already closed
@@ -187,17 +187,17 @@ func (s *BackpressureStream) Close() error {
 	return nil
 }
 
-// IsPaused returns whether the stream is paused due to backpressure.
+// IsPaused 返回流是否因后压而暂停 。
 func (s *BackpressureStream) IsPaused() bool {
 	return s.paused.Load()
 }
 
-// BufferLevel returns the current buffer utilization (0.0-1.0).
+// 缓冲级返回当前缓冲利用率(0.0-1.0).
 func (s *BackpressureStream) BufferLevel() float64 {
 	return float64(len(s.buffer)) / float64(s.config.BufferSize)
 }
 
-// Stats returns stream statistics.
+// Stats 返回流统计 。
 func (s *BackpressureStream) Stats() StreamStats {
 	return StreamStats{
 		Produced:   s.produced.Load(),
@@ -212,7 +212,7 @@ func (s *BackpressureStream) Stats() StreamStats {
 	}
 }
 
-// StreamStats contains stream statistics.
+// StreamStats包含流统计数据.
 type StreamStats struct {
 	Produced   int64     `json:"produced"`
 	Consumed   int64     `json:"consumed"`
@@ -225,7 +225,7 @@ type StreamStats struct {
 	LastRead   time.Time `json:"last_read"`
 }
 
-// StreamMultiplexer fans out a single stream to multiple consumers.
+// Stream Complexer 粉丝出一流 给多个消费者。
 type StreamMultiplexer struct {
 	source    *BackpressureStream
 	consumers []*BackpressureStream
@@ -233,7 +233,7 @@ type StreamMultiplexer struct {
 	running   atomic.Bool
 }
 
-// NewStreamMultiplexer creates a new multiplexer.
+// NewStream多相机创建了新的多相机.
 func NewStreamMultiplexer(source *BackpressureStream) *StreamMultiplexer {
 	return &StreamMultiplexer{
 		source:    source,
@@ -241,7 +241,7 @@ func NewStreamMultiplexer(source *BackpressureStream) *StreamMultiplexer {
 	}
 }
 
-// AddConsumer adds a consumer stream.
+// 添加Concumer增加了消费流.
 func (m *StreamMultiplexer) AddConsumer(config BackpressureConfig) *BackpressureStream {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -251,7 +251,7 @@ func (m *StreamMultiplexer) AddConsumer(config BackpressureConfig) *Backpressure
 	return consumer
 }
 
-// Start begins multiplexing.
+// 开始多路运行 。
 func (m *StreamMultiplexer) Start(ctx context.Context) {
 	if m.running.Swap(true) {
 		return
@@ -279,11 +279,11 @@ func (m *StreamMultiplexer) broadcast(ctx context.Context, token Token) {
 	defer m.mu.RUnlock()
 
 	for _, consumer := range m.consumers {
-		// Non-blocking write to each consumer
+		// 给每个消费者的无阻信
 		select {
 		case consumer.buffer <- token:
 		default:
-			// Consumer is slow, apply its drop policy
+			// 消费者行为缓慢,运用其降价政策
 		}
 	}
 }
@@ -298,7 +298,7 @@ func (m *StreamMultiplexer) closeAll() {
 	m.running.Store(false)
 }
 
-// RateLimiter provides token-based rate limiting for streams.
+// rateLimiter为流提供了基于符号的速率限制.
 type RateLimiter struct {
 	tokensPerSec float64
 	bucket       float64
@@ -307,7 +307,7 @@ type RateLimiter struct {
 	mu           sync.Mutex
 }
 
-// NewRateLimiter creates a new rate limiter.
+// NewRateLimiter创建了新的速率限制器.
 func NewRateLimiter(tokensPerSec float64, burst int) *RateLimiter {
 	return &RateLimiter{
 		tokensPerSec: tokensPerSec,
@@ -317,7 +317,7 @@ func NewRateLimiter(tokensPerSec float64, burst int) *RateLimiter {
 	}
 }
 
-// Allow checks if a token can be consumed.
+// 允许检查是否可以消耗一个令牌 。
 func (r *RateLimiter) Allow() bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -331,7 +331,7 @@ func (r *RateLimiter) Allow() bool {
 	return false
 }
 
-// Wait blocks until a token is available.
+// 等待区块, 直到一个符号可用 。
 func (r *RateLimiter) Wait(ctx context.Context) error {
 	for {
 		if r.Allow() {

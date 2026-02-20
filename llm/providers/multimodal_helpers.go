@@ -11,7 +11,7 @@ import (
 )
 
 // =============================================================================
-// 🖼️ Image Generation Helpers
+// XQ 图像生成助手
 // =============================================================================
 
 // GenerateImageOpenAICompat 通用的 OpenAI 兼容图像生成函数
@@ -57,7 +57,7 @@ func GenerateImageOpenAICompat(ctx context.Context, client *http.Client, baseURL
 }
 
 // =============================================================================
-// 🎬 Video Generation Helpers
+// 视频生成助手
 // =============================================================================
 
 // GenerateVideoOpenAICompat 通用的 OpenAI 兼容视频生成函数
@@ -103,7 +103,7 @@ func GenerateVideoOpenAICompat(ctx context.Context, client *http.Client, baseURL
 }
 
 // =============================================================================
-// 🎵 Audio Generation Helpers
+// QQ 音频生成助手
 // =============================================================================
 
 // GenerateAudioOpenAICompat 通用的 OpenAI 兼容音频生成函数
@@ -134,7 +134,7 @@ func GenerateAudioOpenAICompat(ctx context.Context, client *http.Client, baseURL
 		return nil, MapHTTPError(resp.StatusCode, msg, providerName)
 	}
 
-	// Read audio data
+	// 读取音频数据
 	audioData, err := http.DefaultClient.Do(httpReq)
 	if err != nil {
 		return nil, &llm.Error{
@@ -164,7 +164,7 @@ func GenerateAudioOpenAICompat(ctx context.Context, client *http.Client, baseURL
 }
 
 // =============================================================================
-// 📝 Embedding Helpers
+// * 嵌入帮助者
 // =============================================================================
 
 // CreateEmbeddingOpenAICompat 通用的 OpenAI 兼容 Embedding 函数
@@ -210,7 +210,7 @@ func CreateEmbeddingOpenAICompat(ctx context.Context, client *http.Client, baseU
 }
 
 // =============================================================================
-// ❌ Not Supported Helpers
+// 未支持的帮助者
 // =============================================================================
 
 // NotSupportedError 返回不支持的错误

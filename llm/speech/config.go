@@ -2,7 +2,7 @@ package speech
 
 import "time"
 
-// OpenAITTSConfig configures OpenAI TTS provider.
+// OpenAITTSConfig配置了OpenAI TTS供应商.
 type OpenAITTSConfig struct {
 	APIKey  string        `json:"api_key" yaml:"api_key"`
 	BaseURL string        `json:"base_url" yaml:"base_url"`
@@ -11,7 +11,7 @@ type OpenAITTSConfig struct {
 	Timeout time.Duration `json:"timeout,omitempty" yaml:"timeout,omitempty"`
 }
 
-// OpenAISTTConfig configures OpenAI Whisper STT provider.
+// OpenAISTTConfig配置了OpenAI Whisper STT供应商.
 type OpenAISTTConfig struct {
 	APIKey  string        `json:"api_key" yaml:"api_key"`
 	BaseURL string        `json:"base_url" yaml:"base_url"`
@@ -19,7 +19,7 @@ type OpenAISTTConfig struct {
 	Timeout time.Duration `json:"timeout,omitempty" yaml:"timeout,omitempty"`
 }
 
-// ElevenLabsConfig configures ElevenLabs TTS provider.
+// 11LabsConfig配置了11Labs TTS供应商.
 type ElevenLabsConfig struct {
 	APIKey  string        `json:"api_key" yaml:"api_key"`
 	BaseURL string        `json:"base_url" yaml:"base_url"`
@@ -28,7 +28,7 @@ type ElevenLabsConfig struct {
 	Timeout time.Duration `json:"timeout,omitempty" yaml:"timeout,omitempty"`
 }
 
-// DeepgramConfig configures Deepgram STT provider.
+// DeepgramConfig配置了 Deepgram STT 供应商.
 type DeepgramConfig struct {
 	APIKey  string        `json:"api_key" yaml:"api_key"`
 	BaseURL string        `json:"base_url" yaml:"base_url"`
@@ -36,7 +36,7 @@ type DeepgramConfig struct {
 	Timeout time.Duration `json:"timeout,omitempty" yaml:"timeout,omitempty"`
 }
 
-// DefaultOpenAITTSConfig returns default OpenAI TTS config.
+// 默认 OpenAITTSConfig 返回默认 OpenAI TTS 配置 。
 func DefaultOpenAITTSConfig() OpenAITTSConfig {
 	return OpenAITTSConfig{
 		BaseURL: "https://api.openai.com",
@@ -46,7 +46,7 @@ func DefaultOpenAITTSConfig() OpenAITTSConfig {
 	}
 }
 
-// DefaultOpenAISTTConfig returns default OpenAI STT config.
+// 默认 OpenAISTTConfig 返回默认 OpenAI STT 配置 。
 func DefaultOpenAISTTConfig() OpenAISTTConfig {
 	return OpenAISTTConfig{
 		BaseURL: "https://api.openai.com",
@@ -55,7 +55,7 @@ func DefaultOpenAISTTConfig() OpenAISTTConfig {
 	}
 }
 
-// DefaultElevenLabsConfig returns default ElevenLabs config.
+// 默认ElevenLabsconfig 返回默认的 11Labs 配置 。
 func DefaultElevenLabsConfig() ElevenLabsConfig {
 	return ElevenLabsConfig{
 		BaseURL: "https://api.elevenlabs.io",
@@ -64,7 +64,7 @@ func DefaultElevenLabsConfig() ElevenLabsConfig {
 	}
 }
 
-// DefaultDeepgramConfig returns default Deepgram config.
+// 默认 DepgramConfig 返回默认 Depgram 配置 。
 func DefaultDeepgramConfig() DeepgramConfig {
 	return DeepgramConfig{
 		BaseURL: "https://api.deepgram.com",

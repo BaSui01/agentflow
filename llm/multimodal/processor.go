@@ -1,4 +1,4 @@
-// Package multimodal provides multimodal content handling for LLM providers.
+// 套件多式为LLM供应商提供多式内容处理.
 package multimodal
 
 import (
@@ -9,13 +9,13 @@ import (
 	"github.com/BaSui01/agentflow/llm"
 )
 
-// Processor handles multimodal content conversion for different providers.
+// 处理器处理不同提供者的多模式内容转换.
 type Processor struct {
 	visionConfig VisionConfig
 	audioConfig  AudioConfig
 }
 
-// NewProcessor creates a new multimodal processor.
+// 新处理器创建了一个新的多式处理器.
 func NewProcessor(visionCfg VisionConfig, audioCfg AudioConfig) *Processor {
 	return &Processor{
 		visionConfig: visionCfg,
@@ -23,12 +23,12 @@ func NewProcessor(visionCfg VisionConfig, audioCfg AudioConfig) *Processor {
 	}
 }
 
-// DefaultProcessor creates a processor with default configurations.
+// 默认处理器创建了默认配置的处理器.
 func DefaultProcessor() *Processor {
 	return NewProcessor(DefaultVisionConfig(), DefaultAudioConfig())
 }
 
-// ConvertToProviderFormat converts multimodal messages to provider-specific format.
+// 转换 ToProviderFormat 将多式消息转换为提供者专用格式.
 func (p *Processor) ConvertToProviderFormat(provider string, messages []MultimodalMessage) ([]llm.Message, error) {
 	switch provider {
 	case "openai":
@@ -42,7 +42,7 @@ func (p *Processor) ConvertToProviderFormat(provider string, messages []Multimod
 	}
 }
 
-// convertToOpenAI converts to OpenAI's multimodal format.
+// 转换为OpenAI的多模式格式。
 func (p *Processor) convertToOpenAI(messages []MultimodalMessage) ([]llm.Message, error) {
 	var result []llm.Message
 
@@ -73,7 +73,7 @@ func (p *Processor) convertToOpenAI(messages []MultimodalMessage) ([]llm.Message
 				contentParts = append(contentParts, imageContent)
 
 			case ContentTypeAudio:
-				// OpenAI audio input format
+				// OpenAI 音频输入格式
 				audioContent := map[string]interface{}{
 					"type": "input_audio",
 				}
@@ -87,7 +87,7 @@ func (p *Processor) convertToOpenAI(messages []MultimodalMessage) ([]llm.Message
 			}
 		}
 
-		// Serialize content parts to JSON for the Content field
+		// 将内容部分序列化到 JSON 的内容字段
 		contentJSON, err := json.Marshal(contentParts)
 		if err != nil {
 			return nil, fmt.Errorf("failed to marshal content: %w", err)
@@ -102,7 +102,7 @@ func (p *Processor) convertToOpenAI(messages []MultimodalMessage) ([]llm.Message
 	return result, nil
 }
 
-// convertToAnthropic converts to Anthropic's multimodal format.
+// 将 ToAnthropic 转换为 Anthropic 的多式格式。
 func (p *Processor) convertToAnthropic(messages []MultimodalMessage) ([]llm.Message, error) {
 	var result []llm.Message
 
@@ -151,7 +151,7 @@ func (p *Processor) convertToAnthropic(messages []MultimodalMessage) ([]llm.Mess
 	return result, nil
 }
 
-// convertToGemini converts to Gemini's multimodal format.
+// 将ToGemini转换为双子座多式格式.
 func (p *Processor) convertToGemini(messages []MultimodalMessage) ([]llm.Message, error) {
 	var result []llm.Message
 
@@ -218,7 +218,7 @@ func (p *Processor) convertToGemini(messages []MultimodalMessage) ([]llm.Message
 	return result, nil
 }
 
-// convertToGeneric converts to a generic format (text-only fallback).
+// 转换 ToGeneric 转换为通用格式(仅文本倒置).
 func (p *Processor) convertToGeneric(messages []MultimodalMessage) ([]llm.Message, error) {
 	var result []llm.Message
 
@@ -242,7 +242,7 @@ func (p *Processor) convertToGeneric(messages []MultimodalMessage) ([]llm.Messag
 }
 
 func extractFormat(mediaType string) string {
-	// Extract format from media type like "audio/mp3" -> "mp3"
+	// 从“ audio/ mp3” 等介质类型提取格式 - > “ mp3”
 	if len(mediaType) > 6 && mediaType[:6] == "audio/" {
 		return mediaType[6:]
 	}
@@ -263,19 +263,19 @@ func joinStrings(parts []string, sep string) string {
 	return result
 }
 
-// MultimodalRequest extends ChatRequest with multimodal content.
+// 多式联运请求以多式联运内容扩展聊天请求。
 type MultimodalRequest struct {
 	llm.ChatRequest
 	MultimodalMessages []MultimodalMessage `json:"multimodal_messages,omitempty"`
 }
 
-// MultimodalProvider wraps a provider with multimodal support.
+// 多式联运提供方将供应商包裹在多式联运支持下。
 type MultimodalProvider struct {
 	provider  llm.Provider
 	processor *Processor
 }
 
-// NewMultimodalProvider creates a multimodal-aware provider wrapper.
+// 新的多式联运提供商创建了一种认识到多式联运提供者的包装。
 func NewMultimodalProvider(provider llm.Provider, processor *Processor) *MultimodalProvider {
 	if processor == nil {
 		processor = DefaultProcessor()
@@ -286,7 +286,7 @@ func NewMultimodalProvider(provider llm.Provider, processor *Processor) *Multimo
 	}
 }
 
-// Completion sends a multimodal completion request.
+// 完成后发出多式完成请求。
 func (m *MultimodalProvider) Completion(ctx context.Context, req *MultimodalRequest) (*llm.ChatResponse, error) {
 	if len(req.MultimodalMessages) > 0 {
 		messages, err := m.processor.ConvertToProviderFormat(m.provider.Name(), req.MultimodalMessages)
@@ -299,7 +299,7 @@ func (m *MultimodalProvider) Completion(ctx context.Context, req *MultimodalRequ
 	return m.provider.Completion(ctx, &req.ChatRequest)
 }
 
-// Stream sends a multimodal streaming request.
+// 流发送多模式流请求 。
 func (m *MultimodalProvider) Stream(ctx context.Context, req *MultimodalRequest) (<-chan llm.StreamChunk, error) {
 	if len(req.MultimodalMessages) > 0 {
 		messages, err := m.processor.ConvertToProviderFormat(m.provider.Name(), req.MultimodalMessages)
@@ -312,14 +312,14 @@ func (m *MultimodalProvider) Stream(ctx context.Context, req *MultimodalRequest)
 	return m.provider.Stream(ctx, &req.ChatRequest)
 }
 
-// Name returns the underlying provider name.
+// 名称返回基本提供者名称 。
 func (m *MultimodalProvider) Name() string {
 	return m.provider.Name()
 }
 
-// SupportsMultimodal checks if the provider supports multimodal input.
+// 如果供应商支持多式联运输入,则支持多式联运检查。
 func (m *MultimodalProvider) SupportsMultimodal() bool {
-	// Check provider name for known multimodal support
+	// 检查已知多式联运支持的提供者名称
 	switch m.provider.Name() {
 	case "openai", "anthropic", "gemini":
 		return true
@@ -328,7 +328,7 @@ func (m *MultimodalProvider) SupportsMultimodal() bool {
 	}
 }
 
-// SupportedModalities returns the modalities supported by the provider.
+// 支持模式返回提供者支持的模式。
 func (m *MultimodalProvider) SupportedModalities() []ContentType {
 	switch m.provider.Name() {
 	case "openai":

@@ -9,7 +9,7 @@ import (
 	"go.uber.org/zap"
 )
 
-// MockProviderForResilience for testing
+// 用于测试的模型
 type MockProviderForResilience struct {
 	mock.Mock
 }
@@ -56,7 +56,7 @@ func (m *MockProviderForResilience) ListModels(ctx context.Context) ([]Model, er
 	return args.Get(0).([]Model), args.Error(1)
 }
 
-// TestResilientProvider_Name tests Name method
+// 测试响应性提供器  Name 名称方法
 func TestResilientProvider_Name(t *testing.T) {
 	logger, _ := zap.NewDevelopment()
 	mockProvider := new(MockProviderForResilience)
@@ -71,7 +71,7 @@ func TestResilientProvider_Name(t *testing.T) {
 	mockProvider.AssertExpectations(t)
 }
 
-// TestResilientProvider_SupportsNativeFunctionCalling tests function calling support
+// 响应性测试 Provider  支持性功能调用测试函数调用支持
 func TestResilientProvider_SupportsNativeFunctionCalling(t *testing.T) {
 	logger, _ := zap.NewDevelopment()
 	mockProvider := new(MockProviderForResilience)

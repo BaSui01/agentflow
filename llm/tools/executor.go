@@ -11,10 +11,10 @@ import (
 	"go.uber.org/zap"
 )
 
-// ToolFunc defines the tool function signature.
+// ToolFunc定义了工具函数签名.
 type ToolFunc func(ctx context.Context, args json.RawMessage) (json.RawMessage, error)
 
-// ToolMetadata describes tool metadata.
+// ToolMetadata描述了工具元数据.
 type ToolMetadata struct {
 	Schema      llm.ToolSchema   // Tool JSON Schema
 	Permission  string           // Required permission (optional)
@@ -23,13 +23,13 @@ type ToolMetadata struct {
 	Description string           // Detailed description
 }
 
-// RateLimitConfig defines rate limit configuration.
+// RatenLimitConfig定义了速率限制配置.
 type RateLimitConfig struct {
 	MaxCalls int           // Maximum calls
 	Window   time.Duration // Time window
 }
 
-// ToolResult represents tool execution result.
+// ToolResult代表工具执行结果.
 type ToolResult struct {
 	ToolCallID string          `json:"tool_call_id"`
 	Name       string          `json:"name"`
@@ -38,7 +38,7 @@ type ToolResult struct {
 	Duration   time.Duration   `json:"duration"`
 }
 
-// ToolRegistry defines tool registry interface.
+// ToolRegistry定义了工具注册界面.
 type ToolRegistry interface {
 	Register(name string, fn ToolFunc, metadata ToolMetadata) error
 	Unregister(name string) error
@@ -47,7 +47,7 @@ type ToolRegistry interface {
 	Has(name string) bool
 }
 
-// ToolExecutor defines tool executor interface.
+// ToolExecutor定义了工具执行器接口.
 type ToolExecutor interface {
 	Execute(ctx context.Context, calls []llm.ToolCall) []ToolResult
 	ExecuteOne(ctx context.Context, call llm.ToolCall) ToolResult
@@ -289,7 +289,7 @@ func (e *DefaultExecutor) ExecuteOne(ctx context.Context, call llm.ToolCall) Too
 
 // ====== 速率限制器 ======
 
-// tokenBucketLimiter implements a token bucket rate limiter with O(1) Allow() complexity
+// 符号BucketLimiter 执行带有 O(1) 允许( ) 复杂性的符号桶速率限制器
 type tokenBucketLimiter struct {
 	mu         sync.Mutex
 	tokens     float64   // Current available tokens
@@ -298,9 +298,9 @@ type tokenBucketLimiter struct {
 	lastRefill time.Time // Last refill timestamp
 }
 
-// newTokenBucketLimiter creates a new token bucket rate limiter
-// maxCalls: maximum calls allowed in the time window
-// window: time window duration
+// 新TokenBucketLimiter 创建了新的符号桶速率限制器
+// 最大呼叫: 时间窗口允许的最大呼叫
+// 窗口: 时间窗口持续时间
 func newTokenBucketLimiter(maxCalls int, window time.Duration) *tokenBucketLimiter {
 	refillRate := float64(maxCalls) / window.Seconds()
 	return &tokenBucketLimiter{
@@ -311,42 +311,42 @@ func newTokenBucketLimiter(maxCalls int, window time.Duration) *tokenBucketLimit
 	}
 }
 
-// Allow checks if a request is allowed (O(1) time complexity)
+// 允许检查请求( O(1) 时间复杂度)
 func (tb *tokenBucketLimiter) Allow() error {
 	tb.mu.Lock()
 	defer tb.mu.Unlock()
 
 	now := time.Now()
 
-	// Refill tokens based on elapsed time
+	// 根据已过期时间重新填入符号
 	elapsed := now.Sub(tb.lastRefill).Seconds()
 	tb.tokens += elapsed * tb.refillRate
 
-	// Cap tokens at maximum
+	// 顶多加盖符
 	if tb.tokens > tb.maxTokens {
 		tb.tokens = tb.maxTokens
 	}
 
 	tb.lastRefill = now
 
-	// Check if we have available tokens
+	// 检查是否有可用的代号
 	if tb.tokens < 1 {
 		return fmt.Errorf("rate limit exceeded: no tokens available")
 	}
 
-	// Consume one token
+	// 假设一个符号
 	tb.tokens--
 	return nil
 }
 
-// Tokens returns the current number of available tokens (for monitoring)
+// Tokens 返回当前可用的令牌数( 用于监视)
 func (tb *tokenBucketLimiter) Tokens() float64 {
 	tb.mu.Lock()
 	defer tb.mu.Unlock()
 	return tb.tokens
 }
 
-// Reset resets the limiter to full capacity
+// 将限制器重置为全容量
 func (tb *tokenBucketLimiter) Reset() {
 	tb.mu.Lock()
 	defer tb.mu.Unlock()
@@ -354,13 +354,13 @@ func (tb *tokenBucketLimiter) Reset() {
 	tb.lastRefill = time.Now()
 }
 
-// rateLimiter is kept for backward compatibility but uses tokenBucketLimiter internally
-// Deprecated: Use tokenBucketLimiter directly for new code
+// 速率Limiter 为后向相容性而保留,但内部使用符号BucketLimiter
+// 折旧: 对新代码直接使用符号BucketLimiter
 type rateLimiter struct {
 	internal *tokenBucketLimiter
 }
 
-// newRateLimiter creates a new rate limiter (uses token bucket internally)
+// 新RateLimiter 创建了新的限速器( 内部使用符号桶)
 func newRateLimiter(maxCalls int, window time.Duration) *rateLimiter {
 	return &rateLimiter{
 		internal: newTokenBucketLimiter(maxCalls, window),

@@ -13,7 +13,7 @@ import (
 	"github.com/BaSui01/agentflow/llm"
 )
 
-// BaseProvider provides common functionality for embedding providers.
+// BaseProvider为嵌入提供者提供了共同的功能.
 type BaseProvider struct {
 	name       string
 	client     *http.Client
@@ -24,7 +24,7 @@ type BaseProvider struct {
 	maxBatch   int
 }
 
-// BaseConfig holds common configuration for base provider.
+// BaseConfig持有基础提供者的共同配置.
 type BaseConfig struct {
 	Name       string
 	BaseURL    string
@@ -35,7 +35,7 @@ type BaseConfig struct {
 	Timeout    time.Duration
 }
 
-// NewBaseProvider creates a new base provider.
+// NewBase Provider创建了一个新的基础提供者.
 func NewBaseProvider(cfg BaseConfig) *BaseProvider {
 	timeout := cfg.Timeout
 	if timeout == 0 {
@@ -60,7 +60,7 @@ func (p *BaseProvider) Name() string      { return p.name }
 func (p *BaseProvider) Dimensions() int   { return p.dimensions }
 func (p *BaseProvider) MaxBatchSize() int { return p.maxBatch }
 
-// EmbedQuery embeds a single query string.
+// 嵌入查询嵌入单个查询字符串.
 func (p *BaseProvider) EmbedQuery(ctx context.Context, query string, embedFn func(context.Context, *EmbeddingRequest) (*EmbeddingResponse, error)) ([]float64, error) {
 	resp, err := embedFn(ctx, &EmbeddingRequest{
 		Input:     []string{query},
@@ -75,7 +75,7 @@ func (p *BaseProvider) EmbedQuery(ctx context.Context, query string, embedFn fun
 	return resp.Embeddings[0].Embedding, nil
 }
 
-// EmbedDocuments embeds multiple documents.
+// 嵌入文件嵌入多个文档。
 func (p *BaseProvider) EmbedDocuments(ctx context.Context, documents []string, embedFn func(context.Context, *EmbeddingRequest) (*EmbeddingResponse, error)) ([][]float64, error) {
 	resp, err := embedFn(ctx, &EmbeddingRequest{
 		Input:     documents,
@@ -91,7 +91,7 @@ func (p *BaseProvider) EmbedDocuments(ctx context.Context, documents []string, e
 	return result, nil
 }
 
-// DoRequest performs an HTTP request with common error handling.
+// Dorequest 执行 HTTP 请求, 并进行常见错误处理 。
 func (p *BaseProvider) DoRequest(ctx context.Context, method, endpoint string, body interface{}, headers map[string]string) ([]byte, error) {
 	var reqBody io.Reader
 	if body != nil {
@@ -136,7 +136,7 @@ func (p *BaseProvider) DoRequest(ctx context.Context, method, endpoint string, b
 	return respBody, nil
 }
 
-// mapHTTPError maps HTTP status to llm.Error.
+// 映射 HTTPerror 映射 HTTP 状态到 llm. 错误。
 func mapHTTPError(status int, msg, provider string) *llm.Error {
 	code := llm.ErrUpstreamError
 	retryable := status >= 500
@@ -162,7 +162,7 @@ func mapHTTPError(status int, msg, provider string) *llm.Error {
 	}
 }
 
-// ChooseModel selects model from request or defaults.
+// 从请求或默认中选择模式。
 func ChooseModel(reqModel, defaultModel, fallback string) string {
 	if reqModel != "" {
 		return reqModel

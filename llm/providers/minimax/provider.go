@@ -18,8 +18,8 @@ import (
 	"go.uber.org/zap"
 )
 
-// MiniMaxProvider implements MiniMax LLM Provider.
-// MiniMax uses a custom format with XML-based tool calls.
+// MiniMax Provider 执行 MiniMax LLM 提供程序.
+// MiniMax使用自定义格式,使用基于XML的工具调用.
 type MiniMaxProvider struct {
 	cfg           providers.MiniMaxConfig
 	client        *http.Client
@@ -27,15 +27,15 @@ type MiniMaxProvider struct {
 	rewriterChain *middleware.RewriterChain
 }
 
-// NewMiniMaxProvider creates a new MiniMax provider instance.
+// NewMiniMax Provider 创建了一个新的MiniMax提供者实例.
 func NewMiniMaxProvider(cfg providers.MiniMaxConfig, logger *zap.Logger) *MiniMaxProvider {
 	timeout := cfg.Timeout
 	if timeout == 0 {
 		timeout = 30 * time.Second
 	}
 
-	// Set default BaseURL if not provided
-	// MiniMax API: https://api.minimax.io (new) or https://api.minimax.chat (legacy)
+	// 如果未提供则设置默认 BaseURL
+	// MiniMax API: https://api.minimax.io(新)或https://api.minimax.chat(遗产)
 	if cfg.BaseURL == "" {
 		cfg.BaseURL = "https://api.minimax.io"
 	}
@@ -65,7 +65,7 @@ func (p *MiniMaxProvider) HealthCheck(ctx context.Context) (*llm.HealthStatus, e
 	start := time.Now()
 	endpoint := fmt.Sprintf("%s/v1/text/chatcompletion_v2", strings.TrimRight(p.cfg.BaseURL, "/"))
 
-	// MiniMax health check: send a minimal request
+	// MiniMax 健康检查: 发送最小请求
 	testReq := miniMaxRequest{
 		Model: "abab6.5s-chat",
 		Messages: []miniMaxMessage{
@@ -95,7 +95,7 @@ func (p *MiniMaxProvider) HealthCheck(ctx context.Context) (*llm.HealthStatus, e
 	return &llm.HealthStatus{Healthy: true, Latency: latency}, nil
 }
 
-// MiniMax-specific types
+// MiniMax 特定类型
 type miniMaxMessage struct {
 	Role    string `json:"role"`
 	Content string `json:"content,omitempty"`
@@ -147,7 +147,7 @@ func (p *MiniMaxProvider) buildHeaders(req *http.Request, apiKey string) {
 	req.Header.Set("Content-Type", "application/json")
 }
 
-// convertToMiniMaxMessages converts llm.Message to MiniMax format
+// 转换为 MiniMaxMessages 转换为 llm 。 信件到 MiniMax 格式
 func convertToMiniMaxMessages(msgs []llm.Message) []miniMaxMessage {
 	out := make([]miniMaxMessage, 0, len(msgs))
 	for _, m := range msgs {
@@ -157,7 +157,7 @@ func convertToMiniMaxMessages(msgs []llm.Message) []miniMaxMessage {
 			Name:    m.Name,
 		}
 
-		// If message has tool calls, format them as XML
+		// 如果信件有工具调用, 请将其格式化为 XML
 		if len(m.ToolCalls) > 0 {
 			toolCallsXML := "<tool_calls>\n"
 			for _, tc := range m.ToolCalls {
@@ -176,7 +176,7 @@ func convertToMiniMaxMessages(msgs []llm.Message) []miniMaxMessage {
 	return out
 }
 
-// convertToMiniMaxTools converts llm.ToolSchema to MiniMax format
+// 转换为MiniMaxTools 转换为 llm。 工具Schema 到 miniMax 格式
 func convertToMiniMaxTools(tools []llm.ToolSchema) []miniMaxTool {
 	if len(tools) == 0 {
 		return nil
@@ -192,10 +192,10 @@ func convertToMiniMaxTools(tools []llm.ToolSchema) []miniMaxTool {
 	return out
 }
 
-// parseMiniMaxToolCalls extracts tool calls from XML format
-// Format: <tool_calls>{"name":"func","arguments":{...}}</tool_calls>
+// parseMiniMaxToolCalls 从 XML 格式提取工具调用
+// 格式: <tool calls>{}"名称:"func","参数":{.}}</tool calls>
 func parseMiniMaxToolCalls(content string) []llm.ToolCall {
-	// Extract content between <tool_calls> tags
+	// 在“ 工具  calls” 标签之间提取内容
 	pattern := regexp.MustCompile(`(?s)<tool_calls>(.*?)</tool_calls>`)
 	matches := pattern.FindStringSubmatch(content)
 	if len(matches) < 2 {
@@ -205,7 +205,7 @@ func parseMiniMaxToolCalls(content string) []llm.ToolCall {
 	toolCallsContent := strings.TrimSpace(matches[1])
 	var toolCalls []llm.ToolCall
 
-	// Parse each line as JSON
+	// 将每行分析为 JSON
 	lines := strings.Split(toolCallsContent, "\n")
 	for i, line := range lines {
 		line = strings.TrimSpace(line)
@@ -222,7 +222,7 @@ func parseMiniMaxToolCalls(content string) []llm.ToolCall {
 			continue
 		}
 
-		// Generate unique ID for each tool call
+		// 生成每个工具调用的唯一 ID
 		toolCalls = append(toolCalls, llm.ToolCall{
 			ID:        fmt.Sprintf("call_%d", i),
 			Name:      call.Name,
@@ -242,7 +242,7 @@ func mapError(status int, msg string, provider string) *llm.Error {
 	case http.StatusTooManyRequests:
 		return &llm.Error{Code: llm.ErrRateLimited, Message: msg, HTTPStatus: status, Retryable: true, Provider: provider}
 	case http.StatusBadRequest:
-		// Check for quota/credit keywords
+		// 检查配额/信用关键字
 		if strings.Contains(strings.ToLower(msg), "quota") ||
 			strings.Contains(strings.ToLower(msg), "credit") {
 			return &llm.Error{Code: llm.ErrQuotaExceeded, Message: msg, HTTPStatus: status, Provider: provider}
@@ -258,7 +258,7 @@ func mapError(status int, msg string, provider string) *llm.Error {
 }
 
 func (p *MiniMaxProvider) Completion(ctx context.Context, req *llm.ChatRequest) (*llm.ChatResponse, error) {
-	// Apply rewriter chain
+	// 应用重写链
 	rewrittenReq, err := p.rewriterChain.Execute(ctx, req)
 	if err != nil {
 		return nil, &llm.Error{
@@ -270,7 +270,7 @@ func (p *MiniMaxProvider) Completion(ctx context.Context, req *llm.ChatRequest) 
 	}
 	req = rewrittenReq
 
-	// Handle credential override from context
+	// 从上下文处理证书覆盖
 	apiKey := p.cfg.APIKey
 	if c, ok := llm.CredentialOverrideFromContext(ctx); ok {
 		if strings.TrimSpace(c.APIKey) != "" {
@@ -313,7 +313,7 @@ func (p *MiniMaxProvider) Completion(ctx context.Context, req *llm.ChatRequest) 
 }
 
 func (p *MiniMaxProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-chan llm.StreamChunk, error) {
-	// Apply rewriter chain
+	// 应用重写链
 	rewrittenReq, err := p.rewriterChain.Execute(ctx, req)
 	if err != nil {
 		return nil, &llm.Error{
@@ -325,7 +325,7 @@ func (p *MiniMaxProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-c
 	}
 	req = rewrittenReq
 
-	// Handle credential override from context
+	// 从上下文处理证书覆盖
 	apiKey := p.cfg.APIKey
 	if c, ok := llm.CredentialOverrideFromContext(ctx); ok {
 		if strings.TrimSpace(c.APIKey) != "" {
@@ -342,7 +342,7 @@ func (p *MiniMaxProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-c
 	}
 	payload, _ := json.Marshal(body)
 
-	// MiniMax API endpoint: /v1/text/chatcompletion_v2
+	// MiniMax API 端点: /v1/text/chat 补全 v2
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, fmt.Sprintf("%s/v1/text/chatcompletion_v2", strings.TrimRight(p.cfg.BaseURL, "/")), bytes.NewReader(payload))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
@@ -400,7 +400,7 @@ func (p *MiniMaxProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-c
 						Content: choice.Delta.Content,
 					}
 
-					// Parse tool calls from XML if present
+					// 从 XML 解析工具呼叫( 如果存在)
 					if strings.Contains(choice.Delta.Content, "<tool_calls>") {
 						toolCalls := parseMiniMaxToolCalls(choice.Delta.Content)
 						if len(toolCalls) > 0 {
@@ -425,12 +425,12 @@ func toChatResponse(mm miniMaxResponse, provider string) *llm.ChatResponse {
 			Name:    c.Message.Name,
 		}
 
-		// Parse tool calls from XML if present
+		// 从 XML 解析工具呼叫( 如果存在)
 		if strings.Contains(c.Message.Content, "<tool_calls>") {
 			toolCalls := parseMiniMaxToolCalls(c.Message.Content)
 			if len(toolCalls) > 0 {
 				msg.ToolCalls = toolCalls
-				// Remove XML from content
+				// 从内容中删除 XML
 				msg.Content = regexp.MustCompile(`(?s)<tool_calls>.*?</tool_calls>`).ReplaceAllString(msg.Content, "")
 				msg.Content = strings.TrimSpace(msg.Content)
 			}

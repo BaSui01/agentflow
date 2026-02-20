@@ -1,4 +1,4 @@
-// Package video provides unified video processing provider interfaces.
+// 包视频提供统一的视频处理提供者接口.
 package video
 
 import (
@@ -6,7 +6,7 @@ import (
 	"time"
 )
 
-// VideoFormat represents supported video formats.
+// VideoFormat 代表支持的视频格式.
 type VideoFormat string
 
 const (
@@ -17,7 +17,7 @@ const (
 	VideoFormatMKV  VideoFormat = "mkv"
 )
 
-// AnalyzeRequest represents a video analysis request.
+// 分析请求是一个视频分析请求。
 type AnalyzeRequest struct {
 	VideoURL    string            `json:"video_url,omitempty"`
 	VideoData   string            `json:"video_data,omitempty"` // Base64 encoded
@@ -31,7 +31,7 @@ type AnalyzeRequest struct {
 	Metadata    map[string]string `json:"metadata,omitempty"`
 }
 
-// AnalyzeResponse represents the response from video analysis.
+// Analysis Response代表视频分析的反应.
 type AnalyzeResponse struct {
 	Provider  string          `json:"provider"`
 	Model     string          `json:"model"`
@@ -42,7 +42,7 @@ type AnalyzeResponse struct {
 	CreatedAt time.Time       `json:"created_at"`
 }
 
-// FrameAnalysis represents analysis of a single frame.
+// 框架分析是单一框架的分析。
 type FrameAnalysis struct {
 	Timestamp   float64           `json:"timestamp"`
 	Description string            `json:"description,omitempty"`
@@ -51,14 +51,14 @@ type FrameAnalysis struct {
 	Metadata    map[string]string `json:"metadata,omitempty"`
 }
 
-// DetectedObject represents an object detected in a frame.
+// 被检测对象代表在帧中检测到的对象.
 type DetectedObject struct {
 	Label       string       `json:"label"`
 	Confidence  float64      `json:"confidence"`
 	BoundingBox *BoundingBox `json:"bounding_box,omitempty"`
 }
 
-// BoundingBox represents object location in frame.
+// BboundingBox代表框中的对象位置.
 type BoundingBox struct {
 	X      float64 `json:"x"`
 	Y      float64 `json:"y"`
@@ -66,7 +66,7 @@ type BoundingBox struct {
 	Height float64 `json:"height"`
 }
 
-// GenerateRequest represents a video generation request.
+// 生成请求代表视频生成请求.
 type GenerateRequest struct {
 	Prompt         string            `json:"prompt"`
 	NegativePrompt string            `json:"negative_prompt,omitempty"`
@@ -82,7 +82,7 @@ type GenerateRequest struct {
 	Metadata       map[string]string `json:"metadata,omitempty"`
 }
 
-// GenerateResponse represents the response from video generation.
+// GenerateResponse代表了视频生成的响应.
 type GenerateResponse struct {
 	Provider  string      `json:"provider"`
 	Model     string      `json:"model"`
@@ -91,7 +91,7 @@ type GenerateResponse struct {
 	CreatedAt time.Time   `json:"created_at"`
 }
 
-// VideoData represents a generated video.
+// VideoData代表一个已生成的视频.
 type VideoData struct {
 	URL           string  `json:"url,omitempty"`
 	B64JSON       string  `json:"b64_json,omitempty"`
@@ -101,27 +101,27 @@ type VideoData struct {
 	RevisedPrompt string  `json:"revised_prompt,omitempty"`
 }
 
-// VideoUsage represents usage statistics.
+// VideoUsage代表使用统计.
 type VideoUsage struct {
 	VideosGenerated int     `json:"videos_generated"`
 	DurationSeconds float64 `json:"duration_seconds"`
 	Cost            float64 `json:"cost,omitempty"`
 }
 
-// Provider defines the video processing provider interface.
+// 提供方定义了视频处理提供者接口.
 type Provider interface {
-	// Analyze processes and understands video content.
+	// 分析过程和理解视频内容.
 	Analyze(ctx context.Context, req *AnalyzeRequest) (*AnalyzeResponse, error)
 
-	// Generate creates videos from text/image prompts.
+	// 从文本/图像提示生成视频 。
 	Generate(ctx context.Context, req *GenerateRequest) (*GenerateResponse, error)
 
-	// Name returns the provider name.
+	// 名称返回提供者名称 。
 	Name() string
 
-	// SupportedFormats returns supported video formats for analysis.
+	// 支持Formats返回支持用于分析的视频格式.
 	SupportedFormats() []VideoFormat
 
-	// SupportsGeneration returns whether the provider supports video generation.
+	// 支持 Generation 返回提供者是否支持视频生成 。
 	SupportsGeneration() bool
 }

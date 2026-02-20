@@ -1,4 +1,4 @@
-// Package tools provides tool execution capabilities for LLM agents.
+// 包工具为LLM代理提供了工具执行能力.
 package tools
 
 import (
@@ -13,7 +13,7 @@ import (
 	"go.uber.org/zap"
 )
 
-// ParallelConfig defines configuration for parallel tool execution.
+// 并行Config定义了并行工具执行的配置.
 type ParallelConfig struct {
 	MaxConcurrency   int           // Maximum concurrent tool executions (0 = unlimited)
 	ExecutionTimeout time.Duration // Global timeout for all parallel executions
@@ -25,7 +25,7 @@ type ParallelConfig struct {
 	DependencyGraph  bool          // Enable dependency-aware execution order
 }
 
-// DefaultParallelConfig returns sensible defaults for parallel execution.
+// 默认ParallelConfig 返回并行执行的合理默认值 。
 func DefaultParallelConfig() ParallelConfig {
 	return ParallelConfig{
 		MaxConcurrency:   10,
@@ -39,20 +39,20 @@ func DefaultParallelConfig() ParallelConfig {
 	}
 }
 
-// ParallelExecutor executes multiple tool calls concurrently with advanced features.
+// 并行执行器同时执行多个工具调用和高级功能.
 type ParallelExecutor struct {
 	registry ToolRegistry
 	config   ParallelConfig
 	logger   *zap.Logger
 
-	// Metrics
+	// 计量
 	totalExecutions   int64
 	successExecutions int64
 	failedExecutions  int64
 	totalDuration     int64 // nanoseconds
 }
 
-// NewParallelExecutor creates a new parallel tool executor.
+// NewParallelExecutor创建了一个新的并行工具执行器.
 func NewParallelExecutor(registry ToolRegistry, config ParallelConfig, logger *zap.Logger) *ParallelExecutor {
 	if logger == nil {
 		logger = zap.NewNop()
@@ -70,7 +70,7 @@ func NewParallelExecutor(registry ToolRegistry, config ParallelConfig, logger *z
 	}
 }
 
-// ParallelResult contains results from parallel tool execution.
+// 并行结果包含并行工具执行的结果.
 type ParallelResult struct {
 	Results       []ToolResult  `json:"results"`
 	TotalDuration time.Duration `json:"total_duration"`
@@ -80,7 +80,7 @@ type ParallelResult struct {
 	PartialResult bool          `json:"partial_result"`
 }
 
-// Execute runs multiple tool calls in parallel with concurrency control.
+// Execute运行多个工具调用与货币控制并行.
 func (p *ParallelExecutor) Execute(ctx context.Context, calls []llmpkg.ToolCall) *ParallelResult {
 	start := time.Now()
 	result := &ParallelResult{
@@ -92,14 +92,14 @@ func (p *ParallelExecutor) Execute(ctx context.Context, calls []llmpkg.ToolCall)
 		return result
 	}
 
-	// Create execution context with timeout
+	// 创建超时的执行上下文
 	execCtx, cancel := context.WithTimeout(ctx, p.config.ExecutionTimeout)
 	defer cancel()
 
-	// Semaphore for concurrency control
+	// 用于货币控制的Semaphore
 	sem := make(chan struct{}, p.config.MaxConcurrency)
 
-	// Channel for fail-fast cancellation
+	// 故障快速取消的通道
 	var failFastCancel context.CancelFunc
 	if p.config.FailFast {
 		execCtx, failFastCancel = context.WithCancel(execCtx)
@@ -114,7 +114,7 @@ func (p *ParallelExecutor) Execute(ctx context.Context, calls []llmpkg.ToolCall)
 		go func(idx int, c llmpkg.ToolCall) {
 			defer wg.Done()
 
-			// Acquire semaphore
+			// 获取分母
 			select {
 			case sem <- struct{}{}:
 				defer func() { <-sem }()
@@ -128,7 +128,7 @@ func (p *ParallelExecutor) Execute(ctx context.Context, calls []llmpkg.ToolCall)
 				return
 			}
 
-			// Execute with retry logic
+			// 用重试逻辑执行
 			toolResult := p.executeWithRetry(execCtx, c)
 			result.Results[idx] = toolResult
 
@@ -148,7 +148,7 @@ func (p *ParallelExecutor) Execute(ctx context.Context, calls []llmpkg.ToolCall)
 
 	wg.Wait()
 
-	// Calculate statistics
+	// 计算统计
 	result.TotalDuration = time.Since(start)
 	atomic.AddInt64(&p.totalExecutions, int64(len(calls)))
 	atomic.AddInt64(&p.totalDuration, int64(result.TotalDuration))
@@ -175,7 +175,7 @@ func (p *ParallelExecutor) Execute(ctx context.Context, calls []llmpkg.ToolCall)
 	return result
 }
 
-// executeWithRetry executes a single tool call with retry logic.
+// 执行 With Retry 执行带有重试逻辑的单一工具调用 。
 func (p *ParallelExecutor) executeWithRetry(ctx context.Context, call llmpkg.ToolCall) ToolResult {
 	var lastResult ToolResult
 	maxAttempts := 1
@@ -204,7 +204,7 @@ func (p *ParallelExecutor) executeWithRetry(ctx context.Context, call llmpkg.Too
 			return lastResult
 		}
 
-		// Don't retry on certain errors
+		// 不要重试某些错误
 		if !p.isRetryableError(lastResult.Error) {
 			break
 		}
@@ -213,7 +213,7 @@ func (p *ParallelExecutor) executeWithRetry(ctx context.Context, call llmpkg.Too
 	return lastResult
 }
 
-// executeSingle executes a single tool call.
+// 执行 Single 执行单个工具调用 。
 func (p *ParallelExecutor) executeSingle(ctx context.Context, call llmpkg.ToolCall) ToolResult {
 	start := time.Now()
 	result := ToolResult{
@@ -221,7 +221,7 @@ func (p *ParallelExecutor) executeSingle(ctx context.Context, call llmpkg.ToolCa
 		Name:       call.Name,
 	}
 
-	// Check context before execution
+	// 执行前检查上下文
 	select {
 	case <-ctx.Done():
 		result.Error = "context cancelled"
@@ -230,7 +230,7 @@ func (p *ParallelExecutor) executeSingle(ctx context.Context, call llmpkg.ToolCa
 	default:
 	}
 
-	// Get tool function
+	// 获取工具函数
 	fn, meta, err := p.registry.Get(call.Name)
 	if err != nil {
 		result.Error = fmt.Sprintf("tool not found: %s", err.Error())
@@ -238,7 +238,7 @@ func (p *ParallelExecutor) executeSingle(ctx context.Context, call llmpkg.ToolCa
 		return result
 	}
 
-	// Check rate limit
+	// 检查率限制
 	if reg, ok := p.registry.(*DefaultRegistry); ok {
 		if err := reg.checkRateLimit(call.Name); err != nil {
 			result.Error = fmt.Sprintf("rate limit exceeded: %s", err.Error())
@@ -247,7 +247,7 @@ func (p *ParallelExecutor) executeSingle(ctx context.Context, call llmpkg.ToolCa
 		}
 	}
 
-	// Validate arguments
+	// 验证参数
 	if len(call.Arguments) > 0 {
 		var tmp interface{}
 		if err := json.Unmarshal(call.Arguments, &tmp); err != nil {
@@ -257,7 +257,7 @@ func (p *ParallelExecutor) executeSingle(ctx context.Context, call llmpkg.ToolCa
 		}
 	}
 
-	// Execute with timeout
+	// 以超时执行
 	execCtx, cancel := context.WithTimeout(ctx, meta.Timeout)
 	defer cancel()
 
@@ -288,9 +288,9 @@ func (p *ParallelExecutor) executeSingle(ctx context.Context, call llmpkg.ToolCa
 	return result
 }
 
-// isRetryableError determines if an error should trigger a retry.
+// 可重试错误决定是否触发重试 。
 func (p *ParallelExecutor) isRetryableError(errMsg string) bool {
-	// Don't retry validation errors or not found errors
+	// 不要重试验证错误或发现错误
 	nonRetryable := []string{
 		"tool not found",
 		"invalid arguments",
@@ -304,7 +304,7 @@ func (p *ParallelExecutor) isRetryableError(errMsg string) bool {
 	return true
 }
 
-// Stats returns execution statistics.
+// Stats 返回执行统计 。
 func (p *ParallelExecutor) Stats() (total, success, failed int64, avgDuration time.Duration) {
 	total = atomic.LoadInt64(&p.totalExecutions)
 	success = atomic.LoadInt64(&p.successExecutions)
@@ -316,15 +316,15 @@ func (p *ParallelExecutor) Stats() (total, success, failed int64, avgDuration ti
 	return
 }
 
-// ExecuteWithDependencies executes tools respecting dependency order.
-// Dependencies are specified as tool call IDs that must complete before this call.
+// 执行与依赖关系执行工具 。
+// 依赖性被指定为工具调用ID,在调用之前必须完成.
 type ToolCallWithDeps struct {
 	Call         llmpkg.ToolCall                                     `json:"call"`
 	DependsOn    []string                                            `json:"depends_on,omitempty"` // IDs of tool calls that must complete first
 	ResultMapper func(results map[string]ToolResult) json.RawMessage `json:"-"`                    // Optional: modify args based on deps
 }
 
-// ExecuteWithDependencies executes tool calls respecting dependency order.
+// 执行与相互依存执行工具调用尊重依赖命令 。
 func (p *ParallelExecutor) ExecuteWithDependencies(ctx context.Context, calls []ToolCallWithDeps) *ParallelResult {
 	start := time.Now()
 	result := &ParallelResult{
@@ -339,13 +339,13 @@ func (p *ParallelExecutor) ExecuteWithDependencies(ctx context.Context, calls []
 	execCtx, cancel := context.WithTimeout(ctx, p.config.ExecutionTimeout)
 	defer cancel()
 
-	// Build dependency graph
+	// 构建依赖图
 	callIndex := make(map[string]int)
 	for i, c := range calls {
 		callIndex[c.Call.ID] = i
 	}
 
-	// Track completed results
+	// 跟踪完成的成果
 	var mu sync.Mutex
 	completedResults := make(map[string]ToolResult)
 	completed := make(map[string]chan struct{})
@@ -361,7 +361,7 @@ func (p *ParallelExecutor) ExecuteWithDependencies(ctx context.Context, calls []
 		go func(idx int, cwd ToolCallWithDeps) {
 			defer wg.Done()
 
-			// Wait for dependencies
+			// 等待依赖关系
 			for _, depID := range cwd.DependsOn {
 				if ch, ok := completed[depID]; ok {
 					select {
@@ -377,7 +377,7 @@ func (p *ParallelExecutor) ExecuteWithDependencies(ctx context.Context, calls []
 				}
 			}
 
-			// Apply result mapper if provided
+			// 如果提供了结果映射器, 则应用
 			call := cwd.Call
 			if cwd.ResultMapper != nil {
 				mu.Lock()
@@ -388,7 +388,7 @@ func (p *ParallelExecutor) ExecuteWithDependencies(ctx context.Context, calls []
 				}
 			}
 
-			// Acquire semaphore
+			// 获取分母
 			select {
 			case sem <- struct{}{}:
 				defer func() { <-sem }()
@@ -401,11 +401,11 @@ func (p *ParallelExecutor) ExecuteWithDependencies(ctx context.Context, calls []
 				return
 			}
 
-			// Execute
+			// 执行
 			toolResult := p.executeWithRetry(execCtx, call)
 			result.Results[idx] = toolResult
 
-			// Mark as completed
+			// 标为已完成
 			mu.Lock()
 			completedResults[call.ID] = toolResult
 			mu.Unlock()
@@ -429,13 +429,13 @@ func (p *ParallelExecutor) ExecuteWithDependencies(ctx context.Context, calls []
 	return result
 }
 
-// BatchExecutor provides batch execution with automatic batching of similar tool calls.
+// 批量执行器提供批量执行,并自动分批处理类似工具调用.
 type BatchExecutor struct {
 	parallel *ParallelExecutor
 	logger   *zap.Logger
 }
 
-// NewBatchExecutor creates a batch executor.
+// NewBatch 执行器创建批次执行器 。
 func NewBatchExecutor(parallel *ParallelExecutor, logger *zap.Logger) *BatchExecutor {
 	return &BatchExecutor{
 		parallel: parallel,
@@ -443,9 +443,9 @@ func NewBatchExecutor(parallel *ParallelExecutor, logger *zap.Logger) *BatchExec
 	}
 }
 
-// ExecuteBatched groups similar tool calls and executes them efficiently.
+// 执行Batched类类似工具调用并高效地执行.
 func (b *BatchExecutor) ExecuteBatched(ctx context.Context, calls []llmpkg.ToolCall) *ParallelResult {
-	// Group calls by tool name for potential batching optimization
+	// 按工具名分组调用,以便进行可能的分批优化
 	groups := make(map[string][]int)
 	for i, call := range calls {
 		groups[call.Name] = append(groups[call.Name], i)
@@ -455,7 +455,7 @@ func (b *BatchExecutor) ExecuteBatched(ctx context.Context, calls []llmpkg.ToolC
 		zap.Int("total_calls", len(calls)),
 		zap.Int("unique_tools", len(groups)))
 
-	// For now, delegate to parallel executor
-	// Future: implement actual batching for tools that support it
+	// 现在,代表 平行执行者
+	// 未来:对辅助工具进行实际分批
 	return b.parallel.Execute(ctx, calls)
 }

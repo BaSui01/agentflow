@@ -1,4 +1,4 @@
-// Package tools provides audit logging for tool execution in enterprise AI Agent frameworks.
+// 软件包工具为企业AI代理框架中的工具执行提供了审计记录.
 package tools
 
 import (
@@ -13,7 +13,7 @@ import (
 	"go.uber.org/zap"
 )
 
-// AuditEventType represents the type of audit event.
+// AuditEventType代表审计事件的类型.
 type AuditEventType string
 
 const (
@@ -24,7 +24,7 @@ const (
 	AuditEventCostAlert      AuditEventType = "cost_alert"
 )
 
-// AuditEntry represents a single audit log entry.
+// Auditry代表单一的审计记录条目.
 type AuditEntry struct {
 	ID            string            `json:"id"`
 	Timestamp     time.Time         `json:"timestamp"`
@@ -44,22 +44,22 @@ type AuditEntry struct {
 	RequestIP     string            `json:"request_ip,omitempty"`
 }
 
-// AuditLogger defines the interface for audit logging.
+// AuditLogger定义了审计日志的接口.
 type AuditLogger interface {
-	// Log records an audit entry.
+	// 日志记录了一个审计条目。
 	Log(ctx context.Context, entry *AuditEntry) error
 
-	// LogAsync records an audit entry asynchronously.
+	// LogAsync同步记录审计条目.
 	LogAsync(entry *AuditEntry)
 
-	// Query retrieves audit entries based on filters.
+	// 查询根据过滤器检索审计条目。
 	Query(ctx context.Context, filter *AuditFilter) ([]*AuditEntry, error)
 
-	// Close closes the audit logger and flushes pending entries.
+	// 关闭审计日志并冲出待录条目 。
 	Close() error
 }
 
-// AuditFilter defines filters for querying audit entries.
+// AuditFilter定义了查询审计条目的过滤器.
 type AuditFilter struct {
 	AgentID    string         `json:"agent_id,omitempty"`
 	UserID     string         `json:"user_id,omitempty"`
@@ -73,19 +73,19 @@ type AuditFilter struct {
 	Offset     int            `json:"offset,omitempty"`
 }
 
-// AuditBackend defines the interface for audit storage backends.
+// 审计后端定义了审计存储后端的接口.
 type AuditBackend interface {
-	// Write writes an audit entry to the backend.
+	// 写入后端的审计条目 。
 	Write(ctx context.Context, entry *AuditEntry) error
 
-	// Query retrieves audit entries from the backend.
+	// 查询从后端检索审计条目.
 	Query(ctx context.Context, filter *AuditFilter) ([]*AuditEntry, error)
 
-	// Close closes the backend.
+	// 关闭后端 。
 	Close() error
 }
 
-// DefaultAuditLogger is the default implementation of AuditLogger.
+// 默认AuditLogger是AuditLogger的默认执行.
 type DefaultAuditLogger struct {
 	backends     []AuditBackend
 	asyncQueue   chan *AuditEntry
@@ -96,7 +96,7 @@ type DefaultAuditLogger struct {
 	idGenerator  func() string
 }
 
-// AuditLoggerConfig configures the audit logger.
+// 审计LoggerConfig 配置审计日志 。
 type AuditLoggerConfig struct {
 	Backends       []AuditBackend
 	AsyncQueueSize int
@@ -104,7 +104,7 @@ type AuditLoggerConfig struct {
 	IDGenerator    func() string
 }
 
-// NewAuditLogger creates a new audit logger.
+// NewAuditLogger创建了新的审计日志.
 func NewAuditLogger(cfg *AuditLoggerConfig, logger *zap.Logger) *DefaultAuditLogger {
 	if logger == nil {
 		logger = zap.NewNop()
@@ -127,7 +127,7 @@ func NewAuditLogger(cfg *AuditLoggerConfig, logger *zap.Logger) *DefaultAuditLog
 		idGenerator: cfg.IDGenerator,
 	}
 
-	// Start async workers
+	// 启动同步工作
 	for i := 0; i < cfg.AsyncWorkers; i++ {
 		al.wg.Add(1)
 		go al.asyncWorker()
@@ -136,7 +136,7 @@ func NewAuditLogger(cfg *AuditLoggerConfig, logger *zap.Logger) *DefaultAuditLog
 	return al
 }
 
-// asyncWorker processes audit entries asynchronously.
+// ayncWorker 同步处理审计条目。
 func (al *DefaultAuditLogger) asyncWorker() {
 	defer al.wg.Done()
 
@@ -150,7 +150,7 @@ func (al *DefaultAuditLogger) asyncWorker() {
 	}
 }
 
-// writeToBackends writes an entry to all backends.
+// 写入 ToBackends 为所有后端写出一个条目 。
 func (al *DefaultAuditLogger) writeToBackends(ctx context.Context, entry *AuditEntry) error {
 	var lastErr error
 	for _, backend := range al.backends {
@@ -165,7 +165,7 @@ func (al *DefaultAuditLogger) writeToBackends(ctx context.Context, entry *AuditE
 	return lastErr
 }
 
-// Log records an audit entry synchronously.
+// 日志同步记录审计条目。
 func (al *DefaultAuditLogger) Log(ctx context.Context, entry *AuditEntry) error {
 	al.closeMu.Lock()
 	if al.closed {
@@ -184,7 +184,7 @@ func (al *DefaultAuditLogger) Log(ctx context.Context, entry *AuditEntry) error 
 	return al.writeToBackends(ctx, entry)
 }
 
-// LogAsync records an audit entry asynchronously.
+// LogAsync同步记录审计条目.
 func (al *DefaultAuditLogger) LogAsync(entry *AuditEntry) {
 	al.closeMu.Lock()
 	if al.closed {
@@ -203,7 +203,7 @@ func (al *DefaultAuditLogger) LogAsync(entry *AuditEntry) {
 
 	select {
 	case al.asyncQueue <- entry:
-		// Successfully queued
+		// 成功排队
 	default:
 		al.logger.Warn("audit queue full, dropping entry",
 			zap.String("entry_id", entry.ID),
@@ -211,17 +211,17 @@ func (al *DefaultAuditLogger) LogAsync(entry *AuditEntry) {
 	}
 }
 
-// Query retrieves audit entries based on filters.
+// 查询根据过滤器检索审计条目。
 func (al *DefaultAuditLogger) Query(ctx context.Context, filter *AuditFilter) ([]*AuditEntry, error) {
 	if len(al.backends) == 0 {
 		return nil, fmt.Errorf("no backends configured")
 	}
 
-	// Query from the first backend that supports querying
+	// 从第一个支持查询的后端查询
 	return al.backends[0].Query(ctx, filter)
 }
 
-// Close closes the audit logger and flushes pending entries.
+// 关闭审计日志并冲出待录条目 。
 func (al *DefaultAuditLogger) Close() error {
 	al.closeMu.Lock()
 	if al.closed {
@@ -231,11 +231,11 @@ func (al *DefaultAuditLogger) Close() error {
 	al.closed = true
 	al.closeMu.Unlock()
 
-	// Close the async queue and wait for workers to finish
+	// 关闭同步队列并等待工人完成
 	close(al.asyncQueue)
 	al.wg.Wait()
 
-	// Close all backends
+	// 关闭所有后端
 	var lastErr error
 	for _, backend := range al.backends {
 		if err := backend.Close(); err != nil {
@@ -247,16 +247,16 @@ func (al *DefaultAuditLogger) Close() error {
 	return lastErr
 }
 
-// ====== Memory Backend ======
+// QQ 内存后端QQ
 
-// MemoryAuditBackend stores audit entries in memory.
+// MemoryAuditBackend将审计条目存储于内存.
 type MemoryAuditBackend struct {
 	entries  []*AuditEntry
 	maxSize  int
 	mu       sync.RWMutex
 }
 
-// NewMemoryAuditBackend creates a new memory audit backend.
+// New Memory AuditBackend创建了新的内存审计后端.
 func NewMemoryAuditBackend(maxSize int) *MemoryAuditBackend {
 	if maxSize <= 0 {
 		maxSize = 100000
@@ -267,14 +267,14 @@ func NewMemoryAuditBackend(maxSize int) *MemoryAuditBackend {
 	}
 }
 
-// Write writes an audit entry to memory.
+// 写一个审计条目到内存 。
 func (m *MemoryAuditBackend) Write(ctx context.Context, entry *AuditEntry) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	// Evict oldest entries if at capacity
+	// 如果具备能力, 将保留最老条目
 	if len(m.entries) >= m.maxSize {
-		// Remove oldest 10%
+		// 删除最老的10%
 		removeCount := m.maxSize / 10
 		if removeCount < 1 {
 			removeCount = 1
@@ -286,7 +286,7 @@ func (m *MemoryAuditBackend) Write(ctx context.Context, entry *AuditEntry) error
 	return nil
 }
 
-// Query retrieves audit entries from memory.
+// 查询从内存中检索审计条目 。
 func (m *MemoryAuditBackend) Query(ctx context.Context, filter *AuditFilter) ([]*AuditEntry, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
@@ -299,7 +299,7 @@ func (m *MemoryAuditBackend) Query(ctx context.Context, filter *AuditFilter) ([]
 		}
 	}
 
-	// Apply offset and limit
+	// 应用偏移和限制
 	if filter.Offset > 0 {
 		if filter.Offset >= len(results) {
 			return []*AuditEntry{}, nil
@@ -314,7 +314,7 @@ func (m *MemoryAuditBackend) Query(ctx context.Context, filter *AuditFilter) ([]
 	return results, nil
 }
 
-// matchesFilter checks if an entry matches the filter.
+// 匹配过滤器。
 func (m *MemoryAuditBackend) matchesFilter(entry *AuditEntry, filter *AuditFilter) bool {
 	if filter.AgentID != "" && entry.AgentID != filter.AgentID {
 		return false
@@ -343,14 +343,14 @@ func (m *MemoryAuditBackend) matchesFilter(entry *AuditEntry, filter *AuditFilte
 	return true
 }
 
-// Close closes the memory backend.
+// 关闭内存后端 。
 func (m *MemoryAuditBackend) Close() error {
 	return nil
 }
 
-// ====== File Backend ======
+// QQ 文件后端 QQ
 
-// FileAuditBackend stores audit entries in files.
+// FileAuditBackend将审计条目存储在文件中.
 type FileAuditBackend struct {
 	dir         string
 	currentFile *os.File
@@ -360,13 +360,13 @@ type FileAuditBackend struct {
 	logger      *zap.Logger
 }
 
-// FileAuditBackendConfig configures the file audit backend.
+// FileAuditBackendConfig配置文件审计后端.
 type FileAuditBackendConfig struct {
 	Directory   string
 	MaxFileSize int64 // Max file size in bytes before rotation
 }
 
-// NewFileAuditBackend creates a new file audit backend.
+// NewFileAuditBackend创建了一个新的文件审计后端.
 func NewFileAuditBackend(cfg *FileAuditBackendConfig, logger *zap.Logger) (*FileAuditBackend, error) {
 	if logger == nil {
 		logger = zap.NewNop()
@@ -379,7 +379,7 @@ func NewFileAuditBackend(cfg *FileAuditBackendConfig, logger *zap.Logger) (*File
 		cfg.MaxFileSize = 100 * 1024 * 1024 // 100MB
 	}
 
-	// Create directory if it doesn't exist
+	// 如果目录不存在, 则创建目录
 	if err := os.MkdirAll(cfg.Directory, 0755); err != nil {
 		return nil, fmt.Errorf("failed to create audit directory: %w", err)
 	}
@@ -391,12 +391,12 @@ func NewFileAuditBackend(cfg *FileAuditBackendConfig, logger *zap.Logger) (*File
 	}, nil
 }
 
-// Write writes an audit entry to a file.
+// 写入文件的审计条目 。
 func (f *FileAuditBackend) Write(ctx context.Context, entry *AuditEntry) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
-	// Check if we need to rotate the file
+	// 检查是否需要旋转文件
 	currentDate := entry.Timestamp.Format("2006-01-02")
 	if f.currentFile == nil || f.currentDate != currentDate {
 		if err := f.rotateFile(currentDate); err != nil {
@@ -404,7 +404,7 @@ func (f *FileAuditBackend) Write(ctx context.Context, entry *AuditEntry) error {
 		}
 	}
 
-	// Check file size
+	// 检查文件大小
 	if f.currentFile != nil {
 		info, err := f.currentFile.Stat()
 		if err == nil && info.Size() >= f.maxFileSize {
@@ -414,7 +414,7 @@ func (f *FileAuditBackend) Write(ctx context.Context, entry *AuditEntry) error {
 		}
 	}
 
-	// Write entry as JSON line
+	// 将条目写入 JSON 行
 	data, err := json.Marshal(entry)
 	if err != nil {
 		return fmt.Errorf("failed to marshal audit entry: %w", err)
@@ -427,14 +427,14 @@ func (f *FileAuditBackend) Write(ctx context.Context, entry *AuditEntry) error {
 	return nil
 }
 
-// rotateFile rotates to a new file.
+// 旋转文件旋转为新文件 。
 func (f *FileAuditBackend) rotateFile(date string) error {
-	// Close current file
+	// 关闭当前文件
 	if f.currentFile != nil {
 		f.currentFile.Close()
 	}
 
-	// Create new file
+	// 创建新文件
 	filename := filepath.Join(f.dir, fmt.Sprintf("audit_%s_%d.jsonl", date, time.Now().UnixNano()))
 	file, err := os.OpenFile(filename, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
 	if err != nil {
@@ -448,10 +448,10 @@ func (f *FileAuditBackend) rotateFile(date string) error {
 	return nil
 }
 
-// Query retrieves audit entries from files (limited implementation).
+// 查询从文件中检索审计条目(执行有限).
 func (f *FileAuditBackend) Query(ctx context.Context, filter *AuditFilter) ([]*AuditEntry, error) {
-	// Note: This is a simplified implementation that only reads from the current file
-	// A production implementation would need to read from multiple files based on the filter
+	// 说明: 这是一个只读取当前文件的简化执行
+	// 生产实施需要根据过滤器从多个文件中读取
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
@@ -459,16 +459,16 @@ func (f *FileAuditBackend) Query(ctx context.Context, filter *AuditFilter) ([]*A
 		return []*AuditEntry{}, nil
 	}
 
-	// For a full implementation, you would:
-	// 1. List all files in the directory
-	// 2. Filter files based on date range
-	// 3. Read and parse each file
-	// 4. Apply filters and return results
+	// 为了充分执行,你们将:
+	// 1. 列出目录中的所有文件
+	// 2. 基于日期范围的过滤文件
+	// 3. 阅读并分析每个文件
+	// 4. 应用过滤并返回结果
 
 	return []*AuditEntry{}, fmt.Errorf("file query not fully implemented; use memory backend for queries")
 }
 
-// Close closes the file backend.
+// 关闭文件后端 。
 func (f *FileAuditBackend) Close() error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -481,23 +481,23 @@ func (f *FileAuditBackend) Close() error {
 	return nil
 }
 
-// ====== Database Backend Interface ======
+// QQ 数据库后端接口QQ
 
-// DatabaseAuditBackend defines the interface for database audit backends.
-// Implementations can use PostgreSQL, MySQL, MongoDB, etc.
+// DatabaseAuditBackend定义了数据库审计后端的接口.
+// 执行可以使用PostgreSQL,MySQL,MongoDB等.
 type DatabaseAuditBackend interface {
 	AuditBackend
-	// Migrate creates or updates the database schema.
+	// 迁移创建或更新数据库计划。
 	Migrate(ctx context.Context) error
 }
 
-// ====== Audit Middleware ======
+// 审计中间软件
 
-// AuditMiddleware creates a middleware that logs tool executions.
+// AuditleMiddleware创建了一个记录工具执行的中间软件.
 func AuditMiddleware(auditLogger AuditLogger) func(ToolFunc) ToolFunc {
 	return func(next ToolFunc) ToolFunc {
 		return func(ctx context.Context, args json.RawMessage) (json.RawMessage, error) {
-			// Extract context information
+			// 摘录上下文信息
 			permCtx, _ := GetPermissionContext(ctx)
 
 			entry := &AuditEntry{
@@ -516,19 +516,19 @@ func AuditMiddleware(auditLogger AuditLogger) func(ToolFunc) ToolFunc {
 				entry.Metadata = permCtx.Metadata
 			}
 
-			// Execute the tool
+			// 执行工具
 			start := time.Now()
 			result, err := next(ctx, args)
 			entry.Duration = time.Since(start)
 
-			// Record result
+			// 记录结果
 			if err != nil {
 				entry.Error = err.Error()
 			} else {
 				entry.Result = result
 			}
 
-			// Log asynchronously
+			// 同步日志
 			auditLogger.LogAsync(entry)
 
 			return result, err
@@ -536,7 +536,7 @@ func AuditMiddleware(auditLogger AuditLogger) func(ToolFunc) ToolFunc {
 	}
 }
 
-// ====== Helper Functions ======
+// 帮助函数
 
 var auditIDCounter uint64
 var auditIDMu sync.Mutex
@@ -548,7 +548,7 @@ func generateAuditID() string {
 	return fmt.Sprintf("audit_%d_%d", time.Now().UnixNano(), auditIDCounter)
 }
 
-// LogToolCall is a convenience function to log a tool call.
+// LogToolCall是登录工具调用的一种便利功能.
 func LogToolCall(auditLogger AuditLogger, agentID, userID, toolName string, args json.RawMessage) {
 	auditLogger.LogAsync(&AuditEntry{
 		EventType: AuditEventToolCall,
@@ -559,7 +559,7 @@ func LogToolCall(auditLogger AuditLogger, agentID, userID, toolName string, args
 	})
 }
 
-// LogToolResult is a convenience function to log a tool result.
+// LogToolResult是记录工具结果的便利功能.
 func LogToolResult(auditLogger AuditLogger, agentID, userID, toolName string, result json.RawMessage, err error, duration time.Duration) {
 	entry := &AuditEntry{
 		EventType: AuditEventToolResult,
@@ -575,7 +575,7 @@ func LogToolResult(auditLogger AuditLogger, agentID, userID, toolName string, re
 	auditLogger.LogAsync(entry)
 }
 
-// LogPermissionCheck is a convenience function to log a permission check.
+// LogPermissionCheck是登录权限检查的便利功能.
 func LogPermissionCheck(auditLogger AuditLogger, permCtx *PermissionContext, decision PermissionDecision, reason string) {
 	auditLogger.LogAsync(&AuditEntry{
 		EventType: AuditEventPermissionCheck,
@@ -590,7 +590,7 @@ func LogPermissionCheck(auditLogger AuditLogger, permCtx *PermissionContext, dec
 	})
 }
 
-// LogRateLimitHit is a convenience function to log a rate limit hit.
+// LogRateLimitHit是记录速率限制命中的便利功能.
 func LogRateLimitHit(auditLogger AuditLogger, agentID, userID, toolName, limitType string) {
 	auditLogger.LogAsync(&AuditEntry{
 		EventType: AuditEventRateLimitHit,
@@ -601,7 +601,7 @@ func LogRateLimitHit(auditLogger AuditLogger, agentID, userID, toolName, limitTy
 	})
 }
 
-// LogCostAlert is a convenience function to log a cost alert.
+// LogCostAlert是登录成本提示的便利功能.
 func LogCostAlert(auditLogger AuditLogger, agentID, userID string, cost float64, alertType string) {
 	auditLogger.LogAsync(&AuditEntry{
 		EventType: AuditEventCostAlert,

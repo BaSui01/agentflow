@@ -12,12 +12,12 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-// Feature: multi-provider-support, Property 9: RewriterChain Error Handling
-// **Validates: Requirements 7.3**
+// 特性: 多提供者支持, 属性 9: 重写Chain 错误处理
+// ** 参数:要求7.3**
 //
-// This property test verifies that when RewriterChain execution fails, the provider
-// returns an llm.Error with Code=ErrInvalidRequest and HTTPStatus=400.
-// Minimum 100 iterations are achieved through comprehensive test cases.
+// 此属性测试验证 Rewrite Chain 执行失败时, 提供者
+// 返回 llm。 代码=ErrInvalid Request and HTTP Status=400出错.
+// 通过综合测试案例实现至少100次重复。
 func TestProperty9_RewriterChainErrorHandling(t *testing.T) {
 	testCases := []struct {
 		name               string
@@ -28,7 +28,7 @@ func TestProperty9_RewriterChainErrorHandling(t *testing.T) {
 		requirement        string
 		description        string
 	}{
-		// Requirement 7.3: When RewriterChain execution fails, return ErrInvalidRequest with HTTPStatus=400
+		// 7.3要求: 当重写Chain执行失败时, 用 HTTP status=400 返回 ErrInvalid 请求
 		{
 			name:               "Simple rewriter error",
 			rewriterError:      errors.New("rewriter failed"),
@@ -121,8 +121,8 @@ func TestProperty9_RewriterChainErrorHandling(t *testing.T) {
 		},
 	}
 
-	// Expand test cases to reach 100+ iterations
-	// Test with different error messages
+	// 扩大测试案例,使其达到100+重复
+	// 用不同的错误消息进行测试
 	errorMessages := []string{
 		"rewriter failed",
 		"validation error",
@@ -148,10 +148,10 @@ func TestProperty9_RewriterChainErrorHandling(t *testing.T) {
 		description        string
 	}, 0, len(testCases)+len(errorMessages)*len(providers))
 
-	// Add original test cases
+	// 添加原始测试案例
 	expandedTestCases = append(expandedTestCases, testCases...)
 
-	// Add combinations of error messages and providers
+	// 添加错误消息和提供者的组合
 	for _, errMsg := range errorMessages {
 		for _, provider := range providers {
 			expandedTestCases = append(expandedTestCases, struct {
@@ -174,7 +174,7 @@ func TestProperty9_RewriterChainErrorHandling(t *testing.T) {
 		}
 	}
 
-	// Additional specific error scenarios
+	// 额外的具体错误设想
 	specificErrors := []struct {
 		name  string
 		error error
@@ -213,19 +213,19 @@ func TestProperty9_RewriterChainErrorHandling(t *testing.T) {
 		}
 	}
 
-	// Run all test cases
+	// 运行所有测试大小写
 	for _, tc := range expandedTestCases {
 		t.Run(tc.name, func(t *testing.T) {
-			// Create a failing rewriter
+			// 创建失败的重写器
 			failingRewriter := &mockFailingRewriter{
 				name:  "failing_rewriter",
 				error: tc.rewriterError,
 			}
 
-			// Create RewriterChain with the failing rewriter
+			// 用失败的重写创建 Chan
 			chain := middleware.NewRewriterChain(failingRewriter)
 
-			// Create a test request
+			// 创建测试请求
 			req := &llm.ChatRequest{
 				Model: "test-model",
 				Messages: []llm.Message{
@@ -233,19 +233,19 @@ func TestProperty9_RewriterChainErrorHandling(t *testing.T) {
 				},
 			}
 
-			// Execute the chain (should fail)
+			// 执行链条( 应失败)
 			_, err := chain.Execute(context.Background(), req)
 
-			// Verify that the chain returned an error
+			// 验证链返回错误
 			assert.Error(t, err, "RewriterChain should return error when rewriter fails")
 
-			// Now simulate how a provider would handle this error
-			// According to Requirement 7.3, providers should return llm.Error with:
-			// - Code: ErrInvalidRequest
-			// - HTTPStatus: 400
+			// 现在模拟提供者如何处理这个错误
+			// 根据要求7.3,提供者应返还llm. 错误 :
+			// - 代码:无效请求
+			// - HTTP现状:400
 			providerErr := convertRewriterErrorToProviderError(err, tc.provider)
 
-			// Verify the provider error properties
+			// 校验提供者错误属性
 			assert.NotNil(t, providerErr, "Provider should return non-nil error")
 
 			llmErr, ok := providerErr.(*llm.Error)
@@ -266,13 +266,13 @@ func TestProperty9_RewriterChainErrorHandling(t *testing.T) {
 		})
 	}
 
-	// Verify we have at least 100 test cases
+	// 检查我们至少有100个测试病例
 	assert.GreaterOrEqual(t, len(expandedTestCases), 100,
 		"Property test should have minimum 100 iterations")
 }
 
-// TestProperty9_RewriterChainErrorInCompletionMethod verifies that Completion()
-// method correctly handles RewriterChain errors (Requirement 7.3)
+// 测试Property9  Rewriter ChainError Incompletion Method 验证完成( )
+// 方法正确处理 RewriterChain 错误(要求 7.3)
 func TestProperty9_RewriterChainErrorInCompletionMethod(t *testing.T) {
 	testCases := []struct {
 		name          string
@@ -314,7 +314,7 @@ func TestProperty9_RewriterChainErrorInCompletionMethod(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			// Simulate provider behavior when RewriterChain fails
+			// 复制失败时模拟提供者行为
 			err := convertRewriterErrorToProviderError(tc.rewriterError, tc.provider)
 
 			llmErr, ok := err.(*llm.Error)
@@ -327,8 +327,8 @@ func TestProperty9_RewriterChainErrorInCompletionMethod(t *testing.T) {
 	}
 }
 
-// TestProperty9_RewriterChainErrorInStreamMethod verifies that Stream()
-// method correctly handles RewriterChain errors (Requirement 7.3)
+// 测试Property9  Rewriter ChainErrorInStream 方法验证流 ()
+// 方法正确处理 RewriterChain 错误(要求 7.3)
 func TestProperty9_RewriterChainErrorInStreamMethod(t *testing.T) {
 	testCases := []struct {
 		name          string
@@ -370,7 +370,7 @@ func TestProperty9_RewriterChainErrorInStreamMethod(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			// Simulate provider behavior when RewriterChain fails
+			// 复制失败时模拟提供者行为
 			err := convertRewriterErrorToProviderError(tc.rewriterError, tc.provider)
 
 			llmErr, ok := err.(*llm.Error)
@@ -383,8 +383,8 @@ func TestProperty9_RewriterChainErrorInStreamMethod(t *testing.T) {
 	}
 }
 
-// TestProperty9_ErrorMessagePreservation verifies that the original rewriter
-// error message is preserved in the provider error
+// 测试Property9  错误MessagePreaty 验证原重写
+// 错误消息在提供者错误中保存
 func TestProperty9_ErrorMessagePreservation(t *testing.T) {
 	testCases := []struct {
 		name             string
@@ -420,8 +420,8 @@ func TestProperty9_ErrorMessagePreservation(t *testing.T) {
 	}
 }
 
-// TestProperty9_ConsistentErrorHandlingAcrossProviders verifies that all
-// providers handle RewriterChain errors consistently
+// Property9  持续操作的交叉操作验证
+// 提供者一致处理 RewriterChan 错误
 func TestProperty9_ConsistentErrorHandlingAcrossProviders(t *testing.T) {
 	providers := []string{"grok", "qwen", "deepseek", "glm", "minimax", "openai", "claude"}
 	rewriterError := errors.New("test rewriter error")
@@ -444,7 +444,7 @@ func TestProperty9_ConsistentErrorHandlingAcrossProviders(t *testing.T) {
 	}
 }
 
-// Mock failing rewriter for testing
+// 模拟失败重写测试
 type mockFailingRewriter struct {
 	name  string
 	error error
@@ -458,8 +458,8 @@ func (m *mockFailingRewriter) Rewrite(ctx context.Context, req *llm.ChatRequest)
 	return nil, m.error
 }
 
-// convertRewriterErrorToProviderError simulates how providers convert
-// RewriterChain errors to llm.Error (as seen in MiniMax provider)
+// 转换写入器 ErrorTo ProviderError 模拟提供者如何转换
+// 重写Chain错误到 llm 。 出错( 如在 MiniMax 提供者所见)
 func convertRewriterErrorToProviderError(rewriterErr error, provider string) error {
 	return &llm.Error{
 		Code:       llm.ErrInvalidRequest,

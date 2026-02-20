@@ -19,10 +19,10 @@ import (
 	"go.uber.org/zap"
 )
 
-// Feature: multi-provider-support, Property 27: Context Cancellation Handling
-// **Validates: Requirements 16.2, 16.3**
+// 特性:多提供者支持,财产 27:上下文取消处理
+// ** 参数:要求16.2、16.3**
 
-// TestProperty27_ContextCancellation tests that cancelled context aborts request
+// 取消上下文中止请求的 ContextConcellation 测试
 func TestProperty27_ContextCancellation(t *testing.T) {
 	logger := zap.NewNop()
 	providerNames := []string{"grok", "qwen", "deepseek", "glm", "minimax"}
@@ -87,7 +87,7 @@ func TestProperty27_ContextCancellation(t *testing.T) {
 	}
 }
 
-// TestProperty27_PreCancelledContext tests that pre-cancelled context fails immediately
+// Property27  预取消的上下文测试立即失败
 func TestProperty27_PreCancelledContext(t *testing.T) {
 	logger := zap.NewNop()
 	providerNames := []string{"grok", "qwen", "deepseek", "glm", "minimax"}
@@ -137,7 +137,7 @@ func TestProperty27_PreCancelledContext(t *testing.T) {
 	}
 }
 
-// TestProperty27_ContextTimeout tests that context timeout is respected
+// 测试Property27  ContextTimeout 测试中遵守上下文超时
 func TestProperty27_ContextTimeout(t *testing.T) {
 	logger := zap.NewNop()
 	providerNames := []string{"grok", "qwen", "deepseek", "glm", "minimax"}
@@ -199,7 +199,7 @@ func TestProperty27_ContextTimeout(t *testing.T) {
 	}
 }
 
-// TestProperty27_StreamCancellation tests that stream is cancelled properly
+// 测试 Property27  Stream 取消对流的测试
 func TestProperty27_StreamCancellation(t *testing.T) {
 	logger := zap.NewNop()
 	providerNames := []string{"grok", "qwen", "deepseek", "glm", "minimax"}
@@ -294,7 +294,7 @@ func TestProperty27_StreamCancellation(t *testing.T) {
 	}
 }
 
-// TestProperty27_CancellationCleanup tests that resources are cleaned up on cancellation
+// Property27  Cancellation 清除测试, 取消时清理资源
 func TestProperty27_CancellationCleanup(t *testing.T) {
 	logger := zap.NewNop()
 	providerNames := []string{"grok", "qwen", "deepseek", "glm", "minimax"}
@@ -347,7 +347,7 @@ func TestProperty27_CancellationCleanup(t *testing.T) {
 	}
 }
 
-// TestProperty27_IterationCount verifies we have at least 100 test iterations
+// 检测 Property27  检测国家至少100次检测重复
 func TestProperty27_IterationCount(t *testing.T) {
 	totalIterations := 20 + 20 + 20 + 20 + 20
 	assert.GreaterOrEqual(t, totalIterations, 100,

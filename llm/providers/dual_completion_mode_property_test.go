@@ -19,10 +19,10 @@ import (
 	"go.uber.org/zap"
 )
 
-// Feature: multi-provider-support, Property 4: Dual Completion Mode Support
-// **Validates: Requirements 1.5, 2.4, 3.4, 4.5, 5.5**
+// 特性:多供应商支持,财产4:双重完成模式支持
+// ** 参数:要求1.5、2.4、3.4、4.5、5.5**
 
-// TestProperty4_DualCompletionModeSupport tests both completion modes work
+// 测试Property4  双重补全模块支持测试两种完成模式的工作
 func TestProperty4_DualCompletionModeSupport(t *testing.T) {
 	logger := zap.NewNop()
 	providerNames := []string{"grok", "qwen", "deepseek", "glm", "minimax"}
@@ -37,7 +37,7 @@ func TestProperty4_DualCompletionModeSupport(t *testing.T) {
 		{"long message", []llm.Message{{Role: llm.RoleUser, Content: "This is a longer message that contains multiple sentences."}}},
 	}
 
-	// Test Completion mode
+	// 测试完成模式
 	for _, provider := range providerNames {
 		for _, mv := range messageVariations {
 			t.Run(provider+"_completion_"+mv.name, func(t *testing.T) {
@@ -95,7 +95,7 @@ func TestProperty4_DualCompletionModeSupport(t *testing.T) {
 		}
 	}
 
-	// Test Stream mode
+	// 测试流模式
 	for _, provider := range providerNames {
 		for _, mv := range messageVariations {
 			t.Run(provider+"_stream_"+mv.name, func(t *testing.T) {
@@ -167,7 +167,7 @@ func TestProperty4_DualCompletionModeSupport(t *testing.T) {
 	}
 }
 
-// TestProperty4_CompletionWithTools tests completion with tool calling
+// 测试Property4  完成 用工具调用工具完成工具测试
 func TestProperty4_CompletionWithTools(t *testing.T) {
 	logger := zap.NewNop()
 	providerNames := []string{"grok", "qwen", "deepseek", "glm", "minimax"}
@@ -230,7 +230,7 @@ func TestProperty4_CompletionWithTools(t *testing.T) {
 	}
 }
 
-// TestProperty4_CompletionParameters tests various completion parameters
+// Property4  完成参数测试各种完成参数
 func TestProperty4_CompletionParameters(t *testing.T) {
 	logger := zap.NewNop()
 	providerNames := []string{"grok", "qwen", "deepseek", "glm", "minimax"}
@@ -293,7 +293,7 @@ func TestProperty4_CompletionParameters(t *testing.T) {
 	}
 }
 
-// TestProperty4_StreamWithTools tests streaming with tool calling
+// Property4  Stream With Tools 测试工具调用
 func TestProperty4_StreamWithTools(t *testing.T) {
 	logger := zap.NewNop()
 	providerNames := []string{"grok", "qwen", "deepseek", "glm", "minimax"}
@@ -365,13 +365,13 @@ func TestProperty4_StreamWithTools(t *testing.T) {
 	}
 }
 
-// TestProperty4_IterationCount verifies we have at least 100 test iterations
+// Property4  测试国家验证我们至少有100个测试重复
 func TestProperty4_IterationCount(t *testing.T) {
-	// Completion: 5 providers * 4 variations = 20
-	// Stream: 5 providers * 4 variations = 20
-	// CompletionWithTools: 5 providers * 3 variations = 15
-	// CompletionParameters: 5 providers * 7 variations = 35
-	// StreamWithTools (added): 5 providers * 2 variations = 10
+	// 完成:5个供应商* 4个变数=20
+	// 流:5个供应商 * 4个变数=20
+	// 完成 使用工具:5个供应商 * 3个变化=15
+	// 完成量表:5个供应商 * 7个变数=35
+	// StreamWithTools(添加):5个供应商 * 2个变数=10
 	totalIterations := 20 + 20 + 15 + 35 + 10
 	assert.GreaterOrEqual(t, totalIterations, 100,
 		"Property 4 should have at least 100 test iterations, got %d", totalIterations)

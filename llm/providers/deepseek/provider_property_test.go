@@ -13,8 +13,8 @@ import (
 	"go.uber.org/zap"
 )
 
-// Feature: multi-provider-support, Property 6: Credential Override from Context
-// Validates: Requirements 5.8
+// 特性: 多提供者支持, 属性 6: 从上下文获取证书
+// 核实:所需经费5.8
 func TestProperty6_CredentialOverrideFromContext(t *testing.T) {
 	testCases := []struct {
 		name           string
@@ -50,16 +50,16 @@ func TestProperty6_CredentialOverrideFromContext(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			// Create a test server to capture the API key
+			// 创建测试服务器以捕获 API 密钥
 			var capturedAPIKey string
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				// Extract API key from Authorization header
+				// 从授权头提取 API 密钥
 				authHeader := r.Header.Get("Authorization")
 				if len(authHeader) > 7 && authHeader[:7] == "Bearer " {
 					capturedAPIKey = authHeader[7:]
 				}
 
-				// Return a valid response
+				// 返回有效的响应
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusOK)
 				json.NewEncoder(w).Encode(openAIResponse{
@@ -79,14 +79,14 @@ func TestProperty6_CredentialOverrideFromContext(t *testing.T) {
 			}))
 			defer server.Close()
 
-			// Create provider with config API key
+			// 以配置 API 密钥创建提供者
 			cfg := providers.DeepSeekConfig{
 				APIKey:  tc.configAPIKey,
 				BaseURL: server.URL,
 			}
 			provider := NewDeepSeekProvider(cfg, zap.NewNop())
 
-			// Create context with or without credential override
+			// 创建包含或不包含证书覆盖的上下文
 			ctx := context.Background()
 			if tc.contextAPIKey != "" {
 				ctx = llm.WithCredentialOverride(ctx, llm.CredentialOverride{
@@ -94,7 +94,7 @@ func TestProperty6_CredentialOverrideFromContext(t *testing.T) {
 				})
 			}
 
-			// Make a completion request
+			// 提出完成请求
 			req := &llm.ChatRequest{
 				Messages: []llm.Message{
 					{Role: llm.RoleUser, Content: "test"},
@@ -104,13 +104,13 @@ func TestProperty6_CredentialOverrideFromContext(t *testing.T) {
 			_, err := provider.Completion(ctx, req)
 			assert.NoError(t, err, "Completion should succeed")
 
-			// Verify the correct API key was used
+			// 校验正确的 API 密钥
 			assert.Equal(t, tc.expectedAPIKey, capturedAPIKey,
 				"API key should match expected value")
 		})
 	}
 
-	// Test credential override in streaming mode
+	// 串流模式中的测试证书覆盖
 	t.Run("credential override in streaming mode", func(t *testing.T) {
 		var capturedAPIKey string
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -122,7 +122,7 @@ func TestProperty6_CredentialOverrideFromContext(t *testing.T) {
 			w.Header().Set("Content-Type", "text/event-stream")
 			w.WriteHeader(http.StatusOK)
 
-			// Send a simple SSE response
+			// 发送简单的 SSE 响应
 			data := openAIResponse{
 				ID:    "test-id",
 				Model: "deepseek-chat",
@@ -162,7 +162,7 @@ func TestProperty6_CredentialOverrideFromContext(t *testing.T) {
 		ch, err := provider.Stream(ctx, req)
 		assert.NoError(t, err, "Stream should succeed")
 
-		// Consume the stream
+		// 控制溪流
 		for chunk := range ch {
 			assert.Nil(t, chunk.Err, "Stream chunk should not have error")
 		}
@@ -171,7 +171,7 @@ func TestProperty6_CredentialOverrideFromContext(t *testing.T) {
 			"Override API key should be used in streaming mode")
 	})
 
-	// Test that no override preserves config key
+	// 测试没有覆盖保存配置密钥
 	t.Run("no override uses config key", func(t *testing.T) {
 		var capturedAPIKey string
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -205,7 +205,7 @@ func TestProperty6_CredentialOverrideFromContext(t *testing.T) {
 		}
 		provider := NewDeepSeekProvider(cfg, zap.NewNop())
 
-		// No credential override in context
+		// 上下文中没有证书覆盖
 		ctx := context.Background()
 
 		req := &llm.ChatRequest{

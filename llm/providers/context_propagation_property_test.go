@@ -19,10 +19,10 @@ import (
 	"go.uber.org/zap"
 )
 
-// Feature: multi-provider-support, Property 26: Context Propagation
-// **Validates: Requirements 16.1, 16.4**
+// 特征:多供应商支持,财产26:背景宣传
+// ** 变动情况:要求16.1, 16.4**
 
-// TestProperty26_ContextPropagation tests that context is propagated to HTTP requests
+// Property26  Context 上下文向 HTTP 请求传播的配置测试
 func TestProperty26_ContextPropagation(t *testing.T) {
 	logger := zap.NewNop()
 	providerNames := []string{"grok", "qwen", "deepseek", "glm", "minimax"}
@@ -84,7 +84,7 @@ func TestProperty26_ContextPropagation(t *testing.T) {
 	}
 }
 
-// TestProperty26_ContextWithDeadline tests that context deadline is respected
+// 测试Property26  Context With Deadline 测试中遵守上下文最后期限
 func TestProperty26_ContextWithDeadline(t *testing.T) {
 	logger := zap.NewNop()
 	providerNames := []string{"grok", "qwen", "deepseek", "glm", "minimax"}
@@ -153,7 +153,7 @@ func TestProperty26_ContextWithDeadline(t *testing.T) {
 	}
 }
 
-// TestProperty26_ContextWithCredentialOverride tests credential override from context
+// Property26  Context with Creditive Override tests 从上下文复制证书
 func TestProperty26_ContextWithCredentialOverride(t *testing.T) {
 	logger := zap.NewNop()
 	providerNames := []string{"grok", "qwen", "deepseek", "glm", "minimax"}
@@ -214,7 +214,7 @@ func TestProperty26_ContextWithCredentialOverride(t *testing.T) {
 	}
 }
 
-// TestProperty26_ContextValueTypes tests different context value types
+// Property26  ContextValeTypes 测试不同的上下文值类型
 func TestProperty26_ContextValueTypes(t *testing.T) {
 	logger := zap.NewNop()
 	providerNames := []string{"grok", "qwen", "deepseek", "glm", "minimax"}
@@ -269,7 +269,7 @@ func TestProperty26_ContextValueTypes(t *testing.T) {
 	}
 }
 
-// TestProperty26_ContextChaining tests chained context values
+// Property26  ContextChaining 测试的上下文值
 func TestProperty26_ContextChaining(t *testing.T) {
 	logger := zap.NewNop()
 	providerNames := []string{"grok", "qwen", "deepseek", "glm", "minimax"}
@@ -318,7 +318,7 @@ func TestProperty26_ContextChaining(t *testing.T) {
 	}
 }
 
-// TestProperty26_IterationCount verifies we have at least 100 test iterations
+// 测试 Property26  测试国家验证我们至少有100个测试重复
 func TestProperty26_IterationCount(t *testing.T) {
 	totalIterations := 25 + 20 + 20 + 25 + 25
 	assert.GreaterOrEqual(t, totalIterations, 100,

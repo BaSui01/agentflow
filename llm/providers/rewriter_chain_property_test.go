@@ -9,12 +9,12 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-// Feature: multi-provider-support, Property 8: RewriterChain Application
-// **Validates: Requirements 7.1, 7.4**
+// 特性:多提供者支持, 属性 8: 重写Chain 应用程序
+// ** 参数:要求7.1、7.4**
 //
-// This property test verifies that RewriterChain is applied to both Completion() and Stream() methods
-// and that EmptyToolsCleaner removes empty tools arrays.
-// Minimum 100 iterations are achieved through comprehensive test cases.
+// 此属性测试验证 ReriterChan 既适用于补全( ) 方法, 也适用于 Stream( ) 方法
+// 而"空工具清除器"则去除"空工具"阵列.
+// 通过综合测试案例实现至少100次重复。
 func TestProperty8_RewriterChainApplication(t *testing.T) {
 	testCases := []struct {
 		name               string
@@ -25,10 +25,10 @@ func TestProperty8_RewriterChainApplication(t *testing.T) {
 		requirement        string
 		description        string
 	}{
-		// Requirement 7.1: RewriterChain SHALL apply to both Completion and Stream
-		// Requirement 7.4: RewriterChain SHALL apply to both methods
+		// 要求7.1:重写Chain SHALL既适用于完成,也适用于流
+		// 7.4要求:重写Chain SHALL适用于两种方法
 
-		// Empty tools array cases
+		// 空工具阵列大小写
 		{
 			name:               "Empty tools array with tool_choice - should clear tool_choice",
 			inputTools:         []llm.ToolSchema{},
@@ -66,7 +66,7 @@ func TestProperty8_RewriterChainApplication(t *testing.T) {
 			description:        "EmptyToolsCleaner should handle nil tools with no tool_choice",
 		},
 
-		// Non-empty tools cases
+		// 非空工具案件
 		{
 			name: "Single tool with tool_choice - should preserve both",
 			inputTools: []llm.ToolSchema{
@@ -102,8 +102,8 @@ func TestProperty8_RewriterChainApplication(t *testing.T) {
 			description:        "EmptyToolsCleaner should preserve tools even without tool_choice",
 		},
 
-		// Additional test cases to reach 100+ iterations
-		// Various tool_choice values with empty tools
+		// 额外测试案例达到100+重复
+		// 使用空工具选择各种工具( C)
 		{
 			name:               "Empty tools with tool_choice 'none'",
 			inputTools:         []llm.ToolSchema{},
@@ -132,7 +132,7 @@ func TestProperty8_RewriterChainApplication(t *testing.T) {
 			description:        "Should clear tool_choice='auto' when tools nil",
 		},
 
-		// Various tool configurations
+		// 各种工具配置
 		{
 			name: "Tool with minimal parameters",
 			inputTools: []llm.ToolSchema{
@@ -197,8 +197,8 @@ func TestProperty8_RewriterChainApplication(t *testing.T) {
 		},
 	}
 
-	// Duplicate test cases with variations to reach 100+ iterations
-	// We'll test each scenario multiple times with different contexts
+	// 重复测试案例,可有变化,达到100+重复
+	// 我们用不同的环境来测试每个情景
 	expandedTestCases := make([]struct {
 		name               string
 		inputTools         []llm.ToolSchema
@@ -209,10 +209,10 @@ func TestProperty8_RewriterChainApplication(t *testing.T) {
 		description        string
 	}, 0, len(testCases)*8)
 
-	// Add original test cases
+	// 添加原始测试案例
 	expandedTestCases = append(expandedTestCases, testCases...)
 
-	// Add variations with different providers
+	// 添加不同提供者的变量
 	providers := []string{"grok", "qwen", "deepseek", "glm", "minimax", "openai", "claude"}
 	for _, provider := range providers {
 		for _, tc := range testCases {
@@ -222,10 +222,10 @@ func TestProperty8_RewriterChainApplication(t *testing.T) {
 		}
 	}
 
-	// Run all test cases
+	// 运行所有测试大小写
 	for _, tc := range expandedTestCases {
 		t.Run(tc.name, func(t *testing.T) {
-			// Create a ChatRequest with the test inputs
+			// 用测试输入创建聊天请求
 			req := &llm.ChatRequest{
 				Model: "test-model",
 				Messages: []llm.Message{
@@ -235,19 +235,19 @@ func TestProperty8_RewriterChainApplication(t *testing.T) {
 				ToolChoice: tc.inputToolChoice,
 			}
 
-			// Create RewriterChain with EmptyToolsCleaner
+			// 用空工具清除器创建重写Chain
 			chain := middleware.NewRewriterChain(
 				middleware.NewEmptyToolsCleaner(),
 			)
 
-			// Execute the chain
+			// 执行链条
 			rewrittenReq, err := chain.Execute(context.Background(), req)
 
-			// Verify no error
+			// 校验无出错
 			assert.NoError(t, err, "RewriterChain should not return error for valid request")
 			assert.NotNil(t, rewrittenReq, "RewriterChain should return non-nil request")
 
-			// Verify tools handling
+			// 验证工具处理
 			if tc.expectedToolsNil {
 				assert.Empty(t, rewrittenReq.Tools,
 					"Tools should be empty when input tools are empty/nil (Requirement %s)", tc.requirement)
@@ -258,27 +258,27 @@ func TestProperty8_RewriterChainApplication(t *testing.T) {
 					"Tool count should be preserved")
 			}
 
-			// Verify tool_choice handling
+			// 校验工具  选择处理
 			assert.Equal(t, tc.expectedToolChoice, rewrittenReq.ToolChoice,
 				"ToolChoice should be '%s' (Requirement %s): %s",
 				tc.expectedToolChoice, tc.requirement, tc.description)
 
-			// Verify other fields are preserved
+			// 校验其他字段保存
 			assert.Equal(t, req.Model, rewrittenReq.Model, "Model should be preserved")
 			assert.Equal(t, len(req.Messages), len(rewrittenReq.Messages), "Messages should be preserved")
 		})
 	}
 
-	// Verify we have at least 100 test cases
+	// 检查我们至少有100个测试病例
 	assert.GreaterOrEqual(t, len(expandedTestCases), 100,
 		"Property test should have minimum 100 iterations")
 }
 
-// TestProperty8_RewriterChainAppliedToBothMethods verifies that RewriterChain
-// is applied to both Completion() and Stream() methods (Requirement 7.4)
+// TestProperty8  Rewrite Chain 应用两种方法验证重写 Chain
+// 适用于完成()和流()方法(要求7.4)
 func TestProperty8_RewriterChainAppliedToBothMethods(t *testing.T) {
-	// This test verifies the pattern used in all providers
-	// We test that the rewriter chain is called before processing in both methods
+	// 此测试验证所有提供者所用的模式
+	// 我们测试在两种方法处理之前 重写链被调用
 
 	testCases := []struct {
 		name           string
@@ -338,11 +338,11 @@ func TestProperty8_RewriterChainAppliedToBothMethods(t *testing.T) {
 			assert.NoError(t, err)
 
 			if tc.expectModified {
-				// ToolChoice should be cleared when tools are empty
+				// 当工具为空时应该清除工具选择
 				assert.Empty(t, rewrittenReq.ToolChoice,
 					"ToolChoice should be cleared when tools are empty (Requirement %s)", tc.requirement)
 			} else {
-				// ToolChoice should be preserved when tools are not empty
+				// 当工具不是空的时, 工具选择应当保存
 				assert.Equal(t, tc.toolChoice, rewrittenReq.ToolChoice,
 					"ToolChoice should be preserved when tools are not empty (Requirement %s)", tc.requirement)
 			}
@@ -350,7 +350,7 @@ func TestProperty8_RewriterChainAppliedToBothMethods(t *testing.T) {
 	}
 }
 
-// TestProperty8_EmptyToolsCleanerBehavior tests the specific behavior of EmptyToolsCleaner
+// 测试Property8 EmptyTools 清除器行为测试空工具清除器的特定行为
 func TestProperty8_EmptyToolsCleanerBehavior(t *testing.T) {
 	cleaner := middleware.NewEmptyToolsCleaner()
 
@@ -425,7 +425,7 @@ func TestProperty8_EmptyToolsCleanerBehavior(t *testing.T) {
 	}
 }
 
-// TestProperty8_RewriterChainName verifies that EmptyToolsCleaner has correct name
+// 测试Property8  RewriterChanName 验证空工具清除器有正确名称
 func TestProperty8_RewriterChainName(t *testing.T) {
 	cleaner := middleware.NewEmptyToolsCleaner()
 	assert.Equal(t, "empty_tools_cleaner", cleaner.Name(),

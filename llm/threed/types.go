@@ -1,4 +1,4 @@
-// Package threed provides AI 3D model generation capabilities.
+// 3d包提供了AI 三维模型生成能力.
 package threed
 
 import (
@@ -6,13 +6,13 @@ import (
 	"time"
 )
 
-// ThreeDProvider defines the interface for 3D model generation.
+// ThreeDProvider为3D模型生成定义了接口.
 type ThreeDProvider interface {
 	Name() string
 	Generate(ctx context.Context, req *GenerateRequest) (*GenerateResponse, error)
 }
 
-// GenerateRequest represents a 3D generation request.
+// 生成请求代表一个 三维生成请求 。
 type GenerateRequest struct {
 	Prompt      string   `json:"prompt,omitempty"`       // Text description
 	Image       string   `json:"image,omitempty"`        // Base64 image for image-to-3D
@@ -25,7 +25,7 @@ type GenerateRequest struct {
 	TextureSize int      `json:"texture_size,omitempty"` // Texture resolution
 }
 
-// GenerateResponse represents a 3D generation response.
+// 生成响应(Generate Response)代表3D生成响应.
 type GenerateResponse struct {
 	Provider  string      `json:"provider"`
 	Model     string      `json:"model"`
@@ -34,7 +34,7 @@ type GenerateResponse struct {
 	CreatedAt time.Time   `json:"created_at"`
 }
 
-// ModelData represents a generated 3D model.
+// ModelData代表生成的3D模型.
 type ModelData struct {
 	ID           string `json:"id,omitempty"`
 	URL          string `json:"url,omitempty"`           // Download URL
@@ -44,7 +44,7 @@ type ModelData struct {
 	ThumbnailURL string `json:"thumbnail_url,omitempty"` // Preview image
 }
 
-// ThreeDUsage contains usage information.
+// 3DUsage包含使用信息.
 type ThreeDUsage struct {
 	ModelsGenerated int     `json:"models_generated"`
 	Credits         float64 `json:"credits,omitempty"`

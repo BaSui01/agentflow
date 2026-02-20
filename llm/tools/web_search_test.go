@@ -12,7 +12,7 @@ import (
 	"go.uber.org/zap"
 )
 
-// --- mock WebSearchProvider ---
+// -- -- 模拟 WebSearch 提供 -- --
 
 type mockWebSearchProvider struct {
 	name    string
@@ -29,7 +29,7 @@ func (m *mockWebSearchProvider) Search(_ context.Context, _ string, _ WebSearchO
 
 func (m *mockWebSearchProvider) Name() string { return m.name }
 
-// --- tests ---
+// -- -- 测试 -- --
 
 func TestNewWebSearchTool(t *testing.T) {
 	t.Parallel()
@@ -216,7 +216,7 @@ func TestRegisterWebSearchTool(t *testing.T) {
 	}
 	assert.True(t, found, "web_search should appear in registry.List()")
 
-	// Registering again should fail (duplicate)
+	// 重新注册失败( 重复)
 	err = RegisterWebSearchTool(registry, config, zap.NewNop())
 	assert.Error(t, err)
 }

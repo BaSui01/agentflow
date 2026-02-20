@@ -1,4 +1,4 @@
-// Package music provides AI music generation capabilities.
+// 包音乐提供AI音乐生成能力.
 package music
 
 import (
@@ -6,13 +6,13 @@ import (
 	"time"
 )
 
-// MusicProvider defines the interface for music generation.
+// MusicProvider定义了音乐生成的界面.
 type MusicProvider interface {
 	Name() string
 	Generate(ctx context.Context, req *GenerateRequest) (*GenerateResponse, error)
 }
 
-// GenerateRequest represents a music generation request.
+// 生成请求代表音乐生成请求.
 type GenerateRequest struct {
 	Prompt         string  `json:"prompt"`                    // Text description or lyrics
 	Style          string  `json:"style,omitempty"`           // Music style (pop, rock, jazz, etc.)
@@ -23,7 +23,7 @@ type GenerateRequest struct {
 	ReferenceAudio string  `json:"reference_audio,omitempty"` // Base64 reference audio
 }
 
-// GenerateResponse represents a music generation response.
+// GenerateResponse代表音乐生成响应.
 type GenerateResponse struct {
 	Provider  string      `json:"provider"`
 	Model     string      `json:"model"`
@@ -32,7 +32,7 @@ type GenerateResponse struct {
 	CreatedAt time.Time   `json:"created_at"`
 }
 
-// MusicData represents a generated music track.
+// MusicData代表一个已生成的音乐音轨.
 type MusicData struct {
 	ID       string  `json:"id,omitempty"`
 	URL      string  `json:"url,omitempty"`       // Download URL
@@ -43,7 +43,7 @@ type MusicData struct {
 	Style    string  `json:"style,omitempty"`
 }
 
-// MusicUsage contains usage information.
+// MusicUsage包含使用信息.
 type MusicUsage struct {
 	TracksGenerated int     `json:"tracks_generated"`
 	DurationSeconds float64 `json:"duration_seconds"`

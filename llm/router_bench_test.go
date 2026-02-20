@@ -107,7 +107,7 @@ func setupBenchmarkRouter(b *testing.B) *MultiProviderRouter {
 
 	// 使用内存数据库（需要实现）
 	// TODO: 实现 setupInMemoryDB 或使用 mock
-	// db := setupInMemoryDB(b)
+	// db:= 设置InMemoryDB(b)
 
 	// 暂时跳过，因为需要完整的数据库设置
 	b.Skip("需要完整的数据库设置")
@@ -121,14 +121,14 @@ func setupBenchmarkRouter(b *testing.B) *MultiProviderRouter {
 
 /*
 运行基准测试：
-go test -bench=BenchmarkMultiProviderRouter -benchmem -benchtime=10s
+测试 - Benchmark 多维路特 - Benchmem - Bennchtime=10s
 
 预期结果（参考）：
-BenchmarkMultiProviderRouter_SelectProvider-8                  	 1000000	      1200 ns/op	     512 B/op	      10 allocs/op
-BenchmarkMultiProviderRouter_SelectProvider_Parallel-8         	 5000000	       300 ns/op	     256 B/op	       5 allocs/op
-BenchmarkMultiProviderRouter_Completion-8                      	  500000	      2500 ns/op	    1024 B/op	      20 allocs/op
-BenchmarkMultiProviderRouter_Completion_Parallel-8             	 2000000	       800 ns/op	     512 B/op	      10 allocs/op
-BenchmarkMultiProviderRouter_HealthCheck-8                     	 2000000	       600 ns/op	     256 B/op	       8 allocs/op
+基准 多供应者 Router  选择供应者 1000000 1200 ns/op 512 B/op 10 alogs/op
+基准多维路透器  选取出出出出出出出出出出出出出出出出出出出出出出出出出出出出出出出出出出出出出出出出出出出出出出出出出出出出出出出出出出出出出出出出出出出出出出出出出出出出出出出出出出出出出出出出出出出出出出出出出出出出出出出出出出出出出出出出出入出出出出出出出出出出出出出出出出出出出出出出出出出出出出出出出出出出出出出出出出出出出出出出出出出出出出出出出出出出出出出出出出出出入出出出出出出出出出出出出出出出出出出出出出出出出出出出出出出出出出出出出出出出出出出出出出出出出出出出出出出出出出出出出出出出出
+基准多维路透器-完成-8 500 000 2500 ns/op 1024 B/op 20 alogs/op
+基准多供应者 Router 完成 Parallel-8 2000000 800ns/op 512 B/op 10 alocs/op
+基准多功能旋转器-健康检查
 
 性能目标：
 - 路由选择：< 2ms

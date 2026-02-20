@@ -13,8 +13,8 @@ import (
 	"go.uber.org/zap"
 )
 
-// Feature: multi-provider-support, Property 3: OpenAI Format Conversion for Compatible Providers
-// Validates: Requirements 4.4
+// 特性: 多提供者支持, 属性 3: OpenAI 格式转换兼容供应商
+// 审定:要求4.4
 func TestProperty3_OpenAIFormatConversion(t *testing.T) {
 	testCases := []struct {
 		name             string
@@ -100,13 +100,13 @@ func TestProperty3_OpenAIFormatConversion(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			// Create a test server to capture the request
+			// 创建测试服务器以抓取请求
 			var capturedRequest openAIRequest
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				// Decode the request body
+				// 解码请求正文
 				json.NewDecoder(r.Body).Decode(&capturedRequest)
 
-				// Return a valid response
+				// 返回有效的响应
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusOK)
 				json.NewEncoder(w).Encode(openAIResponse{
@@ -126,14 +126,14 @@ func TestProperty3_OpenAIFormatConversion(t *testing.T) {
 			}))
 			defer server.Close()
 
-			// Create provider with test server URL
+			// 以测试服务器 URL 创建提供者
 			cfg := providers.QwenConfig{
 				APIKey:  "test-key",
 				BaseURL: server.URL,
 			}
 			provider := NewQwenProvider(cfg, zap.NewNop())
 
-			// Make a completion request
+			// 提出完成请求
 			ctx := context.Background()
 			req := &llm.ChatRequest{
 				Messages: tc.messages,
@@ -143,13 +143,13 @@ func TestProperty3_OpenAIFormatConversion(t *testing.T) {
 			_, err := provider.Completion(ctx, req)
 			assert.NoError(t, err, "Completion should succeed")
 
-			// Verify the request was converted to OpenAI format
+			// 校验请求已转换为 OpenAI 格式
 			assert.Equal(t, tc.expectedMessages, len(capturedRequest.Messages),
 				"Number of messages should match")
 			assert.Equal(t, tc.expectedTools, len(capturedRequest.Tools),
 				"Number of tools should match")
 
-			// Verify message roles are preserved
+			// 校验信件角色保存
 			for i, msg := range tc.messages {
 				assert.Equal(t, string(msg.Role), capturedRequest.Messages[i].Role,
 					"Message role should be preserved")
@@ -159,7 +159,7 @@ func TestProperty3_OpenAIFormatConversion(t *testing.T) {
 				}
 			}
 
-			// Verify tool calls are converted correctly
+			// 校验工具调用正确转换
 			for i, msg := range tc.messages {
 				if len(msg.ToolCalls) > 0 {
 					assert.Equal(t, len(msg.ToolCalls), len(capturedRequest.Messages[i].ToolCalls),
@@ -175,7 +175,7 @@ func TestProperty3_OpenAIFormatConversion(t *testing.T) {
 				}
 			}
 
-			// Verify tools are converted correctly
+			// 校验工具被正确转换
 			for i, tool := range tc.tools {
 				assert.Equal(t, tool.Name, capturedRequest.Tools[i].Function.Name,
 					"Tool name should be preserved")

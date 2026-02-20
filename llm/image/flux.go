@@ -11,23 +11,23 @@ import (
 	"time"
 )
 
-// FluxProvider implements image generation using Black Forest Labs Flux.
-// API Docs: https://docs.bfl.ai/quick_start/generating_images
+// Flux Provider使用 Black Forest Labs Flux执行图像生成.
+// API 文件:https://docs.bfl.ai/quick start/生成 images
 type FluxProvider struct {
 	cfg    FluxConfig
 	client *http.Client
 }
 
-// NewFluxProvider creates a new Flux image provider.
+// NewFlux Provider创建了一个新的Flux图像提供者.
 func NewFluxProvider(cfg FluxConfig) *FluxProvider {
 	if cfg.BaseURL == "" {
-		// Primary global endpoint (recommended)
-		// Regional: api.eu.bfl.ai (EU), api.us.bfl.ai (US)
+		// 主要全球终点(建议)
+		// 区域:api.eu.bfl.ai(欧盟),api.us.bfl.ai(美国)
 		cfg.BaseURL = "https://api.bfl.ai"
 	}
 	if cfg.Model == "" {
-		// Available: flux-2-pro, flux-2-max, flux-2-flex, flux-2-klein-4b, flux-2-klein-9b
-		// flux-kontext-max, flux-kontext-pro, flux-pro-1.1-ultra, flux-pro-1.1
+		// 可用:通量-2-pro,通量-2-最大,通量-2-弹性,通量-2-克林-4b,通量-2-克林-9b
+		// 通通-kontext-max,通通-kontext-pro,通通-pro-1.1-ultra,通通-pro-1.1
 		cfg.Model = "flux-2-pro"
 	}
 	timeout := cfg.Timeout
@@ -68,9 +68,9 @@ type fluxResponse struct {
 	} `json:"result,omitempty"`
 }
 
-// Generate creates images using Flux.
-// Endpoint: POST /v1/{model} (e.g., /v1/flux-2-pro)
-// Auth: x-key header
+// 生成使用Flux创建图像.
+// 终点:POST /v1/{型号}(例如:/v1/flux-2-pro)
+// Auth: x- key 头
 func (p *FluxProvider) Generate(ctx context.Context, req *GenerateRequest) (*GenerateResponse, error) {
 	model := req.Model
 	if model == "" {
@@ -82,11 +82,11 @@ func (p *FluxProvider) Generate(ctx context.Context, req *GenerateRequest) (*Gen
 		OutputFormat: "jpeg",
 	}
 
-	// Prefer aspect_ratio over width/height for Flux 2.x
+	// 优于宽度/ 高度的一面 2. x
 	if req.Size != "" {
 		var width, height int
 		fmt.Sscanf(req.Size, "%dx%d", &width, &height)
-		// Convert to aspect ratio
+		// 转换为宽度比
 		if width == height {
 			body.AspectRatio = "1:1"
 		} else if width > height {
@@ -108,7 +108,7 @@ func (p *FluxProvider) Generate(ctx context.Context, req *GenerateRequest) (*Gen
 		body.Seed = req.Seed
 	}
 
-	// Submit generation request
+	// 提交生成请求
 	payload, _ := json.Marshal(body)
 	endpoint := fmt.Sprintf("%s/v1/%s", strings.TrimRight(p.cfg.BaseURL, "/"), model)
 	httpReq, err := http.NewRequestWithContext(ctx, "POST", endpoint, bytes.NewReader(payload))
@@ -135,11 +135,11 @@ func (p *FluxProvider) Generate(ctx context.Context, req *GenerateRequest) (*Gen
 		return nil, err
 	}
 
-	// Poll for result using polling_url (required for global endpoint)
+	// 使用投票站(全球终点)进行结果投票
 	if fResp.Status == "Pending" || fResp.Status == "Processing" || fResp.Status == "" {
 		pollingURL := fResp.PollingURL
 		if pollingURL == "" {
-			// Fallback for legacy endpoints
+			// 遗留终点的倒计时
 			pollingURL = fmt.Sprintf("%s/v1/get_result?id=%s", strings.TrimRight(p.cfg.BaseURL, "/"), fResp.ID)
 		}
 		result, err := p.pollResult(ctx, pollingURL)
@@ -162,8 +162,8 @@ func (p *FluxProvider) Generate(ctx context.Context, req *GenerateRequest) (*Gen
 	}, nil
 }
 
-// pollResult polls for async generation result using the polling URL.
-// Note: Signed URLs in result.sample are only valid for 10 minutes.
+// 使用投票URL生成合成结果。
+// 注意: 已签名的 URLs in result. sample 只有效10分钟.
 func (p *FluxProvider) pollResult(ctx context.Context, pollingURL string) (*fluxResponse, error) {
 	for i := 0; i < 120; i++ { // Max 120 attempts (4 minutes)
 		select {
@@ -194,18 +194,18 @@ func (p *FluxProvider) pollResult(ctx context.Context, pollingURL string) (*flux
 		case "Error", "Failed":
 			return nil, fmt.Errorf("flux generation failed")
 		}
-		// Continue polling for Pending, Processing, etc.
+		// 继续投票等待、处理等。
 	}
 
 	return nil, fmt.Errorf("flux generation timeout")
 }
 
-// Edit is not supported by Flux.
+// Flux 不支持编辑 。
 func (p *FluxProvider) Edit(ctx context.Context, req *EditRequest) (*GenerateResponse, error) {
 	return nil, fmt.Errorf("flux does not support image editing")
 }
 
-// CreateVariation is not supported by Flux.
+// CreateVariation不由Flux支持.
 func (p *FluxProvider) CreateVariation(ctx context.Context, req *VariationRequest) (*GenerateResponse, error) {
 	return nil, fmt.Errorf("flux does not support image variations")
 }

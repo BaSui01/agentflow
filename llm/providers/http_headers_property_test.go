@@ -8,16 +8,16 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-// Feature: multi-provider-support, Property 25: HTTP Headers Configuration
-// **Validates: Requirements 15.3, 15.4, 15.5**
+// 特性: 多提供者支持, 属性 25: HTTP 信头配置
+// ** 变动情况:要求15.3、15.4、15.5**
 //
-// This property test verifies that for any provider HTTP request:
-// - Authorization header is set with Bearer token (15.3)
-// - Content-Type header is set to application/json (15.4)
-// - Accept header is set appropriately (15.5)
-// Minimum 100 iterations are achieved through comprehensive test cases across all providers.
+// 此属性测试验证对任何提供者 HTTP 请求:
+// - 授权信头设置为熊克(15.3)
+// - 内容-Type标题设定为应用程序/json(15.4)
+// - 接受信头设置得当(15.5)
+// 通过对所有供应商进行全面测试,实现至少100次重复。
 
-// TestProperty25_AuthorizationHeader tests that Authorization header is set correctly
+// Property25  认证 正确设置授权页眉的页眉测试
 func TestProperty25_AuthorizationHeader(t *testing.T) {
 	providers := []string{"grok", "qwen", "deepseek", "glm", "minimax"}
 
@@ -33,7 +33,7 @@ func TestProperty25_AuthorizationHeader(t *testing.T) {
 		{"alphanumeric key", "sk1234567890abcdef"},
 	}
 
-	// 5 providers * 6 key variations = 30 test cases
+	// 5个供应商 * 6个关键变化=30个测试案例
 	for _, provider := range providers {
 		for _, kv := range apiKeyVariations {
 			t.Run(provider+"_"+kv.name, func(t *testing.T) {
@@ -46,10 +46,10 @@ func TestProperty25_AuthorizationHeader(t *testing.T) {
 				}))
 				defer server.Close()
 
-				// Build expected header
+				// 构建预期页眉
 				expectedAuth := "Bearer " + kv.apiKey
 
-				// Simulate header building (as done in providers)
+				// 模拟信头建筑(如供应商所做的那样)
 				req, _ := http.NewRequest(http.MethodGet, server.URL, nil)
 				req.Header.Set("Authorization", expectedAuth)
 				req.Header.Set("Content-Type", "application/json")
@@ -68,7 +68,7 @@ func TestProperty25_AuthorizationHeader(t *testing.T) {
 	}
 }
 
-// TestProperty25_ContentTypeHeader tests that Content-Type header is set correctly
+// 测试Property25  ContentTypeheader 测试内容- Type 标题设置正确
 func TestProperty25_ContentTypeHeader(t *testing.T) {
 	providers := []string{"grok", "qwen", "deepseek", "glm", "minimax"}
 
@@ -84,7 +84,7 @@ func TestProperty25_ContentTypeHeader(t *testing.T) {
 		{"health check", http.MethodGet, false, "application/json"},
 	}
 
-	// 5 providers * 4 request types = 20 test cases
+	// 5个供应商 * 4个请求类型=20个测试案例
 	for _, provider := range providers {
 		for _, rt := range requestTypes {
 			t.Run(provider+"_"+rt.name, func(t *testing.T) {
@@ -115,14 +115,14 @@ func TestProperty25_ContentTypeHeader(t *testing.T) {
 	}
 }
 
-// TestProperty25_HeadersPreservedAcrossRequests tests headers are consistent
+// 测试 Property25  标题保存 交叉请求测试标题一致
 func TestProperty25_HeadersPreservedAcrossRequests(t *testing.T) {
 	providers := []string{"grok", "qwen", "deepseek", "glm", "minimax"}
 
-	// Test multiple sequential requests
+	// 测试多个顺序请求
 	requestCounts := []int{1, 2, 3, 5, 10}
 
-	// 5 providers * 5 counts = 25 test cases
+	// 5个供应商 * 5个计数=25个测试案例
 	for _, provider := range providers {
 		for _, count := range requestCounts {
 			t.Run(provider+"_requests_"+string(rune('0'+count)), func(t *testing.T) {
@@ -163,7 +163,7 @@ func TestProperty25_HeadersPreservedAcrossRequests(t *testing.T) {
 	}
 }
 
-// TestProperty25_HeadersWithDifferentEndpoints tests headers for different endpoints
+// 测试 Property25  不同终点的标题测试标题
 func TestProperty25_HeadersWithDifferentEndpoints(t *testing.T) {
 	providers := []string{"grok", "qwen", "deepseek", "glm", "minimax"}
 
@@ -177,7 +177,7 @@ func TestProperty25_HeadersWithDifferentEndpoints(t *testing.T) {
 		{"root", "/"},
 	}
 
-	// 5 providers * 4 endpoints = 20 test cases
+	// * 4个终点=20个测试病例
 	for _, provider := range providers {
 		for _, ep := range endpoints {
 			t.Run(provider+"_"+ep.name, func(t *testing.T) {
@@ -212,7 +212,7 @@ func TestProperty25_HeadersWithDifferentEndpoints(t *testing.T) {
 	}
 }
 
-// TestProperty25_HeaderCaseSensitivity tests that headers are case-insensitive
+// 测试 Property25  信头敏感度测试, 信头对大小写不敏感
 func TestProperty25_HeaderCaseSensitivity(t *testing.T) {
 	providers := []string{"grok", "qwen", "deepseek", "glm", "minimax"}
 
@@ -227,14 +227,14 @@ func TestProperty25_HeaderCaseSensitivity(t *testing.T) {
 		{"mixed case", "AuThOrIzAtIoN", "CoNtEnT-TyPe"},
 	}
 
-	// 5 providers * 4 cases = 20 test cases
+	// 5个供应商 * 4个病例=20个测试病例
 	for _, provider := range providers {
 		for _, hc := range headerCases {
 			t.Run(provider+"_"+hc.name, func(t *testing.T) {
 				var capturedAuth, capturedCT string
 
 				server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-					// HTTP headers are case-insensitive, Go normalizes them
+					// HTTP 信头对大小写不敏感, 去规范它们
 					capturedAuth = r.Header.Get("Authorization")
 					capturedCT = r.Header.Get("Content-Type")
 					w.WriteHeader(http.StatusOK)
@@ -262,15 +262,15 @@ func TestProperty25_HeaderCaseSensitivity(t *testing.T) {
 	}
 }
 
-// TestProperty25_IterationCount verifies we have at least 100 test iterations
+// 测试Property25  测试国家验证我们至少有100个测试重复
 func TestProperty25_IterationCount(t *testing.T) {
-	// Count all test cases:
-	// - AuthorizationHeader: 5 providers * 6 variations = 30
-	// - ContentTypeHeader: 5 providers * 4 types = 20
-	// - HeadersPreservedAcrossRequests: 5 providers * 5 counts = 25
-	// - HeadersWithDifferentEndpoints: 5 providers * 4 endpoints = 20
-	// - HeaderCaseSensitivity: 5 providers * 4 cases = 20
-	// Total: 115 test cases (exceeds 100 minimum)
+	// 计算所有测试案例 :
+	// - 授权 页:5个供应商* 6个变数=30
+	// - 内容标题:5个提供者 * 4个类型=20
+	// 5个供应商 * 5个计数=25
+	// - 不同终点头:5个供应商 *4个终点=20
+	// - 案头敏感性:5个供应商 * 4个案件=20个
+	// 共计:115个测试案例(超过最低100个案例)
 
 	totalIterations := 30 + 20 + 25 + 20 + 20
 	assert.GreaterOrEqual(t, totalIterations, 100,

@@ -12,7 +12,7 @@ import (
 	"go.uber.org/zap"
 )
 
-// --- mock WebScrapeProvider ---
+// -- -- 模拟 WebScrape 提供 -- --
 
 type mockWebScrapeProvider struct {
 	name   string
@@ -29,7 +29,7 @@ func (m *mockWebScrapeProvider) Scrape(_ context.Context, _ string, _ WebScrapeO
 
 func (m *mockWebScrapeProvider) Name() string { return m.name }
 
-// --- tests ---
+// -- -- 测试 -- --
 
 func TestNewWebScrapeTool(t *testing.T) {
 	t.Parallel()
@@ -224,7 +224,7 @@ func TestRegisterWebScrapeTool(t *testing.T) {
 	}
 	assert.True(t, found, "web_scrape should appear in registry.List()")
 
-	// Registering again should fail (duplicate)
+	// 重新注册失败( 重复)
 	err = RegisterWebScrapeTool(registry, config, zap.NewNop())
 	assert.Error(t, err)
 }

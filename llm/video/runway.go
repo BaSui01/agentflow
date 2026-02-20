@@ -10,20 +10,20 @@ import (
 	"time"
 )
 
-// RunwayProvider implements video generation using Runway ML Gen-4.
-// API Docs: https://docs.dev.runwayml.com/api/
+// Runway Provider执行视频生成,使用Runway ML Gen-4.
+// API 文件: https://docs.dev.runwayml.com/api/
 type RunwayProvider struct {
 	cfg    RunwayConfig
 	client *http.Client
 }
 
-// NewRunwayProvider creates a new Runway video provider.
+// NewRunway Provider创建了新的跑道视频提供商.
 func NewRunwayProvider(cfg RunwayConfig) *RunwayProvider {
 	if cfg.BaseURL == "" {
 		cfg.BaseURL = "https://api.runwayml.com"
 	}
 	if cfg.Model == "" {
-		// Available: gen4_turbo, gen3a_turbo, veo3.1, veo3.1_fast, veo3
+		// 可用: gen4 turbo, gen3a turbo, veo3.1, veo3.1 快活, veo3
 		cfg.Model = "gen4_turbo"
 	}
 	timeout := cfg.Timeout
@@ -63,14 +63,14 @@ type runwayResponse struct {
 	FailureCode string   `json:"failureCode,omitempty"`
 }
 
-// Analyze is not supported by Runway.
+// 分析不由跑道支持.
 func (p *RunwayProvider) Analyze(ctx context.Context, req *AnalyzeRequest) (*AnalyzeResponse, error) {
 	return nil, fmt.Errorf("video analysis not supported by runway provider")
 }
 
-// Generate creates videos using Runway Gen-4.
-// Endpoint: POST /v1/image_to_video
-// Auth: Bearer token + X-Runway-Version header
+// 利用跑道Gen-4生成视频.
+// 终点: POST /v1/image to video
+// Auth: 熊克令牌 + X- Runway-Version 信头
 func (p *RunwayProvider) Generate(ctx context.Context, req *GenerateRequest) (*GenerateResponse, error) {
 	model := req.Model
 	if model == "" {
@@ -88,7 +88,7 @@ func (p *RunwayProvider) Generate(ctx context.Context, req *GenerateRequest) (*G
 		duration = 10
 	}
 
-	// Convert aspect ratio format
+	// 转换宽比格式
 	ratio := "1280:720" // default 16:9
 	if req.AspectRatio != "" {
 		switch req.AspectRatio {
@@ -141,7 +141,7 @@ func (p *RunwayProvider) Generate(ctx context.Context, req *GenerateRequest) (*G
 		return nil, fmt.Errorf("failed to decode runway response: %w", err)
 	}
 
-	// Poll for completion
+	// 完成投票
 	result, err := p.pollGeneration(ctx, rResp.ID)
 	if err != nil {
 		return nil, err
@@ -202,7 +202,7 @@ func (p *RunwayProvider) pollGeneration(ctx context.Context, id string) (*runway
 				}
 				return nil, fmt.Errorf("runway generation failed")
 			}
-			// Continue polling for PENDING, RUNNING
+			// 继续投票 PENDING,跑
 		}
 	}
 }

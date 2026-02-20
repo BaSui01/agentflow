@@ -2,7 +2,7 @@ package threed
 
 import "time"
 
-// MeshyConfig configures the Meshy 3D provider.
+// MeshyConfig配置了 Meshy 3D提供者.
 type MeshyConfig struct {
 	APIKey  string        `json:"api_key" yaml:"api_key"`
 	BaseURL string        `json:"base_url" yaml:"base_url"`
@@ -10,7 +10,7 @@ type MeshyConfig struct {
 	Timeout time.Duration `json:"timeout,omitempty" yaml:"timeout,omitempty"`
 }
 
-// DefaultMeshyConfig returns default Meshy config.
+// 默认 MeshyConfig 返回默认 Meshy 配置 。
 func DefaultMeshyConfig() MeshyConfig {
 	return MeshyConfig{
 		BaseURL: "https://api.meshy.ai/v2",
@@ -19,7 +19,7 @@ func DefaultMeshyConfig() MeshyConfig {
 	}
 }
 
-// TripoConfig configures the Tripo3D provider.
+// TripoConfig 配置 Tripo3D 提供者 。
 type TripoConfig struct {
 	APIKey  string        `json:"api_key" yaml:"api_key"`
 	BaseURL string        `json:"base_url" yaml:"base_url"`
@@ -27,7 +27,7 @@ type TripoConfig struct {
 	Timeout time.Duration `json:"timeout,omitempty" yaml:"timeout,omitempty"`
 }
 
-// DefaultTripoConfig returns default Tripo3D config.
+// 默认 TripoConfig 返回默认 Tripo3D 配置 。
 func DefaultTripoConfig() TripoConfig {
 	return TripoConfig{
 		BaseURL: "https://api.tripo3d.ai/v2",

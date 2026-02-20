@@ -11,13 +11,13 @@ import (
 	"time"
 )
 
-// MeshyProvider implements 3D generation using Meshy API.
+// MeshyProvider使用Meshy API执行3D生成.
 type MeshyProvider struct {
 	cfg    MeshyConfig
 	client *http.Client
 }
 
-// NewMeshyProvider creates a new Meshy 3D provider.
+// NewMeshyProvider创建了新的Meshy 3D供应商.
 func NewMeshyProvider(cfg MeshyConfig) *MeshyProvider {
 	if cfg.BaseURL == "" {
 		cfg.BaseURL = "https://api.meshy.ai/v2"
@@ -59,7 +59,7 @@ type meshyTaskResponse struct {
 	ThumbnailURL string `json:"thumbnail_url"`
 }
 
-// Generate creates 3D models using Meshy API.
+// 生成使用Messy API创建了3D模型.
 func (p *MeshyProvider) Generate(ctx context.Context, req *GenerateRequest) (*GenerateResponse, error) {
 	var taskID string
 	var err error

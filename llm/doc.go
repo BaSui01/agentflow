@@ -1,199 +1,199 @@
-// Copyright 2024 AgentFlow Authors. All rights reserved.
-// Use of this source code is governed by a MIT license that can be
-// found in the LICENSE file.
+// 版权所有 2024 AgentFlow Authors. 版权所有。
+// 此源代码的使用由 MIT 许可规范,该许可可以是
+// 在LICENSE文件中找到。
 
 /*
-Package llm provides unified LLM provider abstraction and routing.
+package llm提供统一的LLM提供者抽象和路由.
 
-# Overview
+# 概览
 
-The llm package provides a unified interface for interacting with multiple
-Large Language Model providers. It abstracts away provider-specific details
-and provides features like routing, caching, retry logic, and observability.
+llm 软件包提供了一个用于与多重交互的统一接口
+大语言模型提供者. 它摘取了提供商的具体细节
+并提供了路由,缓存,重试逻辑,可观察等特征.
 
-# Architecture
+建筑
 
 	┌─────────────────────────────────────────────────────────────┐
-	│                    Application Layer                        │
+	应用程序层
 	├─────────────────────────────────────────────────────────────┤
-	│                    Router / Load Balancer                   │
-	│  (Model-based routing, failover, load balancing)           │
+	++ 路由器/ 负载平衡器 ++
+	++(基于模型的路由、故障、负载平衡)+++
 	├─────────────────────────────────────────────────────────────┤
 	│  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────┐ │
-	│  │   Cache     │  │   Retry     │  │   Observability     │ │
-	│  │  (L1/L2)    │  │  (Backoff)  │  │  (Metrics/Tracing)  │ │
+	{\fn黑体\fs22\bord1\shad0\3aHBE\4aH00\fscx67\fscy66\2cHFFFFFF\3cH808080}再试一次 {\fn黑体\fs22\bord1\shad0\3aHBE\4aH00\fscx67\fscy66\2cHFFFFFF\3cH808080}可观察性 {\fn黑体\fs22\bord1\shad0\3aHBE\4aH00\fscx67\fscy66\2cHFFFFFF\3cH808080}我
+	========================================================================================================================================================================================== (=============== (======== (=== (===== (===== (=========== ( (======= (======
 	│  └─────────────┘  └─────────────┘  └─────────────────────┘ │
 	├─────────────────────────────────────────────────────────────┤
-	│                    Provider Interface                       │
+	提供方接口
 	├──────────┬──────────┬──────────┬──────────┬────────────────┤
-	│  OpenAI  │ Anthropic│  Gemini  │ DeepSeek │    Others...   │
+	{\fn黑体\fs22\bord1\shad0\3aHBE\4aH00\fscx67\fscy66\2cHFFFFFF\3cH808080}其他的...
 	└──────────┴──────────┴──────────┴──────────┴────────────────┘
 
-# Provider Interface
+# 提供者接口
 
-The core Provider interface defines the contract for all LLM providers:
+核心提供者接口为所有LLM提供者定义合同:
 
-	type Provider interface {
-	    Completion(ctx context.Context, req *ChatRequest) (*ChatResponse, error)
-	    Stream(ctx context.Context, req *ChatRequest) (<-chan StreamChunk, error)
-	    HealthCheck(ctx context.Context) (*HealthStatus, error)
-	    Name() string
-	    SupportsNativeFunctionCalling() bool
+	类型提供者接口 {
+	    补全( ctx 上下文 ). 背景, req *Chat request (*ChatResponse, 错误)
+	    Stream( ctx) 上下文 。 上下文, req *Chat request ( <-chan StreamChunk, 错误)
+	    健康检查( ctx) 上下文 。 (*健康状况,错误)
+	    名称( ) 字符串
+	    支持 NativeFunctionCalling () 布尔
 	}
 
-# Supported Providers
+# 支持供应商
 
-The package supports 13+ LLM providers out of the box:
+包支持框外的 13+ LLM 提供者 :
 
-  - OpenAI (GPT-4, GPT-4o, GPT-3.5-turbo)
-  - Anthropic (Claude 3 Opus, Sonnet, Haiku)
-  - Google (Gemini Pro, Gemini Ultra)
-  - DeepSeek (DeepSeek-Chat, DeepSeek-Coder)
-  - Alibaba (Qwen-Turbo, Qwen-Plus, Qwen-Max)
-  - Tencent (Hunyuan)
-  - Moonshot (Kimi)
-  - Zhipu (GLM-4)
-  - ByteDance (Doubao)
-  - Baidu (ERNIE)
-  - MiniMax
-  - Mistral
-  - Meta (Llama)
-  - xAI (Grok)
+  - OpenAI(GPT-4,GPT-4o,GPT-3.5-涡轮)
+  - Anthropic(克洛德3 Opus,索内特,海库)
+  - Google(双子星双子星)
+  - 深搜索 (深搜索聊天,深搜索编码)
+  - 阿里巴巴 (克文-图尔博,克文-普卢斯,克文-马克斯)
+  - 十美分(湖南)
+  - 月光拍摄(基米)
+  - 日普(GLM-4)
+  - 字节(杜波)
+  - 贝都语(爱沙尼亚)
+  - 迷你麦克斯
+  - 迷雾
+  - 梅塔 (拉玛语)
+  - XAI (希腊语)
 
-# Usage
+使用量
 
-Basic usage with a single provider:
+单一供应商的基本使用:
 
-	provider, err := openai.NewProvider(&openai.Config{
-	    APIKey: "your-api-key",
-	    Model:  "gpt-4o",
+	提供者, 错误 : = openai. New Provider( & openai). 配置{
+	    爱比克:"你的爱比克",
+	    型号:"gpt-4o",
 	})
-	if err != nil {
-	    log.Fatal(err)
+	如果错误 ! = 无 {
+	    记录。 致命( err)
 	}
 
-	resp, err := provider.Completion(ctx, &llm.ChatRequest{
-	    Model: "gpt-4o",
-	    Messages: []llm.Message{
-	        {Role: llm.RoleUser, Content: "Hello!"},
+	resp, 错误 := 提供者。 补全( ctx, &llm.). 聊天请求{
+	    型号:"gpt-4o",
+	    消息:[将. 信件{
+	        {Role:llm.RoleUser,内容:"Hello!"},
 	    },
 	})
 
-Using the router for multi-provider setup:
+使用路由器进行多提供者设置 :
 
-	router := llm.NewRouter(
-	    llm.WithProvider("openai", openaiProvider),
-	    llm.WithProvider("anthropic", anthropicProvider),
-	    llm.WithFallback("anthropic"),
+	路由器: = llm. NewRouter( )
+	    与 Provider ("openai", "openai") 相接,
+	    与Provider("人类","人类"),
+	    与Fallback("人类"),
 	)
 
-	// Router automatically selects provider based on model
-	resp, err := router.Completion(ctx, &llm.ChatRequest{
-	    Model: "claude-3-opus", // Routes to Anthropic
+	// 路由器根据模型自动选择提供者
+	resp,错误:=路由器. 补全( ctx, &llm.). 聊天请求{
+	    型号:"Claude-3-opus",//去往Anthropic的路线
 	})
 
-# Streaming
+# 流淌着
 
-All providers support streaming responses:
+所有提供者支持流化响应:
 
-	stream, err := provider.Stream(ctx, &llm.ChatRequest{
-	    Model: "gpt-4o",
-	    Messages: messages,
+	流,错误:=提供者。 Stream( ctx, &llm.) (中文(简体) ). 聊天请求{
+	    型号:"gpt-4o",
+	    消息:消息,
 	})
-	if err != nil {
-	    log.Fatal(err)
+	如果错误 ! = 无 {
+	    记录。 致命( err)
 	}
 
-	for chunk := range stream {
-	    if chunk.Error != nil {
-	        log.Printf("Error: %v", chunk.Error)
-	        break
+	块 := 范围流 {
+	    如果块。 错误 != 0 {
+	        log.Printf(“错误:%v”),块。 错误)
+	        换行
 	    }
-	    fmt.Print(chunk.Content)
+	    fmt.Print(圆). 内容)
 	}
 
-# Caching
+缓冲
 
-The package provides multi-level caching:
+该包提供多级缓存:
 
-	cache := cache.NewMultiLevelCache(redisClient, &cache.CacheConfig{
-	    LocalMaxSize: 1000,
-	    LocalTTL:     5 * time.Minute,
-	    RedisTTL:     1 * time.Hour,
-	    EnableLocal:  true,
-	    EnableRedis:  true,
+	缓存 := 缓存. New MultilevelCache( redisclient, &cache). 缓存Config{
+	    本地MaxSize: 1000, (英语).
+	    本地TTL: 5 *时间. 分钟,
+	    (原始内容存档于2017-09-26). RedistL: 1 * time. 小时
+	    启用本地端: 真实,
+	    启用Redis: 真实,
 	})
 
-# Retry and Resilience
+# 重试和复原力
 
-Built-in retry with exponential backoff:
+内置重试, 以指数倒置 :
 
-	resilientProvider := llm.NewResilientProvider(provider, &llm.ResilienceConfig{
-	    MaxRetries:     3,
-	    InitialBackoff: 100 * time.Millisecond,
-	    MaxBackoff:     10 * time.Second,
-	    CircuitBreaker: true,
+	具有弹性的提供方:=llm. NewResilient 提供方(提供方, &llm.ResienceConfig{
+	    马克思瑞斯: 3,
+	    (原始内容存档于2018-10-05). IntroductionBackoff: 100 * time. 毫秒时
+	    麦克斯巴克夫:10*时间. 第二,我们...
+	    电路分离器: 真实,
 	})
 
-# Observability
+# 观察
 
-The package integrates with OpenTelemetry for metrics and tracing:
+该套件与OpenTeleometry集成,用于测量和追踪:
 
-	provider := observability.WrapProvider(baseProvider, &observability.Config{
-	    EnableMetrics: true,
-	    EnableTracing: true,
-	    ServiceName:   "my-service",
+	提供者:=可观察性。 WrapProvider( 基础提供, 可观察性) 。 配置{
+	    启用度量衡: 真,
+	    启用追踪: 真,
+	    服务名:"我的服务",
 	})
 
-# Tool Calling
+工具召唤
 
-Support for native function calling:
+支持本地函数调用 :
 
-	resp, err := provider.Completion(ctx, &llm.ChatRequest{
-	    Model: "gpt-4o",
-	    Messages: messages,
-	    Tools: []llm.ToolSchema{
+	resp, 错误 := 提供者。 补全( ctx, &llm.). 聊天请求{
+	    型号:"gpt-4o",
+	    消息:消息,
+	    工具:[llm. 工具计划{
 	        {
-	            Name:        "get_weather",
-	            Description: "Get current weather for a location",
-	            Parameters:  weatherParamsSchema,
+	            名称:"Get weather",
+	            描述:"获取当前天气作为位置",
+	            参数:气象卫星系统
 	        },
 	    },
 	})
 
-# Error Handling
+# 处理错误
 
-The package defines structured error codes:
+软件包定义了结构化错误代码 :
 
-	const (
-	    ErrInvalidRequest      ErrorCode = "invalid_request"
-	    ErrAuthentication      ErrorCode = "authentication_error"
-	    ErrRateLimit           ErrorCode = "rate_limit"
-	    ErrContextTooLong      ErrorCode = "context_too_long"
-	    ErrServiceUnavailable  ErrorCode = "service_unavailable"
+	康斯特( Const) (
+	    无效请求错误Code = "无效请求"
+	    错误校正错误Code="校正错误"
+	    ErrRateLimit 错误代码 = "rate limit"
+	    ErrContext TooLong 错误代码 = “ Context  too  long ”
+	    ErrService 无法使用错误代码 = "Service  无法使用"
 	)
 
-Use IsRetryable to check if an error can be retried:
+使用 IsRetry 来检查是否可以重试一个错误 :
 
-	if llm.IsRetryable(err) {
-	    // Implement retry logic
+	如果 llm. 是可重试的( err) {
+	    // 执行重试逻辑
 	}
 
-# API Key Management
+# API 密钥管理
 
-Support for API key pools with rotation:
+支持旋转的 API 密钥集合 :
 
-	pool := llm.NewAPIKeyPool(db, providerID, llm.StrategyRoundRobin, logger)
-	pool.LoadKeys(ctx)
-	key, err := pool.SelectKey(ctx)
+	池:=llm.NewAPIKeyPool(db,提供ID,llm. StrategyRound Robin,日志) 互联网档案馆的存檔,存档日期2013-12-21.
+	移动键( ctx)
+	键,错误:= pool.SelectKey(ctx)
 
-See the subpackages for additional functionality:
-  - llm/cache: Prompt caching with multiple strategies
-  - llm/middleware: Request/response middleware
-  - llm/observability: Metrics, tracing, and cost tracking
-  - llm/retry: Retry strategies and backoff
-  - llm/router: Multi-provider routing
-  - llm/tools: ReAct loop and tool execution
-  - llm/providers/*: Provider-specific implementations
+附加功能见子包 :
+  - ltm/cache:用多种策略快速缓存
+  - llm/中件:请求/响应中件
+  - 标准/可观察性:计量、追踪和费用追踪
+  - llm/重试:重试策略和后退
+  - ltm/routter:多供应商路线
+  - llm/工具:ReAct循环和工具执行
+  - ltm/提供者/*:针对提供者的具体实施
 */
 package llm

@@ -5,50 +5,50 @@ import (
 	"sync"
 )
 
-// Tokenizer is the unified token counting interface.
+// Tokenizer是统一的代号计数界面.
 type Tokenizer interface {
-	// CountTokens returns the number of tokens in the given text.
+	// 伯爵托肯斯返回给定文本中的符号数.
 	CountTokens(text string) (int, error)
 
-	// CountMessages returns the total token count for a message list,
-	// including per-message overhead (role markers, separators, etc.).
+	// CounterMessages 返回信件列表的总符号数,
+	// 包括每条消息的间接费用(作用标记、分离器等)。
 	CountMessages(messages []Message) (int, error)
 
-	// Encode converts text into a list of token IDs.
+	// Encode 将文本转换为符号ID列表.
 	Encode(text string) ([]int, error)
 
-	// Decode converts token IDs back into text.
+	// 解码后将符号ID转换回文本.
 	Decode(tokens []int) (string, error)
 
-	// MaxTokens returns the model's maximum context length.
+	// MaxTokens返回模型的最大上下文长度.
 	MaxTokens() int
 
-	// Name returns a human-readable tokenizer name.
+	// 名称返回一个人类可读的标致器名.
 	Name() string
 }
 
-// Message is a lightweight message struct used by the tokenizer package
-// to avoid circular dependencies with the llm package.
+// 信件是一个轻量级信件, 由指示器包使用
+// 以避免与 llm 包的循环依赖。
 type Message struct {
 	Role    string
 	Content string
 }
 
-// Global tokenizer registry.
+// 全球标致器注册.
 var (
 	modelTokenizers   = make(map[string]Tokenizer)
 	modelTokenizersMu sync.RWMutex
 )
 
-// RegisterTokenizer registers a tokenizer for the given model name.
+// RegisterTokenizer 为给定的型号名称注册了一个标注符.
 func RegisterTokenizer(model string, t Tokenizer) {
 	modelTokenizersMu.Lock()
 	defer modelTokenizersMu.Unlock()
 	modelTokenizers[model] = t
 }
 
-// GetTokenizer returns the tokenizer registered for the given model.
-// It also attempts prefix matching (e.g. "gpt-4o" matches "gpt-4o-mini").
+// GetTokenizer 返回为给定型号注册的标定器 。
+// 它也尝试了前缀匹配(如"gpt-4o"匹配"gpt-4o-mini").
 func GetTokenizer(model string) (Tokenizer, error) {
 	modelTokenizersMu.RLock()
 	defer modelTokenizersMu.RUnlock()
@@ -57,7 +57,7 @@ func GetTokenizer(model string) (Tokenizer, error) {
 		return t, nil
 	}
 
-	// Try prefix matching.
+	// 尝试前缀匹配 。
 	for prefix, t := range modelTokenizers {
 		if len(model) >= len(prefix) && model[:len(prefix)] == prefix {
 			return t, nil
@@ -67,8 +67,8 @@ func GetTokenizer(model string) (Tokenizer, error) {
 	return nil, fmt.Errorf("no tokenizer registered for model: %s", model)
 }
 
-// GetTokenizerOrEstimator returns the registered tokenizer for the model,
-// falling back to a generic estimator if none is registered.
+// GetTokenizer OrEstimator 返回该模型的注册代号器,
+// 如果没有登记,则回到一般估计器。
 func GetTokenizerOrEstimator(model string) Tokenizer {
 	t, err := GetTokenizer(model)
 	if err != nil {

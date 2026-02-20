@@ -7,8 +7,8 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-// TestChooseModel_Priority tests the model selection priority:
-// request > config > default (Requirements 14.1, 14.2, 14.3)
+// TestChooseModel Priority 测试模型选择优先级 :
+// 请求 > 配置 > 默认(要求14.1、14.2、14.3)
 func TestChooseModel_Priority(t *testing.T) {
 	tests := []struct {
 		name          string
@@ -82,8 +82,8 @@ func TestChooseModel_Priority(t *testing.T) {
 	}
 }
 
-// TestChooseModel_ProviderDefaults tests that each provider's default model
-// is correctly returned when no other model is specified
+// 测试ChooseModel  提供缺陷测试, 每个提供者的默认模式
+// 在没有指定其他模型时正确返回
 func TestChooseModel_ProviderDefaults(t *testing.T) {
 	providerDefaults := map[string]string{
 		"grok":     "grok-beta",
@@ -101,7 +101,7 @@ func TestChooseModel_ProviderDefaults(t *testing.T) {
 	}
 }
 
-// TestChooseModel_EmptyStrings tests handling of empty strings vs nil
+// 测试ChooseModel EmptyStrings 空字符串处理对零
 func TestChooseModel_EmptyStrings(t *testing.T) {
 	tests := []struct {
 		name          string
@@ -141,7 +141,7 @@ func TestChooseModel_EmptyStrings(t *testing.T) {
 	}
 }
 
-// TestChooseModel_RealWorldScenarios tests realistic usage scenarios
+// TestChooseModel Real WorldScreators 测试现实的使用情景
 func TestChooseModel_RealWorldScenarios(t *testing.T) {
 	tests := []struct {
 		name          string
@@ -197,7 +197,7 @@ func TestChooseModel_RealWorldScenarios(t *testing.T) {
 	}
 }
 
-// TestChooseModel_NilRequest tests that nil request is handled safely
+// 测试模式  Nil 请求安全处理零请求
 func TestChooseModel_NilRequest(t *testing.T) {
 	result := ChooseModel(nil, "config-model", "default-model")
 	assert.Equal(t, "config-model", result, "Should use config model when request is nil")
@@ -206,13 +206,13 @@ func TestChooseModel_NilRequest(t *testing.T) {
 	assert.Equal(t, "default-model", result, "Should use default model when request is nil and config is empty")
 }
 
-// TestChooseModel_Consistency tests that the function is deterministic
+// 测试ChooseModel 一致性测试,该函数具有确定性
 func TestChooseModel_Consistency(t *testing.T) {
 	req := &llm.ChatRequest{Model: "test-model"}
 	configModel := "config-model"
 	defaultModel := "default-model"
 
-	// Call multiple times with same inputs
+	// 用相同的输入调用多次
 	result1 := ChooseModel(req, configModel, defaultModel)
 	result2 := ChooseModel(req, configModel, defaultModel)
 	result3 := ChooseModel(req, configModel, defaultModel)

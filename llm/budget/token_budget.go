@@ -1,4 +1,4 @@
-// Package budget provides token budget management and cost control.
+// 一揽子预算提供象征性的预算管理和成本控制。
 package budget
 
 import (
@@ -11,7 +11,7 @@ import (
 	"go.uber.org/zap"
 )
 
-// BudgetConfig configures token budget management.
+// 预算Config 配置符号预算管理 。
 type BudgetConfig struct {
 	MaxTokensPerRequest int           `json:"max_tokens_per_request"`
 	MaxTokensPerMinute  int           `json:"max_tokens_per_minute"`
@@ -24,7 +24,7 @@ type BudgetConfig struct {
 	ThrottleDelay       time.Duration `json:"throttle_delay"`
 }
 
-// DefaultBudgetConfig returns sensible defaults.
+// 默认预览返回合理的默认值 。
 func DefaultBudgetConfig() BudgetConfig {
 	return BudgetConfig{
 		MaxTokensPerRequest: 100000,
@@ -39,7 +39,7 @@ func DefaultBudgetConfig() BudgetConfig {
 	}
 }
 
-// UsageRecord represents a single usage record.
+// 用法记录代表单一使用记录.
 type UsageRecord struct {
 	Timestamp time.Time `json:"timestamp"`
 	Tokens    int       `json:"tokens"`
@@ -50,7 +50,7 @@ type UsageRecord struct {
 	AgentID   string    `json:"agent_id,omitempty"`
 }
 
-// BudgetStatus represents current budget status.
+// 预算状况是目前的预算状况。
 type BudgetStatus struct {
 	TokensUsedMinute  int64      `json:"tokens_used_minute"`
 	TokensUsedHour    int64      `json:"tokens_used_hour"`
@@ -64,7 +64,7 @@ type BudgetStatus struct {
 	ThrottleUntil     *time.Time `json:"throttle_until,omitempty"`
 }
 
-// AlertType represents the type of budget alert.
+// 提醒Type代表预算提醒的类型.
 type AlertType string
 
 const (
@@ -75,7 +75,7 @@ const (
 	AlertLimitHit    AlertType = "limit_hit"
 )
 
-// Alert represents a budget alert.
+// 警报代表预算警报。
 type Alert struct {
 	Type      AlertType `json:"type"`
 	Message   string    `json:"message"`
@@ -84,38 +84,38 @@ type Alert struct {
 	Timestamp time.Time `json:"timestamp"`
 }
 
-// AlertHandler handles budget alerts.
+// 警报汉德勒处理预算警报.
 type AlertHandler func(alert Alert)
 
-// TokenBudgetManager manages token budgets and enforces limits.
+// TokenBudgetManager管理符名预算并强制执行限制.
 type TokenBudgetManager struct {
 	config        BudgetConfig
 	logger        *zap.Logger
 	alertHandlers []AlertHandler
 
-	// Atomic counters for thread-safe updates
+	// 用于线程安全更新的原子计数器
 	tokensMinute int64
 	tokensHour   int64
 	tokensDay    int64
 	costDay      int64 // stored as cost * 1000000 for atomic ops
 
-	// Time windows
+	// 时间窗口
 	minuteStart time.Time
 	hourStart   time.Time
 	dayStart    time.Time
 
-	// Throttling
+	// 调弦
 	throttleUntil time.Time
 	mu            sync.RWMutex
 
-	// Alert tracking
+	// 警报跟踪
 	alertedMinute bool
 	alertedHour   bool
 	alertedDay    bool
 	alertedCost   bool
 }
 
-// NewTokenBudgetManager creates a new token budget manager.
+// NewTokenBudgetManager 创建了新的代币预算管理器.
 func NewTokenBudgetManager(config BudgetConfig, logger *zap.Logger) *TokenBudgetManager {
 	now := time.Now()
 	return &TokenBudgetManager{
@@ -127,18 +127,18 @@ func NewTokenBudgetManager(config BudgetConfig, logger *zap.Logger) *TokenBudget
 	}
 }
 
-// OnAlert registers an alert handler.
+// OnAlert登记了一个警报处理器。
 func (m *TokenBudgetManager) OnAlert(handler AlertHandler) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.alertHandlers = append(m.alertHandlers, handler)
 }
 
-// CheckBudget checks if a request is within budget.
+// 检查预算是否在预算范围内 。
 func (m *TokenBudgetManager) CheckBudget(ctx context.Context, estimatedTokens int, estimatedCost float64) error {
 	m.resetWindowsIfNeeded()
 
-	// Check throttling
+	// 检查节奏
 	m.mu.RLock()
 	if time.Now().Before(m.throttleUntil) {
 		m.mu.RUnlock()
@@ -146,7 +146,7 @@ func (m *TokenBudgetManager) CheckBudget(ctx context.Context, estimatedTokens in
 	}
 	m.mu.RUnlock()
 
-	// Check per-request limits
+	// 检查每个请求的限制
 	if estimatedTokens > m.config.MaxTokensPerRequest {
 		return fmt.Errorf("estimated tokens %d exceeds per-request limit %d",
 			estimatedTokens, m.config.MaxTokensPerRequest)
@@ -156,7 +156,7 @@ func (m *TokenBudgetManager) CheckBudget(ctx context.Context, estimatedTokens in
 			estimatedCost, m.config.MaxCostPerRequest)
 	}
 
-	// Check window limits
+	// 检查窗口限制
 	currentMinute := atomic.LoadInt64(&m.tokensMinute)
 	if int(currentMinute)+estimatedTokens > m.config.MaxTokensPerMinute {
 		m.applyThrottle()
@@ -181,17 +181,17 @@ func (m *TokenBudgetManager) CheckBudget(ctx context.Context, estimatedTokens in
 	return nil
 }
 
-// RecordUsage records token and cost usage.
+// 记录Usage记录符和成本使用.
 func (m *TokenBudgetManager) RecordUsage(record UsageRecord) {
 	m.resetWindowsIfNeeded()
 
-	// Update counters
+	// 更新计数器
 	atomic.AddInt64(&m.tokensMinute, int64(record.Tokens))
 	atomic.AddInt64(&m.tokensHour, int64(record.Tokens))
 	atomic.AddInt64(&m.tokensDay, int64(record.Tokens))
 	atomic.AddInt64(&m.costDay, int64(record.Cost*1000000))
 
-	// Check alerts
+	// 检查提示
 	m.checkAlerts()
 
 	m.logger.Debug("usage recorded",
@@ -200,7 +200,7 @@ func (m *TokenBudgetManager) RecordUsage(record UsageRecord) {
 		zap.String("model", record.Model))
 }
 
-// GetStatus returns current budget status.
+// Get Status 返回当前预算状况 。
 func (m *TokenBudgetManager) GetStatus() BudgetStatus {
 	m.resetWindowsIfNeeded()
 
@@ -236,21 +236,21 @@ func (m *TokenBudgetManager) resetWindowsIfNeeded() {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	// Reset minute window
+	// 重置分钟窗口
 	if now.Sub(m.minuteStart) >= time.Minute {
 		atomic.StoreInt64(&m.tokensMinute, 0)
 		m.minuteStart = now
 		m.alertedMinute = false
 	}
 
-	// Reset hour window
+	// 重置小时窗口
 	if now.Sub(m.hourStart) >= time.Hour {
 		atomic.StoreInt64(&m.tokensHour, 0)
 		m.hourStart = now
 		m.alertedHour = false
 	}
 
-	// Reset day window
+	// 重设日窗口
 	dayStart := now.Truncate(24 * time.Hour)
 	if dayStart.After(m.dayStart) {
 		atomic.StoreInt64(&m.tokensDay, 0)
@@ -279,7 +279,7 @@ func (m *TokenBudgetManager) checkAlerts() {
 
 	threshold := m.config.AlertThreshold
 
-	// Check minute threshold
+	// 检查分钟阈值
 	minuteUtil := float64(atomic.LoadInt64(&m.tokensMinute)) / float64(m.config.MaxTokensPerMinute)
 	if minuteUtil >= threshold && !m.alertedMinute {
 		m.alertedMinute = true
@@ -292,7 +292,7 @@ func (m *TokenBudgetManager) checkAlerts() {
 		})
 	}
 
-	// Check hour threshold
+	// 检查小时阈值
 	hourUtil := float64(atomic.LoadInt64(&m.tokensHour)) / float64(m.config.MaxTokensPerHour)
 	if hourUtil >= threshold && !m.alertedHour {
 		m.alertedHour = true
@@ -305,7 +305,7 @@ func (m *TokenBudgetManager) checkAlerts() {
 		})
 	}
 
-	// Check day threshold
+	// 检查日阈值
 	dayUtil := float64(atomic.LoadInt64(&m.tokensDay)) / float64(m.config.MaxTokensPerDay)
 	if dayUtil >= threshold && !m.alertedDay {
 		m.alertedDay = true
@@ -318,7 +318,7 @@ func (m *TokenBudgetManager) checkAlerts() {
 		})
 	}
 
-	// Check cost threshold
+	// 检查费用门槛值
 	costUtil := float64(atomic.LoadInt64(&m.costDay)) / 1000000 / m.config.MaxCostPerDay
 	if costUtil >= threshold && !m.alertedCost {
 		m.alertedCost = true
@@ -344,7 +344,7 @@ func (m *TokenBudgetManager) fireAlert(alert Alert) {
 	}
 }
 
-// Reset resets all counters (for testing).
+// 重置所有计数器(用于测试).
 func (m *TokenBudgetManager) Reset() {
 	m.mu.Lock()
 	defer m.mu.Unlock()

@@ -2,7 +2,7 @@ package moderation
 
 import "time"
 
-// OpenAIConfig configures the OpenAI moderation provider.
+// OpenAIConfig 配置 OpenAI 节奏提供者 。
 type OpenAIConfig struct {
 	APIKey  string        `json:"api_key" yaml:"api_key"`
 	BaseURL string        `json:"base_url" yaml:"base_url"`
@@ -10,7 +10,7 @@ type OpenAIConfig struct {
 	Timeout time.Duration `json:"timeout,omitempty" yaml:"timeout,omitempty"`
 }
 
-// DefaultOpenAIConfig returns default OpenAI moderation config.
+// 默认 OpenAIConfig 返回默认 OpenAI 温和配置 。
 func DefaultOpenAIConfig() OpenAIConfig {
 	return OpenAIConfig{
 		BaseURL: "https://api.openai.com/v1",

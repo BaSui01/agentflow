@@ -2,7 +2,7 @@ package embedding
 
 import "time"
 
-// OpenAIConfig configures the OpenAI embedding provider.
+// OpenAIConfig 配置 OpenAI 嵌入提供者.
 type OpenAIConfig struct {
 	APIKey     string        `json:"api_key" yaml:"api_key"`
 	BaseURL    string        `json:"base_url" yaml:"base_url"`
@@ -11,7 +11,7 @@ type OpenAIConfig struct {
 	Timeout    time.Duration `json:"timeout,omitempty" yaml:"timeout,omitempty"`
 }
 
-// VoyageConfig configures the Voyage AI embedding provider.
+// VoyageConfig 配置 Voyage AI 嵌入提供者 。
 type VoyageConfig struct {
 	APIKey  string        `json:"api_key" yaml:"api_key"`
 	BaseURL string        `json:"base_url" yaml:"base_url"`
@@ -19,7 +19,7 @@ type VoyageConfig struct {
 	Timeout time.Duration `json:"timeout,omitempty" yaml:"timeout,omitempty"`
 }
 
-// CohereConfig configures the Cohere embedding provider.
+// CohereConfig 配置 Cohere 嵌入提供者 。
 type CohereConfig struct {
 	APIKey  string        `json:"api_key" yaml:"api_key"`
 	BaseURL string        `json:"base_url" yaml:"base_url"`
@@ -27,7 +27,7 @@ type CohereConfig struct {
 	Timeout time.Duration `json:"timeout,omitempty" yaml:"timeout,omitempty"`
 }
 
-// JinaConfig configures the Jina AI embedding provider.
+// JinaConfig配置了Jina AI嵌入提供者.
 type JinaConfig struct {
 	APIKey  string        `json:"api_key" yaml:"api_key"`
 	BaseURL string        `json:"base_url" yaml:"base_url"`
@@ -35,7 +35,7 @@ type JinaConfig struct {
 	Timeout time.Duration `json:"timeout,omitempty" yaml:"timeout,omitempty"`
 }
 
-// DefaultOpenAIConfig returns default OpenAI embedding config.
+// 默认 OpenAIConfig 返回默认 OpenAI 嵌入配置 。
 func DefaultOpenAIConfig() OpenAIConfig {
 	return OpenAIConfig{
 		BaseURL:    "https://api.openai.com",
@@ -45,7 +45,7 @@ func DefaultOpenAIConfig() OpenAIConfig {
 	}
 }
 
-// DefaultVoyageConfig returns default Voyage AI config.
+// 默认 VoyageConfig 返回默认 Voyage AI 配置 。
 func DefaultVoyageConfig() VoyageConfig {
 	return VoyageConfig{
 		BaseURL: "https://api.voyageai.com",
@@ -54,7 +54,7 @@ func DefaultVoyageConfig() VoyageConfig {
 	}
 }
 
-// DefaultCohereConfig returns default Cohere config.
+// 默认 Cohere Config 返回默认 Cohere 配置 。
 func DefaultCohereConfig() CohereConfig {
 	return CohereConfig{
 		BaseURL: "https://api.cohere.ai",
@@ -63,7 +63,7 @@ func DefaultCohereConfig() CohereConfig {
 	}
 }
 
-// DefaultJinaConfig returns default Jina AI config.
+// 默认 JinaConfig 返回默认 Jina AI 配置 。
 func DefaultJinaConfig() JinaConfig {
 	return JinaConfig{
 		BaseURL: "https://api.jina.ai",

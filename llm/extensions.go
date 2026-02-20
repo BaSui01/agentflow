@@ -5,12 +5,12 @@ import (
 	"time"
 )
 
-// Extensions provides optional framework extension interfaces.
-// All interfaces have NoOp implementations, allowing users to inject real implementations as needed.
+// 扩展提供了可选的框架扩展接口.
+// 所有接口都有"NoOp"执行,允许用户根据需要注入真正的执行.
 
-// ====== Security & Authentication ======
+// 安全认证
 
-// Identity represents an agent or user identity
+// 身份代表代理人或用户身份
 type Identity struct {
 	ID          string
 	Type        string // "agent", "user", "service"
@@ -19,16 +19,16 @@ type Identity struct {
 	Metadata    map[string]interface{}
 }
 
-// SecurityProvider provides authentication and authorization
+// 提供认证和授权
 type SecurityProvider interface {
-	// Authenticate verifies credentials and returns identity
+	// 认证证书和返回身份
 	Authenticate(ctx context.Context, credentials interface{}) (*Identity, error)
 	
-	// Authorize checks if identity has permission for resource/action
+	// 授权检查身份是否有资源/行动许可
 	Authorize(ctx context.Context, identity *Identity, resource string, action string) error
 }
 
-// NoOpSecurityProvider is a no-op implementation
+// NoOp Security Provider 是一个不执行
 type NoOpSecurityProvider struct{}
 
 func (n *NoOpSecurityProvider) Authenticate(ctx context.Context, credentials interface{}) (*Identity, error) {
@@ -39,9 +39,9 @@ func (n *NoOpSecurityProvider) Authorize(ctx context.Context, identity *Identity
 	return nil
 }
 
-// ====== Audit Logging ======
+// 审计记录
 
-// AuditEvent represents an auditable event
+// 审计工作代表可审计事件
 type AuditEvent struct {
 	Timestamp  time.Time
 	EventType  string // "agent.execute", "tool.call", "provider.request"
@@ -54,13 +54,13 @@ type AuditEvent struct {
 	Metadata   map[string]interface{}
 }
 
-// AuditLogger logs audit events
+// 审计
 type AuditLogger interface {
 	Log(ctx context.Context, event AuditEvent) error
 	Query(ctx context.Context, filter AuditFilter) ([]AuditEvent, error)
 }
 
-// AuditFilter filters audit log queries
+// 审计过滤器过滤审计日志查询
 type AuditFilter struct {
 	StartTime  time.Time
 	EndTime    time.Time
@@ -69,7 +69,7 @@ type AuditFilter struct {
 	Resource   string
 }
 
-// NoOpAuditLogger is a no-op implementation
+// NoOpAudit Logger 是无执行
 type NoOpAuditLogger struct{}
 
 func (n *NoOpAuditLogger) Log(ctx context.Context, event AuditEvent) error {
@@ -80,21 +80,21 @@ func (n *NoOpAuditLogger) Query(ctx context.Context, filter AuditFilter) ([]Audi
 	return []AuditEvent{}, nil
 }
 
-// ====== Rate Limiting ======
+// · 限制费率
 
-// RateLimiter controls request rates
+// 百分位控制请求率
 type RateLimiter interface {
-	// Allow checks if request is allowed
+	// 如果允许请求, 允许检查
 	Allow(ctx context.Context, key string) (bool, error)
 	
-	// AllowN checks if N requests are allowed
+	// 允许检查 N 请求是否被允许
 	AllowN(ctx context.Context, key string, n int) (bool, error)
 	
-	// Reset resets rate limit for key
+	// 重置密钥的速率限制
 	Reset(ctx context.Context, key string) error
 }
 
-// NoOpRateLimiter is a no-op implementation
+// NoOpRateLimiter 是一个不执行
 type NoOpRateLimiter struct{}
 
 func (n *NoOpRateLimiter) Allow(ctx context.Context, key string) (bool, error) {
@@ -109,49 +109,49 @@ func (n *NoOpRateLimiter) Reset(ctx context.Context, key string) error {
 	return nil
 }
 
-// ====== Distributed Tracing ======
+// 分配追踪
 
-// Span represents a trace span
+// Span 表示跟踪跨度
 type Span interface {
 	SetAttribute(key string, value interface{})
 	AddEvent(name string, attributes map[string]interface{})
 	End()
 }
 
-// Tracer provides distributed tracing
+// 追踪器提供分布式追踪
 type Tracer interface {
 	StartSpan(ctx context.Context, name string) (context.Context, Span)
 }
 
-// NoOpSpan is a no-op span
+// 无 OpSpan 是无线
 type NoOpSpan struct{}
 
 func (n *NoOpSpan) SetAttribute(key string, value interface{}) {}
 func (n *NoOpSpan) AddEvent(name string, attributes map[string]interface{}) {}
 func (n *NoOpSpan) End() {}
 
-// NoOpTracer is a no-op tracer
+// 无Op追踪器是无Op追踪器
 type NoOpTracer struct{}
 
 func (n *NoOpTracer) StartSpan(ctx context.Context, name string) (context.Context, Span) {
 	return ctx, &NoOpSpan{}
 }
 
-// ====== Middleware System ======
+// 中间软件系统
 
-// ProviderMiddleware wraps a Provider
+// 提供者中间软件包装提供者
 type ProviderMiddleware interface {
 	Wrap(next Provider) Provider
 }
 
-// ProviderMiddlewareFunc is a function adapter for ProviderMiddleware
+// ProverMiddlewareFunc 是 ProverMiddleware 的函数适配器
 type ProviderMiddlewareFunc func(Provider) Provider
 
 func (f ProviderMiddlewareFunc) Wrap(next Provider) Provider {
 	return f(next)
 }
 
-// ChainProviderMiddleware chains multiple middlewares
+// 链式 ProviderMiddleware 链式 多个中件
 func ChainProviderMiddleware(provider Provider, middlewares ...ProviderMiddleware) Provider {
 	for i := len(middlewares) - 1; i >= 0; i-- {
 		provider = middlewares[i].Wrap(provider)

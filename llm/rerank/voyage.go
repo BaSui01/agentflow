@@ -11,13 +11,13 @@ import (
 	"time"
 )
 
-// VoyageProvider implements reranking using Voyage AI's API.
+// Voyage Provider执行重排,使用Voyage AI的API.
 type VoyageProvider struct {
 	cfg    VoyageConfig
 	client *http.Client
 }
 
-// NewVoyageProvider creates a new Voyage reranker provider.
+// NewVoyage Provider创建了一个新的Voyage reranker供应商.
 func NewVoyageProvider(cfg VoyageConfig) *VoyageProvider {
 	if cfg.BaseURL == "" {
 		cfg.BaseURL = "https://api.voyageai.com"
@@ -61,7 +61,7 @@ type voyageRerankResponse struct {
 	} `json:"usage"`
 }
 
-// Rerank reranks documents using Voyage AI.
+// 重新排序使用Voyage AI的文档重新排序.
 func (p *VoyageProvider) Rerank(ctx context.Context, req *RerankRequest) (*RerankResponse, error) {
 	model := req.Model
 	if model == "" {
@@ -133,7 +133,7 @@ func (p *VoyageProvider) Rerank(ctx context.Context, req *RerankRequest) (*Reran
 	}, nil
 }
 
-// RerankSimple is a convenience method for simple reranking.
+// RerankSimple是简单的再排的一种方便方法.
 func (p *VoyageProvider) RerankSimple(ctx context.Context, query string, documents []string, topN int) ([]RerankResult, error) {
 	docs := make([]Document, len(documents))
 	for i, d := range documents {

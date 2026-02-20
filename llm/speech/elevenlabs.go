@@ -12,13 +12,13 @@ import (
 	"time"
 )
 
-// ElevenLabsProvider implements TTS using ElevenLabs API.
+// 11LabsProvider使用11Labs API执行TTS.
 type ElevenLabsProvider struct {
 	cfg    ElevenLabsConfig
 	client *http.Client
 }
 
-// NewElevenLabsProvider creates a new ElevenLabs TTS provider.
+// NewElevenLabs Provider 创建了新的"11Labs TTS"供应商.
 func NewElevenLabsProvider(cfg ElevenLabsConfig) *ElevenLabsProvider {
 	if cfg.BaseURL == "" {
 		cfg.BaseURL = "https://api.elevenlabs.io"
@@ -50,7 +50,7 @@ type elevenLabsTTSRequest struct {
 	} `json:"voice_settings,omitempty"`
 }
 
-// Synthesize converts text to speech using ElevenLabs.
+// 合成会使用"十一律"将文本转换为语音.
 func (p *ElevenLabsProvider) Synthesize(ctx context.Context, req *TTSRequest) (*TTSResponse, error) {
 	model := req.Model
 	if model == "" {
@@ -72,7 +72,7 @@ func (p *ElevenLabsProvider) Synthesize(ctx context.Context, req *TTSRequest) (*
 	payload, _ := json.Marshal(body)
 	endpoint := fmt.Sprintf("%s/v1/text-to-speech/%s", strings.TrimRight(p.cfg.BaseURL, "/"), voiceID)
 
-	// Add output format query param
+	// 添加输出格式查询参数
 	format := req.ResponseFormat
 	if format == "" {
 		format = "mp3_44100_128"
@@ -107,7 +107,7 @@ func (p *ElevenLabsProvider) Synthesize(ctx context.Context, req *TTSRequest) (*
 	}, nil
 }
 
-// SynthesizeToFile converts text to speech and saves to file.
+// 将文本转换为语音并保存为文件。
 func (p *ElevenLabsProvider) SynthesizeToFile(ctx context.Context, req *TTSRequest, filepath string) error {
 	resp, err := p.Synthesize(ctx, req)
 	if err != nil {
@@ -143,7 +143,7 @@ type elevenLabsVoicesResponse struct {
 	Voices []elevenLabsVoice `json:"voices"`
 }
 
-// ListVoices returns available ElevenLabs voices.
+// ListVoices 返回可用的 11Labs 声音 。
 func (p *ElevenLabsProvider) ListVoices(ctx context.Context) ([]Voice, error) {
 	endpoint := fmt.Sprintf("%s/v1/voices", strings.TrimRight(p.cfg.BaseURL, "/"))
 

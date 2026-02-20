@@ -26,14 +26,14 @@ type DoubaoProvider struct {
 	rewriterChain *middleware.RewriterChain
 }
 
-// NewDoubaoProvider creates a new Doubao provider instance.
+// NewDoubao Provider创建了一个新的Doubao供应商实例.
 func NewDoubaoProvider(cfg providers.DoubaoConfig, logger *zap.Logger) *DoubaoProvider {
 	timeout := cfg.Timeout
 	if timeout == 0 {
 		timeout = 30 * time.Second
 	}
 
-	// Set default BaseURL if not provided
+	// 如果未提供则设置默认 BaseURL
 	if cfg.BaseURL == "" {
 		cfg.BaseURL = "https://ark.cn-beijing.volces.com"
 	}
@@ -83,7 +83,7 @@ func (p *DoubaoProvider) HealthCheck(ctx context.Context) (*llm.HealthStatus, er
 	return &llm.HealthStatus{Healthy: true, Latency: latency}, nil
 }
 
-// OpenAI-compatible types
+// OpenAI 兼容类型
 type openAIMessage struct {
 	Role         string           `json:"role"`
 	Content      string           `json:"content,omitempty"`

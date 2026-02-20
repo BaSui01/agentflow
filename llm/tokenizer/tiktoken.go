@@ -7,7 +7,7 @@ import (
 	"github.com/pkoukk/tiktoken-go"
 )
 
-// TiktokenTokenizer adapts tiktoken for OpenAI-family models.
+// TiktokenTokenizer为OpenAI-家庭模型改造tiktoken.
 type TiktokenTokenizer struct {
 	model     string
 	encoding  string
@@ -17,7 +17,7 @@ type TiktokenTokenizer struct {
 	initErr   error
 }
 
-// modelEncodings maps model names to their tiktoken encoding and context size.
+// 模型编码将模型名称映射到其tiktoken编码和上下文大小。
 var modelEncodings = map[string]struct {
 	encoding  string
 	maxTokens int
@@ -31,11 +31,11 @@ var modelEncodings = map[string]struct {
 	"text-embedding-3-small":    {encoding: "cl100k_base", maxTokens: 8191},
 }
 
-// NewTiktokenTokenizer creates a tiktoken-based tokenizer for the given model.
+// NewTiktokenTokenizer为给定型号创建了以tiktoken为主的代号.
 func NewTiktokenTokenizer(model string) (*TiktokenTokenizer, error) {
 	info, ok := modelEncodings[model]
 	if !ok {
-		// Try prefix matching.
+		// 尝试前缀匹配 。
 		for prefix, i := range modelEncodings {
 			if len(model) >= len(prefix) && model[:len(prefix)] == prefix {
 				info = i
@@ -46,7 +46,7 @@ func NewTiktokenTokenizer(model string) (*TiktokenTokenizer, error) {
 	}
 
 	if !ok {
-		// Default to cl100k_base.
+		// 默认为 Cl100k  base 。
 		info = struct {
 			encoding  string
 			maxTokens int
@@ -60,7 +60,7 @@ func NewTiktokenTokenizer(model string) (*TiktokenTokenizer, error) {
 	}, nil
 }
 
-// init lazily initializes the tiktoken encoding (may download data on first use).
+// init lazily 初始化 tiktoken 编码(可以在第一次使用时下载数据).
 func (t *TiktokenTokenizer) init() error {
 	t.once.Do(func() {
 		enc, err := tiktoken.GetEncoding(t.encoding)
@@ -88,7 +88,7 @@ func (t *TiktokenTokenizer) CountMessages(messages []Message) (int, error) {
 
 	total := 0
 	for _, msg := range messages {
-		// Per-message overhead: <|start|>role\n content <|end|>\n
+		// 每封信件的间接费用: <| start|>role\n 内容<|end|>\n
 		total += 4
 		tokens := t.enc.Encode(msg.Content, nil, nil)
 		total += len(tokens)
@@ -121,7 +121,7 @@ func (t *TiktokenTokenizer) Name() string {
 	return fmt.Sprintf("tiktoken[%s]", t.encoding)
 }
 
-// RegisterOpenAITokenizers registers tokenizers for all known OpenAI models.
+// 注册 OpenAI 用户登记所有已知的 OpenAI 模型的标识器。
 func RegisterOpenAITokenizers() {
 	for model := range modelEncodings {
 		t, err := NewTiktokenTokenizer(model)

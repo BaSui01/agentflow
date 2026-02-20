@@ -8,12 +8,12 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-// Feature: multi-provider-support, Property 18: Tool Choice Preservation
-// **Validates: Requirements 11.2**
+// 特性:多提供者支持,财产 18:工具选择保存
+// ** 参数:要求11.2**
 //
-// This property test verifies that for any provider and any ChatRequest with non-empty ToolChoice string,
-// the provider includes the tool_choice field in the API request with the same value.
-// Minimum 100 iterations are achieved through comprehensive test cases.
+// 这个属性测试验证了对于任何提供商和任何使用非空工具选择字符串的聊天请求,
+// 提供者在 API 请求中包含具有相同值的工具 选择字段。
+// 通过综合测试案例实现至少100次重复。
 func TestProperty18_ToolChoicePreservation(t *testing.T) {
 	testCases := []struct {
 		name        string
@@ -22,7 +22,7 @@ func TestProperty18_ToolChoicePreservation(t *testing.T) {
 		requirement string
 		description string
 	}{
-		// Standard tool choice values
+		// 标准工具选择值
 		{
 			name:        "ToolChoice auto",
 			toolChoice:  "auto",
@@ -45,7 +45,7 @@ func TestProperty18_ToolChoicePreservation(t *testing.T) {
 			description: "Should preserve 'required' tool choice value",
 		},
 
-		// Specific tool names
+		// 特定工具名称
 		{
 			name:        "ToolChoice specific tool - search",
 			toolChoice:  "search",
@@ -82,7 +82,7 @@ func TestProperty18_ToolChoicePreservation(t *testing.T) {
 			description: "Should preserve specific tool name 'process_image'",
 		},
 
-		// Tool names with underscores
+		// 带有下划线的工具名称
 		{
 			name:        "ToolChoice with underscores - web_search",
 			toolChoice:  "web_search",
@@ -112,7 +112,7 @@ func TestProperty18_ToolChoicePreservation(t *testing.T) {
 			description: "Should preserve tool name with underscores",
 		},
 
-		// Tool names with hyphens
+		// 带连字符的工具名称
 		{
 			name:        "ToolChoice with hyphens - get-weather",
 			toolChoice:  "get-weather",
@@ -135,7 +135,7 @@ func TestProperty18_ToolChoicePreservation(t *testing.T) {
 			description: "Should preserve tool name with hyphens",
 		},
 
-		// Mixed case tool names
+		// 混合大小写工具名称
 		{
 			name:        "ToolChoice mixed case - GetWeather",
 			toolChoice:  "GetWeather",
@@ -158,7 +158,7 @@ func TestProperty18_ToolChoicePreservation(t *testing.T) {
 			description: "Should preserve mixed case tool name",
 		},
 
-		// Long tool names
+		// 长工具名
 		{
 			name:        "ToolChoice long name",
 			toolChoice:  "fetch_user_profile_data_from_database",
@@ -174,7 +174,7 @@ func TestProperty18_ToolChoicePreservation(t *testing.T) {
 			description: "Should preserve very long tool name",
 		},
 
-		// Tool names with numbers
+		// 带有数字的工具名称
 		{
 			name:        "ToolChoice with numbers - tool1",
 			toolChoice:  "tool1",
@@ -197,7 +197,7 @@ func TestProperty18_ToolChoicePreservation(t *testing.T) {
 			description: "Should preserve tool name with version suffix",
 		},
 
-		// Edge cases
+		// 边缘案件
 		{
 			name:        "ToolChoice single character",
 			toolChoice:  "a",
@@ -228,7 +228,7 @@ func TestProperty18_ToolChoicePreservation(t *testing.T) {
 		},
 	}
 
-	// Expand test cases to reach 100+ iterations by testing each case with all providers
+	// 通过对所有提供商进行每个案例的测试,将测试案例扩展至100+重复
 	providers := []string{"grok", "qwen", "deepseek", "glm", "minimax"}
 	expandedTestCases := make([]struct {
 		name        string
@@ -238,10 +238,10 @@ func TestProperty18_ToolChoicePreservation(t *testing.T) {
 		description string
 	}, 0, len(testCases)*len(providers))
 
-	// Add original test cases
+	// 添加原始测试案例
 	expandedTestCases = append(expandedTestCases, testCases...)
 
-	// Add variations with different providers
+	// 添加不同提供者的变量
 	for _, provider := range providers {
 		for _, tc := range testCases {
 			if tc.provider != provider {
@@ -253,16 +253,16 @@ func TestProperty18_ToolChoicePreservation(t *testing.T) {
 		}
 	}
 
-	// Run all test cases
+	// 运行所有测试大小写
 	for _, tc := range expandedTestCases {
 		t.Run(tc.name, func(t *testing.T) {
-			// Test the conversion based on provider type
+			// 根据提供者类型测试转换
 			switch tc.provider {
 			case "grok", "qwen", "deepseek", "glm":
-				// OpenAI-compatible providers
+				// OpenAI 兼容供应商
 				testOpenAICompatibleToolChoice(t, tc.toolChoice, tc.provider, tc.requirement, tc.description)
 			case "minimax":
-				// MiniMax has custom format but should still preserve tool_choice
+				// MiniMax 具有自定义格式,但仍应当保存工具  选择
 				testMiniMaxToolChoice(t, tc.toolChoice, tc.provider, tc.requirement, tc.description)
 			default:
 				t.Fatalf("Unknown provider: %s", tc.provider)
@@ -270,14 +270,14 @@ func TestProperty18_ToolChoicePreservation(t *testing.T) {
 		})
 	}
 
-	// Verify we have at least 100 test cases
+	// 检查我们至少有100个测试病例
 	assert.GreaterOrEqual(t, len(expandedTestCases), 100,
 		"Property test should have minimum 100 iterations")
 }
 
-// testOpenAICompatibleToolChoice tests tool choice preservation for OpenAI-compatible providers
+// 测试 OpenAI 兼容 ToolChoice 测试工具选择保存 OpenAI 兼容供应商
 func testOpenAICompatibleToolChoice(t *testing.T, toolChoice, provider, requirement, description string) {
-	// Create a mock request with tool choice
+	// 用工具选择创建模拟请求
 	req := &llm.ChatRequest{
 		Model: "test-model",
 		Messages: []llm.Message{
@@ -293,21 +293,21 @@ func testOpenAICompatibleToolChoice(t *testing.T, toolChoice, provider, requirem
 		ToolChoice: toolChoice,
 	}
 
-	// Convert to OpenAI format
+	// 转换为 OpenAI 格式
 	converted := mockConvertToOpenAIRequest(req)
 
-	// Verify tool_choice is preserved
+	// 校验工具  选择被保存
 	assert.NotNil(t, converted.ToolChoice,
 		"ToolChoice should not be nil when non-empty (Requirement %s): %s", requirement, description)
 
-	// Verify the value matches
+	// 校验值匹配
 	assert.Equal(t, toolChoice, converted.ToolChoice,
 		"ToolChoice value should be preserved exactly (Requirement %s): %s", requirement, description)
 }
 
-// testMiniMaxToolChoice tests tool choice preservation for MiniMax provider
+// 测试MiniMax ToolChoice 测试工具选择为 MiniMax 提供者保存
 func testMiniMaxToolChoice(t *testing.T, toolChoice, provider, requirement, description string) {
-	// Create a mock request with tool choice
+	// 用工具选择创建模拟请求
 	req := &llm.ChatRequest{
 		Model: "test-model",
 		Messages: []llm.Message{
@@ -323,19 +323,19 @@ func testMiniMaxToolChoice(t *testing.T, toolChoice, provider, requirement, desc
 		ToolChoice: toolChoice,
 	}
 
-	// Convert to MiniMax format
+	// 转换为 MiniMax 格式
 	converted := mockConvertToMiniMaxRequest(req)
 
-	// Verify tool_choice is preserved
+	// 校验工具  选择被保存
 	assert.NotNil(t, converted.ToolChoice,
 		"ToolChoice should not be nil when non-empty (Requirement %s): %s", requirement, description)
 
-	// Verify the value matches
+	// 校验值匹配
 	assert.Equal(t, toolChoice, converted.ToolChoice,
 		"ToolChoice value should be preserved exactly (Requirement %s): %s", requirement, description)
 }
 
-// TestProperty18_EmptyToolChoice verifies that empty tool choice is not included in request
+// Property18 Empty ToolChoice 验证请求中没有包含空工具选择
 func TestProperty18_EmptyToolChoice(t *testing.T) {
 	providers := []string{"grok", "qwen", "deepseek", "glm", "minimax"}
 
@@ -370,7 +370,7 @@ func TestProperty18_EmptyToolChoice(t *testing.T) {
 	}
 }
 
-// TestProperty18_ToolChoiceWithoutTools verifies tool choice behavior when no tools are provided
+// Property18 TooChoice Without Tools 在没有提供工具时验证工具选择行为
 func TestProperty18_ToolChoiceWithoutTools(t *testing.T) {
 	providers := []string{"grok", "qwen", "deepseek", "glm", "minimax"}
 	toolChoices := []string{"auto", "none", "search"}
@@ -387,8 +387,8 @@ func TestProperty18_ToolChoiceWithoutTools(t *testing.T) {
 					ToolChoice: toolChoice,
 				}
 
-				// Even without tools, if ToolChoice is specified, it should be preserved
-				// (though this may be an invalid request, the conversion should still preserve it)
+				// 即使没有工具,如果指定了 ToolChoice , 也应保留它
+				// (虽然这可能是无效的请求,但转换仍应保留).
 				switch provider {
 				case "grok", "qwen", "deepseek", "glm":
 					converted := mockConvertToOpenAIRequest(req)
@@ -404,7 +404,7 @@ func TestProperty18_ToolChoiceWithoutTools(t *testing.T) {
 	}
 }
 
-// TestProperty18_ToolChoiceTypeConsistency verifies that tool choice maintains type consistency
+// Property18  ToolChoiceType一致性验证工具选择保持类型一致性
 func TestProperty18_ToolChoiceTypeConsistency(t *testing.T) {
 	testCases := []struct {
 		name       string
@@ -430,7 +430,7 @@ func TestProperty18_ToolChoiceTypeConsistency(t *testing.T) {
 				ToolChoice: tc.toolChoice,
 			}
 
-			// Test OpenAI format
+			// 测试 OpenAI 格式
 			converted := mockConvertToOpenAIRequest(req)
 			assert.IsType(t, "", converted.ToolChoice,
 				"ToolChoice should be string type")
@@ -440,7 +440,7 @@ func TestProperty18_ToolChoiceTypeConsistency(t *testing.T) {
 	}
 }
 
-// Mock conversion functions that follow the spec
+// 跟踪光谱的模拟转换函数
 
 type mockOpenAIRequestWithToolChoice struct {
 	Model      string        `json:"model"`
@@ -465,7 +465,7 @@ func mockConvertToOpenAIRequest(req *llm.ChatRequest) *mockOpenAIRequestWithTool
 		MaxTokens: req.MaxTokens,
 	}
 
-	// Convert tools if present
+	// 在当前情况下转换工具
 	if len(req.Tools) > 0 {
 		result.Tools = []interface{}{}
 		for range req.Tools {
@@ -473,7 +473,7 @@ func mockConvertToOpenAIRequest(req *llm.ChatRequest) *mockOpenAIRequestWithTool
 		}
 	}
 
-	// Preserve ToolChoice if non-empty
+	// 非空时保留工具选择
 	if req.ToolChoice != "" {
 		result.ToolChoice = req.ToolChoice
 	}
@@ -488,7 +488,7 @@ func mockConvertToMiniMaxRequest(req *llm.ChatRequest) *mockMiniMaxRequestWithTo
 		MaxTokens: req.MaxTokens,
 	}
 
-	// Convert tools if present
+	// 在当前情况下转换工具
 	if len(req.Tools) > 0 {
 		result.Tools = []interface{}{}
 		for range req.Tools {
@@ -496,7 +496,7 @@ func mockConvertToMiniMaxRequest(req *llm.ChatRequest) *mockMiniMaxRequestWithTo
 		}
 	}
 
-	// Preserve ToolChoice if non-empty
+	// 非空时保留工具选择
 	if req.ToolChoice != "" {
 		result.ToolChoice = req.ToolChoice
 	}

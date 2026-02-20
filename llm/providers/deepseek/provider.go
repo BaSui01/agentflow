@@ -17,8 +17,8 @@ import (
 	"go.uber.org/zap"
 )
 
-// DeepSeekProvider implements DeepSeek LLM Provider.
-// DeepSeek uses OpenAI-compatible API format.
+// DeepSeek Provider执行 DeepSeek LLM 提供程序.
+// DeepSeek使用OpenAI兼容的API格式.
 type DeepSeekProvider struct {
 	cfg           providers.DeepSeekConfig
 	client        *http.Client
@@ -26,14 +26,14 @@ type DeepSeekProvider struct {
 	rewriterChain *middleware.RewriterChain
 }
 
-// NewDeepSeekProvider creates a new Qwen provider instance.
+// NewDepseek Provider 创建了新的 Quen 提供者实例 。
 func NewDeepSeekProvider(cfg providers.DeepSeekConfig, logger *zap.Logger) *DeepSeekProvider {
 	timeout := cfg.Timeout
 	if timeout == 0 {
 		timeout = 30 * time.Second
 	}
 
-	// Set default BaseURL if not provided
+	// 如果未提供则设置默认 BaseURL
 	if cfg.BaseURL == "" {
 		cfg.BaseURL = "https://api.deepseek.com"
 	}
@@ -83,7 +83,7 @@ func (p *DeepSeekProvider) HealthCheck(ctx context.Context) (*llm.HealthStatus, 
 	return &llm.HealthStatus{Healthy: true, Latency: latency}, nil
 }
 
-// OpenAI-compatible types (reused from OpenAI provider pattern)
+// OpenAI 兼容类型(从 OpenAI 提供者模式中重新使用)
 type openAIMessage struct {
 	Role         string           `json:"role"`
 	Content      string           `json:"content,omitempty"`
@@ -212,7 +212,7 @@ func mapError(status int, msg string, provider string) *llm.Error {
 	case http.StatusTooManyRequests:
 		return &llm.Error{Code: llm.ErrRateLimited, Message: msg, HTTPStatus: status, Retryable: true, Provider: provider}
 	case http.StatusBadRequest:
-		// Check for quota/credit keywords
+		// 检查配额/信用关键字
 		if strings.Contains(strings.ToLower(msg), "quota") ||
 			strings.Contains(strings.ToLower(msg), "credit") {
 			return &llm.Error{Code: llm.ErrQuotaExceeded, Message: msg, HTTPStatus: status, Provider: provider}
@@ -228,7 +228,7 @@ func mapError(status int, msg string, provider string) *llm.Error {
 }
 
 func (p *DeepSeekProvider) Completion(ctx context.Context, req *llm.ChatRequest) (*llm.ChatResponse, error) {
-	// Apply rewriter chain
+	// 应用重写链
 	rewrittenReq, err := p.rewriterChain.Execute(ctx, req)
 	if err != nil {
 		return nil, &llm.Error{
@@ -240,7 +240,7 @@ func (p *DeepSeekProvider) Completion(ctx context.Context, req *llm.ChatRequest)
 	}
 	req = rewrittenReq
 
-	// Handle credential override from context
+	// 从上下文处理证书覆盖
 	apiKey := p.cfg.APIKey
 	if c, ok := llm.CredentialOverrideFromContext(ctx); ok {
 		if strings.TrimSpace(c.APIKey) != "" {
@@ -294,7 +294,7 @@ func (p *DeepSeekProvider) Completion(ctx context.Context, req *llm.ChatRequest)
 }
 
 func (p *DeepSeekProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-chan llm.StreamChunk, error) {
-	// Apply rewriter chain
+	// 应用重写链
 	rewrittenReq, err := p.rewriterChain.Execute(ctx, req)
 	if err != nil {
 		return nil, &llm.Error{
@@ -306,7 +306,7 @@ func (p *DeepSeekProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-
 	}
 	req = rewrittenReq
 
-	// Handle credential override from context
+	// 从上下文处理证书覆盖
 	apiKey := p.cfg.APIKey
 	if c, ok := llm.CredentialOverrideFromContext(ctx); ok {
 		if strings.TrimSpace(c.APIKey) != "" {

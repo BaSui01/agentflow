@@ -111,9 +111,9 @@ func Example_getWeatherTool() {
 		}
 	}
 
-	// Output:
-	// Tool: get_weather
-	// Result: {"condition":"sunny","humidity":60,"location":"San Francisco, CA","temperature":72,"unit":"fahrenheit"}
+	// 输出 :
+	// 工具: get weather
+	// 结果:{"条件":"生","湿":"地":"旧金山,CA""温":72"单位":"平"]
 }
 
 // 示例：ReAct 循环集成（伪代码，需要真实的 Provider）
@@ -129,14 +129,14 @@ func Example_reActLoop() {
 	toolExecutor := tools.NewDefaultExecutor(registry, logger)
 
 	// 3. 假设我们有一个 LLM Provider（这里需要真实实现）
-	// provider := ... (OpenAI, Claude, etc.)
+	// 提供者:= (OpenAI, Claude等)
 
 	// 4. 创建 ReAct 执行器
 	config := tools.ReActConfig{
 		MaxIterations: 5,
 		StopOnError:   false,
 	}
-	// reactExecutor := tools.NewReActExecutor(provider, toolExecutor, config, logger)
+	// 反应执行器:=工具. NewReAct执行器(提供器,工具执行器,配置器,日志)
 
 	// 5. 准备请求
 	req := &llmpkg.ChatRequest{
@@ -156,15 +156,15 @@ func Example_reActLoop() {
 	}
 
 	// 6. 执行 ReAct 循环
-	// resp, steps, err := reactExecutor.Execute(context.Background(), req)
-	// if err != nil {
-	//     logger.Error("ReAct execution failed", zap.Error(err))
-	//     return
+	// resp, 步骤, 错误 : = 反应Executor.Execute(context.Background (, req))
+	// 如果错误 ! = 无 {
+	//     logger. Error ("ReAct执行失败", zap. Error( err)) :
+	//     返回时
 	// }
 
 	// 7. 打印结果
-	// fmt.Printf("Final response: %s\n", resp.Choices[0].Message.Content)
-	// fmt.Printf("Total steps: %d\n", len(steps))
+	// fmt.Printf ("最后反应: %s\n", resp.Choices [0]. 传言. 内容)
+	// fmt.Printf ("总步数:%d\n", len( 步数))
 
 	_ = toolExecutor // 避免未使用变量错误
 	_ = config       // 避免未使用变量错误

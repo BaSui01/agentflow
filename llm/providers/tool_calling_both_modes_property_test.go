@@ -16,17 +16,17 @@ import (
 	"pgregory.net/rapid"
 )
 
-// Feature: multi-provider-support, Property 21: Tool Calling in Both Modes
-// **Validates: Requirements 11.6**
+// 特性: 多提供者支持, 属性 21: 在两种模式下调用工具
+// ** 参数:要求11.6**
 //
-// This property test verifies that for any provider and any ChatRequest with Tools,
-// both Completion() and Stream() should successfully handle tool calls and
-// return/emit tool call information.
+// 这项财产测试验证了任何供应商和任何带有工具的聊天请求,
+// 完成()和Stream()应成功处理工具呼叫和
+// 返回/邮件工具调用信息。
 
-// mockToolCallServer creates a test server that simulates tool call responses
+// 模拟TooCallServer 创建模拟工具调用响应的测试服务器
 func mockToolCallServer(t *testing.T, toolCalls []mockToolCallData, streaming bool) *httptest.Server {
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Verify request has tools
+		// 校验请求有工具
 		body, err := io.ReadAll(r.Body)
 		require.NoError(t, err)
 		defer r.Body.Close()
@@ -35,7 +35,7 @@ func mockToolCallServer(t *testing.T, toolCalls []mockToolCallData, streaming bo
 		err = json.Unmarshal(body, &req)
 		require.NoError(t, err)
 
-		// Check if streaming
+		// 检查流线
 		isStream, _ := req["stream"].(bool)
 
 		if isStream {
@@ -46,7 +46,7 @@ func mockToolCallServer(t *testing.T, toolCalls []mockToolCallData, streaming bo
 				t.Fatal("expected http.Flusher")
 			}
 
-			// Send tool calls in streaming format
+			// 以流式发送工具调用
 			for i, tc := range toolCalls {
 				chunk := mockStreamChunk{
 					ID:    "chatcmpl-test",
@@ -80,7 +80,7 @@ func mockToolCallServer(t *testing.T, toolCalls []mockToolCallData, streaming bo
 			fmt.Fprintf(w, "data: [DONE]\n\n")
 			flusher.Flush()
 		} else {
-			// Non-streaming response
+			// 非分流反应
 			w.Header().Set("Content-Type", "application/json")
 			resp := mockCompletionResponse{
 				ID:    "chatcmpl-test",
@@ -116,7 +116,7 @@ func mockToolCallServer(t *testing.T, toolCalls []mockToolCallData, streaming bo
 	}))
 }
 
-// Mock types for test server responses
+// 测试服务器响应的模拟类型
 type mockToolCallData struct {
 	ID        string
 	Name      string
@@ -177,11 +177,11 @@ type mockStreamChunk struct {
 	Choices []mockStreamChoice `json:"choices"`
 }
 
-// TestProperty21_ToolCallingInBothModes verifies that tool calling works in both
-// Completion() and Stream() modes for all providers.
+// 测试Property21  ToolCalling InBothModes 验证调用工具在两者中都有效
+// 所有提供者的补全()和Stream()模式。
 func TestProperty21_ToolCallingInBothModes(t *testing.T) {
 	rapid.Check(t, func(rt *rapid.T) {
-		// Generate random tool call data
+		// 生成随机工具调用数据
 		numToolCalls := rapid.IntRange(1, 3).Draw(rt, "numToolCalls")
 		toolCalls := make([]mockToolCallData, numToolCalls)
 		for i := 0; i < numToolCalls; i++ {
@@ -192,7 +192,7 @@ func TestProperty21_ToolCallingInBothModes(t *testing.T) {
 			}
 		}
 
-		// Generate tools for request
+		// 生成请求工具
 		tools := make([]llm.ToolSchema, numToolCalls)
 		for i := 0; i < numToolCalls; i++ {
 			tools[i] = llm.ToolSchema{
@@ -202,7 +202,7 @@ func TestProperty21_ToolCallingInBothModes(t *testing.T) {
 			}
 		}
 
-		// Test non-streaming mode
+		// 测试非流化模式
 		t.Run("Completion", func(t *testing.T) {
 			server := mockToolCallServer(t, toolCalls, false)
 			defer server.Close()
@@ -219,7 +219,7 @@ func TestProperty21_ToolCallingInBothModes(t *testing.T) {
 			require.NoError(t, err)
 			require.NotNil(t, resp)
 
-			// Verify tool calls are returned
+			// 返回校验工具呼叫
 			require.Len(t, resp.Choices, 1)
 			require.Len(t, resp.Choices[0].Message.ToolCalls, numToolCalls)
 
@@ -230,7 +230,7 @@ func TestProperty21_ToolCallingInBothModes(t *testing.T) {
 			}
 		})
 
-		// Test streaming mode
+		// 测试流线模式
 		t.Run("Stream", func(t *testing.T) {
 			server := mockToolCallServer(t, toolCalls, true)
 			defer server.Close()
@@ -246,7 +246,7 @@ func TestProperty21_ToolCallingInBothModes(t *testing.T) {
 			chunks, err := mockProviderStream(server.URL, req)
 			require.NoError(t, err)
 
-			// Collect all tool calls from stream
+			// 从流中收集全部工具呼叫
 			var receivedToolCalls []llm.ToolCall
 			for chunk := range chunks {
 				if chunk.Err != nil {
@@ -257,7 +257,7 @@ func TestProperty21_ToolCallingInBothModes(t *testing.T) {
 				}
 			}
 
-			// Verify tool calls are emitted
+			// 发送了校验工具呼叫
 			require.Len(t, receivedToolCalls, numToolCalls)
 			for i, tc := range receivedToolCalls {
 				assert.Equal(t, toolCalls[i].ID, tc.ID, "Tool call ID should match")
@@ -268,11 +268,11 @@ func TestProperty21_ToolCallingInBothModes(t *testing.T) {
 	})
 }
 
-// mockProviderCompletion simulates a provider's Completion method
+// 模拟 Provider 完成 模拟提供者的完成方法
 func mockProviderCompletion(baseURL string, req *llm.ChatRequest) (*llm.ChatResponse, error) {
 	ctx := context.Background()
 
-	// Build request body
+	// 构建请求正文
 	body := map[string]interface{}{
 		"model":    req.Model,
 		"messages": convertMessagesToMap(req.Messages),
@@ -307,11 +307,11 @@ func mockProviderCompletion(baseURL string, req *llm.ChatRequest) (*llm.ChatResp
 	return convertToLLMResponse(oaResp), nil
 }
 
-// mockProviderStream simulates a provider's Stream method
+// 模拟 ProviderStream 模拟提供者的流法
 func mockProviderStream(baseURL string, req *llm.ChatRequest) (<-chan llm.StreamChunk, error) {
 	ctx := context.Background()
 
-	// Build request body
+	// 构建请求正文
 	body := map[string]interface{}{
 		"model":    req.Model,
 		"messages": convertMessagesToMap(req.Messages),
@@ -348,7 +348,7 @@ func mockProviderStream(baseURL string, req *llm.ChatRequest) (<-chan llm.Stream
 	return ch, nil
 }
 
-// parseSSEStream parses SSE stream and emits chunks
+// 解析 SSE 解析 SSE 流出块
 func parseSSEStream(body io.Reader, ch chan<- llm.StreamChunk) {
 	buf := make([]byte, 4096)
 	var leftover string
@@ -359,7 +359,7 @@ func parseSSEStream(body io.Reader, ch chan<- llm.StreamChunk) {
 			data := leftover + string(buf[:n])
 			lines := strings.Split(data, "\n")
 
-			// Keep incomplete line for next iteration
+			// 为下次重复保留不完整的行
 			if !strings.HasSuffix(data, "\n") {
 				leftover = lines[len(lines)-1]
 				lines = lines[:len(lines)-1]
@@ -417,7 +417,7 @@ func parseSSEStream(body io.Reader, ch chan<- llm.StreamChunk) {
 	}
 }
 
-// Helper functions for conversion
+// 转换的辅助功能
 func convertMessagesToMap(msgs []llm.Message) []map[string]interface{} {
 	result := make([]map[string]interface{}, 0, len(msgs))
 	for _, m := range msgs {
@@ -493,8 +493,8 @@ func convertToLLMResponse(resp mockCompletionResponse) *llm.ChatResponse {
 	return result
 }
 
-// TestProperty21_ToolCallingBothModes_TableDriven provides additional coverage
-// through table-driven tests to ensure minimum 100 iterations.
+// Property21  ToolCalling Both Modes  TableDriven 提供了额外的覆盖范围
+// 通过表格驱动测试,确保至少100次重复。
 func TestProperty21_ToolCallingBothModes_TableDriven(t *testing.T) {
 	testCases := []struct {
 		name      string
@@ -502,7 +502,7 @@ func TestProperty21_ToolCallingBothModes_TableDriven(t *testing.T) {
 		provider  string
 		mode      string // "completion" or "stream"
 	}{
-		// Single tool call cases
+		// 单一工具呼叫案件
 		{
 			name: "Single tool call - completion - grok",
 			toolCalls: []mockToolCallData{
@@ -584,7 +584,7 @@ func TestProperty21_ToolCallingBothModes_TableDriven(t *testing.T) {
 			mode:     "stream",
 		},
 
-		// Multiple tool calls cases
+		// 多个工具调用案件
 		{
 			name: "Two tool calls - completion - grok",
 			toolCalls: []mockToolCallData{
@@ -625,7 +625,7 @@ func TestProperty21_ToolCallingBothModes_TableDriven(t *testing.T) {
 		},
 	}
 
-	// Add more test cases to reach 100+ iterations
+	// 添加更多的测试案例以达到100+重复
 	providers := []string{"grok", "qwen", "deepseek", "glm", "minimax"}
 	modes := []string{"completion", "stream"}
 	toolNames := []string{"search", "calculate", "get_weather", "translate", "summarize", "fetch_data", "process", "validate", "analyze", "generate"}
@@ -652,7 +652,7 @@ func TestProperty21_ToolCallingBothModes_TableDriven(t *testing.T) {
 		}
 	}
 
-	// Verify we have at least 100 test cases
+	// 检查我们至少有100个测试病例
 	require.GreaterOrEqual(t, len(testCases), 100, "Should have at least 100 test cases")
 
 	for _, tc := range testCases {
@@ -711,11 +711,11 @@ func TestProperty21_ToolCallingBothModes_TableDriven(t *testing.T) {
 	}
 }
 
-// TestProperty21_ToolCallingPreservesToolCallFields verifies that all tool call
-// fields (ID, Name, Arguments) are preserved in both modes.
+// 测试Property21  ToolCalling Preserves ToolCallFields 验证所有工具调用
+// 字段(ID、名称、参数)在两种模式中都保留。
 func TestProperty21_ToolCallingPreservesToolCallFields(t *testing.T) {
 	rapid.Check(t, func(rt *rapid.T) {
-		// Generate tool call with various field values
+		// 生成包含各种字段值的工具调用
 		toolCall := mockToolCallData{
 			ID:   rapid.StringMatching(`call_[a-zA-Z0-9]{8,16}`).Draw(rt, "toolCallID"),
 			Name: rapid.StringMatching(`[a-z][a-z_]{2,20}`).Draw(rt, "toolName"),
@@ -740,7 +740,7 @@ func TestProperty21_ToolCallingPreservesToolCallFields(t *testing.T) {
 			Tools: tools,
 		}
 
-		// Test Completion mode
+		// 测试完成模式
 		server := mockToolCallServer(t, []mockToolCallData{toolCall}, false)
 		resp, err := mockProviderCompletion(server.URL, req)
 		server.Close()
@@ -753,7 +753,7 @@ func TestProperty21_ToolCallingPreservesToolCallFields(t *testing.T) {
 		assert.Equal(t, toolCall.Name, tc.Name, "Tool call Name should be preserved in Completion mode")
 		assert.JSONEq(t, toolCall.Arguments, string(tc.Arguments), "Tool call Arguments should be preserved in Completion mode")
 
-		// Test Stream mode
+		// 测试流模式
 		server = mockToolCallServer(t, []mockToolCallData{toolCall}, true)
 		chunks, err := mockProviderStream(server.URL, req)
 		require.NoError(t, err)
@@ -774,7 +774,7 @@ func TestProperty21_ToolCallingPreservesToolCallFields(t *testing.T) {
 	})
 }
 
-// TestProperty21_ToolCallingWithToolChoice verifies tool calling works with ToolChoice
+// TestProperty21  ToolCalling With ToolChoice 校验工具与 ToolChoice 工作
 func TestProperty21_ToolCallingWithToolChoice(t *testing.T) {
 	toolChoices := []string{"auto", "none", "required", "search", "calculate"}
 	modes := []string{"completion", "stream"}

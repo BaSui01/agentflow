@@ -10,16 +10,16 @@ import (
 	"go.uber.org/zap"
 )
 
-// WebScrapeProvider defines the interface for web scraping backends.
-// Implementations can wrap Firecrawl, Playwright, Colly, or custom scrapers.
+// WebScrape Provider定义了网络刮取后端的界面.
+// 执行器可以包装Firecrawl,Playwright,Colly,或者自定义的刮取器.
 type WebScrapeProvider interface {
-	// Scrape fetches and extracts content from a URL.
+	// Scrape 从 URL 获取并提取内容 。
 	Scrape(ctx context.Context, url string, opts WebScrapeOptions) (*WebScrapeResult, error)
-	// Name returns the provider name.
+	// 名称返回提供者名称 。
 	Name() string
 }
 
-// WebScrapeOptions configures a web scrape request.
+// WebScrape 选项配置了网络刮擦请求 。
 type WebScrapeOptions struct {
 	Format           string   `json:"format"`                        // Output format: "markdown", "text", "html"
 	IncludeLinks     bool     `json:"include_links,omitempty"`       // Include hyperlinks in output
@@ -30,7 +30,7 @@ type WebScrapeOptions struct {
 	ExcludeSelectors []string `json:"exclude_selectors,omitempty"`   // CSS selectors to exclude
 }
 
-// DefaultWebScrapeOptions returns sensible defaults.
+// 默认WebScrape 选项返回明智的默认 。
 func DefaultWebScrapeOptions() WebScrapeOptions {
 	return WebScrapeOptions{
 		Format:       "markdown",
@@ -39,7 +39,7 @@ func DefaultWebScrapeOptions() WebScrapeOptions {
 	}
 }
 
-// WebScrapeResult represents the scraped content from a URL.
+// WebScrapeResult 代表从 URL 删除的内容 。
 type WebScrapeResult struct {
 	URL       string         `json:"url"`
 	Title     string         `json:"title"`
@@ -52,19 +52,19 @@ type WebScrapeResult struct {
 	ScrapedAt time.Time      `json:"scraped_at"`
 }
 
-// ScrapedLink represents a hyperlink found in the page.
+// ScrapedLink代表页面中找到的超链接.
 type ScrapedLink struct {
 	Text string `json:"text"`
 	URL  string `json:"url"`
 }
 
-// ScrapedImage represents an image found in the page.
+// 已删除 图像代表页面中找到的图像 。
 type ScrapedImage struct {
 	Alt string `json:"alt"`
 	URL string `json:"url"`
 }
 
-// WebScrapeToolConfig configures the web scrape tool.
+// WebScrapeToolConfig 配置了网页刮擦工具.
 type WebScrapeToolConfig struct {
 	Provider    WebScrapeProvider // Scraping backend provider
 	DefaultOpts WebScrapeOptions  // Default scrape options
@@ -72,7 +72,7 @@ type WebScrapeToolConfig struct {
 	RateLimit   *RateLimitConfig  // Rate limiting
 }
 
-// DefaultWebScrapeToolConfig returns sensible defaults.
+// 默认WebScrapeToolConfig返回合理的默认值 。
 func DefaultWebScrapeToolConfig() WebScrapeToolConfig {
 	return WebScrapeToolConfig{
 		DefaultOpts: DefaultWebScrapeOptions(),
@@ -84,7 +84,7 @@ func DefaultWebScrapeToolConfig() WebScrapeToolConfig {
 	}
 }
 
-// webScrapeArgs defines the input arguments for the web scrape tool.
+// WebScrapeArgs 定义了 Web 刮擦工具的输入参数.
 type webScrapeArgs struct {
 	URL              string   `json:"url"`
 	Format           string   `json:"format,omitempty"`
@@ -96,8 +96,8 @@ type webScrapeArgs struct {
 	ExcludeSelectors []string `json:"exclude_selectors,omitempty"`
 }
 
-// NewWebScrapeTool creates a ToolFunc for web scraping.
-// Register this with a ToolRegistry to make it available to agents.
+// 新WebScrapeTool创建了用于网络刮取的工具Func.
+// 用工具登记器注册, 以便提供给代理商 。
 func NewWebScrapeTool(config WebScrapeToolConfig, logger *zap.Logger) (ToolFunc, ToolMetadata) {
 	if logger == nil {
 		logger = zap.NewNop()
@@ -117,7 +117,7 @@ func NewWebScrapeTool(config WebScrapeToolConfig, logger *zap.Logger) (ToolFunc,
 			return nil, fmt.Errorf("web scrape provider not configured")
 		}
 
-		// Build scrape options from args + defaults
+		// 从 args + 默认值中构建 raise 选项
 		opts := config.DefaultOpts
 		if params.Format != "" {
 			opts.Format = params.Format
@@ -215,7 +215,7 @@ func NewWebScrapeTool(config WebScrapeToolConfig, logger *zap.Logger) (ToolFunc,
 	return fn, metadata
 }
 
-// RegisterWebScrapeTool is a convenience function that creates and registers the web scrape tool.
+// RegisterWebScrapeToole是一个创建并注册web刮取工具的便利功能.
 func RegisterWebScrapeTool(registry ToolRegistry, config WebScrapeToolConfig, logger *zap.Logger) error {
 	fn, metadata := NewWebScrapeTool(config, logger)
 	return registry.Register("web_scrape", fn, metadata)

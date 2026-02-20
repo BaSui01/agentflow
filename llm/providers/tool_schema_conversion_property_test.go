@@ -8,13 +8,13 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-// Feature: multi-provider-support, Property 17: Tool Schema Conversion
-// **Validates: Requirements 11.1**
+// 特性:多提供者支持,属性17:工具Schema转换
+// ** 参数:要求11.1**
 //
-// This property test verifies that for any provider and any ChatRequest with non-empty Tools array,
-// the provider converts each llm.ToolSchema to the provider-specific tool format preserving
-// name, description, and parameters.
-// Minimum 100 iterations are achieved through comprehensive test cases.
+// 这个属性测试验证了对于任何提供商和任何带有非空工具阵列的聊天请求,
+// 提供者转换每个 llm。 工具Schema 到特定提供者的工具格式保存
+// 名称、描述和参数。
+// 通过综合测试案例实现至少100次重复。
 func TestProperty17_ToolSchemaConversion(t *testing.T) {
 	testCases := []struct {
 		name        string
@@ -23,7 +23,7 @@ func TestProperty17_ToolSchemaConversion(t *testing.T) {
 		requirement string
 		description string
 	}{
-		// Single tool cases
+		// 单一工具案件
 		{
 			name: "Single tool with all fields",
 			tools: []llm.ToolSchema{
@@ -116,7 +116,7 @@ func TestProperty17_ToolSchemaConversion(t *testing.T) {
 			description: "Should convert tool with array parameters",
 		},
 
-		// Multiple tools cases
+		// 多种工具案件
 		{
 			name: "Two tools with different schemas",
 			tools: []llm.ToolSchema{
@@ -201,7 +201,7 @@ func TestProperty17_ToolSchemaConversion(t *testing.T) {
 			description: "Should convert tools with all JSON schema types",
 		},
 
-		// Edge cases
+		// 边缘案件
 		{
 			name: "Tool with empty description",
 			tools: []llm.ToolSchema{
@@ -414,7 +414,7 @@ func TestProperty17_ToolSchemaConversion(t *testing.T) {
 		},
 	}
 
-	// Expand test cases to reach 100+ iterations by testing each case with all providers
+	// 通过对所有提供商进行每个案例的测试,将测试案例扩展至100+重复
 	providers := []string{"grok", "qwen", "deepseek", "glm", "minimax"}
 	expandedTestCases := make([]struct {
 		name        string
@@ -424,10 +424,10 @@ func TestProperty17_ToolSchemaConversion(t *testing.T) {
 		description string
 	}, 0, len(testCases)*len(providers))
 
-	// Add original test cases
+	// 添加原始测试案例
 	expandedTestCases = append(expandedTestCases, testCases...)
 
-	// Add variations with different providers
+	// 添加不同提供者的变量
 	for _, provider := range providers {
 		for _, tc := range testCases {
 			if tc.provider != provider {
@@ -439,16 +439,16 @@ func TestProperty17_ToolSchemaConversion(t *testing.T) {
 		}
 	}
 
-	// Run all test cases
+	// 运行所有测试大小写
 	for _, tc := range expandedTestCases {
 		t.Run(tc.name, func(t *testing.T) {
-			// Test the conversion based on provider type
+			// 根据提供者类型测试转换
 			switch tc.provider {
 			case "grok", "qwen", "deepseek", "glm":
-				// OpenAI-compatible providers
+				// OpenAI 兼容供应商
 				testOpenAICompatibleConversion(t, tc.tools, tc.provider, tc.requirement, tc.description)
 			case "minimax":
-				// MiniMax has custom format
+				// MiniMax 有自定义格式
 				testMiniMaxConversion(t, tc.tools, tc.provider, tc.requirement, tc.description)
 			default:
 				t.Fatalf("Unknown provider: %s", tc.provider)
@@ -456,63 +456,63 @@ func TestProperty17_ToolSchemaConversion(t *testing.T) {
 		})
 	}
 
-	// Verify we have at least 100 test cases
+	// 检查我们至少有100个测试病例
 	assert.GreaterOrEqual(t, len(expandedTestCases), 100,
 		"Property test should have minimum 100 iterations")
 }
 
-// testOpenAICompatibleConversion tests tool conversion for OpenAI-compatible providers
+// 测试 OpenAI 兼容性转换测试工具转换 OpenAI 兼容供应商
 func testOpenAICompatibleConversion(t *testing.T, tools []llm.ToolSchema, provider, requirement, description string) {
-	// Convert using the mock function that follows the spec
+	// 使用光谱之后的模拟函数转换
 	converted := mockConvertToolsOpenAI(tools)
 
-	// Verify conversion preserves all fields
+	// 校验转换保存所有字段
 	assert.Equal(t, len(tools), len(converted),
 		"Number of tools should be preserved (Requirement %s): %s", requirement, description)
 
 	for i, tool := range tools {
-		// Verify tool type is set correctly
+		// 校验工具类型设置正确
 		assert.Equal(t, "function", converted[i].Type,
 			"Tool type should be 'function' for OpenAI-compatible providers")
 
-		// Verify name is preserved
+		// 验证名称被保存
 		assert.Equal(t, tool.Name, converted[i].Function.Name,
 			"Tool name should be preserved (Requirement %s): %s", requirement, description)
 
-		// Verify parameters are preserved
+		// 校验参数被保存
 		assert.JSONEq(t, string(tool.Parameters), string(converted[i].Function.Arguments),
 			"Tool parameters should be preserved (Requirement %s): %s", requirement, description)
 
-		// Note: OpenAI format doesn't include description in the function object
-		// Description is typically included in the parameters schema or elsewhere
+		// 注意: OpenAI 格式不包括函数对象中的描述
+		// 描述通常包括在参数计划或其他地方。
 	}
 }
 
-// testMiniMaxConversion tests tool conversion for MiniMax provider
+// 测试MiniMax 转换测试工具转换
 func testMiniMaxConversion(t *testing.T, tools []llm.ToolSchema, provider, requirement, description string) {
-	// Convert using the mock function that follows the spec
+	// 使用光谱之后的模拟函数转换
 	converted := mockConvertToolsMiniMax(tools)
 
-	// Verify conversion preserves all fields
+	// 校验转换保存所有字段
 	assert.Equal(t, len(tools), len(converted),
 		"Number of tools should be preserved (Requirement %s): %s", requirement, description)
 
 	for i, tool := range tools {
-		// Verify name is preserved
+		// 验证名称被保存
 		assert.Equal(t, tool.Name, converted[i].Name,
 			"Tool name should be preserved (Requirement %s): %s", requirement, description)
 
-		// Verify description is preserved
+		// 验证描述被保存
 		assert.Equal(t, tool.Description, converted[i].Description,
 			"Tool description should be preserved (Requirement %s): %s", requirement, description)
 
-		// Verify parameters are preserved
+		// 校验参数被保存
 		assert.JSONEq(t, string(tool.Parameters), string(converted[i].Parameters),
 			"Tool parameters should be preserved (Requirement %s): %s", requirement, description)
 	}
 }
 
-// TestProperty17_EmptyToolsArray verifies that empty tools array is handled correctly
+// Property17 Empty ToolsArray 验证空工具阵列的处理正确
 func TestProperty17_EmptyToolsArray(t *testing.T) {
 	providers := []string{"grok", "qwen", "deepseek", "glm", "minimax"}
 
@@ -534,7 +534,7 @@ func TestProperty17_EmptyToolsArray(t *testing.T) {
 	}
 }
 
-// TestProperty17_NilToolsArray verifies that nil tools array is handled correctly
+// Property17  NilToolsArray 验证零工具阵列得到正确处理
 func TestProperty17_NilToolsArray(t *testing.T) {
 	providers := []string{"grok", "qwen", "deepseek", "glm", "minimax"}
 
@@ -556,7 +556,7 @@ func TestProperty17_NilToolsArray(t *testing.T) {
 	}
 }
 
-// TestProperty17_ParameterJSONValidity verifies that parameters remain valid JSON
+// Property17 ParameterJSONValidity 验证参数仍然有效的JSON
 func TestProperty17_ParameterJSONValidity(t *testing.T) {
 	testCases := []struct {
 		name       string
@@ -578,13 +578,13 @@ func TestProperty17_ParameterJSONValidity(t *testing.T) {
 				Parameters:  tc.parameters,
 			}
 
-			// Test OpenAI format
+			// 测试 OpenAI 格式
 			openAIConverted := mockConvertToolsOpenAI([]llm.ToolSchema{tool})
 			assert.NotNil(t, openAIConverted)
 			assert.True(t, json.Valid(openAIConverted[0].Function.Arguments),
 				"Converted parameters should be valid JSON")
 
-			// Test MiniMax format
+			// 测试迷你最大格式
 			miniMaxConverted := mockConvertToolsMiniMax([]llm.ToolSchema{tool})
 			assert.NotNil(t, miniMaxConverted)
 			assert.True(t, json.Valid(miniMaxConverted[0].Parameters),
@@ -593,7 +593,7 @@ func TestProperty17_ParameterJSONValidity(t *testing.T) {
 	}
 }
 
-// Mock conversion functions that follow the spec
+// 跟踪光谱的模拟转换函数
 
 type mockOpenAITool struct {
 	Type     string             `json:"type"`

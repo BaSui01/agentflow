@@ -10,13 +10,13 @@ import (
 	"time"
 )
 
-// GeminiProvider implements video analysis using Google Gemini.
+// 双子公司使用谷歌双子公司执行视频分析.
 type GeminiProvider struct {
 	cfg    GeminiConfig
 	client *http.Client
 }
 
-// NewGeminiProvider creates a new Gemini video provider.
+// NewGemini Provider创建了新的双子座视频提供商.
 func NewGeminiProvider(cfg GeminiConfig) *GeminiProvider {
 	if cfg.Model == "" {
 		cfg.Model = "gemini-3-flash-preview"
@@ -85,7 +85,7 @@ type geminiResponse struct {
 	} `json:"usageMetadata"`
 }
 
-// Analyze processes video content using Gemini's multimodal capabilities.
+// 利用双子座多模式能力分析视频内容.
 func (p *GeminiProvider) Analyze(ctx context.Context, req *AnalyzeRequest) (*AnalyzeResponse, error) {
 	model := req.Model
 	if model == "" {
@@ -94,7 +94,7 @@ func (p *GeminiProvider) Analyze(ctx context.Context, req *AnalyzeRequest) (*Ana
 
 	var parts []geminiVideoPart
 
-	// Add video content
+	// 添加视频内容
 	if req.VideoData != "" {
 		mimeType := fmt.Sprintf("video/%s", req.VideoFormat)
 		if req.VideoFormat == "" {
@@ -119,7 +119,7 @@ func (p *GeminiProvider) Analyze(ctx context.Context, req *AnalyzeRequest) (*Ana
 		})
 	}
 
-	// Add prompt
+	// 添加提示
 	parts = append(parts, geminiVideoPart{Text: req.Prompt})
 
 	body := geminiRequest{
@@ -169,7 +169,7 @@ func (p *GeminiProvider) Analyze(ctx context.Context, req *AnalyzeRequest) (*Ana
 	}, nil
 }
 
-// Generate is not supported by Gemini video provider.
+// 生成不由双子座视频提供商支持.
 func (p *GeminiProvider) Generate(ctx context.Context, req *GenerateRequest) (*GenerateResponse, error) {
 	return nil, fmt.Errorf("video generation not supported by gemini provider")
 }

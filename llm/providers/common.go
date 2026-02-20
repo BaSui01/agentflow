@@ -11,8 +11,8 @@ import (
 	"github.com/BaSui01/agentflow/llm"
 )
 
-// MapHTTPError maps HTTP status codes to llm.Error with appropriate retry flags
-// This is a common error mapping function used by all providers
+// MapHTTPError 将 HTTP 状态代码映射到 llm. 合适的重试标记出错
+// 这是所有提供者使用的常见错误映射功能
 func MapHTTPError(status int, msg string, provider string) *llm.Error {
 	switch status {
 	case http.StatusUnauthorized:
@@ -38,7 +38,7 @@ func MapHTTPError(status int, msg string, provider string) *llm.Error {
 			Provider:   provider,
 		}
 	case http.StatusBadRequest:
-		// Check for quota/credit keywords
+		// 检查配额/信用关键字
 		msgLower := strings.ToLower(msg)
 		if strings.Contains(msgLower, "quota") ||
 			strings.Contains(msgLower, "credit") ||
@@ -83,15 +83,15 @@ func MapHTTPError(status int, msg string, provider string) *llm.Error {
 	}
 }
 
-// ReadErrorMessage reads error message from response body
-// Attempts to parse JSON error response, falls back to raw text
+// 读取响应机构的错误消息
+// 试图解析 JSON 错误响应, 返回到原始文本
 func ReadErrorMessage(body io.Reader) string {
 	data, err := io.ReadAll(body)
 	if err != nil {
 		return "failed to read error response"
 	}
 
-	// Try to parse as generic error response
+	// 尝试解析为通用错误响应
 	var errResp struct {
 		Error struct {
 			Message string `json:"message"`
@@ -107,15 +107,15 @@ func ReadErrorMessage(body io.Reader) string {
 		return errResp.Error.Message
 	}
 
-	// Fallback to raw text
+	// 倒转到原始文本
 	return string(data)
 }
 
-// === OpenAI Compatible API Common Types ===
-// These types are used by deepseek, qwen, glm, doubao, grok and other OpenAI-compatible providers.
-// Individual provider packages currently define their own copies; future refactoring can unify on these.
+// OpenAI 兼容 API 常见类型
+// 这些类型被Deepseek, qwen, glm, doubao, grok等兼容OpenAI的提供者所使用.
+// 单个提供者软件包目前定义了自己的拷贝;未来的重构可以在这些软件包上统一.
 
-// OpenAICompatMessage represents an OpenAI-compatible message format.
+// OpenAICompatMessage代表一种与OpenAI兼容的信息格式.
 type OpenAICompatMessage struct {
 	Role       string                `json:"role"`
 	Content    string                `json:"content,omitempty"`
@@ -124,26 +124,26 @@ type OpenAICompatMessage struct {
 	ToolCallID string                `json:"tool_call_id,omitempty"`
 }
 
-// OpenAICompatToolCall represents an OpenAI-compatible tool call.
+// OpenAI CompatToolCall代表了一个OpenAI相容的工具调用.
 type OpenAICompatToolCall struct {
 	ID       string              `json:"id"`
 	Type     string              `json:"type"`
 	Function OpenAICompatFunction `json:"function"`
 }
 
-// OpenAICompatFunction represents an OpenAI-compatible function definition.
+// OpenAICompatFunction代表一个与OpenAI相容的函数定义.
 type OpenAICompatFunction struct {
 	Name      string          `json:"name"`
 	Arguments json.RawMessage `json:"arguments"`
 }
 
-// OpenAICompatTool represents an OpenAI-compatible tool definition.
+// OpenAICompatTooll代表了一个OpenAI相容的工具定义.
 type OpenAICompatTool struct {
 	Type     string              `json:"type"`
 	Function OpenAICompatFunction `json:"function"`
 }
 
-// OpenAICompatRequest represents an OpenAI-compatible chat completion request.
+// OpenAICompat Request 代表 OpenAI 兼容的聊天完成请求.
 type OpenAICompatRequest struct {
 	Model       string                `json:"model"`
 	Messages    []OpenAICompatMessage `json:"messages"`
@@ -156,7 +156,7 @@ type OpenAICompatRequest struct {
 	Stream      bool                  `json:"stream,omitempty"`
 }
 
-// OpenAICompatChoice represents a single choice in an OpenAI-compatible response.
+// OpenAICompatChoice代表OpenAI相容响应中的单一选择.
 type OpenAICompatChoice struct {
 	Index        int                  `json:"index"`
 	FinishReason string               `json:"finish_reason"`
@@ -164,14 +164,14 @@ type OpenAICompatChoice struct {
 	Delta        *OpenAICompatMessage `json:"delta,omitempty"`
 }
 
-// OpenAICompatUsage represents token usage in an OpenAI-compatible response.
+// OpenAI CompatUsage 表示OpenAI相容响应中的符号用法.
 type OpenAICompatUsage struct {
 	PromptTokens     int `json:"prompt_tokens"`
 	CompletionTokens int `json:"completion_tokens"`
 	TotalTokens      int `json:"total_tokens"`
 }
 
-// OpenAICompatResponse represents an OpenAI-compatible chat completion response.
+// OpenAICompatResponse代表了一个与OpenAI兼容的聊天完成响应.
 type OpenAICompatResponse struct {
 	ID      string               `json:"id"`
 	Model   string               `json:"model"`
@@ -180,7 +180,7 @@ type OpenAICompatResponse struct {
 	Created int64                `json:"created,omitempty"`
 }
 
-// OpenAICompatErrorResp represents an OpenAI-compatible error response.
+// OpenAICompatErrorResp 代表 OpenAI 兼容的错误响应.
 type OpenAICompatErrorResp struct {
 	Error struct {
 		Message string `json:"message"`
@@ -190,7 +190,7 @@ type OpenAICompatErrorResp struct {
 	} `json:"error"`
 }
 
-// ConvertMessagesToOpenAI converts llm.Message slice to OpenAI-compatible format.
+// 转换Messages To OpenAI 转换 llm 。 信件切片到 OpenAI 兼容格式 。
 func ConvertMessagesToOpenAI(msgs []llm.Message) []OpenAICompatMessage {
 	out := make([]OpenAICompatMessage, 0, len(msgs))
 	for _, m := range msgs {
@@ -218,7 +218,7 @@ func ConvertMessagesToOpenAI(msgs []llm.Message) []OpenAICompatMessage {
 	return out
 }
 
-// ConvertToolsToOpenAI converts llm.ToolSchema slice to OpenAI-compatible format.
+// 转换 Tools To OpenAI 转换 llm 。 ToolSchema切片为OpenAI相容格式.
 func ConvertToolsToOpenAI(tools []llm.ToolSchema) []OpenAICompatTool {
 	if len(tools) == 0 {
 		return nil
@@ -236,7 +236,7 @@ func ConvertToolsToOpenAI(tools []llm.ToolSchema) []OpenAICompatTool {
 	return out
 }
 
-// ToLLMChatResponse converts an OpenAI-compatible response to llm.ChatResponse.
+// ToLLMChatResponse将一个OpenAI相容的响应转换为llm. 聊天回应.
 func ToLLMChatResponse(oa OpenAICompatResponse, provider string) *llm.ChatResponse {
 	choices := make([]llm.ChatChoice, 0, len(oa.Choices))
 	for _, c := range oa.Choices {
@@ -277,7 +277,7 @@ func ToLLMChatResponse(oa OpenAICompatResponse, provider string) *llm.ChatRespon
 	return resp
 }
 
-// ChooseModel selects the model to use based on request and default
+// 根据请求和默认选择模式
 func ChooseModel(req *llm.ChatRequest, defaultModel, fallbackModel string) string {
 	if req != nil && req.Model != "" {
 		return req.Model
@@ -288,7 +288,7 @@ func ChooseModel(req *llm.ChatRequest, defaultModel, fallbackModel string) strin
 	return fallbackModel
 }
 
-// SafeCloseBody safely closes HTTP response body and logs errors
+// SafeCloseBody 安全关闭 HTTP 响应机体并记录出错
 func SafeCloseBody(body io.ReadCloser) {
 	if body != nil {
 		_ = body.Close()

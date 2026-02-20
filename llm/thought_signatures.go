@@ -1,6 +1,6 @@
-// Package llm provides Thought Signatures support for maintaining reasoning chain continuity.
-// Thought Signatures are encrypted reasoning signatures used by OpenAI/Gemini to preserve
-// reasoning context across multiple API calls.
+// package llm为维持推理链连续性提供思想签名支持.
+// 思想签名是OpenAI/Gemini用于保存的加密推理签名
+// 跨越多个API呼叫的推理上下文.
 package llm
 
 import (
@@ -12,7 +12,7 @@ import (
 	"time"
 )
 
-// ThoughtSignature represents an encrypted reasoning signature.
+// ThoughtSignature代表一个加密推理签名.
 type ThoughtSignature struct {
 	ID        string                 `json:"id"`
 	Signature string                 `json:"signature"`
@@ -22,7 +22,7 @@ type ThoughtSignature struct {
 	Metadata  map[string]interface{} `json:"metadata,omitempty"`
 }
 
-// ThoughtChain represents a chain of reasoning signatures.
+// ThoughtChain代表了一系列推理签名.
 type ThoughtChain struct {
 	ID         string             `json:"id"`
 	Signatures []ThoughtSignature `json:"signatures"`
@@ -30,14 +30,14 @@ type ThoughtChain struct {
 	UpdatedAt  time.Time          `json:"updated_at"`
 }
 
-// ThoughtSignatureManager manages thought signatures for reasoning continuity.
+// ThoughtSignatureManager 管理思想签名用于推理连续性.
 type ThoughtSignatureManager struct {
 	chains map[string]*ThoughtChain
 	mu     sync.RWMutex
 	ttl    time.Duration
 }
 
-// NewThoughtSignatureManager creates a new manager.
+// NewThoughtSignatureManager创建了新管理器.
 func NewThoughtSignatureManager(ttl time.Duration) *ThoughtSignatureManager {
 	if ttl == 0 {
 		ttl = 24 * time.Hour
@@ -48,7 +48,7 @@ func NewThoughtSignatureManager(ttl time.Duration) *ThoughtSignatureManager {
 	}
 }
 
-// CreateChain creates a new thought chain.
+// CreateChain创建了一个新的思维链.
 func (m *ThoughtSignatureManager) CreateChain(id string) *ThoughtChain {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -63,14 +63,14 @@ func (m *ThoughtSignatureManager) CreateChain(id string) *ThoughtChain {
 	return chain
 }
 
-// GetChain retrieves a thought chain.
+// 让钱找到一个思想链
 func (m *ThoughtSignatureManager) GetChain(id string) *ThoughtChain {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	return m.chains[id]
 }
 
-// AddSignature adds a signature to a chain.
+// 添加签名将签名添加到链中。
 func (m *ThoughtSignatureManager) AddSignature(chainID string, sig ThoughtSignature) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -89,7 +89,7 @@ func (m *ThoughtSignatureManager) AddSignature(chainID string, sig ThoughtSignat
 	return nil
 }
 
-// GetLatestSignatures returns the latest signatures for a chain.
+// GetLatestSignatures 返回链条的最新签名 。
 func (m *ThoughtSignatureManager) GetLatestSignatures(chainID string, count int) []ThoughtSignature {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
@@ -113,7 +113,7 @@ func (m *ThoughtSignatureManager) GetLatestSignatures(chainID string, count int)
 	return valid
 }
 
-// CleanExpired removes expired signatures.
+// CleanExpired 删除过期的签名 。
 func (m *ThoughtSignatureManager) CleanExpired() {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -130,13 +130,13 @@ func (m *ThoughtSignatureManager) CleanExpired() {
 	}
 }
 
-// ThoughtSignatureMiddleware wraps a provider to handle thought signatures.
+// ThoughtSignatureMiddleware 包装一个提供者来处理思想签名.
 type ThoughtSignatureMiddleware struct {
 	provider Provider
 	manager  *ThoughtSignatureManager
 }
 
-// NewThoughtSignatureMiddleware creates a new middleware.
+// NewThought SignatureMiddleware 创建了新的中间软件.
 func NewThoughtSignatureMiddleware(provider Provider, manager *ThoughtSignatureManager) *ThoughtSignatureMiddleware {
 	return &ThoughtSignatureMiddleware{
 		provider: provider,
@@ -144,15 +144,15 @@ func NewThoughtSignatureMiddleware(provider Provider, manager *ThoughtSignatureM
 	}
 }
 
-// Completion wraps the provider's Completion with thought signature handling.
+// 完成将提供者的完成用思维签名处理包裹.
 func (m *ThoughtSignatureMiddleware) Completion(ctx context.Context, req *ChatRequest) (*ChatResponse, error) {
-	// Extract chain ID from request metadata
+	// 从请求元数据中提取链式ID
 	chainID := ""
 	if req.Metadata != nil {
 		chainID = req.Metadata["thought_chain_id"]
 	}
 
-	// Add previous signatures to request
+	// 在请求中添加先前的签名
 	if chainID != "" {
 		sigs := m.manager.GetLatestSignatures(chainID, 5)
 		if len(sigs) > 0 {
@@ -164,13 +164,13 @@ func (m *ThoughtSignatureMiddleware) Completion(ctx context.Context, req *ChatRe
 		}
 	}
 
-	// Call provider
+	// 电话提供者
 	resp, err := m.provider.Completion(ctx, req)
 	if err != nil {
 		return nil, err
 	}
 
-	// Store new signatures from response
+	// 从响应中存储新签名
 	if chainID != "" && len(resp.ThoughtSignatures) > 0 {
 		for _, sigStr := range resp.ThoughtSignatures {
 			sig := ThoughtSignature{
@@ -186,9 +186,9 @@ func (m *ThoughtSignatureMiddleware) Completion(ctx context.Context, req *ChatRe
 	return resp, nil
 }
 
-// Stream wraps streaming with thought signature handling.
+// 串流与思维签名处理相接。
 func (m *ThoughtSignatureMiddleware) Stream(ctx context.Context, req *ChatRequest) (<-chan StreamChunk, error) {
-	// Add signatures to request
+	// 在请求中添加签名
 	chainID := ""
 	if req.Metadata != nil {
 		chainID = req.Metadata["thought_chain_id"]
@@ -208,22 +208,22 @@ func (m *ThoughtSignatureMiddleware) Stream(ctx context.Context, req *ChatReques
 	return m.provider.Stream(ctx, req)
 }
 
-// Name returns the provider name.
+// 名称返回提供者名称 。
 func (m *ThoughtSignatureMiddleware) Name() string {
 	return m.provider.Name()
 }
 
-// HealthCheck delegates to the wrapped provider.
+// 健康检查代表 到包装提供者。
 func (m *ThoughtSignatureMiddleware) HealthCheck(ctx context.Context) (*HealthStatus, error) {
 	return m.provider.HealthCheck(ctx)
 }
 
-// SupportsNativeFunctionCalling delegates to the wrapped provider.
+// 支持NativeFunction Call代表到包裹供应商.
 func (m *ThoughtSignatureMiddleware) SupportsNativeFunctionCalling() bool {
 	return m.provider.SupportsNativeFunctionCalling()
 }
 
-// ListModels delegates to the wrapped provider.
+// ListModels代表到包裹提供者.
 func (m *ThoughtSignatureMiddleware) ListModels(ctx context.Context) ([]Model, error) {
 	return m.provider.ListModels(ctx)
 }

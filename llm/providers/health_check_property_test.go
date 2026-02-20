@@ -17,10 +17,10 @@ import (
 	"go.uber.org/zap"
 )
 
-// Feature: multi-provider-support, Property 10: Health Check Request Execution
-// **Validates: Requirements 8.1, 8.5**
+// 特征:多提供者支助,财产10:健康检查请求执行
+// ** 变动情况:要求8.1、8.5**
 
-// TestProperty10_HealthCheckRequestExecution tests that health check sends request
+// 检测 Property10  健康检查请求检测
 func TestProperty10_HealthCheckRequestExecution(t *testing.T) {
 	logger := zap.NewNop()
 	providerNames := []string{"grok", "qwen", "deepseek", "glm", "minimax"}
@@ -91,8 +91,8 @@ func TestProperty10_HealthCheckRequestExecution(t *testing.T) {
 	}
 }
 
-// TestProperty11_HealthCheckLatencyMeasurement tests that latency is measured
-// **Validates: Requirements 8.2**
+// 测试 Property11  健康检查摄入度测量测试 测定延迟度
+// ** 参数:要求8.2**
 func TestProperty11_HealthCheckLatencyMeasurement(t *testing.T) {
 	logger := zap.NewNop()
 	providerNames := []string{"grok", "qwen", "deepseek", "glm", "minimax"}
@@ -165,8 +165,8 @@ func TestProperty11_HealthCheckLatencyMeasurement(t *testing.T) {
 	}
 }
 
-// TestHealthCheckSuccess tests HTTP 200 returns Healthy=true
-// **Validates: Requirement 8.3**
+// 测试健康检查成功测试 HTTP 200 返回健康=真实
+// ** 变动情况:要求8.3**
 func TestHealthCheckSuccess(t *testing.T) {
 	logger := zap.NewNop()
 	providerNames := []string{"grok", "qwen", "deepseek", "glm", "minimax"}
@@ -221,8 +221,8 @@ func TestHealthCheckSuccess(t *testing.T) {
 	}
 }
 
-// TestHealthCheckFailure tests HTTP errors return Healthy=false
-// **Validates: Requirement 8.4**
+// 测试健康检查失败测试 HTTP 错误返回健康=虚假
+// ** 参数:要求8.4**
 func TestHealthCheckFailure(t *testing.T) {
 	logger := zap.NewNop()
 	providerNames := []string{"grok", "qwen", "deepseek", "glm", "minimax"}
@@ -277,7 +277,7 @@ func TestHealthCheckFailure(t *testing.T) {
 	}
 }
 
-// TestHealthCheckIterationCount verifies we have at least 100 test iterations
+// 测试健康检查 国家验证我们至少有100次测试重复
 func TestHealthCheckIterationCount(t *testing.T) {
 	totalIterations := 30 + 20 + 20 + 35
 	assert.GreaterOrEqual(t, totalIterations, 100,

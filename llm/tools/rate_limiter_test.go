@@ -9,7 +9,7 @@ import (
 func TestTokenBucketLimiter_Basic(t *testing.T) {
 	limiter := newTokenBucketLimiter(10, time.Second)
 
-	// Should allow first 10 calls
+	// 应允许前十通电话
 	for i := 0; i < 10; i++ {
 		err := limiter.Allow()
 		if err != nil {
@@ -17,7 +17,7 @@ func TestTokenBucketLimiter_Basic(t *testing.T) {
 		}
 	}
 
-	// 11th call should be rejected
+	// 第11通电话应该拒绝
 	err := limiter.Allow()
 	if err == nil {
 		t.Error("expected rate limit error for 11th call")
@@ -25,24 +25,24 @@ func TestTokenBucketLimiter_Basic(t *testing.T) {
 }
 
 func TestTokenBucketLimiter_Refill(t *testing.T) {
-	// 10 calls per 100ms = 100 calls per second
+	// 每100米打出10通电话=每秒打出100通电话
 	limiter := newTokenBucketLimiter(10, 100*time.Millisecond)
 
-	// Consume all tokens
+	// 设定所有符牌
 	for i := 0; i < 10; i++ {
 		limiter.Allow()
 	}
 
-	// Should be rejected immediately
+	// 应该马上驳回
 	err := limiter.Allow()
 	if err == nil {
 		t.Error("expected rate limit error after consuming all tokens")
 	}
 
-	// Wait for tokens to refill (wait for ~2 tokens to refill)
+	// 等待重新填充符( 等待~ 2 个再填充符)
 	time.Sleep(25 * time.Millisecond)
 
-	// Should have at least 1 token now
+	// 现在至少应该有1个符号
 	err = limiter.Allow()
 	if err != nil {
 		t.Errorf("expected call to be allowed after refill, got error: %v", err)
@@ -52,21 +52,21 @@ func TestTokenBucketLimiter_Refill(t *testing.T) {
 func TestTokenBucketLimiter_Reset(t *testing.T) {
 	limiter := newTokenBucketLimiter(5, time.Second)
 
-	// Consume all tokens
+	// 设定所有符牌
 	for i := 0; i < 5; i++ {
 		limiter.Allow()
 	}
 
-	// Should be rejected
+	// 应该拒绝
 	err := limiter.Allow()
 	if err == nil {
 		t.Error("expected rate limit error")
 	}
 
-	// Reset
+	// 重设
 	limiter.Reset()
 
-	// Should be allowed again
+	// 应该再允许一次
 	err = limiter.Allow()
 	if err != nil {
 		t.Errorf("expected call to be allowed after reset, got error: %v", err)
@@ -76,16 +76,16 @@ func TestTokenBucketLimiter_Reset(t *testing.T) {
 func TestTokenBucketLimiter_Tokens(t *testing.T) {
 	limiter := newTokenBucketLimiter(10, time.Second)
 
-	// Initial tokens should be max
+	// 初始符号应为最大值
 	tokens := limiter.Tokens()
 	if tokens != 10 {
 		t.Errorf("expected 10 tokens, got %f", tokens)
 	}
 
-	// Consume one token
+	// 假设一个符号
 	limiter.Allow()
 
-	// Should have 9 tokens
+	// 应该有9个纪念品
 	tokens = limiter.Tokens()
 	if tokens < 8.9 || tokens > 9.1 {
 		t.Errorf("expected ~9 tokens, got %f", tokens)
@@ -99,7 +99,7 @@ func TestTokenBucketLimiter_Concurrent(t *testing.T) {
 	var successCount int
 	var mu sync.Mutex
 
-	// Launch 200 concurrent requests
+	// 发出200项同时提出的请求
 	for i := 0; i < 200; i++ {
 		wg.Add(1)
 		go func() {
@@ -115,17 +115,17 @@ func TestTokenBucketLimiter_Concurrent(t *testing.T) {
 
 	wg.Wait()
 
-	// Should have exactly 100 successful calls
+	// 应该有100个成功的电话
 	if successCount != 100 {
 		t.Errorf("expected 100 successful calls, got %d", successCount)
 	}
 }
 
 func TestRateLimiter_BackwardCompatibility(t *testing.T) {
-	// Test that the old rateLimiter interface still works
+	// 测试旧率Limiter 界面是否仍然有效
 	limiter := newRateLimiter(5, time.Second)
 
-	// Should allow first 5 calls
+	// 应允许先打五通电话
 	for i := 0; i < 5; i++ {
 		err := limiter.Allow()
 		if err != nil {
@@ -133,14 +133,14 @@ func TestRateLimiter_BackwardCompatibility(t *testing.T) {
 		}
 	}
 
-	// 6th call should be rejected
+	// 第六通电话应该拒绝
 	err := limiter.Allow()
 	if err == nil {
 		t.Error("expected rate limit error for 6th call")
 	}
 }
 
-// Benchmark tests to compare performance
+// 比较业绩的基准测试
 func BenchmarkTokenBucketLimiter_Allow(b *testing.B) {
 	limiter := newTokenBucketLimiter(1000000, time.Second)
 

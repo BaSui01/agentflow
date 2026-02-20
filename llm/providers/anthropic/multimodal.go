@@ -7,47 +7,47 @@ import (
 	"github.com/BaSui01/agentflow/llm/providers"
 )
 
-// GenerateImage is not supported by Claude.
+// 生成图像不被克洛德所支持.
 func (p *ClaudeProvider) GenerateImage(ctx context.Context, req *llm.ImageGenerationRequest) (*llm.ImageGenerationResponse, error) {
 	return nil, providers.NotSupportedError(p.Name(), "image generation")
 }
 
-// GenerateVideo is not supported by Claude.
+// 生成Video不受克洛德的支持.
 func (p *ClaudeProvider) GenerateVideo(ctx context.Context, req *llm.VideoGenerationRequest) (*llm.VideoGenerationResponse, error) {
 	return nil, providers.NotSupportedError(p.Name(), "video generation")
 }
 
-// GenerateAudio is not supported by Claude.
+// 生成Audio不被克洛德支持.
 func (p *ClaudeProvider) GenerateAudio(ctx context.Context, req *llm.AudioGenerationRequest) (*llm.AudioGenerationResponse, error) {
 	return nil, providers.NotSupportedError(p.Name(), "audio generation")
 }
 
-// TranscribeAudio is not supported by Claude.
+// TrancisAudio不被克洛德支持.
 func (p *ClaudeProvider) TranscribeAudio(ctx context.Context, req *llm.AudioTranscriptionRequest) (*llm.AudioTranscriptionResponse, error) {
 	return nil, providers.NotSupportedError(p.Name(), "audio transcription")
 }
 
-// CreateEmbedding is not supported by Claude.
+// CreateEmbedding不被克洛德支持.
 func (p *ClaudeProvider) CreateEmbedding(ctx context.Context, req *llm.EmbeddingRequest) (*llm.EmbeddingResponse, error) {
 	return nil, providers.NotSupportedError(p.Name(), "embeddings")
 }
 
-// CreateFineTuningJob is not supported by Claude.
+// CreateFineTuningJob不被克洛德支持.
 func (p *ClaudeProvider) CreateFineTuningJob(ctx context.Context, req *llm.FineTuningJobRequest) (*llm.FineTuningJob, error) {
 	return nil, providers.NotSupportedError(p.Name(), "fine-tuning")
 }
 
-// ListFineTuningJobs is not supported by Claude.
+// ListFineTuningJobs 不支持克劳德.
 func (p *ClaudeProvider) ListFineTuningJobs(ctx context.Context) ([]llm.FineTuningJob, error) {
 	return nil, providers.NotSupportedError(p.Name(), "fine-tuning")
 }
 
-// GetFineTuningJob is not supported by Claude.
+// Get FineTuningJob不受克洛德支持.
 func (p *ClaudeProvider) GetFineTuningJob(ctx context.Context, jobID string) (*llm.FineTuningJob, error) {
 	return nil, providers.NotSupportedError(p.Name(), "fine-tuning")
 }
 
-// CancelFineTuningJob is not supported by Claude.
+// 取消FineTuningJob不由克洛德支持.
 func (p *ClaudeProvider) CancelFineTuningJob(ctx context.Context, jobID string) error {
 	return providers.NotSupportedError(p.Name(), "fine-tuning")
 }
