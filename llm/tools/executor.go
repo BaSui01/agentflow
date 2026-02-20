@@ -11,10 +11,10 @@ import (
 	"go.uber.org/zap"
 )
 
-// ToolFunc定义了工具函数签名.
+// ToolFunc 定义工具函数签名.
 type ToolFunc func(ctx context.Context, args json.RawMessage) (json.RawMessage, error)
 
-// ToolMetadata描述了工具元数据.
+// ToolMetadata 描述工具元数据.
 type ToolMetadata struct {
 	Schema      llm.ToolSchema   // Tool JSON Schema
 	Permission  string           // Required permission (optional)
@@ -23,13 +23,13 @@ type ToolMetadata struct {
 	Description string           // Detailed description
 }
 
-// RatenLimitConfig定义了速率限制配置.
+// RateLimitConfig 定义速率限制配置.
 type RateLimitConfig struct {
 	MaxCalls int           // Maximum calls
 	Window   time.Duration // Time window
 }
 
-// ToolResult代表工具执行结果.
+// ToolResult 表示工具执行结果.
 type ToolResult struct {
 	ToolCallID string          `json:"tool_call_id"`
 	Name       string          `json:"name"`
@@ -38,7 +38,7 @@ type ToolResult struct {
 	Duration   time.Duration   `json:"duration"`
 }
 
-// ToolRegistry定义了工具注册界面.
+// ToolRegistry 定义工具注册接口.
 type ToolRegistry interface {
 	Register(name string, fn ToolFunc, metadata ToolMetadata) error
 	Unregister(name string) error
@@ -47,7 +47,7 @@ type ToolRegistry interface {
 	Has(name string) bool
 }
 
-// ToolExecutor定义了工具执行器接口.
+// ToolExecutor 定义工具执行器接口.
 type ToolExecutor interface {
 	Execute(ctx context.Context, calls []llm.ToolCall) []ToolResult
 	ExecuteOne(ctx context.Context, call llm.ToolCall) ToolResult
@@ -289,7 +289,7 @@ func (e *DefaultExecutor) ExecuteOne(ctx context.Context, call llm.ToolCall) Too
 
 // ====== 速率限制器 ======
 
-// 符号BucketLimiter 执行带有 O(1) 允许( ) 复杂性的符号桶速率限制器
+// tokenBucketLimiter 实现令牌桶速率限制器，Allow() 时间复杂度为 O(1)
 type tokenBucketLimiter struct {
 	mu         sync.Mutex
 	tokens     float64   // Current available tokens
@@ -298,9 +298,9 @@ type tokenBucketLimiter struct {
 	lastRefill time.Time // Last refill timestamp
 }
 
-// 新TokenBucketLimiter 创建了新的符号桶速率限制器
-// 最大呼叫: 时间窗口允许的最大呼叫
-// 窗口: 时间窗口持续时间
+// newTokenBucketLimiter 创建新的令牌桶速率限制器
+// maxCalls: 时间窗口内允许的最大调用次数
+// window: 时间窗口持续时间
 func newTokenBucketLimiter(maxCalls int, window time.Duration) *tokenBucketLimiter {
 	refillRate := float64(maxCalls) / window.Seconds()
 	return &tokenBucketLimiter{
@@ -311,42 +311,42 @@ func newTokenBucketLimiter(maxCalls int, window time.Duration) *tokenBucketLimit
 	}
 }
 
-// 允许检查请求( O(1) 时间复杂度)
+// Allow 检查请求是否被允许（O(1) 时间复杂度）
 func (tb *tokenBucketLimiter) Allow() error {
 	tb.mu.Lock()
 	defer tb.mu.Unlock()
 
 	now := time.Now()
 
-	// 根据已过期时间重新填入符号
+	// 根据已过去的时间补充令牌
 	elapsed := now.Sub(tb.lastRefill).Seconds()
 	tb.tokens += elapsed * tb.refillRate
 
-	// 顶多加盖符
+	// 令牌数上限封顶
 	if tb.tokens > tb.maxTokens {
 		tb.tokens = tb.maxTokens
 	}
 
 	tb.lastRefill = now
 
-	// 检查是否有可用的代号
+	// 检查是否有可用的令牌
 	if tb.tokens < 1 {
 		return fmt.Errorf("rate limit exceeded: no tokens available")
 	}
 
-	// 假设一个符号
+	// 消耗一个令牌
 	tb.tokens--
 	return nil
 }
 
-// Tokens 返回当前可用的令牌数( 用于监视)
+// Tokens 返回当前可用的令牌数（用于监控）
 func (tb *tokenBucketLimiter) Tokens() float64 {
 	tb.mu.Lock()
 	defer tb.mu.Unlock()
 	return tb.tokens
 }
 
-// 将限制器重置为全容量
+// Reset 将限制器重置为满容量
 func (tb *tokenBucketLimiter) Reset() {
 	tb.mu.Lock()
 	defer tb.mu.Unlock()
@@ -354,13 +354,13 @@ func (tb *tokenBucketLimiter) Reset() {
 	tb.lastRefill = time.Now()
 }
 
-// 速率Limiter 为后向相容性而保留,但内部使用符号BucketLimiter
-// 折旧: 对新代码直接使用符号BucketLimiter
+// rateLimiter 为向后兼容而保留，内部使用 tokenBucketLimiter
+// Deprecated: 新代码请直接使用 tokenBucketLimiter
 type rateLimiter struct {
 	internal *tokenBucketLimiter
 }
 
-// 新RateLimiter 创建了新的限速器( 内部使用符号桶)
+// newRateLimiter 创建新的速率限制器（内部使用令牌桶）
 func newRateLimiter(maxCalls int, window time.Duration) *rateLimiter {
 	return &rateLimiter{
 		internal: newTokenBucketLimiter(maxCalls, window),

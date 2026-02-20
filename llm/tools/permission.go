@@ -1,4 +1,4 @@
-// 软件包工具为企业AI代理框架提供工具许可控制.
+// Package tools 为企业 AI Agent 框架提供工具权限控制.
 package tools
 
 import (
@@ -573,7 +573,7 @@ func findSubstr(s, substr string) bool {
 	return false
 }
 
-// CreatyMiddleware 创建了一个在工具执行前检查权限的中间软件.
+// PermissionMiddleware 创建一个在工具执行前检查权限的中间件.
 func PermissionMiddleware(pm PermissionManager) func(ToolFunc) ToolFunc {
 	return func(next ToolFunc) ToolFunc {
 		return func(ctx context.Context, args json.RawMessage) (json.RawMessage, error) {

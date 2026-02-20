@@ -111,7 +111,7 @@ func (p *VeoProvider) Generate(ctx context.Context, req *GenerateRequest) (*Gene
 	}
 
 	payload, _ := json.Marshal(body)
-	// Veo 3.1使用双子座API端点:/models/{model}:generateVideos
+	// Veo 3.1 使用 Gemini API 端点: /models/{model}:generateVideos
 	url := fmt.Sprintf("https://generativelanguage.googleapis.com/v1beta/models/%s:generateVideos?key=%s",
 		model, p.cfg.APIKey)
 

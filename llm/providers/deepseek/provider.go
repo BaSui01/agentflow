@@ -17,7 +17,7 @@ import (
 	"go.uber.org/zap"
 )
 
-// DeepSeek Provider执行 DeepSeek LLM 提供程序.
+// DeepSeekProvider 实现 DeepSeek LLM 提供者.
 // DeepSeek使用OpenAI兼容的API格式.
 type DeepSeekProvider struct {
 	cfg           providers.DeepSeekConfig
@@ -26,7 +26,7 @@ type DeepSeekProvider struct {
 	rewriterChain *middleware.RewriterChain
 }
 
-// NewDepseek Provider 创建了新的 Quen 提供者实例 。
+// NewDeepSeekProvider 创建新的 DeepSeek 提供者实例.
 func NewDeepSeekProvider(cfg providers.DeepSeekConfig, logger *zap.Logger) *DeepSeekProvider {
 	timeout := cfg.Timeout
 	if timeout == 0 {

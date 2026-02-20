@@ -7,17 +7,17 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-// 特性:多提供者支持, 属性 22: 信件角色转换
-// ** 变动情况:要求12.1、12.2、12.3、12.4**
+// 特性: 多提供者支持, 属性 22: 消息角色转换
+// 需求: 12.1、12.2、12.3、12.4
 //
-// 这一财产测试对任何供应商和任何商家进行验证。 信件阵列,
-// 提供方正确映射每个 llm。 角色(系统、用户、助理、工具)
-// 改为提供者特定角色格式。
-// 通过对所有供应商进行全面测试,实现至少100次重复。
+// 此属性测试验证对于任何提供者和任何消息数组，
+// 提供者正确映射每个 llm.Role（system、user、assistant、tool）
+// 到提供者特定的角色格式.
+// 通过对所有提供者进行全面测试，实现至少 100 次迭代.
 
-// 测试 Property22  MessageRole 转换测试 在所有提供者中实现消息角色转换
+// TestProperty22_MessageRoleConversion 测试所有提供者的消息角色转换
 func TestProperty22_MessageRoleConversion(t *testing.T) {
-	// 定义所有角色测试案例
+	// 定义所有角色测试用例
 	roleTestCases := []struct {
 		name         string
 		role         llm.Role
@@ -53,7 +53,7 @@ func TestProperty22_MessageRoleConversion(t *testing.T) {
 	// 定义要测试的所有提供者
 	providerNames := []string{"grok", "qwen", "deepseek", "glm", "minimax"}
 
-	// 定义信件内容变化
+	// 定义消息内容变体
 	contentVariations := []struct {
 		name    string
 		content string
@@ -66,7 +66,7 @@ func TestProperty22_MessageRoleConversion(t *testing.T) {
 		{"multiline content", "Line 1\nLine 2\nLine 3"},
 	}
 
-	// 生成综合测试案例
+	// 生成综合测试用例
 	testCases := make([]struct {
 		name         string
 		provider     string
@@ -76,7 +76,7 @@ func TestProperty22_MessageRoleConversion(t *testing.T) {
 		requirement  string
 	}, 0)
 
-	// 合并所有变异,以达到100多个测试案例
+	// 合并所有变体，以达到 100+ 个测试用例
 	for _, provider := range providerNames {
 		for _, roleTC := range roleTestCases {
 			for _, contentVar := range contentVariations {
@@ -99,35 +99,35 @@ func TestProperty22_MessageRoleConversion(t *testing.T) {
 		}
 	}
 
-	// 检查我们至少有100个测试病例
+	// 检查至少有 100 个测试用例
 	assert.GreaterOrEqual(t, len(testCases), 100,
 		"Property test should have minimum 100 iterations, got %d", len(testCases))
 
-	// 运行所有测试大小写
+	// 运行所有测试用例
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			// 用指定的角色创建信件
+			// 用指定的角色创建消息
 			msg := llm.Message{
 				Role:    tc.role,
 				Content: tc.content,
 			}
 
-			// 工具角色需要工具CallID
+			// 工具角色需要 ToolCallID
 			if tc.role == llm.RoleTool {
 				msg.ToolCallID = "call_123"
 			}
 
-			// 基于提供者类型的测试转换
+			// 基于提供者类型测试转换
 			switch tc.provider {
 			case "grok", "qwen", "deepseek", "glm":
-				// OpenAI 兼容供应商
+				// OpenAI 兼容提供者
 				converted := mockConvertMessageOpenAI(msg)
 				assert.Equal(t, tc.expectedRole, converted.Role,
 					"Role should be converted correctly for %s (Requirement %s)", tc.provider, tc.requirement)
 				assert.Equal(t, tc.content, converted.Content,
 					"Content should be preserved for %s", tc.provider)
 			case "minimax":
-				// 迷你Max 供应商
+				// MiniMax 提供者
 				converted := mockConvertMessageMiniMax(msg)
 				assert.Equal(t, tc.expectedRole, converted.Role,
 					"Role should be converted correctly for %s (Requirement %s)", tc.provider, tc.requirement)
@@ -137,13 +137,13 @@ func TestProperty22_MessageRoleConversion(t *testing.T) {
 	}
 }
 
-// 测试 Property22  多功能多功能多功能多功能多功能多功能多功能多功能多功能多功能多功能测试
+// TestProperty22_MultipleMessagesWithDifferentRoles 测试包含不同角色的多条消息
 func TestProperty22_MultipleMessagesWithDifferentRoles(t *testing.T) {
 	providerNames := []string{"grok", "qwen", "deepseek", "glm", "minimax"}
 
 	for _, providerName := range providerNames {
 		t.Run(providerName, func(t *testing.T) {
-			// 创建包含全部四个角色的信息
+			// 创建包含全部四个角色的消息
 			messages := []llm.Message{
 				{Role: llm.RoleSystem, Content: "You are a helpful assistant"},
 				{Role: llm.RoleUser, Content: "Hello"},
@@ -173,7 +173,7 @@ func TestProperty22_MultipleMessagesWithDifferentRoles(t *testing.T) {
 	}
 }
 
-// 测试 Property22  Role ConversionPreservements 校正内容在角色转换过程中保存
+// TestProperty22_RoleConversionPreservesContent 验证角色转换过程中内容被保留
 func TestProperty22_RoleConversionPreservesContent(t *testing.T) {
 	providerNames := []string{"grok", "qwen", "deepseek", "glm", "minimax"}
 	testContent := "Test content with special chars: 你好 🌍 @#$%"
@@ -201,7 +201,7 @@ func TestProperty22_RoleConversionPreservesContent(t *testing.T) {
 	}
 }
 
-// TestProperty22 TooleRole With ToolCallID 验证工具角色包括工具 call id
+// TestProperty22_ToolRoleWithToolCallID 验证工具角色包含 ToolCallID
 func TestProperty22_ToolRoleWithToolCallID(t *testing.T) {
 	providerNames := []string{"grok", "qwen", "deepseek", "glm"}
 
@@ -223,7 +223,7 @@ func TestProperty22_ToolRoleWithToolCallID(t *testing.T) {
 	}
 }
 
-// 测试property22 系统RoleVariations测试系统角色,内容类型各异
+// TestProperty22_SystemRoleVariations 测试系统角色的各种内容类型
 func TestProperty22_SystemRoleVariations(t *testing.T) {
 	testCases := []struct {
 		name    string
@@ -266,7 +266,7 @@ func TestProperty22_SystemRoleVariations(t *testing.T) {
 	}
 }
 
-// 测试 Property22  UserRoleVariations 测试用户角色,内容类型各异
+// TestProperty22_UserRoleVariations 测试用户角色的各种内容类型
 func TestProperty22_UserRoleVariations(t *testing.T) {
 	testCases := []struct {
 		name    string
@@ -309,7 +309,7 @@ func TestProperty22_UserRoleVariations(t *testing.T) {
 	}
 }
 
-// Property22  ApplicRoleVariations 测试助理角色, 包含各种内容类型
+// TestProperty22_AssistantRoleVariations 测试助理角色的各种内容类型
 func TestProperty22_AssistantRoleVariations(t *testing.T) {
 	testCases := []struct {
 		name    string
@@ -352,7 +352,7 @@ func TestProperty22_AssistantRoleVariations(t *testing.T) {
 	}
 }
 
-// 测试 Property22  ToolRoleVariations 测试工具角色,包含各种内容类型
+// TestProperty22_ToolRoleVariations 测试工具角色的各种内容类型
 func TestProperty22_ToolRoleVariations(t *testing.T) {
 	testCases := []struct {
 		name       string
@@ -390,7 +390,7 @@ func TestProperty22_ToolRoleVariations(t *testing.T) {
 	}
 }
 
-// 跟踪光谱的模拟转换函数
+// 模拟转换函数
 
 type mockOpenAIMessage struct {
 	Role       string `json:"role"`
@@ -405,7 +405,7 @@ type mockMiniMaxMessage struct {
 	Name    string `json:"name,omitempty"`
 }
 
-// 模拟ConvertMessage OpenAI 转换一个单 llm. 信件到 OpenAI 格式
+// mockConvertMessageOpenAI 转换单个 llm.Message 到 OpenAI 格式
 func mockConvertMessageOpenAI(msg llm.Message) mockOpenAIMessage {
 	converted := mockOpenAIMessage{
 		Role:       string(msg.Role),
@@ -416,7 +416,7 @@ func mockConvertMessageOpenAI(msg llm.Message) mockOpenAIMessage {
 	return converted
 }
 
-// motConvertMessages OpenAI 转换多位元. 信件到 OpenAI 格式
+// mockConvertMessagesOpenAI 转换多个 llm.Message 到 OpenAI 格式
 func mockConvertMessagesOpenAI(msgs []llm.Message) []mockOpenAIMessage {
 	out := make([]mockOpenAIMessage, 0, len(msgs))
 	for _, m := range msgs {
@@ -425,7 +425,7 @@ func mockConvertMessagesOpenAI(msgs []llm.Message) []mockOpenAIMessage {
 	return out
 }
 
-// motConvertMessageMiniMax 转换出一个单一的 llm. 信件到 MiniMax 格式
+// mockConvertMessageMiniMax 转换单个 llm.Message 到 MiniMax 格式
 func mockConvertMessageMiniMax(msg llm.Message) mockMiniMaxMessage {
 	converted := mockMiniMaxMessage{
 		Role:    string(msg.Role),
@@ -435,7 +435,7 @@ func mockConvertMessageMiniMax(msg llm.Message) mockMiniMaxMessage {
 	return converted
 }
 
-// 模拟ConvertMessagesMiniMax 转换多位元. 信件到 MiniMax 格式
+// mockConvertMessagesMiniMax 转换多个 llm.Message 到 MiniMax 格式
 func mockConvertMessagesMiniMax(msgs []llm.Message) []mockMiniMaxMessage {
 	out := make([]mockMiniMaxMessage, 0, len(msgs))
 	for _, m := range msgs {

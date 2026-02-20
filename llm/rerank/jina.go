@@ -17,7 +17,7 @@ type JinaProvider struct {
 	client *http.Client
 }
 
-// 新JinaProvider创建了新的Jina reranker供应商.
+// NewJinaProvider 创建新的 Jina reranker 提供者.
 func NewJinaProvider(cfg JinaConfig) *JinaProvider {
 	if cfg.BaseURL == "" {
 		cfg.BaseURL = "https://api.jina.ai"

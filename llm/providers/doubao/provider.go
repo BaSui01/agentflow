@@ -26,7 +26,7 @@ type DoubaoProvider struct {
 	rewriterChain *middleware.RewriterChain
 }
 
-// NewDoubao Provider创建了一个新的Doubao供应商实例.
+// NewDoubaoProvider 创建新的 Doubao 提供者实例.
 func NewDoubaoProvider(cfg providers.DoubaoConfig, logger *zap.Logger) *DoubaoProvider {
 	timeout := cfg.Timeout
 	if timeout == 0 {

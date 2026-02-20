@@ -7,22 +7,22 @@ import (
 	"github.com/BaSui01/agentflow/llm/providers"
 )
 
-// 出家偶像不为杜宝所支持.
+// GenerateImage Doubao 不支持图像生成.
 func (p *DoubaoProvider) GenerateImage(ctx context.Context, req *llm.ImageGenerationRequest) (*llm.ImageGenerationResponse, error) {
 	return nil, providers.NotSupportedError(p.Name(), "image generation")
 }
 
-// 生成Video不被多宝所支持.
+// GenerateVideo Doubao 不支持视频生成.
 func (p *DoubaoProvider) GenerateVideo(ctx context.Context, req *llm.VideoGenerationRequest) (*llm.VideoGenerationResponse, error) {
 	return nil, providers.NotSupportedError(p.Name(), "video generation")
 }
 
-// 生成Audio使用多巴奥生成音频.
+// GenerateAudio 使用 Doubao 生成音频.
 func (p *DoubaoProvider) GenerateAudio(ctx context.Context, req *llm.AudioGenerationRequest) (*llm.AudioGenerationResponse, error) {
 	return providers.GenerateAudioOpenAICompat(ctx, p.client, p.cfg.BaseURL, p.cfg.APIKey, p.Name(), "/api/v3/audio/speech", req, p.buildHeaders)
 }
 
-// TrancisAudio 不支持杜宝.
+// TranscribeAudio Doubao 不支持音频转录.
 func (p *DoubaoProvider) TranscribeAudio(ctx context.Context, req *llm.AudioTranscriptionRequest) (*llm.AudioTranscriptionResponse, error) {
 	return nil, providers.NotSupportedError(p.Name(), "audio transcription")
 }
@@ -32,22 +32,22 @@ func (p *DoubaoProvider) CreateEmbedding(ctx context.Context, req *llm.Embedding
 	return providers.CreateEmbeddingOpenAICompat(ctx, p.client, p.cfg.BaseURL, p.cfg.APIKey, p.Name(), "/api/v3/embeddings", req, p.buildHeaders)
 }
 
-// CreateFineTuningJob不受多宝支持.
+// CreateFineTuningJob Doubao 不支持微调.
 func (p *DoubaoProvider) CreateFineTuningJob(ctx context.Context, req *llm.FineTuningJobRequest) (*llm.FineTuningJob, error) {
 	return nil, providers.NotSupportedError(p.Name(), "fine-tuning")
 }
 
-// ListFineTuningJobs 不支持杜宝.
+// ListFineTuningJobs Doubao 不支持微调.
 func (p *DoubaoProvider) ListFineTuningJobs(ctx context.Context) ([]llm.FineTuningJob, error) {
 	return nil, providers.NotSupportedError(p.Name(), "fine-tuning")
 }
 
-// Get FineTuningJob 不支持杜宝.
+// GetFineTuningJob Doubao 不支持微调.
 func (p *DoubaoProvider) GetFineTuningJob(ctx context.Context, jobID string) (*llm.FineTuningJob, error) {
 	return nil, providers.NotSupportedError(p.Name(), "fine-tuning")
 }
 
-// 取消FineTuningJob不支持杜宝.
+// CancelFineTuningJob Doubao 不支持微调.
 func (p *DoubaoProvider) CancelFineTuningJob(ctx context.Context, jobID string) error {
 	return providers.NotSupportedError(p.Name(), "fine-tuning")
 }

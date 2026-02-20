@@ -17,7 +17,7 @@ type VoyageProvider struct {
 	client *http.Client
 }
 
-// NewVoyage Provider创建了一个新的Voyage reranker供应商.
+// NewVoyageProvider 创建新的 Voyage reranker 提供者.
 func NewVoyageProvider(cfg VoyageConfig) *VoyageProvider {
 	if cfg.BaseURL == "" {
 		cfg.BaseURL = "https://api.voyageai.com"

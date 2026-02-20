@@ -17,7 +17,7 @@ import (
 //
 // 此属性测试验证 Rewrite Chain 执行失败时, 提供者
 // 返回 llm。 代码=ErrInvalid Request and HTTP Status=400出错.
-// 通过综合测试案例实现至少100次重复。
+// 通过综合测试用例实现至少100次重复。
 func TestProperty9_RewriterChainErrorHandling(t *testing.T) {
 	testCases := []struct {
 		name               string
@@ -121,7 +121,7 @@ func TestProperty9_RewriterChainErrorHandling(t *testing.T) {
 		},
 	}
 
-	// 扩大测试案例,使其达到100+重复
+	// 扩大测试用例,使其达到100+重复
 	// 用不同的错误消息进行测试
 	errorMessages := []string{
 		"rewriter failed",
@@ -148,7 +148,7 @@ func TestProperty9_RewriterChainErrorHandling(t *testing.T) {
 		description        string
 	}, 0, len(testCases)+len(errorMessages)*len(providers))
 
-	// 添加原始测试案例
+	// 添加原始测试用例
 	expandedTestCases = append(expandedTestCases, testCases...)
 
 	// 添加错误消息和提供者的组合
@@ -266,7 +266,7 @@ func TestProperty9_RewriterChainErrorHandling(t *testing.T) {
 		})
 	}
 
-	// 检查我们至少有100个测试病例
+	// 检查我们至少有100个测试用例
 	assert.GreaterOrEqual(t, len(expandedTestCases), 100,
 		"Property test should have minimum 100 iterations")
 }

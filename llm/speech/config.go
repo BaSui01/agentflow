@@ -2,7 +2,7 @@ package speech
 
 import "time"
 
-// OpenAITTSConfig配置了OpenAI TTS供应商.
+// OpenAITTSConfig 配置 OpenAI TTS 提供者.
 type OpenAITTSConfig struct {
 	APIKey  string        `json:"api_key" yaml:"api_key"`
 	BaseURL string        `json:"base_url" yaml:"base_url"`
@@ -11,7 +11,7 @@ type OpenAITTSConfig struct {
 	Timeout time.Duration `json:"timeout,omitempty" yaml:"timeout,omitempty"`
 }
 
-// OpenAISTTConfig配置了OpenAI Whisper STT供应商.
+// OpenAISTTConfig 配置 OpenAI Whisper STT 提供者.
 type OpenAISTTConfig struct {
 	APIKey  string        `json:"api_key" yaml:"api_key"`
 	BaseURL string        `json:"base_url" yaml:"base_url"`
@@ -19,7 +19,7 @@ type OpenAISTTConfig struct {
 	Timeout time.Duration `json:"timeout,omitempty" yaml:"timeout,omitempty"`
 }
 
-// 11LabsConfig配置了11Labs TTS供应商.
+// ElevenLabsConfig 配置 ElevenLabs TTS 提供者.
 type ElevenLabsConfig struct {
 	APIKey  string        `json:"api_key" yaml:"api_key"`
 	BaseURL string        `json:"base_url" yaml:"base_url"`
@@ -28,7 +28,7 @@ type ElevenLabsConfig struct {
 	Timeout time.Duration `json:"timeout,omitempty" yaml:"timeout,omitempty"`
 }
 
-// DeepgramConfig配置了 Deepgram STT 供应商.
+// DeepgramConfig 配置 Deepgram STT 提供者.
 type DeepgramConfig struct {
 	APIKey  string        `json:"api_key" yaml:"api_key"`
 	BaseURL string        `json:"base_url" yaml:"base_url"`

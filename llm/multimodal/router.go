@@ -31,7 +31,7 @@ const (
 	CapabilityModeration Capability = "moderation"
 )
 
-// 路由器向所有多式联运供应商提供统一准入。
+// Router 向所有多模态提供者提供统一访问。
 type Router struct {
 	mu sync.RWMutex
 
@@ -75,7 +75,7 @@ func NewRouter() *Router {
 // 登记方法
 // ============================================================
 
-// 注册 Embedding 注册一个嵌入式提供者 。
+// RegisterEmbedding 注册一个嵌入提供者.
 func (r *Router) RegisterEmbedding(name string, provider embedding.Provider, isDefault bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -95,7 +95,7 @@ func (r *Router) RegisterRerank(name string, provider rerank.Provider, isDefault
 	}
 }
 
-// 注册TTS注册一个TTS供应商.
+// RegisterTTS 注册一个 TTS 提供者.
 func (r *Router) RegisterTTS(name string, provider speech.TTSProvider, isDefault bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -145,7 +145,7 @@ func (r *Router) RegisterMusic(name string, provider music.MusicProvider, isDefa
 	}
 }
 
-// 注册三维注册三维供应商.
+// RegisterThreeD 注册一个 3D 提供者.
 func (r *Router) RegisterThreeD(name string, provider threed.ThreeDProvider, isDefault bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()

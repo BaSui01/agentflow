@@ -234,8 +234,8 @@ func TestErrorMapping_QuotaCreditDetection(t *testing.T) {
 	}
 }
 
-// 测试错误映射  提供方Name 包含提供者名称的测试
-// 在所有错误反应中(要求9.8)
+// TestErrorMapping_ProviderNameIncluded 测试错误映射中包含提供者名称
+// 在所有错误响应中（要求 9.8）
 func TestErrorMapping_ProviderNameIncluded(t *testing.T) {
 	providers := []string{"openai", "grok", "qwen", "deepseek", "glm", "minimax"}
 	statuses := []int{401, 403, 429, 400, 503, 502, 504, 529, 500}
@@ -250,8 +250,8 @@ func TestErrorMapping_ProviderNameIncluded(t *testing.T) {
 	}
 }
 
-// 模拟地图是符合光谱要求的参考执行
-// 用于测试,以确保所有供应商遵循相同的模式
+// mockMapError 是符合规范要求的参考实现
+// 用于测试，以确保所有提供者遵循相同的模式
 func mockMapError(status int, msg string, provider string) *llm.Error {
 	switch status {
 	case http.StatusUnauthorized:
@@ -283,7 +283,7 @@ func mockMapError(status int, msg string, provider string) *llm.Error {
 	}
 }
 
-// 包含 Substring 检查, 如果 s 包含 substr (简单执行测试)
+// containsSubstring 检查 s 是否包含 substr（简单的测试辅助函数）
 func containsSubstring(s, substr string) bool {
 	if len(substr) > len(s) {
 		return false

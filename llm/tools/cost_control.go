@@ -1,4 +1,4 @@
-// 包工具为企业AI代理框架中的工具执行提供成本控制.
+// Package tools 为企业 AI Agent 框架中的工具执行提供成本控制.
 package tools
 
 import (
@@ -11,7 +11,7 @@ import (
 	"go.uber.org/zap"
 )
 
-// CostAlert Level代表着成本警报的严重性.
+// CostAlertLevel 表示成本告警的严重级别.
 type CostAlertLevel string
 
 const (
@@ -20,7 +20,7 @@ const (
 	CostAlertLevelCritical CostAlertLevel = "critical"
 )
 
-// 成本单位代表成本计量单位.
+// CostUnit 表示成本计量单位.
 type CostUnit string
 
 const (
@@ -29,7 +29,7 @@ const (
 	CostUnitTokens  CostUnit = "tokens"
 )
 
-// ToolCost定义了工具的成本配置.
+// ToolCost 定义工具的成本配置.
 type ToolCost struct {
 	ToolName    string   `json:"tool_name"`
 	BaseCost    float64  `json:"base_cost"`              // Base cost per call
@@ -38,7 +38,7 @@ type ToolCost struct {
 	Description string   `json:"description,omitempty"`
 }
 
-// 预算界定了预算配置。
+// Budget 定义预算配置。
 type Budget struct {
 	ID          string         `json:"id"`
 	Name        string         `json:"name"`
@@ -54,7 +54,7 @@ type Budget struct {
 	UpdatedAt   time.Time      `json:"updated_at"`
 }
 
-// 预算范围界定了预算的范围。
+// BudgetScope 定义预算的作用域。
 type BudgetScope string
 
 const (
@@ -65,7 +65,7 @@ const (
 	BudgetScopeTool    BudgetScope = "tool"
 )
 
-// 预算执行情况界定了预算的期限。
+// BudgetPeriod 定义预算的周期。
 type BudgetPeriod string
 
 const (
@@ -76,7 +76,7 @@ const (
 	BudgetPeriodTotal   BudgetPeriod = "total" // No reset
 )
 
-// 成本记录是单一成本记录。
+// CostRecord 表示单条成本记录。
 type CostRecord struct {
 	ID        string    `json:"id"`
 	Timestamp time.Time `json:"timestamp"`
@@ -89,7 +89,7 @@ type CostRecord struct {
 	Metadata  map[string]string `json:"metadata,omitempty"`
 }
 
-// CostAlert代表成本警报.
+// CostAlert 表示成本告警.
 type CostAlert struct {
 	ID        string         `json:"id"`
 	Timestamp time.Time      `json:"timestamp"`
@@ -101,7 +101,7 @@ type CostAlert struct {
 	Percentage float64       `json:"percentage"`
 }
 
-// CostCheckResult包含成本检查的结果.
+// CostCheckResult 包含成本检查的结果.
 type CostCheckResult struct {
 	Allowed     bool           `json:"allowed"`
 	Cost        float64        `json:"cost"`
@@ -112,7 +112,7 @@ type CostCheckResult struct {
 	Reason      string         `json:"reason,omitempty"`
 }
 
-// 成本优化是一个成本优化建议。
+// CostOptimization 表示成本优化建议。
 type CostOptimization struct {
 	Type        string  `json:"type"`
 	Description string  `json:"description"`
@@ -120,46 +120,46 @@ type CostOptimization struct {
 	Priority    int     `json:"priority"`
 }
 
-// 成本控制员管理成本控制。
+// CostController 管理成本控制。
 type CostController interface {
-	// 计算成本计算工具调用的成本 。
+	// CalculateCost 计算工具调用的成本。
 	CalculateCost(toolName string, args json.RawMessage) (float64, error)
 
-	// 检查预算是否在预算范围内 。
+	// CheckBudget 检查是否在预算范围内。
 	CheckBudget(ctx context.Context, agentID, userID, sessionID, toolName string, cost float64) (*CostCheckResult, error)
 
-	// 记录成本记录成本。
+	// RecordCost 记录成本。
 	RecordCost(record *CostRecord) error
 
-	// SetToolCost 设置工具的成本配置 。
+	// SetToolCost 设置工具的成本配置。
 	SetToolCost(cost *ToolCost) error
 
-	// GetTooLCost 获得工具的成本配置.
+	// GetToolCost 获取工具的成本配置.
 	GetToolCost(toolName string) (*ToolCost, bool)
 
-	// 增加预算。
+	// AddBudget 添加预算。
 	AddBudget(budget *Budget) error
 
-	// 删除预算会删除预算 。
+	// RemoveBudget 删除预算。
 	RemoveBudget(budgetID string) error
 
-	// GetBudget通过身份证获得预算.
+	// GetBudget 根据 ID 获取预算.
 	GetBudget(budgetID string) (*Budget, bool)
 
-	// 预算列表列出所有预算.
+	// ListBudgets 列出所有预算.
 	ListBudgets() []*Budget
 
-	// GetUsage 获得当前用于一个瞄准镜的用法 。
+	// GetUsage 获取指定作用域的当前用量。
 	GetUsage(scope BudgetScope, scopeID string, period BudgetPeriod) float64
 
-	// Get Optimizations获得成本优化建议.
+	// GetOptimizations 获取成本优化建议.
 	GetOptimizations(agentID, userID string) []*CostOptimization
 
-	// GetCostReport 生成成本报告 。
+	// GetCostReport 生成成本报告。
 	GetCostReport(filter *CostReportFilter) (*CostReport, error)
 }
 
-// CostReportFilter为成本报告定义了过滤器.
+// CostReportFilter 定义成本报告的过滤器.
 type CostReportFilter struct {
 	AgentID   string     `json:"agent_id,omitempty"`
 	UserID    string     `json:"user_id,omitempty"`
@@ -169,7 +169,7 @@ type CostReportFilter struct {
 	GroupBy   string     `json:"group_by,omitempty"` // agent, user, tool, day, hour
 }
 
-// 成本报告是一种成本报告。
+// CostReport 表示成本报告。
 type CostReport struct {
 	TotalCost    float64                `json:"total_cost"`
 	TotalCalls   int64                  `json:"total_calls"`
@@ -182,7 +182,7 @@ type CostReport struct {
 	GeneratedAt  time.Time              `json:"generated_at"`
 }
 
-// 工具成本汇总总结 工具的成本。
+// ToolCostSummary 汇总工具的成本。
 type ToolCostSummary struct {
 	ToolName   string  `json:"tool_name"`
 	TotalCost  float64 `json:"total_cost"`
@@ -190,7 +190,7 @@ type ToolCostSummary struct {
 	AvgCost    float64 `json:"avg_cost"`
 }
 
-// 默认成本控制器是成本控制器的默认执行 。
+// DefaultCostController 是 CostController 的默认实现。
 type DefaultCostController struct {
 	toolCosts       map[string]*ToolCost
 	budgets         map[string]*Budget
@@ -203,7 +203,7 @@ type DefaultCostController struct {
 	mu              sync.RWMutex
 }
 
-// CostAlertHandler处理成本警报.
+// CostAlertHandler 处理成本告警.
 type CostAlertHandler interface {
 	HandleAlert(ctx context.Context, alert *CostAlert) error
 }
@@ -213,7 +213,7 @@ type TokenCounter interface {
 	CountTokens(text string) (int, error)
 }
 
-// 新建成本控制器 。
+// NewCostController 创建新的成本控制器。
 func NewCostController(logger *zap.Logger) *DefaultCostController {
 	if logger == nil {
 		logger = zap.NewNop()
@@ -228,14 +228,14 @@ func NewCostController(logger *zap.Logger) *DefaultCostController {
 	}
 }
 
-// SetAlertHandler)设置了警报处理器.
+// SetAlertHandler 设置告警处理器.
 func (cc *DefaultCostController) SetAlertHandler(handler CostAlertHandler) {
 	cc.mu.Lock()
 	defer cc.mu.Unlock()
 	cc.alertHandler = handler
 }
 
-// 计算成本计算工具调用的成本 。
+// CalculateCost 计算工具调用的成本。
 func (cc *DefaultCostController) CalculateCost(toolName string, args json.RawMessage) (float64, error) {
 	cc.mu.RLock()
 	defer cc.mu.RUnlock()
@@ -300,7 +300,7 @@ func (cc *DefaultCostController) resetUsageIfNeeded(budget *Budget) {
 	}
 }
 
-// 检查预算是否在预算范围内 。
+// CheckBudget 检查是否在预算范围内。
 func (cc *DefaultCostController) CheckBudget(ctx context.Context, agentID, userID, sessionID, toolName string, cost float64) (*CostCheckResult, error) {
 	cc.mu.Lock()
 	defer cc.mu.Unlock()
@@ -377,7 +377,7 @@ func (cc *DefaultCostController) CheckBudget(ctx context.Context, agentID, userI
 	return result, nil
 }
 
-// 可应用的预算为适用于上下文的预算。
+// findApplicableBudgets 查找适用于上下文的预算。
 func (cc *DefaultCostController) findApplicableBudgets(agentID, userID, sessionID, toolName string) []*Budget {
 	var budgets []*Budget
 
@@ -407,13 +407,13 @@ func (cc *DefaultCostController) findApplicableBudgets(agentID, userID, sessionI
 	return budgets
 }
 
-// 构建 UsageKey 为使用跟踪构建了独特的密钥.
+// buildUsageKey 为用量跟踪构建唯一的 key.
 func (cc *DefaultCostController) buildUsageKey(budget *Budget) string {
 	periodKey := cc.getPeriodKey(budget.Period)
 	return fmt.Sprintf("%s:%s:%s:%s", budget.Scope, budget.ScopeID, budget.ID, periodKey)
 }
 
-// 获取 PeriodKey 获得当前时间的周期密钥 。
+// getPeriodKey 获取当前时间对应的周期 key。
 func (cc *DefaultCostController) getPeriodKey(period BudgetPeriod) string {
 	now := time.Now()
 	switch period {
@@ -432,7 +432,7 @@ func (cc *DefaultCostController) getPeriodKey(period BudgetPeriod) string {
 	return "unknown"
 }
 
-// getAlert Level根据阈值确定警戒级别.
+// getAlertLevel 根据阈值确定告警级别.
 func (cc *DefaultCostController) getAlertLevel(threshold float64) CostAlertLevel {
 	if threshold >= 100 {
 		return CostAlertLevelCritical
@@ -442,7 +442,7 @@ func (cc *DefaultCostController) getAlertLevel(threshold float64) CostAlertLevel
 	return CostAlertLevelInfo
 }
 
-// 记录成本记录成本。
+// RecordCost 记录成本。
 func (cc *DefaultCostController) RecordCost(record *CostRecord) error {
 	cc.mu.Lock()
 	defer cc.mu.Unlock()
@@ -456,7 +456,7 @@ func (cc *DefaultCostController) RecordCost(record *CostRecord) error {
 
 	cc.records = append(cc.records, record)
 
-	// 所有适用预算的最新使用情况
+	// 更新所有适用预算的用量
 	applicableBudgets := cc.findApplicableBudgets(record.AgentID, record.UserID, record.SessionID, record.ToolName)
 	for _, budget := range applicableBudgets {
 		key := cc.buildUsageKey(budget)
@@ -472,7 +472,7 @@ func (cc *DefaultCostController) RecordCost(record *CostRecord) error {
 	return nil
 }
 
-// SetToolCost 设置工具的成本配置 。
+// SetToolCost 设置工具的成本配置。
 func (cc *DefaultCostController) SetToolCost(cost *ToolCost) error {
 	if cost.ToolName == "" {
 		return fmt.Errorf("tool name is required")
@@ -491,7 +491,7 @@ func (cc *DefaultCostController) SetToolCost(cost *ToolCost) error {
 	return nil
 }
 
-// GetTooLCost 获得工具的成本配置.
+// GetToolCost 获取工具的成本配置.
 func (cc *DefaultCostController) GetToolCost(toolName string) (*ToolCost, bool) {
 	cc.mu.RLock()
 	defer cc.mu.RUnlock()
@@ -499,7 +499,7 @@ func (cc *DefaultCostController) GetToolCost(toolName string) (*ToolCost, bool) 
 	return cost, ok
 }
 
-// 增加预算。
+// AddBudget 添加预算。
 func (cc *DefaultCostController) AddBudget(budget *Budget) error {
 	if budget.ID == "" {
 		return fmt.Errorf("budget ID is required")
@@ -521,7 +521,7 @@ func (cc *DefaultCostController) AddBudget(budget *Budget) error {
 	return nil
 }
 
-// 删除预算会删除预算 。
+// RemoveBudget 删除预算。
 func (cc *DefaultCostController) RemoveBudget(budgetID string) error {
 	cc.mu.Lock()
 	defer cc.mu.Unlock()
@@ -535,7 +535,7 @@ func (cc *DefaultCostController) RemoveBudget(budgetID string) error {
 	return nil
 }
 
-// GetBudget通过身份证获得预算.
+// GetBudget 根据 ID 获取预算.
 func (cc *DefaultCostController) GetBudget(budgetID string) (*Budget, bool) {
 	cc.mu.RLock()
 	defer cc.mu.RUnlock()
@@ -543,7 +543,7 @@ func (cc *DefaultCostController) GetBudget(budgetID string) (*Budget, bool) {
 	return budget, ok
 }
 
-// 预算列表列出所有预算.
+// ListBudgets 列出所有预算.
 func (cc *DefaultCostController) ListBudgets() []*Budget {
 	cc.mu.RLock()
 	defer cc.mu.RUnlock()
@@ -555,7 +555,7 @@ func (cc *DefaultCostController) ListBudgets() []*Budget {
 	return budgets
 }
 
-// GetUsage 获得当前用于一个瞄准镜的用法 。
+// GetUsage 获取指定作用域的当前用量。
 func (cc *DefaultCostController) GetUsage(scope BudgetScope, scopeID string, period BudgetPeriod) float64 {
 	cc.mu.RLock()
 	defer cc.mu.RUnlock()
@@ -572,7 +572,7 @@ func (cc *DefaultCostController) GetUsage(scope BudgetScope, scopeID string, per
 	return total
 }
 
-// Get Optimizations获得成本优化建议.
+// GetOptimizations 获取成本优化建议.
 func (cc *DefaultCostController) GetOptimizations(agentID, userID string) []*CostOptimization {
 	cc.mu.RLock()
 	defer cc.mu.RUnlock()
@@ -619,7 +619,7 @@ func (cc *DefaultCostController) GetOptimizations(agentID, userID string) []*Cos
 	return opts
 }
 
-// GetCostReport 生成成本报告 。
+// GetCostReport 生成成本报告。
 func (cc *DefaultCostController) GetCostReport(filter *CostReportFilter) (*CostReport, error) {
 	cc.mu.RLock()
 	defer cc.mu.RUnlock()
@@ -668,13 +668,13 @@ func (cc *DefaultCostController) GetCostReport(filter *CostReportFilter) (*CostR
 	return report, nil
 }
 
-// 成本控制中间软件
+// ====== 成本控制中间件 ======
 
-// Cost ControlMiddleware 创建了一个执行成本控制的中间软件.
+// CostControlMiddleware 创建一个执行成本控制的中间件.
 func CostControlMiddleware(cc CostController, auditLogger AuditLogger) func(ToolFunc) ToolFunc {
 	return func(next ToolFunc) ToolFunc {
 		return func(ctx context.Context, args json.RawMessage) (json.RawMessage, error) {
-			// 摘录上下文信息
+			// 提取上下文信息
 			permCtx, _ := GetPermissionContext(ctx)
 
 			var agentID, userID, sessionID, toolName string
@@ -698,7 +698,7 @@ func CostControlMiddleware(cc CostController, auditLogger AuditLogger) func(Tool
 			}
 
 			if !result.Allowed {
-				// 日志费用提示
+				// 记录成本告警
 				if auditLogger != nil {
 					LogCostAlert(auditLogger, agentID, userID, cost, "budget_exceeded")
 				}
@@ -724,9 +724,9 @@ func CostControlMiddleware(cc CostController, auditLogger AuditLogger) func(Tool
 	}
 }
 
-// • 方便功能
+// ====== 便捷函数 ======
 
-// 创建全球预算创建全球预算。
+// CreateGlobalBudget 创建全局预算。
 func CreateGlobalBudget(id, name string, limit float64, period BudgetPeriod) *Budget {
 	return &Budget{
 		ID:              id,
@@ -740,7 +740,7 @@ func CreateGlobalBudget(id, name string, limit float64, period BudgetPeriod) *Bu
 	}
 }
 
-// Create AgentBudget 创建针对特定代理的预算.
+// CreateAgentBudget 创建针对特定 Agent 的预算.
 func CreateAgentBudget(id, name, agentID string, limit float64, period BudgetPeriod) *Budget {
 	return &Budget{
 		ID:              id,
@@ -755,7 +755,7 @@ func CreateAgentBudget(id, name, agentID string, limit float64, period BudgetPer
 	}
 }
 
-// Create UserBudget 创建针对用户的预算.
+// CreateUserBudget 创建针对用户的预算.
 func CreateUserBudget(id, name, userID string, limit float64, period BudgetPeriod) *Budget {
 	return &Budget{
 		ID:              id,
@@ -770,7 +770,7 @@ func CreateUserBudget(id, name, userID string, limit float64, period BudgetPerio
 	}
 }
 
-// Create ToolCost 创建工具成本配置 。
+// CreateToolCost 创建工具成本配置。
 func CreateToolCost(toolName string, baseCost, costPerUnit float64) *ToolCost {
 	return &ToolCost{
 		ToolName:    toolName,

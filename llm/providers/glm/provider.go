@@ -17,8 +17,8 @@ import (
 	"go.uber.org/zap"
 )
 
-// GLMProvider 执行 Zhipu AI GLM LLM 提供者.
-// GLM使用OpenAI相容的API格式.
+// GLMProvider 实现智谱 AI GLM LLM 提供者.
+// GLM 使用 OpenAI 兼容的 API 格式.
 type GLMProvider struct {
 	cfg           providers.GLMConfig
 	client        *http.Client
@@ -26,7 +26,7 @@ type GLMProvider struct {
 	rewriterChain *middleware.RewriterChain
 }
 
-// NewGLMProvider创建了新的 Quen 提供者实例 。
+// NewGLMProvider 创建新的 GLM 提供者实例.
 func NewGLMProvider(cfg providers.GLMConfig, logger *zap.Logger) *GLMProvider {
 	timeout := cfg.Timeout
 	if timeout == 0 {

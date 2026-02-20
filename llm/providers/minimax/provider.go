@@ -18,8 +18,8 @@ import (
 	"go.uber.org/zap"
 )
 
-// MiniMax Provider 执行 MiniMax LLM 提供程序.
-// MiniMax使用自定义格式,使用基于XML的工具调用.
+// MiniMaxProvider 实现 MiniMax LLM 提供者.
+// MiniMax 使用自定义格式，采用基于 XML 的工具调用.
 type MiniMaxProvider struct {
 	cfg           providers.MiniMaxConfig
 	client        *http.Client
@@ -27,7 +27,7 @@ type MiniMaxProvider struct {
 	rewriterChain *middleware.RewriterChain
 }
 
-// NewMiniMax Provider 创建了一个新的MiniMax提供者实例.
+// NewMiniMaxProvider 创建新的 MiniMax 提供者实例.
 func NewMiniMaxProvider(cfg providers.MiniMaxConfig, logger *zap.Logger) *MiniMaxProvider {
 	timeout := cfg.Timeout
 	if timeout == 0 {
@@ -35,7 +35,7 @@ func NewMiniMaxProvider(cfg providers.MiniMaxConfig, logger *zap.Logger) *MiniMa
 	}
 
 	// 如果未提供则设置默认 BaseURL
-	// MiniMax API: https://api.minimax.io(新)或https://api.minimax.chat(遗产)
+	// MiniMax API: https://api.minimax.io (新) 或 https://api.minimax.chat (旧)
 	if cfg.BaseURL == "" {
 		cfg.BaseURL = "https://api.minimax.io"
 	}
@@ -147,7 +147,7 @@ func (p *MiniMaxProvider) buildHeaders(req *http.Request, apiKey string) {
 	req.Header.Set("Content-Type", "application/json")
 }
 
-// 转换为 MiniMaxMessages 转换为 llm 。 信件到 MiniMax 格式
+// convertToMiniMaxMessages 将 llm.Message 转换为 MiniMax 格式
 func convertToMiniMaxMessages(msgs []llm.Message) []miniMaxMessage {
 	out := make([]miniMaxMessage, 0, len(msgs))
 	for _, m := range msgs {
@@ -157,7 +157,7 @@ func convertToMiniMaxMessages(msgs []llm.Message) []miniMaxMessage {
 			Name:    m.Name,
 		}
 
-		// 如果信件有工具调用, 请将其格式化为 XML
+		// 如果消息有工具调用，将其格式化为 XML
 		if len(m.ToolCalls) > 0 {
 			toolCallsXML := "<tool_calls>\n"
 			for _, tc := range m.ToolCalls {
@@ -176,7 +176,7 @@ func convertToMiniMaxMessages(msgs []llm.Message) []miniMaxMessage {
 	return out
 }
 
-// 转换为MiniMaxTools 转换为 llm。 工具Schema 到 miniMax 格式
+// convertToMiniMaxTools 将 llm.ToolSchema 转换为 MiniMax 格式
 func convertToMiniMaxTools(tools []llm.ToolSchema) []miniMaxTool {
 	if len(tools) == 0 {
 		return nil
@@ -193,9 +193,9 @@ func convertToMiniMaxTools(tools []llm.ToolSchema) []miniMaxTool {
 }
 
 // parseMiniMaxToolCalls 从 XML 格式提取工具调用
-// 格式: <tool calls>{}"名称:"func","参数":{.}}</tool calls>
+// 格式: <tool_calls>{"name":"func","arguments":{...}}</tool_calls>
 func parseMiniMaxToolCalls(content string) []llm.ToolCall {
-	// 在“ 工具  calls” 标签之间提取内容
+	// 在 tool_calls 标签之间提取内容
 	pattern := regexp.MustCompile(`(?s)<tool_calls>(.*?)</tool_calls>`)
 	matches := pattern.FindStringSubmatch(content)
 	if len(matches) < 2 {
@@ -205,7 +205,7 @@ func parseMiniMaxToolCalls(content string) []llm.ToolCall {
 	toolCallsContent := strings.TrimSpace(matches[1])
 	var toolCalls []llm.ToolCall
 
-	// 将每行分析为 JSON
+	// 将每行解析为 JSON
 	lines := strings.Split(toolCallsContent, "\n")
 	for i, line := range lines {
 		line = strings.TrimSpace(line)
@@ -342,7 +342,7 @@ func (p *MiniMaxProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-c
 	}
 	payload, _ := json.Marshal(body)
 
-	// MiniMax API 端点: /v1/text/chat 补全 v2
+	// MiniMax API 端点: /v1/text/chatcompletion_v2
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, fmt.Sprintf("%s/v1/text/chatcompletion_v2", strings.TrimRight(p.cfg.BaseURL, "/")), bytes.NewReader(payload))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
@@ -400,7 +400,7 @@ func (p *MiniMaxProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-c
 						Content: choice.Delta.Content,
 					}
 
-					// 从 XML 解析工具呼叫( 如果存在)
+					// 从 XML 解析工具调用（如果存在）
 					if strings.Contains(choice.Delta.Content, "<tool_calls>") {
 						toolCalls := parseMiniMaxToolCalls(choice.Delta.Content)
 						if len(toolCalls) > 0 {

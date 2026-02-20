@@ -11,14 +11,14 @@ import (
 	"go.uber.org/zap"
 )
 
-// Mistral Provider 执行 Mistral AI 提供器.
-// Mistral AI使用OpenAI相容的API格式.
+// MistralProvider 实现 Mistral AI LLM 提供者.
+// Mistral AI 使用 OpenAI 兼容的 API 格式.
 type MistralProvider struct {
 	*openai.OpenAIProvider
 	cfg providers.MistralConfig
 }
 
-// NewMistral Provider创建了一个新的Mistral供应商实例.
+// NewMistralProvider 创建新的 Mistral 提供者实例.
 func NewMistralProvider(cfg providers.MistralConfig, logger *zap.Logger) *MistralProvider {
 	// 如果未提供则设置默认 BaseURL
 	if cfg.BaseURL == "" {
@@ -56,7 +56,7 @@ func (p *MistralProvider) HealthCheck(ctx context.Context) (*llm.HealthStatus, e
 
 func (p *MistralProvider) SupportsNativeFunctionCalling() bool { return true }
 
-// 完成超过 OpenAI 的补全来修正提供方字段 。
+// Completion 覆盖 OpenAI 的补全以修正提供者字段.
 func (p *MistralProvider) Completion(ctx context.Context, req *llm.ChatRequest) (*llm.ChatResponse, error) {
 	resp, err := p.OpenAIProvider.Completion(ctx, req)
 	if err != nil {
@@ -70,7 +70,7 @@ func (p *MistralProvider) Completion(ctx context.Context, req *llm.ChatRequest) 
 	return resp, nil
 }
 
-// Cream 覆盖 OpenAI 的 Stream 来修正每个块上的提供方字段 。
+// Stream 覆盖 OpenAI 的 Stream 以修正每个块上的提供者字段.
 func (p *MistralProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-chan llm.StreamChunk, error) {
 	ch, err := p.OpenAIProvider.Stream(ctx, req)
 	if err != nil {

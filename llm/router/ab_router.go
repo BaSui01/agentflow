@@ -390,7 +390,7 @@ func (r *ABRouter) UpdateWeights(weights map[string]int) error {
 	return nil
 }
 
-// GetMetrics 返回每个变量的度量衡.
+// GetMetrics 返回每个变体的指标.
 func (r *ABRouter) GetMetrics() map[string]*ABMetrics {
 	return r.metrics
 }

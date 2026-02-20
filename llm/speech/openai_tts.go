@@ -18,7 +18,7 @@ type OpenAITTSProvider struct {
 	client *http.Client
 }
 
-// NewOpenAITSProvider创建了新的OpenAI TTS供应商.
+// NewOpenAITTSProvider 创建新的 OpenAI TTS 提供者.
 func NewOpenAITTSProvider(cfg OpenAITTSConfig) *OpenAITTSProvider {
 	if cfg.BaseURL == "" {
 		cfg.BaseURL = "https://api.openai.com"

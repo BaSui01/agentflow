@@ -11,17 +11,17 @@ import (
 	"go.uber.org/zap"
 )
 
-// 匈奴提供商执行"特能匈奴提供商".
-// Hunyuan使用OpenAI相容的API格式.
+// HunyuanProvider 实现腾讯混元提供者.
+// Hunyuan 使用 OpenAI 兼容的 API 格式.
 type HunyuanProvider struct {
 	*openai.OpenAIProvider
 	cfg providers.HunyuanConfig
 }
 
-// NewHunyuan Provider创建了新的Hunyuan供应商实例.
+// NewHunyuanProvider 创建新的 Hunyuan 提供者实例.
 func NewHunyuanProvider(cfg providers.HunyuanConfig, logger *zap.Logger) *HunyuanProvider {
 	// 如果未提供则设置默认 BaseURL
-	// Hunyuan OpenAI相容的API:https://api.hunyuan.cloud.tencent.com/v1 互联网档案馆的存檔,存档日期2013-12-11.
+	// Hunyuan OpenAI 兼容 API: https://api.hunyuan.cloud.tencent.com/v1
 	if cfg.BaseURL == "" {
 		cfg.BaseURL = "https://api.hunyuan.cloud.tencent.com/v1"
 	}
@@ -57,7 +57,7 @@ func (p *HunyuanProvider) HealthCheck(ctx context.Context) (*llm.HealthStatus, e
 
 func (p *HunyuanProvider) SupportsNativeFunctionCalling() bool { return true }
 
-// 完成超过 OpenAI 的补全来修正提供方字段 。
+// Completion 覆盖 OpenAI 的补全以修正提供者字段.
 func (p *HunyuanProvider) Completion(ctx context.Context, req *llm.ChatRequest) (*llm.ChatResponse, error) {
 	resp, err := p.OpenAIProvider.Completion(ctx, req)
 	if err != nil {
@@ -71,7 +71,7 @@ func (p *HunyuanProvider) Completion(ctx context.Context, req *llm.ChatRequest) 
 	return resp, nil
 }
 
-// Cream 覆盖 OpenAI 的 Stream 来修正每个块上的提供方字段 。
+// Stream 覆盖 OpenAI 的 Stream 以修正每个块上的提供者字段.
 func (p *HunyuanProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-chan llm.StreamChunk, error) {
 	ch, err := p.OpenAIProvider.Stream(ctx, req)
 	if err != nil {

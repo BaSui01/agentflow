@@ -19,7 +19,7 @@ type DeepgramProvider struct {
 	client *http.Client
 }
 
-// NewDepgram Provider 创建了新的 Deepgram STT 供应商.
+// NewDeepgramProvider 创建新的 Deepgram STT 提供者.
 func NewDeepgramProvider(cfg DeepgramConfig) *DeepgramProvider {
 	if cfg.BaseURL == "" {
 		cfg.BaseURL = "https://api.deepgram.com"

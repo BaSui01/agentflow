@@ -11,14 +11,14 @@ import (
 	"time"
 )
 
-// 双子星Provider执行嵌入使用谷歌双子星API.
-// 注:双子座使用不同的端点格式:/models/{model}:embed Content
+// GeminiProvider 使用 Google Gemini API 执行嵌入.
+// 注: Gemini 使用不同的端点格式: /models/{model}:embedContent
 type GeminiProvider struct {
 	cfg    GeminiConfig
 	client *http.Client
 }
 
-// 双子座Config配置双子座嵌入提供者.
+// GeminiConfig 配置 Gemini 嵌入提供者.
 type GeminiConfig struct {
 	APIKey  string        `json:"api_key" yaml:"api_key"`
 	BaseURL string        `json:"base_url" yaml:"base_url"`
@@ -26,7 +26,7 @@ type GeminiConfig struct {
 	Timeout time.Duration `json:"timeout,omitempty" yaml:"timeout,omitempty"`
 }
 
-// 默认GeminiConfig 返回默认双子嵌入配置 。
+// DefaultGeminiConfig 返回默认 Gemini 嵌入配置.
 func DefaultGeminiConfig() GeminiConfig {
 	return GeminiConfig{
 		BaseURL: "https://generativelanguage.googleapis.com/v1beta",
@@ -35,7 +35,7 @@ func DefaultGeminiConfig() GeminiConfig {
 	}
 }
 
-// NewGeminiProvider创建了新的双子星嵌入提供商.
+// NewGeminiProvider 创建新的 Gemini 嵌入提供者.
 func NewGeminiProvider(cfg GeminiConfig) *GeminiProvider {
 	if cfg.BaseURL == "" {
 		cfg.BaseURL = "https://generativelanguage.googleapis.com/v1beta"
@@ -58,7 +58,7 @@ func (p *GeminiProvider) Name() string      { return "gemini-embedding" }
 func (p *GeminiProvider) Dimensions() int   { return 3072 }
 func (p *GeminiProvider) MaxBatchSize() int { return 100 }
 
-// 双子任务Type映射
+// Gemini TaskType 映射
 type geminiTaskType string
 
 const (
@@ -102,7 +102,7 @@ type geminiContentEmbedding struct {
 	Values []float64 `json:"values"`
 }
 
-// 映射任务Type将输入任务Type转换为双子任务Type.
+// mapTaskType 将输入任务类型转换为 Gemini 任务类型.
 func mapTaskType(inputType InputType) geminiTaskType {
 	switch inputType {
 	case InputTypeQuery:
@@ -120,7 +120,7 @@ func mapTaskType(inputType InputType) geminiTaskType {
 	}
 }
 
-// Embed使用双子座API生成嵌入.
+// Embed 使用 Gemini API 生成嵌入.
 func (p *GeminiProvider) Embed(ctx context.Context, req *EmbeddingRequest) (*EmbeddingResponse, error) {
 	model := ChooseModel(req.Model, p.cfg.Model, "gemini-embedding-001")
 	taskType := mapTaskType(req.InputType)
@@ -209,7 +209,7 @@ func (p *GeminiProvider) batchEmbed(ctx context.Context, req *EmbeddingRequest, 
 	}, nil
 }
 
-// do request 以双子座特异性认证执行 HTTP 请求 。
+// doRequest 使用 Gemini 特定认证执行 HTTP 请求.
 func (p *GeminiProvider) doRequest(ctx context.Context, endpoint string, body interface{}) ([]byte, error) {
 	payload, err := json.Marshal(body)
 	if err != nil {
@@ -221,7 +221,7 @@ func (p *GeminiProvider) doRequest(ctx context.Context, endpoint string, body in
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
 
-	// 双子座使用 x-goog- api- key 头( 不是 Bearer 令牌)
+	// Gemini 使用 x-goog-api-key 头（不是 Bearer 令牌）
 	httpReq.Header.Set("x-goog-api-key", p.cfg.APIKey)
 	httpReq.Header.Set("Content-Type", "application/json")
 
@@ -243,7 +243,7 @@ func (p *GeminiProvider) doRequest(ctx context.Context, endpoint string, body in
 	return respBody, nil
 }
 
-// 嵌入查询嵌入了单个查询.
+// EmbedQuery 嵌入单个查询.
 func (p *GeminiProvider) EmbedQuery(ctx context.Context, query string) ([]float64, error) {
 	resp, err := p.Embed(ctx, &EmbeddingRequest{
 		Input:     []string{query},
@@ -258,7 +258,7 @@ func (p *GeminiProvider) EmbedQuery(ctx context.Context, query string) ([]float6
 	return resp.Embeddings[0].Embedding, nil
 }
 
-// 嵌入文件嵌入多个文档。
+// EmbedDocuments 嵌入多个文档.
 func (p *GeminiProvider) EmbedDocuments(ctx context.Context, documents []string) ([][]float64, error) {
 	resp, err := p.Embed(ctx, &EmbeddingRequest{
 		Input:     documents,

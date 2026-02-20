@@ -61,7 +61,7 @@ func (p *RetryableProvider) HealthCheck(ctx context.Context) (*llm.HealthStatus,
 	return p.inner.HealthCheck(ctx)
 }
 
-// 补全 执行聊天补全, 在瞬态错误上重试 。
+// Completion 执行聊天补全，在瞬态错误上重试.
 func (p *RetryableProvider) Completion(ctx context.Context, req *llm.ChatRequest) (*llm.ChatResponse, error) {
 	var lastErr error
 	for attempt := 0; attempt <= p.config.MaxRetries; attempt++ {
@@ -99,8 +99,8 @@ func (p *RetryableProvider) Completion(ctx context.Context, req *llm.ChatRequest
 	return nil, fmt.Errorf("completion failed after %d retries: %w", p.config.MaxRetries, lastErr)
 }
 
-// Stream 执行流式聊天请求, 并重试连接错误 。
-// 只有连接-建立阶段被重试;中流错误没有.
+// Stream 执行流式聊天请求，并重试连接错误.
+// 只有连接建立阶段会被重试；流传输中的错误不会.
 func (p *RetryableProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-chan llm.StreamChunk, error) {
 	var lastErr error
 	for attempt := 0; attempt <= p.config.MaxRetries; attempt++ {

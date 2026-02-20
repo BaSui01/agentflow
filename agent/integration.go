@@ -87,6 +87,19 @@ func (b *BaseAgent) EnableMCP(server interface{}) {
 	b.logger.Info("MCP integration enabled")
 }
 
+// EnableLSP 启用 LSP 集成。
+func (b *BaseAgent) EnableLSP(client interface{}) {
+	b.lspClient = client
+	b.logger.Info("LSP integration enabled")
+}
+
+// EnableLSPWithLifecycle 启用 LSP，并注册可选生命周期对象（例如 *ManagedLSP）。
+func (b *BaseAgent) EnableLSPWithLifecycle(client interface{}, lifecycle interface{}) {
+	b.lspClient = client
+	b.lspLifecycle = lifecycle
+	b.logger.Info("LSP integration enabled with lifecycle")
+}
+
 // EnableEnhancedMemory 启用增强记忆系统
 func (b *BaseAgent) EnableEnhancedMemory(memorySystem interface{}) {
 	b.enhancedMemory = memorySystem
@@ -397,6 +410,7 @@ func (b *BaseAgent) GetFeatureStatus() map[string]bool {
 		"prompt_enhancer": b.promptEnhancer != nil,
 		"skills":          b.skillManager != nil,
 		"mcp":             b.mcpServer != nil,
+		"lsp":             b.lspClient != nil,
 		"enhanced_memory": b.enhancedMemory != nil,
 		"observability":   b.observabilitySystem != nil,
 		"context_manager": b.contextManager != nil,
@@ -414,6 +428,7 @@ func (b *BaseAgent) PrintFeatureStatus() {
 		zap.Bool("prompt_enhancer", status["prompt_enhancer"]),
 		zap.Bool("skills", status["skills"]),
 		zap.Bool("mcp", status["mcp"]),
+		zap.Bool("lsp", status["lsp"]),
 		zap.Bool("enhanced_memory", status["enhanced_memory"]),
 		zap.Bool("observability", status["observability"]),
 		zap.Bool("context_manager", status["context_manager"]),
@@ -430,6 +445,7 @@ type QuickSetupOptions struct {
 	EnablePromptEnhancer bool
 	EnableSkills         bool
 	EnableMCP            bool
+	EnableLSP            bool
 	EnableEnhancedMemory bool
 	EnableObservability  bool
 
@@ -438,6 +454,8 @@ type QuickSetupOptions struct {
 	ToolSelectionMaxTools   int
 	SkillsDirectory         string
 	MCPServerName           string
+	LSPServerName           string
+	LSPServerVersion        string
 	MemoryTTL               time.Duration
 }
 
@@ -450,12 +468,15 @@ func DefaultQuickSetupOptions() QuickSetupOptions {
 		EnablePromptEnhancer:    true,
 		EnableSkills:            true,
 		EnableMCP:               false, // MCP 需要额外配置
+		EnableLSP:               true,
 		EnableEnhancedMemory:    true,
 		EnableObservability:     true,
 		ReflectionMaxIterations: 3,
 		ToolSelectionMaxTools:   5,
 		SkillsDirectory:         "./skills",
 		MCPServerName:           "agent-mcp-server",
+		LSPServerName:           defaultLSPServerName,
+		LSPServerVersion:        defaultLSPServerVersion,
 		MemoryTTL:               24 * time.Hour,
 	}
 }
@@ -493,6 +514,12 @@ func (b *BaseAgent) QuickSetup(ctx context.Context, options QuickSetupOptions) e
 	if options.EnableMCP {
 		b.logger.Info("MCP should be enabled with server name",
 			zap.String("server_name", options.MCPServerName))
+	}
+
+	if options.EnableAllFeatures || options.EnableLSP {
+		b.logger.Info("LSP should be enabled with server info",
+			zap.String("server_name", options.LSPServerName),
+			zap.String("server_version", options.LSPServerVersion))
 	}
 
 	if options.EnableAllFeatures || options.EnableEnhancedMemory {
@@ -536,6 +563,10 @@ func (b *BaseAgent) ValidateConfiguration() error {
 
 	if b.config.EnableMCP && b.mcpServer == nil {
 		errors = append(errors, "MCP enabled but server not set")
+	}
+
+	if b.config.EnableLSP && b.lspClient == nil {
+		errors = append(errors, "LSP enabled but client not set")
 	}
 
 	if b.config.EnableEnhancedMemory && b.enhancedMemory == nil {
@@ -632,6 +663,7 @@ func (b *BaseAgent) ExportConfiguration() map[string]interface{} {
 			"prompt_enhancer": b.config.EnablePromptEnhancer,
 			"skills":          b.config.EnableSkills,
 			"mcp":             b.config.EnableMCP,
+			"lsp":             b.config.EnableLSP,
 			"enhanced_memory": b.config.EnableEnhancedMemory,
 			"observability":   b.config.EnableObservability,
 		},

@@ -50,7 +50,7 @@ func (LLMProvider) TableName() string {
 // ============================================================
 
 // LLMProvider Model 代表提供商的模型实例( 多人对多人映射)
-// 多种供应商(OpenAI、Azure、Cloudflare)可提供一种模式(例如gpt-4)
+// 多个提供者（OpenAI、Azure、Cloudflare）可提供同一模型（例如 gpt-4）
 type LLMProviderModel struct {
 	ID              uint      `gorm:"primaryKey" json:"id"`
 	ModelID         uint      `gorm:"not null;index:idx_model_provider" json:"model_id"`

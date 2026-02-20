@@ -1,4 +1,4 @@
-// 软件包重排提供了统一的重排提供者接口和执行.
+// Package rerank 提供统一的重排序提供者接口和实现.
 package rerank
 
 import (
@@ -6,7 +6,7 @@ import (
 	"time"
 )
 
-// 重新排序请求代表着重新排序文件的请求 。
+// RerankRequest 表示重排序请求.
 type RerankRequest struct {
 	Query           string            `json:"query"`
 	Documents       []Document        `json:"documents"`
@@ -17,14 +17,14 @@ type RerankRequest struct {
 	Metadata        map[string]string `json:"metadata,omitempty"`
 }
 
-// 文档代表要重新排序的文件。
+// Document 表示待重排序的文档.
 type Document struct {
 	Text  string `json:"text"`
 	ID    string `json:"id,omitempty"`
 	Title string `json:"title,omitempty"`
 }
 
-// RerankResponse代表了由rerank请求产生的响应.
+// RerankResponse 表示重排序响应.
 type RerankResponse struct {
 	ID        string         `json:"id,omitempty"`
 	Provider  string         `json:"provider"`
@@ -34,31 +34,31 @@ type RerankResponse struct {
 	CreatedAt time.Time      `json:"created_at,omitempty"`
 }
 
-// RerankResult代表单一被重新排序的文件.
+// RerankResult 表示单个重排序结果.
 type RerankResult struct {
 	Index          int      `json:"index"`           // Original index in input
 	RelevanceScore float64  `json:"relevance_score"` // 0-1 normalized score
 	Document       Document `json:"document,omitempty"`
 }
 
-// RerankUsage代表使用统计.
+// RerankUsage 表示使用统计.
 type RerankUsage struct {
 	SearchUnits int     `json:"search_units,omitempty"`
 	TotalTokens int     `json:"total_tokens,omitempty"`
 	Cost        float64 `json:"cost,omitempty"`
 }
 
-// 提供方定义了统一的重排提供者接口.
+// Provider 定义统一的重排序提供者接口.
 type Provider interface {
-	// 根据查询的关联性重新排序文档 。
+	// Rerank 根据查询的相关性重排序文档.
 	Rerank(ctx context.Context, req *RerankRequest) (*RerankResponse, error)
 
-	// RerankSimple是简单的再排的一种方便方法.
+	// RerankSimple 是简单重排序的便捷方法.
 	RerankSimple(ctx context.Context, query string, documents []string, topN int) ([]RerankResult, error)
 
-	// 名称返回提供者名称 。
+	// Name 返回提供者名称.
 	Name() string
 
-	// 最大文档返回所支持的最大文档数量 。
+	// MaxDocuments 返回支持的最大文档数量.
 	MaxDocuments() int
 }

@@ -246,6 +246,42 @@ executor := agent.NewReflectionExecutor(baseAgent, agent.ReflectionExecutorConfi
 result, _ := executor.ExecuteWithReflection(ctx, input)
 ```
 
+### LSP 一键启用
+
+```go
+cfg := agent.Config{
+    ID:    "assistant-1",
+    Name:  "Assistant",
+    Type:  agent.TypeAssistant,
+    Model: "gpt-4o-mini",
+}
+
+ag, err := agent.NewAgentBuilder(cfg).
+    WithProvider(provider).
+    WithLogger(logger).
+    WithDefaultLSPServer("agentflow-lsp", "0.1.0").
+    Build()
+if err != nil {
+    panic(err)
+}
+
+fmt.Println("LSP enabled:", ag.GetFeatureStatus()["lsp"])
+```
+
+也可以通过 `runtime.BuildAgent` 一键开关：
+
+```go
+opts := runtime.DefaultBuildOptions()
+opts.EnableAll = false
+opts.EnableLSP = true
+
+ag, err := runtime.BuildAgent(ctx, cfg, provider, logger, opts)
+if err != nil {
+    panic(err)
+}
+_ = ag
+```
+
 ### DAG 工作流
 
 完整可运行示例：`examples/05_workflow/`

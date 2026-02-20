@@ -73,7 +73,7 @@ func TestMultiProviderRouter_SelectProviderWithModel(t *testing.T) {
 		t.Fatalf("create model: %v", err)
 	}
 
-	// 供应商模式制图(成本不同)。
+	// 提供者模型映射（成本不同）。
 	pmA := LLMProviderModel{
 		ModelID:         model.ID,
 		ProviderID:      pA.ID,

@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/BaSui01/agentflow/agent"
+	agentlsp "github.com/BaSui01/agentflow/agent/lsp"
 	"github.com/BaSui01/agentflow/agent/memory"
 	"github.com/BaSui01/agentflow/agent/observability"
 	mcpproto "github.com/BaSui01/agentflow/agent/protocol/mcp"
@@ -23,6 +24,7 @@ type BuildOptions struct {
 	EnablePromptEnhancer bool
 	EnableSkills         bool
 	EnableMCP            bool
+	EnableLSP            bool
 	EnableEnhancedMemory bool
 	EnableObservability  bool
 
@@ -31,6 +33,8 @@ type BuildOptions struct {
 
 	MCPServerName    string
 	MCPServerVersion string
+	LSPServerName    string
+	LSPServerVersion string
 
 	EnhancedMemoryConfig *memory.EnhancedMemoryConfig
 
@@ -49,11 +53,14 @@ func DefaultBuildOptions() BuildOptions {
 		EnablePromptEnhancer: true,
 		EnableSkills:         true,
 		EnableMCP:            true,
+		EnableLSP:            true,
 		EnableEnhancedMemory: true,
 		EnableObservability:  true,
 		SkillsDirectory:      "./skills",
 		MCPServerName:        "agentflow-mcp",
 		MCPServerVersion:     "0.1.0",
+		LSPServerName:        "agentflow-lsp",
+		LSPServerVersion:     "0.1.0",
 		InitAgent:            false,
 	}
 }
@@ -92,6 +99,9 @@ func BuildAgent(ctx context.Context, cfg agent.Config, provider llm.Provider, lo
 			Name:    strings.TrimSpace(opts.MCPServerName),
 			Version: strings.TrimSpace(opts.MCPServerVersion),
 		})
+	}
+	if enabled(opts.EnableAll, opts.EnableLSP) {
+		b.WithDefaultLSPServer(strings.TrimSpace(opts.LSPServerName), strings.TrimSpace(opts.LSPServerVersion))
 	}
 	if enabled(opts.EnableAll, opts.EnableEnhancedMemory) {
 		b.WithDefaultEnhancedMemory(opts.EnhancedMemoryConfig)
@@ -152,6 +162,18 @@ func QuickSetup(ctx context.Context, ag *agent.BaseAgent, opts BuildOptions) err
 			version = "0.1.0"
 		}
 		ag.EnableMCP(mcpproto.NewMCPServer(name, version, logger))
+	}
+	if enabled(opts.EnableAll, opts.EnableLSP) && !ag.GetFeatureStatus()["lsp"] {
+		name := strings.TrimSpace(opts.LSPServerName)
+		if name == "" {
+			name = "agentflow-lsp"
+		}
+		version := strings.TrimSpace(opts.LSPServerVersion)
+		if version == "" {
+			version = "0.1.0"
+		}
+		runtime := agent.NewManagedLSP(agentlsp.ServerInfo{Name: name, Version: version}, logger)
+		ag.EnableLSPWithLifecycle(runtime.Client, runtime)
 	}
 	if enabled(opts.EnableAll, opts.EnableEnhancedMemory) && !ag.GetFeatureStatus()["enhanced_memory"] {
 		memCfg := memory.DefaultEnhancedMemoryConfig()

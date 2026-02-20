@@ -11,14 +11,14 @@ import (
 	"go.uber.org/zap"
 )
 
-// Kimi Provider 执行月球射击 Kimi Profer.
-// Kimi使用OpenAI相容的API格式.
+// KimiProvider 实现月之暗面 Kimi LLM 提供者.
+// Kimi 使用 OpenAI 兼容的 API 格式.
 type KimiProvider struct {
 	*openai.OpenAIProvider
 	cfg providers.KimiConfig
 }
 
-// NewKimi Provider创建了一个新的 Kimi 提供者实例 。
+// NewKimiProvider 创建新的 Kimi 提供者实例.
 func NewKimiProvider(cfg providers.KimiConfig, logger *zap.Logger) *KimiProvider {
 	// 如果未提供则设置默认 BaseURL
 	if cfg.BaseURL == "" {
@@ -56,7 +56,7 @@ func (p *KimiProvider) HealthCheck(ctx context.Context) (*llm.HealthStatus, erro
 
 func (p *KimiProvider) SupportsNativeFunctionCalling() bool { return true }
 
-// 完成超过 OpenAI 的补全来修正提供方字段 。
+// Completion 覆盖 OpenAI 的补全以修正提供者字段.
 func (p *KimiProvider) Completion(ctx context.Context, req *llm.ChatRequest) (*llm.ChatResponse, error) {
 	resp, err := p.OpenAIProvider.Completion(ctx, req)
 	if err != nil {
@@ -70,7 +70,7 @@ func (p *KimiProvider) Completion(ctx context.Context, req *llm.ChatRequest) (*l
 	return resp, nil
 }
 
-// Cream 覆盖 OpenAI 的 Stream 来修正每个块上的提供方字段 。
+// Stream 覆盖 OpenAI 的 Stream 以修正每个块上的提供者字段.
 func (p *KimiProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-chan llm.StreamChunk, error) {
 	ch, err := p.OpenAIProvider.Stream(ctx, req)
 	if err != nil {

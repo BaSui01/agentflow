@@ -15,7 +15,7 @@ import (
 // - 授权信头设置为熊克(15.3)
 // - 内容-Type标题设定为应用程序/json(15.4)
 // - 接受信头设置得当(15.5)
-// 通过对所有供应商进行全面测试,实现至少100次重复。
+// 通过对所有提供者进行全面测试,实现至少100次重复。
 
 // Property25  认证 正确设置授权页眉的页眉测试
 func TestProperty25_AuthorizationHeader(t *testing.T) {
@@ -33,7 +33,7 @@ func TestProperty25_AuthorizationHeader(t *testing.T) {
 		{"alphanumeric key", "sk1234567890abcdef"},
 	}
 
-	// 5个供应商 * 6个关键变化=30个测试案例
+	// 5个提供者 * 6个关键变化=30个测试用例
 	for _, provider := range providers {
 		for _, kv := range apiKeyVariations {
 			t.Run(provider+"_"+kv.name, func(t *testing.T) {
@@ -49,7 +49,7 @@ func TestProperty25_AuthorizationHeader(t *testing.T) {
 				// 构建预期页眉
 				expectedAuth := "Bearer " + kv.apiKey
 
-				// 模拟信头建筑(如供应商所做的那样)
+				// 模拟信头建筑(如提供者所做的那样)
 				req, _ := http.NewRequest(http.MethodGet, server.URL, nil)
 				req.Header.Set("Authorization", expectedAuth)
 				req.Header.Set("Content-Type", "application/json")
@@ -84,7 +84,7 @@ func TestProperty25_ContentTypeHeader(t *testing.T) {
 		{"health check", http.MethodGet, false, "application/json"},
 	}
 
-	// 5个供应商 * 4个请求类型=20个测试案例
+	// 5个提供者 * 4个请求类型=20个测试用例
 	for _, provider := range providers {
 		for _, rt := range requestTypes {
 			t.Run(provider+"_"+rt.name, func(t *testing.T) {
@@ -122,7 +122,7 @@ func TestProperty25_HeadersPreservedAcrossRequests(t *testing.T) {
 	// 测试多个顺序请求
 	requestCounts := []int{1, 2, 3, 5, 10}
 
-	// 5个供应商 * 5个计数=25个测试案例
+	// 5个提供者 * 5个计数=25个测试用例
 	for _, provider := range providers {
 		for _, count := range requestCounts {
 			t.Run(provider+"_requests_"+string(rune('0'+count)), func(t *testing.T) {
@@ -177,7 +177,7 @@ func TestProperty25_HeadersWithDifferentEndpoints(t *testing.T) {
 		{"root", "/"},
 	}
 
-	// * 4个终点=20个测试病例
+	// * 4个终点=20个测试用例
 	for _, provider := range providers {
 		for _, ep := range endpoints {
 			t.Run(provider+"_"+ep.name, func(t *testing.T) {
@@ -227,7 +227,7 @@ func TestProperty25_HeaderCaseSensitivity(t *testing.T) {
 		{"mixed case", "AuThOrIzAtIoN", "CoNtEnT-TyPe"},
 	}
 
-	// 5个供应商 * 4个病例=20个测试病例
+	// 5个提供者 * 4个用例=20个测试用例
 	for _, provider := range providers {
 		for _, hc := range headerCases {
 			t.Run(provider+"_"+hc.name, func(t *testing.T) {
@@ -264,13 +264,13 @@ func TestProperty25_HeaderCaseSensitivity(t *testing.T) {
 
 // 测试Property25  测试国家验证我们至少有100个测试重复
 func TestProperty25_IterationCount(t *testing.T) {
-	// 计算所有测试案例 :
-	// - 授权 页:5个供应商* 6个变数=30
+	// 计算所有测试用例 :
+	// - 授权 页:5个提供者* 6个变数=30
 	// - 内容标题:5个提供者 * 4个类型=20
-	// 5个供应商 * 5个计数=25
-	// - 不同终点头:5个供应商 *4个终点=20
-	// - 案头敏感性:5个供应商 * 4个案件=20个
-	// 共计:115个测试案例(超过最低100个案例)
+	// 5个提供者 * 5个计数=25
+	// - 不同终点头:5个提供者 *4个终点=20
+	// - 案头敏感性:5个提供者 * 4个案件=20个
+	// 共计:115个测试用例(超过最低100个用例)
 
 	totalIterations := 30 + 20 + 25 + 20 + 20
 	assert.GreaterOrEqual(t, totalIterations, 100,

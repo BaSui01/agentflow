@@ -9,13 +9,13 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-// 特性:多供应商支助,财产24:反应外地采掘
+// 特性:多提供者支持,属性24:反应外地采掘
 // ** 变动情况:要求13.1、13.2、13.3、13.4、13.5、13.6、13.7**
 //
 // 该属性测试验证了对于任何提供者的响应,转换器
 // 垛 聊天响应应当包含响应ID,模型名,提供者名,
 // 选项数组、使用信息(如果有)和完成理由。
-// 通过对所有供应商进行全面测试,实现至少100次重复。
+// 通过对所有提供者进行全面测试,实现至少100次重复。
 
 // OpenAI 兼容测试反应类型
 type testOpenAIResponse struct {
@@ -179,7 +179,7 @@ func TestProperty24_ResponseIDExtraction(t *testing.T) {
 		{"provider prefix", "grok-response-001"},
 	}
 
-	// 5个供应商 * 7个差数=35个测试案例
+	// 5个提供者 * 7个差数=35个测试用例
 	for _, provider := range providers {
 		for _, idv := range idVariations {
 			t.Run(provider+"_"+idv.name, func(t *testing.T) {
@@ -230,7 +230,7 @@ func TestProperty24_ModelNameExtraction(t *testing.T) {
 		{"model with suffix", "claude-3-opus-20240229"},
 	}
 
-	// * 7个模型变化=35个测试案例
+	// * 7个模型变化=35个测试用例
 	for _, provider := range providers {
 		for _, mv := range modelVariations {
 			t.Run(provider+"_"+mv.name, func(t *testing.T) {
@@ -268,7 +268,7 @@ func TestProperty24_ModelNameExtraction(t *testing.T) {
 func TestProperty24_ProviderNameExtraction(t *testing.T) {
 	providers := []string{"grok", "qwen", "deepseek", "glm", "minimax"}
 
-	// * 4个答复变化=20个测试病例
+	// * 4个答复变化=20个测试用例
 	responseVariations := []struct {
 		name    string
 		content string
@@ -329,7 +329,7 @@ func TestProperty24_ChoicesArrayExtraction(t *testing.T) {
 		{"length finish", 1, []string{"Truncated..."}, "length"},
 	}
 
-	// * 5个变体=25个测试病例
+	// * 5个变体=25个测试用例
 	for _, provider := range providers {
 		for _, cv := range choicesVariations {
 			t.Run(provider+"_"+cv.name, func(t *testing.T) {
@@ -398,7 +398,7 @@ func TestProperty24_UsageInformationExtraction(t *testing.T) {
 		{"completion only", 0, 50, 50, true},
 	}
 
-	// * 6个变数=30个测试案例
+	// * 6个变数=30个测试用例
 	for _, provider := range providers {
 		for _, uv := range usageVariations {
 			t.Run(provider+"_"+uv.name, func(t *testing.T) {
@@ -472,7 +472,7 @@ func TestProperty24_TimestampExtraction(t *testing.T) {
 		{"epoch time", 1, true},
 	}
 
-	// * 5个变体=25个测试病例
+	// * 5个变体=25个测试用例
 	for _, provider := range providers {
 		for _, tv := range timestampVariations {
 			t.Run(provider+"_"+tv.name, func(t *testing.T) {
@@ -531,7 +531,7 @@ func TestProperty24_FinishReasonExtraction(t *testing.T) {
 		{"custom reason", "custom_stop_reason"},
 	}
 
-	// * 7个变数=35个测试病例
+	// * 7个变数=35个测试用例
 	for _, provider := range providers {
 		for _, frv := range finishReasonVariations {
 			t.Run(provider+"_"+frv.name, func(t *testing.T) {
@@ -627,7 +627,7 @@ func TestProperty24_AllFieldsExtraction(t *testing.T) {
 		},
 	}
 
-	// * 4个测试案例=20个测试案例
+	// * 4个测试用例=20个测试用例
 	for _, provider := range providers {
 		for _, tc := range testCases {
 			t.Run(provider+"_"+tc.name, func(t *testing.T) {
@@ -710,7 +710,7 @@ func TestProperty24_ToolCallsInResponse(t *testing.T) {
 		},
 	}
 
-	// * 3个变数=12个测试案例
+	// * 3个变数=12个测试用例
 	for _, provider := range providers {
 		for _, tcv := range toolCallVariations {
 			t.Run(provider+"_"+tcv.name, func(t *testing.T) {
@@ -748,17 +748,17 @@ func TestProperty24_ToolCallsInResponse(t *testing.T) {
 
 // Property24  测试国家验证我们至少有100个测试重复
 func TestProperty24_IterationCount(t *testing.T) {
-	// 计算所有测试案例 :
-	// - 应变:5个供应商* 7个变数=35
-	// - 模型名称:5个供应商 * 7个变式=35
-	// - 供应商名称:5个供应商 * 4个变式=20
-	// - 选择阵列:5个供应商 * 5个变数=25
-	// - 使用信息外包:5个供应商 * 6个变化=30
-	// - 时间戳:5个供应商* 5个变化=25
-	// - FinishReason Extraction:5个供应商 * 7个变数=35
-	// - 所有外地:5个供应商* 4个变数=20
-	// - ToolCallsInresponse:4个供应商 * 3个变数=12
-	// 共计:237个测试案例(超过最低100个案例)
+	// 计算所有测试用例 :
+	// - 应变:5个提供者* 7个变数=35
+	// - 模型名称:5个提供者 * 7个变式=35
+	// - 提供者名称:5个提供者 * 4个变式=20
+	// - 选择阵列:5个提供者 * 5个变数=25
+	// - 使用信息外包:5个提供者 * 6个变化=30
+	// - 时间戳:5个提供者* 5个变化=25
+	// - FinishReason Extraction:5个提供者 * 7个变数=35
+	// - 所有外地:5个提供者* 4个变数=20
+	// - ToolCallsInresponse:4个提供者 * 3个变数=12
+	// 共计:237个测试用例(超过最低100个用例)
 
 	totalIterations := 35 + 35 + 20 + 25 + 30 + 25 + 35 + 20 + 12
 	assert.GreaterOrEqual(t, totalIterations, 100,

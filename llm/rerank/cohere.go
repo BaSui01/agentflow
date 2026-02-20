@@ -17,7 +17,7 @@ type CohereProvider struct {
 	client *http.Client
 }
 
-// NewCohere Provider创建了新的Cohere reranker供应商.
+// NewCohereProvider 创建新的 Cohere reranker 提供者.
 func NewCohereProvider(cfg CohereConfig) *CohereProvider {
 	if cfg.BaseURL == "" {
 		cfg.BaseURL = "https://api.cohere.ai"

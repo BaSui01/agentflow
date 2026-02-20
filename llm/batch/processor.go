@@ -23,13 +23,13 @@ type Request struct {
 	Params   map[string]any `json:"params,omitempty"`
 }
 
-// 信件代表聊天信件 。
+// Message 表示聊天消息.
 type Message struct {
 	Role    string `json:"role"`
 	Content string `json:"content"`
 }
 
-// 反应代表单一的LLM反应.
+// Response 表示单个 LLM 响应.
 type Response struct {
 	ID      string `json:"id"`
 	Content string `json:"content"`

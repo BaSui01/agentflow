@@ -3,31 +3,31 @@ package llm
 import "context"
 
 // =============================================================================
-// QQ 多模式提供者接口
+// 多模态提供者接口
 // =============================================================================
 
-// MultiModalProvider扩展提供商,具有多式能力.
+// MultiModalProvider 扩展 Provider，具有多模态能力.
 type MultiModalProvider interface {
 	Provider
 
-	// 生成图像从文本提示生成图像 。
-	// 如果提供者不支持图像生成, 则返回为零 。
+	// GenerateImage 从文本提示生成图像.
+	// 如果提供者不支持图像生成，则返回 nil。
 	GenerateImage(ctx context.Context, req *ImageGenerationRequest) (*ImageGenerationResponse, error)
 
-	// 生成视频从文本提示生成视频 。
-	// 如果供应商不支持视频生成,则返回为零。
+	// GenerateVideo 从文本提示生成视频.
+	// 如果提供者不支持视频生成，则返回 nil。
 	GenerateVideo(ctx context.Context, req *VideoGenerationRequest) (*VideoGenerationResponse, error)
 
-	// 生成 Audio 从文本生成音频/语音 。
-	// 如果提供者不支持音频生成, 则返回为零 。
+	// GenerateAudio 从文本生成音频/语音.
+	// 如果提供者不支持音频生成，则返回 nil。
 	GenerateAudio(ctx context.Context, req *AudioGenerationRequest) (*AudioGenerationResponse, error)
 
-	// 将音频转换成文本 。
-	// 如果提供方不支持音频转录,则返回为零。
+	// TranscribeAudio 将音频转录为文本.
+	// 如果提供者不支持音频转录，则返回 nil。
 	TranscribeAudio(ctx context.Context, req *AudioTranscriptionRequest) (*AudioTranscriptionResponse, error)
 }
 
-// 嵌入 Provider 扩展提供商 并具有嵌入能力.
+// EmbeddingProvider 扩展 Provider，具有嵌入能力.
 type EmbeddingProvider interface {
 	Provider
 
@@ -35,28 +35,28 @@ type EmbeddingProvider interface {
 	CreateEmbedding(ctx context.Context, req *EmbeddingRequest) (*EmbeddingResponse, error)
 }
 
-// FineTuning Provider扩展了提供商的微调能力.
+// FineTuningProvider 扩展 Provider，具有微调能力.
 type FineTuningProvider interface {
 	Provider
 
-	// 创建 FineTuningJob 创建微调任务.
+	// CreateFineTuningJob 创建微调任务.
 	CreateFineTuningJob(ctx context.Context, req *FineTuningJobRequest) (*FineTuningJob, error)
 
-	// ListFineTuningJobs列出微调工作.
+	// ListFineTuningJobs 列出微调任务.
 	ListFineTuningJobs(ctx context.Context) ([]FineTuningJob, error)
 
-	// Get FineTuningJob通过ID检索微调工作.
+	// GetFineTuningJob 通过 ID 获取微调任务.
 	GetFineTuningJob(ctx context.Context, jobID string) (*FineTuningJob, error)
 
-	// 取消FineTuningJob取消微调任务.
+	// CancelFineTuningJob 取消微调任务.
 	CancelFineTuningJob(ctx context.Context, jobID string) error
 }
 
 // =============================================================================
-// QQ 图像生成类型
+// 图像生成类型
 // =============================================================================
 
-// ImageGeneration 请求代表图像生成请求.
+// ImageGenerationRequest 表示图像生成请求.
 type ImageGenerationRequest struct {
 	Model          string  `json:"model"`                     // 模型名称
 	Prompt         string  `json:"prompt"`                    // 文本提示
@@ -69,13 +69,13 @@ type ImageGenerationRequest struct {
 	User           string  `json:"user,omitempty"`            // 用户标识
 }
 
-// ImageGenerationResponse代表了图像生成响应.
+// ImageGenerationResponse 表示图像生成响应.
 type ImageGenerationResponse struct {
 	Created int64   `json:"created"`
 	Data    []Image `json:"data"`
 }
 
-// 图像代表生成的图像.
+// Image 表示生成的图像.
 type Image struct {
 	URL           string `json:"url,omitempty"`            // 图片 URL
 	B64JSON       string `json:"b64_json,omitempty"`       // Base64 编码的图片
@@ -83,10 +83,10 @@ type Image struct {
 }
 
 // =============================================================================
-// QQ 视频生成类型
+// 视频生成类型
 // =============================================================================
 
-// VideoGeneration Request代表视频生成请求.
+// VideoGenerationRequest 表示视频生成请求.
 type VideoGenerationRequest struct {
 	Model          string  `json:"model"`                     // 模型名称
 	Prompt         string  `json:"prompt"`                    // 文本提示
@@ -98,24 +98,24 @@ type VideoGenerationRequest struct {
 	ResponseFormat string  `json:"response_format,omitempty"` // 响应格式（url, b64_json）
 }
 
-// VideoGenerationResponse代表视频生成响应.
+// VideoGenerationResponse 表示视频生成响应.
 type VideoGenerationResponse struct {
 	ID      string  `json:"id"`
 	Created int64   `json:"created"`
 	Data    []Video `json:"data"`
 }
 
-// 视频代表一个生成的视频.
+// Video 表示生成的视频.
 type Video struct {
 	URL     string `json:"url,omitempty"`      // 视频 URL
 	B64JSON string `json:"b64_json,omitempty"` // Base64 编码的视频
 }
 
 // =============================================================================
-// & Transcription 类型
+// 音频生成与转录类型
 // =============================================================================
 
-// AudioGeneration 请求代表音频/语音生成请求.
+// AudioGenerationRequest 表示音频/语音生成请求.
 type AudioGenerationRequest struct {
 	Model          string  `json:"model"`                     // 模型名称
 	Input          string  `json:"input"`                     // 输入文本
@@ -124,12 +124,12 @@ type AudioGenerationRequest struct {
 	ResponseFormat string  `json:"response_format,omitempty"` // 响应格式（mp3, opus, aac, flac）
 }
 
-// AudioGenerationResponse代表音频生成响应.
+// AudioGenerationResponse 表示音频生成响应.
 type AudioGenerationResponse struct {
 	Audio []byte `json:"audio"` // 音频数据
 }
 
-// AudioTranscription 请求代表音频转录请求.
+// AudioTranscriptionRequest 表示音频转录请求.
 type AudioTranscriptionRequest struct {
 	Model          string  `json:"model"`                     // 模型名称
 	File           []byte  `json:"file"`                      // 音频文件数据
@@ -139,7 +139,7 @@ type AudioTranscriptionRequest struct {
 	Temperature    float32 `json:"temperature,omitempty"`     // 采样温度
 }
 
-// AudioTranscriptionResponse 代表音频抄写响应.
+// AudioTranscriptionResponse 表示音频转录响应.
 type AudioTranscriptionResponse struct {
 	Text     string                 `json:"text"`               // 转录文本
 	Language string                 `json:"language,omitempty"` // 检测到的语言
@@ -147,7 +147,7 @@ type AudioTranscriptionResponse struct {
 	Segments []TranscriptionSegment `json:"segments,omitempty"` // 分段信息
 }
 
-// TranscriptionSegment代表了被转录的音频的一个部分.
+// TranscriptionSegment 表示转录音频的一个片段.
 type TranscriptionSegment struct {
 	ID               int     `json:"id"`
 	Seek             int     `json:"seek"`
@@ -165,7 +165,7 @@ type TranscriptionSegment struct {
 // 嵌入类型
 // =============================================================================
 
-// 嵌入请求代表嵌入请求.
+// EmbeddingRequest 表示嵌入请求.
 type EmbeddingRequest struct {
 	Model          string   `json:"model"`                     // 模型名称
 	Input          []string `json:"input"`                     // 输入文本列表
@@ -174,7 +174,7 @@ type EmbeddingRequest struct {
 	User           string   `json:"user,omitempty"`            // 用户标识
 }
 
-// 嵌入式响应代表嵌入式响应.
+// EmbeddingResponse 表示嵌入响应.
 type EmbeddingResponse struct {
 	Object string      `json:"object"`
 	Data   []Embedding `json:"data"`
@@ -182,7 +182,7 @@ type EmbeddingResponse struct {
 	Usage  ChatUsage   `json:"usage"`
 }
 
-// 嵌入代表单一嵌入.
+// Embedding 表示单个嵌入向量.
 type Embedding struct {
 	Object    string    `json:"object"`
 	Index     int       `json:"index"`
@@ -190,10 +190,10 @@ type Embedding struct {
 }
 
 // =============================================================================
-// QQ 微调类型
+// 微调类型
 // =============================================================================
 
-// FineTuningJob Request代表着一个微调创造就业的请求.
+// FineTuningJobRequest 表示创建微调任务的请求.
 type FineTuningJobRequest struct {
 	Model           string                 `json:"model"`                       // 基础模型
 	TrainingFile    string                 `json:"training_file"`               // 训练文件 ID
@@ -203,7 +203,7 @@ type FineTuningJobRequest struct {
 	IntegrationIDs  []string               `json:"integration_ids,omitempty"`   // 集成 ID
 }
 
-// FineTuningJob代表微调工作.
+// FineTuningJob 表示微调任务.
 type FineTuningJob struct {
 	ID              string                 `json:"id"`
 	Object          string                 `json:"object"`
@@ -221,7 +221,7 @@ type FineTuningJob struct {
 	Error           *FineTuningError       `json:"error,omitempty"`
 }
 
-// FineTuningError代表了微调错误.
+// FineTuningError 表示微调错误.
 type FineTuningError struct {
 	Code    string `json:"code"`
 	Message string `json:"message"`

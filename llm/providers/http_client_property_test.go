@@ -20,7 +20,7 @@ import (
 // 特性: 多提供者支持, 属性 7: 默认超时配置
 // ** 变动情况:要求6.6、15.1**
 
-// 测试Property7  Default Timeout 配置测试 供应商使用 30s 默认超时
+// 测试Property7  Default Timeout 配置测试 提供者使用 30s 默认超时
 func TestProperty7_DefaultTimeoutConfiguration(t *testing.T) {
 	logger := zap.NewNop()
 
