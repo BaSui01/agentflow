@@ -96,6 +96,16 @@ These guides help you **ask the right questions before coding**.
 
 → Read [quality-guidelines.md §23](../backend/quality-guidelines.md) for Optional Interface pattern
 
+### When to Think About Concurrency Safety
+
+- [ ] 使用了 channel — 是否有 `sync.Once` 保护 close？
+- [ ] goroutine 是否有明确的退出路径（`done` channel 或 context cancellation）？
+- [ ] 向 channel 发送数据前是否检查了关闭状态？
+- [ ] 共享 map/slice 是否有 `sync.RWMutex` 或 `sync.Map` 保护？
+- [ ] streaming 场景是否处理了 client disconnect 导致的 goroutine 泄漏？
+
+→ Read [error-handling.md § Channel Double-Close Protection](../backend/error-handling.md)
+
 ### When to Think About Cross-Platform Issues
 
 - [ ] Writing code that creates files or directories

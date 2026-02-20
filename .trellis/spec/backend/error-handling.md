@@ -365,3 +365,74 @@ apiKey := r.Header.Get("X-API-Key")
 ```
 
 > **历史教训**：`config/api.go` 同时存在 CORS `*` 和 query string API key 两个安全问题。对于管理类 API，这些是高风险漏洞。
+
+---
+
+## Channel Double-Close Protection
+
+### Problem
+
+Goroutine 向已关闭的 channel 发送数据会 panic。在 streaming、WebSocket transport、parallel execution 等场景中，多个 goroutine 可能同时尝试关闭同一个 channel。
+
+### Pattern: sync.Once for Channel Close
+
+```go
+type SafeStream struct {
+    ch       chan Event
+    closeOnce sync.Once
+}
+
+func (s *SafeStream) Close() {
+    s.closeOnce.Do(func() {
+        close(s.ch)
+    })
+}
+```
+
+### Pattern: Select+Default for Safe Send
+
+当 channel 可能已关闭时，使用 `select` + `default` 避免 panic：
+
+```go
+func (s *SafeStream) Send(event Event) bool {
+    select {
+    case s.ch <- event:
+        return true
+    default:
+        // channel closed or full — drop event gracefully
+        return false
+    }
+}
+```
+
+### Pattern: Done Channel for Lifecycle
+
+使用独立的 `done` channel 协调 goroutine 退出：
+
+```go
+type Transport struct {
+    done     chan struct{}
+    doneOnce sync.Once
+}
+
+func (t *Transport) shutdown() {
+    t.doneOnce.Do(func() {
+        close(t.done)
+    })
+}
+
+// In goroutine:
+select {
+case msg := <-t.incoming:
+    process(msg)
+case <-t.done:
+    return
+}
+```
+
+### Checklist
+
+- [ ] 每个可关闭的 channel 都有 `sync.Once` 保护
+- [ ] 向 channel 发送前检查 done 信号
+- [ ] goroutine 有明确的退出路径（`select` on `done` channel）
+- [ ] 不要依赖 `recover()` 来捕获 channel panic — 从设计上避免
