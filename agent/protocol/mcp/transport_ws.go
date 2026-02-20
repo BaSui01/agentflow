@@ -68,6 +68,7 @@ type WebSocketTransport struct {
 	reconnectCount int
 	lastHeartbeat  time.Time
 	done           chan struct{}
+	closeOnce      sync.Once
 	reconnecting   bool // guards against concurrent reconnect attempts
 	sendBuffer     []*MCPMessage
 }
@@ -284,7 +285,7 @@ func (t *WebSocketTransport) Close() error {
 		return nil
 	}
 	t.closed = true
-	close(t.done)
+	t.closeOnce.Do(func() { close(t.done) })
 	conn := t.conn
 	t.mu.Unlock()
 

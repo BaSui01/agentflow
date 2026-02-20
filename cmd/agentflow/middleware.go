@@ -113,7 +113,7 @@ func APIKeyAuth(validKeys []string, skipPaths []string, allowQueryAPIKey bool, l
 }
 
 // RateLimiter 基于 IP 的请求限流中间件
-func RateLimiter(rps float64, burst int, logger *zap.Logger) Middleware {
+func RateLimiter(ctx context.Context, rps float64, burst int, logger *zap.Logger) Middleware {
 	type visitor struct {
 		limiter  *rate.Limiter
 		lastSeen time.Time
@@ -124,15 +124,21 @@ func RateLimiter(rps float64, burst int, logger *zap.Logger) Middleware {
 	)
 	// 后台清理过期 visitor
 	go func() {
+		ticker := time.NewTicker(time.Minute)
+		defer ticker.Stop()
 		for {
-			time.Sleep(time.Minute)
-			mu.Lock()
-			for ip, v := range visitors {
-				if time.Since(v.lastSeen) > 3*time.Minute {
-					delete(visitors, ip)
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				mu.Lock()
+				for ip, v := range visitors {
+					if time.Since(v.lastSeen) > 3*time.Minute {
+						delete(visitors, ip)
+					}
 				}
+				mu.Unlock()
 			}
-			mu.Unlock()
 		}
 	}()
 	return func(next http.Handler) http.Handler {

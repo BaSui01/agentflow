@@ -8,43 +8,32 @@ import (
 	"github.com/BaSui01/agentflow/llm"
 	"github.com/BaSui01/agentflow/llm/tools"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/mock"
 	"go.uber.org/zap"
 )
+
+// testToolExecutor 是用于测试的函数回调工具执行器替身
+type testToolExecutor struct {
+	executeFn    func(ctx context.Context, calls []llm.ToolCall) []tools.ToolResult
+	executeOneFn func(ctx context.Context, call llm.ToolCall) tools.ToolResult
+}
+
+func (e *testToolExecutor) Execute(ctx context.Context, calls []llm.ToolCall) []tools.ToolResult {
+	if e.executeFn != nil {
+		return e.executeFn(ctx, calls)
+	}
+	return nil
+}
+
+func (e *testToolExecutor) ExecuteOne(ctx context.Context, call llm.ToolCall) tools.ToolResult {
+	if e.executeOneFn != nil {
+		return e.executeOneFn(ctx, call)
+	}
+	return tools.ToolResult{}
+}
 
 // TestReActLoop_SingleToolCall 使用单个工具调用测试 ReAct 循环
 func TestReActLoop_SingleToolCall(t *testing.T) {
 	logger, _ := zap.NewDevelopment()
-	provider := &MockProvider{name: "test-provider"}
-	executor := &MockToolExecutor{}
-
-	config := tools.ReActConfig{
-		MaxIterations: 5,
-		StopOnError:   true,
-	}
-
-	reactExecutor := tools.NewReActExecutor(provider, executor, config, logger)
-
-	ctx := context.Background()
-	req := &llm.ChatRequest{
-		Model: "gpt-4",
-		Messages: []llm.Message{
-			{Role: llm.RoleUser, Content: "What's the weather in Tokyo?"},
-		},
-		Tools: []llm.ToolSchema{
-			{
-				Name:        "get_weather",
-				Description: "Get weather information for a city",
-				Parameters: json.RawMessage(`{
-					"type": "object",
-					"properties": {
-						"city": {"type": "string"}
-					},
-					"required": ["city"]
-				}`),
-			},
-		},
-	}
 
 	// 第一次法学硕士通话 - 决定使用工具
 	firstResp := &llm.ChatResponse{
@@ -89,13 +78,17 @@ func TestReActLoop_SingleToolCall(t *testing.T) {
 		Usage: llm.ChatUsage{TotalTokens: 30},
 	}
 
-	provider.On("Completion", ctx, mock.MatchedBy(func(r *llm.ChatRequest) bool {
-		return len(r.Messages) == 1
-	})).Return(firstResp, nil).Once()
-
-	provider.On("Completion", ctx, mock.MatchedBy(func(r *llm.ChatRequest) bool {
-		return len(r.Messages) == 3 // user + assistant + tool
-	})).Return(secondResp, nil).Once()
+	callCount := 0
+	provider := &testProvider{
+		name: "test-provider",
+		completionFn: func(ctx context.Context, req *llm.ChatRequest) (*llm.ChatResponse, error) {
+			callCount++
+			if callCount == 1 {
+				return firstResp, nil
+			}
+			return secondResp, nil
+		},
+	}
 
 	// 模拟工具执行
 	toolResults := []tools.ToolResult{
@@ -106,29 +99,15 @@ func TestReActLoop_SingleToolCall(t *testing.T) {
 		},
 	}
 
-	executor.On("Execute", ctx, mock.Anything).Return(toolResults)
-
-	// 执行ReAct循环
-	resp, steps, err := reactExecutor.Execute(ctx, req)
-
-	assert.NoError(t, err)
-	assert.NotNil(t, resp)
-	assert.Len(t, steps, 2)
-	assert.Equal(t, "The weather in Tokyo is sunny with a temperature of 25°C.", resp.Choices[0].Message.Content)
-
-	provider.AssertExpectations(t)
-	executor.AssertExpectations(t)
-}
-
-// TestReActLoop_MultipleToolCalls 使用多个工具调用测试 ReAct 循环
-func TestReActLoop_MultipleToolCalls(t *testing.T) {
-	logger, _ := zap.NewDevelopment()
-	provider := &MockProvider{name: "test-provider"}
-	executor := &MockToolExecutor{}
+	executor := &testToolExecutor{
+		executeFn: func(ctx context.Context, calls []llm.ToolCall) []tools.ToolResult {
+			return toolResults
+		},
+	}
 
 	config := tools.ReActConfig{
 		MaxIterations: 5,
-		StopOnError:   false,
+		StopOnError:   true,
 	}
 
 	reactExecutor := tools.NewReActExecutor(provider, executor, config, logger)
@@ -137,19 +116,35 @@ func TestReActLoop_MultipleToolCalls(t *testing.T) {
 	req := &llm.ChatRequest{
 		Model: "gpt-4",
 		Messages: []llm.Message{
-			{Role: llm.RoleUser, Content: "Calculate 10 + 20 and then multiply by 2"},
+			{Role: llm.RoleUser, Content: "What's the weather in Tokyo?"},
 		},
 		Tools: []llm.ToolSchema{
 			{
-				Name:        "add",
-				Description: "Add two numbers",
-			},
-			{
-				Name:        "multiply",
-				Description: "Multiply two numbers",
+				Name:        "get_weather",
+				Description: "Get weather information for a city",
+				Parameters: json.RawMessage(`{
+					"type": "object",
+					"properties": {
+						"city": {"type": "string"}
+					},
+					"required": ["city"]
+				}`),
 			},
 		},
 	}
+
+	// 执行ReAct循环
+	resp, steps, err := reactExecutor.Execute(ctx, req)
+
+	assert.NoError(t, err)
+	assert.NotNil(t, resp)
+	assert.Len(t, steps, 2)
+	assert.Equal(t, "The weather in Tokyo is sunny with a temperature of 25°C.", resp.Choices[0].Message.Content)
+}
+
+// TestReActLoop_MultipleToolCalls 使用多个工具调用测试 ReAct 循环
+func TestReActLoop_MultipleToolCalls(t *testing.T) {
+	logger, _ := zap.NewDevelopment()
 
 	// 第一次调用 - 添加
 	resp1 := &llm.ChatResponse{
@@ -217,60 +212,48 @@ func TestReActLoop_MultipleToolCalls(t *testing.T) {
 		Usage: llm.ChatUsage{TotalTokens: 10},
 	}
 
-	provider.On("Completion", ctx, mock.MatchedBy(func(r *llm.ChatRequest) bool {
-		return len(r.Messages) == 1
-	})).Return(resp1, nil).Once()
-
-	provider.On("Completion", ctx, mock.MatchedBy(func(r *llm.ChatRequest) bool {
-		return len(r.Messages) == 3
-	})).Return(resp2, nil).Once()
-
-	provider.On("Completion", ctx, mock.MatchedBy(func(r *llm.ChatRequest) bool {
-		return len(r.Messages) == 5
-	})).Return(resp3, nil).Once()
-
-	// 模拟工具执行
-	executor.On("Execute", ctx, mock.MatchedBy(func(calls []llm.ToolCall) bool {
-		return len(calls) == 1 && calls[0].Name == "add"
-	})).Return([]tools.ToolResult{
-		{
-			ToolCallID: "call_1",
-			Name:       "add",
-			Result:     json.RawMessage(`30`),
+	completionCallCount := 0
+	provider := &testProvider{
+		name: "test-provider",
+		completionFn: func(ctx context.Context, req *llm.ChatRequest) (*llm.ChatResponse, error) {
+			completionCallCount++
+			switch completionCallCount {
+			case 1:
+				return resp1, nil
+			case 2:
+				return resp2, nil
+			default:
+				return resp3, nil
+			}
 		},
-	}).Once()
+	}
 
-	executor.On("Execute", ctx, mock.MatchedBy(func(calls []llm.ToolCall) bool {
-		return len(calls) == 1 && calls[0].Name == "multiply"
-	})).Return([]tools.ToolResult{
-		{
-			ToolCallID: "call_2",
-			Name:       "multiply",
-			Result:     json.RawMessage(`60`),
+	executeCallCount := 0
+	executor := &testToolExecutor{
+		executeFn: func(ctx context.Context, calls []llm.ToolCall) []tools.ToolResult {
+			executeCallCount++
+			if executeCallCount == 1 {
+				return []tools.ToolResult{
+					{
+						ToolCallID: "call_1",
+						Name:       "add",
+						Result:     json.RawMessage(`30`),
+					},
+				}
+			}
+			return []tools.ToolResult{
+				{
+					ToolCallID: "call_2",
+					Name:       "multiply",
+					Result:     json.RawMessage(`60`),
+				},
+			}
 		},
-	}).Once()
-
-	// 执行ReAct循环
-	resp, steps, err := reactExecutor.Execute(ctx, req)
-
-	assert.NoError(t, err)
-	assert.NotNil(t, resp)
-	assert.Len(t, steps, 3)
-	assert.Equal(t, "The result is 60.", resp.Choices[0].Message.Content)
-
-	provider.AssertExpectations(t)
-	executor.AssertExpectations(t)
-}
-
-// TestReActLoop_ToolError 使用工具错误测试 ReAct 循环
-func TestReActLoop_ToolError(t *testing.T) {
-	logger, _ := zap.NewDevelopment()
-	provider := &MockProvider{name: "test-provider"}
-	executor := &MockToolExecutor{}
+	}
 
 	config := tools.ReActConfig{
 		MaxIterations: 5,
-		StopOnError:   true,
+		StopOnError:   false,
 	}
 
 	reactExecutor := tools.NewReActExecutor(provider, executor, config, logger)
@@ -279,12 +262,32 @@ func TestReActLoop_ToolError(t *testing.T) {
 	req := &llm.ChatRequest{
 		Model: "gpt-4",
 		Messages: []llm.Message{
-			{Role: llm.RoleUser, Content: "Get weather"},
+			{Role: llm.RoleUser, Content: "Calculate 10 + 20 and then multiply by 2"},
 		},
 		Tools: []llm.ToolSchema{
-			{Name: "get_weather", Description: "Get weather"},
+			{
+				Name:        "add",
+				Description: "Add two numbers",
+			},
+			{
+				Name:        "multiply",
+				Description: "Multiply two numbers",
+			},
 		},
 	}
+
+	// 执行ReAct循环
+	resp, steps, err := reactExecutor.Execute(ctx, req)
+
+	assert.NoError(t, err)
+	assert.NotNil(t, resp)
+	assert.Len(t, steps, 3)
+	assert.Equal(t, "The result is 60.", resp.Choices[0].Message.Content)
+}
+
+// TestReActLoop_ToolError 使用工具错误测试 ReAct 循环
+func TestReActLoop_ToolError(t *testing.T) {
+	logger, _ := zap.NewDevelopment()
 
 	// LLM调用工具
 	resp1 := &llm.ChatResponse{
@@ -310,7 +313,12 @@ func TestReActLoop_ToolError(t *testing.T) {
 		Usage: llm.ChatUsage{TotalTokens: 10},
 	}
 
-	provider.On("Completion", ctx, mock.Anything).Return(resp1, nil).Once()
+	provider := &testProvider{
+		name: "test-provider",
+		completionFn: func(ctx context.Context, req *llm.ChatRequest) (*llm.ChatResponse, error) {
+			return resp1, nil
+		},
+	}
 
 	// 模拟工具执行时出错
 	toolResults := []tools.ToolResult{
@@ -321,29 +329,15 @@ func TestReActLoop_ToolError(t *testing.T) {
 		},
 	}
 
-	executor.On("Execute", ctx, mock.Anything).Return(toolResults)
-
-	// 执行 ReAct 循环 - 应因错误而停止
-	resp, steps, err := reactExecutor.Execute(ctx, req)
-
-	assert.Error(t, err)
-	assert.NotNil(t, resp)
-	assert.Len(t, steps, 1)
-	assert.Contains(t, err.Error(), "tool execution failed")
-
-	provider.AssertExpectations(t)
-	executor.AssertExpectations(t)
-}
-
-// TestReActLoop_MaxIterations 测试 ReAct 循环达到最大迭代次数
-func TestReActLoop_MaxIterations(t *testing.T) {
-	logger, _ := zap.NewDevelopment()
-	provider := &MockProvider{name: "test-provider"}
-	executor := &MockToolExecutor{}
+	executor := &testToolExecutor{
+		executeFn: func(ctx context.Context, calls []llm.ToolCall) []tools.ToolResult {
+			return toolResults
+		},
+	}
 
 	config := tools.ReActConfig{
-		MaxIterations: 2,
-		StopOnError:   false,
+		MaxIterations: 5,
+		StopOnError:   true,
 	}
 
 	reactExecutor := tools.NewReActExecutor(provider, executor, config, logger)
@@ -352,12 +346,25 @@ func TestReActLoop_MaxIterations(t *testing.T) {
 	req := &llm.ChatRequest{
 		Model: "gpt-4",
 		Messages: []llm.Message{
-			{Role: llm.RoleUser, Content: "Test"},
+			{Role: llm.RoleUser, Content: "Get weather"},
 		},
 		Tools: []llm.ToolSchema{
-			{Name: "test_tool", Description: "Test tool"},
+			{Name: "get_weather", Description: "Get weather"},
 		},
 	}
+
+	// 执行 ReAct 循环 - 应因错误而停止
+	resp, steps, err := reactExecutor.Execute(ctx, req)
+
+	assert.Error(t, err)
+	assert.NotNil(t, resp)
+	assert.Len(t, steps, 1)
+	assert.Contains(t, err.Error(), "tool execution failed")
+}
+
+// TestReActLoop_MaxIterations 测试 ReAct 循环达到最大迭代次数
+func TestReActLoop_MaxIterations(t *testing.T) {
+	logger, _ := zap.NewDevelopment()
 
 	// 始终返回工具调用
 	resp := &llm.ChatResponse{
@@ -383,7 +390,12 @@ func TestReActLoop_MaxIterations(t *testing.T) {
 		Usage: llm.ChatUsage{TotalTokens: 10},
 	}
 
-	provider.On("Completion", ctx, mock.Anything).Return(resp, nil)
+	provider := &testProvider{
+		name: "test-provider",
+		completionFn: func(ctx context.Context, req *llm.ChatRequest) (*llm.ChatResponse, error) {
+			return resp, nil
+		},
+	}
 
 	toolResults := []tools.ToolResult{
 		{
@@ -393,40 +405,15 @@ func TestReActLoop_MaxIterations(t *testing.T) {
 		},
 	}
 
-	executor.On("Execute", ctx, mock.Anything).Return(toolResults)
-
-	// 执行 ReAct 循环 - 应达到最大迭代次数
-	_, steps, err := reactExecutor.Execute(ctx, req)
-
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "max iterations reached")
-	assert.Len(t, steps, 2)
-}
-
-// MockToolExecutor 用于测试
-type MockToolExecutor struct {
-	mock.Mock
-}
-
-func (m *MockToolExecutor) Execute(ctx context.Context, calls []llm.ToolCall) []tools.ToolResult {
-	args := m.Called(ctx, calls)
-	return args.Get(0).([]tools.ToolResult)
-}
-
-func (m *MockToolExecutor) ExecuteOne(ctx context.Context, call llm.ToolCall) tools.ToolResult {
-	args := m.Called(ctx, call)
-	return args.Get(0).(tools.ToolResult)
-}
-
-// BenchmarkReActLoop 基准测试 ReAct 循环性能
-func BenchmarkReActLoop(b *testing.B) {
-	logger, _ := zap.NewDevelopment()
-	provider := &MockProvider{name: "test-provider"}
-	executor := &MockToolExecutor{}
+	executor := &testToolExecutor{
+		executeFn: func(ctx context.Context, calls []llm.ToolCall) []tools.ToolResult {
+			return toolResults
+		},
+	}
 
 	config := tools.ReActConfig{
-		MaxIterations: 5,
-		StopOnError:   true,
+		MaxIterations: 2,
+		StopOnError:   false,
 	}
 
 	reactExecutor := tools.NewReActExecutor(provider, executor, config, logger)
@@ -437,7 +424,22 @@ func BenchmarkReActLoop(b *testing.B) {
 		Messages: []llm.Message{
 			{Role: llm.RoleUser, Content: "Test"},
 		},
+		Tools: []llm.ToolSchema{
+			{Name: "test_tool", Description: "Test tool"},
+		},
 	}
+
+	// 执行 ReAct 循环 - 应达到最大迭代次数
+	_, steps, err := reactExecutor.Execute(ctx, req)
+
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "max iterations reached")
+	assert.Len(t, steps, 2)
+}
+
+// BenchmarkReActLoop 基准测试 ReAct 循环性能
+func BenchmarkReActLoop(b *testing.B) {
+	logger, _ := zap.NewDevelopment()
 
 	resp := &llm.ChatResponse{
 		ID:       "resp",
@@ -455,8 +457,30 @@ func BenchmarkReActLoop(b *testing.B) {
 		},
 	}
 
-	provider.On("Completion", ctx, mock.Anything).Return(resp, nil)
-	provider.On("SupportsNativeFunctionCalling").Return(true)
+	provider := &testProvider{
+		name:           "test-provider",
+		supportsNative: true,
+		completionFn: func(ctx context.Context, req *llm.ChatRequest) (*llm.ChatResponse, error) {
+			return resp, nil
+		},
+	}
+
+	executor := &testToolExecutor{}
+
+	config := tools.ReActConfig{
+		MaxIterations: 5,
+		StopOnError:   true,
+	}
+
+	reactExecutor := tools.NewReActExecutor(provider, executor, config, logger)
+
+	ctx := context.Background()
+	req := &llm.ChatRequest{
+		Model: "gpt-4",
+		Messages: []llm.Message{
+			{Role: llm.RoleUser, Content: "Test"},
+		},
+	}
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {

@@ -8,6 +8,8 @@ import (
 	"io"
 	"net/http"
 	"time"
+
+	"github.com/BaSui01/agentflow/internal/tlsutil"
 )
 
 // VeoProvider使用Google Veo 3.1执行视频生成.
@@ -28,7 +30,7 @@ func NewVeoProvider(cfg VeoConfig) *VeoProvider {
 
 	return &VeoProvider{
 		cfg:    cfg,
-		client: &http.Client{Timeout: timeout},
+		client: tlsutil.SecureHTTPClient(timeout),
 	}
 }
 

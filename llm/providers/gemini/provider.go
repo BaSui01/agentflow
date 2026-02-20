@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/BaSui01/agentflow/internal/tlsutil"
 	"github.com/BaSui01/agentflow/llm"
 	"github.com/BaSui01/agentflow/llm/middleware"
 	"github.com/BaSui01/agentflow/llm/providers"
@@ -43,10 +44,8 @@ func NewGeminiProvider(cfg providers.GeminiConfig, logger *zap.Logger) *GeminiPr
 	}
 
 	return &GeminiProvider{
-		cfg: cfg,
-		client: &http.Client{
-			Timeout: timeout,
-		},
+		cfg:    cfg,
+		client: tlsutil.SecureHTTPClient(timeout),
 		logger: logger,
 		rewriterChain: middleware.NewRewriterChain(
 			middleware.NewEmptyToolsCleaner(),
@@ -485,7 +484,10 @@ func (p *GeminiProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-ch
 			line, err := reader.ReadString('\n')
 			if err != nil {
 				if err != io.EOF {
-					ch <- llm.StreamChunk{
+					select {
+					case <-ctx.Done():
+						return
+					case ch <- llm.StreamChunk{
 						Err: &llm.Error{
 							Code:       llm.ErrUpstreamError,
 							Message:    err.Error(),
@@ -493,6 +495,7 @@ func (p *GeminiProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-ch
 							Retryable:  true,
 							Provider:   p.Name(),
 						},
+					}:
 					}
 				}
 				return
@@ -545,12 +548,19 @@ func (p *GeminiProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-ch
 					}
 				}
 
-				ch <- chunk
+				select {
+				case <-ctx.Done():
+					return
+				case ch <- chunk:
+				}
 			}
 
 			// 最后一个 chunk 包含 usage
 			if geminiResp.UsageMetadata != nil {
-				ch <- llm.StreamChunk{
+				select {
+				case <-ctx.Done():
+					return
+				case ch <- llm.StreamChunk{
 					Provider: p.Name(),
 					Model:    model,
 					Usage: &llm.ChatUsage{
@@ -558,6 +568,7 @@ func (p *GeminiProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-ch
 						CompletionTokens: geminiResp.UsageMetadata.CandidatesTokenCount,
 						TotalTokens:      geminiResp.UsageMetadata.TotalTokenCount,
 					},
+				}:
 				}
 			}
 		}

@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/BaSui01/agentflow/internal/tlsutil"
 	"github.com/google/uuid"
 	"go.uber.org/zap"
 )
@@ -115,7 +116,7 @@ func NewWeaviateStore(cfg WeaviateConfig, logger *zap.Logger) *WeaviateStore {
 	return &WeaviateStore{
 		cfg:     cfg,
 		baseURL: baseURL,
-		client:  &http.Client{Timeout: cfg.Timeout},
+		client:  tlsutil.SecureHTTPClient(cfg.Timeout),
 		logger:  logger.With(zap.String("component", "weaviate_store")),
 	}
 }

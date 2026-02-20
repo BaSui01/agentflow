@@ -11,6 +11,8 @@ import (
 	"os"
 	"strings"
 	"time"
+
+	"github.com/BaSui01/agentflow/internal/tlsutil"
 )
 
 // DeepgramProvider使用Deepgram API执行STT.
@@ -34,7 +36,7 @@ func NewDeepgramProvider(cfg DeepgramConfig) *DeepgramProvider {
 
 	return &DeepgramProvider{
 		cfg:    cfg,
-		client: &http.Client{Timeout: timeout},
+		client: tlsutil.SecureHTTPClient(timeout),
 	}
 }
 

@@ -74,7 +74,10 @@ Only return valid JSON, no markdown.`
 
 // PlanActions 规划下一步操作
 func (a *LLMVisionAdapter) PlanActions(ctx context.Context, goal string, analysis *VisionAnalysis) ([]AgenticAction, error) {
-	analysisJSON, _ := json.Marshal(analysis)
+	analysisJSON, err := json.Marshal(analysis)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal analysis: %w", err)
+	}
 
 	prompt := fmt.Sprintf(`Given the goal: "%s"
 And the current page analysis: %s

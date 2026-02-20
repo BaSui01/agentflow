@@ -9,9 +9,9 @@ import (
 	"net/http"
 	"strings"
 	"time"
-)
 
-// Cohere Provider执行重排 使用 Cohere API.
+	"github.com/BaSui01/agentflow/internal/tlsutil"
+)
 type CohereProvider struct {
 	cfg    CohereConfig
 	client *http.Client
@@ -32,7 +32,7 @@ func NewCohereProvider(cfg CohereConfig) *CohereProvider {
 
 	return &CohereProvider{
 		cfg:    cfg,
-		client: &http.Client{Timeout: timeout},
+		client: tlsutil.SecureHTTPClient(timeout),
 	}
 }
 

@@ -11,6 +11,8 @@ import (
 	"os"
 	"strings"
 	"time"
+
+	"github.com/BaSui01/agentflow/internal/tlsutil"
 )
 
 // OpenAISTTProvider使用OpenAI Whisper API执行STT.
@@ -34,7 +36,7 @@ func NewOpenAISTTProvider(cfg OpenAISTTConfig) *OpenAISTTProvider {
 
 	return &OpenAISTTProvider{
 		cfg:    cfg,
-		client: &http.Client{Timeout: timeout},
+		client: tlsutil.SecureHTTPClient(timeout),
 	}
 }
 

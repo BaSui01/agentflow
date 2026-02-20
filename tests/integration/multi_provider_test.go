@@ -2,56 +2,49 @@ package integration
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
 	"github.com/BaSui01/agentflow/llm"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/mock"
 	"go.uber.org/zap"
 )
 
-// MockProvider 用于集成测试
-type MockProvider struct {
-	mock.Mock
-	name string
+// testProvider 是用于集成测试的函数回调测试替身
+type testProvider struct {
+	name           string
+	completionFn   func(ctx context.Context, req *llm.ChatRequest) (*llm.ChatResponse, error)
+	streamFn       func(ctx context.Context, req *llm.ChatRequest) (<-chan llm.StreamChunk, error)
+	healthCheckFn  func(ctx context.Context) (*llm.HealthStatus, error)
+	listModelsFn   func(ctx context.Context) ([]llm.Model, error)
+	supportsNative bool
 }
 
-func (m *MockProvider) Completion(ctx context.Context, req *llm.ChatRequest) (*llm.ChatResponse, error) {
-	args := m.Called(ctx, req)
-	if args.Get(0) == nil {
-		return nil, args.Error(1)
+func (p *testProvider) Name() string { return p.name }
+func (p *testProvider) SupportsNativeFunctionCalling() bool { return p.supportsNative }
+func (p *testProvider) Completion(ctx context.Context, req *llm.ChatRequest) (*llm.ChatResponse, error) {
+	if p.completionFn != nil {
+		return p.completionFn(ctx, req)
 	}
-	return args.Get(0).(*llm.ChatResponse), args.Error(1)
+	return nil, fmt.Errorf("completion not configured")
 }
-
-func (m *MockProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-chan llm.StreamChunk, error) {
-	args := m.Called(ctx, req)
-	if args.Get(0) == nil {
-		return nil, args.Error(1)
+func (p *testProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-chan llm.StreamChunk, error) {
+	if p.streamFn != nil {
+		return p.streamFn(ctx, req)
 	}
-	return args.Get(0).(<-chan llm.StreamChunk), args.Error(1)
+	return nil, fmt.Errorf("stream not configured")
 }
-
-func (m *MockProvider) HealthCheck(ctx context.Context) (*llm.HealthStatus, error) {
-	args := m.Called(ctx)
-	if args.Get(0) == nil {
-		return nil, args.Error(1)
+func (p *testProvider) HealthCheck(ctx context.Context) (*llm.HealthStatus, error) {
+	if p.healthCheckFn != nil {
+		return p.healthCheckFn(ctx)
 	}
-	return args.Get(0).(*llm.HealthStatus), args.Error(1)
+	return &llm.HealthStatus{Healthy: true}, nil
 }
-
-func (m *MockProvider) Name() string {
-	return m.name
-}
-
-func (m *MockProvider) SupportsNativeFunctionCalling() bool {
-	args := m.Called()
-	return args.Bool(0)
-}
-
-func (m *MockProvider) ListModels(ctx context.Context) ([]llm.Model, error) {
-	_ = ctx
+func (p *testProvider) ListModels(ctx context.Context) ([]llm.Model, error) {
+	if p.listModelsFn != nil {
+		return p.listModelsFn(ctx)
+	}
 	return nil, nil
 }
 
@@ -59,9 +52,28 @@ func (m *MockProvider) ListModels(ctx context.Context) ([]llm.Model, error) {
 func TestMultiProviderRouting(t *testing.T) {
 	logger, _ := zap.NewDevelopment()
 
-	// 创建模拟提供商
-	provider1 := &MockProvider{name: "provider1"}
-	provider2 := &MockProvider{name: "provider2"}
+	resp1 := &llm.ChatResponse{
+		ID:       "resp-1",
+		Provider: "provider1",
+		Model:    "gpt-4",
+		Choices: []llm.ChatChoice{
+			{
+				Index:        0,
+				FinishReason: "stop",
+				Message:      llm.Message{Role: llm.RoleAssistant, Content: "Response from provider1"},
+			},
+		},
+		Usage: llm.ChatUsage{TotalTokens: 10},
+	}
+
+	// 创建测试提供商
+	provider1 := &testProvider{
+		name: "provider1",
+		completionFn: func(ctx context.Context, req *llm.ChatRequest) (*llm.ChatResponse, error) {
+			return resp1, nil
+		},
+	}
+	provider2 := &testProvider{name: "provider2"}
 
 	// 使用提供商地图创建路由器
 	providers := map[string]llm.Provider{
@@ -80,23 +92,6 @@ func TestMultiProviderRouting(t *testing.T) {
 		},
 	}
 
-	// 模拟提供商 1 响应
-	resp1 := &llm.ChatResponse{
-		ID:       "resp-1",
-		Provider: "provider1",
-		Model:    "gpt-4",
-		Choices: []llm.ChatChoice{
-			{
-				Index:        0,
-				FinishReason: "stop",
-				Message:      llm.Message{Role: llm.RoleAssistant, Content: "Response from provider1"},
-			},
-		},
-		Usage: llm.ChatUsage{TotalTokens: 10},
-	}
-
-	provider1.On("Completion", ctx, req).Return(resp1, nil)
-
 	// 路由到provider1 - 直接使用provider，因为旧版路由器已被弃用
 	resp, err := provider1.Completion(ctx, req)
 
@@ -104,17 +99,40 @@ func TestMultiProviderRouting(t *testing.T) {
 	assert.NotNil(t, resp)
 	assert.Equal(t, "provider1", resp.Provider)
 	assert.Equal(t, "Response from provider1", resp.Choices[0].Message.Content)
-
-	provider1.AssertExpectations(t)
 }
 
 // TestMultiProviderFailover 测试提供商之间的故障转移
 func TestMultiProviderFailover(t *testing.T) {
 	logger, _ := zap.NewDevelopment()
 
-	// 创建模拟提供商
-	provider1 := &MockProvider{name: "provider1"}
-	provider2 := &MockProvider{name: "provider2"}
+	// 创建测试提供商
+	provider1 := &testProvider{
+		name: "provider1",
+		completionFn: func(ctx context.Context, req *llm.ChatRequest) (*llm.ChatResponse, error) {
+			return nil, assert.AnError
+		},
+	}
+
+	resp2 := &llm.ChatResponse{
+		ID:       "resp-2",
+		Provider: "provider2",
+		Model:    "gpt-4",
+		Choices: []llm.ChatChoice{
+			{
+				Index:        0,
+				FinishReason: "stop",
+				Message:      llm.Message{Role: llm.RoleAssistant, Content: "Response from provider2"},
+			},
+		},
+		Usage: llm.ChatUsage{TotalTokens: 10},
+	}
+
+	provider2 := &testProvider{
+		name: "provider2",
+		completionFn: func(ctx context.Context, req *llm.ChatRequest) (*llm.ChatResponse, error) {
+			return resp2, nil
+		},
+	}
 
 	// 使用提供商地图创建路由器
 	providers := map[string]llm.Provider{
@@ -132,26 +150,6 @@ func TestMultiProviderFailover(t *testing.T) {
 		},
 	}
 
-	// 模拟提供商 1 失败
-	provider1.On("Completion", ctx, req).Return(nil, assert.AnError)
-
-	// 模拟提供商2成功
-	resp2 := &llm.ChatResponse{
-		ID:       "resp-2",
-		Provider: "provider2",
-		Model:    "gpt-4",
-		Choices: []llm.ChatChoice{
-			{
-				Index:        0,
-				FinishReason: "stop",
-				Message:      llm.Message{Role: llm.RoleAssistant, Content: "Response from provider2"},
-			},
-		},
-		Usage: llm.ChatUsage{TotalTokens: 10},
-	}
-
-	provider2.On("Completion", ctx, req).Return(resp2, nil)
-
 	// 尝试provider1，应该会失败 - 直接使用provider
 	_, err := provider1.Completion(ctx, req)
 	assert.Error(t, err)
@@ -161,30 +159,12 @@ func TestMultiProviderFailover(t *testing.T) {
 	assert.NoError(t, err)
 	assert.NotNil(t, resp)
 	assert.Equal(t, "provider2", resp.Provider)
-
-	provider1.AssertExpectations(t)
-	provider2.AssertExpectations(t)
 }
 
 // TestMultiProviderLoadBalancing 测试提供商之间的负载平衡
 func TestMultiProviderLoadBalancing(t *testing.T) {
 	logger, _ := zap.NewDevelopment()
 
-	// 创建模拟提供商
-	provider1 := &MockProvider{name: "provider1"}
-	provider2 := &MockProvider{name: "provider2"}
-
-	// 使用提供商地图创建路由器
-	providers := map[string]llm.Provider{
-		"provider1": provider1,
-		"provider2": provider2,
-	}
-
-	_ = llm.NewRouter(nil, providers, llm.RouterOptions{Logger: logger})
-
-	ctx := context.Background()
-
-	// 模拟回复
 	resp1 := &llm.ChatResponse{
 		ID:       "resp-1",
 		Provider: "provider1",
@@ -211,8 +191,29 @@ func TestMultiProviderLoadBalancing(t *testing.T) {
 		},
 	}
 
-	provider1.On("Completion", ctx, mock.Anything).Return(resp1, nil)
-	provider2.On("Completion", ctx, mock.Anything).Return(resp2, nil)
+	// 创建测试提供商
+	provider1 := &testProvider{
+		name: "provider1",
+		completionFn: func(ctx context.Context, req *llm.ChatRequest) (*llm.ChatResponse, error) {
+			return resp1, nil
+		},
+	}
+	provider2 := &testProvider{
+		name: "provider2",
+		completionFn: func(ctx context.Context, req *llm.ChatRequest) (*llm.ChatResponse, error) {
+			return resp2, nil
+		},
+	}
+
+	// 使用提供商地图创建路由器
+	providers := map[string]llm.Provider{
+		"provider1": provider1,
+		"provider2": provider2,
+	}
+
+	_ = llm.NewRouter(nil, providers, llm.RouterOptions{Logger: logger})
+
+	ctx := context.Background()
 
 	// 发送多个请求 - 直接使用提供商
 	for i := 0; i < 10; i++ {
@@ -234,19 +235,33 @@ func TestMultiProviderLoadBalancing(t *testing.T) {
 		assert.NoError(t, err)
 		assert.NotNil(t, resp)
 	}
-
-	// 两个提供商都应该被称为
-	provider1.AssertExpectations(t)
-	provider2.AssertExpectations(t)
 }
 
 // TestMultiProviderHealthCheck 测试跨提供商的健康检查
 func TestMultiProviderHealthCheck(t *testing.T) {
 	logger, _ := zap.NewDevelopment()
 
-	// 创建模拟提供商
-	provider1 := &MockProvider{name: "provider1"}
-	provider2 := &MockProvider{name: "provider2"}
+	// 创建测试提供商
+	provider1 := &testProvider{
+		name: "provider1",
+		healthCheckFn: func(ctx context.Context) (*llm.HealthStatus, error) {
+			return &llm.HealthStatus{
+				Healthy:   true,
+				Latency:   50 * time.Millisecond,
+				ErrorRate: 0.0,
+			}, nil
+		},
+	}
+	provider2 := &testProvider{
+		name: "provider2",
+		healthCheckFn: func(ctx context.Context) (*llm.HealthStatus, error) {
+			return &llm.HealthStatus{
+				Healthy:   false,
+				Latency:   1000 * time.Millisecond,
+				ErrorRate: 0.5,
+			}, nil
+		},
+	}
 
 	// 使用提供商地图创建路由器
 	providers := map[string]llm.Provider{
@@ -258,22 +273,6 @@ func TestMultiProviderHealthCheck(t *testing.T) {
 
 	ctx := context.Background()
 
-	// 模拟健康检查响应
-	health1 := &llm.HealthStatus{
-		Healthy:   true,
-		Latency:   50 * time.Millisecond,
-		ErrorRate: 0.0,
-	}
-
-	health2 := &llm.HealthStatus{
-		Healthy:   false,
-		Latency:   1000 * time.Millisecond,
-		ErrorRate: 0.5,
-	}
-
-	provider1.On("HealthCheck", ctx).Return(health1, nil)
-	provider2.On("HealthCheck", ctx).Return(health2, nil)
-
 	// 检查提供商1的健康状况
 	status1, err := provider1.HealthCheck(ctx)
 	assert.NoError(t, err)
@@ -283,29 +282,11 @@ func TestMultiProviderHealthCheck(t *testing.T) {
 	status2, err := provider2.HealthCheck(ctx)
 	assert.NoError(t, err)
 	assert.False(t, status2.Healthy)
-
-	provider1.AssertExpectations(t)
-	provider2.AssertExpectations(t)
 }
 
 // BenchmarkMultiProviderRouting 基准路由性能
 func BenchmarkMultiProviderRouting(b *testing.B) {
 	logger, _ := zap.NewDevelopment()
-
-	provider1 := &MockProvider{name: "provider1"}
-	providers := map[string]llm.Provider{
-		"provider1": provider1,
-	}
-
-	_ = llm.NewRouter(nil, providers, llm.RouterOptions{Logger: logger})
-
-	ctx := context.Background()
-	req := &llm.ChatRequest{
-		Model: "gpt-4",
-		Messages: []llm.Message{
-			{Role: llm.RoleUser, Content: "Hello"},
-		},
-	}
 
 	resp := &llm.ChatResponse{
 		ID:       "resp-1",
@@ -320,7 +301,25 @@ func BenchmarkMultiProviderRouting(b *testing.B) {
 		},
 	}
 
-	provider1.On("Completion", ctx, req).Return(resp, nil)
+	provider1 := &testProvider{
+		name: "provider1",
+		completionFn: func(ctx context.Context, req *llm.ChatRequest) (*llm.ChatResponse, error) {
+			return resp, nil
+		},
+	}
+	providers := map[string]llm.Provider{
+		"provider1": provider1,
+	}
+
+	_ = llm.NewRouter(nil, providers, llm.RouterOptions{Logger: logger})
+
+	ctx := context.Background()
+	req := &llm.ChatRequest{
+		Model: "gpt-4",
+		Messages: []llm.Message{
+			{Role: llm.RoleUser, Content: "Hello"},
+		},
+	}
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {

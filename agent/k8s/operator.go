@@ -197,8 +197,9 @@ type AgentOperator struct {
 	onHealthCheck func(agent *AgentCRD) (bool, error)
 
 	// 控制权
-	stopCh  chan struct{}
-	running bool
+	stopCh    chan struct{}
+	closeOnce sync.Once
+	running   bool
 }
 
 // 代理Instance代表运行的代理实例.
@@ -311,7 +312,7 @@ func (o *AgentOperator) Stop() {
 		return
 	}
 
-	close(o.stopCh)
+	o.closeOnce.Do(func() { close(o.stopCh) })
 	o.running = false
 	o.logger.Info("agent operator stopped")
 }

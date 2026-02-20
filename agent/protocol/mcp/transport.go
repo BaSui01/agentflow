@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"sync"
 
+	"github.com/BaSui01/agentflow/internal/tlsutil"
 	"go.uber.org/zap"
 )
 
@@ -115,7 +116,7 @@ type SSETransport struct {
 func NewSSETransport(endpoint string, logger *zap.Logger) *SSETransport {
 	return &SSETransport{
 		endpoint:   endpoint,
-		httpClient: &http.Client{Timeout: 0}, // SSE 长连接不设超时
+		httpClient: tlsutil.SecureHTTPClient(0), // SSE 长连接不设超时
 		eventChan:  make(chan *MCPMessage, 100),
 		sendURL:    endpoint + "/message",
 		logger:     logger,

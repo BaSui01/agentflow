@@ -42,6 +42,9 @@ type Server struct {
 	hotReloadManager *config.HotReloadManager
 	configAPIHandler *config.ConfigAPIHandler
 
+	// Rate limiter 生命周期管理
+	rateLimiterCancel context.CancelFunc
+
 	wg sync.WaitGroup
 }
 
@@ -209,12 +212,14 @@ func (s *Server) startHTTPServer() error {
 	// 构建中间件链
 	// ========================================
 	skipAuthPaths := []string{"/health", "/healthz", "/ready", "/readyz", "/version", "/metrics"}
+	rateLimiterCtx, rateLimiterCancel := context.WithCancel(context.Background())
+	s.rateLimiterCancel = rateLimiterCancel
 	handler := Chain(mux,
 		Recovery(s.logger),
 		RequestID(),
 		RequestLogger(s.logger),
 		CORS(s.cfg.Server.CORSAllowedOrigins),
-		RateLimiter(float64(s.cfg.Server.RateLimitRPS), s.cfg.Server.RateLimitBurst, s.logger),
+		RateLimiter(rateLimiterCtx, float64(s.cfg.Server.RateLimitRPS), s.cfg.Server.RateLimitBurst, s.logger),
 		APIKeyAuth(s.cfg.Server.APIKeys, skipAuthPaths, s.cfg.Server.AllowQueryAPIKey, s.logger),
 	)
 
@@ -288,6 +293,11 @@ func (s *Server) Shutdown() {
 	s.logger.Info("Starting graceful shutdown...")
 
 	ctx := context.Background()
+
+	// 0. 停止 rate limiter 清理 goroutine
+	if s.rateLimiterCancel != nil {
+		s.rateLimiterCancel()
+	}
 
 	// 1. 停止热更新管理器
 	if s.hotReloadManager != nil {

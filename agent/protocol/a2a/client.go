@@ -9,6 +9,8 @@ import (
 	"net/http"
 	"sync"
 	"time"
+
+	"github.com/BaSui01/agentflow/internal/tlsutil"
 )
 
 // A2AClient定义了A2A客户端操作的接口.
@@ -80,9 +82,7 @@ func NewHTTPClient(config *ClientConfig) *HTTPClient {
 
 	return &HTTPClient{
 		config: config,
-		httpClient: &http.Client{
-			Timeout: config.Timeout,
-		},
+		httpClient: tlsutil.SecureHTTPClient(config.Timeout),
 		cardCache:    make(map[string]*cachedCard),
 		taskRegistry: make(map[string]*taskInfo),
 	}

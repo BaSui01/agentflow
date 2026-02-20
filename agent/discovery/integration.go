@@ -42,9 +42,10 @@ type AgentDiscoveryIntegration struct {
 	config *IntegrationConfig
 
 	// 状态
-	running bool
-	done    chan struct{}
-	wg      sync.WaitGroup
+	running   bool
+	done      chan struct{}
+	closeOnce sync.Once
+	wg        sync.WaitGroup
 }
 
 // 集成Config持有代理发现集成的配置.
@@ -117,7 +118,7 @@ func (i *AgentDiscoveryIntegration) Stop(ctx context.Context) error {
 		return nil
 	}
 
-	close(i.done)
+	i.closeOnce.Do(func() { close(i.done) })
 	i.wg.Wait()
 
 	// 启用自动注销注册时取消所有代理

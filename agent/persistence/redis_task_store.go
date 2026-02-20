@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/BaSui01/agentflow/internal/tlsutil"
 	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
 )
@@ -23,12 +24,16 @@ type RedisTaskStore struct {
 
 // 新建基于 Redis 的任务库
 func NewRedisTaskStore(config StoreConfig) (*RedisTaskStore, error) {
-	client := redis.NewClient(&redis.Options{
+	opts := &redis.Options{
 		Addr:     fmt.Sprintf("%s:%d", config.Redis.Host, config.Redis.Port),
 		Password: config.Redis.Password,
 		DB:       config.Redis.DB,
 		PoolSize: config.Redis.PoolSize,
-	})
+	}
+	if config.Redis.TLSEnabled {
+		opts.TLSConfig = tlsutil.DefaultTLSConfig()
+	}
+	client := redis.NewClient(opts)
 
 	// 测试连接
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)

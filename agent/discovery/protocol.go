@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/BaSui01/agentflow/internal/tlsutil"
 	"go.uber.org/zap"
 )
 
@@ -39,9 +40,10 @@ type DiscoveryProtocol struct {
 	handlerSeq int
 
 	// 状态
-	running bool
-	done    chan struct{}
-	wg      sync.WaitGroup
+	running   bool
+	done      chan struct{}
+	closeOnce sync.Once
+	wg        sync.WaitGroup
 }
 
 // 协议Config持有发现协议的配置.
@@ -148,7 +150,7 @@ func (p *DiscoveryProtocol) Stop(ctx context.Context) error {
 		return nil
 	}
 
-	close(p.done)
+	p.closeOnce.Do(func() { close(p.done) })
 
 	// 停止 HTTP 服务器
 	if p.httpServer != nil {
@@ -675,7 +677,7 @@ func (p *DiscoveryProtocol) DiscoverRemote(ctx context.Context, serverURL string
 	}
 
 	// 执行请求
-	client := &http.Client{Timeout: p.config.DiscoveryTimeout}
+	client := tlsutil.SecureHTTPClient(p.config.DiscoveryTimeout)
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to execute request: %w", err)
@@ -713,7 +715,7 @@ func (p *DiscoveryProtocol) AnnounceRemote(ctx context.Context, serverURL string
 	req.Header.Set("Content-Type", "application/json")
 
 	// 执行请求
-	client := &http.Client{Timeout: p.config.DiscoveryTimeout}
+	client := tlsutil.SecureHTTPClient(p.config.DiscoveryTimeout)
 	resp, err := client.Do(req)
 	if err != nil {
 		return fmt.Errorf("failed to execute request: %w", err)

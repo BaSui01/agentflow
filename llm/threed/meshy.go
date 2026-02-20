@@ -9,6 +9,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/BaSui01/agentflow/internal/tlsutil"
 )
 
 // MeshyProvider使用Meshy API执行3D生成.
@@ -28,7 +30,7 @@ func NewMeshyProvider(cfg MeshyConfig) *MeshyProvider {
 	}
 	return &MeshyProvider{
 		cfg:    cfg,
-		client: &http.Client{Timeout: timeout},
+		client: tlsutil.SecureHTTPClient(timeout),
 	}
 }
 

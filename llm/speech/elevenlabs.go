@@ -10,6 +10,8 @@ import (
 	"os"
 	"strings"
 	"time"
+
+	"github.com/BaSui01/agentflow/internal/tlsutil"
 )
 
 // 11LabsProvider使用11Labs API执行TTS.
@@ -33,7 +35,7 @@ func NewElevenLabsProvider(cfg ElevenLabsConfig) *ElevenLabsProvider {
 
 	return &ElevenLabsProvider{
 		cfg:    cfg,
-		client: &http.Client{Timeout: timeout},
+		client: tlsutil.SecureHTTPClient(timeout),
 	}
 }
 

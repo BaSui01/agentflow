@@ -10,6 +10,8 @@ import (
 	"os"
 	"strings"
 	"time"
+
+	"github.com/BaSui01/agentflow/internal/tlsutil"
 )
 
 // OpenATSProvider使用OpenAI的API执行TTS.
@@ -36,7 +38,7 @@ func NewOpenAITTSProvider(cfg OpenAITTSConfig) *OpenAITTSProvider {
 
 	return &OpenAITTSProvider{
 		cfg:    cfg,
-		client: &http.Client{Timeout: timeout},
+		client: tlsutil.SecureHTTPClient(timeout),
 	}
 }
 

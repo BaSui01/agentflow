@@ -71,8 +71,9 @@ type IntelligentDecay struct {
 	mu       sync.RWMutex
 	logger   *zap.Logger
 
-	running bool
-	stopCh  chan struct{}
+	running   bool
+	stopCh    chan struct{}
+	closeOnce sync.Once
 }
 
 // 新智能Decay创建了新的智能衰变管理器.
@@ -248,7 +249,7 @@ func (d *IntelligentDecay) Stop() {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	if d.running {
-		close(d.stopCh)
+		d.closeOnce.Do(func() { close(d.stopCh) })
 		d.running = false
 	}
 }

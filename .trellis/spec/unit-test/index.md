@@ -607,17 +607,17 @@ func TestFoo(t *testing.T) {
 
 ### 6. Using `testify/mock` (Banned — Use Hand-Written Mocks)
 
-**Known violations (as of 2026-02-21 audit)**: 7 files still use `testify/mock`:
+**Known violations (as of 2026-02-21 audit)** — partially fixed in bugfix-squad session:
 
 | File | Status |
 |------|--------|
-| `agent/base_test.go` | Uses `mock.Mock` embedding |
-| `agent/tool_selector_test.go` | Uses `mock.Mock` embedding |
-| `agent/tool_provider_test.go` | Uses `mock.Mock` embedding |
-| `agent/reflection_test.go` | Uses `mock.Mock` embedding |
-| `llm/resilient_provider_test.go` | Uses `mock.Mock` embedding |
-| `tests/integration/multi_provider_test.go` | Uses `mock.Mock` embedding |
-| `tests/integration/tool_calling_test.go` | Uses `mock.Mock` embedding |
+| `agent/base_test.go` | ✅ Fixed — migrated to function-callback test doubles in `agent/mock_test.go` |
+| `agent/tool_selector_test.go` | ⚠️ Pending |
+| `agent/tool_provider_test.go` | ⚠️ Pending |
+| `agent/reflection_test.go` | ⚠️ Pending (uses legacy Mock* types retained in `mock_test.go` for compat) |
+| `llm/resilient_provider_test.go` | ✅ Fixed — local `testProvider` with function callbacks |
+| `tests/integration/multi_provider_test.go` | ✅ Fixed — local `testProvider` with function callbacks |
+| `tests/integration/tool_calling_test.go` | ✅ Fixed — local `testToolExecutor` with function callbacks |
 
 These should be migrated to hand-written mocks with builder pattern (see Mock Patterns section above).
 

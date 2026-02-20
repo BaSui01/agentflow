@@ -8,6 +8,8 @@ import (
 	"io"
 	"net/http"
 	"time"
+
+	"github.com/BaSui01/agentflow/internal/tlsutil"
 )
 
 // Runway Provider执行视频生成,使用Runway ML Gen-4.
@@ -33,7 +35,7 @@ func NewRunwayProvider(cfg RunwayConfig) *RunwayProvider {
 
 	return &RunwayProvider{
 		cfg:    cfg,
-		client: &http.Client{Timeout: timeout},
+		client: tlsutil.SecureHTTPClient(timeout),
 	}
 }
 

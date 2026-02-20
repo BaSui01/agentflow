@@ -26,9 +26,10 @@ type DiscoveryService struct {
 	localMu    sync.RWMutex
 
 	// 状态
-	running bool
-	done    chan struct{}
-	wg      sync.WaitGroup
+	running   bool
+	done      chan struct{}
+	closeOnce sync.Once
+	wg        sync.WaitGroup
 }
 
 // ServiceConfig持有发现服务配置.
@@ -136,7 +137,7 @@ func (s *DiscoveryService) Stop(ctx context.Context) error {
 		return nil
 	}
 
-	close(s.done)
+	s.closeOnce.Do(func() { close(s.done) })
 	s.wg.Wait()
 
 	// 停止协议

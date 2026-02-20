@@ -8,6 +8,8 @@ import (
 	"io"
 	"net/http"
 	"time"
+
+	"github.com/BaSui01/agentflow/internal/tlsutil"
 )
 
 // GeminiProvider 使用 Google Gemini 执行视频分析.
@@ -28,7 +30,7 @@ func NewGeminiProvider(cfg GeminiConfig) *GeminiProvider {
 
 	return &GeminiProvider{
 		cfg:    cfg,
-		client: &http.Client{Timeout: timeout},
+		client: tlsutil.SecureHTTPClient(timeout),
 	}
 }
 

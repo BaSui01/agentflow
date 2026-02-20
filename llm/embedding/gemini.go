@@ -9,6 +9,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/BaSui01/agentflow/internal/tlsutil"
 )
 
 // GeminiProvider 使用 Google Gemini API 执行嵌入.
@@ -50,7 +52,7 @@ func NewGeminiProvider(cfg GeminiConfig) *GeminiProvider {
 
 	return &GeminiProvider{
 		cfg:    cfg,
-		client: &http.Client{Timeout: timeout},
+		client: tlsutil.SecureHTTPClient(timeout),
 	}
 }
 

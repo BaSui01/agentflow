@@ -565,3 +565,68 @@ README.md（中文）和 README_EN.md（英文）全量更新，使文档覆盖�
 ### Next Steps
 
 - None - task complete
+
+
+## Session 8: Security Scan Full Fix — TLS Hardening + Input Validation
+
+**Date**: 2026-02-21
+**Task**: Security Scan Full Fix — TLS Hardening + Input Validation
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+## Summary
+
+全量修复 GitHub Actions Security Scan 报出的 10 个 annotation。创建集中化 `internal/tlsutil/` 包，替换全部 39 个裸 HTTP Client、加固 HTTP Server / Redis / Postgres TLS 配置，并为 API handler 添加输入校验。
+
+## Changes
+
+| Category | Files | Description |
+|----------|-------|-------------|
+| **New Package** | `internal/tlsutil/tlsutil.go`, `tlsutil_test.go` | 集中化 TLS 工具包：`DefaultTLSConfig()`, `SecureTransport()`, `SecureHTTPClient()` |
+| **HTTP Server** | `internal/server/manager.go` | `&http.Server{}` 添加 `TLSConfig: tlsutil.DefaultTLSConfig()` |
+| **LLM Providers** | `openaicompat/provider.go`, `gemini/provider.go`, `anthropic/provider.go` | 替换裸 `&http.Client{}` → `tlsutil.SecureHTTPClient()` |
+| **RAG** | `weaviate_store.go`, `pinecone_store.go`, `milvus_store.go`, `qdrant_store.go`, `sources/github_source.go`, `sources/arxiv.go` | 同上 |
+| **Embedding** | `embedding/base.go`, `embedding/gemini.go` | 同上 |
+| **Multimodal** | `video/*.go`, `image/*.go`, `music/*.go`, `speech/*.go`, `threed/*.go` | 15 个文件批量替换 |
+| **Rerank** | `rerank/voyage.go`, `rerank/cohere.go`, `rerank/jina.go` | 同上 |
+| **Moderation** | `moderation/openai.go` | 同上 |
+| **Agent** | `discovery/protocol.go`, `discovery/registry.go`, `hosted/tools.go`, `protocol/mcp/transport.go`, `protocol/a2a/client.go` | 同上 |
+| **Tools** | `tools/openapi/generator.go` | 同上 |
+| **Redis TLS** | `internal/cache/manager.go`, `agent/persistence/store.go`, `redis_message_store.go`, `redis_task_store.go` | Config 加 `TLSEnabled bool`，条件注入 TLS |
+| **Database** | `internal/migration/migrator.go` | Postgres 默认 `sslmode` 从 `disable` → `require` |
+| **Federation** | `agent/federation/orchestrator.go` | TLS fallback：`config.TLSConfig == nil` 时使用 `tlsutil.DefaultTLSConfig()` |
+| **Input Validation** | `api/handlers/agent.go` | 包级别 `validAgentID` 正则 + `HandleAgentHealth` / `extractAgentID` 校验 |
+| **Spec Updates** | `quality-guidelines.md`, `error-handling.md`, `guides/index.md`, `backend/index.md` | 新增 §32 TLS Hardening + §33 Input Validation 规范 |
+
+## Stats
+
+- **41 files** importing `tlsutil` (non-test)
+- **0 residual** bare `&http.Client{}` (excluding federation with custom Transport)
+- `go build ./...` ✅ | `go vet ./...` ✅ | `go test ./internal/tlsutil/ -v` ✅ (3/3 PASS)
+
+## Approach
+
+使用 TeamCreate 创建 4 个并行 agent（phase2-core-tls, phase3-validation, phase4-bulk-replace, phase5-federation）同时处理不同 phase，team lead 负责 Phase 1（创建 tlsutil 包）和 Phase 6（验证），并在 Phase 4 中接手队友未完成的剩余文件。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `117c27b` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

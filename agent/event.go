@@ -5,6 +5,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"go.uber.org/zap"
 )
 
 // EventType 事件类型
@@ -46,14 +48,22 @@ type SimpleEventBus struct {
 	eventChannel chan Event
 	done         chan struct{}
 	stopOnce     sync.Once
+	logger       *zap.Logger
 }
 
 // NewEventBus 创建新的事件总线
-func NewEventBus() EventBus {
+func NewEventBus(logger ...*zap.Logger) EventBus {
+	var l *zap.Logger
+	if len(logger) > 0 && logger[0] != nil {
+		l = logger[0]
+	} else {
+		l = zap.NewNop()
+	}
 	bus := &SimpleEventBus{
 		handlers:     make(map[EventType]map[string]EventHandler),
 		eventChannel: make(chan Event, 100),
 		done:         make(chan struct{}),
+		logger:       l,
 	}
 	go bus.processEvents()
 	return bus
@@ -112,7 +122,9 @@ func (b *SimpleEventBus) processEvents() {
 				h := handler // capture loop variable
 				go func() {
 					defer func() {
-						recover() // prevent handler panic from crashing the event bus
+						if r := recover(); r != nil {
+							b.logger.Error("event handler panicked", zap.Any("recover", r))
+						}
 					}()
 					h(event)
 				}()

@@ -171,6 +171,7 @@ type memoryManager struct {
 	mu              sync.RWMutex
 	logger          *zap.Logger
 	stopCh          chan struct{}
+	closeOnce       sync.Once
 	cleanupInterval time.Duration
 }
 
@@ -242,7 +243,7 @@ func (m *memoryManager) cleanup() {
 
 // Close 停止清理 goroutine
 func (m *memoryManager) Close() {
-	close(m.stopCh)
+	m.closeOnce.Do(func() { close(m.stopCh) })
 }
 
 // GenerateKey 实现 Manager.GenerateKey（同 redisManager）

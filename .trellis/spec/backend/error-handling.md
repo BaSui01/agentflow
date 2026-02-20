@@ -366,6 +366,36 @@ apiKey := r.Header.Get("X-API-Key")
 
 > **历史教训**：`config/api.go` 同时存在 CORS `*` 和 query string API key 两个安全问题。对于管理类 API，这些是高风险漏洞。
 
+### 3. Path Parameter Validation: Regex Before Use
+
+All IDs extracted from URL paths or query parameters must be validated before use. Unvalidated input enables path traversal and injection attacks.
+
+```go
+// WRONG — trusts user input directly
+agentID := r.PathValue("id")
+info, _ := h.registry.GetAgent(ctx, agentID)  // path traversal possible
+
+// CORRECT — compiled regex at package level + validation before use
+var validAgentID = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$`)
+
+func (h *AgentHandler) HandleAgentHealth(w http.ResponseWriter, r *http.Request) {
+    agentID := r.URL.Query().Get("id")
+    if agentID == "" {
+        WriteErrorMessage(w, http.StatusBadRequest, types.ErrInvalidRequest,
+            "query parameter 'id' is required", h.logger)
+        return
+    }
+    if !validAgentID.MatchString(agentID) {
+        WriteErrorMessage(w, http.StatusBadRequest, types.ErrInvalidRequest,
+            "invalid agent ID format", h.logger)
+        return
+    }
+    // safe to use agentID
+}
+```
+
+> **历史教训**：`api/handlers/agent.go` 的 `HandleAgentHealth` 和 `extractAgentID` 直接使用未校验的 URL 参数。安全扫描标记为输入校验缺失。修复方案：包级别编译正则 + 两处校验点（handler 入口 + 提取函数）。
+
 ---
 
 ## Channel Double-Close Protection
@@ -439,9 +469,11 @@ case <-t.done:
 
 ---
 
-## HITL Interrupt Resolve/Cancel Race Condition (P0)
+## HITL Interrupt Resolve/Cancel Race Condition (P0) ✅ FIXED
 
-`agent/hitl/interrupt.go` has a race between `Resolve()` (line ~239) and `Cancel()` (line ~282) — both write to `responseCh` without coordination:
+**Status**: ✅ Fixed in bugfix-squad session — `agent/hitl/interrupt.go` now uses `resolveOnce sync.Once` on `pendingInterrupt` struct. Both `ResolveInterrupt` and `CancelInterrupt` wrap their `responseCh` operations in `pending.resolveOnce.Do()`.
+
+`agent/hitl/interrupt.go` had a race between `Resolve()` and `Cancel()` — both write to `responseCh` without coordination:
 
 ```go
 // WRONG — current code: two methods can write to same channel concurrently
@@ -495,9 +527,11 @@ func (i *Interrupt) Cancel() error {
 
 ---
 
-## Rate Limiter Goroutine Leak (P2)
+## Rate Limiter Goroutine Leak (P2) ✅ FIXED
 
-`cmd/agentflow/middleware.go:126-137` creates a goroutine for token bucket refill with no shutdown mechanism:
+**Status**: ✅ Fixed in bugfix-squad session — `cmd/agentflow/middleware.go` RateLimiter now accepts `ctx context.Context`; goroutine uses `select { case <-ctx.Done(): return; case <-ticker.C: ... }`. `cmd/agentflow/server.go` creates `rateLimiterCtx` and calls `rateLimiterCancel()` in Shutdown().
+
+`cmd/agentflow/middleware.go` previously created a goroutine for token bucket refill with no shutdown mechanism:
 
 ```go
 // WRONG — goroutine runs forever, no way to stop it

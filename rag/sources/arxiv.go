@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/BaSui01/agentflow/internal/tlsutil"
 	"go.uber.org/zap"
 )
 
@@ -68,7 +69,7 @@ func NewArxivSource(config ArxivConfig, logger *zap.Logger) *ArxivSource {
 	}
 	return &ArxivSource{
 		config: config,
-		client: &http.Client{Timeout: config.Timeout},
+		client: tlsutil.SecureHTTPClient(config.Timeout),
 		logger: logger,
 	}
 }

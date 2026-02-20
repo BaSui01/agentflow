@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/BaSui01/agentflow/internal/tlsutil"
 	"github.com/BaSui01/agentflow/llm"
 	"go.uber.org/zap"
 )
@@ -116,7 +117,7 @@ func NewWebSearchTool(config WebSearchConfig) *WebSearchTool {
 		maxResults = 10
 	}
 	return &WebSearchTool{
-		httpClient: &http.Client{Timeout: timeout},
+		httpClient: tlsutil.SecureHTTPClient(timeout),
 		apiKey:     config.APIKey,
 		endpoint:   config.Endpoint,
 		maxResults: maxResults,
@@ -128,7 +129,7 @@ func (t *WebSearchTool) Name() string         { return "web_search" }
 func (t *WebSearchTool) Description() string  { return "Search the web for current information" }
 
 func (t *WebSearchTool) Schema() llm.ToolSchema {
-	params, _ := json.Marshal(map[string]any{
+	params, err := json.Marshal(map[string]any{
 		"type": "object",
 		"properties": map[string]any{
 			"query":       map[string]any{"type": "string", "description": "Search query"},
@@ -136,6 +137,9 @@ func (t *WebSearchTool) Schema() llm.ToolSchema {
 		},
 		"required": []string{"query"},
 	})
+	if err != nil {
+		params = []byte("{}")
+	}
 	return llm.ToolSchema{Name: t.Name(), Description: t.Description(), Parameters: params}
 }
 
@@ -222,7 +226,7 @@ func (t *FileSearchTool) Name() string         { return "file_search" }
 func (t *FileSearchTool) Description() string  { return "Search through uploaded files" }
 
 func (t *FileSearchTool) Schema() llm.ToolSchema {
-	params, _ := json.Marshal(map[string]any{
+	params, err := json.Marshal(map[string]any{
 		"type": "object",
 		"properties": map[string]any{
 			"query":       map[string]any{"type": "string", "description": "Search query"},
@@ -230,6 +234,9 @@ func (t *FileSearchTool) Schema() llm.ToolSchema {
 		},
 		"required": []string{"query"},
 	})
+	if err != nil {
+		params = []byte("{}")
+	}
 	return llm.ToolSchema{Name: t.Name(), Description: t.Description(), Parameters: params}
 }
 

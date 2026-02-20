@@ -310,7 +310,20 @@ func (h *ChatHandler) convertToAPIStreamChunk(chunk *llm.StreamChunk) *api.Strea
 			ToolCallID: chunk.Delta.ToolCallID,
 		},
 		FinishReason: chunk.FinishReason,
-		Usage:        (*api.ChatUsage)(chunk.Usage),
+		Usage:        convertStreamUsage(chunk.Usage),
+	}
+}
+
+// convertStreamUsage safely converts *llm.ChatUsage to *api.ChatUsage
+// without relying on unsafe pointer casts between distinct types.
+func convertStreamUsage(u *llm.ChatUsage) *api.ChatUsage {
+	if u == nil {
+		return nil
+	}
+	return &api.ChatUsage{
+		PromptTokens:     u.PromptTokens,
+		CompletionTokens: u.CompletionTokens,
+		TotalTokens:      u.TotalTokens,
 	}
 }
 

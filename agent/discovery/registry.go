@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/BaSui01/agentflow/internal/tlsutil"
 	"go.uber.org/zap"
 )
 
@@ -38,7 +39,8 @@ type CapabilityRegistry struct {
 	logger *zap.Logger
 
 	// 信号关闭了
-	done chan struct{}
+	done      chan struct{}
+	closeOnce sync.Once
 }
 
 // 登记册Config拥有能力登记册的配置。
@@ -608,7 +610,7 @@ func (r *CapabilityRegistry) Unsubscribe(subscriptionID string) {
 
 // 关闭注册 。
 func (r *CapabilityRegistry) Close() error {
-	close(r.done)
+	r.closeOnce.Do(func() { close(r.done) })
 
 	if r.healthChecker != nil {
 		if err := r.healthChecker.Stop(context.Background()); err != nil {
@@ -750,8 +752,9 @@ type HealthChecker struct {
 	failureCounts map[string]int
 	failureMu     sync.Mutex
 
-	done chan struct{}
-	wg   sync.WaitGroup
+	done      chan struct{}
+	closeOnce sync.Once
+	wg        sync.WaitGroup
 }
 
 // 健康检查员Config拥有健康检查员的配置.
@@ -787,7 +790,7 @@ func (h *HealthChecker) Start(ctx context.Context) error {
 
 // 停止停止健康检查。
 func (h *HealthChecker) Stop(ctx context.Context) error {
-	close(h.done)
+	h.closeOnce.Do(func() { close(h.done) })
 	h.wg.Wait()
 	h.logger.Info("health checker stopped")
 	return nil
@@ -894,7 +897,7 @@ func (h *HealthChecker) performHealthCheck(ctx context.Context, agent *AgentInfo
 	// 对远程特工进行HTTP健康检查
 	if agent.Endpoint != "" {
 		healthURL := strings.TrimRight(agent.Endpoint, "/") + "/health"
-		client := &http.Client{Timeout: 5 * time.Second}
+		client := tlsutil.SecureHTTPClient(5 * time.Second)
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, healthURL, nil)
 		if err != nil {
 			result.Healthy = false

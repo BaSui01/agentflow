@@ -15,7 +15,8 @@ const (
 	ErrUnauthorized        ErrorCode = "UNAUTHORIZED"
 	ErrForbidden           ErrorCode = "FORBIDDEN"
 	ErrRateLimit           ErrorCode = "RATE_LIMIT"
-	ErrRateLimited         ErrorCode = "RATE_LIMITED"
+	// Deprecated: Use ErrRateLimit instead.
+	ErrRateLimited         ErrorCode = ErrRateLimit
 	ErrQuotaExceeded       ErrorCode = "QUOTA_EXCEEDED"
 	ErrModelNotFound       ErrorCode = "MODEL_NOT_FOUND"
 	ErrContextTooLong      ErrorCode = "CONTEXT_TOO_LONG"

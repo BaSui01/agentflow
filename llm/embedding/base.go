@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/BaSui01/agentflow/internal/tlsutil"
 	"github.com/BaSui01/agentflow/llm"
 )
 
@@ -47,7 +48,7 @@ func NewBaseProvider(cfg BaseConfig) *BaseProvider {
 	}
 	return &BaseProvider{
 		name:       cfg.Name,
-		client:     &http.Client{Timeout: timeout},
+		client:     tlsutil.SecureHTTPClient(timeout),
 		baseURL:    strings.TrimRight(cfg.BaseURL, "/"),
 		apiKey:     cfg.APIKey,
 		model:      cfg.Model,

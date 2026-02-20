@@ -11,14 +11,15 @@ import (
 
 // BrowserPool 浏览器实例池
 type BrowserPool struct {
-	config  BrowserConfig
-	pool    chan *ChromeDPBrowser
-	active  map[*ChromeDPBrowser]bool
-	maxSize int
-	minIdle int
-	logger  *zap.Logger
-	mu      sync.Mutex
-	closed  bool
+	config    BrowserConfig
+	pool      chan *ChromeDPBrowser
+	active    map[*ChromeDPBrowser]bool
+	maxSize   int
+	minIdle   int
+	logger    *zap.Logger
+	mu        sync.Mutex
+	closeOnce sync.Once
+	closed    bool
 }
 
 // BrowserPoolConfig 浏览器池配置
@@ -160,7 +161,7 @@ func (p *BrowserPool) Close() error {
 	p.mu.Unlock()
 
 	// 关闭池中的实例
-	close(p.pool)
+	p.closeOnce.Do(func() { close(p.pool) })
 	for browser := range p.pool {
 		_ = browser.Close()
 	}
