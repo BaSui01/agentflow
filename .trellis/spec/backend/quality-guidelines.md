@@ -45,6 +45,62 @@ go vet ./...       # Runs in CI
 
 Use `zap` exclusively. `log.Printf`/`log.Fatalf` is only acceptable in `examples/` and `main.go` fatal paths.
 
+For CLI-only "fatal exit" functions that don't have a logger, use `fmt.Fprintf(os.Stderr, ...)` + `os.Exit(1)` instead of `log.Printf`:
+
+```go
+// WRONG — uses forbidden log package
+func NewMessageStoreOrExit(config StoreConfig) MessageStore {
+    store, err := NewMessageStore(config)
+    if err != nil {
+        log.Printf("FATAL: failed to create message store: %v", err)
+        os.Exit(1)
+    }
+    return store
+}
+
+// CORRECT — uses fmt.Fprintf to stderr
+func NewMessageStoreOrExit(config StoreConfig) MessageStore {
+    store, err := NewMessageStore(config)
+    if err != nil {
+        fmt.Fprintf(os.Stderr, "FATAL: failed to create message store: %v\n", err)
+        os.Exit(1)
+    }
+    return store
+}
+```
+
+> **历史教训**：`llm/canary.go` 有 6 处 `log.Printf`，`agent/persistence/factory.go` 有 2 处。canary 模块通过添加 `*zap.Logger` 字段修复；factory 的 `OrExit` 函数改用 `fmt.Fprintf(os.Stderr, ...)`。
+
+### 1b. `panic` in Production Code
+
+`panic` 仅允许在以下场景：
+- `Must*` 函数（如 `MustNewMessageStore`），且文档明确标注"仅用于应用初始化"
+- `init()` 函数中的不可恢复错误
+
+**禁止在以下场景使用 `panic`**：
+- 请求处理器 / 业务逻辑
+- 服务定位器的 `Get` 方法（应返回 `(T, bool)` 或 `(T, error)`）
+- 配置加载（应返回 error）
+
+```go
+// WRONG — 长期运行的服务中 panic 会崩进程
+func (sl *ServiceLocator) MustGet(name string) interface{} {
+    service, ok := sl.services[name]
+    if !ok {
+        panic("service not found: " + name)
+    }
+    return service
+}
+
+// CORRECT — 返回 error，让调用者决定如何处理
+func (sl *ServiceLocator) Get(name string) (interface{}, bool) {
+    service, ok := sl.services[name]
+    return service, ok
+}
+```
+
+> **历史教训**：`agent/container.go`、`agent/reasoning/patterns.go`、`config/loader.go` 中都有 `panic`。`Must*` 变体可以保留（用于 `main()` 初始化），但必须有对应的返回 error 的非 Must 版本。
+
 ### 2. `interface{}` Without Justification
 
 Some `interface{}` fields exist in `agent/base.go:148-156` to avoid circular dependencies, with comments explaining why. New `interface{}` usage requires a comment explaining the reason.
@@ -65,6 +121,41 @@ Some `interface{}` fields exist in `agent/base.go:148-156` to avoid circular dep
 
 `errcheck` requires all errors to be handled. No `_` for error returns (except in tests).
 
+**特别注意 `json.Marshal`**：
+
+```go
+// WRONG — json.Marshal CAN fail (e.g., unsupported types, circular refs)
+payload, _ := json.Marshal(body)
+
+// CORRECT
+payload, err := json.Marshal(body)
+if err != nil {
+    return nil, fmt.Errorf("failed to marshal request: %w", err)
+}
+```
+
+> **历史教训**：LLM Provider 重构前有 12 处 `json.Marshal` 错误被忽略。虽然对已知结构体不太可能失败，但这违反了 `errcheck` 规则且掩盖了潜在的序列化问题。
+
+**特别注意 HTTP handler 中的 `json.NewEncoder(w).Encode(data)`**：
+
+```go
+// WRONG — Encode 错误被静默丢弃，且 WriteHeader 已调用后无法更改状态码
+w.WriteHeader(status)
+json.NewEncoder(w).Encode(data)
+
+// CORRECT — 先 Marshal 再 Write，Marshal 失败可以返回 500
+buf, err := json.Marshal(data)
+if err != nil {
+    w.WriteHeader(http.StatusInternalServerError)
+    _, _ = w.Write([]byte(`{"success":false,"error":"failed to encode response"}`))
+    return
+}
+w.WriteHeader(status)
+_, _ = w.Write(buf)  // Write 错误可安全忽略（客户端断开）
+```
+
+> **历史教训**：`config/api.go` 的 `writeJSON` 使用 `json.NewEncoder(w).Encode(data)` 且未检查错误。由于 `WriteHeader` 已调用，Encode 失败时无法更改状态码。先 Marshal 再 Write 可以在序列化失败时正确返回 500。
+
 ### 7. Unchecked Type Assertions
 
 ```go
@@ -75,6 +166,41 @@ val := x.(string)
 val, ok := x.(string)
 if !ok {
     return fmt.Errorf("expected string, got %T", x)
+}
+```
+
+### 8. String Keys for `context.Value`
+
+Go best practice requires typed keys for `context.Value` to avoid collisions:
+
+```go
+// WRONG — string key, collision-prone
+ctx.Value("previous_response_id")
+
+// CORRECT — typed struct key + helper functions
+type previousResponseIDKey struct{}
+
+func WithPreviousResponseID(ctx context.Context, id string) context.Context {
+    return context.WithValue(ctx, previousResponseIDKey{}, id)
+}
+
+func PreviousResponseIDFromContext(ctx context.Context) (string, bool) {
+    v, ok := ctx.Value(previousResponseIDKey{}).(string)
+    return v, ok && v != ""
+}
+```
+
+See `llm/credentials.go` for the canonical pattern (`credentialOverrideKey struct{}`).
+
+### 9. Hardcoded CORS Wildcard
+
+```go
+// WRONG — not suitable for production
+w.Header().Set("Access-Control-Allow-Origin", "*")
+
+// CORRECT — configurable origin
+if h.allowedOrigin != "" {
+    w.Header().Set("Access-Control-Allow-Origin", h.allowedOrigin)
 }
 ```
 
@@ -212,30 +338,172 @@ Key conventions:
 
 ### 10. LLM Provider Implementation Pattern
 
-Every provider under `llm/providers/` follows this structure (e.g., openai/provider.go:20-25):
+#### 10a. Provider Config — BaseProviderConfig 嵌入
+
+所有 13 个 Provider Config 结构体共享 `BaseProviderConfig`（`llm/providers/config.go`）：
 
 ```go
-type OpenAIProvider struct {
-    cfg            providers.OpenAIConfig
-    client         *http.Client           // default timeout 30s
-    logger         *zap.Logger
-    rewriterChain  *middleware.RewriterChain
+// 基础配置 — 4 个共享字段
+type BaseProviderConfig struct {
+    APIKey  string        `json:"api_key" yaml:"api_key"`
+    BaseURL string        `json:"base_url" yaml:"base_url"`
+    Model   string        `json:"model,omitempty" yaml:"model,omitempty"`
+    Timeout time.Duration `json:"timeout,omitempty" yaml:"timeout,omitempty"`
+}
+
+// 简单 Config — 只嵌入基础配置
+type QwenConfig struct {
+    BaseProviderConfig `yaml:",inline"`
+}
+
+// 扩展 Config — 嵌入 + 额外字段
+type OpenAIConfig struct {
+    BaseProviderConfig `yaml:",inline"`
+    Organization    string `json:"organization,omitempty" yaml:"organization,omitempty"`
+    UseResponsesAPI bool   `json:"use_responses_api,omitempty" yaml:"use_responses_api,omitempty"`
 }
 ```
 
+> **陷阱：struct literal 初始化语法变化**
+>
+> 嵌入 `BaseProviderConfig` 后，struct literal 必须使用嵌入语法：
+> ```go
+> // WRONG — 编译错误
+> providers.QwenConfig{APIKey: "key", Model: "qwen3"}
+>
+> // CORRECT — 通过 BaseProviderConfig 初始化
+> providers.QwenConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "key", Model: "qwen3"}}
+> ```
+> 但字段访问不受影响（Go promoted fields）：`cfg.APIKey` 仍然有效。
+
+#### 10b. OpenAI-Compatible Providers (9/13 providers)
+
+Most providers use the `openaicompat.Provider` base via struct embedding (`llm/providers/openaicompat/provider.go`):
+
+```go
+// 标准模板 — 新增 OpenAI 兼容 Provider 只需 ~30 行
+type QwenProvider struct {
+    *openaicompat.Provider  // 嵌入基类，自动获得所有 llm.Provider 方法
+}
+
+func NewQwenProvider(cfg providers.QwenConfig, logger *zap.Logger) *QwenProvider {
+    if cfg.BaseURL == "" {
+        cfg.BaseURL = "https://dashscope.aliyuncs.com"
+    }
+    return &QwenProvider{
+        Provider: openaicompat.New(openaicompat.Config{
+            ProviderName:  "qwen",
+            APIKey:        cfg.APIKey,
+            BaseURL:       cfg.BaseURL,
+            DefaultModel:  cfg.Model,
+            FallbackModel: "qwen3-235b-a22b",
+            Timeout:       cfg.Timeout,
+            EndpointPath:  "/compatible-mode/v1/chat/completions", // 非标准路径
+        }, logger),
+    }
+}
+```
+
+**openaicompat.Config 扩展点**：
+
+| 字段 | 用途 | 默认值 |
+|------|------|--------|
+| `EndpointPath` | Chat completions 端点路径 | `/v1/chat/completions` |
+| `ModelsEndpoint` | Models 列表端点路径 | `/v1/models` |
+| `BuildHeaders` | 自定义 HTTP 头（如 Organization） | Bearer token auth |
+| `RequestHook` | 请求体修改钩子（如 DeepSeek ReasoningMode） | nil |
+| `SupportsTools` | 是否支持 function calling | true |
+
+**RequestHook 示例**（DeepSeek 推理模式选择）：
+
+```go
+RequestHook: func(req *llm.ChatRequest, body *providers.OpenAICompatRequest) {
+    if req.ReasoningMode == "thinking" || req.ReasoningMode == "extended" {
+        if req.Model == "" { body.Model = "deepseek-reasoner" }
+    }
+},
+```
+
+**SetBuildHeaders 示例**（OpenAI Organization 头）：
+
+```go
+p.SetBuildHeaders(func(req *http.Request, apiKey string) {
+    req.Header.Set("Authorization", "Bearer "+apiKey)
+    if cfg.Organization != "" {
+        req.Header.Set("OpenAI-Organization", cfg.Organization)
+    }
+    req.Header.Set("Content-Type", "application/json")
+})
+```
+
+**覆写方法**（OpenAI Responses API）：
+
+```go
+// OpenAIProvider 覆写 Completion 以支持 Responses API 路由
+func (p *OpenAIProvider) Completion(ctx context.Context, req *llm.ChatRequest) (*llm.ChatResponse, error) {
+    if !p.openaiCfg.UseResponsesAPI {
+        return p.Provider.Completion(ctx, req)  // 委托给基类
+    }
+    return p.completionWithResponsesAPI(ctx, req, apiKey)
+}
+```
+
+#### 10c. 非 OpenAI 兼容 Providers（Anthropic、Gemini）
+
+这两个 provider 有独立的 API 格式，不使用 `openaicompat`，直接实现 `llm.Provider` 接口。
+它们必须使用 `providers` 包的共享函数，不得重复实现：
+
+```go
+// WRONG — 不要在 provider 内部重复实现这些函数
+func mapGeminiError(statusCode int, msg, provider string) *llm.Error { ... }
+func readGeminiErrMsg(body io.Reader) string { ... }
+func chooseGeminiModel(req *llm.ChatRequest, cfgModel string) string { ... }
+
+// CORRECT — 使用 providers 包的共享实现
+providers.MapHTTPError(resp.StatusCode, msg, p.Name())
+providers.ReadErrorMessage(resp.Body)
+providers.ChooseModel(req, p.cfg.Model, "gemini-3-pro")
+```
+
+#### 10d. Multimodal 共享函数（所有 Provider）
+
+`llm/providers/common.go` 提供 `BearerTokenHeaders` 共享函数，`multimodal.go` 中不得内联匿名函数：
+
+```go
+// WRONG — 每个 multimodal.go 都内联相同的匿名函数
+providers.GenerateImageOpenAICompat(ctx, p.Client, p.Cfg.BaseURL, apiKey, "qwen",
+    "/v1/images/generations", req,
+    func(r *http.Request, key string) {
+        r.Header.Set("Authorization", "Bearer "+key)
+        r.Header.Set("Content-Type", "application/json")
+    })
+
+// CORRECT — 使用共享函数
+providers.GenerateImageOpenAICompat(ctx, p.Client, p.Cfg.BaseURL, apiKey, "qwen",
+    "/v1/images/generations", req, providers.BearerTokenHeaders)
+```
+
+`llm/providers/multimodal_helpers.go` 使用泛型 `doOpenAICompatRequest[Req, Resp]` 消除 Image/Video/Embedding 三个函数的 HTTP 样板重复。
+
+#### 10e. 通用约定（所有 Provider）
+
 Required methods:
 - `Name() string` — provider identifier
-- `HealthCheck(ctx) error` — connectivity + latency check
-- `ListModels(ctx) ([]string, error)` — supported models
+- `HealthCheck(ctx) (*HealthStatus, error)` — connectivity + latency check
+- `ListModels(ctx) ([]Model, error)` — supported models
 - `Completion(ctx, *ChatRequest) (*ChatResponse, error)` — non-streaming
-- `Stream(ctx, *ChatRequest) (<-chan StreamEvent, error)` — streaming (SSE, `[DONE]` marker)
+- `Stream(ctx, *ChatRequest) (<-chan StreamChunk, error)` — streaming (SSE, `[DONE]` marker)
 - `SupportsNativeFunctionCalling() bool` — capability declaration
 
 Conventions:
-- Model selection priority: request-specified > config default > hardcoded default
-- Credential override: read API key from context (line 251-255)
-- Tool conversion: `llm.ToolSchema` ↔ provider-native format
+- Model selection priority: request-specified > config default > hardcoded fallback (`providers.ChooseModel()`)
+- Credential override: `llm.CredentialOverrideFromContext(ctx)` checks context first
+- Tool conversion: `providers.ConvertToolsToOpenAI()` / `providers.ConvertMessagesToOpenAI()` for OpenAI-compat
 - Empty tool lists must be cleaned (`EmptyToolsCleaner` rewriter)
+- `json.Marshal` errors must be checked — never use `payload, _ := json.Marshal(...)` (see §6)
+- **Completion 和 Stream 方法的请求参数必须一致** — 如果 Completion 传了 Temperature/TopP/Stop，Stream 也必须传
+
+> **历史教训**：`openaicompat/provider.go` 的 `Stream` 方法遗漏了 `Temperature`、`TopP`、`Stop` 三个参数，导致流式和非流式调用行为不一致。修改共享基座时，务必对比 `Completion` 和 `Stream` 两个方法的请求体构建逻辑。
 
 ### 11. Protocol Implementation Pattern (A2A / MCP)
 

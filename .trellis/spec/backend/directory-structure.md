@@ -35,7 +35,8 @@ agentflow/
 ├── llm/                        # Unified LLM abstraction layer
 │   ├── provider.go             # Core Provider interface + type re-exports
 │   ├── providers/              # 13 LLM provider implementations
-│   │   ├── anthropic/          # Each provider: doc.go + provider.go + test
+│   │   ├── openaicompat/       # Shared base for OpenAI-compatible providers
+│   │   ├── anthropic/          # Each provider: doc.go + provider.go + multimodal.go + test
 │   │   ├── openai/
 │   │   ├── gemini/
 │   │   ├── deepseek/
@@ -192,12 +193,46 @@ types/  ←  llm/  ←  agent/  ←  workflow/  ←  api/  ←  cmd/
 
 ### Adding a New LLM Provider
 
-Create a sub-package under `llm/providers/` with exactly:
+Create a sub-package under `llm/providers/` with:
 - `doc.go` — package documentation
 - `provider.go` — `Provider` interface implementation
-- `provider_test.go` — tests
+- `multimodal.go` — multimodal capabilities (image/audio/embedding/fine-tuning)
+- `provider_test.go` or `provider_property_test.go` — tests
 
-Required methods: `Name()`, `HealthCheck()`, `ListModels()`, `Completion()`, `Stream()`, `SupportsNativeFunctionCalling()`. See `quality-guidelines.md` §10 for details.
+**OpenAI-Compatible Provider（大多数情况）**：
+
+嵌入 `*openaicompat.Provider`，只需配置差异：
+
+```go
+type MyProvider struct {
+    *openaicompat.Provider
+}
+
+func NewMyProvider(cfg providers.MyConfig, logger *zap.Logger) *MyProvider {
+    if cfg.BaseURL == "" { cfg.BaseURL = "https://api.myprovider.com" }
+    return &MyProvider{
+        Provider: openaicompat.New(openaicompat.Config{
+            ProviderName:  "myprovider",
+            APIKey:        cfg.APIKey,
+            BaseURL:       cfg.BaseURL,
+            DefaultModel:  cfg.Model,
+            FallbackModel: "my-default-model",
+            Timeout:       cfg.Timeout,
+            // EndpointPath: "/custom/path",  // 仅非标准路径时设置
+            // RequestHook: myHook,           // 仅需修改请求体时设置
+        }, logger),
+    }
+}
+```
+
+还需要：
+1. 在 `llm/providers/config.go` 添加 `MyConfig` 结构体
+2. 在 `multimodal.go` 实现多模态方法（不支持的返回 `providers.NotSupportedError`）
+3. 在 `config/defaults.go` 注册 provider 工厂
+
+**非 OpenAI 兼容 Provider**（如 Anthropic、Gemini）：直接实现 `llm.Provider` 接口。
+
+See `quality-guidelines.md` §10 for full pattern details.
 
 ### Adding a New Agent Protocol
 

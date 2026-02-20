@@ -317,3 +317,51 @@ var ErrCacheMiss = errors.New("cache miss")
 ### 5. Missing Panic Recovery at HTTP Layer
 
 Panic recovery exists only in the LLM middleware chain (`RecoveryMiddleware`), not at the HTTP handler level. The HTTP middleware in `cmd/agentflow/middleware.go` has a `Recovery` middleware — ensure it's always in the chain.
+
+### 6. Duplicate Error Mapping Functions in Non-OpenAI Providers
+
+Non-OpenAI providers (Anthropic, Gemini) should use the shared `providers.MapHTTPError()` and `providers.ReadErrorMessage()` functions, not provider-specific copies.
+
+```go
+// WRONG — duplicated logic
+func mapClaudeError(status int, msg string, provider string) *llm.Error { ... }
+func readClaudeErrMsg(body io.Reader) string { ... }
+
+// CORRECT — use shared functions
+msg := providers.ReadErrorMessage(resp.Body)
+return nil, providers.MapHTTPError(resp.StatusCode, msg, p.Name())
+```
+
+Similarly, use `providers.ChooseModel(req, defaultModel, fallbackModel)` instead of provider-specific `chooseClaudeModel` / `chooseGeminiModel`.
+
+> **历史教训**：Anthropic 和 Gemini provider 各自有 `mapXxxError`、`readXxxErrMsg`、`chooseXxxModel` 三个函数，与 `providers/common.go` 中的共享版本几乎完全相同。唯一的差异是 Claude 的 529 状态码处理，但 `MapHTTPError` 已经覆盖了这个 case。
+
+---
+
+## HTTP API Security Patterns
+
+### 1. CORS: Never Hardcode Wildcard Origin
+
+```go
+// WRONG — 配置管理 API 不应对所有来源开放
+w.Header().Set("Access-Control-Allow-Origin", "*")
+
+// CORRECT — 回显请求的 Origin（或从配置读取允许的 origins）
+origin := r.Header.Get("Origin")
+if origin != "" {
+    w.Header().Set("Access-Control-Allow-Origin", origin)
+    w.Header().Set("Vary", "Origin")
+}
+```
+
+### 2. API Key: Never Accept via Query String
+
+```go
+// WRONG — API key 会暴露在服务器日志、浏览器历史和代理日志中
+apiKey := r.URL.Query().Get("api_key")
+
+// CORRECT — 仅通过 HTTP header 传递
+apiKey := r.Header.Get("X-API-Key")
+```
+
+> **历史教训**：`config/api.go` 同时存在 CORS `*` 和 query string API key 两个安全问题。对于管理类 API，这些是高风险漏洞。
