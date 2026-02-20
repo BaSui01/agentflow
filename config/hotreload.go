@@ -1,13 +1,6 @@
-// =============================================================================
-// AgentFlow Configuration Hot Reload Manager
-// =============================================================================
-// Manages configuration hot reloading with support for:
-// - Partial configuration updates (no restart required)
-// - Full configuration updates (restart required)
-// - Change callbacks and notifications
-// - Configuration validation before applying
-// - Audit logging for configuration changes
-// =============================================================================
+// 配置热重载管理器实现。
+//
+// 支持局部更新、变更通知、应用前校验与审计记录。
 package config
 
 import (
@@ -21,39 +14,37 @@ import (
 	"go.uber.org/zap"
 )
 
-// =============================================================================
-// Hot Reload Types
-// =============================================================================
+// --- 热重载类型定义 ---
 
 // HotReloadManager manages configuration hot reloading
 type HotReloadManager struct {
 	mu sync.RWMutex
 
-	// Current configuration
+	// 当前配置
 	config     *Config
 	configPath string
 
-	// Rollback support
+	// 回滚支持
 	previousConfig *Config          // 上一个成功应用的配置（用于回滚）
 	configHistory  []ConfigSnapshot // 配置变更历史（环形缓冲）
 	maxHistorySize int              // 最大历史记录数，默认 10
 	validateFunc   ValidateFunc     // 配置验证钩子（可选）
 
-	// File watcher
+	// 文件观察者
 	watcher *FileWatcher
 
-	// Callbacks
+	// 回调
 	changeCallbacks   []ChangeCallback
 	reloadCallbacks   []ReloadCallback
 	rollbackCallbacks []RollbackCallback // 回滚事件回调
 
-	// Change log
+	// 变更日志
 	changeLog []ConfigChange
 
-	// Logger
+	// 记录器
 	logger *zap.Logger
 
-	// Running state
+	// 运行状态
 	running bool
 	ctx     context.Context
 	cancel  context.CancelFunc
@@ -67,28 +58,28 @@ type ReloadCallback func(oldConfig, newConfig *Config)
 
 // ConfigChange represents a configuration change
 type ConfigChange struct {
-	// Timestamp of the change
+	// 变更的时间戳
 	Timestamp time.Time `json:"timestamp"`
 
-	// Source of the change (file, api, env)
+	// 更改的来源（文件、api、env）
 	Source string `json:"source"`
 
-	// Path to the changed field (e.g., "Server.HTTPPort")
+	// 已更改字段的路径（例如“Server.HTTPPort”）
 	Path string `json:"path"`
 
-	// OldValue before the change (may be redacted for sensitive fields)
+	// 更改前的 OldValue（可能会对敏感字段进行编辑）
 	OldValue interface{} `json:"old_value,omitempty"`
 
-	// NewValue after the change (may be redacted for sensitive fields)
+	// 更改后的 NewValue（可能会对敏感字段进行编辑）
 	NewValue interface{} `json:"new_value,omitempty"`
 
-	// RequiresRestart indicates if restart is needed for this change
+	// RequiresRestart 指示此更改是否需要重新启动
 	RequiresRestart bool `json:"requires_restart"`
 
-	// Applied indicates if the change was applied
+	// 已应用指示是否应用了更改
 	Applied bool `json:"applied"`
 
-	// Error if the change failed
+	// 如果更改失败则出错
 	Error string `json:"error,omitempty"`
 }
 
@@ -120,29 +111,27 @@ type RollbackEvent struct {
 
 // HotReloadableField defines which fields can be hot reloaded
 type HotReloadableField struct {
-	// Path is the field path (e.g., "Log.Level")
+	// Path 是字段路径（例如“Log.Level”）
 	Path string
 
-	// Description of the field
+	// 字段描述
 	Description string
 
-	// RequiresRestart indicates if changing this field requires restart
+	// RequiresRestart 指示更改此字段是否需要重新启动
 	RequiresRestart bool
 
-	// Sensitive indicates if the field contains sensitive data
+	// Sensitive 表示该字段是否包含敏感数据
 	Sensitive bool
 
-	// Validator is an optional validation function
+	// ???Validator is an optional validation function
 	Validator func(value interface{}) error
 }
 
-// =============================================================================
-// Hot Reloadable Fields Registry
-// =============================================================================
+// --- 可热重载字段注册表 ---
 
 // hotReloadableFields defines which configuration fields can be hot reloaded
 var hotReloadableFields = map[string]HotReloadableField{
-	// Log configuration - can be hot reloaded
+	// 日志配置-可以热重载
 	"Log.Level": {
 		Path:            "Log.Level",
 		Description:     "Log level (debug, info, warn, error)",
@@ -156,7 +145,7 @@ var hotReloadableFields = map[string]HotReloadableField{
 		Sensitive:       false,
 	},
 
-	// Agent configuration - can be hot reloaded
+	// 代理配置 - 可以热重载
 	"Agent.MaxIterations": {
 		Path:            "Agent.MaxIterations",
 		Description:     "Maximum agent iterations",
@@ -188,7 +177,7 @@ var hotReloadableFields = map[string]HotReloadableField{
 		Sensitive:       false,
 	},
 
-	// LLM configuration - can be hot reloaded
+	// LLM配置-可以热重载
 	"LLM.MaxRetries": {
 		Path:            "LLM.MaxRetries",
 		Description:     "Maximum LLM request retries",
@@ -202,7 +191,7 @@ var hotReloadableFields = map[string]HotReloadableField{
 		Sensitive:       false,
 	},
 
-	// Telemetry configuration - can be hot reloaded
+	// 遥测配置 - 可以热重载
 	"Telemetry.Enabled": {
 		Path:            "Telemetry.Enabled",
 		Description:     "Enable telemetry",
@@ -216,7 +205,7 @@ var hotReloadableFields = map[string]HotReloadableField{
 		Sensitive:       false,
 	},
 
-	// Server configuration - requires restart
+	// 服务器配置 - 需要重新启动
 	"Server.HTTPPort": {
 		Path:            "Server.HTTPPort",
 		Description:     "HTTP server port",
@@ -248,7 +237,7 @@ var hotReloadableFields = map[string]HotReloadableField{
 		Sensitive:       false,
 	},
 
-	// Database configuration - requires restart
+	// 数据库配置 - 需要重新启动
 	"Database.Host": {
 		Path:            "Database.Host",
 		Description:     "Database host",
@@ -268,7 +257,7 @@ var hotReloadableFields = map[string]HotReloadableField{
 		Sensitive:       true,
 	},
 
-	// Redis configuration - requires restart
+	// Redis 配置 - 需要重新启动
 	"Redis.Addr": {
 		Path:            "Redis.Addr",
 		Description:     "Redis address",
@@ -282,7 +271,7 @@ var hotReloadableFields = map[string]HotReloadableField{
 		Sensitive:       true,
 	},
 
-	// LLM API Key - requires restart
+	// LLM API 密钥 - 需要重新启动
 	"LLM.APIKey": {
 		Path:            "LLM.APIKey",
 		Description:     "LLM API key",
@@ -290,7 +279,7 @@ var hotReloadableFields = map[string]HotReloadableField{
 		Sensitive:       true,
 	},
 
-	// Qdrant configuration - requires restart
+	// Qdrant 配置 - 需要重新启动
 	"Qdrant.Host": {
 		Path:            "Qdrant.Host",
 		Description:     "Qdrant host",
@@ -305,9 +294,7 @@ var hotReloadableFields = map[string]HotReloadableField{
 	},
 }
 
-// =============================================================================
-// Hot Reload Manager Options
-// =============================================================================
+// --- 热重载管理器选项 ---
 
 // HotReloadOption configures the HotReloadManager
 type HotReloadOption func(*HotReloadManager)
@@ -342,9 +329,7 @@ func WithValidateFunc(fn ValidateFunc) HotReloadOption {
 	}
 }
 
-// =============================================================================
-// Hot Reload Manager Implementation
-// =============================================================================
+// --- 热重载管理器实现 ---
 
 // NewHotReloadManager creates a new hot reload manager
 func NewHotReloadManager(config *Config, opts ...HotReloadOption) *HotReloadManager {
@@ -427,7 +412,7 @@ func (m *HotReloadManager) Start(ctx context.Context) error {
 
 	m.ctx, m.cancel = context.WithCancel(ctx)
 
-	// Start file watcher if config path is set
+	// 如果设置了配置路径则启动文件监视程序
 	if m.configPath != "" {
 		watcher, err := NewFileWatcher(
 			[]string{m.configPath},
@@ -688,7 +673,7 @@ func (m *HotReloadManager) logChange(change ConfigChange) {
 		zap.Bool("requires_restart", change.RequiresRestart),
 	}
 
-	// Only log values if not sensitive
+	// 仅记录不敏感的值
 	field, known := hotReloadableFields[change.Path]
 	if !known || !field.Sensitive {
 		fields = append(fields,
@@ -828,7 +813,7 @@ func (m *HotReloadManager) GetChangeLog(limit int) []ConfigChange {
 		limit = len(m.changeLog)
 	}
 
-	// Return most recent changes
+	// 返回最近的更改
 	start := len(m.changeLog) - limit
 	result := make([]ConfigChange, limit)
 	copy(result, m.changeLog[start:])
@@ -842,14 +827,14 @@ func (m *HotReloadManager) UpdateField(path string, value interface{}) error {
 
 	oldConfigSnapshot := deepCopyConfig(m.config)
 
-	// Check if field is known
+	// 检查字段是否已知
 	field, known := hotReloadableFields[path]
 	if !known {
 		m.mu.Unlock()
 		return fmt.Errorf("unknown configuration field: %s", path)
 	}
 
-	// Validate if validator exists
+	// 验证验证器是否存在
 	if field.Validator != nil {
 		if err := field.Validator(value); err != nil {
 			m.mu.Unlock()
@@ -857,20 +842,20 @@ func (m *HotReloadManager) UpdateField(path string, value interface{}) error {
 		}
 	}
 
-	// Get old value
+	// 获取旧值
 	oldValue, err := m.getFieldValue(path)
 	if err != nil {
 		m.mu.Unlock()
 		return fmt.Errorf("failed to get old value: %w", err)
 	}
 
-	// Set new value
+	// 设置新值
 	if err := m.setFieldValue(path, value); err != nil {
 		m.mu.Unlock()
 		return fmt.Errorf("failed to set value: %w", err)
 	}
 
-	// Create change record
+	// 创建变更记录
 	change := ConfigChange{
 		Timestamp:       time.Now(),
 		Source:          "api",
@@ -886,7 +871,7 @@ func (m *HotReloadManager) UpdateField(path string, value interface{}) error {
 		change.NewValue = "[REDACTED]"
 	}
 
-	// Log and notify
+	// 记录并通知
 	m.logChange(change)
 	m.changeLog = append(m.changeLog, change)
 	callbacks := append([]ChangeCallback(nil), m.changeCallbacks...)
@@ -950,7 +935,7 @@ func setNestedField(v reflect.Value, path string, value interface{}) error {
 			return fmt.Errorf("field not found: %s", part)
 		}
 
-		// If this is the last part, set the value
+		// 如果这是最后一部分，请设置该值
 		if i == len(parts)-1 {
 			if !v.CanSet() {
 				return fmt.Errorf("cannot set field: %s", part)
@@ -1006,16 +991,14 @@ func IsHotReloadable(path string) bool {
 	return known && !field.RequiresRestart
 }
 
-// =============================================================================
-// Sanitized Config for API
-// =============================================================================
+// --- API 脱敏配置视图 ---
 
 // SanitizedConfig returns a copy of the configuration with sensitive fields redacted
 func (m *HotReloadManager) SanitizedConfig() map[string]interface{} {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
-	// Convert to JSON and back to get a map
+	// 转换为 JSON 并返回以获取地图
 	data, err := json.Marshal(m.config)
 	if err != nil {
 		return nil
@@ -1026,7 +1009,7 @@ func (m *HotReloadManager) SanitizedConfig() map[string]interface{} {
 		return nil
 	}
 
-	// Redact sensitive fields
+	// 编辑敏感字段
 	redactSensitiveFields(result, "")
 
 	return result
@@ -1049,7 +1032,7 @@ func redactSensitiveFields(data map[string]interface{}, prefix string) {
 			fullPath = prefix + "." + key
 		}
 
-		// Check if this is a sensitive field
+		// 检查这是否是敏感字段
 		lowerKey := toLower(key)
 		for sensitiveKey := range sensitiveKeys {
 			if contains(lowerKey, sensitiveKey) {
@@ -1060,7 +1043,7 @@ func redactSensitiveFields(data map[string]interface{}, prefix string) {
 			}
 		}
 
-		// Recurse into nested maps
+		// 递归到嵌套映射
 		if nested, ok := value.(map[string]interface{}); ok {
 			redactSensitiveFields(nested, fullPath)
 		}

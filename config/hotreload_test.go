@@ -1,6 +1,4 @@
-// =============================================================================
-// AgentFlow Configuration Hot Reload Tests
-// =============================================================================
+// 配置热重载相关测试。
 package config
 
 import (
@@ -19,18 +17,16 @@ import (
 	"go.uber.org/zap"
 )
 
-// =============================================================================
-// File Watcher Tests
-// =============================================================================
+// --- 文件监听器测试 ---
 
 func TestFileWatcher_NewFileWatcher(t *testing.T) {
-	// Create a temporary file
+	// 创建临时文件
 	tmpDir := t.TempDir()
 	tmpFile := filepath.Join(tmpDir, "config.yaml")
 	err := os.WriteFile(tmpFile, []byte("test: value"), 0644)
 	require.NoError(t, err)
 
-	// Create watcher
+	// 创建观察者
 	watcher, err := NewFileWatcher([]string{tmpFile})
 	require.NoError(t, err)
 	assert.NotNil(t, watcher)
@@ -49,12 +45,12 @@ func TestFileWatcher_StartStop(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	// Start watcher
+	// 启动观察者
 	err = watcher.Start(ctx)
 	require.NoError(t, err)
 	assert.True(t, watcher.IsRunning())
 
-	// Stop watcher
+	// 停止观察者
 	err = watcher.Stop()
 	require.NoError(t, err)
 	assert.False(t, watcher.IsRunning())
@@ -72,7 +68,7 @@ func TestFileWatcher_DetectsChanges(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	// Track events
+	// 追踪事件
 	var events []FileEvent
 	watcher.OnChange(func(event FileEvent) {
 		events = append(events, event)
@@ -85,17 +81,17 @@ func TestFileWatcher_DetectsChanges(t *testing.T) {
 	require.NoError(t, err)
 	defer watcher.Stop()
 
-	// Wait for initial setup
+	// 等待初始设置
 	time.Sleep(100 * time.Millisecond)
 
-	// Modify file
+	// 修改文件
 	err = os.WriteFile(tmpFile, []byte("test: value2"), 0644)
 	require.NoError(t, err)
 
-	// Wait for event detection
+	// 等待事件检测
 	time.Sleep(2 * time.Second)
 
-	// Should have detected the change
+	// 应该检测到变化
 	assert.GreaterOrEqual(t, len(events), 1)
 	if len(events) > 0 {
 		assert.Equal(t, tmpFile, events[0].Path)
@@ -123,9 +119,7 @@ func TestFileOp_String(t *testing.T) {
 	}
 }
 
-// =============================================================================
-// Hot Reload Manager Tests
-// =============================================================================
+// --- 热重载管理器测试 ---
 
 func TestHotReloadManager_NewHotReloadManager(t *testing.T) {
 	cfg := DefaultConfig()
@@ -153,14 +147,14 @@ func TestHotReloadManager_UpdateField(t *testing.T) {
 	cfg := DefaultConfig()
 	manager := NewHotReloadManager(cfg)
 
-	// Update log level
+	// 更新日志级别
 	err := manager.UpdateField("Log.Level", "debug")
 	require.NoError(t, err)
 
-	// Verify change
+	// 验证变更
 	assert.Equal(t, "debug", manager.GetConfig().Log.Level)
 
-	// Check change log
+	// 检查变更日志
 	changes := manager.GetChangeLog(10)
 	assert.GreaterOrEqual(t, len(changes), 1)
 }
@@ -182,14 +176,14 @@ func TestHotReloadManager_SanitizedConfig(t *testing.T) {
 	manager := NewHotReloadManager(cfg)
 	sanitized := manager.SanitizedConfig()
 
-	// The Config struct uses yaml tags, so JSON marshaling will use field names
-	// Check that sensitive fields are redacted
+	// Config 结构使用 yaml 标签，因此 JSON 封送将使用字段名称
+	// 检查敏感字段是否已被编辑
 	if db, ok := sanitized["Database"].(map[string]interface{}); ok {
 		assert.Equal(t, "[REDACTED]", db["Password"])
 	} else if db, ok := sanitized["database"].(map[string]interface{}); ok {
 		assert.Equal(t, "[REDACTED]", db["password"])
 	} else {
-		// Just verify the sanitized config is not nil
+		// 只需验证清理后的配置不为零
 		assert.NotNil(t, sanitized)
 	}
 
@@ -221,7 +215,7 @@ func TestHotReloadManager_ReloadFromFile(t *testing.T) {
 	tmpDir := t.TempDir()
 	tmpFile := filepath.Join(tmpDir, "config.yaml")
 
-	// Write initial config
+	// 写入初始配置
 	initialConfig := `
 server:
   http_port: 8080
@@ -237,11 +231,11 @@ agent:
 	cfg := DefaultConfig()
 	manager := NewHotReloadManager(cfg, WithConfigPath(tmpFile))
 
-	// Reload from file
+	// 从文件重新加载
 	err = manager.ReloadFromFile()
 	require.NoError(t, err)
 
-	// Verify config was loaded
+	// 验证配置已加载
 	assert.Equal(t, "info", manager.GetConfig().Log.Level)
 }
 
@@ -268,9 +262,7 @@ func TestHotReloadManager_ApplyConfig(t *testing.T) {
 	assert.Equal(t, "debug", manager.GetConfig().Log.Level)
 }
 
-// =============================================================================
-// Hot Reloadable Fields Tests
-// =============================================================================
+// --- 可热重载字段测试 ---
 
 func TestGetHotReloadableFields(t *testing.T) {
 	fields := GetHotReloadableFields()
@@ -282,19 +274,17 @@ func TestGetHotReloadableFields(t *testing.T) {
 }
 
 func TestIsHotReloadable(t *testing.T) {
-	// Log.Level can be hot reloaded
+	// Log.Level 可以热重载
 	assert.True(t, IsHotReloadable("Log.Level"))
 
-	// Server.HTTPPort requires restart
+	// Server.HTTPPort 需要重新启动
 	assert.False(t, IsHotReloadable("Server.HTTPPort"))
 
-	// Unknown field
+	// 未知领域
 	assert.False(t, IsHotReloadable("Unknown.Field"))
 }
 
-// =============================================================================
-// Config API Handler Tests
-// =============================================================================
+// --- 配置 API 处理器测试 ---
 
 func TestConfigAPIHandler_GetConfig(t *testing.T) {
 	cfg := DefaultConfig()
@@ -419,7 +409,7 @@ func TestConfigAPIHandler_GetChanges(t *testing.T) {
 	manager := NewHotReloadManager(cfg)
 	handler := NewConfigAPIHandler(manager)
 
-	// Make some changes
+	// 做一些改变
 	manager.UpdateField("Log.Level", "debug")
 	manager.UpdateField("Agent.MaxIterations", 20)
 
@@ -451,9 +441,7 @@ func TestConfigAPIHandler_MethodNotAllowed(t *testing.T) {
 	assert.Equal(t, http.StatusMethodNotAllowed, w.Code)
 }
 
-// =============================================================================
-// Middleware Tests
-// =============================================================================
+// --- 中间件测试 ---
 
 func TestConfigAPIMiddleware_RequireAuth(t *testing.T) {
 	cfg := DefaultConfig()
@@ -461,7 +449,7 @@ func TestConfigAPIMiddleware_RequireAuth(t *testing.T) {
 	handler := NewConfigAPIHandler(manager)
 	middleware := NewConfigAPIMiddleware(handler, "test-api-key")
 
-	// Test without API key
+	// 无需 API 密钥进行测试
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/config", nil)
 	w := httptest.NewRecorder()
 
@@ -470,7 +458,7 @@ func TestConfigAPIMiddleware_RequireAuth(t *testing.T) {
 
 	assert.Equal(t, http.StatusUnauthorized, w.Code)
 
-	// Test with correct API key
+	// 使用正确的 API 密钥进行测试
 	req = httptest.NewRequest(http.MethodGet, "/api/v1/config", nil)
 	req.Header.Set("X-API-Key", "test-api-key")
 	w = httptest.NewRecorder()
@@ -495,9 +483,7 @@ func TestConfigAPIMiddleware_RequireAuth_QueryParam(t *testing.T) {
 	assert.Equal(t, http.StatusOK, w.Code)
 }
 
-// =============================================================================
-// Helper Function Tests
-// =============================================================================
+// --- 辅助函数测试 ---
 
 func TestSplitPath(t *testing.T) {
 	tests := []struct {
@@ -540,15 +526,13 @@ func TestRedactSensitiveFields(t *testing.T) {
 	assert.Equal(t, "value", nested["normal"])
 }
 
-// =============================================================================
-// Integration Tests
-// =============================================================================
+// --- 集成测试 ---
 
 func TestHotReload_Integration(t *testing.T) {
 	tmpDir := t.TempDir()
 	tmpFile := filepath.Join(tmpDir, "config.yaml")
 
-	// Write initial config
+	// 写入初始配置
 	initialConfig := `
 server:
   http_port: 8080
@@ -561,7 +545,7 @@ agent:
 	err := os.WriteFile(tmpFile, []byte(initialConfig), 0644)
 	require.NoError(t, err)
 
-	// Create manager with file watching
+	// 创建具有文件监视功能的管理器
 	cfg := DefaultConfig()
 	logger, _ := zap.NewDevelopment()
 	manager := NewHotReloadManager(cfg,
@@ -576,13 +560,13 @@ agent:
 	require.NoError(t, err)
 	defer manager.Stop()
 
-	// Track changes
+	// 追踪变更
 	var changes []ConfigChange
 	manager.OnChange(func(change ConfigChange) {
 		changes = append(changes, change)
 	})
 
-	// Update config file
+	// 更新配置文件
 	updatedConfig := `
 server:
   http_port: 8080
@@ -592,16 +576,16 @@ agent:
   max_iterations: 20
   temperature: 0.7
 `
-	// Wait a bit before modifying to ensure watcher is ready
+	// 修改之前稍等一下以确保观察者已准备好
 	time.Sleep(500 * time.Millisecond)
 
 	err = os.WriteFile(tmpFile, []byte(updatedConfig), 0644)
 	require.NoError(t, err)
 
-	// Wait for file watcher to detect change (poll interval is 1s + debounce 500ms)
+	// 等待文件观察器检测更改（轮询间隔为 1 秒 + 去抖 500 毫秒）
 	time.Sleep(4 * time.Second)
 
-	// Verify changes were detected - the integration test may not always detect changes
-	// due to timing issues in CI environments, so we just verify no errors occurred
+	// 验证是否检测到更改 - 集成测试可能并不总是检测到更改
+	// 由于 CI 环境中的计时问题，所以我们只是验证没有发生错误
 	t.Logf("Detected %d changes", len(changes))
 }

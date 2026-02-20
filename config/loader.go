@@ -1,17 +1,6 @@
-// =============================================================================
-// 📦 AgentFlow 配置加载器
-// =============================================================================
-// 统一配置加载，支持 YAML 文件 + 环境变量覆盖
+// 配置加载器实现。
 //
-// 使用方法:
-//
-//	cfg, err := config.NewLoader().
-//	    WithConfigPath("config.yaml").
-//	    WithEnvPrefix("AGENTFLOW").
-//	    Load()
-//
-// 配置优先级: 默认值 → YAML 文件 → 环境变量
-// =============================================================================
+// 支持默认值、YAML 文件与环境变量覆盖，并按优先级合并配置。
 package config
 
 import (
@@ -25,9 +14,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// =============================================================================
-// 🎯 核心配置结构
-// =============================================================================
+// --- 核心配置结构 ---
 
 // Config 是 AgentFlow 的完整配置结构
 type Config struct {
@@ -78,7 +65,7 @@ type ServerConfig struct {
 	ShutdownTimeout time.Duration `yaml:"shutdown_timeout" env:"SHUTDOWN_TIMEOUT"`
 	// CORS 允许的源
 	CORSAllowedOrigins []string `yaml:"cors_allowed_origins" json:"cors_allowed_origins,omitempty"`
-	// API Keys
+	// API 密钥
 	APIKeys []string `yaml:"api_keys" json:"api_keys,omitempty"`
 	// 是否允许从 URL Query 读取 API Key（默认 false，出于安全考虑）
 	AllowQueryAPIKey bool `yaml:"allow_query_api_key" env:"ALLOW_QUERY_API_KEY" json:"allow_query_api_key,omitempty"`
@@ -268,9 +255,7 @@ type TelemetryConfig struct {
 	SampleRate float64 `yaml:"sample_rate" env:"SAMPLE_RATE"`
 }
 
-// =============================================================================
-// 🔧 配置加载器
-// =============================================================================
+// --- 配置加载器 ---
 
 // Loader 配置加载器（Builder 模式）
 type Loader struct {
@@ -456,9 +441,7 @@ func setFieldValue(field reflect.Value, value string) error {
 	return nil
 }
 
-// =============================================================================
-// 🔍 辅助函数
-// =============================================================================
+// --- 辅助函数 ---
 
 // MustLoad 加载配置，失败时 panic
 func MustLoad(path string) *Config {
