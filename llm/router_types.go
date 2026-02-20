@@ -68,7 +68,7 @@ func NewRouter(db *gorm.DB, providers map[string]Provider, opts RouterOptions) *
 		db:                  db,
 		providers:           providers,
 		healthMonitor:       NewHealthMonitor(db),
-		canaryConfig:        NewCanaryConfig(db),
+		canaryConfig:        NewCanaryConfig(db, opts.Logger),
 		logger:              opts.Logger,
 		healthCheckInterval: opts.HealthCheckInterval,
 		healthCheckTimeout:  opts.HealthCheckTimeout,

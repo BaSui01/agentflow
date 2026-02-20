@@ -3,11 +3,11 @@ package llm
 import (
 	"context"
 	"fmt"
-	"log"
 	"strconv"
 	"sync"
 	"time"
 
+	"go.uber.org/zap"
 	"gorm.io/gorm"
 )
 
@@ -24,6 +24,7 @@ const (
 type CanaryConfig struct {
 	mu          sync.RWMutex
 	db          *gorm.DB
+	logger      *zap.Logger
 	deployments map[uint]*CanaryDeployment // provider_id -> deployment
 	ctx         context.Context
 	cancel      context.CancelFunc
@@ -50,10 +51,14 @@ type ProviderStats struct {
 	FailedCalls int
 }
 
-func NewCanaryConfig(db *gorm.DB) *CanaryConfig {
+func NewCanaryConfig(db *gorm.DB, logger *zap.Logger) *CanaryConfig {
+	if logger == nil {
+		logger = zap.NewNop()
+	}
 	ctx, cancel := context.WithCancel(context.Background())
 	config := &CanaryConfig{
 		db:          db,
+		logger:      logger,
 		deployments: make(map[uint]*CanaryDeployment),
 		ctx:         ctx,
 		cancel:      cancel,
@@ -111,7 +116,7 @@ func (c *CanaryConfig) loadFromDB() {
 		}
 	}
 
-	log.Printf("[CanaryConfig] Loaded %d active deployments from database", len(c.deployments))
+	c.logger.Info("loaded active deployments from database", zap.Int("count", len(c.deployments)))
 }
 
 // GetDeployment 获取指定 Provider 的金丝雀部署配置
@@ -192,8 +197,11 @@ func (c *CanaryConfig) UpdateStage(providerID uint, newStage CanaryStage) error 
 
 	c.db.Table("sc_llm_canary_deployments").Where("id = ?", deployment.ID).Updates(updates)
 
-	log.Printf("[CanaryConfig] Provider %d stage updated: %s -> %s (traffic: %d%%)",
-		providerID, oldStage, newStage, deployment.TrafficPercent)
+	c.logger.Info("provider stage updated",
+		zap.Uint("providerID", providerID),
+		zap.String("from", string(oldStage)),
+		zap.String("to", string(newStage)),
+		zap.Int("trafficPercent", deployment.TrafficPercent))
 
 	return nil
 }
@@ -234,7 +242,9 @@ func (c *CanaryConfig) TriggerRollback(providerID uint, reason string) error {
 	}
 	c.db.Table("sc_audit_logs").Create(&auditLog)
 
-	log.Printf("[ALERT] Canary rollback triggered for provider %d: %s", providerID, reason)
+	c.logger.Warn("canary rollback triggered",
+		zap.Uint("providerID", providerID),
+		zap.String("reason", reason))
 
 	return nil
 }
@@ -265,16 +275,21 @@ func (c *CanaryConfig) GetAllDeployments() []*CanaryDeployment {
 type CanaryMonitor struct {
 	db            *gorm.DB
 	canaryConfig  *CanaryConfig
+	logger        *zap.Logger
 	checkInterval time.Duration
 	ctx           context.Context
 	cancel        context.CancelFunc
 }
 
-func NewCanaryMonitor(db *gorm.DB, canaryConfig *CanaryConfig) *CanaryMonitor {
+func NewCanaryMonitor(db *gorm.DB, canaryConfig *CanaryConfig, logger *zap.Logger) *CanaryMonitor {
+	if logger == nil {
+		logger = zap.NewNop()
+	}
 	ctx, cancel := context.WithCancel(context.Background())
 	return &CanaryMonitor{
 		db:            db,
 		canaryConfig:  canaryConfig,
+		logger:        logger,
 		checkInterval: 30 * time.Second,
 		ctx:           ctx,
 		cancel:        cancel,
@@ -285,12 +300,12 @@ func (m *CanaryMonitor) Start(ctx context.Context) {
 	ticker := time.NewTicker(m.checkInterval)
 	defer ticker.Stop()
 
-	log.Printf("[CanaryMonitor] Started with check interval: %v", m.checkInterval)
+	m.logger.Info("canary monitor started", zap.Duration("checkInterval", m.checkInterval))
 
 	for {
 		select {
 		case <-ctx.Done():
-			log.Printf("[CanaryMonitor] Stopped")
+			m.logger.Info("canary monitor stopped")
 			return
 		case <-m.ctx.Done():
 			return
@@ -334,7 +349,9 @@ func (m *CanaryMonitor) checkAndRollback() {
 
 		// 执行自动回滚
 		if shouldRollback && deployment.AutoRollback {
-			log.Printf("[CanaryMonitor] Auto-rollback triggered for provider %d: %s", deployment.ProviderID, reason)
+			m.logger.Warn("auto-rollback triggered",
+				zap.Uint("providerID", deployment.ProviderID),
+				zap.String("reason", reason))
 			m.canaryConfig.TriggerRollback(deployment.ProviderID, reason)
 		}
 	}
