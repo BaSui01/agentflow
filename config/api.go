@@ -1,13 +1,6 @@
-// =============================================================================
-// AgentFlow Configuration HTTP API
-// =============================================================================
-// Provides HTTP endpoints for configuration management:
-// - GET /api/v1/config - Get current configuration (sanitized)
-// - PUT /api/v1/config - Update configuration fields
-// - POST /api/v1/config/reload - Reload configuration from file
-// - GET /api/v1/config/fields - Get hot reloadable fields
-// - GET /api/v1/config/changes - Get configuration change history
-// =============================================================================
+// config 包的 HTTP 配置管理 API。
+//
+// 提供配置查询、更新、热重载触发与变更历史查询能力。
 package config
 
 import (
@@ -18,78 +11,74 @@ import (
 	"time"
 )
 
-// =============================================================================
-// API Types
-// =============================================================================
+// --- API 类型定义 ---
 
-// ConfigAPIHandler handles configuration API requests
+// ConfigAPIHandler 处理配置 API 请求
 type ConfigAPIHandler struct {
 	manager *HotReloadManager
 }
 
-// ConfigResponse represents the configuration API response
+// ConfigResponse 表示配置 API 响应
 type ConfigResponse struct {
-	// Success indicates if the operation was successful
+	// success表示操作是否成功
 	Success bool `json:"success"`
 
-	// Message provides additional information
+	// 消息提供附加信息
 	Message string `json:"message,omitempty"`
 
-	// Config is the current configuration (sanitized)
+	// 配置是当前配置（已清理）
 	Config map[string]interface{} `json:"config,omitempty"`
 
-	// Fields lists hot reloadable fields
+	// Fields 列出了热可重载字段
 	Fields map[string]FieldInfo `json:"fields,omitempty"`
 
-	// Changes lists configuration changes
+	// 更改列出配置更改
 	Changes []ConfigChange `json:"changes,omitempty"`
 
-	// Error provides error details
+	// 错误提供错误详细信息
 	Error string `json:"error,omitempty"`
 
-	// RequiresRestart indicates if restart is needed
+	// RequiresRestart 表示是否需要重启
 	RequiresRestart bool `json:"requires_restart,omitempty"`
 
-	// Timestamp of the response
+	// 响应的时间戳
 	Timestamp time.Time `json:"timestamp"`
 }
 
-// FieldInfo provides information about a configuration field
+// FieldInfo 提供有关配置字段的信息
 type FieldInfo struct {
-	// Path is the field path
+	// Path是字段路径
 	Path string `json:"path"`
 
-	// Description of the field
+	// 字段描述
 	Description string `json:"description"`
 
-	// RequiresRestart indicates if changing requires restart
+	// RequiresRestart 指示更改是否需要重新启动
 	RequiresRestart bool `json:"requires_restart"`
 
-	// Sensitive indicates if the field is sensitive
+	// Sensitive 表示该字段是否敏感
 	Sensitive bool `json:"sensitive"`
 
-	// CurrentValue is the current value (redacted if sensitive)
+	// CurrentValue 是当前值（如果敏感则进行编辑）
 	CurrentValue interface{} `json:"current_value,omitempty"`
 }
 
-// ConfigUpdateRequest represents a configuration update request
+// ConfigUpdateRequest 代表配置更新请求
 type ConfigUpdateRequest struct {
-	// Updates is a map of field paths to new values
+	// 更新是到新值的字段路径的映射
 	Updates map[string]interface{} `json:"updates"`
 }
 
-// =============================================================================
-// API Handler Implementation
-// =============================================================================
+// --- API 处理器实现 ---
 
-// NewConfigAPIHandler creates a new configuration API handler
+// NewConfigAPIHandler 创建一个新的配置 API 处理程序
 func NewConfigAPIHandler(manager *HotReloadManager) *ConfigAPIHandler {
 	return &ConfigAPIHandler{
 		manager: manager,
 	}
 }
 
-// RegisterRoutes registers the configuration API routes
+// RegisterRoutes 注册配置 API 路由
 func (h *ConfigAPIHandler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/v1/config", h.handleConfig)
 	mux.HandleFunc("/api/v1/config/reload", h.handleReload)
@@ -97,7 +86,7 @@ func (h *ConfigAPIHandler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/v1/config/changes", h.handleChanges)
 }
 
-// handleConfig handles GET and PUT requests for configuration
+// handleConfig 处理配置的 GET 和 PUT 请求
 func (h *ConfigAPIHandler) handleConfig(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
@@ -111,15 +100,15 @@ func (h *ConfigAPIHandler) handleConfig(w http.ResponseWriter, r *http.Request) 
 	}
 }
 
-// getConfig returns the current configuration (sanitized)
-// @Summary Get current configuration
-// @Description Returns the current configuration with sensitive fields redacted
-// @Tags Configuration
-// @Accept json
-// @Produce json
-// @Success 200 {object} ConfigResponse "Current configuration"
-// @Failure 500 {object} ConfigResponse "Internal server error"
-// @Router /api/v1/config [get]
+// getConfig 返回当前配置（已清理）
+// @Summary 获取当前配置
+// @Description 返回当前配置并编辑敏感字段
+// @标签配置
+// ???@Accept json
+// @生成json
+// @Success 200 {object} ConfigResponse "当前配置"
+// @Failure 500 {object} ConfigResponse“内部服务器错误”
+// @Router /api/v1/config [获取]
 func (h *ConfigAPIHandler) getConfig(w http.ResponseWriter, r *http.Request) {
 	config := h.manager.SanitizedConfig()
 
@@ -133,17 +122,17 @@ func (h *ConfigAPIHandler) getConfig(w http.ResponseWriter, r *http.Request) {
 	h.writeJSON(w, http.StatusOK, resp)
 }
 
-// updateConfig updates configuration fields
-// @Summary Update configuration
-// @Description Updates one or more configuration fields dynamically
-// @Tags Configuration
-// @Accept json
-// @Produce json
-// @Param request body ConfigUpdateRequest true "Configuration updates"
-// @Success 200 {object} ConfigResponse "Configuration updated"
-// @Failure 400 {object} ConfigResponse "Invalid request"
-// @Failure 500 {object} ConfigResponse "Internal server error"
-// @Router /api/v1/config [put]
+// updateConfig 更新配置字段
+// @Summary 更新配置
+// @Description 动态更新一个或多个配置字段
+// @标签配置
+// ???@Accept json
+// @生成json
+// @Param 请求正文 ConfigUpdateRequest true "配置更新"
+// @Success 200 {object} ConfigResponse“配置已更新”
+// @Failure 400 {object} ConfigResponse“无效请求”
+// @Failure 500 {object} ConfigResponse“内部服务器错误”
+// @Router /api/v1/config [放置]
 func (h *ConfigAPIHandler) updateConfig(w http.ResponseWriter, r *http.Request) {
 	var req ConfigUpdateRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -168,7 +157,7 @@ func (h *ConfigAPIHandler) updateConfig(w http.ResponseWriter, r *http.Request) 
 	var requiresRestart bool
 
 	for path, value := range req.Updates {
-		// Check if field is known
+		// 检查字段是否已知
 		field, known := hotReloadableFields[path]
 		if !known {
 			errors = append(errors, fmt.Sprintf("Unknown field: %s", path))
@@ -203,15 +192,15 @@ func (h *ConfigAPIHandler) updateConfig(w http.ResponseWriter, r *http.Request) 
 	})
 }
 
-// handleReload handles POST requests to reload configuration from file
-// @Summary Reload configuration from file
-// @Description Reloads the configuration from the configuration file
-// @Tags Configuration
-// @Accept json
-// @Produce json
-// @Success 200 {object} ConfigResponse "Configuration reloaded"
-// @Failure 500 {object} ConfigResponse "Reload failed"
-// @Router /api/v1/config/reload [post]
+// handleReload 处理 POST 请求以从文件重新加载配置
+// @Summary 从文件重新加载配置
+// @Description 从配置文件重新加载配置
+// @标签配置
+// ???@Accept json
+// @生成json
+// @Success 200 {object} ConfigResponse“配置已重新加载”
+// @Failure 500 {object} ConfigResponse“重新加载失败”
+// @Router /api/v1/config/reload [帖子]
 func (h *ConfigAPIHandler) handleReload(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodOptions {
 		h.handleCORS(w, r)
@@ -240,14 +229,14 @@ func (h *ConfigAPIHandler) handleReload(w http.ResponseWriter, r *http.Request) 
 	})
 }
 
-// handleFields returns the list of hot reloadable fields
-// @Summary Get hot reloadable fields
-// @Description Returns the list of configuration fields that can be hot reloaded
-// @Tags Configuration
-// @Accept json
-// @Produce json
-// @Success 200 {object} ConfigResponse "Hot reloadable fields"
-// @Router /api/v1/config/fields [get]
+// handleFields 返回热可重载字段的列表
+// @Summary 获取热可重载字段
+// @Description 返回可热重载的配置字段列表
+// @标签配置
+// ???@Accept json
+// @生成json
+// @Success 200 {object} ConfigResponse“热可重新加载字段”
+// @Router /api/v1/config/fields [获取]
 func (h *ConfigAPIHandler) handleFields(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodOptions {
 		h.handleCORS(w, r)
@@ -268,7 +257,7 @@ func (h *ConfigAPIHandler) handleFields(w http.ResponseWriter, r *http.Request) 
 			Sensitive:       field.Sensitive,
 		}
 
-		// Get current value if not sensitive
+		// 如果不敏感则获取当前值
 		if !field.Sensitive {
 			if value, err := h.manager.getFieldValue(path); err == nil {
 				info.CurrentValue = value
@@ -286,15 +275,15 @@ func (h *ConfigAPIHandler) handleFields(w http.ResponseWriter, r *http.Request) 
 	})
 }
 
-// handleChanges returns the configuration change history
-// @Summary Get configuration change history
-// @Description Returns the history of configuration changes
-// @Tags Configuration
-// @Accept json
-// @Produce json
-// @Param limit query int false "Maximum number of changes to return" default(50)
-// @Success 200 {object} ConfigResponse "Configuration changes"
-// @Router /api/v1/config/changes [get]
+// handleChanges 返回配置更改历史记录
+// @Summary 获取配置更改历史记录
+// @Description 返回配置更改的历史记录
+// @标签配置
+// ???@Accept json
+// @生成json
+// @Param limit query int false "返回的最大更改数量" 默认(50)
+// @Success 200 {object} ConfigResponse“配置更改”
+// @Router /api/v1/config/changes [获取]
 func (h *ConfigAPIHandler) handleChanges(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodOptions {
 		h.handleCORS(w, r)
@@ -306,7 +295,7 @@ func (h *ConfigAPIHandler) handleChanges(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	// Parse limit parameter
+	// 解析限制参数
 	limit := 50
 	if limitStr := r.URL.Query().Get("limit"); limitStr != "" {
 		if l, err := strconv.Atoi(limitStr); err == nil && l > 0 {
@@ -324,11 +313,9 @@ func (h *ConfigAPIHandler) handleChanges(w http.ResponseWriter, r *http.Request)
 	})
 }
 
-// =============================================================================
-// Helper Methods
-// =============================================================================
+// --- 辅助方法 ---
 
-// writeJSON writes a JSON response
+// writeJSON 写入 JSON 响应
 func (h *ConfigAPIHandler) writeJSON(w http.ResponseWriter, status int, data interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
@@ -336,7 +323,7 @@ func (h *ConfigAPIHandler) writeJSON(w http.ResponseWriter, status int, data int
 	json.NewEncoder(w).Encode(data)
 }
 
-// handleCORS handles CORS preflight requests
+// handleCORS 处理 CORS 预检请求
 func (h *ConfigAPIHandler) handleCORS(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("Access-Control-Allow-Methods", "GET, PUT, POST, OPTIONS")
@@ -345,7 +332,7 @@ func (h *ConfigAPIHandler) handleCORS(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// methodNotAllowed returns a 405 Method Not Allowed response
+// methodNotAllowed 返回 405 方法不允许响应
 func (h *ConfigAPIHandler) methodNotAllowed(w http.ResponseWriter, r *http.Request) {
 	h.writeJSON(w, http.StatusMethodNotAllowed, ConfigResponse{
 		Success:   false,
@@ -354,17 +341,15 @@ func (h *ConfigAPIHandler) methodNotAllowed(w http.ResponseWriter, r *http.Reque
 	})
 }
 
-// =============================================================================
-// Middleware
-// =============================================================================
+// --- 中间件 ---
 
-// ConfigAPIMiddleware provides middleware for the configuration API
+// ConfigAPIMiddleware 为配置API提供中间件
 type ConfigAPIMiddleware struct {
 	handler *ConfigAPIHandler
 	apiKey  string
 }
 
-// NewConfigAPIMiddleware creates a new configuration API middleware
+// NewConfigAPIMiddleware 创建一个新的配置API中间件
 func NewConfigAPIMiddleware(handler *ConfigAPIHandler, apiKey string) *ConfigAPIMiddleware {
 	return &ConfigAPIMiddleware{
 		handler: handler,
@@ -372,16 +357,16 @@ func NewConfigAPIMiddleware(handler *ConfigAPIHandler, apiKey string) *ConfigAPI
 	}
 }
 
-// RequireAuth wraps a handler with API key authentication
+// RequireAuth 使用 API 密钥身份验证包装处理程序
 func (m *ConfigAPIMiddleware) RequireAuth(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		// Skip auth for OPTIONS requests (CORS preflight)
+		// 跳过 OPTIONS 请求的身份验证（CORS 预检）
 		if r.Method == http.MethodOptions {
 			next(w, r)
 			return
 		}
 
-		// Check API key if configured
+		// 检查 API 密钥（如果已配置）
 		if m.apiKey != "" {
 			apiKey := r.Header.Get("X-API-Key")
 			if apiKey == "" {
@@ -402,12 +387,12 @@ func (m *ConfigAPIMiddleware) RequireAuth(next http.HandlerFunc) http.HandlerFun
 	}
 }
 
-// LogRequests wraps a handler with request logging
+// LogRequests 使用请求日志记录来包装处理程序
 func (m *ConfigAPIMiddleware) LogRequests(next http.HandlerFunc, logger func(method, path string, status int, duration time.Duration)) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
 
-		// Wrap response writer to capture status code
+		// 包装响应编写器以捕获状态代码
 		wrapped := &responseWriter{ResponseWriter: w, status: http.StatusOK}
 
 		next(wrapped, r)
@@ -418,7 +403,7 @@ func (m *ConfigAPIMiddleware) LogRequests(next http.HandlerFunc, logger func(met
 	}
 }
 
-// responseWriter wraps http.ResponseWriter to capture status code
+// responseWriter 包装 http.ResponseWriter 来捕获状态码
 type responseWriter struct {
 	http.ResponseWriter
 	status int

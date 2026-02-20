@@ -49,9 +49,18 @@ agentflow/
 │   ├── image/                  # Image generation
 │   ├── video/                  # Video generation
 │   ├── music/                  # Music generation
+│   ├── speech/                 # Speech generation (TTS/STT)
+│   ├── threed/                 # 3D model generation
+│   ├── multimodal/             # Multimodal processing
 │   ├── batch/                  # Batch request processing
 │   ├── budget/                 # Token budget management
 │   ├── circuitbreaker/         # Circuit breaker pattern
+│   ├── config/                 # LLM configuration types
+│   ├── idempotency/            # Idempotent request handling
+│   ├── middleware/              # LLM middleware chain
+│   ├── moderation/             # Content moderation
+│   ├── rerank/                 # Reranking providers
+│   ├── tokenizer/              # Tokenizer implementations
 │   └── observability/          # Cost, metrics, tracing
 │
 ├── agent/                      # Core agent framework
@@ -71,7 +80,27 @@ agentflow/
 │   ├── skills/                 # Skill management
 │   ├── evaluation/             # Evaluation, A/B testing
 │   ├── lsp/                    # LSP protocol integration
-│   └── ...                     # context, conversation, deliberation, discovery, etc.
+│   ├── artifacts/              # Artifact management
+│   ├── context/                # Context management
+│   ├── conversation/           # Conversation handling
+│   ├── deliberation/           # Deliberation framework
+│   ├── deployment/             # Agent deployment
+│   ├── discovery/              # Agent discovery
+│   ├── execution/              # Execution engine
+│   ├── federation/             # Federated agents
+│   ├── handoff/                # Agent handoff
+│   ├── hierarchical/           # Hierarchical agent orchestration
+│   ├── hitl/                   # Human-in-the-loop
+│   ├── hosted/                 # Hosted agent runtime
+│   ├── k8s/                    # Kubernetes integration
+│   ├── longrunning/            # Long-running task management
+│   ├── mcp/                    # MCP client utilities
+│   ├── observability/          # Agent observability
+│   ├── persistence/            # State persistence (store interface)
+│   ├── reasoning/              # Reasoning framework
+│   ├── runtime/                # Agent runtime
+│   ├── streaming/              # Agent streaming
+│   └── voice/                  # Voice agent support
 │
 ├── workflow/                   # Workflow engine
 │   ├── workflow.go             # Workflow & Step interfaces
@@ -117,10 +146,18 @@ agentflow/
 │   ├── benchmark/              # Performance benchmarks
 │   └── contracts/              # Contract tests (OpenAPI)
 │
-├── examples/                   # 21 standalone example programs
+├── testutil/                   # Shared test utilities
+│   ├── helpers.go              # Common test helpers
+│   ├── fixtures/               # Test fixtures (agents.go, responses.go)
+│   └── mocks/                  # Shared mocks (memory.go, provider.go, tools.go)
+│
+├── tools/                      # Development tools
+│   └── openapi/                # OpenAPI generator
+│
+├── examples/                   # 19 standalone example programs
 │   ├── 01_simple_chat/
 │   ├── 02_streaming/
-│   └── ...
+│   └── ...                     # 04-09, 11-21 (gaps at 03, 10)
 │
 └── deployments/                # Deployment configs
     ├── docker/                 # Docker configs + config.example.yaml
@@ -168,7 +205,7 @@ Create a sub-package under `llm/providers/` with exactly:
 
 | Pattern | Purpose | Examples |
 |---------|---------|---------|
-| `doc.go` | Package-level godoc documentation | 25 `doc.go` files across the project |
+| `doc.go` | Package-level godoc documentation | ~79 `doc.go` files across the project |
 | `provider.go` | Provider interface implementation | `llm/providers/*/provider.go` |
 | `types.go` | Type definitions for a package | `api/types.go`, `agent/discovery/types.go` |
 | `config.go` | Configuration structs | `llm/config/types.go`, `types/config.go` |

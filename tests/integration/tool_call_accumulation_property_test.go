@@ -57,7 +57,7 @@ func mockSSEServerWithPartialToolCalls(chunks []partialToolCallChunk) *httptest.
 		}
 
 		for _, chunk := range chunks {
-			// Build the SSE data - arguments is sent as a string containing partial JSON
+			// 构建 SSE 数据 - 参数作为包含部分 JSON 的字符串发送
 			var sseData map[string]any
 			if chunk.IsFirst {
 				sseData = map[string]any{
@@ -75,7 +75,7 @@ func mockSSEServerWithPartialToolCalls(chunks []partialToolCallChunk) *httptest.
 										"type":  "function",
 										"function": map[string]any{
 											"name": chunk.ToolCallName,
-											// Arguments is a string containing partial JSON
+											// 参数是包含部分 JSON 的字符串
 											"arguments": chunk.PartialArgs,
 										},
 									},
@@ -96,7 +96,7 @@ func mockSSEServerWithPartialToolCalls(chunks []partialToolCallChunk) *httptest.
 									{
 										"index": chunk.Index,
 										"function": map[string]any{
-											// Arguments is a string containing partial JSON
+											// 参数是包含部分 JSON 的字符串
 											"arguments": chunk.PartialArgs,
 										},
 									},
@@ -149,20 +149,20 @@ func TestProperty16_ToolCallAccumulation(t *testing.T) {
 	logger := zap.NewNop()
 
 	rapid.Check(t, func(rt *rapid.T) {
-		// Generate random tool call data
+		// 生成随机工具调用数据
 		toolCallID := rapid.StringMatching(`call_[a-z0-9]{8}`).Draw(rt, "toolCallID")
 		toolName := rapid.StringMatching(`[a-z_]{3,15}`).Draw(rt, "toolName")
 
-		// Generate random JSON arguments
+		// 生成随机 JSON 参数
 		paramKey := rapid.StringMatching(`[a-z]{3,10}`).Draw(rt, "paramKey")
 		paramValue := rapid.StringMatching(`[a-zA-Z0-9]{3,20}`).Draw(rt, "paramValue")
 		fullArgs := fmt.Sprintf(`{"%s":"%s"}`, paramKey, paramValue)
 
-		// Split into 2-4 chunks
+		// 分成2-4块
 		numChunks := rapid.IntRange(2, 4).Draw(rt, "numChunks")
 		argChunks := splitJSONIntoChunks(fullArgs, numChunks)
 
-		// Build partial tool call chunks
+		// 构建部分工具调用块
 		chunks := make([]partialToolCallChunk, len(argChunks))
 		chunkID := rapid.StringMatching(`chatcmpl-[a-z0-9]{8}`).Draw(rt, "chunkID")
 		chunkModel := rapid.StringMatching(`[a-z0-9-]{3,15}`).Draw(rt, "chunkModel")
@@ -182,7 +182,7 @@ func TestProperty16_ToolCallAccumulation(t *testing.T) {
 			}
 		}
 
-		// Select a random OpenAI-compatible provider (exclude minimax which uses XML)
+		// 选择一个随机的 OpenAI 兼容提供商（不包括使用 XML 的 minimax）
 		providerIndex := rapid.IntRange(0, 3).Draw(rt, "providerIndex")
 		providerNames := []string{"grok", "qwen", "deepseek", "glm"}
 		providerName := providerNames[providerIndex]
@@ -225,8 +225,8 @@ func TestProperty16_ToolCallAccumulation(t *testing.T) {
 
 		require.NoError(t, err, "Stream() should not return error for provider %s", providerName)
 
-		// Collect all tool call chunks and accumulate arguments
-		// Following the same logic as ReAct executor: try to unmarshal as string first
+		// 收集所有工具调用块并累积参数
+		// 遵循与 ReAct 执行器相同的逻辑：首先尝试将其解组为字符串
 		var argsBuilder strings.Builder
 		var receivedToolCallID string
 		var receivedToolName string
@@ -242,12 +242,12 @@ func TestProperty16_ToolCallAccumulation(t *testing.T) {
 					receivedToolName = tc.Name
 				}
 				if len(tc.Arguments) > 0 {
-					// Try to unmarshal as JSON string first (OpenAI format)
+					// 首先尝试解组为 JSON 字符串（OpenAI 格式）
 					var argStr string
 					if err := json.Unmarshal(tc.Arguments, &argStr); err == nil {
 						argsBuilder.WriteString(argStr)
 					} else {
-						// Otherwise use raw bytes
+						// 否则使用原始字节
 						argsBuilder.Write(tc.Arguments)
 					}
 				}
@@ -256,16 +256,16 @@ func TestProperty16_ToolCallAccumulation(t *testing.T) {
 
 		accumulatedArgs := argsBuilder.String()
 
-		// Verify accumulated arguments form valid JSON
+		// 验证累积参数是否来自有效的 JSON
 		var parsed map[string]any
 		err = json.Unmarshal([]byte(accumulatedArgs), &parsed)
 		assert.NoError(t, err, "Accumulated arguments should be valid JSON for provider %s: %s", providerName, accumulatedArgs)
 
-		// Verify tool call metadata
+		// 验证工具调用元数据
 		assert.Equal(t, toolCallID, receivedToolCallID, "Tool call ID should match for provider %s", providerName)
 		assert.Equal(t, toolName, receivedToolName, "Tool call name should match for provider %s", providerName)
 
-		// Verify the accumulated JSON matches original
+		// 验证累积的 JSON 与原始数据是否匹配
 		assert.Equal(t, fullArgs, accumulatedArgs, "Accumulated args should match original for provider %s", providerName)
 	})
 }
@@ -286,10 +286,10 @@ func TestProperty16_ToolCallAccumulation_AllProviders(t *testing.T) {
 
 	var testCases []testCase
 
-	// OpenAI-compatible providers (exclude minimax which uses XML format)
+	// OpenAI 兼容提供程序（不包括使用 XML 格式的 minimax）
 	providerList := []string{"grok", "qwen", "deepseek", "glm"}
 
-	// Various JSON argument patterns
+	// 各种 JSON 参数模式
 	argPatterns := []string{
 		`{"location":"Shanghai"}`,
 		`{"query":"weather forecast"}`,
@@ -309,7 +309,7 @@ func TestProperty16_ToolCallAccumulation_AllProviders(t *testing.T) {
 		"process_input",
 	}
 
-	// Generate 100+ test cases
+	// 生成 100+ 测试用例
 	idx := 0
 	for _, provider := range providerList {
 		for _, args := range argPatterns {
@@ -395,7 +395,7 @@ func TestProperty16_ToolCallAccumulation_AllProviders(t *testing.T) {
 				if len(chunk.Delta.ToolCalls) > 0 {
 					tc := chunk.Delta.ToolCalls[0]
 					if len(tc.Arguments) > 0 {
-						// Try to unmarshal as JSON string first (OpenAI format)
+						// 首先尝试解组为 JSON 字符串（OpenAI 格式）
 						var argStr string
 						if err := json.Unmarshal(tc.Arguments, &argStr); err == nil {
 							argsBuilder.WriteString(argStr)
@@ -408,7 +408,7 @@ func TestProperty16_ToolCallAccumulation_AllProviders(t *testing.T) {
 
 			accumulatedArgs := argsBuilder.String()
 
-			// Verify accumulated arguments form valid JSON
+			// 验证累积参数是否来自有效的 JSON
 			var parsed map[string]any
 			err = json.Unmarshal([]byte(accumulatedArgs), &parsed)
 			assert.NoError(t, err, "Accumulated arguments should be valid JSON: %s", accumulatedArgs)
@@ -422,7 +422,7 @@ func TestProperty16_ToolCallAccumulation_ComplexJSON(t *testing.T) {
 	logger := zap.NewNop()
 
 	rapid.Check(t, func(rt *rapid.T) {
-		// Generate complex JSON with nested structure
+		// 生成具有嵌套结构的复杂 JSON
 		key1 := rapid.StringMatching(`[a-z]{3,8}`).Draw(rt, "key1")
 		val1 := rapid.StringMatching(`[a-zA-Z0-9]{3,15}`).Draw(rt, "val1")
 		key2 := rapid.StringMatching(`[a-z]{3,8}`).Draw(rt, "key2")
@@ -499,7 +499,7 @@ func TestProperty16_ToolCallAccumulation_ComplexJSON(t *testing.T) {
 			if len(chunk.Delta.ToolCalls) > 0 {
 				tc := chunk.Delta.ToolCalls[0]
 				if len(tc.Arguments) > 0 {
-					// Try to unmarshal as JSON string first (OpenAI format)
+					// 首先尝试解组为 JSON 字符串（OpenAI 格式）
 					var argStr string
 					if err := json.Unmarshal(tc.Arguments, &argStr); err == nil {
 						argsBuilder.WriteString(argStr)
@@ -512,7 +512,7 @@ func TestProperty16_ToolCallAccumulation_ComplexJSON(t *testing.T) {
 
 		accumulatedArgs := argsBuilder.String()
 
-		// Verify accumulated arguments form valid JSON
+		// 验证累积参数是否来自有效的 JSON
 		var parsed map[string]any
 		err = json.Unmarshal([]byte(accumulatedArgs), &parsed)
 		assert.NoError(t, err, "Complex accumulated arguments should be valid JSON for provider %s: %s", providerName, accumulatedArgs)
@@ -525,9 +525,9 @@ func TestProperty16_ToolCallAccumulation_ComplexJSON(t *testing.T) {
 func TestProperty16_ToolCallAccumulation_MultipleToolCalls(t *testing.T) {
 	logger := zap.NewNop()
 
-	// Create server that sends a single tool call split across chunks
-	// This tests the core accumulation property without the complexity of
-	// multiple simultaneous tool calls
+	// 创建发送跨块的单个工具调用的服务器
+	// 这测试了核心积累属性，没有复杂性
+	// 多个同时工具调用
 	mockSingleToolCallServer := func(toolName, fullArgs string) *httptest.Server {
 		return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "text/event-stream")
@@ -538,10 +538,10 @@ func TestProperty16_ToolCallAccumulation_MultipleToolCalls(t *testing.T) {
 				return
 			}
 
-			// Split args into two parts
+			// 将 args 分成两部分
 			mid := len(fullArgs) / 2
 
-			// First chunk: tool call starts with first half of args
+			// 第一个块：工具调用从参数的前半部分开始
 			chunk1 := map[string]any{
 				"id":    "chatcmpl-multi",
 				"model": "test-model",
@@ -569,7 +569,7 @@ func TestProperty16_ToolCallAccumulation_MultipleToolCalls(t *testing.T) {
 			fmt.Fprintf(w, "data: %s\n\n", data1)
 			flusher.Flush()
 
-			// Second chunk: tool call continues with second half
+			// 第二块：工具调用在后半部分继续
 			chunk2 := map[string]any{
 				"id":    "chatcmpl-multi",
 				"model": "test-model",
@@ -647,13 +647,13 @@ func TestProperty16_ToolCallAccumulation_MultipleToolCalls(t *testing.T) {
 
 		require.NoError(t, err, "Stream() should not return error for provider %s", providerName)
 
-		// Accumulate all tool call arguments
+		// 累积所有工具调用参数
 		var argsBuilder strings.Builder
 		for chunk := range streamCh {
 			require.Nil(t, chunk.Err, "Stream should not have errors")
 			for _, tc := range chunk.Delta.ToolCalls {
 				if len(tc.Arguments) > 0 {
-					// Try to unmarshal as JSON string first (OpenAI format)
+					// 首先尝试解组为 JSON 字符串（OpenAI 格式）
 					var argStr string
 					if err := json.Unmarshal(tc.Arguments, &argStr); err == nil {
 						argsBuilder.WriteString(argStr)
@@ -666,7 +666,7 @@ func TestProperty16_ToolCallAccumulation_MultipleToolCalls(t *testing.T) {
 
 		accumulatedArgs := argsBuilder.String()
 
-		// Verify accumulated arguments form valid JSON
+		// 验证累积参数是否来自有效的 JSON
 		var parsed map[string]any
 		err = json.Unmarshal([]byte(accumulatedArgs), &parsed)
 		assert.NoError(t, err, "Accumulated args should be valid JSON for provider %s: %s", providerName, accumulatedArgs)
@@ -679,7 +679,7 @@ func TestProperty16_ToolCallAccumulation_MultipleToolCalls(t *testing.T) {
 func TestProperty16_ToolCallAccumulation_MiniMaxXML(t *testing.T) {
 	logger := zap.NewNop()
 
-	// Create server that sends MiniMax XML tool calls in partial chunks
+	// 创建以部分块的形式发送 MiniMax XML 工具调用的服务器
 	mockMiniMaxPartialServer := func(toolName, fullArgs string, numChunks int) *httptest.Server {
 		return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "text/event-stream")
@@ -690,10 +690,10 @@ func TestProperty16_ToolCallAccumulation_MiniMaxXML(t *testing.T) {
 				return
 			}
 
-			// Build full XML content
+			// 构建完整的 XML 内容
 			xmlContent := fmt.Sprintf("<tool_calls>\n{\"name\":\"%s\",\"arguments\":%s}\n</tool_calls>", toolName, fullArgs)
 
-			// Split content into chunks
+			// 将内容分成块
 			contentChunks := splitJSONIntoChunks(xmlContent, numChunks)
 
 			for i, contentPart := range contentChunks {
@@ -752,7 +752,7 @@ func TestProperty16_ToolCallAccumulation_MiniMaxXML(t *testing.T) {
 
 		require.NoError(t, err, "Stream() should not return error for MiniMax")
 
-		// Accumulate content and check for tool calls
+		// 积累内容并检查工具调用
 		var accumulatedContent string
 		var receivedToolCalls []llm.ToolCall
 
@@ -764,11 +764,11 @@ func TestProperty16_ToolCallAccumulation_MiniMaxXML(t *testing.T) {
 			}
 		}
 
-		// MiniMax parses tool calls from accumulated XML content
-		// Verify that tool calls were extracted
+		// MiniMax 从累积的 XML 内容中解析工具调用
+		// 验证工具调用是否已提取
 		if len(receivedToolCalls) > 0 {
 			assert.Equal(t, toolName, receivedToolCalls[0].Name, "Tool name should match for MiniMax")
-			// Verify arguments are valid JSON
+			// 验证参数是有效的 JSON
 			var parsed map[string]any
 			err = json.Unmarshal(receivedToolCalls[0].Arguments, &parsed)
 			assert.NoError(t, err, "Tool call arguments should be valid JSON for MiniMax")
@@ -787,8 +787,8 @@ func TestProperty16_ToolCallAccumulation_EmptyChunks(t *testing.T) {
 		t.Run(providerName, func(t *testing.T) {
 			fullArgs := `{"key":"value"}`
 
-			// Create chunks - note: we only send non-empty argument parts
-			// because empty string "" gets JSON-marshaled to "" which breaks accumulation
+			// 创建块 - 注意：我们只发送非空参数部分
+			// 因为空字符串“”被 JSON 编组为“”，这会破坏累积
 			chunks := []partialToolCallChunk{
 				{ID: "test", Model: "test", ToolCallID: "call_1", ToolCallName: "test_tool", PartialArgs: `{"key":`, Index: 0, IsFirst: true},
 				{ID: "test", Model: "test", ToolCallID: "call_1", ToolCallName: "test_tool", PartialArgs: `"value"}`, Index: 0, IsFirst: false, FinishReason: "tool_calls"},
@@ -838,7 +838,7 @@ func TestProperty16_ToolCallAccumulation_EmptyChunks(t *testing.T) {
 				if len(chunk.Delta.ToolCalls) > 0 {
 					tc := chunk.Delta.ToolCalls[0]
 					if len(tc.Arguments) > 0 {
-						// Try to unmarshal as JSON string first (OpenAI format)
+						// 首先尝试解组为 JSON 字符串（OpenAI 格式）
 						var argStr string
 						if err := json.Unmarshal(tc.Arguments, &argStr); err == nil {
 							argsBuilder.WriteString(argStr)
@@ -851,7 +851,7 @@ func TestProperty16_ToolCallAccumulation_EmptyChunks(t *testing.T) {
 
 			accumulatedArgs := argsBuilder.String()
 
-			// Verify accumulated arguments form valid JSON
+			// 验证累积参数是否来自有效的 JSON
 			var parsed map[string]any
 			err = json.Unmarshal([]byte(accumulatedArgs), &parsed)
 			assert.NoError(t, err, "Accumulated arguments should be valid JSON: %s", accumulatedArgs)

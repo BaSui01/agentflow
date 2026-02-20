@@ -1,12 +1,14 @@
 # Frontend Development Guidelines
 
-> Best practices for frontend development in this project.
+> N/A — This is a pure Go backend project.
 
 ---
 
-## Overview
+## Status
 
-This directory contains guidelines for frontend development. Fill in each file with your project's specific conventions.
+AgentFlow is a Go backend framework with no frontend code. All frontend guideline files are not applicable.
+
+If a frontend is added in the future (e.g., admin dashboard, monitoring UI), fill in the guideline files below.
 
 ---
 
@@ -14,12 +16,12 @@ This directory contains guidelines for frontend development. Fill in each file w
 
 | Guide | Description | Status |
 |-------|-------------|--------|
-| [Directory Structure](./directory-structure.md) | Module organization and file layout | To fill |
-| [Component Guidelines](./component-guidelines.md) | Component patterns, props, composition | To fill |
-| [Hook Guidelines](./hook-guidelines.md) | Custom hooks, data fetching patterns | To fill |
-| [State Management](./state-management.md) | Local state, global state, server state | To fill |
-| [Quality Guidelines](./quality-guidelines.md) | Code standards, forbidden patterns | To fill |
-| [Type Safety](./type-safety.md) | Type patterns, validation | To fill |
+| [Directory Structure](./directory-structure.md) | Module organization and file layout | N/A |
+| [Component Guidelines](./component-guidelines.md) | Component patterns, props, composition | N/A |
+| [Hook Guidelines](./hook-guidelines.md) | Custom hooks, data fetching patterns | N/A |
+| [State Management](./state-management.md) | Local state, global state, server state | N/A |
+| [Quality Guidelines](./quality-guidelines.md) | Code standards, forbidden patterns | N/A |
+| [Type Safety](./type-safety.md) | Type patterns, validation | N/A |
 
 ---
 

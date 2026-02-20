@@ -47,7 +47,7 @@ func mockSSEServer(chunks []sseChunkData) *httptest.Server {
 			return
 		}
 
-		// Send each chunk as SSE data line
+		// 将每个块作为 SSE 数据线发送
 		for i, chunk := range chunks {
 			sseData := map[string]any{
 				"id":    chunk.ID,
@@ -71,7 +71,7 @@ func mockSSEServer(chunks []sseChunkData) *httptest.Server {
 			flusher.Flush()
 		}
 
-		// Send [DONE] marker
+		// 发送 [DONE] 标记
 		fmt.Fprintf(w, "data: [DONE]\n\n")
 		flusher.Flush()
 	}))
@@ -83,7 +83,7 @@ func TestProperty14_SSEResponseParsing(t *testing.T) {
 	logger := zap.NewNop()
 
 	rapid.Check(t, func(rt *rapid.T) {
-		// Generate random SSE chunks
+		// 生成随机 SSE 块
 		numChunks := rapid.IntRange(1, 5).Draw(rt, "numChunks")
 		chunks := make([]sseChunkData, numChunks)
 		expectedContents := make([]string, numChunks)
@@ -101,7 +101,7 @@ func TestProperty14_SSEResponseParsing(t *testing.T) {
 			}
 		}
 
-		// Select a random provider
+		// 选择随机提供商
 		providerIndex := rapid.IntRange(0, 4).Draw(rt, "providerIndex")
 		providerNames := []string{"grok", "qwen", "deepseek", "glm", "minimax"}
 		providerName := providerNames[providerIndex]
@@ -145,7 +145,7 @@ func TestProperty14_SSEResponseParsing(t *testing.T) {
 
 		require.NoError(t, err, "Stream() should not return error for provider %s", providerName)
 
-		// Collect all chunks from stream
+		// 从流中收集所有块
 		var receivedContents []string
 		for chunk := range streamCh {
 			require.Nil(t, chunk.Err, "Stream should not have errors for provider %s", providerName)
@@ -154,7 +154,7 @@ func TestProperty14_SSEResponseParsing(t *testing.T) {
 			}
 		}
 
-		// Verify all SSE data lines were parsed and emitted as StreamChunks
+		// 验证所有 SSE 数据行均已解析并作为 StreamChunk 发出
 		require.Equal(t, len(expectedContents), len(receivedContents),
 			"Should receive same number of chunks as sent for provider %s", providerName)
 
@@ -186,11 +186,11 @@ func TestProperty14_SSEResponseParsing_AllProviders(t *testing.T) {
 		"API", "Request", "Reply", "Token", "Complete",
 	}
 
-	// Generate 100+ test cases
+	// 生成 100+ 测试用例
 	idx := 0
 	for _, provider := range providerList {
 		for i, content := range contentVariants {
-			// Single chunk test
+			// 单块测试
 			testCases = append(testCases, testCase{
 				name:         fmt.Sprintf("%s_single_%d", provider, idx),
 				providerName: provider,
@@ -200,7 +200,7 @@ func TestProperty14_SSEResponseParsing_AllProviders(t *testing.T) {
 			})
 			idx++
 
-			// Multi-chunk test (2 chunks)
+			// 多块测试（2块）
 			if i+1 < len(contentVariants) {
 				testCases = append(testCases, testCase{
 					name:         fmt.Sprintf("%s_multi_%d", provider, idx),
@@ -215,7 +215,7 @@ func TestProperty14_SSEResponseParsing_AllProviders(t *testing.T) {
 		}
 	}
 
-	// Ensure we have at least 100 test cases
+	// 确保我们至少有 100 个测试用例
 	require.GreaterOrEqual(t, len(testCases), 100, "Should have at least 100 test cases")
 
 	for _, tc := range testCases {
@@ -267,7 +267,7 @@ func TestProperty14_SSEResponseParsing_AllProviders(t *testing.T) {
 				}
 			}
 
-			// Verify all chunks were parsed
+			// 验证所有块都已解析
 			require.Equal(t, len(tc.chunks), len(receivedContents), "Should receive all chunks")
 			for i, expected := range tc.chunks {
 				assert.Equal(t, expected.Content, receivedContents[i], "Content should match at index %d", i)
@@ -281,7 +281,7 @@ func TestProperty14_SSEResponseParsing_AllProviders(t *testing.T) {
 func TestProperty14_SSEResponseParsing_DataLineFormat(t *testing.T) {
 	logger := zap.NewNop()
 
-	// Create a server that sends various line formats
+	// 创建一个发送各种线路格式的服务器
 	mockServerWithFormats := func(validChunks []sseChunkData) *httptest.Server {
 		return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "text/event-stream")
@@ -292,14 +292,14 @@ func TestProperty14_SSEResponseParsing_DataLineFormat(t *testing.T) {
 				return
 			}
 
-			// Send some non-data lines (should be ignored)
+			// 发送一些非数据线（应该被忽略）
 			fmt.Fprintf(w, ": this is a comment\n\n")
 			flusher.Flush()
 
 			fmt.Fprintf(w, "event: message\n\n")
 			flusher.Flush()
 
-			// Send valid data lines
+			// 发送有效数据线
 			for i, chunk := range validChunks {
 				sseData := map[string]any{
 					"id":    chunk.ID,
@@ -323,7 +323,7 @@ func TestProperty14_SSEResponseParsing_DataLineFormat(t *testing.T) {
 				flusher.Flush()
 			}
 
-			// Send empty lines (should be ignored)
+			// 发送空行（应被忽略）
 			fmt.Fprintf(w, "\n\n")
 			flusher.Flush()
 
@@ -395,7 +395,7 @@ func TestProperty14_SSEResponseParsing_DataLineFormat(t *testing.T) {
 			}
 		}
 
-		// Only valid data lines should be parsed
+		// 仅应解析有效的数据行
 		require.Equal(t, len(chunks), len(receivedContents),
 			"Should only receive chunks from valid data: lines for provider %s", providerName)
 	})
@@ -407,7 +407,7 @@ func TestProperty14_SSEResponseParsing_JSONContent(t *testing.T) {
 	logger := zap.NewNop()
 
 	rapid.Check(t, func(rt *rapid.T) {
-		// Generate random chunk data
+		// 生成随机块数据
 		chunkID := rapid.StringMatching(`chatcmpl-[a-z0-9]{8}`).Draw(rt, "chunkID")
 		chunkModel := rapid.StringMatching(`[a-z0-9-]{3,15}`).Draw(rt, "chunkModel")
 		chunkContent := rapid.StringMatching(`[a-zA-Z0-9 ]{1,30}`).Draw(rt, "chunkContent")
@@ -465,7 +465,7 @@ func TestProperty14_SSEResponseParsing_JSONContent(t *testing.T) {
 			receivedChunks = append(receivedChunks, chunk)
 		}
 
-		// Verify JSON fields were correctly parsed
+		// 验证 JSON 字段是否已正确解析
 		require.Len(t, receivedChunks, 1, "Should receive exactly one chunk")
 		chunk := receivedChunks[0]
 
@@ -482,7 +482,7 @@ func TestProperty14_SSEResponseParsing_JSONContent(t *testing.T) {
 func TestProperty14_SSEResponseParsing_WithToolCalls(t *testing.T) {
 	logger := zap.NewNop()
 
-	// Create a server that returns SSE with tool calls (OpenAI format)
+	// 创建一个通过工具调用返回 SSE 的服务器（OpenAI 格式）
 	mockSSEServerWithToolCalls := func(toolCallID, toolName, toolArgs string) *httptest.Server {
 		return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "text/event-stream")
@@ -531,7 +531,7 @@ func TestProperty14_SSEResponseParsing_WithToolCalls(t *testing.T) {
 		toolName := rapid.StringMatching(`[a-z_]{3,15}`).Draw(rt, "toolName")
 		toolArgs := fmt.Sprintf(`{"param": "%s"}`, rapid.StringMatching(`[a-z]{3,10}`).Draw(rt, "paramValue"))
 
-		// Only test OpenAI-compatible providers (exclude minimax which uses XML format)
+		// 仅测试 OpenAI 兼容的提供程序（不包括使用 XML 格式的 minimax）
 		providerIndex := rapid.IntRange(0, 3).Draw(rt, "providerIndex")
 		providerNames := []string{"grok", "qwen", "deepseek", "glm"}
 		providerName := providerNames[providerIndex]
@@ -582,7 +582,7 @@ func TestProperty14_SSEResponseParsing_WithToolCalls(t *testing.T) {
 			}
 		}
 
-		// Verify tool calls were parsed from SSE
+		// 验证工具调用是从 SSE 解析的
 		require.Len(t, receivedToolCalls, 1, "Should receive one tool call for provider %s", providerName)
 		assert.Equal(t, toolCallID, receivedToolCalls[0].ID, "Tool call ID should match for provider %s", providerName)
 		assert.Equal(t, toolName, receivedToolCalls[0].Name, "Tool call name should match for provider %s", providerName)
@@ -594,7 +594,7 @@ func TestProperty14_SSEResponseParsing_WithToolCalls(t *testing.T) {
 func TestProperty14_SSEResponseParsing_MiniMaxXMLToolCalls(t *testing.T) {
 	logger := zap.NewNop()
 
-	// Create a server that returns SSE with MiniMax XML tool calls
+	// 创建一个使用 MiniMax XML 工具调用返回 SSE 的服务器
 	mockMiniMaxSSEServerWithToolCalls := func(toolName, toolArgs string) *httptest.Server {
 		return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "text/event-stream")
@@ -605,7 +605,7 @@ func TestProperty14_SSEResponseParsing_MiniMaxXMLToolCalls(t *testing.T) {
 				return
 			}
 
-			// MiniMax uses XML format for tool calls in content
+			// MiniMax 在内容中使用 XML 格式进行工具调用
 			xmlContent := fmt.Sprintf("<tool_calls>\n{\"name\":\"%s\",\"arguments\":%s}\n</tool_calls>", toolName, toolArgs)
 
 			sseData := map[string]any{
@@ -664,7 +664,7 @@ func TestProperty14_SSEResponseParsing_MiniMaxXMLToolCalls(t *testing.T) {
 			}
 		}
 
-		// Verify tool calls were parsed from XML in SSE
+		// 验证工具调用是从 SSE 中的 XML 解析的
 		require.Len(t, receivedToolCalls, 1, "Should receive one tool call for MiniMax")
 		assert.Equal(t, toolName, receivedToolCalls[0].Name, "Tool call name should match for MiniMax")
 	})

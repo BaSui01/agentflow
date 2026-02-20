@@ -1,27 +1,27 @@
-[!] **Prerequisite**: This command should only be used AFTER the human has tested and committed the code.
+[!] **前提条件**: 此命令仅应在人工已测试并提交代码之后使用。
 
-**AI must NOT execute git commit** - only read history (`git log`, `git status`, `git diff`).
+**AI 禁止执行 git commit** - 仅可读取历史记录（`git log`、`git status`、`git diff`）。
 
 ---
 
-## Record Work Progress (Simplified - Only 2 Steps)
+## 记录工作进度（简化版 - 仅需 2 步）
 
-### Step 1: Get Context
+### 第 1 步：获取上下文
 
 ```bash
 python3 ./.trellis/scripts/get_context.py
 ```
 
-### Step 2: One-Click Add Session
+### 第 2 步：一键添加会话
 
 ```bash
-# Method 1: Simple parameters
+# 方法 1：简单参数
 python3 ./.trellis/scripts/add_session.py \
   --title "Session Title" \
   --commit "hash1,hash2" \
   --summary "Brief summary of what was done"
 
-# Method 2: Pass detailed content via stdin
+# 方法 2：通过 stdin 传递详细内容
 cat << 'EOF' | python3 ./.trellis/scripts/add_session.py --title "Title" --commit "hash"
 | Feature | Description |
 |---------|-------------|
@@ -34,16 +34,16 @@ cat << 'EOF' | python3 ./.trellis/scripts/add_session.py --title "Title" --commi
 EOF
 ```
 
-**Auto-completes**:
-- [OK] Appends session to journal-N.md
-- [OK] Auto-detects line count, creates new file if >2000 lines
-- [OK] Updates index.md (Total Sessions +1, Last Active, line stats, history)
+**自动完成的操作**：
+- [OK] 将会话追加到 journal-N.md
+- [OK] 自动检测行数，超过 2000 行时创建新文件
+- [OK] 更新 index.md（总会话数 +1、最后活跃时间、行数统计、历史记录）
 
 ---
 
-## Archive Completed Task (if any)
+## 归档已完成的任务（如有）
 
-If a task was completed this session:
+如果本次会话中有任务已完成：
 
 ```bash
 python3 ./.trellis/scripts/task.py archive <task-name>
@@ -51,12 +51,12 @@ python3 ./.trellis/scripts/task.py archive <task-name>
 
 ---
 
-## Script Command Reference
+## 脚本命令参考
 
-| Command | Purpose |
+| 命令 | 用途 |
 |---------|---------|
-| `python3 ./.trellis/scripts/get_context.py` | Get all context info |
-| `python3 ./.trellis/scripts/add_session.py --title "..." --commit "..."` | **One-click add session (recommended)** |
-| `python3 ./.trellis/scripts/task.py create "<title>" [--slug <name>]` | Create new task directory |
-| `python3 ./.trellis/scripts/task.py archive <name>` | Archive completed task |
-| `python3 ./.trellis/scripts/task.py list` | List active tasks |
+| `python3 ./.trellis/scripts/get_context.py` | 获取所有上下文信息 |
+| `python3 ./.trellis/scripts/add_session.py --title "..." --commit "..."` | **一键添加会话（推荐）** |
+| `python3 ./.trellis/scripts/task.py create "<title>" [--slug <name>]` | 创建新任务目录 |
+| `python3 ./.trellis/scripts/task.py archive <name>` | 归档已完成的任务 |
+| `python3 ./.trellis/scripts/task.py list` | 列出活跃任务 |

@@ -1,12 +1,6 @@
-// =============================================================================
-// 🧪 Agent 生命周期 E2E 测试
-// =============================================================================
-// 测试 Agent 的完整生命周期：创建 → 执行 → 检查点 → 恢复
+// Agent 生命周期端到端测试。
 //
-// 运行方式:
-//
-//	go test ./tests/e2e/... -v -tags=e2e -run TestAgentLifecycle
-// =============================================================================
+// 覆盖创建、执行、检查点与恢复流程。
 //go:build e2e
 
 package e2e
@@ -24,9 +18,7 @@ import (
 	"github.com/BaSui01/agentflow/types"
 )
 
-// =============================================================================
-// 🎯 Agent 生命周期测试
-// =============================================================================
+// --- Agent 生命周期测试 ---
 
 // TestAgentLifecycle_BasicExecution 测试基本的 Agent 执行流程
 func TestAgentLifecycle_BasicExecution(t *testing.T) {
@@ -309,9 +301,7 @@ func TestAgentLifecycle_ConcurrentExecution(t *testing.T) {
 	assert.Equal(t, concurrency, env.Provider.GetCallCount())
 }
 
-// =============================================================================
-// 🔄 检查点和恢复测试
-// =============================================================================
+// --- 检查点和恢复测试 ---
 
 // TestAgentLifecycle_CheckpointAndRestore 测试检查点保存和恢复
 func TestAgentLifecycle_CheckpointAndRestore(t *testing.T) {
@@ -353,9 +343,7 @@ func TestAgentLifecycle_CheckpointAndRestore(t *testing.T) {
 	assert.Equal(t, checkpoint[0].Content, restored[0].Content)
 }
 
-// =============================================================================
-// 📊 性能测试
-// =============================================================================
+// --- 性能测试 ---
 
 // TestAgentLifecycle_PerformanceBaseline 测试性能基线
 func TestAgentLifecycle_PerformanceBaseline(t *testing.T) {

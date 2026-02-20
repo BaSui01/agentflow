@@ -1,9 +1,6 @@
-// =============================================================================
-// AgentFlow Configuration File Watcher
-// =============================================================================
-// Watches configuration files for changes and triggers reload callbacks.
-// Uses fsnotify for cross-platform file system notifications.
-// =============================================================================
+// 配置文件变更监听器实现。
+//
+// 基于文件系统事件与轮询兜底机制触发配置重载回调。
 package config
 
 import (
@@ -17,45 +14,43 @@ import (
 	"go.uber.org/zap"
 )
 
-// =============================================================================
-// File Watcher Types
-// =============================================================================
+// --- 文件监听器类型定义 ---
 
 // FileWatcher watches configuration files for changes
 type FileWatcher struct {
 	mu sync.RWMutex
 
-	// Configuration
+	// 配置
 	paths         []string
 	debounceDelay time.Duration
 
-	// State
+	// 状态
 	running   bool
 	stopChan  chan struct{}
 	eventChan chan FileEvent
 
-	// Callbacks
+	// 回调
 	callbacks []func(event FileEvent)
 
-	// Logger
+	// 记录器
 	logger *zap.Logger
 
-	// Last modification times for polling fallback
+	// 轮询回退的最后修改时间
 	lastModTimes map[string]time.Time
 }
 
 // FileEvent represents a file change event
 type FileEvent struct {
-	// Path is the file path that changed
+	// Path是改变的文件路径
 	Path string `json:"path"`
 
-	// Op is the operation type
+	// op 是操作类型
 	Op FileOp `json:"op"`
 
-	// Timestamp is when the event occurred
+	// 时间戳是事件发生的时间
 	Timestamp time.Time `json:"timestamp"`
 
-	// Error if any occurred during detection
+	// 检测过程中如有错误
 	Error error `json:"error,omitempty"`
 }
 
@@ -63,15 +58,15 @@ type FileEvent struct {
 type FileOp int
 
 const (
-	// FileOpCreate indicates a file was created
+	// FileOpCreate 表示文件已创建
 	FileOpCreate FileOp = iota
-	// FileOpWrite indicates a file was modified
+	// FileOpWrite 指示文件已被修改
 	FileOpWrite
-	// FileOpRemove indicates a file was removed
+	// FileOpRemove 表示文件已被删除
 	FileOpRemove
-	// FileOpRename indicates a file was renamed
+	// FileOpRename 表示文件已重命名
 	FileOpRename
-	// FileOpChmod indicates file permissions changed
+	// FileOpChmod 表示文件权限已更改
 	FileOpChmod
 )
 
@@ -93,9 +88,7 @@ func (op FileOp) String() string {
 	}
 }
 
-// =============================================================================
-// File Watcher Options
-// =============================================================================
+// --- 文件监听器选项 ---
 
 // WatcherOption configures the FileWatcher
 type WatcherOption func(*FileWatcher)
@@ -114,9 +107,7 @@ func WithWatcherLogger(logger *zap.Logger) WatcherOption {
 	}
 }
 
-// =============================================================================
-// File Watcher Implementation
-// =============================================================================
+// --- 文件监听器实现 ---
 
 // NewFileWatcher creates a new file watcher
 func NewFileWatcher(paths []string, opts ...WatcherOption) (*FileWatcher, error) {
@@ -134,7 +125,7 @@ func NewFileWatcher(paths []string, opts ...WatcherOption) (*FileWatcher, error)
 		opt(w)
 	}
 
-	// Validate paths exist
+	// 验证路径是否存在
 	for _, path := range paths {
 		if _, err := os.Stat(path); err != nil {
 			if os.IsNotExist(err) {
@@ -166,17 +157,17 @@ func (w *FileWatcher) Start(ctx context.Context) error {
 	w.running = true
 	w.mu.Unlock()
 
-	// Initialize last modification times
+	// 初始化上次修改时间
 	for _, path := range w.paths {
 		if info, err := os.Stat(path); err == nil {
 			w.lastModTimes[path] = info.ModTime()
 		}
 	}
 
-	// Start polling goroutine (cross-platform fallback)
+	// 开始轮询goroutine（跨平台后备）
 	go w.pollLoop(ctx)
 
-	// Start event dispatcher
+	// 启动事件调度程序
 	go w.dispatchLoop(ctx)
 
 	w.logger.Info("File watcher started",
@@ -228,7 +219,7 @@ func (w *FileWatcher) checkFiles() {
 		info, err := os.Stat(path)
 		if err != nil {
 			if os.IsNotExist(err) {
-				// Check if file was previously tracked (removed)
+				// 检查文件之前是否被跟踪（已删除）
 				if _, existed := w.lastModTimes[path]; existed {
 					delete(w.lastModTimes, path)
 					w.eventChan <- FileEvent{
@@ -243,7 +234,7 @@ func (w *FileWatcher) checkFiles() {
 
 		lastMod, existed := w.lastModTimes[path]
 		if !existed {
-			// New file created
+			// 新文件已创建
 			w.lastModTimes[path] = info.ModTime()
 			w.eventChan <- FileEvent{
 				Path:      path,
@@ -251,7 +242,7 @@ func (w *FileWatcher) checkFiles() {
 				Timestamp: time.Now(),
 			}
 		} else if info.ModTime().After(lastMod) {
-			// File modified
+			// 文件已修改
 			w.lastModTimes[path] = info.ModTime()
 			w.eventChan <- FileEvent{
 				Path:      path,
@@ -276,10 +267,10 @@ func (w *FileWatcher) dispatchLoop(ctx context.Context) {
 		case <-w.stopChan:
 			return
 		case event := <-w.eventChan:
-			// Store event (overwrites previous for same path)
+			// 存储事件（覆盖相同路径的先前事件）
 			pendingEvents[event.Path] = event
 
-			// Reset debounce timer
+			// 重置防抖定时器
 			if debounceTimer != nil {
 				debounceTimer.Stop()
 			}
@@ -289,7 +280,7 @@ func (w *FileWatcher) dispatchLoop(ctx context.Context) {
 				copy(callbacks, w.callbacks)
 				w.mu.RUnlock()
 
-				// Dispatch all pending events
+				// 调度所有待处理事件
 				for path, evt := range pendingEvents {
 					w.logger.Debug("Dispatching file event",
 						zap.String("path", path),
@@ -300,7 +291,7 @@ func (w *FileWatcher) dispatchLoop(ctx context.Context) {
 					}
 				}
 
-				// Clear pending events
+				// 清除待处理事件
 				pendingEvents = make(map[string]FileEvent)
 			})
 		}
@@ -312,14 +303,14 @@ func (w *FileWatcher) AddPath(path string) error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
-	// Check if already watching
+	// 检查是否已经观看
 	for _, p := range w.paths {
 		if p == path {
 			return nil
 		}
 	}
 
-	// Resolve to absolute path
+	// 解析为绝对路径
 	absPath, err := filepath.Abs(path)
 	if err != nil {
 		return fmt.Errorf("failed to resolve path: %w", err)
@@ -327,7 +318,7 @@ func (w *FileWatcher) AddPath(path string) error {
 
 	w.paths = append(w.paths, absPath)
 
-	// Initialize modification time if file exists
+	// 如果文件存在则初始化修改时间
 	if info, err := os.Stat(absPath); err == nil {
 		w.lastModTimes[absPath] = info.ModTime()
 	}

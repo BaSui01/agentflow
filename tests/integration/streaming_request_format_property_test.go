@@ -71,7 +71,7 @@ func mockStreamServer(capture *streamRequestCapture) *httptest.Server {
 
 		capture.setRequest(req)
 
-		// Return a minimal streaming response
+		// 返回最小的流响应
 		w.Header().Set("Content-Type", "text/event-stream")
 		w.WriteHeader(http.StatusOK)
 
@@ -105,11 +105,11 @@ func TestProperty13_StreamingRequestFormat(t *testing.T) {
 	logger := zap.NewNop()
 
 	rapid.Check(t, func(rt *rapid.T) {
-		// Generate random message content
+		// 生成随机消息内容
 		messageContent := rapid.StringMatching(`[a-zA-Z0-9 ]{5,50}`).Draw(rt, "messageContent")
 		model := rapid.StringMatching(`[a-z0-9-]{3,20}`).Draw(rt, "model")
 
-		// Select a random provider
+		// 选择随机提供商
 		providerIndex := rapid.IntRange(0, 4).Draw(rt, "providerIndex")
 		providerNames := []string{"grok", "qwen", "deepseek", "glm", "minimax"}
 		providerName := providerNames[providerIndex]
@@ -154,11 +154,11 @@ func TestProperty13_StreamingRequestFormat(t *testing.T) {
 
 		require.NoError(t, err, "Stream() should not return error for provider %s", providerName)
 
-		// Drain the channel
+		// 排空通道
 		for range streamCh {
 		}
 
-		// Verify stream=true was set in request
+		// 验证请求中设置了stream=true
 		streamValue, captured := capture.getStreamField()
 		assert.True(t, captured, "Request should be captured for provider %s", providerName)
 		assert.True(t, streamValue, "stream field should be true for provider %s", providerName)
@@ -177,7 +177,7 @@ func TestProperty13_StreamingRequestFormat_AllProviders(t *testing.T) {
 		model          string
 	}
 
-	// Generate test cases for all providers with various inputs
+	// 为具有各种输入的所有提供商生成测试用例
 	var testCases []testCase
 
 	providerList := []string{"grok", "qwen", "deepseek", "glm", "minimax"}
@@ -212,7 +212,7 @@ func TestProperty13_StreamingRequestFormat_AllProviders(t *testing.T) {
 		"abab6.5s-chat",
 	}
 
-	// Generate 100+ test cases
+	// 生成 100+ 测试用例
 	idx := 0
 	for _, provider := range providerList {
 		for _, msg := range messages {
@@ -237,7 +237,7 @@ func TestProperty13_StreamingRequestFormat_AllProviders(t *testing.T) {
 		}
 	}
 
-	// Ensure we have at least 100 test cases
+	// 确保我们至少有 100 个测试用例
 	require.GreaterOrEqual(t, len(testCases), 100, "Should have at least 100 test cases")
 
 	for _, tc := range testCases {
@@ -282,11 +282,11 @@ func TestProperty13_StreamingRequestFormat_AllProviders(t *testing.T) {
 
 			require.NoError(t, err, "Stream() should not return error")
 
-			// Drain the channel
+			// 排空通道
 			for range streamCh {
 			}
 
-			// Verify stream=true was set
+			// 验证已设置stream=true
 			streamValue, captured := capture.getStreamField()
 			assert.True(t, captured, "Request should be captured")
 			assert.True(t, streamValue, "stream field should be true in request body")
@@ -373,7 +373,7 @@ func TestProperty13_CompletionDoesNotSetStreamTrue(t *testing.T) {
 
 	for _, providerName := range providerList {
 		t.Run(providerName+"_completion", func(t *testing.T) {
-			// Create a server that captures the request for Completion
+			// 创建一个捕获完成请求的服务器
 			completionCapture := &streamRequestCapture{}
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				body, _ := io.ReadAll(r.Body)
@@ -383,7 +383,7 @@ func TestProperty13_CompletionDoesNotSetStreamTrue(t *testing.T) {
 				json.Unmarshal(body, &req)
 				completionCapture.setRequest(req)
 
-				// Return a completion response
+				// 返回完成响应
 				w.Header().Set("Content-Type", "application/json")
 				resp := map[string]any{
 					"id":    "test-id",
@@ -432,7 +432,7 @@ func TestProperty13_CompletionDoesNotSetStreamTrue(t *testing.T) {
 				_, _ = p.Completion(ctx, req)
 			}
 
-			// Verify stream is NOT true for Completion
+			// 验证流对于完成来说不正确
 			streamValue, captured := completionCapture.getStreamField()
 			assert.True(t, captured, "Request should be captured")
 			assert.False(t, streamValue, "stream field should NOT be true for Completion()")
