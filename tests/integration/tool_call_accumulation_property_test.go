@@ -22,14 +22,14 @@ import (
 	"pgregory.net/rapid"
 )
 
-// Feature: multi-provider-support, Property 16: Tool Call Accumulation in Streaming
-// **Validates: Requirements 10.6**
+// 特性：多提供商支持，特性 16：流媒体中的工具调用累积
+// **验证：要求 10.6**
 //
-// This property test verifies that for any provider that sends partial tool call
-// JSON across multiple stream chunks, the accumulated tool call arguments should
-// form valid JSON when all chunks are combined.
+// This 属性测试验证对于发送部分工具调用的任何提供者
+// JSON 跨多个流块，累积的工具调用参数应该
+// 当所有块组合在一起时形成有效的 JSON。
 
-// partialToolCallChunk represents a chunk with partial tool call data
+// partialToolCallChunk 表示具有部分工具调用数据的块
 type partialToolCallChunk struct {
 	ID           string
 	Model        string
@@ -41,11 +41,11 @@ type partialToolCallChunk struct {
 	FinishReason string
 }
 
-// mockSSEServerWithPartialToolCalls creates a test server that sends tool call
-// arguments in multiple partial chunks (simulating how providers like OpenAI
-// stream tool calls with partial JSON).
-// Note: OpenAI sends arguments as a string field containing partial JSON.
-// Each chunk's arguments is a string that, when concatenated, forms valid JSON.
+// mockSSEServerWithPartialToolCalls 创建一个发送工具调用的测试服务器
+// 多个部分块中的参数（模拟 OpenAI 等提供商如何
+// 使用部分 JSON 进行流工具调用）。
+// Error 500 (Server Error)!!1500.That’s an error.There was an error. Please try again later.That’s all we know.
+// Each chunk 的参数是一个字符串，连接后形成有效的 JSON。
 func mockSSEServerWithPartialToolCalls(chunks []partialToolCallChunk) *httptest.Server {
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/event-stream")
@@ -120,7 +120,7 @@ func mockSSEServerWithPartialToolCalls(chunks []partialToolCallChunk) *httptest.
 	}))
 }
 
-// splitJSONIntoChunks splits a JSON string into multiple partial chunks
+// splitJSONIntoChunks 将 JSON 字符串拆分为多个部分块
 func splitJSONIntoChunks(jsonStr string, numChunks int) []string {
 	if numChunks <= 1 || len(jsonStr) == 0 {
 		return []string{jsonStr}
@@ -143,8 +143,8 @@ func splitJSONIntoChunks(jsonStr string, numChunks int) []string {
 	return chunks
 }
 
-// TestProperty16_ToolCallAccumulation verifies that partial tool call JSON
-// chunks are accumulated correctly to form valid JSON for all providers.
+// TestProperty16_ToolCallAccumulation ???verifies that partial tool call JSON
+// 正确累积块以形成所有提供者的有效 JSON。
 func TestProperty16_ToolCallAccumulation(t *testing.T) {
 	logger := zap.NewNop()
 
@@ -270,8 +270,8 @@ func TestProperty16_ToolCallAccumulation(t *testing.T) {
 	})
 }
 
-// TestProperty16_ToolCallAccumulation_AllProviders provides table-driven tests
-// to ensure minimum 100 iterations across all providers.
+// TestProperty16_ToolCallAccumulation_AllProviders 提供表驱动测试
+// 确保所有提供者至少进行 100 次迭代。
 func TestProperty16_ToolCallAccumulation_AllProviders(t *testing.T) {
 	logger := zap.NewNop()
 
@@ -416,8 +416,8 @@ func TestProperty16_ToolCallAccumulation_AllProviders(t *testing.T) {
 	}
 }
 
-// TestProperty16_ToolCallAccumulation_ComplexJSON verifies accumulation works
-// with more complex JSON structures.
+// TestProperty16_ToolCallAccumulation_ComplexJSON 验证累积工作
+// 具有更复杂的 JSON 结构。
 func TestProperty16_ToolCallAccumulation_ComplexJSON(t *testing.T) {
 	logger := zap.NewNop()
 
@@ -520,8 +520,8 @@ func TestProperty16_ToolCallAccumulation_ComplexJSON(t *testing.T) {
 	})
 }
 
-// TestProperty16_ToolCallAccumulation_MultipleToolCalls verifies accumulation
-// works when multiple tool calls are streamed in a single chunk.
+// TestProperty16_ToolCallAccumulation_MultipleToolCalls 验证累积
+// 当多个工具调用在单个块中流式传输时有效。
 func TestProperty16_ToolCallAccumulation_MultipleToolCalls(t *testing.T) {
 	logger := zap.NewNop()
 
@@ -674,8 +674,8 @@ func TestProperty16_ToolCallAccumulation_MultipleToolCalls(t *testing.T) {
 	})
 }
 
-// TestProperty16_ToolCallAccumulation_MiniMaxXML verifies that MiniMax's
-// XML-based tool calls also accumulate correctly when sent in partial chunks.
+// TestProperty16_ToolCallAccumulation_MiniMaxXML 验证 MiniMax 的
+// 当以部分块发送时，基于 XML 的工具调用也能正确累积。
 func TestProperty16_ToolCallAccumulation_MiniMaxXML(t *testing.T) {
 	logger := zap.NewNop()
 
@@ -776,8 +776,8 @@ func TestProperty16_ToolCallAccumulation_MiniMaxXML(t *testing.T) {
 	})
 }
 
-// TestProperty16_ToolCallAccumulation_EmptyChunks verifies that chunks with
-// non-empty arguments are properly accumulated (empty chunks are skipped).
+// TestProperty16_ToolCallAccumulation_EmptyChunks 验证块与
+// 非空参数被正确累积（空块被跳过）。
 func TestProperty16_ToolCallAccumulation_EmptyChunks(t *testing.T) {
 	logger := zap.NewNop()
 

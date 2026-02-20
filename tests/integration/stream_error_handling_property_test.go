@@ -20,14 +20,14 @@ import (
 	"pgregory.net/rapid"
 )
 
-// Feature: multi-provider-support, Property 15: Stream Error Handling
-// **Validates: Requirements 10.5**
+// 功能：多提供商支持，属性 15：流错误处理
+// **验证：要求 10.5**
 //
-// This property test verifies that for any provider streaming response,
-// when encountering invalid JSON in SSE data, the provider should emit
-// a StreamChunk with a non-nil Err field containing an llm.Error.
+// This 属性测试验证对于任何提供商流响应，
+// 当 SSE 数据中遇到无效 JSON 时，提供者应发出
+// 具有包含 llm.Error 的非零 Err 字段的 StreamChunk。
 
-// mockSSEServerWithInvalidJSON creates a test server that returns SSE with invalid JSON
+// mockSSEServerWithInvalidJSON 创建一个测试服务器，返回带有无效 JSON 的 SSE
 func mockSSEServerWithInvalidJSON(invalidJSON string) *httptest.Server {
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/event-stream")
@@ -44,8 +44,8 @@ func mockSSEServerWithInvalidJSON(invalidJSON string) *httptest.Server {
 	}))
 }
 
-// TestProperty15_StreamErrorHandling verifies that invalid JSON in SSE data
-// results in a StreamChunk with non-nil Err field for all providers.
+// TestProperty15_StreamErrorHandling 验证 SSE 数据中的 JSON 无效
+// 为所有提供者生成一个具有非零 Err 字段的 StreamChunk。
 func TestProperty15_StreamErrorHandling(t *testing.T) {
 	logger := zap.NewNop()
 
@@ -142,8 +142,8 @@ func TestProperty15_StreamErrorHandling(t *testing.T) {
 	})
 }
 
-// TestProperty15_StreamErrorHandling_AllProviders provides table-driven tests
-// to ensure minimum 100 iterations across all providers.
+// TestProperty15_StreamErrorHandling_AllProviders 提供表驱动测试
+// 确保所有提供者至少进行 100 次迭代。
 func TestProperty15_StreamErrorHandling_AllProviders(t *testing.T) {
 	logger := zap.NewNop()
 
@@ -262,8 +262,8 @@ func TestProperty15_StreamErrorHandling_AllProviders(t *testing.T) {
 	}
 }
 
-// TestProperty15_StreamErrorHandling_ErrorContainsLLMError verifies that
-// the error in StreamChunk is specifically an llm.Error with correct fields.
+// TestProperty15_StreamErrorHandling_ErrorContainsLLMError 验证
+// StreamChunk 中的错误具体是具有正确字段的 llm.Error 。
 func TestProperty15_StreamErrorHandling_ErrorContainsLLMError(t *testing.T) {
 	logger := zap.NewNop()
 
@@ -340,8 +340,8 @@ func TestProperty15_StreamErrorHandling_ErrorContainsLLMError(t *testing.T) {
 	})
 }
 
-// TestProperty15_StreamErrorHandling_ChannelClosesAfterError verifies that
-// the stream channel is properly closed after emitting an error chunk.
+// TestProperty15_StreamErrorHandling_ChannelClosesAfterError 验证
+// 发出错误块后，流通道被正确关闭。
 func TestProperty15_StreamErrorHandling_ChannelClosesAfterError(t *testing.T) {
 	logger := zap.NewNop()
 
@@ -403,8 +403,8 @@ func TestProperty15_StreamErrorHandling_ChannelClosesAfterError(t *testing.T) {
 	})
 }
 
-// TestProperty15_StreamErrorHandling_MixedValidInvalidJSON verifies that
-// when valid JSON is followed by invalid JSON, the error is still emitted.
+// TestProperty15_StreamErrorHandling_MixedValidInvalidJSON 验证
+// 当有效 JSON 后面跟着无效 JSON 时，仍然会发出错误。
 func TestProperty15_StreamErrorHandling_MixedValidInvalidJSON(t *testing.T) {
 	logger := zap.NewNop()
 
@@ -498,8 +498,8 @@ func TestProperty15_StreamErrorHandling_MixedValidInvalidJSON(t *testing.T) {
 	})
 }
 
-// TestProperty15_StreamErrorHandling_EmptyDataLine verifies that empty data
-// after "data: " prefix is handled (may or may not be an error depending on implementation).
+// TestProperty15_StreamErrorHandling_EmptyDataLine 验证数据是否为空
+// 在处理“data:”前缀之后（可能是错误，也可能不是错误，具体取决于实现）。
 func TestProperty15_StreamErrorHandling_EmptyDataLine(t *testing.T) {
 	logger := zap.NewNop()
 

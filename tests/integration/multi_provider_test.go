@@ -11,7 +11,7 @@ import (
 	"go.uber.org/zap"
 )
 
-// MockProvider for integration testing
+// MockProvider 用于集成测试
 type MockProvider struct {
 	mock.Mock
 	name string
@@ -55,7 +55,7 @@ func (m *MockProvider) ListModels(ctx context.Context) ([]llm.Model, error) {
 	return nil, nil
 }
 
-// TestMultiProviderRouting tests routing between multiple providers
+// TestMultiProviderRouting 测试多个提供商之间的路由
 func TestMultiProviderRouting(t *testing.T) {
 	logger, _ := zap.NewDevelopment()
 
@@ -108,7 +108,7 @@ func TestMultiProviderRouting(t *testing.T) {
 	provider1.AssertExpectations(t)
 }
 
-// TestMultiProviderFailover tests failover between providers
+// TestMultiProviderFailover 测试提供商之间的故障转移
 func TestMultiProviderFailover(t *testing.T) {
 	logger, _ := zap.NewDevelopment()
 
@@ -166,7 +166,7 @@ func TestMultiProviderFailover(t *testing.T) {
 	provider2.AssertExpectations(t)
 }
 
-// TestMultiProviderLoadBalancing tests load balancing across providers
+// TestMultiProviderLoadBalancing 测试提供商之间的负载平衡
 func TestMultiProviderLoadBalancing(t *testing.T) {
 	logger, _ := zap.NewDevelopment()
 
@@ -240,7 +240,7 @@ func TestMultiProviderLoadBalancing(t *testing.T) {
 	provider2.AssertExpectations(t)
 }
 
-// TestMultiProviderHealthCheck tests health checking across providers
+// TestMultiProviderHealthCheck 测试跨提供商的健康检查
 func TestMultiProviderHealthCheck(t *testing.T) {
 	logger, _ := zap.NewDevelopment()
 
@@ -288,7 +288,7 @@ func TestMultiProviderHealthCheck(t *testing.T) {
 	provider2.AssertExpectations(t)
 }
 
-// BenchmarkMultiProviderRouting benchmarks routing performance
+// BenchmarkMultiProviderRouting 基准路由性能
 func BenchmarkMultiProviderRouting(b *testing.B) {
 	logger, _ := zap.NewDevelopment()
 

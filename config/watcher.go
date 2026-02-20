@@ -16,7 +16,7 @@ import (
 
 // --- 文件监听器类型定义 ---
 
-// FileWatcher watches configuration files for changes
+// FileWatcher 监视配置文件的更改
 type FileWatcher struct {
 	mu sync.RWMutex
 
@@ -39,7 +39,7 @@ type FileWatcher struct {
 	lastModTimes map[string]time.Time
 }
 
-// FileEvent represents a file change event
+// FileEvent 代表文件更改事件
 type FileEvent struct {
 	// Path是改变的文件路径
 	Path string `json:"path"`
@@ -54,7 +54,7 @@ type FileEvent struct {
 	Error error `json:"error,omitempty"`
 }
 
-// FileOp represents file operation types
+// FileOp 代表文件操作类型
 type FileOp int
 
 const (
@@ -70,7 +70,7 @@ const (
 	FileOpChmod
 )
 
-// String returns the string representation of FileOp
+// String 返回 FileOp 的字符串表示形式
 func (op FileOp) String() string {
 	switch op {
 	case FileOpCreate:
@@ -90,17 +90,17 @@ func (op FileOp) String() string {
 
 // --- 文件监听器选项 ---
 
-// WatcherOption configures the FileWatcher
+// WatcherOption 配置文件观察器
 type WatcherOption func(*FileWatcher)
 
-// WithDebounceDelay sets the debounce delay for file events
+// WithDebounceDelay 设置文件事件的去抖延迟
 func WithDebounceDelay(d time.Duration) WatcherOption {
 	return func(w *FileWatcher) {
 		w.debounceDelay = d
 	}
 }
 
-// WithWatcherLogger sets the logger for the watcher
+// WithWatcherLogger 设置观察者的记录器
 func WithWatcherLogger(logger *zap.Logger) WatcherOption {
 	return func(w *FileWatcher) {
 		w.logger = logger
@@ -109,7 +109,7 @@ func WithWatcherLogger(logger *zap.Logger) WatcherOption {
 
 // --- 文件监听器实现 ---
 
-// NewFileWatcher creates a new file watcher
+// NewFileWatcher 创建一个新的文件观察器
 func NewFileWatcher(paths []string, opts ...WatcherOption) (*FileWatcher, error) {
 	w := &FileWatcher{
 		paths:         paths,
@@ -140,14 +140,14 @@ func NewFileWatcher(paths []string, opts ...WatcherOption) (*FileWatcher, error)
 	return w, nil
 }
 
-// OnChange registers a callback for file change events
+// OnChange 注册文件更改事件的回调
 func (w *FileWatcher) OnChange(callback func(FileEvent)) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	w.callbacks = append(w.callbacks, callback)
 }
 
-// Start begins watching for file changes
+// Start 开始监视文件更改
 func (w *FileWatcher) Start(ctx context.Context) error {
 	w.mu.Lock()
 	if w.running {
@@ -177,7 +177,7 @@ func (w *FileWatcher) Start(ctx context.Context) error {
 	return nil
 }
 
-// Stop stops the file watcher
+// Stop 停止文件观察器
 func (w *FileWatcher) Stop() error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
@@ -193,7 +193,7 @@ func (w *FileWatcher) Stop() error {
 	return nil
 }
 
-// pollLoop polls files for changes (fallback for systems without fsnotify)
+// pollLoop 轮询文件是否有更改（没有 fsnotify 的系统的回退）
 func (w *FileWatcher) pollLoop(ctx context.Context) {
 	ticker := time.NewTicker(1 * time.Second)
 	defer ticker.Stop()
@@ -210,7 +210,7 @@ func (w *FileWatcher) pollLoop(ctx context.Context) {
 	}
 }
 
-// checkFiles checks all watched files for modifications
+// checkFiles 检查所有监视的文件是否有修改
 func (w *FileWatcher) checkFiles() {
 	w.mu.Lock()
 	defer w.mu.Unlock()
@@ -253,7 +253,7 @@ func (w *FileWatcher) checkFiles() {
 	}
 }
 
-// dispatchLoop dispatches events to callbacks with debouncing
+// dispatchLoop 将事件分派到具有去抖动功能的回调
 func (w *FileWatcher) dispatchLoop(ctx context.Context) {
 	var (
 		pendingEvents = make(map[string]FileEvent)
@@ -298,7 +298,7 @@ func (w *FileWatcher) dispatchLoop(ctx context.Context) {
 	}
 }
 
-// AddPath adds a new path to watch
+// AddPath 添加新的观看路径
 func (w *FileWatcher) AddPath(path string) error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
@@ -327,7 +327,7 @@ func (w *FileWatcher) AddPath(path string) error {
 	return nil
 }
 
-// RemovePath removes a path from watching
+// RemovePath 从观看中删除一条路径
 func (w *FileWatcher) RemovePath(path string) error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
@@ -346,7 +346,7 @@ func (w *FileWatcher) RemovePath(path string) error {
 	return fmt.Errorf("path not found: %s", path)
 }
 
-// Paths returns the list of watched paths
+// Paths 返回监视路径的列表
 func (w *FileWatcher) Paths() []string {
 	w.mu.RLock()
 	defer w.mu.RUnlock()
@@ -356,7 +356,7 @@ func (w *FileWatcher) Paths() []string {
 	return paths
 }
 
-// IsRunning returns whether the watcher is running
+// IsRunning 返回观察者是否正在运行
 func (w *FileWatcher) IsRunning() bool {
 	w.mu.RLock()
 	defer w.mu.RUnlock()

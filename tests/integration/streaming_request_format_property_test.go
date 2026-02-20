@@ -23,13 +23,13 @@ import (
 	"pgregory.net/rapid"
 )
 
-// Feature: multi-provider-support, Property 13: Streaming Request Format
-// **Validates: Requirements 10.1**
+// 特性：多提供商支持，属性 13：流请求格式
+// **验证：要求 10.1**
 //
-// This property test verifies that for any provider, when Stream() is called
-// with a ChatRequest, the HTTP request body should include "stream": true field.
+// This 属性测试验证对于任何提供者，当调用 Stream() 时
+// ???with a ChatRequest, the HTTP request body should include "stream": true field.
 
-// streamRequestCapture captures the request body sent to the server
+// StreamRequestCapture 捕获发送到服务器的请求正文
 type streamRequestCapture struct {
 	mu          sync.Mutex
 	requestBody map[string]any
@@ -53,7 +53,7 @@ func (c *streamRequestCapture) getStreamField() (bool, bool) {
 	return c.streamField, c.captured
 }
 
-// mockStreamServer creates a test server that captures the request and returns a streaming response
+// mockStreamServer 创建一个测试服务器来捕获请求并返回流响应
 func mockStreamServer(capture *streamRequestCapture) *httptest.Server {
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, err := io.ReadAll(r.Body)
@@ -99,8 +99,8 @@ func mockStreamServer(capture *streamRequestCapture) *httptest.Server {
 	}))
 }
 
-// TestProperty13_StreamingRequestFormat verifies that Stream() sets stream=true
-// in the HTTP request body for all providers.
+// TestProperty13_StreamingRequestFormat 验证 Stream() 设置stream=true
+// 在所有提供者的 HTTP 请求正文中。
 func TestProperty13_StreamingRequestFormat(t *testing.T) {
 	logger := zap.NewNop()
 
@@ -165,8 +165,8 @@ func TestProperty13_StreamingRequestFormat(t *testing.T) {
 	})
 }
 
-// TestProperty13_StreamingRequestFormat_AllProviders provides table-driven tests
-// to ensure minimum 100 iterations across all providers.
+// TestProperty13_StreamingRequestFormat_AllProviders 提供表驱动测试
+// 确保所有提供者至少进行 100 次迭代。
 func TestProperty13_StreamingRequestFormat_AllProviders(t *testing.T) {
 	logger := zap.NewNop()
 
@@ -294,8 +294,8 @@ func TestProperty13_StreamingRequestFormat_AllProviders(t *testing.T) {
 	}
 }
 
-// TestProperty13_StreamingRequestFormat_WithTools verifies stream=true is set
-// even when tools are included in the request.
+// TestProperty13_StreamingRequestFormat_WithTools 验证是否设置了stream=true
+// 即使请求中包含了工具。
 func TestProperty13_StreamingRequestFormat_WithTools(t *testing.T) {
 	logger := zap.NewNop()
 
@@ -364,8 +364,8 @@ func TestProperty13_StreamingRequestFormat_WithTools(t *testing.T) {
 	})
 }
 
-// TestProperty13_CompletionDoesNotSetStreamTrue verifies that Completion()
-// does NOT set stream=true (contrast test to ensure Stream() behavior is correct).
+// TestProperty13_CompletionDoesNotSetStreamTrue 验证 Completion()
+// 不设置stream=true（对比测试以确保Stream()行为正确）。
 func TestProperty13_CompletionDoesNotSetStreamTrue(t *testing.T) {
 	logger := zap.NewNop()
 

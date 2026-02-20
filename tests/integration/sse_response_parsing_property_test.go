@@ -21,14 +21,14 @@ import (
 	"pgregory.net/rapid"
 )
 
-// Feature: multi-provider-support, Property 14: SSE Response Parsing
-// **Validates: Requirements 10.2, 10.3**
+// 特性：多提供商支持，属性 14：SSE 响应解析
+// **验证：要求 10.2、10.3**
 //
-// This property test verifies that for any provider streaming response,
-// when receiving SSE data lines starting with "data: ", the provider should
-// parse the JSON content and emit corresponding StreamChunk messages.
+// This 属性测试验证对于任何提供商流响应，
+// 当接收到以“data:”开头的 SSE 数据行时，提供商应
+// 解析 JSON 内容并发出相应的 StreamChunk 消息。
 
-// sseChunkData represents the data for a single SSE chunk
+// sseChunkData 表示单个 SSE 块的数据
 type sseChunkData struct {
 	ID           string
 	Model        string
@@ -36,7 +36,7 @@ type sseChunkData struct {
 	FinishReason string
 }
 
-// mockSSEServer creates a test server that returns SSE formatted responses
+// mockSSEServer 创建一个返回 SSE 格式响应的测试服务器
 func mockSSEServer(chunks []sseChunkData) *httptest.Server {
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/event-stream")
@@ -77,8 +77,8 @@ func mockSSEServer(chunks []sseChunkData) *httptest.Server {
 	}))
 }
 
-// TestProperty14_SSEResponseParsing verifies that SSE data lines are correctly
-// parsed into StreamChunk messages for all providers.
+// TestProperty14_SSEResponseParsing 验证SSE数据线是否正确
+// 解析为所有提供者的 StreamChunk 消息。
 func TestProperty14_SSEResponseParsing(t *testing.T) {
 	logger := zap.NewNop()
 
@@ -165,8 +165,8 @@ func TestProperty14_SSEResponseParsing(t *testing.T) {
 	})
 }
 
-// TestProperty14_SSEResponseParsing_AllProviders provides table-driven tests
-// to ensure minimum 100 iterations across all providers.
+// TestProperty14_SSEResponseParsing_AllProviders 提供表驱动测试
+// 确保所有提供者至少进行 100 次迭代。
 func TestProperty14_SSEResponseParsing_AllProviders(t *testing.T) {
 	logger := zap.NewNop()
 
@@ -276,8 +276,8 @@ func TestProperty14_SSEResponseParsing_AllProviders(t *testing.T) {
 	}
 }
 
-// TestProperty14_SSEResponseParsing_DataLineFormat verifies that only lines
-// starting with "data: " are parsed as SSE events.
+// TestProperty14_SSEResponseParsing_DataLineFormat 验证只有行
+// 以“data:”开头的被解析为 SSE 事件。
 func TestProperty14_SSEResponseParsing_DataLineFormat(t *testing.T) {
 	logger := zap.NewNop()
 
@@ -401,8 +401,8 @@ func TestProperty14_SSEResponseParsing_DataLineFormat(t *testing.T) {
 	})
 }
 
-// TestProperty14_SSEResponseParsing_JSONContent verifies that JSON content
-// in SSE data lines is correctly parsed into StreamChunk fields.
+// TestProperty14_SSEResponseParsing_JSONContent Error 500 (Server Error)!!1500.That’s an error.There was an error. Please try again later.That’s all we know.
+// SSE 中的数据行被正确解析为 StreamChunk 字段。
 func TestProperty14_SSEResponseParsing_JSONContent(t *testing.T) {
 	logger := zap.NewNop()
 
@@ -476,9 +476,9 @@ func TestProperty14_SSEResponseParsing_JSONContent(t *testing.T) {
 	})
 }
 
-// TestProperty14_SSEResponseParsing_WithToolCalls verifies that SSE responses
-// containing tool calls are correctly parsed for OpenAI-compatible providers.
-// Note: MiniMax uses XML-based tool calls and is tested separately.
+// TestProperty14_SSEResponseParsing_WithToolCalls 验证 SSE 的回应
+// 包含的工具调用已正确解析为 OpenAI 兼容的提供程序。
+// 注意：MiniMax 使用基于 XML 的工具调用并单独进行测试。
 func TestProperty14_SSEResponseParsing_WithToolCalls(t *testing.T) {
 	logger := zap.NewNop()
 
@@ -589,8 +589,8 @@ func TestProperty14_SSEResponseParsing_WithToolCalls(t *testing.T) {
 	})
 }
 
-// TestProperty14_SSEResponseParsing_MiniMaxXMLToolCalls verifies that MiniMax's
-// XML-based tool calls in SSE responses are correctly parsed.
+// TestProperty14_SSEResponseParsing_MiniMaxXMLToolCalls 验证 MiniMax 的
+// SSE 响应中基于 XML 的工具调用已正确解析。
 func TestProperty14_SSEResponseParsing_MiniMaxXMLToolCalls(t *testing.T) {
 	logger := zap.NewNop()
 

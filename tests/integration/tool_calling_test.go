@@ -12,7 +12,7 @@ import (
 	"go.uber.org/zap"
 )
 
-// TestReActLoop_SingleToolCall tests ReAct loop with single tool call
+// TestReActLoop_SingleToolCall 使用单个工具调用测试 ReAct 循环
 func TestReActLoop_SingleToolCall(t *testing.T) {
 	logger, _ := zap.NewDevelopment()
 	provider := &MockProvider{name: "test-provider"}
@@ -120,7 +120,7 @@ func TestReActLoop_SingleToolCall(t *testing.T) {
 	executor.AssertExpectations(t)
 }
 
-// TestReActLoop_MultipleToolCalls tests ReAct loop with multiple tool calls
+// TestReActLoop_MultipleToolCalls 使用多个工具调用测试 ReAct 循环
 func TestReActLoop_MultipleToolCalls(t *testing.T) {
 	logger, _ := zap.NewDevelopment()
 	provider := &MockProvider{name: "test-provider"}
@@ -262,7 +262,7 @@ func TestReActLoop_MultipleToolCalls(t *testing.T) {
 	executor.AssertExpectations(t)
 }
 
-// TestReActLoop_ToolError tests ReAct loop with tool error
+// TestReActLoop_ToolError 使用工具错误测试 ReAct 循环
 func TestReActLoop_ToolError(t *testing.T) {
 	logger, _ := zap.NewDevelopment()
 	provider := &MockProvider{name: "test-provider"}
@@ -335,7 +335,7 @@ func TestReActLoop_ToolError(t *testing.T) {
 	executor.AssertExpectations(t)
 }
 
-// TestReActLoop_MaxIterations tests ReAct loop reaching max iterations
+// TestReActLoop_MaxIterations 测试 ReAct 循环达到最大迭代次数
 func TestReActLoop_MaxIterations(t *testing.T) {
 	logger, _ := zap.NewDevelopment()
 	provider := &MockProvider{name: "test-provider"}
@@ -403,7 +403,7 @@ func TestReActLoop_MaxIterations(t *testing.T) {
 	assert.Len(t, steps, 2)
 }
 
-// MockToolExecutor for testing
+// MockToolExecutor 用于测试
 type MockToolExecutor struct {
 	mock.Mock
 }
@@ -418,7 +418,7 @@ func (m *MockToolExecutor) ExecuteOne(ctx context.Context, call llm.ToolCall) to
 	return args.Get(0).(tools.ToolResult)
 }
 
-// BenchmarkReActLoop benchmarks ReAct loop performance
+// BenchmarkReActLoop 基准测试 ReAct 循环性能
 func BenchmarkReActLoop(b *testing.B) {
 	logger, _ := zap.NewDevelopment()
 	provider := &MockProvider{name: "test-provider"}

@@ -22,14 +22,14 @@ import (
 	"go.uber.org/zap"
 )
 
-// Feature: multi-provider-support, Task 12.5: [DONE] Marker Handling
-// **Validates: Requirements 10.4**
+// 功能：多提供商支持，任务 12.5：[完成] 标记处理
+// **验证：要求 10.4**
 //
-// This unit test verifies that when a provider receives "[DONE]" marker in SSE stream,
-// the stream channel is properly closed.
+// This 单元测试验证当提供者在 SSE 流中收到“[DONE]”标记时，
+// 流通道已正确关闭。
 
-// TestDoneMarkerHandling_StreamClosesOnDone verifies that the stream channel
-// is closed when [DONE] marker is received for all 5 providers.
+// TestDoneMarkerHandling_StreamClosesOnDone 验证流通道
+// 当收到所有 5 个提供商的 [DONE] 标记时关闭。
 func TestDoneMarkerHandling_StreamClosesOnDone(t *testing.T) {
 	logger := zap.NewNop()
 
@@ -157,8 +157,8 @@ func TestDoneMarkerHandling_StreamClosesOnDone(t *testing.T) {
 	}
 }
 
-// TestDoneMarkerHandling_ChannelProperlyClosedWithTimeout verifies that the channel
-// is properly closed and doesn't block indefinitely after [DONE] marker.
+// TestDoneMarkerHandling_ChannelProperlyClosedWithTimeout 验证通道
+// 已正确关闭，并且不会在 [DONE] 标记之后无限期地阻塞。
 func TestDoneMarkerHandling_ChannelProperlyClosedWithTimeout(t *testing.T) {
 	logger := zap.NewNop()
 
@@ -258,8 +258,8 @@ func TestDoneMarkerHandling_ChannelProperlyClosedWithTimeout(t *testing.T) {
 	}
 }
 
-// TestDoneMarkerHandling_NoDataAfterDone verifies that no data is sent
-// after [DONE] marker is received.
+// TestDoneMarkerHandling_NoDataAfterDone 验证没有发送数据
+// 收到 [DONE] 标记后。
 func TestDoneMarkerHandling_NoDataAfterDone(t *testing.T) {
 	logger := zap.NewNop()
 
@@ -374,8 +374,8 @@ func TestDoneMarkerHandling_NoDataAfterDone(t *testing.T) {
 	}
 }
 
-// TestDoneMarkerHandling_ConcurrentReads verifies that channel closure is safe
-// for concurrent reads after [DONE] marker.
+// TestDoneMarkerHandling_ConcurrentReads 验证通道关闭是否安全
+// 用于 [DONE] 标记之后的并发读取。
 func TestDoneMarkerHandling_ConcurrentReads(t *testing.T) {
 	logger := zap.NewNop()
 
@@ -496,8 +496,8 @@ func TestDoneMarkerHandling_ConcurrentReads(t *testing.T) {
 	}
 }
 
-// TestDoneMarkerHandling_DoneMarkerVariations tests different [DONE] marker formats
-// that providers should handle.
+// TestDoneMarkerHandling_DoneMarkerVariations 测试不同的 [DONE] 标记格式
+// 提供商应该处理的。
 func TestDoneMarkerHandling_DoneMarkerVariations(t *testing.T) {
 	logger := zap.NewNop()
 

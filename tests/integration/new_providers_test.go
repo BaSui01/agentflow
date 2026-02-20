@@ -17,7 +17,7 @@ import (
 	"go.uber.org/zap"
 )
 
-// TestNewProviders_Compatibility tests that all new providers are compatible with the Provider interface
+// TestNewProviders_Compatibility 测试所有新提供程序是否与提供程序接口兼容
 func TestNewProviders_Compatibility(t *testing.T) {
 	logger := zap.NewNop()
 
@@ -60,7 +60,7 @@ func TestNewProviders_Compatibility(t *testing.T) {
 	}
 }
 
-// TestNewProviders_ResilientWrapper tests that new providers work with ResilientProvider
+// TestNewProviders_ResilientWrapper 测试新提供程序是否与 ResilientProvider 配合使用
 func TestNewProviders_ResilientWrapper(t *testing.T) {
 	logger := zap.NewNop()
 	ctx := context.Background()
@@ -126,7 +126,7 @@ func TestNewProviders_ResilientWrapper(t *testing.T) {
 	}
 }
 
-// TestNewProviders_FunctionCalling tests function calling support
+// TestNewProviders_FunctionCalling 测试函数调用支持
 func TestNewProviders_FunctionCalling(t *testing.T) {
 	logger := zap.NewNop()
 	ctx := context.Background()
@@ -181,7 +181,7 @@ func TestNewProviders_FunctionCalling(t *testing.T) {
 	}
 }
 
-// BenchmarkNewProviders benchmarks all new providers
+// BenchmarkNewProviders 对所有新提供商进行基准测试
 func BenchmarkNewProviders(b *testing.B) {
 	logger := zap.NewNop()
 	ctx := context.Background()
