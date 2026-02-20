@@ -103,12 +103,12 @@ func (h *ConfigAPIHandler) handleConfig(w http.ResponseWriter, r *http.Request) 
 // getConfig 返回当前配置（已清理）
 // @Summary 获取当前配置
 // @Description 返回当前配置并编辑敏感字段
-// @标签配置
-// ???@Accept json
-// @生成json
+// @Tags config
+// @Accept json
+// @Produce json
 // @Success 200 {object} ConfigResponse "当前配置"
-// @Failure 500 {object} ConfigResponse“内部服务器错误”
-// @Router /api/v1/config [获取]
+// @Failure 500 {object} ConfigResponse "内部服务器错误"
+// @Router /api/v1/config [get]
 func (h *ConfigAPIHandler) getConfig(w http.ResponseWriter, r *http.Request) {
 	config := h.manager.SanitizedConfig()
 
@@ -125,14 +125,14 @@ func (h *ConfigAPIHandler) getConfig(w http.ResponseWriter, r *http.Request) {
 // updateConfig 更新配置字段
 // @Summary 更新配置
 // @Description 动态更新一个或多个配置字段
-// @标签配置
-// ???@Accept json
-// @生成json
-// @Param 请求正文 ConfigUpdateRequest true "配置更新"
-// @Success 200 {object} ConfigResponse“配置已更新”
-// @Failure 400 {object} ConfigResponse“无效请求”
-// @Failure 500 {object} ConfigResponse“内部服务器错误”
-// @Router /api/v1/config [放置]
+// @Tags config
+// @Accept json
+// @Produce json
+// @Param request body ConfigUpdateRequest true "配置更新"
+// @Success 200 {object} ConfigResponse "配置已更新"
+// @Failure 400 {object} ConfigResponse "无效请求"
+// @Failure 500 {object} ConfigResponse "内部服务器错误"
+// @Router /api/v1/config [put]
 func (h *ConfigAPIHandler) updateConfig(w http.ResponseWriter, r *http.Request) {
 	var req ConfigUpdateRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -195,12 +195,12 @@ func (h *ConfigAPIHandler) updateConfig(w http.ResponseWriter, r *http.Request) 
 // handleReload 处理 POST 请求以从文件重新加载配置
 // @Summary 从文件重新加载配置
 // @Description 从配置文件重新加载配置
-// @标签配置
-// ???@Accept json
-// @生成json
-// @Success 200 {object} ConfigResponse“配置已重新加载”
-// @Failure 500 {object} ConfigResponse“重新加载失败”
-// @Router /api/v1/config/reload [帖子]
+// @Tags config
+// @Accept json
+// @Produce json
+// @Success 200 {object} ConfigResponse "配置已重新加载"
+// @Failure 500 {object} ConfigResponse "重新加载失败"
+// @Router /api/v1/config/reload [post]
 func (h *ConfigAPIHandler) handleReload(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodOptions {
 		h.handleCORS(w, r)
@@ -232,11 +232,11 @@ func (h *ConfigAPIHandler) handleReload(w http.ResponseWriter, r *http.Request) 
 // handleFields 返回热可重载字段的列表
 // @Summary 获取热可重载字段
 // @Description 返回可热重载的配置字段列表
-// @标签配置
-// ???@Accept json
-// @生成json
-// @Success 200 {object} ConfigResponse“热可重新加载字段”
-// @Router /api/v1/config/fields [获取]
+// @Tags config
+// @Accept json
+// @Produce json
+// @Success 200 {object} ConfigResponse "热可重载字段"
+// @Router /api/v1/config/fields [get]
 func (h *ConfigAPIHandler) handleFields(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodOptions {
 		h.handleCORS(w, r)
@@ -278,12 +278,12 @@ func (h *ConfigAPIHandler) handleFields(w http.ResponseWriter, r *http.Request) 
 // handleChanges 返回配置更改历史记录
 // @Summary 获取配置更改历史记录
 // @Description 返回配置更改的历史记录
-// @标签配置
-// ???@Accept json
-// @生成json
-// @Param limit query int false "返回的最大更改数量" 默认(50)
-// @Success 200 {object} ConfigResponse“配置更改”
-// @Router /api/v1/config/changes [获取]
+// @Tags config
+// @Accept json
+// @Produce json
+// @Param limit query int false "返回的最大更改数量" default(50)
+// @Success 200 {object} ConfigResponse "配置更改"
+// @Router /api/v1/config/changes [get]
 func (h *ConfigAPIHandler) handleChanges(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodOptions {
 		h.handleCORS(w, r)
