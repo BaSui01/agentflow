@@ -1,5 +1,3 @@
-// 包布提供由LlamaIndex所启发的RAG查询转换能力.
-// 这个模块执行查询扩展,重写,意向检测,和子克分解等功能.
 package rag
 
 import (

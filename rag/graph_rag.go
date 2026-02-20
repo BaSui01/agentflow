@@ -1,4 +1,3 @@
-// 包布提供了 GraphRAG - 知识图+矢量混合检索。
 package rag
 
 import (
