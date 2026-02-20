@@ -3,6 +3,7 @@ package streaming
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -40,6 +41,22 @@ const (
 	DropPolicyNewest                   // Drop newest tokens
 	DropPolicyError                    // Return error
 )
+
+// String returns the string representation of DropPolicy.
+func (d DropPolicy) String() string {
+	switch d {
+	case DropPolicyBlock:
+		return "block"
+	case DropPolicyOldest:
+		return "oldest"
+	case DropPolicyNewest:
+		return "newest"
+	case DropPolicyError:
+		return "error"
+	default:
+		return fmt.Sprintf("DropPolicy(%d)", d)
+	}
+}
 
 // DefaultBackpressureConfig 返回优化的默认值.
 func DefaultBackpressureConfig() BackpressureConfig {

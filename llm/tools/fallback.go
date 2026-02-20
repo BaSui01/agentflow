@@ -236,7 +236,7 @@ func (e *ResilientExecutor) executeAlternate(ctx context.Context, original llmpk
 }
 
 func (e *ResilientExecutor) buildSkipResponse(toolName, errMsg string) json.RawMessage {
-	resp := map[string]interface{}{
+	resp := map[string]any{
 		"skipped": true,
 		"tool":    toolName,
 		"reason":  errMsg,

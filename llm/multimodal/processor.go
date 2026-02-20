@@ -46,26 +46,26 @@ func (p *Processor) convertToOpenAI(messages []MultimodalMessage) ([]llm.Message
 	var result []llm.Message
 
 	for _, msg := range messages {
-		var contentParts []map[string]interface{}
+		var contentParts []map[string]any
 
 		for _, content := range msg.Contents {
 			switch content.Type {
 			case ContentTypeText:
-				contentParts = append(contentParts, map[string]interface{}{
+				contentParts = append(contentParts, map[string]any{
 					"type": "text",
 					"text": content.Text,
 				})
 
 			case ContentTypeImage:
-				imageContent := map[string]interface{}{
+				imageContent := map[string]any{
 					"type": "image_url",
 				}
 				if content.ImageURL != "" {
-					imageContent["image_url"] = map[string]interface{}{
+					imageContent["image_url"] = map[string]any{
 						"url": content.ImageURL,
 					}
 				} else if content.Data != "" {
-					imageContent["image_url"] = map[string]interface{}{
+					imageContent["image_url"] = map[string]any{
 						"url": fmt.Sprintf("data:%s;base64,%s", content.MediaType, content.Data),
 					}
 				}
@@ -73,11 +73,11 @@ func (p *Processor) convertToOpenAI(messages []MultimodalMessage) ([]llm.Message
 
 			case ContentTypeAudio:
 				// OpenAI 音频输入格式
-				audioContent := map[string]interface{}{
+				audioContent := map[string]any{
 					"type": "input_audio",
 				}
 				if content.Data != "" {
-					audioContent["input_audio"] = map[string]interface{}{
+					audioContent["input_audio"] = map[string]any{
 						"data":   content.Data,
 						"format": extractFormat(content.MediaType),
 					}
@@ -106,28 +106,28 @@ func (p *Processor) convertToAnthropic(messages []MultimodalMessage) ([]llm.Mess
 	var result []llm.Message
 
 	for _, msg := range messages {
-		var contentParts []map[string]interface{}
+		var contentParts []map[string]any
 
 		for _, content := range msg.Contents {
 			switch content.Type {
 			case ContentTypeText:
-				contentParts = append(contentParts, map[string]interface{}{
+				contentParts = append(contentParts, map[string]any{
 					"type": "text",
 					"text": content.Text,
 				})
 
 			case ContentTypeImage:
-				imageContent := map[string]interface{}{
+				imageContent := map[string]any{
 					"type": "image",
 				}
 				if content.Data != "" {
-					imageContent["source"] = map[string]interface{}{
+					imageContent["source"] = map[string]any{
 						"type":       "base64",
 						"media_type": content.MediaType,
 						"data":       content.Data,
 					}
 				} else if content.ImageURL != "" {
-					imageContent["source"] = map[string]interface{}{
+					imageContent["source"] = map[string]any{
 						"type": "url",
 						"url":  content.ImageURL,
 					}
@@ -155,26 +155,26 @@ func (p *Processor) convertToGemini(messages []MultimodalMessage) ([]llm.Message
 	var result []llm.Message
 
 	for _, msg := range messages {
-		var parts []map[string]interface{}
+		var parts []map[string]any
 
 		for _, content := range msg.Contents {
 			switch content.Type {
 			case ContentTypeText:
-				parts = append(parts, map[string]interface{}{
+				parts = append(parts, map[string]any{
 					"text": content.Text,
 				})
 
 			case ContentTypeImage:
 				if content.Data != "" {
-					parts = append(parts, map[string]interface{}{
-						"inline_data": map[string]interface{}{
+					parts = append(parts, map[string]any{
+						"inline_data": map[string]any{
 							"mime_type": content.MediaType,
 							"data":      content.Data,
 						},
 					})
 				} else if content.ImageURL != "" {
-					parts = append(parts, map[string]interface{}{
-						"file_data": map[string]interface{}{
+					parts = append(parts, map[string]any{
+						"file_data": map[string]any{
 							"file_uri":  content.ImageURL,
 							"mime_type": content.MediaType,
 						},
@@ -183,8 +183,8 @@ func (p *Processor) convertToGemini(messages []MultimodalMessage) ([]llm.Message
 
 			case ContentTypeAudio:
 				if content.Data != "" {
-					parts = append(parts, map[string]interface{}{
-						"inline_data": map[string]interface{}{
+					parts = append(parts, map[string]any{
+						"inline_data": map[string]any{
 							"mime_type": content.MediaType,
 							"data":      content.Data,
 						},
@@ -193,8 +193,8 @@ func (p *Processor) convertToGemini(messages []MultimodalMessage) ([]llm.Message
 
 			case ContentTypeVideo:
 				if content.VideoURL != "" {
-					parts = append(parts, map[string]interface{}{
-						"file_data": map[string]interface{}{
+					parts = append(parts, map[string]any{
+						"file_data": map[string]any{
 							"file_uri":  content.VideoURL,
 							"mime_type": "video/mp4",
 						},

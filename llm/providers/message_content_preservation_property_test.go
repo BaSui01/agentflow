@@ -445,7 +445,7 @@ func convertMessageMiniMaxFormat(msg llm.Message) miniMaxMessageFormat {
 	if len(msg.ToolCalls) > 0 {
 		toolCallsXML := "<tool_calls>\n"
 		for _, tc := range msg.ToolCalls {
-			callJSON, _ := json.Marshal(map[string]interface{}{
+			callJSON, _ := json.Marshal(map[string]any{
 				"name":      tc.Name,
 				"arguments": json.RawMessage(tc.Arguments),
 			})

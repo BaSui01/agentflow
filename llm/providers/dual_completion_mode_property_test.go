@@ -42,10 +42,10 @@ func TestProperty4_DualCompletionModeSupport(t *testing.T) {
 		for _, mv := range messageVariations {
 			t.Run(provider+"_completion_"+mv.name, func(t *testing.T) {
 				server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-					resp := map[string]interface{}{
+					resp := map[string]any{
 						"id": "test-id", "model": "test-model",
-						"choices": []map[string]interface{}{{"index": 0, "finish_reason": "stop", "message": map[string]interface{}{"role": "assistant", "content": "Test response"}}},
-						"usage":   map[string]interface{}{"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15},
+						"choices": []map[string]any{{"index": 0, "finish_reason": "stop", "message": map[string]any{"role": "assistant", "content": "Test response"}}},
+						"usage":   map[string]any{"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15},
 					}
 					json.NewEncoder(w).Encode(resp)
 				}))
@@ -185,7 +185,7 @@ func TestProperty4_CompletionWithTools(t *testing.T) {
 		for _, tv := range toolVariations {
 			t.Run(provider+"_tools_"+tv.name, func(t *testing.T) {
 				server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-					resp := map[string]interface{}{"id": "test-id", "model": "test-model", "choices": []map[string]interface{}{{"index": 0, "finish_reason": "stop", "message": map[string]interface{}{"role": "assistant", "content": "Response"}}}}
+					resp := map[string]any{"id": "test-id", "model": "test-model", "choices": []map[string]any{{"index": 0, "finish_reason": "stop", "message": map[string]any{"role": "assistant", "content": "Response"}}}}
 					json.NewEncoder(w).Encode(resp)
 				}))
 				defer server.Close()
@@ -253,7 +253,7 @@ func TestProperty4_CompletionParameters(t *testing.T) {
 		for _, pv := range paramVariations {
 			t.Run(provider+"_params_"+pv.name, func(t *testing.T) {
 				server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-					resp := map[string]interface{}{"id": "test", "model": "test", "choices": []map[string]interface{}{{"index": 0, "finish_reason": "stop", "message": map[string]interface{}{"role": "assistant", "content": "OK"}}}}
+					resp := map[string]any{"id": "test", "model": "test", "choices": []map[string]any{{"index": 0, "finish_reason": "stop", "message": map[string]any{"role": "assistant", "content": "OK"}}}}
 					json.NewEncoder(w).Encode(resp)
 				}))
 				defer server.Close()

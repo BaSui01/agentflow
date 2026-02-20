@@ -92,7 +92,7 @@ func (p *BaseProvider) EmbedDocuments(ctx context.Context, documents []string, e
 }
 
 // Dorequest 执行 HTTP 请求, 并进行常见错误处理 。
-func (p *BaseProvider) DoRequest(ctx context.Context, method, endpoint string, body interface{}, headers map[string]string) ([]byte, error) {
+func (p *BaseProvider) DoRequest(ctx context.Context, method, endpoint string, body any, headers map[string]string) ([]byte, error) {
 	var reqBody io.Reader
 	if body != nil {
 		data, err := json.Marshal(body)

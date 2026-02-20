@@ -31,7 +31,7 @@ func mockToolCallServer(t *testing.T, toolCalls []mockToolCallData, streaming bo
 		require.NoError(t, err)
 		defer r.Body.Close()
 
-		var req map[string]interface{}
+		var req map[string]any
 		err = json.Unmarshal(body, &req)
 		require.NoError(t, err)
 
@@ -273,7 +273,7 @@ func mockProviderCompletion(baseURL string, req *llm.ChatRequest) (*llm.ChatResp
 	ctx := context.Background()
 
 	// 构建请求正文
-	body := map[string]interface{}{
+	body := map[string]any{
 		"model":    req.Model,
 		"messages": convertMessagesToMap(req.Messages),
 		"tools":    convertToolsToMap(req.Tools),
@@ -312,7 +312,7 @@ func mockProviderStream(baseURL string, req *llm.ChatRequest) (<-chan llm.Stream
 	ctx := context.Background()
 
 	// 构建请求正文
-	body := map[string]interface{}{
+	body := map[string]any{
 		"model":    req.Model,
 		"messages": convertMessagesToMap(req.Messages),
 		"tools":    convertToolsToMap(req.Tools),
@@ -418,10 +418,10 @@ func parseSSEStream(body io.Reader, ch chan<- llm.StreamChunk) {
 }
 
 // 转换的辅助功能
-func convertMessagesToMap(msgs []llm.Message) []map[string]interface{} {
-	result := make([]map[string]interface{}, 0, len(msgs))
+func convertMessagesToMap(msgs []llm.Message) []map[string]any {
+	result := make([]map[string]any, 0, len(msgs))
 	for _, m := range msgs {
-		msg := map[string]interface{}{
+		msg := map[string]any{
 			"role":    string(m.Role),
 			"content": m.Content,
 		}
@@ -436,15 +436,15 @@ func convertMessagesToMap(msgs []llm.Message) []map[string]interface{} {
 	return result
 }
 
-func convertToolsToMap(tools []llm.ToolSchema) []map[string]interface{} {
+func convertToolsToMap(tools []llm.ToolSchema) []map[string]any {
 	if len(tools) == 0 {
 		return nil
 	}
-	result := make([]map[string]interface{}, 0, len(tools))
+	result := make([]map[string]any, 0, len(tools))
 	for _, t := range tools {
-		result = append(result, map[string]interface{}{
+		result = append(result, map[string]any{
 			"type": "function",
-			"function": map[string]interface{}{
+			"function": map[string]any{
 				"name":        t.Name,
 				"description": t.Description,
 				"parameters":  json.RawMessage(t.Parameters),

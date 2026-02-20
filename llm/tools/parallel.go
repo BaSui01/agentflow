@@ -248,7 +248,7 @@ func (p *ParallelExecutor) executeSingle(ctx context.Context, call llmpkg.ToolCa
 
 	// 验证参数
 	if len(call.Arguments) > 0 {
-		var tmp interface{}
+		var tmp any
 		if err := json.Unmarshal(call.Arguments, &tmp); err != nil {
 			result.Error = fmt.Sprintf("invalid arguments: %s", err.Error())
 			result.Duration = time.Since(start)
