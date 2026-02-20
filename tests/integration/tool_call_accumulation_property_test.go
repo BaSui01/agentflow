@@ -44,7 +44,7 @@ type partialToolCallChunk struct {
 // mockSSEServerWithPartialToolCalls 创建一个发送工具调用的测试服务器
 // 多个部分块中的参数（模拟 OpenAI 等提供商如何
 // 使用部分 JSON 进行流工具调用）。
-// Error 500 (Server Error)!!1500.That’s an error.There was an error. Please try again later.That’s all we know.
+// 注意：OpenAI 将 arguments 作为字符串字段发送，内容为分段 JSON。
 // Each chunk 的参数是一个字符串，连接后形成有效的 JSON。
 func mockSSEServerWithPartialToolCalls(chunks []partialToolCallChunk) *httptest.Server {
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -143,7 +143,7 @@ func splitJSONIntoChunks(jsonStr string, numChunks int) []string {
 	return chunks
 }
 
-// TestProperty16_ToolCallAccumulation ???verifies that partial tool call JSON
+// TestProperty16_ToolCallAccumulation 验证部分工具调用 JSON
 // 正确累积块以形成所有提供者的有效 JSON。
 func TestProperty16_ToolCallAccumulation(t *testing.T) {
 	logger := zap.NewNop()

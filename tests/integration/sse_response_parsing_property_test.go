@@ -401,7 +401,7 @@ func TestProperty14_SSEResponseParsing_DataLineFormat(t *testing.T) {
 	})
 }
 
-// TestProperty14_SSEResponseParsing_JSONContent Error 500 (Server Error)!!1500.That’s an error.There was an error. Please try again later.That’s all we know.
+// TestProperty14_SSEResponseParsing_JSONContent 验证 SSE 数据行中的 JSON 内容可被正确解析。
 // SSE 中的数据行被正确解析为 StreamChunk 字段。
 func TestProperty14_SSEResponseParsing_JSONContent(t *testing.T) {
 	logger := zap.NewNop()
