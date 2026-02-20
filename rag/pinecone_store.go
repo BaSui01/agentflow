@@ -335,6 +335,53 @@ func (s *PineconeStore) Count(ctx context.Context) (int, error) {
 	return resp.TotalVectorCount, nil
 }
 
+// ListDocumentIDs returns a paginated list of vector IDs stored in the Pinecone index.
+// It uses the list vectors API endpoint. The offset parameter is used to skip results
+// by fetching offset+limit IDs and discarding the first offset entries.
+func (s *PineconeStore) ListDocumentIDs(ctx context.Context, limit int, offset int) ([]string, error) {
+	if strings.TrimSpace(s.cfg.APIKey) == "" {
+		return nil, fmt.Errorf("pinecone api_key is required")
+	}
+	if limit <= 0 {
+		return []string{}, nil
+	}
+
+	// Pinecone list endpoint returns vector IDs with pagination via paginationToken.
+	// We fetch offset+limit IDs and skip the first offset.
+	fetchLimit := offset + limit
+
+	path := fmt.Sprintf("/vectors/list?limit=%d", fetchLimit)
+	if ns := strings.TrimSpace(s.cfg.Namespace); ns != "" {
+		path += "&namespace=" + url.QueryEscape(ns)
+	}
+
+	var resp struct {
+		Vectors []struct {
+			ID string `json:"id"`
+		} `json:"vectors"`
+	}
+
+	if err := s.doJSON(ctx, http.MethodGet, path, nil, &resp); err != nil {
+		return nil, fmt.Errorf("pinecone list vectors: %w", err)
+	}
+
+	if offset >= len(resp.Vectors) {
+		return []string{}, nil
+	}
+
+	end := offset + limit
+	if end > len(resp.Vectors) {
+		end = len(resp.Vectors)
+	}
+
+	ids := make([]string, 0, end-offset)
+	for _, v := range resp.Vectors[offset:end] {
+		ids = append(ids, v.ID)
+	}
+
+	return ids, nil
+}
+
 // ClearAll deletes all vectors from the Pinecone index (or namespace).
 func (s *PineconeStore) ClearAll(ctx context.Context) error {
 	req := struct {

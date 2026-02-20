@@ -3,6 +3,8 @@ package workflow
 import (
 	"context"
 	"fmt"
+
+	"github.com/BaSui01/agentflow/agent"
 )
 
 // ============================================================
@@ -365,4 +367,93 @@ func (a *AgentAdapter) ID() string {
 // Name implements AgentExecutor.
 func (a *AgentAdapter) Name() string {
 	return a.agent.Name()
+}
+
+// ============================================================
+// NativeAgentAdapter — bridges agent.Agent to AgentExecutor
+// ============================================================
+
+// NativeAgentAdapter adapts an agent.Agent (with *Input/*Output signatures)
+// to the AgentExecutor interface used by workflow steps.
+//
+// Input conversion (any -> *agent.Input):
+//   - *agent.Input: passed through directly
+//   - string: wrapped as Input.Content
+//   - map[string]any: Content extracted from "content" key, rest goes to Context
+//   - other types: converted to string via fmt.Sprintf and set as Content
+//
+// Output: returns the *agent.Output directly (callers can type-assert).
+type NativeAgentAdapter struct {
+	agent agent.Agent
+}
+
+// NewNativeAgentAdapter creates an adapter that bridges agent.Agent to AgentExecutor.
+func NewNativeAgentAdapter(a agent.Agent) *NativeAgentAdapter {
+	return &NativeAgentAdapter{agent: a}
+}
+
+// Execute implements AgentExecutor. It converts the workflow input to *agent.Input,
+// calls agent.Execute, and returns the *agent.Output.
+func (n *NativeAgentAdapter) Execute(ctx context.Context, input any) (any, error) {
+	agentInput, err := toAgentInput(input)
+	if err != nil {
+		return nil, fmt.Errorf("NativeAgentAdapter: input conversion failed: %w", err)
+	}
+
+	output, err := n.agent.Execute(ctx, agentInput)
+	if err != nil {
+		return nil, fmt.Errorf("NativeAgentAdapter: agent execution failed: %w", err)
+	}
+
+	return output, nil
+}
+
+// ID implements AgentExecutor.
+func (n *NativeAgentAdapter) ID() string {
+	return n.agent.ID()
+}
+
+// Name implements AgentExecutor.
+func (n *NativeAgentAdapter) Name() string {
+	return n.agent.Name()
+}
+
+// toAgentInput converts a workflow any value to *agent.Input.
+func toAgentInput(input any) (*agent.Input, error) {
+	if input == nil {
+		return &agent.Input{}, nil
+	}
+
+	switch v := input.(type) {
+	case *agent.Input:
+		return v, nil
+	case string:
+		return &agent.Input{Content: v}, nil
+	case map[string]any:
+		inp := &agent.Input{}
+		if content, ok := v["content"].(string); ok {
+			inp.Content = content
+		}
+		if traceID, ok := v["trace_id"].(string); ok {
+			inp.TraceID = traceID
+		}
+		if tenantID, ok := v["tenant_id"].(string); ok {
+			inp.TenantID = tenantID
+		}
+		if userID, ok := v["user_id"].(string); ok {
+			inp.UserID = userID
+		}
+		if channelID, ok := v["channel_id"].(string); ok {
+			inp.ChannelID = channelID
+		}
+		if ctxMap, ok := v["context"].(map[string]any); ok {
+			inp.Context = ctxMap
+		}
+		if vars, ok := v["variables"].(map[string]string); ok {
+			inp.Variables = vars
+		}
+		return inp, nil
+	default:
+		return &agent.Input{Content: fmt.Sprintf("%v", v)}, nil
+	}
 }

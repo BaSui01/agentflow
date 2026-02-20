@@ -63,7 +63,15 @@ type DocumentChunker struct {
 	logger    *zap.Logger
 }
 
-// Tokenizer 分词器接口
+// Tokenizer 分词器接口（RAG 分块专用）。
+//
+// 注意：项目中存在三个 Tokenizer 接口，各自服务不同层次，无法统一：
+//   - types.Tokenizer          — 框架层，面向 Message/ToolSchema，无 error 返回
+//   - llm/tokenizer.Tokenizer  — LLM 层，完整编解码 + error 返回 + 模型感知
+//   - rag.Tokenizer（本接口）  — RAG 分块专用，最小接口（CountTokens + Encode），无 error
+//
+// 若需将 llm/tokenizer.Tokenizer 适配为本接口，使用 NewLLMTokenizerAdapter()。
+// 统一会导致循环依赖（rag → types.Message）或强制不必要的方法签名变更。
 type Tokenizer interface {
 	CountTokens(text string) int
 	Encode(text string) []int

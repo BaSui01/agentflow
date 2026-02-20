@@ -415,6 +415,71 @@ func (s *QdrantStore) Count(ctx context.Context) (int, error) {
 	return resp.Result.Count, nil
 }
 
+// ListDocumentIDs returns a paginated list of document IDs stored in the Qdrant collection.
+// It uses the scroll API to retrieve points and extracts the original document ID from the payload.
+func (s *QdrantStore) ListDocumentIDs(ctx context.Context, limit int, offset int) ([]string, error) {
+	if strings.TrimSpace(s.cfg.Collection) == "" {
+		return nil, fmt.Errorf("qdrant collection is required")
+	}
+	if limit <= 0 {
+		return []string{}, nil
+	}
+
+	// Qdrant scroll API uses an offset point ID for pagination.
+	// We fetch offset+limit points and discard the first `offset`.
+	fetchLimit := offset + limit
+
+	req := struct {
+		Limit       int  `json:"limit"`
+		WithPayload any  `json:"with_payload"`
+		WithVector  bool `json:"with_vector"`
+	}{
+		Limit: fetchLimit,
+		WithPayload: map[string]any{
+			"include": []string{s.cfg.PayloadIDField},
+		},
+		WithVector: false,
+	}
+
+	var resp struct {
+		Result struct {
+			Points []struct {
+				ID      any            `json:"id"`
+				Payload map[string]any `json:"payload"`
+			} `json:"points"`
+		} `json:"result"`
+	}
+
+	path := fmt.Sprintf("/collections/%s/points/scroll", url.PathEscape(s.cfg.Collection))
+	if err := s.doJSON(ctx, http.MethodPost, path, req, &resp); err != nil {
+		return nil, fmt.Errorf("qdrant scroll points: %w", err)
+	}
+
+	points := resp.Result.Points
+	if offset >= len(points) {
+		return []string{}, nil
+	}
+
+	end := offset + limit
+	if end > len(points) {
+		end = len(points)
+	}
+
+	ids := make([]string, 0, end-offset)
+	for _, p := range points[offset:end] {
+		if p.Payload != nil {
+			if docID, ok := p.Payload[s.cfg.PayloadIDField].(string); ok && docID != "" {
+				ids = append(ids, docID)
+				continue
+			}
+		}
+		// Fallback to point ID
+		ids = append(ids, fmt.Sprint(p.ID))
+	}
+
+	return ids, nil
+}
+
 // ClearAll deletes all points from the Qdrant collection.
 // It uses the delete-by-filter API with a match-all filter to remove all points
 // while preserving the collection schema.

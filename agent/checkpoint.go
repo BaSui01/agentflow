@@ -65,7 +65,13 @@ type CheckpointVersion struct {
 	Summary   string    `json:"summary"`
 }
 
-// CheckpointStore 检查点存储接口
+// CheckpointStore 检查点存储接口（Agent 层）。
+//
+// 注意：项目中存在两个 CheckpointStore 接口，操作不同的检查点类型：
+//   - agent.CheckpointStore（本接口）   — 操作 *agent.Checkpoint，含 List/DeleteThread/Rollback
+//   - workflow.CheckpointStore          — 操作 *workflow.EnhancedCheckpoint，用于 DAG 工作流时间旅行
+//
+// 两者的检查点结构体字段不同（Agent 状态 vs DAG 节点结果），无法统一。
 type CheckpointStore interface {
 	// Save 保存检查点
 	Save(ctx context.Context, checkpoint *Checkpoint) error

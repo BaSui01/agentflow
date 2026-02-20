@@ -43,7 +43,14 @@ type AuditEntry struct {
 	RequestIP     string            `json:"request_ip,omitempty"`
 }
 
-// AuditLogger 定义审计日志的接口.
+// AuditLogger 定义工具层审计日志的接口.
+//
+// 注意：项目中存在三个 AuditLogger 接口，各自服务不同领域，无法统一：
+//   - llm.AuditLogger                   — 框架级，记录 AuditEvent（通用事件）
+//   - llm/tools.AuditLogger（本接口）   — 工具层，记录 *AuditEntry（工具调用/权限/成本），含 LogAsync/Close
+//   - agent/guardrails.AuditLogger      — 护栏层，记录 *AuditLogEntry（验证失败/PII/注入），含 Count
+//
+// 三者的事件类型、过滤器结构和方法签名均不同，统一会导致接口膨胀。
 type AuditLogger interface {
 	// Log 同步记录一条审计条目。
 	Log(ctx context.Context, entry *AuditEntry) error

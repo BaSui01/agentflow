@@ -498,7 +498,14 @@ type AuditLogEntry struct {
 	Metadata map[string]any `json:"metadata,omitempty"`
 }
 
-// AuditLogger 审计日志记录器接口
+// AuditLogger 护栏层审计日志记录器接口。
+//
+// 注意：项目中存在三个 AuditLogger 接口，各自服务不同领域，无法统一：
+//   - llm.AuditLogger                        — 框架级，记录 AuditEvent（通用事件）
+//   - llm/tools.AuditLogger                  — 工具层，记录 *AuditEntry（工具调用/权限/成本），含 LogAsync/Close
+//   - agent/guardrails.AuditLogger（本接口） — 护栏层，记录 *AuditLogEntry（验证失败/PII/注入），含 Count
+//
+// 三者的事件类型、过滤器结构和方法签名均不同，统一会导致接口膨胀。
 type AuditLogger interface {
 	// Log 记录审计日志
 	Log(ctx context.Context, entry *AuditLogEntry) error

@@ -765,6 +765,46 @@ func (s *MilvusStore) Flush(ctx context.Context) error {
 	return nil
 }
 
+// ListDocumentIDs returns a paginated list of document IDs stored in the Milvus collection.
+// It uses the query API with an output field of "doc_id" to retrieve original document IDs.
+func (s *MilvusStore) ListDocumentIDs(ctx context.Context, limit int, offset int) ([]string, error) {
+	if strings.TrimSpace(s.cfg.Collection) == "" {
+		return nil, fmt.Errorf("milvus collection is required")
+	}
+	if limit <= 0 {
+		return []string{}, nil
+	}
+
+	req := map[string]any{
+		"dbName":         s.cfg.Database,
+		"collectionName": s.cfg.Collection,
+		"outputFields":   []string{"doc_id"},
+		"limit":          limit,
+		"offset":         offset,
+	}
+
+	var resp struct {
+		Code    int    `json:"code"`
+		Message string `json:"message"`
+		Data    []struct {
+			DocID string `json:"doc_id"`
+		} `json:"data"`
+	}
+
+	if err := s.doJSON(ctx, http.MethodPost, "/v2/vectordb/entities/query", req, &resp); err != nil {
+		return nil, fmt.Errorf("milvus query entities: %w", err)
+	}
+
+	ids := make([]string, 0, len(resp.Data))
+	for _, item := range resp.Data {
+		if item.DocID != "" {
+			ids = append(ids, item.DocID)
+		}
+	}
+
+	return ids, nil
+}
+
 // ClearAll drops and recreates the Milvus collection, effectively removing all data.
 // The collection schema and index will be recreated on the next AddDocuments call.
 func (s *MilvusStore) ClearAll(ctx context.Context) error {

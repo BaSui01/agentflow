@@ -746,6 +746,59 @@ func (s *WeaviateStore) GetSchema(ctx context.Context) (map[string]any, error) {
 	return schema, nil
 }
 
+// ListDocumentIDs returns a paginated list of document IDs stored in the Weaviate class.
+// It uses a GraphQL query to retrieve the docId property with limit and offset.
+func (s *WeaviateStore) ListDocumentIDs(ctx context.Context, limit int, offset int) ([]string, error) {
+	if strings.TrimSpace(s.cfg.ClassName) == "" {
+		return nil, fmt.Errorf("weaviate class_name is required")
+	}
+	if limit <= 0 {
+		return []string{}, nil
+	}
+
+	graphql := fmt.Sprintf(`{
+		Get {
+			%s(
+				limit: %d
+				offset: %d
+			) {
+				%s
+			}
+		}
+	}`, s.cfg.ClassName, limit, offset, s.cfg.DocIDProperty)
+
+	query := map[string]any{
+		"query": graphql,
+	}
+
+	var resp struct {
+		Data struct {
+			Get map[string][]map[string]any `json:"Get"`
+		} `json:"data"`
+		Errors []struct {
+			Message string `json:"message"`
+		} `json:"errors"`
+	}
+
+	if err := s.doJSON(ctx, http.MethodPost, "/v1/graphql", query, &resp); err != nil {
+		return nil, fmt.Errorf("weaviate list document IDs: %w", err)
+	}
+
+	if len(resp.Errors) > 0 {
+		return nil, fmt.Errorf("weaviate graphql error: %s", resp.Errors[0].Message)
+	}
+
+	results := resp.Data.Get[s.cfg.ClassName]
+	ids := make([]string, 0, len(results))
+	for _, r := range results {
+		if docID, ok := r[s.cfg.DocIDProperty].(string); ok && docID != "" {
+			ids = append(ids, docID)
+		}
+	}
+
+	return ids, nil
+}
+
 // ClearAll deletes the entire Weaviate class and resets the schema guard so it
 // can be recreated on the next AddDocuments call.
 func (s *WeaviateStore) ClearAll(ctx context.Context) error {

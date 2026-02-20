@@ -54,7 +54,14 @@ type AuditEvent struct {
 	Metadata   map[string]any
 }
 
-// AuditLogger 提供审计日志记录功能。
+// AuditLogger 提供审计日志记录功能（框架级扩展点）。
+//
+// 注意：项目中存在三个 AuditLogger 接口，各自服务不同领域，无法统一：
+//   - llm.AuditLogger（本接口）         — 框架级，记录 AuditEvent（通用事件）
+//   - llm/tools.AuditLogger             — 工具层，记录 *AuditEntry（工具调用/权限/成本），含 LogAsync/Close
+//   - agent/guardrails.AuditLogger      — 护栏层，记录 *AuditLogEntry（验证失败/PII/注入），含 Count
+//
+// 三者的事件类型、过滤器结构和方法签名均不同，统一会导致接口膨胀。
 type AuditLogger interface {
 	Log(ctx context.Context, event AuditEvent) error
 	Query(ctx context.Context, filter AuditFilter) ([]AuditEvent, error)
