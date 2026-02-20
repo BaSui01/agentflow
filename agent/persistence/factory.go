@@ -2,7 +2,6 @@ package persistence
 
 import (
 	"fmt"
-	"log"
 	"os"
 )
 
@@ -79,7 +78,7 @@ func MustNewTaskStore(config StoreConfig) TaskStore {
 func NewMessageStoreOrExit(config StoreConfig) MessageStore {
 	store, err := NewMessageStore(config)
 	if err != nil {
-		log.Printf("FATAL: failed to create message store: %v", err)
+		fmt.Fprintf(os.Stderr, "FATAL: failed to create message store: %v\n", err)
 		os.Exit(1)
 	}
 	return store
@@ -90,7 +89,7 @@ func NewMessageStoreOrExit(config StoreConfig) MessageStore {
 func NewTaskStoreOrExit(config StoreConfig) TaskStore {
 	store, err := NewTaskStore(config)
 	if err != nil {
-		log.Printf("FATAL: failed to create task store: %v", err)
+		fmt.Fprintf(os.Stderr, "FATAL: failed to create task store: %v\n", err)
 		os.Exit(1)
 	}
 	return store

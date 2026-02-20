@@ -22,16 +22,19 @@ import (
 // Endpoint: POST /v1/images/generations
 // Models: dall-e-3, dall-e-2, gpt-image-1
 func (p *OpenAIProvider) GenerateImage(ctx context.Context, req *llm.ImageGenerationRequest) (*llm.ImageGenerationResponse, error) {
-	endpoint := fmt.Sprintf("%s/v1/images/generations", strings.TrimRight(p.cfg.BaseURL, "/"))
+	endpoint := fmt.Sprintf("%s/v1/images/generations", strings.TrimRight(p.openaiCfg.BaseURL, "/"))
 
-	payload, _ := json.Marshal(req)
+	payload, err := json.Marshal(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal request: %w", err)
+	}
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(payload))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
-	p.buildHeaders(httpReq, p.cfg.APIKey)
+	p.Provider.Cfg.BuildHeaders(httpReq, p.openaiCfg.APIKey)
 
-	resp, err := p.client.Do(httpReq)
+	resp, err := p.Provider.Client.Do(httpReq)
 	if err != nil {
 		return nil, &llm.Error{
 			Code:       llm.ErrUpstreamError,
@@ -80,16 +83,19 @@ func (p *OpenAIProvider) GenerateVideo(ctx context.Context, req *llm.VideoGenera
 // Endpoint: POST /v1/audio/speech
 // Models: tts-1, tts-1-hd, gpt-4o-mini-tts
 func (p *OpenAIProvider) GenerateAudio(ctx context.Context, req *llm.AudioGenerationRequest) (*llm.AudioGenerationResponse, error) {
-	endpoint := fmt.Sprintf("%s/v1/audio/speech", strings.TrimRight(p.cfg.BaseURL, "/"))
+	endpoint := fmt.Sprintf("%s/v1/audio/speech", strings.TrimRight(p.openaiCfg.BaseURL, "/"))
 
-	payload, _ := json.Marshal(req)
+	payload, err := json.Marshal(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal request: %w", err)
+	}
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(payload))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
-	p.buildHeaders(httpReq, p.cfg.APIKey)
+	p.Provider.Cfg.BuildHeaders(httpReq, p.openaiCfg.APIKey)
 
-	resp, err := p.client.Do(httpReq)
+	resp, err := p.Provider.Client.Do(httpReq)
 	if err != nil {
 		return nil, &llm.Error{
 			Code:       llm.ErrUpstreamError,
@@ -127,7 +133,7 @@ func (p *OpenAIProvider) GenerateAudio(ctx context.Context, req *llm.AudioGenera
 // Endpoint: POST /v1/audio/transcriptions
 // Models: whisper-1, gpt-4o-transcribe, gpt-4o-mini-transcribe
 func (p *OpenAIProvider) TranscribeAudio(ctx context.Context, req *llm.AudioTranscriptionRequest) (*llm.AudioTranscriptionResponse, error) {
-	endpoint := fmt.Sprintf("%s/v1/audio/transcriptions", strings.TrimRight(p.cfg.BaseURL, "/"))
+	endpoint := fmt.Sprintf("%s/v1/audio/transcriptions", strings.TrimRight(p.openaiCfg.BaseURL, "/"))
 
 	// 创建多部分形式数据
 	body := &bytes.Buffer{}
@@ -163,10 +169,10 @@ func (p *OpenAIProvider) TranscribeAudio(ctx context.Context, req *llm.AudioTran
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
-	httpReq.Header.Set("Authorization", "Bearer "+p.cfg.APIKey)
+	httpReq.Header.Set("Authorization", "Bearer "+p.openaiCfg.APIKey)
 	httpReq.Header.Set("Content-Type", writer.FormDataContentType())
 
-	resp, err := p.client.Do(httpReq)
+	resp, err := p.Provider.Client.Do(httpReq)
 	if err != nil {
 		return nil, &llm.Error{
 			Code:       llm.ErrUpstreamError,
@@ -205,16 +211,19 @@ func (p *OpenAIProvider) TranscribeAudio(ctx context.Context, req *llm.AudioTran
 // Endpoint: POST /v1/embeddings
 // Models: text-embedding-3-small, text-embedding-3-large, text-embedding-ada-002
 func (p *OpenAIProvider) CreateEmbedding(ctx context.Context, req *llm.EmbeddingRequest) (*llm.EmbeddingResponse, error) {
-	endpoint := fmt.Sprintf("%s/v1/embeddings", strings.TrimRight(p.cfg.BaseURL, "/"))
+	endpoint := fmt.Sprintf("%s/v1/embeddings", strings.TrimRight(p.openaiCfg.BaseURL, "/"))
 
-	payload, _ := json.Marshal(req)
+	payload, err := json.Marshal(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal request: %w", err)
+	}
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(payload))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
-	p.buildHeaders(httpReq, p.cfg.APIKey)
+	p.Provider.Cfg.BuildHeaders(httpReq, p.openaiCfg.APIKey)
 
-	resp, err := p.client.Do(httpReq)
+	resp, err := p.Provider.Client.Do(httpReq)
 	if err != nil {
 		return nil, &llm.Error{
 			Code:       llm.ErrUpstreamError,
@@ -252,16 +261,19 @@ func (p *OpenAIProvider) CreateEmbedding(ctx context.Context, req *llm.Embedding
 // CreateFineTuningJob 创建微调任务.
 // Endpoint: POST /v1/fine_tuning/jobs
 func (p *OpenAIProvider) CreateFineTuningJob(ctx context.Context, req *llm.FineTuningJobRequest) (*llm.FineTuningJob, error) {
-	endpoint := fmt.Sprintf("%s/v1/fine_tuning/jobs", strings.TrimRight(p.cfg.BaseURL, "/"))
+	endpoint := fmt.Sprintf("%s/v1/fine_tuning/jobs", strings.TrimRight(p.openaiCfg.BaseURL, "/"))
 
-	payload, _ := json.Marshal(req)
+	payload, err := json.Marshal(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal request: %w", err)
+	}
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(payload))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
-	p.buildHeaders(httpReq, p.cfg.APIKey)
+	p.Provider.Cfg.BuildHeaders(httpReq, p.openaiCfg.APIKey)
 
-	resp, err := p.client.Do(httpReq)
+	resp, err := p.Provider.Client.Do(httpReq)
 	if err != nil {
 		return nil, &llm.Error{
 			Code:       llm.ErrUpstreamError,
@@ -295,15 +307,15 @@ func (p *OpenAIProvider) CreateFineTuningJob(ctx context.Context, req *llm.FineT
 // ListFineTuningJobs 列出微调任务.
 // Endpoint: GET /v1/fine_tuning/jobs
 func (p *OpenAIProvider) ListFineTuningJobs(ctx context.Context) ([]llm.FineTuningJob, error) {
-	endpoint := fmt.Sprintf("%s/v1/fine_tuning/jobs", strings.TrimRight(p.cfg.BaseURL, "/"))
+	endpoint := fmt.Sprintf("%s/v1/fine_tuning/jobs", strings.TrimRight(p.openaiCfg.BaseURL, "/"))
 
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
-	p.buildHeaders(httpReq, p.cfg.APIKey)
+	p.Provider.Cfg.BuildHeaders(httpReq, p.openaiCfg.APIKey)
 
-	resp, err := p.client.Do(httpReq)
+	resp, err := p.Provider.Client.Do(httpReq)
 	if err != nil {
 		return nil, &llm.Error{
 			Code:       llm.ErrUpstreamError,
@@ -339,15 +351,15 @@ func (p *OpenAIProvider) ListFineTuningJobs(ctx context.Context) ([]llm.FineTuni
 // GetFineTuningJob 通过 ID 获取微调任务.
 // Endpoint: GET /v1/fine_tuning/jobs/{job_id}
 func (p *OpenAIProvider) GetFineTuningJob(ctx context.Context, jobID string) (*llm.FineTuningJob, error) {
-	endpoint := fmt.Sprintf("%s/v1/fine_tuning/jobs/%s", strings.TrimRight(p.cfg.BaseURL, "/"), jobID)
+	endpoint := fmt.Sprintf("%s/v1/fine_tuning/jobs/%s", strings.TrimRight(p.openaiCfg.BaseURL, "/"), jobID)
 
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
-	p.buildHeaders(httpReq, p.cfg.APIKey)
+	p.Provider.Cfg.BuildHeaders(httpReq, p.openaiCfg.APIKey)
 
-	resp, err := p.client.Do(httpReq)
+	resp, err := p.Provider.Client.Do(httpReq)
 	if err != nil {
 		return nil, &llm.Error{
 			Code:       llm.ErrUpstreamError,
@@ -381,15 +393,15 @@ func (p *OpenAIProvider) GetFineTuningJob(ctx context.Context, jobID string) (*l
 // CancelFineTuningJob 取消微调任务.
 // Endpoint: POST /v1/fine_tuning/jobs/{job_id}/cancel
 func (p *OpenAIProvider) CancelFineTuningJob(ctx context.Context, jobID string) error {
-	endpoint := fmt.Sprintf("%s/v1/fine_tuning/jobs/%s/cancel", strings.TrimRight(p.cfg.BaseURL, "/"), jobID)
+	endpoint := fmt.Sprintf("%s/v1/fine_tuning/jobs/%s/cancel", strings.TrimRight(p.openaiCfg.BaseURL, "/"), jobID)
 
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, nil)
 	if err != nil {
 		return fmt.Errorf("failed to create request: %w", err)
 	}
-	p.buildHeaders(httpReq, p.cfg.APIKey)
+	p.Provider.Cfg.BuildHeaders(httpReq, p.openaiCfg.APIKey)
 
-	resp, err := p.client.Do(httpReq)
+	resp, err := p.Provider.Client.Do(httpReq)
 	if err != nil {
 		return &llm.Error{
 			Code:       llm.ErrUpstreamError,

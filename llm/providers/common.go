@@ -288,6 +288,13 @@ func ChooseModel(req *llm.ChatRequest, defaultModel, fallbackModel string) strin
 	return fallbackModel
 }
 
+// BearerTokenHeaders 是标准的 Bearer token 认证 header 构建函数。
+// 用于 multimodal helper 函数的 buildHeadersFunc 参数，避免各 provider 重复定义匿名函数。
+func BearerTokenHeaders(r *http.Request, apiKey string) {
+	r.Header.Set("Authorization", "Bearer "+apiKey)
+	r.Header.Set("Content-Type", "application/json")
+}
+
 // SafeCloseBody 安全关闭 HTTP 响应体并忽略错误
 func SafeCloseBody(body io.ReadCloser) {
 	if body != nil {

@@ -18,9 +18,11 @@ func main() {
 
 	// 2. 配置 OpenAI Provider
 	cfg := providers.OpenAIConfig{
-		APIKey:  "your-api-key-here", // 替换为你的 API Key
-		BaseURL: "https://api.openai.com/v1",
-		Model:   "gpt-3.5-turbo",
+		BaseProviderConfig: providers.BaseProviderConfig{
+			APIKey:  "your-api-key-here", // 替换为你的 API Key
+			BaseURL: "https://api.openai.com/v1",
+			Model:   "gpt-3.5-turbo",
+		},
 	}
 
 	// 3. 创建 Provider

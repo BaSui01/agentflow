@@ -25,7 +25,7 @@ func TestOpenAIProvider_SupportsNativeFunctionCalling(t *testing.T) {
 
 func TestOpenAIProvider_DefaultBaseURL(t *testing.T) {
 	cfg := providers.OpenAIConfig{
-		APIKey: "test-key",
+		BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key"},
 	}
 	provider := NewOpenAIProvider(cfg, zap.NewNop())
 	assert.NotNil(t, provider)
@@ -36,18 +36,18 @@ func TestOpenAIProvider_DefaultModel(t *testing.T) {
 	cfg := providers.OpenAIConfig{}
 	provider := NewOpenAIProvider(cfg, zap.NewNop())
 	
-	model := providers.ChooseModel(req, provider.cfg.Model, "gpt-5.2")
+	model := providers.ChooseModel(req, provider.openaiCfg.Model, "gpt-5.2")
 	assert.Equal(t, "gpt-5.2", model, "Default model should be GPT-5.2 (2026)")
 }
 
 func TestOpenAIProvider_ResponsesAPISupport(t *testing.T) {
 	cfg := providers.OpenAIConfig{
-		APIKey:          "test-key",
-		UseResponsesAPI: true,
+		BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key"},
+		UseResponsesAPI:    true,
 	}
 	provider := NewOpenAIProvider(cfg, zap.NewNop())
 	assert.NotNil(t, provider)
-	assert.True(t, provider.cfg.UseResponsesAPI)
+	assert.True(t, provider.openaiCfg.UseResponsesAPI)
 }
 
 func TestOpenAIProvider_Integration(t *testing.T) {
@@ -57,9 +57,11 @@ func TestOpenAIProvider_Integration(t *testing.T) {
 	}
 
 	provider := NewOpenAIProvider(providers.OpenAIConfig{
-		APIKey:  apiKey,
-		Model:   "gpt-4o-mini",
-		Timeout: 30 * time.Second,
+		BaseProviderConfig: providers.BaseProviderConfig{
+			APIKey:  apiKey,
+			Model:   "gpt-4o-mini",
+			Timeout: 30 * time.Second,
+		},
 	}, zap.NewNop())
 
 	ctx := context.Background()

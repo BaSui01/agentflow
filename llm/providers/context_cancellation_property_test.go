@@ -60,23 +60,23 @@ func TestProperty27_ContextCancellation(t *testing.T) {
 				var err error
 				switch provider {
 				case "grok":
-					cfg := providers.GrokConfig{APIKey: "test", BaseURL: server.URL, Timeout: 30 * time.Second}
+					cfg := providers.GrokConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test", BaseURL: server.URL, Timeout: 30 * time.Second}}
 					p := grok.NewGrokProvider(cfg, logger)
 					_, err = p.HealthCheck(ctx)
 				case "qwen":
-					cfg := providers.QwenConfig{APIKey: "test", BaseURL: server.URL, Timeout: 30 * time.Second}
+					cfg := providers.QwenConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test", BaseURL: server.URL, Timeout: 30 * time.Second}}
 					p := qwen.NewQwenProvider(cfg, logger)
 					_, err = p.HealthCheck(ctx)
 				case "deepseek":
-					cfg := providers.DeepSeekConfig{APIKey: "test", BaseURL: server.URL, Timeout: 30 * time.Second}
+					cfg := providers.DeepSeekConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test", BaseURL: server.URL, Timeout: 30 * time.Second}}
 					p := deepseek.NewDeepSeekProvider(cfg, logger)
 					_, err = p.HealthCheck(ctx)
 				case "glm":
-					cfg := providers.GLMConfig{APIKey: "test", BaseURL: server.URL, Timeout: 30 * time.Second}
+					cfg := providers.GLMConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test", BaseURL: server.URL, Timeout: 30 * time.Second}}
 					p := glm.NewGLMProvider(cfg, logger)
 					_, err = p.HealthCheck(ctx)
 				case "minimax":
-					cfg := providers.MiniMaxConfig{APIKey: "test", BaseURL: server.URL, Timeout: 30 * time.Second}
+					cfg := providers.MiniMaxConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test", BaseURL: server.URL, Timeout: 30 * time.Second}}
 					p := minimax.NewMiniMaxProvider(cfg, logger)
 					_, err = p.HealthCheck(ctx)
 				}
@@ -107,27 +107,27 @@ func TestProperty27_PreCancelledContext(t *testing.T) {
 
 				switch provider {
 				case "grok":
-					cfg := providers.GrokConfig{APIKey: "test", BaseURL: server.URL, Timeout: 30 * time.Second}
+					cfg := providers.GrokConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test", BaseURL: server.URL, Timeout: 30 * time.Second}}
 					p := grok.NewGrokProvider(cfg, logger)
 					_, err := p.HealthCheck(ctx)
 					assert.Error(t, err, "Should fail with pre-cancelled context")
 				case "qwen":
-					cfg := providers.QwenConfig{APIKey: "test", BaseURL: server.URL, Timeout: 30 * time.Second}
+					cfg := providers.QwenConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test", BaseURL: server.URL, Timeout: 30 * time.Second}}
 					p := qwen.NewQwenProvider(cfg, logger)
 					_, err := p.HealthCheck(ctx)
 					assert.Error(t, err, "Should fail with pre-cancelled context")
 				case "deepseek":
-					cfg := providers.DeepSeekConfig{APIKey: "test", BaseURL: server.URL, Timeout: 30 * time.Second}
+					cfg := providers.DeepSeekConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test", BaseURL: server.URL, Timeout: 30 * time.Second}}
 					p := deepseek.NewDeepSeekProvider(cfg, logger)
 					_, err := p.HealthCheck(ctx)
 					assert.Error(t, err, "Should fail with pre-cancelled context")
 				case "glm":
-					cfg := providers.GLMConfig{APIKey: "test", BaseURL: server.URL, Timeout: 30 * time.Second}
+					cfg := providers.GLMConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test", BaseURL: server.URL, Timeout: 30 * time.Second}}
 					p := glm.NewGLMProvider(cfg, logger)
 					_, err := p.HealthCheck(ctx)
 					assert.Error(t, err, "Should fail with pre-cancelled context")
 				case "minimax":
-					cfg := providers.MiniMaxConfig{APIKey: "test", BaseURL: server.URL, Timeout: 30 * time.Second}
+					cfg := providers.MiniMaxConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test", BaseURL: server.URL, Timeout: 30 * time.Second}}
 					p := minimax.NewMiniMaxProvider(cfg, logger)
 					_, err := p.HealthCheck(ctx)
 					assert.Error(t, err, "Should fail with pre-cancelled context")
@@ -170,23 +170,23 @@ func TestProperty27_ContextTimeout(t *testing.T) {
 
 				switch provider {
 				case "grok":
-					cfg := providers.GrokConfig{APIKey: "test", BaseURL: server.URL, Timeout: 30 * time.Second}
+					cfg := providers.GrokConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test", BaseURL: server.URL, Timeout: 30 * time.Second}}
 					p := grok.NewGrokProvider(cfg, logger)
 					_, err = p.HealthCheck(ctx)
 				case "qwen":
-					cfg := providers.QwenConfig{APIKey: "test", BaseURL: server.URL, Timeout: 30 * time.Second}
+					cfg := providers.QwenConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test", BaseURL: server.URL, Timeout: 30 * time.Second}}
 					p := qwen.NewQwenProvider(cfg, logger)
 					_, err = p.HealthCheck(ctx)
 				case "deepseek":
-					cfg := providers.DeepSeekConfig{APIKey: "test", BaseURL: server.URL, Timeout: 30 * time.Second}
+					cfg := providers.DeepSeekConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test", BaseURL: server.URL, Timeout: 30 * time.Second}}
 					p := deepseek.NewDeepSeekProvider(cfg, logger)
 					_, err = p.HealthCheck(ctx)
 				case "glm":
-					cfg := providers.GLMConfig{APIKey: "test", BaseURL: server.URL, Timeout: 30 * time.Second}
+					cfg := providers.GLMConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test", BaseURL: server.URL, Timeout: 30 * time.Second}}
 					p := glm.NewGLMProvider(cfg, logger)
 					_, err = p.HealthCheck(ctx)
 				case "minimax":
-					cfg := providers.MiniMaxConfig{APIKey: "test", BaseURL: server.URL, Timeout: 30 * time.Second}
+					cfg := providers.MiniMaxConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test", BaseURL: server.URL, Timeout: 30 * time.Second}}
 					p := minimax.NewMiniMaxProvider(cfg, logger)
 					_, err = p.HealthCheck(ctx)
 				}
@@ -249,7 +249,7 @@ func TestProperty27_StreamCancellation(t *testing.T) {
 
 				switch provider {
 				case "grok":
-					cfg := providers.GrokConfig{APIKey: "test", BaseURL: server.URL, Timeout: 30 * time.Second}
+					cfg := providers.GrokConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test", BaseURL: server.URL, Timeout: 30 * time.Second}}
 					p := grok.NewGrokProvider(cfg, logger)
 					ch, err := p.Stream(ctx, req)
 					if err == nil && ch != nil {
@@ -257,7 +257,7 @@ func TestProperty27_StreamCancellation(t *testing.T) {
 						}
 					}
 				case "qwen":
-					cfg := providers.QwenConfig{APIKey: "test", BaseURL: server.URL, Timeout: 30 * time.Second}
+					cfg := providers.QwenConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test", BaseURL: server.URL, Timeout: 30 * time.Second}}
 					p := qwen.NewQwenProvider(cfg, logger)
 					ch, err := p.Stream(ctx, req)
 					if err == nil && ch != nil {
@@ -265,7 +265,7 @@ func TestProperty27_StreamCancellation(t *testing.T) {
 						}
 					}
 				case "deepseek":
-					cfg := providers.DeepSeekConfig{APIKey: "test", BaseURL: server.URL, Timeout: 30 * time.Second}
+					cfg := providers.DeepSeekConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test", BaseURL: server.URL, Timeout: 30 * time.Second}}
 					p := deepseek.NewDeepSeekProvider(cfg, logger)
 					ch, err := p.Stream(ctx, req)
 					if err == nil && ch != nil {
@@ -273,7 +273,7 @@ func TestProperty27_StreamCancellation(t *testing.T) {
 						}
 					}
 				case "glm":
-					cfg := providers.GLMConfig{APIKey: "test", BaseURL: server.URL, Timeout: 30 * time.Second}
+					cfg := providers.GLMConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test", BaseURL: server.URL, Timeout: 30 * time.Second}}
 					p := glm.NewGLMProvider(cfg, logger)
 					ch, err := p.Stream(ctx, req)
 					if err == nil && ch != nil {
@@ -281,7 +281,7 @@ func TestProperty27_StreamCancellation(t *testing.T) {
 						}
 					}
 				case "minimax":
-					cfg := providers.MiniMaxConfig{APIKey: "test", BaseURL: server.URL, Timeout: 30 * time.Second}
+					cfg := providers.MiniMaxConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test", BaseURL: server.URL, Timeout: 30 * time.Second}}
 					p := minimax.NewMiniMaxProvider(cfg, logger)
 					ch, err := p.Stream(ctx, req)
 					if err == nil && ch != nil {
@@ -321,23 +321,23 @@ func TestProperty27_CancellationCleanup(t *testing.T) {
 
 					switch provider {
 					case "grok":
-						cfg := providers.GrokConfig{APIKey: "test", BaseURL: server.URL, Timeout: 30 * time.Second}
+						cfg := providers.GrokConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test", BaseURL: server.URL, Timeout: 30 * time.Second}}
 						p := grok.NewGrokProvider(cfg, logger)
 						_, _ = p.HealthCheck(ctx)
 					case "qwen":
-						cfg := providers.QwenConfig{APIKey: "test", BaseURL: server.URL, Timeout: 30 * time.Second}
+						cfg := providers.QwenConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test", BaseURL: server.URL, Timeout: 30 * time.Second}}
 						p := qwen.NewQwenProvider(cfg, logger)
 						_, _ = p.HealthCheck(ctx)
 					case "deepseek":
-						cfg := providers.DeepSeekConfig{APIKey: "test", BaseURL: server.URL, Timeout: 30 * time.Second}
+						cfg := providers.DeepSeekConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test", BaseURL: server.URL, Timeout: 30 * time.Second}}
 						p := deepseek.NewDeepSeekProvider(cfg, logger)
 						_, _ = p.HealthCheck(ctx)
 					case "glm":
-						cfg := providers.GLMConfig{APIKey: "test", BaseURL: server.URL, Timeout: 30 * time.Second}
+						cfg := providers.GLMConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test", BaseURL: server.URL, Timeout: 30 * time.Second}}
 						p := glm.NewGLMProvider(cfg, logger)
 						_, _ = p.HealthCheck(ctx)
 					case "minimax":
-						cfg := providers.MiniMaxConfig{APIKey: "test", BaseURL: server.URL, Timeout: 30 * time.Second}
+						cfg := providers.MiniMaxConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test", BaseURL: server.URL, Timeout: 30 * time.Second}}
 						p := minimax.NewMiniMaxProvider(cfg, logger)
 						_, _ = p.HealthCheck(ctx)
 					}

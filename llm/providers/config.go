@@ -2,109 +2,80 @@ package providers
 
 import "time"
 
+// BaseProviderConfig 所有 Provider 共享的基础配置字段。
+// 通过嵌入此结构体，各 Provider 的 Config 自动获得 APIKey、BaseURL、Model、Timeout 四个字段，
+// 避免重复定义。
+type BaseProviderConfig struct {
+	APIKey  string        `json:"api_key" yaml:"api_key"`
+	BaseURL string        `json:"base_url" yaml:"base_url"`
+	Model   string        `json:"model,omitempty" yaml:"model,omitempty"`
+	Timeout time.Duration `json:"timeout,omitempty" yaml:"timeout,omitempty"`
+}
+
 // OpenAIConfig OpenAI Provider 配置
 type OpenAIConfig struct {
-	APIKey          string        `json:"api_key" yaml:"api_key"`
-	BaseURL         string        `json:"base_url" yaml:"base_url"`
-	Organization    string        `json:"organization,omitempty" yaml:"organization,omitempty"`
-	Model           string        `json:"model,omitempty" yaml:"model,omitempty"`
-	Timeout         time.Duration `json:"timeout,omitempty" yaml:"timeout,omitempty"`
-	UseResponsesAPI bool          `json:"use_responses_api,omitempty" yaml:"use_responses_api,omitempty"` // 启用新的 Responses API (2025)
+	BaseProviderConfig `yaml:",inline"`
+	Organization       string `json:"organization,omitempty" yaml:"organization,omitempty"`
+	UseResponsesAPI    bool   `json:"use_responses_api,omitempty" yaml:"use_responses_api,omitempty"` // 启用新的 Responses API (2025)
 }
 
 // ClaudeConfig Claude Provider 配置
 type ClaudeConfig struct {
-	APIKey  string        `json:"api_key" yaml:"api_key"`
-	BaseURL string        `json:"base_url" yaml:"base_url"`
-	Model   string        `json:"model,omitempty" yaml:"model,omitempty"`
-	Timeout time.Duration `json:"timeout,omitempty" yaml:"timeout,omitempty"`
+	BaseProviderConfig `yaml:",inline"`
 }
 
 // GeminiConfig Gemini Provider 配置
 type GeminiConfig struct {
-	APIKey  string        `json:"api_key" yaml:"api_key"`
-	BaseURL string        `json:"base_url" yaml:"base_url"`
-	Model   string        `json:"model,omitempty" yaml:"model,omitempty"`
-	Timeout time.Duration `json:"timeout,omitempty" yaml:"timeout,omitempty"`
+	BaseProviderConfig `yaml:",inline"`
 }
 
 // GrokConfig xAI Grok Provider 配置
 type GrokConfig struct {
-	APIKey  string        `json:"api_key" yaml:"api_key"`
-	BaseURL string        `json:"base_url" yaml:"base_url"`
-	Model   string        `json:"model,omitempty" yaml:"model,omitempty"`
-	Timeout time.Duration `json:"timeout,omitempty" yaml:"timeout,omitempty"`
+	BaseProviderConfig `yaml:",inline"`
 }
 
 // GLMConfig Zhipu AI GLM Provider 配置
 type GLMConfig struct {
-	APIKey  string        `json:"api_key" yaml:"api_key"`
-	BaseURL string        `json:"base_url" yaml:"base_url"`
-	Model   string        `json:"model,omitempty" yaml:"model,omitempty"`
-	Timeout time.Duration `json:"timeout,omitempty" yaml:"timeout,omitempty"`
+	BaseProviderConfig `yaml:",inline"`
 }
 
 // MiniMaxConfig MiniMax Provider 配置
 type MiniMaxConfig struct {
-	APIKey  string        `json:"api_key" yaml:"api_key"`
-	BaseURL string        `json:"base_url" yaml:"base_url"`
-	Model   string        `json:"model,omitempty" yaml:"model,omitempty"`
-	Timeout time.Duration `json:"timeout,omitempty" yaml:"timeout,omitempty"`
+	BaseProviderConfig `yaml:",inline"`
 }
 
 // QwenConfig Alibaba Qwen Provider 配置
 type QwenConfig struct {
-	APIKey  string        `json:"api_key" yaml:"api_key"`
-	BaseURL string        `json:"base_url" yaml:"base_url"`
-	Model   string        `json:"model,omitempty" yaml:"model,omitempty"`
-	Timeout time.Duration `json:"timeout,omitempty" yaml:"timeout,omitempty"`
+	BaseProviderConfig `yaml:",inline"`
 }
 
 // DeepSeekConfig DeepSeek Provider 配置
 type DeepSeekConfig struct {
-	APIKey  string        `json:"api_key" yaml:"api_key"`
-	BaseURL string        `json:"base_url" yaml:"base_url"`
-	Model   string        `json:"model,omitempty" yaml:"model,omitempty"`
-	Timeout time.Duration `json:"timeout,omitempty" yaml:"timeout,omitempty"`
+	BaseProviderConfig `yaml:",inline"`
 }
 
 // MistralConfig Mistral AI Provider 配置
 type MistralConfig struct {
-	APIKey  string        `json:"api_key" yaml:"api_key"`
-	BaseURL string        `json:"base_url" yaml:"base_url"`
-	Model   string        `json:"model,omitempty" yaml:"model,omitempty"`
-	Timeout time.Duration `json:"timeout,omitempty" yaml:"timeout,omitempty"`
+	BaseProviderConfig `yaml:",inline"`
 }
 
 // HunyuanConfig Tencent Hunyuan Provider 配置
 type HunyuanConfig struct {
-	APIKey  string        `json:"api_key" yaml:"api_key"`
-	BaseURL string        `json:"base_url" yaml:"base_url"`
-	Model   string        `json:"model,omitempty" yaml:"model,omitempty"`
-	Timeout time.Duration `json:"timeout,omitempty" yaml:"timeout,omitempty"`
+	BaseProviderConfig `yaml:",inline"`
 }
 
 // KimiConfig Moonshot Kimi Provider 配置
 type KimiConfig struct {
-	APIKey  string        `json:"api_key" yaml:"api_key"`
-	BaseURL string        `json:"base_url" yaml:"base_url"`
-	Model   string        `json:"model,omitempty" yaml:"model,omitempty"`
-	Timeout time.Duration `json:"timeout,omitempty" yaml:"timeout,omitempty"`
+	BaseProviderConfig `yaml:",inline"`
 }
 
 // LlamaConfig Meta Llama Provider 配置 (via Together AI/Replicate)
 type LlamaConfig struct {
-	APIKey   string        `json:"api_key" yaml:"api_key"`
-	BaseURL  string        `json:"base_url" yaml:"base_url"`
-	Model    string        `json:"model,omitempty" yaml:"model,omitempty"`
-	Timeout  time.Duration `json:"timeout,omitempty" yaml:"timeout,omitempty"`
-	Provider string        `json:"provider,omitempty" yaml:"provider,omitempty"` // together/replicate/openrouter
+	BaseProviderConfig `yaml:",inline"`
+	Provider           string `json:"provider,omitempty" yaml:"provider,omitempty"` // together/replicate/openrouter
 }
 
 // DoubaoConfig ByteDance Doubao Provider 配置
 type DoubaoConfig struct {
-	APIKey  string        `json:"api_key" yaml:"api_key"`
-	BaseURL string        `json:"base_url" yaml:"base_url"` // Default: https://ark.cn-beijing.volces.com/api/v3
-	Model   string        `json:"model,omitempty" yaml:"model,omitempty"` // Default: Doubao-1.5-pro-32k
-	Timeout time.Duration `json:"timeout,omitempty" yaml:"timeout,omitempty"`
+	BaseProviderConfig `yaml:",inline"`
 }

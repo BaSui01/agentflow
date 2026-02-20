@@ -24,9 +24,7 @@ func TestMistralProvider_SupportsNativeFunctionCalling(t *testing.T) {
 }
 
 func TestMistralProvider_DefaultBaseURL(t *testing.T) {
-	cfg := providers.MistralConfig{
-		APIKey: "test-key",
-	}
+	cfg := providers.MistralConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key"}}
 	provider := NewMistralProvider(cfg, zap.NewNop())
 	assert.NotNil(t, provider)
 }
@@ -38,9 +36,11 @@ func TestMistralProvider_Integration(t *testing.T) {
 	}
 
 	provider := NewMistralProvider(providers.MistralConfig{
-		APIKey:  apiKey,
-		Model:   "mistral-small-latest",
-		Timeout: 30 * time.Second,
+		BaseProviderConfig: providers.BaseProviderConfig{
+			APIKey:  apiKey,
+			Model:   "mistral-small-latest",
+			Timeout: 30 * time.Second,
+		},
 	}, zap.NewNop())
 
 	ctx := context.Background()

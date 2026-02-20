@@ -11,14 +11,24 @@ import (
 )
 
 // =============================================================================
-// 图像生成助手
+// OpenAI 兼容 API 通用请求执行
 // =============================================================================
 
-// GenerateImageOpenAICompat 通用的 OpenAI 兼容图像生成函数
-func GenerateImageOpenAICompat(ctx context.Context, client *http.Client, baseURL, apiKey, providerName, endpoint string, req *llm.ImageGenerationRequest, buildHeadersFunc func(*http.Request, string)) (*llm.ImageGenerationResponse, error) {
+// doOpenAICompatRequest 是 OpenAI 兼容 API 的通用 HTTP 请求执行函数。
+// 它封装了 marshal -> create request -> set headers -> do -> check status -> decode 的完整流程。
+func doOpenAICompatRequest[Req any, Resp any](
+	ctx context.Context,
+	client *http.Client,
+	baseURL, apiKey, providerName, endpoint string,
+	req *Req,
+	buildHeadersFunc func(*http.Request, string),
+) (*Resp, error) {
 	fullEndpoint := fmt.Sprintf("%s%s", baseURL, endpoint)
 
-	payload, _ := json.Marshal(req)
+	payload, err := json.Marshal(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal request: %w", err)
+	}
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, fullEndpoint, bytes.NewReader(payload))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
@@ -42,8 +52,8 @@ func GenerateImageOpenAICompat(ctx context.Context, client *http.Client, baseURL
 		return nil, MapHTTPError(resp.StatusCode, msg, providerName)
 	}
 
-	var imageResp llm.ImageGenerationResponse
-	if err := json.NewDecoder(resp.Body).Decode(&imageResp); err != nil {
+	var result Resp
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		return nil, &llm.Error{
 			Code:       llm.ErrUpstreamError,
 			Message:    err.Error(),
@@ -53,7 +63,16 @@ func GenerateImageOpenAICompat(ctx context.Context, client *http.Client, baseURL
 		}
 	}
 
-	return &imageResp, nil
+	return &result, nil
+}
+
+// =============================================================================
+// 图像生成助手
+// =============================================================================
+
+// GenerateImageOpenAICompat 通用的 OpenAI 兼容图像生成函数
+func GenerateImageOpenAICompat(ctx context.Context, client *http.Client, baseURL, apiKey, providerName, endpoint string, req *llm.ImageGenerationRequest, buildHeadersFunc func(*http.Request, string)) (*llm.ImageGenerationResponse, error) {
+	return doOpenAICompatRequest[llm.ImageGenerationRequest, llm.ImageGenerationResponse](ctx, client, baseURL, apiKey, providerName, endpoint, req, buildHeadersFunc)
 }
 
 // =============================================================================
@@ -62,44 +81,7 @@ func GenerateImageOpenAICompat(ctx context.Context, client *http.Client, baseURL
 
 // GenerateVideoOpenAICompat 通用的 OpenAI 兼容视频生成函数
 func GenerateVideoOpenAICompat(ctx context.Context, client *http.Client, baseURL, apiKey, providerName, endpoint string, req *llm.VideoGenerationRequest, buildHeadersFunc func(*http.Request, string)) (*llm.VideoGenerationResponse, error) {
-	fullEndpoint := fmt.Sprintf("%s%s", baseURL, endpoint)
-
-	payload, _ := json.Marshal(req)
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, fullEndpoint, bytes.NewReader(payload))
-	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
-	}
-	buildHeadersFunc(httpReq, apiKey)
-
-	resp, err := client.Do(httpReq)
-	if err != nil {
-		return nil, &llm.Error{
-			Code:       llm.ErrUpstreamError,
-			Message:    err.Error(),
-			HTTPStatus: http.StatusBadGateway,
-			Retryable:  true,
-			Provider:   providerName,
-		}
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode >= 400 {
-		msg := ReadErrorMessage(resp.Body)
-		return nil, MapHTTPError(resp.StatusCode, msg, providerName)
-	}
-
-	var videoResp llm.VideoGenerationResponse
-	if err := json.NewDecoder(resp.Body).Decode(&videoResp); err != nil {
-		return nil, &llm.Error{
-			Code:       llm.ErrUpstreamError,
-			Message:    err.Error(),
-			HTTPStatus: http.StatusBadGateway,
-			Retryable:  true,
-			Provider:   providerName,
-		}
-	}
-
-	return &videoResp, nil
+	return doOpenAICompatRequest[llm.VideoGenerationRequest, llm.VideoGenerationResponse](ctx, client, baseURL, apiKey, providerName, endpoint, req, buildHeadersFunc)
 }
 
 // =============================================================================
@@ -110,7 +92,10 @@ func GenerateVideoOpenAICompat(ctx context.Context, client *http.Client, baseURL
 func GenerateAudioOpenAICompat(ctx context.Context, client *http.Client, baseURL, apiKey, providerName, endpoint string, req *llm.AudioGenerationRequest, buildHeadersFunc func(*http.Request, string)) (*llm.AudioGenerationResponse, error) {
 	fullEndpoint := fmt.Sprintf("%s%s", baseURL, endpoint)
 
-	payload, _ := json.Marshal(req)
+	payload, err := json.Marshal(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal request: %w", err)
+	}
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, fullEndpoint, bytes.NewReader(payload))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
@@ -157,44 +142,7 @@ func GenerateAudioOpenAICompat(ctx context.Context, client *http.Client, baseURL
 
 // CreateEmbeddingOpenAICompat 通用的 OpenAI 兼容 Embedding 函数
 func CreateEmbeddingOpenAICompat(ctx context.Context, client *http.Client, baseURL, apiKey, providerName, endpoint string, req *llm.EmbeddingRequest, buildHeadersFunc func(*http.Request, string)) (*llm.EmbeddingResponse, error) {
-	fullEndpoint := fmt.Sprintf("%s%s", baseURL, endpoint)
-
-	payload, _ := json.Marshal(req)
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, fullEndpoint, bytes.NewReader(payload))
-	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
-	}
-	buildHeadersFunc(httpReq, apiKey)
-
-	resp, err := client.Do(httpReq)
-	if err != nil {
-		return nil, &llm.Error{
-			Code:       llm.ErrUpstreamError,
-			Message:    err.Error(),
-			HTTPStatus: http.StatusBadGateway,
-			Retryable:  true,
-			Provider:   providerName,
-		}
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode >= 400 {
-		msg := ReadErrorMessage(resp.Body)
-		return nil, MapHTTPError(resp.StatusCode, msg, providerName)
-	}
-
-	var embeddingResp llm.EmbeddingResponse
-	if err := json.NewDecoder(resp.Body).Decode(&embeddingResp); err != nil {
-		return nil, &llm.Error{
-			Code:       llm.ErrUpstreamError,
-			Message:    err.Error(),
-			HTTPStatus: http.StatusBadGateway,
-			Retryable:  true,
-			Provider:   providerName,
-		}
-	}
-
-	return &embeddingResp, nil
+	return doOpenAICompatRequest[llm.EmbeddingRequest, llm.EmbeddingResponse](ctx, client, baseURL, apiKey, providerName, endpoint, req, buildHeadersFunc)
 }
 
 // =============================================================================

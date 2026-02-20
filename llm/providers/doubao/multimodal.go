@@ -19,7 +19,7 @@ func (p *DoubaoProvider) GenerateVideo(ctx context.Context, req *llm.VideoGenera
 
 // GenerateAudio 使用 Doubao 生成音频.
 func (p *DoubaoProvider) GenerateAudio(ctx context.Context, req *llm.AudioGenerationRequest) (*llm.AudioGenerationResponse, error) {
-	return providers.GenerateAudioOpenAICompat(ctx, p.client, p.cfg.BaseURL, p.cfg.APIKey, p.Name(), "/api/v3/audio/speech", req, p.buildHeaders)
+	return providers.GenerateAudioOpenAICompat(ctx, p.Client, p.Cfg.BaseURL, p.Cfg.APIKey, p.Name(), "/api/v3/audio/speech", req, providers.BearerTokenHeaders)
 }
 
 // TranscribeAudio Doubao 不支持音频转录.
@@ -29,7 +29,7 @@ func (p *DoubaoProvider) TranscribeAudio(ctx context.Context, req *llm.AudioTran
 
 // CreateEmbedding 使用 Doubao 创建嵌入.
 func (p *DoubaoProvider) CreateEmbedding(ctx context.Context, req *llm.EmbeddingRequest) (*llm.EmbeddingResponse, error) {
-	return providers.CreateEmbeddingOpenAICompat(ctx, p.client, p.cfg.BaseURL, p.cfg.APIKey, p.Name(), "/api/v3/embeddings", req, p.buildHeaders)
+	return providers.CreateEmbeddingOpenAICompat(ctx, p.Client, p.Cfg.BaseURL, p.Cfg.APIKey, p.Name(), "/api/v3/embeddings", req, providers.BearerTokenHeaders)
 }
 
 // CreateFineTuningJob Doubao 不支持微调.

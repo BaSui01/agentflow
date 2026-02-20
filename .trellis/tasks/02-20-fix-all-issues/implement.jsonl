@@ -1,0 +1,8 @@
+{"file": ".trellis/workflow.md", "reason": "Project workflow and conventions"}
+{"file": ".trellis/spec/shared/index.md", "reason": "Shared coding standards"}
+{"file": ".trellis/spec/backend/index.md", "reason": "Backend development guide"}
+{"file": ".trellis/spec/backend/api-module.md", "reason": "API module conventions"}
+{"file": ".trellis/spec/backend/quality.md", "reason": "Code quality requirements"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "代码质量规范-修复违规"}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "目录结构规范-命名修复"}
+{"file": ".trellis/spec/unit-test/index.md", "reason": "测试规范-补充测试"}

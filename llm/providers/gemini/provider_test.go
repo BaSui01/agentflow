@@ -25,20 +25,20 @@ func TestGeminiProvider_SupportsNativeFunctionCalling(t *testing.T) {
 
 func TestGeminiProvider_DefaultBaseURL(t *testing.T) {
 	cfg := providers.GeminiConfig{
-		APIKey: "test-key",
+		BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key"},
 	}
 	provider := NewGeminiProvider(cfg, zap.NewNop())
 	assert.NotNil(t, provider)
 }
 
 func TestGeminiProvider_DefaultModel(t *testing.T) {
-	model := chooseGeminiModel(nil, "")
+	model := providers.ChooseModel(nil, "", "gemini-3-pro")
 	assert.Equal(t, "gemini-3-pro", model, "Default model should be Gemini 3 Pro (2026)")
 }
 
 func TestGeminiProvider_ThoughtSignaturesSupport(t *testing.T) {
 	cfg := providers.GeminiConfig{
-		APIKey: "test-key",
+		BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key"},
 	}
 	provider := NewGeminiProvider(cfg, zap.NewNop())
 	assert.NotNil(t, provider)
@@ -51,9 +51,11 @@ func TestGeminiProvider_Integration(t *testing.T) {
 	}
 
 	provider := NewGeminiProvider(providers.GeminiConfig{
-		APIKey:  apiKey,
-		Model:   "gemini-2.0-flash-exp",
-		Timeout: 30 * time.Second,
+		BaseProviderConfig: providers.BaseProviderConfig{
+			APIKey:  apiKey,
+			Model:   "gemini-2.0-flash-exp",
+			Timeout: 30 * time.Second,
+		},
 	}, zap.NewNop())
 
 	ctx := context.Background()

@@ -25,20 +25,20 @@ func TestClaudeProvider_SupportsNativeFunctionCalling(t *testing.T) {
 
 func TestClaudeProvider_DefaultBaseURL(t *testing.T) {
 	cfg := providers.ClaudeConfig{
-		APIKey: "test-key",
+		BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key"},
 	}
 	provider := NewClaudeProvider(cfg, zap.NewNop())
 	assert.NotNil(t, provider)
 }
 
 func TestClaudeProvider_DefaultModel(t *testing.T) {
-	model := chooseClaudeModel(nil, "")
+	model := providers.ChooseModel(nil, "", "claude-opus-4.5-20260105")
 	assert.Equal(t, "claude-opus-4.5-20260105", model, "Default model should be Claude Opus 4.5 (2026)")
 }
 
 func TestClaudeProvider_ReasoningModeSupport(t *testing.T) {
 	cfg := providers.ClaudeConfig{
-		APIKey: "test-key",
+		BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key"},
 	}
 	provider := NewClaudeProvider(cfg, zap.NewNop())
 	assert.NotNil(t, provider)
@@ -51,9 +51,11 @@ func TestClaudeProvider_Integration(t *testing.T) {
 	}
 
 	provider := NewClaudeProvider(providers.ClaudeConfig{
-		APIKey:  apiKey,
-		Model:   "claude-3-5-sonnet-20241022",
-		Timeout: 60 * time.Second,
+		BaseProviderConfig: providers.BaseProviderConfig{
+			APIKey:  apiKey,
+			Model:   "claude-3-5-sonnet-20241022",
+			Timeout: 60 * time.Second,
+		},
 	}, zap.NewNop())
 
 	ctx := context.Background()

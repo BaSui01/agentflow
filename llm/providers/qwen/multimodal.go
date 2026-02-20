@@ -11,7 +11,7 @@ import (
 // Endpoint: POST /compatible-mode/v1/images/generations
 // Models: wanx-v1, wanx2.1-t2i-turbo, wanx2.1-t2i-plus
 func (p *QwenProvider) GenerateImage(ctx context.Context, req *llm.ImageGenerationRequest) (*llm.ImageGenerationResponse, error) {
-	return providers.GenerateImageOpenAICompat(ctx, p.client, p.cfg.BaseURL, p.cfg.APIKey, p.Name(), "/compatible-mode/v1/images/generations", req, p.buildHeaders)
+	return providers.GenerateImageOpenAICompat(ctx, p.Client, p.Cfg.BaseURL, p.Cfg.APIKey, p.Name(), "/compatible-mode/v1/images/generations", req, providers.BearerTokenHeaders)
 }
 
 // GenerateVideo Qwen 不支持视频生成.
@@ -23,7 +23,7 @@ func (p *QwenProvider) GenerateVideo(ctx context.Context, req *llm.VideoGenerati
 // Endpoint: POST /compatible-mode/v1/audio/speech
 // Models: cosyvoice-v1, sambert-v1, qwen-tts
 func (p *QwenProvider) GenerateAudio(ctx context.Context, req *llm.AudioGenerationRequest) (*llm.AudioGenerationResponse, error) {
-	return providers.GenerateAudioOpenAICompat(ctx, p.client, p.cfg.BaseURL, p.cfg.APIKey, p.Name(), "/compatible-mode/v1/audio/speech", req, p.buildHeaders)
+	return providers.GenerateAudioOpenAICompat(ctx, p.Client, p.Cfg.BaseURL, p.Cfg.APIKey, p.Name(), "/compatible-mode/v1/audio/speech", req, providers.BearerTokenHeaders)
 }
 
 // TranscribeAudio Qwen 不支持音频转录.
@@ -35,7 +35,7 @@ func (p *QwenProvider) TranscribeAudio(ctx context.Context, req *llm.AudioTransc
 // Endpoint: POST /compatible-mode/v1/embeddings
 // Models: text-embedding-v4, text-embedding-v3, text-embedding-v2
 func (p *QwenProvider) CreateEmbedding(ctx context.Context, req *llm.EmbeddingRequest) (*llm.EmbeddingResponse, error) {
-	return providers.CreateEmbeddingOpenAICompat(ctx, p.client, p.cfg.BaseURL, p.cfg.APIKey, p.Name(), "/compatible-mode/v1/embeddings", req, p.buildHeaders)
+	return providers.CreateEmbeddingOpenAICompat(ctx, p.Client, p.Cfg.BaseURL, p.Cfg.APIKey, p.Name(), "/compatible-mode/v1/embeddings", req, providers.BearerTokenHeaders)
 }
 
 // CreateFineTuningJob Qwen 不支持微调.

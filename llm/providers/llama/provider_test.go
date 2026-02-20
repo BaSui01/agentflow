@@ -40,9 +40,7 @@ func TestLlamaProvider_SupportsNativeFunctionCalling(t *testing.T) {
 }
 
 func TestLlamaProvider_DefaultProvider(t *testing.T) {
-	cfg := providers.LlamaConfig{
-		APIKey: "test-key",
-	}
+	cfg := providers.LlamaConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key"}}
 	provider := NewLlamaProvider(cfg, zap.NewNop())
 	assert.Equal(t, "llama-together", provider.Name())
 }
@@ -61,7 +59,9 @@ func TestLlamaProvider_BaseURLSelection(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			cfg := providers.LlamaConfig{
-				APIKey:   "test-key",
+				BaseProviderConfig: providers.BaseProviderConfig{
+					APIKey:   "test-key",
+				},
 				Provider: tt.provider,
 			}
 			provider := NewLlamaProvider(cfg, zap.NewNop())
@@ -77,10 +77,12 @@ func TestLlamaProvider_Integration(t *testing.T) {
 	}
 
 	provider := NewLlamaProvider(providers.LlamaConfig{
-		APIKey:   apiKey,
-		Model:    "meta-llama/Llama-3.3-70B-Instruct-Turbo",
+		BaseProviderConfig: providers.BaseProviderConfig{
+			APIKey:   apiKey,
+			Model:    "meta-llama/Llama-3.3-70B-Instruct-Turbo",
+			Timeout:  30 * time.Second,
+		},
 		Provider: "together",
-		Timeout:  30 * time.Second,
 	}, zap.NewNop())
 
 	ctx := context.Background()

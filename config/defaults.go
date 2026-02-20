@@ -22,15 +22,15 @@ func DefaultConfig() *Config {
 // DefaultServerConfig 返回默认服务器配置
 func DefaultServerConfig() ServerConfig {
 	return ServerConfig{
-		HTTPPort:        8080,
-		GRPCPort:        9090,
-		MetricsPort:     9091,
-		ReadTimeout:     30 * time.Second,
-		WriteTimeout:    30 * time.Second,
-		ShutdownTimeout: 15 * time.Second,
+		HTTPPort:         8080,
+		GRPCPort:         9090,
+		MetricsPort:      9091,
+		ReadTimeout:      30 * time.Second,
+		WriteTimeout:     30 * time.Second,
+		ShutdownTimeout:  15 * time.Second,
 		AllowQueryAPIKey: false,
-		RateLimitRPS:    100,
-		RateLimitBurst:  200,
+		RateLimitRPS:     100,
+		RateLimitBurst:   200,
 	}
 }
 
