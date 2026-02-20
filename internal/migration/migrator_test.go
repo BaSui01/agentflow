@@ -92,7 +92,7 @@ func TestBuildDatabaseURL(t *testing.T) {
 			username: "user",
 			password: "pass",
 			sslMode:  "",
-			expected: "postgres://user:pass@localhost:5432/testdb?sslmode=disable",
+			expected: "postgres://user:pass@localhost:5432/testdb?sslmode=require",
 		},
 		{
 			name:     "mysql",
