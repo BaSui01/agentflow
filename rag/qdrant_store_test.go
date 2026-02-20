@@ -45,7 +45,7 @@ func TestQdrantStore_BasicFlow(t *testing.T) {
 			Points []struct {
 				ID      string                 `json:"id"`
 				Vector  []float64              `json:"vector"`
-				Payload map[string]interface{} `json:"payload"`
+				Payload map[string]any `json:"payload"`
 			} `json:"points"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {

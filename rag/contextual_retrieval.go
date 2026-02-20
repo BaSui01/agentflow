@@ -180,7 +180,7 @@ func (r *ContextualRetrieval) IndexDocumentsWithContext(ctx context.Context, doc
 				ID:        fmt.Sprintf("%s_chunk_%d", doc.ID, i),
 				Content:   enrichedContent,
 				Embedding: nil,
-				Metadata: map[string]interface{}{
+				Metadata: map[string]any{
 					"original_doc_id": doc.ID,
 					"chunk_index":     i,
 					"context":         contextStr,
@@ -526,7 +526,7 @@ func (r *ContextualRetrieval) putToCache(key, context string) {
 // CleanExpiredCache 清理过期缓存
 func (r *ContextualRetrieval) CleanExpiredCache() int {
 	cleaned := 0
-	r.contextCache.Range(func(key, value interface{}) bool {
+	r.contextCache.Range(func(key, value any) bool {
 		entry := value.(*contextCacheEntry)
 		if r.config.CacheTTL > 0 && time.Since(entry.createdAt) > r.config.CacheTTL {
 			r.contextCache.Delete(key)
@@ -575,7 +575,7 @@ func (r *ContextualRetrieval) rerankWithEmbedding(queryEmbedding []float64, resu
 }
 
 // getMetadataString 获取元数据字符串
-func getMetadataString(metadata map[string]interface{}, key string) string {
+func getMetadataString(metadata map[string]any, key string) string {
 	if metadata == nil {
 		return ""
 	}

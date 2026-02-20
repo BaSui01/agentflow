@@ -254,7 +254,7 @@ func TestChunk_Metadata(t *testing.T) {
 		StartPos:   0,
 		EndPos:     12,
 		TokenCount: 3,
-		Metadata: map[string]interface{}{
+		Metadata: map[string]any{
 			"source": "test",
 			"index":  0,
 		},

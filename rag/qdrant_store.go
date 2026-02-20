@@ -414,3 +414,34 @@ func (s *QdrantStore) Count(ctx context.Context) (int, error) {
 
 	return resp.Result.Count, nil
 }
+
+// ClearAll deletes all points from the Qdrant collection.
+// It uses the delete-by-filter API with a match-all filter to remove all points
+// while preserving the collection schema.
+func (s *QdrantStore) ClearAll(ctx context.Context) error {
+	if strings.TrimSpace(s.cfg.Collection) == "" {
+		return fmt.Errorf("qdrant collection is required")
+	}
+
+	// Delete all points using a filter that matches everything.
+	req := struct {
+		Filter map[string]any `json:"filter"`
+	}{
+		Filter: map[string]any{
+			"must": []map[string]any{},
+		},
+	}
+
+	path := fmt.Sprintf("/collections/%s/points/delete", url.PathEscape(s.cfg.Collection))
+	if s.cfg.Wait == nil || *s.cfg.Wait {
+		path += "?wait=true"
+	}
+
+	var resp any
+	if err := s.doJSON(ctx, http.MethodPost, path, req, &resp); err != nil {
+		return fmt.Errorf("qdrant clear all points: %w", err)
+	}
+
+	s.logger.Info("all points cleared from collection", zap.String("collection", s.cfg.Collection))
+	return nil
+}

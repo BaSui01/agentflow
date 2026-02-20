@@ -765,6 +765,19 @@ func (s *MilvusStore) Flush(ctx context.Context) error {
 	return nil
 }
 
+// ClearAll drops and recreates the Milvus collection, effectively removing all data.
+// The collection schema and index will be recreated on the next AddDocuments call.
+func (s *MilvusStore) ClearAll(ctx context.Context) error {
+	if err := s.DropCollection(ctx); err != nil {
+		return fmt.Errorf("milvus clear all: %w", err)
+	}
+	// Reset the ensureOnce so the collection can be recreated.
+	s.ensureOnce = sync.Once{}
+	s.ensureErr = nil
+	s.logger.Info("milvus collection cleared", zap.String("collection", s.cfg.Collection))
+	return nil
+}
+
 // 辅助功能
 
 // 将字符串切入指定的最大长度。

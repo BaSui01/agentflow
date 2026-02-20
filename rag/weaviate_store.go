@@ -746,6 +746,16 @@ func (s *WeaviateStore) GetSchema(ctx context.Context) (map[string]any, error) {
 	return schema, nil
 }
 
+// ClearAll deletes the entire Weaviate class and resets the schema guard so it
+// can be recreated on the next AddDocuments call.
+func (s *WeaviateStore) ClearAll(ctx context.Context) error {
+	if err := s.DeleteClass(ctx); err != nil {
+		return fmt.Errorf("weaviate clear all: %w", err)
+	}
+	s.logger.Info("weaviate class cleared", zap.String("class", s.cfg.ClassName))
+	return nil
+}
+
 // 辅助功能
 
 // 格式Vector将一个浮点64切片作为JSON数组字符串。
