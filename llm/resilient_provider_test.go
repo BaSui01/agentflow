@@ -2,86 +2,73 @@ package llm
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/mock"
 	"go.uber.org/zap"
 )
 
-// 用于测试的模型
-type MockProviderForResilience struct {
-	mock.Mock
+// testProvider 是用于测试的函数回调测试替身
+type testProvider struct {
+	name           string
+	completionFn   func(ctx context.Context, req *ChatRequest) (*ChatResponse, error)
+	streamFn       func(ctx context.Context, req *ChatRequest) (<-chan StreamChunk, error)
+	healthCheckFn  func(ctx context.Context) (*HealthStatus, error)
+	listModelsFn   func(ctx context.Context) ([]Model, error)
+	supportsNative bool
 }
 
-func (m *MockProviderForResilience) Name() string {
-	args := m.Called()
-	return args.String(0)
-}
-
-func (m *MockProviderForResilience) SupportsNativeFunctionCalling() bool {
-	args := m.Called()
-	return args.Bool(0)
-}
-
-func (m *MockProviderForResilience) Completion(ctx context.Context, req *ChatRequest) (*ChatResponse, error) {
-	args := m.Called(ctx, req)
-	if args.Get(0) == nil {
-		return nil, args.Error(1)
+func (p *testProvider) Name() string { return p.name }
+func (p *testProvider) SupportsNativeFunctionCalling() bool { return p.supportsNative }
+func (p *testProvider) Completion(ctx context.Context, req *ChatRequest) (*ChatResponse, error) {
+	if p.completionFn != nil {
+		return p.completionFn(ctx, req)
 	}
-	return args.Get(0).(*ChatResponse), args.Error(1)
+	return nil, fmt.Errorf("completion not configured")
 }
-
-func (m *MockProviderForResilience) Stream(ctx context.Context, req *ChatRequest) (<-chan StreamChunk, error) {
-	args := m.Called(ctx, req)
-	if args.Get(0) == nil {
-		return nil, args.Error(1)
+func (p *testProvider) Stream(ctx context.Context, req *ChatRequest) (<-chan StreamChunk, error) {
+	if p.streamFn != nil {
+		return p.streamFn(ctx, req)
 	}
-	return args.Get(0).(<-chan StreamChunk), args.Error(1)
+	return nil, fmt.Errorf("stream not configured")
 }
-
-func (m *MockProviderForResilience) HealthCheck(ctx context.Context) (*HealthStatus, error) {
-	args := m.Called(ctx)
-	if args.Get(0) == nil {
-		return nil, args.Error(1)
+func (p *testProvider) HealthCheck(ctx context.Context) (*HealthStatus, error) {
+	if p.healthCheckFn != nil {
+		return p.healthCheckFn(ctx)
 	}
-	return args.Get(0).(*HealthStatus), args.Error(1)
+	return &HealthStatus{Healthy: true}, nil
 }
-
-func (m *MockProviderForResilience) ListModels(ctx context.Context) ([]Model, error) {
-	args := m.Called(ctx)
-	if args.Get(0) == nil {
-		return nil, args.Error(1)
+func (p *testProvider) ListModels(ctx context.Context) ([]Model, error) {
+	if p.listModelsFn != nil {
+		return p.listModelsFn(ctx)
 	}
-	return args.Get(0).([]Model), args.Error(1)
+	return nil, nil
 }
 
 // 测试响应性提供器  Name 名称方法
 func TestResilientProvider_Name(t *testing.T) {
 	logger, _ := zap.NewDevelopment()
-	mockProvider := new(MockProviderForResilience)
+	provider := &testProvider{name: "test-provider"}
 
-	rp := NewResilientProvider(mockProvider, nil, logger)
-
-	mockProvider.On("Name").Return("test-provider")
+	rp := NewResilientProvider(provider, nil, logger)
 
 	name := rp.Name()
 
 	assert.Equal(t, "test-provider", name)
-	mockProvider.AssertExpectations(t)
 }
 
 // 响应性测试 Provider  支持性功能调用测试函数调用支持
 func TestResilientProvider_SupportsNativeFunctionCalling(t *testing.T) {
 	logger, _ := zap.NewDevelopment()
-	mockProvider := new(MockProviderForResilience)
+	provider := &testProvider{
+		name:           "test-provider",
+		supportsNative: true,
+	}
 
-	rp := NewResilientProvider(mockProvider, nil, logger)
-
-	mockProvider.On("SupportsNativeFunctionCalling").Return(true)
+	rp := NewResilientProvider(provider, nil, logger)
 
 	supports := rp.SupportsNativeFunctionCalling()
 
 	assert.True(t, supports)
-	mockProvider.AssertExpectations(t)
 }
