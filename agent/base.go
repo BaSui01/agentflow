@@ -51,7 +51,7 @@ type Agent interface {
 // 使用 pkg/context.AgentContextManager 作为标准实现
 type ContextManager interface {
 	PrepareMessages(ctx context.Context, messages []llm.Message, currentQuery string) ([]llm.Message, error)
-	GetStatus(messages []llm.Message) interface{}
+	GetStatus(messages []llm.Message) any
 	EstimateTokens(messages []llm.Message) int
 }
 
@@ -145,15 +145,15 @@ type BaseAgent struct {
 	contextEngineEnabled bool           // 是否启用上下文工程
 
 	// 2025 新增功能（可选启用）
-	reflectionExecutor  interface{} // *ReflectionExecutor - 避免循环依赖
-	toolSelector        interface{} // *DynamicToolSelector
-	promptEnhancer      interface{} // *PromptEnhancer
-	skillManager        interface{} // *SkillManager
-	mcpServer           interface{} // *MCPServer
-	lspClient           interface{} // *lsp.LSPClient
-	lspLifecycle        interface{} // optional lifecycle owner (e.g. *ManagedLSP)
-	enhancedMemory      interface{} // *EnhancedMemorySystem
-	observabilitySystem interface{} // *ObservabilitySystem
+	reflectionExecutor  any // *ReflectionExecutor - 避免循环依赖
+	toolSelector        any // *DynamicToolSelector
+	promptEnhancer      any // *PromptEnhancer
+	skillManager        any // *SkillManager
+	mcpServer           any // *MCPServer
+	lspClient           any // *lsp.LSPClient
+	lspLifecycle        any // optional lifecycle owner (e.g. *ManagedLSP)
+	enhancedMemory      any // *EnhancedMemorySystem
+	observabilitySystem any // *ObservabilitySystem
 
 	// 2026 Guardrails 功能
 	// Requirements 1.7, 2.4: 输入/输出验证和重试支持

@@ -222,7 +222,12 @@ func (r *ReflectionExecutor) critique(ctx context.Context, task, output string) 
 		return nil, fmt.Errorf("critique LLM call failed: %w", err)
 	}
 
-	feedback := resp.Choices[0].Message.Content
+	choice, err := llm.FirstChoice(resp)
+	if err != nil {
+		return nil, fmt.Errorf("critique LLM returned no choices: %w", err)
+	}
+
+	feedback := choice.Message.Content
 
 	// 解析评审结果
 	critique := r.parseCritique(feedback)

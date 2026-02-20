@@ -3,6 +3,7 @@ package agent
 import (
 	"fmt"
 	"strings"
+	"sync"
 )
 
 // 快速EnhancerConfig 快速工程配置
@@ -225,6 +226,7 @@ func (o *PromptOptimizer) addBasicConstraints(prompt string) string {
 
 // PromptTemplateLibrary 提示词模板库
 type PromptTemplateLibrary struct {
+	mu        sync.RWMutex
 	templates map[string]PromptTemplate
 }
 
@@ -331,13 +333,18 @@ func (l *PromptTemplateLibrary) registerDefaultTemplates() {
 
 // GetTemplate 获取模板
 func (l *PromptTemplateLibrary) GetTemplate(name string) (PromptTemplate, bool) {
+	l.mu.RLock()
+	defer l.mu.RUnlock()
 	template, ok := l.templates[name]
 	return template, ok
 }
 
 // RenderTemplate 渲染模板
 func (l *PromptTemplateLibrary) RenderTemplate(name string, vars map[string]string) (string, error) {
+	l.mu.RLock()
 	template, ok := l.templates[name]
+	l.mu.RUnlock()
+
 	if !ok {
 		return "", fmt.Errorf("template %s not found", name)
 	}
@@ -357,11 +364,15 @@ func (l *PromptTemplateLibrary) RenderTemplate(name string, vars map[string]stri
 
 // RegisterTemplate 注册自定义模板
 func (l *PromptTemplateLibrary) RegisterTemplate(template PromptTemplate) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
 	l.templates[template.Name] = template
 }
 
 // ListTemplates 列出所有模板
 func (l *PromptTemplateLibrary) ListTemplates() []string {
+	l.mu.RLock()
+	defer l.mu.RUnlock()
 	names := make([]string, 0, len(l.templates))
 	for name := range l.templates {
 		names = append(names, name)

@@ -3,6 +3,7 @@ package agent
 import (
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -18,6 +19,9 @@ const (
 	EventSubagentCompleted EventType = "subagent_completed"
 )
 
+// subscriptionCounter 用于生成唯一订阅 ID，替代 time.Now().UnixNano() 避免并发碰撞
+var subscriptionCounter int64
+
 // Event 事件接口
 type Event interface {
 	Timestamp() time.Time
@@ -32,6 +36,7 @@ type EventBus interface {
 	Publish(event Event)
 	Subscribe(eventType EventType, handler EventHandler) string
 	Unsubscribe(subscriptionID string)
+	Stop()
 }
 
 // SimpleEventBus 简单的事件总线实现
@@ -40,6 +45,7 @@ type SimpleEventBus struct {
 	handlers     map[EventType]map[string]EventHandler
 	eventChannel chan Event
 	done         chan struct{}
+	stopOnce     sync.Once
 }
 
 // NewEventBus 创建新的事件总线
@@ -72,7 +78,7 @@ func (b *SimpleEventBus) Subscribe(eventType EventType, handler EventHandler) st
 		b.handlers[eventType] = make(map[string]EventHandler)
 	}
 
-	id := fmt.Sprintf("%s-%d", eventType, time.Now().UnixNano())
+	id := fmt.Sprintf("%s-%d", eventType, atomic.AddInt64(&subscriptionCounter, 1))
 	b.handlers[eventType][id] = handler
 	return id
 }
@@ -103,7 +109,13 @@ func (b *SimpleEventBus) processEvents() {
 			b.mu.RUnlock()
 
 			for _, handler := range handlers {
-				go handler(event)
+				h := handler // capture loop variable
+				go func() {
+					defer func() {
+						recover() // prevent handler panic from crashing the event bus
+					}()
+					h(event)
+				}()
 			}
 		case <-b.done:
 			return
@@ -113,7 +125,9 @@ func (b *SimpleEventBus) processEvents() {
 
 // Stop 停止事件总线
 func (b *SimpleEventBus) Stop() {
-	close(b.done)
+	b.stopOnce.Do(func() {
+		close(b.done)
+	})
 }
 
 // StateChangeEvent 状态变更事件

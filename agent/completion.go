@@ -57,6 +57,12 @@ func (b *BaseAgent) ChatCompletion(ctx context.Context, messages []llm.Message) 
 		Temperature: b.config.Temperature,
 	}
 
+	// 运行时配置覆盖：从 context 获取 RunConfig 并应用到请求
+	rc := GetRunConfig(ctx)
+	if rc != nil {
+		rc.ApplyToRequest(req, b.config)
+	}
+
 	// 按白名单过滤可用工具
 	if b.toolManager != nil && len(b.config.Tools) > 0 {
 		req.Tools = filterToolSchemasByWhitelist(b.toolManager.GetAllowedTools(b.config.ID), b.config.Tools)
@@ -72,6 +78,9 @@ func (b *BaseAgent) ChatCompletion(ctx context.Context, messages []llm.Message) 
 		}
 	}
 
+	// 计算有效的 ReAct 迭代次数（RunConfig 可覆盖）
+	effectiveReActIterations := rc.EffectiveMaxReActIterations(b.maxReActIterations())
+
 	emit, streaming := runtimeStreamEmitterFromContext(ctx)
 	if streaming {
 		// 若存在可用工具：使用流式 ReAct 循环，并将 token/tool 事件发射给上游（RunStream/Workflow）。
@@ -82,7 +91,7 @@ func (b *BaseAgent) ChatCompletion(ctx context.Context, messages []llm.Message) 
 				reactProvider = b.toolProvider
 			}
 			executor := llmtools.NewReActExecutor(reactProvider, newToolManagerExecutor(b.toolManager, b.config.ID, b.config.Tools, b.bus), llmtools.ReActConfig{
-				MaxIterations: b.maxReActIterations(),
+				MaxIterations: effectiveReActIterations,
 				StopOnError:   false,
 			}, b.logger)
 
@@ -207,7 +216,7 @@ func (b *BaseAgent) ChatCompletion(ctx context.Context, messages []llm.Message) 
 			reactProvider = b.toolProvider
 		}
 		reactExecutor := llmtools.NewReActExecutor(reactProvider, newToolManagerExecutor(b.toolManager, b.config.ID, b.config.Tools, b.bus), llmtools.ReActConfig{
-			MaxIterations: b.maxReActIterations(),
+			MaxIterations: effectiveReActIterations,
 			StopOnError:   false,
 		}, b.logger)
 
@@ -252,6 +261,12 @@ func (b *BaseAgent) StreamCompletion(ctx context.Context, messages []llm.Message
 		MaxTokens:   b.config.MaxTokens,
 		Temperature: b.config.Temperature,
 	}
+
+	// 运行时配置覆盖：从 context 获取 RunConfig 并应用到请求
+	if rc := GetRunConfig(ctx); rc != nil {
+		rc.ApplyToRequest(req, b.config)
+	}
+
 	if b.toolManager != nil && len(b.config.Tools) > 0 {
 		req.Tools = filterToolSchemasByWhitelist(b.toolManager.GetAllowedTools(b.config.ID), b.config.Tools)
 	}

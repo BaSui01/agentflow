@@ -32,7 +32,7 @@ type FailureMode struct {
 // OutputSchema 输出格式 Schema
 type OutputSchema struct {
 	Type       string                 `json:"type"`             // "json", "markdown", "structured_text"
-	Schema     map[string]interface{} `json:"schema,omitempty"` // JSON Schema
+	Schema     map[string]any `json:"schema,omitempty"` // JSON Schema
 	Required   []string               `json:"required,omitempty"`
 	Example    string                 `json:"example,omitempty"`
 	Validation string                 `json:"validation,omitempty"` // 验证规则描述
@@ -288,7 +288,7 @@ func (e *DefensivePromptEnhancer) ValidateOutput(output string) error {
 
 	// 如果要求 JSON 格式，验证是否为有效 JSON
 	if schema.Type == "json" {
-		var result map[string]interface{}
+		var result map[string]any
 		if err := json.Unmarshal([]byte(output), &result); err != nil {
 			return fmt.Errorf("输出不是有效的 JSON: %w", err)
 		}

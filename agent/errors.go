@@ -61,7 +61,7 @@ type Error struct {
 	Retryable bool                   `json:"retryable"`
 	Timestamp time.Time              `json:"timestamp"`
 	Cause     error                  `json:"-"` // 原始错误
-	Metadata  map[string]interface{} `json:"metadata,omitempty"`
+	Metadata  map[string]any `json:"metadata,omitempty"`
 }
 
 // Error 实现 error 接口
@@ -83,7 +83,7 @@ func NewError(code ErrorCode, message string) *Error {
 		Code:      code,
 		Message:   message,
 		Timestamp: time.Now(),
-		Metadata:  make(map[string]interface{}),
+		Metadata:  make(map[string]any),
 	}
 }
 
@@ -94,7 +94,7 @@ func NewErrorWithCause(code ErrorCode, message string, cause error) *Error {
 		Message:   message,
 		Cause:     cause,
 		Timestamp: time.Now(),
-		Metadata:  make(map[string]interface{}),
+		Metadata:  make(map[string]any),
 	}
 }
 
@@ -109,7 +109,7 @@ func FromTypesError(err *types.Error) *Error {
 		Retryable: err.Retryable,
 		Timestamp: time.Now(),
 		Cause:     err.Cause,
-		Metadata:  make(map[string]interface{}),
+		Metadata:  make(map[string]any),
 	}
 }
 
@@ -137,9 +137,9 @@ func (e *Error) WithRetryable(retryable bool) *Error {
 }
 
 // WithMetadata 添加元数据
-func (e *Error) WithMetadata(key string, value interface{}) *Error {
+func (e *Error) WithMetadata(key string, value any) *Error {
 	if e.Metadata == nil {
-		e.Metadata = make(map[string]interface{})
+		e.Metadata = make(map[string]any)
 	}
 	e.Metadata[key] = value
 	return e

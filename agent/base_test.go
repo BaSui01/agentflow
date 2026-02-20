@@ -138,6 +138,9 @@ func (m *MockEventBus) Unsubscribe(subscriptionID string) {
 	m.Called(subscriptionID)
 }
 
+func (m *MockEventBus) Stop() {
+}
+
 // TestNewBaseAgent 测试创建 BaseAgent
 func TestNewBaseAgent(t *testing.T) {
 	logger, _ := zap.NewDevelopment()
