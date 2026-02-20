@@ -33,7 +33,7 @@ import (
 func TestDoneMarkerHandling_StreamClosesOnDone(t *testing.T) {
 	logger := zap.NewNop()
 
-	// Create a mock server that sends SSE data followed by [DONE]
+	// 创建一个发送 SSE 数据的模拟服务器，然后发送 [DONE]
 	mockSSEServerWithDone := func(chunks []string) *httptest.Server {
 		return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "text/event-stream")
@@ -44,7 +44,7 @@ func TestDoneMarkerHandling_StreamClosesOnDone(t *testing.T) {
 				return
 			}
 
-			// Send each chunk as SSE data
+			// 将每个块作为 SSE 数据发送
 			for i, content := range chunks {
 				sseData := map[string]any{
 					"id":    fmt.Sprintf("chatcmpl-%d", i),
@@ -64,7 +64,7 @@ func TestDoneMarkerHandling_StreamClosesOnDone(t *testing.T) {
 				flusher.Flush()
 			}
 
-			// Send [DONE] marker to signal end of stream
+			// 发送 [DONE] 标记以表示流结束
 			fmt.Fprintf(w, "data: [DONE]\n\n")
 			flusher.Flush()
 		}))
@@ -133,7 +133,7 @@ func TestDoneMarkerHandling_StreamClosesOnDone(t *testing.T) {
 
 			require.NoError(t, err, "Stream() should not return error for provider %s", tc.providerName)
 
-			// Collect all chunks and verify channel closes
+			// 收集所有块并验证通道关闭
 			var receivedChunks []llm.StreamChunk
 			channelClosed := false
 
@@ -142,14 +142,14 @@ func TestDoneMarkerHandling_StreamClosesOnDone(t *testing.T) {
 			}
 			channelClosed = true
 
-			// Verify channel was closed after [DONE]
+			// 验证通道在 [DONE] 之后关闭
 			assert.True(t, channelClosed, "Channel should be closed after [DONE] for provider %s", tc.providerName)
 
-			// Verify we received expected number of chunks (no extra chunks after [DONE])
+			// 验证我们收到了预期数量的块（[DONE] 之后没有额外的块）
 			assert.Equal(t, len(tc.chunks), len(receivedChunks),
 				"Should receive exactly %d chunks before [DONE] for provider %s", len(tc.chunks), tc.providerName)
 
-			// Verify no errors in received chunks
+			// 验证接收到的块中没有错误
 			for i, chunk := range receivedChunks {
 				assert.Nil(t, chunk.Err, "Chunk %d should not have error for provider %s", i, tc.providerName)
 			}
@@ -162,7 +162,7 @@ func TestDoneMarkerHandling_StreamClosesOnDone(t *testing.T) {
 func TestDoneMarkerHandling_ChannelProperlyClosedWithTimeout(t *testing.T) {
 	logger := zap.NewNop()
 
-	// Create a mock server that sends [DONE] immediately
+	// 创建一个立即发送 [DONE] 的模拟服务器
 	mockSSEServerImmediateDone := func() *httptest.Server {
 		return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "text/event-stream")
@@ -173,7 +173,7 @@ func TestDoneMarkerHandling_ChannelProperlyClosedWithTimeout(t *testing.T) {
 				return
 			}
 
-			// Send one chunk then [DONE]
+			// 发送一大块然后[完成]
 			sseData := map[string]any{
 				"id":    "chatcmpl-test",
 				"model": "test-model",
@@ -239,18 +239,18 @@ func TestDoneMarkerHandling_ChannelProperlyClosedWithTimeout(t *testing.T) {
 
 			require.NoError(t, err, "Stream() should not return error for provider %s", providerName)
 
-			// Use a timeout to ensure channel closes properly
+			// 使用超时确保通道正确关闭
 			done := make(chan bool)
 			go func() {
 				for range streamCh {
-					// Drain the channel
+					// 排空通道
 				}
 				done <- true
 			}()
 
 			select {
 			case <-done:
-				// Channel closed properly
+				// 通道正常关闭
 			case <-time.After(5 * time.Second):
 				t.Fatalf("Channel did not close within timeout for provider %s", providerName)
 			}
@@ -263,7 +263,7 @@ func TestDoneMarkerHandling_ChannelProperlyClosedWithTimeout(t *testing.T) {
 func TestDoneMarkerHandling_NoDataAfterDone(t *testing.T) {
 	logger := zap.NewNop()
 
-	// Create a mock server that sends data after [DONE] (which should be ignored)
+	// 创建一个模拟服务器，在 [DONE] 之后发送数据（应该被忽略）
 	mockSSEServerWithDataAfterDone := func() *httptest.Server {
 		return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "text/event-stream")
@@ -274,7 +274,7 @@ func TestDoneMarkerHandling_NoDataAfterDone(t *testing.T) {
 				return
 			}
 
-			// Send valid chunk
+			// 发送有效块
 			sseData := map[string]any{
 				"id":    "chatcmpl-1",
 				"model": "test-model",
@@ -292,11 +292,11 @@ func TestDoneMarkerHandling_NoDataAfterDone(t *testing.T) {
 			fmt.Fprintf(w, "data: %s\n\n", data)
 			flusher.Flush()
 
-			// Send [DONE]
+			// 发送[完成]
 			fmt.Fprintf(w, "data: [DONE]\n\n")
 			flusher.Flush()
 
-			// Send data after [DONE] (should be ignored by provider)
+			// [DONE]后发送数据（应被提供商忽略）
 			sseDataAfter := map[string]any{
 				"id":    "chatcmpl-2",
 				"model": "test-model",
@@ -366,7 +366,7 @@ func TestDoneMarkerHandling_NoDataAfterDone(t *testing.T) {
 				}
 			}
 
-			// Should only receive the chunk before [DONE]
+			// 应该只在 [DONE] 之前接收块
 			require.Len(t, receivedContents, 1, "Should only receive 1 chunk for provider %s", providerName)
 			assert.Equal(t, "Before DONE", receivedContents[0],
 				"Should only receive content before [DONE] for provider %s", providerName)
@@ -389,7 +389,7 @@ func TestDoneMarkerHandling_ConcurrentReads(t *testing.T) {
 				return
 			}
 
-			// Send multiple chunks
+			// 发送多个块
 			for i := 0; i < 5; i++ {
 				sseData := map[string]any{
 					"id":    fmt.Sprintf("chatcmpl-%d", i),
@@ -457,12 +457,12 @@ func TestDoneMarkerHandling_ConcurrentReads(t *testing.T) {
 
 			require.NoError(t, err, "Stream() should not return error for provider %s", providerName)
 
-			// Multiple goroutines trying to read from channel
+			// 多个 goroutine 尝试从通道读取
 			var wg sync.WaitGroup
 			chunkCount := 0
 			var mu sync.Mutex
 
-			// Single reader (channels can only have one reader in Go)
+			// 单个阅读器（Go 中通道只能有一个阅读器）
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
@@ -475,7 +475,7 @@ func TestDoneMarkerHandling_ConcurrentReads(t *testing.T) {
 				}
 			}()
 
-			// Wait with timeout
+			// 等待超时
 			done := make(chan struct{})
 			go func() {
 				wg.Wait()
@@ -484,7 +484,7 @@ func TestDoneMarkerHandling_ConcurrentReads(t *testing.T) {
 
 			select {
 			case <-done:
-				// Success
+				// 成功
 			case <-time.After(5 * time.Second):
 				t.Fatalf("Test timed out for provider %s", providerName)
 			}
@@ -522,7 +522,7 @@ func TestDoneMarkerHandling_DoneMarkerVariations(t *testing.T) {
 					return
 				}
 
-				// Send one chunk
+				// 发送一大块
 				sseData := map[string]any{
 					"id":    "chatcmpl-test",
 					"model": "test-model",
@@ -540,7 +540,7 @@ func TestDoneMarkerHandling_DoneMarkerVariations(t *testing.T) {
 				fmt.Fprintf(w, "data: %s\n\n", data)
 				flusher.Flush()
 
-				// Send [DONE] marker variation
+				// 发送 [DONE] 标记变体
 				fmt.Fprint(w, tc.doneMarker)
 				flusher.Flush()
 			}))
@@ -553,18 +553,18 @@ func TestDoneMarkerHandling_DoneMarkerVariations(t *testing.T) {
 				},
 			}
 
-			// Test with grok provider as representative
+			// 以grok提供商为代表进行测试
 			cfg := providers.GrokConfig{APIKey: "test-key", BaseURL: server.URL}
 			p := grok.NewGrokProvider(cfg, logger)
 			streamCh, err := p.Stream(context.Background(), req)
 
 			require.NoError(t, err, "Stream() should not return error")
 
-			// Verify channel closes properly
+			// 验证通道是否正确关闭
 			done := make(chan bool)
 			go func() {
 				for range streamCh {
-					// Drain
+					// 流走
 				}
 				done <- true
 			}()

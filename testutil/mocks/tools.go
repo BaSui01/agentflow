@@ -1,15 +1,6 @@
-// =============================================================================
-// 🔧 MockToolManager - 工具管理器模拟实现
-// =============================================================================
-// 用于测试的工具管理器模拟，支持工具注册和执行
+// MockToolManager 的工具管理测试模拟实现。
 //
-// 使用方法:
-//
-//	tools := mocks.NewMockToolManager().
-//	    WithTool("calculator", func(args map[string]any) (any, error) {
-//	        return 42, nil
-//	    })
-// =============================================================================
+// 支持工具注册、调用与错误场景测试。
 package mocks
 
 import (
@@ -21,9 +12,7 @@ import (
 	"github.com/BaSui01/agentflow/types"
 )
 
-// =============================================================================
-// 🎯 MockToolManager 结构
-// =============================================================================
+// --- MockToolManager 结构 ---
 
 // ToolFunc 工具执行函数类型
 type ToolFunc func(ctx context.Context, args map[string]any) (any, error)
@@ -54,9 +43,7 @@ type ToolCall struct {
 	Error  error
 }
 
-// =============================================================================
-// 🔧 构造函数和 Builder 方法
-// =============================================================================
+// --- 构造函数和 Builder 方法 ---
 
 // NewMockToolManager 创建新的 MockToolManager
 func NewMockToolManager() *MockToolManager {
@@ -133,9 +120,7 @@ func (m *MockToolManager) WithDefaultError(err error) *MockToolManager {
 	return m
 }
 
-// =============================================================================
-// 🎯 ToolManager 接口实现
-// =============================================================================
+// --- ToolManager 接口实现 ---
 
 // Register 注册工具
 func (m *MockToolManager) Register(tool types.ToolSchema) error {
@@ -238,9 +223,7 @@ func (m *MockToolManager) ExecuteToolCall(ctx context.Context, tc types.ToolCall
 	return m.Execute(ctx, tc.Name, args)
 }
 
-// =============================================================================
-// 🔍 查询方法
-// =============================================================================
+// --- 查询方法 ---
 
 // GetCalls 获取所有调用记录
 func (m *MockToolManager) GetCalls() []ToolCall {
@@ -307,9 +290,7 @@ func (m *MockToolManager) Clear() {
 	m.calls = []ToolCall{}
 }
 
-// =============================================================================
-// 🎭 预设 ToolManager 工厂
-// =============================================================================
+// --- 预设 ToolManager 工厂 ---
 
 // NewEmptyToolManager 创建空的工具管理器
 func NewEmptyToolManager() *MockToolManager {

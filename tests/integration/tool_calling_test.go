@@ -46,7 +46,7 @@ func TestReActLoop_SingleToolCall(t *testing.T) {
 		},
 	}
 
-	// First LLM call - decides to use tool
+	// 第一次法学硕士通话 - 决定使用工具
 	firstResp := &llm.ChatResponse{
 		ID:       "resp-1",
 		Provider: "test-provider",
@@ -71,7 +71,7 @@ func TestReActLoop_SingleToolCall(t *testing.T) {
 		Usage: llm.ChatUsage{TotalTokens: 20},
 	}
 
-	// Second LLM call - final answer
+	// 第二次法学硕士通话 - 最终答案
 	secondResp := &llm.ChatResponse{
 		ID:       "resp-2",
 		Provider: "test-provider",
@@ -97,7 +97,7 @@ func TestReActLoop_SingleToolCall(t *testing.T) {
 		return len(r.Messages) == 3 // user + assistant + tool
 	})).Return(secondResp, nil).Once()
 
-	// Mock tool execution
+	// 模拟工具执行
 	toolResults := []tools.ToolResult{
 		{
 			ToolCallID: "call_1",
@@ -108,7 +108,7 @@ func TestReActLoop_SingleToolCall(t *testing.T) {
 
 	executor.On("Execute", ctx, mock.Anything).Return(toolResults)
 
-	// Execute ReAct loop
+	// 执行ReAct循环
 	resp, steps, err := reactExecutor.Execute(ctx, req)
 
 	assert.NoError(t, err)
@@ -151,7 +151,7 @@ func TestReActLoop_MultipleToolCalls(t *testing.T) {
 		},
 	}
 
-	// First call - add
+	// 第一次调用 - 添加
 	resp1 := &llm.ChatResponse{
 		ID:       "resp-1",
 		Provider: "test-provider",
@@ -175,7 +175,7 @@ func TestReActLoop_MultipleToolCalls(t *testing.T) {
 		Usage: llm.ChatUsage{TotalTokens: 15},
 	}
 
-	// Second call - multiply
+	// 第二次调用 - 乘法
 	resp2 := &llm.ChatResponse{
 		ID:       "resp-2",
 		Provider: "test-provider",
@@ -199,7 +199,7 @@ func TestReActLoop_MultipleToolCalls(t *testing.T) {
 		Usage: llm.ChatUsage{TotalTokens: 20},
 	}
 
-	// Final call - answer
+	// 最后通话 - 应答
 	resp3 := &llm.ChatResponse{
 		ID:       "resp-3",
 		Provider: "test-provider",
@@ -229,7 +229,7 @@ func TestReActLoop_MultipleToolCalls(t *testing.T) {
 		return len(r.Messages) == 5
 	})).Return(resp3, nil).Once()
 
-	// Mock tool executions
+	// 模拟工具执行
 	executor.On("Execute", ctx, mock.MatchedBy(func(calls []llm.ToolCall) bool {
 		return len(calls) == 1 && calls[0].Name == "add"
 	})).Return([]tools.ToolResult{
@@ -250,7 +250,7 @@ func TestReActLoop_MultipleToolCalls(t *testing.T) {
 		},
 	}).Once()
 
-	// Execute ReAct loop
+	// 执行ReAct循环
 	resp, steps, err := reactExecutor.Execute(ctx, req)
 
 	assert.NoError(t, err)
@@ -286,7 +286,7 @@ func TestReActLoop_ToolError(t *testing.T) {
 		},
 	}
 
-	// LLM calls tool
+	// LLM调用工具
 	resp1 := &llm.ChatResponse{
 		ID:       "resp-1",
 		Provider: "test-provider",
@@ -312,7 +312,7 @@ func TestReActLoop_ToolError(t *testing.T) {
 
 	provider.On("Completion", ctx, mock.Anything).Return(resp1, nil).Once()
 
-	// Mock tool execution with error
+	// 模拟工具执行时出错
 	toolResults := []tools.ToolResult{
 		{
 			ToolCallID: "call_1",
@@ -323,7 +323,7 @@ func TestReActLoop_ToolError(t *testing.T) {
 
 	executor.On("Execute", ctx, mock.Anything).Return(toolResults)
 
-	// Execute ReAct loop - should stop on error
+	// 执行 ReAct 循环 - 应因错误而停止
 	resp, steps, err := reactExecutor.Execute(ctx, req)
 
 	assert.Error(t, err)
@@ -359,7 +359,7 @@ func TestReActLoop_MaxIterations(t *testing.T) {
 		},
 	}
 
-	// Always return tool calls
+	// 始终返回工具调用
 	resp := &llm.ChatResponse{
 		ID:       "resp",
 		Provider: "test-provider",
@@ -395,7 +395,7 @@ func TestReActLoop_MaxIterations(t *testing.T) {
 
 	executor.On("Execute", ctx, mock.Anything).Return(toolResults)
 
-	// Execute ReAct loop - should reach max iterations
+	// 执行 ReAct 循环 - 应达到最大迭代次数
 	_, steps, err := reactExecutor.Execute(ctx, req)
 
 	assert.Error(t, err)

@@ -1,18 +1,6 @@
-// =============================================================================
-// 🎭 MockProvider - LLM Provider 模拟实现
-// =============================================================================
-// 用于测试的 LLM Provider 模拟，支持自定义响应和错误注入
+// MockProvider 的 LLM 提供商测试模拟实现。
 //
-// 使用方法:
-//
-//	provider := mocks.NewMockProvider().
-//	    WithResponse("Hello, World!").
-//	    WithTokenUsage(100, 50)
-//
-//	// 或者使用流式响应
-//	provider := mocks.NewMockProvider().
-//	    WithStreamChunks([]string{"Hello", ", ", "World", "!"})
-// =============================================================================
+// 支持固定响应、流式输出与错误注入场景。
 package mocks
 
 import (
@@ -25,9 +13,7 @@ import (
 	"github.com/BaSui01/agentflow/types"
 )
 
-// =============================================================================
-// 🎯 MockProvider 结构
-// =============================================================================
+// --- MockProvider 结构 ---
 
 // MockProvider 是 LLM Provider 的模拟实现
 type MockProvider struct {
@@ -62,9 +48,7 @@ type MockProviderCall struct {
 	Error    error
 }
 
-// =============================================================================
-// 🔧 构造函数和 Builder 方法
-// =============================================================================
+// --- 构造函数和 Builder 方法 ---
 
 // NewMockProvider 创建新的 MockProvider
 func NewMockProvider() *MockProvider {
@@ -152,9 +136,7 @@ func (m *MockProvider) WithStreamFunc(fn func(ctx context.Context, req *llm.Chat
 	return m
 }
 
-// =============================================================================
-// 🎯 Provider 接口实现
-// =============================================================================
+// --- Provider 接口实现 ---
 
 // Name 返回 Provider 名称
 func (m *MockProvider) Name() string {
@@ -314,9 +296,7 @@ func (m *MockProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-chan
 	return ch, nil
 }
 
-// =============================================================================
-// 🔍 查询方法
-// =============================================================================
+// --- 查询方法 ---
 
 // GetCalls 获取所有调用记录
 func (m *MockProvider) GetCalls() []MockProviderCall {
@@ -352,9 +332,7 @@ func (m *MockProvider) Reset() {
 	m.err = nil
 }
 
-// =============================================================================
-// 🎭 预设 Provider 工厂
-// =============================================================================
+// --- 预设 Provider 工厂 ---
 
 // NewSuccessProvider 创建总是成功的 Provider
 func NewSuccessProvider(response string) *MockProvider {

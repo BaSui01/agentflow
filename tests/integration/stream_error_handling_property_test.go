@@ -38,7 +38,7 @@ func mockSSEServerWithInvalidJSON(invalidJSON string) *httptest.Server {
 			return
 		}
 
-		// Send invalid JSON in SSE data line
+		// 在 SSE 数据行中发送无效 JSON
 		fmt.Fprintf(w, "data: %s\n\n", invalidJSON)
 		flusher.Flush()
 	}))
@@ -50,32 +50,32 @@ func TestProperty15_StreamErrorHandling(t *testing.T) {
 	logger := zap.NewNop()
 
 	rapid.Check(t, func(rt *rapid.T) {
-		// Generate various types of invalid JSON
+		// 生成各种类型的无效JSON
 		invalidJSONType := rapid.IntRange(0, 5).Draw(rt, "invalidJSONType")
 		var invalidJSON string
 
 		switch invalidJSONType {
 		case 0:
-			// Truncated JSON
+			// 截断的 JSON
 			invalidJSON = `{"id": "test", "model": "test-model", "choices": [`
 		case 1:
-			// Missing closing brace
+			// 缺少右大括号
 			invalidJSON = `{"id": "test", "model": "test-model"`
 		case 2:
-			// Invalid syntax - unquoted key
+			// 语法无效 - 不带引号的键
 			invalidJSON = `{id: "test", model: "test-model"}`
 		case 3:
-			// Random garbage
+			// 随机垃圾
 			invalidJSON = rapid.StringMatching(`[a-zA-Z0-9!@#$%^&*()]{5,30}`).Draw(rt, "garbage")
 		case 4:
-			// Malformed array
+			// 数组格式错误
 			invalidJSON = `{"choices": [{"index": 0, "delta": {"content": "test"}`
 		case 5:
-			// Invalid escape sequence
+			// 转义序列无效
 			invalidJSON = `{"id": "test\xinvalid", "model": "test"}`
 		}
 
-		// Select a random provider
+		// 选择随机提供商
 		providerIndex := rapid.IntRange(0, 4).Draw(rt, "providerIndex")
 		providerNames := []string{"grok", "qwen", "deepseek", "glm", "minimax"}
 		providerName := providerNames[providerIndex]
@@ -119,7 +119,7 @@ func TestProperty15_StreamErrorHandling(t *testing.T) {
 
 		require.NoError(t, err, "Stream() should not return error for provider %s", providerName)
 
-		// Collect chunks and check for error
+		// 收集块并检查错误
 		var foundError bool
 		var errorChunk llm.StreamChunk
 		for chunk := range streamCh {
@@ -130,11 +130,11 @@ func TestProperty15_StreamErrorHandling(t *testing.T) {
 			}
 		}
 
-		// Verify that an error chunk was emitted
+		// 验证是否发出了错误块
 		assert.True(t, foundError, "Should receive StreamChunk with error for invalid JSON for provider %s", providerName)
 		assert.NotNil(t, errorChunk.Err, "StreamChunk.Err should not be nil for provider %s", providerName)
 
-		// Verify the error fields (Err is already *llm.Error)
+		// 验证错误字段（Err 已经是 *llm.Error）
 		if errorChunk.Err != nil {
 			assert.NotEmpty(t, errorChunk.Err.Message, "Error message should not be empty for provider %s", providerName)
 			assert.Equal(t, llm.ErrUpstreamError, errorChunk.Err.Code, "Error code should be ErrUpstreamError for provider %s", providerName)
@@ -153,30 +153,30 @@ func TestProperty15_StreamErrorHandling_AllProviders(t *testing.T) {
 		invalidJSON  string
 	}
 
-	// Generate various invalid JSON patterns
+	// 生成各种无效的 JSON 模式
 	invalidJSONPatterns := []string{
-		// Truncated JSON
+		// 截断的 JSON
 		`{"id": "test", "model": "test-model", "choices": [`,
 		`{"id": "test"`,
 		`{"choices": [{"index": 0`,
 		`{"id": "test", "model":`,
-		// Missing closing braces
+		// 缺少右大括号
 		`{"id": "test", "model": "test-model"`,
 		`{"choices": [{"delta": {"content": "test"}}`,
-		// Invalid syntax
+		// 语法无效
 		`{id: "test"}`,
 		`{"id": test}`,
 		`{'id': 'test'}`,
 		`{id: test}`,
-		// Random garbage
+		// 随机垃圾
 		`not json at all`,
 		`<xml>not json</xml>`,
-		// Malformed structures (these will parse but cause issues in provider)
+		// 格式错误的结构（这些将解析但会导致提供程序出现问题）
 		`{"choices": "not an array"}`,
 		`{"id": {"nested": "wrong"}}`,
 		`{"choices": [{"delta": "not object"}]}`,
 		`{"id": [1,2,3]}`,
-		// Additional invalid patterns
+		// 其他无效模式
 		`{"unclosed": "string`,
 		`{trailing comma,}`,
 		`{"key": undefined}`,
@@ -185,7 +185,7 @@ func TestProperty15_StreamErrorHandling_AllProviders(t *testing.T) {
 	var testCases []testCase
 	providerList := []string{"grok", "qwen", "deepseek", "glm", "minimax"}
 
-	// Generate 100+ test cases by repeating patterns with variations
+	// 通过重复具有变化的模式生成 100 多个测试用例
 	idx := 0
 	for round := 0; round < 2; round++ {
 		for _, provider := range providerList {
@@ -200,7 +200,7 @@ func TestProperty15_StreamErrorHandling_AllProviders(t *testing.T) {
 		}
 	}
 
-	// Ensure we have at least 100 test cases
+	// 确保我们至少有 100 个测试用例
 	require.GreaterOrEqual(t, len(testCases), 100, "Should have at least 100 test cases")
 
 	for _, tc := range testCases {
@@ -244,7 +244,7 @@ func TestProperty15_StreamErrorHandling_AllProviders(t *testing.T) {
 
 			require.NoError(t, err, "Stream() should not return error")
 
-			// Collect chunks and check for error
+			// 收集块并检查错误
 			var foundError bool
 			var errorChunk llm.StreamChunk
 			for chunk := range streamCh {
@@ -255,7 +255,7 @@ func TestProperty15_StreamErrorHandling_AllProviders(t *testing.T) {
 				}
 			}
 
-			// Verify error was emitted
+			// 验证已发出错误
 			assert.True(t, foundError, "Should receive StreamChunk with error for invalid JSON")
 			assert.NotNil(t, errorChunk.Err, "StreamChunk.Err should not be nil")
 		})
@@ -268,7 +268,7 @@ func TestProperty15_StreamErrorHandling_ErrorContainsLLMError(t *testing.T) {
 	logger := zap.NewNop()
 
 	rapid.Check(t, func(rt *rapid.T) {
-		// Generate random invalid JSON
+		// 生成随机无效 JSON
 		invalidJSON := rapid.StringMatching(`\{[a-zA-Z0-9:,"' ]{0,20}`).Draw(rt, "invalidJSON")
 
 		providerIndex := rapid.IntRange(0, 4).Draw(rt, "providerIndex")
@@ -314,7 +314,7 @@ func TestProperty15_StreamErrorHandling_ErrorContainsLLMError(t *testing.T) {
 
 		require.NoError(t, err, "Stream() should not return error for provider %s", providerName)
 
-		// Collect error chunk
+		// 收集错误块
 		var errorChunk llm.StreamChunk
 		for chunk := range streamCh {
 			if chunk.Err != nil {
@@ -323,9 +323,9 @@ func TestProperty15_StreamErrorHandling_ErrorContainsLLMError(t *testing.T) {
 			}
 		}
 
-		// Verify error is llm.Error with correct fields (Err is already *llm.Error)
+		// 验证错误是否为 llm.Error 且字段正确（Err 已为 *llm.Error）
 		if errorChunk.Err != nil {
-			// Verify llm.Error fields
+			// 验证 llm.Error 字段
 			assert.Equal(t, llm.ErrUpstreamError, errorChunk.Err.Code,
 				"Error code should be ErrUpstreamError for provider %s", providerName)
 			assert.NotEmpty(t, errorChunk.Err.Message,
@@ -391,14 +391,14 @@ func TestProperty15_StreamErrorHandling_ChannelClosesAfterError(t *testing.T) {
 
 		require.NoError(t, err, "Stream() should not return error for provider %s", providerName)
 
-		// Drain the channel completely
+		// 彻底排空通道
 		chunkCount := 0
 		for range streamCh {
 			chunkCount++
 		}
 
-		// Channel should be closed (loop should exit)
-		// If we get here, the channel was properly closed
+		// 通道应关闭（循环应退出）
+		// 如果我们到达这里，通道已正确关闭
 		assert.True(t, true, "Channel should be closed after error for provider %s", providerName)
 	})
 }
@@ -408,7 +408,7 @@ func TestProperty15_StreamErrorHandling_ChannelClosesAfterError(t *testing.T) {
 func TestProperty15_StreamErrorHandling_MixedValidInvalidJSON(t *testing.T) {
 	logger := zap.NewNop()
 
-	// Create a server that sends valid JSON first, then invalid JSON
+	// 创建一个首先发送有效 JSON，然后发送无效 JSON 的服务器
 	mockMixedSSEServer := func(validContent string, invalidJSON string) *httptest.Server {
 		return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "text/event-stream")
@@ -419,12 +419,12 @@ func TestProperty15_StreamErrorHandling_MixedValidInvalidJSON(t *testing.T) {
 				return
 			}
 
-			// Send valid JSON first
+			// 首先发送有效的 JSON
 			validData := fmt.Sprintf(`{"id":"test","model":"test-model","choices":[{"index":0,"delta":{"role":"assistant","content":"%s"}}]}`, validContent)
 			fmt.Fprintf(w, "data: %s\n\n", validData)
 			flusher.Flush()
 
-			// Then send invalid JSON
+			// 然后发送无效的JSON
 			fmt.Fprintf(w, "data: %s\n\n", invalidJSON)
 			flusher.Flush()
 		}))
@@ -477,7 +477,7 @@ func TestProperty15_StreamErrorHandling_MixedValidInvalidJSON(t *testing.T) {
 
 		require.NoError(t, err, "Stream() should not return error for provider %s", providerName)
 
-		// Collect all chunks
+		// 收集所有块
 		var validChunks []llm.StreamChunk
 		var errorChunk *llm.StreamChunk
 		for chunk := range streamCh {
@@ -488,11 +488,11 @@ func TestProperty15_StreamErrorHandling_MixedValidInvalidJSON(t *testing.T) {
 			}
 		}
 
-		// Should have received valid chunk first
+		// 应该首先收到有效的块
 		assert.GreaterOrEqual(t, len(validChunks), 1,
 			"Should receive at least one valid chunk before error for provider %s", providerName)
 
-		// Should have received error chunk
+		// 应该收到错误块
 		assert.NotNil(t, errorChunk,
 			"Should receive error chunk for invalid JSON for provider %s", providerName)
 	})
@@ -503,7 +503,7 @@ func TestProperty15_StreamErrorHandling_MixedValidInvalidJSON(t *testing.T) {
 func TestProperty15_StreamErrorHandling_EmptyDataLine(t *testing.T) {
 	logger := zap.NewNop()
 
-	// Create a server that sends empty data line followed by valid data
+	// 创建一个服务器，发送空数据行，后跟有效数据
 	mockEmptyDataServer := func() *httptest.Server {
 		return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "text/event-stream")
@@ -514,11 +514,11 @@ func TestProperty15_StreamErrorHandling_EmptyDataLine(t *testing.T) {
 				return
 			}
 
-			// Send empty data line (just whitespace after data:)
+			// 发送空数据行（数据后只有空格:)
 			fmt.Fprintf(w, "data:    \n\n")
 			flusher.Flush()
 
-			// Send [DONE] to close
+			// 发送 [DONE] 关闭
 			fmt.Fprintf(w, "data: [DONE]\n\n")
 			flusher.Flush()
 		}))
@@ -567,18 +567,18 @@ func TestProperty15_StreamErrorHandling_EmptyDataLine(t *testing.T) {
 
 			require.NoError(t, err, "Stream() should not return error")
 
-			// Drain channel - empty data line should either be skipped or cause error
+			// 漏极通道 - 空数据线应被跳过或导致错误
 			var hasError bool
 			for chunk := range streamCh {
 				if chunk.Err != nil {
 					hasError = true
-					// Err is already *llm.Error, no type assertion needed
+					// Err 已经是 *llm.Error，不需要类型断言
 					assert.NotNil(t, chunk.Err, "Error should not be nil for provider %s", providerName)
 				}
 			}
 
-			// Empty whitespace after "data:" should cause JSON parse error
-			// since it's not valid JSON and not [DONE]
+			// “data:”后的空白会导致 JSON 解析错误
+			// 因为它不是有效的 JSON 并且不是 [DONE]
 			assert.True(t, hasError, "Empty data line should cause error for provider %s", providerName)
 		})
 	}

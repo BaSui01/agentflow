@@ -59,11 +59,11 @@ func (m *MockProvider) ListModels(ctx context.Context) ([]llm.Model, error) {
 func TestMultiProviderRouting(t *testing.T) {
 	logger, _ := zap.NewDevelopment()
 
-	// Create mock providers
+	// 创建模拟提供商
 	provider1 := &MockProvider{name: "provider1"}
 	provider2 := &MockProvider{name: "provider2"}
 
-	// Create router with providers map
+	// 使用提供商地图创建路由器
 	providers := map[string]llm.Provider{
 		"provider1": provider1,
 		"provider2": provider2,
@@ -80,7 +80,7 @@ func TestMultiProviderRouting(t *testing.T) {
 		},
 	}
 
-	// Mock provider1 response
+	// 模拟提供商 1 响应
 	resp1 := &llm.ChatResponse{
 		ID:       "resp-1",
 		Provider: "provider1",
@@ -97,7 +97,7 @@ func TestMultiProviderRouting(t *testing.T) {
 
 	provider1.On("Completion", ctx, req).Return(resp1, nil)
 
-	// Route to provider1 - use provider directly since legacy router is deprecated
+	// 路由到provider1 - 直接使用provider，因为旧版路由器已被弃用
 	resp, err := provider1.Completion(ctx, req)
 
 	assert.NoError(t, err)
@@ -112,11 +112,11 @@ func TestMultiProviderRouting(t *testing.T) {
 func TestMultiProviderFailover(t *testing.T) {
 	logger, _ := zap.NewDevelopment()
 
-	// Create mock providers
+	// 创建模拟提供商
 	provider1 := &MockProvider{name: "provider1"}
 	provider2 := &MockProvider{name: "provider2"}
 
-	// Create router with providers map
+	// 使用提供商地图创建路由器
 	providers := map[string]llm.Provider{
 		"provider1": provider1,
 		"provider2": provider2,
@@ -132,10 +132,10 @@ func TestMultiProviderFailover(t *testing.T) {
 		},
 	}
 
-	// Mock provider1 failure
+	// 模拟提供商 1 失败
 	provider1.On("Completion", ctx, req).Return(nil, assert.AnError)
 
-	// Mock provider2 success
+	// 模拟提供商2成功
 	resp2 := &llm.ChatResponse{
 		ID:       "resp-2",
 		Provider: "provider2",
@@ -152,11 +152,11 @@ func TestMultiProviderFailover(t *testing.T) {
 
 	provider2.On("Completion", ctx, req).Return(resp2, nil)
 
-	// Try provider1, should fail - use provider directly
+	// 尝试provider1，应该会失败 - 直接使用provider
 	_, err := provider1.Completion(ctx, req)
 	assert.Error(t, err)
 
-	// Fallback to provider2 - use provider directly
+	// 回退到provider2 - 直接使用provider
 	resp, err := provider2.Completion(ctx, req)
 	assert.NoError(t, err)
 	assert.NotNil(t, resp)
@@ -170,11 +170,11 @@ func TestMultiProviderFailover(t *testing.T) {
 func TestMultiProviderLoadBalancing(t *testing.T) {
 	logger, _ := zap.NewDevelopment()
 
-	// Create mock providers
+	// 创建模拟提供商
 	provider1 := &MockProvider{name: "provider1"}
 	provider2 := &MockProvider{name: "provider2"}
 
-	// Create router with providers map
+	// 使用提供商地图创建路由器
 	providers := map[string]llm.Provider{
 		"provider1": provider1,
 		"provider2": provider2,
@@ -184,7 +184,7 @@ func TestMultiProviderLoadBalancing(t *testing.T) {
 
 	ctx := context.Background()
 
-	// Mock responses
+	// 模拟回复
 	resp1 := &llm.ChatResponse{
 		ID:       "resp-1",
 		Provider: "provider1",
@@ -214,7 +214,7 @@ func TestMultiProviderLoadBalancing(t *testing.T) {
 	provider1.On("Completion", ctx, mock.Anything).Return(resp1, nil)
 	provider2.On("Completion", ctx, mock.Anything).Return(resp2, nil)
 
-	// Send multiple requests - use providers directly
+	// 发送多个请求 - 直接使用提供商
 	for i := 0; i < 10; i++ {
 		req := &llm.ChatRequest{
 			Model: "gpt-4",
@@ -223,7 +223,7 @@ func TestMultiProviderLoadBalancing(t *testing.T) {
 			},
 		}
 
-		// Alternate between providers
+		// 在提供商之间交替
 		var resp *llm.ChatResponse
 		var err error
 		if i%2 == 0 {
@@ -235,7 +235,7 @@ func TestMultiProviderLoadBalancing(t *testing.T) {
 		assert.NotNil(t, resp)
 	}
 
-	// Both providers should have been called
+	// 两个提供商都应该被称为
 	provider1.AssertExpectations(t)
 	provider2.AssertExpectations(t)
 }
@@ -244,11 +244,11 @@ func TestMultiProviderLoadBalancing(t *testing.T) {
 func TestMultiProviderHealthCheck(t *testing.T) {
 	logger, _ := zap.NewDevelopment()
 
-	// Create mock providers
+	// 创建模拟提供商
 	provider1 := &MockProvider{name: "provider1"}
 	provider2 := &MockProvider{name: "provider2"}
 
-	// Create router with providers map
+	// 使用提供商地图创建路由器
 	providers := map[string]llm.Provider{
 		"provider1": provider1,
 		"provider2": provider2,
@@ -258,7 +258,7 @@ func TestMultiProviderHealthCheck(t *testing.T) {
 
 	ctx := context.Background()
 
-	// Mock health check responses
+	// 模拟健康检查响应
 	health1 := &llm.HealthStatus{
 		Healthy:   true,
 		Latency:   50 * time.Millisecond,
@@ -274,12 +274,12 @@ func TestMultiProviderHealthCheck(t *testing.T) {
 	provider1.On("HealthCheck", ctx).Return(health1, nil)
 	provider2.On("HealthCheck", ctx).Return(health2, nil)
 
-	// Check health of provider1
+	// 检查提供商1的健康状况
 	status1, err := provider1.HealthCheck(ctx)
 	assert.NoError(t, err)
 	assert.True(t, status1.Healthy)
 
-	// Check health of provider2
+	// 检查provider2的健康状况
 	status2, err := provider2.HealthCheck(ctx)
 	assert.NoError(t, err)
 	assert.False(t, status2.Healthy)

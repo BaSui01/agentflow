@@ -1,14 +1,6 @@
-// =============================================================================
-// 🧠 MockMemoryManager - 记忆管理器模拟实现
-// =============================================================================
-// 用于测试的记忆管理器模拟，支持消息存储和检索
+// MockMemoryManager 的测试模拟实现。
 //
-// 使用方法:
-//
-//	memory := mocks.NewMockMemoryManager()
-//	memory.Add(ctx, types.Message{Role: "user", Content: "Hello"})
-//	messages := memory.GetAll(ctx)
-// =============================================================================
+// 用于消息存储、检索与状态验证相关测试。
 package mocks
 
 import (
@@ -18,9 +10,7 @@ import (
 	"github.com/BaSui01/agentflow/types"
 )
 
-// =============================================================================
-// 🎯 MockMemoryManager 结构
-// =============================================================================
+// --- MockMemoryManager 结构 ---
 
 // MockMemoryManager 是记忆管理器的模拟实现
 type MockMemoryManager struct {
@@ -49,9 +39,7 @@ type MockMemoryManager struct {
 	searchResults []types.Message
 }
 
-// =============================================================================
-// 🔧 构造函数和 Builder 方法
-// =============================================================================
+// --- 构造函数和 Builder 方法 ---
 
 // NewMockMemoryManager 创建新的 MockMemoryManager
 func NewMockMemoryManager() *MockMemoryManager {
@@ -127,9 +115,7 @@ func (m *MockMemoryManager) WithSearchError(err error) *MockMemoryManager {
 	return m
 }
 
-// =============================================================================
-// 🎯 MemoryManager 接口实现
-// =============================================================================
+// --- MemoryManager 接口实现 ---
 
 // Add 添加消息到记忆
 func (m *MockMemoryManager) Add(ctx context.Context, msg types.Message) error {
@@ -239,9 +225,7 @@ func (m *MockMemoryManager) Count() int {
 	return len(m.messages)
 }
 
-// =============================================================================
-// 🔍 查询方法
-// =============================================================================
+// --- 查询方法 ---
 
 // GetAddCalls 获取 Add 调用次数
 func (m *MockMemoryManager) GetAddCalls() int {
@@ -286,9 +270,7 @@ func (m *MockMemoryManager) Reset() {
 	m.searchErr = nil
 }
 
-// =============================================================================
-// 🎭 预设 MemoryManager 工厂
-// =============================================================================
+// --- 预设 MemoryManager 工厂 ---
 
 // NewEmptyMemory 创建空的记忆管理器
 func NewEmptyMemory() *MockMemoryManager {

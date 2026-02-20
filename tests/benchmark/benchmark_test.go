@@ -1,17 +1,6 @@
-// =============================================================================
-// 🚀 AgentFlow 性能基准测试
-// =============================================================================
-// 覆盖关键路径的性能测试，包括：
-// - Memory 层访问（Episodic/Semantic/Working）
-// - Guardrails 验证链
-// - Cache 命中/未命中
-// - Router 路由选择
-// - Agent 执行流程
+// AgentFlow 关键路径性能基准测试。
 //
-// 运行方式:
-//   go test -bench=. -benchmem ./tests/benchmark/...
-//   go test -bench=BenchmarkMemory -benchmem ./tests/benchmark/...
-// =============================================================================
+// 关注记忆层、护栏链路、缓存、路由与代理执行等场景。
 
 package benchmark
 
@@ -30,9 +19,7 @@ import (
 	"go.uber.org/zap"
 )
 
-// =============================================================================
-// 🧠 Memory Layer Benchmarks
-// =============================================================================
+// --- 内存层基准测试 ---
 
 // BenchmarkEpisodicMemory_Store 测试 Episodic Memory 存储性能
 func BenchmarkEpisodicMemory_Store(b *testing.B) {
@@ -197,9 +184,7 @@ func BenchmarkWorkingMemory_SetGet(b *testing.B) {
 	}
 }
 
-// =============================================================================
-// 🛡️ Guardrails Benchmarks
-// =============================================================================
+// --- 护栏基准测试 ---
 
 // BenchmarkValidatorChain_Validate 测试验证器链性能
 func BenchmarkValidatorChain_Validate(b *testing.B) {
@@ -307,9 +292,7 @@ func BenchmarkGuardrails_Concurrent(b *testing.B) {
 	})
 }
 
-// =============================================================================
-// 💾 Cache Benchmarks
-// =============================================================================
+// --- 缓存基准测试 ---
 
 // BenchmarkCacheKeyGeneration_Hash 测试 Hash 键生成性能
 func BenchmarkCacheKeyGeneration_Hash(b *testing.B) {
@@ -482,9 +465,7 @@ func BenchmarkLRUCache_Operations(b *testing.B) {
 	})
 }
 
-// =============================================================================
-// 🔀 Router Benchmarks
-// =============================================================================
+// --- 路由基准测试 ---
 
 // BenchmarkRouter_Selection 测试路由选择性能
 func BenchmarkRouter_Selection(b *testing.B) {
@@ -555,9 +536,7 @@ func BenchmarkRouter_Concurrent(b *testing.B) {
 	})
 }
 
-// =============================================================================
-// 📊 Composite Benchmarks (End-to-End)
-// =============================================================================
+// --- 端到端综合基准测试 ---
 
 // BenchmarkFullPipeline_Simple 测试简单请求的完整流程
 func BenchmarkFullPipeline_Simple(b *testing.B) {
@@ -640,9 +619,7 @@ func BenchmarkFullPipeline_WithGuardrails(b *testing.B) {
 	}
 }
 
-// =============================================================================
-// 📈 Scalability Benchmarks
-// =============================================================================
+// --- 可扩展性基准测试 ---
 
 // BenchmarkMemory_Scalability 测试内存系统的可扩展性
 func BenchmarkMemory_Scalability(b *testing.B) {
@@ -722,9 +699,7 @@ func BenchmarkCache_Scalability(b *testing.B) {
 	}
 }
 
-// =============================================================================
-// 🔄 Throughput Benchmarks
-// =============================================================================
+// --- 吞吐量基准测试 ---
 
 // BenchmarkThroughput_MemoryOperations 测试内存操作吞吐量
 func BenchmarkThroughput_MemoryOperations(b *testing.B) {

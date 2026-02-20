@@ -53,7 +53,7 @@ func TestNewProviders_Compatibility(t *testing.T) {
 
 	for _, p := range providers {
 		t.Run(p.name, func(t *testing.T) {
-			// Test interface compliance
+			// 测试接口合规性
 			assert.NotEmpty(t, p.provider.Name())
 			assert.True(t, p.provider.SupportsNativeFunctionCalling())
 		})
@@ -106,10 +106,10 @@ func TestNewProviders_ResilientWrapper(t *testing.T) {
 				t.Skipf("%s API key not set", p.name)
 			}
 
-			// Wrap with resilient provider
+			// 与弹性提供商一起包裹
 			resilient := llm.NewResilientProviderSimple(p.provider, nil, logger)
 
-			// Test basic completion
+			// 测试基本完成
 			req := &llm.ChatRequest{
 				Messages: []llm.Message{
 					{Role: llm.RoleUser, Content: "Hello"},
