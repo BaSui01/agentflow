@@ -24,9 +24,7 @@ func TestKimiProvider_SupportsNativeFunctionCalling(t *testing.T) {
 }
 
 func TestKimiProvider_DefaultBaseURL(t *testing.T) {
-	cfg := providers.KimiConfig{
-		APIKey: "test-key",
-	}
+	cfg := providers.KimiConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key"}}
 	provider := NewKimiProvider(cfg, zap.NewNop())
 	assert.NotNil(t, provider)
 }
@@ -38,9 +36,11 @@ func TestKimiProvider_Integration(t *testing.T) {
 	}
 
 	provider := NewKimiProvider(providers.KimiConfig{
-		APIKey:  apiKey,
-		Model:   "moonshot-v1-8k",
-		Timeout: 30 * time.Second,
+		BaseProviderConfig: providers.BaseProviderConfig{
+			APIKey:  apiKey,
+			Model:   "moonshot-v1-8k",
+			Timeout: 30 * time.Second,
+		},
 	}, zap.NewNop())
 
 	ctx := context.Background()

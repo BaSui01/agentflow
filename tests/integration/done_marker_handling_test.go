@@ -110,23 +110,23 @@ func TestDoneMarkerHandling_StreamClosesOnDone(t *testing.T) {
 
 			switch tc.providerName {
 			case "grok":
-				cfg := providers.GrokConfig{APIKey: "test-key", BaseURL: server.URL}
+				cfg := providers.GrokConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key", BaseURL: server.URL}}
 				p := grok.NewGrokProvider(cfg, logger)
 				streamCh, err = p.Stream(ctx, req)
 			case "qwen":
-				cfg := providers.QwenConfig{APIKey: "test-key", BaseURL: server.URL}
+				cfg := providers.QwenConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key", BaseURL: server.URL}}
 				p := qwen.NewQwenProvider(cfg, logger)
 				streamCh, err = p.Stream(ctx, req)
 			case "deepseek":
-				cfg := providers.DeepSeekConfig{APIKey: "test-key", BaseURL: server.URL}
+				cfg := providers.DeepSeekConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key", BaseURL: server.URL}}
 				p := deepseek.NewDeepSeekProvider(cfg, logger)
 				streamCh, err = p.Stream(ctx, req)
 			case "glm":
-				cfg := providers.GLMConfig{APIKey: "test-key", BaseURL: server.URL}
+				cfg := providers.GLMConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key", BaseURL: server.URL}}
 				p := glm.NewGLMProvider(cfg, logger)
 				streamCh, err = p.Stream(ctx, req)
 			case "minimax":
-				cfg := providers.MiniMaxConfig{APIKey: "test-key", BaseURL: server.URL}
+				cfg := providers.MiniMaxConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key", BaseURL: server.URL}}
 				p := minimax.NewMiniMaxProvider(cfg, logger)
 				streamCh, err = p.Stream(ctx, req)
 			}
@@ -216,23 +216,23 @@ func TestDoneMarkerHandling_ChannelProperlyClosedWithTimeout(t *testing.T) {
 
 			switch providerName {
 			case "grok":
-				cfg := providers.GrokConfig{APIKey: "test-key", BaseURL: server.URL}
+				cfg := providers.GrokConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key", BaseURL: server.URL}}
 				p := grok.NewGrokProvider(cfg, logger)
 				streamCh, err = p.Stream(ctx, req)
 			case "qwen":
-				cfg := providers.QwenConfig{APIKey: "test-key", BaseURL: server.URL}
+				cfg := providers.QwenConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key", BaseURL: server.URL}}
 				p := qwen.NewQwenProvider(cfg, logger)
 				streamCh, err = p.Stream(ctx, req)
 			case "deepseek":
-				cfg := providers.DeepSeekConfig{APIKey: "test-key", BaseURL: server.URL}
+				cfg := providers.DeepSeekConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key", BaseURL: server.URL}}
 				p := deepseek.NewDeepSeekProvider(cfg, logger)
 				streamCh, err = p.Stream(ctx, req)
 			case "glm":
-				cfg := providers.GLMConfig{APIKey: "test-key", BaseURL: server.URL}
+				cfg := providers.GLMConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key", BaseURL: server.URL}}
 				p := glm.NewGLMProvider(cfg, logger)
 				streamCh, err = p.Stream(ctx, req)
 			case "minimax":
-				cfg := providers.MiniMaxConfig{APIKey: "test-key", BaseURL: server.URL}
+				cfg := providers.MiniMaxConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key", BaseURL: server.URL}}
 				p := minimax.NewMiniMaxProvider(cfg, logger)
 				streamCh, err = p.Stream(ctx, req)
 			}
@@ -336,23 +336,23 @@ func TestDoneMarkerHandling_NoDataAfterDone(t *testing.T) {
 
 			switch providerName {
 			case "grok":
-				cfg := providers.GrokConfig{APIKey: "test-key", BaseURL: server.URL}
+				cfg := providers.GrokConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key", BaseURL: server.URL}}
 				p := grok.NewGrokProvider(cfg, logger)
 				streamCh, err = p.Stream(ctx, req)
 			case "qwen":
-				cfg := providers.QwenConfig{APIKey: "test-key", BaseURL: server.URL}
+				cfg := providers.QwenConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key", BaseURL: server.URL}}
 				p := qwen.NewQwenProvider(cfg, logger)
 				streamCh, err = p.Stream(ctx, req)
 			case "deepseek":
-				cfg := providers.DeepSeekConfig{APIKey: "test-key", BaseURL: server.URL}
+				cfg := providers.DeepSeekConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key", BaseURL: server.URL}}
 				p := deepseek.NewDeepSeekProvider(cfg, logger)
 				streamCh, err = p.Stream(ctx, req)
 			case "glm":
-				cfg := providers.GLMConfig{APIKey: "test-key", BaseURL: server.URL}
+				cfg := providers.GLMConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key", BaseURL: server.URL}}
 				p := glm.NewGLMProvider(cfg, logger)
 				streamCh, err = p.Stream(ctx, req)
 			case "minimax":
-				cfg := providers.MiniMaxConfig{APIKey: "test-key", BaseURL: server.URL}
+				cfg := providers.MiniMaxConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key", BaseURL: server.URL}}
 				p := minimax.NewMiniMaxProvider(cfg, logger)
 				streamCh, err = p.Stream(ctx, req)
 			}
@@ -434,23 +434,23 @@ func TestDoneMarkerHandling_ConcurrentReads(t *testing.T) {
 
 			switch providerName {
 			case "grok":
-				cfg := providers.GrokConfig{APIKey: "test-key", BaseURL: server.URL}
+				cfg := providers.GrokConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key", BaseURL: server.URL}}
 				p := grok.NewGrokProvider(cfg, logger)
 				streamCh, err = p.Stream(ctx, req)
 			case "qwen":
-				cfg := providers.QwenConfig{APIKey: "test-key", BaseURL: server.URL}
+				cfg := providers.QwenConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key", BaseURL: server.URL}}
 				p := qwen.NewQwenProvider(cfg, logger)
 				streamCh, err = p.Stream(ctx, req)
 			case "deepseek":
-				cfg := providers.DeepSeekConfig{APIKey: "test-key", BaseURL: server.URL}
+				cfg := providers.DeepSeekConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key", BaseURL: server.URL}}
 				p := deepseek.NewDeepSeekProvider(cfg, logger)
 				streamCh, err = p.Stream(ctx, req)
 			case "glm":
-				cfg := providers.GLMConfig{APIKey: "test-key", BaseURL: server.URL}
+				cfg := providers.GLMConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key", BaseURL: server.URL}}
 				p := glm.NewGLMProvider(cfg, logger)
 				streamCh, err = p.Stream(ctx, req)
 			case "minimax":
-				cfg := providers.MiniMaxConfig{APIKey: "test-key", BaseURL: server.URL}
+				cfg := providers.MiniMaxConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key", BaseURL: server.URL}}
 				p := minimax.NewMiniMaxProvider(cfg, logger)
 				streamCh, err = p.Stream(ctx, req)
 			}
@@ -554,7 +554,7 @@ func TestDoneMarkerHandling_DoneMarkerVariations(t *testing.T) {
 			}
 
 			// 以grok提供商为代表进行测试
-			cfg := providers.GrokConfig{APIKey: "test-key", BaseURL: server.URL}
+			cfg := providers.GrokConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key", BaseURL: server.URL}}
 			p := grok.NewGrokProvider(cfg, logger)
 			streamCh, err := p.Stream(context.Background(), req)
 

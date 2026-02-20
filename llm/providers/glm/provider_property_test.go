@@ -108,7 +108,7 @@ func TestProperty12_HTTPStatusToErrorCodeMapping(t *testing.T) {
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(tc.httpStatus)
-				json.NewEncoder(w).Encode(openAIErrorResp{
+				json.NewEncoder(w).Encode(providers.OpenAICompatErrorResp{
 					Error: struct {
 						Message string `json:"message"`
 						Type    string `json:"type"`
@@ -124,8 +124,10 @@ func TestProperty12_HTTPStatusToErrorCodeMapping(t *testing.T) {
 
 			// 以测试服务器 URL 创建提供者
 			cfg := providers.GLMConfig{
-				APIKey:  "test-key",
-				BaseURL: server.URL,
+				BaseProviderConfig: providers.BaseProviderConfig{
+					APIKey:  "test-key",
+					BaseURL: server.URL,
+				},
 			}
 			provider := NewGLMProvider(cfg, zap.NewNop())
 
@@ -173,7 +175,7 @@ func TestProperty12_HTTPStatusToErrorCodeMapping(t *testing.T) {
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusUnauthorized)
-			json.NewEncoder(w).Encode(openAIErrorResp{
+			json.NewEncoder(w).Encode(providers.OpenAICompatErrorResp{
 				Error: struct {
 					Message string `json:"message"`
 					Type    string `json:"type"`
@@ -188,8 +190,10 @@ func TestProperty12_HTTPStatusToErrorCodeMapping(t *testing.T) {
 		defer server.Close()
 
 		cfg := providers.GLMConfig{
-			APIKey:  "test-key",
-			BaseURL: server.URL,
+			BaseProviderConfig: providers.BaseProviderConfig{
+				APIKey:  "test-key",
+				BaseURL: server.URL,
+			},
 		}
 		provider := NewGLMProvider(cfg, zap.NewNop())
 

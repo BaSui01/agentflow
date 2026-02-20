@@ -101,7 +101,7 @@ func TestProperty3_OpenAIFormatConversion(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			// 创建测试服务器以抓取请求
-			var capturedRequest openAIRequest
+			var capturedRequest providers.OpenAICompatRequest
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				// 解码请求正文
 				json.NewDecoder(r.Body).Decode(&capturedRequest)
@@ -109,14 +109,14 @@ func TestProperty3_OpenAIFormatConversion(t *testing.T) {
 				// 返回有效的响应
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusOK)
-				json.NewEncoder(w).Encode(openAIResponse{
+				json.NewEncoder(w).Encode(providers.OpenAICompatResponse{
 					ID:    "test-id",
 					Model: "qwen-plus",
-					Choices: []openAIChoice{
+					Choices: []providers.OpenAICompatChoice{
 						{
 							Index:        0,
 							FinishReason: "stop",
-							Message: openAIMessage{
+							Message: providers.OpenAICompatMessage{
 								Role:    "assistant",
 								Content: "test response",
 							},
@@ -128,8 +128,10 @@ func TestProperty3_OpenAIFormatConversion(t *testing.T) {
 
 			// 以测试服务器 URL 创建提供者
 			cfg := providers.QwenConfig{
-				APIKey:  "test-key",
-				BaseURL: server.URL,
+				BaseProviderConfig: providers.BaseProviderConfig{
+					APIKey:  "test-key",
+					BaseURL: server.URL,
+				},
 			}
 			provider := NewQwenProvider(cfg, zap.NewNop())
 

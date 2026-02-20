@@ -43,23 +43,23 @@ func TestProperty7_DefaultTimeoutConfiguration(t *testing.T) {
 			t.Run(provider+"_"+tc.name, func(t *testing.T) {
 				switch provider {
 				case "grok":
-					cfg := providers.GrokConfig{APIKey: "test-key", BaseURL: "https://api.x.ai", Timeout: tc.configTimeout}
+					cfg := providers.GrokConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key", BaseURL: "https://api.x.ai", Timeout: tc.configTimeout}}
 					p := grok.NewGrokProvider(cfg, logger)
 					assert.NotNil(t, p, "Provider should be created")
 				case "qwen":
-					cfg := providers.QwenConfig{APIKey: "test-key", BaseURL: "https://dashscope.aliyuncs.com/compatible-mode/v1", Timeout: tc.configTimeout}
+					cfg := providers.QwenConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key", BaseURL: "https://dashscope.aliyuncs.com/compatible-mode/v1", Timeout: tc.configTimeout}}
 					p := qwen.NewQwenProvider(cfg, logger)
 					assert.NotNil(t, p, "Provider should be created")
 				case "deepseek":
-					cfg := providers.DeepSeekConfig{APIKey: "test-key", BaseURL: "https://api.deepseek.com", Timeout: tc.configTimeout}
+					cfg := providers.DeepSeekConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key", BaseURL: "https://api.deepseek.com", Timeout: tc.configTimeout}}
 					p := deepseek.NewDeepSeekProvider(cfg, logger)
 					assert.NotNil(t, p, "Provider should be created")
 				case "glm":
-					cfg := providers.GLMConfig{APIKey: "test-key", BaseURL: "https://open.bigmodel.cn/api/paas/v4", Timeout: tc.configTimeout}
+					cfg := providers.GLMConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key", BaseURL: "https://open.bigmodel.cn/api/paas/v4", Timeout: tc.configTimeout}}
 					p := glm.NewGLMProvider(cfg, logger)
 					assert.NotNil(t, p, "Provider should be created")
 				case "minimax":
-					cfg := providers.MiniMaxConfig{APIKey: "test-key", BaseURL: "https://api.minimax.chat/v1", Timeout: tc.configTimeout}
+					cfg := providers.MiniMaxConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key", BaseURL: "https://api.minimax.chat/v1", Timeout: tc.configTimeout}}
 					p := minimax.NewMiniMaxProvider(cfg, logger)
 					assert.NotNil(t, p, "Provider should be created")
 				}
@@ -87,27 +87,27 @@ func TestProperty7_TimeoutBehavior(t *testing.T) {
 
 			switch provider {
 			case "grok":
-				cfg := providers.GrokConfig{APIKey: "test-key", BaseURL: slowServer.URL, Timeout: 100 * time.Millisecond}
+				cfg := providers.GrokConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key", BaseURL: slowServer.URL, Timeout: 100 * time.Millisecond}}
 				p := grok.NewGrokProvider(cfg, logger)
 				_, err := p.HealthCheck(ctx)
 				assert.Error(t, err, "Should timeout for %s", provider)
 			case "qwen":
-				cfg := providers.QwenConfig{APIKey: "test-key", BaseURL: slowServer.URL, Timeout: 100 * time.Millisecond}
+				cfg := providers.QwenConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key", BaseURL: slowServer.URL, Timeout: 100 * time.Millisecond}}
 				p := qwen.NewQwenProvider(cfg, logger)
 				_, err := p.HealthCheck(ctx)
 				assert.Error(t, err, "Should timeout for %s", provider)
 			case "deepseek":
-				cfg := providers.DeepSeekConfig{APIKey: "test-key", BaseURL: slowServer.URL, Timeout: 100 * time.Millisecond}
+				cfg := providers.DeepSeekConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key", BaseURL: slowServer.URL, Timeout: 100 * time.Millisecond}}
 				p := deepseek.NewDeepSeekProvider(cfg, logger)
 				_, err := p.HealthCheck(ctx)
 				assert.Error(t, err, "Should timeout for %s", provider)
 			case "glm":
-				cfg := providers.GLMConfig{APIKey: "test-key", BaseURL: slowServer.URL, Timeout: 100 * time.Millisecond}
+				cfg := providers.GLMConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key", BaseURL: slowServer.URL, Timeout: 100 * time.Millisecond}}
 				p := glm.NewGLMProvider(cfg, logger)
 				_, err := p.HealthCheck(ctx)
 				assert.Error(t, err, "Should timeout for %s", provider)
 			case "minimax":
-				cfg := providers.MiniMaxConfig{APIKey: "test-key", BaseURL: slowServer.URL, Timeout: 100 * time.Millisecond}
+				cfg := providers.MiniMaxConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key", BaseURL: slowServer.URL, Timeout: 100 * time.Millisecond}}
 				p := minimax.NewMiniMaxProvider(cfg, logger)
 				_, err := p.HealthCheck(ctx)
 				assert.Error(t, err, "Should timeout for %s", provider)
@@ -148,23 +148,23 @@ func TestProperty7_DefaultTimeoutVariations(t *testing.T) {
 			t.Run(provider+"_timeout_"+v.name, func(t *testing.T) {
 				switch provider {
 				case "grok":
-					cfg := providers.GrokConfig{APIKey: "test", Timeout: v.timeout}
+					cfg := providers.GrokConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test", Timeout: v.timeout}}
 					p := grok.NewGrokProvider(cfg, logger)
 					assert.NotNil(t, p)
 				case "qwen":
-					cfg := providers.QwenConfig{APIKey: "test", Timeout: v.timeout}
+					cfg := providers.QwenConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test", Timeout: v.timeout}}
 					p := qwen.NewQwenProvider(cfg, logger)
 					assert.NotNil(t, p)
 				case "deepseek":
-					cfg := providers.DeepSeekConfig{APIKey: "test", Timeout: v.timeout}
+					cfg := providers.DeepSeekConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test", Timeout: v.timeout}}
 					p := deepseek.NewDeepSeekProvider(cfg, logger)
 					assert.NotNil(t, p)
 				case "glm":
-					cfg := providers.GLMConfig{APIKey: "test", Timeout: v.timeout}
+					cfg := providers.GLMConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test", Timeout: v.timeout}}
 					p := glm.NewGLMProvider(cfg, logger)
 					assert.NotNil(t, p)
 				case "minimax":
-					cfg := providers.MiniMaxConfig{APIKey: "test", Timeout: v.timeout}
+					cfg := providers.MiniMaxConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test", Timeout: v.timeout}}
 					p := minimax.NewMiniMaxProvider(cfg, logger)
 					assert.NotNil(t, p)
 				}

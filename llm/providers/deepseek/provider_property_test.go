@@ -62,14 +62,14 @@ func TestProperty6_CredentialOverrideFromContext(t *testing.T) {
 				// 返回有效的响应
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusOK)
-				json.NewEncoder(w).Encode(openAIResponse{
+				json.NewEncoder(w).Encode(providers.OpenAICompatResponse{
 					ID:    "test-id",
 					Model: "deepseek-chat",
-					Choices: []openAIChoice{
+					Choices: []providers.OpenAICompatChoice{
 						{
 							Index:        0,
 							FinishReason: "stop",
-							Message: openAIMessage{
+							Message: providers.OpenAICompatMessage{
 								Role:    "assistant",
 								Content: "test response",
 							},
@@ -81,8 +81,10 @@ func TestProperty6_CredentialOverrideFromContext(t *testing.T) {
 
 			// 以配置 API 密钥创建提供者
 			cfg := providers.DeepSeekConfig{
-				APIKey:  tc.configAPIKey,
-				BaseURL: server.URL,
+				BaseProviderConfig: providers.BaseProviderConfig{
+					APIKey:  tc.configAPIKey,
+					BaseURL: server.URL,
+				},
 			}
 			provider := NewDeepSeekProvider(cfg, zap.NewNop())
 
@@ -123,13 +125,13 @@ func TestProperty6_CredentialOverrideFromContext(t *testing.T) {
 			w.WriteHeader(http.StatusOK)
 
 			// 发送简单的 SSE 响应
-			data := openAIResponse{
+			data := providers.OpenAICompatResponse{
 				ID:    "test-id",
 				Model: "deepseek-chat",
-				Choices: []openAIChoice{
+				Choices: []providers.OpenAICompatChoice{
 					{
 						Index: 0,
-						Delta: &openAIMessage{
+						Delta: &providers.OpenAICompatMessage{
 							Role:    "assistant",
 							Content: "test",
 						},
@@ -144,8 +146,10 @@ func TestProperty6_CredentialOverrideFromContext(t *testing.T) {
 		defer server.Close()
 
 		cfg := providers.DeepSeekConfig{
-			APIKey:  "config-key",
-			BaseURL: server.URL,
+			BaseProviderConfig: providers.BaseProviderConfig{
+				APIKey:  "config-key",
+				BaseURL: server.URL,
+			},
 		}
 		provider := NewDeepSeekProvider(cfg, zap.NewNop())
 
@@ -182,14 +186,14 @@ func TestProperty6_CredentialOverrideFromContext(t *testing.T) {
 
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusOK)
-			json.NewEncoder(w).Encode(openAIResponse{
+			json.NewEncoder(w).Encode(providers.OpenAICompatResponse{
 				ID:    "test-id",
 				Model: "deepseek-chat",
-				Choices: []openAIChoice{
+				Choices: []providers.OpenAICompatChoice{
 					{
 						Index:        0,
 						FinishReason: "stop",
-						Message: openAIMessage{
+						Message: providers.OpenAICompatMessage{
 							Role:    "assistant",
 							Content: "test response",
 						},
@@ -200,8 +204,10 @@ func TestProperty6_CredentialOverrideFromContext(t *testing.T) {
 		defer server.Close()
 
 		cfg := providers.DeepSeekConfig{
-			APIKey:  "config-key-only",
-			BaseURL: server.URL,
+			BaseProviderConfig: providers.BaseProviderConfig{
+				APIKey:  "config-key-only",
+				BaseURL: server.URL,
+			},
 		}
 		provider := NewDeepSeekProvider(cfg, zap.NewNop())
 

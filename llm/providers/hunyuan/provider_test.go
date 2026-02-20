@@ -24,9 +24,7 @@ func TestHunyuanProvider_SupportsNativeFunctionCalling(t *testing.T) {
 }
 
 func TestHunyuanProvider_DefaultBaseURL(t *testing.T) {
-	cfg := providers.HunyuanConfig{
-		APIKey: "test-key",
-	}
+	cfg := providers.HunyuanConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key"}}
 	provider := NewHunyuanProvider(cfg, zap.NewNop())
 	assert.NotNil(t, provider)
 }
@@ -38,9 +36,11 @@ func TestHunyuanProvider_Integration(t *testing.T) {
 	}
 
 	provider := NewHunyuanProvider(providers.HunyuanConfig{
-		APIKey:  apiKey,
-		Model:   "hunyuan-lite",
-		Timeout: 30 * time.Second,
+		BaseProviderConfig: providers.BaseProviderConfig{
+			APIKey:  apiKey,
+			Model:   "hunyuan-lite",
+			Timeout: 30 * time.Second,
+		},
 	}, zap.NewNop())
 
 	ctx := context.Background()

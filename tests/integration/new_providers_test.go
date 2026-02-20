@@ -27,27 +27,19 @@ func TestNewProviders_Compatibility(t *testing.T) {
 	}{
 		{
 			name: "Mistral",
-			provider: mistral.NewMistralProvider(providers.MistralConfig{
-				APIKey: "test-key",
-			}, logger),
+			provider: mistral.NewMistralProvider(providers.MistralConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key"}}, logger),
 		},
 		{
 			name: "Hunyuan",
-			provider: hunyuan.NewHunyuanProvider(providers.HunyuanConfig{
-				APIKey: "test-key",
-			}, logger),
+			provider: hunyuan.NewHunyuanProvider(providers.HunyuanConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key"}}, logger),
 		},
 		{
 			name: "Kimi",
-			provider: kimi.NewKimiProvider(providers.KimiConfig{
-				APIKey: "test-key",
-			}, logger),
+			provider: kimi.NewKimiProvider(providers.KimiConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key"}}, logger),
 		},
 		{
 			name: "Llama",
-			provider: llama.NewLlamaProvider(providers.LlamaConfig{
-				APIKey: "test-key",
-			}, logger),
+			provider: llama.NewLlamaProvider(providers.LlamaConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key"}}, logger),
 		},
 	}
 
@@ -72,30 +64,22 @@ func TestNewProviders_ResilientWrapper(t *testing.T) {
 	}{
 		{
 			name: "Mistral",
-			provider: mistral.NewMistralProvider(providers.MistralConfig{
-				APIKey: os.Getenv("MISTRAL_API_KEY"),
-			}, logger),
+			provider: mistral.NewMistralProvider(providers.MistralConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: os.Getenv("MISTRAL_API_KEY")}}, logger),
 			skip: os.Getenv("MISTRAL_API_KEY") == "",
 		},
 		{
 			name: "Hunyuan",
-			provider: hunyuan.NewHunyuanProvider(providers.HunyuanConfig{
-				APIKey: os.Getenv("HUNYUAN_API_KEY"),
-			}, logger),
+			provider: hunyuan.NewHunyuanProvider(providers.HunyuanConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: os.Getenv("HUNYUAN_API_KEY")}}, logger),
 			skip: os.Getenv("HUNYUAN_API_KEY") == "",
 		},
 		{
 			name: "Kimi",
-			provider: kimi.NewKimiProvider(providers.KimiConfig{
-				APIKey: os.Getenv("KIMI_API_KEY"),
-			}, logger),
+			provider: kimi.NewKimiProvider(providers.KimiConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: os.Getenv("KIMI_API_KEY")}}, logger),
 			skip: os.Getenv("KIMI_API_KEY") == "",
 		},
 		{
 			name: "Llama",
-			provider: llama.NewLlamaProvider(providers.LlamaConfig{
-				APIKey: os.Getenv("TOGETHER_API_KEY"),
-			}, logger),
+			provider: llama.NewLlamaProvider(providers.LlamaConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: os.Getenv("TOGETHER_API_KEY")}}, logger),
 			skip: os.Getenv("TOGETHER_API_KEY") == "",
 		},
 	}
@@ -144,16 +128,12 @@ func TestNewProviders_FunctionCalling(t *testing.T) {
 	}{
 		{
 			name: "Mistral",
-			provider: mistral.NewMistralProvider(providers.MistralConfig{
-				APIKey: os.Getenv("MISTRAL_API_KEY"),
-			}, logger),
+			provider: mistral.NewMistralProvider(providers.MistralConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: os.Getenv("MISTRAL_API_KEY")}}, logger),
 			skip: os.Getenv("MISTRAL_API_KEY") == "",
 		},
 		{
 			name: "Kimi",
-			provider: kimi.NewKimiProvider(providers.KimiConfig{
-				APIKey: os.Getenv("KIMI_API_KEY"),
-			}, logger),
+			provider: kimi.NewKimiProvider(providers.KimiConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: os.Getenv("KIMI_API_KEY")}}, logger),
 			skip: os.Getenv("KIMI_API_KEY") == "",
 		},
 	}
@@ -194,32 +174,40 @@ func BenchmarkNewProviders(b *testing.B) {
 		{
 			name: "Mistral",
 			provider: mistral.NewMistralProvider(providers.MistralConfig{
-				APIKey:  os.Getenv("MISTRAL_API_KEY"),
-				Timeout: 10 * time.Second,
+				BaseProviderConfig: providers.BaseProviderConfig{
+					APIKey:  os.Getenv("MISTRAL_API_KEY"),
+					Timeout: 10 * time.Second,
+				},
 			}, logger),
 			skip: os.Getenv("MISTRAL_API_KEY") == "",
 		},
 		{
 			name: "Hunyuan",
 			provider: hunyuan.NewHunyuanProvider(providers.HunyuanConfig{
-				APIKey:  os.Getenv("HUNYUAN_API_KEY"),
-				Timeout: 10 * time.Second,
+				BaseProviderConfig: providers.BaseProviderConfig{
+					APIKey:  os.Getenv("HUNYUAN_API_KEY"),
+					Timeout: 10 * time.Second,
+				},
 			}, logger),
 			skip: os.Getenv("HUNYUAN_API_KEY") == "",
 		},
 		{
 			name: "Kimi",
 			provider: kimi.NewKimiProvider(providers.KimiConfig{
-				APIKey:  os.Getenv("KIMI_API_KEY"),
-				Timeout: 10 * time.Second,
+				BaseProviderConfig: providers.BaseProviderConfig{
+					APIKey:  os.Getenv("KIMI_API_KEY"),
+					Timeout: 10 * time.Second,
+				},
 			}, logger),
 			skip: os.Getenv("KIMI_API_KEY") == "",
 		},
 		{
 			name: "Llama",
 			provider: llama.NewLlamaProvider(providers.LlamaConfig{
-				APIKey:  os.Getenv("TOGETHER_API_KEY"),
-				Timeout: 10 * time.Second,
+				BaseProviderConfig: providers.BaseProviderConfig{
+					APIKey:  os.Getenv("TOGETHER_API_KEY"),
+					Timeout: 10 * time.Second,
+				},
 			}, logger),
 			skip: os.Getenv("TOGETHER_API_KEY") == "",
 		},

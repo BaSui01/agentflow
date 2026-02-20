@@ -47,12 +47,14 @@ func TestProperty1_DefaultBaseURLConfiguration(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			cfg := providers.GrokConfig{
-				APIKey:  "test-key",
-				BaseURL: tc.inputBaseURL,
+				BaseProviderConfig: providers.BaseProviderConfig{
+					APIKey:  "test-key",
+					BaseURL: tc.inputBaseURL,
+				},
 			}
 			provider := NewGrokProvider(cfg, zap.NewNop())
 
-			assert.Equal(t, tc.expectedBaseURL, provider.cfg.BaseURL,
+			assert.Equal(t, tc.expectedBaseURL, provider.Cfg.BaseURL,
 				"BaseURL should match expected value")
 		})
 	}
@@ -88,14 +90,14 @@ func TestProperty2_BearerTokenAuthentication(t *testing.T) {
 
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusOK)
-				json.NewEncoder(w).Encode(openAIResponse{
+				json.NewEncoder(w).Encode(providers.OpenAICompatResponse{
 					ID:    "test-id",
 					Model: "grok-beta",
-					Choices: []openAIChoice{
+					Choices: []providers.OpenAICompatChoice{
 						{
 							Index:        0,
 							FinishReason: "stop",
-							Message: openAIMessage{
+							Message: providers.OpenAICompatMessage{
 								Role:    "assistant",
 								Content: "test response",
 							},
@@ -106,8 +108,10 @@ func TestProperty2_BearerTokenAuthentication(t *testing.T) {
 			defer server.Close()
 
 			cfg := providers.GrokConfig{
-				APIKey:  tc.apiKey,
-				BaseURL: server.URL,
+				BaseProviderConfig: providers.BaseProviderConfig{
+					APIKey:  tc.apiKey,
+					BaseURL: server.URL,
+				},
 			}
 			provider := NewGrokProvider(cfg, zap.NewNop())
 
@@ -138,14 +142,14 @@ func TestProperty2_BearerTokenAuthentication(t *testing.T) {
 
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusOK)
-			json.NewEncoder(w).Encode(openAIResponse{
+			json.NewEncoder(w).Encode(providers.OpenAICompatResponse{
 				ID:    "test-id",
 				Model: "grok-beta",
-				Choices: []openAIChoice{
+				Choices: []providers.OpenAICompatChoice{
 					{
 						Index:        0,
 						FinishReason: "stop",
-						Message: openAIMessage{
+						Message: providers.OpenAICompatMessage{
 							Role:    "assistant",
 							Content: "test response",
 						},
@@ -156,8 +160,10 @@ func TestProperty2_BearerTokenAuthentication(t *testing.T) {
 		defer server.Close()
 
 		cfg := providers.GrokConfig{
-			APIKey:  "original-key",
-			BaseURL: server.URL,
+			BaseProviderConfig: providers.BaseProviderConfig{
+				APIKey:  "original-key",
+				BaseURL: server.URL,
+			},
 		}
 		provider := NewGrokProvider(cfg, zap.NewNop())
 
@@ -199,8 +205,10 @@ func TestProperty2_BearerTokenAuthentication(t *testing.T) {
 		defer server.Close()
 
 		cfg := providers.GrokConfig{
-			APIKey:  apiKey,
-			BaseURL: server.URL,
+			BaseProviderConfig: providers.BaseProviderConfig{
+				APIKey:  apiKey,
+				BaseURL: server.URL,
+			},
 		}
 		provider := NewGrokProvider(cfg, zap.NewNop())
 
@@ -252,20 +260,20 @@ func TestProperty5_DefaultModelSelectionPriority(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			var capturedModel string
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				var reqBody openAIRequest
+				var reqBody providers.OpenAICompatRequest
 				json.NewDecoder(r.Body).Decode(&reqBody)
 				capturedModel = reqBody.Model
 
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusOK)
-				json.NewEncoder(w).Encode(openAIResponse{
+				json.NewEncoder(w).Encode(providers.OpenAICompatResponse{
 					ID:    "test-id",
 					Model: reqBody.Model,
-					Choices: []openAIChoice{
+					Choices: []providers.OpenAICompatChoice{
 						{
 							Index:        0,
 							FinishReason: "stop",
-							Message: openAIMessage{
+							Message: providers.OpenAICompatMessage{
 								Role:    "assistant",
 								Content: "test response",
 							},
@@ -276,9 +284,11 @@ func TestProperty5_DefaultModelSelectionPriority(t *testing.T) {
 			defer server.Close()
 
 			cfg := providers.GrokConfig{
-				APIKey:  "test-key",
-				BaseURL: server.URL,
-				Model:   tc.configModel,
+				BaseProviderConfig: providers.BaseProviderConfig{
+					APIKey:  "test-key",
+					BaseURL: server.URL,
+					Model:   tc.configModel,
+				},
 			}
 			provider := NewGrokProvider(cfg, zap.NewNop())
 
@@ -302,7 +312,7 @@ func TestProperty5_DefaultModelSelectionPriority(t *testing.T) {
 	t.Run("model selection in streaming mode", func(t *testing.T) {
 		var capturedModel string
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			var reqBody openAIRequest
+			var reqBody providers.OpenAICompatRequest
 			json.NewDecoder(r.Body).Decode(&reqBody)
 			capturedModel = reqBody.Model
 
@@ -311,13 +321,13 @@ func TestProperty5_DefaultModelSelectionPriority(t *testing.T) {
 			w.Header().Set("Content-Type", "text/event-stream")
 			w.WriteHeader(http.StatusOK)
 
-			data := openAIResponse{
+			data := providers.OpenAICompatResponse{
 				ID:    "test-id",
 				Model: reqBody.Model,
-				Choices: []openAIChoice{
+				Choices: []providers.OpenAICompatChoice{
 					{
 						Index: 0,
-						Delta: &openAIMessage{
+						Delta: &providers.OpenAICompatMessage{
 							Role:    "assistant",
 							Content: "test",
 						},
@@ -331,9 +341,11 @@ func TestProperty5_DefaultModelSelectionPriority(t *testing.T) {
 		defer server.Close()
 
 		cfg := providers.GrokConfig{
-			APIKey:  "test-key",
-			BaseURL: server.URL,
-			Model:   "config-model",
+			BaseProviderConfig: providers.BaseProviderConfig{
+				APIKey:  "test-key",
+				BaseURL: server.URL,
+				Model:   "config-model",
+			},
 		}
 		provider := NewGrokProvider(cfg, zap.NewNop())
 
