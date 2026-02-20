@@ -8,14 +8,14 @@ import (
 // 它囊括了之前在BaseAgent中的特性管理逻辑.
 type FeatureManager struct {
 	// 特性实例( 使用接口来避免循环依赖)
-	reflection     interface{} // *ReflectionExecutor
-	toolSelector   interface{} // *DynamicToolSelector
-	promptEnhancer interface{} // *PromptEnhancer
-	skillManager   interface{} // *SkillManager
-	mcpServer      interface{} // *MCPServer
-	lspClient      interface{} // *lsp.LSPClient
-	enhancedMemory interface{} // *EnhancedMemorySystem
-	observability  interface{} // *ObservabilitySystem
+	reflection     any // *ReflectionExecutor
+	toolSelector   any // *DynamicToolSelector
+	promptEnhancer any // *PromptEnhancer
+	skillManager   any // *SkillManager
+	mcpServer      any // *MCPServer
+	lspClient      any // *lsp.LSPClient
+	enhancedMemory any // *EnhancedMemorySystem
+	observability  any // *ObservabilitySystem
 
 	// 地物标志
 	reflectionEnabled     bool
@@ -38,7 +38,7 @@ func NewFeatureManager(logger *zap.Logger) *FeatureManager {
 }
 
 // 启用反射功能可以实现反射功能 。
-func (fm *FeatureManager) EnableReflection(executor interface{}) {
+func (fm *FeatureManager) EnableReflection(executor any) {
 	fm.reflection = executor
 	fm.reflectionEnabled = true
 	fm.logger.Info("reflection feature enabled")
@@ -52,7 +52,7 @@ func (fm *FeatureManager) DisableReflection() {
 }
 
 // Get Reflection 返回反射执行器 。
-func (fm *FeatureManager) GetReflection() interface{} {
+func (fm *FeatureManager) GetReflection() any {
 	return fm.reflection
 }
 
@@ -62,7 +62,7 @@ func (fm *FeatureManager) IsReflectionEnabled() bool {
 }
 
 // 启用工具选择允许动态工具选择功能 。
-func (fm *FeatureManager) EnableToolSelection(selector interface{}) {
+func (fm *FeatureManager) EnableToolSelection(selector any) {
 	fm.toolSelector = selector
 	fm.toolSelectionEnabled = true
 	fm.logger.Info("tool selection feature enabled")
@@ -76,7 +76,7 @@ func (fm *FeatureManager) DisableToolSelection() {
 }
 
 // GetTooSelector 返回工具选择器。
-func (fm *FeatureManager) GetToolSelector() interface{} {
+func (fm *FeatureManager) GetToolSelector() any {
 	return fm.toolSelector
 }
 
@@ -86,7 +86,7 @@ func (fm *FeatureManager) IsToolSelectionEnabled() bool {
 }
 
 // 启用Prompt Enhancer 启用了即时增强器特性 。
-func (fm *FeatureManager) EnablePromptEnhancer(enhancer interface{}) {
+func (fm *FeatureManager) EnablePromptEnhancer(enhancer any) {
 	fm.promptEnhancer = enhancer
 	fm.promptEnhancerEnabled = true
 	fm.logger.Info("prompt enhancer feature enabled")
@@ -100,7 +100,7 @@ func (fm *FeatureManager) DisablePromptEnhancer() {
 }
 
 // GetPrompt Enhancer 返回快速增强器 。
-func (fm *FeatureManager) GetPromptEnhancer() interface{} {
+func (fm *FeatureManager) GetPromptEnhancer() any {
 	return fm.promptEnhancer
 }
 
@@ -110,7 +110,7 @@ func (fm *FeatureManager) IsPromptEnhancerEnabled() bool {
 }
 
 // 启用技能可以实现技能特性 。
-func (fm *FeatureManager) EnableSkills(manager interface{}) {
+func (fm *FeatureManager) EnableSkills(manager any) {
 	fm.skillManager = manager
 	fm.skillsEnabled = true
 	fm.logger.Info("skills feature enabled")
@@ -124,7 +124,7 @@ func (fm *FeatureManager) DisableSkills() {
 }
 
 // GetSkillManager返回技能管理器.
-func (fm *FeatureManager) GetSkillManager() interface{} {
+func (fm *FeatureManager) GetSkillManager() any {
 	return fm.skillManager
 }
 
@@ -134,7 +134,7 @@ func (fm *FeatureManager) IsSkillsEnabled() bool {
 }
 
 // 启用 MCP 启用 MCP( 模式背景协议) 特性 。
-func (fm *FeatureManager) EnableMCP(server interface{}) {
+func (fm *FeatureManager) EnableMCP(server any) {
 	fm.mcpServer = server
 	fm.mcpEnabled = true
 	fm.logger.Info("MCP feature enabled")
@@ -148,7 +148,7 @@ func (fm *FeatureManager) DisableMCP() {
 }
 
 // GetMCPServer 返回 MCP 服务器.
-func (fm *FeatureManager) GetMCPServer() interface{} {
+func (fm *FeatureManager) GetMCPServer() any {
 	return fm.mcpServer
 }
 
@@ -158,7 +158,7 @@ func (fm *FeatureManager) IsMCPEnabled() bool {
 }
 
 // EnableLSP enables the LSP feature.
-func (fm *FeatureManager) EnableLSP(client interface{}) {
+func (fm *FeatureManager) EnableLSP(client any) {
 	fm.lspClient = client
 	fm.lspEnabled = true
 	fm.logger.Info("LSP feature enabled")
@@ -172,7 +172,7 @@ func (fm *FeatureManager) DisableLSP() {
 }
 
 // GetLSP returns the LSP client.
-func (fm *FeatureManager) GetLSP() interface{} {
+func (fm *FeatureManager) GetLSP() any {
 	return fm.lspClient
 }
 
@@ -182,7 +182,7 @@ func (fm *FeatureManager) IsLSPEnabled() bool {
 }
 
 // 启用 Enhanced Memory 启用增强的内存功能 。
-func (fm *FeatureManager) EnableEnhancedMemory(system interface{}) {
+func (fm *FeatureManager) EnableEnhancedMemory(system any) {
 	fm.enhancedMemory = system
 	fm.enhancedMemoryEnabled = true
 	fm.logger.Info("enhanced memory feature enabled")
@@ -196,7 +196,7 @@ func (fm *FeatureManager) DisableEnhancedMemory() {
 }
 
 // Get Enhanced Memory 返回增强的内存系统.
-func (fm *FeatureManager) GetEnhancedMemory() interface{} {
+func (fm *FeatureManager) GetEnhancedMemory() any {
 	return fm.enhancedMemory
 }
 
@@ -206,7 +206,7 @@ func (fm *FeatureManager) IsEnhancedMemoryEnabled() bool {
 }
 
 // 启用可观察性可以实现可观察性特性.
-func (fm *FeatureManager) EnableObservability(system interface{}) {
+func (fm *FeatureManager) EnableObservability(system any) {
 	fm.observability = system
 	fm.observabilityEnabled = true
 	fm.logger.Info("observability feature enabled")
@@ -220,7 +220,7 @@ func (fm *FeatureManager) DisableObservability() {
 }
 
 // GetObservacy返回可观察系统.
-func (fm *FeatureManager) GetObservability() interface{} {
+func (fm *FeatureManager) GetObservability() any {
 	return fm.observability
 }
 

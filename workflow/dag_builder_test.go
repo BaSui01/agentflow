@@ -11,11 +11,11 @@ import (
 // mockStep is a simple step implementation for testing
 type mockStep struct {
 	name   string
-	result interface{}
+	result any
 	err    error
 }
 
-func (m *mockStep) Execute(ctx context.Context, input interface{}) (interface{}, error) {
+func (m *mockStep) Execute(ctx context.Context, input any) (any, error) {
 	if m.err != nil {
 		return nil, m.err
 	}
@@ -56,7 +56,7 @@ func TestDAGBuilder_BasicWorkflow(t *testing.T) {
 
 func TestDAGBuilder_ConditionalWorkflow(t *testing.T) {
 	// Build a workflow with conditional branching
-	conditionFunc := func(ctx context.Context, input interface{}) (bool, error) {
+	conditionFunc := func(ctx context.Context, input any) (bool, error) {
 		if val, ok := input.(int); ok {
 			return val > 10, nil
 		}
@@ -89,7 +89,7 @@ func TestDAGBuilder_ConditionalWorkflow(t *testing.T) {
 
 func TestDAGBuilder_LoopWorkflow(t *testing.T) {
 	// Build a workflow with a loop
-	loopCondition := func(ctx context.Context, input interface{}) (bool, error) {
+	loopCondition := func(ctx context.Context, input any) (bool, error) {
 		if val, ok := input.(int); ok {
 			return val < 5, nil
 		}
@@ -442,11 +442,11 @@ func TestDAGBuilder_ValidationErrors(t *testing.T) {
 
 func TestDAGBuilder_ComplexWorkflow(t *testing.T) {
 	// Build a complex workflow with multiple node types
-	conditionFunc := func(ctx context.Context, input interface{}) (bool, error) {
+	conditionFunc := func(ctx context.Context, input any) (bool, error) {
 		return true, nil
 	}
 
-	loopCondition := func(ctx context.Context, input interface{}) (bool, error) {
+	loopCondition := func(ctx context.Context, input any) (bool, error) {
 		return false, nil
 	}
 

@@ -122,7 +122,7 @@ type Message struct {
 	// 多模式消息的图像内容
 	Images []ImageContent `json:"images,omitempty"`
 	// 自定义元数据
-	Metadata interface{} `json:"metadata,omitempty"`
+	Metadata any `json:"metadata,omitempty"`
 	// 消息时间戳
 	Timestamp time.Time `json:"timestamp,omitempty"`
 }
@@ -255,9 +255,11 @@ type LLMProviderModel struct {
 	Enabled bool `json:"enabled" example:"true"`
 }
 
-// HealthStatus 代表提供商健康检查结果。
+// ProviderHealthResponse 代表提供商健康检查结果（HTTP API 序列化 DTO）。
+// 注意：这是 API 层的响应类型，Latency 为 string 格式。
+// 框架内部的 Provider 健康状态请使用 llm.HealthStatus。
 // @Description 提供者健康状况
-type HealthStatus struct {
+type ProviderHealthResponse struct {
 	// 提供者是否健康
 	Healthy bool `json:"healthy" example:"true"`
 	// 响应延迟
@@ -316,9 +318,9 @@ type AgentCard struct {
 	// 代理能力
 	Capabilities []Capability `json:"capabilities"`
 	// 代理输入的 JSON 架构
-	InputSchema interface{} `json:"input_schema,omitempty"`
+	InputSchema any `json:"input_schema,omitempty"`
 	// 代理输出的 JSON 架构
-	OutputSchema interface{} `json:"output_schema,omitempty"`
+	OutputSchema any `json:"output_schema,omitempty"`
 	// 可用工具
 	Tools []ToolDefinition `json:"tools,omitempty"`
 	// 附加元数据
@@ -344,7 +346,7 @@ type ToolDefinition struct {
 	// 工具说明
 	Description string `json:"description" example:"Search the web"`
 	// 工具参数的 JSON 架构
-	Parameters interface{} `json:"parameters,omitempty"`
+	Parameters any `json:"parameters,omitempty"`
 }
 
 // A2ARequest表示A2A调用请求。
@@ -353,7 +355,7 @@ type A2ARequest struct {
 	// 任务描述或查询
 	Task string `json:"task" example:"What is the weather today?" binding:"required"`
 	// 额外的背景信息
-	Context interface{} `json:"context,omitempty"`
+	Context any `json:"context,omitempty"`
 	// 是否流式传输响应
 	Stream bool `json:"stream,omitempty" example:"false"`
 }
@@ -364,7 +366,7 @@ type A2AResponse struct {
 	// 响应状态（成功、错误、待处理）
 	Status string `json:"status" example:"success"`
 	// 任务结果
-	Result interface{} `json:"result,omitempty"`
+	Result any `json:"result,omitempty"`
 	// 如果失败则出现错误消息
 	Error string `json:"error,omitempty"`
 }

@@ -10,6 +10,7 @@ import (
 	"github.com/BaSui01/agentflow/config"
 	"github.com/BaSui01/agentflow/internal/metrics"
 	"github.com/BaSui01/agentflow/internal/server"
+	llmfactory "github.com/BaSui01/agentflow/llm/factory"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.uber.org/zap"
 )
@@ -30,8 +31,8 @@ type Server struct {
 
 	// Handlers
 	healthHandler *handlers.HealthHandler
-	// TODO: 添加更多 handlers
-	// chatHandler   *handlers.ChatHandler
+	chatHandler   *handlers.ChatHandler
+	// TODO: agentHandler depends on agent registry, kept as future work
 	// agentHandler  *handlers.AgentHandler
 
 	// 指标收集器
@@ -100,10 +101,27 @@ func (s *Server) initHandlers() error {
 	// 健康检查 handler
 	s.healthHandler = handlers.NewHealthHandler(s.logger)
 
-	// TODO: 初始化其他 handlers
-	// 需要先初始化 Provider 和 Registry
-	// s.chatHandler = handlers.NewChatHandler(provider, s.logger)
-	// s.agentHandler = handlers.NewAgentHandler(discoveryRegistry, agentRegistry, s.logger)
+	// 初始化 LLM Provider（使用工厂函数）
+	if s.cfg.LLM.APIKey != "" {
+		provider, err := llmfactory.NewProviderFromConfig(s.cfg.LLM.DefaultProvider, llmfactory.ProviderConfig{
+			APIKey:  s.cfg.LLM.APIKey,
+			BaseURL: s.cfg.LLM.BaseURL,
+			Timeout: s.cfg.LLM.Timeout,
+		}, s.logger)
+		if err != nil {
+			s.logger.Warn("Failed to create LLM provider, chat endpoints disabled",
+				zap.String("provider", s.cfg.LLM.DefaultProvider),
+				zap.Error(err))
+		} else {
+			s.chatHandler = handlers.NewChatHandler(provider, s.logger)
+			s.logger.Info("Chat handler initialized",
+				zap.String("provider", s.cfg.LLM.DefaultProvider))
+		}
+	} else {
+		s.logger.Info("LLM API key not configured, chat endpoints disabled")
+	}
+
+	// TODO: agentHandler initialization requires agent registry (OP8)
 
 	s.logger.Info("Handlers initialized")
 	return nil
@@ -168,10 +186,14 @@ func (s *Server) startHTTPServer() error {
 	mux.HandleFunc("/version", s.healthHandler.HandleVersion(Version, BuildTime, GitCommit))
 
 	// ========================================
-	// API 路由（TODO: 使用新的 handlers）
+	// API 路由
 	// ========================================
-	// mux.HandleFunc("/v1/chat/completions", s.chatHandler.HandleCompletion)
-	// mux.HandleFunc("/v1/chat/completions/stream", s.chatHandler.HandleStream)
+	if s.chatHandler != nil {
+		mux.HandleFunc("/v1/chat/completions", s.chatHandler.HandleCompletion)
+		mux.HandleFunc("/v1/chat/completions/stream", s.chatHandler.HandleStream)
+		s.logger.Info("Chat API routes registered")
+	}
+	// TODO: Agent routes depend on agent registry (OP8)
 	// mux.HandleFunc("/v1/agents", s.agentHandler.HandleListAgents)
 	// mux.HandleFunc("/v1/agents/execute", s.agentHandler.HandleExecuteAgent)
 
@@ -189,6 +211,7 @@ func (s *Server) startHTTPServer() error {
 	skipAuthPaths := []string{"/health", "/healthz", "/ready", "/readyz", "/version", "/metrics"}
 	handler := Chain(mux,
 		Recovery(s.logger),
+		RequestID(),
 		RequestLogger(s.logger),
 		CORS(s.cfg.Server.CORSAllowedOrigins),
 		RateLimiter(float64(s.cfg.Server.RateLimitRPS), s.cfg.Server.RateLimitBurst, s.logger),

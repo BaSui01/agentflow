@@ -132,7 +132,7 @@ func TestManager_GetJSONNonExistent(t *testing.T) {
 
 	ctx := context.Background()
 
-	var result map[string]interface{}
+	var result map[string]any
 	err := manager.GetJSON(ctx, "non-existent", &result)
 	assert.Error(t, err)
 }
@@ -162,7 +162,7 @@ func TestManager_GetJSONInvalidJSON(t *testing.T) {
 	require.NoError(t, err)
 
 	// 尝试获取为 JSON
-	var result map[string]interface{}
+	var result map[string]any
 	err = manager.GetJSON(ctx, "test-invalid-json", &result)
 	assert.Error(t, err)
 }

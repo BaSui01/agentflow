@@ -130,7 +130,7 @@ func createSkillFixture(t *testing.T, root, id, name, instructions string) {
 		Version:      "1.0.0",
 		Description:  name,
 		Instructions: instructions,
-		Resources:    map[string]interface{}{},
+		Resources:    map[string]any{},
 		Tools:        []string{},
 		Examples:     []SkillExample{},
 	}}

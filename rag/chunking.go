@@ -52,7 +52,7 @@ type Chunk struct {
 	Content    string                 `json:"content"`
 	StartPos   int                    `json:"start_pos"`
 	EndPos     int                    `json:"end_pos"`
-	Metadata   map[string]interface{} `json:"metadata"`
+	Metadata   map[string]any `json:"metadata"`
 	TokenCount int                    `json:"token_count"`
 }
 
@@ -374,7 +374,7 @@ func (c *DocumentChunker) documentAwareChunking(doc Document) []Chunk {
 				StartPos:   block.StartPos,
 				EndPos:     block.EndPos,
 				TokenCount: c.tokenizer.CountTokens(block.Content),
-				Metadata: map[string]interface{}{
+				Metadata: map[string]any{
 					"type": "code",
 				},
 			})
@@ -385,7 +385,7 @@ func (c *DocumentChunker) documentAwareChunking(doc Document) []Chunk {
 				StartPos:   block.StartPos,
 				EndPos:     block.EndPos,
 				TokenCount: c.tokenizer.CountTokens(block.Content),
-				Metadata: map[string]interface{}{
+				Metadata: map[string]any{
 					"type": "table",
 				},
 			})
@@ -619,7 +619,8 @@ func (c *DocumentChunker) identifyStructuralBlocks(content string) []StructuralB
 	return blocks
 }
 
-// SimpleTokenizer 简单分词器（用于测试）
+// SimpleTokenizer 简单分词器（1 token ≈ 4 字符）。
+// 仅用于测试和快速原型。生产环境请使用 NewTiktokenAdapter 创建基于 tiktoken 的分词器。
 type SimpleTokenizer struct{}
 
 func (t *SimpleTokenizer) CountTokens(text string) int {

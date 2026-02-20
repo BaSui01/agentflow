@@ -237,7 +237,7 @@ func (wr *WebRetriever) mergeResults(localResults []RetrievalResult, webResults 
 			Document: Document{
 				ID:      fmt.Sprintf("web_%s", contentHash(wr2.URL)),
 				Content: wr2.Content,
-				Metadata: map[string]interface{}{
+				Metadata: map[string]any{
 					"source": "web",
 					"url":    wr2.URL,
 					"title":  wr2.Title,

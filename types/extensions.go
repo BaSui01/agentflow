@@ -5,13 +5,13 @@ import "context"
 // ============================================================
 // Extension Interfaces
 // These interfaces define contracts for optional Agent capabilities.
-// They replace the use of interface{} in BaseAgent for type safety.
+// They replace the use of any in BaseAgent for type safety.
 // ============================================================
 
 // ReflectionExtension provides self-evaluation and iterative improvement.
 type ReflectionExtension interface {
 	// ExecuteWithReflection executes a task with reflection loop.
-	ExecuteWithReflection(ctx context.Context, input interface{}) (interface{}, error)
+	ExecuteWithReflection(ctx context.Context, input any) (any, error)
 	// IsEnabled returns whether reflection is enabled.
 	IsEnabled() bool
 }
@@ -37,7 +37,7 @@ type SkillsExtension interface {
 	// LoadSkill loads a skill by name.
 	LoadSkill(ctx context.Context, name string) error
 	// ExecuteSkill executes a loaded skill.
-	ExecuteSkill(ctx context.Context, name string, input interface{}) (interface{}, error)
+	ExecuteSkill(ctx context.Context, name string, input any) (any, error)
 	// ListSkills returns available skills.
 	ListSkills() []string
 }
@@ -49,7 +49,7 @@ type MCPExtension interface {
 	// Disconnect closes MCP connection.
 	Disconnect(ctx context.Context) error
 	// SendMessage sends a message via MCP.
-	SendMessage(ctx context.Context, message interface{}) (interface{}, error)
+	SendMessage(ctx context.Context, message any) (any, error)
 	// IsConnected returns connection status.
 	IsConnected() bool
 }
@@ -81,7 +81,7 @@ type SpanHandle interface {
 	// End ends the span.
 	End()
 	// SetAttribute sets an attribute on the span.
-	SetAttribute(key string, value interface{})
+	SetAttribute(key string, value any)
 	// RecordError records an error on the span.
 	RecordError(err error)
 }

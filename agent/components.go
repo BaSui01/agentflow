@@ -460,8 +460,10 @@ func (a *ModularAgent) Execute(ctx context.Context, input *Input) (*Output, erro
 	}
 
 	content := ""
+	finishReason := ""
 	if len(resp.Choices) > 0 {
 		content = resp.Choices[0].Message.Content
+		finishReason = resp.Choices[0].FinishReason
 	}
 
 	// 如果有护栏, 验证输出
@@ -483,7 +485,7 @@ func (a *ModularAgent) Execute(ctx context.Context, input *Input) (*Output, erro
 		Content:      content,
 		TokensUsed:   resp.Usage.TotalTokens,
 		Duration:     time.Since(startTime),
-		FinishReason: resp.Choices[0].FinishReason,
+		FinishReason: finishReason,
 	}, nil
 }
 

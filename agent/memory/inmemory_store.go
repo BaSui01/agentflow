@@ -21,7 +21,7 @@ type InMemoryMemoryStoreConfig struct {
 }
 
 type inMemoryEntry struct {
-	value     interface{}
+	value     any
 	createdAt time.Time
 	expiresAt time.Time
 }
@@ -53,7 +53,7 @@ func NewInMemoryMemoryStore(config InMemoryMemoryStoreConfig, logger *zap.Logger
 	}
 }
 
-func (s *InMemoryMemoryStore) Save(ctx context.Context, key string, value interface{}, ttl time.Duration) error {
+func (s *InMemoryMemoryStore) Save(ctx context.Context, key string, value any, ttl time.Duration) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -81,7 +81,7 @@ func (s *InMemoryMemoryStore) Save(ctx context.Context, key string, value interf
 	return nil
 }
 
-func (s *InMemoryMemoryStore) Load(ctx context.Context, key string) (interface{}, error) {
+func (s *InMemoryMemoryStore) Load(ctx context.Context, key string) (any, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -117,7 +117,7 @@ func (s *InMemoryMemoryStore) Delete(ctx context.Context, key string) error {
 	return nil
 }
 
-func (s *InMemoryMemoryStore) List(ctx context.Context, pattern string, limit int) ([]interface{}, error) {
+func (s *InMemoryMemoryStore) List(ctx context.Context, pattern string, limit int) ([]any, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -130,7 +130,7 @@ func (s *InMemoryMemoryStore) List(ctx context.Context, pattern string, limit in
 
 	type item struct {
 		createdAt time.Time
-		value     interface{}
+		value     any
 	}
 	items := make([]item, 0, len(s.entries))
 
@@ -151,7 +151,7 @@ func (s *InMemoryMemoryStore) List(ctx context.Context, pattern string, limit in
 		limit = len(items)
 	}
 
-	out := make([]interface{}, 0, limit)
+	out := make([]any, 0, limit)
 	for i := 0; i < limit; i++ {
 		out = append(out, items[i].value)
 	}

@@ -42,7 +42,7 @@ type Retryer interface {
 	Do(ctx context.Context, fn func() error) error
 
 	// DoWithResult 执行函数并返回结果，失败时根据策略重试
-	DoWithResult(ctx context.Context, fn func() (interface{}, error)) (interface{}, error)
+	DoWithResult(ctx context.Context, fn func() (any, error)) (any, error)
 }
 
 // backoffRetryer 基于指数退避的重试器实现
@@ -79,7 +79,7 @@ func NewBackoffRetryer(policy *RetryPolicy, logger *zap.Logger) Retryer {
 
 // Do 实现 Retryer.Do
 func (r *backoffRetryer) Do(ctx context.Context, fn func() error) error {
-	_, err := r.DoWithResult(ctx, func() (interface{}, error) {
+	_, err := r.DoWithResult(ctx, func() (any, error) {
 		return nil, fn()
 	})
 	return err
@@ -87,9 +87,9 @@ func (r *backoffRetryer) Do(ctx context.Context, fn func() error) error {
 
 // DoWithResult 实现 Retryer.DoWithResult
 // 核心重试逻辑：指数退避 + 随机抖动 + 错误过滤
-func (r *backoffRetryer) DoWithResult(ctx context.Context, fn func() (interface{}, error)) (interface{}, error) {
+func (r *backoffRetryer) DoWithResult(ctx context.Context, fn func() (any, error)) (any, error) {
 	var lastErr error
-	var result interface{}
+	var result any
 
 	for attempt := 0; attempt <= r.policy.MaxRetries; attempt++ {
 		// 第一次执行不延迟
@@ -215,11 +215,18 @@ func (e *RetryableError) Unwrap() error {
 	return e.Err
 }
 
-// IsRetryable 检查错误是否为可重试错误
-func IsRetryable(err error) bool {
+// IsRetryableError 检查错误是否被 WrapRetryable 包装为可重试错误。
+// 注意：这与 types.IsRetryable 语义不同 —— 本函数检查 *RetryableError 包装类型，
+// 而 types.IsRetryable 检查 *types.Error 的 Retryable 字段。
+func IsRetryableError(err error) bool {
 	var retryableErr *RetryableError
 	return errors.As(err, &retryableErr)
 }
+
+// IsRetryable is an alias for IsRetryableError.
+//
+// Deprecated: 为避免与 types.IsRetryable 混淆，请使用 IsRetryableError。
+var IsRetryable = IsRetryableError
 
 // WrapRetryable 将错误包装为可重试错误
 func WrapRetryable(err error) error {

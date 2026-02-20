@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/BaSui01/agentflow/llm"
@@ -33,8 +34,8 @@ type Resource struct {
 	Description string                 `json:"description"` // 资源描述
 	Type        ResourceType           `json:"type"`        // 资源类型
 	MimeType    string                 `json:"mimeType"`    // MIME 类型
-	Content     interface{}            `json:"content"`     // 资源内容
-	Metadata    map[string]interface{} `json:"metadata"`    // 元数据
+	Content     any            `json:"content"`     // 资源内容
+	Metadata    map[string]any `json:"metadata"`    // 元数据
 	Size        int64                  `json:"size"`        // 资源大小（字节）
 	CreatedAt   time.Time              `json:"createdAt"`   // 创建时间
 	UpdatedAt   time.Time              `json:"updatedAt"`   // 更新时间
@@ -44,9 +45,9 @@ type Resource struct {
 type ToolDefinition struct {
 	Name         string                 `json:"name"`
 	Description  string                 `json:"description"`
-	InputSchema  map[string]interface{} `json:"inputSchema"` // JSON Schema
-	OutputSchema map[string]interface{} `json:"outputSchema,omitempty"`
-	Metadata     map[string]interface{} `json:"metadata,omitempty"`
+	InputSchema  map[string]any `json:"inputSchema"` // JSON Schema
+	OutputSchema map[string]any `json:"outputSchema,omitempty"`
+	Metadata     map[string]any `json:"metadata,omitempty"`
 }
 
 // PromptTemplate MCP 提示词模板
@@ -56,7 +57,7 @@ type PromptTemplate struct {
 	Template    string                 `json:"template"`
 	Variables   []string               `json:"variables"`
 	Examples    []PromptExample        `json:"examples,omitempty"`
-	Metadata    map[string]interface{} `json:"metadata,omitempty"`
+	Metadata    map[string]any `json:"metadata,omitempty"`
 }
 
 // PromptExample 提示词示例
@@ -77,7 +78,7 @@ type MCPServer interface {
 
 	// 工具管理
 	ListTools(ctx context.Context) ([]ToolDefinition, error)
-	CallTool(ctx context.Context, name string, args map[string]interface{}) (interface{}, error)
+	CallTool(ctx context.Context, name string, args map[string]any) (any, error)
 
 	// 提示词管理
 	ListPrompts(ctx context.Context) ([]PromptTemplate, error)
@@ -93,7 +94,7 @@ type ServerInfo struct {
 	Version         string                 `json:"version"`
 	ProtocolVersion string                 `json:"protocolVersion"`
 	Capabilities    ServerCapabilities     `json:"capabilities"`
-	Metadata        map[string]interface{} `json:"metadata,omitempty"`
+	Metadata        map[string]any `json:"metadata,omitempty"`
 }
 
 // ServerCapabilities 服务器能力
@@ -121,7 +122,7 @@ type MCPClient interface {
 
 	// 工具操作
 	ListTools(ctx context.Context) ([]ToolDefinition, error)
-	CallTool(ctx context.Context, name string, args map[string]interface{}) (interface{}, error)
+	CallTool(ctx context.Context, name string, args map[string]any) (any, error)
 
 	// 提示词操作
 	ListPrompts(ctx context.Context) ([]PromptTemplate, error)
@@ -131,10 +132,10 @@ type MCPClient interface {
 // MCPMessage MCP 消息（JSON-RPC 2.0）
 type MCPMessage struct {
 	JSONRPC string                 `json:"jsonrpc"`
-	ID      interface{}            `json:"id,omitempty"`
+	ID      any            `json:"id,omitempty"`
 	Method  string                 `json:"method,omitempty"`
-	Params  map[string]interface{} `json:"params,omitempty"`
-	Result  interface{}            `json:"result,omitempty"`
+	Params  map[string]any `json:"params,omitempty"`
+	Result  any            `json:"result,omitempty"`
 	Error   *MCPError              `json:"error,omitempty"`
 }
 
@@ -142,7 +143,7 @@ type MCPMessage struct {
 type MCPError struct {
 	Code    int         `json:"code"`
 	Message string      `json:"message"`
-	Data    interface{} `json:"data,omitempty"`
+	Data    any `json:"data,omitempty"`
 }
 
 // 标准错误码
@@ -156,7 +157,7 @@ const (
 
 // ToLLMToolSchema 将 MCP 工具定义转换为 LLM 工具 Schema
 func (t *ToolDefinition) ToLLMToolSchema() llm.ToolSchema {
-	// 将 map[string]interface{} 转换为 json.RawMessage
+	// 将 map[string]any 转换为 json.RawMessage
 	parametersJSON, _ := json.Marshal(t.InputSchema)
 
 	return llm.ToolSchema{
@@ -168,8 +169,8 @@ func (t *ToolDefinition) ToLLMToolSchema() llm.ToolSchema {
 
 // FromLLMToolSchema 从 LLM 工具 Schema 创建 MCP 工具定义
 func FromLLMToolSchema(schema llm.ToolSchema) ToolDefinition {
-	// 将 json.RawMessage 转换为 map[string]interface{}
-	var inputSchema map[string]interface{}
+	// 将 json.RawMessage 转换为 map[string]any
+	var inputSchema map[string]any
 	_ = json.Unmarshal(schema.Parameters, &inputSchema)
 
 	return ToolDefinition{
@@ -229,36 +230,10 @@ func (p *PromptTemplate) RenderPrompt(vars map[string]string) (string, error) {
 		}
 
 		placeholder := "{{" + varName + "}}"
-		result = replaceAll(result, placeholder, value)
+		result = strings.ReplaceAll(result, placeholder, value)
 	}
 
 	return result, nil
-}
-
-// replaceAll 替换所有出现的字符串
-func replaceAll(s, old, new string) string {
-	// 简化实现，实际应使用 strings.ReplaceAll
-	result := ""
-	for {
-		idx := indexOf(s, old)
-		if idx == -1 {
-			result += s
-			break
-		}
-		result += s[:idx] + new
-		s = s[idx+len(old):]
-	}
-	return result
-}
-
-// indexOf 查找子字符串位置
-func indexOf(s, substr string) int {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return i
-		}
-	}
-	return -1
 }
 
 // MarshalJSON 自定义 JSON 序列化
@@ -274,7 +249,7 @@ func (m *MCPMessage) MarshalJSON() ([]byte, error) {
 }
 
 // NewMCPRequest 创建 MCP 请求
-func NewMCPRequest(id interface{}, method string, params map[string]interface{}) *MCPMessage {
+func NewMCPRequest(id any, method string, params map[string]any) *MCPMessage {
 	return &MCPMessage{
 		JSONRPC: "2.0",
 		ID:      id,
@@ -284,7 +259,7 @@ func NewMCPRequest(id interface{}, method string, params map[string]interface{})
 }
 
 // NewMCPResponse 创建 MCP 响应
-func NewMCPResponse(id interface{}, result interface{}) *MCPMessage {
+func NewMCPResponse(id any, result any) *MCPMessage {
 	return &MCPMessage{
 		JSONRPC: "2.0",
 		ID:      id,
@@ -293,7 +268,7 @@ func NewMCPResponse(id interface{}, result interface{}) *MCPMessage {
 }
 
 // NewMCPError 创建 MCP 错误响应
-func NewMCPError(id interface{}, code int, message string, data interface{}) *MCPMessage {
+func NewMCPError(id any, code int, message string, data any) *MCPMessage {
 	return &MCPMessage{
 		JSONRPC: "2.0",
 		ID:      id,

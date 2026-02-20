@@ -67,7 +67,7 @@ type Message struct {
 	ToID      string // 空表示广播
 	Type      MessageType
 	Content   string
-	Metadata  map[string]interface{}
+	Metadata  map[string]any
 	Timestamp time.Time
 }
 

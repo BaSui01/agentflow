@@ -32,7 +32,7 @@ func Example_getWeatherTool() {
 		}
 
 		// 模拟获取天气
-		weather := map[string]interface{}{
+		weather := map[string]any{
 			"location":    params.Location,
 			"temperature": 22,
 			"unit":        "celsius",

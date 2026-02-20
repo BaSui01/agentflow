@@ -675,6 +675,303 @@ Shared fixtures live in `testutil/fixtures/`:
 
 Common test utilities in `testutil/helpers.go` — shared setup/teardown, assertion helpers.
 
+### 14. Optional Injection + Backward-Compatible Placeholder Pattern
+
+When upgrading a "stub" step/handler to real functionality, use optional dependency injection with nil-check fallback to preserve backward compatibility:
+
+```go
+// Pattern: nil dependency → placeholder behavior; non-nil → real execution
+type LLMStep struct {
+    Model    string
+    Prompt   string
+    Provider llm.Provider // Optional: inject to enable real LLM calls
+}
+
+func (s *LLMStep) Execute(ctx context.Context, input any) (any, error) {
+    if s.Provider == nil {
+        // Backward-compatible placeholder — returns config map
+        return map[string]any{"model": s.Model, "prompt": s.Prompt, "input": input}, nil
+    }
+    // Real execution path
+    resp, err := s.Provider.Completion(ctx, req)
+    // ...
+}
+```
+
+**Why this pattern**:
+- Existing tests and consumers that don't inject a Provider continue to work unchanged
+- New consumers opt-in to real behavior by injecting the dependency
+- No breaking changes to the Step interface signature
+
+**Applied in**: `workflow/steps.go` — `LLMStep` (injects `llm.Provider`), `ToolStep` (injects `ToolRegistry`), `HumanInputStep` (injects `HumanInputHandler`)
+
+> **Historical lesson**: Sprint 1 OP4 upgraded three workflow steps from placeholder stubs to real integrations. The nil-check pattern allowed all 33 existing tests to pass without modification while adding 25 new tests for real execution paths.
+
+### 15. Workflow-Local Interfaces to Avoid Circular Dependencies
+
+When a lower-layer package (`workflow/`) needs to call into a higher-layer package (`agent/`), define a local interface in the lower-layer package instead of importing the higher-layer:
+
+```go
+// WRONG — circular dependency: workflow → agent → workflow
+import "github.com/BaSui01/agentflow/agent"
+type ToolStep struct {
+    Manager agent.ToolManager
+}
+
+// CORRECT — define a local interface in workflow/
+type ToolRegistry interface {
+    GetTool(name string) (Tool, bool)
+    ExecuteTool(ctx context.Context, name string, params map[string]any) (any, error)
+}
+type ToolStep struct {
+    Registry ToolRegistry // Satisfied by agent.ToolManager at wiring time
+}
+```
+
+**Key rules**:
+- Local interfaces should be minimal — only the methods the consumer actually calls
+- Name them descriptively for the consuming context (`ToolRegistry`, not `ToolManager`)
+- The higher-layer package's concrete type implicitly satisfies the local interface (Go duck typing)
+- Document the intended implementor: `// Implement this interface to bridge workflow with your tool management layer.`
+
+**Applied in**: `workflow/steps.go` — `ToolRegistry`, `Tool`, `HumanInputHandler` interfaces
+
+### 16. Config-to-Domain Bridge Layer with Functional Options
+
+When `config/` structs and domain package structs have overlapping but different fields, create a bridge layer with factory functions + functional options:
+
+```go
+// Factory function — maps config.Config to domain runtime instance
+func NewVectorStoreFromConfig(cfg *config.Config, storeType VectorStoreType, logger *zap.Logger) (VectorStore, error)
+
+// One-shot assembly with functional options
+func NewRetrieverFromConfig(cfg *config.Config, opts ...RetrieverOption) (*EnhancedRetriever, error)
+
+// Options
+func WithLogger(l *zap.Logger) RetrieverOption
+func WithEmbeddingType(t EmbeddingProviderType) RetrieverOption
+func WithRerankType(t RerankProviderType) RetrieverOption
+```
+
+**Key rules**:
+- Internal `mapXxxConfig` functions handle field-by-field mapping (not exported)
+- Nil config → return error (not panic)
+- Nil logger → default to `zap.NewNop()`
+- Use typed constants for store/provider types (not raw strings)
+
+**Applied in**: `rag/factory.go` — `NewVectorStoreFromConfig`, `NewEmbeddingProviderFromConfig`, `NewRetrieverFromConfig`
+
+> **Historical lesson**: `config.QdrantConfig` and `rag.QdrantConfig` were two independent structs with no automatic conversion. Users had to manually map fields. The bridge layer eliminates this with a single factory call.
+
+### 17. Numeric Type Consistency in Domain Packages
+
+Within a single domain package, all vector/embedding types must use the same numeric precision. Mixed `[]float32` / `[]float64` creates interoperability barriers:
+
+```go
+// WRONG — GraphVectorStore uses float32, VectorStore uses float64
+type GraphVectorStore interface {
+    Search(embedding []float32, topK int) ([]Node, error)  // float32
+}
+type VectorStore interface {
+    Search(query []float64, topK int) ([]VectorSearchResult, error)  // float64
+}
+
+// CORRECT — unified to float64 (matching the primary VectorStore interface)
+type GraphVectorStore interface {
+    Search(embedding []float64, topK int) ([]Node, error)
+}
+```
+
+**When to provide conversion utilities**: If external consumers may have data in the other precision, provide `Float32ToFloat64` / `Float64ToFloat32` helpers in a utility file (e.g., `vector_convert.go`).
+
+**Applied in**: `rag/graph_rag.go`, `rag/graph_embedder.go` — unified from `[]float32` to `[]float64`
+
+### 18. Agent-as-Tool Adapter Pattern
+
+When an Agent needs to be callable as a Tool by another Agent, use the `AgentTool` adapter instead of Handoff (which is heavyweight task delegation):
+
+```go
+// agent/agent_tool.go — wraps Agent as a callable Tool
+tool := NewAgentTool(researchAgent, &AgentToolConfig{
+    Name:        "research",           // overrides default "agent_<name>"
+    Description: "Research a topic",
+    Timeout:     30 * time.Second,
+})
+
+// Schema() returns types.ToolSchema for LLM tool registration
+schema := tool.Schema()
+
+// Execute() parses ToolCall.Arguments JSON, builds Input, delegates to Agent.Execute
+result := tool.Execute(ctx, toolCall)
+```
+
+**Key conventions**:
+- Default tool name: `agent_<agent.Name()>` — override via `AgentToolConfig.Name`
+- Arguments JSON must contain `"input"` field (string) — optional `"context"` and `"variables"`
+- Timeout via `context.WithTimeout` — nil config means no timeout
+- Output is JSON-marshaled `agent.Output` in `ToolResult.Content`
+- Agent errors map to `ToolResult.Error` (not Go errors)
+- Thread-safe: concurrent Execute calls are safe (Agent's own `execMu` handles serialization)
+
+**When to use Agent-as-Tool vs Handoff vs Crew**:
+
+| Mechanism | Semantics | Weight | Use Case |
+|-----------|-----------|--------|----------|
+| `AgentTool` | Function call (sync, returns result) | Light | Sub-agent for specific capability |
+| `Handoff` | Task delegation (async, may not return) | Medium | Transfer control to specialist |
+| `Crew` | Multi-agent collaboration (orchestrated) | Heavy | Complex multi-step workflows |
+
+> **Design decision**: Agent-as-Tool was chosen over extending the Handoff protocol because it maps directly to LLM tool calling semantics — the parent Agent's LLM sees the child Agent as just another tool, enabling natural multi-agent composition without special orchestration logic.
+
+### 19. RunConfig — Runtime Configuration Override via Context
+
+Agent configuration is static after `Build()`, but runtime overrides are needed for A/B testing, per-request model selection, etc. `RunConfig` solves this via `context.Context`:
+
+```go
+// agent/run_config.go — all fields are pointers (nil = no override)
+type RunConfig struct {
+    Model              *string        `json:"model,omitempty"`
+    Temperature        *float32       `json:"temperature,omitempty"`
+    MaxTokens          *int           `json:"max_tokens,omitempty"`
+    MaxReActIterations *int           `json:"max_react_iterations,omitempty"`
+    // ... more fields
+}
+
+// Store in context — never mutates BaseAgent.config
+ctx = WithRunConfig(ctx, &RunConfig{
+    Model:       StringPtr("gpt-4o"),
+    Temperature: Float32Ptr(0.2),
+})
+
+// Applied in ChatCompletion/StreamCompletion before provider call
+rc := GetRunConfig(ctx)
+rc.ApplyToRequest(req, b.config)  // only non-nil fields override
+```
+
+**Key rules**:
+- Context key is unexported struct type (`runConfigKey{}`) — Go best practice
+- `ApplyToRequest` only touches non-nil fields — base config defaults preserved
+- `BaseAgent.config` is NEVER mutated — RunConfig is purely transient per-call
+- Metadata merges (RunConfig metadata adds to, doesn't replace, base metadata)
+- Helper functions: `StringPtr()`, `Float32Ptr()`, `IntPtr()`, `DurationPtr()`
+
+### 20. Guardrails Tripwire + Parallel Execution
+
+The Guardrails system supports three execution semantics:
+
+| Mode | Behavior | Use Case |
+|------|----------|----------|
+| `FailFast` | Stop at first failure | Quick validation |
+| `CollectAll` | Run all, collect all errors | Comprehensive validation |
+| `Parallel` | Run all concurrently via `errgroup` | Low-latency validation |
+
+**Tripwire** is orthogonal to mode — it means "immediately abort the entire Agent execution chain":
+
+```go
+// agent/guardrails/types.go
+type ValidationResult struct {
+    Valid    bool   `json:"valid"`
+    Tripwire bool   `json:"tripwire,omitempty"` // triggers immediate abort
+    // ...
+}
+
+// TripwireError is returned when any validator sets Tripwire=true
+type TripwireError struct {
+    ValidatorName string
+    Result        *ValidationResult
+}
+```
+
+**Key rules**:
+- Tripwire takes priority over chain mode (even CollectAll stops immediately)
+- `ValidationResult.Merge` propagates Tripwire via logical OR
+- Parallel mode uses `errgroup` with shared context — Tripwire cancels remaining validators
+- Each parallel goroutine writes to its own pre-allocated result slot (no mutex needed)
+- Backward compatible: validators that don't set Tripwire work exactly as before
+- Use `errors.As(&TripwireError{})` to detect Tripwire in error handling
+
+### 21. Context Window Auto-Management
+
+The `WindowManager` (`agent/context/window.go`) implements `ContextManager` with three strategies:
+
+```go
+// Strategies
+StrategySlidingWindow  // Keep system + last N messages
+StrategyTokenBudget    // Walk backwards, accumulate tokens until budget exhausted
+StrategySummarize      // Compress old messages via LLM, fallback to TokenBudget
+```
+
+**Key conventions**:
+- `TokenCounter` interface: `CountTokens(string) int` — compatible with `rag.Tokenizer` (same signature, no import)
+- `Summarizer` interface: `Summarize(ctx, []Message) (string, error)` — optional, nil falls back to TokenBudget
+- System messages (`RoleSystem`) are always preserved regardless of strategy
+- `KeepLastN` messages are always preserved (configurable, default 0)
+- `ReserveTokens` reserves budget for the model's response
+- Nil `TokenCounter` defaults to `len(text)/4` estimation
+- `GetStatus` returns `WindowStatus{TotalTokens, MessageCount, Trimmed, Strategy}`
+
+**Design decision**: `TokenCounter` is defined locally in `agent/context/` (not imported from `rag/`) to avoid circular dependencies. The interface is identical to `rag.Tokenizer.CountTokens`, so any `rag.Tokenizer` implementation satisfies it.
+
+### 22. Provider Factory + Registry Pattern
+
+The `llm/factory/` package provides centralized provider creation to avoid scattered `switch` statements:
+
+```go
+// llm/factory/factory.go — single entry point for all 13+ providers
+provider, err := factory.NewProviderFromConfig("deepseek", factory.ProviderConfig{
+    APIKey:  "sk-xxx",
+    BaseURL: "https://api.deepseek.com",
+    Model:   "deepseek-chat",
+    Extra:   map[string]any{"reasoning_mode": "thinking"},
+}, logger)
+
+// llm/registry.go — thread-safe provider registry
+reg := llm.NewProviderRegistry()
+reg.Register("deepseek", provider)
+reg.SetDefault("deepseek")
+defaultProvider, _ := reg.Default()
+```
+
+**Key rules**:
+- Factory lives in `llm/factory/` sub-package (not `llm/`) to avoid `llm` ↔ `llm/providers` import cycle
+- `ProviderConfig.Extra` map handles provider-specific options (OpenAI organization, Llama backend, etc.)
+- `ProviderRegistry` uses `sync.RWMutex` for concurrent safety
+- `SupportedProviders()` returns sorted list of all registered provider names
+- Provider name aliases: `"anthropic"` and `"claude"` both create Claude provider
+
+### 23. Optional Interface Pattern for Backward-Compatible Extensions
+
+When extending an existing interface would break all implementors, use optional interfaces with type assertions:
+
+```go
+// WRONG — adding ClearAll to VectorStore breaks all 5 implementations
+type VectorStore interface {
+    Search(...)
+    ClearAll(ctx context.Context) error  // breaks existing code
+}
+
+// CORRECT — optional interface, checked at runtime
+type Clearable interface {
+    ClearAll(ctx context.Context) error
+}
+
+// Usage: type-assert at call site
+if c, ok := store.(Clearable); ok {
+    return c.ClearAll(ctx)
+}
+// fallback behavior when not implemented
+```
+
+**Applied in**:
+- `rag/vector_store.go`: `Clearable` and `DocumentLister` optional interfaces for `SemanticCache.Clear()`
+- `agent/base.go`: `any` fields with anonymous interface assertions in `integration.go` (legacy pattern, should migrate to named optional interfaces)
+
+**Key rules**:
+- Optional interface names should be adjectives or `-er` nouns: `Clearable`, `DocumentLister`
+- Always provide a fallback path when the type assertion fails
+- Document the optional interface near the primary interface it extends
+- Prefer named optional interfaces over anonymous `interface{ Method() }` assertions
+
 ---
 
 ## Code Review Checklist

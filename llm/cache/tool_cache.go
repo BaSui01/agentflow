@@ -204,7 +204,7 @@ type CachedToolResult struct {
 
 func (c *ToolResultCache) buildKey(toolName string, arguments json.RawMessage) string {
 	// 对参数进行规范化以保证一致的哈希
-	var normalized interface{}
+	var normalized any
 	if err := json.Unmarshal(arguments, &normalized); err == nil {
 		if sortedArgs, err := json.Marshal(normalized); err == nil {
 			arguments = sortedArgs

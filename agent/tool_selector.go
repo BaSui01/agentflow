@@ -324,8 +324,13 @@ func (s *DynamicToolSelector) llmRanking(ctx context.Context, task string, score
 		return scores, err
 	}
 
+	choice, err := llm.FirstChoice(resp)
+	if err != nil {
+		return scores, err
+	}
+
 	// LLM 返回的解析工具索引
-	selected := parseToolIndices(resp.Choices[0].Message.Content)
+	selected := parseToolIndices(choice.Message.Content)
 
 	// 重排工具
 	reordered := []ToolScore{}

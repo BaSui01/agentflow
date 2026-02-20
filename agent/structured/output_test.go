@@ -365,7 +365,7 @@ func TestParseResult_IsValid(t *testing.T) {
 type TestComplexStruct struct {
 	ID       int                    `json:"id" jsonschema:"required"`
 	Name     string                 `json:"name" jsonschema:"required,minLength=1"`
-	Metadata map[string]interface{} `json:"metadata,omitempty"`
+	Metadata map[string]any `json:"metadata,omitempty"`
 	Items    []TestItem             `json:"items" jsonschema:"minItems=0"`
 }
 

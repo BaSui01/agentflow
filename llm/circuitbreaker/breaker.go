@@ -69,7 +69,7 @@ type CircuitBreaker interface {
 	Call(ctx context.Context, fn func() error) error
 
 	// CallWithResult 执行调用并返回结果
-	CallWithResult(ctx context.Context, fn func() (interface{}, error)) (interface{}, error)
+	CallWithResult(ctx context.Context, fn func() (any, error)) (any, error)
 
 	// State 获取当前状态
 	State() State
@@ -119,7 +119,7 @@ func NewCircuitBreaker(config *Config, logger *zap.Logger) CircuitBreaker {
 
 // Call 实现 CircuitBreaker.Call
 func (b *breaker) Call(ctx context.Context, fn func() error) error {
-	_, err := b.CallWithResult(ctx, func() (interface{}, error) {
+	_, err := b.CallWithResult(ctx, func() (any, error) {
 		return nil, fn()
 	})
 	return err
@@ -127,7 +127,7 @@ func (b *breaker) Call(ctx context.Context, fn func() error) error {
 
 // CallWithResult 实现 CircuitBreaker.CallWithResult
 // 核心逻辑：状态机转换 + 失败计数 + 超时控制
-func (b *breaker) CallWithResult(ctx context.Context, fn func() (interface{}, error)) (interface{}, error) {
+func (b *breaker) CallWithResult(ctx context.Context, fn func() (any, error)) (any, error) {
 	// 检查熔断器状态
 	if err := b.beforeCall(); err != nil {
 		return nil, err
@@ -166,7 +166,7 @@ func (b *breaker) CallWithResult(ctx context.Context, fn func() (interface{}, er
 }
 
 type callResult struct {
-	result interface{}
+	result any
 	err    error
 }
 

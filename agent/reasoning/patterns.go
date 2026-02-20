@@ -281,7 +281,11 @@ Format as JSON array: [{"thought": "next step", "reasoning": "why"}]`, task, par
 	}
 
 	tokens := resp.Usage.TotalTokens
-	content := resp.Choices[0].Message.Content
+	genChoice, err := llm.FirstChoice(resp)
+	if err != nil {
+		return nil, 0, fmt.Errorf("thought generation returned no choices: %w", err)
+	}
+	content := genChoice.Message.Content
 
 	// 从反应中解析想法
 	var thoughtsData []struct {
@@ -366,7 +370,11 @@ Respond with only a number between 0.0 and 1.0`, task, thought.Content)
 	}
 
 	var score float64
-	fmt.Sscanf(resp.Choices[0].Message.Content, "%f", &score)
+	evalChoice, choiceErr := llm.FirstChoice(resp)
+	if choiceErr != nil {
+		return 0.5, resp.Usage.TotalTokens
+	}
+	fmt.Sscanf(evalChoice.Message.Content, "%f", &score)
 	if score < 0 || score > 1 {
 		score = 0.5
 	}

@@ -226,7 +226,7 @@ func (e *DefaultExecutor) ExecuteOne(ctx context.Context, call llm.ToolCall) Too
 
 	// 3. 参数校验（简单校验：确保是有效 JSON）
 	if len(call.Arguments) > 0 {
-		var tmp interface{}
+		var tmp any
 		if err := json.Unmarshal(call.Arguments, &tmp); err != nil {
 			result.Error = fmt.Sprintf("invalid arguments: %s", err.Error())
 			result.Duration = time.Since(start)

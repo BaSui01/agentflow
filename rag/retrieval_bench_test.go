@@ -97,7 +97,7 @@ func generateMockDocuments(count int) []Document {
 					"techniques, and applications in the field. Document number %d.",
 				topic, i,
 			),
-			Metadata: map[string]interface{}{
+			Metadata: map[string]any{
 				"topic": topic,
 				"index": i,
 			},

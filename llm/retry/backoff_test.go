@@ -242,3 +242,81 @@ func TestWrapRetryable(t *testing.T) {
 	assert.True(t, IsRetryable(wrapped))
 	assert.False(t, IsRetryable(err))
 }
+
+// ---------------------------------------------------------------------------
+// DoWithResultTyped (generic wrapper)
+// ---------------------------------------------------------------------------
+
+func TestDoWithResultTyped_Success(t *testing.T) {
+	r := NewBackoffRetryer(&RetryPolicy{
+		MaxRetries:   3,
+		InitialDelay: 10 * time.Millisecond,
+		MaxDelay:     100 * time.Millisecond,
+		Multiplier:   2.0,
+		Jitter:       false,
+	}, zap.NewNop())
+
+	val, err := DoWithResultTyped[int](r, context.Background(), func() (int, error) {
+		return 42, nil
+	})
+	assert.NoError(t, err)
+	assert.Equal(t, 42, val)
+}
+
+func TestDoWithResultTyped_Error(t *testing.T) {
+	r := NewBackoffRetryer(&RetryPolicy{
+		MaxRetries:   0,
+		InitialDelay: 10 * time.Millisecond,
+		MaxDelay:     100 * time.Millisecond,
+		Multiplier:   2.0,
+		Jitter:       false,
+	}, zap.NewNop())
+
+	val, err := DoWithResultTyped[int](r, context.Background(), func() (int, error) {
+		return 0, errors.New("fail")
+	})
+	assert.Error(t, err)
+	assert.Equal(t, 0, val)
+}
+
+func TestDoWithResultTyped_RetryThenSuccess(t *testing.T) {
+	r := NewBackoffRetryer(&RetryPolicy{
+		MaxRetries:   3,
+		InitialDelay: 10 * time.Millisecond,
+		MaxDelay:     100 * time.Millisecond,
+		Multiplier:   2.0,
+		Jitter:       false,
+	}, zap.NewNop())
+
+	callCount := 0
+	val, err := DoWithResultTyped[string](r, context.Background(), func() (string, error) {
+		callCount++
+		if callCount < 3 {
+			return "", errors.New("not yet")
+		}
+		return "done", nil
+	})
+	assert.NoError(t, err)
+	assert.Equal(t, "done", val)
+	assert.Equal(t, 3, callCount)
+}
+
+func TestDoWithResultTyped_Struct(t *testing.T) {
+	type result struct {
+		Value int
+	}
+
+	r := NewBackoffRetryer(&RetryPolicy{
+		MaxRetries:   1,
+		InitialDelay: 10 * time.Millisecond,
+		MaxDelay:     100 * time.Millisecond,
+		Multiplier:   2.0,
+		Jitter:       false,
+	}, zap.NewNop())
+
+	val, err := DoWithResultTyped[result](r, context.Background(), func() (result, error) {
+		return result{Value: 100}, nil
+	})
+	assert.NoError(t, err)
+	assert.Equal(t, 100, val.Value)
+}

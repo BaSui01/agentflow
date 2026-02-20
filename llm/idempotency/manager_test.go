@@ -47,22 +47,22 @@ func TestMemoryManager_GenerateKey(t *testing.T) {
 	t.Cleanup(func() { mm.Close() })
 	tests := []struct {
 		name    string
-		inputs  []interface{}
+		inputs  []any
 		wantErr bool
 	}{
 		{
 			name:    "single string input",
-			inputs:  []interface{}{"hello"},
+			inputs:  []any{"hello"},
 			wantErr: false,
 		},
 		{
 			name:    "multiple inputs",
-			inputs:  []interface{}{"model", "prompt", 42},
+			inputs:  []any{"model", "prompt", 42},
 			wantErr: false,
 		},
 		{
 			name:    "empty inputs returns error",
-			inputs:  []interface{}{},
+			inputs:  []any{},
 			wantErr: true,
 		},
 	}
@@ -308,4 +308,110 @@ func TestMemoryManager_ConcurrentSafety(t *testing.T) {
 
 func TestMemoryManager_ImplementsManager(t *testing.T) {
 	var _ Manager = (*memoryManager)(nil)
+}
+
+// ---------------------------------------------------------------------------
+// GetTyped / SetTyped (generic wrappers)
+// ---------------------------------------------------------------------------
+
+func TestGetTyped_Success(t *testing.T) {
+	m := NewMemoryManager(zap.NewNop())
+	mm := m.(*memoryManager)
+	t.Cleanup(func() { mm.Close() })
+
+	ctx := context.Background()
+
+	type payload struct {
+		Name  string `json:"name"`
+		Score int    `json:"score"`
+	}
+
+	// Store via SetTyped
+	err := SetTyped[payload](m, ctx, "k1", payload{Name: "test", Score: 99}, time.Hour)
+	require.NoError(t, err)
+
+	// Retrieve via GetTyped
+	val, found, err := GetTyped[payload](m, ctx, "k1")
+	require.NoError(t, err)
+	assert.True(t, found)
+	assert.Equal(t, "test", val.Name)
+	assert.Equal(t, 99, val.Score)
+}
+
+func TestGetTyped_NotFound(t *testing.T) {
+	m := NewMemoryManager(zap.NewNop())
+	mm := m.(*memoryManager)
+	t.Cleanup(func() { mm.Close() })
+
+	val, found, err := GetTyped[string](m, context.Background(), "nonexistent")
+	require.NoError(t, err)
+	assert.False(t, found)
+	assert.Equal(t, "", val)
+}
+
+func TestGetTyped_UnmarshalError(t *testing.T) {
+	m := NewMemoryManager(zap.NewNop())
+	mm := m.(*memoryManager)
+	t.Cleanup(func() { mm.Close() })
+
+	ctx := context.Background()
+
+	// Store a string value
+	err := m.Set(ctx, "k1", "hello", time.Hour)
+	require.NoError(t, err)
+
+	// Try to unmarshal as struct — should fail
+	type complex struct {
+		Field int `json:"field"`
+	}
+	_, found, err := GetTyped[complex](m, ctx, "k1")
+	assert.Error(t, err)
+	assert.False(t, found)
+	assert.Contains(t, err.Error(), "unmarshal cached result")
+}
+
+func TestSetTyped_PrimitiveTypes(t *testing.T) {
+	m := NewMemoryManager(zap.NewNop())
+	mm := m.(*memoryManager)
+	t.Cleanup(func() { mm.Close() })
+
+	ctx := context.Background()
+
+	// int
+	require.NoError(t, SetTyped[int](m, ctx, "int-key", 42, time.Hour))
+	intVal, found, err := GetTyped[int](m, ctx, "int-key")
+	require.NoError(t, err)
+	assert.True(t, found)
+	assert.Equal(t, 42, intVal)
+
+	// string
+	require.NoError(t, SetTyped[string](m, ctx, "str-key", "hello", time.Hour))
+	strVal, found, err := GetTyped[string](m, ctx, "str-key")
+	require.NoError(t, err)
+	assert.True(t, found)
+	assert.Equal(t, "hello", strVal)
+
+	// []int
+	require.NoError(t, SetTyped[[]int](m, ctx, "slice-key", []int{1, 2, 3}, time.Hour))
+	sliceVal, found, err := GetTyped[[]int](m, ctx, "slice-key")
+	require.NoError(t, err)
+	assert.True(t, found)
+	assert.Equal(t, []int{1, 2, 3}, sliceVal)
+}
+
+func TestGetTyped_MapType(t *testing.T) {
+	m := NewMemoryManager(zap.NewNop())
+	mm := m.(*memoryManager)
+	t.Cleanup(func() { mm.Close() })
+
+	ctx := context.Background()
+
+	data := map[string]int{"a": 1, "b": 2}
+	require.NoError(t, SetTyped[map[string]int](m, ctx, "map-key", data, time.Hour))
+
+	val, found, err := GetTyped[map[string]int](m, ctx, "map-key")
+	require.NoError(t, err)
+	assert.True(t, found)
+	assert.Equal(t, 1, val["a"])
+	assert.Equal(t, 2, val["b"])
 }

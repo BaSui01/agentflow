@@ -20,7 +20,7 @@ import (
 func TestWriteJSON(t *testing.T) {
 	tests := []struct {
 		name       string
-		data       interface{}
+		data       any
 		wantStatus int
 	}{
 		{

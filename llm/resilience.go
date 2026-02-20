@@ -8,6 +8,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/BaSui01/agentflow/llm/circuitbreaker"
 	"go.uber.org/zap"
 )
 
@@ -29,13 +30,15 @@ func DefaultRetryPolicy() *RetryPolicy {
 	}
 }
 
-// 电路状态代表断路器状态.
-type CircuitState int32
+// CircuitState is an alias for circuitbreaker.State, the authoritative definition.
+// This keeps backward compatibility for any code referencing llm.CircuitState.
+type CircuitState = circuitbreaker.State
 
+// Circuit state constants — aliases to circuitbreaker.State* values.
 const (
-	CircuitClosed CircuitState = iota
-	CircuitOpen
-	CircuitHalfOpen
+	CircuitClosed  = circuitbreaker.StateClosed
+	CircuitOpen    = circuitbreaker.StateOpen
+	CircuitHalfOpen = circuitbreaker.StateHalfOpen
 )
 
 // CircuitBreakerConfig配置断路器.
@@ -54,8 +57,10 @@ func DefaultCircuitBreakerConfig() *CircuitBreakerConfig {
 	}
 }
 
-// CircuitBreaker执行断路器模式.
-type CircuitBreaker struct {
+// simpleCircuitBreaker is a lightweight circuit breaker used internally by ResilientProvider.
+// For the full-featured circuit breaker with timeout control and CallWithResult, use
+// the circuitbreaker.CircuitBreaker interface from llm/circuitbreaker/.
+type simpleCircuitBreaker struct {
 	config          *CircuitBreakerConfig
 	state           atomic.Int32
 	failures        atomic.Int32
@@ -68,24 +73,24 @@ type CircuitBreaker struct {
 // 打开电路时返回 Err Circuit Open 。
 var ErrCircuitOpen = errors.New("circuit breaker is open")
 
-// 新CircuitBreaker创建了新的断路器.
-func NewCircuitBreaker(config *CircuitBreakerConfig, logger *zap.Logger) *CircuitBreaker {
+// newSimpleCircuitBreaker creates a new simple circuit breaker for internal use.
+func newSimpleCircuitBreaker(config *CircuitBreakerConfig, logger *zap.Logger) *simpleCircuitBreaker {
 	if config == nil {
 		config = DefaultCircuitBreakerConfig()
 	}
-	return &CircuitBreaker{
+	return &simpleCircuitBreaker{
 		config: config,
 		logger: logger,
 	}
 }
 
 // 状态返回当前电路状态 。
-func (cb *CircuitBreaker) State() CircuitState {
+func (cb *simpleCircuitBreaker) State() CircuitState {
 	return CircuitState(cb.state.Load())
 }
 
 // 调用以断路器保护功能执行 。
-func (cb *CircuitBreaker) Call(ctx context.Context, fn func() error) error {
+func (cb *simpleCircuitBreaker) Call(ctx context.Context, fn func() error) error {
 	state := cb.State()
 
 	if state == CircuitOpen {
@@ -108,7 +113,7 @@ func (cb *CircuitBreaker) Call(ctx context.Context, fn func() error) error {
 	return nil
 }
 
-func (cb *CircuitBreaker) recordFailure() {
+func (cb *simpleCircuitBreaker) recordFailure() {
 	failures := cb.failures.Add(1)
 	cb.lastFailureTime.Store(time.Now().UnixNano())
 
@@ -118,7 +123,7 @@ func (cb *CircuitBreaker) recordFailure() {
 	}
 }
 
-func (cb *CircuitBreaker) recordSuccess() {
+func (cb *simpleCircuitBreaker) recordSuccess() {
 	state := cb.State()
 	if state == CircuitHalfOpen {
 		successes := cb.successes.Add(1)
@@ -136,7 +141,7 @@ func (cb *CircuitBreaker) recordSuccess() {
 type ResilientProvider struct {
 	provider       Provider
 	retryPolicy    *RetryPolicy
-	circuitBreaker *CircuitBreaker
+	circuitBreaker *simpleCircuitBreaker
 	idempotencyTTL time.Duration
 	idempotencyMap sync.Map
 	logger         *zap.Logger
@@ -152,7 +157,7 @@ type ResilientConfig struct {
 
 // NewResilientProviderSimple 使用默认配置创建弹性 Provider.
 // 这是简单用例的便捷函数。
-func NewResilientProviderSimple(provider Provider, _ interface{}, logger *zap.Logger) *ResilientProvider {
+func NewResilientProviderSimple(provider Provider, _ any, logger *zap.Logger) *ResilientProvider {
 	return NewResilientProvider(provider, nil, logger)
 }
 
@@ -170,7 +175,7 @@ func NewResilientProvider(provider Provider, config *ResilientConfig, logger *za
 	return &ResilientProvider{
 		provider:       provider,
 		retryPolicy:    config.RetryPolicy,
-		circuitBreaker: NewCircuitBreaker(config.CircuitBreaker, logger),
+		circuitBreaker: newSimpleCircuitBreaker(config.CircuitBreaker, logger),
 		idempotencyTTL: config.IdempotencyTTL,
 		logger:         logger,
 	}

@@ -1,6 +1,9 @@
 package llm
 
-import "time"
+import (
+	"fmt"
+	"time"
+)
 
 // ============================================================
 // 提供者和模型基础类型
@@ -14,6 +17,20 @@ const (
 	LLMProviderStatusActive   LLMProviderStatus = 1
 	LLMProviderStatusDisabled LLMProviderStatus = 2
 )
+
+// String returns the string representation of LLMProviderStatus.
+func (s LLMProviderStatus) String() string {
+	switch s {
+	case LLMProviderStatusInactive:
+		return "inactive"
+	case LLMProviderStatusActive:
+		return "active"
+	case LLMProviderStatusDisabled:
+		return "disabled"
+	default:
+		return fmt.Sprintf("LLMProviderStatus(%d)", s)
+	}
+}
 
 // LLMMOdel代表抽象模型(例如gpt-4,claude-3-opus).
 type LLMModel struct {
@@ -195,6 +212,6 @@ type AuditLog struct {
 	Action       string
 	ResourceType string
 	ResourceID   string
-	Details      map[string]interface{}
+	Details      map[string]any
 	CreatedAt    time.Time
 }

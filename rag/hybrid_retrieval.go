@@ -50,7 +50,7 @@ func DefaultHybridRetrievalConfig() HybridRetrievalConfig {
 type Document struct {
 	ID        string                 `json:"id"`
 	Content   string                 `json:"content"`
-	Metadata  map[string]interface{} `json:"metadata,omitempty"`
+	Metadata  map[string]any `json:"metadata,omitempty"`
 	Embedding []float64              `json:"embedding,omitempty"`
 }
 

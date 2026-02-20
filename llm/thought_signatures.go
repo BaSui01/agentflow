@@ -16,7 +16,7 @@ type ThoughtSignature struct {
 	Model     string                 `json:"model"`
 	CreatedAt time.Time              `json:"created_at"`
 	ExpiresAt time.Time              `json:"expires_at"`
-	Metadata  map[string]interface{} `json:"metadata,omitempty"`
+	Metadata  map[string]any `json:"metadata,omitempty"`
 }
 
 // ThoughtChain 表示一组推理签名序列.

@@ -554,7 +554,7 @@ func TestProperty20_JSONValidity(t *testing.T) {
 				"Converted content should remain valid JSON")
 
 			// 校验 JSON 内容在内容上相当
-			var inputJSON, outputJSON interface{}
+			var inputJSON, outputJSON any
 			json.Unmarshal([]byte(tc.content), &inputJSON)
 			json.Unmarshal([]byte(converted.Content), &outputJSON)
 			assert.Equal(t, inputJSON, outputJSON,

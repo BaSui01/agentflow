@@ -3,6 +3,8 @@ package embedding
 import (
 	"context"
 	"time"
+
+	"github.com/BaSui01/agentflow/llm"
 )
 
 // EmbeddingRequest 表示生成嵌入的请求.
@@ -74,8 +76,5 @@ type Provider interface {
 }
 
 // HealthStatus 表示提供者的健康检查结果.
-type HealthStatus struct {
-	Healthy bool          `json:"healthy"`
-	Latency time.Duration `json:"latency"`
-	Message string        `json:"message,omitempty"`
-}
+// 这是 llm.HealthStatus 的类型别名，统一 Provider 级别的健康状态定义。
+type HealthStatus = llm.HealthStatus

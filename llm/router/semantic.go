@@ -238,8 +238,12 @@ Respond with JSON: {"intent": "intent_type", "confidence": 0.0-1.0, "entities": 
 	}
 
 	// 分析分类
+	classifyChoice, choiceErr := llm.FirstChoice(resp)
+	if choiceErr != nil {
+		return &IntentClassification{Intent: IntentUnknown, Confidence: 0}, nil
+	}
 	var classification IntentClassification
-	content := resp.Choices[0].Message.Content
+	content := classifyChoice.Message.Content
 	content = extractJSONFromResponse(content)
 	if err := json.Unmarshal([]byte(content), &classification); err != nil {
 		// 默认为未知

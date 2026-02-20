@@ -36,7 +36,7 @@ func TestFileCheckpointStore_SaveAndLoad(t *testing.T) {
 				Content: "Hello",
 			},
 		},
-		Metadata:  map[string]interface{}{"key": "value"},
+		Metadata:  map[string]any{"key": "value"},
 		CreatedAt: time.Now(),
 	}
 
@@ -250,7 +250,7 @@ func TestFileCheckpointStore_Rollback(t *testing.T) {
 			ThreadID:  "thread-1",
 			AgentID:   "agent-1",
 			State:     StateReady,
-			Metadata:  map[string]interface{}{"version": i},
+			Metadata:  map[string]any{"version": i},
 			CreatedAt: time.Now(),
 		}
 		err = store.Save(ctx, checkpoint)

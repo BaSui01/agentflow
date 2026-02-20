@@ -28,11 +28,11 @@ type AgentBuilder struct {
 	reflectionConfig     *ReflectionExecutorConfig
 	toolSelectionConfig  *ToolSelectionConfig
 	promptEnhancerConfig *PromptEnhancerConfig
-	skillsConfig         interface{} // 避免循环依赖
-	mcpConfig            interface{}
-	lspConfig            interface{}
-	enhancedMemoryConfig interface{}
-	observabilityConfig  interface{}
+	skillsConfig         any // 避免循环依赖
+	mcpConfig            any
+	lspConfig            any
+	enhancedMemoryConfig any
+	observabilityConfig  any
 
 	errors []error
 }
@@ -149,7 +149,7 @@ type LSPOptions struct {
 }
 
 // WithSkills 启用 Skills 系统
-func (b *AgentBuilder) WithSkills(config interface{}) *AgentBuilder {
+func (b *AgentBuilder) WithSkills(config any) *AgentBuilder {
 	b.skillsConfig = config
 	b.config.EnableSkills = true
 	return b
@@ -168,14 +168,14 @@ func (b *AgentBuilder) WithDefaultSkills(directory string, config *skills.SkillM
 }
 
 // WithMCP 启用 MCP 集成
-func (b *AgentBuilder) WithMCP(config interface{}) *AgentBuilder {
+func (b *AgentBuilder) WithMCP(config any) *AgentBuilder {
 	b.mcpConfig = config
 	b.config.EnableMCP = true
 	return b
 }
 
 // WithLSP 启用 LSP 集成。
-func (b *AgentBuilder) WithLSP(config interface{}) *AgentBuilder {
+func (b *AgentBuilder) WithLSP(config any) *AgentBuilder {
 	b.lspConfig = config
 	b.config.EnableLSP = true
 	return b
@@ -198,7 +198,7 @@ func (b *AgentBuilder) WithDefaultMCPServer(name, version string) *AgentBuilder 
 }
 
 // WithEnhancedMemory 启用增强记忆系统
-func (b *AgentBuilder) WithEnhancedMemory(config interface{}) *AgentBuilder {
+func (b *AgentBuilder) WithEnhancedMemory(config any) *AgentBuilder {
 	b.enhancedMemoryConfig = config
 	b.config.EnableEnhancedMemory = true
 	return b
@@ -214,7 +214,7 @@ func (b *AgentBuilder) WithDefaultEnhancedMemory(config *memory.EnhancedMemoryCo
 }
 
 // WithObservability 启用可观测性系统
-func (b *AgentBuilder) WithObservability(config interface{}) *AgentBuilder {
+func (b *AgentBuilder) WithObservability(config any) *AgentBuilder {
 	b.observabilityConfig = config
 	b.config.EnableObservability = true
 	return b

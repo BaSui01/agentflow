@@ -46,7 +46,7 @@ type MemoryItem struct {
 	Relevance    float64                `json:"relevance"` // User-defined relevance (0-1)
 	Utility      float64                `json:"utility"`   // Computed utility based on usage
 	Tags         []string               `json:"tags,omitempty"`
-	Metadata     map[string]interface{} `json:"metadata,omitempty"`
+	Metadata     map[string]any `json:"metadata,omitempty"`
 }
 
 // 复合分数计算出复合衰减分数.

@@ -291,7 +291,7 @@ func (s *RedisTaskStore) sortTasks(tasks []*AsyncTask, orderBy string, desc bool
 }
 
 // 更新状态更新任务状态
-func (s *RedisTaskStore) UpdateStatus(ctx context.Context, taskID string, status TaskStatus, result interface{}, errMsg string) error {
+func (s *RedisTaskStore) UpdateStatus(ctx context.Context, taskID string, status TaskStatus, result any, errMsg string) error {
 	task, err := s.GetTask(ctx, taskID)
 	if err != nil {
 		return err

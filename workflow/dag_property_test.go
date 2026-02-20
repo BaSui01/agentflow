@@ -32,7 +32,7 @@ func TestProperty_ConditionalRoutingCorrectness(t *testing.T) {
 				WithStep(&testStep{name: "start", result: inputValue}).
 				Done().
 				AddNode("condition", NodeTypeCondition).
-				WithCondition(func(ctx context.Context, input interface{}) (bool, error) {
+				WithCondition(func(ctx context.Context, input any) (bool, error) {
 					return conditionResult, nil
 				}).
 				WithOnTrue("true_branch").
@@ -280,12 +280,12 @@ func TestProperty_CycleDetection(t *testing.T) {
 // testStep is a simple step implementation for property testing
 type testStep struct {
 	name     string
-	result   interface{}
+	result   any
 	err      error
 	callback func()
 }
 
-func (s *testStep) Execute(ctx context.Context, input interface{}) (interface{}, error) {
+func (s *testStep) Execute(ctx context.Context, input any) (any, error) {
 	if s.callback != nil {
 		s.callback()
 	}

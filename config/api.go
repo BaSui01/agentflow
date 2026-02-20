@@ -28,7 +28,7 @@ type ConfigResponse struct {
 	Message string `json:"message,omitempty"`
 
 	// 配置是当前配置（已清理）
-	Config map[string]interface{} `json:"config,omitempty"`
+	Config map[string]any `json:"config,omitempty"`
 
 	// Fields 列出了热可重载字段
 	Fields map[string]FieldInfo `json:"fields,omitempty"`
@@ -61,13 +61,13 @@ type FieldInfo struct {
 	Sensitive bool `json:"sensitive"`
 
 	// CurrentValue 是当前值（如果敏感则进行编辑）
-	CurrentValue interface{} `json:"current_value,omitempty"`
+	CurrentValue any `json:"current_value,omitempty"`
 }
 
 // ConfigUpdateRequest 代表配置更新请求
 type ConfigUpdateRequest struct {
 	// 更新是到新值的字段路径的映射
-	Updates map[string]interface{} `json:"updates"`
+	Updates map[string]any `json:"updates"`
 }
 
 // --- API 处理器实现 ---
@@ -323,7 +323,7 @@ func (h *ConfigAPIHandler) handleChanges(w http.ResponseWriter, r *http.Request)
 // --- 辅助方法 ---
 
 // writeJSON 写入 JSON 响应
-func (h *ConfigAPIHandler) writeJSON(w http.ResponseWriter, status int, data interface{}) {
+func (h *ConfigAPIHandler) writeJSON(w http.ResponseWriter, status int, data any) {
 	buf, err := json.Marshal(data)
 	if err != nil {
 		w.Header().Set("Content-Type", "application/json")

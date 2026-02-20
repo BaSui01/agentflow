@@ -396,10 +396,10 @@ func (r *ABRouter) GetMetrics() map[string]*ABMetrics {
 }
 
 // GetReport 返回所有变体的摘要报告 。
-func (r *ABRouter) GetReport() map[string]map[string]interface{} {
-	report := make(map[string]map[string]interface{})
+func (r *ABRouter) GetReport() map[string]map[string]any {
+	report := make(map[string]map[string]any)
 	for name, m := range r.metrics {
-		report[name] = map[string]interface{}{
+		report[name] = map[string]any{
 			"total_requests":    atomic.LoadInt64(&m.TotalRequests),
 			"success_rate":      m.GetSuccessRate(),
 			"avg_latency_ms":    m.GetAvgLatencyMs(),

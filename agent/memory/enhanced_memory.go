@@ -79,20 +79,20 @@ func DefaultEnhancedMemoryConfig() EnhancedMemoryConfig {
 
 // MemoryStore 通用记忆存储接口
 type MemoryStore interface {
-	Save(ctx context.Context, key string, value interface{}, ttl time.Duration) error
-	Load(ctx context.Context, key string) (interface{}, error)
+	Save(ctx context.Context, key string, value any, ttl time.Duration) error
+	Load(ctx context.Context, key string) (any, error)
 	Delete(ctx context.Context, key string) error
-	List(ctx context.Context, pattern string, limit int) ([]interface{}, error)
+	List(ctx context.Context, pattern string, limit int) ([]any, error)
 	Clear(ctx context.Context) error
 }
 
 // VectorStore 向量存储接口（用于语义搜索）
 type VectorStore interface {
 	// 存储向量
-	Store(ctx context.Context, id string, vector []float64, metadata map[string]interface{}) error
+	Store(ctx context.Context, id string, vector []float64, metadata map[string]any) error
 
 	// 语义搜索
-	Search(ctx context.Context, query []float64, topK int, filter map[string]interface{}) ([]VectorSearchResult, error)
+	Search(ctx context.Context, query []float64, topK int, filter map[string]any) ([]VectorSearchResult, error)
 
 	// 删除向量
 	Delete(ctx context.Context, id string) error
@@ -105,14 +105,14 @@ type VectorStore interface {
 type VectorSearchResult struct {
 	ID       string                 `json:"id"`
 	Score    float64                `json:"score"` // 相似度分数
-	Metadata map[string]interface{} `json:"metadata"`
+	Metadata map[string]any `json:"metadata"`
 }
 
 // VectorItem 向量项
 type VectorItem struct {
 	ID       string
 	Vector   []float64
-	Metadata map[string]interface{}
+	Metadata map[string]any
 }
 
 // EpisodicStore 情节记忆存储接口
@@ -133,7 +133,7 @@ type EpisodicEvent struct {
 	AgentID   string                 `json:"agent_id"`
 	Type      string                 `json:"type"`    // 事件类型
 	Content   string                 `json:"content"` // 事件内容
-	Context   map[string]interface{} `json:"context"` // 上下文
+	Context   map[string]any `json:"context"` // 上下文
 	Timestamp time.Time              `json:"timestamp"`
 	Duration  time.Duration          `json:"duration"` // 事件持续时间
 }
@@ -170,7 +170,7 @@ type Entity struct {
 	ID         string                 `json:"id"`
 	Type       string                 `json:"type"`
 	Name       string                 `json:"name"`
-	Properties map[string]interface{} `json:"properties"`
+	Properties map[string]any `json:"properties"`
 	CreatedAt  time.Time              `json:"created_at"`
 	UpdatedAt  time.Time              `json:"updated_at"`
 }
@@ -181,7 +181,7 @@ type Relation struct {
 	FromID     string                 `json:"from_id"`
 	ToID       string                 `json:"to_id"`
 	Type       string                 `json:"type"`
-	Properties map[string]interface{} `json:"properties"`
+	Properties map[string]any `json:"properties"`
 	Weight     float64                `json:"weight"`
 	CreatedAt  time.Time              `json:"created_at"`
 }
@@ -204,10 +204,10 @@ type MemoryConsolidator struct {
 // ConsolidationStrategy 整合策略接口
 type ConsolidationStrategy interface {
 	// 判断是否应该整合
-	ShouldConsolidate(ctx context.Context, memory interface{}) bool
+	ShouldConsolidate(ctx context.Context, memory any) bool
 
 	// 执行整合
-	Consolidate(ctx context.Context, memories []interface{}) error
+	Consolidate(ctx context.Context, memories []any) error
 }
 
 // NewEnhancedMemorySystem 创建增强记忆系统
@@ -269,14 +269,14 @@ func NewDefaultEnhancedMemorySystem(config EnhancedMemoryConfig, logger *zap.Log
 }
 
 // SaveShortTerm 保存短期记忆
-func (m *EnhancedMemorySystem) SaveShortTerm(ctx context.Context, agentID string, content string, metadata map[string]interface{}) error {
+func (m *EnhancedMemorySystem) SaveShortTerm(ctx context.Context, agentID string, content string, metadata map[string]any) error {
 	if m.shortTerm == nil {
 		return fmt.Errorf("short-term memory not configured")
 	}
 
 	key := fmt.Sprintf("short_term:%s:%d", agentID, time.Now().UnixNano())
 
-	memory := map[string]interface{}{
+	memory := map[string]any{
 		"key":       key,
 		"agent_id":  agentID,
 		"content":   content,
@@ -294,17 +294,17 @@ func (m *EnhancedMemorySystem) SaveShortTermWithVector(
 	agentID string,
 	content string,
 	vector []float64,
-	metadata map[string]interface{},
+	metadata map[string]any,
 ) error {
 	if metadata == nil {
-		metadata = make(map[string]interface{})
+		metadata = make(map[string]any)
 	}
 	metadata["vector"] = vector
 	return m.SaveShortTerm(ctx, agentID, content, metadata)
 }
 
 // LoadShortTerm 加载短期记忆
-func (m *EnhancedMemorySystem) LoadShortTerm(ctx context.Context, agentID string, limit int) ([]interface{}, error) {
+func (m *EnhancedMemorySystem) LoadShortTerm(ctx context.Context, agentID string, limit int) ([]any, error) {
 	if m.shortTerm == nil {
 		return nil, fmt.Errorf("short-term memory not configured")
 	}
@@ -314,14 +314,14 @@ func (m *EnhancedMemorySystem) LoadShortTerm(ctx context.Context, agentID string
 }
 
 // SaveWorking 保存工作记忆
-func (m *EnhancedMemorySystem) SaveWorking(ctx context.Context, agentID string, content string, metadata map[string]interface{}) error {
+func (m *EnhancedMemorySystem) SaveWorking(ctx context.Context, agentID string, content string, metadata map[string]any) error {
 	if m.working == nil {
 		return fmt.Errorf("working memory not configured")
 	}
 
 	key := fmt.Sprintf("working:%s:%d", agentID, time.Now().UnixNano())
 
-	memory := map[string]interface{}{
+	memory := map[string]any{
 		"key":       key,
 		"agent_id":  agentID,
 		"content":   content,
@@ -333,7 +333,7 @@ func (m *EnhancedMemorySystem) SaveWorking(ctx context.Context, agentID string, 
 }
 
 // LoadWorking 加载工作记忆
-func (m *EnhancedMemorySystem) LoadWorking(ctx context.Context, agentID string) ([]interface{}, error) {
+func (m *EnhancedMemorySystem) LoadWorking(ctx context.Context, agentID string) ([]any, error) {
 	if m.working == nil {
 		return nil, fmt.Errorf("working memory not configured")
 	}
@@ -352,7 +352,7 @@ func (m *EnhancedMemorySystem) ClearWorking(ctx context.Context, agentID string)
 }
 
 // SaveLongTerm 保存长期记忆（向量化）
-func (m *EnhancedMemorySystem) SaveLongTerm(ctx context.Context, agentID string, content string, vector []float64, metadata map[string]interface{}) error {
+func (m *EnhancedMemorySystem) SaveLongTerm(ctx context.Context, agentID string, content string, vector []float64, metadata map[string]any) error {
 	if !m.config.LongTermEnabled || m.longTerm == nil {
 		return fmt.Errorf("long-term memory not configured")
 	}
@@ -360,7 +360,7 @@ func (m *EnhancedMemorySystem) SaveLongTerm(ctx context.Context, agentID string,
 	id := fmt.Sprintf("long_term:%s:%d", agentID, time.Now().UnixNano())
 
 	if metadata == nil {
-		metadata = make(map[string]interface{})
+		metadata = make(map[string]any)
 	}
 	metadata["agent_id"] = agentID
 	metadata["content"] = content
@@ -375,7 +375,7 @@ func (m *EnhancedMemorySystem) SearchLongTerm(ctx context.Context, agentID strin
 		return nil, fmt.Errorf("long-term memory not configured")
 	}
 
-	filter := map[string]interface{}{
+	filter := map[string]any{
 		"agent_id": agentID,
 	}
 
@@ -560,7 +560,7 @@ func (c *MemoryConsolidator) consolidate(ctx context.Context) error {
 		return nil
 	}
 
-	var memories []interface{}
+	var memories []any
 
 	if c.system.shortTerm != nil {
 		limit := c.system.config.ShortTermMaxSize * 100
@@ -596,7 +596,7 @@ func (c *MemoryConsolidator) consolidate(ctx context.Context) error {
 			return err
 		}
 
-		var selected []interface{}
+		var selected []any
 		for _, mem := range memories {
 			if err := ctx.Err(); err != nil {
 				return err
@@ -625,8 +625,8 @@ func (c *MemoryConsolidator) AddStrategy(strategy ConsolidationStrategy) {
 	c.strategies = append(c.strategies, strategy)
 }
 
-func extractMemoryKey(memory interface{}) (string, bool) {
-	m, ok := memory.(map[string]interface{})
+func extractMemoryKey(memory any) (string, bool) {
+	m, ok := memory.(map[string]any)
 	if !ok {
 		return "", false
 	}

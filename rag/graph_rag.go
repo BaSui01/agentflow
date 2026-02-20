@@ -16,7 +16,7 @@ type Node struct {
 	Type       string         `json:"type"`
 	Label      string         `json:"label"`
 	Properties map[string]any `json:"properties,omitempty"`
-	Embedding  []float32      `json:"embedding,omitempty"`
+	Embedding  []float64      `json:"embedding,omitempty"`
 	CreatedAt  time.Time      `json:"created_at"`
 }
 
@@ -155,8 +155,8 @@ type GraphRAG struct {
 
 // GraphRAG中矢量操作的 GraphVectorStore 接口.
 type GraphVectorStore interface {
-	Store(ctx context.Context, id string, embedding []float32, metadata map[string]any) error
-	Search(ctx context.Context, embedding []float32, limit int) ([]GraphVectorResult, error)
+	Store(ctx context.Context, id string, embedding []float64, metadata map[string]any) error
+	Search(ctx context.Context, embedding []float64, limit int) ([]GraphVectorResult, error)
 }
 
 // GraphVectorResult 代表着向量搜索结果.
@@ -168,7 +168,7 @@ type GraphVectorResult struct {
 
 // GraphEmbedder 生成嵌入式.
 type GraphEmbedder interface {
-	Embed(ctx context.Context, text string) ([]float32, error)
+	Embed(ctx context.Context, text string) ([]float64, error)
 }
 
 // GraphRAGConfig 配置了 GraphRAG.

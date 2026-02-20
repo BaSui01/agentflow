@@ -230,10 +230,13 @@ Keep the plan focused and achievable (max %d steps).`, strings.Join(toolDescs, "
 		return nil, 0, err
 	}
 
-	content := resp.Choices[0].Message.Content
-	tokens := resp.Usage.TotalTokens
+	choice, err := llm.FirstChoice(resp)
+	if err != nil {
+		return nil, 0, fmt.Errorf("plan creation returned no choices: %w", err)
+	}
 
-	// 摘录 JSON
+	content := choice.Message.Content
+	tokens := resp.Usage.TotalTokens
 	content = extractJSONObject(content)
 
 	var plan ExecutionPlan
@@ -342,7 +345,12 @@ Execute this step and provide the result.`, plan.Goal, strings.Join(context, "\n
 		return "", 0, err
 	}
 
-	return resp.Choices[0].Message.Content, resp.Usage.TotalTokens, nil
+	choice, err := llm.FirstChoice(resp)
+	if err != nil {
+		return "", 0, fmt.Errorf("LLM step returned no choices: %w", err)
+	}
+
+	return choice.Message.Content, resp.Usage.TotalTokens, nil
 }
 
 func (p *PlanAndExecute) replan(ctx context.Context, task string, currentPlan *ExecutionPlan, errorMsg string) (*ExecutionPlan, int, error) {
@@ -384,7 +392,12 @@ Create a new plan to continue from here. Output as JSON:
 		return nil, 0, err
 	}
 
-	content := extractJSONObject(resp.Choices[0].Message.Content)
+	replanChoice, err := llm.FirstChoice(resp)
+	if err != nil {
+		return nil, 0, fmt.Errorf("replan returned no choices: %w", err)
+	}
+
+	content := extractJSONObject(replanChoice.Message.Content)
 	tokens := resp.Usage.TotalTokens
 
 	var newPlan ExecutionPlan
@@ -428,7 +441,12 @@ Based on these results, provide a clear and complete final answer.`, task, strin
 		return "", 0, err
 	}
 
-	return resp.Choices[0].Message.Content, resp.Usage.TotalTokens, nil
+	synthChoice, err := llm.FirstChoice(resp)
+	if err != nil {
+		return "", 0, fmt.Errorf("synthesis returned no choices: %w", err)
+	}
+
+	return synthChoice.Message.Content, resp.Usage.TotalTokens, nil
 }
 
 func extractJSONObject(s string) string {

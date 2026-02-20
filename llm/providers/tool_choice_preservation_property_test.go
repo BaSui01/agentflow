@@ -444,32 +444,32 @@ func TestProperty18_ToolChoiceTypeConsistency(t *testing.T) {
 
 type mockOpenAIRequestWithToolChoice struct {
 	Model      string        `json:"model"`
-	Messages   []interface{} `json:"messages"`
-	Tools      []interface{} `json:"tools,omitempty"`
-	ToolChoice interface{}   `json:"tool_choice,omitempty"`
+	Messages   []any `json:"messages"`
+	Tools      []any `json:"tools,omitempty"`
+	ToolChoice any   `json:"tool_choice,omitempty"`
 	MaxTokens  int           `json:"max_tokens,omitempty"`
 }
 
 type mockMiniMaxRequestWithToolChoice struct {
 	Model      string        `json:"model"`
-	Messages   []interface{} `json:"messages"`
-	Tools      []interface{} `json:"tools,omitempty"`
-	ToolChoice interface{}   `json:"tool_choice,omitempty"`
+	Messages   []any `json:"messages"`
+	Tools      []any `json:"tools,omitempty"`
+	ToolChoice any   `json:"tool_choice,omitempty"`
 	MaxTokens  int           `json:"max_tokens,omitempty"`
 }
 
 func mockConvertToOpenAIRequest(req *llm.ChatRequest) *mockOpenAIRequestWithToolChoice {
 	result := &mockOpenAIRequestWithToolChoice{
 		Model:     req.Model,
-		Messages:  []interface{}{},
+		Messages:  []any{},
 		MaxTokens: req.MaxTokens,
 	}
 
 	// 在当前情况下转换工具
 	if len(req.Tools) > 0 {
-		result.Tools = []interface{}{}
+		result.Tools = []any{}
 		for range req.Tools {
-			result.Tools = append(result.Tools, map[string]interface{}{})
+			result.Tools = append(result.Tools, map[string]any{})
 		}
 	}
 
@@ -484,15 +484,15 @@ func mockConvertToOpenAIRequest(req *llm.ChatRequest) *mockOpenAIRequestWithTool
 func mockConvertToMiniMaxRequest(req *llm.ChatRequest) *mockMiniMaxRequestWithToolChoice {
 	result := &mockMiniMaxRequestWithToolChoice{
 		Model:     req.Model,
-		Messages:  []interface{}{},
+		Messages:  []any{},
 		MaxTokens: req.MaxTokens,
 	}
 
 	// 在当前情况下转换工具
 	if len(req.Tools) > 0 {
-		result.Tools = []interface{}{}
+		result.Tools = []any{}
 		for range req.Tools {
-			result.Tools = append(result.Tools, map[string]interface{}{})
+			result.Tools = append(result.Tools, map[string]any{})
 		}
 	}
 

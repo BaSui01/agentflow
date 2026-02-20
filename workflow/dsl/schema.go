@@ -25,13 +25,13 @@ type WorkflowDSL struct {
 	Workflow WorkflowNodesDef `yaml:"workflow" json:"workflow"`
 
 	// Metadata 元数据
-	Metadata map[string]interface{} `yaml:"metadata,omitempty" json:"metadata,omitempty"`
+	Metadata map[string]any `yaml:"metadata,omitempty" json:"metadata,omitempty"`
 }
 
 // VariableDef 变量定义
 type VariableDef struct {
 	Type        string      `yaml:"type" json:"type"`                                  // string, int, float, bool, list, map
-	Default     interface{} `yaml:"default,omitempty" json:"default,omitempty"`         // 默认值
+	Default     any `yaml:"default,omitempty" json:"default,omitempty"`         // 默认值
 	Description string      `yaml:"description,omitempty" json:"description,omitempty"` // 描述
 	Required    bool        `yaml:"required,omitempty" json:"required,omitempty"`       // 是否必填
 }
@@ -51,8 +51,8 @@ type AgentDef struct {
 type ToolDef struct {
 	Type        string                 `yaml:"type" json:"type"` // builtin, mcp, http, code
 	Description string                 `yaml:"description" json:"description"`
-	Config      map[string]interface{} `yaml:"config,omitempty" json:"config,omitempty"`
-	InputSchema map[string]interface{} `yaml:"input_schema,omitempty" json:"input_schema,omitempty"`
+	Config      map[string]any `yaml:"config,omitempty" json:"config,omitempty"`
+	InputSchema map[string]any `yaml:"input_schema,omitempty" json:"input_schema,omitempty"`
 }
 
 // StepDef 步骤定义
@@ -61,7 +61,7 @@ type StepDef struct {
 	Agent  string                 `yaml:"agent,omitempty" json:"agent,omitempty"`   // 引用 agents 中的 agent
 	Tool   string                 `yaml:"tool,omitempty" json:"tool,omitempty"`     // 引用 tools 中的工具
 	Prompt string                 `yaml:"prompt,omitempty" json:"prompt,omitempty"` // 支持 ${variable} 插值
-	Config map[string]interface{} `yaml:"config,omitempty" json:"config,omitempty"`
+	Config map[string]any `yaml:"config,omitempty" json:"config,omitempty"`
 }
 
 // WorkflowNodesDef 工作流节点定义
@@ -84,7 +84,7 @@ type NodeDef struct {
 	Parallel  []string               `yaml:"parallel,omitempty" json:"parallel,omitempty"`
 	SubGraph  *WorkflowNodesDef      `yaml:"subgraph,omitempty" json:"subgraph,omitempty"`
 	Error     *ErrorDef              `yaml:"error,omitempty" json:"error,omitempty"`
-	Metadata  map[string]interface{} `yaml:"metadata,omitempty" json:"metadata,omitempty"`
+	Metadata  map[string]any `yaml:"metadata,omitempty" json:"metadata,omitempty"`
 }
 
 // LoopDef 循环定义
@@ -101,5 +101,5 @@ type ErrorDef struct {
 	Strategy      string      `yaml:"strategy" json:"strategy"` // fail_fast, skip, retry
 	MaxRetries    int         `yaml:"max_retries,omitempty" json:"max_retries,omitempty"`
 	RetryDelayMs  int         `yaml:"retry_delay_ms,omitempty" json:"retry_delay_ms,omitempty"`
-	FallbackValue interface{} `yaml:"fallback_value,omitempty" json:"fallback_value,omitempty"`
+	FallbackValue any `yaml:"fallback_value,omitempty" json:"fallback_value,omitempty"`
 }

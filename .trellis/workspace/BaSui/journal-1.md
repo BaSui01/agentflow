@@ -147,3 +147,89 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 3: 框架优化 T1-T8 全面实施
+
+**Date**: 2026-02-21
+**Task**: 框架优化 T1-T8 全面实施
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+## 任务背景
+
+推进 `02-20-framework-optimization` 任务，从 planning 阶段进入实施。原始 PRD 识别了 13 个问题（H1-H3, M1-M8, L1-L2），经 Research Agent 深度分析后发现 6 个已在之前的代码质量修复中解决，实际需要处理 7 个问题 + 1 个规范沉淀。
+
+## 完成内容
+
+### Phase 1: 快速修复
+| 任务 | 内容 | 文件 |
+|------|------|------|
+| T1 | `splitPath` 替换为 `strings.FieldsFunc` | `config/hotreload.go` |
+
+### Phase 2: 核心测试覆盖
+| 任务 | 内容 | 测试数 | 文件 |
+|------|------|--------|------|
+| T2 | openaicompat 基类测试 | 18 | `llm/providers/openaicompat/provider_test.go` |
+| T3 | circuitbreaker 测试 | 13 | `llm/circuitbreaker/breaker_test.go` |
+| T4 | idempotency 测试 | 16 | `llm/idempotency/manager_test.go` |
+
+### Phase 3: Provider 和 Config 测试
+| 任务 | 内容 | 测试数 | 文件 |
+|------|------|--------|------|
+| T5 | Doubao provider 测试 | 8 | `llm/providers/doubao/provider_test.go` |
+| T6 | Config 子模块测试 | 30+ | `config/defaults_test.go`, `config/watcher_test.go`, `config/api_test.go` |
+| T7 | server/manager 测试 | 9 | `internal/server/manager_test.go` |
+
+### Phase 4: 功能完善
+| 任务 | 内容 | 文件 |
+|------|------|------|
+| T8 | Agent API registry 集成 | `api/handlers/agent.go`, `api/handlers/agent_test.go`, `cmd/agentflow/server.go` |
+
+### 规范沉淀
+- `quality-guidelines.md` 新增 §9 禁止重新实现标准库函数
+- `quality-guidelines.md` 新增 §11 零测试核心模块必须补齐直接测试
+
+## 关键发现
+
+1. **6/13 问题已修复**: H3(Config重复), M1(Gemini/Claude重复), M2(header重复), M3(multimodal泛型), M4(context key), M5(CORS) 均在之前的代码质量修复中已解决
+2. **IDE 诊断误报**: gopls 对新创建的 Go 测试文件报 `expected ';', found 'EOF'`，实际是索引延迟，`go vet` 和 `go test` 均通过
+3. **已有测试失败**: `TestProperty14_SSEResponseParsing_MiniMaxXMLToolCalls` 在原始代码上就失败，与本次改动无关
+4. **Agent API 架构**: 项目有两个 Registry — `agent.AgentRegistry`(类型工厂) 和 `discovery.Registry`(运行时实例管理)，API handler 需要同时持有两者
+
+## 统计
+
+- 新增 8 个测试文件，+3233 行
+- 修改 10 个文件
+- 8 个分批提交 + 1 个 merge commit
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `01ebf0a` | (see git log) |
+| `1e48470` | (see git log) |
+| `7c73410` | (see git log) |
+| `258602e` | (see git log) |
+| `11e1129` | (see git log) |
+| `e4d7df2` | (see git log) |
+| `642d873` | (see git log) |
+| `fea8ac3` | (see git log) |
+| `eb33eae` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

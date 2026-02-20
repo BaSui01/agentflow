@@ -335,3 +335,21 @@ func (s *PineconeStore) Count(ctx context.Context) (int, error) {
 	return resp.TotalVectorCount, nil
 }
 
+// ClearAll deletes all vectors from the Pinecone index (or namespace).
+func (s *PineconeStore) ClearAll(ctx context.Context) error {
+	req := struct {
+		DeleteAll bool   `json:"deleteAll"`
+		Namespace string `json:"namespace,omitempty"`
+	}{
+		DeleteAll: true,
+		Namespace: strings.TrimSpace(s.cfg.Namespace),
+	}
+
+	var resp any
+	if err := s.doJSON(ctx, http.MethodPost, "/vectors/delete", req, &resp); err != nil {
+		return fmt.Errorf("pinecone delete all: %w", err)
+	}
+
+	s.logger.Info("all vectors cleared from index")
+	return nil
+}

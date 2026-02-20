@@ -16,13 +16,13 @@ type Identity struct {
 	Type        string // "agent", "user", "service"
 	Permissions []string
 	Roles       []string
-	Metadata    map[string]interface{}
+	Metadata    map[string]any
 }
 
 // SecurityProvider 提供认证和授权功能。
 type SecurityProvider interface {
 	// Authenticate 验证凭证并返回身份。
-	Authenticate(ctx context.Context, credentials interface{}) (*Identity, error)
+	Authenticate(ctx context.Context, credentials any) (*Identity, error)
 	
 	// Authorize 检查身份是否有对资源执行操作的权限。
 	Authorize(ctx context.Context, identity *Identity, resource string, action string) error
@@ -31,7 +31,7 @@ type SecurityProvider interface {
 // NoOpSecurityProvider 是空操作实现。
 type NoOpSecurityProvider struct{}
 
-func (n *NoOpSecurityProvider) Authenticate(ctx context.Context, credentials interface{}) (*Identity, error) {
+func (n *NoOpSecurityProvider) Authenticate(ctx context.Context, credentials any) (*Identity, error) {
 	return &Identity{ID: "anonymous", Type: "user"}, nil
 }
 
@@ -51,7 +51,7 @@ type AuditEvent struct {
 	Action     string
 	Result     string // "success", "failure"
 	Error      string
-	Metadata   map[string]interface{}
+	Metadata   map[string]any
 }
 
 // AuditLogger 提供审计日志记录功能。
@@ -113,8 +113,9 @@ func (n *NoOpRateLimiter) Reset(ctx context.Context, key string) error {
 
 // Span 表示一个追踪 span。
 type Span interface {
-	SetAttribute(key string, value interface{})
-	AddEvent(name string, attributes map[string]interface{})
+	SetAttribute(key string, value any)
+	AddEvent(name string, attributes map[string]any)
+	SetError(err error)
 	End()
 }
 
@@ -126,8 +127,9 @@ type Tracer interface {
 // NoOpSpan 是空操作实现。
 type NoOpSpan struct{}
 
-func (n *NoOpSpan) SetAttribute(key string, value interface{}) {}
-func (n *NoOpSpan) AddEvent(name string, attributes map[string]interface{}) {}
+func (n *NoOpSpan) SetAttribute(key string, value any) {}
+func (n *NoOpSpan) AddEvent(name string, attributes map[string]any) {}
+func (n *NoOpSpan) SetError(err error) {}
 func (n *NoOpSpan) End() {}
 
 // NoOpTracer 是空操作实现。

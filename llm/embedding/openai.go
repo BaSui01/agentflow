@@ -39,7 +39,7 @@ func NewOpenAIProvider(cfg OpenAIConfig) *OpenAIProvider {
 }
 
 type openAIEmbedRequest struct {
-	Input          interface{} `json:"input"`
+	Input          any `json:"input"`
 	Model          string      `json:"model"`
 	Dimensions     int         `json:"dimensions,omitempty"`
 	EncodingFormat string      `json:"encoding_format,omitempty"`

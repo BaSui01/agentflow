@@ -86,14 +86,15 @@ func (lm *LifecycleManager) Stop(ctx context.Context) error {
 		lm.mu.Unlock()
 		return fmt.Errorf("agent not running")
 	}
+	// 在同一个临界区内设置 running = false 并 close channel，
+	// 防止两个并发 Stop() 都通过检查后 double-close panic。
+	lm.running = false
+	close(lm.stopChan)
 	lm.mu.Unlock()
 
 	lm.logger.Info("stopping agent lifecycle manager",
 		zap.String("agent_id", lm.agent.ID()),
 	)
-
-	// 发送停止信号
-	close(lm.stopChan)
 
 	// 等待健康检查循环结束
 	select {
@@ -107,10 +108,6 @@ func (lm *LifecycleManager) Stop(ctx context.Context) error {
 		lm.logger.Error("failed to teardown agent", zap.Error(err))
 		return err
 	}
-
-	lm.mu.Lock()
-	lm.running = false
-	lm.mu.Unlock()
 
 	lm.logger.Info("agent lifecycle manager stopped")
 	return nil
@@ -207,9 +204,11 @@ func (lm *LifecycleManager) Restart(ctx context.Context) error {
 	// 等待一小段时间
 	time.Sleep(1 * time.Second)
 
-	// 重新创建通道
+	// 在锁保护下重新创建通道，防止与并发读取竞争
+	lm.mu.Lock()
 	lm.stopChan = make(chan struct{})
 	lm.doneChan = make(chan struct{})
+	lm.mu.Unlock()
 
 	// 启动
 	if err := lm.Start(ctx); err != nil {

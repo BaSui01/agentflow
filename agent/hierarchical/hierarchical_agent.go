@@ -77,7 +77,7 @@ type Task struct {
 	Priority     int
 	Deadline     time.Time
 	Dependencies []string
-	Metadata     map[string]interface{}
+	Metadata     map[string]any
 
 	// 执行状态
 	Status      TaskStatus

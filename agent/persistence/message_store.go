@@ -69,7 +69,7 @@ type Message struct {
 	Content string `json:"content"`
 
 	// 有效载荷包含额外的结构化数据
-	Payload map[string]interface{} `json:"payload,omitempty"`
+	Payload map[string]any `json:"payload,omitempty"`
 
 	// 元数据包含信件元数据
 	Metadata map[string]string `json:"metadata,omitempty"`

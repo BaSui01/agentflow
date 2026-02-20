@@ -14,15 +14,15 @@ import (
 type EnhancedExecutionOptions struct {
 	// Reflection 选项
 	UseReflection    bool
-	ReflectionConfig interface{} // ReflectionConfig
+	ReflectionConfig any // ReflectionConfig
 
 	// 工具选择选项
 	UseToolSelection    bool
-	ToolSelectionConfig interface{} // ToolSelectionConfig
+	ToolSelectionConfig any // ToolSelectionConfig
 
 	// 提示词增强选项
 	UsePromptEnhancer       bool
-	PromptEngineeringConfig interface{} // PromptEngineeringConfig
+	PromptEngineeringConfig any // PromptEngineeringConfig
 
 	// Skills 选项
 	UseSkills   bool
@@ -58,56 +58,56 @@ func DefaultEnhancedExecutionOptions() EnhancedExecutionOptions {
 }
 
 // EnableReflection 启用 Reflection 机制
-func (b *BaseAgent) EnableReflection(executor interface{}) {
+func (b *BaseAgent) EnableReflection(executor any) {
 	b.reflectionExecutor = executor
 	b.logger.Info("reflection enabled")
 }
 
 // EnableToolSelection 启用动态工具选择
-func (b *BaseAgent) EnableToolSelection(selector interface{}) {
+func (b *BaseAgent) EnableToolSelection(selector any) {
 	b.toolSelector = selector
 	b.logger.Info("tool selection enabled")
 }
 
 // EnablePromptEnhancer 启用提示词增强
-func (b *BaseAgent) EnablePromptEnhancer(enhancer interface{}) {
+func (b *BaseAgent) EnablePromptEnhancer(enhancer any) {
 	b.promptEnhancer = enhancer
 	b.logger.Info("prompt enhancer enabled")
 }
 
 // EnableSkills 启用 Skills 系统
-func (b *BaseAgent) EnableSkills(manager interface{}) {
+func (b *BaseAgent) EnableSkills(manager any) {
 	b.skillManager = manager
 	b.logger.Info("skills system enabled")
 }
 
 // EnableMCP 启用 MCP 集成
-func (b *BaseAgent) EnableMCP(server interface{}) {
+func (b *BaseAgent) EnableMCP(server any) {
 	b.mcpServer = server
 	b.logger.Info("MCP integration enabled")
 }
 
 // EnableLSP 启用 LSP 集成。
-func (b *BaseAgent) EnableLSP(client interface{}) {
+func (b *BaseAgent) EnableLSP(client any) {
 	b.lspClient = client
 	b.logger.Info("LSP integration enabled")
 }
 
 // EnableLSPWithLifecycle 启用 LSP，并注册可选生命周期对象（例如 *ManagedLSP）。
-func (b *BaseAgent) EnableLSPWithLifecycle(client interface{}, lifecycle interface{}) {
+func (b *BaseAgent) EnableLSPWithLifecycle(client any, lifecycle any) {
 	b.lspClient = client
 	b.lspLifecycle = lifecycle
 	b.logger.Info("LSP integration enabled with lifecycle")
 }
 
 // EnableEnhancedMemory 启用增强记忆系统
-func (b *BaseAgent) EnableEnhancedMemory(memorySystem interface{}) {
+func (b *BaseAgent) EnableEnhancedMemory(memorySystem any) {
 	b.enhancedMemory = memorySystem
 	b.logger.Info("enhanced memory enabled")
 }
 
 // EnableObservability 启用可观测性系统
-func (b *BaseAgent) EnableObservability(obsSystem interface{}) {
+func (b *BaseAgent) EnableObservability(obsSystem any) {
 	b.observabilitySystem = obsSystem
 	b.logger.Info("observability enabled")
 }
@@ -165,13 +165,13 @@ func (b *BaseAgent) ExecuteEnhanced(ctx context.Context, input *Input, options E
 				b.logger.Info("skills discovered", zap.Int("count", len(skillInstructions)))
 			}
 		} else if sm, ok := b.skillManager.(interface {
-			DiscoverSkills(ctx context.Context, task string) (interface{}, error)
+			DiscoverSkills(ctx context.Context, task string) (any, error)
 		}); ok {
 			// 后向相容倒计时自定义执行.
 			raw, err := sm.DiscoverSkills(ctx, query)
 			if err != nil {
 				b.logger.Warn("skill discovery failed", zap.Error(err))
-			} else if list, ok := raw.([]interface{}); ok {
+			} else if list, ok := raw.([]any); ok {
 				for _, s := range list {
 					if skill, ok := s.(interface{ GetInstructions() string }); ok {
 						skillInstructions = append(skillInstructions, skill.GetInstructions())
@@ -193,14 +193,14 @@ func (b *BaseAgent) ExecuteEnhanced(ctx context.Context, input *Input, options E
 		if options.LoadWorkingMemory {
 			b.logger.Debug("loading working memory")
 			if mem, ok := b.enhancedMemory.(interface {
-				LoadWorking(ctx context.Context, agentID string) ([]interface{}, error)
+				LoadWorking(ctx context.Context, agentID string) ([]any, error)
 			}); ok {
 				working, err := mem.LoadWorking(ctx, b.ID())
 				if err != nil {
 					b.logger.Warn("failed to load working memory", zap.Error(err))
 				} else {
 					for _, w := range working {
-						if wm, ok := w.(map[string]interface{}); ok {
+						if wm, ok := w.(map[string]any); ok {
 							if content, ok := wm["content"].(string); ok {
 								memoryContext = append(memoryContext, content)
 							}
@@ -213,14 +213,14 @@ func (b *BaseAgent) ExecuteEnhanced(ctx context.Context, input *Input, options E
 		if options.LoadShortTermMemory {
 			b.logger.Debug("loading short-term memory")
 			if mem, ok := b.enhancedMemory.(interface {
-				LoadShortTerm(ctx context.Context, agentID string, limit int) ([]interface{}, error)
+				LoadShortTerm(ctx context.Context, agentID string, limit int) ([]any, error)
 			}); ok {
 				shortTerm, err := mem.LoadShortTerm(ctx, b.ID(), 5)
 				if err != nil {
 					b.logger.Warn("failed to load short-term memory", zap.Error(err))
 				} else {
 					for _, st := range shortTerm {
-						if stm, ok := st.(map[string]interface{}); ok {
+						if stm, ok := st.(map[string]any); ok {
 							if content, ok := stm["content"].(string); ok {
 								memoryContext = append(memoryContext, content)
 							}
@@ -272,7 +272,7 @@ func (b *BaseAgent) ExecuteEnhanced(ctx context.Context, input *Input, options E
 	if options.UseToolSelection && b.toolSelector != nil && b.toolManager != nil {
 		b.logger.Debug("selecting tools dynamically")
 		if ts, ok := b.toolSelector.(interface {
-			SelectTools(ctx context.Context, task string, availableTools interface{}) (interface{}, error)
+			SelectTools(ctx context.Context, task string, availableTools any) (any, error)
 		}); ok {
 			// 获取可用工具
 			availableTools := b.toolManager.GetAllowedTools(b.ID())
@@ -294,7 +294,7 @@ func (b *BaseAgent) ExecuteEnhanced(ctx context.Context, input *Input, options E
 		// 使用 Reflection 执行
 		b.logger.Debug("executing with reflection")
 		if re, ok := b.reflectionExecutor.(interface {
-			ExecuteWithReflection(ctx context.Context, input *Input) (interface{}, error)
+			ExecuteWithReflection(ctx context.Context, input *Input) (any, error)
 		}); ok {
 			result, execErr := re.ExecuteWithReflection(ctx, enhancedInput)
 			if execErr != nil {
@@ -336,9 +336,9 @@ func (b *BaseAgent) ExecuteEnhanced(ctx context.Context, input *Input, options E
 
 		// 保存短期记忆
 		if mem, ok := b.enhancedMemory.(interface {
-			SaveShortTerm(ctx context.Context, agentID, content string, metadata map[string]interface{}) error
+			SaveShortTerm(ctx context.Context, agentID, content string, metadata map[string]any) error
 		}); ok {
-			metadata := map[string]interface{}{
+			metadata := map[string]any{
 				"trace_id": input.TraceID,
 				"tokens":   output.TokensUsed,
 				"cost":     output.Cost,
@@ -350,17 +350,17 @@ func (b *BaseAgent) ExecuteEnhanced(ctx context.Context, input *Input, options E
 
 		// 记录情节
 		if mem, ok := b.enhancedMemory.(interface {
-			RecordEpisode(ctx context.Context, event interface{}) error
+			RecordEpisode(ctx context.Context, event any) error
 		}); ok {
 			// 创建情节事件（需要导入 memory 包的类型）
-			event := map[string]interface{}{
+			event := map[string]any{
 				"id":        fmt.Sprintf("%s-%d", b.ID(), time.Now().UnixNano()),
 				"agent_id":  b.ID(),
 				"type":      "task_execution",
 				"content":   output.Content,
 				"timestamp": time.Now(),
 				"duration":  output.Duration,
-				"context": map[string]interface{}{
+				"context": map[string]any{
 					"trace_id":   input.TraceID,
 					"tokens":     output.TokensUsed,
 					"cost":       output.Cost,
@@ -586,15 +586,15 @@ func (b *BaseAgent) ValidateConfiguration() error {
 }
 
 // GetFeatureMetrics 获取功能使用指标
-func (b *BaseAgent) GetFeatureMetrics() map[string]interface{} {
+func (b *BaseAgent) GetFeatureMetrics() map[string]any {
 	status := b.GetFeatureStatus()
 
-	metrics := map[string]interface{}{
+	metrics := map[string]any{
 		"agent_id":   b.ID(),
 		"agent_name": b.Name(),
 		"agent_type": string(b.Type()),
 		"features":   status,
-		"config": map[string]interface{}{
+		"config": map[string]any{
 			"model":       b.config.Model,
 			"provider":    b.config.Provider,
 			"max_tokens":  b.config.MaxTokens,
@@ -649,8 +649,8 @@ func prependSkillInstructions(prompt string, instructions []string) string {
 }
 
 // ExportConfiguration 导出配置（用于持久化或分享）
-func (b *BaseAgent) ExportConfiguration() map[string]interface{} {
-	return map[string]interface{}{
+func (b *BaseAgent) ExportConfiguration() map[string]any {
+	return map[string]any{
 		"id":          b.config.ID,
 		"name":        b.config.Name,
 		"type":        string(b.config.Type),

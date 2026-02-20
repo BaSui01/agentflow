@@ -30,7 +30,7 @@ func TestMaxPerAgentPrunerStrategy_ShortTerm(t *testing.T) {
 
 	for i := 0; i < 3; i++ {
 		key := fmt.Sprintf("short_term:a:%d", i+1)
-		mem := map[string]interface{}{
+		mem := map[string]any{
 			"key":       key,
 			"agent_id":  "a",
 			"content":   "c",

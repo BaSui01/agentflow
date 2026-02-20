@@ -163,10 +163,10 @@ func TestAgentCardGenerator_GenerateWithTools(t *testing.T) {
 		AgentDescription: "Agent with tools",
 	}
 
-	params := map[string]interface{}{
+	params := map[string]any{
 		"type": "object",
-		"properties": map[string]interface{}{
-			"query": map[string]interface{}{
+		"properties": map[string]any{
+			"query": map[string]any{
 				"type":        "string",
 				"description": "Search query",
 			},

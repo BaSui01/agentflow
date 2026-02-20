@@ -61,7 +61,7 @@ func main() {
 // runPromptChaining 演示提示词链工作流
 func runPromptChaining(ctx context.Context, provider llm.Provider, logger *zap.Logger) {
 	// 步骤 1: 翻译
-	translateStep := workflow.NewFuncStep("translate", func(ctx context.Context, input interface{}) (interface{}, error) {
+	translateStep := workflow.NewFuncStep("translate", func(ctx context.Context, input any) (any, error) {
 		text := input.(string)
 
 		resp, err := provider.Completion(ctx, &llm.ChatRequest{
@@ -81,7 +81,7 @@ func runPromptChaining(ctx context.Context, provider llm.Provider, logger *zap.L
 	})
 
 	// 步骤 2: 总结
-	summarizeStep := workflow.NewFuncStep("summarize", func(ctx context.Context, input interface{}) (interface{}, error) {
+	summarizeStep := workflow.NewFuncStep("summarize", func(ctx context.Context, input any) (any, error) {
 		text := input.(string)
 
 		resp, err := provider.Completion(ctx, &llm.ChatRequest{
@@ -125,7 +125,7 @@ func runPromptChaining(ctx context.Context, provider llm.Provider, logger *zap.L
 // runRouting 演示路由工作流
 func runRouting(ctx context.Context, provider llm.Provider, logger *zap.Logger) {
 	// 创建路由器（使用 LLM 进行分类）
-	router := workflow.NewFuncRouter(func(ctx context.Context, input interface{}) (string, error) {
+	router := workflow.NewFuncRouter(func(ctx context.Context, input any) (string, error) {
 		question := input.(string)
 
 		resp, err := provider.Completion(ctx, &llm.ChatRequest{
@@ -148,7 +148,7 @@ func runRouting(ctx context.Context, provider llm.Provider, logger *zap.Logger) 
 	})
 
 	// 创建处理器
-	technicalHandler := workflow.NewFuncHandler("technical", func(ctx context.Context, input interface{}) (interface{}, error) {
+	technicalHandler := workflow.NewFuncHandler("technical", func(ctx context.Context, input any) (any, error) {
 		question := input.(string)
 
 		resp, err := provider.Completion(ctx, &llm.ChatRequest{
@@ -167,7 +167,7 @@ func runRouting(ctx context.Context, provider llm.Provider, logger *zap.Logger) 
 		return resp.Choices[0].Message.Content, nil
 	})
 
-	businessHandler := workflow.NewFuncHandler("business", func(ctx context.Context, input interface{}) (interface{}, error) {
+	businessHandler := workflow.NewFuncHandler("business", func(ctx context.Context, input any) (any, error) {
 		question := input.(string)
 
 		resp, err := provider.Completion(ctx, &llm.ChatRequest{
@@ -186,7 +186,7 @@ func runRouting(ctx context.Context, provider llm.Provider, logger *zap.Logger) 
 		return resp.Choices[0].Message.Content, nil
 	})
 
-	generalHandler := workflow.NewFuncHandler("general", func(ctx context.Context, input interface{}) (interface{}, error) {
+	generalHandler := workflow.NewFuncHandler("general", func(ctx context.Context, input any) (any, error) {
 		question := input.(string)
 
 		resp, err := provider.Completion(ctx, &llm.ChatRequest{
@@ -239,7 +239,7 @@ func runRouting(ctx context.Context, provider llm.Provider, logger *zap.Logger) 
 // runParallelization 演示并行工作流
 func runParallelization(ctx context.Context, provider llm.Provider, logger *zap.Logger) {
 	// 任务 1: 情感分析
-	sentimentTask := workflow.NewFuncTask("sentiment", func(ctx context.Context, input interface{}) (interface{}, error) {
+	sentimentTask := workflow.NewFuncTask("sentiment", func(ctx context.Context, input any) (any, error) {
 		text := input.(string)
 
 		resp, err := provider.Completion(ctx, &llm.ChatRequest{
@@ -259,7 +259,7 @@ func runParallelization(ctx context.Context, provider llm.Provider, logger *zap.
 	})
 
 	// 任务 2: 主题提取
-	topicTask := workflow.NewFuncTask("topic", func(ctx context.Context, input interface{}) (interface{}, error) {
+	topicTask := workflow.NewFuncTask("topic", func(ctx context.Context, input any) (any, error) {
 		text := input.(string)
 
 		resp, err := provider.Completion(ctx, &llm.ChatRequest{
@@ -279,7 +279,7 @@ func runParallelization(ctx context.Context, provider llm.Provider, logger *zap.
 	})
 
 	// 任务 3: 关键词提取
-	keywordTask := workflow.NewFuncTask("keyword", func(ctx context.Context, input interface{}) (interface{}, error) {
+	keywordTask := workflow.NewFuncTask("keyword", func(ctx context.Context, input any) (any, error) {
 		text := input.(string)
 
 		resp, err := provider.Completion(ctx, &llm.ChatRequest{
@@ -299,7 +299,7 @@ func runParallelization(ctx context.Context, provider llm.Provider, logger *zap.
 	})
 
 	// 创建聚合器
-	aggregator := workflow.NewFuncAggregator(func(ctx context.Context, results []workflow.TaskResult) (interface{}, error) {
+	aggregator := workflow.NewFuncAggregator(func(ctx context.Context, results []workflow.TaskResult) (any, error) {
 		report := "=== 文本分析报告 ===\n\n"
 
 		for _, r := range results {

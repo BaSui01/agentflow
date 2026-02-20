@@ -9,11 +9,11 @@ import (
 // 根据输入决定使用哪个处理器
 type Router interface {
 	// Route 路由决策，返回路由键
-	Route(ctx context.Context, input interface{}) (string, error)
+	Route(ctx context.Context, input any) (string, error)
 }
 
 // RouterFunc 路由函数类型
-type RouterFunc func(ctx context.Context, input interface{}) (string, error)
+type RouterFunc func(ctx context.Context, input any) (string, error)
 
 // FuncRouter 函数路由器
 type FuncRouter struct {
@@ -25,20 +25,20 @@ func NewFuncRouter(fn RouterFunc) *FuncRouter {
 	return &FuncRouter{fn: fn}
 }
 
-func (r *FuncRouter) Route(ctx context.Context, input interface{}) (string, error) {
+func (r *FuncRouter) Route(ctx context.Context, input any) (string, error) {
 	return r.fn(ctx, input)
 }
 
 // Handler 处理器接口
 type Handler interface {
 	// Handle 处理输入
-	Handle(ctx context.Context, input interface{}) (interface{}, error)
+	Handle(ctx context.Context, input any) (any, error)
 	// Name 返回处理器名称
 	Name() string
 }
 
 // HandlerFunc 处理器函数类型
-type HandlerFunc func(ctx context.Context, input interface{}) (interface{}, error)
+type HandlerFunc func(ctx context.Context, input any) (any, error)
 
 // FuncHandler 函数处理器
 type FuncHandler struct {
@@ -54,7 +54,7 @@ func NewFuncHandler(name string, fn HandlerFunc) *FuncHandler {
 	}
 }
 
-func (h *FuncHandler) Handle(ctx context.Context, input interface{}) (interface{}, error) {
+func (h *FuncHandler) Handle(ctx context.Context, input any) (any, error) {
 	return h.fn(ctx, input)
 }
 
@@ -96,7 +96,7 @@ func (w *RoutingWorkflow) SetDefaultRoute(route string) {
 // 1. 使用路由器决定路由
 // 2. 查找对应的处理器
 // 3. 执行处理器
-func (w *RoutingWorkflow) Execute(ctx context.Context, input interface{}) (interface{}, error) {
+func (w *RoutingWorkflow) Execute(ctx context.Context, input any) (any, error) {
 	// 1. 路由决策
 	route, err := w.router.Route(ctx, input)
 	if err != nil {

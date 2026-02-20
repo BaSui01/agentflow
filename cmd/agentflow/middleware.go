@@ -1,6 +1,8 @@
 package main
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"fmt"
 	"net/http"
 	"strings"
@@ -167,4 +169,26 @@ func CORS(allowedOrigins []string) Middleware {
 			next.ServeHTTP(w, r)
 		})
 	}
+}
+
+// RequestID adds a unique request ID to each request via the X-Request-ID header.
+// If the client already provides one, it is preserved.
+func RequestID() Middleware {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			id := r.Header.Get("X-Request-ID")
+			if id == "" {
+				id = generateRequestID()
+			}
+			w.Header().Set("X-Request-ID", id)
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
+// generateRequestID produces a random hex string suitable for request tracing.
+func generateRequestID() string {
+	b := make([]byte, 16)
+	_, _ = rand.Read(b)
+	return "req-" + hex.EncodeToString(b)
 }

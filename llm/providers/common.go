@@ -148,7 +148,7 @@ type OpenAICompatRequest struct {
 	Model       string                `json:"model"`
 	Messages    []OpenAICompatMessage `json:"messages"`
 	Tools       []OpenAICompatTool    `json:"tools,omitempty"`
-	ToolChoice  interface{}           `json:"tool_choice,omitempty"`
+	ToolChoice  any           `json:"tool_choice,omitempty"`
 	MaxTokens   int                   `json:"max_tokens,omitempty"`
 	Temperature float32               `json:"temperature,omitempty"`
 	TopP        float32               `json:"top_p,omitempty"`

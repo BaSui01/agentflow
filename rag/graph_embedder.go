@@ -44,7 +44,7 @@ func NewSimpleGraphEmbedder(config SimpleGraphEmbedderConfig, logger *zap.Logger
 
 // Embed 为文本生成嵌入向量。
 // 使用词袋 + 哈希映射的方式将文本映射到固定维度的向量空间，并进行 L2 归一化。
-func (e *SimpleGraphEmbedder) Embed(ctx context.Context, text string) ([]float32, error) {
+func (e *SimpleGraphEmbedder) Embed(ctx context.Context, text string) ([]float64, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -52,10 +52,10 @@ func (e *SimpleGraphEmbedder) Embed(ctx context.Context, text string) ([]float32
 	// 分词并转小写
 	words := strings.Fields(strings.ToLower(text))
 	if len(words) == 0 {
-		return make([]float32, e.dimension), nil
+		return make([]float64, e.dimension), nil
 	}
 
-	vec := make([]float32, e.dimension)
+	vec := make([]float64, e.dimension)
 
 	// 统计词频并映射到向量维度
 	for _, word := range words {
@@ -66,7 +66,7 @@ func (e *SimpleGraphEmbedder) Embed(ctx context.Context, text string) ([]float32
 	}
 
 	// L2 归一化
-	normalize32(vec)
+	normalize64(vec)
 
 	e.logger.Debug("embedding generated",
 		zap.Int("text_len", len(text)),
@@ -98,17 +98,17 @@ func (e *SimpleGraphEmbedder) getOrAssignIndex(word string) int {
 	return idx
 }
 
-// normalize32 对 float32 向量进行 L2 归一化。
-func normalize32(vec []float32) {
+// normalize64 对 float64 向量进行 L2 归一化。
+func normalize64(vec []float64) {
 	var norm float64
 	for _, v := range vec {
-		norm += float64(v) * float64(v)
+		norm += v * v
 	}
 	if norm == 0 {
 		return
 	}
 	norm = math.Sqrt(norm)
 	for i := range vec {
-		vec[i] = float32(float64(vec[i]) / norm)
+		vec[i] = vec[i] / norm
 	}
 }

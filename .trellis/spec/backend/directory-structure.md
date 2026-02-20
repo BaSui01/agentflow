@@ -105,6 +105,8 @@ agentflow/
 │
 ├── workflow/                   # Workflow engine
 │   ├── workflow.go             # Workflow & Step interfaces
+│   ├── steps.go                # Step implementations (LLM, Tool, HumanInput, Code)
+│   ├── agent_adapter.go        # Agent↔Workflow bridge (AgentStep, AgentRouter, etc.)
 │   ├── dag.go                  # DAG execution model
 │   ├── dag_builder.go          # DAG construction
 │   ├── dag_executor.go         # DAG execution
@@ -112,11 +114,23 @@ agentflow/
 │
 ├── rag/                        # Retrieval-Augmented Generation
 │   ├── vector_store.go         # Vector store abstraction
+│   ├── vector_convert.go       # Float32↔Float64 conversion utilities
+│   ├── factory.go              # Config→RAG bridge (NewVectorStoreFromConfig, etc.)
 │   ├── chunking.go             # Document chunking
 │   ├── hybrid_retrieval.go     # Hybrid retrieval strategies
+│   ├── graph_rag.go            # Graph-based RAG (float64 unified)
+│   ├── graph_embedder.go       # Graph embedding interface (float64)
 │   ├── qdrant_store.go         # Qdrant adapter
 │   ├── milvus_store.go         # Milvus adapter
-│   └── ...                     # pinecone, weaviate, graph_rag, web_retrieval
+│   ├── ...                     # pinecone, weaviate, web_retrieval
+│   └── loader/                 # Document loader subsystem
+│       ├── doc.go              # Package documentation
+│       ├── loader.go           # DocumentLoader interface + LoaderRegistry
+│       ├── text.go             # Plain text loader
+│       ├── markdown.go         # Markdown loader (frontmatter extraction)
+│       ├── csv.go              # CSV loader (row→document mapping)
+│       ├── json.go             # JSON/JSONL loader
+│       └── adapter.go          # Source adapters (GitHub, arXiv)
 │
 ├── api/                        # HTTP API layer
 │   ├── openapi.yaml            # OpenAPI 3.0.3 specification
@@ -249,6 +263,24 @@ Create a file in `rag/` following the existing pattern:
 - Implement the `VectorStore` interface: `AddDocuments`, `Search`, `DeleteDocuments`, `UpdateDocument`, `Count`
 - File naming: `<backend>_store.go` (e.g., `qdrant_store.go`, `milvus_store.go`)
 - Include `*_test.go` with `InMemoryVectorStore` for unit tests
+- Register factory mapping in `rag/factory.go` (`mapXxxConfig` function)
+
+### Adding a New Document Loader
+
+Create a file in `rag/loader/` following the existing pattern:
+- Implement the `DocumentLoader` interface: `Load(ctx, source string) ([]Document, error)` + `SupportedExtensions() []string`
+- Register in `NewDefaultRegistry()` inside `loader.go`
+- For external sources (APIs, not files), create a `SourceAdapter` in `adapter.go`
+
+### Using Config→RAG Bridge
+
+Use `rag/factory.go` to create RAG components from config:
+```go
+store, err := rag.NewVectorStoreFromConfig(cfg.RAG.VectorStore, rag.WithLogger(logger))
+embedder, err := rag.NewEmbeddingProviderFromConfig(cfg.RAG.Embedding)
+retriever, err := rag.NewRetrieverFromConfig(cfg.RAG)
+```
+Add new config mappings via `mapXxxConfig` internal functions + functional options.
 
 ### Adding a New Workflow Node Type
 
@@ -256,6 +288,23 @@ Extend `workflow/dag.go`:
 - Add constant to the node type enum (line 11-24)
 - Add execution logic in `dag_executor.go`
 - Existing types: `Action`, `Condition`, `Loop`, `Parallel`, `SubGraph`, `Checkpoint`
+
+### Adding a New Workflow Step
+
+Add to `workflow/steps.go` following the Optional Injection pattern:
+- Define a workflow-local interface for the dependency (avoid importing `agent/`)
+- Add an optional dependency field (e.g., `Provider llm.Provider`)
+- When dependency is nil, return a backward-compatible placeholder map
+- When dependency is set, perform real execution
+- See `quality-guidelines.md` §14-§15 for full pattern details
+
+### Bridging Agents into Workflows
+
+Use `workflow/agent_adapter.go`:
+- Implement `AgentInterface` (simple string I/O) or `AgentExecutor` (generic I/O)
+- Wrap with `NewAgentAdapter()` + optional `WithAgentInputMapper`/`WithAgentOutputMapper`
+- Use `NewAgentStep()` to create a workflow `Step` from an `AgentExecutor`
+- For multi-agent: `AgentRouter` (conditional), `ParallelAgentStep` (concurrent), `ConditionalAgentStep` (branching)
 
 ---
 

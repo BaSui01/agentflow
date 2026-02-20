@@ -45,7 +45,7 @@ func demoHierarchicalArchitecture(logger *zap.Logger) {
 	}
 
 	// 注意：实际使用时需要提供真实的 provider
-	var provider interface{} = nil
+	var provider any = nil
 	supervisor := agent.NewBaseAgent(supervisorConfig, nil, nil, nil, nil, logger)
 
 	// 2. 创建 Worker Agents

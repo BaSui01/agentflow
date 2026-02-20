@@ -134,7 +134,7 @@ func WrapError(err error, code ErrorCode, message string) *Error {
 }
 
 // WrapErrorf 包装标准错误为 types.Error（支持格式化）
-func WrapErrorf(err error, code ErrorCode, format string, args ...interface{}) *Error {
+func WrapErrorf(err error, code ErrorCode, format string, args ...any) *Error {
 	if err == nil {
 		return nil
 	}

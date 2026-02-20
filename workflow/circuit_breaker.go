@@ -8,7 +8,10 @@ import (
 	"go.uber.org/zap"
 )
 
-// CircuitState 熔断器状态
+// CircuitState represents the state of a circuit breaker.
+// This is an independent definition equivalent to circuitbreaker.State in llm/circuitbreaker/.
+// The workflow package maintains its own copy to avoid depending on the llm package
+// (dependency direction: llm <- workflow, not workflow -> llm).
 type CircuitState int
 
 const (

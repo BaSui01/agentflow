@@ -9,7 +9,7 @@ import (
 // Workflow 是预定义的步骤序列，提供可预测和一致的执行
 type Workflow interface {
 	// Execute 执行工作流
-	Execute(ctx context.Context, input interface{}) (interface{}, error)
+	Execute(ctx context.Context, input any) (any, error)
 	// Name 返回工作流名称
 	Name() string
 	// Description 返回工作流描述
@@ -19,13 +19,13 @@ type Workflow interface {
 // Step 工作流步骤接口
 type Step interface {
 	// Execute 执行步骤
-	Execute(ctx context.Context, input interface{}) (interface{}, error)
+	Execute(ctx context.Context, input any) (any, error)
 	// Name 返回步骤名称
 	Name() string
 }
 
 // StepFunc 步骤函数类型
-type StepFunc func(ctx context.Context, input interface{}) (interface{}, error)
+type StepFunc func(ctx context.Context, input any) (any, error)
 
 // FuncStep 函数步骤实现
 type FuncStep struct {
@@ -41,7 +41,7 @@ func NewFuncStep(name string, fn StepFunc) *FuncStep {
 	}
 }
 
-func (s *FuncStep) Execute(ctx context.Context, input interface{}) (interface{}, error) {
+func (s *FuncStep) Execute(ctx context.Context, input any) (any, error) {
 	return s.fn(ctx, input)
 }
 
@@ -68,7 +68,7 @@ func NewChainWorkflow(name, description string, steps ...Step) *ChainWorkflow {
 
 // Execute 执行提示词链
 // 按顺序执行每个步骤，将前一步的输出作为下一步的输入
-func (w *ChainWorkflow) Execute(ctx context.Context, input interface{}) (interface{}, error) {
+func (w *ChainWorkflow) Execute(ctx context.Context, input any) (any, error) {
 	current := input
 
 	for i, step := range w.steps {

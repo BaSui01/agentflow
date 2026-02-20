@@ -210,7 +210,7 @@ func (p *GeminiProvider) batchEmbed(ctx context.Context, req *EmbeddingRequest, 
 }
 
 // doRequest 使用 Gemini 特定认证执行 HTTP 请求.
-func (p *GeminiProvider) doRequest(ctx context.Context, endpoint string, body interface{}) ([]byte, error) {
+func (p *GeminiProvider) doRequest(ctx context.Context, endpoint string, body any) ([]byte, error) {
 	payload, err := json.Marshal(body)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal request: %w", err)

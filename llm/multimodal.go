@@ -198,7 +198,7 @@ type FineTuningJobRequest struct {
 	Model           string                 `json:"model"`                       // 基础模型
 	TrainingFile    string                 `json:"training_file"`               // 训练文件 ID
 	ValidationFile  string                 `json:"validation_file,omitempty"`   // 验证文件 ID
-	Hyperparameters map[string]interface{} `json:"hyperparameters,omitempty"`   // 超参数
+	Hyperparameters map[string]any `json:"hyperparameters,omitempty"`   // 超参数
 	Suffix          string                 `json:"suffix,omitempty"`            // 模型名称后缀
 	IntegrationIDs  []string               `json:"integration_ids,omitempty"`   // 集成 ID
 }
@@ -216,7 +216,7 @@ type FineTuningJob struct {
 	Status          string                 `json:"status"` // queued, running, succeeded, failed, cancelled
 	ValidationFile  string                 `json:"validation_file,omitempty"`
 	TrainingFile    string                 `json:"training_file"`
-	Hyperparameters map[string]interface{} `json:"hyperparameters"`
+	Hyperparameters map[string]any `json:"hyperparameters"`
 	TrainedTokens   int                    `json:"trained_tokens,omitempty"`
 	Error           *FineTuningError       `json:"error,omitempty"`
 }

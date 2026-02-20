@@ -181,9 +181,9 @@ func (s *HTTPServer) RecoverTasks(ctx context.Context) error {
 
 // 转换 ToPersistTask 将内部任务转换为持久性格式。
 func (s *HTTPServer) convertToPersistTask(task *asyncTask) *persistence.AsyncTask {
-	var input map[string]interface{}
+	var input map[string]any
 	if task.Message != nil && task.Message.Payload != nil {
-		if m, ok := task.Message.Payload.(map[string]interface{}); ok {
+		if m, ok := task.Message.Payload.(map[string]any); ok {
 			input = m
 		}
 	}

@@ -205,7 +205,7 @@ func (s *MemoryTaskStore) sortTasks(tasks []*AsyncTask, orderBy string, desc boo
 }
 
 // 更新状态更新任务状态
-func (s *MemoryTaskStore) UpdateStatus(ctx context.Context, taskID string, status TaskStatus, result interface{}, errMsg string) error {
+func (s *MemoryTaskStore) UpdateStatus(ctx context.Context, taskID string, status TaskStatus, result any, errMsg string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 

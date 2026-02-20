@@ -30,7 +30,7 @@ func TestDAGDefinition_JSONSerialization(t *testing.T) {
 				Step: "step2",
 			},
 		},
-		Metadata: map[string]interface{}{
+		Metadata: map[string]any{
 			"version": "1.0",
 			"author":  "test",
 		},
@@ -74,7 +74,7 @@ func TestDAGDefinition_YAMLSerialization(t *testing.T) {
 				Step: "step2",
 			},
 		},
-		Metadata: map[string]interface{}{
+		Metadata: map[string]any{
 			"version": "1.0",
 			"author":  "test",
 		},
@@ -780,7 +780,7 @@ func TestComplexWorkflowSerialization(t *testing.T) {
 				Step: "finalize",
 			},
 		},
-		Metadata: map[string]interface{}{
+		Metadata: map[string]any{
 			"version": "1.0",
 			"tags":    []string{"complex", "test"},
 		},

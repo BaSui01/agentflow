@@ -22,7 +22,7 @@ type InMemoryVectorStoreConfig struct {
 
 type vectorEntry struct {
 	vector    []float64
-	metadata  map[string]interface{}
+	metadata  map[string]any
 	createdAt time.Time
 }
 
@@ -52,7 +52,7 @@ func NewInMemoryVectorStore(config InMemoryVectorStoreConfig, logger *zap.Logger
 	}
 }
 
-func (s *InMemoryVectorStore) Store(ctx context.Context, id string, vector []float64, metadata map[string]interface{}) error {
+func (s *InMemoryVectorStore) Store(ctx context.Context, id string, vector []float64, metadata map[string]any) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -77,7 +77,7 @@ func (s *InMemoryVectorStore) Store(ctx context.Context, id string, vector []flo
 	return nil
 }
 
-func (s *InMemoryVectorStore) Search(ctx context.Context, query []float64, topK int, filter map[string]interface{}) ([]VectorSearchResult, error) {
+func (s *InMemoryVectorStore) Search(ctx context.Context, query []float64, topK int, filter map[string]any) ([]VectorSearchResult, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -150,7 +150,7 @@ func (s *InMemoryVectorStore) BatchStore(ctx context.Context, items []VectorItem
 	return nil
 }
 
-func matchesFilter(metadata map[string]interface{}, filter map[string]interface{}) bool {
+func matchesFilter(metadata map[string]any, filter map[string]any) bool {
 	if len(filter) == 0 {
 		return true
 	}
@@ -185,11 +185,11 @@ func cosineSimilarityFloat64(a, b []float64) float64 {
 	return dot / (math.Sqrt(normA) * math.Sqrt(normB))
 }
 
-func cloneMap(in map[string]interface{}) map[string]interface{} {
+func cloneMap(in map[string]any) map[string]any {
 	if in == nil {
 		return nil
 	}
-	out := make(map[string]interface{}, len(in))
+	out := make(map[string]any, len(in))
 	for k, v := range in {
 		out[k] = v
 	}

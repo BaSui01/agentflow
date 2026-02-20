@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"sort"
 	"sync"
 
 	"go.uber.org/zap"
@@ -25,6 +26,22 @@ type VectorStore interface {
 
 	// 获取文档数量
 	Count(ctx context.Context) (int, error)
+}
+
+// Clearable is an optional interface for VectorStore implementations that support
+// clearing all stored data. Use type assertion to check support:
+//
+//	if c, ok := store.(Clearable); ok { c.ClearAll(ctx) }
+type Clearable interface {
+	ClearAll(ctx context.Context) error
+}
+
+// DocumentLister is an optional interface for VectorStore implementations that
+// support listing document IDs with pagination. Use type assertion to check support:
+//
+//	if l, ok := store.(DocumentLister); ok { l.ListDocumentIDs(ctx, 100, 0) }
+type DocumentLister interface {
+	ListDocumentIDs(ctx context.Context, limit int, offset int) ([]string, error)
 }
 
 // VectorSearchResult 向量搜索结果
@@ -159,6 +176,36 @@ func (s *InMemoryVectorStore) Count(ctx context.Context) (int, error) {
 	return len(s.documents), nil
 }
 
+// ClearAll removes all documents from the in-memory store.
+func (s *InMemoryVectorStore) ClearAll(ctx context.Context) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.documents = make([]Document, 0)
+	s.logger.Info("all documents cleared from vector store")
+	return nil
+}
+
+// ListDocumentIDs returns a paginated list of document IDs.
+func (s *InMemoryVectorStore) ListDocumentIDs(ctx context.Context, limit int, offset int) ([]string, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	if offset >= len(s.documents) {
+		return []string{}, nil
+	}
+
+	end := offset + limit
+	if end > len(s.documents) {
+		end = len(s.documents)
+	}
+
+	ids := make([]string, 0, end-offset)
+	for _, doc := range s.documents[offset:end] {
+		ids = append(ids, doc.ID)
+	}
+	return ids, nil
+}
+
 // 功用函数
 
 // 等同度计算等同度
@@ -181,17 +228,11 @@ func cosineSimilarity(a, b []float64) float64 {
 	return dotProduct / (math.Sqrt(normA) * math.Sqrt(normB))
 }
 
-// sortByScore 按分数排序
+// sortByScore 按分数降序排序
 func sortByScore(results []VectorSearchResult) {
-	// 简单冒泡排序（生产环境应使用更高效的排序算法）
-	n := len(results)
-	for i := 0; i < n-1; i++ {
-		for j := 0; j < n-i-1; j++ {
-			if results[j].Score < results[j+1].Score {
-				results[j], results[j+1] = results[j+1], results[j]
-			}
-		}
-	}
+	sort.Slice(results, func(i, j int) bool {
+		return results[i].Score > results[j].Score
+	})
 }
 
 // ====== 语义缓存 ======
@@ -246,19 +287,44 @@ func (c *SemanticCache) Set(ctx context.Context, doc Document) error {
 
 // Clear 清空缓存
 func (c *SemanticCache) Clear(ctx context.Context) error {
-	// 获取所有文档 ID
+	// 快速路径：空缓存无需操作
 	count, err := c.store.Count(ctx)
 	if err != nil {
-		return err
+		return fmt.Errorf("count cache entries: %w", err)
 	}
-
 	if count == 0 {
 		return nil
 	}
 
-	// NOTE: 批量删除需要 VectorStore 接口支持 ListDocumentIDs 方法，
-	// 当前接口仅支持按 ID 删除，无法枚举所有文档 ID。
-	// 待 VectorStore 接口扩展后实现完整的缓存清理。
-	c.logger.Info("semantic cache cleared")
+	// 优先使用 Clearable 接口（最高效）
+	if clearable, ok := c.store.(Clearable); ok {
+		if err := clearable.ClearAll(ctx); err != nil {
+			return fmt.Errorf("clear cache: %w", err)
+		}
+		c.logger.Info("semantic cache cleared via ClearAll")
+		return nil
+	}
+
+	// 回退：使用 DocumentLister + DeleteDocuments 分批清理
+	if lister, ok := c.store.(DocumentLister); ok {
+		const batchSize = 100
+		for {
+			ids, err := lister.ListDocumentIDs(ctx, batchSize, 0)
+			if err != nil {
+				return fmt.Errorf("list document IDs: %w", err)
+			}
+			if len(ids) == 0 {
+				break
+			}
+			if err := c.store.DeleteDocuments(ctx, ids); err != nil {
+				return fmt.Errorf("delete documents: %w", err)
+			}
+		}
+		c.logger.Info("semantic cache cleared via ListDocumentIDs + DeleteDocuments")
+		return nil
+	}
+
+	// 最终回退：VectorStore 不支持任何清理接口
+	c.logger.Warn("VectorStore does not support Clearable or DocumentLister, cache not cleared")
 	return nil
 }

@@ -25,8 +25,8 @@ type Decision struct {
 	ID           string            `json:"id"`
 	Type         DecisionType      `json:"type"`
 	Description  string            `json:"description"`
-	Input        interface{}       `json:"input,omitempty"`
-	Output       interface{}       `json:"output,omitempty"`
+	Input        any       `json:"input,omitempty"`
+	Output       any       `json:"output,omitempty"`
 	Reasoning    string            `json:"reasoning"`
 	Confidence   float64           `json:"confidence,omitempty"`
 	Alternatives []Alternative     `json:"alternatives,omitempty"`

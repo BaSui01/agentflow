@@ -8,17 +8,17 @@ import (
 
 func TestChainWorkflow(t *testing.T) {
 	// 创建测试步骤
-	step1 := NewFuncStep("step1", func(ctx context.Context, input interface{}) (interface{}, error) {
+	step1 := NewFuncStep("step1", func(ctx context.Context, input any) (any, error) {
 		str := input.(string)
 		return str + " -> step1", nil
 	})
 
-	step2 := NewFuncStep("step2", func(ctx context.Context, input interface{}) (interface{}, error) {
+	step2 := NewFuncStep("step2", func(ctx context.Context, input any) (any, error) {
 		str := input.(string)
 		return str + " -> step2", nil
 	})
 
-	step3 := NewFuncStep("step3", func(ctx context.Context, input interface{}) (interface{}, error) {
+	step3 := NewFuncStep("step3", func(ctx context.Context, input any) (any, error) {
 		str := input.(string)
 		return str + " -> step3", nil
 	})
@@ -40,15 +40,15 @@ func TestChainWorkflow(t *testing.T) {
 }
 
 func TestChainWorkflow_StepError(t *testing.T) {
-	step1 := NewFuncStep("step1", func(ctx context.Context, input interface{}) (interface{}, error) {
+	step1 := NewFuncStep("step1", func(ctx context.Context, input any) (any, error) {
 		return "step1", nil
 	})
 
-	step2 := NewFuncStep("step2", func(ctx context.Context, input interface{}) (interface{}, error) {
+	step2 := NewFuncStep("step2", func(ctx context.Context, input any) (any, error) {
 		return nil, errors.New("step2 failed")
 	})
 
-	step3 := NewFuncStep("step3", func(ctx context.Context, input interface{}) (interface{}, error) {
+	step3 := NewFuncStep("step3", func(ctx context.Context, input any) (any, error) {
 		return "step3", nil
 	})
 
@@ -66,11 +66,11 @@ func TestChainWorkflow_StepError(t *testing.T) {
 }
 
 func TestChainWorkflow_ContextCancellation(t *testing.T) {
-	step1 := NewFuncStep("step1", func(ctx context.Context, input interface{}) (interface{}, error) {
+	step1 := NewFuncStep("step1", func(ctx context.Context, input any) (any, error) {
 		return "step1", nil
 	})
 
-	step2 := NewFuncStep("step2", func(ctx context.Context, input interface{}) (interface{}, error) {
+	step2 := NewFuncStep("step2", func(ctx context.Context, input any) (any, error) {
 		// 模拟长时间运行
 		select {
 		case <-ctx.Done():
@@ -95,7 +95,7 @@ func TestChainWorkflow_ContextCancellation(t *testing.T) {
 
 func TestRoutingWorkflow(t *testing.T) {
 	// 创建路由器
-	router := NewFuncRouter(func(ctx context.Context, input interface{}) (string, error) {
+	router := NewFuncRouter(func(ctx context.Context, input any) (string, error) {
 		str := input.(string)
 		if str == "route-a" {
 			return "handler-a", nil
@@ -104,11 +104,11 @@ func TestRoutingWorkflow(t *testing.T) {
 	})
 
 	// 创建处理器
-	handlerA := NewFuncHandler("handler-a", func(ctx context.Context, input interface{}) (interface{}, error) {
+	handlerA := NewFuncHandler("handler-a", func(ctx context.Context, input any) (any, error) {
 		return "handled by A", nil
 	})
 
-	handlerB := NewFuncHandler("handler-b", func(ctx context.Context, input interface{}) (interface{}, error) {
+	handlerB := NewFuncHandler("handler-b", func(ctx context.Context, input any) (any, error) {
 		return "handled by B", nil
 	})
 
@@ -138,7 +138,7 @@ func TestRoutingWorkflow(t *testing.T) {
 }
 
 func TestRoutingWorkflow_NoHandler(t *testing.T) {
-	router := NewFuncRouter(func(ctx context.Context, input interface{}) (string, error) {
+	router := NewFuncRouter(func(ctx context.Context, input any) (string, error) {
 		return "unknown-route", nil
 	})
 
@@ -152,11 +152,11 @@ func TestRoutingWorkflow_NoHandler(t *testing.T) {
 }
 
 func TestRoutingWorkflow_DefaultRoute(t *testing.T) {
-	router := NewFuncRouter(func(ctx context.Context, input interface{}) (string, error) {
+	router := NewFuncRouter(func(ctx context.Context, input any) (string, error) {
 		return "unknown-route", nil
 	})
 
-	defaultHandler := NewFuncHandler("default", func(ctx context.Context, input interface{}) (interface{}, error) {
+	defaultHandler := NewFuncHandler("default", func(ctx context.Context, input any) (any, error) {
 		return "default handler", nil
 	})
 
@@ -176,20 +176,20 @@ func TestRoutingWorkflow_DefaultRoute(t *testing.T) {
 
 func TestParallelWorkflow(t *testing.T) {
 	// 创建任务
-	task1 := NewFuncTask("task1", func(ctx context.Context, input interface{}) (interface{}, error) {
+	task1 := NewFuncTask("task1", func(ctx context.Context, input any) (any, error) {
 		return "result1", nil
 	})
 
-	task2 := NewFuncTask("task2", func(ctx context.Context, input interface{}) (interface{}, error) {
+	task2 := NewFuncTask("task2", func(ctx context.Context, input any) (any, error) {
 		return "result2", nil
 	})
 
-	task3 := NewFuncTask("task3", func(ctx context.Context, input interface{}) (interface{}, error) {
+	task3 := NewFuncTask("task3", func(ctx context.Context, input any) (any, error) {
 		return "result3", nil
 	})
 
 	// 创建聚合器
-	aggregator := NewFuncAggregator(func(ctx context.Context, results []TaskResult) (interface{}, error) {
+	aggregator := NewFuncAggregator(func(ctx context.Context, results []TaskResult) (any, error) {
 		combined := ""
 		for _, r := range results {
 			combined += r.Result.(string) + " "
@@ -215,15 +215,15 @@ func TestParallelWorkflow(t *testing.T) {
 }
 
 func TestParallelWorkflow_TaskError(t *testing.T) {
-	task1 := NewFuncTask("task1", func(ctx context.Context, input interface{}) (interface{}, error) {
+	task1 := NewFuncTask("task1", func(ctx context.Context, input any) (any, error) {
 		return "result1", nil
 	})
 
-	task2 := NewFuncTask("task2", func(ctx context.Context, input interface{}) (interface{}, error) {
+	task2 := NewFuncTask("task2", func(ctx context.Context, input any) (any, error) {
 		return nil, errors.New("task2 failed")
 	})
 
-	aggregator := NewFuncAggregator(func(ctx context.Context, results []TaskResult) (interface{}, error) {
+	aggregator := NewFuncAggregator(func(ctx context.Context, results []TaskResult) (any, error) {
 		return "aggregated", nil
 	})
 
@@ -237,11 +237,11 @@ func TestParallelWorkflow_TaskError(t *testing.T) {
 }
 
 func TestParallelWorkflow_NoAggregator(t *testing.T) {
-	task1 := NewFuncTask("task1", func(ctx context.Context, input interface{}) (interface{}, error) {
+	task1 := NewFuncTask("task1", func(ctx context.Context, input any) (any, error) {
 		return "result1", nil
 	})
 
-	task2 := NewFuncTask("task2", func(ctx context.Context, input interface{}) (interface{}, error) {
+	task2 := NewFuncTask("task2", func(ctx context.Context, input any) (any, error) {
 		return "result2", nil
 	})
 

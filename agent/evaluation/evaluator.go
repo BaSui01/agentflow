@@ -707,7 +707,7 @@ func (s *ContainsScorer) Score(ctx context.Context, task *EvalTask, output strin
 type JSONScorer struct{}
 
 func (s *JSONScorer) Score(ctx context.Context, task *EvalTask, output string) (float64, map[string]float64, error) {
-	var expectedJSON, outputJSON interface{}
+	var expectedJSON, outputJSON any
 
 	if err := json.Unmarshal([]byte(task.Expected), &expectedJSON); err != nil {
 		return 0, nil, fmt.Errorf("invalid expected JSON: %w", err)
@@ -759,7 +759,7 @@ func containsSubstring(s, substr string) bool {
 	return false
 }
 
-func compareJSON(expected, actual interface{}) float64 {
+func compareJSON(expected, actual any) float64 {
 	expectedBytes, _ := json.Marshal(expected)
 	actualBytes, _ := json.Marshal(actual)
 	return calculateSimilarity(string(expectedBytes), string(actualBytes))

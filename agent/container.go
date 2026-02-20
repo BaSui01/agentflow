@@ -20,14 +20,14 @@ type Container struct {
 	logger      *zap.Logger
 
 	// 用于扩展的工厂功能
-	reflectionFactory     func() interface{}
-	toolSelectionFactory  func() interface{}
-	promptEnhancerFactory func() interface{}
-	skillsFactory         func() interface{}
-	mcpFactory            func() interface{}
-	enhancedMemoryFactory func() interface{}
-	observabilityFactory  func() interface{}
-	guardrailsFactory     func() interface{}
+	reflectionFactory     func() any
+	toolSelectionFactory  func() any
+	promptEnhancerFactory func() any
+	skillsFactory         func() any
+	mcpFactory            func() any
+	enhancedMemoryFactory func() any
+	observabilityFactory  func() any
+	guardrailsFactory     func() any
 }
 
 // NewContaner创建了新的依赖容器.
@@ -66,19 +66,19 @@ func (c *Container) WithLogger(logger *zap.Logger) *Container {
 }
 
 // 随着ReflectionFactory设置了反射延伸工厂.
-func (c *Container) WithReflectionFactory(factory func() interface{}) *Container {
+func (c *Container) WithReflectionFactory(factory func() any) *Container {
 	c.reflectionFactory = factory
 	return c
 }
 
 // With ToolSelectFactory 设置工具选择扩展厂.
-func (c *Container) WithToolSelectionFactory(factory func() interface{}) *Container {
+func (c *Container) WithToolSelectionFactory(factory func() any) *Container {
 	c.toolSelectionFactory = factory
 	return c
 }
 
 // 与Guardrails Factory 设置了护栏延长工厂.
-func (c *Container) WithGuardrailsFactory(factory func() interface{}) *Container {
+func (c *Container) WithGuardrailsFactory(factory func() any) *Container {
 	c.guardrailsFactory = factory
 	return c
 }
@@ -158,29 +158,29 @@ func (f *AgentFactoryFunc) CreateModular(config ModularAgentConfig) (*ModularAge
 
 // 服务管理员提供全球服务登记处。
 type ServiceLocator struct {
-	services map[string]interface{}
+	services map[string]any
 }
 
 // 新服务定位器创建了新的服务定位器.
 func NewServiceLocator() *ServiceLocator {
 	return &ServiceLocator{
-		services: make(map[string]interface{}),
+		services: make(map[string]any),
 	}
 }
 
 // 登记服务。
-func (sl *ServiceLocator) Register(name string, service interface{}) {
+func (sl *ServiceLocator) Register(name string, service any) {
 	sl.services[name] = service
 }
 
 // 获取服务的名称 。
-func (sl *ServiceLocator) Get(name string) (interface{}, bool) {
+func (sl *ServiceLocator) Get(name string) (any, bool) {
 	service, ok := sl.services[name]
 	return service, ok
 }
 
 // 如果找不到, 必须获取服务或恐慌 。
-func (sl *ServiceLocator) MustGet(name string) interface{} {
+func (sl *ServiceLocator) MustGet(name string) any {
 	service, ok := sl.services[name]
 	if !ok {
 		panic("service not found: " + name)

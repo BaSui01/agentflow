@@ -4,6 +4,8 @@ import (
 	"context"
 	"sort"
 	"sync"
+
+	"golang.org/x/sync/errgroup"
 )
 
 // ChainMode 验证器链执行模式
@@ -14,6 +16,8 @@ const (
 	ChainModeFailFast ChainMode = "fail_fast"
 	// ChainModeCollectAll 收集全部模式：执行所有验证器并收集所有结果
 	ChainModeCollectAll ChainMode = "collect_all"
+	// ChainModeParallel 并行模式：并行执行所有验证器并收集结果
+	ChainModeParallel ChainMode = "parallel"
 )
 
 // ValidatorChainConfig 验证器链配置
@@ -138,6 +142,11 @@ func (c *ValidatorChain) Validate(ctx context.Context, content string) (*Validat
 	mode := c.mode
 	c.mu.RUnlock()
 
+	// 并行模式走独立路径
+	if mode == ChainModeParallel {
+		return c.validateParallel(ctx, validators, content)
+	}
+
 	// 按优先级排序（数字越小优先级越高）
 	sortValidatorsByPriority(validators)
 
@@ -184,12 +193,104 @@ func (c *ValidatorChain) Validate(ctx context.Context, content string) (*Validat
 		executed := result.Metadata["validators_executed"].([]string)
 		result.Metadata["validators_executed"] = append(executed, v.Name())
 
+		// Tripwire 优先级高于模式：立即中断
+		if vResult.Tripwire {
+			result.Merge(vResult)
+			return result, &TripwireError{
+				ValidatorName: v.Name(),
+				Result:        result,
+			}
+		}
+
 		// 合并结果
 		result.Merge(vResult)
 
 		// 快速失败模式：遇到验证失败立即停止
 		if mode == ChainModeFailFast && !vResult.Valid {
 			return result, nil
+		}
+	}
+
+	return result, nil
+}
+
+// validateParallel 并行执行所有验证器并收集结果。
+// 如果任何验证器返回 Tripwire，通过 context cancel 取消其他验证器。
+func (c *ValidatorChain) validateParallel(ctx context.Context, validators []Validator, content string) (*ValidationResult, error) {
+	if len(validators) == 0 {
+		result := NewValidationResult()
+		result.Metadata["validators_executed"] = make([]string, 0)
+		result.Metadata["execution_order"] = make([]string, 0)
+		return result, nil
+	}
+
+	type validatorResult struct {
+		name   string
+		result *ValidationResult
+		err    error
+	}
+
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	results := make([]validatorResult, len(validators))
+	g, gctx := errgroup.WithContext(ctx)
+
+	// tripwire 信号：一旦触发就取消所有其他验证器
+	var tripwireOnce sync.Once
+	var tripwireName string
+
+	for i, v := range validators {
+		i, v := i, v
+		g.Go(func() error {
+			vResult, err := v.Validate(gctx, content)
+			results[i] = validatorResult{
+				name:   v.Name(),
+				result: vResult,
+				err:    err,
+			}
+			// 检测 Tripwire 并取消其他验证器
+			if err == nil && vResult != nil && vResult.Tripwire {
+				tripwireOnce.Do(func() {
+					tripwireName = v.Name()
+					cancel()
+				})
+			}
+			return nil // 不让 errgroup 提前终止，我们自己收集所有结果
+		})
+	}
+
+	// 等待所有 goroutine 完成
+	_ = g.Wait()
+
+	// 聚合结果
+	result := NewValidationResult()
+	executed := make([]string, 0, len(validators))
+
+	for _, vr := range results {
+		if vr.err != nil {
+			result.AddError(ValidationError{
+				Code:     ErrCodeValidationFailed,
+				Message:  "验证器 " + vr.name + " 执行失败: " + vr.err.Error(),
+				Severity: SeverityCritical,
+			})
+			continue
+		}
+		if vr.result == nil {
+			// 验证器被取消且未产生结果
+			continue
+		}
+		executed = append(executed, vr.name)
+		result.Merge(vr.result)
+	}
+
+	result.Metadata["validators_executed"] = executed
+	result.Metadata["execution_order"] = executed // 并行模式下顺序不确定
+
+	if tripwireName != "" {
+		return result, &TripwireError{
+			ValidatorName: tripwireName,
+			Result:        result,
 		}
 	}
 

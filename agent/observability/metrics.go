@@ -92,7 +92,7 @@ type Trace struct {
 	Error  error
 
 	// 元数据
-	Metadata map[string]interface{}
+	Metadata map[string]any
 }
 
 // Span 执行步骤
@@ -107,7 +107,7 @@ type Span struct {
 	ParentSpanID string
 
 	// 属性
-	Attributes map[string]interface{}
+	Attributes map[string]any
 
 	// 事件
 	Events []SpanEvent
@@ -117,7 +117,7 @@ type Span struct {
 type SpanEvent struct {
 	Name       string
 	Timestamp  time.Time
-	Attributes map[string]interface{}
+	Attributes map[string]any
 }
 
 // Evaluator 评估器
@@ -157,7 +157,7 @@ type BenchmarkCase struct {
 	ID             string
 	Input          *agent.Input
 	ExpectedOutput string
-	Metadata       map[string]interface{}
+	Metadata       map[string]any
 }
 
 // BenchmarkResult 基准测试结果
@@ -293,7 +293,7 @@ func (t *Tracer) StartTrace(traceID, agentID string) *Trace {
 		AgentID:   agentID,
 		StartTime: time.Now(),
 		Spans:     []*Span{},
-		Metadata:  make(map[string]interface{}),
+		Metadata:  make(map[string]any),
 	}
 
 	t.traces[traceID] = trace

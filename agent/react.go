@@ -54,7 +54,11 @@ func (b *BaseAgent) Plan(ctx context.Context, input *Input) (*PlanResult, error)
 	}
 
 	// 解析计划
-	planContent := resp.Choices[0].Message.Content
+	choice, err := llm.FirstChoice(resp)
+	if err != nil {
+		return nil, fmt.Errorf("plan generation returned no choices: %w", err)
+	}
+	planContent := choice.Message.Content
 	steps := parsePlanSteps(planContent)
 
 	b.logger.Info("plan generated",
@@ -186,6 +190,7 @@ func (b *BaseAgent) Execute(ctx context.Context, input *Input) (*Output, error) 
 	var resp *llm.ChatResponse
 	var outputContent string
 	var lastValidationResult *guardrails.ValidationResult
+	var choice llm.ChatChoice
 
 	for attempt := 0; attempt <= maxRetries; attempt++ {
 		if attempt > 0 {
@@ -215,7 +220,12 @@ func (b *BaseAgent) Execute(ctx context.Context, input *Input) (*Output, error) 
 			return nil, fmt.Errorf("execution failed: %w", err)
 		}
 
-		outputContent = resp.Choices[0].Message.Content
+		var choiceErr error
+		choice, choiceErr = llm.FirstChoice(resp)
+		if choiceErr != nil {
+			return nil, fmt.Errorf("execution returned no choices: %w", choiceErr)
+		}
+		outputContent = choice.Message.Content
 
 		// 产出验证(护栏)
 		if b.guardrailsEnabled && b.outputValidator != nil {
@@ -310,7 +320,7 @@ func (b *BaseAgent) Execute(ctx context.Context, input *Input) (*Output, error) 
 		},
 		TokensUsed:   resp.Usage.TotalTokens,
 		Duration:     duration,
-		FinishReason: resp.Choices[0].FinishReason,
+		FinishReason: choice.FinishReason,
 	}, nil
 }
 
