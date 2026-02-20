@@ -117,7 +117,7 @@ func (h *MCPHandler) dispatch(ctx context.Context, msg *MCPMessage) *MCPMessage 
 	switch msg.Method {
 	case "initialize":
 		info := h.server.GetServerInfo()
-		return NewMCPResponse(msg.ID, map[string]interface{}{
+		return NewMCPResponse(msg.ID, map[string]any{
 			"protocolVersion": MCPVersion,
 			"capabilities":    info.Capabilities,
 			"serverInfo":      info,
@@ -128,17 +128,17 @@ func (h *MCPHandler) dispatch(ctx context.Context, msg *MCPMessage) *MCPMessage 
 		if err != nil {
 			return NewMCPError(msg.ID, ErrorCodeInternalError, err.Error(), nil)
 		}
-		return NewMCPResponse(msg.ID, map[string]interface{}{"tools": tools})
+		return NewMCPResponse(msg.ID, map[string]any{"tools": tools})
 
 	case "tools/call":
 		name, _ := msg.Params["name"].(string)
-		args, _ := msg.Params["arguments"].(map[string]interface{})
+		args, _ := msg.Params["arguments"].(map[string]any)
 		result, err := h.server.CallTool(ctx, name, args)
 		if err != nil {
 			return NewMCPError(msg.ID, ErrorCodeInternalError, err.Error(), nil)
 		}
-		return NewMCPResponse(msg.ID, map[string]interface{}{
-			"content": []map[string]interface{}{
+		return NewMCPResponse(msg.ID, map[string]any{
+			"content": []map[string]any{
 				{"type": "text", "text": fmt.Sprintf("%v", result)},
 			},
 		})
@@ -148,7 +148,7 @@ func (h *MCPHandler) dispatch(ctx context.Context, msg *MCPMessage) *MCPMessage 
 		if err != nil {
 			return NewMCPError(msg.ID, ErrorCodeInternalError, err.Error(), nil)
 		}
-		return NewMCPResponse(msg.ID, map[string]interface{}{"resources": resources})
+		return NewMCPResponse(msg.ID, map[string]any{"resources": resources})
 
 	case "resources/read":
 		uri, _ := msg.Params["uri"].(string)
@@ -156,8 +156,8 @@ func (h *MCPHandler) dispatch(ctx context.Context, msg *MCPMessage) *MCPMessage 
 		if err != nil {
 			return NewMCPError(msg.ID, ErrorCodeInternalError, err.Error(), nil)
 		}
-		return NewMCPResponse(msg.ID, map[string]interface{}{
-			"contents": []interface{}{resource},
+		return NewMCPResponse(msg.ID, map[string]any{
+			"contents": []any{resource},
 		})
 
 	case "prompts/list":
@@ -165,11 +165,11 @@ func (h *MCPHandler) dispatch(ctx context.Context, msg *MCPMessage) *MCPMessage 
 		if err != nil {
 			return NewMCPError(msg.ID, ErrorCodeInternalError, err.Error(), nil)
 		}
-		return NewMCPResponse(msg.ID, map[string]interface{}{"prompts": prompts})
+		return NewMCPResponse(msg.ID, map[string]any{"prompts": prompts})
 
 	case "prompts/get":
 		name, _ := msg.Params["name"].(string)
-		varsRaw, _ := msg.Params["arguments"].(map[string]interface{})
+		varsRaw, _ := msg.Params["arguments"].(map[string]any)
 		vars := make(map[string]string)
 		for k, v := range varsRaw {
 			vars[k] = fmt.Sprintf("%v", v)
@@ -178,16 +178,16 @@ func (h *MCPHandler) dispatch(ctx context.Context, msg *MCPMessage) *MCPMessage 
 		if err != nil {
 			return NewMCPError(msg.ID, ErrorCodeInternalError, err.Error(), nil)
 		}
-		return NewMCPResponse(msg.ID, map[string]interface{}{
-			"messages": []map[string]interface{}{
-				{"role": "user", "content": map[string]interface{}{"type": "text", "text": result}},
+		return NewMCPResponse(msg.ID, map[string]any{
+			"messages": []map[string]any{
+				{"role": "user", "content": map[string]any{"type": "text", "text": result}},
 			},
 		})
 
 	case "logging/setLevel":
 		level, _ := msg.Params["level"].(string)
 		h.server.SetLogLevel(level)
-		return NewMCPResponse(msg.ID, map[string]interface{}{})
+		return NewMCPResponse(msg.ID, map[string]any{})
 
 	default:
 		return NewMCPError(msg.ID, ErrorCodeMethodNotFound,

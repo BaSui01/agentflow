@@ -95,12 +95,12 @@ func (c *DefaultMCPClient) Connect(ctx context.Context, serverURL string) error 
 	c.connected = true
 
 	// MCP 初始化握手
-	initResult, err := c.sendRequest(ctx, "initialize", map[string]interface{}{
+	initResult, err := c.sendRequest(ctx, "initialize", map[string]any{
 		"protocolVersion": MCPVersion,
-		"capabilities": map[string]interface{}{
-			"roots": map[string]interface{}{"listChanged": true},
+		"capabilities": map[string]any{
+			"roots": map[string]any{"listChanged": true},
 		},
-		"clientInfo": map[string]interface{}{
+		"clientInfo": map[string]any{
 			"name":    "agentflow-mcp-client",
 			"version": "1.0.0",
 		},
@@ -206,7 +206,7 @@ func (c *DefaultMCPClient) ListResources(ctx context.Context) ([]Resource, error
 
 // ReadResource 读取资源
 func (c *DefaultMCPClient) ReadResource(ctx context.Context, uri string) (*Resource, error) {
-	params := map[string]interface{}{
+	params := map[string]any{
 		"uri": uri,
 	}
 
@@ -239,8 +239,8 @@ func (c *DefaultMCPClient) ListTools(ctx context.Context) ([]ToolDefinition, err
 }
 
 // CallTool 调用工具
-func (c *DefaultMCPClient) CallTool(ctx context.Context, name string, args map[string]interface{}) (interface{}, error) {
-	params := map[string]interface{}{
+func (c *DefaultMCPClient) CallTool(ctx context.Context, name string, args map[string]any) (any, error) {
+	params := map[string]any{
 		"name":      name,
 		"arguments": args,
 	}
@@ -250,7 +250,7 @@ func (c *DefaultMCPClient) CallTool(ctx context.Context, name string, args map[s
 		return nil, err
 	}
 
-	var toolResult interface{}
+	var toolResult any
 	if err := json.Unmarshal(result, &toolResult); err != nil {
 		return nil, fmt.Errorf("failed to parse tool result: %w", err)
 	}
@@ -275,7 +275,7 @@ func (c *DefaultMCPClient) ListPrompts(ctx context.Context) ([]PromptTemplate, e
 
 // GetPrompt 获取提示词
 func (c *DefaultMCPClient) GetPrompt(ctx context.Context, name string, vars map[string]string) (string, error) {
-	params := map[string]interface{}{
+	params := map[string]any{
 		"name":      name,
 		"variables": vars,
 	}
@@ -304,7 +304,7 @@ func (c *DefaultMCPClient) SubscribeResource(ctx context.Context, uri string) (<
 	}
 
 	// 发送订阅请求
-	params := map[string]interface{}{
+	params := map[string]any{
 		"uri": uri,
 	}
 
@@ -332,7 +332,7 @@ func (c *DefaultMCPClient) UnsubscribeResource(ctx context.Context, uri string) 
 	}
 
 	// 发送取消订阅请求
-	params := map[string]interface{}{
+	params := map[string]any{
 		"uri": uri,
 	}
 
@@ -376,7 +376,7 @@ func (c *DefaultMCPClient) messageLoop(ctx context.Context) {
 }
 
 // sendRequest 发送请求
-func (c *DefaultMCPClient) sendRequest(ctx context.Context, method string, params map[string]interface{}) (json.RawMessage, error) {
+func (c *DefaultMCPClient) sendRequest(ctx context.Context, method string, params map[string]any) (json.RawMessage, error) {
 	if !c.IsConnected() {
 		return nil, fmt.Errorf("not connected")
 	}
@@ -443,7 +443,7 @@ func (c *DefaultMCPClient) handleMessage(msg *MCPMessage) {
 }
 
 // handleResourceUpdate 处理资源更新通知
-func (c *DefaultMCPClient) handleResourceUpdate(params map[string]interface{}) {
+func (c *DefaultMCPClient) handleResourceUpdate(params map[string]any) {
 	uriVal, ok := params["uri"]
 	if !ok {
 		return
@@ -484,8 +484,8 @@ func (c *DefaultMCPClient) handleResourceUpdate(params map[string]interface{}) {
 }
 
 // BatchCallTools 批量调用工具
-func (c *DefaultMCPClient) BatchCallTools(ctx context.Context, calls []ToolCall) ([]interface{}, error) {
-	results := make([]interface{}, len(calls))
+func (c *DefaultMCPClient) BatchCallTools(ctx context.Context, calls []ToolCall) ([]any, error) {
+	results := make([]any, len(calls))
 	errors := make([]error, len(calls))
 
 	var wg sync.WaitGroup
@@ -494,7 +494,7 @@ func (c *DefaultMCPClient) BatchCallTools(ctx context.Context, calls []ToolCall)
 		go func(idx int, tc ToolCall) {
 			defer wg.Done()
 
-			var args map[string]interface{}
+			var args map[string]any
 			if err := json.Unmarshal(tc.Arguments, &args); err != nil {
 				errors[idx] = fmt.Errorf("failed to parse arguments: %w", err)
 				return

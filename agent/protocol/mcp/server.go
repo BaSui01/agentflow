@@ -34,7 +34,7 @@ type DefaultMCPServer struct {
 }
 
 // ToolHandler 工具处理函数
-type ToolHandler func(ctx context.Context, args map[string]interface{}) (interface{}, error)
+type ToolHandler func(ctx context.Context, args map[string]any) (any, error)
 
 // NewMCPServer 创建 MCP 服务器
 func NewMCPServer(name, version string, logger *zap.Logger) *DefaultMCPServer {
@@ -54,7 +54,7 @@ func NewMCPServer(name, version string, logger *zap.Logger) *DefaultMCPServer {
 				Logging:   true,
 				Sampling:  false,
 			},
-			Metadata: make(map[string]interface{}),
+			Metadata: make(map[string]any),
 		},
 		resources:     make(map[string]*Resource),
 		tools:         make(map[string]*ToolDefinition),
@@ -182,7 +182,7 @@ func (s *DefaultMCPServer) ListTools(ctx context.Context) ([]ToolDefinition, err
 }
 
 // CallTool 调用工具（带 30 秒超时控制）
-func (s *DefaultMCPServer) CallTool(ctx context.Context, name string, args map[string]interface{}) (interface{}, error) {
+func (s *DefaultMCPServer) CallTool(ctx context.Context, name string, args map[string]any) (any, error) {
 	s.toolsMu.RLock()
 	handler, ok := s.toolHandlers[name]
 	s.toolsMu.RUnlock()
