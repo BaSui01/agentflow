@@ -76,8 +76,12 @@ func TestDefaultWSTransportConfig(t *testing.T) {
 	assert.Equal(t, 10*time.Second, cfg.HeartbeatTimeout)
 	assert.Equal(t, 5, cfg.MaxReconnects)
 	assert.Equal(t, time.Second, cfg.ReconnectDelay)
+	assert.Equal(t, 30*time.Second, cfg.MaxBackoff)
+	assert.Equal(t, 2.0, cfg.BackoffMultiplier)
+	assert.True(t, cfg.ReconnectEnabled)
 	assert.True(t, cfg.EnableHeartbeat)
 	assert.Equal(t, []string{"mcp"}, cfg.Subprotocols)
+	assert.Equal(t, 64, cfg.SendBufferSize)
 }
 
 // ---------------------------------------------------------------------------
@@ -101,16 +105,43 @@ func TestNewWebSocketTransportWithConfig(t *testing.T) {
 		HeartbeatTimeout:  2 * time.Second,
 		MaxReconnects:     3,
 		ReconnectDelay:    500 * time.Millisecond,
+		MaxBackoff:        10 * time.Second,
+		BackoffMultiplier: 1.5,
+		ReconnectEnabled:  true,
 		EnableHeartbeat:   false,
 		Subprotocols:      []string{"custom"},
+		SendBufferSize:    32,
 	}
 	tr := NewWebSocketTransportWithConfig("ws://example.com", cfg, nil)
 
 	require.NotNil(t, tr)
 	assert.Equal(t, cfg.HeartbeatInterval, tr.config.HeartbeatInterval)
 	assert.Equal(t, cfg.MaxReconnects, tr.config.MaxReconnects)
+	assert.Equal(t, 10*time.Second, tr.config.MaxBackoff)
+	assert.Equal(t, 1.5, tr.config.BackoffMultiplier)
+	assert.True(t, tr.config.ReconnectEnabled)
 	assert.False(t, tr.config.EnableHeartbeat)
 	assert.Equal(t, []string{"custom"}, tr.config.Subprotocols)
+	assert.Equal(t, 32, tr.config.SendBufferSize)
+}
+
+func TestNewWebSocketTransportWithConfig_ZeroValueDefaults(t *testing.T) {
+	// When MaxBackoff, BackoffMultiplier, SendBufferSize are zero,
+	// the constructor should apply sensible defaults.
+	cfg := WSTransportConfig{
+		HeartbeatInterval: time.Second,
+		HeartbeatTimeout:  time.Second,
+		MaxReconnects:     1,
+		ReconnectDelay:    time.Millisecond,
+		EnableHeartbeat:   false,
+		Subprotocols:      []string{"mcp"},
+		// MaxBackoff, BackoffMultiplier, SendBufferSize left at zero
+	}
+	tr := NewWebSocketTransportWithConfig("ws://example.com", cfg, nil)
+
+	assert.Equal(t, 30*time.Second, tr.config.MaxBackoff)
+	assert.Equal(t, 2.0, tr.config.BackoffMultiplier)
+	assert.Equal(t, 64, tr.config.SendBufferSize)
 }
 
 // ---------------------------------------------------------------------------
@@ -320,6 +351,7 @@ func TestWebSocketTransport_TryReconnectMaxAttempts(t *testing.T) {
 		HeartbeatTimeout:  time.Hour,
 		MaxReconnects:     2,
 		ReconnectDelay:    10 * time.Millisecond,
+		ReconnectEnabled:  true,
 		EnableHeartbeat:   false,
 		Subprotocols:      []string{"mcp"},
 	}
@@ -329,18 +361,11 @@ func TestWebSocketTransport_TryReconnectMaxAttempts(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	t.Cleanup(cancel)
 
-	// First attempt
+	// tryReconnect now retries internally — a single call exhausts all attempts
 	err := tr.tryReconnect(ctx)
 	require.Error(t, err)
-
-	// Second attempt
-	err = tr.tryReconnect(ctx)
-	require.Error(t, err)
-
-	// Third attempt should hit max
-	err = tr.tryReconnect(ctx)
-	require.Error(t, err)
 	assert.Contains(t, err.Error(), "max reconnect attempts")
+	assert.Equal(t, WSStateFailed, tr.State())
 }
 
 // ---------------------------------------------------------------------------
@@ -354,6 +379,7 @@ func TestWebSocketTransport_TryReconnectSuccess(t *testing.T) {
 		HeartbeatTimeout:  time.Hour,
 		MaxReconnects:     5,
 		ReconnectDelay:    10 * time.Millisecond,
+		ReconnectEnabled:  true,
 		EnableHeartbeat:   false,
 		Subprotocols:      []string{"mcp"},
 	}
@@ -407,4 +433,240 @@ func TestWebSocketTransport_CloseStopsHeartbeat(t *testing.T) {
 	// Give goroutines time to exit
 	time.Sleep(200 * time.Millisecond)
 	assert.False(t, tr.IsConnected())
+}
+
+// ---------------------------------------------------------------------------
+// Tests: State() getter
+// ---------------------------------------------------------------------------
+
+func TestWebSocketTransport_State(t *testing.T) {
+	srv := newTestWSServer(t)
+	cfg := DefaultWSTransportConfig()
+	cfg.EnableHeartbeat = false
+	tr := NewWebSocketTransportWithConfig(wsURL(srv), cfg, zap.NewNop())
+
+	assert.Equal(t, WSStateDisconnected, tr.State())
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	t.Cleanup(cancel)
+
+	require.NoError(t, tr.Connect(ctx))
+	assert.Equal(t, WSStateConnected, tr.State())
+
+	require.NoError(t, tr.Close())
+	assert.Equal(t, WSStateClosed, tr.State())
+}
+
+// ---------------------------------------------------------------------------
+// Tests: WSStateFailed on exhausted reconnects
+// ---------------------------------------------------------------------------
+
+func TestWebSocketTransport_StateFailed(t *testing.T) {
+	cfg := WSTransportConfig{
+		HeartbeatInterval: time.Hour,
+		HeartbeatTimeout:  time.Hour,
+		MaxReconnects:     1,
+		ReconnectDelay:    10 * time.Millisecond,
+		ReconnectEnabled:  true,
+		EnableHeartbeat:   false,
+		Subprotocols:      []string{"mcp"},
+	}
+	tr := NewWebSocketTransportWithConfig("ws://127.0.0.1:1", cfg, zap.NewNop())
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	t.Cleanup(cancel)
+
+	err := tr.tryReconnect(ctx)
+	require.Error(t, err)
+	assert.Equal(t, WSStateFailed, tr.State())
+}
+
+// ---------------------------------------------------------------------------
+// Tests: Send buffers messages during reconnect
+// ---------------------------------------------------------------------------
+
+func TestWebSocketTransport_SendBuffersDuringReconnect(t *testing.T) {
+	cfg := DefaultWSTransportConfig()
+	cfg.EnableHeartbeat = false
+	cfg.SendBufferSize = 3
+	tr := NewWebSocketTransportWithConfig("ws://localhost:1", cfg, zap.NewNop())
+
+	// Simulate reconnecting state
+	tr.mu.Lock()
+	tr.reconnecting = true
+	tr.mu.Unlock()
+
+	ctx := context.Background()
+
+	// Send messages while reconnecting — they should be buffered
+	for i := 0; i < 3; i++ {
+		err := tr.Send(ctx, NewMCPRequest(i, "test", nil))
+		require.NoError(t, err)
+	}
+
+	tr.mu.Lock()
+	assert.Len(t, tr.sendBuffer, 3)
+	tr.mu.Unlock()
+
+	// Sending a 4th should drop the oldest
+	err := tr.Send(ctx, NewMCPRequest(99, "overflow", nil))
+	require.NoError(t, err)
+
+	tr.mu.Lock()
+	assert.Len(t, tr.sendBuffer, 3)
+	// The oldest (id=0) should have been dropped
+	assert.Equal(t, "test", tr.sendBuffer[0].Method)
+	assert.Equal(t, "overflow", tr.sendBuffer[2].Method)
+	tr.mu.Unlock()
+}
+
+// ---------------------------------------------------------------------------
+// Tests: flushSendBuffer
+// ---------------------------------------------------------------------------
+
+func TestWebSocketTransport_FlushSendBuffer(t *testing.T) {
+	srv := newTestWSServer(t)
+	cfg := DefaultWSTransportConfig()
+	cfg.EnableHeartbeat = false
+	tr := NewWebSocketTransportWithConfig(wsURL(srv), cfg, zap.NewNop())
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	t.Cleanup(cancel)
+
+	require.NoError(t, tr.Connect(ctx))
+	t.Cleanup(func() { _ = tr.Close() })
+
+	// Manually buffer some messages
+	tr.mu.Lock()
+	tr.sendBuffer = []*MCPMessage{
+		NewMCPRequest(1, "buffered/one", nil),
+		NewMCPRequest(2, "buffered/two", nil),
+	}
+	tr.mu.Unlock()
+
+	// Flush
+	tr.flushSendBuffer(ctx)
+
+	// Buffer should be empty
+	tr.mu.Lock()
+	assert.Nil(t, tr.sendBuffer)
+	tr.mu.Unlock()
+
+	// Receive the echoed messages
+	msg1, err := tr.Receive(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, "buffered/one", msg1.Method)
+
+	msg2, err := tr.Receive(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, "buffered/two", msg2.Method)
+}
+
+// ---------------------------------------------------------------------------
+// Tests: Send with closed transport
+// ---------------------------------------------------------------------------
+
+func TestWebSocketTransport_SendClosed(t *testing.T) {
+	cfg := DefaultWSTransportConfig()
+	cfg.EnableHeartbeat = false
+	tr := NewWebSocketTransportWithConfig("ws://localhost:1", cfg, zap.NewNop())
+
+	// Close immediately
+	require.NoError(t, tr.Close())
+
+	err := tr.Send(context.Background(), NewMCPRequest(1, "test", nil))
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "closed")
+}
+
+// ---------------------------------------------------------------------------
+// Tests: Receive with closed transport
+// ---------------------------------------------------------------------------
+
+func TestWebSocketTransport_ReceiveClosed(t *testing.T) {
+	srv := newTestWSServer(t)
+	cfg := DefaultWSTransportConfig()
+	cfg.EnableHeartbeat = false
+	tr := NewWebSocketTransportWithConfig(wsURL(srv), cfg, zap.NewNop())
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	t.Cleanup(cancel)
+
+	require.NoError(t, tr.Connect(ctx))
+	require.NoError(t, tr.Close())
+
+	_, err := tr.Receive(ctx)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "closed")
+}
+
+// ---------------------------------------------------------------------------
+// Tests: Receive reconnects on read error
+// ---------------------------------------------------------------------------
+
+func TestWebSocketTransport_ReceiveReconnectsOnError(t *testing.T) {
+	// Start a server that accepts connections
+	srv := newTestWSServer(t)
+	cfg := WSTransportConfig{
+		HeartbeatInterval: time.Hour,
+		HeartbeatTimeout:  time.Hour,
+		MaxReconnects:     3,
+		ReconnectDelay:    10 * time.Millisecond,
+		ReconnectEnabled:  true,
+		EnableHeartbeat:   false,
+		Subprotocols:      []string{"mcp"},
+	}
+	tr := NewWebSocketTransportWithConfig(wsURL(srv), cfg, zap.NewNop())
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	t.Cleanup(cancel)
+
+	require.NoError(t, tr.Connect(ctx))
+	t.Cleanup(func() { _ = tr.Close() })
+
+	// Forcefully close the underlying connection to simulate a read error
+	tr.mu.Lock()
+	oldConn := tr.conn
+	tr.mu.Unlock()
+	_ = oldConn.Close(websocket.StatusNormalClosure, "simulated failure")
+
+	// Send a message after reconnect so Receive has something to read
+	go func() {
+		// Wait a bit for reconnect to happen
+		time.Sleep(200 * time.Millisecond)
+		_ = tr.Send(ctx, NewMCPRequest(1, "after_reconnect", nil))
+	}()
+
+	// Receive should trigger reconnect and eventually succeed
+	msg, err := tr.Receive(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, "after_reconnect", msg.Method)
+}
+
+// ---------------------------------------------------------------------------
+// Tests: Receive does NOT reconnect when ReconnectEnabled is false
+// ---------------------------------------------------------------------------
+
+func TestWebSocketTransport_ReceiveNoReconnectWhenDisabled(t *testing.T) {
+	srv := newTestWSServer(t)
+	cfg := DefaultWSTransportConfig()
+	cfg.EnableHeartbeat = false
+	cfg.ReconnectEnabled = false
+	tr := NewWebSocketTransportWithConfig(wsURL(srv), cfg, zap.NewNop())
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	t.Cleanup(cancel)
+
+	require.NoError(t, tr.Connect(ctx))
+	t.Cleanup(func() { _ = tr.Close() })
+
+	// Forcefully close the underlying connection
+	tr.mu.Lock()
+	oldConn := tr.conn
+	tr.mu.Unlock()
+	_ = oldConn.Close(websocket.StatusNormalClosure, "simulated failure")
+
+	// Receive should return error immediately without reconnecting
+	_, err := tr.Receive(ctx)
+	require.Error(t, err)
 }
