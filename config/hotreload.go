@@ -16,7 +16,7 @@ import (
 
 // --- 热重载类型定义 ---
 
-// HotReloadManager manages configuration hot reloading
+// HotReloadManager 管理配置热重载
 type HotReloadManager struct {
 	mu sync.RWMutex
 
@@ -50,13 +50,13 @@ type HotReloadManager struct {
 	cancel  context.CancelFunc
 }
 
-// ChangeCallback is called when configuration changes
+// ChangeCallback 配置更改时调用
 type ChangeCallback func(change ConfigChange)
 
-// ReloadCallback is called after configuration is reloaded
+// ReloadCallback 重新加载配置后调用
 type ReloadCallback func(oldConfig, newConfig *Config)
 
-// ConfigChange represents a configuration change
+// ConfigChange 代表配置更改
 type ConfigChange struct {
 	// 变更的时间戳
 	Timestamp time.Time `json:"timestamp"`
@@ -109,7 +109,7 @@ type RollbackEvent struct {
 	Error          error     `json:"error,omitempty"`
 }
 
-// HotReloadableField defines which fields can be hot reloaded
+// HotReloadableField 定义哪些字段可以热重载
 type HotReloadableField struct {
 	// Path 是字段路径（例如“Log.Level”）
 	Path string
@@ -123,13 +123,13 @@ type HotReloadableField struct {
 	// Sensitive 表示该字段是否包含敏感数据
 	Sensitive bool
 
-	// ???Validator is an optional validation function
+	// Validator 是可选的校验函数
 	Validator func(value interface{}) error
 }
 
 // --- 可热重载字段注册表 ---
 
-// hotReloadableFields defines which configuration fields can be hot reloaded
+// hotReloadableFields 定义哪些配置字段可以热重载
 var hotReloadableFields = map[string]HotReloadableField{
 	// 日志配置-可以热重载
 	"Log.Level": {
@@ -296,17 +296,17 @@ var hotReloadableFields = map[string]HotReloadableField{
 
 // --- 热重载管理器选项 ---
 
-// HotReloadOption configures the HotReloadManager
+// HotReloadOption 配置 HotReloadManager
 type HotReloadOption func(*HotReloadManager)
 
-// WithHotReloadLogger sets the logger
+// WithHotReloadLogger 设置记录器
 func WithHotReloadLogger(logger *zap.Logger) HotReloadOption {
 	return func(m *HotReloadManager) {
 		m.logger = logger
 	}
 }
 
-// WithConfigPath sets the configuration file path
+// WithConfigPath 设置配置文件路径
 func WithConfigPath(path string) HotReloadOption {
 	return func(m *HotReloadManager) {
 		m.configPath = path
@@ -331,7 +331,7 @@ func WithValidateFunc(fn ValidateFunc) HotReloadOption {
 
 // --- 热重载管理器实现 ---
 
-// NewHotReloadManager creates a new hot reload manager
+// NewHotReloadManager 创建一个新的热重载管理器
 func NewHotReloadManager(config *Config, opts ...HotReloadOption) *HotReloadManager {
 	m := &HotReloadManager{
 		config:            config,
@@ -401,7 +401,7 @@ func computeConfigChecksum(config *Config) string {
 	return fmt.Sprintf("%016x", hash)
 }
 
-// Start starts the hot reload manager
+// Start 启动热重载管理器
 func (m *HotReloadManager) Start(ctx context.Context) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -439,7 +439,7 @@ func (m *HotReloadManager) Start(ctx context.Context) error {
 	return nil
 }
 
-// Stop stops the hot reload manager
+// Stop 停止热重载管理器
 func (m *HotReloadManager) Stop() error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -464,7 +464,7 @@ func (m *HotReloadManager) Stop() error {
 	return nil
 }
 
-// handleFileChange handles file change events
+// handleFileChange 处理文件更改事件
 func (m *HotReloadManager) handleFileChange(event FileEvent) {
 	m.logger.Info("Configuration file changed",
 		zap.String("path", event.Path),
@@ -477,7 +477,7 @@ func (m *HotReloadManager) handleFileChange(event FileEvent) {
 	}
 }
 
-// ReloadFromFile reloads configuration from the file
+// ReloadFromFile 从文件重新加载配置
 func (m *HotReloadManager) ReloadFromFile() error {
 	if m.configPath == "" {
 		return fmt.Errorf("no config path set")
@@ -506,7 +506,7 @@ func (m *HotReloadManager) ReloadFromFile() error {
 	return nil
 }
 
-// ApplyConfig applies a new configuration
+// ApplyConfig 应用新配置
 func (m *HotReloadManager) ApplyConfig(newConfig *Config, source string) error {
 	m.mu.Lock()
 
@@ -618,7 +618,7 @@ func (m *HotReloadManager) notifyCallbacksSafe(changeCallbacks []ChangeCallback,
 	return nil
 }
 
-// detectChanges detects changes between old and new configuration
+// detectChanges 检测新旧配置之间的变化
 func (m *HotReloadManager) detectChanges(oldConfig, newConfig *Config) []ConfigChange {
 	var changes []ConfigChange
 
@@ -630,7 +630,7 @@ func (m *HotReloadManager) detectChanges(oldConfig, newConfig *Config) []ConfigC
 	return changes
 }
 
-// compareStructs recursively compares struct fields
+// compareStructs 递归比较结构体字段
 func (m *HotReloadManager) compareStructs(prefix string, oldVal, newVal reflect.Value, changes *[]ConfigChange) {
 	if oldVal.Kind() != reflect.Struct || newVal.Kind() != reflect.Struct {
 		return
@@ -665,7 +665,7 @@ func (m *HotReloadManager) compareStructs(prefix string, oldVal, newVal reflect.
 	}
 }
 
-// logChange logs a configuration change
+// logChange 记录配置更改
 func (m *HotReloadManager) logChange(change ConfigChange) {
 	fields := []zap.Field{
 		zap.String("path", change.Path),
@@ -685,14 +685,14 @@ func (m *HotReloadManager) logChange(change ConfigChange) {
 	m.logger.Info("Configuration changed", fields...)
 }
 
-// OnChange registers a callback for configuration changes
+// OnChange 注册配置更改的回调
 func (m *HotReloadManager) OnChange(callback ChangeCallback) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.changeCallbacks = append(m.changeCallbacks, callback)
 }
 
-// OnReload registers a callback for configuration reloads
+// OnReload 注册配置重新加载的回调
 func (m *HotReloadManager) OnReload(callback ReloadCallback) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -797,14 +797,14 @@ func (m *HotReloadManager) GetCurrentVersion() int {
 	return m.configHistory[len(m.configHistory)-1].Version
 }
 
-// GetConfig returns the current configuration
+// GetConfig 返回当前配置
 func (m *HotReloadManager) GetConfig() *Config {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	return deepCopyConfig(m.config)
 }
 
-// GetChangeLog returns the configuration change log
+// GetChangeLog 返回配置变更日志
 func (m *HotReloadManager) GetChangeLog(limit int) []ConfigChange {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
@@ -821,7 +821,7 @@ func (m *HotReloadManager) GetChangeLog(limit int) []ConfigChange {
 	return result
 }
 
-// UpdateField updates a single configuration field
+// UpdateField 更新单个配置字段
 func (m *HotReloadManager) UpdateField(path string, value interface{}) error {
 	m.mu.Lock()
 
@@ -887,19 +887,19 @@ func (m *HotReloadManager) UpdateField(path string, value interface{}) error {
 	return nil
 }
 
-// getFieldValue gets a field value by path
+// getFieldValue 通过路径获取字段值
 func (m *HotReloadManager) getFieldValue(path string) (interface{}, error) {
 	val := reflect.ValueOf(m.config).Elem()
 	return getNestedField(val, path)
 }
 
-// setFieldValue sets a field value by path
+// setFieldValue 通过路径设置字段值
 func (m *HotReloadManager) setFieldValue(path string, value interface{}) error {
 	val := reflect.ValueOf(m.config).Elem()
 	return setNestedField(val, path, value)
 }
 
-// getNestedField gets a nested field by dot-separated path
+// getNestedField 通过点分隔路径获取嵌套字段
 func getNestedField(v reflect.Value, path string) (interface{}, error) {
 	parts := splitPath(path)
 
@@ -919,7 +919,7 @@ func getNestedField(v reflect.Value, path string) (interface{}, error) {
 	return v.Interface(), nil
 }
 
-// setNestedField sets a nested field by dot-separated path
+// setNestedField 通过点分隔路径设置嵌套字段
 func setNestedField(v reflect.Value, path string, value interface{}) error {
 	parts := splitPath(path)
 
@@ -953,7 +953,7 @@ func setNestedField(v reflect.Value, path string, value interface{}) error {
 	return nil
 }
 
-// splitPath splits a dot-separated path
+// splitPath 分割点分隔的路径
 func splitPath(path string) []string {
 	var parts []string
 	var current string
@@ -976,7 +976,7 @@ func splitPath(path string) []string {
 	return parts
 }
 
-// GetHotReloadableFields returns the list of hot reloadable fields
+// GetHotReloadableFields 返回可热重载字段的列表
 func GetHotReloadableFields() map[string]HotReloadableField {
 	result := make(map[string]HotReloadableField)
 	for k, v := range hotReloadableFields {
@@ -985,7 +985,7 @@ func GetHotReloadableFields() map[string]HotReloadableField {
 	return result
 }
 
-// IsHotReloadable checks if a field can be hot reloaded
+// IsHotReloadable 检查字段是否可以热重载
 func IsHotReloadable(path string) bool {
 	field, known := hotReloadableFields[path]
 	return known && !field.RequiresRestart
@@ -993,7 +993,7 @@ func IsHotReloadable(path string) bool {
 
 // --- API 脱敏配置视图 ---
 
-// SanitizedConfig returns a copy of the configuration with sensitive fields redacted
+// SanitizedConfig 返回包含敏感字段的配置副本
 func (m *HotReloadManager) SanitizedConfig() map[string]interface{} {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
@@ -1015,7 +1015,7 @@ func (m *HotReloadManager) SanitizedConfig() map[string]interface{} {
 	return result
 }
 
-// redactSensitiveFields recursively redacts sensitive fields
+// redactSensitiveFields 递归地编辑敏感字段
 func redactSensitiveFields(data map[string]interface{}, prefix string) {
 	sensitiveKeys := map[string]bool{
 		"password":   true,
@@ -1050,7 +1050,7 @@ func redactSensitiveFields(data map[string]interface{}, prefix string) {
 	}
 }
 
-// toLower converts string to lowercase
+// toLower 将字符串转换为小写
 func toLower(s string) string {
 	result := make([]byte, len(s))
 	for i := 0; i < len(s); i++ {
@@ -1063,7 +1063,7 @@ func toLower(s string) string {
 	return string(result)
 }
 
-// contains checks if s contains substr
+// contains 检查 s 是否包含 substr
 func contains(s, substr string) bool {
 	for i := 0; i <= len(s)-len(substr); i++ {
 		if s[i:i+len(substr)] == substr {

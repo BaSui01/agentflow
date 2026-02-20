@@ -197,6 +197,31 @@ Create a sub-package under `llm/providers/` with exactly:
 - `provider.go` — `Provider` interface implementation
 - `provider_test.go` — tests
 
+Required methods: `Name()`, `HealthCheck()`, `ListModels()`, `Completion()`, `Stream()`, `SupportsNativeFunctionCalling()`. See `quality-guidelines.md` §10 for details.
+
+### Adding a New Agent Protocol
+
+Create a sub-package under `agent/protocol/` following the A2A/MCP pattern:
+- `types.go` — protocol-specific types (e.g., `AgentCard`, `Resource`)
+- `protocol.go` — interfaces and message types
+- `server.go` — server implementation
+- `client.go` — client implementation (if applicable)
+- `errors.go` — sentinel errors (use `errors.New`, not `fmt.Errorf`)
+
+### Adding a New Vector Store
+
+Create a file in `rag/` following the existing pattern:
+- Implement the `VectorStore` interface: `AddDocuments`, `Search`, `DeleteDocuments`, `UpdateDocument`, `Count`
+- File naming: `<backend>_store.go` (e.g., `qdrant_store.go`, `milvus_store.go`)
+- Include `*_test.go` with `InMemoryVectorStore` for unit tests
+
+### Adding a New Workflow Node Type
+
+Extend `workflow/dag.go`:
+- Add constant to the node type enum (line 11-24)
+- Add execution logic in `dag_executor.go`
+- Existing types: `Action`, `Condition`, `Loop`, `Parallel`, `SubGraph`, `Checkpoint`
+
 ---
 
 ## Naming Conventions

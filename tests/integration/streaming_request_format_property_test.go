@@ -27,7 +27,7 @@ import (
 // **验证：要求 10.1**
 //
 // This 属性测试验证对于任何提供者，当调用 Stream() 时
-// ???with a ChatRequest, the HTTP request body should include "stream": true field.
+// 即在传入 ChatRequest 时，请求体应包含 "stream": true 字段。
 
 // StreamRequestCapture 捕获发送到服务器的请求正文
 type streamRequestCapture struct {
