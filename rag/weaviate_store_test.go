@@ -3,6 +3,7 @@ package rag
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -678,4 +679,131 @@ func TestFormatVector(t *testing.T) {
 	if !strings.Contains(result, "0.1") {
 		t.Fatalf("expected vector values in output, got %s", result)
 	}
+}
+
+func TestWeaviateStore_ListDocumentIDs(t *testing.T) {
+	t.Parallel()
+
+	mux := http.NewServeMux()
+
+	// All available docs for server-side pagination simulation
+	allDocs := []string{"doc1", "doc2", "doc3", "doc4", "doc5"}
+
+	mux.HandleFunc("/v1/graphql", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			t.Fatalf("unexpected method: %s", r.Method)
+		}
+
+		var req struct {
+			Query string `json:"query"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			t.Fatalf("decode graphql: %v", err)
+		}
+
+		// Verify it's a Get query with limit and offset
+		if !strings.Contains(req.Query, "limit") || !strings.Contains(req.Query, "offset") {
+			t.Fatalf("expected limit and offset in query, got: %s", req.Query)
+		}
+
+		// Parse limit and offset from GraphQL query to simulate server-side pagination
+		var qLimit, qOffset int
+		fmt.Sscanf(extractBetween(req.Query, "limit:", "\n"), "%d", &qLimit)
+		fmt.Sscanf(extractBetween(req.Query, "offset:", "\n"), "%d", &qOffset)
+
+		// Apply server-side pagination
+		start := qOffset
+		if start > len(allDocs) {
+			start = len(allDocs)
+		}
+		end := start + qLimit
+		if end > len(allDocs) {
+			end = len(allDocs)
+		}
+		page := allDocs[start:end]
+
+		// Build response JSON
+		var items []string
+		for _, id := range page {
+			items = append(items, fmt.Sprintf(`{"docId": "%s"}`, id))
+		}
+		body := fmt.Sprintf(`{"data":{"Get":{"TestClass":[%s]}}}`, strings.Join(items, ","))
+
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(body))
+	})
+
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	store := NewWeaviateStore(WeaviateConfig{
+		BaseURL:   srv.URL,
+		ClassName: "TestClass",
+	}, zap.NewNop())
+
+	ctx := context.Background()
+
+	// All documents
+	ids, err := store.ListDocumentIDs(ctx, 10, 0)
+	if err != nil {
+		t.Fatalf("ListDocumentIDs: %v", err)
+	}
+	if len(ids) != 5 {
+		t.Fatalf("expected 5 IDs, got %d", len(ids))
+	}
+	if ids[0] != "doc1" || ids[4] != "doc5" {
+		t.Fatalf("unexpected IDs: %v", ids)
+	}
+
+	// With offset
+	ids, err = store.ListDocumentIDs(ctx, 2, 2)
+	if err != nil {
+		t.Fatalf("ListDocumentIDs with offset: %v", err)
+	}
+	if len(ids) != 2 {
+		t.Fatalf("expected 2 IDs with offset, got %d", len(ids))
+	}
+	if ids[0] != "doc3" || ids[1] != "doc4" {
+		t.Fatalf("unexpected IDs with offset: %v", ids)
+	}
+
+	// Offset beyond length
+	ids, err = store.ListDocumentIDs(ctx, 10, 100)
+	if err != nil {
+		t.Fatalf("ListDocumentIDs beyond offset: %v", err)
+	}
+	if len(ids) != 0 {
+		t.Fatalf("expected 0 IDs for beyond offset, got %d", len(ids))
+	}
+
+	// Zero limit
+	ids, err = store.ListDocumentIDs(ctx, 0, 0)
+	if err != nil {
+		t.Fatalf("ListDocumentIDs zero limit: %v", err)
+	}
+	if len(ids) != 0 {
+		t.Fatalf("expected 0 IDs for zero limit, got %d", len(ids))
+	}
+
+	// Missing class name
+	storeNoClass := NewWeaviateStore(WeaviateConfig{}, zap.NewNop())
+	_, err = storeNoClass.ListDocumentIDs(ctx, 10, 0)
+	if err == nil || !strings.Contains(err.Error(), "class_name is required") {
+		t.Fatalf("expected class_name required error, got: %v", err)
+	}
+}
+
+// extractBetween returns the substring between start and end markers.
+// Used by test mock to parse limit/offset from GraphQL queries.
+func extractBetween(s, start, end string) string {
+	i := strings.Index(s, start)
+	if i < 0 {
+		return ""
+	}
+	i += len(start)
+	j := strings.Index(s[i:], end)
+	if j < 0 {
+		return strings.TrimSpace(s[i:])
+	}
+	return strings.TrimSpace(s[i : i+j])
 }

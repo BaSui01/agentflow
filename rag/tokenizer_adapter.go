@@ -60,3 +60,11 @@ func NewTiktokenAdapter(model string, logger *zap.Logger) (Tokenizer, error) {
 	}
 	return NewLLMTokenizerAdapter(tok, logger), nil
 }
+
+// NewEstimatorAdapter 创建一个基于 llm/tokenizer.EstimatorTokenizer 的 rag.Tokenizer 适配器。
+// 比 SimpleTokenizer 更精确（CJK 感知），且不需要外部编码数据下载。
+// model 参数仅用于标识，maxTokens 指定模型上下文长度（0 使用默认值 4096）。
+func NewEstimatorAdapter(model string, maxTokens int, logger *zap.Logger) Tokenizer {
+	est := lltok.NewEstimatorTokenizer(model, maxTokens)
+	return NewLLMTokenizerAdapter(est, logger)
+}
