@@ -1,4 +1,3 @@
-// Package main demonstrates 2026 advanced features.
 package main
 
 import (

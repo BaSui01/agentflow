@@ -1,5 +1,3 @@
-// Package main demonstrates the Structured Output module for type-safe LLM responses.
-// This example shows JSON Schema generation, validation, and structured output parsing.
 package main
 
 import (

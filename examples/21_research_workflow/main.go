@@ -1,7 +1,3 @@
-// Package main demonstrates a research workflow using AgentFlow's DAG engine.
-// Inspired by AI-Researcher's multi-agent pipeline, this example shows how to
-// orchestrate a complete research lifecycle: literature collection → filtering →
-// idea generation → design → implementation → validation → report generation.
 package main
 
 import (
