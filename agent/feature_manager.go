@@ -15,6 +15,7 @@ type FeatureManager struct {
 	promptEnhancer interface{} // *PromptEnhancer
 	skillManager   interface{} // *SkillManager
 	mcpServer      interface{} // *MCPServer
+	lspClient      interface{} // *lsp.LSPClient
 	enhancedMemory interface{} // *EnhancedMemorySystem
 	observability  interface{} // *ObservabilitySystem
 
@@ -24,6 +25,7 @@ type FeatureManager struct {
 	promptEnhancerEnabled bool
 	skillsEnabled         bool
 	mcpEnabled            bool
+	lspEnabled            bool
 	enhancedMemoryEnabled bool
 	observabilityEnabled  bool
 
@@ -157,6 +159,30 @@ func (fm *FeatureManager) IsMCPEnabled() bool {
 	return fm.mcpEnabled && fm.mcpServer != nil
 }
 
+// EnableLSP enables the LSP feature.
+func (fm *FeatureManager) EnableLSP(client interface{}) {
+	fm.lspClient = client
+	fm.lspEnabled = true
+	fm.logger.Info("LSP feature enabled")
+}
+
+// DisableLSP disables the LSP feature.
+func (fm *FeatureManager) DisableLSP() {
+	fm.lspClient = nil
+	fm.lspEnabled = false
+	fm.logger.Info("LSP feature disabled")
+}
+
+// GetLSP returns the LSP client.
+func (fm *FeatureManager) GetLSP() interface{} {
+	return fm.lspClient
+}
+
+// IsLSPEnabled checks if LSP is enabled.
+func (fm *FeatureManager) IsLSPEnabled() bool {
+	return fm.lspEnabled && fm.lspClient != nil
+}
+
 // 启用 Enhanced Memory 启用增强的内存功能 。
 func (fm *FeatureManager) EnableEnhancedMemory(system interface{}) {
 	fm.enhancedMemory = system
@@ -223,6 +249,9 @@ func (fm *FeatureManager) EnabledFeatures() []string {
 	if fm.IsMCPEnabled() {
 		features = append(features, "mcp")
 	}
+	if fm.IsLSPEnabled() {
+		features = append(features, "lsp")
+	}
 	if fm.IsEnhancedMemoryEnabled() {
 		features = append(features, "enhanced_memory")
 	}
@@ -239,6 +268,7 @@ func (fm *FeatureManager) DisableAll() {
 	fm.DisablePromptEnhancer()
 	fm.DisableSkills()
 	fm.DisableMCP()
+	fm.DisableLSP()
 	fm.DisableEnhancedMemory()
 	fm.DisableObservability()
 }

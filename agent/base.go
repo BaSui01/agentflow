@@ -111,6 +111,7 @@ type Config struct {
 	EnablePromptEnhancer bool `json:"enable_prompt_enhancer,omitempty"`
 	EnableSkills         bool `json:"enable_skills,omitempty"`
 	EnableMCP            bool `json:"enable_mcp,omitempty"`
+	EnableLSP            bool `json:"enable_lsp,omitempty"`
 	EnableEnhancedMemory bool `json:"enable_enhanced_memory,omitempty"`
 	EnableObservability  bool `json:"enable_observability,omitempty"`
 
@@ -132,8 +133,8 @@ type BaseAgent struct {
 	provider     llm.Provider
 	toolProvider llm.Provider // 工具调用专用 Provider（可选，为 nil 时退化为 provider）
 	memory       MemoryManager
-	toolManager ToolManager
-	bus         EventBus
+	toolManager  ToolManager
+	bus          EventBus
 
 	recentMemory   []MemoryRecord // 缓存最近加载的记忆
 	recentMemoryMu sync.RWMutex   // 保护 recentMemory 的并发访问
@@ -149,6 +150,8 @@ type BaseAgent struct {
 	promptEnhancer      interface{} // *PromptEnhancer
 	skillManager        interface{} // *SkillManager
 	mcpServer           interface{} // *MCPServer
+	lspClient           interface{} // *lsp.LSPClient
+	lspLifecycle        interface{} // optional lifecycle owner (e.g. *ManagedLSP)
 	enhancedMemory      interface{} // *EnhancedMemorySystem
 	observabilitySystem interface{} // *ObservabilitySystem
 
@@ -413,6 +416,24 @@ func (b *BaseAgent) Init(ctx context.Context) error {
 // Teardown 清理资源
 func (b *BaseAgent) Teardown(ctx context.Context) error {
 	b.logger.Info("tearing down agent")
+
+	if b.lspLifecycle != nil {
+		if closer, ok := b.lspLifecycle.(interface{ Close() error }); ok {
+			if err := closer.Close(); err != nil {
+				b.logger.Warn("failed to close lsp lifecycle", zap.Error(err))
+			}
+		}
+		return nil
+	}
+
+	if b.lspClient != nil {
+		if client, ok := b.lspClient.(interface{ Shutdown(context.Context) error }); ok {
+			if err := client.Shutdown(ctx); err != nil {
+				b.logger.Warn("failed to shutdown lsp client", zap.Error(err))
+			}
+		}
+	}
+
 	return nil
 }
 

@@ -5,6 +5,7 @@ import (
 	"os"
 	"strings"
 
+	agentlsp "github.com/BaSui01/agentflow/agent/lsp"
 	"github.com/BaSui01/agentflow/agent/memory"
 	mcpproto "github.com/BaSui01/agentflow/agent/protocol/mcp"
 	"github.com/BaSui01/agentflow/agent/skills"
@@ -19,9 +20,9 @@ type AgentBuilder struct {
 	provider     llm.Provider
 	toolProvider llm.Provider // 工具调用专用 Provider（可选，为 nil 时退化为 provider）
 	memory       MemoryManager
-	toolManager ToolManager
-	bus         EventBus
-	logger      *zap.Logger
+	toolManager  ToolManager
+	bus          EventBus
+	logger       *zap.Logger
 
 	// 增强功能配置
 	reflectionConfig     *ReflectionExecutorConfig
@@ -29,6 +30,7 @@ type AgentBuilder struct {
 	promptEnhancerConfig *PromptEnhancerConfig
 	skillsConfig         interface{} // 避免循环依赖
 	mcpConfig            interface{}
+	lspConfig            interface{}
 	enhancedMemoryConfig interface{}
 	observabilityConfig  interface{}
 
@@ -140,6 +142,12 @@ type MCPServerOptions struct {
 	Version string
 }
 
+// LSPOptions 配置构建器如何创建默认 LSP 运行时。
+type LSPOptions struct {
+	Name    string
+	Version string
+}
+
 // WithSkills 启用 Skills 系统
 func (b *AgentBuilder) WithSkills(config interface{}) *AgentBuilder {
 	b.skillsConfig = config
@@ -164,6 +172,21 @@ func (b *AgentBuilder) WithMCP(config interface{}) *AgentBuilder {
 	b.mcpConfig = config
 	b.config.EnableMCP = true
 	return b
+}
+
+// WithLSP 启用 LSP 集成。
+func (b *AgentBuilder) WithLSP(config interface{}) *AgentBuilder {
+	b.lspConfig = config
+	b.config.EnableLSP = true
+	return b
+}
+
+// WithDefaultLSPServer 启用默认名称/版本的内置 LSP 运行时。
+func (b *AgentBuilder) WithDefaultLSPServer(name, version string) *AgentBuilder {
+	return b.WithLSP(LSPOptions{
+		Name:    strings.TrimSpace(name),
+		Version: strings.TrimSpace(version),
+	})
 }
 
 // With DefaultMCPServer 启用默认名称/版本的内置的MCP服务器.
@@ -274,6 +297,11 @@ func (b *AgentBuilder) enableOptionalFeatures(agent *BaseAgent) error {
 			return fmt.Errorf("enable MCP: %w", err)
 		}
 	}
+	if b.config.EnableLSP {
+		if err := b.enableLSP(agent); err != nil {
+			return fmt.Errorf("enable LSP: %w", err)
+		}
+	}
 	if b.config.EnableEnhancedMemory {
 		if err := b.enableEnhancedMemory(agent); err != nil {
 			return fmt.Errorf("enable enhanced memory: %w", err)
@@ -356,6 +384,46 @@ func (b *AgentBuilder) enableMCP(agent *BaseAgent) error {
 		return nil
 	default:
 		agent.EnableMCP(v)
+		return nil
+	}
+}
+
+func (b *AgentBuilder) enableLSP(agent *BaseAgent) error {
+	createManagedRuntime := func(name, version string) {
+		runtime := NewManagedLSP(agentlsp.ServerInfo{Name: name, Version: version}, b.logger)
+		agent.EnableLSPWithLifecycle(runtime.Client, runtime)
+	}
+
+	switch v := b.lspConfig.(type) {
+	case nil:
+		createManagedRuntime(defaultLSPServerName, defaultLSPServerVersion)
+		return nil
+	case LSPOptions:
+		name := strings.TrimSpace(v.Name)
+		version := strings.TrimSpace(v.Version)
+		if name == "" {
+			name = defaultLSPServerName
+		}
+		if version == "" {
+			version = defaultLSPServerVersion
+		}
+		createManagedRuntime(name, version)
+		return nil
+	case string:
+		name := strings.TrimSpace(v)
+		if name == "" {
+			name = defaultLSPServerName
+		}
+		createManagedRuntime(name, defaultLSPServerVersion)
+		return nil
+	case *ManagedLSP:
+		agent.EnableLSPWithLifecycle(v.Client, v)
+		return nil
+	case *agentlsp.LSPClient:
+		agent.EnableLSP(v)
+		return nil
+	default:
+		agent.EnableLSP(v)
 		return nil
 	}
 }

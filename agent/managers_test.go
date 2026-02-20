@@ -192,12 +192,13 @@ func TestFeatureManager_AllFeatures(t *testing.T) {
 	fm.EnablePromptEnhancer("prompt-enhancer")
 	fm.EnableSkills("skill-manager")
 	fm.EnableMCP("mcp-server")
+	fm.EnableLSP("lsp-client")
 	fm.EnableEnhancedMemory("enhanced-memory")
 	fm.EnableObservability("observability")
 
 	features := fm.EnabledFeatures()
-	if len(features) != 7 {
-		t.Errorf("expected 7 enabled features, got %d: %v", len(features), features)
+	if len(features) != 8 {
+		t.Errorf("expected 8 enabled features, got %d: %v", len(features), features)
 	}
 
 	// 全部禁用
