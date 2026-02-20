@@ -329,17 +329,17 @@ func (h *ConfigAPIHandler) writeJSON(w http.ResponseWriter, status int, data int
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		w.WriteHeader(http.StatusInternalServerError)
-		_, _ = w.Write([]byte(`{"success":false,"error":"failed to encode response"}`))
+		_, _ = w.Write([]byte(`{"success":false,"error":"failed to encode response"}`)) //nolint:errcheck // Write 错误可安全忽略（客户端断开）
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.WriteHeader(status)
-	_, _ = w.Write(buf)
+	_, _ = w.Write(buf) //nolint:errcheck // Write 错误可安全忽略（客户端断开）
 }
 
 // handleCORS 处理 CORS 预检请求
-func (h *ConfigAPIHandler) handleCORS(w http.ResponseWriter, r *http.Request) {
+func (h *ConfigAPIHandler) handleCORS(w http.ResponseWriter, r *http.Request) { //nolint:unparam // r 参数保留以符合 http.HandlerFunc 签名
 	if h.allowedOrigin != "" {
 		w.Header().Set("Access-Control-Allow-Origin", h.allowedOrigin)
 	}

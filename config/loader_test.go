@@ -122,14 +122,14 @@ log:
 func TestLoader_LoadFromEnv(t *testing.T) {
 	// 设置环境变量
 	envVars := map[string]string{
-		"AGENTFLOW_SERVER_HTTP_PORT":    "7777",
-		"AGENTFLOW_SERVER_GRPC_PORT":    "8888",
-		"AGENTFLOW_AGENT_NAME":          "env-agent",
-		"AGENTFLOW_AGENT_MODEL":         "gpt-4-turbo",
+		"AGENTFLOW_SERVER_HTTP_PORT":     "7777",
+		"AGENTFLOW_SERVER_GRPC_PORT":     "8888",
+		"AGENTFLOW_AGENT_NAME":           "env-agent",
+		"AGENTFLOW_AGENT_MODEL":          "gpt-4-turbo",
 		"AGENTFLOW_AGENT_MAX_ITERATIONS": "15",
-		"AGENTFLOW_AGENT_TEMPERATURE":   "0.9",
-		"AGENTFLOW_REDIS_ADDR":          "env-redis:6379",
-		"AGENTFLOW_LOG_LEVEL":           "warn",
+		"AGENTFLOW_AGENT_TEMPERATURE":    "0.9",
+		"AGENTFLOW_REDIS_ADDR":           "env-redis:6379",
+		"AGENTFLOW_LOG_LEVEL":            "warn",
 	}
 
 	// 设置环境变量

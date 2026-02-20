@@ -332,7 +332,10 @@ func (w *FileWatcher) RemovePath(path string) error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
-	absPath, _ := filepath.Abs(path)
+	absPath, err := filepath.Abs(path)
+	if err != nil {
+		return fmt.Errorf("failed to resolve path: %w", err)
+	}
 
 	for i, p := range w.paths {
 		if p == absPath {
