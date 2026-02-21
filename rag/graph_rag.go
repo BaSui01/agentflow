@@ -219,7 +219,10 @@ func (r *GraphRAG) Retrieve(ctx context.Context, query string) ([]GraphRetrieval
 	// 矢量搜索
 	vectorResults, err := r.vectorStore.Search(ctx, queryEmb, r.config.MaxResults*2, nil)
 	if err != nil {
-		r.logger.Warn("vector search failed", zap.Error(err))
+		r.logger.Warn("vector search failed, falling back to graph-only retrieval", zap.Error(err))
+		// BugFix: 向量搜索失败时，确保 vectorResults 为空切片而非 nil，
+		// 防止后续切片操作（vectorResults[:min(5, len(vectorResults))]）在 nil 上 panic。
+		vectorResults = nil
 	}
 
 	// 构建结果映射
@@ -235,21 +238,24 @@ func (r *GraphRAG) Retrieve(ctx context.Context, query string) ([]GraphRetrieval
 		}
 	}
 
-	// 上向量结果的图正反转
-	for _, vr := range vectorResults[:min(5, len(vectorResults))] {
-		neighbors := r.graph.GetNeighbors(vr.ID, r.config.MaxGraphDepth)
-		for _, neighbor := range neighbors {
-			if existing, ok := resultMap[neighbor.ID]; ok {
-				existing.GraphScore = 0.8 // Connected to query result
-				existing.Source = "hybrid"
-				existing.RelatedNodes = append(existing.RelatedNodes, neighbor)
-			} else {
-				resultMap[neighbor.ID] = &GraphRetrievalResult{
-					ID:         neighbor.ID,
-					Content:    neighbor.Label,
-					GraphScore: 0.6,
-					Source:     "graph",
-					Metadata:   neighbor.Properties,
+	// BugFix: 仅在向量搜索有结果时才进行图扩展，避免对 nil/空切片做子切片操作
+	if len(vectorResults) > 0 {
+		// 上向量结果的图正反转
+		for _, vr := range vectorResults[:min(5, len(vectorResults))] {
+			neighbors := r.graph.GetNeighbors(vr.ID, r.config.MaxGraphDepth)
+			for _, neighbor := range neighbors {
+				if existing, ok := resultMap[neighbor.ID]; ok {
+					existing.GraphScore = 0.8 // Connected to query result
+					existing.Source = "hybrid"
+					existing.RelatedNodes = append(existing.RelatedNodes, neighbor)
+				} else {
+					resultMap[neighbor.ID] = &GraphRetrievalResult{
+						ID:         neighbor.ID,
+						Content:    neighbor.Label,
+						GraphScore: 0.6,
+						Source:     "graph",
+						Metadata:   neighbor.Properties,
+					}
 				}
 			}
 		}
