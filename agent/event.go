@@ -115,7 +115,11 @@ func (b *SimpleEventBus) processEvents() {
 		select {
 		case event := <-b.eventChannel:
 			b.mu.RLock()
-			handlers := b.handlers[event.Type()]
+			src := b.handlers[event.Type()]
+			handlers := make([]EventHandler, 0, len(src))
+			for _, h := range src {
+				handlers = append(handlers, h)
+			}
 			b.mu.RUnlock()
 
 			for _, handler := range handlers {

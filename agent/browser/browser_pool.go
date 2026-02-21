@@ -136,13 +136,14 @@ func (p *BrowserPool) Release(browser *ChromeDPBrowser) {
 		_ = browser.Close()
 		return
 	}
-	p.mu.Unlock()
 
-	// 尝试放回池中
+	// 在锁保护范围内尝试放回池中，防止 Close() 在解锁后关闭 channel 导致 panic
 	select {
 	case p.pool <- browser:
+		p.mu.Unlock()
 		p.logger.Debug("browser returned to pool")
 	default:
+		p.mu.Unlock()
 		// 池满，关闭多余实例
 		_ = browser.Close()
 		p.logger.Debug("pool full, closing excess browser")
@@ -158,10 +159,11 @@ func (p *BrowserPool) Close() error {
 		_ = browser.Close()
 	}
 	p.active = make(map[*ChromeDPBrowser]bool)
+	// 在锁内关闭 channel，确保 Release 不会向已关闭的 channel 发送
+	p.closeOnce.Do(func() { close(p.pool) })
 	p.mu.Unlock()
 
-	// 关闭池中的实例
-	p.closeOnce.Do(func() { close(p.pool) })
+	// 排空池中的实例
 	for browser := range p.pool {
 		_ = browser.Close()
 	}

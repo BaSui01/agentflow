@@ -36,6 +36,7 @@ type ToolResult struct {
 	Result     json.RawMessage `json:"result"`
 	Error      string          `json:"error,omitempty"`
 	Duration   time.Duration   `json:"duration"`
+	FromCache  bool            `json:"from_cache,omitempty"`
 }
 
 // ToolRegistry 定义工具注册接口.

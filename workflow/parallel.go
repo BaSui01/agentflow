@@ -8,8 +8,7 @@ import (
 
 // Task 并行任务接口
 type Task interface {
-	// Execute 执行任务
-	Execute(ctx context.Context, input any) (any, error)
+	Runnable
 	// Name 返回任务名称
 	Name() string
 }

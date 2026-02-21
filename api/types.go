@@ -3,6 +3,8 @@ package api
 import (
 	"encoding/json"
 	"time"
+
+	"github.com/BaSui01/agentflow/types"
 )
 
 // =============================================================================
@@ -127,16 +129,9 @@ type Message struct {
 	Timestamp time.Time `json:"timestamp,omitempty"`
 }
 
-// ToolCall 代表来自 LLM 的工具调用请求。
-// @Description 工具调用结构
-type ToolCall struct {
-	// 工具调用 ID
-	ID string `json:"id" example:"call_123"`
-	// 工具名称
-	Name string `json:"name" example:"get_weather"`
-	// JSON 格式的工具参数
-	Arguments json.RawMessage `json:"arguments"`
-}
+// ToolCall is a type alias for types.ToolCall to avoid duplicate definitions.
+// The canonical definition lives in types.ToolCall (types/message.go).
+type ToolCall = types.ToolCall
 
 // ImageContent 表示多模式消息的图像数据。
 // @Description 图像内容结构

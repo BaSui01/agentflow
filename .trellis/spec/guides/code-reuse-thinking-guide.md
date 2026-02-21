@@ -249,3 +249,5 @@ type Tokenizer interface {
 - [ ] Error types use existing `types.Error` or `agent.Error` where possible
 - [ ] New provider follows `llm/providers/` template exactly (OpenAI-compat → embed `openaicompat.Provider`)
 - [ ] 看似重复的接口是否真的可以统一？（检查方法签名 + 依赖方向）
+- [ ] ❌ 不要用 `type X = other.Y` alias 做兼容迁移 — 直接替换所有引用（§34）
+- [ ] 统一接口后检查 canonical location 表（§34）避免重新引入重复

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -806,4 +807,116 @@ func extractBetween(s, start, end string) string {
 		return strings.TrimSpace(s[i:])
 	}
 	return strings.TrimSpace(s[i : i+j])
+}
+
+// TestWeaviateStore_DeleteDocuments_BodyClosed verifies that each response body
+// is closed promptly during DeleteDocuments, rather than being deferred until
+// the entire function returns. Before the fix, `defer resp.Body.Close()` inside
+// a for-loop would keep all bodies open until the function returned.
+func TestWeaviateStore_DeleteDocuments_BodyClosed(t *testing.T) {
+	t.Parallel()
+
+	var closedBodies atomic.Int64
+	var activeBodies atomic.Int64
+	var maxActiveBodies atomic.Int64
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/v1/objects/TestClass/", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodDelete {
+			t.Fatalf("unexpected method: %s", r.Method)
+		}
+		w.WriteHeader(http.StatusNoContent)
+	})
+
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	logger := zap.NewNop()
+	store := NewWeaviateStore(WeaviateConfig{
+		BaseURL:   srv.URL,
+		ClassName: "TestClass",
+	}, logger)
+
+	// Wrap the client transport to track body close calls
+	origTransport := store.client.Transport
+	store.client.Transport = roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		var transport http.RoundTripper
+		if origTransport != nil {
+			transport = origTransport
+		} else {
+			transport = http.DefaultTransport
+		}
+		resp, err := transport.RoundTrip(req)
+		if err != nil {
+			return nil, err
+		}
+
+		cur := activeBodies.Add(1)
+		// Track the maximum number of concurrently open bodies
+		for {
+			old := maxActiveBodies.Load()
+			if cur <= old || maxActiveBodies.CompareAndSwap(old, cur) {
+				break
+			}
+		}
+
+		origBody := resp.Body
+		resp.Body = &trackingReadCloser{
+			ReadCloser: origBody,
+			onClose: func() {
+				activeBodies.Add(-1)
+				closedBodies.Add(1)
+			},
+		}
+		return resp, nil
+	})
+
+	ctx := context.Background()
+
+	ids := make([]string, 10)
+	for i := range ids {
+		ids[i] = fmt.Sprintf("doc-%d", i)
+	}
+
+	err := store.DeleteDocuments(ctx, ids)
+	if err != nil {
+		t.Fatalf("DeleteDocuments: %v", err)
+	}
+
+	if closedBodies.Load() != 10 {
+		t.Fatalf("expected 10 bodies closed, got %d", closedBodies.Load())
+	}
+
+	if activeBodies.Load() != 0 {
+		t.Fatalf("expected 0 active bodies after completion, got %d", activeBodies.Load())
+	}
+
+	// With the fix (extracting to a separate function), each body is closed
+	// before the next request starts, so maxActiveBodies should be 1.
+	if maxActiveBodies.Load() > 1 {
+		t.Fatalf("expected max 1 concurrently active body (bodies closed promptly), got %d",
+			maxActiveBodies.Load())
+	}
+}
+
+// roundTripFunc adapts a function to http.RoundTripper.
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
+	return f(req)
+}
+
+// trackingReadCloser wraps an io.ReadCloser and calls onClose when closed.
+type trackingReadCloser struct {
+	io.ReadCloser
+	onClose func()
+	closed  bool
+}
+
+func (t *trackingReadCloser) Close() error {
+	if !t.closed {
+		t.closed = true
+		t.onClose()
+	}
+	return t.ReadCloser.Close()
 }

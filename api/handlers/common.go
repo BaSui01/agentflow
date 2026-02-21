@@ -151,6 +151,9 @@ func DecodeJSONBody(w http.ResponseWriter, r *http.Request, dst any, logger *zap
 		return err
 	}
 
+	// Limit request body to 1 MB to prevent abuse.
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
+
 	decoder := json.NewDecoder(r.Body)
 	decoder.DisallowUnknownFields() // 严格模式：拒绝未知字段
 

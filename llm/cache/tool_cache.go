@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/BaSui01/agentflow/llm"
+	"github.com/BaSui01/agentflow/llm/tools"
 	"go.uber.org/zap"
 )
 
@@ -251,28 +252,13 @@ func (c *ToolResultCache) evictOldest() {
 
 // CachingToolExecutor 将工具执行器用缓存包裹.
 type CachingToolExecutor struct {
-	executor ToolExecutor
+	executor tools.ToolExecutor
 	cache    *ToolResultCache
 	logger   *zap.Logger
 }
 
-// ToolExecutor 定义工具执行接口.
-type ToolExecutor interface {
-	Execute(ctx context.Context, calls []llm.ToolCall) []ToolResult
-}
-
-// ToolResult 表示工具执行结果.
-type ToolResult struct {
-	ToolCallID string          `json:"tool_call_id"`
-	Name       string          `json:"name"`
-	Result     json.RawMessage `json:"result"`
-	Error      string          `json:"error,omitempty"`
-	Duration   time.Duration   `json:"duration"`
-	FromCache  bool            `json:"from_cache"`
-}
-
 // NewCachingToolExecutor 创建缓存工具执行器.
-func NewCachingToolExecutor(executor ToolExecutor, cache *ToolResultCache, logger *zap.Logger) *CachingToolExecutor {
+func NewCachingToolExecutor(executor tools.ToolExecutor, cache *ToolResultCache, logger *zap.Logger) *CachingToolExecutor {
 	return &CachingToolExecutor{
 		executor: executor,
 		cache:    cache,
@@ -281,15 +267,15 @@ func NewCachingToolExecutor(executor ToolExecutor, cache *ToolResultCache, logge
 }
 
 // Execute 使用缓存执行工具调用.
-func (e *CachingToolExecutor) Execute(ctx context.Context, calls []llm.ToolCall) []ToolResult {
-	results := make([]ToolResult, len(calls))
+func (e *CachingToolExecutor) Execute(ctx context.Context, calls []llm.ToolCall) []tools.ToolResult {
+	results := make([]tools.ToolResult, len(calls))
 	var uncachedCalls []llm.ToolCall
 	var uncachedIndices []int
 
 	// 检查每次调用的缓存
 	for i, call := range calls {
 		if cached, ok := e.cache.Get(call.Name, call.Arguments); ok {
-			results[i] = ToolResult{
+			results[i] = tools.ToolResult{
 				ToolCallID: call.ID,
 				Name:       call.Name,
 				Result:     cached.Result,
@@ -307,7 +293,7 @@ func (e *CachingToolExecutor) Execute(ctx context.Context, calls []llm.ToolCall)
 		execResults := e.executor.Execute(ctx, uncachedCalls)
 		for j, execResult := range execResults {
 			idx := uncachedIndices[j]
-			results[idx] = ToolResult{
+			results[idx] = tools.ToolResult{
 				ToolCallID: execResult.ToolCallID,
 				Name:       execResult.Name,
 				Result:     execResult.Result,
@@ -322,4 +308,17 @@ func (e *CachingToolExecutor) Execute(ctx context.Context, calls []llm.ToolCall)
 	}
 
 	return results
+}
+
+// ExecuteOne 使用缓存执行单个工具调用.
+func (e *CachingToolExecutor) ExecuteOne(ctx context.Context, call llm.ToolCall) tools.ToolResult {
+	results := e.Execute(ctx, []llm.ToolCall{call})
+	if len(results) > 0 {
+		return results[0]
+	}
+	return tools.ToolResult{
+		ToolCallID: call.ID,
+		Name:       call.Name,
+		Error:      "no result returned",
+	}
 }

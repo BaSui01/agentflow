@@ -1,6 +1,8 @@
 package agent
 
 import (
+	"sync"
+
 	"github.com/BaSui01/agentflow/llm"
 	"go.uber.org/zap"
 )
@@ -158,6 +160,7 @@ func (f *AgentFactoryFunc) CreateModular(config ModularAgentConfig) (*ModularAge
 
 // 服务管理员提供全球服务登记处。
 type ServiceLocator struct {
+	mu       sync.RWMutex
 	services map[string]any
 }
 
@@ -170,17 +173,23 @@ func NewServiceLocator() *ServiceLocator {
 
 // 登记服务。
 func (sl *ServiceLocator) Register(name string, service any) {
+	sl.mu.Lock()
+	defer sl.mu.Unlock()
 	sl.services[name] = service
 }
 
 // 获取服务的名称 。
 func (sl *ServiceLocator) Get(name string) (any, bool) {
+	sl.mu.RLock()
+	defer sl.mu.RUnlock()
 	service, ok := sl.services[name]
 	return service, ok
 }
 
 // 如果找不到, 必须获取服务或恐慌 。
 func (sl *ServiceLocator) MustGet(name string) any {
+	sl.mu.RLock()
+	defer sl.mu.RUnlock()
 	service, ok := sl.services[name]
 	if !ok {
 		panic("service not found: " + name)
@@ -190,6 +199,8 @@ func (sl *ServiceLocator) MustGet(name string) any {
 
 // Get Provider 获取 LLM 提供者 。
 func (sl *ServiceLocator) GetProvider() (llm.Provider, bool) {
+	sl.mu.RLock()
+	defer sl.mu.RUnlock()
 	service, ok := sl.services["provider"]
 	if !ok {
 		return nil, false
@@ -200,6 +211,8 @@ func (sl *ServiceLocator) GetProvider() (llm.Provider, bool) {
 
 // 让Memory找回记忆管理器
 func (sl *ServiceLocator) GetMemory() (MemoryManager, bool) {
+	sl.mu.RLock()
+	defer sl.mu.RUnlock()
 	service, ok := sl.services["memory"]
 	if !ok {
 		return nil, false
@@ -210,6 +223,8 @@ func (sl *ServiceLocator) GetMemory() (MemoryManager, bool) {
 
 // GetToolManager检索工具管理器.
 func (sl *ServiceLocator) GetToolManager() (ToolManager, bool) {
+	sl.mu.RLock()
+	defer sl.mu.RUnlock()
 	service, ok := sl.services["tool_manager"]
 	if !ok {
 		return nil, false
@@ -220,6 +235,8 @@ func (sl *ServiceLocator) GetToolManager() (ToolManager, bool) {
 
 // GetEventBus 检索活动总线 。
 func (sl *ServiceLocator) GetEventBus() (EventBus, bool) {
+	sl.mu.RLock()
+	defer sl.mu.RUnlock()
 	service, ok := sl.services["event_bus"]
 	if !ok {
 		return nil, false
@@ -230,6 +247,8 @@ func (sl *ServiceLocator) GetEventBus() (EventBus, bool) {
 
 // 让Logger拿回日志
 func (sl *ServiceLocator) GetLogger() (*zap.Logger, bool) {
+	sl.mu.RLock()
+	defer sl.mu.RUnlock()
 	service, ok := sl.services["logger"]
 	if !ok {
 		return nil, false

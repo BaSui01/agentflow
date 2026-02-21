@@ -160,11 +160,13 @@ These guides help you **ask the right questions before coding**.
 ### When to Think About Interface Deduplication
 
 - [ ] 新增接口定义 — 是否已有同名接口在其他包中？先搜索 `type <Name> interface`
-- [ ] 已知重复接口：`VectorStore`(3处)、`AuditLogger`(3处)、`Tokenizer`(3处)、`Plugin`(2处)、`CheckpointStore`(2处)、`MetricsCollector`(2处)
-- [ ] 如果重复是为了避免循环依赖 — 使用 §15 Workflow-Local Interface 模式并注释说明
+- [ ] 已知保留的重复接口（有正当理由）：`AuditLogger`(3处)、`Tokenizer`(3处)、`CheckpointStore`(2处: agent + workflow)
+- [ ] 已统一/删除的接口（不要再重复定义）：`TokenCounter`→`types/`、`VectorStore`(memory)→`rag.LowLevelVectorStore`、`ToolExecutor`→`llm/tools/`、`Plugin`(agent/plugins 已删除)、`execution.Checkpointer`(已删除)、`api.ToolCall`→`types.ToolCall` alias
+- [ ] 如果重复是为了避免循环依赖 — 使用 §12 Workflow-Local Interface 模式并注释说明
 - [ ] 如果重复无正当理由 — 统一到 `types/` 或最低层包中
+- [ ] ❌ 禁止使用 `type X = other.Y` 作为兼容层 — 直接替换所有引用（§34）。例外：API 层 type alias 用于消除结构体重复（如 `api.ToolCall = types.ToolCall`）
 
-→ Read [quality-guidelines.md §15](../backend/quality-guidelines.md) for Workflow-Local Interface pattern
+→ Read [quality-guidelines.md §15, §34](../backend/quality-guidelines.md) for Workflow-Local Interface and No-Alias patterns
 
 ### When to Think About Cross-Layer Type Consistency
 

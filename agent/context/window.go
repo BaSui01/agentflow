@@ -29,15 +29,6 @@ type WindowConfig struct {
 	KeepLastN     int            `json:"keep_last_n"`     // Always preserve last N messages
 }
 
-// TokenCounter counts tokens in text. Compatible with rag.Tokenizer.
-//
-// Note: llm/tools.TokenCounter has a different signature (returns error).
-// These cannot be unified because this interface is error-free by design
-// (context window management should not fail on token counting).
-type TokenCounter interface {
-	CountTokens(text string) int
-}
-
 // Summarizer compresses messages into a summary string via LLM.
 // Optional — when nil, the Summarize strategy falls back to TokenBudget.
 type Summarizer interface {
@@ -56,14 +47,14 @@ type WindowStatus struct {
 // It satisfies the agent.ContextManager interface.
 type WindowManager struct {
 	config       WindowConfig
-	tokenCounter TokenCounter
+	tokenCounter types.TokenCounter
 	summarizer   Summarizer
 }
 
 // NewWindowManager creates a WindowManager.
 // tokenCounter may be nil (defaults to len/4 estimation).
 // summarizer may be nil (Summarize strategy falls back to TokenBudget).
-func NewWindowManager(config WindowConfig, tokenCounter TokenCounter, summarizer Summarizer) *WindowManager {
+func NewWindowManager(config WindowConfig, tokenCounter types.TokenCounter, summarizer Summarizer) *WindowManager {
 	return &WindowManager{
 		config:       config,
 		tokenCounter: tokenCounter,

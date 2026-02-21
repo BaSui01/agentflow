@@ -1,6 +1,7 @@
 package federation
 
 import (
+	"bytes"
 	"context"
 	"crypto/tls"
 	"encoding/json"
@@ -270,13 +271,15 @@ func (o *Orchestrator) executeOnNode(ctx context.Context, nodeID string, task *F
 	}
 
 	// 通过 HTTP 远程执行
-	payload, _ := json.Marshal(task)
-	req, err := http.NewRequestWithContext(ctx, "POST", node.Endpoint+"/federation/task", nil)
+	payload, err := json.Marshal(task)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal task: %w", err)
+	}
+	req, err := http.NewRequestWithContext(ctx, "POST", node.Endpoint+"/federation/task", bytes.NewReader(payload))
 	if err != nil {
 		return nil, err
 	}
 	req.Header.Set("Content-Type", "application/json")
-	_ = payload // Would send payload in real implementation
 
 	resp, err := o.httpClient.Do(req)
 	if err != nil {

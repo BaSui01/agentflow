@@ -155,6 +155,11 @@ func (h *AgentHandler) HandleExecuteAgent(w http.ResponseWriter, r *http.Request
 		return
 	}
 
+	if !validAgentID.MatchString(req.AgentID) {
+		WriteErrorMessage(w, http.StatusBadRequest, types.ErrInvalidRequest, "invalid agent ID format", h.logger)
+		return
+	}
+
 	// Verify the agent exists in the discovery registry
 	info, err := h.registry.GetAgent(r.Context(), req.AgentID)
 	if err != nil {
@@ -206,6 +211,11 @@ func (h *AgentHandler) HandlePlanAgent(w http.ResponseWriter, r *http.Request) {
 
 	if req.AgentID == "" || req.Content == "" {
 		WriteErrorMessage(w, http.StatusBadRequest, types.ErrInvalidRequest, "agent_id and content are required", h.logger)
+		return
+	}
+
+	if !validAgentID.MatchString(req.AgentID) {
+		WriteErrorMessage(w, http.StatusBadRequest, types.ErrInvalidRequest, "invalid agent ID format", h.logger)
 		return
 	}
 

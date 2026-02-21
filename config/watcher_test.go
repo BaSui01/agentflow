@@ -184,6 +184,97 @@ func TestFileWatcher_OnChange_Callback(t *testing.T) {
 	}
 }
 
+// --- dispatchLoop race condition regression test ---
+
+// TestFileWatcher_DispatchLoop_NoRace verifies that rapid file changes do not
+// cause a concurrent map read/write panic. Before the fix, time.AfterFunc
+// callbacks accessed pendingEvents from a separate goroutine while the select
+// loop also wrote to it. With -race this would reliably fail.
+func TestFileWatcher_DispatchLoop_NoRace(t *testing.T) {
+	tmpDir := t.TempDir()
+	f := filepath.Join(tmpDir, "race.yaml")
+	require.NoError(t, os.WriteFile(f, []byte("v0"), 0644))
+
+	w, err := NewFileWatcher([]string{f}, WithDebounceDelay(10*time.Millisecond))
+	require.NoError(t, err)
+
+	var mu sync.Mutex
+	var dispatched []FileEvent
+	w.OnChange(func(evt FileEvent) {
+		mu.Lock()
+		dispatched = append(dispatched, evt)
+		mu.Unlock()
+	})
+
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+
+	require.NoError(t, w.Start(ctx))
+	t.Cleanup(func() { w.Stop() })
+
+	// Flood the event channel with rapid events to trigger the race window.
+	for i := 0; i < 50; i++ {
+		w.eventChan <- FileEvent{
+			Path:      f,
+			Op:        FileOpWrite,
+			Timestamp: time.Now(),
+		}
+	}
+
+	// Wait for debounce to flush
+	time.Sleep(200 * time.Millisecond)
+
+	mu.Lock()
+	defer mu.Unlock()
+	// We should have received at least one dispatched event (debounce coalesces).
+	assert.GreaterOrEqual(t, len(dispatched), 1,
+		"expected at least 1 dispatched event after rapid writes")
+}
+
+// TestFileWatcher_DispatchCh_Coalesces verifies that multiple events for the
+// same path are coalesced into a single dispatch after the debounce window.
+func TestFileWatcher_DispatchCh_Coalesces(t *testing.T) {
+	tmpDir := t.TempDir()
+	f := filepath.Join(tmpDir, "coalesce.yaml")
+	require.NoError(t, os.WriteFile(f, []byte("v0"), 0644))
+
+	w, err := NewFileWatcher([]string{f}, WithDebounceDelay(50*time.Millisecond))
+	require.NoError(t, err)
+
+	var mu sync.Mutex
+	callCount := 0
+	w.OnChange(func(evt FileEvent) {
+		mu.Lock()
+		callCount++
+		mu.Unlock()
+	})
+
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+
+	require.NoError(t, w.Start(ctx))
+	t.Cleanup(func() { w.Stop() })
+
+	// Send 3 events in quick succession for the same path
+	for i := 0; i < 3; i++ {
+		w.eventChan <- FileEvent{
+			Path:      f,
+			Op:        FileOpWrite,
+			Timestamp: time.Now(),
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+
+	// Wait for debounce to flush
+	time.Sleep(200 * time.Millisecond)
+
+	mu.Lock()
+	defer mu.Unlock()
+	// Same path events should be coalesced into 1 callback invocation
+	assert.Equal(t, 1, callCount,
+		"events for the same path should be coalesced into a single dispatch")
+}
+
 // --- Context cancellation stops watcher ---
 
 func TestFileWatcher_ContextCancel(t *testing.T) {

@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/BaSui01/agentflow/rag"
 	"go.uber.org/zap"
 )
 
@@ -77,7 +78,7 @@ func (s *InMemoryVectorStore) Store(ctx context.Context, id string, vector []flo
 	return nil
 }
 
-func (s *InMemoryVectorStore) Search(ctx context.Context, query []float64, topK int, filter map[string]any) ([]VectorSearchResult, error) {
+func (s *InMemoryVectorStore) Search(ctx context.Context, query []float64, topK int, filter map[string]any) ([]rag.LowLevelSearchResult, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -88,13 +89,13 @@ func (s *InMemoryVectorStore) Search(ctx context.Context, query []float64, topK 
 		return nil, fmt.Errorf("query vector dimension mismatch: got %d want %d", len(query), s.dimension)
 	}
 	if topK <= 0 {
-		return []VectorSearchResult{}, nil
+		return []rag.LowLevelSearchResult{}, nil
 	}
 
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	results := make([]VectorSearchResult, 0, len(s.items))
+	results := make([]rag.LowLevelSearchResult, 0, len(s.items))
 	for id, ent := range s.items {
 		if err := ctx.Err(); err != nil {
 			return nil, err
@@ -103,7 +104,7 @@ func (s *InMemoryVectorStore) Search(ctx context.Context, query []float64, topK 
 			continue
 		}
 		score := cosineSimilarityFloat64(query, ent.vector)
-		results = append(results, VectorSearchResult{
+		results = append(results, rag.LowLevelSearchResult{
 			ID:       id,
 			Score:    score,
 			Metadata: cloneMap(ent.metadata),

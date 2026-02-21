@@ -992,6 +992,11 @@ func (s *FileCheckpointStore) Save(ctx context.Context, checkpoint *Checkpoint) 
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	return s.saveLocked(ctx, checkpoint)
+}
+
+// saveLocked 保存检查点的内部实现（调用方必须持有 s.mu 锁）
+func (s *FileCheckpointStore) saveLocked(ctx context.Context, checkpoint *Checkpoint) error {
 	// 如果版本号为0，自动分配版本号
 	if checkpoint.Version == 0 {
 		versions, err := s.listVersionsUnlocked(ctx, checkpoint.ThreadID)
@@ -1279,12 +1284,8 @@ func (s *FileCheckpointStore) Rollback(ctx context.Context, threadID string, ver
 	}
 	newCheckpoint.Metadata["rollback_from_version"] = version
 
-	// 保存新检查点（需要临时释放锁，因为 Save 会获取锁）
-	s.mu.Unlock()
-	err = s.Save(ctx, &newCheckpoint)
-	s.mu.Lock()
-
-	return err
+	// 直接调用 saveLocked，避免释放锁后的竞态窗口
+	return s.saveLocked(ctx, &newCheckpoint)
 }
 
 // 辅助方法

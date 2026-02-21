@@ -194,12 +194,13 @@ func (t *WebSearchTool) Execute(ctx context.Context, args json.RawMessage) (json
 
 // FileSearchTool 执行文件搜索功能.
 type FileSearchTool struct {
-	vectorStore VectorStore
+	vectorStore FileSearchStore
 	maxResults  int
 }
 
-// 用于文件搜索的矢量Store接口.
-type VectorStore interface {
+// FileSearchStore is the store interface for file search operations.
+// It operates on text queries (not raw vectors), distinct from rag.VectorStore.
+type FileSearchStore interface {
 	Search(ctx context.Context, query string, limit int) ([]FileSearchResult, error)
 	Index(ctx context.Context, fileID string, content []byte) error
 }
@@ -214,7 +215,7 @@ type FileSearchResult struct {
 }
 
 // NewFileSearchTool创建了一个新的文件搜索工具.
-func NewFileSearchTool(store VectorStore, maxResults int) *FileSearchTool {
+func NewFileSearchTool(store FileSearchStore, maxResults int) *FileSearchTool {
 	if maxResults == 0 {
 		maxResults = 10
 	}

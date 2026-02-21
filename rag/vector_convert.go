@@ -2,7 +2,7 @@ package rag
 
 // Float32ToFloat64 converts a []float32 vector to []float64.
 // Useful when integrating external systems that produce float32 embeddings
-// with AgentFlow's float64-based VectorStore and GraphVectorStore interfaces.
+// with AgentFlow's float64-based VectorStore and LowLevelVectorStore interfaces.
 func Float32ToFloat64(v []float32) []float64 {
 	if v == nil {
 		return nil
