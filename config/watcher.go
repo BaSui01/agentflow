@@ -25,9 +25,10 @@ type FileWatcher struct {
 	debounceDelay time.Duration
 
 	// 状态
-	running   bool
-	stopChan  chan struct{}
-	eventChan chan FileEvent
+	running    bool
+	stopChan   chan struct{}
+	eventChan  chan FileEvent
+	dispatchCh chan string // 通知 dispatchLoop 执行 dispatch 的 channel
 
 	// 回调
 	callbacks []func(event FileEvent)
@@ -116,6 +117,7 @@ func NewFileWatcher(paths []string, opts ...WatcherOption) (*FileWatcher, error)
 		debounceDelay: 100 * time.Millisecond,
 		stopChan:      make(chan struct{}),
 		eventChan:     make(chan FileEvent, 100),
+		dispatchCh:    make(chan string, 100),
 		callbacks:     make([]func(FileEvent), 0),
 		lastModTimes:  make(map[string]time.Time),
 		logger:        zap.NewNop(),
@@ -274,26 +276,34 @@ func (w *FileWatcher) dispatchLoop(ctx context.Context) {
 			if debounceTimer != nil {
 				debounceTimer.Stop()
 			}
+			// 回调通过 dispatchCh 通知主循环，而非直接操作 pendingEvents
 			debounceTimer = time.AfterFunc(w.debounceDelay, func() {
-				w.mu.RLock()
-				callbacks := make([]func(FileEvent), len(w.callbacks))
-				copy(callbacks, w.callbacks)
-				w.mu.RUnlock()
-
-				// 调度所有待处理事件
-				for path, evt := range pendingEvents {
-					w.logger.Debug("Dispatching file event",
-						zap.String("path", path),
-						zap.String("op", evt.Op.String()))
-
-					for _, cb := range callbacks {
-						cb(evt)
-					}
+				// 发送一个空字符串作为 "flush" 信号
+				select {
+				case w.dispatchCh <- "":
+				default:
 				}
-
-				// 清除待处理事件
-				pendingEvents = make(map[string]FileEvent)
 			})
+		case <-w.dispatchCh:
+			// 在主循环中安全地读写 pendingEvents
+			w.mu.RLock()
+			callbacks := make([]func(FileEvent), len(w.callbacks))
+			copy(callbacks, w.callbacks)
+			w.mu.RUnlock()
+
+			// 调度所有待处理事件
+			for path, evt := range pendingEvents {
+				w.logger.Debug("Dispatching file event",
+					zap.String("path", path),
+					zap.String("op", evt.Op.String()))
+
+				for _, cb := range callbacks {
+					cb(evt)
+				}
+			}
+
+			// 清除待处理事件
+			pendingEvents = make(map[string]FileEvent)
 		}
 	}
 }

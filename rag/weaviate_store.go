@@ -621,28 +621,37 @@ func (s *WeaviateStore) DeleteDocuments(ctx context.Context, ids []string) error
 			continue
 		}
 
-		objectID := weaviateObjectID(id)
-		path := fmt.Sprintf("/v1/objects/%s/%s", s.cfg.ClassName, objectID)
-
-		req, err := http.NewRequestWithContext(ctx, http.MethodDelete, s.baseURL+path, nil)
-		if err != nil {
-			return fmt.Errorf("weaviate create delete request: %w", err)
-		}
-		s.applyHeaders(req)
-
-		resp, err := s.client.Do(req)
-		if err != nil {
-			return fmt.Errorf("weaviate delete request failed: %w", err)
-		}
-		defer resp.Body.Close()
-
-		// 404是可以接受的(对象不存在)
-		if resp.StatusCode != http.StatusNoContent && resp.StatusCode != http.StatusNotFound {
-			return fmt.Errorf("weaviate delete failed: status=%d", resp.StatusCode)
+		if err := s.deleteSingleDocument(ctx, id); err != nil {
+			return err
 		}
 	}
 
 	s.logger.Debug("weaviate delete completed", zap.Int("count", len(ids)))
+	return nil
+}
+
+// deleteSingleDocument 删除单个文档，确保 resp.Body 在函数返回时关闭。
+func (s *WeaviateStore) deleteSingleDocument(ctx context.Context, id string) error {
+	objectID := weaviateObjectID(id)
+	path := fmt.Sprintf("/v1/objects/%s/%s", s.cfg.ClassName, objectID)
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodDelete, s.baseURL+path, nil)
+	if err != nil {
+		return fmt.Errorf("weaviate create delete request: %w", err)
+	}
+	s.applyHeaders(req)
+
+	resp, err := s.client.Do(req)
+	if err != nil {
+		return fmt.Errorf("weaviate delete request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	// 404是可以接受的(对象不存在)
+	if resp.StatusCode != http.StatusNoContent && resp.StatusCode != http.StatusNotFound {
+		return fmt.Errorf("weaviate delete failed: status=%d", resp.StatusCode)
+	}
+
 	return nil
 }
 

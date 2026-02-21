@@ -25,6 +25,7 @@ type ContextualRetrieval struct {
 	idfCache     map[string]float64 // 词的 IDF 缓存
 	avgDocLen    float64            // 平均文档长度（用于 BM25）
 	totalDocs    int                // 总文档数
+	totalDocLen  int                // 累积文档总长度（用于计算全局平均）
 	mu           sync.RWMutex
 }
 
@@ -467,7 +468,8 @@ func (r *ContextualRetrieval) UpdateIDFStats(docs []Document) {
 	}
 
 	if r.totalDocs > 0 {
-		r.avgDocLen = float64(totalLen) / float64(len(docs))
+		r.totalDocLen += totalLen
+		r.avgDocLen = float64(r.totalDocLen) / float64(r.totalDocs)
 	}
 
 	if r.idfCache == nil {
