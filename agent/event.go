@@ -48,6 +48,7 @@ type SimpleEventBus struct {
 	eventChannel chan Event
 	done         chan struct{}
 	stopOnce     sync.Once
+	handlerWg    sync.WaitGroup // 跟踪正在运行的 handler goroutine，Stop() 时等待完成
 	logger       *zap.Logger
 }
 
@@ -124,7 +125,9 @@ func (b *SimpleEventBus) processEvents() {
 
 			for _, handler := range handlers {
 				h := handler // capture loop variable
+				b.handlerWg.Add(1)
 				go func() {
+					defer b.handlerWg.Done()
 					defer func() {
 						if r := recover(); r != nil {
 							b.logger.Error("event handler panicked", zap.Any("recover", r))
@@ -139,11 +142,13 @@ func (b *SimpleEventBus) processEvents() {
 	}
 }
 
-// Stop 停止事件总线
+// Stop 停止事件总线，等待所有 handler goroutine 完成
 func (b *SimpleEventBus) Stop() {
 	b.stopOnce.Do(func() {
 		close(b.done)
 	})
+	// 等待所有正在运行的 handler goroutine 完成，防止 goroutine 泄漏
+	b.handlerWg.Wait()
 }
 
 // StateChangeEvent 状态变更事件

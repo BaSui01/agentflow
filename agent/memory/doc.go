@@ -7,7 +7,7 @@
 
 # 概述
 
-本包用于解决智能体“如何记住、检索、遗忘和沉淀信息”的问题，
+本包用于解决智能体"如何记住、检索、遗忘和沉淀信息"的问题，
 支持从短期上下文到长期知识的多层记忆建模，并提供衰减、整合、
 向量检索与存储抽象等能力。
 
@@ -18,7 +18,42 @@
 - 工作记忆：短期、快速、可过期，适合当前回合上下文。
 - 情节记忆：按事件序列记录交互过程与执行结果。
 - 语义记忆：沉淀事实知识，支持基于语义相似度检索。
-- 程序记忆：沉淀“如何做事”的策略与步骤经验。
+- 程序记忆：沉淀"如何做事"的策略与步骤经验。
+
+# 核心接口
+
+  - [MemoryStore]：通用记忆存储接口，提供 Save / Load / Delete / List / Clear
+  - [EpisodicStore]：情节记忆存储接口，提供 RecordEvent / QueryEvents / GetTimeline
+  - [KnowledgeGraph]：知识图谱接口，提供实体与关系的增删查操作
+  - [BatchVectorStore]：扩展向量存储接口，支持批量写入
+  - [Embedder]：向量嵌入接口，将文本转换为向量表示
+
+# 核心类型
+
+  - [EnhancedMemorySystem]：增强型多层记忆系统，整合短期、工作、长期、
+    情节与语义记忆，并支持记忆整合
+  - [LayeredMemory]：分层记忆管理器，组合情节、语义、工作与程序记忆
+  - [IntelligentDecay]：智能衰减管理器，基于时间、访问频次与相关性
+    自动淘汰低价值记忆
+  - [MemoryConsolidator]：记忆整合器，将短期高价值信息迁移到长期层
+  - [MemoryEntry]：记忆条目，包含内容、嵌入向量、重要性与元数据
+  - [MemoryItem]：带衰减元数据的记忆项，用于智能衰减场景
+  - [EpisodicEvent] / [EpisodicQuery]：情节事件与查询模型
+  - [Entity] / [Relation]：知识图谱实体与关系
+  - [Episode]：情节/事件记录
+  - [Fact]：语义记忆中的事实条目
+  - [DecayConfig] / [DecayResult] / [DecayStats]：衰减配置、结果与统计
+
+# 默认实现
+
+  - [InMemoryStore]：基于内存的通用存储实现
+  - [InMemoryEpisodicStore]：基于内存的情节记忆存储
+  - [InMemoryKnowledgeGraph]：基于内存的知识图谱实现
+  - [InMemoryVectorStore]：基于内存的向量存储实现
+  - [EpisodicMemory]：基于内存的情节记忆（简化版）
+  - [SemanticMemory]：基于内存的语义记忆
+  - [WorkingMemory]：基于内存的工作记忆
+  - [ProceduralMemory]：基于内存的程序记忆
 
 # 核心能力
 

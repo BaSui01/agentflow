@@ -167,6 +167,11 @@ type AsyncExecution struct {
 	endTime time.Time
 
 	doneCh chan executionResult
+
+	// waitOnce + waitResult 确保 Wait() 可被多次调用，
+	// 第一次从 doneCh 读取结果并缓存，后续调用直接返回缓存值。
+	waitOnce   sync.Once
+	waitResult executionResult
 }
 
 // setCompleted atomically marks the execution as completed.
@@ -226,14 +231,18 @@ const (
 	ExecutionStatusCancelled ExecutionStatus = "cancelled"
 )
 
-// Wait 等待执行完成
+// Wait 等待执行完成。可安全地被多次调用，
+// 第一次从 doneCh 读取并缓存结果，后续调用直接返回缓存值。
 func (e *AsyncExecution) Wait(ctx context.Context) (*Output, error) {
-	select {
-	case res := <-e.doneCh:
-		return res.Output, res.Err
-	case <-ctx.Done():
-		return nil, ctx.Err()
-	}
+	e.waitOnce.Do(func() {
+		select {
+		case res := <-e.doneCh:
+			e.waitResult = res
+		case <-ctx.Done():
+			e.waitResult = executionResult{Err: ctx.Err()}
+		}
+	})
+	return e.waitResult.Output, e.waitResult.Err
 }
 
 // SubagentManager Subagent 管理器
