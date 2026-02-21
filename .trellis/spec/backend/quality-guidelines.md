@@ -1574,3 +1574,132 @@ if !validAgentID.MatchString(agentID) {
 > **Historical lesson**: `api/handlers/agent.go` accepted arbitrary strings as agent IDs from both query parameters and URL paths. The regex pattern `^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$` was chosen to match the existing agent naming convention while preventing path traversal, injection, and oversized inputs.
 
 > **Convention**: Use `regexp.MustCompile` at package level (not inside functions) to avoid recompilation. The regex is compiled once at init time with zero per-request cost.
+
+## §34 Interface Deduplication — No Type Aliases for Backward Compatibility (P1 — Naming Confusion)
+
+When consolidating duplicate interfaces across packages, **never use `type X = Y` aliases** as a backward-compatibility shim. Always replace usages directly with the canonical type.
+
+### 1. Scope / Trigger
+
+- Trigger: Interface unification refactoring (Feb 2026) revealed that type aliases create "two names for one thing" confusion
+- Applies to: ANY interface consolidation where a duplicate is being removed
+
+### 2. Deduplication Decision Matrix
+
+| Situation | Action | Example |
+|-----------|--------|---------|
+| Identical signatures, no circular dep | Unify to lowest-layer package | `context.TokenCounter` → `types.TokenCounter` |
+| Identical signatures, circular dep risk | Keep separate + comment explaining why (§12) | `rag.Tokenizer` vs `llm/tokenizer.Tokenizer` |
+| Same name, different signatures | Rename the less-used one to be domain-specific | `hosted.VectorStore` → `hosted.FileSearchStore` |
+| Same name, fundamentally different semantics | Keep both, add distinguishing comments | `agent.CheckpointStore` vs `workflow.CheckpointStore` |
+| Duplicate struct + interface in different pkg | Delete duplicate, import canonical | `cache.ToolResult` → `tools.ToolResult` |
+
+### 3. Contract — The "No Alias" Rule
+
+```go
+// ❌ FORBIDDEN — creates two names for the same type
+type TokenCounter = types.TokenCounter  // "backward compat" alias
+
+// ❌ FORBIDDEN — same problem with struct aliases
+type VectorSearchResult = rag.LowLevelSearchResult
+
+// ✅ CORRECT — use the canonical type directly everywhere
+func NewWindowManager(config WindowConfig, tc types.TokenCounter, ...) *WindowManager {
+    // ...
+}
+
+// ✅ CORRECT — if the old name was domain-specific, rename it
+type FileSearchStore interface {  // was: VectorStore (ambiguous)
+    Search(ctx context.Context, query string, limit int) ([]FileSearchResult, error)
+    Index(ctx context.Context, fileID string, content []byte) error
+}
+```
+
+### 4. Validation & Error Matrix
+
+| Pattern | Verdict | Reason |
+|---------|---------|--------|
+| `type X = other.Y` for interface compat | ❌ Forbidden | Two names → confusion about which to use |
+| `type X = other.Y` for struct compat | ❌ Forbidden | Same problem; also breaks `godoc` discoverability |
+| `type X = other.Y` in `_test.go` only | ⚠️ Tolerated | Test-only aliases don't leak to public API |
+| `// Deprecated: Use X` comment on alias | ❌ Still forbidden | "Deprecated" aliases never get cleaned up in practice |
+| Direct import + usage of canonical type | ✅ Required | One name, one type, zero ambiguity |
+
+### 5. Good / Base / Bad
+
+**Good** — Direct replacement, no alias:
+```go
+// agent/memory/enhanced_memory.go
+import "github.com/BaSui01/agentflow/rag"
+
+type EnhancedMemorySystem struct {
+    longTerm rag.LowLevelVectorStore  // canonical type, no alias
+}
+
+func (m *EnhancedMemorySystem) SearchLongTerm(...) ([]rag.LowLevelSearchResult, error) {
+```
+
+**Base** — Kept separate with justification comment:
+```go
+// rag/chunking.go
+// Tokenizer is intentionally separate from llm/tokenizer.Tokenizer:
+// - This interface has no error returns (chunking must not fail on counting)
+// - llm/tokenizer.Tokenizer returns errors (real tokenizer failures)
+// - Adapter: rag/tokenizer_adapter.go bridges the two
+type Tokenizer interface {
+    CountTokens(text string) int
+    Encode(text string) []int
+}
+```
+
+**Bad** — Alias pretending to be backward compat:
+```go
+// ❌ This was removed in the Feb 2026 cleanup
+type VectorStore = rag.LowLevelVectorStore       // DON'T
+type VectorSearchResult = rag.LowLevelSearchResult // DON'T
+```
+
+### 6. Required Tests
+
+- After removing an alias, `go build ./...` must pass (no broken references)
+- After removing an alias, `go vet ./...` must pass
+- All existing tests in affected packages must pass unchanged
+
+### 7. Wrong vs Right
+
+#### Wrong
+```go
+// "Gentle" migration with alias — seems safe but creates naming confusion
+type TokenCounter = types.TokenCounter // Deprecated: use types.TokenCounter
+
+type WindowManager struct {
+    tokenCounter TokenCounter  // which TokenCounter? local alias or types?
+}
+```
+
+#### Right
+```go
+// Direct usage — one name, one type, zero confusion
+type WindowManager struct {
+    tokenCounter types.TokenCounter
+}
+
+func NewWindowManager(cfg WindowConfig, tc types.TokenCounter, ...) *WindowManager {
+```
+
+> **Historical lesson**: During the Feb 2026 interface unification, type aliases were initially used as a "gentle migration" strategy. They were removed within the same session because: (1) `godoc` shows both names, confusing readers; (2) IDE auto-import picks the alias instead of the canonical type; (3) "Deprecated" aliases never get cleaned up — they become permanent tech debt.
+
+### Canonical Interface Locations (Post-Unification)
+
+| Interface | Canonical Location | Notes |
+|-----------|-------------------|-------|
+| `TokenCounter` | `types/token.go` | `CountTokens(string) int` — error-free |
+| `Tokenizer` | `types/token.go` | Full tokenizer with message counting |
+| `LowLevelVectorStore` | `rag/vector_store.go` | Raw vector Store/Search/Delete |
+| `VectorStore` | `rag/vector_store.go` | Document-level Add/Search/Delete |
+| `ToolExecutor` | `llm/tools/executor.go` | Tool execution with `[]ToolCall` |
+| `ToolResult` | `llm/tools/executor.go` | Includes `FromCache` field |
+| `Executor` | `types/agent.go` | Minimal `ID()` + `Execute(ctx, any) (any, error)` |
+| `Runnable` | `workflow/workflow.go` | `Execute(ctx, any) (any, error)` — workflow unit |
+| `FileSearchStore` | `agent/hosted/tools.go` | Text-query search (was: `hosted.VectorStore`) |
+| `EvalExecutor` | `agent/evaluation/evaluator.go` | String I/O + token count (was: `AgentExecutor`) |
