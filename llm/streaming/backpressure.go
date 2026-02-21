@@ -139,9 +139,16 @@ func (s *BackpressureStream) Write(ctx context.Context, token Token) error {
 				s.dropped.Add(1)
 			default:
 			}
-			s.buffer <- token
-			s.produced.Add(1)
-			return nil
+			// 使用 select 保护写入，防止并发 Write 填满 buffer 导致永久阻塞
+			select {
+			case s.buffer <- token:
+				s.produced.Add(1)
+				return nil
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-s.done:
+				return ErrStreamClosed
+			}
 
 		case DropPolicyNewest:
 			// 丢弃此 token

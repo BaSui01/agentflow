@@ -29,8 +29,8 @@ type Plugin interface {
 	Type() PluginType
 	// Init 初始化插件 。
 	Init(ctx context.Context) error
-	// 关闭清理插件 。
-	Close(ctx context.Context) error
+	// Shutdown 优雅关闭插件 。
+	Shutdown(ctx context.Context) error
 }
 
 // PrecessPlugin 在代理执行前运行.
@@ -168,21 +168,21 @@ func (r *PluginRegistry) Init(ctx context.Context) error {
 }
 
 // 关闭所有插件 。
-func (r *PluginRegistry) Close(ctx context.Context) error {
+func (r *PluginRegistry) Shutdown(ctx context.Context) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
 	var errs []error
 	for name, plugin := range r.plugins {
-		if err := plugin.Close(ctx); err != nil {
-			errs = append(errs, fmt.Errorf("failed to close plugin %s: %w", name, err))
+		if err := plugin.Shutdown(ctx); err != nil {
+			errs = append(errs, fmt.Errorf("failed to shutdown plugin %s: %w", name, err))
 		}
 	}
 
 	r.initialized = false
 
 	if len(errs) > 0 {
-		return fmt.Errorf("errors closing plugins: %v", errs)
+		return fmt.Errorf("errors shutting down plugins: %v", errs)
 	}
 	return nil
 }
@@ -284,7 +284,7 @@ func (a *PluginEnabledAgent) Teardown(ctx context.Context) error {
 	if err := a.agent.Teardown(ctx); err != nil {
 		return err
 	}
-	return a.registry.Close(ctx)
+	return a.registry.Shutdown(ctx)
 }
 
 // 计划产生一个执行计划。
@@ -306,8 +306,9 @@ func (a *PluginEnabledAgent) Execute(ctx context.Context, input *Input) (*Output
 
 	// 用中间软件构建执行链
 	execFunc := a.agent.Execute
-	for i := len(a.registry.MiddlewarePlugins()) - 1; i >= 0; i-- {
-		execFunc = a.registry.MiddlewarePlugins()[i].Wrap(execFunc)
+	middlewares := a.registry.MiddlewarePlugins()
+	for i := len(middlewares) - 1; i >= 0; i-- {
+		execFunc = middlewares[i].Wrap(execFunc)
 	}
 
 	// 执行

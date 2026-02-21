@@ -6,6 +6,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/BaSui01/agentflow/rag"
+
 	"go.uber.org/zap"
 )
 
@@ -19,7 +21,7 @@ type EnhancedMemorySystem struct {
 	working MemoryStore
 
 	// 长期记忆（向量数据库）- 持久化的重要信息
-	longTerm VectorStore
+	longTerm rag.LowLevelVectorStore
 
 	// 情节记忆（时序数据库）- 时间序列事件
 	episodic EpisodicStore
@@ -86,33 +88,18 @@ type MemoryStore interface {
 	Clear(ctx context.Context) error
 }
 
-// VectorStore 向量存储接口（用于语义搜索）
-type VectorStore interface {
-	// 存储向量
-	Store(ctx context.Context, id string, vector []float64, metadata map[string]any) error
-
-	// 语义搜索
-	Search(ctx context.Context, query []float64, topK int, filter map[string]any) ([]VectorSearchResult, error)
-
-	// 删除向量
-	Delete(ctx context.Context, id string) error
-
-	// 批量操作
-	BatchStore(ctx context.Context, items []VectorItem) error
-}
-
-// VectorSearchResult 向量搜索结果
-type VectorSearchResult struct {
-	ID       string                 `json:"id"`
-	Score    float64                `json:"score"` // 相似度分数
-	Metadata map[string]any `json:"metadata"`
-}
-
 // VectorItem 向量项
 type VectorItem struct {
 	ID       string
 	Vector   []float64
 	Metadata map[string]any
+}
+
+// BatchVectorStore extends LowLevelVectorStore with batch operations.
+// This is memory-specific and not part of the shared rag interface.
+type BatchVectorStore interface {
+	rag.LowLevelVectorStore
+	BatchStore(ctx context.Context, items []VectorItem) error
 }
 
 // EpisodicStore 情节记忆存储接口
@@ -215,7 +202,7 @@ type ConsolidationStrategy interface {
 func NewEnhancedMemorySystem(
 	shortTerm MemoryStore,
 	working MemoryStore,
-	longTerm VectorStore,
+	longTerm rag.LowLevelVectorStore,
 	episodic EpisodicStore,
 	semantic KnowledgeGraph,
 	config EnhancedMemoryConfig,
@@ -257,7 +244,7 @@ func NewDefaultEnhancedMemorySystem(config EnhancedMemoryConfig, logger *zap.Log
 		MaxEntries: config.WorkingMemorySize,
 	}, logger)
 
-	var longTerm VectorStore
+	var longTerm rag.LowLevelVectorStore
 	if config.LongTermEnabled {
 		longTerm = NewInMemoryVectorStore(InMemoryVectorStoreConfig{Dimension: config.VectorDimension}, logger)
 	}
@@ -371,7 +358,7 @@ func (m *EnhancedMemorySystem) SaveLongTerm(ctx context.Context, agentID string,
 }
 
 // SearchLongTerm 搜索长期记忆
-func (m *EnhancedMemorySystem) SearchLongTerm(ctx context.Context, agentID string, queryVector []float64, topK int) ([]VectorSearchResult, error) {
+func (m *EnhancedMemorySystem) SearchLongTerm(ctx context.Context, agentID string, queryVector []float64, topK int) ([]rag.LowLevelSearchResult, error) {
 	if !m.config.LongTermEnabled || m.longTerm == nil {
 		return nil, fmt.Errorf("long-term memory not configured")
 	}
@@ -483,6 +470,7 @@ func (c *MemoryConsolidator) Start(ctx context.Context) error {
 		return fmt.Errorf("consolidator already running")
 	}
 	c.stopCh = make(chan struct{})
+	c.closeOnce = sync.Once{}
 	c.running = true
 	c.mu.Unlock()
 

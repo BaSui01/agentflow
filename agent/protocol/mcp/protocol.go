@@ -168,16 +168,20 @@ func (t *ToolDefinition) ToLLMToolSchema() llm.ToolSchema {
 }
 
 // FromLLMToolSchema 从 LLM 工具 Schema 创建 MCP 工具定义
-func FromLLMToolSchema(schema llm.ToolSchema) ToolDefinition {
+func FromLLMToolSchema(schema llm.ToolSchema) (ToolDefinition, error) {
 	// 将 json.RawMessage 转换为 map[string]any
 	var inputSchema map[string]any
-	_ = json.Unmarshal(schema.Parameters, &inputSchema)
+	if len(schema.Parameters) > 0 {
+		if err := json.Unmarshal(schema.Parameters, &inputSchema); err != nil {
+			return ToolDefinition{}, fmt.Errorf("failed to unmarshal tool parameters for %q: %w", schema.Name, err)
+		}
+	}
 
 	return ToolDefinition{
 		Name:        schema.Name,
 		Description: schema.Description,
 		InputSchema: inputSchema,
-	}
+	}, nil
 }
 
 // ValidateResource 验证资源
