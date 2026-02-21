@@ -144,8 +144,11 @@ func DefaultEvaluatorConfig() EvaluatorConfig {
 	}
 }
 
-// AgentExecutor定义了执行代理任务的接口.
-type AgentExecutor interface {
+// EvalExecutor defines the interface for executing an agent during evaluation.
+// Renamed from AgentExecutor to avoid naming conflict with workflow.AgentExecutor.
+// Unlike types.Executor (which uses any -> any), this interface uses string I/O
+// and returns token count, which is specific to evaluation scoring needs.
+type EvalExecutor interface {
 	Execute(ctx context.Context, input string) (output string, tokens int, err error)
 }
 
@@ -215,7 +218,7 @@ func (e *Evaluator) RegisterScorer(taskType string, scorer Scorer) {
 
 // 评估运行一个评估套房 对代理。
 // 审定:要求9.2、9.5
-func (e *Evaluator) Evaluate(ctx context.Context, suite *EvalSuite, agent AgentExecutor) (*EvalReport, error) {
+func (e *Evaluator) Evaluate(ctx context.Context, suite *EvalSuite, agent EvalExecutor) (*EvalReport, error) {
 	startTime := time.Now()
 
 	report := &EvalReport{
@@ -285,6 +288,23 @@ func (e *Evaluator) Evaluate(ctx context.Context, suite *EvalSuite, agent AgentE
 
 	wg.Wait()
 
+	// StopOnFailure 可能导致部分任务未执行，截断零值结果
+	if stopFlag {
+		n := 0
+		for _, r := range report.Results {
+			if r.TaskID != "" {
+				n++
+			}
+		}
+		truncated := make([]EvalResult, 0, n)
+		for _, r := range report.Results {
+			if r.TaskID != "" {
+				truncated = append(truncated, r)
+			}
+		}
+		report.Results = truncated
+	}
+
 	// 以统计方式计算汇总(参数:要求9.5)
 	report.Summary = e.calculateSummary(report.Results)
 	report.EndTime = time.Now()
@@ -293,7 +313,7 @@ func (e *Evaluator) Evaluate(ctx context.Context, suite *EvalSuite, agent AgentE
 	return report, nil
 }
 
-func (e *Evaluator) evaluateTask(ctx context.Context, task *EvalTask, agent AgentExecutor) EvalResult {
+func (e *Evaluator) evaluateTask(ctx context.Context, task *EvalTask, agent EvalExecutor) EvalResult {
 	start := time.Now()
 	result := EvalResult{
 		TaskID:   task.ID,
@@ -530,7 +550,7 @@ func (e *Evaluator) triggerAlert(alert *Alert) {
 
 // 评估批量在多个套间进行批量评价.
 // 核证:要求9.4
-func (e *Evaluator) EvaluateBatch(ctx context.Context, suites []*EvalSuite, agent AgentExecutor) ([]*EvalReport, error) {
+func (e *Evaluator) EvaluateBatch(ctx context.Context, suites []*EvalSuite, agent EvalExecutor) ([]*EvalReport, error) {
 	reports := make([]*EvalReport, len(suites))
 	var wg sync.WaitGroup
 	var mu sync.Mutex
@@ -751,6 +771,9 @@ func calculateSimilarity(a, b string) float64 {
 }
 
 func containsSubstring(s, substr string) bool {
+	if len(substr) > len(s) {
+		return false
+	}
 	for i := 0; i <= len(s)-len(substr); i++ {
 		if s[i:i+len(substr)] == substr {
 			return true

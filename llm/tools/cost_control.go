@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/BaSui01/agentflow/types"
 	"go.uber.org/zap"
 )
 
@@ -195,8 +196,7 @@ type DefaultCostController struct {
 	budgets         map[string]*Budget
 	records         []*CostRecord
 	usage           map[string]float64 // key -> usage
-	usageResetTimes map[string]time.Time
-	tokenCounter    TokenCounter
+	tokenCounter    types.TokenCounter
 	alertHandler    CostAlertHandler
 	logger          *zap.Logger
 	mu              sync.RWMutex
@@ -207,12 +207,12 @@ type CostAlertHandler interface {
 	HandleAlert(ctx context.Context, alert *CostAlert) error
 }
 
-// TokenCounter 可选的 token 计数器接口。
-//
-// 注意：agent/context.TokenCounter 签名为 CountTokens(string) int（无 error），
-// 本接口返回 error 以支持真实 tokenizer 的错误处理。两者无法统一。
-type TokenCounter interface {
-	CountTokens(text string) (int, error)
+// SetTokenCounter sets an optional token counter for precise cost calculation.
+// If not set, cost estimation falls back to character-based approximation.
+func (cc *DefaultCostController) SetTokenCounter(tc types.TokenCounter) {
+	cc.mu.Lock()
+	defer cc.mu.Unlock()
+	cc.tokenCounter = tc
 }
 
 // NewCostController 创建新的成本控制器。
@@ -225,7 +225,6 @@ func NewCostController(logger *zap.Logger) *DefaultCostController {
 		budgets:         make(map[string]*Budget),
 		records:         make([]*CostRecord, 0),
 		usage:           make(map[string]float64),
-		usageResetTimes: make(map[string]time.Time),
 		logger:          logger.With(zap.String("component", "cost_controller")),
 	}
 }
@@ -254,11 +253,9 @@ func (cc *DefaultCostController) CalculateCost(toolName string, args json.RawMes
 		case CostUnitTokens:
 			// 如果有 token 计数器，精确计算
 			if cc.tokenCounter != nil {
-				tokens, err := cc.tokenCounter.CountTokens(string(args))
-				if err == nil {
-					cost += float64(tokens) * toolCost.CostPerUnit
-					break
-				}
+				tokens := cc.tokenCounter.CountTokens(string(args))
+				cost += float64(tokens) * toolCost.CostPerUnit
+				break
 			}
 			// fallback: 按字符数估算（1 token ≈ 4 字符）
 			cost += float64(len(args)) / 4.0 * toolCost.CostPerUnit
@@ -270,35 +267,25 @@ func (cc *DefaultCostController) CalculateCost(toolName string, args json.RawMes
 	return cost, nil
 }
 
-// resetUsageIfNeeded 检查并重置过期的预算周期
+// resetUsageIfNeeded 清理过期周期的用量数据。
+// buildUsageKey 已包含日历周期 key（如 "2006-01-02"），新周期自动产生新 key，
+// 此函数负责删除同一预算下旧周期的 key 以释放内存。
 func (cc *DefaultCostController) resetUsageIfNeeded(budget *Budget) {
-	key := cc.buildUsageKey(budget)
-	resetKey := key + ":reset_at"
-
-	lastReset, exists := cc.usageResetTimes[resetKey]
-	if !exists {
-		cc.usageResetTimes[resetKey] = time.Now()
-		return
+	if budget.Period == BudgetPeriodTotal {
+		return // "total" 类型永不重置
 	}
 
-	var shouldReset bool
-	switch budget.Period {
-	case BudgetPeriodHourly:
-		shouldReset = time.Since(lastReset) >= time.Hour
-	case BudgetPeriodDaily:
-		shouldReset = time.Since(lastReset) >= 24*time.Hour
-	case BudgetPeriodWeekly:
-		shouldReset = time.Since(lastReset) >= 7*24*time.Hour
-	case BudgetPeriodMonthly:
-		shouldReset = time.Since(lastReset) >= 30*24*time.Hour
-	case BudgetPeriodTotal:
-		shouldReset = false
-	}
+	currentKey := cc.buildUsageKey(budget)
+	prefix := fmt.Sprintf("%s:%s:%s:", budget.Scope, budget.ScopeID, budget.ID)
 
-	if shouldReset {
-		cc.usage[key] = 0
-		cc.usageResetTimes[resetKey] = time.Now()
-		cc.logger.Info("budget usage reset", zap.String("budget_id", budget.ID), zap.String("period", string(budget.Period)))
+	for k := range cc.usage {
+		if len(k) >= len(prefix) && k[:len(prefix)] == prefix && k != currentKey {
+			delete(cc.usage, k)
+			cc.logger.Info("budget usage reset (new period)",
+				zap.String("budget_id", budget.ID),
+				zap.String("period", string(budget.Period)),
+			)
+		}
 	}
 }
 
@@ -558,16 +545,20 @@ func (cc *DefaultCostController) ListBudgets() []*Budget {
 }
 
 // GetUsage 获取指定作用域的当前用量。
+// 遍历所有 usage entries，按 scope+scopeID 前缀和 periodKey 后缀匹配，
+// 汇总所有 budgetID 下的用量。
 func (cc *DefaultCostController) GetUsage(scope BudgetScope, scopeID string, period BudgetPeriod) float64 {
 	cc.mu.RLock()
 	defer cc.mu.RUnlock()
 
+	prefix := fmt.Sprintf("%s:%s:", scope, scopeID)
 	periodKey := cc.getPeriodKey(period)
-	key := fmt.Sprintf("%s:%s::%s", scope, scopeID, periodKey)
+	suffix := ":" + periodKey
 
 	var total float64
 	for k, v := range cc.usage {
-		if len(k) >= len(key) && k[:len(key)] == key {
+		if len(k) >= len(prefix) && k[:len(prefix)] == prefix &&
+			len(k) >= len(suffix) && k[len(k)-len(suffix):] == suffix {
 			total += v
 		}
 	}
