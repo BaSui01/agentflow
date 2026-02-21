@@ -101,16 +101,20 @@ func (e *Error) WithProvider(provider string) *Error {
 }
 
 // IsRetryable checks if an error is retryable.
+// Uses errors.As to correctly handle wrapped errors.
 func IsRetryable(err error) bool {
-	if e, ok := err.(*Error); ok {
+	var e *Error
+	if errors.As(err, &e) {
 		return e.Retryable
 	}
 	return false
 }
 
 // GetErrorCode extracts the error code from an error.
+// Uses errors.As to correctly handle wrapped errors.
 func GetErrorCode(err error) ErrorCode {
-	if e, ok := err.(*Error); ok {
+	var e *Error
+	if errors.As(err, &e) {
 		return e.Code
 	}
 	return ""
@@ -121,13 +125,15 @@ func GetErrorCode(err error) ErrorCode {
 // =============================================================================
 
 // WrapError 包装标准错误为 types.Error
+// Uses errors.As to correctly handle wrapped errors.
 func WrapError(err error, code ErrorCode, message string) *Error {
 	if err == nil {
 		return nil
 	}
 
-	// 如果已经是 types.Error，直接返回
-	if typedErr, ok := err.(*Error); ok {
+	// 如果已经是 types.Error（包括 wrapped），直接返回
+	var typedErr *Error
+	if errors.As(err, &typedErr) {
 		return typedErr
 	}
 
