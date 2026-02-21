@@ -16,6 +16,16 @@ func (u *TokenUsage) Add(other TokenUsage) {
 	u.Cost += other.Cost
 }
 
+// TokenCounter is the minimal token counting interface.
+// It is the common subset shared by types.Tokenizer, rag.Tokenizer, and agent/context.TokenCounter.
+//
+// Any type that implements CountTokens(string) int satisfies this interface,
+// including types.Tokenizer, types.EstimateTokenizer, rag.Tokenizer,
+// and llm/tools.DefaultCostController (which now uses types.TokenCounter).
+type TokenCounter interface {
+	CountTokens(text string) int
+}
+
 // Tokenizer defines the interface for token counting.
 //
 // Note: Three Tokenizer interfaces exist in the project, each serving a different layer:

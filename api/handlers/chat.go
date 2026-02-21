@@ -222,7 +222,7 @@ func (h *ChatHandler) convertToLLMRequest(req *api.ChatRequest) *llm.ChatRequest
 			Role:       types.Role(msg.Role),
 			Content:    msg.Content,
 			Name:       msg.Name,
-			ToolCalls:  convertAPIToolCallsToTypes(msg.ToolCalls),
+			ToolCalls:  msg.ToolCalls,
 			ToolCallID: msg.ToolCallID,
 		}
 	}
@@ -278,7 +278,7 @@ func (h *ChatHandler) convertChoices(choices []llm.ChatChoice) []api.ChatChoice 
 				Role:       string(choice.Message.Role),
 				Content:    choice.Message.Content,
 				Name:       choice.Message.Name,
-				ToolCalls:  convertTypesToolCallsToAPI(choice.Message.ToolCalls),
+				ToolCalls:  choice.Message.ToolCalls,
 				ToolCallID: choice.Message.ToolCallID,
 			},
 		}
@@ -306,7 +306,7 @@ func (h *ChatHandler) convertToAPIStreamChunk(chunk *llm.StreamChunk) *api.Strea
 			Role:       string(chunk.Delta.Role),
 			Content:    chunk.Delta.Content,
 			Name:       chunk.Delta.Name,
-			ToolCalls:  convertTypesToolCallsToAPI(chunk.Delta.ToolCalls),
+			ToolCalls:  chunk.Delta.ToolCalls,
 			ToolCallID: chunk.Delta.ToolCallID,
 		},
 		FinishReason: chunk.FinishReason,
@@ -352,34 +352,5 @@ func writeJSON(w http.ResponseWriter, data any) error {
 // 🔄 类型转换辅助函数
 // =============================================================================
 
-// convertAPIToolCallsToTypes 转换 API ToolCall 到 types.ToolCall
-func convertAPIToolCallsToTypes(apiCalls []api.ToolCall) []types.ToolCall {
-	if len(apiCalls) == 0 {
-		return nil
-	}
-	calls := make([]types.ToolCall, len(apiCalls))
-	for i, call := range apiCalls {
-		calls[i] = types.ToolCall{
-			ID:        call.ID,
-			Name:      call.Name,
-			Arguments: call.Arguments,
-		}
-	}
-	return calls
-}
-
-// convertTypesToolCallsToAPI 转换 types.ToolCall 到 API ToolCall
-func convertTypesToolCallsToAPI(typeCalls []types.ToolCall) []api.ToolCall {
-	if len(typeCalls) == 0 {
-		return nil
-	}
-	calls := make([]api.ToolCall, len(typeCalls))
-	for i, call := range typeCalls {
-		calls[i] = api.ToolCall{
-			ID:        call.ID,
-			Name:      call.Name,
-			Arguments: call.Arguments,
-		}
-	}
-	return calls
-}
+// Note: convertAPIToolCallsToTypes and convertTypesToolCallsToAPI were removed
+// because api.ToolCall is now a type alias for types.ToolCall — no conversion needed.
