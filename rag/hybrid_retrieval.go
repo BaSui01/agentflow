@@ -2,6 +2,7 @@ package rag
 
 import (
 	"context"
+	"fmt"
 	"math"
 	"sort"
 	"strings"
@@ -112,6 +113,14 @@ func (r *HybridRetriever) IndexDocuments(docs []Document) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
+	// 保存旧状态，以便向量存储写入失败时回滚 BM25 统计
+	prevDocuments := r.documents
+	prevAvgDocLen := r.avgDocLen
+	prevDocLens := r.docLens
+	prevIdf := r.idf
+	prevDocTermFreqs := r.docTermFreqs
+	prevDocIDIndex := r.docIDIndex
+
 	r.documents = docs
 
 	// 计算 BM25 统计信息
@@ -120,9 +129,17 @@ func (r *HybridRetriever) IndexDocuments(docs []Document) error {
 	}
 
 	// 添加到向量存储
+	// BugFix: 如果向量存储写入失败，回滚 BM25 统计，保证数据一致性
 	if r.vectorStore != nil && r.config.UseVector {
 		if err := r.vectorStore.AddDocuments(context.Background(), docs); err != nil {
-			r.logger.Warn("failed to add documents to vector store", zap.Error(err))
+			// 回滚 BM25 统计到之前的状态
+			r.documents = prevDocuments
+			r.avgDocLen = prevAvgDocLen
+			r.docLens = prevDocLens
+			r.idf = prevIdf
+			r.docTermFreqs = prevDocTermFreqs
+			r.docIDIndex = prevDocIDIndex
+			return fmt.Errorf("failed to add documents to vector store (BM25 stats rolled back): %w", err)
 		}
 	}
 

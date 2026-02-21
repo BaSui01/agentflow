@@ -18,6 +18,8 @@ type ChromeDPDriver struct {
 	allocCancel context.CancelFunc
 	ctx         context.Context
 	cancel      context.CancelFunc
+	// BUG-1 FIX: 保存所有 cancel 函数，防止 context.WithTimeout 覆盖原始 cancel 导致泄漏
+	cancels     []context.CancelFunc
 	config      BrowserConfig
 	logger      *zap.Logger
 	mu          sync.Mutex
@@ -54,9 +56,14 @@ func NewChromeDPDriver(config BrowserConfig, logger *zap.Logger) (*ChromeDPDrive
 		}),
 	)
 
+	// BUG-1 FIX: 保存所有 cancel 函数，避免 WithTimeout 覆盖导致原始 cancel 丢失
+	cancels := []context.CancelFunc{cancel}
+
 	// 设置超时
 	if config.Timeout > 0 {
-		ctx, cancel = context.WithTimeout(ctx, config.Timeout)
+		var timeoutCancel context.CancelFunc
+		ctx, timeoutCancel = context.WithTimeout(ctx, config.Timeout)
+		cancels = append(cancels, timeoutCancel)
 	}
 
 	driver := &ChromeDPDriver{
@@ -64,6 +71,7 @@ func NewChromeDPDriver(config BrowserConfig, logger *zap.Logger) (*ChromeDPDrive
 		allocCancel: allocCancel,
 		ctx:         ctx,
 		cancel:      cancel,
+		cancels:     cancels,
 		config:      config,
 		logger:      logger.With(zap.String("component", "chromedp_driver")),
 	}
@@ -190,7 +198,10 @@ func (d *ChromeDPDriver) Close() error {
 	defer d.mu.Unlock()
 
 	d.logger.Info("closing chromedp browser")
-	d.cancel()
+	// BUG-1 FIX: 按逆序调用所有 cancel 函数，确保无资源泄漏
+	for i := len(d.cancels) - 1; i >= 0; i-- {
+		d.cancels[i]()
+	}
 	d.allocCancel()
 	return nil
 }

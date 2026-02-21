@@ -95,8 +95,20 @@ func (r *ReflexionExecutor) Execute(ctx context.Context, task string) (*Reasonin
 		default:
 		}
 
-		trial, tokens, _ := r.executeTrial(ctx, task, trialNum, trials)
+		// BUG-4 FIX: 正确处理 executeTrial 错误，记录日志并在非 context 错误时继续尝试
+		trial, tokens, trialErr := r.executeTrial(ctx, task, trialNum, trials)
 		result.TotalTokens += tokens
+		if trialErr != nil {
+			r.logger.Error("trial execution failed",
+				zap.Int("trial", trialNum), zap.Error(trialErr))
+			// context 取消/超时时直接返回
+			if ctx.Err() != nil {
+				result.TotalLatency = time.Since(start)
+				return result, trialErr
+			}
+			// 其他错误继续下一轮 trial
+			continue
+		}
 		trials = append(trials, *trial)
 
 		result.Steps = append(result.Steps, ReasoningStep{StepID: fmt.Sprintf("trial_%d", trialNum), Type: "action", Content: trial.Action, Score: trial.Score})
@@ -110,8 +122,13 @@ func (r *ReflexionExecutor) Execute(ctx context.Context, task string) (*Reasonin
 		}
 
 		if trialNum < r.config.MaxTrials {
-			reflection, reflectTokens, _ := r.generateReflection(ctx, task, trial)
+			// BUG-4 FIX: 正确处理 generateReflection 错误，记录日志后继续（reflection 失败不阻塞流程）
+			reflection, reflectTokens, reflectErr := r.generateReflection(ctx, task, trial)
 			result.TotalTokens += reflectTokens
+			if reflectErr != nil {
+				r.logger.Warn("reflection generation failed",
+					zap.Int("trial", trialNum), zap.Error(reflectErr))
+			}
 			trial.Reflection = reflection
 			result.Steps = append(result.Steps, ReasoningStep{StepID: fmt.Sprintf("reflection_%d", trialNum), Type: "reflection", Content: reflection.Analysis})
 		}

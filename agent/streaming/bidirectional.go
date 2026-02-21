@@ -207,7 +207,16 @@ func (s *BidirectionalStream) Send(chunk StreamChunk) error {
 		chunk.Timestamp = time.Now()
 	}
 
+	// BUG-2 FIX: 使用 select + done channel 模式，防止向已关闭的 channel 发送导致 panic
 	select {
+	case <-s.done:
+		return fmt.Errorf("stream closed")
+	default:
+	}
+
+	select {
+	case <-s.done:
+		return fmt.Errorf("stream closed")
 	case s.outbound <- chunk:
 		return nil
 	default:
@@ -229,6 +238,9 @@ func (s *BidirectionalStream) Close() error {
 		return nil
 	}
 
+	// BUG-2 FIX: 先通过 done channel 通知所有 goroutine 退出，
+	// 不再关闭 inbound/outbound channel，避免活跃 sender 写入已关闭 channel 导致 panic。
+	// goroutine 通过 select <-s.done 退出后，channel 会被 GC 回收。
 	s.closeOnce.Do(func() { close(s.done) })
 	s.State = StateDisconnected
 
@@ -237,10 +249,6 @@ func (s *BidirectionalStream) Close() error {
 	if s.conn != nil {
 		connErr = s.conn.Close()
 	}
-
-	// 排空 channel
-	close(s.inbound)
-	close(s.outbound)
 
 	s.logger.Info("stream closed")
 	return connErr

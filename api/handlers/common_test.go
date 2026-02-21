@@ -194,6 +194,16 @@ func TestValidateContentType(t *testing.T) {
 			want:        true,
 		},
 		{
+			name:        "valid with uppercase charset",
+			contentType: "application/json; charset=UTF-8",
+			want:        true,
+		},
+		{
+			name:        "valid with extra whitespace",
+			contentType: "application/json;  charset=utf-8",
+			want:        true,
+		},
+		{
 			name:        "invalid text/plain",
 			contentType: "text/plain",
 			want:        false,

@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"encoding/json"
+	"mime"
 	"net/http"
 	"time"
 
@@ -169,11 +170,13 @@ func DecodeJSONBody(w http.ResponseWriter, r *http.Request, dst any, logger *zap
 }
 
 // ValidateContentType 验证 Content-Type
+// 使用 mime.ParseMediaType 进行宽松解析，正确处理大小写变体
+// （如 "application/json; charset=UTF-8"）和额外参数。
 func ValidateContentType(w http.ResponseWriter, r *http.Request, logger *zap.Logger) bool {
-	contentType := r.Header.Get("Content-Type")
-	if contentType != "application/json" && contentType != "application/json; charset=utf-8" {
-		err := types.NewError(types.ErrInvalidRequest, "Content-Type must be application/json")
-		WriteError(w, err, logger)
+	mediaType, _, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
+	if err != nil || mediaType != "application/json" {
+		apiErr := types.NewError(types.ErrInvalidRequest, "Content-Type must be application/json")
+		WriteError(w, apiErr, logger)
 		return false
 	}
 	return true

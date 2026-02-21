@@ -76,6 +76,10 @@ type ParallelWorkflow struct {
 	description string
 	tasks       []Task
 	aggregator  Aggregator
+	// mu protects tasks slice against concurrent AddTask (write) and
+	// Execute (read) calls. Bug fix (P0): without this lock, concurrent
+	// modification of the tasks slice during execution causes a data race.
+	mu sync.RWMutex
 }
 
 // NewParallelWorkflow 创建并行工作流
@@ -93,16 +97,23 @@ func NewParallelWorkflow(name, description string, aggregator Aggregator, tasks 
 // 2. 收集所有结果
 // 3. 使用聚合器聚合结果
 func (w *ParallelWorkflow) Execute(ctx context.Context, input any) (any, error) {
-	if len(w.tasks) == 0 {
+	// Read lock protects against concurrent AddTask modifications.
+	w.mu.RLock()
+	tasks := make([]Task, len(w.tasks))
+	copy(tasks, w.tasks)
+	aggregator := w.aggregator
+	w.mu.RUnlock()
+
+	if len(tasks) == 0 {
 		return nil, fmt.Errorf("no tasks to execute")
 	}
 
 	// 创建结果通道
-	resultCh := make(chan TaskResult, len(w.tasks))
+	resultCh := make(chan TaskResult, len(tasks))
 	var wg sync.WaitGroup
 
 	// 启动所有任务
-	for _, task := range w.tasks {
+	for _, task := range tasks {
 		wg.Add(1)
 		go func(t Task) {
 			defer wg.Done()
@@ -123,7 +134,7 @@ func (w *ParallelWorkflow) Execute(ctx context.Context, input any) (any, error) 
 	}()
 
 	// 收集结果
-	results := make([]TaskResult, 0, len(w.tasks))
+	results := make([]TaskResult, 0, len(tasks))
 	for result := range resultCh {
 		results = append(results, result)
 	}
@@ -141,12 +152,12 @@ func (w *ParallelWorkflow) Execute(ctx context.Context, input any) (any, error) 
 	}
 
 	// 聚合结果
-	if w.aggregator == nil {
+	if aggregator == nil {
 		// 如果没有聚合器，直接返回所有结果
 		return results, nil
 	}
 
-	aggregated, err := w.aggregator.Aggregate(ctx, results)
+	aggregated, err := aggregator.Aggregate(ctx, results)
 	if err != nil {
 		return nil, fmt.Errorf("aggregation failed: %w", err)
 	}
@@ -164,10 +175,16 @@ func (w *ParallelWorkflow) Description() string {
 
 // AddTask 添加任务
 func (w *ParallelWorkflow) AddTask(task Task) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
 	w.tasks = append(w.tasks, task)
 }
 
 // Tasks 返回所有任务
 func (w *ParallelWorkflow) Tasks() []Task {
-	return w.tasks
+	w.mu.RLock()
+	defer w.mu.RUnlock()
+	tasks := make([]Task, len(w.tasks))
+	copy(tasks, w.tasks)
+	return tasks
 }

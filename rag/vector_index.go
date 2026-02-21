@@ -173,9 +173,14 @@ func (idx *HNSWIndex) Search(query []float64, k int) ([]SearchResult, error) {
 	// 从顶层开始搜索
 	ep := idx.entryPoint
 	for level := idx.maxLevel; level > 0; level-- {
-		ep = idx.searchLayer(query, ep, 1, level)[0]
+		// BugFix: searchLayer 可能返回空切片（节点被删除等情况），检查后再取首元素
+		result := idx.searchLayer(query, ep, 1, level)
+		if len(result) == 0 {
+			return []SearchResult{}, nil
+		}
+		ep = result[0]
 	}
-	
+
 	// 在第 0 层搜索 k 个最近邻
 	candidates := idx.searchLayer(query, ep, idx.config.EfSearch, 0)
 	
@@ -252,14 +257,37 @@ func (idx *HNSWIndex) Delete(id string) error {
 		}
 	}
 	
-	// 如果删除的是入口点，选择新的入口点
+	// BugFix: 如果删除的是入口点，遍历剩余节点找到最高层级的节点作为新入口点，
+	// 并同步更新 maxLevel，避免后续搜索访问已删除节点或在不存在的层级搜索。
 	if idx.entryPoint == id {
-		for newID := range idx.vectors {
-			idx.entryPoint = newID
-			break
+		idx.entryPoint = ""
+		idx.maxLevel = 0
+		for nid, levels := range idx.graph {
+			nodeMaxLevel := 0
+			for l := range levels {
+				if l > nodeMaxLevel {
+					nodeMaxLevel = l
+				}
+			}
+			if nodeMaxLevel > idx.maxLevel || idx.entryPoint == "" {
+				idx.maxLevel = nodeMaxLevel
+				idx.entryPoint = nid
+			}
 		}
+	} else {
+		// 即使删除的不是入口点，也需要重新计算 maxLevel，
+		// 因为被删除的节点可能是唯一处于最高层的节点。
+		newMaxLevel := 0
+		for _, levels := range idx.graph {
+			for l := range levels {
+				if l > newMaxLevel {
+					newMaxLevel = l
+				}
+			}
+		}
+		idx.maxLevel = newMaxLevel
 	}
-	
+
 	return nil
 }
 
@@ -277,7 +305,12 @@ func (idx *HNSWIndex) insert(id string, vector []float64, level int) {
 	// 从顶层搜索到目标层
 	ep := idx.entryPoint
 	for lc := idx.maxLevel; lc > level; lc-- {
-		ep = idx.searchLayer(vector, ep, 1, lc)[0]
+		// BugFix: searchLayer 可能返回空切片，检查后再取首元素
+		result := idx.searchLayer(vector, ep, 1, lc)
+		if len(result) == 0 {
+			break
+		}
+		ep = result[0]
 	}
 	
 	// 在每一层插入
@@ -314,46 +347,58 @@ func (idx *HNSWIndex) searchLayer(query []float64, ep string, ef int, level int)
 	visited := make(map[string]bool)
 	candidates := &minHeap{}
 	w := &maxHeap{}
-	
+
+	// BugFix: 入口点的向量可能已被删除，防御性检查
+	if _, ok := idx.vectors[ep]; !ok {
+		return []string{}
+	}
+
 	// 初始化
 	dist := idx.distance(query, idx.vectors[ep])
 	heap.Push(candidates, &heapItem{id: ep, dist: dist})
 	heap.Push(w, &heapItem{id: ep, dist: dist})
 	visited[ep] = true
-	
+
 	for candidates.Len() > 0 {
 		c := heap.Pop(candidates).(*heapItem)
-		
-		if c.dist > (*w)[0].dist {
+
+		// BugFix: 访问堆顶元素前检查堆是否为空，防止 index out of range panic
+		if w.Len() == 0 || c.dist > (*w)[0].dist {
 			break
 		}
-		
+
 		// 检查邻居
 		for _, nid := range idx.graph[c.id][level] {
 			if visited[nid] {
 				continue
 			}
 			visited[nid] = true
-			
+
+			// BugFix: 邻居向量可能已被删除，跳过不存在的向量
+			if _, ok := idx.vectors[nid]; !ok {
+				continue
+			}
+
 			dist := idx.distance(query, idx.vectors[nid])
-			
-			if dist < (*w)[0].dist || w.Len() < ef {
+
+			// BugFix: 访问堆顶元素前检查堆是否为空
+			if w.Len() == 0 || dist < (*w)[0].dist || w.Len() < ef {
 				heap.Push(candidates, &heapItem{id: nid, dist: dist})
 				heap.Push(w, &heapItem{id: nid, dist: dist})
-				
+
 				if w.Len() > ef {
 					heap.Pop(w)
 				}
 			}
 		}
 	}
-	
+
 	// 返回结果
 	result := make([]string, w.Len())
 	for i := len(result) - 1; i >= 0; i-- {
 		result[i] = heap.Pop(w).(*heapItem).id
 	}
-	
+
 	return result
 }
 

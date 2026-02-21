@@ -44,13 +44,17 @@ func (c *Chain) UseFront(m Middleware) *Chain {
 }
 
 // Then 用链中的所有中间件包裹一个处理器.
+// 先在锁内拷贝中间件切片，再在锁外执行中间件包裹，
+// 防止中间件回调 Use() 时产生死锁。
 func (c *Chain) Then(h Handler) Handler {
 	c.mu.RLock()
-	defer c.mu.RUnlock()
+	mws := make([]Middleware, len(c.middlewares))
+	copy(mws, c.middlewares)
+	c.mu.RUnlock()
 
-	// 按倒序应用中间件
-	for i := len(c.middlewares) - 1; i >= 0; i-- {
-		h = c.middlewares[i](h)
+	// 按倒序应用中间件（锁已释放，安全调用用户代码）
+	for i := len(mws) - 1; i >= 0; i-- {
+		h = mws[i](h)
 	}
 	return h
 }

@@ -245,8 +245,15 @@ func (c *Crew) executeHierarchical(ctx context.Context, result *CrewResult) erro
 				Task:       task,
 				Message:    fmt.Sprintf("Please handle task: %s", task.Description),
 			}
-			negResult, _ := delegatee.Agent.Negotiate(ctx, proposal)
-			if negResult != nil && !negResult.Accepted {
+			// BUG-5 FIX: 正确处理 negotiate 错误，记录日志并回退到 manager 执行
+			negResult, negErr := delegatee.Agent.Negotiate(ctx, proposal)
+			if negErr != nil {
+				c.logger.Warn("negotiation failed, falling back to manager",
+					zap.String("delegatee", delegatee.ID),
+					zap.String("task", task.ID),
+					zap.Error(negErr))
+				delegatee = manager
+			} else if negResult != nil && !negResult.Accepted {
 				delegatee = manager
 			}
 		}
@@ -273,7 +280,15 @@ func (c *Crew) executeConsensus(ctx context.Context, result *CrewResult) error {
 				Task:    task,
 				Message: "Who should handle this task?",
 			}
-			negResult, _ := member.Agent.Negotiate(ctx, proposal)
+			// BUG-5 FIX: 正确处理 negotiate 错误，记录日志并跳过该成员的投票
+			negResult, negErr := member.Agent.Negotiate(ctx, proposal)
+			if negErr != nil {
+				c.logger.Warn("consensus negotiation failed",
+					zap.String("member", member.ID),
+					zap.String("task", task.ID),
+					zap.Error(negErr))
+				continue
+			}
 			if negResult != nil && negResult.Response != "" {
 				votes[negResult.Response]++
 			}

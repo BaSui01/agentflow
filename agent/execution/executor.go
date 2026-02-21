@@ -145,11 +145,25 @@ func (s *SandboxExecutor) Execute(ctx context.Context, req *ExecutionRequest) (*
 	// 执行
 	result, err := s.backend.Execute(ctx, req, s.config)
 
-	// 更新数据
+	// Bug fix: 当 backend 返回 (nil, err) 时，必须先检查 err，
+	// 避免后续访问 result.Success 导致 nil 指针解引用。
+	if err != nil {
+		s.mu.Lock()
+		s.stats.TotalExecutions++
+		s.stats.TotalDuration += time.Since(start)
+		s.stats.FailedExecutions++
+		if ctx.Err() == context.DeadlineExceeded {
+			s.stats.TimeoutExecutions++
+		}
+		s.mu.Unlock()
+		return nil, err
+	}
+
+	// 更新统计（此时 result 保证非 nil）
 	s.mu.Lock()
 	s.stats.TotalExecutions++
 	s.stats.TotalDuration += time.Since(start)
-	if err != nil || !result.Success {
+	if !result.Success {
 		s.stats.FailedExecutions++
 		if ctx.Err() == context.DeadlineExceeded {
 			s.stats.TimeoutExecutions++
@@ -158,10 +172,6 @@ func (s *SandboxExecutor) Execute(ctx context.Context, req *ExecutionRequest) (*
 		s.stats.SuccessExecutions++
 	}
 	s.mu.Unlock()
-
-	if err != nil {
-		return nil, err
-	}
 
 	// 需要时断线输出
 	if len(result.Stdout) > s.config.MaxOutputBytes {

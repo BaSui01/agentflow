@@ -30,7 +30,8 @@ type EnhancedMemorySystem struct {
 	semantic KnowledgeGraph
 
 	// 记忆整合器
-	consolidator *MemoryConsolidator
+	consolidator     *MemoryConsolidator
+	consolidatorOnce sync.Once // 确保 consolidator 只初始化一次
 
 	// 配置
 	config EnhancedMemoryConfig
@@ -222,9 +223,9 @@ func NewEnhancedMemorySystem(
 		logger:    logger.With(zap.String("component", "enhanced_memory")),
 	}
 
-	// 创建记忆整合器
+	// 使用 sync.Once 确保 consolidator 只初始化一次
 	if config.ConsolidationEnabled {
-		system.consolidator = NewMemoryConsolidator(system, logger)
+		system.initConsolidator(logger)
 	}
 
 	return system
@@ -451,6 +452,14 @@ func (m *EnhancedMemorySystem) AddConsolidationStrategy(strategy ConsolidationSt
 	}
 	m.consolidator.AddStrategy(strategy)
 	return nil
+}
+
+// initConsolidator 使用 sync.Once 确保 consolidator 只初始化一次，
+// 防止并发调用导致重复创建。
+func (m *EnhancedMemorySystem) initConsolidator(logger *zap.Logger) {
+	m.consolidatorOnce.Do(func() {
+		m.consolidator = NewMemoryConsolidator(m, logger)
+	})
 }
 
 // NewMemoryConsolidator 创建记忆整合器

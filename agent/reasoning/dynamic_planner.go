@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/BaSui01/agentflow/llm"
@@ -79,7 +80,7 @@ type DynamicPlanner struct {
 	rootNode    *PlanNode
 	currentNode *PlanNode
 	backtracks  int
-	nodeCounter int
+	nodeCounter atomic.Int64 // 原子计数器，防止并发递增竞态
 }
 
 // NewDynamic Planner创建了新的动态计划.
@@ -148,14 +149,14 @@ func (d *DynamicPlanner) Execute(ctx context.Context, task string) (*ReasoningRe
 	result.FinalAnswer = finalResult
 	result.TotalLatency = time.Since(start)
 	result.Metadata["backtracks"] = d.backtracks
-	result.Metadata["total_nodes"] = d.nodeCounter
+	result.Metadata["total_nodes"] = d.nodeCounter.Load()
 
 	return result, nil
 }
 
 func (d *DynamicPlanner) nextNodeID() string {
-	d.nodeCounter++
-	return fmt.Sprintf("node_%d", d.nodeCounter)
+	n := d.nodeCounter.Add(1)
+	return fmt.Sprintf("node_%d", n)
 }
 
 func (d *DynamicPlanner) generateNextSteps(ctx context.Context, task string, currentState *PlanNode) ([]*PlanNode, int, error) {

@@ -144,6 +144,8 @@ func (o *Orchestrator) RegisterHandler(taskType string, handler TaskHandler) {
 
 // 向联邦提交任务。
 func (o *Orchestrator) SubmitTask(ctx context.Context, task *FederatedTask) error {
+	// BUG-3 FIX: 所有 task 字段的读写都在锁保护下进行，消除数据竞争
+	o.mu.Lock()
 	task.ID = fmt.Sprintf("ftask_%d", time.Now().UnixNano())
 	task.SourceNode = o.config.NodeID
 	task.CreatedAt = time.Now()
@@ -154,19 +156,22 @@ func (o *Orchestrator) SubmitTask(ctx context.Context, task *FederatedTask) erro
 		task.Timeout = o.config.TaskTimeout
 	}
 
-	o.mu.Lock()
 	o.tasks[task.ID] = task
 	o.mu.Unlock()
 
 	// 找到能够的节点
 	targetNodes := o.findCapableNodes(task)
 	if len(targetNodes) == 0 {
+		o.mu.Lock()
 		task.Status = TaskStatusFailed
+		o.mu.Unlock()
 		return fmt.Errorf("no capable nodes found")
 	}
 
+	o.mu.Lock()
 	task.TargetNodes = targetNodes
 	task.Status = TaskStatusRunning
+	o.mu.Unlock()
 
 	// 分配任务
 	go o.distributeTask(ctx, task)
@@ -248,7 +253,10 @@ func (o *Orchestrator) distributeTask(ctx context.Context, task *FederatedTask) 
 		o.mu.Unlock()
 	}
 
+	// BUG-3 FIX: 在锁保护下更新 task 状态，防止与 SubmitTask/GetTask 竞争
+	o.mu.Lock()
 	task.Status = TaskStatusCompleted
+	o.mu.Unlock()
 	o.logger.Info("federated task completed", zap.String("task_id", task.ID))
 }
 
@@ -263,7 +271,9 @@ func (o *Orchestrator) executeOnNode(ctx context.Context, nodeID string, task *F
 
 	// 如果本地节点, 直接执行
 	if nodeID == o.config.NodeID {
+		o.mu.RLock()
 		handler, ok := o.handlers[task.Type]
+		o.mu.RUnlock()
 		if !ok {
 			return nil, fmt.Errorf("no handler for task type: %s", task.Type)
 		}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sync"
 
 	"github.com/BaSui01/agentflow/agent"
 	"github.com/BaSui01/agentflow/types"
@@ -112,6 +113,7 @@ func (s *AgentStep) AgentID() string {
 
 // AgentRouter routes tasks to appropriate agents based on criteria.
 type AgentRouter struct {
+	mu       sync.RWMutex // 保护 agents map 的并发读写
 	agents   map[string]AgentExecutor
 	selector func(ctx context.Context, input any, agents map[string]AgentExecutor) (AgentExecutor, error)
 }
@@ -126,6 +128,8 @@ func NewAgentRouter(selector func(ctx context.Context, input any, agents map[str
 
 // RegisterAgent registers an agent with the router.
 func (r *AgentRouter) RegisterAgent(agent AgentExecutor) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	r.agents[agent.ID()] = agent
 }
 
@@ -135,7 +139,10 @@ func (r *AgentRouter) Execute(ctx context.Context, input any) (any, error) {
 		return nil, fmt.Errorf("no agent selector configured")
 	}
 
+	// 持有读锁期间调用 selector，防止与 RegisterAgent 写操作竞态
+	r.mu.RLock()
 	agent, err := r.selector(ctx, input, r.agents)
+	r.mu.RUnlock()
 	if err != nil {
 		return nil, fmt.Errorf("agent selection failed: %w", err)
 	}

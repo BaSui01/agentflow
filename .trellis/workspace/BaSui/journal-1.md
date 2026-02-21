@@ -630,3 +630,194 @@ README.md（中文）和 README_EN.md（英文）全量更新，使文档覆盖�
 ### Next Steps
 
 - None - task complete
+
+
+## Session 9: 兼容代码分析 + 死代码清理 + 接口统一增量修复
+
+**Date**: 2026-02-22
+**Task**: 兼容代码分析 + 死代码清理 + 接口统一增量修复
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+## 目标
+
+分析项目中"改一处就得改一片"的兼容代码（adapter/shim/bridge），并按建议执行修复。
+
+## 完成内容
+
+### 1. 全量兼容代码分析
+
+深度扫描了整个代码库，识别出 6 类高耦合问题：
+- Tokenizer 碎片化（6 处定义 + 1 adapter）
+- CheckpointStore 三胞胎（3 接口 + 3 struct）
+- workflow/agent_adapter.go 手动字段映射
+- api.ToolCall / types.ToolCall 重复定义
+- ProviderWrapper 幽灵包装器（死代码）
+- agent/plugins 死代码包
+
+### 2. 执行的修复（6 项）
+
+| 修复 | 文件 | 改动 |
+|------|------|------|
+| 删除 ProviderWrapper 死代码 | `llm/provider_wrapper.go` | -55 行，保留 ProviderFactory |
+| 删除 execution.Checkpointer 死代码 | `agent/execution/checkpointer.go` | -265 行，零外部消费者 |
+| 删除 agent/plugins 死代码包 | `agent/plugins/*` | 删除 6 个文件，零外部导入 |
+| 统一 TokenCounter 签名 | `llm/tools/cost_control.go` | 改用 types.TokenCounter，新增 SetTokenCounter() |
+| 消除 api.ToolCall 重复 | `api/types.go` + `api/handlers/chat.go` | type alias + 删除双向转换函数 |
+| toAgentInput JSON 自动映射 | `workflow/agent_adapter.go` | json.Marshal/Unmarshal 替代手动 7 字段映射 |
+
+### 3. 规范更新
+
+- `.trellis/spec/guides/index.md`: 更新接口去重检查清单，记录已统一/已删除的接口
+
+## 验证
+
+- `go build ./...` ✅
+- `go vet ./...` ✅
+- 所有相关包测试通过 ✅
+
+## 净效果
+
+- 删除 356 行代码（-445 / +89）
+- 删除 1 个死代码包（agent/plugins/）
+- 消除 2 个重复类型定义
+- 1 处手动映射改为自动映射
+
+## 修改的文件
+
+- `llm/provider_wrapper.go`
+- `agent/execution/checkpointer.go`
+- `agent/plugins/*`（已删除）
+- `llm/tools/cost_control.go`
+- `types/token.go`
+- `api/types.go`
+- `api/handlers/chat.go`
+- `workflow/agent_adapter.go`
+- `.trellis/spec/guides/index.md`
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `e1c1b13` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 10: Session 10: 8-Agent 并行 Bug 修复 + 接口统一 + 安全加固
+
+**Date**: 2026-02-22
+**Task**: Session 10: 8-Agent 并行 Bug 修复 + 接口统一 + 安全加固
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+## 概述
+
+基于 Session 9 的 10-Agent 全局分析结果（总评 6.5/10，发现 12+ 确认 Bug），本次会话启动 **8 个并行修复 Agent**，全量修复所有发现的 Bug，并为每个修复补齐测试覆盖。
+
+## 修复成果
+
+| 类别 | 修复内容 | 严重度 | Agent |
+|------|---------|--------|-------|
+| 基础类型 | TokenCounter/ToolResult/Executor 接口去重，消除跨包重复定义 | P1 | 接口统一 |
+| 并发安全 | ServiceLocator/ProviderFactory/EventBus/HybridRetriever 四处 map 竞态 | P1 | a2a9867 |
+| Evaluator | `containsSubstring` uint 下溢 panic + StopOnFailure 零值稀释 | P0 | ad971b9 |
+| CostController | GetUsage key 前缀不匹配（永远查不到用量）+ 日历周期重置不一致 | P0 | a279ad5 |
+| StateGraph | `Snapshot()` 泛型接口断言失败（返回空 map）| P0 | a3c0b96 |
+| BrowserPool | `Release` channel send 在锁外导致 send-on-closed panic | P0 | a3c0b96 |
+| Checkpoint | `Rollback` Unlock/Lock 竞态窗口 | P1 | a101940 |
+| MemoryConsolidator | `sync.Once` 重启不重置导致 goroutine 泄漏 | P0 | a72f016 |
+| Plugin | `MiddlewarePlugins()` 每次迭代重新获取导致并发越界 | P1 | a72f016 |
+| Federation | `json.Marshal` payload 未传入 HTTP body（请求体为 nil）| P1 | a101940 |
+| Backpressure | `DropPolicyOldest` 裸 channel send 可能永久阻塞 | P1 | a101940 |
+| MCP Protocol | `FromLLMToolSchema` 静默吞没 json.Unmarshal 错误 | P1 | a101940 |
+| Watcher | `dispatchLoop` pendingEvents 跨 goroutine 竞态 | P1 | a620747 |
+| RAG avgDocLen | 单批次计算而非全局累计，结果不准确 | P1 | a620747 |
+| Weaviate | defer-in-loop 导致 FD 泄漏 | P1 | a620747 |
+| 安全加固 | SecurityHeaders 中间件 + MaxBytesReader 1MB + agentID 正则校验 | P1 | a4c60d1 |
+| IdleTimeout | 120x ReadTimeout → 2x ReadTimeout | P1 | a279ad5 |
+
+## 统计
+
+- **修改文件**: 54 个已修改 + 19 个新增（含 16 个测试文件）
+- **代码变更**: +912 行 / -1718 行（净减 806 行）
+- **测试结果**: `go build ./...` ✅ | `go vet ./...` ✅ | `go test ./...` 62 包全绿
+- **分批提交**: 8 个 commit + 1 个 --no-ff merge commit
+
+## 规范更新
+
+- `.trellis/spec/backend/quality-guidelines.md` — 新增 §34 接口去重 No-Alias 规则
+- `.trellis/spec/guides/index.md` — 更新已统一/保留的接口清单
+- `.trellis/spec/guides/code-reuse-thinking-guide.md` — 添加 No-Alias 检查项
+
+## 关键文件
+
+**Bug 修复**:
+- `agent/evaluation/evaluator.go` — uint 下溢 + 零值过滤
+- `llm/tools/cost_control.go` — key 匹配 + 周期重置
+- `workflow/state_reducer.go` — ChannelReader 泛型桥接
+- `agent/browser/browser_pool.go` — 锁内 channel send
+- `agent/checkpoint.go` — saveLocked 提取
+- `agent/memory/enhanced_memory.go` — closeOnce 重置
+- `agent/federation/orchestrator.go` — payload 传入 body
+- `llm/streaming/backpressure.go` — select 替代裸 send
+- `config/watcher.go` — dispatchCh channel 架构
+- `rag/contextual_retrieval.go` — totalDocLen 累计
+- `rag/weaviate_store.go` — deleteSingleDocument 提取
+
+**安全加固**:
+- `cmd/agentflow/middleware.go` — SecurityHeaders
+- `api/handlers/common.go` — MaxBytesReader
+- `api/handlers/agent.go` — agentID 校验
+
+**接口统一**:
+- `types/token.go` — TokenCounter 唯一定义
+- `types/agent.go` — Executor 最小接口
+- `api/types.go` — ToolCall alias
+- `rag/vector_store.go` — LowLevelVectorStore
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `9aecb27` | (see git log) |
+| `d84465c` | (see git log) |
+| `d4df09c` | (see git log) |
+| `cba34ad` | (see git log) |
+| `bb42cb3` | (see git log) |
+| `5f1c62e` | (see git log) |
+| `390c694` | (see git log) |
+| `aba52cf` | (see git log) |
+| `61ff842` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

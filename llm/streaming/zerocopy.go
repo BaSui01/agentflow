@@ -3,6 +3,7 @@ package streaming
 import (
 	"io"
 	"sync"
+	"sync/atomic"
 	"unsafe"
 )
 
@@ -44,9 +45,11 @@ func (b *ZeroCopyBuffer) Write(p []byte) (int, error) {
 }
 
 // 在不复制的情况下读取数据(返回部分为内部缓冲).
+// 注意: 使用写锁(Lock)而非读锁(RLock)，因为此方法会修改 readPos。
+// 在 RLock 下写 readPos 违反读写锁语义，会导致并发数据竞争。
 func (b *ZeroCopyBuffer) Read(p []byte) (int, error) {
-	b.mu.RLock()
-	defer b.mu.RUnlock()
+	b.mu.Lock()
+	defer b.mu.Unlock()
 
 	if b.readPos >= b.writePos {
 		return 0, io.EOF
@@ -165,11 +168,12 @@ func (r *ChunkReader) Reset() {
 }
 
 // RingBuffer提供无锁环缓冲来进行流.
+// readIdx 和 writeIdx 使用 atomic 操作保证并发安全。
 type RingBuffer struct {
 	data     []byte
 	size     int
-	readIdx  uint64
-	writeIdx uint64
+	readIdx  atomic.Uint64
+	writeIdx atomic.Uint64
 	mask     uint64
 }
 
@@ -191,41 +195,41 @@ func NewRingBuffer(size int) *RingBuffer {
 	}
 }
 
-// 写一个字节
+// 写一个字节（使用 atomic 操作保证并发安全）
 func (r *RingBuffer) Put(b byte) bool {
-	writeIdx := r.writeIdx
+	writeIdx := r.writeIdx.Load()
 	nextWrite := writeIdx + 1
 
 	// 检查缓冲器是否满了
-	if nextWrite-r.readIdx > uint64(r.size) {
+	if nextWrite-r.readIdx.Load() > uint64(r.size) {
 		return false
 	}
 
 	r.data[writeIdx&r.mask] = b
-	r.writeIdx = nextWrite
+	r.writeIdx.Store(nextWrite)
 	return true
 }
 
-// 读取一个字节。
+// 读取一个字节（使用 atomic 操作保证并发安全）。
 func (r *RingBuffer) Get() (byte, bool) {
-	readIdx := r.readIdx
+	readIdx := r.readIdx.Load()
 
 	// 检查缓冲是否为空
-	if readIdx >= r.writeIdx {
+	if readIdx >= r.writeIdx.Load() {
 		return 0, false
 	}
 
 	b := r.data[readIdx&r.mask]
-	r.readIdx = readIdx + 1
+	r.readIdx.Store(readIdx + 1)
 	return b, true
 }
 
-// 可用返回可用的字节数 。
+// 可用返回可用的字节数（使用 atomic 读取保证并发安全）。
 func (r *RingBuffer) Available() int {
-	return int(r.writeIdx - r.readIdx)
+	return int(r.writeIdx.Load() - r.readIdx.Load())
 }
 
-// 自由返回自由写入的字节数 。
+// 自由返回自由写入的字节数（使用 atomic 读取保证并发安全）。
 func (r *RingBuffer) Free() int {
-	return r.size - int(r.writeIdx-r.readIdx)
+	return r.size - int(r.writeIdx.Load()-r.readIdx.Load())
 }

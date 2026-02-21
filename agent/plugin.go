@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 )
@@ -182,7 +183,8 @@ func (r *PluginRegistry) Shutdown(ctx context.Context) error {
 	r.initialized = false
 
 	if len(errs) > 0 {
-		return fmt.Errorf("errors shutting down plugins: %v", errs)
+		// Use errors.Join to preserve the error chain for errors.Is/errors.As
+		return fmt.Errorf("errors shutting down plugins: %w", errors.Join(errs...))
 	}
 	return nil
 }

@@ -93,6 +93,26 @@ func (h *ConfigAPIHandler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/v1/config/changes", h.handleChanges)
 }
 
+// HandleConfig 处理配置的 GET 和 PUT 请求（导出方法，供外部认证中间件包装使用）
+func (h *ConfigAPIHandler) HandleConfig(w http.ResponseWriter, r *http.Request) {
+	h.handleConfig(w, r)
+}
+
+// HandleReload 处理配置热重载请求（导出方法）
+func (h *ConfigAPIHandler) HandleReload(w http.ResponseWriter, r *http.Request) {
+	h.handleReload(w, r)
+}
+
+// HandleFields 返回可热重载字段列表（导出方法）
+func (h *ConfigAPIHandler) HandleFields(w http.ResponseWriter, r *http.Request) {
+	h.handleFields(w, r)
+}
+
+// HandleChanges 返回配置变更历史（导出方法）
+func (h *ConfigAPIHandler) HandleChanges(w http.ResponseWriter, r *http.Request) {
+	h.handleChanges(w, r)
+}
+
 // handleConfig 处理配置的 GET 和 PUT 请求
 func (h *ConfigAPIHandler) handleConfig(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {

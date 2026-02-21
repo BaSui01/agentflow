@@ -153,9 +153,12 @@ func (h *ChatHandler) HandleStream(w http.ResponseWriter, r *http.Request) {
 	for chunk := range stream {
 		if chunk.Err != nil {
 			h.logger.Error("stream error", zap.Error(chunk.Err))
-			// SSE 错误事件
+			// SSE 错误事件 — 使用 json.Marshal 转义错误消息，防止 JSON 注入
+			errPayload, _ := json.Marshal(map[string]string{"error": chunk.Err.Message})
 			w.Write([]byte("event: error\n"))
-			w.Write([]byte("data: {\"error\":\"" + chunk.Err.Message + "\"}\n\n"))
+			w.Write([]byte("data: "))
+			w.Write(errPayload)
+			w.Write([]byte("\n\n"))
 			flusher.Flush()
 			return
 		}

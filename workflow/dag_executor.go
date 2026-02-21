@@ -17,7 +17,13 @@ type DAGExecutor struct {
 	logger          *zap.Logger
 	circuitBreakers *CircuitBreakerRegistry
 
-	// Execution state
+	// executeMu serializes concurrent Execute() calls on the same executor instance.
+	// Bug fix: without this, concurrent Execute() calls would reset shared state
+	// (visitedNodes, nodeResults, etc.) causing data races. (P0 — non-reentrant safety)
+	executeMu sync.Mutex
+
+	// Execution state — protected by mu for concurrent access within a single execution
+	// (e.g. parallel nodes sharing visitedNodes map).
 	executionID  string
 	threadID     string
 	nodeResults  map[string]any
@@ -65,11 +71,17 @@ func (e *DAGExecutor) GetCircuitBreakerStates() map[string]CircuitState {
 	return e.circuitBreakers.GetAllStates()
 }
 
-// Execute runs the DAG workflow with dependency resolution
+// Execute runs the DAG workflow with dependency resolution.
+// Bug fix (P0): executeMu ensures that concurrent Execute() calls on the same
+// executor are serialized, preventing data races on shared execution state.
 func (e *DAGExecutor) Execute(ctx context.Context, graph *DAGGraph, input any) (any, error) {
 	if graph == nil {
 		return nil, fmt.Errorf("graph cannot be nil")
 	}
+
+	// Serialize concurrent Execute() calls to prevent shared-state data races.
+	e.executeMu.Lock()
+	defer e.executeMu.Unlock()
 
 	// Initialize execution state
 	e.mu.Lock()
@@ -133,9 +145,12 @@ func (e *DAGExecutor) GetHistoryStore() *ExecutionHistoryStore {
 	return e.historyStore
 }
 
-// executeNode executes a single node based on its type
+// executeNode executes a single node based on its type.
+// Bug fix (P0): visitedNodes and nodeResults are protected by mu to ensure
+// concurrent safety when parallel nodes share these maps.
 func (e *DAGExecutor) executeNode(ctx context.Context, graph *DAGGraph, node *DAGNode, input any) (any, error) {
-	// Check if already visited and mark atomically (prevent cycles and duplicate execution)
+	// Atomic check-and-mark under write lock — prevents concurrent parallel
+	// goroutines from executing the same node twice or reading the map unsafely.
 	e.mu.Lock()
 	if e.visitedNodes[node.ID] {
 		result := e.nodeResults[node.ID]
@@ -402,6 +417,21 @@ func (e *DAGExecutor) executeConditionNode(ctx context.Context, graph *DAGGraph,
 	return lastResult, nil
 }
 
+// unmarkSubgraph recursively unmarks a node and all its reachable descendants
+// in visitedNodes so they can be re-executed in the next loop iteration.
+// Bug fix (P0): previously only the direct children of the loop node were
+// unmarked, causing deeper nodes in the loop body to be skipped on subsequent
+// iterations. Caller must hold e.mu.
+func (e *DAGExecutor) unmarkSubgraph(graph *DAGGraph, nodeID string) {
+	if !e.visitedNodes[nodeID] {
+		return
+	}
+	delete(e.visitedNodes, nodeID)
+	for _, childID := range graph.GetEdges(nodeID) {
+		e.unmarkSubgraph(graph, childID)
+	}
+}
+
 // executeLoopNode executes a loop node
 func (e *DAGExecutor) executeLoopNode(ctx context.Context, graph *DAGGraph, node *DAGNode, input any) (any, error) {
 	if node.LoopConfig == nil {
@@ -473,9 +503,9 @@ func (e *DAGExecutor) executeLoopNode(ctx context.Context, graph *DAGGraph, node
 					return nil, fmt.Errorf("next node not found: %s", nextNodeID)
 				}
 
-				// Temporarily unmark as visited to allow re-execution
+				// Unmark the entire loop body subgraph so all nodes re-execute.
 				e.mu.Lock()
-				delete(e.visitedNodes, nextNodeID)
+				e.unmarkSubgraph(graph, nextNodeID)
 				e.mu.Unlock()
 
 				var execErr error
@@ -504,9 +534,9 @@ func (e *DAGExecutor) executeLoopNode(ctx context.Context, graph *DAGGraph, node
 					return nil, fmt.Errorf("next node not found: %s", nextNodeID)
 				}
 
-				// Temporarily unmark as visited
+				// Unmark the entire loop body subgraph so all nodes re-execute.
 				e.mu.Lock()
-				delete(e.visitedNodes, nextNodeID)
+				e.unmarkSubgraph(graph, nextNodeID)
 				e.mu.Unlock()
 
 				var execErr error
@@ -545,9 +575,9 @@ func (e *DAGExecutor) executeLoopNode(ctx context.Context, graph *DAGGraph, node
 					return nil, fmt.Errorf("next node not found: %s", nextNodeID)
 				}
 
-				// Temporarily unmark as visited
+				// Unmark the entire loop body subgraph so all nodes re-execute.
 				e.mu.Lock()
-				delete(e.visitedNodes, nextNodeID)
+				e.unmarkSubgraph(graph, nextNodeID)
 				e.mu.Unlock()
 
 				var execErr error

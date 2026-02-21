@@ -143,20 +143,31 @@ func splitSystemAndOther(msgs []types.Message, keepSystem bool) (system, other [
 }
 
 // slidingWindow keeps system messages + the last N non-system messages.
+// Bug fix: 修正边界条件 —— MaxMessages 作为非系统消息的上限，
+// KeepLastN 作为下限但不超过可用消息数，防止重复或丢失消息。
 func (w *WindowManager) slidingWindow(messages []types.Message) []types.Message {
 	system, other := splitSystemAndOther(messages, w.config.KeepSystemMsg)
 
+	if len(other) == 0 {
+		return system
+	}
+
 	limit := w.config.MaxMessages
 	if limit <= 0 {
-		limit = len(other)
+		// MaxMessages 未设置时保留所有非系统消息
+		return append(system, other...)
 	}
-	// KeepLastN acts as a floor
+
+	// KeepLastN 作为保留下限，但不能超过 MaxMessages
 	if w.config.KeepLastN > 0 && limit < w.config.KeepLastN {
 		limit = w.config.KeepLastN
 	}
+
+	// 确保 limit 不超过可用消息数，防止切片越界
 	if limit >= len(other) {
 		return append(system, other...)
 	}
+
 	kept := other[len(other)-limit:]
 	return append(system, kept...)
 }

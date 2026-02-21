@@ -90,17 +90,21 @@ func (cb *simpleCircuitBreaker) State() CircuitState {
 }
 
 // 调用以断路器保护功能执行 。
+// 使用 mutex 保护状态检查与转换的原子性，防止并发调用导致状态不一致。
 func (cb *simpleCircuitBreaker) Call(ctx context.Context, fn func() error) error {
-	state := cb.State()
+	cb.mu.Lock()
+	state := CircuitState(cb.state.Load())
 
 	if state == CircuitOpen {
 		if time.Now().UnixNano()-cb.lastFailureTime.Load() > cb.config.Timeout.Nanoseconds() {
 			cb.state.Store(int32(CircuitHalfOpen))
 			cb.successes.Store(0)
 		} else {
+			cb.mu.Unlock()
 			return ErrCircuitOpen
 		}
 	}
+	cb.mu.Unlock()
 
 	err := fn()
 
@@ -114,6 +118,9 @@ func (cb *simpleCircuitBreaker) Call(ctx context.Context, fn func() error) error
 }
 
 func (cb *simpleCircuitBreaker) recordFailure() {
+	cb.mu.Lock()
+	defer cb.mu.Unlock()
+
 	failures := cb.failures.Add(1)
 	cb.lastFailureTime.Store(time.Now().UnixNano())
 
@@ -123,8 +130,13 @@ func (cb *simpleCircuitBreaker) recordFailure() {
 	}
 }
 
+// recordSuccess 在 mutex 保护下检查并转换 HalfOpen -> Closed 状态，
+// 防止并发成功调用导致多次状态转换。
 func (cb *simpleCircuitBreaker) recordSuccess() {
-	state := cb.State()
+	cb.mu.Lock()
+	defer cb.mu.Unlock()
+
+	state := CircuitState(cb.state.Load())
 	if state == CircuitHalfOpen {
 		successes := cb.successes.Add(1)
 		if successes >= int32(cb.config.SuccessThreshold) {
