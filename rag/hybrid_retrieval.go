@@ -5,6 +5,7 @@ import (
 	"math"
 	"sort"
 	"strings"
+	"sync"
 
 	"go.uber.org/zap"
 )
@@ -66,6 +67,7 @@ type RetrievalResult struct {
 
 // HybridRetriever 混合检索器
 type HybridRetriever struct {
+	mu        sync.RWMutex
 	config    HybridRetrievalConfig
 	documents []Document
 
@@ -107,6 +109,9 @@ func NewHybridRetrieverWithVectorStore(
 
 // IndexDocuments 索引文档
 func (r *HybridRetriever) IndexDocuments(docs []Document) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
 	r.documents = docs
 
 	// 计算 BM25 统计信息
@@ -129,6 +134,9 @@ func (r *HybridRetriever) IndexDocuments(docs []Document) error {
 
 // Retrieve 混合检索
 func (r *HybridRetriever) Retrieve(ctx context.Context, query string, queryEmbedding []float64) ([]RetrievalResult, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
 	results := []RetrievalResult{}
 
 	// 1. BM25 检索
