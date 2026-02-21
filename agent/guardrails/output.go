@@ -460,8 +460,19 @@ func (v *ContentFilterValidator) Validate(ctx context.Context, content string) (
 		Severity: SeverityHigh,
 	})
 
-	// 提供过滤后的内容
-	filtered, _ := v.filter.Filter(ctx, content)
+	// BUG-6 FIX: safety filter 错误时采用 fail-closed 原则——默认拒绝，不放行不安全内容
+	filtered, filterErr := v.filter.Filter(ctx, content)
+	if filterErr != nil {
+		result.AddError(ValidationError{
+			Code:     ErrCodeContentBlocked,
+			Message:  fmt.Sprintf("安全过滤器执行失败 (fail-closed): %s", filterErr.Error()),
+			Severity: SeverityCritical,
+		})
+		// fail-closed: 过滤器出错时返回空的过滤内容，标记为不安全
+		result.Metadata["filter_error"] = filterErr.Error()
+		result.Metadata["fail_closed"] = true
+		return result, nil
+	}
 	result.Metadata["filtered_content"] = filtered
 
 	return result, nil
