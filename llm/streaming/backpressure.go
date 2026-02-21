@@ -104,7 +104,11 @@ func NewBackpressureStream(config BackpressureConfig) *BackpressureStream {
 }
 
 // Write 向流发送一个带背压处理的 token.
+// 使用 RLock 防止与 Close() 并发执行时向已关闭 channel 发送导致 panic。
 func (s *BackpressureStream) Write(ctx context.Context, token Token) error {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
 	if s.closed.Load() {
 		return ErrStreamClosed
 	}
@@ -202,10 +206,14 @@ func (s *BackpressureStream) ReadChan() <-chan Token {
 }
 
 // Close 关闭流.
+// 使用写锁(Lock)确保与 Write() 的 RLock 互斥，
+// 防止在 Write 发送到 buffer channel 的同时关闭 channel 导致 panic。
 func (s *BackpressureStream) Close() error {
 	if s.closed.Swap(true) {
 		return nil // Already closed
 	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	s.closeOnce.Do(func() { close(s.done); close(s.buffer) })
 	return nil
 }
