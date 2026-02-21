@@ -3,6 +3,7 @@ package workflow
 import (
 	"context"
 	"fmt"
+	"sync"
 )
 
 // Router 路由器接口
@@ -69,6 +70,10 @@ type RoutingWorkflow struct {
 	router       Router
 	handlers     map[string]Handler
 	defaultRoute string
+	// mu protects handlers map against concurrent RegisterHandler (write) and
+	// Route/Execute (read) calls. Bug fix (P0): without this lock, concurrent
+	// access to the handlers map causes a panic.
+	mu sync.RWMutex
 }
 
 // NewRoutingWorkflow 创建路由工作流
@@ -83,6 +88,8 @@ func NewRoutingWorkflow(name, description string, router Router) *RoutingWorkflo
 
 // RegisterHandler 注册处理器
 func (w *RoutingWorkflow) RegisterHandler(route string, handler Handler) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
 	w.handlers[route] = handler
 }
 
@@ -102,19 +109,23 @@ func (w *RoutingWorkflow) Execute(ctx context.Context, input any) (any, error) {
 		return nil, fmt.Errorf("routing failed: %w", err)
 	}
 
-	// 2. 查找处理器
+	// 2. 查找处理器 — read lock protects concurrent access to handlers map
+	w.mu.RLock()
 	handler, ok := w.handlers[route]
 	if !ok {
 		// 尝试使用默认路由
 		if w.defaultRoute != "" {
 			handler, ok = w.handlers[w.defaultRoute]
 			if !ok {
+				w.mu.RUnlock()
 				return nil, fmt.Errorf("no handler for route: %s (default route also not found)", route)
 			}
 		} else {
+			w.mu.RUnlock()
 			return nil, fmt.Errorf("no handler for route: %s", route)
 		}
 	}
+	w.mu.RUnlock()
 
 	// 3. 执行处理器
 	result, err := handler.Execute(ctx, input)
@@ -135,6 +146,8 @@ func (w *RoutingWorkflow) Description() string {
 
 // Routes 返回所有已注册的路由
 func (w *RoutingWorkflow) Routes() []string {
+	w.mu.RLock()
+	defer w.mu.RUnlock()
 	routes := make([]string, 0, len(w.handlers))
 	for route := range w.handlers {
 		routes = append(routes, route)
