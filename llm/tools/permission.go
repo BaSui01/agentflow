@@ -166,6 +166,7 @@ func (pm *DefaultPermissionManager) SetApprovalHandler(handler ApprovalHandler) 
 }
 
 // 检查是否允许调用工具 。
+// 注意：在调用外部 approvalHandler 前释放锁，防止回调导致死锁。
 func (pm *DefaultPermissionManager) CheckPermission(ctx context.Context, permCtx *PermissionContext) (*PermissionCheckResult, error) {
 	start := time.Now()
 	result := &PermissionCheckResult{
@@ -173,12 +174,12 @@ func (pm *DefaultPermissionManager) CheckPermission(ctx context.Context, permCtx
 	}
 
 	pm.mu.RLock()
-	defer pm.mu.RUnlock()
 
 	// 1. 先检查代理特定权限
 	if agentPerm, ok := pm.agentPermissions[permCtx.AgentID]; ok {
 		decision := pm.checkAgentPermission(agentPerm, permCtx.ToolName)
 		if decision != "" {
+			pm.mu.RUnlock()
 			result.Decision = decision
 			result.Reason = fmt.Sprintf("agent-specific permission: %s", decision)
 			result.CheckLatency = time.Since(start)
@@ -196,30 +197,41 @@ func (pm *DefaultPermissionManager) CheckPermission(ctx context.Context, permCtx
 	sortRulesByPriority(applicableRules)
 
 	// 5. 评价规则
+	var matchedRule *PermissionRule
 	for _, rule := range applicableRules {
 		if pm.evaluateRule(rule, permCtx) {
-			result.Decision = rule.Decision
-			result.MatchedRule = rule
-			result.Reason = fmt.Sprintf("matched rule: %s", rule.Name)
-
-			// 处理需要  批准
-			if rule.Decision == PermissionRequireApproval && pm.approvalHandler != nil {
-				approvalID, err := pm.approvalHandler.RequestApproval(ctx, permCtx, rule)
-				if err != nil {
-					pm.logger.Error("failed to request approval", zap.Error(err))
-					result.Decision = PermissionDeny
-					result.Reason = "approval request failed"
-				} else {
-					result.ApprovalID = approvalID
-				}
-			}
-
-			result.CheckLatency = time.Since(start)
-			return result, nil
+			matchedRule = rule
+			break
 		}
 	}
 
-	// 6. 默认:如果没有规则匹配则拒绝
+	// 拷贝 approvalHandler 引用后释放锁，避免在持锁状态下调用外部代码
+	approvalHandler := pm.approvalHandler
+	pm.mu.RUnlock()
+
+	// 6. 处理匹配到的规则（锁已释放）
+	if matchedRule != nil {
+		result.Decision = matchedRule.Decision
+		result.MatchedRule = matchedRule
+		result.Reason = fmt.Sprintf("matched rule: %s", matchedRule.Name)
+
+		// 处理需要批准 — 在锁外调用外部 handler，防止死锁
+		if matchedRule.Decision == PermissionRequireApproval && approvalHandler != nil {
+			approvalID, err := approvalHandler.RequestApproval(ctx, permCtx, matchedRule)
+			if err != nil {
+				pm.logger.Error("failed to request approval", zap.Error(err))
+				result.Decision = PermissionDeny
+				result.Reason = "approval request failed"
+			} else {
+				result.ApprovalID = approvalID
+			}
+		}
+
+		result.CheckLatency = time.Since(start)
+		return result, nil
+	}
+
+	// 7. 默认:如果没有规则匹配则拒绝
 	result.Decision = PermissionDeny
 	result.Reason = "no matching permission rule"
 	result.CheckLatency = time.Since(start)

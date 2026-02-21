@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"go.uber.org/zap"
@@ -92,11 +91,11 @@ type TokenBudgetManager struct {
 	logger        *zap.Logger
 	alertHandlers []AlertHandler
 
-	// 用于线程安全更新的原子计数器
+	// 计数器 — 所有访问必须持有 mu 锁，不再使用裸 atomic 操作
 	tokensMinute int64
 	tokensHour   int64
 	tokensDay    int64
-	costDay      int64 // stored as cost * 1000000 for atomic ops
+	costDay      int64 // stored as cost * 1000000
 
 	// 时间窗口
 	minuteStart time.Time
@@ -105,7 +104,7 @@ type TokenBudgetManager struct {
 
 	// 调弦
 	throttleUntil time.Time
-	mu            sync.RWMutex
+	mu            sync.Mutex // 统一使用 Mutex（非 RWMutex），所有计数器访问均需持锁
 
 	// 警报跟踪
 	alertedMinute bool
@@ -134,16 +133,17 @@ func (m *TokenBudgetManager) OnAlert(handler AlertHandler) {
 }
 
 // 检查预算是否在预算范围内 。
+// 所有计数器访问统一在 mu 锁保护下进行，避免 mutex/atomic 混用导致的不一致。
 func (m *TokenBudgetManager) CheckBudget(ctx context.Context, estimatedTokens int, estimatedCost float64) error {
-	m.resetWindowsIfNeeded()
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.resetWindowsLocked()
 
 	// 检查节奏
-	m.mu.RLock()
 	if time.Now().Before(m.throttleUntil) {
-		m.mu.RUnlock()
 		return fmt.Errorf("throttled until %s", m.throttleUntil.Format(time.RFC3339))
 	}
-	m.mu.RUnlock()
 
 	// 检查每个请求的限制
 	if estimatedTokens > m.config.MaxTokensPerRequest {
@@ -156,23 +156,20 @@ func (m *TokenBudgetManager) CheckBudget(ctx context.Context, estimatedTokens in
 	}
 
 	// 检查窗口限制
-	currentMinute := atomic.LoadInt64(&m.tokensMinute)
-	if int(currentMinute)+estimatedTokens > m.config.MaxTokensPerMinute {
-		m.applyThrottle()
+	if int(m.tokensMinute)+estimatedTokens > m.config.MaxTokensPerMinute {
+		m.applyThrottleLocked()
 		return fmt.Errorf("would exceed minute token limit")
 	}
 
-	currentHour := atomic.LoadInt64(&m.tokensHour)
-	if int(currentHour)+estimatedTokens > m.config.MaxTokensPerHour {
+	if int(m.tokensHour)+estimatedTokens > m.config.MaxTokensPerHour {
 		return fmt.Errorf("would exceed hour token limit")
 	}
 
-	currentDay := atomic.LoadInt64(&m.tokensDay)
-	if int(currentDay)+estimatedTokens > m.config.MaxTokensPerDay {
+	if int(m.tokensDay)+estimatedTokens > m.config.MaxTokensPerDay {
 		return fmt.Errorf("would exceed day token limit")
 	}
 
-	currentCost := float64(atomic.LoadInt64(&m.costDay)) / 1000000
+	currentCost := float64(m.costDay) / 1000000
 	if currentCost+estimatedCost > m.config.MaxCostPerDay {
 		return fmt.Errorf("would exceed daily cost limit")
 	}
@@ -181,17 +178,21 @@ func (m *TokenBudgetManager) CheckBudget(ctx context.Context, estimatedTokens in
 }
 
 // 记录Usage记录符和成本使用.
+// 所有计数器更新统一在 mu 锁保护下进行。
 func (m *TokenBudgetManager) RecordUsage(record UsageRecord) {
-	m.resetWindowsIfNeeded()
+	m.mu.Lock()
+	defer m.mu.Unlock()
 
-	// 更新计数器
-	atomic.AddInt64(&m.tokensMinute, int64(record.Tokens))
-	atomic.AddInt64(&m.tokensHour, int64(record.Tokens))
-	atomic.AddInt64(&m.tokensDay, int64(record.Tokens))
-	atomic.AddInt64(&m.costDay, int64(record.Cost*1000000))
+	m.resetWindowsLocked()
+
+	// 更新计数器（直接操作，已持有 mu 锁）
+	m.tokensMinute += int64(record.Tokens)
+	m.tokensHour += int64(record.Tokens)
+	m.tokensDay += int64(record.Tokens)
+	m.costDay += int64(record.Cost * 1000000)
 
 	// 检查提示
-	m.checkAlerts()
+	m.checkAlertsLocked()
 
 	m.logger.Debug("usage recorded",
 		zap.Int("tokens", record.Tokens),
@@ -201,12 +202,15 @@ func (m *TokenBudgetManager) RecordUsage(record UsageRecord) {
 
 // Get Status 返回当前预算状况 。
 func (m *TokenBudgetManager) GetStatus() BudgetStatus {
-	m.resetWindowsIfNeeded()
+	m.mu.Lock()
+	defer m.mu.Unlock()
 
-	tokensMinute := atomic.LoadInt64(&m.tokensMinute)
-	tokensHour := atomic.LoadInt64(&m.tokensHour)
-	tokensDay := atomic.LoadInt64(&m.tokensDay)
-	costDay := float64(atomic.LoadInt64(&m.costDay)) / 1000000
+	m.resetWindowsLocked()
+
+	tokensMinute := m.tokensMinute
+	tokensHour := m.tokensHour
+	tokensDay := m.tokensDay
+	costDay := float64(m.costDay) / 1000000
 
 	status := BudgetStatus{
 		TokensUsedMinute:  tokensMinute,
@@ -219,32 +223,29 @@ func (m *TokenBudgetManager) GetStatus() BudgetStatus {
 		CostUtilization:   costDay / m.config.MaxCostPerDay,
 	}
 
-	m.mu.RLock()
 	if time.Now().Before(m.throttleUntil) {
 		status.IsThrottled = true
 		status.ThrottleUntil = &m.throttleUntil
 	}
-	m.mu.RUnlock()
 
 	return status
 }
 
-func (m *TokenBudgetManager) resetWindowsIfNeeded() {
+// resetWindowsLocked 重置过期的时间窗口计数器。
+// 调用者必须持有 mu 锁。
+func (m *TokenBudgetManager) resetWindowsLocked() {
 	now := time.Now()
-
-	m.mu.Lock()
-	defer m.mu.Unlock()
 
 	// 重置分钟窗口
 	if now.Sub(m.minuteStart) >= time.Minute {
-		atomic.StoreInt64(&m.tokensMinute, 0)
+		m.tokensMinute = 0
 		m.minuteStart = now
 		m.alertedMinute = false
 	}
 
 	// 重置小时窗口
 	if now.Sub(m.hourStart) >= time.Hour {
-		atomic.StoreInt64(&m.tokensHour, 0)
+		m.tokensHour = 0
 		m.hourStart = now
 		m.alertedHour = false
 	}
@@ -252,34 +253,30 @@ func (m *TokenBudgetManager) resetWindowsIfNeeded() {
 	// 重设日窗口
 	dayStart := now.Truncate(24 * time.Hour)
 	if dayStart.After(m.dayStart) {
-		atomic.StoreInt64(&m.tokensDay, 0)
-		atomic.StoreInt64(&m.costDay, 0)
+		m.tokensDay = 0
+		m.costDay = 0
 		m.dayStart = dayStart
 		m.alertedDay = false
 		m.alertedCost = false
 	}
 }
 
-func (m *TokenBudgetManager) applyThrottle() {
+// applyThrottleLocked 应用节流。调用者必须持有 mu 锁。
+func (m *TokenBudgetManager) applyThrottleLocked() {
 	if !m.config.AutoThrottle {
 		return
 	}
-
-	m.mu.Lock()
-	defer m.mu.Unlock()
 
 	m.throttleUntil = time.Now().Add(m.config.ThrottleDelay)
 	m.logger.Warn("throttling applied", zap.Time("until", m.throttleUntil))
 }
 
-func (m *TokenBudgetManager) checkAlerts() {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
+// checkAlertsLocked 检查并触发告警。调用者必须持有 mu 锁。
+func (m *TokenBudgetManager) checkAlertsLocked() {
 	threshold := m.config.AlertThreshold
 
 	// 检查分钟阈值
-	minuteUtil := float64(atomic.LoadInt64(&m.tokensMinute)) / float64(m.config.MaxTokensPerMinute)
+	minuteUtil := float64(m.tokensMinute) / float64(m.config.MaxTokensPerMinute)
 	if minuteUtil >= threshold && !m.alertedMinute {
 		m.alertedMinute = true
 		m.fireAlert(Alert{
@@ -292,7 +289,7 @@ func (m *TokenBudgetManager) checkAlerts() {
 	}
 
 	// 检查小时阈值
-	hourUtil := float64(atomic.LoadInt64(&m.tokensHour)) / float64(m.config.MaxTokensPerHour)
+	hourUtil := float64(m.tokensHour) / float64(m.config.MaxTokensPerHour)
 	if hourUtil >= threshold && !m.alertedHour {
 		m.alertedHour = true
 		m.fireAlert(Alert{
@@ -305,7 +302,7 @@ func (m *TokenBudgetManager) checkAlerts() {
 	}
 
 	// 检查日阈值
-	dayUtil := float64(atomic.LoadInt64(&m.tokensDay)) / float64(m.config.MaxTokensPerDay)
+	dayUtil := float64(m.tokensDay) / float64(m.config.MaxTokensPerDay)
 	if dayUtil >= threshold && !m.alertedDay {
 		m.alertedDay = true
 		m.fireAlert(Alert{
@@ -318,7 +315,7 @@ func (m *TokenBudgetManager) checkAlerts() {
 	}
 
 	// 检查费用门槛值
-	costUtil := float64(atomic.LoadInt64(&m.costDay)) / 1000000 / m.config.MaxCostPerDay
+	costUtil := float64(m.costDay) / 1000000 / m.config.MaxCostPerDay
 	if costUtil >= threshold && !m.alertedCost {
 		m.alertedCost = true
 		m.fireAlert(Alert{
@@ -348,10 +345,10 @@ func (m *TokenBudgetManager) Reset() {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	atomic.StoreInt64(&m.tokensMinute, 0)
-	atomic.StoreInt64(&m.tokensHour, 0)
-	atomic.StoreInt64(&m.tokensDay, 0)
-	atomic.StoreInt64(&m.costDay, 0)
+	m.tokensMinute = 0
+	m.tokensHour = 0
+	m.tokensDay = 0
+	m.costDay = 0
 
 	now := time.Now()
 	m.minuteStart = now

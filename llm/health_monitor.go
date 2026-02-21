@@ -65,9 +65,10 @@ func (m *HealthMonitor) Stop() {
 }
 
 // GetHealthScore 获取 Provider 的健康分数 (0-1)
+// 使用写锁，因为 getCurrentQPSUnsafe 内部调用 bumpWindow 会修改计数器状态。
 func (m *HealthMonitor) GetHealthScore(providerCode string) float64 {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
+	m.mu.Lock()
+	defer m.mu.Unlock()
 
 	if probe, ok := m.probe[providerCode]; ok && !probe.Healthy {
 		return 0.0 // 主动探活失败，直接熔断
@@ -87,9 +88,10 @@ func (m *HealthMonitor) GetHealthScore(providerCode string) float64 {
 }
 
 // GetCurrentQPS 获取当前 QPS
+// 使用写锁，因为 getCurrentQPSUnsafe 内部调用 bumpWindow 会修改计数器状态。
 func (m *HealthMonitor) GetCurrentQPS(providerCode string) int {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	return m.getCurrentQPSUnsafe(providerCode)
 }
 
@@ -137,9 +139,10 @@ func (m *HealthMonitor) SetMaxQPS(providerCode string, maxQPS int) {
 }
 
 // GetAllProviderStats 获取所有 Provider 的健康统计
+// 使用写锁，因为 getCurrentQPSUnsafe 内部调用 bumpWindow 会修改计数器状态。
 func (m *HealthMonitor) GetAllProviderStats() []ProviderHealthStats {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
+	m.mu.Lock()
+	defer m.mu.Unlock()
 
 	stats := make([]ProviderHealthStats, 0, len(m.healthScore))
 	for providerCode, score := range m.healthScore {
