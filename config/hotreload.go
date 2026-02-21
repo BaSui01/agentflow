@@ -508,12 +508,14 @@ func (m *HotReloadManager) ReloadFromFile() error {
 }
 
 // ApplyConfig 应用新配置
+// 修复 TOCTOU 竞态：validate、apply、pushHistory 和 changeLog 更新
+// 全部在同一把锁内完成，确保原子性。回调通知在锁外执行以避免死锁。
 func (m *HotReloadManager) ApplyConfig(newConfig *Config, source string) error {
 	m.mu.Lock()
 
 	oldConfig := m.config
 
-	// 1. 执行自定义验证钩子
+	// 1. 执行自定义验证钩子（持有锁，防止 TOCTOU）
 	if m.validateFunc != nil {
 		if err := m.validateFunc(newConfig); err != nil {
 			m.logger.Warn("config validation hook failed",
@@ -561,11 +563,20 @@ func (m *HotReloadManager) ApplyConfig(newConfig *Config, source string) error {
 
 	// 4. 应用新配置
 	m.config = newConfig
+
+	// 5. 推入历史记录和更新变更日志（在锁内完成，消除 TOCTOU 窗口）
+	m.pushHistory(newConfig, source)
+	m.changeLog = append(m.changeLog, appliedChanges...)
+	if len(m.changeLog) > 1000 {
+		m.changeLog = m.changeLog[len(m.changeLog)-1000:]
+	}
+
+	// 复制回调列表，在锁外安全调用
 	changeCallbacks := append([]ChangeCallback(nil), m.changeCallbacks...)
 	reloadCallbacks := append([]ReloadCallback(nil), m.reloadCallbacks...)
 	m.mu.Unlock()
 
-	// 5. 通知回调（失败则自动回滚）
+	// 6. 通知回调（失败则自动回滚）
 	if err := m.notifyCallbacksSafe(changeCallbacks, reloadCallbacks, oldConfig, newConfig, appliedChanges); err != nil {
 		m.mu.Lock()
 		if m.config == newConfig {
@@ -578,18 +589,6 @@ func (m *HotReloadManager) ApplyConfig(newConfig *Config, source string) error {
 		}
 		m.mu.Unlock()
 		return fmt.Errorf("config applied but callback failed: %w", err)
-	}
-
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	// 6. 推入历史记录
-	m.pushHistory(newConfig, source)
-
-	// 7. 更新变更日志
-	m.changeLog = append(m.changeLog, appliedChanges...)
-	if len(m.changeLog) > 1000 {
-		m.changeLog = m.changeLog[len(m.changeLog)-1000:]
 	}
 
 	if requiresRestart {
@@ -876,9 +875,11 @@ func (m *HotReloadManager) UpdateField(path string, value any) error {
 	m.logChange(change)
 	m.changeLog = append(m.changeLog, change)
 	callbacks := append([]ChangeCallback(nil), m.changeCallbacks...)
+	// Bug fix: 在锁内捕获当前配置快照，避免锁外读取 m.config 导致的竞态
+	newConfigSnapshot := deepCopyConfig(m.config)
 	m.mu.Unlock()
 
-	if err := m.notifyCallbacksSafe(callbacks, nil, oldConfigSnapshot, m.GetConfig(), []ConfigChange{change}); err != nil {
+	if err := m.notifyCallbacksSafe(callbacks, nil, oldConfigSnapshot, newConfigSnapshot, []ConfigChange{change}); err != nil {
 		m.mu.Lock()
 		m.rollbackLocked(oldConfigSnapshot, fmt.Sprintf("callback error: %v", err), err)
 		m.mu.Unlock()

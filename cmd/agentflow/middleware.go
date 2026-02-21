@@ -164,23 +164,34 @@ func RateLimiter(ctx context.Context, rps float64, burst int, logger *zap.Logger
 }
 
 // CORS 跨域中间件
+// 安全修复：当 allowedOrigins 为空时，不设置 CORS 头（拒绝跨域请求），
+// 而非默认允许所有来源（Access-Control-Allow-Origin: *）。
 func CORS(allowedOrigins []string) Middleware {
 	originSet := make(map[string]struct{}, len(allowedOrigins))
 	for _, o := range allowedOrigins {
 		originSet[o] = struct{}{}
 	}
-	allowAll := len(allowedOrigins) == 0
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			origin := r.Header.Get("Origin")
-			if allowAll || origin == "" {
-				w.Header().Set("Access-Control-Allow-Origin", "*")
+			if len(originSet) == 0 {
+				// allowedOrigins 未配置：不设置任何 CORS 头，拒绝跨域请求
+				// 生产环境应显式配置允许的来源
+				if origin != "" {
+					// 有 Origin 头的跨域请求，不设置 Allow-Origin，浏览器会拒绝
+					if r.Method == http.MethodOptions {
+						w.WriteHeader(http.StatusForbidden)
+						return
+					}
+					next.ServeHTTP(w, r)
+					return
+				}
 			} else if _, ok := originSet[origin]; ok {
 				w.Header().Set("Access-Control-Allow-Origin", origin)
+				w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+				w.Header().Set("Access-Control-Allow-Headers", "Content-Type, X-API-Key, Authorization")
+				w.Header().Set("Access-Control-Max-Age", "86400")
 			}
-			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, X-API-Key, Authorization")
-			w.Header().Set("Access-Control-Max-Age", "86400")
 			if r.Method == http.MethodOptions {
 				w.WriteHeader(http.StatusNoContent)
 				return

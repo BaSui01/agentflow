@@ -201,11 +201,17 @@ func (s *Server) startHTTPServer() error {
 	// mux.HandleFunc("/v1/agents/execute", s.agentHandler.HandleExecuteAgent)
 
 	// ========================================
-	// 配置管理 API
+	// 配置管理 API（需要独立认证保护）
+	// 安全修复：配置 API 是敏感的管理端点，必须经过认证中间件保护，
+	// 不依赖全局中间件链的顺序，而是显式包装认证检查。
 	// ========================================
 	if s.configAPIHandler != nil {
-		s.configAPIHandler.RegisterRoutes(mux)
-		s.logger.Info("Configuration API registered")
+		configAuth := config.NewConfigAPIMiddleware(s.configAPIHandler, s.getFirstAPIKey())
+		mux.HandleFunc("/api/v1/config", configAuth.RequireAuth(s.configAPIHandler.HandleConfig))
+		mux.HandleFunc("/api/v1/config/reload", configAuth.RequireAuth(s.configAPIHandler.HandleReload))
+		mux.HandleFunc("/api/v1/config/fields", configAuth.RequireAuth(s.configAPIHandler.HandleFields))
+		mux.HandleFunc("/api/v1/config/changes", configAuth.RequireAuth(s.configAPIHandler.HandleChanges))
+		s.logger.Info("Configuration API registered with authentication")
 	}
 
 	// ========================================
@@ -272,6 +278,15 @@ func (s *Server) startMetricsServer() error {
 
 	s.logger.Info("Metrics server started", zap.Int("port", s.cfg.Server.MetricsPort))
 	return nil
+}
+
+// getFirstAPIKey 返回配置中的第一个 API Key，用于配置 API 的独立认证。
+// 如果未配置任何 API Key，返回空字符串（ConfigAPIMiddleware 会跳过认证检查）。
+func (s *Server) getFirstAPIKey() string {
+	if len(s.cfg.Server.APIKeys) > 0 {
+		return s.cfg.Server.APIKeys[0]
+	}
+	return ""
 }
 
 // =============================================================================
