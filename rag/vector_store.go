@@ -44,6 +44,27 @@ type DocumentLister interface {
 	ListDocumentIDs(ctx context.Context, limit int, offset int) ([]string, error)
 }
 
+// LowLevelVectorStore is the low-level vector storage interface for raw vectors
+// with metadata. Used by memory systems and graph RAG. For document-level
+// operations, use VectorStore.
+type LowLevelVectorStore interface {
+	// Store stores a vector with its ID and metadata.
+	Store(ctx context.Context, id string, vector []float64, metadata map[string]any) error
+
+	// Search finds the top-K most similar vectors, optionally filtered by metadata.
+	Search(ctx context.Context, query []float64, topK int, filter map[string]any) ([]LowLevelSearchResult, error)
+
+	// Delete removes a vector by ID.
+	Delete(ctx context.Context, id string) error
+}
+
+// LowLevelSearchResult is the search result for LowLevelVectorStore.
+type LowLevelSearchResult struct {
+	ID       string         `json:"id"`
+	Score    float64        `json:"score"`
+	Metadata map[string]any `json:"metadata"`
+}
+
 // VectorSearchResult 向量搜索结果
 type VectorSearchResult struct {
 	Document Document `json:"document"`

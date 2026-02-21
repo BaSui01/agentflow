@@ -147,24 +147,15 @@ func (g *KnowledgeGraph) QueryByType(nodeType string) []*Node {
 // GraphRAG结合了知识图和向量检索.
 type GraphRAG struct {
 	graph       *KnowledgeGraph
-	vectorStore GraphVectorStore
+	vectorStore LowLevelVectorStore
 	embedder    GraphEmbedder
 	config      GraphRAGConfig
 	logger      *zap.Logger
 }
 
-// GraphRAG中矢量操作的 GraphVectorStore 接口.
-type GraphVectorStore interface {
-	Store(ctx context.Context, id string, embedding []float64, metadata map[string]any) error
-	Search(ctx context.Context, embedding []float64, limit int) ([]GraphVectorResult, error)
-}
-
-// GraphVectorResult 代表着向量搜索结果.
-type GraphVectorResult struct {
-	ID       string         `json:"id"`
-	Score    float64        `json:"score"`
-	Metadata map[string]any `json:"metadata,omitempty"`
-}
+// LowLevelVectorStore and LowLevelSearchResult are defined in vector_store.go.
+// GraphRAG uses LowLevelVectorStore for raw embedding storage and search,
+// replacing the previously duplicated GraphVectorStore interface.
 
 // GraphEmbedder 生成嵌入式.
 type GraphEmbedder interface {
@@ -192,7 +183,7 @@ func DefaultGraphRAGConfig() GraphRAGConfig {
 }
 
 // NewGraphRAG创建了一个新的GraphRAG实例.
-func NewGraphRAG(graph *KnowledgeGraph, vectorStore GraphVectorStore, embedder GraphEmbedder, config GraphRAGConfig, logger *zap.Logger) *GraphRAG {
+func NewGraphRAG(graph *KnowledgeGraph, vectorStore LowLevelVectorStore, embedder GraphEmbedder, config GraphRAGConfig, logger *zap.Logger) *GraphRAG {
 	if logger == nil {
 		logger = zap.NewNop()
 	}
@@ -226,7 +217,7 @@ func (r *GraphRAG) Retrieve(ctx context.Context, query string) ([]GraphRetrieval
 	}
 
 	// 矢量搜索
-	vectorResults, err := r.vectorStore.Search(ctx, queryEmb, r.config.MaxResults*2)
+	vectorResults, err := r.vectorStore.Search(ctx, queryEmb, r.config.MaxResults*2, nil)
 	if err != nil {
 		r.logger.Warn("vector search failed", zap.Error(err))
 	}

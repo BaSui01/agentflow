@@ -401,3 +401,108 @@ func TestAgentHandler_HandleAgentError(t *testing.T) {
 		})
 	}
 }
+
+// =============================================================================
+// AgentID Validation Tests
+// =============================================================================
+
+func TestAgentHandler_HandleExecuteAgent_InvalidAgentID(t *testing.T) {
+	reg := newMockRegistry()
+	handler := newTestHandler(reg)
+
+	tests := []struct {
+		name    string
+		agentID string
+	}{
+		{"SQL injection", "agent'; DROP TABLE--"},
+		{"path traversal", "../../../etc/passwd"},
+		{"too long", string(make([]byte, 200))},
+		{"special chars", "agent<script>alert(1)</script>"},
+		{"starts with dot", ".hidden-agent"},
+		{"empty after trim", ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			body, _ := json.Marshal(AgentExecuteRequest{
+				AgentID: tt.agentID,
+				Content: "hello",
+			})
+			w := httptest.NewRecorder()
+			r := httptest.NewRequest(http.MethodPost, "/v1/agents/execute", bytes.NewReader(body))
+			r.Header.Set("Content-Type", "application/json")
+
+			handler.HandleExecuteAgent(w, r)
+
+			assert.Equal(t, http.StatusBadRequest, w.Code, "agentID=%q should be rejected", tt.agentID)
+		})
+	}
+}
+
+func TestAgentHandler_HandleExecuteAgent_ValidAgentID(t *testing.T) {
+	reg := newMockRegistry().
+		withAgent(newTestAgentInfo("valid-agent-1", discovery.AgentStatusOnline))
+	handler := newTestHandler(reg)
+
+	body, _ := json.Marshal(AgentExecuteRequest{
+		AgentID: "valid-agent-1",
+		Content: "hello",
+	})
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPost, "/v1/agents/execute", bytes.NewReader(body))
+	r.Header.Set("Content-Type", "application/json")
+
+	handler.HandleExecuteAgent(w, r)
+
+	// Should pass validation (501 = not yet implemented, but not 400)
+	assert.NotEqual(t, http.StatusBadRequest, w.Code)
+}
+
+func TestAgentHandler_HandlePlanAgent_InvalidAgentID(t *testing.T) {
+	reg := newMockRegistry()
+	handler := newTestHandler(reg)
+
+	tests := []struct {
+		name    string
+		agentID string
+	}{
+		{"SQL injection", "agent'; DROP TABLE--"},
+		{"path traversal", "../../../etc/passwd"},
+		{"special chars", "agent<script>"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			body, _ := json.Marshal(AgentExecuteRequest{
+				AgentID: tt.agentID,
+				Content: "hello",
+			})
+			w := httptest.NewRecorder()
+			r := httptest.NewRequest(http.MethodPost, "/v1/agents/plan", bytes.NewReader(body))
+			r.Header.Set("Content-Type", "application/json")
+
+			handler.HandlePlanAgent(w, r)
+
+			assert.Equal(t, http.StatusBadRequest, w.Code, "agentID=%q should be rejected", tt.agentID)
+		})
+	}
+}
+
+func TestAgentHandler_HandlePlanAgent_ValidAgentID(t *testing.T) {
+	reg := newMockRegistry().
+		withAgent(newTestAgentInfo("plan-agent", discovery.AgentStatusOnline))
+	handler := newTestHandler(reg)
+
+	body, _ := json.Marshal(AgentExecuteRequest{
+		AgentID: "plan-agent",
+		Content: "hello",
+	})
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPost, "/v1/agents/plan", bytes.NewReader(body))
+	r.Header.Set("Content-Type", "application/json")
+
+	handler.HandlePlanAgent(w, r)
+
+	// Should pass validation (501 = not yet implemented, but not 400)
+	assert.NotEqual(t, http.StatusBadRequest, w.Code)
+}

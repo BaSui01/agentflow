@@ -31,8 +31,7 @@ func (r *FuncRouter) Route(ctx context.Context, input any) (string, error) {
 
 // Handler 处理器接口
 type Handler interface {
-	// Handle 处理输入
-	Handle(ctx context.Context, input any) (any, error)
+	Runnable
 	// Name 返回处理器名称
 	Name() string
 }
@@ -54,7 +53,7 @@ func NewFuncHandler(name string, fn HandlerFunc) *FuncHandler {
 	}
 }
 
-func (h *FuncHandler) Handle(ctx context.Context, input any) (any, error) {
+func (h *FuncHandler) Execute(ctx context.Context, input any) (any, error) {
 	return h.fn(ctx, input)
 }
 
@@ -118,7 +117,7 @@ func (w *RoutingWorkflow) Execute(ctx context.Context, input any) (any, error) {
 	}
 
 	// 3. 执行处理器
-	result, err := handler.Handle(ctx, input)
+	result, err := handler.Execute(ctx, input)
 	if err != nil {
 		return nil, fmt.Errorf("handler %s failed: %w", handler.Name(), err)
 	}

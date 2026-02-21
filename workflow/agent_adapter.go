@@ -2,9 +2,11 @@ package workflow
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 
 	"github.com/BaSui01/agentflow/agent"
+	"github.com/BaSui01/agentflow/types"
 )
 
 // ============================================================
@@ -12,14 +14,12 @@ import (
 // These adapters bridge the gap between Agent and Workflow systems.
 // ============================================================
 
-// AgentExecutor defines the interface for agent execution.
-// This allows workflow to use agents without direct dependency on agent package.
+// AgentExecutor defines the interface for agent execution in workflows.
+// It embeds types.Executor (the minimal common agent contract) and adds
+// Name() which is required by workflow steps (e.g., AgentStep default naming).
 type AgentExecutor interface {
-	// Execute executes the agent with the given input.
-	Execute(ctx context.Context, input any) (any, error)
-	// ID returns the agent's unique identifier.
-	ID() string
-	// Name returns the agent's name.
+	types.Executor
+	// Name returns the agent's display name.
 	Name() string
 }
 
@@ -287,6 +287,11 @@ func (c *ConditionalAgentStep) Name() string {
 // The agent.Agent interface uses (ctx, *Input) -> (*Output, error), but
 // this interface uses plain string I/O for simplicity. Callers can use
 // AgentAdapterOption functions to customize input/output conversion.
+//
+// Note: This interface intentionally differs from types.Executor in its
+// Execute signature (string -> string vs any -> any). It exists for agents
+// that only support string-based I/O. Use AgentAdapter to bridge an
+// AgentInterface implementation to the AgentExecutor (types.Executor) contract.
 type AgentInterface interface {
 	// Execute runs the agent with a string prompt and returns a string response.
 	Execute(ctx context.Context, input string) (string, error)
@@ -419,6 +424,9 @@ func (n *NativeAgentAdapter) Name() string {
 }
 
 // toAgentInput converts a workflow any value to *agent.Input.
+// It uses JSON marshal/unmarshal for map[string]any to automatically pick up
+// all fields via agent.Input's json tags — no manual field mapping needed.
+// Adding new fields to agent.Input will be handled automatically.
 func toAgentInput(input any) (*agent.Input, error) {
 	if input == nil {
 		return &agent.Input{}, nil
@@ -430,27 +438,13 @@ func toAgentInput(input any) (*agent.Input, error) {
 	case string:
 		return &agent.Input{Content: v}, nil
 	case map[string]any:
+		data, err := json.Marshal(v)
+		if err != nil {
+			return nil, fmt.Errorf("marshal map to json: %w", err)
+		}
 		inp := &agent.Input{}
-		if content, ok := v["content"].(string); ok {
-			inp.Content = content
-		}
-		if traceID, ok := v["trace_id"].(string); ok {
-			inp.TraceID = traceID
-		}
-		if tenantID, ok := v["tenant_id"].(string); ok {
-			inp.TenantID = tenantID
-		}
-		if userID, ok := v["user_id"].(string); ok {
-			inp.UserID = userID
-		}
-		if channelID, ok := v["channel_id"].(string); ok {
-			inp.ChannelID = channelID
-		}
-		if ctxMap, ok := v["context"].(map[string]any); ok {
-			inp.Context = ctxMap
-		}
-		if vars, ok := v["variables"].(map[string]string); ok {
-			inp.Variables = vars
+		if err := json.Unmarshal(data, inp); err != nil {
+			return nil, fmt.Errorf("unmarshal json to agent.Input: %w", err)
 		}
 		return inp, nil
 	default:

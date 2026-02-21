@@ -5,11 +5,16 @@ import (
 	"fmt"
 )
 
+// Runnable is the common execution interface shared by Step, Task, and Handler.
+// It represents any unit of work that can be executed with input and produce output.
+type Runnable interface {
+	Execute(ctx context.Context, input any) (any, error)
+}
+
 // Workflow 工作流接口
 // Workflow 是预定义的步骤序列，提供可预测和一致的执行
 type Workflow interface {
-	// Execute 执行工作流
-	Execute(ctx context.Context, input any) (any, error)
+	Runnable
 	// Name 返回工作流名称
 	Name() string
 	// Description 返回工作流描述
@@ -18,8 +23,7 @@ type Workflow interface {
 
 // Step 工作流步骤接口
 type Step interface {
-	// Execute 执行步骤
-	Execute(ctx context.Context, input any) (any, error)
+	Runnable
 	// Name 返回步骤名称
 	Name() string
 }

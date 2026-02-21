@@ -49,12 +49,12 @@ func (s *dagExecMockStep) Execute(ctx context.Context, input any) (any, error) {
 
 // mockCheckpointMgr implements CheckpointManager for testing.
 type mockCheckpointMgr struct {
-	saved     []any
+	saved     []*EnhancedCheckpoint
 	err       error
 	callCount atomic.Int32
 }
 
-func (m *mockCheckpointMgr) SaveCheckpoint(ctx context.Context, checkpoint any) error {
+func (m *mockCheckpointMgr) SaveCheckpoint(ctx context.Context, checkpoint *EnhancedCheckpoint) error {
 	m.callCount.Add(1)
 	if m.err != nil {
 		return m.err

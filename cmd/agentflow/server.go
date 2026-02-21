@@ -217,6 +217,7 @@ func (s *Server) startHTTPServer() error {
 	handler := Chain(mux,
 		Recovery(s.logger),
 		RequestID(),
+		SecurityHeaders(),
 		RequestLogger(s.logger),
 		CORS(s.cfg.Server.CORSAllowedOrigins),
 		RateLimiter(rateLimiterCtx, float64(s.cfg.Server.RateLimitRPS), s.cfg.Server.RateLimitBurst, s.logger),
@@ -230,7 +231,7 @@ func (s *Server) startHTTPServer() error {
 		Addr:            fmt.Sprintf(":%d", s.cfg.Server.HTTPPort),
 		ReadTimeout:     s.cfg.Server.ReadTimeout,
 		WriteTimeout:    s.cfg.Server.WriteTimeout,
-		IdleTimeout:     120 * s.cfg.Server.ReadTimeout, // 2x ReadTimeout
+		IdleTimeout:     2 * s.cfg.Server.ReadTimeout, // 2x ReadTimeout
 		MaxHeaderBytes:  1 << 20,                        // 1 MB
 		ShutdownTimeout: s.cfg.Server.ShutdownTimeout,
 	}

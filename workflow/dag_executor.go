@@ -32,7 +32,7 @@ const maxLoopDepth = 1000
 
 // CheckpointManager interface for checkpoint integration
 type CheckpointManager interface {
-	SaveCheckpoint(ctx context.Context, checkpoint any) error
+	SaveCheckpoint(ctx context.Context, checkpoint *EnhancedCheckpoint) error
 }
 
 // NewDAGExecutor creates a new DAG executor
@@ -675,25 +675,31 @@ func (e *DAGExecutor) executeCheckpointNode(ctx context.Context, node *DAGNode, 
 
 	e.logger.Debug("creating checkpoint", zap.String("node_id", node.ID))
 
-	// Create execution context for checkpoint
+	// Create checkpoint from current execution state
 	e.mu.RLock()
-	execCtx := &ExecutionContext{
-		WorkflowID:     e.executionID,
-		CurrentNode:    node.ID,
-		NodeResults:    make(map[string]any),
-		Variables:      make(map[string]any),
-		StartTime:      time.Now(),
-		LastUpdateTime: time.Now(),
-	}
-
-	// Copy node results
+	nodeResults := make(map[string]any)
+	completedNodes := make([]string, 0, len(e.nodeResults))
 	for k, v := range e.nodeResults {
-		execCtx.NodeResults[k] = v
+		nodeResults[k] = v
+		completedNodes = append(completedNodes, k)
 	}
 	e.mu.RUnlock()
 
-	// Save checkpoint (simplified - actual implementation would need full checkpoint struct)
-	if err := e.checkpointMgr.SaveCheckpoint(ctx, execCtx); err != nil {
+	checkpoint := &EnhancedCheckpoint{
+		ID:             generateCheckpointID(),
+		WorkflowID:     e.executionID,
+		ThreadID:       e.threadID,
+		NodeID:         node.ID,
+		NodeResults:    nodeResults,
+		Variables:      make(map[string]any),
+		CompletedNodes: completedNodes,
+		Input:          input,
+		CreatedAt:      time.Now(),
+		Metadata:       make(map[string]any),
+	}
+
+	// Save checkpoint
+	if err := e.checkpointMgr.SaveCheckpoint(ctx, checkpoint); err != nil {
 		e.logger.Error("failed to save checkpoint",
 			zap.String("node_id", node.ID),
 			zap.Error(err),

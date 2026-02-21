@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/BaSui01/agentflow/types"
@@ -261,4 +262,41 @@ func TestMapErrorCodeToHTTPStatus(t *testing.T) {
 			assert.Equal(t, tt.wantStatus, status)
 		})
 	}
+}
+
+func TestDecodeJSONBody_MaxBodySize(t *testing.T) {
+	logger := zap.NewNop()
+
+	type TestStruct struct {
+		Name string `json:"name"`
+	}
+
+	// Create a body that exceeds 1 MB
+	oversized := `{"name":"` + strings.Repeat("x", 2<<20) + `"}`
+
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPost, "/test", strings.NewReader(oversized))
+
+	var result TestStruct
+	err := DecodeJSONBody(w, r, &result, logger)
+
+	assert.Error(t, err, "body exceeding 1 MB should be rejected")
+}
+
+func TestDecodeJSONBody_WithinLimit(t *testing.T) {
+	logger := zap.NewNop()
+
+	type TestStruct struct {
+		Name string `json:"name"`
+	}
+
+	body := `{"name":"small"}`
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPost, "/test", strings.NewReader(body))
+
+	var result TestStruct
+	err := DecodeJSONBody(w, r, &result, logger)
+
+	assert.NoError(t, err)
+	assert.Equal(t, "small", result.Name)
 }
