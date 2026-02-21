@@ -136,16 +136,37 @@ func (s *InMemoryVectorStore) Delete(ctx context.Context, id string) error {
 	return nil
 }
 
+// BatchStore 原子地批量存储多个向量项。
+// 整个批次在同一把锁内完成，保证并发读取者不会看到部分写入的状态。
 func (s *InMemoryVectorStore) BatchStore(ctx context.Context, items []VectorItem) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
+
+	// 先在锁外做参数校验，避免持锁时间过长
+	for i, it := range items {
+		if it.ID == "" {
+			return fmt.Errorf("item %d: id is required", i)
+		}
+		if it.Vector == nil {
+			return fmt.Errorf("item %d: vector is required", i)
+		}
+		if s.dimension > 0 && len(it.Vector) != s.dimension {
+			return fmt.Errorf("item %d: vector dimension mismatch: got %d want %d", i, len(it.Vector), s.dimension)
+		}
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	for _, it := range items {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		if err := s.Store(ctx, it.ID, it.Vector, it.Metadata); err != nil {
-			return err
+		s.items[it.ID] = vectorEntry{
+			vector:    append([]float64(nil), it.Vector...),
+			metadata:  cloneMap(it.Metadata),
+			createdAt: s.now(),
 		}
 	}
 	return nil
