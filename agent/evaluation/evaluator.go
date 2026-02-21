@@ -162,6 +162,7 @@ type Scorer interface {
 type Evaluator struct {
 	config        EvaluatorConfig
 	scorers       map[string]Scorer
+	scorersMu     sync.RWMutex // 保护 scorers map 的并发读写
 	metrics       *MetricRegistry
 	alertHandlers []AlertHandler
 	alerts        []Alert
@@ -213,6 +214,8 @@ func (e *Evaluator) ClearAlerts() {
 
 // RegisterScounter为特定任务类型注册了计分器.
 func (e *Evaluator) RegisterScorer(taskType string, scorer Scorer) {
+	e.scorersMu.Lock()
+	defer e.scorersMu.Unlock()
 	e.scorers[taskType] = scorer
 }
 
@@ -375,7 +378,10 @@ func (e *Evaluator) evaluateTask(ctx context.Context, task *EvalTask, agent Eval
 func (e *Evaluator) getScorer(task *EvalTask) Scorer {
 	// 检查特定任务的计分器
 	if taskType, ok := task.Metadata["type"]; ok {
-		if scorer, ok := e.scorers[taskType]; ok {
+		e.scorersMu.RLock()
+		scorer, found := e.scorers[taskType]
+		e.scorersMu.RUnlock()
+		if found {
 			return scorer
 		}
 	}

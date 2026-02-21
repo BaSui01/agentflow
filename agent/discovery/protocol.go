@@ -41,6 +41,7 @@ type DiscoveryProtocol struct {
 
 	// 状态
 	running   bool
+	runMu     sync.Mutex // 保护 running 字段的并发读写
 	done      chan struct{}
 	closeOnce sync.Once
 	wg        sync.WaitGroup
@@ -116,13 +117,16 @@ func NewDiscoveryProtocol(config *ProtocolConfig, registry Registry, logger *zap
 
 // 启动发现协议 。
 func (p *DiscoveryProtocol) Start(ctx context.Context) error {
+	p.runMu.Lock()
 	if p.running {
+		p.runMu.Unlock()
 		return fmt.Errorf("protocol already running")
 	}
 
 	// 启用时启动 HTTP 服务器
 	if p.config.EnableHTTP {
 		if err := p.startHTTPServer(); err != nil {
+			p.runMu.Unlock()
 			return fmt.Errorf("failed to start HTTP server: %w", err)
 		}
 	}
@@ -136,6 +140,8 @@ func (p *DiscoveryProtocol) Start(ctx context.Context) error {
 	}
 
 	p.running = true
+	p.runMu.Unlock()
+
 	p.logger.Info("discovery protocol started",
 		zap.Bool("http", p.config.EnableHTTP),
 		zap.Bool("multicast", p.config.EnableMulticast),
@@ -146,9 +152,12 @@ func (p *DiscoveryProtocol) Start(ctx context.Context) error {
 
 // 停止停止发现协议。
 func (p *DiscoveryProtocol) Stop(ctx context.Context) error {
+	p.runMu.Lock()
 	if !p.running {
+		p.runMu.Unlock()
 		return nil
 	}
+	p.runMu.Unlock()
 
 	p.closeOnce.Do(func() { close(p.done) })
 
@@ -167,7 +176,11 @@ func (p *DiscoveryProtocol) Stop(ctx context.Context) error {
 	}
 
 	p.wg.Wait()
+
+	p.runMu.Lock()
 	p.running = false
+	p.runMu.Unlock()
+
 	p.logger.Info("discovery protocol stopped")
 
 	return nil
