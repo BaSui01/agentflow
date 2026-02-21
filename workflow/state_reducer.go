@@ -8,6 +8,14 @@ import (
 // Reducer defines how to merge state updates from multiple nodes.
 type Reducer[T any] func(current T, update T) T
 
+// ChannelReader is a non-generic interface for reading channel values.
+// This is needed because Go's type system does not allow matching
+// generic method signatures like Get() T via interface{ Get() any }.
+type ChannelReader interface {
+	GetAny() any
+	Version() uint64
+}
+
 // Channel represents a state channel with optional reducer.
 type Channel[T any] struct {
 	name    string
@@ -74,6 +82,11 @@ func (c *Channel[T]) Update(update T) T {
 	c.value = c.reducer(c.value, update)
 	c.version++
 	return c.value
+}
+
+// GetAny returns the current value as any, implementing ChannelReader.
+func (c *Channel[T]) GetAny() any {
+	return c.Get()
 }
 
 // Version returns the current version number.
@@ -222,11 +235,9 @@ func (sg *StateGraph) Snapshot() StateSnapshot {
 	}
 
 	for name, ch := range sg.channels {
-		switch c := ch.(type) {
-		case interface{ Get() any }:
-			snapshot.Values[name] = c.Get()
-		case interface{ Version() uint64 }:
-			snapshot.Versions[name] = c.Version()
+		if cr, ok := ch.(ChannelReader); ok {
+			snapshot.Values[name] = cr.GetAny()
+			snapshot.Versions[name] = cr.Version()
 		}
 	}
 
