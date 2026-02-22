@@ -55,6 +55,7 @@ func WriteSuccess(w http.ResponseWriter, data any) {
 		Success:   true,
 		Data:      data,
 		Timestamp: time.Now(),
+		RequestID: w.Header().Get("X-Request-ID"),
 	})
 }
 

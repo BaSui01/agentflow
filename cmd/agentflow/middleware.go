@@ -5,8 +5,8 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
+	"net"
 	"net/http"
-	"strings"
 	"sync"
 	"time"
 
@@ -143,7 +143,10 @@ func RateLimiter(ctx context.Context, rps float64, burst int, logger *zap.Logger
 	}()
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			ip := strings.Split(r.RemoteAddr, ":")[0]
+			ip, _, err := net.SplitHostPort(r.RemoteAddr)
+			if err != nil {
+				ip = r.RemoteAddr
+			}
 			mu.Lock()
 			v, exists := visitors[ip]
 			if !exists {
