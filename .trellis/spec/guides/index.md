@@ -27,6 +27,7 @@ These guides help you **ask the right questions before coding**.
 | [quality-guidelines.md §18-§23](../backend/quality-guidelines.md) | Agent composition, guardrails, context window patterns | Multi-agent design, runtime config, validation chains |
 | [quality-guidelines.md §35-§39](../backend/quality-guidelines.md) | Cache eviction, Prometheus cardinality, broadcast safety, API envelope, doc snippets | In-memory caches, metrics, fan-out channels, new API endpoints, documentation |
 | [quality-guidelines.md §41-§42](../backend/quality-guidelines.md) | JWT auth middleware, MCP server serve loop | Authentication, tenant rate limiting, protocol message dispatch |
+| [quality-guidelines.md §43-§44](../backend/quality-guidelines.md) | OTel SDK initialization, API request body validation | Telemetry setup, new API handlers, request parsing |
 
 ---
 
@@ -245,6 +246,44 @@ These guides help you **ask the right questions before coding**.
 - [ ] 新增 ErrorCode — 是否与现有 code 语义重复？（如 `RATE_LIMIT` vs `RATE_LIMITED`）
 
 → Read [cross-layer-thinking-guide.md § Known Type Splits](./cross-layer-thinking-guide.md) for full inventory
+
+### When to Think About OTel / Telemetry
+
+- [ ] New service entry point or `main()` — is `telemetry.Init()` called before any OTel consumer code?
+- [ ] Adding `otel.Tracer()` or `otel.Meter()` calls — are global providers initialized? (noop if not)
+- [ ] Modifying `Server.Shutdown()` — is `providers.Shutdown(ctx)` called to flush pending spans/metrics?
+- [ ] Telemetry init failure — is it `Warn` (not `Fatal`)? Telemetry should never block service startup
+
+→ Read [quality-guidelines.md §43](../backend/quality-guidelines.md) for OTel SDK Initialization pattern
+
+### When to Think About OTel HTTP Tracing
+
+- [ ] New middleware added to chain — is `OTelTracing()` still positioned after `MetricsMiddleware` and before `RequestLogger`?
+- [ ] New API handler — does it automatically get traced? (Yes, if middleware chain is correct)
+- [ ] Need trace context propagation to downstream HTTP calls — is `otel.GetTextMapPropagator().Inject()` used on outgoing requests?
+- [ ] Custom span attributes needed — add them inside the handler, not the middleware
+
+→ Read [quality-guidelines.md §45](../backend/quality-guidelines.md) for OTel HTTP Tracing Middleware pattern
+
+### When to Think About Route Registration
+
+- [ ] New handler requires database — is it conditionally registered (nil check on handler)?
+- [ ] Path serves multiple HTTP methods — is method dispatch done in a single `HandleFunc` with `switch r.Method`?
+- [ ] New CRUD routes added — is `api/openapi.yaml` updated? (§14)
+- [ ] Handler depends on optional infrastructure (DB, cache, external service) — does server start without it?
+
+→ Read [quality-guidelines.md §46](../backend/quality-guidelines.md) for Conditional Route Registration pattern
+
+### When to Think About API Request Body Validation
+
+- [ ] New POST/PUT/PATCH handler — does it use `ValidateContentType` + `DecodeJSONBody`? (§44)
+- [ ] Using raw `json.NewDecoder(r.Body).Decode()` — ❌ WRONG, bypasses 1MB limit and unknown field rejection
+- [ ] Adding numeric fields to API request — are they validated for range (non-negative, min/max)?
+- [ ] Adding URL fields to API request — is `ValidateURL` used?
+- [ ] Adding enum fields (like `role`) — is `ValidateEnum` used with explicit allowed values?
+- [ ] Existing handler tests failing after validation changes — did you add `Content-Type: application/json` header?
+
+→ Read [quality-guidelines.md §44](../backend/quality-guidelines.md) for API Request Body Validation pattern
 
 ---
 

@@ -396,6 +396,19 @@ func (h *AgentHandler) HandleAgentHealth(w http.ResponseWriter, r *http.Request)
 
 > **历史教训**：`api/handlers/agent.go` 的 `HandleAgentHealth` 和 `extractAgentID` 直接使用未校验的 URL 参数。安全扫描标记为输入校验缺失。修复方案：包级别编译正则 + 两处校验点（handler 入口 + 提取函数）。
 
+### 4. Common Pitfall: Adding Validation Breaks Existing Tests
+
+When adding `ValidateContentType` to an existing handler, all tests that don't set `Content-Type: application/json` will start returning 400. This is a silent regression — tests fail with "unsupported media type" instead of the expected response.
+
+**Prevention**: After adding `ValidateContentType` or `DecodeJSONBody` to any handler, immediately grep for that handler's test file and verify all requests set the header:
+
+```go
+// MUST add this to every test request that hits a handler with ValidateContentType
+req.Header.Set("Content-Type", "application/json")
+```
+
+> **历史教训**：`api/handlers/apikey.go` 的 `HandleCreateAPIKey` 和 `HandleUpdateAPIKey` 从 raw `json.Decoder` 迁移到 `ValidateContentType` + `DecodeJSONBody` 后，`apikey_test.go` 中 3 个测试因缺少 Content-Type header 而 break。修复：在每个 POST/PUT 测试请求中添加 header。
+
 ---
 
 ## Channel Double-Close Protection

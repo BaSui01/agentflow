@@ -1026,3 +1026,74 @@ README.md（中文）和 README_EN.md（英文）全量更新，使文档覆盖�
 ### Next Steps
 
 - None - task complete
+
+
+## Session 14: 基座完善：流式/可观测/认证/多Agent/工具链全量增强
+
+**Date**: 2026-02-23
+**Task**: 基座完善：流式/可观测/认证/多Agent/工具链全量增强
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+## 概述
+
+对 AgentFlow 框架进行全量基座增强，6 个并行 Agent 组同时推进，覆盖 P0-P4 + MCP + Function Calling 共 7 个维度。
+
+## 变更内容
+
+| 维度 | 内容 | 关键文件 |
+|------|------|----------|
+| P0 流式请求 | Agent 级 SSE 端点 HandleAgentStream + 5 个路由 | `api/handlers/agent.go`, `cmd/agentflow/server.go` |
+| P1 可观测性 | MetricsMiddleware 接入 Prometheus Collector | `cmd/agentflow/middleware.go` |
+| P2 认证升级 | JWTAuth (HS256+RS256) + TenantRateLimiter | `cmd/agentflow/middleware.go`, `config/loader.go`, `types/context.go` |
+| P3 多Agent加固 | 57 个新测试 + parseSubtasks 修复 + Discovery 持久化 | `agent/crews/`, `agent/handoff/`, `agent/hierarchical/`, `agent/discovery/` |
+| P4 Workflow流式 | WorkflowStreamEmitter context 模式 | `workflow/workflow.go`, `workflow/dag_executor.go` |
+| MCP 增强 | HandleMessage 分发器 + Serve 消息循环 | `agent/protocol/mcp/server.go` |
+| FC 增强 | StreamableToolExecutor + 重试策略 | `llm/tools/executor.go` |
+| 文档 | OpenAPI 同步 + 规范 §41-§42 + Thinking Triggers | `api/openapi.yaml`, `.trellis/spec/` |
+
+## 修复的问题
+
+- handoff race condition（Handoff.mu 保护并发写 Status 字段）
+- parseSubtasks stub 改为真正 JSON 解析（支持直接数组 + code block 提取 + fallback）
+
+## 规范沉淀
+
+- §41 JWT Authentication Middleware Pattern
+- §42 MCP Server Message Dispatcher and Serve Loop Pattern
+- Workflow Stream Emitter Pattern（cross-layer guide）
+- 认证 + 流式 Thinking Triggers（guides/index）
+
+## 统计
+
+39 文件变更，+3608/-53 行，57 个新测试全部通过（含 race detector）
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `ee51970` | (see git log) |
+| `978c574` | (see git log) |
+| `a965fd3` | (see git log) |
+| `a2aa7a7` | (see git log) |
+| `0cd9afe` | (see git log) |
+| `6dcd48b` | (see git log) |
+| `6173c02` | (see git log) |
+| `7a333d6` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

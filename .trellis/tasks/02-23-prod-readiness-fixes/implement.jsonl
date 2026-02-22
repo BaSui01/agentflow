@@ -1,0 +1,9 @@
+{"file": ".trellis/workflow.md", "reason": "Project workflow and conventions"}
+{"file": ".trellis/spec/shared/index.md", "reason": "Shared coding standards"}
+{"file": ".trellis/spec/backend/index.md", "reason": "Backend development guide"}
+{"file": ".trellis/spec/backend/api-module.md", "reason": "API module conventions"}
+{"file": ".trellis/spec/backend/quality.md", "reason": "Code quality requirements"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "质量规范 — TLS/安全/API模式"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "错误处理规范 — API错误响应模式"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "跨层思维指南 — OTel/类型一致性"}
+{"file": ".trellis/spec/unit-test/index.md", "reason": "测试规范 — mock模式/表驱动/fixtures"}

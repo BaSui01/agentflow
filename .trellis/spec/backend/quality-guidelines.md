@@ -2441,3 +2441,371 @@ type Transport interface {
 - JSON-RPC version validation: reject anything other than `"2.0"`
 
 > **Rule**: When adding a new MCP method, add a `case` in `dispatch()` and implement a `handle<Method>` function. Keep the handler focused on parameter extraction and delegation to existing server methods (e.g., `s.CallTool`, `s.ListResources`).
+
+---
+
+## §43 OTel SDK Initialization Pattern
+
+### 1. Scope / Trigger
+
+- Adding or modifying telemetry/tracing/metrics initialization
+- New service entry point that needs distributed tracing
+- Changing `TelemetryConfig` fields
+
+### 2. Signature
+
+```go
+// internal/telemetry/telemetry.go
+func Init(cfg config.TelemetryConfig, logger *zap.Logger) (*Providers, error)
+func (p *Providers) Shutdown(ctx context.Context) error
+```
+
+### 3. Contract
+
+**Config fields** (`config.TelemetryConfig`):
+
+| Field | Type | Default | Constraint |
+|-------|------|---------|------------|
+| `Enabled` | `bool` | `false` | Hot-reloadable |
+| `OTLPEndpoint` | `string` | `"localhost:4317"` | gRPC endpoint |
+| `ServiceName` | `string` | `"agentflow"` | OTel resource attribute |
+| `SampleRate` | `float64` | `0.1` | 0.0–1.0, hot-reloadable |
+
+**Lifecycle**:
+- `Init()` called in `cmd/agentflow/main.go` after logger init, before `NewServer()`
+- `Shutdown()` called in `Server.Shutdown()` before HTTP server close
+- `Providers` stored in `Server` struct
+
+### 4. Validation & Error Matrix
+
+| Condition | Behavior |
+|-----------|----------|
+| `Enabled == false` | Return noop `Providers{}`, log info, no external connections |
+| `Enabled == true`, exporter creation fails | Return error (caller should `Warn` and continue, not `Fatal`) |
+| `Shutdown()` on nil `Providers` | No-op, return nil |
+| `Shutdown()` with flush timeout | Return joined errors from tp + mp |
+
+### 5. Good / Base / Bad
+
+**Good** — Telemetry failure does not block service startup:
+```go
+providers, err := telemetry.Init(cfg.Telemetry, logger)
+if err != nil {
+    logger.Warn("failed to initialize telemetry", zap.Error(err))
+}
+```
+
+**Base** — Disabled by default, zero overhead:
+```yaml
+telemetry:
+  enabled: false
+```
+
+**Bad** — Fatal on telemetry failure (blocks service):
+```go
+// WRONG — telemetry is optional infrastructure
+providers, err := telemetry.Init(cfg.Telemetry, logger)
+if err != nil {
+    logger.Fatal("telemetry init failed", zap.Error(err))
+}
+```
+
+### 6. Required Tests
+
+- Build verification: `go build ./cmd/agentflow/` must pass
+- Vet: `go vet ./internal/telemetry/...` must pass
+- Integration: when `Enabled == true` with a real OTLP collector, spans appear in backend
+
+### 7. Wrong vs Right
+
+#### Wrong — Initialize OTel in package init()
+```go
+func init() {
+    tp := sdktrace.NewTracerProvider(...)
+    otel.SetTracerProvider(tp)
+}
+```
+No config, no shutdown, no error handling.
+
+#### Right — Explicit Init with config and shutdown
+```go
+providers, err := telemetry.Init(cfg.Telemetry, logger)
+// ... store providers in Server ...
+// In Shutdown():
+providers.Shutdown(ctx)
+```
+
+---
+
+## §44 API Request Body Validation Pattern
+
+### 1. Scope / Trigger
+
+- New API handler accepting POST/PUT/PATCH request body
+- Modifying existing handler's request parsing
+- Adding field-level validation to API types
+
+### 2. Signature
+
+```go
+// api/handlers/common.go — shared validation helpers
+func ValidateContentType(w http.ResponseWriter, r *http.Request, logger *zap.Logger) bool
+func DecodeJSONBody(w http.ResponseWriter, r *http.Request, dst any, logger *zap.Logger) error
+func ValidateURL(s string) bool
+func ValidateEnum(value string, allowed []string) bool
+func ValidateNonNegative(value float64) bool
+```
+
+### 3. Contract
+
+**Every POST/PUT/PATCH handler MUST follow this sequence**:
+
+1. `ValidateContentType(w, r, logger)` — rejects non-`application/json`
+2. `DecodeJSONBody(w, r, &req, logger)` — 1MB limit, `DisallowUnknownFields`, auto-writes 400
+3. Business-level field validation — specific to each endpoint
+4. Error response via `WriteErrorMessage(w, 400, types.ErrInvalidRequest, "specific message", logger)`
+
+**DecodeJSONBody guarantees**:
+- `http.MaxBytesReader` with 1MB limit
+- `json.Decoder.DisallowUnknownFields()` — rejects unknown JSON keys
+- Handles nil body, empty body, malformed JSON
+- Writes 400 response on failure (caller just returns)
+
+### 4. Validation & Error Matrix
+
+| Condition | HTTP Status | Error Message |
+|-----------|-------------|---------------|
+| Wrong Content-Type | 400 | "Content-Type must be application/json" |
+| Body > 1MB | 400 | "request body too large" |
+| Malformed JSON | 400 | "invalid JSON in request body" |
+| Unknown fields | 400 | "request body contains unknown field: X" |
+| Missing required field | 400 | "field_name is required" |
+| Invalid URL format | 400 | "field_name must be a valid HTTP or HTTPS URL" |
+| Negative numeric | 400 | "field_name must be non-negative" |
+| Invalid enum value | 400 | "messages[i].role must be one of: system, user, assistant, tool" |
+
+### 5. Good / Base / Bad
+
+**Good** — Full validation chain:
+```go
+func (h *Handler) HandleCreate(w http.ResponseWriter, r *http.Request) {
+    if !ValidateContentType(w, r, h.logger) { return }
+    var req createRequest
+    if err := DecodeJSONBody(w, r, &req, h.logger); err != nil { return }
+    if req.Name == "" {
+        WriteErrorMessage(w, http.StatusBadRequest, types.ErrInvalidRequest, "name is required", h.logger)
+        return
+    }
+    // ... business logic
+}
+```
+
+**Bad** — Bypassing shared validation:
+```go
+// WRONG — no size limit, no unknown field rejection, no Content-Type check
+var req createRequest
+json.NewDecoder(r.Body).Decode(&req)
+```
+
+### 6. Required Tests
+
+- Existing handler tests must set `Content-Type: application/json` header
+- Test missing Content-Type → 400
+- Test unknown fields → 400
+- Test invalid field values → 400 with specific message
+
+### 7. Wrong vs Right
+
+#### Wrong — Raw json.Decoder
+```go
+json.NewDecoder(r.Body).Decode(&req)
+```
+
+#### Right — Shared validation chain
+```go
+if !ValidateContentType(w, r, h.logger) { return }
+if err := DecodeJSONBody(w, r, &req, h.logger); err != nil { return }
+```
+
+---
+
+## §45 OTel HTTP Tracing Middleware (P2 — Observability)
+
+### 1. Scope / Trigger
+
+- Adding HTTP-layer distributed tracing
+- Need trace propagation from incoming requests to downstream services
+- Want per-request spans with HTTP attributes in OTel backend
+
+### 2. Signature
+
+```go
+// cmd/agentflow/middleware.go
+func OTelTracing() Middleware
+```
+
+### 3. Contract
+
+**Middleware behavior**:
+1. Extract incoming trace context from request headers via `otel.GetTextMapPropagator().Extract()`
+2. Create a server span named `"HTTP " + r.Method + " " + r.URL.Path`
+3. Set attributes: `http.method`, `http.url`, `http.response.status_code`
+4. Wrap `http.ResponseWriter` with `handlers.ResponseWriter` to capture status code
+5. End span after handler completes
+
+**Middleware chain position**: After `MetricsMiddleware`, before `RequestLogger`.
+
+**Noop safety**: When telemetry is disabled (`cfg.Telemetry.Enabled == false`), the global tracer is noop. The middleware still runs but creates zero-cost noop spans — no conditional check needed.
+
+### 4. Validation & Error Matrix
+
+| Condition | Behavior |
+|-----------|----------|
+| No `traceparent` header | New root span created |
+| Valid `traceparent` header | Child span created, trace context propagated |
+| Telemetry disabled (noop tracer) | Middleware runs, noop span, negligible overhead |
+| Handler panics | Span ended by Recovery middleware (upstream in chain) |
+
+### 5. Good / Base / Bad
+
+**Good** — Uses global tracer (auto-wired by `telemetry.Init`):
+```go
+func OTelTracing() Middleware {
+    return func(next http.Handler) http.Handler {
+        return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+            ctx := otel.GetTextMapPropagator().Extract(r.Context(), propagation.HeaderCarrier(r.Header))
+            tracer := otel.Tracer("agentflow/http")
+            ctx, span := tracer.Start(ctx, "HTTP "+r.Method+" "+r.URL.Path)
+            defer span.End()
+            // ... set attributes, call next
+        })
+    }
+}
+```
+
+**Bad** — Creating a new tracer provider per request:
+```go
+// WRONG — tracer provider should be global, not per-request
+tp := sdktrace.NewTracerProvider(...)
+tracer := tp.Tracer("http")
+```
+
+### 6. Required Tests
+
+- `go build ./cmd/agentflow/` must pass
+- Middleware chain order verified: OTelTracing after Metrics, before Logger
+- Integration: with telemetry enabled, HTTP requests produce spans in OTLP backend
+
+### 7. Wrong vs Right
+
+#### Wrong — No trace context extraction
+```go
+ctx, span := tracer.Start(r.Context(), spanName)
+```
+Incoming `traceparent` header is ignored, breaking distributed trace propagation.
+
+#### Right — Extract then start
+```go
+ctx := otel.GetTextMapPropagator().Extract(r.Context(), propagation.HeaderCarrier(r.Header))
+ctx, span := tracer.Start(ctx, spanName)
+```
+
+---
+
+## §46 Conditional Route Registration — Database-Dependent Handlers (P2 — Architecture)
+
+### 1. Scope / Trigger
+
+- Adding API handlers that require a database connection
+- Registering routes for CRUD operations on database-backed resources
+- Server must remain functional when database is unavailable
+
+### 2. Signature
+
+```go
+// cmd/agentflow/server.go
+type Server struct {
+    db             *gorm.DB              // nil when DB unavailable
+    apiKeyHandler  *handlers.APIKeyHandler // nil when db == nil
+}
+
+func NewServer(cfg *config.Config, configPath string, logger *zap.Logger,
+    tp *telemetry.Providers, db *gorm.DB) *Server
+```
+
+### 3. Contract
+
+**Initialization pattern**:
+1. `NewServer()` accepts `*gorm.DB` (may be nil)
+2. `initHandlers()` creates DB-dependent handlers only when `db != nil`
+3. `startHTTPServer()` registers routes only when handler is non-nil
+4. Service starts successfully even without database — health/chat/agent endpoints still work
+
+**Route registration for multi-method paths** (using `http.ServeMux`):
+```go
+mux.HandleFunc("/api/v1/providers/{id}/api-keys", func(w http.ResponseWriter, r *http.Request) {
+    switch r.Method {
+    case http.MethodGet:
+        h.apiKeyHandler.HandleListAPIKeys(w, r)
+    case http.MethodPost:
+        h.apiKeyHandler.HandleCreateAPIKey(w, r)
+    default:
+        handlers.WriteErrorMessage(w, http.StatusMethodNotAllowed, ...)
+    }
+})
+```
+
+### 4. Validation & Error Matrix
+
+| Condition | Behavior |
+|-----------|----------|
+| `db == nil` | APIKeyHandler not created, routes not registered, log info |
+| `db != nil` | APIKeyHandler created, all 6 routes registered |
+| Request to unregistered route | 404 from `http.ServeMux` default |
+| Wrong HTTP method on registered route | 405 from inline method dispatch |
+
+### 5. Good / Base / Bad
+
+**Good** — Conditional registration with graceful degradation:
+```go
+if s.apiKeyHandler != nil {
+    mux.HandleFunc("/api/v1/providers", s.apiKeyHandler.HandleListProviders)
+    // ... more routes
+    s.logger.Info("Provider API routes registered")
+}
+```
+
+**Bad** — Unconditional registration that panics on nil handler:
+```go
+// WRONG — panics if apiKeyHandler is nil
+mux.HandleFunc("/api/v1/providers", s.apiKeyHandler.HandleListProviders)
+```
+
+### 6. Required Tests
+
+- `go build ./cmd/agentflow/` must pass
+- Server starts without database (db=nil) — no panic
+- When db is available, all 6 routes respond correctly
+
+### 7. Wrong vs Right
+
+#### Wrong — Separate mux registrations per method
+```go
+// WRONG with http.ServeMux — last registration wins, earlier ones silently overwritten
+mux.HandleFunc("/api/v1/providers/{id}/api-keys", h.HandleListAPIKeys)   // GET
+mux.HandleFunc("/api/v1/providers/{id}/api-keys", h.HandleCreateAPIKey)  // POST — overwrites GET!
+```
+
+#### Right — Single registration with method dispatch
+```go
+mux.HandleFunc("/api/v1/providers/{id}/api-keys", func(w http.ResponseWriter, r *http.Request) {
+    switch r.Method {
+    case http.MethodGet:
+        h.apiKeyHandler.HandleListAPIKeys(w, r)
+    case http.MethodPost:
+        h.apiKeyHandler.HandleCreateAPIKey(w, r)
+    default:
+        handlers.WriteErrorMessage(w, 405, types.ErrInvalidRequest, "method not allowed", h.logger)
+    }
+})
+```
