@@ -4,10 +4,13 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"os"
 	"time"
 
 	"github.com/BaSui01/agentflow/agent"
 	"github.com/BaSui01/agentflow/llm"
+	"github.com/BaSui01/agentflow/llm/providers"
+	"github.com/BaSui01/agentflow/llm/providers/openai"
 	"go.uber.org/zap"
 )
 
@@ -28,7 +31,34 @@ func main() {
 	demoPromptEngineering(logger)
 }
 
+// createProvider creates an OpenAI provider from environment variables.
+// Returns nil if OPENAI_API_KEY is not set.
+func createProvider(logger *zap.Logger) llm.Provider {
+	apiKey := os.Getenv("OPENAI_API_KEY")
+	if apiKey == "" {
+		return nil
+	}
+	baseURL := os.Getenv("OPENAI_BASE_URL")
+	if baseURL == "" {
+		baseURL = "https://api.openai.com/v1"
+	}
+	cfg := providers.OpenAIConfig{
+		BaseProviderConfig: providers.BaseProviderConfig{
+			APIKey:  apiKey,
+			BaseURL: baseURL,
+			Model:   "gpt-4",
+		},
+	}
+	return openai.NewOpenAIProvider(cfg, logger)
+}
+
 func demoReflection(logger *zap.Logger) {
+	provider := createProvider(logger)
+	if provider == nil {
+		fmt.Println("  Skipped: set OPENAI_API_KEY to run this demo")
+		return
+	}
+
 	// Create Agent
 	config := agent.Config{
 		ID:          "reflection-agent",
@@ -51,9 +81,6 @@ func demoReflection(logger *zap.Logger) {
 			},
 		},
 	}
-
-	// Assume provider exists (using nil for demonstration)
-	var provider llm.Provider = nil // Should be initialized in actual use
 
 	baseAgent := agent.NewBaseAgent(config, provider, nil, nil, nil, logger)
 
@@ -98,7 +125,10 @@ func demoReflection(logger *zap.Logger) {
 }
 
 func demoToolSelection(logger *zap.Logger) {
-	// Create Agent
+	// Create Agent with provider if available, otherwise use nil
+	// (tool scoring is keyword-based and works without a provider)
+	provider := createProvider(logger)
+
 	config := agent.Config{
 		ID:          "tool-agent",
 		Name:        "Tool Selection Agent",
@@ -108,13 +138,16 @@ func demoToolSelection(logger *zap.Logger) {
 		Temperature: 0.7,
 	}
 
-	var provider llm.Provider = nil
 	baseAgent := agent.NewBaseAgent(config, provider, nil, nil, nil, logger)
 
 	// Configure dynamic tool selection
 	selectorConfig := agent.DefaultToolSelectionConfig()
 	selectorConfig.MaxTools = 3
 	selectorConfig.MinScore = 0.4
+	// Disable LLM ranking when no provider is available
+	if provider == nil {
+		selectorConfig.UseLLMRanking = false
+	}
 
 	selector := agent.NewDynamicToolSelector(baseAgent, *selectorConfig)
 

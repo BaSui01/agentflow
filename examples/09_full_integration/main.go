@@ -3,47 +3,73 @@ package main
 import (
 	"context"
 	"fmt"
+	"os"
 
 	"github.com/BaSui01/agentflow/agent"
 	"github.com/BaSui01/agentflow/agent/collaboration"
 	"github.com/BaSui01/agentflow/agent/hierarchical"
-	"github.com/BaSui01/agentflow/agent/protocol/mcp"
 	"github.com/BaSui01/agentflow/agent/memory"
 	"github.com/BaSui01/agentflow/agent/observability"
+	"github.com/BaSui01/agentflow/agent/protocol/mcp"
 	"github.com/BaSui01/agentflow/agent/skills"
+	"github.com/BaSui01/agentflow/llm"
+	"github.com/BaSui01/agentflow/llm/providers"
+	"github.com/BaSui01/agentflow/llm/providers/openai"
 	"go.uber.org/zap"
 )
 
-// 完整集成示例：展示如何将所有功能集成到实际项目中
+// Full integration example: demonstrates how to integrate all features into a real project.
 
 func main() {
 	logger, _ := zap.NewDevelopment()
 	defer logger.Sync()
 
-	fmt.Println("=== AgentFlow 2025 完整集成示例 ===")
+	fmt.Println("=== AgentFlow Full Integration Example ===")
 
-	// 场景 1: 单 Agent 增强版
-	fmt.Println("场景 1: 单 Agent 增强版（启用所有功能）")
+	// Scenario 1: Enhanced single Agent
+	fmt.Println("\nScenario 1: Enhanced Single Agent (all features enabled)")
 	demoEnhancedSingleAgent(logger)
 
-	// 场景 2: 层次化多 Agent 系统
-	fmt.Println("\n场景 2: 层次化多 Agent 系统")
+	// Scenario 2: Hierarchical multi-Agent system
+	fmt.Println("\nScenario 2: Hierarchical Multi-Agent System")
 	demoHierarchicalSystem(logger)
 
-	// 场景 3: 协作式多 Agent 系统
-	fmt.Println("\n场景 3: 协作式多 Agent 系统")
+	// Scenario 3: Collaborative multi-Agent system
+	fmt.Println("\nScenario 3: Collaborative Multi-Agent System")
 	demoCollaborativeSystem(logger)
 
-	// 场景 4: 生产环境配置
-	fmt.Println("\n场景 4: 生产环境配置建议")
+	// Scenario 4: Production configuration
+	fmt.Println("\nScenario 4: Production Configuration")
 	demoProductionConfig(logger)
+}
+
+// createProvider creates an OpenAI provider from environment variables.
+// Returns nil if OPENAI_API_KEY is not set.
+func createProvider(logger *zap.Logger) llm.Provider {
+	apiKey := os.Getenv("OPENAI_API_KEY")
+	if apiKey == "" {
+		return nil
+	}
+	baseURL := os.Getenv("OPENAI_BASE_URL")
+	if baseURL == "" {
+		baseURL = "https://api.openai.com/v1"
+	}
+	cfg := providers.OpenAIConfig{
+		BaseProviderConfig: providers.BaseProviderConfig{
+			APIKey:  apiKey,
+			BaseURL: baseURL,
+			Model:   "gpt-4",
+		},
+	}
+	return openai.NewOpenAIProvider(cfg, logger)
 }
 
 func demoEnhancedSingleAgent(logger *zap.Logger) {
 	ctx := context.Background()
+	provider := createProvider(logger)
 
-	// 1. 创建基础 Agent
-	fmt.Println("\n1. 创建基础 Agent")
+	// 1. Create base Agent
+	fmt.Println("\n1. Creating base Agent")
 	config := agent.Config{
 		ID:          "enhanced-agent-001",
 		Name:        "Enhanced Agent",
@@ -52,7 +78,6 @@ func demoEnhancedSingleAgent(logger *zap.Logger) {
 		MaxTokens:   2000,
 		Temperature: 0.7,
 
-		// 启用新功能
 		EnableReflection:     true,
 		EnableToolSelection:  true,
 		EnablePromptEnhancer: true,
@@ -61,11 +86,10 @@ func demoEnhancedSingleAgent(logger *zap.Logger) {
 		EnableObservability:  true,
 	}
 
-	// 注意：实际使用时需要提供真实的 provider
-	baseAgent := agent.NewBaseAgent(config, nil, nil, nil, nil, logger)
+	baseAgent := agent.NewBaseAgent(config, provider, nil, nil, nil, logger)
 
-	// 2. 启用 Reflection
-	fmt.Println("\n2. 启用 Reflection 机制")
+	// 2. Enable Reflection
+	fmt.Println("2. Enabling Reflection")
 	reflectionConfig := agent.ReflectionExecutorConfig{
 		Enabled:       true,
 		MaxIterations: 3,
@@ -74,54 +98,52 @@ func demoEnhancedSingleAgent(logger *zap.Logger) {
 	reflectionExecutor := agent.NewReflectionExecutor(baseAgent, reflectionConfig)
 	baseAgent.EnableReflection(reflectionExecutor)
 
-	// 3. 启用动态工具选择
-	fmt.Println("3. 启用动态工具选择")
+	// 3. Enable dynamic tool selection
+	fmt.Println("3. Enabling dynamic tool selection")
 	toolSelectionConfig := agent.DefaultToolSelectionConfig()
 	toolSelector := agent.NewDynamicToolSelector(baseAgent, *toolSelectionConfig)
 	baseAgent.EnableToolSelection(toolSelector)
 
-	// 4. 启用提示词增强
-	fmt.Println("4. 启用提示词增强")
+	// 4. Enable prompt enhancer
+	fmt.Println("4. Enabling prompt enhancer")
 	promptConfig := agent.DefaultPromptEngineeringConfig()
 	promptEnhancer := agent.NewPromptEnhancer(promptConfig)
 	baseAgent.EnablePromptEnhancer(promptEnhancer)
 
-	// 5. 启用 Skills 系统
-	fmt.Println("5. 启用 Skills 系统")
+	// 5. Enable Skills system
+	fmt.Println("5. Enabling Skills system")
 	skillsConfig := skills.DefaultSkillManagerConfig()
 	skillManager := skills.NewSkillManager(skillsConfig, logger)
 
-	// 注册一些技能
-	codeReviewSkill, _ := skills.NewSkillBuilder("code-review", "代码审查").
-		WithDescription("专业的代码审查技能").
-		WithInstructions("审查代码质量、安全性和最佳实践").
+	codeReviewSkill, _ := skills.NewSkillBuilder("code-review", "Code Review").
+		WithDescription("Professional code review skill").
+		WithInstructions("Review code quality, security, and best practices").
 		Build()
 	skillManager.RegisterSkill(codeReviewSkill)
-
 	baseAgent.EnableSkills(skillManager)
 
-	// 6. 启用 MCP
-	fmt.Println("6. 启用 MCP 集成")
+	// 6. Enable MCP
+	fmt.Println("6. Enabling MCP integration")
 	mcpServer := mcp.NewMCPServer("agent-mcp-server", "1.0.0", logger)
 	baseAgent.EnableMCP(mcpServer)
 
-	// 7. 启用增强记忆
-	fmt.Println("7. 启用增强记忆系统")
+	// 7. Enable enhanced memory
+	fmt.Println("7. Enabling enhanced memory system")
 	memoryConfig := memory.DefaultEnhancedMemoryConfig()
 	enhancedMemory := memory.NewEnhancedMemorySystem(
-		nil, nil, nil, nil, nil, // 实际使用时需要提供真实的存储
+		nil, nil, nil, nil, nil,
 		memoryConfig,
 		logger,
 	)
 	baseAgent.EnableEnhancedMemory(enhancedMemory)
 
-	// 8. 启用可观测性
-	fmt.Println("8. 启用可观测性系统")
+	// 8. Enable observability
+	fmt.Println("8. Enabling observability system")
 	obsSystem := observability.NewObservabilitySystem(logger)
 	baseAgent.EnableObservability(obsSystem)
 
-	// 9. 检查功能状态
-	fmt.Println("\n9. 功能状态检查")
+	// 9. Check feature status
+	fmt.Println("\n9. Feature status check")
 	baseAgent.PrintFeatureStatus()
 	status := baseAgent.GetFeatureStatus()
 
@@ -131,10 +153,10 @@ func demoEnhancedSingleAgent(logger *zap.Logger) {
 			enabledCount++
 		}
 	}
-	fmt.Printf("已启用功能: %d/%d\n", enabledCount, len(status))
+	fmt.Printf("Enabled features: %d/%d\n", enabledCount, len(status))
 
-	// 10. 使用增强执行
-	fmt.Println("\n10. 执行增强任务")
+	// 10. Execute enhanced task
+	fmt.Println("\n10. Executing enhanced task")
 	options := agent.EnhancedExecutionOptions{
 		UseReflection:       true,
 		UseToolSelection:    true,
@@ -151,40 +173,41 @@ func demoEnhancedSingleAgent(logger *zap.Logger) {
 
 	input := &agent.Input{
 		TraceID: "trace-001",
-		Content: "请审查这段代码的质量",
+		Content: "Review this code for quality issues",
 	}
 
-	// 注意：实际执行需要真实的 provider
-	fmt.Println("执行选项:")
-	fmt.Printf("  - Reflection: %v\n", options.UseReflection)
-	fmt.Printf("  - 工具选择: %v\n", options.UseToolSelection)
-	fmt.Printf("  - 提示词增强: %v\n", options.UsePromptEnhancer)
-	fmt.Printf("  - Skills: %v\n", options.UseSkills)
-	fmt.Printf("  - 增强记忆: %v\n", options.UseEnhancedMemory)
-	fmt.Printf("  - 可观测性: %v\n", options.UseObservability)
+	if provider == nil {
+		fmt.Println("  Skipped execution: set OPENAI_API_KEY to run with a real provider")
+		fmt.Println("  All subsystems were initialized successfully above.")
+		return
+	}
 
-	_ = ctx
-	_ = input
-	_ = options
+	output, err := baseAgent.ExecuteEnhanced(ctx, input, options)
+	if err != nil {
+		fmt.Printf("  Enhanced execution failed: %v\n", err)
+		return
+	}
+	fmt.Printf("  Result: %s\n", output.Content)
+	fmt.Printf("  Duration: %v\n", output.Duration)
 }
 
 func demoHierarchicalSystem(logger *zap.Logger) {
 	ctx := context.Background()
+	provider := createProvider(logger)
 
-	fmt.Println("\n适用场景: 复杂任务需要分解和并行执行")
-	fmt.Println("示例: 大型代码库审查、多文档分析、批量数据处理")
+	fmt.Println("\nUse case: complex tasks requiring decomposition and parallel execution")
 
-	// 1. 创建 Supervisor
+	// 1. Create Supervisor
 	supervisorConfig := agent.Config{
 		ID:          "supervisor",
 		Name:        "Supervisor Agent",
 		Type:        agent.TypeGeneric,
 		Model:       "gpt-4",
-		Description: "负责任务分解和结果聚合",
+		Description: "Responsible for task decomposition and result aggregation",
 	}
-	supervisor := agent.NewBaseAgent(supervisorConfig, nil, nil, nil, nil, logger)
+	supervisor := agent.NewBaseAgent(supervisorConfig, provider, nil, nil, nil, logger)
 
-	// 2. 创建 Workers
+	// 2. Create Workers
 	workers := []agent.Agent{}
 	workerTypes := []string{"analyzer", "reviewer", "optimizer"}
 
@@ -194,13 +217,13 @@ func demoHierarchicalSystem(logger *zap.Logger) {
 			Name:        fmt.Sprintf("Worker %s", wType),
 			Type:        agent.AgentType(wType),
 			Model:       "gpt-3.5-turbo",
-			Description: fmt.Sprintf("专门负责 %s", wType),
+			Description: fmt.Sprintf("Specialized in %s tasks", wType),
 		}
-		worker := agent.NewBaseAgent(workerConfig, nil, nil, nil, nil, logger)
+		worker := agent.NewBaseAgent(workerConfig, provider, nil, nil, nil, logger)
 		workers = append(workers, worker)
 	}
 
-	// 3. 创建层次化系统
+	// 3. Create hierarchical system
 	hierarchicalConfig := hierarchical.DefaultHierarchicalConfig()
 	hierarchicalConfig.MaxWorkers = 3
 	hierarchicalConfig.WorkerSelection = "least_loaded"
@@ -208,46 +231,52 @@ func demoHierarchicalSystem(logger *zap.Logger) {
 
 	hierarchicalAgent := hierarchical.NewHierarchicalAgent(
 		supervisor,
-		supervisor, // supervisor implements agent.Agent interface
+		supervisor,
 		workers,
 		hierarchicalConfig,
 		logger,
 	)
 
-	fmt.Println("\n层次化系统配置:")
+	fmt.Println("\nHierarchical system configuration:")
 	fmt.Printf("  - Supervisor: %s\n", supervisor.Name())
-	fmt.Printf("  - Workers: %d 个\n", len(workers))
-	fmt.Printf("  - 分配策略: %s\n", hierarchicalConfig.WorkerSelection)
-	fmt.Printf("  - 负载均衡: %v\n", hierarchicalConfig.EnableLoadBalance)
-	fmt.Printf("  - 任务超时: %v\n", hierarchicalConfig.TaskTimeout)
+	fmt.Printf("  - Workers: %d\n", len(workers))
+	fmt.Printf("  - Selection strategy: %s\n", hierarchicalConfig.WorkerSelection)
+	fmt.Printf("  - Load balancing: %v\n", hierarchicalConfig.EnableLoadBalance)
+	fmt.Printf("  - Task timeout: %v\n", hierarchicalConfig.TaskTimeout)
 
-	fmt.Println("\n执行流程:")
-	fmt.Println("  1. Supervisor 接收任务")
-	fmt.Println("  2. 分解为 3 个子任务")
-	fmt.Println("  3. 分配给 3 个 Workers 并行执行")
-	fmt.Println("  4. 收集结果")
-	fmt.Println("  5. Supervisor 聚合最终结果")
+	if provider == nil {
+		fmt.Println("\n  Skipped execution: set OPENAI_API_KEY to run with a real provider")
+		return
+	}
 
-	_ = hierarchicalAgent
-	_ = ctx
+	input := &agent.Input{
+		TraceID: "trace-hierarchical",
+		Content: "Analyze the performance characteristics of a Go web server",
+	}
+	output, err := hierarchicalAgent.Execute(ctx, input)
+	if err != nil {
+		fmt.Printf("  Hierarchical execution failed: %v\n", err)
+		return
+	}
+	fmt.Printf("  Result: %s\n", output.Content)
 }
 
 func demoCollaborativeSystem(logger *zap.Logger) {
 	ctx := context.Background()
+	provider := createProvider(logger)
 
-	fmt.Println("\n适用场景: 需要多个视角和专业意见")
-	fmt.Println("示例: 决策支持、创意生成、问题诊断")
+	fmt.Println("\nUse case: tasks requiring multiple perspectives and expert opinions")
 
-	// 1. 创建专家 Agents
+	// 1. Create expert Agents
 	experts := []agent.Agent{}
 	expertRoles := []struct {
 		id   string
 		name string
 		desc string
 	}{
-		{"expert-analyst", "数据分析专家", "擅长数据分析和统计"},
-		{"expert-critic", "批判性思考专家", "擅长发现问题和漏洞"},
-		{"expert-creative", "创意专家", "擅长创新和头脑风暴"},
+		{"expert-analyst", "Data Analysis Expert", "Specializes in data analysis and statistics"},
+		{"expert-critic", "Critical Thinking Expert", "Specializes in finding issues and flaws"},
+		{"expert-creative", "Creative Expert", "Specializes in innovation and brainstorming"},
 	}
 
 	for _, role := range expertRoles {
@@ -258,11 +287,11 @@ func demoCollaborativeSystem(logger *zap.Logger) {
 			Model:       "gpt-4",
 			Description: role.desc,
 		}
-		expert := agent.NewBaseAgent(config, nil, nil, nil, nil, logger)
+		expert := agent.NewBaseAgent(config, provider, nil, nil, nil, logger)
 		experts = append(experts, expert)
 	}
 
-	// 2. 创建协作系统（辩论模式）
+	// 2. Create collaborative system (debate mode)
 	debateConfig := collaboration.DefaultMultiAgentConfig()
 	debateConfig.Pattern = collaboration.PatternDebate
 	debateConfig.MaxRounds = 3
@@ -270,52 +299,57 @@ func demoCollaborativeSystem(logger *zap.Logger) {
 
 	debateSystem := collaboration.NewMultiAgentSystem(experts, debateConfig, logger)
 
-	fmt.Println("\n协作系统配置:")
-	fmt.Printf("  - 模式: %s\n", debateConfig.Pattern)
-	fmt.Printf("  - 专家数: %d\n", len(experts))
-	fmt.Printf("  - 最大轮次: %d\n", debateConfig.MaxRounds)
-	fmt.Printf("  - 共识阈值: %.2f\n", debateConfig.ConsensusThreshold)
+	fmt.Println("\nCollaborative system configuration:")
+	fmt.Printf("  - Pattern: %s\n", debateConfig.Pattern)
+	fmt.Printf("  - Experts: %d\n", len(experts))
+	fmt.Printf("  - Max rounds: %d\n", debateConfig.MaxRounds)
+	fmt.Printf("  - Consensus threshold: %.2f\n", debateConfig.ConsensusThreshold)
 
-	fmt.Println("\n辩论流程:")
-	fmt.Println("  第 1 轮: 每个专家提出初始观点")
-	fmt.Println("  第 2 轮: 专家互相评论和改进")
-	fmt.Println("  第 3 轮: 达成共识或选择最佳答案")
-
-	// 3. 其他协作模式
-	fmt.Println("\n其他可用模式:")
-
+	// 3. List available collaboration patterns
+	fmt.Println("\nAvailable collaboration patterns:")
 	patterns := []struct {
 		pattern collaboration.CollaborationPattern
 		desc    string
 		useCase string
 	}{
-		{collaboration.PatternConsensus, "共识模式", "投票决策"},
-		{collaboration.PatternPipeline, "流水线模式", "顺序处理"},
-		{collaboration.PatternBroadcast, "广播模式", "并行处理"},
-		{collaboration.PatternNetwork, "网络模式", "自由通信"},
+		{collaboration.PatternConsensus, "Consensus", "Voting decisions"},
+		{collaboration.PatternPipeline, "Pipeline", "Sequential processing"},
+		{collaboration.PatternBroadcast, "Broadcast", "Parallel processing"},
+		{collaboration.PatternNetwork, "Network", "Free communication"},
 	}
-
 	for i, p := range patterns {
-		fmt.Printf("  %d. %s - %s (适用: %s)\n", i+1, p.pattern, p.desc, p.useCase)
+		fmt.Printf("  %d. %s - %s (use case: %s)\n", i+1, p.pattern, p.desc, p.useCase)
 	}
 
-	_ = debateSystem
-	_ = ctx
+	if provider == nil {
+		fmt.Println("\n  Skipped execution: set OPENAI_API_KEY to run with a real provider")
+		return
+	}
+
+	input := &agent.Input{
+		TraceID: "trace-collab",
+		Content: "Should we adopt microservices architecture for our new project?",
+	}
+	output, err := debateSystem.Execute(ctx, input)
+	if err != nil {
+		fmt.Printf("  Collaborative execution failed: %v\n", err)
+		return
+	}
+	fmt.Printf("  Debate result: %s\n", output.Content)
 }
 
 func demoProductionConfig(logger *zap.Logger) {
-	fmt.Println("\n生产环境配置建议")
+	fmt.Println("\nProduction configuration examples")
 
-	// 1. 性能优化配置 — 使用真实的 Config 结构体
-	fmt.Println("1. 性能优化配置")
-	prodConfig := agent.Config{
-		ID:          "prod-agent",
-		Name:        "Production Agent",
-		Type:        agent.TypeGeneric,
-		Model:       "gpt-4",
-		MaxTokens:   2000,
-		Temperature: 0.7,
-
+	// 1. Agent configuration
+	fmt.Println("\n1. Agent configuration")
+	agentConfig := agent.Config{
+		ID:                   "prod-agent",
+		Name:                 "Production Agent",
+		Type:                 agent.TypeGeneric,
+		Model:                "gpt-4",
+		MaxTokens:            2000,
+		Temperature:          0.7,
 		EnableReflection:     true,
 		EnableToolSelection:  true,
 		EnablePromptEnhancer: true,
@@ -323,11 +357,11 @@ func demoProductionConfig(logger *zap.Logger) {
 		EnableEnhancedMemory: true,
 		EnableObservability:  true,
 	}
-	fmt.Printf("  Model: %s, MaxTokens: %d, Temperature: %.1f\n",
-		prodConfig.Model, prodConfig.MaxTokens, prodConfig.Temperature)
+	fmt.Printf("  Agent: %s (model: %s, max_tokens: %d)\n",
+		agentConfig.Name, agentConfig.Model, agentConfig.MaxTokens)
 
-	// 2. Reflection 配置
-	fmt.Println("\n2. Reflection 配置")
+	// 2. Reflection configuration
+	fmt.Println("\n2. Reflection configuration")
 	reflectionConfig := agent.ReflectionExecutorConfig{
 		Enabled:       true,
 		MaxIterations: 2,
@@ -336,46 +370,60 @@ func demoProductionConfig(logger *zap.Logger) {
 	fmt.Printf("  MaxIterations: %d, MinQuality: %.2f\n",
 		reflectionConfig.MaxIterations, reflectionConfig.MinQuality)
 
-	// 3. 工具选择配置
-	fmt.Println("\n3. 工具选择配置")
+	// 3. Tool selection configuration
+	fmt.Println("\n3. Tool selection configuration")
 	toolConfig := agent.DefaultToolSelectionConfig()
+	toolConfig.SemanticWeight = 0.5
+	toolConfig.CostWeight = 0.3
+	toolConfig.LatencyWeight = 0.1
+	toolConfig.ReliabilityWeight = 0.1
+	toolConfig.MaxTools = 5
+	toolConfig.UseLLMRanking = false
+	fmt.Printf("  Weights: semantic=%.1f, cost=%.1f, latency=%.1f, reliability=%.1f\n",
+		toolConfig.SemanticWeight, toolConfig.CostWeight,
+		toolConfig.LatencyWeight, toolConfig.ReliabilityWeight)
 	fmt.Printf("  MaxTools: %d, UseLLMRanking: %v\n",
 		toolConfig.MaxTools, toolConfig.UseLLMRanking)
 
-	// 4. 记忆配置
-	fmt.Println("\n4. 记忆配置")
-	memoryConfig := memory.DefaultEnhancedMemoryConfig()
+	// 4. Memory configuration
+	fmt.Println("\n4. Memory configuration")
+	memConfig := memory.DefaultEnhancedMemoryConfig()
 	fmt.Printf("  ShortTermTTL: %v, WorkingMemorySize: %d\n",
-		memoryConfig.ShortTermTTL, memoryConfig.WorkingMemorySize)
+		memConfig.ShortTermTTL, memConfig.WorkingMemorySize)
+	fmt.Printf("  ConsolidationEnabled: %v, ConsolidationInterval: %v\n",
+		memConfig.ConsolidationEnabled, memConfig.ConsolidationInterval)
 
-	// 5. 可观测性 — 使用真实的 MetricsCollector 演示告警检查
-	fmt.Println("\n5. 可观测性告警检查")
-	collector := observability.NewMetricsCollector(logger)
-	// 模拟一些任务数据
-	collector.RecordTask("prod-agent", true, 100*1e6, 500, 0.01, 8.0)
-	collector.RecordTask("prod-agent", true, 200*1e6, 600, 0.012, 7.5)
-	collector.RecordTask("prod-agent", false, 500*1e6, 400, 0.008, 3.0)
+	// 5. Observability
+	fmt.Println("\n5. Observability system")
+	obsSystem := observability.NewObservabilitySystem(logger)
+	fmt.Printf("  Observability system initialized: %v\n", obsSystem != nil)
 
-	m := collector.GetMetrics("prod-agent")
-	if m != nil {
-		alerts := map[string]struct {
-			value     float64
-			threshold float64
-			op        string
-		}{
-			"成功率":    {m.TaskSuccessRate * 100, 70, "<"},
-			"每任务成本": {m.CostPerTask, 0.10, ">"},
-			"平均质量":  {m.AvgOutputQuality, 6.0, "<"},
-		}
-		for name, a := range alerts {
-			status := "OK"
-			if (a.op == "<" && a.value < a.threshold) || (a.op == ">" && a.value > a.threshold) {
-				status = "ALERT"
-			}
-			fmt.Printf("  [%s] %s: %.2f (阈值 %s %.2f)\n", status, name, a.value, a.op, a.threshold)
-		}
+	// 6. Hierarchical system for production
+	fmt.Println("\n6. Hierarchical system defaults")
+	hConfig := hierarchical.DefaultHierarchicalConfig()
+	fmt.Printf("  MaxWorkers: %d, TaskTimeout: %v, EnableRetry: %v, MaxRetries: %d\n",
+		hConfig.MaxWorkers, hConfig.TaskTimeout, hConfig.EnableRetry, hConfig.MaxRetries)
+
+	// 7. Collaboration system for production
+	fmt.Println("\n7. Collaboration system defaults")
+	collabConfig := collaboration.DefaultMultiAgentConfig()
+	fmt.Printf("  Pattern: %s, MaxRounds: %d, ConsensusThreshold: %.2f, Timeout: %v\n",
+		collabConfig.Pattern, collabConfig.MaxRounds,
+		collabConfig.ConsensusThreshold, collabConfig.Timeout)
+
+	// 8. Gradual rollout strategy
+	fmt.Println("\n8. Recommended gradual rollout strategy")
+	phases := []struct {
+		week     string
+		features []string
+	}{
+		{"Week 1", []string{"Observability", "Prompt Enhancer"}},
+		{"Week 2-3", []string{"Dynamic Tool Selection", "Enhanced Memory"}},
+		{"Week 4", []string{"Reflection", "Skills System"}},
+		{"Week 5+", []string{"MCP Integration", "Multi-Agent Collaboration"}},
 	}
-
-	_ = prodConfig
-	_ = reflectionConfig
+	for _, phase := range phases {
+		fmt.Printf("  %s: %v\n", phase.week, phase.features)
+	}
 }
+
