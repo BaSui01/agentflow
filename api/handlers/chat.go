@@ -307,13 +307,7 @@ func (h *ChatHandler) convertChoices(choices []llm.ChatChoice) []api.ChatChoice 
 		result[i] = api.ChatChoice{
 			Index:        choice.Index,
 			FinishReason: choice.FinishReason,
-			Message: api.Message{
-				Role:       string(choice.Message.Role),
-				Content:    choice.Message.Content,
-				Name:       choice.Message.Name,
-				ToolCalls:  choice.Message.ToolCalls,
-				ToolCallID: choice.Message.ToolCallID,
-			},
+			Message:      convertTypesMessageToAPI(choice.Message),
 		}
 	}
 	return result
@@ -331,17 +325,11 @@ func (h *ChatHandler) convertUsage(usage llm.ChatUsage) api.ChatUsage {
 // convertToAPIStreamChunk 转换流式块
 func (h *ChatHandler) convertToAPIStreamChunk(chunk *llm.StreamChunk) *api.StreamChunk {
 	return &api.StreamChunk{
-		ID:       chunk.ID,
-		Provider: chunk.Provider,
-		Model:    chunk.Model,
-		Index:    chunk.Index,
-		Delta: api.Message{
-			Role:       string(chunk.Delta.Role),
-			Content:    chunk.Delta.Content,
-			Name:       chunk.Delta.Name,
-			ToolCalls:  chunk.Delta.ToolCalls,
-			ToolCallID: chunk.Delta.ToolCallID,
-		},
+		ID:           chunk.ID,
+		Provider:     chunk.Provider,
+		Model:        chunk.Model,
+		Index:        chunk.Index,
+		Delta:        convertTypesMessageToAPI(chunk.Delta),
 		FinishReason: chunk.FinishReason,
 		Usage:        convertStreamUsage(chunk.Usage),
 	}
@@ -384,6 +372,32 @@ func writeJSON(w http.ResponseWriter, data any) error {
 // =============================================================================
 // 🔄 类型转换辅助函数
 // =============================================================================
+
+// convertTypesMessageToAPI converts a types.Message to an api.Message,
+// copying all fields including Images, Metadata, and Timestamp.
+func convertTypesMessageToAPI(msg types.Message) api.Message {
+	m := api.Message{
+		Role:       string(msg.Role),
+		Content:    msg.Content,
+		Name:       msg.Name,
+		ToolCalls:  msg.ToolCalls,
+		ToolCallID: msg.ToolCallID,
+		Metadata:   msg.Metadata,
+		Timestamp:  msg.Timestamp,
+	}
+	if len(msg.Images) > 0 {
+		images := make([]api.ImageContent, len(msg.Images))
+		for i, img := range msg.Images {
+			images[i] = api.ImageContent{
+				Type: img.Type,
+				URL:  img.URL,
+				Data: img.Data,
+			}
+		}
+		m.Images = images
+	}
+	return m
+}
 
 // Note: convertAPIToolCallsToTypes and convertTypesToolCallsToAPI were removed
 // because api.ToolCall is now a type alias for types.ToolCall — no conversion needed.

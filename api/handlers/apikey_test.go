@@ -42,7 +42,8 @@ func TestMaskAPIKey(t *testing.T) {
 
 func TestHandleListProviders(t *testing.T) {
 	db := setupTestDB(t)
-	h := NewAPIKeyHandler(db, zap.NewNop())
+	store := NewGormAPIKeyStore(db)
+	h := NewAPIKeyHandler(store, zap.NewNop())
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/providers", nil)
 	w := httptest.NewRecorder()
@@ -57,7 +58,8 @@ func TestHandleListProviders(t *testing.T) {
 
 func TestHandleCreateAndListAPIKeys(t *testing.T) {
 	db := setupTestDB(t)
-	h := NewAPIKeyHandler(db, zap.NewNop())
+	store := NewGormAPIKeyStore(db)
+	h := NewAPIKeyHandler(store, zap.NewNop())
 
 	// Create
 	body, _ := json.Marshal(createAPIKeyRequest{
@@ -96,7 +98,8 @@ func TestHandleCreateAndListAPIKeys(t *testing.T) {
 
 func TestHandleUpdateAPIKey(t *testing.T) {
 	db := setupTestDB(t)
-	h := NewAPIKeyHandler(db, zap.NewNop())
+	store := NewGormAPIKeyStore(db)
+	h := NewAPIKeyHandler(store, zap.NewNop())
 
 	// 先创建
 	db.Create(&llm.LLMProviderAPIKey{
@@ -127,7 +130,8 @@ func TestHandleUpdateAPIKey(t *testing.T) {
 
 func TestHandleDeleteAPIKey(t *testing.T) {
 	db := setupTestDB(t)
-	h := NewAPIKeyHandler(db, zap.NewNop())
+	store := NewGormAPIKeyStore(db)
+	h := NewAPIKeyHandler(store, zap.NewNop())
 
 	db.Create(&llm.LLMProviderAPIKey{
 		ProviderID: 1, APIKey: "sk-delete-test", Priority: 100, Weight: 100, Enabled: true,
@@ -149,7 +153,8 @@ func TestHandleDeleteAPIKey(t *testing.T) {
 
 func TestHandleDeleteAPIKey_NotFound(t *testing.T) {
 	db := setupTestDB(t)
-	h := NewAPIKeyHandler(db, zap.NewNop())
+	store := NewGormAPIKeyStore(db)
+	h := NewAPIKeyHandler(store, zap.NewNop())
 
 	req := httptest.NewRequest(http.MethodDelete, "/api/v1/providers/1/api-keys/999", nil)
 	req.SetPathValue("id", "1")
@@ -162,7 +167,8 @@ func TestHandleDeleteAPIKey_NotFound(t *testing.T) {
 
 func TestHandleAPIKeyStats(t *testing.T) {
 	db := setupTestDB(t)
-	h := NewAPIKeyHandler(db, zap.NewNop())
+	store := NewGormAPIKeyStore(db)
+	h := NewAPIKeyHandler(store, zap.NewNop())
 
 	db.Create(&llm.LLMProviderAPIKey{
 		ProviderID: 1, APIKey: "sk-stats-test", BaseURL: "https://api.test.com",
@@ -184,7 +190,8 @@ func TestHandleAPIKeyStats(t *testing.T) {
 
 func TestHandleCreateAPIKey_Validation(t *testing.T) {
 	db := setupTestDB(t)
-	h := NewAPIKeyHandler(db, zap.NewNop())
+	store := NewGormAPIKeyStore(db)
+	h := NewAPIKeyHandler(store, zap.NewNop())
 
 	// 空 api_key 应该返回 400
 	body, _ := json.Marshal(createAPIKeyRequest{APIKey: "", Label: "empty"})

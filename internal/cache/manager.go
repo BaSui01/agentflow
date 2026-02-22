@@ -3,11 +3,12 @@ package cache
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sync"
 	"time"
 
-	"github.com/BaSui01/agentflow/internal/tlsutil"
+	"github.com/BaSui01/agentflow/pkg/tlsutil"
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 )
@@ -334,9 +335,9 @@ func (m *Manager) GetStats(ctx context.Context) (*Stats, error) {
 // =============================================================================
 
 // ErrCacheMiss 缓存未命中错误
-var ErrCacheMiss = fmt.Errorf("cache miss")
+var ErrCacheMiss = errors.New("cache miss")
 
 // IsCacheMiss 判断是否为缓存未命中错误
 func IsCacheMiss(err error) bool {
-	return err == ErrCacheMiss
+	return errors.Is(err, ErrCacheMiss)
 }

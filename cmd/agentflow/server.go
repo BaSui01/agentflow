@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"sync"
+	"time"
 
 	"github.com/BaSui01/agentflow/agent"
 	"github.com/BaSui01/agentflow/agent/discovery"
@@ -18,7 +19,6 @@ import (
 	"github.com/BaSui01/agentflow/types"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.uber.org/zap"
-	"golang.org/x/sync/singleflight"
 	"gorm.io/gorm"
 )
 
@@ -62,9 +62,8 @@ type Server struct {
 	// LLM provider (nil when API key not configured)
 	provider llm.Provider
 
-	// Cached agent instances for the resolver
-	agents  sync.Map
-	agentSF singleflight.Group
+	// Agent resolver (nil when no LLM provider)
+	resolver *agent.CachingResolver
 
 	wg sync.WaitGroup
 }
@@ -155,8 +154,8 @@ func (s *Server) initHandlers() error {
 	agentRegistry := agent.NewAgentRegistry(s.logger)
 
 	if s.provider != nil {
-		resolver := s.buildAgentResolver(agentRegistry)
-		s.agentHandler = handlers.NewAgentHandler(discoveryRegistry, agentRegistry, s.logger, resolver)
+		s.resolver = agent.NewCachingResolver(agentRegistry, s.provider, s.logger)
+		s.agentHandler = handlers.NewAgentHandler(discoveryRegistry, agentRegistry, s.logger, s.resolver.Resolve)
 		s.logger.Info("Agent handler initialized with resolver")
 	} else {
 		s.agentHandler = handlers.NewAgentHandler(discoveryRegistry, agentRegistry, s.logger)
@@ -165,7 +164,8 @@ func (s *Server) initHandlers() error {
 
 	// Initialize API key handler when database is available
 	if s.db != nil {
-		s.apiKeyHandler = handlers.NewAPIKeyHandler(s.db, s.logger)
+		store := handlers.NewGormAPIKeyStore(s.db)
+		s.apiKeyHandler = handlers.NewAPIKeyHandler(store, s.logger)
 		s.logger.Info("API key handler initialized")
 	} else {
 		s.logger.Info("Database not available, API key management disabled")
@@ -375,48 +375,6 @@ func (s *Server) startMetricsServer() error {
 	return nil
 }
 
-// buildAgentResolver creates an AgentResolver that uses the AgentRegistry to
-// create agent instances on demand and caches them in s.agents for reuse.
-// It uses singleflight to ensure that concurrent requests for the same agentID
-// only trigger one Create+Init cycle, preventing leaked agent instances.
-func (s *Server) buildAgentResolver(registry *agent.AgentRegistry) handlers.AgentResolver {
-	return func(ctx context.Context, agentID string) (agent.Agent, error) {
-		// Check cache first
-		if cached, ok := s.agents.Load(agentID); ok {
-			return cached.(agent.Agent), nil
-		}
-
-		// Use singleflight to ensure only one goroutine creates the agent
-		result, err, _ := s.agentSF.Do(agentID, func() (any, error) {
-			// Double-check cache after acquiring the flight
-			if cached, ok := s.agents.Load(agentID); ok {
-				return cached, nil
-			}
-
-			cfg := agent.Config{
-				ID:   agentID,
-				Name: agentID,
-				Type: agent.TypeGeneric,
-			}
-			ag, err := registry.Create(cfg, s.provider, nil, nil, nil, s.logger)
-			if err != nil {
-				return nil, fmt.Errorf("failed to create agent %q: %w", agentID, err)
-			}
-
-			if err := ag.Init(ctx); err != nil {
-				return nil, fmt.Errorf("failed to init agent %q: %w", agentID, err)
-			}
-
-			s.agents.Store(agentID, ag)
-			return ag, nil
-		})
-		if err != nil {
-			return nil, err
-		}
-		return result.(agent.Agent), nil
-	}
-}
-
 // getFirstAPIKey 返回配置中的第一个 API Key，用于配置 API 的独立认证。
 // 如果未配置任何 API Key，返回空字符串（ConfigAPIMiddleware 会跳过认证检查）。
 func (s *Server) getFirstAPIKey() string {
@@ -471,7 +429,12 @@ func (s *Server) WaitForShutdown() {
 func (s *Server) Shutdown() {
 	s.logger.Info("Starting graceful shutdown...")
 
-	ctx := context.Background()
+	timeout := s.cfg.Server.ShutdownTimeout
+	if timeout <= 0 {
+		timeout = 15 * time.Second
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
 
 	// 0. 停止 rate limiter 清理 goroutine
 	if s.rateLimiterCancel != nil {
@@ -511,16 +474,9 @@ func (s *Server) Shutdown() {
 	}
 
 	// 5. Teardown cached agent instances
-	s.agents.Range(func(key, value any) bool {
-		if ag, ok := value.(agent.Agent); ok {
-			if err := ag.Teardown(ctx); err != nil {
-				s.logger.Warn("Failed to teardown cached agent",
-					zap.String("agent_id", key.(string)),
-					zap.Error(err))
-			}
-		}
-		return true
-	})
+	if s.resolver != nil {
+		s.resolver.TeardownAll(ctx)
+	}
 
 	// 6. 关闭数据库连接
 	if s.db != nil {

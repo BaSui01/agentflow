@@ -8,18 +8,17 @@ import (
 	"github.com/BaSui01/agentflow/llm"
 	"github.com/BaSui01/agentflow/types"
 	"go.uber.org/zap"
-	"gorm.io/gorm"
 )
 
 // APIKeyHandler 处理 API Key 管理的 CRUD 操作
 type APIKeyHandler struct {
-	db     *gorm.DB
+	store  APIKeyStore
 	logger *zap.Logger
 }
 
 // NewAPIKeyHandler 创建 APIKeyHandler
-func NewAPIKeyHandler(db *gorm.DB, logger *zap.Logger) *APIKeyHandler {
-	return &APIKeyHandler{db: db, logger: logger}
+func NewAPIKeyHandler(store APIKeyStore, logger *zap.Logger) *APIKeyHandler {
+	return &APIKeyHandler{store: store, logger: logger}
 }
 
 // maskAPIKey 脱敏 API Key，仅显示末 4 位
@@ -71,8 +70,8 @@ func (h *APIKeyHandler) HandleListProviders(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	var providers []llm.LLMProvider
-	if err := h.db.Order("id ASC").Find(&providers).Error; err != nil {
+	providers, err := h.store.ListProviders()
+	if err != nil {
 		WriteErrorMessage(w, http.StatusInternalServerError, types.ErrInternalError, "failed to list providers", h.logger)
 		return
 	}
@@ -126,8 +125,8 @@ func (h *APIKeyHandler) HandleListAPIKeys(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	var keys []llm.LLMProviderAPIKey
-	if err := h.db.Where("provider_id = ?", providerID).Order("priority ASC, id ASC").Find(&keys).Error; err != nil {
+	keys, err := h.store.ListAPIKeys(providerID)
+	if err != nil {
 		WriteErrorMessage(w, http.StatusInternalServerError, types.ErrInternalError, "failed to list API keys", h.logger)
 		return
 	}
@@ -221,7 +220,7 @@ func (h *APIKeyHandler) HandleCreateAPIKey(w http.ResponseWriter, r *http.Reques
 		key.Weight = 100
 	}
 
-	if err := h.db.Create(&key).Error; err != nil {
+	if err := h.store.CreateAPIKey(&key); err != nil {
 		WriteErrorMessage(w, http.StatusInternalServerError, types.ErrInternalError, "failed to create API key", h.logger)
 		return
 	}
@@ -262,8 +261,8 @@ func (h *APIKeyHandler) HandleUpdateAPIKey(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	var existing llm.LLMProviderAPIKey
-	if err := h.db.Where("id = ? AND provider_id = ?", keyID, providerID).First(&existing).Error; err != nil {
+	existing, err := h.store.GetAPIKey(keyID, providerID)
+	if err != nil {
 		WriteErrorMessage(w, http.StatusNotFound, types.ErrInvalidRequest, "API key not found", h.logger)
 		return
 	}
@@ -330,13 +329,16 @@ func (h *APIKeyHandler) HandleUpdateAPIKey(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	if err := h.db.Model(&existing).Updates(updates).Error; err != nil {
+	if err := h.store.UpdateAPIKey(&existing, updates); err != nil {
 		WriteErrorMessage(w, http.StatusInternalServerError, types.ErrInternalError, "failed to update API key", h.logger)
 		return
 	}
 
 	// 重新加载
-	h.db.First(&existing, keyID)
+	if err := h.store.ReloadAPIKey(&existing); err != nil {
+		WriteErrorMessage(w, http.StatusInternalServerError, types.ErrInternalError, "failed to reload API key", h.logger)
+		return
+	}
 	WriteSuccess(w, toAPIKeyResponse(existing))
 }
 
@@ -359,12 +361,12 @@ func (h *APIKeyHandler) HandleDeleteAPIKey(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	result := h.db.Where("id = ? AND provider_id = ?", keyID, providerID).Delete(&llm.LLMProviderAPIKey{})
-	if result.Error != nil {
+	rowsAffected, err := h.store.DeleteAPIKey(keyID, providerID)
+	if err != nil {
 		WriteErrorMessage(w, http.StatusInternalServerError, types.ErrInternalError, "failed to delete API key", h.logger)
 		return
 	}
-	if result.RowsAffected == 0 {
+	if rowsAffected == 0 {
 		WriteErrorMessage(w, http.StatusNotFound, types.ErrInvalidRequest, "API key not found", h.logger)
 		return
 	}
@@ -385,8 +387,8 @@ func (h *APIKeyHandler) HandleAPIKeyStats(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	var keys []llm.LLMProviderAPIKey
-	if err := h.db.Where("provider_id = ?", providerID).Find(&keys).Error; err != nil {
+	keys, err := h.store.ListAPIKeys(providerID)
+	if err != nil {
 		WriteErrorMessage(w, http.StatusInternalServerError, types.ErrInternalError, "failed to load API keys", h.logger)
 		return
 	}

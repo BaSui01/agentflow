@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/BaSui01/agentflow/internal/tlsutil"
+	"github.com/BaSui01/agentflow/pkg/tlsutil"
 )
 
 // Tripo Provider使用 Tripo3D API执行3D生成.

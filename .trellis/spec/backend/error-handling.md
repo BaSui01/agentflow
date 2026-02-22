@@ -294,7 +294,9 @@ Centralized in `mapErrorCodeToHTTPStatus` (`api/handlers/common.go:103-141`):
 
 ### 1. Duplicate Sentinel Errors Across Packages
 
-`ErrCacheMiss` is defined in 3 places (`llm/cache.go`, `llm/cache/prompt_cache.go`, `internal/cache/manager.go`). These are distinct values — `errors.Is` will NOT match across them. Consolidate sentinels in a single location.
+`ErrCacheMiss` is defined in 2 places (`llm/cache/prompt_cache.go`, `internal/cache/manager.go`). These are distinct values — `errors.Is` will NOT match across them. Consolidate sentinels in a single location.
+
+> **历史修复**：`internal/cache/manager.go` 的 `ErrCacheMiss` 已从 `fmt.Errorf("cache miss")` 改为 `errors.New("cache miss")`，`IsCacheMiss` 已从 `err == ErrCacheMiss` 改为 `errors.Is(err, ErrCacheMiss)`。
 
 ### 2. Two Parallel `Error` Types
 

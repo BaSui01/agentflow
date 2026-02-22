@@ -10,7 +10,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/BaSui01/agentflow/internal/tlsutil"
+	"github.com/BaSui01/agentflow/pkg/tlsutil"
 )
 
 // A2AClient定义了A2A客户端操作的接口.
