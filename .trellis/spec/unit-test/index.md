@@ -647,9 +647,9 @@ require.True(t, ok, "condition not met within timeout")
 |---------|------|--------|
 | `agent/browser/` | High | Concurrent pool + vision, P0 race conditions |
 | `agent/hitl/` | High | P0 Resolve/Cancel race condition |
-| `agent/federation/` | High | P0 channel close race |
-| `agent/voice/` | Medium | Audio streaming lifecycle |
-| `llm/batch/` | Medium | Batch processing with timeouts |
+| `agent/federation/` | High | ✅ Tests added (8 tests) — orchestrator register/unregister/submit/concurrent |
+| `agent/voice/` | Medium | ✅ Tests added (11 tests) — VoiceAgent/VoiceSession/NativeAudioReasoner |
+| `llm/batch/` | Medium | ✅ Tests added (8 tests) — BatchProcessor submit/sync/concurrent/stats |
 | `llm/streaming/` | Medium | Backpressure and buffer management |
 | `llm/embedding/` | Low | Relatively simple wrapper |
 | `llm/tokenizer/` | Low | Thin adapter layer |

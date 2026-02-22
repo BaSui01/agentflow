@@ -2,7 +2,7 @@
 name: dispatch
 description: |
   Multi-Agent Pipeline main dispatcher. Pure dispatcher. Only responsible for calling subagents and scripts in phase order.
-tools: Read, Bash, mcp__exa__web_search_exa, mcp__exa__get_code_context_exa
+tools: Read, Bash
 model: opus
 ---
 # Dispatch Agent

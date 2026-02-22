@@ -15,11 +15,17 @@ import (
 	"sync"
 	"time"
 
+	"github.com/BaSui01/agentflow/api/handlers"
 	"github.com/BaSui01/agentflow/config"
 	"github.com/BaSui01/agentflow/internal/metrics"
 	"github.com/BaSui01/agentflow/types"
 
 	"github.com/golang-jwt/jwt/v5"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/propagation"
+	semconv "go.opentelemetry.io/otel/semconv/v1.26.0"
+	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 	"golang.org/x/time/rate"
 )
@@ -197,6 +203,42 @@ func normalizePath(path string) string {
 		return path
 	}
 	return strings.Join(segments, "/")
+}
+
+// =============================================================================
+// OTelTracing — OpenTelemetry HTTP tracing middleware
+// =============================================================================
+
+// OTelTracing creates a span for each HTTP request using the global OTel tracer.
+// It extracts incoming trace context from request headers and records standard
+// HTTP semantic convention attributes on the span.
+func OTelTracing() Middleware {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// Extract trace context from incoming request headers
+			propagator := otel.GetTextMapPropagator()
+			ctx := propagator.Extract(r.Context(), propagation.HeaderCarrier(r.Header))
+
+			tracer := otel.Tracer("agentflow/http")
+			spanName := r.Method + " " + r.URL.Path
+			ctx, span := tracer.Start(ctx, spanName,
+				trace.WithSpanKind(trace.SpanKindServer),
+				trace.WithAttributes(
+					semconv.HTTPRequestMethodKey.String(r.Method),
+					semconv.URLFull(r.URL.String()),
+				),
+			)
+			defer span.End()
+
+			// Wrap response writer to capture status code
+			rw := handlers.NewResponseWriter(w)
+			next.ServeHTTP(rw, r.WithContext(ctx))
+
+			span.SetAttributes(
+				attribute.Int("http.response.status_code", rw.StatusCode),
+			)
+		})
+	}
 }
 
 // APIKeyAuth API Key 认证中间件

@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"encoding/json"
 	"net/http"
 	"strconv"
 	"strings"
@@ -81,8 +80,6 @@ func (h *APIKeyHandler) HandleListProviders(w http.ResponseWriter, r *http.Reque
 	WriteSuccess(w, providers)
 }
 
-// PLACEHOLDER_CRUD
-
 // apiKeyResponse 脱敏后的 API Key 响应
 type apiKeyResponse struct {
 	ID             uint   `json:"id"`
@@ -142,8 +139,6 @@ func (h *APIKeyHandler) HandleListAPIKeys(w http.ResponseWriter, r *http.Request
 	WriteSuccess(w, resp)
 }
 
-// PLACEHOLDER_CREATE_UPDATE_DELETE
-
 // createAPIKeyRequest 创建 API Key 请求体
 type createAPIKeyRequest struct {
 	APIKey       string `json:"api_key"`
@@ -169,14 +164,42 @@ func (h *APIKeyHandler) HandleCreateAPIKey(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
+	if !ValidateContentType(w, r, h.logger) {
+		return
+	}
+
 	var req createAPIKeyRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		WriteErrorMessage(w, http.StatusBadRequest, types.ErrInvalidRequest, "invalid request body", h.logger)
+	if err := DecodeJSONBody(w, r, &req, h.logger); err != nil {
 		return
 	}
 
 	if strings.TrimSpace(req.APIKey) == "" {
 		WriteErrorMessage(w, http.StatusBadRequest, types.ErrInvalidRequest, "api_key is required", h.logger)
+		return
+	}
+
+	if req.BaseURL != "" && !ValidateURL(req.BaseURL) {
+		WriteErrorMessage(w, http.StatusBadRequest, types.ErrInvalidRequest, "base_url must be a valid HTTP or HTTPS URL", h.logger)
+		return
+	}
+
+	if req.Priority < 0 {
+		WriteErrorMessage(w, http.StatusBadRequest, types.ErrInvalidRequest, "priority must be non-negative", h.logger)
+		return
+	}
+
+	if req.Weight < 0 {
+		WriteErrorMessage(w, http.StatusBadRequest, types.ErrInvalidRequest, "weight must be non-negative", h.logger)
+		return
+	}
+
+	if req.RateLimitRPM < 0 {
+		WriteErrorMessage(w, http.StatusBadRequest, types.ErrInvalidRequest, "rate_limit_rpm must be non-negative", h.logger)
+		return
+	}
+
+	if req.RateLimitRPD < 0 {
+		WriteErrorMessage(w, http.StatusBadRequest, types.ErrInvalidRequest, "rate_limit_rpd must be non-negative", h.logger)
 		return
 	}
 
@@ -208,8 +231,6 @@ func (h *APIKeyHandler) HandleCreateAPIKey(w http.ResponseWriter, r *http.Reques
 		Data:    toAPIKeyResponse(key),
 	})
 }
-
-// PLACEHOLDER_UPDATE_DELETE_STATS
 
 // updateAPIKeyRequest 更新 API Key 请求体
 type updateAPIKeyRequest struct {
@@ -247,9 +268,37 @@ func (h *APIKeyHandler) HandleUpdateAPIKey(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
+	if !ValidateContentType(w, r, h.logger) {
+		return
+	}
+
 	var req updateAPIKeyRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		WriteErrorMessage(w, http.StatusBadRequest, types.ErrInvalidRequest, "invalid request body", h.logger)
+	if err := DecodeJSONBody(w, r, &req, h.logger); err != nil {
+		return
+	}
+
+	if req.BaseURL != nil && *req.BaseURL != "" && !ValidateURL(*req.BaseURL) {
+		WriteErrorMessage(w, http.StatusBadRequest, types.ErrInvalidRequest, "base_url must be a valid HTTP or HTTPS URL", h.logger)
+		return
+	}
+
+	if req.Priority != nil && *req.Priority < 0 {
+		WriteErrorMessage(w, http.StatusBadRequest, types.ErrInvalidRequest, "priority must be non-negative", h.logger)
+		return
+	}
+
+	if req.Weight != nil && *req.Weight < 0 {
+		WriteErrorMessage(w, http.StatusBadRequest, types.ErrInvalidRequest, "weight must be non-negative", h.logger)
+		return
+	}
+
+	if req.RateLimitRPM != nil && *req.RateLimitRPM < 0 {
+		WriteErrorMessage(w, http.StatusBadRequest, types.ErrInvalidRequest, "rate_limit_rpm must be non-negative", h.logger)
+		return
+	}
+
+	if req.RateLimitRPD != nil && *req.RateLimitRPD < 0 {
+		WriteErrorMessage(w, http.StatusBadRequest, types.ErrInvalidRequest, "rate_limit_rpd must be non-negative", h.logger)
 		return
 	}
 
@@ -275,8 +324,6 @@ func (h *APIKeyHandler) HandleUpdateAPIKey(w http.ResponseWriter, r *http.Reques
 	if req.RateLimitRPD != nil {
 		updates["rate_limit_rpd"] = *req.RateLimitRPD
 	}
-
-// PLACEHOLDER_FINAL
 
 	if len(updates) == 0 {
 		WriteErrorMessage(w, http.StatusBadRequest, types.ErrInvalidRequest, "no fields to update", h.logger)
