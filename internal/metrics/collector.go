@@ -28,9 +28,11 @@ type Collector struct {
 	llmCost            *prometheus.CounterVec
 
 	// Agent 指标
+	// K3 FIX: agent_id 改为 agent_type，避免动态 ID 导致时间序列基数爆炸
 	agentExecutionsTotal   *prometheus.CounterVec
 	agentExecutionDuration *prometheus.HistogramVec
 	agentStateTransitions  *prometheus.CounterVec
+	agentInfo              *prometheus.GaugeVec // agent_id → agent_type 映射，仅用于调试
 
 	// 缓存指标
 	cacheHits   *prometheus.CounterVec
@@ -130,13 +132,14 @@ func NewCollector(namespace string, logger *zap.Logger) *Collector {
 	)
 
 	// Agent 指标
+	// K3 FIX: 使用 agent_type（有限枚举）替代 agent_id（动态 UUID），防止时间序列基数爆炸
 	c.agentExecutionsTotal = promauto.NewCounterVec(
 		prometheus.CounterOpts{
 			Namespace: namespace,
 			Name:      "agent_executions_total",
 			Help:      "Total number of agent executions",
 		},
-		[]string{"agent_id", "agent_type", "status"},
+		[]string{"agent_type", "status"},
 	)
 
 	c.agentExecutionDuration = promauto.NewHistogramVec(
@@ -146,7 +149,7 @@ func NewCollector(namespace string, logger *zap.Logger) *Collector {
 			Help:      "Agent execution duration in seconds",
 			Buckets:   []float64{0.1, 0.5, 1, 2, 5, 10, 30, 60, 120},
 		},
-		[]string{"agent_id", "agent_type"},
+		[]string{"agent_type"},
 	)
 
 	c.agentStateTransitions = promauto.NewCounterVec(
@@ -155,7 +158,17 @@ func NewCollector(namespace string, logger *zap.Logger) *Collector {
 			Name:      "agent_state_transitions_total",
 			Help:      "Total number of agent state transitions",
 		},
-		[]string{"agent_id", "from_state", "to_state"},
+		[]string{"agent_type", "from_state", "to_state"},
+	)
+
+	// agent_info gauge 保留 agent_id 的可观测性，但不参与高频指标
+	c.agentInfo = promauto.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Namespace: namespace,
+			Name:      "agent_info",
+			Help:      "Agent metadata mapping (agent_id to agent_type)",
+		},
+		[]string{"agent_id", "agent_type"},
 	)
 
 	// 缓存指标
@@ -241,14 +254,21 @@ func (c *Collector) RecordLLMRequest(provider, model, status string, duration ti
 // =============================================================================
 
 // RecordAgentExecution 记录 Agent 执行
-func (c *Collector) RecordAgentExecution(agentID, agentType, status string, duration time.Duration) {
-	c.agentExecutionsTotal.WithLabelValues(agentID, agentType, status).Inc()
-	c.agentExecutionDuration.WithLabelValues(agentID, agentType).Observe(duration.Seconds())
+// K3 FIX: 移除 agentID 参数，仅使用 agentType（有限枚举值）
+func (c *Collector) RecordAgentExecution(agentType, status string, duration time.Duration) {
+	c.agentExecutionsTotal.WithLabelValues(agentType, status).Inc()
+	c.agentExecutionDuration.WithLabelValues(agentType).Observe(duration.Seconds())
 }
 
 // RecordAgentStateTransition 记录 Agent 状态转换
-func (c *Collector) RecordAgentStateTransition(agentID, fromState, toState string) {
-	c.agentStateTransitions.WithLabelValues(agentID, fromState, toState).Inc()
+// K3 FIX: 使用 agentType 替代 agentID，避免 agent_id x from_state x to_state 笛卡尔积爆炸
+func (c *Collector) RecordAgentStateTransition(agentType, fromState, toState string) {
+	c.agentStateTransitions.WithLabelValues(agentType, fromState, toState).Inc()
+}
+
+// RecordAgentInfo 记录 agent_id 到 agent_type 的映射关系（低频调用，仅用于调试）
+func (c *Collector) RecordAgentInfo(agentID, agentType string) {
+	c.agentInfo.WithLabelValues(agentID, agentType).Set(1)
 }
 
 // =============================================================================

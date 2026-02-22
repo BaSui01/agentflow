@@ -235,19 +235,19 @@ func SeedExampleData(db *gorm.DB) error {
 
 	// 种子 API 密钥（示例 - 替换为真实密钥）
 	apiKeys := []LLMProviderAPIKey{
-		{ProviderID: 1, APIKey: "sk-example-openai-key", Label: "主账号", Priority: 10, Weight: 100, Enabled: false, RateLimitRPM: 3500, RateLimitRPD: 200000},
-		{ProviderID: 2, APIKey: "sk-ant-example-anthropic-key", Label: "主账号", Priority: 10, Weight: 100, Enabled: false, RateLimitRPM: 0, RateLimitRPD: 0},
-		{ProviderID: 3, APIKey: "AIza-example-google-key", Label: "主账号", Priority: 10, Weight: 100, Enabled: false, RateLimitRPM: 0, RateLimitRPD: 0},
-		{ProviderID: 4, APIKey: "sk-example-deepseek-key", Label: "主账号", Priority: 10, Weight: 100, Enabled: false, RateLimitRPM: 0, RateLimitRPD: 0},
-		{ProviderID: 5, APIKey: "your-ark-doubao-key", Label: "主账号", Priority: 10, Weight: 100, Enabled: false, RateLimitRPM: 0, RateLimitRPD: 0},
-		{ProviderID: 6, APIKey: "sk-example-qwen-key", Label: "主账号", Priority: 10, Weight: 100, Enabled: false, RateLimitRPM: 0, RateLimitRPD: 0},
-		{ProviderID: 7, APIKey: "example-glm-key", Label: "主账号", Priority: 10, Weight: 100, Enabled: false, RateLimitRPM: 0, RateLimitRPD: 0},
-		{ProviderID: 8, APIKey: "xai-example-grok-key", Label: "主账号", Priority: 10, Weight: 100, Enabled: false, RateLimitRPM: 0, RateLimitRPD: 0},
-		{ProviderID: 9, APIKey: "example-mistral-key", Label: "主账号", Priority: 10, Weight: 100, Enabled: false, RateLimitRPM: 0, RateLimitRPD: 0},
-		{ProviderID: 10, APIKey: "example-hunyuan-key", Label: "主账号", Priority: 10, Weight: 100, Enabled: false, RateLimitRPM: 0, RateLimitRPD: 0},
-		{ProviderID: 11, APIKey: "example-kimi-key", Label: "主账号", Priority: 10, Weight: 100, Enabled: false, RateLimitRPM: 0, RateLimitRPD: 0},
-		{ProviderID: 12, APIKey: "example-minimax-key", Label: "主账号", Priority: 10, Weight: 100, Enabled: false, RateLimitRPM: 0, RateLimitRPD: 0},
-		{ProviderID: 13, APIKey: "example-llama-key", Label: "主账号", Priority: 10, Weight: 100, Enabled: false, RateLimitRPM: 0, RateLimitRPD: 0},
+		{ProviderID: 1, APIKey: "sk-example-openai-key", BaseURL: "https://api.openai.com", Label: "主账号", Priority: 10, Weight: 100, Enabled: false, RateLimitRPM: 3500, RateLimitRPD: 200000},
+		{ProviderID: 2, APIKey: "sk-ant-example-anthropic-key", BaseURL: "https://api.anthropic.com", Label: "主账号", Priority: 10, Weight: 100, Enabled: false, RateLimitRPM: 0, RateLimitRPD: 0},
+		{ProviderID: 3, APIKey: "AIza-example-google-key", BaseURL: "https://generativelanguage.googleapis.com", Label: "主账号", Priority: 10, Weight: 100, Enabled: false, RateLimitRPM: 0, RateLimitRPD: 0},
+		{ProviderID: 4, APIKey: "sk-example-deepseek-key", BaseURL: "https://api.deepseek.com", Label: "主账号", Priority: 10, Weight: 100, Enabled: false, RateLimitRPM: 0, RateLimitRPD: 0},
+		{ProviderID: 5, APIKey: "your-ark-doubao-key", BaseURL: "https://ark.cn-beijing.volces.com", Label: "主账号", Priority: 10, Weight: 100, Enabled: false, RateLimitRPM: 0, RateLimitRPD: 0},
+		{ProviderID: 6, APIKey: "sk-example-qwen-key", BaseURL: "https://dashscope.aliyuncs.com", Label: "主账号", Priority: 10, Weight: 100, Enabled: false, RateLimitRPM: 0, RateLimitRPD: 0},
+		{ProviderID: 7, APIKey: "example-glm-key", BaseURL: "https://open.bigmodel.cn", Label: "主账号", Priority: 10, Weight: 100, Enabled: false, RateLimitRPM: 0, RateLimitRPD: 0},
+		{ProviderID: 8, APIKey: "xai-example-grok-key", BaseURL: "https://api.x.ai", Label: "主账号", Priority: 10, Weight: 100, Enabled: false, RateLimitRPM: 0, RateLimitRPD: 0},
+		{ProviderID: 9, APIKey: "example-mistral-key", BaseURL: "https://api.mistral.ai", Label: "主账号", Priority: 10, Weight: 100, Enabled: false, RateLimitRPM: 0, RateLimitRPD: 0},
+		{ProviderID: 10, APIKey: "example-hunyuan-key", BaseURL: "https://hunyuan.tencentcloudapi.com", Label: "主账号", Priority: 10, Weight: 100, Enabled: false, RateLimitRPM: 0, RateLimitRPD: 0},
+		{ProviderID: 11, APIKey: "example-kimi-key", BaseURL: "https://api.moonshot.cn", Label: "主账号", Priority: 10, Weight: 100, Enabled: false, RateLimitRPM: 0, RateLimitRPD: 0},
+		{ProviderID: 12, APIKey: "example-minimax-key", BaseURL: "https://api.minimax.chat", Label: "主账号", Priority: 10, Weight: 100, Enabled: false, RateLimitRPM: 0, RateLimitRPD: 0},
+		{ProviderID: 13, APIKey: "example-llama-key", BaseURL: "https://api.together.xyz", Label: "主账号", Priority: 10, Weight: 100, Enabled: false, RateLimitRPM: 0, RateLimitRPD: 0},
 	}
 	
 	for _, key := range apiKeys {

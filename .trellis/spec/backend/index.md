@@ -17,7 +17,7 @@ This directory contains guidelines for backend development. Fill in each file wi
 | [Directory Structure](./directory-structure.md) | Module organization and file layout | ✅ Filled |
 | [Database Guidelines](./database-guidelines.md) | ORM patterns, queries, migrations | ✅ Filled |
 | [Error Handling](./error-handling.md) | Error types, handling strategies | ✅ Filled |
-| [Quality Guidelines](./quality-guidelines.md) | Code standards, forbidden patterns, TLS hardening (§32), input validation (§33), interface dedup no-alias rule (§34) | ✅ Filled |
+| [Quality Guidelines](./quality-guidelines.md) | Code standards, forbidden patterns, TLS hardening (§32), input validation (§33), interface dedup no-alias (§34), cache eviction (§35), Prometheus cardinality (§36), broadcast recover (§37), API envelope (§38), doc snippets (§39) | ✅ Filled |
 | [Logging Guidelines](./logging-guidelines.md) | Structured logging, log levels | ✅ Filled |
 
 ---

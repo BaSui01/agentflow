@@ -84,8 +84,10 @@ func main() {
     logger, _ := zap.NewDevelopment()
 
     provider := openai.NewOpenAIProvider(providers.OpenAIConfig{
-        APIKey: os.Getenv("OPENAI_API_KEY"),
-        Model:  "gpt-4o-mini",
+        BaseProviderConfig: providers.BaseProviderConfig{
+            APIKey: os.Getenv("OPENAI_API_KEY"),
+            Model:  "gpt-4o-mini",
+        },
     }, logger)
 
     resp, _ := provider.Completion(context.Background(), &llm.ChatRequest{

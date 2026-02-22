@@ -330,7 +330,16 @@ func (h *MessageHub) fromPersistMessage(pm *persistence.Message) *Message {
 }
 
 // ackMessage 确认消息已处理
+// H1 FIX: 异步 goroutine 调用前检查 closed 标志，防止 store 关闭后访问
 func (h *MessageHub) ackMessage(ctx context.Context, msgID string) {
+	// H1 FIX: Close() 可能已关闭 messageStore，提前检查避免访问已关闭的 store
+	h.mu.RLock()
+	closed := h.closed
+	h.mu.RUnlock()
+	if closed {
+		return
+	}
+
 	if h.messageStore == nil {
 		return
 	}
@@ -395,6 +404,18 @@ func (h *MessageHub) RecoverMessages(ctx context.Context) error {
 			h.mu.RUnlock()
 
 			if ok {
+				// N7 FIX: 写入 channel 前检查 closed 标志，防止 Close() 关闭 channel 后写入导致 panic
+				h.mu.RLock()
+				closed := h.closed
+				h.mu.RUnlock()
+				if closed {
+					h.logger.Debug("message hub closed, skipping recovery",
+						zap.String("msg_id", msg.ID),
+						zap.String("to", agentID),
+					)
+					break
+				}
+
 				select {
 				case ch <- msg:
 					totalRecovered++

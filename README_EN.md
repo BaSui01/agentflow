@@ -119,6 +119,7 @@ package main
 import (
     "context"
     "fmt"
+    "os"
 
     "github.com/BaSui01/agentflow/llm"
     "github.com/BaSui01/agentflow/llm/providers"
@@ -131,8 +132,10 @@ func main() {
     defer logger.Sync()
 
     provider := openaiprov.NewOpenAIProvider(providers.OpenAIConfig{
-        APIKey:  "sk-xxx",
-        BaseURL: "https://api.openai.com",
+        BaseProviderConfig: providers.BaseProviderConfig{
+            APIKey:  os.Getenv("OPENAI_API_KEY"),
+            BaseURL: "https://api.openai.com",
+        },
     }, logger)
 
     resp, err := provider.Completion(context.Background(), &llm.ChatRequest{
@@ -222,8 +225,10 @@ func main() {
     factory := llm.NewDefaultProviderFactory()
     factory.RegisterProvider("openai", func(apiKey, baseURL string) (llm.Provider, error) {
         return openaiprov.NewOpenAIProvider(providers.OpenAIConfig{
-            APIKey:  apiKey,
-            BaseURL: baseURL,
+            BaseProviderConfig: providers.BaseProviderConfig{
+                APIKey:  apiKey,
+                BaseURL: baseURL,
+            },
         }, logger), nil
     })
 

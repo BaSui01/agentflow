@@ -41,14 +41,8 @@ func NewChatHandler(provider llm.Provider, logger *zap.Logger) *ChatHandler {
 // @Failure 400 {object} Response "无效请求"
 // @Failure 500 {object} Response "内部错误"
 // @Security ApiKeyAuth
-// @Router /v1/chat/completions [post]
+// @Router /api/v1/chat/completions [post]
 func (h *ChatHandler) HandleCompletion(w http.ResponseWriter, r *http.Request) {
-	// 验证 HTTP 方法
-	if r.Method != http.MethodPost {
-		WriteErrorMessage(w, http.StatusMethodNotAllowed, types.ErrInvalidRequest, "method not allowed, use POST", h.logger)
-		return
-	}
-
 	// 验证 Content-Type
 	if !ValidateContentType(w, r, h.logger) {
 		return
@@ -112,14 +106,8 @@ func (h *ChatHandler) HandleCompletion(w http.ResponseWriter, r *http.Request) {
 // @Failure 400 {object} Response "无效请求"
 // @Failure 500 {object} Response "内部错误"
 // @Security ApiKeyAuth
-// @Router /v1/chat/completions/stream [post]
+// @Router /api/v1/chat/completions/stream [post]
 func (h *ChatHandler) HandleStream(w http.ResponseWriter, r *http.Request) {
-	// 验证 HTTP 方法
-	if r.Method != http.MethodPost {
-		WriteErrorMessage(w, http.StatusMethodNotAllowed, types.ErrInvalidRequest, "method not allowed, use POST", h.logger)
-		return
-	}
-
 	// 验证 Content-Type
 	if !ValidateContentType(w, r, h.logger) {
 		return
