@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -257,7 +258,38 @@ func (pm *PoolManager) WithTransactionRetry(ctx context.Context, maxRetries int,
 
 // isRetryableError 判断错误是否可重试
 func isRetryableError(err error) bool {
-	// TODO: 根据具体数据库类型判断
-	// 例如：死锁、序列化失败、连接丢失等
+	if err == nil {
+		return false
+	}
+
+	errMsg := strings.ToLower(err.Error())
+
+	// 死锁
+	if strings.Contains(errMsg, "deadlock") {
+		return true
+	}
+
+	// 序列化失败（PostgreSQL SQLSTATE 40001）
+	if strings.Contains(errMsg, "serialization failure") || strings.Contains(errMsg, "40001") {
+		return true
+	}
+
+	// 连接相关错误
+	if strings.Contains(errMsg, "connection reset") ||
+		strings.Contains(errMsg, "connection refused") ||
+		strings.Contains(errMsg, "broken pipe") {
+		return true
+	}
+
+	// 锁超时
+	if strings.Contains(errMsg, "lock timeout") || strings.Contains(errMsg, "lock wait timeout") {
+		return true
+	}
+
+	// driver: bad connection（Go database/sql 标准错误）
+	if strings.Contains(errMsg, "bad connection") {
+		return true
+	}
+
 	return false
 }

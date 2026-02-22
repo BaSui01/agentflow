@@ -2,7 +2,9 @@ package server
 
 import (
 	"context"
+	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"testing"
 	"time"
@@ -53,9 +55,10 @@ func TestManager_StartAndShutdown(t *testing.T) {
 	t.Cleanup(func() { m.Shutdown(context.Background()) })
 
 	// Server should be reachable
-	// Get the actual address from the listener
-	addr := m.listener.Addr().String()
-	resp, err := http.Get("http://" + addr + "/")
+	// Get the actual port from the listener and connect via 127.0.0.1
+	// to avoid IPv6 issues in some environments (e.g. WSL2).
+	port := m.listener.Addr().(*net.TCPAddr).Port
+	resp, err := http.Get(fmt.Sprintf("http://127.0.0.1:%d/", port))
 	require.NoError(t, err)
 	defer resp.Body.Close()
 

@@ -72,7 +72,6 @@ func NewManager(handler http.Handler, config Config, logger *zap.Logger) *Manage
 		WriteTimeout:   config.WriteTimeout,
 		IdleTimeout:    config.IdleTimeout,
 		MaxHeaderBytes: config.MaxHeaderBytes,
-		TLSConfig:      tlsutil.DefaultTLSConfig(),
 	}
 
 	return &Manager{
@@ -132,6 +131,7 @@ func (m *Manager) StartTLS(certFile, keyFile string) error {
 	}
 
 	m.listener = listener
+	m.server.TLSConfig = tlsutil.DefaultTLSConfig()
 	m.logger.Info("starting HTTPS server",
 		zap.String("addr", m.config.Addr),
 		zap.String("cert", certFile),
