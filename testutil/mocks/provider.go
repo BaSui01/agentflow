@@ -15,6 +15,28 @@ import (
 
 // --- MockProvider 结构 ---
 
+// GenerateRequest 是 E2E 测试使用的简化请求类型。
+// 它将被内部转换为 llm.ChatRequest。
+type GenerateRequest struct {
+	Messages []types.Message    `json:"messages"`
+	Model    string             `json:"model,omitempty"`
+	Tools    []types.ToolSchema `json:"tools,omitempty"`
+	Stream   bool               `json:"stream,omitempty"`
+}
+
+// GenerateResponse 是 E2E 测试使用的简化响应类型。
+// 它从 llm.ChatResponse 中提取关键字段。
+type GenerateResponse struct {
+	Content   string           `json:"content"`
+	ToolCalls []types.ToolCall `json:"tool_calls,omitempty"`
+}
+
+// GenerateStreamChunk 是 E2E 测试使用的简化流式块类型。
+type GenerateStreamChunk struct {
+	Content      string `json:"content"`
+	FinishReason string `json:"finish_reason,omitempty"`
+}
+
 // MockProvider 是 LLM Provider 的模拟实现
 type MockProvider struct {
 	mu sync.RWMutex
@@ -33,6 +55,7 @@ type MockProvider struct {
 	calls           []MockProviderCall
 	completionFunc  func(ctx context.Context, req *llm.ChatRequest) (*llm.ChatResponse, error)
 	streamFunc      func(ctx context.Context, req *llm.ChatRequest) (<-chan llm.StreamChunk, error)
+	generateFunc    func(ctx context.Context, req *GenerateRequest) (*GenerateResponse, error)
 
 	// 行为控制
 	delay        int // 模拟延迟（毫秒）
@@ -136,6 +159,14 @@ func (m *MockProvider) WithStreamFunc(fn func(ctx context.Context, req *llm.Chat
 	return m
 }
 
+// WithGenerateFunc 设置自定义 Generate 函数（E2E 测试用简化接口）
+func (m *MockProvider) WithGenerateFunc(fn func(ctx context.Context, req *GenerateRequest) (*GenerateResponse, error)) *MockProvider {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.generateFunc = fn
+	return m
+}
+
 // --- Provider 接口实现 ---
 
 // Name 返回 Provider 名称
@@ -167,6 +198,17 @@ func (m *MockProvider) HealthCheck(ctx context.Context) (*llm.HealthStatus, erro
 		Latency:   10 * time.Millisecond,
 		ErrorRate: 0,
 	}, nil
+}
+
+// Endpoints 返回 Provider 使用的 API 端点信息
+func (m *MockProvider) Endpoints() llm.ProviderEndpoints {
+	return llm.ProviderEndpoints{
+		Completion: "http://mock-provider/v1/chat/completions",
+		Stream:     "http://mock-provider/v1/chat/completions",
+		Models:     "http://mock-provider/v1/models",
+		Health:     "http://mock-provider/v1/health",
+		BaseURL:    "http://mock-provider",
+	}
 }
 
 // Completion 生成响应
@@ -288,6 +330,75 @@ func (m *MockProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-chan
 					}
 					return ""
 				}(),
+			}:
+			}
+		}
+	}()
+
+	return ch, nil
+}
+
+// --- E2E 测试简化接口 ---
+
+// Generate 是 E2E 测试使用的简化生成接口。
+// 内部将 GenerateRequest 转换为 llm.ChatRequest 并调用 Completion。
+func (m *MockProvider) Generate(ctx context.Context, req *GenerateRequest) (*GenerateResponse, error) {
+	m.mu.Lock()
+
+	// 如果设置了自定义 generateFunc，使用它
+	if m.generateFunc != nil {
+		fn := m.generateFunc
+		m.mu.Unlock()
+		return fn(ctx, req)
+	}
+	m.mu.Unlock()
+
+	// 转换为 ChatRequest 并调用 Completion
+	chatReq := &llm.ChatRequest{
+		Model:    req.Model,
+		Messages: req.Messages,
+		Tools:    req.Tools,
+	}
+
+	chatResp, err := m.Completion(ctx, chatReq)
+	if err != nil {
+		return nil, err
+	}
+
+	// 从 ChatResponse 提取简化响应
+	resp := &GenerateResponse{}
+	if len(chatResp.Choices) > 0 {
+		resp.Content = chatResp.Choices[0].Message.Content
+		resp.ToolCalls = chatResp.Choices[0].Message.ToolCalls
+	}
+	return resp, nil
+}
+
+// StreamGenerate 是 E2E 测试使用的简化流式接口。
+// 内部将 GenerateRequest 转换为 llm.ChatRequest 并调用 Stream，
+// 返回简化的 GenerateStreamChunk channel。
+func (m *MockProvider) StreamGenerate(ctx context.Context, req *GenerateRequest) (<-chan GenerateStreamChunk, error) {
+	chatReq := &llm.ChatRequest{
+		Model:    req.Model,
+		Messages: req.Messages,
+		Tools:    req.Tools,
+	}
+
+	llmCh, err := m.Stream(ctx, chatReq)
+	if err != nil {
+		return nil, err
+	}
+
+	ch := make(chan GenerateStreamChunk, cap(llmCh))
+	go func() {
+		defer close(ch)
+		for chunk := range llmCh {
+			select {
+			case <-ctx.Done():
+				return
+			case ch <- GenerateStreamChunk{
+				Content:      chunk.Delta.Content,
+				FinishReason: chunk.FinishReason,
 			}:
 			}
 		}
