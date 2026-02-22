@@ -66,6 +66,7 @@ func TestHandleCreateAndListAPIKeys(t *testing.T) {
 		Label:   "test",
 	})
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/providers/1/api-keys", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
 	req.SetPathValue("id", "1")
 	w := httptest.NewRecorder()
 	h.HandleCreateAPIKey(w, req)
@@ -107,6 +108,7 @@ func TestHandleUpdateAPIKey(t *testing.T) {
 	newLabel := "updated"
 	body, _ := json.Marshal(updateAPIKeyRequest{BaseURL: &newURL, Label: &newLabel})
 	req := httptest.NewRequest(http.MethodPut, "/api/v1/providers/1/api-keys/1", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
 	req.SetPathValue("id", "1")
 	req.SetPathValue("keyId", "1")
 	w := httptest.NewRecorder()
@@ -187,6 +189,7 @@ func TestHandleCreateAPIKey_Validation(t *testing.T) {
 	// 空 api_key 应该返回 400
 	body, _ := json.Marshal(createAPIKeyRequest{APIKey: "", Label: "empty"})
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/providers/1/api-keys", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
 	req.SetPathValue("id", "1")
 	w := httptest.NewRecorder()
 	h.HandleCreateAPIKey(w, req)

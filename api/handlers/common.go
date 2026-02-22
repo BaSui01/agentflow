@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"mime"
 	"net/http"
+	"net/url"
 	"time"
 
 	"github.com/BaSui01/agentflow/api"
@@ -172,6 +173,27 @@ func ValidateContentType(w http.ResponseWriter, r *http.Request, logger *zap.Log
 		return false
 	}
 	return true
+}
+
+// ValidateURL validates that s is a well-formed HTTP or HTTPS URL.
+func ValidateURL(s string) bool {
+	u, err := url.Parse(s)
+	return err == nil && (u.Scheme == "http" || u.Scheme == "https") && u.Host != ""
+}
+
+// ValidateEnum checks whether value is one of the allowed values.
+func ValidateEnum(value string, allowed []string) bool {
+	for _, a := range allowed {
+		if value == a {
+			return true
+		}
+	}
+	return false
+}
+
+// ValidateNonNegative checks that value is >= 0.
+func ValidateNonNegative(value float64) bool {
+	return value >= 0
 }
 
 // =============================================================================

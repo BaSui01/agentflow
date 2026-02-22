@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"time"
 
@@ -185,6 +186,9 @@ func (h *ChatHandler) HandleStream(w http.ResponseWriter, r *http.Request) {
 // 🔧 辅助函数
 // =============================================================================
 
+// allowedMessageRoles is the set of valid message roles for chat requests.
+var allowedMessageRoles = []string{"system", "user", "assistant", "tool"}
+
 // validateChatRequest 验证聊天请求
 func (h *ChatHandler) validateChatRequest(req *api.ChatRequest) *types.Error {
 	if req.Model == "" {
@@ -195,6 +199,11 @@ func (h *ChatHandler) validateChatRequest(req *api.ChatRequest) *types.Error {
 		return types.NewError(types.ErrInvalidRequest, "messages cannot be empty")
 	}
 
+	// 验证 max_tokens 参数
+	if req.MaxTokens < 0 {
+		return types.NewError(types.ErrInvalidRequest, "max_tokens must be non-negative")
+	}
+
 	// 验证温度参数
 	if req.Temperature < 0 || req.Temperature > 2 {
 		return types.NewError(types.ErrInvalidRequest, "temperature must be between 0 and 2")
@@ -203,6 +212,14 @@ func (h *ChatHandler) validateChatRequest(req *api.ChatRequest) *types.Error {
 	// 验证 TopP 参数
 	if req.TopP < 0 || req.TopP > 1 {
 		return types.NewError(types.ErrInvalidRequest, "top_p must be between 0 and 1")
+	}
+
+	// 验证每条消息的 role
+	for i, msg := range req.Messages {
+		if !ValidateEnum(msg.Role, allowedMessageRoles) {
+			return types.NewError(types.ErrInvalidRequest,
+				fmt.Sprintf("messages[%d].role must be one of: system, user, assistant, tool", i))
+		}
 	}
 
 	return nil
