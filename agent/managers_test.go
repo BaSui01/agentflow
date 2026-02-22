@@ -6,6 +6,8 @@ import (
 	"time"
 
 	"github.com/BaSui01/agentflow/agent/guardrails"
+	"github.com/BaSui01/agentflow/agent/memory"
+	"github.com/BaSui01/agentflow/agent/skills"
 	"go.uber.org/zap"
 )
 
@@ -190,11 +192,11 @@ func TestFeatureManager_AllFeatures(t *testing.T) {
 	fm.EnableReflection("reflection")
 	fm.EnableToolSelection("tool-selector")
 	fm.EnablePromptEnhancer("prompt-enhancer")
-	fm.EnableSkills("skill-manager")
-	fm.EnableMCP("mcp-server")
-	fm.EnableLSP("lsp-client")
-	fm.EnableEnhancedMemory("enhanced-memory")
-	fm.EnableObservability("observability")
+	fm.EnableSkills(&stubSkillDiscoverer{})
+	fm.EnableMCP(struct{ MCPServerRunner }{})
+	fm.EnableLSP(&stubLSPClient{})
+	fm.EnableEnhancedMemory(&stubEnhancedMemory{})
+	fm.EnableObservability(&stubObservability{})
 
 	features := fm.EnabledFeatures()
 	if len(features) != 8 {
@@ -251,3 +253,36 @@ func (m *mockMemoryManager) LoadRecent(ctx context.Context, agentID string, kind
 func (m *mockMemoryManager) Get(ctx context.Context, id string) (*MemoryRecord, error) {
 	return nil, nil
 }
+
+// Stub types for FeatureManager typed interface tests
+
+type stubSkillDiscoverer struct{}
+
+func (s *stubSkillDiscoverer) DiscoverSkills(_ context.Context, _ string) ([]*skills.Skill, error) {
+	return nil, nil
+}
+
+type stubLSPClient struct{}
+
+func (s *stubLSPClient) Shutdown(_ context.Context) error { return nil }
+
+type stubEnhancedMemory struct{}
+
+func (s *stubEnhancedMemory) LoadWorking(_ context.Context, _ string) ([]any, error) {
+	return nil, nil
+}
+func (s *stubEnhancedMemory) LoadShortTerm(_ context.Context, _ string, _ int) ([]any, error) {
+	return nil, nil
+}
+func (s *stubEnhancedMemory) SaveShortTerm(_ context.Context, _, _ string, _ map[string]any) error {
+	return nil
+}
+func (s *stubEnhancedMemory) RecordEpisode(_ context.Context, _ *memory.EpisodicEvent) error {
+	return nil
+}
+
+type stubObservability struct{}
+
+func (s *stubObservability) StartTrace(_, _ string)                                          {}
+func (s *stubObservability) EndTrace(_, _ string, _ error)                                   {}
+func (s *stubObservability) RecordTask(_ string, _ bool, _ time.Duration, _ int, _, _ float64) {}

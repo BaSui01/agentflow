@@ -8,14 +8,14 @@ import (
 // 它囊括了之前在BaseAgent中的特性管理逻辑.
 type FeatureManager struct {
 	// 特性实例( 使用接口来避免循环依赖)
-	reflection     ReflectionRunner     // *ReflectionExecutor
+	reflection     ReflectionRunner          // *ReflectionExecutor
 	toolSelector   DynamicToolSelectorRunner // *DynamicToolSelector
-	promptEnhancer PromptEnhancerRunner // *PromptEnhancer
-	skillManager   any                  // SkillDiscoverer or custom impl
-	mcpServer      any                  // MCPServerRunner
-	lspClient      any                  // LSPClientRunner
-	enhancedMemory any                  // EnhancedMemoryRunner
-	observability  any                  // ObservabilityRunner
+	promptEnhancer PromptEnhancerRunner      // *PromptEnhancer
+	skillManager   SkillDiscoverer           // *skills.DefaultSkillManager
+	mcpServer      MCPServerRunner           // *mcp.MCPServer
+	lspClient      LSPClientRunner           // *lsp.LSPClient
+	enhancedMemory EnhancedMemoryRunner      // *memory.EnhancedMemorySystem
+	observability  ObservabilityRunner       // *observability.ObservabilitySystem
 
 	// 地物标志
 	reflectionEnabled     bool
@@ -122,7 +122,7 @@ func (fm *FeatureManager) IsPromptEnhancerEnabled() bool {
 }
 
 // 启用技能可以实现技能特性 。
-func (fm *FeatureManager) EnableSkills(manager any) {
+func (fm *FeatureManager) EnableSkills(manager SkillDiscoverer) {
 	fm.skillManager = manager
 	fm.skillsEnabled = true
 	fm.logger.Info("skills feature enabled")
@@ -136,7 +136,7 @@ func (fm *FeatureManager) DisableSkills() {
 }
 
 // GetSkillManager返回技能管理器.
-func (fm *FeatureManager) GetSkillManager() any {
+func (fm *FeatureManager) GetSkillManager() SkillDiscoverer {
 	return fm.skillManager
 }
 
@@ -146,7 +146,7 @@ func (fm *FeatureManager) IsSkillsEnabled() bool {
 }
 
 // 启用 MCP 启用 MCP( 模式背景协议) 特性 。
-func (fm *FeatureManager) EnableMCP(server any) {
+func (fm *FeatureManager) EnableMCP(server MCPServerRunner) {
 	fm.mcpServer = server
 	fm.mcpEnabled = true
 	fm.logger.Info("MCP feature enabled")
@@ -160,7 +160,7 @@ func (fm *FeatureManager) DisableMCP() {
 }
 
 // GetMCPServer 返回 MCP 服务器.
-func (fm *FeatureManager) GetMCPServer() any {
+func (fm *FeatureManager) GetMCPServer() MCPServerRunner {
 	return fm.mcpServer
 }
 
@@ -170,7 +170,7 @@ func (fm *FeatureManager) IsMCPEnabled() bool {
 }
 
 // EnableLSP enables the LSP feature.
-func (fm *FeatureManager) EnableLSP(client any) {
+func (fm *FeatureManager) EnableLSP(client LSPClientRunner) {
 	fm.lspClient = client
 	fm.lspEnabled = true
 	fm.logger.Info("LSP feature enabled")
@@ -184,7 +184,7 @@ func (fm *FeatureManager) DisableLSP() {
 }
 
 // GetLSP returns the LSP client.
-func (fm *FeatureManager) GetLSP() any {
+func (fm *FeatureManager) GetLSP() LSPClientRunner {
 	return fm.lspClient
 }
 
@@ -194,7 +194,7 @@ func (fm *FeatureManager) IsLSPEnabled() bool {
 }
 
 // 启用 Enhanced Memory 启用增强的内存功能 。
-func (fm *FeatureManager) EnableEnhancedMemory(system any) {
+func (fm *FeatureManager) EnableEnhancedMemory(system EnhancedMemoryRunner) {
 	fm.enhancedMemory = system
 	fm.enhancedMemoryEnabled = true
 	fm.logger.Info("enhanced memory feature enabled")
@@ -208,7 +208,7 @@ func (fm *FeatureManager) DisableEnhancedMemory() {
 }
 
 // Get Enhanced Memory 返回增强的内存系统.
-func (fm *FeatureManager) GetEnhancedMemory() any {
+func (fm *FeatureManager) GetEnhancedMemory() EnhancedMemoryRunner {
 	return fm.enhancedMemory
 }
 
@@ -218,7 +218,7 @@ func (fm *FeatureManager) IsEnhancedMemoryEnabled() bool {
 }
 
 // 启用可观察性可以实现可观察性特性.
-func (fm *FeatureManager) EnableObservability(system any) {
+func (fm *FeatureManager) EnableObservability(system ObservabilityRunner) {
 	fm.observability = system
 	fm.observabilityEnabled = true
 	fm.logger.Info("observability feature enabled")
@@ -232,7 +232,7 @@ func (fm *FeatureManager) DisableObservability() {
 }
 
 // GetObservacy返回可观察系统.
-func (fm *FeatureManager) GetObservability() any {
+func (fm *FeatureManager) GetObservability() ObservabilityRunner {
 	return fm.observability
 }
 

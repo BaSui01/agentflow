@@ -39,7 +39,7 @@ type BuildOptions struct {
 	EnhancedMemoryConfig *memory.EnhancedMemoryConfig
 
 	// 设定时使用可观察性系统代替默认执行.
-	ObservabilitySystem any
+	ObservabilitySystem agent.ObservabilityRunner
 
 	// InitAgent在接线后呼叫Init(ctx).
 	InitAgent bool

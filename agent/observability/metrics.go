@@ -187,6 +187,24 @@ func NewObservabilitySystem(logger *zap.Logger) *ObservabilitySystem {
 	}
 }
 
+// StartTrace delegates to the internal Tracer.
+// Satisfies agent.ObservabilityRunner.
+func (o *ObservabilitySystem) StartTrace(traceID, agentID string) {
+	o.tracer.StartTrace(traceID, agentID)
+}
+
+// EndTrace delegates to the internal Tracer.
+// Satisfies agent.ObservabilityRunner.
+func (o *ObservabilitySystem) EndTrace(traceID, status string, err error) {
+	o.tracer.EndTrace(traceID, status, err)
+}
+
+// RecordTask delegates to the internal MetricsCollector.
+// Satisfies agent.ObservabilityRunner.
+func (o *ObservabilitySystem) RecordTask(agentID string, success bool, duration time.Duration, tokens int, cost, quality float64) {
+	o.metricsCollector.RecordTask(agentID, success, duration, tokens, cost, quality)
+}
+
 // NewMetricsCollector 创建指标收集器
 func NewMetricsCollector(logger *zap.Logger) *MetricsCollector {
 	return &MetricsCollector{
