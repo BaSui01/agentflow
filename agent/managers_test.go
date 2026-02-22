@@ -166,7 +166,7 @@ func TestFeatureManager_EnableDisable(t *testing.T) {
 	fm := NewFeatureManager(logger)
 
 	// 启用反射
-	fm.EnableReflection("mock-executor")
+	fm.EnableReflection(&stubReflectionRunner{})
 	if !fm.IsReflectionEnabled() {
 		t.Error("expected reflection to be enabled")
 	}
@@ -189,9 +189,9 @@ func TestFeatureManager_AllFeatures(t *testing.T) {
 	fm := NewFeatureManager(logger)
 
 	// 启用所有特性
-	fm.EnableReflection("reflection")
-	fm.EnableToolSelection("tool-selector")
-	fm.EnablePromptEnhancer("prompt-enhancer")
+	fm.EnableReflection(&stubReflectionRunner{})
+	fm.EnableToolSelection(&stubToolSelectorRunner{})
+	fm.EnablePromptEnhancer(&stubPromptEnhancerRunner{})
 	fm.EnableSkills(&stubSkillDiscoverer{})
 	fm.EnableMCP(struct{ MCPServerRunner }{})
 	fm.EnableLSP(&stubLSPClient{})
@@ -255,6 +255,24 @@ func (m *mockMemoryManager) Get(ctx context.Context, id string) (*MemoryRecord, 
 }
 
 // Stub types for FeatureManager typed interface tests
+
+type stubReflectionRunner struct{}
+
+func (s *stubReflectionRunner) ExecuteWithReflection(_ context.Context, _ *Input) (any, error) {
+	return nil, nil
+}
+
+type stubToolSelectorRunner struct{}
+
+func (s *stubToolSelectorRunner) SelectTools(_ context.Context, _ string, _ any) (any, error) {
+	return nil, nil
+}
+
+type stubPromptEnhancerRunner struct{}
+
+func (s *stubPromptEnhancerRunner) EnhanceUserPrompt(prompt, _ string) (string, error) {
+	return prompt, nil
+}
 
 type stubSkillDiscoverer struct{}
 
