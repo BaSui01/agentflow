@@ -111,13 +111,20 @@ def mark_finalized(repo_root: str, task_dir: str) -> None:
         pass
 
 
-def is_pipeline_complete(task_data: dict) -> bool:
+def is_pipeline_complete(task_data: dict, subagent_type: str = "") -> bool:
     """
     Check if all pipeline phases have been executed.
 
-    Logic: current_phase >= max phase number in next_action,
+    For team-lead: always returns True (team-lead coordinates all phases
+    internally; when it stops, the work is done).
+
+    For dispatch: current_phase >= max phase number in next_action,
     AND the last action is NOT "create-pr" (that's handled separately).
     """
+    # Team-lead manages its own phases — stopping means done
+    if subagent_type == "team-lead":
+        return True
+
     next_actions = task_data.get("next_action", [])
     if not next_actions:
         return False
@@ -173,7 +180,7 @@ def main():
         sys.exit(0)
 
     # Only trigger if pipeline is complete
-    if not is_pipeline_complete(task_data):
+    if not is_pipeline_complete(task_data, subagent_type):
         sys.exit(0)
 
     # Mark as finalized before outputting instructions
@@ -186,7 +193,21 @@ def main():
         "decision": "block",
         "reason": f"""Pipeline phases complete. Execute the finalization chain:
 
-## Step 1: Git Batch Commit
+## Step 1: Check (Backend Verification)
+
+Run backend checks to catch any remaining issues:
+
+```bash
+cd {repo_root} && go build ./... 2>&1 | head -50
+```
+
+```bash
+cd {repo_root} && go vet ./... 2>&1 | head -50
+```
+
+If there are build or vet errors, fix them before proceeding.
+
+## Step 2: Git Batch Commit
 
 Run the batch commit script to commit all changes:
 
@@ -200,19 +221,27 @@ Review the plan output. If it looks correct, run without --dry-run:
 python3 .claude/skills/git-batch-commit/scripts/batch_commit.py auto --target master
 ```
 
-## Step 2: Archive Task
+## Step 3: Archive Task
 
 ```bash
 python3 ./.trellis/scripts/task.py archive {task_name}
 ```
 
-## Step 3: Report Completion
+## Step 4: Record Session
+
+Record this work session (use the latest commit hash from Step 2):
+
+```bash
+python3 ./.trellis/scripts/add_session.py --title "{task_name}" --commit "$(git rev-parse --short HEAD)" --summary "Completed via Agent Team pipeline"
+```
+
+## Step 5: Report Completion
 
 Report to the user:
 - What was implemented (from prd.md)
 - Files changed
 - Commit(s) created
-- Task archived
+- Task archived and session recorded
 
 After completing all steps, you may stop.""",
     }

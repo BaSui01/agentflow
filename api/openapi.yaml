@@ -613,6 +613,10 @@ components:
         timestamp:
           type: string
           format: date-time
+        request_id:
+          type: string
+          description: Unique request identifier for tracing
+          example: "req-abc123"
 
     HealthStatus:
       type: object
@@ -676,10 +680,24 @@ components:
 
     ChatRequest:
       type: object
-      required: [messages]
+      required: [model, messages]
       properties:
+        trace_id:
+          type: string
+          description: Trace ID for request tracing
+          example: "trace-123"
+        tenant_id:
+          type: string
+          description: Tenant ID for multi-tenancy
+          example: "tenant-1"
+        user_id:
+          type: string
+          description: User identity
+          example: "user-1"
         model:
           type: string
+          description: Model name (e.g. gpt-4, claude-3-opus)
+          example: "gpt-4"
         messages:
           type: array
           items:
@@ -687,15 +705,49 @@ components:
             properties:
               role:
                 type: string
-                enum: [system, user, assistant]
+                enum: [system, user, assistant, tool]
               content:
                 type: string
         max_tokens:
           type: integer
+          description: Maximum number of tokens to generate
+          example: 4096
         temperature:
           type: number
-        stream:
-          type: boolean
+          description: Sampling temperature (0-2)
+          example: 0.7
+        top_p:
+          type: number
+          description: Nucleus sampling parameter (0-1)
+          example: 1.0
+        stop:
+          type: array
+          items:
+            type: string
+          description: Stop sequences
+        tools:
+          type: array
+          items:
+            $ref: '#/components/schemas/ToolSchema'
+          description: Available tools for function calling
+        tool_choice:
+          type: string
+          description: Tool selection mode (auto, none, or specific tool name)
+          example: "auto"
+        timeout:
+          type: string
+          description: Request timeout duration
+          example: "30s"
+        metadata:
+          type: object
+          additionalProperties:
+            type: string
+          description: Custom metadata key-value pairs
+        tags:
+          type: array
+          items:
+            type: string
+          description: Routing tags
 
     AgentInfo:
       type: object
@@ -902,3 +954,24 @@ components:
           nullable: true
         last_error:
           type: string
+
+    ToolSchema:
+      type: object
+      required: [name, parameters]
+      properties:
+        name:
+          type: string
+          description: Tool name
+          example: "get_weather"
+        description:
+          type: string
+          description: Tool description
+          example: "Get the current weather for a location"
+        parameters:
+          type: object
+          description: JSON Schema for tool parameters
+          additionalProperties: true
+        version:
+          type: string
+          description: Tool version
+          example: "1.0.0"

@@ -24,7 +24,7 @@ type Config struct {
 	// Agent 默认 Agent 配置
 	Agent AgentConfig `yaml:"agent" env:"AGENT"`
 
-	// Redis 缓存配置
+	// Redis 缓存配置 — Reserved for future Redis-backed caching, not currently used.
 	Redis RedisConfig `yaml:"redis" env:"REDIS"`
 
 	// Database 数据库配置
@@ -53,7 +53,7 @@ type Config struct {
 type ServerConfig struct {
 	// HTTP 端口
 	HTTPPort int `yaml:"http_port" env:"HTTP_PORT"`
-	// gRPC 端口
+	// gRPC 端口 — Reserved for future gRPC support, not currently used.
 	GRPCPort int `yaml:"grpc_port" env:"GRPC_PORT"`
 	// Metrics 端口
 	MetricsPort int `yaml:"metrics_port" env:"METRICS_PORT"`

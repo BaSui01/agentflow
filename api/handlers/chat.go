@@ -245,6 +245,18 @@ func (h *ChatHandler) convertToLLMRequest(req *api.ChatRequest) *llm.ChatRequest
 			ToolCalls:  msg.ToolCalls,
 			ToolCallID: msg.ToolCallID,
 		}
+		// 复制 Images 字段（api.ImageContent → types.ImageContent）
+		if len(msg.Images) > 0 {
+			images := make([]types.ImageContent, len(msg.Images))
+			for j, img := range msg.Images {
+				images[j] = types.ImageContent{
+					Type: img.Type,
+					URL:  img.URL,
+					Data: img.Data,
+				}
+			}
+			messages[i].Images = images
+		}
 	}
 
 	// 转换 Tools（api.ToolSchema -> types.ToolSchema）
@@ -254,6 +266,7 @@ func (h *ChatHandler) convertToLLMRequest(req *api.ChatRequest) *llm.ChatRequest
 			Name:        tool.Name,
 			Description: tool.Description,
 			Parameters:  tool.Parameters,
+			Version:     tool.Version,
 		}
 	}
 

@@ -17,7 +17,11 @@ permissions:
   contents: read
 
 env:
-  EXCLUDED_PKGS_REGEX: '^github\.com/BaSui01/agentflow/(api/handlers|internal/cache|internal/database|internal/metrics|llm|rag)$'
+  # Only exclude packages whose tests require external services at runtime.
+  # - internal/database: requires a running database instance
+  # Integration tests in rag/ and llm/ use //go:build integration tags
+  # and are already excluded by default (go test doesn't include them).
+  EXCLUDED_PKGS_REGEX: '^github\.com/BaSui01/agentflow/internal/database$'
 
 jobs:
   ci:

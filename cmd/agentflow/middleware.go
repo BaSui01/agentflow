@@ -60,7 +60,7 @@ func Recovery(logger *zap.Logger) Middleware {
 			defer func() {
 				if err := recover(); err != nil {
 					logger.Error("panic recovered", zap.Any("error", err), zap.String("path", r.URL.Path))
-					http.Error(w, `{"error":"internal server error"}`, http.StatusInternalServerError)
+					writeMiddlewareError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "internal server error")
 				}
 			}()
 			next.ServeHTTP(w, r)
@@ -263,9 +263,7 @@ func APIKeyAuth(validKeys []string, skipPaths []string, allowQueryAPIKey bool, l
 				key = r.URL.Query().Get("api_key")
 			}
 			if _, ok := keySet[key]; !ok {
-				w.Header().Set("Content-Type", "application/json")
-				w.WriteHeader(http.StatusUnauthorized)
-				fmt.Fprint(w, `{"error":"unauthorized","message":"invalid or missing API key"}`)
+				writeMiddlewareError(w, http.StatusUnauthorized, "AUTHENTICATION", "invalid or missing API key")
 				return
 			}
 			next.ServeHTTP(w, r)
@@ -317,9 +315,7 @@ func RateLimiter(ctx context.Context, rps float64, burst int, logger *zap.Logger
 			v.lastSeen = time.Now()
 			mu.Unlock()
 			if !v.limiter.Allow() {
-				w.Header().Set("Content-Type", "application/json")
-				w.WriteHeader(http.StatusTooManyRequests)
-				fmt.Fprint(w, `{"error":"rate_limit_exceeded","message":"too many requests"}`)
+				writeMiddlewareError(w, http.StatusTooManyRequests, "RATE_LIMITED", "too many requests")
 				return
 			}
 			next.ServeHTTP(w, r)
@@ -473,7 +469,7 @@ func JWTAuth(cfg config.JWTConfig, skipPaths []string, logger *zap.Logger) Middl
 
 			authHeader := r.Header.Get("Authorization")
 			if !strings.HasPrefix(authHeader, "Bearer ") {
-				writeJSONError(w, http.StatusUnauthorized, "missing or malformed Authorization header")
+				writeMiddlewareError(w, http.StatusUnauthorized, "AUTHENTICATION", "missing or malformed Authorization header")
 				return
 			}
 			tokenStr := strings.TrimPrefix(authHeader, "Bearer ")
@@ -481,13 +477,13 @@ func JWTAuth(cfg config.JWTConfig, skipPaths []string, logger *zap.Logger) Middl
 			token, err := jwt.Parse(tokenStr, keyFunc, parserOpts...)
 			if err != nil {
 				logger.Debug("JWT validation failed", zap.Error(err))
-				writeJSONError(w, http.StatusUnauthorized, "invalid or expired token")
+				writeMiddlewareError(w, http.StatusUnauthorized, "AUTHENTICATION", "invalid or expired token")
 				return
 			}
 
 			claims, ok := token.Claims.(jwt.MapClaims)
 			if !ok || !token.Valid {
-				writeJSONError(w, http.StatusUnauthorized, "invalid token claims")
+				writeMiddlewareError(w, http.StatusUnauthorized, "AUTHENTICATION", "invalid token claims")
 				return
 			}
 
@@ -516,11 +512,14 @@ func JWTAuth(cfg config.JWTConfig, skipPaths []string, logger *zap.Logger) Middl
 	}
 }
 
-// writeJSONError writes a JSON error response with the given status code and message.
-func writeJSONError(w http.ResponseWriter, status int, message string) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	fmt.Fprintf(w, `{"success":false,"error":{"code":"AUTHENTICATION","message":%q}}`, message)
+// writeMiddlewareError writes a JSON error response consistent with the handler
+// layer's Response envelope (§38). This is a local helper to avoid importing
+// api/handlers (which would create a circular dependency).
+func writeMiddlewareError(w http.ResponseWriter, statusCode int, code string, message string) {
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.WriteHeader(statusCode)
+	fmt.Fprintf(w, `{"success":false,"error":{"code":%q,"message":%q},"timestamp":%q}`,
+		code, message, time.Now().UTC().Format(time.RFC3339))
 }
 
 // =============================================================================
@@ -582,9 +581,7 @@ func TenantRateLimiter(ctx context.Context, rps float64, burst int, logger *zap.
 			mu.Unlock()
 
 			if !v.limiter.Allow() {
-				w.Header().Set("Content-Type", "application/json")
-				w.WriteHeader(http.StatusTooManyRequests)
-				fmt.Fprint(w, `{"success":false,"error":{"code":"RATE_LIMITED","message":"tenant rate limit exceeded"}}`)
+				writeMiddlewareError(w, http.StatusTooManyRequests, "RATE_LIMITED", "tenant rate limit exceeded")
 				return
 			}
 			next.ServeHTTP(w, r)
