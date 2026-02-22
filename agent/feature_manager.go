@@ -38,12 +38,8 @@ func NewFeatureManager(logger *zap.Logger) *FeatureManager {
 }
 
 // 启用反射功能可以实现反射功能 。
-func (fm *FeatureManager) EnableReflection(executor any) {
-	if re, ok := executor.(ReflectionRunner); ok {
-		fm.reflection = re
-	} else {
-		fm.reflection = &reflectionAnyAdapter{raw: executor}
-	}
+func (fm *FeatureManager) EnableReflection(executor ReflectionRunner) {
+	fm.reflection = executor
 	fm.reflectionEnabled = true
 	fm.logger.Info("reflection feature enabled")
 }
@@ -66,12 +62,8 @@ func (fm *FeatureManager) IsReflectionEnabled() bool {
 }
 
 // 启用工具选择允许动态工具选择功能 。
-func (fm *FeatureManager) EnableToolSelection(selector any) {
-	if ts, ok := selector.(DynamicToolSelectorRunner); ok {
-		fm.toolSelector = ts
-	} else {
-		fm.toolSelector = &toolSelectorAnyAdapter{raw: selector}
-	}
+func (fm *FeatureManager) EnableToolSelection(selector DynamicToolSelectorRunner) {
+	fm.toolSelector = selector
 	fm.toolSelectionEnabled = true
 	fm.logger.Info("tool selection feature enabled")
 }
@@ -94,12 +86,8 @@ func (fm *FeatureManager) IsToolSelectionEnabled() bool {
 }
 
 // 启用Prompt Enhancer 启用了即时增强器特性 。
-func (fm *FeatureManager) EnablePromptEnhancer(enhancer any) {
-	if pe, ok := enhancer.(PromptEnhancerRunner); ok {
-		fm.promptEnhancer = pe
-	} else {
-		fm.promptEnhancer = &promptEnhancerAnyAdapter{raw: enhancer}
-	}
+func (fm *FeatureManager) EnablePromptEnhancer(enhancer PromptEnhancerRunner) {
+	fm.promptEnhancer = enhancer
 	fm.promptEnhancerEnabled = true
 	fm.logger.Info("prompt enhancer feature enabled")
 }
