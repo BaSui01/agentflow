@@ -17,7 +17,7 @@ import (
 	"github.com/golang-migrate/migrate/v4/database"
 	"github.com/golang-migrate/migrate/v4/database/mysql"
 	"github.com/golang-migrate/migrate/v4/database/postgres"
-	"github.com/golang-migrate/migrate/v4/database/sqlite3"
+	sqlitedb "github.com/golang-migrate/migrate/v4/database/sqlite"
 	"github.com/golang-migrate/migrate/v4/source"
 	"github.com/golang-migrate/migrate/v4/source/iofs"
 )
@@ -207,7 +207,7 @@ func (m *DefaultMigrator) openDatabase() (*sql.DB, error) {
 	case DatabaseTypeMySQL:
 		driverName = "mysql"
 	case DatabaseTypeSQLite:
-		driverName = "sqlite3"
+		driverName = "sqlite"
 	default:
 		return nil, fmt.Errorf("unsupported database type: %s", m.config.DatabaseType)
 	}
@@ -238,7 +238,7 @@ func (m *DefaultMigrator) createDatabaseDriver() (database.Driver, error) {
 			MigrationsTable: m.config.TableName,
 		})
 	case DatabaseTypeSQLite:
-		return sqlite3.WithInstance(m.db, &sqlite3.Config{
+		return sqlitedb.WithInstance(m.db, &sqlitedb.Config{
 			MigrationsTable: m.config.TableName,
 		})
 	default:

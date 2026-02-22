@@ -2,7 +2,6 @@ package migration
 
 import (
 	"context"
-	"database/sql"
 	"os"
 	"path/filepath"
 	"testing"
@@ -10,24 +9,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	// Ensure the sqlite3 driver is registered for skipIfNoCGO
-	_ "github.com/mattn/go-sqlite3"
+	_ "modernc.org/sqlite" // register pure-Go SQLite driver
 )
-
-// skipIfNoCGO skips the test if CGO (and thus the sqlite3 driver) is not available.
-func skipIfNoCGO(t *testing.T) {
-	t.Helper()
-	db, err := sql.Open("sqlite3", ":memory:")
-	if err != nil {
-		t.Skipf("Skipping: CGO/sqlite3 not available: %v", err)
-		return
-	}
-	if err := db.Ping(); err != nil {
-		t.Skipf("Skipping: CGO/sqlite3 not available: %v", err)
-		return
-	}
-	db.Close()
-}
 
 func TestParseDatabaseType(t *testing.T) {
 	tests := []struct {
@@ -157,7 +140,6 @@ func TestMigrator_SQLite_Integration(t *testing.T) {
 	if testing.Short() {
 		t.Skip("Skipping integration test in short mode")
 	}
-	skipIfNoCGO(t)
 
 	// Create a temporary database file
 	tmpDir := t.TempDir()
@@ -218,7 +200,6 @@ func TestMigrator_GetAvailableMigrations(t *testing.T) {
 	if testing.Short() {
 		t.Skip("Skipping test that requires CGO in short mode")
 	}
-	skipIfNoCGO(t)
 
 	// Create a temporary database file
 	tmpDir := t.TempDir()
@@ -248,7 +229,6 @@ func TestCLI_Output(t *testing.T) {
 	if testing.Short() {
 		t.Skip("Skipping test that requires CGO in short mode")
 	}
-	skipIfNoCGO(t)
 
 	// Create a temporary database file
 	tmpDir := t.TempDir()
