@@ -543,7 +543,7 @@ endif
 .PHONY: install-migrate
 install-migrate: ## 安装 golang-migrate CLI 工具
 	@echo "📦 Installing golang-migrate..."
-	$(GO) install -tags 'postgres mysql sqlite3' github.com/golang-migrate/migrate/v4/cmd/migrate@latest
+	$(GO) install -tags 'postgres mysql sqlite' github.com/golang-migrate/migrate/v4/cmd/migrate@latest
 	@echo "✅ golang-migrate installed"
 
 # -----------------------------------------------------------------------------
