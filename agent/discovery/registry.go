@@ -10,7 +10,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/BaSui01/agentflow/internal/tlsutil"
+	"github.com/BaSui01/agentflow/pkg/tlsutil"
 	"go.uber.org/zap"
 )
 
