@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 11
+- **Total Sessions**: 12
 - **Last Active**: 2026-02-22
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~917 | Active |
+| `journal-1.md` | ~968 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits |
 |---|------|-------|---------|
+| 12 | 2026-02-22 | 移除 CGO 依赖：mattn/go-sqlite3 → 纯 Go SQLite | `f11f9ef`, `c7cf629`, `a167297` |
 | 11 | 2026-02-22 | Session 12-v2: 10-Agent 并行分析新发现 Bug 全量修复 + 规范沉淀 | `659637a`, `4a28187`, `bc8fc56`, `e2d17ac`, `7f8fc10`, `3553e34`, `9041c54`, `d95f35a`, `f36d04d` |
 | 10 | 2026-02-22 | Session 10: 8-Agent 并行 Bug 修复 + 接口统一 + 安全加固 | `9aecb27`, `d84465c`, `d4df09c`, `cba34ad`, `bb42cb3`, `5f1c62e`, `390c694`, `aba52cf`, `61ff842` |
 | 9 | 2026-02-22 | 兼容代码分析 + 死代码清理 + 接口统一增量修复 | `e1c1b13` |

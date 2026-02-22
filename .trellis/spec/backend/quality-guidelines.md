@@ -2131,3 +2131,115 @@ go vet -tags e2e ./tests/e2e/...
 > **Rule**: After any type rename or struct field change, run `grep -rn 'OldTypeName' --include='*.md' --include='*.go' docs/ examples/ README*` and update all references.
 
 > **Historical lesson**: 12 documentation files (README.md, README_EN.md, 5 Chinese docs, 5 English docs) all had `OpenAIConfig{APIKey: "sk-xxx", Model: "gpt-4"}` — flat initialization that doesn't compile because `APIKey` lives in the embedded `BaseProviderConfig`. New users copying these snippets got immediate compile errors, creating a terrible first impression. The fix touched 50+ code blocks across 12 files.
+
+---
+
+## §40 Configuration Pattern Convention (P2 — Consistency)
+
+New code MUST follow one of the four sanctioned configuration patterns. Mixing patterns within a single component creates confusion about how to configure it.
+
+### 1. Scope / Trigger
+
+- Trigger: Inconsistent configuration approaches across packages (Config struct, Builder, Factory, Functional Options all used without clear rules)
+- Applies to: ANY new component that accepts configuration
+
+### 2. Decision Matrix
+
+| Scenario | Recommended Pattern | Example |
+|----------|-------------------|---------|
+| Simple component with YAML/JSON config | Config struct + `Validate()` | `ToolSelectionConfig`, `ReflectionExecutorConfig` |
+| Component needing defaults + validation | Config struct + `NewXxxConfig()` constructor | `memory.EnhancedMemoryConfig` |
+| Programmatic API with many optional params | Functional Options (`WithXxx` functions) | `config.NewFileWatcher(paths, opts...)` |
+| Complex multi-step construction | Builder pattern | `AgentBuilder`, `DAGBuilder` |
+| Runtime dynamic creation by name/type | Factory pattern | `factory.NewProviderFromConfig(name, cfg)` |
+
+### 3. Pattern Details
+
+#### 3a. Config Struct (Default for most components)
+
+```go
+// Config struct — declarative, YAML/JSON friendly
+type RetrieverConfig struct {
+    TopK       int           `json:"top_k" yaml:"top_k"`
+    MinScore   float64       `json:"min_score" yaml:"min_score"`
+    Timeout    time.Duration `json:"timeout" yaml:"timeout"`
+}
+
+// Constructor with defaults
+func DefaultRetrieverConfig() RetrieverConfig {
+    return RetrieverConfig{
+        TopK:     10,
+        MinScore: 0.3,
+        Timeout:  30 * time.Second,
+    }
+}
+
+// Validate checks invariants
+func (c RetrieverConfig) Validate() error {
+    if c.TopK <= 0 {
+        return fmt.Errorf("top_k must be positive, got %d", c.TopK)
+    }
+    return nil
+}
+```
+
+#### 3b. Functional Options (For programmatic APIs)
+
+```go
+type WatcherOption func(*FileWatcher)
+
+func WithInterval(d time.Duration) WatcherOption {
+    return func(w *FileWatcher) { w.interval = d }
+}
+
+func NewFileWatcher(paths []string, opts ...WatcherOption) (*FileWatcher, error) {
+    w := &FileWatcher{paths: paths, interval: defaultInterval}
+    for _, opt := range opts {
+        opt(w)
+    }
+    return w, nil
+}
+```
+
+#### 3c. Builder (For complex multi-step construction only)
+
+Reserved for objects that require ordered construction steps or cross-field validation:
+
+```go
+agent, err := NewAgentBuilder(cfg).
+    WithProvider(provider).    // required
+    WithLogger(logger).        // optional
+    WithReflection(reflCfg).   // optional
+    Build()                    // validates + constructs
+```
+
+#### 3d. Factory (For runtime dynamic creation)
+
+Reserved for creating instances by name/type at runtime:
+
+```go
+provider, err := factory.NewProviderFromConfig("openai", providerCfg, logger)
+```
+
+### 4. Anti-Patterns
+
+| Pattern | Problem | Fix |
+|---------|---------|-----|
+| Config struct + Builder for same component | Two ways to configure = confusion | Pick one based on complexity |
+| Functional Options for YAML-loaded config | Options can't be serialized | Use Config struct |
+| Builder without `Validate()` in `Build()` | Invalid objects can be created | Always validate in `Build()` |
+| Factory that returns `any` | Loses type safety | Return concrete type or narrow interface |
+| Config struct without `Default*()` constructor | Users must know all fields | Always provide defaults |
+
+### 5. Migration Guide
+
+When refactoring existing code:
+1. If the component has < 5 config fields and is loaded from YAML → Config struct
+2. If the component has > 5 optional params and is created programmatically → Functional Options
+3. If the component requires ordered setup steps → Builder
+4. If the component is created by name at runtime → Factory
+5. Never combine Builder + Functional Options on the same type
+
+> **Rule**: Before adding a new configuration approach to a package, check what pattern the package already uses. Consistency within a package trumps "best" pattern choice.
+
+> **Historical lesson**: The `agent/` package uses Builder (`AgentBuilder`), the `config/` package uses Functional Options (`WatcherOption`), and the `llm/factory/` package uses Factory. Each is appropriate for its use case. The problem was lack of documentation about when to use which, leading to ad-hoc choices in new code.

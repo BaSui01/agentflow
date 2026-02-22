@@ -915,3 +915,54 @@ README.md（中文）和 README_EN.md（英文）全量更新，使文档覆盖�
 ### Next Steps
 
 - None - task complete
+
+
+## Session 12: 移除 CGO 依赖：mattn/go-sqlite3 → 纯 Go SQLite
+
+**Date**: 2026-02-22
+**Task**: 移除 CGO 依赖：mattn/go-sqlite3 → 纯 Go SQLite
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+## 变更概要
+
+将 migration 子系统从 CGO 依赖的 `mattn/go-sqlite3` 迁移到纯 Go 的 `modernc.org/sqlite`，彻底消除编译对 gcc 的依赖。
+
+| 文件 | 变更 |
+|------|------|
+| `internal/migration/migrator.go` | import `sqlite3` → `sqlite` (alias `sqlitedb`)，driverName `"sqlite3"` → `"sqlite"` |
+| `internal/migration/migrator_test.go` | 移除 `skipIfNoCGO` 函数及调用，`mattn/go-sqlite3` → `modernc.org/sqlite` |
+| `Dockerfile` | `CGO_ENABLED=1` → `0`，移除 `gcc musl-dev` |
+| `Makefile` | install-migrate tag `sqlite3` → `sqlite` |
+| `go.mod` / `go.sum` | 移除 `mattn/go-sqlite3`，`modernc.org/sqlite` 提升为直接依赖 |
+
+## 验证结果
+
+- `CGO_ENABLED=0 go vet ./internal/migration/...` — 通过
+- `CGO_ENABLED=0 go test ./internal/migration/... -v` — 7/7 PASS（含 3 个之前被 skip 的集成测试）
+- `go.mod` 中无 `mattn/go-sqlite3` 残留
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `f11f9ef` | (see git log) |
+| `c7cf629` | (see git log) |
+| `a167297` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
