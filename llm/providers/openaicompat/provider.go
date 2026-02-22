@@ -70,7 +70,7 @@ type Config struct {
 	AuthHeaderName string
 
 	// APIKeys 多 API Key 列表，轮询使用。如果非空，优先于 APIKey。
-	APIKeys []string
+	APIKeys []providers.APIKeyEntry
 }
 
 // Provider is the base implementation for all OpenAI-compatible LLM providers.
@@ -149,7 +149,7 @@ func (p *Provider) resolveAPIKey(ctx context.Context) string {
 	// 2. 多 Key 轮询
 	if len(p.Cfg.APIKeys) > 0 {
 		idx := atomic.AddUint64(&p.keyIndex, 1) - 1
-		return p.Cfg.APIKeys[idx%uint64(len(p.Cfg.APIKeys))]
+		return p.Cfg.APIKeys[idx%uint64(len(p.Cfg.APIKeys))].Key
 	}
 	// 3. 单 Key
 	return p.Cfg.APIKey

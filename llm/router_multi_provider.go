@@ -264,7 +264,11 @@ func (r *MultiProviderRouter) buildSelectionMulti(
 	}
 
 	// 使用工厂创建 Provider 实例（带 API Key 和 BaseURL）
+	// Key 级 BaseURL 优先，回退到 ProviderModel 级 BaseURL
 	baseURL := providerModel.BaseURL
+	if apiKey.BaseURL != "" {
+		baseURL = apiKey.BaseURL
+	}
 	provider, err := r.providerFactory.CreateProvider(providerCode, apiKey.APIKey, baseURL)
 	if err != nil {
 		return nil, &Error{

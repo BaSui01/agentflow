@@ -327,7 +327,7 @@ func (p *GeminiProvider) resolveAPIKey(ctx context.Context) string {
 	}
 	if len(p.cfg.APIKeys) > 0 {
 		idx := atomic.AddUint64(&p.keyIndex, 1) - 1
-		return p.cfg.APIKeys[idx%uint64(len(p.cfg.APIKeys))]
+		return p.cfg.APIKeys[idx%uint64(len(p.cfg.APIKeys))].Key
 	}
 	return p.cfg.APIKey
 }

@@ -100,6 +100,7 @@ type LLMProviderAPIKey struct {
 	ID         uint   `gorm:"primaryKey" json:"id"`
 	ProviderID uint   `gorm:"not null;index:idx_provider_api_keys_provider_id" json:"provider_id"`
 	APIKey     string `gorm:"size:500;not null" json:"api_key"`
+	BaseURL    string `gorm:"size:500" json:"base_url"`
 	Label      string `gorm:"size:100" json:"label"`
 	Priority   int    `gorm:"default:100" json:"priority"`
 	Weight     int    `gorm:"default:100" json:"weight"`
