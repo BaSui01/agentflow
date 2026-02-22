@@ -1097,3 +1097,130 @@ README.md（中文）和 README_EN.md（英文）全量更新，使文档覆盖�
 ### Next Steps
 
 - None - task complete
+
+
+## Session 15: 生产就绪度修复 — OTel/验证/测试 + batch-commit 脚本通用化
+
+**Date**: 2026-02-23
+**Task**: 生产就绪度修复 — OTel/验证/测试 + batch-commit 脚本通用化
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+## 生产就绪度审计与修复
+
+对 AgentFlow 框架进行 12 维度生产就绪度审计，发现 3 个关键缺口并行修复：
+
+| 优先级 | 问题 | 修复内容 |
+|--------|------|----------|
+| P0 | OTel SDK 未接线 | `internal/telemetry/` 封装 TracerProvider + MeterProvider，`cmd/agentflow/main.go` 接入 |
+| P1 | 测试覆盖不足 | 新增 `llm/batch/`(8)、`agent/voice/`(11)、`agent/federation/`(+6) 共 25 个测试 |
+| P2 | API 验证不一致 | `apikey.go` + `chat.go` 统一 ValidateContentType + DecodeJSONBody 链 |
+
+## 代码规范沉淀
+
+- §43 OTel SDK Initialization Pattern
+- §44 API Request Body Validation Pattern
+- §45-§46 OTel HTTP Tracing Middleware + Conditional Route Registration
+- 验证破坏测试的常见陷阱文档化
+
+## batch-commit 脚本通用化
+
+- 移除硬编码 `DIR_GROUP_MAP`，改为按顶层目录自动分组
+- 新增 20+ 依赖文件识别（Go/Node/Python/Rust/Java/Ruby/PHP/.NET）
+- 新增 ELF/Mach-O/PE 二进制产物自动排除
+- 新增语义化描述生成（"新增 X"、"更新 Y"、"移除 Z"）
+- `--target` 默认值改为自动检测（remote HEAD → main/master/develop → 当前分支）
+
+**变更文件**:
+- `internal/telemetry/telemetry.go` / `doc.go` / `telemetry_test.go`
+- `cmd/agentflow/main.go` / `server.go`
+- `llm/batch/processor_test.go`
+- `agent/voice/realtime_test.go`
+- `agent/federation/orchestrator_test.go`
+- `api/handlers/apikey.go` / `apikey_test.go` / `chat.go` / `common.go`
+- `go.mod` / `go.sum`
+- `.trellis/spec/backend/quality-guidelines.md` / `error-handling.md`
+- `.trellis/spec/unit-test/index.md`
+- `.claude/skills/git-batch-commit/scripts/batch_commit.py` / `SKILL.md`
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `2df1a31` | (see git log) |
+| `bdef378` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 16: 生产就绪度修复 — OTel接线 + 测试覆盖 + API验证
+
+**Date**: 2026-02-23
+**Task**: 生产就绪度修复 — OTel接线 + 测试覆盖 + API验证
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+## 完成内容
+
+使用 Agent Team 模式并行完成 PRD 中 3 个工作项：
+
+| 工作项 | 描述 | 关键文件 |
+|--------|------|----------|
+| P0: OTel 追踪接线 | 新建 `internal/telemetry/` 包，封装 TracerProvider + MeterProvider 初始化，接入 main.go 启动和 server.go 关闭流程 | `internal/telemetry/telemetry.go`, `cmd/agentflow/main.go`, `cmd/agentflow/server.go` |
+| P1: 高风险包测试 | voice (11 tests), batch (13 tests), federation (8 tests) 三个零测试包补充单元测试 | `agent/voice/realtime_test.go`, `llm/batch/processor_test.go`, `agent/federation/orchestrator_test.go` |
+| P2: API 验证统一 | apikey.go 改用 DecodeJSONBody，chat.go 增强 role 枚举校验，common.go 添加 ValidateURL/ValidateEnum/ValidateNonNegative | `api/handlers/apikey.go`, `api/handlers/chat.go`, `api/handlers/common.go` |
+
+## 验证结果
+
+- `go build ./...` ✅
+- `go vet ./...` ✅
+- 所有新增测试 `-race -count=1` ✅
+- 代码规范已沉淀 §43-§46
+
+## 规范更新
+
+commit `4a9159a` 沉淀了 4 条新规范：§43 OTel SDK Init、§44 API Request Body Validation、§45 OTel HTTP Tracing Middleware、§46 Conditional Route Registration
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `7fba196` | (see git log) |
+| `8a29c1e` | (see git log) |
+| `d8d5b9a` | (see git log) |
+| `7d13137` | (see git log) |
+| `61b0ba2` | (see git log) |
+| `2a310f2` | (see git log) |
+| `4a9159a` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
