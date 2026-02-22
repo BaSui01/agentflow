@@ -7,17 +7,16 @@ import (
 
 	"github.com/BaSui01/agentflow/llm"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/mock"
 	"go.uber.org/zap"
 )
 
 // 测试新DynamicTooSelector 测试创建工具选择器
 func TestNewDynamicToolSelector(t *testing.T) {
 	logger, _ := zap.NewDevelopment()
-	provider := new(MockProvider)
-	memory := new(MockMemoryManager)
-	toolManager := new(MockToolManager)
-	bus := new(MockEventBus)
+	provider := &testProvider{name: "test"}
+	memory := &testMemoryManager{}
+	toolManager := &testToolManager{}
+	bus := &testEventBus{}
 
 	config := Config{
 		ID:    "test-agent",
@@ -39,10 +38,10 @@ func TestNewDynamicToolSelector(t *testing.T) {
 // TestDynamicTooSelector SelectedTools 失效测试选择器
 func TestDynamicToolSelector_SelectTools_Disabled(t *testing.T) {
 	logger, _ := zap.NewDevelopment()
-	provider := new(MockProvider)
-	memory := new(MockMemoryManager)
-	toolManager := new(MockToolManager)
-	bus := new(MockEventBus)
+	provider := &testProvider{name: "test"}
+	memory := &testMemoryManager{}
+	toolManager := &testToolManager{}
+	bus := &testEventBus{}
 
 	config := Config{
 		ID:    "test-agent",
@@ -72,10 +71,10 @@ func TestDynamicToolSelector_SelectTools_Disabled(t *testing.T) {
 // TestDynamicTooL 选择器 SelectTools 成功测试工具选择
 func TestDynamicToolSelector_SelectTools_Success(t *testing.T) {
 	logger, _ := zap.NewDevelopment()
-	provider := new(MockProvider)
-	memory := new(MockMemoryManager)
-	toolManager := new(MockToolManager)
-	bus := new(MockEventBus)
+	provider := &testProvider{name: "test"}
+	memory := &testMemoryManager{}
+	toolManager := &testToolManager{}
+	bus := &testEventBus{}
 
 	config := Config{
 		ID:    "test-agent",
@@ -111,10 +110,10 @@ func TestDynamicToolSelector_SelectTools_Success(t *testing.T) {
 // 测试DynamicTooSelector ScoreTools 测试工具评分
 func TestDynamicToolSelector_ScoreTools(t *testing.T) {
 	logger, _ := zap.NewDevelopment()
-	provider := new(MockProvider)
-	memory := new(MockMemoryManager)
-	toolManager := new(MockToolManager)
-	bus := new(MockEventBus)
+	provider := &testProvider{name: "test"}
+	memory := &testMemoryManager{}
+	toolManager := &testToolManager{}
+	bus := &testEventBus{}
 
 	config := Config{
 		ID:    "test-agent",
@@ -145,10 +144,10 @@ func TestDynamicToolSelector_ScoreTools(t *testing.T) {
 // Test Dynamic ToolSelector 计算语义相似性测试语义相似性
 func TestDynamicToolSelector_calculateSemanticSimilarity(t *testing.T) {
 	logger, _ := zap.NewDevelopment()
-	provider := new(MockProvider)
-	memory := new(MockMemoryManager)
-	toolManager := new(MockToolManager)
-	bus := new(MockEventBus)
+	provider := &testProvider{name: "test"}
+	memory := &testMemoryManager{}
+	toolManager := &testToolManager{}
+	bus := &testEventBus{}
 
 	config := Config{
 		ID:    "test-agent",
@@ -200,10 +199,10 @@ func TestDynamicToolSelector_calculateSemanticSimilarity(t *testing.T) {
 // TestDynamic ToolSelector  Update ToolStats 测试更新工具统计
 func TestDynamicToolSelector_UpdateToolStats(t *testing.T) {
 	logger, _ := zap.NewDevelopment()
-	provider := new(MockProvider)
-	memory := new(MockMemoryManager)
-	toolManager := new(MockToolManager)
-	bus := new(MockEventBus)
+	provider := &testProvider{name: "test"}
+	memory := &testMemoryManager{}
+	toolManager := &testToolManager{}
+	bus := &testEventBus{}
 
 	config := Config{
 		ID:    "test-agent",
@@ -241,10 +240,10 @@ func TestDynamicToolSelector_UpdateToolStats(t *testing.T) {
 // 测试动态工具Selector 获得可靠性测试可靠性计算
 func TestDynamicToolSelector_getReliability(t *testing.T) {
 	logger, _ := zap.NewDevelopment()
-	provider := new(MockProvider)
-	memory := new(MockMemoryManager)
-	toolManager := new(MockToolManager)
-	bus := new(MockEventBus)
+	provider := &testProvider{name: "test"}
+	memory := &testMemoryManager{}
+	toolManager := &testToolManager{}
+	bus := &testEventBus{}
 
 	config := Config{
 		ID:    "test-agent",
@@ -346,10 +345,37 @@ func TestParseToolIndices(t *testing.T) {
 // TestDynamicTooL 选择器 SelectTools WithLLMRanging 测试 LLM 辅助排名
 func TestDynamicToolSelector_SelectTools_WithLLMRanking(t *testing.T) {
 	logger, _ := zap.NewDevelopment()
-	provider := new(MockProvider)
-	memory := new(MockMemoryManager)
-	toolManager := new(MockToolManager)
-	bus := new(MockEventBus)
+
+	// Mock LLM 排名响应
+	rankingResponse := &llm.ChatResponse{
+		ID:       "ranking-response",
+		Provider: "mock",
+		Model:    "gpt-4",
+		Choices: []llm.ChatChoice{
+			{
+				Index:        0,
+				FinishReason: "stop",
+				Message: llm.Message{
+					Role:    llm.RoleAssistant,
+					Content: "1,3,2",
+				},
+			},
+		},
+	}
+
+	completionCalled := 0
+	provider := &testProvider{
+		name: "test",
+		completionFn: func(ctx context.Context, req *llm.ChatRequest) (*llm.ChatResponse, error) {
+			completionCalled++
+			assert.Len(t, req.Messages, 2)
+			assert.Equal(t, llm.RoleSystem, req.Messages[0].Role)
+			return rankingResponse, nil
+		},
+	}
+	memory := &testMemoryManager{}
+	toolManager := &testToolManager{}
+	bus := &testEventBus{}
 
 	config := Config{
 		ID:    "test-agent",
@@ -375,42 +401,20 @@ func TestDynamicToolSelector_SelectTools_WithLLMRanking(t *testing.T) {
 		{Name: "api_call", Description: "Call API"},
 	}
 
-	// Mock LLM 排名响应
-	rankingResponse := &llm.ChatResponse{
-		ID:       "ranking-response",
-		Provider: "mock",
-		Model:    "gpt-4",
-		Choices: []llm.ChatChoice{
-			{
-				Index:        0,
-				FinishReason: "stop",
-				Message: llm.Message{
-					Role:    llm.RoleAssistant,
-					Content: "1,3,2",
-				},
-			},
-		},
-	}
-
-	provider.On("Completion", mock.Anything, mock.MatchedBy(func(req *llm.ChatRequest) bool {
-		return len(req.Messages) == 2 && req.Messages[0].Role == llm.RoleSystem
-	})).Return(rankingResponse, nil)
-
 	selected, err := selector.SelectTools(ctx, "search for information", tools)
 
 	assert.NoError(t, err)
 	assert.LessOrEqual(t, len(selected), 2)
-
-	provider.AssertExpectations(t)
+	assert.Greater(t, completionCalled, 0, "Completion should have been called")
 }
 
 // 基准动态工具Selector SelectTools 基准工具选择
 func BenchmarkDynamicToolSelector_SelectTools(b *testing.B) {
 	logger, _ := zap.NewDevelopment()
-	provider := new(MockProvider)
-	memory := new(MockMemoryManager)
-	toolManager := new(MockToolManager)
-	bus := new(MockEventBus)
+	provider := &testProvider{name: "test"}
+	memory := &testMemoryManager{}
+	toolManager := &testToolManager{}
+	bus := &testEventBus{}
 
 	config := Config{
 		ID:    "test-agent",

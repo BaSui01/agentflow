@@ -168,8 +168,8 @@ func TestFeatureManager_EnableDisable(t *testing.T) {
 	if !fm.IsReflectionEnabled() {
 		t.Error("expected reflection to be enabled")
 	}
-	if fm.GetReflection() != "mock-executor" {
-		t.Error("expected to get mock executor")
+	if fm.GetReflection() == nil {
+		t.Error("expected to get non-nil reflection runner")
 	}
 
 	// 禁用反射
