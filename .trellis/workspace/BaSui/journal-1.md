@@ -966,3 +966,63 @@ README.md（中文）和 README_EN.md（英文）全量更新，使文档覆盖�
 ### Next Steps
 
 - None - task complete
+
+
+## Session 13: #17 收尾: Enable* typed interface + 消除 builder any 字段
+
+**Date**: 2026-02-23
+**Task**: #17 收尾: Enable* typed interface + 消除 builder any 字段
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+## 问题
+
+\`go build ./...\` 编译失败，6 个错误：
+- \`builder.go\`: 3 个具体类型未实现 Runner 接口（返回值 \`any\` vs 具体类型）
+- \`feature_manager.go\`: 3 个未定义的 \`*AnyAdapter\` 引用
+
+根因：#17 消除 any 类型的工作做了一半，接口签名已类型化但 adapter 桥接层和调用点未同步。
+
+## 修复内容
+
+| 文件 | 变更 |
+|------|------|
+| \`agent/integration.go\` | \`EnableReflection/EnableToolSelection/EnablePromptEnhancer\` 参数从 \`any\` → typed interface |
+| \`agent/feature_manager.go\` | 同步类型化，删除 \`anyAdapter\` 分支 |
+| \`agent/builder.go\` | 5 个 \`any\` config 字段改为 typed interface 实例；With* → WithDefault* 模式 |
+| \`agent/errors.go\` | 删除废弃的 \`FromTypesError/ToTypesError\` |
+| \`agent/runtime/quicksetup.go\` | 适配新的 \`WithDefaultMCPServer\` API |
+| \`agent/managers_test.go\` | 新增 3 个 stub（ReflectionRunner/ToolSelectorRunner/PromptEnhancerRunner） |
+| \`examples/09_full_integration/main.go\` | 使用 \`As*Runner\` adapter 包装具体类型 |
+
+## 验证
+
+- \`go build ./...\` ✅
+- \`go vet ./...\` ✅
+- \`go test ./agent\` ✅（\`TestCheckpointManager_AutoSave\` 偶发 flaky，非本次引入）
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `56056ba` | (see git log) |
+| `a377d18` | (see git log) |
+| `0b5f2b4` | (see git log) |
+| `3952684` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

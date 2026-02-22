@@ -1,0 +1,41 @@
+{
+  "id": "fix-remaining-10",
+  "name": "fix-remaining-10",
+  "title": "全量修复 P0-P3 剩余 10 项问题",
+  "description": "",
+  "status": "completed",
+  "dev_type": null,
+  "scope": null,
+  "priority": "P2",
+  "creator": "BaSui",
+  "assignee": "BaSui",
+  "createdAt": "2026-02-22",
+  "completedAt": "2026-02-23",
+  "branch": null,
+  "base_branch": "master",
+  "worktree_path": null,
+  "current_phase": 1,
+  "next_action": [
+    {
+      "phase": 1,
+      "action": "implement"
+    },
+    {
+      "phase": 2,
+      "action": "check"
+    },
+    {
+      "phase": 3,
+      "action": "finish"
+    },
+    {
+      "phase": 4,
+      "action": "create-pr"
+    }
+  ],
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "relatedFiles": [],
+  "notes": ""
+}

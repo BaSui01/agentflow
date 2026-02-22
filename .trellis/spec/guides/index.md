@@ -26,6 +26,7 @@ These guides help you **ask the right questions before coding**.
 | [Cross-Platform Thinking Guide](./cross-platform-thinking-guide.md) | Catch platform-specific assumptions | Scripts, paths, commands |
 | [quality-guidelines.md §18-§23](../backend/quality-guidelines.md) | Agent composition, guardrails, context window patterns | Multi-agent design, runtime config, validation chains |
 | [quality-guidelines.md §35-§39](../backend/quality-guidelines.md) | Cache eviction, Prometheus cardinality, broadcast safety, API envelope, doc snippets | In-memory caches, metrics, fan-out channels, new API endpoints, documentation |
+| [quality-guidelines.md §41-§42](../backend/quality-guidelines.md) | JWT auth middleware, MCP server serve loop | Authentication, tenant rate limiting, protocol message dispatch |
 
 ---
 
@@ -193,6 +194,27 @@ These guides help you **ask the right questions before coding**.
 - [ ] 新增路由 — 是否更新了 `api/openapi.yaml`？（§14）
 
 → Read [quality-guidelines.md §38](../backend/quality-guidelines.md) for API Envelope pattern
+
+### When to Think About Authentication / Authorization
+
+- [ ] New API handler — does it need authentication? Add to `JWTAuth` or `APIKeyAuth` skip paths if exempt
+- [ ] Using `tenant_id` or `user_id` — are you extracting from JWT claims via `types.TenantID(ctx)` / `types.UserID(ctx)`, or trusting client input? (§41)
+- [ ] New rate limiting — is it per-tenant (from JWT context) rather than only per-IP? (§41)
+- [ ] Handler reads identity from request body or custom header — WRONG, must come from JWT claims in context
+- [ ] Adding a new claim to JWT — did you add a typed context key + `With*`/getter pair in `types/context.go`?
+
+→ Read [quality-guidelines.md §41](../backend/quality-guidelines.md) for JWT Authentication Middleware pattern
+
+### When to Think About Streaming Patterns
+
+- [ ] New workflow node type — does `executeNode` emit `node_start` / `node_complete` / `node_error` events?
+- [ ] New API handler — does it need an SSE streaming endpoint alongside the sync endpoint?
+- [ ] Agent execution — is `RuntimeStreamEmitter` injected into context for SSE bridging?
+- [ ] Workflow execution — is `WorkflowStreamEmitter` injected into context? (optional, backward compatible)
+- [ ] Emitter callback called from parallel goroutines — is it safe for concurrent invocation?
+
+→ Read [cross-layer-thinking-guide.md § Workflow Stream Emitter](./cross-layer-thinking-guide.md) for context emitter pattern
+→ Read [quality-guidelines.md §42](../backend/quality-guidelines.md) for MCP Server Serve loop pattern
 
 ### When to Think About Documentation Code Snippets
 

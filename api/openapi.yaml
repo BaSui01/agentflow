@@ -26,6 +26,8 @@ tags:
     description: Runtime configuration management endpoints
   - name: Chat
     description: LLM chat completion endpoints
+  - name: Agent
+    description: Agent management and execution endpoints
 
 paths:
   /health:
@@ -253,6 +255,158 @@ paths:
               schema:
                 $ref: '#/components/schemas/ConfigResponse'
 
+  /api/v1/agents:
+    get:
+      tags: [Agent]
+      summary: List agents
+      operationId: listAgents
+      security:
+        - ApiKeyAuth: []
+      responses:
+        '200':
+          description: Agent list
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/AgentInfo'
+        '500':
+          description: Internal error
+
+  /api/v1/agents/execute:
+    post:
+      tags: [Agent]
+      summary: Execute agent
+      operationId: executeAgent
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AgentExecuteRequest'
+      responses:
+        '200':
+          description: Execution result
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/AgentExecuteResponse'
+        '400':
+          description: Invalid request
+        '404':
+          description: Agent not found
+        '500':
+          description: Execution failed
+
+  /api/v1/agents/execute/stream:
+    post:
+      tags: [Agent]
+      summary: Stream agent execution (SSE)
+      operationId: executeAgentStream
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AgentExecuteRequest'
+      responses:
+        '200':
+          description: SSE stream of agent execution events (token, tool_call, tool_result, error, [DONE])
+          content:
+            text/event-stream:
+              schema:
+                type: string
+        '400':
+          description: Invalid request
+        '404':
+          description: Agent not found
+        '500':
+          description: Execution failed
+
+  /api/v1/agents/plan:
+    post:
+      tags: [Agent]
+      summary: Plan agent execution
+      operationId: planAgent
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AgentExecuteRequest'
+      responses:
+        '200':
+          description: Execution plan
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Envelope'
+        '400':
+          description: Invalid request
+        '404':
+          description: Agent not found
+        '500':
+          description: Plan failed
+
+  /api/v1/agents/health:
+    get:
+      tags: [Agent]
+      summary: Agent health check
+      operationId: agentHealth
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - name: id
+          in: query
+          required: true
+          schema:
+            type: string
+          description: Agent ID
+      responses:
+        '200':
+          description: Agent is healthy
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/AgentHealthResponse'
+        '400':
+          description: Invalid agent ID
+        '404':
+          description: Agent not found
+        '503':
+          description: Agent not ready
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/AgentHealthResponse'
+
 components:
   securitySchemes:
     ApiKeyAuth:
@@ -358,3 +512,72 @@ components:
           type: number
         stream:
           type: boolean
+
+    AgentInfo:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        type:
+          type: string
+        state:
+          type: string
+        description:
+          type: string
+        model:
+          type: string
+        created_at:
+          type: string
+
+    AgentExecuteRequest:
+      type: object
+      required: [agent_id, content]
+      properties:
+        agent_id:
+          type: string
+        content:
+          type: string
+        context:
+          type: object
+          additionalProperties: true
+        variables:
+          type: object
+          additionalProperties:
+            type: string
+
+    AgentExecuteResponse:
+      type: object
+      properties:
+        trace_id:
+          type: string
+        content:
+          type: string
+        metadata:
+          type: object
+          additionalProperties: true
+        tokens_used:
+          type: integer
+        cost:
+          type: number
+        duration:
+          type: string
+        finish_reason:
+          type: string
+
+    AgentHealthResponse:
+      type: object
+      properties:
+        agent_id:
+          type: string
+        status:
+          type: string
+        healthy:
+          type: boolean
+        endpoint:
+          type: string
+        load:
+          type: number
+        checked_at:
+          type: string

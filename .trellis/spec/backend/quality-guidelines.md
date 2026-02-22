@@ -2243,3 +2243,201 @@ When refactoring existing code:
 > **Rule**: Before adding a new configuration approach to a package, check what pattern the package already uses. Consistency within a package trumps "best" pattern choice.
 
 > **Historical lesson**: The `agent/` package uses Builder (`AgentBuilder`), the `config/` package uses Functional Options (`WatcherOption`), and the `llm/factory/` package uses Factory. Each is appropriate for its use case. The problem was lack of documentation about when to use which, leading to ad-hoc choices in new code.
+
+---
+
+## §41 JWT Authentication Middleware Pattern (P1 — Security)
+
+All authenticated API endpoints MUST use the JWT middleware for identity extraction. Static API key auth is acceptable only as a fallback for legacy clients or dev mode.
+
+### 1. Scope / Trigger
+
+- Trigger: Authentication upgrade from static API keys to JWT (Feb 2026)
+- Applies to: ANY new API handler that needs to know the caller's identity (tenant, user, roles)
+
+### 2. Authentication Strategy Priority
+
+| Priority | Method | Use Case |
+|----------|--------|----------|
+| 1 (preferred) | JWT Bearer token | Production multi-tenant |
+| 2 (fallback) | Static API Key (`X-API-Key` header) | Legacy clients, internal services |
+| 3 (dev only) | No auth (skip paths) | Health checks, metrics, dev mode |
+
+### 3. JWT Middleware Pattern (from `cmd/agentflow/middleware.go`)
+
+```go
+// JWTAuth validates JWT tokens and injects identity into context.
+// Supports HS256 (HMAC) and RS256 (RSA) signing algorithms.
+func JWTAuth(cfg config.JWTConfig, skipPaths []string, logger *zap.Logger) Middleware {
+    // Parse RSA public key at init time (not per-request)
+    var rsaKey *rsa.PublicKey
+    if cfg.PublicKey != "" {
+        // ... PEM decode + x509.ParsePKIXPublicKey ...
+    }
+
+    keyFunc := func(token *jwt.Token) (any, error) {
+        switch token.Method.Alg() {
+        case "HS256":
+            return []byte(cfg.Secret), nil
+        case "RS256":
+            return rsaKey, nil
+        default:
+            return nil, fmt.Errorf("unexpected signing method: %s", token.Method.Alg())
+        }
+    }
+
+    // Extract claims and inject into context via types.With* helpers
+    claims, ok := token.Claims.(jwt.MapClaims)
+    ctx := r.Context()
+    if tenantID, ok := claims["tenant_id"].(string); ok && tenantID != "" {
+        ctx = types.WithTenantID(ctx, tenantID)
+    }
+    if userID, ok := claims["user_id"].(string); ok && userID != "" {
+        ctx = types.WithUserID(ctx, userID)
+    }
+    if rolesRaw, ok := claims["roles"].([]any); ok {
+        // ... convert []any to []string ...
+        ctx = types.WithRoles(ctx, roles)
+    }
+    next.ServeHTTP(w, r.WithContext(ctx))
+}
+```
+
+### 4. Forbidden Patterns
+
+```go
+// WRONG — trusting client-submitted identity
+tenantID := r.Header.Get("X-Tenant-ID")  // ❌ Client can forge this
+
+// WRONG — trusting identity from request body
+tenantID := req.TenantID  // ❌ Client can set any value
+
+// CORRECT — extract from JWT claims via context
+tenantID, ok := types.TenantID(r.Context())  // ✅ Set by JWTAuth middleware
+```
+
+### 5. Tenant-Level Rate Limiting
+
+Rate limiting MUST use `tenant_id` from context (set by JWT middleware), falling back to IP only when no tenant is present:
+
+```go
+// cmd/agentflow/middleware.go — TenantRateLimiter
+key := ""
+if tenantID, ok := types.TenantID(r.Context()); ok {
+    key = "tenant:" + tenantID
+} else {
+    ip, _, _ := net.SplitHostPort(r.RemoteAddr)
+    key = "ip:" + ip
+}
+```
+
+### 6. Config Structure
+
+```go
+// config/loader.go — JWTConfig
+type JWTConfig struct {
+    Secret    string `yaml:"secret" env:"SECRET" json:"-"`      // HMAC key
+    PublicKey string `yaml:"public_key" env:"PUBLIC_KEY" json:"-"` // RSA PEM
+    Issuer    string `yaml:"issuer" env:"ISSUER"`                // Optional iss claim
+    Audience  string `yaml:"audience" env:"AUDIENCE"`            // Optional aud claim
+}
+```
+
+> **Rule**: Never trust client-submitted `tenant_id` or `user_id`. Always extract from JWT claims. Downstream handlers read identity via `types.TenantID(ctx)` / `types.UserID(ctx)` / `types.Roles(ctx)`.
+
+> **Historical lesson**: The initial API used static API keys with no tenant isolation. Adding JWT required creating `types/context.go` with typed context keys (`keyTenantID`, `keyUserID`, `keyRoles`) and `With*`/getter helper pairs. The `TenantRateLimiter` middleware was added alongside `JWTAuth` to enforce per-tenant fairness.
+
+---
+
+## §42 MCP Server Message Dispatcher and Serve Loop Pattern (P2 — Protocol)
+
+The MCP Server uses a JSON-RPC 2.0 message dispatcher with a transport-agnostic message loop. New MCP method handlers follow the `dispatch` routing pattern.
+
+### 1. Scope / Trigger
+
+- Trigger: MCP Server needed a message dispatcher to actually serve protocol requests (Feb 2026)
+- Applies to: Adding new MCP methods or new transport implementations
+
+### 2. Message Dispatcher Pattern (from `agent/protocol/mcp/server.go`)
+
+```go
+// HandleMessage dispatches JSON-RPC 2.0 requests to server methods.
+// Notifications (no ID) return nil — no response sent.
+func (s *DefaultMCPServer) HandleMessage(ctx context.Context, msg *MCPMessage) (*MCPMessage, error) {
+    if msg == nil {
+        return NewMCPError(nil, ErrorCodeInvalidRequest, "empty message", nil), nil
+    }
+    // Notifications are fire-and-forget
+    if msg.ID == nil {
+        s.handleNotification(msg)
+        return nil, nil
+    }
+    // Dispatch based on method name
+    result, mcpErr := s.dispatch(ctx, msg.Method, msg.Params)
+    if mcpErr != nil {
+        return &MCPMessage{JSONRPC: "2.0", ID: msg.ID, Error: mcpErr}, nil
+    }
+    return NewMCPResponse(msg.ID, result), nil
+}
+
+// dispatch routes method → handler
+func (s *DefaultMCPServer) dispatch(ctx context.Context, method string, params map[string]any) (any, *MCPError) {
+    switch method {
+    case "initialize":     return s.handleInitialize(params)
+    case "tools/list":     return s.handleToolsList(ctx)
+    case "tools/call":     return s.handleToolsCall(ctx, params)
+    case "resources/list": return s.handleResourcesList(ctx)
+    case "resources/read": return s.handleResourcesRead(ctx, params)
+    case "prompts/list":   return s.handlePromptsList(ctx)
+    case "prompts/get":    return s.handlePromptsGet(ctx, params)
+    default:
+        return nil, &MCPError{Code: ErrorCodeMethodNotFound, Message: "method not found: " + method}
+    }
+}
+```
+
+### 3. Transport Message Loop (Serve)
+
+```go
+// Serve runs receive → dispatch → respond loop until context cancellation.
+func (s *DefaultMCPServer) Serve(ctx context.Context, transport Transport) error {
+    for {
+        select {
+        case <-ctx.Done():
+            return ctx.Err()
+        default:
+        }
+        msg, err := transport.Receive(ctx)
+        if err != nil {
+            if ctx.Err() != nil { return ctx.Err() }  // clean shutdown
+            // Send parse error and continue
+            transport.Send(ctx, NewMCPError(nil, ErrorCodeParseError, "...", nil))
+            continue
+        }
+        resp, _ := s.HandleMessage(ctx, msg)
+        if resp == nil { continue }  // notification — no response
+        transport.Send(ctx, resp)
+    }
+}
+```
+
+### 4. Transport Interface
+
+```go
+// agent/protocol/mcp/transport.go
+type Transport interface {
+    Send(ctx context.Context, msg *MCPMessage) error
+    Receive(ctx context.Context) (*MCPMessage, error)
+    Close() error
+}
+```
+
+### 5. Key Rules
+
+- `HandleMessage` never returns a Go error for protocol-level issues — it returns `*MCPMessage` with JSON-RPC error
+- Notifications (ID == nil) produce no response — `Serve` skips the `Send` call
+- `Serve` exits cleanly on `ctx.Done()` — no goroutine leak
+- New methods: add a case to `dispatch()` switch and a `handle*` method
+- JSON-RPC version validation: reject anything other than `"2.0"`
+
+> **Rule**: When adding a new MCP method, add a `case` in `dispatch()` and implement a `handle<Method>` function. Keep the handler focused on parameter extraction and delegation to existing server methods (e.g., `s.CallTool`, `s.ListResources`).
