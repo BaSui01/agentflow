@@ -310,7 +310,11 @@ func (b *AgentBuilder) enableOptionalFeatures(agent *BaseAgent) error {
 	// 可观察性有一个具有代理/可观察性的进口周期(其进口代理)。
 	// 构建者仍然可以接受一个提供的例子;对于箱外接线使用代理/运行时间.
 	if b.config.EnableObservability && b.observabilityConfig != nil {
-		agent.EnableObservability(b.observabilityConfig)
+		if obs, ok := b.observabilityConfig.(ObservabilityRunner); ok {
+			agent.EnableObservability(obs)
+		} else {
+			return fmt.Errorf("observabilityConfig does not implement ObservabilityRunner")
+		}
 	}
 	return nil
 }
@@ -356,8 +360,11 @@ func (b *AgentBuilder) enableSkills(agent *BaseAgent) error {
 		agent.EnableSkills(v)
 		return nil
 	default:
-		agent.EnableSkills(v)
-		return nil
+		if sd, ok := v.(SkillDiscoverer); ok {
+			agent.EnableSkills(sd)
+			return nil
+		}
+		return fmt.Errorf("skillsConfig type %T does not implement SkillDiscoverer", v)
 	}
 }
 
@@ -385,8 +392,11 @@ func (b *AgentBuilder) enableMCP(agent *BaseAgent) error {
 		agent.EnableMCP(mcpproto.NewMCPServer(name, "0.1.0", b.logger))
 		return nil
 	default:
-		agent.EnableMCP(v)
-		return nil
+		if srv, ok := v.(MCPServerRunner); ok {
+			agent.EnableMCP(srv)
+			return nil
+		}
+		return fmt.Errorf("mcpConfig type %T does not implement MCPServerRunner", v)
 	}
 }
 
@@ -425,8 +435,11 @@ func (b *AgentBuilder) enableLSP(agent *BaseAgent) error {
 		agent.EnableLSP(v)
 		return nil
 	default:
-		agent.EnableLSP(v)
-		return nil
+		if client, ok := v.(LSPClientRunner); ok {
+			agent.EnableLSP(client)
+			return nil
+		}
+		return fmt.Errorf("lspConfig type %T does not implement LSPClientRunner", v)
 	}
 }
 
@@ -443,8 +456,11 @@ func (b *AgentBuilder) enableEnhancedMemory(agent *BaseAgent) error {
 		agent.EnableEnhancedMemory(v)
 		return nil
 	default:
-		agent.EnableEnhancedMemory(v)
-		return nil
+		if mem, ok := v.(EnhancedMemoryRunner); ok {
+			agent.EnableEnhancedMemory(mem)
+			return nil
+		}
+		return fmt.Errorf("enhancedMemoryConfig type %T does not implement EnhancedMemoryRunner", v)
 	}
 }
 
