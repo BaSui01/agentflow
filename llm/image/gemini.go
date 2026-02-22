@@ -10,7 +10,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/BaSui01/agentflow/internal/tlsutil"
+	"github.com/BaSui01/agentflow/pkg/tlsutil"
 )
 
 // GeminiProvider 利用 Google Gemini 原生多模态能力实现图像生成.

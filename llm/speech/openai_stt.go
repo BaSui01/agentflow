@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/BaSui01/agentflow/internal/tlsutil"
+	"github.com/BaSui01/agentflow/pkg/tlsutil"
 )
 
 // OpenAISTTProvider使用OpenAI Whisper API执行STT.
