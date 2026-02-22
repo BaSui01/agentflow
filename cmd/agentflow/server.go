@@ -13,6 +13,7 @@ import (
 	"github.com/BaSui01/agentflow/internal/metrics"
 	"github.com/BaSui01/agentflow/internal/server"
 	"github.com/BaSui01/agentflow/internal/telemetry"
+	"github.com/BaSui01/agentflow/llm"
 	llmfactory "github.com/BaSui01/agentflow/llm/factory"
 	"github.com/BaSui01/agentflow/types"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -56,6 +57,12 @@ type Server struct {
 	// Rate limiter 生命周期管理
 	rateLimiterCancel       context.CancelFunc
 	tenantRateLimiterCancel context.CancelFunc
+
+	// LLM provider (nil when API key not configured)
+	provider llm.Provider
+
+	// Cached agent instances for the resolver
+	agents sync.Map
 
 	wg sync.WaitGroup
 }
@@ -130,6 +137,7 @@ func (s *Server) initHandlers() error {
 				zap.String("provider", s.cfg.LLM.DefaultProvider),
 				zap.Error(err))
 		} else {
+			s.provider = provider
 			s.chatHandler = handlers.NewChatHandler(provider, s.logger)
 			s.logger.Info("Chat handler initialized",
 				zap.String("provider", s.cfg.LLM.DefaultProvider))
@@ -138,15 +146,20 @@ func (s *Server) initHandlers() error {
 		s.logger.Info("LLM API key not configured, chat endpoints disabled")
 	}
 
-	// TODO: agentHandler initialization requires agent registry (OP8)
-
 	// Initialize agent handler with discovery registry and agent registry.
-	// The resolver is nil for now — it will be wired when a live agent store is available.
-	// Without a resolver, execute/stream endpoints return 501 (Not Implemented).
+	// When an LLM provider is available, wire a resolver so execute/stream/plan
+	// endpoints can create agent instances on demand instead of returning 501.
 	discoveryRegistry := discovery.NewCapabilityRegistry(nil, s.logger)
 	agentRegistry := agent.NewAgentRegistry(s.logger)
-	s.agentHandler = handlers.NewAgentHandler(discoveryRegistry, agentRegistry, s.logger)
-	s.logger.Info("Agent handler initialized")
+
+	if s.provider != nil {
+		resolver := s.buildAgentResolver(agentRegistry)
+		s.agentHandler = handlers.NewAgentHandler(discoveryRegistry, agentRegistry, s.logger, resolver)
+		s.logger.Info("Agent handler initialized with resolver")
+	} else {
+		s.agentHandler = handlers.NewAgentHandler(discoveryRegistry, agentRegistry, s.logger)
+		s.logger.Info("Agent handler initialized without resolver (no LLM provider)")
+	}
 
 	// Initialize API key handler when database is available
 	if s.db != nil {
@@ -358,6 +371,37 @@ func (s *Server) startMetricsServer() error {
 
 	s.logger.Info("Metrics server started", zap.Int("port", s.cfg.Server.MetricsPort))
 	return nil
+}
+
+// buildAgentResolver creates an AgentResolver that uses the AgentRegistry to
+// create agent instances on demand and caches them in s.agents for reuse.
+func (s *Server) buildAgentResolver(registry *agent.AgentRegistry) handlers.AgentResolver {
+	return func(ctx context.Context, agentID string) (agent.Agent, error) {
+		// Check cache first
+		if cached, ok := s.agents.Load(agentID); ok {
+			return cached.(agent.Agent), nil
+		}
+
+		// Create a new agent via the registry
+		cfg := agent.Config{
+			ID:   agentID,
+			Name: agentID,
+			Type: agent.TypeGeneric,
+		}
+		ag, err := registry.Create(cfg, s.provider, nil, nil, nil, s.logger)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create agent %q: %w", agentID, err)
+		}
+
+		// Initialize the agent lifecycle
+		if err := ag.Init(ctx); err != nil {
+			return nil, fmt.Errorf("failed to init agent %q: %w", agentID, err)
+		}
+
+		// Cache for reuse (if another goroutine raced us, use theirs)
+		actual, _ := s.agents.LoadOrStore(agentID, ag)
+		return actual.(agent.Agent), nil
+	}
 }
 
 // getFirstAPIKey 返回配置中的第一个 API Key，用于配置 API 的独立认证。
