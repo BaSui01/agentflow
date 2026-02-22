@@ -154,12 +154,12 @@ coverage-html: ## 在浏览器中打开覆盖率报告
 	fi
 
 .PHONY: coverage-check
-coverage-check: ## 检查覆盖率是否达到阈值 (默认 24%)
+coverage-check: ## 检查覆盖率是否达到阈值 (默认 40%)
 	@echo "🔍 Checking coverage threshold..."
 	@mkdir -p $(BUILD_DIR)
 	@$(GO) test ./... -covermode=atomic -coverprofile=$(BUILD_DIR)/coverage.out
 	@total=$$($(GO) tool cover -func=$(BUILD_DIR)/coverage.out | grep total | awk '{gsub(/%/,"",$$3); print $$3}'); \
-	threshold=$${COVERAGE_THRESHOLD:-24.0}; \
+	threshold=$${COVERAGE_THRESHOLD:-40.0}; \
 	echo "📊 Current coverage: $${total}%"; \
 	echo "📏 Threshold: $${threshold}%"; \
 	if [ $$(echo "$${total} < $${threshold}" | bc -l) -eq 1 ]; then \
