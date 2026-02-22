@@ -96,19 +96,19 @@ func demoEnhancedSingleAgent(logger *zap.Logger) {
 		MinQuality:    0.7,
 	}
 	reflectionExecutor := agent.NewReflectionExecutor(baseAgent, reflectionConfig)
-	baseAgent.EnableReflection(reflectionExecutor)
+	baseAgent.EnableReflection(agent.AsReflectionRunner(reflectionExecutor))
 
 	// 3. Enable dynamic tool selection
 	fmt.Println("3. Enabling dynamic tool selection")
 	toolSelectionConfig := agent.DefaultToolSelectionConfig()
 	toolSelector := agent.NewDynamicToolSelector(baseAgent, *toolSelectionConfig)
-	baseAgent.EnableToolSelection(toolSelector)
+	baseAgent.EnableToolSelection(agent.AsToolSelectorRunner(toolSelector))
 
 	// 4. Enable prompt enhancer
 	fmt.Println("4. Enabling prompt enhancer")
 	promptConfig := agent.DefaultPromptEngineeringConfig()
 	promptEnhancer := agent.NewPromptEnhancer(promptConfig)
-	baseAgent.EnablePromptEnhancer(promptEnhancer)
+	baseAgent.EnablePromptEnhancer(agent.AsPromptEnhancerRunner(promptEnhancer))
 
 	// 5. Enable Skills system
 	fmt.Println("5. Enabling Skills system")

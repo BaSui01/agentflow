@@ -28,11 +28,12 @@ type AgentBuilder struct {
 	reflectionConfig     *ReflectionExecutorConfig
 	toolSelectionConfig  *ToolSelectionConfig
 	promptEnhancerConfig *PromptEnhancerConfig
-	skillsConfig         any // SkillsOptions | string | skills.SkillManagerConfig | skills.SkillManager — type-switched in enableSkills
-	mcpConfig            any // MCPServerOptions | string | *mcp.MCPServer — type-switched in enableMCP
-	lspConfig            any // LSPOptions | string | *ManagedLSP | *lsp.LSPClient — type-switched in enableLSP
-	enhancedMemoryConfig any // memory.EnhancedMemoryConfig | *memory.EnhancedMemorySystem — type-switched in enableEnhancedMemory
-	observabilityConfig  any // ObservabilityRunner — passed through to EnableObservability
+	skillsInstance         SkillDiscoverer
+	mcpInstance            MCPServerRunner
+	lspClient              LSPClientRunner
+	lspLifecycle           LSPLifecycleOwner
+	enhancedMemoryInstance EnhancedMemoryRunner
+	observabilityInstance  ObservabilityRunner
 
 	errors []error
 }
@@ -130,92 +131,121 @@ func (b *AgentBuilder) WithPromptEnhancer(config *PromptEnhancerConfig) *AgentBu
 	return b
 }
 
-// 技能选项配置构建者如何创建默认的技能管理器 。
-type SkillsOptions struct {
-	Directory string
-	Config    skills.SkillManagerConfig
-}
-
 // MCPServer 选项配置构建器如何创建默认的 MCP 服务器.
+// Deprecated: Use WithDefaultMCPServer(name, version) instead.
 type MCPServerOptions struct {
 	Name    string
 	Version string
 }
 
-// LSPOptions 配置构建器如何创建默认 LSP 运行时。
-type LSPOptions struct {
-	Name    string
-	Version string
-}
-
 // WithSkills 启用 Skills 系统
-func (b *AgentBuilder) WithSkills(config any) *AgentBuilder {
-	b.skillsConfig = config
+func (b *AgentBuilder) WithSkills(discoverer SkillDiscoverer) *AgentBuilder {
+	b.skillsInstance = discoverer
 	b.config.EnableSkills = true
 	return b
 }
 
 // With DefaultSkills 启用了内置的技能管理器,并可以选择扫描一个目录.
 func (b *AgentBuilder) WithDefaultSkills(directory string, config *skills.SkillManagerConfig) *AgentBuilder {
-	opts := SkillsOptions{
-		Directory: strings.TrimSpace(directory),
-		Config:    skills.DefaultSkillManagerConfig(),
-	}
+	cfg := skills.DefaultSkillManagerConfig()
 	if config != nil {
-		opts.Config = *config
+		cfg = *config
 	}
-	return b.WithSkills(opts)
+	logger := b.logger
+	if logger == nil {
+		logger = zap.NewNop()
+	}
+	mgr := skills.NewSkillManager(cfg, logger)
+	dir := strings.TrimSpace(directory)
+	if dir != "" {
+		if err := mgr.ScanDirectory(dir); err != nil {
+			b.errors = append(b.errors, fmt.Errorf("scan skills directory %q: %w", dir, err))
+			return b
+		}
+	}
+	return b.WithSkills(mgr)
 }
 
 // WithMCP 启用 MCP 集成
-func (b *AgentBuilder) WithMCP(config any) *AgentBuilder {
-	b.mcpConfig = config
+func (b *AgentBuilder) WithMCP(server MCPServerRunner) *AgentBuilder {
+	b.mcpInstance = server
 	b.config.EnableMCP = true
 	return b
 }
 
 // WithLSP 启用 LSP 集成。
-func (b *AgentBuilder) WithLSP(config any) *AgentBuilder {
-	b.lspConfig = config
+func (b *AgentBuilder) WithLSP(client LSPClientRunner) *AgentBuilder {
+	b.lspClient = client
+	b.config.EnableLSP = true
+	return b
+}
+
+// WithLSPWithLifecycle 启用 LSP 集成，并注册可选生命周期对象。
+func (b *AgentBuilder) WithLSPWithLifecycle(client LSPClientRunner, lifecycle LSPLifecycleOwner) *AgentBuilder {
+	b.lspClient = client
+	b.lspLifecycle = lifecycle
 	b.config.EnableLSP = true
 	return b
 }
 
 // WithDefaultLSPServer 启用默认名称/版本的内置 LSP 运行时。
 func (b *AgentBuilder) WithDefaultLSPServer(name, version string) *AgentBuilder {
-	return b.WithLSP(LSPOptions{
-		Name:    strings.TrimSpace(name),
-		Version: strings.TrimSpace(version),
-	})
+	n := strings.TrimSpace(name)
+	v := strings.TrimSpace(version)
+	if n == "" {
+		n = defaultLSPServerName
+	}
+	if v == "" {
+		v = defaultLSPServerVersion
+	}
+	logger := b.logger
+	if logger == nil {
+		logger = zap.NewNop()
+	}
+	runtime := NewManagedLSP(agentlsp.ServerInfo{Name: n, Version: v}, logger)
+	return b.WithLSPWithLifecycle(runtime.Client, runtime)
 }
 
 // With DefaultMCPServer 启用默认名称/版本的内置的MCP服务器.
 func (b *AgentBuilder) WithDefaultMCPServer(name, version string) *AgentBuilder {
-	return b.WithMCP(MCPServerOptions{
-		Name:    strings.TrimSpace(name),
-		Version: strings.TrimSpace(version),
-	})
+	n := strings.TrimSpace(name)
+	v := strings.TrimSpace(version)
+	if n == "" {
+		n = "agentflow-mcp"
+	}
+	if v == "" {
+		v = "0.1.0"
+	}
+	logger := b.logger
+	if logger == nil {
+		logger = zap.NewNop()
+	}
+	return b.WithMCP(mcpproto.NewMCPServer(n, v, logger))
 }
 
 // WithEnhancedMemory 启用增强记忆系统
-func (b *AgentBuilder) WithEnhancedMemory(config any) *AgentBuilder {
-	b.enhancedMemoryConfig = config
+func (b *AgentBuilder) WithEnhancedMemory(mem EnhancedMemoryRunner) *AgentBuilder {
+	b.enhancedMemoryInstance = mem
 	b.config.EnableEnhancedMemory = true
 	return b
 }
 
 // 通过DefaultEnhancedMemory,可以使内置增强的内存系统与内存存储相通.
 func (b *AgentBuilder) WithDefaultEnhancedMemory(config *memory.EnhancedMemoryConfig) *AgentBuilder {
-	if config == nil {
-		cfg := memory.DefaultEnhancedMemoryConfig()
-		return b.WithEnhancedMemory(cfg)
+	cfg := memory.DefaultEnhancedMemoryConfig()
+	if config != nil {
+		cfg = *config
 	}
-	return b.WithEnhancedMemory(*config)
+	logger := b.logger
+	if logger == nil {
+		logger = zap.NewNop()
+	}
+	return b.WithEnhancedMemory(memory.NewDefaultEnhancedMemorySystem(cfg, logger))
 }
 
 // WithObservability 启用可观测性系统
-func (b *AgentBuilder) WithObservability(config any) *AgentBuilder {
-	b.observabilityConfig = config
+func (b *AgentBuilder) WithObservability(obs ObservabilityRunner) *AgentBuilder {
+	b.observabilityInstance = obs
 	b.config.EnableObservability = true
 	return b
 }
@@ -266,17 +296,17 @@ func (b *AgentBuilder) Build() (*BaseAgent, error) {
 	// 启用高级特性
 	if b.config.EnableReflection && b.reflectionConfig != nil {
 		reflectionExecutor := NewReflectionExecutor(agent, *b.reflectionConfig)
-		agent.EnableReflection(reflectionExecutor)
+		agent.EnableReflection(AsReflectionRunner(reflectionExecutor))
 	}
 
 	if b.config.EnableToolSelection && b.toolSelectionConfig != nil {
 		toolSelector := NewDynamicToolSelector(agent, *b.toolSelectionConfig)
-		agent.EnableToolSelection(toolSelector)
+		agent.EnableToolSelection(AsToolSelectorRunner(toolSelector))
 	}
 
 	if b.config.EnablePromptEnhancer && b.promptEnhancerConfig != nil {
 		promptEnhancer := NewPromptEnhancer(*b.promptEnhancerConfig)
-		agent.EnablePromptEnhancer(promptEnhancer)
+		agent.EnablePromptEnhancer(AsPromptEnhancerRunner(promptEnhancer))
 	}
 
 	if err := b.enableOptionalFeatures(agent); err != nil {
@@ -293,175 +323,67 @@ func (b *AgentBuilder) enableOptionalFeatures(agent *BaseAgent) error {
 		}
 	}
 	if b.config.EnableMCP {
-		if err := b.enableMCP(agent); err != nil {
-			return fmt.Errorf("enable MCP: %w", err)
-		}
+		b.enableMCP(agent)
 	}
 	if b.config.EnableLSP {
-		if err := b.enableLSP(agent); err != nil {
-			return fmt.Errorf("enable LSP: %w", err)
-		}
+		b.enableLSP(agent)
 	}
 	if b.config.EnableEnhancedMemory {
-		if err := b.enableEnhancedMemory(agent); err != nil {
-			return fmt.Errorf("enable enhanced memory: %w", err)
-		}
+		b.enableEnhancedMemory(agent)
 	}
-	// 可观察性有一个具有代理/可观察性的进口周期(其进口代理)。
-	// 构建者仍然可以接受一个提供的例子;对于箱外接线使用代理/运行时间.
-	if b.config.EnableObservability && b.observabilityConfig != nil {
-		if obs, ok := b.observabilityConfig.(ObservabilityRunner); ok {
-			agent.EnableObservability(obs)
-		} else {
-			return fmt.Errorf("observabilityConfig does not implement ObservabilityRunner")
-		}
+	if b.config.EnableObservability && b.observabilityInstance != nil {
+		agent.EnableObservability(b.observabilityInstance)
 	}
 	return nil
 }
 
 func (b *AgentBuilder) enableSkills(agent *BaseAgent) error {
-	switch v := b.skillsConfig.(type) {
-	case nil:
-		mgr := skills.NewSkillManager(skills.DefaultSkillManagerConfig(), b.logger)
-		if _, err := os.Stat("./skills"); err == nil {
-			if scanErr := mgr.ScanDirectory("./skills"); scanErr != nil {
-				b.logger.Warn("failed to scan default skills directory", zap.Error(scanErr))
-			}
-		}
-		agent.EnableSkills(mgr)
+	if b.skillsInstance != nil {
+		agent.EnableSkills(b.skillsInstance)
 		return nil
-	case string:
-		dir := strings.TrimSpace(v)
-		mgr := skills.NewSkillManager(skills.DefaultSkillManagerConfig(), b.logger)
-		if dir != "" {
-			if err := mgr.ScanDirectory(dir); err != nil {
-				return fmt.Errorf("scan skills directory %q: %w", dir, err)
-			}
-		}
-		agent.EnableSkills(mgr)
-		return nil
-	case SkillsOptions:
-		mgr := skills.NewSkillManager(v.Config, b.logger)
-		if v.Directory != "" {
-			if err := mgr.ScanDirectory(v.Directory); err != nil {
-				return fmt.Errorf("scan skills directory %q: %w", v.Directory, err)
-			}
-		}
-		agent.EnableSkills(mgr)
-		return nil
-	case skills.SkillManagerConfig:
-		mgr := skills.NewSkillManager(v, b.logger)
-		agent.EnableSkills(mgr)
-		return nil
-	case *skills.DefaultSkillManager:
-		agent.EnableSkills(v)
-		return nil
-	case skills.SkillManager:
-		agent.EnableSkills(v)
-		return nil
-	default:
-		if sd, ok := v.(SkillDiscoverer); ok {
-			agent.EnableSkills(sd)
-			return nil
-		}
-		return fmt.Errorf("skillsConfig type %T does not implement SkillDiscoverer", v)
 	}
+	// Create default skill manager
+	mgr := skills.NewSkillManager(skills.DefaultSkillManagerConfig(), b.logger)
+	if _, err := os.Stat("./skills"); err == nil {
+		if scanErr := mgr.ScanDirectory("./skills"); scanErr != nil {
+			b.logger.Warn("failed to scan default skills directory", zap.Error(scanErr))
+		}
+	}
+	agent.EnableSkills(mgr)
+	return nil
 }
 
-func (b *AgentBuilder) enableMCP(agent *BaseAgent) error {
-	switch v := b.mcpConfig.(type) {
-	case nil:
-		agent.EnableMCP(mcpproto.NewMCPServer("agentflow-mcp", "0.1.0", b.logger))
-		return nil
-	case MCPServerOptions:
-		name := v.Name
-		version := v.Version
-		if name == "" {
-			name = "agentflow-mcp"
-		}
-		if version == "" {
-			version = "0.1.0"
-		}
-		agent.EnableMCP(mcpproto.NewMCPServer(name, version, b.logger))
-		return nil
-	case string:
-		name := strings.TrimSpace(v)
-		if name == "" {
-			name = "agentflow-mcp"
-		}
-		agent.EnableMCP(mcpproto.NewMCPServer(name, "0.1.0", b.logger))
-		return nil
-	default:
-		if srv, ok := v.(MCPServerRunner); ok {
-			agent.EnableMCP(srv)
-			return nil
-		}
-		return fmt.Errorf("mcpConfig type %T does not implement MCPServerRunner", v)
+func (b *AgentBuilder) enableMCP(agent *BaseAgent) {
+	if b.mcpInstance != nil {
+		agent.EnableMCP(b.mcpInstance)
+		return
 	}
+	// Create default MCP server
+	agent.EnableMCP(mcpproto.NewMCPServer("agentflow-mcp", "0.1.0", b.logger))
 }
 
-func (b *AgentBuilder) enableLSP(agent *BaseAgent) error {
-	createManagedRuntime := func(name, version string) {
-		runtime := NewManagedLSP(agentlsp.ServerInfo{Name: name, Version: version}, b.logger)
-		agent.EnableLSPWithLifecycle(runtime.Client, runtime)
+func (b *AgentBuilder) enableLSP(agent *BaseAgent) {
+	if b.lspClient != nil {
+		if b.lspLifecycle != nil {
+			agent.EnableLSPWithLifecycle(b.lspClient, b.lspLifecycle)
+		} else {
+			agent.EnableLSP(b.lspClient)
+		}
+		return
 	}
-
-	switch v := b.lspConfig.(type) {
-	case nil:
-		createManagedRuntime(defaultLSPServerName, defaultLSPServerVersion)
-		return nil
-	case LSPOptions:
-		name := strings.TrimSpace(v.Name)
-		version := strings.TrimSpace(v.Version)
-		if name == "" {
-			name = defaultLSPServerName
-		}
-		if version == "" {
-			version = defaultLSPServerVersion
-		}
-		createManagedRuntime(name, version)
-		return nil
-	case string:
-		name := strings.TrimSpace(v)
-		if name == "" {
-			name = defaultLSPServerName
-		}
-		createManagedRuntime(name, defaultLSPServerVersion)
-		return nil
-	case *ManagedLSP:
-		agent.EnableLSPWithLifecycle(v.Client, v)
-		return nil
-	case *agentlsp.LSPClient:
-		agent.EnableLSP(v)
-		return nil
-	default:
-		if client, ok := v.(LSPClientRunner); ok {
-			agent.EnableLSP(client)
-			return nil
-		}
-		return fmt.Errorf("lspConfig type %T does not implement LSPClientRunner", v)
-	}
+	// Create default managed LSP runtime
+	runtime := NewManagedLSP(agentlsp.ServerInfo{Name: defaultLSPServerName, Version: defaultLSPServerVersion}, b.logger)
+	agent.EnableLSPWithLifecycle(runtime.Client, runtime)
 }
 
-func (b *AgentBuilder) enableEnhancedMemory(agent *BaseAgent) error {
-	switch v := b.enhancedMemoryConfig.(type) {
-	case nil:
-		cfg := memory.DefaultEnhancedMemoryConfig()
-		agent.EnableEnhancedMemory(memory.NewDefaultEnhancedMemorySystem(cfg, b.logger))
-		return nil
-	case memory.EnhancedMemoryConfig:
-		agent.EnableEnhancedMemory(memory.NewDefaultEnhancedMemorySystem(v, b.logger))
-		return nil
-	case *memory.EnhancedMemorySystem:
-		agent.EnableEnhancedMemory(v)
-		return nil
-	default:
-		if mem, ok := v.(EnhancedMemoryRunner); ok {
-			agent.EnableEnhancedMemory(mem)
-			return nil
-		}
-		return fmt.Errorf("enhancedMemoryConfig type %T does not implement EnhancedMemoryRunner", v)
+func (b *AgentBuilder) enableEnhancedMemory(agent *BaseAgent) {
+	if b.enhancedMemoryInstance != nil {
+		agent.EnableEnhancedMemory(b.enhancedMemoryInstance)
+		return
 	}
+	// Create default enhanced memory system
+	cfg := memory.DefaultEnhancedMemoryConfig()
+	agent.EnableEnhancedMemory(memory.NewDefaultEnhancedMemorySystem(cfg, b.logger))
 }
 
 // Validate 验证配置是否有效

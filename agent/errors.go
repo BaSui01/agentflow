@@ -97,27 +97,6 @@ func NewErrorWithCause(code ErrorCode, message string, cause error) *Error {
 	}
 }
 
-// FromTypesError converts a *types.Error to an *agent.Error.
-// Deprecated: With Base field, *agent.Error wraps *types.Error directly.
-// Kept for backward compatibility.
-func FromTypesError(err *types.Error) *Error {
-	if err == nil {
-		return nil
-	}
-	return &Error{
-		Base:      err,
-		Timestamp: time.Now(),
-		Metadata:  make(map[string]any),
-	}
-}
-
-// ToTypesError returns the underlying *types.Error.
-// Deprecated: Use e.Base directly.
-// Kept for backward compatibility.
-func (e *Error) ToTypesError() *types.Error {
-	return e.Base
-}
-
 // WithAgent 添加 Agent 信息
 func (e *Error) WithAgent(id string, agentType AgentType) *Error {
 	e.AgentID = id

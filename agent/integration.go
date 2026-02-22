@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/BaSui01/agentflow/agent/memory"
+	"github.com/BaSui01/agentflow/llm"
 	"go.uber.org/zap"
 )
 
@@ -55,33 +56,20 @@ func DefaultEnhancedExecutionOptions() EnhancedExecutionOptions {
 }
 
 // EnableReflection 启用 Reflection 机制
-func (b *BaseAgent) EnableReflection(executor any) {
-	if re, ok := executor.(ReflectionRunner); ok {
-		b.reflectionExecutor = re
-	} else {
-		// Wrap raw any in a type-asserted adapter for backward compatibility
-		b.reflectionExecutor = &reflectionAnyAdapter{raw: executor}
-	}
+func (b *BaseAgent) EnableReflection(executor ReflectionRunner) {
+	b.reflectionExecutor = executor
 	b.logger.Info("reflection enabled")
 }
 
 // EnableToolSelection 启用动态工具选择
-func (b *BaseAgent) EnableToolSelection(selector any) {
-	if ts, ok := selector.(DynamicToolSelectorRunner); ok {
-		b.toolSelector = ts
-	} else {
-		b.toolSelector = &toolSelectorAnyAdapter{raw: selector}
-	}
+func (b *BaseAgent) EnableToolSelection(selector DynamicToolSelectorRunner) {
+	b.toolSelector = selector
 	b.logger.Info("tool selection enabled")
 }
 
 // EnablePromptEnhancer 启用提示词增强
-func (b *BaseAgent) EnablePromptEnhancer(enhancer any) {
-	if pe, ok := enhancer.(PromptEnhancerRunner); ok {
-		b.promptEnhancer = pe
-	} else {
-		b.promptEnhancer = &promptEnhancerAnyAdapter{raw: enhancer}
-	}
+func (b *BaseAgent) EnablePromptEnhancer(enhancer PromptEnhancerRunner) {
+	b.promptEnhancer = enhancer
 	b.logger.Info("prompt enhancer enabled")
 }
 
@@ -614,39 +602,53 @@ func (b *BaseAgent) ExportConfiguration() map[string]any {
 }
 
 // =============================================================================
-// Backward-compatible adapters for Enable* methods that receive raw any values.
-// These wrap the raw value and delegate via type assertion at call time.
+// Adapters: wrap concrete types whose method signatures differ from the
+// workflow-local interfaces (e.g. *ReflectionExecutor returns *ReflectionResult
+// instead of any). Use these when passing concrete agent types to Enable*.
 // =============================================================================
 
-type reflectionAnyAdapter struct{ raw any }
-
-func (a *reflectionAnyAdapter) ExecuteWithReflection(ctx context.Context, input *Input) (any, error) {
-	if re, ok := a.raw.(interface {
-		ExecuteWithReflection(ctx context.Context, input *Input) (any, error)
-	}); ok {
-		return re.ExecuteWithReflection(ctx, input)
-	}
-	return nil, fmt.Errorf("reflection executor does not implement ExecuteWithReflection")
+// reflectionRunnerAdapter wraps *ReflectionExecutor to satisfy ReflectionRunner.
+type reflectionRunnerAdapter struct {
+	executor *ReflectionExecutor
 }
 
-type toolSelectorAnyAdapter struct{ raw any }
-
-func (a *toolSelectorAnyAdapter) SelectTools(ctx context.Context, task string, availableTools any) (any, error) {
-	if ts, ok := a.raw.(interface {
-		SelectTools(ctx context.Context, task string, availableTools any) (any, error)
-	}); ok {
-		return ts.SelectTools(ctx, task, availableTools)
-	}
-	return nil, fmt.Errorf("tool selector does not implement SelectTools")
+func (a *reflectionRunnerAdapter) ExecuteWithReflection(ctx context.Context, input *Input) (any, error) {
+	return a.executor.ExecuteWithReflection(ctx, input)
 }
 
-type promptEnhancerAnyAdapter struct{ raw any }
+// AsReflectionRunner wraps a *ReflectionExecutor as a ReflectionRunner.
+func AsReflectionRunner(executor *ReflectionExecutor) ReflectionRunner {
+	return &reflectionRunnerAdapter{executor: executor}
+}
 
-func (a *promptEnhancerAnyAdapter) EnhanceUserPrompt(prompt, context string) (string, error) {
-	if pe, ok := a.raw.(interface {
-		EnhanceUserPrompt(prompt, context string) (string, error)
-	}); ok {
-		return pe.EnhanceUserPrompt(prompt, context)
+// toolSelectorRunnerAdapter wraps *DynamicToolSelector to satisfy DynamicToolSelectorRunner.
+type toolSelectorRunnerAdapter struct {
+	selector *DynamicToolSelector
+}
+
+func (a *toolSelectorRunnerAdapter) SelectTools(ctx context.Context, task string, availableTools any) (any, error) {
+	tools, ok := availableTools.([]llm.ToolSchema)
+	if !ok {
+		return nil, fmt.Errorf("availableTools: expected []llm.ToolSchema, got %T", availableTools)
 	}
-	return prompt, nil
+	return a.selector.SelectTools(ctx, task, tools)
+}
+
+// AsToolSelectorRunner wraps a *DynamicToolSelector as a DynamicToolSelectorRunner.
+func AsToolSelectorRunner(selector *DynamicToolSelector) DynamicToolSelectorRunner {
+	return &toolSelectorRunnerAdapter{selector: selector}
+}
+
+// promptEnhancerRunnerAdapter wraps *PromptEnhancer to satisfy PromptEnhancerRunner.
+type promptEnhancerRunnerAdapter struct {
+	enhancer *PromptEnhancer
+}
+
+func (a *promptEnhancerRunnerAdapter) EnhanceUserPrompt(prompt, context string) (string, error) {
+	return a.enhancer.EnhanceUserPrompt(prompt, context), nil
+}
+
+// AsPromptEnhancerRunner wraps a *PromptEnhancer as a PromptEnhancerRunner.
+func AsPromptEnhancerRunner(enhancer *PromptEnhancer) PromptEnhancerRunner {
+	return &promptEnhancerRunnerAdapter{enhancer: enhancer}
 }
