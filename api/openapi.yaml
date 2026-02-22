@@ -105,7 +105,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/Envelope'
 
-  /v1/chat/completions:
+  /api/v1/chat/completions:
     post:
       tags: [Chat]
       summary: Chat completion
@@ -130,7 +130,7 @@ paths:
         '500':
           description: Internal error
 
-  /v1/chat/completions/stream:
+  /api/v1/chat/completions/stream:
     post:
       tags: [Chat]
       summary: Streaming chat completion (SSE)
@@ -312,30 +312,29 @@ components:
           additionalProperties: true
 
     ConfigResponse:
-      type: object
-      properties:
-        success:
-          type: boolean
-        message:
-          type: string
-        config:
-          type: object
-          additionalProperties: true
-        fields:
-          type: object
-          additionalProperties: true
-        changes:
-          type: array
-          items:
-            type: object
-            additionalProperties: true
-        error:
-          type: string
-        requires_restart:
-          type: boolean
-        timestamp:
-          type: string
-          format: date-time
+      description: Config API responses use the unified Envelope structure. The data field contains config-specific fields.
+      allOf:
+        - $ref: '#/components/schemas/Envelope'
+        - type: object
+          properties:
+            data:
+              type: object
+              properties:
+                message:
+                  type: string
+                config:
+                  type: object
+                  additionalProperties: true
+                fields:
+                  type: object
+                  additionalProperties: true
+                changes:
+                  type: array
+                  items:
+                    type: object
+                    additionalProperties: true
+                requires_restart:
+                  type: boolean
 
     ChatRequest:
       type: object

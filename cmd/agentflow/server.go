@@ -192,13 +192,13 @@ func (s *Server) startHTTPServer() error {
 	// API 路由
 	// ========================================
 	if s.chatHandler != nil {
-		mux.HandleFunc("/v1/chat/completions", s.chatHandler.HandleCompletion)
-		mux.HandleFunc("/v1/chat/completions/stream", s.chatHandler.HandleStream)
+		mux.HandleFunc("/api/v1/chat/completions", s.chatHandler.HandleCompletion)
+		mux.HandleFunc("/api/v1/chat/completions/stream", s.chatHandler.HandleStream)
 		s.logger.Info("Chat API routes registered")
 	}
 	// TODO: Agent routes depend on agent registry (OP8)
-	// mux.HandleFunc("/v1/agents", s.agentHandler.HandleListAgents)
-	// mux.HandleFunc("/v1/agents/execute", s.agentHandler.HandleExecuteAgent)
+	// mux.HandleFunc("/api/v1/agents", s.agentHandler.HandleListAgents)
+	// mux.HandleFunc("/api/v1/agents/execute", s.agentHandler.HandleExecuteAgent)
 
 	// ========================================
 	// 配置管理 API（需要独立认证保护）

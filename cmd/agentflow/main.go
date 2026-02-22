@@ -50,8 +50,11 @@ import (
 
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
+	"gorm.io/driver/postgres"
+	"gorm.io/gorm"
 
 	"github.com/BaSui01/agentflow/config"
+	"github.com/BaSui01/agentflow/llm"
 )
 
 // =============================================================================
@@ -129,6 +132,17 @@ func runServe(args []string) {
 		zap.String("build_time", BuildTime),
 		zap.String("git_commit", GitCommit),
 	)
+
+	// 初始化数据库连接
+	db, err := openDatabase(cfg.Database, logger)
+	if err != nil {
+		logger.Warn("Database not available, API key management disabled", zap.Error(err))
+	} else {
+		// AutoMigrate 确保表结构最新（包括新增的 base_url 列）
+		if migrateErr := llm.InitDatabase(db); migrateErr != nil {
+			logger.Error("Database auto-migrate failed", zap.Error(migrateErr))
+		}
+	}
 
 	// 创建服务器（传入配置文件路径以支持热更新）
 	server := NewServer(cfg, *configPath, logger)
@@ -271,4 +285,27 @@ func initLogger(cfg config.LogConfig) *zap.Logger {
 	}
 
 	return logger
+}
+
+// openDatabase 根据配置打开数据库连接
+func openDatabase(dbCfg config.DatabaseConfig, logger *zap.Logger) (*gorm.DB, error) {
+	if dbCfg.Driver == "" {
+		return nil, fmt.Errorf("database driver not configured")
+	}
+
+	var dialector gorm.Dialector
+	switch dbCfg.Driver {
+	case "postgres":
+		dialector = postgres.Open(dbCfg.DSN())
+	default:
+		return nil, fmt.Errorf("unsupported database driver: %s (supported: postgres)", dbCfg.Driver)
+	}
+
+	db, err := gorm.Open(dialector, &gorm.Config{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to connect database: %w", err)
+	}
+
+	logger.Info("Database connected", zap.String("driver", dbCfg.Driver))
+	return db, nil
 }

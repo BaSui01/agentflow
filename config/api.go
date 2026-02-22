@@ -19,11 +19,27 @@ type ConfigAPIHandler struct {
 	allowedOrigin string
 }
 
-// ConfigResponse 表示配置 API 响应
-type ConfigResponse struct {
-	// success表示操作是否成功
-	Success bool `json:"success"`
+// apiResponse 是统一 API 响应结构，与 handlers.Response 保持相同的 JSON 格式。
+// 由于 config 包无法导入 api/handlers（循环依赖），此处定义本地镜像类型。
+// JSON 输出格式与 handlers.Response 完全一致。
+type apiResponse struct {
+	Success   bool        `json:"success"`
+	Data      any         `json:"data,omitempty"`
+	Error     *apiError   `json:"error,omitempty"`
+	Timestamp time.Time   `json:"timestamp"`
+	RequestID string      `json:"request_id,omitempty"`
+}
 
+// apiError 与 handlers.ErrorInfo 保持相同的 JSON 格式。
+type apiError struct {
+	Code      string `json:"code"`
+	Message   string `json:"message"`
+	Details   string `json:"details,omitempty"`
+	Retryable bool   `json:"retryable,omitempty"`
+}
+
+// configData 是配置 API 响应中 Data 字段的内部结构。
+type configData struct {
 	// 消息提供附加信息
 	Message string `json:"message,omitempty"`
 
@@ -36,14 +52,8 @@ type ConfigResponse struct {
 	// 更改列出配置更改
 	Changes []ConfigChange `json:"changes,omitempty"`
 
-	// 错误提供错误详细信息
-	Error string `json:"error,omitempty"`
-
 	// RequiresRestart 表示是否需要重启
 	RequiresRestart bool `json:"requires_restart,omitempty"`
-
-	// 响应的时间戳
-	Timestamp time.Time `json:"timestamp"`
 }
 
 // FieldInfo 提供有关配置字段的信息
@@ -133,20 +143,20 @@ func (h *ConfigAPIHandler) handleConfig(w http.ResponseWriter, r *http.Request) 
 // @Tags config
 // @Accept json
 // @Produce json
-// @Success 200 {object} ConfigResponse "当前配置"
-// @Failure 500 {object} ConfigResponse "内部服务器错误"
+// @Success 200 {object} apiResponse "当前配置"
+// @Failure 500 {object} apiResponse "内部服务器错误"
 // @Router /api/v1/config [get]
 func (h *ConfigAPIHandler) getConfig(w http.ResponseWriter, r *http.Request) {
 	config := h.manager.SanitizedConfig()
 
-	resp := ConfigResponse{
-		Success:   true,
-		Message:   "Configuration retrieved successfully",
-		Config:    config,
+	writeAPIJSON(w, http.StatusOK, apiResponse{
+		Success: true,
+		Data: configData{
+			Message: "Configuration retrieved successfully",
+			Config:  config,
+		},
 		Timestamp: time.Now(),
-	}
-
-	h.writeJSON(w, http.StatusOK, resp)
+	})
 }
 
 // updateConfig 更新配置字段
@@ -156,25 +166,31 @@ func (h *ConfigAPIHandler) getConfig(w http.ResponseWriter, r *http.Request) {
 // @Accept json
 // @Produce json
 // @Param request body ConfigUpdateRequest true "配置更新"
-// @Success 200 {object} ConfigResponse "配置已更新"
-// @Failure 400 {object} ConfigResponse "无效请求"
-// @Failure 500 {object} ConfigResponse "内部服务器错误"
+// @Success 200 {object} apiResponse "配置已更新"
+// @Failure 400 {object} apiResponse "无效请求"
+// @Failure 500 {object} apiResponse "内部服务器错误"
 // @Router /api/v1/config [put]
 func (h *ConfigAPIHandler) updateConfig(w http.ResponseWriter, r *http.Request) {
 	var req ConfigUpdateRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		h.writeJSON(w, http.StatusBadRequest, ConfigResponse{
-			Success:   false,
-			Error:     fmt.Sprintf("Invalid request body: %v", err),
+		writeAPIJSON(w, http.StatusBadRequest, apiResponse{
+			Success: false,
+			Error: &apiError{
+				Code:    "INVALID_REQUEST",
+				Message: fmt.Sprintf("Invalid request body: %v", err),
+			},
 			Timestamp: time.Now(),
 		})
 		return
 	}
 
 	if len(req.Updates) == 0 {
-		h.writeJSON(w, http.StatusBadRequest, ConfigResponse{
-			Success:   false,
-			Error:     "No updates provided",
+		writeAPIJSON(w, http.StatusBadRequest, apiResponse{
+			Success: false,
+			Error: &apiError{
+				Code:    "INVALID_REQUEST",
+				Message: "No updates provided",
+			},
 			Timestamp: time.Now(),
 		})
 		return
@@ -201,21 +217,28 @@ func (h *ConfigAPIHandler) updateConfig(w http.ResponseWriter, r *http.Request) 
 	}
 
 	if len(errors) > 0 {
-		h.writeJSON(w, http.StatusBadRequest, ConfigResponse{
-			Success:         false,
-			Error:           fmt.Sprintf("Some updates failed: %v", errors),
-			RequiresRestart: requiresRestart,
-			Timestamp:       time.Now(),
+		writeAPIJSON(w, http.StatusBadRequest, apiResponse{
+			Success: false,
+			Error: &apiError{
+				Code:    "INVALID_REQUEST",
+				Message: fmt.Sprintf("Some updates failed: %v", errors),
+			},
+			Data: configData{
+				RequiresRestart: requiresRestart,
+			},
+			Timestamp: time.Now(),
 		})
 		return
 	}
 
-	h.writeJSON(w, http.StatusOK, ConfigResponse{
-		Success:         true,
-		Message:         "Configuration updated successfully",
-		Config:          h.manager.SanitizedConfig(),
-		RequiresRestart: requiresRestart,
-		Timestamp:       time.Now(),
+	writeAPIJSON(w, http.StatusOK, apiResponse{
+		Success: true,
+		Data: configData{
+			Message:         "Configuration updated successfully",
+			Config:          h.manager.SanitizedConfig(),
+			RequiresRestart: requiresRestart,
+		},
+		Timestamp: time.Now(),
 	})
 }
 
@@ -225,8 +248,8 @@ func (h *ConfigAPIHandler) updateConfig(w http.ResponseWriter, r *http.Request) 
 // @Tags config
 // @Accept json
 // @Produce json
-// @Success 200 {object} ConfigResponse "配置已热重载"
-// @Failure 500 {object} ConfigResponse "热重载失败"
+// @Success 200 {object} apiResponse "配置已热重载"
+// @Failure 500 {object} apiResponse "热重载失败"
 // @Router /api/v1/config/reload [post]
 func (h *ConfigAPIHandler) handleReload(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodOptions {
@@ -240,18 +263,23 @@ func (h *ConfigAPIHandler) handleReload(w http.ResponseWriter, r *http.Request) 
 	}
 
 	if err := h.manager.ReloadFromFile(); err != nil {
-		h.writeJSON(w, http.StatusInternalServerError, ConfigResponse{
-			Success:   false,
-			Error:     fmt.Sprintf("Failed to reload configuration: %v", err),
+		writeAPIJSON(w, http.StatusInternalServerError, apiResponse{
+			Success: false,
+			Error: &apiError{
+				Code:    "INTERNAL_ERROR",
+				Message: fmt.Sprintf("Failed to reload configuration: %v", err),
+			},
 			Timestamp: time.Now(),
 		})
 		return
 	}
 
-	h.writeJSON(w, http.StatusOK, ConfigResponse{
-		Success:   true,
-		Message:   "Configuration reloaded successfully",
-		Config:    h.manager.SanitizedConfig(),
+	writeAPIJSON(w, http.StatusOK, apiResponse{
+		Success: true,
+		Data: configData{
+			Message: "Configuration reloaded successfully",
+			Config:  h.manager.SanitizedConfig(),
+		},
 		Timestamp: time.Now(),
 	})
 }
@@ -262,7 +290,7 @@ func (h *ConfigAPIHandler) handleReload(w http.ResponseWriter, r *http.Request) 
 // @Tags config
 // @Accept json
 // @Produce json
-// @Success 200 {object} ConfigResponse "可热重载字段"
+// @Success 200 {object} apiResponse "可热重载字段"
 // @Router /api/v1/config/fields [get]
 func (h *ConfigAPIHandler) handleFields(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodOptions {
@@ -294,10 +322,12 @@ func (h *ConfigAPIHandler) handleFields(w http.ResponseWriter, r *http.Request) 
 		fields[path] = info
 	}
 
-	h.writeJSON(w, http.StatusOK, ConfigResponse{
-		Success:   true,
-		Message:   "Hot reloadable fields retrieved",
-		Fields:    fields,
+	writeAPIJSON(w, http.StatusOK, apiResponse{
+		Success: true,
+		Data: configData{
+			Message: "Hot reloadable fields retrieved",
+			Fields:  fields,
+		},
 		Timestamp: time.Now(),
 	})
 }
@@ -309,7 +339,7 @@ func (h *ConfigAPIHandler) handleFields(w http.ResponseWriter, r *http.Request) 
 // @Accept json
 // @Produce json
 // @Param limit query int false "返回的最大更改数量" default(50)
-// @Success 200 {object} ConfigResponse "配置更改"
+// @Success 200 {object} apiResponse "配置更改"
 // @Router /api/v1/config/changes [get]
 func (h *ConfigAPIHandler) handleChanges(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodOptions {
@@ -332,27 +362,30 @@ func (h *ConfigAPIHandler) handleChanges(w http.ResponseWriter, r *http.Request)
 
 	changes := h.manager.GetChangeLog(limit)
 
-	h.writeJSON(w, http.StatusOK, ConfigResponse{
-		Success:   true,
-		Message:   fmt.Sprintf("Retrieved %d configuration changes", len(changes)),
-		Changes:   changes,
+	writeAPIJSON(w, http.StatusOK, apiResponse{
+		Success: true,
+		Data: configData{
+			Message: fmt.Sprintf("Retrieved %d configuration changes", len(changes)),
+			Changes: changes,
+		},
 		Timestamp: time.Now(),
 	})
 }
 
 // --- 辅助方法 ---
 
-// writeJSON 写入 JSON 响应
-func (h *ConfigAPIHandler) writeJSON(w http.ResponseWriter, status int, data any) {
+// writeAPIJSON 写入统一格式的 JSON 响应。
+// 遵循 handlers.WriteJSON 相同的 Content-Type 和安全头设置。
+func writeAPIJSON(w http.ResponseWriter, status int, data any) {
 	buf, err := json.Marshal(data)
 	if err != nil {
-		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		w.WriteHeader(http.StatusInternalServerError)
-		_, _ = w.Write([]byte(`{"success":false,"error":"failed to encode response"}`)) //nolint:errcheck // Write 错误可安全忽略（客户端断开）
+		_, _ = w.Write([]byte(`{"success":false,"error":{"code":"INTERNAL_ERROR","message":"failed to encode response"}}`)) //nolint:errcheck // Write 错误可安全忽略（客户端断开）
 		return
 	}
-	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.WriteHeader(status)
 	_, _ = w.Write(buf) //nolint:errcheck // Write 错误可安全忽略（客户端断开）
@@ -371,9 +404,12 @@ func (h *ConfigAPIHandler) handleCORS(w http.ResponseWriter, r *http.Request) { 
 
 // methodNotAllowed 返回 405 方法不允许响应
 func (h *ConfigAPIHandler) methodNotAllowed(w http.ResponseWriter, r *http.Request) {
-	h.writeJSON(w, http.StatusMethodNotAllowed, ConfigResponse{
-		Success:   false,
-		Error:     fmt.Sprintf("Method %s not allowed", r.Method),
+	writeAPIJSON(w, http.StatusMethodNotAllowed, apiResponse{
+		Success: false,
+		Error: &apiError{
+			Code:    "METHOD_NOT_ALLOWED",
+			Message: fmt.Sprintf("Method %s not allowed", r.Method),
+		},
 		Timestamp: time.Now(),
 	})
 }
@@ -409,9 +445,12 @@ func (m *ConfigAPIMiddleware) RequireAuth(next http.HandlerFunc) http.HandlerFun
 			// 不再支持 query string 传递 API key（安全风险：会暴露在日志和浏览器历史中）
 
 			if apiKey != m.apiKey {
-				m.handler.writeJSON(w, http.StatusUnauthorized, ConfigResponse{
-					Success:   false,
-					Error:     "Invalid or missing API key",
+				writeAPIJSON(w, http.StatusUnauthorized, apiResponse{
+					Success: false,
+					Error: &apiError{
+						Code:    "UNAUTHORIZED",
+						Message: "Invalid or missing API key",
+					},
 					Timestamp: time.Now(),
 				})
 				return
