@@ -95,10 +95,7 @@ func BuildAgent(ctx context.Context, cfg agent.Config, provider llm.Provider, lo
 		b.WithDefaultSkills(dir, opts.SkillsConfig)
 	}
 	if enabled(opts.EnableAll, opts.EnableMCP) {
-		b.WithMCP(agent.MCPServerOptions{
-			Name:    strings.TrimSpace(opts.MCPServerName),
-			Version: strings.TrimSpace(opts.MCPServerVersion),
-		})
+		b.WithDefaultMCPServer(strings.TrimSpace(opts.MCPServerName), strings.TrimSpace(opts.MCPServerVersion))
 	}
 	if enabled(opts.EnableAll, opts.EnableLSP) {
 		b.WithDefaultLSPServer(strings.TrimSpace(opts.LSPServerName), strings.TrimSpace(opts.LSPServerVersion))
