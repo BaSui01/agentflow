@@ -147,15 +147,15 @@ type BaseAgent struct {
 	// 2025 新增功能（可选启用）
 	// These use workflow-local interfaces (agent/interfaces.go) to avoid circular
 	// dependencies with sub-packages. See quality-guidelines.md §15.
-	reflectionExecutor  ReflectionRunner     // *ReflectionExecutor
+	reflectionExecutor  ReflectionRunner          // *ReflectionExecutor
 	toolSelector        DynamicToolSelectorRunner // *DynamicToolSelector
-	promptEnhancer      PromptEnhancerRunner // *PromptEnhancer
-	skillManager        any                  // SkillDiscoverer or custom impl — type-asserted at call site
-	mcpServer           any                  // MCPServerRunner — nil-check only
-	lspClient           any                  // LSPClientRunner — type-asserted in Teardown
-	lspLifecycle        any                  // LSPLifecycleOwner — type-asserted in Teardown
-	enhancedMemory      any                  // EnhancedMemoryRunner — type-asserted at call site
-	observabilitySystem any                  // ObservabilityRunner — type-asserted at call site
+	promptEnhancer      PromptEnhancerRunner      // *PromptEnhancer
+	skillManager        SkillDiscoverer           // *skills.DefaultSkillManager
+	mcpServer           MCPServerRunner           // *mcp.MCPServer — nil-check only
+	lspClient           LSPClientRunner           // *lsp.LSPClient
+	lspLifecycle        LSPLifecycleOwner         // *ManagedLSP
+	enhancedMemory      EnhancedMemoryRunner      // *memory.EnhancedMemorySystem
+	observabilitySystem ObservabilityRunner       // *observability.ObservabilitySystem
 
 	// 2026 Guardrails 功能
 	// Requirements 1.7, 2.4: 输入/输出验证和重试支持
@@ -420,19 +420,15 @@ func (b *BaseAgent) Teardown(ctx context.Context) error {
 	b.logger.Info("tearing down agent")
 
 	if b.lspLifecycle != nil {
-		if closer, ok := b.lspLifecycle.(interface{ Close() error }); ok {
-			if err := closer.Close(); err != nil {
-				b.logger.Warn("failed to close lsp lifecycle", zap.Error(err))
-			}
+		if err := b.lspLifecycle.Close(); err != nil {
+			b.logger.Warn("failed to close lsp lifecycle", zap.Error(err))
 		}
 		return nil
 	}
 
 	if b.lspClient != nil {
-		if client, ok := b.lspClient.(interface{ Shutdown(context.Context) error }); ok {
-			if err := client.Shutdown(ctx); err != nil {
-				b.logger.Warn("failed to shutdown lsp client", zap.Error(err))
-			}
+		if err := b.lspClient.Shutdown(ctx); err != nil {
+			b.logger.Warn("failed to shutdown lsp client", zap.Error(err))
 		}
 	}
 
