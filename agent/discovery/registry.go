@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/BaSui01/agentflow/internal/tlsutil"
@@ -41,6 +42,9 @@ type CapabilityRegistry struct {
 	// 信号关闭了
 	done      chan struct{}
 	closeOnce sync.Once
+
+	// subscriptionCounter 原子计数器，用于生成唯一订阅 ID
+	subscriptionCounter atomic.Uint64
 }
 
 // 登记册Config拥有能力登记册的配置。
@@ -595,7 +599,7 @@ func (r *CapabilityRegistry) Subscribe(handler DiscoveryEventHandler) string {
 	r.handlerMu.Lock()
 	defer r.handlerMu.Unlock()
 
-	id := fmt.Sprintf("sub-%d", time.Now().UnixNano())
+	id := fmt.Sprintf("sub-%d", r.subscriptionCounter.Add(1))
 	r.eventHandlers[id] = handler
 	return id
 }
@@ -651,7 +655,15 @@ func (r *CapabilityRegistry) emitEvent(event *DiscoveryEvent) {
 	r.handlerMu.RUnlock()
 
 	for _, handler := range handlers {
-		go handler(event)
+		h := handler
+		go func() {
+			defer func() {
+				if rec := recover(); rec != nil {
+					r.logger.Error("event handler panicked", zap.Any("recover", rec))
+				}
+			}()
+			h(event)
+		}()
 	}
 }
 
@@ -748,6 +760,9 @@ type HealthChecker struct {
 	registry *CapabilityRegistry
 	logger   *zap.Logger
 
+	// httpClient 共享的健康检查 HTTP 客户端
+	httpClient *http.Client
+
 	// 失败 。
 	failureCounts map[string]int
 	failureMu     sync.Mutex
@@ -775,6 +790,7 @@ func NewHealthChecker(config *HealthCheckerConfig, registry *CapabilityRegistry,
 		config:        config,
 		registry:      registry,
 		logger:        logger.With(zap.String("component", "health_checker")),
+		httpClient:    tlsutil.SecureHTTPClient(5 * time.Second),
 		failureCounts: make(map[string]int),
 		done:          make(chan struct{}),
 	}
@@ -897,7 +913,7 @@ func (h *HealthChecker) performHealthCheck(ctx context.Context, agent *AgentInfo
 	// 对远程特工进行HTTP健康检查
 	if agent.Endpoint != "" {
 		healthURL := strings.TrimRight(agent.Endpoint, "/") + "/health"
-		client := tlsutil.SecureHTTPClient(5 * time.Second)
+		client := h.httpClient
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, healthURL, nil)
 		if err != nil {
 			result.Healthy = false

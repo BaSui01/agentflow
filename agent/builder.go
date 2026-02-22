@@ -320,7 +320,9 @@ func (b *AgentBuilder) enableSkills(agent *BaseAgent) error {
 	case nil:
 		mgr := skills.NewSkillManager(skills.DefaultSkillManagerConfig(), b.logger)
 		if _, err := os.Stat("./skills"); err == nil {
-			_ = mgr.ScanDirectory("./skills")
+			if scanErr := mgr.ScanDirectory("./skills"); scanErr != nil {
+				b.logger.Warn("failed to scan default skills directory", zap.Error(scanErr))
+			}
 		}
 		agent.EnableSkills(mgr)
 		return nil

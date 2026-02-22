@@ -91,6 +91,7 @@ type MessageHub struct {
 	messageStore persistence.MessageStore // 持久化存储（可选）
 	retryConfig  persistence.RetryConfig  // 重试配置
 	closed       bool
+	closeOnce    sync.Once
 }
 
 // Coordinator 协调器接口
@@ -187,23 +188,26 @@ func (h *MessageHub) SetMessageStore(store persistence.MessageStore) {
 }
 
 // Close 关闭消息中心
+// 使用 sync.Once 保护 channel 关闭，防止重复关闭 panic
 func (h *MessageHub) Close() error {
-	h.mu.Lock()
-	defer h.mu.Unlock()
+	var storeErr error
+	h.closeOnce.Do(func() {
+		h.mu.Lock()
+		defer h.mu.Unlock()
 
-	h.closed = true
+		h.closed = true
 
-	// 关闭所有通道
-	for _, ch := range h.channels {
-		close(ch)
-	}
+		// 关闭所有通道
+		for _, ch := range h.channels {
+			close(ch)
+		}
 
-	// 关闭存储
-	if h.messageStore != nil {
-		return h.messageStore.Close()
-	}
-
-	return nil
+		// 关闭存储
+		if h.messageStore != nil {
+			storeErr = h.messageStore.Close()
+		}
+	})
+	return storeErr
 }
 
 // CreateChannel 创建通道
