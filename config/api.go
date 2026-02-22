@@ -8,9 +8,8 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
-
-	"github.com/BaSui01/agentflow/api"
 )
 
 // --- API 类型定义 ---
@@ -21,11 +20,21 @@ type ConfigAPIHandler struct {
 	allowedOrigin string
 }
 
-// apiResponse is a type alias for api.Response — the canonical API envelope (§38).
-type apiResponse = api.Response
+// apiResponse is the canonical API envelope (§38), local to config to avoid
+// reverse-dependency on the api package.
+type apiResponse struct {
+	Success   bool        `json:"success"`
+	Data      any         `json:"data,omitempty"`
+	Error     *apiError   `json:"error,omitempty"`
+	Timestamp time.Time   `json:"timestamp"`
+	RequestID string      `json:"request_id,omitempty"`
+}
 
-// apiError is a type alias for api.ErrorInfo — the canonical error structure (§38).
-type apiError = api.ErrorInfo
+// apiError is the canonical error structure embedded in apiResponse (§38).
+type apiError struct {
+	Code    string `json:"code"`
+	Message string `json:"message"`
+}
 
 // configData 是配置 API 响应中 Data 字段的内部结构。
 type configData struct {
@@ -160,6 +169,10 @@ func (h *ConfigAPIHandler) getConfig(w http.ResponseWriter, r *http.Request) {
 // @Failure 500 {object} apiResponse "内部服务器错误"
 // @Router /api/v1/config [put]
 func (h *ConfigAPIHandler) updateConfig(w http.ResponseWriter, r *http.Request) {
+	if !validateJSONContentType(w, r) {
+		return
+	}
+
 	var req ConfigUpdateRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeAPIJSON(w, http.StatusBadRequest, apiResponse{
@@ -248,6 +261,19 @@ func (h *ConfigAPIHandler) handleReload(w http.ResponseWriter, r *http.Request) 
 
 	if r.Method != http.MethodPost {
 		h.methodNotAllowed(w, r)
+		return
+	}
+
+	// POST with body is optional for reload, but if Content-Type is set it must be JSON
+	if ct := r.Header.Get("Content-Type"); ct != "" && !strings.HasPrefix(ct, "application/json") {
+		writeAPIJSON(w, http.StatusUnsupportedMediaType, apiResponse{
+			Success: false,
+			Error: &apiError{
+				Code:    "INVALID_REQUEST",
+				Message: "Content-Type must be application/json",
+			},
+			Timestamp: time.Now(),
+		})
 		return
 	}
 
@@ -362,6 +388,24 @@ func (h *ConfigAPIHandler) handleChanges(w http.ResponseWriter, r *http.Request)
 }
 
 // --- 辅助方法 ---
+
+// validateJSONContentType checks that the request Content-Type is application/json.
+// Returns true if valid; on false the caller should return immediately (415 already written).
+func validateJSONContentType(w http.ResponseWriter, r *http.Request) bool {
+	ct := r.Header.Get("Content-Type")
+	if !strings.HasPrefix(ct, "application/json") {
+		writeAPIJSON(w, http.StatusUnsupportedMediaType, apiResponse{
+			Success: false,
+			Error: &apiError{
+				Code:    "INVALID_REQUEST",
+				Message: "Content-Type must be application/json",
+			},
+			Timestamp: time.Now(),
+		})
+		return false
+	}
+	return true
+}
 
 // writeAPIJSON writes a JSON response using the marshal-first pattern (§6).
 // Uses the same Content-Type and security headers as handlers.WriteJSON.
