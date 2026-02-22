@@ -2,7 +2,7 @@
 name: check
 description: |
   Code quality check expert. Reviews code changes against specs and self-fixes issues.
-tools: Read, Write, Edit, Bash, Glob, Grep, mcp__exa__web_search_exa, mcp__exa__get_code_context_exa
+tools: Read, Write, Edit, Bash, Glob, Grep, mcp__exa__web_search_exa, mcp__exa__get_code_context_exa, mcp__ace-tool__search_context
 model: opus
 ---
 # Check Agent
