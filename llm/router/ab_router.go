@@ -359,6 +359,14 @@ func (r *ABRouter) ListModels(ctx context.Context) ([]llmpkg.Model, error) {
 	return result, nil
 }
 
+// Endpoints 返回第一个变体提供者的端点信息。
+func (r *ABRouter) Endpoints() llmpkg.ProviderEndpoints {
+	if len(r.config.Variants) > 0 {
+		return r.config.Variants[0].Provider.Endpoints()
+	}
+	return llmpkg.ProviderEndpoints{}
+}
+
 // 更新Weights动态地调整了变位权重. 重量必须等于100。
 func (r *ABRouter) UpdateWeights(weights map[string]int) error {
 	total := 0

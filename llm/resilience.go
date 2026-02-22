@@ -278,6 +278,11 @@ func (rp *ResilientProvider) ListModels(ctx context.Context) ([]Model, error) {
 	return rp.provider.ListModels(ctx)
 }
 
+// Endpoints 委托给被包装的提供者。
+func (rp *ResilientProvider) Endpoints() ProviderEndpoints {
+	return rp.provider.Endpoints()
+}
+
 func (rp *ResilientProvider) generateIdempotencyKey(req *ChatRequest) string {
 	data, _ := json.Marshal(struct {
 		Model    string    `json:"model"`
