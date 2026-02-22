@@ -1703,3 +1703,431 @@ func NewWindowManager(cfg WindowConfig, tc types.TokenCounter, ...) *WindowManag
 | `Runnable` | `workflow/workflow.go` | `Execute(ctx, any) (any, error)` — workflow unit |
 | `FileSearchStore` | `agent/hosted/tools.go` | Text-query search (was: `hosted.VectorStore`) |
 | `EvalExecutor` | `agent/evaluation/evaluator.go` | String I/O + token count (was: `AgentExecutor`) |
+
+## §35 In-Memory Cache Must Have Eviction (P1 — Memory Leak)
+
+Every in-memory cache (`map[K]V` used as cache) MUST have both a **max size cap** and a **TTL-based lazy eviction**. Unbounded caches grow monotonically in long-running services until OOM.
+
+### 1. Scope / Trigger
+
+- Trigger: 4 unbounded caches found in production code (Feb 2026 audit)
+- Applies to: ANY `map` field used as a cache (identified by names like `*Cache`, `*Store`, `*Memo`)
+
+### 2. Two-Layer Eviction Pattern
+
+```go
+type cachedItem[V any] struct {
+    value     V
+    createdAt time.Time
+}
+
+type boundedCache[K comparable, V any] struct {
+    mu       sync.RWMutex
+    items    map[K]cachedItem[V]
+    maxSize  int
+    ttl      time.Duration
+}
+
+// Get with lazy eviction — expired entries removed on access
+func (c *boundedCache[K, V]) Get(key K) (V, bool) {
+    c.mu.Lock()         // Lock (not RLock) because we may delete
+    defer c.mu.Unlock()
+    item, ok := c.items[key]
+    if !ok {
+        var zero V
+        return zero, false
+    }
+    if time.Since(item.createdAt) > c.ttl {
+        delete(c.items, key)  // lazy eviction
+        var zero V
+        return zero, false
+    }
+    return item.value, true
+}
+
+// Set with max size cap — evicts oldest when full
+func (c *boundedCache[K, V]) Set(key K, value V) {
+    c.mu.Lock()
+    defer c.mu.Unlock()
+    if len(c.items) >= c.maxSize {
+        c.evictOldest()
+    }
+    c.items[key] = cachedItem[V]{value: value, createdAt: time.Now()}
+}
+
+func (c *boundedCache[K, V]) evictOldest() {
+    var oldestKey K
+    var oldestTime time.Time
+    first := true
+    for k, v := range c.items {
+        if first || v.createdAt.Before(oldestTime) {
+            oldestKey = k
+            oldestTime = v.createdAt
+            first = false
+        }
+    }
+    if !first {
+        delete(c.items, oldestKey)
+    }
+}
+```
+
+### 3. Known Violations — ✅ ALL FIXED (Feb 2026 Session 12)
+
+| File | Cache Field | Issue | Fix |
+|------|-------------|-------|-----|
+| `rag/multi_hop.go` | `reasoningCache` | No eviction, no max size (K2) | ✅ Lazy TTL eviction on Get + maxSize=1000 on Set |
+| `llm/router/semantic.go` | `classificationCache` | No eviction, no max size (N1) | ✅ Same pattern |
+| `llm/router/ab_router.go` | `stickyCache` | No max size (N3) | ✅ stickyMaxSize=10000, clear when full |
+| `llm/router/ab_router.go` | `QualityScores` | Unbounded append (N4) | ✅ Sliding window, qualityWindowSize=1000 |
+
+### 4. Validation & Error Matrix
+
+| Condition | Result |
+|-----------|--------|
+| `map` cache with no size limit | ❌ Memory leak in long-running service |
+| `map` cache with maxSize but no TTL | ⚠️ Stale data served indefinitely |
+| `map` cache with TTL but no maxSize | ❌ Burst traffic fills memory before TTL kicks in |
+| `map` cache with maxSize + lazy TTL | ✅ Bounded memory + fresh data |
+
+### 5. Wrong vs Right
+
+#### Wrong
+```go
+// Grows forever — OOM in production
+type SemanticRouter struct {
+    cache map[string]string  // no eviction, no limit
+}
+func (r *SemanticRouter) Classify(text string) string {
+    if v, ok := r.cache[text]; ok {
+        return v
+    }
+    result := r.doClassify(text)
+    r.cache[text] = result  // unbounded growth
+    return result
+}
+```
+
+#### Right
+```go
+// Bounded with lazy eviction
+func (r *SemanticRouter) Classify(text string) string {
+    r.mu.Lock()
+    if item, ok := r.cache[text]; ok {
+        if time.Since(item.createdAt) <= r.cacheTTL {
+            r.mu.Unlock()
+            return item.value
+        }
+        delete(r.cache, text)  // lazy eviction
+    }
+    if len(r.cache) >= r.maxCacheSize {
+        r.evictOldest()
+    }
+    result := r.doClassify(text)
+    r.cache[text] = cachedEntry{value: result, createdAt: time.Now()}
+    r.mu.Unlock()
+    return result
+}
+```
+
+> **Rule**: Every `map` field with "cache" in its name must have `maxSize` and `ttl` fields. Code review should reject any cache without eviction.
+
+> **Historical lesson**: `reasoningCache` in `rag/multi_hop.go` and `classificationCache` in `llm/router/semantic.go` both grew unbounded. In a production scenario with diverse queries, these would consume gigabytes of memory over days. The fix is simple (lazy eviction + maxSize cap) but must be applied at creation time — retrofitting eviction to an existing cache is error-prone.
+
+---
+
+## §36 Prometheus Labels Must Use Finite Cardinality (P1 — Monitoring Explosion)
+
+Prometheus metric labels MUST have bounded, finite cardinality. Using dynamic identifiers (user IDs, request IDs, agent instance IDs) as label values causes metric explosion — each unique value creates a new time series, eventually crashing Prometheus.
+
+### 1. Scope / Trigger
+
+- Trigger: `agent_id` label in `internal/metrics/collector.go` created unbounded time series (K3)
+- Applies to: ANY `prometheus.Labels{}` or `prometheus.NewCounterVec` label definition
+
+### 2. Signatures
+
+```go
+// internal/metrics/collector.go — AFTER fix
+
+// ✅ agent_type has finite values (e.g., "chat", "rag", "workflow")
+agentExecutionsTotal: prometheus.NewCounterVec(prometheus.CounterOpts{
+    Name: "agentflow_agent_executions_total",
+}, []string{"agent_type", "status"}),
+
+// ✅ Separate info gauge for ID→type mapping (debug only)
+agentInfo: prometheus.NewGaugeVec(prometheus.GaugeOpts{
+    Name: "agentflow_agent_info",
+    Help: "Agent metadata for label join",
+}, []string{"agent_id", "agent_type"}),
+```
+
+### 3. Contract — Label Cardinality Rules
+
+| Label Type | Max Cardinality | Example |
+|-----------|----------------|---------|
+| Status codes | ~5 | `"success"`, `"error"`, `"timeout"` |
+| Agent types | ~10 | `"chat"`, `"rag"`, `"workflow"` |
+| Provider names | ~15 | `"openai"`, `"claude"`, `"deepseek"` |
+| HTTP methods | ~5 | `"GET"`, `"POST"`, `"PUT"` |
+| Agent IDs | ❌ UNBOUNDED | `"agent-abc123"` — FORBIDDEN as metric label |
+| Request IDs | ❌ UNBOUNDED | `"req-xyz789"` — FORBIDDEN as metric label |
+| User IDs | ❌ UNBOUNDED | `"user-12345"` — FORBIDDEN as metric label |
+
+### 4. Pattern: Info Gauge for ID Mapping
+
+When you need to correlate metrics with dynamic IDs (for debugging), use a separate `_info` gauge:
+
+```go
+// Record execution with finite labels only
+c.agentExecutionsTotal.WithLabelValues(agentType, "success").Inc()
+
+// Separately record ID→type mapping (low-frequency, debug use)
+c.agentInfo.WithLabelValues(agentID, agentType).Set(1)
+```
+
+In Grafana, use `label_join` or `label_replace` to correlate.
+
+### 5. Wrong vs Right
+
+#### Wrong
+```go
+// ❌ agent_id creates unbounded time series
+agentExecutionsTotal: prometheus.NewCounterVec(prometheus.CounterOpts{
+    Name: "agentflow_agent_executions_total",
+}, []string{"agent_id", "status"}),
+
+func (c *Collector) RecordAgentExecution(agentID, status string) {
+    c.agentExecutionsTotal.WithLabelValues(agentID, status).Inc()
+}
+```
+
+#### Right
+```go
+// ✅ agent_type has finite cardinality
+agentExecutionsTotal: prometheus.NewCounterVec(prometheus.CounterOpts{
+    Name: "agentflow_agent_executions_total",
+}, []string{"agent_type", "status"}),
+
+func (c *Collector) RecordAgentExecution(agentType, status string) {
+    c.agentExecutionsTotal.WithLabelValues(agentType, status).Inc()
+}
+```
+
+> **Rule**: Before adding a Prometheus label, ask: "Can this value grow without bound?" If yes, it MUST NOT be a label. Use a separate `_info` gauge or structured logging instead.
+
+> **Historical lesson**: `agent_id` as a label in `agentflow_agent_executions_total` would create a new time series for every agent instance. In a system with 1000+ agents, this means 1000+ time series per metric × status combinations. Prometheus recommends <10 label values per dimension. The fix replaced `agent_id` with `agent_type` (finite enum) and added a separate `agentflow_agent_info` gauge for ID-to-type mapping.
+
+---
+
+## §37 Broadcast/Fan-Out to Channels Must Use recover() (P1 — Runtime Panic)
+
+When broadcasting (sending the same value to multiple subscriber channels), the send MUST be wrapped in a `recover()` to handle send-on-closed-channel panics. Subscribers may close their channels at any time, and the broadcaster cannot hold a lock during send without risking deadlock.
+
+### 1. Scope / Trigger
+
+- Trigger: `broadcast()` in `llm/streaming/backpressure.go` sent to subscriber channels without protection (N8)
+- Applies to: ANY code that iterates over a collection of channels and sends to each
+
+### 2. Pattern
+
+```go
+// CORRECT — recover protects against send-on-closed-channel
+func (s *Stream) broadcast(chunk Chunk) {
+    s.mu.RLock()
+    subscribers := make([]chan Chunk, len(s.subscribers))
+    copy(subscribers, s.subscribers)
+    s.mu.RUnlock()
+
+    for _, ch := range subscribers {
+        func() {
+            defer func() {
+                if r := recover(); r != nil {
+                    // subscriber closed their channel — skip silently
+                }
+            }()
+            select {
+            case ch <- chunk:
+            default:
+                // channel full — apply backpressure policy
+            }
+        }()
+    }
+}
+```
+
+### 3. Key Rules
+
+1. **Copy subscriber list** before iterating (avoid holding lock during send)
+2. **Wrap each send** in an inline `func()` with `defer recover()`
+3. **Never skip the recover** — even if you think all channels are managed by you
+4. **Log or count** recovered panics for observability (optional but recommended)
+
+### 4. Wrong vs Right
+
+#### Wrong
+```go
+// ❌ Panics if any subscriber closed their channel
+func (s *Stream) broadcast(chunk Chunk) {
+    s.mu.RLock()
+    defer s.mu.RUnlock()
+    for _, ch := range s.subscribers {
+        ch <- chunk  // PANIC if ch is closed
+    }
+}
+```
+
+#### Right
+```go
+// ✅ Each send is protected
+for _, ch := range subscribers {
+    func() {
+        defer func() { recover() }()
+        select {
+        case ch <- chunk:
+        default:
+        }
+    }()
+}
+```
+
+> **Historical lesson**: `backpressure.go` broadcast() bypassed the `Write()` method's lock and sent directly to subscriber channels. When a subscriber called `Close()` (which closes the channel), the next broadcast panicked with "send on closed channel". The fix wraps each send in an inline func with `defer recover()`.
+
+---
+
+## §38 API Response Envelope Must Be Unified (P2 — Inconsistency)
+
+All API endpoints MUST use the same response envelope structure. Having multiple response formats (one for config API, another for chat API) confuses clients and makes SDK generation unreliable.
+
+### 1. Scope / Trigger
+
+- Trigger: `config/api.go` used `ConfigResponse` while `api/handlers/` used `handlers.Response` — two different envelopes
+- Applies to: ANY new API endpoint or response structure
+
+### 2. Canonical Response Envelope
+
+```go
+// api/handlers/common.go — THE canonical envelope
+type Response struct {
+    Success bool        `json:"success"`
+    Data    interface{} `json:"data,omitempty"`
+    Error   *ErrorInfo  `json:"error,omitempty"`
+}
+
+type ErrorInfo struct {
+    Code    string `json:"code"`
+    Message string `json:"message"`
+}
+```
+
+### 3. Contract
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `success` | `bool` | Always | `true` for 2xx, `false` for 4xx/5xx |
+| `data` | `any` | On success | Domain-specific payload |
+| `error` | `*ErrorInfo` | On failure | Structured error with code + message |
+| `error.code` | `string` | On failure | Machine-readable error code (e.g., `"INVALID_REQUEST"`) |
+| `error.message` | `string` | On failure | Human-readable description |
+
+### 4. Wrong vs Right
+
+#### Wrong
+```go
+// ❌ Config API had its own envelope
+type ConfigResponse struct {
+    Status  string      `json:"status"`   // "ok" vs "error" — different from bool
+    Message string      `json:"message"`  // flat string, not structured
+    Data    interface{} `json:"data"`
+}
+```
+
+#### Right
+```go
+// ✅ Reuse the canonical envelope
+type apiResponse = handlers.Response  // or define identical struct in config/
+
+func writeJSON(w http.ResponseWriter, status int, data interface{}) {
+    w.Header().Set("Content-Type", "application/json")
+    w.WriteHeader(status)
+    json.NewEncoder(w).Encode(apiResponse{
+        Success: status < 400,
+        Data:    data,
+    })
+}
+```
+
+> **Rule**: When adding a new API package or handler group, import or replicate the canonical `Response` struct. Never invent a new envelope format.
+
+> **Historical lesson**: `config/api.go` had `ConfigResponse{Status: "ok", Message: "...", Data: ...}` while `api/handlers/` used `Response{Success: true, Data: ..., Error: ...}`. Clients had to handle two different shapes. Fixed by replacing `ConfigResponse` with an `apiResponse` struct matching the canonical envelope, and using structured `apiError` for error responses.
+
+---
+
+## §39 Documentation Code Snippets Must Compile (P2 — Onboarding Friction)
+
+All code snippets in README, docs/, and examples/ MUST compile against the current codebase. Non-compiling examples are worse than no examples — they waste hours of developer time.
+
+### 1. Scope / Trigger
+
+- Trigger: 50+ code snippets in 12 documentation files used incorrect Go struct initialization (Feb 2026 audit)
+- Applies to: ANY code block in `.md` files or `examples/` that references project types
+
+### 2. Common Violations Found
+
+| Pattern | Count | Fix |
+|---------|-------|-----|
+| Flat `OpenAIConfig{APIKey: "..."}` instead of nested `BaseProviderConfig` | 30+ | Use `OpenAIConfig{BaseProviderConfig: BaseProviderConfig{APIKey: os.Getenv("...")}}` |
+| Hardcoded API keys `"sk-xxx"` | 20+ | Use `os.Getenv("OPENAI_API_KEY")` |
+| Wrong type name `AnthropicConfig` | 5+ | Use `ClaudeConfig` (renamed in codebase) |
+| Missing required fields in struct literal | 10+ | Add all required fields |
+
+### 3. Rules
+
+1. **Embedded struct initialization**: When a Go struct has an embedded field (e.g., `BaseProviderConfig`), the composite literal MUST name the embedded field explicitly:
+
+```go
+// ❌ WRONG — flat initialization doesn't work with embedded structs
+cfg := OpenAIConfig{
+    APIKey: "sk-xxx",
+    Model:  "gpt-4",
+}
+
+// ✅ CORRECT — name the embedded struct
+cfg := OpenAIConfig{
+    BaseProviderConfig: BaseProviderConfig{
+        APIKey: os.Getenv("OPENAI_API_KEY"),
+    },
+    Model: "gpt-4",
+}
+```
+
+2. **No hardcoded secrets**: Use `os.Getenv()` for API keys in all documentation and examples.
+
+3. **Type names must match codebase**: After renaming a type, grep all `.md` files and update references.
+
+4. **Examples must have skip logic**: If an example requires an API key, add a skip check:
+
+```go
+func main() {
+    apiKey := os.Getenv("OPENAI_API_KEY")
+    if apiKey == "" {
+        fmt.Println("Skipping: OPENAI_API_KEY not set")
+        return
+    }
+    // ... rest of example
+}
+```
+
+### 4. Verification Command
+
+```bash
+# Check all examples compile
+go build ./examples/...
+
+# Check E2E tests compile (with build tag)
+go vet -tags e2e ./tests/e2e/...
+```
+
+> **Rule**: After any type rename or struct field change, run `grep -rn 'OldTypeName' --include='*.md' --include='*.go' docs/ examples/ README*` and update all references.
+
+> **Historical lesson**: 12 documentation files (README.md, README_EN.md, 5 Chinese docs, 5 English docs) all had `OpenAIConfig{APIKey: "sk-xxx", Model: "gpt-4"}` — flat initialization that doesn't compile because `APIKey` lives in the embedded `BaseProviderConfig`. New users copying these snippets got immediate compile errors, creating a terrible first impression. The fix touched 50+ code blocks across 12 files.

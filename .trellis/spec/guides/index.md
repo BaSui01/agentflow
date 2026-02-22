@@ -25,6 +25,7 @@ These guides help you **ask the right questions before coding**.
 | [Cross-Layer Thinking Guide](./cross-layer-thinking-guide.md) | Think through data flow across layers | Features spanning multiple layers |
 | [Cross-Platform Thinking Guide](./cross-platform-thinking-guide.md) | Catch platform-specific assumptions | Scripts, paths, commands |
 | [quality-guidelines.md §18-§23](../backend/quality-guidelines.md) | Agent composition, guardrails, context window patterns | Multi-agent design, runtime config, validation chains |
+| [quality-guidelines.md §35-§39](../backend/quality-guidelines.md) | Cache eviction, Prometheus cardinality, broadcast safety, API envelope, doc snippets | In-memory caches, metrics, fan-out channels, new API endpoints, documentation |
 
 ---
 
@@ -156,6 +157,51 @@ These guides help you **ask the right questions before coding**.
 
 → Read [quality-guidelines.md §30](../backend/quality-guidelines.md) for Function Callback Pattern
 → Read [unit-test/index.md § Mock Patterns](../unit-test/index.md) for shared mock conventions
+
+### When to Think About In-Memory Cache Safety
+
+- [ ] 新增 `map` 字段用作缓存 — 是否有 `maxSize` 上限？（§35）
+- [ ] 缓存条目是否有 TTL？Get 时是否做了 lazy eviction？（§35）
+- [ ] 缓存名称包含 `Cache`/`Store`/`Memo` — 是否有驱逐机制？
+- [ ] 高并发场景下缓存 Get 是否需要升级为 `Lock()`（而非 `RLock()`）以支持 lazy eviction？
+- [ ] `append()` 到 slice 字段 — 是否有滑动窗口限制？（如 `QualityScores`）
+
+→ Read [quality-guidelines.md §35](../backend/quality-guidelines.md) for Cache Eviction pattern
+
+### When to Think About Prometheus Metrics
+
+- [ ] 新增 Prometheus label — 该值是否有界？（§36）
+- [ ] label 值来自用户输入或动态 ID — ❌ 禁止！改用 `_info` gauge（§36）
+- [ ] 新增 `CounterVec`/`HistogramVec` — 估算最大 label 组合数（应 <100）
+- [ ] 需要按动态 ID 查询指标 — 使用 structured logging 而非 Prometheus label
+
+→ Read [quality-guidelines.md §36](../backend/quality-guidelines.md) for Prometheus Cardinality rules
+
+### When to Think About Fan-Out / Broadcast Safety
+
+- [ ] 遍历 channel 列表并逐个发送 — 是否有 `recover()` 保护？（§37）
+- [ ] subscriber 可以随时 `Close()` 自己的 channel — broadcaster 是否处理了 panic？
+- [ ] 持有锁的同时向 channel 发送 — 是否可能死锁？先 copy 再发送（§37）
+
+→ Read [quality-guidelines.md §37](../backend/quality-guidelines.md) for Broadcast Recover pattern
+
+### When to Think About API Response Consistency
+
+- [ ] 新增 API handler 包 — 是否复用了 canonical `Response` 信封？（§38）
+- [ ] 错误响应是否使用了结构化 `ErrorInfo{Code, Message}`？（§38）
+- [ ] 新增路由 — 路由前缀是否与现有 API 一致（`/api/v1/`）？
+- [ ] 新增路由 — 是否更新了 `api/openapi.yaml`？（§14）
+
+→ Read [quality-guidelines.md §38](../backend/quality-guidelines.md) for API Envelope pattern
+
+### When to Think About Documentation Code Snippets
+
+- [ ] 重命名了类型或结构体字段 — 是否 grep 了所有 `.md` 文件？（§39）
+- [ ] 修改了嵌套结构体 — 文档中的 composite literal 是否正确命名了嵌套字段？
+- [ ] 新增 example — 是否有 `os.Getenv` + skip 逻辑？（§39）
+- [ ] `go build ./examples/...` 是否通过？
+
+→ Read [quality-guidelines.md §39](../backend/quality-guidelines.md) for Documentation Code Snippet rules
 
 ### When to Think About Interface Deduplication
 
