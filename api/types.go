@@ -29,6 +29,7 @@ type ErrorInfo struct {
 	Details    string `json:"details,omitempty"`
 	Retryable  bool   `json:"retryable,omitempty"`
 	HTTPStatus int    `json:"-"` // not serialized to JSON
+	Provider   string `json:"provider,omitempty"`
 }
 
 // =============================================================================
@@ -401,20 +402,10 @@ type ErrorResponse struct {
 	Error ErrorDetail `json:"error"`
 }
 
-// ErrorDetail 表示错误详细信息。
-// @Description 错误详细结构
-type ErrorDetail struct {
-	// 错误代码
-	Code string `json:"code" example:"INVALID_REQUEST"`
-	// 人类可读的错误消息
-	Message string `json:"message" example:"Invalid request parameters"`
-	// HTTP 状态码
-	HTTPStatus int `json:"http_status,omitempty" example:"400"`
-	// 请求是否可以重试
-	Retryable bool `json:"retryable,omitempty" example:"false"`
-	// 返回错误的提供者
-	Provider string `json:"provider,omitempty" example:"openai"`
-}
+// ErrorDetail is a type alias for ErrorInfo — the canonical error structure.
+// The canonical definition lives in ErrorInfo (above).
+// Deprecated: prefer using ErrorInfo directly.
+type ErrorDetail = ErrorInfo
 
 // =============================================================================
 // 列出响应类型

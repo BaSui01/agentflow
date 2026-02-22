@@ -95,7 +95,7 @@
 // # 错误与列表响应类型
 //
 //   - [ErrorResponse]：统一错误响应包装
-//   - [ErrorDetail]：错误详情，含 Code、Message、HTTPStatus 和 Retryable 标志
+//   - [ErrorDetail]：ErrorInfo 的类型别名（已废弃，建议直接使用 ErrorInfo）
 //   - [ProviderListResponse]：提供商列表响应
 //   - [ModelListResponse]：模型列表响应
 //   - [ToolListResponse]：工具列表响应

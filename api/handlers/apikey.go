@@ -183,22 +183,22 @@ func (h *APIKeyHandler) HandleCreateAPIKey(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	if req.Priority < 0 {
+	if !ValidateNonNegative(float64(req.Priority)) {
 		WriteErrorMessage(w, http.StatusBadRequest, types.ErrInvalidRequest, "priority must be non-negative", h.logger)
 		return
 	}
 
-	if req.Weight < 0 {
+	if !ValidateNonNegative(float64(req.Weight)) {
 		WriteErrorMessage(w, http.StatusBadRequest, types.ErrInvalidRequest, "weight must be non-negative", h.logger)
 		return
 	}
 
-	if req.RateLimitRPM < 0 {
+	if !ValidateNonNegative(float64(req.RateLimitRPM)) {
 		WriteErrorMessage(w, http.StatusBadRequest, types.ErrInvalidRequest, "rate_limit_rpm must be non-negative", h.logger)
 		return
 	}
 
-	if req.RateLimitRPD < 0 {
+	if !ValidateNonNegative(float64(req.RateLimitRPD)) {
 		WriteErrorMessage(w, http.StatusBadRequest, types.ErrInvalidRequest, "rate_limit_rpd must be non-negative", h.logger)
 		return
 	}
@@ -282,22 +282,22 @@ func (h *APIKeyHandler) HandleUpdateAPIKey(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	if req.Priority != nil && *req.Priority < 0 {
+	if req.Priority != nil && !ValidateNonNegative(float64(*req.Priority)) {
 		WriteErrorMessage(w, http.StatusBadRequest, types.ErrInvalidRequest, "priority must be non-negative", h.logger)
 		return
 	}
 
-	if req.Weight != nil && *req.Weight < 0 {
+	if req.Weight != nil && !ValidateNonNegative(float64(*req.Weight)) {
 		WriteErrorMessage(w, http.StatusBadRequest, types.ErrInvalidRequest, "weight must be non-negative", h.logger)
 		return
 	}
 
-	if req.RateLimitRPM != nil && *req.RateLimitRPM < 0 {
+	if req.RateLimitRPM != nil && !ValidateNonNegative(float64(*req.RateLimitRPM)) {
 		WriteErrorMessage(w, http.StatusBadRequest, types.ErrInvalidRequest, "rate_limit_rpm must be non-negative", h.logger)
 		return
 	}
 
-	if req.RateLimitRPD != nil && *req.RateLimitRPD < 0 {
+	if req.RateLimitRPD != nil && !ValidateNonNegative(float64(*req.RateLimitRPD)) {
 		WriteErrorMessage(w, http.StatusBadRequest, types.ErrInvalidRequest, "rate_limit_rpd must be non-negative", h.logger)
 		return
 	}
