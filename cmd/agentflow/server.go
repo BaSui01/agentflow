@@ -12,9 +12,12 @@ import (
 	"github.com/BaSui01/agentflow/config"
 	"github.com/BaSui01/agentflow/internal/metrics"
 	"github.com/BaSui01/agentflow/internal/server"
+	"github.com/BaSui01/agentflow/internal/telemetry"
 	llmfactory "github.com/BaSui01/agentflow/llm/factory"
+	"github.com/BaSui01/agentflow/types"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.uber.org/zap"
+	"gorm.io/gorm"
 )
 
 // =============================================================================
@@ -27,6 +30,12 @@ type Server struct {
 	configPath string
 	logger     *zap.Logger
 
+	// OpenTelemetry providers
+	telemetry *telemetry.Providers
+
+	// Database (optional — nil when DB is unavailable)
+	db *gorm.DB
+
 	// 服务器管理器
 	httpManager    *server.Manager
 	metricsManager *server.Manager
@@ -35,6 +44,7 @@ type Server struct {
 	healthHandler *handlers.HealthHandler
 	chatHandler   *handlers.ChatHandler
 	agentHandler  *handlers.AgentHandler
+	apiKeyHandler *handlers.APIKeyHandler
 
 	// 指标收集器
 	metricsCollector *metrics.Collector
@@ -51,11 +61,13 @@ type Server struct {
 }
 
 // NewServer 创建新的服务器实例
-func NewServer(cfg *config.Config, configPath string, logger *zap.Logger) *Server {
+func NewServer(cfg *config.Config, configPath string, logger *zap.Logger, tp *telemetry.Providers, db *gorm.DB) *Server {
 	return &Server{
 		cfg:        cfg,
 		configPath: configPath,
 		logger:     logger,
+		telemetry:  tp,
+		db:         db,
 	}
 }
 
@@ -135,6 +147,14 @@ func (s *Server) initHandlers() error {
 	agentRegistry := agent.NewAgentRegistry(s.logger)
 	s.agentHandler = handlers.NewAgentHandler(discoveryRegistry, agentRegistry, s.logger)
 	s.logger.Info("Agent handler initialized")
+
+	// Initialize API key handler when database is available
+	if s.db != nil {
+		s.apiKeyHandler = handlers.NewAPIKeyHandler(s.db, s.logger)
+		s.logger.Info("API key handler initialized")
+	} else {
+		s.logger.Info("Database not available, API key management disabled")
+	}
 
 	s.logger.Info("Handlers initialized")
 	return nil
@@ -217,6 +237,33 @@ func (s *Server) startHTTPServer() error {
 		s.logger.Info("Agent API routes registered")
 	}
 
+	// Provider / API Key CRUD routes
+	if s.apiKeyHandler != nil {
+		mux.HandleFunc("/api/v1/providers", s.apiKeyHandler.HandleListProviders)
+		mux.HandleFunc("/api/v1/providers/{id}/api-keys", func(w http.ResponseWriter, r *http.Request) {
+			switch r.Method {
+			case http.MethodGet:
+				s.apiKeyHandler.HandleListAPIKeys(w, r)
+			case http.MethodPost:
+				s.apiKeyHandler.HandleCreateAPIKey(w, r)
+			default:
+				handlers.WriteErrorMessage(w, http.StatusMethodNotAllowed, types.ErrInvalidRequest, "method not allowed", s.logger)
+			}
+		})
+		mux.HandleFunc("/api/v1/providers/{id}/api-keys/stats", s.apiKeyHandler.HandleAPIKeyStats)
+		mux.HandleFunc("/api/v1/providers/{id}/api-keys/{keyId}", func(w http.ResponseWriter, r *http.Request) {
+			switch r.Method {
+			case http.MethodPut:
+				s.apiKeyHandler.HandleUpdateAPIKey(w, r)
+			case http.MethodDelete:
+				s.apiKeyHandler.HandleDeleteAPIKey(w, r)
+			default:
+				handlers.WriteErrorMessage(w, http.StatusMethodNotAllowed, types.ErrInvalidRequest, "method not allowed", s.logger)
+			}
+		})
+		s.logger.Info("Provider API key routes registered")
+	}
+
 	// ========================================
 	// 配置管理 API（需要独立认证保护）
 	// 安全修复：配置 API 是敏感的管理端点，必须经过认证中间件保护，
@@ -248,6 +295,7 @@ func (s *Server) startHTTPServer() error {
 		RequestID(),
 		SecurityHeaders(),
 		MetricsMiddleware(s.metricsCollector),
+		OTelTracing(),
 		RequestLogger(s.logger),
 		CORS(s.cfg.Server.CORSAllowedOrigins),
 		RateLimiter(rateLimiterCtx, float64(s.cfg.Server.RateLimitRPS), s.cfg.Server.RateLimitBurst, s.logger),
@@ -380,6 +428,13 @@ func (s *Server) Shutdown() {
 	if s.hotReloadManager != nil {
 		if err := s.hotReloadManager.Stop(); err != nil {
 			s.logger.Error("Hot reload manager shutdown error", zap.Error(err))
+		}
+	}
+
+	// 1.5. Flush and shutdown telemetry exporters
+	if s.telemetry != nil {
+		if err := s.telemetry.Shutdown(ctx); err != nil {
+			s.logger.Error("Telemetry shutdown error", zap.Error(err))
 		}
 	}
 

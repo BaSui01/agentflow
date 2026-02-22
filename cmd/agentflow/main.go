@@ -54,6 +54,7 @@ import (
 	"gorm.io/gorm"
 
 	"github.com/BaSui01/agentflow/config"
+	"github.com/BaSui01/agentflow/internal/telemetry"
 	"github.com/BaSui01/agentflow/llm"
 )
 
@@ -133,6 +134,12 @@ func runServe(args []string) {
 		zap.String("git_commit", GitCommit),
 	)
 
+	// Initialize OpenTelemetry
+	otelProviders, err := telemetry.Init(cfg.Telemetry, logger)
+	if err != nil {
+		logger.Warn("failed to initialize telemetry", zap.Error(err))
+	}
+
 	// 初始化数据库连接
 	db, err := openDatabase(cfg.Database, logger)
 	if err != nil {
@@ -145,7 +152,7 @@ func runServe(args []string) {
 	}
 
 	// 创建服务器（传入配置文件路径以支持热更新）
-	server := NewServer(cfg, *configPath, logger)
+	server := NewServer(cfg, *configPath, logger, otelProviders, db)
 
 	// 启动服务器
 	if err := server.Start(); err != nil {
