@@ -105,8 +105,8 @@ collector.RecordHTTPRequest(method, path, status, duration, reqSize, respSize)
 // 记录 LLM 调用
 collector.RecordLLMRequest(provider, model, status, duration, promptTokens, completionTokens, cost)
 
-// 记录 Agent 执行
-collector.RecordAgentExecution(agentID, agentType, status, duration)
+// 记录 Agent 执行（K3 FIX: 使用 agent_type 替代 agent_id）
+collector.RecordAgentExecution(agentType, status, duration)
 ```
 
 ##### `internal/server/` - HTTP 服务器管理
