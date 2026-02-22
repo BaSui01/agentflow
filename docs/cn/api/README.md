@@ -196,12 +196,24 @@ type ChatRequest struct {
 
 ```go
 type ChatResponse struct {
-    ID           string      `json:"id"`
-    Model        string      `json:"model"`
-    Message      Message     `json:"message"`
-    ToolCalls    []ToolCall  `json:"tool_calls,omitempty"`
-    Usage        TokenUsage  `json:"usage"`
-    FinishReason string      `json:"finish_reason"`
+    ID        string       `json:"id,omitempty"`
+    Provider  string       `json:"provider,omitempty"`
+    Model     string       `json:"model"`
+    Choices   []ChatChoice `json:"choices"`
+    Usage     ChatUsage    `json:"usage"`
+    CreatedAt time.Time    `json:"created_at"`
+}
+
+type ChatChoice struct {
+    Index        int     `json:"index"`
+    FinishReason string  `json:"finish_reason,omitempty"`
+    Message      Message `json:"message"`
+}
+
+type ChatUsage struct {
+    PromptTokens     int `json:"prompt_tokens"`
+    CompletionTokens int `json:"completion_tokens"`
+    TotalTokens      int `json:"total_tokens"`
 }
 ```
 
