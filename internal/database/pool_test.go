@@ -241,17 +241,15 @@ func TestPoolManager_StartHealthCheck(t *testing.T) {
 		HealthCheckInterval: 100 * time.Millisecond,
 	}
 
+	// Mock 多次 ping — 必须在 NewPoolManager 之前设置，
+	// 因为构造函数会立即启动 health check goroutine。
+	mock.ExpectPing()
+	mock.ExpectPing()
+	mock.ExpectPing()
+
 	manager, err := NewPoolManager(gormDB, config, logger)
 	require.NoError(t, err)
 	defer manager.Close()
-
-	// Mock 多次 ping
-	mock.ExpectPing()
-	mock.ExpectPing()
-	mock.ExpectPing()
-
-	// 启动健康检查
-	// manager.StartHealthCheck(ctx)
 
 	// 等待一段时间让健康检查运行
 	time.Sleep(350 * time.Millisecond)

@@ -279,7 +279,7 @@ func (h *AgentHandler) HandleAgentHealth(w http.ResponseWriter, r *http.Request)
 
 	if !healthy {
 		WriteJSON(w, http.StatusServiceUnavailable, Response{
-			Success:   true,
+			Success:   false,
 			Data:      resp,
 			Timestamp: time.Now(),
 		})

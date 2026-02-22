@@ -22,6 +22,7 @@ import (
 	"github.com/BaSui01/agentflow/llm/providers/minimax"
 	"github.com/BaSui01/agentflow/llm/providers/mistral"
 	"github.com/BaSui01/agentflow/llm/providers/openai"
+	"github.com/BaSui01/agentflow/llm/providers/openaicompat"
 	"github.com/BaSui01/agentflow/llm/providers/qwen"
 	"go.uber.org/zap"
 )
@@ -29,11 +30,12 @@ import (
 // ProviderConfig is the generic configuration accepted by the factory function.
 // It uses a flat structure with an Extra map for provider-specific fields.
 type ProviderConfig struct {
-	APIKey  string         `json:"api_key" yaml:"api_key"`
-	BaseURL string         `json:"base_url" yaml:"base_url"`
-	Model   string         `json:"model,omitempty" yaml:"model,omitempty"`
-	Timeout time.Duration  `json:"timeout,omitempty" yaml:"timeout,omitempty"`
-	Extra   map[string]any `json:"extra,omitempty" yaml:"extra,omitempty"`
+	APIKey  string                  `json:"api_key" yaml:"api_key"`
+	APIKeys []providers.APIKeyEntry `json:"api_keys,omitempty" yaml:"api_keys,omitempty"`
+	BaseURL string                  `json:"base_url" yaml:"base_url"`
+	Model   string                  `json:"model,omitempty" yaml:"model,omitempty"`
+	Timeout time.Duration           `json:"timeout,omitempty" yaml:"timeout,omitempty"`
+	Extra   map[string]any          `json:"extra,omitempty" yaml:"extra,omitempty"`
 }
 
 // NewProviderFromConfig creates a Provider instance based on the provider name
@@ -48,6 +50,7 @@ func NewProviderFromConfig(name string, cfg ProviderConfig, logger *zap.Logger) 
 
 	base := providers.BaseProviderConfig{
 		APIKey:  cfg.APIKey,
+		APIKeys: cfg.APIKeys,
 		BaseURL: cfg.BaseURL,
 		Model:   cfg.Model,
 		Timeout: cfg.Timeout,
@@ -67,10 +70,35 @@ func NewProviderFromConfig(name string, cfg ProviderConfig, logger *zap.Logger) 
 		return openai.NewOpenAIProvider(oc, logger), nil
 
 	case "anthropic", "claude":
-		return claude.NewClaudeProvider(providers.ClaudeConfig{BaseProviderConfig: base}, logger), nil
+		cc := providers.ClaudeConfig{BaseProviderConfig: base}
+		if cfg.Extra != nil {
+			if v, ok := cfg.Extra["auth_type"].(string); ok {
+				cc.AuthType = v
+			}
+			if v, ok := cfg.Extra["anthropic_version"].(string); ok {
+				cc.AnthropicVersion = v
+			}
+		}
+		return claude.NewClaudeProvider(cc, logger), nil
 
-	case "gemini":
-		return gemini.NewGeminiProvider(providers.GeminiConfig{BaseProviderConfig: base}, logger), nil
+	case "gemini", "gemini-vertex":
+		gc := providers.GeminiConfig{BaseProviderConfig: base}
+		if cfg.Extra != nil {
+			if v, ok := cfg.Extra["project_id"].(string); ok {
+				gc.ProjectID = v
+			}
+			if v, ok := cfg.Extra["region"].(string); ok {
+				gc.Region = v
+			}
+			if v, ok := cfg.Extra["auth_type"].(string); ok {
+				gc.AuthType = v
+			}
+		}
+		// gemini-vertex 别名自动设置 oauth
+		if name == "gemini-vertex" && gc.AuthType == "" {
+			gc.AuthType = "oauth"
+		}
+		return gemini.NewGeminiProvider(gc, logger), nil
 
 	case "deepseek":
 		return deepseek.NewDeepSeekProvider(providers.DeepSeekConfig{BaseProviderConfig: base}, logger), nil
@@ -109,14 +137,52 @@ func NewProviderFromConfig(name string, cfg ProviderConfig, logger *zap.Logger) 
 		return llama.NewLlamaProvider(lc, logger), nil
 
 	default:
-		return nil, fmt.Errorf("unknown provider: %q", name)
+		// 通用 OpenAI 兼容提供商：任意名称 + base_url 即可接入
+		// 支持 Groq、Fireworks、OpenRouter、Ollama、vLLM 等
+		if cfg.BaseURL == "" {
+			return nil, fmt.Errorf("unknown provider %q: built-in provider not found, and base_url is required for generic OpenAI-compatible provider", name)
+		}
+		oc := openaicompat.Config{
+			ProviderName: name,
+			APIKey:       cfg.APIKey,
+			APIKeys:      cfg.APIKeys,
+			BaseURL:      cfg.BaseURL,
+			DefaultModel: cfg.Model,
+		}
+		if cfg.Extra != nil {
+			if v, ok := cfg.Extra["endpoint_path"].(string); ok {
+				oc.EndpointPath = v
+			}
+			if v, ok := cfg.Extra["models_endpoint"].(string); ok {
+				oc.ModelsEndpoint = v
+			}
+			if v, ok := cfg.Extra["auth_header"].(string); ok {
+				oc.AuthHeaderName = v
+			}
+			if v, ok := cfg.Extra["supports_tools"].(bool); ok {
+				oc.SupportsTools = &v
+			}
+			if v, ok := cfg.Extra["api_keys"].([]any); ok {
+				for _, k := range v {
+					if s, ok := k.(string); ok {
+						oc.APIKeys = append(oc.APIKeys, providers.APIKeyEntry{Key: s})
+					}
+				}
+			}
+		}
+		logger.Info("creating generic OpenAI-compatible provider",
+			zap.String("provider", name),
+			zap.String("base_url", cfg.BaseURL))
+		return openaicompat.New(oc, logger), nil
 	}
 }
 
-// SupportedProviders returns the list of provider names supported by the factory.
+// SupportedProviders returns the list of built-in provider names.
+// Any name not in this list will be treated as a generic OpenAI-compatible
+// provider, requiring base_url in the configuration.
 func SupportedProviders() []string {
 	return []string{
-		"openai", "anthropic", "claude", "gemini", "deepseek",
+		"openai", "anthropic", "claude", "gemini", "gemini-vertex", "deepseek",
 		"qwen", "glm", "grok", "kimi", "mistral",
 		"minimax", "hunyuan", "doubao", "llama",
 	}

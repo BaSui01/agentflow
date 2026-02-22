@@ -2,13 +2,22 @@ package providers
 
 import "time"
 
+// APIKeyEntry 结构化 API Key 条目，每个 Key 可绑定独立的 BaseURL 和权重
+type APIKeyEntry struct {
+	Key     string `json:"key" yaml:"key"`
+	BaseURL string `json:"base_url,omitempty" yaml:"base_url,omitempty"`
+	Weight  int    `json:"weight,omitempty" yaml:"weight,omitempty"`
+}
+
 // BaseProviderConfig 所有 Provider 共享的基础配置字段。
 // 通过嵌入此结构体，各 Provider 的 Config 自动获得 APIKey、BaseURL、Model、Timeout 四个字段，
 // 避免重复定义。
 type BaseProviderConfig struct {
 	APIKey  string        `json:"api_key" yaml:"api_key"`
+	APIKeys []APIKeyEntry `json:"api_keys,omitempty" yaml:"api_keys,omitempty"` // 多 API Key 支持，轮询使用
 	BaseURL string        `json:"base_url" yaml:"base_url"`
 	Model   string        `json:"model,omitempty" yaml:"model,omitempty"`
+	Models  []string      `json:"models,omitempty" yaml:"models,omitempty"` // 可用模型白名单
 	Timeout time.Duration `json:"timeout,omitempty" yaml:"timeout,omitempty"`
 }
 
@@ -22,11 +31,16 @@ type OpenAIConfig struct {
 // ClaudeConfig Claude Provider 配置
 type ClaudeConfig struct {
 	BaseProviderConfig `yaml:",inline"`
+	AuthType          string `json:"auth_type,omitempty" yaml:"auth_type,omitempty"`           // "api_key"(默认) | "bearer"
+	AnthropicVersion  string `json:"anthropic_version,omitempty" yaml:"anthropic_version,omitempty"` // 默认 "2023-06-01"
 }
 
 // GeminiConfig Gemini Provider 配置
 type GeminiConfig struct {
 	BaseProviderConfig `yaml:",inline"`
+	ProjectID string `json:"project_id,omitempty" yaml:"project_id,omitempty"`
+	Region    string `json:"region,omitempty" yaml:"region,omitempty"`
+	AuthType  string `json:"auth_type,omitempty" yaml:"auth_type,omitempty"` // "api_key"(默认) | "oauth"
 }
 
 // GrokConfig xAI Grok Provider 配置

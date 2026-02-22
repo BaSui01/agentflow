@@ -66,6 +66,16 @@ func NewOpenAIProvider(cfg providers.OpenAIConfig, logger *zap.Logger) *OpenAIPr
 	return p
 }
 
+// Endpoints 返回该提供者使用的所有 API 端点完整 URL。
+func (p *OpenAIProvider) Endpoints() llm.ProviderEndpoints {
+	ep := p.Provider.Endpoints()
+	if p.openaiCfg.UseResponsesAPI {
+		base := strings.TrimRight(p.openaiCfg.BaseURL, "/")
+		ep.Completion = base + "/v1/responses"
+	}
+	return ep
+}
+
 // Completion 覆写基类方法，支持 Responses API 路由.
 // 当 UseResponsesAPI 启用时走 /v1/responses，否则委托给 openaicompat.Provider.Completion.
 func (p *OpenAIProvider) Completion(ctx context.Context, req *llm.ChatRequest) (*llm.ChatResponse, error) {

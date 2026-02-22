@@ -17,6 +17,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/BaSui01/agentflow/internal/tlsutil"
@@ -63,6 +64,13 @@ type Config struct {
 	// SupportsTools indicates whether this provider supports native function calling.
 	// Defaults to true if not set.
 	SupportsTools *bool
+
+	// AuthHeaderName 自定义认证头名称。为空时使用默认的 "Authorization: Bearer <key>"。
+	// 设置后使用 "<AuthHeaderName>: <key>"（不加 Bearer 前缀）。
+	AuthHeaderName string
+
+	// APIKeys 多 API Key 列表，轮询使用。如果非空，优先于 APIKey。
+	APIKeys []providers.APIKeyEntry
 }
 
 // Provider is the base implementation for all OpenAI-compatible LLM providers.
@@ -72,6 +80,7 @@ type Provider struct {
 	Client        *http.Client
 	Logger        *zap.Logger
 	RewriterChain *middleware.RewriterChain
+	keyIndex      uint64 // 多 Key 轮询索引
 }
 
 // New creates a new OpenAI-compatible provider with the given config.
@@ -121,18 +130,28 @@ func (p *Provider) buildHeaders(req *http.Request, apiKey string) {
 		p.Cfg.BuildHeaders(req, apiKey)
 		return
 	}
-	// Default: Bearer token auth
-	req.Header.Set("Authorization", "Bearer "+apiKey)
+	if p.Cfg.AuthHeaderName != "" {
+		req.Header.Set(p.Cfg.AuthHeaderName, apiKey)
+	} else {
+		req.Header.Set("Authorization", "Bearer "+apiKey)
+	}
 	req.Header.Set("Content-Type", "application/json")
 }
 
 // resolveAPIKey returns the API key, checking for context override first.
 func (p *Provider) resolveAPIKey(ctx context.Context) string {
+	// 1. 优先使用 context 中的凭据覆盖
 	if c, ok := llm.CredentialOverrideFromContext(ctx); ok {
 		if strings.TrimSpace(c.APIKey) != "" {
 			return strings.TrimSpace(c.APIKey)
 		}
 	}
+	// 2. 多 Key 轮询
+	if len(p.Cfg.APIKeys) > 0 {
+		idx := atomic.AddUint64(&p.keyIndex, 1) - 1
+		return p.Cfg.APIKeys[idx%uint64(len(p.Cfg.APIKeys))].Key
+	}
+	// 3. 单 Key
 	return p.Cfg.APIKey
 }
 
@@ -172,6 +191,15 @@ func (p *Provider) ListModels(ctx context.Context) ([]llm.Model, error) {
 		ctx, p.Client, p.Cfg.BaseURL, p.Cfg.APIKey, p.Cfg.ProviderName,
 		p.Cfg.ModelsEndpoint, p.buildHeaders,
 	)
+}
+
+// Endpoints 返回该提供者使用的所有 API 端点完整 URL。
+func (p *Provider) Endpoints() llm.ProviderEndpoints {
+	return llm.ProviderEndpoints{
+		Completion: p.endpoint(p.Cfg.EndpointPath),
+		Models:     p.endpoint(p.Cfg.ModelsEndpoint),
+		BaseURL:    p.Cfg.BaseURL,
+	}
 }
 
 // Completion performs a non-streaming chat completion.

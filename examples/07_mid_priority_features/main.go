@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"os"
 
 	"github.com/BaSui01/agentflow/agent/conversation"
 	"github.com/BaSui01/agentflow/agent/crews"
@@ -46,9 +47,9 @@ func demoHostedTools(logger *zap.Logger) {
 
 	registry := hosted.NewToolRegistry(logger)
 
-	// Register web search tool
+	// Register web search tool (需要真实的搜索 API Key)
 	webSearch := hosted.NewWebSearchTool(hosted.WebSearchConfig{
-		APIKey:     "demo-key",
+		APIKey:     os.Getenv("SEARCH_API_KEY"), // 从环境变量读取
 		Endpoint:   "https://api.search.example.com/search",
 		MaxResults: 5,
 	})

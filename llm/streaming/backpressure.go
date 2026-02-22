@@ -310,6 +310,10 @@ func (m *StreamMultiplexer) broadcast(ctx context.Context, token Token) {
 	defer m.mu.RUnlock()
 
 	for _, consumer := range m.consumers {
+		// 跳过已关闭的消费者，防止向已关闭 channel 发送导致 panic
+		if consumer.closed.Load() {
+			continue
+		}
 		// 非阻塞发送给每个消费者
 		select {
 		case consumer.buffer <- token:

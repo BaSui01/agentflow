@@ -46,6 +46,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"time"
 
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
@@ -152,7 +153,8 @@ func runHealthCheck(args []string) {
 	addr := fs.String("addr", "http://localhost:8080", "Server address")
 	fs.Parse(args)
 
-	resp, err := http.Get(*addr + "/health")
+	client := &http.Client{Timeout: 5 * time.Second}
+	resp, err := client.Get(*addr + "/health")
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Health check failed: %v\n", err)
 		os.Exit(1)

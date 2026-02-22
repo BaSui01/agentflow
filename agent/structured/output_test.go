@@ -47,6 +47,8 @@ func (m *mockProvider) ListModels(ctx context.Context) ([]llm.Model, error) {
 	return nil, nil
 }
 
+func (m *mockProvider) Endpoints() llm.ProviderEndpoints { return llm.ProviderEndpoints{} }
+
 // 模拟Structured Provider支持本地结构输出.
 type mockStructuredProvider struct {
 	mockProvider

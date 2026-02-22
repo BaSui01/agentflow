@@ -89,8 +89,9 @@ type BidirectionalStream struct {
 	logger   *zap.Logger
 	mu       sync.RWMutex
 	done     chan struct{}
-	closeOnce sync.Once
-	sequence int64
+	closeOnce        sync.Once
+	inboundCloseOnce sync.Once // 保证 inbound channel 只关闭一次
+	sequence         int64
 	// 新增字段
 	connFactory    func() (StreamConnection, error) // 连接工厂，用于重连
 	reconnectCount int
@@ -238,10 +239,11 @@ func (s *BidirectionalStream) Close() error {
 		return nil
 	}
 
-	// BUG-2 FIX: 先通过 done channel 通知所有 goroutine 退出，
-	// 不再关闭 inbound/outbound channel，避免活跃 sender 写入已关闭 channel 导致 panic。
-	// goroutine 通过 select <-s.done 退出后，channel 会被 GC 回收。
+	// 先通过 done channel 通知所有 goroutine 退出
 	s.closeOnce.Do(func() { close(s.done) })
+	// 关闭 inbound channel，使所有通过 Receive() 做 range 的消费者能正常退出
+	// outbound 不关闭——Send() 有并发写入，关闭会 panic；processOutbound 通过 done 退出即可
+	s.inboundCloseOnce.Do(func() { close(s.inbound) })
 	s.State = StateDisconnected
 
 	// 关闭底层连接
@@ -265,6 +267,8 @@ func (s *BidirectionalStream) setState(state StreamState) {
 
 func (s *BidirectionalStream) processInbound(ctx context.Context) {
 	defer s.logger.Debug("processInbound exited")
+	// C1 FIX: goroutine 退出时关闭 inbound channel，使 range 消费者能正常结束
+	defer s.inboundCloseOnce.Do(func() { close(s.inbound) })
 	for {
 		select {
 		case <-ctx.Done():
@@ -426,70 +430,72 @@ func (s *BidirectionalStream) processHeartbeat(ctx context.Context) {
 	}
 }
 
-// tryReconnect 尝试重新建立连接
+// tryReconnect 尝试重新建立连接（迭代方式，避免递归栈溢出）
 func (s *BidirectionalStream) tryReconnect(ctx context.Context) bool {
 	if s.connFactory == nil {
 		s.logger.Error("no connection factory, cannot reconnect")
 		return false
 	}
 
-	s.mu.Lock()
-	if s.reconnectCount >= s.Config.MaxReconnects {
+	for {
+		s.mu.Lock()
+		if s.reconnectCount >= s.Config.MaxReconnects {
+			s.mu.Unlock()
+			s.logger.Error("max reconnect attempts reached",
+				zap.Int("attempts", s.reconnectCount))
+			s.setState(StateError)
+			return false
+		}
+		s.reconnectCount++
+		attempt := s.reconnectCount
 		s.mu.Unlock()
-		s.logger.Error("max reconnect attempts reached",
-			zap.Int("attempts", s.reconnectCount))
-		s.setState(StateError)
-		return false
+
+		s.setState(StateConnecting)
+		s.logger.Info("attempting reconnect",
+			zap.Int("attempt", attempt),
+			zap.Int("max", s.Config.MaxReconnects))
+
+		// 指数退避
+		delay := s.Config.ReconnectDelay * time.Duration(1<<uint(attempt-1))
+		if delay > 30*time.Second {
+			delay = 30 * time.Second
+		}
+
+		select {
+		case <-ctx.Done():
+			return false
+		case <-s.done:
+			return false
+		case <-time.After(delay):
+		}
+
+		// 关闭旧连接
+		if s.conn != nil {
+			_ = s.conn.Close()
+		}
+
+		// 创建新连接
+		newConn, err := s.connFactory()
+		if err != nil {
+			s.logger.Error("reconnect failed", zap.Error(err), zap.Int("attempt", attempt))
+			continue // C2 FIX: 迭代重试，不再递归
+		}
+
+		s.mu.Lock()
+		s.conn = newConn
+		s.lastHeartbeat = time.Now()
+		s.mu.Unlock()
+
+		s.setState(StateConnected)
+		s.logger.Info("reconnected successfully", zap.Int("attempt", attempt))
+
+		// 重置重连计数
+		s.mu.Lock()
+		s.reconnectCount = 0
+		s.mu.Unlock()
+
+		return true
 	}
-	s.reconnectCount++
-	attempt := s.reconnectCount
-	s.mu.Unlock()
-
-	s.setState(StateConnecting)
-	s.logger.Info("attempting reconnect",
-		zap.Int("attempt", attempt),
-		zap.Int("max", s.Config.MaxReconnects))
-
-	// 指数退避
-	delay := s.Config.ReconnectDelay * time.Duration(1<<uint(attempt-1))
-	if delay > 30*time.Second {
-		delay = 30 * time.Second
-	}
-
-	select {
-	case <-ctx.Done():
-		return false
-	case <-s.done:
-		return false
-	case <-time.After(delay):
-	}
-
-	// 关闭旧连接
-	if s.conn != nil {
-		_ = s.conn.Close()
-	}
-
-	// 创建新连接
-	newConn, err := s.connFactory()
-	if err != nil {
-		s.logger.Error("reconnect failed", zap.Error(err), zap.Int("attempt", attempt))
-		return s.tryReconnect(ctx) // 递归重试
-	}
-
-	s.mu.Lock()
-	s.conn = newConn
-	s.lastHeartbeat = time.Now()
-	s.mu.Unlock()
-
-	s.setState(StateConnected)
-	s.logger.Info("reconnected successfully", zap.Int("attempt", attempt))
-
-	// 重置重连计数
-	s.mu.Lock()
-	s.reconnectCount = 0
-	s.mu.Unlock()
-
-	return true
 }
 
 // GetState 返回当前流状态 。

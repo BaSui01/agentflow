@@ -41,6 +41,7 @@ func (m *mockProvider) HealthCheck(ctx context.Context) (*llm.HealthStatus, erro
 
 func (m *mockProvider) Name() string                        { return m.name }
 func (m *mockProvider) SupportsNativeFunctionCalling() bool { return false }
+func (m *mockProvider) Endpoints() llm.ProviderEndpoints    { return llm.ProviderEndpoints{} }
 func (m *mockProvider) ListModels(ctx context.Context) ([]llm.Model, error) {
 	return nil, nil
 }

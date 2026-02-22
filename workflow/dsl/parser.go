@@ -237,8 +237,21 @@ func (p *Parser) resolveStep(def *NodeDef, dsl *WorkflowDSL, vars map[string]any
 	switch stepDef.Type {
 	case "llm":
 		prompt := p.interpolate(stepDef.Prompt, vars)
+		// Resolve model name: if an agent is referenced, look up its model;
+		// otherwise fall back to config["model"] or empty string.
+		model := ""
+		if stepDef.Agent != "" {
+			if agentDef, ok := dsl.Agents[stepDef.Agent]; ok {
+				model = agentDef.Model
+			}
+		}
+		if model == "" {
+			if m, ok := stepDef.Config["model"].(string); ok {
+				model = m
+			}
+		}
 		return &workflow.LLMStep{
-			Model:  stepDef.Agent,
+			Model:  model,
 			Prompt: prompt,
 		}, nil
 

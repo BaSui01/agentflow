@@ -366,6 +366,7 @@ func (p *APIKeyPool) GetStats() map[uint]*APIKeyStats {
 		stats[key.ID] = &APIKeyStats{
 			KeyID:          key.ID,
 			Label:          key.Label,
+			BaseURL:        key.BaseURL,
 			Enabled:        key.Enabled,
 			IsHealthy:      key.IsHealthy(),
 			TotalRequests:  key.TotalRequests,
@@ -394,6 +395,7 @@ func (p *APIKeyPool) calculateSuccessRate(key *LLMProviderAPIKey) float64 {
 type APIKeyStats struct {
 	KeyID          uint       `json:"key_id"`
 	Label          string     `json:"label"`
+	BaseURL        string     `json:"base_url"`
 	Enabled        bool       `json:"enabled"`
 	IsHealthy      bool       `json:"is_healthy"`
 	TotalRequests  int64      `json:"total_requests"`

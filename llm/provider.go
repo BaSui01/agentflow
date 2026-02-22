@@ -70,6 +70,9 @@ type Provider interface {
 	// ListModels 返回提供者支持的可用模型列表。
 	// 如果提供者不支持列出模型，则返回 nil。
 	ListModels(ctx context.Context) ([]Model, error)
+
+	// Endpoints 返回该提供者使用的所有 API 端点完整 URL，用于调试和配置验证。
+	Endpoints() ProviderEndpoints
 }
 
 // HealthStatus 表示提供者的健康检查结果。
@@ -143,13 +146,25 @@ type StreamChunk struct {
 
 // Model 表示提供者支持的一个模型.
 type Model struct {
-	ID          string    `json:"id"`           // 模型 ID（API 调用时使用）
-	Object      string    `json:"object"`       // 对象类型（通常是 "model"）
-	Created     int64     `json:"created"`      // 创建时间戳
-	OwnedBy     string    `json:"owned_by"`     // 所属组织
-	Permissions []string  `json:"permissions"`  // 权限列表
-	Root        string    `json:"root"`         // 根模型
-	Parent      string    `json:"parent"`       // 父模型
+	ID              string   `json:"id"`                          // 模型 ID（API 调用时使用）
+	Object          string   `json:"object"`                      // 对象类型（通常是 "model"）
+	Created         int64    `json:"created"`                     // 创建时间戳
+	OwnedBy         string   `json:"owned_by"`                    // 所属组织
+	Permissions     []string `json:"permissions"`                 // 权限列表
+	Root            string   `json:"root"`                        // 根模型
+	Parent          string   `json:"parent"`                      // 父模型
+	MaxInputTokens  int      `json:"max_input_tokens,omitempty"`  // 最大输入 token 数
+	MaxOutputTokens int      `json:"max_output_tokens,omitempty"` // 最大输出 token 数
+	Capabilities    []string `json:"capabilities,omitempty"`      // 模型能力列表
+}
+
+// ProviderEndpoints 描述提供者使用的所有 API 端点。
+type ProviderEndpoints struct {
+	Completion string `json:"completion"`          // 聊天补全端点
+	Stream     string `json:"stream,omitempty"`    // 流式端点（如果与 Completion 不同）
+	Models     string `json:"models"`              // 模型列表端点
+	Health     string `json:"health,omitempty"`    // 健康检查端点（如果与 Models 不同）
+	BaseURL    string `json:"base_url"`            // 基础 URL
 }
 
 // IsRetryable 判断错误是否可重试。
