@@ -28,6 +28,8 @@ tags:
     description: LLM chat completion endpoints
   - name: Agent
     description: Agent management and execution endpoints
+  - name: Provider
+    description: LLM provider and API key management endpoints
 
 paths:
   /health:
@@ -407,6 +409,188 @@ paths:
                       data:
                         $ref: '#/components/schemas/AgentHealthResponse'
 
+  /api/v1/providers:
+    get:
+      tags: [Provider]
+      summary: List all LLM providers
+      operationId: listProviders
+      security:
+        - ApiKeyAuth: []
+      responses:
+        '200':
+          description: Provider list
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/Provider'
+
+  /api/v1/providers/{id}/api-keys:
+    get:
+      tags: [Provider]
+      summary: List API keys for a provider
+      operationId: listAPIKeys
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+          description: Provider ID
+      responses:
+        '200':
+          description: API key list
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/APIKeyResponse'
+    post:
+      tags: [Provider]
+      summary: Create API key for a provider
+      operationId: createAPIKey
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+          description: Provider ID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateAPIKeyRequest'
+      responses:
+        '201':
+          description: API key created
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/APIKeyResponse'
+        '400':
+          description: Invalid request
+
+  /api/v1/providers/{id}/api-keys/stats:
+    get:
+      tags: [Provider]
+      summary: Get API key stats for a provider
+      operationId: getAPIKeyStats
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+          description: Provider ID
+      responses:
+        '200':
+          description: API key statistics
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/APIKeyStats'
+
+  /api/v1/providers/{id}/api-keys/{keyId}:
+    put:
+      tags: [Provider]
+      summary: Update an API key
+      operationId: updateAPIKey
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+          description: Provider ID
+        - name: keyId
+          in: path
+          required: true
+          schema:
+            type: integer
+          description: API Key ID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateAPIKeyRequest'
+      responses:
+        '200':
+          description: API key updated
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/APIKeyResponse'
+        '404':
+          description: API key not found
+    delete:
+      tags: [Provider]
+      summary: Delete an API key
+      operationId: deleteAPIKey
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+          description: Provider ID
+        - name: keyId
+          in: path
+          required: true
+          schema:
+            type: integer
+          description: API Key ID
+      responses:
+        '200':
+          description: API key deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Envelope'
+        '404':
+          description: API key not found
+
 components:
   securitySchemes:
     ApiKeyAuth:
@@ -580,4 +764,141 @@ components:
         load:
           type: number
         checked_at:
+          type: string
+
+    Provider:
+      type: object
+      properties:
+        id:
+          type: integer
+        code:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        status:
+          type: integer
+          description: "0=inactive, 1=active, 2=disabled"
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    APIKeyResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+        provider_id:
+          type: integer
+        api_key:
+          type: string
+          description: Masked API key (only last 4 chars visible)
+        base_url:
+          type: string
+        label:
+          type: string
+        priority:
+          type: integer
+        weight:
+          type: integer
+        enabled:
+          type: boolean
+        total_requests:
+          type: integer
+          format: int64
+        failed_requests:
+          type: integer
+          format: int64
+        rate_limit_rpm:
+          type: integer
+        rate_limit_rpd:
+          type: integer
+
+    CreateAPIKeyRequest:
+      type: object
+      required: [api_key]
+      properties:
+        api_key:
+          type: string
+        base_url:
+          type: string
+        label:
+          type: string
+        priority:
+          type: integer
+          minimum: 0
+        weight:
+          type: integer
+          minimum: 0
+        enabled:
+          type: boolean
+          default: true
+        rate_limit_rpm:
+          type: integer
+          minimum: 0
+        rate_limit_rpd:
+          type: integer
+          minimum: 0
+
+    UpdateAPIKeyRequest:
+      type: object
+      properties:
+        base_url:
+          type: string
+        label:
+          type: string
+        priority:
+          type: integer
+          minimum: 0
+        weight:
+          type: integer
+          minimum: 0
+        enabled:
+          type: boolean
+        rate_limit_rpm:
+          type: integer
+          minimum: 0
+        rate_limit_rpd:
+          type: integer
+          minimum: 0
+
+    APIKeyStats:
+      type: object
+      properties:
+        key_id:
+          type: integer
+        label:
+          type: string
+        base_url:
+          type: string
+        enabled:
+          type: boolean
+        is_healthy:
+          type: boolean
+        total_requests:
+          type: integer
+          format: int64
+        failed_requests:
+          type: integer
+          format: int64
+        success_rate:
+          type: number
+          format: double
+        current_rpm:
+          type: integer
+        current_rpd:
+          type: integer
+        last_used_at:
+          type: string
+          format: date-time
+          nullable: true
+        last_error_at:
+          type: string
+          format: date-time
+          nullable: true
+        last_error:
           type: string
