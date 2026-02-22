@@ -2809,3 +2809,65 @@ mux.HandleFunc("/api/v1/providers/{id}/api-keys", func(w http.ResponseWriter, r 
     }
 })
 ```
+
+---
+
+## §47 Handler 分层：Store 接口模式
+
+Handler 不应直接持有 `*gorm.DB`。通过定义 Store 接口解耦 handler 与数据库实现。
+
+```go
+// WRONG — handler 直接访问 DB
+type APIKeyHandler struct {
+    db *gorm.DB
+}
+
+// CORRECT — handler 依赖接口
+type APIKeyStore interface {
+    ListProviders(ctx context.Context) ([]LLMProvider, error)
+    CreateAPIKey(ctx context.Context, key *APIKey) error
+}
+
+type APIKeyHandler struct {
+    store  APIKeyStore
+    logger *zap.Logger
+}
+```
+
+实现放在独立文件（如 `apikey_store.go`），handler 文件不 import gorm。
+
+> **历史教训**：`api/handlers/apikey.go` 直接持有 `*gorm.DB` 并在 handler 中执行 SQL 查询。重构为 `APIKeyStore` 接口 + `GormAPIKeyStore` 实现后，handler 与 DB 解耦。
+
+---
+
+## §48 EventBus WaitGroup 竞态防护
+
+`sync.WaitGroup` 的 `Add` 和 `Wait` 并发调用会触发竞态。在事件总线等场景中，`Stop()` 必须先等待事件处理循环退出，再调用 `Wait()`。
+
+```go
+// WRONG — Stop() 和 processEvents() 的 Add/Wait 竞态
+func (b *EventBus) Stop() {
+    close(b.done)
+    b.handlerWg.Wait() // 可能与 processEvents 中的 Add(1) 竞态
+}
+
+// CORRECT — 先等循环退出，再 Wait
+type EventBus struct {
+    done     chan struct{}
+    loopDone chan struct{} // processEvents 退出时关闭
+    // ...
+}
+
+func (b *EventBus) processEvents() {
+    defer close(b.loopDone)
+    for { /* ... */ }
+}
+
+func (b *EventBus) Stop() {
+    close(b.done)
+    <-b.loopDone       // 确保不再有新的 Add 调用
+    b.handlerWg.Wait() // 安全等待
+}
+```
+
+> **历史教训**：`agent/event.go` 的 `SimpleEventBus.Stop()` 直接调用 `handlerWg.Wait()`，与 `processEvents` 中的 `handlerWg.Add` 竞态。修复：添加 `loopDone` channel，`Stop()` 先等 `<-b.loopDone`。

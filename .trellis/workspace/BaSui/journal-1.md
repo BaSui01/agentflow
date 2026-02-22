@@ -1224,3 +1224,50 @@ commit `4a9159a` 沉淀了 4 条新规范：§43 OTel SDK Init、§44 API Reques
 ### Next Steps
 
 - None - task complete
+
+
+## Session 17: 跨层一致性修复 — shutdown/middleware/resolver/验证复用
+
+**Date**: 2026-02-23
+**Task**: 跨层一致性修复 — shutdown/middleware/resolver/验证复用
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+## 跨层检查 + 并行修复
+
+对上一轮生产就绪度修复进行跨层检查（`/trellis:check-cross-layer`），发现 4 个问题并行修复：
+
+| 修复 | 文件 | 内容 |
+|------|------|------|
+| P1 | `cmd/agentflow/server.go` | Telemetry shutdown 移到 HTTP/Metrics server 关闭之后 |
+| P2 | `cmd/agentflow/middleware.go` | 统一 `writeMiddlewareError` 信封格式，删除旧 `writeJSONError` |
+| P3 | `cmd/agentflow/server.go` | AgentResolver 用 `singleflight` 防并发泄漏 + Shutdown teardown 缓存 agent |
+| P4 | `api/handlers/apikey.go` | 8 处内联 `< 0` 检查替换为 `ValidateNonNegative()` |
+
+**变更文件**:
+- `cmd/agentflow/server.go`
+- `cmd/agentflow/middleware.go`
+- `api/handlers/apikey.go`
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `235809d` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
