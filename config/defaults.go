@@ -31,6 +31,8 @@ func DefaultServerConfig() ServerConfig {
 		AllowQueryAPIKey: false,
 		RateLimitRPS:     100,
 		RateLimitBurst:   200,
+		TenantRateLimitRPS:   50,
+		TenantRateLimitBurst: 100,
 	}
 }
 
