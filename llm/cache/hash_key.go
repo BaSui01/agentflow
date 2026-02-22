@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 
 	llmpkg "github.com/BaSui01/agentflow/llm"
 )
@@ -19,7 +20,11 @@ func (s *HashKeyStrategy) Name() string {
 
 // GenerateKey 生成 Hash 缓存键
 func (s *HashKeyStrategy) GenerateKey(req *llmpkg.ChatRequest) string {
-	data, _ := json.Marshal(req)
+	data, err := json.Marshal(req)
+	if err != nil {
+		// fallback: 使用 fmt.Sprintf 生成确定性字符串避免 key 碰撞
+		data = []byte(fmt.Sprintf("%v", req))
+	}
 	hash := sha256.Sum256(data)
 	return "llm:cache:" + hex.EncodeToString(hash[:16]) // 使用前 16 字节
 }

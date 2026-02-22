@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/BaSui01/agentflow/internal/tlsutil"
@@ -29,6 +30,7 @@ type ClaudeProvider struct {
 	client        *http.Client
 	logger        *zap.Logger
 	rewriterChain *middleware.RewriterChain
+	keyIndex      uint64 // 多 Key 轮询索引
 }
 
 // NewClaudeProvider 创建 Claude Provider。
@@ -80,6 +82,16 @@ func (p *ClaudeProvider) HealthCheck(ctx context.Context) (*llm.HealthStatus, er
 
 func (p *ClaudeProvider) SupportsNativeFunctionCalling() bool { return true }
 
+// Endpoints 返回该提供者使用的所有 API 端点完整 URL。
+func (p *ClaudeProvider) Endpoints() llm.ProviderEndpoints {
+	base := strings.TrimRight(p.cfg.BaseURL, "/")
+	return llm.ProviderEndpoints{
+		Completion: base + "/v1/messages",
+		Models:     base + "/v1/models",
+		BaseURL:    p.cfg.BaseURL,
+	}
+}
+
 // ListModels 获取 Claude 支持的模型列表
 func (p *ClaudeProvider) ListModels(ctx context.Context) ([]llm.Model, error) {
 	endpoint := fmt.Sprintf("%s/v1/models", strings.TrimRight(p.cfg.BaseURL, "/"))
@@ -107,7 +119,12 @@ func (p *ClaudeProvider) ListModels(ctx context.Context) ([]llm.Model, error) {
 	}
 
 	var modelsResp struct {
-		Data []llm.Model `json:"data"`
+		Data []struct {
+			ID          string `json:"id"`
+			DisplayName string `json:"display_name"`
+			CreatedAt   string `json:"created_at"`
+			Type        string `json:"type"`
+		} `json:"data"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&modelsResp); err != nil {
 		return nil, &llm.Error{
@@ -119,7 +136,21 @@ func (p *ClaudeProvider) ListModels(ctx context.Context) ([]llm.Model, error) {
 		}
 	}
 
-	return modelsResp.Data, nil
+	models := make([]llm.Model, 0, len(modelsResp.Data))
+	for _, m := range modelsResp.Data {
+		var created int64
+		if t, err := time.Parse(time.RFC3339, m.CreatedAt); err == nil {
+			created = t.Unix()
+		}
+		models = append(models, llm.Model{
+			ID:      m.ID,
+			Object:  "model",
+			Created: created,
+			OwnedBy: "anthropic",
+		})
+	}
+
+	return models, nil
 }
 
 // Claude 的消息结构与 OpenAI 不同
@@ -201,11 +232,34 @@ type claudeErrorResp struct {
 }
 
 func (p *ClaudeProvider) buildHeaders(req *http.Request, apiKey string) {
-	// Claude 使用 x-api-key 认证
-	req.Header.Set("x-api-key", apiKey)
-	req.Header.Set("anthropic-version", "2023-06-01") // API 版本
+	// 认证方式：支持 x-api-key（默认）和 Bearer Token（代理网关兼容）
+	if p.cfg.AuthType == "bearer" {
+		req.Header.Set("Authorization", "Bearer "+apiKey)
+	} else {
+		req.Header.Set("x-api-key", apiKey)
+	}
+	// API 版本：可配置，默认 2023-06-01
+	version := p.cfg.AnthropicVersion
+	if version == "" {
+		version = "2023-06-01"
+	}
+	req.Header.Set("anthropic-version", version)
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
+}
+
+// resolveAPIKey 解析 API Key，支持上下文覆盖和多 Key 轮询
+func (p *ClaudeProvider) resolveAPIKey(ctx context.Context) string {
+	if c, ok := llm.CredentialOverrideFromContext(ctx); ok {
+		if strings.TrimSpace(c.APIKey) != "" {
+			return strings.TrimSpace(c.APIKey)
+		}
+	}
+	if len(p.cfg.APIKeys) > 0 {
+		idx := atomic.AddUint64(&p.keyIndex, 1) - 1
+		return p.cfg.APIKeys[idx%uint64(len(p.cfg.APIKeys))]
+	}
+	return p.cfg.APIKey
 }
 
 // convertToClaudeMessages 将统一格式转换为 Claude 格式
@@ -299,12 +353,7 @@ func (p *ClaudeProvider) Completion(ctx context.Context, req *llm.ChatRequest) (
 	}
 	req = rewrittenReq
 
-	apiKey := p.cfg.APIKey
-	if c, ok := llm.CredentialOverrideFromContext(ctx); ok {
-		if strings.TrimSpace(c.APIKey) != "" {
-			apiKey = strings.TrimSpace(c.APIKey)
-		}
-	}
+	apiKey := p.resolveAPIKey(ctx)
 	system, messages := convertToClaudeMessages(req.Messages)
 
 	body := claudeRequest{
@@ -376,12 +425,7 @@ func (p *ClaudeProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-ch
 	}
 	req = rewrittenReq
 
-	apiKey := p.cfg.APIKey
-	if c, ok := llm.CredentialOverrideFromContext(ctx); ok {
-		if strings.TrimSpace(c.APIKey) != "" {
-			apiKey = strings.TrimSpace(c.APIKey)
-		}
-	}
+	apiKey := p.resolveAPIKey(ctx)
 	system, messages := convertToClaudeMessages(req.Messages)
 
 	body := claudeRequest{
@@ -397,19 +441,38 @@ func (p *ClaudeProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-ch
 
 	payload, err := json.Marshal(body)
 	if err != nil {
-		return nil, fmt.Errorf("failed to marshal request: %w", err)
+		return nil, &llm.Error{
+			Code:       llm.ErrInvalidRequest,
+			Message:    fmt.Sprintf("failed to marshal request: %v", err),
+			HTTPStatus: http.StatusBadRequest,
+			Provider:   p.Name(),
+			Cause:      err,
+		}
 	}
 	endpoint := fmt.Sprintf("%s/v1/messages", strings.TrimRight(p.cfg.BaseURL, "/"))
 
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(payload))
 	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
+		return nil, &llm.Error{
+			Code:       llm.ErrInternalError,
+			Message:    fmt.Sprintf("failed to create request: %v", err),
+			HTTPStatus: http.StatusInternalServerError,
+			Provider:   p.Name(),
+			Cause:      err,
+		}
 	}
 	p.buildHeaders(httpReq, apiKey)
 
 	resp, err := p.client.Do(httpReq)
 	if err != nil {
-		return nil, err
+		return nil, &llm.Error{
+			Code:       llm.ErrUpstreamError,
+			Message:    err.Error(),
+			HTTPStatus: http.StatusBadGateway,
+			Retryable:  true,
+			Provider:   p.Name(),
+			Cause:      err,
+		}
 	}
 	if resp.StatusCode >= 400 {
 		defer resp.Body.Close()

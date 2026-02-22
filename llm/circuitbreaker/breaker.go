@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -154,7 +155,8 @@ func (b *breaker) CallWithResult(ctx context.Context, fn func() (any, error)) (a
 
 	case res := <-resultCh:
 		// 调用完成
-		success := res.err == nil
+		// 客户端错误（如无效请求）不应计入熔断失败
+		success := res.err == nil || isClientError(res.err)
 		b.afterCall(success)
 
 		if !success {
@@ -168,6 +170,24 @@ func (b *breaker) CallWithResult(ctx context.Context, fn func() (any, error)) (a
 type callResult struct {
 	result any
 	err    error
+}
+
+// isClientError 判断错误是否为客户端错误（不应计入熔断失败）。
+func isClientError(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := err.Error()
+	for _, code := range []string{
+		"INVALID_REQUEST", "AUTHENTICATION", "UNAUTHORIZED",
+		"FORBIDDEN", "QUOTA_EXCEEDED", "CONTENT_FILTERED",
+		"TOOL_VALIDATION", "CONTEXT_TOO_LONG",
+	} {
+		if strings.Contains(msg, code) {
+			return true
+		}
+	}
+	return false
 }
 
 // beforeCall 调用前检查

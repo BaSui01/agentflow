@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/BaSui01/agentflow/internal/tlsutil"
@@ -29,6 +30,7 @@ type GeminiProvider struct {
 	client        *http.Client
 	logger        *zap.Logger
 	rewriterChain *middleware.RewriterChain
+	keyIndex      uint64 // 多 Key 轮询索引
 }
 
 // NewGeminiProvider 创建 Gemini Provider
@@ -38,9 +40,18 @@ func NewGeminiProvider(cfg providers.GeminiConfig, logger *zap.Logger) *GeminiPr
 		timeout = 60 * time.Second
 	}
 
+	// Vertex AI 模式：设置默认 Region
+	if cfg.ProjectID != "" && cfg.Region == "" {
+		cfg.Region = "us-central1"
+	}
+
 	// 设置默认 BaseURL
 	if cfg.BaseURL == "" {
-		cfg.BaseURL = "https://generativelanguage.googleapis.com"
+		if cfg.ProjectID != "" {
+			cfg.BaseURL = fmt.Sprintf("https://%s-aiplatform.googleapis.com", cfg.Region)
+		} else {
+			cfg.BaseURL = "https://generativelanguage.googleapis.com"
+		}
 	}
 
 	return &GeminiProvider{
@@ -57,7 +68,7 @@ func (p *GeminiProvider) Name() string { return "gemini" }
 
 func (p *GeminiProvider) HealthCheck(ctx context.Context) (*llm.HealthStatus, error) {
 	start := time.Now()
-	endpoint := fmt.Sprintf("%s/v1beta/models", strings.TrimRight(p.cfg.BaseURL, "/"))
+	endpoint := p.modelsEndpoint()
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
@@ -82,7 +93,7 @@ func (p *GeminiProvider) SupportsNativeFunctionCalling() bool { return true }
 
 // ListModels 获取 Gemini 支持的模型列表
 func (p *GeminiProvider) ListModels(ctx context.Context) ([]llm.Model, error) {
-	endpoint := fmt.Sprintf("%s/v1beta/models", strings.TrimRight(p.cfg.BaseURL, "/"))
+	endpoint := p.modelsEndpoint()
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
@@ -133,14 +144,42 @@ func (p *GeminiProvider) ListModels(ctx context.Context) ([]llm.Model, error) {
 	for _, m := range modelsResp.Models {
 		// 提取模型 ID（去掉 "models/" 前缀）
 		modelID := strings.TrimPrefix(m.Name, "models/")
-		models = append(models, llm.Model{
-			ID:      modelID,
-			Object:  "model",
-			OwnedBy: "google",
-		})
+		model := llm.Model{
+			ID:              modelID,
+			Object:          "model",
+			OwnedBy:         "google",
+			MaxInputTokens:  m.InputTokenLimit,
+			MaxOutputTokens: m.OutputTokenLimit,
+			Capabilities:    convertGeminiCapabilities(m.SupportedMethods),
+		}
+		models = append(models, model)
 	}
 
 	return models, nil
+}
+
+// convertGeminiCapabilities 将 Gemini 的 supportedGenerationMethods 转换为统一能力标识
+func convertGeminiCapabilities(methods []string) []string {
+	if len(methods) == 0 {
+		return nil
+	}
+	capMap := map[string]string{
+		"generateContent":  "chat",
+		"embedContent":     "embedding",
+		"countTokens":      "token_counting",
+		"createTunedModel": "fine_tuning",
+		"generateAnswer":   "question_answering",
+	}
+	var caps []string
+	for _, m := range methods {
+		if cap, ok := capMap[m]; ok {
+			caps = append(caps, cap)
+		}
+	}
+	if len(caps) == 0 {
+		return nil
+	}
+	return caps
 }
 
 // Gemini 消息结构
@@ -224,10 +263,73 @@ type geminiErrorResp struct {
 	} `json:"error"`
 }
 
+func (p *GeminiProvider) isVertexAI() bool {
+	return p.cfg.ProjectID != ""
+}
+
+func (p *GeminiProvider) completionEndpoint(model string) string {
+	base := strings.TrimRight(p.cfg.BaseURL, "/")
+	if p.isVertexAI() {
+		return fmt.Sprintf("%s/v1/projects/%s/locations/%s/publishers/google/models/%s:generateContent",
+			base, p.cfg.ProjectID, p.cfg.Region, model)
+	}
+	return fmt.Sprintf("%s/v1beta/models/%s:generateContent", base, model)
+}
+
+func (p *GeminiProvider) streamEndpoint(model string) string {
+	base := strings.TrimRight(p.cfg.BaseURL, "/")
+	if p.isVertexAI() {
+		return fmt.Sprintf("%s/v1/projects/%s/locations/%s/publishers/google/models/%s:streamGenerateContent",
+			base, p.cfg.ProjectID, p.cfg.Region, model)
+	}
+	return fmt.Sprintf("%s/v1beta/models/%s:streamGenerateContent", base, model)
+}
+
+func (p *GeminiProvider) modelsEndpoint() string {
+	base := strings.TrimRight(p.cfg.BaseURL, "/")
+	if p.isVertexAI() {
+		return fmt.Sprintf("%s/v1/projects/%s/locations/%s/publishers/google/models",
+			base, p.cfg.ProjectID, p.cfg.Region)
+	}
+	return fmt.Sprintf("%s/v1beta/models", base)
+}
+
+// Endpoints 返回该提供者使用的所有 API 端点完整 URL。
+func (p *GeminiProvider) Endpoints() llm.ProviderEndpoints {
+	// 使用默认模型来展示端点格式
+	model := p.cfg.Model
+	if model == "" {
+		model = "gemini-3-pro"
+	}
+	return llm.ProviderEndpoints{
+		Completion: p.completionEndpoint(model),
+		Stream:     p.streamEndpoint(model),
+		Models:     p.modelsEndpoint(),
+		BaseURL:    p.cfg.BaseURL,
+	}
+}
+
 func (p *GeminiProvider) buildHeaders(req *http.Request, apiKey string) {
-	// Gemini 使用 x-goog-api-key 认证
-	req.Header.Set("x-goog-api-key", apiKey)
+	if p.cfg.AuthType == "oauth" {
+		req.Header.Set("Authorization", "Bearer "+apiKey)
+	} else {
+		req.Header.Set("x-goog-api-key", apiKey)
+	}
 	req.Header.Set("Content-Type", "application/json")
+}
+
+// resolveAPIKey 解析 API Key，支持上下文覆盖和多 Key 轮询
+func (p *GeminiProvider) resolveAPIKey(ctx context.Context) string {
+	if c, ok := llm.CredentialOverrideFromContext(ctx); ok {
+		if strings.TrimSpace(c.APIKey) != "" {
+			return strings.TrimSpace(c.APIKey)
+		}
+	}
+	if len(p.cfg.APIKeys) > 0 {
+		idx := atomic.AddUint64(&p.keyIndex, 1) - 1
+		return p.cfg.APIKeys[idx%uint64(len(p.cfg.APIKeys))]
+	}
+	return p.cfg.APIKey
 }
 
 // convertToGeminiContents 将统一格式转换为 Gemini 格式
@@ -346,12 +448,7 @@ func (p *GeminiProvider) Completion(ctx context.Context, req *llm.ChatRequest) (
 	}
 	req = rewrittenReq
 
-	apiKey := p.cfg.APIKey
-	if c, ok := llm.CredentialOverrideFromContext(ctx); ok {
-		if strings.TrimSpace(c.APIKey) != "" {
-			apiKey = strings.TrimSpace(c.APIKey)
-		}
-	}
+	apiKey := p.resolveAPIKey(ctx)
 
 	systemInstruction, contents := convertToGeminiContents(req.Messages)
 
@@ -376,7 +473,7 @@ func (p *GeminiProvider) Completion(ctx context.Context, req *llm.ChatRequest) (
 		return nil, fmt.Errorf("failed to marshal request: %w", err)
 	}
 	model := providers.ChooseModel(req, p.cfg.Model, "gemini-3-pro")
-	endpoint := fmt.Sprintf("%s/v1beta/models/%s:generateContent", strings.TrimRight(p.cfg.BaseURL, "/"), model)
+	endpoint := p.completionEndpoint(model)
 
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(payload))
 	if err != nil {
@@ -428,12 +525,7 @@ func (p *GeminiProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-ch
 	}
 	req = rewrittenReq
 
-	apiKey := p.cfg.APIKey
-	if c, ok := llm.CredentialOverrideFromContext(ctx); ok {
-		if strings.TrimSpace(c.APIKey) != "" {
-			apiKey = strings.TrimSpace(c.APIKey)
-		}
-	}
+	apiKey := p.resolveAPIKey(ctx)
 
 	systemInstruction, contents := convertToGeminiContents(req.Messages)
 
@@ -453,20 +545,39 @@ func (p *GeminiProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-ch
 
 	payload, err := json.Marshal(body)
 	if err != nil {
-		return nil, fmt.Errorf("failed to marshal request: %w", err)
+		return nil, &llm.Error{
+			Code:       llm.ErrInvalidRequest,
+			Message:    fmt.Sprintf("failed to marshal request: %v", err),
+			HTTPStatus: http.StatusBadRequest,
+			Provider:   p.Name(),
+			Cause:      err,
+		}
 	}
 	model := providers.ChooseModel(req, p.cfg.Model, "gemini-3-pro")
-	endpoint := fmt.Sprintf("%s/v1beta/models/%s:streamGenerateContent", strings.TrimRight(p.cfg.BaseURL, "/"), model)
+	endpoint := p.streamEndpoint(model)
 
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(payload))
 	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
+		return nil, &llm.Error{
+			Code:       llm.ErrInternalError,
+			Message:    fmt.Sprintf("failed to create request: %v", err),
+			HTTPStatus: http.StatusInternalServerError,
+			Provider:   p.Name(),
+			Cause:      err,
+		}
 	}
 	p.buildHeaders(httpReq, apiKey)
 
 	resp, err := p.client.Do(httpReq)
 	if err != nil {
-		return nil, err
+		return nil, &llm.Error{
+			Code:       llm.ErrUpstreamError,
+			Message:    err.Error(),
+			HTTPStatus: http.StatusBadGateway,
+			Retryable:  true,
+			Provider:   p.Name(),
+			Cause:      err,
+		}
 	}
 	if resp.StatusCode >= 400 {
 		defer resp.Body.Close()
