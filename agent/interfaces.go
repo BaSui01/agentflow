@@ -17,6 +17,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/BaSui01/agentflow/agent/memory"
 	"github.com/BaSui01/agentflow/agent/skills"
 )
 
@@ -69,7 +70,7 @@ type EnhancedMemoryRunner interface {
 	LoadWorking(ctx context.Context, agentID string) ([]any, error)
 	LoadShortTerm(ctx context.Context, agentID string, limit int) ([]any, error)
 	SaveShortTerm(ctx context.Context, agentID, content string, metadata map[string]any) error
-	RecordEpisode(ctx context.Context, event any) error
+	RecordEpisode(ctx context.Context, event *memory.EpisodicEvent) error
 }
 
 // ObservabilityRunner provides metrics, tracing, and logging.
