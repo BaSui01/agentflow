@@ -821,3 +821,97 @@ README.md（中文）和 README_EN.md（英文）全量更新，使文档覆盖�
 ### Next Steps
 
 - None - task complete
+
+
+## Session 11: Session 12-v2: 10-Agent 并行分析新发现 Bug 全量修复 + 规范沉淀
+
+**Date**: 2026-02-22
+**Task**: Session 12-v2: 10-Agent 并行分析新发现 Bug 全量修复 + 规范沉淀
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+
+## 概述
+
+延续 Session 12 的 10-Agent 并行分析结果，本次会话完成了所有新发现 Bug 的修复、文档修复、测试修复，以及代码规范沉淀。
+
+## 工作内容
+
+### 1. 9 个并行修复 Agent（worktree 隔离）
+
+| Agent | 修复项 | 涉及文件 |
+|-------|--------|----------|
+| fix-cache-eviction | K2/N1 缓存驱逐 | `rag/multi_hop.go`, `llm/router/semantic.go` |
+| fix-abrouter | N2/N3/N4 ABRouter 竞态+无界缓存 | `llm/router/ab_router.go` |
+| fix-streaming | N5/N6/N8 streaming 并发 | `agent/streaming/bidirectional.go`, `llm/streaming/backpressure.go` |
+| fix-collaboration | H1/N7 MessageHub 竞态 | `agent/collaboration/multi_agent.go` |
+| fix-metrics | K3 Prometheus 标签基数 | `internal/metrics/collector.go` |
+| fix-docs | 50+ 文档代码片段 | 12 个 .md 文件 |
+| fix-tests | MockProvider + E2E | `testutil/mocks/provider.go`, `tests/e2e/` |
+| fix-examples | examples 06/09 | `examples/06_*/main.go`, `examples/09_*/main.go` |
+| fix-api-consistency | API 信封统一 | `config/api.go`, `cmd/agentflow/server.go` |
+
+### 2. 合并与验证
+
+- 9 个 worktree 变更合并到主仓库
+- 修复合并后 NewServer 签名不匹配问题
+- `go build ./...` ✅, `go vet ./...` ✅, `go test -race` 关键包 ✅
+
+### 3. 规范沉淀（/trellis:update-spec）
+
+`quality-guidelines.md` 新增 §35-§39：
+- §35: In-Memory Cache 必须有驱逐机制（maxSize + lazy TTL）
+- §36: Prometheus 标签必须有限基数（禁止动态 ID）
+- §37: broadcast/fan-out 必须用 recover（防 send-on-closed-channel）
+- §38: API 响应信封统一（canonical Response 结构）
+- §39: 文档代码片段必须能编译（嵌套结构体初始化）
+
+`guides/index.md` 新增 5 组 thinking triggers 指向 §35-§39。
+
+### 4. 分批提交
+
+8 批 commit 通过 `--no-ff` 合并到 master，46 文件 +2640/-958 行。
+
+## 统计
+
+- **修复 Bug 数**: 12 个（K2/K3/N1-N8/H1 + API 统一 + 文档）
+- **变更文件数**: 46
+- **代码行变更**: +2,640 / -958
+- **新增规范章节**: 5 个（§35-§39）
+- **新增 thinking triggers**: 5 组
+
+## 已知遗留
+
+- `config/hotreload_test.go` TestHotReload_Integration 预存 race（FileWatcher goroutine 竞态，非本次引入）
+- `agent/protocol/mcp/server.go` subscription channel close 保护（§24 pending 项）
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `659637a` | (see git log) |
+| `4a28187` | (see git log) |
+| `bc8fc56` | (see git log) |
+| `e2d17ac` | (see git log) |
+| `7f8fc10` | (see git log) |
+| `3553e34` | (see git log) |
+| `9041c54` | (see git log) |
+| `d95f35a` | (see git log) |
+| `f36d04d` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
