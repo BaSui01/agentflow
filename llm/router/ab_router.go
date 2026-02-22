@@ -30,6 +30,9 @@ type ABVariant struct {
 	Metadata map[string]string
 }
 
+// qualityWindowSize 是 QualityScores 滑动窗口的默认大小（N4 修复：防止无限增长）
+const qualityWindowSize = 1000
+
 // ABMetrics收集了每个变量的请求量度.
 type ABMetrics struct {
 	VariantName    string
@@ -58,6 +61,10 @@ func (m *ABMetrics) RecordRequest(latencyMs int64, cost float64, success bool, q
 	}
 	if qualityScore > 0 {
 		m.QualityScores = append(m.QualityScores, qualityScore)
+		// N4 修复：滑动窗口，保留最近 qualityWindowSize 个分数，防止无限增长
+		if len(m.QualityScores) > qualityWindowSize {
+			m.QualityScores = m.QualityScores[len(m.QualityScores)-qualityWindowSize:]
+		}
 	}
 }
 
@@ -111,14 +118,18 @@ type ABTestConfig struct {
 	EndTime time.Time
 }
 
+// defaultStickyMaxSize 是 stickyCache 的默认最大容量（N3 修复：防止内存泄漏）
+const defaultStickyMaxSize = 10000
+
 // ABRouter是一个A/B测试路由器,用于执行lmpkg. 供养者.
 type ABRouter struct {
 	config  ABTestConfig
 	metrics map[string]*ABMetrics // variantName -> metrics
 
 	// 粘接路由缓存.
-	stickyCache   map[string]string // stickyKey -> variantName
-	stickyCacheMu sync.RWMutex
+	stickyCache    map[string]string // stickyKey -> variantName
+	stickyCacheMu  sync.RWMutex
+	stickyMaxSize  int // N3 修复：stickyCache 最大容量，超过时清空
 
 	// 动态重量调整.
 	dynamicWeights map[string]int // variantName -> weight
@@ -158,6 +169,7 @@ func NewABRouter(config ABTestConfig, logger *zap.Logger) (*ABRouter, error) {
 		config:         config,
 		metrics:        metrics,
 		stickyCache:    make(map[string]string),
+		stickyMaxSize:  defaultStickyMaxSize,
 		dynamicWeights: dynamicWeights,
 		logger:         logger.With(zap.String("component", "ab_router")),
 		rng:            rand.New(rand.NewSource(time.Now().UnixNano())),
@@ -191,6 +203,10 @@ func (r *ABRouter) selectVariant(ctx context.Context, req *llmpkg.ChatRequest) (
 			// 第一次请求此键 - 使用决定散列 。
 			variant := r.hashBasedSelect(stickyKey)
 			r.stickyCacheMu.Lock()
+			// N3 修复：超过最大容量时清空缓存，防止内存泄漏
+			if len(r.stickyCache) >= r.stickyMaxSize {
+				r.stickyCache = make(map[string]string)
+			}
 			r.stickyCache[stickyKey] = variant.Name
 			r.stickyCacheMu.Unlock()
 			return variant, nil
@@ -398,21 +414,43 @@ func (r *ABRouter) UpdateWeights(weights map[string]int) error {
 	return nil
 }
 
-// GetMetrics 返回每个变体的指标.
+// GetMetrics 返回每个变体的指标（深拷贝，避免数据竞争 — N2 修复）.
 func (r *ABRouter) GetMetrics() map[string]*ABMetrics {
-	return r.metrics
+	result := make(map[string]*ABMetrics, len(r.metrics))
+	for name, m := range r.metrics {
+		m.mu.Lock()
+		scores := make([]float64, len(m.QualityScores))
+		copy(scores, m.QualityScores)
+		copied := &ABMetrics{
+			VariantName:    m.VariantName,
+			TotalRequests:  atomic.LoadInt64(&m.TotalRequests),
+			SuccessCount:   m.SuccessCount,
+			FailureCount:   m.FailureCount,
+			TotalLatencyMs: atomic.LoadInt64(&m.TotalLatencyMs),
+			TotalCost:      m.TotalCost,
+			QualityScores:  scores,
+		}
+		m.mu.Unlock()
+		result[name] = copied
+	}
+	return result
 }
 
 // GetReport 返回所有变体的摘要报告 。
 func (r *ABRouter) GetReport() map[string]map[string]any {
 	report := make(map[string]map[string]any)
 	for name, m := range r.metrics {
+		// N2 修复：读取 TotalCost 时加锁，与 RecordRequest 写入保持一致
+		m.mu.Lock()
+		totalCost := m.TotalCost
+		m.mu.Unlock()
+
 		report[name] = map[string]any{
 			"total_requests":    atomic.LoadInt64(&m.TotalRequests),
 			"success_rate":      m.GetSuccessRate(),
 			"avg_latency_ms":    m.GetAvgLatencyMs(),
 			"avg_quality_score": m.GetAvgQualityScore(),
-			"total_cost":        m.TotalCost,
+			"total_cost":        totalCost,
 		}
 	}
 	return report
