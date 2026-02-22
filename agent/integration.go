@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/BaSui01/agentflow/agent/skills"
+	"github.com/BaSui01/agentflow/agent/memory"
 	"go.uber.org/zap"
 )
 
@@ -86,38 +86,38 @@ func (b *BaseAgent) EnablePromptEnhancer(enhancer any) {
 }
 
 // EnableSkills 启用 Skills 系统
-func (b *BaseAgent) EnableSkills(manager any) {
+func (b *BaseAgent) EnableSkills(manager SkillDiscoverer) {
 	b.skillManager = manager
 	b.logger.Info("skills system enabled")
 }
 
 // EnableMCP 启用 MCP 集成
-func (b *BaseAgent) EnableMCP(server any) {
+func (b *BaseAgent) EnableMCP(server MCPServerRunner) {
 	b.mcpServer = server
 	b.logger.Info("MCP integration enabled")
 }
 
 // EnableLSP 启用 LSP 集成。
-func (b *BaseAgent) EnableLSP(client any) {
+func (b *BaseAgent) EnableLSP(client LSPClientRunner) {
 	b.lspClient = client
 	b.logger.Info("LSP integration enabled")
 }
 
 // EnableLSPWithLifecycle 启用 LSP，并注册可选生命周期对象（例如 *ManagedLSP）。
-func (b *BaseAgent) EnableLSPWithLifecycle(client any, lifecycle any) {
+func (b *BaseAgent) EnableLSPWithLifecycle(client LSPClientRunner, lifecycle LSPLifecycleOwner) {
 	b.lspClient = client
 	b.lspLifecycle = lifecycle
 	b.logger.Info("LSP integration enabled with lifecycle")
 }
 
 // EnableEnhancedMemory 启用增强记忆系统
-func (b *BaseAgent) EnableEnhancedMemory(memorySystem any) {
+func (b *BaseAgent) EnableEnhancedMemory(memorySystem EnhancedMemoryRunner) {
 	b.enhancedMemory = memorySystem
 	b.logger.Info("enhanced memory enabled")
 }
 
 // EnableObservability 启用可观测性系统
-func (b *BaseAgent) EnableObservability(obsSystem any) {
+func (b *BaseAgent) EnableObservability(obsSystem ObservabilityRunner) {
 	b.observabilitySystem = obsSystem
 	b.logger.Info("observability enabled")
 }
@@ -141,12 +141,7 @@ func (b *BaseAgent) ExecuteEnhanced(ctx context.Context, input *Input, options E
 	if options.UseObservability && b.observabilitySystem != nil {
 		traceID = input.TraceID
 		b.logger.Debug("trace started", zap.String("trace_id", traceID))
-		// 类型断言并调用
-		if obs, ok := b.observabilitySystem.(interface {
-			StartTrace(traceID, agentID string)
-		}); ok {
-			obs.StartTrace(traceID, b.ID())
-		}
+		b.observabilitySystem.StartTrace(traceID, b.ID())
 	}
 
 	// 2. Skills：发现并加载技能
@@ -158,37 +153,17 @@ func (b *BaseAgent) ExecuteEnhanced(ctx context.Context, input *Input, options E
 		}
 		b.logger.Debug("discovering skills", zap.String("query", query))
 
-		// 优先使用内置技能管理器签名.
-		if sm, ok := b.skillManager.(interface {
-			DiscoverSkills(ctx context.Context, task string) ([]*skills.Skill, error)
-		}); ok {
-			found, err := sm.DiscoverSkills(ctx, query)
-			if err != nil {
-				b.logger.Warn("skill discovery failed", zap.Error(err))
-			} else {
-				for _, s := range found {
-					if s == nil {
-						continue
-					}
-					skillInstructions = append(skillInstructions, s.GetInstructions())
+		found, err := b.skillManager.DiscoverSkills(ctx, query)
+		if err != nil {
+			b.logger.Warn("skill discovery failed", zap.Error(err))
+		} else {
+			for _, s := range found {
+				if s == nil {
+					continue
 				}
-				b.logger.Info("skills discovered", zap.Int("count", len(skillInstructions)))
+				skillInstructions = append(skillInstructions, s.GetInstructions())
 			}
-		} else if sm, ok := b.skillManager.(interface {
-			DiscoverSkills(ctx context.Context, task string) (any, error)
-		}); ok {
-			// 后向相容倒计时自定义执行.
-			raw, err := sm.DiscoverSkills(ctx, query)
-			if err != nil {
-				b.logger.Warn("skill discovery failed", zap.Error(err))
-			} else if list, ok := raw.([]any); ok {
-				for _, s := range list {
-					if skill, ok := s.(interface{ GetInstructions() string }); ok {
-						skillInstructions = append(skillInstructions, skill.GetInstructions())
-					}
-				}
-				b.logger.Info("skills discovered", zap.Int("count", len(skillInstructions)))
-			}
+			b.logger.Info("skills discovered", zap.Int("count", len(skillInstructions)))
 		}
 	}
 
@@ -202,42 +177,34 @@ func (b *BaseAgent) ExecuteEnhanced(ctx context.Context, input *Input, options E
 	if options.UseEnhancedMemory && b.enhancedMemory != nil {
 		if options.LoadWorkingMemory {
 			b.logger.Debug("loading working memory")
-			if mem, ok := b.enhancedMemory.(interface {
-				LoadWorking(ctx context.Context, agentID string) ([]any, error)
-			}); ok {
-				working, err := mem.LoadWorking(ctx, b.ID())
-				if err != nil {
-					b.logger.Warn("failed to load working memory", zap.Error(err))
-				} else {
-					for _, w := range working {
-						if wm, ok := w.(map[string]any); ok {
-							if content, ok := wm["content"].(string); ok {
-								memoryContext = append(memoryContext, content)
-							}
+			working, err := b.enhancedMemory.LoadWorking(ctx, b.ID())
+			if err != nil {
+				b.logger.Warn("failed to load working memory", zap.Error(err))
+			} else {
+				for _, w := range working {
+					if wm, ok := w.(map[string]any); ok {
+						if content, ok := wm["content"].(string); ok {
+							memoryContext = append(memoryContext, content)
 						}
 					}
-					b.logger.Info("working memory loaded", zap.Int("count", len(working)))
 				}
+				b.logger.Info("working memory loaded", zap.Int("count", len(working)))
 			}
 		}
 		if options.LoadShortTermMemory {
 			b.logger.Debug("loading short-term memory")
-			if mem, ok := b.enhancedMemory.(interface {
-				LoadShortTerm(ctx context.Context, agentID string, limit int) ([]any, error)
-			}); ok {
-				shortTerm, err := mem.LoadShortTerm(ctx, b.ID(), 5)
-				if err != nil {
-					b.logger.Warn("failed to load short-term memory", zap.Error(err))
-				} else {
-					for _, st := range shortTerm {
-						if stm, ok := st.(map[string]any); ok {
-							if content, ok := stm["content"].(string); ok {
-								memoryContext = append(memoryContext, content)
-							}
+			shortTerm, err := b.enhancedMemory.LoadShortTerm(ctx, b.ID(), 5)
+			if err != nil {
+				b.logger.Warn("failed to load short-term memory", zap.Error(err))
+			} else {
+				for _, st := range shortTerm {
+					if stm, ok := st.(map[string]any); ok {
+						if content, ok := stm["content"].(string); ok {
+							memoryContext = append(memoryContext, content)
 						}
 					}
-					b.logger.Info("short-term memory loaded", zap.Int("count", len(shortTerm)))
 				}
+				b.logger.Info("short-term memory loaded", zap.Int("count", len(shortTerm)))
 			}
 		}
 	}
@@ -316,11 +283,7 @@ func (b *BaseAgent) ExecuteEnhanced(ctx context.Context, input *Input, options E
 		// 可观测性：记录错误
 		if options.UseObservability && b.observabilitySystem != nil {
 			b.logger.Error("execution failed", zap.Error(err))
-			if obs, ok := b.observabilitySystem.(interface {
-				EndTrace(traceID, status string, err error)
-			}); ok {
-				obs.EndTrace(traceID, "failed", err)
-			}
+			b.observabilitySystem.EndTrace(traceID, "failed", err)
 		}
 		return nil, err
 	}
@@ -330,41 +293,32 @@ func (b *BaseAgent) ExecuteEnhanced(ctx context.Context, input *Input, options E
 		b.logger.Debug("saving to enhanced memory")
 
 		// 保存短期记忆
-		if mem, ok := b.enhancedMemory.(interface {
-			SaveShortTerm(ctx context.Context, agentID, content string, metadata map[string]any) error
-		}); ok {
-			metadata := map[string]any{
-				"trace_id": input.TraceID,
-				"tokens":   output.TokensUsed,
-				"cost":     output.Cost,
-			}
-			if err := mem.SaveShortTerm(ctx, b.ID(), output.Content, metadata); err != nil {
-				b.logger.Warn("failed to save short-term memory", zap.Error(err))
-			}
+		metadata := map[string]any{
+			"trace_id": input.TraceID,
+			"tokens":   output.TokensUsed,
+			"cost":     output.Cost,
+		}
+		if err := b.enhancedMemory.SaveShortTerm(ctx, b.ID(), output.Content, metadata); err != nil {
+			b.logger.Warn("failed to save short-term memory", zap.Error(err))
 		}
 
 		// 记录情节
-		if mem, ok := b.enhancedMemory.(interface {
-			RecordEpisode(ctx context.Context, event any) error
-		}); ok {
-			// 创建情节事件（需要导入 memory 包的类型）
-			event := map[string]any{
-				"id":        fmt.Sprintf("%s-%d", b.ID(), time.Now().UnixNano()),
-				"agent_id":  b.ID(),
-				"type":      "task_execution",
-				"content":   output.Content,
-				"timestamp": time.Now(),
-				"duration":  output.Duration,
-				"context": map[string]any{
-					"trace_id":   input.TraceID,
-					"tokens":     output.TokensUsed,
-					"cost":       output.Cost,
-					"reflection": options.UseReflection,
-				},
-			}
-			if err := mem.RecordEpisode(ctx, event); err != nil {
-				b.logger.Warn("failed to record episode", zap.Error(err))
-			}
+		event := &memory.EpisodicEvent{
+			ID:        fmt.Sprintf("%s-%d", b.ID(), time.Now().UnixNano()),
+			AgentID:   b.ID(),
+			Type:      "task_execution",
+			Content:   output.Content,
+			Timestamp: time.Now(),
+			Duration:  output.Duration,
+			Context: map[string]any{
+				"trace_id":   input.TraceID,
+				"tokens":     output.TokensUsed,
+				"cost":       output.Cost,
+				"reflection": options.UseReflection,
+			},
+		}
+		if err := b.enhancedMemory.RecordEpisode(ctx, event); err != nil {
+			b.logger.Warn("failed to record episode", zap.Error(err))
 		}
 	}
 
@@ -373,18 +327,10 @@ func (b *BaseAgent) ExecuteEnhanced(ctx context.Context, input *Input, options E
 		duration := time.Since(startTime)
 		if options.RecordMetrics {
 			b.logger.Debug("recording metrics")
-			if obs, ok := b.observabilitySystem.(interface {
-				RecordTask(agentID string, success bool, duration time.Duration, tokens int, cost, quality float64)
-			}); ok {
-				obs.RecordTask(b.ID(), true, duration, output.TokensUsed, output.Cost, 0.8)
-			}
+			b.observabilitySystem.RecordTask(b.ID(), true, duration, output.TokensUsed, output.Cost, 0.8)
 		}
 		if options.RecordTrace {
-			if obs, ok := b.observabilitySystem.(interface {
-				EndTrace(traceID, status string, err error)
-			}); ok {
-				obs.EndTrace(traceID, "completed", nil)
-			}
+			b.observabilitySystem.EndTrace(traceID, "completed", nil)
 		}
 	}
 
