@@ -28,11 +28,11 @@ type AgentBuilder struct {
 	reflectionConfig     *ReflectionExecutorConfig
 	toolSelectionConfig  *ToolSelectionConfig
 	promptEnhancerConfig *PromptEnhancerConfig
-	skillsConfig         any // 避免循环依赖
-	mcpConfig            any
-	lspConfig            any
-	enhancedMemoryConfig any
-	observabilityConfig  any
+	skillsConfig         any // SkillsOptions | string | skills.SkillManagerConfig | skills.SkillManager — type-switched in enableSkills
+	mcpConfig            any // MCPServerOptions | string | *mcp.MCPServer — type-switched in enableMCP
+	lspConfig            any // LSPOptions | string | *ManagedLSP | *lsp.LSPClient — type-switched in enableLSP
+	enhancedMemoryConfig any // memory.EnhancedMemoryConfig | *memory.EnhancedMemorySystem — type-switched in enableEnhancedMemory
+	observabilityConfig  any // ObservabilityRunner — passed through to EnableObservability
 
 	errors []error
 }

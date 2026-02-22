@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/BaSui01/agentflow/api"
 	"github.com/BaSui01/agentflow/types"
 	"go.uber.org/zap"
 )
@@ -14,23 +15,13 @@ import (
 // 📦 通用响应结构
 // =============================================================================
 
-// Response 统一 API 响应结构
-type Response struct {
-	Success   bool        `json:"success"`
-	Data      any `json:"data,omitempty"`
-	Error     *ErrorInfo  `json:"error,omitempty"`
-	Timestamp time.Time   `json:"timestamp"`
-	RequestID string      `json:"request_id,omitempty"`
-}
+// Response is a type alias for api.Response — the canonical API envelope.
+// The canonical definition lives in api/types.go (§38).
+type Response = api.Response
 
-// ErrorInfo 错误信息结构
-type ErrorInfo struct {
-	Code       string `json:"code"`
-	Message    string `json:"message"`
-	Details    string `json:"details,omitempty"`
-	Retryable  bool   `json:"retryable,omitempty"`
-	HTTPStatus int    `json:"-"` // 不序列化到 JSON
-}
+// ErrorInfo is a type alias for api.ErrorInfo — the canonical error structure.
+// The canonical definition lives in api/types.go (§38).
+type ErrorInfo = api.ErrorInfo
 
 // =============================================================================
 // 🎯 响应辅助函数

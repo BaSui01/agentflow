@@ -13,16 +13,13 @@ import (
 // EnhancedExecutionOptions 增强执行选项
 type EnhancedExecutionOptions struct {
 	// Reflection 选项
-	UseReflection    bool
-	ReflectionConfig any // ReflectionConfig
+	UseReflection bool
 
 	// 工具选择选项
-	UseToolSelection    bool
-	ToolSelectionConfig any // ToolSelectionConfig
+	UseToolSelection bool
 
 	// 提示词增强选项
-	UsePromptEnhancer       bool
-	PromptEngineeringConfig any // PromptEngineeringConfig
+	UsePromptEnhancer bool
 
 	// Skills 选项
 	UseSkills   bool
@@ -59,19 +56,32 @@ func DefaultEnhancedExecutionOptions() EnhancedExecutionOptions {
 
 // EnableReflection 启用 Reflection 机制
 func (b *BaseAgent) EnableReflection(executor any) {
-	b.reflectionExecutor = executor
+	if re, ok := executor.(ReflectionRunner); ok {
+		b.reflectionExecutor = re
+	} else {
+		// Wrap raw any in a type-asserted adapter for backward compatibility
+		b.reflectionExecutor = &reflectionAnyAdapter{raw: executor}
+	}
 	b.logger.Info("reflection enabled")
 }
 
 // EnableToolSelection 启用动态工具选择
 func (b *BaseAgent) EnableToolSelection(selector any) {
-	b.toolSelector = selector
+	if ts, ok := selector.(DynamicToolSelectorRunner); ok {
+		b.toolSelector = ts
+	} else {
+		b.toolSelector = &toolSelectorAnyAdapter{raw: selector}
+	}
 	b.logger.Info("tool selection enabled")
 }
 
 // EnablePromptEnhancer 启用提示词增强
 func (b *BaseAgent) EnablePromptEnhancer(enhancer any) {
-	b.promptEnhancer = enhancer
+	if pe, ok := enhancer.(PromptEnhancerRunner); ok {
+		b.promptEnhancer = pe
+	} else {
+		b.promptEnhancer = &promptEnhancerAnyAdapter{raw: enhancer}
+	}
 	b.logger.Info("prompt enhancer enabled")
 }
 
@@ -235,25 +245,21 @@ func (b *BaseAgent) ExecuteEnhanced(ctx context.Context, input *Input, options E
 	// 4. 提示词增强
 	if options.UsePromptEnhancer && b.promptEnhancer != nil {
 		b.logger.Debug("enhancing prompt")
-		if pe, ok := b.promptEnhancer.(interface {
-			EnhanceUserPrompt(prompt, context string) (string, error)
-		}); ok {
-			// 构建上下文
-			contextStr := ""
-			if len(skillInstructions) > 0 {
-				contextStr += "Skills: " + fmt.Sprintf("%v", skillInstructions) + "\n"
-			}
-			if len(memoryContext) > 0 {
-				contextStr += "Memory: " + fmt.Sprintf("%v", memoryContext) + "\n"
-			}
+		// 构建上下文
+		contextStr := ""
+		if len(skillInstructions) > 0 {
+			contextStr += "Skills: " + fmt.Sprintf("%v", skillInstructions) + "\n"
+		}
+		if len(memoryContext) > 0 {
+			contextStr += "Memory: " + fmt.Sprintf("%v", memoryContext) + "\n"
+		}
 
-			enhanced, err := pe.EnhanceUserPrompt(input.Content, contextStr)
-			if err != nil {
-				b.logger.Warn("prompt enhancement failed", zap.Error(err))
-			} else {
-				enhancedPrompt = enhanced
-				b.logger.Info("prompt enhanced")
-			}
+		enhanced, err := b.promptEnhancer.EnhanceUserPrompt(input.Content, contextStr)
+		if err != nil {
+			b.logger.Warn("prompt enhancement failed", zap.Error(err))
+		} else {
+			enhancedPrompt = enhanced
+			b.logger.Info("prompt enhanced")
 		}
 	}
 
@@ -271,18 +277,14 @@ func (b *BaseAgent) ExecuteEnhanced(ctx context.Context, input *Input, options E
 	// 5. 动态工具选择
 	if options.UseToolSelection && b.toolSelector != nil && b.toolManager != nil {
 		b.logger.Debug("selecting tools dynamically")
-		if ts, ok := b.toolSelector.(interface {
-			SelectTools(ctx context.Context, task string, availableTools any) (any, error)
-		}); ok {
-			// 获取可用工具
-			availableTools := b.toolManager.GetAllowedTools(b.ID())
-			selected, err := ts.SelectTools(ctx, enhancedPrompt, availableTools)
-			if err != nil {
-				b.logger.Warn("tool selection failed", zap.Error(err))
-			} else {
-				b.logger.Info("tools selected dynamically", zap.Any("selected", selected))
-				// 这里可以更新 Agent 的工具列表
-			}
+		// 获取可用工具
+		availableTools := b.toolManager.GetAllowedTools(b.ID())
+		selected, err := b.toolSelector.SelectTools(ctx, enhancedPrompt, availableTools)
+		if err != nil {
+			b.logger.Warn("tool selection failed", zap.Error(err))
+		} else {
+			b.logger.Info("tools selected dynamically", zap.Any("selected", selected))
+			// 这里可以更新 Agent 的工具列表
 		}
 	}
 
@@ -293,21 +295,14 @@ func (b *BaseAgent) ExecuteEnhanced(ctx context.Context, input *Input, options E
 	if options.UseReflection && b.reflectionExecutor != nil {
 		// 使用 Reflection 执行
 		b.logger.Debug("executing with reflection")
-		if re, ok := b.reflectionExecutor.(interface {
-			ExecuteWithReflection(ctx context.Context, input *Input) (any, error)
-		}); ok {
-			result, execErr := re.ExecuteWithReflection(ctx, enhancedInput)
-			if execErr != nil {
-				return nil, fmt.Errorf("reflection execution failed: %w", execErr)
-			}
+		result, execErr := b.reflectionExecutor.ExecuteWithReflection(ctx, enhancedInput)
+		if execErr != nil {
+			return nil, fmt.Errorf("reflection execution failed: %w", execErr)
+		}
 
-			// 提取最终输出
-			if reflectionResult, ok := result.(interface{ GetFinalOutput() *Output }); ok {
-				output = reflectionResult.GetFinalOutput()
-			} else {
-				// 回退到普通执行
-				output, err = b.Execute(ctx, enhancedInput)
-			}
+		// 提取最终输出
+		if reflectionResult, ok := result.(interface{ GetFinalOutput() *Output }); ok {
+			output = reflectionResult.GetFinalOutput()
 		} else {
 			// 回退到普通执行
 			output, err = b.Execute(ctx, enhancedInput)
@@ -670,4 +665,42 @@ func (b *BaseAgent) ExportConfiguration() map[string]any {
 		"tools":    b.config.Tools,
 		"metadata": b.config.Metadata,
 	}
+}
+
+// =============================================================================
+// Backward-compatible adapters for Enable* methods that receive raw any values.
+// These wrap the raw value and delegate via type assertion at call time.
+// =============================================================================
+
+type reflectionAnyAdapter struct{ raw any }
+
+func (a *reflectionAnyAdapter) ExecuteWithReflection(ctx context.Context, input *Input) (any, error) {
+	if re, ok := a.raw.(interface {
+		ExecuteWithReflection(ctx context.Context, input *Input) (any, error)
+	}); ok {
+		return re.ExecuteWithReflection(ctx, input)
+	}
+	return nil, fmt.Errorf("reflection executor does not implement ExecuteWithReflection")
+}
+
+type toolSelectorAnyAdapter struct{ raw any }
+
+func (a *toolSelectorAnyAdapter) SelectTools(ctx context.Context, task string, availableTools any) (any, error) {
+	if ts, ok := a.raw.(interface {
+		SelectTools(ctx context.Context, task string, availableTools any) (any, error)
+	}); ok {
+		return ts.SelectTools(ctx, task, availableTools)
+	}
+	return nil, fmt.Errorf("tool selector does not implement SelectTools")
+}
+
+type promptEnhancerAnyAdapter struct{ raw any }
+
+func (a *promptEnhancerAnyAdapter) EnhanceUserPrompt(prompt, context string) (string, error) {
+	if pe, ok := a.raw.(interface {
+		EnhanceUserPrompt(prompt, context string) (string, error)
+	}); ok {
+		return pe.EnhanceUserPrompt(prompt, context)
+	}
+	return prompt, nil
 }

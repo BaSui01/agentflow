@@ -2,21 +2,21 @@ package agent
 
 import (
 	"context"
+	"sync/atomic"
 	"testing"
 
 	"github.com/BaSui01/agentflow/llm"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/mock"
 	"go.uber.org/zap"
 )
 
 // 测试新引用执行器测试创建反射执行器
 func TestNewReflectionExecutor(t *testing.T) {
 	logger, _ := zap.NewDevelopment()
-	provider := new(MockProvider)
-	memory := new(MockMemoryManager)
-	toolManager := new(MockToolManager)
-	bus := new(MockEventBus)
+	provider := &testProvider{name: "test"}
+	memory := &testMemoryManager{}
+	toolManager := &testToolManager{}
+	bus := &testEventBus{}
 
 	config := Config{
 		ID:    "test-agent",
@@ -38,38 +38,6 @@ func TestNewReflectionExecutor(t *testing.T) {
 // 测试Reflection 执行器 Execute with Reflection Disabled 测试 已禁用反射
 func TestReflectionExecutor_ExecuteWithReflection_Disabled(t *testing.T) {
 	logger, _ := zap.NewDevelopment()
-	provider := new(MockProvider)
-	memory := new(MockMemoryManager)
-	toolManager := new(MockToolManager)
-	bus := new(MockEventBus)
-
-	config := Config{
-		ID:    "test-agent",
-		Name:  "Test Agent",
-		Type:  TypeGeneric,
-		Model: "gpt-4",
-		PromptBundle: PromptBundle{
-			System: SystemPrompt{
-				Identity: "You are a helpful assistant",
-			},
-		},
-	}
-
-	agent := NewBaseAgent(config, provider, memory, toolManager, bus, logger)
-
-	// 初始化代理
-	memory.On("LoadRecent", mock.Anything, "test-agent", MemoryShortTerm, 10).
-		Return([]MemoryRecord{}, nil)
-	bus.On("Publish", mock.AnythingOfType("*agent.StateChangeEvent")).
-		Return()
-
-	ctx := context.Background()
-	_ = agent.Init(ctx)
-
-	reflectionConfig := DefaultReflectionExecutorConfig()
-	reflectionConfig.Enabled = false
-
-	executor := NewReflectionExecutor(agent, reflectionConfig)
 
 	// Mock LLM 响应
 	mockResponse := &llm.ChatResponse{
@@ -89,35 +57,22 @@ func TestReflectionExecutor_ExecuteWithReflection_Disabled(t *testing.T) {
 		Usage: llm.ChatUsage{TotalTokens: 10},
 	}
 
-	provider.On("Completion", mock.Anything, mock.Anything).
-		Return(mockResponse, nil)
-	memory.On("Save", mock.Anything, mock.Anything).
-		Return(nil)
-
-	input := &Input{
-		TraceID: "test-trace",
-		Content: "Hello",
+	provider := &testProvider{
+		name: "test",
+		completionFn: func(ctx context.Context, req *llm.ChatRequest) (*llm.ChatResponse, error) {
+			return mockResponse, nil
+		},
 	}
-
-	result, err := executor.ExecuteWithReflection(ctx, input)
-
-	assert.NoError(t, err)
-	assert.NotNil(t, result)
-	assert.Equal(t, 1, result.Iterations)
-	assert.False(t, result.ImprovedByReflection)
-	assert.Equal(t, "Hello! How can I help?", result.FinalOutput.Content)
-
-	provider.AssertExpectations(t)
-	memory.AssertExpectations(t)
-}
-
-// 测试引用执行器  执行引用  成功测试反射
-func TestReflectionExecutor_ExecuteWithReflection_Success(t *testing.T) {
-	logger, _ := zap.NewDevelopment()
-	provider := new(MockProvider)
-	memory := new(MockMemoryManager)
-	toolManager := new(MockToolManager)
-	bus := new(MockEventBus)
+	memory := &testMemoryManager{
+		loadRecentFn: func(ctx context.Context, agentID string, kind MemoryKind, limit int) ([]MemoryRecord, error) {
+			return []MemoryRecord{}, nil
+		},
+		saveFn: func(ctx context.Context, rec MemoryRecord) error {
+			return nil
+		},
+	}
+	toolManager := &testToolManager{}
+	bus := &testEventBus{}
 
 	config := Config{
 		ID:    "test-agent",
@@ -133,11 +88,127 @@ func TestReflectionExecutor_ExecuteWithReflection_Success(t *testing.T) {
 
 	agent := NewBaseAgent(config, provider, memory, toolManager, bus, logger)
 
-	// 初始化代理
-	memory.On("LoadRecent", mock.Anything, "test-agent", MemoryShortTerm, 10).
-		Return([]MemoryRecord{}, nil)
-	bus.On("Publish", mock.AnythingOfType("*agent.StateChangeEvent")).
-		Return()
+	ctx := context.Background()
+	_ = agent.Init(ctx)
+
+	reflectionConfig := DefaultReflectionExecutorConfig()
+	reflectionConfig.Enabled = false
+
+	executor := NewReflectionExecutor(agent, reflectionConfig)
+
+	input := &Input{
+		TraceID: "test-trace",
+		Content: "Hello",
+	}
+
+	result, err := executor.ExecuteWithReflection(ctx, input)
+
+	assert.NoError(t, err)
+	assert.NotNil(t, result)
+	assert.Equal(t, 1, result.Iterations)
+	assert.False(t, result.ImprovedByReflection)
+	assert.Equal(t, "Hello! How can I help?", result.FinalOutput.Content)
+}
+
+// 测试引用执行器  执行引用  成功测试反射
+func TestReflectionExecutor_ExecuteWithReflection_Success(t *testing.T) {
+	logger, _ := zap.NewDevelopment()
+
+	// 第一次执行 -- -- 质量低
+	firstResponse := &llm.ChatResponse{
+		ID: "response-1", Provider: "mock", Model: "gpt-4",
+		Choices: []llm.ChatChoice{{
+			Index: 0, FinishReason: "stop",
+			Message: llm.Message{Role: llm.RoleAssistant, Content: "Short answer"},
+		}},
+		Usage: llm.ChatUsage{TotalTokens: 10},
+	}
+
+	// 批评反应 - 低分数
+	critiqueResponse := &llm.ChatResponse{
+		ID: "critique-1", Provider: "mock", Model: "gpt-4",
+		Choices: []llm.ChatChoice{{
+			Index: 0, FinishReason: "stop",
+			Message: llm.Message{
+				Role:    llm.RoleAssistant,
+				Content: "评分：5/10\n问题：\n- 回答太简短\n改进建议：\n- 提供更详细的信息",
+			},
+		}},
+		Usage: llm.ChatUsage{TotalTokens: 20},
+	}
+
+	// 第二次执行 -- -- 高质量
+	secondResponse := &llm.ChatResponse{
+		ID: "response-2", Provider: "mock", Model: "gpt-4",
+		Choices: []llm.ChatChoice{{
+			Index: 0, FinishReason: "stop",
+			Message: llm.Message{
+				Role:    llm.RoleAssistant,
+				Content: "Detailed and comprehensive answer with all necessary information",
+			},
+		}},
+		Usage: llm.ChatUsage{TotalTokens: 30},
+	}
+
+	// 第二个批评 - 高分
+	secondCritiqueResponse := &llm.ChatResponse{
+		ID: "critique-2", Provider: "mock", Model: "gpt-4",
+		Choices: []llm.ChatChoice{{
+			Index: 0, FinishReason: "stop",
+			Message: llm.Message{
+				Role:    llm.RoleAssistant,
+				Content: "评分：9/10\n问题：\n改进建议：",
+			},
+		}},
+		Usage: llm.ChatUsage{TotalTokens: 15},
+	}
+
+	// Track call sequence: 1=first exec, 2=critique, 3=second exec, 4=second critique
+	var callCount atomic.Int32
+	provider := &testProvider{
+		name: "test",
+		completionFn: func(ctx context.Context, req *llm.ChatRequest) (*llm.ChatResponse, error) {
+			n := callCount.Add(1)
+			// Critique calls have the quality reviewer system prompt
+			isCritique := req.Messages[0].Content == "你是一个专业的质量评审专家，擅长发现问题并提供建设性建议。"
+			switch {
+			case n == 1: // first execution
+				return firstResponse, nil
+			case n == 2 && isCritique: // first critique
+				return critiqueResponse, nil
+			case n == 3: // second execution (improved)
+				return secondResponse, nil
+			case n == 4 && isCritique: // second critique
+				return secondCritiqueResponse, nil
+			default:
+				return firstResponse, nil
+			}
+		},
+	}
+	memory := &testMemoryManager{
+		loadRecentFn: func(ctx context.Context, agentID string, kind MemoryKind, limit int) ([]MemoryRecord, error) {
+			return []MemoryRecord{}, nil
+		},
+		saveFn: func(ctx context.Context, rec MemoryRecord) error {
+			return nil
+		},
+	}
+	toolManager := &testToolManager{}
+	bus := &testEventBus{}
+
+	config := Config{
+		ID:    "test-agent",
+		Name:  "Test Agent",
+		Type:  TypeGeneric,
+		Model: "gpt-4",
+		PromptBundle: PromptBundle{
+			System: SystemPrompt{
+				Identity: "You are a helpful assistant",
+			},
+		},
+	}
+
+	agent := NewBaseAgent(config, provider, memory, toolManager, bus, logger)
 
 	ctx := context.Background()
 	_ = agent.Init(ctx)
@@ -146,97 +217,6 @@ func TestReflectionExecutor_ExecuteWithReflection_Success(t *testing.T) {
 	reflectionConfig.MaxIterations = 2
 
 	executor := NewReflectionExecutor(agent, reflectionConfig)
-
-	// 第一次执行 -- -- 质量低
-	firstResponse := &llm.ChatResponse{
-		ID:       "response-1",
-		Provider: "mock",
-		Model:    "gpt-4",
-		Choices: []llm.ChatChoice{
-			{
-				Index:        0,
-				FinishReason: "stop",
-				Message: llm.Message{
-					Role:    llm.RoleAssistant,
-					Content: "Short answer",
-				},
-			},
-		},
-		Usage: llm.ChatUsage{TotalTokens: 10},
-	}
-
-	// 批评反应 - 低分数
-	critiqueResponse := &llm.ChatResponse{
-		ID:       "critique-1",
-		Provider: "mock",
-		Model:    "gpt-4",
-		Choices: []llm.ChatChoice{
-			{
-				Index:        0,
-				FinishReason: "stop",
-				Message: llm.Message{
-					Role:    llm.RoleAssistant,
-					Content: "评分：5/10\n问题：\n- 回答太简短\n改进建议：\n- 提供更详细的信息",
-				},
-			},
-		},
-		Usage: llm.ChatUsage{TotalTokens: 20},
-	}
-
-	// 第二次执行 -- -- 高质量
-	secondResponse := &llm.ChatResponse{
-		ID:       "response-2",
-		Provider: "mock",
-		Model:    "gpt-4",
-		Choices: []llm.ChatChoice{
-			{
-				Index:        0,
-				FinishReason: "stop",
-				Message: llm.Message{
-					Role:    llm.RoleAssistant,
-					Content: "Detailed and comprehensive answer with all necessary information",
-				},
-			},
-		},
-		Usage: llm.ChatUsage{TotalTokens: 30},
-	}
-
-	// 第二个批评 - 高分
-	secondCritiqueResponse := &llm.ChatResponse{
-		ID:       "critique-2",
-		Provider: "mock",
-		Model:    "gpt-4",
-		Choices: []llm.ChatChoice{
-			{
-				Index:        0,
-				FinishReason: "stop",
-				Message: llm.Message{
-					Role:    llm.RoleAssistant,
-					Content: "评分：9/10\n问题：\n改进建议：",
-				},
-			},
-		},
-		Usage: llm.ChatUsage{TotalTokens: 15},
-	}
-
-	// 按顺序设置模拟呼叫
-	provider.On("Completion", mock.Anything, mock.MatchedBy(func(req *llm.ChatRequest) bool {
-		return len(req.Messages) == 2 && req.Messages[1].Content == "Hello"
-	})).Return(firstResponse, nil).Once()
-
-	provider.On("Completion", mock.Anything, mock.MatchedBy(func(req *llm.ChatRequest) bool {
-		return req.Messages[0].Content == "你是一个专业的质量评审专家，擅长发现问题并提供建设性建议。"
-	})).Return(critiqueResponse, nil).Once()
-
-	provider.On("Completion", mock.Anything, mock.MatchedBy(func(req *llm.ChatRequest) bool {
-		return len(req.Messages) == 2 && req.Messages[1].Content != "Hello"
-	})).Return(secondResponse, nil).Once()
-
-	provider.On("Completion", mock.Anything, mock.MatchedBy(func(req *llm.ChatRequest) bool {
-		return req.Messages[0].Content == "你是一个专业的质量评审专家，擅长发现问题并提供建设性建议。"
-	})).Return(secondCritiqueResponse, nil).Once()
-
-	memory.On("Save", mock.Anything, mock.Anything).Return(nil)
 
 	input := &Input{
 		TraceID: "test-trace",
@@ -252,17 +232,16 @@ func TestReflectionExecutor_ExecuteWithReflection_Success(t *testing.T) {
 	assert.Len(t, result.Critiques, 2)
 	assert.False(t, result.Critiques[0].IsGood)
 	assert.True(t, result.Critiques[1].IsGood)
-
-	provider.AssertExpectations(t)
+	assert.GreaterOrEqual(t, int(callCount.Load()), 4, "should have at least 4 Completion calls")
 }
 
 // 测试引用执行器  praseCritic 测试批判解
 func TestReflectionExecutor_parseCritique(t *testing.T) {
 	logger, _ := zap.NewDevelopment()
-	provider := new(MockProvider)
-	memory := new(MockMemoryManager)
-	toolManager := new(MockToolManager)
-	bus := new(MockEventBus)
+	provider := &testProvider{name: "test"}
+	memory := &testMemoryManager{}
+	toolManager := &testToolManager{}
+	bus := &testEventBus{}
 
 	config := Config{
 		ID:    "test-agent",
@@ -297,10 +276,10 @@ func TestReflectionExecutor_parseCritique(t *testing.T) {
 // 测试引用执行器  提取分数测试
 func TestReflectionExecutor_extractScore(t *testing.T) {
 	logger, _ := zap.NewDevelopment()
-	provider := new(MockProvider)
-	memory := new(MockMemoryManager)
-	toolManager := new(MockToolManager)
-	bus := new(MockEventBus)
+	provider := &testProvider{name: "test"}
+	memory := &testMemoryManager{}
+	toolManager := &testToolManager{}
+	bus := &testEventBus{}
 
 	config := Config{
 		ID:    "test-agent",

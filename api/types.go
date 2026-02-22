@@ -8,6 +8,30 @@ import (
 )
 
 // =============================================================================
+// Unified API Response Envelope (§38)
+// =============================================================================
+
+// Response is the canonical API response envelope used by all endpoints.
+// Both api/handlers and config packages reference this type to ensure
+// consistent JSON output across the entire API surface.
+type Response struct {
+	Success   bool        `json:"success"`
+	Data      any         `json:"data,omitempty"`
+	Error     *ErrorInfo  `json:"error,omitempty"`
+	Timestamp time.Time   `json:"timestamp"`
+	RequestID string      `json:"request_id,omitempty"`
+}
+
+// ErrorInfo is the canonical error structure embedded in Response.
+type ErrorInfo struct {
+	Code       string `json:"code"`
+	Message    string `json:"message"`
+	Details    string `json:"details,omitempty"`
+	Retryable  bool   `json:"retryable,omitempty"`
+	HTTPStatus int    `json:"-"` // not serialized to JSON
+}
+
+// =============================================================================
 // 聊天完成类型
 // =============================================================================
 

@@ -310,24 +310,12 @@ func (m *StreamMultiplexer) broadcast(ctx context.Context, token Token) {
 	defer m.mu.RUnlock()
 
 	for _, consumer := range m.consumers {
-		// N8 FIX: broadcast() 直接写 consumer.buffer 绕过了 Write() 的锁保护，
-		// Close() 可能在 closed.Load() 检查之后、channel 发送之前关闭 buffer，
-		// 导致 send-on-closed-channel panic。使用 recover 捕获此 panic。
-		func(c *BackpressureStream) {
-			defer func() {
-				if r := recover(); r != nil {
-					// consumer 已关闭，安全忽略
-				}
-			}()
-			if c.closed.Load() {
-				return
-			}
-			select {
-			case c.buffer <- token:
-			default:
-				// 消费者过慢，应用其丢弃策略
-			}
-		}(consumer)
+		// 通过 Write() 方法发送 token，而非直接写 consumer.buffer。
+		// Write() 内部持有 RLock，与 Close() 的 Lock 互斥，
+		// 消除了 closed.Load() 与 channel 发送之间的 TOCTOU 窗口。
+		if err := consumer.Write(ctx, token); err != nil {
+			// consumer 已关闭或 ctx 取消 — 安全忽略
+		}
 	}
 }
 

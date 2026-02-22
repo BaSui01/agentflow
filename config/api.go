@@ -9,6 +9,8 @@ import (
 	"net/http"
 	"strconv"
 	"time"
+
+	"github.com/BaSui01/agentflow/api"
 )
 
 // --- API 类型定义 ---
@@ -19,24 +21,11 @@ type ConfigAPIHandler struct {
 	allowedOrigin string
 }
 
-// apiResponse 是统一 API 响应结构，与 handlers.Response 保持相同的 JSON 格式。
-// 由于 config 包无法导入 api/handlers（循环依赖），此处定义本地镜像类型。
-// JSON 输出格式与 handlers.Response 完全一致。
-type apiResponse struct {
-	Success   bool        `json:"success"`
-	Data      any         `json:"data,omitempty"`
-	Error     *apiError   `json:"error,omitempty"`
-	Timestamp time.Time   `json:"timestamp"`
-	RequestID string      `json:"request_id,omitempty"`
-}
+// apiResponse is a type alias for api.Response — the canonical API envelope (§38).
+type apiResponse = api.Response
 
-// apiError 与 handlers.ErrorInfo 保持相同的 JSON 格式。
-type apiError struct {
-	Code      string `json:"code"`
-	Message   string `json:"message"`
-	Details   string `json:"details,omitempty"`
-	Retryable bool   `json:"retryable,omitempty"`
-}
+// apiError is a type alias for api.ErrorInfo — the canonical error structure (§38).
+type apiError = api.ErrorInfo
 
 // configData 是配置 API 响应中 Data 字段的内部结构。
 type configData struct {
@@ -374,8 +363,8 @@ func (h *ConfigAPIHandler) handleChanges(w http.ResponseWriter, r *http.Request)
 
 // --- 辅助方法 ---
 
-// writeAPIJSON 写入统一格式的 JSON 响应。
-// 遵循 handlers.WriteJSON 相同的 Content-Type 和安全头设置。
+// writeAPIJSON writes a JSON response using the marshal-first pattern (§6).
+// Uses the same Content-Type and security headers as handlers.WriteJSON.
 func writeAPIJSON(w http.ResponseWriter, status int, data any) {
 	buf, err := json.Marshal(data)
 	if err != nil {
