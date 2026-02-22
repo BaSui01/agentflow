@@ -45,6 +45,7 @@ func (p *testProvider) ListModels(ctx context.Context) ([]llm.Model, error) {
 	}
 	return nil, nil
 }
+func (p *testProvider) Endpoints() llm.ProviderEndpoints { return llm.ProviderEndpoints{} }
 
 // testMemoryManager implements MemoryManager for testing
 type testMemoryManager struct {
@@ -190,6 +191,7 @@ func (m *MockProvider) ListModels(ctx context.Context) ([]llm.Model, error) {
 	_ = ctx
 	return nil, nil
 }
+func (m *MockProvider) Endpoints() llm.ProviderEndpoints { return llm.ProviderEndpoints{} }
 
 // PLACEHOLDER_LEGACY_REST
 

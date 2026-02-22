@@ -45,6 +45,7 @@ func (p *testProvider) ListModels(ctx context.Context) ([]Model, error) {
 	}
 	return nil, nil
 }
+func (p *testProvider) Endpoints() ProviderEndpoints { return ProviderEndpoints{} }
 
 // 测试响应性提供器  Name 名称方法
 func TestResilientProvider_Name(t *testing.T) {

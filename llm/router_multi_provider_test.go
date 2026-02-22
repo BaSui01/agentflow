@@ -45,6 +45,8 @@ func (p *mockProvider) ListModels(ctx context.Context) ([]Model, error) {
 	return nil, nil
 }
 
+func (p *mockProvider) Endpoints() ProviderEndpoints { return ProviderEndpoints{} }
+
 func TestMultiProviderRouter_SelectProviderWithModel(t *testing.T) {
 	t.Parallel()
 

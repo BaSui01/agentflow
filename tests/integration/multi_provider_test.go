@@ -47,6 +47,7 @@ func (p *testProvider) ListModels(ctx context.Context) ([]llm.Model, error) {
 	}
 	return nil, nil
 }
+func (p *testProvider) Endpoints() llm.ProviderEndpoints { return llm.ProviderEndpoints{} }
 
 // TestMultiProviderRouting 测试多个提供商之间的路由
 func TestMultiProviderRouting(t *testing.T) {

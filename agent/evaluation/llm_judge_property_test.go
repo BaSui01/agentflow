@@ -443,3 +443,5 @@ func (m *mockJudgeProvider) SupportsNativeFunctionCalling() bool {
 func (m *mockJudgeProvider) ListModels(ctx context.Context) ([]llm.Model, error) {
 	return nil, nil
 }
+
+func (m *mockJudgeProvider) Endpoints() llm.ProviderEndpoints { return llm.ProviderEndpoints{} }
