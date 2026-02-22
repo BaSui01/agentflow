@@ -1,4 +1,7 @@
 {
+  "env": {
+    "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"
+  },
   "hooks": {
     "SessionStart": [
       {
@@ -32,6 +35,16 @@
             "type": "command",
             "command": "python3 .claude/hooks/ralph-loop.py",
             "timeout": 10
+          }
+        ]
+      },
+      {
+        "matcher": "dispatch|team-lead",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 .claude/hooks/pipeline-complete.py",
+            "timeout": 15
           }
         ]
       }
