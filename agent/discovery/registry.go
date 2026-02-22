@@ -36,6 +36,11 @@ type CapabilityRegistry struct {
 	// 配置包含注册配置 。
 	config *RegistryConfig
 
+	// store is an optional persistence backend. When non-nil, agent data is
+	// also persisted through this store. When nil, the registry operates
+	// purely in-memory (preserving backward compatibility).
+	store RegistryStore
+
 	// logger 是日志实例 。
 	logger *zap.Logger
 
@@ -80,8 +85,20 @@ func DefaultRegistryConfig() *RegistryConfig {
 	}
 }
 
+// RegistryOption configures a CapabilityRegistry.
+type RegistryOption func(*CapabilityRegistry)
+
+// WithStore sets a persistence backend for the registry.
+// When set, agent data is persisted through the store in addition to the
+// in-memory map. When not set, the registry operates purely in-memory.
+func WithStore(store RegistryStore) RegistryOption {
+	return func(r *CapabilityRegistry) {
+		r.store = store
+	}
+}
+
 // 新能力登记系统建立了一个新的能力登记册。
-func NewCapabilityRegistry(config *RegistryConfig, logger *zap.Logger) *CapabilityRegistry {
+func NewCapabilityRegistry(config *RegistryConfig, logger *zap.Logger, opts ...RegistryOption) *CapabilityRegistry {
 	if config == nil {
 		config = DefaultRegistryConfig()
 	}
@@ -96,6 +113,11 @@ func NewCapabilityRegistry(config *RegistryConfig, logger *zap.Logger) *Capabili
 		config:          config,
 		logger:          logger.With(zap.String("component", "capability_registry")),
 		done:            make(chan struct{}),
+	}
+
+	// Apply options
+	for _, opt := range opts {
+		opt(r)
 	}
 
 	// 如果启用, 初始化健康检查器
@@ -174,6 +196,13 @@ func (r *CapabilityRegistry) RegisterAgent(ctx context.Context, info *AgentInfo)
 	// 存储代理
 	r.agents[agentID] = info
 
+	// Persist to store if configured
+	if r.store != nil {
+		if err := r.store.Save(ctx, info); err != nil {
+			r.logger.Error("failed to persist agent to store", zap.String("agent_id", agentID), zap.Error(err))
+		}
+	}
+
 	r.logger.Info("agent registered",
 		zap.String("agent_id", agentID),
 		zap.Int("capabilities", len(info.Capabilities)),
@@ -206,6 +235,13 @@ func (r *CapabilityRegistry) UnregisterAgent(ctx context.Context, agentID string
 
 	// 删除代理
 	delete(r.agents, agentID)
+
+	// Persist deletion to store if configured
+	if r.store != nil {
+		if err := r.store.Delete(ctx, agentID); err != nil {
+			r.logger.Error("failed to delete agent from store", zap.String("agent_id", agentID), zap.Error(err))
+		}
+	}
 
 	r.logger.Info("agent unregistered", zap.String("agent_id", agentID))
 
@@ -259,6 +295,13 @@ func (r *CapabilityRegistry) UpdateAgent(ctx context.Context, info *AgentInfo) e
 
 	// 存储更新代理
 	r.agents[agentID] = info
+
+	// Persist to store if configured
+	if r.store != nil {
+		if err := r.store.Save(ctx, info); err != nil {
+			r.logger.Error("failed to persist updated agent to store", zap.String("agent_id", agentID), zap.Error(err))
+		}
+	}
 
 	r.logger.Info("agent updated", zap.String("agent_id", agentID))
 

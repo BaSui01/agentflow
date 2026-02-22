@@ -2,7 +2,9 @@ package hierarchical
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -235,23 +237,94 @@ func (h *HierarchicalAgent) decomposeTask(ctx context.Context, input *agent.Inpu
 	return subtasks, nil
 }
 
-// parseSubtasks 解析子任务
+// subtaskJSON is the JSON structure for parsed subtasks from LLM output.
+type subtaskJSON struct {
+	Type        string `json:"type"`
+	Description string `json:"description"`
+	Priority    int    `json:"priority"`
+}
+
+// parseSubtasks parses subtasks from LLM output content.
+// It tries: 1) direct JSON array parse, 2) extract ```json block, 3) fallback to single task.
 func (h *HierarchicalAgent) parseSubtasks(content string, originalInput *agent.Input) []*Task {
-	// 简化实现：实际应解析 JSON
-	// 这里创建示例子任务
-	tasks := []*Task{
+	// Attempt 1: direct JSON array parse
+	if tasks := h.tryParseSubtaskJSON(content, originalInput); tasks != nil {
+		return tasks
+	}
+
+	// Attempt 2: extract JSON from ```json ... ``` code block
+	if idx := strings.Index(content, "```json"); idx != -1 {
+		start := idx + len("```json")
+		if end := strings.Index(content[start:], "```"); end != -1 {
+			jsonBlock := strings.TrimSpace(content[start : start+end])
+			if tasks := h.tryParseSubtaskJSON(jsonBlock, originalInput); tasks != nil {
+				return tasks
+			}
+		}
+	}
+
+	// Attempt 3: extract JSON from ``` ... ``` code block (no language tag)
+	if idx := strings.Index(content, "```"); idx != -1 {
+		start := idx + len("```")
+		// Skip language tag if present on same line
+		if nlIdx := strings.Index(content[start:], "\n"); nlIdx != -1 {
+			start = start + nlIdx + 1
+		}
+		if end := strings.Index(content[start:], "```"); end != -1 {
+			jsonBlock := strings.TrimSpace(content[start : start+end])
+			if tasks := h.tryParseSubtaskJSON(jsonBlock, originalInput); tasks != nil {
+				return tasks
+			}
+		}
+	}
+
+	// Fallback: create a single task with the original input
+	return []*Task{
 		{
 			ID:       fmt.Sprintf("%s-subtask-1", originalInput.TraceID),
 			Type:     "subtask",
 			Priority: 1,
 			Input: &agent.Input{
 				TraceID: originalInput.TraceID,
-				Content: "子任务 1: " + originalInput.Content,
+				Content: originalInput.Content,
 			},
 			Status: TaskStatusPending,
 		},
 	}
+}
 
+// tryParseSubtaskJSON attempts to parse a JSON array of subtasks.
+// Returns nil if parsing fails.
+func (h *HierarchicalAgent) tryParseSubtaskJSON(raw string, originalInput *agent.Input) []*Task {
+	var parsed []subtaskJSON
+	if err := json.Unmarshal([]byte(raw), &parsed); err != nil {
+		return nil
+	}
+	if len(parsed) == 0 {
+		return nil
+	}
+
+	tasks := make([]*Task, 0, len(parsed))
+	for i, st := range parsed {
+		taskType := st.Type
+		if taskType == "" {
+			taskType = "subtask"
+		}
+		desc := st.Description
+		if desc == "" {
+			desc = originalInput.Content
+		}
+		tasks = append(tasks, &Task{
+			ID:       fmt.Sprintf("%s-subtask-%d", originalInput.TraceID, i+1),
+			Type:     taskType,
+			Priority: st.Priority,
+			Input: &agent.Input{
+				TraceID: originalInput.TraceID,
+				Content: desc,
+			},
+			Status: TaskStatusPending,
+		})
+	}
 	return tasks
 }
 
