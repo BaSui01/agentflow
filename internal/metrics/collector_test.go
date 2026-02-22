@@ -85,9 +85,8 @@ func TestCollector_RecordAgentExecution(t *testing.T) {
 	logger := zap.NewNop()
 	collector := NewCollector(nextTestNamespace(), logger)
 
-	// 记录 Agent 执行
+	// 记录 Agent 执行 — K3 FIX: 使用 agent_type 而非 agent_id
 	collector.RecordAgentExecution(
-		"test-agent",
 		"chat",
 		"success",
 		1*time.Second,
