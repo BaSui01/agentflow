@@ -18,6 +18,7 @@ import (
 	"github.com/BaSui01/agentflow/types"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.uber.org/zap"
+	"golang.org/x/sync/singleflight"
 	"gorm.io/gorm"
 )
 
@@ -62,7 +63,8 @@ type Server struct {
 	provider llm.Provider
 
 	// Cached agent instances for the resolver
-	agents sync.Map
+	agents  sync.Map
+	agentSF singleflight.Group
 
 	wg sync.WaitGroup
 }
@@ -375,6 +377,8 @@ func (s *Server) startMetricsServer() error {
 
 // buildAgentResolver creates an AgentResolver that uses the AgentRegistry to
 // create agent instances on demand and caches them in s.agents for reuse.
+// It uses singleflight to ensure that concurrent requests for the same agentID
+// only trigger one Create+Init cycle, preventing leaked agent instances.
 func (s *Server) buildAgentResolver(registry *agent.AgentRegistry) handlers.AgentResolver {
 	return func(ctx context.Context, agentID string) (agent.Agent, error) {
 		// Check cache first
@@ -382,25 +386,34 @@ func (s *Server) buildAgentResolver(registry *agent.AgentRegistry) handlers.Agen
 			return cached.(agent.Agent), nil
 		}
 
-		// Create a new agent via the registry
-		cfg := agent.Config{
-			ID:   agentID,
-			Name: agentID,
-			Type: agent.TypeGeneric,
-		}
-		ag, err := registry.Create(cfg, s.provider, nil, nil, nil, s.logger)
+		// Use singleflight to ensure only one goroutine creates the agent
+		result, err, _ := s.agentSF.Do(agentID, func() (any, error) {
+			// Double-check cache after acquiring the flight
+			if cached, ok := s.agents.Load(agentID); ok {
+				return cached, nil
+			}
+
+			cfg := agent.Config{
+				ID:   agentID,
+				Name: agentID,
+				Type: agent.TypeGeneric,
+			}
+			ag, err := registry.Create(cfg, s.provider, nil, nil, nil, s.logger)
+			if err != nil {
+				return nil, fmt.Errorf("failed to create agent %q: %w", agentID, err)
+			}
+
+			if err := ag.Init(ctx); err != nil {
+				return nil, fmt.Errorf("failed to init agent %q: %w", agentID, err)
+			}
+
+			s.agents.Store(agentID, ag)
+			return ag, nil
+		})
 		if err != nil {
-			return nil, fmt.Errorf("failed to create agent %q: %w", agentID, err)
+			return nil, err
 		}
-
-		// Initialize the agent lifecycle
-		if err := ag.Init(ctx); err != nil {
-			return nil, fmt.Errorf("failed to init agent %q: %w", agentID, err)
-		}
-
-		// Cache for reuse (if another goroutine raced us, use theirs)
-		actual, _ := s.agents.LoadOrStore(agentID, ag)
-		return actual.(agent.Agent), nil
+		return result.(agent.Agent), nil
 	}
 }
 
@@ -475,14 +488,7 @@ func (s *Server) Shutdown() {
 		}
 	}
 
-	// 1.5. Flush and shutdown telemetry exporters
-	if s.telemetry != nil {
-		if err := s.telemetry.Shutdown(ctx); err != nil {
-			s.logger.Error("Telemetry shutdown error", zap.Error(err))
-		}
-	}
-
-	// 2. 关闭 HTTP 服务器
+	// 2. 关闭 HTTP 服务器（等待 in-flight 请求完成）
 	if s.httpManager != nil {
 		if err := s.httpManager.Shutdown(ctx); err != nil {
 			s.logger.Error("HTTP server shutdown error", zap.Error(err))
@@ -496,7 +502,38 @@ func (s *Server) Shutdown() {
 		}
 	}
 
-	// 4. 等待所有 goroutine 完成
+	// 4. Flush and shutdown telemetry exporters
+	// 必须在 HTTP/Metrics server 关闭之后执行，确保 in-flight 请求的 span/metric 不丢失
+	if s.telemetry != nil {
+		if err := s.telemetry.Shutdown(ctx); err != nil {
+			s.logger.Error("Telemetry shutdown error", zap.Error(err))
+		}
+	}
+
+	// 5. Teardown cached agent instances
+	s.agents.Range(func(key, value any) bool {
+		if ag, ok := value.(agent.Agent); ok {
+			if err := ag.Teardown(ctx); err != nil {
+				s.logger.Warn("Failed to teardown cached agent",
+					zap.String("agent_id", key.(string)),
+					zap.Error(err))
+			}
+		}
+		return true
+	})
+
+	// 6. 关闭数据库连接
+	if s.db != nil {
+		if sqlDB, err := s.db.DB(); err == nil {
+			if err := sqlDB.Close(); err != nil {
+				s.logger.Error("Database close error", zap.Error(err))
+			} else {
+				s.logger.Info("Database connection closed")
+			}
+		}
+	}
+
+	// 7. 等待所有 goroutine 完成
 	s.wg.Wait()
 
 	s.logger.Info("Graceful shutdown completed")
