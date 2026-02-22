@@ -306,134 +306,76 @@ func demoCollaborativeSystem(logger *zap.Logger) {
 func demoProductionConfig(logger *zap.Logger) {
 	fmt.Println("\n生产环境配置建议")
 
-	// 1. 性能优化配置
+	// 1. 性能优化配置 — 使用真实的 Config 结构体
 	fmt.Println("1. 性能优化配置")
-	fmt.Println("```go")
-	fmt.Println("config := agent.Config{")
-	fmt.Println("    // 基础配置")
-	fmt.Println("    Model:       \"gpt-4\",")
-	fmt.Println("    MaxTokens:   2000,")
-	fmt.Println("    Temperature: 0.7,")
-	fmt.Println("    ")
-	fmt.Println("    // 功能开关（根据需求选择）")
-	fmt.Println("    EnableReflection:     true,  // 质量要求高")
-	fmt.Println("    EnableToolSelection:  true,  // 工具多时启用")
-	fmt.Println("    EnablePromptEnhancer: true,  // 提升成功率")
-	fmt.Println("    EnableSkills:         true,  // 需要专业能力")
-	fmt.Println("    EnableEnhancedMemory: true,  // 需要上下文")
-	fmt.Println("    EnableObservability:  true,  // 生产必备")
-	fmt.Println("}")
-	fmt.Println("```")
+	prodConfig := agent.Config{
+		ID:          "prod-agent",
+		Name:        "Production Agent",
+		Type:        agent.TypeGeneric,
+		Model:       "gpt-4",
+		MaxTokens:   2000,
+		Temperature: 0.7,
+
+		EnableReflection:     true,
+		EnableToolSelection:  true,
+		EnablePromptEnhancer: true,
+		EnableSkills:         true,
+		EnableEnhancedMemory: true,
+		EnableObservability:  true,
+	}
+	fmt.Printf("  Model: %s, MaxTokens: %d, Temperature: %.1f\n",
+		prodConfig.Model, prodConfig.MaxTokens, prodConfig.Temperature)
 
 	// 2. Reflection 配置
 	fmt.Println("\n2. Reflection 配置")
-	fmt.Println("```go")
-	fmt.Println("reflectionConfig := agent.ReflectionExecutorConfig{")
-	fmt.Println("    Enabled:       true,")
-	fmt.Println("    MaxIterations: 2,      // 生产环境建议 2-3 次")
-	fmt.Println("    MinQuality:    0.75,   // 根据业务要求调整")
-	fmt.Println("}")
-	fmt.Println("```")
+	reflectionConfig := agent.ReflectionExecutorConfig{
+		Enabled:       true,
+		MaxIterations: 2,
+		MinQuality:    0.75,
+	}
+	fmt.Printf("  MaxIterations: %d, MinQuality: %.2f\n",
+		reflectionConfig.MaxIterations, reflectionConfig.MinQuality)
 
 	// 3. 工具选择配置
 	fmt.Println("\n3. 工具选择配置")
-	fmt.Println("```go")
-	fmt.Println("toolConfig := agent.ToolSelectionConfig{")
-	fmt.Println("    Enabled:           true,")
-	fmt.Println("    SemanticWeight:    0.5,   // 语义权重")
-	fmt.Println("    CostWeight:        0.3,   // 成本敏感时提高")
-	fmt.Println("    LatencyWeight:     0.1,   // 延迟敏感时提高")
-	fmt.Println("    ReliabilityWeight: 0.1,")
-	fmt.Println("    MaxTools:          5,     // 限制工具数量")
-	fmt.Println("    UseLLMRanking:     false, // 生产环境可关闭")
-	fmt.Println("}")
-	fmt.Println("```")
+	toolConfig := agent.DefaultToolSelectionConfig()
+	fmt.Printf("  MaxTools: %d, UseLLMRanking: %v\n",
+		toolConfig.MaxTools, toolConfig.UseLLMRanking)
 
 	// 4. 记忆配置
 	fmt.Println("\n4. 记忆配置")
-	fmt.Println("```go")
-	fmt.Println("memoryConfig := memory.EnhancedMemoryConfig{")
-	fmt.Println("    ShortTermTTL:          24 * time.Hour,")
-	fmt.Println("    ShortTermMaxSize:      100,")
-	fmt.Println("    WorkingMemorySize:     20,")
-	fmt.Println("    LongTermEnabled:       true,")
-	fmt.Println("    EpisodicEnabled:       true,")
-	fmt.Println("    SemanticEnabled:       false, // 可选")
-	fmt.Println("    ConsolidationEnabled:  true,")
-	fmt.Println("    ConsolidationInterval: 1 * time.Hour,")
-	fmt.Println("}")
-	fmt.Println("```")
+	memoryConfig := memory.DefaultEnhancedMemoryConfig()
+	fmt.Printf("  ShortTermTTL: %v, WorkingMemorySize: %d\n",
+		memoryConfig.ShortTermTTL, memoryConfig.WorkingMemorySize)
 
-	// 5. 可观测性配置
-	fmt.Println("\n5. 可观测性配置")
-	fmt.Println("```go")
-	fmt.Println("// 设置告警阈值")
-	fmt.Println("alerts := map[string]float64{")
-	fmt.Println("    \"success_rate_min\":  0.70,  // 成功率 < 70% 告警")
-	fmt.Println("    \"p95_latency_max\":   1000,  // P95 延迟 > 1s 告警")
-	fmt.Println("    \"cost_per_task_max\": 0.10,  // 成本 > $0.10 告警")
-	fmt.Println("    \"quality_min\":       6.0,   // 质量 < 6.0 告警")
-	fmt.Println("}")
-	fmt.Println("```")
+	// 5. 可观测性 — 使用真实的 MetricsCollector 演示告警检查
+	fmt.Println("\n5. 可观测性告警检查")
+	collector := observability.NewMetricsCollector(logger)
+	// 模拟一些任务数据
+	collector.RecordTask("prod-agent", true, 100*1e6, 500, 0.01, 8.0)
+	collector.RecordTask("prod-agent", true, 200*1e6, 600, 0.012, 7.5)
+	collector.RecordTask("prod-agent", false, 500*1e6, 400, 0.008, 3.0)
 
-	// 6. 部署建议
-	fmt.Println("\n6. 部署建议")
-	fmt.Println("  a) 基础设施:")
-	fmt.Println("     - Redis: 短期记忆和缓存")
-	fmt.Println("     - PostgreSQL: 元数据和配置")
-	fmt.Println("     - Qdrant/Pinecone: 向量存储")
-	fmt.Println("     - InfluxDB: 时序数据（可选）")
-	fmt.Println("     - Prometheus: 指标监控")
-	fmt.Println("     - Grafana: 可视化仪表板")
+	m := collector.GetMetrics("prod-agent")
+	if m != nil {
+		alerts := map[string]struct {
+			value     float64
+			threshold float64
+			op        string
+		}{
+			"成功率":    {m.TaskSuccessRate * 100, 70, "<"},
+			"每任务成本": {m.CostPerTask, 0.10, ">"},
+			"平均质量":  {m.AvgOutputQuality, 6.0, "<"},
+		}
+		for name, a := range alerts {
+			status := "OK"
+			if (a.op == "<" && a.value < a.threshold) || (a.op == ">" && a.value > a.threshold) {
+				status = "ALERT"
+			}
+			fmt.Printf("  [%s] %s: %.2f (阈值 %s %.2f)\n", status, name, a.value, a.op, a.threshold)
+		}
+	}
 
-	fmt.Println("\n  b) 性能调优:")
-	fmt.Println("     - 启用 Redis 缓存（幂等性）")
-	fmt.Println("     - 使用连接池")
-	fmt.Println("     - 设置合理的超时时间")
-	fmt.Println("     - 启用熔断器")
-	fmt.Println("     - 限流保护")
-
-	fmt.Println("\n  c) 成本优化:")
-	fmt.Println("     - 使用动态工具选择减少 Token")
-	fmt.Println("     - 启用缓存减少重复调用")
-	fmt.Println("     - 根据任务复杂度选择模型")
-	fmt.Println("     - 监控成本指标")
-
-	fmt.Println("\n  d) 质量保证:")
-	fmt.Println("     - 启用 Reflection 提升质量")
-	fmt.Println("     - 使用基准测试持续评估")
-	fmt.Println("     - 收集用户反馈")
-	fmt.Println("     - A/B 测试不同配置")
-
-	// 7. 监控指标
-	fmt.Println("\n7. 关键监控指标")
-	fmt.Println("  - 任务成功率 (目标: > 85%)")
-	fmt.Println("  - P50/P95/P99 延迟")
-	fmt.Println("  - Token 消耗趋势")
-	fmt.Println("  - 每任务成本")
-	fmt.Println("  - 输出质量分数")
-	fmt.Println("  - 错误率和类型")
-	fmt.Println("  - 缓存命中率")
-
-	// 8. 渐进式启用
-	fmt.Println("\n8. 渐进式启用策略")
-	fmt.Println("  阶段 1 (第 1 周):")
-	fmt.Println("    - 启用可观测性")
-	fmt.Println("    - 启用提示词增强")
-	fmt.Println("    - 收集基线数据")
-	fmt.Println("  ")
-	fmt.Println("  阶段 2 (第 2-3 周):")
-	fmt.Println("    - 启用动态工具选择")
-	fmt.Println("    - 启用增强记忆")
-	fmt.Println("    - 对比性能提升")
-	fmt.Println("  ")
-	fmt.Println("  阶段 3 (第 4 周):")
-	fmt.Println("    - 启用 Reflection")
-	fmt.Println("    - 启用 Skills 系统")
-	fmt.Println("    - 全面评估效果")
-	fmt.Println("  ")
-	fmt.Println("  阶段 4 (第 5+ 周):")
-	fmt.Println("    - 根据需求启用 MCP")
-	fmt.Println("    - 考虑多 Agent 协作")
-	fmt.Println("    - 持续优化调参")
+	_ = prodConfig
+	_ = reflectionConfig
 }
