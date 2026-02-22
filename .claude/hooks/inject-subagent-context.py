@@ -52,7 +52,7 @@ FILE_CURRENT_TASK = ".current-task"
 FILE_TASK_JSON = "task.json"
 
 # Agents that don't update phase (can be called at any time)
-AGENTS_NO_PHASE_UPDATE = {"debug", "research"}
+AGENTS_NO_PHASE_UPDATE = {"debug", "research", "team-lead"}
 
 # =============================================================================
 # Subagent Constants (change here to rename subagent types)
@@ -62,11 +62,12 @@ AGENT_IMPLEMENT = "implement"
 AGENT_CHECK = "check"
 AGENT_DEBUG = "debug"
 AGENT_RESEARCH = "research"
+AGENT_TEAM_LEAD = "team-lead"
 
 # Agents that require a task directory
-AGENTS_REQUIRE_TASK = (AGENT_IMPLEMENT, AGENT_CHECK, AGENT_DEBUG)
+AGENTS_REQUIRE_TASK = (AGENT_IMPLEMENT, AGENT_CHECK, AGENT_DEBUG, AGENT_TEAM_LEAD)
 # All supported agents
-AGENTS_ALL = (AGENT_IMPLEMENT, AGENT_CHECK, AGENT_DEBUG, AGENT_RESEARCH)
+AGENTS_ALL = (AGENT_IMPLEMENT, AGENT_CHECK, AGENT_DEBUG, AGENT_RESEARCH, AGENT_TEAM_LEAD)
 
 
 def find_repo_root(start_path: str) -> str | None:
@@ -593,6 +594,56 @@ Dev specs and Codex Review results:
 - Report which issues were fixed and which files were modified"""
 
 
+def get_team_lead_context(repo_root: str, task_dir: str) -> str:
+    """
+    Context for Team Lead Agent
+
+    Team Lead needs:
+    1. prd.md (requirements — the primary input for work distribution)
+    2. task.json (task configuration and metadata)
+    """
+    context_parts = []
+
+    # 1. Requirements document (primary input)
+    prd_content = read_file_content(repo_root, f"{task_dir}/prd.md")
+    if prd_content:
+        context_parts.append(f"=== {task_dir}/prd.md (Requirements) ===\n{prd_content}")
+
+    # 2. Task configuration
+    task_json_content = read_file_content(repo_root, f"{task_dir}/{FILE_TASK_JSON}")
+    if task_json_content:
+        context_parts.append(f"=== {task_dir}/{FILE_TASK_JSON} (Task Config) ===\n{task_json_content}")
+
+    return "\n\n".join(context_parts)
+
+
+def build_team_lead_prompt(original_prompt: str, context: str) -> str:
+    """Build complete prompt for Team Lead"""
+    return f"""# Team Lead Agent Task
+
+You are the Team Lead in the Multi-Agent Pipeline, using Agent Team mode.
+
+## Your Context
+
+Task requirements and configuration:
+
+{context}
+
+---
+
+## Your Task
+
+{original_prompt}
+
+---
+
+## Important
+
+- Read your agent definition (.claude/agents/team-lead.md) for full workflow
+- Context injection hooks will automatically provide specs to your teammates
+- When you finish and stop, the pipeline-complete hook will trigger the finalization chain"""
+
+
 def get_research_context(repo_root: str, task_dir: str | None) -> str:
     """
     Context for Research Agent
@@ -765,6 +816,10 @@ def main():
         # Research can work without task directory
         context = get_research_context(repo_root, task_dir)
         new_prompt = build_research_prompt(original_prompt, context)
+    elif subagent_type == AGENT_TEAM_LEAD:
+        assert task_dir is not None  # validated above
+        context = get_team_lead_context(repo_root, task_dir)
+        new_prompt = build_team_lead_prompt(original_prompt, context)
     else:
         sys.exit(0)
 

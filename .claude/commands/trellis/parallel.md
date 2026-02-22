@@ -115,6 +115,7 @@ Team Lead 将会：
 3. 按需求拆分工作，并行启动 teammates
 4. 通过 SendMessage 协调进度
 5. 完成后 shutdown teammates → TeamDelete
+6. Team Lead 停止后，`SubagentStop` hook 自动触发收尾链（check → commit → archive → record-session）
 
 #### Hook 兼容性
 

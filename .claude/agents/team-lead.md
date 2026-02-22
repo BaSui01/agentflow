@@ -151,6 +151,15 @@ Wait for shutdown_response from each.
 TeamDelete()
 ```
 
+After TeamDelete, simply stop. The `pipeline-complete.py` hook will automatically intercept your stop and inject the finalization chain for the parent agent to execute:
+
+1. **Check** — `go build ./...` + `go vet ./...` to catch build errors
+2. **Git Batch Commit** — `batch_commit.py auto --target master`
+3. **Task Archive** — `task.py archive <name>`
+4. **Record Session** — `add_session.py` to log the work session
+
+You do NOT need to run these steps yourself. Just shut down teammates, delete the team, and stop.
+
 ---
 
 ## Integration with Trellis Hooks
