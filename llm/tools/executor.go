@@ -54,6 +54,51 @@ type ToolExecutor interface {
 	ExecuteOne(ctx context.Context, call llm.ToolCall) ToolResult
 }
 
+// ToolStreamEventType 定义流式工具执行事件类型.
+type ToolStreamEventType string
+
+const (
+	// ToolStreamProgress 表示工具执行进度事件.
+	ToolStreamProgress ToolStreamEventType = "progress"
+	// ToolStreamOutput 表示工具执行输出事件.
+	ToolStreamOutput ToolStreamEventType = "output"
+	// ToolStreamComplete 表示工具执行完成事件.
+	ToolStreamComplete ToolStreamEventType = "complete"
+	// ToolStreamError 表示工具执行错误事件.
+	ToolStreamError ToolStreamEventType = "error"
+)
+
+// ToolStreamEvent 表示流式工具执行中的单个事件.
+type ToolStreamEvent struct {
+	Type     ToolStreamEventType `json:"type"`
+	ToolName string              `json:"tool_name"`
+	Data     any                 `json:"data,omitempty"`
+	Error    error               `json:"-"`
+}
+
+// StreamableToolExecutor 是 ToolExecutor 的可选扩展接口（Optional Interface pattern, §23），
+// 支持流式工具执行以报告长时间运行工具的进度.
+type StreamableToolExecutor interface {
+	ToolExecutor
+	ExecuteOneStream(ctx context.Context, call llm.ToolCall) <-chan ToolStreamEvent
+}
+
+// ExecutorConfig 定义工具执行器的可配置参数.
+type ExecutorConfig struct {
+	MaxRetries   int           // 单个工具失败时的最大重试次数（0 表示不重试）
+	RetryDelay   time.Duration // 首次重试前的等待时间
+	RetryBackoff float64       // 重试间隔的指数退避乘数（例如 2.0 表示每次翻倍）
+}
+
+// DefaultExecutorConfig 返回默认的执行器配置（不重试）.
+func DefaultExecutorConfig() ExecutorConfig {
+	return ExecutorConfig{
+		MaxRetries:   0,
+		RetryDelay:   100 * time.Millisecond,
+		RetryBackoff: 2.0,
+	}
+}
+
 // ====== 实现：DefaultRegistry ======
 
 type DefaultRegistry struct {
@@ -172,31 +217,81 @@ func (r *DefaultRegistry) checkRateLimit(name string) error {
 type DefaultExecutor struct {
 	registry ToolRegistry
 	logger   *zap.Logger
+	config   ExecutorConfig
 }
 
-// NewDefaultExecutor 创建默认的工具执行器。
+// NewDefaultExecutor 创建默认的工具执行器（无重试）。
 func NewDefaultExecutor(registry ToolRegistry, logger *zap.Logger) *DefaultExecutor {
 	return &DefaultExecutor{
 		registry: registry,
 		logger:   logger,
+		config:   DefaultExecutorConfig(),
+	}
+}
+
+// NewDefaultExecutorWithConfig 创建带自定义配置的工具执行器。
+func NewDefaultExecutorWithConfig(registry ToolRegistry, logger *zap.Logger, config ExecutorConfig) *DefaultExecutor {
+	if config.RetryDelay <= 0 {
+		config.RetryDelay = 100 * time.Millisecond
+	}
+	if config.RetryBackoff <= 0 {
+		config.RetryBackoff = 2.0
+	}
+	return &DefaultExecutor{
+		registry: registry,
+		logger:   logger,
+		config:   config,
 	}
 }
 
 func (e *DefaultExecutor) Execute(ctx context.Context, calls []llm.ToolCall) []ToolResult {
 	results := make([]ToolResult, len(calls))
 
-	// 并发执行所有工具调用
+	// 并发执行所有工具调用，单个工具失败不阻塞其他工具
 	var wg sync.WaitGroup
 	for i, call := range calls {
 		wg.Add(1)
 		go func(idx int, c llm.ToolCall) {
 			defer wg.Done()
-			results[idx] = e.ExecuteOne(ctx, c)
+			results[idx] = e.executeWithRetry(ctx, c)
 		}(i, call)
 	}
 	wg.Wait()
 
 	return results
+}
+
+// executeWithRetry 执行单个工具调用，失败时按配置重试.
+func (e *DefaultExecutor) executeWithRetry(ctx context.Context, call llm.ToolCall) ToolResult {
+	result := e.ExecuteOne(ctx, call)
+	if result.Error == "" || e.config.MaxRetries <= 0 {
+		return result
+	}
+
+	delay := e.config.RetryDelay
+	for attempt := 1; attempt <= e.config.MaxRetries; attempt++ {
+		e.logger.Warn("retrying tool execution",
+			zap.String("name", call.Name),
+			zap.Int("attempt", attempt),
+			zap.Int("max_retries", e.config.MaxRetries),
+			zap.String("last_error", result.Error))
+
+		select {
+		case <-ctx.Done():
+			result.Error = fmt.Sprintf("retry cancelled: %v", ctx.Err())
+			return result
+		case <-time.After(delay):
+		}
+
+		result = e.ExecuteOne(ctx, call)
+		if result.Error == "" {
+			return result
+		}
+
+		delay = time.Duration(float64(delay) * e.config.RetryBackoff)
+	}
+
+	return result
 }
 
 func (e *DefaultExecutor) ExecuteOne(ctx context.Context, call llm.ToolCall) ToolResult {
@@ -287,6 +382,76 @@ func (e *DefaultExecutor) ExecuteOne(ctx context.Context, call llm.ToolCall) Too
 
 	return result
 }
+
+// ExecuteOneStream 执行单个工具调用并通过 channel 发射流式事件.
+// 支持长时间运行工具的进度回报和 context cancellation.
+// channel 在 goroutine 结束时保证关闭.
+func (e *DefaultExecutor) ExecuteOneStream(ctx context.Context, call llm.ToolCall) <-chan ToolStreamEvent {
+	ch := make(chan ToolStreamEvent, 4)
+
+	go func() {
+		defer close(ch)
+
+		// 发射 progress 事件：开始执行
+		select {
+		case ch <- ToolStreamEvent{
+			Type:     ToolStreamProgress,
+			ToolName: call.Name,
+			Data:     "starting execution",
+		}:
+		case <-ctx.Done():
+			ch <- ToolStreamEvent{
+				Type:     ToolStreamError,
+				ToolName: call.Name,
+				Error:    ctx.Err(),
+			}
+			return
+		}
+
+		// 使用 executeWithRetry 执行（包含重试逻辑）
+		result := e.executeWithRetry(ctx, call)
+
+		// 检查 context 是否已取消
+		select {
+		case <-ctx.Done():
+			ch <- ToolStreamEvent{
+				Type:     ToolStreamError,
+				ToolName: call.Name,
+				Error:    ctx.Err(),
+			}
+			return
+		default:
+		}
+
+		if result.Error != "" {
+			ch <- ToolStreamEvent{
+				Type:     ToolStreamError,
+				ToolName: call.Name,
+				Error:    fmt.Errorf("%s", result.Error),
+			}
+			return
+		}
+
+		// 发射 output 事件
+		ch <- ToolStreamEvent{
+			Type:     ToolStreamOutput,
+			ToolName: call.Name,
+			Data:     result.Result,
+		}
+
+		// 发射 complete 事件
+		ch <- ToolStreamEvent{
+			Type:     ToolStreamComplete,
+			ToolName: call.Name,
+			Data:     result,
+		}
+	}()
+
+	return ch
+}
+
+// Compile-time check: DefaultExecutor implements StreamableToolExecutor.
+var _ StreamableToolExecutor = (*DefaultExecutor)(nil)
 
 // ====== 速率限制器 ======
 
