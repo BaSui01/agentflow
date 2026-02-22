@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 12
-- **Last Active**: 2026-02-22
+- **Total Sessions**: 13
+- **Last Active**: 2026-02-23
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~968 | Active |
+| `journal-1.md` | ~1028 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits |
 |---|------|-------|---------|
+| 13 | 2026-02-23 | #17 收尾: Enable* typed interface + 消除 builder any 字段 | `56056ba`, `a377d18`, `0b5f2b4`, `3952684` |
 | 12 | 2026-02-22 | 移除 CGO 依赖：mattn/go-sqlite3 → 纯 Go SQLite | `f11f9ef`, `c7cf629`, `a167297` |
 | 11 | 2026-02-22 | Session 12-v2: 10-Agent 并行分析新发现 Bug 全量修复 + 规范沉淀 | `659637a`, `4a28187`, `bc8fc56`, `e2d17ac`, `7f8fc10`, `3553e34`, `9041c54`, `d95f35a`, `f36d04d` |
 | 10 | 2026-02-22 | Session 10: 8-Agent 并行 Bug 修复 + 接口统一 + 安全加固 | `9aecb27`, `d84465c`, `d4df09c`, `cba34ad`, `bb42cb3`, `5f1c62e`, `390c694`, `aba52cf`, `61ff842` |

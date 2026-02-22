@@ -174,6 +174,15 @@ func (e *DAGExecutor) executeNode(ctx context.Context, graph *DAGGraph, node *DA
 		zap.String("node_type", string(node.Type)),
 	)
 
+	// Emit node_start event if a stream emitter is present in context
+	if emitter, ok := workflowStreamEmitterFromContext(ctx); ok {
+		emitter(WorkflowStreamEvent{
+			Type:   WorkflowEventNodeStart,
+			NodeID: node.ID,
+			Data:   input,
+		})
+	}
+
 	// 熔断器检查
 	cb := e.circuitBreakers.GetOrCreate(node.ID)
 	allowed, cbErr := cb.AllowRequest()
@@ -220,6 +229,14 @@ func (e *DAGExecutor) executeNode(ctx context.Context, graph *DAGGraph, node *DA
 		result, err = e.handleNodeError(ctx, graph, node, input, err, duration)
 		if err != nil {
 			cb.RecordFailure()
+			// Emit node_error event
+			if emitter, ok := workflowStreamEmitterFromContext(ctx); ok {
+				emitter(WorkflowStreamEvent{
+					Type:   WorkflowEventNodeError,
+					NodeID: node.ID,
+					Error:  err,
+				})
+			}
 			// Record failure in history
 			if nodeExec != nil {
 				e.history.RecordNodeEnd(nodeExec, nil, err)
@@ -240,6 +257,15 @@ func (e *DAGExecutor) executeNode(ctx context.Context, graph *DAGGraph, node *DA
 	e.mu.Lock()
 	e.nodeResults[node.ID] = result
 	e.mu.Unlock()
+
+	// Emit node_complete event
+	if emitter, ok := workflowStreamEmitterFromContext(ctx); ok {
+		emitter(WorkflowStreamEvent{
+			Type:   WorkflowEventNodeComplete,
+			NodeID: node.ID,
+			Data:   result,
+		})
+	}
 
 	e.logger.Debug("node execution completed",
 		zap.String("node_id", node.ID),

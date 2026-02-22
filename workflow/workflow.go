@@ -112,3 +112,62 @@ func (w *ChainWorkflow) AddStep(step Step) {
 func (w *ChainWorkflow) Steps() []Step {
 	return w.steps
 }
+
+// =============================================================================
+// Workflow Streaming
+// =============================================================================
+
+// WorkflowStreamEventType defines the type of workflow stream event.
+type WorkflowStreamEventType string
+
+const (
+	// WorkflowEventNodeStart is emitted before a DAG node begins execution.
+	WorkflowEventNodeStart WorkflowStreamEventType = "node_start"
+	// WorkflowEventNodeComplete is emitted after a DAG node finishes successfully.
+	WorkflowEventNodeComplete WorkflowStreamEventType = "node_complete"
+	// WorkflowEventNodeError is emitted when a DAG node fails.
+	WorkflowEventNodeError WorkflowStreamEventType = "node_error"
+	// WorkflowEventStepProgress is emitted for intermediate step progress.
+	WorkflowEventStepProgress WorkflowStreamEventType = "step_progress"
+	// WorkflowEventToken is emitted for streaming token output from LLM steps.
+	WorkflowEventToken WorkflowStreamEventType = "token"
+)
+
+// WorkflowStreamEvent carries information about a workflow execution event.
+type WorkflowStreamEvent struct {
+	Type     WorkflowStreamEventType `json:"type"`
+	NodeID   string                  `json:"node_id,omitempty"`
+	NodeName string                  `json:"node_name,omitempty"`
+	Data     any                     `json:"data,omitempty"`
+	Error    error                   `json:"-"`
+}
+
+// WorkflowStreamEmitter is a callback that receives workflow stream events.
+type WorkflowStreamEmitter func(WorkflowStreamEvent)
+
+// workflowStreamEmitterKey is the context key for WorkflowStreamEmitter.
+type workflowStreamEmitterKey struct{}
+
+// WithWorkflowStreamEmitter stores a WorkflowStreamEmitter in the context.
+func WithWorkflowStreamEmitter(ctx context.Context, emitter WorkflowStreamEmitter) context.Context {
+	if emitter == nil {
+		return ctx
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	return context.WithValue(ctx, workflowStreamEmitterKey{}, emitter)
+}
+
+// workflowStreamEmitterFromContext retrieves the WorkflowStreamEmitter from context.
+func workflowStreamEmitterFromContext(ctx context.Context) (WorkflowStreamEmitter, bool) {
+	if ctx == nil {
+		return nil, false
+	}
+	v := ctx.Value(workflowStreamEmitterKey{})
+	if v == nil {
+		return nil, false
+	}
+	emit, ok := v.(WorkflowStreamEmitter)
+	return emit, ok && emit != nil
+}

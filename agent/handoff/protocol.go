@@ -36,6 +36,8 @@ type Handoff struct {
 	Timeout     time.Duration  `json:"timeout"`
 	RetryCount  int            `json:"retry_count"`
 	MaxRetries  int            `json:"max_retries"`
+
+	mu sync.Mutex `json:"-"`
 }
 
 // 任务代表着正在移交的任务。
@@ -220,7 +222,9 @@ func (m *HandoffManager) Handoff(ctx context.Context, opts HandoffOptions) (*Han
 		handoff.Result = result
 		return handoff, nil
 	case <-time.After(handoff.Timeout):
+		handoff.mu.Lock()
 		handoff.Status = StatusFailed
+		handoff.mu.Unlock()
 		return handoff, fmt.Errorf("handoff timeout")
 	case <-ctx.Done():
 		return handoff, ctx.Err()
@@ -228,21 +232,29 @@ func (m *HandoffManager) Handoff(ctx context.Context, opts HandoffOptions) (*Han
 }
 
 func (m *HandoffManager) executeHandoff(ctx context.Context, agent HandoffAgent, handoff *Handoff, resultCh chan *HandoffResult) {
+	handoff.mu.Lock()
 	handoff.Status = StatusInProgress
+	handoff.mu.Unlock()
 	start := time.Now()
 
 	result, err := agent.ExecuteHandoff(ctx, handoff)
 	if err != nil {
 		result = &HandoffResult{Error: err.Error(), Duration: time.Since(start).Milliseconds()}
+		handoff.mu.Lock()
 		handoff.Status = StatusFailed
+		handoff.mu.Unlock()
 	} else {
 		result.Duration = time.Since(start).Milliseconds()
+		handoff.mu.Lock()
 		handoff.Status = StatusCompleted
+		handoff.mu.Unlock()
 	}
 
 	now := time.Now()
+	handoff.mu.Lock()
 	handoff.CompletedAt = &now
 	handoff.Result = result
+	handoff.mu.Unlock()
 
 	m.logger.Info("handoff completed",
 		zap.String("id", handoff.ID),

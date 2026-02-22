@@ -73,6 +73,24 @@ type ServerConfig struct {
 	RateLimitRPS int `yaml:"rate_limit_rps" json:"rate_limit_rps,omitempty"`
 	// 限流 Burst，默认 200
 	RateLimitBurst int `yaml:"rate_limit_burst" json:"rate_limit_burst,omitempty"`
+	// JWT 认证配置
+	JWT JWTConfig `yaml:"jwt" json:"jwt,omitempty"`
+	// 租户级限流 RPS，默认 50
+	TenantRateLimitRPS int `yaml:"tenant_rate_limit_rps" json:"tenant_rate_limit_rps,omitempty"`
+	// 租户级限流 Burst，默认 100
+	TenantRateLimitBurst int `yaml:"tenant_rate_limit_burst" json:"tenant_rate_limit_burst,omitempty"`
+}
+
+// JWTConfig JWT 认证配置
+type JWTConfig struct {
+	// HMAC 签名密钥
+	Secret string `yaml:"secret" env:"SECRET" json:"-"`
+	// RSA 公钥（PEM 格式）
+	PublicKey string `yaml:"public_key" env:"PUBLIC_KEY" json:"-"`
+	// 期望的签发者
+	Issuer string `yaml:"issuer" env:"ISSUER" json:"issuer,omitempty"`
+	// 期望的受众
+	Audience string `yaml:"audience" env:"AUDIENCE" json:"audience,omitempty"`
 }
 
 // AgentConfig Agent 配置（与 types.AgentConfig 兼容）

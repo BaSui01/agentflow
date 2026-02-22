@@ -12,6 +12,7 @@ const (
 	keyRunID               contextKey = "run_id"
 	keyLLMModel            contextKey = "llm_model"
 	keyPromptBundleVersion contextKey = "prompt_bundle_version"
+	keyRoles               contextKey = "roles"
 )
 
 // WithTraceID adds trace ID to context.
@@ -78,4 +79,15 @@ func WithPromptBundleVersion(ctx context.Context, version string) context.Contex
 func PromptBundleVersion(ctx context.Context) (string, bool) {
 	v, ok := ctx.Value(keyPromptBundleVersion).(string)
 	return v, ok && v != ""
+}
+
+// WithRoles adds user roles to context.
+func WithRoles(ctx context.Context, roles []string) context.Context {
+	return context.WithValue(ctx, keyRoles, roles)
+}
+
+// Roles extracts user roles from context.
+func Roles(ctx context.Context) ([]string, bool) {
+	v, ok := ctx.Value(keyRoles).([]string)
+	return v, ok && len(v) > 0
 }

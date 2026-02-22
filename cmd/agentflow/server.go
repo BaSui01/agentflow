@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"sync"
 
+	"github.com/BaSui01/agentflow/agent"
+	"github.com/BaSui01/agentflow/agent/discovery"
 	"github.com/BaSui01/agentflow/api/handlers"
 	"github.com/BaSui01/agentflow/config"
 	"github.com/BaSui01/agentflow/internal/metrics"
@@ -32,8 +34,7 @@ type Server struct {
 	// Handlers
 	healthHandler *handlers.HealthHandler
 	chatHandler   *handlers.ChatHandler
-	// TODO: agentHandler depends on agent registry, kept as future work
-	// agentHandler  *handlers.AgentHandler
+	agentHandler  *handlers.AgentHandler
 
 	// 指标收集器
 	metricsCollector *metrics.Collector
@@ -43,7 +44,8 @@ type Server struct {
 	configAPIHandler *config.ConfigAPIHandler
 
 	// Rate limiter 生命周期管理
-	rateLimiterCancel context.CancelFunc
+	rateLimiterCancel       context.CancelFunc
+	tenantRateLimiterCancel context.CancelFunc
 
 	wg sync.WaitGroup
 }
@@ -126,6 +128,14 @@ func (s *Server) initHandlers() error {
 
 	// TODO: agentHandler initialization requires agent registry (OP8)
 
+	// Initialize agent handler with discovery registry and agent registry.
+	// The resolver is nil for now — it will be wired when a live agent store is available.
+	// Without a resolver, execute/stream endpoints return 501 (Not Implemented).
+	discoveryRegistry := discovery.NewCapabilityRegistry(nil, s.logger)
+	agentRegistry := agent.NewAgentRegistry(s.logger)
+	s.agentHandler = handlers.NewAgentHandler(discoveryRegistry, agentRegistry, s.logger)
+	s.logger.Info("Agent handler initialized")
+
 	s.logger.Info("Handlers initialized")
 	return nil
 }
@@ -196,9 +206,16 @@ func (s *Server) startHTTPServer() error {
 		mux.HandleFunc("/api/v1/chat/completions/stream", s.chatHandler.HandleStream)
 		s.logger.Info("Chat API routes registered")
 	}
-	// TODO: Agent routes depend on agent registry (OP8)
-	// mux.HandleFunc("/api/v1/agents", s.agentHandler.HandleListAgents)
-	// mux.HandleFunc("/api/v1/agents/execute", s.agentHandler.HandleExecuteAgent)
+
+	// Agent API routes
+	if s.agentHandler != nil {
+		mux.HandleFunc("/api/v1/agents", s.agentHandler.HandleListAgents)
+		mux.HandleFunc("/api/v1/agents/execute", s.agentHandler.HandleExecuteAgent)
+		mux.HandleFunc("/api/v1/agents/execute/stream", s.agentHandler.HandleAgentStream)
+		mux.HandleFunc("/api/v1/agents/plan", s.agentHandler.HandlePlanAgent)
+		mux.HandleFunc("/api/v1/agents/health", s.agentHandler.HandleAgentHealth)
+		s.logger.Info("Agent API routes registered")
+	}
 
 	// ========================================
 	// 配置管理 API（需要独立认证保护）
@@ -220,15 +237,30 @@ func (s *Server) startHTTPServer() error {
 	skipAuthPaths := []string{"/health", "/healthz", "/ready", "/readyz", "/version", "/metrics"}
 	rateLimiterCtx, rateLimiterCancel := context.WithCancel(context.Background())
 	s.rateLimiterCancel = rateLimiterCancel
-	handler := Chain(mux,
+	tenantRateLimiterCtx, tenantRateLimiterCancel := context.WithCancel(context.Background())
+	s.tenantRateLimiterCancel = tenantRateLimiterCancel
+
+	// Auth strategy: JWT preferred, fallback to API Key, skip if neither configured
+	authMiddleware := s.buildAuthMiddleware(skipAuthPaths)
+
+	middlewares := []Middleware{
 		Recovery(s.logger),
 		RequestID(),
 		SecurityHeaders(),
+		MetricsMiddleware(s.metricsCollector),
 		RequestLogger(s.logger),
 		CORS(s.cfg.Server.CORSAllowedOrigins),
 		RateLimiter(rateLimiterCtx, float64(s.cfg.Server.RateLimitRPS), s.cfg.Server.RateLimitBurst, s.logger),
-		APIKeyAuth(s.cfg.Server.APIKeys, skipAuthPaths, s.cfg.Server.AllowQueryAPIKey, s.logger),
+	}
+	if authMiddleware != nil {
+		middlewares = append(middlewares, authMiddleware)
+	}
+	// Tenant rate limiter runs after auth (needs tenant_id in context)
+	middlewares = append(middlewares,
+		TenantRateLimiter(tenantRateLimiterCtx, float64(s.cfg.Server.TenantRateLimitRPS), s.cfg.Server.TenantRateLimitBurst, s.logger),
 	)
+
+	handler := Chain(mux, middlewares...)
 
 	// ========================================
 	// 使用 internal/server.Manager
@@ -289,6 +321,32 @@ func (s *Server) getFirstAPIKey() string {
 	return ""
 }
 
+// buildAuthMiddleware selects the authentication strategy based on configuration.
+// Priority: JWT (if secret or public key configured) > API Key > nil (dev mode).
+func (s *Server) buildAuthMiddleware(skipPaths []string) Middleware {
+	jwtCfg := s.cfg.Server.JWT
+	hasJWT := jwtCfg.Secret != "" || jwtCfg.PublicKey != ""
+	hasAPIKeys := len(s.cfg.Server.APIKeys) > 0
+
+	switch {
+	case hasJWT:
+		s.logger.Info("Authentication: JWT enabled",
+			zap.Bool("hmac", jwtCfg.Secret != ""),
+			zap.Bool("rsa", jwtCfg.PublicKey != ""),
+			zap.String("issuer", jwtCfg.Issuer),
+		)
+		return JWTAuth(jwtCfg, skipPaths, s.logger)
+	case hasAPIKeys:
+		s.logger.Info("Authentication: API Key enabled",
+			zap.Int("key_count", len(s.cfg.Server.APIKeys)),
+		)
+		return APIKeyAuth(s.cfg.Server.APIKeys, skipPaths, s.cfg.Server.AllowQueryAPIKey, s.logger)
+	default:
+		s.logger.Warn("Authentication: DISABLED (no JWT secret/key and no API keys configured)")
+		return nil
+	}
+}
+
 // =============================================================================
 // 🛑 关闭流程
 // =============================================================================
@@ -313,6 +371,9 @@ func (s *Server) Shutdown() {
 	// 0. 停止 rate limiter 清理 goroutine
 	if s.rateLimiterCancel != nil {
 		s.rateLimiterCancel()
+	}
+	if s.tenantRateLimiterCancel != nil {
+		s.tenantRateLimiterCancel()
 	}
 
 	// 1. 停止热更新管理器

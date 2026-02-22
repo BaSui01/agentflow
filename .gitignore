@@ -31,4 +31,4 @@ test_artifacts/
 .snow/
 
 # Claude Code skills (user-local)
-.claude/skills/
+.claude/skills/agentflow
