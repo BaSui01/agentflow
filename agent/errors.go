@@ -52,36 +52,37 @@ const (
 )
 
 // Error Agent 统一错误类型
-// 扩展类型 。 特定代理字段出错 。
+// Uses Base *types.Error for unified error handling across the framework.
+// Agent-specific fields (AgentID, AgentType, Timestamp, Metadata) extend the base.
+// Access base fields via promoted-style helpers: e.Code, e.Message, e.Retryable, e.Cause.
 type Error struct {
-	Code      ErrorCode              `json:"code"`
-	Message   string                 `json:"message"`
-	AgentID   string                 `json:"agent_id,omitempty"`
-	AgentType AgentType              `json:"agent_type,omitempty"`
-	Retryable bool                   `json:"retryable"`
-	Timestamp time.Time              `json:"timestamp"`
-	Cause     error                  `json:"-"` // 原始错误
+	Base      *types.Error   `json:"base,inline"`
+	AgentID   string         `json:"agent_id,omitempty"`
+	AgentType AgentType      `json:"agent_type,omitempty"`
+	Timestamp time.Time      `json:"timestamp"`
 	Metadata  map[string]any `json:"metadata,omitempty"`
 }
 
 // Error 实现 error 接口
 func (e *Error) Error() string {
-	if e.Cause != nil {
-		return fmt.Sprintf("[%s] %s: %v", e.Code, e.Message, e.Cause)
+	if e.Base != nil {
+		return e.Base.Error()
 	}
-	return fmt.Sprintf("[%s] %s", e.Code, e.Message)
+	return "[UNKNOWN] agent error"
 }
 
-// Unwrap 支持 errors.Unwrap
+// Unwrap 支持 errors.Unwrap — delegates to Base
 func (e *Error) Unwrap() error {
-	return e.Cause
+	if e.Base != nil {
+		return e.Base.Unwrap()
+	}
+	return nil
 }
 
 // NewError 创建新的 Agent 错误
 func NewError(code ErrorCode, message string) *Error {
 	return &Error{
-		Code:      code,
-		Message:   message,
+		Base:      types.NewError(code, message),
 		Timestamp: time.Now(),
 		Metadata:  make(map[string]any),
 	}
@@ -90,37 +91,31 @@ func NewError(code ErrorCode, message string) *Error {
 // NewErrorWithCause 创建带原因的错误
 func NewErrorWithCause(code ErrorCode, message string, cause error) *Error {
 	return &Error{
-		Code:      code,
-		Message:   message,
-		Cause:     cause,
+		Base:      types.NewError(code, message).WithCause(cause),
 		Timestamp: time.Now(),
 		Metadata:  make(map[string]any),
 	}
 }
 
-// 从 TypesError 转换一个类型。 代理错误 。 错误
+// FromTypesError converts a *types.Error to an *agent.Error.
+// Deprecated: With Base field, *agent.Error wraps *types.Error directly.
+// Kept for backward compatibility.
 func FromTypesError(err *types.Error) *Error {
 	if err == nil {
 		return nil
 	}
 	return &Error{
-		Code:      err.Code,
-		Message:   err.Message,
-		Retryable: err.Retryable,
+		Base:      err,
 		Timestamp: time.Now(),
-		Cause:     err.Cause,
 		Metadata:  make(map[string]any),
 	}
 }
 
-// ToTypesError 转换一个代理 。 错误为类型 。 错误
+// ToTypesError returns the underlying *types.Error.
+// Deprecated: Use e.Base directly.
+// Kept for backward compatibility.
 func (e *Error) ToTypesError() *types.Error {
-	return &types.Error{
-		Code:      e.Code,
-		Message:   e.Message,
-		Retryable: e.Retryable,
-		Cause:     e.Cause,
-	}
+	return e.Base
 }
 
 // WithAgent 添加 Agent 信息
@@ -132,7 +127,7 @@ func (e *Error) WithAgent(id string, agentType AgentType) *Error {
 
 // WithRetryable 设置是否可重试
 func (e *Error) WithRetryable(retryable bool) *Error {
-	e.Retryable = retryable
+	e.Base.Retryable = retryable
 	return e
 }
 
@@ -147,14 +142,14 @@ func (e *Error) WithMetadata(key string, value any) *Error {
 
 // WithCause 添加原因错误
 func (e *Error) WithCause(cause error) *Error {
-	e.Cause = cause
+	e.Base.Cause = cause
 	return e
 }
 
 // 如果代理错误可以重试, 是否可重试
 func IsRetryable(err error) bool {
 	if e, ok := err.(*Error); ok {
-		return e.Retryable
+		return e.Base.Retryable
 	}
 	// 还要检查类型 错误
 	return types.IsRetryable(err)
@@ -163,7 +158,7 @@ func IsRetryable(err error) bool {
 // GetErrorCode 从错误中提取出错误代码
 func GetErrorCode(err error) ErrorCode {
 	if e, ok := err.(*Error); ok {
-		return e.Code
+		return e.Base.Code
 	}
 	return types.GetErrorCode(err)
 }

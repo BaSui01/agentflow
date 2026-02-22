@@ -8,14 +8,14 @@ import (
 // 它囊括了之前在BaseAgent中的特性管理逻辑.
 type FeatureManager struct {
 	// 特性实例( 使用接口来避免循环依赖)
-	reflection     any // *ReflectionExecutor
-	toolSelector   any // *DynamicToolSelector
-	promptEnhancer any // *PromptEnhancer
-	skillManager   any // *SkillManager
-	mcpServer      any // *MCPServer
-	lspClient      any // *lsp.LSPClient
-	enhancedMemory any // *EnhancedMemorySystem
-	observability  any // *ObservabilitySystem
+	reflection     ReflectionRunner     // *ReflectionExecutor
+	toolSelector   DynamicToolSelectorRunner // *DynamicToolSelector
+	promptEnhancer PromptEnhancerRunner // *PromptEnhancer
+	skillManager   any                  // SkillDiscoverer or custom impl
+	mcpServer      any                  // MCPServerRunner
+	lspClient      any                  // LSPClientRunner
+	enhancedMemory any                  // EnhancedMemoryRunner
+	observability  any                  // ObservabilityRunner
 
 	// 地物标志
 	reflectionEnabled     bool
@@ -39,7 +39,11 @@ func NewFeatureManager(logger *zap.Logger) *FeatureManager {
 
 // 启用反射功能可以实现反射功能 。
 func (fm *FeatureManager) EnableReflection(executor any) {
-	fm.reflection = executor
+	if re, ok := executor.(ReflectionRunner); ok {
+		fm.reflection = re
+	} else {
+		fm.reflection = &reflectionAnyAdapter{raw: executor}
+	}
 	fm.reflectionEnabled = true
 	fm.logger.Info("reflection feature enabled")
 }
@@ -52,7 +56,7 @@ func (fm *FeatureManager) DisableReflection() {
 }
 
 // Get Reflection 返回反射执行器 。
-func (fm *FeatureManager) GetReflection() any {
+func (fm *FeatureManager) GetReflection() ReflectionRunner {
 	return fm.reflection
 }
 
@@ -63,7 +67,11 @@ func (fm *FeatureManager) IsReflectionEnabled() bool {
 
 // 启用工具选择允许动态工具选择功能 。
 func (fm *FeatureManager) EnableToolSelection(selector any) {
-	fm.toolSelector = selector
+	if ts, ok := selector.(DynamicToolSelectorRunner); ok {
+		fm.toolSelector = ts
+	} else {
+		fm.toolSelector = &toolSelectorAnyAdapter{raw: selector}
+	}
 	fm.toolSelectionEnabled = true
 	fm.logger.Info("tool selection feature enabled")
 }
@@ -76,7 +84,7 @@ func (fm *FeatureManager) DisableToolSelection() {
 }
 
 // GetTooSelector 返回工具选择器。
-func (fm *FeatureManager) GetToolSelector() any {
+func (fm *FeatureManager) GetToolSelector() DynamicToolSelectorRunner {
 	return fm.toolSelector
 }
 
@@ -87,7 +95,11 @@ func (fm *FeatureManager) IsToolSelectionEnabled() bool {
 
 // 启用Prompt Enhancer 启用了即时增强器特性 。
 func (fm *FeatureManager) EnablePromptEnhancer(enhancer any) {
-	fm.promptEnhancer = enhancer
+	if pe, ok := enhancer.(PromptEnhancerRunner); ok {
+		fm.promptEnhancer = pe
+	} else {
+		fm.promptEnhancer = &promptEnhancerAnyAdapter{raw: enhancer}
+	}
 	fm.promptEnhancerEnabled = true
 	fm.logger.Info("prompt enhancer feature enabled")
 }
@@ -100,7 +112,7 @@ func (fm *FeatureManager) DisablePromptEnhancer() {
 }
 
 // GetPrompt Enhancer 返回快速增强器 。
-func (fm *FeatureManager) GetPromptEnhancer() any {
+func (fm *FeatureManager) GetPromptEnhancer() PromptEnhancerRunner {
 	return fm.promptEnhancer
 }
 

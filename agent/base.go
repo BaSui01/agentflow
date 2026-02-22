@@ -145,15 +145,17 @@ type BaseAgent struct {
 	contextEngineEnabled bool           // 是否启用上下文工程
 
 	// 2025 新增功能（可选启用）
-	reflectionExecutor  any // *ReflectionExecutor - 避免循环依赖
-	toolSelector        any // *DynamicToolSelector
-	promptEnhancer      any // *PromptEnhancer
-	skillManager        any // *SkillManager
-	mcpServer           any // *MCPServer
-	lspClient           any // *lsp.LSPClient
-	lspLifecycle        any // optional lifecycle owner (e.g. *ManagedLSP)
-	enhancedMemory      any // *EnhancedMemorySystem
-	observabilitySystem any // *ObservabilitySystem
+	// These use workflow-local interfaces (agent/interfaces.go) to avoid circular
+	// dependencies with sub-packages. See quality-guidelines.md §15.
+	reflectionExecutor  ReflectionRunner     // *ReflectionExecutor
+	toolSelector        DynamicToolSelectorRunner // *DynamicToolSelector
+	promptEnhancer      PromptEnhancerRunner // *PromptEnhancer
+	skillManager        any                  // SkillDiscoverer or custom impl — type-asserted at call site
+	mcpServer           any                  // MCPServerRunner — nil-check only
+	lspClient           any                  // LSPClientRunner — type-asserted in Teardown
+	lspLifecycle        any                  // LSPLifecycleOwner — type-asserted in Teardown
+	enhancedMemory      any                  // EnhancedMemoryRunner — type-asserted at call site
+	observabilitySystem any                  // ObservabilityRunner — type-asserted at call site
 
 	// 2026 Guardrails 功能
 	// Requirements 1.7, 2.4: 输入/输出验证和重试支持
