@@ -23,6 +23,9 @@ const (
 	ToolTypeFileSearch HostedToolType = "file_search"
 	ToolTypeCodeExec   HostedToolType = "code_execution"
 	ToolTypeRetrieval  HostedToolType = "retrieval"
+
+	// maxResponseSize is the maximum allowed response body size (1MB).
+	maxResponseSize = 1 << 20
 )
 
 // HostToole 代表由提供者托管的工具.
@@ -34,11 +37,18 @@ type HostedTool interface {
 	Execute(ctx context.Context, args json.RawMessage) (json.RawMessage, error)
 }
 
-// ToolRegistry 管理主机工具 。
+// ToolExecuteFunc is the function signature for tool execution.
+type ToolExecuteFunc func(ctx context.Context, args json.RawMessage) (json.RawMessage, error)
+
+// ToolMiddleware wraps tool execution with cross-cutting concerns.
+type ToolMiddleware func(next ToolExecuteFunc) ToolExecuteFunc
+
+// ToolRegistry manages hosted tools.
 type ToolRegistry struct {
-	tools  map[string]HostedTool
-	logger *zap.Logger
-	mu     sync.RWMutex
+	tools       map[string]HostedTool
+	middlewares []ToolMiddleware
+	logger      *zap.Logger
+	mu          sync.RWMutex
 }
 
 // NewToolRegistry创建了新的主机工具注册.
@@ -162,17 +172,21 @@ func (t *WebSearchTool) Execute(ctx context.Context, args json.RawMessage) (json
 		return nil, fmt.Errorf("invalid arguments: %w", err)
 	}
 
+	if searchArgs.Query == "" {
+		return nil, fmt.Errorf("query is required")
+	}
+
 	maxResults := searchArgs.MaxResults
 	if maxResults == 0 {
 		maxResults = t.maxResults
 	}
 
-	// 构建搜索 URL
+	// Build search URL
 	searchURL := fmt.Sprintf("%s?q=%s&max=%d", t.endpoint, url.QueryEscape(searchArgs.Query), maxResults)
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, searchURL, nil)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
 	if t.apiKey != "" {
 		req.Header.Set("Authorization", "Bearer "+t.apiKey)
@@ -184,12 +198,24 @@ func (t *WebSearchTool) Execute(ctx context.Context, args json.RawMessage) (json
 	}
 	defer resp.Body.Close()
 
-	body, err := io.ReadAll(resp.Body)
+	// Enforce 1MB response size limit
+	limitedReader := io.LimitReader(resp.Body, maxResponseSize)
+	body, err := io.ReadAll(limitedReader)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to read response: %w", err)
 	}
 
-	return body, nil
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("search API returned status %d: %s", resp.StatusCode, string(body))
+	}
+
+	// Parse response into structured results
+	var results []WebSearchResult
+	if err := json.Unmarshal(body, &results); err != nil {
+		return nil, fmt.Errorf("failed to parse search results: %w", err)
+	}
+
+	return json.Marshal(results)
 }
 
 // FileSearchTool 执行文件搜索功能.
@@ -261,4 +287,82 @@ func (t *FileSearchTool) Execute(ctx context.Context, args json.RawMessage) (jso
 	}
 
 	return json.Marshal(results)
+}
+
+// Use appends middleware(s) to the registry's middleware chain.
+func (r *ToolRegistry) Use(middleware ...ToolMiddleware) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.middlewares = append(r.middlewares, middleware...)
+}
+
+// Execute looks up a tool by name and executes it with the middleware chain applied.
+func (r *ToolRegistry) Execute(ctx context.Context, name string, args json.RawMessage) (json.RawMessage, error) {
+	r.mu.RLock()
+	tool, ok := r.tools[name]
+	middlewares := make([]ToolMiddleware, len(r.middlewares))
+	copy(middlewares, r.middlewares)
+	r.mu.RUnlock()
+
+	if !ok {
+		return nil, fmt.Errorf("tool not found: %s", name)
+	}
+
+	// Build the middleware chain: last middleware wraps first, so iterate in reverse.
+	var fn ToolExecuteFunc = tool.Execute
+	for i := len(middlewares) - 1; i >= 0; i-- {
+		fn = middlewares[i](fn)
+	}
+
+	return fn(ctx, args)
+}
+
+// WithTimeout returns a middleware that enforces an execution timeout.
+func WithTimeout(d time.Duration) ToolMiddleware {
+	return func(next ToolExecuteFunc) ToolExecuteFunc {
+		return func(ctx context.Context, args json.RawMessage) (json.RawMessage, error) {
+			ctx, cancel := context.WithTimeout(ctx, d)
+			defer cancel()
+			return next(ctx, args)
+		}
+	}
+}
+
+// WithLogging returns a middleware that logs tool invocations.
+func WithLogging(logger *zap.Logger) ToolMiddleware {
+	if logger == nil {
+		logger = zap.NewNop()
+	}
+	return func(next ToolExecuteFunc) ToolExecuteFunc {
+		return func(ctx context.Context, args json.RawMessage) (json.RawMessage, error) {
+			start := time.Now()
+			result, err := next(ctx, args)
+			duration := time.Since(start)
+			if err != nil {
+				logger.Warn("tool execution failed",
+					zap.Duration("duration", duration),
+					zap.Error(err),
+				)
+			} else {
+				logger.Debug("tool execution completed",
+					zap.Duration("duration", duration),
+				)
+			}
+			return result, err
+		}
+	}
+}
+
+// WithMetrics returns a middleware that calls a metrics callback after execution.
+func WithMetrics(onExecute func(name string, duration time.Duration, err error)) ToolMiddleware {
+	return func(next ToolExecuteFunc) ToolExecuteFunc {
+		return func(ctx context.Context, args json.RawMessage) (json.RawMessage, error) {
+			start := time.Now()
+			result, err := next(ctx, args)
+			if onExecute != nil {
+				onExecute("", time.Since(start), err)
+			}
+			return result, err
+		}
+	}
 }

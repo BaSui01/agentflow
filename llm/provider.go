@@ -7,8 +7,7 @@ import (
 	"github.com/BaSui01/agentflow/types"
 )
 
-// 迁移期间向后兼容的重导出类型。
-// 完全迁移后将被移除。
+// 重导出核心类型，供 llm 包内部及下游使用。
 type (
 	Message      = types.Message
 	Role         = types.Role
@@ -190,9 +189,3 @@ type ProviderEndpoints struct {
 	Health     string `json:"health,omitempty"`    // 健康检查端点（如果与 Models 不同）
 	BaseURL    string `json:"base_url"`            // 基础 URL
 }
-
-// IsRetryable 判断错误是否可重试。
-//
-// Deprecated: 这是 types.IsRetryable 的完全重复。
-// 新代码请直接使用 types.IsRetryable。保留此变量仅为向后兼容。
-var IsRetryable = types.IsRetryable

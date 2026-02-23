@@ -306,24 +306,25 @@ func (h *AgentHandler) HandleAgentStream(w http.ResponseWriter, r *http.Request)
 	emitter := func(event agent.RuntimeStreamEvent) {
 		var sseEvent string
 		var data []byte
+		var err error
 
 		switch event.Type {
 		case agent.RuntimeStreamToken:
 			sseEvent = "token"
-			data, _ = json.Marshal(map[string]string{"content": event.Delta})
+			data, err = json.Marshal(map[string]string{"content": event.Delta})
 		case agent.RuntimeStreamToolCall:
 			sseEvent = "tool_call"
 			if event.ToolCall != nil {
-				data, _ = json.Marshal(event.ToolCall)
+				data, err = json.Marshal(event.ToolCall)
 			}
 		case agent.RuntimeStreamToolResult:
 			sseEvent = "tool_result"
 			if event.ToolResult != nil {
-				data, _ = json.Marshal(event.ToolResult)
+				data, err = json.Marshal(event.ToolResult)
 			}
 		case agent.RuntimeStreamToolProgress:
 			sseEvent = "tool_progress"
-			data, _ = json.Marshal(map[string]any{
+			data, err = json.Marshal(map[string]any{
 				"tool_call_id": event.ToolCallID,
 				"tool_name":    event.ToolName,
 				"progress":     event.Data,
@@ -332,7 +333,7 @@ func (h *AgentHandler) HandleAgentStream(w http.ResponseWriter, r *http.Request)
 			return
 		}
 
-		if data == nil {
+		if err != nil || data == nil {
 			return
 		}
 

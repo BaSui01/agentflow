@@ -56,8 +56,8 @@ func TestMultiProviderRouter_SelectProviderWithModel(t *testing.T) {
 	if err != nil {
 		t.Fatalf("open db: %v", err)
 	}
-	if err := InitDatabase(db); err != nil {
-		t.Fatalf("InitDatabase: %v", err)
+	if err := db.AutoMigrate(&LLMProvider{}, &LLMModel{}, &LLMProviderModel{}, &LLMProviderAPIKey{}); err != nil {
+		t.Fatalf("AutoMigrate: %v", err)
 	}
 
 	// 种子提供者/模型。

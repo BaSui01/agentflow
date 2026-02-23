@@ -168,15 +168,23 @@ func (p *OpenAIProvider) Edit(ctx context.Context, req *EditRequest) (*GenerateR
 		}
 	}
 
-	_ = writer.WriteField("prompt", req.Prompt)
+	if err := writer.WriteField("prompt", req.Prompt); err != nil {
+		return nil, fmt.Errorf("failed to write prompt field: %w", err)
+	}
 	if req.Model != "" {
-		_ = writer.WriteField("model", req.Model)
+		if err := writer.WriteField("model", req.Model); err != nil {
+			return nil, fmt.Errorf("failed to write model field: %w", err)
+		}
 	}
 	if req.N > 0 {
-		_ = writer.WriteField("n", fmt.Sprintf("%d", req.N))
+		if err := writer.WriteField("n", fmt.Sprintf("%d", req.N)); err != nil {
+			return nil, fmt.Errorf("failed to write n field: %w", err)
+		}
 	}
 	if req.Size != "" {
-		_ = writer.WriteField("size", req.Size)
+		if err := writer.WriteField("size", req.Size); err != nil {
+			return nil, fmt.Errorf("failed to write size field: %w", err)
+		}
 	}
 
 	writer.Close()
@@ -237,10 +245,14 @@ func (p *OpenAIProvider) CreateVariation(ctx context.Context, req *VariationRequ
 	}
 
 	if req.N > 0 {
-		_ = writer.WriteField("n", fmt.Sprintf("%d", req.N))
+		if err := writer.WriteField("n", fmt.Sprintf("%d", req.N)); err != nil {
+			return nil, fmt.Errorf("failed to write n field: %w", err)
+		}
 	}
 	if req.Size != "" {
-		_ = writer.WriteField("size", req.Size)
+		if err := writer.WriteField("size", req.Size); err != nil {
+			return nil, fmt.Errorf("failed to write size field: %w", err)
+		}
 	}
 
 	writer.Close()

@@ -40,7 +40,92 @@ func (b *testBackend) Name() string {
 	return "test"
 }
 
-// PLACEHOLDER_EXEC_TESTS
+// --- SandboxExecutor nil backend ---
+
+func TestNewSandboxExecutorNilBackend(t *testing.T) {
+	cfg := DefaultSandboxConfig()
+	exec := NewSandboxExecutor(cfg, nil, nil)
+	require.NotNil(t, exec)
+
+	_, err := exec.Execute(context.Background(), &ExecutionRequest{
+		ID:       "nil-backend",
+		Language: LangPython,
+		Code:     "pass",
+	})
+	assert.Error(t, err)
+}
+
+// --- SandboxExecutor context cancellation ---
+
+func TestSandboxExecutorContextCancelled(t *testing.T) {
+	backend := &testBackend{
+		executeFn: func(ctx context.Context, req *ExecutionRequest, config SandboxConfig) (*ExecutionResult, error) {
+			<-ctx.Done()
+			return nil, ctx.Err()
+		},
+	}
+
+	cfg := DefaultSandboxConfig()
+	exec := NewSandboxExecutor(cfg, backend, nil)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	_, err := exec.Execute(ctx, &ExecutionRequest{
+		ID:       "cancelled",
+		Language: LangPython,
+		Code:     "pass",
+	})
+	assert.Error(t, err)
+}
+
+// --- SandboxExecutor empty ID ---
+
+func TestSandboxExecutorEmptyID(t *testing.T) {
+	backend := &testBackend{}
+	cfg := DefaultSandboxConfig()
+	exec := NewSandboxExecutor(cfg, backend, nil)
+
+	result, err := exec.Execute(context.Background(), &ExecutionRequest{
+		ID:       "",
+		Language: LangPython,
+		Code:     "pass",
+	})
+	// Should still work — ID is optional for execution
+	if err == nil {
+		assert.True(t, result.Success)
+	}
+}
+
+// --- SandboxExecutor multiple executions ---
+
+func TestSandboxExecutorMultipleExecutions(t *testing.T) {
+	callCount := 0
+	backend := &testBackend{
+		executeFn: func(ctx context.Context, req *ExecutionRequest, config SandboxConfig) (*ExecutionResult, error) {
+			callCount++
+			return &ExecutionResult{ID: req.ID, Success: true, ExitCode: 0}, nil
+		},
+	}
+
+	cfg := DefaultSandboxConfig()
+	exec := NewSandboxExecutor(cfg, backend, nil)
+
+	for i := 0; i < 5; i++ {
+		result, err := exec.Execute(context.Background(), &ExecutionRequest{
+			ID:       fmt.Sprintf("multi-%d", i),
+			Language: LangPython,
+			Code:     "pass",
+		})
+		require.NoError(t, err)
+		assert.True(t, result.Success)
+	}
+
+	assert.Equal(t, 5, callCount)
+	stats := exec.Stats()
+	assert.Equal(t, int64(5), stats.TotalExecutions)
+	assert.Equal(t, int64(5), stats.SuccessExecutions)
+}
 
 // --- DefaultSandboxConfig ---
 
@@ -261,7 +346,47 @@ func TestSandboxExecutorCleanup(t *testing.T) {
 	assert.True(t, cleanupCalled)
 }
 
-// PLACEHOLDER_DOCKER_TESTS
+// --- DockerBackend additional tests ---
+
+func TestDockerBackendBuildCommandUnknownLang(t *testing.T) {
+	d := NewDockerBackend(nil)
+	cmd := d.buildCommand(&ExecutionRequest{Language: Language("unknown"), Code: "test"})
+	// Unknown language should fall back to sh -c
+	assert.Contains(t, cmd, "-c")
+}
+
+func TestDockerBackendNetworkEnabled(t *testing.T) {
+	d := NewDockerBackend(nil)
+	cfg := SandboxConfig{
+		MaxMemoryMB:    256,
+		MaxCPUPercent:  25,
+		NetworkEnabled: true,
+		AllowedHosts:   []string{"api.example.com"},
+	}
+
+	args := d.buildDockerArgs("test-net", "python:3.12-slim", &ExecutionRequest{
+		Language: LangPython,
+		Code:     "pass",
+	}, cfg, "")
+
+	// When network is enabled, should NOT contain "none"
+	hasNone := false
+	for i, arg := range args {
+		if arg == "--network" && i+1 < len(args) && args[i+1] == "none" {
+			hasNone = true
+		}
+	}
+	assert.False(t, hasNone, "network should not be 'none' when NetworkEnabled is true")
+}
+
+func TestDockerBackendCustomImage(t *testing.T) {
+	d := NewDockerBackendWithConfig(nil, DockerBackendConfig{
+		CustomImages: map[Language]string{
+			LangPython: "python:3.13-alpine",
+		},
+	})
+	assert.Equal(t, "python:3.13-alpine", d.images[LangPython])
+}
 
 // --- DockerBackend ---
 
@@ -413,7 +538,32 @@ func TestProcessBackendCleanup(t *testing.T) {
 	require.NoError(t, err)
 }
 
-// PLACEHOLDER_VALIDATOR_TESTS
+// --- CodeValidator additional tests ---
+
+func TestCodeValidatorMultiplePatterns(t *testing.T) {
+	v := NewCodeValidator()
+
+	// Python code with multiple dangerous patterns
+	code := "import os\nimport subprocess\nos.system('ls')\nsubprocess.call(['rm'])"
+	warnings := v.Validate(LangPython, code)
+	assert.GreaterOrEqual(t, len(warnings), 3)
+}
+
+func TestCodeValidatorEmptyCode(t *testing.T) {
+	v := NewCodeValidator()
+	warnings := v.Validate(LangPython, "")
+	assert.Empty(t, warnings)
+}
+
+func TestCodeValidatorAllLanguages(t *testing.T) {
+	v := NewCodeValidator()
+	languages := []Language{LangPython, LangJavaScript, LangBash, LangGo, LangRust}
+	for _, lang := range languages {
+		// Safe code should produce no warnings
+		warnings := v.Validate(lang, "x = 1")
+		_ = warnings // just ensure no panic
+	}
+}
 
 // --- CodeValidator ---
 

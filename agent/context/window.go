@@ -221,7 +221,7 @@ func (w *WindowManager) summarize(ctx context.Context, messages []types.Message)
 
 	budget := w.config.MaxTokens - w.config.ReserveTokens
 	if budget <= 0 {
-		return nil, nil
+		return []types.Message{}, nil
 	}
 
 	// If already within budget, no trimming needed.

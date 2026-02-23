@@ -179,7 +179,7 @@ type BenchmarkResult struct {
 // NewObservabilitySystem 创建可观测性系统
 func NewObservabilitySystem(logger *zap.Logger) *ObservabilitySystem {
 	if logger == nil {
-		logger, _ = zap.NewProduction()
+		logger = zap.NewNop()
 	}
 
 	return &ObservabilitySystem{

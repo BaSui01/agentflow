@@ -43,8 +43,8 @@ func TestMemoryCoordinator_NoMemory(t *testing.T) {
 	if err != nil {
 		t.Errorf("expected no error, got %v", err)
 	}
-	if records != nil {
-		t.Error("expected nil records")
+	if len(records) != 0 {
+		t.Errorf("expected empty records, got %d", len(records))
 	}
 }
 

@@ -2,6 +2,8 @@ package deployment
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"sync"
@@ -9,6 +11,13 @@ import (
 
 	"go.uber.org/zap"
 )
+
+// DeploymentEventCallbacks holds optional lifecycle event hooks.
+type DeploymentEventCallbacks struct {
+	OnDeploy func(d *Deployment)
+	OnDelete func(deploymentID string)
+	OnScale  func(deploymentID string, from, to int)
+}
 
 // 部署 目标定义了部署目标类型.
 type DeploymentTarget string
@@ -108,6 +117,7 @@ type DeploymentProvider interface {
 type Deployer struct {
 	providers   map[DeploymentTarget]DeploymentProvider
 	deployments map[string]*Deployment
+	callbacks   DeploymentEventCallbacks
 	logger      *zap.Logger
 	mu          sync.RWMutex
 }
@@ -129,6 +139,13 @@ func (d *Deployer) RegisterProvider(target DeploymentTarget, provider Deployment
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	d.providers[target] = provider
+}
+
+// SetCallbacks configures lifecycle event hooks.
+func (d *Deployer) SetCallbacks(cb DeploymentEventCallbacks) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.callbacks = cb
 }
 
 // 向指定目标部署特工。
@@ -174,6 +191,10 @@ func (d *Deployer) Deploy(ctx context.Context, opts DeployOptions) (*Deployment,
 
 	deployment.Status = StatusRunning
 	deployment.UpdatedAt = time.Now()
+
+	if d.callbacks.OnDeploy != nil {
+		d.callbacks.OnDeploy(deployment)
+	}
 
 	d.logger.Info("deployment successful",
 		zap.String("id", deployment.ID),
@@ -227,6 +248,10 @@ func (d *Deployer) Delete(ctx context.Context, deploymentID string) error {
 	delete(d.deployments, deploymentID)
 	d.mu.Unlock()
 
+	if d.callbacks.OnDelete != nil {
+		d.callbacks.OnDelete(deploymentID)
+	}
+
 	d.logger.Info("deployment deleted", zap.String("id", deploymentID))
 	return nil
 }
@@ -257,9 +282,14 @@ func (d *Deployer) Scale(ctx context.Context, deploymentID string, replicas int)
 	}
 
 	d.mu.Lock()
+	oldReplicas := deployment.Replicas
 	deployment.Replicas = replicas
 	deployment.UpdatedAt = time.Now()
 	d.mu.Unlock()
+
+	if d.callbacks.OnScale != nil {
+		d.callbacks.OnScale(deploymentID, oldReplicas, replicas)
+	}
 
 	return nil
 }
@@ -300,7 +330,26 @@ type DeployOptions struct {
 }
 
 func generateDeploymentID() string {
-	return fmt.Sprintf("dep_%d", time.Now().UnixNano())
+	b := make([]byte, 16)
+	if _, err := rand.Read(b); err != nil {
+		// Fallback: should never happen with crypto/rand
+		return fmt.Sprintf("dep_%d", time.Now().UnixNano())
+	}
+	return "dep_" + hex.EncodeToString(b)
+}
+
+// GetDeploymentsByAgent returns all deployments for a given agent ID.
+func (d *Deployer) GetDeploymentsByAgent(agentID string) []*Deployment {
+	d.mu.RLock()
+	defer d.mu.RUnlock()
+
+	var result []*Deployment
+	for _, dep := range d.deployments {
+		if dep.AgentID == agentID {
+			result = append(result, dep)
+		}
+	}
+	return result
 }
 
 // 按 K8s 显示的“出口管理”出口部署。

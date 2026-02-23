@@ -46,7 +46,7 @@ func NewAPIKeyPool(db *gorm.DB, providerID uint, strategy APIKeySelectionStrateg
 		logger = zap.NewNop()
 	}
 	if strategy == "" {
-		strategy = StrategyWeightedRandom
+		panic("NewAPIKeyPool: strategy must not be empty")
 	}
 
 	pool := &APIKeyPool{
@@ -116,7 +116,7 @@ func (p *APIKeyPool) SelectKey(ctx context.Context) (*LLMProviderAPIKey, error) 
 	case StrategyLeastUsed:
 		selected = p.selectLeastUsed(healthyKeys)
 	default:
-		selected = p.selectWeightedRandom(healthyKeys)
+		return nil, fmt.Errorf("unsupported API key selection strategy: %s", p.strategy)
 	}
 
 	if selected == nil {

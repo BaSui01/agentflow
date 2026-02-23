@@ -538,7 +538,7 @@ func (r *CapabilityRegistry) FindCapabilities(ctx context.Context, capabilityNam
 
 	agentCaps, exists := r.capabilityIndex[capabilityName]
 	if !exists {
-		return nil, nil
+		return []CapabilityInfo{}, nil
 	}
 
 	caps := make([]CapabilityInfo, 0, len(agentCaps))
@@ -755,7 +755,7 @@ func (r *CapabilityRegistry) GetAgentsByCapability(ctx context.Context, capabili
 
 	agentCaps, exists := r.capabilityIndex[capabilityName]
 	if !exists {
-		return nil, nil
+		return []*AgentInfo{}, nil
 	}
 
 	agents := make([]*AgentInfo, 0, len(agentCaps))

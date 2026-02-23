@@ -223,11 +223,6 @@ func IsRetryableError(err error) bool {
 	return errors.As(err, &retryableErr)
 }
 
-// IsRetryable is an alias for IsRetryableError.
-//
-// Deprecated: 为避免与 types.IsRetryable 混淆，请使用 IsRetryableError。
-var IsRetryable = IsRetryableError
-
 // WrapRetryable 将错误包装为可重试错误
 func WrapRetryable(err error) error {
 	if err == nil {

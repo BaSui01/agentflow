@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -316,16 +318,35 @@ func (m *Manager) GetStats(ctx context.Context) (*Stats, error) {
 		return nil, fmt.Errorf("cache manager is closed")
 	}
 
-	_, err := m.redis.Info(ctx, "stats", "memory", "clients").Result()
+	info, err := m.redis.Info(ctx, "stats", "memory", "clients", "keyspace").Result()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get redis info: %w", err)
 	}
 
-	// 解析 Redis INFO 输出（简化版）
 	stats := &Stats{}
+	stats.Hits = parseRedisInfoUint64(info, "keyspace_hits")
+	stats.Misses = parseRedisInfoUint64(info, "keyspace_misses")
+	stats.UsedMemory = parseRedisInfoInt64(info, "used_memory")
+	stats.MaxMemory = parseRedisInfoInt64(info, "maxmemory")
+	stats.Connections = int(parseRedisInfoInt64(info, "connected_clients"))
 
-	// TODO: 解析 info 字符串提取统计信息
-	// 这里只是示例，实际需要解析 Redis INFO 输出
+	// Parse db0 keys count: "db0:keys=123,expires=45,avg_ttl=6789"
+	for _, line := range strings.Split(info, "\n") {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "db") && strings.Contains(line, "keys=") {
+			parts := strings.SplitN(line, ":", 2)
+			if len(parts) == 2 {
+				for _, field := range strings.Split(parts[1], ",") {
+					kv := strings.SplitN(field, "=", 2)
+					if len(kv) == 2 && kv[0] == "keys" {
+						if v, err := strconv.ParseInt(kv[1], 10, 64); err == nil {
+							stats.Keys += v
+						}
+					}
+				}
+			}
+		}
+	}
 
 	return stats, nil
 }
@@ -333,6 +354,38 @@ func (m *Manager) GetStats(ctx context.Context) (*Stats, error) {
 // =============================================================================
 // 🔧 辅助函数
 // =============================================================================
+
+// parseRedisInfoUint64 extracts a uint64 value from a Redis INFO response by key.
+func parseRedisInfoUint64(info, key string) uint64 {
+	for _, line := range strings.Split(info, "\n") {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, key+":") {
+			parts := strings.SplitN(line, ":", 2)
+			if len(parts) == 2 {
+				if v, err := strconv.ParseUint(strings.TrimSpace(parts[1]), 10, 64); err == nil {
+					return v
+				}
+			}
+		}
+	}
+	return 0
+}
+
+// parseRedisInfoInt64 extracts an int64 value from a Redis INFO response by key.
+func parseRedisInfoInt64(info, key string) int64 {
+	for _, line := range strings.Split(info, "\n") {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, key+":") {
+			parts := strings.SplitN(line, ":", 2)
+			if len(parts) == 2 {
+				if v, err := strconv.ParseInt(strings.TrimSpace(parts[1]), 10, 64); err == nil {
+					return v
+				}
+			}
+		}
+	}
+	return 0
+}
 
 // ErrCacheMiss 缓存未命中错误
 var ErrCacheMiss = errors.New("cache miss")

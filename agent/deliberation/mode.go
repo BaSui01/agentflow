@@ -3,6 +3,7 @@ package deliberation
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -72,12 +73,14 @@ type Reasoner interface {
 	Think(ctx context.Context, prompt string) (string, float64, error)
 }
 
-// 发动机提供考虑能力.
+// Engine provides deliberation capabilities.
 type Engine struct {
-	config   DeliberationConfig
-	reasoner Reasoner
-	logger   *zap.Logger
-	mu       sync.RWMutex
+	config     DeliberationConfig
+	reasoner   Reasoner
+	logger     *zap.Logger
+	mu         sync.RWMutex
+	OnThought  func(ThoughtProcess)
+	OnDecision func(Decision)
 }
 
 // NewEngine创造了一个新的审议引擎.
@@ -92,9 +95,16 @@ func NewEngine(config DeliberationConfig, reasoner Reasoner, logger *zap.Logger)
 	}
 }
 
-// 故意在行动前进行推理。
+// Deliberate performs reasoning before action.
 func (e *Engine) Deliberate(ctx context.Context, task Task) (*DeliberationResult, error) {
-	if e.config.Mode == ModeImmediate {
+	mode := e.GetMode()
+
+	// Adaptive mode: decide between immediate and deliberate based on task complexity.
+	if mode == ModeAdaptive {
+		mode = e.selectAdaptiveMode(task)
+	}
+
+	if mode == ModeImmediate {
 		return e.immediateDecision(task)
 	}
 
@@ -113,40 +123,66 @@ func (e *Engine) Deliberate(ctx context.Context, task Task) (*DeliberationResult
 	for i := 0; i < e.config.MaxIterations; i++ {
 		result.Iterations = i + 1
 
-		// 步骤1:了解任务
+		// Check context before understand step.
+		if err := ctx.Err(); err != nil {
+			return result, fmt.Errorf("deliberation cancelled before understand: %w", err)
+		}
+
+		// Step 1: Understand the task.
 		thought, err := e.understand(ctx, task, i)
 		if err != nil {
 			return result, err
 		}
 		result.Thoughts = append(result.Thoughts, *thought)
+		e.emitThought(*thought)
 
-		// 步骤2:评估选项
+		// Check context before evaluate step.
+		if err := ctx.Err(); err != nil {
+			return result, fmt.Errorf("deliberation cancelled before evaluate: %w", err)
+		}
+
+		// Step 2: Evaluate options.
 		evalThought, err := e.evaluate(ctx, task, result.Thoughts, i)
 		if err != nil {
 			return result, err
 		}
 		result.Thoughts = append(result.Thoughts, *evalThought)
+		e.emitThought(*evalThought)
 
-		// 步骤3:计划行动
+		// Check context before plan step.
+		if err := ctx.Err(); err != nil {
+			return result, fmt.Errorf("deliberation cancelled before plan: %w", err)
+		}
+
+		// Step 3: Plan action.
 		decision, planThought, err := e.plan(ctx, task, result.Thoughts, i)
 		if err != nil {
 			return result, err
 		}
 		result.Thoughts = append(result.Thoughts, *planThought)
+		e.emitThought(*planThought)
 		confidence = decision.Confidence
 
-		// 第4步:自律(可选)
+		// Step 4: Self-critique (optional).
 		if e.config.EnableSelfCritique && confidence < e.config.MinConfidence {
+			if err := ctx.Err(); err != nil {
+				return result, fmt.Errorf("deliberation cancelled before critique: %w", err)
+			}
 			critiqueThought, err := e.critique(ctx, decision, i)
 			if err != nil {
 				return result, err
 			}
 			result.Thoughts = append(result.Thoughts, *critiqueThought)
+			e.emitThought(*critiqueThought)
 			continue // Another iteration
 		}
 
 		finalDecision = decision
 		break
+	}
+
+	if finalDecision != nil {
+		e.emitDecision(*finalDecision)
 	}
 
 	result.Decision = finalDecision
@@ -218,7 +254,10 @@ func (e *Engine) evaluate(ctx context.Context, task Task, thoughts []ThoughtProc
 }
 
 func (e *Engine) plan(ctx context.Context, task Task, thoughts []ThoughtProcess, step int) (*Decision, *ThoughtProcess, error) {
-	prompt := fmt.Sprintf("Plan action for: %s\nBased on %d thoughts", task.Description, len(thoughts))
+	prompt := fmt.Sprintf(
+		"Plan action for: %s\nBased on %d thoughts\nAvailable tools: %v\nSuggested tool: %s\n\nSelect the best tool from the available tools list. "+
+			"Include a line in your response: TOOL: <tool_name>",
+		task.Description, len(thoughts), task.AvailableTools, task.SuggestedTool)
 
 	content, confidence, err := e.reasoner.Think(ctx, prompt)
 	if err != nil {
@@ -234,9 +273,11 @@ func (e *Engine) plan(ctx context.Context, task Task, thoughts []ThoughtProcess,
 		Timestamp:  time.Now(),
 	}
 
+	selectedTool := parseToolSelection(content, task.AvailableTools, task.SuggestedTool)
+
 	decision := &Decision{
 		Action:     "execute",
-		Tool:       task.SuggestedTool,
+		Tool:       selectedTool,
 		Parameters: task.Parameters,
 		Reasoning:  content,
 		Confidence: confidence,
@@ -272,11 +313,82 @@ func (e *Engine) SetMode(mode DeliberationMode) {
 	e.logger.Info("deliberation mode changed", zap.String("mode", string(mode)))
 }
 
-// GetMode 返回当前审议模式 。
+// GetMode returns the current deliberation mode.
 func (e *Engine) GetMode() DeliberationMode {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
 	return e.config.Mode
+}
+
+// selectAdaptiveMode estimates task complexity and returns the appropriate mode.
+// Tasks with many tools, large context, or long goals use deliberate mode.
+func (e *Engine) selectAdaptiveMode(task Task) DeliberationMode {
+	complexity := 0
+
+	// More available tools means more options to reason about.
+	complexity += len(task.AvailableTools)
+
+	// Large context maps add complexity.
+	complexity += len(task.Context)
+
+	// Long goal descriptions suggest complex tasks.
+	if len(task.Goal) > 100 {
+		complexity += 2
+	}
+
+	// Threshold: 3 or more complexity points triggers deliberate mode.
+	if complexity >= 3 {
+		e.logger.Debug("adaptive mode selected deliberate",
+			zap.Int("complexity", complexity),
+			zap.String("task_id", task.ID),
+		)
+		return ModeDeliberate
+	}
+
+	e.logger.Debug("adaptive mode selected immediate",
+		zap.Int("complexity", complexity),
+		zap.String("task_id", task.ID),
+	)
+	return ModeImmediate
+}
+
+// parseToolSelection extracts a tool name from the LLM response content.
+// It looks for a line like "TOOL: <name>" and validates it against available tools.
+// Falls back to suggestedTool if no valid tool is found.
+func parseToolSelection(content string, availableTools []string, suggestedTool string) string {
+	toolSet := make(map[string]bool, len(availableTools))
+	for _, t := range availableTools {
+		toolSet[strings.ToLower(t)] = true
+	}
+
+	for _, line := range strings.Split(content, "\n") {
+		line = strings.TrimSpace(line)
+		lower := strings.ToLower(line)
+		if strings.HasPrefix(lower, "tool:") {
+			candidate := strings.TrimSpace(line[len("tool:"):])
+			if toolSet[strings.ToLower(candidate)] {
+				// Return the original-case version from available tools.
+				for _, t := range availableTools {
+					if strings.EqualFold(t, candidate) {
+						return t
+					}
+				}
+			}
+		}
+	}
+	return suggestedTool
+}
+
+func (e *Engine) emitThought(t ThoughtProcess) {
+	if e.OnThought != nil {
+		e.OnThought(t)
+	}
+}
+
+func (e *Engine) emitDecision(d Decision) {
+	if e.OnDecision != nil {
+		e.OnDecision(d)
+	}
 }
 
 // 任务是一项需要审议的任务。

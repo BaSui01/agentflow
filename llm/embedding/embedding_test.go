@@ -3,6 +3,7 @@ package embedding
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -48,7 +49,27 @@ func TestNewBaseProvider(t *testing.T) {
 	})
 }
 
-// PLACEHOLDER_EMBED_TESTS
+func TestNewBaseProviderNilTimeout(t *testing.T) {
+	bp := NewBaseProvider(BaseConfig{
+		Name:    "zero-timeout",
+		BaseURL: "http://example.com",
+		Timeout: 0,
+	})
+	// Should use default timeout, not panic
+	assert.NotNil(t, bp)
+	assert.Equal(t, "zero-timeout", bp.Name())
+}
+
+func TestBaseProviderDimensionsDefault(t *testing.T) {
+	bp := NewBaseProvider(BaseConfig{Name: "test", BaseURL: "http://example.com"})
+	// Default dimensions should be 0 or a sensible default
+	assert.GreaterOrEqual(t, bp.Dimensions(), 0)
+}
+
+func TestBaseProviderMaxBatchDefault(t *testing.T) {
+	bp := NewBaseProvider(BaseConfig{Name: "test", BaseURL: "http://example.com"})
+	assert.Equal(t, 100, bp.MaxBatchSize())
+}
 
 // --- mapHTTPError ---
 
@@ -166,7 +187,46 @@ func TestBaseProviderEmbedQueryAndDocuments(t *testing.T) {
 	})
 }
 
-// PLACEHOLDER_PROVIDER_TESTS
+func TestBaseProviderEmbedDocumentsEmpty(t *testing.T) {
+	mockEmbed := func(ctx context.Context, req *EmbeddingRequest) (*EmbeddingResponse, error) {
+		return &EmbeddingResponse{Embeddings: nil}, nil
+	}
+
+	bp := NewBaseProvider(BaseConfig{Name: "test", BaseURL: "http://unused"})
+	vecs, err := bp.EmbedDocuments(context.Background(), []string{}, mockEmbed)
+	require.NoError(t, err)
+	assert.Empty(t, vecs)
+}
+
+func TestBaseProviderEmbedDocumentsError(t *testing.T) {
+	mockEmbed := func(ctx context.Context, req *EmbeddingRequest) (*EmbeddingResponse, error) {
+		return nil, fmt.Errorf("embedding service down")
+	}
+
+	bp := NewBaseProvider(BaseConfig{Name: "test", BaseURL: "http://unused"})
+	_, err := bp.EmbedDocuments(context.Background(), []string{"test"}, mockEmbed)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "embedding service down")
+}
+
+func TestBaseProviderDoRequestTimeout(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		time.Sleep(5 * time.Second)
+	}))
+	defer srv.Close()
+
+	bp := NewBaseProvider(BaseConfig{
+		Name:    "test",
+		BaseURL: srv.URL,
+		Timeout: 100 * time.Millisecond,
+	})
+
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+
+	_, err := bp.DoRequest(ctx, "POST", "/embed", map[string]string{"q": "hello"}, nil)
+	assert.Error(t, err)
+}
 
 // --- OpenAI Provider ---
 
@@ -318,7 +378,43 @@ func TestCohereProviderTruncate(t *testing.T) {
 	require.NoError(t, err)
 }
 
-// PLACEHOLDER_MORE_PROVIDERS
+func TestCohereProviderDefaults(t *testing.T) {
+	p := NewCohereProvider(CohereConfig{APIKey: "k"})
+	assert.Equal(t, "cohere-embedding", p.Name())
+	assert.Equal(t, 1024, p.Dimensions())
+	assert.Equal(t, 96, p.MaxBatchSize())
+}
+
+func TestCohereProviderHTTPError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusTooManyRequests)
+		w.Write([]byte(`{"message":"rate limited"}`))
+	}))
+	defer srv.Close()
+
+	p := NewCohereProvider(CohereConfig{APIKey: "k", BaseURL: srv.URL})
+	_, err := p.Embed(context.Background(), &EmbeddingRequest{Input: []string{"test"}})
+	require.Error(t, err)
+}
+
+func TestVoyageProviderDefaults(t *testing.T) {
+	p := NewVoyageProvider(VoyageConfig{APIKey: "k"})
+	assert.Equal(t, "voyage-embedding", p.Name())
+	assert.Equal(t, 1024, p.Dimensions())
+	assert.Equal(t, 128, p.MaxBatchSize())
+}
+
+func TestVoyageProviderHTTPError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusUnauthorized)
+		w.Write([]byte(`{"error":"invalid api key"}`))
+	}))
+	defer srv.Close()
+
+	p := NewVoyageProvider(VoyageConfig{APIKey: "k", BaseURL: srv.URL})
+	_, err := p.Embed(context.Background(), &EmbeddingRequest{Input: []string{"test"}})
+	require.Error(t, err)
+}
 
 // --- Jina Provider ---
 
@@ -458,7 +554,51 @@ func TestVoyageProviderEmbed(t *testing.T) {
 	assert.Equal(t, 3, resp.Usage.TotalTokens)
 }
 
-// PLACEHOLDER_GEMINI_TESTS
+func TestVoyageProviderEmbedQueryAndDocuments(t *testing.T) {
+	handler := func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(voyageEmbedResponse{
+			Model: "voyage-3-large",
+			Data: []struct {
+				Object    string    `json:"object"`
+				Index     int       `json:"index"`
+				Embedding []float64 `json:"embedding"`
+			}{
+				{Index: 0, Embedding: []float64{0.5}},
+			},
+		})
+	}
+	srv := httptest.NewServer(http.HandlerFunc(handler))
+	defer srv.Close()
+
+	p := NewVoyageProvider(VoyageConfig{APIKey: "k", BaseURL: srv.URL})
+
+	vec, err := p.EmbedQuery(context.Background(), "test query")
+	require.NoError(t, err)
+	assert.Equal(t, []float64{0.5}, vec)
+
+	vecs, err := p.EmbedDocuments(context.Background(), []string{"doc1"})
+	require.NoError(t, err)
+	assert.Len(t, vecs, 1)
+}
+
+func TestJinaProviderDefaults(t *testing.T) {
+	p := NewJinaProvider(JinaConfig{APIKey: "k"})
+	assert.Equal(t, "jina-embedding", p.Name())
+	assert.Equal(t, 1024, p.Dimensions())
+	assert.Equal(t, 2048, p.MaxBatchSize())
+}
+
+func TestJinaProviderHTTPError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte(`{"error":"bad request"}`))
+	}))
+	defer srv.Close()
+
+	p := NewJinaProvider(JinaConfig{APIKey: "k", BaseURL: srv.URL})
+	_, err := p.Embed(context.Background(), &EmbeddingRequest{Input: []string{"test"}})
+	require.Error(t, err)
+}
 
 // --- Gemini Provider ---
 

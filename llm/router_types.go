@@ -20,8 +20,7 @@ const (
 	StrategyCanary      RoutingStrategy = "canary"
 )
 
-// 路由器是遗留的单一提供路由器(DEPRECATED)
-// 在新执行中使用多服务路透社
+// Router 是 MultiProviderRouter 的基础结构体，提供 DB、健康监控等基础设施。
 type Router struct {
 	db            *gorm.DB
 	providers     map[string]Provider
@@ -53,8 +52,7 @@ type ProviderSelection struct {
 	Strategy     RoutingStrategy
 }
 
-// NewRouter 创建了遗产路由器( DEPRECATED)
-// 使用新多维路透器
+// NewRouter 创建基础路由器（仅供 MultiProviderRouter 内部使用）
 func NewRouter(db *gorm.DB, providers map[string]Provider, opts RouterOptions) *Router {
 	if opts.Logger == nil {
 		opts.Logger = zap.NewNop()
@@ -75,11 +73,4 @@ func NewRouter(db *gorm.DB, providers map[string]Provider, opts RouterOptions) *
 		healthCheckInterval: opts.HealthCheckInterval,
 		healthCheckTimeout:  opts.HealthCheckTimeout,
 	}
-}
-
-// 选择提供者( DEPRECATED - 最小执行)
-func (r *Router) SelectProvider(ctx context.Context, req *ChatRequest, strategy RoutingStrategy) (*ProviderSelection, error) {
-	// 向后兼容最小执行
-	// 真正的逻辑应该使用多功能旋转器
-	return nil, &Error{Code: "DEPRECATED", Message: "Use MultiProviderRouter instead"}
 }

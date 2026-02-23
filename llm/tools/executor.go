@@ -113,7 +113,7 @@ type DefaultRegistry struct {
 	tools          map[string]ToolFunc
 	streamingTools map[string]StreamingToolFunc
 	metadata       map[string]ToolMetadata
-	rateLimits     map[string]*rateLimiter // 工具级别的速率限制器
+	rateLimits     map[string]*tokenBucketLimiter // 工具级别的速率限制器
 	logger         *zap.Logger
 }
 
@@ -123,7 +123,7 @@ func NewDefaultRegistry(logger *zap.Logger) *DefaultRegistry {
 		tools:          make(map[string]ToolFunc),
 		streamingTools: make(map[string]StreamingToolFunc),
 		metadata:       make(map[string]ToolMetadata),
-		rateLimits:     make(map[string]*rateLimiter),
+		rateLimits:     make(map[string]*tokenBucketLimiter),
 		logger:         logger,
 	}
 }
@@ -154,7 +154,7 @@ func (r *DefaultRegistry) Register(name string, fn ToolFunc, metadata ToolMetada
 
 	// 初始化速率限制器
 	if metadata.RateLimit != nil {
-		r.rateLimits[name] = newRateLimiter(metadata.RateLimit.MaxCalls, metadata.RateLimit.Window)
+		r.rateLimits[name] = newTokenBucketLimiter(metadata.RateLimit.MaxCalls, metadata.RateLimit.Window)
 	}
 
 	r.logger.Info("tool registered", zap.String("name", name), zap.Duration("timeout", metadata.Timeout))
@@ -430,7 +430,7 @@ func (e *DefaultExecutor) ExecuteOneStream(ctx context.Context, call llm.ToolCal
 		// 检查是否有流式版本
 		var streamingFn StreamingToolFunc
 		if reg, ok := e.registry.(*DefaultRegistry); ok {
-			streamingFn, _ = reg.GetStreaming(call.Name)
+			streamingFn, _ = reg.GetStreaming(call.Name) // error means no streaming variant; fall through to non-streaming path
 		}
 
 		if streamingFn != nil {
@@ -658,19 +658,3 @@ func (tb *tokenBucketLimiter) Reset() {
 	tb.lastRefill = time.Now()
 }
 
-// rateLimiter 为向后兼容而保留，内部使用 tokenBucketLimiter
-// Deprecated: 新代码请直接使用 tokenBucketLimiter
-type rateLimiter struct {
-	internal *tokenBucketLimiter
-}
-
-// newRateLimiter 创建新的速率限制器（内部使用令牌桶）
-func newRateLimiter(maxCalls int, window time.Duration) *rateLimiter {
-	return &rateLimiter{
-		internal: newTokenBucketLimiter(maxCalls, window),
-	}
-}
-
-func (rl *rateLimiter) Allow() error {
-	return rl.internal.Allow()
-}
