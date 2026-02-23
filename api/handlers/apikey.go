@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/BaSui01/agentflow/llm"
 	"github.com/BaSui01/agentflow/types"
@@ -226,8 +227,10 @@ func (h *APIKeyHandler) HandleCreateAPIKey(w http.ResponseWriter, r *http.Reques
 	}
 
 	WriteJSON(w, http.StatusCreated, Response{
-		Success: true,
-		Data:    toAPIKeyResponse(key),
+		Success:   true,
+		Data:      toAPIKeyResponse(key),
+		Timestamp: time.Now(),
+		RequestID: w.Header().Get("X-Request-ID"),
 	})
 }
 

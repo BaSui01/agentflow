@@ -80,6 +80,7 @@ func WriteError(w http.ResponseWriter, err *types.Error, logger *zap.Logger) {
 		Success:   false,
 		Error:     errorInfo,
 		Timestamp: time.Now(),
+		RequestID: w.Header().Get("X-Request-ID"),
 	})
 }
 

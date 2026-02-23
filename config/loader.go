@@ -270,6 +270,8 @@ type TelemetryConfig struct {
 	Enabled bool `yaml:"enabled" env:"ENABLED"`
 	// OTLP 端点
 	OTLPEndpoint string `yaml:"otlp_endpoint" env:"OTLP_ENDPOINT"`
+	// 是否使用非加密连接（仅用于开发/测试环境）
+	OTLPInsecure bool `yaml:"otlp_insecure" env:"OTLP_INSECURE"`
 	// 服务名称
 	ServiceName string `yaml:"service_name" env:"SERVICE_NAME"`
 	// 采样率

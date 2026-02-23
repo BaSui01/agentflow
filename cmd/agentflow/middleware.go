@@ -6,6 +6,7 @@ import (
 	"crypto/rsa"
 	"crypto/x509"
 	"encoding/hex"
+	"encoding/json"
 	"encoding/pem"
 	"fmt"
 	"net"
@@ -524,10 +525,30 @@ func JWTAuth(cfg config.JWTConfig, skipPaths []string, logger *zap.Logger) Middl
 // layer's Response envelope (§38). This is a local helper to avoid importing
 // api/handlers (which would create a circular dependency).
 func writeMiddlewareError(w http.ResponseWriter, statusCode int, code string, message string) {
+	type errorDetail struct {
+		Code    string `json:"code"`
+		Message string `json:"message"`
+	}
+	type errorResponse struct {
+		Success   bool         `json:"success"`
+		Error     *errorDetail `json:"error"`
+		Timestamp time.Time    `json:"timestamp"`
+	}
+	resp := errorResponse{
+		Success:   false,
+		Error:     &errorDetail{Code: code, Message: message},
+		Timestamp: time.Now().UTC(),
+	}
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	buf, err := json.Marshal(resp)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = w.Write([]byte(`{"success":false,"error":{"code":"INTERNAL_ERROR","message":"failed to encode error response"}}`))
+		return
+	}
 	w.WriteHeader(statusCode)
-	fmt.Fprintf(w, `{"success":false,"error":{"code":%q,"message":%q},"timestamp":%q}`,
-		code, message, time.Now().UTC().Format(time.RFC3339))
+	_, _ = w.Write(buf)
 }
 
 // =============================================================================

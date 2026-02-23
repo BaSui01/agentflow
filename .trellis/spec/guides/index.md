@@ -28,6 +28,8 @@ These guides help you **ask the right questions before coding**.
 | [quality-guidelines.md §35-§39](../backend/quality-guidelines.md) | Cache eviction, Prometheus cardinality, broadcast safety, API envelope, doc snippets | In-memory caches, metrics, fan-out channels, new API endpoints, documentation |
 | [quality-guidelines.md §41-§42](../backend/quality-guidelines.md) | JWT auth middleware, MCP server serve loop | Authentication, tenant rate limiting, protocol message dispatch |
 | [quality-guidelines.md §43-§44](../backend/quality-guidelines.md) | OTel SDK initialization, API request body validation | Telemetry setup, new API handlers, request parsing |
+| [quality-guidelines.md §49-§53](../backend/quality-guidelines.md) | HSTS header, JWT secret length, auth disable protection, OpenAPI conditional routes, OTel trace logging | Security headers, authentication config, API documentation, log-trace correlation |
+| [quality-guidelines.md §54-§56](../backend/quality-guidelines.md) | Structured outputs, tool streaming, skills-discovery bridge | LLM response format, tool progress events, skill-capability registration |
 
 ---
 
@@ -284,6 +286,33 @@ These guides help you **ask the right questions before coding**.
 - [ ] Existing handler tests failing after validation changes — did you add `Content-Type: application/json` header?
 
 → Read [quality-guidelines.md §44](../backend/quality-guidelines.md) for API Request Body Validation pattern
+
+### When to Think About Structured Outputs
+
+- [ ] Agent 需要可靠的 JSON 输出 — 是否使用了 `ResponseFormat` 而非仅靠 prompt？（§54）
+- [ ] 设置 `ToolChoice` — 是否用 `!= nil` 而非 `!= ""`？（§54）
+- [ ] 新增 LLM provider — 是否实现了 `ResponseFormat` 和 `ToolChoice` 传递？
+- [ ] 使用 `StructuredOutput[T]` — provider 是否支持 native structured output？
+
+→ Read [quality-guidelines.md §54](../backend/quality-guidelines.md) for Structured Outputs pattern
+
+### When to Think About Tool Streaming
+
+- [ ] 新增工具执行时间 >2 秒 — 是否使用 `StreamingToolFunc` 而非普通 `ToolFunc`？（§55）
+- [ ] 修改 ReAct 循环 — 是否保留了 `StreamableToolExecutor` 类型断言？（§55）
+- [ ] 新增 SSE 事件类型 — 是否在 `api/handlers/agent.go` 的 emitter 中处理？
+- [ ] 工具需要推送中间状态 — 使用 `ToolProgressEmitter` 回调
+
+→ Read [quality-guidelines.md §55](../backend/quality-guidelines.md) for Tool Streaming pattern
+
+### When to Think About Skills-Discovery Integration
+
+- [ ] 新增 Skill — 是否需要通过 Discovery 系统可发现？使用 `SkillDiscoveryBridge.RegisterSkillAsCapability()`（§56）
+- [ ] `skills` 包需要引用 `discovery` 包 — ❌ 禁止直接 import！使用 `internal/bridge/` + 本地接口（§12, §56）
+- [ ] 新增 Agent 类型 — 是否在 `registry.go` 中添加了差异化 PromptBundle？（§56）
+- [ ] 实现 `SkillsExtension` — 使用 `SkillsExtensionAdapter` 而非直接实现
+
+→ Read [quality-guidelines.md §56](../backend/quality-guidelines.md) for Skills-Discovery Bridge pattern
 
 ---
 

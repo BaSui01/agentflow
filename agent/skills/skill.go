@@ -103,6 +103,13 @@ func loadSkillResources(dir string, skill *Skill, files []string) error {
 	for _, file := range files {
 		filePath := filepath.Join(dir, file)
 
+		// 防止路径遍历：确保解析后的路径仍在 dir 目录下
+		absDir, _ := filepath.Abs(dir)
+		absFile, _ := filepath.Abs(filePath)
+		if !strings.HasPrefix(absFile, absDir+string(filepath.Separator)) && absFile != absDir {
+			continue // 跳过可能的路径遍历尝试
+		}
+
 		// 检查文件是否存在
 		if _, err := os.Stat(filePath); os.IsNotExist(err) {
 			continue

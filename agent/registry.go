@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/BaSui01/agentflow/agent/skills"
 	"github.com/BaSui01/agentflow/llm"
 	"go.uber.org/zap"
 )
@@ -73,6 +74,15 @@ func newTypedAgentFactory(agentType AgentType) AgentFactory {
 		// Apply type-specific defaults only if the user hasn't set a PromptBundle
 		if config.PromptBundle.IsZero() {
 			config.PromptBundle = defaultPromptBundleForType(agentType)
+		}
+		// Apply type-specific skill categories into Metadata for SkillManager discovery
+		if cats := defaultSkillCategoriesForType(agentType); len(cats) > 0 {
+			if config.Metadata == nil {
+				config.Metadata = make(map[string]string)
+			}
+			if _, exists := config.Metadata["skill_categories"]; !exists {
+				config.Metadata["skill_categories"] = joinSkillCategories(cats)
+			}
 		}
 		return NewBaseAgent(config, provider, memory, toolManager, bus, logger), nil
 	}
@@ -152,6 +162,34 @@ func defaultPromptBundleForType(agentType AgentType) PromptBundle {
 		// TypeGeneric and unknown types — no preset
 		return PromptBundle{}
 	}
+}
+
+// defaultSkillCategoriesForType returns the recommended skill categories for each agent type.
+// These categories are used by SkillManager to discover and load relevant skills.
+func defaultSkillCategoriesForType(agentType AgentType) []skills.SkillCategory {
+	switch agentType {
+	case TypeAssistant:
+		return []skills.SkillCategory{skills.CategoryCommunication, skills.CategoryReasoning}
+	case TypeAnalyzer:
+		return []skills.SkillCategory{skills.CategoryData, skills.CategoryReasoning}
+	case TypeTranslator:
+		return []skills.SkillCategory{skills.CategoryCommunication}
+	case TypeSummarizer:
+		return []skills.SkillCategory{skills.CategoryReasoning}
+	case TypeReviewer:
+		return []skills.SkillCategory{skills.CategoryCoding, skills.CategoryReasoning}
+	default:
+		return nil
+	}
+}
+
+// joinSkillCategories joins skill categories into a comma-separated string.
+func joinSkillCategories(cats []skills.SkillCategory) string {
+	parts := make([]string, len(cats))
+	for i, c := range cats {
+		parts[i] = string(c)
+	}
+	return strings.Join(parts, ",")
 }
 
 // 登记册登记具有工厂功能的新代理类型
