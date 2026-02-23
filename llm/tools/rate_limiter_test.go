@@ -121,9 +121,8 @@ func TestTokenBucketLimiter_Concurrent(t *testing.T) {
 	}
 }
 
-func TestRateLimiter_BackwardCompatibility(t *testing.T) {
-	// 测试旧率Limiter 界面是否仍然有效
-	limiter := newRateLimiter(5, time.Second)
+func TestTokenBucketLimiter_Direct(t *testing.T) {
+	limiter := newTokenBucketLimiter(5, time.Second)
 
 	// 应允许先打五通电话
 	for i := 0; i < 5; i++ {

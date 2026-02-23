@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/BaSui01/agentflow/llm/circuitbreaker"
+	"github.com/BaSui01/agentflow/types"
 	"go.uber.org/zap"
 )
 
@@ -30,11 +31,10 @@ func DefaultRetryPolicy() *RetryPolicy {
 	}
 }
 
-// CircuitState is an alias for circuitbreaker.State, the authoritative definition.
-// This keeps backward compatibility for any code referencing llm.CircuitState.
+// CircuitState 是断路器状态类型。
 type CircuitState = circuitbreaker.State
 
-// Circuit state constants — aliases to circuitbreaker.State* values.
+// 断路器状态常量。
 const (
 	CircuitClosed  = circuitbreaker.StateClosed
 	CircuitOpen    = circuitbreaker.StateOpen
@@ -219,7 +219,7 @@ func (rp *ResilientProvider) Completion(ctx context.Context, req *ChatRequest) (
 			}
 
 			lastErr = err
-			if !IsRetryable(err) {
+			if !types.IsRetryable(err) {
 				return err
 			}
 
