@@ -90,11 +90,9 @@ func (LLMProvider) TableName() string { return "sc_llm_providers" }
 
 ## Migrations
 
-### Dual Migration Strategy
+### Migration Strategy
 
-The project uses two migration approaches:
-
-#### 1. `golang-migrate` for Versioned SQL Migrations (Production)
+The project uses `golang-migrate` for versioned SQL migrations:
 
 Located at `internal/migration/migrator.go`, with embedded SQL files:
 
@@ -120,24 +118,7 @@ agentflow migrate force N     # Force set version (no migration run)
 agentflow migrate reset       # Rollback all migrations
 ```
 
-#### 2. GORM `AutoMigrate` for Development
-
-Used in `llm/db_init.go` for quick schema sync:
-
-```go
-// llm/db_init.go:11-27
-func InitDatabase(db *gorm.DB) error {
-    err := db.AutoMigrate(
-        &LLMProvider{},
-        &LLMModel{},
-        &LLMProviderModel{},
-        &LLMProviderAPIKey{},
-    )
-    // ...
-}
-```
-
-`SeedExampleData()` seeds 13 providers, 52 models, and 52 provider-model mappings.
+**Important**: GORM `AutoMigrate` is NOT used in production. All schema changes must go through SQL migration files. API keys and provider data are managed at runtime via the API Key Pool (`apikey_pool.go`) or the management API (`api/handlers/apikey.go`). They are never seeded in code.
 
 ### Creating a New Migration
 
