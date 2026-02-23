@@ -82,14 +82,18 @@ python3 ./.trellis/scripts/multi_agent/status.py --log <name>    # 查看日志
 python3 ./.trellis/scripts/multi_agent/cleanup.py <branch>       # 清理
 ```
 
-### 模式 B：Agent Team（会话内协作，适合并行任务） `[推荐]`
+### 模式 B：Team Lead 直接执行（会话内，适合多项修复） `[推荐]`
 
 适用场景：
-- 多个模块可以并行实现
-- 需要 research + implement 同时进行
-- 中等复杂度，需要实时协调
+- 多个模块需要修复/实现
+- PRD 中有多个独立工作项
+- 中等复杂度，Team Lead 可以顺序完成
 
-流程：Team Lead 在当前会话内创建团队，通过消息协调 teammates
+流程：Team Lead 读取 PRD，顺序执行所有工作项，自行验证
+
+> **注意**：Team Lead 不会启动子 agent。Claude Code 不支持嵌套会话，
+> 子 agent 会因 `CLAUDECODE` 环境变量检测而崩溃。Team Lead 直接用
+> Read/Write/Edit/Bash 工具完成所有工作。
 
 #### 步骤 1：配置任务（同模式 A）
 
@@ -104,37 +108,34 @@ python3 ./.trellis/scripts/task.py start "$TASK_DIR"
 ```
 Task(
   subagent_type: "team-lead",
-  prompt: "Execute the task in .trellis/.current-task using Agent Team mode.",
+  prompt: "Execute the task in .trellis/.current-task.",
   model: "opus"
 )
 ```
 
 Team Lead 将会：
-1. 读取 task.json 和 prd.md
-2. 创建 Team
-3. 按需求拆分工作，并行启动 teammates
-4. 通过 SendMessage 协调进度
-5. 完成后 shutdown teammates → TeamDelete
-6. Team Lead 停止后，`SubagentStop` hook 自动触发收尾链（check → commit → archive → record-session）
+1. 读取 prd.md，理解所有工作项
+2. 逐项实现修改（检查是否已修复 → 编辑 → 验证）
+3. 运行 `go build ./...` 和 `go vet ./...` 验证
+4. 停止后，`SubagentStop` hook 自动触发收尾链（check → commit → archive → record-session）
 
 #### Hook 兼容性
 
-现有 Hook 在 Team 模式下仍然生效：
-- `inject-subagent-context.py` — Team Lead 调 Task 时自动注入规范
-- `ralph-loop.py` — check agent 仍受 Ralph Loop 控制
+- `inject-subagent-context.py` — 自动注入 PRD 和任务配置到 Team Lead prompt
+- `pipeline-complete.py` — Team Lead 停止时自动触发收尾链
 
 ---
 
 ## 模式对比
 
-| | Worktree Dispatch | Agent Team |
+| | Worktree Dispatch | Team Lead 直接执行 |
 |---|---|---|
-| 隔离方式 | 独立 worktree + 独立进程 | 同一会话，可选 worktree 隔离 |
-| 并行能力 | 单线程流水线 | 多 teammate 并行 |
-| 协调方式 | 无（按 phase 顺序） | SendMessage 实时通信 |
+| 隔离方式 | 独立 worktree + 独立进程 | 同一会话 |
+| 执行方式 | 单线程流水线 | Team Lead 顺序执行所有工作项 |
+| 协调方式 | 无（按 phase 顺序） | 无需协调（单 agent） |
 | 断点续跑 | session-id resume | 不支持 |
-| 监控 | status.py 轮询日志 | 自动消息投递 |
-| 适合 | 大型独立任务 | 可拆分的并行任务 |
+| 监控 | status.py 轮询日志 | 实时输出 |
+| 适合 | 大型独立任务 | 多项修复、PRD 驱动的批量工作 |
 
 ---
 
@@ -151,7 +152,7 @@ Team Lead 将会：
 
 ## 核心规则
 
-- **不要直接写代码** - 委托给 Agent
-- **不要执行 git commit** - Agent 通过 create-pr 操作完成
-- **将复杂分析委托给 research** - 查找规范、分析代码结构
+- **Team Lead 直接执行** - 不启动子 agent，自己完成所有工作
+- **不要执行 git commit** - 由收尾链自动处理
+- **将复杂分析委托给 research** - 查找规范、分析代码结构（research agent 不嵌套，由编排器直接启动）
 - **implement 用 opus，research 可用 sonnet** - 平衡质量和速度
