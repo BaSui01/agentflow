@@ -31,9 +31,11 @@ type apiResponse struct {
 }
 
 // apiError is the canonical error structure embedded in apiResponse (§38).
+// Details is optional additional context, aligned with api.ErrorInfo.
 type apiError struct {
 	Code    string `json:"code"`
 	Message string `json:"message"`
+	Details string `json:"details,omitempty"`
 }
 
 // configData 是配置 API 响应中 Data 字段的内部结构。
@@ -264,7 +266,8 @@ func (h *ConfigAPIHandler) handleReload(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	// POST with body is optional for reload, but if Content-Type is set it must be JSON
+	// POST with body is optional for reload; Content-Type may be absent.
+	// When present, it must be application/json (consistent with validateJSONContentType).
 	if ct := r.Header.Get("Content-Type"); ct != "" && !strings.HasPrefix(ct, "application/json") {
 		writeAPIJSON(w, http.StatusUnsupportedMediaType, apiResponse{
 			Success: false,
@@ -373,6 +376,9 @@ func (h *ConfigAPIHandler) handleChanges(w http.ResponseWriter, r *http.Request)
 		if l, err := strconv.Atoi(limitStr); err == nil && l > 0 {
 			limit = l
 		}
+	}
+	if limit > 1000 {
+		limit = 1000
 	}
 
 	changes := h.manager.GetChangeLog(limit)

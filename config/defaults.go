@@ -79,7 +79,7 @@ func DefaultDatabaseConfig() DatabaseConfig {
 		Name:            "agentflow",
 		SSLMode:         "disable",
 		MaxOpenConns:    25,
-		MaxIdleConns:    5,
+		MaxIdleConns:    10,
 		ConnMaxLifetime: 5 * time.Minute,
 	}
 }
@@ -156,6 +156,7 @@ func DefaultTelemetryConfig() TelemetryConfig {
 	return TelemetryConfig{
 		Enabled:      false,
 		OTLPEndpoint: "localhost:4317",
+		OTLPInsecure: false,
 		ServiceName:  "agentflow",
 		SampleRate:   0.1,
 	}
