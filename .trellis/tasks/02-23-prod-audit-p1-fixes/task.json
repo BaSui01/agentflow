@@ -1,7 +1,7 @@
 {
-  "id": "prod-audit-fixes",
-  "name": "prod-audit-fixes",
-  "title": "并行修复审计发现的所有问题",
+  "id": "prod-audit-p1-fixes",
+  "name": "prod-audit-p1-fixes",
+  "title": "修复生产审计 P1 问题",
   "description": "",
   "status": "planning",
   "dev_type": null,
@@ -14,7 +14,7 @@
   "branch": null,
   "base_branch": "master",
   "worktree_path": null,
-  "current_phase": 1,
+  "current_phase": 2,
   "next_action": [
     {
       "phase": 1,
