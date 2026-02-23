@@ -102,13 +102,13 @@ func TestAsyncExecution_Wait_ContextCancelled(t *testing.T) {
 // ============================================================
 
 func TestNewAsyncExecutor(t *testing.T) {
-	agent := &stubAgent{id: "agent-1"}
+	agent := &asyncStubAgent{id: "agent-1"}
 	executor := NewAsyncExecutor(agent, zap.NewNop())
 	assert.NotNil(t, executor)
 }
 
 func TestAsyncExecutor_ExecuteAsync_Success(t *testing.T) {
-	agent := &stubAgent{
+	agent := &asyncStubAgent{
 		id: "agent-1",
 		executeFn: func(ctx context.Context, input *Input) (*Output, error) {
 			return &Output{Content: "async result"}, nil
@@ -127,7 +127,7 @@ func TestAsyncExecutor_ExecuteAsync_Success(t *testing.T) {
 }
 
 func TestAsyncExecutor_ExecuteAsync_Failure(t *testing.T) {
-	agent := &stubAgent{
+	agent := &asyncStubAgent{
 		id: "agent-1",
 		executeFn: func(ctx context.Context, input *Input) (*Output, error) {
 			return nil, errors.New("exec failed")
@@ -172,7 +172,7 @@ func TestAsyncExecutor_CombineResults_Multiple(t *testing.T) {
 func TestSubagentManager_SpawnAndGet(t *testing.T) {
 	manager := NewSubagentManager(zap.NewNop())
 
-	agent := &stubAgent{
+	agent := &asyncStubAgent{
 		id: "sub-1",
 		executeFn: func(ctx context.Context, input *Input) (*Output, error) {
 			return &Output{Content: "sub result"}, nil
@@ -205,7 +205,7 @@ func TestSubagentManager_GetExecution_NotFound(t *testing.T) {
 func TestSubagentManager_ListExecutions(t *testing.T) {
 	manager := NewSubagentManager(zap.NewNop())
 
-	agent := &stubAgent{
+	agent := &asyncStubAgent{
 		id: "sub-1",
 		executeFn: func(ctx context.Context, input *Input) (*Output, error) {
 			return &Output{Content: "ok"}, nil
@@ -224,7 +224,7 @@ func TestSubagentManager_ListExecutions(t *testing.T) {
 func TestSubagentManager_CleanupCompleted(t *testing.T) {
 	manager := NewSubagentManager(zap.NewNop())
 
-	agent := &stubAgent{
+	agent := &asyncStubAgent{
 		id: "sub-1",
 		executeFn: func(ctx context.Context, input *Input) (*Output, error) {
 			return &Output{Content: "ok"}, nil
@@ -247,7 +247,7 @@ func TestSubagentManager_CleanupCompleted(t *testing.T) {
 func TestSubagentManager_CleanupCompleted_SkipsRecent(t *testing.T) {
 	manager := NewSubagentManager(zap.NewNop())
 
-	agent := &stubAgent{
+	agent := &asyncStubAgent{
 		id: "sub-1",
 		executeFn: func(ctx context.Context, input *Input) (*Output, error) {
 			return &Output{Content: "ok"}, nil
@@ -274,13 +274,13 @@ func TestRealtimeCoordinator_CoordinateSubagents_Success(t *testing.T) {
 	coordinator := NewRealtimeCoordinator(manager, bus, zap.NewNop())
 
 	agents := []Agent{
-		&stubAgent{
+		&asyncStubAgent{
 			id: "sub-1",
 			executeFn: func(ctx context.Context, input *Input) (*Output, error) {
 				return &Output{Content: "result-1", TokensUsed: 10}, nil
 			},
 		},
-		&stubAgent{
+		&asyncStubAgent{
 			id: "sub-2",
 			executeFn: func(ctx context.Context, input *Input) (*Output, error) {
 				return &Output{Content: "result-2", TokensUsed: 20}, nil
@@ -300,7 +300,7 @@ func TestRealtimeCoordinator_CoordinateSubagents_AllFail(t *testing.T) {
 	coordinator := NewRealtimeCoordinator(manager, nil, zap.NewNop())
 
 	agents := []Agent{
-		&stubAgent{
+		&asyncStubAgent{
 			id: "sub-1",
 			executeFn: func(ctx context.Context, input *Input) (*Output, error) {
 				return nil, errors.New("fail-1")
@@ -332,10 +332,10 @@ func TestGenerateExecutionID(t *testing.T) {
 }
 
 // ============================================================
-// stubAgent for async tests
+// asyncStubAgent for async tests
 // ============================================================
 
-type stubAgent struct {
+type asyncStubAgent struct {
 	id        string
 	name      string
 	agentType AgentType
@@ -343,19 +343,19 @@ type stubAgent struct {
 	executeFn func(ctx context.Context, input *Input) (*Output, error)
 }
 
-func (a *stubAgent) ID() string        { return a.id }
-func (a *stubAgent) Name() string      { return a.name }
-func (a *stubAgent) Type() AgentType   { return a.agentType }
-func (a *stubAgent) State() State      { return a.state }
-func (a *stubAgent) Init(ctx context.Context) error { return nil }
-func (a *stubAgent) Teardown(ctx context.Context) error { return nil }
-func (a *stubAgent) Plan(ctx context.Context, input *Input) (*PlanResult, error) {
+func (a *asyncStubAgent) ID() string        { return a.id }
+func (a *asyncStubAgent) Name() string      { return a.name }
+func (a *asyncStubAgent) Type() AgentType   { return a.agentType }
+func (a *asyncStubAgent) State() State      { return a.state }
+func (a *asyncStubAgent) Init(ctx context.Context) error { return nil }
+func (a *asyncStubAgent) Teardown(ctx context.Context) error { return nil }
+func (a *asyncStubAgent) Plan(ctx context.Context, input *Input) (*PlanResult, error) {
 	return &PlanResult{}, nil
 }
-func (a *stubAgent) Execute(ctx context.Context, input *Input) (*Output, error) {
+func (a *asyncStubAgent) Execute(ctx context.Context, input *Input) (*Output, error) {
 	if a.executeFn != nil {
 		return a.executeFn(ctx, input)
 	}
 	return &Output{Content: "default"}, nil
 }
-func (a *stubAgent) Observe(ctx context.Context, feedback *Feedback) error { return nil }
+func (a *asyncStubAgent) Observe(ctx context.Context, feedback *Feedback) error { return nil }
