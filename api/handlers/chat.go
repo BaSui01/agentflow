@@ -244,6 +244,8 @@ func (h *ChatHandler) convertToLLMRequest(req *api.ChatRequest) *llm.ChatRequest
 			Name:       msg.Name,
 			ToolCalls:  msg.ToolCalls,
 			ToolCallID: msg.ToolCallID,
+			Metadata:   msg.Metadata,
+			Timestamp:  msg.Timestamp,
 		}
 		// 复制 Images 字段（api.ImageContent → types.ImageContent）
 		if len(msg.Images) > 0 {

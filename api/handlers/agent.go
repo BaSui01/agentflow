@@ -321,6 +321,13 @@ func (h *AgentHandler) HandleAgentStream(w http.ResponseWriter, r *http.Request)
 			if event.ToolResult != nil {
 				data, _ = json.Marshal(event.ToolResult)
 			}
+		case agent.RuntimeStreamToolProgress:
+			sseEvent = "tool_progress"
+			data, _ = json.Marshal(map[string]any{
+				"tool_call_id": event.ToolCallID,
+				"tool_name":    event.ToolName,
+				"progress":     event.Data,
+			})
 		default:
 			return
 		}
