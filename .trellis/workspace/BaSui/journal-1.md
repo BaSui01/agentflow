@@ -1550,3 +1550,71 @@ commit `4a9159a` 沉淀了 4 条新规范：§43 OTel SDK Init、§44 API Reques
 ### Next Steps
 
 - None - task complete
+
+
+## Session 22: 实现 6 个 Web 搜索/抓取工具提供商
+
+**Date**: 2026-02-23
+**Task**: 实现 6 个 Web 搜索/抓取工具提供商
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+## 工作内容
+
+为 AgentFlow 框架实现了完整的 Web 搜索和网页抓取工具提供商，填补了框架中"有接口无实现"的核心空白。
+
+### 付费 API 提供商（3 个）
+
+| 提供商 | 接口 | 说明 |
+|--------|------|------|
+| TavilySearchProvider | WebSearchProvider | Tavily Search API，支持域名过滤、时间范围 |
+| JinaScraperProvider | WebScrapeProvider | Jina Reader API，HTML→Markdown 转换 |
+| FirecrawlProvider | WebSearchProvider + WebScrapeProvider | 双接口，同时支持搜索和抓取 |
+
+### 免费提供商（3 个，无需 API Key）
+
+| 提供商 | 接口 | 说明 |
+|--------|------|------|
+| DuckDuckGoSearchProvider | WebSearchProvider | DuckDuckGo Instant Answer API |
+| SearXNGSearchProvider | WebSearchProvider | 自托管元搜索引擎 |
+| HTTPScrapeProvider | WebScrapeProvider | 纯 HTTP + 正则 HTML→Markdown |
+
+### 配置与测试
+
+- 扩展 `config/loader.go` 的 `ToolsConfig` 结构体，支持全部 6 个提供商配置
+- 更新 `config/defaults.go` 默认配置和 `deployments/docker/config.example.yaml`
+- 每个提供商均有完整的 httptest 单元测试（共 43 个测试用例）
+- 通过 `go build`、`go vet`、`go test -race` 验证
+
+### 关键文件
+
+- `llm/tools/provider_tavily.go` / `_test.go`
+- `llm/tools/provider_jina.go` / `_test.go`
+- `llm/tools/provider_firecrawl.go` / `_test.go`
+- `llm/tools/provider_duckduckgo.go` / `_test.go`
+- `llm/tools/provider_searxng.go` / `_test.go`
+- `llm/tools/provider_http_scrape.go` / `_test.go`
+- `config/loader.go`、`config/defaults.go`
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `9ab951a` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
