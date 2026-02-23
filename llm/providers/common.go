@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/BaSui01/agentflow/llm"
 )
@@ -321,6 +322,9 @@ func ToLLMChatResponse(oa OpenAICompatResponse, provider string) *llm.ChatRespon
 		Provider: provider,
 		Model:    oa.Model,
 		Choices:  choices,
+	}
+	if oa.Created > 0 {
+		resp.CreatedAt = time.Unix(oa.Created, 0)
 	}
 	if oa.Usage != nil {
 		resp.Usage = llm.ChatUsage{

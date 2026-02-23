@@ -111,6 +111,10 @@ func New(cfg Config, logger *zap.Logger) *Provider {
 // Name returns the provider name.
 func (p *Provider) Name() string { return p.Cfg.ProviderName }
 
+// SupportsStructuredOutput returns true because OpenAI-compatible providers
+// support native JSON Schema response_format.
+func (p *Provider) SupportsStructuredOutput() bool { return true }
+
 // SupportsNativeFunctionCalling returns whether this provider supports tool calling.
 func (p *Provider) SupportsNativeFunctionCalling() bool {
 	if p.Cfg.SupportsTools != nil {
