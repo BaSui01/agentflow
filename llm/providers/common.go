@@ -117,11 +117,35 @@ func ReadErrorMessage(body io.Reader) string {
 
 // OpenAICompatMessage 表示 OpenAI 兼容的消息格式.
 type OpenAICompatMessage struct {
-	Role       string                `json:"role"`
-	Content    string                `json:"content,omitempty"`
-	Name       string                `json:"name,omitempty"`
-	ToolCalls  []OpenAICompatToolCall `json:"tool_calls,omitempty"`
-	ToolCallID string                `json:"tool_call_id,omitempty"`
+	Role         string                `json:"role"`
+	Content      string                `json:"content,omitempty"`
+	MultiContent []map[string]any      `json:"multi_content,omitempty"` // multimodal content parts
+	Name         string                `json:"name,omitempty"`
+	ToolCalls    []OpenAICompatToolCall `json:"tool_calls,omitempty"`
+	ToolCallID   string                `json:"tool_call_id,omitempty"`
+}
+
+// MarshalJSON 自定义序列化：当 MultiContent 非空时，将其序列化为 "content" 字段。
+func (m OpenAICompatMessage) MarshalJSON() ([]byte, error) {
+	type plain struct {
+		Role       string                `json:"role"`
+		Content    any                   `json:"content,omitempty"`
+		Name       string                `json:"name,omitempty"`
+		ToolCalls  []OpenAICompatToolCall `json:"tool_calls,omitempty"`
+		ToolCallID string                `json:"tool_call_id,omitempty"`
+	}
+	p := plain{
+		Role:       m.Role,
+		Name:       m.Name,
+		ToolCalls:  m.ToolCalls,
+		ToolCallID: m.ToolCallID,
+	}
+	if len(m.MultiContent) > 0 {
+		p.Content = m.MultiContent
+	} else {
+		p.Content = m.Content
+	}
+	return json.Marshal(p)
 }
 
 // OpenAICompatToolCall 表示 OpenAI 兼容的工具调用.
@@ -145,15 +169,16 @@ type OpenAICompatTool struct {
 
 // OpenAICompatRequest 表示 OpenAI 兼容的聊天完成请求.
 type OpenAICompatRequest struct {
-	Model       string                `json:"model"`
-	Messages    []OpenAICompatMessage `json:"messages"`
-	Tools       []OpenAICompatTool    `json:"tools,omitempty"`
-	ToolChoice  any           `json:"tool_choice,omitempty"`
-	MaxTokens   int                   `json:"max_tokens,omitempty"`
-	Temperature float32               `json:"temperature,omitempty"`
-	TopP        float32               `json:"top_p,omitempty"`
-	Stop        []string              `json:"stop,omitempty"`
-	Stream      bool                  `json:"stream,omitempty"`
+	Model          string                `json:"model"`
+	Messages       []OpenAICompatMessage `json:"messages"`
+	Tools          []OpenAICompatTool    `json:"tools,omitempty"`
+	ToolChoice     any                   `json:"tool_choice,omitempty"`
+	ResponseFormat any                   `json:"response_format,omitempty"`
+	MaxTokens      int                   `json:"max_tokens,omitempty"`
+	Temperature    float32               `json:"temperature,omitempty"`
+	TopP           float32               `json:"top_p,omitempty"`
+	Stop           []string              `json:"stop,omitempty"`
+	Stream         bool                  `json:"stream,omitempty"`
 }
 
 // OpenAICompatChoice 表示 OpenAI 兼容响应中的单个选项.
@@ -197,8 +222,38 @@ func ConvertMessagesToOpenAI(msgs []llm.Message) []OpenAICompatMessage {
 		oa := OpenAICompatMessage{
 			Role:       string(m.Role),
 			Name:       m.Name,
-			Content:    m.Content,
 			ToolCallID: m.ToolCallID,
+		}
+		// 如果有 Images，构建 multimodal content array
+		if len(m.Images) > 0 {
+			oa.Content = "" // 清空文本 content，使用 MultiContent
+			var parts []map[string]any
+			if m.Content != "" {
+				parts = append(parts, map[string]any{
+					"type": "text",
+					"text": m.Content,
+				})
+			}
+			for _, img := range m.Images {
+				if img.Type == "url" && img.URL != "" {
+					parts = append(parts, map[string]any{
+						"type": "image_url",
+						"image_url": map[string]string{
+							"url": img.URL,
+						},
+					})
+				} else if img.Type == "base64" && img.Data != "" {
+					parts = append(parts, map[string]any{
+						"type": "image_url",
+						"image_url": map[string]string{
+							"url": "data:image/png;base64," + img.Data,
+						},
+					})
+				}
+			}
+			oa.MultiContent = parts
+		} else {
+			oa.Content = m.Content
 		}
 		if len(m.ToolCalls) > 0 {
 			oa.ToolCalls = make([]OpenAICompatToolCall, 0, len(m.ToolCalls))
@@ -299,6 +354,38 @@ func BearerTokenHeaders(r *http.Request, apiKey string) {
 func SafeCloseBody(body io.ReadCloser) {
 	if body != nil {
 		_ = body.Close()
+	}
+}
+
+// ConvertResponseFormat 将 llm.ResponseFormat 转换为 OpenAI 兼容的 response_format 参数。
+// 返回 nil 表示不设置 response_format。
+func ConvertResponseFormat(rf *llm.ResponseFormat) any {
+	if rf == nil {
+		return nil
+	}
+	switch rf.Type {
+	case llm.ResponseFormatText:
+		return map[string]any{"type": "text"}
+	case llm.ResponseFormatJSONObject:
+		return map[string]any{"type": "json_object"}
+	case llm.ResponseFormatJSONSchema:
+		result := map[string]any{"type": "json_schema"}
+		if rf.JSONSchema != nil {
+			schemaParam := map[string]any{
+				"name":   rf.JSONSchema.Name,
+				"schema": rf.JSONSchema.Schema,
+			}
+			if rf.JSONSchema.Description != "" {
+				schemaParam["description"] = rf.JSONSchema.Description
+			}
+			if rf.JSONSchema.Strict != nil {
+				schemaParam["strict"] = *rf.JSONSchema.Strict
+			}
+			result["json_schema"] = schemaParam
+		}
+		return result
+	default:
+		return nil
 	}
 }
 

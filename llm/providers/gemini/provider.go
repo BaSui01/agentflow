@@ -221,11 +221,13 @@ type geminiFunctionDeclaration struct {
 }
 
 type geminiGenerationConfig struct {
-	Temperature     float32  `json:"temperature,omitempty"`
-	TopP            float32  `json:"topP,omitempty"`
-	TopK            int      `json:"topK,omitempty"`
-	MaxOutputTokens int      `json:"maxOutputTokens,omitempty"`
-	StopSequences   []string `json:"stopSequences,omitempty"`
+	Temperature      float32        `json:"temperature,omitempty"`
+	TopP             float32        `json:"topP,omitempty"`
+	TopK             int            `json:"topK,omitempty"`
+	MaxOutputTokens  int            `json:"maxOutputTokens,omitempty"`
+	StopSequences    []string       `json:"stopSequences,omitempty"`
+	ResponseMimeType string         `json:"responseMimeType,omitempty"`
+	ResponseSchema   map[string]any `json:"responseSchema,omitempty"`
 }
 
 type geminiRequest struct {
@@ -459,12 +461,25 @@ func (p *GeminiProvider) Completion(ctx context.Context, req *llm.ChatRequest) (
 	}
 
 	// 生成配置
-	if req.Temperature > 0 || req.TopP > 0 || req.MaxTokens > 0 || len(req.Stop) > 0 {
+	genCfgNeeded := req.Temperature > 0 || req.TopP > 0 || req.MaxTokens > 0 || len(req.Stop) > 0 || req.ResponseFormat != nil
+	if genCfgNeeded {
 		body.GenerationConfig = &geminiGenerationConfig{
 			Temperature:     req.Temperature,
 			TopP:            req.TopP,
 			MaxOutputTokens: req.MaxTokens,
 			StopSequences:   req.Stop,
+		}
+		// ResponseFormat 转换为 Gemini 格式
+		if req.ResponseFormat != nil {
+			switch req.ResponseFormat.Type {
+			case llm.ResponseFormatJSONObject:
+				body.GenerationConfig.ResponseMimeType = "application/json"
+			case llm.ResponseFormatJSONSchema:
+				body.GenerationConfig.ResponseMimeType = "application/json"
+				if req.ResponseFormat.JSONSchema != nil {
+					body.GenerationConfig.ResponseSchema = req.ResponseFormat.JSONSchema.Schema
+				}
+			}
 		}
 	}
 
@@ -535,11 +550,22 @@ func (p *GeminiProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-ch
 		SystemInstruction: systemInstruction,
 	}
 
-	if req.Temperature > 0 || req.TopP > 0 || req.MaxTokens > 0 {
+	if req.Temperature > 0 || req.TopP > 0 || req.MaxTokens > 0 || req.ResponseFormat != nil {
 		body.GenerationConfig = &geminiGenerationConfig{
 			Temperature:     req.Temperature,
 			TopP:            req.TopP,
 			MaxOutputTokens: req.MaxTokens,
+		}
+		if req.ResponseFormat != nil {
+			switch req.ResponseFormat.Type {
+			case llm.ResponseFormatJSONObject:
+				body.GenerationConfig.ResponseMimeType = "application/json"
+			case llm.ResponseFormatJSONSchema:
+				body.GenerationConfig.ResponseMimeType = "application/json"
+				if req.ResponseFormat.JSONSchema != nil {
+					body.GenerationConfig.ResponseSchema = req.ResponseFormat.JSONSchema.Schema
+				}
+			}
 		}
 	}
 

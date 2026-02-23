@@ -279,7 +279,7 @@ func mockProviderCompletion(baseURL string, req *llm.ChatRequest) (*llm.ChatResp
 		"tools":    convertToolsToMap(req.Tools),
 		"stream":   false,
 	}
-	if req.ToolChoice != "" {
+	if req.ToolChoice != nil {
 		body["tool_choice"] = req.ToolChoice
 	}
 
@@ -318,7 +318,7 @@ func mockProviderStream(baseURL string, req *llm.ChatRequest) (<-chan llm.Stream
 		"tools":    convertToolsToMap(req.Tools),
 		"stream":   true,
 	}
-	if req.ToolChoice != "" {
+	if req.ToolChoice != nil {
 		body["tool_choice"] = req.ToolChoice
 	}
 

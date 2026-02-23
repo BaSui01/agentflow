@@ -228,8 +228,11 @@ func (p *Provider) Completion(ctx context.Context, req *llm.ChatRequest) (*llm.C
 		TopP:        req.TopP,
 		Stop:        req.Stop,
 	}
-	if req.ToolChoice != "" {
+	if req.ToolChoice != nil {
 		body.ToolChoice = req.ToolChoice
+	}
+	if rf := providers.ConvertResponseFormat(req.ResponseFormat); rf != nil {
+		body.ResponseFormat = rf
 	}
 
 	// Apply provider-specific request hook
@@ -304,8 +307,11 @@ func (p *Provider) Stream(ctx context.Context, req *llm.ChatRequest) (<-chan llm
 		Stop:        req.Stop,
 		Stream:      true,
 	}
-	if req.ToolChoice != "" {
+	if req.ToolChoice != nil {
 		body.ToolChoice = req.ToolChoice
+	}
+	if rf := providers.ConvertResponseFormat(req.ResponseFormat); rf != nil {
+		body.ResponseFormat = rf
 	}
 
 	// Apply provider-specific request hook
