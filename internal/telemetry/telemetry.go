@@ -57,19 +57,25 @@ func Init(cfg config.TelemetryConfig, logger *zap.Logger) (*Providers, error) {
 	}
 
 	// Create OTLP gRPC trace exporter
-	traceExporter, err := otlptracegrpc.New(ctx,
+	traceOpts := []otlptracegrpc.Option{
 		otlptracegrpc.WithEndpoint(cfg.OTLPEndpoint),
-		otlptracegrpc.WithInsecure(),
-	)
+	}
+	if cfg.OTLPInsecure {
+		traceOpts = append(traceOpts, otlptracegrpc.WithInsecure())
+	}
+	traceExporter, err := otlptracegrpc.New(ctx, traceOpts...)
 	if err != nil {
 		return nil, fmt.Errorf("create trace exporter: %w", err)
 	}
 
 	// Create OTLP gRPC metric exporter
-	metricExporter, err := otlpmetricgrpc.New(ctx,
+	metricOpts := []otlpmetricgrpc.Option{
 		otlpmetricgrpc.WithEndpoint(cfg.OTLPEndpoint),
-		otlpmetricgrpc.WithInsecure(),
-	)
+	}
+	if cfg.OTLPInsecure {
+		metricOpts = append(metricOpts, otlpmetricgrpc.WithInsecure())
+	}
+	metricExporter, err := otlpmetricgrpc.New(ctx, metricOpts...)
 	if err != nil {
 		return nil, fmt.Errorf("create metric exporter: %w", err)
 	}

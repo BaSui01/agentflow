@@ -35,8 +35,10 @@ type Collector struct {
 	agentInfo              *prometheus.GaugeVec // agent_id → agent_type 映射，仅用于调试
 
 	// 缓存指标
-	cacheHits   *prometheus.CounterVec
-	cacheMisses *prometheus.CounterVec
+	cacheHits      *prometheus.CounterVec
+	cacheMisses    *prometheus.CounterVec
+	cacheEvictions *prometheus.CounterVec
+	cacheSize      *prometheus.GaugeVec
 
 	// 数据库指标
 	dbConnectionsOpen *prometheus.GaugeVec
@@ -190,6 +192,24 @@ func NewCollector(namespace string, logger *zap.Logger) *Collector {
 		[]string{"cache_type"},
 	)
 
+	c.cacheEvictions = promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Namespace: namespace,
+			Name:      "cache_evictions_total",
+			Help:      "Total number of cache evictions",
+		},
+		[]string{"cache_type"},
+	)
+
+	c.cacheSize = promauto.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Namespace: namespace,
+			Name:      "cache_size",
+			Help:      "Current number of items in cache",
+		},
+		[]string{"cache_type"},
+	)
+
 	// 数据库指标
 	c.dbConnectionsOpen = promauto.NewGaugeVec(
 		prometheus.GaugeOpts{
@@ -283,6 +303,16 @@ func (c *Collector) RecordCacheHit(cacheType string) {
 // RecordCacheMiss 记录缓存未命中
 func (c *Collector) RecordCacheMiss(cacheType string) {
 	c.cacheMisses.WithLabelValues(cacheType).Inc()
+}
+
+// RecordCacheEviction 记录缓存驱逐
+func (c *Collector) RecordCacheEviction(cacheType string) {
+	c.cacheEvictions.WithLabelValues(cacheType).Inc()
+}
+
+// RecordCacheSize 记录缓存当前大小
+func (c *Collector) RecordCacheSize(cacheType string, size int) {
+	c.cacheSize.WithLabelValues(cacheType).Set(float64(size))
 }
 
 // =============================================================================
