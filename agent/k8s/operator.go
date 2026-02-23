@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"go.uber.org/zap"
@@ -184,12 +185,13 @@ func DefaultOperatorConfig() OperatorConfig {
 
 // AgentOperator为特工执行Kubernetes操作器.
 type AgentOperator struct {
-	config    OperatorConfig
-	agents    map[string]*AgentCRD
-	instances map[string]*AgentInstance
-	metrics   *OperatorMetrics
-	logger    *zap.Logger
-	mu        sync.RWMutex
+	config           OperatorConfig
+	agents           map[string]*AgentCRD
+	instances        map[string]*AgentInstance
+	instanceProvider InstanceProvider
+	metrics          *OperatorMetrics
+	logger           *zap.Logger
+	mu               sync.RWMutex
 
 	// 回电
 	onReconcile   func(agent *AgentCRD) error
@@ -236,14 +238,23 @@ type InstanceMetrics struct {
 	TokensUsed        int64         `json:"tokensUsed"`
 }
 
+// InstanceProvider abstracts how agent instances are created/destroyed.
+// Default implementation is in-memory. K8s implementation would use client-go.
+type InstanceProvider interface {
+	CreateInstance(ctx context.Context, agent *AgentCRD) (*AgentInstance, error)
+	DeleteInstance(ctx context.Context, instanceID string) error
+	GetInstanceStatus(ctx context.Context, instanceID string) (InstanceStatus, error)
+	ListInstances(ctx context.Context, namespace, name string) ([]*AgentInstance, error)
+}
+
 // 运算仪包含运算器级的度量衡.
 type OperatorMetrics struct {
-	ReconcileTotal       int64         `json:"reconcileTotal"`
-	ReconcileErrors      int64         `json:"reconcileErrors"`
-	ScaleUpEvents        int64         `json:"scaleUpEvents"`
-	ScaleDownEvents      int64         `json:"scaleDownEvents"`
-	SelfHealingEvents    int64         `json:"selfHealingEvents"`
-	AverageReconcileTime time.Duration `json:"averageReconcileTime"`
+	ReconcileTotal       atomic.Int64  `json:"reconcileTotal"`
+	ReconcileErrors      atomic.Int64  `json:"reconcileErrors"`
+	ScaleUpEvents        atomic.Int64  `json:"scaleUpEvents"`
+	ScaleDownEvents      atomic.Int64  `json:"scaleDownEvents"`
+	SelfHealingEvents    atomic.Int64  `json:"selfHealingEvents"`
+	AverageReconcileTime atomic.Int64  `json:"averageReconcileTime"` // nanoseconds
 }
 
 // 新代理运营商创建了新的代理运营商.
@@ -251,7 +262,7 @@ func NewAgentOperator(config OperatorConfig, logger *zap.Logger) *AgentOperator 
 	if logger == nil {
 		logger = zap.NewNop()
 	}
-	return &AgentOperator{
+	op := &AgentOperator{
 		config:    config,
 		agents:    make(map[string]*AgentCRD),
 		instances: make(map[string]*AgentInstance),
@@ -259,6 +270,15 @@ func NewAgentOperator(config OperatorConfig, logger *zap.Logger) *AgentOperator 
 		logger:    logger,
 		stopCh:    make(chan struct{}),
 	}
+	op.instanceProvider = NewInMemoryInstanceProvider(logger)
+	return op
+}
+
+// SetInstanceProvider replaces the default in-memory instance provider.
+func (o *AgentOperator) SetInstanceProvider(p InstanceProvider) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	o.instanceProvider = p
 }
 
 // 设置调和 Callback 设置调和调回调 。
@@ -285,6 +305,8 @@ func (o *AgentOperator) Start(ctx context.Context) error {
 	}
 	o.running = true
 	o.stopCh = make(chan struct{})
+	o.closeOnce = sync.Once{}
+	stopCh := o.stopCh // capture under lock for goroutines
 	o.mu.Unlock()
 
 	o.logger.Info("starting agent operator",
@@ -292,13 +314,13 @@ func (o *AgentOperator) Start(ctx context.Context) error {
 		zap.Duration("reconcileInterval", o.config.ReconcileInterval))
 
 	// 开始调节循环
-	go o.reconcileLoop(ctx)
+	go o.reconcileLoop(ctx, stopCh)
 
 	// 开始健康检查循环
-	go o.healthCheckLoop(ctx)
+	go o.healthCheckLoop(ctx, stopCh)
 
 	// 开始收集衡量标准
-	go o.metricsLoop(ctx)
+	go o.metricsLoop(ctx, stopCh)
 
 	return nil
 }
@@ -383,7 +405,7 @@ func (o *AgentOperator) ListAgents() []*AgentCRD {
 	return agents
 }
 
-func (o *AgentOperator) reconcileLoop(ctx context.Context) {
+func (o *AgentOperator) reconcileLoop(ctx context.Context, stopCh <-chan struct{}) {
 	ticker := time.NewTicker(o.config.ReconcileInterval)
 	defer ticker.Stop()
 
@@ -391,7 +413,7 @@ func (o *AgentOperator) reconcileLoop(ctx context.Context) {
 		select {
 		case <-ctx.Done():
 			return
-		case <-o.stopCh:
+		case <-stopCh:
 			return
 		case <-ticker.C:
 			o.reconcileAll()
@@ -414,7 +436,7 @@ func (o *AgentOperator) reconcileAll() {
 
 func (o *AgentOperator) reconcileAgent(agent *AgentCRD) {
 	start := time.Now()
-	o.metrics.ReconcileTotal++
+	o.metrics.ReconcileTotal.Add(1)
 
 	o.logger.Debug("reconciling agent",
 		zap.String("name", agent.Metadata.Name),
@@ -423,7 +445,7 @@ func (o *AgentOperator) reconcileAgent(agent *AgentCRD) {
 	// 调用自定义调试回调
 	if o.onReconcile != nil {
 		if err := o.onReconcile(agent); err != nil {
-			o.metrics.ReconcileErrors++
+			o.metrics.ReconcileErrors.Add(1)
 			o.logger.Error("reconcile callback failed", zap.Error(err))
 			o.updateAgentCondition(agent, "Reconciled", "False", "ReconcileFailed", err.Error())
 			return
@@ -544,7 +566,7 @@ func (o *AgentOperator) scaleAgent(agent *AgentCRD, replicas int32) {
 
 	if replicas > currentReplicas {
 		// 缩放
-		o.metrics.ScaleUpEvents++
+		o.metrics.ScaleUpEvents.Add(1)
 		o.logger.Info("scaling up agent",
 			zap.String("name", agent.Metadata.Name),
 			zap.Int32("from", currentReplicas),
@@ -555,7 +577,7 @@ func (o *AgentOperator) scaleAgent(agent *AgentCRD, replicas int32) {
 		}
 	} else if replicas < currentReplicas {
 		// 缩放
-		o.metrics.ScaleDownEvents++
+		o.metrics.ScaleDownEvents.Add(1)
 		o.logger.Info("scaling down agent",
 			zap.String("name", agent.Metadata.Name),
 			zap.Int32("from", currentReplicas),
@@ -631,7 +653,7 @@ func (o *AgentOperator) countReadyInstances(namespace, name string) int32 {
 	return count
 }
 
-func (o *AgentOperator) healthCheckLoop(ctx context.Context) {
+func (o *AgentOperator) healthCheckLoop(ctx context.Context, stopCh <-chan struct{}) {
 	ticker := time.NewTicker(10 * time.Second)
 	defer ticker.Stop()
 
@@ -639,7 +661,7 @@ func (o *AgentOperator) healthCheckLoop(ctx context.Context) {
 		select {
 		case <-ctx.Done():
 			return
-		case <-o.stopCh:
+		case <-stopCh:
 			return
 		case <-ticker.C:
 			o.checkAllHealth()
@@ -689,7 +711,7 @@ func (o *AgentOperator) checkInstanceHealth(inst *AgentInstance, agent *AgentCRD
 }
 
 func (o *AgentOperator) selfHeal(inst *AgentInstance, agent *AgentCRD) {
-	o.metrics.SelfHealingEvents++
+	o.metrics.SelfHealingEvents.Add(1)
 	o.logger.Info("self-healing instance",
 		zap.String("instance", inst.ID),
 		zap.String("agent", agent.Metadata.Name))
@@ -711,11 +733,11 @@ func (o *AgentOperator) selfHeal(inst *AgentInstance, agent *AgentCRD) {
 	// 删除失败实例
 	delete(o.instances, inst.ID)
 
-	o.updateAgentCondition(agent, "SelfHealed", "True", "InstanceReplaced",
+	o.updateAgentConditionLocked(agent, "SelfHealed", "True", "InstanceReplaced",
 		fmt.Sprintf("Replaced unhealthy instance %s", inst.ID))
 }
 
-func (o *AgentOperator) metricsLoop(ctx context.Context) {
+func (o *AgentOperator) metricsLoop(ctx context.Context, stopCh <-chan struct{}) {
 	ticker := time.NewTicker(15 * time.Second)
 	defer ticker.Stop()
 
@@ -723,7 +745,7 @@ func (o *AgentOperator) metricsLoop(ctx context.Context) {
 		select {
 		case <-ctx.Done():
 			return
-		case <-o.stopCh:
+		case <-stopCh:
 			return
 		case <-ticker.C:
 			o.collectMetrics()
@@ -779,6 +801,11 @@ func (o *AgentOperator) getCurrentMetricValueLocked(agent *AgentCRD, metricName 
 func (o *AgentOperator) updateAgentCondition(agent *AgentCRD, condType, status, reason, message string) {
 	o.mu.Lock()
 	defer o.mu.Unlock()
+	o.updateAgentConditionLocked(agent, condType, status, reason, message)
+}
+
+// updateAgentConditionLocked updates a condition while the caller already holds o.mu.
+func (o *AgentOperator) updateAgentConditionLocked(agent *AgentCRD, condType, status, reason, message string) {
 
 	now := time.Now()
 	newCondition := AgentCondition{

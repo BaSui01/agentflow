@@ -210,7 +210,7 @@ func NewEnhancedMemorySystem(
 	logger *zap.Logger,
 ) *EnhancedMemorySystem {
 	if logger == nil {
-		logger, _ = zap.NewProduction()
+		logger = zap.NewNop()
 	}
 
 	system := &EnhancedMemorySystem{

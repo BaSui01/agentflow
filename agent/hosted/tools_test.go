@@ -1,0 +1,468 @@
+package hosted
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
+	"testing"
+	"time"
+
+	"go.uber.org/zap"
+)
+
+// --- Mock types using function callback pattern (§30) ---
+
+type mockFileSearchStore struct {
+	searchFn func(ctx context.Context, query string, limit int) ([]FileSearchResult, error)
+	indexFn  func(ctx context.Context, fileID string, content []byte) error
+}
+
+func (m *mockFileSearchStore) Search(ctx context.Context, query string, limit int) ([]FileSearchResult, error) {
+	if m.searchFn != nil {
+		return m.searchFn(ctx, query, limit)
+	}
+	return nil, nil
+}
+
+func (m *mockFileSearchStore) Index(ctx context.Context, fileID string, content []byte) error {
+	if m.indexFn != nil {
+		return m.indexFn(ctx, fileID, content)
+	}
+	return nil
+}
+
+type mockCodeExecutor struct {
+	executeFn func(ctx context.Context, language string, code string, timeout time.Duration) (*CodeExecOutput, error)
+}
+
+func (m *mockCodeExecutor) Execute(ctx context.Context, language string, code string, timeout time.Duration) (*CodeExecOutput, error) {
+	if m.executeFn != nil {
+		return m.executeFn(ctx, language, code, timeout)
+	}
+	return &CodeExecOutput{}, nil
+}
+
+type mockRetrievalStore struct {
+	retrieveFn func(ctx context.Context, query string, topK int) ([]RetrievalResult, error)
+}
+
+func (m *mockRetrievalStore) Retrieve(ctx context.Context, query string, topK int) ([]RetrievalResult, error) {
+	if m.retrieveFn != nil {
+		return m.retrieveFn(ctx, query, topK)
+	}
+	return nil, nil
+}
+
+// --- ToolRegistry tests ---
+
+func TestToolRegistry_RegisterGetList(t *testing.T) {
+	reg := NewToolRegistry(nil)
+
+	tool := NewFileSearchTool(&mockFileSearchStore{}, 5)
+	reg.Register(tool)
+
+	got, ok := reg.Get("file_search")
+	if !ok {
+		t.Fatal("expected to find registered tool")
+	}
+	if got.Name() != "file_search" {
+		t.Errorf("got name %q, want %q", got.Name(), "file_search")
+	}
+
+	_, ok = reg.Get("nonexistent")
+	if ok {
+		t.Error("expected not to find nonexistent tool")
+	}
+
+	list := reg.List()
+	if len(list) != 1 {
+		t.Errorf("got %d tools, want 1", len(list))
+	}
+}
+
+func TestToolRegistry_GetSchemas(t *testing.T) {
+	reg := NewToolRegistry(nil)
+	reg.Register(NewFileSearchTool(&mockFileSearchStore{}, 5))
+	reg.Register(NewWebSearchTool(WebSearchConfig{Endpoint: "http://example.com"}))
+
+	schemas := reg.GetSchemas()
+	if len(schemas) != 2 {
+		t.Errorf("got %d schemas, want 2", len(schemas))
+	}
+}
+
+// --- WebSearchTool tests ---
+
+func TestWebSearchTool_Execute_Success(t *testing.T) {
+	results := []WebSearchResult{
+		{Title: "Result 1", URL: "http://example.com/1", Snippet: "snippet 1"},
+		{Title: "Result 2", URL: "http://example.com/2", Snippet: "snippet 2"},
+	}
+	body, err := json.Marshal(results)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("q") != "test query" {
+			t.Errorf("unexpected query: %s", r.URL.Query().Get("q"))
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write(body)
+	}))
+	defer srv.Close()
+
+	tool := NewWebSearchTool(WebSearchConfig{Endpoint: srv.URL})
+	args, _ := json.Marshal(WebSearchArgs{Query: "test query"})
+
+	result, err := tool.Execute(context.Background(), args)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var got []WebSearchResult
+	if err := json.Unmarshal(result, &got); err != nil {
+		t.Fatalf("failed to unmarshal result: %v", err)
+	}
+	if len(got) != 2 {
+		t.Errorf("got %d results, want 2", len(got))
+	}
+}
+
+func TestWebSearchTool_Execute_NonOKStatus(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusTooManyRequests)
+		_, _ = w.Write([]byte("rate limited"))
+	}))
+	defer srv.Close()
+
+	tool := NewWebSearchTool(WebSearchConfig{Endpoint: srv.URL})
+	args, _ := json.Marshal(WebSearchArgs{Query: "test"})
+
+	_, err := tool.Execute(context.Background(), args)
+	if err == nil {
+		t.Fatal("expected error for non-200 status")
+	}
+}
+
+func TestWebSearchTool_Execute_EmptyQuery(t *testing.T) {
+	tool := NewWebSearchTool(WebSearchConfig{Endpoint: "http://example.com"})
+	args, _ := json.Marshal(WebSearchArgs{Query: ""})
+
+	_, err := tool.Execute(context.Background(), args)
+	if err == nil {
+		t.Fatal("expected error for empty query")
+	}
+}
+
+// --- FileSearchTool tests ---
+
+func TestFileSearchTool_Execute_Success(t *testing.T) {
+	store := &mockFileSearchStore{
+		searchFn: func(_ context.Context, query string, limit int) ([]FileSearchResult, error) {
+			if query != "find docs" {
+				t.Errorf("unexpected query: %s", query)
+			}
+			return []FileSearchResult{
+				{FileID: "f1", FileName: "doc.txt", Content: "content", Score: 0.95},
+			}, nil
+		},
+	}
+
+	tool := NewFileSearchTool(store, 10)
+	args, _ := json.Marshal(map[string]any{"query": "find docs"})
+
+	result, err := tool.Execute(context.Background(), args)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var got []FileSearchResult
+	if err := json.Unmarshal(result, &got); err != nil {
+		t.Fatalf("failed to unmarshal: %v", err)
+	}
+	if len(got) != 1 || got[0].FileID != "f1" {
+		t.Errorf("unexpected results: %+v", got)
+	}
+}
+
+func TestFileSearchTool_Execute_StoreError(t *testing.T) {
+	store := &mockFileSearchStore{
+		searchFn: func(_ context.Context, _ string, _ int) ([]FileSearchResult, error) {
+			return nil, fmt.Errorf("store unavailable")
+		},
+	}
+
+	tool := NewFileSearchTool(store, 10)
+	args, _ := json.Marshal(map[string]any{"query": "test"})
+
+	_, err := tool.Execute(context.Background(), args)
+	if err == nil {
+		t.Fatal("expected error from store")
+	}
+}
+
+// --- CodeExecTool tests ---
+
+func TestCodeExecTool_Execute_Success(t *testing.T) {
+	executor := &mockCodeExecutor{
+		executeFn: func(_ context.Context, lang string, code string, _ time.Duration) (*CodeExecOutput, error) {
+			if lang != "python" {
+				t.Errorf("unexpected language: %s", lang)
+			}
+			return &CodeExecOutput{
+				Stdout:   "hello\n",
+				ExitCode: 0,
+				Duration: 100 * time.Millisecond,
+			}, nil
+		},
+	}
+
+	tool := NewCodeExecTool(CodeExecConfig{Executor: executor})
+	args, _ := json.Marshal(map[string]any{"language": "python", "code": "print('hello')"})
+
+	result, err := tool.Execute(context.Background(), args)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var got CodeExecOutput
+	if err := json.Unmarshal(result, &got); err != nil {
+		t.Fatalf("failed to unmarshal: %v", err)
+	}
+	if got.Stdout != "hello\n" {
+		t.Errorf("got stdout %q, want %q", got.Stdout, "hello\n")
+	}
+}
+
+func TestCodeExecTool_Execute_UnsupportedLanguage(t *testing.T) {
+	tool := NewCodeExecTool(CodeExecConfig{Executor: &mockCodeExecutor{}})
+	args, _ := json.Marshal(map[string]any{"language": "ruby", "code": "puts 'hi'"})
+
+	_, err := tool.Execute(context.Background(), args)
+	if err == nil {
+		t.Fatal("expected error for unsupported language")
+	}
+}
+
+func TestCodeExecTool_Execute_EmptyCode(t *testing.T) {
+	tool := NewCodeExecTool(CodeExecConfig{Executor: &mockCodeExecutor{}})
+	args, _ := json.Marshal(map[string]any{"language": "python", "code": ""})
+
+	_, err := tool.Execute(context.Background(), args)
+	if err == nil {
+		t.Fatal("expected error for empty code")
+	}
+}
+
+func TestCodeExecTool_Execute_CustomTimeout(t *testing.T) {
+	var receivedTimeout time.Duration
+	executor := &mockCodeExecutor{
+		executeFn: func(_ context.Context, _ string, _ string, timeout time.Duration) (*CodeExecOutput, error) {
+			receivedTimeout = timeout
+			return &CodeExecOutput{ExitCode: 0}, nil
+		},
+	}
+
+	tool := NewCodeExecTool(CodeExecConfig{Executor: executor})
+	args, _ := json.Marshal(map[string]any{"language": "bash", "code": "echo hi", "timeout_seconds": 60})
+
+	_, err := tool.Execute(context.Background(), args)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if receivedTimeout != 60*time.Second {
+		t.Errorf("got timeout %v, want 60s", receivedTimeout)
+	}
+}
+
+// --- RetrievalTool tests ---
+
+func TestRetrievalTool_Execute_Success(t *testing.T) {
+	store := &mockRetrievalStore{
+		retrieveFn: func(_ context.Context, query string, topK int) ([]RetrievalResult, error) {
+			if query != "how to deploy" {
+				t.Errorf("unexpected query: %s", query)
+			}
+			if topK != 5 {
+				t.Errorf("unexpected topK: %d", topK)
+			}
+			return []RetrievalResult{
+				{DocumentID: "d1", Content: "deploy guide", Score: 0.9},
+			}, nil
+		},
+	}
+
+	tool := NewRetrievalTool(store, 10, nil)
+	args, _ := json.Marshal(map[string]any{"query": "how to deploy", "max_results": 5})
+
+	result, err := tool.Execute(context.Background(), args)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var got []RetrievalResult
+	if err := json.Unmarshal(result, &got); err != nil {
+		t.Fatalf("failed to unmarshal: %v", err)
+	}
+	if len(got) != 1 || got[0].DocumentID != "d1" {
+		t.Errorf("unexpected results: %+v", got)
+	}
+}
+
+func TestRetrievalTool_Execute_EmptyQuery(t *testing.T) {
+	tool := NewRetrievalTool(&mockRetrievalStore{}, 10, nil)
+	args, _ := json.Marshal(map[string]any{"query": ""})
+
+	_, err := tool.Execute(context.Background(), args)
+	if err == nil {
+		t.Fatal("expected error for empty query")
+	}
+}
+
+func TestRetrievalTool_Execute_DefaultMaxResults(t *testing.T) {
+	var receivedTopK int
+	store := &mockRetrievalStore{
+		retrieveFn: func(_ context.Context, _ string, topK int) ([]RetrievalResult, error) {
+			receivedTopK = topK
+			return nil, nil
+		},
+	}
+
+	tool := NewRetrievalTool(store, 10, nil)
+	args, _ := json.Marshal(map[string]any{"query": "test"})
+
+	_, err := tool.Execute(context.Background(), args)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if receivedTopK != 10 {
+		t.Errorf("got topK %d, want 10", receivedTopK)
+	}
+}
+
+// --- Middleware tests ---
+
+func TestMiddleware_WithTimeout(t *testing.T) {
+	reg := NewToolRegistry(nil)
+
+	store := &mockFileSearchStore{
+		searchFn: func(ctx context.Context, _ string, _ int) ([]FileSearchResult, error) {
+			select {
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			case <-time.After(5 * time.Second):
+				return nil, nil
+			}
+		},
+	}
+	reg.Register(NewFileSearchTool(store, 5))
+	reg.Use(WithTimeout(50 * time.Millisecond))
+
+	args, _ := json.Marshal(map[string]any{"query": "test"})
+	_, err := reg.Execute(context.Background(), "file_search", args)
+	if err == nil {
+		t.Fatal("expected timeout error")
+	}
+}
+
+func TestMiddleware_WithLogging(t *testing.T) {
+	logger, _ := zap.NewDevelopment()
+	reg := NewToolRegistry(nil)
+
+	store := &mockFileSearchStore{
+		searchFn: func(_ context.Context, _ string, _ int) ([]FileSearchResult, error) {
+			return []FileSearchResult{{FileID: "f1"}}, nil
+		},
+	}
+	reg.Register(NewFileSearchTool(store, 5))
+	reg.Use(WithLogging(logger))
+
+	args, _ := json.Marshal(map[string]any{"query": "test"})
+	_, err := reg.Execute(context.Background(), "file_search", args)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestMiddleware_WithMetrics(t *testing.T) {
+	var called bool
+	var reportedErr error
+
+	reg := NewToolRegistry(nil)
+	store := &mockFileSearchStore{
+		searchFn: func(_ context.Context, _ string, _ int) ([]FileSearchResult, error) {
+			return nil, nil
+		},
+	}
+	reg.Register(NewFileSearchTool(store, 5))
+	reg.Use(WithMetrics(func(_ string, _ time.Duration, err error) {
+		called = true
+		reportedErr = err
+	}))
+
+	args, _ := json.Marshal(map[string]any{"query": "test"})
+	_, err := reg.Execute(context.Background(), "file_search", args)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !called {
+		t.Error("metrics callback was not called")
+	}
+	if reportedErr != nil {
+		t.Errorf("unexpected reported error: %v", reportedErr)
+	}
+}
+
+func TestToolRegistry_Execute_NotFound(t *testing.T) {
+	reg := NewToolRegistry(nil)
+	args, _ := json.Marshal(map[string]any{"query": "test"})
+
+	_, err := reg.Execute(context.Background(), "nonexistent", args)
+	if err == nil {
+		t.Fatal("expected error for nonexistent tool")
+	}
+}
+
+func TestMiddleware_Chain_Order(t *testing.T) {
+	var order []string
+
+	mw := func(label string) ToolMiddleware {
+		return func(next ToolExecuteFunc) ToolExecuteFunc {
+			return func(ctx context.Context, args json.RawMessage) (json.RawMessage, error) {
+				order = append(order, label+"-before")
+				result, err := next(ctx, args)
+				order = append(order, label+"-after")
+				return result, err
+			}
+		}
+	}
+
+	reg := NewToolRegistry(nil)
+	store := &mockFileSearchStore{
+		searchFn: func(_ context.Context, _ string, _ int) ([]FileSearchResult, error) {
+			order = append(order, "execute")
+			return nil, nil
+		},
+	}
+	reg.Register(NewFileSearchTool(store, 5))
+	reg.Use(mw("first"), mw("second"))
+
+	args, _ := json.Marshal(map[string]any{"query": "test"})
+	_, err := reg.Execute(context.Background(), "file_search", args)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	expected := []string{"first-before", "second-before", "execute", "second-after", "first-after"}
+	if len(order) != len(expected) {
+		t.Fatalf("got order %v, want %v", order, expected)
+	}
+	for i, v := range expected {
+		if order[i] != v {
+			t.Errorf("order[%d] = %q, want %q", i, order[i], v)
+		}
+	}
+}

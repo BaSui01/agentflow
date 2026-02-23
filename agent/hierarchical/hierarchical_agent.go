@@ -130,7 +130,7 @@ func NewHierarchicalAgent(
 	logger *zap.Logger,
 ) *HierarchicalAgent {
 	if logger == nil {
-		logger, _ = zap.NewProduction()
+		logger = zap.NewNop()
 	}
 
 	coordinator := NewTaskCoordinator(workers, config, logger)

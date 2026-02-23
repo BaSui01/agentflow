@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 )
 
 // DefaultMCPServer 默认 MCP 服务器实现
@@ -31,6 +32,7 @@ type DefaultMCPServer struct {
 	subsMu        sync.RWMutex
 
 	logger *zap.Logger
+	logLevel zap.AtomicLevel
 }
 
 // ToolHandler 工具处理函数
@@ -39,7 +41,7 @@ type ToolHandler func(ctx context.Context, args map[string]any) (any, error)
 // NewMCPServer 创建 MCP 服务器
 func NewMCPServer(name, version string, logger *zap.Logger) *DefaultMCPServer {
 	if logger == nil {
-		logger, _ = zap.NewProduction()
+		logger = zap.NewNop()
 	}
 
 	return &DefaultMCPServer{
@@ -61,6 +63,7 @@ func NewMCPServer(name, version string, logger *zap.Logger) *DefaultMCPServer {
 		toolHandlers:  make(map[string]ToolHandler),
 		prompts:       make(map[string]*PromptTemplate),
 		subscriptions: make(map[string][]chan Resource),
+		logLevel:      zap.NewAtomicLevelAt(zapcore.InfoLevel),
 		logger:        logger.With(zap.String("component", "mcp_server")),
 	}
 }
@@ -258,7 +261,11 @@ func (s *DefaultMCPServer) GetPrompt(ctx context.Context, name string, vars map[
 
 // SetLogLevel 设置日志级别
 func (s *DefaultMCPServer) SetLogLevel(level string) error {
-	// 实现日志级别设置
+	var zapLevel zapcore.Level
+	if err := zapLevel.UnmarshalText([]byte(level)); err != nil {
+		return fmt.Errorf("invalid log level %q: %w", level, err)
+	}
+	s.logLevel.SetLevel(zapLevel)
 	s.logger.Info("log level changed", zap.String("level", level))
 	return nil
 }

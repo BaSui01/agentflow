@@ -80,7 +80,7 @@ func (mc *MemoryCoordinator) Save(ctx context.Context, content string, kind Memo
 // 搜索匹配查询的记忆 。
 func (mc *MemoryCoordinator) Search(ctx context.Context, query string, topK int) ([]MemoryRecord, error) {
 	if mc.memory == nil {
-		return nil, nil
+		return []MemoryRecord{}, nil
 	}
 	return mc.memory.Search(ctx, mc.agentID, query, topK)
 }
@@ -141,7 +141,7 @@ func (mc *MemoryCoordinator) SaveConversation(ctx context.Context, input, output
 // RecallRelvant 回顾与查询相关的记忆.
 func (mc *MemoryCoordinator) RecallRelevant(ctx context.Context, query string, topK int) ([]MemoryRecord, error) {
 	if mc.memory == nil {
-		return nil, nil
+		return []MemoryRecord{}, nil
 	}
 
 	records, err := mc.memory.Search(ctx, mc.agentID, query, topK)

@@ -81,7 +81,7 @@ func DefaultSkillManagerConfig() SkillManagerConfig {
 // NewSkillManager 创建技能管理器
 func NewSkillManager(config SkillManagerConfig, logger *zap.Logger) *DefaultSkillManager {
 	if logger == nil {
-		logger, _ = zap.NewProduction()
+		logger = zap.NewNop()
 	}
 
 	return &DefaultSkillManager{

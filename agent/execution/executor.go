@@ -126,6 +126,11 @@ func NewSandboxExecutor(config SandboxConfig, backend ExecutionBackend, logger *
 func (s *SandboxExecutor) Execute(ctx context.Context, req *ExecutionRequest) (*ExecutionResult, error) {
 	start := time.Now()
 
+	// 检查后端
+	if s.backend == nil {
+		return nil, fmt.Errorf("execution backend is nil")
+	}
+
 	// 验证请求
 	if err := s.validate(req); err != nil {
 		return nil, err

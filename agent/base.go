@@ -474,7 +474,7 @@ func (b *BaseAgent) SaveMemory(ctx context.Context, content string, kind MemoryK
 // RecallMemory 检索记忆
 func (b *BaseAgent) RecallMemory(ctx context.Context, query string, topK int) ([]MemoryRecord, error) {
 	if b.memory == nil {
-		return nil, nil
+		return []MemoryRecord{}, nil
 	}
 	return b.memory.Search(ctx, b.config.ID, query, topK)
 }
