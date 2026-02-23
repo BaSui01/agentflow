@@ -361,7 +361,7 @@ func (h *AgentHandler) HandleAgentStream(w http.ResponseWriter, r *http.Request)
 	_, err = ag.Execute(ctx, input)
 	if err != nil {
 		// If headers are already sent (SSE mode), write error as SSE event
-		errPayload, _ := json.Marshal(map[string]string{"error": err.Error()})
+		errPayload, _ := json.Marshal(map[string]string{"error": "agent execution failed"})
 		fmt.Fprintf(w, "event: error\ndata: %s\n\n", errPayload)
 		flusher.Flush()
 	}
