@@ -38,7 +38,108 @@ func TestMaskAPIKey(t *testing.T) {
 	assert.True(t, masked[len(masked)-4:] == key[len(key)-4:])
 }
 
-// PLACEHOLDER_TESTS
+func TestHandleListProviders_Empty(t *testing.T) {
+	// Use a DB with no providers
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	require.NoError(t, err)
+	require.NoError(t, db.AutoMigrate(&llm.LLMProvider{}, &llm.LLMProviderAPIKey{}))
+
+	store := NewGormAPIKeyStore(db)
+	h := NewAPIKeyHandler(store, zap.NewNop())
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/providers", nil)
+	w := httptest.NewRecorder()
+	h.HandleListProviders(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	var resp Response
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	assert.True(t, resp.Success)
+}
+
+func TestHandleCreateAPIKey_InvalidJSON(t *testing.T) {
+	db := setupTestDB(t)
+	store := NewGormAPIKeyStore(db)
+	h := NewAPIKeyHandler(store, zap.NewNop())
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/providers/1/api-keys", bytes.NewReader([]byte(`{invalid`)))
+	req.Header.Set("Content-Type", "application/json")
+	req.SetPathValue("id", "1")
+	w := httptest.NewRecorder()
+	h.HandleCreateAPIKey(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestHandleCreateAPIKey_InvalidProviderID(t *testing.T) {
+	db := setupTestDB(t)
+	store := NewGormAPIKeyStore(db)
+	h := NewAPIKeyHandler(store, zap.NewNop())
+
+	body, _ := json.Marshal(createAPIKeyRequest{
+		APIKey: "sk-test-key-1234567890",
+		Label:  "test",
+	})
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/providers/abc/api-keys", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.SetPathValue("id", "abc")
+	w := httptest.NewRecorder()
+	h.HandleCreateAPIKey(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestHandleListAPIKeys_Empty(t *testing.T) {
+	db := setupTestDB(t)
+	store := NewGormAPIKeyStore(db)
+	h := NewAPIKeyHandler(store, zap.NewNop())
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/providers/1/api-keys", nil)
+	req.SetPathValue("id", "1")
+	w := httptest.NewRecorder()
+	h.HandleListAPIKeys(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	var resp Response
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	assert.True(t, resp.Success)
+}
+
+func TestHandleUpdateAPIKey_InvalidJSON(t *testing.T) {
+	db := setupTestDB(t)
+	store := NewGormAPIKeyStore(db)
+	h := NewAPIKeyHandler(store, zap.NewNop())
+
+	db.Create(&llm.LLMProviderAPIKey{
+		ProviderID: 1, APIKey: "sk-test", Priority: 100, Weight: 100, Enabled: true,
+	})
+
+	req := httptest.NewRequest(http.MethodPut, "/api/v1/providers/1/api-keys/1", bytes.NewReader([]byte(`{bad`)))
+	req.Header.Set("Content-Type", "application/json")
+	req.SetPathValue("id", "1")
+	req.SetPathValue("keyId", "1")
+	w := httptest.NewRecorder()
+	h.HandleUpdateAPIKey(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestHandleUpdateAPIKey_NotFound(t *testing.T) {
+	db := setupTestDB(t)
+	store := NewGormAPIKeyStore(db)
+	h := NewAPIKeyHandler(store, zap.NewNop())
+
+	newLabel := "updated"
+	body, _ := json.Marshal(updateAPIKeyRequest{Label: &newLabel})
+	req := httptest.NewRequest(http.MethodPut, "/api/v1/providers/1/api-keys/999", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.SetPathValue("id", "1")
+	req.SetPathValue("keyId", "999")
+	w := httptest.NewRecorder()
+	h.HandleUpdateAPIKey(w, req)
+
+	assert.Equal(t, http.StatusNotFound, w.Code)
+}
 
 func TestHandleListProviders(t *testing.T) {
 	db := setupTestDB(t)
@@ -126,7 +227,48 @@ func TestHandleUpdateAPIKey(t *testing.T) {
 	assert.Equal(t, "updated", key.Label)
 }
 
-// PLACEHOLDER_DELETE_STATS_TESTS
+func TestHandleDeleteAPIKey_InvalidKeyID(t *testing.T) {
+	db := setupTestDB(t)
+	store := NewGormAPIKeyStore(db)
+	h := NewAPIKeyHandler(store, zap.NewNop())
+
+	req := httptest.NewRequest(http.MethodDelete, "/api/v1/providers/1/api-keys/abc", nil)
+	req.SetPathValue("id", "1")
+	req.SetPathValue("keyId", "abc")
+	w := httptest.NewRecorder()
+	h.HandleDeleteAPIKey(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestHandleAPIKeyStats_NoKeys(t *testing.T) {
+	db := setupTestDB(t)
+	store := NewGormAPIKeyStore(db)
+	h := NewAPIKeyHandler(store, zap.NewNop())
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/providers/1/api-keys/stats", nil)
+	req.SetPathValue("id", "1")
+	w := httptest.NewRecorder()
+	h.HandleAPIKeyStats(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	var resp Response
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	assert.True(t, resp.Success)
+}
+
+func TestHandleAPIKeyStats_InvalidProviderID(t *testing.T) {
+	db := setupTestDB(t)
+	store := NewGormAPIKeyStore(db)
+	h := NewAPIKeyHandler(store, zap.NewNop())
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/providers/abc/api-keys/stats", nil)
+	req.SetPathValue("id", "abc")
+	w := httptest.NewRecorder()
+	h.HandleAPIKeyStats(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
 
 func TestHandleDeleteAPIKey(t *testing.T) {
 	db := setupTestDB(t)
