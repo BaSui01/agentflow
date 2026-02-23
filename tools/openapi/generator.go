@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -153,7 +154,7 @@ func (g *Generator) LoadSpec(ctx context.Context, source string) (*OpenAPISpec, 
 	if strings.HasPrefix(source, "http://") || strings.HasPrefix(source, "https://") {
 		data, err = g.fetchFromURL(ctx, source)
 	} else {
-		return nil, fmt.Errorf("file loading not implemented, use URL")
+		data, err = os.ReadFile(source)
 	}
 
 	if err != nil {
