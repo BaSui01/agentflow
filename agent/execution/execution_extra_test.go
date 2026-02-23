@@ -261,6 +261,87 @@ func TestProcessBackend_BuildArgs_DefaultLang(t *testing.T) {
 	assert.Equal(t, "-c", args[0])
 }
 
+// --- DockerBackend.buildCommand all languages ---
+
+func TestDockerBackend_BuildCommand_AllLanguages(t *testing.T) {
+	d := NewDockerBackend(nil)
+
+	tests := []struct {
+		lang     Language
+		wantCmd  string
+		wantArg1 string
+	}{
+		{LangPython, "python3", "-c"},
+		{LangJavaScript, "node", "-e"},
+		{LangTypeScript, "node", "-e"},
+		{LangGo, "go", "run"},
+		{LangRust, "sh", "-c"},
+		{LangBash, "sh", "-c"},
+		{Language("lua"), "sh", "-c"},
+	}
+
+	for _, tt := range tests {
+		t.Run(string(tt.lang), func(t *testing.T) {
+			cmd := d.buildCommand(&ExecutionRequest{Language: tt.lang, Code: "test"})
+			require.GreaterOrEqual(t, len(cmd), 2)
+			assert.Equal(t, tt.wantCmd, cmd[0])
+			assert.Equal(t, tt.wantArg1, cmd[1])
+		})
+	}
+}
+
+// --- DockerBackend.Execute with active containers ---
+
+func TestDockerBackend_Cleanup_WithActiveContainers(t *testing.T) {
+	d := NewDockerBackend(nil)
+	// Simulate active containers
+	d.mu.Lock()
+	d.activeContainers["test-container-1"] = struct{}{}
+	d.activeContainers["test-container-2"] = struct{}{}
+	d.mu.Unlock()
+
+	err := d.Cleanup()
+	require.NoError(t, err)
+	// Cleanup calls kill+remove but doesn't clear the map itself
+}
+
+// --- RealDockerBackend.Cleanup with active containers ---
+
+func TestRealDockerBackend_Cleanup_WithActiveContainers(t *testing.T) {
+	d := NewRealDockerBackend(nil)
+	d.mu.Lock()
+	d.activeContainers["test-container-1"] = struct{}{}
+	d.mu.Unlock()
+
+	err := d.Cleanup()
+	require.NoError(t, err)
+}
+
+// --- DockerBackend.buildDockerArgs with mount paths ---
+
+func TestDockerBackend_BuildDockerArgs_WithMounts(t *testing.T) {
+	d := NewDockerBackend(nil)
+	cfg := SandboxConfig{
+		MountPaths: map[string]string{
+			"/host/data": "/container/data",
+		},
+	}
+
+	args := d.buildDockerArgs("test", "python:3.12-slim", &ExecutionRequest{
+		Language: LangPython,
+		Code:     "pass",
+	}, cfg, "")
+
+	// Should contain -v mount
+	foundMount := false
+	for i, arg := range args {
+		if arg == "-v" && i+1 < len(args) && args[i+1] == "/host/data:/container/data:ro" {
+			foundMount = true
+		}
+	}
+	assert.True(t, foundMount, "expected mount path in docker args")
+}
+
 // --- SandboxTool with warnings ---
 
 func TestSandboxTool_WithWarnings(t *testing.T) {
