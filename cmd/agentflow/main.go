@@ -54,7 +54,7 @@ import (
 	"gorm.io/gorm"
 
 	"github.com/BaSui01/agentflow/config"
-	"github.com/BaSui01/agentflow/internal/telemetry"
+	"github.com/BaSui01/agentflow/pkg/telemetry"
 	"github.com/BaSui01/agentflow/llm"
 )
 
