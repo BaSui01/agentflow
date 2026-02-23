@@ -2,10 +2,15 @@ package workflow
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/BaSui01/agentflow/llm"
 )
+
+// ErrNotConfigured is returned when a step's required dependency (Provider, Registry, Handler)
+// has not been injected. Callers can check for this with errors.Is(err, ErrNotConfigured).
+var ErrNotConfigured = errors.New("step dependency not configured")
 
 // ============================================================
 // Workflow-local interfaces (avoid circular dependency on agent/)
@@ -67,12 +72,7 @@ func (s *LLMStep) Name() string { return "llm" }
 
 func (s *LLMStep) Execute(ctx context.Context, input any) (any, error) {
 	if s.Provider == nil {
-		// Backward-compatible placeholder
-		return map[string]any{
-			"model":  s.Model,
-			"prompt": s.Prompt,
-			"input":  input,
-		}, nil
+		return nil, fmt.Errorf("LLMStep: Provider is nil: %w", ErrNotConfigured)
 	}
 
 	// Build the user message from prompt + input
@@ -125,12 +125,7 @@ func (s *ToolStep) Name() string { return s.ToolName }
 
 func (s *ToolStep) Execute(ctx context.Context, input any) (any, error) {
 	if s.Registry == nil {
-		// Backward-compatible placeholder
-		return map[string]any{
-			"tool":   s.ToolName,
-			"params": s.Params,
-			"input":  input,
-		}, nil
+		return nil, fmt.Errorf("ToolStep %q: Registry is nil: %w", s.ToolName, ErrNotConfigured)
 	}
 
 	// Merge static params with dynamic input if input is a map
@@ -175,13 +170,7 @@ func (s *HumanInputStep) Name() string { return "human_input" }
 
 func (s *HumanInputStep) Execute(ctx context.Context, input any) (any, error) {
 	if s.Handler == nil {
-		// Backward-compatible placeholder
-		return map[string]any{
-			"prompt":  s.Prompt,
-			"type":    s.Type,
-			"options": s.Options,
-			"input":   input,
-		}, nil
+		return nil, fmt.Errorf("HumanInputStep: Handler is nil: %w", ErrNotConfigured)
 	}
 
 	result, err := s.Handler.RequestInput(ctx, s.Prompt, s.Type, s.Options)
