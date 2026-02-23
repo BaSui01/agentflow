@@ -47,6 +47,9 @@ type Config struct {
 
 	// Telemetry 遥测配置
 	Telemetry TelemetryConfig `yaml:"telemetry" env:"TELEMETRY"`
+
+	// Tools 工具提供者配置
+	Tools ToolsConfig `yaml:"tools" env:"TOOLS"`
 }
 
 // ServerConfig 服务器配置
@@ -276,6 +279,74 @@ type TelemetryConfig struct {
 	ServiceName string `yaml:"service_name" env:"SERVICE_NAME"`
 	// 采样率
 	SampleRate float64 `yaml:"sample_rate" env:"SAMPLE_RATE"`
+}
+
+// ToolsConfig 工具提供者配置
+type ToolsConfig struct {
+	// Tavily 搜索配置（需要 API Key）
+	Tavily TavilyToolConfig `yaml:"tavily" env:"TAVILY"`
+	// Jina Reader 抓取配置（可选 API Key，免费可用）
+	Jina JinaToolConfig `yaml:"jina" env:"JINA"`
+	// Firecrawl 搜索+抓取配置（需要 API Key）
+	Firecrawl FirecrawlToolConfig `yaml:"firecrawl" env:"FIRECRAWL"`
+	// DuckDuckGo 搜索配置（完全免费，无需 API Key）
+	DuckDuckGo DuckDuckGoToolConfig `yaml:"duckduckgo" env:"DUCKDUCKGO"`
+	// SearXNG 搜索配置（自托管，无需 API Key）
+	SearXNG SearXNGToolConfig `yaml:"searxng" env:"SEARXNG"`
+	// HTTP 抓取配置（纯 HTTP，无需 API Key）
+	HTTPScrape HTTPScrapeToolConfig `yaml:"http_scrape" env:"HTTP_SCRAPE"`
+}
+
+// TavilyToolConfig Tavily 搜索工具配置
+type TavilyToolConfig struct {
+	// API Key（建议使用环境变量 AGENTFLOW_TOOLS_TAVILY_API_KEY）
+	APIKey string `yaml:"api_key" env:"API_KEY" json:"-"`
+	// 基础 URL（可选，默认 https://api.tavily.com）
+	BaseURL string `yaml:"base_url" env:"BASE_URL"`
+	// 请求超时
+	Timeout time.Duration `yaml:"timeout" env:"TIMEOUT"`
+}
+
+// JinaToolConfig Jina Reader 工具配置
+type JinaToolConfig struct {
+	// API Key（建议使用环境变量 AGENTFLOW_TOOLS_JINA_API_KEY）
+	APIKey string `yaml:"api_key" env:"API_KEY" json:"-"`
+	// 基础 URL（可选，默认 https://r.jina.ai）
+	BaseURL string `yaml:"base_url" env:"BASE_URL"`
+	// 请求超时
+	Timeout time.Duration `yaml:"timeout" env:"TIMEOUT"`
+}
+
+// FirecrawlToolConfig Firecrawl 工具配置
+type FirecrawlToolConfig struct {
+	// API Key（建议使用环境变量 AGENTFLOW_TOOLS_FIRECRAWL_API_KEY）
+	APIKey string `yaml:"api_key" env:"API_KEY" json:"-"`
+	// 基础 URL（可选，默认 https://api.firecrawl.dev）
+	BaseURL string `yaml:"base_url" env:"BASE_URL"`
+	// 请求超时
+	Timeout time.Duration `yaml:"timeout" env:"TIMEOUT"`
+}
+
+// DuckDuckGoToolConfig DuckDuckGo 搜索工具配置（完全免费）
+type DuckDuckGoToolConfig struct {
+	// 请求超时
+	Timeout time.Duration `yaml:"timeout" env:"TIMEOUT"`
+}
+
+// SearXNGToolConfig SearXNG 搜索工具配置（自托管，无需 API Key）
+type SearXNGToolConfig struct {
+	// SearXNG 实例地址（必填，如 https://searx.example.com）
+	BaseURL string `yaml:"base_url" env:"BASE_URL"`
+	// 请求超时
+	Timeout time.Duration `yaml:"timeout" env:"TIMEOUT"`
+}
+
+// HTTPScrapeToolConfig 纯 HTTP 抓取工具配置（零依赖，无需 API Key）
+type HTTPScrapeToolConfig struct {
+	// 自定义 User-Agent
+	UserAgent string `yaml:"user_agent" env:"USER_AGENT"`
+	// 请求超时
+	Timeout time.Duration `yaml:"timeout" env:"TIMEOUT"`
 }
 
 // --- 配置加载器 ---

@@ -16,6 +16,7 @@ func DefaultConfig() *Config {
 		LLM:       DefaultLLMConfig(),
 		Log:       DefaultLogConfig(),
 		Telemetry: DefaultTelemetryConfig(),
+		Tools:     DefaultToolsConfig(),
 	}
 }
 
@@ -159,5 +160,33 @@ func DefaultTelemetryConfig() TelemetryConfig {
 		OTLPInsecure: false,
 		ServiceName:  "agentflow",
 		SampleRate:   0.1,
+	}
+}
+
+// DefaultToolsConfig 返回默认工具提供者配置
+func DefaultToolsConfig() ToolsConfig {
+	return ToolsConfig{
+		Tavily: TavilyToolConfig{
+			BaseURL: "https://api.tavily.com",
+			Timeout: 15 * time.Second,
+		},
+		Jina: JinaToolConfig{
+			BaseURL: "https://r.jina.ai",
+			Timeout: 30 * time.Second,
+		},
+		Firecrawl: FirecrawlToolConfig{
+			BaseURL: "https://api.firecrawl.dev",
+			Timeout: 30 * time.Second,
+		},
+		DuckDuckGo: DuckDuckGoToolConfig{
+			Timeout: 15 * time.Second,
+		},
+		SearXNG: SearXNGToolConfig{
+			Timeout: 15 * time.Second,
+		},
+		HTTPScrape: HTTPScrapeToolConfig{
+			UserAgent: "Mozilla/5.0 (compatible; AgentFlow/1.0)",
+			Timeout:   30 * time.Second,
+		},
 	}
 }

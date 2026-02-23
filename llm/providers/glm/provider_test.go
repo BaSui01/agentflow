@@ -1,4 +1,4 @@
-package hunyuan
+package glm
 
 import (
 	"context"
@@ -14,60 +14,80 @@ import (
 	"go.uber.org/zap"
 )
 
-func TestNewHunyuanProvider_Defaults(t *testing.T) {
+// --- Constructor and defaults ---
+
+func TestNewGLMProvider_Defaults(t *testing.T) {
 	tests := []struct {
 		name            string
-		cfg             providers.HunyuanConfig
+		cfg             providers.GLMConfig
 		expectedBaseURL string
 	}{
-		{"empty config uses default", providers.HunyuanConfig{}, "https://api.hunyuan.cloud.tencent.com/v1"},
-		{"custom BaseURL preserved", providers.HunyuanConfig{
-			BaseProviderConfig: providers.BaseProviderConfig{BaseURL: "https://custom.example.com"},
-		}, "https://custom.example.com"},
+		{
+			name:            "empty config uses default BaseURL",
+			cfg:             providers.GLMConfig{},
+			expectedBaseURL: "https://open.bigmodel.cn",
+		},
+		{
+			name: "custom BaseURL is preserved",
+			cfg: providers.GLMConfig{
+				BaseProviderConfig: providers.BaseProviderConfig{BaseURL: "https://custom.example.com"},
+			},
+			expectedBaseURL: "https://custom.example.com",
+		},
 	}
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			p := NewHunyuanProvider(tt.cfg, zap.NewNop())
+			p := NewGLMProvider(tt.cfg, zap.NewNop())
 			require.NotNil(t, p)
-			assert.Equal(t, "hunyuan", p.Name())
+			assert.Equal(t, "glm", p.Name())
 			assert.Equal(t, tt.expectedBaseURL, p.Cfg.BaseURL)
 		})
 	}
 }
 
-func TestHunyuanProvider_FallbackModel(t *testing.T) {
-	p := NewHunyuanProvider(providers.HunyuanConfig{}, zap.NewNop())
-	assert.Equal(t, "hunyuan-pro", p.Cfg.FallbackModel)
+func TestGLMProvider_FallbackModel(t *testing.T) {
+	p := NewGLMProvider(providers.GLMConfig{}, zap.NewNop())
+	assert.Equal(t, "glm-4-plus", p.Cfg.FallbackModel)
 }
 
-func TestHunyuanProvider_NilLogger(t *testing.T) {
-	p := NewHunyuanProvider(providers.HunyuanConfig{}, nil)
+func TestGLMProvider_EndpointPath(t *testing.T) {
+	p := NewGLMProvider(providers.GLMConfig{}, zap.NewNop())
+	assert.Equal(t, "/api/paas/v4/chat/completions", p.Cfg.EndpointPath)
+}
+
+func TestGLMProvider_NilLogger(t *testing.T) {
+	p := NewGLMProvider(providers.GLMConfig{}, nil)
 	require.NotNil(t, p)
-	assert.Equal(t, "hunyuan", p.Name())
+	assert.Equal(t, "glm", p.Name())
 }
 
-func TestHunyuanProvider_SupportsNativeFunctionCalling(t *testing.T) {
-	p := NewHunyuanProvider(providers.HunyuanConfig{}, zap.NewNop())
+func TestGLMProvider_SupportsNativeFunctionCalling(t *testing.T) {
+	p := NewGLMProvider(providers.GLMConfig{}, zap.NewNop())
 	assert.True(t, p.SupportsNativeFunctionCalling())
 }
 
-func TestHunyuanProvider_Completion(t *testing.T) {
+// --- Completion via httptest ---
+
+func TestGLMProvider_Completion(t *testing.T) {
 	var capturedRequest providers.OpenAICompatRequest
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		assert.Equal(t, "/v1/chat/completions", r.URL.Path)
+		assert.Equal(t, "/api/paas/v4/chat/completions", r.URL.Path)
+		assert.Contains(t, r.Header.Get("Authorization"), "Bearer ")
 		json.NewDecoder(r.Body).Decode(&capturedRequest)
+
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(providers.OpenAICompatResponse{
-			ID: "resp-1", Model: "hunyuan-pro",
+			ID: "resp-1", Model: "glm-4-plus",
 			Choices: []providers.OpenAICompatChoice{
-				{Index: 0, FinishReason: "stop", Message: providers.OpenAICompatMessage{Role: "assistant", Content: "Hello from Hunyuan"}},
+				{Index: 0, FinishReason: "stop", Message: providers.OpenAICompatMessage{Role: "assistant", Content: "Hello from GLM"}},
 			},
 			Usage: &providers.OpenAICompatUsage{PromptTokens: 10, CompletionTokens: 5, TotalTokens: 15},
 		})
 	}))
 	t.Cleanup(func() { server.Close() })
 
-	p := NewHunyuanProvider(providers.HunyuanConfig{
+	p := NewGLMProvider(providers.GLMConfig{
 		BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key", BaseURL: server.URL},
 	}, zap.NewNop())
 
@@ -75,21 +95,23 @@ func TestHunyuanProvider_Completion(t *testing.T) {
 		Messages: []llm.Message{{Role: llm.RoleUser, Content: "Hi"}},
 	})
 	require.NoError(t, err)
-	assert.Equal(t, "hunyuan", resp.Provider)
-	assert.Equal(t, "hunyuan-pro", resp.Model)
+	require.NotNil(t, resp)
+	assert.Equal(t, "glm", resp.Provider)
+	assert.Equal(t, "glm-4-plus", resp.Model)
 	require.Len(t, resp.Choices, 1)
-	assert.Equal(t, "Hello from Hunyuan", resp.Choices[0].Message.Content)
+	assert.Equal(t, "Hello from GLM", resp.Choices[0].Message.Content)
 	assert.Equal(t, 15, resp.Usage.TotalTokens)
+	assert.Equal(t, "glm-4-plus", capturedRequest.Model)
 }
 
-func TestHunyuanProvider_Completion_Error(t *testing.T) {
+func TestGLMProvider_Completion_Error(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusUnauthorized)
 		w.Write([]byte(`{"error":{"message":"Invalid API key"}}`))
 	}))
 	t.Cleanup(func() { server.Close() })
 
-	p := NewHunyuanProvider(providers.HunyuanConfig{
+	p := NewGLMProvider(providers.GLMConfig{
 		BaseProviderConfig: providers.BaseProviderConfig{APIKey: "bad", BaseURL: server.URL},
 	}, zap.NewNop())
 
@@ -102,14 +124,14 @@ func TestHunyuanProvider_Completion_Error(t *testing.T) {
 	assert.Equal(t, llm.ErrUnauthorized, llmErr.Code)
 }
 
-func TestHunyuanProvider_Completion_RateLimited(t *testing.T) {
+func TestGLMProvider_Completion_RateLimited(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusTooManyRequests)
 		w.Write([]byte(`{"error":{"message":"Rate limit"}}`))
 	}))
 	t.Cleanup(func() { server.Close() })
 
-	p := NewHunyuanProvider(providers.HunyuanConfig{
+	p := NewGLMProvider(providers.GLMConfig{
 		BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k", BaseURL: server.URL},
 	}, zap.NewNop())
 
@@ -122,12 +144,16 @@ func TestHunyuanProvider_Completion_RateLimited(t *testing.T) {
 	assert.Equal(t, llm.ErrRateLimited, llmErr.Code)
 }
 
-func TestHunyuanProvider_Stream(t *testing.T) {
+// --- Stream via httptest ---
+
+func TestGLMProvider_Stream(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "/api/paas/v4/chat/completions", r.URL.Path)
 		w.Header().Set("Content-Type", "text/event-stream")
 		w.WriteHeader(http.StatusOK)
+
 		chunk := providers.OpenAICompatResponse{
-			ID: "stream-1", Model: "hunyuan-pro",
+			ID: "stream-1", Model: "glm-4-plus",
 			Choices: []providers.OpenAICompatChoice{
 				{Index: 0, Delta: &providers.OpenAICompatMessage{Role: "assistant", Content: "Hello"}},
 			},
@@ -139,8 +165,8 @@ func TestHunyuanProvider_Stream(t *testing.T) {
 	}))
 	t.Cleanup(func() { server.Close() })
 
-	p := NewHunyuanProvider(providers.HunyuanConfig{
-		BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k", BaseURL: server.URL},
+	p := NewGLMProvider(providers.GLMConfig{
+		BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key", BaseURL: server.URL},
 	}, zap.NewNop())
 
 	ch, err := p.Stream(context.Background(), &llm.ChatRequest{
@@ -154,17 +180,17 @@ func TestHunyuanProvider_Stream(t *testing.T) {
 	}
 	require.Len(t, chunks, 1)
 	assert.Equal(t, "Hello", chunks[0].Delta.Content)
-	assert.Equal(t, "hunyuan", chunks[0].Provider)
+	assert.Equal(t, "glm", chunks[0].Provider)
 }
 
-func TestHunyuanProvider_Stream_Error(t *testing.T) {
+func TestGLMProvider_Stream_Error(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusTooManyRequests)
 		w.Write([]byte(`{"error":{"message":"Rate limit"}}`))
 	}))
 	t.Cleanup(func() { server.Close() })
 
-	p := NewHunyuanProvider(providers.HunyuanConfig{
+	p := NewGLMProvider(providers.GLMConfig{
 		BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k", BaseURL: server.URL},
 	}, zap.NewNop())
 
@@ -172,10 +198,15 @@ func TestHunyuanProvider_Stream_Error(t *testing.T) {
 		Messages: []llm.Message{{Role: llm.RoleUser, Content: "Hi"}},
 	})
 	require.Error(t, err)
+	llmErr, ok := err.(*llm.Error)
+	require.True(t, ok)
+	assert.Equal(t, llm.ErrRateLimited, llmErr.Code)
 }
 
-func TestHunyuanProvider_NotSupported(t *testing.T) {
-	p := NewHunyuanProvider(providers.HunyuanConfig{}, zap.NewNop())
+// --- Multimodal not-supported methods ---
+
+func TestGLMProvider_NotSupported(t *testing.T) {
+	p := NewGLMProvider(providers.GLMConfig{}, zap.NewNop())
 	ctx := context.Background()
 
 	tests := []struct {
@@ -183,11 +214,8 @@ func TestHunyuanProvider_NotSupported(t *testing.T) {
 		callFn  func() error
 		feature string
 	}{
-		{"GenerateImage", func() error { _, err := p.GenerateImage(ctx, &llm.ImageGenerationRequest{}); return err }, "image generation"},
-		{"GenerateVideo", func() error { _, err := p.GenerateVideo(ctx, &llm.VideoGenerationRequest{}); return err }, "video generation"},
 		{"GenerateAudio", func() error { _, err := p.GenerateAudio(ctx, &llm.AudioGenerationRequest{}); return err }, "audio generation"},
 		{"TranscribeAudio", func() error { _, err := p.TranscribeAudio(ctx, &llm.AudioTranscriptionRequest{}); return err }, "audio transcription"},
-		{"CreateEmbedding", func() error { _, err := p.CreateEmbedding(ctx, &llm.EmbeddingRequest{}); return err }, "embeddings"},
 		{"CreateFineTuningJob", func() error { _, err := p.CreateFineTuningJob(ctx, &llm.FineTuningJobRequest{}); return err }, "fine-tuning"},
 		{"ListFineTuningJobs", func() error { _, err := p.ListFineTuningJobs(ctx); return err }, "fine-tuning"},
 		{"GetFineTuningJob", func() error { _, err := p.GetFineTuningJob(ctx, "j"); return err }, "fine-tuning"},
@@ -202,19 +230,21 @@ func TestHunyuanProvider_NotSupported(t *testing.T) {
 			require.True(t, ok)
 			assert.Equal(t, llm.ErrInvalidRequest, llmErr.Code)
 			assert.Contains(t, llmErr.Message, tt.feature)
-			assert.Equal(t, "hunyuan", llmErr.Provider)
+			assert.Equal(t, "glm", llmErr.Provider)
 		})
 	}
 }
 
-func TestHunyuanProvider_HealthCheck(t *testing.T) {
+// --- HealthCheck ---
+
+func TestGLMProvider_HealthCheck(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.Write([]byte(`{"object":"list","data":[]}`))
 	}))
 	t.Cleanup(func() { server.Close() })
 
-	p := NewHunyuanProvider(providers.HunyuanConfig{
+	p := NewGLMProvider(providers.GLMConfig{
 		BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k", BaseURL: server.URL},
 	}, zap.NewNop())
 

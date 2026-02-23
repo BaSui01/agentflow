@@ -153,3 +153,50 @@ telemetry:
   service_name: "agentflow"
   # 采样率 (0.0 - 1.0)
   sample_rate: 0.1
+
+# -----------------------------------------------------------------------------
+# 🔧 工具提供者配置
+# -----------------------------------------------------------------------------
+tools:
+  # Tavily 搜索 (https://tavily.com)
+  tavily:
+    # API Key (建议使用环境变量 AGENTFLOW_TOOLS_TAVILY_API_KEY)
+    api_key: ""
+    # 基础 URL (可选)
+    base_url: "https://api.tavily.com"
+    # 请求超时
+    timeout: "15s"
+
+  # Jina Reader 网页抓取 (https://jina.ai/reader)
+  jina:
+    # API Key (建议使用环境变量 AGENTFLOW_TOOLS_JINA_API_KEY)
+    api_key: ""
+    # 基础 URL (可选)
+    base_url: "https://r.jina.ai"
+    # 请求超时
+    timeout: "30s"
+
+  # Firecrawl 搜索+抓取 (https://firecrawl.dev)
+  firecrawl:
+    # API Key (建议使用环境变量 AGENTFLOW_TOOLS_FIRECRAWL_API_KEY)
+    api_key: ""
+    # 基础 URL (可选)
+    base_url: "https://api.firecrawl.dev"
+    # 请求超时
+    timeout: "30s"
+
+  # DuckDuckGo 搜索 (完全免费，无需 API Key)
+  duckduckgo:
+    timeout: "15s"
+
+  # SearXNG 自托管元搜索引擎 (无需 API Key，需自行部署)
+  # 公共实例列表: https://searx.space/
+  searxng:
+    # SearXNG 实例地址 (必填)
+    base_url: ""
+    timeout: "15s"
+
+  # 纯 HTTP 网页抓取 (零依赖，无需 API Key，不支持 JS 渲染)
+  http_scrape:
+    user_agent: "Mozilla/5.0 (compatible; AgentFlow/1.0)"
+    timeout: "30s"
