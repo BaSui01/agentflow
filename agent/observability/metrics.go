@@ -10,6 +10,9 @@ import (
 	"go.uber.org/zap"
 )
 
+// maxHistorySize 限制 LatencyHistory/QualityHistory 的最大长度，防止无界增长
+const maxHistorySize = 1000
+
 // ObservabilitySystem 可观测性系统
 type ObservabilitySystem struct {
 	// 指标收集器
@@ -242,6 +245,9 @@ func (c *MetricsCollector) RecordTask(agentID string, success bool, latency time
 
 	// 更新延迟
 	metrics.LatencyHistory = append(metrics.LatencyHistory, latency)
+	if len(metrics.LatencyHistory) > maxHistorySize {
+		metrics.LatencyHistory = metrics.LatencyHistory[len(metrics.LatencyHistory)-maxHistorySize:]
+	}
 	metrics.AvgLatency = calculateAvgDuration(metrics.LatencyHistory)
 	metrics.P50Latency = calculatePercentile(metrics.LatencyHistory, 0.5)
 	metrics.P95Latency = calculatePercentile(metrics.LatencyHistory, 0.95)
@@ -254,6 +260,9 @@ func (c *MetricsCollector) RecordTask(agentID string, success bool, latency time
 	// 更新质量
 	if quality > 0 {
 		metrics.QualityHistory = append(metrics.QualityHistory, quality)
+		if len(metrics.QualityHistory) > maxHistorySize {
+			metrics.QualityHistory = metrics.QualityHistory[len(metrics.QualityHistory)-maxHistorySize:]
+		}
 		metrics.AvgOutputQuality = calculateAvg(metrics.QualityHistory)
 	}
 
