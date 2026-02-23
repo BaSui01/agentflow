@@ -120,8 +120,9 @@ func TestThoughtSignatureMiddleware_Delegates(t *testing.T) {
 
 func TestGenerateSignatureID(t *testing.T) {
 	id1 := generateSignatureID("test-sig")
-	id2 := generateSignatureID("test-sig")
-	// IDs include time.Now() so they should differ
 	assert.NotEmpty(t, id1)
 	assert.Len(t, id1, 16) // hex of 8 bytes
+
+	id2 := generateSignatureID("test-sig-2")
+	assert.NotEmpty(t, id2)
 }
