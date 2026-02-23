@@ -336,7 +336,7 @@ func TestDockerBackendBuildDockerArgs(t *testing.T) {
 		Language: LangPython,
 		Code:     "pass",
 		EnvVars:  map[string]string{"BAZ": "qux"},
-	}, cfg)
+	}, cfg, "")
 
 	assert.Contains(t, args, "--name")
 	assert.Contains(t, args, "--memory")

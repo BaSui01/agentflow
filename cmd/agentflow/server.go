@@ -11,10 +11,11 @@ import (
 	"github.com/BaSui01/agentflow/agent/discovery"
 	"github.com/BaSui01/agentflow/api/handlers"
 	"github.com/BaSui01/agentflow/config"
-	"github.com/BaSui01/agentflow/internal/metrics"
-	"github.com/BaSui01/agentflow/internal/server"
-	"github.com/BaSui01/agentflow/internal/telemetry"
 	"github.com/BaSui01/agentflow/llm"
+	"github.com/BaSui01/agentflow/pkg/metrics"
+	mw "github.com/BaSui01/agentflow/pkg/middleware"
+	"github.com/BaSui01/agentflow/pkg/server"
+	"github.com/BaSui01/agentflow/pkg/telemetry"
 	llmfactory "github.com/BaSui01/agentflow/llm/factory"
 	"github.com/BaSui01/agentflow/types"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -305,25 +306,25 @@ func (s *Server) startHTTPServer() error {
 	// Auth strategy: JWT preferred, fallback to API Key, skip if neither configured
 	authMiddleware := s.buildAuthMiddleware(skipAuthPaths)
 
-	middlewares := []Middleware{
-		Recovery(s.logger),
-		RequestID(),
-		SecurityHeaders(),
-		MetricsMiddleware(s.metricsCollector),
-		OTelTracing(),
-		RequestLogger(s.logger),
-		CORS(s.cfg.Server.CORSAllowedOrigins),
-		RateLimiter(rateLimiterCtx, float64(s.cfg.Server.RateLimitRPS), s.cfg.Server.RateLimitBurst, s.logger),
+	middlewares := []mw.Middleware{
+		mw.Recovery(s.logger),
+		mw.RequestID(),
+		mw.SecurityHeaders(),
+		mw.MetricsMiddleware(s.metricsCollector),
+		mw.OTelTracing(),
+		mw.RequestLogger(s.logger),
+		mw.CORS(s.cfg.Server.CORSAllowedOrigins),
+		mw.RateLimiter(rateLimiterCtx, float64(s.cfg.Server.RateLimitRPS), s.cfg.Server.RateLimitBurst, s.logger),
 	}
 	if authMiddleware != nil {
 		middlewares = append(middlewares, authMiddleware)
 	}
 	// Tenant rate limiter runs after auth (needs tenant_id in context)
 	middlewares = append(middlewares,
-		TenantRateLimiter(tenantRateLimiterCtx, float64(s.cfg.Server.TenantRateLimitRPS), s.cfg.Server.TenantRateLimitBurst, s.logger),
+		mw.TenantRateLimiter(tenantRateLimiterCtx, float64(s.cfg.Server.TenantRateLimitRPS), s.cfg.Server.TenantRateLimitBurst, s.logger),
 	)
 
-	handler := Chain(mux, middlewares...)
+	handler := mw.Chain(mux, middlewares...)
 
 	// ========================================
 	// 使用 internal/server.Manager
@@ -386,7 +387,7 @@ func (s *Server) getFirstAPIKey() string {
 
 // buildAuthMiddleware selects the authentication strategy based on configuration.
 // Priority: JWT (if secret or public key configured) > API Key > nil (dev mode).
-func (s *Server) buildAuthMiddleware(skipPaths []string) Middleware {
+func (s *Server) buildAuthMiddleware(skipPaths []string) mw.Middleware {
 	jwtCfg := s.cfg.Server.JWT
 	hasJWT := jwtCfg.Secret != "" || jwtCfg.PublicKey != ""
 	hasAPIKeys := len(s.cfg.Server.APIKeys) > 0
@@ -398,12 +399,12 @@ func (s *Server) buildAuthMiddleware(skipPaths []string) Middleware {
 			zap.Bool("rsa", jwtCfg.PublicKey != ""),
 			zap.String("issuer", jwtCfg.Issuer),
 		)
-		return JWTAuth(jwtCfg, skipPaths, s.logger)
+		return mw.JWTAuth(jwtCfg, skipPaths, s.logger)
 	case hasAPIKeys:
 		s.logger.Info("Authentication: API Key enabled",
 			zap.Int("key_count", len(s.cfg.Server.APIKeys)),
 		)
-		return APIKeyAuth(s.cfg.Server.APIKeys, skipPaths, s.cfg.Server.AllowQueryAPIKey, s.logger)
+		return mw.APIKeyAuth(s.cfg.Server.APIKeys, skipPaths, s.cfg.Server.AllowQueryAPIKey, s.logger)
 	default:
 		if !s.cfg.Server.AllowNoAuth {
 			s.logger.Warn("Authentication is disabled and allow_no_auth is false. " +

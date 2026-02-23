@@ -621,7 +621,16 @@ def build_team_lead_prompt(original_prompt: str, context: str) -> str:
     """Build complete prompt for Team Lead"""
     return f"""# Team Lead Agent Task
 
-You are the Team Lead in the Multi-Agent Pipeline, using Agent Team mode.
+You are the Team Lead in the Multi-Agent Pipeline.
+
+## CRITICAL: No Nested Agents
+
+**DO NOT use TeamCreate, Task, or SendMessage tools to spawn sub-agents or teammates.**
+Nested Claude Code sessions will crash. You must implement all changes yourself directly
+using Read, Write, Edit, Bash, Glob, and Grep tools.
+
+If the PRD defines multiple "Agents" or work groups, treat them as sequential work items
+that YOU execute one by one — not as separate agents to spawn.
 
 ## Your Context
 
@@ -637,10 +646,19 @@ Task requirements and configuration:
 
 ---
 
+## Workflow
+
+1. Read the PRD and understand all work items
+2. For each work item, implement the changes directly (Read → Edit/Write → verify)
+3. After all changes, run `go build ./...` and `go vet ./...` to verify
+4. If there are errors, fix them
+5. Report what was done when finished
+
 ## Important
 
-- Read your agent definition (.claude/agents/team-lead.md) for full workflow
-- Context injection hooks will automatically provide specs to your teammates
+- Do NOT spawn sub-agents, teammates, or teams — do everything yourself
+- Do NOT execute git commit, only code modifications
+- Context injection hooks will provide specs automatically
 - When you finish and stop, the pipeline-complete hook will trigger the finalization chain"""
 
 
