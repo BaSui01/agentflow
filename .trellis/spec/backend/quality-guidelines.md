@@ -995,12 +995,14 @@ if c, ok := store.(Clearable); ok {
 
 From `.github/workflows/ci.yml`:
 
-1. Build all packages
-2. API contract consistency check (`go test ./tests/contracts`)
-3. `go vet` on selected packages
-4. Tests with coverage
-5. Security scan via `govulncheck` (non-blocking, separate job)
-6. Cross-platform builds: `linux/amd64`, `linux/arm64`, `darwin/amd64`, `windows/amd64` (separate job)
+1. `golangci-lint` (20 linters, runs before build)
+2. Build all packages
+3. API contract consistency check (`go test ./tests/contracts`)
+4. `go vet` on selected packages
+5. Tests with coverage (`-race -covermode=atomic`)
+6. Coverage threshold check (`make coverage-check`, threshold: 55%)
+7. Security scan via `govulncheck` (blocking — failures break the pipeline)
+8. Cross-platform builds: `linux/amd64`, `linux/arm64`, `darwin/amd64`, `windows/amd64` (separate job)
 
 ---
 
@@ -1037,7 +1039,7 @@ return fmt.Errorf("store does not support clearing")
 
 When adding/removing `mux.HandleFunc` routes in `cmd/agentflow/server.go` or `config/api.go`, you MUST update `api/openapi.yaml` to match. The contract test `tests/contracts/TestOpenAPIPathsMatchRuntimeRoutes` will fail otherwise.
 
-Note: `golangci-lint` is NOT run in CI — only locally via `make lint`. Developers must run `make lint` before pushing.
+Note: `golangci-lint` runs in CI via `golangci/golangci-lint-action@v6`. Developers should also run `make lint` locally before pushing.
 
 ---
 
@@ -2871,3 +2873,242 @@ func (b *EventBus) Stop() {
 ```
 
 > **历史教训**：`agent/event.go` 的 `SimpleEventBus.Stop()` 直接调用 `handlerWg.Wait()`，与 `processEvents` 中的 `handlerWg.Add` 竞态。修复：添加 `loopDone` channel，`Stop()` 先等 `<-b.loopDone`。
+
+---
+
+## §49 HSTS Security Header (Mandatory)
+
+All HTTP responses MUST include `Strict-Transport-Security` to prevent HTTPS downgrade attacks.
+
+**File**: `cmd/agentflow/middleware.go` — `SecurityHeaders()` function
+
+```go
+// CORRECT — full security header set
+func SecurityHeaders(next http.Handler) http.Handler {
+    return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+        w.Header().Set("X-Frame-Options", "DENY")
+        w.Header().Set("X-Content-Type-Options", "nosniff")
+        w.Header().Set("Referrer-Policy", "strict-origin-when-cross-origin")
+        w.Header().Set("X-XSS-Protection", "1; mode=block")
+        w.Header().Set("Content-Security-Policy", "default-src 'self'")
+        w.Header().Set("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+        next.ServeHTTP(w, r)
+    })
+}
+```
+
+> **历史教训**：2026-02-23 生产审计发现 `SecurityHeaders()` 缺少 HSTS 头。HTTPS 部署时浏览器不会强制安全连接，存在降级攻击风险。一行代码修复。
+
+## §50 JWT HMAC Secret Minimum Length
+
+When using HMAC-based JWT signing (HS256), the secret key MUST be at least 32 bytes. Short keys are vulnerable to brute-force attacks.
+
+**File**: `cmd/agentflow/middleware.go` — `JWTAuth()` function
+
+```go
+// At the start of JWTAuth(), after reading cfg.Secret:
+if len(cfg.Secret) > 0 && len(cfg.Secret) < 32 {
+    logger.Warn("JWT HMAC secret is shorter than recommended 32 bytes",
+        zap.Int("actual_length", len(cfg.Secret)))
+}
+```
+
+**Key rules**:
+- Don't panic or refuse to start — log a Warn
+- Only check when Secret is non-empty (empty means JWT is disabled)
+- Minimum 32 bytes for HS256 (256-bit security)
+
+## §51 Authentication Disable Protection
+
+When neither JWT nor API Key authentication is configured, the server runs without authentication. This MUST be logged as a clear warning.
+
+**File**: `cmd/agentflow/server.go` — `buildAuthMiddleware()`
+
+```go
+// When both JWT and APIKey are unconfigured:
+logger.Warn("Authentication is disabled. Set JWT or API key configuration for production use.")
+```
+
+**Config field**: `config.ServerConfig.AllowNoAuth bool` (yaml: `allow_no_auth`, env: `AGENTFLOW_SERVER_ALLOW_NO_AUTH`)
+
+## §52 OpenAPI Conditional Route Annotation
+
+Conditionally-registered routes MUST be annotated in `api/openapi.yaml` with `x-conditional` extension field.
+
+```yaml
+# Example: Chat endpoint requires LLM API key
+/api/v1/chat/completions:
+  post:
+    x-conditional: "Requires LLM API key configuration (config.llm.api_key)"
+    description: |
+      Send a chat completion request.
+      Note: This endpoint is only available when an LLM API key is configured.
+```
+
+**Known conditional routes**:
+- Chat endpoints (`/api/v1/chat/completions*`) — requires `config.llm.api_key`
+- Provider/APIKey endpoints (`/api/v1/providers*`) — requires database connection
+
+> **历史教训**：2026-02-23 审计发现 OpenAPI spec 未说明条件路由，API 消费者无法预知端点可用性。
+
+## §53 OTel Trace Context in Logs
+
+Use `telemetry.LoggerWithTrace(ctx, logger)` to inject `trace_id` and `span_id` into structured logs, enabling log-trace correlation.
+
+**File**: `internal/telemetry/telemetry.go`
+
+```go
+// Usage in any handler or service:
+logger := telemetry.LoggerWithTrace(ctx, h.logger)
+logger.Info("processing request", zap.String("agent_id", agentID))
+// Output: {"trace_id":"abc123","span_id":"def456","msg":"processing request",...}
+```
+
+**Key rules**:
+- Returns the original logger unchanged when no valid span exists (zero overhead)
+- Use in HTTP handlers, agent execution, and LLM provider calls for distributed tracing
+- Don't use in hot loops — the `With()` call allocates
+
+## §54 Structured Outputs — API-Level ResponseFormat + ToolChoice (P1 — Reliability)
+
+### 1. Scope / Trigger
+
+- Adding or modifying LLM provider integrations
+- Agent needs deterministic JSON output (not prompt-based "please output JSON")
+- Tool calling requires forced tool selection (`tool_choice: any/tool`)
+
+### 2. Signatures
+
+```go
+// llm/provider.go
+type ResponseFormatType string
+const (
+    ResponseFormatText       ResponseFormatType = "text"
+    ResponseFormatJSONObject ResponseFormatType = "json_object"
+    ResponseFormatJSONSchema ResponseFormatType = "json_schema"
+)
+
+type ResponseFormat struct {
+    Type       ResponseFormatType `json:"type"`
+    JSONSchema *JSONSchemaParam   `json:"json_schema,omitempty"`
+}
+
+// ChatRequest fields:
+ResponseFormat *ResponseFormat `json:"response_format,omitempty"`
+ToolChoice     any             `json:"tool_choice,omitempty"` // string OR complex object
+```
+
+### 3. Contract — Provider Mapping
+
+| Provider | ResponseFormat | ToolChoice |
+|----------|---------------|------------|
+| OpenAI / OpenAI-compat | `response_format: {type, json_schema}` | string or `{"type":"function","function":{"name":"x"}}` |
+| Anthropic Claude | Not supported (use tool_choice) | `{"type":"auto"}` / `{"type":"any"}` / `{"type":"tool","name":"x"}` |
+| Gemini | `responseMimeType` + `responseSchema` | Not supported |
+
+### 4. Good / Bad
+
+```go
+// BAD — string comparison on any-typed ToolChoice
+if req.ToolChoice != "" { ... }  // WRONG
+
+// GOOD — nil comparison
+if req.ToolChoice != nil { ... }
+```
+
+> **Design Decision**: `any` for ToolChoice because Go lacks sum types. Provider-specific conversion in each provider's `Completion()`/`Stream()`.
+
+<!-- §54-PLACEHOLDER -->
+
+## §55 Fine-Grained Tool Streaming — StreamingToolFunc + tool_progress (P1 — UX)
+
+### 1. Scope / Trigger
+
+- Implementing a tool that runs >2 seconds (code execution, web scraping, DB queries)
+- Adding SSE streaming to an agent endpoint
+- Modifying the ReAct execution loop
+
+### 2. Signatures
+
+```go
+// llm/tools/executor.go
+type ToolProgressEmitter func(event ToolStreamEvent)
+type StreamingToolFunc func(ctx context.Context, args json.RawMessage, emit ToolProgressEmitter) (json.RawMessage, error)
+
+// Registration: registry.RegisterStreaming("name", fn, schema)
+// Auto-creates non-streaming wrapper for backward compat
+```
+
+### 3. Event Flow
+
+```
+StreamingToolFunc emit() → ExecuteOneStream channel
+  → ReActStreamEvent{Type:"tool_progress"}
+    → RuntimeStreamEvent{Type:"tool_progress"}
+      → SSE: event: tool_progress {tool_call_id, tool_name, progress}
+```
+
+### 4. Good / Bad
+
+```go
+// BAD — Normal ToolFunc for long-running tool (30s silence)
+registry.Register("execute_code", func(ctx context.Context, args json.RawMessage) (json.RawMessage, error) {
+    return runCode(ctx, args) // client sees nothing
+}, schema)
+
+// GOOD — StreamingToolFunc with progress
+registry.RegisterStreaming("execute_code", func(ctx context.Context, args json.RawMessage, emit ToolProgressEmitter) (json.RawMessage, error) {
+    emit(ToolStreamEvent{Type: ToolStreamProgress, Data: map[string]any{"stdout": "compiling..."}})
+    result := runCode(ctx, args)
+    return json.Marshal(result)
+}, schema)
+```
+
+> **Backward Compat**: `StreamingToolFunc` is opt-in. Existing `ToolFunc` tools work unchanged. ReAct falls back to batch `Execute()` when executor doesn't implement `StreamableToolExecutor`.
+
+## §56 Skills-Discovery Bridge — Capability Registration (P2 — Architecture)
+
+### 1. Scope / Trigger
+
+- Adding Skills that should be discoverable via Discovery system
+- Implementing `SkillsExtension` interface for agent extensions
+- Creating new agent types with preset behaviors
+
+### 2. Architecture — Three-Package Pattern (Avoids Import Cycle)
+
+```
+agent/skills/ ←→ internal/bridge/ ←→ agent/discovery/
+```
+
+`skills → discovery` direct import creates cycle: `skills → discovery → a2a → agent → skills`. The `internal/bridge/` package breaks this via §12 (Workflow-Local Interfaces).
+
+```go
+// agent/skills/discovery_bridge.go — local interface
+type CapabilityRegistrar interface {
+    RegisterCapability(desc CapabilityDescriptor) error
+}
+
+// internal/bridge/discovery_adapter.go — implements the interface
+type DiscoveryRegistrarAdapter struct { registry *discovery.Registry }
+```
+
+### 3. Category Mapping
+
+| Skill Category | Discovery Category |
+|---------------|-------------------|
+| coding, automation | task |
+| research, data, reasoning | query |
+| communication | stream |
+
+### 4. Agent Type Differentiation
+
+`agent/registry.go`: Each built-in type gets a preset `PromptBundle` (Role, Identity, Policies). User-provided PromptBundle takes precedence (`IsZero()` check).
+
+| Type | Focus |
+|------|-------|
+| assistant | communication + reasoning |
+| analyzer | data analysis |
+| translator | language translation |
+| summarizer | text compression |
+| reviewer | code review |
+| generic | no preset (blank slate) |
