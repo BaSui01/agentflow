@@ -79,6 +79,9 @@ type ServerConfig struct {
 	TenantRateLimitRPS int `yaml:"tenant_rate_limit_rps" json:"tenant_rate_limit_rps,omitempty"`
 	// 租户级限流 Burst，默认 100
 	TenantRateLimitBurst int `yaml:"tenant_rate_limit_burst" json:"tenant_rate_limit_burst,omitempty"`
+	// AllowNoAuth 允许在无认证配置时启动（默认 false）。
+	// 生产环境必须显式设置为 true 才能在无 JWT/API Key 配置时启动。
+	AllowNoAuth bool `yaml:"allow_no_auth" env:"ALLOW_NO_AUTH" json:"allow_no_auth,omitempty"`
 }
 
 // JWTConfig JWT 认证配置

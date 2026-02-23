@@ -353,7 +353,7 @@ func TestProperty18_EmptyToolChoice(t *testing.T) {
 						Parameters:  json.RawMessage(`{"type":"object"}`),
 					},
 				},
-				ToolChoice: "", // Empty tool choice
+				ToolChoice: nil, // Empty tool choice
 			}
 
 			switch provider {
@@ -474,7 +474,7 @@ func mockConvertToOpenAIRequest(req *llm.ChatRequest) *mockOpenAIRequestWithTool
 	}
 
 	// 非空时保留工具选择
-	if req.ToolChoice != "" {
+	if req.ToolChoice != nil {
 		result.ToolChoice = req.ToolChoice
 	}
 
@@ -497,7 +497,7 @@ func mockConvertToMiniMaxRequest(req *llm.ChatRequest) *mockMiniMaxRequestWithTo
 	}
 
 	// 非空时保留工具选择
-	if req.ToolChoice != "" {
+	if req.ToolChoice != nil {
 		result.ToolChoice = req.ToolChoice
 	}
 

@@ -59,8 +59,8 @@ type ChatRequest struct {
 	Stop []string `json:"stop,omitempty"`
 	// 函数调用的可用工具
 	Tools []ToolSchema `json:"tools,omitempty"`
-	// 工具选择模式（自动、无或特定工具名称）
-	ToolChoice string `json:"tool_choice,omitempty" example:"auto"`
+	// 工具选择模式（字符串如 "auto"/"none"/"required"，或结构化对象）
+	ToolChoice any `json:"tool_choice,omitempty"`
 	// 请求超时时长
 	Timeout string `json:"timeout,omitempty" example:"30s"`
 	// 自定义元数据

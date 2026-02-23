@@ -153,20 +153,29 @@ func (p *ClaudeProvider) ListModels(ctx context.Context) ([]llm.Model, error) {
 	return models, nil
 }
 
-// Claude 的消息结构与 OpenAI 不同
+	// Claude 的消息结构与 OpenAI 不同
 type claudeMessage struct {
 	Role    string          `json:"role"` // user 或 assistant
 	Content []claudeContent `json:"content"`
 }
 
 type claudeContent struct {
-	Type      string          `json:"type"` // text, tool_use, tool_result
+	Type      string          `json:"type"` // text, tool_use, tool_result, image
 	Text      string          `json:"text,omitempty"`
 	ID        string          `json:"id,omitempty"`
 	Name      string          `json:"name,omitempty"`
 	Input     json.RawMessage `json:"input,omitempty"`
 	ToolUseID string          `json:"tool_use_id,omitempty"`
 	Content   string          `json:"content,omitempty"` // for tool_result
+	// Image source fields (for type="image")
+	Source *claudeImageSource `json:"source,omitempty"`
+}
+
+type claudeImageSource struct {
+	Type      string `json:"type"`                 // "base64" or "url"
+	MediaType string `json:"media_type,omitempty"` // e.g., "image/png"
+	Data      string `json:"data,omitempty"`       // base64 data
+	URL       string `json:"url,omitempty"`        // image URL
 }
 
 type claudeTool struct {
@@ -175,18 +184,25 @@ type claudeTool struct {
 	InputSchema json.RawMessage `json:"input_schema"` // JSON Schema
 }
 
+type claudeToolChoice struct {
+	Type                   string `json:"type"`                                // "auto", "any", "tool"
+	Name                   string `json:"name,omitempty"`                      // 仅 type="tool" 时
+	DisableParallelToolUse *bool  `json:"disable_parallel_tool_use,omitempty"` // 可选
+}
+
 type claudeRequest struct {
-	Model            string          `json:"model"`
-	Messages         []claudeMessage `json:"messages"`
-	System           string          `json:"system,omitempty"` // system 消息单独传递
-	MaxTokens        int             `json:"max_tokens"`
-	Temperature      float32         `json:"temperature,omitempty"`
-	TopP             float32         `json:"top_p,omitempty"`
-	StopSeq          []string        `json:"stop_sequences,omitempty"`
-	Stream           bool            `json:"stream,omitempty"`
-	Tools            []claudeTool    `json:"tools,omitempty"`
-	ReasoningMode    string          `json:"reasoning_mode,omitempty"`    // 2026: "fast" | "extended"
-	ThoughtSignatures []string       `json:"thought_signatures,omitempty"` // 2026: Thought Signatures
+	Model             string           `json:"model"`
+	Messages          []claudeMessage  `json:"messages"`
+	System            string           `json:"system,omitempty"` // system 消息单独传递
+	MaxTokens         int              `json:"max_tokens"`
+	Temperature       float32          `json:"temperature,omitempty"`
+	TopP              float32          `json:"top_p,omitempty"`
+	StopSeq           []string         `json:"stop_sequences,omitempty"`
+	Stream            bool             `json:"stream,omitempty"`
+	Tools             []claudeTool     `json:"tools,omitempty"`
+	ToolChoice        *claudeToolChoice `json:"tool_choice,omitempty"`
+	ReasoningMode     string           `json:"reasoning_mode,omitempty"`     // 2026: "fast" | "extended"
+	ThoughtSignatures []string         `json:"thought_signatures,omitempty"` // 2026: Thought Signatures
 }
 
 type claudeUsage struct {
@@ -305,6 +321,30 @@ func convertToClaudeMessages(msgs []llm.Message) (string, []claudeMessage) {
 			})
 		}
 
+		// Images 转换为 Claude 的 image content blocks
+		if len(m.Images) > 0 {
+			for _, img := range m.Images {
+				if img.Type == "base64" && img.Data != "" {
+					cm.Content = append(cm.Content, claudeContent{
+						Type: "image",
+						Source: &claudeImageSource{
+							Type:      "base64",
+							MediaType: "image/png",
+							Data:      img.Data,
+						},
+					})
+				} else if img.Type == "url" && img.URL != "" {
+					cm.Content = append(cm.Content, claudeContent{
+						Type: "image",
+						Source: &claudeImageSource{
+							Type: "url",
+							URL:  img.URL,
+						},
+					})
+				}
+			}
+		}
+
 		// ToolCall 转换
 		if len(m.ToolCalls) > 0 {
 			for _, tc := range m.ToolCalls {
@@ -340,6 +380,39 @@ func convertToClaudeTools(tools []llm.ToolSchema) []claudeTool {
 	return out
 }
 
+// convertClaudeToolChoice 将 llm.ChatRequest.ToolChoice (any) 转换为 Claude 格式。
+// 支持 string ("auto"/"any"/"none") 和 map/struct 形式。
+func convertClaudeToolChoice(tc any) *claudeToolChoice {
+	if tc == nil {
+		return nil
+	}
+	switch v := tc.(type) {
+	case string:
+		switch v {
+		case "auto":
+			return &claudeToolChoice{Type: "auto"}
+		case "any", "required":
+			return &claudeToolChoice{Type: "any"}
+		case "none", "":
+			return nil // Claude: 不传 tool_choice 等同于不使用工具
+		default:
+			// 假设是具体工具名
+			return &claudeToolChoice{Type: "tool", Name: v}
+		}
+	case map[string]any:
+		result := &claudeToolChoice{}
+		if t, ok := v["type"].(string); ok {
+			result.Type = t
+		}
+		if n, ok := v["name"].(string); ok {
+			result.Name = n
+		}
+		return result
+	default:
+		return nil
+	}
+}
+
 func (p *ClaudeProvider) Completion(ctx context.Context, req *llm.ChatRequest) (*llm.ChatResponse, error) {
 	// 统一入口：应用改写器链
 	rewrittenReq, err := p.rewriterChain.Execute(ctx, req)
@@ -365,6 +438,7 @@ func (p *ClaudeProvider) Completion(ctx context.Context, req *llm.ChatRequest) (
 		TopP:              req.TopP,
 		StopSeq:           req.Stop,
 		Tools:             convertToClaudeTools(req.Tools),
+		ToolChoice:        convertClaudeToolChoice(req.ToolChoice),
 		ReasoningMode:     req.ReasoningMode,     // 2026: 混合推理模式
 		ThoughtSignatures: req.ThoughtSignatures, // 2026: Thought Signatures
 	}
@@ -435,6 +509,7 @@ func (p *ClaudeProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-ch
 		MaxTokens:         chooseMaxTokens(req),
 		Stream:            true,
 		Tools:             convertToClaudeTools(req.Tools),
+		ToolChoice:        convertClaudeToolChoice(req.ToolChoice),
 		ReasoningMode:     req.ReasoningMode,     // 2026: 混合推理模式
 		ThoughtSignatures: req.ThoughtSignatures, // 2026: Thought Signatures
 	}

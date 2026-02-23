@@ -14,6 +14,13 @@ import (
 // ToolFunc 定义工具函数签名.
 type ToolFunc func(ctx context.Context, args json.RawMessage) (json.RawMessage, error)
 
+// ToolProgressEmitter 允许工具在执行过程中推送中间状态.
+type ToolProgressEmitter func(event ToolStreamEvent)
+
+// StreamingToolFunc 是支持流式输出的工具函数签名.
+// 工具通过 emit 回调推送中间进度事件，最终返回结果.
+type StreamingToolFunc func(ctx context.Context, args json.RawMessage, emit ToolProgressEmitter) (json.RawMessage, error)
+
 // ToolMetadata 描述工具元数据.
 type ToolMetadata struct {
 	Schema      llm.ToolSchema   // Tool JSON Schema
@@ -102,20 +109,22 @@ func DefaultExecutorConfig() ExecutorConfig {
 // ====== 实现：DefaultRegistry ======
 
 type DefaultRegistry struct {
-	mu         sync.RWMutex
-	tools      map[string]ToolFunc
-	metadata   map[string]ToolMetadata
-	rateLimits map[string]*rateLimiter // 工具级别的速率限制器
-	logger     *zap.Logger
+	mu             sync.RWMutex
+	tools          map[string]ToolFunc
+	streamingTools map[string]StreamingToolFunc
+	metadata       map[string]ToolMetadata
+	rateLimits     map[string]*rateLimiter // 工具级别的速率限制器
+	logger         *zap.Logger
 }
 
 // NewDefaultRegistry 创建默认的工具注册中心。
 func NewDefaultRegistry(logger *zap.Logger) *DefaultRegistry {
 	return &DefaultRegistry{
-		tools:      make(map[string]ToolFunc),
-		metadata:   make(map[string]ToolMetadata),
-		rateLimits: make(map[string]*rateLimiter),
-		logger:     logger,
+		tools:          make(map[string]ToolFunc),
+		streamingTools: make(map[string]StreamingToolFunc),
+		metadata:       make(map[string]ToolMetadata),
+		rateLimits:     make(map[string]*rateLimiter),
+		logger:         logger,
 	}
 }
 
@@ -152,6 +161,30 @@ func (r *DefaultRegistry) Register(name string, fn ToolFunc, metadata ToolMetada
 	return nil
 }
 
+// RegisterStreaming 注册一个支持流式输出的工具函数.
+// 同时注册一个普通 ToolFunc 包装器，确保非流式路径也能调用该工具.
+func (r *DefaultRegistry) RegisterStreaming(name string, fn StreamingToolFunc, metadata ToolMetadata) error {
+	// 创建一个普通 ToolFunc 包装器（忽略 emit）
+	wrapper := func(ctx context.Context, args json.RawMessage) (json.RawMessage, error) {
+		return fn(ctx, args, func(_ ToolStreamEvent) {})
+	}
+	if err := r.Register(name, wrapper, metadata); err != nil {
+		return err
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.streamingTools[name] = fn
+	return nil
+}
+
+// GetStreaming 返回工具的流式版本（如果存在）.
+func (r *DefaultRegistry) GetStreaming(name string) (StreamingToolFunc, bool) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	fn, ok := r.streamingTools[name]
+	return fn, ok
+}
+
 func (r *DefaultRegistry) Unregister(name string) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -161,6 +194,7 @@ func (r *DefaultRegistry) Unregister(name string) error {
 	}
 
 	delete(r.tools, name)
+	delete(r.streamingTools, name)
 	delete(r.metadata, name)
 	delete(r.rateLimits, name)
 
@@ -384,70 +418,174 @@ func (e *DefaultExecutor) ExecuteOne(ctx context.Context, call llm.ToolCall) Too
 }
 
 // ExecuteOneStream 执行单个工具调用并通过 channel 发射流式事件.
-// 支持长时间运行工具的进度回报和 context cancellation.
+// 如果工具注册了 StreamingToolFunc，工具推送的中间事件会被转发到 channel.
+// 否则回退到普通执行（start → execute → complete）.
 // channel 在 goroutine 结束时保证关闭.
 func (e *DefaultExecutor) ExecuteOneStream(ctx context.Context, call llm.ToolCall) <-chan ToolStreamEvent {
-	ch := make(chan ToolStreamEvent, 4)
+	ch := make(chan ToolStreamEvent, 8)
 
 	go func() {
 		defer close(ch)
 
-		// 发射 progress 事件：开始执行
-		select {
-		case ch <- ToolStreamEvent{
-			Type:     ToolStreamProgress,
-			ToolName: call.Name,
-			Data:     "starting execution",
-		}:
-		case <-ctx.Done():
-			ch <- ToolStreamEvent{
-				Type:     ToolStreamError,
-				ToolName: call.Name,
-				Error:    ctx.Err(),
-			}
+		// 检查是否有流式版本
+		var streamingFn StreamingToolFunc
+		if reg, ok := e.registry.(*DefaultRegistry); ok {
+			streamingFn, _ = reg.GetStreaming(call.Name)
+		}
+
+		if streamingFn != nil {
+			e.executeStreamingTool(ctx, call, streamingFn, ch)
 			return
 		}
 
-		// 使用 executeWithRetry 执行（包含重试逻辑）
-		result := e.executeWithRetry(ctx, call)
-
-		// 检查 context 是否已取消
-		select {
-		case <-ctx.Done():
-			ch <- ToolStreamEvent{
-				Type:     ToolStreamError,
-				ToolName: call.Name,
-				Error:    ctx.Err(),
-			}
-			return
-		default:
-		}
-
-		if result.Error != "" {
-			ch <- ToolStreamEvent{
-				Type:     ToolStreamError,
-				ToolName: call.Name,
-				Error:    fmt.Errorf("%s", result.Error),
-			}
-			return
-		}
-
-		// 发射 output 事件
-		ch <- ToolStreamEvent{
-			Type:     ToolStreamOutput,
-			ToolName: call.Name,
-			Data:     result.Result,
-		}
-
-		// 发射 complete 事件
-		ch <- ToolStreamEvent{
-			Type:     ToolStreamComplete,
-			ToolName: call.Name,
-			Data:     result,
-		}
+		// 回退到普通执行路径（start → execute → complete）
+		e.executeNonStreamingTool(ctx, call, ch)
 	}()
 
 	return ch
+}
+
+// executeStreamingTool 执行流式工具，将工具推送的事件转发到 channel.
+func (e *DefaultExecutor) executeStreamingTool(ctx context.Context, call llm.ToolCall, fn StreamingToolFunc, ch chan<- ToolStreamEvent) {
+	start := time.Now()
+
+	// 获取元数据（用于超时）
+	_, meta, err := e.registry.Get(call.Name)
+	if err != nil {
+		ch <- ToolStreamEvent{Type: ToolStreamError, ToolName: call.Name, Error: fmt.Errorf("tool not found: %s", err.Error())}
+		return
+	}
+
+	// 检查速率限制
+	if reg, ok := e.registry.(*DefaultRegistry); ok {
+		if err := reg.checkRateLimit(call.Name); err != nil {
+			ch <- ToolStreamEvent{Type: ToolStreamError, ToolName: call.Name, Error: fmt.Errorf("rate limit exceeded: %s", err.Error())}
+			return
+		}
+	}
+
+	// 参数校验
+	if len(call.Arguments) > 0 {
+		var tmp any
+		if err := json.Unmarshal(call.Arguments, &tmp); err != nil {
+			ch <- ToolStreamEvent{Type: ToolStreamError, ToolName: call.Name, Error: fmt.Errorf("invalid arguments: %s", err.Error())}
+			return
+		}
+	}
+
+	// 发射 progress: starting
+	select {
+	case ch <- ToolStreamEvent{Type: ToolStreamProgress, ToolName: call.Name, Data: "starting execution"}:
+	case <-ctx.Done():
+		ch <- ToolStreamEvent{Type: ToolStreamError, ToolName: call.Name, Error: ctx.Err()}
+		return
+	}
+
+	// 创建 emitter 回调，将工具推送的事件转发到 channel
+	emitter := func(event ToolStreamEvent) {
+		if event.ToolName == "" {
+			event.ToolName = call.Name
+		}
+		select {
+		case ch <- event:
+		case <-ctx.Done():
+		}
+	}
+
+	// 带超时执行
+	execCtx, cancel := context.WithTimeout(ctx, meta.Timeout)
+	defer cancel()
+
+	type execResult struct {
+		res json.RawMessage
+		err error
+	}
+	doneChan := make(chan execResult, 1)
+
+	go func() {
+		res, err := fn(execCtx, call.Arguments, emitter)
+		select {
+		case doneChan <- execResult{res, err}:
+		case <-execCtx.Done():
+		}
+	}()
+
+	select {
+	case done := <-doneChan:
+		duration := time.Since(start)
+		if done.err != nil {
+			ch <- ToolStreamEvent{Type: ToolStreamError, ToolName: call.Name, Error: done.err}
+			return
+		}
+		result := ToolResult{
+			ToolCallID: call.ID,
+			Name:       call.Name,
+			Result:     done.res,
+			Duration:   duration,
+		}
+		ch <- ToolStreamEvent{Type: ToolStreamOutput, ToolName: call.Name, Data: done.res}
+		ch <- ToolStreamEvent{Type: ToolStreamComplete, ToolName: call.Name, Data: result}
+
+	case <-execCtx.Done():
+		ch <- ToolStreamEvent{Type: ToolStreamError, ToolName: call.Name, Error: fmt.Errorf("execution timeout after %s", meta.Timeout)}
+	}
+}
+
+// executeNonStreamingTool 执行普通工具并发射 start/complete 事件.
+func (e *DefaultExecutor) executeNonStreamingTool(ctx context.Context, call llm.ToolCall, ch chan<- ToolStreamEvent) {
+	// 发射 progress 事件：开始执行
+	select {
+	case ch <- ToolStreamEvent{
+		Type:     ToolStreamProgress,
+		ToolName: call.Name,
+		Data:     "starting execution",
+	}:
+	case <-ctx.Done():
+		ch <- ToolStreamEvent{
+			Type:     ToolStreamError,
+			ToolName: call.Name,
+			Error:    ctx.Err(),
+		}
+		return
+	}
+
+	// 使用 executeWithRetry 执行（包含重试逻辑）
+	result := e.executeWithRetry(ctx, call)
+
+	// 检查 context 是否已取消
+	select {
+	case <-ctx.Done():
+		ch <- ToolStreamEvent{
+			Type:     ToolStreamError,
+			ToolName: call.Name,
+			Error:    ctx.Err(),
+		}
+		return
+	default:
+	}
+
+	if result.Error != "" {
+		ch <- ToolStreamEvent{
+			Type:     ToolStreamError,
+			ToolName: call.Name,
+			Error:    fmt.Errorf("%s", result.Error),
+		}
+		return
+	}
+
+	// 发射 output 事件
+	ch <- ToolStreamEvent{
+		Type:     ToolStreamOutput,
+		ToolName: call.Name,
+		Data:     result.Result,
+	}
+
+	// 发射 complete 事件
+	ch <- ToolStreamEvent{
+		Type:     ToolStreamComplete,
+		ToolName: call.Name,
+		Data:     result,
+	}
 }
 
 // Compile-time check: DefaultExecutor implements StreamableToolExecutor.

@@ -1271,3 +1271,84 @@ commit `4a9159a` 沉淀了 4 条新规范：§43 OTel SDK Init、§44 API Reques
 ### Next Steps
 
 - None - task complete
+
+
+## Session 18: 生产审计修复：4 P0 + 15 P1 + EventBus 竞态修复
+
+**Date**: 2026-02-23
+**Task**: 生产审计修复：4 P0 + 15 P1 + EventBus 竞态修复
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+## 概述
+
+基于上一会话的生产就绪度审计（7.3/10），使用 Agent Team 并行修复了全部 P0 和主要 P1 问题。
+
+## 修复内容
+
+### P0 修复
+- `api/handlers/chat.go`: `convertChoices`/`convertToAPIStreamChunk` 缺失 Images/Metadata/Timestamp 字段，创建 `convertTypesMessageToAPI` 共享 helper
+
+### P1 修复
+- `cmd/agentflow/server.go`: Shutdown() 使用 `cfg.Server.ShutdownTimeout`（默认 15s）替代无超时的 `context.Background()`
+- `internal/cache/manager.go`: `ErrCacheMiss` 从 `fmt.Errorf` 改为 `errors.New`，`IsCacheMiss` 从 `==` 改为 `errors.Is`
+- `.github/workflows/ci.yml`: 测试命令添加 `-race` flag
+- `api/handlers/apikey.go`: 引入 `APIKeyStore` 接口解耦 gorm 直接依赖
+- `config/api.go`: 移除对 `api` 包的反向依赖，添加 Content-Type 验证
+
+### P2 修复
+- `internal/tlsutil/` → `pkg/tlsutil/` 迁移，40+ 文件 import 路径更新
+- `cmd/agentflow/server.go`: 业务逻辑提取到 `agent/resolver.go`（CachingResolver）
+
+### 发现并修复的预存 Bug
+- `agent/event.go`: SimpleEventBus Stop()/processEvents() 之间的 WaitGroup 竞态条件，通过 `loopDone` channel 模式修复
+
+## 并行执行策略
+
+使用 Agent Team 模式，4 个任务按依赖链执行：
+- Task B (config 解耦) + Task C (tlsutil 迁移) → 并行
+- Task D (resolver 提取) → 依赖 Task C
+- Task A (apikey 接口) → 依赖 Task D
+
+## 规范更新
+- `quality-guidelines.md`: 新增 §47 (handler store interface) 和 §48 (EventBus WaitGroup race)
+- `error-handling.md`: 更新 ErrCacheMiss 修复历史
+
+## 新增文件
+- `api/handlers/apikey_store.go` — GormAPIKeyStore 实现
+- `agent/resolver.go` — CachingResolver（singleflight + sync.Map）
+- `pkg/tlsutil/` — 从 internal 迁移的 TLS 工具包
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `d623fa8` | (see git log) |
+| `c78a0a3` | (see git log) |
+| `fbe0040` | (see git log) |
+| `79f1de6` | (see git log) |
+| `4e295a5` | (see git log) |
+| `232e35b` | (see git log) |
+| `7f964e0` | (see git log) |
+| `fb018dd` | (see git log) |
+| `52773b2` | (see git log) |
+| `ed787a3` | (see git log) |
+| `c009127` | (see git log) |
+| `551f097` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

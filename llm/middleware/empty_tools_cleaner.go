@@ -24,7 +24,7 @@ func (r *EmptyToolsCleaner) Rewrite(ctx context.Context, req *llmpkg.ChatRequest
 
 	// 如果 Tools 为空（nil 或空数组），清除 ToolChoice
 	if len(req.Tools) == 0 {
-		req.ToolChoice = ""
+		req.ToolChoice = nil
 	}
 
 	return req, nil

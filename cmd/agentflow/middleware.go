@@ -104,8 +104,8 @@ func (rw *responseWriter) WriteHeader(code int) {
 // response body size for metrics recording.
 type metricsResponseWriter struct {
 	http.ResponseWriter
-	statusCode  int
-	wroteHeader bool
+	statusCode   int
+	wroteHeader  bool
 	bytesWritten int64
 }
 
@@ -387,6 +387,7 @@ func SecurityHeaders() Middleware {
 			w.Header().Set("Referrer-Policy", "strict-origin-when-cross-origin")
 			w.Header().Set("X-XSS-Protection", "1; mode=block")
 			w.Header().Set("Content-Security-Policy", "default-src 'self'")
+			w.Header().Set("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
 			next.ServeHTTP(w, r)
 		})
 	}
@@ -408,6 +409,13 @@ func generateRequestID() string {
 // types.WithUserID, and types.WithRoles. Supports HMAC (HS256) and RSA (RS256).
 // skipPaths are exempt from authentication (e.g. health endpoints).
 func JWTAuth(cfg config.JWTConfig, skipPaths []string, logger *zap.Logger) Middleware {
+	// Warn if HMAC secret is configured but too short (minimum 32 bytes recommended)
+	if len(cfg.Secret) > 0 && len(cfg.Secret) < 32 {
+		logger.Warn("JWT HMAC secret is shorter than recommended minimum of 32 bytes",
+			zap.Int("secret_length", len(cfg.Secret)),
+		)
+	}
+
 	skipSet := make(map[string]struct{}, len(skipPaths))
 	for _, p := range skipPaths {
 		skipSet[p] = struct{}{}

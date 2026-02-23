@@ -84,22 +84,46 @@ type HealthStatus struct {
 	Message   string        `json:"message,omitempty"`
 }
 
+// ResponseFormatType 定义响应格式类型。
+type ResponseFormatType string
+
+const (
+	ResponseFormatText       ResponseFormatType = "text"
+	ResponseFormatJSONObject ResponseFormatType = "json_object"
+	ResponseFormatJSONSchema ResponseFormatType = "json_schema"
+)
+
+// ResponseFormat 定义 API 级别的结构化输出格式。
+type ResponseFormat struct {
+	Type       ResponseFormatType `json:"type"`
+	JSONSchema *JSONSchemaParam   `json:"json_schema,omitempty"`
+}
+
+// JSONSchemaParam 定义 JSON Schema 参数，用于 json_schema 响应格式。
+type JSONSchemaParam struct {
+	Name        string         `json:"name"`
+	Description string         `json:"description,omitempty"`
+	Schema      map[string]any `json:"schema"`
+	Strict      *bool          `json:"strict,omitempty"`
+}
+
 // ChatRequest 表示聊天补全请求.
 type ChatRequest struct {
-	TraceID     string            `json:"trace_id"`
-	TenantID    string            `json:"tenant_id,omitempty"`
-	UserID      string            `json:"user_id,omitempty"`
-	Model       string            `json:"model"`
-	Messages    []Message         `json:"messages"`
-	MaxTokens   int               `json:"max_tokens,omitempty"`
-	Temperature float32           `json:"temperature,omitempty"`
-	TopP        float32           `json:"top_p,omitempty"`
-	Stop        []string          `json:"stop,omitempty"`
-	Tools       []ToolSchema      `json:"tools,omitempty"`
-	ToolChoice  string            `json:"tool_choice,omitempty"`
-	Timeout     time.Duration     `json:"timeout,omitempty"`
-	Metadata    map[string]string `json:"metadata,omitempty"`
-	Tags        []string          `json:"tags,omitempty"`
+	TraceID        string            `json:"trace_id"`
+	TenantID       string            `json:"tenant_id,omitempty"`
+	UserID         string            `json:"user_id,omitempty"`
+	Model          string            `json:"model"`
+	Messages       []Message         `json:"messages"`
+	MaxTokens      int               `json:"max_tokens,omitempty"`
+	Temperature    float32           `json:"temperature,omitempty"`
+	TopP           float32           `json:"top_p,omitempty"`
+	Stop           []string          `json:"stop,omitempty"`
+	Tools          []ToolSchema      `json:"tools,omitempty"`
+	ToolChoice     any               `json:"tool_choice,omitempty"`
+	ResponseFormat *ResponseFormat   `json:"response_format,omitempty"`
+	Timeout        time.Duration     `json:"timeout,omitempty"`
+	Metadata       map[string]string `json:"metadata,omitempty"`
+	Tags           []string          `json:"tags,omitempty"`
 
 	// 扩展字段
 	ReasoningMode      string   `json:"reasoning_mode,omitempty"`

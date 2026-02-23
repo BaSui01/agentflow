@@ -113,6 +113,10 @@ paths:
     post:
       tags: [Chat]
       summary: Chat completion
+      description: |
+        Send a chat completion request to the configured LLM provider.
+        Note: This endpoint is only available when an LLM API key is configured.
+      x-conditional: "Requires LLM API key configuration (config.llm.api_key)"
       operationId: chatCompletion
       security:
         - ApiKeyAuth: []
@@ -138,6 +142,10 @@ paths:
     post:
       tags: [Chat]
       summary: Streaming chat completion (SSE)
+      description: |
+        Send a streaming chat completion request via Server-Sent Events.
+        Note: This endpoint is only available when an LLM API key is configured.
+      x-conditional: "Requires LLM API key configuration (config.llm.api_key)"
       operationId: chatCompletionStream
       security:
         - ApiKeyAuth: []
@@ -413,6 +421,10 @@ paths:
     get:
       tags: [Provider]
       summary: List all LLM providers
+      description: |
+        List all configured LLM providers.
+        Note: This endpoint is only available when a database is configured.
+      x-conditional: "Requires database connection"
       operationId: listProviders
       security:
         - ApiKeyAuth: []
@@ -435,6 +447,10 @@ paths:
     get:
       tags: [Provider]
       summary: List API keys for a provider
+      description: |
+        List all API keys for a specific LLM provider.
+        Note: This endpoint is only available when a database is configured.
+      x-conditional: "Requires database connection"
       operationId: listAPIKeys
       security:
         - ApiKeyAuth: []
@@ -462,6 +478,10 @@ paths:
     post:
       tags: [Provider]
       summary: Create API key for a provider
+      description: |
+        Create a new API key for a specific LLM provider.
+        Note: This endpoint is only available when a database is configured.
+      x-conditional: "Requires database connection"
       operationId: createAPIKey
       security:
         - ApiKeyAuth: []
@@ -497,6 +517,10 @@ paths:
     get:
       tags: [Provider]
       summary: Get API key stats for a provider
+      description: |
+        Get usage statistics for API keys of a specific LLM provider.
+        Note: This endpoint is only available when a database is configured.
+      x-conditional: "Requires database connection"
       operationId: getAPIKeyStats
       security:
         - ApiKeyAuth: []
@@ -526,6 +550,10 @@ paths:
     put:
       tags: [Provider]
       summary: Update an API key
+      description: |
+        Update an existing API key for a specific LLM provider.
+        Note: This endpoint is only available when a database is configured.
+      x-conditional: "Requires database connection"
       operationId: updateAPIKey
       security:
         - ApiKeyAuth: []
@@ -565,6 +593,10 @@ paths:
     delete:
       tags: [Provider]
       summary: Delete an API key
+      description: |
+        Delete an API key for a specific LLM provider.
+        Note: This endpoint is only available when a database is configured.
+      x-conditional: "Requires database connection"
       operationId: deleteAPIKey
       security:
         - ApiKeyAuth: []

@@ -55,6 +55,11 @@ jobs:
           echo "pkgs=${pkgs}" >> "$GITHUB_OUTPUT"
           echo "Selected package count: $(echo "${pkgs}" | wc -w)"
 
+      - name: Run golangci-lint
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: latest
+
       - name: Build all packages
         run: go build ./...
 
@@ -82,6 +87,9 @@ jobs:
             coverage.out
             coverage-summary.txt
           retention-days: 14
+
+      - name: Check coverage threshold
+        run: make coverage-check
 
   cross-build:
     name: Cross Build (${{ matrix.goos }}/${{ matrix.goarch }})
@@ -134,10 +142,9 @@ jobs:
           retention-days: 14
 
   security:
-    name: Security Scan (non-blocking)
+    name: Security Scan
     runs-on: ubuntu-latest
     needs: ci
-    continue-on-error: true
     steps:
       - name: Checkout
         uses: actions/checkout@v4

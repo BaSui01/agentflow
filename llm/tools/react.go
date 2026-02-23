@@ -314,17 +314,34 @@ func (r *ReActExecutor) ExecuteStream(ctx context.Context, req *llm.ChatRequest)
 			}
 
 			eventCh <- ReActStreamEvent{Type: "tools_start", ToolCalls: assembledMessage.ToolCalls}
-			toolResults := r.toolExecutor.Execute(ctx, assembledMessage.ToolCalls)
-			eventCh <- ReActStreamEvent{Type: "tools_end", ToolResults: toolResults}
 
-			messages = append(messages, assembledMessage)
-			for _, result := range toolResults {
-				toolMessage := result.ToMessage()
-				if result.Error != "" && r.config.StopOnError {
-					eventCh <- ReActStreamEvent{Type: "error", Error: fmt.Sprintf("tool execution failed: %s", result.Error)}
-					return
+			// 检查 toolExecutor 是否支持流式执行
+			if streamExec, ok := r.toolExecutor.(StreamableToolExecutor); ok {
+				toolResults := r.executeToolsWithStreaming(ctx, streamExec, assembledMessage.ToolCalls, eventCh)
+				eventCh <- ReActStreamEvent{Type: "tools_end", ToolResults: toolResults}
+
+				messages = append(messages, assembledMessage)
+				for _, result := range toolResults {
+					toolMessage := result.ToMessage()
+					if result.Error != "" && r.config.StopOnError {
+						eventCh <- ReActStreamEvent{Type: "error", Error: fmt.Sprintf("tool execution failed: %s", result.Error)}
+						return
+					}
+					messages = append(messages, toolMessage)
 				}
-				messages = append(messages, toolMessage)
+			} else {
+				toolResults := r.toolExecutor.Execute(ctx, assembledMessage.ToolCalls)
+				eventCh <- ReActStreamEvent{Type: "tools_end", ToolResults: toolResults}
+
+				messages = append(messages, assembledMessage)
+				for _, result := range toolResults {
+					toolMessage := result.ToMessage()
+					if result.Error != "" && r.config.StopOnError {
+						eventCh <- ReActStreamEvent{Type: "error", Error: fmt.Sprintf("tool execution failed: %s", result.Error)}
+						return
+					}
+					messages = append(messages, toolMessage)
+				}
 			}
 		}
 
@@ -341,8 +358,64 @@ type ReActStreamEvent struct {
 	Chunk         *llm.StreamChunk  `json:"chunk,omitempty"`
 	ToolCalls     []llm.ToolCall    `json:"tool_calls,omitempty"`
 	ToolResults   []ToolResult      `json:"tool_results,omitempty"`
+	ToolCallID    string            `json:"tool_call_id,omitempty"`
+	ToolName      string            `json:"tool_name,omitempty"`
+	ProgressData  any               `json:"progress_data,omitempty"`
 	FinalResponse *llm.ChatResponse `json:"final_response,omitempty"`
 	Error         string            `json:"error,omitempty"`
+}
+
+// executeToolsWithStreaming 使用流式执行器逐个执行工具调用，
+// 将中间 progress 事件作为 "tool_progress" 转发到 eventCh.
+func (r *ReActExecutor) executeToolsWithStreaming(
+	ctx context.Context,
+	streamExec StreamableToolExecutor,
+	calls []llm.ToolCall,
+	eventCh chan<- ReActStreamEvent,
+) []ToolResult {
+	results := make([]ToolResult, len(calls))
+
+	for i, call := range calls {
+		streamCh := streamExec.ExecuteOneStream(ctx, call)
+		var toolResult ToolResult
+		toolResult.ToolCallID = call.ID
+		toolResult.Name = call.Name
+
+		for event := range streamCh {
+			switch event.Type {
+			case ToolStreamProgress:
+				// 转发中间进度事件
+				select {
+				case eventCh <- ReActStreamEvent{
+					Type:         "tool_progress",
+					ToolCallID:   call.ID,
+					ToolName:     call.Name,
+					ProgressData: event.Data,
+				}:
+				case <-ctx.Done():
+					return results
+				}
+			case ToolStreamOutput:
+				// output 事件的 Data 是 json.RawMessage
+				if raw, ok := event.Data.(json.RawMessage); ok {
+					toolResult.Result = raw
+				}
+			case ToolStreamComplete:
+				// complete 事件的 Data 是 ToolResult
+				if tr, ok := event.Data.(ToolResult); ok {
+					toolResult = tr
+				}
+			case ToolStreamError:
+				if event.Error != nil {
+					toolResult.Error = event.Error.Error()
+				}
+			}
+		}
+
+		results[i] = toolResult
+	}
+
+	return results
 }
 
 // ToMessage 将 ToolResult 转换为 LLM 消息.

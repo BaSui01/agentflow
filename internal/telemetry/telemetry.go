@@ -23,6 +23,7 @@ import (
 	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.26.0"
+	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 )
 
@@ -121,6 +122,19 @@ func (p *Providers) Shutdown(ctx context.Context) error {
 		}
 	}
 	return errors.Join(errs...)
+}
+
+// LoggerWithTrace returns a logger with trace_id and span_id fields from the context.
+// If the context has no valid span, the original logger is returned unchanged.
+func LoggerWithTrace(ctx context.Context, logger *zap.Logger) *zap.Logger {
+	span := trace.SpanFromContext(ctx)
+	if !span.SpanContext().IsValid() {
+		return logger
+	}
+	return logger.With(
+		zap.String("trace_id", span.SpanContext().TraceID().String()),
+		zap.String("span_id", span.SpanContext().SpanID().String()),
+	)
 }
 
 // buildVersion extracts the module version from Go build info.

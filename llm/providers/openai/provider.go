@@ -170,7 +170,7 @@ func (p *OpenAIProvider) completionWithResponsesAPI(ctx context.Context, req *ll
 		Tools:           providers.ConvertToolsToOpenAI(req.Tools),
 		Store:           true,
 	}
-	if req.ToolChoice != "" {
+	if req.ToolChoice != nil {
 		body.ToolChoice = req.ToolChoice
 	}
 	if req.PreviousResponseID != "" {

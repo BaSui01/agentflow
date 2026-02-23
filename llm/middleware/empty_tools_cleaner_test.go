@@ -15,7 +15,7 @@ func TestEmptyToolsCleaner_Rewrite(t *testing.T) {
 	tests := []struct {
 		name           string
 		req            *llmpkg.ChatRequest
-		expectedChoice string
+		expectedChoice any
 		description    string
 	}{
 		{
@@ -24,7 +24,7 @@ func TestEmptyToolsCleaner_Rewrite(t *testing.T) {
 				Tools:      []llmpkg.ToolSchema{},
 				ToolChoice: "auto",
 			},
-			expectedChoice: "",
+			expectedChoice: nil,
 			description:    "当 Tools 为空数组时，ToolChoice 应被清空",
 		},
 		{
@@ -33,7 +33,7 @@ func TestEmptyToolsCleaner_Rewrite(t *testing.T) {
 				Tools:      nil,
 				ToolChoice: "auto",
 			},
-			expectedChoice: "",
+			expectedChoice: nil,
 			description:    "当 Tools 为 nil 时，ToolChoice 应被清空",
 		},
 		{
@@ -51,15 +51,15 @@ func TestEmptyToolsCleaner_Rewrite(t *testing.T) {
 			name: "空 tool_choice 应保持不变",
 			req: &llmpkg.ChatRequest{
 				Tools:      []llmpkg.ToolSchema{},
-				ToolChoice: "",
+				ToolChoice: nil,
 			},
-			expectedChoice: "",
-			description:    "当 ToolChoice 本身为空时，应保持不变",
+			expectedChoice: nil,
+			description:    "当 ToolChoice 本身为 nil 时，应保持不变",
 		},
 		{
 			name:           "nil 请求应返回 nil",
 			req:            nil,
-			expectedChoice: "",
+			expectedChoice: nil,
 			description:    "当请求为 nil 时，应安全返回 nil",
 		},
 	}
