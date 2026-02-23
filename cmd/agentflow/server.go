@@ -333,7 +333,7 @@ func (s *Server) startHTTPServer() error {
 		ReadTimeout:     s.cfg.Server.ReadTimeout,
 		WriteTimeout:    s.cfg.Server.WriteTimeout,
 		IdleTimeout:     2 * s.cfg.Server.ReadTimeout, // 2x ReadTimeout
-		MaxHeaderBytes:  1 << 20,                        // 1 MB
+		MaxHeaderBytes:  1 << 20,                      // 1 MB
 		ShutdownTimeout: s.cfg.Server.ShutdownTimeout,
 	}
 
@@ -405,7 +405,13 @@ func (s *Server) buildAuthMiddleware(skipPaths []string) Middleware {
 		)
 		return APIKeyAuth(s.cfg.Server.APIKeys, skipPaths, s.cfg.Server.AllowQueryAPIKey, s.logger)
 	default:
-		s.logger.Warn("Authentication: DISABLED (no JWT secret/key and no API keys configured)")
+		if !s.cfg.Server.AllowNoAuth {
+			s.logger.Warn("Authentication is disabled and allow_no_auth is false. " +
+				"Set JWT or API key configuration, or set allow_no_auth=true to explicitly allow unauthenticated access.")
+		} else {
+			s.logger.Warn("Authentication is disabled (allow_no_auth=true). " +
+				"This is not recommended for production use.")
+		}
 		return nil
 	}
 }
