@@ -2,6 +2,9 @@ package llama
 
 import (
 	"context"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"testing"
 	"time"
@@ -133,4 +136,202 @@ func TestLlamaProvider_Integration(t *testing.T) {
 
 		assert.NotEmpty(t, chunks)
 	})
+}
+
+// --- httptest-based unit tests ---
+
+func TestLlamaProvider_NilLogger(t *testing.T) {
+	p := NewLlamaProvider(providers.LlamaConfig{}, nil)
+	require.NotNil(t, p)
+}
+
+func TestLlamaProvider_FallbackModel(t *testing.T) {
+	p := NewLlamaProvider(providers.LlamaConfig{}, zap.NewNop())
+	assert.Equal(t, "meta-llama/Llama-3-70b-chat-hf", p.Cfg.FallbackModel)
+}
+
+func TestLlamaProvider_Completion_Httptest(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "/v1/chat/completions", r.URL.Path)
+		assert.Contains(t, r.Header.Get("Authorization"), "Bearer ")
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(providers.OpenAICompatResponse{
+			ID: "resp-1", Model: "meta-llama/Llama-3.3-70B-Instruct-Turbo",
+			Choices: []providers.OpenAICompatChoice{
+				{Index: 0, FinishReason: "stop", Message: providers.OpenAICompatMessage{Role: "assistant", Content: "Hello from Llama"}},
+			},
+			Usage: &providers.OpenAICompatUsage{PromptTokens: 10, CompletionTokens: 5, TotalTokens: 15},
+		})
+	}))
+	t.Cleanup(func() { server.Close() })
+
+	p := NewLlamaProvider(providers.LlamaConfig{
+		BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key", BaseURL: server.URL},
+	}, zap.NewNop())
+
+	resp, err := p.Completion(context.Background(), &llm.ChatRequest{
+		Messages: []llm.Message{{Role: llm.RoleUser, Content: "Hi"}},
+	})
+	require.NoError(t, err)
+	assert.Contains(t, resp.Provider, "llama")
+	require.Len(t, resp.Choices, 1)
+	assert.Equal(t, "Hello from Llama", resp.Choices[0].Message.Content)
+	assert.Equal(t, 15, resp.Usage.TotalTokens)
+}
+
+func TestLlamaProvider_Completion_Error(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusUnauthorized)
+		w.Write([]byte(`{"error":{"message":"Invalid API key"}}`))
+	}))
+	t.Cleanup(func() { server.Close() })
+
+	p := NewLlamaProvider(providers.LlamaConfig{
+		BaseProviderConfig: providers.BaseProviderConfig{APIKey: "bad", BaseURL: server.URL},
+	}, zap.NewNop())
+
+	_, err := p.Completion(context.Background(), &llm.ChatRequest{
+		Messages: []llm.Message{{Role: llm.RoleUser, Content: "Hi"}},
+	})
+	require.Error(t, err)
+	llmErr, ok := err.(*llm.Error)
+	require.True(t, ok)
+	assert.Equal(t, llm.ErrUnauthorized, llmErr.Code)
+}
+
+func TestLlamaProvider_Completion_RateLimited(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusTooManyRequests)
+		w.Write([]byte(`{"error":{"message":"Rate limit"}}`))
+	}))
+	t.Cleanup(func() { server.Close() })
+
+	p := NewLlamaProvider(providers.LlamaConfig{
+		BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k", BaseURL: server.URL},
+	}, zap.NewNop())
+
+	_, err := p.Completion(context.Background(), &llm.ChatRequest{
+		Messages: []llm.Message{{Role: llm.RoleUser, Content: "Hi"}},
+	})
+	require.Error(t, err)
+	llmErr, ok := err.(*llm.Error)
+	require.True(t, ok)
+	assert.Equal(t, llm.ErrRateLimited, llmErr.Code)
+}
+
+func TestLlamaProvider_Stream_Httptest(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(http.StatusOK)
+		for _, content := range []string{"Hello", " ", "World"} {
+			chunk := providers.OpenAICompatResponse{
+				ID: "stream-1", Model: "meta-llama/Llama-3.3-70B-Instruct-Turbo",
+				Choices: []providers.OpenAICompatChoice{
+					{Index: 0, Delta: &providers.OpenAICompatMessage{Role: "assistant", Content: content}},
+				},
+			}
+			data, _ := json.Marshal(chunk)
+			w.Write([]byte("data: "))
+			w.Write(data)
+			w.Write([]byte("\n\n"))
+		}
+		w.Write([]byte("data: [DONE]\n\n"))
+	}))
+	t.Cleanup(func() { server.Close() })
+
+	p := NewLlamaProvider(providers.LlamaConfig{
+		BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k", BaseURL: server.URL},
+	}, zap.NewNop())
+
+	ch, err := p.Stream(context.Background(), &llm.ChatRequest{
+		Messages: []llm.Message{{Role: llm.RoleUser, Content: "Hi"}},
+	})
+	require.NoError(t, err)
+
+	var combined string
+	for c := range ch {
+		combined += c.Delta.Content
+	}
+	assert.Equal(t, "Hello World", combined)
+}
+
+func TestLlamaProvider_Stream_Error(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusServiceUnavailable)
+		w.Write([]byte(`{"error":{"message":"Service unavailable"}}`))
+	}))
+	t.Cleanup(func() { server.Close() })
+
+	p := NewLlamaProvider(providers.LlamaConfig{
+		BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k", BaseURL: server.URL},
+	}, zap.NewNop())
+
+	_, err := p.Stream(context.Background(), &llm.ChatRequest{
+		Messages: []llm.Message{{Role: llm.RoleUser, Content: "Hi"}},
+	})
+	require.Error(t, err)
+}
+
+func TestLlamaProvider_NotSupported(t *testing.T) {
+	p := NewLlamaProvider(providers.LlamaConfig{}, zap.NewNop())
+	ctx := context.Background()
+
+	tests := []struct {
+		name    string
+		callFn  func() error
+		feature string
+	}{
+		{"GenerateImage", func() error { _, err := p.GenerateImage(ctx, &llm.ImageGenerationRequest{}); return err }, "image generation"},
+		{"GenerateVideo", func() error { _, err := p.GenerateVideo(ctx, &llm.VideoGenerationRequest{}); return err }, "video generation"},
+		{"GenerateAudio", func() error { _, err := p.GenerateAudio(ctx, &llm.AudioGenerationRequest{}); return err }, "audio generation"},
+		{"TranscribeAudio", func() error { _, err := p.TranscribeAudio(ctx, &llm.AudioTranscriptionRequest{}); return err }, "audio transcription"},
+		{"CreateEmbedding", func() error { _, err := p.CreateEmbedding(ctx, &llm.EmbeddingRequest{}); return err }, "embeddings"},
+		{"CreateFineTuningJob", func() error { _, err := p.CreateFineTuningJob(ctx, &llm.FineTuningJobRequest{}); return err }, "fine-tuning"},
+		{"ListFineTuningJobs", func() error { _, err := p.ListFineTuningJobs(ctx); return err }, "fine-tuning"},
+		{"GetFineTuningJob", func() error { _, err := p.GetFineTuningJob(ctx, "j"); return err }, "fine-tuning"},
+		{"CancelFineTuningJob", func() error { return p.CancelFineTuningJob(ctx, "j") }, "fine-tuning"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := tt.callFn()
+			require.Error(t, err)
+			llmErr, ok := err.(*llm.Error)
+			require.True(t, ok)
+			assert.Equal(t, llm.ErrInvalidRequest, llmErr.Code)
+			assert.Contains(t, llmErr.Message, tt.feature)
+		})
+	}
+}
+
+func TestLlamaProvider_HealthCheck_Httptest(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"object":"list","data":[]}`))
+	}))
+	t.Cleanup(func() { server.Close() })
+
+	p := NewLlamaProvider(providers.LlamaConfig{
+		BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k", BaseURL: server.URL},
+	}, zap.NewNop())
+
+	status, err := p.HealthCheck(context.Background())
+	require.NoError(t, err)
+	assert.True(t, status.Healthy)
+}
+
+func TestLlamaProvider_HealthCheck_Unhealthy(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(`error`))
+	}))
+	t.Cleanup(func() { server.Close() })
+
+	p := NewLlamaProvider(providers.LlamaConfig{
+		BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k", BaseURL: server.URL},
+	}, zap.NewNop())
+
+	status, err := p.HealthCheck(context.Background())
+	require.Error(t, err)
+	assert.False(t, status.Healthy)
 }
