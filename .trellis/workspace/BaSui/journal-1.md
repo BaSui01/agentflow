@@ -1425,3 +1425,73 @@ commit `4a9159a` 沉淀了 4 条新规范：§43 OTel SDK Init、§44 API Reques
 ### Next Steps
 
 - None - task complete
+
+
+## Session 20: LLM 数据链路精确化：删除兼容代码 + AutoMigrate + 架构审计
+
+**Date**: 2026-02-23
+**Task**: LLM 数据链路精确化：删除兼容代码 + AutoMigrate + 架构审计
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+## 本次会话工作内容
+
+### 1. 删除 `llm/db_init.go` 及 AutoMigrate
+- 删除整个 `llm/db_init.go` 文件，表结构统一由 SQL migration (`migrations/`) 管理
+- 移除 `cmd/agentflow/main.go` 中 `llm.InitDatabase(db)` 调用
+- 测试文件 `router_multi_provider_test.go` 改为直接 `db.AutoMigrate`（测试专用）
+
+### 2. LLM 数据链路架构审计
+- 确认 4 表多对多设计正确：`LLMModel ↔ LLMProviderModel ↔ LLMProvider → LLMProviderAPIKey`
+- 完整链路：`modelName → 3-table JOIN → 策略选择 → Pool 选 Key → Factory 创建实例`
+
+### 3. 清理 6 处兼容/回退代码
+| 清理项 | 文件 |
+|--------|------|
+| 删除 DEPRECATED `Router.SelectProvider()` | `llm/router_types.go` |
+| 删除 `llm.IsRetryable` 兼容别名 | `llm/provider.go`, `llm/resilience.go` |
+| 删除 `llm/retry.IsRetryable` 兼容别名 | `llm/retry/backoff.go` |
+| 删除 `rateLimiter` 兼容包装器 | `llm/tools/executor.go` |
+| `SelectProviderWithModel` default 分支改为报错 | `llm/router_multi_provider.go` |
+| `APIKeyPool.SelectKey` default 分支改为报错 | `llm/apikey_pool.go` |
+| `NewAPIKeyPool` 空 strategy 改为 panic | `llm/apikey_pool.go` |
+
+### 4. 规范文档同步
+- `.trellis/spec/backend/database-guidelines.md`：移除 "Dual Migration Strategy" 章节，改为单一 SQL migration 策略
+- `CHANGELOG.md`：新增 `### Removed` 章节记录所有清理项
+
+**修改文件**: llm/db_init.go(删除), cmd/agentflow/main.go, llm/router_types.go, llm/provider.go, llm/resilience.go, llm/retry/backoff.go, llm/retry/backoff_test.go, llm/tools/executor.go, llm/tools/rate_limiter_test.go, llm/router_multi_provider.go, llm/router_multi_provider_test.go, llm/apikey_pool.go, CHANGELOG.md, .trellis/spec/backend/database-guidelines.md
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `8a87afd` | (see git log) |
+| `7b9b4bf` | (see git log) |
+| `d13d62b` | (see git log) |
+| `f7fc15f` | (see git log) |
+| `72a19c0` | (see git log) |
+| `7b8d961` | (see git log) |
+| `f5a1749` | (see git log) |
+| `acca7e1` | (see git log) |
+| `1c25d81` | (see git log) |
+| `07216fe` | (see git log) |
+| `7bd1328` | (see git log) |
+| `188cc89` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
