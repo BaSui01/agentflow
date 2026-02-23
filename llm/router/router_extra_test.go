@@ -60,7 +60,7 @@ func TestHealthChecker_StartStop(t *testing.T) {
 	r := NewWeightedRouter(zap.NewNop(), nil)
 	hc := NewHealthChecker(r, 100*time.Millisecond, zap.NewNop())
 
-	hc.Start(context.Background())
+	go hc.Start(context.Background())
 	time.Sleep(50 * time.Millisecond)
 	hc.Stop()
 	// Double stop should not panic
@@ -68,17 +68,17 @@ func TestHealthChecker_StartStop(t *testing.T) {
 }
 
 func TestWeightedRouter_Select_PreferModel(t *testing.T) {
-	r := NewWeightedRouter(zap.NewNop(), nil)
+	r := NewWeightedRouter(zap.NewNop(), []config.PrefixRule{
+		{Prefix: "preferred", Provider: "openai"},
+	})
 	r.mu.Lock()
 	r.candidates["preferred"] = &ModelCandidate{
 		ModelID: "preferred", ModelName: "gpt-4", ProviderCode: "openai",
 		Weight: 10, Enabled: true,
-		Health: &ModelHealth{IsHealthy: true, SuccessRate: 0.99},
 	}
 	r.candidates["other"] = &ModelCandidate{
-		ModelID: "other", ModelName: "gpt-3.5", ProviderCode: "openai",
+		ModelID: "other", ModelName: "gpt-3.5", ProviderCode: "azure",
 		Weight: 5, Enabled: true,
-		Health: &ModelHealth{IsHealthy: true, SuccessRate: 0.99},
 	}
 	r.mu.Unlock()
 
@@ -87,4 +87,26 @@ func TestWeightedRouter_Select_PreferModel(t *testing.T) {
 	})
 	require.NoError(t, err)
 	assert.Equal(t, "preferred", result.ModelID)
+	assert.Equal(t, "prefix_match", result.Reason)
+}
+
+func TestWeightedRouter_Select_NoAvailableModel(t *testing.T) {
+	r := NewWeightedRouter(zap.NewNop(), nil)
+	// No candidates loaded
+	_, err := r.Select(context.Background(), &RouteRequest{})
+	assert.ErrorIs(t, err, ErrNoAvailableModel)
+}
+
+func TestWeightedRouter_Select_WeightedFallback(t *testing.T) {
+	r := NewWeightedRouter(zap.NewNop(), nil)
+	r.mu.Lock()
+	r.candidates["only"] = &ModelCandidate{
+		ModelID: "only", ModelName: "gpt-4", ProviderCode: "openai",
+		Weight: 10, Enabled: true,
+	}
+	r.mu.Unlock()
+
+	result, err := r.Select(context.Background(), &RouteRequest{})
+	require.NoError(t, err)
+	assert.Equal(t, "only", result.ModelID)
 }
