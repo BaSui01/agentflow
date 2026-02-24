@@ -1678,3 +1678,60 @@ commit `4a9159a` 沉淀了 4 条新规范：§43 OTel SDK Init、§44 API Reques
 ### Next Steps
 
 - None - task complete
+
+
+## Session 24: fix: agent memory cache write-through
+
+**Date**: 2026-02-25
+**Task**: fix: agent memory cache write-through
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+## 问题
+
+BaseAgent.SaveMemory() 写入底层 MemoryManager 后不更新 recentMemory 缓存，导致同一 Agent 实例的多次 Execute() 调用间，新保存的对话记忆不会被后续调用看到。MemoryCoordinator.Save() 存在同样问题。CachingResolver 创建 Agent 时 memory 参数始终传 nil。
+
+## 修复
+
+| 文件 | 变更 |
+|------|------|
+| `agent/base.go` | SaveMemory 写入存储后回写 recentMemory 缓存 + 驱逐上限 `defaultMaxRecentMemory=50` |
+| `agent/memory_coordinator.go` | Save 同步回写缓存 + 驱逐 |
+| `agent/resolver.go` | 新增 `WithMemory()` 方法，Create 调用传递 `r.memory` |
+| `agent/base_test.go` | +2 测试：WriteThroughCache, CacheEviction |
+| `agent/managers_test.go` | +2 测试：MemoryCoordinator 缓存回写和驱逐 |
+| `agent/registry_test.go` | +2 测试：CachingResolver WithMemory/WithoutMemory |
+
+## 规范更新
+
+- `quality-guidelines.md` §35.6: write-through slice cache 规则
+- `guides/index.md`: 新增 thinking trigger — 写入存储后是否同步缓存
+
+## 经验
+
+write-through 缓存必须在写入底层存储后同步更新本地缓存，否则后续读取会看到过期数据。slice 类型缓存同样需要 maxSize 上限防止无限增长。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `88f9d14` | (see git log) |
+| `e554428` | (see git log) |
+| `2edcbbf` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
