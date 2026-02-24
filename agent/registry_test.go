@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"context"
 	"testing"
 
 	"github.com/BaSui01/agentflow/llm"
@@ -103,4 +104,44 @@ func TestJoinSkillCategories(t *testing.T) {
 	cats := defaultSkillCategoriesForType(TypeAssistant)
 	result := joinSkillCategories(cats)
 	assert.Contains(t, result, ",")
+}
+
+func TestCachingResolver_WithMemory(t *testing.T) {
+	logger := zap.NewNop()
+	registry := NewAgentRegistry(logger)
+	provider := &testProvider{name: "mock"}
+	mem := &testMemoryManager{
+		loadRecentFn: func(_ context.Context, _ string, _ MemoryKind, _ int) ([]MemoryRecord, error) {
+			return nil, nil
+		},
+	}
+
+	resolver := NewCachingResolver(registry, provider, logger).WithMemory(mem)
+
+	// Resolve should create an agent with memory capabilities.
+	ctx := context.Background()
+	ag, err := resolver.Resolve(ctx, "test-with-mem")
+	require.NoError(t, err)
+	require.NotNil(t, ag)
+
+	// The underlying BaseAgent should have a non-nil memory field.
+	ba, ok := ag.(*BaseAgent)
+	require.True(t, ok)
+	assert.NotNil(t, ba.memory)
+}
+
+func TestCachingResolver_WithoutMemory(t *testing.T) {
+	logger := zap.NewNop()
+	registry := NewAgentRegistry(logger)
+	provider := &testProvider{name: "mock"}
+
+	resolver := NewCachingResolver(registry, provider, logger)
+
+	ctx := context.Background()
+	ag, err := resolver.Resolve(ctx, "test-no-mem")
+	require.NoError(t, err)
+
+	ba, ok := ag.(*BaseAgent)
+	require.True(t, ok)
+	assert.Nil(t, ba.memory)
 }

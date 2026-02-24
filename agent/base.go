@@ -15,6 +15,11 @@ import (
 	"go.uber.org/zap"
 )
 
+// defaultMaxRecentMemory is the upper bound for the in-process recent-memory
+// cache. When SaveMemory appends a new record and the cache exceeds this size,
+// the oldest entries are evicted.
+const defaultMaxRecentMemory = 50
+
 // AgentType 定义 Agent 类型
 // 这是一个可扩展的字符串类型，用户可以定义自己的 Agent 类型
 type AgentType string
@@ -402,7 +407,7 @@ func (b *BaseAgent) Init(ctx context.Context) error {
 
 	// 加载记忆（如果有）并缓存
 	if b.memory != nil {
-		records, err := b.memory.LoadRecent(ctx, b.config.ID, MemoryShortTerm, 10)
+		records, err := b.memory.LoadRecent(ctx, b.config.ID, MemoryShortTerm, defaultMaxRecentMemory)
 		if err != nil {
 			b.logger.Warn("failed to load memory", zap.Error(err))
 		} else {
@@ -454,7 +459,7 @@ func (b *BaseAgent) EnsureReady() error {
 	return nil
 }
 
-// SaveMemory 保存记忆
+// SaveMemory 保存记忆并同步更新本地缓存
 func (b *BaseAgent) SaveMemory(ctx context.Context, content string, kind MemoryKind, metadata map[string]any) error {
 	if b.memory == nil {
 		return nil
@@ -468,7 +473,21 @@ func (b *BaseAgent) SaveMemory(ctx context.Context, content string, kind MemoryK
 		CreatedAt: time.Now(),
 	}
 
-	return b.memory.Save(ctx, rec)
+	if err := b.memory.Save(ctx, rec); err != nil {
+		return err
+	}
+
+	// Write-through: keep the in-process cache consistent so that
+	// subsequent Execute() calls within the same agent instance see
+	// the newly saved record without a full reload.
+	b.recentMemoryMu.Lock()
+	b.recentMemory = append(b.recentMemory, rec)
+	if len(b.recentMemory) > defaultMaxRecentMemory {
+		b.recentMemory = b.recentMemory[len(b.recentMemory)-defaultMaxRecentMemory:]
+	}
+	b.recentMemoryMu.Unlock()
+
+	return nil
 }
 
 // RecallMemory 检索记忆
