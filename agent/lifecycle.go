@@ -72,8 +72,8 @@ func (lm *LifecycleManager) Start(ctx context.Context) error {
 		return fmt.Errorf("failed to initialize agent: %w", err)
 	}
 
-	// 启动健康检查
-	go lm.healthCheckLoop(ctx)
+	// 启动健康检查，将 stopChan/doneChan 快照传入，避免 Restart 竞态
+	go lm.healthCheckLoop(ctx, lm.stopChan, lm.doneChan)
 
 	lm.logger.Info("agent lifecycle manager started")
 	return nil
@@ -128,8 +128,10 @@ func (lm *LifecycleManager) GetHealthStatus() HealthStatus {
 }
 
 // healthCheckLoop 健康检查循环
-func (lm *LifecycleManager) healthCheckLoop(ctx context.Context) {
-	defer close(lm.doneChan)
+// stop 和 done 作为参数传入，避免 Restart 替换 lm.stopChan/lm.doneChan 后
+// 旧 goroutine 通过 lm 字段访问到新 channel 导致竞态。
+func (lm *LifecycleManager) healthCheckLoop(ctx context.Context, stop <-chan struct{}, done chan struct{}) {
+	defer close(done)
 
 	ticker := time.NewTicker(lm.healthCheckInterval)
 	defer ticker.Stop()
@@ -139,7 +141,7 @@ func (lm *LifecycleManager) healthCheckLoop(ctx context.Context) {
 
 	for {
 		select {
-		case <-lm.stopChan:
+		case <-stop:
 			lm.logger.Info("health check loop stopped")
 			return
 		case <-ticker.C:
@@ -200,9 +202,6 @@ func (lm *LifecycleManager) Restart(ctx context.Context) error {
 	if err := lm.Stop(ctx); err != nil {
 		return fmt.Errorf("failed to stop agent: %w", err)
 	}
-
-	// 等待一小段时间
-	time.Sleep(1 * time.Second)
 
 	// 在锁保护下重新创建通道，防止与并发读取竞争
 	lm.mu.Lock()

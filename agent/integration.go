@@ -229,6 +229,14 @@ func (b *BaseAgent) ExecuteEnhanced(ctx context.Context, input *Input, options E
 		Variables: input.Variables,
 	}
 
+	// 如果启用增强记忆，标记跳过基础记忆保存以避免重复
+	if options.UseEnhancedMemory && b.enhancedMemory != nil && options.SaveToMemory {
+		if enhancedInput.Context == nil {
+			enhancedInput.Context = make(map[string]any)
+		}
+		enhancedInput.Context["_skip_base_memory"] = true
+	}
+
 	// 5. 动态工具选择
 	if options.UseToolSelection && b.toolSelector != nil && b.toolManager != nil {
 		b.logger.Debug("selecting tools dynamically")
@@ -410,58 +418,88 @@ func DefaultQuickSetupOptions() QuickSetupOptions {
 	}
 }
 
-// QuickSetup 快速设置（启用推荐功能）
-// 注意：这个方法需要在实际项目中根据具体的类型进行实现
-// 这里提供一个框架示例
-func (b *BaseAgent) QuickSetup(ctx context.Context, options QuickSetupOptions) error {
-	b.logger.Info("quick setup: enabling features",
+// QuickSetupResult holds the list of features that the caller must manually
+// enable by calling the corresponding Enable* methods on BaseAgent.
+type QuickSetupResult struct {
+	RequiredSetups []string `json:"required_setups"`
+}
+
+// QuickSetup validates the requested feature configuration and returns a list
+// of features that still need to be enabled.
+// NOTE: This method does NOT automatically enable any features. The caller
+// must inspect RequiredSetups and invoke the corresponding Enable* methods
+// with concrete implementations (e.g. via agent/runtime.QuickSetup).
+func (b *BaseAgent) QuickSetup(ctx context.Context, options QuickSetupOptions) (*QuickSetupResult, error) {
+	b.logger.Info("quick setup: validating feature requirements",
 		zap.Bool("all_features", options.EnableAllFeatures),
 	)
 
-	// 由于避免循环依赖，这里只能提供接口
-	// 实际实现需要在调用方创建具体的实例并调用 Enable* 方法
+	result := &QuickSetupResult{}
 
 	if options.EnableAllFeatures || options.EnableReflection {
-		b.logger.Info("reflection should be enabled with max_iterations",
-			zap.Int("max_iterations", options.ReflectionMaxIterations))
+		if b.reflectionExecutor == nil {
+			result.RequiredSetups = append(result.RequiredSetups,
+				fmt.Sprintf("EnableReflection(executor) — max_iterations: %d", options.ReflectionMaxIterations))
+		}
 	}
 
 	if options.EnableAllFeatures || options.EnableToolSelection {
-		b.logger.Info("tool selection should be enabled with max_tools",
-			zap.Int("max_tools", options.ToolSelectionMaxTools))
+		if b.toolSelector == nil {
+			result.RequiredSetups = append(result.RequiredSetups,
+				fmt.Sprintf("EnableToolSelection(selector) — max_tools: %d", options.ToolSelectionMaxTools))
+		}
 	}
 
 	if options.EnableAllFeatures || options.EnablePromptEnhancer {
-		b.logger.Info("prompt enhancer should be enabled")
+		if b.promptEnhancer == nil {
+			result.RequiredSetups = append(result.RequiredSetups, "EnablePromptEnhancer(enhancer)")
+		}
 	}
 
 	if options.EnableAllFeatures || options.EnableSkills {
-		b.logger.Info("skills should be enabled with directory",
-			zap.String("directory", options.SkillsDirectory))
+		if b.skillManager == nil {
+			result.RequiredSetups = append(result.RequiredSetups,
+				fmt.Sprintf("EnableSkills(manager) — directory: %s", options.SkillsDirectory))
+		}
 	}
 
 	if options.EnableMCP {
-		b.logger.Info("MCP should be enabled with server name",
-			zap.String("server_name", options.MCPServerName))
+		if b.mcpServer == nil {
+			result.RequiredSetups = append(result.RequiredSetups,
+				fmt.Sprintf("EnableMCP(server) — server_name: %s", options.MCPServerName))
+		}
 	}
 
 	if options.EnableAllFeatures || options.EnableLSP {
-		b.logger.Info("LSP should be enabled with server info",
-			zap.String("server_name", options.LSPServerName),
-			zap.String("server_version", options.LSPServerVersion))
+		if b.lspClient == nil {
+			result.RequiredSetups = append(result.RequiredSetups,
+				fmt.Sprintf("EnableLSP(client) — server: %s %s", options.LSPServerName, options.LSPServerVersion))
+		}
 	}
 
 	if options.EnableAllFeatures || options.EnableEnhancedMemory {
-		b.logger.Info("enhanced memory should be enabled with TTL",
-			zap.Duration("ttl", options.MemoryTTL))
+		if b.enhancedMemory == nil {
+			result.RequiredSetups = append(result.RequiredSetups,
+				fmt.Sprintf("EnableEnhancedMemory(system) — ttl: %s", options.MemoryTTL))
+		}
 	}
 
 	if options.EnableAllFeatures || options.EnableObservability {
-		b.logger.Info("observability should be enabled")
+		if b.observabilitySystem == nil {
+			result.RequiredSetups = append(result.RequiredSetups, "EnableObservability(system)")
+		}
 	}
 
-	b.logger.Info("quick setup completed - features configured")
-	return nil
+	if len(result.RequiredSetups) > 0 {
+		b.logger.Warn("quick setup: features require manual enablement",
+			zap.Int("pending_count", len(result.RequiredSetups)),
+			zap.Strings("required", result.RequiredSetups),
+		)
+	} else {
+		b.logger.Info("quick setup: all requested features already enabled")
+	}
+
+	return result, nil
 }
 
 // ValidateConfiguration 验证配置

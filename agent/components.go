@@ -437,6 +437,16 @@ func (a *ModularAgent) Execute(ctx context.Context, input *Input) (*Output, erro
 	}
 	defer a.stateManager.UnlockExec()
 
+	// 转换状态到运行中
+	if err := a.stateManager.Transition(ctx, StateRunning); err != nil {
+		return nil, err
+	}
+	defer func() {
+		if err := a.stateManager.Transition(context.Background(), StateReady); err != nil {
+			a.logger.Error("failed to transition to ready", zap.Error(err))
+		}
+	}()
+
 	// 验证可用守护栏的输入
 	if a.extensions.HasGuardrails() {
 		result, err := a.extensions.Guardrails().ValidateInput(ctx, input.Content)

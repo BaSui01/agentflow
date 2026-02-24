@@ -179,11 +179,6 @@ func NewExecutor(config ExecutorConfig, logger *zap.Logger, opts ...ExecutorOpti
 		opt(e)
 	}
 
-	// Default to filesystem-based checkpoint store if none provided.
-	if e.checkpointStore == nil {
-		e.checkpointStore = NewFileCheckpointStore(config.CheckpointDir, e.logger)
-	}
-
 	return e
 }
 

@@ -167,6 +167,11 @@ type BaseAgent struct {
 	inputValidatorChain *guardrails.ValidatorChain
 	outputValidator     *guardrails.OutputValidator
 	guardrailsEnabled   bool
+
+	// MongoDB persistence stores (required)
+	promptStore       PromptStoreProvider
+	conversationStore ConversationStoreProvider
+	runStore          RunStoreProvider
 }
 
 // NewBaseAgent 创建基础 Agent
@@ -579,6 +584,8 @@ func (e *GuardrailsError) Error() string {
 // 设置守护栏为代理设置守护栏
 // 1.7: 支持海关验证规则的登记和延期
 func (b *BaseAgent) SetGuardrails(cfg *guardrails.GuardrailsConfig) {
+	b.execMu.Lock()
+	defer b.execMu.Unlock()
 	if cfg == nil {
 		b.guardrailsEnabled = false
 		b.inputValidatorChain = nil
@@ -594,9 +601,26 @@ func (b *BaseAgent) GuardrailsEnabled() bool {
 	return b.guardrailsEnabled
 }
 
+// SetPromptStore sets the prompt store provider.
+func (b *BaseAgent) SetPromptStore(store PromptStoreProvider) {
+	b.promptStore = store
+}
+
+// SetConversationStore sets the conversation store provider.
+func (b *BaseAgent) SetConversationStore(store ConversationStoreProvider) {
+	b.conversationStore = store
+}
+
+// SetRunStore sets the run store provider.
+func (b *BaseAgent) SetRunStore(store RunStoreProvider) {
+	b.runStore = store
+}
+
 // 添加自定义输入验证器
 // 1.7: 支持海关验证规则的登记和延期
 func (b *BaseAgent) AddInputValidator(v guardrails.Validator) {
+	b.execMu.Lock()
+	defer b.execMu.Unlock()
 	if b.inputValidatorChain == nil {
 		b.inputValidatorChain = guardrails.NewValidatorChain(nil)
 		b.guardrailsEnabled = true
@@ -607,6 +631,8 @@ func (b *BaseAgent) AddInputValidator(v guardrails.Validator) {
 // 添加输出变量添加自定义输出验证器
 // 1.7: 支持海关验证规则的登记和延期
 func (b *BaseAgent) AddOutputValidator(v guardrails.Validator) {
+	b.execMu.Lock()
+	defer b.execMu.Unlock()
 	if b.outputValidator == nil {
 		b.outputValidator = guardrails.NewOutputValidator(nil)
 		b.guardrailsEnabled = true
@@ -616,6 +642,8 @@ func (b *BaseAgent) AddOutputValidator(v guardrails.Validator) {
 
 // 添加 OutputFilter 添加自定义输出过滤器
 func (b *BaseAgent) AddOutputFilter(f guardrails.Filter) {
+	b.execMu.Lock()
+	defer b.execMu.Unlock()
 	if b.outputValidator == nil {
 		b.outputValidator = guardrails.NewOutputValidator(nil)
 		b.guardrailsEnabled = true

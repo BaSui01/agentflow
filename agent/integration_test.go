@@ -187,8 +187,12 @@ func TestBaseAgent_QuickSetup(t *testing.T) {
 	ba := newTestBaseAgent()
 	opts := DefaultQuickSetupOptions()
 
-	err := ba.QuickSetup(context.Background(), opts)
+	result, err := ba.QuickSetup(context.Background(), opts)
 	require.NoError(t, err)
+	require.NotNil(t, result)
+	// With default options (all features enabled) and no subsystems wired,
+	// every feature should appear in RequiredSetups.
+	assert.NotEmpty(t, result.RequiredSetups)
 }
 
 func TestDefaultQuickSetupOptions(t *testing.T) {

@@ -48,6 +48,13 @@ services:
       # Qdrant 配置
       AGENTFLOW_QDRANT_HOST: "qdrant"
       AGENTFLOW_QDRANT_PORT: "6334"
+      # MongoDB 配置
+      AGENTFLOW_MONGODB_HOST: "mongodb"
+      AGENTFLOW_MONGODB_PORT: "27017"
+      AGENTFLOW_MONGODB_USER: "agentflow"
+      AGENTFLOW_MONGODB_PASSWORD: "agentflow_secret"
+      AGENTFLOW_MONGODB_DATABASE: "agentflow"
+      AGENTFLOW_MONGODB_AUTH_SOURCE: "admin"
       # 日志配置
       AGENTFLOW_LOG_LEVEL: "info"
       AGENTFLOW_LOG_FORMAT: "json"
@@ -58,6 +65,8 @@ services:
       redis:
         condition: service_healthy
       postgres:
+        condition: service_healthy
+      mongodb:
         condition: service_healthy
       qdrant:
         condition: service_started
@@ -108,6 +117,29 @@ services:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U agentflow -d agentflow"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - agentflow-network
+
+  # ---------------------------------------------------------------------------
+  # MongoDB - Document Store
+  # ---------------------------------------------------------------------------
+  mongodb:
+    image: mongo:7
+    container_name: agentflow-mongodb
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: agentflow
+      MONGO_INITDB_ROOT_PASSWORD: agentflow_secret
+      MONGO_INITDB_DATABASE: agentflow
+    volumes:
+      - mongodb_data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -327,6 +359,8 @@ volumes:
   postgres_data:
     driver: local
   qdrant_data:
+    driver: local
+  mongodb_data:
     driver: local
   weaviate_data:
     driver: local

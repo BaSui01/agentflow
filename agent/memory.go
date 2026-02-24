@@ -33,7 +33,9 @@ type MemoryRecord struct {
 	Metadata  map[string]any       `json:"metadata,omitempty"`
 	VectorID  string               `json:"vector_id,omitempty"` // Qdrant 向量 ID
 	CreatedAt time.Time            `json:"created_at"`
-	ExpiresAt *time.Time           `json:"expires_at,omitempty"` // 短期记忆过期时间
+	// Deprecated: ExpiresAt is reserved for future TTL-based expiration.
+	// Currently unused; memory expiration is handled by the MemoryManager implementation.
+	ExpiresAt *time.Time `json:"expires_at,omitempty"`
 }
 
 // MemoryWriter 记忆写入接口

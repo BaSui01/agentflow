@@ -9,14 +9,19 @@ import (
 
 	"github.com/BaSui01/agentflow/agent"
 	"github.com/BaSui01/agentflow/agent/discovery"
+	"github.com/BaSui01/agentflow/agent/evaluation"
+	"github.com/BaSui01/agentflow/agent/memory"
+	mongostore "github.com/BaSui01/agentflow/agent/persistence/mongodb"
 	"github.com/BaSui01/agentflow/api/handlers"
 	"github.com/BaSui01/agentflow/config"
 	"github.com/BaSui01/agentflow/llm"
+	llmfactory "github.com/BaSui01/agentflow/llm/factory"
+	"github.com/BaSui01/agentflow/llm/tools"
 	"github.com/BaSui01/agentflow/pkg/metrics"
 	mw "github.com/BaSui01/agentflow/pkg/middleware"
+	mongoclient "github.com/BaSui01/agentflow/pkg/mongodb"
 	"github.com/BaSui01/agentflow/pkg/server"
 	"github.com/BaSui01/agentflow/pkg/telemetry"
-	llmfactory "github.com/BaSui01/agentflow/llm/factory"
 	"github.com/BaSui01/agentflow/types"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.uber.org/zap"
@@ -38,6 +43,9 @@ type Server struct {
 
 	// Database (optional — nil when DB is unavailable)
 	db *gorm.DB
+
+	// MongoDB (required — document store for prompts, conversations, runs, audit)
+	mongoClient *mongoclient.Client
 
 	// 服务器管理器
 	httpManager    *server.Manager
@@ -66,6 +74,15 @@ type Server struct {
 	// Agent resolver (nil when no LLM provider)
 	resolver *agent.CachingResolver
 
+	// AuditLogger for tool-level audit logging (backed by MongoDB)
+	auditLogger *tools.DefaultAuditLogger
+
+	// AB testing (backed by MongoDB experiment store)
+	abTester *evaluation.ABTester
+
+	// Enhanced memory system (backed by MongoDB stores)
+	enhancedMemory *memory.EnhancedMemorySystem
+
 	wg sync.WaitGroup
 }
 
@@ -89,22 +106,27 @@ func (s *Server) Start() error {
 	// 1. 初始化指标收集器
 	s.metricsCollector = metrics.NewCollector("agentflow", s.logger)
 
-	// 2. 初始化 Handlers
+	// 2. 初始化 MongoDB（必需）
+	if err := s.initMongoDB(); err != nil {
+		return fmt.Errorf("failed to init MongoDB: %w", err)
+	}
+
+	// 3. 初始化 Handlers
 	if err := s.initHandlers(); err != nil {
 		return fmt.Errorf("failed to init handlers: %w", err)
 	}
 
-	// 3. 初始化热更新管理器
+	// 4. 初始化热更新管理器
 	if err := s.initHotReloadManager(); err != nil {
 		return fmt.Errorf("failed to init hot reload manager: %w", err)
 	}
 
-	// 4. 启动 HTTP 服务器
+	// 5. 启动 HTTP 服务器
 	if err := s.startHTTPServer(); err != nil {
 		return fmt.Errorf("failed to start HTTP server: %w", err)
 	}
 
-	// 5. 启动 Metrics 服务器
+	// 6. 启动 Metrics 服务器
 	if err := s.startMetricsServer(); err != nil {
 		return fmt.Errorf("failed to start metrics server: %w", err)
 	}
@@ -121,6 +143,139 @@ func (s *Server) Start() error {
 // =============================================================================
 // 🔧 初始化方法
 // =============================================================================
+
+// initMongoDB initializes the MongoDB client.
+// MongoDB is required — startup fails if connection cannot be established.
+func (s *Server) initMongoDB() error {
+	client, err := mongoclient.NewClient(s.cfg.MongoDB, s.logger)
+	if err != nil {
+		return fmt.Errorf("failed to connect to MongoDB: %w", err)
+	}
+
+	s.mongoClient = client
+	s.logger.Info("MongoDB client initialized",
+		zap.String("database", s.cfg.MongoDB.Database),
+	)
+	return nil
+}
+
+// wireMongoStores creates MongoDB stores and wires them into the agent resolver,
+// discovery registry, evaluation system, and enhanced memory system.
+// Core stores (prompt, conversation, run, audit) are required — any failure is fatal.
+// Extended stores (memory, episodic, knowledge graph, experiment, registry) are
+// optional — failures are logged but do not prevent startup.
+func (s *Server) wireMongoStores(resolver *agent.CachingResolver, discoveryRegistry *discovery.CapabilityRegistry) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	// PromptStore
+	promptStore, err := mongostore.NewPromptStore(ctx, s.mongoClient)
+	if err != nil {
+		return fmt.Errorf("failed to create MongoDB prompt store: %w", err)
+	}
+	resolver.WithPromptStore(mongostore.NewPromptStoreAdapter(promptStore))
+	s.logger.Info("MongoDB prompt store initialized")
+
+	// ConversationStore
+	convStore, err := mongostore.NewConversationStore(ctx, s.mongoClient)
+	if err != nil {
+		return fmt.Errorf("failed to create MongoDB conversation store: %w", err)
+	}
+	resolver.WithConversationStore(mongostore.NewConversationStoreAdapter(convStore))
+	s.logger.Info("MongoDB conversation store initialized")
+
+	// RunStore
+	runStore, err := mongostore.NewRunStore(ctx, s.mongoClient)
+	if err != nil {
+		return fmt.Errorf("failed to create MongoDB run store: %w", err)
+	}
+	resolver.WithRunStore(mongostore.NewRunStoreAdapter(runStore))
+	s.logger.Info("MongoDB run store initialized")
+
+	// AuditBackend — create and wire into an AuditLogger stored on Server.
+	auditBackend, err := mongostore.NewAuditBackend(ctx, s.mongoClient)
+	if err != nil {
+		return fmt.Errorf("failed to create MongoDB audit backend: %w", err)
+	}
+	s.auditLogger = tools.NewAuditLogger(&tools.AuditLoggerConfig{
+		Backends: []tools.AuditBackend{auditBackend},
+	}, s.logger)
+	s.logger.Info("MongoDB audit backend initialized")
+
+	// --- Extended stores (optional — failures are non-fatal) ---
+
+	// MemoryStore — short-term memory backed by MongoDB
+	memoryStore, err := mongostore.NewMemoryStore(ctx, s.mongoClient)
+	if err != nil {
+		s.logger.Warn("failed to create MongoDB memory store, enhanced memory disabled", zap.Error(err))
+	}
+
+	// EpisodicStore — episodic memory backed by MongoDB
+	var episodicStore *mongostore.MongoEpisodicStore
+	if memoryStore != nil {
+		episodicStore, err = mongostore.NewEpisodicStore(ctx, s.mongoClient)
+		if err != nil {
+			s.logger.Warn("failed to create MongoDB episodic store", zap.Error(err))
+		}
+	}
+
+	// KnowledgeGraph — semantic memory backed by MongoDB
+	var knowledgeGraph *mongostore.MongoKnowledgeGraph
+	if memoryStore != nil {
+		knowledgeGraph, err = mongostore.NewKnowledgeGraph(ctx, s.mongoClient)
+		if err != nil {
+			s.logger.Warn("failed to create MongoDB knowledge graph", zap.Error(err))
+		}
+	}
+
+	// Wire EnhancedMemorySystem when at least the memory store is available.
+	if memoryStore != nil {
+		memCfg := memory.DefaultEnhancedMemoryConfig()
+		memCfg.EpisodicEnabled = episodicStore != nil
+		memCfg.SemanticEnabled = knowledgeGraph != nil
+
+		working := memory.NewInMemoryMemoryStore(memory.InMemoryMemoryStoreConfig{
+			MaxEntries: memCfg.WorkingMemorySize,
+		}, s.logger)
+
+		var episodic memory.EpisodicStore
+		if episodicStore != nil {
+			episodic = episodicStore
+		}
+		var semantic memory.KnowledgeGraph
+		if knowledgeGraph != nil {
+			semantic = knowledgeGraph
+		}
+
+		s.enhancedMemory = memory.NewEnhancedMemorySystem(
+			memoryStore, working, nil, episodic, semantic, memCfg, s.logger,
+		)
+		s.logger.Info("MongoDB enhanced memory system initialized",
+			zap.Bool("episodic", episodicStore != nil),
+			zap.Bool("semantic", knowledgeGraph != nil),
+		)
+	}
+
+	// ExperimentStore — A/B testing backed by MongoDB
+	expStore, err := mongostore.NewExperimentStore(ctx, s.mongoClient)
+	if err != nil {
+		s.logger.Warn("failed to create MongoDB experiment store, A/B testing disabled", zap.Error(err))
+	} else {
+		s.abTester = evaluation.NewABTester(expStore, s.logger)
+		s.logger.Info("MongoDB experiment store initialized")
+	}
+
+	// RegistryStore — agent discovery persistence backed by MongoDB
+	regStore, err := mongostore.NewRegistryStore(ctx, s.mongoClient)
+	if err != nil {
+		s.logger.Warn("failed to create MongoDB registry store, discovery persistence disabled", zap.Error(err))
+	} else {
+		discoveryRegistry.SetStore(regStore)
+		s.logger.Info("MongoDB registry store initialized")
+	}
+
+	return nil
+}
 
 // initHandlers 初始化所有 handlers
 func (s *Server) initHandlers() error {
@@ -156,6 +311,12 @@ func (s *Server) initHandlers() error {
 
 	if s.provider != nil {
 		s.resolver = agent.NewCachingResolver(agentRegistry, s.provider, s.logger)
+
+		// Wire MongoDB persistence stores into the resolver (required).
+		if err := s.wireMongoStores(s.resolver); err != nil {
+			return fmt.Errorf("failed to wire MongoDB stores: %w", err)
+		}
+
 		s.agentHandler = handlers.NewAgentHandler(discoveryRegistry, agentRegistry, s.logger, s.resolver.Resolve)
 		s.logger.Info("Agent handler initialized with resolver")
 	} else {
@@ -496,7 +657,21 @@ func (s *Server) Shutdown() {
 		}
 	}
 
-	// 7. 等待所有 goroutine 完成
+	// 7. 关闭 MongoDB 连接
+	if err := s.mongoClient.Close(ctx); err != nil {
+		s.logger.Error("MongoDB close error", zap.Error(err))
+	} else {
+		s.logger.Info("MongoDB connection closed")
+	}
+
+	// 7.5 关闭 AuditLogger
+	if s.auditLogger != nil {
+		if err := s.auditLogger.Close(); err != nil {
+			s.logger.Error("AuditLogger close error", zap.Error(err))
+		}
+	}
+
+	// 8. 等待所有 goroutine 完成
 	s.wg.Wait()
 
 	s.logger.Info("Graceful shutdown completed")

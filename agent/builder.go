@@ -35,6 +35,11 @@ type AgentBuilder struct {
 	enhancedMemoryInstance EnhancedMemoryRunner
 	observabilityInstance  ObservabilityRunner
 
+	// MongoDB persistence stores (required)
+	promptStore       PromptStoreProvider
+	conversationStore ConversationStoreProvider
+	runStore          RunStoreProvider
+
 	errors []error
 }
 
@@ -250,6 +255,24 @@ func (b *AgentBuilder) WithObservability(obs ObservabilityRunner) *AgentBuilder 
 	return b
 }
 
+// WithPromptStore sets the prompt store for loading prompts from MongoDB.
+func (b *AgentBuilder) WithPromptStore(store PromptStoreProvider) *AgentBuilder {
+	b.promptStore = store
+	return b
+}
+
+// WithConversationStore sets the conversation store for persisting chat history.
+func (b *AgentBuilder) WithConversationStore(store ConversationStoreProvider) *AgentBuilder {
+	b.conversationStore = store
+	return b
+}
+
+// WithRunStore sets the run store for recording execution logs.
+func (b *AgentBuilder) WithRunStore(store RunStoreProvider) *AgentBuilder {
+	b.runStore = store
+	return b
+}
+
 // Build 构建 Agent 实例
 func (b *AgentBuilder) Build() (*BaseAgent, error) {
 	// 检查构建过程中的错误
@@ -281,6 +304,11 @@ func (b *AgentBuilder) Build() (*BaseAgent, error) {
 	if b.toolProvider != nil {
 		agent.toolProvider = b.toolProvider
 	}
+
+	// Wire MongoDB persistence stores (required).
+	agent.promptStore = b.promptStore
+	agent.conversationStore = b.conversationStore
+	agent.runStore = b.runStore
 
 	// 如果直接在配置上启用了特性标记, 请返回默认配置 。
 	if b.config.EnableReflection && b.reflectionConfig == nil {

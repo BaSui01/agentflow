@@ -21,6 +21,11 @@ type CachingResolver struct {
 	logger   *zap.Logger
 	agents   sync.Map
 	group    singleflight.Group
+
+	// MongoDB persistence stores (required)
+	promptStore       PromptStoreProvider
+	conversationStore ConversationStoreProvider
+	runStore          RunStoreProvider
 }
 
 // NewCachingResolver creates a CachingResolver backed by the given registry
@@ -37,6 +42,24 @@ func NewCachingResolver(registry *AgentRegistry, provider llm.Provider, logger *
 // When non-nil, agents created by this resolver will have memory capabilities.
 func (r *CachingResolver) WithMemory(m MemoryManager) *CachingResolver {
 	r.memory = m
+	return r
+}
+
+// WithPromptStore sets the PromptStoreProvider for resolved agents.
+func (r *CachingResolver) WithPromptStore(s PromptStoreProvider) *CachingResolver {
+	r.promptStore = s
+	return r
+}
+
+// WithConversationStore sets the ConversationStoreProvider for resolved agents.
+func (r *CachingResolver) WithConversationStore(s ConversationStoreProvider) *CachingResolver {
+	r.conversationStore = s
+	return r
+}
+
+// WithRunStore sets the RunStoreProvider for resolved agents.
+func (r *CachingResolver) WithRunStore(s RunStoreProvider) *CachingResolver {
+	r.runStore = s
 	return r
 }
 
@@ -62,6 +85,13 @@ func (r *CachingResolver) Resolve(ctx context.Context, agentID string) (Agent, e
 		ag, err := r.registry.Create(cfg, r.provider, r.memory, nil, nil, r.logger)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create agent %q: %w", agentID, err)
+		}
+
+		// Inject MongoDB persistence stores.
+		if ba, ok := ag.(*BaseAgent); ok {
+			ba.SetPromptStore(r.promptStore)
+			ba.SetConversationStore(r.conversationStore)
+			ba.SetRunStore(r.runStore)
 		}
 
 		if err := ag.Init(ctx); err != nil {

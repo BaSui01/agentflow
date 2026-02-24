@@ -39,6 +39,9 @@ type Config struct {
 	// Milvus 向量存储配置
 	Milvus MilvusConfig `yaml:"milvus" env:"MILVUS"`
 
+	// MongoDB 文档型数据存储配置
+	MongoDB MongoDBConfig `yaml:"mongodb" env:"MONGODB"`
+
 	// LLM 大语言模型配置
 	LLM LLMConfig `yaml:"llm" env:"LLM"`
 
@@ -237,6 +240,44 @@ type MilvusConfig struct {
 	BatchSize int `yaml:"batch_size" env:"BATCH_SIZE"`
 	// 一致性级别: Strong, Session, Bounded, Eventually
 	ConsistencyLevel string `yaml:"consistency_level" env:"CONSISTENCY_LEVEL"`
+}
+
+// MongoDBConfig MongoDB 文档型数据存储配置
+type MongoDBConfig struct {
+	// 连接 URI（优先级最高，设置后忽略 Host/Port/User/Password）
+	URI string `yaml:"uri" env:"URI"`
+	// 主机
+	Host string `yaml:"host" env:"HOST"`
+	// 端口
+	Port int `yaml:"port" env:"PORT"`
+	// 用户名
+	User string `yaml:"user" env:"USER"`
+	// 密码
+	Password string `yaml:"password" env:"PASSWORD"`
+	// 数据库名
+	Database string `yaml:"database" env:"DATABASE"`
+	// 认证数据库
+	AuthSource string `yaml:"auth_source" env:"AUTH_SOURCE"`
+	// 副本集名称（可选）
+	ReplicaSet string `yaml:"replica_set" env:"REPLICA_SET"`
+	// 最大连接池大小
+	MaxPoolSize int `yaml:"max_pool_size" env:"MAX_POOL_SIZE"`
+	// 最小连接池大小
+	MinPoolSize int `yaml:"min_pool_size" env:"MIN_POOL_SIZE"`
+	// 连接超时
+	ConnectTimeout time.Duration `yaml:"connect_timeout" env:"CONNECT_TIMEOUT"`
+	// 请求超时
+	Timeout time.Duration `yaml:"timeout" env:"TIMEOUT"`
+	// 健康检查间隔
+	HealthCheckInterval time.Duration `yaml:"health_check_interval" env:"HEALTH_CHECK_INTERVAL"`
+	// 是否启用 TLS
+	TLSEnabled bool `yaml:"tls_enabled" env:"TLS_ENABLED"`
+	// TLS CA 证书路径
+	TLSCAFile string `yaml:"tls_ca_file" env:"TLS_CA_FILE"`
+	// TLS 客户端证书路径
+	TLSCertFile string `yaml:"tls_cert_file" env:"TLS_CERT_FILE"`
+	// TLS 客户端密钥路径
+	TLSKeyFile string `yaml:"tls_key_file" env:"TLS_KEY_FILE"`
 }
 
 // LLMConfig LLM 配置

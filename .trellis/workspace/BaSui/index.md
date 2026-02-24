@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 23
-- **Last Active**: 2026-02-23
+- **Total Sessions**: 24
+- **Last Active**: 2026-02-25
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~1680 | Active |
+| `journal-1.md` | ~1737 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits |
 |---|------|-------|---------|
+| 24 | 2026-02-25 | fix: agent memory cache write-through | `88f9d14`, `e554428`, `2edcbbf` |
 | 23 | 2026-02-23 | 生产就绪度审计 + 测试/安全修复 | `c32069e`, `2b4c56b`, `44a4c8f`, `00e7c99`, `f3b7c31`, `4a57af4`, `a26754b` |
 | 22 | 2026-02-23 | 实现 6 个 Web 搜索/抓取工具提供商 | `9ab951a` |
 | 21 | 2026-02-23 | 修复 go vet 编译错误 + 补全缺失测试 helper + finish-work 检查 | `b37dfdf`, `f56e35f`, `bb079ae`, `ebd9d95`, `57d1a0e` |

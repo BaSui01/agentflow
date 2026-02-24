@@ -13,6 +13,7 @@ func DefaultConfig() *Config {
 		Qdrant:    DefaultQdrantConfig(),
 		Weaviate:  DefaultWeaviateConfig(),
 		Milvus:    DefaultMilvusConfig(),
+		MongoDB:   DefaultMongoDBConfig(),
 		LLM:       DefaultLLMConfig(),
 		Log:       DefaultLogConfig(),
 		Telemetry: DefaultTelemetryConfig(),
@@ -127,6 +128,21 @@ func DefaultMilvusConfig() MilvusConfig {
 		Timeout:              30 * time.Second,
 		BatchSize:            1000,
 		ConsistencyLevel:     "Strong",
+	}
+}
+
+// DefaultMongoDBConfig 返回默认 MongoDB 配置
+func DefaultMongoDBConfig() MongoDBConfig {
+	return MongoDBConfig{
+		Host:                "localhost",
+		Port:                27017,
+		Database:            "agentflow",
+		AuthSource:          "admin",
+		MaxPoolSize:         100,
+		MinPoolSize:         5,
+		ConnectTimeout:      10 * time.Second,
+		Timeout:             30 * time.Second,
+		HealthCheckInterval: 30 * time.Second,
 	}
 }
 

@@ -196,11 +196,9 @@ func (r *CapabilityRegistry) RegisterAgent(ctx context.Context, info *AgentInfo)
 	// 存储代理
 	r.agents[agentID] = info
 
-	// Persist to store if configured
-	if r.store != nil {
-		if err := r.store.Save(ctx, info); err != nil {
-			r.logger.Error("failed to persist agent to store", zap.String("agent_id", agentID), zap.Error(err))
-		}
+	// Persist to store
+	if err := r.store.Save(ctx, info); err != nil {
+		r.logger.Error("failed to persist agent to store", zap.String("agent_id", agentID), zap.Error(err))
 	}
 
 	r.logger.Info("agent registered",
@@ -236,11 +234,9 @@ func (r *CapabilityRegistry) UnregisterAgent(ctx context.Context, agentID string
 	// 删除代理
 	delete(r.agents, agentID)
 
-	// Persist deletion to store if configured
-	if r.store != nil {
-		if err := r.store.Delete(ctx, agentID); err != nil {
-			r.logger.Error("failed to delete agent from store", zap.String("agent_id", agentID), zap.Error(err))
-		}
+	// Persist deletion to store
+	if err := r.store.Delete(ctx, agentID); err != nil {
+		r.logger.Error("failed to delete agent from store", zap.String("agent_id", agentID), zap.Error(err))
 	}
 
 	r.logger.Info("agent unregistered", zap.String("agent_id", agentID))
@@ -296,11 +292,9 @@ func (r *CapabilityRegistry) UpdateAgent(ctx context.Context, info *AgentInfo) e
 	// 存储更新代理
 	r.agents[agentID] = info
 
-	// Persist to store if configured
-	if r.store != nil {
-		if err := r.store.Save(ctx, info); err != nil {
-			r.logger.Error("failed to persist updated agent to store", zap.String("agent_id", agentID), zap.Error(err))
-		}
+	// Persist to store
+	if err := r.store.Save(ctx, info); err != nil {
+		r.logger.Error("failed to persist updated agent to store", zap.String("agent_id", agentID), zap.Error(err))
 	}
 
 	r.logger.Info("agent updated", zap.String("agent_id", agentID))
