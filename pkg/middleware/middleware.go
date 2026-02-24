@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"bufio"
 	"context"
 	"crypto/rand"
 	"crypto/rsa"
@@ -97,6 +98,14 @@ func (rw *responseWriter) WriteHeader(code int) {
 	rw.ResponseWriter.WriteHeader(code)
 }
 
+// Hijack implements http.Hijacker so WebSocket upgrades work through the logging middleware.
+func (rw *responseWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	if hj, ok := rw.ResponseWriter.(http.Hijacker); ok {
+		return hj.Hijack()
+	}
+	return nil, nil, fmt.Errorf("underlying ResponseWriter does not implement http.Hijacker")
+}
+
 // PLACEHOLDER_METRICS_AND_REST
 
 // =============================================================================
@@ -134,6 +143,14 @@ func (w *metricsResponseWriter) Flush() {
 	if f, ok := w.ResponseWriter.(http.Flusher); ok {
 		f.Flush()
 	}
+}
+
+// Hijack implements http.Hijacker so WebSocket upgrades work through the metrics middleware.
+func (w *metricsResponseWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	if hj, ok := w.ResponseWriter.(http.Hijacker); ok {
+		return hj.Hijack()
+	}
+	return nil, nil, fmt.Errorf("underlying ResponseWriter does not implement http.Hijacker")
 }
 
 // MetricsMiddleware records HTTP request duration, status, and sizes via the

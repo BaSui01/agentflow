@@ -169,6 +169,7 @@ These guides help you **ask the right questions before coding**.
 - [ ] 缓存名称包含 `Cache`/`Store`/`Memo` — 是否有驱逐机制？
 - [ ] 高并发场景下缓存 Get 是否需要升级为 `Lock()`（而非 `RLock()`）以支持 lazy eviction？
 - [ ] `append()` 到 slice 字段 — 是否有滑动窗口限制？（如 `QualityScores`）
+- [ ] 方法写入底层存储后 — 是否同步更新了 in-process slice 缓存？（§35.6 write-through）
 
 → Read [quality-guidelines.md §35](../backend/quality-guidelines.md) for Cache Eviction pattern
 

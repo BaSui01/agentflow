@@ -51,7 +51,7 @@ func (mc *MemoryCoordinator) LoadRecent(ctx context.Context, kind MemoryKind, li
 	return nil
 }
 
-// 保存内存记录 。
+// 保存内存记录并同步更新本地缓存 。
 func (mc *MemoryCoordinator) Save(ctx context.Context, content string, kind MemoryKind, metadata map[string]any) error {
 	if mc.memory == nil {
 		return nil
@@ -69,6 +69,14 @@ func (mc *MemoryCoordinator) Save(ctx context.Context, content string, kind Memo
 		mc.logger.Warn("failed to save memory", zap.Error(err))
 		return err
 	}
+
+	// Write-through: keep the in-process cache consistent.
+	mc.recentMemoryMu.Lock()
+	mc.recentMemory = append(mc.recentMemory, rec)
+	if len(mc.recentMemory) > defaultMaxRecentMemory {
+		mc.recentMemory = mc.recentMemory[len(mc.recentMemory)-defaultMaxRecentMemory:]
+	}
+	mc.recentMemoryMu.Unlock()
 
 	mc.logger.Debug("saved memory",
 		zap.String("kind", string(kind)),

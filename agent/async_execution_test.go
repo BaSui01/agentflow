@@ -343,11 +343,11 @@ type asyncStubAgent struct {
 	executeFn func(ctx context.Context, input *Input) (*Output, error)
 }
 
-func (a *asyncStubAgent) ID() string        { return a.id }
-func (a *asyncStubAgent) Name() string      { return a.name }
-func (a *asyncStubAgent) Type() AgentType   { return a.agentType }
-func (a *asyncStubAgent) State() State      { return a.state }
-func (a *asyncStubAgent) Init(ctx context.Context) error { return nil }
+func (a *asyncStubAgent) ID() string                         { return a.id }
+func (a *asyncStubAgent) Name() string                       { return a.name }
+func (a *asyncStubAgent) Type() AgentType                    { return a.agentType }
+func (a *asyncStubAgent) State() State                       { return a.state }
+func (a *asyncStubAgent) Init(ctx context.Context) error     { return nil }
 func (a *asyncStubAgent) Teardown(ctx context.Context) error { return nil }
 func (a *asyncStubAgent) Plan(ctx context.Context, input *Input) (*PlanResult, error) {
 	return &PlanResult{}, nil

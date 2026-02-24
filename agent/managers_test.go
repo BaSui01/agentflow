@@ -304,3 +304,50 @@ type stubObservability struct{}
 func (s *stubObservability) StartTrace(_, _ string)                                          {}
 func (s *stubObservability) EndTrace(_, _ string, _ error)                                   {}
 func (s *stubObservability) RecordTask(_ string, _ bool, _ time.Duration, _ int, _, _ float64) {}
+
+// TestMemoryCoordinator_SaveWriteThroughCache verifies that Save() appends
+// the new record to the in-process recentMemory cache.
+func TestMemoryCoordinator_SaveWriteThroughCache(t *testing.T) {
+	logger := zap.NewNop()
+	mc := NewMemoryCoordinator("test-agent", &mockMemoryManager{}, logger)
+
+	ctx := context.Background()
+
+	// Load initial (empty) cache.
+	_ = mc.LoadRecent(ctx, MemoryShortTerm, 10)
+	if len(mc.GetRecentMemory()) != 1 {
+		// mockMemoryManager.LoadRecent returns 1 record
+		t.Fatalf("expected 1 record after LoadRecent, got %d", len(mc.GetRecentMemory()))
+	}
+
+	// Save a new record — cache should grow.
+	err := mc.Save(ctx, "new-content", MemoryShortTerm, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	recent := mc.GetRecentMemory()
+	if len(recent) != 2 {
+		t.Errorf("expected 2 records after Save, got %d", len(recent))
+	}
+	if recent[1].Content != "new-content" {
+		t.Errorf("expected last record content to be 'new-content', got %q", recent[1].Content)
+	}
+}
+
+// TestMemoryCoordinator_SaveCacheEviction verifies that the cache is bounded.
+func TestMemoryCoordinator_SaveCacheEviction(t *testing.T) {
+	logger := zap.NewNop()
+	mc := NewMemoryCoordinator("test-agent", &mockMemoryManager{}, logger)
+
+	ctx := context.Background()
+
+	for i := 0; i < defaultMaxRecentMemory+5; i++ {
+		_ = mc.Save(ctx, "msg", MemoryShortTerm, nil)
+	}
+
+	recent := mc.GetRecentMemory()
+	if len(recent) != defaultMaxRecentMemory {
+		t.Errorf("expected cache size %d, got %d", defaultMaxRecentMemory, len(recent))
+	}
+}

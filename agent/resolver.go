@@ -17,6 +17,7 @@ import (
 type CachingResolver struct {
 	registry *AgentRegistry
 	provider llm.Provider
+	memory   MemoryManager // optional; nil means stateless agents
 	logger   *zap.Logger
 	agents   sync.Map
 	group    singleflight.Group
@@ -30,6 +31,13 @@ func NewCachingResolver(registry *AgentRegistry, provider llm.Provider, logger *
 		provider: provider,
 		logger:   logger,
 	}
+}
+
+// WithMemory sets the MemoryManager used when creating new agent instances.
+// When non-nil, agents created by this resolver will have memory capabilities.
+func (r *CachingResolver) WithMemory(m MemoryManager) *CachingResolver {
+	r.memory = m
+	return r
 }
 
 // Resolve returns a cached Agent for agentID, or creates and initialises one.
@@ -51,7 +59,7 @@ func (r *CachingResolver) Resolve(ctx context.Context, agentID string) (Agent, e
 			Name: agentID,
 			Type: TypeGeneric,
 		}
-		ag, err := r.registry.Create(cfg, r.provider, nil, nil, nil, r.logger)
+		ag, err := r.registry.Create(cfg, r.provider, r.memory, nil, nil, r.logger)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create agent %q: %w", agentID, err)
 		}

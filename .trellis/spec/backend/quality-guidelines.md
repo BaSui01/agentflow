@@ -1836,6 +1836,37 @@ func (r *SemanticRouter) Classify(text string) string {
 
 > **Historical lesson**: `reasoningCache` in `rag/multi_hop.go` and `classificationCache` in `llm/router/semantic.go` both grew unbounded. In a production scenario with diverse queries, these would consume gigabytes of memory over days. The fix is simple (lazy eviction + maxSize cap) but must be applied at creation time — retrofitting eviction to an existing cache is error-prone.
 
+### 6. Write-Through Slice Cache (Feb 2026 — Memory Bug)
+
+When a struct caches recent records in a `[]T` slice (e.g., `recentMemory []MemoryRecord`), any method that persists a new record to the underlying store MUST also append it to the in-process cache. Otherwise subsequent reads from the cache will miss the newly saved data.
+
+**Pattern**: Save → write to store → append to slice → cap slice length.
+
+```go
+func (b *BaseAgent) SaveMemory(ctx context.Context, ...) error {
+    // 1. Persist to store
+    if err := b.memory.Save(ctx, rec); err != nil {
+        return err
+    }
+    // 2. Write-through: sync the in-process cache
+    b.recentMemoryMu.Lock()
+    b.recentMemory = append(b.recentMemory, rec)
+    if len(b.recentMemory) > defaultMaxRecentMemory {
+        b.recentMemory = b.recentMemory[len(b.recentMemory)-defaultMaxRecentMemory:]
+    }
+    b.recentMemoryMu.Unlock()
+    return nil
+}
+```
+
+**Known violation — ✅ FIXED (Feb 2026)**:
+
+| File | Field | Issue | Fix |
+|------|-------|-------|-----|
+| `agent/base.go` | `recentMemory` | `SaveMemory()` wrote to store but never updated cache; multi-turn conversations lost context | ✅ Write-through + cap at `defaultMaxRecentMemory` |
+| `agent/memory_coordinator.go` | `recentMemory` | Same pattern — `Save()` only wrote to store | ✅ Same fix |
+| `agent/resolver.go` | `CachingResolver` | `Create()` always passed `nil` for memory — agents had no memory capability | ✅ Added `WithMemory()` option |
+
 ---
 
 ## §36 Prometheus Labels Must Use Finite Cardinality (P1 — Monitoring Explosion)
