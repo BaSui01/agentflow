@@ -18,7 +18,7 @@ var validTransitions = map[State][]State{
 	StateReady:     {StateRunning, StateFailed},
 	StateRunning:   {StateReady, StatePaused, StateCompleted, StateFailed}, // Support retry after interruption
 	StatePaused:    {StateRunning, StateCompleted, StateFailed},            // Support direct completion after pause
-	StateCompleted: {StateReady},                                           // 支持重新调度
+	StateCompleted: {StateReady, StateInit},                                 // 支持重新调度或完整重初始化
 	StateFailed:    {StateReady, StateInit},                                // 支持重试或重置
 }
 
