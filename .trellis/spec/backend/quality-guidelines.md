@@ -3035,7 +3035,7 @@ ToolChoice     any             `json:"tool_choice,omitempty"` // string OR compl
 |----------|---------------|------------|
 | OpenAI / OpenAI-compat | `response_format: {type, json_schema}` | string or `{"type":"function","function":{"name":"x"}}` |
 | Anthropic Claude | Not supported (use tool_choice) | `{"type":"auto"}` / `{"type":"any"}` / `{"type":"tool","name":"x"}` |
-| Gemini | `responseMimeType` + `responseSchema` | Not supported |
+| Gemini | `responseMimeType` + `responseSchema` | `toolConfig.functionCallingConfig` (AUTO/ANY/NONE + allowedFunctionNames) |
 
 ### 4. Good / Bad
 
@@ -3143,3 +3143,428 @@ type DiscoveryRegistrarAdapter struct { registry *discovery.Registry }
 | summarizer | text compression |
 | reviewer | code review |
 | generic | no preset (blank slate) |
+
+## §57 Gemini Provider — Native API Protocol Compliance (P0 — Correctness)
+
+### 1. Scope / Trigger
+
+- Adding or modifying Gemini provider (`llm/providers/gemini/`)
+- Implementing streaming for Gemini API
+- Mapping OpenAI-style parameters to Gemini-native format
+- Adding new Gemini features (thinking, safety settings, tool config)
+
+### 2. Signatures
+
+```go
+// llm/providers/gemini/provider.go
+
+// Stream endpoint MUST include ?alt=sse
+func (p *GeminiProvider) streamEndpoint(model string) string {
+    return fmt.Sprintf("%s/v1beta/models/%s:streamGenerateContent?alt=sse", base, model)
+}
+
+// FinishReason normalization — Gemini uses UPPER_CASE, project uses lowercase
+func normalizeFinishReason(reason string) string // STOP→stop, MAX_TOKENS→length, SAFETY→content_filter
+
+// ToolChoice mapping — OpenAI string/object → Gemini ToolConfig
+func convertToolChoice(toolChoice any) *geminiToolConfig
+
+// Generation config builder — centralizes Completion/Stream config construction
+func buildGenerationConfig(req *llm.ChatRequest) *geminiGenerationConfig
+```
+
+### 3. Contract — Gemini SSE Stream Format
+
+Gemini `streamGenerateContent` has two response modes:
+
+| URL Parameter | Response Format | Parser Required |
+|---------------|----------------|-----------------|
+| (none) | JSON array `[{...}, {...}]` | `json.Decoder` on array |
+| `?alt=sse` | SSE `data: {...}\n\n` | Line reader + `data:` prefix strip |
+
+**Project uses `?alt=sse`**. Each SSE event is:
+```
+data: {"candidates":[...],"usageMetadata":{...}}\n
+\n
+```
+
+### 4. Contract — FinishReason Mapping
+
+| Gemini (raw) | Normalized (project) | Meaning |
+|-------------|---------------------|---------|
+| `STOP` | `stop` | Normal completion |
+| `MAX_TOKENS` | `length` | Token limit reached |
+| `SAFETY` | `content_filter` | Safety filter blocked |
+| `RECITATION` | `content_filter` | Citation filter blocked |
+| `BLOCKLIST` | `content_filter` | Blocklist match |
+| `LANGUAGE` | `content_filter` | Unsupported language |
+
+### 5. Contract — ToolChoice Mapping
+
+| OpenAI ToolChoice | Gemini FunctionCallingConfig |
+|-------------------|------------------------------|
+| `"auto"` | `{mode: "AUTO"}` |
+| `"required"` or `"any"` | `{mode: "ANY"}` |
+| `"none"` | `{mode: "NONE"}` |
+| `{"type":"function","function":{"name":"X"}}` | `{mode: "ANY", allowedFunctionNames: ["X"]}` |
+
+### 6. Contract — Thinking/Reasoning
+
+```go
+// Request: ReasoningMode → thinkingConfig
+geminiGenerationConfig{
+    ThinkingConfig: &geminiThinkingConfig{
+        ThinkingLevel:   "low|medium|high",  // maps from req.ReasoningMode
+        IncludeThoughts: true,
+    },
+}
+
+// Response: thought parts → ReasoningContent
+// geminiPart with Thought=true → Message.ReasoningContent
+// geminiPart with Thought=nil/false → Message.Content
+```
+
+### 7. Contract — Safety Filter Handling
+
+```go
+// promptFeedback.blockReason non-empty → return ErrContentFiltered
+// Do NOT return empty choices — return a meaningful error
+checkPromptFeedback(resp, providerName) // returns *llm.Error or nil
+```
+
+### 8. Good / Bad
+
+```go
+// BAD — Stream without ?alt=sse (returns JSON array, not SSE)
+endpoint := fmt.Sprintf("%s/v1beta/models/%s:streamGenerateContent", base, model)
+
+// GOOD — Always include ?alt=sse for SSE streaming
+endpoint := fmt.Sprintf("%s/v1beta/models/%s:streamGenerateContent?alt=sse", base, model)
+```
+
+```go
+// BAD — Raw Gemini FinishReason leaks to upper layers
+choices = append(choices, llm.ChatChoice{FinishReason: candidate.FinishReason}) // "STOP"
+
+// GOOD — Normalized to project convention
+choices = append(choices, llm.ChatChoice{FinishReason: normalizeFinishReason(candidate.FinishReason)}) // "stop"
+```
+
+```go
+// BAD — Ignoring promptFeedback, returning empty choices
+return toGeminiChatResponse(geminiResp, p.Name(), model), nil
+
+// GOOD — Check promptFeedback before converting
+if err := checkPromptFeedback(geminiResp, p.Name()); err != nil {
+    return nil, err
+}
+return toGeminiChatResponse(geminiResp, p.Name(), model), nil
+```
+
+```go
+// BAD — Duplicate generation config logic in Completion and Stream
+if req.Temperature > 0 || req.TopP > 0 || ... { body.GenerationConfig = &geminiGenerationConfig{...} }
+
+// GOOD — Centralized builder
+body.GenerationConfig = buildGenerationConfig(req) // returns nil if all zero-value
+```
+
+### 9. Required Tests
+
+- `TestNormalizeFinishReason` — all Gemini finish reasons map correctly
+- `TestConvertToolChoice` — nil, "auto", "required", "none", OpenAI-style object
+- `TestCheckPromptFeedback_Blocked` — returns `ErrContentFiltered`
+- `TestGeminiProvider_Stream` — mock returns SSE format (`data: {json}\n\n`)
+- `TestGeminiProvider_Completion_WithThinking` — thought parts → ReasoningContent
+- `TestGeminiProvider_Completion_PromptBlocked` — promptFeedback → error
+- `TestBuildGenerationConfig_WithThinking` — ReasoningMode → thinkingConfig
+- `TestConvertSafetySettings` — config → request format conversion
+
+### 10. Default Model
+
+Default fallback model: `gemini-2.5-flash` (GA, stable). Preview models (`gemini-3-pro-preview`, `gemini-3-flash-preview`) should be explicitly specified by the user.
+
+> **历史教训**：2026-02-25 审计发现 Gemini provider 的 Stream 功能完全不可用——`streamEndpoint` 缺少 `?alt=sse` 参数，且 SSE 解析逻辑按逐行 JSON 对象处理而非 `data:` 前缀格式。测试通过是因为 mock server 使用了非真实的格式。同时发现 FinishReason 未标准化（`STOP` vs `stop`）、ToolChoice 被忽略、Thinking 未支持、promptFeedback 未处理等 11 个问题。
+
+## §58 OpenAI-Compatible Provider — Shared Field Completeness (P1 — Correctness)
+
+### 1. Scope / Trigger
+
+- Adding new fields to `OpenAICompatRequest` / `OpenAICompatResponse` / `OpenAICompatMessage`
+- Adding a new OpenAI-compatible provider (Doubao, Qwen, DeepSeek, etc.)
+- Reviewing provider implementation against official SDK
+- Modifying `ConvertToolsToOpenAI`, `ConvertMessagesToOpenAI`, `ToLLMChatResponse`
+
+### 2. Signatures
+
+```go
+// llm/providers/common.go — Shared types used by ALL OpenAI-compatible providers
+
+type OpenAICompatRequest struct {
+    // Core fields (always sent)
+    Model, Messages, Stream
+    // Sampling parameters (pointer types for zero-value distinction)
+    Temperature, TopP, MaxTokens, Stop
+    FrequencyPenalty, PresencePenalty, RepetitionPenalty *float32
+    N *int, LogProbs *bool, TopLogProbs *int
+    // Tool calling
+    Tools, ToolChoice, ParallelToolCalls *bool
+    // Response format
+    ResponseFormat any
+    // Streaming
+    StreamOptions *StreamOptions
+    // Reasoning/Thinking (provider-specific via RequestHook)
+    Thinking *Thinking, MaxCompletionTokens *int, ReasoningEffort *string
+    // Metadata
+    ServiceTier *string, User string
+}
+
+type OpenAICompatMessage struct {
+    Role, Content string
+    ReasoningContent *string  // thinking/reasoning output
+    MultiContent []map[string]any  // multimodal (image_url, video_url)
+    ToolCalls []OpenAICompatToolCall
+    ToolCallID string
+}
+
+type OpenAICompatFunction struct {
+    Name        string          // used in both tool definition and tool call
+    Description string          // tool definition only
+    Parameters  json.RawMessage // tool definition only
+    Arguments   json.RawMessage // tool call only
+}
+```
+
+### 3. Contract — Field Propagation Chain
+
+Every field must flow through 4 layers:
+
+```
+llm.ChatRequest → OpenAICompatRequest → HTTP JSON body → OpenAICompatResponse → llm.ChatResponse
+     (1)                (2)                  (3)                 (4)                  (5)
+```
+
+| Layer | File | Responsibility |
+|-------|------|----------------|
+| (1) `llm.ChatRequest` | `llm/provider.go` | Interface-level field definition |
+| (2) Body construction | `openaicompat/provider.go` Completion/Stream | Copy fields from req to body |
+| (3) JSON serialization | `common.go` struct tags | `omitempty` for optional fields |
+| (4) Response parsing | `common.go` `ToLLMChatResponse` | Map response fields back |
+| (5) `llm.ChatResponse` | `llm/provider.go` | Interface-level response |
+
+**Critical**: If you add a field to layer (1), you MUST also update layers (2), (3), (4), (5).
+
+### 4. Validation & Error Matrix
+
+| Condition | Error |
+|-----------|-------|
+| Tool definition missing `Description` | Silent data loss — LLM cannot understand tool purpose |
+| `ReasoningContent` not propagated in stream | Thinking output silently dropped |
+| `StreamOptions.IncludeUsage` set but stream parser ignores `usage` | Token counting broken for streaming |
+| Pointer field (`*float32`) serialized as `0` instead of omitted | API may reject or behave differently |
+
+### 5. Good / Base / Bad
+
+```go
+// BAD — Tool description lost (pre-fix bug)
+func ConvertToolsToOpenAI(tools []llm.ToolSchema) []OpenAICompatTool {
+    out = append(out, OpenAICompatTool{
+        Type: "function",
+        Function: OpenAICompatFunction{
+            Name:      t.Name,
+            Arguments: t.Parameters, // WRONG: Parameters mapped to Arguments
+        },
+    })
+}
+
+// GOOD — Description and Parameters correctly mapped
+func ConvertToolsToOpenAI(tools []llm.ToolSchema) []OpenAICompatTool {
+    out = append(out, OpenAICompatTool{
+        Type: "function",
+        Function: OpenAICompatFunction{
+            Name:        t.Name,
+            Description: t.Description,
+            Parameters:  t.Parameters,
+        },
+    })
+}
+```
+
+```go
+// BAD — New sampling params not forwarded to body
+body := providers.OpenAICompatRequest{
+    Model: model, Messages: msgs, MaxTokens: req.MaxTokens,
+    Temperature: req.Temperature, TopP: req.TopP,
+    // FrequencyPenalty, PresencePenalty etc. silently dropped!
+}
+
+// GOOD — All sampling params forwarded
+body := providers.OpenAICompatRequest{
+    Model: model, Messages: msgs, MaxTokens: req.MaxTokens,
+    Temperature: req.Temperature, TopP: req.TopP,
+    FrequencyPenalty: req.FrequencyPenalty, PresencePenalty: req.PresencePenalty,
+    RepetitionPenalty: req.RepetitionPenalty, N: req.N,
+    LogProbs: req.LogProbs, TopLogProbs: req.TopLogProbs,
+}
+```
+
+```go
+// BAD — ReasoningContent ignored in ToLLMChatResponse
+msg := llm.Message{Role: llm.RoleAssistant, Content: c.Message.Content}
+
+// GOOD — ReasoningContent propagated
+msg := llm.Message{
+    Role: llm.RoleAssistant, Content: c.Message.Content,
+    ReasoningContent: c.Message.ReasoningContent,
+}
+```
+
+### 6. Required Tests
+
+- `TestConvertToolsToOpenAI` — verify `Description` and `Parameters` are set (not `Arguments`)
+- `TestToLLMChatResponse` — verify `ReasoningContent` propagated from response
+- `TestConvertMessagesToOpenAI` — verify `ReasoningContent` propagated to request
+- `TestConvertMessagesToOpenAI_Videos` — verify `video_url` content parts with optional `fps`
+- `TestStreamSSE_Usage` — verify `stream_options.include_usage` produces `Usage` in chunks
+- `TestStreamSSE_ReasoningContent` — verify `reasoning_content` in delta
+
+### 7. Wrong vs Right — Optional Field Types
+
+```go
+// WRONG — zero value sent as 0, API may interpret as "set to 0"
+type OpenAICompatRequest struct {
+    FrequencyPenalty float32 `json:"frequency_penalty,omitempty"` // 0.0 is omitted but ambiguous
+}
+
+// RIGHT — pointer type, nil = not set, *0.0 = explicitly set to 0
+type OpenAICompatRequest struct {
+    FrequencyPenalty *float32 `json:"frequency_penalty,omitempty"` // nil omitted, &0.0 sent
+}
+```
+
+> **历史教训**：2026-02-25 对照 volcengine-go-sdk 审计发现 17 个缺失字段。最严重的是 `ConvertToolsToOpenAI` 把 `Parameters` 映射到了 `Arguments` 字段，导致工具定义的 description 和 parameters schema 完全丢失，LLM 无法理解工具用途。
+
+## §59 Doubao Provider — Volcengine Ark API Compliance (P1 — Correctness)
+
+### 1. Scope / Trigger
+
+- Adding or modifying Doubao provider (`llm/providers/doubao/`)
+- Implementing Doubao-specific features (Context Cache, AK/SK auth, Thinking)
+- Reviewing against volcengine-go-sdk or Volcengine API docs
+
+### 2. Signatures
+
+```go
+// llm/providers/doubao/provider.go
+func NewDoubaoProvider(cfg providers.DoubaoConfig, logger *zap.Logger) *DoubaoProvider
+func doubaoRequestHook(req *llm.ChatRequest, body *providers.OpenAICompatRequest)
+
+// llm/providers/doubao/context_cache.go
+func (p *DoubaoProvider) CreateContextCache(ctx, model, messages, mode, ttl) (*ContextCacheResponse, error)
+func (p *DoubaoProvider) CompletionWithContext(ctx, contextID, req) (*llm.ChatResponse, error)
+
+// llm/providers/doubao/signer.go
+func newVolcSigner(ak, sk, region string) *volcSigner
+func (s *volcSigner) sign(req *http.Request, bodyHash string)
+
+// llm/providers/config.go
+type DoubaoConfig struct {
+    BaseProviderConfig
+    AccessKey string  // Volcengine IAM Access Key
+    SecretKey string  // Volcengine IAM Secret Key
+    Region    string  // defaults to "cn-beijing"
+}
+```
+
+### 3. Contract — API Endpoints
+
+| Feature | Endpoint | Method |
+|---------|----------|--------|
+| Chat Completion | `/api/v3/chat/completions` | POST |
+| Image Generation | `/api/v3/images/generations` | POST |
+| Embeddings | `/api/v3/embeddings` | POST |
+| Audio Speech | `/api/v3/audio/speech` | POST |
+| Context Cache Create | `/api/v3/context/create` | POST |
+| Context Cache Chat | `/api/v3/context/chat/completions` | POST |
+| Models List | `/api/v3/models` | GET |
+
+Base URL: `https://ark.cn-beijing.volces.com`
+
+### 4. Contract — Authentication
+
+| Method | Config Fields | Header |
+|--------|--------------|--------|
+| API Key (default) | `APIKey` | `Authorization: Bearer <key>` |
+| AK/SK (IAM) | `AccessKey` + `SecretKey` | `Authorization: HMAC-SHA256 Credential=<ak>/...` |
+
+AK/SK signing flow: canonical request → string-to-sign → 4-level HMAC key derivation (secret → date → region → service → "request") → signature.
+
+When `AccessKey` and `SecretKey` are both set, AK/SK takes precedence over API Key.
+
+### 5. Contract — Thinking/Reasoning Mode
+
+```go
+// Request: ReasoningMode → Thinking field (via RequestHook)
+// "thinking" or "enabled" → Thinking{Type: "enabled"}
+// "disabled"              → Thinking{Type: "disabled"}
+// "auto"                  → Thinking{Type: "auto"}
+
+// Response: reasoning_content field on message/delta
+// Non-streaming: Message.ReasoningContent *string
+// Streaming: Delta.ReasoningContent *string
+```
+
+### 6. Good / Bad
+
+```go
+// BAD — Context Cache uses resolveAPIKey (unexported on embedded provider)
+func (p *DoubaoProvider) CreateContextCache(...) {
+    apiKey := p.resolveAPIKey(ctx) // COMPILE ERROR: unexported method
+}
+
+// GOOD — Use Cfg.APIKey directly for Doubao-specific endpoints
+func (p *DoubaoProvider) CreateContextCache(...) {
+    apiKey := p.Cfg.APIKey
+}
+```
+
+```go
+// BAD — AK/SK signer doesn't reset request body after reading
+buildHeaders = func(req *http.Request, _ string) {
+    bodyBytes, _ := io.ReadAll(req.Body) // body consumed!
+    bodyHash = hashSHA256(string(bodyBytes))
+    signer.sign(req, bodyHash)
+    // req.Body is now empty — HTTP client sends empty body
+}
+
+// GOOD — Reset body after reading
+buildHeaders = func(req *http.Request, _ string) {
+    bodyBytes, _ := io.ReadAll(req.Body)
+    bodyHash = hashSHA256(string(bodyBytes))
+    req.Body = io.NopCloser(bytes.NewReader(bodyBytes)) // reset!
+    signer.sign(req, bodyHash)
+}
+```
+
+### 7. Required Tests
+
+- `TestDoubaoProvider_Completion` — basic chat via httptest
+- `TestDoubaoProvider_Stream` — SSE streaming via httptest
+- `TestDoubaoProvider_GenerateImage` — `/api/v3/images/generations` endpoint
+- `TestDoubaoProvider_CreateContextCache` — context create + response parsing
+- `TestDoubaoProvider_CompletionWithContext` — context chat with `context_id`
+- `TestVolcSigner_Sign` — HMAC-SHA256 signature format validation
+- `TestHashSHA256` — empty string produces known hash
+
+### 8. Design Decision: RequestHook for Provider-Specific Fields
+
+**Background**: Doubao needs `thinking` field in request body, but `OpenAICompatRequest` is shared across 10+ providers.
+
+**Options considered**:
+1. Add `Thinking` directly to `OpenAICompatRequest` — simple but pollutes shared struct
+2. Use `Extra map[string]any` with custom MarshalJSON — flexible but complex
+3. Use `RequestHook` to set fields on the shared struct — clean separation
+
+**Decision**: Option 1+3 hybrid. Added `Thinking`, `MaxCompletionTokens`, `ReasoningEffort` to `OpenAICompatRequest` (they're `omitempty`, harmless to other providers), and use `RequestHook` to map `ReasoningMode` → `Thinking`. This pattern is already used by DeepSeek for model selection.
+
+> **历史教训**：2026-02-25 对照 volcengine-go-sdk 审计发现 Doubao provider 缺失 17 个功能点。最关键的是 `ConvertToolsToOpenAI` 丢失 tool description（影响所有 OpenAI 兼容 provider），以及完全缺失 `reasoning_content` 支持（影响推理模型输出）。Context Cache 和 AK/SK 认证是豆包特色功能，需要独立端点和签名逻辑。
