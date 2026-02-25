@@ -1735,3 +1735,35 @@ write-through 缓存必须在写入底层存储后同步更新本地缓存，否
 ### Next Steps
 
 - None - task complete
+
+
+## Session 25: LLM Provider 全面优化：模型更新、Reasoning Mode、错误处理
+
+**Date**: 2026-02-26
+**Task**: LLM Provider 全面优化：模型更新、Reasoning Mode、错误处理
+
+### Summary
+
+根据各 LLM 供应商官方文档，对 14 个 provider 进行三批次优化：(1) 更新 5 个 provider 的过时默认模型（Grok→grok-3、MiniMax→MiniMax-Text-01、Kimi→moonshot-v1-32k、Llama→Llama-3.3、Hunyuan→hunyuan-turbos-latest）；(2) 为 8 个 provider 添加 reasoning mode RequestHook（Grok、GLM、Kimi、Qwen、Mistral、Hunyuan + 修复 DeepSeek reasoner 参数剥离）；(3) MiniMax 新模型跳过 XML tool call 解析、common.go 新增 402/408/413/422 错误码映射、Hunyuan function calling 自动路由。32 个文件变更，39 个测试包全部通过。
+
+### Main Changes
+
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `2713db1` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

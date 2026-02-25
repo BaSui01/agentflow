@@ -229,7 +229,7 @@ func (h *AgentHandler) HandleExecuteAgent(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	WriteError(w, types.NewError(types.ErrInternalError,
+	WriteError(w, types.NewInternalError(
 		"agent execution is not configured — no agent resolver available").
 		WithHTTPStatus(http.StatusNotImplemented), h.logger)
 }
@@ -276,7 +276,7 @@ func (h *AgentHandler) HandleAgentStream(w http.ResponseWriter, r *http.Request)
 			WriteError(w, types.NewNotFoundError("agent not found"), h.logger)
 			return
 		}
-		WriteError(w, types.NewError(types.ErrInternalError,
+		WriteError(w, types.NewInternalError(
 			"agent streaming is not configured — no agent resolver available").
 			WithHTTPStatus(http.StatusNotImplemented), h.logger)
 		return
@@ -291,7 +291,7 @@ func (h *AgentHandler) HandleAgentStream(w http.ResponseWriter, r *http.Request)
 	// Verify Flusher support before committing to SSE
 	flusher, ok := w.(http.Flusher)
 	if !ok {
-		WriteError(w, types.NewError(types.ErrInternalError, "streaming not supported").
+		WriteError(w, types.NewInternalError("streaming not supported").
 			WithHTTPStatus(http.StatusInternalServerError), h.logger)
 		return
 	}
@@ -415,7 +415,7 @@ func (h *AgentHandler) HandlePlanAgent(w http.ResponseWriter, r *http.Request) {
 			WriteError(w, types.NewNotFoundError("agent not found"), h.logger)
 			return
 		}
-		WriteError(w, types.NewError(types.ErrInternalError,
+		WriteError(w, types.NewInternalError(
 			"agent planning is not configured — no agent resolver available").
 			WithHTTPStatus(http.StatusNotImplemented), h.logger)
 		return
@@ -505,9 +505,8 @@ func (h *AgentHandler) handleAgentError(w http.ResponseWriter, err error) {
 		return
 	}
 
-	internalErr := types.NewError(types.ErrInternalError, "agent operation failed").
-		WithCause(err).
-		WithRetryable(false)
+	internalErr := types.NewInternalError("agent operation failed").
+		WithCause(err)
 
 	WriteError(w, internalErr, h.logger)
 }
