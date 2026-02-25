@@ -105,6 +105,12 @@ type JSONSchemaParam struct {
 	Strict      *bool          `json:"strict,omitempty"`
 }
 
+// StreamOptions 控制流式响应中的额外信息。
+type StreamOptions struct {
+	IncludeUsage      bool `json:"include_usage,omitempty"`
+	ChunkIncludeUsage bool `json:"chunk_include_usage,omitempty"`
+}
+
 // ChatRequest 表示聊天补全请求.
 type ChatRequest struct {
 	TraceID        string            `json:"trace_id"`
@@ -122,6 +128,18 @@ type ChatRequest struct {
 	Timeout        time.Duration     `json:"timeout,omitempty"`
 	Metadata       map[string]string `json:"metadata,omitempty"`
 	Tags           []string          `json:"tags,omitempty"`
+
+	// 采样参数
+	FrequencyPenalty  *float32       `json:"frequency_penalty,omitempty"`
+	PresencePenalty   *float32       `json:"presence_penalty,omitempty"`
+	RepetitionPenalty *float32       `json:"repetition_penalty,omitempty"`
+	N                 *int           `json:"n,omitempty"`
+	LogProbs          *bool          `json:"logprobs,omitempty"`
+	TopLogProbs       *int           `json:"top_logprobs,omitempty"`
+	ParallelToolCalls *bool          `json:"parallel_tool_calls,omitempty"`
+	ServiceTier       *string        `json:"service_tier,omitempty"`
+	User              string         `json:"user,omitempty"`
+	StreamOptions     *StreamOptions `json:"stream_options,omitempty"`
 
 	// 扩展字段
 	ReasoningMode      string   `json:"reasoning_mode,omitempty"`
@@ -149,9 +167,21 @@ type ChatChoice struct {
 
 // ChatUsage 表示响应中的 token 用量。
 type ChatUsage struct {
-	PromptTokens     int `json:"prompt_tokens"`
-	CompletionTokens int `json:"completion_tokens"`
-	TotalTokens      int `json:"total_tokens"`
+	PromptTokens            int                      `json:"prompt_tokens"`
+	CompletionTokens        int                      `json:"completion_tokens"`
+	TotalTokens             int                      `json:"total_tokens"`
+	PromptTokensDetails     *PromptTokensDetails     `json:"prompt_tokens_details,omitempty"`
+	CompletionTokensDetails *CompletionTokensDetails `json:"completion_tokens_details,omitempty"`
+}
+
+// PromptTokensDetails 提示 token 详细统计。
+type PromptTokensDetails struct {
+	CachedTokens int `json:"cached_tokens"`
+}
+
+// CompletionTokensDetails 补全 token 详细统计。
+type CompletionTokensDetails struct {
+	ReasoningTokens int `json:"reasoning_tokens"`
 }
 
 // StreamChunk 表示流式响应块.
