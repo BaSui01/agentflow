@@ -12,10 +12,14 @@ import (
 	"github.com/BaSui01/agentflow/agent/evaluation"
 	"github.com/BaSui01/agentflow/agent/memory"
 	mongostore "github.com/BaSui01/agentflow/agent/persistence/mongodb"
+	"github.com/BaSui01/agentflow/agent/runtime"
+	"github.com/BaSui01/agentflow/agent/skills"
 	"github.com/BaSui01/agentflow/api/handlers"
 	"github.com/BaSui01/agentflow/config"
+	"github.com/BaSui01/agentflow/internal/bridge"
 	"github.com/BaSui01/agentflow/llm"
 	llmfactory "github.com/BaSui01/agentflow/llm/factory"
+	"github.com/BaSui01/agentflow/llm/retry"
 	"github.com/BaSui01/agentflow/llm/tools"
 	"github.com/BaSui01/agentflow/pkg/metrics"
 	mw "github.com/BaSui01/agentflow/pkg/middleware"
@@ -277,6 +281,33 @@ func (s *Server) wireMongoStores(resolver *agent.CachingResolver, discoveryRegis
 	return nil
 }
 
+// wireDefaultRuntimeAgent registers a default "agentflow-default" agent type
+// using the runtime.BuildAgent quick-setup, so the system has at least one
+// ready-to-use agent configuration out of the box.
+func (s *Server) wireDefaultRuntimeAgent(agentRegistry *agent.AgentRegistry) {
+	if s.provider == nil {
+		return
+	}
+
+	agentRegistry.Register("default", func(
+		cfg agent.Config,
+		provider llm.Provider,
+		mem agent.MemoryManager,
+		tm agent.ToolManager,
+		bus agent.EventBus,
+		logger *zap.Logger,
+	) (agent.Agent, error) {
+		opts := runtime.DefaultBuildOptions()
+		opts.EnableAll = false
+		opts.EnableSkills = true
+		opts.SkillsConfig = &skills.SkillManagerConfig{MaxLoadedSkills: 50}
+		opts.InitAgent = true
+		return runtime.BuildAgent(context.Background(), cfg, provider, logger, opts)
+	})
+
+	s.logger.Info("Default runtime agent factory registered")
+}
+
 // initHandlers 初始化所有 handlers
 func (s *Server) initHandlers() error {
 	// 健康检查 handler
@@ -294,6 +325,8 @@ func (s *Server) initHandlers() error {
 				zap.String("provider", s.cfg.LLM.DefaultProvider),
 				zap.Error(err))
 		} else {
+			// Wrap with retry middleware for automatic exponential backoff
+			provider = llmfactory.WrapWithRetry(provider, retry.DefaultRetryPolicy(), s.logger)
 			s.provider = provider
 			s.chatHandler = handlers.NewChatHandler(provider, s.logger)
 			s.logger.Info("Chat handler initialized",
@@ -309,13 +342,20 @@ func (s *Server) initHandlers() error {
 	discoveryRegistry := discovery.NewCapabilityRegistry(nil, s.logger)
 	agentRegistry := agent.NewAgentRegistry(s.logger)
 
+	// Wire skills-discovery bridge so skill registrations propagate to discovery
+	bridgeAdapter := bridge.NewDiscoveryRegistrarAdapter(discoveryRegistry)
+	_ = bridgeAdapter // available for future skill manager wiring
+
 	if s.provider != nil {
 		s.resolver = agent.NewCachingResolver(agentRegistry, s.provider, s.logger)
 
 		// Wire MongoDB persistence stores into the resolver (required).
-		if err := s.wireMongoStores(s.resolver); err != nil {
+		if err := s.wireMongoStores(s.resolver, discoveryRegistry); err != nil {
 			return fmt.Errorf("failed to wire MongoDB stores: %w", err)
 		}
+
+		// Wire a default runtime agent for quick-start usage
+		s.wireDefaultRuntimeAgent(agentRegistry)
 
 		s.agentHandler = handlers.NewAgentHandler(discoveryRegistry, agentRegistry, s.logger, s.resolver.Resolve)
 		s.logger.Info("Agent handler initialized with resolver")
