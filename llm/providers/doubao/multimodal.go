@@ -7,9 +7,9 @@ import (
 	"github.com/BaSui01/agentflow/llm/providers"
 )
 
-// GenerateImage Doubao 不支持图像生成.
+// GenerateImage 使用 Doubao 生成图像.
 func (p *DoubaoProvider) GenerateImage(ctx context.Context, req *llm.ImageGenerationRequest) (*llm.ImageGenerationResponse, error) {
-	return nil, providers.NotSupportedError(p.Name(), "image generation")
+	return providers.GenerateImageOpenAICompat(ctx, p.Client, p.Cfg.BaseURL, p.Cfg.APIKey, p.Name(), "/api/v3/images/generations", req, providers.BearerTokenHeaders)
 }
 
 // GenerateVideo Doubao 不支持视频生成.

@@ -94,11 +94,6 @@ func TestDoubaoProvider_NotSupported(t *testing.T) {
 		feature string
 	}{
 		{
-			name:    "GenerateImage returns not supported",
-			callFn:  func() error { _, err := p.GenerateImage(ctx, &llm.ImageGenerationRequest{}); return err },
-			feature: "image generation",
-		},
-		{
 			name:    "GenerateVideo returns not supported",
 			callFn:  func() error { _, err := p.GenerateVideo(ctx, &llm.VideoGenerationRequest{}); return err },
 			feature: "video generation",
@@ -142,6 +137,44 @@ func TestDoubaoProvider_NotSupported(t *testing.T) {
 			assert.Equal(t, "doubao", llmErr.Provider)
 		})
 	}
+}
+
+// --- GenerateImage via httptest ---
+
+func TestDoubaoProvider_GenerateImage(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "/api/v3/images/generations", r.URL.Path)
+		assert.Contains(t, r.Header.Get("Authorization"), "Bearer ")
+
+		var req llm.ImageGenerationRequest
+		json.NewDecoder(r.Body).Decode(&req)
+		assert.Equal(t, "test prompt", req.Prompt)
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(llm.ImageGenerationResponse{
+			Created: 1700000000,
+			Data: []llm.Image{
+				{URL: "https://example.com/image.png"},
+			},
+		})
+	}))
+	t.Cleanup(func() { server.Close() })
+
+	cfg := providers.DoubaoConfig{
+		BaseProviderConfig: providers.BaseProviderConfig{
+			APIKey:  "test-key",
+			BaseURL: server.URL,
+		},
+	}
+	p := NewDoubaoProvider(cfg, zap.NewNop())
+
+	resp, err := p.GenerateImage(context.Background(), &llm.ImageGenerationRequest{
+		Prompt: "test prompt",
+	})
+	require.NoError(t, err)
+	require.NotNil(t, resp)
+	require.Len(t, resp.Data, 1)
+	assert.Equal(t, "https://example.com/image.png", resp.Data[0].URL)
 }
 
 // --- Completion via httptest ---
