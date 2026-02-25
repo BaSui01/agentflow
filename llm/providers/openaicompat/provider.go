@@ -224,28 +224,41 @@ func (p *Provider) Completion(ctx context.Context, req *llm.ChatRequest) (*llm.C
 	model := providers.ChooseModel(req, p.Cfg.DefaultModel, p.Cfg.FallbackModel)
 
 	body := providers.OpenAICompatRequest{
-		Model:             model,
-		Messages:          providers.ConvertMessagesToOpenAI(req.Messages),
-		Tools:             providers.ConvertToolsToOpenAI(req.Tools),
-		MaxTokens:         req.MaxTokens,
-		Temperature:       req.Temperature,
-		TopP:              req.TopP,
-		Stop:              req.Stop,
-		FrequencyPenalty:  req.FrequencyPenalty,
-		PresencePenalty:   req.PresencePenalty,
-		RepetitionPenalty: req.RepetitionPenalty,
-		N:                 req.N,
-		LogProbs:          req.LogProbs,
-		TopLogProbs:       req.TopLogProbs,
-		ParallelToolCalls: req.ParallelToolCalls,
-		ServiceTier:       req.ServiceTier,
-		User:              req.User,
+		Model:               model,
+		Messages:            providers.ConvertMessagesToOpenAI(req.Messages),
+		Tools:               providers.ConvertToolsToOpenAI(req.Tools),
+		MaxTokens:           req.MaxTokens,
+		Temperature:         req.Temperature,
+		TopP:                req.TopP,
+		Stop:                req.Stop,
+		FrequencyPenalty:    req.FrequencyPenalty,
+		PresencePenalty:     req.PresencePenalty,
+		RepetitionPenalty:   req.RepetitionPenalty,
+		N:                   req.N,
+		LogProbs:            req.LogProbs,
+		TopLogProbs:         req.TopLogProbs,
+		ParallelToolCalls:   req.ParallelToolCalls,
+		ServiceTier:         req.ServiceTier,
+		User:                req.User,
+		MaxCompletionTokens: req.MaxCompletionTokens,
+		Store:               req.Store,
+		Modalities:          req.Modalities,
 	}
 	if req.ToolChoice != nil {
 		body.ToolChoice = req.ToolChoice
 	}
 	if rf := providers.ConvertResponseFormat(req.ResponseFormat); rf != nil {
 		body.ResponseFormat = rf
+	}
+
+	// 传递 reasoning_effort
+	if req.ReasoningEffort != "" {
+		body.ReasoningEffort = &req.ReasoningEffort
+	}
+
+	// 传递 web_search_options
+	if req.WebSearchOptions != nil {
+		body.WebSearchOptions = convertWebSearchOptions(req.WebSearchOptions)
 	}
 
 	// Apply provider-specific request hook
@@ -290,6 +303,7 @@ func (p *Provider) Completion(ctx context.Context, req *llm.ChatRequest) (*llm.C
 	if oaResp.Created != 0 {
 		result.CreatedAt = time.Unix(oaResp.Created, 0)
 	}
+	result.ServiceTier = oaResp.ServiceTier
 	return result, nil
 }
 
@@ -311,23 +325,26 @@ func (p *Provider) Stream(ctx context.Context, req *llm.ChatRequest) (<-chan llm
 	model := providers.ChooseModel(req, p.Cfg.DefaultModel, p.Cfg.FallbackModel)
 
 	body := providers.OpenAICompatRequest{
-		Model:             model,
-		Messages:          providers.ConvertMessagesToOpenAI(req.Messages),
-		Tools:             providers.ConvertToolsToOpenAI(req.Tools),
-		MaxTokens:         req.MaxTokens,
-		Temperature:       req.Temperature,
-		TopP:              req.TopP,
-		Stop:              req.Stop,
-		Stream:            true,
-		FrequencyPenalty:  req.FrequencyPenalty,
-		PresencePenalty:   req.PresencePenalty,
-		RepetitionPenalty: req.RepetitionPenalty,
-		N:                 req.N,
-		LogProbs:          req.LogProbs,
-		TopLogProbs:       req.TopLogProbs,
-		ParallelToolCalls: req.ParallelToolCalls,
-		ServiceTier:       req.ServiceTier,
-		User:              req.User,
+		Model:               model,
+		Messages:            providers.ConvertMessagesToOpenAI(req.Messages),
+		Tools:               providers.ConvertToolsToOpenAI(req.Tools),
+		MaxTokens:           req.MaxTokens,
+		Temperature:         req.Temperature,
+		TopP:                req.TopP,
+		Stop:                req.Stop,
+		Stream:              true,
+		FrequencyPenalty:    req.FrequencyPenalty,
+		PresencePenalty:     req.PresencePenalty,
+		RepetitionPenalty:   req.RepetitionPenalty,
+		N:                   req.N,
+		LogProbs:            req.LogProbs,
+		TopLogProbs:         req.TopLogProbs,
+		ParallelToolCalls:   req.ParallelToolCalls,
+		ServiceTier:         req.ServiceTier,
+		User:                req.User,
+		MaxCompletionTokens: req.MaxCompletionTokens,
+		Store:               req.Store,
+		Modalities:          req.Modalities,
 	}
 	if req.ToolChoice != nil {
 		body.ToolChoice = req.ToolChoice
@@ -340,6 +357,16 @@ func (p *Provider) Stream(ctx context.Context, req *llm.ChatRequest) (<-chan llm
 			IncludeUsage:      req.StreamOptions.IncludeUsage,
 			ChunkIncludeUsage: req.StreamOptions.ChunkIncludeUsage,
 		}
+	}
+
+	// 传递 reasoning_effort
+	if req.ReasoningEffort != "" {
+		body.ReasoningEffort = &req.ReasoningEffort
+	}
+
+	// 传递 web_search_options
+	if req.WebSearchOptions != nil {
+		body.WebSearchOptions = convertWebSearchOptions(req.WebSearchOptions)
 	}
 
 	// Apply provider-specific request hook
@@ -456,6 +483,7 @@ func StreamSSE(ctx context.Context, body io.ReadCloser, providerName string) <-c
 				}
 				if choice.Delta != nil {
 					chunk.Delta.Content = choice.Delta.Content
+					chunk.Delta.Refusal = choice.Delta.Refusal
 					chunk.Delta.ReasoningContent = choice.Delta.ReasoningContent
 					if len(choice.Delta.ToolCalls) > 0 {
 						chunk.Delta.ToolCalls = make([]llm.ToolCall, 0, len(choice.Delta.ToolCalls))
@@ -486,4 +514,24 @@ func StreamSSE(ctx context.Context, body io.ReadCloser, providerName string) <-c
 	return ch
 }
 
-
+// convertWebSearchOptions converts llm.WebSearchOptions to the wire format.
+func convertWebSearchOptions(opts *llm.WebSearchOptions) *providers.WebSearchOptions {
+	if opts == nil {
+		return nil
+	}
+	result := &providers.WebSearchOptions{
+		SearchContextSize: opts.SearchContextSize,
+	}
+	if opts.UserLocation != nil {
+		result.UserLocation = &providers.WebSearchUserLocation{
+			Type: "approximate",
+			Approximate: &providers.WebSearchApproxLocation{
+				Country:  opts.UserLocation.Country,
+				Region:   opts.UserLocation.Region,
+				City:     opts.UserLocation.City,
+				Timezone: opts.UserLocation.Timezone,
+			},
+		}
+	}
+	return result
+}

@@ -121,10 +121,12 @@ type OpenAICompatMessage struct {
 	Role             string                `json:"role"`
 	Content          string                `json:"content,omitempty"`
 	ReasoningContent *string               `json:"reasoning_content,omitempty"` // 推理内容
+	Refusal          *string               `json:"refusal,omitempty"`           // 模型拒绝内容
 	MultiContent     []map[string]any      `json:"multi_content,omitempty"`     // multimodal content parts
 	Name             string                `json:"name,omitempty"`
 	ToolCalls        []OpenAICompatToolCall `json:"tool_calls,omitempty"`
 	ToolCallID       string                `json:"tool_call_id,omitempty"`
+	Annotations      []OpenAIAnnotation    `json:"annotations,omitempty"` // URL 引用
 }
 
 // MarshalJSON 自定义序列化：当 MultiContent 非空时，将其序列化为 "content" 字段。
@@ -133,16 +135,20 @@ func (m OpenAICompatMessage) MarshalJSON() ([]byte, error) {
 		Role             string                `json:"role"`
 		Content          any                   `json:"content,omitempty"`
 		ReasoningContent *string               `json:"reasoning_content,omitempty"`
+		Refusal          *string               `json:"refusal,omitempty"`
 		Name             string                `json:"name,omitempty"`
 		ToolCalls        []OpenAICompatToolCall `json:"tool_calls,omitempty"`
 		ToolCallID       string                `json:"tool_call_id,omitempty"`
+		Annotations      []OpenAIAnnotation    `json:"annotations,omitempty"`
 	}
 	p := plain{
 		Role:             m.Role,
 		ReasoningContent: m.ReasoningContent,
+		Refusal:          m.Refusal,
 		Name:             m.Name,
 		ToolCalls:        m.ToolCalls,
 		ToolCallID:       m.ToolCallID,
+		Annotations:      m.Annotations,
 	}
 	if len(m.MultiContent) > 0 {
 		p.Content = m.MultiContent
@@ -198,6 +204,12 @@ type OpenAICompatRequest struct {
 	Thinking          *Thinking             `json:"thinking,omitempty"`
 	MaxCompletionTokens *int               `json:"max_completion_tokens,omitempty"`
 	ReasoningEffort   *string               `json:"reasoning_effort,omitempty"`
+
+	// 新增 OpenAI 扩展字段
+	Store            *bool              `json:"store,omitempty"`              // 是否存储用于蒸馏/评估
+	Modalities       []string           `json:"modalities,omitempty"`         // ["text", "audio"]
+	WebSearchOptions *WebSearchOptions  `json:"web_search_options,omitempty"` // 内置 web 搜索
+	Metadata         map[string]string  `json:"metadata,omitempty"`           // OpenAI 级别元数据
 }
 
 // StreamOptions 控制流式响应中的额外信息。
@@ -209,6 +221,26 @@ type StreamOptions struct {
 // Thinking 控制推理/思考模式。
 type Thinking struct {
 	Type string `json:"type"` // "enabled", "disabled", "auto"
+}
+
+// WebSearchOptions configures the built-in web search for Chat Completions.
+type WebSearchOptions struct {
+	UserLocation      *WebSearchUserLocation `json:"user_location,omitempty"`
+	SearchContextSize string                 `json:"search_context_size,omitempty"` // low/medium/high
+}
+
+// WebSearchUserLocation represents approximate user location.
+type WebSearchUserLocation struct {
+	Type        string                  `json:"type"`        // "approximate"
+	Approximate *WebSearchApproxLocation `json:"approximate,omitempty"`
+}
+
+// WebSearchApproxLocation holds approximate location details.
+type WebSearchApproxLocation struct {
+	Country  string `json:"country,omitempty"`
+	Region   string `json:"region,omitempty"`
+	City     string `json:"city,omitempty"`
+	Timezone string `json:"timezone,omitempty"`
 }
 
 // OpenAICompatChoice 表示 OpenAI 兼容响应中的单个选项.
@@ -231,11 +263,15 @@ type OpenAICompatUsage struct {
 // PromptTokensDetails 提示 token 详细统计。
 type PromptTokensDetails struct {
 	CachedTokens int `json:"cached_tokens"`
+	AudioTokens  int `json:"audio_tokens,omitempty"`
 }
 
 // CompletionTokensDetails 补全 token 详细统计。
 type CompletionTokensDetails struct {
-	ReasoningTokens int `json:"reasoning_tokens"`
+	ReasoningTokens          int `json:"reasoning_tokens"`
+	AudioTokens              int `json:"audio_tokens,omitempty"`
+	AcceptedPredictionTokens int `json:"accepted_prediction_tokens,omitempty"`
+	RejectedPredictionTokens int `json:"rejected_prediction_tokens,omitempty"`
 }
 
 // OpenAICompatResponse 表示 OpenAI 兼容的聊天完成响应.
@@ -258,6 +294,20 @@ type OpenAICompatErrorResp struct {
 	} `json:"error"`
 }
 
+// OpenAIAnnotation represents a URL citation annotation in a response.
+type OpenAIAnnotation struct {
+	Type        string              `json:"type"`                    // "url_citation"
+	URLCitation *URLCitationDetail  `json:"url_citation,omitempty"`
+}
+
+// URLCitationDetail holds the details of a URL citation.
+type URLCitationDetail struct {
+	StartIndex int    `json:"start_index"`
+	EndIndex   int    `json:"end_index"`
+	URL        string `json:"url"`
+	Title      string `json:"title"`
+}
+
 // ConvertMessagesToOpenAI 将 llm.Message 切片转换为 OpenAI 兼容格式.
 func ConvertMessagesToOpenAI(msgs []llm.Message) []OpenAICompatMessage {
 	out := make([]OpenAICompatMessage, 0, len(msgs))
@@ -265,6 +315,7 @@ func ConvertMessagesToOpenAI(msgs []llm.Message) []OpenAICompatMessage {
 		oa := OpenAICompatMessage{
 			Role:             string(m.Role),
 			ReasoningContent: m.ReasoningContent,
+			Refusal:          m.Refusal,
 			Name:             m.Name,
 			ToolCallID:       m.ToolCallID,
 		}
@@ -359,6 +410,7 @@ func ToLLMChatResponse(oa OpenAICompatResponse, provider string) *llm.ChatRespon
 			Role:             llm.RoleAssistant,
 			Content:          c.Message.Content,
 			ReasoningContent: c.Message.ReasoningContent,
+			Refusal:          c.Message.Refusal,
 			Name:             c.Message.Name,
 		}
 		if len(c.Message.ToolCalls) > 0 {
@@ -371,6 +423,20 @@ func ToLLMChatResponse(oa OpenAICompatResponse, provider string) *llm.ChatRespon
 				})
 			}
 		}
+		// 映射 annotations
+		if len(c.Message.Annotations) > 0 {
+			msg.Annotations = make([]llm.Annotation, 0, len(c.Message.Annotations))
+			for _, ann := range c.Message.Annotations {
+				a := llm.Annotation{Type: ann.Type}
+				if ann.URLCitation != nil {
+					a.StartIndex = ann.URLCitation.StartIndex
+					a.EndIndex = ann.URLCitation.EndIndex
+					a.URL = ann.URLCitation.URL
+					a.Title = ann.URLCitation.Title
+				}
+				msg.Annotations = append(msg.Annotations, a)
+			}
+		}
 		choices = append(choices, llm.ChatChoice{
 			Index:        c.Index,
 			FinishReason: c.FinishReason,
@@ -378,10 +444,11 @@ func ToLLMChatResponse(oa OpenAICompatResponse, provider string) *llm.ChatRespon
 		})
 	}
 	resp := &llm.ChatResponse{
-		ID:       oa.ID,
-		Provider: provider,
-		Model:    oa.Model,
-		Choices:  choices,
+		ID:          oa.ID,
+		Provider:    provider,
+		Model:       oa.Model,
+		Choices:     choices,
+		ServiceTier: oa.ServiceTier,
 	}
 	if oa.Created > 0 {
 		resp.CreatedAt = time.Unix(oa.Created, 0)
@@ -395,11 +462,15 @@ func ToLLMChatResponse(oa OpenAICompatResponse, provider string) *llm.ChatRespon
 		if oa.Usage.PromptTokensDetails != nil {
 			resp.Usage.PromptTokensDetails = &llm.PromptTokensDetails{
 				CachedTokens: oa.Usage.PromptTokensDetails.CachedTokens,
+				AudioTokens:  oa.Usage.PromptTokensDetails.AudioTokens,
 			}
 		}
 		if oa.Usage.CompletionTokensDetails != nil {
 			resp.Usage.CompletionTokensDetails = &llm.CompletionTokensDetails{
-				ReasoningTokens: oa.Usage.CompletionTokensDetails.ReasoningTokens,
+				ReasoningTokens:          oa.Usage.CompletionTokensDetails.ReasoningTokens,
+				AudioTokens:              oa.Usage.CompletionTokensDetails.AudioTokens,
+				AcceptedPredictionTokens: oa.Usage.CompletionTokensDetails.AcceptedPredictionTokens,
+				RejectedPredictionTokens: oa.Usage.CompletionTokensDetails.RejectedPredictionTokens,
 			}
 		}
 	}

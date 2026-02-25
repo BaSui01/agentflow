@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -64,7 +65,7 @@ func (p *ClaudeProvider) HealthCheck(ctx context.Context) (*llm.HealthStatus, er
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
-	p.buildHeaders(httpReq, p.cfg.APIKey)
+	p.buildHeaders(httpReq, p.resolveAPIKey(ctx))
 
 	resp, err := p.client.Do(httpReq)
 	latency := time.Since(start)
@@ -99,7 +100,7 @@ func (p *ClaudeProvider) ListModels(ctx context.Context) ([]llm.Model, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
-	p.buildHeaders(httpReq, p.cfg.APIKey)
+	p.buildHeaders(httpReq, p.resolveAPIKey(ctx))
 
 	resp, err := p.client.Do(httpReq)
 	if err != nil {
@@ -167,6 +168,7 @@ type claudeContent struct {
 	Input     json.RawMessage `json:"input,omitempty"`
 	ToolUseID string          `json:"tool_use_id,omitempty"`
 	Content   string          `json:"content,omitempty"` // for tool_result
+	IsError   *bool           `json:"is_error,omitempty"` // for tool_result: 标记工具执行失败
 	// Image source fields (for type="image")
 	Source *claudeImageSource `json:"source,omitempty"`
 	// Thinking fields (for type="thinking")
@@ -204,8 +206,8 @@ type claudeRequest struct {
 	Messages    []claudeMessage   `json:"messages"`
 	System      any               `json:"system,omitempty"` // string 或 []claudeSystemBlock（支持 cache_control）
 	MaxTokens   int               `json:"max_tokens"`
-	Temperature float32           `json:"temperature,omitempty"`
-	TopP        float32           `json:"top_p,omitempty"`
+	Temperature *float32          `json:"temperature,omitempty"` // 指针类型：区分 "未设置" 和 "显式设为 0"
+	TopP        *float32          `json:"top_p,omitempty"`       // 指针类型：同上
 	StopSeq     []string          `json:"stop_sequences,omitempty"`
 	Stream      bool              `json:"stream,omitempty"`
 	Tools       []claudeTool      `json:"tools,omitempty"`
@@ -295,26 +297,34 @@ func (p *ClaudeProvider) resolveAPIKey(ctx context.Context) string {
 // 2. 消息必须是 user/assistant 交替出现
 // 3. content 是数组形式，可包含文本和工具调用
 func convertToClaudeMessages(msgs []llm.Message) (string, []claudeMessage) {
-	var system string
+	var systemParts []string
 	var claudeMsgs []claudeMessage
 
 	for _, m := range msgs {
-		// 提取 system 消息
+		// 提取 system 消息（多条拼接）
 		if m.Role == llm.RoleSystem {
-			system = m.Content
+			if m.Content != "" {
+				systemParts = append(systemParts, m.Content)
+			}
 			continue
 		}
 
 		// 处理 tool 角色（Claude 将其作为 assistant 的 tool_result）
 		if m.Role == llm.RoleTool {
 			// Tool 结果需要包装成 user 消息
+			tr := claudeContent{
+				Type:      "tool_result",
+				ToolUseID: m.ToolCallID,
+				Content:   m.Content,
+			}
+			// 问题 4: 传递 is_error 标记，让模型知道工具执行失败
+			if m.IsToolError {
+				isErr := true
+				tr.IsError = &isErr
+			}
 			claudeMsgs = append(claudeMsgs, claudeMessage{
-				Role: "user",
-				Content: []claudeContent{{
-					Type:      "tool_result",
-					ToolUseID: m.ToolCallID,
-					Content:   m.Content,
-				}},
+				Role:    "user",
+				Content: []claudeContent{tr},
 			})
 			continue
 		}
@@ -322,6 +332,17 @@ func convertToClaudeMessages(msgs []llm.Message) (string, []claudeMessage) {
 		// 构建普通消息
 		cm := claudeMessage{
 			Role: string(m.Role),
+		}
+
+		// 问题 1: assistant 消息的 ThinkingBlocks 需要回传为 thinking content blocks
+		if m.Role == llm.RoleAssistant && len(m.ThinkingBlocks) > 0 {
+			for _, tb := range m.ThinkingBlocks {
+				cm.Content = append(cm.Content, claudeContent{
+					Type:      "thinking",
+					Thinking:  tb.Thinking,
+					Signature: tb.Signature,
+				})
+			}
 		}
 
 		// 文本内容
@@ -340,7 +361,7 @@ func convertToClaudeMessages(msgs []llm.Message) (string, []claudeMessage) {
 						Type: "image",
 						Source: &claudeImageSource{
 							Type:      "base64",
-							MediaType: "image/png",
+							MediaType: detectImageMediaType(img.Data),
 							Data:      img.Data,
 						},
 					})
@@ -373,7 +394,7 @@ func convertToClaudeMessages(msgs []llm.Message) (string, []claudeMessage) {
 		}
 	}
 
-	return system, claudeMsgs
+	return strings.Join(systemParts, "\n\n"), claudeMsgs
 }
 
 func convertToClaudeTools(tools []llm.ToolSchema) []claudeTool {
@@ -447,8 +468,8 @@ func (p *ClaudeProvider) Completion(ctx context.Context, req *llm.ChatRequest) (
 		Messages:    messages,
 		System:      system,
 		MaxTokens:   chooseMaxTokens(req),
-		Temperature: req.Temperature,
-		TopP:        req.TopP,
+		Temperature: float32PtrIfSet(req.Temperature),
+		TopP:        float32PtrIfSet(req.TopP),
 		StopSeq:     req.Stop,
 		Tools:       convertToClaudeTools(req.Tools),
 		ToolChoice:  convertClaudeToolChoice(req.ToolChoice),
@@ -519,8 +540,8 @@ func (p *ClaudeProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-ch
 		Messages:    messages,
 		System:      system,
 		MaxTokens:   chooseMaxTokens(req),
-		Temperature: req.Temperature,
-		TopP:        req.TopP,
+		Temperature: float32PtrIfSet(req.Temperature),
+		TopP:        float32PtrIfSet(req.TopP),
 		StopSeq:     req.Stop,
 		Stream:      true,
 		Tools:       convertToClaudeTools(req.Tools),
@@ -579,6 +600,7 @@ func (p *ClaudeProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-ch
 		var currentID string
 		var currentModel string
 		var toolCallAccumulator = make(map[int]*llm.ToolCall) // 累积工具调用
+		var startUsage *claudeUsage                           // message_start 中的初始 usage
 
 		for {
 			line, err := reader.ReadString('\n')
@@ -641,6 +663,10 @@ func (p *ClaudeProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-ch
 				if event.Message != nil {
 					currentID = event.Message.ID
 					currentModel = event.Message.Model
+					// 捕获初始 usage（包含 input_tokens）
+					if event.Message.Usage != nil {
+						startUsage = event.Message.Usage
+					}
 				}
 
 			case "content_block_start":
@@ -654,6 +680,7 @@ func (p *ClaudeProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-ch
 
 			case "content_block_delta":
 				if event.Delta != nil {
+					var sendChunk bool
 					chunk := llm.StreamChunk{
 						ID:       currentID,
 						Provider: p.Name(),
@@ -667,23 +694,26 @@ func (p *ClaudeProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-ch
 					switch event.Delta.Type {
 					case "text_delta":
 						chunk.Delta.Content = event.Delta.Text
+						sendChunk = true
 					case "input_json_delta":
-						// 累积工具调用参数
+						// 累积工具调用参数，不发送空 chunk
 						if tc, ok := toolCallAccumulator[event.Index]; ok {
 							tc.Arguments = append(tc.Arguments, []byte(event.Delta.PartialJSON)...)
 						}
 					case "thinking_delta":
-						// Bug6 fix: 处理 thinking delta，通过 ReasoningContent 传递
 						thinking := event.Delta.Thinking
 						chunk.Delta.ReasoningContent = &thinking
+						sendChunk = true
 					case "signature_delta":
-						// signature_delta 用于验证 thinking 块完整性，静默忽略
+						// signature_delta 用于验证 thinking 块完整性，不发送 chunk
 					}
 
-					select {
-					case <-ctx.Done():
-						return
-					case ch <- chunk:
+					if sendChunk {
+						select {
+						case <-ctx.Done():
+							return
+						case ch <- chunk:
+						}
 					}
 				}
 
@@ -708,7 +738,6 @@ func (p *ClaudeProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-ch
 				}
 
 			case "message_delta":
-				// Bug2 fix: usage 在 message_delta 事件中，不在 message_stop 中
 				chunk := llm.StreamChunk{
 					ID:       currentID,
 					Provider: p.Name(),
@@ -718,7 +747,18 @@ func (p *ClaudeProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-ch
 					chunk.FinishReason = event.Delta.StopReason
 				}
 				if event.Usage != nil {
-					chunk.Usage = buildStreamUsage(event.Usage)
+					// message_delta 的 usage 可能只有 output_tokens，
+					// 需要与 message_start 的 input_tokens 合并
+					merged := *event.Usage
+					if merged.InputTokens == 0 && startUsage != nil {
+						merged.InputTokens = startUsage.InputTokens
+						merged.CacheCreationInputTokens = startUsage.CacheCreationInputTokens
+						merged.CacheReadInputTokens = startUsage.CacheReadInputTokens
+					}
+					chunk.Usage = buildStreamUsage(&merged)
+				} else if startUsage != nil {
+					// message_delta 没有 usage 但 message_start 有，回退使用 startUsage
+					chunk.Usage = buildStreamUsage(startUsage)
 				}
 				select {
 				case <-ctx.Done():
@@ -733,14 +773,19 @@ func (p *ClaudeProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-ch
 				// 心跳事件，忽略
 
 			case "error":
-				// 流式错误事件（如 overloaded_error）
+				// 流式错误事件，解析实际错误信息
+				errMsg := "stream error event received"
+				var errEvent claudeErrorResp
+				if json.Unmarshal([]byte(data), &errEvent) == nil && errEvent.Error.Message != "" {
+					errMsg = fmt.Sprintf("%s: %s", errEvent.Error.Type, errEvent.Error.Message)
+				}
 				select {
 				case <-ctx.Done():
 					return
 				case ch <- llm.StreamChunk{
 					Err: &llm.Error{
 						Code:       llm.ErrUpstreamError,
-						Message:    "stream error event received",
+						Message:    errMsg,
 						HTTPStatus: http.StatusBadGateway,
 						Retryable:  true,
 						Provider:   p.Name(),
@@ -762,6 +807,8 @@ func toClaudeChatResponse(cr claudeResponse, provider string) *llm.ChatResponse 
 
 	// 解析 content 数组
 	var signatures []string
+	var thinkingParts []string
+	var thinkingBlocks []llm.ThinkingBlock
 	for _, content := range cr.Content {
 		switch content.Type {
 		case "text":
@@ -773,15 +820,26 @@ func toClaudeChatResponse(cr claudeResponse, provider string) *llm.ChatResponse 
 				Arguments: content.Input,
 			})
 		case "thinking":
-			// Extended Thinking: 提取推理内容和签名
+			// Extended Thinking: 收集所有推理内容和签名（interleaved thinking 可能有多个）
 			if content.Thinking != "" {
-				thinking := content.Thinking
-				msg.ReasoningContent = &thinking
+				thinkingParts = append(thinkingParts, content.Thinking)
 			}
 			if content.Signature != "" {
 				signatures = append(signatures, content.Signature)
 			}
+			// 保存完整的 thinking block 用于 round-trip
+			thinkingBlocks = append(thinkingBlocks, llm.ThinkingBlock{
+				Thinking:  content.Thinking,
+				Signature: content.Signature,
+			})
 		}
+	}
+	if len(thinkingParts) > 0 {
+		joined := strings.Join(thinkingParts, "\n\n")
+		msg.ReasoningContent = &joined
+	}
+	if len(thinkingBlocks) > 0 {
+		msg.ThinkingBlocks = thinkingBlocks
 	}
 
 	resp := &llm.ChatResponse{
@@ -826,15 +884,27 @@ func chooseMaxTokens(req *llm.ChatRequest) int {
 }
 
 // buildThinking 将统一的 ReasoningMode 转换为 Claude 的 Thinking 参数。
+// 约束：budget_tokens 必须 < max_tokens 且 >= 1024。
+// 如果 max_tokens 太小无法满足最低 budget，则不启用 thinking。
 func buildThinking(req *llm.ChatRequest) *claudeThinking {
 	if req == nil || req.ReasoningMode == "" {
 		return nil
 	}
 	switch req.ReasoningMode {
 	case "extended":
-		budget := chooseMaxTokens(req) * 3 / 4
+		maxTok := chooseMaxTokens(req)
+		// budget_tokens 必须 < max_tokens，且最小 1024
+		// 如果 max_tokens <= 1024，无法满足约束，不启用 thinking
+		if maxTok <= 1024 {
+			return nil
+		}
+		budget := maxTok * 3 / 4
 		if budget < 1024 {
 			budget = 1024
+		}
+		// 确保 budget < max_tokens
+		if budget >= maxTok {
+			budget = maxTok - 1
 		}
 		return &claudeThinking{
 			Type:         "enabled",
@@ -861,4 +931,27 @@ func buildStreamUsage(u *claudeUsage) *llm.ChatUsage {
 		}
 	}
 	return usage
+}
+
+// detectImageMediaType 从 base64 数据的前几个字节推断图片 MIME 类型。
+// 支持 PNG、JPEG、GIF、WebP。无法识别时回退到 image/png。
+func detectImageMediaType(b64Data string) string {
+	// 只需解码前 16 字节即可判断 magic bytes
+	raw, err := base64.StdEncoding.DecodeString(b64Data[:min(24, len(b64Data))])
+	if err != nil || len(raw) < 4 {
+		return "image/png"
+	}
+	switch {
+	case raw[0] == 0x89 && raw[1] == 0x50 && raw[2] == 0x4E && raw[3] == 0x47:
+		return "image/png"
+	case raw[0] == 0xFF && raw[1] == 0xD8:
+		return "image/jpeg"
+	case raw[0] == 0x47 && raw[1] == 0x49 && raw[2] == 0x46:
+		return "image/gif"
+	case raw[0] == 0x52 && raw[1] == 0x49 && raw[2] == 0x46 && raw[3] == 0x46 && len(raw) >= 12 &&
+		raw[8] == 0x57 && raw[9] == 0x45 && raw[10] == 0x42 && raw[11] == 0x50:
+		return "image/webp"
+	default:
+		return "image/png"
+	}
 }
