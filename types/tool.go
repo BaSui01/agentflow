@@ -26,14 +26,16 @@ type ToolResult struct {
 // ToMessage converts ToolResult to a Message.
 func (tr ToolResult) ToMessage() Message {
 	content := string(tr.Result)
-	if tr.Error != "" {
+	isErr := tr.Error != ""
+	if isErr {
 		content = "Error: " + tr.Error
 	}
 	return Message{
-		Role:       RoleTool,
-		Content:    content,
-		Name:       tr.Name,
-		ToolCallID: tr.ToolCallID,
+		Role:        RoleTool,
+		Content:     content,
+		Name:        tr.Name,
+		ToolCallID:  tr.ToolCallID,
+		IsToolError: isErr,
 	}
 }
 

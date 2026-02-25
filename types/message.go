@@ -13,6 +13,7 @@ const (
 	RoleUser      Role = "user"
 	RoleAssistant Role = "assistant"
 	RoleTool      Role = "tool"
+	RoleDeveloper Role = "developer" // OpenAI developer instructions role
 )
 
 // ToolCall represents a tool invocation request from the LLM.
@@ -35,18 +36,38 @@ type VideoContent struct {
 	FPS *float64 `json:"fps,omitempty"`
 }
 
+// Annotation represents a citation or reference annotation in a message.
+type Annotation struct {
+	Type       string `json:"type"`                  // "url_citation"
+	StartIndex int    `json:"start_index,omitempty"`
+	EndIndex   int    `json:"end_index,omitempty"`
+	URL        string `json:"url,omitempty"`
+	Title      string `json:"title,omitempty"`
+}
+
+// ThinkingBlock represents a Claude extended thinking content block.
+// Used for round-tripping thinking blocks in multi-turn tool use conversations.
+type ThinkingBlock struct {
+	Thinking  string `json:"thinking"`
+	Signature string `json:"signature,omitempty"`
+}
+
 // Message represents a conversation message.
 type Message struct {
-	Role             Role           `json:"role"`
-	Content          string         `json:"content,omitempty"`
-	ReasoningContent *string        `json:"reasoning_content,omitempty"` // 推理/思考内容
-	Name             string         `json:"name,omitempty"`
-	ToolCalls        []ToolCall     `json:"tool_calls,omitempty"`
-	ToolCallID       string         `json:"tool_call_id,omitempty"`
-	Images           []ImageContent `json:"images,omitempty"`
-	Videos           []VideoContent `json:"videos,omitempty"`
-	Metadata         any            `json:"metadata,omitempty"`
-	Timestamp        time.Time      `json:"timestamp,omitempty"`
+	Role             Role            `json:"role"`
+	Content          string          `json:"content,omitempty"`
+	ReasoningContent *string         `json:"reasoning_content,omitempty"` // 推理/思考内容
+	ThinkingBlocks   []ThinkingBlock `json:"thinking_blocks,omitempty"`   // Claude thinking blocks（用于多轮 round-trip）
+	Refusal          *string         `json:"refusal,omitempty"`           // 模型拒绝内容
+	Name             string          `json:"name,omitempty"`
+	ToolCalls        []ToolCall      `json:"tool_calls,omitempty"`
+	ToolCallID       string          `json:"tool_call_id,omitempty"`
+	IsToolError      bool            `json:"is_tool_error,omitempty"` // tool_result 是否为错误结果
+	Images           []ImageContent  `json:"images,omitempty"`
+	Videos           []VideoContent  `json:"videos,omitempty"`
+	Annotations      []Annotation    `json:"annotations,omitempty"` // URL 引用注释
+	Metadata         any             `json:"metadata,omitempty"`
+	Timestamp        time.Time       `json:"timestamp,omitempty"`
 }
 
 // NewMessage creates a new message with the given role and content.
@@ -82,6 +103,11 @@ func NewToolMessage(toolCallID, name, content string) Message {
 		ToolCallID: toolCallID,
 		Timestamp:  time.Now(),
 	}
+}
+
+// NewDeveloperMessage creates a new developer instructions message.
+func NewDeveloperMessage(content string) Message {
+	return NewMessage(RoleDeveloper, content)
 }
 
 // WithToolCalls adds tool calls to the message.
