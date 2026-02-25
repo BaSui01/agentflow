@@ -29,16 +29,24 @@ type ImageContent struct {
 	Data string `json:"data,omitempty"` // base64 encoded
 }
 
+// VideoContent represents video data for multimodal messages.
+type VideoContent struct {
+	URL string   `json:"url"`
+	FPS *float64 `json:"fps,omitempty"`
+}
+
 // Message represents a conversation message.
 type Message struct {
-	Role       Role           `json:"role"`
-	Content    string         `json:"content,omitempty"`
-	Name       string         `json:"name,omitempty"`
-	ToolCalls  []ToolCall     `json:"tool_calls,omitempty"`
-	ToolCallID string         `json:"tool_call_id,omitempty"`
-	Images     []ImageContent `json:"images,omitempty"`
-	Metadata   any            `json:"metadata,omitempty"`
-	Timestamp  time.Time      `json:"timestamp,omitempty"`
+	Role             Role           `json:"role"`
+	Content          string         `json:"content,omitempty"`
+	ReasoningContent *string        `json:"reasoning_content,omitempty"` // 推理/思考内容
+	Name             string         `json:"name,omitempty"`
+	ToolCalls        []ToolCall     `json:"tool_calls,omitempty"`
+	ToolCallID       string         `json:"tool_call_id,omitempty"`
+	Images           []ImageContent `json:"images,omitempty"`
+	Videos           []VideoContent `json:"videos,omitempty"`
+	Metadata         any            `json:"metadata,omitempty"`
+	Timestamp        time.Time      `json:"timestamp,omitempty"`
 }
 
 // NewMessage creates a new message with the given role and content.
