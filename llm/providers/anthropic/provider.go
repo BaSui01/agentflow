@@ -476,6 +476,11 @@ func (p *ClaudeProvider) Completion(ctx context.Context, req *llm.ChatRequest) (
 		Thinking:    buildThinking(req),
 	}
 
+	// 问题 3: thinking + tool_choice 冲突校验
+	if err := validateThinkingConstraints(&body); err != nil {
+		return nil, err
+	}
+
 	payload, err := json.Marshal(body)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal request: %w", err)
@@ -547,6 +552,11 @@ func (p *ClaudeProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-ch
 		Tools:       convertToClaudeTools(req.Tools),
 		ToolChoice:  convertClaudeToolChoice(req.ToolChoice),
 		Thinking:    buildThinking(req),
+	}
+
+	// 问题 3: thinking + tool_choice 冲突校验
+	if err := validateThinkingConstraints(&body); err != nil {
+		return nil, err
 	}
 
 	payload, err := json.Marshal(body)
@@ -881,6 +891,38 @@ func chooseMaxTokens(req *llm.ChatRequest) int {
 	}
 	// Claude 要求必须提供 max_tokens
 	return 4096
+}
+
+// float32PtrIfSet 将 float32 转为指针。零值返回 nil（不发送），非零值返回指针。
+// 注意：这意味着无法通过 ChatRequest.Temperature=0 显式发送 temperature:0。
+// 这是 ChatRequest 使用非指针 float32 的已知限制。
+func float32PtrIfSet(v float32) *float32 {
+	if v == 0 {
+		return nil
+	}
+	return &v
+}
+
+// validateThinkingConstraints 校验 thinking 模式与其他参数的兼容性。
+// Claude API 约束：thinking 模式只支持 tool_choice: auto 或 none。
+func validateThinkingConstraints(body *claudeRequest) error {
+	if body.Thinking == nil || body.Thinking.Type != "enabled" {
+		return nil
+	}
+	if body.ToolChoice != nil {
+		switch body.ToolChoice.Type {
+		case "auto", "none":
+			// 允许
+		default:
+			return &llm.Error{
+				Code:       llm.ErrInvalidRequest,
+				Message:    fmt.Sprintf("extended thinking only supports tool_choice 'auto' or 'none', got '%s'", body.ToolChoice.Type),
+				HTTPStatus: http.StatusBadRequest,
+				Provider:   "claude",
+			}
+		}
+	}
+	return nil
 }
 
 // buildThinking 将统一的 ReasoningMode 转换为 Claude 的 Thinking 参数。
