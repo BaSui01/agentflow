@@ -65,7 +65,7 @@
 //   - [ToolCall]：工具调用（类型别名，规范定义在 types.ToolCall）
 //   - [ImageContent]：多模态图像内容，支持 URL 和 Base64 两种格式
 //   - [ToolSchema]：工具定义，含 Name、Description 和 Parameters JSON Schema
-//   - [ToolResult]：工具执行结果，含 Result JSON 和执行耗时
+//   - [ToolResultDTO]：工具执行结果，含 Result JSON 和执行耗时
 //   - [ToolInvokeRequest]：工具调用请求
 //
 // # 提供商与模型类型
@@ -95,7 +95,6 @@
 // # 错误与列表响应类型
 //
 //   - [ErrorResponse]：统一错误响应包装
-//   - [ErrorDetail]：ErrorInfo 的类型别名（已废弃，建议直接使用 ErrorInfo）
 //   - [ProviderListResponse]：提供商列表响应
 //   - [ModelListResponse]：模型列表响应
 //   - [ToolListResponse]：工具列表响应

@@ -43,7 +43,7 @@ type Config struct {
 	MongoDB MongoDBConfig `yaml:"mongodb" env:"MONGODB"`
 
 	// LLM 大语言模型配置
-	LLM LLMConfig `yaml:"llm" env:"LLM"`
+	LLM LLMConnectionConfig `yaml:"llm" env:"LLM"`
 
 	// Log 日志配置
 	Log LogConfig `yaml:"log" env:"LOG"`
@@ -280,8 +280,10 @@ type MongoDBConfig struct {
 	TLSKeyFile string `yaml:"tls_key_file" env:"TLS_KEY_FILE"`
 }
 
-// LLMConfig LLM 配置
-type LLMConfig struct {
+// LLMConnectionConfig 连接级 LLM 配置（YAML 反序列化用）。
+// 注意：与 types.LLMConfig（运行时 Agent 配置）和 llm/config.LLMConfig（路由/降级配置）不同，
+// 此结构体仅用于应用启动时的连接参数加载。
+type LLMConnectionConfig struct {
 	// 默认 Provider
 	DefaultProvider string `yaml:"default_provider" env:"DEFAULT_PROVIDER"`
 	// API Key（通用）

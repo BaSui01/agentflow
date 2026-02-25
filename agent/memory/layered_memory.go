@@ -11,12 +11,7 @@ import (
 	"go.uber.org/zap"
 )
 
-// 内存Type定义了内存的类型.
-// 折旧:使用类型。 用于新代码的内存类型 。
-type MemoryType = types.MemoryCategory
-
-// 内存类型常数 - 映射到统一类型. 内存类型
-// 折旧:使用类型。 记忆Episodic,类型. 记忆语义等.
+// Memory type constants — convenience aliases for types.MemoryCategory values.
 const (
 	MemoryTypeEpisodic   = types.MemoryEpisodic   // Event-based memories
 	MemoryTypeSemantic   = types.MemorySemantic   // Factual knowledge
@@ -24,10 +19,10 @@ const (
 	MemoryTypeProcedural = types.MemoryProcedural // How-to knowledge
 )
 
-// 内存 Entry 代表单个内存条目.
+// MemoryEntry 代表单个内存条目.
 type MemoryEntry struct {
-	ID          string         `json:"id"`
-	Type        MemoryType     `json:"type"`
+	ID          string               `json:"id"`
+	Type        types.MemoryCategory `json:"type"`
 	Content     string         `json:"content"`
 	Embedding   []float32      `json:"embedding,omitempty"`
 	Importance  float64        `json:"importance"`

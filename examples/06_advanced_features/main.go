@@ -215,8 +215,8 @@ func demoPromptEngineering(logger *zap.Logger) {
 	// 1. 使用提示词增强器
 	fmt.Println("1. 提示词增强器")
 
-	config := agent.DefaultPromptEngineeringConfig()
-	enhancer := agent.NewPromptEnhancer(config)
+	config := agent.DefaultPromptEnhancerConfig()
+	enhancer := agent.NewPromptEnhancer(*config)
 
 	// 原始提示词包
 	bundle := agent.PromptBundle{

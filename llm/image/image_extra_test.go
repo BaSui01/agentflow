@@ -9,6 +9,7 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/BaSui01/agentflow/llm/providers"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -38,7 +39,7 @@ func TestOpenAIProvider_Edit_WithAllFields(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	p := NewOpenAIProvider(OpenAIConfig{APIKey: "k", BaseURL: srv.URL})
+	p := NewOpenAIProvider(OpenAIConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k", BaseURL: srv.URL}})
 	resp, err := p.Edit(context.Background(), &EditRequest{
 		Image:  bytes.NewReader([]byte("img")),
 		Prompt: "edit prompt",
@@ -57,7 +58,7 @@ func TestOpenAIProvider_Edit_HTTPError(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	p := NewOpenAIProvider(OpenAIConfig{APIKey: "k", BaseURL: srv.URL})
+	p := NewOpenAIProvider(OpenAIConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k", BaseURL: srv.URL}})
 	_, err := p.Edit(context.Background(), &EditRequest{
 		Image:  bytes.NewReader([]byte("img")),
 		Prompt: "edit",
@@ -90,7 +91,7 @@ func TestOpenAIProvider_CreateVariation_WithAllFields(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	p := NewOpenAIProvider(OpenAIConfig{APIKey: "k", BaseURL: srv.URL})
+	p := NewOpenAIProvider(OpenAIConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k", BaseURL: srv.URL}})
 	resp, err := p.CreateVariation(context.Background(), &VariationRequest{
 		Image: bytes.NewReader([]byte("img")),
 		N:     3,
@@ -107,7 +108,7 @@ func TestOpenAIProvider_CreateVariation_HTTPError(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	p := NewOpenAIProvider(OpenAIConfig{APIKey: "k", BaseURL: srv.URL})
+	p := NewOpenAIProvider(OpenAIConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k", BaseURL: srv.URL}})
 	_, err := p.CreateVariation(context.Background(), &VariationRequest{
 		Image: bytes.NewReader([]byte("img")),
 	})
@@ -135,7 +136,7 @@ func TestOpenAIProvider_Generate_WithOptionalFields(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	p := NewOpenAIProvider(OpenAIConfig{APIKey: "k", BaseURL: srv.URL})
+	p := NewOpenAIProvider(OpenAIConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k", BaseURL: srv.URL}})
 	resp, err := p.Generate(context.Background(), &GenerateRequest{
 		Prompt:         "a dog",
 		Model:          "dall-e-3",
@@ -169,7 +170,7 @@ func TestFluxProvider_Generate_WithOptionalFields(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	p := NewFluxProvider(FluxConfig{APIKey: "k", BaseURL: srv.URL})
+	p := NewFluxProvider(FluxConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k", BaseURL: srv.URL}})
 	_, err := p.Generate(context.Background(), &GenerateRequest{
 		Prompt:   "landscape",
 		Steps:    30,
@@ -213,7 +214,7 @@ func TestFluxProvider_Generate_WithPolling(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	p := NewFluxProvider(FluxConfig{APIKey: "k", BaseURL: srv.URL})
+	p := NewFluxProvider(FluxConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k", BaseURL: srv.URL}})
 	resp, err := p.Generate(context.Background(), &GenerateRequest{Prompt: "test"})
 	require.NoError(t, err)
 	assert.Equal(t, "https://example.com/polled.jpg", resp.Images[0].URL)
@@ -232,7 +233,7 @@ func TestFluxProvider_Generate_PollContextCancelled(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	p := NewFluxProvider(FluxConfig{APIKey: "k", BaseURL: srv.URL})
+	p := NewFluxProvider(FluxConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k", BaseURL: srv.URL}})
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel() // cancel immediately
 
@@ -258,7 +259,7 @@ func TestFluxProvider_Generate_PollError(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	p := NewFluxProvider(FluxConfig{APIKey: "k", BaseURL: srv.URL})
+	p := NewFluxProvider(FluxConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k", BaseURL: srv.URL}})
 	_, err := p.Generate(context.Background(), &GenerateRequest{Prompt: "test"})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "flux generation failed")

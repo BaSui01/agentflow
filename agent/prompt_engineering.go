@@ -6,7 +6,7 @@ import (
 	"sync"
 )
 
-// 快速EnhancerConfig 快速工程配置
+// PromptEnhancerConfig 提示词增强配置
 type PromptEnhancerConfig struct {
 	UseChainOfThought   bool `json:"use_chain_of_thought"`   // Use Chain of Thought (CoT)
 	UseSelfConsistency  bool `json:"use_self_consistency"`   // Use self-consistency
@@ -16,18 +16,9 @@ type PromptEnhancerConfig struct {
 	UseDelimiters       bool `json:"use_delimiters"`         // Use delimiters
 }
 
-// ExpressEngineeringConfig 是用于向后兼容的ExpressEngineeringConfig的别名
-type PromptEngineeringConfig = PromptEnhancerConfig
-
-// 默认Prompt EnhancerConfig 返回默认的快速增强器配置
+// DefaultPromptEnhancerConfig 返回默认的提示词增强器配置
 func DefaultPromptEnhancerConfig() *PromptEnhancerConfig {
-	config := DefaultPromptEngineeringConfig()
-	return &config
-}
-
-// 默认PromptEngineeringConfig 返回默认的快速工程配置
-func DefaultPromptEngineeringConfig() PromptEngineeringConfig {
-	return PromptEngineeringConfig{
+	return &PromptEnhancerConfig{
 		UseChainOfThought:   true,
 		UseSelfConsistency:  false,
 		UseStructuredOutput: true,
@@ -39,11 +30,11 @@ func DefaultPromptEngineeringConfig() PromptEngineeringConfig {
 
 // PromptEnhancer 提示词增强器
 type PromptEnhancer struct {
-	config PromptEngineeringConfig
+	config PromptEnhancerConfig
 }
 
 // NewPromptEnhancer 创建提示词增强器
-func NewPromptEnhancer(config PromptEngineeringConfig) *PromptEnhancer {
+func NewPromptEnhancer(config PromptEnhancerConfig) *PromptEnhancer {
 	return &PromptEnhancer{config: config}
 }
 

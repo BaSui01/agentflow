@@ -32,7 +32,7 @@ func MapHTTPError(status int, msg string, provider string) *llm.Error {
 		}
 	case http.StatusTooManyRequests:
 		return &llm.Error{
-			Code:       llm.ErrRateLimited,
+			Code:       llm.ErrRateLimit,
 			Message:    msg,
 			HTTPStatus: status,
 			Retryable:  true,

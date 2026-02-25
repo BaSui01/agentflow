@@ -22,7 +22,7 @@ func TestDefaultConfig_ContainsAllSubConfigs(t *testing.T) {
 	assert.NotEqual(t, QdrantConfig{}, cfg.Qdrant)
 	assert.NotEqual(t, WeaviateConfig{}, cfg.Weaviate)
 	assert.NotEqual(t, MilvusConfig{}, cfg.Milvus)
-	assert.NotEqual(t, LLMConfig{}, cfg.LLM)
+	assert.NotEqual(t, LLMConnectionConfig{}, cfg.LLM)
 	assert.NotEqual(t, LogConfig{}, cfg.Log)
 	assert.NotEqual(t, TelemetryConfig{}, cfg.Telemetry)
 }

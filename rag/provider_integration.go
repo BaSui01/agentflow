@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/BaSui01/agentflow/llm/embedding"
+	"github.com/BaSui01/agentflow/llm/providers"
 	"github.com/BaSui01/agentflow/llm/rerank"
 	"go.uber.org/zap"
 )
@@ -155,7 +156,7 @@ func (r *EnhancedRetriever) applyExternalRerank(ctx context.Context, query strin
 // 新 OpenAIREtriever 创建了带有 OpenAI 嵌入式的检索器 。
 func NewOpenAIRetriever(apiKey string, logger *zap.Logger) *EnhancedRetriever {
 	embProvider := embedding.NewOpenAIProvider(embedding.OpenAIConfig{
-		APIKey: apiKey,
+		BaseProviderConfig: providers.BaseProviderConfig{APIKey: apiKey},
 	})
 
 	return NewEnhancedRetriever(EnhancedRetrieverConfig{
@@ -167,7 +168,7 @@ func NewOpenAIRetriever(apiKey string, logger *zap.Logger) *EnhancedRetriever {
 // NewCohere Retriever创建了由Cohere嵌入并重排的取回器.
 func NewCohereRetriever(apiKey string, logger *zap.Logger) *EnhancedRetriever {
 	embProvider := embedding.NewCohereProvider(embedding.CohereConfig{
-		APIKey: apiKey,
+		BaseProviderConfig: providers.BaseProviderConfig{APIKey: apiKey},
 	})
 	rerankProvider := rerank.NewCohereProvider(rerank.CohereConfig{
 		APIKey: apiKey,
@@ -183,7 +184,7 @@ func NewCohereRetriever(apiKey string, logger *zap.Logger) *EnhancedRetriever {
 // NewVoyage Retriever 创建取回器,由Voyage AI嵌入并重排.
 func NewVoyageRetriever(apiKey string, logger *zap.Logger) *EnhancedRetriever {
 	embProvider := embedding.NewVoyageProvider(embedding.VoyageConfig{
-		APIKey: apiKey,
+		BaseProviderConfig: providers.BaseProviderConfig{APIKey: apiKey},
 	})
 	rerankProvider := rerank.NewVoyageProvider(rerank.VoyageConfig{
 		APIKey: apiKey,
@@ -199,7 +200,7 @@ func NewVoyageRetriever(apiKey string, logger *zap.Logger) *EnhancedRetriever {
 // 新JinaRetriever创建取回器,由Jina AI嵌入并重排.
 func NewJinaRetriever(apiKey string, logger *zap.Logger) *EnhancedRetriever {
 	embProvider := embedding.NewJinaProvider(embedding.JinaConfig{
-		APIKey: apiKey,
+		BaseProviderConfig: providers.BaseProviderConfig{APIKey: apiKey},
 	})
 	rerankProvider := rerank.NewJinaProvider(rerank.JinaConfig{
 		APIKey: apiKey,

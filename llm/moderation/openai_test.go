@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/BaSui01/agentflow/llm/providers"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -20,7 +21,7 @@ func TestDefaultOpenAIConfig(t *testing.T) {
 }
 
 func TestNewOpenAIProvider(t *testing.T) {
-	p := NewOpenAIProvider(OpenAIConfig{APIKey: "test-key"})
+	p := NewOpenAIProvider(OpenAIConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key"}})
 	require.NotNil(t, p)
 	assert.Equal(t, "https://api.openai.com/v1", p.cfg.BaseURL)
 	assert.Equal(t, "omni-moderation-latest", p.cfg.Model)
@@ -28,10 +29,12 @@ func TestNewOpenAIProvider(t *testing.T) {
 
 func TestNewOpenAIProvider_CustomConfig(t *testing.T) {
 	cfg := OpenAIConfig{
-		APIKey:  "key",
-		BaseURL: "https://custom.api.com",
-		Model:   "custom-model",
-		Timeout: 10 * time.Second,
+		BaseProviderConfig: providers.BaseProviderConfig{
+			APIKey:  "key",
+			BaseURL: "https://custom.api.com",
+			Model:   "custom-model",
+			Timeout: 10 * time.Second,
+		},
 	}
 	p := NewOpenAIProvider(cfg)
 	assert.Equal(t, "https://custom.api.com", p.cfg.BaseURL)
@@ -75,7 +78,7 @@ func TestOpenAIProvider_Moderate_TextOnly(t *testing.T) {
 	}))
 	defer server.Close()
 
-	p := NewOpenAIProvider(OpenAIConfig{APIKey: "test-key", BaseURL: server.URL})
+	p := NewOpenAIProvider(OpenAIConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key", BaseURL: server.URL}})
 	p.client = server.Client()
 
 	result, err := p.Moderate(context.Background(), &ModerationRequest{
@@ -117,7 +120,7 @@ func TestOpenAIProvider_Moderate_WithImages(t *testing.T) {
 	}))
 	defer server.Close()
 
-	p := NewOpenAIProvider(OpenAIConfig{APIKey: "test-key", BaseURL: server.URL})
+	p := NewOpenAIProvider(OpenAIConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key", BaseURL: server.URL}})
 	p.client = server.Client()
 
 	result, err := p.Moderate(context.Background(), &ModerationRequest{
@@ -141,7 +144,7 @@ func TestOpenAIProvider_Moderate_CustomModel(t *testing.T) {
 	}))
 	defer server.Close()
 
-	p := NewOpenAIProvider(OpenAIConfig{APIKey: "key", BaseURL: server.URL})
+	p := NewOpenAIProvider(OpenAIConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "key", BaseURL: server.URL}})
 	p.client = server.Client()
 
 	result, err := p.Moderate(context.Background(), &ModerationRequest{
@@ -159,7 +162,7 @@ func TestOpenAIProvider_Moderate_HTTPError(t *testing.T) {
 	}))
 	defer server.Close()
 
-	p := NewOpenAIProvider(OpenAIConfig{APIKey: "key", BaseURL: server.URL})
+	p := NewOpenAIProvider(OpenAIConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "key", BaseURL: server.URL}})
 	p.client = server.Client()
 
 	_, err := p.Moderate(context.Background(), &ModerationRequest{Input: []string{"text"}})
@@ -173,7 +176,7 @@ func TestOpenAIProvider_Moderate_ContextCancelled(t *testing.T) {
 	}))
 	defer server.Close()
 
-	p := NewOpenAIProvider(OpenAIConfig{APIKey: "key", BaseURL: server.URL})
+	p := NewOpenAIProvider(OpenAIConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "key", BaseURL: server.URL}})
 	p.client = server.Client()
 
 	ctx, cancel := context.WithCancel(context.Background())

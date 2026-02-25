@@ -199,7 +199,7 @@ func TestMistralProvider_Completion_RateLimited(t *testing.T) {
 	require.Error(t, err)
 	llmErr, ok := err.(*llm.Error)
 	require.True(t, ok)
-	assert.Equal(t, llm.ErrRateLimited, llmErr.Code)
+	assert.Equal(t, llm.ErrRateLimit, llmErr.Code)
 	assert.True(t, llmErr.Retryable)
 }
 
@@ -321,7 +321,7 @@ func TestMistralProvider_Stream_Error(t *testing.T) {
 	require.Error(t, err)
 	llmErr, ok := err.(*llm.Error)
 	require.True(t, ok)
-	assert.Equal(t, llm.ErrRateLimited, llmErr.Code)
+	assert.Equal(t, llm.ErrRateLimit, llmErr.Code)
 }
 
 // --- Multimodal not-supported methods ---

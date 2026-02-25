@@ -151,3 +151,31 @@ type RunOutputDoc struct {
 	Cost         float64 `json:"cost"`
 	FinishReason string  `json:"finish_reason"`
 }
+
+// =============================================================================
+// Orchestration Interfaces (used by agent/orchestration bridge)
+// =============================================================================
+
+// OrchestratorRunner executes a multi-agent orchestration task.
+// Implemented by: *orchestration.OrchestratorAdapter (agent/orchestration/)
+type OrchestratorRunner interface {
+	Execute(ctx context.Context, task *OrchestrationTaskInput) (*OrchestrationTaskOutput, error)
+}
+
+// OrchestrationTaskInput is the input for an orchestration task.
+type OrchestrationTaskInput struct {
+	ID          string         `json:"id"`
+	Description string         `json:"description"`
+	Input       string         `json:"input"`
+	Agents      []string       `json:"agents,omitempty"`
+	Metadata    map[string]any `json:"metadata,omitempty"`
+}
+
+// OrchestrationTaskOutput is the output from an orchestration task.
+type OrchestrationTaskOutput struct {
+	Pattern   string         `json:"pattern"`
+	Output    string         `json:"output"`
+	AgentUsed []string       `json:"agent_used,omitempty"`
+	Duration  time.Duration  `json:"duration"`
+	Metadata  map[string]any `json:"metadata,omitempty"`
+}

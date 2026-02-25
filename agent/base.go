@@ -172,6 +172,13 @@ type BaseAgent struct {
 	promptStore       PromptStoreProvider
 	conversationStore ConversationStoreProvider
 	runStore          RunStoreProvider
+
+	// Composite sub-managers (used by pipeline steps)
+	extensions  *ExtensionRegistry
+	llmEngine   *LLMEngine
+	persistence *PersistenceStores
+	guardrails  *GuardrailsManager
+	memoryCache *MemoryCache
 }
 
 // NewBaseAgent 创建基础 Agent
@@ -183,6 +190,8 @@ func NewBaseAgent(
 	bus EventBus,
 	logger *zap.Logger,
 ) *BaseAgent {
+	agentLogger := logger.With(zap.String("agent_id", cfg.ID), zap.String("agent_type", string(cfg.Type)))
+
 	ba := &BaseAgent{
 		config:      cfg,
 		state:       StateInit,
@@ -190,12 +199,19 @@ func NewBaseAgent(
 		memory:      memory,
 		toolManager: toolManager,
 		bus:         bus,
-		logger:      logger.With(zap.String("agent_id", cfg.ID), zap.String("agent_type", string(cfg.Type))),
+		logger:      agentLogger,
 	}
+
+	// Initialize composite sub-managers for pipeline steps
+	ba.extensions = NewExtensionRegistry(agentLogger)
+	ba.persistence = NewPersistenceStores(agentLogger)
+	ba.guardrails = NewGuardrailsManager(agentLogger)
+	ba.memoryCache = NewMemoryCache(cfg.ID, memory, agentLogger)
 
 	// 如果配置, 初始化守护栏
 	if cfg.Guardrails != nil {
 		ba.initGuardrails(cfg.Guardrails)
+		ba.guardrails.Init(cfg.Guardrails)
 	}
 
 	return ba

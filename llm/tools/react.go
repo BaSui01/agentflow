@@ -417,23 +417,3 @@ func (r *ReActExecutor) executeToolsWithStreaming(
 
 	return results
 }
-
-// ToMessage 将 ToolResult 转换为 LLM 消息.
-func (tr ToolResult) ToMessage() llm.Message {
-	msg := llm.Message{
-		Role:       llm.RoleTool,
-		ToolCallID: tr.ToolCallID,
-		Name:       tr.Name,
-	}
-	if tr.Error != "" {
-		msg.Content = fmt.Sprintf("Error: %s", tr.Error)
-	} else {
-		msg.Content = string(tr.Result)
-	}
-	return msg
-}
-
-// ToJSON 将 ToolResult 序列化为 JSON.
-func (tr ToolResult) ToJSON() (json.RawMessage, error) {
-	return json.Marshal(tr)
-}

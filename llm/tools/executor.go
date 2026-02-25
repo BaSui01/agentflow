@@ -36,15 +36,9 @@ type RateLimitConfig struct {
 	Window   time.Duration // Time window
 }
 
-// ToolResult 表示工具执行结果.
-type ToolResult struct {
-	ToolCallID string          `json:"tool_call_id"`
-	Name       string          `json:"name"`
-	Result     json.RawMessage `json:"result"`
-	Error      string          `json:"error,omitempty"`
-	Duration   time.Duration   `json:"duration"`
-	FromCache  bool            `json:"from_cache,omitempty"`
-}
+// ToolResult is a type alias for llm.ToolResult (re-exported from types.ToolResult).
+// The canonical definition lives in types/tool.go.
+type ToolResult = llm.ToolResult
 
 // ToolRegistry 定义工具注册接口.
 type ToolRegistry interface {

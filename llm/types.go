@@ -185,23 +185,6 @@ func (k *LLMProviderAPIKey) IncrementUsage(success bool) {
 }
 
 // ============================================================
-// 扩展类型(与协会)
-// ============================================================
-
-// LLMMOdel Extended 扩展 LLMMOdel 与协会
-type LLMModelExtended struct {
-	LLMModel
-	ProviderModels []LLMProviderModel `gorm:"foreignKey:ModelID" json:"provider_models,omitempty"`
-}
-
-// LLMProvider Extended 扩展 LLMProvider 协会
-type LLMProviderExtended struct {
-	LLMProvider
-	APIKeys        []LLMProviderAPIKey `gorm:"foreignKey:ProviderID" json:"api_keys,omitempty"`
-	ProviderModels []LLMProviderModel  `gorm:"foreignKey:ProviderID" json:"provider_models,omitempty"`
-}
-
-// ============================================================
 // 审计日志
 // ============================================================
 

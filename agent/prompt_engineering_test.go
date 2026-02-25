@@ -11,8 +11,8 @@ import (
 // PromptEnhancerConfig tests
 // ============================================================
 
-func TestDefaultPromptEngineeringConfig(t *testing.T) {
-	cfg := DefaultPromptEngineeringConfig()
+func TestDefaultPromptEnhancerConfig_Values(t *testing.T) {
+	cfg := DefaultPromptEnhancerConfig()
 	assert.True(t, cfg.UseChainOfThought)
 	assert.False(t, cfg.UseSelfConsistency)
 	assert.True(t, cfg.UseStructuredOutput)
@@ -32,7 +32,7 @@ func TestDefaultPromptEnhancerConfig(t *testing.T) {
 // ============================================================
 
 func TestPromptEnhancer_EnhancePromptBundle_ChainOfThought(t *testing.T) {
-	enhancer := NewPromptEnhancer(PromptEngineeringConfig{
+	enhancer := NewPromptEnhancer(PromptEnhancerConfig{
 		UseChainOfThought: true,
 	})
 
@@ -44,7 +44,7 @@ func TestPromptEnhancer_EnhancePromptBundle_ChainOfThought(t *testing.T) {
 }
 
 func TestPromptEnhancer_EnhancePromptBundle_SkipCoTIfPresent(t *testing.T) {
-	enhancer := NewPromptEnhancer(PromptEngineeringConfig{
+	enhancer := NewPromptEnhancer(PromptEnhancerConfig{
 		UseChainOfThought: true,
 	})
 
@@ -57,7 +57,7 @@ func TestPromptEnhancer_EnhancePromptBundle_SkipCoTIfPresent(t *testing.T) {
 }
 
 func TestPromptEnhancer_EnhancePromptBundle_StructuredOutput(t *testing.T) {
-	enhancer := NewPromptEnhancer(PromptEngineeringConfig{
+	enhancer := NewPromptEnhancer(PromptEnhancerConfig{
 		UseStructuredOutput: true,
 	})
 
@@ -70,7 +70,7 @@ func TestPromptEnhancer_EnhancePromptBundle_StructuredOutput(t *testing.T) {
 }
 
 func TestPromptEnhancer_EnhancePromptBundle_StructuredOutputSkipIfPresent(t *testing.T) {
-	enhancer := NewPromptEnhancer(PromptEngineeringConfig{
+	enhancer := NewPromptEnhancer(PromptEnhancerConfig{
 		UseStructuredOutput: true,
 	})
 
@@ -86,7 +86,7 @@ func TestPromptEnhancer_EnhancePromptBundle_StructuredOutputSkipIfPresent(t *tes
 }
 
 func TestPromptEnhancer_EnhancePromptBundle_FewShotLimit(t *testing.T) {
-	enhancer := NewPromptEnhancer(PromptEngineeringConfig{
+	enhancer := NewPromptEnhancer(PromptEnhancerConfig{
 		UseFewShot:  true,
 		MaxExamples: 2,
 	})
@@ -103,7 +103,7 @@ func TestPromptEnhancer_EnhancePromptBundle_FewShotLimit(t *testing.T) {
 }
 
 func TestPromptEnhancer_EnhancePromptBundle_Delimiters(t *testing.T) {
-	enhancer := NewPromptEnhancer(PromptEngineeringConfig{
+	enhancer := NewPromptEnhancer(PromptEnhancerConfig{
 		UseDelimiters: true,
 	})
 
@@ -115,7 +115,7 @@ func TestPromptEnhancer_EnhancePromptBundle_Delimiters(t *testing.T) {
 }
 
 func TestPromptEnhancer_EnhancePromptBundle_DelimitersSkipIfPresent(t *testing.T) {
-	enhancer := NewPromptEnhancer(PromptEngineeringConfig{
+	enhancer := NewPromptEnhancer(PromptEnhancerConfig{
 		UseDelimiters: true,
 	})
 
@@ -130,14 +130,14 @@ func TestPromptEnhancer_EnhancePromptBundle_DelimitersSkipIfPresent(t *testing.T
 func TestPromptEnhancer_EnhanceUserPrompt(t *testing.T) {
 	tests := []struct {
 		name         string
-		config       PromptEngineeringConfig
+		config       PromptEnhancerConfig
 		prompt       string
 		outputFormat string
 		checkFn      func(t *testing.T, result string)
 	}{
 		{
 			name:   "delimiters added",
-			config: PromptEngineeringConfig{UseDelimiters: true},
+			config: PromptEnhancerConfig{UseDelimiters: true},
 			prompt: "hello world",
 			checkFn: func(t *testing.T, result string) {
 				assert.Contains(t, result, "```")
@@ -145,7 +145,7 @@ func TestPromptEnhancer_EnhanceUserPrompt(t *testing.T) {
 		},
 		{
 			name:   "delimiters not added if already present",
-			config: PromptEngineeringConfig{UseDelimiters: true},
+			config: PromptEnhancerConfig{UseDelimiters: true},
 			prompt: "```\nhello\n```",
 			checkFn: func(t *testing.T, result string) {
 				// Should not double-wrap
@@ -154,7 +154,7 @@ func TestPromptEnhancer_EnhanceUserPrompt(t *testing.T) {
 		},
 		{
 			name:   "chain of thought added",
-			config: PromptEngineeringConfig{UseChainOfThought: true},
+			config: PromptEnhancerConfig{UseChainOfThought: true},
 			prompt: "solve this",
 			checkFn: func(t *testing.T, result string) {
 				assert.Contains(t, result, "一步步思考")
@@ -162,7 +162,7 @@ func TestPromptEnhancer_EnhanceUserPrompt(t *testing.T) {
 		},
 		{
 			name:   "chain of thought skipped if present",
-			config: PromptEngineeringConfig{UseChainOfThought: true},
+			config: PromptEnhancerConfig{UseChainOfThought: true},
 			prompt: "solve this step by step",
 			checkFn: func(t *testing.T, result string) {
 				// Should not add another CoT prompt
@@ -171,7 +171,7 @@ func TestPromptEnhancer_EnhanceUserPrompt(t *testing.T) {
 		},
 		{
 			name:         "structured output format appended",
-			config:       PromptEngineeringConfig{UseStructuredOutput: true},
+			config:       PromptEnhancerConfig{UseStructuredOutput: true},
 			prompt:       "analyze this",
 			outputFormat: "JSON",
 			checkFn: func(t *testing.T, result string) {
@@ -180,7 +180,7 @@ func TestPromptEnhancer_EnhanceUserPrompt(t *testing.T) {
 		},
 		{
 			name:         "structured output not appended without format",
-			config:       PromptEngineeringConfig{UseStructuredOutput: true},
+			config:       PromptEnhancerConfig{UseStructuredOutput: true},
 			prompt:       "analyze this",
 			outputFormat: "",
 			checkFn: func(t *testing.T, result string) {

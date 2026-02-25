@@ -8,6 +8,7 @@ import (
 	agentlsp "github.com/BaSui01/agentflow/agent/lsp"
 	"github.com/BaSui01/agentflow/agent/memory"
 	mcpproto "github.com/BaSui01/agentflow/agent/protocol/mcp"
+	"github.com/BaSui01/agentflow/agent/reasoning"
 	"github.com/BaSui01/agentflow/agent/skills"
 	"github.com/BaSui01/agentflow/llm"
 	"go.uber.org/zap"
@@ -39,6 +40,10 @@ type AgentBuilder struct {
 	promptStore       PromptStoreProvider
 	conversationStore ConversationStoreProvider
 	runStore          RunStoreProvider
+
+	// Orchestration and reasoning (optional)
+	orchestratorInstance OrchestratorRunner
+	reasoningRegistry   *reasoning.PatternRegistry
 
 	errors []error
 }
@@ -134,13 +139,6 @@ func (b *AgentBuilder) WithPromptEnhancer(config *PromptEnhancerConfig) *AgentBu
 	b.promptEnhancerConfig = config
 	b.config.EnablePromptEnhancer = true
 	return b
-}
-
-// MCPServer 选项配置构建器如何创建默认的 MCP 服务器.
-// Deprecated: Use WithDefaultMCPServer(name, version) instead.
-type MCPServerOptions struct {
-	Name    string
-	Version string
 }
 
 // WithSkills 启用 Skills 系统
@@ -271,6 +269,28 @@ func (b *AgentBuilder) WithConversationStore(store ConversationStoreProvider) *A
 func (b *AgentBuilder) WithRunStore(store RunStoreProvider) *AgentBuilder {
 	b.runStore = store
 	return b
+}
+
+// WithOrchestrator sets the orchestration runner for multi-agent coordination.
+func (b *AgentBuilder) WithOrchestrator(orchestrator OrchestratorRunner) *AgentBuilder {
+	b.orchestratorInstance = orchestrator
+	return b
+}
+
+// WithReasoning sets the reasoning pattern registry for advanced reasoning strategies.
+func (b *AgentBuilder) WithReasoning(registry *reasoning.PatternRegistry) *AgentBuilder {
+	b.reasoningRegistry = registry
+	return b
+}
+
+// Orchestrator returns the configured orchestrator runner (may be nil).
+func (b *AgentBuilder) Orchestrator() OrchestratorRunner {
+	return b.orchestratorInstance
+}
+
+// ReasoningRegistry returns the configured reasoning pattern registry (may be nil).
+func (b *AgentBuilder) ReasoningRegistry() *reasoning.PatternRegistry {
+	return b.reasoningRegistry
 }
 
 // Build 构建 Agent 实例

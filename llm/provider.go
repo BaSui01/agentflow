@@ -35,7 +35,6 @@ const (
 	ErrUnauthorized        = types.ErrUnauthorized
 	ErrForbidden           = types.ErrForbidden
 	ErrRateLimit           = types.ErrRateLimit
-	ErrRateLimited         = types.ErrRateLimited
 	ErrQuotaExceeded       = types.ErrQuotaExceeded
 	ErrModelNotFound       = types.ErrModelNotFound
 	ErrModelOverloaded     = types.ErrModelOverloaded

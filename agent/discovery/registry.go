@@ -97,6 +97,15 @@ func WithStore(store RegistryStore) RegistryOption {
 	}
 }
 
+// SetStore sets the persistence backend after construction.
+// This is useful when the store is not available at construction time
+// (e.g., when MongoDB stores are initialized after the registry).
+func (r *CapabilityRegistry) SetStore(store RegistryStore) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.store = store
+}
+
 // 新能力登记系统建立了一个新的能力登记册。
 func NewCapabilityRegistry(config *RegistryConfig, logger *zap.Logger, opts ...RegistryOption) *CapabilityRegistry {
 	if config == nil {
