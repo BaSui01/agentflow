@@ -60,11 +60,14 @@ func (b *ZeroCopyBuffer) Read(p []byte) (int, error) {
 	return n, nil
 }
 
-// 字节返回未读部分而不复制 。
+// 字节返回未读部分的副本（线程安全）。
 func (b *ZeroCopyBuffer) Bytes() []byte {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
-	return b.data[b.readPos:b.writePos]
+	src := b.data[b.readPos:b.writePos]
+	out := make([]byte, len(src))
+	copy(out, src)
+	return out
 }
 
 // 字节不安全返回字节没有锁(调用器必须确保安全).
@@ -167,8 +170,10 @@ func (r *ChunkReader) Reset() {
 	r.pos = 0
 }
 
-// RingBuffer提供无锁环缓冲来进行流.
-// readIdx 和 writeIdx 使用 atomic 操作保证并发安全。
+// RingBuffer 提供无锁环形缓冲用于流式传输。
+// 重要：仅适用于单生产者单消费者（SPSC）场景。
+// 多生产者或多消费者并发使用会导致数据竞争。
+// readIdx 和 writeIdx 使用 atomic 操作保证 SPSC 场景下的并发安全。
 type RingBuffer struct {
 	data     []byte
 	size     int

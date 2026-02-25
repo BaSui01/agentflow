@@ -377,16 +377,16 @@ func TestClaudeProvider_Stream(t *testing.T) {
 			Delta: &claudeDelta{Type: "text_delta", Text: "world"},
 		})
 
-		// message_delta with stop reason
+		// message_delta with stop reason and usage (Anthropic sends usage in message_delta)
 		writeSSEEvent(w, "message_delta", claudeStreamEvent{
 			Type:  "message_delta",
 			Delta: &claudeDelta{StopReason: "end_turn"},
+			Usage: &claudeUsage{InputTokens: 10, OutputTokens: 5},
 		})
 
-		// message_stop with usage
+		// message_stop (no payload per Anthropic API)
 		writeSSEEvent(w, "message_stop", claudeStreamEvent{
-			Type:  "message_stop",
-			Usage: &claudeUsage{InputTokens: 10, OutputTokens: 5},
+			Type: "message_stop",
 		})
 	}))
 	t.Cleanup(func() { server.Close() })

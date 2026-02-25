@@ -86,9 +86,9 @@ func TestChooseModel_Priority(t *testing.T) {
 // 在没有指定其他模型时正确返回
 func TestChooseModel_ProviderDefaults(t *testing.T) {
 	providerDefaults := map[string]string{
-		"grok":     "grok-beta",
+		"grok":     "grok-3",
 		"glm":      "glm-4-plus",
-		"minimax":  "abab6.5s-chat",
+		"minimax":  "MiniMax-Text-01",
 		"qwen":     "qwen-plus",
 		"deepseek": "deepseek-chat",
 	}

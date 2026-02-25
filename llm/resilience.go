@@ -250,12 +250,39 @@ func (rp *ResilientProvider) Completion(ctx context.Context, req *ChatRequest) (
 	return resp, nil
 }
 
-// Stream 执行器 提供器( 不重试进行 streaming) 。
+// Stream 执行 streaming 请求（不重试，但记录成功/失败到 circuit breaker）。
 func (rp *ResilientProvider) Stream(ctx context.Context, req *ChatRequest) (<-chan StreamChunk, error) {
 	if rp.circuitBreaker.State() == CircuitOpen {
 		return nil, ErrCircuitOpen
 	}
-	return rp.provider.Stream(ctx, req)
+	ch, err := rp.provider.Stream(ctx, req)
+	if err != nil {
+		rp.circuitBreaker.recordFailure()
+		return nil, err
+	}
+	// Wrap channel to record success/failure based on stream outcome
+	wrapped := make(chan StreamChunk)
+	go func() {
+		defer close(wrapped)
+		var hadError bool
+		for chunk := range ch {
+			if chunk.Err != nil {
+				hadError = true
+			}
+			select {
+			case <-ctx.Done():
+				rp.circuitBreaker.recordFailure()
+				return
+			case wrapped <- chunk:
+			}
+		}
+		if hadError {
+			rp.circuitBreaker.recordFailure()
+		} else {
+			rp.circuitBreaker.recordSuccess()
+		}
+	}()
+	return wrapped, nil
 }
 
 // 健康检查工具 提供者。

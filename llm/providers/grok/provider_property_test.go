@@ -246,7 +246,7 @@ func TestProperty5_DefaultModelSelectionPriority(t *testing.T) {
 			name:          "default model used when both empty",
 			requestModel:  "",
 			configModel:   "",
-			expectedModel: "grok-beta",
+			expectedModel: "grok-3",
 		},
 		{
 			name:          "request model used even if config has value",

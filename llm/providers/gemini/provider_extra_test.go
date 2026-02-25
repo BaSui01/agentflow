@@ -133,8 +133,8 @@ func TestConvertToGeminiTools_InvalidJSON(t *testing.T) {
 func TestGeminiProvider_Stream_Success(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Contains(t, r.URL.Path, "streamGenerateContent")
-		w.Header().Set("Content-Type", "application/json")
-		// Return a simple streaming response
+		w.Header().Set("Content-Type", "text/event-stream")
+		// Return a simple SSE streaming response
 		chunk := geminiResponse{
 			Candidates: []geminiCandidate{
 				{Content: geminiContent{
@@ -143,8 +143,10 @@ func TestGeminiProvider_Stream_Success(t *testing.T) {
 				}},
 			},
 		}
-		data, _ := json.Marshal([]geminiResponse{chunk})
+		data, _ := json.Marshal(chunk)
+		w.Write([]byte("data: "))
 		w.Write(data)
+		w.Write([]byte("\n\n"))
 	}))
 	t.Cleanup(server.Close)
 

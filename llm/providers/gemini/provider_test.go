@@ -297,10 +297,10 @@ func TestGeminiProvider_Stream(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Contains(t, r.URL.Path, "streamGenerateContent")
 
-		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Content-Type", "text/event-stream")
 		w.WriteHeader(http.StatusOK)
 
-		// Gemini streams JSON objects, one per line
+		// With ?alt=sse, Gemini streams SSE format: "data: {...}\n\n"
 		chunk1 := geminiResponse{
 			Candidates: []geminiCandidate{{
 				Content: geminiContent{Role: "model", Parts: []geminiPart{{Text: "Hello "}}},
@@ -322,10 +322,12 @@ func TestGeminiProvider_Stream(t *testing.T) {
 
 		data1, _ := json.Marshal(chunk1)
 		data2, _ := json.Marshal(chunk2)
+		w.Write([]byte("data: "))
 		w.Write(data1)
-		w.Write([]byte("\n"))
+		w.Write([]byte("\n\n"))
+		w.Write([]byte("data: "))
 		w.Write(data2)
-		w.Write([]byte("\n"))
+		w.Write([]byte("\n\n"))
 	}))
 	t.Cleanup(func() { server.Close() })
 

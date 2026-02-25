@@ -2,6 +2,7 @@ package providers
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -51,6 +52,35 @@ func MapHTTPError(status int, msg string, provider string) *llm.Error {
 				Provider:   provider,
 			}
 		}
+		return &llm.Error{
+			Code:       llm.ErrInvalidRequest,
+			Message:    msg,
+			HTTPStatus: status,
+			Provider:   provider,
+		}
+	case http.StatusPaymentRequired: // 402 — insufficient balance / quota exceeded
+		return &llm.Error{
+			Code:       llm.ErrQuotaExceeded,
+			Message:    msg,
+			HTTPStatus: status,
+			Provider:   provider,
+		}
+	case http.StatusRequestTimeout: // 408 — request timeout, retryable
+		return &llm.Error{
+			Code:       llm.ErrTimeout,
+			Message:    msg,
+			HTTPStatus: status,
+			Retryable:  true,
+			Provider:   provider,
+		}
+	case http.StatusRequestEntityTooLarge: // 413 — request body too large
+		return &llm.Error{
+			Code:       llm.ErrInvalidRequest,
+			Message:    msg,
+			HTTPStatus: status,
+			Provider:   provider,
+		}
+	case http.StatusUnprocessableEntity: // 422 — parameter validation failed
 		return &llm.Error{
 			Code:       llm.ErrInvalidRequest,
 			Message:    msg,
@@ -156,16 +186,30 @@ type OpenAICompatToolCall struct {
 	Function OpenAICompatFunction `json:"function"`
 }
 
-// OpenAICompatFunction 表示 OpenAI 兼容的函数定义.
+// OpenAICompatFunction represents a function in a tool CALL (response).
+// The OpenAI API uses "arguments" (stringified JSON) for tool call results.
 type OpenAICompatFunction struct {
 	Name      string          `json:"name"`
 	Arguments json.RawMessage `json:"arguments"`
 }
 
-// OpenAICompatTool 表示 OpenAI 兼容的工具定义.
+// OpenAICompatFunctionDef represents a function DEFINITION in a tool declaration (request).
+// The OpenAI API uses "parameters" (JSON Schema) and "description" for tool definitions.
+type OpenAICompatFunctionDef struct {
+	Name        string          `json:"name"`
+	Description string          `json:"description,omitempty"`
+	Parameters  json.RawMessage `json:"parameters,omitempty"`
+}
+
+// OpenAICompatTool represents an OpenAI-compatible tool definition in a request.
 type OpenAICompatTool struct {
-	Type     string              `json:"type"`
-	Function OpenAICompatFunction `json:"function"`
+	Type     string                  `json:"type"`
+	Function OpenAICompatFunctionDef `json:"function"`
+}
+
+// StreamOptions controls streaming behavior for OpenAI-compatible APIs.
+type StreamOptions struct {
+	IncludeUsage bool `json:"include_usage"`
 }
 
 // OpenAICompatRequest 表示 OpenAI 兼容的聊天完成请求.
@@ -180,6 +224,7 @@ type OpenAICompatRequest struct {
 	TopP           float32               `json:"top_p,omitempty"`
 	Stop           []string              `json:"stop,omitempty"`
 	Stream         bool                  `json:"stream,omitempty"`
+	StreamOptions  *StreamOptions        `json:"stream_options,omitempty"`
 }
 
 // OpenAICompatChoice 表示 OpenAI 兼容响应中的单个选项.
@@ -244,10 +289,11 @@ func ConvertMessagesToOpenAI(msgs []llm.Message) []OpenAICompatMessage {
 						},
 					})
 				} else if img.Type == "base64" && img.Data != "" {
+					mime := detectImageMIME(img.Data)
 					parts = append(parts, map[string]any{
 						"type": "image_url",
 						"image_url": map[string]string{
-							"url": "data:image/png;base64," + img.Data,
+							"url": "data:" + mime + ";base64," + img.Data,
 						},
 					})
 				}
@@ -283,9 +329,10 @@ func ConvertToolsToOpenAI(tools []llm.ToolSchema) []OpenAICompatTool {
 	for _, t := range tools {
 		out = append(out, OpenAICompatTool{
 			Type: "function",
-			Function: OpenAICompatFunction{
-				Name:      t.Name,
-				Arguments: t.Parameters,
+			Function: OpenAICompatFunctionDef{
+				Name:        t.Name,
+				Description: t.Description,
+				Parameters:  t.Parameters,
 			},
 		})
 	}
@@ -434,5 +481,49 @@ func ListModelsOpenAICompat(ctx context.Context, client *http.Client, baseURL, a
 	}
 
 	return modelsResp.Data, nil
+}
+
+// detectImageMIME detects the MIME type from base64-encoded image data by
+// inspecting the first few decoded bytes for known magic numbers.
+// Falls back to "image/png" if detection fails.
+func detectImageMIME(b64Data string) string {
+	raw := decodeBase64Prefix(b64Data)
+	if len(raw) < 3 {
+		return "image/png"
+	}
+	return matchImageMagic(raw)
+}
+
+// decodeBase64Prefix decodes just enough bytes from a base64 string to check magic numbers.
+func decodeBase64Prefix(b64Data string) []byte {
+	prefix := b64Data
+	if len(prefix) > 16 {
+		prefix = prefix[:16]
+	}
+	raw, err := base64.StdEncoding.DecodeString(prefix)
+	if err != nil {
+		raw, err = base64.RawStdEncoding.DecodeString(prefix)
+		if err != nil {
+			return nil
+		}
+	}
+	return raw
+}
+
+// matchImageMagic matches raw bytes against known image magic numbers.
+// Requires len(raw) >= 3.
+func matchImageMagic(raw []byte) string {
+	switch {
+	case raw[0] == 0xFF && raw[1] == 0xD8:
+		return "image/jpeg"
+	case raw[0] == 0x89 && raw[1] == 'P' && raw[2] == 'N':
+		return "image/png"
+	case raw[0] == 'G' && raw[1] == 'I' && raw[2] == 'F':
+		return "image/gif"
+	case len(raw) >= 4 && raw[0] == 'R' && raw[1] == 'I' && raw[2] == 'F' && raw[3] == 'F':
+		return "image/webp"
+	default:
+		return "image/png"
+	}
 }
 

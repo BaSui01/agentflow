@@ -3,6 +3,7 @@ package middleware
 import (
 	"context"
 	"fmt"
+	"sync"
 
 	llmpkg "github.com/BaSui01/agentflow/llm"
 )
@@ -19,8 +20,9 @@ type RequestRewriter interface {
 }
 
 // RewriterChain 改写器链
-// 按顺序执行多个改写器
+// 按顺序执行多个改写器，线程安全
 type RewriterChain struct {
+	mu        sync.RWMutex
 	rewriters []RequestRewriter
 }
 
@@ -34,12 +36,21 @@ func NewRewriterChain(rewriters ...RequestRewriter) *RewriterChain {
 // Execute 执行改写器链
 // 按顺序执行所有改写器，任何一个失败则中断并返回错误
 func (c *RewriterChain) Execute(ctx context.Context, req *llmpkg.ChatRequest) (*llmpkg.ChatRequest, error) {
-	if c == nil || len(c.rewriters) == 0 {
+	if c == nil {
+		return req, nil
+	}
+
+	c.mu.RLock()
+	rewriters := make([]RequestRewriter, len(c.rewriters))
+	copy(rewriters, c.rewriters)
+	c.mu.RUnlock()
+
+	if len(rewriters) == 0 {
 		return req, nil
 	}
 
 	var err error
-	for _, rewriter := range c.rewriters {
+	for _, rewriter := range rewriters {
 		req, err = rewriter.Rewrite(ctx, req)
 		if err != nil {
 			return nil, fmt.Errorf("rewriter [%s] failed: %w", rewriter.Name(), err)
@@ -51,10 +62,16 @@ func (c *RewriterChain) Execute(ctx context.Context, req *llmpkg.ChatRequest) (*
 
 // AddRewriter 动态添加改写器
 func (c *RewriterChain) AddRewriter(rewriter RequestRewriter) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	c.rewriters = append(c.rewriters, rewriter)
 }
 
 // GetRewriters 获取所有改写器（用于调试）
 func (c *RewriterChain) GetRewriters() []RequestRewriter {
-	return c.rewriters
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	out := make([]RequestRewriter, len(c.rewriters))
+	copy(out, c.rewriters)
+	return out
 }

@@ -22,6 +22,7 @@ func NewDoubaoProvider(cfg providers.DoubaoConfig, logger *zap.Logger) *DoubaoPr
 		Provider: openaicompat.New(openaicompat.Config{
 			ProviderName:  "doubao",
 			APIKey:        cfg.APIKey,
+			APIKeys:       cfg.APIKeys,
 			BaseURL:       cfg.BaseURL,
 			DefaultModel:  cfg.Model,
 			FallbackModel: "Doubao-1.5-pro-32k",
