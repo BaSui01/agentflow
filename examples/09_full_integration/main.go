@@ -106,8 +106,8 @@ func demoEnhancedSingleAgent(logger *zap.Logger) {
 
 	// 4. Enable prompt enhancer
 	fmt.Println("4. Enabling prompt enhancer")
-	promptConfig := agent.DefaultPromptEngineeringConfig()
-	promptEnhancer := agent.NewPromptEnhancer(promptConfig)
+	promptConfig := agent.DefaultPromptEnhancerConfig()
+	promptEnhancer := agent.NewPromptEnhancer(*promptConfig)
 	baseAgent.EnablePromptEnhancer(agent.AsPromptEnhancerRunner(promptEnhancer))
 
 	// 5. Enable Skills system

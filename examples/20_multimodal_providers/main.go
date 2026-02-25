@@ -11,9 +11,10 @@ import (
 	"github.com/BaSui01/agentflow/llm/embedding"
 	"github.com/BaSui01/agentflow/llm/image"
 	"github.com/BaSui01/agentflow/llm/multimodal"
+	"github.com/BaSui01/agentflow/llm/providers"
 	"github.com/BaSui01/agentflow/llm/rerank"
-	"github.com/BaSui01/agentflow/rag"
 	"github.com/BaSui01/agentflow/llm/speech"
+	"github.com/BaSui01/agentflow/rag"
 	"go.uber.org/zap"
 )
 
@@ -44,9 +45,8 @@ func demoEmbedding(ctx context.Context, logger *zap.Logger) {
 	openaiKey := os.Getenv("OPENAI_API_KEY")
 	if openaiKey != "" {
 		provider := embedding.NewOpenAIProvider(embedding.OpenAIConfig{
-			APIKey:     openaiKey,
-			Model:      "text-embedding-3-large",
-			Dimensions: 1024, // Reduced dimensions for efficiency
+			BaseProviderConfig: providers.BaseProviderConfig{APIKey: openaiKey, Model: "text-embedding-3-large"},
+			Dimensions:         1024, // Reduced dimensions for efficiency
 		})
 
 		resp, err := provider.Embed(ctx, &embedding.EmbeddingRequest{
@@ -65,8 +65,7 @@ func demoEmbedding(ctx context.Context, logger *zap.Logger) {
 	voyageKey := os.Getenv("VOYAGE_API_KEY")
 	if voyageKey != "" {
 		provider := embedding.NewVoyageProvider(embedding.VoyageConfig{
-			APIKey: voyageKey,
-			Model:  "voyage-3-large",
+			BaseProviderConfig: providers.BaseProviderConfig{APIKey: voyageKey, Model: "voyage-3-large"},
 		})
 
 		emb, err := provider.EmbedQuery(ctx, "What is machine learning?")
@@ -81,8 +80,7 @@ func demoEmbedding(ctx context.Context, logger *zap.Logger) {
 	jinaKey := os.Getenv("JINA_API_KEY")
 	if jinaKey != "" {
 		provider := embedding.NewJinaProvider(embedding.JinaConfig{
-			APIKey: jinaKey,
-			Model:  "jina-embeddings-v3",
+			BaseProviderConfig: providers.BaseProviderConfig{APIKey: jinaKey, Model: "jina-embeddings-v3"},
 		})
 
 		resp, err := provider.Embed(ctx, &embedding.EmbeddingRequest{
@@ -188,14 +186,14 @@ func demoMultimodalRouter(ctx context.Context, logger *zap.Logger) {
 
 	// Register providers based on available API keys
 	if key := os.Getenv("OPENAI_API_KEY"); key != "" {
-		router.RegisterEmbedding("openai", embedding.NewOpenAIProvider(embedding.OpenAIConfig{APIKey: key}), true)
+		router.RegisterEmbedding("openai", embedding.NewOpenAIProvider(embedding.OpenAIConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: key}}), true)
 		router.RegisterTTS("openai", speech.NewOpenAITTSProvider(speech.OpenAITTSConfig{APIKey: key}), true)
 		router.RegisterSTT("openai", speech.NewOpenAISTTProvider(speech.OpenAISTTConfig{APIKey: key}), true)
-		router.RegisterImage("openai", image.NewOpenAIProvider(image.OpenAIConfig{APIKey: key}), true)
+		router.RegisterImage("openai", image.NewOpenAIProvider(image.OpenAIConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: key}}), true)
 	}
 
 	if key := os.Getenv("COHERE_API_KEY"); key != "" {
-		router.RegisterEmbedding("cohere", embedding.NewCohereProvider(embedding.CohereConfig{APIKey: key}), false)
+		router.RegisterEmbedding("cohere", embedding.NewCohereProvider(embedding.CohereConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: key}}), false)
 		router.RegisterRerank("cohere", rerank.NewCohereProvider(rerank.CohereConfig{APIKey: key}), true)
 	}
 
