@@ -283,28 +283,6 @@ func InitGlobalRegistry(logger *zap.Logger) {
 	})
 }
 
-// Get GlobalRegistry 返回全球注册,必要时初始化它.
-// 这是访问全球登记册的建议方式。
-func GetGlobalRegistry(logger *zap.Logger) *AgentRegistry {
-	InitGlobalRegistry(logger)
-	return GlobalRegistry
-}
-
-// AgentType在全球登记册中登记一种代理类型。
-// 如果全球登记册没有初始化,它将以nop日志初始化。
-func RegisterAgentType(agentType AgentType, factory AgentFactory) {
-	globalRegistryMu.RLock()
-	registry := GlobalRegistry
-	globalRegistryMu.RUnlock()
-
-	if registry == nil {
-		// 如果未初始化, 自动初始化 。
-		InitGlobalRegistry(zap.NewNop())
-		registry = GlobalRegistry
-	}
-	registry.Register(agentType, factory)
-}
-
 // Create Agent 使用全球登记册创建代理
 func CreateAgent(
 	config Config,

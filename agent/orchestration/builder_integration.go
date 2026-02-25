@@ -37,8 +37,7 @@ func (a *OrchestratorAdapter) Execute(ctx context.Context, task *agent.Orchestra
 	ot := &OrchestrationTask{
 		ID:          task.ID,
 		Description: task.Description,
-		Input:       task.Input,
-		Agents:      task.Agents,
+		Input:       &agent.Input{Content: task.Input},
 		Metadata:    task.Metadata,
 	}
 
@@ -47,9 +46,14 @@ func (a *OrchestratorAdapter) Execute(ctx context.Context, task *agent.Orchestra
 		return nil, err
 	}
 
+	outputContent := ""
+	if result.Output != nil {
+		outputContent = result.Output.Content
+	}
+
 	return &agent.OrchestrationTaskOutput{
 		Pattern:   string(result.Pattern),
-		Output:    result.Output,
+		Output:    outputContent,
 		AgentUsed: result.AgentUsed,
 		Duration:  result.Duration,
 		Metadata:  result.Metadata,

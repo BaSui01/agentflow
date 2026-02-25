@@ -274,7 +274,7 @@ func TestAsReflectionRunner(t *testing.T) {
 }
 
 func TestAsPromptEnhancerRunner(t *testing.T) {
-	enhancer := NewPromptEnhancer(DefaultPromptEngineeringConfig())
+	enhancer := NewPromptEnhancer(*DefaultPromptEnhancerConfig())
 	runner := AsPromptEnhancerRunner(enhancer)
 	assert.NotNil(t, runner)
 
