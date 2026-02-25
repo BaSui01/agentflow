@@ -186,7 +186,7 @@ func TestConvertClaudeToolChoice(t *testing.T) {
 		{"auto string", "auto", &claudeToolChoice{Type: "auto"}},
 		{"any string", "any", &claudeToolChoice{Type: "any"}},
 		{"required string", "required", &claudeToolChoice{Type: "any"}},
-		{"none string", "none", nil},
+		{"none string", "none", &claudeToolChoice{Type: "none"}},
 		{"empty string", "", nil},
 		{"specific tool", "my_tool", &claudeToolChoice{Type: "tool", Name: "my_tool"}},
 		{"map form", map[string]any{"type": "tool", "name": "calc"}, &claudeToolChoice{Type: "tool", Name: "calc"}},
@@ -298,14 +298,16 @@ func TestClaudeProvider_Completion_WithToolCalls(t *testing.T) {
 	assert.Equal(t, "tool_use", resp.Choices[0].FinishReason)
 }
 
-func TestClaudeProvider_Completion_ThoughtSignatures(t *testing.T) {
+func TestClaudeProvider_Completion_ThinkingContentBlock(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(claudeResponse{
 			ID: "msg_ts", Role: "assistant", Model: "claude-opus-4.5-20260105",
-			Content:           []claudeContent{{Type: "text", Text: "2+2=4"}},
-			StopReason:        "end_turn",
-			ThoughtSignatures: []string{"sig_abc"},
+			Content: []claudeContent{
+				{Type: "thinking", Thinking: "Let me think step by step...", Signature: "sig_abc"},
+				{Type: "text", Text: "2+2=4"},
+			},
+			StopReason: "end_turn",
 		})
 	}))
 	t.Cleanup(func() { server.Close() })
@@ -315,10 +317,12 @@ func TestClaudeProvider_Completion_ThoughtSignatures(t *testing.T) {
 	}, zap.NewNop())
 
 	resp, err := p.Completion(context.Background(), &llm.ChatRequest{
-		Messages:          []llm.Message{{Role: llm.RoleUser, Content: "2+2?"}},
-		ThoughtSignatures: []string{"sig_abc"},
+		Messages: []llm.Message{{Role: llm.RoleUser, Content: "2+2?"}},
 	})
 	require.NoError(t, err)
+	assert.Equal(t, "2+2=4", resp.Choices[0].Message.Content)
+	require.NotNil(t, resp.Choices[0].Message.ReasoningContent)
+	assert.Equal(t, "Let me think step by step...", *resp.Choices[0].Message.ReasoningContent)
 	assert.Equal(t, []string{"sig_abc"}, resp.ThoughtSignatures)
 }
 
@@ -377,16 +381,16 @@ func TestClaudeProvider_Stream(t *testing.T) {
 			Delta: &claudeDelta{Type: "text_delta", Text: "world"},
 		})
 
-		// message_delta with stop reason
+		// message_delta with stop reason and usage (Bug2 fix: usage is on message_delta, not message_stop)
 		writeSSEEvent(w, "message_delta", claudeStreamEvent{
 			Type:  "message_delta",
 			Delta: &claudeDelta{StopReason: "end_turn"},
+			Usage: &claudeUsage{InputTokens: 10, OutputTokens: 5},
 		})
 
-		// message_stop with usage
+		// message_stop (no usage data per API spec)
 		writeSSEEvent(w, "message_stop", claudeStreamEvent{
-			Type:  "message_stop",
-			Usage: &claudeUsage{InputTokens: 10, OutputTokens: 5},
+			Type: "message_stop",
 		})
 	}))
 	t.Cleanup(func() { server.Close() })
@@ -491,6 +495,9 @@ func TestClaudeProvider_Stream_ToolCall(t *testing.T) {
 	tc := toolCallChunks[len(toolCallChunks)-1].Delta.ToolCalls[0]
 	assert.Equal(t, "get_weather", tc.Name)
 	assert.Equal(t, "toolu_1", tc.ID)
+
+	// Bug1 fix: verify Arguments is valid JSON (not corrupted by initial "{}")
+	assert.JSONEq(t, `{"city":"NYC"}`, string(tc.Arguments))
 }
 
 func TestClaudeProvider_Stream_Error(t *testing.T) {
