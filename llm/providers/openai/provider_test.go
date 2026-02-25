@@ -310,7 +310,7 @@ func TestOpenAIProvider_Completion_Error(t *testing.T) {
 	require.Error(t, err)
 	llmErr, ok := err.(*llm.Error)
 	require.True(t, ok)
-	assert.Equal(t, llm.ErrRateLimited, llmErr.Code)
+	assert.Equal(t, llm.ErrRateLimit, llmErr.Code)
 	assert.True(t, llmErr.Retryable)
 }
 

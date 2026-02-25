@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/BaSui01/agentflow/llm/providers"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -53,7 +54,7 @@ func (t *redirectTransport) RoundTrip(req *http.Request) (*http.Response, error)
 // --- Gemini Provider tests ---
 
 func TestNewGeminiProvider(t *testing.T) {
-	p := NewGeminiProvider(GeminiConfig{APIKey: "test-key"})
+	p := NewGeminiProvider(GeminiConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key"}})
 	assert.Equal(t, "gemini-video", p.Name())
 	assert.Equal(t, "gemini-3-flash-preview", p.cfg.Model)
 	assert.False(t, p.SupportsGeneration())
@@ -68,7 +69,7 @@ func TestNewGeminiProvider_Defaults(t *testing.T) {
 }
 
 func TestGeminiProvider_Generate_NotSupported(t *testing.T) {
-	p := NewGeminiProvider(GeminiConfig{APIKey: "k"})
+	p := NewGeminiProvider(GeminiConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k"}})
 	_, err := p.Generate(context.Background(), &GenerateRequest{Prompt: "test"})
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "not supported")
@@ -99,7 +100,7 @@ func TestGeminiProvider_Analyze_WithVideoData(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	p := NewGeminiProvider(GeminiConfig{APIKey: "test-key"})
+	p := NewGeminiProvider(GeminiConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key"}})
 	p.client = &http.Client{Transport: &redirectTransport{targetURL: srv.URL, inner: http.DefaultTransport}}
 
 	resp, err := p.Analyze(context.Background(), &AnalyzeRequest{
@@ -133,7 +134,7 @@ func TestGeminiProvider_Analyze_WithVideoURL(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	p := NewGeminiProvider(GeminiConfig{APIKey: "k"})
+	p := NewGeminiProvider(GeminiConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k"}})
 	p.client = &http.Client{Transport: &redirectTransport{targetURL: srv.URL, inner: http.DefaultTransport}}
 
 	resp, err := p.Analyze(context.Background(), &AnalyzeRequest{
@@ -165,7 +166,7 @@ func TestGeminiProvider_Analyze_WithFormat(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	p := NewGeminiProvider(GeminiConfig{APIKey: "k"})
+	p := NewGeminiProvider(GeminiConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k"}})
 	p.client = &http.Client{Transport: &redirectTransport{targetURL: srv.URL, inner: http.DefaultTransport}}
 
 	resp, err := p.Analyze(context.Background(), &AnalyzeRequest{
@@ -184,7 +185,7 @@ func TestGeminiProvider_Analyze_Error(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	p := NewGeminiProvider(GeminiConfig{APIKey: "k"})
+	p := NewGeminiProvider(GeminiConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k"}})
 	p.client = &http.Client{Transport: &redirectTransport{targetURL: srv.URL, inner: http.DefaultTransport}}
 
 	_, err := p.Analyze(context.Background(), &AnalyzeRequest{Prompt: "test"})
@@ -199,7 +200,7 @@ func TestGeminiProvider_Analyze_EmptyResponse(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	p := NewGeminiProvider(GeminiConfig{APIKey: "k"})
+	p := NewGeminiProvider(GeminiConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k"}})
 	p.client = &http.Client{Transport: &redirectTransport{targetURL: srv.URL, inner: http.DefaultTransport}}
 
 	resp, err := p.Analyze(context.Background(), &AnalyzeRequest{Prompt: "test"})
@@ -225,7 +226,7 @@ func TestGeminiProvider_Analyze_CustomModel(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	p := NewGeminiProvider(GeminiConfig{APIKey: "k"})
+	p := NewGeminiProvider(GeminiConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k"}})
 	p.client = &http.Client{Transport: &redirectTransport{targetURL: srv.URL, inner: http.DefaultTransport}}
 
 	resp, err := p.Analyze(context.Background(), &AnalyzeRequest{
@@ -239,7 +240,7 @@ func TestGeminiProvider_Analyze_CustomModel(t *testing.T) {
 // --- Runway Provider tests ---
 
 func TestNewRunwayProvider(t *testing.T) {
-	p := NewRunwayProvider(RunwayConfig{APIKey: "test-key"})
+	p := NewRunwayProvider(RunwayConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key"}})
 	assert.Equal(t, "runway", p.Name())
 	assert.Equal(t, "gen4_turbo", p.cfg.Model)
 	assert.True(t, p.SupportsGeneration())
@@ -253,7 +254,7 @@ func TestNewRunwayProvider_Defaults(t *testing.T) {
 }
 
 func TestRunwayProvider_Analyze_NotSupported(t *testing.T) {
-	p := NewRunwayProvider(RunwayConfig{APIKey: "k"})
+	p := NewRunwayProvider(RunwayConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k"}})
 	_, err := p.Analyze(context.Background(), &AnalyzeRequest{})
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "not supported")
@@ -266,7 +267,7 @@ func TestRunwayProvider_Generate_SubmitError(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	p := NewRunwayProvider(RunwayConfig{APIKey: "k", BaseURL: srv.URL})
+	p := NewRunwayProvider(RunwayConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k", BaseURL: srv.URL}})
 	_, err := p.Generate(context.Background(), &GenerateRequest{Prompt: "test"})
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "runway error")
@@ -289,7 +290,7 @@ func TestRunwayProvider_Generate_RequestParams(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	p := NewRunwayProvider(RunwayConfig{APIKey: "test-key", BaseURL: srv.URL})
+	p := NewRunwayProvider(RunwayConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key", BaseURL: srv.URL}})
 	result, err := p.Generate(context.Background(), &GenerateRequest{
 		Prompt:      "a sunset",
 		Duration:    0,
@@ -338,7 +339,7 @@ func TestRunwayProvider_Generate_DurationClamping(t *testing.T) {
 			}))
 			t.Cleanup(srv.Close)
 
-			p := NewRunwayProvider(RunwayConfig{APIKey: "k", BaseURL: srv.URL})
+			p := NewRunwayProvider(RunwayConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k", BaseURL: srv.URL}})
 			_, _ = p.Generate(context.Background(), &GenerateRequest{
 				Prompt:   "test",
 				Duration: tt.duration,
@@ -374,7 +375,7 @@ func TestRunwayProvider_Generate_AspectRatioMapping(t *testing.T) {
 			}))
 			t.Cleanup(srv.Close)
 
-			p := NewRunwayProvider(RunwayConfig{APIKey: "k", BaseURL: srv.URL})
+			p := NewRunwayProvider(RunwayConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k", BaseURL: srv.URL}})
 			_, _ = p.Generate(context.Background(), &GenerateRequest{
 				Prompt:      "test",
 				AspectRatio: tt.input,
@@ -397,7 +398,7 @@ func TestRunwayProvider_PollGeneration_Failed(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	p := NewRunwayProvider(RunwayConfig{APIKey: "k", BaseURL: srv.URL})
+	p := NewRunwayProvider(RunwayConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k", BaseURL: srv.URL}})
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
@@ -419,7 +420,7 @@ func TestRunwayProvider_PollGeneration_ContextCancelled(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	p := NewRunwayProvider(RunwayConfig{APIKey: "k", BaseURL: srv.URL})
+	p := NewRunwayProvider(RunwayConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k", BaseURL: srv.URL}})
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 
@@ -430,7 +431,7 @@ func TestRunwayProvider_PollGeneration_ContextCancelled(t *testing.T) {
 // --- Veo Provider tests ---
 
 func TestNewVeoProvider(t *testing.T) {
-	p := NewVeoProvider(VeoConfig{APIKey: "test-key"})
+	p := NewVeoProvider(VeoConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key"}})
 	assert.Equal(t, "veo", p.Name())
 	assert.Equal(t, "veo-3.1-generate-preview", p.cfg.Model)
 	assert.True(t, p.SupportsGeneration())
@@ -443,7 +444,7 @@ func TestNewVeoProvider_Defaults(t *testing.T) {
 }
 
 func TestVeoProvider_Analyze_NotSupported(t *testing.T) {
-	p := NewVeoProvider(VeoConfig{APIKey: "k"})
+	p := NewVeoProvider(VeoConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k"}})
 	_, err := p.Analyze(context.Background(), &AnalyzeRequest{})
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "not supported")
@@ -477,7 +478,7 @@ func TestVeoProvider_Generate(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	p := NewVeoProvider(VeoConfig{APIKey: "test-key"})
+	p := NewVeoProvider(VeoConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key"}})
 	p.client = &http.Client{Transport: &redirectTransport{targetURL: srv.URL, inner: http.DefaultTransport}}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
@@ -516,7 +517,7 @@ func TestVeoProvider_Generate_WithImage(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	p := NewVeoProvider(VeoConfig{APIKey: "k"})
+	p := NewVeoProvider(VeoConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k"}})
 	p.client = &http.Client{Transport: &redirectTransport{targetURL: srv.URL, inner: http.DefaultTransport}}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
@@ -551,7 +552,7 @@ func TestVeoProvider_Generate_WithImageURL(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	p := NewVeoProvider(VeoConfig{APIKey: "k"})
+	p := NewVeoProvider(VeoConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k"}})
 	p.client = &http.Client{Transport: &redirectTransport{targetURL: srv.URL, inner: http.DefaultTransport}}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
@@ -571,7 +572,7 @@ func TestVeoProvider_Generate_Error(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	p := NewVeoProvider(VeoConfig{APIKey: "k"})
+	p := NewVeoProvider(VeoConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k"}})
 	p.client = &http.Client{Transport: &redirectTransport{targetURL: srv.URL, inner: http.DefaultTransport}}
 
 	_, err := p.Generate(context.Background(), &GenerateRequest{Prompt: "test"})
@@ -597,7 +598,7 @@ func TestVeoProvider_PollOperation_Failed(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	p := NewVeoProvider(VeoConfig{APIKey: "k"})
+	p := NewVeoProvider(VeoConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k"}})
 	p.client = &http.Client{Transport: &redirectTransport{targetURL: srv.URL, inner: http.DefaultTransport}}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
@@ -621,7 +622,7 @@ func TestVeoProvider_PollOperation_ContextCancelled(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	p := NewVeoProvider(VeoConfig{APIKey: "k"})
+	p := NewVeoProvider(VeoConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k"}})
 	p.client = &http.Client{Transport: &redirectTransport{targetURL: srv.URL, inner: http.DefaultTransport}}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
@@ -652,7 +653,7 @@ func TestVeoProvider_Generate_CustomDuration(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	p := NewVeoProvider(VeoConfig{APIKey: "k"})
+	p := NewVeoProvider(VeoConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k"}})
 	p.client = &http.Client{Transport: &redirectTransport{targetURL: srv.URL, inner: http.DefaultTransport}}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)

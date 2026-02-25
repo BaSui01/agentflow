@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/BaSui01/agentflow/llm/providers"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -234,9 +235,11 @@ func newOpenAITestServer(t *testing.T, handler http.HandlerFunc) (*httptest.Serv
 	t.Helper()
 	srv := httptest.NewServer(handler)
 	p := NewOpenAIProvider(OpenAIConfig{
-		APIKey:  "test-key",
-		BaseURL: srv.URL,
-		Model:   "text-embedding-3-small",
+		BaseProviderConfig: providers.BaseProviderConfig{
+			APIKey:  "test-key",
+			BaseURL: srv.URL,
+			Model:   "text-embedding-3-small",
+		},
 	})
 	return srv, p
 }
@@ -305,7 +308,7 @@ func TestOpenAIProviderEmbedQueryAndDocuments(t *testing.T) {
 }
 
 func TestOpenAIProviderDefaults(t *testing.T) {
-	p := NewOpenAIProvider(OpenAIConfig{APIKey: "k"})
+	p := NewOpenAIProvider(OpenAIConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k"}})
 	assert.Equal(t, "openai-embedding", p.Name())
 	assert.Equal(t, 3072, p.Dimensions())
 	assert.Equal(t, 2048, p.MaxBatchSize())
@@ -342,8 +345,10 @@ func TestCohereProviderEmbed(t *testing.T) {
 	defer srv.Close()
 
 	p := NewCohereProvider(CohereConfig{
-		APIKey:  "test-key",
-		BaseURL: srv.URL,
+		BaseProviderConfig: providers.BaseProviderConfig{
+			APIKey:  "test-key",
+			BaseURL: srv.URL,
+		},
 	})
 
 	resp, err := p.Embed(context.Background(), &EmbeddingRequest{
@@ -370,7 +375,7 @@ func TestCohereProviderTruncate(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	p := NewCohereProvider(CohereConfig{APIKey: "k", BaseURL: srv.URL})
+	p := NewCohereProvider(CohereConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k", BaseURL: srv.URL}})
 	_, err := p.Embed(context.Background(), &EmbeddingRequest{
 		Input:    []string{"hello"},
 		Truncate: true,
@@ -379,7 +384,7 @@ func TestCohereProviderTruncate(t *testing.T) {
 }
 
 func TestCohereProviderDefaults(t *testing.T) {
-	p := NewCohereProvider(CohereConfig{APIKey: "k"})
+	p := NewCohereProvider(CohereConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k"}})
 	assert.Equal(t, "cohere-embedding", p.Name())
 	assert.Equal(t, 1024, p.Dimensions())
 	assert.Equal(t, 96, p.MaxBatchSize())
@@ -392,13 +397,13 @@ func TestCohereProviderHTTPError(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	p := NewCohereProvider(CohereConfig{APIKey: "k", BaseURL: srv.URL})
+	p := NewCohereProvider(CohereConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k", BaseURL: srv.URL}})
 	_, err := p.Embed(context.Background(), &EmbeddingRequest{Input: []string{"test"}})
 	require.Error(t, err)
 }
 
 func TestVoyageProviderDefaults(t *testing.T) {
-	p := NewVoyageProvider(VoyageConfig{APIKey: "k"})
+	p := NewVoyageProvider(VoyageConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k"}})
 	assert.Equal(t, "voyage-embedding", p.Name())
 	assert.Equal(t, 1024, p.Dimensions())
 	assert.Equal(t, 128, p.MaxBatchSize())
@@ -411,7 +416,7 @@ func TestVoyageProviderHTTPError(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	p := NewVoyageProvider(VoyageConfig{APIKey: "k", BaseURL: srv.URL})
+	p := NewVoyageProvider(VoyageConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k", BaseURL: srv.URL}})
 	_, err := p.Embed(context.Background(), &EmbeddingRequest{Input: []string{"test"}})
 	require.Error(t, err)
 }
@@ -443,7 +448,7 @@ func TestJinaProviderEmbed(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	p := NewJinaProvider(JinaConfig{APIKey: "k", BaseURL: srv.URL})
+	p := NewJinaProvider(JinaConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k", BaseURL: srv.URL}})
 	resp, err := p.Embed(context.Background(), &EmbeddingRequest{
 		Input:     []string{"test"},
 		InputType: InputTypeQuery,
@@ -483,7 +488,7 @@ func TestJinaProviderInputTypeMapping(t *testing.T) {
 			}))
 			defer srv.Close()
 
-			p := NewJinaProvider(JinaConfig{APIKey: "k", BaseURL: srv.URL})
+			p := NewJinaProvider(JinaConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k", BaseURL: srv.URL}})
 			_, err := p.Embed(context.Background(), &EmbeddingRequest{
 				Input:     []string{"test"},
 				InputType: tt.inputType,
@@ -508,7 +513,7 @@ func TestJinaProviderDimensions(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	p := NewJinaProvider(JinaConfig{APIKey: "k", BaseURL: srv.URL})
+	p := NewJinaProvider(JinaConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k", BaseURL: srv.URL}})
 	_, err := p.Embed(context.Background(), &EmbeddingRequest{
 		Input:      []string{"test"},
 		Dimensions: 256,
@@ -543,7 +548,7 @@ func TestVoyageProviderEmbed(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	p := NewVoyageProvider(VoyageConfig{APIKey: "k", BaseURL: srv.URL})
+	p := NewVoyageProvider(VoyageConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k", BaseURL: srv.URL}})
 	resp, err := p.Embed(context.Background(), &EmbeddingRequest{
 		Input:     []string{"test"},
 		InputType: InputTypeQuery,
@@ -570,7 +575,7 @@ func TestVoyageProviderEmbedQueryAndDocuments(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(handler))
 	defer srv.Close()
 
-	p := NewVoyageProvider(VoyageConfig{APIKey: "k", BaseURL: srv.URL})
+	p := NewVoyageProvider(VoyageConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k", BaseURL: srv.URL}})
 
 	vec, err := p.EmbedQuery(context.Background(), "test query")
 	require.NoError(t, err)
@@ -582,7 +587,7 @@ func TestVoyageProviderEmbedQueryAndDocuments(t *testing.T) {
 }
 
 func TestJinaProviderDefaults(t *testing.T) {
-	p := NewJinaProvider(JinaConfig{APIKey: "k"})
+	p := NewJinaProvider(JinaConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k"}})
 	assert.Equal(t, "jina-embedding", p.Name())
 	assert.Equal(t, 1024, p.Dimensions())
 	assert.Equal(t, 2048, p.MaxBatchSize())
@@ -595,7 +600,7 @@ func TestJinaProviderHTTPError(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	p := NewJinaProvider(JinaConfig{APIKey: "k", BaseURL: srv.URL})
+	p := NewJinaProvider(JinaConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k", BaseURL: srv.URL}})
 	_, err := p.Embed(context.Background(), &EmbeddingRequest{Input: []string{"test"}})
 	require.Error(t, err)
 }
@@ -614,9 +619,11 @@ func TestGeminiProviderSingleEmbed(t *testing.T) {
 	defer srv.Close()
 
 	p := NewGeminiProvider(GeminiConfig{
-		APIKey:  "test-key",
-		BaseURL: srv.URL,
-		Model:   "gemini-embedding-001",
+		BaseProviderConfig: providers.BaseProviderConfig{
+			APIKey:  "test-key",
+			BaseURL: srv.URL,
+			Model:   "gemini-embedding-001",
+		},
 	})
 
 	resp, err := p.Embed(context.Background(), &EmbeddingRequest{
@@ -643,8 +650,10 @@ func TestGeminiProviderBatchEmbed(t *testing.T) {
 	defer srv.Close()
 
 	p := NewGeminiProvider(GeminiConfig{
-		APIKey:  "test-key",
-		BaseURL: srv.URL,
+		BaseProviderConfig: providers.BaseProviderConfig{
+			APIKey:  "test-key",
+			BaseURL: srv.URL,
+		},
 	})
 
 	resp, err := p.Embed(context.Background(), &EmbeddingRequest{
@@ -673,7 +682,7 @@ func TestGeminiProviderEmbedQueryAndDocuments(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	p := NewGeminiProvider(GeminiConfig{APIKey: "k", BaseURL: srv.URL})
+	p := NewGeminiProvider(GeminiConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k", BaseURL: srv.URL}})
 
 	vec, err := p.EmbedQuery(context.Background(), "query")
 	require.NoError(t, err)
@@ -691,14 +700,14 @@ func TestGeminiProviderHTTPError(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	p := NewGeminiProvider(GeminiConfig{APIKey: "k", BaseURL: srv.URL})
+	p := NewGeminiProvider(GeminiConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k", BaseURL: srv.URL}})
 	_, err := p.Embed(context.Background(), &EmbeddingRequest{Input: []string{"test"}})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "403")
 }
 
 func TestGeminiProviderDefaults(t *testing.T) {
-	p := NewGeminiProvider(GeminiConfig{APIKey: "k"})
+	p := NewGeminiProvider(GeminiConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k"}})
 	assert.Equal(t, "gemini-embedding", p.Name())
 	assert.Equal(t, 3072, p.Dimensions())
 	assert.Equal(t, 100, p.MaxBatchSize())
@@ -743,7 +752,7 @@ func TestProviderServerDown(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
 	srv.Close()
 
-	p := NewOpenAIProvider(OpenAIConfig{APIKey: "k", BaseURL: srv.URL})
+	p := NewOpenAIProvider(OpenAIConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k", BaseURL: srv.URL}})
 	_, err := p.Embed(context.Background(), &EmbeddingRequest{Input: []string{"test"}})
 	require.Error(t, err)
 }
@@ -756,7 +765,7 @@ func TestProviderContextCanceled(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	p := NewOpenAIProvider(OpenAIConfig{APIKey: "k", BaseURL: srv.URL, Timeout: 5 * time.Second})
+	p := NewOpenAIProvider(OpenAIConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k", BaseURL: srv.URL, Timeout: 5 * time.Second}})
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel() // cancel immediately
 

@@ -148,7 +148,7 @@ func mapHTTPError(status int, msg, provider string) *llm.Error {
 	case http.StatusForbidden:
 		code = llm.ErrForbidden
 	case http.StatusTooManyRequests:
-		code = llm.ErrRateLimited
+		code = llm.ErrRateLimit
 		retryable = true
 	case http.StatusBadRequest:
 		code = llm.ErrInvalidRequest

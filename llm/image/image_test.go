@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/BaSui01/agentflow/llm/providers"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -47,7 +48,7 @@ func TestDefaultImagen4Config(t *testing.T) {
 // --- OpenAI Provider tests ---
 
 func TestNewOpenAIProvider(t *testing.T) {
-	p := NewOpenAIProvider(OpenAIConfig{APIKey: "test-key"})
+	p := NewOpenAIProvider(OpenAIConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key"}})
 	assert.Equal(t, "openai-image", p.Name())
 	assert.Equal(t, "dall-e-3", p.cfg.Model)
 	assert.Contains(t, p.SupportedSizes(), "1024x1024")
@@ -77,7 +78,7 @@ func TestOpenAIProvider_Generate(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	p := NewOpenAIProvider(OpenAIConfig{APIKey: "test-key", BaseURL: srv.URL})
+	p := NewOpenAIProvider(OpenAIConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key", BaseURL: srv.URL}})
 	resp, err := p.Generate(context.Background(), &GenerateRequest{Prompt: "a cat"})
 	require.NoError(t, err)
 	assert.Equal(t, "openai-image", resp.Provider)
@@ -94,7 +95,7 @@ func TestOpenAIProvider_Generate_Error(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	p := NewOpenAIProvider(OpenAIConfig{APIKey: "k", BaseURL: srv.URL})
+	p := NewOpenAIProvider(OpenAIConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k", BaseURL: srv.URL}})
 	_, err := p.Generate(context.Background(), &GenerateRequest{Prompt: "test"})
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "dalle error")
@@ -118,7 +119,7 @@ func TestOpenAIProvider_Edit(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	p := NewOpenAIProvider(OpenAIConfig{APIKey: "k", BaseURL: srv.URL})
+	p := NewOpenAIProvider(OpenAIConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k", BaseURL: srv.URL}})
 	resp, err := p.Edit(context.Background(), &EditRequest{
 		Image:  bytes.NewReader([]byte("fake-image")),
 		Prompt: "add a hat",
@@ -128,7 +129,7 @@ func TestOpenAIProvider_Edit(t *testing.T) {
 }
 
 func TestOpenAIProvider_Edit_NoImage(t *testing.T) {
-	p := NewOpenAIProvider(OpenAIConfig{APIKey: "k"})
+	p := NewOpenAIProvider(OpenAIConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k"}})
 	_, err := p.Edit(context.Background(), &EditRequest{Prompt: "test"})
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "image is required")
@@ -149,7 +150,7 @@ func TestOpenAIProvider_Edit_WithMask(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	p := NewOpenAIProvider(OpenAIConfig{APIKey: "k", BaseURL: srv.URL})
+	p := NewOpenAIProvider(OpenAIConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k", BaseURL: srv.URL}})
 	resp, err := p.Edit(context.Background(), &EditRequest{
 		Image:  bytes.NewReader([]byte("image")),
 		Mask:   bytes.NewReader([]byte("mask")),
@@ -175,7 +176,7 @@ func TestOpenAIProvider_CreateVariation(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	p := NewOpenAIProvider(OpenAIConfig{APIKey: "k", BaseURL: srv.URL})
+	p := NewOpenAIProvider(OpenAIConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k", BaseURL: srv.URL}})
 	resp, err := p.CreateVariation(context.Background(), &VariationRequest{
 		Image: bytes.NewReader([]byte("image")),
 	})
@@ -184,7 +185,7 @@ func TestOpenAIProvider_CreateVariation(t *testing.T) {
 }
 
 func TestOpenAIProvider_CreateVariation_NoImage(t *testing.T) {
-	p := NewOpenAIProvider(OpenAIConfig{APIKey: "k"})
+	p := NewOpenAIProvider(OpenAIConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k"}})
 	_, err := p.CreateVariation(context.Background(), &VariationRequest{})
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "image is required")
@@ -193,7 +194,7 @@ func TestOpenAIProvider_CreateVariation_NoImage(t *testing.T) {
 // --- Gemini Provider tests ---
 
 func TestNewGeminiProvider(t *testing.T) {
-	p := NewGeminiProvider(GeminiConfig{APIKey: "test-key"})
+	p := NewGeminiProvider(GeminiConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key"}})
 	assert.Equal(t, "gemini-image", p.Name())
 	assert.Equal(t, "gemini-3-pro-image-preview", p.cfg.Model)
 	assert.Contains(t, p.SupportedSizes(), "1024x1024")
@@ -251,7 +252,7 @@ func TestGeminiProvider_Generate(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	p := NewGeminiProvider(GeminiConfig{APIKey: "test-key"})
+	p := NewGeminiProvider(GeminiConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key"}})
 	p.client = &http.Client{Transport: &redirectTransport{targetURL: srv.URL, inner: http.DefaultTransport}}
 
 	resp, err := p.Generate(context.Background(), &GenerateRequest{Prompt: "a cat"})
@@ -269,7 +270,7 @@ func TestGeminiProvider_Generate_Error(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	p := NewGeminiProvider(GeminiConfig{APIKey: "k"})
+	p := NewGeminiProvider(GeminiConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k"}})
 	p.client = &http.Client{Transport: &redirectTransport{targetURL: srv.URL, inner: http.DefaultTransport}}
 
 	_, err := p.Generate(context.Background(), &GenerateRequest{Prompt: "test"})
@@ -307,7 +308,7 @@ func TestGeminiProvider_Edit(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	p := NewGeminiProvider(GeminiConfig{APIKey: "k"})
+	p := NewGeminiProvider(GeminiConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k"}})
 	p.client = &http.Client{Transport: &redirectTransport{targetURL: srv.URL, inner: http.DefaultTransport}}
 
 	resp, err := p.Edit(context.Background(), &EditRequest{
@@ -326,7 +327,7 @@ func TestGeminiProvider_Edit_Error(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	p := NewGeminiProvider(GeminiConfig{APIKey: "k"})
+	p := NewGeminiProvider(GeminiConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k"}})
 	p.client = &http.Client{Transport: &redirectTransport{targetURL: srv.URL, inner: http.DefaultTransport}}
 
 	_, err := p.Edit(context.Background(), &EditRequest{
@@ -367,7 +368,7 @@ func TestGeminiProvider_CreateVariation(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	p := NewGeminiProvider(GeminiConfig{APIKey: "k"})
+	p := NewGeminiProvider(GeminiConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k"}})
 	p.client = &http.Client{Transport: &redirectTransport{targetURL: srv.URL, inner: http.DefaultTransport}}
 
 	resp, err := p.CreateVariation(context.Background(), &VariationRequest{
@@ -378,14 +379,14 @@ func TestGeminiProvider_CreateVariation(t *testing.T) {
 }
 
 func TestGeminiProvider_Edit_NoImage(t *testing.T) {
-	p := NewGeminiProvider(GeminiConfig{APIKey: "k"})
+	p := NewGeminiProvider(GeminiConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k"}})
 	_, err := p.Edit(context.Background(), &EditRequest{Prompt: "test"})
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "image is required")
 }
 
 func TestGeminiProvider_CreateVariation_NoImage(t *testing.T) {
-	p := NewGeminiProvider(GeminiConfig{APIKey: "k"})
+	p := NewGeminiProvider(GeminiConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k"}})
 	_, err := p.CreateVariation(context.Background(), &VariationRequest{})
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "image is required")
@@ -394,21 +395,21 @@ func TestGeminiProvider_CreateVariation_NoImage(t *testing.T) {
 // --- Flux Provider tests ---
 
 func TestNewFluxProvider(t *testing.T) {
-	p := NewFluxProvider(FluxConfig{APIKey: "test-key"})
+	p := NewFluxProvider(FluxConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key"}})
 	assert.Equal(t, "flux", p.Name())
 	assert.Equal(t, "flux-2-pro", p.cfg.Model)
 	assert.Contains(t, p.SupportedSizes(), "1024x1024")
 }
 
 func TestFluxProvider_Edit_NotSupported(t *testing.T) {
-	p := NewFluxProvider(FluxConfig{APIKey: "k"})
+	p := NewFluxProvider(FluxConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k"}})
 	_, err := p.Edit(context.Background(), &EditRequest{})
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "does not support image editing")
 }
 
 func TestFluxProvider_CreateVariation_NotSupported(t *testing.T) {
-	p := NewFluxProvider(FluxConfig{APIKey: "k"})
+	p := NewFluxProvider(FluxConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k"}})
 	_, err := p.CreateVariation(context.Background(), &VariationRequest{})
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "does not support image variations")
@@ -430,7 +431,7 @@ func TestFluxProvider_Generate_ImmediateReady(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	p := NewFluxProvider(FluxConfig{APIKey: "k", BaseURL: srv.URL})
+	p := NewFluxProvider(FluxConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k", BaseURL: srv.URL}})
 	resp, err := p.Generate(context.Background(), &GenerateRequest{
 		Prompt: "a landscape",
 		Size:   "1024x1024",
@@ -448,7 +449,7 @@ func TestFluxProvider_Generate_Error(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	p := NewFluxProvider(FluxConfig{APIKey: "k", BaseURL: srv.URL})
+	p := NewFluxProvider(FluxConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k", BaseURL: srv.URL}})
 	_, err := p.Generate(context.Background(), &GenerateRequest{Prompt: "test"})
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "flux error")
@@ -479,7 +480,7 @@ func TestFluxProvider_Generate_AspectRatios(t *testing.T) {
 			}))
 			t.Cleanup(srv.Close)
 
-			p := NewFluxProvider(FluxConfig{APIKey: "k", BaseURL: srv.URL})
+			p := NewFluxProvider(FluxConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k", BaseURL: srv.URL}})
 			_, err := p.Generate(context.Background(), &GenerateRequest{
 				Prompt: "test",
 				Size:   tt.size,

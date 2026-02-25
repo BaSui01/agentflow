@@ -179,7 +179,7 @@ func TestProvider_Completion_HTTPError(t *testing.T) {
 			name:       "429 rate limited",
 			statusCode: http.StatusTooManyRequests,
 			body:       `{"error":{"message":"slow down"}}`,
-			wantCode:   llm.ErrRateLimited,
+			wantCode:   llm.ErrRateLimit,
 		},
 		{
 			name:       "500 server error",
@@ -369,7 +369,7 @@ func TestProvider_Stream_HTTPError(t *testing.T) {
 	require.Error(t, err)
 	var llmErr *llm.Error
 	require.ErrorAs(t, err, &llmErr)
-	assert.Equal(t, llm.ErrRateLimited, llmErr.Code)
+	assert.Equal(t, llm.ErrRateLimit, llmErr.Code)
 }
 
 func TestProvider_Stream_ToolCallDelta(t *testing.T) {

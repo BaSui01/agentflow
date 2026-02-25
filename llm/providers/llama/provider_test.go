@@ -216,7 +216,7 @@ func TestLlamaProvider_Completion_RateLimited(t *testing.T) {
 	require.Error(t, err)
 	llmErr, ok := err.(*llm.Error)
 	require.True(t, ok)
-	assert.Equal(t, llm.ErrRateLimited, llmErr.Code)
+	assert.Equal(t, llm.ErrRateLimit, llmErr.Code)
 }
 
 func TestLlamaProvider_Stream_Httptest(t *testing.T) {
