@@ -3142,4 +3142,297 @@ type DiscoveryRegistrarAdapter struct { registry *discovery.Registry }
 | translator | language translation |
 | summarizer | text compression |
 | reviewer | code review |
+
+## §57 LLM Provider Tool Definition Wire Format (P0 — Correctness)
+
+### 1. Scope / Trigger
+
+- Adding or modifying tool/function calling support in any LLM provider
+- Creating new OpenAI-compatible provider wrappers
+- Changing `ConvertToolsToOpenAI` or similar conversion functions
+
+### 2. Rule — Separate Tool Definition from Tool Call Structs
+
+The OpenAI API uses **different field names** for tool definitions (request) vs tool calls (response):
+
+| Context | Field Name | JSON Tag | Contains |
+|---------|-----------|----------|----------|
+| Tool **definition** (request `tools[]`) | `parameters` | `"parameters"` | JSON Schema |
+| Tool **definition** (request `tools[]`) | `description` | `"description"` | Human-readable description |
+| Tool **call** (response `tool_calls[]`) | `arguments` | `"arguments"` | Actual call arguments |
+
+**Forbidden pattern** — reusing one struct for both:
+```go
+// ❌ WRONG: "arguments" tag used for both definitions and calls
+type OpenAICompatFunction struct {
+    Name      string          `json:"name"`
+    Arguments json.RawMessage `json:"arguments"` // wrong for definitions!
+}
+```
+
+**Required pattern** — separate structs:
+```go
+// ✅ Tool DEFINITION (in request)
+type OpenAICompatFunctionDef struct {
+    Name        string          `json:"name"`
+    Description string          `json:"description,omitempty"`
+    Parameters  json.RawMessage `json:"parameters,omitempty"`
+}
+
+// ✅ Tool CALL (in response)
+type OpenAICompatFunction struct {
+    Name      string          `json:"name"`
+    Arguments json.RawMessage `json:"arguments"`
+}
+```
+
+### 3. Checklist
+
+- [ ] `ConvertToolsToOpenAI` populates `Description` from `ToolSchema.Description`
+- [ ] `ConvertToolsToOpenAI` populates `Parameters` (not `Arguments`) from `ToolSchema.Parameters`
+- [ ] `OpenAICompatTool.Function` uses the definition struct (with `"parameters"` tag)
+- [ ] `OpenAICompatToolCall.Function` uses the call struct (with `"arguments"` tag)
+
+### 4. Applies To
+
+All 13 OpenAI-compatible providers: openai, deepseek, qwen, glm, grok, kimi, mistral, minimax, hunyuan, doubao, llama, plus any future providers using `openaicompat`.
+
+---
+
+## §58 LLM Provider Streaming Correctness (P0 — Correctness)
+
+### 1. Scope / Trigger
+
+- Implementing or modifying `Stream()` method in any LLM provider
+- Parsing SSE events from upstream APIs
+- Handling token usage in streaming responses
+
+### 2. Rules
+
+#### 2.1 Streaming Goroutine Panic Recovery (Mandatory)
+
+Every streaming goroutine MUST have `recover()` as the **first** defer:
+
+```go
+go func() {
+    defer func() {
+        if r := recover(); r != nil {
+            select {
+            case ch <- llm.StreamChunk{
+                Err: &llm.Error{
+                    Code:    llm.ErrInternalError,
+                    Message: fmt.Sprintf("streaming panic: %v", r),
+                },
+            }:
+            default:
+            }
+        }
+    }()
+    defer resp.Body.Close()
+    defer close(ch)
+    // ... parsing logic
+}()
+```
+
+**Why**: Without recovery, a panic in any streaming goroutine (e.g., nil pointer on malformed event) crashes the entire process.
+
+#### 2.2 Anthropic: Usage in `message_delta`, NOT `message_stop`
+
+```
+// ✅ Correct: read usage from message_delta
+case "message_delta":
+    if event.Usage != nil { /* emit usage chunk */ }
+
+// ❌ Wrong: message_stop has no usage field
+case "message_stop":
+    if event.Usage != nil { /* this is always nil */ }
+```
+
+#### 2.3 Anthropic: Tool Call Accumulator Init
+
+```go
+// ✅ Correct: nil allows clean append of partial JSON
+Arguments: json.RawMessage(nil),
+
+// ❌ Wrong: "{}" prefix corrupts accumulated JSON → {}{"name":"x"}
+Arguments: json.RawMessage("{}"),
+```
+
+#### 2.4 OpenAI-Compatible: `stream_options` Required for Usage
+
+OpenAI API requires explicit opt-in for streaming usage data:
+
+```go
+body := providers.OpenAICompatRequest{
+    Stream:        true,
+    StreamOptions: &providers.StreamOptions{IncludeUsage: true}, // ← required
+}
+```
+
+Without this, the final streaming chunk will never contain token usage.
+
+#### 2.5 Gemini: `?alt=sse` Required for Streaming
+
+Gemini's `streamGenerateContent` endpoint returns a **JSON array** by default, not SSE. Append `?alt=sse` to get standard SSE format:
+
+```go
+// ✅ Correct
+fmt.Sprintf("%s/v1beta/models/%s:streamGenerateContent?alt=sse", base, model)
+
+// ❌ Wrong: returns JSON array, line-by-line parser fails
+fmt.Sprintf("%s/v1beta/models/%s:streamGenerateContent", base, model)
+```
+
+#### 2.6 Stream Request Must Match Completion Parameters
+
+If `Completion()` sets `Temperature`, `TopP`, `Stop`, then `Stream()` MUST set them too. Audit both methods side-by-side when modifying either.
+
+### 3. Checklist
+
+- [ ] Streaming goroutine has `recover()` as first defer
+- [ ] Anthropic: usage read from `message_delta`, not `message_stop`
+- [ ] Anthropic: tool call accumulator initialized with `nil`, not `"{}"`
+- [ ] OpenAI-compat: `StreamOptions.IncludeUsage` set to `true`
+- [ ] Gemini: streaming URL includes `?alt=sse`
+- [ ] Stream() and Completion() set the same request parameters
+
+---
+
+## §59 OpenAI-Compatible Provider Configuration (P1 — Reliability)
+
+### 1. Scope / Trigger
+
+- Creating a new OpenAI-compatible provider
+- Modifying provider configuration or factory
+
+### 2. Rules
+
+#### 2.1 Always Propagate `APIKeys` to `openaicompat.Config`
+
+Every provider that embeds `openaicompat.Provider` MUST pass `APIKeys` from its config:
+
+```go
+// ✅ Correct
+openaicompat.New(openaicompat.Config{
+    ProviderName: "deepseek",
+    APIKey:       cfg.APIKey,
+    APIKeys:      cfg.APIKeys,  // ← MUST include
+    BaseURL:      cfg.BaseURL,
+    // ...
+}, logger)
+
+// ❌ Wrong: multi-key rotation silently broken
+openaicompat.New(openaicompat.Config{
+    ProviderName: "deepseek",
+    APIKey:       cfg.APIKey,
+    // APIKeys missing!
+}, logger)
+```
+
+#### 2.2 BaseURL Must Not Duplicate Path Prefix
+
+If the default `EndpointPath` is `/v1/chat/completions`, the `BaseURL` must NOT end with `/v1`:
+
+```go
+// ✅ Correct: BaseURL + EndpointPath = .../v1/chat/completions
+cfg.BaseURL = "https://api.example.com"
+
+// ❌ Wrong: produces .../v1/v1/chat/completions
+cfg.BaseURL = "https://api.example.com/v1"
+```
+
+#### 2.3 ModelsEndpoint Must Match Provider's API
+
+The default `ModelsEndpoint` is `/v1/models`. If the provider uses a non-standard chat path (e.g., `/compatible-mode/v1/chat/completions`), the models endpoint likely needs a matching prefix.
+
+#### 2.4 OpenAI Provider Must Set Default BaseURL
+
+```go
+if cfg.BaseURL == "" {
+    cfg.BaseURL = "https://api.openai.com"
+}
+```
+
+### 3. New Provider Checklist
+
+- [ ] `APIKeys` propagated to `openaicompat.Config`
+- [ ] `BaseURL` does not duplicate path prefix with `EndpointPath`
+- [ ] `ModelsEndpoint` matches provider's actual API path
+- [ ] Default `BaseURL` set when empty
+- [ ] `FallbackModel` uses a current, non-deprecated model name
+
+---
+
+## §60 Concurrent Safety in LLM Infrastructure (P1 — Reliability)
+
+### 1. Scope / Trigger
+
+- Modifying `RewriterChain`, `ResilientProvider`, `ZeroCopyBuffer`, or `RingBuffer`
+- Adding dynamic mutation methods to shared data structures
+- Wrapping streaming channels
+
+### 2. Rules
+
+#### 2.1 RewriterChain Must Be Thread-Safe
+
+`AddRewriter()` and `Execute()` can be called concurrently. Use `sync.RWMutex`:
+
+```go
+type RewriterChain struct {
+    mu        sync.RWMutex
+    rewriters []RequestRewriter
+}
+
+func (c *RewriterChain) Execute(...) {
+    c.mu.RLock()
+    snapshot := make([]RequestRewriter, len(c.rewriters))
+    copy(snapshot, c.rewriters)
+    c.mu.RUnlock()
+    // iterate snapshot
+}
+
+func (c *RewriterChain) AddRewriter(r RequestRewriter) {
+    c.mu.Lock()
+    defer c.mu.Unlock()
+    c.rewriters = append(c.rewriters, r)
+}
+```
+
+#### 2.2 ResilientProvider.Stream Must Feed Circuit Breaker
+
+`Stream()` must record success/failure to the circuit breaker, not just check if it's open:
+
+```go
+func (rp *ResilientProvider) Stream(...) (<-chan StreamChunk, error) {
+    // Check circuit
+    // Wrap returned channel to observe outcome
+    // Record success/failure when stream completes
+}
+```
+
+#### 2.3 Buffer.Bytes() Must Return a Copy
+
+Never return a slice pointing to internal mutable memory:
+
+```go
+// ✅ Correct: returns independent copy
+func (b *Buffer) Bytes() []byte {
+    b.mu.RLock()
+    defer b.mu.RUnlock()
+    out := make([]byte, b.writePos-b.readPos)
+    copy(out, b.data[b.readPos:b.writePos])
+    return out
+}
+
+// ❌ Wrong: caller reads stale memory after concurrent Write()
+func (b *Buffer) Bytes() []byte {
+    b.mu.RLock()
+    defer b.mu.RUnlock()
+    return b.data[b.readPos:b.writePos]
+}
+```
+
+#### 2.4 RingBuffer is SPSC-Only
+
+The lock-free `RingBuffer` uses atomic load/store without CAS. It is only safe for **single-producer, single-consumer** (SPSC) scenarios. Document this constraint clearly. For MPMC, use a mutex-protected buffer or channel instead.
 | generic | no preset (blank slate) |
