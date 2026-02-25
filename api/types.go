@@ -126,7 +126,7 @@ type StreamChunk struct {
 	// 使用统计（仅在最终块中）
 	Usage *ChatUsage `json:"usage,omitempty"`
 	// 错误信息
-	Error *ErrorDetail `json:"error,omitempty"`
+	Error *ErrorInfo `json:"error,omitempty"`
 }
 
 // =============================================================================
@@ -186,9 +186,10 @@ type ToolSchema struct {
 	Version string `json:"version,omitempty" example:"1.0.0"`
 }
 
-// ToolResult 表示工具执行的结果。
+// ToolResultDTO 表示工具执行结果的 API 传输对象。
+// 注意：与 types.ToolResult 不同，Duration 为 string 格式（适合 JSON 序列化）。
 // @Description 工具结果结构
-type ToolResult struct {
+type ToolResultDTO struct {
 	// 工具调用 ID
 	ToolCallID string `json:"tool_call_id" example:"call_123"`
 	// 工具名称
@@ -399,13 +400,8 @@ type A2AResponse struct {
 // @Description 错误响应结构
 type ErrorResponse struct {
 	// 错误详情
-	Error ErrorDetail `json:"error"`
+	Error ErrorInfo `json:"error"`
 }
-
-// ErrorDetail is a type alias for ErrorInfo — the canonical error structure.
-// The canonical definition lives in ErrorInfo (above).
-// Deprecated: prefer using ErrorInfo directly.
-type ErrorDetail = ErrorInfo
 
 // =============================================================================
 // 列出响应类型
