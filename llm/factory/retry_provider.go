@@ -9,7 +9,7 @@ import (
 )
 
 // RetryProvider wraps an llm.Provider with automatic retry using exponential backoff.
-// Only Completion is retried; Stream, HealthCheck, and ListModels delegate directly.
+// Completion and Stream (connection establishment only) are retried; HealthCheck and ListModels delegate directly.
 type RetryProvider struct {
 	inner   llm.Provider
 	retryer retry.Retryer
@@ -43,9 +43,11 @@ func (p *RetryProvider) Completion(ctx context.Context, req *llm.ChatRequest) (*
 	})
 }
 
-// Stream delegates to the inner provider (no retry for streaming).
+// Stream wraps the inner Stream with retry for connection establishment.
 func (p *RetryProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-chan llm.StreamChunk, error) {
-	return p.inner.Stream(ctx, req)
+	return retry.DoWithResultTyped[<-chan llm.StreamChunk](p.retryer, ctx, func() (<-chan llm.StreamChunk, error) {
+		return p.inner.Stream(ctx, req)
+	})
 }
 
 // HealthCheck delegates to the inner provider.

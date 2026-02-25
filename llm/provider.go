@@ -17,7 +17,10 @@ type (
 	TokenUsage   = types.TokenUsage
 	Error        = types.Error
 	ErrorCode    = types.ErrorCode
-	ImageContent = types.ImageContent
+	ImageContent  = types.ImageContent
+	VideoContent  = types.VideoContent
+	ThinkingBlock = types.ThinkingBlock
+	Annotation    = types.Annotation
 )
 
 // 重导出常量.
@@ -26,6 +29,7 @@ const (
 	RoleUser      = types.RoleUser
 	RoleAssistant = types.RoleAssistant
 	RoleTool      = types.RoleTool
+	RoleDeveloper = types.RoleDeveloper
 )
 
 // 重导出错误码.
@@ -105,6 +109,27 @@ type JSONSchemaParam struct {
 	Strict      *bool          `json:"strict,omitempty"`
 }
 
+// StreamOptions 控制流式响应中的额外信息。
+type StreamOptions struct {
+	IncludeUsage      bool `json:"include_usage,omitempty"`
+	ChunkIncludeUsage bool `json:"chunk_include_usage,omitempty"`
+}
+
+// WebSearchOptions configures the built-in web search tool for Chat Completions.
+type WebSearchOptions struct {
+	SearchContextSize string             `json:"search_context_size,omitempty"` // low/medium/high
+	UserLocation      *WebSearchLocation `json:"user_location,omitempty"`
+}
+
+// WebSearchLocation represents approximate user location for web search.
+type WebSearchLocation struct {
+	Type     string `json:"type,omitempty"`     // "approximate"
+	Country  string `json:"country,omitempty"`
+	Region   string `json:"region,omitempty"`
+	City     string `json:"city,omitempty"`
+	Timezone string `json:"timezone,omitempty"`
+}
+
 // ChatRequest 表示聊天补全请求.
 type ChatRequest struct {
 	TraceID        string            `json:"trace_id"`
@@ -123,6 +148,25 @@ type ChatRequest struct {
 	Metadata       map[string]string `json:"metadata,omitempty"`
 	Tags           []string          `json:"tags,omitempty"`
 
+	// 采样参数
+	FrequencyPenalty  *float32       `json:"frequency_penalty,omitempty"`
+	PresencePenalty   *float32       `json:"presence_penalty,omitempty"`
+	RepetitionPenalty *float32       `json:"repetition_penalty,omitempty"`
+	N                 *int           `json:"n,omitempty"`
+	LogProbs          *bool          `json:"logprobs,omitempty"`
+	TopLogProbs       *int           `json:"top_logprobs,omitempty"`
+	ParallelToolCalls *bool          `json:"parallel_tool_calls,omitempty"`
+	ServiceTier       *string        `json:"service_tier,omitempty"`
+	User              string         `json:"user,omitempty"`
+	StreamOptions     *StreamOptions `json:"stream_options,omitempty"`
+
+	// OpenAI 扩展参数
+	MaxCompletionTokens *int              `json:"max_completion_tokens,omitempty"` // 替代 max_tokens 的新字段
+	ReasoningEffort     string            `json:"reasoning_effort,omitempty"`      // none/minimal/low/medium/high/xhigh
+	Store               *bool             `json:"store,omitempty"`                 // 是否存储用于蒸馏/评估
+	Modalities          []string          `json:"modalities,omitempty"`            // ["text", "audio"]
+	WebSearchOptions    *WebSearchOptions `json:"web_search_options,omitempty"`    // 内置 web 搜索
+
 	// 扩展字段
 	ReasoningMode      string   `json:"reasoning_mode,omitempty"`
 	PreviousResponseID string   `json:"previous_response_id,omitempty"`
@@ -138,6 +182,7 @@ type ChatResponse struct {
 	Usage             ChatUsage    `json:"usage"`
 	CreatedAt         time.Time    `json:"created_at"`
 	ThoughtSignatures []string     `json:"thought_signatures,omitempty"`
+	ServiceTier       string       `json:"service_tier,omitempty"`
 }
 
 // ChatChoice 表示响应中的单个选项.
@@ -149,9 +194,25 @@ type ChatChoice struct {
 
 // ChatUsage 表示响应中的 token 用量。
 type ChatUsage struct {
-	PromptTokens     int `json:"prompt_tokens"`
-	CompletionTokens int `json:"completion_tokens"`
-	TotalTokens      int `json:"total_tokens"`
+	PromptTokens            int                      `json:"prompt_tokens"`
+	CompletionTokens        int                      `json:"completion_tokens"`
+	TotalTokens             int                      `json:"total_tokens"`
+	PromptTokensDetails     *PromptTokensDetails     `json:"prompt_tokens_details,omitempty"`
+	CompletionTokensDetails *CompletionTokensDetails `json:"completion_tokens_details,omitempty"`
+}
+
+// PromptTokensDetails 提示 token 详细统计。
+type PromptTokensDetails struct {
+	CachedTokens int `json:"cached_tokens"`
+	AudioTokens  int `json:"audio_tokens,omitempty"`
+}
+
+// CompletionTokensDetails 补全 token 详细统计。
+type CompletionTokensDetails struct {
+	ReasoningTokens          int `json:"reasoning_tokens"`
+	AudioTokens              int `json:"audio_tokens,omitempty"`
+	AcceptedPredictionTokens int `json:"accepted_prediction_tokens,omitempty"`
+	RejectedPredictionTokens int `json:"rejected_prediction_tokens,omitempty"`
 }
 
 // StreamChunk 表示流式响应块.

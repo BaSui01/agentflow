@@ -91,6 +91,10 @@ func (p *GeminiProvider) HealthCheck(ctx context.Context) (*llm.HealthStatus, er
 
 func (p *GeminiProvider) SupportsNativeFunctionCalling() bool { return true }
 
+// SupportsStructuredOutput returns true because Gemini supports native
+// structured output via responseMimeType + responseSchema.
+func (p *GeminiProvider) SupportsStructuredOutput() bool { return true }
+
 // ListModels 获取 Gemini 支持的模型列表
 func (p *GeminiProvider) ListModels(ctx context.Context) ([]llm.Model, error) {
 	endpoint := p.modelsEndpoint()
@@ -190,6 +194,7 @@ type geminiContent struct {
 
 type geminiPart struct {
 	Text             string                  `json:"text,omitempty"`
+	Thought          *bool                   `json:"thought,omitempty"` // true = thinking content
 	InlineData       *geminiInlineData       `json:"inlineData,omitempty"`
 	FunctionCall     *geminiFunctionCall     `json:"functionCall,omitempty"`
 	FunctionResponse *geminiFunctionResponse `json:"functionResponse,omitempty"`
@@ -221,20 +226,42 @@ type geminiFunctionDeclaration struct {
 }
 
 type geminiGenerationConfig struct {
-	Temperature      float32        `json:"temperature,omitempty"`
-	TopP             float32        `json:"topP,omitempty"`
-	TopK             int            `json:"topK,omitempty"`
-	MaxOutputTokens  int            `json:"maxOutputTokens,omitempty"`
-	StopSequences    []string       `json:"stopSequences,omitempty"`
-	ResponseMimeType string         `json:"responseMimeType,omitempty"`
-	ResponseSchema   map[string]any `json:"responseSchema,omitempty"`
+	Temperature      float32               `json:"temperature,omitempty"`
+	TopP             float32               `json:"topP,omitempty"`
+	TopK             int                   `json:"topK,omitempty"`
+	MaxOutputTokens  int                   `json:"maxOutputTokens,omitempty"`
+	StopSequences    []string              `json:"stopSequences,omitempty"`
+	ResponseMimeType string                `json:"responseMimeType,omitempty"`
+	ResponseSchema   map[string]any        `json:"responseSchema,omitempty"`
+	ThinkingConfig   *geminiThinkingConfig `json:"thinkingConfig,omitempty"`
+}
+
+type geminiThinkingConfig struct {
+	ThinkingLevel   string `json:"thinkingLevel,omitempty"`   // minimal, low, medium, high
+	IncludeThoughts bool   `json:"includeThoughts,omitempty"` // include thought parts in response
+}
+
+type geminiToolConfig struct {
+	FunctionCallingConfig *geminiFunctionCallingConfig `json:"functionCallingConfig,omitempty"`
+}
+
+type geminiFunctionCallingConfig struct {
+	Mode                 string   `json:"mode,omitempty"`                 // AUTO, ANY, NONE
+	AllowedFunctionNames []string `json:"allowedFunctionNames,omitempty"` // restrict callable functions
+}
+
+type geminiSafetySetting struct {
+	Category  string `json:"category"`
+	Threshold string `json:"threshold"`
 }
 
 type geminiRequest struct {
 	Contents          []geminiContent         `json:"contents"`
 	Tools             []geminiTool            `json:"tools,omitempty"`
+	ToolConfig        *geminiToolConfig       `json:"toolConfig,omitempty"`
 	GenerationConfig  *geminiGenerationConfig `json:"generationConfig,omitempty"`
 	SystemInstruction *geminiContent          `json:"systemInstruction,omitempty"`
+	SafetySettings    []geminiSafetySetting   `json:"safetySettings,omitempty"`
 }
 
 type geminiCandidate struct {
@@ -248,13 +275,20 @@ type geminiUsageMetadata struct {
 	PromptTokenCount     int `json:"promptTokenCount"`
 	CandidatesTokenCount int `json:"candidatesTokenCount"`
 	TotalTokenCount      int `json:"totalTokenCount"`
+	ThoughtsTokenCount   int `json:"thoughtsTokenCount,omitempty"`
+}
+
+type geminiPromptFeedback struct {
+	BlockReason   string `json:"blockReason,omitempty"`
+	BlockMessage  string `json:"blockReasonMessage,omitempty"`
 }
 
 type geminiResponse struct {
-	Candidates    []geminiCandidate    `json:"candidates"`
-	UsageMetadata *geminiUsageMetadata `json:"usageMetadata,omitempty"`
-	ModelVersion  string               `json:"modelVersion,omitempty"`
-	ResponseID    string               `json:"responseId,omitempty"`
+	Candidates     []geminiCandidate     `json:"candidates"`
+	UsageMetadata  *geminiUsageMetadata  `json:"usageMetadata,omitempty"`
+	PromptFeedback *geminiPromptFeedback `json:"promptFeedback,omitempty"`
+	ModelVersion   string                `json:"modelVersion,omitempty"`
+	ResponseID     string                `json:"responseId,omitempty"`
 }
 
 type geminiErrorResp struct {
@@ -301,7 +335,7 @@ func (p *GeminiProvider) Endpoints() llm.ProviderEndpoints {
 	// 使用默认模型来展示端点格式
 	model := p.cfg.Model
 	if model == "" {
-		model = "gemini-3-pro"
+		model = "gemini-2.5-flash"
 	}
 	return llm.ProviderEndpoints{
 		Completion: p.completionEndpoint(model),
@@ -342,13 +376,8 @@ func convertToGeminiContents(msgs []llm.Message) (*geminiContent, []geminiConten
 	for _, m := range msgs {
 		// 提取 system 消息
 		if m.Role == llm.RoleSystem {
-			if systemInstruction == nil {
-				systemInstruction = &geminiContent{
-					Parts: []geminiPart{{Text: m.Content}},
-				}
-			} else {
-				// Concatenate multiple system messages
-				systemInstruction.Parts[0].Text += "\n\n" + m.Content
+			systemInstruction = &geminiContent{
+				Parts: []geminiPart{{Text: m.Content}},
 			}
 			continue
 		}
@@ -357,8 +386,6 @@ func convertToGeminiContents(msgs []llm.Message) (*geminiContent, []geminiConten
 		role := string(m.Role)
 		if role == "assistant" {
 			role = "model" // Gemini 使用 "model" 而不是 "assistant"
-		} else if role == "tool" {
-			role = "user" // Gemini uses "user" role for function responses
 		}
 
 		content := geminiContent{
@@ -464,37 +491,19 @@ func (p *GeminiProvider) Completion(ctx context.Context, req *llm.ChatRequest) (
 	body := geminiRequest{
 		Contents:          contents,
 		Tools:             convertToGeminiTools(req.Tools),
+		ToolConfig:        convertToolChoice(req.ToolChoice),
 		SystemInstruction: systemInstruction,
+		SafetySettings:    convertSafetySettings(p.cfg.SafetySettings),
 	}
 
 	// 生成配置
-	genCfgNeeded := req.Temperature > 0 || req.TopP > 0 || req.MaxTokens > 0 || len(req.Stop) > 0 || req.ResponseFormat != nil
-	if genCfgNeeded {
-		body.GenerationConfig = &geminiGenerationConfig{
-			Temperature:     req.Temperature,
-			TopP:            req.TopP,
-			MaxOutputTokens: req.MaxTokens,
-			StopSequences:   req.Stop,
-		}
-		// ResponseFormat 转换为 Gemini 格式
-		if req.ResponseFormat != nil {
-			switch req.ResponseFormat.Type {
-			case llm.ResponseFormatJSONObject:
-				body.GenerationConfig.ResponseMimeType = "application/json"
-			case llm.ResponseFormatJSONSchema:
-				body.GenerationConfig.ResponseMimeType = "application/json"
-				if req.ResponseFormat.JSONSchema != nil {
-					body.GenerationConfig.ResponseSchema = req.ResponseFormat.JSONSchema.Schema
-				}
-			}
-		}
-	}
+	body.GenerationConfig = buildGenerationConfig(req)
 
 	payload, err := json.Marshal(body)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal request: %w", err)
 	}
-	model := providers.ChooseModel(req, p.cfg.Model, "gemini-3-pro")
+	model := providers.ChooseModel(req, p.cfg.Model, defaultModel)
 	endpoint := p.completionEndpoint(model)
 
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(payload))
@@ -531,6 +540,11 @@ func (p *GeminiProvider) Completion(ctx context.Context, req *llm.ChatRequest) (
 		}
 	}
 
+	// 检查 promptFeedback（安全过滤导致的拒绝）
+	if err := checkPromptFeedback(geminiResp, p.Name()); err != nil {
+		return nil, err
+	}
+
 	return toGeminiChatResponse(geminiResp, p.Name(), model), nil
 }
 
@@ -554,28 +568,12 @@ func (p *GeminiProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-ch
 	body := geminiRequest{
 		Contents:          contents,
 		Tools:             convertToGeminiTools(req.Tools),
+		ToolConfig:        convertToolChoice(req.ToolChoice),
 		SystemInstruction: systemInstruction,
+		SafetySettings:    convertSafetySettings(p.cfg.SafetySettings),
 	}
 
-	if req.Temperature > 0 || req.TopP > 0 || req.MaxTokens > 0 || len(req.Stop) > 0 || req.ResponseFormat != nil {
-		body.GenerationConfig = &geminiGenerationConfig{
-			Temperature:     req.Temperature,
-			TopP:            req.TopP,
-			MaxOutputTokens: req.MaxTokens,
-			StopSequences:   req.Stop,
-		}
-		if req.ResponseFormat != nil {
-			switch req.ResponseFormat.Type {
-			case llm.ResponseFormatJSONObject:
-				body.GenerationConfig.ResponseMimeType = "application/json"
-			case llm.ResponseFormatJSONSchema:
-				body.GenerationConfig.ResponseMimeType = "application/json"
-				if req.ResponseFormat.JSONSchema != nil {
-					body.GenerationConfig.ResponseSchema = req.ResponseFormat.JSONSchema.Schema
-				}
-			}
-		}
-	}
+	body.GenerationConfig = buildGenerationConfig(req)
 
 	payload, err := json.Marshal(body)
 	if err != nil {
@@ -587,7 +585,7 @@ func (p *GeminiProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-ch
 			Cause:      err,
 		}
 	}
-	model := providers.ChooseModel(req, p.cfg.Model, "gemini-3-pro")
+	model := providers.ChooseModel(req, p.cfg.Model, defaultModel)
 	endpoint := p.streamEndpoint(model)
 
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(payload))
@@ -621,21 +619,6 @@ func (p *GeminiProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-ch
 
 	ch := make(chan llm.StreamChunk)
 	go func() {
-		defer func() {
-			if r := recover(); r != nil {
-				select {
-				case ch <- llm.StreamChunk{
-					Err: &llm.Error{
-						Code:       llm.ErrInternalError,
-						Message:    fmt.Sprintf("gemini streaming panic: %v", r),
-						HTTPStatus: 500,
-						Provider:   p.Name(),
-					},
-				}:
-				default:
-				}
-			}
-		}()
 		defer resp.Body.Close()
 		defer close(ch)
 		reader := bufio.NewReader(resp.Body)
@@ -666,7 +649,7 @@ func (p *GeminiProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-ch
 				continue
 			}
 
-			// With ?alt=sse, Gemini returns SSE format: "data: {...}"
+			// Gemini SSE 格式：data: {json}\n\n
 			if !strings.HasPrefix(line, "data:") {
 				continue
 			}
@@ -677,34 +660,37 @@ func (p *GeminiProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-ch
 
 			var geminiResp geminiResponse
 			if err := json.Unmarshal([]byte(data), &geminiResp); err != nil {
-				continue // skip malformed lines
+				continue
 			}
 
 			// 处理每个候选响应
 			for _, candidate := range geminiResp.Candidates {
 				chunk := llm.StreamChunk{
+					ID:           geminiResp.ResponseID,
 					Provider:     p.Name(),
 					Model:        model,
 					Index:        candidate.Index,
-					FinishReason: candidate.FinishReason,
+					FinishReason: normalizeFinishReason(candidate.FinishReason),
 					Delta: llm.Message{
 						Role: llm.RoleAssistant,
 					},
 				}
 
-				// 解析内容
 				toolCallIndex := 0
 				for _, part := range candidate.Content.Parts {
+					// Thinking content
+					if part.Thought != nil && *part.Thought {
+						chunk.Delta.ReasoningContent = strPtr(part.Text)
+						continue
+					}
 					if part.Text != "" {
 						chunk.Delta.Content += part.Text
 					}
-
 					if part.FunctionCall != nil {
 						argsJSON, err := json.Marshal(part.FunctionCall.Args)
 						if err != nil {
-							continue // 跳过无法序列化的工具调用
+							continue
 						}
-						// 生成唯一的工具调用 ID
 						toolCallID := fmt.Sprintf("call_%s_%d_%d", part.FunctionCall.Name, candidate.Index, toolCallIndex)
 						chunk.Delta.ToolCalls = append(chunk.Delta.ToolCalls, llm.ToolCall{
 							ID:        toolCallID,
@@ -722,7 +708,7 @@ func (p *GeminiProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-ch
 				}
 			}
 
-			// 最后一个 chunk 包含 usage
+			// Usage metadata
 			if geminiResp.UsageMetadata != nil {
 				select {
 				case <-ctx.Done():
@@ -730,11 +716,7 @@ func (p *GeminiProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-ch
 				case ch <- llm.StreamChunk{
 					Provider: p.Name(),
 					Model:    model,
-					Usage: &llm.ChatUsage{
-						PromptTokens:     geminiResp.UsageMetadata.PromptTokenCount,
-						CompletionTokens: geminiResp.UsageMetadata.CandidatesTokenCount,
-						TotalTokens:      geminiResp.UsageMetadata.TotalTokenCount,
-					},
+					Usage:    convertUsageMetadata(geminiResp.UsageMetadata),
 				}:
 				}
 			}
@@ -752,19 +734,21 @@ func toGeminiChatResponse(gr geminiResponse, provider, model string) *llm.ChatRe
 			Role: llm.RoleAssistant,
 		}
 
-		// 解析内容
 		toolCallIndex := 0
 		for _, part := range candidate.Content.Parts {
+			// Thinking content
+			if part.Thought != nil && *part.Thought {
+				msg.ReasoningContent = strPtr(part.Text)
+				continue
+			}
 			if part.Text != "" {
 				msg.Content += part.Text
 			}
-
 			if part.FunctionCall != nil {
 				argsJSON, err := json.Marshal(part.FunctionCall.Args)
 				if err != nil {
-					continue // 跳过无法序列化的工具调用
+					continue
 				}
-				// 生成唯一的工具调用 ID
 				toolCallID := fmt.Sprintf("call_%s_%d", part.FunctionCall.Name, toolCallIndex)
 				if gr.ResponseID != "" {
 					toolCallID = fmt.Sprintf("call_%s_%s_%d", gr.ResponseID, part.FunctionCall.Name, toolCallIndex)
@@ -780,7 +764,7 @@ func toGeminiChatResponse(gr geminiResponse, provider, model string) *llm.ChatRe
 
 		choices = append(choices, llm.ChatChoice{
 			Index:        candidate.Index,
-			FinishReason: candidate.FinishReason,
+			FinishReason: normalizeFinishReason(candidate.FinishReason),
 			Message:      msg,
 		})
 	}
@@ -793,12 +777,160 @@ func toGeminiChatResponse(gr geminiResponse, provider, model string) *llm.ChatRe
 	}
 
 	if gr.UsageMetadata != nil {
-		resp.Usage = llm.ChatUsage{
-			PromptTokens:     gr.UsageMetadata.PromptTokenCount,
-			CompletionTokens: gr.UsageMetadata.CandidatesTokenCount,
-			TotalTokens:      gr.UsageMetadata.TotalTokenCount,
-		}
+		resp.Usage = *convertUsageMetadata(gr.UsageMetadata)
 	}
 
 	return resp
+}
+
+// =============================================================================
+// Helper functions
+// =============================================================================
+
+const defaultModel = "gemini-2.5-flash"
+
+// normalizeFinishReason maps Gemini finish reasons to OpenAI-compatible values.
+func normalizeFinishReason(reason string) string {
+	switch reason {
+	case "STOP":
+		return "stop"
+	case "MAX_TOKENS":
+		return "length"
+	case "SAFETY", "RECITATION", "BLOCKLIST", "PROHIBITED_CONTENT", "SPII":
+		return "content_filter"
+	case "LANGUAGE":
+		return "content_filter"
+	case "":
+		return ""
+	default:
+		return strings.ToLower(reason)
+	}
+}
+
+// convertUsageMetadata converts Gemini usage metadata to ChatUsage.
+func convertUsageMetadata(m *geminiUsageMetadata) *llm.ChatUsage {
+	usage := &llm.ChatUsage{
+		PromptTokens:     m.PromptTokenCount,
+		CompletionTokens: m.CandidatesTokenCount,
+		TotalTokens:      m.TotalTokenCount,
+	}
+	if m.ThoughtsTokenCount > 0 {
+		usage.CompletionTokensDetails = &llm.CompletionTokensDetails{
+			ReasoningTokens: m.ThoughtsTokenCount,
+		}
+	}
+	return usage
+}
+
+// checkPromptFeedback returns an error if the response was blocked by safety filters.
+func checkPromptFeedback(resp geminiResponse, provider string) error {
+	if resp.PromptFeedback == nil {
+		return nil
+	}
+	if resp.PromptFeedback.BlockReason == "" {
+		return nil
+	}
+	msg := fmt.Sprintf("request blocked by safety filter: %s", resp.PromptFeedback.BlockReason)
+	if resp.PromptFeedback.BlockMessage != "" {
+		msg = fmt.Sprintf("%s — %s", msg, resp.PromptFeedback.BlockMessage)
+	}
+	return &llm.Error{
+		Code:       llm.ErrContentFiltered,
+		Message:    msg,
+		HTTPStatus: http.StatusBadRequest,
+		Provider:   provider,
+	}
+}
+
+// convertToolChoice maps ChatRequest.ToolChoice to Gemini's ToolConfig.
+func convertToolChoice(toolChoice any) *geminiToolConfig {
+	if toolChoice == nil {
+		return nil
+	}
+	switch v := toolChoice.(type) {
+	case string:
+		switch v {
+		case "auto":
+			return &geminiToolConfig{FunctionCallingConfig: &geminiFunctionCallingConfig{Mode: "AUTO"}}
+		case "required", "any":
+			return &geminiToolConfig{FunctionCallingConfig: &geminiFunctionCallingConfig{Mode: "ANY"}}
+		case "none":
+			return &geminiToolConfig{FunctionCallingConfig: &geminiFunctionCallingConfig{Mode: "NONE"}}
+		}
+	case map[string]any:
+		// OpenAI-style {"type":"function","function":{"name":"fn"}}
+		if fn, ok := v["function"].(map[string]any); ok {
+			if name, ok := fn["name"].(string); ok {
+				return &geminiToolConfig{
+					FunctionCallingConfig: &geminiFunctionCallingConfig{
+						Mode:                 "ANY",
+						AllowedFunctionNames: []string{name},
+					},
+				}
+			}
+		}
+	}
+	return nil
+}
+
+// buildGenerationConfig constructs geminiGenerationConfig from ChatRequest.
+func buildGenerationConfig(req *llm.ChatRequest) *geminiGenerationConfig {
+	cfg := &geminiGenerationConfig{
+		Temperature:     req.Temperature,
+		TopP:            req.TopP,
+		MaxOutputTokens: req.MaxTokens,
+		StopSequences:   req.Stop,
+	}
+
+	// ResponseFormat
+	if req.ResponseFormat != nil {
+		switch req.ResponseFormat.Type {
+		case llm.ResponseFormatJSONObject:
+			cfg.ResponseMimeType = "application/json"
+		case llm.ResponseFormatJSONSchema:
+			cfg.ResponseMimeType = "application/json"
+			if req.ResponseFormat.JSONSchema != nil {
+				cfg.ResponseSchema = req.ResponseFormat.JSONSchema.Schema
+			}
+		}
+	}
+
+	// Thinking / Reasoning mode
+	if req.ReasoningMode != "" {
+		cfg.ThinkingConfig = &geminiThinkingConfig{
+			IncludeThoughts: true,
+		}
+		switch req.ReasoningMode {
+		case "minimal", "low", "medium", "high":
+			cfg.ThinkingConfig.ThinkingLevel = req.ReasoningMode
+		default:
+			cfg.ThinkingConfig.ThinkingLevel = "medium"
+		}
+	}
+
+	// Return nil if all fields are zero-value to keep request clean
+	if cfg.Temperature == 0 && cfg.TopP == 0 && cfg.MaxOutputTokens == 0 &&
+		len(cfg.StopSequences) == 0 && cfg.ResponseMimeType == "" && cfg.ThinkingConfig == nil {
+		return nil
+	}
+	return cfg
+}
+
+func strPtr(s string) *string {
+	if s == "" {
+		return nil
+	}
+	return &s
+}
+
+// convertSafetySettings converts config safety settings to request format.
+func convertSafetySettings(settings []providers.GeminiSafetySetting) []geminiSafetySetting {
+	if len(settings) == 0 {
+		return nil
+	}
+	out := make([]geminiSafetySetting, len(settings))
+	for i, s := range settings {
+		out[i] = geminiSafetySetting{Category: s.Category, Threshold: s.Threshold}
+	}
+	return out
 }

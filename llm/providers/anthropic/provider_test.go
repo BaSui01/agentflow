@@ -2,6 +2,7 @@ package claude
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -186,7 +187,7 @@ func TestConvertClaudeToolChoice(t *testing.T) {
 		{"auto string", "auto", &claudeToolChoice{Type: "auto"}},
 		{"any string", "any", &claudeToolChoice{Type: "any"}},
 		{"required string", "required", &claudeToolChoice{Type: "any"}},
-		{"none string", "none", nil},
+		{"none string", "none", &claudeToolChoice{Type: "none"}},
 		{"empty string", "", nil},
 		{"specific tool", "my_tool", &claudeToolChoice{Type: "tool", Name: "my_tool"}},
 		{"map form", map[string]any{"type": "tool", "name": "calc"}, &claudeToolChoice{Type: "tool", Name: "calc"}},
@@ -298,14 +299,16 @@ func TestClaudeProvider_Completion_WithToolCalls(t *testing.T) {
 	assert.Equal(t, "tool_use", resp.Choices[0].FinishReason)
 }
 
-func TestClaudeProvider_Completion_ThoughtSignatures(t *testing.T) {
+func TestClaudeProvider_Completion_ThinkingContentBlock(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(claudeResponse{
 			ID: "msg_ts", Role: "assistant", Model: "claude-opus-4.5-20260105",
-			Content:           []claudeContent{{Type: "text", Text: "2+2=4"}},
-			StopReason:        "end_turn",
-			ThoughtSignatures: []string{"sig_abc"},
+			Content: []claudeContent{
+				{Type: "thinking", Thinking: "Let me think step by step...", Signature: "sig_abc"},
+				{Type: "text", Text: "2+2=4"},
+			},
+			StopReason: "end_turn",
 		})
 	}))
 	t.Cleanup(func() { server.Close() })
@@ -315,10 +318,12 @@ func TestClaudeProvider_Completion_ThoughtSignatures(t *testing.T) {
 	}, zap.NewNop())
 
 	resp, err := p.Completion(context.Background(), &llm.ChatRequest{
-		Messages:          []llm.Message{{Role: llm.RoleUser, Content: "2+2?"}},
-		ThoughtSignatures: []string{"sig_abc"},
+		Messages: []llm.Message{{Role: llm.RoleUser, Content: "2+2?"}},
 	})
 	require.NoError(t, err)
+	assert.Equal(t, "2+2=4", resp.Choices[0].Message.Content)
+	require.NotNil(t, resp.Choices[0].Message.ReasoningContent)
+	assert.Equal(t, "Let me think step by step...", *resp.Choices[0].Message.ReasoningContent)
 	assert.Equal(t, []string{"sig_abc"}, resp.ThoughtSignatures)
 }
 
@@ -377,14 +382,14 @@ func TestClaudeProvider_Stream(t *testing.T) {
 			Delta: &claudeDelta{Type: "text_delta", Text: "world"},
 		})
 
-		// message_delta with stop reason and usage (Anthropic sends usage in message_delta)
+		// message_delta with stop reason and usage (Bug2 fix: usage is on message_delta, not message_stop)
 		writeSSEEvent(w, "message_delta", claudeStreamEvent{
 			Type:  "message_delta",
 			Delta: &claudeDelta{StopReason: "end_turn"},
 			Usage: &claudeUsage{InputTokens: 10, OutputTokens: 5},
 		})
 
-		// message_stop (no payload per Anthropic API)
+		// message_stop (no usage data per API spec)
 		writeSSEEvent(w, "message_stop", claudeStreamEvent{
 			Type: "message_stop",
 		})
@@ -491,6 +496,9 @@ func TestClaudeProvider_Stream_ToolCall(t *testing.T) {
 	tc := toolCallChunks[len(toolCallChunks)-1].Delta.ToolCalls[0]
 	assert.Equal(t, "get_weather", tc.Name)
 	assert.Equal(t, "toolu_1", tc.ID)
+
+	// Bug1 fix: verify Arguments is valid JSON (not corrupted by initial "{}")
+	assert.JSONEq(t, `{"city":"NYC"}`, string(tc.Arguments))
 }
 
 func TestClaudeProvider_Stream_Error(t *testing.T) {
@@ -586,4 +594,233 @@ func TestClaudeProvider_ListModels_Error(t *testing.T) {
 	llmErr, ok := err.(*llm.Error)
 	require.True(t, ok)
 	assert.Equal(t, llm.ErrForbidden, llmErr.Code)
+}
+
+// --- Bug A: buildThinking budget_tokens constraint ---
+
+func TestBuildThinking_BudgetConstraints(t *testing.T) {
+	tests := []struct {
+		name      string
+		maxTokens int
+		mode      string
+		wantNil   bool
+		wantBudge int
+	}{
+		{"no reasoning", 4096, "", true, 0},
+		{"normal case", 4096, "extended", false, 3072},
+		{"max_tokens too small", 500, "extended", true, 0},
+		{"max_tokens exactly 1024", 1024, "extended", true, 0},
+		{"max_tokens 1025", 1025, "extended", false, 1024},
+		{"max_tokens 2000", 2000, "extended", false, 1500},
+		{"budget must be < max_tokens", 1366, "extended", false, 1024},
+		{"unknown mode", 4096, "fast", true, 0},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := &llm.ChatRequest{MaxTokens: tt.maxTokens, ReasoningMode: tt.mode}
+			result := buildThinking(req)
+			if tt.wantNil {
+				assert.Nil(t, result)
+			} else {
+				require.NotNil(t, result)
+				assert.Equal(t, "enabled", result.Type)
+				assert.Equal(t, tt.wantBudge, result.BudgetTokens)
+				assert.Less(t, result.BudgetTokens, tt.maxTokens, "budget_tokens must be < max_tokens")
+			}
+		})
+	}
+}
+
+// --- Bug B: HealthCheck/ListModels use resolveAPIKey ---
+
+func TestClaudeProvider_HealthCheck_MultiKey(t *testing.T) {
+	var capturedKey string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		capturedKey = r.Header.Get("x-api-key")
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{"data":[]}`))
+	}))
+	t.Cleanup(func() { server.Close() })
+
+	p := NewClaudeProvider(providers.ClaudeConfig{
+		BaseProviderConfig: providers.BaseProviderConfig{
+			BaseURL: server.URL,
+			APIKeys: []providers.APIKeyEntry{{Key: "sk-multi-1"}},
+		},
+	}, zap.NewNop())
+
+	status, err := p.HealthCheck(context.Background())
+	require.NoError(t, err)
+	assert.True(t, status.Healthy)
+	assert.Equal(t, "sk-multi-1", capturedKey)
+}
+
+func TestClaudeProvider_ListModels_MultiKey(t *testing.T) {
+	var capturedKey string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		capturedKey = r.Header.Get("x-api-key")
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"data":[]}`))
+	}))
+	t.Cleanup(func() { server.Close() })
+
+	p := NewClaudeProvider(providers.ClaudeConfig{
+		BaseProviderConfig: providers.BaseProviderConfig{
+			BaseURL: server.URL,
+			APIKeys: []providers.APIKeyEntry{{Key: "sk-multi-2"}},
+		},
+	}, zap.NewNop())
+
+	_, err := p.ListModels(context.Background())
+	require.NoError(t, err)
+	assert.Equal(t, "sk-multi-2", capturedKey)
+}
+
+// --- Bug C: detectImageMediaType ---
+
+func TestDetectImageMediaType(t *testing.T) {
+	tests := []struct {
+		name     string
+		header   []byte
+		expected string
+	}{
+		{"PNG", []byte{0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A}, "image/png"},
+		{"JPEG", []byte{0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10}, "image/jpeg"},
+		{"GIF", []byte{0x47, 0x49, 0x46, 0x38, 0x39, 0x61}, "image/gif"},
+		{"WebP", []byte{0x52, 0x49, 0x46, 0x46, 0x00, 0x00, 0x00, 0x00, 0x57, 0x45, 0x42, 0x50}, "image/webp"},
+		{"unknown fallback", []byte{0x00, 0x00, 0x00, 0x00}, "image/png"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			b64 := base64.StdEncoding.EncodeToString(tt.header)
+			assert.Equal(t, tt.expected, detectImageMediaType(b64))
+		})
+	}
+}
+
+// --- Bug D: input_json_delta should not emit empty chunks ---
+
+func TestClaudeProvider_Stream_NoEmptyChunksForJsonDelta(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(http.StatusOK)
+
+		writeSSEEvent(w, "message_start", claudeStreamEvent{
+			Type:    "message_start",
+			Message: &claudeResponse{ID: "msg_1", Model: "claude-opus-4.5-20260105"},
+		})
+		writeSSEEvent(w, "content_block_start", claudeStreamEvent{
+			Type: "content_block_start", Index: 0,
+			ContentBlock: &claudeContent{Type: "tool_use", ID: "t1", Name: "calc"},
+		})
+		// These should NOT produce chunks
+		writeSSEEvent(w, "content_block_delta", claudeStreamEvent{
+			Type: "content_block_delta", Index: 0,
+			Delta: &claudeDelta{Type: "input_json_delta", PartialJSON: `{"x":1}`},
+		})
+		writeSSEEvent(w, "content_block_stop", claudeStreamEvent{
+			Type: "content_block_stop", Index: 0,
+		})
+		writeSSEEvent(w, "message_stop", claudeStreamEvent{Type: "message_stop"})
+	}))
+	t.Cleanup(func() { server.Close() })
+
+	p := NewClaudeProvider(providers.ClaudeConfig{
+		BaseProviderConfig: providers.BaseProviderConfig{APIKey: "sk-test", BaseURL: server.URL},
+	}, zap.NewNop())
+
+	ch, err := p.Stream(context.Background(), &llm.ChatRequest{
+		Messages: []llm.Message{{Role: llm.RoleUser, Content: "calc"}},
+	})
+	require.NoError(t, err)
+
+	var emptyChunks int
+	for c := range ch {
+		// A chunk with no content, no tool calls, no reasoning, no finish reason, no usage
+		if c.Delta.Content == "" && len(c.Delta.ToolCalls) == 0 &&
+			c.Delta.ReasoningContent == nil && c.FinishReason == "" && c.Usage == nil {
+			emptyChunks++
+		}
+	}
+	assert.Equal(t, 0, emptyChunks, "should not emit empty chunks for input_json_delta")
+}
+
+// --- Bug E: message_start input_tokens merged into message_delta ---
+
+func TestClaudeProvider_Stream_InputTokensFromMessageStart(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(http.StatusOK)
+
+		// message_start with input_tokens
+		writeSSEEvent(w, "message_start", claudeStreamEvent{
+			Type: "message_start",
+			Message: &claudeResponse{
+				ID: "msg_1", Model: "claude-opus-4.5-20260105",
+				Usage: &claudeUsage{InputTokens: 25, OutputTokens: 1},
+			},
+		})
+		writeSSEEvent(w, "content_block_delta", claudeStreamEvent{
+			Type: "content_block_delta", Index: 0,
+			Delta: &claudeDelta{Type: "text_delta", Text: "Hi"},
+		})
+		// message_delta with only output_tokens (basic case per API docs)
+		writeSSEEvent(w, "message_delta", claudeStreamEvent{
+			Type:  "message_delta",
+			Delta: &claudeDelta{StopReason: "end_turn"},
+			Usage: &claudeUsage{OutputTokens: 15},
+		})
+		writeSSEEvent(w, "message_stop", claudeStreamEvent{Type: "message_stop"})
+	}))
+	t.Cleanup(func() { server.Close() })
+
+	p := NewClaudeProvider(providers.ClaudeConfig{
+		BaseProviderConfig: providers.BaseProviderConfig{APIKey: "sk-test", BaseURL: server.URL},
+	}, zap.NewNop())
+
+	ch, err := p.Stream(context.Background(), &llm.ChatRequest{
+		Messages: []llm.Message{{Role: llm.RoleUser, Content: "Hi"}},
+	})
+	require.NoError(t, err)
+
+	var lastUsage *llm.ChatUsage
+	for c := range ch {
+		if c.Usage != nil {
+			lastUsage = c.Usage
+		}
+	}
+	require.NotNil(t, lastUsage, "should have usage")
+	assert.Equal(t, 25, lastUsage.PromptTokens, "input_tokens from message_start should be merged")
+	assert.Equal(t, 15, lastUsage.CompletionTokens)
+}
+
+// --- Bug G: multiple system messages concatenation ---
+
+func TestConvertToClaudeMessages_MultipleSystem(t *testing.T) {
+	msgs := []llm.Message{
+		{Role: llm.RoleSystem, Content: "You are helpful."},
+		{Role: llm.RoleSystem, Content: "Be concise."},
+		{Role: llm.RoleUser, Content: "Hi"},
+	}
+	system, claudeMsgs := convertToClaudeMessages(msgs)
+	assert.Equal(t, "You are helpful.\n\nBe concise.", system)
+	require.Len(t, claudeMsgs, 1)
+}
+
+// --- Bug H: multiple thinking blocks concatenation ---
+
+func TestToClaudeChatResponse_MultipleThinkingBlocks(t *testing.T) {
+	cr := claudeResponse{
+		ID: "msg_1", Role: "assistant", Model: "test",
+		Content: []claudeContent{
+			{Type: "thinking", Thinking: "Step 1: analyze", Signature: "sig1"},
+			{Type: "thinking", Thinking: "Step 2: conclude", Signature: "sig2"},
+			{Type: "text", Text: "Answer"},
+		},
+		StopReason: "end_turn",
+	}
+	resp := toClaudeChatResponse(cr, "claude")
+	require.NotNil(t, resp.Choices[0].Message.ReasoningContent)
+	assert.Equal(t, "Step 1: analyze\n\nStep 2: conclude", *resp.Choices[0].Message.ReasoningContent)
+	assert.Equal(t, []string{"sig1", "sig2"}, resp.ThoughtSignatures)
 }

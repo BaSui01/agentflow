@@ -38,9 +38,21 @@ type ClaudeConfig struct {
 // GeminiConfig Gemini Provider 配置
 type GeminiConfig struct {
 	BaseProviderConfig `yaml:",inline"`
-	ProjectID string `json:"project_id,omitempty" yaml:"project_id,omitempty"`
-	Region    string `json:"region,omitempty" yaml:"region,omitempty"`
-	AuthType  string `json:"auth_type,omitempty" yaml:"auth_type,omitempty"` // "api_key"(默认) | "oauth"
+	ProjectID      string                `json:"project_id,omitempty" yaml:"project_id,omitempty"`
+	Region         string                `json:"region,omitempty" yaml:"region,omitempty"`
+	AuthType       string                `json:"auth_type,omitempty" yaml:"auth_type,omitempty"` // "api_key"(默认) | "oauth"
+	SafetySettings []GeminiSafetySetting `json:"safety_settings,omitempty" yaml:"safety_settings,omitempty"`
+}
+
+// GeminiSafetySetting configures safety filter thresholds.
+// Category: HARM_CATEGORY_HARASSMENT, HARM_CATEGORY_HATE_SPEECH,
+//
+//	HARM_CATEGORY_SEXUALLY_EXPLICIT, HARM_CATEGORY_DANGEROUS_CONTENT, HARM_CATEGORY_CIVIC_INTEGRITY.
+//
+// Threshold: BLOCK_NONE, BLOCK_LOW_AND_ABOVE, BLOCK_MEDIUM_AND_ABOVE, BLOCK_HIGH_AND_ABOVE.
+type GeminiSafetySetting struct {
+	Category  string `json:"category" yaml:"category"`
+	Threshold string `json:"threshold" yaml:"threshold"`
 }
 
 // GrokConfig xAI Grok Provider 配置
@@ -92,4 +104,7 @@ type LlamaConfig struct {
 // DoubaoConfig ByteDance Doubao Provider 配置
 type DoubaoConfig struct {
 	BaseProviderConfig `yaml:",inline"`
+	AccessKey          string `json:"access_key,omitempty" yaml:"access_key,omitempty"`   // 火山引擎 Access Key
+	SecretKey          string `json:"secret_key,omitempty" yaml:"secret_key,omitempty"`   // 火山引擎 Secret Key
+	Region             string `json:"region,omitempty" yaml:"region,omitempty"`            // 区域，默认 cn-beijing
 }

@@ -29,9 +29,7 @@ These guides help you **ask the right questions before coding**.
 | [quality-guidelines.md §41-§42](../backend/quality-guidelines.md) | JWT auth middleware, MCP server serve loop | Authentication, tenant rate limiting, protocol message dispatch |
 | [quality-guidelines.md §43-§44](../backend/quality-guidelines.md) | OTel SDK initialization, API request body validation | Telemetry setup, new API handlers, request parsing |
 | [quality-guidelines.md §49-§53](../backend/quality-guidelines.md) | HSTS header, JWT secret length, auth disable protection, OpenAPI conditional routes, OTel trace logging | Security headers, authentication config, API documentation, log-trace correlation |
-| [quality-guidelines.md §54-§56](../backend/quality-guidelines.md) | Structured outputs, tool streaming, skills-discovery bridge | LLM response format, tool progress events, skill-capability registration |
-| [quality-guidelines.md §57-§58](../backend/quality-guidelines.md) | LLM tool definition wire format, streaming correctness | Tool/function calling, SSE parsing, streaming token usage |
-| [quality-guidelines.md §59-§60](../backend/quality-guidelines.md) | OpenAI-compat provider config, concurrent safety in LLM infra | New provider wrappers, multi-key rotation, buffer/channel safety |
+| [quality-guidelines.md §54-§57](../backend/quality-guidelines.md) | Structured outputs, tool streaming, skills-discovery bridge, Gemini native API | LLM response format, tool progress events, skill-capability registration, Gemini SSE/ToolConfig/Thinking |
 
 ---
 
@@ -317,18 +315,17 @@ These guides help you **ask the right questions before coding**.
 
 → Read [quality-guidelines.md §56](../backend/quality-guidelines.md) for Skills-Discovery Bridge pattern
 
-### When to Think About LLM Provider Implementation
+### When to Think About Gemini Provider Protocol
 
-- [ ] 新增或修改 Provider 的 `Stream()` 方法 — goroutine 是否有 `recover()` 作为第一个 defer？（§58）
-- [ ] 新增 OpenAI 兼容 Provider — 是否传递了 `APIKeys` 到 `openaicompat.Config`？（§59）
-- [ ] 修改工具定义转换 — JSON tag 是 `"parameters"`（定义）还是 `"arguments"`（调用）？（§57）
-- [ ] 修改 Anthropic streaming — usage 是否从 `message_delta` 读取？tool call 累积器是否初始化为 `nil`？（§58）
-- [ ] 修改 Gemini streaming — URL 是否包含 `?alt=sse`？（§58）
-- [ ] 修改 OpenAI-compat streaming — 是否设置了 `StreamOptions.IncludeUsage: true`？（§58）
-- [ ] `Stream()` 和 `Completion()` 是否设置了相同的请求参数（Temperature, TopP, Stop）？（§58）
-- [ ] Provider 默认 BaseURL — 是否与 EndpointPath 有路径重复？（§59）
+- [ ] 修改 Gemini `streamEndpoint` — URL 是否包含 `?alt=sse`？（§57）
+- [ ] 解析 Gemini 流式响应 — 是否按 SSE `data:` 前缀解析而非逐行 JSON？（§57）
+- [ ] 返回 FinishReason — 是否通过 `normalizeFinishReason()` 标准化？（§57）
+- [ ] 处理 Gemini 响应 — 是否检查了 `promptFeedback.blockReason`？（§57）
+- [ ] 映射 ToolChoice — 是否转换为 `toolConfig.functionCallingConfig`？（§57）
+- [ ] 新增 Gemini 功能 — 是否在 `buildGenerationConfig()` 中集中处理？（§57）
+- [ ] Gemini 3 系列 — 是否处理了 `thought` part 到 `ReasoningContent` 的映射？（§57）
 
-→ Read [quality-guidelines.md §57-§60](../backend/quality-guidelines.md) for LLM Provider patterns
+→ Read [quality-guidelines.md §57](../backend/quality-guidelines.md) for Gemini Native API Protocol pattern
 
 ---
 

@@ -173,7 +173,8 @@ func TestOpenAIProvider_Completion_ResponsesAPI(t *testing.T) {
 
 		var reqBody openAIResponsesRequest
 		json.NewDecoder(r.Body).Decode(&reqBody)
-		assert.True(t, reqBody.Store)
+		assert.NotNil(t, reqBody.Store)
+		assert.True(t, *reqBody.Store)
 
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(openAIResponsesResponse{
@@ -182,18 +183,18 @@ func TestOpenAIProvider_Completion_ResponsesAPI(t *testing.T) {
 			CreatedAt: 1700000000,
 			Status:    "completed",
 			Model:     "gpt-5.2",
-			Output: []openAIResponsesOutput{
+			Output: []responsesOutputItem{
 				{
 					Type:   "message",
 					ID:     "msg_1",
 					Status: "completed",
 					Role:   "assistant",
-					Content: []openAIContent{
+					Content: []responsesContent{
 						{Type: "output_text", Text: "Hello from Responses API"},
 					},
 				},
 			},
-			Usage: &providers.OpenAICompatUsage{PromptTokens: 8, CompletionTokens: 6, TotalTokens: 14},
+			Usage: &responsesUsage{InputTokens: 8, OutputTokens: 6, TotalTokens: 14},
 		})
 	}))
 	t.Cleanup(func() { server.Close() })
@@ -203,8 +204,10 @@ func TestOpenAIProvider_Completion_ResponsesAPI(t *testing.T) {
 		UseResponsesAPI:    true,
 	}, zap.NewNop())
 
+	storeTrue := true
 	resp, err := p.Completion(context.Background(), &llm.ChatRequest{
 		Messages: []llm.Message{{Role: llm.RoleUser, Content: "Hi"}},
+		Store:    &storeTrue,
 	})
 	require.NoError(t, err)
 	require.NotNil(t, resp)
@@ -221,18 +224,25 @@ func TestOpenAIProvider_Completion_ResponsesAPI_WithToolCalls(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(openAIResponsesResponse{
-			ID:    "resp_tc",
-			Model: "gpt-5.2",
-			Output: []openAIResponsesOutput{
+			ID:     "resp_tc",
+			Model:  "gpt-5.2",
+			Status: "completed",
+			Output: []responsesOutputItem{
 				{
 					Type:   "message",
 					ID:     "msg_1",
 					Status: "completed",
 					Role:   "assistant",
-					Content: []openAIContent{
+					Content: []responsesContent{
 						{Type: "output_text", Text: "Let me check the weather."},
-						{Type: "tool_call", ID: "call_1", Name: "get_weather", Arguments: json.RawMessage(`{"city":"NYC"}`)},
 					},
+				},
+				{
+					Type:      "function_call",
+					ID:        "fc_1",
+					CallID:    "call_1",
+					Name:      "get_weather",
+					Arguments: json.RawMessage(`{"city":"NYC"}`),
 				},
 			},
 		})
@@ -248,10 +258,12 @@ func TestOpenAIProvider_Completion_ResponsesAPI_WithToolCalls(t *testing.T) {
 		Messages: []llm.Message{{Role: llm.RoleUser, Content: "Weather?"}},
 	})
 	require.NoError(t, err)
+	// message output + function_call output get merged into one choice
 	require.Len(t, resp.Choices, 1)
 	assert.Equal(t, "Let me check the weather.", resp.Choices[0].Message.Content)
 	require.Len(t, resp.Choices[0].Message.ToolCalls, 1)
 	assert.Equal(t, "get_weather", resp.Choices[0].Message.ToolCalls[0].Name)
+	assert.Equal(t, "call_1", resp.Choices[0].Message.ToolCalls[0].ID)
 }
 
 func TestOpenAIProvider_Completion_ResponsesAPI_PreviousResponseID(t *testing.T) {
@@ -264,7 +276,7 @@ func TestOpenAIProvider_Completion_ResponsesAPI_PreviousResponseID(t *testing.T)
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(openAIResponsesResponse{
 			ID: "resp_2", Model: "gpt-5.2",
-			Output: []openAIResponsesOutput{{Type: "message", Role: "assistant", Content: []openAIContent{{Type: "output_text", Text: "ok"}}}},
+			Output: []responsesOutputItem{{Type: "message", Role: "assistant", Content: []responsesContent{{Type: "output_text", Text: "ok"}}}},
 		})
 	}))
 	t.Cleanup(func() { server.Close() })
@@ -401,19 +413,25 @@ func TestToResponsesAPIChatResponse(t *testing.T) {
 		ID:        "resp_test",
 		Model:     "gpt-5.2",
 		CreatedAt: 1700000000,
-		Output: []openAIResponsesOutput{
-			{Type: "message", ID: "msg_1", Status: "stop", Role: "assistant",
-				Content: []openAIContent{{Type: "output_text", Text: "Hello"}}},
-			{Type: "function_call", ID: "fc_1"}, // non-message type, should be skipped
+		Status:    "completed",
+		Output: []responsesOutputItem{
+			{Type: "message", ID: "msg_1", Status: "completed", Role: "assistant",
+				Content: []responsesContent{{Type: "output_text", Text: "Hello"}}},
+			{Type: "function_call", ID: "fc_1", CallID: "call_1", Name: "do_thing",
+				Arguments: json.RawMessage(`{}`)},
 		},
-		Usage: &providers.OpenAICompatUsage{PromptTokens: 5, CompletionTokens: 3, TotalTokens: 8},
+		Usage: &responsesUsage{InputTokens: 5, OutputTokens: 3, TotalTokens: 8},
 	}
 
 	result := toResponsesAPIChatResponse(resp, "openai")
 	assert.Equal(t, "resp_test", result.ID)
 	assert.Equal(t, "openai", result.Provider)
+	// message + function_call merged into one choice
 	require.Len(t, result.Choices, 1)
 	assert.Equal(t, "Hello", result.Choices[0].Message.Content)
+	assert.Equal(t, "tool_calls", result.Choices[0].FinishReason)
+	require.Len(t, result.Choices[0].Message.ToolCalls, 1)
+	assert.Equal(t, "do_thing", result.Choices[0].Message.ToolCalls[0].Name)
 	assert.Equal(t, 8, result.Usage.TotalTokens)
 	assert.False(t, result.CreatedAt.IsZero())
 }

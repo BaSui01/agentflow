@@ -2,7 +2,6 @@ package providers
 
 import (
 	"context"
-	"encoding/base64"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -437,36 +436,4 @@ func TestListModelsOpenAICompat(t *testing.T) {
 
 // =============================================================================
 // detectImageMIME tests
-// =============================================================================
-
-func TestDetectImageMIME(t *testing.T) {
-	t.Run("JPEG magic bytes", func(t *testing.T) {
-		data := base64.StdEncoding.EncodeToString([]byte{0xFF, 0xD8, 0xFF, 0xE0})
-		assert.Equal(t, "image/jpeg", detectImageMIME(data))
-	})
-
-	t.Run("PNG magic bytes", func(t *testing.T) {
-		data := base64.StdEncoding.EncodeToString([]byte{0x89, 'P', 'N', 'G'})
-		assert.Equal(t, "image/png", detectImageMIME(data))
-	})
-
-	t.Run("GIF magic bytes", func(t *testing.T) {
-		data := base64.StdEncoding.EncodeToString([]byte("GIF89a"))
-		assert.Equal(t, "image/gif", detectImageMIME(data))
-	})
-
-	t.Run("WebP magic bytes", func(t *testing.T) {
-		data := base64.StdEncoding.EncodeToString([]byte("RIFF\x00\x00\x00\x00WEBP"))
-		assert.Equal(t, "image/webp", detectImageMIME(data))
-	})
-
-	t.Run("unknown data falls back to png", func(t *testing.T) {
-		data := base64.StdEncoding.EncodeToString([]byte{0x00, 0x01, 0x02, 0x03})
-		assert.Equal(t, "image/png", detectImageMIME(data))
-	})
-
-	t.Run("invalid base64 falls back to png", func(t *testing.T) {
-		assert.Equal(t, "image/png", detectImageMIME("!!!invalid!!!"))
-	})
-}
 

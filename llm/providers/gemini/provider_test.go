@@ -3,6 +3,7 @@ package gemini
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -224,7 +225,7 @@ func TestGeminiProvider_Completion(t *testing.T) {
 	assert.Equal(t, "gemini", resp.Provider)
 	require.Len(t, resp.Choices, 1)
 	assert.Equal(t, "Hello from Gemini", resp.Choices[0].Message.Content)
-	assert.Equal(t, "STOP", resp.Choices[0].FinishReason)
+	assert.Equal(t, "stop", resp.Choices[0].FinishReason)
 	assert.Equal(t, 12, resp.Usage.TotalTokens)
 
 	// Verify system instruction was extracted
@@ -300,7 +301,7 @@ func TestGeminiProvider_Stream(t *testing.T) {
 		w.Header().Set("Content-Type", "text/event-stream")
 		w.WriteHeader(http.StatusOK)
 
-		// With ?alt=sse, Gemini streams SSE format: "data: {...}\n\n"
+		// Gemini SSE format: data: {json}\n\n
 		chunk1 := geminiResponse{
 			Candidates: []geminiCandidate{{
 				Content: geminiContent{Role: "model", Parts: []geminiPart{{Text: "Hello "}}},
@@ -322,12 +323,8 @@ func TestGeminiProvider_Stream(t *testing.T) {
 
 		data1, _ := json.Marshal(chunk1)
 		data2, _ := json.Marshal(chunk2)
-		w.Write([]byte("data: "))
-		w.Write(data1)
-		w.Write([]byte("\n\n"))
-		w.Write([]byte("data: "))
-		w.Write(data2)
-		w.Write([]byte("\n\n"))
+		fmt.Fprintf(w, "data: %s\n\n", data1)
+		fmt.Fprintf(w, "data: %s\n\n", data2)
 	}))
 	t.Cleanup(func() { server.Close() })
 
