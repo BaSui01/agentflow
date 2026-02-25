@@ -160,7 +160,7 @@ type claudeMessage struct {
 }
 
 type claudeContent struct {
-	Type      string          `json:"type"` // text, tool_use, tool_result, image
+	Type      string          `json:"type"` // text, tool_use, tool_result, image, thinking
 	Text      string          `json:"text,omitempty"`
 	ID        string          `json:"id,omitempty"`
 	Name      string          `json:"name,omitempty"`
@@ -169,6 +169,9 @@ type claudeContent struct {
 	Content   string          `json:"content,omitempty"` // for tool_result
 	// Image source fields (for type="image")
 	Source *claudeImageSource `json:"source,omitempty"`
+	// Thinking fields (for type="thinking")
+	Thinking  string `json:"thinking,omitempty"`
+	Signature string `json:"signature,omitempty"`
 }
 
 type claudeImageSource struct {
@@ -185,41 +188,47 @@ type claudeTool struct {
 }
 
 type claudeToolChoice struct {
-	Type                   string `json:"type"`                                // "auto", "any", "tool"
+	Type                   string `json:"type"`                                // "auto", "any", "tool", "none"
 	Name                   string `json:"name,omitempty"`                      // 仅 type="tool" 时
 	DisableParallelToolUse *bool  `json:"disable_parallel_tool_use,omitempty"` // 可选
 }
 
+// claudeThinking 控制 Claude 的 Extended Thinking 功能。
+type claudeThinking struct {
+	Type         string `json:"type"`                    // "enabled" or "disabled"
+	BudgetTokens int    `json:"budget_tokens,omitempty"` // type="enabled" 时必填，最小 1024
+}
+
 type claudeRequest struct {
-	Model             string           `json:"model"`
-	Messages          []claudeMessage  `json:"messages"`
-	System            string           `json:"system,omitempty"` // system 消息单独传递
-	MaxTokens         int              `json:"max_tokens"`
-	Temperature       float32          `json:"temperature,omitempty"`
-	TopP              float32          `json:"top_p,omitempty"`
-	StopSeq           []string         `json:"stop_sequences,omitempty"`
-	Stream            bool             `json:"stream,omitempty"`
-	Tools             []claudeTool     `json:"tools,omitempty"`
-	ToolChoice        *claudeToolChoice `json:"tool_choice,omitempty"`
-	ReasoningMode     string           `json:"reasoning_mode,omitempty"`     // 2026: "fast" | "extended"
-	ThoughtSignatures []string         `json:"thought_signatures,omitempty"` // 2026: Thought Signatures
+	Model       string            `json:"model"`
+	Messages    []claudeMessage   `json:"messages"`
+	System      any               `json:"system,omitempty"` // string 或 []claudeSystemBlock（支持 cache_control）
+	MaxTokens   int               `json:"max_tokens"`
+	Temperature float32           `json:"temperature,omitempty"`
+	TopP        float32           `json:"top_p,omitempty"`
+	StopSeq     []string          `json:"stop_sequences,omitempty"`
+	Stream      bool              `json:"stream,omitempty"`
+	Tools       []claudeTool      `json:"tools,omitempty"`
+	ToolChoice  *claudeToolChoice `json:"tool_choice,omitempty"`
+	Thinking    *claudeThinking   `json:"thinking,omitempty"` // Extended Thinking
 }
 
 type claudeUsage struct {
-	InputTokens  int `json:"input_tokens"`
-	OutputTokens int `json:"output_tokens"`
+	InputTokens              int `json:"input_tokens"`
+	OutputTokens             int `json:"output_tokens"`
+	CacheCreationInputTokens int `json:"cache_creation_input_tokens,omitempty"`
+	CacheReadInputTokens     int `json:"cache_read_input_tokens,omitempty"`
 }
 
 type claudeResponse struct {
-	ID                string          `json:"id"`
-	Type              string          `json:"type"` // message, content_block_delta, etc.
-	Role              string          `json:"role"`
-	Content           []claudeContent `json:"content"`
-	Model             string          `json:"model"`
-	StopReason        string          `json:"stop_reason"`
-	StopSequence      string          `json:"stop_sequence,omitempty"`
-	Usage             *claudeUsage    `json:"usage,omitempty"`
-	ThoughtSignatures []string        `json:"thought_signatures,omitempty"` // 2026: Thought Signatures
+	ID           string          `json:"id"`
+	Type         string          `json:"type"` // message, content_block_delta, etc.
+	Role         string          `json:"role"`
+	Content      []claudeContent `json:"content"`
+	Model        string          `json:"model"`
+	StopReason   string          `json:"stop_reason"`
+	StopSequence string          `json:"stop_sequence,omitempty"`
+	Usage        *claudeUsage    `json:"usage,omitempty"`
 }
 
 // 流式响应的事件类型
@@ -233,10 +242,12 @@ type claudeStreamEvent struct {
 }
 
 type claudeDelta struct {
-	Type        string `json:"type"` // text_delta, input_json_delta
+	Type        string `json:"type"` // text_delta, input_json_delta, thinking_delta, signature_delta
 	Text        string `json:"text,omitempty"`
 	PartialJSON string `json:"partial_json,omitempty"`
 	StopReason  string `json:"stop_reason,omitempty"`
+	Thinking    string `json:"thinking,omitempty"`  // for thinking_delta
+	Signature   string `json:"signature,omitempty"` // for signature_delta
 }
 
 type claudeErrorResp struct {
@@ -393,8 +404,10 @@ func convertClaudeToolChoice(tc any) *claudeToolChoice {
 			return &claudeToolChoice{Type: "auto"}
 		case "any", "required":
 			return &claudeToolChoice{Type: "any"}
-		case "none", "":
-			return nil // Claude: 不传 tool_choice 等同于不使用工具
+		case "none":
+			return &claudeToolChoice{Type: "none"}
+		case "":
+			return nil
 		default:
 			// 假设是具体工具名
 			return &claudeToolChoice{Type: "tool", Name: v}
@@ -430,17 +443,16 @@ func (p *ClaudeProvider) Completion(ctx context.Context, req *llm.ChatRequest) (
 	system, messages := convertToClaudeMessages(req.Messages)
 
 	body := claudeRequest{
-		Model:             providers.ChooseModel(req, p.cfg.Model, "claude-opus-4.5-20260105"),
-		Messages:          messages,
-		System:            system,
-		MaxTokens:         chooseMaxTokens(req),
-		Temperature:       req.Temperature,
-		TopP:              req.TopP,
-		StopSeq:           req.Stop,
-		Tools:             convertToClaudeTools(req.Tools),
-		ToolChoice:        convertClaudeToolChoice(req.ToolChoice),
-		ReasoningMode:     req.ReasoningMode,     // 2026: 混合推理模式
-		ThoughtSignatures: req.ThoughtSignatures, // 2026: Thought Signatures
+		Model:       providers.ChooseModel(req, p.cfg.Model, "claude-opus-4.5-20260105"),
+		Messages:    messages,
+		System:      system,
+		MaxTokens:   chooseMaxTokens(req),
+		Temperature: req.Temperature,
+		TopP:        req.TopP,
+		StopSeq:     req.Stop,
+		Tools:       convertToClaudeTools(req.Tools),
+		ToolChoice:  convertClaudeToolChoice(req.ToolChoice),
+		Thinking:    buildThinking(req),
 	}
 
 	payload, err := json.Marshal(body)
@@ -503,15 +515,17 @@ func (p *ClaudeProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-ch
 	system, messages := convertToClaudeMessages(req.Messages)
 
 	body := claudeRequest{
-		Model:             providers.ChooseModel(req, p.cfg.Model, "claude-opus-4.5-20260105"),
-		Messages:          messages,
-		System:            system,
-		MaxTokens:         chooseMaxTokens(req),
-		Stream:            true,
-		Tools:             convertToClaudeTools(req.Tools),
-		ToolChoice:        convertClaudeToolChoice(req.ToolChoice),
-		ReasoningMode:     req.ReasoningMode,     // 2026: 混合推理模式
-		ThoughtSignatures: req.ThoughtSignatures, // 2026: Thought Signatures
+		Model:       providers.ChooseModel(req, p.cfg.Model, "claude-opus-4.5-20260105"),
+		Messages:    messages,
+		System:      system,
+		MaxTokens:   chooseMaxTokens(req),
+		Temperature: req.Temperature,
+		TopP:        req.TopP,
+		StopSeq:     req.Stop,
+		Stream:      true,
+		Tools:       convertToClaudeTools(req.Tools),
+		ToolChoice:  convertClaudeToolChoice(req.ToolChoice),
+		Thinking:    buildThinking(req),
 	}
 
 	payload, err := json.Marshal(body)
@@ -594,7 +608,6 @@ func (p *ClaudeProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-ch
 
 			// Claude SSE 格式：event: <type>\ndata: <json>
 			if strings.HasPrefix(line, "event:") {
-				// 事件类型行，跳过
 				continue
 			}
 
@@ -603,9 +616,6 @@ func (p *ClaudeProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-ch
 			}
 
 			data := strings.TrimSpace(strings.TrimPrefix(line, "data:"))
-			if data == "[DONE]" {
-				return
-			}
 
 			var event claudeStreamEvent
 			if err := json.Unmarshal([]byte(data), &event); err != nil {
@@ -635,11 +645,10 @@ func (p *ClaudeProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-ch
 
 			case "content_block_start":
 				if event.ContentBlock != nil && event.ContentBlock.Type == "tool_use" {
-					// 初始化工具调用累积器
+					// Bug1 fix: 初始化 Arguments 为 nil，由 input_json_delta 逐步构建
 					toolCallAccumulator[event.Index] = &llm.ToolCall{
-						ID:        event.ContentBlock.ID,
-						Name:      event.ContentBlock.Name,
-						Arguments: json.RawMessage("{}"),
+						ID:   event.ContentBlock.ID,
+						Name: event.ContentBlock.Name,
 					}
 				}
 
@@ -655,14 +664,20 @@ func (p *ClaudeProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-ch
 						},
 					}
 
-					if event.Delta.Type == "text_delta" {
+					switch event.Delta.Type {
+					case "text_delta":
 						chunk.Delta.Content = event.Delta.Text
-					} else if event.Delta.Type == "input_json_delta" {
+					case "input_json_delta":
 						// 累积工具调用参数
 						if tc, ok := toolCallAccumulator[event.Index]; ok {
-							// 追加 JSON 片段
 							tc.Arguments = append(tc.Arguments, []byte(event.Delta.PartialJSON)...)
 						}
+					case "thinking_delta":
+						// Bug6 fix: 处理 thinking delta，通过 ReasoningContent 传递
+						thinking := event.Delta.Thinking
+						chunk.Delta.ReasoningContent = &thinking
+					case "signature_delta":
+						// signature_delta 用于验证 thinking 块完整性，静默忽略
 					}
 
 					select {
@@ -693,36 +708,44 @@ func (p *ClaudeProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-ch
 				}
 
 			case "message_delta":
+				// Bug2 fix: usage 在 message_delta 事件中，不在 message_stop 中
+				chunk := llm.StreamChunk{
+					ID:       currentID,
+					Provider: p.Name(),
+					Model:    currentModel,
+				}
 				if event.Delta != nil && event.Delta.StopReason != "" {
-					select {
-					case <-ctx.Done():
-						return
-					case ch <- llm.StreamChunk{
-						ID:           currentID,
-						Provider:     p.Name(),
-						Model:        currentModel,
-						FinishReason: event.Delta.StopReason,
-					}:
-					}
+					chunk.FinishReason = event.Delta.StopReason
+				}
+				if event.Usage != nil {
+					chunk.Usage = buildStreamUsage(event.Usage)
+				}
+				select {
+				case <-ctx.Done():
+					return
+				case ch <- chunk:
 				}
 
 			case "message_stop":
-				// 消息结束
-				if event.Usage != nil {
-					select {
-					case <-ctx.Done():
-						return
-					case ch <- llm.StreamChunk{
-						ID:       currentID,
-						Provider: p.Name(),
-						Model:    currentModel,
-						Usage: &llm.ChatUsage{
-							PromptTokens:     event.Usage.InputTokens,
-							CompletionTokens: event.Usage.OutputTokens,
-							TotalTokens:      event.Usage.InputTokens + event.Usage.OutputTokens,
-						},
-					}:
-					}
+				return
+
+			case "ping":
+				// 心跳事件，忽略
+
+			case "error":
+				// 流式错误事件（如 overloaded_error）
+				select {
+				case <-ctx.Done():
+					return
+				case ch <- llm.StreamChunk{
+					Err: &llm.Error{
+						Code:       llm.ErrUpstreamError,
+						Message:    "stream error event received",
+						HTTPStatus: http.StatusBadGateway,
+						Retryable:  true,
+						Provider:   p.Name(),
+					},
+				}:
 				}
 				return
 			}
@@ -738,6 +761,7 @@ func toClaudeChatResponse(cr claudeResponse, provider string) *llm.ChatResponse 
 	}
 
 	// 解析 content 数组
+	var signatures []string
 	for _, content := range cr.Content {
 		switch content.Type {
 		case "text":
@@ -748,6 +772,15 @@ func toClaudeChatResponse(cr claudeResponse, provider string) *llm.ChatResponse 
 				Name:      content.Name,
 				Arguments: content.Input,
 			})
+		case "thinking":
+			// Extended Thinking: 提取推理内容和签名
+			if content.Thinking != "" {
+				thinking := content.Thinking
+				msg.ReasoningContent = &thinking
+			}
+			if content.Signature != "" {
+				signatures = append(signatures, content.Signature)
+			}
 		}
 	}
 
@@ -768,11 +801,17 @@ func toClaudeChatResponse(cr claudeResponse, provider string) *llm.ChatResponse 
 			CompletionTokens: cr.Usage.OutputTokens,
 			TotalTokens:      cr.Usage.InputTokens + cr.Usage.OutputTokens,
 		}
+		// Bug7 fix: 映射 cache token 用量
+		if cr.Usage.CacheCreationInputTokens > 0 || cr.Usage.CacheReadInputTokens > 0 {
+			resp.Usage.PromptTokensDetails = &llm.PromptTokensDetails{
+				CachedTokens: cr.Usage.CacheReadInputTokens,
+			}
+		}
 	}
 
-	// 2026: 传递 Thought Signatures
-	if len(cr.ThoughtSignatures) > 0 {
-		resp.ThoughtSignatures = cr.ThoughtSignatures
+	// 传递 thinking signatures
+	if len(signatures) > 0 {
+		resp.ThoughtSignatures = signatures
 	}
 
 	return resp
@@ -784,4 +823,42 @@ func chooseMaxTokens(req *llm.ChatRequest) int {
 	}
 	// Claude 要求必须提供 max_tokens
 	return 4096
+}
+
+// buildThinking 将统一的 ReasoningMode 转换为 Claude 的 Thinking 参数。
+func buildThinking(req *llm.ChatRequest) *claudeThinking {
+	if req == nil || req.ReasoningMode == "" {
+		return nil
+	}
+	switch req.ReasoningMode {
+	case "extended":
+		budget := chooseMaxTokens(req) * 3 / 4
+		if budget < 1024 {
+			budget = 1024
+		}
+		return &claudeThinking{
+			Type:         "enabled",
+			BudgetTokens: budget,
+		}
+	default:
+		return nil
+	}
+}
+
+// buildStreamUsage 将 Claude 的 usage 转换为统一的 ChatUsage。
+func buildStreamUsage(u *claudeUsage) *llm.ChatUsage {
+	if u == nil {
+		return nil
+	}
+	usage := &llm.ChatUsage{
+		PromptTokens:     u.InputTokens,
+		CompletionTokens: u.OutputTokens,
+		TotalTokens:      u.InputTokens + u.OutputTokens,
+	}
+	if u.CacheCreationInputTokens > 0 || u.CacheReadInputTokens > 0 {
+		usage.PromptTokensDetails = &llm.PromptTokensDetails{
+			CachedTokens: u.CacheReadInputTokens,
+		}
+	}
+	return usage
 }
