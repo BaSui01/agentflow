@@ -159,6 +159,12 @@ func (p *Provider) resolveAPIKey(ctx context.Context) string {
 	return p.Cfg.APIKey
 }
 
+// ResolveAPIKey returns the API key, checking for context override first.
+// Exported for use by providers that embed this base provider.
+func (p *Provider) ResolveAPIKey(ctx context.Context) string {
+	return p.resolveAPIKey(ctx)
+}
+
 // endpoint builds the full URL for a given path.
 func (p *Provider) endpoint(path string) string {
 	return fmt.Sprintf("%s%s", strings.TrimRight(p.Cfg.BaseURL, "/"), path)
@@ -302,14 +308,15 @@ func (p *Provider) Stream(ctx context.Context, req *llm.ChatRequest) (<-chan llm
 	model := providers.ChooseModel(req, p.Cfg.DefaultModel, p.Cfg.FallbackModel)
 
 	body := providers.OpenAICompatRequest{
-		Model:       model,
-		Messages:    providers.ConvertMessagesToOpenAI(req.Messages),
-		Tools:       providers.ConvertToolsToOpenAI(req.Tools),
-		MaxTokens:   req.MaxTokens,
-		Temperature: req.Temperature,
-		TopP:        req.TopP,
-		Stop:        req.Stop,
-		Stream:      true,
+		Model:         model,
+		Messages:      providers.ConvertMessagesToOpenAI(req.Messages),
+		Tools:         providers.ConvertToolsToOpenAI(req.Tools),
+		MaxTokens:     req.MaxTokens,
+		Temperature:   req.Temperature,
+		TopP:          req.TopP,
+		Stop:          req.Stop,
+		Stream:        true,
+		StreamOptions: &providers.StreamOptions{IncludeUsage: true},
 	}
 	if req.ToolChoice != nil {
 		body.ToolChoice = req.ToolChoice
@@ -356,6 +363,21 @@ func (p *Provider) Stream(ctx context.Context, req *llm.ChatRequest) (<-chan llm
 func StreamSSE(ctx context.Context, body io.ReadCloser, providerName string) <-chan llm.StreamChunk {
 	ch := make(chan llm.StreamChunk)
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				select {
+				case ch <- llm.StreamChunk{
+					Err: &llm.Error{
+						Code:       llm.ErrInternalError,
+						Message:    fmt.Sprintf("streaming panic: %v", r),
+						HTTPStatus: 500,
+						Provider:   providerName,
+					},
+				}:
+				default:
+				}
+			}
+		}()
 		defer body.Close()
 		defer close(ch)
 		reader := bufio.NewReader(body)
@@ -424,6 +446,24 @@ func StreamSSE(ctx context.Context, body io.ReadCloser, providerName string) <-c
 				case <-ctx.Done():
 					return
 				case ch <- chunk:
+				}
+			}
+
+			// Handle usage data from stream_options
+			if oaResp.Usage != nil {
+				select {
+				case <-ctx.Done():
+					return
+				case ch <- llm.StreamChunk{
+					ID:       oaResp.ID,
+					Provider: providerName,
+					Model:    oaResp.Model,
+					Usage: &llm.ChatUsage{
+						PromptTokens:     oaResp.Usage.PromptTokens,
+						CompletionTokens: oaResp.Usage.CompletionTokens,
+						TotalTokens:      oaResp.Usage.TotalTokens,
+					},
+				}:
 				}
 			}
 		}

@@ -42,10 +42,14 @@ type OpenAIProvider struct {
 
 // NewOpenAIProvider 创建新的 OpenAI 提供者实例.
 func NewOpenAIProvider(cfg providers.OpenAIConfig, logger *zap.Logger) *OpenAIProvider {
+	if cfg.BaseURL == "" {
+		cfg.BaseURL = "https://api.openai.com"
+	}
 	p := &OpenAIProvider{
 		Provider: openaicompat.New(openaicompat.Config{
 			ProviderName:  "openai",
 			APIKey:        cfg.APIKey,
+			APIKeys:       cfg.APIKeys,
 			BaseURL:       cfg.BaseURL,
 			DefaultModel:  cfg.Model,
 			FallbackModel: "gpt-5.2", // 2026: GPT-5.2
@@ -93,12 +97,7 @@ func (p *OpenAIProvider) Completion(ctx context.Context, req *llm.ChatRequest) (
 	}
 	req = rewrittenReq
 
-	apiKey := p.Provider.Cfg.APIKey
-	if c, ok := llm.CredentialOverrideFromContext(ctx); ok {
-		if strings.TrimSpace(c.APIKey) != "" {
-			apiKey = strings.TrimSpace(c.APIKey)
-		}
-	}
+	apiKey := p.Provider.ResolveAPIKey(ctx)
 
 	return p.completionWithResponsesAPI(ctx, req, apiKey)
 }
@@ -222,24 +221,47 @@ func (p *OpenAIProvider) completionWithResponsesAPI(ctx context.Context, req *ll
 // toResponsesAPIChatResponse 将 Responses API 响应转换为统一的 llm.ChatResponse.
 func toResponsesAPIChatResponse(resp openAIResponsesResponse, provider string) *llm.ChatResponse {
 	choices := make([]llm.ChatChoice, 0, len(resp.Output))
+	var toolCalls []llm.ToolCall
+
 	for idx, output := range resp.Output {
-		if output.Type != "message" {
-			continue
-		}
-		msg := llm.Message{Role: llm.Role(output.Role)}
-		for _, content := range output.Content {
-			switch content.Type {
-			case "output_text":
-				msg.Content += content.Text
-			case "tool_call":
-				msg.ToolCalls = append(msg.ToolCalls, llm.ToolCall{
-					ID: content.ID, Name: content.Name, Arguments: content.Arguments,
-				})
+		switch output.Type {
+		case "message":
+			msg := llm.Message{Role: llm.Role(output.Role)}
+			for _, content := range output.Content {
+				switch content.Type {
+				case "output_text":
+					msg.Content += content.Text
+				case "tool_call":
+					msg.ToolCalls = append(msg.ToolCalls, llm.ToolCall{
+						ID: content.ID, Name: content.Name, Arguments: content.Arguments,
+					})
+				}
+			}
+			choices = append(choices, llm.ChatChoice{
+				Index: idx, FinishReason: output.Status, Message: msg,
+			})
+		case "function_call":
+			// Responses API returns function calls as separate output items
+			for _, content := range output.Content {
+				if content.Type == "function_call" || content.Name != "" {
+					toolCalls = append(toolCalls, llm.ToolCall{
+						ID: content.ID, Name: content.Name, Arguments: content.Arguments,
+					})
+				}
 			}
 		}
-		choices = append(choices, llm.ChatChoice{
-			Index: idx, FinishReason: output.Status, Message: msg,
-		})
+	}
+
+	// If we have tool calls but no message choice, create one
+	if len(toolCalls) > 0 {
+		if len(choices) == 0 {
+			choices = append(choices, llm.ChatChoice{
+				Index:   0,
+				Message: llm.Message{Role: llm.RoleAssistant, ToolCalls: toolCalls},
+			})
+		} else {
+			choices[0].Message.ToolCalls = append(choices[0].Message.ToolCalls, toolCalls...)
+		}
 	}
 
 	chatResp := &llm.ChatResponse{

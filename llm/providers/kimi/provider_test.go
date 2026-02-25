@@ -37,7 +37,7 @@ func TestNewKimiProvider_Defaults(t *testing.T) {
 
 func TestKimiProvider_FallbackModel(t *testing.T) {
 	p := NewKimiProvider(providers.KimiConfig{}, zap.NewNop())
-	assert.Equal(t, "moonshot-v1-8k", p.Cfg.FallbackModel)
+	assert.Equal(t, "moonshot-v1-32k", p.Cfg.FallbackModel)
 }
 
 func TestKimiProvider_NilLogger(t *testing.T) {

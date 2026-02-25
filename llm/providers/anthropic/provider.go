@@ -224,12 +224,16 @@ type claudeResponse struct {
 
 // 流式响应的事件类型
 type claudeStreamEvent struct {
-	Type         string          `json:"type"` // message_start, content_block_start, content_block_delta, content_block_stop, message_delta, message_stop
+	Type         string          `json:"type"` // message_start, content_block_start, content_block_delta, content_block_stop, message_delta, message_stop, error
 	Index        int             `json:"index,omitempty"`
 	Delta        *claudeDelta    `json:"delta,omitempty"`
 	ContentBlock *claudeContent  `json:"content_block,omitempty"`
 	Message      *claudeResponse `json:"message,omitempty"`
 	Usage        *claudeUsage    `json:"usage,omitempty"`
+	Error        struct {
+		Type    string `json:"type"`
+		Message string `json:"message"`
+	} `json:"error,omitempty"`
 }
 
 type claudeDelta struct {
@@ -507,6 +511,9 @@ func (p *ClaudeProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-ch
 		Messages:          messages,
 		System:            system,
 		MaxTokens:         chooseMaxTokens(req),
+		Temperature:       req.Temperature,
+		TopP:              req.TopP,
+		StopSeq:           req.Stop,
 		Stream:            true,
 		Tools:             convertToClaudeTools(req.Tools),
 		ToolChoice:        convertClaudeToolChoice(req.ToolChoice),
@@ -557,6 +564,21 @@ func (p *ClaudeProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-ch
 
 	ch := make(chan llm.StreamChunk)
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				select {
+				case ch <- llm.StreamChunk{
+					Err: &llm.Error{
+						Code:       llm.ErrInternalError,
+						Message:    fmt.Sprintf("claude streaming panic: %v", r),
+						HTTPStatus: 500,
+						Provider:   p.Name(),
+					},
+				}:
+				default:
+				}
+			}
+		}()
 		defer resp.Body.Close()
 		defer close(ch)
 		reader := bufio.NewReader(resp.Body)
@@ -639,7 +661,7 @@ func (p *ClaudeProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-ch
 					toolCallAccumulator[event.Index] = &llm.ToolCall{
 						ID:        event.ContentBlock.ID,
 						Name:      event.ContentBlock.Name,
-						Arguments: json.RawMessage("{}"),
+						Arguments: json.RawMessage(nil),
 					}
 				}
 
@@ -705,9 +727,7 @@ func (p *ClaudeProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-ch
 					}:
 					}
 				}
-
-			case "message_stop":
-				// 消息结束
+				// Anthropic sends usage in message_delta, not message_stop
 				if event.Usage != nil {
 					select {
 					case <-ctx.Done():
@@ -723,6 +743,28 @@ func (p *ClaudeProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-ch
 						},
 					}:
 					}
+				}
+
+			case "message_stop":
+				return
+
+			case "error":
+				errMsg := "unknown streaming error"
+				if event.Error.Message != "" {
+					errMsg = event.Error.Message
+				}
+				select {
+				case <-ctx.Done():
+					return
+				case ch <- llm.StreamChunk{
+					Err: &llm.Error{
+						Code:       llm.ErrUpstreamError,
+						Message:    errMsg,
+						HTTPStatus: http.StatusBadGateway,
+						Retryable:  true,
+						Provider:   p.Name(),
+					},
+				}:
 				}
 				return
 			}

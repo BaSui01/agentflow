@@ -50,7 +50,7 @@ func TestNewMiniMaxProvider_Defaults(t *testing.T) {
 
 func TestMiniMaxProvider_FallbackModel(t *testing.T) {
 	p := NewMiniMaxProvider(providers.MiniMaxConfig{}, zap.NewNop())
-	assert.Equal(t, "abab6.5s-chat", p.Cfg.FallbackModel)
+	assert.Equal(t, "MiniMax-Text-01", p.Cfg.FallbackModel)
 }
 
 func TestMiniMaxProvider_NilLogger(t *testing.T) {
@@ -159,7 +159,7 @@ func TestMiniMaxProvider_Completion(t *testing.T) {
 	require.Len(t, resp.Choices, 1)
 	assert.Equal(t, "Hello from MiniMax", resp.Choices[0].Message.Content)
 	assert.Equal(t, 15, resp.Usage.TotalTokens)
-	assert.Equal(t, "abab6.5s-chat", capturedRequest.Model)
+	assert.Equal(t, "MiniMax-Text-01", capturedRequest.Model)
 }
 
 func TestMiniMaxProvider_Completion_Error(t *testing.T) {
@@ -236,6 +236,7 @@ func TestMiniMaxProvider_Stream(t *testing.T) {
 
 func TestMiniMaxProvider_Stream_XMLToolCall(t *testing.T) {
 	// MiniMax Stream overrides the parent to parse XML tool calls from content
+	// This only applies to legacy abab models
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/event-stream")
 		w.WriteHeader(http.StatusOK)
@@ -260,10 +261,12 @@ func TestMiniMaxProvider_Stream_XMLToolCall(t *testing.T) {
 	}))
 	t.Cleanup(func() { server.Close() })
 
+	// Use a legacy abab model to trigger XML tool call parsing
 	p := NewMiniMaxProvider(providers.MiniMaxConfig{
 		BaseProviderConfig: providers.BaseProviderConfig{
 			APIKey:  "test-key",
 			BaseURL: server.URL,
+			Model:   "abab6.5s-chat",
 		},
 	}, zap.NewNop())
 

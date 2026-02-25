@@ -281,10 +281,10 @@ func (p *GeminiProvider) completionEndpoint(model string) string {
 func (p *GeminiProvider) streamEndpoint(model string) string {
 	base := strings.TrimRight(p.cfg.BaseURL, "/")
 	if p.isVertexAI() {
-		return fmt.Sprintf("%s/v1/projects/%s/locations/%s/publishers/google/models/%s:streamGenerateContent",
+		return fmt.Sprintf("%s/v1/projects/%s/locations/%s/publishers/google/models/%s:streamGenerateContent?alt=sse",
 			base, p.cfg.ProjectID, p.cfg.Region, model)
 	}
-	return fmt.Sprintf("%s/v1beta/models/%s:streamGenerateContent", base, model)
+	return fmt.Sprintf("%s/v1beta/models/%s:streamGenerateContent?alt=sse", base, model)
 }
 
 func (p *GeminiProvider) modelsEndpoint() string {
@@ -342,8 +342,13 @@ func convertToGeminiContents(msgs []llm.Message) (*geminiContent, []geminiConten
 	for _, m := range msgs {
 		// 提取 system 消息
 		if m.Role == llm.RoleSystem {
-			systemInstruction = &geminiContent{
-				Parts: []geminiPart{{Text: m.Content}},
+			if systemInstruction == nil {
+				systemInstruction = &geminiContent{
+					Parts: []geminiPart{{Text: m.Content}},
+				}
+			} else {
+				// Concatenate multiple system messages
+				systemInstruction.Parts[0].Text += "\n\n" + m.Content
 			}
 			continue
 		}
@@ -352,6 +357,8 @@ func convertToGeminiContents(msgs []llm.Message) (*geminiContent, []geminiConten
 		role := string(m.Role)
 		if role == "assistant" {
 			role = "model" // Gemini 使用 "model" 而不是 "assistant"
+		} else if role == "tool" {
+			role = "user" // Gemini uses "user" role for function responses
 		}
 
 		content := geminiContent{
@@ -550,11 +557,12 @@ func (p *GeminiProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-ch
 		SystemInstruction: systemInstruction,
 	}
 
-	if req.Temperature > 0 || req.TopP > 0 || req.MaxTokens > 0 || req.ResponseFormat != nil {
+	if req.Temperature > 0 || req.TopP > 0 || req.MaxTokens > 0 || len(req.Stop) > 0 || req.ResponseFormat != nil {
 		body.GenerationConfig = &geminiGenerationConfig{
 			Temperature:     req.Temperature,
 			TopP:            req.TopP,
 			MaxOutputTokens: req.MaxTokens,
+			StopSequences:   req.Stop,
 		}
 		if req.ResponseFormat != nil {
 			switch req.ResponseFormat.Type {
@@ -613,6 +621,21 @@ func (p *GeminiProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-ch
 
 	ch := make(chan llm.StreamChunk)
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				select {
+				case ch <- llm.StreamChunk{
+					Err: &llm.Error{
+						Code:       llm.ErrInternalError,
+						Message:    fmt.Sprintf("gemini streaming panic: %v", r),
+						HTTPStatus: 500,
+						Provider:   p.Name(),
+					},
+				}:
+				default:
+				}
+			}
+		}()
 		defer resp.Body.Close()
 		defer close(ch)
 		reader := bufio.NewReader(resp.Body)
@@ -643,11 +666,18 @@ func (p *GeminiProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-ch
 				continue
 			}
 
-			// Gemini 流式响应是 JSON 数组格式
-			// 每行是一个完整的 JSON 对象
-			var geminiResp geminiResponse
-			if err := json.Unmarshal([]byte(line), &geminiResp); err != nil {
+			// With ?alt=sse, Gemini returns SSE format: "data: {...}"
+			if !strings.HasPrefix(line, "data:") {
 				continue
+			}
+			data := strings.TrimSpace(strings.TrimPrefix(line, "data:"))
+			if data == "" {
+				continue
+			}
+
+			var geminiResp geminiResponse
+			if err := json.Unmarshal([]byte(data), &geminiResp); err != nil {
+				continue // skip malformed lines
 			}
 
 			// 处理每个候选响应

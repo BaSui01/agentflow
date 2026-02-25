@@ -147,7 +147,7 @@ func TestLlamaProvider_NilLogger(t *testing.T) {
 
 func TestLlamaProvider_FallbackModel(t *testing.T) {
 	p := NewLlamaProvider(providers.LlamaConfig{}, zap.NewNop())
-	assert.Equal(t, "meta-llama/Llama-3-70b-chat-hf", p.Cfg.FallbackModel)
+	assert.Equal(t, "meta-llama/Llama-3.3-70B-Instruct-Turbo", p.Cfg.FallbackModel)
 }
 
 func TestLlamaProvider_Completion_Httptest(t *testing.T) {
