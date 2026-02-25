@@ -146,9 +146,9 @@ func DefaultMongoDBConfig() MongoDBConfig {
 	}
 }
 
-// DefaultLLMConfig 返回默认 LLM 配置
-func DefaultLLMConfig() LLMConfig {
-	return LLMConfig{
+// DefaultLLMConfig 返回默认 LLM 连接配置
+func DefaultLLMConfig() LLMConnectionConfig {
+	return LLMConnectionConfig{
 		DefaultProvider: "openai",
 		APIKey:          "",
 		BaseURL:         "",
