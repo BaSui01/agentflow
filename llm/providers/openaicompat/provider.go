@@ -224,13 +224,22 @@ func (p *Provider) Completion(ctx context.Context, req *llm.ChatRequest) (*llm.C
 	model := providers.ChooseModel(req, p.Cfg.DefaultModel, p.Cfg.FallbackModel)
 
 	body := providers.OpenAICompatRequest{
-		Model:       model,
-		Messages:    providers.ConvertMessagesToOpenAI(req.Messages),
-		Tools:       providers.ConvertToolsToOpenAI(req.Tools),
-		MaxTokens:   req.MaxTokens,
-		Temperature: req.Temperature,
-		TopP:        req.TopP,
-		Stop:        req.Stop,
+		Model:             model,
+		Messages:          providers.ConvertMessagesToOpenAI(req.Messages),
+		Tools:             providers.ConvertToolsToOpenAI(req.Tools),
+		MaxTokens:         req.MaxTokens,
+		Temperature:       req.Temperature,
+		TopP:              req.TopP,
+		Stop:              req.Stop,
+		FrequencyPenalty:  req.FrequencyPenalty,
+		PresencePenalty:   req.PresencePenalty,
+		RepetitionPenalty: req.RepetitionPenalty,
+		N:                 req.N,
+		LogProbs:          req.LogProbs,
+		TopLogProbs:       req.TopLogProbs,
+		ParallelToolCalls: req.ParallelToolCalls,
+		ServiceTier:       req.ServiceTier,
+		User:              req.User,
 	}
 	if req.ToolChoice != nil {
 		body.ToolChoice = req.ToolChoice
@@ -302,20 +311,35 @@ func (p *Provider) Stream(ctx context.Context, req *llm.ChatRequest) (<-chan llm
 	model := providers.ChooseModel(req, p.Cfg.DefaultModel, p.Cfg.FallbackModel)
 
 	body := providers.OpenAICompatRequest{
-		Model:       model,
-		Messages:    providers.ConvertMessagesToOpenAI(req.Messages),
-		Tools:       providers.ConvertToolsToOpenAI(req.Tools),
-		MaxTokens:   req.MaxTokens,
-		Temperature: req.Temperature,
-		TopP:        req.TopP,
-		Stop:        req.Stop,
-		Stream:      true,
+		Model:             model,
+		Messages:          providers.ConvertMessagesToOpenAI(req.Messages),
+		Tools:             providers.ConvertToolsToOpenAI(req.Tools),
+		MaxTokens:         req.MaxTokens,
+		Temperature:       req.Temperature,
+		TopP:              req.TopP,
+		Stop:              req.Stop,
+		Stream:            true,
+		FrequencyPenalty:  req.FrequencyPenalty,
+		PresencePenalty:   req.PresencePenalty,
+		RepetitionPenalty: req.RepetitionPenalty,
+		N:                 req.N,
+		LogProbs:          req.LogProbs,
+		TopLogProbs:       req.TopLogProbs,
+		ParallelToolCalls: req.ParallelToolCalls,
+		ServiceTier:       req.ServiceTier,
+		User:              req.User,
 	}
 	if req.ToolChoice != nil {
 		body.ToolChoice = req.ToolChoice
 	}
 	if rf := providers.ConvertResponseFormat(req.ResponseFormat); rf != nil {
 		body.ResponseFormat = rf
+	}
+	if req.StreamOptions != nil {
+		body.StreamOptions = &providers.StreamOptions{
+			IncludeUsage:      req.StreamOptions.IncludeUsage,
+			ChunkIncludeUsage: req.StreamOptions.ChunkIncludeUsage,
+		}
 	}
 
 	// Apply provider-specific request hook
@@ -396,6 +420,29 @@ func StreamSSE(ctx context.Context, body io.ReadCloser, providerName string) <-c
 				return
 			}
 
+			// 处理流式 usage（stream_options.include_usage 时最后一个 chunk 会包含）
+			if oaResp.Usage != nil {
+				streamUsage := &llm.ChatUsage{
+					PromptTokens:     oaResp.Usage.PromptTokens,
+					CompletionTokens: oaResp.Usage.CompletionTokens,
+					TotalTokens:      oaResp.Usage.TotalTokens,
+				}
+				// 如果没有 choices，发送一个只包含 usage 的 chunk
+				if len(oaResp.Choices) == 0 {
+					select {
+					case <-ctx.Done():
+						return
+					case ch <- llm.StreamChunk{
+						ID:       oaResp.ID,
+						Provider: providerName,
+						Model:    oaResp.Model,
+						Usage:    streamUsage,
+					}:
+					}
+					continue
+				}
+			}
+
 			for _, choice := range oaResp.Choices {
 				chunk := llm.StreamChunk{
 					ID:           oaResp.ID,
@@ -409,6 +456,7 @@ func StreamSSE(ctx context.Context, body io.ReadCloser, providerName string) <-c
 				}
 				if choice.Delta != nil {
 					chunk.Delta.Content = choice.Delta.Content
+					chunk.Delta.ReasoningContent = choice.Delta.ReasoningContent
 					if len(choice.Delta.ToolCalls) > 0 {
 						chunk.Delta.ToolCalls = make([]llm.ToolCall, 0, len(choice.Delta.ToolCalls))
 						for _, tc := range choice.Delta.ToolCalls {
@@ -418,6 +466,13 @@ func StreamSSE(ctx context.Context, body io.ReadCloser, providerName string) <-c
 								Arguments: tc.Function.Arguments,
 							})
 						}
+					}
+				}
+				if oaResp.Usage != nil {
+					chunk.Usage = &llm.ChatUsage{
+						PromptTokens:     oaResp.Usage.PromptTokens,
+						CompletionTokens: oaResp.Usage.CompletionTokens,
+						TotalTokens:      oaResp.Usage.TotalTokens,
 					}
 				}
 				select {
