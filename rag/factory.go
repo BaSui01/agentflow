@@ -9,6 +9,7 @@ import (
 
 	"github.com/BaSui01/agentflow/config"
 	"github.com/BaSui01/agentflow/llm/embedding"
+	"github.com/BaSui01/agentflow/llm/providers"
 	"github.com/BaSui01/agentflow/llm/rerank"
 	"go.uber.org/zap"
 )
@@ -89,23 +90,23 @@ func NewEmbeddingProviderFromConfig(cfg *config.Config, providerType EmbeddingPr
 
 	switch providerType {
 	case EmbeddingOpenAI:
-		embCfg := embedding.OpenAIConfig{APIKey: apiKey}
+		embCfg := embedding.OpenAIConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: apiKey}}
 		if cfg.LLM.BaseURL != "" {
 			embCfg.BaseURL = cfg.LLM.BaseURL
 		}
 		return embedding.NewOpenAIProvider(embCfg), nil
 
 	case EmbeddingCohere:
-		return embedding.NewCohereProvider(embedding.CohereConfig{APIKey: apiKey}), nil
+		return embedding.NewCohereProvider(embedding.CohereConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: apiKey}}), nil
 
 	case EmbeddingVoyage:
-		return embedding.NewVoyageProvider(embedding.VoyageConfig{APIKey: apiKey}), nil
+		return embedding.NewVoyageProvider(embedding.VoyageConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: apiKey}}), nil
 
 	case EmbeddingJina:
-		return embedding.NewJinaProvider(embedding.JinaConfig{APIKey: apiKey}), nil
+		return embedding.NewJinaProvider(embedding.JinaConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: apiKey}}), nil
 
 	case EmbeddingGemini:
-		return embedding.NewGeminiProvider(embedding.GeminiConfig{APIKey: apiKey}), nil
+		return embedding.NewGeminiProvider(embedding.GeminiConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: apiKey}}), nil
 
 	default:
 		return nil, fmt.Errorf("unsupported embedding provider type: %s", providerType)
