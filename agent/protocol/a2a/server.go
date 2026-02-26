@@ -126,6 +126,9 @@ func (s *HTTPServer) SetTaskStore(store persistence.TaskStore) {
 // RecoverTasks在服务重启后从持续存储中恢复任务.
 func (s *HTTPServer) RecoverTasks(ctx context.Context) error {
 	s.logger.Info("recovering tasks from persistent storage")
+	if s.taskStore == nil {
+		return nil
+	}
 
 	tasks, err := s.taskStore.GetRecoverableTasks(ctx)
 	if err != nil {
@@ -562,7 +565,7 @@ func (s *HTTPServer) handleAsyncMessage(w http.ResponseWriter, r *http.Request) 
 	}
 
 	// 持久化任务
-	{
+	if s.taskStore != nil {
 		persistTask := s.convertToPersistTask(task)
 		if err := s.taskStore.SaveTask(r.Context(), persistTask); err != nil {
 			s.logger.Error("failed to persist task",
@@ -743,11 +746,13 @@ func (s *HTTPServer) executeAsyncTask(ctx context.Context, ag agent.Agent, task 
 	s.asyncTasksMu.Unlock()
 
 	// 更新持久性存储
-	if err := s.taskStore.UpdateStatus(ctx, task.ID, persistence.TaskStatusRunning, nil, ""); err != nil {
-		s.logger.Warn("failed to update task status in store",
-			zap.String("task_id", task.ID),
-			zap.Error(err),
-		)
+	if s.taskStore != nil {
+		if err := s.taskStore.UpdateStatus(ctx, task.ID, persistence.TaskStatusRunning, nil, ""); err != nil {
+			s.logger.Warn("failed to update task status in store",
+				zap.String("task_id", task.ID),
+				zap.Error(err),
+			)
+		}
 	}
 
 	// 执行任务
@@ -766,7 +771,7 @@ func (s *HTTPServer) executeAsyncTask(ctx context.Context, ag agent.Agent, task 
 	s.asyncTasksMu.Unlock()
 
 	// 更新持久性存储
-	{
+	if s.taskStore != nil {
 		var status persistence.TaskStatus
 		var errMsg string
 		if err != nil {
@@ -869,7 +874,7 @@ func (s *HTTPServer) CleanupExpiredTasks(maxAge time.Duration) int {
 	}
 
 	// 还清理了持久性储存
-	{
+	if s.taskStore != nil {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 		persistCount, err := s.taskStore.Cleanup(ctx, maxAge)
@@ -911,6 +916,9 @@ func (s *HTTPServer) StartCleanupLoop(ctx context.Context, interval time.Duratio
 
 // TaskStats 返回关于任务存储的统计数据 。
 func (s *HTTPServer) TaskStats(ctx context.Context) (*persistence.TaskStoreStats, error) {
+	if s.taskStore == nil {
+		return nil, fmt.Errorf("task store not configured")
+	}
 	return s.taskStore.Stats(ctx)
 }
 

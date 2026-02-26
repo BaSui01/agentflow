@@ -206,8 +206,10 @@ func (r *CapabilityRegistry) RegisterAgent(ctx context.Context, info *AgentInfo)
 	r.agents[agentID] = info
 
 	// Persist to store
-	if err := r.store.Save(ctx, info); err != nil {
-		r.logger.Error("failed to persist agent to store", zap.String("agent_id", agentID), zap.Error(err))
+	if r.store != nil {
+		if err := r.store.Save(ctx, info); err != nil {
+			r.logger.Error("failed to persist agent to store", zap.String("agent_id", agentID), zap.Error(err))
+		}
 	}
 
 	r.logger.Info("agent registered",
@@ -244,8 +246,10 @@ func (r *CapabilityRegistry) UnregisterAgent(ctx context.Context, agentID string
 	delete(r.agents, agentID)
 
 	// Persist deletion to store
-	if err := r.store.Delete(ctx, agentID); err != nil {
-		r.logger.Error("failed to delete agent from store", zap.String("agent_id", agentID), zap.Error(err))
+	if r.store != nil {
+		if err := r.store.Delete(ctx, agentID); err != nil {
+			r.logger.Error("failed to delete agent from store", zap.String("agent_id", agentID), zap.Error(err))
+		}
 	}
 
 	r.logger.Info("agent unregistered", zap.String("agent_id", agentID))
@@ -302,8 +306,10 @@ func (r *CapabilityRegistry) UpdateAgent(ctx context.Context, info *AgentInfo) e
 	r.agents[agentID] = info
 
 	// Persist to store
-	if err := r.store.Save(ctx, info); err != nil {
-		r.logger.Error("failed to persist updated agent to store", zap.String("agent_id", agentID), zap.Error(err))
+	if r.store != nil {
+		if err := r.store.Save(ctx, info); err != nil {
+			r.logger.Error("failed to persist updated agent to store", zap.String("agent_id", agentID), zap.Error(err))
+		}
 	}
 
 	r.logger.Info("agent updated", zap.String("agent_id", agentID))

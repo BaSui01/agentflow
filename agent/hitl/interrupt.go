@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/google/uuid"
 	"go.uber.org/zap"
 )
 
@@ -303,7 +304,7 @@ type InterruptOptions struct {
 }
 
 func generateInterruptID() string {
-	return fmt.Sprintf("int_%d", time.Now().UnixNano())
+	return "int_" + uuid.New().String()
 }
 
 // 在MemoryInterruptStore中为中断提供内存.

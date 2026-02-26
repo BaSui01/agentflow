@@ -205,7 +205,9 @@ func (h *MessageHub) Close() error {
 		}
 
 		// 关闭存储
-		storeErr = h.messageStore.Close()
+		if h.messageStore != nil {
+			storeErr = h.messageStore.Close()
+		}
 	})
 	return storeErr
 }
@@ -237,7 +239,7 @@ func (h *MessageHub) SendWithContext(ctx context.Context, msg *Message) error {
 	}
 
 	// 如果有持久化存储，先持久化消息（无需锁）
-	{
+	if h.messageStore != nil {
 		persistMsg := h.toPersistMessage(msg)
 		if err := h.messageStore.SaveMessage(ctx, persistMsg); err != nil {
 			h.logger.Error("failed to persist message",
@@ -336,6 +338,9 @@ func (h *MessageHub) ackMessage(ctx context.Context, msgID string) {
 		return
 	}
 
+	if h.messageStore == nil {
+		return
+	}
 	if err := h.messageStore.AckMessage(ctx, msgID); err != nil {
 		h.logger.Debug("failed to ack message",
 			zap.String("msg_id", msgID),
@@ -357,6 +362,9 @@ func safeSend(ch chan<- *Message, msg *Message) (sent bool) {
 
 // RecoverMessages 恢复未处理的消息（服务重启后调用）
 func (h *MessageHub) RecoverMessages(ctx context.Context) error {
+	if h.messageStore == nil {
+		return nil
+	}
 	h.logger.Info("recovering unprocessed messages")
 
 	h.mu.RLock()
@@ -449,6 +457,9 @@ func (h *MessageHub) StartRetryLoop(ctx context.Context, interval time.Duration)
 
 // Stats 获取消息统计信息
 func (h *MessageHub) Stats(ctx context.Context) (*persistence.MessageStoreStats, error) {
+	if h.messageStore == nil {
+		return nil, fmt.Errorf("no message store configured")
+	}
 	return h.messageStore.Stats(ctx)
 }
 

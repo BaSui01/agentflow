@@ -140,6 +140,9 @@ func (o *Orchestrator) Execute(ctx context.Context, task *OrchestrationTask) (*O
 
 	result.Pattern = pattern
 	result.Duration = time.Since(start)
+	if result.Duration <= 0 {
+		result.Duration = time.Nanosecond
+	}
 
 	return result, nil
 }
