@@ -24,7 +24,7 @@ type Config struct {
 	// Agent 默认 Agent 配置
 	Agent AgentConfig `yaml:"agent" env:"AGENT"`
 
-	// Redis 缓存配置 — Reserved for future Redis-backed caching, not currently used.
+	// Redis 配置（缓存与可选的多模态引用存储复用）。
 	Redis RedisConfig `yaml:"redis" env:"REDIS"`
 
 	// Database 数据库配置
@@ -44,6 +44,9 @@ type Config struct {
 
 	// LLM 大语言模型配置
 	LLM LLMConnectionConfig `yaml:"llm" env:"LLM"`
+
+	// Multimodal 多模态框架能力配置
+	Multimodal MultimodalConfig `yaml:"multimodal" env:"MULTIMODAL"`
 
 	// Log 日志配置
 	Log LogConfig `yaml:"log" env:"LOG"`
@@ -303,6 +306,40 @@ type LLMConnectionConfig struct {
 	Timeout time.Duration `yaml:"timeout" env:"TIMEOUT"`
 	// 最大重试次数
 	MaxRetries int `yaml:"max_retries" env:"MAX_RETRIES"`
+}
+
+// MultimodalConfig 多模态框架配置（能力层，不绑定具体业务）。
+type MultimodalConfig struct {
+	// 是否启用多模态 API 路由
+	Enabled bool `yaml:"enabled" env:"ENABLED"`
+	// 引用图上传的最大字节数
+	ReferenceMaxSizeBytes int64 `yaml:"reference_max_size_bytes" env:"REFERENCE_MAX_SIZE_BYTES"`
+	// 引用图默认存活时长
+	ReferenceTTL time.Duration `yaml:"reference_ttl" env:"REFERENCE_TTL"`
+	// 引用图存储后端（仅支持 redis）
+	ReferenceStoreBackend string `yaml:"reference_store_backend" env:"REFERENCE_STORE_BACKEND"`
+	// 引用图存储 key 前缀（Redis 后端使用）
+	ReferenceStoreKeyPrefix string `yaml:"reference_store_key_prefix" env:"REFERENCE_STORE_KEY_PREFIX"`
+	// 默认图像提供商标识（openai/gemini 等）
+	DefaultImageProvider string `yaml:"default_image_provider" env:"DEFAULT_IMAGE_PROVIDER"`
+	// 默认视频提供商标识（runway/veo 等）
+	DefaultVideoProvider string `yaml:"default_video_provider" env:"DEFAULT_VIDEO_PROVIDER"`
+	// 图像提供商配置
+	Image MultimodalImageConfig `yaml:"image" env:"IMAGE"`
+	// 视频提供商配置
+	Video MultimodalVideoConfig `yaml:"video" env:"VIDEO"`
+}
+
+type MultimodalImageConfig struct {
+	OpenAIAPIKey  string `yaml:"openai_api_key" env:"OPENAI_API_KEY" json:"-"`
+	OpenAIBaseURL string `yaml:"openai_base_url" env:"OPENAI_BASE_URL"`
+	GeminiAPIKey  string `yaml:"gemini_api_key" env:"GEMINI_API_KEY" json:"-"`
+}
+
+type MultimodalVideoConfig struct {
+	RunwayAPIKey string `yaml:"runway_api_key" env:"RUNWAY_API_KEY" json:"-"`
+	VeoAPIKey    string `yaml:"veo_api_key" env:"VEO_API_KEY" json:"-"`
+	GoogleAPIKey string `yaml:"google_api_key" env:"GOOGLE_API_KEY" json:"-"`
 }
 
 // LogConfig 日志配置
@@ -618,6 +655,18 @@ func (c *Config) Validate() error {
 	}
 	if c.Agent.Temperature < 0 || c.Agent.Temperature > 2 {
 		errs = append(errs, "temperature must be between 0 and 2")
+	}
+	if c.Multimodal.ReferenceMaxSizeBytes <= 0 {
+		errs = append(errs, "multimodal.reference_max_size_bytes must be positive")
+	}
+	if c.Multimodal.ReferenceTTL <= 0 {
+		errs = append(errs, "multimodal.reference_ttl must be positive")
+	}
+	if strings.ToLower(strings.TrimSpace(c.Multimodal.ReferenceStoreBackend)) != "redis" {
+		errs = append(errs, "multimodal.reference_store_backend must be redis")
+	}
+	if c.Multimodal.Enabled && strings.TrimSpace(c.Redis.Addr) == "" {
+		errs = append(errs, "redis.addr is required when multimodal.reference_store_backend=redis")
 	}
 
 	if len(errs) > 0 {

@@ -125,6 +125,41 @@ llm:
   max_retries: 3
 
 # -----------------------------------------------------------------------------
+# 🎬 多模态框架能力配置
+# -----------------------------------------------------------------------------
+multimodal:
+  # 是否启用 /api/v1/multimodal/* 路由
+  enabled: true
+  # 参考图上传大小限制（字节）
+  reference_max_size_bytes: 8388608
+  # 参考图缓存 TTL
+  reference_ttl: "2h"
+  # 参考图存储后端：仅支持 redis
+  reference_store_backend: "redis"
+  # Redis key 前缀
+  # 安全说明：非本机地址请使用 redis.addr=rediss://host:port
+  reference_store_key_prefix: "agentflow:mm:ref"
+  # 默认提供商（为空表示按已配置 provider 自动选择）
+  default_image_provider: ""
+  default_video_provider: ""
+
+  image:
+    # 建议优先使用环境变量 AGENTFLOW_MULTIMODAL_IMAGE_OPENAI_API_KEY
+    openai_api_key: ""
+    openai_base_url: ""
+    # 建议优先使用环境变量 AGENTFLOW_MULTIMODAL_IMAGE_GEMINI_API_KEY
+    gemini_api_key: ""
+
+  video:
+    # 建议优先使用环境变量 AGENTFLOW_MULTIMODAL_VIDEO_RUNWAY_API_KEY
+    runway_api_key: ""
+    # 建议优先使用环境变量 AGENTFLOW_MULTIMODAL_VIDEO_VEO_API_KEY
+    veo_api_key: ""
+    # Google API Key（用于 Veo/Gemini 视频链路）
+    # 建议优先使用环境变量 AGENTFLOW_MULTIMODAL_VIDEO_GOOGLE_API_KEY
+    google_api_key: ""
+
+# -----------------------------------------------------------------------------
 # 📝 日志配置
 # -----------------------------------------------------------------------------
 log:

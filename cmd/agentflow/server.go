@@ -3,7 +3,10 @@ package main
 import (
 	"context"
 	"fmt"
+	"net"
 	"net/http"
+	"net/url"
+	"strings"
 	"sync"
 	"time"
 
@@ -37,8 +40,10 @@ import (
 	mongoclient "github.com/BaSui01/agentflow/pkg/mongodb"
 	"github.com/BaSui01/agentflow/pkg/server"
 	"github.com/BaSui01/agentflow/pkg/telemetry"
+	"github.com/BaSui01/agentflow/pkg/tlsutil"
 	"github.com/BaSui01/agentflow/types"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
 )
@@ -67,13 +72,15 @@ type Server struct {
 	metricsManager *server.Manager
 
 	// Handlers
-	healthHandler   *handlers.HealthHandler
-	chatHandler     *handlers.ChatHandler
-	agentHandler    *handlers.AgentHandler
-	apiKeyHandler   *handlers.APIKeyHandler
-	ragHandler      *handlers.RAGHandler
-	workflowHandler *handlers.WorkflowHandler
-	protocolHandler *handlers.ProtocolHandler
+	healthHandler     *handlers.HealthHandler
+	chatHandler       *handlers.ChatHandler
+	agentHandler      *handlers.AgentHandler
+	apiKeyHandler     *handlers.APIKeyHandler
+	ragHandler        *handlers.RAGHandler
+	workflowHandler   *handlers.WorkflowHandler
+	protocolHandler   *handlers.ProtocolHandler
+	multimodalHandler *handlers.MultimodalHandler
+	multimodalRedis   *redis.Client
 
 	// 指标收集器
 	metricsCollector *metrics.Collector
@@ -94,10 +101,6 @@ type Server struct {
 	costTracker   *observability.CostTracker
 	llmCache      *cache.MultiLevelCache
 	llmMetrics    *observability.Metrics
-
-	// 多模态
-	multimodalRouter  *multimodal.Router
-	multimodalHandler *handlers.MultimodalHandler
 
 	// Agent resolver (nil when no LLM provider)
 	resolver *agent.CachingResolver
@@ -458,10 +461,61 @@ func (s *Server) initHandlers() error {
 		s.logger.Info("Database not available, API key management disabled")
 	}
 
-	// Initialize multimodal router and handler
-	s.multimodalRouter = multimodal.NewRouter()
-	s.multimodalHandler = handlers.NewMultimodalHandler(s.multimodalRouter, s.logger)
-	s.logger.Info("Multimodal handler initialized")
+	// Initialize framework-level multimodal handler (capability endpoints).
+	if s.cfg.Multimodal.Enabled {
+		backend := strings.ToLower(strings.TrimSpace(s.cfg.Multimodal.ReferenceStoreBackend))
+		if backend != "redis" {
+			return fmt.Errorf("multimodal.reference_store_backend must be redis")
+		}
+
+		referenceStore, err := s.newMultimodalRedisReferenceStore(
+			s.cfg.Multimodal.ReferenceStoreKeyPrefix,
+			s.cfg.Multimodal.ReferenceTTL,
+		)
+		if err != nil {
+			return fmt.Errorf("failed to initialize multimodal redis reference store: %w", err)
+		}
+
+		multimodalCfg := handlers.MultimodalHandlerConfig{
+			ChatProvider:         s.provider,
+			OpenAIAPIKey:         firstNonEmpty(s.cfg.Multimodal.Image.OpenAIAPIKey, s.cfg.LLM.APIKey),
+			OpenAIBaseURL:        firstNonEmpty(s.cfg.Multimodal.Image.OpenAIBaseURL, s.cfg.LLM.BaseURL),
+			GoogleAPIKey:         firstNonEmpty(s.cfg.Multimodal.Video.GoogleAPIKey, s.cfg.Multimodal.Image.GeminiAPIKey),
+			RunwayAPIKey:         s.cfg.Multimodal.Video.RunwayAPIKey,
+			VeoAPIKey:            s.cfg.Multimodal.Video.VeoAPIKey,
+			DefaultImageProvider: s.cfg.Multimodal.DefaultImageProvider,
+			DefaultVideoProvider: s.cfg.Multimodal.DefaultVideoProvider,
+			ReferenceMaxSize:     s.cfg.Multimodal.ReferenceMaxSizeBytes,
+			ReferenceTTL:         s.cfg.Multimodal.ReferenceTTL,
+			ReferenceStore:       referenceStore,
+		}
+		s.multimodalHandler = handlers.NewMultimodalHandlerFromConfig(multimodalCfg, s.logger)
+
+		imageProviderCount := 0
+		videoProviderCount := 0
+		if multimodalCfg.OpenAIAPIKey != "" {
+			imageProviderCount++
+		}
+		if multimodalCfg.GoogleAPIKey != "" {
+			imageProviderCount++
+			videoProviderCount++
+		}
+		if multimodalCfg.RunwayAPIKey != "" {
+			videoProviderCount++
+		}
+		if multimodalCfg.VeoAPIKey != "" && multimodalCfg.GoogleAPIKey == "" {
+			videoProviderCount++
+		}
+		s.logger.Info("Multimodal framework handler initialized",
+			zap.String("reference_store_backend", backend),
+			zap.Int("image_provider_count", imageProviderCount),
+			zap.Int("video_provider_count", videoProviderCount),
+			zap.Int64("reference_max_size_bytes", multimodalCfg.ReferenceMaxSize),
+			zap.Duration("reference_ttl", multimodalCfg.ReferenceTTL),
+		)
+	} else {
+		s.logger.Info("Multimodal framework handler disabled by config")
+	}
 
 	// Initialize MCP/A2A protocol handler
 	mcpSrv := mcp.NewMCPServer("agentflow", "1.0.0", s.logger)
@@ -613,20 +667,15 @@ func (s *Server) startHTTPServer() error {
 		s.logger.Info("Provider API key routes registered")
 	}
 
-	// Multimodal API routes
+	// Framework multimodal capability routes
 	if s.multimodalHandler != nil {
-		h := s.multimodalHandler
-		mux.HandleFunc("/api/v1/multimodal/providers", h.HandleListProviders)
-		mux.HandleFunc("/api/v1/images/generate", h.HandleGenerateImage)
-		mux.HandleFunc("/api/v1/images/edit", h.HandleEditImage)
-		mux.HandleFunc("/api/v1/videos/analyze", h.HandleAnalyzeVideo)
-		mux.HandleFunc("/api/v1/videos/generate", h.HandleGenerateVideo)
-		mux.HandleFunc("/api/v1/speech/synthesize", h.HandleSynthesize)
-		mux.HandleFunc("/api/v1/speech/transcribe", h.HandleTranscribe)
-		mux.HandleFunc("/api/v1/music/generate", h.HandleGenerateMusic)
-		mux.HandleFunc("/api/v1/3d/generate", h.HandleGenerate3D)
-		mux.HandleFunc("/api/v1/moderation", h.HandleModerate)
-		s.logger.Info("Multimodal API routes registered")
+		mux.HandleFunc("/api/v1/multimodal/capabilities", s.multimodalHandler.HandleCapabilities)
+		mux.HandleFunc("/api/v1/multimodal/references", s.multimodalHandler.HandleUploadReference)
+		mux.HandleFunc("/api/v1/multimodal/image", s.multimodalHandler.HandleImage)
+		mux.HandleFunc("/api/v1/multimodal/video", s.multimodalHandler.HandleVideo)
+		mux.HandleFunc("/api/v1/multimodal/plan", s.multimodalHandler.HandlePlan)
+		mux.HandleFunc("/api/v1/multimodal/chat", s.multimodalHandler.HandleChat)
+		s.logger.Info("Multimodal framework routes registered")
 	}
 
 	// Protocol API routes (MCP + A2A)
@@ -761,6 +810,109 @@ func (s *Server) getFirstAPIKey() string {
 	return ""
 }
 
+func firstNonEmpty(values ...string) string {
+	for _, v := range values {
+		if strings.TrimSpace(v) != "" {
+			return v
+		}
+	}
+	return ""
+}
+
+func (s *Server) newMultimodalRedisReferenceStore(keyPrefix string, ttl time.Duration) (handlers.ReferenceStore, error) {
+	addr := strings.TrimSpace(s.cfg.Redis.Addr)
+	if addr == "" {
+		return nil, fmt.Errorf("redis address is required when multimodal reference_store_backend=redis")
+	}
+
+	var (
+		opts *redis.Options
+		err  error
+	)
+
+	if strings.HasPrefix(addr, "redis://") || strings.HasPrefix(addr, "rediss://") {
+		parsed, parseErr := url.Parse(addr)
+		if parseErr != nil {
+			return nil, fmt.Errorf("invalid redis url: %w", parseErr)
+		}
+		scheme := strings.ToLower(parsed.Scheme)
+		host := parsed.Hostname()
+		if scheme == "redis" && !isLoopbackHost(host) {
+			return nil, fmt.Errorf("insecure redis:// is only allowed for loopback hosts, use rediss:// for %q", host)
+		}
+
+		opts, err = redis.ParseURL(addr)
+		if err != nil {
+			return nil, fmt.Errorf("invalid redis url: %w", err)
+		}
+		if s.cfg.Redis.Password != "" && opts.Password == "" {
+			opts.Password = s.cfg.Redis.Password
+		}
+		if s.cfg.Redis.DB != 0 && opts.DB == 0 {
+			opts.DB = s.cfg.Redis.DB
+		}
+		if s.cfg.Redis.PoolSize > 0 {
+			opts.PoolSize = s.cfg.Redis.PoolSize
+		}
+		if s.cfg.Redis.MinIdleConns > 0 {
+			opts.MinIdleConns = s.cfg.Redis.MinIdleConns
+		}
+		if scheme == "rediss" && opts.TLSConfig == nil {
+			opts.TLSConfig = tlsutil.DefaultTLSConfig()
+		}
+		if scheme == "redis" && isLoopbackHost(host) {
+			s.logger.Warn("using insecure redis:// for loopback host in multimodal reference store",
+				zap.String("host", host))
+		}
+	} else {
+		host := hostFromAddr(addr)
+		if !isLoopbackHost(host) {
+			return nil, fmt.Errorf("non-loopback redis address %q requires rediss:// scheme", host)
+		}
+
+		opts = &redis.Options{
+			Addr:         addr,
+			Password:     s.cfg.Redis.Password,
+			DB:           s.cfg.Redis.DB,
+			PoolSize:     s.cfg.Redis.PoolSize,
+			MinIdleConns: s.cfg.Redis.MinIdleConns,
+		}
+		s.logger.Warn("using insecure plaintext redis connection for loopback host in multimodal reference store",
+			zap.String("host", host))
+	}
+
+	client := redis.NewClient(opts)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := client.Ping(ctx).Err(); err != nil {
+		_ = client.Close()
+		return nil, fmt.Errorf("redis ping failed: %w", err)
+	}
+
+	s.multimodalRedis = client
+	return handlers.NewRedisReferenceStore(client, keyPrefix, ttl, s.logger), nil
+}
+
+func hostFromAddr(addr string) string {
+	host, _, err := net.SplitHostPort(addr)
+	if err == nil {
+		return host
+	}
+	return strings.TrimSpace(addr)
+}
+
+func isLoopbackHost(host string) bool {
+	h := strings.TrimSpace(strings.Trim(host, "[]"))
+	if h == "" {
+		return false
+	}
+	if strings.EqualFold(h, "localhost") {
+		return true
+	}
+	ip := net.ParseIP(h)
+	return ip != nil && ip.IsLoopback()
+}
+
 // buildAuthMiddleware selects the authentication strategy based on configuration.
 // Priority: JWT (if secret or public key configured) > API Key > nil (dev mode).
 func (s *Server) buildAuthMiddleware(skipPaths []string) mw.Middleware {
@@ -877,6 +1029,13 @@ func (s *Server) Shutdown() {
 		s.logger.Error("MongoDB close error", zap.Error(err))
 	} else {
 		s.logger.Info("MongoDB connection closed")
+	}
+
+	// 7.1 关闭多模态 Redis 连接（如果启用）
+	if s.multimodalRedis != nil {
+		if err := s.multimodalRedis.Close(); err != nil {
+			s.logger.Error("Multimodal Redis close error", zap.Error(err))
+		}
 	}
 
 	// 7.5 关闭 AuditLogger

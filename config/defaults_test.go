@@ -23,6 +23,7 @@ func TestDefaultConfig_ContainsAllSubConfigs(t *testing.T) {
 	assert.NotEqual(t, WeaviateConfig{}, cfg.Weaviate)
 	assert.NotEqual(t, MilvusConfig{}, cfg.Milvus)
 	assert.NotEqual(t, LLMConnectionConfig{}, cfg.LLM)
+	assert.NotEqual(t, MultimodalConfig{}, cfg.Multimodal)
 	assert.NotEqual(t, LogConfig{}, cfg.Log)
 	assert.NotEqual(t, TelemetryConfig{}, cfg.Telemetry)
 }
@@ -126,6 +127,19 @@ func TestDefaultLLMConfig(t *testing.T) {
 	assert.Empty(t, cfg.BaseURL)
 	assert.Equal(t, 2*time.Minute, cfg.Timeout)
 	assert.Equal(t, 3, cfg.MaxRetries)
+}
+
+func TestDefaultMultimodalConfig(t *testing.T) {
+	cfg := DefaultMultimodalConfig()
+	assert.True(t, cfg.Enabled)
+	assert.Equal(t, int64(8<<20), cfg.ReferenceMaxSizeBytes)
+	assert.Equal(t, 2*time.Hour, cfg.ReferenceTTL)
+	assert.Equal(t, "redis", cfg.ReferenceStoreBackend)
+	assert.Equal(t, "agentflow:mm:ref", cfg.ReferenceStoreKeyPrefix)
+	assert.Empty(t, cfg.DefaultImageProvider)
+	assert.Empty(t, cfg.DefaultVideoProvider)
+	assert.Empty(t, cfg.Image.OpenAIAPIKey)
+	assert.Empty(t, cfg.Video.RunwayAPIKey)
 }
 
 func TestDefaultLogConfig(t *testing.T) {
