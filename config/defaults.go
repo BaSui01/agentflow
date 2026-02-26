@@ -6,33 +6,34 @@ import "time"
 // DefaultConfig 返回默认配置
 func DefaultConfig() *Config {
 	return &Config{
-		Server:    DefaultServerConfig(),
-		Agent:     DefaultAgentConfig(),
-		Redis:     DefaultRedisConfig(),
-		Database:  DefaultDatabaseConfig(),
-		Qdrant:    DefaultQdrantConfig(),
-		Weaviate:  DefaultWeaviateConfig(),
-		Milvus:    DefaultMilvusConfig(),
-		MongoDB:   DefaultMongoDBConfig(),
-		LLM:       DefaultLLMConfig(),
-		Log:       DefaultLogConfig(),
-		Telemetry: DefaultTelemetryConfig(),
-		Tools:     DefaultToolsConfig(),
+		Server:     DefaultServerConfig(),
+		Agent:      DefaultAgentConfig(),
+		Redis:      DefaultRedisConfig(),
+		Database:   DefaultDatabaseConfig(),
+		Qdrant:     DefaultQdrantConfig(),
+		Weaviate:   DefaultWeaviateConfig(),
+		Milvus:     DefaultMilvusConfig(),
+		MongoDB:    DefaultMongoDBConfig(),
+		LLM:        DefaultLLMConfig(),
+		Multimodal: DefaultMultimodalConfig(),
+		Log:        DefaultLogConfig(),
+		Telemetry:  DefaultTelemetryConfig(),
+		Tools:      DefaultToolsConfig(),
 	}
 }
 
 // DefaultServerConfig 返回默认服务器配置
 func DefaultServerConfig() ServerConfig {
 	return ServerConfig{
-		HTTPPort:         8080,
-		GRPCPort:         9090,
-		MetricsPort:      9091,
-		ReadTimeout:      30 * time.Second,
-		WriteTimeout:     30 * time.Second,
-		ShutdownTimeout:  15 * time.Second,
-		AllowQueryAPIKey: false,
-		RateLimitRPS:     100,
-		RateLimitBurst:   200,
+		HTTPPort:             8080,
+		GRPCPort:             9090,
+		MetricsPort:          9091,
+		ReadTimeout:          30 * time.Second,
+		WriteTimeout:         30 * time.Second,
+		ShutdownTimeout:      15 * time.Second,
+		AllowQueryAPIKey:     false,
+		RateLimitRPS:         100,
+		RateLimitBurst:       200,
 		TenantRateLimitRPS:   50,
 		TenantRateLimitBurst: 100,
 	}
@@ -154,6 +155,29 @@ func DefaultLLMConfig() LLMConnectionConfig {
 		BaseURL:         "",
 		Timeout:         2 * time.Minute,
 		MaxRetries:      3,
+	}
+}
+
+// DefaultMultimodalConfig 返回默认多模态框架配置
+func DefaultMultimodalConfig() MultimodalConfig {
+	return MultimodalConfig{
+		Enabled:                 true,
+		ReferenceMaxSizeBytes:   8 << 20, // 8MB
+		ReferenceTTL:            2 * time.Hour,
+		ReferenceStoreBackend:   "redis",
+		ReferenceStoreKeyPrefix: "agentflow:mm:ref",
+		DefaultImageProvider:    "",
+		DefaultVideoProvider:    "",
+		Image: MultimodalImageConfig{
+			OpenAIAPIKey:  "",
+			OpenAIBaseURL: "",
+			GeminiAPIKey:  "",
+		},
+		Video: MultimodalVideoConfig{
+			RunwayAPIKey: "",
+			VeoAPIKey:    "",
+			GoogleAPIKey: "",
+		},
 	}
 }
 

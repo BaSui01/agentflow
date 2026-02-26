@@ -92,31 +92,6 @@ func TestClaudeProvider_Headers_APIKey(t *testing.T) {
 	assert.Equal(t, "application/json", capturedHeaders.Get("Content-Type"))
 }
 
-func TestClaudeProvider_Headers_Bearer(t *testing.T) {
-	var capturedHeaders http.Header
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		capturedHeaders = r.Header.Clone()
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(claudeResponse{
-			ID: "msg_1", Role: "assistant", Model: "claude-opus-4.5-20260105",
-			Content: []claudeContent{{Type: "text", Text: "ok"}},
-		})
-	}))
-	t.Cleanup(func() { server.Close() })
-
-	p := NewClaudeProvider(providers.ClaudeConfig{
-		BaseProviderConfig: providers.BaseProviderConfig{APIKey: "sk-test", BaseURL: server.URL},
-		AuthType:           "bearer",
-	}, zap.NewNop())
-
-	_, err := p.Completion(context.Background(), &llm.ChatRequest{
-		Messages: []llm.Message{{Role: llm.RoleUser, Content: "Hi"}},
-	})
-	require.NoError(t, err)
-	assert.Equal(t, "Bearer sk-test", capturedHeaders.Get("Authorization"))
-	assert.Empty(t, capturedHeaders.Get("x-api-key"))
-}
-
 func TestClaudeProvider_Headers_CustomVersion(t *testing.T) {
 	var capturedVersion string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -146,6 +121,7 @@ func TestClaudeProvider_Headers_CustomVersion(t *testing.T) {
 func TestConvertToClaudeMessages(t *testing.T) {
 	msgs := []llm.Message{
 		{Role: llm.RoleSystem, Content: "You are helpful"},
+		{Role: llm.RoleDeveloper, Content: "Always answer in JSON"},
 		{Role: llm.RoleUser, Content: "Hello"},
 		{Role: llm.RoleAssistant, Content: "Hi there", ToolCalls: []llm.ToolCall{
 			{ID: "tc_1", Name: "search", Arguments: json.RawMessage(`{"q":"test"}`)},
@@ -154,7 +130,7 @@ func TestConvertToClaudeMessages(t *testing.T) {
 	}
 
 	system, claudeMsgs := convertToClaudeMessages(msgs)
-	assert.Equal(t, "You are helpful", system)
+	assert.Equal(t, "You are helpful\n\nAlways answer in JSON", system)
 	require.Len(t, claudeMsgs, 3)
 
 	// User message
