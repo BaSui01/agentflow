@@ -31,7 +31,6 @@ type OpenAIConfig struct {
 // ClaudeConfig Claude Provider 配置
 type ClaudeConfig struct {
 	BaseProviderConfig `yaml:",inline"`
-	AuthType          string `json:"auth_type,omitempty" yaml:"auth_type,omitempty"`           // "api_key"(默认) | "bearer"
 	AnthropicVersion  string `json:"anthropic_version,omitempty" yaml:"anthropic_version,omitempty"` // 默认 "2023-06-01"
 }
 

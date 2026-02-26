@@ -12,10 +12,10 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/BaSui01/agentflow/pkg/tlsutil"
 	"github.com/BaSui01/agentflow/llm"
 	"github.com/BaSui01/agentflow/llm/middleware"
 	"github.com/BaSui01/agentflow/llm/providers"
+	"github.com/BaSui01/agentflow/pkg/tlsutil"
 	"go.uber.org/zap"
 )
 
@@ -73,7 +73,7 @@ func (p *GeminiProvider) HealthCheck(ctx context.Context) (*llm.HealthStatus, er
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
-	p.buildHeaders(httpReq, p.cfg.APIKey)
+	p.buildHeaders(httpReq, p.resolveAPIKey(ctx))
 
 	resp, err := p.client.Do(httpReq)
 	latency := time.Since(start)
@@ -102,7 +102,7 @@ func (p *GeminiProvider) ListModels(ctx context.Context) ([]llm.Model, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
-	p.buildHeaders(httpReq, p.cfg.APIKey)
+	p.buildHeaders(httpReq, p.resolveAPIKey(ctx))
 
 	resp, err := p.client.Do(httpReq)
 	if err != nil {
@@ -123,14 +123,14 @@ func (p *GeminiProvider) ListModels(ctx context.Context) ([]llm.Model, error) {
 
 	var modelsResp struct {
 		Models []struct {
-			Name               string   `json:"name"`
-			BaseModelID        string   `json:"baseModelId"`
-			Version            string   `json:"version"`
-			DisplayName        string   `json:"displayName"`
-			Description        string   `json:"description"`
-			InputTokenLimit    int      `json:"inputTokenLimit"`
-			OutputTokenLimit   int      `json:"outputTokenLimit"`
-			SupportedMethods   []string `json:"supportedGenerationMethods"`
+			Name             string   `json:"name"`
+			BaseModelID      string   `json:"baseModelId"`
+			Version          string   `json:"version"`
+			DisplayName      string   `json:"displayName"`
+			Description      string   `json:"description"`
+			InputTokenLimit  int      `json:"inputTokenLimit"`
+			OutputTokenLimit int      `json:"outputTokenLimit"`
+			SupportedMethods []string `json:"supportedGenerationMethods"`
 		} `json:"models"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&modelsResp); err != nil {
@@ -206,12 +206,12 @@ type geminiInlineData struct {
 }
 
 type geminiFunctionCall struct {
-	Name string                 `json:"name"`
+	Name string         `json:"name"`
 	Args map[string]any `json:"args"`
 }
 
 type geminiFunctionResponse struct {
-	Name     string                 `json:"name"`
+	Name     string         `json:"name"`
 	Response map[string]any `json:"response"`
 }
 
@@ -220,8 +220,8 @@ type geminiTool struct {
 }
 
 type geminiFunctionDeclaration struct {
-	Name        string                 `json:"name"`
-	Description string                 `json:"description,omitempty"`
+	Name        string         `json:"name"`
+	Description string         `json:"description,omitempty"`
 	Parameters  map[string]any `json:"parameters,omitempty"` // JSON Schema
 }
 
@@ -268,7 +268,7 @@ type geminiCandidate struct {
 	Content       geminiContent `json:"content"`
 	FinishReason  string        `json:"finishReason,omitempty"`
 	Index         int           `json:"index"`
-	SafetyRatings []any `json:"safetyRatings,omitempty"`
+	SafetyRatings []any         `json:"safetyRatings,omitempty"`
 }
 
 type geminiUsageMetadata struct {
@@ -279,8 +279,8 @@ type geminiUsageMetadata struct {
 }
 
 type geminiPromptFeedback struct {
-	BlockReason   string `json:"blockReason,omitempty"`
-	BlockMessage  string `json:"blockReasonMessage,omitempty"`
+	BlockReason  string `json:"blockReason,omitempty"`
+	BlockMessage string `json:"blockReasonMessage,omitempty"`
 }
 
 type geminiResponse struct {
@@ -382,18 +382,18 @@ func convertToGeminiContents(msgs []llm.Message) (*geminiContent, []geminiConten
 			continue
 		}
 
-		// 转换角色名称
-		role := string(m.Role)
-		if role == "assistant" {
-			role = "model" // Gemini 使用 "model" 而不是 "assistant"
+		// 转换角色名称，Gemini 仅支持 user/model
+		role := "user"
+		if m.Role == llm.RoleAssistant {
+			role = "model"
 		}
 
 		content := geminiContent{
 			Role: role,
 		}
 
-		// 文本内容
-		if m.Content != "" {
+		// 文本内容（tool 消息通过 functionResponse 表达，不重复发送 text）
+		if m.Content != "" && m.Role != llm.RoleTool {
 			content.Parts = append(content.Parts, geminiPart{
 				Text: m.Content,
 			})
@@ -414,7 +414,7 @@ func convertToGeminiContents(msgs []llm.Message) (*geminiContent, []geminiConten
 			}
 		}
 
-		// 工具响应
+		// 工具响应：tool role 通过 user + functionResponse 发送
 		if m.Role == llm.RoleTool && m.ToolCallID != "" {
 			var response map[string]any
 			if err := json.Unmarshal([]byte(m.Content), &response); err == nil {

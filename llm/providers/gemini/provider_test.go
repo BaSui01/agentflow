@@ -169,6 +169,18 @@ func TestConvertToGeminiContents(t *testing.T) {
 	assert.Equal(t, "model", contents[1].Role) // assistant -> model
 }
 
+func TestConvertToGeminiContents_ToolRoleMappedToUser(t *testing.T) {
+	msgs := []llm.Message{
+		{Role: llm.RoleTool, ToolCallID: "tc-1", Name: "search", Content: `{"ok":true}`},
+	}
+	_, contents := convertToGeminiContents(msgs)
+	require.Len(t, contents, 1)
+	assert.Equal(t, "user", contents[0].Role)
+	require.Len(t, contents[0].Parts, 1)
+	require.NotNil(t, contents[0].Parts[0].FunctionResponse)
+	assert.Equal(t, "search", contents[0].Parts[0].FunctionResponse.Name)
+}
+
 // --- convertGeminiCapabilities ---
 
 func TestConvertGeminiCapabilities(t *testing.T) {
@@ -457,4 +469,47 @@ func TestGeminiProvider_ListModels_Error(t *testing.T) {
 	llmErr, ok := err.(*llm.Error)
 	require.True(t, ok)
 	assert.Equal(t, llm.ErrForbidden, llmErr.Code)
+}
+
+func TestGeminiProvider_HealthCheck_UsesResolveAPIKey(t *testing.T) {
+	var capturedKey string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		capturedKey = r.Header.Get("x-goog-api-key")
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{"models":[]}`))
+	}))
+	t.Cleanup(func() { server.Close() })
+
+	p := NewGeminiProvider(providers.GeminiConfig{
+		BaseProviderConfig: providers.BaseProviderConfig{
+			BaseURL: server.URL,
+			APIKeys: []providers.APIKeyEntry{{Key: "multi-key-1"}},
+		},
+	}, zap.NewNop())
+
+	status, err := p.HealthCheck(context.Background())
+	require.NoError(t, err)
+	assert.True(t, status.Healthy)
+	assert.Equal(t, "multi-key-1", capturedKey)
+}
+
+func TestGeminiProvider_ListModels_UsesResolveAPIKey(t *testing.T) {
+	var capturedKey string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		capturedKey = r.Header.Get("x-goog-api-key")
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"models":[]}`))
+	}))
+	t.Cleanup(func() { server.Close() })
+
+	p := NewGeminiProvider(providers.GeminiConfig{
+		BaseProviderConfig: providers.BaseProviderConfig{
+			BaseURL: server.URL,
+			APIKeys: []providers.APIKeyEntry{{Key: "multi-key-2"}},
+		},
+	}, zap.NewNop())
+
+	_, err := p.ListModels(context.Background())
+	require.NoError(t, err)
+	assert.Equal(t, "multi-key-2", capturedKey)
 }
