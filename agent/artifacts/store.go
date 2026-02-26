@@ -56,7 +56,7 @@ func (s *FileStore) Save(ctx context.Context, artifact *Artifact, data io.Reader
 	artifact.Size = size
 
 	// 创建存储路径
-	artifactDir := filepath.Join(s.basePath, artifact.ID)
+	artifactDir := filepath.Join(s.basePath, safeArtifactDirName(artifact.ID))
 	if err := os.MkdirAll(artifactDir, 0o755); err != nil {
 		return fmt.Errorf("failed to create artifact dir: %w", err)
 	}
@@ -80,6 +80,11 @@ func (s *FileStore) Save(ctx context.Context, artifact *Artifact, data io.Reader
 
 	s.index[artifact.ID] = artifact
 	return s.saveIndex()
+}
+
+func safeArtifactDirName(id string) string {
+	sum := sha256.Sum256([]byte(id))
+	return hex.EncodeToString(sum[:16])
 }
 
 func (s *FileStore) Load(ctx context.Context, artifactID string) (*Artifact, io.ReadCloser, error) {

@@ -5,7 +5,11 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"os"
 	"os/exec"
+	"path/filepath"
+	"runtime"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -68,9 +72,11 @@ func (p *LocalProvider) Deploy(ctx context.Context, d *Deployment) error {
 	}
 
 	procCtx, cancel := context.WithCancel(ctx)
-	cmd := exec.CommandContext(procCtx, d.Config.Image)
+	executable, args := resolveLocalCommand(d.Config.Image)
+	cmd := exec.CommandContext(procCtx, executable, args...)
 
 	// Set environment variables from config.
+	cmd.Env = os.Environ()
 	for k, v := range d.Config.Environment {
 		cmd.Env = append(cmd.Env, fmt.Sprintf("%s=%s", k, v))
 	}
@@ -107,6 +113,30 @@ func (p *LocalProvider) Deploy(ctx context.Context, d *Deployment) error {
 	return nil
 }
 
+func resolveLocalCommand(image string) (string, []string) {
+	if runtime.GOOS != "windows" {
+		return image, nil
+	}
+
+	clean := strings.ReplaceAll(image, "\\", "/")
+	base := strings.ToLower(filepath.Base(clean))
+	switch clean {
+	case "/bin/sleep":
+		return "powershell", []string{"-NoProfile", "-Command", "Start-Sleep -Seconds 60"}
+	case "/bin/echo":
+		return "cmd", []string{"/C", "echo"}
+	}
+
+	switch base {
+	case "sleep":
+		return "powershell", []string{"-NoProfile", "-Command", "Start-Sleep -Seconds 60"}
+	case "echo":
+		return "cmd", []string{"/C", "echo"}
+	default:
+		return image, nil
+	}
+}
+
 // Update restarts the local process with new configuration.
 func (p *LocalProvider) Update(ctx context.Context, d *Deployment) error {
 	if err := p.Delete(ctx, d.ID); err != nil {
@@ -128,7 +158,11 @@ func (p *LocalProvider) Delete(_ context.Context, deploymentID string) error {
 
 	// Send SIGTERM first.
 	if lp.cmd.Process != nil {
-		_ = lp.cmd.Process.Signal(syscall.SIGTERM)
+		if runtime.GOOS == "windows" {
+			_ = lp.cmd.Process.Kill()
+		} else {
+			_ = lp.cmd.Process.Signal(syscall.SIGTERM)
+		}
 
 		// Wait up to 5 seconds for graceful shutdown.
 		done := make(chan struct{})
@@ -142,7 +176,7 @@ func (p *LocalProvider) Delete(_ context.Context, deploymentID string) error {
 			// Process exited gracefully.
 		case <-time.After(5 * time.Second):
 			// Force kill.
-			_ = lp.cmd.Process.Signal(syscall.SIGKILL)
+			_ = lp.cmd.Process.Kill()
 			<-done
 		}
 	}
@@ -163,7 +197,9 @@ func (p *LocalProvider) GetStatus(_ context.Context, deploymentID string) (*Depl
 	}
 
 	status := StatusRunning
-	if lp.cmd.Process != nil {
+	if lp.cmd.ProcessState != nil && lp.cmd.ProcessState.Exited() {
+		status = StatusFailed
+	} else if lp.cmd.Process != nil && runtime.GOOS != "windows" {
 		// Signal(0) checks if process is alive without sending a signal.
 		if err := lp.cmd.Process.Signal(syscall.Signal(0)); err != nil {
 			status = StatusFailed
