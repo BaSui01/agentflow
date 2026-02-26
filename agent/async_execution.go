@@ -385,7 +385,7 @@ func (m *SubagentManager) CleanupCompleted(olderThan time.Duration) int {
 		status := exec.GetStatus()
 		endTime := exec.GetEndTime()
 		if status == ExecutionStatusCompleted || status == ExecutionStatusFailed {
-			if endTime.Before(cutoff) {
+			if olderThan <= 0 || endTime.Before(cutoff) || endTime.Equal(cutoff) {
 				delete(m.executions, id)
 				cleaned++
 			}

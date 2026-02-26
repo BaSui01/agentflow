@@ -259,6 +259,9 @@ func NewDefaultEnhancedMemorySystem(config EnhancedMemoryConfig, logger *zap.Log
 
 // SaveShortTerm 保存短期记忆
 func (m *EnhancedMemorySystem) SaveShortTerm(ctx context.Context, agentID string, content string, metadata map[string]any) error {
+	if m.shortTerm == nil {
+		return fmt.Errorf("short-term memory store not configured")
+	}
 	key := fmt.Sprintf("short_term:%s:%d", agentID, time.Now().UnixNano())
 
 	memory := map[string]any{
@@ -290,12 +293,18 @@ func (m *EnhancedMemorySystem) SaveShortTermWithVector(
 
 // LoadShortTerm 加载短期记忆
 func (m *EnhancedMemorySystem) LoadShortTerm(ctx context.Context, agentID string, limit int) ([]any, error) {
+	if m.shortTerm == nil {
+		return nil, fmt.Errorf("short-term memory store not configured")
+	}
 	pattern := fmt.Sprintf("short_term:%s:*", agentID)
 	return m.shortTerm.List(ctx, pattern, limit)
 }
 
 // SaveWorking 保存工作记忆
 func (m *EnhancedMemorySystem) SaveWorking(ctx context.Context, agentID string, content string, metadata map[string]any) error {
+	if m.working == nil {
+		return fmt.Errorf("working memory store not configured")
+	}
 	key := fmt.Sprintf("working:%s:%d", agentID, time.Now().UnixNano())
 
 	memory := map[string]any{
@@ -311,12 +320,18 @@ func (m *EnhancedMemorySystem) SaveWorking(ctx context.Context, agentID string, 
 
 // LoadWorking 加载工作记忆
 func (m *EnhancedMemorySystem) LoadWorking(ctx context.Context, agentID string) ([]any, error) {
+	if m.working == nil {
+		return nil, fmt.Errorf("working memory store not configured")
+	}
 	pattern := fmt.Sprintf("working:%s:*", agentID)
 	return m.working.List(ctx, pattern, m.config.WorkingMemorySize)
 }
 
 // ClearWorking 清除工作记忆
 func (m *EnhancedMemorySystem) ClearWorking(ctx context.Context, agentID string) error {
+	if m.working == nil {
+		return fmt.Errorf("working memory store not configured")
+	}
 	return m.working.Clear(ctx)
 }
 
@@ -372,7 +387,7 @@ func (m *EnhancedMemorySystem) QueryEpisodes(ctx context.Context, query Episodic
 // AddKnowledge 添加知识（实体和关系）
 func (m *EnhancedMemorySystem) AddKnowledge(ctx context.Context, entity *Entity) error {
 	if !m.config.SemanticEnabled {
-		return fmt.Errorf("semantic memory not enabled")
+		return fmt.Errorf("semantic memory not configured")
 	}
 
 	return m.semantic.AddEntity(ctx, entity)
@@ -381,7 +396,7 @@ func (m *EnhancedMemorySystem) AddKnowledge(ctx context.Context, entity *Entity)
 // AddKnowledgeRelation 添加知识关系
 func (m *EnhancedMemorySystem) AddKnowledgeRelation(ctx context.Context, relation *Relation) error {
 	if !m.config.SemanticEnabled {
-		return fmt.Errorf("semantic memory not enabled")
+		return fmt.Errorf("semantic memory not configured")
 	}
 
 	return m.semantic.AddRelation(ctx, relation)
@@ -390,7 +405,7 @@ func (m *EnhancedMemorySystem) AddKnowledgeRelation(ctx context.Context, relatio
 // QueryKnowledge 查询知识
 func (m *EnhancedMemorySystem) QueryKnowledge(ctx context.Context, entityID string) (*Entity, error) {
 	if !m.config.SemanticEnabled {
-		return nil, fmt.Errorf("semantic memory not enabled")
+		return nil, fmt.Errorf("semantic memory not configured")
 	}
 
 	return m.semantic.QueryEntity(ctx, entityID)
@@ -541,6 +556,9 @@ func (c *MemoryConsolidator) consolidate(ctx context.Context) error {
 	var memories []any
 
 	{
+		if c.system.shortTerm == nil {
+			return fmt.Errorf("short-term memory store not configured")
+		}
 		limit := c.system.config.ShortTermMaxSize * 100
 		if limit <= 0 {
 			limit = 1000
@@ -553,6 +571,12 @@ func (c *MemoryConsolidator) consolidate(ctx context.Context) error {
 	}
 
 	{
+		if c.system.working == nil {
+			if c.system.config.WorkingMemorySize <= 0 {
+				goto processStrategies
+			}
+			return fmt.Errorf("working memory store not configured")
+		}
 		limit := c.system.config.WorkingMemorySize * 100
 		if limit <= 0 {
 			limit = 1000
@@ -564,6 +588,7 @@ func (c *MemoryConsolidator) consolidate(ctx context.Context) error {
 		memories = append(memories, items...)
 	}
 
+processStrategies:
 	if len(memories) == 0 {
 		c.logger.Debug("no memories available for consolidation")
 		return nil

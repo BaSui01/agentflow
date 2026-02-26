@@ -174,6 +174,7 @@ func NewExecutor(config ExecutorConfig, logger *zap.Logger, opts ...ExecutorOpti
 		registry:   NewStepRegistry(),
 		logger:     logger.With(zap.String("component", "longrunning")),
 	}
+	e.checkpointStore = NewFileCheckpointStore(config.CheckpointDir, logger)
 
 	for _, opt := range opts {
 		opt(e)
@@ -473,6 +474,9 @@ func (e *Executor) saveCheckpoint(exec *Execution, state any) {
 		Step: checkpoint.Step, Timestamp: checkpoint.Timestamp, State: state,
 	})
 
+	if e.checkpointStore == nil {
+		return
+	}
 	if err := e.checkpointStore.SaveCheckpoint(context.Background(), exec); err != nil {
 		e.logger.Error("failed to save checkpoint", zap.Error(err))
 	}
@@ -544,6 +548,9 @@ func (e *Executor) Resume(execID string) error {
 
 // LoadExecution loads an execution from the checkpoint store.
 func (e *Executor) LoadExecution(execID string) (*Execution, error) {
+	if e.checkpointStore == nil {
+		return nil, fmt.Errorf("checkpoint store not configured")
+	}
 	exec, err := e.checkpointStore.LoadCheckpoint(context.Background(), execID)
 	if err != nil {
 		return nil, fmt.Errorf("loading checkpoint: %w", err)
@@ -629,6 +636,9 @@ func (e *Executor) ListExecutions() []*Execution {
 // resumable (running, paused, or resuming) and have named steps registered in
 // the step registry.
 func (e *Executor) AutoResumeAll(ctx context.Context) (int, error) {
+	if e.checkpointStore == nil {
+		return 0, nil
+	}
 	execs, err := e.checkpointStore.ListCheckpoints(ctx)
 	if err != nil {
 		return 0, fmt.Errorf("listing checkpoints: %w", err)

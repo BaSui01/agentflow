@@ -116,16 +116,20 @@ func (b *BaseAgent) Execute(ctx context.Context, input *Input) (_ *Output, execE
 			Input:     input.Content,
 			StartTime: startTime,
 		}
-		if err := b.runStore.RecordRun(ctx, doc); err != nil {
-			b.logger.Warn("failed to record run start", zap.Error(err))
-			runID = "" // disable run tracking on failure
+		if b.runStore != nil {
+			if err := b.runStore.RecordRun(ctx, doc); err != nil {
+				b.logger.Warn("failed to record run start", zap.Error(err))
+				runID = "" // disable run tracking on failure
+			}
+		} else {
+			runID = ""
 		}
 	}
 
 	// 3c. ConversationStore: restore conversation history
 	var restoredMessages []llm.Message
 	conversationID := input.ChannelID
-	if conversationID != "" {
+	if conversationID != "" && b.conversationStore != nil {
 		conv, convErr := b.conversationStore.GetByID(ctx, conversationID)
 		if convErr != nil {
 			// ErrNotFound is expected for new conversations; only warn on real errors.
@@ -148,15 +152,15 @@ func (b *BaseAgent) Execute(ctx context.Context, input *Input) (_ *Output, execE
 	}
 	defer func() {
 		// Ensure run status is updated on any exit path (including panic).
-		if runID != "" {
+		if runID != "" && b.runStore != nil {
 			if r := recover(); r != nil {
 				_ = b.runStore.UpdateStatus(ctx, runID, "failed", nil, fmt.Sprintf("panic: %v", r))
 				b.logger.Error("panic during execution, run marked as failed",
 					zap.Any("panic", r), zap.String("run_id", runID))
 				panic(r) // re-panic after recording
 			}
-			if execErr != nil {
-				if updateErr := b.runStore.UpdateStatus(ctx, runID, "failed", nil, execErr.Error()); updateErr != nil {
+		if execErr != nil && runID != "" && b.runStore != nil {
+			if updateErr := b.runStore.UpdateStatus(ctx, runID, "failed", nil, execErr.Error()); updateErr != nil {
 					b.logger.Warn("failed to mark run as failed", zap.Error(updateErr))
 				}
 			}
@@ -387,7 +391,7 @@ func (b *BaseAgent) Execute(ctx context.Context, input *Input) (_ *Output, execE
 	b.persistConversation(ctx, input, outputContent, conversationID)
 
 	// 9b. RunStore: update run status
-	if runID != "" {
+	if runID != "" && b.runStore != nil {
 		outputDoc := &RunOutputDoc{
 			Content:      outputContent,
 			TokensUsed:   resp.Usage.TotalTokens,
@@ -478,6 +482,10 @@ func (b *BaseAgent) Observe(ctx context.Context, feedback *Feedback) error {
 // loadPromptFromStore attempts to load the active prompt from PromptStore.
 // Falls back to the existing config PromptBundle if unavailable.
 func (b *BaseAgent) loadPromptFromStore(ctx context.Context) {
+	if b.promptStore == nil {
+		return
+	}
+
 	agentType := string(b.config.Type)
 	name := b.config.Name
 	tenantID := "" // default tenant
@@ -507,7 +515,7 @@ func (b *BaseAgent) loadPromptFromStore(ctx context.Context) {
 
 // persistConversation saves the user input and agent output to ConversationStore.
 func (b *BaseAgent) persistConversation(ctx context.Context, input *Input, outputContent, conversationID string) {
-	if conversationID == "" {
+	if conversationID == "" || b.conversationStore == nil {
 		return
 	}
 

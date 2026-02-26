@@ -336,6 +336,9 @@ func (t *Tracer) EndTrace(traceID string, status string, err error) {
 	if trace, ok := t.traces[traceID]; ok {
 		trace.EndTime = time.Now()
 		trace.Duration = trace.EndTime.Sub(trace.StartTime)
+		if trace.Duration <= 0 {
+			trace.Duration = time.Nanosecond
+		}
 		trace.Status = status
 		trace.Error = err
 	}
