@@ -257,8 +257,3 @@ func DefaultBudgetConfig() BudgetConfig {
 		AlertThreshold:     0.8,
 	}
 }
-
-// DefaultMultimodalConfig 返回默认多模态配置
-func DefaultMultimodalConfig() MultimodalConfig {
-	return MultimodalConfig{}
-}

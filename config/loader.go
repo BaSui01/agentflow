@@ -62,9 +62,6 @@ type Config struct {
 
 	// Budget Token 预算管理配置
 	Budget BudgetConfig `yaml:"budget" env:"BUDGET"`
-
-	// Multimodal 多模态配置
-	Multimodal MultimodalConfig `yaml:"multimodal" env:"MULTIMODAL"`
 }
 
 // ServerConfig 服务器配置
@@ -773,40 +770,4 @@ type BudgetConfig struct {
 	MaxCostPerDay float64 `yaml:"max_cost_per_day" env:"MAX_COST_PER_DAY"`
 	// 告警阈值 (0.0-1.0)
 	AlertThreshold float64 `yaml:"alert_threshold" env:"ALERT_THRESHOLD"`
-}
-
-// MultimodalConfig 多模态配置
-type MultimodalConfig struct {
-	// 图像生成配置
-	Image ModalityProviderConfig `yaml:"image" env:"IMAGE"`
-	// 语音配置
-	Speech SpeechProviderConfig `yaml:"speech" env:"SPEECH"`
-	// 视频配置
-	Video ModalityProviderConfig `yaml:"video" env:"VIDEO"`
-	// 音乐生成配置
-	Music ModalityProviderConfig `yaml:"music" env:"MUSIC"`
-	// 3D 生成配置
-	ThreeD ModalityProviderConfig `yaml:"threed" env:"THREED"`
-	// 内容审核配置
-	Moderation ModalityProviderConfig `yaml:"moderation" env:"MODERATION"`
-}
-
-// ModalityProviderConfig 模态提供者配置
-type ModalityProviderConfig struct {
-	// 提供者名称
-	Provider string `yaml:"provider" env:"PROVIDER"`
-	// API Key
-	APIKey string `yaml:"api_key" env:"API_KEY" json:"-"`
-	// 基础 URL
-	BaseURL string `yaml:"base_url" env:"BASE_URL"`
-	// 模型名称
-	Model string `yaml:"model" env:"MODEL"`
-}
-
-// SpeechProviderConfig 语音提供者配置
-type SpeechProviderConfig struct {
-	// 文本转语音
-	TTS ModalityProviderConfig `yaml:"tts" env:"TTS"`
-	// 语音转文本
-	STT ModalityProviderConfig `yaml:"stt" env:"STT"`
 }
