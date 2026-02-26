@@ -192,6 +192,44 @@ var hotReloadableFields = map[string]HotReloadableField{
 		Sensitive:       false,
 	},
 
+	// 多模态配置 - 可以热重载
+	"Multimodal.ReferenceMaxSizeBytes": {
+		Path:            "Multimodal.ReferenceMaxSizeBytes",
+		Description:     "Multimodal reference max upload size in bytes",
+		RequiresRestart: false,
+		Sensitive:       false,
+	},
+	"Multimodal.ReferenceTTL": {
+		Path:            "Multimodal.ReferenceTTL",
+		Description:     "Multimodal reference TTL",
+		RequiresRestart: false,
+		Sensitive:       false,
+	},
+	"Multimodal.ReferenceStoreBackend": {
+		Path:            "Multimodal.ReferenceStoreBackend",
+		Description:     "Multimodal reference store backend (redis only)",
+		RequiresRestart: true,
+		Sensitive:       false,
+	},
+	"Multimodal.ReferenceStoreKeyPrefix": {
+		Path:            "Multimodal.ReferenceStoreKeyPrefix",
+		Description:     "Multimodal reference store key prefix",
+		RequiresRestart: true,
+		Sensitive:       false,
+	},
+	"Multimodal.DefaultImageProvider": {
+		Path:            "Multimodal.DefaultImageProvider",
+		Description:     "Default multimodal image provider",
+		RequiresRestart: false,
+		Sensitive:       false,
+	},
+	"Multimodal.DefaultVideoProvider": {
+		Path:            "Multimodal.DefaultVideoProvider",
+		Description:     "Default multimodal video provider",
+		RequiresRestart: false,
+		Sensitive:       false,
+	},
+
 	// 遥测配置 - 可以热重载
 	"Telemetry.Enabled": {
 		Path:            "Telemetry.Enabled",
@@ -276,6 +314,36 @@ var hotReloadableFields = map[string]HotReloadableField{
 	"LLM.APIKey": {
 		Path:            "LLM.APIKey",
 		Description:     "LLM API key",
+		RequiresRestart: true,
+		Sensitive:       true,
+	},
+	"Multimodal.Image.OpenAIAPIKey": {
+		Path:            "Multimodal.Image.OpenAIAPIKey",
+		Description:     "Multimodal OpenAI image API key",
+		RequiresRestart: true,
+		Sensitive:       true,
+	},
+	"Multimodal.Image.GeminiAPIKey": {
+		Path:            "Multimodal.Image.GeminiAPIKey",
+		Description:     "Multimodal Gemini image API key",
+		RequiresRestart: true,
+		Sensitive:       true,
+	},
+	"Multimodal.Video.RunwayAPIKey": {
+		Path:            "Multimodal.Video.RunwayAPIKey",
+		Description:     "Multimodal Runway video API key",
+		RequiresRestart: true,
+		Sensitive:       true,
+	},
+	"Multimodal.Video.VeoAPIKey": {
+		Path:            "Multimodal.Video.VeoAPIKey",
+		Description:     "Multimodal Veo video API key",
+		RequiresRestart: true,
+		Sensitive:       true,
+	},
+	"Multimodal.Video.GoogleAPIKey": {
+		Path:            "Multimodal.Video.GoogleAPIKey",
+		Description:     "Multimodal Google video API key",
 		RequiresRestart: true,
 		Sensitive:       true,
 	},

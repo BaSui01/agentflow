@@ -158,6 +158,41 @@ func TestLoader_LoadFromEnv(t *testing.T) {
 	assert.Equal(t, "warn", cfg.Log.Level)
 }
 
+func TestLoader_LoadMultimodalFromEnv(t *testing.T) {
+	envVars := map[string]string{
+		"AGENTFLOW_MULTIMODAL_ENABLED":                    "true",
+		"AGENTFLOW_MULTIMODAL_REFERENCE_MAX_SIZE_BYTES":   "5242880",
+		"AGENTFLOW_MULTIMODAL_REFERENCE_TTL":              "45m",
+		"AGENTFLOW_MULTIMODAL_REFERENCE_STORE_BACKEND":    "redis",
+		"AGENTFLOW_MULTIMODAL_REFERENCE_STORE_KEY_PREFIX": "agentflow:test:mm",
+		"AGENTFLOW_MULTIMODAL_DEFAULT_IMAGE_PROVIDER":     "openai",
+		"AGENTFLOW_MULTIMODAL_DEFAULT_VIDEO_PROVIDER":     "runway",
+		"AGENTFLOW_MULTIMODAL_IMAGE_OPENAI_API_KEY":       "sk-mm-openai",
+		"AGENTFLOW_MULTIMODAL_VIDEO_RUNWAY_API_KEY":       "rw-mm-key",
+	}
+	for k, v := range envVars {
+		os.Setenv(k, v)
+	}
+	defer func() {
+		for k := range envVars {
+			os.Unsetenv(k)
+		}
+	}()
+
+	cfg, err := NewLoader().Load()
+	require.NoError(t, err)
+
+	assert.True(t, cfg.Multimodal.Enabled)
+	assert.Equal(t, int64(5242880), cfg.Multimodal.ReferenceMaxSizeBytes)
+	assert.Equal(t, 45*time.Minute, cfg.Multimodal.ReferenceTTL)
+	assert.Equal(t, "redis", cfg.Multimodal.ReferenceStoreBackend)
+	assert.Equal(t, "agentflow:test:mm", cfg.Multimodal.ReferenceStoreKeyPrefix)
+	assert.Equal(t, "openai", cfg.Multimodal.DefaultImageProvider)
+	assert.Equal(t, "runway", cfg.Multimodal.DefaultVideoProvider)
+	assert.Equal(t, "sk-mm-openai", cfg.Multimodal.Image.OpenAIAPIKey)
+	assert.Equal(t, "rw-mm-key", cfg.Multimodal.Video.RunwayAPIKey)
+}
+
 func TestLoader_EnvOverridesYAML(t *testing.T) {
 	// 创建临时配置文件
 	tmpDir := t.TempDir()
@@ -310,6 +345,41 @@ func TestConfig_Validate(t *testing.T) {
 			name: "invalid temperature (too high)",
 			modify: func(c *Config) {
 				c.Agent.Temperature = 3.0
+			},
+			wantErr: true,
+		},
+		{
+			name: "invalid multimodal reference size",
+			modify: func(c *Config) {
+				c.Multimodal.ReferenceMaxSizeBytes = 0
+			},
+			wantErr: true,
+		},
+		{
+			name: "invalid multimodal reference ttl",
+			modify: func(c *Config) {
+				c.Multimodal.ReferenceTTL = 0
+			},
+			wantErr: true,
+		},
+		{
+			name: "invalid multimodal reference store backend",
+			modify: func(c *Config) {
+				c.Multimodal.ReferenceStoreBackend = "kv"
+			},
+			wantErr: true,
+		},
+		{
+			name: "memory backend is not allowed for multimodal reference store",
+			modify: func(c *Config) {
+				c.Multimodal.ReferenceStoreBackend = "memory"
+			},
+			wantErr: true,
+		},
+		{
+			name: "redis address is required when multimodal is enabled",
+			modify: func(c *Config) {
+				c.Redis.Addr = ""
 			},
 			wantErr: true,
 		},
