@@ -17,6 +17,7 @@ import (
 	"github.com/BaSui01/agentflow/llm"
 	"github.com/BaSui01/agentflow/llm/middleware"
 	"github.com/BaSui01/agentflow/llm/providers"
+	"github.com/BaSui01/agentflow/types"
 	"go.uber.org/zap"
 )
 
@@ -261,12 +262,7 @@ type claudeErrorResp struct {
 }
 
 func (p *ClaudeProvider) buildHeaders(req *http.Request, apiKey string) {
-	// 认证方式：支持 x-api-key（默认）和 Bearer Token（代理网关兼容）
-	if p.cfg.AuthType == "bearer" {
-		req.Header.Set("Authorization", "Bearer "+apiKey)
-	} else {
-		req.Header.Set("x-api-key", apiKey)
-	}
+	req.Header.Set("x-api-key", apiKey)
 	// API 版本：可配置，默认 2023-06-01
 	version := p.cfg.AnthropicVersion
 	if version == "" {
@@ -302,7 +298,7 @@ func convertToClaudeMessages(msgs []llm.Message) (string, []claudeMessage) {
 
 	for _, m := range msgs {
 		// 提取 system 消息（多条拼接）
-		if m.Role == llm.RoleSystem {
+		if m.Role == llm.RoleSystem || m.Role == llm.RoleDeveloper {
 			if m.Content != "" {
 				systemParts = append(systemParts, m.Content)
 			}
@@ -330,9 +326,11 @@ func convertToClaudeMessages(msgs []llm.Message) (string, []claudeMessage) {
 		}
 
 		// 构建普通消息
-		cm := claudeMessage{
-			Role: string(m.Role),
+		role := "user"
+		if m.Role == llm.RoleAssistant {
+			role = "assistant"
 		}
+		cm := claudeMessage{Role: role}
 
 		// 问题 1: assistant 消息的 ThinkingBlocks 需要回传为 thinking content blocks
 		if m.Role == llm.RoleAssistant && len(m.ThinkingBlocks) > 0 {
@@ -818,7 +816,7 @@ func toClaudeChatResponse(cr claudeResponse, provider string) *llm.ChatResponse 
 	// 解析 content 数组
 	var signatures []string
 	var thinkingParts []string
-	var thinkingBlocks []llm.ThinkingBlock
+	var thinkingBlocks []types.ThinkingBlock
 	for _, content := range cr.Content {
 		switch content.Type {
 		case "text":
@@ -838,7 +836,7 @@ func toClaudeChatResponse(cr claudeResponse, provider string) *llm.ChatResponse 
 				signatures = append(signatures, content.Signature)
 			}
 			// 保存完整的 thinking block 用于 round-trip
-			thinkingBlocks = append(thinkingBlocks, llm.ThinkingBlock{
+			thinkingBlocks = append(thinkingBlocks, types.ThinkingBlock{
 				Thinking:  content.Thinking,
 				Signature: content.Signature,
 			})

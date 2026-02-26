@@ -66,6 +66,7 @@ type BatchProcessor struct {
 	queue   chan *pendingRequest
 	closed  atomic.Bool
 	wg      sync.WaitGroup
+	inflight atomic.Int64
 
 	// 计量
 	submitted atomic.Int64
@@ -108,6 +109,30 @@ func (bp *BatchProcessor) Submit(ctx context.Context, req *Request) <-chan *Resp
 	}
 
 	bp.submitted.Add(1)
+	if err := ctx.Err(); err != nil {
+		respCh <- &Response{ID: req.ID, Error: err}
+		close(respCh)
+		return respCh
+	}
+
+	// QueueSize 语义：限制“未完成请求总数”，而不是仅限制 channel 缓冲区。
+	// 否则 worker 提前取走请求后，短时间内会绕过容量限制。
+	for {
+		cur := bp.inflight.Load()
+		if cur >= int64(bp.config.QueueSize) {
+			if err := ctx.Err(); err != nil {
+				respCh <- &Response{ID: req.ID, Error: err}
+				close(respCh)
+				return respCh
+			}
+			respCh <- &Response{ID: req.ID, Error: ErrBatchFull}
+			close(respCh)
+			return respCh
+		}
+		if bp.inflight.CompareAndSwap(cur, cur+1) {
+			break
+		}
+	}
 
 	pending := &pendingRequest{
 		request:  req,
@@ -118,9 +143,11 @@ func (bp *BatchProcessor) Submit(ctx context.Context, req *Request) <-chan *Resp
 	select {
 	case bp.queue <- pending:
 	case <-ctx.Done():
+		bp.inflight.Add(-1)
 		respCh <- &Response{ID: req.ID, Error: ctx.Err()}
 		close(respCh)
 	default:
+		bp.inflight.Add(-1)
 		respCh <- &Response{ID: req.ID, Error: ErrBatchFull}
 		close(respCh)
 	}
@@ -223,6 +250,7 @@ func (bp *BatchProcessor) processBatch(batch []*pendingRequest) {
 		default:
 		}
 		close(pending.response)
+		bp.inflight.Add(-1)
 	}
 }
 

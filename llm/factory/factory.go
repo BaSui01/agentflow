@@ -72,9 +72,6 @@ func NewProviderFromConfig(name string, cfg ProviderConfig, logger *zap.Logger) 
 	case "anthropic", "claude":
 		cc := providers.ClaudeConfig{BaseProviderConfig: base}
 		if cfg.Extra != nil {
-			if v, ok := cfg.Extra["auth_type"].(string); ok {
-				cc.AuthType = v
-			}
 			if v, ok := cfg.Extra["anthropic_version"].(string); ok {
 				cc.AnthropicVersion = v
 			}
