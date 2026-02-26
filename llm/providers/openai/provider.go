@@ -44,6 +44,10 @@ type OpenAIProvider struct {
 
 // NewOpenAIProvider 创建新的 OpenAI 提供者实例.
 func NewOpenAIProvider(cfg providers.OpenAIConfig, logger *zap.Logger) *OpenAIProvider {
+	if cfg.BaseURL == "" {
+		cfg.BaseURL = "https://api.openai.com"
+	}
+
 	p := &OpenAIProvider{
 		Provider: openaicompat.New(openaicompat.Config{
 			ProviderName:  "openai",
@@ -109,25 +113,25 @@ func (p *OpenAIProvider) Completion(ctx context.Context, req *llm.ChatRequest) (
 
 // openAIResponsesRequest represents the POST /v1/responses request body.
 type openAIResponsesRequest struct {
-	Model              string            `json:"model"`
-	Input              any               `json:"input"`                         // string or []ResponsesInputItem
-	Instructions       string            `json:"instructions,omitempty"`
-	MaxOutputTokens    *int              `json:"max_output_tokens,omitempty"`
-	Temperature        *float32          `json:"temperature,omitempty"`
-	TopP               *float32          `json:"top_p,omitempty"`
-	Tools              []any             `json:"tools,omitempty"`
-	ToolChoice         any               `json:"tool_choice,omitempty"`
-	ParallelToolCalls  *bool             `json:"parallel_tool_calls,omitempty"`
-	PreviousResponseID string            `json:"previous_response_id,omitempty"`
-	Store              *bool             `json:"store,omitempty"`
-	Metadata           map[string]string `json:"metadata,omitempty"`
-	Truncation         string            `json:"truncation,omitempty"` // "auto" or "disabled"
+	Model              string              `json:"model"`
+	Input              any                 `json:"input"` // string or []ResponsesInputItem
+	Instructions       string              `json:"instructions,omitempty"`
+	MaxOutputTokens    *int                `json:"max_output_tokens,omitempty"`
+	Temperature        *float32            `json:"temperature,omitempty"`
+	TopP               *float32            `json:"top_p,omitempty"`
+	Tools              []any               `json:"tools,omitempty"`
+	ToolChoice         any                 `json:"tool_choice,omitempty"`
+	ParallelToolCalls  *bool               `json:"parallel_tool_calls,omitempty"`
+	PreviousResponseID string              `json:"previous_response_id,omitempty"`
+	Store              *bool               `json:"store,omitempty"`
+	Metadata           map[string]string   `json:"metadata,omitempty"`
+	Truncation         string              `json:"truncation,omitempty"` // "auto" or "disabled"
 	Reasoning          *responsesReasoning `json:"reasoning,omitempty"`
 	Text               *responsesTextParam `json:"text,omitempty"`
-	ServiceTier        *string           `json:"service_tier,omitempty"`
-	User               string            `json:"user,omitempty"`
-	Stream             bool              `json:"stream,omitempty"`
-	TopLogProbs        *int              `json:"top_logprobs,omitempty"`
+	ServiceTier        *string             `json:"service_tier,omitempty"`
+	User               string              `json:"user,omitempty"`
+	Stream             bool                `json:"stream,omitempty"`
+	TopLogProbs        *int                `json:"top_logprobs,omitempty"`
 }
 
 // responsesReasoning configures reasoning for o-series and gpt-5 models.
@@ -151,16 +155,17 @@ type responsesInputItem struct {
 
 // inputContentPart represents a content part in a structured input.
 type inputContentPart struct {
-	Type     string `json:"type"`               // "input_text", "input_image", "input_file"
+	Type     string `json:"type"` // "input_text", "input_image", "input_file"
 	Text     string `json:"text,omitempty"`
 	ImageURL string `json:"image_url,omitempty"`
 	FileID   string `json:"file_id,omitempty"`
+	FileURL  string `json:"file_url,omitempty"`
 	Detail   string `json:"detail,omitempty"` // "auto", "low", "high"
 }
 
 // functionCallInputItem represents a function call in the input (for multi-turn).
 type functionCallInputItem struct {
-	Type      string          `json:"type"`      // "function_call"
+	Type      string          `json:"type"` // "function_call"
 	ID        string          `json:"id"`
 	CallID    string          `json:"call_id"`
 	Name      string          `json:"name"`
@@ -169,7 +174,7 @@ type functionCallInputItem struct {
 
 // functionCallOutputItem represents a function call output in the input.
 type functionCallOutputItem struct {
-	Type   string `json:"type"`    // "function_call_output"
+	Type   string `json:"type"` // "function_call_output"
 	CallID string `json:"call_id"`
 	Output string `json:"output"`
 }
@@ -229,9 +234,9 @@ type responsesOutputItem struct {
 
 // responsesContent represents a content item in the output.
 type responsesContent struct {
-	Type        string               `json:"type"`
-	Text        string               `json:"text,omitempty"`
-	Refusal     string               `json:"refusal,omitempty"`
+	Type        string                `json:"type"`
+	Text        string                `json:"text,omitempty"`
+	Refusal     string                `json:"refusal,omitempty"`
 	Annotations []responsesAnnotation `json:"annotations,omitempty"`
 }
 
@@ -352,15 +357,9 @@ func (p *OpenAIProvider) buildResponsesRequest(req *llm.ChatRequest) openAIRespo
 		body.Tools = tools
 	}
 
-	// Reasoning
-	if req.ReasoningEffort != "" || req.ReasoningMode != "" {
-		r := &responsesReasoning{}
-		if req.ReasoningEffort != "" {
-			r.Effort = req.ReasoningEffort
-		} else if req.ReasoningMode != "" {
-			r.Effort = req.ReasoningMode
-		}
-		body.Reasoning = r
+	// Reasoning: only pass valid effort values
+	if effort, ok := chooseResponsesReasoningEffort(req); ok {
+		body.Reasoning = &responsesReasoning{Effort: effort}
 	}
 
 	// ResponseFormat → text.format
@@ -450,7 +449,38 @@ func buildInputContent(m llm.Message) any {
 		}
 		parts = append(parts, part)
 	}
+	for _, video := range m.Videos {
+		if video.URL == "" {
+			continue
+		}
+		parts = append(parts, inputContentPart{
+			Type:    "input_file",
+			FileURL: video.URL,
+		})
+	}
 	return parts
+}
+
+func chooseResponsesReasoningEffort(req *llm.ChatRequest) (string, bool) {
+	allowed := map[string]struct{}{
+		"none": {}, "minimal": {}, "low": {}, "medium": {}, "high": {}, "xhigh": {},
+	}
+	if req == nil {
+		return "", false
+	}
+	if _, ok := allowed[req.ReasoningEffort]; ok {
+		return req.ReasoningEffort, true
+	}
+	switch req.ReasoningMode {
+	case "minimal", "low", "medium", "high":
+		return req.ReasoningMode, true
+	case "thinking":
+		return "medium", true
+	case "extended":
+		return "high", true
+	default:
+		return "", false
+	}
 }
 
 // toResponsesAPIChatResponse 将 Responses API 响应转换为统一的 llm.ChatResponse.
@@ -621,6 +651,9 @@ func streamResponsesSSE(ctx context.Context, body io.ReadCloser, providerName st
 
 		var currentID string
 		var currentModel string
+		toolCallName := map[string]string{}
+		toolCallArgs := map[string][]byte{}
+		finishSent := false
 
 		for {
 			line, err := reader.ReadString('\n')
@@ -695,21 +728,13 @@ func streamResponsesSSE(ctx context.Context, body io.ReadCloser, providerName st
 				delta, _ := event["delta"].(string)
 				name, _ := event["name"].(string)
 				itemID, _ := event["item_id"].(string)
-				select {
-				case <-ctx.Done():
-					return
-				case ch <- llm.StreamChunk{
-					ID: currentID, Provider: providerName, Model: currentModel,
-					Delta: llm.Message{
-						Role: llm.RoleAssistant,
-						ToolCalls: []llm.ToolCall{{
-							ID:        itemID,
-							Name:      name,
-							Arguments: json.RawMessage(delta),
-						}},
-					},
-				}:
+				if itemID == "" {
+					continue
 				}
+				if name != "" {
+					toolCallName[itemID] = name
+				}
+				toolCallArgs[itemID] = append(toolCallArgs[itemID], []byte(delta)...)
 
 			case "response.completed":
 				if resp, ok := event["response"].(map[string]any); ok {
@@ -722,7 +747,13 @@ func streamResponsesSSE(ctx context.Context, body io.ReadCloser, providerName st
 							return
 						case ch <- llm.StreamChunk{
 							ID: currentID, Provider: providerName, Model: currentModel,
-							FinishReason: "stop",
+							FinishReason: func() string {
+								if finishSent {
+									return ""
+								}
+								finishSent = true
+								return "stop"
+							}(),
 							Usage: &llm.ChatUsage{
 								PromptTokens:     int(inputTokens),
 								CompletionTokens: int(outputTokens),
@@ -734,6 +765,10 @@ func streamResponsesSSE(ctx context.Context, body io.ReadCloser, providerName st
 				}
 
 			case "response.output_text.done":
+				if finishSent {
+					continue
+				}
+				finishSent = true
 				select {
 				case <-ctx.Done():
 					return
@@ -744,11 +779,31 @@ func streamResponsesSSE(ctx context.Context, body io.ReadCloser, providerName st
 				}
 
 			case "response.function_call_arguments.done":
+				itemID, _ := event["item_id"].(string)
+				if itemID == "" {
+					continue
+				}
+				arguments := toolCallArgs[itemID]
+				name := toolCallName[itemID]
+				delete(toolCallArgs, itemID)
+				delete(toolCallName, itemID)
+				if finishSent {
+					continue
+				}
+				finishSent = true
 				select {
 				case <-ctx.Done():
 					return
 				case ch <- llm.StreamChunk{
 					ID: currentID, Provider: providerName, Model: currentModel,
+					Delta: llm.Message{
+						Role: llm.RoleAssistant,
+						ToolCalls: []llm.ToolCall{{
+							ID:        itemID,
+							Name:      name,
+							Arguments: json.RawMessage(arguments),
+						}},
+					},
 					FinishReason: "tool_calls",
 				}:
 				}

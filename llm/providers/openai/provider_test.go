@@ -9,6 +9,7 @@ import (
 
 	"github.com/BaSui01/agentflow/llm"
 	"github.com/BaSui01/agentflow/llm/providers"
+	"github.com/BaSui01/agentflow/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
@@ -48,6 +49,7 @@ func TestNewOpenAIProvider_Defaults(t *testing.T) {
 			p := NewOpenAIProvider(tt.cfg, zap.NewNop())
 			require.NotNil(t, p)
 			assert.Equal(t, tt.expectedName, p.Name())
+			assert.Equal(t, "https://api.openai.com", p.Cfg.BaseURL)
 		})
 	}
 }
@@ -384,6 +386,75 @@ func TestOpenAIProvider_Stream(t *testing.T) {
 	require.Len(t, chunks, 1)
 	assert.Equal(t, "Hello", chunks[0].Delta.Content)
 	assert.Equal(t, "openai", chunks[0].Provider)
+}
+
+func TestOpenAIProvider_Stream_ResponsesAPI_ToolArgsAreAccumulated(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(http.StatusOK)
+
+		_, _ = w.Write([]byte("event: response.created\n"))
+		_, _ = w.Write([]byte(`data: {"type":"response.created","response":{"id":"resp_1","model":"gpt-5.2"}}` + "\n\n"))
+		_, _ = w.Write([]byte("event: response.function_call_arguments.delta\n"))
+		_, _ = w.Write([]byte(`data: {"type":"response.function_call_arguments.delta","item_id":"fc_1","name":"lookup","delta":"{\"city\":"}` + "\n\n"))
+		_, _ = w.Write([]byte("event: response.function_call_arguments.delta\n"))
+		_, _ = w.Write([]byte(`data: {"type":"response.function_call_arguments.delta","item_id":"fc_1","name":"lookup","delta":"\"NYC\"}"}` + "\n\n"))
+		_, _ = w.Write([]byte("event: response.function_call_arguments.done\n"))
+		_, _ = w.Write([]byte(`data: {"type":"response.function_call_arguments.done","item_id":"fc_1"}` + "\n\n"))
+		_, _ = w.Write([]byte("data: [DONE]\n\n"))
+	}))
+	t.Cleanup(func() { server.Close() })
+
+	p := NewOpenAIProvider(providers.OpenAIConfig{
+		BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key", BaseURL: server.URL},
+		UseResponsesAPI:    true,
+	}, zap.NewNop())
+
+	ch, err := p.Stream(context.Background(), &llm.ChatRequest{
+		Messages: []llm.Message{{Role: llm.RoleUser, Content: "Weather?"}},
+	})
+	require.NoError(t, err)
+
+	var gotToolCall *llm.ToolCall
+	for c := range ch {
+		if len(c.Delta.ToolCalls) > 0 {
+			tc := c.Delta.ToolCalls[0]
+			gotToolCall = &tc
+		}
+	}
+
+	require.NotNil(t, gotToolCall)
+	assert.Equal(t, "fc_1", gotToolCall.ID)
+	assert.Equal(t, "lookup", gotToolCall.Name)
+	assert.JSONEq(t, `{"city":"NYC"}`, string(gotToolCall.Arguments))
+}
+
+func TestBuildInputContent_IncludesVideoAsInputFile(t *testing.T) {
+	content := buildInputContent(llm.Message{
+		Role:    llm.RoleUser,
+		Content: "analyze this video",
+		Videos:  []types.VideoContent{{URL: "https://example.com/video.mp4"}},
+	})
+
+	parts, ok := content.([]inputContentPart)
+	require.True(t, ok)
+	require.Len(t, parts, 2)
+	assert.Equal(t, "input_text", parts[0].Type)
+	assert.Equal(t, "input_file", parts[1].Type)
+	assert.Equal(t, "https://example.com/video.mp4", parts[1].FileURL)
+}
+
+func TestChooseResponsesReasoningEffort(t *testing.T) {
+	effort, ok := chooseResponsesReasoningEffort(&llm.ChatRequest{ReasoningEffort: "low"})
+	require.True(t, ok)
+	assert.Equal(t, "low", effort)
+
+	effort, ok = chooseResponsesReasoningEffort(&llm.ChatRequest{ReasoningMode: "extended"})
+	require.True(t, ok)
+	assert.Equal(t, "high", effort)
+
+	_, ok = chooseResponsesReasoningEffort(&llm.ChatRequest{ReasoningMode: "unsupported"})
+	assert.False(t, ok)
 }
 
 func TestOpenAIProvider_Stream_Error(t *testing.T) {
