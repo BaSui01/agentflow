@@ -37,9 +37,10 @@ func NewLlamaProvider(cfg providers.LlamaConfig, logger *zap.Logger) *LlamaProvi
 		Provider: openaicompat.New(openaicompat.Config{
 			ProviderName:  fmt.Sprintf("llama-%s", cfg.Provider),
 			APIKey:        cfg.APIKey,
+			APIKeys:       cfg.APIKeys,
 			BaseURL:       cfg.BaseURL,
 			DefaultModel:  cfg.Model,
-			FallbackModel: "meta-llama/Llama-3-70b-chat-hf",
+			FallbackModel: "meta-llama/Llama-3.3-70B-Instruct-Turbo",
 			Timeout:       cfg.Timeout,
 		}, logger),
 	}

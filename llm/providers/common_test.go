@@ -172,6 +172,8 @@ func TestConvertToolsToOpenAI(t *testing.T) {
 		require.Len(t, result, 1)
 		assert.Equal(t, "function", result[0].Type)
 		assert.Equal(t, "search", result[0].Function.Name)
+		assert.Equal(t, "Search the web", result[0].Function.Description)
+		assert.JSONEq(t, `{"type":"object"}`, string(result[0].Function.Parameters))
 	})
 }
 
@@ -431,4 +433,7 @@ func TestListModelsOpenAICompat(t *testing.T) {
 		assert.Equal(t, llm.ErrUnauthorized, llmErr.Code)
 	})
 }
+
+// =============================================================================
+// detectImageMIME tests
 

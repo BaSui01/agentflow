@@ -292,7 +292,7 @@ func (e *DefaultExecutor) Execute(ctx context.Context, calls []llm.ToolCall) []T
 // executeWithRetry 执行单个工具调用，失败时按配置重试.
 func (e *DefaultExecutor) executeWithRetry(ctx context.Context, call llm.ToolCall) ToolResult {
 	result := e.ExecuteOne(ctx, call)
-	if result.Error == "" || e.config.MaxRetries <= 0 {
+	if !result.IsError() || e.config.MaxRetries <= 0 {
 		return result
 	}
 
@@ -312,7 +312,7 @@ func (e *DefaultExecutor) executeWithRetry(ctx context.Context, call llm.ToolCal
 		}
 
 		result = e.ExecuteOne(ctx, call)
-		if result.Error == "" {
+		if !result.IsError() {
 			return result
 		}
 

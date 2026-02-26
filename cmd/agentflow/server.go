@@ -15,14 +15,21 @@ import (
 	"github.com/BaSui01/agentflow/agent/evaluation"
 	"github.com/BaSui01/agentflow/agent/memory"
 	mongostore "github.com/BaSui01/agentflow/agent/persistence/mongodb"
+	"github.com/BaSui01/agentflow/agent/protocol/a2a"
+	"github.com/BaSui01/agentflow/agent/protocol/mcp"
 	"github.com/BaSui01/agentflow/agent/runtime"
 	"github.com/BaSui01/agentflow/agent/skills"
 	"github.com/BaSui01/agentflow/api/handlers"
 	"github.com/BaSui01/agentflow/config"
 	"github.com/BaSui01/agentflow/internal/bridge"
 	"github.com/BaSui01/agentflow/llm"
+	"github.com/BaSui01/agentflow/llm/budget"
+	"github.com/BaSui01/agentflow/llm/cache"
+	"github.com/BaSui01/agentflow/llm/embedding"
 	llmfactory "github.com/BaSui01/agentflow/llm/factory"
-	"github.com/BaSui01/agentflow/llm/retry"
+	llmmw "github.com/BaSui01/agentflow/llm/middleware"
+	"github.com/BaSui01/agentflow/llm/observability"
+	"github.com/BaSui01/agentflow/llm/providers"
 	"github.com/BaSui01/agentflow/llm/tools"
 	"github.com/BaSui01/agentflow/pkg/metrics"
 	mw "github.com/BaSui01/agentflow/pkg/middleware"
@@ -30,7 +37,10 @@ import (
 	"github.com/BaSui01/agentflow/pkg/server"
 	"github.com/BaSui01/agentflow/pkg/telemetry"
 	"github.com/BaSui01/agentflow/pkg/tlsutil"
+	"github.com/BaSui01/agentflow/rag"
 	"github.com/BaSui01/agentflow/types"
+	"github.com/BaSui01/agentflow/workflow"
+	"github.com/BaSui01/agentflow/workflow/dsl"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
@@ -65,6 +75,9 @@ type Server struct {
 	chatHandler       *handlers.ChatHandler
 	agentHandler      *handlers.AgentHandler
 	apiKeyHandler     *handlers.APIKeyHandler
+	ragHandler        *handlers.RAGHandler
+	workflowHandler   *handlers.WorkflowHandler
+	protocolHandler   *handlers.ProtocolHandler
 	multimodalHandler *handlers.MultimodalHandler
 	multimodalRedis   *redis.Client
 
@@ -81,6 +94,12 @@ type Server struct {
 
 	// LLM provider (nil when API key not configured)
 	provider llm.Provider
+
+	// LLM 增强层组件
+	budgetManager *budget.TokenBudgetManager
+	costTracker   *observability.CostTracker
+	llmCache      *cache.MultiLevelCache
+	llmMetrics    *observability.Metrics
 
 	// Agent resolver (nil when no LLM provider)
 	resolver *agent.CachingResolver
@@ -332,11 +351,72 @@ func (s *Server) initHandlers() error {
 				zap.String("provider", s.cfg.LLM.DefaultProvider),
 				zap.Error(err))
 		} else {
-			// Wrap with retry middleware for automatic exponential backoff
-			provider = llmfactory.WrapWithRetry(provider, retry.DefaultRetryPolicy(), s.logger)
+			// 1. ResilientProvider (替代 WrapWithRetry，含 retry + circuit breaker + idempotency)
+			provider = llm.NewResilientProvider(provider, nil, s.logger)
+
+			// 2. 初始化可观测组件
+			if llmMetrics, mErr := observability.NewMetrics(); mErr != nil {
+				s.logger.Warn("Failed to create LLM metrics", zap.Error(mErr))
+			} else {
+				s.llmMetrics = llmMetrics
+			}
+			costCalc := observability.NewCostCalculator()
+			s.costTracker = observability.NewCostTracker(costCalc)
+
+			// 3. 条件初始化预算管理器
+			if s.cfg.Budget.Enabled {
+				budgetCfg := budget.BudgetConfig{
+					MaxTokensPerMinute: s.cfg.Budget.MaxTokensPerMinute,
+					MaxTokensPerDay:    s.cfg.Budget.MaxTokensPerDay,
+					MaxCostPerDay:      s.cfg.Budget.MaxCostPerDay,
+					AlertThreshold:     s.cfg.Budget.AlertThreshold,
+				}
+				s.budgetManager = budget.NewTokenBudgetManager(budgetCfg, s.logger)
+				s.logger.Info("Budget manager initialized")
+			}
+
+			// 4. 条件初始化缓存
+			if s.cfg.Cache.Enabled {
+				cacheCfg := &cache.CacheConfig{
+					LocalMaxSize:    s.cfg.Cache.LocalMaxSize,
+					LocalTTL:        s.cfg.Cache.LocalTTL,
+					EnableLocal:     true,
+					EnableRedis:     s.cfg.Cache.EnableRedis,
+					RedisTTL:        s.cfg.Cache.RedisTTL,
+					KeyStrategyType: s.cfg.Cache.KeyStrategy,
+				}
+				s.llmCache = cache.NewMultiLevelCache(nil, cacheCfg, s.logger)
+				s.logger.Info("LLM cache initialized")
+			}
+
+			// 5. 构建中间件链
+			chain := llmmw.NewChain(
+				llmmw.RecoveryMiddleware(func(v any) {
+					s.logger.Error("LLM middleware panic recovered", zap.Any("panic", v))
+				}),
+				llmmw.LoggingMiddleware(s.logger.Sugar().Infof),
+				llmmw.TimeoutMiddleware(s.cfg.LLM.Timeout),
+			)
+			if s.llmMetrics != nil {
+				chain.Use(llmmw.MetricsMiddleware(&llmmw.OtelMetricsAdapter{Metrics: s.llmMetrics}))
+			}
+			if s.llmCache != nil {
+				chain.Use(llmmw.CacheMiddleware(&llmmw.PromptCacheAdapter{Cache: s.llmCache}))
+			}
+			// EmptyToolsCleaner 作为请求改写中间件
+			cleaner := llmmw.NewEmptyToolsCleaner()
+			chain.UseFront(llmmw.TransformMiddleware(func(req *llm.ChatRequest) {
+				if req != nil {
+					_, _ = cleaner.Rewrite(context.Background(), req)
+				}
+			}, nil))
+
+			// 6. 包装为 Provider
+			provider = llmmw.NewMiddlewareProvider(provider, chain)
+
 			s.provider = provider
 			s.chatHandler = handlers.NewChatHandler(provider, s.logger)
-			s.logger.Info("Chat handler initialized",
+			s.logger.Info("Chat handler initialized with middleware chain",
 				zap.String("provider", s.cfg.LLM.DefaultProvider))
 		}
 	} else {
@@ -436,8 +516,50 @@ func (s *Server) initHandlers() error {
 		s.logger.Info("Multimodal framework handler disabled by config")
 	}
 
+	// Initialize MCP/A2A protocol handler
+	mcpSrv := mcp.NewMCPServer("agentflow", "1.0.0", s.logger)
+	a2aSrv := a2a.NewHTTPServer(&a2a.ServerConfig{Logger: s.logger})
+	s.protocolHandler = handlers.NewProtocolHandler(mcpSrv, a2aSrv, s.logger)
+	s.logger.Info("Protocol handler initialized (MCP + A2A)")
+
+	// Initialize RAG handler with in-memory vector store.
+	// Embedding provider is created when an LLM API key is available;
+	// without it the RAG endpoints are disabled (search requires embeddings).
+	s.initRAGHandler()
+
+	// Initialize Workflow handler (no external dependencies required)
+	dagExecutor := workflow.NewDAGExecutor(nil, s.logger)
+	dslParser := dsl.NewParser()
+	s.workflowHandler = handlers.NewWorkflowHandler(dagExecutor, dslParser, s.logger)
+	s.logger.Info("Workflow handler initialized")
+
 	s.logger.Info("Handlers initialized")
 	return nil
+}
+
+// initRAGHandler initializes the RAG handler.
+// Uses InMemoryVectorStore as default. Creates an embedding provider from the
+// configured LLM API key when available; otherwise RAG endpoints are disabled.
+func (s *Server) initRAGHandler() {
+	if s.cfg.LLM.APIKey == "" {
+		s.logger.Info("RAG handler disabled (no LLM API key for embedding)")
+		return
+	}
+
+	// Create embedding provider based on the configured LLM provider.
+	// Most providers expose an OpenAI-compatible embedding endpoint.
+	embCfg := embedding.OpenAIConfig{
+		BaseProviderConfig: providers.BaseProviderConfig{
+			APIKey:  s.cfg.LLM.APIKey,
+			BaseURL: s.cfg.LLM.BaseURL,
+			Timeout: s.cfg.LLM.Timeout,
+		},
+	}
+	embProvider := embedding.NewOpenAIProvider(embCfg)
+
+	store := rag.NewInMemoryVectorStore(s.logger)
+	s.ragHandler = handlers.NewRAGHandler(store, embProvider, s.logger)
+	s.logger.Info("RAG handler initialized (in-memory store, embedding provider ready)")
 }
 
 // initHotReloadManager 初始化热更新管理器
@@ -553,6 +675,33 @@ func (s *Server) startHTTPServer() error {
 		mux.HandleFunc("/api/v1/multimodal/plan", s.multimodalHandler.HandlePlan)
 		mux.HandleFunc("/api/v1/multimodal/chat", s.multimodalHandler.HandleChat)
 		s.logger.Info("Multimodal framework routes registered")
+	}
+
+	// Protocol API routes (MCP + A2A)
+	if s.protocolHandler != nil {
+		ph := s.protocolHandler
+		mux.HandleFunc("/api/v1/mcp/resources", ph.HandleMCPListResources)
+		mux.HandleFunc("/api/v1/mcp/resources/", ph.HandleMCPGetResource)
+		mux.HandleFunc("/api/v1/mcp/tools", ph.HandleMCPListTools)
+		mux.HandleFunc("/api/v1/mcp/tools/", ph.HandleMCPCallTool)
+		mux.HandleFunc("/api/v1/a2a/.well-known/agent.json", ph.HandleA2AAgentCard)
+		mux.HandleFunc("/api/v1/a2a/tasks", ph.HandleA2ASendTask)
+		s.logger.Info("Protocol API routes registered (MCP + A2A)")
+	}
+
+	// RAG API routes
+	if s.ragHandler != nil {
+		mux.HandleFunc("/api/v1/rag/query", s.ragHandler.HandleQuery)
+		mux.HandleFunc("/api/v1/rag/index", s.ragHandler.HandleIndex)
+		s.logger.Info("RAG API routes registered")
+	}
+
+	// Workflow API routes
+	if s.workflowHandler != nil {
+		mux.HandleFunc("/api/v1/workflows/execute", s.workflowHandler.HandleExecute)
+		mux.HandleFunc("/api/v1/workflows/parse", s.workflowHandler.HandleParse)
+		mux.HandleFunc("/api/v1/workflows", s.workflowHandler.HandleList)
+		s.logger.Info("Workflow API routes registered")
 	}
 
 	// ========================================

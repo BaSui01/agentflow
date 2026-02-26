@@ -17,8 +17,10 @@ type (
 	TokenUsage   = types.TokenUsage
 	Error        = types.Error
 	ErrorCode    = types.ErrorCode
-	ImageContent = types.ImageContent
-	Annotation   = types.Annotation
+	ImageContent  = types.ImageContent
+	VideoContent  = types.VideoContent
+	ThinkingBlock = types.ThinkingBlock
+	Annotation    = types.Annotation
 )
 
 // 重导出常量.

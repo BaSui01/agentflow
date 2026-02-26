@@ -37,7 +37,7 @@ func TestNewGrokProvider_Defaults(t *testing.T) {
 
 func TestGrokProvider_FallbackModel(t *testing.T) {
 	p := NewGrokProvider(providers.GrokConfig{}, zap.NewNop())
-	assert.Equal(t, "grok-beta", p.Cfg.FallbackModel)
+	assert.Equal(t, "grok-3", p.Cfg.FallbackModel)
 }
 
 func TestGrokProvider_NilLogger(t *testing.T) {

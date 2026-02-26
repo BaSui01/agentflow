@@ -19,6 +19,8 @@ func DefaultConfig() *Config {
 		Log:        DefaultLogConfig(),
 		Telemetry:  DefaultTelemetryConfig(),
 		Tools:      DefaultToolsConfig(),
+		Cache:      DefaultCacheConfig(),
+		Budget:     DefaultBudgetConfig(),
 	}
 }
 
@@ -228,5 +230,30 @@ func DefaultToolsConfig() ToolsConfig {
 			UserAgent: "Mozilla/5.0 (compatible; AgentFlow/1.0)",
 			Timeout:   30 * time.Second,
 		},
+	}
+}
+
+// DefaultCacheConfig 返回默认缓存配置
+// 与 cache.DefaultCacheConfig() 对齐
+func DefaultCacheConfig() CacheConfig {
+	return CacheConfig{
+		Enabled:      true,
+		LocalMaxSize: 1000,
+		LocalTTL:     5 * time.Minute,
+		EnableRedis:  false,
+		RedisTTL:     1 * time.Hour,
+		KeyStrategy:  "hash",
+	}
+}
+
+// DefaultBudgetConfig 返回默认预算配置
+// 与 budget.DefaultBudgetConfig() 对齐
+func DefaultBudgetConfig() BudgetConfig {
+	return BudgetConfig{
+		Enabled:            true,
+		MaxTokensPerMinute: 500000,
+		MaxTokensPerDay:    50000000,
+		MaxCostPerDay:      1000.0,
+		AlertThreshold:     0.8,
 	}
 }

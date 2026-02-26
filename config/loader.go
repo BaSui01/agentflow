@@ -56,6 +56,12 @@ type Config struct {
 
 	// Tools 工具提供者配置
 	Tools ToolsConfig `yaml:"tools" env:"TOOLS"`
+
+	// Cache LLM 缓存配置
+	Cache CacheConfig `yaml:"cache" env:"CACHE"`
+
+	// Budget Token 预算管理配置
+	Budget BudgetConfig `yaml:"budget" env:"BUDGET"`
 }
 
 // ServerConfig 服务器配置
@@ -734,4 +740,34 @@ func MaskAPIKey(key string) string {
 		return "***"
 	}
 	return key[:6] + "..." + key[len(key)-3:]
+}
+
+// CacheConfig LLM 缓存配置
+type CacheConfig struct {
+	// 是否启用缓存
+	Enabled bool `yaml:"enabled" env:"ENABLED"`
+	// 本地缓存最大条目数
+	LocalMaxSize int `yaml:"local_max_size" env:"LOCAL_MAX_SIZE"`
+	// 本地缓存 TTL
+	LocalTTL time.Duration `yaml:"local_ttl" env:"LOCAL_TTL"`
+	// 是否启用 Redis 缓存
+	EnableRedis bool `yaml:"enable_redis" env:"ENABLE_REDIS"`
+	// Redis 缓存 TTL
+	RedisTTL time.Duration `yaml:"redis_ttl" env:"REDIS_TTL"`
+	// 缓存键策略: hash | hierarchical
+	KeyStrategy string `yaml:"key_strategy" env:"KEY_STRATEGY"`
+}
+
+// BudgetConfig Token 预算管理配置
+type BudgetConfig struct {
+	// 是否启用预算管理
+	Enabled bool `yaml:"enabled" env:"ENABLED"`
+	// 每分钟最大 Token 数
+	MaxTokensPerMinute int `yaml:"max_tokens_per_minute" env:"MAX_TOKENS_PER_MINUTE"`
+	// 每天最大 Token 数
+	MaxTokensPerDay int `yaml:"max_tokens_per_day" env:"MAX_TOKENS_PER_DAY"`
+	// 每天最大花费 (USD)
+	MaxCostPerDay float64 `yaml:"max_cost_per_day" env:"MAX_COST_PER_DAY"`
+	// 告警阈值 (0.0-1.0)
+	AlertThreshold float64 `yaml:"alert_threshold" env:"ALERT_THRESHOLD"`
 }

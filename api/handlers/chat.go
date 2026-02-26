@@ -146,7 +146,7 @@ func (h *ChatHandler) HandleStream(w http.ResponseWriter, r *http.Request) {
 	// 发送流式数据
 	flusher, ok := w.(http.Flusher)
 	if !ok {
-		err := types.NewError(types.ErrInternalError, "streaming not supported")
+		err := types.NewInternalError("streaming not supported")
 		WriteError(w, err, h.logger)
 		return
 	}
@@ -192,32 +192,32 @@ var allowedMessageRoles = []string{"system", "user", "assistant", "tool"}
 // validateChatRequest 验证聊天请求
 func (h *ChatHandler) validateChatRequest(req *api.ChatRequest) *types.Error {
 	if req.Model == "" {
-		return types.NewError(types.ErrInvalidRequest, "model is required")
+		return types.NewInvalidRequestError("model is required")
 	}
 
 	if len(req.Messages) == 0 {
-		return types.NewError(types.ErrInvalidRequest, "messages cannot be empty")
+		return types.NewInvalidRequestError("messages cannot be empty")
 	}
 
 	// 验证 max_tokens 参数
 	if req.MaxTokens < 0 {
-		return types.NewError(types.ErrInvalidRequest, "max_tokens must be non-negative")
+		return types.NewInvalidRequestError("max_tokens must be non-negative")
 	}
 
 	// 验证温度参数
 	if req.Temperature < 0 || req.Temperature > 2 {
-		return types.NewError(types.ErrInvalidRequest, "temperature must be between 0 and 2")
+		return types.NewInvalidRequestError("temperature must be between 0 and 2")
 	}
 
 	// 验证 TopP 参数
 	if req.TopP < 0 || req.TopP > 1 {
-		return types.NewError(types.ErrInvalidRequest, "top_p must be between 0 and 1")
+		return types.NewInvalidRequestError("top_p must be between 0 and 1")
 	}
 
 	// 验证每条消息的 role
 	for i, msg := range req.Messages {
 		if !ValidateEnum(msg.Role, allowedMessageRoles) {
-			return types.NewError(types.ErrInvalidRequest,
+			return types.NewInvalidRequestError(
 				fmt.Sprintf("messages[%d].role must be one of: system, user, assistant, tool", i))
 		}
 	}
@@ -358,9 +358,8 @@ func (h *ChatHandler) handleProviderError(w http.ResponseWriter, err error) {
 	}
 
 	// 未知错误，包装为内部错误
-	internalErr := types.NewError(types.ErrInternalError, "provider error").
-		WithCause(err).
-		WithRetryable(false)
+	internalErr := types.NewInternalError("provider error").
+		WithCause(err)
 
 	WriteError(w, internalErr, h.logger)
 }

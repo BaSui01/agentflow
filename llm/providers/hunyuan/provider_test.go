@@ -20,7 +20,7 @@ func TestNewHunyuanProvider_Defaults(t *testing.T) {
 		cfg             providers.HunyuanConfig
 		expectedBaseURL string
 	}{
-		{"empty config uses default", providers.HunyuanConfig{}, "https://api.hunyuan.cloud.tencent.com/v1"},
+		{"empty config uses default", providers.HunyuanConfig{}, "https://api.hunyuan.cloud.tencent.com"},
 		{"custom BaseURL preserved", providers.HunyuanConfig{
 			BaseProviderConfig: providers.BaseProviderConfig{BaseURL: "https://custom.example.com"},
 		}, "https://custom.example.com"},
@@ -37,7 +37,7 @@ func TestNewHunyuanProvider_Defaults(t *testing.T) {
 
 func TestHunyuanProvider_FallbackModel(t *testing.T) {
 	p := NewHunyuanProvider(providers.HunyuanConfig{}, zap.NewNop())
-	assert.Equal(t, "hunyuan-pro", p.Cfg.FallbackModel)
+	assert.Equal(t, "hunyuan-turbos-latest", p.Cfg.FallbackModel)
 }
 
 func TestHunyuanProvider_NilLogger(t *testing.T) {

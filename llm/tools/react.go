@@ -83,7 +83,7 @@ func (r *ReActExecutor) Execute(ctx context.Context, req *llm.ChatRequest) (*llm
 
 		hasError := false
 		for _, result := range toolResults {
-			if result.Error != "" {
+			if result.IsError() {
 				hasError = true
 				r.logger.Warn("tool execution failed", zap.String("tool", result.Name), zap.String("error", result.Error))
 			}

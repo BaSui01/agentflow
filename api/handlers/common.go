@@ -144,7 +144,7 @@ func mapErrorCodeToHTTPStatus(code types.ErrorCode) int {
 // DecodeJSONBody 解码 JSON 请求体
 func DecodeJSONBody(w http.ResponseWriter, r *http.Request, dst any, logger *zap.Logger) error {
 	if r.Body == nil {
-		err := types.NewError(types.ErrInvalidRequest, "request body is empty")
+		err := types.NewInvalidRequestError("request body is empty")
 		WriteError(w, err, logger)
 		return err
 	}
@@ -156,9 +156,8 @@ func DecodeJSONBody(w http.ResponseWriter, r *http.Request, dst any, logger *zap
 	decoder.DisallowUnknownFields() // 严格模式：拒绝未知字段
 
 	if err := decoder.Decode(dst); err != nil {
-		apiErr := types.NewError(types.ErrInvalidRequest, "invalid JSON body").
-			WithCause(err).
-			WithHTTPStatus(http.StatusBadRequest)
+		apiErr := types.NewInvalidRequestError("invalid JSON body").
+			WithCause(err)
 		WriteError(w, apiErr, logger)
 		return apiErr
 	}
@@ -172,7 +171,7 @@ func DecodeJSONBody(w http.ResponseWriter, r *http.Request, dst any, logger *zap
 func ValidateContentType(w http.ResponseWriter, r *http.Request, logger *zap.Logger) bool {
 	mediaType, _, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
 	if err != nil || mediaType != "application/json" {
-		apiErr := types.NewError(types.ErrInvalidRequest, "Content-Type must be application/json")
+		apiErr := types.NewInvalidRequestError("Content-Type must be application/json")
 		WriteError(w, apiErr, logger)
 		return false
 	}
