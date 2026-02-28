@@ -250,37 +250,43 @@ func (h *MessageHub) SendWithContext(ctx context.Context, msg *Message) error {
 		}
 	}
 
-	// 获取读锁并保持到操作完成
+	// T-011: 缩小锁范围 — 仅在锁内读取 channels map，不在锁内做 channel 发送
 	h.mu.RLock()
-	defer h.mu.RUnlock()
-
-	// 检查是否已关闭
 	if h.closed {
+		h.mu.RUnlock()
 		return fmt.Errorf("message hub is closed")
 	}
 
 	if msg.ToID == "" {
-		// 广播
+		// 广播：复制需要发送的 channel 列表
+		targets := make(map[string]chan *Message, len(h.channels))
 		for id, ch := range h.channels {
 			if id != msg.FromID {
-				select {
-				case ch <- msg:
-					// 消息投递成功，确认消息
-					if h.messageStore != nil {
-						go h.ackMessage(ctx, msg.ID)
-					}
-				default:
-					// channel 满了，消息已持久化，后续可重试
-					h.logger.Debug("channel full, message persisted for retry",
-						zap.String("to", id),
-						zap.String("msg_id", msg.ID),
-					)
+				targets[id] = ch
+			}
+		}
+		h.mu.RUnlock()
+
+		for id, ch := range targets {
+			select {
+			case ch <- msg:
+				// 消息投递成功，确认消息
+				if h.messageStore != nil {
+					go h.ackMessage(ctx, msg.ID)
 				}
+			default:
+				// channel 满了，消息已持久化，后续可重试
+				h.logger.Debug("channel full, message persisted for retry",
+					zap.String("to", id),
+					zap.String("msg_id", msg.ID),
+				)
 			}
 		}
 	} else {
-		// 点对点
+		// 点对点：读取目标 channel 后立即释放锁
 		ch, ok := h.channels[msg.ToID]
+		h.mu.RUnlock()
+
 		if !ok {
 			return fmt.Errorf("channel not found: %s", msg.ToID)
 		}

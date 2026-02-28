@@ -92,6 +92,14 @@ type asyncTask struct {
 	cancel    context.CancelFunc
 }
 
+// Async task status constants.
+const (
+	asyncTaskStatusPending    = "pending"
+	asyncTaskStatusProcessing = "processing"
+	asyncTaskStatusCompleted  = "completed"
+	asyncTaskStatusFailed     = "failed"
+)
+
 // NewHTTPServer用给定的配置创建了新的HTTPServer.
 func NewHTTPServer(config *ServerConfig) *HTTPServer {
 	if config == nil {
@@ -199,13 +207,13 @@ func (s *HTTPServer) convertToPersistTask(task *asyncTask) *persistence.AsyncTas
 
 	// 转换状态
 	switch task.Status {
-	case "pending":
+	case asyncTaskStatusPending:
 		persistTask.Status = persistence.TaskStatusPending
-	case "processing":
+	case asyncTaskStatusProcessing:
 		persistTask.Status = persistence.TaskStatusRunning
-	case "completed":
+	case asyncTaskStatusCompleted:
 		persistTask.Status = persistence.TaskStatusCompleted
-	case "failed":
+	case asyncTaskStatusFailed:
 		persistTask.Status = persistence.TaskStatusFailed
 	default:
 		persistTask.Status = persistence.TaskStatusPending
@@ -234,15 +242,15 @@ func (s *HTTPServer) convertFromPersistTask(persistTask *persistence.AsyncTask) 
 	// 转换状态
 	switch persistTask.Status {
 	case persistence.TaskStatusPending:
-		task.Status = "pending"
+		task.Status = asyncTaskStatusPending
 	case persistence.TaskStatusRunning:
-		task.Status = "processing"
+		task.Status = asyncTaskStatusProcessing
 	case persistence.TaskStatusCompleted:
-		task.Status = "completed"
+		task.Status = asyncTaskStatusCompleted
 	case persistence.TaskStatusFailed:
-		task.Status = "failed"
+		task.Status = asyncTaskStatusFailed
 	default:
-		task.Status = "pending"
+		task.Status = asyncTaskStatusPending
 	}
 
 	task.Error = persistTask.Error
@@ -559,7 +567,7 @@ func (s *HTTPServer) handleAsyncMessage(w http.ResponseWriter, r *http.Request) 
 		ID:        taskID,
 		AgentID:   ag.ID(),
 		Message:   msg,
-		Status:    "pending",
+		Status:    asyncTaskStatusPending,
 		CreatedAt: time.Now(),
 		UpdatedAt: time.Now(),
 		cancel:    cancel,
@@ -617,7 +625,7 @@ func (s *HTTPServer) handleGetTaskResult(w http.ResponseWriter, r *http.Request)
 	}
 
 	switch task.Status {
-	case "pending", "processing":
+	case asyncTaskStatusPending, asyncTaskStatusProcessing:
 		// 任务仍在进行中
 		resp := AsyncResponse{
 			TaskID:  taskID,
@@ -625,10 +633,10 @@ func (s *HTTPServer) handleGetTaskResult(w http.ResponseWriter, r *http.Request)
 			Message: "Task is still processing",
 		}
 		s.writeJSON(w, http.StatusAccepted, resp)
-	case "completed":
+	case asyncTaskStatusCompleted:
 		// 返回结果
 		s.writeJSON(w, http.StatusOK, task.Result)
-	case "failed":
+	case asyncTaskStatusFailed:
 		// 返回错误
 		errMsg := &A2AMessage{
 			ID:        uuid.New().String(),
@@ -742,7 +750,7 @@ func (s *HTTPServer) executeAsyncTask(ctx context.Context, ag agent.Agent, task 
 
 	// 处理状态更新
 	s.asyncTasksMu.Lock()
-	task.Status = "processing"
+	task.Status = asyncTaskStatusProcessing
 	task.UpdatedAt = time.Now()
 	s.asyncTasksMu.Unlock()
 
@@ -762,10 +770,10 @@ func (s *HTTPServer) executeAsyncTask(ctx context.Context, ag agent.Agent, task 
 	// 结果更新任务
 	s.asyncTasksMu.Lock()
 	if err != nil {
-		task.Status = "failed"
+		task.Status = asyncTaskStatusFailed
 		task.Error = err.Error()
 	} else {
-		task.Status = "completed"
+		task.Status = asyncTaskStatusCompleted
 		task.Result = result
 	}
 	task.UpdatedAt = time.Now()
@@ -866,7 +874,7 @@ func (s *HTTPServer) CleanupExpiredTasks(maxAge time.Duration) int {
 	count := 0
 
 	for taskID, task := range s.asyncTasks {
-		if task.Status == "completed" || task.Status == "failed" {
+		if task.Status == asyncTaskStatusCompleted || task.Status == asyncTaskStatusFailed {
 			if task.UpdatedAt.Before(cutoff) {
 				delete(s.asyncTasks, taskID)
 				count++
@@ -945,9 +953,9 @@ func (s *HTTPServer) CancelTask(taskID string) error {
 		return fmt.Errorf("%w: %s", ErrTaskNotFound, taskID)
 	}
 
-	if task.Status == "pending" || task.Status == "processing" {
+	if task.Status == asyncTaskStatusPending || task.Status == asyncTaskStatusProcessing {
 		task.cancel()
-		task.Status = "failed"
+		task.Status = asyncTaskStatusFailed
 		task.Error = "task cancelled"
 		task.UpdatedAt = time.Now()
 	}

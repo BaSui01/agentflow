@@ -100,6 +100,7 @@ func (e *AsyncExecutor) ExecuteWithSubagents(ctx context.Context, input *Input, 
 		if err != nil {
 			e.logger.Warn("failed to spawn subagent",
 				zap.String("subagent_id", subagent.ID()),
+				zap.String("task_type", "subagent_parallel"),
 				zap.Error(err),
 			)
 			continue
@@ -119,6 +120,7 @@ func (e *AsyncExecutor) ExecuteWithSubagents(ctx context.Context, input *Input, 
 			if res.Err != nil {
 				e.logger.Warn("subagent execution failed",
 					zap.String("execution_id", exec.ID),
+					zap.String("task_type", "subagent_parallel"),
 					zap.Error(res.Err),
 				)
 			} else {

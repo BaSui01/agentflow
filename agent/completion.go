@@ -102,7 +102,7 @@ func (b *BaseAgent) ChatCompletion(ctx context.Context, messages []llm.Message) 
 			var final *llm.ChatResponse
 			for ev := range evCh {
 				switch ev.Type {
-				case "llm_chunk":
+				case llmtools.ReActEventLLMChunk:
 					if ev.Chunk != nil && ev.Chunk.Delta.Content != "" {
 						emit(RuntimeStreamEvent{
 							Type:      RuntimeStreamToken,
@@ -111,7 +111,7 @@ func (b *BaseAgent) ChatCompletion(ctx context.Context, messages []llm.Message) 
 							Delta:     ev.Chunk.Delta.Content,
 						})
 					}
-				case "tools_start":
+				case llmtools.ReActEventToolsStart:
 					for _, call := range ev.ToolCalls {
 						emit(RuntimeStreamEvent{
 							Type:      RuntimeStreamToolCall,
@@ -123,7 +123,7 @@ func (b *BaseAgent) ChatCompletion(ctx context.Context, messages []llm.Message) 
 							},
 						})
 					}
-				case "tools_end":
+				case llmtools.ReActEventToolsEnd:
 					for _, tr := range ev.ToolResults {
 						emit(RuntimeStreamEvent{
 							Type:      RuntimeStreamToolResult,
@@ -137,9 +137,9 @@ func (b *BaseAgent) ChatCompletion(ctx context.Context, messages []llm.Message) 
 							},
 						})
 					}
-				case "completed":
+				case llmtools.ReActEventCompleted:
 					final = ev.FinalResponse
-				case "error":
+				case llmtools.ReActEventError:
 					return nil, fmt.Errorf("%s", ev.Error)
 				}
 			}

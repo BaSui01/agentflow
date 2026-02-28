@@ -96,6 +96,13 @@ type LLMHandler interface {
 	ProcessStream(ctx context.Context, input string) (<-chan string, error)
 }
 
+// Channel buffer size defaults for voice sessions.
+const (
+	defaultAudioBufferSize  = 100
+	defaultTextBufferSize   = 10
+	defaultSpeechBufferSize = 100
+)
+
 // VoiceAgent执行实时语音代理.
 type VoiceAgent struct {
 	config VoiceConfig
@@ -144,9 +151,9 @@ func (v *VoiceAgent) Start(ctx context.Context) (*VoiceSession, error) {
 		ID:         fmt.Sprintf("voice_%d", time.Now().UnixNano()),
 		agent:      v,
 		startTime:  time.Now(),
-		audioChan:  make(chan AudioChunk, 100),
-		textChan:   make(chan string, 10),
-		speechChan: make(chan SpeechEvent, 100),
+		audioChan:  make(chan AudioChunk, defaultAudioBufferSize),
+		textChan:   make(chan string, defaultTextBufferSize),
+		speechChan: make(chan SpeechEvent, defaultSpeechBufferSize),
 		doneChan:   make(chan struct{}),
 	}
 
