@@ -205,14 +205,28 @@ func (s *RedisMessageStore) GetMessages(ctx context.Context, topic string, curso
 		return []*Message{}, "", nil
 	}
 
-	// 获取消息数据
+	// 使用 Pipeline 批量获取消息数据，避免 N+1 查询
+	pipe := s.client.Pipeline()
+	cmds := make([]*redis.StringCmd, len(msgIDs))
+	for i, msgID := range msgIDs {
+		cmds[i] = pipe.Get(ctx, s.messageKey(msgID))
+	}
+	_, err = pipe.Exec(ctx)
+	if err != nil && err != redis.Nil {
+		return nil, "", err
+	}
+
 	result := make([]*Message, 0, len(msgIDs))
-	for _, msgID := range msgIDs {
-		msg, err := s.GetMessage(ctx, msgID)
+	for _, cmd := range cmds {
+		data, err := cmd.Bytes()
 		if err != nil {
 			continue
 		}
-		result = append(result, msg)
+		var msg Message
+		if err := json.Unmarshal(data, &msg); err != nil {
+			continue
+		}
+		result = append(result, &msg)
 	}
 
 	// 确定下一个光标
@@ -266,14 +280,29 @@ func (s *RedisMessageStore) GetUnackedMessages(ctx context.Context, topic string
 		return nil, err
 	}
 
+	// 使用 Pipeline 批量获取消息数据，避免 N+1 查询
+	pipe := s.client.Pipeline()
+	cmds := make([]*redis.StringCmd, len(msgIDs))
+	for i, msgID := range msgIDs {
+		cmds[i] = pipe.Get(ctx, s.messageKey(msgID))
+	}
+	_, err = pipe.Exec(ctx)
+	if err != nil && err != redis.Nil {
+		return nil, err
+	}
+
 	result := make([]*Message, 0, len(msgIDs))
-	for _, msgID := range msgIDs {
-		msg, err := s.GetMessage(ctx, msgID)
-		if err != nil {
+	for _, cmd := range cmds {
+		data, cmdErr := cmd.Bytes()
+		if cmdErr != nil {
+			continue
+		}
+		var msg Message
+		if err := json.Unmarshal(data, &msg); err != nil {
 			continue
 		}
 		if msg.AckedAt == nil {
-			result = append(result, msg)
+			result = append(result, &msg)
 		}
 	}
 
@@ -294,10 +323,25 @@ func (s *RedisMessageStore) GetPendingMessages(ctx context.Context, topic string
 		return nil, err
 	}
 
+	// 使用 Pipeline 批量获取消息数据，避免 N+1 查询
+	pipe := s.client.Pipeline()
+	cmds := make([]*redis.StringCmd, len(msgIDs))
+	for i, msgID := range msgIDs {
+		cmds[i] = pipe.Get(ctx, s.messageKey(msgID))
+	}
+	_, err = pipe.Exec(ctx)
+	if err != nil && err != redis.Nil {
+		return nil, err
+	}
+
 	result := make([]*Message, 0)
-	for _, msgID := range msgIDs {
-		msg, err := s.GetMessage(ctx, msgID)
-		if err != nil {
+	for _, cmd := range cmds {
+		data, cmdErr := cmd.Bytes()
+		if cmdErr != nil {
+			continue
+		}
+		var msg Message
+		if err := json.Unmarshal(data, &msg); err != nil {
 			continue
 		}
 
@@ -319,7 +363,7 @@ func (s *RedisMessageStore) GetPendingMessages(ctx context.Context, topic string
 			continue
 		}
 
-		result = append(result, msg)
+		result = append(result, &msg)
 
 		if len(result) >= limit {
 			break
@@ -372,44 +416,48 @@ func (s *RedisMessageStore) DeleteMessage(ctx context.Context, msgID string) err
 
 // 清理删除旧消息
 func (s *RedisMessageStore) Cleanup(ctx context.Context, olderThan time.Duration) (int, error) {
-	// 获取全部话题密钥
-	topicKeys, err := s.client.Keys(ctx, s.keyPrefix+"topic:*").Result()
-	if err != nil {
-		return 0, err
-	}
-
 	cutoff := time.Now().Add(-olderThan)
 	count := 0
 
-	for _, topicKey := range topicKeys {
-		msgIDs, err := s.client.LRange(ctx, topicKey, 0, -1).Result()
+	// 使用 SCAN 替代 Keys() 避免阻塞 Redis
+	var cursor uint64
+	for {
+		keys, nextCursor, err := s.client.Scan(ctx, cursor, s.keyPrefix+"topic:*", 100).Result()
 		if err != nil {
-			continue
+			return count, err
 		}
 
-		for _, msgID := range msgIDs {
-			msg, err := s.GetMessage(ctx, msgID)
+		for _, topicKey := range keys {
+			msgIDs, err := s.client.LRange(ctx, topicKey, 0, -1).Result()
 			if err != nil {
 				continue
 			}
 
-			shouldDelete := false
+			for _, msgID := range msgIDs {
+				msg, err := s.GetMessage(ctx, msgID)
+				if err != nil {
+					continue
+				}
 
-			// 删除比截取时间长的被敲击的信件
-			if msg.AckedAt != nil && msg.AckedAt.Before(cutoff) {
-				shouldDelete = true
-			}
+				shouldDelete := false
+				if msg.AckedAt != nil && msg.AckedAt.Before(cutoff) {
+					shouldDelete = true
+				}
+				if msg.IsExpired() {
+					shouldDelete = true
+				}
 
-			// 同时删除已过期的信件
-			if msg.IsExpired() {
-				shouldDelete = true
-			}
-
-			if shouldDelete {
-				if err := s.DeleteMessage(ctx, msgID); err == nil {
-					count++
+				if shouldDelete {
+					if err := s.DeleteMessage(ctx, msgID); err == nil {
+						count++
+					}
 				}
 			}
+		}
+
+		cursor = nextCursor
+		if cursor == 0 {
+			break
 		}
 	}
 
@@ -422,38 +470,46 @@ func (s *RedisMessageStore) Stats(ctx context.Context) (*MessageStoreStats, erro
 		TopicCounts: make(map[string]int64),
 	}
 
-	// 获取全部话题密钥
-	topicKeys, err := s.client.Keys(ctx, s.keyPrefix+"topic:*").Result()
-	if err != nil {
-		return nil, err
-	}
-
 	var oldestPending time.Time
 
-	for _, topicKey := range topicKeys {
-		topic := topicKey[len(s.keyPrefix+"topic:"):]
-
-		// 获取话题信息计数
-		count, err := s.client.LLen(ctx, topicKey).Result()
+	// 使用 SCAN 替代 Keys() 避免阻塞 Redis
+	var cursor uint64
+	for {
+		keys, nextCursor, err := s.client.Scan(ctx, cursor, s.keyPrefix+"topic:*", 100).Result()
 		if err != nil {
-			continue
-		}
-		stats.TopicCounts[topic] = count
-		stats.TotalMessages += count
-
-		// 获取待计数
-		pendingCount, err := s.client.ZCard(ctx, s.pendingKey(topic)).Result()
-		if err == nil {
-			stats.PendingMessages += pendingCount
+			return nil, err
 		}
 
-		// 获得最年长的等待
-		oldest, err := s.client.ZRangeWithScores(ctx, s.pendingKey(topic), 0, 0).Result()
-		if err == nil && len(oldest) > 0 {
-			ts := time.Unix(0, int64(oldest[0].Score))
-			if oldestPending.IsZero() || ts.Before(oldestPending) {
-				oldestPending = ts
+		for _, topicKey := range keys {
+			topic := topicKey[len(s.keyPrefix+"topic:"):]
+
+			// 获取话题信息计数
+			count, err := s.client.LLen(ctx, topicKey).Result()
+			if err != nil {
+				continue
 			}
+			stats.TopicCounts[topic] = count
+			stats.TotalMessages += count
+
+			// 获取待计数
+			pendingCount, err := s.client.ZCard(ctx, s.pendingKey(topic)).Result()
+			if err == nil {
+				stats.PendingMessages += pendingCount
+			}
+
+			// 获得最年长的等待
+			oldest, err := s.client.ZRangeWithScores(ctx, s.pendingKey(topic), 0, 0).Result()
+			if err == nil && len(oldest) > 0 {
+				ts := time.Unix(0, int64(oldest[0].Score))
+				if oldestPending.IsZero() || ts.Before(oldestPending) {
+					oldestPending = ts
+				}
+			}
+		}
+
+		cursor = nextCursor
+		if cursor == 0 {
+			break
 		}
 	}
 
