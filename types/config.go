@@ -11,6 +11,11 @@ import "time"
 // Note: This is distinct from config.AgentConfig which is for deployment configuration
 // (YAML/env loading, flat structure). This type uses a modular nested structure
 // (Core/LLM/Features/Extensions) for runtime agent behavior configuration.
+//
+// TODO(L-008): config.AgentConfig（部署配置）和 types.AgentConfig（运行时配置）
+// 分布在不同包中，容易混淆。未来可考虑：
+//   1. 在 config 包中提供 ToRuntimeConfig() 方法将部署配置转换为运行时配置
+//   2. 或在文档中更明确地说明两者的使用场景和转换路径
 type AgentConfig struct {
 	// Core configuration (required)
 	Core CoreConfig `json:"core"`

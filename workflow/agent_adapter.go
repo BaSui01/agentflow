@@ -13,6 +13,13 @@ import (
 // ============================================================
 // Agent-Workflow Adapters
 // These adapters bridge the gap between Agent and Workflow systems.
+//
+// L-001: This file intentionally imports the agent package to provide
+// NativeAgentAdapter, which bridges agent.Agent (with *Input/*Output)
+// to the workflow's AgentExecutor interface. This cross-layer dependency
+// is acceptable because the adapter pattern requires knowledge of both
+// sides. The AgentInterface (string I/O) and AgentAdapter exist as a
+// lighter alternative that avoids the agent import.
 // ============================================================
 
 // AgentExecutor defines the interface for agent execution in workflows.

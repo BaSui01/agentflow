@@ -146,6 +146,9 @@ func mapErrorCodeToHTTPStatus(code types.ErrorCode) int {
 // 🛡️ 请求验证辅助函数
 // =============================================================================
 
+// maxRequestBodySize is the maximum allowed request body size (1 MB).
+const maxRequestBodySize = 1 << 20
+
 // DecodeJSONBody 解码 JSON 请求体
 func DecodeJSONBody(w http.ResponseWriter, r *http.Request, dst any, logger *zap.Logger) error {
 	if r.Body == nil {
@@ -157,15 +160,15 @@ func DecodeJSONBody(w http.ResponseWriter, r *http.Request, dst any, logger *zap
 	// V-005: Content-Length pre-check before reading the body.
 	// This rejects obviously oversized requests early, before MaxBytesReader
 	// has to consume and discard the stream.
-	if r.ContentLength > 1<<20 {
+	if r.ContentLength > maxRequestBodySize {
 		err := types.NewError(types.ErrInvalidRequest, "request body too large, maximum is 1MB").
 			WithHTTPStatus(http.StatusRequestEntityTooLarge)
 		WriteError(w, err, logger)
 		return err
 	}
 
-	// Limit request body to 1 MB to prevent abuse.
-	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
+	// Limit request body to prevent abuse.
+	r.Body = http.MaxBytesReader(w, r.Body, maxRequestBodySize)
 
 	decoder := json.NewDecoder(r.Body)
 	decoder.DisallowUnknownFields() // 严格模式：拒绝未知字段
