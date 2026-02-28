@@ -23,6 +23,7 @@ type PoolManager struct {
 	logger *zap.Logger
 	mu     sync.RWMutex
 	closed bool
+	cancel context.CancelFunc // 用于停止 healthCheckLoop goroutine
 }
 
 // PoolConfig 连接池配置
@@ -80,7 +81,9 @@ func NewPoolManager(db *gorm.DB, config PoolConfig, logger *zap.Logger) (*PoolMa
 
 	// 启动健康检查
 	if config.HealthCheckInterval > 0 {
-		go pm.healthCheckLoop()
+		ctx, cancel := context.WithCancel(context.Background())
+		pm.cancel = cancel
+		go pm.healthCheckLoop(ctx)
 	}
 
 	logger.Info("database pool initialized",
@@ -132,6 +135,12 @@ func (pm *PoolManager) Close() error {
 	}
 
 	pm.closed = true
+
+	// 停止 healthCheckLoop goroutine
+	if pm.cancel != nil {
+		pm.cancel()
+	}
+
 	pm.logger.Info("closing database pool")
 
 	return pm.sqlDB.Close()
@@ -142,30 +151,35 @@ func (pm *PoolManager) Close() error {
 // =============================================================================
 
 // healthCheckLoop 健康检查循环
-func (pm *PoolManager) healthCheckLoop() {
+func (pm *PoolManager) healthCheckLoop(ctx context.Context) {
 	ticker := time.NewTicker(pm.config.HealthCheckInterval)
 	defer ticker.Stop()
 
-	for range ticker.C {
-		pm.mu.RLock()
-		if pm.closed {
-			pm.mu.RUnlock()
+	for {
+		select {
+		case <-ctx.Done():
 			return
-		}
-		pm.mu.RUnlock()
+		case <-ticker.C:
+			pm.mu.RLock()
+			if pm.closed {
+				pm.mu.RUnlock()
+				return
+			}
+			pm.mu.RUnlock()
 
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		if err := pm.Ping(ctx); err != nil {
-			pm.logger.Error("database health check failed", zap.Error(err))
-		} else {
-			stats := pm.Stats()
-			pm.logger.Debug("database health check passed",
-				zap.Int("open_connections", stats.OpenConnections),
-				zap.Int("in_use", stats.InUse),
-				zap.Int("idle", stats.Idle),
-			)
+			checkCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+			if err := pm.Ping(checkCtx); err != nil {
+				pm.logger.Error("database health check failed", zap.Error(err))
+			} else {
+				stats := pm.Stats()
+				pm.logger.Debug("database health check passed",
+					zap.Int("open_connections", stats.OpenConnections),
+					zap.Int("in_use", stats.InUse),
+					zap.Int("idle", stats.Idle),
+				)
+			}
+			cancel()
 		}
-		cancel()
 	}
 }
 
