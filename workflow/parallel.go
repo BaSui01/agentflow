@@ -117,6 +117,14 @@ func (w *ParallelWorkflow) Execute(ctx context.Context, input any) (any, error) 
 		wg.Add(1)
 		go func(t Task) {
 			defer wg.Done()
+			defer func() {
+				if r := recover(); r != nil {
+					resultCh <- TaskResult{
+						TaskName: t.Name(),
+						Error:    fmt.Errorf("task %s panicked: %v", t.Name(), r),
+					}
+				}
+			}()
 
 			result, err := t.Execute(ctx, input)
 			resultCh <- TaskResult{
@@ -129,6 +137,11 @@ func (w *ParallelWorkflow) Execute(ctx context.Context, input any) (any, error) 
 
 	// 等待所有任务完成
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				// wg.Wait panicked — channel may already be closed
+			}
+		}()
 		wg.Wait()
 		close(resultCh)
 	}()

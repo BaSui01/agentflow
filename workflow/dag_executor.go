@@ -36,6 +36,12 @@ type DAGExecutor struct {
 // 最大循环深度限制
 const maxLoopDepth = 1000
 
+// defaultMaxRetries is the default number of retries for failed nodes.
+const defaultMaxRetries = 3
+
+// defaultRetryDelay is the default delay between retries for failed nodes.
+const defaultRetryDelay = 100 * time.Millisecond
+
 // CheckpointManager interface for checkpoint integration
 type CheckpointManager interface {
 	SaveCheckpoint(ctx context.Context, checkpoint *EnhancedCheckpoint) error
@@ -102,6 +108,13 @@ func (e *DAGExecutor) Execute(ctx context.Context, graph *DAGGraph, input any) (
 		e.history.Complete(fmt.Errorf("graph has no entry node"))
 		e.historyStore.Save(e.history)
 		return nil, fmt.Errorf("graph has no entry node")
+	}
+
+	// V-018: Cycle detection before execution to prevent infinite loops
+	if err := detectGraphCycles(graph); err != nil {
+		e.history.Complete(err)
+		e.historyStore.Save(e.history)
+		return nil, err
 	}
 
 	entryNode, exists := graph.GetNode(graph.entry)
@@ -288,12 +301,12 @@ func (e *DAGExecutor) handleNodeError(ctx context.Context, graph *DAGGraph, node
 func (e *DAGExecutor) retryNode(ctx context.Context, graph *DAGGraph, node *DAGNode, input any, originalErr error) (any, error) {
 	maxRetries := node.ErrorConfig.MaxRetries
 	if maxRetries <= 0 {
-		maxRetries = 3 // Default
+		maxRetries = defaultMaxRetries
 	}
 
 	retryDelay := time.Duration(node.ErrorConfig.RetryDelayMs) * time.Millisecond
 	if retryDelay <= 0 {
-		retryDelay = 100 * time.Millisecond // Default
+		retryDelay = defaultRetryDelay
 	}
 
 	var lastErr error = originalErr
@@ -626,6 +639,14 @@ func (e *DAGExecutor) executeParallelNode(ctx context.Context, graph *DAGGraph, 
 		wg.Add(1)
 		go func(nodeID string) {
 			defer wg.Done()
+			defer func() {
+				if r := recover(); r != nil {
+					resultChan <- result{
+						nodeID: nodeID,
+						err:    fmt.Errorf("node %s panicked: %v", nodeID, r),
+					}
+				}
+			}()
 
 			nextNode, exists := graph.GetNode(nodeID)
 			if !exists {
@@ -806,4 +827,39 @@ var executionIDCounter uint64
 func generateExecutionID() string {
 	counter := atomic.AddUint64(&executionIDCounter, 1)
 	return fmt.Sprintf("exec_%d_%d", time.Now().UnixNano(), counter)
+}
+
+// detectGraphCycles performs DFS-based cycle detection on the graph.
+// V-018: Prevents infinite execution loops when a graph is passed directly
+// to Execute() without going through DAGBuilder validation.
+func detectGraphCycles(graph *DAGGraph) error {
+	visited := make(map[string]bool)
+	recStack := make(map[string]bool)
+
+	for nodeID := range graph.nodes {
+		if !visited[nodeID] {
+			if hasCycle(graph, nodeID, visited, recStack) {
+				return fmt.Errorf("cycle detected in DAG involving node: %s", nodeID)
+			}
+		}
+	}
+	return nil
+}
+
+func hasCycle(graph *DAGGraph, nodeID string, visited, recStack map[string]bool) bool {
+	visited[nodeID] = true
+	recStack[nodeID] = true
+
+	for _, neighborID := range graph.GetEdges(nodeID) {
+		if !visited[neighborID] {
+			if hasCycle(graph, neighborID, visited, recStack) {
+				return true
+			}
+		} else if recStack[neighborID] {
+			return true
+		}
+	}
+
+	recStack[nodeID] = false
+	return false
 }
