@@ -2,9 +2,10 @@ package kimi
 
 import (
 	"context"
-	"os"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"testing"
-	"time"
 
 	"github.com/BaSui01/agentflow/llm"
 	"github.com/BaSui01/agentflow/llm/providers"
@@ -13,82 +14,211 @@ import (
 	"go.uber.org/zap"
 )
 
-func TestKimiProvider_Name(t *testing.T) {
-	provider := NewKimiProvider(providers.KimiConfig{}, zap.NewNop())
-	assert.Equal(t, "kimi", provider.Name())
+func TestNewKimiProvider_Defaults(t *testing.T) {
+	tests := []struct {
+		name            string
+		cfg             providers.KimiConfig
+		expectedBaseURL string
+	}{
+		{"empty config uses default", providers.KimiConfig{}, "https://api.moonshot.cn"},
+		{"custom BaseURL preserved", providers.KimiConfig{
+			BaseProviderConfig: providers.BaseProviderConfig{BaseURL: "https://custom.example.com"},
+		}, "https://custom.example.com"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := NewKimiProvider(tt.cfg, zap.NewNop())
+			require.NotNil(t, p)
+			assert.Equal(t, "kimi", p.Name())
+			assert.Equal(t, tt.expectedBaseURL, p.Cfg.BaseURL)
+		})
+	}
+}
+
+func TestKimiProvider_FallbackModel(t *testing.T) {
+	p := NewKimiProvider(providers.KimiConfig{}, zap.NewNop())
+	assert.Equal(t, "moonshot-v1-32k", p.Cfg.FallbackModel)
+}
+
+func TestKimiProvider_NilLogger(t *testing.T) {
+	p := NewKimiProvider(providers.KimiConfig{}, nil)
+	require.NotNil(t, p)
+	assert.Equal(t, "kimi", p.Name())
 }
 
 func TestKimiProvider_SupportsNativeFunctionCalling(t *testing.T) {
-	provider := NewKimiProvider(providers.KimiConfig{}, zap.NewNop())
-	assert.True(t, provider.SupportsNativeFunctionCalling())
+	p := NewKimiProvider(providers.KimiConfig{}, zap.NewNop())
+	assert.True(t, p.SupportsNativeFunctionCalling())
 }
 
-func TestKimiProvider_DefaultBaseURL(t *testing.T) {
-	cfg := providers.KimiConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key"}}
-	provider := NewKimiProvider(cfg, zap.NewNop())
-	assert.NotNil(t, provider)
-}
+func TestKimiProvider_Completion(t *testing.T) {
+	var capturedRequest providers.OpenAICompatRequest
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "/v1/chat/completions", r.URL.Path)
+		json.NewDecoder(r.Body).Decode(&capturedRequest)
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(providers.OpenAICompatResponse{
+			ID: "resp-1", Model: "moonshot-v1-8k",
+			Choices: []providers.OpenAICompatChoice{
+				{Index: 0, FinishReason: "stop", Message: providers.OpenAICompatMessage{Role: "assistant", Content: "Hello from Kimi"}},
+			},
+			Usage: &providers.OpenAICompatUsage{PromptTokens: 10, CompletionTokens: 5, TotalTokens: 15},
+		})
+	}))
+	t.Cleanup(func() { server.Close() })
 
-func TestKimiProvider_Integration(t *testing.T) {
-	apiKey := os.Getenv("KIMI_API_KEY")
-	if apiKey == "" {
-		t.Skip("KIMI_API_KEY not set, skipping integration test")
-	}
-
-	provider := NewKimiProvider(providers.KimiConfig{
-		BaseProviderConfig: providers.BaseProviderConfig{
-			APIKey:  apiKey,
-			Model:   "moonshot-v1-8k",
-			Timeout: 30 * time.Second,
-		},
+	p := NewKimiProvider(providers.KimiConfig{
+		BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key", BaseURL: server.URL},
 	}, zap.NewNop())
 
+	resp, err := p.Completion(context.Background(), &llm.ChatRequest{
+		Messages: []llm.Message{{Role: llm.RoleUser, Content: "Hi"}},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "kimi", resp.Provider)
+	assert.Equal(t, "moonshot-v1-8k", resp.Model)
+	require.Len(t, resp.Choices, 1)
+	assert.Equal(t, "Hello from Kimi", resp.Choices[0].Message.Content)
+	assert.Equal(t, 15, resp.Usage.TotalTokens)
+}
+
+func TestKimiProvider_Completion_Error(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusUnauthorized)
+		w.Write([]byte(`{"error":{"message":"Invalid API key"}}`))
+	}))
+	t.Cleanup(func() { server.Close() })
+
+	p := NewKimiProvider(providers.KimiConfig{
+		BaseProviderConfig: providers.BaseProviderConfig{APIKey: "bad", BaseURL: server.URL},
+	}, zap.NewNop())
+
+	_, err := p.Completion(context.Background(), &llm.ChatRequest{
+		Messages: []llm.Message{{Role: llm.RoleUser, Content: "Hi"}},
+	})
+	require.Error(t, err)
+	llmErr, ok := err.(*llm.Error)
+	require.True(t, ok)
+	assert.Equal(t, llm.ErrUnauthorized, llmErr.Code)
+}
+
+func TestKimiProvider_Completion_RateLimited(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusTooManyRequests)
+		w.Write([]byte(`{"error":{"message":"Rate limit"}}`))
+	}))
+	t.Cleanup(func() { server.Close() })
+
+	p := NewKimiProvider(providers.KimiConfig{
+		BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k", BaseURL: server.URL},
+	}, zap.NewNop())
+
+	_, err := p.Completion(context.Background(), &llm.ChatRequest{
+		Messages: []llm.Message{{Role: llm.RoleUser, Content: "Hi"}},
+	})
+	require.Error(t, err)
+	llmErr, ok := err.(*llm.Error)
+	require.True(t, ok)
+	assert.Equal(t, llm.ErrRateLimit, llmErr.Code)
+}
+
+func TestKimiProvider_Stream(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(http.StatusOK)
+		chunk := providers.OpenAICompatResponse{
+			ID: "stream-1", Model: "moonshot-v1-8k",
+			Choices: []providers.OpenAICompatChoice{
+				{Index: 0, Delta: &providers.OpenAICompatMessage{Role: "assistant", Content: "Hello"}},
+			},
+		}
+		data, _ := json.Marshal(chunk)
+		w.Write([]byte("data: "))
+		w.Write(data)
+		w.Write([]byte("\n\ndata: [DONE]\n\n"))
+	}))
+	t.Cleanup(func() { server.Close() })
+
+	p := NewKimiProvider(providers.KimiConfig{
+		BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k", BaseURL: server.URL},
+	}, zap.NewNop())
+
+	ch, err := p.Stream(context.Background(), &llm.ChatRequest{
+		Messages: []llm.Message{{Role: llm.RoleUser, Content: "Hi"}},
+	})
+	require.NoError(t, err)
+
+	var chunks []llm.StreamChunk
+	for c := range ch {
+		chunks = append(chunks, c)
+	}
+	require.Len(t, chunks, 1)
+	assert.Equal(t, "Hello", chunks[0].Delta.Content)
+	assert.Equal(t, "kimi", chunks[0].Provider)
+}
+
+func TestKimiProvider_Stream_Error(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusTooManyRequests)
+		w.Write([]byte(`{"error":{"message":"Rate limit"}}`))
+	}))
+	t.Cleanup(func() { server.Close() })
+
+	p := NewKimiProvider(providers.KimiConfig{
+		BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k", BaseURL: server.URL},
+	}, zap.NewNop())
+
+	_, err := p.Stream(context.Background(), &llm.ChatRequest{
+		Messages: []llm.Message{{Role: llm.RoleUser, Content: "Hi"}},
+	})
+	require.Error(t, err)
+}
+
+func TestKimiProvider_NotSupported(t *testing.T) {
+	p := NewKimiProvider(providers.KimiConfig{}, zap.NewNop())
 	ctx := context.Background()
 
-	t.Run("HealthCheck", func(t *testing.T) {
-		status, err := provider.HealthCheck(ctx)
-		require.NoError(t, err)
-		assert.True(t, status.Healthy)
-		assert.Greater(t, status.Latency, time.Duration(0))
-	})
+	tests := []struct {
+		name    string
+		callFn  func() error
+		feature string
+	}{
+		{"GenerateImage", func() error { _, err := p.GenerateImage(ctx, &llm.ImageGenerationRequest{}); return err }, "image generation"},
+		{"GenerateVideo", func() error { _, err := p.GenerateVideo(ctx, &llm.VideoGenerationRequest{}); return err }, "video generation"},
+		{"GenerateAudio", func() error { _, err := p.GenerateAudio(ctx, &llm.AudioGenerationRequest{}); return err }, "audio generation"},
+		{"TranscribeAudio", func() error { _, err := p.TranscribeAudio(ctx, &llm.AudioTranscriptionRequest{}); return err }, "audio transcription"},
+		{"CreateEmbedding", func() error { _, err := p.CreateEmbedding(ctx, &llm.EmbeddingRequest{}); return err }, "embeddings"},
+		{"CreateFineTuningJob", func() error { _, err := p.CreateFineTuningJob(ctx, &llm.FineTuningJobRequest{}); return err }, "fine-tuning"},
+		{"ListFineTuningJobs", func() error { _, err := p.ListFineTuningJobs(ctx); return err }, "fine-tuning"},
+		{"GetFineTuningJob", func() error { _, err := p.GetFineTuningJob(ctx, "j"); return err }, "fine-tuning"},
+		{"CancelFineTuningJob", func() error { return p.CancelFineTuningJob(ctx, "j") }, "fine-tuning"},
+	}
 
-	t.Run("Completion", func(t *testing.T) {
-		req := &llm.ChatRequest{
-			Model: "moonshot-v1-8k",
-			Messages: []llm.Message{
-				{Role: llm.RoleUser, Content: "你好"},
-			},
-			MaxTokens:   10,
-			Temperature: 0.1,
-		}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := tt.callFn()
+			require.Error(t, err)
+			llmErr, ok := err.(*llm.Error)
+			require.True(t, ok)
+			assert.Equal(t, llm.ErrInvalidRequest, llmErr.Code)
+			assert.Contains(t, llmErr.Message, tt.feature)
+			assert.Equal(t, "kimi", llmErr.Provider)
+		})
+	}
+}
 
-		resp, err := provider.Completion(ctx, req)
-		require.NoError(t, err)
-		assert.NotNil(t, resp)
-		assert.NotEmpty(t, resp.Choices)
-		assert.NotEmpty(t, resp.Choices[0].Message.Content)
-	})
+func TestKimiProvider_HealthCheck(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"object":"list","data":[]}`))
+	}))
+	t.Cleanup(func() { server.Close() })
 
-	t.Run("Stream", func(t *testing.T) {
-		req := &llm.ChatRequest{
-			Model: "moonshot-v1-8k",
-			Messages: []llm.Message{
-				{Role: llm.RoleUser, Content: "数到3"},
-			},
-			MaxTokens: 20,
-		}
+	p := NewKimiProvider(providers.KimiConfig{
+		BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k", BaseURL: server.URL},
+	}, zap.NewNop())
 
-		stream, err := provider.Stream(ctx, req)
-		require.NoError(t, err)
-
-		var chunks []llm.StreamChunk
-		for chunk := range stream {
-			if chunk.Err != nil {
-				t.Fatalf("Stream error: %v", chunk.Err)
-			}
-			chunks = append(chunks, chunk)
-		}
-
-		assert.NotEmpty(t, chunks)
-	})
+	status, err := p.HealthCheck(context.Background())
+	require.NoError(t, err)
+	assert.True(t, status.Healthy)
 }

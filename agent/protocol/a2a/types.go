@@ -34,6 +34,8 @@ type ToolDefinition struct {
 	Description string `json:"description"`
 	// 参数定义了该工具的输入参数的JSON Schema.
 	Parameters *structured.JSONSchema `json:"parameters"`
+	// Version 是工具的版本标识符.
+	Version string `json:"version,omitempty"`
 }
 
 // AgentCard代表一个描述代理能力和元数据的A2A代理卡.

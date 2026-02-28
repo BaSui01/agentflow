@@ -29,6 +29,7 @@
 | [🔧 Tool Integration](./tutorials/04.ToolIntegration.md) | Tool registration, execution, ReAct loop | ⭐⭐⭐ |
 | [📊 Workflow Orchestration](./tutorials/05.WorkflowOrchestration.md) | Chain, parallel, DAG workflows | ⭐⭐⭐ |
 | [🖼️ Multimodal Processing](./tutorials/06.MultimodalProcessing.md) | Image, audio, video processing | ⭐⭐⭐ |
+| [🎬 Multimodal Framework API](./tutorials/21.MultimodalFrameworkAPI.md) | Capability-layer multimodal HTTP API | ⭐⭐⭐ |
 | [🔍 RAG](./tutorials/07.RAG.md) | Vector storage and knowledge retrieval | ⭐⭐⭐⭐ |
 | [👥 Multi-Agent Collaboration](./tutorials/08.MultiAgentCollaboration.md) | Multi-agent coordination | ⭐⭐⭐⭐ |
 
@@ -84,8 +85,10 @@ func main() {
     logger, _ := zap.NewDevelopment()
 
     provider := openai.NewOpenAIProvider(providers.OpenAIConfig{
-        APIKey: os.Getenv("OPENAI_API_KEY"),
-        Model:  "gpt-4o-mini",
+        BaseProviderConfig: providers.BaseProviderConfig{
+            APIKey: os.Getenv("OPENAI_API_KEY"),
+            Model:  "gpt-4o-mini",
+        },
     }, logger)
 
     resp, _ := provider.Completion(context.Background(), &llm.ChatRequest{

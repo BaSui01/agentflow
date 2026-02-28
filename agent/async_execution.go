@@ -3,15 +3,13 @@ package agent
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 
+	"github.com/google/uuid"
 	"go.uber.org/zap"
 )
-
-// executionCounter provides a monotonically increasing counter for unique execution IDs.
-var executionCounter uint64
 
 // executionResult bundles the outcome of an async execution into a single value,
 // eliminating the dual-channel select race between resultCh and errorCh.
@@ -161,11 +159,18 @@ func (e *AsyncExecutor) combineResults(results []*Output) *Output {
 		},
 	}
 
+	var sb strings.Builder
+	var maxDuration time.Duration
 	for i, result := range results {
-		combined.Content += fmt.Sprintf("## Subagent %d\n%s\n\n", i+1, result.Content)
+		sb.WriteString(fmt.Sprintf("## Subagent %d\n%s\n\n", i+1, result.Content))
 		combined.TokensUsed += result.TokensUsed
 		combined.Cost += result.Cost
+		if result.Duration > maxDuration {
+			maxDuration = result.Duration
+		}
 	}
+	combined.Content = sb.String()
+	combined.Duration = maxDuration
 
 	return combined
 }
@@ -189,11 +194,6 @@ type AsyncExecution struct {
 	endTime time.Time
 
 	doneCh chan executionResult
-
-	// waitOnce + waitResult 确保 Wait() 可被多次调用，
-	// 第一次从 doneCh 读取结果并缓存，后续调用直接返回缓存值。
-	waitOnce   sync.Once
-	waitResult executionResult
 }
 
 // setCompleted atomically marks the execution as completed.
@@ -250,21 +250,33 @@ const (
 	ExecutionStatusRunning   ExecutionStatus = "running"
 	ExecutionStatusCompleted ExecutionStatus = "completed"
 	ExecutionStatusFailed    ExecutionStatus = "failed"
-	ExecutionStatusCancelled ExecutionStatus = "cancelled"
+	ExecutionStatusCanceled  ExecutionStatus = "canceled"
 )
 
-// Wait 等待执行完成。可安全地被多次调用，
-// 第一次从 doneCh 读取并缓存结果，后续调用直接返回缓存值。
+// Wait 等待执行完成。可安全地被多次调用。
+// 如果 ctx 被取消，返回 ctx.Err() 但不缓存该错误，后续调用仍可获取实际结果。
 func (e *AsyncExecution) Wait(ctx context.Context) (*Output, error) {
-	e.waitOnce.Do(func() {
-		select {
-		case res := <-e.doneCh:
-			e.waitResult = res
-		case <-ctx.Done():
-			e.waitResult = executionResult{Err: ctx.Err()}
-		}
-	})
-	return e.waitResult.Output, e.waitResult.Err
+	e.mu.RLock()
+	if e.status == ExecutionStatusCompleted {
+		output := e.output
+		e.mu.RUnlock()
+		return output, nil
+	}
+	if e.status == ExecutionStatusFailed {
+		errMsg := e.errMsg
+		e.mu.RUnlock()
+		return nil, fmt.Errorf("execution failed: %s", errMsg)
+	}
+	e.mu.RUnlock()
+
+	select {
+	case res := <-e.doneCh:
+		// 放回 channel 以便后续 Wait 调用也能获取结果
+		e.doneCh <- res
+		return res.Output, res.Err
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
 }
 
 // SubagentManager Subagent 管理器
@@ -272,22 +284,56 @@ type SubagentManager struct {
 	executions map[string]*AsyncExecution
 	mu         sync.RWMutex
 	logger     *zap.Logger
+	closeCh    chan struct{}
 }
 
 // NewSubagentManager 创建 Subagent 管理器
 func NewSubagentManager(logger *zap.Logger) *SubagentManager {
-	return &SubagentManager{
+	m := &SubagentManager{
 		executions: make(map[string]*AsyncExecution),
 		logger:     logger.With(zap.String("component", "subagent_manager")),
+		closeCh:    make(chan struct{}),
+	}
+	go m.autoCleanupLoop()
+	return m
+}
+
+// autoCleanupLoop 定期清理已完成的 execution，防止内存泄漏。
+func (m *SubagentManager) autoCleanupLoop() {
+	ticker := time.NewTicker(5 * time.Minute)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ticker.C:
+			cleaned := m.CleanupCompleted(10 * time.Minute)
+			if cleaned > 0 {
+				m.logger.Info("auto cleanup completed executions", zap.Int("count", cleaned))
+			}
+		case <-m.closeCh:
+			return
+		}
+	}
+}
+
+// Close 停止自动清理 goroutine。
+func (m *SubagentManager) Close() {
+	select {
+	case <-m.closeCh:
+		// already closed
+	default:
+		close(m.closeCh)
 	}
 }
 
 // SpawnSubagent 创建 Subagent 执行
 func (m *SubagentManager) SpawnSubagent(ctx context.Context, subagent Agent, input *Input) (*AsyncExecution, error) {
+	// 深拷贝 input 防止并发修改共享 map
+	inputCopy := copyInput(input)
+
 	execution := &AsyncExecution{
 		ID:        generateExecutionID(),
 		AgentID:   subagent.ID(),
-		Input:     input,
+		Input:     inputCopy,
 		status:    ExecutionStatusRunning,
 		StartTime: time.Now(),
 		doneCh:    make(chan executionResult, 1),
@@ -304,7 +350,7 @@ func (m *SubagentManager) SpawnSubagent(ctx context.Context, subagent Agent, inp
 
 	// 异步执行
 	go func() {
-		output, err := subagent.Execute(ctx, input)
+		output, err := subagent.Execute(ctx, inputCopy)
 		if err != nil {
 			execution.setFailed(err)
 			m.logger.Warn("subagent execution failed",
@@ -362,7 +408,7 @@ func (m *SubagentManager) CleanupCompleted(olderThan time.Duration) int {
 		status := exec.GetStatus()
 		endTime := exec.GetEndTime()
 		if status == ExecutionStatusCompleted || status == ExecutionStatusFailed {
-			if endTime.Before(cutoff) {
+			if olderThan <= 0 || endTime.Before(cutoff) || endTime.Equal(cutoff) {
 				delete(m.executions, id)
 				cleaned++
 			}
@@ -375,10 +421,33 @@ func (m *SubagentManager) CleanupCompleted(olderThan time.Duration) int {
 }
 
 // generateExecutionID 生成执行 ID
-// Uses an atomic counter combined with timestamp to prevent collisions under concurrency.
+// Uses UUID for distributed uniqueness.
 func generateExecutionID() string {
-	id := atomic.AddUint64(&executionCounter, 1)
-	return fmt.Sprintf("exec_%d_%d", time.Now().UnixNano(), id)
+	return "exec_" + uuid.New().String()
+}
+
+// copyInput 深拷贝 Input，防止并发 subagent 共享 map 导致 data race。
+func copyInput(src *Input) *Input {
+	dst := &Input{
+		TraceID:   src.TraceID,
+		TenantID:  src.TenantID,
+		UserID:    src.UserID,
+		ChannelID: src.ChannelID,
+		Content:   src.Content,
+	}
+	if src.Context != nil {
+		dst.Context = make(map[string]any, len(src.Context))
+		for k, v := range src.Context {
+			dst.Context[k] = v
+		}
+	}
+	if src.Variables != nil {
+		dst.Variables = make(map[string]string, len(src.Variables))
+		for k, v := range src.Variables {
+			dst.Variables[k] = v
+		}
+	}
+	return dst
 }
 
 // ====== 实时协调器 ======
@@ -475,11 +544,18 @@ func (c *RealtimeCoordinator) CoordinateSubagents(ctx context.Context, subagents
 		},
 	}
 
+	var sb strings.Builder
+	var maxDuration time.Duration
 	for i, result := range results {
-		combined.Content += fmt.Sprintf("## Result %d\n%s\n\n", i+1, result.Content)
+		sb.WriteString(fmt.Sprintf("## Result %d\n%s\n\n", i+1, result.Content))
 		combined.TokensUsed += result.TokensUsed
 		combined.Cost += result.Cost
+		if result.Duration > maxDuration {
+			maxDuration = result.Duration
+		}
 	}
+	combined.Content = sb.String()
+	combined.Duration = maxDuration
 
 	c.logger.Info("coordination completed",
 		zap.Int("successful", len(results)),
@@ -499,4 +575,3 @@ type SubagentCompletedEvent struct {
 
 func (e *SubagentCompletedEvent) Timestamp() time.Time { return e.Timestamp_ }
 func (e *SubagentCompletedEvent) Type() EventType      { return EventSubagentCompleted }
-

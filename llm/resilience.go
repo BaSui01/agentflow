@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/BaSui01/agentflow/llm/circuitbreaker"
+	"github.com/BaSui01/agentflow/types"
 	"go.uber.org/zap"
 )
 
@@ -30,11 +31,10 @@ func DefaultRetryPolicy() *RetryPolicy {
 	}
 }
 
-// CircuitState is an alias for circuitbreaker.State, the authoritative definition.
-// This keeps backward compatibility for any code referencing llm.CircuitState.
+// CircuitState 是断路器状态类型。
 type CircuitState = circuitbreaker.State
 
-// Circuit state constants — aliases to circuitbreaker.State* values.
+// 断路器状态常量。
 const (
 	CircuitClosed  = circuitbreaker.StateClosed
 	CircuitOpen    = circuitbreaker.StateOpen
@@ -219,7 +219,7 @@ func (rp *ResilientProvider) Completion(ctx context.Context, req *ChatRequest) (
 			}
 
 			lastErr = err
-			if !IsRetryable(err) {
+			if !types.IsRetryable(err) {
 				return err
 			}
 
@@ -250,12 +250,39 @@ func (rp *ResilientProvider) Completion(ctx context.Context, req *ChatRequest) (
 	return resp, nil
 }
 
-// Stream 执行器 提供器( 不重试进行 streaming) 。
+// Stream 执行 streaming 请求（不重试，但记录成功/失败到 circuit breaker）。
 func (rp *ResilientProvider) Stream(ctx context.Context, req *ChatRequest) (<-chan StreamChunk, error) {
 	if rp.circuitBreaker.State() == CircuitOpen {
 		return nil, ErrCircuitOpen
 	}
-	return rp.provider.Stream(ctx, req)
+	ch, err := rp.provider.Stream(ctx, req)
+	if err != nil {
+		rp.circuitBreaker.recordFailure()
+		return nil, err
+	}
+	// Wrap channel to record success/failure based on stream outcome
+	wrapped := make(chan StreamChunk)
+	go func() {
+		defer close(wrapped)
+		var hadError bool
+		for chunk := range ch {
+			if chunk.Err != nil {
+				hadError = true
+			}
+			select {
+			case <-ctx.Done():
+				rp.circuitBreaker.recordFailure()
+				return
+			case wrapped <- chunk:
+			}
+		}
+		if hadError {
+			rp.circuitBreaker.recordFailure()
+		} else {
+			rp.circuitBreaker.recordSuccess()
+		}
+	}()
+	return wrapped, nil
 }
 
 // 健康检查工具 提供者。
@@ -276,6 +303,11 @@ func (rp *ResilientProvider) SupportsNativeFunctionCalling() bool {
 // ListModels 执行提供者 。
 func (rp *ResilientProvider) ListModels(ctx context.Context) ([]Model, error) {
 	return rp.provider.ListModels(ctx)
+}
+
+// Endpoints 委托给被包装的提供者。
+func (rp *ResilientProvider) Endpoints() ProviderEndpoints {
+	return rp.provider.Endpoints()
 }
 
 func (rp *ResilientProvider) generateIdempotencyKey(req *ChatRequest) string {

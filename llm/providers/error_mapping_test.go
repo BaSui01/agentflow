@@ -43,7 +43,7 @@ func TestErrorMapping_HTTPStatusCodes(t *testing.T) {
 			status:         http.StatusTooManyRequests,
 			msg:            "Rate limit exceeded",
 			provider:       "test-provider",
-			expectedCode:   llm.ErrRateLimited,
+			expectedCode:   llm.ErrRateLimit,
 			expectedRetry:  true,
 			expectedStatus: 429,
 		},
@@ -259,7 +259,7 @@ func mockMapError(status int, msg string, provider string) *llm.Error {
 	case http.StatusForbidden:
 		return &llm.Error{Code: llm.ErrForbidden, Message: msg, HTTPStatus: status, Provider: provider}
 	case http.StatusTooManyRequests:
-		return &llm.Error{Code: llm.ErrRateLimited, Message: msg, HTTPStatus: status, Retryable: true, Provider: provider}
+		return &llm.Error{Code: llm.ErrRateLimit, Message: msg, HTTPStatus: status, Retryable: true, Provider: provider}
 	case http.StatusBadRequest:
 		// 检查配额/信用关键字( 对大小写不敏感)
 		msgLower := ""

@@ -46,7 +46,7 @@ func NewChatHandler(provider llm.Provider, logger *zap.Logger) *ChatHandler {
 // @Failure 400 {object} Response "无效请求"
 // @Failure 500 {object} Response "内部错误"
 // @Security ApiKeyAuth
-// @Router /v1/chat/completions [post]
+// @Router /api/v1/chat/completions [post]
 func (h *ChatHandler) HandleCompletion(w http.ResponseWriter, r *http.Request) {
 	// 验证 Content-Type
 	if !ValidateContentType(w, r, h.logger) {
@@ -113,7 +113,7 @@ func (h *ChatHandler) HandleCompletion(w http.ResponseWriter, r *http.Request) {
 // @Failure 400 {object} Response "无效请求"
 // @Failure 500 {object} Response "内部错误"
 // @Security ApiKeyAuth
-// @Router /v1/chat/completions/stream [post]
+// @Router /api/v1/chat/completions/stream [post]
 func (h *ChatHandler) HandleStream(w http.ResponseWriter, r *http.Request) {
 	// 验证 Content-Type
 	if !ValidateContentType(w, r, h.logger) {
@@ -152,7 +152,7 @@ func (h *ChatHandler) HandleStream(w http.ResponseWriter, r *http.Request) {
 	// 发送流式数据
 	flusher, ok := w.(http.Flusher)
 	if !ok {
-		err := types.NewError(types.ErrInternalError, "streaming not supported")
+		err := types.NewInternalError("streaming not supported")
 		WriteError(w, err, h.logger)
 		return
 	}
@@ -211,14 +211,22 @@ func (h *ChatHandler) HandleStream(w http.ResponseWriter, r *http.Request) {
 // 🔧 辅助函数
 // =============================================================================
 
+// allowedMessageRoles is the set of valid message roles for chat requests.
+var allowedMessageRoles = []string{"system", "user", "assistant", "tool"}
+
 // validateChatRequest 验证聊天请求
 func (h *ChatHandler) validateChatRequest(req *api.ChatRequest) *types.Error {
 	if req.Model == "" {
-		return types.NewError(types.ErrInvalidRequest, "model is required")
+		return types.NewInvalidRequestError("model is required")
 	}
 
 	if len(req.Messages) == 0 {
-		return types.NewError(types.ErrInvalidRequest, "messages cannot be empty")
+		return types.NewInvalidRequestError("messages cannot be empty")
+	}
+
+	// 验证 max_tokens 参数
+	if req.MaxTokens < 0 {
+		return types.NewInvalidRequestError("max_tokens must be non-negative")
 	}
 
 	// V-002: MaxTokens range validation
@@ -228,12 +236,20 @@ func (h *ChatHandler) validateChatRequest(req *api.ChatRequest) *types.Error {
 
 	// 验证温度参数
 	if req.Temperature < 0 || req.Temperature > 2 {
-		return types.NewError(types.ErrInvalidRequest, "temperature must be between 0 and 2")
+		return types.NewInvalidRequestError("temperature must be between 0 and 2")
 	}
 
 	// 验证 TopP 参数
 	if req.TopP < 0 || req.TopP > 1 {
-		return types.NewError(types.ErrInvalidRequest, "top_p must be between 0 and 1")
+		return types.NewInvalidRequestError("top_p must be between 0 and 1")
+	}
+
+	// 验证每条消息的 role
+	for i, msg := range req.Messages {
+		if !ValidateEnum(msg.Role, allowedMessageRoles) {
+			return types.NewInvalidRequestError(
+				fmt.Sprintf("messages[%d].role must be one of: system, user, assistant, tool", i))
+		}
 	}
 
 	// V-006: Validate Message.Role enum values
@@ -299,6 +315,7 @@ func (h *ChatHandler) convertToLLMRequest(req *api.ChatRequest) *llm.ChatRequest
 			Name:        tool.Name,
 			Description: tool.Description,
 			Parameters:  tool.Parameters,
+			Version:     tool.Version,
 		}
 	}
 
@@ -339,16 +356,7 @@ func (h *ChatHandler) convertChoices(choices []llm.ChatChoice) []api.ChatChoice 
 		result[i] = api.ChatChoice{
 			Index:        choice.Index,
 			FinishReason: choice.FinishReason,
-			Message: api.Message{
-				Role:       string(choice.Message.Role),
-				Content:    choice.Message.Content,
-				Name:       choice.Message.Name,
-				ToolCalls:  choice.Message.ToolCalls,
-				ToolCallID: choice.Message.ToolCallID,
-				Images:     convertTypesImagesToAPI(choice.Message.Images),
-				Metadata:   choice.Message.Metadata,
-				Timestamp:  choice.Message.Timestamp,
-			},
+			Message:      convertTypesMessageToAPI(choice.Message),
 		}
 	}
 	return result
@@ -365,37 +373,15 @@ func (h *ChatHandler) convertUsage(usage llm.ChatUsage) api.ChatUsage {
 
 // convertToAPIStreamChunk 转换流式块
 func (h *ChatHandler) convertToAPIStreamChunk(chunk *llm.StreamChunk) *api.StreamChunk {
-	result := &api.StreamChunk{
-		ID:       chunk.ID,
-		Provider: chunk.Provider,
-		Model:    chunk.Model,
-		Index:    chunk.Index,
-		Delta: api.Message{
-			Role:       string(chunk.Delta.Role),
-			Content:    chunk.Delta.Content,
-			Name:       chunk.Delta.Name,
-			ToolCalls:  chunk.Delta.ToolCalls,
-			ToolCallID: chunk.Delta.ToolCallID,
-			Images:     convertTypesImagesToAPI(chunk.Delta.Images),
-			Metadata:   chunk.Delta.Metadata,
-			Timestamp:  chunk.Delta.Timestamp,
-		},
+	return &api.StreamChunk{
+		ID:           chunk.ID,
+		Provider:     chunk.Provider,
+		Model:        chunk.Model,
+		Index:        chunk.Index,
+		Delta:        convertTypesMessageToAPI(chunk.Delta),
 		FinishReason: chunk.FinishReason,
 		Usage:        convertStreamUsage(chunk.Usage),
 	}
-
-	// 映射 Err -> Error（注意：流式场景中 Err 通常已在调用方作为 SSE error 事件处理，
-	// 但如果 chunk 携带了非致命错误信息，仍需映射到 API 层的 ErrorDetail）
-	if chunk.Err != nil {
-		result.Error = &api.ErrorDetail{
-			Code:      string(chunk.Err.Code),
-			Message:   chunk.Err.Message,
-			Retryable: chunk.Err.Retryable,
-			Provider:  chunk.Err.Provider,
-		}
-	}
-
-	return result
 }
 
 // convertStreamUsage safely converts *llm.ChatUsage to *api.ChatUsage
@@ -419,9 +405,8 @@ func (h *ChatHandler) handleProviderError(w http.ResponseWriter, err error) {
 	}
 
 	// 未知错误，包装为内部错误
-	internalErr := types.NewError(types.ErrInternalError, "provider error").
-		WithCause(err).
-		WithRetryable(false)
+	internalErr := types.NewInternalError("provider error").
+		WithCause(err)
 
 	WriteError(w, internalErr, h.logger)
 }
@@ -445,6 +430,32 @@ func writeSSE(w http.ResponseWriter, parts ...[]byte) error {
 // =============================================================================
 // 🔄 类型转换辅助函数
 // =============================================================================
+
+// convertTypesMessageToAPI converts a types.Message to an api.Message,
+// copying all fields including Images, Metadata, and Timestamp.
+func convertTypesMessageToAPI(msg types.Message) api.Message {
+	m := api.Message{
+		Role:       string(msg.Role),
+		Content:    msg.Content,
+		Name:       msg.Name,
+		ToolCalls:  msg.ToolCalls,
+		ToolCallID: msg.ToolCallID,
+		Metadata:   msg.Metadata,
+		Timestamp:  msg.Timestamp,
+	}
+	if len(msg.Images) > 0 {
+		images := make([]api.ImageContent, len(msg.Images))
+		for i, img := range msg.Images {
+			images[i] = api.ImageContent{
+				Type: img.Type,
+				URL:  img.URL,
+				Data: img.Data,
+			}
+		}
+		m.Images = images
+	}
+	return m
+}
 
 // Note: convertAPIToolCallsToTypes and convertTypesToolCallsToAPI were removed
 // because api.ToolCall is now a type alias for types.ToolCall — no conversion needed.

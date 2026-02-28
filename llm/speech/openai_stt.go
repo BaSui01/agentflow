@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/BaSui01/agentflow/internal/tlsutil"
+	"github.com/BaSui01/agentflow/pkg/tlsutil"
 )
 
 // OpenAISTTProvider使用OpenAI Whisper API执行STT.
@@ -91,24 +91,34 @@ func (p *OpenAISTTProvider) Transcribe(ctx context.Context, req *STTRequest) (*S
 	}
 
 	// 添加模式
-	_ = writer.WriteField("model", model)
+	if err := writer.WriteField("model", model); err != nil {
+		return nil, fmt.Errorf("failed to write model field: %w", err)
+	}
 
 	// 添加可选字段
 	if req.Language != "" {
-		_ = writer.WriteField("language", req.Language)
+		if err := writer.WriteField("language", req.Language); err != nil {
+			return nil, fmt.Errorf("failed to write language field: %w", err)
+		}
 	}
 	if req.Prompt != "" {
-		_ = writer.WriteField("prompt", req.Prompt)
+		if err := writer.WriteField("prompt", req.Prompt); err != nil {
+			return nil, fmt.Errorf("failed to write prompt field: %w", err)
+		}
 	}
 	format := req.ResponseFormat
 	if format == "" {
 		format = "verbose_json"
 	}
-	_ = writer.WriteField("response_format", format)
+	if err := writer.WriteField("response_format", format); err != nil {
+		return nil, fmt.Errorf("failed to write response_format field: %w", err)
+	}
 
 	if len(req.TimestampGranularities) > 0 {
 		for _, g := range req.TimestampGranularities {
-			_ = writer.WriteField("timestamp_granularities[]", g)
+			if err := writer.WriteField("timestamp_granularities[]", g); err != nil {
+				return nil, fmt.Errorf("failed to write timestamp_granularities field: %w", err)
+			}
 		}
 	}
 

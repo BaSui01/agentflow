@@ -67,6 +67,10 @@ func (s *MemoryTaskStore) SaveTask(ctx context.Context, task *AsyncTask) error {
 	// 如果没有设定则生成 ID
 	if task.ID == "" {
 		task.ID = uuid.New().String()
+	} else {
+		if _, exists := s.tasks[task.ID]; exists {
+			task.ID = uuid.New().String()
+		}
 	}
 
 	// 设置时间戳
@@ -391,10 +395,16 @@ func (s *MemoryTaskStore) Stats(ctx context.Context) (*TaskStoreStats, error) {
 
 	if !oldestPending.IsZero() {
 		stats.OldestPendingAge = time.Since(oldestPending)
+		if stats.OldestPendingAge <= 0 {
+			stats.OldestPendingAge = time.Nanosecond
+		}
 	}
 
 	if completedCount > 0 {
 		stats.AverageCompletionTime = totalCompletionTime / time.Duration(completedCount)
+		if stats.AverageCompletionTime <= 0 {
+			stats.AverageCompletionTime = time.Nanosecond
+		}
 	}
 
 	return stats, nil

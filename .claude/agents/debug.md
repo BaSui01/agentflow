@@ -2,7 +2,7 @@
 name: debug
 description: |
   Issue fixing expert. Understands issues, fixes against specs, and verifies fixes. Precise fixes only.
-tools: Read, Write, Edit, Bash, Glob, Grep, mcp__exa__web_search_exa, mcp__exa__get_code_context_exa
+tools: Read, Write, Edit, Bash, Glob, Grep, mcp__exa__web_search_exa, mcp__exa__get_code_context_exa, mcp__ace-tool__search_context, mcp__context7__resolve-library-id, mcp__context7__query-docs, mcp__chrome-devtools__*
 model: opus
 ---
 # Debug Agent
@@ -36,12 +36,10 @@ Parse the issue, categorize by priority:
 
 ### Step 2: Research if Needed
 
-If you need additional info:
-
-```bash
-# Check knowledge base
-ls .trellis/big-question/
-```
+- Use `mcp__ace-tool__search_context` to find related code and understand call chains
+- Use `mcp__context7__query-docs` to check library API usage correctness
+- Use `mcp__chrome-devtools__*` for frontend issues (inspect DOM, console errors, network)
+- Check knowledge base: `ls .trellis/big-question/`
 
 ### Step 3: Fix One by One
 

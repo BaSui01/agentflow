@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/BaSui01/agentflow/internal/tlsutil"
+	"github.com/BaSui01/agentflow/pkg/tlsutil"
 )
 
 // OpenAIProvider使用OpenAI API执行节制.

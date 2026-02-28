@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/BaSui01/agentflow/internal/tlsutil"
+	"github.com/BaSui01/agentflow/pkg/tlsutil"
 )
 
 // DeepgramProvider使用Deepgram API执行STT.

@@ -8,6 +8,31 @@ import (
 )
 
 // =============================================================================
+// Unified API Response Envelope (§38)
+// =============================================================================
+
+// Response is the canonical API response envelope used by all endpoints.
+// Both api/handlers and config packages reference this type to ensure
+// consistent JSON output across the entire API surface.
+type Response struct {
+	Success   bool        `json:"success"`
+	Data      any         `json:"data,omitempty"`
+	Error     *ErrorInfo  `json:"error,omitempty"`
+	Timestamp time.Time   `json:"timestamp"`
+	RequestID string      `json:"request_id,omitempty"`
+}
+
+// ErrorInfo is the canonical error structure embedded in Response.
+type ErrorInfo struct {
+	Code       string `json:"code"`
+	Message    string `json:"message"`
+	Details    string `json:"details,omitempty"`
+	Retryable  bool   `json:"retryable,omitempty"`
+	HTTPStatus int    `json:"-"` // not serialized to JSON
+	Provider   string `json:"provider,omitempty"`
+}
+
+// =============================================================================
 // 聊天完成类型
 // =============================================================================
 
@@ -20,11 +45,11 @@ type ChatRequest struct {
 	TenantID string `json:"tenant_id,omitempty" example:"tenant-1"`
 	// 用户身份
 	UserID string `json:"user_id,omitempty" example:"user-1"`
-	// 型号名称（例如 gpt-4、claude-3-opus）
+	// 模型名称（例如 gpt-4、claude-3-opus）
 	Model string `json:"model" example:"gpt-4" binding:"required"`
 	// 对话消息
 	Messages []Message `json:"messages" binding:"required"`
-	// 生成的最大代币数量
+	// 生成的最大 Token 数量
 	MaxTokens int `json:"max_tokens,omitempty" example:"4096"`
 	// 采样温度（0-2）
 	Temperature float32 `json:"temperature,omitempty" example:"0.7"`
@@ -34,8 +59,8 @@ type ChatRequest struct {
 	Stop []string `json:"stop,omitempty"`
 	// 函数调用的可用工具
 	Tools []ToolSchema `json:"tools,omitempty"`
-	// 工具选择模式（自动、无或特定工具名称）
-	ToolChoice string `json:"tool_choice,omitempty" example:"auto"`
+	// 工具选择模式（字符串如 "auto"/"none"/"required"，或结构化对象）
+	ToolChoice any `json:"tool_choice,omitempty"`
 	// 请求超时时长
 	Timeout string `json:"timeout,omitempty" example:"30s"`
 	// 自定义元数据
@@ -51,11 +76,11 @@ type ChatResponse struct {
 	ID string `json:"id,omitempty" example:"chatcmpl-123"`
 	// 处理请求的提供者
 	Provider string `json:"provider,omitempty" example:"openai"`
-	// 使用型号
+	// 使用的模型
 	Model string `json:"model" example:"gpt-4"`
-	// 反应选择
+	// 响应选项
 	Choices []ChatChoice `json:"choices"`
-	// 代币使用统计
+	// Token 使用统计
 	Usage ChatUsage `json:"usage"`
 	// 响应创建时间戳
 	CreatedAt time.Time `json:"created_at"`
@@ -64,22 +89,22 @@ type ChatResponse struct {
 // ChatChoice 代表响应中的单个选择。
 // @Description 聊天选择结构
 type ChatChoice struct {
-	// 选择指数
+	// 选项索引
 	Index int `json:"index" example:"0"`
-	// 完成原因（停止、长度、tool_calls、content_filter）
+	// 完成原因（stop、length、tool_calls、content_filter）
 	FinishReason string `json:"finish_reason,omitempty" example:"stop"`
-	// 回复信息
+	// 响应消息
 	Message Message `json:"message"`
 }
 
-// ChatUsage 表示响应中的令牌使用情况。
-// @Description 代币使用统计
+// ChatUsage 表示响应中的 Token 使用情况。
+// @Description Token 使用统计
 type ChatUsage struct {
-	// 提示中的令牌
+	// 提示 Token 数
 	PromptTokens int `json:"prompt_tokens" example:"100"`
-	// 完成中的代币
+	// 补全 Token 数
 	CompletionTokens int `json:"completion_tokens" example:"50"`
-	// 使用的代币总数
+	// 总 Token 数
 	TotalTokens int `json:"total_tokens" example:"150"`
 }
 
@@ -90,18 +115,18 @@ type StreamChunk struct {
 	ID string `json:"id,omitempty" example:"chatcmpl-123"`
 	// 提供商名称
 	Provider string `json:"provider,omitempty" example:"openai"`
-	// 型号名称
+	// 模型名称
 	Model string `json:"model,omitempty" example:"gpt-4"`
-	// 选择指数
+	// 选项索引
 	Index int `json:"index,omitempty" example:"0"`
-	// 达美讯息内容
+	// 增量消息内容
 	Delta Message `json:"delta"`
 	// 完成原因（仅在最后一块）
 	FinishReason string `json:"finish_reason,omitempty" example:"stop"`
 	// 使用统计（仅在最终块中）
 	Usage *ChatUsage `json:"usage,omitempty"`
 	// 错误信息
-	Error *ErrorDetail `json:"error,omitempty"`
+	Error *ErrorInfo `json:"error,omitempty"`
 }
 
 // =============================================================================
@@ -113,11 +138,11 @@ type StreamChunk struct {
 type Message struct {
 	// 消息角色（系统、用户、助手、工具）
 	Role string `json:"role" example:"user" binding:"required"`
-	// 留言内容
+	// 消息内容
 	Content string `json:"content,omitempty" example:"Hello, how are you?"`
 	// 名称（用于工具消息）
 	Name string `json:"name,omitempty"`
-	// 工具调用（用于辅助消息）
+	// 工具调用（用于助手消息）
 	ToolCalls []ToolCall `json:"tool_calls,omitempty"`
 	// 工具调用 ID（用于工具消息）
 	ToolCallID string `json:"tool_call_id,omitempty"`
@@ -166,9 +191,10 @@ type ToolSchema struct {
 	Version string `json:"version,omitempty" example:"1.0.0"`
 }
 
-// ToolResult 表示工具执行的结果。
+// ToolResultDTO 表示工具执行结果的 API 传输对象。
+// 注意：与 types.ToolResult 不同，Duration 为 string 格式（适合 JSON 序列化）。
 // @Description 工具结果结构
-type ToolResult struct {
+type ToolResultDTO struct {
 	// 工具调用 ID
 	ToolCallID string `json:"tool_call_id" example:"call_123"`
 	// 工具名称
@@ -214,13 +240,13 @@ type LLMProvider struct {
 // LLMModel 代表 LLM 模型。
 // @Description LLM模型结构
 type LLMModel struct {
-	// 型号编号
+	// 模型 ID
 	ID uint `json:"id" example:"1"`
-	// 型号标识符
+	// 模型标识符
 	ModelName string `json:"model_name" example:"gpt-4"`
 	// 显示名称
 	DisplayName string `json:"display_name,omitempty" example:"GPT-4"`
-	// 型号说明
+	// 模型描述
 	Description string `json:"description,omitempty"`
 	// 模型是否启用
 	Enabled bool `json:"enabled" example:"true"`
@@ -235,17 +261,17 @@ type LLMModel struct {
 type LLMProviderModel struct {
 	// 映射ID
 	ID uint `json:"id" example:"1"`
-	// 型号编号
+	// 模型 ID
 	ModelID uint `json:"model_id" example:"1"`
 	// 提供商 ID
 	ProviderID uint `json:"provider_id" example:"1"`
-	// 供应商已知的型号名称
+	// 提供商已知的模型名称
 	RemoteModelName string `json:"remote_model_name" example:"gpt-4-turbo"`
 	// 提供者基本 URL
 	BaseURL string `json:"base_url,omitempty" example:"https://api.openai.com"`
-	// 每 1K 输入代币的价格
+	// 每 1K 输入 Token 的价格
 	PriceInput float64 `json:"price_input" example:"0.01"`
-	// 每 1K 完成代币的价格
+	// 每 1K 补全 Token 的价格
 	PriceCompletion float64 `json:"price_completion" example:"0.03"`
 	// 最大上下文长度
 	MaxTokens int `json:"max_tokens" example:"128000"`
@@ -278,9 +304,9 @@ type ProviderHealthResponse struct {
 // RoutingRequest代表提供商选择请求。
 // @Description 路由请求结构
 type RoutingRequest struct {
-	// 路线的型号名称
+	// 路由的模型名称
 	Model string `json:"model" example:"gpt-4" binding:"required"`
-	// 路由策略（成本、运行状况、qps、金丝雀、标签）
+	// 路由策略（cost、health、qps、canary、tag）
 	Strategy string `json:"strategy" example:"cost" binding:"required"`
 	// 用于基于标签的路由的标签
 	Tags []string `json:"tags,omitempty"`
@@ -293,11 +319,11 @@ type ProviderSelection struct {
 	ProviderID uint `json:"provider_id" example:"1"`
 	// 提供商代码
 	ProviderCode string `json:"provider_code" example:"openai"`
-	// 型号编号
+	// 模型 ID
 	ModelID uint `json:"model_id" example:"1"`
-	// 型号名称
+	// 模型名称
 	ModelName string `json:"model_name" example:"gpt-4"`
-	// 这是否是金丝雀部署
+	// 是否为金丝雀部署
 	IsCanary bool `json:"is_canary" example:"false"`
 	// 用于选择的策略
 	Strategy string `json:"strategy" example:"cost"`
@@ -382,26 +408,7 @@ type A2AResponse struct {
 // @Description 错误响应结构
 type ErrorResponse struct {
 	// 错误详情
-	Error ErrorDetail `json:"error"`
-}
-
-// ErrorDetail 表示 API DTO 层的错误详细信息（用于 JSON 序列化给客户端）。
-// 注意：这与 handlers.ErrorInfo 是不同用途的结构：
-//   - ErrorDetail：面向外部客户端的 API DTO，包含 HTTPStatus 等序列化字段
-//   - ErrorInfo：handlers 内部统一响应结构中的错误信息
-//
-// @Description 错误详细结构
-type ErrorDetail struct {
-	// 错误代码
-	Code string `json:"code" example:"INVALID_REQUEST"`
-	// 人类可读的错误消息
-	Message string `json:"message" example:"Invalid request parameters"`
-	// HTTP 状态码
-	HTTPStatus int `json:"http_status,omitempty" example:"400"`
-	// 请求是否可以重试
-	Retryable bool `json:"retryable,omitempty" example:"false"`
-	// 返回错误的提供者
-	Provider string `json:"provider,omitempty" example:"openai"`
+	Error ErrorInfo `json:"error"`
 }
 
 // =============================================================================
@@ -416,9 +423,9 @@ type ProviderListResponse struct {
 }
 
 // ModelListResponse 表示模型列表。
-// @Description 型号列表响应
+// @Description 模型列表响应
 type ModelListResponse struct {
-	// 型号一览
+	// 模型列表
 	Models []LLMModel `json:"models"`
 }
 

@@ -7,7 +7,7 @@ info:
     Notes:
     - API key authentication is accepted via `X-API-Key` header.
     - Query-string `api_key` is disabled by default for security reasons.
-  version: 1.0.1
+  version: 1.3.0
   contact:
     name: AgentFlow Team
     url: https://github.com/BaSui01/agentflow
@@ -26,6 +26,12 @@ tags:
     description: Runtime configuration management endpoints
   - name: Chat
     description: LLM chat completion endpoints
+  - name: Agent
+    description: Agent management and execution endpoints
+  - name: Provider
+    description: LLM provider and API key management endpoints
+  - name: Multimodal
+    description: Framework-level multimodal capabilities
 
 paths:
   /health:
@@ -105,10 +111,14 @@ paths:
               schema:
                 $ref: '#/components/schemas/Envelope'
 
-  /v1/chat/completions:
+  /api/v1/chat/completions:
     post:
       tags: [Chat]
       summary: Chat completion
+      description: |
+        Send a chat completion request to the configured LLM provider.
+        Note: This endpoint is only available when an LLM API key is configured.
+      x-conditional: "Requires LLM API key configuration (config.llm.api_key)"
       operationId: chatCompletion
       security:
         - ApiKeyAuth: []
@@ -130,10 +140,14 @@ paths:
         '500':
           description: Internal error
 
-  /v1/chat/completions/stream:
+  /api/v1/chat/completions/stream:
     post:
       tags: [Chat]
       summary: Streaming chat completion (SSE)
+      description: |
+        Send a streaming chat completion request via Server-Sent Events.
+        Note: This endpoint is only available when an LLM API key is configured.
+      x-conditional: "Requires LLM API key configuration (config.llm.api_key)"
       operationId: chatCompletionStream
       security:
         - ApiKeyAuth: []
@@ -154,6 +168,166 @@ paths:
           description: Invalid request
         '500':
           description: Internal error
+
+  /api/v1/multimodal/capabilities:
+    get:
+      tags: [Multimodal]
+      summary: Get multimodal framework capabilities
+      operationId: getMultimodalCapabilities
+      security:
+        - ApiKeyAuth: []
+      responses:
+        '200':
+          description: Capabilities and available providers
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/MultimodalCapabilities'
+
+  /api/v1/multimodal/references:
+    post:
+      tags: [Multimodal]
+      summary: Upload multimodal reference image
+      description: |
+        Upload an image reference file and receive a temporary `reference_id`.
+        This ID can be used by image/video generation endpoints to trigger image-guided paths.
+      operationId: uploadMultimodalReference
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        '200':
+          description: Reference uploaded successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/MultimodalReference'
+        '400':
+          description: Invalid upload request
+
+  /api/v1/multimodal/image:
+    post:
+      tags: [Multimodal]
+      summary: Generate image (text-to-image / image-to-image)
+      operationId: multimodalImageGenerate
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MultimodalImageRequest'
+      responses:
+        '200':
+          description: Image generation result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Envelope'
+        '400':
+          description: Invalid request
+        '503':
+          description: No image provider configured
+
+  /api/v1/multimodal/video:
+    post:
+      tags: [Multimodal]
+      summary: Generate video (text-to-video / image-to-video)
+      operationId: multimodalVideoGenerate
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MultimodalVideoRequest'
+      responses:
+        '200':
+          description: Video generation result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Envelope'
+        '400':
+          description: Invalid request
+        '503':
+          description: No video provider configured
+
+  /api/v1/multimodal/plan:
+    post:
+      tags: [Multimodal]
+      summary: Generate structured visual plan
+      description: |
+        Uses chat provider structured output to build a modality-agnostic visual plan.
+      operationId: multimodalPlanGenerate
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MultimodalPlanRequest'
+      responses:
+        '200':
+          description: Structured plan result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Envelope'
+        '400':
+          description: Invalid request
+        '503':
+          description: Chat provider not configured
+
+  /api/v1/multimodal/chat:
+    post:
+      tags: [Multimodal]
+      summary: Multimodal framework chat orchestration
+      description: |
+        Supports single-shot chat and two-stage agent_mode orchestration.
+      operationId: multimodalChat
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MultimodalChatRequest'
+      responses:
+        '200':
+          description: Chat result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Envelope'
+        '400':
+          description: Invalid request
+        '503':
+          description: Chat provider not configured
 
   /api/v1/config:
     get:
@@ -253,6 +427,364 @@ paths:
               schema:
                 $ref: '#/components/schemas/ConfigResponse'
 
+  /api/v1/agents:
+    get:
+      tags: [Agent]
+      summary: List agents
+      operationId: listAgents
+      security:
+        - ApiKeyAuth: []
+      responses:
+        '200':
+          description: Agent list
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/AgentInfo'
+        '500':
+          description: Internal error
+
+  /api/v1/agents/execute:
+    post:
+      tags: [Agent]
+      summary: Execute agent
+      operationId: executeAgent
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AgentExecuteRequest'
+      responses:
+        '200':
+          description: Execution result
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/AgentExecuteResponse'
+        '400':
+          description: Invalid request
+        '404':
+          description: Agent not found
+        '500':
+          description: Execution failed
+
+  /api/v1/agents/execute/stream:
+    post:
+      tags: [Agent]
+      summary: Stream agent execution (SSE)
+      operationId: executeAgentStream
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AgentExecuteRequest'
+      responses:
+        '200':
+          description: SSE stream of agent execution events (token, tool_call, tool_result, error, [DONE])
+          content:
+            text/event-stream:
+              schema:
+                type: string
+        '400':
+          description: Invalid request
+        '404':
+          description: Agent not found
+        '500':
+          description: Execution failed
+
+  /api/v1/agents/plan:
+    post:
+      tags: [Agent]
+      summary: Plan agent execution
+      operationId: planAgent
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AgentExecuteRequest'
+      responses:
+        '200':
+          description: Execution plan
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Envelope'
+        '400':
+          description: Invalid request
+        '404':
+          description: Agent not found
+        '500':
+          description: Plan failed
+
+  /api/v1/agents/health:
+    get:
+      tags: [Agent]
+      summary: Agent health check
+      operationId: agentHealth
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - name: id
+          in: query
+          required: true
+          schema:
+            type: string
+          description: Agent ID
+      responses:
+        '200':
+          description: Agent is healthy
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/AgentHealthResponse'
+        '400':
+          description: Invalid agent ID
+        '404':
+          description: Agent not found
+        '503':
+          description: Agent not ready
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/AgentHealthResponse'
+
+  /api/v1/providers:
+    get:
+      tags: [Provider]
+      summary: List all LLM providers
+      description: |
+        List all configured LLM providers.
+        Note: This endpoint is only available when a database is configured.
+      x-conditional: "Requires database connection"
+      operationId: listProviders
+      security:
+        - ApiKeyAuth: []
+      responses:
+        '200':
+          description: Provider list
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/Provider'
+
+  /api/v1/providers/{id}/api-keys:
+    get:
+      tags: [Provider]
+      summary: List API keys for a provider
+      description: |
+        List all API keys for a specific LLM provider.
+        Note: This endpoint is only available when a database is configured.
+      x-conditional: "Requires database connection"
+      operationId: listAPIKeys
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+          description: Provider ID
+      responses:
+        '200':
+          description: API key list
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/APIKeyResponse'
+    post:
+      tags: [Provider]
+      summary: Create API key for a provider
+      description: |
+        Create a new API key for a specific LLM provider.
+        Note: This endpoint is only available when a database is configured.
+      x-conditional: "Requires database connection"
+      operationId: createAPIKey
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+          description: Provider ID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateAPIKeyRequest'
+      responses:
+        '201':
+          description: API key created
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/APIKeyResponse'
+        '400':
+          description: Invalid request
+
+  /api/v1/providers/{id}/api-keys/stats:
+    get:
+      tags: [Provider]
+      summary: Get API key stats for a provider
+      description: |
+        Get usage statistics for API keys of a specific LLM provider.
+        Note: This endpoint is only available when a database is configured.
+      x-conditional: "Requires database connection"
+      operationId: getAPIKeyStats
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+          description: Provider ID
+      responses:
+        '200':
+          description: API key statistics
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/APIKeyStats'
+
+  /api/v1/providers/{id}/api-keys/{keyId}:
+    put:
+      tags: [Provider]
+      summary: Update an API key
+      description: |
+        Update an existing API key for a specific LLM provider.
+        Note: This endpoint is only available when a database is configured.
+      x-conditional: "Requires database connection"
+      operationId: updateAPIKey
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+          description: Provider ID
+        - name: keyId
+          in: path
+          required: true
+          schema:
+            type: integer
+          description: API Key ID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateAPIKeyRequest'
+      responses:
+        '200':
+          description: API key updated
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/APIKeyResponse'
+        '404':
+          description: API key not found
+    delete:
+      tags: [Provider]
+      summary: Delete an API key
+      description: |
+        Delete an API key for a specific LLM provider.
+        Note: This endpoint is only available when a database is configured.
+      x-conditional: "Requires database connection"
+      operationId: deleteAPIKey
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+          description: Provider ID
+        - name: keyId
+          in: path
+          required: true
+          schema:
+            type: integer
+          description: API Key ID
+      responses:
+        '200':
+          description: API key deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Envelope'
+        '404':
+          description: API key not found
+
 components:
   securitySchemes:
     ApiKeyAuth:
@@ -275,6 +807,10 @@ components:
         timestamp:
           type: string
           format: date-time
+        request_id:
+          type: string
+          description: Unique request identifier for tracing
+          example: "req-abc123"
 
     HealthStatus:
       type: object
@@ -312,36 +848,449 @@ components:
           additionalProperties: true
 
     ConfigResponse:
-      type: object
-      properties:
-        success:
-          type: boolean
-        message:
-          type: string
-        config:
-          type: object
-          additionalProperties: true
-        fields:
-          type: object
-          additionalProperties: true
-        changes:
-          type: array
-          items:
-            type: object
-            additionalProperties: true
-        error:
-          type: string
-        requires_restart:
-          type: boolean
-        timestamp:
-          type: string
-          format: date-time
+      description: Config API responses use the unified Envelope structure. The data field contains config-specific fields.
+      allOf:
+        - $ref: '#/components/schemas/Envelope'
+        - type: object
+          properties:
+            data:
+              type: object
+              properties:
+                message:
+                  type: string
+                config:
+                  type: object
+                  additionalProperties: true
+                fields:
+                  type: object
+                  additionalProperties: true
+                changes:
+                  type: array
+                  items:
+                    type: object
+                    additionalProperties: true
+                requires_restart:
+                  type: boolean
 
     ChatRequest:
       type: object
-      required: [messages]
+      required: [model, messages]
+      properties:
+        trace_id:
+          type: string
+          description: Trace ID for request tracing
+          example: "trace-123"
+        tenant_id:
+          type: string
+          description: Tenant ID for multi-tenancy
+          example: "tenant-1"
+        user_id:
+          type: string
+          description: User identity
+          example: "user-1"
+        model:
+          type: string
+          description: Model name (e.g. gpt-4, claude-3-opus)
+          example: "gpt-4"
+        messages:
+          type: array
+          items:
+            type: object
+            properties:
+              role:
+                type: string
+                enum: [system, user, assistant, tool]
+              content:
+                type: string
+        max_tokens:
+          type: integer
+          description: Maximum number of tokens to generate
+          example: 4096
+        temperature:
+          type: number
+          description: Sampling temperature (0-2)
+          example: 0.7
+        top_p:
+          type: number
+          description: Nucleus sampling parameter (0-1)
+          example: 1.0
+        stop:
+          type: array
+          items:
+            type: string
+          description: Stop sequences
+        tools:
+          type: array
+          items:
+            $ref: '#/components/schemas/ToolSchema'
+          description: Available tools for function calling
+        tool_choice:
+          type: string
+          description: Tool selection mode (auto, none, or specific tool name)
+          example: "auto"
+        timeout:
+          type: string
+          description: Request timeout duration
+          example: "30s"
+        metadata:
+          type: object
+          additionalProperties:
+            type: string
+          description: Custom metadata key-value pairs
+        tags:
+          type: array
+          items:
+            type: string
+          description: Routing tags
+
+    AgentInfo:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        type:
+          type: string
+        state:
+          type: string
+        description:
+          type: string
+        model:
+          type: string
+        created_at:
+          type: string
+
+    AgentExecuteRequest:
+      type: object
+      required: [agent_id, content]
+      properties:
+        agent_id:
+          type: string
+        content:
+          type: string
+        context:
+          type: object
+          additionalProperties: true
+        variables:
+          type: object
+          additionalProperties:
+            type: string
+
+    AgentExecuteResponse:
+      type: object
+      properties:
+        trace_id:
+          type: string
+        content:
+          type: string
+        metadata:
+          type: object
+          additionalProperties: true
+        tokens_used:
+          type: integer
+        cost:
+          type: number
+        duration:
+          type: string
+        finish_reason:
+          type: string
+
+    AgentHealthResponse:
+      type: object
+      properties:
+        agent_id:
+          type: string
+        status:
+          type: string
+        healthy:
+          type: boolean
+        endpoint:
+          type: string
+        load:
+          type: number
+        checked_at:
+          type: string
+
+    Provider:
+      type: object
+      properties:
+        id:
+          type: integer
+        code:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        status:
+          type: integer
+          description: "0=inactive, 1=active, 2=disabled"
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    APIKeyResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+        provider_id:
+          type: integer
+        api_key:
+          type: string
+          description: Masked API key (only last 4 chars visible)
+        base_url:
+          type: string
+        label:
+          type: string
+        priority:
+          type: integer
+        weight:
+          type: integer
+        enabled:
+          type: boolean
+        total_requests:
+          type: integer
+          format: int64
+        failed_requests:
+          type: integer
+          format: int64
+        rate_limit_rpm:
+          type: integer
+        rate_limit_rpd:
+          type: integer
+
+    CreateAPIKeyRequest:
+      type: object
+      required: [api_key]
+      properties:
+        api_key:
+          type: string
+        base_url:
+          type: string
+        label:
+          type: string
+        priority:
+          type: integer
+          minimum: 0
+        weight:
+          type: integer
+          minimum: 0
+        enabled:
+          type: boolean
+          default: true
+        rate_limit_rpm:
+          type: integer
+          minimum: 0
+        rate_limit_rpd:
+          type: integer
+          minimum: 0
+
+    UpdateAPIKeyRequest:
+      type: object
+      properties:
+        base_url:
+          type: string
+        label:
+          type: string
+        priority:
+          type: integer
+          minimum: 0
+        weight:
+          type: integer
+          minimum: 0
+        enabled:
+          type: boolean
+        rate_limit_rpm:
+          type: integer
+          minimum: 0
+        rate_limit_rpd:
+          type: integer
+          minimum: 0
+
+    APIKeyStats:
+      type: object
+      properties:
+        key_id:
+          type: integer
+        label:
+          type: string
+        base_url:
+          type: string
+        enabled:
+          type: boolean
+        is_healthy:
+          type: boolean
+        total_requests:
+          type: integer
+          format: int64
+        failed_requests:
+          type: integer
+          format: int64
+        success_rate:
+          type: number
+          format: double
+        current_rpm:
+          type: integer
+        current_rpd:
+          type: integer
+        last_used_at:
+          type: string
+          format: date-time
+          nullable: true
+        last_error_at:
+          type: string
+          format: date-time
+          nullable: true
+        last_error:
+          type: string
+
+    MultimodalCapabilities:
+      type: object
+      properties:
+        image_providers:
+          type: array
+          items:
+            type: string
+        video_providers:
+          type: array
+          items:
+            type: string
+        default_image_provider:
+          type: string
+        default_video_provider:
+          type: string
+        features:
+          type: object
+          additionalProperties:
+            type: boolean
+
+    MultimodalReference:
+      type: object
+      properties:
+        reference_id:
+          type: string
+          example: "ref_1740560000000000000"
+        file_name:
+          type: string
+        mime_type:
+          type: string
+          example: "image/png"
+        size:
+          type: integer
+        created_at:
+          type: string
+          format: date-time
+
+    MultimodalImageRequest:
+      type: object
+      required: [prompt]
+      properties:
+        prompt:
+          type: string
+        negative_prompt:
+          type: string
+        model:
+          type: string
+        provider:
+          type: string
+        n:
+          type: integer
+          minimum: 0
+        size:
+          type: string
+          example: "1024x1024"
+        quality:
+          type: string
+        style:
+          type: string
+        response_format:
+          type: string
+        advanced:
+          type: boolean
+          default: false
+        style_tokens:
+          type: array
+          items:
+            type: string
+        quality_tokens:
+          type: array
+          items:
+            type: string
+        reference_id:
+          type: string
+        reference_image_url:
+          type: string
+          format: uri
+
+    MultimodalVideoRequest:
+      type: object
+      required: [prompt]
+      properties:
+        prompt:
+          type: string
+        negative_prompt:
+          type: string
+        model:
+          type: string
+        provider:
+          type: string
+        duration:
+          type: number
+        aspect_ratio:
+          type: string
+          example: "16:9"
+        resolution:
+          type: string
+          example: "1080p"
+        fps:
+          type: integer
+        seed:
+          type: integer
+          format: int64
+        response_format:
+          type: string
+        advanced:
+          type: boolean
+          default: false
+        style_tokens:
+          type: array
+          items:
+            type: string
+        camera:
+          type: string
+        mood:
+          type: string
+        reference_id:
+          type: string
+        reference_image_url:
+          type: string
+          format: uri
+
+    MultimodalPlanRequest:
+      type: object
+      required: [prompt]
+      properties:
+        prompt:
+          type: string
+        shot_count:
+          type: integer
+          minimum: 1
+          maximum: 12
+        advanced:
+          type: boolean
+          default: false
+
+    MultimodalChatRequest:
+      type: object
       properties:
         model:
+          type: string
+        message:
           type: string
         messages:
           type: array
@@ -350,12 +1299,36 @@ components:
             properties:
               role:
                 type: string
-                enum: [system, user, assistant]
               content:
                 type: string
-        max_tokens:
-          type: integer
+        system_prompt:
+          type: string
         temperature:
           type: number
-        stream:
+        advanced:
           type: boolean
+          default: false
+        agent_mode:
+          type: boolean
+          default: false
+
+    ToolSchema:
+      type: object
+      required: [name, parameters]
+      properties:
+        name:
+          type: string
+          description: Tool name
+          example: "get_weather"
+        description:
+          type: string
+          description: Tool description
+          example: "Get the current weather for a location"
+        parameters:
+          type: object
+          description: JSON Schema for tool parameters
+          additionalProperties: true
+        version:
+          type: string
+          description: Tool version
+          example: "1.0.0"

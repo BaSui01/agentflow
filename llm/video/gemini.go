@@ -9,7 +9,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/BaSui01/agentflow/internal/tlsutil"
+	"github.com/BaSui01/agentflow/pkg/tlsutil"
 )
 
 // GeminiProvider 使用 Google Gemini 执行视频分析.

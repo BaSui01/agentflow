@@ -24,7 +24,7 @@ type Config struct {
 	// Agent 默认 Agent 配置
 	Agent AgentConfig `yaml:"agent" env:"AGENT"`
 
-	// Redis 缓存配置
+	// Redis 配置（缓存与可选的多模态引用存储复用）。
 	Redis RedisConfig `yaml:"redis" env:"REDIS"`
 
 	// Database 数据库配置
@@ -39,21 +39,36 @@ type Config struct {
 	// Milvus 向量存储配置
 	Milvus MilvusConfig `yaml:"milvus" env:"MILVUS"`
 
+	// MongoDB 文档型数据存储配置
+	MongoDB MongoDBConfig `yaml:"mongodb" env:"MONGODB"`
+
 	// LLM 大语言模型配置
-	LLM LLMConfig `yaml:"llm" env:"LLM"`
+	LLM LLMConnectionConfig `yaml:"llm" env:"LLM"`
+
+	// Multimodal 多模态框架能力配置
+	Multimodal MultimodalConfig `yaml:"multimodal" env:"MULTIMODAL"`
 
 	// Log 日志配置
 	Log LogConfig `yaml:"log" env:"LOG"`
 
 	// Telemetry 遥测配置
 	Telemetry TelemetryConfig `yaml:"telemetry" env:"TELEMETRY"`
+
+	// Tools 工具提供者配置
+	Tools ToolsConfig `yaml:"tools" env:"TOOLS"`
+
+	// Cache LLM 缓存配置
+	Cache CacheConfig `yaml:"cache" env:"CACHE"`
+
+	// Budget Token 预算管理配置
+	Budget BudgetConfig `yaml:"budget" env:"BUDGET"`
 }
 
 // ServerConfig 服务器配置
 type ServerConfig struct {
 	// HTTP 端口
 	HTTPPort int `yaml:"http_port" env:"HTTP_PORT"`
-	// gRPC 端口
+	// gRPC 端口 — Reserved for future gRPC support, not currently used.
 	GRPCPort int `yaml:"grpc_port" env:"GRPC_PORT"`
 	// Metrics 端口
 	MetricsPort int `yaml:"metrics_port" env:"METRICS_PORT"`
@@ -75,6 +90,27 @@ type ServerConfig struct {
 	RateLimitRPS int `yaml:"rate_limit_rps" json:"rate_limit_rps,omitempty"`
 	// 限流 Burst，默认 200
 	RateLimitBurst int `yaml:"rate_limit_burst" json:"rate_limit_burst,omitempty"`
+	// JWT 认证配置
+	JWT JWTConfig `yaml:"jwt" json:"jwt,omitempty"`
+	// 租户级限流 RPS，默认 50
+	TenantRateLimitRPS int `yaml:"tenant_rate_limit_rps" json:"tenant_rate_limit_rps,omitempty"`
+	// 租户级限流 Burst，默认 100
+	TenantRateLimitBurst int `yaml:"tenant_rate_limit_burst" json:"tenant_rate_limit_burst,omitempty"`
+	// AllowNoAuth 允许在无认证配置时启动（默认 false）。
+	// 生产环境必须显式设置为 true 才能在无 JWT/API Key 配置时启动。
+	AllowNoAuth bool `yaml:"allow_no_auth" env:"ALLOW_NO_AUTH" json:"allow_no_auth,omitempty"`
+}
+
+// JWTConfig JWT 认证配置
+type JWTConfig struct {
+	// HMAC 签名密钥
+	Secret string `yaml:"secret" env:"SECRET" json:"-"`
+	// RSA 公钥（PEM 格式）
+	PublicKey string `yaml:"public_key" env:"PUBLIC_KEY" json:"-"`
+	// 期望的签发者
+	Issuer string `yaml:"issuer" env:"ISSUER" json:"issuer,omitempty"`
+	// 期望的受众
+	Audience string `yaml:"audience" env:"AUDIENCE" json:"audience,omitempty"`
 }
 
 // AgentConfig Agent 配置，用于 YAML/环境变量加载（扁平结构）。
@@ -222,13 +258,48 @@ type MilvusConfig struct {
 	ConsistencyLevel string `yaml:"consistency_level" env:"CONSISTENCY_LEVEL"`
 }
 
-// LLMConfig LLM 配置，用于 YAML/环境变量加载（面向基础设施连接参数）。
-// 注意：这与 types.LLMConfig 是不同层次的配置结构：
-//   - config.LLMConfig：面向部署配置，包含 Provider 连接参数（APIKey、BaseURL、Timeout、MaxRetries）
-//   - types.LLMConfig：面向运行时 Agent 行为，包含模型参数（Model、Temperature、TopP、Stop）
-//
-// 两者服务于不同场景，不做结构统一。
-type LLMConfig struct {
+// MongoDBConfig MongoDB 文档型数据存储配置
+type MongoDBConfig struct {
+	// 连接 URI（优先级最高，设置后忽略 Host/Port/User/Password）
+	URI string `yaml:"uri" env:"URI"`
+	// 主机
+	Host string `yaml:"host" env:"HOST"`
+	// 端口
+	Port int `yaml:"port" env:"PORT"`
+	// 用户名
+	User string `yaml:"user" env:"USER"`
+	// 密码
+	Password string `yaml:"password" env:"PASSWORD"`
+	// 数据库名
+	Database string `yaml:"database" env:"DATABASE"`
+	// 认证数据库
+	AuthSource string `yaml:"auth_source" env:"AUTH_SOURCE"`
+	// 副本集名称（可选）
+	ReplicaSet string `yaml:"replica_set" env:"REPLICA_SET"`
+	// 最大连接池大小
+	MaxPoolSize int `yaml:"max_pool_size" env:"MAX_POOL_SIZE"`
+	// 最小连接池大小
+	MinPoolSize int `yaml:"min_pool_size" env:"MIN_POOL_SIZE"`
+	// 连接超时
+	ConnectTimeout time.Duration `yaml:"connect_timeout" env:"CONNECT_TIMEOUT"`
+	// 请求超时
+	Timeout time.Duration `yaml:"timeout" env:"TIMEOUT"`
+	// 健康检查间隔
+	HealthCheckInterval time.Duration `yaml:"health_check_interval" env:"HEALTH_CHECK_INTERVAL"`
+	// 是否启用 TLS
+	TLSEnabled bool `yaml:"tls_enabled" env:"TLS_ENABLED"`
+	// TLS CA 证书路径
+	TLSCAFile string `yaml:"tls_ca_file" env:"TLS_CA_FILE"`
+	// TLS 客户端证书路径
+	TLSCertFile string `yaml:"tls_cert_file" env:"TLS_CERT_FILE"`
+	// TLS 客户端密钥路径
+	TLSKeyFile string `yaml:"tls_key_file" env:"TLS_KEY_FILE"`
+}
+
+// LLMConnectionConfig 连接级 LLM 配置（YAML 反序列化用）。
+// 注意：与 types.LLMConfig（运行时 Agent 配置）和 llm/config.LLMConfig（路由/降级配置）不同，
+// 此结构体仅用于应用启动时的连接参数加载。
+type LLMConnectionConfig struct {
 	// 默认 Provider
 	DefaultProvider string `yaml:"default_provider" env:"DEFAULT_PROVIDER"`
 	// API Key（通用）
@@ -241,6 +312,40 @@ type LLMConfig struct {
 	Timeout time.Duration `yaml:"timeout" env:"TIMEOUT"`
 	// 最大重试次数
 	MaxRetries int `yaml:"max_retries" env:"MAX_RETRIES"`
+}
+
+// MultimodalConfig 多模态框架配置（能力层，不绑定具体业务）。
+type MultimodalConfig struct {
+	// 是否启用多模态 API 路由
+	Enabled bool `yaml:"enabled" env:"ENABLED"`
+	// 引用图上传的最大字节数
+	ReferenceMaxSizeBytes int64 `yaml:"reference_max_size_bytes" env:"REFERENCE_MAX_SIZE_BYTES"`
+	// 引用图默认存活时长
+	ReferenceTTL time.Duration `yaml:"reference_ttl" env:"REFERENCE_TTL"`
+	// 引用图存储后端（仅支持 redis）
+	ReferenceStoreBackend string `yaml:"reference_store_backend" env:"REFERENCE_STORE_BACKEND"`
+	// 引用图存储 key 前缀（Redis 后端使用）
+	ReferenceStoreKeyPrefix string `yaml:"reference_store_key_prefix" env:"REFERENCE_STORE_KEY_PREFIX"`
+	// 默认图像提供商标识（openai/gemini 等）
+	DefaultImageProvider string `yaml:"default_image_provider" env:"DEFAULT_IMAGE_PROVIDER"`
+	// 默认视频提供商标识（runway/veo 等）
+	DefaultVideoProvider string `yaml:"default_video_provider" env:"DEFAULT_VIDEO_PROVIDER"`
+	// 图像提供商配置
+	Image MultimodalImageConfig `yaml:"image" env:"IMAGE"`
+	// 视频提供商配置
+	Video MultimodalVideoConfig `yaml:"video" env:"VIDEO"`
+}
+
+type MultimodalImageConfig struct {
+	OpenAIAPIKey  string `yaml:"openai_api_key" env:"OPENAI_API_KEY" json:"-"`
+	OpenAIBaseURL string `yaml:"openai_base_url" env:"OPENAI_BASE_URL"`
+	GeminiAPIKey  string `yaml:"gemini_api_key" env:"GEMINI_API_KEY" json:"-"`
+}
+
+type MultimodalVideoConfig struct {
+	RunwayAPIKey string `yaml:"runway_api_key" env:"RUNWAY_API_KEY" json:"-"`
+	VeoAPIKey    string `yaml:"veo_api_key" env:"VEO_API_KEY" json:"-"`
+	GoogleAPIKey string `yaml:"google_api_key" env:"GOOGLE_API_KEY" json:"-"`
 }
 
 // LogConfig 日志配置
@@ -263,10 +368,80 @@ type TelemetryConfig struct {
 	Enabled bool `yaml:"enabled" env:"ENABLED"`
 	// OTLP 端点
 	OTLPEndpoint string `yaml:"otlp_endpoint" env:"OTLP_ENDPOINT"`
+	// 是否使用非加密连接（仅用于开发/测试环境）
+	OTLPInsecure bool `yaml:"otlp_insecure" env:"OTLP_INSECURE"`
 	// 服务名称
 	ServiceName string `yaml:"service_name" env:"SERVICE_NAME"`
 	// 采样率
 	SampleRate float64 `yaml:"sample_rate" env:"SAMPLE_RATE"`
+}
+
+// ToolsConfig 工具提供者配置
+type ToolsConfig struct {
+	// Tavily 搜索配置（需要 API Key）
+	Tavily TavilyToolConfig `yaml:"tavily" env:"TAVILY"`
+	// Jina Reader 抓取配置（可选 API Key，免费可用）
+	Jina JinaToolConfig `yaml:"jina" env:"JINA"`
+	// Firecrawl 搜索+抓取配置（需要 API Key）
+	Firecrawl FirecrawlToolConfig `yaml:"firecrawl" env:"FIRECRAWL"`
+	// DuckDuckGo 搜索配置（完全免费，无需 API Key）
+	DuckDuckGo DuckDuckGoToolConfig `yaml:"duckduckgo" env:"DUCKDUCKGO"`
+	// SearXNG 搜索配置（自托管，无需 API Key）
+	SearXNG SearXNGToolConfig `yaml:"searxng" env:"SEARXNG"`
+	// HTTP 抓取配置（纯 HTTP，无需 API Key）
+	HTTPScrape HTTPScrapeToolConfig `yaml:"http_scrape" env:"HTTP_SCRAPE"`
+}
+
+// TavilyToolConfig Tavily 搜索工具配置
+type TavilyToolConfig struct {
+	// API Key（建议使用环境变量 AGENTFLOW_TOOLS_TAVILY_API_KEY）
+	APIKey string `yaml:"api_key" env:"API_KEY" json:"-"`
+	// 基础 URL（可选，默认 https://api.tavily.com）
+	BaseURL string `yaml:"base_url" env:"BASE_URL"`
+	// 请求超时
+	Timeout time.Duration `yaml:"timeout" env:"TIMEOUT"`
+}
+
+// JinaToolConfig Jina Reader 工具配置
+type JinaToolConfig struct {
+	// API Key（建议使用环境变量 AGENTFLOW_TOOLS_JINA_API_KEY）
+	APIKey string `yaml:"api_key" env:"API_KEY" json:"-"`
+	// 基础 URL（可选，默认 https://r.jina.ai）
+	BaseURL string `yaml:"base_url" env:"BASE_URL"`
+	// 请求超时
+	Timeout time.Duration `yaml:"timeout" env:"TIMEOUT"`
+}
+
+// FirecrawlToolConfig Firecrawl 工具配置
+type FirecrawlToolConfig struct {
+	// API Key（建议使用环境变量 AGENTFLOW_TOOLS_FIRECRAWL_API_KEY）
+	APIKey string `yaml:"api_key" env:"API_KEY" json:"-"`
+	// 基础 URL（可选，默认 https://api.firecrawl.dev）
+	BaseURL string `yaml:"base_url" env:"BASE_URL"`
+	// 请求超时
+	Timeout time.Duration `yaml:"timeout" env:"TIMEOUT"`
+}
+
+// DuckDuckGoToolConfig DuckDuckGo 搜索工具配置（完全免费）
+type DuckDuckGoToolConfig struct {
+	// 请求超时
+	Timeout time.Duration `yaml:"timeout" env:"TIMEOUT"`
+}
+
+// SearXNGToolConfig SearXNG 搜索工具配置（自托管，无需 API Key）
+type SearXNGToolConfig struct {
+	// SearXNG 实例地址（必填，如 https://searx.example.com）
+	BaseURL string `yaml:"base_url" env:"BASE_URL"`
+	// 请求超时
+	Timeout time.Duration `yaml:"timeout" env:"TIMEOUT"`
+}
+
+// HTTPScrapeToolConfig 纯 HTTP 抓取工具配置（零依赖，无需 API Key）
+type HTTPScrapeToolConfig struct {
+	// 自定义 User-Agent
+	UserAgent string `yaml:"user_agent" env:"USER_AGENT"`
+	// 请求超时
+	Timeout time.Duration `yaml:"timeout" env:"TIMEOUT"`
 }
 
 // --- 配置加载器 ---
@@ -502,6 +677,18 @@ func (c *Config) Validate() error {
 	if c.Agent.Temperature < 0 || c.Agent.Temperature > 2 {
 		errs = append(errs, "temperature must be between 0 and 2")
 	}
+	if c.Multimodal.ReferenceMaxSizeBytes <= 0 {
+		errs = append(errs, "multimodal.reference_max_size_bytes must be positive")
+	}
+	if c.Multimodal.ReferenceTTL <= 0 {
+		errs = append(errs, "multimodal.reference_ttl must be positive")
+	}
+	if strings.ToLower(strings.TrimSpace(c.Multimodal.ReferenceStoreBackend)) != "redis" {
+		errs = append(errs, "multimodal.reference_store_backend must be redis")
+	}
+	if c.Multimodal.Enabled && strings.TrimSpace(c.Redis.Addr) == "" {
+		errs = append(errs, "redis.addr is required when multimodal.reference_store_backend=redis")
+	}
 
 	// V-010: MaxTokens range validation
 	if c.Agent.MaxTokens < 0 || c.Agent.MaxTokens > 128000 {
@@ -589,4 +776,34 @@ func MaskAPIKey(key string) string {
 		return "***"
 	}
 	return key[:6] + "..." + key[len(key)-3:]
+}
+
+// CacheConfig LLM 缓存配置
+type CacheConfig struct {
+	// 是否启用缓存
+	Enabled bool `yaml:"enabled" env:"ENABLED"`
+	// 本地缓存最大条目数
+	LocalMaxSize int `yaml:"local_max_size" env:"LOCAL_MAX_SIZE"`
+	// 本地缓存 TTL
+	LocalTTL time.Duration `yaml:"local_ttl" env:"LOCAL_TTL"`
+	// 是否启用 Redis 缓存
+	EnableRedis bool `yaml:"enable_redis" env:"ENABLE_REDIS"`
+	// Redis 缓存 TTL
+	RedisTTL time.Duration `yaml:"redis_ttl" env:"REDIS_TTL"`
+	// 缓存键策略: hash | hierarchical
+	KeyStrategy string `yaml:"key_strategy" env:"KEY_STRATEGY"`
+}
+
+// BudgetConfig Token 预算管理配置
+type BudgetConfig struct {
+	// 是否启用预算管理
+	Enabled bool `yaml:"enabled" env:"ENABLED"`
+	// 每分钟最大 Token 数
+	MaxTokensPerMinute int `yaml:"max_tokens_per_minute" env:"MAX_TOKENS_PER_MINUTE"`
+	// 每天最大 Token 数
+	MaxTokensPerDay int `yaml:"max_tokens_per_day" env:"MAX_TOKENS_PER_DAY"`
+	// 每天最大花费 (USD)
+	MaxCostPerDay float64 `yaml:"max_cost_per_day" env:"MAX_COST_PER_DAY"`
+	// 告警阈值 (0.0-1.0)
+	AlertThreshold float64 `yaml:"alert_threshold" env:"ALERT_THRESHOLD"`
 }

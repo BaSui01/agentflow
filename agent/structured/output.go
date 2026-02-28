@@ -158,10 +158,16 @@ func (s *StructuredOutput[T]) generateNative(ctx context.Context, messages []llm
 
 // 生成 NativeWithRaw 使用本地结构输出并返回原始响应。
 func (s *StructuredOutput[T]) generateNativeWithRaw(ctx context.Context, messages []llm.Message) (*T, string, error) {
-	// 为请求构建 JSON 计划
+	// 为请求构建 JSON Schema
 	schemaJSON, err := json.Marshal(s.schema)
 	if err != nil {
 		return nil, "", fmt.Errorf("failed to marshal schema: %w", err)
+	}
+
+	// 将 schema 转换为 map[string]any 用于 ResponseFormat
+	var schemaMap map[string]any
+	if err := json.Unmarshal(schemaJSON, &schemaMap); err != nil {
+		return nil, "", fmt.Errorf("failed to unmarshal schema to map: %w", err)
 	}
 
 	// 添加带有计划指令的系统消息
@@ -176,8 +182,17 @@ func (s *StructuredOutput[T]) generateNativeWithRaw(ctx context.Context, message
 	// 预收系统消息
 	allMessages := append([]llm.Message{systemMsg}, messages...)
 
+	strict := true
 	req := &llm.ChatRequest{
 		Messages: allMessages,
+		ResponseFormat: &llm.ResponseFormat{
+			Type: llm.ResponseFormatJSONSchema,
+			JSONSchema: &llm.JSONSchemaParam{
+				Name:   "structured_output",
+				Schema: schemaMap,
+				Strict: &strict,
+			},
+		},
 	}
 
 	resp, err := s.provider.Completion(ctx, req)

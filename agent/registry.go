@@ -2,8 +2,10 @@ package agent
 
 import (
 	"fmt"
+	"strings"
 	"sync"
 
+	"github.com/BaSui01/agentflow/agent/skills"
 	"github.com/BaSui01/agentflow/llm"
 	"go.uber.org/zap"
 )
@@ -41,68 +43,28 @@ func NewAgentRegistry(logger *zap.Logger) *AgentRegistry {
 
 // 注册 BuiltinTyps 注册默认代理类型
 func (r *AgentRegistry) registerBuiltinTypes() {
-	// 通用代理工厂
-	r.Register(TypeGeneric, func(
-		config Config,
-		provider llm.Provider,
-		memory MemoryManager,
-		toolManager ToolManager,
-		bus EventBus,
-		logger *zap.Logger,
-	) (Agent, error) {
-		return NewBaseAgent(config, provider, memory, toolManager, bus, logger), nil
-	})
+	// 通用代理工厂 — 无预装配置
+	r.Register(TypeGeneric, newTypedAgentFactory(TypeGeneric))
 
-	// 助理代理工厂
-	r.Register(TypeAssistant, func(
-		config Config,
-		provider llm.Provider,
-		memory MemoryManager,
-		toolManager ToolManager,
-		bus EventBus,
-		logger *zap.Logger,
-	) (Agent, error) {
-		return NewBaseAgent(config, provider, memory, toolManager, bus, logger), nil
-	})
+	// 助理代理工厂 — 预装 communication + reasoning 提示
+	r.Register(TypeAssistant, newTypedAgentFactory(TypeAssistant))
 
-	// 分析剂厂
-	r.Register(TypeAnalyzer, func(
-		config Config,
-		provider llm.Provider,
-		memory MemoryManager,
-		toolManager ToolManager,
-		bus EventBus,
-		logger *zap.Logger,
-	) (Agent, error) {
-		return NewBaseAgent(config, provider, memory, toolManager, bus, logger), nil
-	})
+	// 分析剂厂 — 预装 data + reasoning 提示
+	r.Register(TypeAnalyzer, newTypedAgentFactory(TypeAnalyzer))
 
-	// 翻译代理工厂
-	r.Register(TypeTranslator, func(
-		config Config,
-		provider llm.Provider,
-		memory MemoryManager,
-		toolManager ToolManager,
-		bus EventBus,
-		logger *zap.Logger,
-	) (Agent, error) {
-		return NewBaseAgent(config, provider, memory, toolManager, bus, logger), nil
-	})
+	// 翻译代理工厂 — 预装 communication 提示
+	r.Register(TypeTranslator, newTypedAgentFactory(TypeTranslator))
 
-	// 总结剂厂
-	r.Register(TypeSummarizer, func(
-		config Config,
-		provider llm.Provider,
-		memory MemoryManager,
-		toolManager ToolManager,
-		bus EventBus,
-		logger *zap.Logger,
-	) (Agent, error) {
-		return NewBaseAgent(config, provider, memory, toolManager, bus, logger), nil
-	})
+	// 总结剂厂 — 预装 reasoning 提示
+	r.Register(TypeSummarizer, newTypedAgentFactory(TypeSummarizer))
 
-	// 审查员代理工厂
-	r.Register(TypeReviewer, func(
+	// 审查员代理工厂 — 预装 coding + reasoning 提示
+	r.Register(TypeReviewer, newTypedAgentFactory(TypeReviewer))
+}
+
+// newTypedAgentFactory creates an AgentFactory that applies type-specific PromptBundle defaults.
+func newTypedAgentFactory(agentType AgentType) AgentFactory {
+	return func(
 		config Config,
 		provider llm.Provider,
 		memory MemoryManager,
@@ -110,8 +72,125 @@ func (r *AgentRegistry) registerBuiltinTypes() {
 		bus EventBus,
 		logger *zap.Logger,
 	) (Agent, error) {
+		// Apply type-specific defaults only if the user hasn't set a PromptBundle
+		if config.PromptBundle.IsZero() {
+			config.PromptBundle = defaultPromptBundleForType(agentType)
+		}
+		// Apply type-specific skill categories into Metadata for SkillManager discovery
+		if cats := defaultSkillCategoriesForType(agentType); len(cats) > 0 {
+			if config.Metadata == nil {
+				config.Metadata = make(map[string]string)
+			}
+			if _, exists := config.Metadata["skill_categories"]; !exists {
+				config.Metadata["skill_categories"] = joinSkillCategories(cats)
+			}
+		}
 		return NewBaseAgent(config, provider, memory, toolManager, bus, logger), nil
-	})
+	}
+}
+
+// defaultPromptBundleForType returns a pre-configured PromptBundle for each agent type.
+// Generic type returns a zero PromptBundle (no preset behavior).
+func defaultPromptBundleForType(agentType AgentType) PromptBundle {
+	switch agentType {
+	case TypeAssistant:
+		return PromptBundle{
+			Version: "1.0.0",
+			System: SystemPrompt{
+				Role:     "You are a helpful assistant with strong communication and reasoning skills.",
+				Identity: "assistant",
+				Policies: []string{
+					"Provide clear, well-structured responses",
+					"Ask clarifying questions when the request is ambiguous",
+					"Use appropriate tone and language for the context",
+				},
+			},
+		}
+	case TypeAnalyzer:
+		return PromptBundle{
+			Version: "1.0.0",
+			System: SystemPrompt{
+				Role:     "You are a data analysis specialist with strong reasoning capabilities.",
+				Identity: "analyzer",
+				Policies: []string{
+					"Present data-driven insights with supporting evidence",
+					"Use structured formats (tables, lists) for clarity",
+					"Identify patterns, anomalies, and trends in data",
+				},
+			},
+		}
+	case TypeTranslator:
+		return PromptBundle{
+			Version: "1.0.0",
+			System: SystemPrompt{
+				Role:     "You are a professional translator with expertise in cross-cultural communication.",
+				Identity: "translator",
+				Policies: []string{
+					"Preserve the original meaning and tone during translation",
+					"Adapt cultural references appropriately for the target audience",
+					"Flag ambiguous terms that may have multiple translations",
+				},
+			},
+		}
+	case TypeSummarizer:
+		return PromptBundle{
+			Version: "1.0.0",
+			System: SystemPrompt{
+				Role:     "You are a summarization specialist with strong reasoning skills.",
+				Identity: "summarizer",
+				Policies: []string{
+					"Extract key points and main arguments from the source material",
+					"Maintain factual accuracy while condensing information",
+					"Organize summaries with clear structure and hierarchy",
+				},
+			},
+		}
+	case TypeReviewer:
+		return PromptBundle{
+			Version: "1.0.0",
+			System: SystemPrompt{
+				Role:     "You are a code review specialist with expertise in software engineering best practices.",
+				Identity: "reviewer",
+				Policies: []string{
+					"Identify bugs, security vulnerabilities, and performance issues",
+					"Suggest improvements following established coding standards",
+					"Provide constructive feedback with concrete examples",
+					"Check for proper error handling and edge cases",
+				},
+			},
+		}
+	default:
+		// TypeGeneric and unknown types — no preset
+		return PromptBundle{}
+	}
+}
+
+// defaultSkillCategoriesForType returns the recommended skill categories for each agent type.
+// These categories are used by SkillManager to discover and load relevant skills.
+func defaultSkillCategoriesForType(agentType AgentType) []skills.SkillCategory {
+	switch agentType {
+	case TypeAssistant:
+		return []skills.SkillCategory{skills.CategoryCommunication, skills.CategoryReasoning}
+	case TypeAnalyzer:
+		return []skills.SkillCategory{skills.CategoryData, skills.CategoryReasoning}
+	case TypeTranslator:
+		return []skills.SkillCategory{skills.CategoryCommunication}
+	case TypeSummarizer:
+		return []skills.SkillCategory{skills.CategoryReasoning}
+	case TypeReviewer:
+		return []skills.SkillCategory{skills.CategoryCoding, skills.CategoryReasoning}
+	default:
+		return nil
+	}
+}
+
+// joinSkillCategories joins skill categories into a comma-separated string.
+func joinSkillCategories(cats []skills.SkillCategory) string {
+	parts := make([]string, len(cats))
+	for i, c := range cats {
+		parts[i] = string(c)
+	}
+	return strings.Join(parts, ",")
 }
 
 // 登记册登记具有工厂功能的新代理类型
@@ -202,28 +281,6 @@ func InitGlobalRegistry(logger *zap.Logger) {
 	globalRegistryOnce.Do(func() {
 		GlobalRegistry = NewAgentRegistry(logger)
 	})
-}
-
-// Get GlobalRegistry 返回全球注册,必要时初始化它.
-// 这是访问全球登记册的建议方式。
-func GetGlobalRegistry(logger *zap.Logger) *AgentRegistry {
-	InitGlobalRegistry(logger)
-	return GlobalRegistry
-}
-
-// AgentType在全球登记册中登记一种代理类型。
-// 如果全球登记册没有初始化,它将以nop日志初始化。
-func RegisterAgentType(agentType AgentType, factory AgentFactory) {
-	globalRegistryMu.RLock()
-	registry := GlobalRegistry
-	globalRegistryMu.RUnlock()
-
-	if registry == nil {
-		// 如果未初始化, 自动初始化 。
-		InitGlobalRegistry(zap.NewNop())
-		registry = GlobalRegistry
-	}
-	registry.Register(agentType, factory)
 }
 
 // Create Agent 使用全球登记册创建代理

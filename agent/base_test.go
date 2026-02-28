@@ -455,3 +455,69 @@ func BenchmarkBaseAgent_Execute(b *testing.B) {
 		_, _ = agent.Execute(ctx, input)
 	}
 }
+
+// TestSaveMemory_WriteThroughCache verifies that SaveMemory appends the new
+// record to the in-process recentMemory cache so that subsequent Execute()
+// calls see it without a full reload from the MemoryManager.
+func TestSaveMemory_WriteThroughCache(t *testing.T) {
+	logger, _ := zap.NewDevelopment()
+
+	var saved []MemoryRecord
+	mem := &testMemoryManager{
+		loadRecentFn: func(_ context.Context, _ string, _ MemoryKind, _ int) ([]MemoryRecord, error) {
+			return nil, nil // start empty
+		},
+		saveFn: func(_ context.Context, rec MemoryRecord) error {
+			saved = append(saved, rec)
+			return nil
+		},
+	}
+
+	agent := NewBaseAgent(Config{ID: "mem-test", Name: "mem-test", Type: TypeGeneric}, &testProvider{name: "mock"}, mem, nil, nil, logger)
+	ctx := context.Background()
+	_ = agent.Init(ctx)
+
+	// Cache should be empty after Init (no records in store).
+	agent.recentMemoryMu.RLock()
+	assert.Empty(t, agent.recentMemory)
+	agent.recentMemoryMu.RUnlock()
+
+	// Save a record.
+	err := agent.SaveMemory(ctx, "hello", MemoryShortTerm, nil)
+	assert.NoError(t, err)
+
+	// Cache should now contain the saved record.
+	agent.recentMemoryMu.RLock()
+	assert.Len(t, agent.recentMemory, 1)
+	assert.Equal(t, "hello", agent.recentMemory[0].Content)
+	agent.recentMemoryMu.RUnlock()
+
+	// Underlying store should also have it.
+	assert.Len(t, saved, 1)
+}
+
+// TestSaveMemory_CacheEviction verifies that the cache is bounded by
+// defaultMaxRecentMemory and evicts the oldest entries when full.
+func TestSaveMemory_CacheEviction(t *testing.T) {
+	logger, _ := zap.NewDevelopment()
+
+	mem := &testMemoryManager{
+		loadRecentFn: func(_ context.Context, _ string, _ MemoryKind, _ int) ([]MemoryRecord, error) {
+			return nil, nil
+		},
+		saveFn: func(_ context.Context, _ MemoryRecord) error { return nil },
+	}
+
+	agent := NewBaseAgent(Config{ID: "evict-test", Name: "evict-test", Type: TypeGeneric}, &testProvider{name: "mock"}, mem, nil, nil, logger)
+	ctx := context.Background()
+	_ = agent.Init(ctx)
+
+	// Fill cache beyond the limit.
+	for i := 0; i < defaultMaxRecentMemory+10; i++ {
+		_ = agent.SaveMemory(ctx, "msg", MemoryShortTerm, nil)
+	}
+
+	agent.recentMemoryMu.RLock()
+	assert.Equal(t, defaultMaxRecentMemory, len(agent.recentMemory))
+	agent.recentMemoryMu.RUnlock()
+}

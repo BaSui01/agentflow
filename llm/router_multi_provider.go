@@ -97,7 +97,7 @@ func (r *MultiProviderRouter) SelectProviderWithModel(ctx context.Context, model
 	case StrategyQPSBased:
 		return r.selectByQPSMulti(ctx, candidates)
 	default:
-		return r.selectByHealthMulti(ctx, candidates)
+		return nil, &Error{Code: "BUSINESS_LLM_INVALID_STRATEGY", Message: fmt.Sprintf("Unsupported routing strategy: %s", strategy)}
 	}
 }
 
@@ -264,7 +264,11 @@ func (r *MultiProviderRouter) buildSelectionMulti(
 	}
 
 	// 使用工厂创建 Provider 实例（带 API Key 和 BaseURL）
+	// BaseURL 优先级：APIKey.BaseURL > ProviderModel.BaseURL
 	baseURL := providerModel.BaseURL
+	if apiKey.BaseURL != "" {
+		baseURL = apiKey.BaseURL
+	}
 	provider, err := r.providerFactory.CreateProvider(providerCode, apiKey.APIKey, baseURL)
 	if err != nil {
 		return nil, &Error{

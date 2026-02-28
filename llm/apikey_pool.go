@@ -48,7 +48,7 @@ func NewAPIKeyPool(db *gorm.DB, providerID uint, strategy APIKeySelectionStrateg
 		logger = zap.NewNop()
 	}
 	if strategy == "" {
-		strategy = StrategyWeightedRandom
+		panic("NewAPIKeyPool: strategy must not be empty")
 	}
 
 	pool := &APIKeyPool{
@@ -118,7 +118,7 @@ func (p *APIKeyPool) SelectKey(ctx context.Context) (*LLMProviderAPIKey, error) 
 	case StrategyLeastUsed:
 		selected = p.selectLeastUsed(healthyKeys)
 	default:
-		selected = p.selectWeightedRandom(healthyKeys)
+		return nil, fmt.Errorf("unsupported API key selection strategy: %s", p.strategy)
 	}
 
 	if selected == nil {
@@ -370,6 +370,7 @@ func (p *APIKeyPool) GetStats() map[uint]*APIKeyStats {
 		stats[key.ID] = &APIKeyStats{
 			KeyID:          key.ID,
 			Label:          key.Label,
+			BaseURL:        key.BaseURL,
 			Enabled:        key.Enabled,
 			IsHealthy:      key.IsHealthy(),
 			TotalRequests:  key.TotalRequests,
@@ -398,6 +399,7 @@ func (p *APIKeyPool) calculateSuccessRate(key *LLMProviderAPIKey) float64 {
 type APIKeyStats struct {
 	KeyID          uint       `json:"key_id"`
 	Label          string     `json:"label"`
+	BaseURL        string     `json:"base_url"`
 	Enabled        bool       `json:"enabled"`
 	IsHealthy      bool       `json:"is_healthy"`
 	TotalRequests  int64      `json:"total_requests"`

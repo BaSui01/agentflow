@@ -6,31 +6,38 @@ import "time"
 // DefaultConfig 返回默认配置
 func DefaultConfig() *Config {
 	return &Config{
-		Server:    DefaultServerConfig(),
-		Agent:     DefaultAgentConfig(),
-		Redis:     DefaultRedisConfig(),
-		Database:  DefaultDatabaseConfig(),
-		Qdrant:    DefaultQdrantConfig(),
-		Weaviate:  DefaultWeaviateConfig(),
-		Milvus:    DefaultMilvusConfig(),
-		LLM:       DefaultLLMConfig(),
-		Log:       DefaultLogConfig(),
-		Telemetry: DefaultTelemetryConfig(),
+		Server:     DefaultServerConfig(),
+		Agent:      DefaultAgentConfig(),
+		Redis:      DefaultRedisConfig(),
+		Database:   DefaultDatabaseConfig(),
+		Qdrant:     DefaultQdrantConfig(),
+		Weaviate:   DefaultWeaviateConfig(),
+		Milvus:     DefaultMilvusConfig(),
+		MongoDB:    DefaultMongoDBConfig(),
+		LLM:        DefaultLLMConfig(),
+		Multimodal: DefaultMultimodalConfig(),
+		Log:        DefaultLogConfig(),
+		Telemetry:  DefaultTelemetryConfig(),
+		Tools:      DefaultToolsConfig(),
+		Cache:      DefaultCacheConfig(),
+		Budget:     DefaultBudgetConfig(),
 	}
 }
 
 // DefaultServerConfig 返回默认服务器配置
 func DefaultServerConfig() ServerConfig {
 	return ServerConfig{
-		HTTPPort:         8080,
-		GRPCPort:         9090,
-		MetricsPort:      9091,
-		ReadTimeout:      30 * time.Second,
-		WriteTimeout:     30 * time.Second,
-		ShutdownTimeout:  15 * time.Second,
-		AllowQueryAPIKey: false,
-		RateLimitRPS:     100,
-		RateLimitBurst:   200,
+		HTTPPort:             8080,
+		GRPCPort:             9090,
+		MetricsPort:          9091,
+		ReadTimeout:          30 * time.Second,
+		WriteTimeout:         30 * time.Second,
+		ShutdownTimeout:      15 * time.Second,
+		AllowQueryAPIKey:     false,
+		RateLimitRPS:         100,
+		RateLimitBurst:       200,
+		TenantRateLimitRPS:   50,
+		TenantRateLimitBurst: 100,
 	}
 }
 
@@ -77,7 +84,7 @@ func DefaultDatabaseConfig() DatabaseConfig {
 		Name:            "agentflow",
 		SSLMode:         "disable",
 		MaxOpenConns:    25,
-		MaxIdleConns:    5,
+		MaxIdleConns:    10,
 		ConnMaxLifetime: 5 * time.Minute,
 	}
 }
@@ -127,14 +134,52 @@ func DefaultMilvusConfig() MilvusConfig {
 	}
 }
 
-// DefaultLLMConfig 返回默认 LLM 配置
-func DefaultLLMConfig() LLMConfig {
-	return LLMConfig{
+// DefaultMongoDBConfig 返回默认 MongoDB 配置
+func DefaultMongoDBConfig() MongoDBConfig {
+	return MongoDBConfig{
+		Host:                "localhost",
+		Port:                27017,
+		Database:            "agentflow",
+		AuthSource:          "admin",
+		MaxPoolSize:         100,
+		MinPoolSize:         5,
+		ConnectTimeout:      10 * time.Second,
+		Timeout:             30 * time.Second,
+		HealthCheckInterval: 30 * time.Second,
+	}
+}
+
+// DefaultLLMConfig 返回默认 LLM 连接配置
+func DefaultLLMConfig() LLMConnectionConfig {
+	return LLMConnectionConfig{
 		DefaultProvider: "openai",
 		APIKey:          "",
 		BaseURL:         "",
 		Timeout:         2 * time.Minute,
 		MaxRetries:      3,
+	}
+}
+
+// DefaultMultimodalConfig 返回默认多模态框架配置
+func DefaultMultimodalConfig() MultimodalConfig {
+	return MultimodalConfig{
+		Enabled:                 true,
+		ReferenceMaxSizeBytes:   8 << 20, // 8MB
+		ReferenceTTL:            2 * time.Hour,
+		ReferenceStoreBackend:   "redis",
+		ReferenceStoreKeyPrefix: "agentflow:mm:ref",
+		DefaultImageProvider:    "",
+		DefaultVideoProvider:    "",
+		Image: MultimodalImageConfig{
+			OpenAIAPIKey:  "",
+			OpenAIBaseURL: "",
+			GeminiAPIKey:  "",
+		},
+		Video: MultimodalVideoConfig{
+			RunwayAPIKey: "",
+			VeoAPIKey:    "",
+			GoogleAPIKey: "",
+		},
 	}
 }
 
@@ -154,7 +199,61 @@ func DefaultTelemetryConfig() TelemetryConfig {
 	return TelemetryConfig{
 		Enabled:      false,
 		OTLPEndpoint: "localhost:4317",
+		OTLPInsecure: false,
 		ServiceName:  "agentflow",
 		SampleRate:   0.1,
+	}
+}
+
+// DefaultToolsConfig 返回默认工具提供者配置
+func DefaultToolsConfig() ToolsConfig {
+	return ToolsConfig{
+		Tavily: TavilyToolConfig{
+			BaseURL: "https://api.tavily.com",
+			Timeout: 15 * time.Second,
+		},
+		Jina: JinaToolConfig{
+			BaseURL: "https://r.jina.ai",
+			Timeout: 30 * time.Second,
+		},
+		Firecrawl: FirecrawlToolConfig{
+			BaseURL: "https://api.firecrawl.dev",
+			Timeout: 30 * time.Second,
+		},
+		DuckDuckGo: DuckDuckGoToolConfig{
+			Timeout: 15 * time.Second,
+		},
+		SearXNG: SearXNGToolConfig{
+			Timeout: 15 * time.Second,
+		},
+		HTTPScrape: HTTPScrapeToolConfig{
+			UserAgent: "Mozilla/5.0 (compatible; AgentFlow/1.0)",
+			Timeout:   30 * time.Second,
+		},
+	}
+}
+
+// DefaultCacheConfig 返回默认缓存配置
+// 与 cache.DefaultCacheConfig() 对齐
+func DefaultCacheConfig() CacheConfig {
+	return CacheConfig{
+		Enabled:      true,
+		LocalMaxSize: 1000,
+		LocalTTL:     5 * time.Minute,
+		EnableRedis:  false,
+		RedisTTL:     1 * time.Hour,
+		KeyStrategy:  "hash",
+	}
+}
+
+// DefaultBudgetConfig 返回默认预算配置
+// 与 budget.DefaultBudgetConfig() 对齐
+func DefaultBudgetConfig() BudgetConfig {
+	return BudgetConfig{
+		Enabled:            true,
+		MaxTokensPerMinute: 500000,
+		MaxTokensPerDay:    50000000,
+		MaxCostPerDay:      1000.0,
+		AlertThreshold:     0.8,
 	}
 }

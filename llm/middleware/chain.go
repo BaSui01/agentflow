@@ -7,6 +7,7 @@ import (
 	"time"
 
 	llmpkg "github.com/BaSui01/agentflow/llm"
+	"github.com/BaSui01/agentflow/types"
 	"go.uber.org/zap"
 )
 
@@ -135,6 +136,7 @@ func TimeoutMiddleware(timeout time.Duration) Middleware {
 }
 
 // RetryMiddleware 重试失败的请求.
+// 只重试可重试的错误（*types.Error 且 Retryable=true），不可重试的错误立即返回。
 func RetryMiddleware(maxRetries int, backoff time.Duration) Middleware {
 	return func(next Handler) Handler {
 		return func(ctx context.Context, req *llmpkg.ChatRequest) (*llmpkg.ChatResponse, error) {
@@ -145,6 +147,11 @@ func RetryMiddleware(maxRetries int, backoff time.Duration) Middleware {
 					return resp, nil
 				}
 				lastErr = err
+
+				// 检查错误是否可重试：只有 *types.Error 且 Retryable=true 才重试
+				if !types.IsRetryable(err) {
+					return nil, err
+				}
 
 				if i < maxRetries {
 					select {

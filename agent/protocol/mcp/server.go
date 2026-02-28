@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 )
 
 // DefaultMCPServer 默认 MCP 服务器实现
@@ -31,6 +32,7 @@ type DefaultMCPServer struct {
 	subsMu        sync.RWMutex
 
 	logger *zap.Logger
+	logLevel zap.AtomicLevel
 }
 
 // ToolHandler 工具处理函数
@@ -39,7 +41,7 @@ type ToolHandler func(ctx context.Context, args map[string]any) (any, error)
 // NewMCPServer 创建 MCP 服务器
 func NewMCPServer(name, version string, logger *zap.Logger) *DefaultMCPServer {
 	if logger == nil {
-		logger, _ = zap.NewProduction()
+		logger = zap.NewNop()
 	}
 
 	return &DefaultMCPServer{
@@ -61,6 +63,7 @@ func NewMCPServer(name, version string, logger *zap.Logger) *DefaultMCPServer {
 		toolHandlers:  make(map[string]ToolHandler),
 		prompts:       make(map[string]*PromptTemplate),
 		subscriptions: make(map[string][]chan Resource),
+		logLevel:      zap.NewAtomicLevelAt(zapcore.InfoLevel),
 		logger:        logger.With(zap.String("component", "mcp_server")),
 	}
 }
@@ -258,7 +261,11 @@ func (s *DefaultMCPServer) GetPrompt(ctx context.Context, name string, vars map[
 
 // SetLogLevel 设置日志级别
 func (s *DefaultMCPServer) SetLogLevel(level string) error {
-	// 实现日志级别设置
+	var zapLevel zapcore.Level
+	if err := zapLevel.UnmarshalText([]byte(level)); err != nil {
+		return fmt.Errorf("invalid log level %q: %w", level, err)
+	}
+	s.logLevel.SetLevel(zapLevel)
 	s.logger.Info("log level changed", zap.String("level", level))
 	return nil
 }
@@ -346,4 +353,232 @@ func (s *DefaultMCPServer) Close() error {
 	s.logger.Info("MCP server closed")
 
 	return nil
+}
+
+// =============================================================================
+// Message Dispatcher (JSON-RPC 2.0)
+// =============================================================================
+
+// HandleMessage dispatches an incoming JSON-RPC 2.0 request to the appropriate
+// server method and returns a JSON-RPC 2.0 response. Notifications (messages
+// without an ID) return nil response and nil error.
+func (s *DefaultMCPServer) HandleMessage(ctx context.Context, msg *MCPMessage) (*MCPMessage, error) {
+	if msg == nil {
+		return NewMCPError(nil, ErrorCodeInvalidRequest, "empty message", nil), nil
+	}
+
+	s.logger.Debug("handling message",
+		zap.String("method", msg.Method),
+		zap.Any("id", msg.ID),
+	)
+
+	// Notifications (no ID) are fire-and-forget; we process but don't respond.
+	if msg.ID == nil {
+		s.handleNotification(msg)
+		return nil, nil
+	}
+
+	// Dispatch based on method
+	result, mcpErr := s.dispatch(ctx, msg.Method, msg.Params)
+	if mcpErr != nil {
+		return &MCPMessage{
+			JSONRPC: "2.0",
+			ID:      msg.ID,
+			Error:   mcpErr,
+		}, nil
+	}
+
+	return NewMCPResponse(msg.ID, result), nil
+}
+
+// handleNotification processes notification messages (no response expected).
+func (s *DefaultMCPServer) handleNotification(msg *MCPMessage) {
+	switch msg.Method {
+	case "notifications/initialized":
+		s.logger.Info("client initialized notification received")
+	default:
+		s.logger.Debug("unhandled notification", zap.String("method", msg.Method))
+	}
+}
+
+// dispatch routes a method call to the corresponding server handler.
+func (s *DefaultMCPServer) dispatch(ctx context.Context, method string, params map[string]any) (any, *MCPError) {
+	switch method {
+	case "initialize":
+		return s.handleInitialize(params)
+	case "tools/list":
+		return s.handleToolsList(ctx)
+	case "tools/call":
+		return s.handleToolsCall(ctx, params)
+	case "resources/list":
+		return s.handleResourcesList(ctx)
+	case "resources/read":
+		return s.handleResourcesRead(ctx, params)
+	case "prompts/list":
+		return s.handlePromptsList(ctx)
+	case "prompts/get":
+		return s.handlePromptsGet(ctx, params)
+	default:
+		return nil, &MCPError{
+			Code:    ErrorCodeMethodNotFound,
+			Message: fmt.Sprintf("method not found: %s", method),
+		}
+	}
+}
+
+func (s *DefaultMCPServer) handleInitialize(_ map[string]any) (any, *MCPError) {
+	return map[string]any{
+		"protocolVersion": MCPVersion,
+		"capabilities":    s.info.Capabilities,
+		"serverInfo": map[string]any{
+			"name":    s.info.Name,
+			"version": s.info.Version,
+		},
+	}, nil
+}
+
+func (s *DefaultMCPServer) handleToolsList(ctx context.Context) (any, *MCPError) {
+	tools, err := s.ListTools(ctx)
+	if err != nil {
+		return nil, &MCPError{Code: ErrorCodeInternalError, Message: err.Error()}
+	}
+	return map[string]any{"tools": tools}, nil
+}
+
+func (s *DefaultMCPServer) handleToolsCall(ctx context.Context, params map[string]any) (any, *MCPError) {
+	name, _ := params["name"].(string)
+	if name == "" {
+		return nil, &MCPError{Code: ErrorCodeInvalidParams, Message: "missing required parameter: name"}
+	}
+
+	// Extract arguments — may be nil for tools with no parameters
+	args, _ := params["arguments"].(map[string]any)
+
+	result, err := s.CallTool(ctx, name, args)
+	if err != nil {
+		return nil, &MCPError{Code: ErrorCodeInternalError, Message: err.Error()}
+	}
+	return result, nil
+}
+
+func (s *DefaultMCPServer) handleResourcesList(ctx context.Context) (any, *MCPError) {
+	resources, err := s.ListResources(ctx)
+	if err != nil {
+		return nil, &MCPError{Code: ErrorCodeInternalError, Message: err.Error()}
+	}
+	return map[string]any{"resources": resources}, nil
+}
+
+func (s *DefaultMCPServer) handleResourcesRead(ctx context.Context, params map[string]any) (any, *MCPError) {
+	uri, _ := params["uri"].(string)
+	if uri == "" {
+		return nil, &MCPError{Code: ErrorCodeInvalidParams, Message: "missing required parameter: uri"}
+	}
+
+	resource, err := s.GetResource(ctx, uri)
+	if err != nil {
+		return nil, &MCPError{Code: ErrorCodeInternalError, Message: err.Error()}
+	}
+	return resource, nil
+}
+
+func (s *DefaultMCPServer) handlePromptsList(ctx context.Context) (any, *MCPError) {
+	prompts, err := s.ListPrompts(ctx)
+	if err != nil {
+		return nil, &MCPError{Code: ErrorCodeInternalError, Message: err.Error()}
+	}
+	return map[string]any{"prompts": prompts}, nil
+}
+
+func (s *DefaultMCPServer) handlePromptsGet(ctx context.Context, params map[string]any) (any, *MCPError) {
+	name, _ := params["name"].(string)
+	if name == "" {
+		return nil, &MCPError{Code: ErrorCodeInvalidParams, Message: "missing required parameter: name"}
+	}
+
+	// Extract variables — convert map[string]any to map[string]string
+	vars := make(map[string]string)
+	if rawVars, ok := params["variables"].(map[string]any); ok {
+		for k, v := range rawVars {
+			if sv, ok := v.(string); ok {
+				vars[k] = sv
+			}
+		}
+	}
+
+	rendered, err := s.GetPrompt(ctx, name, vars)
+	if err != nil {
+		return nil, &MCPError{Code: ErrorCodeInternalError, Message: err.Error()}
+	}
+	return rendered, nil
+}
+
+// =============================================================================
+// Serve — Transport Message Loop
+// =============================================================================
+
+// Serve runs the MCP server message loop over the given transport. It receives
+// messages, dispatches them via HandleMessage, and sends responses back. The
+// loop exits when the context is cancelled or the transport returns an error.
+func (s *DefaultMCPServer) Serve(ctx context.Context, transport Transport) error {
+	if transport == nil {
+		return fmt.Errorf("transport cannot be nil")
+	}
+
+	s.logger.Info("MCP server starting",
+		zap.String("name", s.info.Name),
+		zap.String("version", s.info.Version),
+	)
+
+	for {
+		select {
+		case <-ctx.Done():
+			s.logger.Info("MCP server stopping: context cancelled")
+			return ctx.Err()
+		default:
+		}
+
+		msg, err := transport.Receive(ctx)
+		if err != nil {
+			// Context cancellation is a clean shutdown, not an error
+			if ctx.Err() != nil {
+				s.logger.Info("MCP server stopping: context cancelled")
+				return ctx.Err()
+			}
+			s.logger.Error("transport receive error", zap.Error(err))
+			// Send a parse error response for malformed messages
+			parseErrResp := NewMCPError(nil, ErrorCodeParseError, "failed to receive message", nil)
+			if sendErr := transport.Send(ctx, parseErrResp); sendErr != nil {
+				s.logger.Error("failed to send error response", zap.Error(sendErr))
+			}
+			continue
+		}
+
+		// Validate JSON-RPC version
+		if msg.JSONRPC != "" && msg.JSONRPC != "2.0" {
+			resp := NewMCPError(msg.ID, ErrorCodeInvalidRequest, "unsupported JSON-RPC version", nil)
+			if sendErr := transport.Send(ctx, resp); sendErr != nil {
+				s.logger.Error("failed to send error response", zap.Error(sendErr))
+			}
+			continue
+		}
+
+		resp, handleErr := s.HandleMessage(ctx, msg)
+		if handleErr != nil {
+			s.logger.Error("HandleMessage returned unexpected error", zap.Error(handleErr))
+			continue
+		}
+
+		// Notifications produce no response
+		if resp == nil {
+			continue
+		}
+
+		if sendErr := transport.Send(ctx, resp); sendErr != nil {
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
+			s.logger.Error("failed to send response", zap.Error(sendErr))
+		}
+	}
 }

@@ -19,9 +19,9 @@ func TestProperty8_RewriterChainApplication(t *testing.T) {
 	testCases := []struct {
 		name               string
 		inputTools         []llm.ToolSchema
-		inputToolChoice    string
+		inputToolChoice    any
 		expectedToolsNil   bool
-		expectedToolChoice string
+		expectedToolChoice any
 		requirement        string
 		description        string
 	}{
@@ -34,7 +34,7 @@ func TestProperty8_RewriterChainApplication(t *testing.T) {
 			inputTools:         []llm.ToolSchema{},
 			inputToolChoice:    "auto",
 			expectedToolsNil:   true,
-			expectedToolChoice: "",
+			expectedToolChoice: nil,
 			requirement:        "7.1, 7.4",
 			description:        "EmptyToolsCleaner should remove tool_choice when tools is empty array",
 		},
@@ -43,25 +43,25 @@ func TestProperty8_RewriterChainApplication(t *testing.T) {
 			inputTools:         nil,
 			inputToolChoice:    "required",
 			expectedToolsNil:   true,
-			expectedToolChoice: "",
+			expectedToolChoice: nil,
 			requirement:        "7.1, 7.4",
 			description:        "EmptyToolsCleaner should remove tool_choice when tools is nil",
 		},
 		{
 			name:               "Empty tools array without tool_choice - no change needed",
 			inputTools:         []llm.ToolSchema{},
-			inputToolChoice:    "",
+			inputToolChoice:    nil,
 			expectedToolsNil:   true,
-			expectedToolChoice: "",
+			expectedToolChoice: nil,
 			requirement:        "7.1, 7.4",
 			description:        "EmptyToolsCleaner should handle empty tools with no tool_choice",
 		},
 		{
 			name:               "Nil tools without tool_choice - no change needed",
 			inputTools:         nil,
-			inputToolChoice:    "",
+			inputToolChoice:    nil,
 			expectedToolsNil:   true,
-			expectedToolChoice: "",
+			expectedToolChoice: nil,
 			requirement:        "7.1, 7.4",
 			description:        "EmptyToolsCleaner should handle nil tools with no tool_choice",
 		},
@@ -95,9 +95,9 @@ func TestProperty8_RewriterChainApplication(t *testing.T) {
 			inputTools: []llm.ToolSchema{
 				{Name: "weather", Description: "Get weather", Parameters: []byte(`{"type":"object"}`)},
 			},
-			inputToolChoice:    "",
+			inputToolChoice:    nil,
 			expectedToolsNil:   false,
-			expectedToolChoice: "",
+			expectedToolChoice: nil,
 			requirement:        "7.1, 7.4",
 			description:        "EmptyToolsCleaner should preserve tools even without tool_choice",
 		},
@@ -109,7 +109,7 @@ func TestProperty8_RewriterChainApplication(t *testing.T) {
 			inputTools:         []llm.ToolSchema{},
 			inputToolChoice:    "none",
 			expectedToolsNil:   true,
-			expectedToolChoice: "",
+			expectedToolChoice: nil,
 			requirement:        "7.1, 7.4",
 			description:        "Should clear tool_choice='none' when tools empty",
 		},
@@ -118,7 +118,7 @@ func TestProperty8_RewriterChainApplication(t *testing.T) {
 			inputTools:         []llm.ToolSchema{},
 			inputToolChoice:    `{"type":"function","function":{"name":"search"}}`,
 			expectedToolsNil:   true,
-			expectedToolChoice: "",
+			expectedToolChoice: nil,
 			requirement:        "7.1, 7.4",
 			description:        "Should clear specific function choice when tools empty",
 		},
@@ -127,7 +127,7 @@ func TestProperty8_RewriterChainApplication(t *testing.T) {
 			inputTools:         nil,
 			inputToolChoice:    "auto",
 			expectedToolsNil:   true,
-			expectedToolChoice: "",
+			expectedToolChoice: nil,
 			requirement:        "7.1, 7.4",
 			description:        "Should clear tool_choice='auto' when tools nil",
 		},
@@ -202,9 +202,9 @@ func TestProperty8_RewriterChainApplication(t *testing.T) {
 	expandedTestCases := make([]struct {
 		name               string
 		inputTools         []llm.ToolSchema
-		inputToolChoice    string
+		inputToolChoice    any
 		expectedToolsNil   bool
-		expectedToolChoice string
+		expectedToolChoice any
 		requirement        string
 		description        string
 	}, 0, len(testCases)*8)
@@ -283,7 +283,7 @@ func TestProperty8_RewriterChainAppliedToBothMethods(t *testing.T) {
 	testCases := []struct {
 		name           string
 		tools          []llm.ToolSchema
-		toolChoice     string
+		toolChoice     any
 		expectModified bool
 		requirement    string
 	}{
@@ -339,7 +339,7 @@ func TestProperty8_RewriterChainAppliedToBothMethods(t *testing.T) {
 
 			if tc.expectModified {
 				// 当工具为空时应该清除工具选择
-				assert.Empty(t, rewrittenReq.ToolChoice,
+				assert.Nil(t, rewrittenReq.ToolChoice,
 					"ToolChoice should be cleared when tools are empty (Requirement %s)", tc.requirement)
 			} else {
 				// 当工具不是空的时, 工具选择应当保存
@@ -357,13 +357,13 @@ func TestProperty8_EmptyToolsCleanerBehavior(t *testing.T) {
 	testCases := []struct {
 		name               string
 		inputReq           *llm.ChatRequest
-		expectedToolChoice string
+		expectedToolChoice any
 		description        string
 	}{
 		{
 			name:               "Nil request should be handled gracefully",
 			inputReq:           nil,
-			expectedToolChoice: "",
+			expectedToolChoice: nil,
 			description:        "EmptyToolsCleaner should handle nil request",
 		},
 		{
@@ -372,7 +372,7 @@ func TestProperty8_EmptyToolsCleanerBehavior(t *testing.T) {
 				Tools:      nil,
 				ToolChoice: "auto",
 			},
-			expectedToolChoice: "",
+			expectedToolChoice: nil,
 			description:        "Should clear tool_choice when tools is nil",
 		},
 		{
@@ -381,7 +381,7 @@ func TestProperty8_EmptyToolsCleanerBehavior(t *testing.T) {
 				Tools:      []llm.ToolSchema{},
 				ToolChoice: "required",
 			},
-			expectedToolChoice: "",
+			expectedToolChoice: nil,
 			description:        "Should clear tool_choice when tools is empty array",
 		},
 		{
@@ -401,10 +401,10 @@ func TestProperty8_EmptyToolsCleanerBehavior(t *testing.T) {
 				Tools: []llm.ToolSchema{
 					{Name: "test", Description: "Test", Parameters: []byte(`{"type":"object"}`)},
 				},
-				ToolChoice: "",
+				ToolChoice: nil,
 			},
-			expectedToolChoice: "",
-			description:        "Should preserve empty tool_choice when tools exist",
+			expectedToolChoice: nil,
+			description:        "Should preserve nil tool_choice when tools exist",
 		},
 	}
 

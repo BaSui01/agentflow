@@ -1,20 +1,24 @@
 package moderation
 
-import "time"
+import (
+	"time"
 
-// OpenAIConfig 配置 OpenAI 节奏提供者 。
+	"github.com/BaSui01/agentflow/llm/providers"
+)
+
+// OpenAIConfig 配置 OpenAI 内容审核提供者.
+// 嵌入 providers.BaseProviderConfig 以复用 APIKey、BaseURL、Model、Timeout 字段。
 type OpenAIConfig struct {
-	APIKey  string        `json:"api_key" yaml:"api_key"`
-	BaseURL string        `json:"base_url" yaml:"base_url"`
-	Model   string        `json:"model,omitempty" yaml:"model,omitempty"`
-	Timeout time.Duration `json:"timeout,omitempty" yaml:"timeout,omitempty"`
+	providers.BaseProviderConfig `yaml:",inline"`
 }
 
-// 默认 OpenAIConfig 返回默认 OpenAI 温和配置 。
+// DefaultOpenAIConfig 返回默认 OpenAI 内容审核配置.
 func DefaultOpenAIConfig() OpenAIConfig {
 	return OpenAIConfig{
-		BaseURL: "https://api.openai.com/v1",
-		Model:   "omni-moderation-latest",
-		Timeout: 30 * time.Second,
+		BaseProviderConfig: providers.BaseProviderConfig{
+			BaseURL: "https://api.openai.com/v1",
+			Model:   "omni-moderation-latest",
+			Timeout: 30 * time.Second,
+		},
 	}
 }

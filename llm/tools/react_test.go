@@ -42,6 +42,10 @@ func (p *scriptedCompletionProvider) ListModels(_ context.Context) ([]llmpkg.Mod
 	return nil, nil
 }
 
+func (p *scriptedCompletionProvider) Endpoints() llmpkg.ProviderEndpoints {
+	return llmpkg.ProviderEndpoints{}
+}
+
 type scriptedToolExecutor struct {
 	calls int
 	failN int

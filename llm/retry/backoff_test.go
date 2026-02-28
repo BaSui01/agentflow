@@ -239,8 +239,8 @@ func TestWrapRetryable(t *testing.T) {
 	err := errors.New("test error")
 	wrapped := WrapRetryable(err)
 
-	assert.True(t, IsRetryable(wrapped))
-	assert.False(t, IsRetryable(err))
+	assert.True(t, IsRetryableError(wrapped))
+	assert.False(t, IsRetryableError(err))
 }
 
 // ---------------------------------------------------------------------------

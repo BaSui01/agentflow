@@ -10,7 +10,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/BaSui01/agentflow/internal/tlsutil"
+	"github.com/BaSui01/agentflow/llm/providers"
+	"github.com/BaSui01/agentflow/pkg/tlsutil"
 )
 
 // GeminiProvider 使用 Google Gemini API 执行嵌入.
@@ -21,19 +22,19 @@ type GeminiProvider struct {
 }
 
 // GeminiConfig 配置 Gemini 嵌入提供者.
+// 嵌入 providers.BaseProviderConfig 以复用 APIKey、BaseURL、Model、Timeout 字段。
 type GeminiConfig struct {
-	APIKey  string        `json:"api_key" yaml:"api_key"`
-	BaseURL string        `json:"base_url" yaml:"base_url"`
-	Model   string        `json:"model,omitempty" yaml:"model,omitempty"` // gemini-embedding-001
-	Timeout time.Duration `json:"timeout,omitempty" yaml:"timeout,omitempty"`
+	providers.BaseProviderConfig `yaml:",inline"`
 }
 
 // DefaultGeminiConfig 返回默认 Gemini 嵌入配置.
 func DefaultGeminiConfig() GeminiConfig {
 	return GeminiConfig{
-		BaseURL: "https://generativelanguage.googleapis.com/v1beta",
-		Model:   "gemini-embedding-001",
-		Timeout: 30 * time.Second,
+		BaseProviderConfig: providers.BaseProviderConfig{
+			BaseURL: "https://generativelanguage.googleapis.com/v1beta",
+			Model:   "gemini-embedding-001",
+			Timeout: 30 * time.Second,
+		},
 	}
 }
 

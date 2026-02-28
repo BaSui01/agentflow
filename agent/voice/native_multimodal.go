@@ -153,6 +153,9 @@ func (r *NativeAudioReasoner) StreamProcess(ctx context.Context, inputChan <-cha
 }
 
 func (r *NativeAudioReasoner) updateMetrics(latency time.Duration) {
+	if latency <= 0 {
+		latency = time.Nanosecond
+	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
 

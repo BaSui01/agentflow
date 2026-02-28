@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
 	"sync"
 	"time"
 
@@ -123,6 +125,11 @@ func NewSandboxExecutor(config SandboxConfig, backend ExecutionBackend, logger *
 // 执行在沙盒中运行代码.
 func (s *SandboxExecutor) Execute(ctx context.Context, req *ExecutionRequest) (*ExecutionResult, error) {
 	start := time.Now()
+
+	// 检查后端
+	if s.backend == nil {
+		return nil, fmt.Errorf("execution backend is nil")
+	}
 
 	// 验证请求
 	if err := s.validate(req); err != nil {
@@ -299,8 +306,33 @@ func (d *DockerBackend) Execute(ctx context.Context, req *ExecutionRequest, conf
 	// 生成容器名称
 	containerName := fmt.Sprintf("%s%s_%d", d.containerPrefix, req.ID, time.Now().UnixNano())
 
+	// 对于需要编译的语言（Go/Rust），将代码写入宿主机临时文件并挂载到容器中，
+	// 避免通过 shell echo 传递代码导致的注入漏洞。
+	var codeMountDir string
+	if req.Language == LangGo || req.Language == LangRust {
+		tmpDir, err := os.MkdirTemp("", "sandbox_code_")
+		if err != nil {
+			result.Error = fmt.Sprintf("failed to create temp dir: %v", err)
+			return result, nil
+		}
+		defer os.RemoveAll(tmpDir)
+
+		var filename string
+		if req.Language == LangGo {
+			filename = "main.go"
+		} else {
+			filename = "main.rs"
+		}
+		codePath := filepath.Join(tmpDir, filename)
+		if err := os.WriteFile(codePath, []byte(req.Code), 0600); err != nil {
+			result.Error = fmt.Sprintf("failed to write code file: %v", err)
+			return result, nil
+		}
+		codeMountDir = tmpDir
+	}
+
 	// 构建嵌入器运行命令
-	args := d.buildDockerArgs(containerName, image, req, config)
+	args := d.buildDockerArgs(containerName, image, req, config, codeMountDir)
 
 	d.logger.Debug("executing in docker",
 		zap.String("container", containerName),
@@ -345,7 +377,7 @@ func (d *DockerBackend) Execute(ctx context.Context, req *ExecutionRequest, conf
 	return result, nil
 }
 
-func (d *DockerBackend) buildDockerArgs(containerName, image string, req *ExecutionRequest, config SandboxConfig) []string {
+func (d *DockerBackend) buildDockerArgs(containerName, image string, req *ExecutionRequest, config SandboxConfig, codeMountDir string) []string {
 	args := []string{
 		"run",
 		"--name", containerName,
@@ -390,6 +422,11 @@ func (d *DockerBackend) buildDockerArgs(containerName, image string, req *Execut
 		args = append(args, "-v", fmt.Sprintf("%s:%s:ro", hostPath, containerPath))
 	}
 
+	// 挂载代码文件目录（用于 Go/Rust 等需要编译的语言）
+	if codeMountDir != "" {
+		args = append(args, "-v", fmt.Sprintf("%s:/code:ro", codeMountDir))
+	}
+
 	// 图像
 	args = append(args, image)
 
@@ -407,14 +444,14 @@ func (d *DockerBackend) buildCommand(req *ExecutionRequest) []string {
 	case LangJavaScript:
 		return []string{"node", "-e", req.Code}
 	case LangTypeScript:
-		// TypeScript 需要编译, 先使用 ts- node 或 transpile
+		// TypeScript 需要编译, 先使用 ts-node 或 transpile
 		return []string{"node", "-e", req.Code}
 	case LangGo:
-		// 需要编辑, 使用临时文件运行
-		return []string{"sh", "-c", fmt.Sprintf("echo '%s' > /tmp/main.go && go run /tmp/main.go", escapeShellArg(req.Code))}
+		// 代码已通过卷挂载到 /code/main.go，直接运行
+		return []string{"go", "run", "/code/main.go"}
 	case LangRust:
-		// 需要汇编
-		return []string{"sh", "-c", fmt.Sprintf("echo '%s' > /tmp/main.rs && rustc /tmp/main.rs -o /tmp/main && /tmp/main", escapeShellArg(req.Code))}
+		// 代码已通过卷挂载到 /code/main.rs，编译后运行
+		return []string{"sh", "-c", "rustc /code/main.rs -o /tmp/main && /tmp/main"}
 	case LangBash:
 		return []string{"sh", "-c", req.Code}
 	default:

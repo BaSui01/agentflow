@@ -41,7 +41,7 @@ func TestProperty12_HTTPStatusToErrorCodeMapping(t *testing.T) {
 			name:          "429 Rate Limited",
 			httpStatus:    http.StatusTooManyRequests,
 			errorMessage:  "Too many requests",
-			expectedCode:  llm.ErrRateLimited,
+			expectedCode:  llm.ErrRateLimit,
 			expectedRetry: true,
 		},
 		{

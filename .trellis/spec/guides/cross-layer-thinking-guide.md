@@ -217,6 +217,75 @@ func (s *LLMStep) Execute(ctx context.Context, input any) (any, error) {
 
 ---
 
+## Workflow Stream Emitter Pattern
+
+When workflow/DAG execution needs to emit streaming events (node lifecycle, token output) without breaking existing synchronous callers, use the **optional context emitter** pattern.
+
+### Pattern
+
+The emitter is a callback function stored in `context.Context`. Callers that don't inject an emitter get the same synchronous behavior as before.
+
+```go
+// workflow/workflow.go — type + context helpers
+type WorkflowStreamEmitter func(WorkflowStreamEvent)
+
+type workflowStreamEmitterKey struct{}
+
+func WithWorkflowStreamEmitter(ctx context.Context, emitter WorkflowStreamEmitter) context.Context {
+    if emitter == nil {
+        return ctx  // nil-safe — no-op if no emitter
+    }
+    return context.WithValue(ctx, workflowStreamEmitterKey{}, emitter)
+}
+```
+
+### DAG Node Execution Events
+
+The `DAGExecutor.executeNode` emits events at three points:
+
+```go
+// Before execution
+if emitter, ok := workflowStreamEmitterFromContext(ctx); ok {
+    emitter(WorkflowStreamEvent{Type: WorkflowEventNodeStart, NodeID: node.ID, Data: input})
+}
+
+// On error
+if emitter, ok := workflowStreamEmitterFromContext(ctx); ok {
+    emitter(WorkflowStreamEvent{Type: WorkflowEventNodeError, NodeID: node.ID, Error: err})
+}
+
+// After success
+if emitter, ok := workflowStreamEmitterFromContext(ctx); ok {
+    emitter(WorkflowStreamEvent{Type: WorkflowEventNodeComplete, NodeID: node.ID, Data: result})
+}
+```
+
+### Unified Context Injection (API Layer)
+
+Both `RuntimeStreamEmitter` (agent-level SSE) and `WorkflowStreamEmitter` can coexist in the same context. The API handler injects both before calling the agent/workflow:
+
+```go
+// API handler bridges workflow events to SSE
+ctx = workflow.WithWorkflowStreamEmitter(ctx, func(evt workflow.WorkflowStreamEvent) {
+    sseEmitter.Emit(SSEEvent{Type: string(evt.Type), Data: evt})
+})
+```
+
+### Design Principles
+
+1. **Optional** — nil emitter or missing context key means no streaming (backward compatible)
+2. **Callback, not channel** — avoids goroutine lifecycle management; emitter is called synchronously
+3. **Context-propagated** — emitter flows through the entire execution tree (including subgraphs)
+4. **Event types are extensible** — `WorkflowStreamEventType` is a string, new types can be added without breaking existing consumers
+
+### Checklist
+
+- [ ] New workflow node type — does `executeNode` emit `node_start`/`node_complete`/`node_error`?
+- [ ] New API handler for workflow — does it inject `WorkflowStreamEmitter` into context?
+- [ ] Emitter callback — is it safe for concurrent calls? (parallel nodes may emit simultaneously)
+
+---
+
 ## Known Cross-Layer Type Splits (2026-02-21 Audit)
 
 ### Temperature: float32 vs float64

@@ -214,6 +214,9 @@ func (t *ExplainabilityTracker) EndTrace(traceID string, success bool, output, e
 
 	trace.EndTime = time.Now()
 	trace.Duration = trace.EndTime.Sub(trace.StartTime)
+	if trace.Duration <= 0 {
+		trace.Duration = time.Nanosecond
+	}
 	trace.Success = success
 	trace.FinalOutput = output
 	trace.Error = errorMsg

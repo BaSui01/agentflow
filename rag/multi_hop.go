@@ -150,26 +150,29 @@ type reasoningCache struct {
 	entries map[string]*ReasoningChain
 	mu      sync.RWMutex
 	ttl     time.Duration
+	maxSize int // K2 FIX: 最大容量限制，防止内存无限增长
 }
 
 func newReasoningCache(ttl time.Duration) *reasoningCache {
 	return &reasoningCache{
 		entries: make(map[string]*ReasoningChain),
 		ttl:     ttl,
+		maxSize: 1000,
 	}
 }
 
 func (c *reasoningCache) get(key string) (*ReasoningChain, bool) {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
+	c.mu.Lock() // K2 FIX: 升级为写锁，以便删除过期条目
+	defer c.mu.Unlock()
 
 	chain, ok := c.entries[key]
 	if !ok {
 		return nil, false
 	}
 
-	// 检查是否过期
+	// K2 FIX: 检测到过期时删除条目（lazy eviction），而非仅返回 false
 	if time.Since(chain.CreatedAt) > c.ttl {
+		delete(c.entries, key)
 		return nil, false
 	}
 
@@ -179,7 +182,29 @@ func (c *reasoningCache) get(key string) (*ReasoningChain, bool) {
 func (c *reasoningCache) set(key string, chain *ReasoningChain) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+
+	// K2 FIX: 超过最大容量时删除最旧的条目
+	if _, exists := c.entries[key]; !exists && len(c.entries) >= c.maxSize {
+		c.evictOldest()
+	}
 	c.entries[key] = chain
+}
+
+// evictOldest 删除最旧的缓存条目（调用方须持有写锁）
+func (c *reasoningCache) evictOldest() {
+	var oldestKey string
+	var oldestTime time.Time
+	first := true
+	for k, v := range c.entries {
+		if first || v.CreatedAt.Before(oldestTime) {
+			oldestKey = k
+			oldestTime = v.CreatedAt
+			first = false
+		}
+	}
+	if !first {
+		delete(c.entries, oldestKey)
+	}
 }
 
 // 新建多功能读取器

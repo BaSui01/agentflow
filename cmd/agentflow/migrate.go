@@ -8,7 +8,7 @@ import (
 	"strconv"
 
 	"github.com/BaSui01/agentflow/config"
-	"github.com/BaSui01/agentflow/internal/migration"
+	"github.com/BaSui01/agentflow/pkg/migration"
 )
 
 // =============================================================================

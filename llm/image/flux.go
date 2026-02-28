@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/BaSui01/agentflow/internal/tlsutil"
+	"github.com/BaSui01/agentflow/pkg/tlsutil"
 )
 
 // Flux Provider使用 Black Forest Labs Flux执行图像生成.

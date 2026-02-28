@@ -13,8 +13,8 @@
 # -----------------------------------------------------------------------------
 FROM golang:1.24-alpine AS builder
 
-# 安装构建依赖（CGO 需要 gcc）
-RUN apk add --no-cache git gcc musl-dev
+# 安装构建依赖
+RUN apk add --no-cache git
 
 WORKDIR /app
 
@@ -33,7 +33,7 @@ ARG GIT_COMMIT
 # 编译二进制文件
 # -s -w: 去除调试信息，减小体积
 # -X: 注入版本信息
-RUN CGO_ENABLED=1 GOOS=linux go build \
+RUN CGO_ENABLED=0 GOOS=linux go build \
     -ldflags="-s -w \
         -X main.Version=${VERSION} \
         -X main.BuildTime=${BUILD_TIME} \

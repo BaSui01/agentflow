@@ -10,7 +10,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/BaSui01/agentflow/internal/tlsutil"
+	"github.com/BaSui01/agentflow/pkg/tlsutil"
 	"go.uber.org/zap"
 )
 
@@ -82,6 +82,11 @@ type Orchestrator struct {
 	mu         sync.RWMutex
 	done       chan struct{}
 	closeOnce  sync.Once
+
+	// Node lifecycle callbacks (set via Set* methods).
+	onNodeRegister     func(node *FederatedNode)
+	onNodeUnregister   func(nodeID string)
+	onNodeStatusChange func(nodeID string, status NodeStatus)
 }
 
 // 特劳斯·汉德勒处理联邦任务.
@@ -118,22 +123,55 @@ func NewOrchestrator(config FederationConfig, logger *zap.Logger) *Orchestrator 
 	}
 }
 
+// SetOnNodeRegister sets a callback invoked after a node is registered.
+func (o *Orchestrator) SetOnNodeRegister(fn func(node *FederatedNode)) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	o.onNodeRegister = fn
+}
+
+// SetOnNodeUnregister sets a callback invoked after a node is unregistered.
+func (o *Orchestrator) SetOnNodeUnregister(fn func(nodeID string)) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	o.onNodeUnregister = fn
+}
+
+// SetOnNodeStatusChange sets a callback invoked when a node's status changes.
+func (o *Orchestrator) SetOnNodeStatusChange(fn func(nodeID string, status NodeStatus)) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	o.onNodeStatusChange = fn
+}
+
 // 注册点在联邦登记一个节点。
 func (o *Orchestrator) RegisterNode(node *FederatedNode) {
 	o.mu.Lock()
-	defer o.mu.Unlock()
 	node.Status = NodeStatusOnline
 	node.LastSeen = time.Now()
 	o.nodes[node.ID] = node
+	cb := o.onNodeRegister
+	o.mu.Unlock()
+
 	o.logger.Info("node registered", zap.String("node_id", node.ID))
+
+	if cb != nil {
+		cb(node)
+	}
 }
 
 // UnregisterNode从联邦中删除一个节点.
 func (o *Orchestrator) UnregisterNode(nodeID string) {
 	o.mu.Lock()
-	defer o.mu.Unlock()
 	delete(o.nodes, nodeID)
+	cb := o.onNodeUnregister
+	o.mu.Unlock()
+
 	o.logger.Info("node unregistered", zap.String("node_id", nodeID))
+
+	if cb != nil {
+		cb(nodeID)
+	}
 }
 
 // 登记 Handler 登记任务处理器 。
@@ -349,12 +387,26 @@ func (o *Orchestrator) heartbeatLoop(ctx context.Context) {
 
 func (o *Orchestrator) checkNodeHealth() {
 	o.mu.Lock()
-	defer o.mu.Unlock()
-
 	threshold := time.Now().Add(-3 * o.config.HeartbeatInterval)
+	var changed []struct {
+		id     string
+		status NodeStatus
+	}
 	for _, node := range o.nodes {
-		if node.LastSeen.Before(threshold) {
+		if node.LastSeen.Before(threshold) && node.Status != NodeStatusOffline {
 			node.Status = NodeStatusOffline
+			changed = append(changed, struct {
+				id     string
+				status NodeStatus
+			}{node.ID, NodeStatusOffline})
+		}
+	}
+	cb := o.onNodeStatusChange
+	o.mu.Unlock()
+
+	if cb != nil {
+		for _, c := range changed {
+			cb(c.id, c.status)
 		}
 	}
 }

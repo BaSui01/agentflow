@@ -6,6 +6,8 @@ import (
 	"time"
 
 	"github.com/BaSui01/agentflow/agent/guardrails"
+	"github.com/BaSui01/agentflow/agent/memory"
+	"github.com/BaSui01/agentflow/agent/skills"
 	"go.uber.org/zap"
 )
 
@@ -41,8 +43,8 @@ func TestMemoryCoordinator_NoMemory(t *testing.T) {
 	if err != nil {
 		t.Errorf("expected no error, got %v", err)
 	}
-	if records != nil {
-		t.Error("expected nil records")
+	if len(records) != 0 {
+		t.Errorf("expected empty records, got %d", len(records))
 	}
 }
 
@@ -164,12 +166,12 @@ func TestFeatureManager_EnableDisable(t *testing.T) {
 	fm := NewFeatureManager(logger)
 
 	// 启用反射
-	fm.EnableReflection("mock-executor")
+	fm.EnableReflection(&stubReflectionRunner{})
 	if !fm.IsReflectionEnabled() {
 		t.Error("expected reflection to be enabled")
 	}
-	if fm.GetReflection() != "mock-executor" {
-		t.Error("expected to get mock executor")
+	if fm.GetReflection() == nil {
+		t.Error("expected to get non-nil reflection runner")
 	}
 
 	// 禁用反射
@@ -187,14 +189,14 @@ func TestFeatureManager_AllFeatures(t *testing.T) {
 	fm := NewFeatureManager(logger)
 
 	// 启用所有特性
-	fm.EnableReflection("reflection")
-	fm.EnableToolSelection("tool-selector")
-	fm.EnablePromptEnhancer("prompt-enhancer")
-	fm.EnableSkills("skill-manager")
-	fm.EnableMCP("mcp-server")
-	fm.EnableLSP("lsp-client")
-	fm.EnableEnhancedMemory("enhanced-memory")
-	fm.EnableObservability("observability")
+	fm.EnableReflection(&stubReflectionRunner{})
+	fm.EnableToolSelection(&stubToolSelectorRunner{})
+	fm.EnablePromptEnhancer(&stubPromptEnhancerRunner{})
+	fm.EnableSkills(&stubSkillDiscoverer{})
+	fm.EnableMCP(struct{ MCPServerRunner }{})
+	fm.EnableLSP(&stubLSPClient{})
+	fm.EnableEnhancedMemory(&stubEnhancedMemory{})
+	fm.EnableObservability(&stubObservability{})
 
 	features := fm.EnabledFeatures()
 	if len(features) != 8 {
@@ -250,4 +252,102 @@ func (m *mockMemoryManager) LoadRecent(ctx context.Context, agentID string, kind
 
 func (m *mockMemoryManager) Get(ctx context.Context, id string) (*MemoryRecord, error) {
 	return nil, nil
+}
+
+// Stub types for FeatureManager typed interface tests
+
+type stubReflectionRunner struct{}
+
+func (s *stubReflectionRunner) ExecuteWithReflection(_ context.Context, _ *Input) (any, error) {
+	return nil, nil
+}
+
+type stubToolSelectorRunner struct{}
+
+func (s *stubToolSelectorRunner) SelectTools(_ context.Context, _ string, _ any) (any, error) {
+	return nil, nil
+}
+
+type stubPromptEnhancerRunner struct{}
+
+func (s *stubPromptEnhancerRunner) EnhanceUserPrompt(prompt, _ string) (string, error) {
+	return prompt, nil
+}
+
+type stubSkillDiscoverer struct{}
+
+func (s *stubSkillDiscoverer) DiscoverSkills(_ context.Context, _ string) ([]*skills.Skill, error) {
+	return nil, nil
+}
+
+type stubLSPClient struct{}
+
+func (s *stubLSPClient) Shutdown(_ context.Context) error { return nil }
+
+type stubEnhancedMemory struct{}
+
+func (s *stubEnhancedMemory) LoadWorking(_ context.Context, _ string) ([]any, error) {
+	return nil, nil
+}
+func (s *stubEnhancedMemory) LoadShortTerm(_ context.Context, _ string, _ int) ([]any, error) {
+	return nil, nil
+}
+func (s *stubEnhancedMemory) SaveShortTerm(_ context.Context, _, _ string, _ map[string]any) error {
+	return nil
+}
+func (s *stubEnhancedMemory) RecordEpisode(_ context.Context, _ *memory.EpisodicEvent) error {
+	return nil
+}
+
+type stubObservability struct{}
+
+func (s *stubObservability) StartTrace(_, _ string)                                          {}
+func (s *stubObservability) EndTrace(_, _ string, _ error)                                   {}
+func (s *stubObservability) RecordTask(_ string, _ bool, _ time.Duration, _ int, _, _ float64) {}
+
+// TestMemoryCoordinator_SaveWriteThroughCache verifies that Save() appends
+// the new record to the in-process recentMemory cache.
+func TestMemoryCoordinator_SaveWriteThroughCache(t *testing.T) {
+	logger := zap.NewNop()
+	mc := NewMemoryCoordinator("test-agent", &mockMemoryManager{}, logger)
+
+	ctx := context.Background()
+
+	// Load initial (empty) cache.
+	_ = mc.LoadRecent(ctx, MemoryShortTerm, 10)
+	if len(mc.GetRecentMemory()) != 1 {
+		// mockMemoryManager.LoadRecent returns 1 record
+		t.Fatalf("expected 1 record after LoadRecent, got %d", len(mc.GetRecentMemory()))
+	}
+
+	// Save a new record — cache should grow.
+	err := mc.Save(ctx, "new-content", MemoryShortTerm, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	recent := mc.GetRecentMemory()
+	if len(recent) != 2 {
+		t.Errorf("expected 2 records after Save, got %d", len(recent))
+	}
+	if recent[1].Content != "new-content" {
+		t.Errorf("expected last record content to be 'new-content', got %q", recent[1].Content)
+	}
+}
+
+// TestMemoryCoordinator_SaveCacheEviction verifies that the cache is bounded.
+func TestMemoryCoordinator_SaveCacheEviction(t *testing.T) {
+	logger := zap.NewNop()
+	mc := NewMemoryCoordinator("test-agent", &mockMemoryManager{}, logger)
+
+	ctx := context.Background()
+
+	for i := 0; i < defaultMaxRecentMemory+5; i++ {
+		_ = mc.Save(ctx, "msg", MemoryShortTerm, nil)
+	}
+
+	recent := mc.GetRecentMemory()
+	if len(recent) != defaultMaxRecentMemory {
+		t.Errorf("expected cache size %d, got %d", defaultMaxRecentMemory, len(recent))
+	}
 }

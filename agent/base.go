@@ -15,6 +15,11 @@ import (
 	"go.uber.org/zap"
 )
 
+// defaultMaxRecentMemory is the upper bound for the in-process recent-memory
+// cache. When SaveMemory appends a new record and the cache exceeds this size,
+// the oldest entries are evicted.
+const defaultMaxRecentMemory = 50
+
 // AgentType 定义 Agent 类型
 // 这是一个可扩展的字符串类型，用户可以定义自己的 Agent 类型
 type AgentType string
@@ -145,21 +150,35 @@ type BaseAgent struct {
 	contextEngineEnabled bool           // 是否启用上下文工程
 
 	// 2025 新增功能（可选启用）
-	reflectionExecutor  any // *ReflectionExecutor - 避免循环依赖
-	toolSelector        any // *DynamicToolSelector
-	promptEnhancer      any // *PromptEnhancer
-	skillManager        any // *SkillManager
-	mcpServer           any // *MCPServer
-	lspClient           any // *lsp.LSPClient
-	lspLifecycle        any // optional lifecycle owner (e.g. *ManagedLSP)
-	enhancedMemory      any // *EnhancedMemorySystem
-	observabilitySystem any // *ObservabilitySystem
+	// These use workflow-local interfaces (agent/interfaces.go) to avoid circular
+	// dependencies with sub-packages. See quality-guidelines.md §15.
+	reflectionExecutor  ReflectionRunner          // *ReflectionExecutor
+	toolSelector        DynamicToolSelectorRunner // *DynamicToolSelector
+	promptEnhancer      PromptEnhancerRunner      // *PromptEnhancer
+	skillManager        SkillDiscoverer           // *skills.DefaultSkillManager
+	mcpServer           MCPServerRunner           // *mcp.MCPServer — nil-check only
+	lspClient           LSPClientRunner           // *lsp.LSPClient
+	lspLifecycle        LSPLifecycleOwner         // *ManagedLSP
+	enhancedMemory      EnhancedMemoryRunner      // *memory.EnhancedMemorySystem
+	observabilitySystem ObservabilityRunner       // *observability.ObservabilitySystem
 
 	// 2026 Guardrails 功能
 	// Requirements 1.7, 2.4: 输入/输出验证和重试支持
 	inputValidatorChain *guardrails.ValidatorChain
 	outputValidator     *guardrails.OutputValidator
 	guardrailsEnabled   bool
+
+	// MongoDB persistence stores (required)
+	promptStore       PromptStoreProvider
+	conversationStore ConversationStoreProvider
+	runStore          RunStoreProvider
+
+	// Composite sub-managers (used by pipeline steps)
+	extensions  *ExtensionRegistry
+	llmEngine   *LLMEngine
+	persistence *PersistenceStores
+	guardrails  *GuardrailsManager
+	memoryCache *MemoryCache
 }
 
 // NewBaseAgent 创建基础 Agent
@@ -178,6 +197,7 @@ func NewBaseAgent(
 	if logger == nil {
 		panic("agent.NewBaseAgent: logger must not be nil")
 	}
+	agentLogger := logger.With(zap.String("agent_id", cfg.ID), zap.String("agent_type", string(cfg.Type)))
 
 	ba := &BaseAgent{
 		config:      cfg,
@@ -186,12 +206,19 @@ func NewBaseAgent(
 		memory:      memory,
 		toolManager: toolManager,
 		bus:         bus,
-		logger:      logger.With(zap.String("agent_id", cfg.ID), zap.String("agent_type", string(cfg.Type))),
+		logger:      agentLogger,
 	}
+
+	// Initialize composite sub-managers for pipeline steps
+	ba.extensions = NewExtensionRegistry(agentLogger)
+	ba.persistence = NewPersistenceStores(agentLogger)
+	ba.guardrails = NewGuardrailsManager(agentLogger)
+	ba.memoryCache = NewMemoryCache(cfg.ID, memory, agentLogger)
 
 	// 如果配置, 初始化守护栏
 	if cfg.Guardrails != nil {
 		ba.initGuardrails(cfg.Guardrails)
+		ba.guardrails.Init(cfg.Guardrails)
 	}
 
 	return ba
@@ -412,7 +439,7 @@ func (b *BaseAgent) Init(ctx context.Context) error {
 
 	// 加载记忆（如果有）并缓存
 	if b.memory != nil {
-		records, err := b.memory.LoadRecent(ctx, b.config.ID, MemoryShortTerm, 10)
+		records, err := b.memory.LoadRecent(ctx, b.config.ID, MemoryShortTerm, defaultMaxRecentMemory)
 		if err != nil {
 			b.logger.Warn("failed to load memory", zap.Error(err))
 		} else {
@@ -430,19 +457,15 @@ func (b *BaseAgent) Teardown(ctx context.Context) error {
 	b.logger.Info("tearing down agent")
 
 	if b.lspLifecycle != nil {
-		if closer, ok := b.lspLifecycle.(interface{ Close() error }); ok {
-			if err := closer.Close(); err != nil {
-				b.logger.Warn("failed to close lsp lifecycle", zap.Error(err))
-			}
+		if err := b.lspLifecycle.Close(); err != nil {
+			b.logger.Warn("failed to close lsp lifecycle", zap.Error(err))
 		}
 		return nil
 	}
 
 	if b.lspClient != nil {
-		if client, ok := b.lspClient.(interface{ Shutdown(context.Context) error }); ok {
-			if err := client.Shutdown(ctx); err != nil {
-				b.logger.Warn("failed to shutdown lsp client", zap.Error(err))
-			}
+		if err := b.lspClient.Shutdown(ctx); err != nil {
+			b.logger.Warn("failed to shutdown lsp client", zap.Error(err))
 		}
 	}
 
@@ -468,7 +491,7 @@ func (b *BaseAgent) EnsureReady() error {
 	return nil
 }
 
-// SaveMemory 保存记忆
+// SaveMemory 保存记忆并同步更新本地缓存
 func (b *BaseAgent) SaveMemory(ctx context.Context, content string, kind MemoryKind, metadata map[string]any) error {
 	if b.memory == nil {
 		return nil
@@ -482,13 +505,27 @@ func (b *BaseAgent) SaveMemory(ctx context.Context, content string, kind MemoryK
 		CreatedAt: time.Now(),
 	}
 
-	return b.memory.Save(ctx, rec)
+	if err := b.memory.Save(ctx, rec); err != nil {
+		return err
+	}
+
+	// Write-through: keep the in-process cache consistent so that
+	// subsequent Execute() calls within the same agent instance see
+	// the newly saved record without a full reload.
+	b.recentMemoryMu.Lock()
+	b.recentMemory = append(b.recentMemory, rec)
+	if len(b.recentMemory) > defaultMaxRecentMemory {
+		b.recentMemory = b.recentMemory[len(b.recentMemory)-defaultMaxRecentMemory:]
+	}
+	b.recentMemoryMu.Unlock()
+
+	return nil
 }
 
 // RecallMemory 检索记忆
 func (b *BaseAgent) RecallMemory(ctx context.Context, query string, topK int) ([]MemoryRecord, error) {
 	if b.memory == nil {
-		return nil, nil
+		return []MemoryRecord{}, nil
 	}
 	return b.memory.Search(ctx, b.config.ID, query, topK)
 }
@@ -574,6 +611,8 @@ func (e *GuardrailsError) Error() string {
 // 设置守护栏为代理设置守护栏
 // 1.7: 支持海关验证规则的登记和延期
 func (b *BaseAgent) SetGuardrails(cfg *guardrails.GuardrailsConfig) {
+	b.execMu.Lock()
+	defer b.execMu.Unlock()
 	if cfg == nil {
 		b.guardrailsEnabled = false
 		b.inputValidatorChain = nil
@@ -589,9 +628,26 @@ func (b *BaseAgent) GuardrailsEnabled() bool {
 	return b.guardrailsEnabled
 }
 
+// SetPromptStore sets the prompt store provider.
+func (b *BaseAgent) SetPromptStore(store PromptStoreProvider) {
+	b.promptStore = store
+}
+
+// SetConversationStore sets the conversation store provider.
+func (b *BaseAgent) SetConversationStore(store ConversationStoreProvider) {
+	b.conversationStore = store
+}
+
+// SetRunStore sets the run store provider.
+func (b *BaseAgent) SetRunStore(store RunStoreProvider) {
+	b.runStore = store
+}
+
 // 添加自定义输入验证器
 // 1.7: 支持海关验证规则的登记和延期
 func (b *BaseAgent) AddInputValidator(v guardrails.Validator) {
+	b.execMu.Lock()
+	defer b.execMu.Unlock()
 	if b.inputValidatorChain == nil {
 		b.inputValidatorChain = guardrails.NewValidatorChain(nil)
 		b.guardrailsEnabled = true
@@ -602,6 +658,8 @@ func (b *BaseAgent) AddInputValidator(v guardrails.Validator) {
 // 添加输出变量添加自定义输出验证器
 // 1.7: 支持海关验证规则的登记和延期
 func (b *BaseAgent) AddOutputValidator(v guardrails.Validator) {
+	b.execMu.Lock()
+	defer b.execMu.Unlock()
 	if b.outputValidator == nil {
 		b.outputValidator = guardrails.NewOutputValidator(nil)
 		b.guardrailsEnabled = true
@@ -611,6 +669,8 @@ func (b *BaseAgent) AddOutputValidator(v guardrails.Validator) {
 
 // 添加 OutputFilter 添加自定义输出过滤器
 func (b *BaseAgent) AddOutputFilter(f guardrails.Filter) {
+	b.execMu.Lock()
+	defer b.execMu.Unlock()
 	if b.outputValidator == nil {
 		b.outputValidator = guardrails.NewOutputValidator(nil)
 		b.guardrailsEnabled = true

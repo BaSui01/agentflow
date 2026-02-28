@@ -310,11 +310,11 @@ func (m *StreamMultiplexer) broadcast(ctx context.Context, token Token) {
 	defer m.mu.RUnlock()
 
 	for _, consumer := range m.consumers {
-		// 非阻塞发送给每个消费者
-		select {
-		case consumer.buffer <- token:
-		default:
-			// 消费者过慢，应用其丢弃策略
+		// 通过 Write() 方法发送 token，而非直接写 consumer.buffer。
+		// Write() 内部持有 RLock，与 Close() 的 Lock 互斥，
+		// 消除了 closed.Load() 与 channel 发送之间的 TOCTOU 窗口。
+		if err := consumer.Write(ctx, token); err != nil {
+			// consumer 已关闭或 ctx 取消 — 安全忽略
 		}
 	}
 }

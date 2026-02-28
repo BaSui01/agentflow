@@ -323,6 +323,7 @@ type classificationCache struct {
 	mu      sync.RWMutex
 	entries map[string]*cacheEntry
 	ttl     time.Duration
+	maxSize int // N1 FIX: 最大容量限制，防止内存无限增长
 }
 
 type cacheEntry struct {
@@ -334,15 +335,22 @@ func newClassificationCache(ttl time.Duration) *classificationCache {
 	return &classificationCache{
 		entries: make(map[string]*cacheEntry),
 		ttl:     ttl,
+		maxSize: 1000,
 	}
 }
 
 func (c *classificationCache) get(key string) *IntentClassification {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
+	c.mu.Lock() // N1 FIX: 升级为写锁，以便删除过期条目
+	defer c.mu.Unlock()
 
 	entry, ok := c.entries[key]
-	if !ok || time.Now().After(entry.expiresAt) {
+	if !ok {
+		return nil
+	}
+
+	// N1 FIX: 检测到过期时删除条目（lazy eviction），而非仅返回 nil
+	if time.Now().After(entry.expiresAt) {
+		delete(c.entries, key)
 		return nil
 	}
 	return entry.classification
@@ -352,9 +360,30 @@ func (c *classificationCache) set(key string, classification *IntentClassificati
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
+	// N1 FIX: 超过最大容量时删除最旧的条目
+	if _, exists := c.entries[key]; !exists && len(c.entries) >= c.maxSize {
+		c.evictOldest()
+	}
 	c.entries[key] = &cacheEntry{
 		classification: classification,
 		expiresAt:      time.Now().Add(c.ttl),
+	}
+}
+
+// evictOldest 删除最旧的缓存条目（调用方须持有写锁）
+func (c *classificationCache) evictOldest() {
+	var oldestKey string
+	var oldestTime time.Time
+	first := true
+	for k, v := range c.entries {
+		if first || v.expiresAt.Before(oldestTime) {
+			oldestKey = k
+			oldestTime = v.expiresAt
+			first = false
+		}
+	}
+	if !first {
+		delete(c.entries, oldestKey)
 	}
 }
 

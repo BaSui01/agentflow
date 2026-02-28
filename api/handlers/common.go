@@ -1,11 +1,16 @@
 package handlers
 
 import (
+	"bufio"
 	"encoding/json"
+	"fmt"
 	"mime"
+	"net"
 	"net/http"
+	"net/url"
 	"time"
 
+	"github.com/BaSui01/agentflow/api"
 	"github.com/BaSui01/agentflow/types"
 	"go.uber.org/zap"
 )
@@ -14,24 +19,13 @@ import (
 // 📦 通用响应结构
 // =============================================================================
 
-// Response 统一 API 响应结构
-type Response struct {
-	Success   bool        `json:"success"`
-	Data      any `json:"data,omitempty"`
-	Error     *ErrorInfo  `json:"error,omitempty"`
-	Timestamp time.Time   `json:"timestamp"`
-	RequestID string      `json:"request_id,omitempty"`
-}
+// Response is a type alias for api.Response — the canonical API envelope.
+// The canonical definition lives in api/types.go (§38).
+type Response = api.Response
 
-// ErrorInfo 错误信息结构
-type ErrorInfo struct {
-	Code       string `json:"code"`
-	Message    string `json:"message"`
-	Details    string `json:"details,omitempty"`
-	Retryable  bool   `json:"retryable,omitempty"`
-	Provider   string `json:"provider,omitempty"`
-	HTTPStatus int    `json:"-"` // 不序列化到 JSON
-}
+// ErrorInfo is a type alias for api.ErrorInfo — the canonical error structure.
+// The canonical definition lives in api/types.go (§38).
+type ErrorInfo = api.ErrorInfo
 
 // =============================================================================
 // 🎯 响应辅助函数
@@ -45,7 +39,7 @@ func WriteJSON(w http.ResponseWriter, status int, data any) {
 
 	if err := json.NewEncoder(w).Encode(data); err != nil {
 		// 如果编码失败，记录错误但不能再写响应头
-		zap.L().Error("WriteJSON: failed to encode response", zap.Error(err))
+		// 这里只能记录日志
 		return
 	}
 }
@@ -56,6 +50,7 @@ func WriteSuccess(w http.ResponseWriter, data any) {
 		Success:   true,
 		Data:      data,
 		Timestamp: time.Now(),
+		RequestID: w.Header().Get("X-Request-ID"),
 	})
 }
 
@@ -70,7 +65,6 @@ func WriteError(w http.ResponseWriter, err *types.Error, logger *zap.Logger) {
 		Code:       string(err.Code),
 		Message:    err.Message,
 		Retryable:  err.Retryable,
-		Provider:   err.Provider,
 		HTTPStatus: status,
 	}
 
@@ -89,6 +83,7 @@ func WriteError(w http.ResponseWriter, err *types.Error, logger *zap.Logger) {
 		Success:   false,
 		Error:     errorInfo,
 		Timestamp: time.Now(),
+		RequestID: w.Header().Get("X-Request-ID"),
 	})
 }
 
@@ -146,37 +141,23 @@ func mapErrorCodeToHTTPStatus(code types.ErrorCode) int {
 // 🛡️ 请求验证辅助函数
 // =============================================================================
 
-// maxRequestBodySize is the maximum allowed request body size (1 MB).
-const maxRequestBodySize = 1 << 20
-
 // DecodeJSONBody 解码 JSON 请求体
 func DecodeJSONBody(w http.ResponseWriter, r *http.Request, dst any, logger *zap.Logger) error {
 	if r.Body == nil {
-		err := types.NewError(types.ErrInvalidRequest, "request body is empty")
+		err := types.NewInvalidRequestError("request body is empty")
 		WriteError(w, err, logger)
 		return err
 	}
 
-	// V-005: Content-Length pre-check before reading the body.
-	// This rejects obviously oversized requests early, before MaxBytesReader
-	// has to consume and discard the stream.
-	if r.ContentLength > maxRequestBodySize {
-		err := types.NewError(types.ErrInvalidRequest, "request body too large, maximum is 1MB").
-			WithHTTPStatus(http.StatusRequestEntityTooLarge)
-		WriteError(w, err, logger)
-		return err
-	}
-
-	// Limit request body to prevent abuse.
-	r.Body = http.MaxBytesReader(w, r.Body, maxRequestBodySize)
+	// Limit request body to 1 MB to prevent abuse.
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
 
 	decoder := json.NewDecoder(r.Body)
 	decoder.DisallowUnknownFields() // 严格模式：拒绝未知字段
 
 	if err := decoder.Decode(dst); err != nil {
-		apiErr := types.NewError(types.ErrInvalidRequest, "invalid JSON body").
-			WithCause(err).
-			WithHTTPStatus(http.StatusBadRequest)
+		apiErr := types.NewInvalidRequestError("invalid JSON body").
+			WithCause(err)
 		WriteError(w, apiErr, logger)
 		return apiErr
 	}
@@ -190,11 +171,32 @@ func DecodeJSONBody(w http.ResponseWriter, r *http.Request, dst any, logger *zap
 func ValidateContentType(w http.ResponseWriter, r *http.Request, logger *zap.Logger) bool {
 	mediaType, _, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
 	if err != nil || mediaType != "application/json" {
-		apiErr := types.NewError(types.ErrInvalidRequest, "Content-Type must be application/json")
+		apiErr := types.NewInvalidRequestError("Content-Type must be application/json")
 		WriteError(w, apiErr, logger)
 		return false
 	}
 	return true
+}
+
+// ValidateURL validates that s is a well-formed HTTP or HTTPS URL.
+func ValidateURL(s string) bool {
+	u, err := url.Parse(s)
+	return err == nil && (u.Scheme == "http" || u.Scheme == "https") && u.Host != ""
+}
+
+// ValidateEnum checks whether value is one of the allowed values.
+func ValidateEnum(value string, allowed []string) bool {
+	for _, a := range allowed {
+		if value == a {
+			return true
+		}
+	}
+	return false
+}
+
+// ValidateNonNegative checks that value is >= 0.
+func ValidateNonNegative(value float64) bool {
+	return value >= 0
 }
 
 // =============================================================================
@@ -231,4 +233,12 @@ func (rw *ResponseWriter) Write(b []byte) (int, error) {
 		rw.WriteHeader(http.StatusOK)
 	}
 	return rw.ResponseWriter.Write(b)
+}
+
+// Hijack implements http.Hijacker so WebSocket upgrades work through wrapped ResponseWriters.
+func (rw *ResponseWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	if hj, ok := rw.ResponseWriter.(http.Hijacker); ok {
+		return hj.Hijack()
+	}
+	return nil, nil, fmt.Errorf("underlying ResponseWriter does not implement http.Hijacker")
 }

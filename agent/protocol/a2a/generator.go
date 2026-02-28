@@ -150,6 +150,7 @@ func convertToolSchema(schema llm.ToolSchema) ToolDefinition {
 		Name:        schema.Name,
 		Description: schema.Description,
 		Parameters:  params,
+		Version:     schema.Version,
 	}
 }
 

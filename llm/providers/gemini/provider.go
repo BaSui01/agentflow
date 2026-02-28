@@ -9,12 +9,13 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"sync/atomic"
 	"time"
 
-	"github.com/BaSui01/agentflow/internal/tlsutil"
 	"github.com/BaSui01/agentflow/llm"
 	"github.com/BaSui01/agentflow/llm/middleware"
 	"github.com/BaSui01/agentflow/llm/providers"
+	"github.com/BaSui01/agentflow/pkg/tlsutil"
 	"go.uber.org/zap"
 )
 
@@ -29,6 +30,7 @@ type GeminiProvider struct {
 	client        *http.Client
 	logger        *zap.Logger
 	rewriterChain *middleware.RewriterChain
+	keyIndex      uint64 // 多 Key 轮询索引
 }
 
 // NewGeminiProvider 创建 Gemini Provider
@@ -38,9 +40,18 @@ func NewGeminiProvider(cfg providers.GeminiConfig, logger *zap.Logger) *GeminiPr
 		timeout = 60 * time.Second
 	}
 
+	// Vertex AI 模式：设置默认 Region
+	if cfg.ProjectID != "" && cfg.Region == "" {
+		cfg.Region = "us-central1"
+	}
+
 	// 设置默认 BaseURL
 	if cfg.BaseURL == "" {
-		cfg.BaseURL = "https://generativelanguage.googleapis.com"
+		if cfg.ProjectID != "" {
+			cfg.BaseURL = fmt.Sprintf("https://%s-aiplatform.googleapis.com", cfg.Region)
+		} else {
+			cfg.BaseURL = "https://generativelanguage.googleapis.com"
+		}
 	}
 
 	return &GeminiProvider{
@@ -57,12 +68,12 @@ func (p *GeminiProvider) Name() string { return "gemini" }
 
 func (p *GeminiProvider) HealthCheck(ctx context.Context) (*llm.HealthStatus, error) {
 	start := time.Now()
-	endpoint := fmt.Sprintf("%s/v1beta/models", strings.TrimRight(p.cfg.BaseURL, "/"))
+	endpoint := p.modelsEndpoint()
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
-	p.buildHeaders(httpReq, p.cfg.APIKey)
+	p.buildHeaders(httpReq, p.resolveAPIKey(ctx))
 
 	resp, err := p.client.Do(httpReq)
 	latency := time.Since(start)
@@ -80,14 +91,18 @@ func (p *GeminiProvider) HealthCheck(ctx context.Context) (*llm.HealthStatus, er
 
 func (p *GeminiProvider) SupportsNativeFunctionCalling() bool { return true }
 
+// SupportsStructuredOutput returns true because Gemini supports native
+// structured output via responseMimeType + responseSchema.
+func (p *GeminiProvider) SupportsStructuredOutput() bool { return true }
+
 // ListModels 获取 Gemini 支持的模型列表
 func (p *GeminiProvider) ListModels(ctx context.Context) ([]llm.Model, error) {
-	endpoint := fmt.Sprintf("%s/v1beta/models", strings.TrimRight(p.cfg.BaseURL, "/"))
+	endpoint := p.modelsEndpoint()
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
-	p.buildHeaders(httpReq, p.cfg.APIKey)
+	p.buildHeaders(httpReq, p.resolveAPIKey(ctx))
 
 	resp, err := p.client.Do(httpReq)
 	if err != nil {
@@ -108,14 +123,14 @@ func (p *GeminiProvider) ListModels(ctx context.Context) ([]llm.Model, error) {
 
 	var modelsResp struct {
 		Models []struct {
-			Name               string   `json:"name"`
-			BaseModelID        string   `json:"baseModelId"`
-			Version            string   `json:"version"`
-			DisplayName        string   `json:"displayName"`
-			Description        string   `json:"description"`
-			InputTokenLimit    int      `json:"inputTokenLimit"`
-			OutputTokenLimit   int      `json:"outputTokenLimit"`
-			SupportedMethods   []string `json:"supportedGenerationMethods"`
+			Name             string   `json:"name"`
+			BaseModelID      string   `json:"baseModelId"`
+			Version          string   `json:"version"`
+			DisplayName      string   `json:"displayName"`
+			Description      string   `json:"description"`
+			InputTokenLimit  int      `json:"inputTokenLimit"`
+			OutputTokenLimit int      `json:"outputTokenLimit"`
+			SupportedMethods []string `json:"supportedGenerationMethods"`
 		} `json:"models"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&modelsResp); err != nil {
@@ -133,14 +148,42 @@ func (p *GeminiProvider) ListModels(ctx context.Context) ([]llm.Model, error) {
 	for _, m := range modelsResp.Models {
 		// 提取模型 ID（去掉 "models/" 前缀）
 		modelID := strings.TrimPrefix(m.Name, "models/")
-		models = append(models, llm.Model{
-			ID:      modelID,
-			Object:  "model",
-			OwnedBy: "google",
-		})
+		model := llm.Model{
+			ID:              modelID,
+			Object:          "model",
+			OwnedBy:         "google",
+			MaxInputTokens:  m.InputTokenLimit,
+			MaxOutputTokens: m.OutputTokenLimit,
+			Capabilities:    convertGeminiCapabilities(m.SupportedMethods),
+		}
+		models = append(models, model)
 	}
 
 	return models, nil
+}
+
+// convertGeminiCapabilities 将 Gemini 的 supportedGenerationMethods 转换为统一能力标识
+func convertGeminiCapabilities(methods []string) []string {
+	if len(methods) == 0 {
+		return nil
+	}
+	capMap := map[string]string{
+		"generateContent":  "chat",
+		"embedContent":     "embedding",
+		"countTokens":      "token_counting",
+		"createTunedModel": "fine_tuning",
+		"generateAnswer":   "question_answering",
+	}
+	var caps []string
+	for _, m := range methods {
+		if cap, ok := capMap[m]; ok {
+			caps = append(caps, cap)
+		}
+	}
+	if len(caps) == 0 {
+		return nil
+	}
+	return caps
 }
 
 // Gemini 消息结构
@@ -151,6 +194,7 @@ type geminiContent struct {
 
 type geminiPart struct {
 	Text             string                  `json:"text,omitempty"`
+	Thought          *bool                   `json:"thought,omitempty"` // true = thinking content
 	InlineData       *geminiInlineData       `json:"inlineData,omitempty"`
 	FunctionCall     *geminiFunctionCall     `json:"functionCall,omitempty"`
 	FunctionResponse *geminiFunctionResponse `json:"functionResponse,omitempty"`
@@ -162,12 +206,12 @@ type geminiInlineData struct {
 }
 
 type geminiFunctionCall struct {
-	Name string                 `json:"name"`
+	Name string         `json:"name"`
 	Args map[string]any `json:"args"`
 }
 
 type geminiFunctionResponse struct {
-	Name     string                 `json:"name"`
+	Name     string         `json:"name"`
 	Response map[string]any `json:"response"`
 }
 
@@ -176,44 +220,75 @@ type geminiTool struct {
 }
 
 type geminiFunctionDeclaration struct {
-	Name        string                 `json:"name"`
-	Description string                 `json:"description,omitempty"`
+	Name        string         `json:"name"`
+	Description string         `json:"description,omitempty"`
 	Parameters  map[string]any `json:"parameters,omitempty"` // JSON Schema
 }
 
 type geminiGenerationConfig struct {
-	Temperature     float32  `json:"temperature,omitempty"`
-	TopP            float32  `json:"topP,omitempty"`
-	TopK            int      `json:"topK,omitempty"`
-	MaxOutputTokens int      `json:"maxOutputTokens,omitempty"`
-	StopSequences   []string `json:"stopSequences,omitempty"`
+	Temperature      float32               `json:"temperature,omitempty"`
+	TopP             float32               `json:"topP,omitempty"`
+	TopK             int                   `json:"topK,omitempty"`
+	MaxOutputTokens  int                   `json:"maxOutputTokens,omitempty"`
+	StopSequences    []string              `json:"stopSequences,omitempty"`
+	ResponseMimeType string                `json:"responseMimeType,omitempty"`
+	ResponseSchema   map[string]any        `json:"responseSchema,omitempty"`
+	ThinkingConfig   *geminiThinkingConfig `json:"thinkingConfig,omitempty"`
+}
+
+type geminiThinkingConfig struct {
+	ThinkingLevel   string `json:"thinkingLevel,omitempty"`   // minimal, low, medium, high
+	IncludeThoughts bool   `json:"includeThoughts,omitempty"` // include thought parts in response
+}
+
+type geminiToolConfig struct {
+	FunctionCallingConfig *geminiFunctionCallingConfig `json:"functionCallingConfig,omitempty"`
+}
+
+type geminiFunctionCallingConfig struct {
+	Mode                 string   `json:"mode,omitempty"`                 // AUTO, ANY, NONE
+	AllowedFunctionNames []string `json:"allowedFunctionNames,omitempty"` // restrict callable functions
+}
+
+type geminiSafetySetting struct {
+	Category  string `json:"category"`
+	Threshold string `json:"threshold"`
 }
 
 type geminiRequest struct {
 	Contents          []geminiContent         `json:"contents"`
 	Tools             []geminiTool            `json:"tools,omitempty"`
+	ToolConfig        *geminiToolConfig       `json:"toolConfig,omitempty"`
 	GenerationConfig  *geminiGenerationConfig `json:"generationConfig,omitempty"`
 	SystemInstruction *geminiContent          `json:"systemInstruction,omitempty"`
+	SafetySettings    []geminiSafetySetting   `json:"safetySettings,omitempty"`
 }
 
 type geminiCandidate struct {
 	Content       geminiContent `json:"content"`
 	FinishReason  string        `json:"finishReason,omitempty"`
 	Index         int           `json:"index"`
-	SafetyRatings []any `json:"safetyRatings,omitempty"`
+	SafetyRatings []any         `json:"safetyRatings,omitempty"`
 }
 
 type geminiUsageMetadata struct {
 	PromptTokenCount     int `json:"promptTokenCount"`
 	CandidatesTokenCount int `json:"candidatesTokenCount"`
 	TotalTokenCount      int `json:"totalTokenCount"`
+	ThoughtsTokenCount   int `json:"thoughtsTokenCount,omitempty"`
+}
+
+type geminiPromptFeedback struct {
+	BlockReason  string `json:"blockReason,omitempty"`
+	BlockMessage string `json:"blockReasonMessage,omitempty"`
 }
 
 type geminiResponse struct {
-	Candidates    []geminiCandidate    `json:"candidates"`
-	UsageMetadata *geminiUsageMetadata `json:"usageMetadata,omitempty"`
-	ModelVersion  string               `json:"modelVersion,omitempty"`
-	ResponseID    string               `json:"responseId,omitempty"`
+	Candidates     []geminiCandidate     `json:"candidates"`
+	UsageMetadata  *geminiUsageMetadata  `json:"usageMetadata,omitempty"`
+	PromptFeedback *geminiPromptFeedback `json:"promptFeedback,omitempty"`
+	ModelVersion   string                `json:"modelVersion,omitempty"`
+	ResponseID     string                `json:"responseId,omitempty"`
 }
 
 type geminiErrorResp struct {
@@ -224,10 +299,73 @@ type geminiErrorResp struct {
 	} `json:"error"`
 }
 
+func (p *GeminiProvider) isVertexAI() bool {
+	return p.cfg.ProjectID != ""
+}
+
+func (p *GeminiProvider) completionEndpoint(model string) string {
+	base := strings.TrimRight(p.cfg.BaseURL, "/")
+	if p.isVertexAI() {
+		return fmt.Sprintf("%s/v1/projects/%s/locations/%s/publishers/google/models/%s:generateContent",
+			base, p.cfg.ProjectID, p.cfg.Region, model)
+	}
+	return fmt.Sprintf("%s/v1beta/models/%s:generateContent", base, model)
+}
+
+func (p *GeminiProvider) streamEndpoint(model string) string {
+	base := strings.TrimRight(p.cfg.BaseURL, "/")
+	if p.isVertexAI() {
+		return fmt.Sprintf("%s/v1/projects/%s/locations/%s/publishers/google/models/%s:streamGenerateContent?alt=sse",
+			base, p.cfg.ProjectID, p.cfg.Region, model)
+	}
+	return fmt.Sprintf("%s/v1beta/models/%s:streamGenerateContent?alt=sse", base, model)
+}
+
+func (p *GeminiProvider) modelsEndpoint() string {
+	base := strings.TrimRight(p.cfg.BaseURL, "/")
+	if p.isVertexAI() {
+		return fmt.Sprintf("%s/v1/projects/%s/locations/%s/publishers/google/models",
+			base, p.cfg.ProjectID, p.cfg.Region)
+	}
+	return fmt.Sprintf("%s/v1beta/models", base)
+}
+
+// Endpoints 返回该提供者使用的所有 API 端点完整 URL。
+func (p *GeminiProvider) Endpoints() llm.ProviderEndpoints {
+	// 使用默认模型来展示端点格式
+	model := p.cfg.Model
+	if model == "" {
+		model = "gemini-2.5-flash"
+	}
+	return llm.ProviderEndpoints{
+		Completion: p.completionEndpoint(model),
+		Stream:     p.streamEndpoint(model),
+		Models:     p.modelsEndpoint(),
+		BaseURL:    p.cfg.BaseURL,
+	}
+}
+
 func (p *GeminiProvider) buildHeaders(req *http.Request, apiKey string) {
-	// Gemini 使用 x-goog-api-key 认证
-	req.Header.Set("x-goog-api-key", apiKey)
+	if p.cfg.AuthType == "oauth" {
+		req.Header.Set("Authorization", "Bearer "+apiKey)
+	} else {
+		req.Header.Set("x-goog-api-key", apiKey)
+	}
 	req.Header.Set("Content-Type", "application/json")
+}
+
+// resolveAPIKey 解析 API Key，支持上下文覆盖和多 Key 轮询
+func (p *GeminiProvider) resolveAPIKey(ctx context.Context) string {
+	if c, ok := llm.CredentialOverrideFromContext(ctx); ok {
+		if strings.TrimSpace(c.APIKey) != "" {
+			return strings.TrimSpace(c.APIKey)
+		}
+	}
+	if len(p.cfg.APIKeys) > 0 {
+		idx := atomic.AddUint64(&p.keyIndex, 1) - 1
+		return p.cfg.APIKeys[idx%uint64(len(p.cfg.APIKeys))].Key
+	}
+	return p.cfg.APIKey
 }
 
 // convertToGeminiContents 将统一格式转换为 Gemini 格式
@@ -244,18 +382,18 @@ func convertToGeminiContents(msgs []llm.Message) (*geminiContent, []geminiConten
 			continue
 		}
 
-		// 转换角色名称
-		role := string(m.Role)
-		if role == "assistant" {
-			role = "model" // Gemini 使用 "model" 而不是 "assistant"
+		// 转换角色名称，Gemini 仅支持 user/model
+		role := "user"
+		if m.Role == llm.RoleAssistant {
+			role = "model"
 		}
 
 		content := geminiContent{
 			Role: role,
 		}
 
-		// 文本内容
-		if m.Content != "" {
+		// 文本内容（tool 消息通过 functionResponse 表达，不重复发送 text）
+		if m.Content != "" && m.Role != llm.RoleTool {
 			content.Parts = append(content.Parts, geminiPart{
 				Text: m.Content,
 			})
@@ -276,7 +414,7 @@ func convertToGeminiContents(msgs []llm.Message) (*geminiContent, []geminiConten
 			}
 		}
 
-		// 工具响应
+		// 工具响应：tool role 通过 user + functionResponse 发送
 		if m.Role == llm.RoleTool && m.ToolCallID != "" {
 			var response map[string]any
 			if err := json.Unmarshal([]byte(m.Content), &response); err == nil {
@@ -346,37 +484,27 @@ func (p *GeminiProvider) Completion(ctx context.Context, req *llm.ChatRequest) (
 	}
 	req = rewrittenReq
 
-	apiKey := p.cfg.APIKey
-	if c, ok := llm.CredentialOverrideFromContext(ctx); ok {
-		if strings.TrimSpace(c.APIKey) != "" {
-			apiKey = strings.TrimSpace(c.APIKey)
-		}
-	}
+	apiKey := p.resolveAPIKey(ctx)
 
 	systemInstruction, contents := convertToGeminiContents(req.Messages)
 
 	body := geminiRequest{
 		Contents:          contents,
 		Tools:             convertToGeminiTools(req.Tools),
+		ToolConfig:        convertToolChoice(req.ToolChoice),
 		SystemInstruction: systemInstruction,
+		SafetySettings:    convertSafetySettings(p.cfg.SafetySettings),
 	}
 
 	// 生成配置
-	if req.Temperature > 0 || req.TopP > 0 || req.MaxTokens > 0 || len(req.Stop) > 0 {
-		body.GenerationConfig = &geminiGenerationConfig{
-			Temperature:     req.Temperature,
-			TopP:            req.TopP,
-			MaxOutputTokens: req.MaxTokens,
-			StopSequences:   req.Stop,
-		}
-	}
+	body.GenerationConfig = buildGenerationConfig(req)
 
 	payload, err := json.Marshal(body)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal request: %w", err)
 	}
-	model := providers.ChooseModel(req, p.cfg.Model, "gemini-3-pro")
-	endpoint := fmt.Sprintf("%s/v1beta/models/%s:generateContent", strings.TrimRight(p.cfg.BaseURL, "/"), model)
+	model := providers.ChooseModel(req, p.cfg.Model, defaultModel)
+	endpoint := p.completionEndpoint(model)
 
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(payload))
 	if err != nil {
@@ -412,6 +540,11 @@ func (p *GeminiProvider) Completion(ctx context.Context, req *llm.ChatRequest) (
 		}
 	}
 
+	// 检查 promptFeedback（安全过滤导致的拒绝）
+	if err := checkPromptFeedback(geminiResp, p.Name()); err != nil {
+		return nil, err
+	}
+
 	return toGeminiChatResponse(geminiResp, p.Name(), model), nil
 }
 
@@ -428,45 +561,55 @@ func (p *GeminiProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-ch
 	}
 	req = rewrittenReq
 
-	apiKey := p.cfg.APIKey
-	if c, ok := llm.CredentialOverrideFromContext(ctx); ok {
-		if strings.TrimSpace(c.APIKey) != "" {
-			apiKey = strings.TrimSpace(c.APIKey)
-		}
-	}
+	apiKey := p.resolveAPIKey(ctx)
 
 	systemInstruction, contents := convertToGeminiContents(req.Messages)
 
 	body := geminiRequest{
 		Contents:          contents,
 		Tools:             convertToGeminiTools(req.Tools),
+		ToolConfig:        convertToolChoice(req.ToolChoice),
 		SystemInstruction: systemInstruction,
+		SafetySettings:    convertSafetySettings(p.cfg.SafetySettings),
 	}
 
-	if req.Temperature > 0 || req.TopP > 0 || req.MaxTokens > 0 {
-		body.GenerationConfig = &geminiGenerationConfig{
-			Temperature:     req.Temperature,
-			TopP:            req.TopP,
-			MaxOutputTokens: req.MaxTokens,
-		}
-	}
+	body.GenerationConfig = buildGenerationConfig(req)
 
 	payload, err := json.Marshal(body)
 	if err != nil {
-		return nil, fmt.Errorf("failed to marshal request: %w", err)
+		return nil, &llm.Error{
+			Code:       llm.ErrInvalidRequest,
+			Message:    fmt.Sprintf("failed to marshal request: %v", err),
+			HTTPStatus: http.StatusBadRequest,
+			Provider:   p.Name(),
+			Cause:      err,
+		}
 	}
-	model := providers.ChooseModel(req, p.cfg.Model, "gemini-3-pro")
-	endpoint := fmt.Sprintf("%s/v1beta/models/%s:streamGenerateContent", strings.TrimRight(p.cfg.BaseURL, "/"), model)
+	model := providers.ChooseModel(req, p.cfg.Model, defaultModel)
+	endpoint := p.streamEndpoint(model)
 
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(payload))
 	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
+		return nil, &llm.Error{
+			Code:       llm.ErrInternalError,
+			Message:    fmt.Sprintf("failed to create request: %v", err),
+			HTTPStatus: http.StatusInternalServerError,
+			Provider:   p.Name(),
+			Cause:      err,
+		}
 	}
 	p.buildHeaders(httpReq, apiKey)
 
 	resp, err := p.client.Do(httpReq)
 	if err != nil {
-		return nil, err
+		return nil, &llm.Error{
+			Code:       llm.ErrUpstreamError,
+			Message:    err.Error(),
+			HTTPStatus: http.StatusBadGateway,
+			Retryable:  true,
+			Provider:   p.Name(),
+			Cause:      err,
+		}
 	}
 	if resp.StatusCode >= 400 {
 		defer resp.Body.Close()
@@ -506,38 +649,48 @@ func (p *GeminiProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-ch
 				continue
 			}
 
-			// Gemini 流式响应是 JSON 数组格式
-			// 每行是一个完整的 JSON 对象
+			// Gemini SSE 格式：data: {json}\n\n
+			if !strings.HasPrefix(line, "data:") {
+				continue
+			}
+			data := strings.TrimSpace(strings.TrimPrefix(line, "data:"))
+			if data == "" {
+				continue
+			}
+
 			var geminiResp geminiResponse
-			if err := json.Unmarshal([]byte(line), &geminiResp); err != nil {
+			if err := json.Unmarshal([]byte(data), &geminiResp); err != nil {
 				continue
 			}
 
 			// 处理每个候选响应
 			for _, candidate := range geminiResp.Candidates {
 				chunk := llm.StreamChunk{
+					ID:           geminiResp.ResponseID,
 					Provider:     p.Name(),
 					Model:        model,
 					Index:        candidate.Index,
-					FinishReason: candidate.FinishReason,
+					FinishReason: normalizeFinishReason(candidate.FinishReason),
 					Delta: llm.Message{
 						Role: llm.RoleAssistant,
 					},
 				}
 
-				// 解析内容
 				toolCallIndex := 0
 				for _, part := range candidate.Content.Parts {
+					// Thinking content
+					if part.Thought != nil && *part.Thought {
+						chunk.Delta.ReasoningContent = strPtr(part.Text)
+						continue
+					}
 					if part.Text != "" {
 						chunk.Delta.Content += part.Text
 					}
-
 					if part.FunctionCall != nil {
 						argsJSON, err := json.Marshal(part.FunctionCall.Args)
 						if err != nil {
-							continue // 跳过无法序列化的工具调用
+							continue
 						}
-						// 生成唯一的工具调用 ID
 						toolCallID := fmt.Sprintf("call_%s_%d_%d", part.FunctionCall.Name, candidate.Index, toolCallIndex)
 						chunk.Delta.ToolCalls = append(chunk.Delta.ToolCalls, llm.ToolCall{
 							ID:        toolCallID,
@@ -555,7 +708,7 @@ func (p *GeminiProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-ch
 				}
 			}
 
-			// 最后一个 chunk 包含 usage
+			// Usage metadata
 			if geminiResp.UsageMetadata != nil {
 				select {
 				case <-ctx.Done():
@@ -563,11 +716,7 @@ func (p *GeminiProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-ch
 				case ch <- llm.StreamChunk{
 					Provider: p.Name(),
 					Model:    model,
-					Usage: &llm.ChatUsage{
-						PromptTokens:     geminiResp.UsageMetadata.PromptTokenCount,
-						CompletionTokens: geminiResp.UsageMetadata.CandidatesTokenCount,
-						TotalTokens:      geminiResp.UsageMetadata.TotalTokenCount,
-					},
+					Usage:    convertUsageMetadata(geminiResp.UsageMetadata),
 				}:
 				}
 			}
@@ -585,19 +734,21 @@ func toGeminiChatResponse(gr geminiResponse, provider, model string) *llm.ChatRe
 			Role: llm.RoleAssistant,
 		}
 
-		// 解析内容
 		toolCallIndex := 0
 		for _, part := range candidate.Content.Parts {
+			// Thinking content
+			if part.Thought != nil && *part.Thought {
+				msg.ReasoningContent = strPtr(part.Text)
+				continue
+			}
 			if part.Text != "" {
 				msg.Content += part.Text
 			}
-
 			if part.FunctionCall != nil {
 				argsJSON, err := json.Marshal(part.FunctionCall.Args)
 				if err != nil {
-					continue // 跳过无法序列化的工具调用
+					continue
 				}
-				// 生成唯一的工具调用 ID
 				toolCallID := fmt.Sprintf("call_%s_%d", part.FunctionCall.Name, toolCallIndex)
 				if gr.ResponseID != "" {
 					toolCallID = fmt.Sprintf("call_%s_%s_%d", gr.ResponseID, part.FunctionCall.Name, toolCallIndex)
@@ -613,7 +764,7 @@ func toGeminiChatResponse(gr geminiResponse, provider, model string) *llm.ChatRe
 
 		choices = append(choices, llm.ChatChoice{
 			Index:        candidate.Index,
-			FinishReason: candidate.FinishReason,
+			FinishReason: normalizeFinishReason(candidate.FinishReason),
 			Message:      msg,
 		})
 	}
@@ -626,12 +777,160 @@ func toGeminiChatResponse(gr geminiResponse, provider, model string) *llm.ChatRe
 	}
 
 	if gr.UsageMetadata != nil {
-		resp.Usage = llm.ChatUsage{
-			PromptTokens:     gr.UsageMetadata.PromptTokenCount,
-			CompletionTokens: gr.UsageMetadata.CandidatesTokenCount,
-			TotalTokens:      gr.UsageMetadata.TotalTokenCount,
-		}
+		resp.Usage = *convertUsageMetadata(gr.UsageMetadata)
 	}
 
 	return resp
+}
+
+// =============================================================================
+// Helper functions
+// =============================================================================
+
+const defaultModel = "gemini-2.5-flash"
+
+// normalizeFinishReason maps Gemini finish reasons to OpenAI-compatible values.
+func normalizeFinishReason(reason string) string {
+	switch reason {
+	case "STOP":
+		return "stop"
+	case "MAX_TOKENS":
+		return "length"
+	case "SAFETY", "RECITATION", "BLOCKLIST", "PROHIBITED_CONTENT", "SPII":
+		return "content_filter"
+	case "LANGUAGE":
+		return "content_filter"
+	case "":
+		return ""
+	default:
+		return strings.ToLower(reason)
+	}
+}
+
+// convertUsageMetadata converts Gemini usage metadata to ChatUsage.
+func convertUsageMetadata(m *geminiUsageMetadata) *llm.ChatUsage {
+	usage := &llm.ChatUsage{
+		PromptTokens:     m.PromptTokenCount,
+		CompletionTokens: m.CandidatesTokenCount,
+		TotalTokens:      m.TotalTokenCount,
+	}
+	if m.ThoughtsTokenCount > 0 {
+		usage.CompletionTokensDetails = &llm.CompletionTokensDetails{
+			ReasoningTokens: m.ThoughtsTokenCount,
+		}
+	}
+	return usage
+}
+
+// checkPromptFeedback returns an error if the response was blocked by safety filters.
+func checkPromptFeedback(resp geminiResponse, provider string) error {
+	if resp.PromptFeedback == nil {
+		return nil
+	}
+	if resp.PromptFeedback.BlockReason == "" {
+		return nil
+	}
+	msg := fmt.Sprintf("request blocked by safety filter: %s", resp.PromptFeedback.BlockReason)
+	if resp.PromptFeedback.BlockMessage != "" {
+		msg = fmt.Sprintf("%s — %s", msg, resp.PromptFeedback.BlockMessage)
+	}
+	return &llm.Error{
+		Code:       llm.ErrContentFiltered,
+		Message:    msg,
+		HTTPStatus: http.StatusBadRequest,
+		Provider:   provider,
+	}
+}
+
+// convertToolChoice maps ChatRequest.ToolChoice to Gemini's ToolConfig.
+func convertToolChoice(toolChoice any) *geminiToolConfig {
+	if toolChoice == nil {
+		return nil
+	}
+	switch v := toolChoice.(type) {
+	case string:
+		switch v {
+		case "auto":
+			return &geminiToolConfig{FunctionCallingConfig: &geminiFunctionCallingConfig{Mode: "AUTO"}}
+		case "required", "any":
+			return &geminiToolConfig{FunctionCallingConfig: &geminiFunctionCallingConfig{Mode: "ANY"}}
+		case "none":
+			return &geminiToolConfig{FunctionCallingConfig: &geminiFunctionCallingConfig{Mode: "NONE"}}
+		}
+	case map[string]any:
+		// OpenAI-style {"type":"function","function":{"name":"fn"}}
+		if fn, ok := v["function"].(map[string]any); ok {
+			if name, ok := fn["name"].(string); ok {
+				return &geminiToolConfig{
+					FunctionCallingConfig: &geminiFunctionCallingConfig{
+						Mode:                 "ANY",
+						AllowedFunctionNames: []string{name},
+					},
+				}
+			}
+		}
+	}
+	return nil
+}
+
+// buildGenerationConfig constructs geminiGenerationConfig from ChatRequest.
+func buildGenerationConfig(req *llm.ChatRequest) *geminiGenerationConfig {
+	cfg := &geminiGenerationConfig{
+		Temperature:     req.Temperature,
+		TopP:            req.TopP,
+		MaxOutputTokens: req.MaxTokens,
+		StopSequences:   req.Stop,
+	}
+
+	// ResponseFormat
+	if req.ResponseFormat != nil {
+		switch req.ResponseFormat.Type {
+		case llm.ResponseFormatJSONObject:
+			cfg.ResponseMimeType = "application/json"
+		case llm.ResponseFormatJSONSchema:
+			cfg.ResponseMimeType = "application/json"
+			if req.ResponseFormat.JSONSchema != nil {
+				cfg.ResponseSchema = req.ResponseFormat.JSONSchema.Schema
+			}
+		}
+	}
+
+	// Thinking / Reasoning mode
+	if req.ReasoningMode != "" {
+		cfg.ThinkingConfig = &geminiThinkingConfig{
+			IncludeThoughts: true,
+		}
+		switch req.ReasoningMode {
+		case "minimal", "low", "medium", "high":
+			cfg.ThinkingConfig.ThinkingLevel = req.ReasoningMode
+		default:
+			cfg.ThinkingConfig.ThinkingLevel = "medium"
+		}
+	}
+
+	// Return nil if all fields are zero-value to keep request clean
+	if cfg.Temperature == 0 && cfg.TopP == 0 && cfg.MaxOutputTokens == 0 &&
+		len(cfg.StopSequences) == 0 && cfg.ResponseMimeType == "" && cfg.ThinkingConfig == nil {
+		return nil
+	}
+	return cfg
+}
+
+func strPtr(s string) *string {
+	if s == "" {
+		return nil
+	}
+	return &s
+}
+
+// convertSafetySettings converts config safety settings to request format.
+func convertSafetySettings(settings []providers.GeminiSafetySetting) []geminiSafetySetting {
+	if len(settings) == 0 {
+		return nil
+	}
+	out := make([]geminiSafetySetting, len(settings))
+	for i, s := range settings {
+		out[i] = geminiSafetySetting{Category: s.Category, Threshold: s.Threshold}
+	}
+	return out
 }

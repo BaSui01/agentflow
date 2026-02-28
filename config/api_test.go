@@ -92,10 +92,10 @@ func TestConfigAPIHandler_MethodNotAllowed_Patch(t *testing.T) {
 
 	assert.Equal(t, http.StatusMethodNotAllowed, w.Code)
 
-	var resp ConfigResponse
+	var resp apiResponse
 	require.NoError(t, json.NewDecoder(w.Body).Decode(&resp))
 	assert.False(t, resp.Success)
-	assert.Contains(t, resp.Error, "PATCH")
+	assert.Contains(t, resp.Error.Message, "PATCH")
 }
 
 // --- handleFields method guard ---
@@ -140,7 +140,7 @@ func TestConfigAPIHandler_ChangesMethodNotAllowed(t *testing.T) {
 	assert.Equal(t, http.StatusMethodNotAllowed, w.Code)
 }
 
-// --- writeJSON ---
+// --- Response Content-Type ---
 
 func TestConfigAPIHandler_WriteJSON_ContentType(t *testing.T) {
 	manager := NewHotReloadManager(DefaultConfig())
@@ -151,7 +151,7 @@ func TestConfigAPIHandler_WriteJSON_ContentType(t *testing.T) {
 
 	h.getConfig(w, req)
 
-	assert.Equal(t, "application/json", w.Header().Get("Content-Type"))
+	assert.Equal(t, "application/json; charset=utf-8", w.Header().Get("Content-Type"))
 	assert.Equal(t, "nosniff", w.Header().Get("X-Content-Type-Options"))
 }
 

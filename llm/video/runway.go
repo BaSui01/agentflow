@@ -9,7 +9,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/BaSui01/agentflow/internal/tlsutil"
+	"github.com/BaSui01/agentflow/pkg/tlsutil"
 )
 
 // Runway Provider执行视频生成,使用Runway ML Gen-4.

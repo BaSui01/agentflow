@@ -1,8 +1,8 @@
 package main
 
 import (
-	"context"
 	"fmt"
+	"time"
 
 	"github.com/BaSui01/agentflow/agent"
 	"github.com/BaSui01/agentflow/agent/collaboration"
@@ -31,8 +31,6 @@ func main() {
 }
 
 func demoHierarchicalArchitecture(logger *zap.Logger) {
-	_ = context.Background()
-
 	// 1. 创建 Supervisor Agent
 	fmt.Println("1. 创建 Supervisor Agent")
 	supervisorConfig := agent.Config{
@@ -44,8 +42,7 @@ func demoHierarchicalArchitecture(logger *zap.Logger) {
 		Temperature: 0.7,
 	}
 
-	// 注意：实际使用时需要提供真实的 provider
-	var provider any = nil
+	// 注意：实际使用时需要提供真实的 LLM provider，此处传 nil 仅演示结构
 	supervisor := agent.NewBaseAgent(supervisorConfig, nil, nil, nil, nil, logger)
 
 	// 2. 创建 Worker Agents
@@ -75,12 +72,13 @@ func demoHierarchicalArchitecture(logger *zap.Logger) {
 
 	hierarchicalAgent := hierarchical.NewHierarchicalAgent(
 		supervisor,
-		supervisor, // supervisor implements agent.Agent interface
+		supervisor,
 		workers,
 		hierarchicalConfig,
 		logger,
 	)
 
+	// 4. 打印实际配置（从对象读取，而非硬编码字符串）
 	fmt.Println("层次化 Agent 已创建")
 	fmt.Printf("配置:\n")
 	fmt.Printf("  - 最大 Workers: %d\n", hierarchicalConfig.MaxWorkers)
@@ -88,57 +86,16 @@ func demoHierarchicalArchitecture(logger *zap.Logger) {
 	fmt.Printf("  - 工作者选择策略: %s\n", hierarchicalConfig.WorkerSelection)
 	fmt.Printf("  - 启用重试: %v\n", hierarchicalConfig.EnableRetry)
 
-	// 4. 演示任务分解和执行流程
-	fmt.Println("\n4. 任务执行流程")
-	fmt.Println("  ┌─────────────────┐")
-	fmt.Println("  │   Supervisor    │ ← 接收任务")
-	fmt.Println("  └────────┬────────┘")
-	fmt.Println("           │ 分解任务")
-	fmt.Println("  ┌────────▼────────┐")
-	fmt.Println("  │  Task Coordinator│ ← 任务协调")
-	fmt.Println("  └────────┬────────┘")
-	fmt.Println("           │ 分配任务")
-	fmt.Println("     ┌─────┼─────┐")
-	fmt.Println("  ┌──▼──┐ ┌▼───┐ ┌▼───┐")
-	fmt.Println("  │ W-1 │ │W-2 │ │W-3 │ ← 并行执行")
-	fmt.Println("  └──┬──┘ └┬───┘ └┬───┘")
-	fmt.Println("     └─────┼─────┘")
-	fmt.Println("           │ 返回结果")
-	fmt.Println("  ┌────────▼────────┐")
-	fmt.Println("  │   Supervisor    │ ← 聚合结果")
-	fmt.Println("  └─────────────────┘")
-
-	// 5. 任务分配策略
-	fmt.Println("\n5. 任务分配策略")
-	fmt.Println("  a) Round Robin: 轮询分配")
-	fmt.Println("     - Worker 1 -> Worker 2 -> Worker 3 -> Worker 1 ...")
-	fmt.Println("  b) Least Loaded: 最少负载")
-	fmt.Println("     - 选择当前负载最低的 Worker")
-	fmt.Println("  c) Random: 随机分配")
-	fmt.Println("     - 随机选择空闲的 Worker")
-
-	// 6. Worker 状态监控
-	fmt.Println("\n6. Worker 状态监控")
-	fmt.Println("Worker 状态:")
-	fmt.Println("  - worker-1: 状态=ready, 完成=0, 失败=0, 负载=0.00")
-	fmt.Println("  - worker-2: 状态=ready, 完成=0, 失败=0, 负载=0.00")
-	fmt.Println("  - worker-3: 状态=ready, 完成=0, 失败=0, 负载=0.00")
-
-	// 7. 优势
-	fmt.Println("\n7. 层次化架构优势")
-	fmt.Println("  - 任务分解: 复杂任务拆分为简单子任务")
-	fmt.Println("  - 并行执行: 多个 Worker 同时工作")
-	fmt.Println("  - 负载均衡: 智能分配任务")
-	fmt.Println("  - 容错能力: 单个 Worker 失败不影响整体")
-	fmt.Println("  - 可扩展性: 轻松添加更多 Workers")
+	// 5. 打印 Worker 实际状态
+	fmt.Println("\n5. Worker 实际状态")
+	for _, w := range workers {
+		fmt.Printf("  - %s: 状态=%s\n", w.ID(), w.State())
+	}
 
 	_ = hierarchicalAgent
-	_ = provider
 }
 
 func demoMultiAgentCollaboration(logger *zap.Logger) {
-	ctx := context.Background()
-
 	// 1. 创建多个 Agent
 	fmt.Println("1. 创建协作 Agents")
 	agents := []agent.Agent{}
@@ -159,25 +116,24 @@ func demoMultiAgentCollaboration(logger *zap.Logger) {
 
 	fmt.Printf("创建了 %d 个协作 Agents\n", len(agents))
 
-	// 2. 协作模式
-	fmt.Println("\n2. 协作模式")
+	// 2. 展示所有协作模式
+	fmt.Println("\n2. 可用协作模式")
 	patterns := []struct {
-		name        string
-		pattern     collaboration.CollaborationPattern
-		description string
+		name    string
+		pattern collaboration.CollaborationPattern
 	}{
-		{"辩论模式", collaboration.PatternDebate, "多个 Agent 辩论达成最佳答案"},
-		{"共识模式", collaboration.PatternConsensus, "通过投票达成共识"},
-		{"流水线模式", collaboration.PatternPipeline, "顺序执行，前一个输出是后一个输入"},
-		{"广播模式", collaboration.PatternBroadcast, "并行执行，合并所有结果"},
-		{"网络模式", collaboration.PatternNetwork, "Agent 之间自由通信"},
+		{"辩论模式", collaboration.PatternDebate},
+		{"共识模式", collaboration.PatternConsensus},
+		{"流水线模式", collaboration.PatternPipeline},
+		{"广播模式", collaboration.PatternBroadcast},
+		{"网络模式", collaboration.PatternNetwork},
 	}
 
 	for i, p := range patterns {
-		fmt.Printf("  %d. %s (%s)\n     %s\n", i+1, p.name, p.pattern, p.description)
+		fmt.Printf("  %d. %s (%s)\n", i+1, p.name, p.pattern)
 	}
 
-	// 3. 创建辩论模式系统
+	// 3. 创建辩论模式系统并打印实际配置
 	fmt.Println("\n3. 创建辩论模式系统")
 	debateConfig := collaboration.DefaultMultiAgentConfig()
 	debateConfig.Pattern = collaboration.PatternDebate
@@ -185,153 +141,107 @@ func demoMultiAgentCollaboration(logger *zap.Logger) {
 
 	debateSystem := collaboration.NewMultiAgentSystem(agents, debateConfig, logger)
 
-	fmt.Println("辩论系统已创建")
 	fmt.Printf("配置:\n")
 	fmt.Printf("  - 模式: %s\n", debateConfig.Pattern)
 	fmt.Printf("  - 最大轮次: %d\n", debateConfig.MaxRounds)
 	fmt.Printf("  - 共识阈值: %.2f\n", debateConfig.ConsensusThreshold)
 
-	// 4. 辩论流程
-	fmt.Println("\n4. 辩论模式流程")
-	fmt.Println("  第 1 轮:")
-	fmt.Println("    Agent 1: 提出观点 A")
-	fmt.Println("    Agent 2: 提出观点 B")
-	fmt.Println("    Agent 3: 提出观点 C")
-	fmt.Println("  第 2 轮:")
-	fmt.Println("    Agent 1: 评论 B 和 C，改进 A")
-	fmt.Println("    Agent 2: 评论 A 和 C，改进 B")
-	fmt.Println("    Agent 3: 评论 A 和 B，改进 C")
-	fmt.Println("  第 3 轮:")
-	fmt.Println("    继续辩论和改进...")
-	fmt.Println("  最终:")
-	fmt.Println("    选择最佳答案或达成共识")
-
-	// 5. 流水线模式
-	fmt.Println("\n5. 流水线模式示例")
+	// 4. 创建流水线模式系统
+	fmt.Println("\n4. 创建流水线模式系统")
 	pipelineConfig := collaboration.DefaultMultiAgentConfig()
 	pipelineConfig.Pattern = collaboration.PatternPipeline
 
 	pipelineSystem := collaboration.NewMultiAgentSystem(agents, pipelineConfig, logger)
+	fmt.Printf("  模式: %s\n", pipelineConfig.Pattern)
 
-	fmt.Println("流水线流程:")
-	fmt.Println("  输入 → Agent 1 (分析) → Agent 2 (批评) → Agent 3 (综合) → 输出")
-	fmt.Println("  每个 Agent 的输出成为下一个 Agent 的输入")
-
-	// 6. 广播模式
-	fmt.Println("\n6. 广播模式示例")
+	// 5. 创建广播模式系统
+	fmt.Println("\n5. 创建广播模式系统")
 	broadcastConfig := collaboration.DefaultMultiAgentConfig()
 	broadcastConfig.Pattern = collaboration.PatternBroadcast
 
 	broadcastSystem := collaboration.NewMultiAgentSystem(agents, broadcastConfig, logger)
+	fmt.Printf("  模式: %s\n", broadcastConfig.Pattern)
 
-	fmt.Println("广播流程:")
-	fmt.Println("         ┌─────────┐")
-	fmt.Println("  输入 ──┤ 广播器  ├── Agent 1 ──┐")
-	fmt.Println("         │         ├── Agent 2 ──┼── 聚合 → 输出")
-	fmt.Println("         └─────────┘── Agent 3 ──┘")
-	fmt.Println("  所有 Agent 并行处理，结果合并")
-
-	// 7. 消息通信
-	fmt.Println("\n7. Agent 间消息通信")
-	fmt.Println("  消息类型:")
-	fmt.Println("    - Proposal: 提案")
-	fmt.Println("    - Response: 响应")
-	fmt.Println("    - Vote: 投票")
-	fmt.Println("    - Consensus: 共识")
-	fmt.Println("    - Broadcast: 广播")
-
-	// 8. 优势
-	fmt.Println("\n8. 多 Agent 协作优势")
-	fmt.Println("  - 多样性: 不同视角和专长")
-	fmt.Println("  - 鲁棒性: 单个 Agent 错误不影响整体")
-	fmt.Println("  - 质量提升: 通过辩论和批评改进")
-	fmt.Println("  - 灵活性: 多种协作模式适应不同场景")
+	// 注意：实际执行需要真实的 LLM provider
+	// 调用 debateSystem.Execute(ctx, input) 即可启动辩论
 
 	_ = debateSystem
 	_ = pipelineSystem
 	_ = broadcastSystem
-	_ = ctx
 }
 
 func demoObservabilitySystem(logger *zap.Logger) {
-	_ = context.Background()
-
-	// 1. 创建可观测性系统
+	// 1. 创建可观测性系统的各个组件
 	fmt.Println("1. 创建可观测性系统")
-	_ = observability.NewObservabilitySystem(logger)
+	collector := observability.NewMetricsCollector(logger)
+	tracer := observability.NewTracer(logger)
 
 	fmt.Println("可观测性系统已创建")
-	fmt.Println("组件:")
-	fmt.Println("  - MetricsCollector: 指标收集")
-	fmt.Println("  - Tracer: 追踪记录")
-	fmt.Println("  - Evaluator: 质量评估")
 
-	// 2. 指标收集
-	fmt.Println("\n2. 指标收集")
-	fmt.Println("模拟记录 10 个任务...")
+	// 2. 使用 MetricsCollector 记录真实的任务指标
+	fmt.Println("\n2. 指标收集（真实 API 调用）")
+	testData := []struct {
+		success bool
+		latency time.Duration
+		tokens  int
+		cost    float64
+		quality float64
+	}{
+		{true, 120 * time.Millisecond, 500, 0.01, 8.5},
+		{true, 150 * time.Millisecond, 600, 0.012, 7.8},
+		{false, 200 * time.Millisecond, 400, 0.008, 0},
+		{true, 130 * time.Millisecond, 550, 0.011, 9.0},
+		{true, 180 * time.Millisecond, 700, 0.014, 8.2},
+	}
 
-	// 显示示例指标
-	fmt.Println("\n指标统计:")
-	fmt.Println("  - 总任务数: 10")
-	fmt.Println("  - 成功任务: 8")
-	fmt.Println("  - 失败任务: 2")
-	fmt.Println("  - 成功率: 80.00%")
-	fmt.Println("  - 平均延迟: 145ms")
-	fmt.Println("  - P95 延迟: 190ms")
-	fmt.Println("  - 总 Token: 5450")
-	fmt.Println("  - 总成本: $0.10")
-	fmt.Println("  - 平均质量: 7.90")
+	for _, d := range testData {
+		collector.RecordTask("demo-agent", d.success, d.latency, d.tokens, d.cost, d.quality)
+	}
 
-	// 3. 追踪系统
-	fmt.Println("\n3. 追踪系统")
-	fmt.Println("开始追踪: trace-001")
-	fmt.Println("  - Agent: agent-001")
-	fmt.Println("  - 状态: running")
-	fmt.Println("  - 开始时间: 2025-01-26 10:00:00")
-	fmt.Println("\n追踪完成:")
-	fmt.Println("  - 状态: completed")
-	fmt.Println("  - 持续时间: 1.5s")
-	fmt.Println("  - 步骤数: 3")
+	// 3. 读取真实的指标数据
+	metrics := collector.GetMetrics("demo-agent")
+	if metrics != nil {
+		fmt.Printf("\n指标统计（来自 MetricsCollector）:\n")
+		fmt.Printf("  - 总任务数: %d\n", metrics.TotalTasks)
+		fmt.Printf("  - 成功任务: %d\n", metrics.SuccessfulTasks)
+		fmt.Printf("  - 失败任务: %d\n", metrics.FailedTasks)
+		fmt.Printf("  - 成功率: %.2f%%\n", metrics.TaskSuccessRate*100)
+		fmt.Printf("  - 平均延迟: %v\n", metrics.AvgLatency)
+		fmt.Printf("  - P50 延迟: %v\n", metrics.P50Latency)
+		fmt.Printf("  - P95 延迟: %v\n", metrics.P95Latency)
+		fmt.Printf("  - 总 Token: %d\n", metrics.TotalTokens)
+		fmt.Printf("  - 总成本: $%.3f\n", metrics.TotalCost)
+		fmt.Printf("  - 每任务成本: $%.4f\n", metrics.CostPerTask)
+		fmt.Printf("  - 平均质量: %.2f\n", metrics.AvgOutputQuality)
+	}
 
-	// 4. 评估系统
-	fmt.Println("\n4. 评估系统")
-	fmt.Println("评估结果:")
-	fmt.Println("  - 总分: 8.50")
-	fmt.Println("  - 维度分数:")
-	fmt.Println("    - 准确性: 9.0")
-	fmt.Println("    - 完整性: 8.5")
-	fmt.Println("    - 清晰度: 8.0")
-	fmt.Println("    - 相关性: 8.5")
+	// 4. 使用 Tracer 记录真实的追踪数据
+	fmt.Println("\n4. 追踪系统（真实 API 调用）")
+	trace := tracer.StartTrace("trace-demo-001", "demo-agent")
+	fmt.Printf("  追踪已开始: ID=%s, Agent=%s\n", trace.TraceID, trace.AgentID)
 
-	// 5. 基准测试
-	fmt.Println("\n5. 基准测试")
-	fmt.Println("已注册基准测试: QA Benchmark")
-	fmt.Println("测试用例数: 2")
+	// 添加 Span
+	tracer.AddSpan("trace-demo-001", &observability.Span{
+		Name:       "llm_call",
+		StartTime:  time.Now(),
+		EndTime:    time.Now().Add(150 * time.Millisecond),
+		Attributes: map[string]any{"model": "gpt-4", "tokens": 500},
+	})
 
-	// 6. 可观测性仪表板
-	fmt.Println("\n6. 可观测性仪表板")
-	fmt.Println("  ┌─────────────────────────────────────┐")
-	fmt.Println("  │        Agent 性能仪表板              │")
-	fmt.Println("  ├─────────────────────────────────────┤")
-	fmt.Println("  │ 成功率:  ████████░░ 80%             │")
-	fmt.Println("  │ 延迟:    P50=150ms P95=280ms        │")
-	fmt.Println("  │ 质量:    ████████░░ 8.2/10          │")
-	fmt.Println("  │ 成本:    $0.055/task                │")
-	fmt.Println("  │ Token:   550 tokens/task            │")
-	fmt.Println("  └─────────────────────────────────────┘")
+	tracer.EndTrace("trace-demo-001", "completed", nil)
 
-	// 7. 告警规则
-	fmt.Println("\n7. 告警规则示例")
-	fmt.Println("  - 成功率 < 70%: 发送告警")
-	fmt.Println("  - P95 延迟 > 1s: 发送告警")
-	fmt.Println("  - 成本 > $0.10/task: 发送告警")
-	fmt.Println("  - 质量分数 < 6.0: 发送告警")
+	// 读取追踪结果
+	completedTrace := tracer.GetTrace("trace-demo-001")
+	if completedTrace != nil {
+		fmt.Printf("  追踪完成: 状态=%s, Spans=%d\n", completedTrace.Status, len(completedTrace.Spans))
+	}
 
-	// 8. 优势
-	fmt.Println("\n8. 可观测性系统优势")
-	fmt.Println("  - 实时监控: 实时了解 Agent 性能")
-	fmt.Println("  - 问题定位: 快速定位性能瓶颈")
-	fmt.Println("  - 质量保证: 持续评估输出质量")
-	fmt.Println("  - 成本优化: 监控和优化成本")
-	fmt.Println("  - 数据驱动: 基于数据做决策")
+	// 5. 获取所有 Agent 的指标
+	fmt.Println("\n5. 所有 Agent 指标汇总")
+	allMetrics := collector.GetAllMetrics()
+	fmt.Printf("  已监控 Agent 数: %d\n", len(allMetrics))
+	for agentID, m := range allMetrics {
+		fmt.Printf("  - %s: 任务=%d, 成功率=%.0f%%, 平均延迟=%v\n",
+			agentID, m.TotalTasks, m.TaskSuccessRate*100, m.AvgLatency)
+	}
 }

@@ -8,6 +8,7 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/BaSui01/agentflow/types"
 	"go.uber.org/zap"
 )
 
@@ -522,9 +523,6 @@ func (c *DefaultMCPClient) BatchCallTools(ctx context.Context, calls []ToolCall)
 	return results, nil
 }
 
-// ToolCall 工具调用（复用 protocol.go 中的定义）
-type ToolCall struct {
-	ID        string          `json:"id"`
-	Name      string          `json:"name"`
-	Arguments json.RawMessage `json:"arguments"`
-}
+// ToolCall is a type alias for types.ToolCall to avoid duplicate definitions.
+// The canonical definition lives in types/message.go.
+type ToolCall = types.ToolCall

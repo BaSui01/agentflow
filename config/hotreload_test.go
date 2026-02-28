@@ -17,6 +17,22 @@ import (
 	"go.uber.org/zap"
 )
 
+// decodeConfigResponse decodes the unified apiResponse envelope and
+// extracts the config-specific data from the Data field.
+func decodeConfigResponse(t *testing.T, w *httptest.ResponseRecorder) (apiResponse, configData) {
+	t.Helper()
+	var resp apiResponse
+	require.NoError(t, json.NewDecoder(w.Body).Decode(&resp))
+
+	var data configData
+	if resp.Data != nil {
+		raw, err := json.Marshal(resp.Data)
+		require.NoError(t, err)
+		require.NoError(t, json.Unmarshal(raw, &data))
+	}
+	return resp, data
+}
+
 // --- 文件监听器测试 ---
 
 func TestFileWatcher_NewFileWatcher(t *testing.T) {
@@ -298,12 +314,10 @@ func TestConfigAPIHandler_GetConfig(t *testing.T) {
 
 	assert.Equal(t, http.StatusOK, w.Code)
 
-	var resp ConfigResponse
-	err := json.NewDecoder(w.Body).Decode(&resp)
-	require.NoError(t, err)
+	resp, data := decodeConfigResponse(t, w)
 
 	assert.True(t, resp.Success)
-	assert.NotNil(t, resp.Config)
+	assert.NotNil(t, data.Config)
 }
 
 func TestConfigAPIHandler_UpdateConfig(t *testing.T) {
@@ -320,9 +334,7 @@ func TestConfigAPIHandler_UpdateConfig(t *testing.T) {
 
 	assert.Equal(t, http.StatusOK, w.Code)
 
-	var resp ConfigResponse
-	err := json.NewDecoder(w.Body).Decode(&resp)
-	require.NoError(t, err)
+	resp, _ := decodeConfigResponse(t, w)
 
 	assert.True(t, resp.Success)
 	assert.Equal(t, "debug", manager.GetConfig().Log.Level)
@@ -342,12 +354,11 @@ func TestConfigAPIHandler_UpdateConfig_InvalidField(t *testing.T) {
 
 	assert.Equal(t, http.StatusBadRequest, w.Code)
 
-	var resp ConfigResponse
-	err := json.NewDecoder(w.Body).Decode(&resp)
-	require.NoError(t, err)
+	var resp apiResponse
+	require.NoError(t, json.NewDecoder(w.Body).Decode(&resp))
 
 	assert.False(t, resp.Success)
-	assert.Contains(t, resp.Error, "Unknown field")
+	assert.Contains(t, resp.Error.Message, "Unknown field")
 }
 
 func TestConfigAPIHandler_Reload(t *testing.T) {
@@ -377,9 +388,7 @@ agent:
 
 	assert.Equal(t, http.StatusOK, w.Code)
 
-	var resp ConfigResponse
-	err = json.NewDecoder(w.Body).Decode(&resp)
-	require.NoError(t, err)
+	resp, _ := decodeConfigResponse(t, w)
 
 	assert.True(t, resp.Success)
 }
@@ -396,12 +405,10 @@ func TestConfigAPIHandler_GetFields(t *testing.T) {
 
 	assert.Equal(t, http.StatusOK, w.Code)
 
-	var resp ConfigResponse
-	err := json.NewDecoder(w.Body).Decode(&resp)
-	require.NoError(t, err)
+	resp, data := decodeConfigResponse(t, w)
 
 	assert.True(t, resp.Success)
-	assert.NotEmpty(t, resp.Fields)
+	assert.NotEmpty(t, data.Fields)
 }
 
 func TestConfigAPIHandler_GetChanges(t *testing.T) {
@@ -420,12 +427,10 @@ func TestConfigAPIHandler_GetChanges(t *testing.T) {
 
 	assert.Equal(t, http.StatusOK, w.Code)
 
-	var resp ConfigResponse
-	err := json.NewDecoder(w.Body).Decode(&resp)
-	require.NoError(t, err)
+	resp, data := decodeConfigResponse(t, w)
 
 	assert.True(t, resp.Success)
-	assert.GreaterOrEqual(t, len(resp.Changes), 2)
+	assert.GreaterOrEqual(t, len(data.Changes), 2)
 }
 
 func TestConfigAPIHandler_MethodNotAllowed(t *testing.T) {

@@ -15,7 +15,7 @@
 // =============================================================================
 
 // @title AgentFlow API
-// @version 1.0.0
+// @version 1.3.0
 // @description AgentFlow is a production-ready Go framework for building AI agents with multi-provider LLM support.
 // @description
 // @description ## Features
@@ -46,11 +46,15 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"time"
 
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
+	"gorm.io/driver/postgres"
+	"gorm.io/gorm"
 
 	"github.com/BaSui01/agentflow/config"
+	"github.com/BaSui01/agentflow/pkg/telemetry"
 )
 
 // =============================================================================
@@ -129,8 +133,20 @@ func runServe(args []string) {
 		zap.String("git_commit", GitCommit),
 	)
 
+	// Initialize OpenTelemetry
+	otelProviders, err := telemetry.Init(cfg.Telemetry, logger)
+	if err != nil {
+		logger.Warn("failed to initialize telemetry", zap.Error(err))
+	}
+
+	// 初始化数据库连接
+	db, err := openDatabase(cfg.Database, logger)
+	if err != nil {
+		logger.Warn("Database not available, API key management disabled", zap.Error(err))
+	}
+
 	// 创建服务器（传入配置文件路径以支持热更新）
-	server := NewServer(cfg, *configPath, logger)
+	server := NewServer(cfg, *configPath, logger, otelProviders, db)
 
 	// 启动服务器
 	if err := server.Start(); err != nil {
@@ -152,7 +168,8 @@ func runHealthCheck(args []string) {
 	addr := fs.String("addr", "http://localhost:8080", "Server address")
 	fs.Parse(args)
 
-	resp, err := http.Get(*addr + "/health")
+	client := &http.Client{Timeout: 5 * time.Second}
+	resp, err := client.Get(*addr + "/health")
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Health check failed: %v\n", err)
 		os.Exit(1)
@@ -265,8 +282,31 @@ func initLogger(cfg config.LogConfig) *zap.Logger {
 	)
 	if err != nil {
 		// 回退到基本 logger
-		logger, _ = zap.NewProduction()
+		logger = zap.NewNop()
 	}
 
 	return logger
+}
+
+// openDatabase 根据配置打开数据库连接
+func openDatabase(dbCfg config.DatabaseConfig, logger *zap.Logger) (*gorm.DB, error) {
+	if dbCfg.Driver == "" {
+		return nil, fmt.Errorf("database driver not configured")
+	}
+
+	var dialector gorm.Dialector
+	switch dbCfg.Driver {
+	case "postgres":
+		dialector = postgres.Open(dbCfg.DSN())
+	default:
+		return nil, fmt.Errorf("unsupported database driver: %s (supported: postgres)", dbCfg.Driver)
+	}
+
+	db, err := gorm.Open(dialector, &gorm.Config{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to connect database: %w", err)
+	}
+
+	logger.Info("Database connected", zap.String("driver", dbCfg.Driver))
+	return db, nil
 }

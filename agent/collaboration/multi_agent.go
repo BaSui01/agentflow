@@ -3,6 +3,8 @@ package collaboration
 import (
 	"context"
 	"fmt"
+	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -188,6 +190,7 @@ func (h *MessageHub) SetMessageStore(store persistence.MessageStore) {
 }
 
 // Close 关闭消息中心
+// 使用 sync.Once 保护 channel 关闭，防止重复关闭 panic
 func (h *MessageHub) Close() error {
 	var closeErr error
 	h.closeOnce.Do(func() {
@@ -271,9 +274,7 @@ func (h *MessageHub) SendWithContext(ctx context.Context, msg *Message) error {
 			select {
 			case ch <- msg:
 				// 消息投递成功，确认消息
-				if h.messageStore != nil {
-					go h.ackMessage(ctx, msg.ID)
-				}
+				go h.ackMessage(ctx, msg.ID)
 			default:
 				// channel 满了，消息已持久化，后续可重试
 				h.logger.Debug("channel full, message persisted for retry",
@@ -294,9 +295,7 @@ func (h *MessageHub) SendWithContext(ctx context.Context, msg *Message) error {
 		select {
 		case ch <- msg:
 			// 消息投递成功，确认消息
-			if h.messageStore != nil {
-				go h.ackMessage(ctx, msg.ID)
-			}
+			go h.ackMessage(ctx, msg.ID)
 		default:
 			// channel 满了，消息已持久化，后续可重试
 			h.logger.Debug("channel full, message persisted for retry",
@@ -338,7 +337,16 @@ func (h *MessageHub) fromPersistMessage(pm *persistence.Message) *Message {
 }
 
 // ackMessage 确认消息已处理
+// H1 FIX: 异步 goroutine 调用前检查 closed 标志，防止 store 关闭后访问
 func (h *MessageHub) ackMessage(ctx context.Context, msgID string) {
+	// H1 FIX: Close() 可能已关闭 messageStore，提前检查避免访问已关闭的 store
+	h.mu.RLock()
+	closed := h.closed
+	h.mu.RUnlock()
+	if closed {
+		return
+	}
+
 	if h.messageStore == nil {
 		return
 	}
@@ -350,12 +358,22 @@ func (h *MessageHub) ackMessage(ctx context.Context, msgID string) {
 	}
 }
 
+// safeSend safely writes to a channel, recovering from panic if the channel is closed.
+func safeSend(ch chan<- *Message, msg *Message) (sent bool) {
+	defer func() {
+		if r := recover(); r != nil {
+			sent = false
+		}
+	}()
+	ch <- msg
+	return true
+}
+
 // RecoverMessages 恢复未处理的消息（服务重启后调用）
 func (h *MessageHub) RecoverMessages(ctx context.Context) error {
 	if h.messageStore == nil {
 		return nil
 	}
-
 	h.logger.Info("recovering unprocessed messages")
 
 	h.mu.RLock()
@@ -403,19 +421,19 @@ func (h *MessageHub) RecoverMessages(ctx context.Context) error {
 			h.mu.RUnlock()
 
 			if ok {
-				select {
-				case ch <- msg:
-					totalRecovered++
-					h.logger.Debug("message recovered",
+				if !safeSend(ch, msg) {
+					// channel was closed, stop recovery
+					h.logger.Debug("message hub closed during send, stopping recovery",
 						zap.String("msg_id", msg.ID),
 						zap.String("to", agentID),
 					)
-				default:
-					h.logger.Debug("channel still full during recovery",
-						zap.String("msg_id", msg.ID),
-						zap.String("to", agentID),
-					)
+					break
 				}
+				totalRecovered++
+				h.logger.Debug("message recovered",
+					zap.String("msg_id", msg.ID),
+					zap.String("to", agentID),
+				)
 			}
 		}
 	}
@@ -429,10 +447,6 @@ func (h *MessageHub) RecoverMessages(ctx context.Context) error {
 
 // StartRetryLoop 启动消息重试循环
 func (h *MessageHub) StartRetryLoop(ctx context.Context, interval time.Duration) {
-	if h.messageStore == nil {
-		return
-	}
-
 	go func() {
 		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
@@ -623,9 +637,15 @@ func (c *PipelineCoordinator) Coordinate(ctx context.Context, agents map[string]
 	currentInput := input
 	var currentOutput *agent.Output
 
+	// 按 ID 排序确保流水线执行顺序确定
+	keys := make([]string, 0, len(agents))
+	for k := range agents {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
 	agentList := make([]agent.Agent, 0, len(agents))
-	for _, a := range agents {
-		agentList = append(agentList, a)
+	for _, k := range keys {
+		agentList = append(agentList, agents[k])
 	}
 
 	for i, a := range agentList {
@@ -703,14 +723,14 @@ func (c *BroadcastCoordinator) Coordinate(ctx context.Context, agents map[string
 	}
 
 	// 合并所有输出
-	combined := ""
+	var sb strings.Builder
 	for i, output := range outputs {
-		combined += fmt.Sprintf("Agent %d:\n%s\n\n", i+1, output.Content)
+		sb.WriteString(fmt.Sprintf("Agent %d:\n%s\n\n", i+1, output.Content))
 	}
 
 	finalOutput := &agent.Output{
 		TraceID: input.TraceID,
-		Content: combined,
+		Content: sb.String(),
 	}
 
 	c.logger.Info("broadcast coordination completed")

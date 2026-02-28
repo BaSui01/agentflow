@@ -11,9 +11,10 @@ type runtimeStreamEmitterKey struct{}
 type RuntimeStreamEventType string
 
 const (
-	RuntimeStreamToken      RuntimeStreamEventType = "token"
-	RuntimeStreamToolCall   RuntimeStreamEventType = "tool_call"
-	RuntimeStreamToolResult RuntimeStreamEventType = "tool_result"
+	RuntimeStreamToken        RuntimeStreamEventType = "token"
+	RuntimeStreamToolCall     RuntimeStreamEventType = "tool_call"
+	RuntimeStreamToolResult   RuntimeStreamEventType = "tool_result"
+	RuntimeStreamToolProgress RuntimeStreamEventType = "tool_progress"
 )
 
 type RuntimeToolCall struct {
@@ -37,6 +38,9 @@ type RuntimeStreamEvent struct {
 	Delta      string                 `json:"delta,omitempty"`
 	ToolCall   *RuntimeToolCall       `json:"tool_call,omitempty"`
 	ToolResult *RuntimeToolResult     `json:"tool_result,omitempty"`
+	ToolCallID string                 `json:"tool_call_id,omitempty"`
+	ToolName   string                 `json:"tool_name,omitempty"`
+	Data       any                    `json:"data,omitempty"`
 }
 
 type RuntimeStreamEmitter func(RuntimeStreamEvent)

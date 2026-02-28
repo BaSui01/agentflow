@@ -7,9 +7,10 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
-	"github.com/BaSui01/agentflow/internal/tlsutil"
+	"github.com/BaSui01/agentflow/pkg/tlsutil"
 	"go.uber.org/zap"
 )
 
@@ -35,12 +36,20 @@ type CapabilityRegistry struct {
 	// 配置包含注册配置 。
 	config *RegistryConfig
 
+	// store is an optional persistence backend. When non-nil, agent data is
+	// also persisted through this store. When nil, the registry operates
+	// purely in-memory (preserving backward compatibility).
+	store RegistryStore
+
 	// logger 是日志实例 。
 	logger *zap.Logger
 
 	// 信号关闭了
 	done      chan struct{}
 	closeOnce sync.Once
+
+	// subscriptionCounter 原子计数器，用于生成唯一订阅 ID
+	subscriptionCounter atomic.Uint64
 }
 
 // 登记册Config拥有能力登记册的配置。
@@ -76,8 +85,29 @@ func DefaultRegistryConfig() *RegistryConfig {
 	}
 }
 
+// RegistryOption configures a CapabilityRegistry.
+type RegistryOption func(*CapabilityRegistry)
+
+// WithStore sets a persistence backend for the registry.
+// When set, agent data is persisted through the store in addition to the
+// in-memory map. When not set, the registry operates purely in-memory.
+func WithStore(store RegistryStore) RegistryOption {
+	return func(r *CapabilityRegistry) {
+		r.store = store
+	}
+}
+
+// SetStore sets the persistence backend after construction.
+// This is useful when the store is not available at construction time
+// (e.g., when MongoDB stores are initialized after the registry).
+func (r *CapabilityRegistry) SetStore(store RegistryStore) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.store = store
+}
+
 // 新能力登记系统建立了一个新的能力登记册。
-func NewCapabilityRegistry(config *RegistryConfig, logger *zap.Logger) *CapabilityRegistry {
+func NewCapabilityRegistry(config *RegistryConfig, logger *zap.Logger, opts ...RegistryOption) *CapabilityRegistry {
 	if config == nil {
 		config = DefaultRegistryConfig()
 	}
@@ -92,6 +122,11 @@ func NewCapabilityRegistry(config *RegistryConfig, logger *zap.Logger) *Capabili
 		config:          config,
 		logger:          logger.With(zap.String("component", "capability_registry")),
 		done:            make(chan struct{}),
+	}
+
+	// Apply options
+	for _, opt := range opts {
+		opt(r)
 	}
 
 	// 如果启用, 初始化健康检查器
@@ -170,6 +205,13 @@ func (r *CapabilityRegistry) RegisterAgent(ctx context.Context, info *AgentInfo)
 	// 存储代理
 	r.agents[agentID] = info
 
+	// Persist to store
+	if r.store != nil {
+		if err := r.store.Save(ctx, info); err != nil {
+			r.logger.Error("failed to persist agent to store", zap.String("agent_id", agentID), zap.Error(err))
+		}
+	}
+
 	r.logger.Info("agent registered",
 		zap.String("agent_id", agentID),
 		zap.Int("capabilities", len(info.Capabilities)),
@@ -202,6 +244,13 @@ func (r *CapabilityRegistry) UnregisterAgent(ctx context.Context, agentID string
 
 	// 删除代理
 	delete(r.agents, agentID)
+
+	// Persist deletion to store
+	if r.store != nil {
+		if err := r.store.Delete(ctx, agentID); err != nil {
+			r.logger.Error("failed to delete agent from store", zap.String("agent_id", agentID), zap.Error(err))
+		}
+	}
 
 	r.logger.Info("agent unregistered", zap.String("agent_id", agentID))
 
@@ -255,6 +304,13 @@ func (r *CapabilityRegistry) UpdateAgent(ctx context.Context, info *AgentInfo) e
 
 	// 存储更新代理
 	r.agents[agentID] = info
+
+	// Persist to store
+	if r.store != nil {
+		if err := r.store.Save(ctx, info); err != nil {
+			r.logger.Error("failed to persist updated agent to store", zap.String("agent_id", agentID), zap.Error(err))
+		}
+	}
 
 	r.logger.Info("agent updated", zap.String("agent_id", agentID))
 
@@ -491,7 +547,7 @@ func (r *CapabilityRegistry) FindCapabilities(ctx context.Context, capabilityNam
 
 	agentCaps, exists := r.capabilityIndex[capabilityName]
 	if !exists {
-		return nil, nil
+		return []CapabilityInfo{}, nil
 	}
 
 	caps := make([]CapabilityInfo, 0, len(agentCaps))
@@ -595,7 +651,7 @@ func (r *CapabilityRegistry) Subscribe(handler DiscoveryEventHandler) string {
 	r.handlerMu.Lock()
 	defer r.handlerMu.Unlock()
 
-	id := fmt.Sprintf("sub-%d", time.Now().UnixNano())
+	id := fmt.Sprintf("sub-%d", r.subscriptionCounter.Add(1))
 	r.eventHandlers[id] = handler
 	return id
 }
@@ -654,13 +710,12 @@ func (r *CapabilityRegistry) emitEvent(event *DiscoveryEvent) {
 		h := handler
 		go func() {
 			defer func() {
-				if r := recover(); r != nil {
-					// log panic in event handler to avoid silent failure
+				if rec := recover(); rec != nil {
+					r.logger.Error("event handler panicked", zap.Any("recover", rec))
 				}
 			}()
+
 			// 添加超时控制，防止 handler 阻塞导致 goroutine 堆积
-			timer := time.NewTimer(5 * time.Second)
-			defer timer.Stop()
 			done := make(chan struct{})
 			go func() {
 				defer close(done)
@@ -668,7 +723,8 @@ func (r *CapabilityRegistry) emitEvent(event *DiscoveryEvent) {
 			}()
 			select {
 			case <-done:
-			case <-timer.C:
+			case <-time.After(5 * time.Second):
+				r.logger.Warn("event handler timeout")
 			}
 		}()
 	}
@@ -719,7 +775,7 @@ func (r *CapabilityRegistry) GetAgentsByCapability(ctx context.Context, capabili
 
 	agentCaps, exists := r.capabilityIndex[capabilityName]
 	if !exists {
-		return nil, nil
+		return []*AgentInfo{}, nil
 	}
 
 	agents := make([]*AgentInfo, 0, len(agentCaps))
@@ -767,6 +823,9 @@ type HealthChecker struct {
 	registry *CapabilityRegistry
 	logger   *zap.Logger
 
+	// httpClient 共享的健康检查 HTTP 客户端
+	httpClient *http.Client
+
 	// 失败 。
 	failureCounts map[string]int
 	failureMu     sync.Mutex
@@ -794,6 +853,7 @@ func NewHealthChecker(config *HealthCheckerConfig, registry *CapabilityRegistry,
 		config:        config,
 		registry:      registry,
 		logger:        logger.With(zap.String("component", "health_checker")),
+		httpClient:    tlsutil.SecureHTTPClient(5 * time.Second),
 		failureCounts: make(map[string]int),
 		done:          make(chan struct{}),
 	}
@@ -916,7 +976,7 @@ func (h *HealthChecker) performHealthCheck(ctx context.Context, agent *AgentInfo
 	// 对远程特工进行HTTP健康检查
 	if agent.Endpoint != "" {
 		healthURL := strings.TrimRight(agent.Endpoint, "/") + "/health"
-		client := tlsutil.SecureHTTPClient(5 * time.Second)
+		client := h.httpClient
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, healthURL, nil)
 		if err != nil {
 			result.Healthy = false

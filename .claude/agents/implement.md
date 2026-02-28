@@ -2,7 +2,7 @@
 name: implement
 description: |
   Code implementation expert. Understands specs and requirements, then implements features. No git commit allowed.
-tools: Read, Write, Edit, Bash, Glob, Grep, mcp__exa__web_search_exa, mcp__exa__get_code_context_exa
+tools: Read, Write, Edit, Bash, Glob, Grep, mcp__exa__web_search_exa, mcp__exa__get_code_context_exa, mcp__ace-tool__search_context, mcp__context7__resolve-library-id, mcp__context7__query-docs
 model: opus
 ---
 # Implement Agent
@@ -55,6 +55,8 @@ Read the task's prd.md and info.md:
 
 ### 3. Implement Features
 
+- Use `mcp__ace-tool__search_context` to understand code context before editing
+- Use `mcp__context7__query-docs` when using unfamiliar library APIs
 - Write code following specs and technical design
 - Follow existing code patterns
 - Only do what's required, no over-engineering

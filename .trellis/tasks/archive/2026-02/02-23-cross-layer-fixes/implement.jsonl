@@ -1,0 +1,9 @@
+{"file": ".trellis/workflow.md", "reason": "Project workflow and conventions"}
+{"file": ".trellis/spec/shared/index.md", "reason": "Shared coding standards"}
+{"file": ".trellis/spec/backend/index.md", "reason": "Backend development guide"}
+{"file": ".trellis/spec/backend/api-module.md", "reason": "API module conventions"}
+{"file": ".trellis/spec/backend/quality.md", "reason": "Code quality requirements"}
+{"file": "cmd/agentflow/server.go", "reason": "Shutdown 顺序 + AgentResolver 缓存修复"}
+{"file": "cmd/agentflow/middleware.go", "reason": "Middleware 错误格式统一"}
+{"file": "api/handlers/common.go", "reason": "ValidateNonNegative 复用"}
+{"file": "api/handlers/apikey.go", "reason": "内联验证替换为 helper"}

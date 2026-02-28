@@ -41,6 +41,7 @@ func (m *mockProvider) HealthCheck(ctx context.Context) (*llm.HealthStatus, erro
 
 func (m *mockProvider) Name() string                        { return m.name }
 func (m *mockProvider) SupportsNativeFunctionCalling() bool { return false }
+func (m *mockProvider) Endpoints() llm.ProviderEndpoints    { return llm.ProviderEndpoints{} }
 func (m *mockProvider) ListModels(ctx context.Context) ([]llm.Model, error) {
 	return nil, nil
 }
@@ -104,7 +105,37 @@ func (h *mockHumanInputHandler) RequestInput(ctx context.Context, prompt string,
 	return h.response, nil
 }
 
-// PLACEHOLDER_TESTS
+// ============================================================
+// Step interface compliance
+// ============================================================
+
+func TestAllStepsImplementStepInterface(t *testing.T) {
+	steps := []Step{
+		&PassthroughStep{},
+		&LLMStep{},
+		&ToolStep{ToolName: "test-tool"},
+		&HumanInputStep{},
+		&CodeStep{Handler: func(ctx context.Context, input any) (any, error) { return nil, nil }},
+	}
+	for _, s := range steps {
+		assert.NotEmpty(t, s.Name(), "step %T should have a non-empty name", s)
+	}
+}
+
+func TestPassthroughStep_NilInput(t *testing.T) {
+	step := &PassthroughStep{}
+	result, err := step.Execute(context.Background(), nil)
+	require.NoError(t, err)
+	assert.Nil(t, result)
+}
+
+func TestPassthroughStep_MapInput(t *testing.T) {
+	step := &PassthroughStep{}
+	input := map[string]any{"key": "value"}
+	result, err := step.Execute(context.Background(), input)
+	require.NoError(t, err)
+	assert.Equal(t, input, result)
+}
 
 // ============================================================
 // PassthroughStep tests
@@ -130,14 +161,9 @@ func TestLLMStep_Execute_NilProvider(t *testing.T) {
 	}
 	assert.Equal(t, "llm", step.Name())
 
-	result, err := step.Execute(context.Background(), "input data")
-	require.NoError(t, err)
-
-	m, ok := result.(map[string]any)
-	require.True(t, ok, "expected map result for nil provider")
-	assert.Equal(t, "gpt-4", m["model"])
-	assert.Equal(t, "test prompt", m["prompt"])
-	assert.Equal(t, "input data", m["input"])
+	_, err := step.Execute(context.Background(), "input data")
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrNotConfigured)
 }
 
 func TestLLMStep_Execute_WithProvider(t *testing.T) {
@@ -199,7 +225,46 @@ func TestLLMStep_Execute_EmptyResponse(t *testing.T) {
 	assert.Contains(t, err.Error(), "empty response")
 }
 
-// PLACEHOLDER_TESTS_2
+func TestLLMStep_Execute_WithTemperatureAndMaxTokens(t *testing.T) {
+	provider := &mockProvider{
+		name: "test-provider",
+		response: &llm.ChatResponse{
+			Choices: []llm.ChatChoice{
+				{Message: llm.Message{Role: llm.RoleAssistant, Content: "response"}},
+			},
+		},
+	}
+
+	step := &LLMStep{
+		Model:       "gpt-4",
+		Prompt:      "test",
+		Temperature: 0.0,
+		MaxTokens:   1,
+		Provider:    provider,
+	}
+
+	result, err := step.Execute(context.Background(), nil)
+	require.NoError(t, err)
+	assert.Equal(t, "response", result)
+}
+
+func TestLLMStep_Execute_ContextCancelled(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	provider := &mockProvider{
+		name: "test-provider",
+		err:  ctx.Err(),
+	}
+
+	step := &LLMStep{
+		Prompt:   "test",
+		Provider: provider,
+	}
+
+	_, err := step.Execute(ctx, nil)
+	require.Error(t, err)
+}
 
 func TestLLMStep_Execute_PromptCombination(t *testing.T) {
 	tests := []struct {
@@ -271,13 +336,9 @@ func TestToolStep_Execute_NilRegistry(t *testing.T) {
 	}
 	assert.Equal(t, "calculator", step.Name())
 
-	result, err := step.Execute(context.Background(), "input")
-	require.NoError(t, err)
-
-	m, ok := result.(map[string]any)
-	require.True(t, ok)
-	assert.Equal(t, "calculator", m["tool"])
-	assert.Equal(t, "input", m["input"])
+	_, err := step.Execute(context.Background(), "input")
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrNotConfigured)
 }
 
 func TestToolStep_Execute_WithRegistry(t *testing.T) {
@@ -331,7 +392,48 @@ func TestToolStep_Execute_ToolError(t *testing.T) {
 	assert.Contains(t, err.Error(), "tool crashed")
 }
 
-// PLACEHOLDER_TESTS_3
+func TestToolStep_Execute_NilInput(t *testing.T) {
+	registry := newMockToolRegistry()
+	registry.register(&mockTool{name: "noop", result: "done"})
+
+	step := &ToolStep{
+		ToolName: "noop",
+		Params:   map[string]any{"key": "val"},
+		Registry: registry,
+	}
+
+	result, err := step.Execute(context.Background(), nil)
+	require.NoError(t, err)
+	assert.Equal(t, "done", result)
+}
+
+func TestToolStep_Execute_EmptyParams(t *testing.T) {
+	registry := newMockToolRegistry()
+	registry.register(&mockTool{name: "bare", result: "ok"})
+
+	step := &ToolStep{
+		ToolName: "bare",
+		Registry: registry,
+	}
+
+	result, err := step.Execute(context.Background(), nil)
+	require.NoError(t, err)
+	assert.Equal(t, "ok", result)
+}
+
+func TestHumanInputStep_Execute_ContextCancelled(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	handler := &mockHumanInputHandler{err: ctx.Err()}
+	step := &HumanInputStep{
+		Prompt:  "Confirm?",
+		Handler: handler,
+	}
+
+	_, err := step.Execute(ctx, nil)
+	require.Error(t, err)
+}
 
 func TestToolStep_Execute_InputMerge(t *testing.T) {
 	registry := newMockToolRegistry()
@@ -370,14 +472,9 @@ func TestHumanInputStep_Execute_NilHandler(t *testing.T) {
 	}
 	assert.Equal(t, "human_input", step.Name())
 
-	result, err := step.Execute(context.Background(), "context")
-	require.NoError(t, err)
-
-	m, ok := result.(map[string]any)
-	require.True(t, ok)
-	assert.Equal(t, "Please confirm", m["prompt"])
-	assert.Equal(t, "choice", m["type"])
-	assert.Equal(t, "context", m["input"])
+	_, err := step.Execute(context.Background(), "context")
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrNotConfigured)
 }
 
 func TestHumanInputStep_Execute_WithHandler(t *testing.T) {

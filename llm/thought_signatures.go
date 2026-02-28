@@ -225,6 +225,11 @@ func (m *ThoughtSignatureMiddleware) ListModels(ctx context.Context) ([]Model, e
 	return m.provider.ListModels(ctx)
 }
 
+// Endpoints 委托给被包装的提供者。
+func (m *ThoughtSignatureMiddleware) Endpoints() ProviderEndpoints {
+	return m.provider.Endpoints()
+}
+
 func generateSignatureID(sig string) string {
 	hash := sha256.Sum256([]byte(sig + time.Now().String()))
 	return hex.EncodeToString(hash[:8])

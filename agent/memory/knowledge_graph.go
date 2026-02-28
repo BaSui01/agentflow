@@ -179,7 +179,7 @@ func (g *InMemoryKnowledgeGraph) FindPath(ctx context.Context, fromID, toID stri
 		return nil, fmt.Errorf("from_id and to_id are required")
 	}
 	if maxDepth <= 0 {
-		return nil, nil
+		return [][]string{}, nil
 	}
 
 	g.mu.RLock()

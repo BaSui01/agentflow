@@ -45,6 +45,8 @@ func (p *mockProvider) ListModels(ctx context.Context) ([]Model, error) {
 	return nil, nil
 }
 
+func (p *mockProvider) Endpoints() ProviderEndpoints { return ProviderEndpoints{} }
+
 func TestMultiProviderRouter_SelectProviderWithModel(t *testing.T) {
 	t.Parallel()
 
@@ -54,8 +56,8 @@ func TestMultiProviderRouter_SelectProviderWithModel(t *testing.T) {
 	if err != nil {
 		t.Fatalf("open db: %v", err)
 	}
-	if err := InitDatabase(db); err != nil {
-		t.Fatalf("InitDatabase: %v", err)
+	if err := db.AutoMigrate(&LLMProvider{}, &LLMModel{}, &LLMProviderModel{}, &LLMProviderAPIKey{}); err != nil {
+		t.Fatalf("AutoMigrate: %v", err)
 	}
 
 	// 种子提供者/模型。

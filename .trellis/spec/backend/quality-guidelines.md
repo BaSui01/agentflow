@@ -995,12 +995,14 @@ if c, ok := store.(Clearable); ok {
 
 From `.github/workflows/ci.yml`:
 
-1. Build all packages
-2. API contract consistency check (`go test ./tests/contracts`)
-3. `go vet` on selected packages
-4. Tests with coverage
-5. Security scan via `govulncheck` (non-blocking, separate job)
-6. Cross-platform builds: `linux/amd64`, `linux/arm64`, `darwin/amd64`, `windows/amd64` (separate job)
+1. `golangci-lint` (20 linters, runs before build)
+2. Build all packages
+3. API contract consistency check (`go test ./tests/contracts`)
+4. `go vet` on selected packages
+5. Tests with coverage (`-race -covermode=atomic`)
+6. Coverage threshold check (`make coverage-check`, threshold: 55%)
+7. Security scan via `govulncheck` (blocking — failures break the pipeline)
+8. Cross-platform builds: `linux/amd64`, `linux/arm64`, `darwin/amd64`, `windows/amd64` (separate job)
 
 ---
 
@@ -1037,7 +1039,7 @@ return fmt.Errorf("store does not support clearing")
 
 When adding/removing `mux.HandleFunc` routes in `cmd/agentflow/server.go` or `config/api.go`, you MUST update `api/openapi.yaml` to match. The contract test `tests/contracts/TestOpenAPIPathsMatchRuntimeRoutes` will fail otherwise.
 
-Note: `golangci-lint` is NOT run in CI — only locally via `make lint`. Developers must run `make lint` before pushing.
+Note: `golangci-lint` runs in CI via `golangci/golangci-lint-action@v6`. Developers should also run `make lint` locally before pushing.
 
 ---
 
@@ -1703,3 +1705,2159 @@ func NewWindowManager(cfg WindowConfig, tc types.TokenCounter, ...) *WindowManag
 | `Runnable` | `workflow/workflow.go` | `Execute(ctx, any) (any, error)` — workflow unit |
 | `FileSearchStore` | `agent/hosted/tools.go` | Text-query search (was: `hosted.VectorStore`) |
 | `EvalExecutor` | `agent/evaluation/evaluator.go` | String I/O + token count (was: `AgentExecutor`) |
+
+## §35 In-Memory Cache Must Have Eviction (P1 — Memory Leak)
+
+Every in-memory cache (`map[K]V` used as cache) MUST have both a **max size cap** and a **TTL-based lazy eviction**. Unbounded caches grow monotonically in long-running services until OOM.
+
+### 1. Scope / Trigger
+
+- Trigger: 4 unbounded caches found in production code (Feb 2026 audit)
+- Applies to: ANY `map` field used as a cache (identified by names like `*Cache`, `*Store`, `*Memo`)
+
+### 2. Two-Layer Eviction Pattern
+
+```go
+type cachedItem[V any] struct {
+    value     V
+    createdAt time.Time
+}
+
+type boundedCache[K comparable, V any] struct {
+    mu       sync.RWMutex
+    items    map[K]cachedItem[V]
+    maxSize  int
+    ttl      time.Duration
+}
+
+// Get with lazy eviction — expired entries removed on access
+func (c *boundedCache[K, V]) Get(key K) (V, bool) {
+    c.mu.Lock()         // Lock (not RLock) because we may delete
+    defer c.mu.Unlock()
+    item, ok := c.items[key]
+    if !ok {
+        var zero V
+        return zero, false
+    }
+    if time.Since(item.createdAt) > c.ttl {
+        delete(c.items, key)  // lazy eviction
+        var zero V
+        return zero, false
+    }
+    return item.value, true
+}
+
+// Set with max size cap — evicts oldest when full
+func (c *boundedCache[K, V]) Set(key K, value V) {
+    c.mu.Lock()
+    defer c.mu.Unlock()
+    if len(c.items) >= c.maxSize {
+        c.evictOldest()
+    }
+    c.items[key] = cachedItem[V]{value: value, createdAt: time.Now()}
+}
+
+func (c *boundedCache[K, V]) evictOldest() {
+    var oldestKey K
+    var oldestTime time.Time
+    first := true
+    for k, v := range c.items {
+        if first || v.createdAt.Before(oldestTime) {
+            oldestKey = k
+            oldestTime = v.createdAt
+            first = false
+        }
+    }
+    if !first {
+        delete(c.items, oldestKey)
+    }
+}
+```
+
+### 3. Known Violations — ✅ ALL FIXED (Feb 2026 Session 12)
+
+| File | Cache Field | Issue | Fix |
+|------|-------------|-------|-----|
+| `rag/multi_hop.go` | `reasoningCache` | No eviction, no max size (K2) | ✅ Lazy TTL eviction on Get + maxSize=1000 on Set |
+| `llm/router/semantic.go` | `classificationCache` | No eviction, no max size (N1) | ✅ Same pattern |
+| `llm/router/ab_router.go` | `stickyCache` | No max size (N3) | ✅ stickyMaxSize=10000, clear when full |
+| `llm/router/ab_router.go` | `QualityScores` | Unbounded append (N4) | ✅ Sliding window, qualityWindowSize=1000 |
+
+### 4. Validation & Error Matrix
+
+| Condition | Result |
+|-----------|--------|
+| `map` cache with no size limit | ❌ Memory leak in long-running service |
+| `map` cache with maxSize but no TTL | ⚠️ Stale data served indefinitely |
+| `map` cache with TTL but no maxSize | ❌ Burst traffic fills memory before TTL kicks in |
+| `map` cache with maxSize + lazy TTL | ✅ Bounded memory + fresh data |
+
+### 5. Wrong vs Right
+
+#### Wrong
+```go
+// Grows forever — OOM in production
+type SemanticRouter struct {
+    cache map[string]string  // no eviction, no limit
+}
+func (r *SemanticRouter) Classify(text string) string {
+    if v, ok := r.cache[text]; ok {
+        return v
+    }
+    result := r.doClassify(text)
+    r.cache[text] = result  // unbounded growth
+    return result
+}
+```
+
+#### Right
+```go
+// Bounded with lazy eviction
+func (r *SemanticRouter) Classify(text string) string {
+    r.mu.Lock()
+    if item, ok := r.cache[text]; ok {
+        if time.Since(item.createdAt) <= r.cacheTTL {
+            r.mu.Unlock()
+            return item.value
+        }
+        delete(r.cache, text)  // lazy eviction
+    }
+    if len(r.cache) >= r.maxCacheSize {
+        r.evictOldest()
+    }
+    result := r.doClassify(text)
+    r.cache[text] = cachedEntry{value: result, createdAt: time.Now()}
+    r.mu.Unlock()
+    return result
+}
+```
+
+> **Rule**: Every `map` field with "cache" in its name must have `maxSize` and `ttl` fields. Code review should reject any cache without eviction.
+
+> **Historical lesson**: `reasoningCache` in `rag/multi_hop.go` and `classificationCache` in `llm/router/semantic.go` both grew unbounded. In a production scenario with diverse queries, these would consume gigabytes of memory over days. The fix is simple (lazy eviction + maxSize cap) but must be applied at creation time — retrofitting eviction to an existing cache is error-prone.
+
+### 6. Write-Through Slice Cache (Feb 2026 — Memory Bug)
+
+When a struct caches recent records in a `[]T` slice (e.g., `recentMemory []MemoryRecord`), any method that persists a new record to the underlying store MUST also append it to the in-process cache. Otherwise subsequent reads from the cache will miss the newly saved data.
+
+**Pattern**: Save → write to store → append to slice → cap slice length.
+
+```go
+func (b *BaseAgent) SaveMemory(ctx context.Context, ...) error {
+    // 1. Persist to store
+    if err := b.memory.Save(ctx, rec); err != nil {
+        return err
+    }
+    // 2. Write-through: sync the in-process cache
+    b.recentMemoryMu.Lock()
+    b.recentMemory = append(b.recentMemory, rec)
+    if len(b.recentMemory) > defaultMaxRecentMemory {
+        b.recentMemory = b.recentMemory[len(b.recentMemory)-defaultMaxRecentMemory:]
+    }
+    b.recentMemoryMu.Unlock()
+    return nil
+}
+```
+
+**Known violation — ✅ FIXED (Feb 2026)**:
+
+| File | Field | Issue | Fix |
+|------|-------|-------|-----|
+| `agent/base.go` | `recentMemory` | `SaveMemory()` wrote to store but never updated cache; multi-turn conversations lost context | ✅ Write-through + cap at `defaultMaxRecentMemory` |
+| `agent/memory_coordinator.go` | `recentMemory` | Same pattern — `Save()` only wrote to store | ✅ Same fix |
+| `agent/resolver.go` | `CachingResolver` | `Create()` always passed `nil` for memory — agents had no memory capability | ✅ Added `WithMemory()` option |
+
+---
+
+## §36 Prometheus Labels Must Use Finite Cardinality (P1 — Monitoring Explosion)
+
+Prometheus metric labels MUST have bounded, finite cardinality. Using dynamic identifiers (user IDs, request IDs, agent instance IDs) as label values causes metric explosion — each unique value creates a new time series, eventually crashing Prometheus.
+
+### 1. Scope / Trigger
+
+- Trigger: `agent_id` label in `internal/metrics/collector.go` created unbounded time series (K3)
+- Applies to: ANY `prometheus.Labels{}` or `prometheus.NewCounterVec` label definition
+
+### 2. Signatures
+
+```go
+// internal/metrics/collector.go — AFTER fix
+
+// ✅ agent_type has finite values (e.g., "chat", "rag", "workflow")
+agentExecutionsTotal: prometheus.NewCounterVec(prometheus.CounterOpts{
+    Name: "agentflow_agent_executions_total",
+}, []string{"agent_type", "status"}),
+
+// ✅ Separate info gauge for ID→type mapping (debug only)
+agentInfo: prometheus.NewGaugeVec(prometheus.GaugeOpts{
+    Name: "agentflow_agent_info",
+    Help: "Agent metadata for label join",
+}, []string{"agent_id", "agent_type"}),
+```
+
+### 3. Contract — Label Cardinality Rules
+
+| Label Type | Max Cardinality | Example |
+|-----------|----------------|---------|
+| Status codes | ~5 | `"success"`, `"error"`, `"timeout"` |
+| Agent types | ~10 | `"chat"`, `"rag"`, `"workflow"` |
+| Provider names | ~15 | `"openai"`, `"claude"`, `"deepseek"` |
+| HTTP methods | ~5 | `"GET"`, `"POST"`, `"PUT"` |
+| Agent IDs | ❌ UNBOUNDED | `"agent-abc123"` — FORBIDDEN as metric label |
+| Request IDs | ❌ UNBOUNDED | `"req-xyz789"` — FORBIDDEN as metric label |
+| User IDs | ❌ UNBOUNDED | `"user-12345"` — FORBIDDEN as metric label |
+
+### 4. Pattern: Info Gauge for ID Mapping
+
+When you need to correlate metrics with dynamic IDs (for debugging), use a separate `_info` gauge:
+
+```go
+// Record execution with finite labels only
+c.agentExecutionsTotal.WithLabelValues(agentType, "success").Inc()
+
+// Separately record ID→type mapping (low-frequency, debug use)
+c.agentInfo.WithLabelValues(agentID, agentType).Set(1)
+```
+
+In Grafana, use `label_join` or `label_replace` to correlate.
+
+### 5. Wrong vs Right
+
+#### Wrong
+```go
+// ❌ agent_id creates unbounded time series
+agentExecutionsTotal: prometheus.NewCounterVec(prometheus.CounterOpts{
+    Name: "agentflow_agent_executions_total",
+}, []string{"agent_id", "status"}),
+
+func (c *Collector) RecordAgentExecution(agentID, status string) {
+    c.agentExecutionsTotal.WithLabelValues(agentID, status).Inc()
+}
+```
+
+#### Right
+```go
+// ✅ agent_type has finite cardinality
+agentExecutionsTotal: prometheus.NewCounterVec(prometheus.CounterOpts{
+    Name: "agentflow_agent_executions_total",
+}, []string{"agent_type", "status"}),
+
+func (c *Collector) RecordAgentExecution(agentType, status string) {
+    c.agentExecutionsTotal.WithLabelValues(agentType, status).Inc()
+}
+```
+
+> **Rule**: Before adding a Prometheus label, ask: "Can this value grow without bound?" If yes, it MUST NOT be a label. Use a separate `_info` gauge or structured logging instead.
+
+> **Historical lesson**: `agent_id` as a label in `agentflow_agent_executions_total` would create a new time series for every agent instance. In a system with 1000+ agents, this means 1000+ time series per metric × status combinations. Prometheus recommends <10 label values per dimension. The fix replaced `agent_id` with `agent_type` (finite enum) and added a separate `agentflow_agent_info` gauge for ID-to-type mapping.
+
+---
+
+## §37 Broadcast/Fan-Out to Channels Must Use recover() (P1 — Runtime Panic)
+
+When broadcasting (sending the same value to multiple subscriber channels), the send MUST be wrapped in a `recover()` to handle send-on-closed-channel panics. Subscribers may close their channels at any time, and the broadcaster cannot hold a lock during send without risking deadlock.
+
+### 1. Scope / Trigger
+
+- Trigger: `broadcast()` in `llm/streaming/backpressure.go` sent to subscriber channels without protection (N8)
+- Applies to: ANY code that iterates over a collection of channels and sends to each
+
+### 2. Pattern
+
+```go
+// CORRECT — recover protects against send-on-closed-channel
+func (s *Stream) broadcast(chunk Chunk) {
+    s.mu.RLock()
+    subscribers := make([]chan Chunk, len(s.subscribers))
+    copy(subscribers, s.subscribers)
+    s.mu.RUnlock()
+
+    for _, ch := range subscribers {
+        func() {
+            defer func() {
+                if r := recover(); r != nil {
+                    // subscriber closed their channel — skip silently
+                }
+            }()
+            select {
+            case ch <- chunk:
+            default:
+                // channel full — apply backpressure policy
+            }
+        }()
+    }
+}
+```
+
+### 3. Key Rules
+
+1. **Copy subscriber list** before iterating (avoid holding lock during send)
+2. **Wrap each send** in an inline `func()` with `defer recover()`
+3. **Never skip the recover** — even if you think all channels are managed by you
+4. **Log or count** recovered panics for observability (optional but recommended)
+
+### 4. Wrong vs Right
+
+#### Wrong
+```go
+// ❌ Panics if any subscriber closed their channel
+func (s *Stream) broadcast(chunk Chunk) {
+    s.mu.RLock()
+    defer s.mu.RUnlock()
+    for _, ch := range s.subscribers {
+        ch <- chunk  // PANIC if ch is closed
+    }
+}
+```
+
+#### Right
+```go
+// ✅ Each send is protected
+for _, ch := range subscribers {
+    func() {
+        defer func() { recover() }()
+        select {
+        case ch <- chunk:
+        default:
+        }
+    }()
+}
+```
+
+> **Historical lesson**: `backpressure.go` broadcast() bypassed the `Write()` method's lock and sent directly to subscriber channels. When a subscriber called `Close()` (which closes the channel), the next broadcast panicked with "send on closed channel". The fix wraps each send in an inline func with `defer recover()`.
+
+---
+
+## §38 API Response Envelope Must Be Unified (P2 — Inconsistency)
+
+All API endpoints MUST use the same response envelope structure. Having multiple response formats (one for config API, another for chat API) confuses clients and makes SDK generation unreliable.
+
+### 1. Scope / Trigger
+
+- Trigger: `config/api.go` used `ConfigResponse` while `api/handlers/` used `handlers.Response` — two different envelopes
+- Applies to: ANY new API endpoint or response structure
+
+### 2. Canonical Response Envelope
+
+```go
+// api/handlers/common.go — THE canonical envelope
+type Response struct {
+    Success bool        `json:"success"`
+    Data    interface{} `json:"data,omitempty"`
+    Error   *ErrorInfo  `json:"error,omitempty"`
+}
+
+type ErrorInfo struct {
+    Code    string `json:"code"`
+    Message string `json:"message"`
+}
+```
+
+### 3. Contract
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `success` | `bool` | Always | `true` for 2xx, `false` for 4xx/5xx |
+| `data` | `any` | On success | Domain-specific payload |
+| `error` | `*ErrorInfo` | On failure | Structured error with code + message |
+| `error.code` | `string` | On failure | Machine-readable error code (e.g., `"INVALID_REQUEST"`) |
+| `error.message` | `string` | On failure | Human-readable description |
+
+### 4. Wrong vs Right
+
+#### Wrong
+```go
+// ❌ Config API had its own envelope
+type ConfigResponse struct {
+    Status  string      `json:"status"`   // "ok" vs "error" — different from bool
+    Message string      `json:"message"`  // flat string, not structured
+    Data    interface{} `json:"data"`
+}
+```
+
+#### Right
+```go
+// ✅ Reuse the canonical envelope
+type apiResponse = handlers.Response  // or define identical struct in config/
+
+func writeJSON(w http.ResponseWriter, status int, data interface{}) {
+    w.Header().Set("Content-Type", "application/json")
+    w.WriteHeader(status)
+    json.NewEncoder(w).Encode(apiResponse{
+        Success: status < 400,
+        Data:    data,
+    })
+}
+```
+
+> **Rule**: When adding a new API package or handler group, import or replicate the canonical `Response` struct. Never invent a new envelope format.
+
+> **Historical lesson**: `config/api.go` had `ConfigResponse{Status: "ok", Message: "...", Data: ...}` while `api/handlers/` used `Response{Success: true, Data: ..., Error: ...}`. Clients had to handle two different shapes. Fixed by replacing `ConfigResponse` with an `apiResponse` struct matching the canonical envelope, and using structured `apiError` for error responses.
+
+---
+
+## §39 Documentation Code Snippets Must Compile (P2 — Onboarding Friction)
+
+All code snippets in README, docs/, and examples/ MUST compile against the current codebase. Non-compiling examples are worse than no examples — they waste hours of developer time.
+
+### 1. Scope / Trigger
+
+- Trigger: 50+ code snippets in 12 documentation files used incorrect Go struct initialization (Feb 2026 audit)
+- Applies to: ANY code block in `.md` files or `examples/` that references project types
+
+### 2. Common Violations Found
+
+| Pattern | Count | Fix |
+|---------|-------|-----|
+| Flat `OpenAIConfig{APIKey: "..."}` instead of nested `BaseProviderConfig` | 30+ | Use `OpenAIConfig{BaseProviderConfig: BaseProviderConfig{APIKey: os.Getenv("...")}}` |
+| Hardcoded API keys `"sk-xxx"` | 20+ | Use `os.Getenv("OPENAI_API_KEY")` |
+| Wrong type name `AnthropicConfig` | 5+ | Use `ClaudeConfig` (renamed in codebase) |
+| Missing required fields in struct literal | 10+ | Add all required fields |
+
+### 3. Rules
+
+1. **Embedded struct initialization**: When a Go struct has an embedded field (e.g., `BaseProviderConfig`), the composite literal MUST name the embedded field explicitly:
+
+```go
+// ❌ WRONG — flat initialization doesn't work with embedded structs
+cfg := OpenAIConfig{
+    APIKey: "sk-xxx",
+    Model:  "gpt-4",
+}
+
+// ✅ CORRECT — name the embedded struct
+cfg := OpenAIConfig{
+    BaseProviderConfig: BaseProviderConfig{
+        APIKey: os.Getenv("OPENAI_API_KEY"),
+    },
+    Model: "gpt-4",
+}
+```
+
+2. **No hardcoded secrets**: Use `os.Getenv()` for API keys in all documentation and examples.
+
+3. **Type names must match codebase**: After renaming a type, grep all `.md` files and update references.
+
+4. **Examples must have skip logic**: If an example requires an API key, add a skip check:
+
+```go
+func main() {
+    apiKey := os.Getenv("OPENAI_API_KEY")
+    if apiKey == "" {
+        fmt.Println("Skipping: OPENAI_API_KEY not set")
+        return
+    }
+    // ... rest of example
+}
+```
+
+### 4. Verification Command
+
+```bash
+# Check all examples compile
+go build ./examples/...
+
+# Check E2E tests compile (with build tag)
+go vet -tags e2e ./tests/e2e/...
+```
+
+> **Rule**: After any type rename or struct field change, run `grep -rn 'OldTypeName' --include='*.md' --include='*.go' docs/ examples/ README*` and update all references.
+
+> **Historical lesson**: 12 documentation files (README.md, README_EN.md, 5 Chinese docs, 5 English docs) all had `OpenAIConfig{APIKey: "sk-xxx", Model: "gpt-4"}` — flat initialization that doesn't compile because `APIKey` lives in the embedded `BaseProviderConfig`. New users copying these snippets got immediate compile errors, creating a terrible first impression. The fix touched 50+ code blocks across 12 files.
+
+---
+
+## §40 Configuration Pattern Convention (P2 — Consistency)
+
+New code MUST follow one of the four sanctioned configuration patterns. Mixing patterns within a single component creates confusion about how to configure it.
+
+### 1. Scope / Trigger
+
+- Trigger: Inconsistent configuration approaches across packages (Config struct, Builder, Factory, Functional Options all used without clear rules)
+- Applies to: ANY new component that accepts configuration
+
+### 2. Decision Matrix
+
+| Scenario | Recommended Pattern | Example |
+|----------|-------------------|---------|
+| Simple component with YAML/JSON config | Config struct + `Validate()` | `ToolSelectionConfig`, `ReflectionExecutorConfig` |
+| Component needing defaults + validation | Config struct + `NewXxxConfig()` constructor | `memory.EnhancedMemoryConfig` |
+| Programmatic API with many optional params | Functional Options (`WithXxx` functions) | `config.NewFileWatcher(paths, opts...)` |
+| Complex multi-step construction | Builder pattern | `AgentBuilder`, `DAGBuilder` |
+| Runtime dynamic creation by name/type | Factory pattern | `factory.NewProviderFromConfig(name, cfg)` |
+
+### 3. Pattern Details
+
+#### 3a. Config Struct (Default for most components)
+
+```go
+// Config struct — declarative, YAML/JSON friendly
+type RetrieverConfig struct {
+    TopK       int           `json:"top_k" yaml:"top_k"`
+    MinScore   float64       `json:"min_score" yaml:"min_score"`
+    Timeout    time.Duration `json:"timeout" yaml:"timeout"`
+}
+
+// Constructor with defaults
+func DefaultRetrieverConfig() RetrieverConfig {
+    return RetrieverConfig{
+        TopK:     10,
+        MinScore: 0.3,
+        Timeout:  30 * time.Second,
+    }
+}
+
+// Validate checks invariants
+func (c RetrieverConfig) Validate() error {
+    if c.TopK <= 0 {
+        return fmt.Errorf("top_k must be positive, got %d", c.TopK)
+    }
+    return nil
+}
+```
+
+#### 3b. Functional Options (For programmatic APIs)
+
+```go
+type WatcherOption func(*FileWatcher)
+
+func WithInterval(d time.Duration) WatcherOption {
+    return func(w *FileWatcher) { w.interval = d }
+}
+
+func NewFileWatcher(paths []string, opts ...WatcherOption) (*FileWatcher, error) {
+    w := &FileWatcher{paths: paths, interval: defaultInterval}
+    for _, opt := range opts {
+        opt(w)
+    }
+    return w, nil
+}
+```
+
+#### 3c. Builder (For complex multi-step construction only)
+
+Reserved for objects that require ordered construction steps or cross-field validation:
+
+```go
+agent, err := NewAgentBuilder(cfg).
+    WithProvider(provider).    // required
+    WithLogger(logger).        // optional
+    WithReflection(reflCfg).   // optional
+    Build()                    // validates + constructs
+```
+
+#### 3d. Factory (For runtime dynamic creation)
+
+Reserved for creating instances by name/type at runtime:
+
+```go
+provider, err := factory.NewProviderFromConfig("openai", providerCfg, logger)
+```
+
+### 4. Anti-Patterns
+
+| Pattern | Problem | Fix |
+|---------|---------|-----|
+| Config struct + Builder for same component | Two ways to configure = confusion | Pick one based on complexity |
+| Functional Options for YAML-loaded config | Options can't be serialized | Use Config struct |
+| Builder without `Validate()` in `Build()` | Invalid objects can be created | Always validate in `Build()` |
+| Factory that returns `any` | Loses type safety | Return concrete type or narrow interface |
+| Config struct without `Default*()` constructor | Users must know all fields | Always provide defaults |
+
+### 5. Migration Guide
+
+When refactoring existing code:
+1. If the component has < 5 config fields and is loaded from YAML → Config struct
+2. If the component has > 5 optional params and is created programmatically → Functional Options
+3. If the component requires ordered setup steps → Builder
+4. If the component is created by name at runtime → Factory
+5. Never combine Builder + Functional Options on the same type
+
+> **Rule**: Before adding a new configuration approach to a package, check what pattern the package already uses. Consistency within a package trumps "best" pattern choice.
+
+> **Historical lesson**: The `agent/` package uses Builder (`AgentBuilder`), the `config/` package uses Functional Options (`WatcherOption`), and the `llm/factory/` package uses Factory. Each is appropriate for its use case. The problem was lack of documentation about when to use which, leading to ad-hoc choices in new code.
+
+---
+
+## §41 JWT Authentication Middleware Pattern (P1 — Security)
+
+All authenticated API endpoints MUST use the JWT middleware for identity extraction. Static API key auth is acceptable only as a fallback for legacy clients or dev mode.
+
+### 1. Scope / Trigger
+
+- Trigger: Authentication upgrade from static API keys to JWT (Feb 2026)
+- Applies to: ANY new API handler that needs to know the caller's identity (tenant, user, roles)
+
+### 2. Authentication Strategy Priority
+
+| Priority | Method | Use Case |
+|----------|--------|----------|
+| 1 (preferred) | JWT Bearer token | Production multi-tenant |
+| 2 (fallback) | Static API Key (`X-API-Key` header) | Legacy clients, internal services |
+| 3 (dev only) | No auth (skip paths) | Health checks, metrics, dev mode |
+
+### 3. JWT Middleware Pattern (from `cmd/agentflow/middleware.go`)
+
+```go
+// JWTAuth validates JWT tokens and injects identity into context.
+// Supports HS256 (HMAC) and RS256 (RSA) signing algorithms.
+func JWTAuth(cfg config.JWTConfig, skipPaths []string, logger *zap.Logger) Middleware {
+    // Parse RSA public key at init time (not per-request)
+    var rsaKey *rsa.PublicKey
+    if cfg.PublicKey != "" {
+        // ... PEM decode + x509.ParsePKIXPublicKey ...
+    }
+
+    keyFunc := func(token *jwt.Token) (any, error) {
+        switch token.Method.Alg() {
+        case "HS256":
+            return []byte(cfg.Secret), nil
+        case "RS256":
+            return rsaKey, nil
+        default:
+            return nil, fmt.Errorf("unexpected signing method: %s", token.Method.Alg())
+        }
+    }
+
+    // Extract claims and inject into context via types.With* helpers
+    claims, ok := token.Claims.(jwt.MapClaims)
+    ctx := r.Context()
+    if tenantID, ok := claims["tenant_id"].(string); ok && tenantID != "" {
+        ctx = types.WithTenantID(ctx, tenantID)
+    }
+    if userID, ok := claims["user_id"].(string); ok && userID != "" {
+        ctx = types.WithUserID(ctx, userID)
+    }
+    if rolesRaw, ok := claims["roles"].([]any); ok {
+        // ... convert []any to []string ...
+        ctx = types.WithRoles(ctx, roles)
+    }
+    next.ServeHTTP(w, r.WithContext(ctx))
+}
+```
+
+### 4. Forbidden Patterns
+
+```go
+// WRONG — trusting client-submitted identity
+tenantID := r.Header.Get("X-Tenant-ID")  // ❌ Client can forge this
+
+// WRONG — trusting identity from request body
+tenantID := req.TenantID  // ❌ Client can set any value
+
+// CORRECT — extract from JWT claims via context
+tenantID, ok := types.TenantID(r.Context())  // ✅ Set by JWTAuth middleware
+```
+
+### 5. Tenant-Level Rate Limiting
+
+Rate limiting MUST use `tenant_id` from context (set by JWT middleware), falling back to IP only when no tenant is present:
+
+```go
+// cmd/agentflow/middleware.go — TenantRateLimiter
+key := ""
+if tenantID, ok := types.TenantID(r.Context()); ok {
+    key = "tenant:" + tenantID
+} else {
+    ip, _, _ := net.SplitHostPort(r.RemoteAddr)
+    key = "ip:" + ip
+}
+```
+
+### 6. Config Structure
+
+```go
+// config/loader.go — JWTConfig
+type JWTConfig struct {
+    Secret    string `yaml:"secret" env:"SECRET" json:"-"`      // HMAC key
+    PublicKey string `yaml:"public_key" env:"PUBLIC_KEY" json:"-"` // RSA PEM
+    Issuer    string `yaml:"issuer" env:"ISSUER"`                // Optional iss claim
+    Audience  string `yaml:"audience" env:"AUDIENCE"`            // Optional aud claim
+}
+```
+
+> **Rule**: Never trust client-submitted `tenant_id` or `user_id`. Always extract from JWT claims. Downstream handlers read identity via `types.TenantID(ctx)` / `types.UserID(ctx)` / `types.Roles(ctx)`.
+
+> **Historical lesson**: The initial API used static API keys with no tenant isolation. Adding JWT required creating `types/context.go` with typed context keys (`keyTenantID`, `keyUserID`, `keyRoles`) and `With*`/getter helper pairs. The `TenantRateLimiter` middleware was added alongside `JWTAuth` to enforce per-tenant fairness.
+
+---
+
+## §42 MCP Server Message Dispatcher and Serve Loop Pattern (P2 — Protocol)
+
+The MCP Server uses a JSON-RPC 2.0 message dispatcher with a transport-agnostic message loop. New MCP method handlers follow the `dispatch` routing pattern.
+
+### 1. Scope / Trigger
+
+- Trigger: MCP Server needed a message dispatcher to actually serve protocol requests (Feb 2026)
+- Applies to: Adding new MCP methods or new transport implementations
+
+### 2. Message Dispatcher Pattern (from `agent/protocol/mcp/server.go`)
+
+```go
+// HandleMessage dispatches JSON-RPC 2.0 requests to server methods.
+// Notifications (no ID) return nil — no response sent.
+func (s *DefaultMCPServer) HandleMessage(ctx context.Context, msg *MCPMessage) (*MCPMessage, error) {
+    if msg == nil {
+        return NewMCPError(nil, ErrorCodeInvalidRequest, "empty message", nil), nil
+    }
+    // Notifications are fire-and-forget
+    if msg.ID == nil {
+        s.handleNotification(msg)
+        return nil, nil
+    }
+    // Dispatch based on method name
+    result, mcpErr := s.dispatch(ctx, msg.Method, msg.Params)
+    if mcpErr != nil {
+        return &MCPMessage{JSONRPC: "2.0", ID: msg.ID, Error: mcpErr}, nil
+    }
+    return NewMCPResponse(msg.ID, result), nil
+}
+
+// dispatch routes method → handler
+func (s *DefaultMCPServer) dispatch(ctx context.Context, method string, params map[string]any) (any, *MCPError) {
+    switch method {
+    case "initialize":     return s.handleInitialize(params)
+    case "tools/list":     return s.handleToolsList(ctx)
+    case "tools/call":     return s.handleToolsCall(ctx, params)
+    case "resources/list": return s.handleResourcesList(ctx)
+    case "resources/read": return s.handleResourcesRead(ctx, params)
+    case "prompts/list":   return s.handlePromptsList(ctx)
+    case "prompts/get":    return s.handlePromptsGet(ctx, params)
+    default:
+        return nil, &MCPError{Code: ErrorCodeMethodNotFound, Message: "method not found: " + method}
+    }
+}
+```
+
+### 3. Transport Message Loop (Serve)
+
+```go
+// Serve runs receive → dispatch → respond loop until context cancellation.
+func (s *DefaultMCPServer) Serve(ctx context.Context, transport Transport) error {
+    for {
+        select {
+        case <-ctx.Done():
+            return ctx.Err()
+        default:
+        }
+        msg, err := transport.Receive(ctx)
+        if err != nil {
+            if ctx.Err() != nil { return ctx.Err() }  // clean shutdown
+            // Send parse error and continue
+            transport.Send(ctx, NewMCPError(nil, ErrorCodeParseError, "...", nil))
+            continue
+        }
+        resp, _ := s.HandleMessage(ctx, msg)
+        if resp == nil { continue }  // notification — no response
+        transport.Send(ctx, resp)
+    }
+}
+```
+
+### 4. Transport Interface
+
+```go
+// agent/protocol/mcp/transport.go
+type Transport interface {
+    Send(ctx context.Context, msg *MCPMessage) error
+    Receive(ctx context.Context) (*MCPMessage, error)
+    Close() error
+}
+```
+
+### 5. Key Rules
+
+- `HandleMessage` never returns a Go error for protocol-level issues — it returns `*MCPMessage` with JSON-RPC error
+- Notifications (ID == nil) produce no response — `Serve` skips the `Send` call
+- `Serve` exits cleanly on `ctx.Done()` — no goroutine leak
+- New methods: add a case to `dispatch()` switch and a `handle*` method
+- JSON-RPC version validation: reject anything other than `"2.0"`
+
+> **Rule**: When adding a new MCP method, add a `case` in `dispatch()` and implement a `handle<Method>` function. Keep the handler focused on parameter extraction and delegation to existing server methods (e.g., `s.CallTool`, `s.ListResources`).
+
+---
+
+## §43 OTel SDK Initialization Pattern
+
+### 1. Scope / Trigger
+
+- Adding or modifying telemetry/tracing/metrics initialization
+- New service entry point that needs distributed tracing
+- Changing `TelemetryConfig` fields
+
+### 2. Signature
+
+```go
+// internal/telemetry/telemetry.go
+func Init(cfg config.TelemetryConfig, logger *zap.Logger) (*Providers, error)
+func (p *Providers) Shutdown(ctx context.Context) error
+```
+
+### 3. Contract
+
+**Config fields** (`config.TelemetryConfig`):
+
+| Field | Type | Default | Constraint |
+|-------|------|---------|------------|
+| `Enabled` | `bool` | `false` | Hot-reloadable |
+| `OTLPEndpoint` | `string` | `"localhost:4317"` | gRPC endpoint |
+| `ServiceName` | `string` | `"agentflow"` | OTel resource attribute |
+| `SampleRate` | `float64` | `0.1` | 0.0–1.0, hot-reloadable |
+
+**Lifecycle**:
+- `Init()` called in `cmd/agentflow/main.go` after logger init, before `NewServer()`
+- `Shutdown()` called in `Server.Shutdown()` before HTTP server close
+- `Providers` stored in `Server` struct
+
+### 4. Validation & Error Matrix
+
+| Condition | Behavior |
+|-----------|----------|
+| `Enabled == false` | Return noop `Providers{}`, log info, no external connections |
+| `Enabled == true`, exporter creation fails | Return error (caller should `Warn` and continue, not `Fatal`) |
+| `Shutdown()` on nil `Providers` | No-op, return nil |
+| `Shutdown()` with flush timeout | Return joined errors from tp + mp |
+
+### 5. Good / Base / Bad
+
+**Good** — Telemetry failure does not block service startup:
+```go
+providers, err := telemetry.Init(cfg.Telemetry, logger)
+if err != nil {
+    logger.Warn("failed to initialize telemetry", zap.Error(err))
+}
+```
+
+**Base** — Disabled by default, zero overhead:
+```yaml
+telemetry:
+  enabled: false
+```
+
+**Bad** — Fatal on telemetry failure (blocks service):
+```go
+// WRONG — telemetry is optional infrastructure
+providers, err := telemetry.Init(cfg.Telemetry, logger)
+if err != nil {
+    logger.Fatal("telemetry init failed", zap.Error(err))
+}
+```
+
+### 6. Required Tests
+
+- Build verification: `go build ./cmd/agentflow/` must pass
+- Vet: `go vet ./internal/telemetry/...` must pass
+- Integration: when `Enabled == true` with a real OTLP collector, spans appear in backend
+
+### 7. Wrong vs Right
+
+#### Wrong — Initialize OTel in package init()
+```go
+func init() {
+    tp := sdktrace.NewTracerProvider(...)
+    otel.SetTracerProvider(tp)
+}
+```
+No config, no shutdown, no error handling.
+
+#### Right — Explicit Init with config and shutdown
+```go
+providers, err := telemetry.Init(cfg.Telemetry, logger)
+// ... store providers in Server ...
+// In Shutdown():
+providers.Shutdown(ctx)
+```
+
+---
+
+## §44 API Request Body Validation Pattern
+
+### 1. Scope / Trigger
+
+- New API handler accepting POST/PUT/PATCH request body
+- Modifying existing handler's request parsing
+- Adding field-level validation to API types
+
+### 2. Signature
+
+```go
+// api/handlers/common.go — shared validation helpers
+func ValidateContentType(w http.ResponseWriter, r *http.Request, logger *zap.Logger) bool
+func DecodeJSONBody(w http.ResponseWriter, r *http.Request, dst any, logger *zap.Logger) error
+func ValidateURL(s string) bool
+func ValidateEnum(value string, allowed []string) bool
+func ValidateNonNegative(value float64) bool
+```
+
+### 3. Contract
+
+**Every POST/PUT/PATCH handler MUST follow this sequence**:
+
+1. `ValidateContentType(w, r, logger)` — rejects non-`application/json`
+2. `DecodeJSONBody(w, r, &req, logger)` — 1MB limit, `DisallowUnknownFields`, auto-writes 400
+3. Business-level field validation — specific to each endpoint
+4. Error response via `WriteErrorMessage(w, 400, types.ErrInvalidRequest, "specific message", logger)`
+
+**DecodeJSONBody guarantees**:
+- `http.MaxBytesReader` with 1MB limit
+- `json.Decoder.DisallowUnknownFields()` — rejects unknown JSON keys
+- Handles nil body, empty body, malformed JSON
+- Writes 400 response on failure (caller just returns)
+
+### 4. Validation & Error Matrix
+
+| Condition | HTTP Status | Error Message |
+|-----------|-------------|---------------|
+| Wrong Content-Type | 400 | "Content-Type must be application/json" |
+| Body > 1MB | 400 | "request body too large" |
+| Malformed JSON | 400 | "invalid JSON in request body" |
+| Unknown fields | 400 | "request body contains unknown field: X" |
+| Missing required field | 400 | "field_name is required" |
+| Invalid URL format | 400 | "field_name must be a valid HTTP or HTTPS URL" |
+| Negative numeric | 400 | "field_name must be non-negative" |
+| Invalid enum value | 400 | "messages[i].role must be one of: system, user, assistant, tool" |
+
+### 5. Good / Base / Bad
+
+**Good** — Full validation chain:
+```go
+func (h *Handler) HandleCreate(w http.ResponseWriter, r *http.Request) {
+    if !ValidateContentType(w, r, h.logger) { return }
+    var req createRequest
+    if err := DecodeJSONBody(w, r, &req, h.logger); err != nil { return }
+    if req.Name == "" {
+        WriteErrorMessage(w, http.StatusBadRequest, types.ErrInvalidRequest, "name is required", h.logger)
+        return
+    }
+    // ... business logic
+}
+```
+
+**Bad** — Bypassing shared validation:
+```go
+// WRONG — no size limit, no unknown field rejection, no Content-Type check
+var req createRequest
+json.NewDecoder(r.Body).Decode(&req)
+```
+
+### 6. Required Tests
+
+- Existing handler tests must set `Content-Type: application/json` header
+- Test missing Content-Type → 400
+- Test unknown fields → 400
+- Test invalid field values → 400 with specific message
+
+### 7. Wrong vs Right
+
+#### Wrong — Raw json.Decoder
+```go
+json.NewDecoder(r.Body).Decode(&req)
+```
+
+#### Right — Shared validation chain
+```go
+if !ValidateContentType(w, r, h.logger) { return }
+if err := DecodeJSONBody(w, r, &req, h.logger); err != nil { return }
+```
+
+---
+
+## §45 OTel HTTP Tracing Middleware (P2 — Observability)
+
+### 1. Scope / Trigger
+
+- Adding HTTP-layer distributed tracing
+- Need trace propagation from incoming requests to downstream services
+- Want per-request spans with HTTP attributes in OTel backend
+
+### 2. Signature
+
+```go
+// cmd/agentflow/middleware.go
+func OTelTracing() Middleware
+```
+
+### 3. Contract
+
+**Middleware behavior**:
+1. Extract incoming trace context from request headers via `otel.GetTextMapPropagator().Extract()`
+2. Create a server span named `"HTTP " + r.Method + " " + r.URL.Path`
+3. Set attributes: `http.method`, `http.url`, `http.response.status_code`
+4. Wrap `http.ResponseWriter` with `handlers.ResponseWriter` to capture status code
+5. End span after handler completes
+
+**Middleware chain position**: After `MetricsMiddleware`, before `RequestLogger`.
+
+**Noop safety**: When telemetry is disabled (`cfg.Telemetry.Enabled == false`), the global tracer is noop. The middleware still runs but creates zero-cost noop spans — no conditional check needed.
+
+### 4. Validation & Error Matrix
+
+| Condition | Behavior |
+|-----------|----------|
+| No `traceparent` header | New root span created |
+| Valid `traceparent` header | Child span created, trace context propagated |
+| Telemetry disabled (noop tracer) | Middleware runs, noop span, negligible overhead |
+| Handler panics | Span ended by Recovery middleware (upstream in chain) |
+
+### 5. Good / Base / Bad
+
+**Good** — Uses global tracer (auto-wired by `telemetry.Init`):
+```go
+func OTelTracing() Middleware {
+    return func(next http.Handler) http.Handler {
+        return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+            ctx := otel.GetTextMapPropagator().Extract(r.Context(), propagation.HeaderCarrier(r.Header))
+            tracer := otel.Tracer("agentflow/http")
+            ctx, span := tracer.Start(ctx, "HTTP "+r.Method+" "+r.URL.Path)
+            defer span.End()
+            // ... set attributes, call next
+        })
+    }
+}
+```
+
+**Bad** — Creating a new tracer provider per request:
+```go
+// WRONG — tracer provider should be global, not per-request
+tp := sdktrace.NewTracerProvider(...)
+tracer := tp.Tracer("http")
+```
+
+### 6. Required Tests
+
+- `go build ./cmd/agentflow/` must pass
+- Middleware chain order verified: OTelTracing after Metrics, before Logger
+- Integration: with telemetry enabled, HTTP requests produce spans in OTLP backend
+
+### 7. Wrong vs Right
+
+#### Wrong — No trace context extraction
+```go
+ctx, span := tracer.Start(r.Context(), spanName)
+```
+Incoming `traceparent` header is ignored, breaking distributed trace propagation.
+
+#### Right — Extract then start
+```go
+ctx := otel.GetTextMapPropagator().Extract(r.Context(), propagation.HeaderCarrier(r.Header))
+ctx, span := tracer.Start(ctx, spanName)
+```
+
+---
+
+## §46 Conditional Route Registration — Database-Dependent Handlers (P2 — Architecture)
+
+### 1. Scope / Trigger
+
+- Adding API handlers that require a database connection
+- Registering routes for CRUD operations on database-backed resources
+- Server must remain functional when database is unavailable
+
+### 2. Signature
+
+```go
+// cmd/agentflow/server.go
+type Server struct {
+    db             *gorm.DB              // nil when DB unavailable
+    apiKeyHandler  *handlers.APIKeyHandler // nil when db == nil
+}
+
+func NewServer(cfg *config.Config, configPath string, logger *zap.Logger,
+    tp *telemetry.Providers, db *gorm.DB) *Server
+```
+
+### 3. Contract
+
+**Initialization pattern**:
+1. `NewServer()` accepts `*gorm.DB` (may be nil)
+2. `initHandlers()` creates DB-dependent handlers only when `db != nil`
+3. `startHTTPServer()` registers routes only when handler is non-nil
+4. Service starts successfully even without database — health/chat/agent endpoints still work
+
+**Route registration for multi-method paths** (using `http.ServeMux`):
+```go
+mux.HandleFunc("/api/v1/providers/{id}/api-keys", func(w http.ResponseWriter, r *http.Request) {
+    switch r.Method {
+    case http.MethodGet:
+        h.apiKeyHandler.HandleListAPIKeys(w, r)
+    case http.MethodPost:
+        h.apiKeyHandler.HandleCreateAPIKey(w, r)
+    default:
+        handlers.WriteErrorMessage(w, http.StatusMethodNotAllowed, ...)
+    }
+})
+```
+
+### 4. Validation & Error Matrix
+
+| Condition | Behavior |
+|-----------|----------|
+| `db == nil` | APIKeyHandler not created, routes not registered, log info |
+| `db != nil` | APIKeyHandler created, all 6 routes registered |
+| Request to unregistered route | 404 from `http.ServeMux` default |
+| Wrong HTTP method on registered route | 405 from inline method dispatch |
+
+### 5. Good / Base / Bad
+
+**Good** — Conditional registration with graceful degradation:
+```go
+if s.apiKeyHandler != nil {
+    mux.HandleFunc("/api/v1/providers", s.apiKeyHandler.HandleListProviders)
+    // ... more routes
+    s.logger.Info("Provider API routes registered")
+}
+```
+
+**Bad** — Unconditional registration that panics on nil handler:
+```go
+// WRONG — panics if apiKeyHandler is nil
+mux.HandleFunc("/api/v1/providers", s.apiKeyHandler.HandleListProviders)
+```
+
+### 6. Required Tests
+
+- `go build ./cmd/agentflow/` must pass
+- Server starts without database (db=nil) — no panic
+- When db is available, all 6 routes respond correctly
+
+### 7. Wrong vs Right
+
+#### Wrong — Separate mux registrations per method
+```go
+// WRONG with http.ServeMux — last registration wins, earlier ones silently overwritten
+mux.HandleFunc("/api/v1/providers/{id}/api-keys", h.HandleListAPIKeys)   // GET
+mux.HandleFunc("/api/v1/providers/{id}/api-keys", h.HandleCreateAPIKey)  // POST — overwrites GET!
+```
+
+#### Right — Single registration with method dispatch
+```go
+mux.HandleFunc("/api/v1/providers/{id}/api-keys", func(w http.ResponseWriter, r *http.Request) {
+    switch r.Method {
+    case http.MethodGet:
+        h.apiKeyHandler.HandleListAPIKeys(w, r)
+    case http.MethodPost:
+        h.apiKeyHandler.HandleCreateAPIKey(w, r)
+    default:
+        handlers.WriteErrorMessage(w, 405, types.ErrInvalidRequest, "method not allowed", h.logger)
+    }
+})
+```
+
+---
+
+## §47 Handler 分层：Store 接口模式
+
+Handler 不应直接持有 `*gorm.DB`。通过定义 Store 接口解耦 handler 与数据库实现。
+
+```go
+// WRONG — handler 直接访问 DB
+type APIKeyHandler struct {
+    db *gorm.DB
+}
+
+// CORRECT — handler 依赖接口
+type APIKeyStore interface {
+    ListProviders(ctx context.Context) ([]LLMProvider, error)
+    CreateAPIKey(ctx context.Context, key *APIKey) error
+}
+
+type APIKeyHandler struct {
+    store  APIKeyStore
+    logger *zap.Logger
+}
+```
+
+实现放在独立文件（如 `apikey_store.go`），handler 文件不 import gorm。
+
+> **历史教训**：`api/handlers/apikey.go` 直接持有 `*gorm.DB` 并在 handler 中执行 SQL 查询。重构为 `APIKeyStore` 接口 + `GormAPIKeyStore` 实现后，handler 与 DB 解耦。
+
+---
+
+## §48 EventBus WaitGroup 竞态防护
+
+`sync.WaitGroup` 的 `Add` 和 `Wait` 并发调用会触发竞态。在事件总线等场景中，`Stop()` 必须先等待事件处理循环退出，再调用 `Wait()`。
+
+```go
+// WRONG — Stop() 和 processEvents() 的 Add/Wait 竞态
+func (b *EventBus) Stop() {
+    close(b.done)
+    b.handlerWg.Wait() // 可能与 processEvents 中的 Add(1) 竞态
+}
+
+// CORRECT — 先等循环退出，再 Wait
+type EventBus struct {
+    done     chan struct{}
+    loopDone chan struct{} // processEvents 退出时关闭
+    // ...
+}
+
+func (b *EventBus) processEvents() {
+    defer close(b.loopDone)
+    for { /* ... */ }
+}
+
+func (b *EventBus) Stop() {
+    close(b.done)
+    <-b.loopDone       // 确保不再有新的 Add 调用
+    b.handlerWg.Wait() // 安全等待
+}
+```
+
+> **历史教训**：`agent/event.go` 的 `SimpleEventBus.Stop()` 直接调用 `handlerWg.Wait()`，与 `processEvents` 中的 `handlerWg.Add` 竞态。修复：添加 `loopDone` channel，`Stop()` 先等 `<-b.loopDone`。
+
+---
+
+## §49 HSTS Security Header (Mandatory)
+
+All HTTP responses MUST include `Strict-Transport-Security` to prevent HTTPS downgrade attacks.
+
+**File**: `cmd/agentflow/middleware.go` — `SecurityHeaders()` function
+
+```go
+// CORRECT — full security header set
+func SecurityHeaders(next http.Handler) http.Handler {
+    return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+        w.Header().Set("X-Frame-Options", "DENY")
+        w.Header().Set("X-Content-Type-Options", "nosniff")
+        w.Header().Set("Referrer-Policy", "strict-origin-when-cross-origin")
+        w.Header().Set("X-XSS-Protection", "1; mode=block")
+        w.Header().Set("Content-Security-Policy", "default-src 'self'")
+        w.Header().Set("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+        next.ServeHTTP(w, r)
+    })
+}
+```
+
+> **历史教训**：2026-02-23 生产审计发现 `SecurityHeaders()` 缺少 HSTS 头。HTTPS 部署时浏览器不会强制安全连接，存在降级攻击风险。一行代码修复。
+
+## §50 JWT HMAC Secret Minimum Length
+
+When using HMAC-based JWT signing (HS256), the secret key MUST be at least 32 bytes. Short keys are vulnerable to brute-force attacks.
+
+**File**: `cmd/agentflow/middleware.go` — `JWTAuth()` function
+
+```go
+// At the start of JWTAuth(), after reading cfg.Secret:
+if len(cfg.Secret) > 0 && len(cfg.Secret) < 32 {
+    logger.Warn("JWT HMAC secret is shorter than recommended 32 bytes",
+        zap.Int("actual_length", len(cfg.Secret)))
+}
+```
+
+**Key rules**:
+- Don't panic or refuse to start — log a Warn
+- Only check when Secret is non-empty (empty means JWT is disabled)
+- Minimum 32 bytes for HS256 (256-bit security)
+
+## §51 Authentication Disable Protection
+
+When neither JWT nor API Key authentication is configured, the server runs without authentication. This MUST be logged as a clear warning.
+
+**File**: `cmd/agentflow/server.go` — `buildAuthMiddleware()`
+
+```go
+// When both JWT and APIKey are unconfigured:
+logger.Warn("Authentication is disabled. Set JWT or API key configuration for production use.")
+```
+
+**Config field**: `config.ServerConfig.AllowNoAuth bool` (yaml: `allow_no_auth`, env: `AGENTFLOW_SERVER_ALLOW_NO_AUTH`)
+
+## §52 OpenAPI Conditional Route Annotation
+
+Conditionally-registered routes MUST be annotated in `api/openapi.yaml` with `x-conditional` extension field.
+
+```yaml
+# Example: Chat endpoint requires LLM API key
+/api/v1/chat/completions:
+  post:
+    x-conditional: "Requires LLM API key configuration (config.llm.api_key)"
+    description: |
+      Send a chat completion request.
+      Note: This endpoint is only available when an LLM API key is configured.
+```
+
+**Known conditional routes**:
+- Chat endpoints (`/api/v1/chat/completions*`) — requires `config.llm.api_key`
+- Provider/APIKey endpoints (`/api/v1/providers*`) — requires database connection
+
+> **历史教训**：2026-02-23 审计发现 OpenAPI spec 未说明条件路由，API 消费者无法预知端点可用性。
+
+## §53 OTel Trace Context in Logs
+
+Use `telemetry.LoggerWithTrace(ctx, logger)` to inject `trace_id` and `span_id` into structured logs, enabling log-trace correlation.
+
+**File**: `internal/telemetry/telemetry.go`
+
+```go
+// Usage in any handler or service:
+logger := telemetry.LoggerWithTrace(ctx, h.logger)
+logger.Info("processing request", zap.String("agent_id", agentID))
+// Output: {"trace_id":"abc123","span_id":"def456","msg":"processing request",...}
+```
+
+**Key rules**:
+- Returns the original logger unchanged when no valid span exists (zero overhead)
+- Use in HTTP handlers, agent execution, and LLM provider calls for distributed tracing
+- Don't use in hot loops — the `With()` call allocates
+
+## §54 Structured Outputs — API-Level ResponseFormat + ToolChoice (P1 — Reliability)
+
+### 1. Scope / Trigger
+
+- Adding or modifying LLM provider integrations
+- Agent needs deterministic JSON output (not prompt-based "please output JSON")
+- Tool calling requires forced tool selection (`tool_choice: any/tool`)
+
+### 2. Signatures
+
+```go
+// llm/provider.go
+type ResponseFormatType string
+const (
+    ResponseFormatText       ResponseFormatType = "text"
+    ResponseFormatJSONObject ResponseFormatType = "json_object"
+    ResponseFormatJSONSchema ResponseFormatType = "json_schema"
+)
+
+type ResponseFormat struct {
+    Type       ResponseFormatType `json:"type"`
+    JSONSchema *JSONSchemaParam   `json:"json_schema,omitempty"`
+}
+
+// ChatRequest fields:
+ResponseFormat *ResponseFormat `json:"response_format,omitempty"`
+ToolChoice     any             `json:"tool_choice,omitempty"` // string OR complex object
+```
+
+### 3. Contract — Provider Mapping
+
+| Provider | ResponseFormat | ToolChoice |
+|----------|---------------|------------|
+| OpenAI / OpenAI-compat | `response_format: {type, json_schema}` | string or `{"type":"function","function":{"name":"x"}}` |
+| Anthropic Claude | Not supported (use tool_choice) | `{"type":"auto"}` / `{"type":"any"}` / `{"type":"tool","name":"x"}` |
+| Gemini | `responseMimeType` + `responseSchema` | `toolConfig.functionCallingConfig` (AUTO/ANY/NONE + allowedFunctionNames) |
+
+### 4. Good / Bad
+
+```go
+// BAD — string comparison on any-typed ToolChoice
+if req.ToolChoice != "" { ... }  // WRONG
+
+// GOOD — nil comparison
+if req.ToolChoice != nil { ... }
+```
+
+> **Design Decision**: `any` for ToolChoice because Go lacks sum types. Provider-specific conversion in each provider's `Completion()`/`Stream()`.
+
+<!-- §54-PLACEHOLDER -->
+
+## §55 Fine-Grained Tool Streaming — StreamingToolFunc + tool_progress (P1 — UX)
+
+### 1. Scope / Trigger
+
+- Implementing a tool that runs >2 seconds (code execution, web scraping, DB queries)
+- Adding SSE streaming to an agent endpoint
+- Modifying the ReAct execution loop
+
+### 2. Signatures
+
+```go
+// llm/tools/executor.go
+type ToolProgressEmitter func(event ToolStreamEvent)
+type StreamingToolFunc func(ctx context.Context, args json.RawMessage, emit ToolProgressEmitter) (json.RawMessage, error)
+
+// Registration: registry.RegisterStreaming("name", fn, schema)
+// Auto-creates non-streaming wrapper for backward compat
+```
+
+### 3. Event Flow
+
+```
+StreamingToolFunc emit() → ExecuteOneStream channel
+  → ReActStreamEvent{Type:"tool_progress"}
+    → RuntimeStreamEvent{Type:"tool_progress"}
+      → SSE: event: tool_progress {tool_call_id, tool_name, progress}
+```
+
+### 4. Good / Bad
+
+```go
+// BAD — Normal ToolFunc for long-running tool (30s silence)
+registry.Register("execute_code", func(ctx context.Context, args json.RawMessage) (json.RawMessage, error) {
+    return runCode(ctx, args) // client sees nothing
+}, schema)
+
+// GOOD — StreamingToolFunc with progress
+registry.RegisterStreaming("execute_code", func(ctx context.Context, args json.RawMessage, emit ToolProgressEmitter) (json.RawMessage, error) {
+    emit(ToolStreamEvent{Type: ToolStreamProgress, Data: map[string]any{"stdout": "compiling..."}})
+    result := runCode(ctx, args)
+    return json.Marshal(result)
+}, schema)
+```
+
+> **Backward Compat**: `StreamingToolFunc` is opt-in. Existing `ToolFunc` tools work unchanged. ReAct falls back to batch `Execute()` when executor doesn't implement `StreamableToolExecutor`.
+
+## §56 Skills-Discovery Bridge — Capability Registration (P2 — Architecture)
+
+### 1. Scope / Trigger
+
+- Adding Skills that should be discoverable via Discovery system
+- Implementing `SkillsExtension` interface for agent extensions
+- Creating new agent types with preset behaviors
+
+### 2. Architecture — Three-Package Pattern (Avoids Import Cycle)
+
+```
+agent/skills/ ←→ internal/bridge/ ←→ agent/discovery/
+```
+
+`skills → discovery` direct import creates cycle: `skills → discovery → a2a → agent → skills`. The `internal/bridge/` package breaks this via §12 (Workflow-Local Interfaces).
+
+```go
+// agent/skills/discovery_bridge.go — local interface
+type CapabilityRegistrar interface {
+    RegisterCapability(desc CapabilityDescriptor) error
+}
+
+// internal/bridge/discovery_adapter.go — implements the interface
+type DiscoveryRegistrarAdapter struct { registry *discovery.Registry }
+```
+
+### 3. Category Mapping
+
+| Skill Category | Discovery Category |
+|---------------|-------------------|
+| coding, automation | task |
+| research, data, reasoning | query |
+| communication | stream |
+
+### 4. Agent Type Differentiation
+
+`agent/registry.go`: Each built-in type gets a preset `PromptBundle` (Role, Identity, Policies). User-provided PromptBundle takes precedence (`IsZero()` check).
+
+| Type | Focus |
+|------|-------|
+| assistant | communication + reasoning |
+| analyzer | data analysis |
+| translator | language translation |
+| summarizer | text compression |
+| reviewer | code review |
+
+## §57 LLM Provider Tool Definition Wire Format (P0 — Correctness)
+
+### 1. Scope / Trigger
+
+- Adding or modifying tool/function calling support in any LLM provider
+- Creating new OpenAI-compatible provider wrappers
+- Changing `ConvertToolsToOpenAI` or similar conversion functions
+
+### 2. Rule — Separate Tool Definition from Tool Call Structs
+
+The OpenAI API uses **different field names** for tool definitions (request) vs tool calls (response):
+
+| Context | Field Name | JSON Tag | Contains |
+|---------|-----------|----------|----------|
+| Tool **definition** (request `tools[]`) | `parameters` | `"parameters"` | JSON Schema |
+| Tool **definition** (request `tools[]`) | `description` | `"description"` | Human-readable description |
+| Tool **call** (response `tool_calls[]`) | `arguments` | `"arguments"` | Actual call arguments |
+
+**Forbidden pattern** — reusing one struct for both:
+```go
+// ❌ WRONG: "arguments" tag used for both definitions and calls
+type OpenAICompatFunction struct {
+    Name      string          `json:"name"`
+    Arguments json.RawMessage `json:"arguments"` // wrong for definitions!
+}
+```
+
+**Required pattern** — separate structs:
+```go
+// ✅ Tool DEFINITION (in request)
+type OpenAICompatFunctionDef struct {
+    Name        string          `json:"name"`
+    Description string          `json:"description,omitempty"`
+    Parameters  json.RawMessage `json:"parameters,omitempty"`
+}
+
+// ✅ Tool CALL (in response)
+type OpenAICompatFunction struct {
+    Name      string          `json:"name"`
+    Arguments json.RawMessage `json:"arguments"`
+}
+```
+
+### 3. Checklist
+
+- [ ] `ConvertToolsToOpenAI` populates `Description` from `ToolSchema.Description`
+- [ ] `ConvertToolsToOpenAI` populates `Parameters` (not `Arguments`) from `ToolSchema.Parameters`
+- [ ] `OpenAICompatTool.Function` uses the definition struct (with `"parameters"` tag)
+- [ ] `OpenAICompatToolCall.Function` uses the call struct (with `"arguments"` tag)
+
+### 4. Applies To
+
+All 13 OpenAI-compatible providers: openai, deepseek, qwen, glm, grok, kimi, mistral, minimax, hunyuan, doubao, llama, plus any future providers using `openaicompat`.
+
+---
+
+## §58 LLM Provider Streaming Correctness (P0 — Correctness)
+
+### 1. Scope / Trigger
+
+- Implementing or modifying `Stream()` method in any LLM provider
+- Parsing SSE events from upstream APIs
+- Handling token usage in streaming responses
+
+### 2. Rules
+
+#### 2.1 Streaming Goroutine Panic Recovery (Mandatory)
+
+Every streaming goroutine MUST have `recover()` as the **first** defer:
+
+```go
+go func() {
+    defer func() {
+        if r := recover(); r != nil {
+            select {
+            case ch <- llm.StreamChunk{
+                Err: &llm.Error{
+                    Code:    llm.ErrInternalError,
+                    Message: fmt.Sprintf("streaming panic: %v", r),
+                },
+            }:
+            default:
+            }
+        }
+    }()
+    defer resp.Body.Close()
+    defer close(ch)
+    // ... parsing logic
+}()
+```
+
+**Why**: Without recovery, a panic in any streaming goroutine (e.g., nil pointer on malformed event) crashes the entire process.
+
+#### 2.2 Anthropic: Usage in `message_delta`, NOT `message_stop`
+
+```
+// ✅ Correct: read usage from message_delta
+case "message_delta":
+    if event.Usage != nil { /* emit usage chunk */ }
+
+// ❌ Wrong: message_stop has no usage field
+case "message_stop":
+    if event.Usage != nil { /* this is always nil */ }
+```
+
+#### 2.3 Anthropic: Tool Call Accumulator Init
+
+```go
+// ✅ Correct: nil allows clean append of partial JSON
+Arguments: json.RawMessage(nil),
+
+// ❌ Wrong: "{}" prefix corrupts accumulated JSON → {}{"name":"x"}
+Arguments: json.RawMessage("{}"),
+```
+
+#### 2.4 OpenAI-Compatible: `stream_options` Required for Usage
+
+OpenAI API requires explicit opt-in for streaming usage data:
+
+```go
+body := providers.OpenAICompatRequest{
+    Stream:        true,
+    StreamOptions: &providers.StreamOptions{IncludeUsage: true}, // ← required
+}
+```
+
+Without this, the final streaming chunk will never contain token usage.
+
+#### 2.5 Gemini: `?alt=sse` Required for Streaming
+
+Gemini's `streamGenerateContent` endpoint returns a **JSON array** by default, not SSE. Append `?alt=sse` to get standard SSE format:
+
+```go
+// ✅ Correct
+fmt.Sprintf("%s/v1beta/models/%s:streamGenerateContent?alt=sse", base, model)
+
+// ❌ Wrong: returns JSON array, line-by-line parser fails
+fmt.Sprintf("%s/v1beta/models/%s:streamGenerateContent", base, model)
+```
+
+#### 2.6 Stream Request Must Match Completion Parameters
+
+If `Completion()` sets `Temperature`, `TopP`, `Stop`, then `Stream()` MUST set them too. Audit both methods side-by-side when modifying either.
+
+### 3. Checklist
+
+- [ ] Streaming goroutine has `recover()` as first defer
+- [ ] Anthropic: usage read from `message_delta`, not `message_stop`
+- [ ] Anthropic: tool call accumulator initialized with `nil`, not `"{}"`
+- [ ] OpenAI-compat: `StreamOptions.IncludeUsage` set to `true`
+- [ ] Gemini: streaming URL includes `?alt=sse`
+- [ ] Stream() and Completion() set the same request parameters
+
+---
+
+## §59 OpenAI-Compatible Provider Configuration (P1 — Reliability)
+
+### 1. Scope / Trigger
+
+- Creating a new OpenAI-compatible provider
+- Modifying provider configuration or factory
+
+### 2. Rules
+
+#### 2.1 Always Propagate `APIKeys` to `openaicompat.Config`
+
+Every provider that embeds `openaicompat.Provider` MUST pass `APIKeys` from its config:
+
+```go
+// ✅ Correct
+openaicompat.New(openaicompat.Config{
+    ProviderName: "deepseek",
+    APIKey:       cfg.APIKey,
+    APIKeys:      cfg.APIKeys,  // ← MUST include
+    BaseURL:      cfg.BaseURL,
+    // ...
+}, logger)
+
+// ❌ Wrong: multi-key rotation silently broken
+openaicompat.New(openaicompat.Config{
+    ProviderName: "deepseek",
+    APIKey:       cfg.APIKey,
+    // APIKeys missing!
+}, logger)
+```
+
+#### 2.2 BaseURL Must Not Duplicate Path Prefix
+
+If the default `EndpointPath` is `/v1/chat/completions`, the `BaseURL` must NOT end with `/v1`:
+
+```go
+// ✅ Correct: BaseURL + EndpointPath = .../v1/chat/completions
+cfg.BaseURL = "https://api.example.com"
+
+// ❌ Wrong: produces .../v1/v1/chat/completions
+cfg.BaseURL = "https://api.example.com/v1"
+```
+
+#### 2.3 ModelsEndpoint Must Match Provider's API
+
+The default `ModelsEndpoint` is `/v1/models`. If the provider uses a non-standard chat path (e.g., `/compatible-mode/v1/chat/completions`), the models endpoint likely needs a matching prefix.
+
+#### 2.4 OpenAI Provider Must Set Default BaseURL
+
+```go
+if cfg.BaseURL == "" {
+    cfg.BaseURL = "https://api.openai.com"
+}
+```
+
+### 3. New Provider Checklist
+
+- [ ] `APIKeys` propagated to `openaicompat.Config`
+- [ ] `BaseURL` does not duplicate path prefix with `EndpointPath`
+- [ ] `ModelsEndpoint` matches provider's actual API path
+- [ ] Default `BaseURL` set when empty
+- [ ] `FallbackModel` uses a current, non-deprecated model name
+
+---
+
+## §60 Concurrent Safety in LLM Infrastructure (P1 — Reliability)
+
+### 1. Scope / Trigger
+
+- Modifying `RewriterChain`, `ResilientProvider`, `ZeroCopyBuffer`, or `RingBuffer`
+- Adding dynamic mutation methods to shared data structures
+- Wrapping streaming channels
+
+### 2. Rules
+
+#### 2.1 RewriterChain Must Be Thread-Safe
+
+`AddRewriter()` and `Execute()` can be called concurrently. Use `sync.RWMutex`:
+
+```go
+type RewriterChain struct {
+    mu        sync.RWMutex
+    rewriters []RequestRewriter
+}
+
+func (c *RewriterChain) Execute(...) {
+    c.mu.RLock()
+    snapshot := make([]RequestRewriter, len(c.rewriters))
+    copy(snapshot, c.rewriters)
+    c.mu.RUnlock()
+    // iterate snapshot
+}
+
+func (c *RewriterChain) AddRewriter(r RequestRewriter) {
+    c.mu.Lock()
+    defer c.mu.Unlock()
+    c.rewriters = append(c.rewriters, r)
+}
+```
+
+#### 2.2 ResilientProvider.Stream Must Feed Circuit Breaker
+
+`Stream()` must record success/failure to the circuit breaker, not just check if it's open:
+
+```go
+func (rp *ResilientProvider) Stream(...) (<-chan StreamChunk, error) {
+    // Check circuit
+    // Wrap returned channel to observe outcome
+    // Record success/failure when stream completes
+}
+```
+
+#### 2.3 Buffer.Bytes() Must Return a Copy
+
+Never return a slice pointing to internal mutable memory:
+
+```go
+// ✅ Correct: returns independent copy
+func (b *Buffer) Bytes() []byte {
+    b.mu.RLock()
+    defer b.mu.RUnlock()
+    out := make([]byte, b.writePos-b.readPos)
+    copy(out, b.data[b.readPos:b.writePos])
+    return out
+}
+
+// ❌ Wrong: caller reads stale memory after concurrent Write()
+func (b *Buffer) Bytes() []byte {
+    b.mu.RLock()
+    defer b.mu.RUnlock()
+    return b.data[b.readPos:b.writePos]
+}
+```
+
+#### 2.4 RingBuffer is SPSC-Only
+
+The lock-free `RingBuffer` uses atomic load/store without CAS. It is only safe for **single-producer, single-consumer** (SPSC) scenarios. Document this constraint clearly. For MPMC, use a mutex-protected buffer or channel instead.
+| generic | no preset (blank slate) |
+
+## §57 Gemini Provider — Native API Protocol Compliance (P0 — Correctness)
+
+### 1. Scope / Trigger
+
+- Adding or modifying Gemini provider (`llm/providers/gemini/`)
+- Implementing streaming for Gemini API
+- Mapping OpenAI-style parameters to Gemini-native format
+- Adding new Gemini features (thinking, safety settings, tool config)
+
+### 2. Signatures
+
+```go
+// llm/providers/gemini/provider.go
+
+// Stream endpoint MUST include ?alt=sse
+func (p *GeminiProvider) streamEndpoint(model string) string {
+    return fmt.Sprintf("%s/v1beta/models/%s:streamGenerateContent?alt=sse", base, model)
+}
+
+// FinishReason normalization — Gemini uses UPPER_CASE, project uses lowercase
+func normalizeFinishReason(reason string) string // STOP→stop, MAX_TOKENS→length, SAFETY→content_filter
+
+// ToolChoice mapping — OpenAI string/object → Gemini ToolConfig
+func convertToolChoice(toolChoice any) *geminiToolConfig
+
+// Generation config builder — centralizes Completion/Stream config construction
+func buildGenerationConfig(req *llm.ChatRequest) *geminiGenerationConfig
+```
+
+### 3. Contract — Gemini SSE Stream Format
+
+Gemini `streamGenerateContent` has two response modes:
+
+| URL Parameter | Response Format | Parser Required |
+|---------------|----------------|-----------------|
+| (none) | JSON array `[{...}, {...}]` | `json.Decoder` on array |
+| `?alt=sse` | SSE `data: {...}\n\n` | Line reader + `data:` prefix strip |
+
+**Project uses `?alt=sse`**. Each SSE event is:
+```
+data: {"candidates":[...],"usageMetadata":{...}}\n
+\n
+```
+
+### 4. Contract — FinishReason Mapping
+
+| Gemini (raw) | Normalized (project) | Meaning |
+|-------------|---------------------|---------|
+| `STOP` | `stop` | Normal completion |
+| `MAX_TOKENS` | `length` | Token limit reached |
+| `SAFETY` | `content_filter` | Safety filter blocked |
+| `RECITATION` | `content_filter` | Citation filter blocked |
+| `BLOCKLIST` | `content_filter` | Blocklist match |
+| `LANGUAGE` | `content_filter` | Unsupported language |
+
+### 5. Contract — ToolChoice Mapping
+
+| OpenAI ToolChoice | Gemini FunctionCallingConfig |
+|-------------------|------------------------------|
+| `"auto"` | `{mode: "AUTO"}` |
+| `"required"` or `"any"` | `{mode: "ANY"}` |
+| `"none"` | `{mode: "NONE"}` |
+| `{"type":"function","function":{"name":"X"}}` | `{mode: "ANY", allowedFunctionNames: ["X"]}` |
+
+### 6. Contract — Thinking/Reasoning
+
+```go
+// Request: ReasoningMode → thinkingConfig
+geminiGenerationConfig{
+    ThinkingConfig: &geminiThinkingConfig{
+        ThinkingLevel:   "low|medium|high",  // maps from req.ReasoningMode
+        IncludeThoughts: true,
+    },
+}
+
+// Response: thought parts → ReasoningContent
+// geminiPart with Thought=true → Message.ReasoningContent
+// geminiPart with Thought=nil/false → Message.Content
+```
+
+### 7. Contract — Safety Filter Handling
+
+```go
+// promptFeedback.blockReason non-empty → return ErrContentFiltered
+// Do NOT return empty choices — return a meaningful error
+checkPromptFeedback(resp, providerName) // returns *llm.Error or nil
+```
+
+### 8. Good / Bad
+
+```go
+// BAD — Stream without ?alt=sse (returns JSON array, not SSE)
+endpoint := fmt.Sprintf("%s/v1beta/models/%s:streamGenerateContent", base, model)
+
+// GOOD — Always include ?alt=sse for SSE streaming
+endpoint := fmt.Sprintf("%s/v1beta/models/%s:streamGenerateContent?alt=sse", base, model)
+```
+
+```go
+// BAD — Raw Gemini FinishReason leaks to upper layers
+choices = append(choices, llm.ChatChoice{FinishReason: candidate.FinishReason}) // "STOP"
+
+// GOOD — Normalized to project convention
+choices = append(choices, llm.ChatChoice{FinishReason: normalizeFinishReason(candidate.FinishReason)}) // "stop"
+```
+
+```go
+// BAD — Ignoring promptFeedback, returning empty choices
+return toGeminiChatResponse(geminiResp, p.Name(), model), nil
+
+// GOOD — Check promptFeedback before converting
+if err := checkPromptFeedback(geminiResp, p.Name()); err != nil {
+    return nil, err
+}
+return toGeminiChatResponse(geminiResp, p.Name(), model), nil
+```
+
+```go
+// BAD — Duplicate generation config logic in Completion and Stream
+if req.Temperature > 0 || req.TopP > 0 || ... { body.GenerationConfig = &geminiGenerationConfig{...} }
+
+// GOOD — Centralized builder
+body.GenerationConfig = buildGenerationConfig(req) // returns nil if all zero-value
+```
+
+### 9. Required Tests
+
+- `TestNormalizeFinishReason` — all Gemini finish reasons map correctly
+- `TestConvertToolChoice` — nil, "auto", "required", "none", OpenAI-style object
+- `TestCheckPromptFeedback_Blocked` — returns `ErrContentFiltered`
+- `TestGeminiProvider_Stream` — mock returns SSE format (`data: {json}\n\n`)
+- `TestGeminiProvider_Completion_WithThinking` — thought parts → ReasoningContent
+- `TestGeminiProvider_Completion_PromptBlocked` — promptFeedback → error
+- `TestBuildGenerationConfig_WithThinking` — ReasoningMode → thinkingConfig
+- `TestConvertSafetySettings` — config → request format conversion
+
+### 10. Default Model
+
+Default fallback model: `gemini-2.5-flash` (GA, stable). Preview models (`gemini-3-pro-preview`, `gemini-3-flash-preview`) should be explicitly specified by the user.
+
+> **历史教训**：2026-02-25 审计发现 Gemini provider 的 Stream 功能完全不可用——`streamEndpoint` 缺少 `?alt=sse` 参数，且 SSE 解析逻辑按逐行 JSON 对象处理而非 `data:` 前缀格式。测试通过是因为 mock server 使用了非真实的格式。同时发现 FinishReason 未标准化（`STOP` vs `stop`）、ToolChoice 被忽略、Thinking 未支持、promptFeedback 未处理等 11 个问题。
+
+## §58 OpenAI-Compatible Provider — Shared Field Completeness (P1 — Correctness)
+
+### 1. Scope / Trigger
+
+- Adding new fields to `OpenAICompatRequest` / `OpenAICompatResponse` / `OpenAICompatMessage`
+- Adding a new OpenAI-compatible provider (Doubao, Qwen, DeepSeek, etc.)
+- Reviewing provider implementation against official SDK
+- Modifying `ConvertToolsToOpenAI`, `ConvertMessagesToOpenAI`, `ToLLMChatResponse`
+
+### 2. Signatures
+
+```go
+// llm/providers/common.go — Shared types used by ALL OpenAI-compatible providers
+
+type OpenAICompatRequest struct {
+    // Core fields (always sent)
+    Model, Messages, Stream
+    // Sampling parameters (pointer types for zero-value distinction)
+    Temperature, TopP, MaxTokens, Stop
+    FrequencyPenalty, PresencePenalty, RepetitionPenalty *float32
+    N *int, LogProbs *bool, TopLogProbs *int
+    // Tool calling
+    Tools, ToolChoice, ParallelToolCalls *bool
+    // Response format
+    ResponseFormat any
+    // Streaming
+    StreamOptions *StreamOptions
+    // Reasoning/Thinking (provider-specific via RequestHook)
+    Thinking *Thinking, MaxCompletionTokens *int, ReasoningEffort *string
+    // Metadata
+    ServiceTier *string, User string
+}
+
+type OpenAICompatMessage struct {
+    Role, Content string
+    ReasoningContent *string  // thinking/reasoning output
+    MultiContent []map[string]any  // multimodal (image_url, video_url)
+    ToolCalls []OpenAICompatToolCall
+    ToolCallID string
+}
+
+type OpenAICompatFunction struct {
+    Name        string          // used in both tool definition and tool call
+    Description string          // tool definition only
+    Parameters  json.RawMessage // tool definition only
+    Arguments   json.RawMessage // tool call only
+}
+```
+
+### 3. Contract — Field Propagation Chain
+
+Every field must flow through 4 layers:
+
+```
+llm.ChatRequest → OpenAICompatRequest → HTTP JSON body → OpenAICompatResponse → llm.ChatResponse
+     (1)                (2)                  (3)                 (4)                  (5)
+```
+
+| Layer | File | Responsibility |
+|-------|------|----------------|
+| (1) `llm.ChatRequest` | `llm/provider.go` | Interface-level field definition |
+| (2) Body construction | `openaicompat/provider.go` Completion/Stream | Copy fields from req to body |
+| (3) JSON serialization | `common.go` struct tags | `omitempty` for optional fields |
+| (4) Response parsing | `common.go` `ToLLMChatResponse` | Map response fields back |
+| (5) `llm.ChatResponse` | `llm/provider.go` | Interface-level response |
+
+**Critical**: If you add a field to layer (1), you MUST also update layers (2), (3), (4), (5).
+
+### 4. Validation & Error Matrix
+
+| Condition | Error |
+|-----------|-------|
+| Tool definition missing `Description` | Silent data loss — LLM cannot understand tool purpose |
+| `ReasoningContent` not propagated in stream | Thinking output silently dropped |
+| `StreamOptions.IncludeUsage` set but stream parser ignores `usage` | Token counting broken for streaming |
+| Pointer field (`*float32`) serialized as `0` instead of omitted | API may reject or behave differently |
+
+### 5. Good / Base / Bad
+
+```go
+// BAD — Tool description lost (pre-fix bug)
+func ConvertToolsToOpenAI(tools []llm.ToolSchema) []OpenAICompatTool {
+    out = append(out, OpenAICompatTool{
+        Type: "function",
+        Function: OpenAICompatFunction{
+            Name:      t.Name,
+            Arguments: t.Parameters, // WRONG: Parameters mapped to Arguments
+        },
+    })
+}
+
+// GOOD — Description and Parameters correctly mapped
+func ConvertToolsToOpenAI(tools []llm.ToolSchema) []OpenAICompatTool {
+    out = append(out, OpenAICompatTool{
+        Type: "function",
+        Function: OpenAICompatFunction{
+            Name:        t.Name,
+            Description: t.Description,
+            Parameters:  t.Parameters,
+        },
+    })
+}
+```
+
+```go
+// BAD — New sampling params not forwarded to body
+body := providers.OpenAICompatRequest{
+    Model: model, Messages: msgs, MaxTokens: req.MaxTokens,
+    Temperature: req.Temperature, TopP: req.TopP,
+    // FrequencyPenalty, PresencePenalty etc. silently dropped!
+}
+
+// GOOD — All sampling params forwarded
+body := providers.OpenAICompatRequest{
+    Model: model, Messages: msgs, MaxTokens: req.MaxTokens,
+    Temperature: req.Temperature, TopP: req.TopP,
+    FrequencyPenalty: req.FrequencyPenalty, PresencePenalty: req.PresencePenalty,
+    RepetitionPenalty: req.RepetitionPenalty, N: req.N,
+    LogProbs: req.LogProbs, TopLogProbs: req.TopLogProbs,
+}
+```
+
+```go
+// BAD — ReasoningContent ignored in ToLLMChatResponse
+msg := llm.Message{Role: llm.RoleAssistant, Content: c.Message.Content}
+
+// GOOD — ReasoningContent propagated
+msg := llm.Message{
+    Role: llm.RoleAssistant, Content: c.Message.Content,
+    ReasoningContent: c.Message.ReasoningContent,
+}
+```
+
+### 6. Required Tests
+
+- `TestConvertToolsToOpenAI` — verify `Description` and `Parameters` are set (not `Arguments`)
+- `TestToLLMChatResponse` — verify `ReasoningContent` propagated from response
+- `TestConvertMessagesToOpenAI` — verify `ReasoningContent` propagated to request
+- `TestConvertMessagesToOpenAI_Videos` — verify `video_url` content parts with optional `fps`
+- `TestStreamSSE_Usage` — verify `stream_options.include_usage` produces `Usage` in chunks
+- `TestStreamSSE_ReasoningContent` — verify `reasoning_content` in delta
+
+### 7. Wrong vs Right — Optional Field Types
+
+```go
+// WRONG — zero value sent as 0, API may interpret as "set to 0"
+type OpenAICompatRequest struct {
+    FrequencyPenalty float32 `json:"frequency_penalty,omitempty"` // 0.0 is omitted but ambiguous
+}
+
+// RIGHT — pointer type, nil = not set, *0.0 = explicitly set to 0
+type OpenAICompatRequest struct {
+    FrequencyPenalty *float32 `json:"frequency_penalty,omitempty"` // nil omitted, &0.0 sent
+}
+```
+
+> **历史教训**：2026-02-25 对照 volcengine-go-sdk 审计发现 17 个缺失字段。最严重的是 `ConvertToolsToOpenAI` 把 `Parameters` 映射到了 `Arguments` 字段，导致工具定义的 description 和 parameters schema 完全丢失，LLM 无法理解工具用途。
+
+## §59 Doubao Provider — Volcengine Ark API Compliance (P1 — Correctness)
+
+### 1. Scope / Trigger
+
+- Adding or modifying Doubao provider (`llm/providers/doubao/`)
+- Implementing Doubao-specific features (Context Cache, AK/SK auth, Thinking)
+- Reviewing against volcengine-go-sdk or Volcengine API docs
+
+### 2. Signatures
+
+```go
+// llm/providers/doubao/provider.go
+func NewDoubaoProvider(cfg providers.DoubaoConfig, logger *zap.Logger) *DoubaoProvider
+func doubaoRequestHook(req *llm.ChatRequest, body *providers.OpenAICompatRequest)
+
+// llm/providers/doubao/context_cache.go
+func (p *DoubaoProvider) CreateContextCache(ctx, model, messages, mode, ttl) (*ContextCacheResponse, error)
+func (p *DoubaoProvider) CompletionWithContext(ctx, contextID, req) (*llm.ChatResponse, error)
+
+// llm/providers/doubao/signer.go
+func newVolcSigner(ak, sk, region string) *volcSigner
+func (s *volcSigner) sign(req *http.Request, bodyHash string)
+
+// llm/providers/config.go
+type DoubaoConfig struct {
+    BaseProviderConfig
+    AccessKey string  // Volcengine IAM Access Key
+    SecretKey string  // Volcengine IAM Secret Key
+    Region    string  // defaults to "cn-beijing"
+}
+```
+
+### 3. Contract — API Endpoints
+
+| Feature | Endpoint | Method |
+|---------|----------|--------|
+| Chat Completion | `/api/v3/chat/completions` | POST |
+| Image Generation | `/api/v3/images/generations` | POST |
+| Embeddings | `/api/v3/embeddings` | POST |
+| Audio Speech | `/api/v3/audio/speech` | POST |
+| Context Cache Create | `/api/v3/context/create` | POST |
+| Context Cache Chat | `/api/v3/context/chat/completions` | POST |
+| Models List | `/api/v3/models` | GET |
+
+Base URL: `https://ark.cn-beijing.volces.com`
+
+### 4. Contract — Authentication
+
+| Method | Config Fields | Header |
+|--------|--------------|--------|
+| API Key (default) | `APIKey` | `Authorization: Bearer <key>` |
+| AK/SK (IAM) | `AccessKey` + `SecretKey` | `Authorization: HMAC-SHA256 Credential=<ak>/...` |
+
+AK/SK signing flow: canonical request → string-to-sign → 4-level HMAC key derivation (secret → date → region → service → "request") → signature.
+
+When `AccessKey` and `SecretKey` are both set, AK/SK takes precedence over API Key.
+
+### 5. Contract — Thinking/Reasoning Mode
+
+```go
+// Request: ReasoningMode → Thinking field (via RequestHook)
+// "thinking" or "enabled" → Thinking{Type: "enabled"}
+// "disabled"              → Thinking{Type: "disabled"}
+// "auto"                  → Thinking{Type: "auto"}
+
+// Response: reasoning_content field on message/delta
+// Non-streaming: Message.ReasoningContent *string
+// Streaming: Delta.ReasoningContent *string
+```
+
+### 6. Good / Bad
+
+```go
+// BAD — Context Cache uses resolveAPIKey (unexported on embedded provider)
+func (p *DoubaoProvider) CreateContextCache(...) {
+    apiKey := p.resolveAPIKey(ctx) // COMPILE ERROR: unexported method
+}
+
+// GOOD — Use Cfg.APIKey directly for Doubao-specific endpoints
+func (p *DoubaoProvider) CreateContextCache(...) {
+    apiKey := p.Cfg.APIKey
+}
+```
+
+```go
+// BAD — AK/SK signer doesn't reset request body after reading
+buildHeaders = func(req *http.Request, _ string) {
+    bodyBytes, _ := io.ReadAll(req.Body) // body consumed!
+    bodyHash = hashSHA256(string(bodyBytes))
+    signer.sign(req, bodyHash)
+    // req.Body is now empty — HTTP client sends empty body
+}
+
+// GOOD — Reset body after reading
+buildHeaders = func(req *http.Request, _ string) {
+    bodyBytes, _ := io.ReadAll(req.Body)
+    bodyHash = hashSHA256(string(bodyBytes))
+    req.Body = io.NopCloser(bytes.NewReader(bodyBytes)) // reset!
+    signer.sign(req, bodyHash)
+}
+```
+
+### 7. Required Tests
+
+- `TestDoubaoProvider_Completion` — basic chat via httptest
+- `TestDoubaoProvider_Stream` — SSE streaming via httptest
+- `TestDoubaoProvider_GenerateImage` — `/api/v3/images/generations` endpoint
+- `TestDoubaoProvider_CreateContextCache` — context create + response parsing
+- `TestDoubaoProvider_CompletionWithContext` — context chat with `context_id`
+- `TestVolcSigner_Sign` — HMAC-SHA256 signature format validation
+- `TestHashSHA256` — empty string produces known hash
+
+### 8. Design Decision: RequestHook for Provider-Specific Fields
+
+**Background**: Doubao needs `thinking` field in request body, but `OpenAICompatRequest` is shared across 10+ providers.
+
+**Options considered**:
+1. Add `Thinking` directly to `OpenAICompatRequest` — simple but pollutes shared struct
+2. Use `Extra map[string]any` with custom MarshalJSON — flexible but complex
+3. Use `RequestHook` to set fields on the shared struct — clean separation
+
+**Decision**: Option 1+3 hybrid. Added `Thinking`, `MaxCompletionTokens`, `ReasoningEffort` to `OpenAICompatRequest` (they're `omitempty`, harmless to other providers), and use `RequestHook` to map `ReasoningMode` → `Thinking`. This pattern is already used by DeepSeek for model selection.
+
+> **历史教训**：2026-02-25 对照 volcengine-go-sdk 审计发现 Doubao provider 缺失 17 个功能点。最关键的是 `ConvertToolsToOpenAI` 丢失 tool description（影响所有 OpenAI 兼容 provider），以及完全缺失 `reasoning_content` 支持（影响推理模型输出）。Context Cache 和 AK/SK 认证是豆包特色功能，需要独立端点和签名逻辑。

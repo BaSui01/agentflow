@@ -316,17 +316,20 @@ func (d *InjectionDetector) Validate(ctx context.Context, content string) (*Vali
 func (d *InjectionDetector) Detect(content string) []InjectionMatch {
 	var matches []InjectionMatch
 
+	// 规范化输入：移除零宽字符和不可见 Unicode 控制字符
+	normalized := normalizeForDetection(content)
+
 	// 如果启用分隔符隔离，检查是否有分隔符逃逸
 	if d.useDelimiters {
-		delimiterMatches := d.detectDelimiterEscape(content)
+		delimiterMatches := d.detectDelimiterEscape(normalized)
 		matches = append(matches, delimiterMatches...)
 	}
 
 	// 检测所有注入模式
 	for _, pattern := range d.patterns {
-		locs := pattern.Pattern.FindAllStringIndex(content, -1)
+		locs := pattern.Pattern.FindAllStringIndex(normalized, -1)
 		for _, loc := range locs {
-			matchedText := content[loc[0]:loc[1]]
+			matchedText := normalized[loc[0]:loc[1]]
 			matches = append(matches, InjectionMatch{
 				Pattern:     pattern.Pattern.String(),
 				Description: pattern.Description,
@@ -339,6 +342,27 @@ func (d *InjectionDetector) Detect(content string) []InjectionMatch {
 	}
 
 	return matches
+}
+
+// normalizeForDetection 规范化输入文本用于注入检测。
+// 移除零宽字符、不可见 Unicode 控制字符，并将全角 ASCII 转为半角。
+func normalizeForDetection(s string) string {
+	var b strings.Builder
+	b.Grow(len(s))
+	for _, r := range s {
+		// 跳过零宽和不可见控制字符
+		switch r {
+		case '\u200B', '\u200C', '\u200D', '\uFEFF', '\u00AD', '\u200E', '\u200F',
+			'\u2060', '\u2061', '\u2062', '\u2063', '\u2064':
+			continue
+		}
+		// 全角 ASCII (U+FF01 ~ U+FF5E) 转半角 (U+0021 ~ U+007E)
+		if r >= 0xFF01 && r <= 0xFF5E {
+			r = r - 0xFF01 + 0x0021
+		}
+		b.WriteRune(r)
+	}
+	return b.String()
 }
 
 // detectDelimiterEscape 检测分隔符逃逸尝试

@@ -51,6 +51,7 @@ type SimpleEventBus struct {
 	handlers     map[EventType]map[string]EventHandler
 	eventChannel chan Event
 	done         chan struct{}
+	loopDone     chan struct{} // closed when processEvents goroutine exits
 	stopOnce     sync.Once
 	handlerWg    sync.WaitGroup // 跟踪正在运行的 handler goroutine，Stop() 时等待完成
 	logger       *zap.Logger
@@ -68,6 +69,7 @@ func NewEventBus(logger ...*zap.Logger) EventBus {
 		handlers:     make(map[EventType]map[string]EventHandler),
 		eventChannel: make(chan Event, 100),
 		done:         make(chan struct{}),
+		loopDone:     make(chan struct{}),
 		logger:       l,
 	}
 	go bus.processEvents()
@@ -116,6 +118,7 @@ func (b *SimpleEventBus) Unsubscribe(subscriptionID string) {
 
 // processEvents 处理事件
 func (b *SimpleEventBus) processEvents() {
+	defer close(b.loopDone)
 	for {
 		select {
 		case event := <-b.eventChannel:
@@ -127,9 +130,12 @@ func (b *SimpleEventBus) processEvents() {
 			}
 			b.mu.RUnlock()
 
+			// Add to WaitGroup before checking done, so Stop() waits for
+			// all handlers. We add the full count upfront to avoid a race
+			// between individual Add(1) calls and Stop()'s Wait().
+			b.handlerWg.Add(len(handlers))
 			for _, handler := range handlers {
 				h := handler // capture loop variable
-				b.handlerWg.Add(1)
 				go func() {
 					defer b.handlerWg.Done()
 					defer func() {
@@ -169,7 +175,9 @@ func (b *SimpleEventBus) Stop() {
 	b.stopOnce.Do(func() {
 		close(b.done)
 	})
-	// 等待所有正在运行的 handler goroutine 完成，防止 goroutine 泄漏
+	// 先等 processEvents goroutine 退出，确保不再有新的 handlerWg.Add 调用
+	<-b.loopDone
+	// 再等待所有正在运行的 handler goroutine 完成，防止 goroutine 泄漏
 	b.handlerWg.Wait()
 }
 

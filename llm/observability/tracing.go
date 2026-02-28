@@ -205,6 +205,9 @@ func (t *Tracer) EndTrace(ctx context.Context, traceID string, output any, err e
 	}
 	tr.EndTime = time.Now()
 	tr.Duration = tr.EndTime.Sub(tr.StartTime)
+	if tr.Duration <= 0 {
+		tr.Duration = time.Nanosecond
+	}
 	tr.Output = output
 	if err != nil {
 		tr.Error = err.Error()

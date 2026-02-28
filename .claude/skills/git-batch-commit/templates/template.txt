@@ -1,0 +1,5 @@
+This is a template file for git-batch-commit.
+
+You can use this as a starting point for generating code, configurations, or documentation.
+
+Variables can be referenced like: {{variable_name}}

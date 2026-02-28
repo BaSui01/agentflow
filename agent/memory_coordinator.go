@@ -51,7 +51,7 @@ func (mc *MemoryCoordinator) LoadRecent(ctx context.Context, kind MemoryKind, li
 	return nil
 }
 
-// 保存内存记录 。
+// 保存内存记录并同步更新本地缓存 。
 func (mc *MemoryCoordinator) Save(ctx context.Context, content string, kind MemoryKind, metadata map[string]any) error {
 	if mc.memory == nil {
 		return nil
@@ -70,6 +70,14 @@ func (mc *MemoryCoordinator) Save(ctx context.Context, content string, kind Memo
 		return err
 	}
 
+	// Write-through: keep the in-process cache consistent.
+	mc.recentMemoryMu.Lock()
+	mc.recentMemory = append(mc.recentMemory, rec)
+	if len(mc.recentMemory) > defaultMaxRecentMemory {
+		mc.recentMemory = mc.recentMemory[len(mc.recentMemory)-defaultMaxRecentMemory:]
+	}
+	mc.recentMemoryMu.Unlock()
+
 	mc.logger.Debug("saved memory",
 		zap.String("kind", string(kind)),
 		zap.Int("content_length", len(content)))
@@ -80,7 +88,7 @@ func (mc *MemoryCoordinator) Save(ctx context.Context, content string, kind Memo
 // 搜索匹配查询的记忆 。
 func (mc *MemoryCoordinator) Search(ctx context.Context, query string, topK int) ([]MemoryRecord, error) {
 	if mc.memory == nil {
-		return nil, nil
+		return []MemoryRecord{}, nil
 	}
 	return mc.memory.Search(ctx, mc.agentID, query, topK)
 }
@@ -141,7 +149,7 @@ func (mc *MemoryCoordinator) SaveConversation(ctx context.Context, input, output
 // RecallRelvant 回顾与查询相关的记忆.
 func (mc *MemoryCoordinator) RecallRelevant(ctx context.Context, query string, topK int) ([]MemoryRecord, error) {
 	if mc.memory == nil {
-		return nil, nil
+		return []MemoryRecord{}, nil
 	}
 
 	records, err := mc.memory.Search(ctx, mc.agentID, query, topK)

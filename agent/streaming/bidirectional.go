@@ -207,13 +207,7 @@ func (s *BidirectionalStream) Send(chunk StreamChunk) error {
 		chunk.Timestamp = time.Now()
 	}
 
-	// BUG-2 FIX: 使用 select + done channel 模式，防止向已关闭的 channel 发送导致 panic
-	select {
-	case <-s.done:
-		return fmt.Errorf("stream closed")
-	default:
-	}
-
+	// N5 FIX: 合并为单个 select，同时检查 done 和 outbound，消除冗余的 TOCTOU 双 select 窗口
 	select {
 	case <-s.done:
 		return fmt.Errorf("stream closed")
@@ -645,19 +639,32 @@ func (a *AudioStreamAdapter) ReceiveAudio() <-chan []byte {
 	out := make(chan []byte, 100)
 	go func() {
 		defer close(out)
-		for chunk := range a.stream.Receive() {
-			if chunk.Type != StreamTypeAudio {
-				continue
-			}
-			data := chunk.Data
-			if a.decoder != nil {
-				var err error
-				data, err = a.decoder.Decode(chunk.Data)
-				if err != nil {
+		for {
+			// N6 FIX: 添加 done channel 检查，避免 stream 关闭后 goroutine 在 out 发送处无限阻塞
+			select {
+			case <-a.stream.done:
+				return
+			case chunk, ok := <-a.stream.Receive():
+				if !ok {
+					return
+				}
+				if chunk.Type != StreamTypeAudio {
 					continue
 				}
+				data := chunk.Data
+				if a.decoder != nil {
+					var err error
+					data, err = a.decoder.Decode(chunk.Data)
+					if err != nil {
+						continue
+					}
+				}
+				select {
+				case out <- data:
+				case <-a.stream.done:
+					return
+				}
 			}
-			out <- data
 		}
 	}()
 	return out
@@ -687,9 +694,22 @@ func (t *TextStreamAdapter) ReceiveText() <-chan string {
 	out := make(chan string, 100)
 	go func() {
 		defer close(out)
-		for chunk := range t.stream.Receive() {
-			if chunk.Type == StreamTypeText && chunk.Text != "" {
-				out <- chunk.Text
+		for {
+			// N6 FIX: 添加 done channel 检查，避免 stream 关闭后 goroutine 在 out 发送处无限阻塞
+			select {
+			case <-t.stream.done:
+				return
+			case chunk, ok := <-t.stream.Receive():
+				if !ok {
+					return
+				}
+				if chunk.Type == StreamTypeText && chunk.Text != "" {
+					select {
+					case out <- chunk.Text:
+					case <-t.stream.done:
+						return
+					}
+				}
 			}
 		}
 	}()

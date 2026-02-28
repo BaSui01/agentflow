@@ -98,7 +98,7 @@ type DefaultAuditLogger struct {
 	wg           sync.WaitGroup
 	logger       *zap.Logger
 	closed       bool
-	closeMu      sync.Mutex
+	closeMu      sync.RWMutex
 	idGenerator  func() string
 }
 
@@ -192,13 +192,13 @@ func (al *DefaultAuditLogger) Log(ctx context.Context, entry *AuditEntry) error 
 
 // LogAsync 异步记录审计条目.
 func (al *DefaultAuditLogger) LogAsync(entry *AuditEntry) {
-	al.closeMu.Lock()
+	al.closeMu.RLock()
+	defer al.closeMu.RUnlock()
+
 	if al.closed {
-		al.closeMu.Unlock()
 		al.logger.Warn("audit logger is closed, dropping entry")
 		return
 	}
-	al.closeMu.Unlock()
 
 	if entry.ID == "" {
 		entry.ID = al.idGenerator()

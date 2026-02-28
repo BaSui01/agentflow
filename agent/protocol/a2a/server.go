@@ -133,11 +133,10 @@ func (s *HTTPServer) SetTaskStore(store persistence.TaskStore) {
 
 // RecoverTasks在服务重启后从持续存储中恢复任务.
 func (s *HTTPServer) RecoverTasks(ctx context.Context) error {
+	s.logger.Info("recovering tasks from persistent storage")
 	if s.taskStore == nil {
 		return nil
 	}
-
-	s.logger.Info("recovering tasks from persistent storage")
 
 	tasks, err := s.taskStore.GetRecoverableTasks(ctx)
 	if err != nil {
@@ -573,7 +572,7 @@ func (s *HTTPServer) handleAsyncMessage(w http.ResponseWriter, r *http.Request) 
 		cancel:    cancel,
 	}
 
-	// 配置存储时坚持任务
+	// 持久化任务
 	if s.taskStore != nil {
 		persistTask := s.convertToPersistTask(task)
 		if err := s.taskStore.SaveTask(r.Context(), persistTask); err != nil {
@@ -926,7 +925,7 @@ func (s *HTTPServer) StartCleanupLoop(ctx context.Context, interval time.Duratio
 // TaskStats 返回关于任务存储的统计数据 。
 func (s *HTTPServer) TaskStats(ctx context.Context) (*persistence.TaskStoreStats, error) {
 	if s.taskStore == nil {
-		return nil, fmt.Errorf("no task store configured")
+		return nil, fmt.Errorf("task store not configured")
 	}
 	return s.taskStore.Stats(ctx)
 }

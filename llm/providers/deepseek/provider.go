@@ -23,6 +23,7 @@ func NewDeepSeekProvider(cfg providers.DeepSeekConfig, logger *zap.Logger) *Deep
 		Provider: openaicompat.New(openaicompat.Config{
 			ProviderName:  "deepseek",
 			APIKey:        cfg.APIKey,
+			APIKeys:       cfg.APIKeys,
 			BaseURL:       cfg.BaseURL,
 			DefaultModel:  cfg.Model,
 			FallbackModel: "deepseek-chat",
@@ -35,10 +36,15 @@ func NewDeepSeekProvider(cfg providers.DeepSeekConfig, logger *zap.Logger) *Deep
 
 // deepseekRequestHook handles DeepSeek-specific request modifications.
 // Automatically selects deepseek-reasoner model for thinking/extended reasoning modes.
+// When using reasoner, strips unsupported parameters (temperature, top_p).
 func deepseekRequestHook(req *llm.ChatRequest, body *providers.OpenAICompatRequest) {
 	if req.ReasoningMode == "thinking" || req.ReasoningMode == "extended" {
 		if req.Model == "" {
 			body.Model = "deepseek-reasoner"
 		}
+		// DeepSeek reasoner does not support temperature/top_p parameters;
+		// zero values cause JSON omitempty to omit them from the request body.
+		body.Temperature = 0
+		body.TopP = 0
 	}
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"os"
 
 	"github.com/BaSui01/agentflow/agent"
 	"github.com/BaSui01/agentflow/llm"
@@ -26,10 +27,16 @@ func main() {
 	logger, _ := zap.NewDevelopment()
 	defer logger.Sync()
 
-	// 2. 配置 Provider
+	// 2. 从环境变量读取 API Key
+	apiKey := os.Getenv("OPENAI_API_KEY")
+	if apiKey == "" {
+		log.Fatal("请设置环境变量 OPENAI_API_KEY，例如: export OPENAI_API_KEY=sk-xxx")
+	}
+
+	// 3. 配置 Provider
 	cfg := providers.OpenAIConfig{
 		BaseProviderConfig: providers.BaseProviderConfig{
-			APIKey:  "your-api-key-here",
+			APIKey:  apiKey,
 			BaseURL: "https://api.openai.com/v1",
 		},
 	}

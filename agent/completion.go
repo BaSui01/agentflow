@@ -137,6 +137,14 @@ func (b *BaseAgent) ChatCompletion(ctx context.Context, messages []llm.Message) 
 							},
 						})
 					}
+				case llmtools.ReActEventToolProgress:
+					emit(RuntimeStreamEvent{
+						Type:       RuntimeStreamToolProgress,
+						Timestamp:  time.Now(),
+						ToolCallID: ev.ToolCallID,
+						ToolName:   ev.ToolName,
+						Data:       ev.ProgressData,
+					})
 				case llmtools.ReActEventCompleted:
 					final = ev.FinalResponse
 				case llmtools.ReActEventError:

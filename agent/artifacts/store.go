@@ -23,7 +23,7 @@ type FileStore struct {
 
 // NewFileStore创建了一个新的基于文件的文物商店.
 func NewFileStore(basePath string) (*FileStore, error) {
-	if err := os.MkdirAll(basePath, 0755); err != nil {
+	if err := os.MkdirAll(basePath, 0o755); err != nil {
 		return nil, fmt.Errorf("failed to create base path: %w", err)
 	}
 
@@ -56,14 +56,14 @@ func (s *FileStore) Save(ctx context.Context, artifact *Artifact, data io.Reader
 	artifact.Size = size
 
 	// 创建存储路径
-	artifactDir := filepath.Join(s.basePath, artifact.ID)
-	if err := os.MkdirAll(artifactDir, 0755); err != nil {
+	artifactDir := filepath.Join(s.basePath, safeArtifactDirName(artifact.ID))
+	if err := os.MkdirAll(artifactDir, 0o755); err != nil {
 		return fmt.Errorf("failed to create artifact dir: %w", err)
 	}
 
 	// 写入数据文件
 	dataPath := filepath.Join(artifactDir, "data")
-	if err := os.WriteFile(dataPath, dataBytes, 0644); err != nil {
+	if err := os.WriteFile(dataPath, dataBytes, 0o600); err != nil {
 		return fmt.Errorf("failed to write data: %w", err)
 	}
 	artifact.StoragePath = dataPath
@@ -74,12 +74,17 @@ func (s *FileStore) Save(ctx context.Context, artifact *Artifact, data io.Reader
 	if err != nil {
 		return fmt.Errorf("failed to marshal metadata: %w", err)
 	}
-	if err := os.WriteFile(metaPath, metaData, 0644); err != nil {
+	if err := os.WriteFile(metaPath, metaData, 0o600); err != nil {
 		return fmt.Errorf("failed to write metadata: %w", err)
 	}
 
 	s.index[artifact.ID] = artifact
 	return s.saveIndex()
+}
+
+func safeArtifactDirName(id string) string {
+	sum := sha256.Sum256([]byte(id))
+	return hex.EncodeToString(sum[:16])
 }
 
 func (s *FileStore) Load(ctx context.Context, artifactID string) (*Artifact, io.ReadCloser, error) {
@@ -204,5 +209,5 @@ func (s *FileStore) saveIndex() error {
 	if err != nil {
 		return fmt.Errorf("failed to marshal index: %w", err)
 	}
-	return os.WriteFile(indexPath, data, 0644)
+	return os.WriteFile(indexPath, data, 0o600)
 }

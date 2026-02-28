@@ -10,7 +10,7 @@ import (
 	"net/http"
 	"sync"
 
-	"github.com/BaSui01/agentflow/internal/tlsutil"
+	"github.com/BaSui01/agentflow/pkg/tlsutil"
 	"go.uber.org/zap"
 )
 
@@ -152,6 +152,7 @@ func (t *SSETransport) Connect(ctx context.Context) error {
 // readSSEEvents 后台读取 SSE 事件
 func (t *SSETransport) readSSEEvents(ctx context.Context, body io.ReadCloser) {
 	defer body.Close()
+	defer close(t.eventChan)
 	scanner := bufio.NewScanner(body)
 
 	var dataBuffer string

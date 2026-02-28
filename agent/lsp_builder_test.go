@@ -9,7 +9,7 @@ import (
 
 func TestAgentBuilder_WithDefaultLSPServer(t *testing.T) {
 	logger := zap.NewNop()
-	provider := &MockProvider{}
+	provider := &testProvider{name: "test-model"}
 
 	cfg := Config{
 		ID:    "lsp-builder-test",

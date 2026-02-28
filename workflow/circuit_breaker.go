@@ -41,7 +41,7 @@ type CircuitBreakerConfig struct {
 	// FailureThreshold 连续失败次数阈值，达到后触发熔断
 	FailureThreshold int `json:"failure_threshold"`
 	// RecoveryTimeout 熔断后等待恢复的时间
-	RecoveryTimeout time.Duration `json:"recovery_timeout"`
+	RecoveryTimeout Duration `json:"recovery_timeout"`
 	// HalfOpenMaxProbes 半开状态允许的探测请求数
 	HalfOpenMaxProbes int `json:"half_open_max_probes"`
 	// SuccessThresholdInHalfOpen 半开状态下连续成功多少次后恢复
@@ -52,7 +52,7 @@ type CircuitBreakerConfig struct {
 func DefaultCircuitBreakerConfig() CircuitBreakerConfig {
 	return CircuitBreakerConfig{
 		FailureThreshold:           5,
-		RecoveryTimeout:            30 * time.Second,
+		RecoveryTimeout:            Duration{30 * time.Second},
 		HalfOpenMaxProbes:          3,
 		SuccessThresholdInHalfOpen: 2,
 	}
@@ -117,14 +117,14 @@ func (cb *CircuitBreaker) AllowRequest() (bool, error) {
 
 	case CircuitOpen:
 		// 检查是否到了恢复时间
-		if time.Since(cb.lastFailureTime) >= cb.config.RecoveryTimeout {
+		if time.Since(cb.lastFailureTime) >= cb.config.RecoveryTimeout.Duration {
 			cb.transitionTo(CircuitHalfOpen, "recovery timeout elapsed")
 			cb.probeCount = 0
 			cb.successes = 0
 			return true, nil
 		}
 		return false, fmt.Errorf("circuit breaker open for node %s: %d consecutive failures, retry after %v",
-			cb.nodeID, cb.failures, cb.config.RecoveryTimeout-time.Since(cb.lastFailureTime))
+			cb.nodeID, cb.failures, cb.config.RecoveryTimeout.Duration-time.Since(cb.lastFailureTime))
 
 	case CircuitHalfOpen:
 		if cb.probeCount < cb.config.HalfOpenMaxProbes {

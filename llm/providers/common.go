@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/BaSui01/agentflow/llm"
 )
@@ -31,7 +32,7 @@ func MapHTTPError(status int, msg string, provider string) *llm.Error {
 		}
 	case http.StatusTooManyRequests:
 		return &llm.Error{
-			Code:       llm.ErrRateLimited,
+			Code:       llm.ErrRateLimit,
 			Message:    msg,
 			HTTPStatus: status,
 			Retryable:  true,
@@ -117,11 +118,44 @@ func ReadErrorMessage(body io.Reader) string {
 
 // OpenAICompatMessage 表示 OpenAI 兼容的消息格式.
 type OpenAICompatMessage struct {
-	Role       string                `json:"role"`
-	Content    string                `json:"content,omitempty"`
-	Name       string                `json:"name,omitempty"`
-	ToolCalls  []OpenAICompatToolCall `json:"tool_calls,omitempty"`
-	ToolCallID string                `json:"tool_call_id,omitempty"`
+	Role             string                `json:"role"`
+	Content          string                `json:"content,omitempty"`
+	ReasoningContent *string               `json:"reasoning_content,omitempty"` // 推理内容
+	Refusal          *string               `json:"refusal,omitempty"`           // 模型拒绝内容
+	MultiContent     []map[string]any      `json:"multi_content,omitempty"`     // multimodal content parts
+	Name             string                `json:"name,omitempty"`
+	ToolCalls        []OpenAICompatToolCall `json:"tool_calls,omitempty"`
+	ToolCallID       string                `json:"tool_call_id,omitempty"`
+	Annotations      []OpenAIAnnotation    `json:"annotations,omitempty"` // URL 引用
+}
+
+// MarshalJSON 自定义序列化：当 MultiContent 非空时，将其序列化为 "content" 字段。
+func (m OpenAICompatMessage) MarshalJSON() ([]byte, error) {
+	type plain struct {
+		Role             string                `json:"role"`
+		Content          any                   `json:"content,omitempty"`
+		ReasoningContent *string               `json:"reasoning_content,omitempty"`
+		Refusal          *string               `json:"refusal,omitempty"`
+		Name             string                `json:"name,omitempty"`
+		ToolCalls        []OpenAICompatToolCall `json:"tool_calls,omitempty"`
+		ToolCallID       string                `json:"tool_call_id,omitempty"`
+		Annotations      []OpenAIAnnotation    `json:"annotations,omitempty"`
+	}
+	p := plain{
+		Role:             m.Role,
+		ReasoningContent: m.ReasoningContent,
+		Refusal:          m.Refusal,
+		Name:             m.Name,
+		ToolCalls:        m.ToolCalls,
+		ToolCallID:       m.ToolCallID,
+		Annotations:      m.Annotations,
+	}
+	if len(m.MultiContent) > 0 {
+		p.Content = m.MultiContent
+	} else {
+		p.Content = m.Content
+	}
+	return json.Marshal(p)
 }
 
 // OpenAICompatToolCall 表示 OpenAI 兼容的工具调用.
@@ -133,8 +167,10 @@ type OpenAICompatToolCall struct {
 
 // OpenAICompatFunction 表示 OpenAI 兼容的函数定义.
 type OpenAICompatFunction struct {
-	Name      string          `json:"name"`
-	Arguments json.RawMessage `json:"arguments"`
+	Name        string          `json:"name"`
+	Description string          `json:"description,omitempty"`
+	Parameters  json.RawMessage `json:"parameters,omitempty"`
+	Arguments   json.RawMessage `json:"arguments,omitempty"`
 }
 
 // OpenAICompatTool 表示 OpenAI 兼容的工具定义.
@@ -145,15 +181,66 @@ type OpenAICompatTool struct {
 
 // OpenAICompatRequest 表示 OpenAI 兼容的聊天完成请求.
 type OpenAICompatRequest struct {
-	Model       string                `json:"model"`
-	Messages    []OpenAICompatMessage `json:"messages"`
-	Tools       []OpenAICompatTool    `json:"tools,omitempty"`
-	ToolChoice  any           `json:"tool_choice,omitempty"`
-	MaxTokens   int                   `json:"max_tokens,omitempty"`
-	Temperature float32               `json:"temperature,omitempty"`
-	TopP        float32               `json:"top_p,omitempty"`
-	Stop        []string              `json:"stop,omitempty"`
-	Stream      bool                  `json:"stream,omitempty"`
+	Model             string                `json:"model"`
+	Messages          []OpenAICompatMessage `json:"messages"`
+	Tools             []OpenAICompatTool    `json:"tools,omitempty"`
+	ToolChoice        any                   `json:"tool_choice,omitempty"`
+	ResponseFormat    any                   `json:"response_format,omitempty"`
+	MaxTokens         int                   `json:"max_tokens,omitempty"`
+	Temperature       float32               `json:"temperature,omitempty"`
+	TopP              float32               `json:"top_p,omitempty"`
+	Stop              []string              `json:"stop,omitempty"`
+	Stream            bool                  `json:"stream,omitempty"`
+	FrequencyPenalty  *float32              `json:"frequency_penalty,omitempty"`
+	PresencePenalty   *float32              `json:"presence_penalty,omitempty"`
+	RepetitionPenalty *float32              `json:"repetition_penalty,omitempty"`
+	N                 *int                  `json:"n,omitempty"`
+	LogProbs          *bool                 `json:"logprobs,omitempty"`
+	TopLogProbs       *int                  `json:"top_logprobs,omitempty"`
+	ParallelToolCalls *bool                 `json:"parallel_tool_calls,omitempty"`
+	ServiceTier       *string               `json:"service_tier,omitempty"`
+	StreamOptions     *StreamOptions        `json:"stream_options,omitempty"`
+	User              string                `json:"user,omitempty"`
+	Thinking          *Thinking             `json:"thinking,omitempty"`
+	MaxCompletionTokens *int               `json:"max_completion_tokens,omitempty"`
+	ReasoningEffort   *string               `json:"reasoning_effort,omitempty"`
+
+	// 新增 OpenAI 扩展字段
+	Store            *bool              `json:"store,omitempty"`              // 是否存储用于蒸馏/评估
+	Modalities       []string           `json:"modalities,omitempty"`         // ["text", "audio"]
+	WebSearchOptions *WebSearchOptions  `json:"web_search_options,omitempty"` // 内置 web 搜索
+	Metadata         map[string]string  `json:"metadata,omitempty"`           // OpenAI 级别元数据
+}
+
+// StreamOptions 控制流式响应中的额外信息。
+type StreamOptions struct {
+	IncludeUsage      bool `json:"include_usage,omitempty"`
+	ChunkIncludeUsage bool `json:"chunk_include_usage,omitempty"`
+}
+
+// Thinking 控制推理/思考模式。
+type Thinking struct {
+	Type string `json:"type"` // "enabled", "disabled", "auto"
+}
+
+// WebSearchOptions configures the built-in web search for Chat Completions.
+type WebSearchOptions struct {
+	UserLocation      *WebSearchUserLocation `json:"user_location,omitempty"`
+	SearchContextSize string                 `json:"search_context_size,omitempty"` // low/medium/high
+}
+
+// WebSearchUserLocation represents approximate user location.
+type WebSearchUserLocation struct {
+	Type        string                  `json:"type"`        // "approximate"
+	Approximate *WebSearchApproxLocation `json:"approximate,omitempty"`
+}
+
+// WebSearchApproxLocation holds approximate location details.
+type WebSearchApproxLocation struct {
+	Country  string `json:"country,omitempty"`
+	Region   string `json:"region,omitempty"`
+	City     string `json:"city,omitempty"`
+	Timezone string `json:"timezone,omitempty"`
 }
 
 // OpenAICompatChoice 表示 OpenAI 兼容响应中的单个选项.
@@ -166,18 +253,35 @@ type OpenAICompatChoice struct {
 
 // OpenAICompatUsage 表示 OpenAI 兼容响应中的 token 用量.
 type OpenAICompatUsage struct {
-	PromptTokens     int `json:"prompt_tokens"`
-	CompletionTokens int `json:"completion_tokens"`
-	TotalTokens      int `json:"total_tokens"`
+	PromptTokens            int                      `json:"prompt_tokens"`
+	CompletionTokens        int                      `json:"completion_tokens"`
+	TotalTokens             int                      `json:"total_tokens"`
+	PromptTokensDetails     *PromptTokensDetails     `json:"prompt_tokens_details,omitempty"`
+	CompletionTokensDetails *CompletionTokensDetails `json:"completion_tokens_details,omitempty"`
+}
+
+// PromptTokensDetails 提示 token 详细统计。
+type PromptTokensDetails struct {
+	CachedTokens int `json:"cached_tokens"`
+	AudioTokens  int `json:"audio_tokens,omitempty"`
+}
+
+// CompletionTokensDetails 补全 token 详细统计。
+type CompletionTokensDetails struct {
+	ReasoningTokens          int `json:"reasoning_tokens"`
+	AudioTokens              int `json:"audio_tokens,omitempty"`
+	AcceptedPredictionTokens int `json:"accepted_prediction_tokens,omitempty"`
+	RejectedPredictionTokens int `json:"rejected_prediction_tokens,omitempty"`
 }
 
 // OpenAICompatResponse 表示 OpenAI 兼容的聊天完成响应.
 type OpenAICompatResponse struct {
-	ID      string               `json:"id"`
-	Model   string               `json:"model"`
-	Choices []OpenAICompatChoice `json:"choices"`
-	Usage   *OpenAICompatUsage   `json:"usage,omitempty"`
-	Created int64                `json:"created,omitempty"`
+	ID          string               `json:"id"`
+	Model       string               `json:"model"`
+	Choices     []OpenAICompatChoice `json:"choices"`
+	Usage       *OpenAICompatUsage   `json:"usage,omitempty"`
+	Created     int64                `json:"created,omitempty"`
+	ServiceTier string               `json:"service_tier,omitempty"`
 }
 
 // OpenAICompatErrorResp 表示 OpenAI 兼容的错误响应.
@@ -190,15 +294,76 @@ type OpenAICompatErrorResp struct {
 	} `json:"error"`
 }
 
+// OpenAIAnnotation represents a URL citation annotation in a response.
+type OpenAIAnnotation struct {
+	Type        string              `json:"type"`                    // "url_citation"
+	URLCitation *URLCitationDetail  `json:"url_citation,omitempty"`
+}
+
+// URLCitationDetail holds the details of a URL citation.
+type URLCitationDetail struct {
+	StartIndex int    `json:"start_index"`
+	EndIndex   int    `json:"end_index"`
+	URL        string `json:"url"`
+	Title      string `json:"title"`
+}
+
 // ConvertMessagesToOpenAI 将 llm.Message 切片转换为 OpenAI 兼容格式.
 func ConvertMessagesToOpenAI(msgs []llm.Message) []OpenAICompatMessage {
 	out := make([]OpenAICompatMessage, 0, len(msgs))
 	for _, m := range msgs {
 		oa := OpenAICompatMessage{
-			Role:       string(m.Role),
-			Name:       m.Name,
-			Content:    m.Content,
-			ToolCallID: m.ToolCallID,
+			Role:             string(m.Role),
+			ReasoningContent: m.ReasoningContent,
+			Refusal:          m.Refusal,
+			Name:             m.Name,
+			ToolCallID:       m.ToolCallID,
+		}
+		// 如果有 Images 或 Videos，构建 multimodal content array
+		if len(m.Images) > 0 || len(m.Videos) > 0 {
+			oa.Content = "" // 清空文本 content，使用 MultiContent
+			var parts []map[string]any
+			if m.Content != "" {
+				parts = append(parts, map[string]any{
+					"type": "text",
+					"text": m.Content,
+				})
+			}
+			for _, img := range m.Images {
+				if img.Type == "url" && img.URL != "" {
+					parts = append(parts, map[string]any{
+						"type": "image_url",
+						"image_url": map[string]string{
+							"url": img.URL,
+						},
+					})
+				} else if img.Type == "base64" && img.Data != "" {
+					parts = append(parts, map[string]any{
+						"type": "image_url",
+						"image_url": map[string]string{
+							"url": "data:image/png;base64," + img.Data,
+						},
+					})
+				}
+			}
+			// 处理视频内容
+			for _, vid := range m.Videos {
+				if vid.URL != "" {
+					vidPart := map[string]any{
+						"type": "video_url",
+						"video_url": map[string]any{
+							"url": vid.URL,
+						},
+					}
+					if vid.FPS != nil {
+						vidPart["video_url"].(map[string]any)["fps"] = *vid.FPS
+					}
+					parts = append(parts, vidPart)
+				}
+			}
+			oa.MultiContent = parts
+		} else {
+			oa.Content = m.Content
 		}
 		if len(m.ToolCalls) > 0 {
 			oa.ToolCalls = make([]OpenAICompatToolCall, 0, len(m.ToolCalls))
@@ -228,8 +393,9 @@ func ConvertToolsToOpenAI(tools []llm.ToolSchema) []OpenAICompatTool {
 		out = append(out, OpenAICompatTool{
 			Type: "function",
 			Function: OpenAICompatFunction{
-				Name:      t.Name,
-				Arguments: t.Parameters,
+				Name:        t.Name,
+				Description: t.Description,
+				Parameters:  t.Parameters,
 			},
 		})
 	}
@@ -241,9 +407,11 @@ func ToLLMChatResponse(oa OpenAICompatResponse, provider string) *llm.ChatRespon
 	choices := make([]llm.ChatChoice, 0, len(oa.Choices))
 	for _, c := range oa.Choices {
 		msg := llm.Message{
-			Role:    llm.RoleAssistant,
-			Content: c.Message.Content,
-			Name:    c.Message.Name,
+			Role:             llm.RoleAssistant,
+			Content:          c.Message.Content,
+			ReasoningContent: c.Message.ReasoningContent,
+			Refusal:          c.Message.Refusal,
+			Name:             c.Message.Name,
 		}
 		if len(c.Message.ToolCalls) > 0 {
 			msg.ToolCalls = make([]llm.ToolCall, 0, len(c.Message.ToolCalls))
@@ -255,6 +423,20 @@ func ToLLMChatResponse(oa OpenAICompatResponse, provider string) *llm.ChatRespon
 				})
 			}
 		}
+		// 映射 annotations
+		if len(c.Message.Annotations) > 0 {
+			msg.Annotations = make([]llm.Annotation, 0, len(c.Message.Annotations))
+			for _, ann := range c.Message.Annotations {
+				a := llm.Annotation{Type: ann.Type}
+				if ann.URLCitation != nil {
+					a.StartIndex = ann.URLCitation.StartIndex
+					a.EndIndex = ann.URLCitation.EndIndex
+					a.URL = ann.URLCitation.URL
+					a.Title = ann.URLCitation.Title
+				}
+				msg.Annotations = append(msg.Annotations, a)
+			}
+		}
 		choices = append(choices, llm.ChatChoice{
 			Index:        c.Index,
 			FinishReason: c.FinishReason,
@@ -262,16 +444,34 @@ func ToLLMChatResponse(oa OpenAICompatResponse, provider string) *llm.ChatRespon
 		})
 	}
 	resp := &llm.ChatResponse{
-		ID:       oa.ID,
-		Provider: provider,
-		Model:    oa.Model,
-		Choices:  choices,
+		ID:          oa.ID,
+		Provider:    provider,
+		Model:       oa.Model,
+		Choices:     choices,
+		ServiceTier: oa.ServiceTier,
+	}
+	if oa.Created > 0 {
+		resp.CreatedAt = time.Unix(oa.Created, 0)
 	}
 	if oa.Usage != nil {
 		resp.Usage = llm.ChatUsage{
 			PromptTokens:     oa.Usage.PromptTokens,
 			CompletionTokens: oa.Usage.CompletionTokens,
 			TotalTokens:      oa.Usage.TotalTokens,
+		}
+		if oa.Usage.PromptTokensDetails != nil {
+			resp.Usage.PromptTokensDetails = &llm.PromptTokensDetails{
+				CachedTokens: oa.Usage.PromptTokensDetails.CachedTokens,
+				AudioTokens:  oa.Usage.PromptTokensDetails.AudioTokens,
+			}
+		}
+		if oa.Usage.CompletionTokensDetails != nil {
+			resp.Usage.CompletionTokensDetails = &llm.CompletionTokensDetails{
+				ReasoningTokens:          oa.Usage.CompletionTokensDetails.ReasoningTokens,
+				AudioTokens:              oa.Usage.CompletionTokensDetails.AudioTokens,
+				AcceptedPredictionTokens: oa.Usage.CompletionTokensDetails.AcceptedPredictionTokens,
+				RejectedPredictionTokens: oa.Usage.CompletionTokensDetails.RejectedPredictionTokens,
+			}
 		}
 	}
 	return resp
@@ -299,6 +499,38 @@ func BearerTokenHeaders(r *http.Request, apiKey string) {
 func SafeCloseBody(body io.ReadCloser) {
 	if body != nil {
 		_ = body.Close()
+	}
+}
+
+// ConvertResponseFormat 将 llm.ResponseFormat 转换为 OpenAI 兼容的 response_format 参数。
+// 返回 nil 表示不设置 response_format。
+func ConvertResponseFormat(rf *llm.ResponseFormat) any {
+	if rf == nil {
+		return nil
+	}
+	switch rf.Type {
+	case llm.ResponseFormatText:
+		return map[string]any{"type": "text"}
+	case llm.ResponseFormatJSONObject:
+		return map[string]any{"type": "json_object"}
+	case llm.ResponseFormatJSONSchema:
+		result := map[string]any{"type": "json_schema"}
+		if rf.JSONSchema != nil {
+			schemaParam := map[string]any{
+				"name":   rf.JSONSchema.Name,
+				"schema": rf.JSONSchema.Schema,
+			}
+			if rf.JSONSchema.Description != "" {
+				schemaParam["description"] = rf.JSONSchema.Description
+			}
+			if rf.JSONSchema.Strict != nil {
+				schemaParam["strict"] = *rf.JSONSchema.Strict
+			}
+			result["json_schema"] = schemaParam
+		}
+		return result
+	default:
+		return nil
 	}
 }
 

@@ -65,9 +65,39 @@ def run_script(script_path: Path) -> str:
         return "No context available"
 
 
+def cleanup_stale_teams() -> int:
+    """
+    Clean up stale team and task directories from ~/.claude/teams/ and ~/.claude/tasks/.
+
+    These accumulate when Agent Team sessions fail or don't shut down cleanly
+    (e.g., nested session errors, context overflow, user abort).
+
+    Returns:
+        Number of directories cleaned up.
+    """
+    home = Path.home()
+    cleaned = 0
+    for dir_name in ("teams", "tasks"):
+        target = home / ".claude" / dir_name
+        if not target.is_dir():
+            continue
+        for child in target.iterdir():
+            if child.is_dir():
+                try:
+                    import shutil
+                    shutil.rmtree(child)
+                    cleaned += 1
+                except Exception:
+                    pass
+    return cleaned
+
+
 def main():
     if should_skip_injection():
         sys.exit(0)
+
+    # Clean up stale Agent Team directories from previous sessions
+    cleanup_stale_teams()
 
     project_dir = Path(os.environ.get("CLAUDE_PROJECT_DIR", ".")).resolve()
     trellis_dir = project_dir / ".trellis"

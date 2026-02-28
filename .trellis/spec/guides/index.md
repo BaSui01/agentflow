@@ -25,6 +25,11 @@ These guides help you **ask the right questions before coding**.
 | [Cross-Layer Thinking Guide](./cross-layer-thinking-guide.md) | Think through data flow across layers | Features spanning multiple layers |
 | [Cross-Platform Thinking Guide](./cross-platform-thinking-guide.md) | Catch platform-specific assumptions | Scripts, paths, commands |
 | [quality-guidelines.md §18-§23](../backend/quality-guidelines.md) | Agent composition, guardrails, context window patterns | Multi-agent design, runtime config, validation chains |
+| [quality-guidelines.md §35-§39](../backend/quality-guidelines.md) | Cache eviction, Prometheus cardinality, broadcast safety, API envelope, doc snippets | In-memory caches, metrics, fan-out channels, new API endpoints, documentation |
+| [quality-guidelines.md §41-§42](../backend/quality-guidelines.md) | JWT auth middleware, MCP server serve loop | Authentication, tenant rate limiting, protocol message dispatch |
+| [quality-guidelines.md §43-§44](../backend/quality-guidelines.md) | OTel SDK initialization, API request body validation | Telemetry setup, new API handlers, request parsing |
+| [quality-guidelines.md §49-§53](../backend/quality-guidelines.md) | HSTS header, JWT secret length, auth disable protection, OpenAPI conditional routes, OTel trace logging | Security headers, authentication config, API documentation, log-trace correlation |
+| [quality-guidelines.md §54-§57](../backend/quality-guidelines.md) | Structured outputs, tool streaming, skills-discovery bridge, Gemini native API | LLM response format, tool progress events, skill-capability registration, Gemini SSE/ToolConfig/Thinking |
 
 ---
 
@@ -157,6 +162,73 @@ These guides help you **ask the right questions before coding**.
 → Read [quality-guidelines.md §30](../backend/quality-guidelines.md) for Function Callback Pattern
 → Read [unit-test/index.md § Mock Patterns](../unit-test/index.md) for shared mock conventions
 
+### When to Think About In-Memory Cache Safety
+
+- [ ] 新增 `map` 字段用作缓存 — 是否有 `maxSize` 上限？（§35）
+- [ ] 缓存条目是否有 TTL？Get 时是否做了 lazy eviction？（§35）
+- [ ] 缓存名称包含 `Cache`/`Store`/`Memo` — 是否有驱逐机制？
+- [ ] 高并发场景下缓存 Get 是否需要升级为 `Lock()`（而非 `RLock()`）以支持 lazy eviction？
+- [ ] `append()` 到 slice 字段 — 是否有滑动窗口限制？（如 `QualityScores`）
+- [ ] 方法写入底层存储后 — 是否同步更新了 in-process slice 缓存？（§35.6 write-through）
+
+→ Read [quality-guidelines.md §35](../backend/quality-guidelines.md) for Cache Eviction pattern
+
+### When to Think About Prometheus Metrics
+
+- [ ] 新增 Prometheus label — 该值是否有界？（§36）
+- [ ] label 值来自用户输入或动态 ID — ❌ 禁止！改用 `_info` gauge（§36）
+- [ ] 新增 `CounterVec`/`HistogramVec` — 估算最大 label 组合数（应 <100）
+- [ ] 需要按动态 ID 查询指标 — 使用 structured logging 而非 Prometheus label
+
+→ Read [quality-guidelines.md §36](../backend/quality-guidelines.md) for Prometheus Cardinality rules
+
+### When to Think About Fan-Out / Broadcast Safety
+
+- [ ] 遍历 channel 列表并逐个发送 — 是否有 `recover()` 保护？（§37）
+- [ ] subscriber 可以随时 `Close()` 自己的 channel — broadcaster 是否处理了 panic？
+- [ ] 持有锁的同时向 channel 发送 — 是否可能死锁？先 copy 再发送（§37）
+
+→ Read [quality-guidelines.md §37](../backend/quality-guidelines.md) for Broadcast Recover pattern
+
+### When to Think About API Response Consistency
+
+- [ ] 新增 API handler 包 — 是否复用了 canonical `Response` 信封？（§38）
+- [ ] 错误响应是否使用了结构化 `ErrorInfo{Code, Message}`？（§38）
+- [ ] 新增路由 — 路由前缀是否与现有 API 一致（`/api/v1/`）？
+- [ ] 新增路由 — 是否更新了 `api/openapi.yaml`？（§14）
+
+→ Read [quality-guidelines.md §38](../backend/quality-guidelines.md) for API Envelope pattern
+
+### When to Think About Authentication / Authorization
+
+- [ ] New API handler — does it need authentication? Add to `JWTAuth` or `APIKeyAuth` skip paths if exempt
+- [ ] Using `tenant_id` or `user_id` — are you extracting from JWT claims via `types.TenantID(ctx)` / `types.UserID(ctx)`, or trusting client input? (§41)
+- [ ] New rate limiting — is it per-tenant (from JWT context) rather than only per-IP? (§41)
+- [ ] Handler reads identity from request body or custom header — WRONG, must come from JWT claims in context
+- [ ] Adding a new claim to JWT — did you add a typed context key + `With*`/getter pair in `types/context.go`?
+
+→ Read [quality-guidelines.md §41](../backend/quality-guidelines.md) for JWT Authentication Middleware pattern
+
+### When to Think About Streaming Patterns
+
+- [ ] New workflow node type — does `executeNode` emit `node_start` / `node_complete` / `node_error` events?
+- [ ] New API handler — does it need an SSE streaming endpoint alongside the sync endpoint?
+- [ ] Agent execution — is `RuntimeStreamEmitter` injected into context for SSE bridging?
+- [ ] Workflow execution — is `WorkflowStreamEmitter` injected into context? (optional, backward compatible)
+- [ ] Emitter callback called from parallel goroutines — is it safe for concurrent invocation?
+
+→ Read [cross-layer-thinking-guide.md § Workflow Stream Emitter](./cross-layer-thinking-guide.md) for context emitter pattern
+→ Read [quality-guidelines.md §42](../backend/quality-guidelines.md) for MCP Server Serve loop pattern
+
+### When to Think About Documentation Code Snippets
+
+- [ ] 重命名了类型或结构体字段 — 是否 grep 了所有 `.md` 文件？（§39）
+- [ ] 修改了嵌套结构体 — 文档中的 composite literal 是否正确命名了嵌套字段？
+- [ ] 新增 example — 是否有 `os.Getenv` + skip 逻辑？（§39）
+- [ ] `go build ./examples/...` 是否通过？
+
+→ Read [quality-guidelines.md §39](../backend/quality-guidelines.md) for Documentation Code Snippet rules
+
 ### When to Think About Interface Deduplication
 
 - [ ] 新增接口定义 — 是否已有同名接口在其他包中？先搜索 `type <Name> interface`
@@ -177,6 +249,83 @@ These guides help you **ask the right questions before coding**.
 - [ ] 新增 ErrorCode — 是否与现有 code 语义重复？（如 `RATE_LIMIT` vs `RATE_LIMITED`）
 
 → Read [cross-layer-thinking-guide.md § Known Type Splits](./cross-layer-thinking-guide.md) for full inventory
+
+### When to Think About OTel / Telemetry
+
+- [ ] New service entry point or `main()` — is `telemetry.Init()` called before any OTel consumer code?
+- [ ] Adding `otel.Tracer()` or `otel.Meter()` calls — are global providers initialized? (noop if not)
+- [ ] Modifying `Server.Shutdown()` — is `providers.Shutdown(ctx)` called to flush pending spans/metrics?
+- [ ] Telemetry init failure — is it `Warn` (not `Fatal`)? Telemetry should never block service startup
+
+→ Read [quality-guidelines.md §43](../backend/quality-guidelines.md) for OTel SDK Initialization pattern
+
+### When to Think About OTel HTTP Tracing
+
+- [ ] New middleware added to chain — is `OTelTracing()` still positioned after `MetricsMiddleware` and before `RequestLogger`?
+- [ ] New API handler — does it automatically get traced? (Yes, if middleware chain is correct)
+- [ ] Need trace context propagation to downstream HTTP calls — is `otel.GetTextMapPropagator().Inject()` used on outgoing requests?
+- [ ] Custom span attributes needed — add them inside the handler, not the middleware
+
+→ Read [quality-guidelines.md §45](../backend/quality-guidelines.md) for OTel HTTP Tracing Middleware pattern
+
+### When to Think About Route Registration
+
+- [ ] New handler requires database — is it conditionally registered (nil check on handler)?
+- [ ] Path serves multiple HTTP methods — is method dispatch done in a single `HandleFunc` with `switch r.Method`?
+- [ ] New CRUD routes added — is `api/openapi.yaml` updated? (§14)
+- [ ] Handler depends on optional infrastructure (DB, cache, external service) — does server start without it?
+
+→ Read [quality-guidelines.md §46](../backend/quality-guidelines.md) for Conditional Route Registration pattern
+
+### When to Think About API Request Body Validation
+
+- [ ] New POST/PUT/PATCH handler — does it use `ValidateContentType` + `DecodeJSONBody`? (§44)
+- [ ] Using raw `json.NewDecoder(r.Body).Decode()` — ❌ WRONG, bypasses 1MB limit and unknown field rejection
+- [ ] Adding numeric fields to API request — are they validated for range (non-negative, min/max)?
+- [ ] Adding URL fields to API request — is `ValidateURL` used?
+- [ ] Adding enum fields (like `role`) — is `ValidateEnum` used with explicit allowed values?
+- [ ] Existing handler tests failing after validation changes — did you add `Content-Type: application/json` header?
+
+→ Read [quality-guidelines.md §44](../backend/quality-guidelines.md) for API Request Body Validation pattern
+
+### When to Think About Structured Outputs
+
+- [ ] Agent 需要可靠的 JSON 输出 — 是否使用了 `ResponseFormat` 而非仅靠 prompt？（§54）
+- [ ] 设置 `ToolChoice` — 是否用 `!= nil` 而非 `!= ""`？（§54）
+- [ ] 新增 LLM provider — 是否实现了 `ResponseFormat` 和 `ToolChoice` 传递？
+- [ ] 使用 `StructuredOutput[T]` — provider 是否支持 native structured output？
+
+→ Read [quality-guidelines.md §54](../backend/quality-guidelines.md) for Structured Outputs pattern
+
+### When to Think About Tool Streaming
+
+- [ ] 新增工具执行时间 >2 秒 — 是否使用 `StreamingToolFunc` 而非普通 `ToolFunc`？（§55）
+- [ ] 修改 ReAct 循环 — 是否保留了 `StreamableToolExecutor` 类型断言？（§55）
+- [ ] 新增 SSE 事件类型 — 是否在 `api/handlers/agent.go` 的 emitter 中处理？
+- [ ] 工具需要推送中间状态 — 使用 `ToolProgressEmitter` 回调
+
+→ Read [quality-guidelines.md §55](../backend/quality-guidelines.md) for Tool Streaming pattern
+
+### When to Think About Skills-Discovery Integration
+
+- [ ] 新增 Skill — 是否需要通过 Discovery 系统可发现？使用 `SkillDiscoveryBridge.RegisterSkillAsCapability()`（§56）
+- [ ] `skills` 包需要引用 `discovery` 包 — ❌ 禁止直接 import！使用 `internal/bridge/` + 本地接口（§12, §56）
+- [ ] 新增 Agent 类型 — 是否在 `registry.go` 中添加了差异化 PromptBundle？（§56）
+- [ ] 实现 `SkillsExtension` — 使用 `SkillsExtensionAdapter` 而非直接实现
+
+→ Read [quality-guidelines.md §56](../backend/quality-guidelines.md) for Skills-Discovery Bridge pattern
+
+### When to Think About Gemini Provider Protocol
+
+- [ ] 修改 Gemini `streamEndpoint` — URL 是否包含 `?alt=sse`？（§57）
+- [ ] 解析 Gemini 流式响应 — 是否按 SSE `data:` 前缀解析而非逐行 JSON？（§57）
+- [ ] 返回 FinishReason — 是否通过 `normalizeFinishReason()` 标准化？（§57）
+- [ ] 处理 Gemini 响应 — 是否检查了 `promptFeedback.blockReason`？（§57）
+- [ ] 映射 ToolChoice — 是否转换为 `toolConfig.functionCallingConfig`？（§57）
+- [ ] 新增 Gemini 功能 — 是否在 `buildGenerationConfig()` 中集中处理？（§57）
+- [ ] Gemini 3 系列 — 是否处理了 `thought` part 到 `ReasoningContent` 的映射？（§57）
+
+→ Read [quality-guidelines.md §57](../backend/quality-guidelines.md) for Gemini Native API Protocol pattern
 
 ---
 

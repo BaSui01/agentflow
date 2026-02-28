@@ -17,9 +17,10 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"sync/atomic"
 	"time"
 
-	"github.com/BaSui01/agentflow/internal/tlsutil"
+	"github.com/BaSui01/agentflow/pkg/tlsutil"
 	"github.com/BaSui01/agentflow/llm"
 	"github.com/BaSui01/agentflow/llm/middleware"
 	"github.com/BaSui01/agentflow/llm/providers"
@@ -63,6 +64,13 @@ type Config struct {
 	// SupportsTools indicates whether this provider supports native function calling.
 	// Defaults to true if not set.
 	SupportsTools *bool
+
+	// AuthHeaderName 自定义认证头名称。为空时使用默认的 "Authorization: Bearer <key>"。
+	// 设置后使用 "<AuthHeaderName>: <key>"（不加 Bearer 前缀）。
+	AuthHeaderName string
+
+	// APIKeys 多 API Key 列表，轮询使用。如果非空，优先于 APIKey。
+	APIKeys []providers.APIKeyEntry
 }
 
 // Provider is the base implementation for all OpenAI-compatible LLM providers.
@@ -72,6 +80,7 @@ type Provider struct {
 	Client        *http.Client
 	Logger        *zap.Logger
 	RewriterChain *middleware.RewriterChain
+	keyIndex      uint64 // 多 Key 轮询索引
 }
 
 // New creates a new OpenAI-compatible provider with the given config.
@@ -102,6 +111,10 @@ func New(cfg Config, logger *zap.Logger) *Provider {
 // Name returns the provider name.
 func (p *Provider) Name() string { return p.Cfg.ProviderName }
 
+// SupportsStructuredOutput returns true because OpenAI-compatible providers
+// support native JSON Schema response_format.
+func (p *Provider) SupportsStructuredOutput() bool { return true }
+
 // SupportsNativeFunctionCalling returns whether this provider supports tool calling.
 func (p *Provider) SupportsNativeFunctionCalling() bool {
 	if p.Cfg.SupportsTools != nil {
@@ -121,18 +134,28 @@ func (p *Provider) buildHeaders(req *http.Request, apiKey string) {
 		p.Cfg.BuildHeaders(req, apiKey)
 		return
 	}
-	// Default: Bearer token auth
-	req.Header.Set("Authorization", "Bearer "+apiKey)
+	if p.Cfg.AuthHeaderName != "" {
+		req.Header.Set(p.Cfg.AuthHeaderName, apiKey)
+	} else {
+		req.Header.Set("Authorization", "Bearer "+apiKey)
+	}
 	req.Header.Set("Content-Type", "application/json")
 }
 
 // resolveAPIKey returns the API key, checking for context override first.
 func (p *Provider) resolveAPIKey(ctx context.Context) string {
+	// 1. 优先使用 context 中的凭据覆盖
 	if c, ok := llm.CredentialOverrideFromContext(ctx); ok {
 		if strings.TrimSpace(c.APIKey) != "" {
 			return strings.TrimSpace(c.APIKey)
 		}
 	}
+	// 2. 多 Key 轮询
+	if len(p.Cfg.APIKeys) > 0 {
+		idx := atomic.AddUint64(&p.keyIndex, 1) - 1
+		return p.Cfg.APIKeys[idx%uint64(len(p.Cfg.APIKeys))].Key
+	}
+	// 3. 单 Key
 	return p.Cfg.APIKey
 }
 
@@ -174,6 +197,15 @@ func (p *Provider) ListModels(ctx context.Context) ([]llm.Model, error) {
 	)
 }
 
+// Endpoints 返回该提供者使用的所有 API 端点完整 URL。
+func (p *Provider) Endpoints() llm.ProviderEndpoints {
+	return llm.ProviderEndpoints{
+		Completion: p.endpoint(p.Cfg.EndpointPath),
+		Models:     p.endpoint(p.Cfg.ModelsEndpoint),
+		BaseURL:    p.Cfg.BaseURL,
+	}
+}
+
 // Completion performs a non-streaming chat completion.
 func (p *Provider) Completion(ctx context.Context, req *llm.ChatRequest) (*llm.ChatResponse, error) {
 	// Apply rewriter chain
@@ -192,16 +224,41 @@ func (p *Provider) Completion(ctx context.Context, req *llm.ChatRequest) (*llm.C
 	model := providers.ChooseModel(req, p.Cfg.DefaultModel, p.Cfg.FallbackModel)
 
 	body := providers.OpenAICompatRequest{
-		Model:       model,
-		Messages:    providers.ConvertMessagesToOpenAI(req.Messages),
-		Tools:       providers.ConvertToolsToOpenAI(req.Tools),
-		MaxTokens:   req.MaxTokens,
-		Temperature: req.Temperature,
-		TopP:        req.TopP,
-		Stop:        req.Stop,
+		Model:               model,
+		Messages:            providers.ConvertMessagesToOpenAI(req.Messages),
+		Tools:               providers.ConvertToolsToOpenAI(req.Tools),
+		MaxTokens:           req.MaxTokens,
+		Temperature:         req.Temperature,
+		TopP:                req.TopP,
+		Stop:                req.Stop,
+		FrequencyPenalty:    req.FrequencyPenalty,
+		PresencePenalty:     req.PresencePenalty,
+		RepetitionPenalty:   req.RepetitionPenalty,
+		N:                   req.N,
+		LogProbs:            req.LogProbs,
+		TopLogProbs:         req.TopLogProbs,
+		ParallelToolCalls:   req.ParallelToolCalls,
+		ServiceTier:         req.ServiceTier,
+		User:                req.User,
+		MaxCompletionTokens: req.MaxCompletionTokens,
+		Store:               req.Store,
+		Modalities:          req.Modalities,
 	}
-	if req.ToolChoice != "" {
+	if req.ToolChoice != nil {
 		body.ToolChoice = req.ToolChoice
+	}
+	if rf := providers.ConvertResponseFormat(req.ResponseFormat); rf != nil {
+		body.ResponseFormat = rf
+	}
+
+	// 传递 reasoning_effort
+	if req.ReasoningEffort != "" {
+		body.ReasoningEffort = &req.ReasoningEffort
+	}
+
+	// 传递 web_search_options
+	if req.WebSearchOptions != nil {
+		body.WebSearchOptions = convertWebSearchOptions(req.WebSearchOptions)
 	}
 
 	// Apply provider-specific request hook
@@ -246,6 +303,7 @@ func (p *Provider) Completion(ctx context.Context, req *llm.ChatRequest) (*llm.C
 	if oaResp.Created != 0 {
 		result.CreatedAt = time.Unix(oaResp.Created, 0)
 	}
+	result.ServiceTier = oaResp.ServiceTier
 	return result, nil
 }
 
@@ -267,17 +325,48 @@ func (p *Provider) Stream(ctx context.Context, req *llm.ChatRequest) (<-chan llm
 	model := providers.ChooseModel(req, p.Cfg.DefaultModel, p.Cfg.FallbackModel)
 
 	body := providers.OpenAICompatRequest{
-		Model:       model,
-		Messages:    providers.ConvertMessagesToOpenAI(req.Messages),
-		Tools:       providers.ConvertToolsToOpenAI(req.Tools),
-		MaxTokens:   req.MaxTokens,
-		Temperature: req.Temperature,
-		TopP:        req.TopP,
-		Stop:        req.Stop,
-		Stream:      true,
+		Model:               model,
+		Messages:            providers.ConvertMessagesToOpenAI(req.Messages),
+		Tools:               providers.ConvertToolsToOpenAI(req.Tools),
+		MaxTokens:           req.MaxTokens,
+		Temperature:         req.Temperature,
+		TopP:                req.TopP,
+		Stop:                req.Stop,
+		Stream:              true,
+		FrequencyPenalty:    req.FrequencyPenalty,
+		PresencePenalty:     req.PresencePenalty,
+		RepetitionPenalty:   req.RepetitionPenalty,
+		N:                   req.N,
+		LogProbs:            req.LogProbs,
+		TopLogProbs:         req.TopLogProbs,
+		ParallelToolCalls:   req.ParallelToolCalls,
+		ServiceTier:         req.ServiceTier,
+		User:                req.User,
+		MaxCompletionTokens: req.MaxCompletionTokens,
+		Store:               req.Store,
+		Modalities:          req.Modalities,
 	}
-	if req.ToolChoice != "" {
+	if req.ToolChoice != nil {
 		body.ToolChoice = req.ToolChoice
+	}
+	if rf := providers.ConvertResponseFormat(req.ResponseFormat); rf != nil {
+		body.ResponseFormat = rf
+	}
+	if req.StreamOptions != nil {
+		body.StreamOptions = &providers.StreamOptions{
+			IncludeUsage:      req.StreamOptions.IncludeUsage,
+			ChunkIncludeUsage: req.StreamOptions.ChunkIncludeUsage,
+		}
+	}
+
+	// 传递 reasoning_effort
+	if req.ReasoningEffort != "" {
+		body.ReasoningEffort = &req.ReasoningEffort
+	}
+
+	// 传递 web_search_options
+	if req.WebSearchOptions != nil {
+		body.WebSearchOptions = convertWebSearchOptions(req.WebSearchOptions)
 	}
 
 	// Apply provider-specific request hook
@@ -358,6 +447,29 @@ func StreamSSE(ctx context.Context, body io.ReadCloser, providerName string) <-c
 				return
 			}
 
+			// 处理流式 usage（stream_options.include_usage 时最后一个 chunk 会包含）
+			if oaResp.Usage != nil {
+				streamUsage := &llm.ChatUsage{
+					PromptTokens:     oaResp.Usage.PromptTokens,
+					CompletionTokens: oaResp.Usage.CompletionTokens,
+					TotalTokens:      oaResp.Usage.TotalTokens,
+				}
+				// 如果没有 choices，发送一个只包含 usage 的 chunk
+				if len(oaResp.Choices) == 0 {
+					select {
+					case <-ctx.Done():
+						return
+					case ch <- llm.StreamChunk{
+						ID:       oaResp.ID,
+						Provider: providerName,
+						Model:    oaResp.Model,
+						Usage:    streamUsage,
+					}:
+					}
+					continue
+				}
+			}
+
 			for _, choice := range oaResp.Choices {
 				chunk := llm.StreamChunk{
 					ID:           oaResp.ID,
@@ -371,6 +483,8 @@ func StreamSSE(ctx context.Context, body io.ReadCloser, providerName string) <-c
 				}
 				if choice.Delta != nil {
 					chunk.Delta.Content = choice.Delta.Content
+					chunk.Delta.Refusal = choice.Delta.Refusal
+					chunk.Delta.ReasoningContent = choice.Delta.ReasoningContent
 					if len(choice.Delta.ToolCalls) > 0 {
 						chunk.Delta.ToolCalls = make([]llm.ToolCall, 0, len(choice.Delta.ToolCalls))
 						for _, tc := range choice.Delta.ToolCalls {
@@ -380,6 +494,13 @@ func StreamSSE(ctx context.Context, body io.ReadCloser, providerName string) <-c
 								Arguments: tc.Function.Arguments,
 							})
 						}
+					}
+				}
+				if oaResp.Usage != nil {
+					chunk.Usage = &llm.ChatUsage{
+						PromptTokens:     oaResp.Usage.PromptTokens,
+						CompletionTokens: oaResp.Usage.CompletionTokens,
+						TotalTokens:      oaResp.Usage.TotalTokens,
 					}
 				}
 				select {
@@ -393,4 +514,24 @@ func StreamSSE(ctx context.Context, body io.ReadCloser, providerName string) <-c
 	return ch
 }
 
-
+// convertWebSearchOptions converts llm.WebSearchOptions to the wire format.
+func convertWebSearchOptions(opts *llm.WebSearchOptions) *providers.WebSearchOptions {
+	if opts == nil {
+		return nil
+	}
+	result := &providers.WebSearchOptions{
+		SearchContextSize: opts.SearchContextSize,
+	}
+	if opts.UserLocation != nil {
+		result.UserLocation = &providers.WebSearchUserLocation{
+			Type: "approximate",
+			Approximate: &providers.WebSearchApproxLocation{
+				Country:  opts.UserLocation.Country,
+				Region:   opts.UserLocation.Region,
+				City:     opts.UserLocation.City,
+				Timezone: opts.UserLocation.Timezone,
+			},
+		}
+	}
+	return result
+}

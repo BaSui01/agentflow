@@ -2,8 +2,43 @@ package workflow
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"time"
 )
+
+// Duration wraps time.Duration with human-readable JSON serialization.
+// JSON output is a string like "30s", "5m", "1h30m" instead of nanoseconds.
+type Duration struct {
+	time.Duration
+}
+
+// MarshalJSON serializes Duration as a human-readable string.
+func (d Duration) MarshalJSON() ([]byte, error) {
+	return json.Marshal(d.Duration.String())
+}
+
+// UnmarshalJSON deserializes Duration from a string ("30s") or number (nanoseconds).
+func (d *Duration) UnmarshalJSON(b []byte) error {
+	var v any
+	if err := json.Unmarshal(b, &v); err != nil {
+		return err
+	}
+	switch val := v.(type) {
+	case string:
+		parsed, err := time.ParseDuration(val)
+		if err != nil {
+			return fmt.Errorf("invalid duration string %q: %w", val, err)
+		}
+		d.Duration = parsed
+	case float64:
+		// Backward compatible: accept nanoseconds as number
+		d.Duration = time.Duration(int64(val))
+	default:
+		return fmt.Errorf("invalid duration type: %T", v)
+	}
+	return nil
+}
 
 // NodeType defines the type of a DAG node
 type NodeType string
@@ -191,8 +226,22 @@ type NodeDefinition struct {
 	Loop *LoopDefinition `json:"loop,omitempty" yaml:"loop,omitempty"`
 	// SubGraph defines a nested workflow (for subgraph nodes)
 	SubGraph *DAGDefinition `json:"subgraph,omitempty" yaml:"subgraph,omitempty"`
+	// Error defines error handling configuration
+	Error *ErrorDefinition `json:"error,omitempty" yaml:"error,omitempty"`
 	// Metadata stores additional node information
 	Metadata map[string]any `json:"metadata,omitempty" yaml:"metadata,omitempty"`
+}
+
+// ErrorDefinition represents a serializable error handling configuration
+type ErrorDefinition struct {
+	// Strategy specifies how to handle errors (fail_fast, skip, retry)
+	Strategy string `json:"strategy" yaml:"strategy"`
+	// MaxRetries is the maximum number of retry attempts (for retry strategy)
+	MaxRetries int `json:"max_retries,omitempty" yaml:"max_retries,omitempty"`
+	// RetryDelayMs is the delay between retries in milliseconds
+	RetryDelayMs int `json:"retry_delay_ms,omitempty" yaml:"retry_delay_ms,omitempty"`
+	// FallbackValue is the value to use when skipping a failed node
+	FallbackValue any `json:"fallback_value,omitempty" yaml:"fallback_value,omitempty"`
 }
 
 // LoopDefinition represents a serializable loop configuration
@@ -252,10 +301,11 @@ func (w *DAGWorkflow) GetMetadata(key string) (any, bool) {
 
 // Execute executes the DAG workflow using DAGExecutor
 func (w *DAGWorkflow) Execute(ctx context.Context, input any) (any, error) {
-	// Use custom executor if set, otherwise create default
+	// Use custom executor if set, otherwise lazily create and cache a default
 	executor := w.executor
 	if executor == nil {
 		executor = NewDAGExecutor(nil, nil)
+		w.executor = executor
 	}
 
 	// Execute the graph

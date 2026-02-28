@@ -10,6 +10,9 @@ import (
 	"go.uber.org/zap"
 )
 
+// maxHistorySize 限制 LatencyHistory/QualityHistory 的最大长度，防止无界增长
+const maxHistorySize = 1000
+
 // ObservabilitySystem 可观测性系统
 type ObservabilitySystem struct {
 	// 指标收集器
@@ -176,7 +179,7 @@ type BenchmarkResult struct {
 // NewObservabilitySystem 创建可观测性系统
 func NewObservabilitySystem(logger *zap.Logger) *ObservabilitySystem {
 	if logger == nil {
-		logger, _ = zap.NewProduction()
+		logger = zap.NewNop()
 	}
 
 	return &ObservabilitySystem{
@@ -185,6 +188,24 @@ func NewObservabilitySystem(logger *zap.Logger) *ObservabilitySystem {
 		evaluator:        NewEvaluator(logger),
 		logger:           logger.With(zap.String("component", "observability")),
 	}
+}
+
+// StartTrace delegates to the internal Tracer.
+// Satisfies agent.ObservabilityRunner.
+func (o *ObservabilitySystem) StartTrace(traceID, agentID string) {
+	o.tracer.StartTrace(traceID, agentID)
+}
+
+// EndTrace delegates to the internal Tracer.
+// Satisfies agent.ObservabilityRunner.
+func (o *ObservabilitySystem) EndTrace(traceID, status string, err error) {
+	o.tracer.EndTrace(traceID, status, err)
+}
+
+// RecordTask delegates to the internal MetricsCollector.
+// Satisfies agent.ObservabilityRunner.
+func (o *ObservabilitySystem) RecordTask(agentID string, success bool, duration time.Duration, tokens int, cost, quality float64) {
+	o.metricsCollector.RecordTask(agentID, success, duration, tokens, cost, quality)
 }
 
 // NewMetricsCollector 创建指标收集器
@@ -224,6 +245,9 @@ func (c *MetricsCollector) RecordTask(agentID string, success bool, latency time
 
 	// 更新延迟
 	metrics.LatencyHistory = append(metrics.LatencyHistory, latency)
+	if len(metrics.LatencyHistory) > maxHistorySize {
+		metrics.LatencyHistory = metrics.LatencyHistory[len(metrics.LatencyHistory)-maxHistorySize:]
+	}
 	metrics.AvgLatency = calculateAvgDuration(metrics.LatencyHistory)
 	metrics.P50Latency = calculatePercentile(metrics.LatencyHistory, 0.5)
 	metrics.P95Latency = calculatePercentile(metrics.LatencyHistory, 0.95)
@@ -236,6 +260,9 @@ func (c *MetricsCollector) RecordTask(agentID string, success bool, latency time
 	// 更新质量
 	if quality > 0 {
 		metrics.QualityHistory = append(metrics.QualityHistory, quality)
+		if len(metrics.QualityHistory) > maxHistorySize {
+			metrics.QualityHistory = metrics.QualityHistory[len(metrics.QualityHistory)-maxHistorySize:]
+		}
 		metrics.AvgOutputQuality = calculateAvg(metrics.QualityHistory)
 	}
 
@@ -309,6 +336,9 @@ func (t *Tracer) EndTrace(traceID string, status string, err error) {
 	if trace, ok := t.traces[traceID]; ok {
 		trace.EndTime = time.Now()
 		trace.Duration = trace.EndTime.Sub(trace.StartTime)
+		if trace.Duration <= 0 {
+			trace.Duration = time.Nanosecond
+		}
 		trace.Status = status
 		trace.Error = err
 	}

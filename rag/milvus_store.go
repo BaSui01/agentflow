@@ -11,7 +11,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/BaSui01/agentflow/internal/tlsutil"
+	"github.com/BaSui01/agentflow/pkg/tlsutil"
 	"github.com/google/uuid"
 	"go.uber.org/zap"
 )

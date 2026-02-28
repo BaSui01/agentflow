@@ -47,6 +47,10 @@ func (p *scriptedProvider) ListModels(_ context.Context) ([]llmpkg.Model, error)
 	return nil, nil
 }
 
+func (p *scriptedProvider) Endpoints() llmpkg.ProviderEndpoints {
+	return llmpkg.ProviderEndpoints{}
+}
+
 func (e *countingToolExecutor) Execute(ctx context.Context, calls []llmpkg.ToolCall) []ToolResult {
 	_ = ctx
 	e.calls = append(e.calls, calls...)

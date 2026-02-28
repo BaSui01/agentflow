@@ -9,7 +9,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/BaSui01/agentflow/internal/tlsutil"
+	"github.com/BaSui01/agentflow/pkg/tlsutil"
 )
 
 // VeoProvider使用Google Veo 3.1执行视频生成.

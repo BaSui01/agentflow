@@ -28,9 +28,10 @@ func NewMiniMaxProvider(cfg providers.MiniMaxConfig, logger *zap.Logger) *MiniMa
 		Provider: openaicompat.New(openaicompat.Config{
 			ProviderName:  "minimax",
 			APIKey:        cfg.APIKey,
+			APIKeys:       cfg.APIKeys,
 			BaseURL:       cfg.BaseURL,
 			DefaultModel:  cfg.Model,
-			FallbackModel: "abab6.5s-chat",
+			FallbackModel: "MiniMax-Text-01",
 			Timeout:       cfg.Timeout,
 		}, logger),
 	}
@@ -38,10 +39,16 @@ func NewMiniMaxProvider(cfg providers.MiniMaxConfig, logger *zap.Logger) *MiniMa
 
 // Stream 覆写父类方法，对 SSE 流做后处理以解析 MiniMax 特有的 XML tool call 格式.
 // MiniMax 将 tool calls 放在 content 字段中用 <tool_calls> XML 标签包裹.
+// 新模型（MiniMax-Text-01, M1, M2, M2.5 等）已支持标准 JSON tool calling，
+// 仅对旧模型（abab 系列）执行 XML 解析.
 func (p *MiniMaxProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-chan llm.StreamChunk, error) {
 	upstream, err := p.Provider.Stream(ctx, req)
 	if err != nil {
 		return nil, err
+	}
+	// New models use standard JSON tool calling; skip XML parsing.
+	if !isLegacyModel(req.Model) && !isLegacyModel(p.Cfg.DefaultModel) && !isLegacyModel(p.Cfg.FallbackModel) {
+		return upstream, nil
 	}
 	out := make(chan llm.StreamChunk)
 	go func() {
@@ -56,6 +63,11 @@ func (p *MiniMaxProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-c
 		}
 	}()
 	return out, nil
+}
+
+// isLegacyModel returns true for old MiniMax models (abab series) that use XML tool call format.
+func isLegacyModel(model string) bool {
+	return strings.HasPrefix(model, "abab")
 }
 
 // xmlToolCallPayload 用于反序列化 <tool_calls> 标签内的 JSON.

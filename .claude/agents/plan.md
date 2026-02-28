@@ -2,7 +2,7 @@
 name: plan
 description: |
   Multi-Agent Pipeline planner. Analyzes requirements and produces a fully configured task directory ready for dispatch.
-tools: Read, Bash, Glob, Grep, Task
+tools: Read, Bash, Glob, Grep, Task, mcp__ace-tool__search_context
 model: opus
 ---
 # Plan Agent

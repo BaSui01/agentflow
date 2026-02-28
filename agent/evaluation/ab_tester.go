@@ -147,10 +147,8 @@ func (t *ABTester) CreateExperiment(exp *Experiment) error {
 	t.mu.Unlock()
 
 	// 持久化到存储
-	if t.store != nil {
-		if err := t.store.SaveExperiment(context.Background(), exp); err != nil {
-			t.logger.Warn("failed to save experiment to store", zap.Error(err))
-		}
+	if err := t.store.SaveExperiment(context.Background(), exp); err != nil {
+		t.logger.Warn("failed to save experiment to store", zap.Error(err))
 	}
 
 	t.logger.Info("experiment created",
@@ -187,18 +185,14 @@ func (t *ABTester) GetExperiment(experimentID string) (*Experiment, error) {
 	}
 
 	// 尝试从存储加载
-	if t.store != nil {
-		exp, err := t.store.LoadExperiment(context.Background(), experimentID)
-		if err != nil {
-			return nil, ErrExperimentNotFound
-		}
-		t.mu.Lock()
-		t.experiments[experimentID] = exp
-		t.mu.Unlock()
-		return exp, nil
+	exp, err := t.store.LoadExperiment(context.Background(), experimentID)
+	if err != nil {
+		return nil, ErrExperimentNotFound
 	}
-
-	return nil, ErrExperimentNotFound
+	t.mu.Lock()
+	t.experiments[experimentID] = exp
+	t.mu.Unlock()
+	return exp, nil
 }
 
 // StartExperiment 启动实验
@@ -213,10 +207,8 @@ func (t *ABTester) StartExperiment(experimentID string) error {
 	exp.StartTime = time.Now()
 	t.mu.Unlock()
 
-	if t.store != nil {
-		if err := t.store.SaveExperiment(context.Background(), exp); err != nil {
-			t.logger.Warn("failed to save experiment status", zap.Error(err))
-		}
+	if err := t.store.SaveExperiment(context.Background(), exp); err != nil {
+		t.logger.Warn("failed to save experiment status", zap.Error(err))
 	}
 
 	t.logger.Info("experiment started", zap.String("id", experimentID))
@@ -234,10 +226,8 @@ func (t *ABTester) PauseExperiment(experimentID string) error {
 	exp.Status = ExperimentStatusPaused
 	t.mu.Unlock()
 
-	if t.store != nil {
-		if err := t.store.SaveExperiment(context.Background(), exp); err != nil {
-			t.logger.Warn("failed to save experiment status", zap.Error(err))
-		}
+	if err := t.store.SaveExperiment(context.Background(), exp); err != nil {
+		t.logger.Warn("failed to save experiment status", zap.Error(err))
 	}
 
 	t.logger.Info("experiment paused", zap.String("id", experimentID))
@@ -257,10 +247,8 @@ func (t *ABTester) CompleteExperiment(experimentID string) error {
 	exp.EndTime = &now
 	t.mu.Unlock()
 
-	if t.store != nil {
-		if err := t.store.SaveExperiment(context.Background(), exp); err != nil {
-			t.logger.Warn("failed to save experiment status", zap.Error(err))
-		}
+	if err := t.store.SaveExperiment(context.Background(), exp); err != nil {
+		t.logger.Warn("failed to save experiment status", zap.Error(err))
 	}
 
 	t.logger.Info("experiment completed", zap.String("id", experimentID))
@@ -281,12 +269,10 @@ func (t *ABTester) Assign(experimentID, userID string) (*Variant, error) {
 	}
 
 	// 检查是否已有分配
-	if t.store != nil {
-		if variantID, err := t.store.GetAssignment(context.Background(), experimentID, userID); err == nil && variantID != "" {
-			for i := range exp.Variants {
-				if exp.Variants[i].ID == variantID {
-					return &exp.Variants[i], nil
-				}
+	if variantID, err := t.store.GetAssignment(context.Background(), experimentID, userID); err == nil && variantID != "" {
+		for i := range exp.Variants {
+			if exp.Variants[i].ID == variantID {
+				return &exp.Variants[i], nil
 			}
 		}
 	}
@@ -295,10 +281,8 @@ func (t *ABTester) Assign(experimentID, userID string) (*Variant, error) {
 	variant := t.assignByHash(exp.Variants, experimentID, userID)
 
 	// 记录分配
-	if t.store != nil {
-		if err := t.store.RecordAssignment(context.Background(), experimentID, userID, variant.ID); err != nil {
-			t.logger.Warn("failed to record assignment", zap.Error(err))
-		}
+	if err := t.store.RecordAssignment(context.Background(), experimentID, userID, variant.ID); err != nil {
+		t.logger.Warn("failed to record assignment", zap.Error(err))
 	}
 
 	t.logger.Debug("variant assigned",
@@ -360,10 +344,8 @@ func (t *ABTester) RecordResult(experimentID, variantID string, result *EvalResu
 	}
 
 	// 持久化结果
-	if t.store != nil {
-		if err := t.store.RecordResult(context.Background(), experimentID, variantID, result); err != nil {
-			return fmt.Errorf("failed to record result: %w", err)
-		}
+	if err := t.store.RecordResult(context.Background(), experimentID, variantID, result); err != nil {
+		return fmt.Errorf("failed to record result: %w", err)
 	}
 
 	t.logger.Debug("result recorded",
@@ -383,14 +365,9 @@ func (t *ABTester) Analyze(ctx context.Context, experimentID string) (*Experimen
 	}
 
 	// 获取所有结果
-	var allResults map[string][]*EvalResult
-	if t.store != nil {
-		allResults, err = t.store.GetResults(ctx, experimentID)
-		if err != nil {
-			return nil, fmt.Errorf("failed to get results: %w", err)
-		}
-	} else {
-		allResults = make(map[string][]*EvalResult)
+	allResults, err := t.store.GetResults(ctx, experimentID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get results: %w", err)
 	}
 
 	// 计算每个变体的统计数据
@@ -585,10 +562,8 @@ func (t *ABTester) DeleteExperiment(experimentID string) error {
 	delete(t.experiments, experimentID)
 	t.mu.Unlock()
 
-	if t.store != nil {
-		if err := t.store.DeleteExperiment(context.Background(), experimentID); err != nil {
-			return fmt.Errorf("failed to delete experiment from store: %w", err)
-		}
+	if err := t.store.DeleteExperiment(context.Background(), experimentID); err != nil {
+		return fmt.Errorf("failed to delete experiment from store: %w", err)
 	}
 
 	t.logger.Info("experiment deleted", zap.String("id", experimentID))
