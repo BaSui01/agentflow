@@ -74,6 +74,12 @@ type Provider interface {
 
 // HealthStatus 表示提供者的健康检查结果。
 // 这是 Provider 级别的统一健康状态类型，同时被 llm.Provider 和 llm/embedding.Provider 使用。
+//
+// L-003: 项目中存在两个 HealthStatus 结构体，服务于不同层次：
+//   - llm.HealthStatus（本定义）— LLM Provider 层，包含 Latency/ErrorRate
+//   - agent.HealthStatus — Agent 层，包含 State 字段
+//
+// 两者字段不同，无法统一。API 层转换请使用 handlers.ConvertHealthStatus。
 type HealthStatus struct {
 	Healthy   bool          `json:"healthy"`
 	Latency   time.Duration `json:"latency"`

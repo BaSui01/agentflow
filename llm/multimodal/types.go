@@ -4,7 +4,9 @@ import (
 	"encoding/base64"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -146,9 +148,44 @@ func LoadImageFromFile(path string) (Content, error) {
 	return content, nil
 }
 
+// validateExternalURL checks that the URL does not point to internal/private networks (SSRF prevention).
+// Also resolves hostnames to catch DNS rebinding attacks (X-007).
+func validateExternalURL(rawURL string) error {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return fmt.Errorf("invalid URL: %w", err)
+	}
+	if u.Scheme != "http" && u.Scheme != "https" {
+		return fmt.Errorf("unsupported URL scheme: %s", u.Scheme)
+	}
+	host := u.Hostname()
+	ip := net.ParseIP(host)
+	if ip != nil {
+		if ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() || ip.IsUnspecified() {
+			return fmt.Errorf("URL points to internal network: %s", host)
+		}
+	} else {
+		// Resolve hostname to check resolved IPs against internal ranges
+		addrs, err := net.LookupIP(host)
+		if err != nil {
+			return fmt.Errorf("failed to resolve hostname %s: %w", host, err)
+		}
+		for _, addr := range addrs {
+			if addr.IsLoopback() || addr.IsPrivate() || addr.IsLinkLocalUnicast() || addr.IsLinkLocalMulticast() || addr.IsUnspecified() {
+				return fmt.Errorf("hostname %s resolves to internal IP %s", host, addr)
+			}
+		}
+	}
+	return nil
+}
+
 // LoadImageFromURL 从 URL 加载图像.
-func LoadImageFromURL(url string) (Content, error) {
-	resp, err := http.Get(url)
+func LoadImageFromURL(rawURL string) (Content, error) {
+	if err := validateExternalURL(rawURL); err != nil {
+		return Content{}, fmt.Errorf("URL validation failed: %w", err)
+	}
+
+	resp, err := http.Get(rawURL)
 	if err != nil {
 		return Content{}, fmt.Errorf("failed to fetch image: %w", err)
 	}

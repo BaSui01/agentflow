@@ -106,6 +106,9 @@ type TokenBudgetManager struct {
 	throttleUntil time.Time
 	mu            sync.Mutex // 统一使用 Mutex（非 RWMutex），所有计数器访问均需持锁
 
+	// alertWg 跟踪 fireAlert 启动的 goroutine，确保关闭时可等待完成 (T-012)
+	alertWg sync.WaitGroup
+
 	// 警报跟踪
 	alertedMinute bool
 	alertedHour   bool
@@ -336,12 +339,18 @@ func (m *TokenBudgetManager) fireAlert(alert Alert) {
 		zap.Float64("current", alert.Current))
 
 	for _, handler := range m.alertHandlers {
-		go handler(alert)
+		h := handler
+		m.alertWg.Add(1)
+		go func() {
+			defer m.alertWg.Done()
+			h(alert)
+		}()
 	}
 }
 
 // 重置所有计数器(用于测试).
 func (m *TokenBudgetManager) Reset() {
+	m.alertWg.Wait() // 等待所有 alert goroutine 完成后再重置
 	m.mu.Lock()
 	defer m.mu.Unlock()
 

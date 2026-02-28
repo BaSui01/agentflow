@@ -169,19 +169,19 @@ func (r *ReActExecutor) ExecuteStream(ctx context.Context, req *llm.ChatRequest)
 		for i := 0; i < r.config.MaxIterations; i++ {
 			select {
 			case <-ctx.Done():
-				eventCh <- ReActStreamEvent{Type: "error", Error: fmt.Sprintf("context cancelled: %v", ctx.Err())}
+				eventCh <- ReActStreamEvent{Type: ReActEventError, Error: fmt.Sprintf("context cancelled: %v", ctx.Err())}
 				return
 			default:
 			}
 
-			eventCh <- ReActStreamEvent{Type: "iteration_start", Iteration: i + 1}
+			eventCh <- ReActStreamEvent{Type: ReActEventIterationStart, Iteration: i + 1}
 
 			callReq := *req
 			callReq.Messages = messages
 
 			streamCh, err := r.provider.Stream(ctx, &callReq)
 			if err != nil {
-				eventCh <- ReActStreamEvent{Type: "error", Error: fmt.Sprintf("LLM stream failed: %s", err.Error())}
+				eventCh <- ReActStreamEvent{Type: ReActEventError, Error: fmt.Sprintf("LLM stream failed: %s", err.Error())}
 				return
 			}
 
@@ -201,15 +201,15 @@ func (r *ReActExecutor) ExecuteStream(ctx context.Context, req *llm.ChatRequest)
 			for chunk := range streamCh {
 				select {
 				case <-ctx.Done():
-					eventCh <- ReActStreamEvent{Type: "error", Error: fmt.Sprintf("context cancelled: %v", ctx.Err())}
+					eventCh <- ReActStreamEvent{Type: ReActEventError, Error: fmt.Sprintf("context cancelled: %v", ctx.Err())}
 					return
 				default:
 				}
 
-				eventCh <- ReActStreamEvent{Type: "llm_chunk", Chunk: &chunk}
+				eventCh <- ReActStreamEvent{Type: ReActEventLLMChunk, Chunk: &chunk}
 
 				if chunk.Err != nil {
-					eventCh <- ReActStreamEvent{Type: "error", Error: chunk.Err.Error()}
+					eventCh <- ReActStreamEvent{Type: ReActEventError, Error: chunk.Err.Error()}
 					return
 				}
 
@@ -291,7 +291,7 @@ func (r *ReActExecutor) ExecuteStream(ctx context.Context, req *llm.ChatRequest)
 					raw := strings.TrimSpace(acc.argsBuilding.String())
 					if raw != "" {
 						if !json.Valid([]byte(raw)) {
-							eventCh <- ReActStreamEvent{Type: "error", Error: fmt.Sprintf("invalid tool call arguments (id=%s tool=%s): %s", acc.id, acc.name, raw)}
+							eventCh <- ReActStreamEvent{Type: ReActEventError, Error: fmt.Sprintf("invalid tool call arguments (id=%s tool=%s): %s", acc.id, acc.name, raw)}
 							return
 						}
 						args = json.RawMessage(raw)
@@ -309,30 +309,40 @@ func (r *ReActExecutor) ExecuteStream(ctx context.Context, req *llm.ChatRequest)
 				if lastUsage != nil {
 					final.Usage = *lastUsage
 				}
-				eventCh <- ReActStreamEvent{Type: "completed", Iteration: i + 1, FinalResponse: final}
+				eventCh <- ReActStreamEvent{Type: ReActEventCompleted, Iteration: i + 1, FinalResponse: final}
 				return
 			}
 
-			eventCh <- ReActStreamEvent{Type: "tools_start", ToolCalls: assembledMessage.ToolCalls}
+			eventCh <- ReActStreamEvent{Type: ReActEventToolsStart, ToolCalls: assembledMessage.ToolCalls}
 			toolResults := r.toolExecutor.Execute(ctx, assembledMessage.ToolCalls)
-			eventCh <- ReActStreamEvent{Type: "tools_end", ToolResults: toolResults}
+			eventCh <- ReActStreamEvent{Type: ReActEventToolsEnd, ToolResults: toolResults}
 
 			messages = append(messages, assembledMessage)
 			for _, result := range toolResults {
 				toolMessage := result.ToMessage()
 				if result.Error != "" && r.config.StopOnError {
-					eventCh <- ReActStreamEvent{Type: "error", Error: fmt.Sprintf("tool execution failed: %s", result.Error)}
+					eventCh <- ReActStreamEvent{Type: ReActEventError, Error: fmt.Sprintf("tool execution failed: %s", result.Error)}
 					return
 				}
 				messages = append(messages, toolMessage)
 			}
 		}
 
-		eventCh <- ReActStreamEvent{Type: "error", Error: fmt.Sprintf("max iterations reached (%d)", r.config.MaxIterations)}
+		eventCh <- ReActStreamEvent{Type: ReActEventError, Error: fmt.Sprintf("max iterations reached (%d)", r.config.MaxIterations)}
 	}()
 
 	return eventCh, nil
 }
+
+// ReActStreamEvent type constants.
+const (
+	ReActEventIterationStart = "iteration_start"
+	ReActEventLLMChunk       = "llm_chunk"
+	ReActEventToolsStart     = "tools_start"
+	ReActEventToolsEnd       = "tools_end"
+	ReActEventCompleted      = "completed"
+	ReActEventError          = "error"
+)
 
 // ReActStreamEvent 表示流式 ReAct 循环事件.
 type ReActStreamEvent struct {

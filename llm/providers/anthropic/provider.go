@@ -31,11 +31,15 @@ type ClaudeProvider struct {
 	rewriterChain *middleware.RewriterChain
 }
 
+// defaultClaudeTimeout is the default HTTP client timeout for Claude API requests.
+// Claude responses can be slower than other providers.
+const defaultClaudeTimeout = 60 * time.Second
+
 // NewClaudeProvider 创建 Claude Provider。
 func NewClaudeProvider(cfg providers.ClaudeConfig, logger *zap.Logger) *ClaudeProvider {
 	timeout := cfg.Timeout
 	if timeout == 0 {
-		timeout = 60 * time.Second // Claude 响应可能较慢
+		timeout = defaultClaudeTimeout
 	}
 
 	// 设置默认 BaseURL

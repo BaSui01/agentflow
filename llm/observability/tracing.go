@@ -169,10 +169,12 @@ func (t *Tracer) StartTrace(ctx context.Context, traceType TraceType, name strin
 	var span oteltrace.Span
 	if t.otelTrace != nil {
 		ctx, span = t.otelTrace.Start(ctx, name)
-		span.SetAttributes(
-			attribute.String("trace.type", string(traceType)),
-			attribute.String("trace.id", tr.ID),
-		)
+		if span != nil {
+			span.SetAttributes(
+				attribute.String("trace.type", string(traceType)),
+				attribute.String("trace.id", tr.ID),
+			)
+		}
 	}
 
 	t.mu.Lock()

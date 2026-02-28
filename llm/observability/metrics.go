@@ -162,6 +162,7 @@ func (m *Metrics) StartRequest(ctx context.Context, attrs RequestAttrs) (context
 			attribute.String("tenant.id", attrs.TenantID),
 			attribute.String("user.id", attrs.UserID),
 			attribute.String("llm.feature", attrs.Feature),
+			attribute.String("request.id", attrs.TraceID),
 		))
 
 	m.activeRequests.Add(ctx, 1,
