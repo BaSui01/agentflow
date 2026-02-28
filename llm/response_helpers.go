@@ -14,8 +14,10 @@ func FirstChoice(resp *ChatResponse) (ChatChoice, error) {
 	return resp.Choices[0], nil
 }
 
-// MustFirstChoice returns the first choice or panics.
-// Use only in contexts where empty choices is truly unexpected.
+// Deprecated: MustFirstChoice panics on empty choices. Use FirstChoice() instead.
+//
+// This function is init-only: use it in main() or init() where a missing choice
+// is truly unrecoverable. For runtime code, use FirstChoice() which returns an error.
 func MustFirstChoice(resp *ChatResponse) ChatChoice {
 	choice, err := FirstChoice(resp)
 	if err != nil {

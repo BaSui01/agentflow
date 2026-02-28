@@ -2,10 +2,12 @@ package middleware
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"time"
 
 	llmpkg "github.com/BaSui01/agentflow/llm"
+	"go.uber.org/zap"
 )
 
 // Handler 处理一个请求并返回一个响应.
@@ -69,19 +71,51 @@ func (c *Chain) Len() int {
 // 内置中间件
 
 // LoggingMiddleware 记录请求/响应详情.
-func LoggingMiddleware(logger func(format string, args ...any)) Middleware {
+// 使用结构化 zap.Logger 替代 printf 风格的日志函数。
+func LoggingMiddleware(logger *zap.Logger) Middleware {
 	return func(next Handler) Handler {
 		return func(ctx context.Context, req *llmpkg.ChatRequest) (*llmpkg.ChatResponse, error) {
 			start := time.Now()
-			logger("[LLM] Request: model=%s messages=%d", req.Model, len(req.Messages))
+			logger.Info("LLM request",
+				zap.String("model", req.Model),
+				zap.Int("messages", len(req.Messages)),
+			)
 
 			resp, err := next(ctx, req)
 
 			duration := time.Since(start)
 			if err != nil {
-				logger("[LLM] Error: %v duration=%v", err, duration)
+				logger.Error("LLM error",
+					zap.Error(err),
+					zap.Duration("duration", duration),
+				)
 			} else {
-				logger("[LLM] Response: tokens=%d duration=%v", resp.Usage.TotalTokens, duration)
+				logger.Info("LLM response",
+					zap.Int("tokens", resp.Usage.TotalTokens),
+					zap.Duration("duration", duration),
+				)
+			}
+
+			return resp, err
+		}
+	}
+}
+
+// LoggingMiddlewareFunc 提供向后兼容的 printf 风格日志中间件。
+// 新代码应优先使用 LoggingMiddleware(*zap.Logger)。
+func LoggingMiddlewareFunc(logFn func(format string, args ...any)) Middleware {
+	return func(next Handler) Handler {
+		return func(ctx context.Context, req *llmpkg.ChatRequest) (*llmpkg.ChatResponse, error) {
+			start := time.Now()
+			logFn("[LLM] Request: model=%s messages=%d", req.Model, len(req.Messages))
+
+			resp, err := next(ctx, req)
+
+			duration := time.Since(start)
+			if err != nil {
+				logFn("[LLM] Error: %v duration=%v", err, duration)
+			} else {
+				logFn("[LLM] Response: tokens=%d duration=%v", resp.Usage.TotalTokens, duration)
 			}
 
 			return resp, err
@@ -232,7 +266,7 @@ type PanicError struct {
 }
 
 func (e *PanicError) Error() string {
-	return "panic recovered"
+	return fmt.Sprintf("middleware panic: %v", e.Value)
 }
 
 // TracingMiddleware 添加分布式追踪.

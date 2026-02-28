@@ -37,7 +37,9 @@ type APIKeyPool struct {
 	strategy      APIKeySelectionStrategy
 	roundRobinIdx int
 	logger        *zap.Logger
-	rng           *rand.Rand
+	// rng is not thread-safe on its own, but all callers (SelectKey, etc.)
+	// hold p.mu before calling methods that use rng. Do not use rng without p.mu.
+	rng *rand.Rand
 }
 
 // NewAPIKeyPool 创建 API Key 池
@@ -237,7 +239,8 @@ func (p *APIKeyPool) RecordSuccess(ctx context.Context, keyID uint) error {
 					if r := recover(); r != nil {
 						p.logger.Error("panic in async API key update",
 							zap.Uint("key_id", s.ID),
-							zap.Any("panic", r))
+							zap.Any("panic", r),
+							zap.Stack("stack"))
 					}
 				}()
 
@@ -321,7 +324,8 @@ func (p *APIKeyPool) RecordFailure(ctx context.Context, keyID uint, errMsg strin
 					if r := recover(); r != nil {
 						p.logger.Error("panic in async API key failure update",
 							zap.Uint("key_id", s.ID),
-							zap.Any("panic", r))
+							zap.Any("panic", r),
+							zap.Stack("stack"))
 					}
 				}()
 

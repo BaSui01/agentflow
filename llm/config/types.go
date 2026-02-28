@@ -1,6 +1,8 @@
 package config
 
 import (
+	"fmt"
+	"strings"
 	"time"
 )
 
@@ -95,4 +97,56 @@ type ModelConfig struct {
 	PriceOutput float64  `json:"price_output"`
 	Tags        []string `json:"tags"`
 	Enabled     bool     `json:"enabled"`
+}
+
+// V-019: Validate validates the LLMConfig fields for range and required constraints.
+func (c *LLMConfig) Validate() error {
+	var errs []string
+
+	for code, provider := range c.Providers {
+		if provider.Code == "" {
+			errs = append(errs, fmt.Sprintf("provider %q: code is required", code))
+		}
+		if provider.BaseURL == "" {
+			errs = append(errs, fmt.Sprintf("provider %q: base_url is required", code))
+		}
+		for i, model := range provider.Models {
+			if model.ID == "" {
+				errs = append(errs, fmt.Sprintf("provider %q model[%d]: id is required", code, i))
+			}
+			if model.MaxTokens < 0 {
+				errs = append(errs, fmt.Sprintf("provider %q model %q: max_tokens must be non-negative", code, model.ID))
+			}
+			if model.PriceInput < 0 {
+				errs = append(errs, fmt.Sprintf("provider %q model %q: price_input must be non-negative", code, model.ID))
+			}
+			if model.PriceOutput < 0 {
+				errs = append(errs, fmt.Sprintf("provider %q model %q: price_output must be non-negative", code, model.ID))
+			}
+		}
+	}
+
+	for i, policy := range c.FallbackPolicies {
+		if policy.ID == "" {
+			errs = append(errs, fmt.Sprintf("fallback_policy[%d]: id is required", i))
+		}
+		if policy.RetryMax < 0 {
+			errs = append(errs, fmt.Sprintf("fallback_policy %q: retry_max must be non-negative", policy.ID))
+		}
+		if policy.RetryDelayMs < 0 {
+			errs = append(errs, fmt.Sprintf("fallback_policy %q: retry_delay_ms must be non-negative", policy.ID))
+		}
+		if policy.RetryMultiplier < 0 {
+			errs = append(errs, fmt.Sprintf("fallback_policy %q: retry_multiplier must be non-negative", policy.ID))
+		}
+	}
+
+	if c.Caching.LocalMaxSize < 0 {
+		errs = append(errs, "caching.local_max_size must be non-negative")
+	}
+
+	if len(errs) > 0 {
+		return fmt.Errorf("llm config validation errors: %s", strings.Join(errs, "; "))
+	}
+	return nil
 }
