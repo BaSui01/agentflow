@@ -51,6 +51,7 @@ type FederatedTask struct {
 }
 
 // 任务状态代表联合任务状态.
+// TODO: Consider unifying with persistence.TaskStatus
 type TaskStatus string
 
 const (

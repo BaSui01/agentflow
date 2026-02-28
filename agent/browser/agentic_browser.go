@@ -157,14 +157,22 @@ func (b *AgenticBrowser) ExecuteTask(ctx context.Context, task BrowserTask) (*Ta
 		// 抓取截图
 		screenshot, err := b.driver.Screenshot(ctx)
 		if err != nil {
-			b.logger.Error("screenshot failed", zap.Error(err))
+			b.logger.Error("screenshot failed",
+				zap.String("task_id", task.ID),
+				zap.String("goal", task.Goal),
+				zap.Error(err),
+			)
 			continue
 		}
 
 		// 用视觉模型分析
 		analysis, err := b.vision.Analyze(ctx, screenshot)
 		if err != nil {
-			b.logger.Error("vision analysis failed", zap.Error(err))
+			b.logger.Error("vision analysis failed",
+				zap.String("task_id", task.ID),
+				zap.String("goal", task.Goal),
+				zap.Error(err),
+			)
 			continue
 		}
 
@@ -177,7 +185,11 @@ func (b *AgenticBrowser) ExecuteTask(ctx context.Context, task BrowserTask) (*Ta
 		// 规划下一步行动
 		actions, err := b.vision.PlanActions(ctx, task.Goal, analysis)
 		if err != nil {
-			b.logger.Error("action planning failed", zap.Error(err))
+			b.logger.Error("action planning failed",
+				zap.String("task_id", task.ID),
+				zap.String("goal", task.Goal),
+				zap.Error(err),
+			)
 			continue
 		}
 

@@ -222,7 +222,8 @@ func (d *RealDockerBackend) buildRealCommand(codeFile string, req *ExecutionRequ
 	case LangGo:
 		return []string{"go", "run", codeFile}
 	case LangRust:
-		return []string{"sh", "-c", fmt.Sprintf("rustc %s -o /tmp/main && /tmp/main", codeFile)}
+		// 避免 shell 注入：使用 $1 参数化传递 codeFile，而非直接拼接到 shell 命令中
+		return []string{"sh", "-c", "rustc \"$1\" -o /tmp/main && /tmp/main", "sh", codeFile}
 	case LangBash:
 		return []string{"bash", codeFile}
 	default:
