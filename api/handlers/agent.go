@@ -3,6 +3,7 @@ package handlers
 import (
 	"net/http"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -91,14 +92,52 @@ func NewAgentHandler(registry discovery.Registry, agentRegistry *agent.AgentRegi
 // @Security ApiKeyAuth
 // @Router /v1/agents [get]
 func (h *AgentHandler) HandleListAgents(w http.ResponseWriter, r *http.Request) {
+	// Parse and validate pagination parameters (V-001)
+	limit := 100 // default
+	offset := 0  // default
+
+	if v := r.URL.Query().Get("limit"); v != "" {
+		parsed, err := strconv.Atoi(v)
+		if err != nil || parsed < 0 {
+			WriteErrorMessage(w, http.StatusBadRequest, types.ErrInvalidRequest,
+				"limit must be a non-negative integer", h.logger)
+			return
+		}
+		limit = parsed
+	}
+	if limit > 1000 {
+		limit = 1000
+	}
+
+	if v := r.URL.Query().Get("offset"); v != "" {
+		parsed, err := strconv.Atoi(v)
+		if err != nil || parsed < 0 {
+			WriteErrorMessage(w, http.StatusBadRequest, types.ErrInvalidRequest,
+				"offset must be a non-negative integer", h.logger)
+			return
+		}
+		offset = parsed
+	}
+
 	agents, err := h.registry.ListAgents(r.Context())
 	if err != nil {
 		h.handleAgentError(w, err)
 		return
 	}
 
-	result := make([]AgentInfo, 0, len(agents))
-	for _, a := range agents {
+	// Apply pagination
+	total := len(agents)
+	if offset > total {
+		offset = total
+	}
+	end := offset + limit
+	if end > total {
+		end = total
+	}
+	page := agents[offset:end]
+
+	result := make([]AgentInfo, 0, len(page))
+	for _, a := range page {
 		result = append(result, toAgentInfo(a))
 	}
 
@@ -152,6 +191,13 @@ func (h *AgentHandler) HandleExecuteAgent(w http.ResponseWriter, r *http.Request
 
 	if req.AgentID == "" || req.Content == "" {
 		WriteErrorMessage(w, http.StatusBadRequest, types.ErrInvalidRequest, "agent_id and content are required", h.logger)
+		return
+	}
+
+	// V-004: Content length validation
+	if len(req.Content) > 100000 {
+		WriteErrorMessage(w, http.StatusBadRequest, types.ErrInvalidRequest,
+			"content length exceeds maximum of 100000 characters", h.logger)
 		return
 	}
 

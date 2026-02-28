@@ -29,6 +29,7 @@ type ErrorInfo struct {
 	Message    string `json:"message"`
 	Details    string `json:"details,omitempty"`
 	Retryable  bool   `json:"retryable,omitempty"`
+	Provider   string `json:"provider,omitempty"`
 	HTTPStatus int    `json:"-"` // 不序列化到 JSON
 }
 
@@ -44,7 +45,7 @@ func WriteJSON(w http.ResponseWriter, status int, data any) {
 
 	if err := json.NewEncoder(w).Encode(data); err != nil {
 		// 如果编码失败，记录错误但不能再写响应头
-		// 这里只能记录日志
+		zap.L().Error("WriteJSON: failed to encode response", zap.Error(err))
 		return
 	}
 }
@@ -69,6 +70,7 @@ func WriteError(w http.ResponseWriter, err *types.Error, logger *zap.Logger) {
 		Code:       string(err.Code),
 		Message:    err.Message,
 		Retryable:  err.Retryable,
+		Provider:   err.Provider,
 		HTTPStatus: status,
 	}
 
@@ -148,6 +150,16 @@ func mapErrorCodeToHTTPStatus(code types.ErrorCode) int {
 func DecodeJSONBody(w http.ResponseWriter, r *http.Request, dst any, logger *zap.Logger) error {
 	if r.Body == nil {
 		err := types.NewError(types.ErrInvalidRequest, "request body is empty")
+		WriteError(w, err, logger)
+		return err
+	}
+
+	// V-005: Content-Length pre-check before reading the body.
+	// This rejects obviously oversized requests early, before MaxBytesReader
+	// has to consume and discard the stream.
+	if r.ContentLength > 1<<20 {
+		err := types.NewError(types.ErrInvalidRequest, "request body too large, maximum is 1MB").
+			WithHTTPStatus(http.StatusRequestEntityTooLarge)
 		WriteError(w, err, logger)
 		return err
 	}

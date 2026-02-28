@@ -131,6 +131,11 @@ type Message struct {
 
 // ToolCall is a type alias for types.ToolCall to avoid duplicate definitions.
 // The canonical definition lives in types.ToolCall (types/message.go).
+//
+// C-013: Design decision — ToolCall uses a type alias because its fields are
+// identical across api and types packages. Message is independently defined
+// because the api layer uses string Role (for JSON) while types uses typed Role,
+// and api.Message includes JSON/Swagger annotations not needed in the types layer.
 type ToolCall = types.ToolCall
 
 // ImageContent 表示多模式消息的图像数据。
@@ -251,8 +256,9 @@ type LLMProviderModel struct {
 }
 
 // ProviderHealthResponse 代表提供商健康检查结果（HTTP API 序列化 DTO）。
-// 注意：这是 API 层的响应类型，Latency 为 string 格式。
-// 框架内部的 Provider 健康状态请使用 llm.HealthStatus。
+// 注意：这是 API 层的响应类型，Latency 为 string 格式（便于 JSON 序列化）。
+// 框架内部的 Provider 健康状态请使用 llm.HealthStatus（Latency 为 time.Duration）。
+// 使用 handlers.ConvertHealthStatus 进行两者之间的转换。
 // @Description 提供者健康状况
 type ProviderHealthResponse struct {
 	// 提供者是否健康
@@ -261,6 +267,8 @@ type ProviderHealthResponse struct {
 	Latency string `json:"latency" example:"100ms"`
 	// 错误率（0-1）
 	ErrorRate float64 `json:"error_rate" example:"0.01"`
+	// 健康检查消息（可选，如降级原因）
+	Message string `json:"message,omitempty" example:""`
 }
 
 // =============================================================================
@@ -377,7 +385,11 @@ type ErrorResponse struct {
 	Error ErrorDetail `json:"error"`
 }
 
-// ErrorDetail 表示错误详细信息。
+// ErrorDetail 表示 API DTO 层的错误详细信息（用于 JSON 序列化给客户端）。
+// 注意：这与 handlers.ErrorInfo 是不同用途的结构：
+//   - ErrorDetail：面向外部客户端的 API DTO，包含 HTTPStatus 等序列化字段
+//   - ErrorInfo：handlers 内部统一响应结构中的错误信息
+//
 // @Description 错误详细结构
 type ErrorDetail struct {
 	// 错误代码

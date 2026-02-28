@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"time"
 
@@ -15,6 +16,10 @@ import (
 // =============================================================================
 // 💬 聊天接口 Handler
 // =============================================================================
+
+// defaultStreamTimeout is the default timeout for chat completion requests
+// when no explicit timeout is provided by the client.
+const defaultStreamTimeout = 30 * time.Second
 
 // ChatHandler 聊天接口处理器
 type ChatHandler struct {
@@ -85,7 +90,9 @@ func (h *ChatHandler) HandleCompletion(w http.ResponseWriter, r *http.Request) {
 	apiResp := h.convertToAPIResponse(resp)
 
 	// 记录日志
+	requestID := w.Header().Get("X-Request-ID")
 	h.logger.Info("chat completion",
+		zap.String("request_id", requestID),
 		zap.String("model", req.Model),
 		zap.Int("prompt_tokens", resp.Usage.PromptTokens),
 		zap.Int("completion_tokens", resp.Usage.CompletionTokens),
@@ -150,15 +157,23 @@ func (h *ChatHandler) HandleStream(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	requestID := w.Header().Get("X-Request-ID")
+
 	for chunk := range stream {
 		if chunk.Err != nil {
-			h.logger.Error("stream error", zap.Error(chunk.Err))
+			h.logger.Error("stream error",
+				zap.String("request_id", requestID),
+				zap.Error(chunk.Err),
+			)
 			// SSE 错误事件 — 使用 json.Marshal 转义错误消息，防止 JSON 注入
-			errPayload, _ := json.Marshal(map[string]string{"error": chunk.Err.Message})
-			w.Write([]byte("event: error\n"))
-			w.Write([]byte("data: "))
-			w.Write(errPayload)
-			w.Write([]byte("\n\n"))
+			errPayload, marshalErr := json.Marshal(map[string]string{"error": chunk.Err.Message})
+			if marshalErr != nil {
+				h.logger.Error("failed to marshal error payload", zap.Error(marshalErr))
+				errPayload = []byte(`{"error":"internal error"}`)
+			}
+			if err := writeSSE(w, []byte("event: error\n"), []byte("data: "), errPayload, []byte("\n\n")); err != nil {
+				h.logger.Error("failed to write SSE error event", zap.Error(err))
+			}
 			flusher.Flush()
 			return
 		}
@@ -167,17 +182,28 @@ func (h *ChatHandler) HandleStream(w http.ResponseWriter, r *http.Request) {
 		apiChunk := h.convertToAPIStreamChunk(&chunk)
 
 		// 发送 SSE 事件
-		w.Write([]byte("data: "))
-		if err := writeJSON(w, apiChunk); err != nil {
-			h.logger.Error("failed to write chunk", zap.Error(err))
+		if err := writeSSE(w, []byte("data: ")); err != nil {
+			h.logger.Error("failed to write SSE data prefix", zap.Error(err))
 			return
 		}
-		w.Write([]byte("\n\n"))
+		if err := writeJSON(w, apiChunk); err != nil {
+			h.logger.Error("failed to write chunk",
+				zap.String("request_id", requestID),
+				zap.Error(err),
+			)
+			return
+		}
+		if err := writeSSE(w, []byte("\n\n")); err != nil {
+			h.logger.Error("failed to write SSE data suffix", zap.Error(err))
+			return
+		}
 		flusher.Flush()
 	}
 
 	// 发送结束标记
-	w.Write([]byte("data: [DONE]\n\n"))
+	if err := writeSSE(w, []byte("data: [DONE]\n\n")); err != nil {
+		h.logger.Error("failed to write SSE done marker", zap.Error(err))
+	}
 	flusher.Flush()
 }
 
@@ -195,6 +221,11 @@ func (h *ChatHandler) validateChatRequest(req *api.ChatRequest) *types.Error {
 		return types.NewError(types.ErrInvalidRequest, "messages cannot be empty")
 	}
 
+	// V-002: MaxTokens range validation
+	if req.MaxTokens < 0 || req.MaxTokens > 128000 {
+		return types.NewError(types.ErrInvalidRequest, "max_tokens must be between 0 and 128000")
+	}
+
 	// 验证温度参数
 	if req.Temperature < 0 || req.Temperature > 2 {
 		return types.NewError(types.ErrInvalidRequest, "temperature must be between 0 and 2")
@@ -205,13 +236,41 @@ func (h *ChatHandler) validateChatRequest(req *api.ChatRequest) *types.Error {
 		return types.NewError(types.ErrInvalidRequest, "top_p must be between 0 and 1")
 	}
 
+	// V-006: Validate Message.Role enum values
+	validRoles := map[string]bool{
+		"system": true, "user": true, "assistant": true, "tool": true,
+	}
+
+	for i, msg := range req.Messages {
+		// V-006: Role validation
+		if !validRoles[msg.Role] {
+			return types.NewError(types.ErrInvalidRequest,
+				fmt.Sprintf("messages[%d].role must be one of: system, user, assistant, tool", i))
+		}
+
+		// V-003: Content length validation per message
+		if len(msg.Content) > 100000 {
+			return types.NewError(types.ErrInvalidRequest,
+				fmt.Sprintf("messages[%d].content exceeds maximum length of 100000 characters", i))
+		}
+
+		// V-007: ImageContent.Type enum validation
+		validImageTypes := map[string]bool{"url": true, "base64": true}
+		for j, img := range msg.Images {
+			if !validImageTypes[img.Type] {
+				return types.NewError(types.ErrInvalidRequest,
+					fmt.Sprintf("messages[%d].images[%d].type must be one of: url, base64", i, j))
+			}
+		}
+	}
+
 	return nil
 }
 
 // convertToLLMRequest 转换为 LLM 请求
 func (h *ChatHandler) convertToLLMRequest(req *api.ChatRequest) *llm.ChatRequest {
 	// 解析超时
-	timeout := 30 * time.Second
+	timeout := defaultStreamTimeout
 	if req.Timeout != "" {
 		if d, err := time.ParseDuration(req.Timeout); err == nil {
 			timeout = d
@@ -227,6 +286,9 @@ func (h *ChatHandler) convertToLLMRequest(req *api.ChatRequest) *llm.ChatRequest
 			Name:       msg.Name,
 			ToolCalls:  msg.ToolCalls,
 			ToolCallID: msg.ToolCallID,
+			Images:     convertAPIImagesToTypes(msg.Images),
+			Metadata:   msg.Metadata,
+			Timestamp:  msg.Timestamp,
 		}
 	}
 
@@ -283,6 +345,9 @@ func (h *ChatHandler) convertChoices(choices []llm.ChatChoice) []api.ChatChoice 
 				Name:       choice.Message.Name,
 				ToolCalls:  choice.Message.ToolCalls,
 				ToolCallID: choice.Message.ToolCallID,
+				Images:     convertTypesImagesToAPI(choice.Message.Images),
+				Metadata:   choice.Message.Metadata,
+				Timestamp:  choice.Message.Timestamp,
 			},
 		}
 	}
@@ -300,7 +365,7 @@ func (h *ChatHandler) convertUsage(usage llm.ChatUsage) api.ChatUsage {
 
 // convertToAPIStreamChunk 转换流式块
 func (h *ChatHandler) convertToAPIStreamChunk(chunk *llm.StreamChunk) *api.StreamChunk {
-	return &api.StreamChunk{
+	result := &api.StreamChunk{
 		ID:       chunk.ID,
 		Provider: chunk.Provider,
 		Model:    chunk.Model,
@@ -311,10 +376,26 @@ func (h *ChatHandler) convertToAPIStreamChunk(chunk *llm.StreamChunk) *api.Strea
 			Name:       chunk.Delta.Name,
 			ToolCalls:  chunk.Delta.ToolCalls,
 			ToolCallID: chunk.Delta.ToolCallID,
+			Images:     convertTypesImagesToAPI(chunk.Delta.Images),
+			Metadata:   chunk.Delta.Metadata,
+			Timestamp:  chunk.Delta.Timestamp,
 		},
 		FinishReason: chunk.FinishReason,
 		Usage:        convertStreamUsage(chunk.Usage),
 	}
+
+	// 映射 Err -> Error（注意：流式场景中 Err 通常已在调用方作为 SSE error 事件处理，
+	// 但如果 chunk 携带了非致命错误信息，仍需映射到 API 层的 ErrorDetail）
+	if chunk.Err != nil {
+		result.Error = &api.ErrorDetail{
+			Code:      string(chunk.Err.Code),
+			Message:   chunk.Err.Message,
+			Retryable: chunk.Err.Retryable,
+			Provider:  chunk.Err.Provider,
+		}
+	}
+
+	return result
 }
 
 // convertStreamUsage safely converts *llm.ChatUsage to *api.ChatUsage
@@ -351,9 +432,74 @@ func writeJSON(w http.ResponseWriter, data any) error {
 	return encoder.Encode(data)
 }
 
+// writeSSE 将多个字节片段依次写入 ResponseWriter，任一写入失败立即返回错误。
+func writeSSE(w http.ResponseWriter, parts ...[]byte) error {
+	for _, p := range parts {
+		if _, err := w.Write(p); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // =============================================================================
 // 🔄 类型转换辅助函数
 // =============================================================================
 
 // Note: convertAPIToolCallsToTypes and convertTypesToolCallsToAPI were removed
 // because api.ToolCall is now a type alias for types.ToolCall — no conversion needed.
+
+// =============================================================================
+// 🖼️ Image 转换辅助函数
+// =============================================================================
+
+// convertAPIImagesToTypes 将 api.ImageContent 切片转换为 types.ImageContent 切片。
+// 两者字段相同但属于不同包的独立类型定义，需要逐字段拷贝。
+func convertAPIImagesToTypes(images []api.ImageContent) []types.ImageContent {
+	if len(images) == 0 {
+		return nil
+	}
+	result := make([]types.ImageContent, len(images))
+	for i, img := range images {
+		result[i] = types.ImageContent{
+			Type: img.Type,
+			URL:  img.URL,
+			Data: img.Data,
+		}
+	}
+	return result
+}
+
+// convertTypesImagesToAPI 将 types.ImageContent 切片转换为 api.ImageContent 切片。
+func convertTypesImagesToAPI(images []types.ImageContent) []api.ImageContent {
+	if len(images) == 0 {
+		return nil
+	}
+	result := make([]api.ImageContent, len(images))
+	for i, img := range images {
+		result[i] = api.ImageContent{
+			Type: img.Type,
+			URL:  img.URL,
+			Data: img.Data,
+		}
+	}
+	return result
+}
+
+// =============================================================================
+// 🏥 HealthStatus 转换辅助函数
+// =============================================================================
+
+// ConvertHealthStatus 将 llm.HealthStatus 转换为 api.ProviderHealthResponse。
+// 主要处理 Latency 的 time.Duration -> string 格式化。
+func ConvertHealthStatus(hs *llm.HealthStatus) *api.ProviderHealthResponse {
+	if hs == nil {
+		return nil
+	}
+	return &api.ProviderHealthResponse{
+		Healthy:   hs.Healthy,
+		Latency:   hs.Latency.String(),
+		ErrorRate: hs.ErrorRate,
+		Message:   hs.Message,
+	}
+}
