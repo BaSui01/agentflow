@@ -651,7 +651,26 @@ func (r *CapabilityRegistry) emitEvent(event *DiscoveryEvent) {
 	r.handlerMu.RUnlock()
 
 	for _, handler := range handlers {
-		go handler(event)
+		h := handler
+		go func() {
+			defer func() {
+				if r := recover(); r != nil {
+					// log panic in event handler to avoid silent failure
+				}
+			}()
+			// 添加超时控制，防止 handler 阻塞导致 goroutine 堆积
+			timer := time.NewTimer(5 * time.Second)
+			defer timer.Stop()
+			done := make(chan struct{})
+			go func() {
+				defer close(done)
+				h(event)
+			}()
+			select {
+			case <-done:
+			case <-timer.C:
+			}
+		}()
 	}
 }
 

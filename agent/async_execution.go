@@ -55,13 +55,28 @@ func (e *AsyncExecutor) ExecuteAsync(ctx context.Context, input *Input) (*AsyncE
 
 	// 异步执行
 	go func() {
+		// P-010: 在执行前检查 ctx 是否已取消，避免不必要的工作
+		select {
+		case <-ctx.Done():
+			execution.setFailed(ctx.Err())
+			select {
+			case execution.doneCh <- executionResult{Err: ctx.Err()}:
+			default:
+			}
+			return
+		default:
+		}
+
 		output, err := e.agent.Execute(ctx, input)
 		if err != nil {
 			execution.setFailed(err)
 		} else {
 			execution.setCompleted(output)
 		}
-		execution.doneCh <- executionResult{Output: output, Err: err}
+		select {
+		case execution.doneCh <- executionResult{Output: output, Err: err}:
+		case <-ctx.Done():
+		}
 	}()
 
 	return execution, nil
@@ -153,6 +168,10 @@ func (e *AsyncExecutor) combineResults(results []*Output) *Output {
 }
 
 // AsyncExecution 异步执行状态
+//
+// 重要：调用者必须调用 Wait() 或从 doneCh 读取结果，否则发送 goroutine
+// 可能因 ctx 取消而丢弃结果，但 doneCh 本身（带 1 缓冲）不会泄漏。
+// 如果不再需要结果，请确保取消传入的 context 以释放相关资源。(T-013)
 type AsyncExecution struct {
 	ID        string
 	AgentID   string
@@ -287,6 +306,7 @@ func (m *SubagentManager) SpawnSubagent(ctx context.Context, subagent Agent, inp
 			execution.setFailed(err)
 			m.logger.Warn("subagent execution failed",
 				zap.String("execution_id", execution.ID),
+				zap.String("subagent_id", subagent.ID()),
 				zap.Error(err),
 			)
 		} else {

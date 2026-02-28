@@ -14,6 +14,10 @@ import (
 // 处决国是长期处决状态。
 type ExecutionState string
 
+// baseRetryDelay is the base delay unit for the linear backoff strategy
+// used when retrying failed execution steps.
+const baseRetryDelay = 1 * time.Second
+
 const (
 	StateInitialized ExecutionState = "initialized"
 	StateRunning     ExecutionState = "running"
@@ -188,7 +192,9 @@ func (e *Executor) runExecution(ctx context.Context, exec *Execution, steps []St
 				zap.Int("retry", retry),
 				zap.Error(err),
 			)
-			time.Sleep(time.Duration(retry+1) * time.Second)
+			// Linear backoff: delay = (retry+1) * baseRetryDelay.
+		// For exponential backoff, consider using time.Duration(1<<retry) * baseRetryDelay.
+		time.Sleep(time.Duration(retry+1) * baseRetryDelay)
 		}
 
 		if err != nil {

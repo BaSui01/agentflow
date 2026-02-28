@@ -91,6 +91,7 @@ type MessageHub struct {
 	messageStore persistence.MessageStore // 持久化存储（可选）
 	retryConfig  persistence.RetryConfig  // 重试配置
 	closed       bool
+	closeOnce    sync.Once
 }
 
 // Coordinator 协调器接口
@@ -188,22 +189,25 @@ func (h *MessageHub) SetMessageStore(store persistence.MessageStore) {
 
 // Close 关闭消息中心
 func (h *MessageHub) Close() error {
-	h.mu.Lock()
-	defer h.mu.Unlock()
+	var closeErr error
+	h.closeOnce.Do(func() {
+		h.mu.Lock()
+		defer h.mu.Unlock()
 
-	h.closed = true
+		h.closed = true
 
-	// 关闭所有通道
-	for _, ch := range h.channels {
-		close(ch)
-	}
+		// 关闭所有通道
+		for _, ch := range h.channels {
+			close(ch)
+		}
+		h.channels = nil
 
-	// 关闭存储
-	if h.messageStore != nil {
-		return h.messageStore.Close()
-	}
-
-	return nil
+		// 关闭存储
+		if h.messageStore != nil {
+			closeErr = h.messageStore.Close()
+		}
+	})
+	return closeErr
 }
 
 // CreateChannel 创建通道
@@ -238,6 +242,8 @@ func (h *MessageHub) SendWithContext(ctx context.Context, msg *Message) error {
 		if err := h.messageStore.SaveMessage(ctx, persistMsg); err != nil {
 			h.logger.Error("failed to persist message",
 				zap.String("msg_id", msg.ID),
+				zap.String("from_agent_id", msg.FromID),
+				zap.String("to_agent_id", msg.ToID),
 				zap.Error(err),
 			)
 			// 持久化失败不阻止消息投递，但记录错误
@@ -521,6 +527,11 @@ func (c *DebateCoordinator) Coordinate(ctx context.Context, agents map[string]ag
 
 			output, err := a.Execute(ctx, debateInput)
 			if err != nil {
+				c.logger.Warn("agent debate round failed",
+					zap.String("agent_id", id),
+					zap.Int("round", round+1),
+					zap.Error(err),
+				)
 				continue
 			}
 
@@ -561,15 +572,17 @@ func (c *ConsensusCoordinator) Coordinate(ctx context.Context, agents map[string
 	// 1. 收集所有 Agent 的输出
 	outputs := make([]*agent.Output, 0, len(agents))
 
-	for _, a := range agents {
+	for id, a := range agents {
 		output, err := a.Execute(ctx, input)
 		if err != nil {
+			c.logger.Warn("agent execution failed",
+				zap.String("agent_id", id),
+				zap.Error(err),
+			)
 			continue
 		}
 		outputs = append(outputs, output)
 	}
-
-	// 2. 投票达成共识（简化实现）
 	if len(outputs) == 0 {
 		return nil, fmt.Errorf("no valid outputs")
 	}
