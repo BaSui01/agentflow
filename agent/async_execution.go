@@ -120,6 +120,7 @@ func (e *AsyncExecutor) ExecuteWithSubagents(ctx context.Context, input *Input, 
 			if res.Err != nil {
 				e.logger.Warn("subagent execution failed",
 					zap.String("execution_id", exec.ID),
+					zap.String("subagent_id", exec.AgentID),
 					zap.String("task_type", "subagent_parallel"),
 					zap.Error(res.Err),
 				)
