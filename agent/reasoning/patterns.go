@@ -105,7 +105,10 @@ func (r *PatternRegistry) Unregister(name string) bool {
 	return true
 }
 
-// MustGet 获取推理模式，不存在则 panic
+// Deprecated: MustGet panics if pattern not found. Use Get() instead.
+//
+// 此方法仅用于应用初始化阶段（main() 或 init()），不得在请求处理器
+// 或业务逻辑中使用。对于运行时模式获取，请使用 Get() 方法。
 func (r *PatternRegistry) MustGet(name string) ReasoningPattern {
 	p, ok := r.Get(name)
 	if !ok {

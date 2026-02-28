@@ -39,10 +39,20 @@ type AgentBuilder struct {
 
 // NewAgentBuilder 创建 Agent 构建器
 func NewAgentBuilder(config Config) *AgentBuilder {
-	return &AgentBuilder{
+	b := &AgentBuilder{
 		config: config,
 		errors: make([]error, 0),
 	}
+
+	// V-012: Validate required config fields early
+	if config.ID == "" {
+		b.errors = append(b.errors, fmt.Errorf("config.ID is required"))
+	}
+	if config.Name == "" {
+		b.errors = append(b.errors, fmt.Errorf("config.Name is required"))
+	}
+
+	return b
 }
 
 // WithProvider 设置 LLM Provider
@@ -230,6 +240,11 @@ func (b *AgentBuilder) Build() (*BaseAgent, error) {
 	// 验证必需字段
 	if b.provider == nil {
 		return nil, fmt.Errorf("provider is required")
+	}
+
+	// V-013: Model is required for agent to function
+	if b.config.Model == "" {
+		return nil, fmt.Errorf("config.Model is required")
 	}
 
 	// 设置默认 logger
