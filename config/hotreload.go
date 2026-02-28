@@ -455,7 +455,10 @@ func (m *HotReloadManager) Stop() error {
 
 	if m.watcher != nil {
 		if err := m.watcher.Stop(); err != nil {
-			m.logger.Error("Failed to stop file watcher", zap.Error(err))
+			m.logger.Error("Failed to stop file watcher",
+				zap.String("config_path", m.configPath),
+				zap.Error(err),
+			)
 		}
 	}
 
@@ -473,7 +476,10 @@ func (m *HotReloadManager) handleFileChange(event FileEvent) {
 
 	if event.Op == FileOpWrite || event.Op == FileOpCreate {
 		if err := m.ReloadFromFile(); err != nil {
-			m.logger.Error("Failed to reload configuration", zap.Error(err))
+			m.logger.Error("Failed to reload configuration",
+				zap.String("config_path", m.configPath),
+				zap.Error(err),
+			)
 		}
 	}
 }
@@ -501,6 +507,7 @@ func (m *HotReloadManager) ReloadFromFile() error {
 	// ApplyConfig 内部会处理 validateFunc 和自动回滚
 	if err := m.ApplyConfig(newConfig, "file"); err != nil {
 		m.logger.Error("failed to apply config, auto-rollback may have occurred",
+			zap.String("config_path", m.configPath),
 			zap.Error(err))
 		return err
 	}
@@ -580,7 +587,10 @@ func (m *HotReloadManager) ApplyConfig(newConfig *Config, source string) error {
 	if err := m.notifyCallbacksSafe(changeCallbacks, reloadCallbacks, oldConfig, newConfig, appliedChanges); err != nil {
 		m.mu.Lock()
 		if m.config == newConfig {
-			m.logger.Error("callback failed, rolling back", zap.Error(err))
+			m.logger.Error("callback failed, rolling back",
+				zap.String("config_path", m.configPath),
+				zap.Error(err),
+			)
 			m.rollbackLocked(oldConfig, fmt.Sprintf("callback error: %v", err), err)
 		} else {
 			m.logger.Warn("callback failed but config changed concurrently, skip rollback",
@@ -604,6 +614,10 @@ func (m *HotReloadManager) ApplyConfig(newConfig *Config, source string) error {
 func (m *HotReloadManager) notifyCallbacksSafe(changeCallbacks []ChangeCallback, reloadCallbacks []ReloadCallback, oldConfig, newConfig *Config, changes []ConfigChange) (retErr error) {
 	defer func() {
 		if r := recover(); r != nil {
+			m.logger.Error("config callback panicked",
+				zap.Any("panic", r),
+				zap.Stack("stack"),
+			)
 			retErr = fmt.Errorf("callback panicked: %v", r)
 		}
 	}()
@@ -759,7 +773,10 @@ func (m *HotReloadManager) rollbackLocked(targetConfig *Config, reason string, o
 		func() {
 			defer func() {
 				if r := recover(); r != nil {
-					m.logger.Error("rollback callback panicked", zap.Any("panic", r))
+					m.logger.Error("rollback callback panicked",
+						zap.Any("panic", r),
+						zap.Stack("stack"),
+					)
 				}
 			}()
 			cb(event)
@@ -1020,8 +1037,16 @@ func redactSensitiveFields(data map[string]any, prefix string) {
 		lowerKey := strings.ToLower(key)
 		for sensitiveKey := range sensitiveKeys {
 			if strings.Contains(lowerKey, sensitiveKey) {
-				if str, ok := value.(string); ok && str != "" {
-					data[key] = "[REDACTED]"
+				switch v := value.(type) {
+				case string:
+					if v != "" {
+						data[key] = "[REDACTED]"
+					}
+				case []any:
+					// X-005: 脱敏 API Keys 等敏感字段的切片值
+					if len(v) > 0 {
+						data[key] = "[REDACTED]"
+					}
 				}
 				break
 			}

@@ -7,8 +7,10 @@ import "time"
 // Provides a structured, modular configuration system.
 // ============================================================
 
-// AgentConfig represents the complete configuration for an agent.
-// This replaces the flat Config structure with a more organized approach.
+// AgentConfig represents the complete configuration for an agent (runtime behavior).
+// Note: This is distinct from config.AgentConfig which is for deployment configuration
+// (YAML/env loading, flat structure). This type uses a modular nested structure
+// (Core/LLM/Features/Extensions) for runtime agent behavior configuration.
 type AgentConfig struct {
 	// Core configuration (required)
 	Core CoreConfig `json:"core"`
@@ -34,7 +36,9 @@ type CoreConfig struct {
 	Description string `json:"description,omitempty"`
 }
 
-// LLMConfig contains LLM-related settings.
+// LLMConfig contains LLM-related settings for runtime agent behavior (model parameters).
+// Note: This is distinct from config.LLMConfig which contains infrastructure connection
+// parameters (APIKey, BaseURL, Timeout, MaxRetries) for deployment configuration.
 type LLMConfig struct {
 	Model       string   `json:"model"`
 	Provider    string   `json:"provider,omitempty"`
