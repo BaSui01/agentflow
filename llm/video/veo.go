@@ -18,6 +18,12 @@ type VeoProvider struct {
 	client *http.Client
 }
 
+// defaultVeoTimeout is the default HTTP client timeout for Veo video generation requests.
+const defaultVeoTimeout = 300 * time.Second
+
+// defaultVeoPollInterval is the interval between polling attempts for Veo operation status.
+const defaultVeoPollInterval = 5 * time.Second
+
 // NewVeoProvider创建了一个新的Veo视频提供商.
 func NewVeoProvider(cfg VeoConfig) *VeoProvider {
 	if cfg.Model == "" {
@@ -25,7 +31,7 @@ func NewVeoProvider(cfg VeoConfig) *VeoProvider {
 	}
 	timeout := cfg.Timeout
 	if timeout == 0 {
-		timeout = 300 * time.Second
+		timeout = defaultVeoTimeout
 	}
 
 	return &VeoProvider{
@@ -168,7 +174,7 @@ func (p *VeoProvider) Generate(ctx context.Context, req *GenerateRequest) (*Gene
 }
 
 func (p *VeoProvider) pollOperation(ctx context.Context, opName string) (*veoResponse, error) {
-	ticker := time.NewTicker(5 * time.Second)
+	ticker := time.NewTicker(defaultVeoPollInterval)
 	defer ticker.Stop()
 
 	for {

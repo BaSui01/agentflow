@@ -33,16 +33,15 @@ func NewTaskStore(config StoreConfig) (TaskStore, error) {
 	}
 }
 
-// Must NewMessageStore 创建了新信件存储器或对错误的恐慌 。
+// MustNewMessageStore 创建 MessageStore，失败时 panic。
 //
-// 警告:此功能只应在应用程序初始化时使用
-// (例如,主要()或init())。 在请求处理器或业务逻辑中使用恐慌
-// 强烈劝阻。 对于运行时商店创建,取而代之的是使用"NewMessageStore".
+// 此函数仅用于应用初始化阶段（main() 或 init()），不得在请求处理器
+// 或业务逻辑中使用。对于运行时创建，请使用 NewMessageStore()。
 //
 // 示例用法:
 //
-//	func 主 () {
-//	    存储 := 持久性. Must NewMessageStore(配置) // OK - 初始化
+//	func main() {
+//	    store := persistence.MustNewMessageStore(config) // OK - 初始化
 //	    // ...
 //	}
 func MustNewMessageStore(config StoreConfig) MessageStore {
@@ -53,16 +52,15 @@ func MustNewMessageStore(config StoreConfig) MessageStore {
 	return store
 }
 
-// MustNewTaskStore 创建了新的 TaskStore 或对错误的恐慌.
+// MustNewTaskStore 创建 TaskStore，失败时 panic。
 //
-// 警告:此功能只应在应用程序初始化时使用
-// (例如,主要()或init())。 在请求处理器或业务逻辑中使用恐慌
-// 强烈劝阻。 对于运行时间商店的创建,使用"NewTaskStore"代替.
+// 此函数仅用于应用初始化阶段（main() 或 init()），不得在请求处理器
+// 或业务逻辑中使用。对于运行时创建，请使用 NewTaskStore()。
 //
 // 示例用法:
 //
-//	func 主 () {
-//	    存储 := 持久性. MustNewTaskStore(配置) // OK - 初始化
+//	func main() {
+//	    store := persistence.MustNewTaskStore(config) // OK - 初始化
 //	    // ...
 //	}
 func MustNewTaskStore(config StoreConfig) TaskStore {

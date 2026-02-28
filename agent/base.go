@@ -171,6 +171,14 @@ func NewBaseAgent(
 	bus EventBus,
 	logger *zap.Logger,
 ) *BaseAgent {
+	// V-014: Nil check for critical parameters
+	if provider == nil {
+		panic("agent.NewBaseAgent: provider must not be nil")
+	}
+	if logger == nil {
+		panic("agent.NewBaseAgent: logger must not be nil")
+	}
+
 	ba := &BaseAgent{
 		config:      cfg,
 		state:       StateInit,
@@ -379,7 +387,11 @@ func (b *BaseAgent) Transition(ctx context.Context, to State) error {
 	}
 
 	b.state = to
-	b.logger.Info("state transition", zap.String("from", string(from)), zap.String("to", string(to)))
+	b.logger.Info("state transition",
+		zap.String("agent_id", b.config.ID),
+		zap.String("from", string(from)),
+		zap.String("to", string(to)),
+	)
 
 	// 发布状态变更事件
 	if b.bus != nil {

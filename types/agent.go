@@ -19,6 +19,10 @@ import "context"
 //
 // Domain-specific agent interfaces (conversation, crew, handoff, evaluation)
 // extend or specialize this contract for their own needs.
+//
+// TODO(L-006): agent.Agent 接口使用强类型 (*Input, *Output)，而 types.Executor
+// 使用 (any, any)。两者有意保持不同：Executor 用于跨包通用场景（workflow 等），
+// agent.Agent 用于 Agent 层内部的类型安全。未来可考虑通过泛型统一。
 type Executor interface {
 	// ID returns the agent's unique identifier.
 	ID() string

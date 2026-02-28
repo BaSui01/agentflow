@@ -90,6 +90,7 @@ type Task struct {
 }
 
 // TaskStatus 任务状态
+// TODO: Consider unifying with persistence.TaskStatus
 type TaskStatus string
 
 const (

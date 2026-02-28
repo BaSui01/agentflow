@@ -6,6 +6,7 @@ import (
 )
 
 // ExecutionStatus represents the status of an execution
+// TODO: Consider unifying with agent.State or persistence.TaskStatus
 type ExecutionStatus string
 
 const (

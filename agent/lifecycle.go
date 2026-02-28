@@ -27,6 +27,12 @@ type LifecycleManager struct {
 }
 
 // HealthStatus 健康状态
+//
+// L-002: 项目中存在两个 HealthStatus 结构体，服务于不同层次：
+//   - agent.HealthStatus（本定义）— Agent 层健康状态，包含 State 字段
+//   - llm.HealthStatus — LLM Provider 层健康状态，包含 Latency/ErrorRate 字段
+//
+// 两者字段不同，无法统一。如需跨层传递，请使用各自的转换函数。
 type HealthStatus struct {
 	Healthy   bool      `json:"healthy"`
 	State     State     `json:"state"`

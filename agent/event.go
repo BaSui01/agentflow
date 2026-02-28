@@ -34,6 +34,10 @@ type Event interface {
 type EventHandler func(Event)
 
 // EventBus 定义事件总线接口
+//
+// TODO(L-005): EventBus 目前定义在 agent 包中，但被 workflow、collaboration 等
+// 多个包使用。未来应考虑将 EventBus 接口提升到 types 包或独立的 event 包，
+// 以消除跨层对 agent 包的依赖。
 type EventBus interface {
 	Publish(event Event)
 	Subscribe(eventType EventType, handler EventHandler) string
@@ -130,10 +134,28 @@ func (b *SimpleEventBus) processEvents() {
 					defer b.handlerWg.Done()
 					defer func() {
 						if r := recover(); r != nil {
-							b.logger.Error("event handler panicked", zap.Any("recover", r))
+							b.logger.Error("event handler panicked",
+								zap.Any("recover", r),
+								zap.String("event_type", string(event.Type())),
+								zap.Stack("stack"),
+							)
 						}
 					}()
-					h(event)
+					// 添加超时控制，防止 handler 阻塞导致 goroutine 堆积
+					done := make(chan struct{})
+					go func() {
+						defer close(done)
+						h(event)
+					}()
+					timer := time.NewTimer(5 * time.Second)
+					defer timer.Stop()
+					select {
+					case <-done:
+					case <-timer.C:
+						b.logger.Warn("event handler timed out",
+							zap.String("event_type", string(event.Type())),
+						)
+					}
 				}()
 			}
 		case <-b.done:

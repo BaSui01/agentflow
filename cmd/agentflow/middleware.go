@@ -43,7 +43,13 @@ func Recovery(logger *zap.Logger) Middleware {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			defer func() {
 				if err := recover(); err != nil {
-					logger.Error("panic recovered", zap.Any("error", err), zap.String("path", r.URL.Path))
+					requestID := RequestIDFromContext(r.Context())
+					logger.Error("panic recovered",
+						zap.String("request_id", requestID),
+						zap.Any("error", err),
+						zap.String("path", r.URL.Path),
+						zap.Stack("stack"),
+					)
 					http.Error(w, `{"error":"internal server error"}`, http.StatusInternalServerError)
 				}
 			}()
@@ -59,7 +65,9 @@ func RequestLogger(logger *zap.Logger) Middleware {
 			start := time.Now()
 			rw := &responseWriter{ResponseWriter: w, statusCode: http.StatusOK}
 			next.ServeHTTP(rw, r)
+			requestID := RequestIDFromContext(r.Context())
 			logger.Info("request",
+				zap.String("request_id", requestID),
 				zap.String("method", r.Method),
 				zap.String("path", r.URL.Path),
 				zap.Int("status", rw.statusCode),
@@ -100,6 +108,14 @@ func APIKeyAuth(validKeys []string, skipPaths []string, allowQueryAPIKey bool, l
 			key := r.Header.Get("X-API-Key")
 			if allowQueryAPIKey && key == "" {
 				key = r.URL.Query().Get("api_key")
+				if key != "" {
+					// X-002: Query parameter API key is deprecated and insecure;
+					// keys in URLs are logged by proxies, appear in browser history, and leak via Referer headers.
+					logger.Warn("API key passed via query parameter is deprecated and insecure; use X-API-Key header instead",
+						zap.String("path", r.URL.Path),
+						zap.String("remote_addr", r.RemoteAddr),
+					)
+				}
 			}
 			if _, ok := keySet[key]; !ok {
 				w.Header().Set("Content-Type", "application/json")
@@ -124,6 +140,14 @@ func RateLimiter(ctx context.Context, rps float64, burst int, logger *zap.Logger
 	)
 	// 后台清理过期 visitor
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				logger.Error("panic in rate limiter cleanup",
+					zap.Any("error", r),
+					zap.Stack("stack"),
+				)
+			}
+		}()
 		ticker := time.NewTicker(time.Minute)
 		defer ticker.Stop()
 		for {
@@ -235,6 +259,9 @@ func SecurityHeaders() Middleware {
 // generateRequestID produces a random hex string suitable for request tracing.
 func generateRequestID() string {
 	b := make([]byte, 16)
-	_, _ = rand.Read(b)
+	if _, err := rand.Read(b); err != nil {
+		// crypto/rand failure is catastrophic; fall back to timestamp-based ID
+		return fmt.Sprintf("req-%d", time.Now().UnixNano())
+	}
 	return "req-" + hex.EncodeToString(b)
 }

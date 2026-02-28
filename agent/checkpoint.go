@@ -582,7 +582,12 @@ func (s *RedisCheckpointStore) List(ctx context.Context, threadID string, limit 
 	for _, id := range ids {
 		checkpoint, err := s.Load(ctx, id)
 		if err != nil {
-			s.logger.Warn("failed to load checkpoint", zap.String("id", id), zap.Error(err))
+			s.logger.Warn("failed to load checkpoint",
+				zap.String("checkpoint_id", id),
+				zap.String("thread_id", threadID),
+				zap.String("operation", "list"),
+				zap.Error(err),
+			)
 			continue
 		}
 		checkpoints = append(checkpoints, checkpoint)
@@ -608,7 +613,12 @@ func (s *RedisCheckpointStore) DeleteThread(ctx context.Context, threadID string
 	// 删除所有检查点
 	for _, checkpoint := range checkpoints {
 		if err := s.Delete(ctx, checkpoint.ID); err != nil {
-			s.logger.Warn("failed to delete checkpoint", zap.String("id", checkpoint.ID), zap.Error(err))
+			s.logger.Warn("failed to delete checkpoint",
+				zap.String("checkpoint_id", checkpoint.ID),
+				zap.String("thread_id", threadID),
+				zap.String("operation", "delete_thread"),
+				zap.Error(err),
+			)
 		}
 	}
 

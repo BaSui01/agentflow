@@ -38,6 +38,9 @@ type FileWatcher struct {
 
 	// 轮询回退的最后修改时间
 	lastModTimes map[string]time.Time
+
+	// wg 等待 pollLoop 和 dispatchLoop goroutine 完成，防止 goroutine 泄漏 (T-010)
+	wg sync.WaitGroup
 }
 
 // FileEvent 代表文件更改事件
@@ -110,14 +113,20 @@ func WithWatcherLogger(logger *zap.Logger) WatcherOption {
 
 // --- 文件监听器实现 ---
 
+// Default watcher configuration values.
+const (
+	defaultDebounceDelay   = 100 * time.Millisecond
+	defaultEventBufferSize = 100
+)
+
 // NewFileWatcher 创建一个新的文件观察器
 func NewFileWatcher(paths []string, opts ...WatcherOption) (*FileWatcher, error) {
 	w := &FileWatcher{
 		paths:         paths,
-		debounceDelay: 100 * time.Millisecond,
+		debounceDelay: defaultDebounceDelay,
 		stopChan:      make(chan struct{}),
-		eventChan:     make(chan FileEvent, 100),
-		dispatchCh:    make(chan string, 100),
+		eventChan:     make(chan FileEvent, defaultEventBufferSize),
+		dispatchCh:    make(chan string, defaultEventBufferSize),
 		callbacks:     make([]func(FileEvent), 0),
 		lastModTimes:  make(map[string]time.Time),
 		logger:        zap.NewNop(),
@@ -167,6 +176,7 @@ func (w *FileWatcher) Start(ctx context.Context) error {
 	}
 
 	// 开始轮询goroutine（跨平台后备）
+	w.wg.Add(2)
 	go w.pollLoop(ctx)
 
 	// 启动事件调度程序
@@ -182,14 +192,18 @@ func (w *FileWatcher) Start(ctx context.Context) error {
 // Stop 停止文件观察器
 func (w *FileWatcher) Stop() error {
 	w.mu.Lock()
-	defer w.mu.Unlock()
 
 	if !w.running {
+		w.mu.Unlock()
 		return nil
 	}
 
 	close(w.stopChan)
 	w.running = false
+	w.mu.Unlock()
+
+	// 等待 pollLoop 和 dispatchLoop goroutine 完成 (T-010)
+	w.wg.Wait()
 
 	w.logger.Info("File watcher stopped")
 	return nil
@@ -197,6 +211,7 @@ func (w *FileWatcher) Stop() error {
 
 // pollLoop 轮询文件是否有更改（没有 fsnotify 的系统的回退）
 func (w *FileWatcher) pollLoop(ctx context.Context) {
+	defer w.wg.Done()
 	ticker := time.NewTicker(1 * time.Second)
 	defer ticker.Stop()
 
@@ -257,6 +272,7 @@ func (w *FileWatcher) checkFiles() {
 
 // dispatchLoop 将事件分派到具有去抖动功能的回调
 func (w *FileWatcher) dispatchLoop(ctx context.Context) {
+	defer w.wg.Done()
 	var (
 		pendingEvents = make(map[string]FileEvent)
 		debounceTimer *time.Timer

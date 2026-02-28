@@ -20,6 +20,15 @@ type FluxProvider struct {
 	client *http.Client
 }
 
+// defaultFluxTimeout is the default HTTP client timeout for Flux API requests.
+const defaultFluxTimeout = 120 * time.Second
+
+// defaultFluxPollMaxAttempts is the maximum number of polling attempts for Flux generation results.
+const defaultFluxPollMaxAttempts = 120
+
+// defaultFluxPollInterval is the interval between polling attempts.
+const defaultFluxPollInterval = 2 * time.Second
+
 // NewFlux Provider创建了一个新的Flux图像提供者.
 func NewFluxProvider(cfg FluxConfig) *FluxProvider {
 	if cfg.BaseURL == "" {
@@ -34,7 +43,7 @@ func NewFluxProvider(cfg FluxConfig) *FluxProvider {
 	}
 	timeout := cfg.Timeout
 	if timeout == 0 {
-		timeout = 120 * time.Second
+		timeout = defaultFluxTimeout
 	}
 
 	return &FluxProvider{
@@ -167,11 +176,11 @@ func (p *FluxProvider) Generate(ctx context.Context, req *GenerateRequest) (*Gen
 // 使用投票URL生成合成结果。
 // 注意: 已签名的 URLs in result. sample 只有效10分钟.
 func (p *FluxProvider) pollResult(ctx context.Context, pollingURL string) (*fluxResponse, error) {
-	for i := 0; i < 120; i++ { // Max 120 attempts (4 minutes)
+	for i := 0; i < defaultFluxPollMaxAttempts; i++ {
 		select {
 		case <-ctx.Done():
 			return nil, ctx.Err()
-		case <-time.After(2 * time.Second):
+		case <-time.After(defaultFluxPollInterval):
 		}
 
 		httpReq, err := http.NewRequestWithContext(ctx, "GET", pollingURL, nil)

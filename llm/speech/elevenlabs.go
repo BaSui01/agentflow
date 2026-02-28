@@ -92,17 +92,22 @@ func (p *ElevenLabsProvider) Synthesize(ctx context.Context, req *TTSRequest) (*
 	if err != nil {
 		return nil, fmt.Errorf("elevenlabs request failed: %w", err)
 	}
+	defer resp.Body.Close()
 
 	if resp.StatusCode >= 400 {
-		defer resp.Body.Close()
 		errBody, _ := io.ReadAll(resp.Body)
 		return nil, fmt.Errorf("elevenlabs error: status=%d body=%s", resp.StatusCode, string(errBody))
+	}
+
+	audioData, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read audio response: %w", err)
 	}
 
 	return &TTSResponse{
 		Provider:  p.Name(),
 		Model:     model,
-		Audio:     resp.Body,
+		Audio:     io.NopCloser(bytes.NewReader(audioData)),
 		Format:    "mp3",
 		CharCount: len(req.Text),
 		CreatedAt: time.Now(),

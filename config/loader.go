@@ -65,8 +65,10 @@ type ServerConfig struct {
 	ShutdownTimeout time.Duration `yaml:"shutdown_timeout" env:"SHUTDOWN_TIMEOUT"`
 	// CORS 允许的源
 	CORSAllowedOrigins []string `yaml:"cors_allowed_origins" json:"cors_allowed_origins,omitempty"`
-	// API 密钥
-	APIKeys []string `yaml:"api_keys" json:"api_keys,omitempty"`
+	// API 密钥（json:"-" 防止在 JSON 响应中暴露）
+	// X-006: 安全建议 — 生产环境中应通过环境变量设置 API 密钥，
+	// 避免在 YAML 配置文件中明文存储。
+	APIKeys []string `yaml:"api_keys" json:"-"`
 	// 是否允许从 URL Query 读取 API Key（默认 false，出于安全考虑）
 	AllowQueryAPIKey bool `yaml:"allow_query_api_key" env:"ALLOW_QUERY_API_KEY" json:"allow_query_api_key,omitempty"`
 	// 限流 RPS，默认 100
@@ -75,7 +77,12 @@ type ServerConfig struct {
 	RateLimitBurst int `yaml:"rate_limit_burst" json:"rate_limit_burst,omitempty"`
 }
 
-// AgentConfig Agent 配置（与 types.AgentConfig 兼容）
+// AgentConfig Agent 配置，用于 YAML/环境变量加载（扁平结构）。
+// 注意：这与 types.AgentConfig 是不同层次的配置结构：
+//   - config.AgentConfig：面向部署配置（YAML 文件 + 环境变量），扁平结构便于序列化
+//   - types.AgentConfig：面向运行时行为，模块化嵌套结构（Core/LLM/Features/Extensions）
+//
+// 两者服务于不同场景，不做结构统一。
 type AgentConfig struct {
 	// 名称
 	Name string `yaml:"name" env:"NAME"`
@@ -215,11 +222,18 @@ type MilvusConfig struct {
 	ConsistencyLevel string `yaml:"consistency_level" env:"CONSISTENCY_LEVEL"`
 }
 
-// LLMConfig LLM 配置
+// LLMConfig LLM 配置，用于 YAML/环境变量加载（面向基础设施连接参数）。
+// 注意：这与 types.LLMConfig 是不同层次的配置结构：
+//   - config.LLMConfig：面向部署配置，包含 Provider 连接参数（APIKey、BaseURL、Timeout、MaxRetries）
+//   - types.LLMConfig：面向运行时 Agent 行为，包含模型参数（Model、Temperature、TopP、Stop）
+//
+// 两者服务于不同场景，不做结构统一。
 type LLMConfig struct {
 	// 默认 Provider
 	DefaultProvider string `yaml:"default_provider" env:"DEFAULT_PROVIDER"`
 	// API Key（通用）
+	// X-006: 安全建议 — 生产环境中应通过环境变量 AGENTFLOW_LLM_API_KEY 设置，
+	// 避免在 YAML 配置文件中明文存储 API Key。
 	APIKey string `yaml:"api_key" env:"API_KEY"`
 	// 基础 URL（可选）
 	BaseURL string `yaml:"base_url" env:"BASE_URL"`
@@ -373,7 +387,8 @@ func (l *Loader) setFieldsFromEnv(v reflect.Value, prefix string) error {
 
 		// 设置字段值
 		if err := setFieldValue(field, envValue); err != nil {
-			return fmt.Errorf("failed to set %s: %w", envKey, err)
+			return fmt.Errorf("failed to set %s (field %s) from value %q: %w",
+				envKey, fieldType.Name, envValue, err)
 		}
 	}
 
@@ -443,7 +458,10 @@ func setFieldValue(field reflect.Value, value string) error {
 
 // --- 辅助函数 ---
 
-// MustLoad 加载配置，失败时 panic
+// Deprecated: MustLoad panics on failure. Use NewLoader().Load() instead.
+//
+// 此函数仅用于应用初始化阶段（main() 或 init()），不得在请求处理器
+// 或业务逻辑中使用。对于运行时配置加载，请使用 NewLoader().Load()。
 func MustLoad(path string) *Config {
 	cfg, err := NewLoader().WithConfigPath(path).Load()
 	if err != nil {
@@ -466,12 +484,33 @@ func (c *Config) Validate() error {
 		errs = append(errs, "invalid HTTP port")
 	}
 
+	// V-008: Agent.Model required validation
+	if c.Agent.Model == "" {
+		errs = append(errs, "agent.model is required")
+	}
+
 	// 验证 Agent 配置
 	if c.Agent.MaxIterations <= 0 {
 		errs = append(errs, "max_iterations must be positive")
 	}
+
+	// V-009: MaxIterations upper bound
+	if c.Agent.MaxIterations > 10000 {
+		errs = append(errs, "agent.max_iterations must not exceed 10000")
+	}
+
 	if c.Agent.Temperature < 0 || c.Agent.Temperature > 2 {
 		errs = append(errs, "temperature must be between 0 and 2")
+	}
+
+	// V-010: MaxTokens range validation
+	if c.Agent.MaxTokens < 0 || c.Agent.MaxTokens > 128000 {
+		errs = append(errs, "agent.max_tokens must be between 0 and 128000")
+	}
+
+	// V-008: Database.Driver required if database is configured
+	if c.Database.Host != "" && c.Database.Driver == "" {
+		errs = append(errs, "database.driver is required when database is configured")
 	}
 
 	if len(errs) > 0 {
@@ -482,6 +521,8 @@ func (c *Config) Validate() error {
 }
 
 // DSN 返回数据库连接字符串
+// WARNING: DSN() 返回含明文密码的连接字符串，不要在日志中使用。
+// 日志记录请使用 SafeDSN()，它会对密码进行掩码处理。
 func (d *DatabaseConfig) DSN() string {
 	switch d.Driver {
 	case "postgres":

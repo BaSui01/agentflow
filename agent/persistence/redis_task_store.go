@@ -194,16 +194,29 @@ func (s *RedisTaskStore) ListTasks(ctx context.Context, filter TaskFilter) ([]*A
 		return nil, err
 	}
 
-	// 获取任务并应用过滤器
+	// 使用 Pipeline 批量获取任务数据，避免 N+1 查询
+	pipe := s.client.Pipeline()
+	cmds := make([]*redis.StringCmd, len(taskIDs))
+	for i, taskID := range taskIDs {
+		cmds[i] = pipe.Get(ctx, s.taskKey(taskID))
+	}
+	_, err = pipe.Exec(ctx)
+	if err != nil && err != redis.Nil {
+		return nil, err
+	}
+
 	result := make([]*AsyncTask, 0)
-	for _, taskID := range taskIDs {
-		task, err := s.GetTask(ctx, taskID)
-		if err != nil {
+	for _, cmd := range cmds {
+		data, cmdErr := cmd.Bytes()
+		if cmdErr != nil {
 			continue
 		}
-
-		if s.matchesFilter(task, filter) {
-			result = append(result, task)
+		var task AsyncTask
+		if err := json.Unmarshal(data, &task); err != nil {
+			continue
+		}
+		if s.matchesFilter(&task, filter) {
+			result = append(result, &task)
 		}
 	}
 
@@ -397,20 +410,10 @@ func (s *RedisTaskStore) DeleteTask(ctx context.Context, taskID string) error {
 
 // 获取可回收的任务检索重启后需要回收的任务
 func (s *RedisTaskStore) GetRecoverableTasks(ctx context.Context) ([]*AsyncTask, error) {
-	result := make([]*AsyncTask, 0)
-
 	// 获得待定任务
 	pendingIDs, err := s.client.ZRange(ctx, s.statusKey(TaskStatusPending), 0, -1).Result()
 	if err != nil {
 		return nil, err
-	}
-
-	for _, taskID := range pendingIDs {
-		task, err := s.GetTask(ctx, taskID)
-		if err != nil {
-			continue
-		}
-		result = append(result, task)
 	}
 
 	// 获得运行中的任务
@@ -419,12 +422,33 @@ func (s *RedisTaskStore) GetRecoverableTasks(ctx context.Context) ([]*AsyncTask,
 		return nil, err
 	}
 
-	for _, taskID := range runningIDs {
-		task, err := s.GetTask(ctx, taskID)
-		if err != nil {
+	// 合并所有 ID，使用 Pipeline 批量获取，避免 N+1 查询
+	allIDs := append(pendingIDs, runningIDs...)
+	if len(allIDs) == 0 {
+		return []*AsyncTask{}, nil
+	}
+
+	pipe := s.client.Pipeline()
+	cmds := make([]*redis.StringCmd, len(allIDs))
+	for i, taskID := range allIDs {
+		cmds[i] = pipe.Get(ctx, s.taskKey(taskID))
+	}
+	_, err = pipe.Exec(ctx)
+	if err != nil && err != redis.Nil {
+		return nil, err
+	}
+
+	result := make([]*AsyncTask, 0, len(allIDs))
+	for _, cmd := range cmds {
+		data, cmdErr := cmd.Bytes()
+		if cmdErr != nil {
 			continue
 		}
-		result = append(result, task)
+		var task AsyncTask
+		if err := json.Unmarshal(data, &task); err != nil {
+			continue
+		}
+		result = append(result, &task)
 	}
 
 	// 按优先级排序( 先高一些) 然后按创建时间排序( 先高一些)
@@ -535,14 +559,23 @@ func (s *RedisTaskStore) Stats(ctx context.Context) (*TaskStoreStats, error) {
 	}
 
 	// 获取代理数
-	agentKeys, err := s.client.Keys(ctx, s.keyPrefix+"agent:*").Result()
-	if err == nil {
-		for _, key := range agentKeys {
+	// 使用 SCAN 替代 Keys() 避免阻塞 Redis
+	var cursor uint64
+	for {
+		keys, nextCursor, err := s.client.Scan(ctx, cursor, s.keyPrefix+"agent:*", 100).Result()
+		if err != nil {
+			break
+		}
+		for _, key := range keys {
 			agentID := key[len(s.keyPrefix+"agent:"):]
 			count, err := s.client.ZCard(ctx, key).Result()
 			if err == nil {
 				stats.AgentCounts[agentID] = count
 			}
+		}
+		cursor = nextCursor
+		if cursor == 0 {
+			break
 		}
 	}
 

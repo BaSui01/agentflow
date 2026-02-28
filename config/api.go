@@ -1,6 +1,10 @@
 // config 包的 HTTP 配置管理 API。
 //
 // 提供配置查询、更新、热重载触发与变更历史查询能力。
+//
+// TODO(X-008): 对配置更新请求的值进行更严格的输入验证和类型检查。
+// TODO(X-009): 为配置 API 添加独立的速率限制，防止暴力枚举。
+// TODO(X-010): 内部服务间通信应启用 mTLS，确保传输层安全。
 package config
 
 import (
@@ -9,6 +13,8 @@ import (
 	"net/http"
 	"strconv"
 	"time"
+
+	"go.uber.org/zap"
 )
 
 // --- API 类型定义 ---
@@ -17,6 +23,7 @@ import (
 type ConfigAPIHandler struct {
 	manager       *HotReloadManager
 	allowedOrigin string
+	logger        *zap.Logger // X-004: 审计日志
 }
 
 // ConfigResponse 表示配置 API 响应
@@ -82,6 +89,14 @@ func NewConfigAPIHandler(manager *HotReloadManager, allowedOrigin ...string) *Co
 	return &ConfigAPIHandler{
 		manager:       manager,
 		allowedOrigin: origin,
+		logger:        zap.NewNop(),
+	}
+}
+
+// SetLogger 设置审计日志记录器 (X-004)
+func (h *ConfigAPIHandler) SetLogger(logger *zap.Logger) {
+	if logger != nil {
+		h.logger = logger
 	}
 }
 
@@ -183,6 +198,7 @@ func (h *ConfigAPIHandler) updateConfig(w http.ResponseWriter, r *http.Request) 
 	var errors []string
 	var requiresRestart bool
 
+	// X-004: 审计日志 — 记录配置变更请求
 	for path, value := range req.Updates {
 		// 检查字段是否已知
 		field, known := hotReloadableFields[path]
@@ -197,6 +213,18 @@ func (h *ConfigAPIHandler) updateConfig(w http.ResponseWriter, r *http.Request) 
 
 		if err := h.manager.UpdateField(path, value); err != nil {
 			errors = append(errors, fmt.Sprintf("Failed to update %s: %v", path, err))
+			h.logger.Warn("config update failed",
+				zap.String("field", path),
+				zap.String("remote_addr", r.RemoteAddr),
+				zap.Error(err),
+			)
+		} else {
+			h.logger.Info("config field updated",
+				zap.String("field", path),
+				zap.String("remote_addr", r.RemoteAddr),
+				zap.Bool("sensitive", field.Sensitive),
+				zap.Time("timestamp", time.Now()),
+			)
 		}
 	}
 
@@ -240,6 +268,10 @@ func (h *ConfigAPIHandler) handleReload(w http.ResponseWriter, r *http.Request) 
 	}
 
 	if err := h.manager.ReloadFromFile(); err != nil {
+		h.logger.Warn("config reload failed",
+			zap.String("remote_addr", r.RemoteAddr),
+			zap.Error(err),
+		)
 		h.writeJSON(w, http.StatusInternalServerError, ConfigResponse{
 			Success:   false,
 			Error:     fmt.Sprintf("Failed to reload configuration: %v", err),
@@ -247,6 +279,12 @@ func (h *ConfigAPIHandler) handleReload(w http.ResponseWriter, r *http.Request) 
 		})
 		return
 	}
+
+	// X-004: 审计日志 — 记录配置热重载
+	h.logger.Info("config reloaded from file",
+		zap.String("remote_addr", r.RemoteAddr),
+		zap.Time("timestamp", time.Now()),
+	)
 
 	h.writeJSON(w, http.StatusOK, ConfigResponse{
 		Success:   true,
@@ -323,11 +361,18 @@ func (h *ConfigAPIHandler) handleChanges(w http.ResponseWriter, r *http.Request)
 	}
 
 	// 解析限制参数
+	const maxPageLimit = 1000
 	limit := 50
 	if limitStr := r.URL.Query().Get("limit"); limitStr != "" {
 		if l, err := strconv.Atoi(limitStr); err == nil && l > 0 {
 			limit = l
 		}
+	}
+	if limit > maxPageLimit {
+		limit = maxPageLimit
+	}
+	if limit <= 0 {
+		limit = 50
 	}
 
 	changes := h.manager.GetChangeLog(limit)

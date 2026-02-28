@@ -53,13 +53,25 @@ type Config struct {
 	OnStateChange func(from State, to State)
 }
 
+// Default circuit breaker configuration values.
+const (
+	// DefaultThreshold is the number of consecutive failures before the circuit opens.
+	DefaultThreshold = 5
+	// DefaultTimeout is the timeout for a single call through the circuit breaker.
+	DefaultTimeout = 30 * time.Second
+	// DefaultResetTimeout is the duration the circuit stays open before transitioning to half-open.
+	DefaultResetTimeout = 60 * time.Second
+	// DefaultHalfOpenMaxCalls is the maximum number of calls allowed in the half-open state.
+	DefaultHalfOpenMaxCalls = 3
+)
+
 // DefaultConfig 返回默认配置
 func DefaultConfig() *Config {
 	return &Config{
-		Threshold:        5,
-		Timeout:          30 * time.Second,
-		ResetTimeout:     60 * time.Second,
-		HalfOpenMaxCalls: 3,
+		Threshold:        DefaultThreshold,
+		Timeout:          DefaultTimeout,
+		ResetTimeout:     DefaultResetTimeout,
+		HalfOpenMaxCalls: DefaultHalfOpenMaxCalls,
 	}
 }
 
@@ -98,16 +110,16 @@ func NewCircuitBreaker(config *Config, logger *zap.Logger) CircuitBreaker {
 
 	// 参数校验
 	if config.Threshold <= 0 {
-		config.Threshold = 5
+		config.Threshold = DefaultThreshold
 	}
 	if config.Timeout <= 0 {
-		config.Timeout = 30 * time.Second
+		config.Timeout = DefaultTimeout
 	}
 	if config.ResetTimeout <= 0 {
-		config.ResetTimeout = 60 * time.Second
+		config.ResetTimeout = DefaultResetTimeout
 	}
 	if config.HalfOpenMaxCalls <= 0 {
-		config.HalfOpenMaxCalls = 3
+		config.HalfOpenMaxCalls = DefaultHalfOpenMaxCalls
 	}
 
 	return &breaker{

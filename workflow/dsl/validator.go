@@ -31,6 +31,11 @@ func (v *Validator) Validate(dsl *WorkflowDSL) []error {
 		errs = append(errs, fmt.Errorf("workflow.nodes must have at least one node"))
 	}
 
+	// V-015: Node count upper bound to prevent resource exhaustion
+	if len(dsl.Workflow.Nodes) > 10000 {
+		errs = append(errs, fmt.Errorf("workflow.nodes count %d exceeds maximum of 10000", len(dsl.Workflow.Nodes)))
+	}
+
 	// 收集所有节点 ID
 	nodeIDs := make(map[string]bool)
 	for _, node := range dsl.Workflow.Nodes {

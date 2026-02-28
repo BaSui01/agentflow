@@ -20,6 +20,9 @@ type OpenAIProvider struct {
 	client *http.Client
 }
 
+// defaultOpenAIImageTimeout is the default HTTP client timeout for OpenAI image API requests.
+const defaultOpenAIImageTimeout = 120 * time.Second
+
 // 新OpenAIProvider创建了新的OpenAI图像提供商.
 func NewOpenAIProvider(cfg OpenAIConfig) *OpenAIProvider {
 	if cfg.BaseURL == "" {
@@ -30,7 +33,7 @@ func NewOpenAIProvider(cfg OpenAIConfig) *OpenAIProvider {
 	}
 	timeout := cfg.Timeout
 	if timeout == 0 {
-		timeout = 120 * time.Second
+		timeout = defaultOpenAIImageTimeout
 	}
 
 	return &OpenAIProvider{
