@@ -1,7 +1,6 @@
 package rag
 
 import (
-	"github.com/BaSui01/agentflow/types"
 	"strings"
 	"unicode"
 
@@ -50,11 +49,11 @@ func DefaultChunkingConfig() ChunkingConfig {
 
 // Chunk 文档块
 type Chunk struct {
-	Content    string                 `json:"content"`
-	StartPos   int                    `json:"start_pos"`
-	EndPos     int                    `json:"end_pos"`
+	Content    string         `json:"content"`
+	StartPos   int            `json:"start_pos"`
+	EndPos     int            `json:"end_pos"`
 	Metadata   map[string]any `json:"metadata"`
-	TokenCount int                    `json:"token_count"`
+	TokenCount int            `json:"token_count"`
 }
 
 // DocumentChunker 文档分块器
@@ -709,5 +708,3 @@ func isCJKRune(r rune) bool {
 func isWhitespace(r rune) bool {
 	return unicode.IsSpace(r)
 }
-
-

@@ -1,14 +1,12 @@
 package mcp
 
 import (
-	"github.com/BaSui01/agentflow/types"
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/BaSui01/agentflow/types"
 	"strings"
 	"time"
-
-	"github.com/BaSui01/agentflow/llm"
 )
 
 // MCP (Model Context Protocol) 标准接口
@@ -30,22 +28,22 @@ const (
 
 // Resource MCP 资源
 type Resource struct {
-	URI         string                 `json:"uri"`         // 资源 URI
-	Name        string                 `json:"name"`        // 资源名称
-	Description string                 `json:"description"` // 资源描述
-	Type        ResourceType           `json:"type"`        // 资源类型
-	MimeType    string                 `json:"mimeType"`    // MIME 类型
+	URI         string         `json:"uri"`         // 资源 URI
+	Name        string         `json:"name"`        // 资源名称
+	Description string         `json:"description"` // 资源描述
+	Type        ResourceType   `json:"type"`        // 资源类型
+	MimeType    string         `json:"mimeType"`    // MIME 类型
 	Content     any            `json:"content"`     // 资源内容
 	Metadata    map[string]any `json:"metadata"`    // 元数据
-	Size        int64                  `json:"size"`        // 资源大小（字节）
-	CreatedAt   time.Time              `json:"createdAt"`   // 创建时间
-	UpdatedAt   time.Time              `json:"updatedAt"`   // 更新时间
+	Size        int64          `json:"size"`        // 资源大小（字节）
+	CreatedAt   time.Time      `json:"createdAt"`   // 创建时间
+	UpdatedAt   time.Time      `json:"updatedAt"`   // 更新时间
 }
 
 // ToolDefinition MCP 工具定义
 type ToolDefinition struct {
-	Name         string                 `json:"name"`
-	Description  string                 `json:"description"`
+	Name         string         `json:"name"`
+	Description  string         `json:"description"`
 	InputSchema  map[string]any `json:"inputSchema"` // JSON Schema
 	OutputSchema map[string]any `json:"outputSchema,omitempty"`
 	Metadata     map[string]any `json:"metadata,omitempty"`
@@ -53,12 +51,12 @@ type ToolDefinition struct {
 
 // PromptTemplate MCP 提示词模板
 type PromptTemplate struct {
-	Name        string                 `json:"name"`
-	Description string                 `json:"description"`
-	Template    string                 `json:"template"`
-	Variables   []string               `json:"variables"`
-	Examples    []PromptExample        `json:"examples,omitempty"`
-	Metadata    map[string]any `json:"metadata,omitempty"`
+	Name        string          `json:"name"`
+	Description string          `json:"description"`
+	Template    string          `json:"template"`
+	Variables   []string        `json:"variables"`
+	Examples    []PromptExample `json:"examples,omitempty"`
+	Metadata    map[string]any  `json:"metadata,omitempty"`
 }
 
 // PromptExample 提示词示例
@@ -91,11 +89,11 @@ type MCPServer interface {
 
 // ServerInfo 服务器信息
 type ServerInfo struct {
-	Name            string                 `json:"name"`
-	Version         string                 `json:"version"`
-	ProtocolVersion string                 `json:"protocolVersion"`
-	Capabilities    ServerCapabilities     `json:"capabilities"`
-	Metadata        map[string]any `json:"metadata,omitempty"`
+	Name            string             `json:"name"`
+	Version         string             `json:"version"`
+	ProtocolVersion string             `json:"protocolVersion"`
+	Capabilities    ServerCapabilities `json:"capabilities"`
+	Metadata        map[string]any     `json:"metadata,omitempty"`
 }
 
 // ServerCapabilities 服务器能力
@@ -132,19 +130,19 @@ type MCPClient interface {
 
 // MCPMessage MCP 消息（JSON-RPC 2.0）
 type MCPMessage struct {
-	JSONRPC string                 `json:"jsonrpc"`
+	JSONRPC string         `json:"jsonrpc"`
 	ID      any            `json:"id,omitempty"`
-	Method  string                 `json:"method,omitempty"`
+	Method  string         `json:"method,omitempty"`
 	Params  map[string]any `json:"params,omitempty"`
 	Result  any            `json:"result,omitempty"`
-	Error   *MCPError              `json:"error,omitempty"`
+	Error   *MCPError      `json:"error,omitempty"`
 }
 
 // MCPError MCP 错误
 type MCPError struct {
-	Code    int         `json:"code"`
-	Message string      `json:"message"`
-	Data    any `json:"data,omitempty"`
+	Code    int    `json:"code"`
+	Message string `json:"message"`
+	Data    any    `json:"data,omitempty"`
 }
 
 // 标准错误码
@@ -284,5 +282,3 @@ func NewMCPError(id any, code int, message string, data any) *MCPMessage {
 		},
 	}
 }
-
-

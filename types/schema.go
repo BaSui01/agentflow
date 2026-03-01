@@ -1,7 +1,6 @@
 package types
 
 import (
-	"github.com/BaSui01/agentflow/types"
 	"encoding/json"
 	"fmt"
 )
@@ -142,5 +141,3 @@ func FromJSON(data []byte) (*JSONSchema, error) {
 	}
 	return &schema, nil
 }
-
-

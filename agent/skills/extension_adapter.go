@@ -1,7 +1,6 @@
 package skills
 
 import (
-	"github.com/BaSui01/agentflow/types"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -107,5 +106,3 @@ func (a *SkillsExtensionAdapter) ListSkills() []string {
 	}
 	return names
 }
-
-

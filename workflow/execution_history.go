@@ -3,19 +3,20 @@ package workflow
 import (
 	"sync"
 	"time"
+
+	"github.com/BaSui01/agentflow/agent/persistence"
 )
 
 // ExecutionStatus represents the status of an execution
-// TODO: Consider unifying with agent.State or persistence.TaskStatus
-type ExecutionStatus string
+type ExecutionStatus = persistence.TaskStatus
 
 const (
 	// ExecutionStatusRunning indicates the execution is in progress
-	ExecutionStatusRunning ExecutionStatus = "running"
+	ExecutionStatusRunning ExecutionStatus = persistence.TaskStatusRunning
 	// ExecutionStatusCompleted indicates the execution completed successfully
-	ExecutionStatusCompleted ExecutionStatus = "completed"
+	ExecutionStatusCompleted ExecutionStatus = persistence.TaskStatusCompleted
 	// ExecutionStatusFailed indicates the execution failed
-	ExecutionStatusFailed ExecutionStatus = "failed"
+	ExecutionStatusFailed ExecutionStatus = persistence.TaskStatusFailed
 )
 
 // NodeExecution records the execution of a single node
@@ -26,8 +27,8 @@ type NodeExecution struct {
 	EndTime   time.Time       `json:"end_time"`
 	Duration  time.Duration   `json:"duration"`
 	Status    ExecutionStatus `json:"status"`
-	Input     any     `json:"input,omitempty"`
-	Output    any     `json:"output,omitempty"`
+	Input     any             `json:"input,omitempty"`
+	Output    any             `json:"output,omitempty"`
 	Error     string          `json:"error,omitempty"`
 }
 
@@ -198,4 +199,3 @@ func (s *ExecutionHistoryStore) ListByStatus(status ExecutionStatus) []*Executio
 	}
 	return result
 }
-

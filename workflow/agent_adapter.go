@@ -7,7 +7,6 @@ import (
 	"sync"
 
 	"github.com/BaSui01/agentflow/agent"
-	"github.com/BaSui01/agentflow/types"
 )
 
 // ============================================================
@@ -23,10 +22,10 @@ import (
 // ============================================================
 
 // AgentExecutor defines the interface for agent execution in workflows.
-// It embeds types.Executor (the minimal common agent contract) and adds
-// Name() which is required by workflow steps (e.g., AgentStep default naming).
+// Name() is required by workflow steps (e.g., AgentStep default naming).
 type AgentExecutor interface {
-	types.Executor
+	ID() string
+	Execute(ctx context.Context, input any) (any, error)
 	// Name returns the agent's display name.
 	Name() string
 }
@@ -302,10 +301,10 @@ func (c *ConditionalAgentStep) Name() string {
 // this interface uses plain string I/O for simplicity. Callers can use
 // AgentAdapterOption functions to customize input/output conversion.
 //
-// Note: This interface intentionally differs from types.Executor in its
+// Note: This interface intentionally differs from AgentExecutor in its
 // Execute signature (string -> string vs any -> any). It exists for agents
 // that only support string-based I/O. Use AgentAdapter to bridge an
-// AgentInterface implementation to the AgentExecutor (types.Executor) contract.
+// AgentInterface implementation to the AgentExecutor contract.
 type AgentInterface interface {
 	// Execute runs the agent with a string prompt and returns a string response.
 	Execute(ctx context.Context, input string) (string, error)
@@ -465,4 +464,3 @@ func toAgentInput(input any) (*agent.Input, error) {
 		return &agent.Input{Content: fmt.Sprintf("%v", v)}, nil
 	}
 }
-

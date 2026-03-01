@@ -213,9 +213,6 @@ func (h *ChatHandler) HandleStream(w http.ResponseWriter, r *http.Request) {
 // 🔧 辅助函数
 // =============================================================================
 
-// allowedMessageRoles is the set of valid message roles for chat requests.
-var allowedMessageRoles = []string{"system", "user", "assistant", "tool"}
-
 // validateChatRequest 验证聊天请求
 func (h *ChatHandler) validateChatRequest(req *api.ChatRequest) *types.Error {
 	if req.Model == "" {
@@ -227,11 +224,6 @@ func (h *ChatHandler) validateChatRequest(req *api.ChatRequest) *types.Error {
 	}
 
 	// 验证 max_tokens 参数
-	if req.MaxTokens < 0 {
-		return types.NewInvalidRequestError("max_tokens must be non-negative")
-	}
-
-	// V-002: MaxTokens range validation
 	if req.MaxTokens < 0 || req.MaxTokens > 128000 {
 		return types.NewError(types.ErrInvalidRequest, "max_tokens must be between 0 and 128000")
 	}
@@ -246,15 +238,6 @@ func (h *ChatHandler) validateChatRequest(req *api.ChatRequest) *types.Error {
 		return types.NewInvalidRequestError("top_p must be between 0 and 1")
 	}
 
-	// 验证每条消息的 role
-	for i, msg := range req.Messages {
-		if !ValidateEnum(msg.Role, allowedMessageRoles) {
-			return types.NewInvalidRequestError(
-				fmt.Sprintf("messages[%d].role must be one of: system, user, assistant, tool", i))
-		}
-	}
-
-	// V-006: Validate Message.Role enum values
 	validRoles := map[string]bool{
 		"system": true, "user": true, "assistant": true, "tool": true,
 	}
@@ -414,4 +397,3 @@ func ConvertHealthStatus(hs *llm.HealthStatus) *api.ProviderHealthResponse {
 		Message:   hs.Message,
 	}
 }
-

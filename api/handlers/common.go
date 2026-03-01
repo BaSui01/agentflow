@@ -3,7 +3,9 @@ package handlers
 import (
 	"bufio"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"mime"
 	"net"
 	"net/http"
@@ -25,15 +27,7 @@ import (
 
 // WriteJSON 写入 JSON 响应
 func WriteJSON(w http.ResponseWriter, status int, data any) {
-	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	w.Header().Set("X-Content-Type-Options", "nosniff")
-	w.WriteHeader(status)
-
-	if err := json.NewEncoder(w).Encode(data); err != nil {
-		// 如果编码失败，记录错误但不能再写响应头
-		// 这里只能记录日志
-		return
-	}
+	api.WriteJSONResponse(w, status, data)
 }
 
 // WriteSuccess 写入成功响应
@@ -109,6 +103,12 @@ func DecodeJSONBody(w http.ResponseWriter, r *http.Request, dst any, logger *zap
 	if err := decoder.Decode(dst); err != nil {
 		apiErr := types.NewInvalidRequestError("invalid JSON body").
 			WithCause(err)
+		WriteError(w, apiErr, logger)
+		return apiErr
+	}
+	if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
+		apiErr := types.NewInvalidRequestError("invalid JSON body").
+			WithCause(fmt.Errorf("unexpected trailing data"))
 		WriteError(w, apiErr, logger)
 		return apiErr
 	}
@@ -193,4 +193,3 @@ func (rw *ResponseWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
 	}
 	return nil, nil, fmt.Errorf("underlying ResponseWriter does not implement http.Hijacker")
 }
-

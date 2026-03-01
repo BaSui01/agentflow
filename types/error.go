@@ -1,7 +1,6 @@
 package types
 
 import (
-	"github.com/BaSui01/agentflow/types"
 	"errors"
 	"fmt"
 )
@@ -220,5 +219,3 @@ func NewTimeoutError(message string) *Error {
 		WithHTTPStatus(504).
 		WithRetryable(true)
 }
-
-

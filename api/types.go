@@ -383,8 +383,8 @@ type A2ARequest struct {
 // A2AResponse 表示 A2A 调用响应。
 // @Description A2A 响应结构
 type A2AResponse struct {
-	// 响应状态（成功、错误、待处理）
-	Status string `json:"status" example:"success"`
+	// 响应状态（pending、processing、completed、failed）
+	Status string `json:"status" example:"pending"`
 	// 任务结果
 	Result any `json:"result,omitempty"`
 	// 如果失败则出现错误消息
@@ -426,4 +426,3 @@ type ToolListResponse struct {
 	// 工具清单
 	Tools []ToolSchema `json:"tools"`
 }
-

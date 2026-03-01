@@ -1,11 +1,12 @@
 package agent
 
 import (
-	"github.com/BaSui01/agentflow/types"
 	"context"
 	"time"
 
 	"github.com/BaSui01/agentflow/llm"
+	"github.com/BaSui01/agentflow/types"
+	"github.com/BaSui01/agentflow/agent/pipelinecore"
 )
 
 // PipelineContext carries intermediate state through the pipeline.
@@ -37,39 +38,17 @@ func (pc *PipelineContext) AgentID() string {
 }
 
 // StepFunc is the call signature for the next step in the pipeline.
-type StepFunc func(ctx context.Context, pc *PipelineContext) error
+type StepFunc = pipelinecore.StepFunc[PipelineContext]
 
 // ExecutionStep is a single step in the execution pipeline.
-type ExecutionStep interface {
-	Name() string
-	Execute(ctx context.Context, pc *PipelineContext, next StepFunc) error
-}
+type ExecutionStep = pipelinecore.ExecutionStep[PipelineContext]
 
 // Pipeline manages a chain of execution steps.
-type Pipeline struct {
-	steps []ExecutionStep
-}
+type Pipeline = pipelinecore.Pipeline[PipelineContext]
 
 // NewPipeline creates a new Pipeline from the given steps.
 func NewPipeline(steps ...ExecutionStep) *Pipeline {
-	return &Pipeline{steps: steps}
-}
-
-// Run executes the pipeline by building a middleware chain from the steps.
-func (p *Pipeline) Run(ctx context.Context, pc *PipelineContext) error {
-	// Terminal step: no-op.
-	var chain StepFunc = func(_ context.Context, _ *PipelineContext) error { return nil }
-
-	// Build the chain in reverse so the first step runs first.
-	for i := len(p.steps) - 1; i >= 0; i-- {
-		step := p.steps[i]
-		next := chain
-		chain = func(ctx context.Context, pc *PipelineContext) error {
-			return step.Execute(ctx, pc, next)
-		}
-	}
-
-	return chain(ctx, pc)
+	return pipelinecore.NewPipeline[PipelineContext](steps...)
 }
 
 

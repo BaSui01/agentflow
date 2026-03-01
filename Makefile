@@ -215,6 +215,18 @@ lint: ## 运行代码检查
 	fi
 	@echo "✅ Lint complete"
 
+.PHONY: arch-guard
+arch-guard: ## 架构依赖守卫检查（分层方向/包体积/单文件包）
+	@echo "🏛️ Running architecture guard..."
+	@pwsh -NoProfile -ExecutionPolicy Bypass -File ./scripts/arch_guard.ps1
+	@echo "✅ Architecture guard complete"
+
+.PHONY: arch-guard-ci
+arch-guard-ci: ## CI 严格架构守卫（warning 按阈值升级为 error）
+	@echo "🏛️ Running strict architecture guard..."
+	@ARCH_GUARD_STRICT=1 pwsh -NoProfile -ExecutionPolicy Bypass -File ./scripts/arch_guard.ps1
+	@echo "✅ Strict architecture guard complete"
+
 .PHONY: fmt
 fmt: ## 格式化代码
 	@echo "🎨 Formatting code..."
