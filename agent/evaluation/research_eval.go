@@ -538,3 +538,4 @@ func RegisterResearchMetrics(evaluator *ResearchEvaluator, logger *zap.Logger) {
 	evaluator.RegisterMetric(DimensionClarity, NewClarityMetric(logger))
 	evaluator.RegisterMetric(DimensionCompleteness, NewCompletenessMetric(logger))
 }
+

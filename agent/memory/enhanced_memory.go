@@ -636,3 +636,4 @@ func extractMemoryKey(memory any) (string, bool) {
 	key, ok := m["key"].(string)
 	return key, ok && key != ""
 }
+

@@ -603,3 +603,4 @@ func RegisterResearchRoles(registry *RoleRegistry) error {
 
 	return nil
 }
+

@@ -160,3 +160,4 @@ func TestManager_Addr(t *testing.T) {
 
 	assert.Equal(t, ":9999", m.Addr())
 }
+

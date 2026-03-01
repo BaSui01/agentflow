@@ -1,6 +1,7 @@
 package minimax
 
 import (
+	"github.com/BaSui01/agentflow/types"
 	"context"
 	"encoding/json"
 	"net/http"
@@ -149,7 +150,7 @@ func TestMiniMaxProvider_Completion(t *testing.T) {
 	}, zap.NewNop())
 
 	resp, err := p.Completion(context.Background(), &llm.ChatRequest{
-		Messages: []llm.Message{{Role: llm.RoleUser, Content: "Hi"}},
+		Messages: []types.Message{{Role: llm.RoleUser, Content: "Hi"}},
 	})
 	require.NoError(t, err)
 	require.NotNil(t, resp)
@@ -177,10 +178,10 @@ func TestMiniMaxProvider_Completion_Error(t *testing.T) {
 	}, zap.NewNop())
 
 	_, err := p.Completion(context.Background(), &llm.ChatRequest{
-		Messages: []llm.Message{{Role: llm.RoleUser, Content: "Hi"}},
+		Messages: []types.Message{{Role: llm.RoleUser, Content: "Hi"}},
 	})
 	require.Error(t, err)
-	llmErr, ok := err.(*llm.Error)
+	llmErr, ok := err.(*types.Error)
 	require.True(t, ok)
 	assert.Equal(t, llm.ErrUnauthorized, llmErr.Code)
 }
@@ -220,7 +221,7 @@ func TestMiniMaxProvider_Stream(t *testing.T) {
 	}, zap.NewNop())
 
 	ch, err := p.Stream(context.Background(), &llm.ChatRequest{
-		Messages: []llm.Message{{Role: llm.RoleUser, Content: "Hi"}},
+		Messages: []types.Message{{Role: llm.RoleUser, Content: "Hi"}},
 	})
 	require.NoError(t, err)
 
@@ -271,7 +272,7 @@ func TestMiniMaxProvider_Stream_XMLToolCall(t *testing.T) {
 	}, zap.NewNop())
 
 	ch, err := p.Stream(context.Background(), &llm.ChatRequest{
-		Messages: []llm.Message{{Role: llm.RoleUser, Content: "What is the weather?"}},
+		Messages: []types.Message{{Role: llm.RoleUser, Content: "What is the weather?"}},
 	})
 	require.NoError(t, err)
 
@@ -302,11 +303,13 @@ func TestMiniMaxProvider_Stream_Error(t *testing.T) {
 	}, zap.NewNop())
 
 	_, err := p.Stream(context.Background(), &llm.ChatRequest{
-		Messages: []llm.Message{{Role: llm.RoleUser, Content: "Hi"}},
+		Messages: []types.Message{{Role: llm.RoleUser, Content: "Hi"}},
 	})
 	require.Error(t, err)
-	llmErr, ok := err.(*llm.Error)
+	llmErr, ok := err.(*types.Error)
 	require.True(t, ok)
 	assert.Equal(t, llm.ErrUpstreamError, llmErr.Code)
 	assert.True(t, llmErr.Retryable)
 }
+
+

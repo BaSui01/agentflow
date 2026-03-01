@@ -170,3 +170,4 @@ func (t *CostTracker) Reset() {
 	defer t.mu.Unlock()
 	t.summary = CostSummary{}
 }
+

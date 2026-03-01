@@ -1,6 +1,7 @@
 package providers
 
 import (
+	"github.com/BaSui01/agentflow/types"
 	"encoding/json"
 	"testing"
 
@@ -18,7 +19,7 @@ import (
 func TestProperty17_ToolSchemaConversion(t *testing.T) {
 	testCases := []struct {
 		name        string
-		tools       []llm.ToolSchema
+		tools       []types.ToolSchema
 		provider    string
 		requirement string
 		description string
@@ -26,7 +27,7 @@ func TestProperty17_ToolSchemaConversion(t *testing.T) {
 		// 单一工具案件
 		{
 			name: "Single tool with all fields",
-			tools: []llm.ToolSchema{
+			tools: []types.ToolSchema{
 				{
 					Name:        "search",
 					Description: "Search the web",
@@ -39,7 +40,7 @@ func TestProperty17_ToolSchemaConversion(t *testing.T) {
 		},
 		{
 			name: "Single tool with minimal fields",
-			tools: []llm.ToolSchema{
+			tools: []types.ToolSchema{
 				{
 					Name:       "ping",
 					Parameters: json.RawMessage(`{}`),
@@ -51,7 +52,7 @@ func TestProperty17_ToolSchemaConversion(t *testing.T) {
 		},
 		{
 			name: "Single tool with complex parameters",
-			tools: []llm.ToolSchema{
+			tools: []types.ToolSchema{
 				{
 					Name:        "calculate",
 					Description: "Perform mathematical calculations",
@@ -71,7 +72,7 @@ func TestProperty17_ToolSchemaConversion(t *testing.T) {
 		},
 		{
 			name: "Single tool with nested parameters",
-			tools: []llm.ToolSchema{
+			tools: []types.ToolSchema{
 				{
 					Name:        "create_user",
 					Description: "Create a new user",
@@ -96,7 +97,7 @@ func TestProperty17_ToolSchemaConversion(t *testing.T) {
 		},
 		{
 			name: "Single tool with array parameters",
-			tools: []llm.ToolSchema{
+			tools: []types.ToolSchema{
 				{
 					Name:        "batch_process",
 					Description: "Process multiple items",
@@ -119,7 +120,7 @@ func TestProperty17_ToolSchemaConversion(t *testing.T) {
 		// 多种工具案件
 		{
 			name: "Two tools with different schemas",
-			tools: []llm.ToolSchema{
+			tools: []types.ToolSchema{
 				{
 					Name:        "search",
 					Description: "Search the web",
@@ -137,7 +138,7 @@ func TestProperty17_ToolSchemaConversion(t *testing.T) {
 		},
 		{
 			name: "Three tools with varying complexity",
-			tools: []llm.ToolSchema{
+			tools: []types.ToolSchema{
 				{
 					Name:       "simple",
 					Parameters: json.RawMessage(`{}`),
@@ -169,7 +170,7 @@ func TestProperty17_ToolSchemaConversion(t *testing.T) {
 		},
 		{
 			name: "Five tools with different parameter types",
-			tools: []llm.ToolSchema{
+			tools: []types.ToolSchema{
 				{
 					Name:        "string_tool",
 					Description: "String parameter",
@@ -204,7 +205,7 @@ func TestProperty17_ToolSchemaConversion(t *testing.T) {
 		// 边缘案件
 		{
 			name: "Tool with empty description",
-			tools: []llm.ToolSchema{
+			tools: []types.ToolSchema{
 				{
 					Name:        "no_desc",
 					Description: "",
@@ -217,7 +218,7 @@ func TestProperty17_ToolSchemaConversion(t *testing.T) {
 		},
 		{
 			name: "Tool with long description",
-			tools: []llm.ToolSchema{
+			tools: []types.ToolSchema{
 				{
 					Name:        "long_desc",
 					Description: "This is a very long description that contains multiple sentences and provides detailed information about what the tool does, including examples and use cases. It should be preserved exactly as provided.",
@@ -230,7 +231,7 @@ func TestProperty17_ToolSchemaConversion(t *testing.T) {
 		},
 		{
 			name: "Tool with special characters in name",
-			tools: []llm.ToolSchema{
+			tools: []types.ToolSchema{
 				{
 					Name:        "tool_with_underscores",
 					Description: "Tool name with underscores",
@@ -243,7 +244,7 @@ func TestProperty17_ToolSchemaConversion(t *testing.T) {
 		},
 		{
 			name: "Tool with special characters in description",
-			tools: []llm.ToolSchema{
+			tools: []types.ToolSchema{
 				{
 					Name:        "special_chars",
 					Description: "Tool with special chars: @#$%^&*()[]{}|\\;:'\",.<>?/",
@@ -256,7 +257,7 @@ func TestProperty17_ToolSchemaConversion(t *testing.T) {
 		},
 		{
 			name: "Tool with Unicode in description",
-			tools: []llm.ToolSchema{
+			tools: []types.ToolSchema{
 				{
 					Name:        "unicode_tool",
 					Description: "工具描述 with 中文字符 and émojis 🚀",
@@ -269,7 +270,7 @@ func TestProperty17_ToolSchemaConversion(t *testing.T) {
 		},
 		{
 			name: "Tool with required fields in parameters",
-			tools: []llm.ToolSchema{
+			tools: []types.ToolSchema{
 				{
 					Name:        "required_params",
 					Description: "Tool with required parameters",
@@ -289,7 +290,7 @@ func TestProperty17_ToolSchemaConversion(t *testing.T) {
 		},
 		{
 			name: "Tool with parameter constraints",
-			tools: []llm.ToolSchema{
+			tools: []types.ToolSchema{
 				{
 					Name:        "constrained_params",
 					Description: "Tool with parameter constraints",
@@ -309,7 +310,7 @@ func TestProperty17_ToolSchemaConversion(t *testing.T) {
 		},
 		{
 			name: "Tool with default values",
-			tools: []llm.ToolSchema{
+			tools: []types.ToolSchema{
 				{
 					Name:        "defaults",
 					Description: "Tool with default values",
@@ -328,7 +329,7 @@ func TestProperty17_ToolSchemaConversion(t *testing.T) {
 		},
 		{
 			name: "Tool with parameter descriptions",
-			tools: []llm.ToolSchema{
+			tools: []types.ToolSchema{
 				{
 					Name:        "documented_params",
 					Description: "Tool with documented parameters",
@@ -349,7 +350,7 @@ func TestProperty17_ToolSchemaConversion(t *testing.T) {
 		},
 		{
 			name: "Tool with oneOf schema",
-			tools: []llm.ToolSchema{
+			tools: []types.ToolSchema{
 				{
 					Name:        "oneof_tool",
 					Description: "Tool with oneOf schema",
@@ -372,7 +373,7 @@ func TestProperty17_ToolSchemaConversion(t *testing.T) {
 		},
 		{
 			name: "Tool with anyOf schema",
-			tools: []llm.ToolSchema{
+			tools: []types.ToolSchema{
 				{
 					Name:        "anyof_tool",
 					Description: "Tool with anyOf schema",
@@ -395,7 +396,7 @@ func TestProperty17_ToolSchemaConversion(t *testing.T) {
 		},
 		{
 			name: "Tool with allOf schema",
-			tools: []llm.ToolSchema{
+			tools: []types.ToolSchema{
 				{
 					Name:        "allof_tool",
 					Description: "Tool with allOf schema",
@@ -418,7 +419,7 @@ func TestProperty17_ToolSchemaConversion(t *testing.T) {
 	providers := []string{"grok", "qwen", "deepseek", "glm", "minimax"}
 	expandedTestCases := make([]struct {
 		name        string
-		tools       []llm.ToolSchema
+		tools       []types.ToolSchema
 		provider    string
 		requirement string
 		description string
@@ -462,7 +463,7 @@ func TestProperty17_ToolSchemaConversion(t *testing.T) {
 }
 
 // 测试 OpenAI 兼容性转换测试工具转换 OpenAI 兼容提供者
-func testOpenAICompatibleConversion(t *testing.T, tools []llm.ToolSchema, provider, requirement, description string) {
+func testOpenAICompatibleConversion(t *testing.T, tools []types.ToolSchema, provider, requirement, description string) {
 	// 使用光谱之后的模拟函数转换
 	converted := mockConvertToolsOpenAI(tools)
 
@@ -489,7 +490,7 @@ func testOpenAICompatibleConversion(t *testing.T, tools []llm.ToolSchema, provid
 }
 
 // 测试MiniMax 转换测试工具转换
-func testMiniMaxConversion(t *testing.T, tools []llm.ToolSchema, provider, requirement, description string) {
+func testMiniMaxConversion(t *testing.T, tools []types.ToolSchema, provider, requirement, description string) {
 	// 使用光谱之后的模拟函数转换
 	converted := mockConvertToolsMiniMax(tools)
 
@@ -518,7 +519,7 @@ func TestProperty17_EmptyToolsArray(t *testing.T) {
 
 	for _, provider := range providers {
 		t.Run("empty_tools_"+provider, func(t *testing.T) {
-			emptyTools := []llm.ToolSchema{}
+			emptyTools := []types.ToolSchema{}
 
 			switch provider {
 			case "grok", "qwen", "deepseek", "glm":
@@ -540,7 +541,7 @@ func TestProperty17_NilToolsArray(t *testing.T) {
 
 	for _, provider := range providers {
 		t.Run("nil_tools_"+provider, func(t *testing.T) {
-			var nilTools []llm.ToolSchema
+			var nilTools []types.ToolSchema
 
 			switch provider {
 			case "grok", "qwen", "deepseek", "glm":
@@ -572,20 +573,20 @@ func TestProperty17_ParameterJSONValidity(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			tool := llm.ToolSchema{
+			tool := types.ToolSchema{
 				Name:        "test_tool",
 				Description: "Test tool",
 				Parameters:  tc.parameters,
 			}
 
 			// 测试 OpenAI 格式
-			openAIConverted := mockConvertToolsOpenAI([]llm.ToolSchema{tool})
+			openAIConverted := mockConvertToolsOpenAI([]types.ToolSchema{tool})
 			assert.NotNil(t, openAIConverted)
 			assert.True(t, json.Valid(openAIConverted[0].Function.Arguments),
 				"Converted parameters should be valid JSON")
 
 			// 测试迷你最大格式
-			miniMaxConverted := mockConvertToolsMiniMax([]llm.ToolSchema{tool})
+			miniMaxConverted := mockConvertToolsMiniMax([]types.ToolSchema{tool})
 			assert.NotNil(t, miniMaxConverted)
 			assert.True(t, json.Valid(miniMaxConverted[0].Parameters),
 				"Converted parameters should be valid JSON")
@@ -611,7 +612,7 @@ type mockMiniMaxTool struct {
 	Parameters  json.RawMessage `json:"parameters"`
 }
 
-func mockConvertToolsOpenAI(tools []llm.ToolSchema) []mockOpenAITool {
+func mockConvertToolsOpenAI(tools []types.ToolSchema) []mockOpenAITool {
 	if len(tools) == 0 {
 		return nil
 	}
@@ -628,7 +629,7 @@ func mockConvertToolsOpenAI(tools []llm.ToolSchema) []mockOpenAITool {
 	return out
 }
 
-func mockConvertToolsMiniMax(tools []llm.ToolSchema) []mockMiniMaxTool {
+func mockConvertToolsMiniMax(tools []types.ToolSchema) []mockMiniMaxTool {
 	if len(tools) == 0 {
 		return nil
 	}
@@ -642,3 +643,5 @@ func mockConvertToolsMiniMax(tools []llm.ToolSchema) []mockMiniMaxTool {
 	}
 	return out
 }
+
+

@@ -529,3 +529,4 @@ func uploadTestReference(t *testing.T, h *MultimodalHandler) string {
 	require.NotEmpty(t, refID)
 	return refID
 }
+

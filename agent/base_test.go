@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"github.com/BaSui01/agentflow/types"
 	"context"
 	"testing"
 
@@ -110,7 +111,7 @@ func TestBaseAgent_Execute(t *testing.T) {
 			{
 				Index:        0,
 				FinishReason: "stop",
-				Message: llm.Message{
+				Message: types.Message{
 					Role:    llm.RoleAssistant,
 					Content: "Hello! How can I help you?",
 				},
@@ -336,7 +337,7 @@ func TestBaseAgent_Plan(t *testing.T) {
 			{
 				Index:        0,
 				FinishReason: "stop",
-				Message: llm.Message{
+				Message: types.Message{
 					Role: llm.RoleAssistant,
 					Content: `1. First step: Analyze the problem
 2. Second step: Design solution
@@ -400,7 +401,7 @@ func BenchmarkBaseAgent_Execute(b *testing.B) {
 			{
 				Index:        0,
 				FinishReason: "stop",
-				Message: llm.Message{
+				Message: types.Message{
 					Role:    llm.RoleAssistant,
 					Content: "Response",
 				},
@@ -521,3 +522,5 @@ func TestSaveMemory_CacheEviction(t *testing.T) {
 	assert.Equal(t, defaultMaxRecentMemory, len(agent.recentMemory))
 	agent.recentMemoryMu.RUnlock()
 }
+
+

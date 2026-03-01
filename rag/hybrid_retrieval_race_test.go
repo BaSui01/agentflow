@@ -114,3 +114,4 @@ func TestHybridRetriever_ConcurrentRetrieveOnly(t *testing.T) {
 
 	wg.Wait()
 }
+

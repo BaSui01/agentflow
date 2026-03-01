@@ -1,6 +1,7 @@
 package providers_test
 
 import (
+	"github.com/BaSui01/agentflow/types"
 	"context"
 	"encoding/json"
 	"net/http"
@@ -88,9 +89,9 @@ func TestBaseCapabilityProvider_HTTPError(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
-	llmErr, ok := err.(*llm.Error)
+	llmErr, ok := err.(*types.Error)
 	if !ok {
-		t.Fatalf("expected *llm.Error, got %T", err)
+		t.Fatalf("expected *types.Error, got %T", err)
 	}
 	if llmErr.Code != llm.ErrRateLimit {
 		t.Errorf("expected ErrRateLimit, got %s", llmErr.Code)
@@ -135,3 +136,5 @@ func TestChooseCapabilityModel(t *testing.T) {
 		t.Errorf("expected default, got %s", m)
 	}
 }
+
+

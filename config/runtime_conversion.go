@@ -50,3 +50,4 @@ func (c *Config) ToRuntimeConfig() types.AgentConfig {
 	}
 	return c.Agent.ToRuntimeConfig()
 }
+

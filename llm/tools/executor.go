@@ -1,6 +1,7 @@
 package tools
 
 import (
+	"github.com/BaSui01/agentflow/types"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -23,7 +24,7 @@ type StreamingToolFunc func(ctx context.Context, args json.RawMessage, emit Tool
 
 // ToolMetadata 描述工具元数据.
 type ToolMetadata struct {
-	Schema      llm.ToolSchema   // Tool JSON Schema
+	Schema      types.ToolSchema   // Tool JSON Schema
 	Permission  string           // Required permission (optional)
 	RateLimit   *RateLimitConfig // Rate limit config (optional)
 	Timeout     time.Duration    // Execution timeout (default 30s)
@@ -41,14 +42,14 @@ type ToolRegistry interface {
 	Register(name string, fn ToolFunc, metadata ToolMetadata) error
 	Unregister(name string) error
 	Get(name string) (ToolFunc, ToolMetadata, error)
-	List() []llm.ToolSchema
+	List() []types.ToolSchema
 	Has(name string) bool
 }
 
 // ToolExecutor 定义工具执行器接口.
 type ToolExecutor interface {
-	Execute(ctx context.Context, calls []llm.ToolCall) []llm.ToolResult
-	ExecuteOne(ctx context.Context, call llm.ToolCall) llm.ToolResult
+	Execute(ctx context.Context, calls []types.ToolCall) []types.ToolResult
+	ExecuteOne(ctx context.Context, call types.ToolCall) types.ToolResult
 }
 
 // ToolStreamEventType 定义流式工具执行事件类型.
@@ -77,7 +78,7 @@ type ToolStreamEvent struct {
 // 支持流式工具执行以报告长时间运行工具的进度.
 type StreamableToolExecutor interface {
 	ToolExecutor
-	ExecuteOneStream(ctx context.Context, call llm.ToolCall) <-chan ToolStreamEvent
+	ExecuteOneStream(ctx context.Context, call types.ToolCall) <-chan ToolStreamEvent
 }
 
 // ExecutorConfig 定义工具执行器的可配置参数.
@@ -205,11 +206,11 @@ func (r *DefaultRegistry) Get(name string) (ToolFunc, ToolMetadata, error) {
 	return fn, meta, nil
 }
 
-func (r *DefaultRegistry) List() []llm.ToolSchema {
+func (r *DefaultRegistry) List() []types.ToolSchema {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	schemas := make([]llm.ToolSchema, 0, len(r.metadata))
+	schemas := make([]types.ToolSchema, 0, len(r.metadata))
 	for _, meta := range r.metadata {
 		schemas = append(schemas, meta.Schema)
 	}
@@ -268,14 +269,14 @@ func NewDefaultExecutorWithConfig(registry ToolRegistry, logger *zap.Logger, con
 	}
 }
 
-func (e *DefaultExecutor) Execute(ctx context.Context, calls []llm.ToolCall) []llm.ToolResult {
-	results := make([]llm.ToolResult, len(calls))
+func (e *DefaultExecutor) Execute(ctx context.Context, calls []types.ToolCall) []types.ToolResult {
+	results := make([]types.ToolResult, len(calls))
 
 	// 并发执行所有工具调用，单个工具失败不阻塞其他工具
 	var wg sync.WaitGroup
 	for i, call := range calls {
 		wg.Add(1)
-		go func(idx int, c llm.ToolCall) {
+		go func(idx int, c types.ToolCall) {
 			defer wg.Done()
 			results[idx] = e.executeWithRetry(ctx, c)
 		}(i, call)
@@ -286,7 +287,7 @@ func (e *DefaultExecutor) Execute(ctx context.Context, calls []llm.ToolCall) []l
 }
 
 // executeWithRetry 执行单个工具调用，失败时按配置重试.
-func (e *DefaultExecutor) executeWithRetry(ctx context.Context, call llm.ToolCall) llm.ToolResult {
+func (e *DefaultExecutor) executeWithRetry(ctx context.Context, call types.ToolCall) types.ToolResult {
 	result := e.ExecuteOne(ctx, call)
 	if !result.IsError() || e.config.MaxRetries <= 0 {
 		return result
@@ -318,9 +319,9 @@ func (e *DefaultExecutor) executeWithRetry(ctx context.Context, call llm.ToolCal
 	return result
 }
 
-func (e *DefaultExecutor) ExecuteOne(ctx context.Context, call llm.ToolCall) llm.ToolResult {
+func (e *DefaultExecutor) ExecuteOne(ctx context.Context, call types.ToolCall) types.ToolResult {
 	start := time.Now()
-	result := llm.ToolResult{
+	result := types.ToolResult{
 		ToolCallID: call.ID,
 		Name:       call.Name,
 	}
@@ -411,7 +412,7 @@ func (e *DefaultExecutor) ExecuteOne(ctx context.Context, call llm.ToolCall) llm
 // 如果工具注册了 StreamingToolFunc，工具推送的中间事件会被转发到 channel.
 // 否则回退到普通执行（start → execute → complete）.
 // channel 在 goroutine 结束时保证关闭.
-func (e *DefaultExecutor) ExecuteOneStream(ctx context.Context, call llm.ToolCall) <-chan ToolStreamEvent {
+func (e *DefaultExecutor) ExecuteOneStream(ctx context.Context, call types.ToolCall) <-chan ToolStreamEvent {
 	ch := make(chan ToolStreamEvent, 8)
 
 	go func() {
@@ -436,7 +437,7 @@ func (e *DefaultExecutor) ExecuteOneStream(ctx context.Context, call llm.ToolCal
 }
 
 // executeStreamingTool 执行流式工具，将工具推送的事件转发到 channel.
-func (e *DefaultExecutor) executeStreamingTool(ctx context.Context, call llm.ToolCall, fn StreamingToolFunc, ch chan<- ToolStreamEvent) {
+func (e *DefaultExecutor) executeStreamingTool(ctx context.Context, call types.ToolCall, fn StreamingToolFunc, ch chan<- ToolStreamEvent) {
 	start := time.Now()
 
 	// 获取元数据（用于超时）
@@ -507,7 +508,7 @@ func (e *DefaultExecutor) executeStreamingTool(ctx context.Context, call llm.Too
 			ch <- ToolStreamEvent{Type: ToolStreamError, ToolName: call.Name, Error: done.err}
 			return
 		}
-		result := llm.ToolResult{
+		result := types.ToolResult{
 			ToolCallID: call.ID,
 			Name:       call.Name,
 			Result:     done.res,
@@ -522,7 +523,7 @@ func (e *DefaultExecutor) executeStreamingTool(ctx context.Context, call llm.Too
 }
 
 // executeNonStreamingTool 执行普通工具并发射 start/complete 事件.
-func (e *DefaultExecutor) executeNonStreamingTool(ctx context.Context, call llm.ToolCall, ch chan<- ToolStreamEvent) {
+func (e *DefaultExecutor) executeNonStreamingTool(ctx context.Context, call types.ToolCall, ch chan<- ToolStreamEvent) {
 	// 发射 progress 事件：开始执行
 	select {
 	case ch <- ToolStreamEvent{
@@ -647,3 +648,5 @@ func (tb *tokenBucketLimiter) Reset() {
 	tb.tokens = tb.maxTokens
 	tb.lastRefill = time.Now()
 }
+
+

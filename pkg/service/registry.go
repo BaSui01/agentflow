@@ -239,3 +239,4 @@ func (r *Registry) topologicalSort() ([]int, error) {
 
 	return result, nil
 }
+

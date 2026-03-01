@@ -71,3 +71,4 @@ func TestRerankerType(t *testing.T) {
 		}
 	}
 }
+

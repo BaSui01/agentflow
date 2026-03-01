@@ -105,3 +105,4 @@ func OpenDatabase(dbCfg config.DatabaseConfig, logger *zap.Logger) (*gorm.DB, er
 	logger.Info("Database connected", zap.String("driver", dbCfg.Driver))
 	return db, nil
 }
+

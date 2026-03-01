@@ -233,3 +233,4 @@ func TestDefaultFirecrawlConfig(t *testing.T) {
 // 编译期接口检查
 var _ WebSearchProvider = (*FirecrawlProvider)(nil)
 var _ WebScrapeProvider = (*FirecrawlProvider)(nil)
+

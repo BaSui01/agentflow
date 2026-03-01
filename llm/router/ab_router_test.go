@@ -1,6 +1,7 @@
 package router
 
 import (
+	"github.com/BaSui01/agentflow/types"
 	"context"
 	"fmt"
 	"testing"
@@ -56,7 +57,7 @@ func TestABRouter_Completion(t *testing.T) {
 	require.NoError(t, err)
 
 	resp, err := router.Completion(context.Background(), &llm.ChatRequest{
-		Messages: []llm.Message{{Role: llm.RoleUser, Content: "Hello"}},
+		Messages: []types.Message{{Role: llm.RoleUser, Content: "Hello"}},
 	})
 	require.NoError(t, err)
 	assert.NotNil(t, resp)
@@ -69,7 +70,7 @@ func TestABRouter_Stream(t *testing.T) {
 	require.NoError(t, err)
 
 	ch, err := router.Stream(context.Background(), &llm.ChatRequest{
-		Messages: []llm.Message{{Role: llm.RoleUser, Content: "Hello"}},
+		Messages: []types.Message{{Role: llm.RoleUser, Content: "Hello"}},
 	})
 	require.NoError(t, err)
 	assert.NotNil(t, ch)
@@ -162,7 +163,7 @@ func TestABRouter_StickyRouting(t *testing.T) {
 
 	req := &llm.ChatRequest{
 		UserID:   "user-123",
-		Messages: []llm.Message{{Role: llm.RoleUser, Content: "Hello"}},
+		Messages: []types.Message{{Role: llm.RoleUser, Content: "Hello"}},
 	}
 
 	// Same user should always get same variant
@@ -205,7 +206,7 @@ func TestABRouter_GetMetrics(t *testing.T) {
 	// Make some requests
 	for i := 0; i < 10; i++ {
 		_, callErr := router.Completion(context.Background(), &llm.ChatRequest{
-			Messages: []llm.Message{{Role: llm.RoleUser, Content: "Hello"}},
+			Messages: []types.Message{{Role: llm.RoleUser, Content: "Hello"}},
 		})
 		require.NoError(t, callErr)
 	}
@@ -225,7 +226,7 @@ func TestABRouter_GetReport(t *testing.T) {
 	require.NoError(t, err)
 
 	_, err = router.Completion(context.Background(), &llm.ChatRequest{
-		Messages: []llm.Message{{Role: llm.RoleUser, Content: "Hello"}},
+		Messages: []types.Message{{Role: llm.RoleUser, Content: "Hello"}},
 	})
 	require.NoError(t, err)
 
@@ -255,7 +256,7 @@ func TestABRouter_ExpiredTest(t *testing.T) {
 	// Should always route to first variant when expired
 	for i := 0; i < 10; i++ {
 		resp, err := router.Completion(context.Background(), &llm.ChatRequest{
-			Messages: []llm.Message{{Role: llm.RoleUser, Content: "Hello"}},
+			Messages: []types.Message{{Role: llm.RoleUser, Content: "Hello"}},
 		})
 		require.NoError(t, err)
 		assert.Contains(t, resp.Provider, "control")
@@ -334,7 +335,7 @@ func TestABRouter_StickyCache_MaxSize(t *testing.T) {
 	for i := 0; i < 10; i++ {
 		_, callErr := router.Completion(context.Background(), &llm.ChatRequest{
 			UserID:   fmt.Sprintf("user-%d", i),
-			Messages: []llm.Message{{Role: llm.RoleUser, Content: "Hello"}},
+			Messages: []types.Message{{Role: llm.RoleUser, Content: "Hello"}},
 		})
 		require.NoError(t, callErr)
 	}
@@ -343,3 +344,5 @@ func TestABRouter_StickyCache_MaxSize(t *testing.T) {
 	assert.LessOrEqual(t, len(router.stickyCache), 6) // max + 1 before next clear
 	router.stickyCacheMu.RUnlock()
 }
+
+

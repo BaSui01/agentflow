@@ -48,3 +48,4 @@ type ThreeDUsage struct {
 	ModelsGenerated int     `json:"models_generated"`
 	Credits         float64 `json:"credits,omitempty"`
 }
+

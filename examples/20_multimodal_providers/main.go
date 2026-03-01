@@ -224,3 +224,4 @@ func demoMultimodalRouter(ctx context.Context, logger *zap.Logger) {
 		}
 	}
 }
+

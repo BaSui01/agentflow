@@ -255,3 +255,4 @@ func TestDefaultPipelineConfig(t *testing.T) {
 	assert.Equal(t, 30*time.Minute, cfg.Timeout)
 	assert.True(t, cfg.StopOnFailure)
 }
+

@@ -247,3 +247,4 @@ func (s *MongoConversationStore) UpdateBranches(ctx context.Context, conversatio
 	}
 	return nil
 }
+

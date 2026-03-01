@@ -56,3 +56,4 @@ func (a *HITLInterruptAdapter) RequestApproval(ctx context.Context, opts Approva
 		Data:     resp.Input,
 	}, nil
 }
+

@@ -130,3 +130,4 @@ func demoShadowAI(ctx context.Context, logger *zap.Logger) {
 	fmt.Printf("  Total detections: %d\n", stats.TotalDetections)
 	fmt.Println("  ✓ Shadow AI detector operational")
 }
+

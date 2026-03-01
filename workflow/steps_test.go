@@ -1,6 +1,7 @@
 package workflow
 
 import (
+	"github.com/BaSui01/agentflow/types"
 	"context"
 	"errors"
 	"fmt"
@@ -171,7 +172,7 @@ func TestLLMStep_Execute_WithProvider(t *testing.T) {
 		name: "test-provider",
 		response: &llm.ChatResponse{
 			Choices: []llm.ChatChoice{
-				{Message: llm.Message{Role: llm.RoleAssistant, Content: "Hello from LLM"}},
+				{Message: types.Message{Role: llm.RoleAssistant, Content: "Hello from LLM"}},
 			},
 		},
 	}
@@ -230,7 +231,7 @@ func TestLLMStep_Execute_WithTemperatureAndMaxTokens(t *testing.T) {
 		name: "test-provider",
 		response: &llm.ChatResponse{
 			Choices: []llm.ChatChoice{
-				{Message: llm.Message{Role: llm.RoleAssistant, Content: "response"}},
+				{Message: types.Message{Role: llm.RoleAssistant, Content: "response"}},
 			},
 		},
 	}
@@ -306,7 +307,7 @@ func TestLLMStep_Execute_PromptCombination(t *testing.T) {
 				name: "test",
 				response: &llm.ChatResponse{
 					Choices: []llm.ChatChoice{
-						{Message: llm.Message{Role: llm.RoleAssistant, Content: "ok"}},
+						{Message: types.Message{Role: llm.RoleAssistant, Content: "ok"}},
 					},
 				},
 			}
@@ -535,3 +536,5 @@ func TestCodeStep_Execute_NilHandler(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "handler not configured")
 }
+
+

@@ -348,3 +348,4 @@ func (r *integTestObservability) StartTrace(traceID, agentID string)          {}
 func (r *integTestObservability) EndTrace(traceID, status string, err error)  {}
 func (r *integTestObservability) RecordTask(agentID string, success bool, d time.Duration, tokens int, cost, quality float64) {
 }
+

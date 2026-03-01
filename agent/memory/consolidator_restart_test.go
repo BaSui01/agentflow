@@ -134,3 +134,4 @@ func TestMemoryConsolidator_ConcurrentStopStart(t *testing.T) {
 	require.NoError(t, c.Start(ctx))
 	require.NoError(t, c.Stop())
 }
+

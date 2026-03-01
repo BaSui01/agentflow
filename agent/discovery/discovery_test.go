@@ -596,3 +596,4 @@ func TestCapabilityRegistry_EventSubscription(t *testing.T) {
 		t.Error("timeout waiting for event")
 	}
 }
+

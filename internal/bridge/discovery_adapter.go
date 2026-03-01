@@ -49,3 +49,4 @@ func (a *DiscoveryRegistrarAdapter) RegisterCapability(ctx context.Context, desc
 func (a *DiscoveryRegistrarAdapter) UnregisterCapability(ctx context.Context, agentID string, capabilityName string) error {
 	return a.registry.UnregisterCapability(ctx, agentID, capabilityName)
 }
+

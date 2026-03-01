@@ -544,3 +544,4 @@ func (c *CapabilityComposer) ClearExclusiveGroups() {
 
 // 确保 CapableComposer 执行 Composer 接口.
 var _ Composer = (*CapabilityComposer)(nil)
+

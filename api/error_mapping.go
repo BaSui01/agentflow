@@ -56,3 +56,4 @@ func HTTPStatusFromErrorCode(code types.ErrorCode) int {
 		return 500
 	}
 }
+

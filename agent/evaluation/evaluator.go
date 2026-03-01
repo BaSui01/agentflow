@@ -1,6 +1,7 @@
 package evaluation
 
 import (
+	"github.com/BaSui01/agentflow/types"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -793,3 +794,5 @@ func compareJSON(expected, actual any) float64 {
 	actualBytes, _ := json.Marshal(actual)
 	return calculateSimilarity(string(expectedBytes), string(actualBytes))
 }
+
+

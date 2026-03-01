@@ -670,3 +670,4 @@ func TestWebSocketTransport_ReceiveNoReconnectWhenDisabled(t *testing.T) {
 	_, err := tr.Receive(ctx)
 	require.Error(t, err)
 }
+

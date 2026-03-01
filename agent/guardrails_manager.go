@@ -128,3 +128,4 @@ func (g *GuardrailsManager) AddOutputFilter(f guardrails.Filter) {
 	}
 	g.outputValidator.AddFilter(f)
 }
+

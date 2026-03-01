@@ -1,6 +1,7 @@
 package mistral
 
 import (
+	"github.com/BaSui01/agentflow/types"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -66,7 +67,7 @@ func (p *MistralProvider) TranscribeAudio(ctx context.Context, req *llm.AudioTra
 
 	resp, err := p.Client.Do(httpReq)
 	if err != nil {
-		return nil, &llm.Error{Code: llm.ErrUpstreamError, Message: err.Error(), HTTPStatus: http.StatusBadGateway, Retryable: true, Provider: p.Name()}
+		return nil, &types.Error{Code: llm.ErrUpstreamError, Message: err.Error(), HTTPStatus: http.StatusBadGateway, Retryable: true, Provider: p.Name()}
 	}
 	defer resp.Body.Close()
 
@@ -77,7 +78,7 @@ func (p *MistralProvider) TranscribeAudio(ctx context.Context, req *llm.AudioTra
 
 	var transcriptionResp llm.AudioTranscriptionResponse
 	if err := json.NewDecoder(resp.Body).Decode(&transcriptionResp); err != nil {
-		return nil, &llm.Error{Code: llm.ErrUpstreamError, Message: err.Error(), HTTPStatus: http.StatusBadGateway, Retryable: true, Provider: p.Name()}
+		return nil, &types.Error{Code: llm.ErrUpstreamError, Message: err.Error(), HTTPStatus: http.StatusBadGateway, Retryable: true, Provider: p.Name()}
 	}
 	return &transcriptionResp, nil
 }
@@ -99,7 +100,7 @@ func (p *MistralProvider) CreateEmbedding(ctx context.Context, req *llm.Embeddin
 
 	resp, err := p.Client.Do(httpReq)
 	if err != nil {
-		return nil, &llm.Error{Code: llm.ErrUpstreamError, Message: err.Error(), HTTPStatus: http.StatusBadGateway, Retryable: true, Provider: p.Name()}
+		return nil, &types.Error{Code: llm.ErrUpstreamError, Message: err.Error(), HTTPStatus: http.StatusBadGateway, Retryable: true, Provider: p.Name()}
 	}
 	defer resp.Body.Close()
 
@@ -110,7 +111,7 @@ func (p *MistralProvider) CreateEmbedding(ctx context.Context, req *llm.Embeddin
 
 	var embeddingResp llm.EmbeddingResponse
 	if err := json.NewDecoder(resp.Body).Decode(&embeddingResp); err != nil {
-		return nil, &llm.Error{Code: llm.ErrUpstreamError, Message: err.Error(), HTTPStatus: http.StatusBadGateway, Retryable: true, Provider: p.Name()}
+		return nil, &types.Error{Code: llm.ErrUpstreamError, Message: err.Error(), HTTPStatus: http.StatusBadGateway, Retryable: true, Provider: p.Name()}
 	}
 	return &embeddingResp, nil
 }
@@ -134,3 +135,5 @@ func (p *MistralProvider) GetFineTuningJob(ctx context.Context, jobID string) (*
 func (p *MistralProvider) CancelFineTuningJob(ctx context.Context, jobID string) error {
 	return providers.NotSupportedError(p.Name(), "fine-tuning")
 }
+
+

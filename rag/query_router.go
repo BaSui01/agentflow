@@ -802,3 +802,4 @@ func (d *RoutingDecision) ToJSON() ([]byte, error) {
 func (d *RoutingDecision) FromJSON(data []byte) error {
 	return json.Unmarshal(data, d)
 }
+

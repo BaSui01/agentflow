@@ -511,3 +511,4 @@ func (s *QdrantStore) ClearAll(ctx context.Context) error {
 	s.logger.Info("all points cleared from collection", zap.String("collection", s.cfg.Collection))
 	return nil
 }
+

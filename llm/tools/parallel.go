@@ -459,3 +459,4 @@ func (b *BatchExecutor) ExecuteBatched(ctx context.Context, calls []llmpkg.ToolC
 	return b.parallel.Execute(ctx, calls)
 }
 
+

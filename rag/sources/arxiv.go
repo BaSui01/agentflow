@@ -272,3 +272,4 @@ func (a *ArxivSource) ToJSON(papers []ArxivPaper) (string, error) {
 	}
 	return string(data), nil
 }
+

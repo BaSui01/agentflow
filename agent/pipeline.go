@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"github.com/BaSui01/agentflow/types"
 	"context"
 	"time"
 
@@ -10,9 +11,9 @@ import (
 // PipelineContext carries intermediate state through the pipeline.
 type PipelineContext struct {
 	Input            *Input
-	Messages         []llm.Message
-	RestoredMessages []llm.Message
-	ContextMessages  []llm.Message
+	Messages         []types.Message
+	RestoredMessages []types.Message
+	ContextMessages  []types.Message
 	RunID            string
 	ConversationID   string
 	Response         *llm.ChatResponse
@@ -70,3 +71,5 @@ func (p *Pipeline) Run(ctx context.Context, pc *PipelineContext) error {
 
 	return chain(ctx, pc)
 }
+
+

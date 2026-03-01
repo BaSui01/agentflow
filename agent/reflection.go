@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"github.com/BaSui01/agentflow/types"
 	"context"
 	"fmt"
 	"strings"
@@ -205,7 +206,7 @@ func (r *ReflectionExecutor) critique(ctx context.Context, task, output string) 
 	prompt = strings.ReplaceAll(prompt, "{{.Task}}", task)
 	prompt = strings.ReplaceAll(prompt, "{{.Output}}", output)
 
-	messages := []llm.Message{
+	messages := []types.Message{
 		{
 			Role:    llm.RoleSystem,
 			Content: "你是一个专业的质量评审专家，擅长发现问题并提供建设性建议。",
@@ -362,3 +363,5 @@ func (r *ReflectionExecutor) refineInput(original *Input, critique *Critique) *I
 
 	return refined
 }
+
+

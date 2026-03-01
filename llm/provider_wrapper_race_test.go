@@ -78,3 +78,4 @@ func TestDefaultProviderFactory_ConcurrentRegisterOnly(t *testing.T) {
 		}
 	}
 }
+

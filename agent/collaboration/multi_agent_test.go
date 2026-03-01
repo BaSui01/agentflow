@@ -447,3 +447,4 @@ func TestMessageHub_FromPersistMessage(t *testing.T) {
 	assert.Equal(t, "reply", msg.Content)
 	assert.Equal(t, now, msg.Timestamp)
 }
+

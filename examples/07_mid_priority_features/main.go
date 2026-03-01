@@ -234,3 +234,4 @@ func demoTracing(logger *zap.Logger) {
 	_, conv := convTracer.StartConversation(ctx, "test-chat")
 	fmt.Printf("   Conversation trace ID: %s\n", conv.ID)
 }
+

@@ -238,3 +238,4 @@ func newRerankProvider(cfg *config.Config, t RerankProviderType) (RerankProvider
 func NewPineconeVectorStore(cfg PineconeConfig, logger *zap.Logger) VectorStore {
 	return NewPineconeStore(cfg, logger)
 }
+

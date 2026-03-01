@@ -80,7 +80,7 @@ func TestOpenAIProvider_OrganizationHeader(t *testing.T) {
 	}, zap.NewNop())
 
 	_, err := p.Completion(context.Background(), &llm.ChatRequest{
-		Messages: []llm.Message{{Role: llm.RoleUser, Content: "Hi"}},
+		Messages: []types.Message{{Role: llm.RoleUser, Content: "Hi"}},
 	})
 	require.NoError(t, err)
 	assert.Equal(t, "org-abc", capturedOrgHeader)
@@ -156,7 +156,7 @@ func TestOpenAIProvider_Completion_Standard(t *testing.T) {
 	}, zap.NewNop())
 
 	resp, err := p.Completion(context.Background(), &llm.ChatRequest{
-		Messages: []llm.Message{{Role: llm.RoleUser, Content: "Hi"}},
+		Messages: []types.Message{{Role: llm.RoleUser, Content: "Hi"}},
 	})
 	require.NoError(t, err)
 	require.NotNil(t, resp)
@@ -210,7 +210,7 @@ func TestOpenAIProvider_Completion_ResponsesAPI(t *testing.T) {
 
 	storeTrue := true
 	resp, err := p.Completion(context.Background(), &llm.ChatRequest{
-		Messages: []llm.Message{{Role: llm.RoleUser, Content: "Hi"}},
+		Messages: []types.Message{{Role: llm.RoleUser, Content: "Hi"}},
 		Store:    &storeTrue,
 	})
 	require.NoError(t, err)
@@ -259,7 +259,7 @@ func TestOpenAIProvider_Completion_ResponsesAPI_WithToolCalls(t *testing.T) {
 	}, zap.NewNop())
 
 	resp, err := p.Completion(context.Background(), &llm.ChatRequest{
-		Messages: []llm.Message{{Role: llm.RoleUser, Content: "Weather?"}},
+		Messages: []types.Message{{Role: llm.RoleUser, Content: "Weather?"}},
 	})
 	require.NoError(t, err)
 	// message output + function_call output get merged into one choice
@@ -295,14 +295,14 @@ func TestOpenAIProvider_Completion_ResponsesAPI_PreviousResponseID(t *testing.T)
 	// Via context
 	ctx := WithPreviousResponseID(context.Background(), "resp_prev_ctx")
 	_, err := p.Completion(ctx, &llm.ChatRequest{
-		Messages: []llm.Message{{Role: llm.RoleUser, Content: "Hi"}},
+		Messages: []types.Message{{Role: llm.RoleUser, Content: "Hi"}},
 	})
 	require.NoError(t, err)
 	assert.Equal(t, "resp_prev_ctx", capturedPrevID)
 
 	// Via request field (takes precedence)
 	_, err = p.Completion(ctx, &llm.ChatRequest{
-		Messages:           []llm.Message{{Role: llm.RoleUser, Content: "Hi"}},
+		Messages:           []types.Message{{Role: llm.RoleUser, Content: "Hi"}},
 		PreviousResponseID: "resp_prev_req",
 	})
 	require.NoError(t, err)
@@ -323,10 +323,10 @@ func TestOpenAIProvider_Completion_Error(t *testing.T) {
 	}, zap.NewNop())
 
 	_, err := p.Completion(context.Background(), &llm.ChatRequest{
-		Messages: []llm.Message{{Role: llm.RoleUser, Content: "Hi"}},
+		Messages: []types.Message{{Role: llm.RoleUser, Content: "Hi"}},
 	})
 	require.Error(t, err)
-	llmErr, ok := err.(*llm.Error)
+	llmErr, ok := err.(*types.Error)
 	require.True(t, ok)
 	assert.Equal(t, llm.ErrRateLimit, llmErr.Code)
 	assert.True(t, llmErr.Retryable)
@@ -345,10 +345,10 @@ func TestOpenAIProvider_Completion_ResponsesAPI_Error(t *testing.T) {
 	}, zap.NewNop())
 
 	_, err := p.Completion(context.Background(), &llm.ChatRequest{
-		Messages: []llm.Message{{Role: llm.RoleUser, Content: "Hi"}},
+		Messages: []types.Message{{Role: llm.RoleUser, Content: "Hi"}},
 	})
 	require.Error(t, err)
-	llmErr, ok := err.(*llm.Error)
+	llmErr, ok := err.(*types.Error)
 	require.True(t, ok)
 	assert.Equal(t, llm.ErrInvalidRequest, llmErr.Code)
 }
@@ -378,7 +378,7 @@ func TestOpenAIProvider_Stream(t *testing.T) {
 	}, zap.NewNop())
 
 	ch, err := p.Stream(context.Background(), &llm.ChatRequest{
-		Messages: []llm.Message{{Role: llm.RoleUser, Content: "Hi"}},
+		Messages: []types.Message{{Role: llm.RoleUser, Content: "Hi"}},
 	})
 	require.NoError(t, err)
 
@@ -415,11 +415,11 @@ func TestOpenAIProvider_Stream_ResponsesAPI_ToolArgsAreAccumulated(t *testing.T)
 	}, zap.NewNop())
 
 	ch, err := p.Stream(context.Background(), &llm.ChatRequest{
-		Messages: []llm.Message{{Role: llm.RoleUser, Content: "Weather?"}},
+		Messages: []types.Message{{Role: llm.RoleUser, Content: "Weather?"}},
 	})
 	require.NoError(t, err)
 
-	var gotToolCall *llm.ToolCall
+	var gotToolCall *types.ToolCall
 	for c := range ch {
 		if len(c.Delta.ToolCalls) > 0 {
 			tc := c.Delta.ToolCalls[0]
@@ -434,7 +434,7 @@ func TestOpenAIProvider_Stream_ResponsesAPI_ToolArgsAreAccumulated(t *testing.T)
 }
 
 func TestBuildInputContent_IncludesVideoAsInputFile(t *testing.T) {
-	content := buildInputContent(llm.Message{
+	content := buildInputContent(types.Message{
 		Role:    llm.RoleUser,
 		Content: "analyze this video",
 		Videos:  []types.VideoContent{{URL: "https://example.com/video.mp4"}},
@@ -473,10 +473,10 @@ func TestOpenAIProvider_Stream_Error(t *testing.T) {
 	}, zap.NewNop())
 
 	_, err := p.Stream(context.Background(), &llm.ChatRequest{
-		Messages: []llm.Message{{Role: llm.RoleUser, Content: "Hi"}},
+		Messages: []types.Message{{Role: llm.RoleUser, Content: "Hi"}},
 	})
 	require.Error(t, err)
-	llmErr, ok := err.(*llm.Error)
+	llmErr, ok := err.(*types.Error)
 	require.True(t, ok)
 	assert.Equal(t, llm.ErrUnauthorized, llmErr.Code)
 }
@@ -510,3 +510,4 @@ func TestToResponsesAPIChatResponse(t *testing.T) {
 	assert.Equal(t, 8, result.Usage.TotalTokens)
 	assert.False(t, result.CreatedAt.IsZero())
 }
+

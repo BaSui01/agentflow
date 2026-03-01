@@ -1,6 +1,7 @@
 package main
 
 import (
+	"github.com/BaSui01/agentflow/types"
 	"context"
 	"fmt"
 	"log"
@@ -66,7 +67,7 @@ func runPromptChaining(ctx context.Context, provider llm.Provider, logger *zap.L
 
 		resp, err := provider.Completion(ctx, &llm.ChatRequest{
 			Model: "gpt-3.5-turbo",
-			Messages: []llm.Message{
+			Messages: []types.Message{
 				{Role: llm.RoleSystem, Content: "你是一个专业的翻译助手。"},
 				{Role: llm.RoleUser, Content: fmt.Sprintf("请将以下英文翻译成中文：\n\n%s", text)},
 			},
@@ -86,7 +87,7 @@ func runPromptChaining(ctx context.Context, provider llm.Provider, logger *zap.L
 
 		resp, err := provider.Completion(ctx, &llm.ChatRequest{
 			Model: "gpt-3.5-turbo",
-			Messages: []llm.Message{
+			Messages: []types.Message{
 				{Role: llm.RoleSystem, Content: "你是一个专业的内容总结助手。"},
 				{Role: llm.RoleUser, Content: fmt.Sprintf("请总结以下文章的要点（3-5 条）：\n\n%s", text)},
 			},
@@ -130,7 +131,7 @@ func runRouting(ctx context.Context, provider llm.Provider, logger *zap.Logger) 
 
 		resp, err := provider.Completion(ctx, &llm.ChatRequest{
 			Model: "gpt-3.5-turbo",
-			Messages: []llm.Message{
+			Messages: []types.Message{
 				{Role: llm.RoleSystem, Content: "你是一个问题分类器。请将用户问题分类为：technical（技术问题）、business（商业问题）或 general（一般问题）。只返回分类名称。"},
 				{Role: llm.RoleUser, Content: question},
 			},
@@ -153,7 +154,7 @@ func runRouting(ctx context.Context, provider llm.Provider, logger *zap.Logger) 
 
 		resp, err := provider.Completion(ctx, &llm.ChatRequest{
 			Model: "gpt-3.5-turbo",
-			Messages: []llm.Message{
+			Messages: []types.Message{
 				{Role: llm.RoleSystem, Content: "你是一个技术专家。请用专业的技术语言回答问题。"},
 				{Role: llm.RoleUser, Content: question},
 			},
@@ -172,7 +173,7 @@ func runRouting(ctx context.Context, provider llm.Provider, logger *zap.Logger) 
 
 		resp, err := provider.Completion(ctx, &llm.ChatRequest{
 			Model: "gpt-3.5-turbo",
-			Messages: []llm.Message{
+			Messages: []types.Message{
 				{Role: llm.RoleSystem, Content: "你是一个商业顾问。请从商业角度回答问题。"},
 				{Role: llm.RoleUser, Content: question},
 			},
@@ -191,7 +192,7 @@ func runRouting(ctx context.Context, provider llm.Provider, logger *zap.Logger) 
 
 		resp, err := provider.Completion(ctx, &llm.ChatRequest{
 			Model: "gpt-3.5-turbo",
-			Messages: []llm.Message{
+			Messages: []types.Message{
 				{Role: llm.RoleSystem, Content: "你是一个友好的助手。请用简单易懂的语言回答问题。"},
 				{Role: llm.RoleUser, Content: question},
 			},
@@ -244,7 +245,7 @@ func runParallelization(ctx context.Context, provider llm.Provider, logger *zap.
 
 		resp, err := provider.Completion(ctx, &llm.ChatRequest{
 			Model: "gpt-3.5-turbo",
-			Messages: []llm.Message{
+			Messages: []types.Message{
 				{Role: llm.RoleSystem, Content: "你是一个情感分析专家。请分析文本的情感倾向（积极/消极/中性）。"},
 				{Role: llm.RoleUser, Content: text},
 			},
@@ -264,7 +265,7 @@ func runParallelization(ctx context.Context, provider llm.Provider, logger *zap.
 
 		resp, err := provider.Completion(ctx, &llm.ChatRequest{
 			Model: "gpt-3.5-turbo",
-			Messages: []llm.Message{
+			Messages: []types.Message{
 				{Role: llm.RoleSystem, Content: "你是一个主题提取专家。请提取文本的主要主题。"},
 				{Role: llm.RoleUser, Content: text},
 			},
@@ -284,7 +285,7 @@ func runParallelization(ctx context.Context, provider llm.Provider, logger *zap.
 
 		resp, err := provider.Completion(ctx, &llm.ChatRequest{
 			Model: "gpt-3.5-turbo",
-			Messages: []llm.Message{
+			Messages: []types.Message{
 				{Role: llm.RoleSystem, Content: "你是一个关键词提取专家。请提取文本的关键词（3-5 个）。"},
 				{Role: llm.RoleUser, Content: text},
 			},
@@ -332,3 +333,5 @@ func runParallelization(ctx context.Context, provider llm.Provider, logger *zap.
 
 	fmt.Println(result)
 }
+
+

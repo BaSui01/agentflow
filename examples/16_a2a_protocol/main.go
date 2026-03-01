@@ -236,3 +236,4 @@ func demonstrateQuickIntegration(client *a2a.HTTPClient) {
 	_ = ctx    // Used in real scenarios
 	_ = client // Used in real scenarios
 }
+

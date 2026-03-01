@@ -50,3 +50,4 @@ func TestToolCallChain_ResolveReferences(t *testing.T) {
 		t.Fatalf("payload mismatch: got=%v want=%v", got["payload"], wantPayload)
 	}
 }
+

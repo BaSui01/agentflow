@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"github.com/BaSui01/agentflow/types"
 	"context"
 
 	"github.com/BaSui01/agentflow/llm"
@@ -13,11 +14,11 @@ import (
 // - 直接根据pkg/剂/工具避免pkg/剂(取消进口周期)
 // - 允许在应用程序层注入不同的执行(默认使用工具)。 工具管理器)
 type ToolManager interface {
-	GetAllowedTools(agentID string) []llm.ToolSchema
-	ExecuteForAgent(ctx context.Context, agentID string, calls []llm.ToolCall) []llmtools.ToolResult
+	GetAllowedTools(agentID string) []types.ToolSchema
+	ExecuteForAgent(ctx context.Context, agentID string, calls []types.ToolCall) []llmtools.ToolResult
 }
 
-func filterToolSchemasByWhitelist(all []llm.ToolSchema, whitelist []string) []llm.ToolSchema {
+func filterToolSchemasByWhitelist(all []types.ToolSchema, whitelist []string) []types.ToolSchema {
 	if len(whitelist) == 0 {
 		return all
 	}
@@ -28,7 +29,7 @@ func filterToolSchemasByWhitelist(all []llm.ToolSchema, whitelist []string) []ll
 		}
 		allowed[name] = struct{}{}
 	}
-	out := make([]llm.ToolSchema, 0, len(all))
+	out := make([]types.ToolSchema, 0, len(all))
 	for _, s := range all {
 		if _, ok := allowed[s.Name]; ok {
 			out = append(out, s)
@@ -36,3 +37,5 @@ func filterToolSchemasByWhitelist(all []llm.ToolSchema, whitelist []string) []ll
 	}
 	return out
 }
+
+

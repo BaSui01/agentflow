@@ -190,3 +190,4 @@ func TestCapabilityMatcher_CapabilityMatches_Fuzzy(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotEmpty(t, results)
 }
+

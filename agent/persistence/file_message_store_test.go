@@ -191,3 +191,4 @@ func TestFileMessageStore_IncrementRetry(t *testing.T) {
 	// Not found
 	assert.ErrorIs(t, store.IncrementRetry(ctx, "nope"), ErrNotFound)
 }
+

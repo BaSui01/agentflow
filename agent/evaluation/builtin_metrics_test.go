@@ -347,3 +347,4 @@ func TestMetricImplementsInterface(t *testing.T) {
 		var _ Metric = (*CostMetric)(nil)
 	})
 }
+

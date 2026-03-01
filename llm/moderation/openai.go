@@ -50,3 +50,4 @@ type openAIModerationResponse struct {
 		CategoryScores map[string]float64 `json:"category_scores"`
 	} `json:"results"`
 }
+

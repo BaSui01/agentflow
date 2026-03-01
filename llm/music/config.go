@@ -37,3 +37,4 @@ func DefaultMiniMaxMusicConfig() MiniMaxMusicConfig {
 		},
 	}
 }
+

@@ -167,3 +167,4 @@ func ChainProviderMiddleware(provider Provider, middlewares ...ProviderMiddlewar
 	}
 	return provider
 }
+

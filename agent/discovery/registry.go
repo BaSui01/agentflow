@@ -1033,3 +1033,4 @@ func mustMarshal(v any) json.RawMessage {
 
 // 确保能力登记工具注册界面。
 var _ Registry = (*CapabilityRegistry)(nil)
+

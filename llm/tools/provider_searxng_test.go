@@ -147,3 +147,4 @@ func TestDefaultSearXNGConfig(t *testing.T) {
 	assert.Equal(t, 15*time.Second, cfg.Timeout)
 	assert.Empty(t, cfg.BaseURL) // 需要用户自行配置
 }
+

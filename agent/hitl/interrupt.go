@@ -359,3 +359,4 @@ func (s *InMemoryInterruptStore) Update(ctx context.Context, interrupt *Interrup
 	s.interrupts[interrupt.ID] = interrupt
 	return nil
 }
+

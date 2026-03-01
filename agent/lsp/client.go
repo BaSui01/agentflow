@@ -549,3 +549,4 @@ type DidCloseTextDocumentParams struct {
 type TextDocumentIdentifier struct {
 	URI string `json:"uri"`
 }
+

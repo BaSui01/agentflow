@@ -195,3 +195,4 @@ func TestRegistry_Import_InvalidJSON(t *testing.T) {
 	err := reg.Import([]byte(`not json`))
 	assert.Error(t, err)
 }
+

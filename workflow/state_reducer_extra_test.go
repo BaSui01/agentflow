@@ -218,3 +218,4 @@ func TestAnnotation_CreateChannel_NilReducer(t *testing.T) {
 	ch.Update("new")
 	assert.Equal(t, "new", ch.Get())
 }
+

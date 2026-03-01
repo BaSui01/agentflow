@@ -1,6 +1,7 @@
 package doubao
 
 import (
+	"github.com/BaSui01/agentflow/types"
 	"context"
 	"encoding/json"
 	"net/http"
@@ -129,8 +130,8 @@ func TestDoubaoProvider_NotSupported(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			err := tt.callFn()
 			require.Error(t, err)
-			llmErr, ok := err.(*llm.Error)
-			require.True(t, ok, "error should be *llm.Error")
+			llmErr, ok := err.(*types.Error)
+			require.True(t, ok, "error should be *types.Error")
 			assert.Equal(t, llm.ErrInvalidRequest, llmErr.Code)
 			assert.Contains(t, llmErr.Message, tt.feature)
 			assert.Equal(t, http.StatusNotImplemented, llmErr.HTTPStatus)
@@ -219,7 +220,7 @@ func TestDoubaoProvider_Completion(t *testing.T) {
 	p := NewDoubaoProvider(cfg, zap.NewNop())
 
 	resp, err := p.Completion(context.Background(), &llm.ChatRequest{
-		Messages: []llm.Message{
+		Messages: []types.Message{
 			{Role: llm.RoleUser, Content: "Hi"},
 		},
 	})
@@ -274,7 +275,7 @@ func TestDoubaoProvider_Stream(t *testing.T) {
 	p := NewDoubaoProvider(cfg, zap.NewNop())
 
 	ch, err := p.Stream(context.Background(), &llm.ChatRequest{
-		Messages: []llm.Message{
+		Messages: []types.Message{
 			{Role: llm.RoleUser, Content: "Hi"},
 		},
 	})
@@ -289,3 +290,5 @@ func TestDoubaoProvider_Stream(t *testing.T) {
 	assert.Equal(t, "Hello", chunks[0].Delta.Content)
 	assert.Equal(t, "doubao", chunks[0].Provider)
 }
+
+

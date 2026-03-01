@@ -1,6 +1,7 @@
 package reasoning
 
 import (
+	"github.com/BaSui01/agentflow/types"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -39,13 +40,13 @@ func DefaultReWOOConfig() ReWOOConfig {
 type ReWOO struct {
 	provider     llm.Provider
 	toolExecutor tools.ToolExecutor
-	toolSchemas  []llm.ToolSchema
+	toolSchemas  []types.ToolSchema
 	config       ReWOOConfig
 	logger       *zap.Logger
 }
 
 // NewReWOO创建了新的ReWOO理性.
-func NewReWOO(provider llm.Provider, executor tools.ToolExecutor, schemas []llm.ToolSchema, config ReWOOConfig, logger *zap.Logger) *ReWOO {
+func NewReWOO(provider llm.Provider, executor tools.ToolExecutor, schemas []types.ToolSchema, config ReWOOConfig, logger *zap.Logger) *ReWOO {
 	if logger == nil {
 		logger = zap.NewNop()
 	}
@@ -148,7 +149,7 @@ Create a plan (max %d steps). Output as JSON array:
 
 	resp, err := r.provider.Completion(ctx, &llm.ChatRequest{
 		Model: "gpt-4o",
-		Messages: []llm.Message{
+		Messages: []types.Message{
 			{Role: llm.RoleUser, Content: prompt},
 		},
 		Temperature: 0.2,
@@ -271,13 +272,13 @@ func (r *ReWOO) executeSteps(ctx context.Context, plan []PlanStep) (map[string]s
 func (r *ReWOO) executeTool(ctx context.Context, toolName, args string) string {
 	// 构建工具调用
 	argsJSON, _ := json.Marshal(map[string]string{"input": args})
-	call := llm.ToolCall{
+	call := types.ToolCall{
 		ID:        fmt.Sprintf("rewoo_%d", time.Now().UnixNano()),
 		Name:      toolName,
 		Arguments: argsJSON,
 	}
 
-	results := r.toolExecutor.Execute(ctx, []llm.ToolCall{call})
+	results := r.toolExecutor.Execute(ctx, []types.ToolCall{call})
 	if len(results) > 0 {
 		if results[0].Error != "" {
 			return fmt.Sprintf("Error: %s", results[0].Error)
@@ -307,7 +308,7 @@ Based on these results, provide a clear and complete answer to the task.`, task,
 
 	resp, err := r.provider.Completion(ctx, &llm.ChatRequest{
 		Model: "gpt-4o",
-		Messages: []llm.Message{
+		Messages: []types.Message{
 			{Role: llm.RoleUser, Content: prompt},
 		},
 		Temperature: 0.3,
@@ -343,3 +344,5 @@ func truncate(s string, maxLen int) string {
 	}
 	return s[:maxLen] + "..."
 }
+
+

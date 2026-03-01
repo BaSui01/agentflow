@@ -157,3 +157,4 @@ func TestDefaultResearchEvalConfig_WeightsSum(t *testing.T) {
 	}
 	assert.True(t, math.Abs(sum-1.0) < 0.01, "weights should sum to ~1.0, got %f", sum)
 }
+

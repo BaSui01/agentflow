@@ -134,3 +134,4 @@ func TestDockerProvider_Deploy_WithEnvAndDefaultPort(t *testing.T) {
 	err := p.Deploy(context.Background(), d)
 	assert.Error(t, err)
 }
+

@@ -58,3 +58,4 @@ func (r *PrefixRouter) RouteByModelID(modelID string) (string, bool) {
 func (r *PrefixRouter) GetRules() []PrefixRule {
 	return r.rules
 }
+

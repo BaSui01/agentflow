@@ -349,3 +349,4 @@ func TestMiniMaxProvider_Generate_ContextCancelled(t *testing.T) {
 	_, err := p.Generate(ctx, &GenerateRequest{Prompt: "test"})
 	assert.Error(t, err)
 }
+

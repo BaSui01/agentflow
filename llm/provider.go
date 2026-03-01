@@ -7,17 +7,6 @@ import (
 	"github.com/BaSui01/agentflow/types"
 )
 
-// 重导出核心类型，供 llm 包内部及下游使用。
-type (
-	Message       = types.Message
-	Role          = types.Role
-	ToolCall      = types.ToolCall
-	ToolSchema    = types.ToolSchema
-	ToolResult    = types.ToolResult
-	Error         = types.Error
-	ErrorCode     = types.ErrorCode
-)
-
 // 重导出常量.
 const (
 	RoleSystem    = types.RoleSystem
@@ -137,12 +126,12 @@ type ChatRequest struct {
 	TenantID       string            `json:"tenant_id,omitempty"`
 	UserID         string            `json:"user_id,omitempty"`
 	Model          string            `json:"model"`
-	Messages       []Message         `json:"messages"`
+	Messages       []types.Message   `json:"messages"`
 	MaxTokens      int               `json:"max_tokens,omitempty"`
 	Temperature    float32           `json:"temperature,omitempty"`
 	TopP           float32           `json:"top_p,omitempty"`
 	Stop           []string          `json:"stop,omitempty"`
-	Tools          []ToolSchema      `json:"tools,omitempty"`
+	Tools          []types.ToolSchema `json:"tools,omitempty"`
 	ToolChoice     any               `json:"tool_choice,omitempty"`
 	ResponseFormat *ResponseFormat   `json:"response_format,omitempty"`
 	Timeout        time.Duration     `json:"timeout,omitempty"`
@@ -190,7 +179,7 @@ type ChatResponse struct {
 type ChatChoice struct {
 	Index        int     `json:"index"`
 	FinishReason string  `json:"finish_reason,omitempty"`
-	Message      Message `json:"message"`
+	Message      types.Message `json:"message"`
 }
 
 // ChatUsage 表示响应中的 token 用量。
@@ -222,10 +211,10 @@ type StreamChunk struct {
 	Provider     string     `json:"provider,omitempty"`
 	Model        string     `json:"model,omitempty"`
 	Index        int        `json:"index,omitempty"`
-	Delta        Message    `json:"delta"`
+	Delta        types.Message `json:"delta"`
 	FinishReason string     `json:"finish_reason,omitempty"`
 	Usage        *ChatUsage `json:"usage,omitempty"`
-	Err          *Error     `json:"error,omitempty"`
+	Err          *types.Error `json:"error,omitempty"`
 }
 
 // Model 表示提供者支持的一个模型.
@@ -250,3 +239,4 @@ type ProviderEndpoints struct {
 	Health     string `json:"health,omitempty"` // 健康检查端点（如果与 Models 不同）
 	BaseURL    string `json:"base_url"`         // 基础 URL
 }
+

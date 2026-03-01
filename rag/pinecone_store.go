@@ -401,3 +401,4 @@ func (s *PineconeStore) ClearAll(ctx context.Context) error {
 	s.logger.Info("all vectors cleared from index")
 	return nil
 }
+

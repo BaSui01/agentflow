@@ -336,3 +336,4 @@ func TestExtractMemoryTimestamp(t *testing.T) {
 		assert.True(t, ts.IsZero())
 	})
 }
+

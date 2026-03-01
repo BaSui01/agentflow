@@ -1,6 +1,7 @@
 package minimax
 
 import (
+	"github.com/BaSui01/agentflow/types"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -78,29 +79,31 @@ type xmlToolCallPayload struct {
 
 // parseXMLToolCall 从 MiniMax 的 XML 格式 content 中提取 tool call.
 // 格式: <tool_calls>\n{"name":"...","arguments":...}\n</tool_calls>
-func parseXMLToolCall(content string) (llm.ToolCall, bool) {
+func parseXMLToolCall(content string) (types.ToolCall, bool) {
 	const openTag = "<tool_calls>"
 	const closeTag = "</tool_calls>"
 
 	startIdx := strings.Index(content, openTag)
 	endIdx := strings.Index(content, closeTag)
 	if startIdx < 0 || endIdx < 0 || endIdx <= startIdx {
-		return llm.ToolCall{}, false
+		return types.ToolCall{}, false
 	}
 
 	jsonStr := strings.TrimSpace(content[startIdx+len(openTag) : endIdx])
 	if jsonStr == "" {
-		return llm.ToolCall{}, false
+		return types.ToolCall{}, false
 	}
 
 	var payload xmlToolCallPayload
 	if err := json.Unmarshal([]byte(jsonStr), &payload); err != nil {
-		return llm.ToolCall{}, false
+		return types.ToolCall{}, false
 	}
 
-	return llm.ToolCall{
+	return types.ToolCall{
 		ID:        fmt.Sprintf("minimax_tc_%s", payload.Name),
 		Name:      payload.Name,
 		Arguments: payload.Arguments,
 	}, true
 }
+
+

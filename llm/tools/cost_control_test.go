@@ -222,3 +222,4 @@ func TestCalculateCost_DefaultAndConfigured(t *testing.T) {
 		t.Errorf("token cost = %v, want %v", cost, 1.0+expectedExtra)
 	}
 }
+

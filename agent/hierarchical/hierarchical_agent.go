@@ -599,3 +599,4 @@ func (s *RandomStrategy) SelectWorker(ctx context.Context, task *Task, workers [
 
 	return workers[0], nil
 }
+

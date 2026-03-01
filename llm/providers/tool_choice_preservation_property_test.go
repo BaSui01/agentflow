@@ -1,6 +1,7 @@
 package providers
 
 import (
+	"github.com/BaSui01/agentflow/types"
 	"encoding/json"
 	"testing"
 
@@ -280,10 +281,10 @@ func testOpenAICompatibleToolChoice(t *testing.T, toolChoice, provider, requirem
 	// 用工具选择创建模拟请求
 	req := &llm.ChatRequest{
 		Model: "test-model",
-		Messages: []llm.Message{
+		Messages: []types.Message{
 			{Role: llm.RoleUser, Content: "Test message"},
 		},
-		Tools: []llm.ToolSchema{
+		Tools: []types.ToolSchema{
 			{
 				Name:        "search",
 				Description: "Search tool",
@@ -310,10 +311,10 @@ func testMiniMaxToolChoice(t *testing.T, toolChoice, provider, requirement, desc
 	// 用工具选择创建模拟请求
 	req := &llm.ChatRequest{
 		Model: "test-model",
-		Messages: []llm.Message{
+		Messages: []types.Message{
 			{Role: llm.RoleUser, Content: "Test message"},
 		},
-		Tools: []llm.ToolSchema{
+		Tools: []types.ToolSchema{
 			{
 				Name:        "search",
 				Description: "Search tool",
@@ -343,10 +344,10 @@ func TestProperty18_EmptyToolChoice(t *testing.T) {
 		t.Run("empty_tool_choice_"+provider, func(t *testing.T) {
 			req := &llm.ChatRequest{
 				Model: "test-model",
-				Messages: []llm.Message{
+				Messages: []types.Message{
 					{Role: llm.RoleUser, Content: "Test message"},
 				},
-				Tools: []llm.ToolSchema{
+				Tools: []types.ToolSchema{
 					{
 						Name:        "search",
 						Description: "Search tool",
@@ -380,10 +381,10 @@ func TestProperty18_ToolChoiceWithoutTools(t *testing.T) {
 			t.Run(provider+"_"+toolChoice+"_without_tools", func(t *testing.T) {
 				req := &llm.ChatRequest{
 					Model: "test-model",
-					Messages: []llm.Message{
+					Messages: []types.Message{
 						{Role: llm.RoleUser, Content: "Test message"},
 					},
-					Tools:      []llm.ToolSchema{}, // No tools
+					Tools:      []types.ToolSchema{}, // No tools
 					ToolChoice: toolChoice,
 				}
 
@@ -421,10 +422,10 @@ func TestProperty18_ToolChoiceTypeConsistency(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			req := &llm.ChatRequest{
 				Model: "test-model",
-				Messages: []llm.Message{
+				Messages: []types.Message{
 					{Role: llm.RoleUser, Content: "Test"},
 				},
-				Tools: []llm.ToolSchema{
+				Tools: []types.ToolSchema{
 					{Name: "search", Parameters: json.RawMessage(`{}`)},
 				},
 				ToolChoice: tc.toolChoice,
@@ -503,3 +504,5 @@ func mockConvertToMiniMaxRequest(req *llm.ChatRequest) *mockMiniMaxRequestWithTo
 
 	return result
 }
+
+

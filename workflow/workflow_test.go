@@ -271,3 +271,4 @@ func containsMiddle(s, substr string) bool {
 	}
 	return false
 }
+

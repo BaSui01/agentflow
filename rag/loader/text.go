@@ -46,3 +46,4 @@ func (l *TextLoader) Load(ctx context.Context, source string) ([]rag.Document, e
 func (l *TextLoader) SupportedTypes() []string {
 	return []string{".txt"}
 }
+

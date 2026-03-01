@@ -103,3 +103,4 @@ type ErrorDef struct {
 	RetryDelayMs  int         `yaml:"retry_delay_ms,omitempty" json:"retry_delay_ms,omitempty"`
 	FallbackValue any `yaml:"fallback_value,omitempty" json:"fallback_value,omitempty"`
 }
+

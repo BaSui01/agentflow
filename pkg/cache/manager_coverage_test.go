@@ -319,3 +319,4 @@ func TestManager_Expire_RedisError(t *testing.T) {
 	err := m.Expire(ctx, "key", time.Minute)
 	assert.Error(t, err)
 }
+

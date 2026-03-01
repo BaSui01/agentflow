@@ -121,3 +121,4 @@ func TestChainProviderMiddleware_Empty(t *testing.T) {
 	assert.Equal(t, "base", result.Name())
 }
 
+

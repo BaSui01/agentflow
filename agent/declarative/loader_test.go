@@ -498,3 +498,4 @@ func writeTemp(t *testing.T, name, content string) string {
 	require.NoError(t, os.WriteFile(path, []byte(content), 0644))
 	return path
 }
+

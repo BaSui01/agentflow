@@ -120,3 +120,4 @@ func DefaultMiniMaxVideoConfig() MiniMaxVideoConfig {
 		},
 	}
 }
+

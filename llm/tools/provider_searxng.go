@@ -141,3 +141,4 @@ type searxngResult struct {
 
 // 编译期接口检查
 var _ WebSearchProvider = (*SearXNGSearchProvider)(nil)
+

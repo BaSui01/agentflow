@@ -51,3 +51,4 @@ func hunyuanRequestHook(req *llm.ChatRequest, body *providers.OpenAICompatReques
 		body.Model = "hunyuan-functioncall"
 	}
 }
+

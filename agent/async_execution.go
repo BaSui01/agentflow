@@ -567,3 +567,4 @@ type SubagentCompletedEvent struct {
 
 func (e *SubagentCompletedEvent) Timestamp() time.Time { return e.Timestamp_ }
 func (e *SubagentCompletedEvent) Type() EventType      { return EventSubagentCompleted }
+

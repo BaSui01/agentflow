@@ -65,3 +65,4 @@ type MemoryStats struct {
 	NewestRecord   time.Time      `json:"newest_record,omitempty"`
 	TotalSizeBytes int64          `json:"total_size_bytes,omitempty"`
 }
+

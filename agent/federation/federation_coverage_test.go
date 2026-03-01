@@ -104,3 +104,4 @@ func TestDiscoveryRegistryAdapter_RegisterAgent_Nil(t *testing.T) {
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "nil")
 }
+

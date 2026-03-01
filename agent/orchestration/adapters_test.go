@@ -409,3 +409,4 @@ func TestCrewAgentAdapter_Negotiate(t *testing.T) {
 	assert.True(t, result.Accepted)
 	assert.Equal(t, "test-id", result.Response)
 }
+

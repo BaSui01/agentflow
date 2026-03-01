@@ -1,6 +1,7 @@
 package providers
 
 import (
+	"github.com/BaSui01/agentflow/types"
 	"context"
 	"errors"
 	"fmt"
@@ -22,7 +23,7 @@ func TestProperty9_RewriterChainErrorHandling(t *testing.T) {
 	testCases := []struct {
 		name               string
 		rewriterError      error
-		expectedCode       llm.ErrorCode
+		expectedCode       types.ErrorCode
 		expectedHTTPStatus int
 		provider           string
 		requirement        string
@@ -141,7 +142,7 @@ func TestProperty9_RewriterChainErrorHandling(t *testing.T) {
 	expandedTestCases := make([]struct {
 		name               string
 		rewriterError      error
-		expectedCode       llm.ErrorCode
+		expectedCode       types.ErrorCode
 		expectedHTTPStatus int
 		provider           string
 		requirement        string
@@ -157,7 +158,7 @@ func TestProperty9_RewriterChainErrorHandling(t *testing.T) {
 			expandedTestCases = append(expandedTestCases, struct {
 				name               string
 				rewriterError      error
-				expectedCode       llm.ErrorCode
+				expectedCode       types.ErrorCode
 				expectedHTTPStatus int
 				provider           string
 				requirement        string
@@ -196,7 +197,7 @@ func TestProperty9_RewriterChainErrorHandling(t *testing.T) {
 			expandedTestCases = append(expandedTestCases, struct {
 				name               string
 				rewriterError      error
-				expectedCode       llm.ErrorCode
+				expectedCode       types.ErrorCode
 				expectedHTTPStatus int
 				provider           string
 				requirement        string
@@ -228,7 +229,7 @@ func TestProperty9_RewriterChainErrorHandling(t *testing.T) {
 			// 创建测试请求
 			req := &llm.ChatRequest{
 				Model: "test-model",
-				Messages: []llm.Message{
+				Messages: []types.Message{
 					{Role: llm.RoleUser, Content: "test message"},
 				},
 			}
@@ -248,8 +249,8 @@ func TestProperty9_RewriterChainErrorHandling(t *testing.T) {
 			// 校验提供者错误属性
 			assert.NotNil(t, providerErr, "Provider should return non-nil error")
 
-			llmErr, ok := providerErr.(*llm.Error)
-			assert.True(t, ok, "Provider error should be of type *llm.Error")
+			llmErr, ok := providerErr.(*types.Error)
+			assert.True(t, ok, "Provider error should be of type *types.Error")
 
 			if llmErr != nil {
 				assert.Equal(t, tc.expectedCode, llmErr.Code,
@@ -317,8 +318,8 @@ func TestProperty9_RewriterChainErrorInCompletionMethod(t *testing.T) {
 			// 复制失败时模拟提供者行为
 			err := convertRewriterErrorToProviderError(tc.rewriterError, tc.provider)
 
-			llmErr, ok := err.(*llm.Error)
-			assert.True(t, ok, "Error should be *llm.Error type")
+			llmErr, ok := err.(*types.Error)
+			assert.True(t, ok, "Error should be *types.Error type")
 			assert.Equal(t, llm.ErrInvalidRequest, llmErr.Code,
 				"Completion should return ErrInvalidRequest when rewriter fails (Requirement %s)", tc.requirement)
 			assert.Equal(t, http.StatusBadRequest, llmErr.HTTPStatus,
@@ -373,8 +374,8 @@ func TestProperty9_RewriterChainErrorInStreamMethod(t *testing.T) {
 			// 复制失败时模拟提供者行为
 			err := convertRewriterErrorToProviderError(tc.rewriterError, tc.provider)
 
-			llmErr, ok := err.(*llm.Error)
-			assert.True(t, ok, "Error should be *llm.Error type")
+			llmErr, ok := err.(*types.Error)
+			assert.True(t, ok, "Error should be *types.Error type")
 			assert.Equal(t, llm.ErrInvalidRequest, llmErr.Code,
 				"Stream should return ErrInvalidRequest when rewriter fails (Requirement %s)", tc.requirement)
 			assert.Equal(t, http.StatusBadRequest, llmErr.HTTPStatus,
@@ -412,8 +413,8 @@ func TestProperty9_ErrorMessagePreservation(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			err := convertRewriterErrorToProviderError(tc.rewriterError, "test-provider")
 
-			llmErr, ok := err.(*llm.Error)
-			assert.True(t, ok, "Error should be *llm.Error type")
+			llmErr, ok := err.(*types.Error)
+			assert.True(t, ok, "Error should be *types.Error type")
 			assert.Contains(t, llmErr.Message, tc.expectedContains,
 				"Provider error should preserve original error information")
 		})
@@ -430,8 +431,8 @@ func TestProperty9_ConsistentErrorHandlingAcrossProviders(t *testing.T) {
 		t.Run("provider_"+provider, func(t *testing.T) {
 			err := convertRewriterErrorToProviderError(rewriterError, provider)
 
-			llmErr, ok := err.(*llm.Error)
-			assert.True(t, ok, "All providers should return *llm.Error type")
+			llmErr, ok := err.(*types.Error)
+			assert.True(t, ok, "All providers should return *types.Error type")
 			assert.Equal(t, llm.ErrInvalidRequest, llmErr.Code,
 				"All providers should return ErrInvalidRequest")
 			assert.Equal(t, http.StatusBadRequest, llmErr.HTTPStatus,
@@ -461,7 +462,7 @@ func (m *mockFailingRewriter) Rewrite(ctx context.Context, req *llm.ChatRequest)
 // 转换写入器 ErrorTo ProviderError 模拟提供者如何转换
 // 重写Chain错误到 llm 。 出错( 如在 MiniMax 提供者所见)
 func convertRewriterErrorToProviderError(rewriterErr error, provider string) error {
-	return &llm.Error{
+	return &types.Error{
 		Code:       llm.ErrInvalidRequest,
 		Message:    fmt.Sprintf("request rewrite failed: %v", rewriterErr),
 		HTTPStatus: http.StatusBadRequest,
@@ -469,3 +470,5 @@ func convertRewriterErrorToProviderError(rewriterErr error, provider string) err
 		Retryable:  false,
 	}
 }
+
+

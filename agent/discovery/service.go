@@ -407,3 +407,4 @@ func SetGlobalDiscoveryService(service *DiscoveryService) {
 	defer globalServiceMu.Unlock()
 	globalService = service
 }
+

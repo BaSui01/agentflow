@@ -1,6 +1,7 @@
 package hunyuan
 
 import (
+	"github.com/BaSui01/agentflow/types"
 	"context"
 	"encoding/json"
 	"net/http"
@@ -72,7 +73,7 @@ func TestHunyuanProvider_Completion(t *testing.T) {
 	}, zap.NewNop())
 
 	resp, err := p.Completion(context.Background(), &llm.ChatRequest{
-		Messages: []llm.Message{{Role: llm.RoleUser, Content: "Hi"}},
+		Messages: []types.Message{{Role: llm.RoleUser, Content: "Hi"}},
 	})
 	require.NoError(t, err)
 	assert.Equal(t, "hunyuan", resp.Provider)
@@ -94,10 +95,10 @@ func TestHunyuanProvider_Completion_Error(t *testing.T) {
 	}, zap.NewNop())
 
 	_, err := p.Completion(context.Background(), &llm.ChatRequest{
-		Messages: []llm.Message{{Role: llm.RoleUser, Content: "Hi"}},
+		Messages: []types.Message{{Role: llm.RoleUser, Content: "Hi"}},
 	})
 	require.Error(t, err)
-	llmErr, ok := err.(*llm.Error)
+	llmErr, ok := err.(*types.Error)
 	require.True(t, ok)
 	assert.Equal(t, llm.ErrUnauthorized, llmErr.Code)
 }
@@ -114,10 +115,10 @@ func TestHunyuanProvider_Completion_RateLimited(t *testing.T) {
 	}, zap.NewNop())
 
 	_, err := p.Completion(context.Background(), &llm.ChatRequest{
-		Messages: []llm.Message{{Role: llm.RoleUser, Content: "Hi"}},
+		Messages: []types.Message{{Role: llm.RoleUser, Content: "Hi"}},
 	})
 	require.Error(t, err)
-	llmErr, ok := err.(*llm.Error)
+	llmErr, ok := err.(*types.Error)
 	require.True(t, ok)
 	assert.Equal(t, llm.ErrRateLimit, llmErr.Code)
 }
@@ -144,7 +145,7 @@ func TestHunyuanProvider_Stream(t *testing.T) {
 	}, zap.NewNop())
 
 	ch, err := p.Stream(context.Background(), &llm.ChatRequest{
-		Messages: []llm.Message{{Role: llm.RoleUser, Content: "Hi"}},
+		Messages: []types.Message{{Role: llm.RoleUser, Content: "Hi"}},
 	})
 	require.NoError(t, err)
 
@@ -169,7 +170,7 @@ func TestHunyuanProvider_Stream_Error(t *testing.T) {
 	}, zap.NewNop())
 
 	_, err := p.Stream(context.Background(), &llm.ChatRequest{
-		Messages: []llm.Message{{Role: llm.RoleUser, Content: "Hi"}},
+		Messages: []types.Message{{Role: llm.RoleUser, Content: "Hi"}},
 	})
 	require.Error(t, err)
 }
@@ -198,7 +199,7 @@ func TestHunyuanProvider_NotSupported(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			err := tt.callFn()
 			require.Error(t, err)
-			llmErr, ok := err.(*llm.Error)
+			llmErr, ok := err.(*types.Error)
 			require.True(t, ok)
 			assert.Equal(t, llm.ErrInvalidRequest, llmErr.Code)
 			assert.Contains(t, llmErr.Message, tt.feature)
@@ -222,3 +223,5 @@ func TestHunyuanProvider_HealthCheck(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, status.Healthy)
 }
+
+

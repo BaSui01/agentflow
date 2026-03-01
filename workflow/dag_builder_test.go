@@ -557,3 +557,4 @@ func TestDAGBuilder_SubGraphWorkflow(t *testing.T) {
 	assert.NotNil(t, node.SubGraph)
 	assert.Equal(t, "sub_step", node.SubGraph.GetEntry())
 }
+

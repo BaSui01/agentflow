@@ -154,3 +154,4 @@ func TestRewriterChain_AddRewriter(t *testing.T) {
 	chain.AddRewriter(NewEmptyToolsCleaner())
 	assert.Equal(t, 2, len(chain.GetRewriters()), "再次添加后链长度应为 2")
 }
+

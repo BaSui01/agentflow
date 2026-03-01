@@ -290,3 +290,4 @@ func TestRouter_NotFound_Errors(t *testing.T) {
 	_, err = r.GenerateVideo(context.Background(), &video.GenerateRequest{}, "")
 	assert.Error(t, err)
 }
+

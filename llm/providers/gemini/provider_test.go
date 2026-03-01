@@ -1,6 +1,7 @@
 package gemini
 
 import (
+	"github.com/BaSui01/agentflow/types"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -121,7 +122,7 @@ func TestGeminiProvider_Headers_APIKey(t *testing.T) {
 	}, zap.NewNop())
 
 	_, err := p.Completion(context.Background(), &llm.ChatRequest{
-		Messages: []llm.Message{{Role: llm.RoleUser, Content: "Hi"}},
+		Messages: []types.Message{{Role: llm.RoleUser, Content: "Hi"}},
 	})
 	require.NoError(t, err)
 	assert.Equal(t, "test-key", capturedHeaders.Get("x-goog-api-key"))
@@ -146,7 +147,7 @@ func TestGeminiProvider_Headers_OAuth(t *testing.T) {
 	}, zap.NewNop())
 
 	_, err := p.Completion(context.Background(), &llm.ChatRequest{
-		Messages: []llm.Message{{Role: llm.RoleUser, Content: "Hi"}},
+		Messages: []types.Message{{Role: llm.RoleUser, Content: "Hi"}},
 	})
 	require.NoError(t, err)
 	assert.Equal(t, "Bearer oauth-token", capturedHeaders.Get("Authorization"))
@@ -155,7 +156,7 @@ func TestGeminiProvider_Headers_OAuth(t *testing.T) {
 // --- convertToGeminiContents ---
 
 func TestConvertToGeminiContents(t *testing.T) {
-	msgs := []llm.Message{
+	msgs := []types.Message{
 		{Role: llm.RoleSystem, Content: "You are helpful"},
 		{Role: llm.RoleUser, Content: "Hello"},
 		{Role: llm.RoleAssistant, Content: "Hi there"},
@@ -170,7 +171,7 @@ func TestConvertToGeminiContents(t *testing.T) {
 }
 
 func TestConvertToGeminiContents_ToolRoleMappedToUser(t *testing.T) {
-	msgs := []llm.Message{
+	msgs := []types.Message{
 		{Role: llm.RoleTool, ToolCallID: "tc-1", Name: "search", Content: `{"ok":true}`},
 	}
 	_, contents := convertToGeminiContents(msgs)
@@ -224,7 +225,7 @@ func TestGeminiProvider_Completion(t *testing.T) {
 	}, zap.NewNop())
 
 	resp, err := p.Completion(context.Background(), &llm.ChatRequest{
-		Messages: []llm.Message{
+		Messages: []types.Message{
 			{Role: llm.RoleSystem, Content: "Be helpful"},
 			{Role: llm.RoleUser, Content: "Hi"},
 		},
@@ -274,7 +275,7 @@ func TestGeminiProvider_Completion_WithToolCalls(t *testing.T) {
 	}, zap.NewNop())
 
 	resp, err := p.Completion(context.Background(), &llm.ChatRequest{
-		Messages: []llm.Message{{Role: llm.RoleUser, Content: "Weather?"}},
+		Messages: []types.Message{{Role: llm.RoleUser, Content: "Weather?"}},
 	})
 	require.NoError(t, err)
 	require.Len(t, resp.Choices, 1)
@@ -296,10 +297,10 @@ func TestGeminiProvider_Completion_Error(t *testing.T) {
 	}, zap.NewNop())
 
 	_, err := p.Completion(context.Background(), &llm.ChatRequest{
-		Messages: []llm.Message{{Role: llm.RoleUser, Content: "Hi"}},
+		Messages: []types.Message{{Role: llm.RoleUser, Content: "Hi"}},
 	})
 	require.Error(t, err)
-	llmErr, ok := err.(*llm.Error)
+	llmErr, ok := err.(*types.Error)
 	require.True(t, ok)
 	assert.Equal(t, llm.ErrUnauthorized, llmErr.Code)
 }
@@ -345,7 +346,7 @@ func TestGeminiProvider_Stream(t *testing.T) {
 	}, zap.NewNop())
 
 	ch, err := p.Stream(context.Background(), &llm.ChatRequest{
-		Messages: []llm.Message{{Role: llm.RoleUser, Content: "Hi"}},
+		Messages: []types.Message{{Role: llm.RoleUser, Content: "Hi"}},
 	})
 	require.NoError(t, err)
 
@@ -387,10 +388,10 @@ func TestGeminiProvider_Stream_Error(t *testing.T) {
 	}, zap.NewNop())
 
 	_, err := p.Stream(context.Background(), &llm.ChatRequest{
-		Messages: []llm.Message{{Role: llm.RoleUser, Content: "Hi"}},
+		Messages: []types.Message{{Role: llm.RoleUser, Content: "Hi"}},
 	})
 	require.Error(t, err)
-	llmErr, ok := err.(*llm.Error)
+	llmErr, ok := err.(*types.Error)
 	require.True(t, ok)
 	assert.Equal(t, llm.ErrRateLimit, llmErr.Code)
 }
@@ -466,7 +467,7 @@ func TestGeminiProvider_ListModels_Error(t *testing.T) {
 
 	_, err := p.ListModels(context.Background())
 	require.Error(t, err)
-	llmErr, ok := err.(*llm.Error)
+	llmErr, ok := err.(*types.Error)
 	require.True(t, ok)
 	assert.Equal(t, llm.ErrForbidden, llmErr.Code)
 }
@@ -513,3 +514,5 @@ func TestGeminiProvider_ListModels_UsesResolveAPIKey(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "multi-key-2", capturedKey)
 }
+
+

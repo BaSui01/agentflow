@@ -410,3 +410,4 @@ func TestCanaryConfig_LoadFromDB(t *testing.T) {
 	assert.Equal(t, "v2", d.CanaryVersion)
 	assert.Equal(t, CanaryStage10Pct, d.Stage)
 }
+

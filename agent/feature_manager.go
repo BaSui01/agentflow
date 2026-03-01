@@ -270,3 +270,4 @@ func (fm *FeatureManager) DisableAll() {
 	fm.DisableEnhancedMemory()
 	fm.DisableObservability()
 }
+

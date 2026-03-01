@@ -306,3 +306,4 @@ func generateContent(index int) string {
 	}
 	return "Document about " + topics[index%len(topics)] + " with index " + string(rune('0'+index%10))
 }
+

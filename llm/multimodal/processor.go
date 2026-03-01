@@ -1,6 +1,7 @@
 package multimodal
 
 import (
+	"github.com/BaSui01/agentflow/types"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -28,7 +29,7 @@ func DefaultProcessor() *Processor {
 }
 
 // ConvertToProviderFormat 将多模态消息转换为提供者专用格式.
-func (p *Processor) ConvertToProviderFormat(provider string, messages []MultimodalMessage) ([]llm.Message, error) {
+func (p *Processor) ConvertToProviderFormat(provider string, messages []MultimodalMessage) ([]types.Message, error) {
 	switch provider {
 	case "openai":
 		return p.convertToOpenAI(messages)
@@ -42,8 +43,8 @@ func (p *Processor) ConvertToProviderFormat(provider string, messages []Multimod
 }
 
 // convertToOpenAI 转换为 OpenAI 的多模态格式.
-func (p *Processor) convertToOpenAI(messages []MultimodalMessage) ([]llm.Message, error) {
-	var result []llm.Message
+func (p *Processor) convertToOpenAI(messages []MultimodalMessage) ([]types.Message, error) {
+	var result []types.Message
 
 	for _, msg := range messages {
 		var contentParts []map[string]any
@@ -92,8 +93,8 @@ func (p *Processor) convertToOpenAI(messages []MultimodalMessage) ([]llm.Message
 			return nil, fmt.Errorf("failed to marshal content: %w", err)
 		}
 
-		result = append(result, llm.Message{
-			Role:    llm.Role(msg.Role),
+		result = append(result, types.Message{
+			Role:    types.Role(msg.Role),
 			Content: string(contentJSON),
 		})
 	}
@@ -102,8 +103,8 @@ func (p *Processor) convertToOpenAI(messages []MultimodalMessage) ([]llm.Message
 }
 
 // convertToAnthropic 转换为 Anthropic 的多模态格式.
-func (p *Processor) convertToAnthropic(messages []MultimodalMessage) ([]llm.Message, error) {
-	var result []llm.Message
+func (p *Processor) convertToAnthropic(messages []MultimodalMessage) ([]types.Message, error) {
+	var result []types.Message
 
 	for _, msg := range messages {
 		var contentParts []map[string]any
@@ -141,8 +142,8 @@ func (p *Processor) convertToAnthropic(messages []MultimodalMessage) ([]llm.Mess
 			return nil, fmt.Errorf("failed to marshal content: %w", err)
 		}
 
-		result = append(result, llm.Message{
-			Role:    llm.Role(msg.Role),
+		result = append(result, types.Message{
+			Role:    types.Role(msg.Role),
 			Content: string(contentJSON),
 		})
 	}
@@ -151,8 +152,8 @@ func (p *Processor) convertToAnthropic(messages []MultimodalMessage) ([]llm.Mess
 }
 
 // convertToGemini 转换为 Gemini 的多模态格式.
-func (p *Processor) convertToGemini(messages []MultimodalMessage) ([]llm.Message, error) {
-	var result []llm.Message
+func (p *Processor) convertToGemini(messages []MultimodalMessage) ([]types.Message, error) {
+	var result []types.Message
 
 	for _, msg := range messages {
 		var parts []map[string]any
@@ -208,8 +209,8 @@ func (p *Processor) convertToGemini(messages []MultimodalMessage) ([]llm.Message
 			return nil, fmt.Errorf("failed to marshal content: %w", err)
 		}
 
-		result = append(result, llm.Message{
-			Role:    llm.Role(msg.Role),
+		result = append(result, types.Message{
+			Role:    types.Role(msg.Role),
 			Content: string(contentJSON),
 		})
 	}
@@ -218,8 +219,8 @@ func (p *Processor) convertToGemini(messages []MultimodalMessage) ([]llm.Message
 }
 
 // convertToGeneric 转换为通用格式（仅文本回退）.
-func (p *Processor) convertToGeneric(messages []MultimodalMessage) ([]llm.Message, error) {
-	var result []llm.Message
+func (p *Processor) convertToGeneric(messages []MultimodalMessage) ([]types.Message, error) {
+	var result []types.Message
 
 	for _, msg := range messages {
 		var textParts []string
@@ -231,8 +232,8 @@ func (p *Processor) convertToGeneric(messages []MultimodalMessage) ([]llm.Messag
 			}
 		}
 
-		result = append(result, llm.Message{
-			Role:    llm.Role(msg.Role),
+		result = append(result, types.Message{
+			Role:    types.Role(msg.Role),
 			Content: joinStrings(textParts, "\n"),
 		})
 	}
@@ -340,3 +341,5 @@ func (m *MultimodalProvider) SupportedModalities() []ContentType {
 		return []ContentType{ContentTypeText}
 	}
 }
+
+

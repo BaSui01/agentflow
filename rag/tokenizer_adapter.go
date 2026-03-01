@@ -68,3 +68,4 @@ func NewEstimatorAdapter(model string, maxTokens int, logger *zap.Logger) Tokeni
 	est := lltok.NewEstimatorTokenizer(model, maxTokens)
 	return NewLLMTokenizerAdapter(est, logger)
 }
+

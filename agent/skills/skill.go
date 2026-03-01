@@ -1,6 +1,7 @@
 package skills
 
 import (
+	"github.com/BaSui01/agentflow/types"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -194,7 +195,7 @@ func SaveSkillToDirectory(skill *Skill, dir string) error {
 }
 
 // ToToolSchema 将技能转换为工具 Schema（如果技能可以作为工具使用）
-func (s *Skill) ToToolSchema() llm.ToolSchema {
+func (s *Skill) ToToolSchema() types.ToolSchema {
 	// 构建参数 schema
 	parametersMap := map[string]any{
 		"type": "object",
@@ -210,7 +211,7 @@ func (s *Skill) ToToolSchema() llm.ToolSchema {
 	// 转换为 json.RawMessage
 	parametersJSON, _ := json.Marshal(parametersMap)
 
-	return llm.ToolSchema{
+	return types.ToolSchema{
 		Name:        s.ID,
 		Description: s.Description,
 		Parameters:  parametersJSON,
@@ -459,3 +460,5 @@ func (b *SkillBuilder) Build() (*Skill, error) {
 	}
 	return &b.skill, nil
 }
+
+

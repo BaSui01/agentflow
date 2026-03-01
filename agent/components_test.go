@@ -119,7 +119,7 @@ func TestLLMExecutor_Complete_NilProvider(t *testing.T) {
 	config := LLMExecutorConfig{Model: "gpt-4"}
 	executor := NewLLMExecutor(nil, config, zap.NewNop())
 
-	_, err := executor.Complete(context.Background(), []llm.Message{
+	_, err := executor.Complete(context.Background(), []types.Message{
 		{Role: llm.RoleUser, Content: "hello"},
 	})
 	require.Error(t, err)
@@ -132,7 +132,7 @@ func TestLLMExecutor_Complete_Success(t *testing.T) {
 		completionFn: func(ctx context.Context, req *llm.ChatRequest) (*llm.ChatResponse, error) {
 			return &llm.ChatResponse{
 				Choices: []llm.ChatChoice{
-					{Message: llm.Message{Content: "response"}, FinishReason: "stop"},
+					{Message: types.Message{Content: "response"}, FinishReason: "stop"},
 				},
 			}, nil
 		},
@@ -140,7 +140,7 @@ func TestLLMExecutor_Complete_Success(t *testing.T) {
 	config := LLMExecutorConfig{Model: "gpt-4", MaxTokens: 100, Temperature: 0.5}
 	executor := NewLLMExecutor(provider, config, zap.NewNop())
 
-	resp, err := executor.Complete(context.Background(), []llm.Message{
+	resp, err := executor.Complete(context.Background(), []types.Message{
 		{Role: llm.RoleUser, Content: "hello"},
 	})
 	require.NoError(t, err)
@@ -154,7 +154,7 @@ func TestLLMExecutor_Complete_WithContextManager(t *testing.T) {
 		completionFn: func(ctx context.Context, req *llm.ChatRequest) (*llm.ChatResponse, error) {
 			return &llm.ChatResponse{
 				Choices: []llm.ChatChoice{
-					{Message: llm.Message{Content: "optimized response"}},
+					{Message: types.Message{Content: "optimized response"}},
 				},
 			}, nil
 		},
@@ -163,14 +163,14 @@ func TestLLMExecutor_Complete_WithContextManager(t *testing.T) {
 	executor := NewLLMExecutor(provider, config, zap.NewNop())
 
 	cm := &testContextManager{
-		prepareFn: func(ctx context.Context, msgs []llm.Message, query string) ([]llm.Message, error) {
+		prepareFn: func(ctx context.Context, msgs []types.Message, query string) ([]types.Message, error) {
 			// Return optimized messages
 			return msgs[:1], nil
 		},
 	}
 	executor.SetContextManager(cm)
 
-	msgs := []llm.Message{
+	msgs := []types.Message{
 		{Role: llm.RoleSystem, Content: "system"},
 		{Role: llm.RoleUser, Content: "hello"},
 	}
@@ -183,7 +183,7 @@ func TestLLMExecutor_Stream_NilProvider(t *testing.T) {
 	config := LLMExecutorConfig{Model: "gpt-4"}
 	executor := NewLLMExecutor(nil, config, zap.NewNop())
 
-	_, err := executor.Stream(context.Background(), []llm.Message{
+	_, err := executor.Stream(context.Background(), []types.Message{
 		{Role: llm.RoleUser, Content: "hello"},
 	})
 	require.Error(t, err)
@@ -192,7 +192,7 @@ func TestLLMExecutor_Stream_NilProvider(t *testing.T) {
 
 func TestLLMExecutor_Stream_Success(t *testing.T) {
 	ch := make(chan llm.StreamChunk, 1)
-	ch <- llm.StreamChunk{Delta: llm.Message{Content: "streamed"}}
+	ch <- llm.StreamChunk{Delta: types.Message{Content: "streamed"}}
 	close(ch)
 
 	provider := &testProvider{
@@ -204,7 +204,7 @@ func TestLLMExecutor_Stream_Success(t *testing.T) {
 	config := LLMExecutorConfig{Model: "gpt-4"}
 	executor := NewLLMExecutor(provider, config, zap.NewNop())
 
-	result, err := executor.Stream(context.Background(), []llm.Message{
+	result, err := executor.Stream(context.Background(), []types.Message{
 		{Role: llm.RoleUser, Content: "hello"},
 	})
 	require.NoError(t, err)
@@ -215,7 +215,7 @@ func TestLLMExecutor_Stream_Success(t *testing.T) {
 func TestExtractLastUserQuery(t *testing.T) {
 	tests := []struct {
 		name     string
-		messages []llm.Message
+		messages []types.Message
 		expected string
 	}{
 		{
@@ -225,14 +225,14 @@ func TestExtractLastUserQuery(t *testing.T) {
 		},
 		{
 			name: "single user message",
-			messages: []llm.Message{
+			messages: []types.Message{
 				{Role: llm.RoleUser, Content: "hello"},
 			},
 			expected: "hello",
 		},
 		{
 			name: "multiple messages returns last user",
-			messages: []llm.Message{
+			messages: []types.Message{
 				{Role: llm.RoleUser, Content: "first"},
 				{Role: llm.RoleAssistant, Content: "response"},
 				{Role: llm.RoleUser, Content: "second"},
@@ -241,7 +241,7 @@ func TestExtractLastUserQuery(t *testing.T) {
 		},
 		{
 			name: "no user messages",
-			messages: []llm.Message{
+			messages: []types.Message{
 				{Role: llm.RoleSystem, Content: "system"},
 				{Role: llm.RoleAssistant, Content: "response"},
 			},
@@ -400,7 +400,7 @@ func TestModularAgent_Execute_Success(t *testing.T) {
 		completionFn: func(ctx context.Context, req *llm.ChatRequest) (*llm.ChatResponse, error) {
 			return &llm.ChatResponse{
 				Choices: []llm.ChatChoice{
-					{Message: llm.Message{Content: "response"}, FinishReason: "stop"},
+					{Message: types.Message{Content: "response"}, FinishReason: "stop"},
 				},
 				Usage: llm.ChatUsage{TotalTokens: 42},
 			}, nil
@@ -433,7 +433,7 @@ func TestModularAgent_Plan(t *testing.T) {
 		completionFn: func(ctx context.Context, req *llm.ChatRequest) (*llm.ChatResponse, error) {
 			return &llm.ChatResponse{
 				Choices: []llm.ChatChoice{
-					{Message: llm.Message{Content: "1. Step one\n2. Step two"}},
+					{Message: types.Message{Content: "1. Step one\n2. Step two"}},
 				},
 			}, nil
 		},
@@ -460,17 +460,17 @@ func TestModularAgent_Observe(t *testing.T) {
 // ============================================================
 
 type testContextManager struct {
-	prepareFn func(ctx context.Context, msgs []llm.Message, query string) ([]llm.Message, error)
+	prepareFn func(ctx context.Context, msgs []types.Message, query string) ([]types.Message, error)
 }
 
-func (m *testContextManager) PrepareMessages(ctx context.Context, msgs []llm.Message, query string) ([]llm.Message, error) {
+func (m *testContextManager) PrepareMessages(ctx context.Context, msgs []types.Message, query string) ([]types.Message, error) {
 	if m.prepareFn != nil {
 		return m.prepareFn(ctx, msgs, query)
 	}
 	return msgs, nil
 }
-func (m *testContextManager) GetStatus(msgs []llm.Message) any    { return nil }
-func (m *testContextManager) EstimateTokens(msgs []llm.Message) int { return 0 }
+func (m *testContextManager) GetStatus(msgs []types.Message) any    { return nil }
+func (m *testContextManager) EstimateTokens(msgs []types.Message) int { return 0 }
 
 type testReflectionRunner struct{}
 
@@ -540,3 +540,4 @@ func (r *testGuardrailsExtension) ValidateOutput(ctx context.Context, output str
 func (r *testGuardrailsExtension) FilterOutput(ctx context.Context, output string) (string, error) {
 	return output, nil
 }
+

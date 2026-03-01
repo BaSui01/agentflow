@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"github.com/BaSui01/agentflow/types"
 	"context"
 	"fmt"
 	"time"
@@ -96,7 +97,7 @@ func (p *PersistenceStores) UpdateRunStatus(ctx context.Context, runID, status s
 }
 
 // RestoreConversation restores conversation history from the store.
-func (p *PersistenceStores) RestoreConversation(ctx context.Context, conversationID string) []llm.Message {
+func (p *PersistenceStores) RestoreConversation(ctx context.Context, conversationID string) []types.Message {
 	if p.conversationStore == nil || conversationID == "" {
 		return nil
 	}
@@ -111,10 +112,10 @@ func (p *PersistenceStores) RestoreConversation(ctx context.Context, conversatio
 	if conv == nil {
 		return nil
 	}
-	var msgs []llm.Message
+	var msgs []types.Message
 	for _, msg := range conv.Messages {
-		msgs = append(msgs, llm.Message{
-			Role:    llm.Role(msg.Role),
+		msgs = append(msgs, types.Message{
+			Role:    types.Role(msg.Role),
 			Content: msg.Content,
 		})
 	}
@@ -159,3 +160,5 @@ func (p *PersistenceStores) PersistConversation(ctx context.Context, conversatio
 		)
 	}
 }
+
+

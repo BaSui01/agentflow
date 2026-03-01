@@ -1,6 +1,7 @@
 package reasoning
 
 import (
+	"github.com/BaSui01/agentflow/types"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -19,7 +20,7 @@ func TestDynamicPlanner_ExecuteNode_ThinkAction(t *testing.T) {
 	provider := &testProvider{
 		completionFn: func(_ context.Context, _ *llm.ChatRequest) (*llm.ChatResponse, error) {
 			return &llm.ChatResponse{
-				Choices: []llm.ChatChoice{{Message: llm.Message{Content: "thought result"}}},
+				Choices: []llm.ChatChoice{{Message: types.Message{Content: "thought result"}}},
 				Usage:   llm.ChatUsage{TotalTokens: 10},
 			}, nil
 		},
@@ -37,7 +38,7 @@ func TestDynamicPlanner_ExecuteNode_ReasonAction(t *testing.T) {
 	provider := &testProvider{
 		completionFn: func(_ context.Context, _ *llm.ChatRequest) (*llm.ChatResponse, error) {
 			return &llm.ChatResponse{
-				Choices: []llm.ChatChoice{{Message: llm.Message{Content: "reasoning"}}},
+				Choices: []llm.ChatChoice{{Message: types.Message{Content: "reasoning"}}},
 				Usage:   llm.ChatUsage{TotalTokens: 5},
 			}, nil
 		},
@@ -52,7 +53,7 @@ func TestDynamicPlanner_ExecuteNode_ReasonAction(t *testing.T) {
 
 func TestDynamicPlanner_ExecuteNode_ToolAction(t *testing.T) {
 	executor := &testToolExecutor{
-		executeFn: func(_ context.Context, calls []llm.ToolCall) []tools.ToolResult {
+		executeFn: func(_ context.Context, calls []types.ToolCall) []tools.ToolResult {
 			return []tools.ToolResult{{ToolCallID: calls[0].ID, Result: json.RawMessage(`"tool output"`)}}
 		},
 	}
@@ -66,7 +67,7 @@ func TestDynamicPlanner_ExecuteNode_ToolAction(t *testing.T) {
 
 func TestDynamicPlanner_ExecuteNode_ToolError(t *testing.T) {
 	executor := &testToolExecutor{
-		executeFn: func(_ context.Context, calls []llm.ToolCall) []tools.ToolResult {
+		executeFn: func(_ context.Context, calls []types.ToolCall) []tools.ToolResult {
 			return []tools.ToolResult{{ToolCallID: calls[0].ID, Error: "tool failed"}}
 		},
 	}
@@ -80,7 +81,7 @@ func TestDynamicPlanner_ExecuteNode_ToolError(t *testing.T) {
 
 func TestDynamicPlanner_ExecuteNode_NoToolResult(t *testing.T) {
 	executor := &testToolExecutor{
-		executeFn: func(_ context.Context, _ []llm.ToolCall) []tools.ToolResult {
+		executeFn: func(_ context.Context, _ []types.ToolCall) []tools.ToolResult {
 			return nil
 		},
 	}
@@ -252,3 +253,5 @@ func TestDynamicPlanner_GetNodeDepth_OrphanNode(t *testing.T) {
 	depth := dp.getNodeDepth(orphan)
 	assert.Equal(t, 1, depth) // finds nonexistent parent, breaks
 }
+
+

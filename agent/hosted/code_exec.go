@@ -1,6 +1,7 @@
 package hosted
 
 import (
+	"github.com/BaSui01/agentflow/types"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -70,7 +71,7 @@ func (t *CodeExecTool) Description() string {
 	return "Execute code in a sandboxed environment"
 }
 
-func (t *CodeExecTool) Schema() llm.ToolSchema {
+func (t *CodeExecTool) Schema() types.ToolSchema {
 	params, err := json.Marshal(map[string]any{
 		"type": "object",
 		"properties": map[string]any{
@@ -93,7 +94,7 @@ func (t *CodeExecTool) Schema() llm.ToolSchema {
 	if err != nil {
 		params = []byte("{}")
 	}
-	return llm.ToolSchema{Name: t.Name(), Description: t.Description(), Parameters: params}
+	return types.ToolSchema{Name: t.Name(), Description: t.Description(), Parameters: params}
 }
 
 // codeExecArgs represents the arguments for code execution.
@@ -143,3 +144,5 @@ func (t *CodeExecTool) Execute(ctx context.Context, args json.RawMessage) (json.
 
 	return json.Marshal(output)
 }
+
+

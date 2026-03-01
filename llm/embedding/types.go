@@ -76,3 +76,4 @@ type Provider interface {
 	// MaxBatchSize 返回支持的最大批量大小.
 	MaxBatchSize() int
 }
+

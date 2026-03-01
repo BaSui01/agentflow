@@ -1,6 +1,7 @@
 package providers_test
 
 import (
+	"github.com/BaSui01/agentflow/types"
 	"context"
 	"encoding/json"
 	"net/http"
@@ -29,12 +30,12 @@ func TestProperty4_DualCompletionModeSupport(t *testing.T) {
 
 	messageVariations := []struct {
 		name     string
-		messages []llm.Message
+		messages []types.Message
 	}{
-		{"simple user message", []llm.Message{{Role: llm.RoleUser, Content: "Hello"}}},
-		{"system and user", []llm.Message{{Role: llm.RoleSystem, Content: "You are helpful"}, {Role: llm.RoleUser, Content: "Hi"}}},
-		{"multi-turn conversation", []llm.Message{{Role: llm.RoleUser, Content: "Hello"}, {Role: llm.RoleAssistant, Content: "Hi there!"}, {Role: llm.RoleUser, Content: "How are you?"}}},
-		{"long message", []llm.Message{{Role: llm.RoleUser, Content: "This is a longer message that contains multiple sentences."}}},
+		{"simple user message", []types.Message{{Role: llm.RoleUser, Content: "Hello"}}},
+		{"system and user", []types.Message{{Role: llm.RoleSystem, Content: "You are helpful"}, {Role: llm.RoleUser, Content: "Hi"}}},
+		{"multi-turn conversation", []types.Message{{Role: llm.RoleUser, Content: "Hello"}, {Role: llm.RoleAssistant, Content: "Hi there!"}, {Role: llm.RoleUser, Content: "How are you?"}}},
+		{"long message", []types.Message{{Role: llm.RoleUser, Content: "This is a longer message that contains multiple sentences."}}},
 	}
 
 	// 测试完成模式
@@ -174,10 +175,10 @@ func TestProperty4_CompletionWithTools(t *testing.T) {
 
 	toolVariations := []struct {
 		name  string
-		tools []llm.ToolSchema
+		tools []types.ToolSchema
 	}{
-		{"single tool", []llm.ToolSchema{{Name: "get_weather", Description: "Get weather", Parameters: json.RawMessage(`{"type":"object","properties":{"city":{"type":"string"}}}`)}}},
-		{"multiple tools", []llm.ToolSchema{{Name: "get_weather", Description: "Get weather", Parameters: json.RawMessage(`{"type":"object"}`)}, {Name: "get_time", Description: "Get time", Parameters: json.RawMessage(`{"type":"object"}`)}}},
+		{"single tool", []types.ToolSchema{{Name: "get_weather", Description: "Get weather", Parameters: json.RawMessage(`{"type":"object","properties":{"city":{"type":"string"}}}`)}}},
+		{"multiple tools", []types.ToolSchema{{Name: "get_weather", Description: "Get weather", Parameters: json.RawMessage(`{"type":"object"}`)}, {Name: "get_time", Description: "Get time", Parameters: json.RawMessage(`{"type":"object"}`)}}},
 		{"no tools", nil},
 	}
 
@@ -191,7 +192,7 @@ func TestProperty4_CompletionWithTools(t *testing.T) {
 				defer server.Close()
 
 				ctx := context.Background()
-				req := &llm.ChatRequest{Messages: []llm.Message{{Role: llm.RoleUser, Content: "Test"}}, Tools: tv.tools}
+				req := &llm.ChatRequest{Messages: []types.Message{{Role: llm.RoleUser, Content: "Test"}}, Tools: tv.tools}
 
 				switch provider {
 				case "grok":
@@ -259,7 +260,7 @@ func TestProperty4_CompletionParameters(t *testing.T) {
 				defer server.Close()
 
 				ctx := context.Background()
-				req := &llm.ChatRequest{Messages: []llm.Message{{Role: llm.RoleUser, Content: "Test"}}, MaxTokens: pv.maxTokens, Temperature: pv.temperature}
+				req := &llm.ChatRequest{Messages: []types.Message{{Role: llm.RoleUser, Content: "Test"}}, MaxTokens: pv.maxTokens, Temperature: pv.temperature}
 
 				switch provider {
 				case "grok":
@@ -300,9 +301,9 @@ func TestProperty4_StreamWithTools(t *testing.T) {
 
 	toolVariations := []struct {
 		name  string
-		tools []llm.ToolSchema
+		tools []types.ToolSchema
 	}{
-		{"with tools", []llm.ToolSchema{{Name: "search", Description: "Search", Parameters: json.RawMessage(`{"type":"object"}`)}}},
+		{"with tools", []types.ToolSchema{{Name: "search", Description: "Search", Parameters: json.RawMessage(`{"type":"object"}`)}}},
 		{"without tools", nil},
 	}
 
@@ -321,7 +322,7 @@ func TestProperty4_StreamWithTools(t *testing.T) {
 				defer server.Close()
 
 				ctx := context.Background()
-				req := &llm.ChatRequest{Messages: []llm.Message{{Role: llm.RoleUser, Content: "Test"}}, Tools: tv.tools}
+				req := &llm.ChatRequest{Messages: []types.Message{{Role: llm.RoleUser, Content: "Test"}}, Tools: tv.tools}
 
 				switch provider {
 				case "grok":
@@ -376,3 +377,5 @@ func TestProperty4_IterationCount(t *testing.T) {
 	assert.GreaterOrEqual(t, totalIterations, 100,
 		"Property 4 should have at least 100 test iterations, got %d", totalIterations)
 }
+
+

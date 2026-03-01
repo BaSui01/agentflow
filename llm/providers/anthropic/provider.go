@@ -109,7 +109,7 @@ func (p *ClaudeProvider) ListModels(ctx context.Context) ([]llm.Model, error) {
 
 	resp, err := p.client.Do(httpReq)
 	if err != nil {
-		return nil, &llm.Error{
+		return nil, &types.Error{
 			Code:       llm.ErrUpstreamError,
 			Message:    err.Error(),
 			HTTPStatus: http.StatusBadGateway,
@@ -133,7 +133,7 @@ func (p *ClaudeProvider) ListModels(ctx context.Context) ([]llm.Model, error) {
 		} `json:"data"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&modelsResp); err != nil {
-		return nil, &llm.Error{
+		return nil, &types.Error{
 			Code:       llm.ErrUpstreamError,
 			Message:    err.Error(),
 			HTTPStatus: http.StatusBadGateway,
@@ -296,7 +296,7 @@ func (p *ClaudeProvider) resolveAPIKey(ctx context.Context) string {
 // 1. system 消息需要单独提取到 system 字段
 // 2. 消息必须是 user/assistant 交替出现
 // 3. content 是数组形式，可包含文本和工具调用
-func convertToClaudeMessages(msgs []llm.Message) (string, []claudeMessage) {
+func convertToClaudeMessages(msgs []types.Message) (string, []claudeMessage) {
 	var systemParts []string
 	var claudeMsgs []claudeMessage
 
@@ -399,7 +399,7 @@ func convertToClaudeMessages(msgs []llm.Message) (string, []claudeMessage) {
 	return strings.Join(systemParts, "\n\n"), claudeMsgs
 }
 
-func convertToClaudeTools(tools []llm.ToolSchema) []claudeTool {
+func convertToClaudeTools(tools []types.ToolSchema) []claudeTool {
 	if len(tools) == 0 {
 		return nil
 	}
@@ -453,7 +453,7 @@ func (p *ClaudeProvider) Completion(ctx context.Context, req *llm.ChatRequest) (
 	// 统一入口：应用改写器链
 	rewrittenReq, err := p.rewriterChain.Execute(ctx, req)
 	if err != nil {
-		return nil, &llm.Error{
+		return nil, &types.Error{
 			Code:       llm.ErrInvalidRequest,
 			Message:    fmt.Sprintf("request rewrite failed: %v", err),
 			HTTPStatus: http.StatusBadRequest,
@@ -497,7 +497,7 @@ func (p *ClaudeProvider) Completion(ctx context.Context, req *llm.ChatRequest) (
 
 	resp, err := p.client.Do(httpReq)
 	if err != nil {
-		return nil, &llm.Error{
+		return nil, &types.Error{
 			Code:       llm.ErrUpstreamError,
 			Message:    err.Error(),
 			HTTPStatus: http.StatusBadGateway,
@@ -514,7 +514,7 @@ func (p *ClaudeProvider) Completion(ctx context.Context, req *llm.ChatRequest) (
 
 	var claudeResp claudeResponse
 	if err := json.NewDecoder(resp.Body).Decode(&claudeResp); err != nil {
-		return nil, &llm.Error{
+		return nil, &types.Error{
 			Code:       llm.ErrUpstreamError,
 			Message:    err.Error(),
 			HTTPStatus: http.StatusBadGateway,
@@ -530,7 +530,7 @@ func (p *ClaudeProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-ch
 	// 统一入口：应用改写器链
 	rewrittenReq, err := p.rewriterChain.Execute(ctx, req)
 	if err != nil {
-		return nil, &llm.Error{
+		return nil, &types.Error{
 			Code:       llm.ErrInvalidRequest,
 			Message:    fmt.Sprintf("request rewrite failed: %v", err),
 			HTTPStatus: http.StatusBadRequest,
@@ -563,7 +563,7 @@ func (p *ClaudeProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-ch
 
 	payload, err := json.Marshal(body)
 	if err != nil {
-		return nil, &llm.Error{
+		return nil, &types.Error{
 			Code:       llm.ErrInvalidRequest,
 			Message:    fmt.Sprintf("failed to marshal request: %v", err),
 			HTTPStatus: http.StatusBadRequest,
@@ -575,7 +575,7 @@ func (p *ClaudeProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-ch
 
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(payload))
 	if err != nil {
-		return nil, &llm.Error{
+		return nil, &types.Error{
 			Code:       llm.ErrInternalError,
 			Message:    fmt.Sprintf("failed to create request: %v", err),
 			HTTPStatus: http.StatusInternalServerError,
@@ -587,7 +587,7 @@ func (p *ClaudeProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-ch
 
 	resp, err := p.client.Do(httpReq)
 	if err != nil {
-		return nil, &llm.Error{
+		return nil, &types.Error{
 			Code:       llm.ErrUpstreamError,
 			Message:    err.Error(),
 			HTTPStatus: http.StatusBadGateway,
@@ -611,7 +611,7 @@ func (p *ClaudeProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-ch
 		// Claude 流式响应累积状态
 		var currentID string
 		var currentModel string
-		var toolCallAccumulator = make(map[int]*llm.ToolCall) // 累积工具调用
+		var toolCallAccumulator = make(map[int]*types.ToolCall) // 累积工具调用
 		var startUsage *claudeUsage                           // message_start 中的初始 usage
 
 		for {
@@ -622,7 +622,7 @@ func (p *ClaudeProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-ch
 					case <-ctx.Done():
 						return
 					case ch <- llm.StreamChunk{
-						Err: &llm.Error{
+						Err: &types.Error{
 							Code:       llm.ErrUpstreamError,
 							Message:    err.Error(),
 							HTTPStatus: http.StatusBadGateway,
@@ -657,7 +657,7 @@ func (p *ClaudeProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-ch
 				case <-ctx.Done():
 					return
 				case ch <- llm.StreamChunk{
-					Err: &llm.Error{
+					Err: &types.Error{
 						Code:       llm.ErrUpstreamError,
 						Message:    err.Error(),
 						HTTPStatus: http.StatusBadGateway,
@@ -684,7 +684,7 @@ func (p *ClaudeProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-ch
 			case "content_block_start":
 				if event.ContentBlock != nil && event.ContentBlock.Type == "tool_use" {
 					// Bug1 fix: 初始化 Arguments 为 nil，由 input_json_delta 逐步构建
-					toolCallAccumulator[event.Index] = &llm.ToolCall{
+					toolCallAccumulator[event.Index] = &types.ToolCall{
 						ID:   event.ContentBlock.ID,
 						Name: event.ContentBlock.Name,
 					}
@@ -698,7 +698,7 @@ func (p *ClaudeProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-ch
 						Provider: p.Name(),
 						Model:    currentModel,
 						Index:    event.Index,
-						Delta: llm.Message{
+						Delta: types.Message{
 							Role: llm.RoleAssistant,
 						},
 					}
@@ -740,9 +740,9 @@ func (p *ClaudeProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-ch
 						Provider: p.Name(),
 						Model:    currentModel,
 						Index:    event.Index,
-						Delta: llm.Message{
+						Delta: types.Message{
 							Role:      llm.RoleAssistant,
-							ToolCalls: []llm.ToolCall{*tc},
+							ToolCalls: []types.ToolCall{*tc},
 						},
 					}:
 					}
@@ -795,7 +795,7 @@ func (p *ClaudeProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-ch
 				case <-ctx.Done():
 					return
 				case ch <- llm.StreamChunk{
-					Err: &llm.Error{
+					Err: &types.Error{
 						Code:       llm.ErrUpstreamError,
 						Message:    errMsg,
 						HTTPStatus: http.StatusBadGateway,
@@ -813,7 +813,7 @@ func (p *ClaudeProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-ch
 }
 
 func toClaudeChatResponse(cr claudeResponse, provider string) *llm.ChatResponse {
-	msg := llm.Message{
+	msg := types.Message{
 		Role: llm.RoleAssistant,
 	}
 
@@ -826,7 +826,7 @@ func toClaudeChatResponse(cr claudeResponse, provider string) *llm.ChatResponse 
 		case "text":
 			msg.Content += content.Text
 		case "tool_use":
-			msg.ToolCalls = append(msg.ToolCalls, llm.ToolCall{
+			msg.ToolCalls = append(msg.ToolCalls, types.ToolCall{
 				ID:        content.ID,
 				Name:      content.Name,
 				Arguments: content.Input,
@@ -916,7 +916,7 @@ func validateThinkingConstraints(body *claudeRequest) error {
 		case "auto", "none":
 			// 允许
 		default:
-			return &llm.Error{
+			return &types.Error{
 				Code:       llm.ErrInvalidRequest,
 				Message:    fmt.Sprintf("extended thinking only supports tool_choice 'auto' or 'none', got '%s'", body.ToolChoice.Type),
 				HTTPStatus: http.StatusBadRequest,
@@ -999,3 +999,4 @@ func detectImageMediaType(b64Data string) string {
 		return "image/png"
 	}
 }
+

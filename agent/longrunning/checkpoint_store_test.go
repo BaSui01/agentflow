@@ -446,3 +446,4 @@ func TestAutoResumeAll_SkipsCompleted(t *testing.T) {
 		t.Fatalf("expected 0 resumed (completed should be skipped), got %d", resumed)
 	}
 }
+

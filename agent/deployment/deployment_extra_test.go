@@ -316,3 +316,4 @@ func TestDeployer_UpdateFailure(t *testing.T) {
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "update failed")
 }
+

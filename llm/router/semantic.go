@@ -1,6 +1,7 @@
 package router
 
 import (
+	"github.com/BaSui01/agentflow/types"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -227,7 +228,7 @@ Respond with JSON: {"intent": "intent_type", "confidence": 0.0-1.0, "entities": 
 
 	resp, err := r.classifier.Completion(ctx, &llm.ChatRequest{
 		Model: r.config.ClassifierModel,
-		Messages: []llm.Message{
+		Messages: []types.Message{
 			{Role: llm.RoleUser, Content: prompt},
 		},
 		Temperature: 0.1,
@@ -388,7 +389,7 @@ func (c *classificationCache) evictOldest() {
 }
 
 // 辅助功能
-func extractUserMessage(messages []llm.Message) string {
+func extractUserMessage(messages []types.Message) string {
 	for i := len(messages) - 1; i >= 0; i-- {
 		if messages[i].Role == llm.RoleUser {
 			return messages[i].Content
@@ -431,3 +432,5 @@ func matchesProvider(model, providerName string) bool {
 	}
 	return false
 }
+
+

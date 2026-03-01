@@ -72,3 +72,4 @@ func (s *InMemoryRegistryStore) Delete(_ context.Context, id string) error {
 
 // Ensure InMemoryRegistryStore implements RegistryStore.
 var _ RegistryStore = (*InMemoryRegistryStore)(nil)
+

@@ -61,3 +61,4 @@ type Provider interface {
 	// MaxDocuments 返回支持的最大文档数量.
 	MaxDocuments() int
 }
+

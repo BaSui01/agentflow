@@ -1,6 +1,7 @@
 package main
 
 import (
+	"github.com/BaSui01/agentflow/types"
 	"encoding/json"
 	"fmt"
 	"reflect"
@@ -179,3 +180,5 @@ func demonstrateManualSchema() {
 		fmt.Println("Sample data validation: ✓ Passed")
 	}
 }
+
+

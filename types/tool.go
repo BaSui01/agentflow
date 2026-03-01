@@ -52,3 +52,4 @@ func (tr ToolResult) ToJSON() string {
 	}
 	return string(data)
 }
+

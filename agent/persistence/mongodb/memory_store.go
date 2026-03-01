@@ -156,3 +156,4 @@ func wildcardToRegex(pattern string) string {
 
 // Compile-time interface check.
 var _ memory.MemoryStore = (*MongoMemoryStore)(nil)
+

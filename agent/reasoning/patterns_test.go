@@ -137,3 +137,4 @@ func TestPatternRegistry_GetCases(t *testing.T) {
 		assert.False(t, ok)
 	})
 }
+

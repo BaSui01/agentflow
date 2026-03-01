@@ -70,3 +70,4 @@ func NewRouter(db *gorm.DB, providers map[string]Provider, opts RouterOptions) *
 		healthCheckTimeout:  opts.HealthCheckTimeout,
 	}
 }
+

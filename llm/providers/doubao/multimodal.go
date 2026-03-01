@@ -51,3 +51,4 @@ func (p *DoubaoProvider) GetFineTuningJob(ctx context.Context, jobID string) (*l
 func (p *DoubaoProvider) CancelFineTuningJob(ctx context.Context, jobID string) error {
 	return providers.NotSupportedError(p.Name(), "fine-tuning")
 }
+

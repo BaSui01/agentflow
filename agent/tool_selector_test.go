@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"github.com/BaSui01/agentflow/types"
 	"context"
 	"testing"
 	"time"
@@ -57,7 +58,7 @@ func TestDynamicToolSelector_SelectTools_Disabled(t *testing.T) {
 	selector := NewDynamicToolSelector(agent, selectorConfig)
 
 	ctx := context.Background()
-	tools := []llm.ToolSchema{
+	tools := []types.ToolSchema{
 		{Name: "tool1", Description: "Tool 1"},
 		{Name: "tool2", Description: "Tool 2"},
 	}
@@ -91,7 +92,7 @@ func TestDynamicToolSelector_SelectTools_Success(t *testing.T) {
 	selector := NewDynamicToolSelector(agent, selectorConfig)
 
 	ctx := context.Background()
-	tools := []llm.ToolSchema{
+	tools := []types.ToolSchema{
 		{Name: "search_web", Description: "Search the web for information"},
 		{Name: "calculate", Description: "Perform mathematical calculations"},
 		{Name: "send_email", Description: "Send an email to someone"},
@@ -128,7 +129,7 @@ func TestDynamicToolSelector_ScoreTools(t *testing.T) {
 	selector := NewDynamicToolSelector(agent, selectorConfig)
 
 	ctx := context.Background()
-	tools := []llm.ToolSchema{
+	tools := []types.ToolSchema{
 		{Name: "search_web", Description: "Search the web for information"},
 		{Name: "calculate", Description: "Perform mathematical calculations"},
 	}
@@ -164,13 +165,13 @@ func TestDynamicToolSelector_calculateSemanticSimilarity(t *testing.T) {
 	tests := []struct {
 		name     string
 		task     string
-		tool     llm.ToolSchema
+		tool     types.ToolSchema
 		minScore float64
 	}{
 		{
 			name: "high similarity",
 			task: "search for information online",
-			tool: llm.ToolSchema{
+			tool: types.ToolSchema{
 				Name:        "search_web",
 				Description: "Search the web for information",
 			},
@@ -179,7 +180,7 @@ func TestDynamicToolSelector_calculateSemanticSimilarity(t *testing.T) {
 		{
 			name: "low similarity",
 			task: "send an email",
-			tool: llm.ToolSchema{
+			tool: types.ToolSchema{
 				Name:        "calculate",
 				Description: "Perform mathematical calculations",
 			},
@@ -355,7 +356,7 @@ func TestDynamicToolSelector_SelectTools_WithLLMRanking(t *testing.T) {
 			{
 				Index:        0,
 				FinishReason: "stop",
-				Message: llm.Message{
+				Message: types.Message{
 					Role:    llm.RoleAssistant,
 					Content: "1,3,2",
 				},
@@ -392,7 +393,7 @@ func TestDynamicToolSelector_SelectTools_WithLLMRanking(t *testing.T) {
 	selector := NewDynamicToolSelector(agent, selectorConfig)
 
 	ctx := context.Background()
-	tools := []llm.ToolSchema{
+	tools := []types.ToolSchema{
 		{Name: "search_web", Description: "Search the web"},
 		{Name: "calculate", Description: "Calculate numbers"},
 		{Name: "send_email", Description: "Send email"},
@@ -430,7 +431,7 @@ func BenchmarkDynamicToolSelector_SelectTools(b *testing.B) {
 	selector := NewDynamicToolSelector(agent, selectorConfig)
 
 	ctx := context.Background()
-	tools := []llm.ToolSchema{
+	tools := []types.ToolSchema{
 		{Name: "tool1", Description: "Tool 1"},
 		{Name: "tool2", Description: "Tool 2"},
 		{Name: "tool3", Description: "Tool 3"},
@@ -443,3 +444,5 @@ func BenchmarkDynamicToolSelector_SelectTools(b *testing.B) {
 		_, _ = selector.SelectTools(ctx, "test task", tools)
 	}
 }
+
+

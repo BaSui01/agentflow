@@ -1,6 +1,7 @@
 package gemini
 
 import (
+	"github.com/BaSui01/agentflow/types"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -48,9 +49,9 @@ func TestGeminiProvider_ResolveAPIKey_MultiKey(t *testing.T) {
 // --- convertToGeminiContents ---
 
 func TestConvertToGeminiContents_ToolCalls(t *testing.T) {
-	msgs := []llm.Message{
+	msgs := []types.Message{
 		{Role: llm.RoleUser, Content: "What's the weather?"},
-		{Role: llm.RoleAssistant, Content: "Let me check.", ToolCalls: []llm.ToolCall{
+		{Role: llm.RoleAssistant, Content: "Let me check.", ToolCalls: []types.ToolCall{
 			{ID: "tc1", Name: "get_weather", Arguments: json.RawMessage(`{"city":"NYC"}`)},
 		}},
 		{Role: llm.RoleTool, ToolCallID: "tc1", Name: "get_weather", Content: `{"temp":72}`},
@@ -83,7 +84,7 @@ func TestConvertToGeminiContents_ToolCalls(t *testing.T) {
 }
 
 func TestConvertToGeminiContents_ToolResponseNonJSON(t *testing.T) {
-	msgs := []llm.Message{
+	msgs := []types.Message{
 		{Role: llm.RoleTool, ToolCallID: "tc1", Name: "search", Content: "plain text result"},
 	}
 
@@ -102,7 +103,7 @@ func TestConvertToGeminiContents_ToolResponseNonJSON(t *testing.T) {
 // --- convertToGeminiTools ---
 
 func TestConvertToGeminiTools_WithValidTools(t *testing.T) {
-	tools := []llm.ToolSchema{
+	tools := []types.ToolSchema{
 		{
 			Name:        "get_weather",
 			Description: "Get weather",
@@ -122,7 +123,7 @@ func TestConvertToGeminiTools_Empty(t *testing.T) {
 }
 
 func TestConvertToGeminiTools_InvalidJSON(t *testing.T) {
-	tools := []llm.ToolSchema{
+	tools := []types.ToolSchema{
 		{Name: "bad", Parameters: json.RawMessage(`invalid`)},
 	}
 	result := convertToGeminiTools(tools)
@@ -190,7 +191,7 @@ func TestCheckPromptFeedback_Blocked(t *testing.T) {
 	}
 	err := checkPromptFeedback(resp, "gemini")
 	require.Error(t, err)
-	llmErr, ok := err.(*llm.Error)
+	llmErr, ok := err.(*types.Error)
 	require.True(t, ok)
 	assert.Equal(t, llm.ErrContentFiltered, llmErr.Code)
 	assert.Contains(t, llmErr.Message, "SAFETY")
@@ -267,7 +268,7 @@ func TestGeminiProvider_Completion_WithThinking(t *testing.T) {
 	}, zap.NewNop())
 
 	resp, err := p.Completion(context.Background(), &llm.ChatRequest{
-		Messages:      []llm.Message{{Role: llm.RoleUser, Content: "What is 6*7?"}},
+		Messages:      []types.Message{{Role: llm.RoleUser, Content: "What is 6*7?"}},
 		ReasoningMode: "high",
 	})
 	require.NoError(t, err)
@@ -295,10 +296,10 @@ func TestGeminiProvider_Completion_PromptBlocked(t *testing.T) {
 	}, zap.NewNop())
 
 	_, err := p.Completion(context.Background(), &llm.ChatRequest{
-		Messages: []llm.Message{{Role: llm.RoleUser, Content: "bad content"}},
+		Messages: []types.Message{{Role: llm.RoleUser, Content: "bad content"}},
 	})
 	require.Error(t, err)
-	llmErr, ok := err.(*llm.Error)
+	llmErr, ok := err.(*types.Error)
 	require.True(t, ok)
 	assert.Equal(t, llm.ErrContentFiltered, llmErr.Code)
 }
@@ -331,7 +332,7 @@ func TestGeminiProvider_Stream_WithThinking(t *testing.T) {
 	}, zap.NewNop())
 
 	ch, err := p.Stream(context.Background(), &llm.ChatRequest{
-		Messages: []llm.Message{{Role: llm.RoleUser, Content: "Hi"}},
+		Messages: []types.Message{{Role: llm.RoleUser, Content: "Hi"}},
 	})
 	require.NoError(t, err)
 
@@ -386,7 +387,7 @@ func TestGeminiProvider_Stream_Success(t *testing.T) {
 	}, zap.NewNop())
 
 	ch, err := p.Stream(context.Background(), &llm.ChatRequest{
-		Messages: []llm.Message{{Role: llm.RoleUser, Content: "Hi"}},
+		Messages: []types.Message{{Role: llm.RoleUser, Content: "Hi"}},
 	})
 	require.NoError(t, err)
 
@@ -408,7 +409,9 @@ func TestGeminiProvider_Stream_HTTPError(t *testing.T) {
 	}, zap.NewNop())
 
 	_, err := p.Stream(context.Background(), &llm.ChatRequest{
-		Messages: []llm.Message{{Role: llm.RoleUser, Content: "Hi"}},
+		Messages: []types.Message{{Role: llm.RoleUser, Content: "Hi"}},
 	})
 	require.Error(t, err)
 }
+
+

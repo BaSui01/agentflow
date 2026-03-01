@@ -468,3 +468,4 @@ func resolvePath(root any, path string) (any, bool) {
 	}
 	return cur, true
 }
+

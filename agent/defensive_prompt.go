@@ -303,3 +303,4 @@ func (e *DefensivePromptEnhancer) ValidateOutput(output string) error {
 
 	return nil
 }
+

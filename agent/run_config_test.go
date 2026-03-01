@@ -243,3 +243,4 @@ func TestRunConfig_HelperFunctions(t *testing.T) {
 		assert.Equal(t, 5*time.Second, *p)
 	})
 }
+

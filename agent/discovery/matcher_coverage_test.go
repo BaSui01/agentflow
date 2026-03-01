@@ -201,3 +201,4 @@ func registerCovTestAgent(t *testing.T, reg *CapabilityRegistry, name string, ca
 	}
 	require.NoError(t, reg.RegisterAgent(context.Background(), info))
 }
+

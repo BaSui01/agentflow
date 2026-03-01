@@ -221,3 +221,4 @@ func TestQuickSetup_EmptyNames(t *testing.T) {
 	err = QuickSetup(context.Background(), ag, opts)
 	require.NoError(t, err)
 }
+

@@ -490,3 +490,4 @@ func TestLoaderRegistry_Integration_LoadsCorrectFormat(t *testing.T) {
 		})
 	}
 }
+

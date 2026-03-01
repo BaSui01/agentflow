@@ -83,7 +83,7 @@ func (mc *MemoryCache) Recall(ctx context.Context, query string, topK int) ([]Me
 }
 
 // GetRecentMessages converts cached recent memory into LLM messages.
-func (mc *MemoryCache) GetRecentMessages() []llm.Message {
+func (mc *MemoryCache) GetRecentMessages() []types.Message {
 	mc.recentMemoryMu.RLock()
 	defer mc.recentMemoryMu.RUnlock()
 
@@ -91,14 +91,14 @@ func (mc *MemoryCache) GetRecentMessages() []llm.Message {
 		return nil
 	}
 
-	var msgs []llm.Message
+	var msgs []types.Message
 	for _, mem := range mc.recentMemory {
 		if mem.Kind == types.MemoryCategory(MemoryShortTerm) {
 			role := llm.RoleAssistant
 			if r, ok := mem.Metadata["role"].(string); ok && r != "" {
-				role = llm.Role(r)
+				role = types.Role(r)
 			}
-			msgs = append(msgs, llm.Message{
+			msgs = append(msgs, types.Message{
 				Role:    role,
 				Content: mem.Content,
 			})
@@ -116,4 +116,5 @@ func (mc *MemoryCache) HasRecentMemory() bool {
 	defer mc.recentMemoryMu.RUnlock()
 	return len(mc.recentMemory) > 0
 }
+
 

@@ -782,3 +782,4 @@ func TestProviderContextCanceled(t *testing.T) {
 	_, err := p.Embed(ctx, &EmbeddingRequest{Input: []string{"test"}})
 	require.Error(t, err)
 }
+

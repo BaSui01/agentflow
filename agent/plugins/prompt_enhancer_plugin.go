@@ -43,3 +43,4 @@ func (p *PromptEnhancerPlugin) BeforeExecute(_ context.Context, pc *agent.Pipeli
 	pc.Input.Content = enhanced
 	return nil
 }
+

@@ -470,3 +470,4 @@ func TestCallWithResultTyped_CircuitOpen(t *testing.T) {
 	assert.ErrorIs(t, err, ErrCircuitOpen)
 	assert.Equal(t, 0, val)
 }
+

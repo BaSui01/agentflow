@@ -231,3 +231,4 @@ func (m *Manager) IsRunning() bool {
 	defer m.mu.RUnlock()
 	return !m.closed
 }
+

@@ -964,3 +964,4 @@ func TestValidator_ComplexSchemaTypes(t *testing.T) {
 		})
 	}
 }
+

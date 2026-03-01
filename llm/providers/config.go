@@ -107,3 +107,4 @@ type DoubaoConfig struct {
 	SecretKey          string `json:"secret_key,omitempty" yaml:"secret_key,omitempty"`   // 火山引擎 Secret Key
 	Region             string `json:"region,omitempty" yaml:"region,omitempty"`            // 区域，默认 cn-beijing
 }
+

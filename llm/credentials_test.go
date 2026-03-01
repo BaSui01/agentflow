@@ -210,3 +210,4 @@ func TestThoughtSignatureManager_DefaultTTL(t *testing.T) {
 	mgr := NewThoughtSignatureManager(0) // should default to 24h
 	assert.Equal(t, 24*time.Hour, mgr.ttl)
 }
+

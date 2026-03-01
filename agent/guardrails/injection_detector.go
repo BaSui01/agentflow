@@ -460,3 +460,4 @@ func formatInjectionErrorMessage(matches []InjectionMatch) string {
 
 	return "检测到多个提示注入模式: " + strings.Join(descriptions, "; ")
 }
+

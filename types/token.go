@@ -115,3 +115,4 @@ func (t *EstimateTokenizer) EstimateToolTokens(tools []ToolSchema) int {
 	}
 	return total
 }
+

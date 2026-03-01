@@ -50,3 +50,4 @@ func NewProviderFromConfig(cfg FactoryConfig) (Provider, error) {
 		return nil, fmt.Errorf("unsupported rerank provider type: %s", t)
 	}
 }
+

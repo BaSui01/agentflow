@@ -506,3 +506,4 @@ func TestEnhancedCheckpointManager_ResumeFromCheckpoint(t *testing.T) {
 	assert.True(t, ok)
 	assert.Equal(t, "done", result)
 }
+

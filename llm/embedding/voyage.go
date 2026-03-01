@@ -100,3 +100,4 @@ func (p *VoyageProvider) EmbedQuery(ctx context.Context, query string) ([]float6
 func (p *VoyageProvider) EmbedDocuments(ctx context.Context, documents []string) ([][]float64, error) {
 	return p.BaseProvider.EmbedDocuments(ctx, documents, p.Embed)
 }
+

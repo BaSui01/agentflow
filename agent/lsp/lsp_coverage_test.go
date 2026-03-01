@@ -392,3 +392,4 @@ func TestIdentifierPrefixAtPosition(t *testing.T) {
 	_, err = identifierPrefixAtPosition(text, Position{Line: 0, Character: -1})
 	assert.Error(t, err)
 }
+

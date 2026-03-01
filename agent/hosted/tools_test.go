@@ -466,3 +466,4 @@ func TestMiddleware_Chain_Order(t *testing.T) {
 		}
 	}
 }
+

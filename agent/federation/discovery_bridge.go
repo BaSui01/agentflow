@@ -193,3 +193,4 @@ func (b *DiscoveryBridge) periodicSync(ctx context.Context) {
 		}
 	}
 }
+

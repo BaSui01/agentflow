@@ -1,6 +1,7 @@
 package main
 
 import (
+	"github.com/BaSui01/agentflow/types"
 	"context"
 	"fmt"
 	"log"
@@ -51,7 +52,7 @@ func main() {
 
 	// 4. 使用代码审查 Agent
 	fmt.Println("=== 代码审查 Agent ===")
-	codeMessages := []llm.Message{
+	codeMessages := []types.Message{
 		{
 			Role:    llm.RoleSystem,
 			Content: codeReviewer.Config().PromptBundle.RenderSystemPrompt(),
@@ -73,7 +74,7 @@ func divide(a, b int) int {
 
 	// 5. 使用数据分析 Agent
 	fmt.Println("=== 数据分析 Agent ===")
-	dataMessages := []llm.Message{
+	dataMessages := []types.Message{
 		{
 			Role:    llm.RoleSystem,
 			Content: dataAnalyst.Config().PromptBundle.RenderSystemPrompt(),
@@ -92,7 +93,7 @@ func divide(a, b int) int {
 
 	// 6. 使用故事创作 Agent
 	fmt.Println("=== 故事创作 Agent ===")
-	storyMessages := []llm.Message{
+	storyMessages := []types.Message{
 		{
 			Role:    llm.RoleSystem,
 			Content: storyWriter.Config().PromptBundle.RenderSystemPrompt(),
@@ -206,3 +207,5 @@ func createStoryWriterAgent(provider llm.Provider, logger *zap.Logger) *agent.Ba
 
 	return agent.NewBaseAgent(cfg, provider, nil, nil, nil, logger)
 }
+
+

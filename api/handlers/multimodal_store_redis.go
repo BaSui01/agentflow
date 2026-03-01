@@ -127,3 +127,4 @@ func (s *RedisReferenceStore) Cleanup(expireBefore time.Time) {
 func (s *RedisReferenceStore) keyFor(id string) string {
 	return s.keyPrefix + ":" + id
 }
+

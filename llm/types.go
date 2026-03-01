@@ -199,3 +199,4 @@ type AuditLog struct {
 	Details      map[string]any
 	CreatedAt    time.Time
 }
+

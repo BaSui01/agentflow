@@ -1027,3 +1027,4 @@ func TestGenerateReportMultiVariant(t *testing.T) {
 	// 应进行2个比较(控制与变体-a,控制与变体-b)
 	assert.Len(t, report.Comparisons, 2)
 }
+

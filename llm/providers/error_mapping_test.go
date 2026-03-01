@@ -1,6 +1,7 @@
 package providers
 
 import (
+	"github.com/BaSui01/agentflow/types"
 	"net/http"
 	"testing"
 
@@ -16,7 +17,7 @@ func TestErrorMapping_HTTPStatusCodes(t *testing.T) {
 		status         int
 		msg            string
 		provider       string
-		expectedCode   llm.ErrorCode
+		expectedCode   types.ErrorCode
 		expectedRetry  bool
 		expectedStatus int
 	}{
@@ -187,7 +188,7 @@ func TestErrorMapping_QuotaCreditDetection(t *testing.T) {
 	tests := []struct {
 		name         string
 		msg          string
-		expectedCode llm.ErrorCode
+		expectedCode types.ErrorCode
 	}{
 		{
 			name:         "Contains 'quota' lowercase",
@@ -252,14 +253,14 @@ func TestErrorMapping_ProviderNameIncluded(t *testing.T) {
 
 // mockMapError 是符合规范要求的参考实现
 // 用于测试，以确保所有提供者遵循相同的模式
-func mockMapError(status int, msg string, provider string) *llm.Error {
+func mockMapError(status int, msg string, provider string) *types.Error {
 	switch status {
 	case http.StatusUnauthorized:
-		return &llm.Error{Code: llm.ErrUnauthorized, Message: msg, HTTPStatus: status, Provider: provider}
+		return &types.Error{Code: llm.ErrUnauthorized, Message: msg, HTTPStatus: status, Provider: provider}
 	case http.StatusForbidden:
-		return &llm.Error{Code: llm.ErrForbidden, Message: msg, HTTPStatus: status, Provider: provider}
+		return &types.Error{Code: llm.ErrForbidden, Message: msg, HTTPStatus: status, Provider: provider}
 	case http.StatusTooManyRequests:
-		return &llm.Error{Code: llm.ErrRateLimit, Message: msg, HTTPStatus: status, Retryable: true, Provider: provider}
+		return &types.Error{Code: llm.ErrRateLimit, Message: msg, HTTPStatus: status, Retryable: true, Provider: provider}
 	case http.StatusBadRequest:
 		// 检查配额/信用关键字( 对大小写不敏感)
 		msgLower := ""
@@ -271,15 +272,15 @@ func mockMapError(status int, msg string, provider string) *llm.Error {
 			}
 		}
 		if containsSubstring(msgLower, "quota") || containsSubstring(msgLower, "credit") {
-			return &llm.Error{Code: llm.ErrQuotaExceeded, Message: msg, HTTPStatus: status, Provider: provider}
+			return &types.Error{Code: llm.ErrQuotaExceeded, Message: msg, HTTPStatus: status, Provider: provider}
 		}
-		return &llm.Error{Code: llm.ErrInvalidRequest, Message: msg, HTTPStatus: status, Provider: provider}
+		return &types.Error{Code: llm.ErrInvalidRequest, Message: msg, HTTPStatus: status, Provider: provider}
 	case http.StatusServiceUnavailable, http.StatusBadGateway, http.StatusGatewayTimeout:
-		return &llm.Error{Code: llm.ErrUpstreamError, Message: msg, HTTPStatus: status, Retryable: true, Provider: provider}
+		return &types.Error{Code: llm.ErrUpstreamError, Message: msg, HTTPStatus: status, Retryable: true, Provider: provider}
 	case 529: // Model overloaded
-		return &llm.Error{Code: llm.ErrModelOverloaded, Message: msg, HTTPStatus: status, Retryable: true, Provider: provider}
+		return &types.Error{Code: llm.ErrModelOverloaded, Message: msg, HTTPStatus: status, Retryable: true, Provider: provider}
 	default:
-		return &llm.Error{Code: llm.ErrUpstreamError, Message: msg, HTTPStatus: status, Retryable: status >= 500, Provider: provider}
+		return &types.Error{Code: llm.ErrUpstreamError, Message: msg, HTTPStatus: status, Retryable: status >= 500, Provider: provider}
 	}
 }
 
@@ -302,3 +303,5 @@ func containsSubstring(s, substr string) bool {
 	}
 	return false
 }
+
+

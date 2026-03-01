@@ -1,6 +1,7 @@
 package llama
 
 import (
+	"github.com/BaSui01/agentflow/types"
 	"context"
 	"encoding/json"
 	"net/http"
@@ -100,7 +101,7 @@ func TestLlamaProvider_Integration(t *testing.T) {
 	t.Run("Completion", func(t *testing.T) {
 		req := &llm.ChatRequest{
 			Model: "meta-llama/Llama-3.3-70B-Instruct-Turbo",
-			Messages: []llm.Message{
+			Messages: []types.Message{
 				{Role: llm.RoleUser, Content: "Say 'test' only"},
 			},
 			MaxTokens:   10,
@@ -117,7 +118,7 @@ func TestLlamaProvider_Integration(t *testing.T) {
 	t.Run("Stream", func(t *testing.T) {
 		req := &llm.ChatRequest{
 			Model: "meta-llama/Llama-3.3-70B-Instruct-Turbo",
-			Messages: []llm.Message{
+			Messages: []types.Message{
 				{Role: llm.RoleUser, Content: "Count to 3"},
 			},
 			MaxTokens: 20,
@@ -170,7 +171,7 @@ func TestLlamaProvider_Completion_Httptest(t *testing.T) {
 	}, zap.NewNop())
 
 	resp, err := p.Completion(context.Background(), &llm.ChatRequest{
-		Messages: []llm.Message{{Role: llm.RoleUser, Content: "Hi"}},
+		Messages: []types.Message{{Role: llm.RoleUser, Content: "Hi"}},
 	})
 	require.NoError(t, err)
 	assert.Contains(t, resp.Provider, "llama")
@@ -191,10 +192,10 @@ func TestLlamaProvider_Completion_Error(t *testing.T) {
 	}, zap.NewNop())
 
 	_, err := p.Completion(context.Background(), &llm.ChatRequest{
-		Messages: []llm.Message{{Role: llm.RoleUser, Content: "Hi"}},
+		Messages: []types.Message{{Role: llm.RoleUser, Content: "Hi"}},
 	})
 	require.Error(t, err)
-	llmErr, ok := err.(*llm.Error)
+	llmErr, ok := err.(*types.Error)
 	require.True(t, ok)
 	assert.Equal(t, llm.ErrUnauthorized, llmErr.Code)
 }
@@ -211,10 +212,10 @@ func TestLlamaProvider_Completion_RateLimited(t *testing.T) {
 	}, zap.NewNop())
 
 	_, err := p.Completion(context.Background(), &llm.ChatRequest{
-		Messages: []llm.Message{{Role: llm.RoleUser, Content: "Hi"}},
+		Messages: []types.Message{{Role: llm.RoleUser, Content: "Hi"}},
 	})
 	require.Error(t, err)
-	llmErr, ok := err.(*llm.Error)
+	llmErr, ok := err.(*types.Error)
 	require.True(t, ok)
 	assert.Equal(t, llm.ErrRateLimit, llmErr.Code)
 }
@@ -244,7 +245,7 @@ func TestLlamaProvider_Stream_Httptest(t *testing.T) {
 	}, zap.NewNop())
 
 	ch, err := p.Stream(context.Background(), &llm.ChatRequest{
-		Messages: []llm.Message{{Role: llm.RoleUser, Content: "Hi"}},
+		Messages: []types.Message{{Role: llm.RoleUser, Content: "Hi"}},
 	})
 	require.NoError(t, err)
 
@@ -267,7 +268,7 @@ func TestLlamaProvider_Stream_Error(t *testing.T) {
 	}, zap.NewNop())
 
 	_, err := p.Stream(context.Background(), &llm.ChatRequest{
-		Messages: []llm.Message{{Role: llm.RoleUser, Content: "Hi"}},
+		Messages: []types.Message{{Role: llm.RoleUser, Content: "Hi"}},
 	})
 	require.Error(t, err)
 }
@@ -296,7 +297,7 @@ func TestLlamaProvider_NotSupported(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			err := tt.callFn()
 			require.Error(t, err)
-			llmErr, ok := err.(*llm.Error)
+			llmErr, ok := err.(*types.Error)
 			require.True(t, ok)
 			assert.Equal(t, llm.ErrInvalidRequest, llmErr.Code)
 			assert.Contains(t, llmErr.Message, tt.feature)
@@ -335,3 +336,5 @@ func TestLlamaProvider_HealthCheck_Unhealthy(t *testing.T) {
 	require.Error(t, err)
 	assert.False(t, status.Healthy)
 }
+
+

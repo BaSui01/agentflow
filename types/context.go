@@ -91,3 +91,4 @@ func Roles(ctx context.Context) ([]string, bool) {
 	v, ok := ctx.Value(keyRoles).([]string)
 	return v, ok && len(v) > 0
 }
+

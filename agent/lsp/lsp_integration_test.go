@@ -195,3 +195,4 @@ func hasDocumentSymbol(items []DocumentSymbol, name string) bool {
 	}
 	return false
 }
+

@@ -194,3 +194,4 @@ func newCovTestRegistry(t *testing.T) *CapabilityRegistry {
 func newCovTestMatcher(registry Registry) *CapabilityMatcher {
 	return NewCapabilityMatcher(registry, nil, zap.NewNop())
 }
+

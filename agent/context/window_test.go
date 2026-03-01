@@ -324,3 +324,4 @@ func TestWindowManager_Summarize_WithinBudget_NoTrim(t *testing.T) {
 		assert.NotEqual(t, "should not appear", m.Content)
 	}
 }
+

@@ -171,3 +171,4 @@ func workflowStreamEmitterFromContext(ctx context.Context) (WorkflowStreamEmitte
 	emit, ok := v.(WorkflowStreamEmitter)
 	return emit, ok && emit != nil
 }
+

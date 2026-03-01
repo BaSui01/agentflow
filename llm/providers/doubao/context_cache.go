@@ -1,6 +1,7 @@
 package doubao
 
 import (
+	"github.com/BaSui01/agentflow/types"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -28,7 +29,7 @@ type ContextCacheResponse struct {
 
 // CreateContextCache 创建上下文缓存。
 // 将一组消息缓存到服务端，返回缓存 ID，后续可通过 ContextID 复用。
-func (p *DoubaoProvider) CreateContextCache(ctx context.Context, model string, messages []llm.Message, mode string, ttl int) (*ContextCacheResponse, error) {
+func (p *DoubaoProvider) CreateContextCache(ctx context.Context, model string, messages []types.Message, mode string, ttl int) (*ContextCacheResponse, error) {
 	reqBody := ContextCacheRequest{
 		Model:    model,
 		Messages: providers.ConvertMessagesToOpenAI(messages),
@@ -51,7 +52,7 @@ func (p *DoubaoProvider) CreateContextCache(ctx context.Context, model string, m
 
 	resp, err := p.Client.Do(httpReq)
 	if err != nil {
-		return nil, &llm.Error{
+		return nil, &types.Error{
 			Code:       llm.ErrUpstreamError,
 			Message:    err.Error(),
 			HTTPStatus: http.StatusBadGateway,
@@ -68,7 +69,7 @@ func (p *DoubaoProvider) CreateContextCache(ctx context.Context, model string, m
 
 	var result ContextCacheResponse
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return nil, &llm.Error{
+		return nil, &types.Error{
 			Code:       llm.ErrUpstreamError,
 			Message:    err.Error(),
 			HTTPStatus: http.StatusBadGateway,
@@ -121,7 +122,7 @@ func (p *DoubaoProvider) CompletionWithContext(ctx context.Context, contextID st
 
 	resp, err := p.Client.Do(httpReq)
 	if err != nil {
-		return nil, &llm.Error{
+		return nil, &types.Error{
 			Code:       llm.ErrUpstreamError,
 			Message:    err.Error(),
 			HTTPStatus: http.StatusBadGateway,
@@ -138,7 +139,7 @@ func (p *DoubaoProvider) CompletionWithContext(ctx context.Context, contextID st
 
 	var oaResp providers.OpenAICompatResponse
 	if err := json.NewDecoder(resp.Body).Decode(&oaResp); err != nil {
-		return nil, &llm.Error{
+		return nil, &types.Error{
 			Code:       llm.ErrUpstreamError,
 			Message:    err.Error(),
 			HTTPStatus: http.StatusBadGateway,
@@ -149,3 +150,5 @@ func (p *DoubaoProvider) CompletionWithContext(ctx context.Context, contextID st
 
 	return providers.ToLLMChatResponse(oaResp, p.Name()), nil
 }
+
+

@@ -127,3 +127,4 @@ func (p *MiniMaxProvider) Generate(ctx context.Context, req *GenerateRequest) (*
 		CreatedAt: time.Now(),
 	}, nil
 }
+

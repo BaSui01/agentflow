@@ -144,3 +144,4 @@ func TestProperty_Float64Float32_LengthPreserved(t *testing.T) {
 		assert.Len(t, backToFloat64, length)
 	})
 }
+

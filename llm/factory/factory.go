@@ -224,3 +224,4 @@ func NewRegistryFromConfig(cfg RegistryConfig, logger *zap.Logger) (*llm.Provide
 
 	return reg, nil
 }
+

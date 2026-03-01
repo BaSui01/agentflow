@@ -104,3 +104,4 @@ func TestCostCalculator_SetPrice(t *testing.T) {
 		t.Errorf("Calculate() = %v, want %v", cost, expected)
 	}
 }
+

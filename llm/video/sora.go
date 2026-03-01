@@ -206,3 +206,4 @@ func (p *SoraProvider) pollGeneration(ctx context.Context, id string) (*soraResp
 		}
 	}
 }
+

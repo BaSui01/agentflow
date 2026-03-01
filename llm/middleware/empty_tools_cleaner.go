@@ -34,3 +34,4 @@ func (r *EmptyToolsCleaner) Rewrite(ctx context.Context, req *llmpkg.ChatRequest
 func NewEmptyToolsCleaner() *EmptyToolsCleaner {
 	return &EmptyToolsCleaner{}
 }
+

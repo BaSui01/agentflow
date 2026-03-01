@@ -1,6 +1,7 @@
 package providers
 
 import (
+	"github.com/BaSui01/agentflow/types"
 	"context"
 	"testing"
 
@@ -18,7 +19,7 @@ import (
 func TestProperty8_RewriterChainApplication(t *testing.T) {
 	testCases := []struct {
 		name               string
-		inputTools         []llm.ToolSchema
+		inputTools         []types.ToolSchema
 		inputToolChoice    any
 		expectedToolsNil   bool
 		expectedToolChoice any
@@ -31,7 +32,7 @@ func TestProperty8_RewriterChainApplication(t *testing.T) {
 		// 空工具阵列大小写
 		{
 			name:               "Empty tools array with tool_choice - should clear tool_choice",
-			inputTools:         []llm.ToolSchema{},
+			inputTools:         []types.ToolSchema{},
 			inputToolChoice:    "auto",
 			expectedToolsNil:   true,
 			expectedToolChoice: nil,
@@ -49,7 +50,7 @@ func TestProperty8_RewriterChainApplication(t *testing.T) {
 		},
 		{
 			name:               "Empty tools array without tool_choice - no change needed",
-			inputTools:         []llm.ToolSchema{},
+			inputTools:         []types.ToolSchema{},
 			inputToolChoice:    nil,
 			expectedToolsNil:   true,
 			expectedToolChoice: nil,
@@ -69,7 +70,7 @@ func TestProperty8_RewriterChainApplication(t *testing.T) {
 		// 非空工具案件
 		{
 			name: "Single tool with tool_choice - should preserve both",
-			inputTools: []llm.ToolSchema{
+			inputTools: []types.ToolSchema{
 				{Name: "search", Description: "Search the web", Parameters: []byte(`{"type":"object"}`)},
 			},
 			inputToolChoice:    "auto",
@@ -80,7 +81,7 @@ func TestProperty8_RewriterChainApplication(t *testing.T) {
 		},
 		{
 			name: "Multiple tools with tool_choice - should preserve both",
-			inputTools: []llm.ToolSchema{
+			inputTools: []types.ToolSchema{
 				{Name: "search", Description: "Search", Parameters: []byte(`{"type":"object"}`)},
 				{Name: "calculate", Description: "Calculate", Parameters: []byte(`{"type":"object"}`)},
 			},
@@ -92,7 +93,7 @@ func TestProperty8_RewriterChainApplication(t *testing.T) {
 		},
 		{
 			name: "Single tool without tool_choice - should preserve tool",
-			inputTools: []llm.ToolSchema{
+			inputTools: []types.ToolSchema{
 				{Name: "weather", Description: "Get weather", Parameters: []byte(`{"type":"object"}`)},
 			},
 			inputToolChoice:    nil,
@@ -106,7 +107,7 @@ func TestProperty8_RewriterChainApplication(t *testing.T) {
 		// 使用空工具选择各种工具( C)
 		{
 			name:               "Empty tools with tool_choice 'none'",
-			inputTools:         []llm.ToolSchema{},
+			inputTools:         []types.ToolSchema{},
 			inputToolChoice:    "none",
 			expectedToolsNil:   true,
 			expectedToolChoice: nil,
@@ -115,7 +116,7 @@ func TestProperty8_RewriterChainApplication(t *testing.T) {
 		},
 		{
 			name:               "Empty tools with specific function choice",
-			inputTools:         []llm.ToolSchema{},
+			inputTools:         []types.ToolSchema{},
 			inputToolChoice:    `{"type":"function","function":{"name":"search"}}`,
 			expectedToolsNil:   true,
 			expectedToolChoice: nil,
@@ -135,7 +136,7 @@ func TestProperty8_RewriterChainApplication(t *testing.T) {
 		// 各种工具配置
 		{
 			name: "Tool with minimal parameters",
-			inputTools: []llm.ToolSchema{
+			inputTools: []types.ToolSchema{
 				{Name: "ping", Description: "Ping", Parameters: []byte(`{}`)},
 			},
 			inputToolChoice:    "auto",
@@ -146,7 +147,7 @@ func TestProperty8_RewriterChainApplication(t *testing.T) {
 		},
 		{
 			name: "Tool with complex parameters",
-			inputTools: []llm.ToolSchema{
+			inputTools: []types.ToolSchema{
 				{
 					Name:        "complex_tool",
 					Description: "Complex tool",
@@ -169,7 +170,7 @@ func TestProperty8_RewriterChainApplication(t *testing.T) {
 		},
 		{
 			name: "Three tools with auto choice",
-			inputTools: []llm.ToolSchema{
+			inputTools: []types.ToolSchema{
 				{Name: "tool1", Description: "Tool 1", Parameters: []byte(`{"type":"object"}`)},
 				{Name: "tool2", Description: "Tool 2", Parameters: []byte(`{"type":"object"}`)},
 				{Name: "tool3", Description: "Tool 3", Parameters: []byte(`{"type":"object"}`)},
@@ -182,7 +183,7 @@ func TestProperty8_RewriterChainApplication(t *testing.T) {
 		},
 		{
 			name: "Five tools with required choice",
-			inputTools: []llm.ToolSchema{
+			inputTools: []types.ToolSchema{
 				{Name: "tool1", Description: "Tool 1", Parameters: []byte(`{"type":"object"}`)},
 				{Name: "tool2", Description: "Tool 2", Parameters: []byte(`{"type":"object"}`)},
 				{Name: "tool3", Description: "Tool 3", Parameters: []byte(`{"type":"object"}`)},
@@ -201,7 +202,7 @@ func TestProperty8_RewriterChainApplication(t *testing.T) {
 	// 我们用不同的环境来测试每个情景
 	expandedTestCases := make([]struct {
 		name               string
-		inputTools         []llm.ToolSchema
+		inputTools         []types.ToolSchema
 		inputToolChoice    any
 		expectedToolsNil   bool
 		expectedToolChoice any
@@ -228,7 +229,7 @@ func TestProperty8_RewriterChainApplication(t *testing.T) {
 			// 用测试输入创建聊天请求
 			req := &llm.ChatRequest{
 				Model: "test-model",
-				Messages: []llm.Message{
+				Messages: []types.Message{
 					{Role: llm.RoleUser, Content: "test message"},
 				},
 				Tools:      tc.inputTools,
@@ -282,28 +283,28 @@ func TestProperty8_RewriterChainAppliedToBothMethods(t *testing.T) {
 
 	testCases := []struct {
 		name           string
-		tools          []llm.ToolSchema
+		tools          []types.ToolSchema
 		toolChoice     any
 		expectModified bool
 		requirement    string
 	}{
 		{
 			name:           "Empty tools should be cleaned in Completion",
-			tools:          []llm.ToolSchema{},
+			tools:          []types.ToolSchema{},
 			toolChoice:     "auto",
 			expectModified: true,
 			requirement:    "7.4",
 		},
 		{
 			name:           "Empty tools should be cleaned in Stream",
-			tools:          []llm.ToolSchema{},
+			tools:          []types.ToolSchema{},
 			toolChoice:     "required",
 			expectModified: true,
 			requirement:    "7.4",
 		},
 		{
 			name: "Non-empty tools should not be modified in Completion",
-			tools: []llm.ToolSchema{
+			tools: []types.ToolSchema{
 				{Name: "test", Description: "Test", Parameters: []byte(`{"type":"object"}`)},
 			},
 			toolChoice:     "auto",
@@ -312,7 +313,7 @@ func TestProperty8_RewriterChainAppliedToBothMethods(t *testing.T) {
 		},
 		{
 			name: "Non-empty tools should not be modified in Stream",
-			tools: []llm.ToolSchema{
+			tools: []types.ToolSchema{
 				{Name: "test", Description: "Test", Parameters: []byte(`{"type":"object"}`)},
 			},
 			toolChoice:     "required",
@@ -325,7 +326,7 @@ func TestProperty8_RewriterChainAppliedToBothMethods(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			req := &llm.ChatRequest{
 				Model:      "test-model",
-				Messages:   []llm.Message{{Role: llm.RoleUser, Content: "test"}},
+				Messages:   []types.Message{{Role: llm.RoleUser, Content: "test"}},
 				Tools:      tc.tools,
 				ToolChoice: tc.toolChoice,
 			}
@@ -378,7 +379,7 @@ func TestProperty8_EmptyToolsCleanerBehavior(t *testing.T) {
 		{
 			name: "Request with empty tools array and tool_choice",
 			inputReq: &llm.ChatRequest{
-				Tools:      []llm.ToolSchema{},
+				Tools:      []types.ToolSchema{},
 				ToolChoice: "required",
 			},
 			expectedToolChoice: nil,
@@ -387,7 +388,7 @@ func TestProperty8_EmptyToolsCleanerBehavior(t *testing.T) {
 		{
 			name: "Request with tools and tool_choice",
 			inputReq: &llm.ChatRequest{
-				Tools: []llm.ToolSchema{
+				Tools: []types.ToolSchema{
 					{Name: "test", Description: "Test", Parameters: []byte(`{"type":"object"}`)},
 				},
 				ToolChoice: "auto",
@@ -398,7 +399,7 @@ func TestProperty8_EmptyToolsCleanerBehavior(t *testing.T) {
 		{
 			name: "Request with tools but no tool_choice",
 			inputReq: &llm.ChatRequest{
-				Tools: []llm.ToolSchema{
+				Tools: []types.ToolSchema{
 					{Name: "test", Description: "Test", Parameters: []byte(`{"type":"object"}`)},
 				},
 				ToolChoice: nil,
@@ -431,3 +432,5 @@ func TestProperty8_RewriterChainName(t *testing.T) {
 	assert.Equal(t, "empty_tools_cleaner", cleaner.Name(),
 		"EmptyToolsCleaner should have correct name for logging and debugging")
 }
+
+

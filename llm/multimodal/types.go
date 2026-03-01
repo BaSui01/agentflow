@@ -336,3 +336,4 @@ func DefaultAudioConfig() AudioConfig {
 		AllowedFormats: []AudioFormat{AudioFormatMP3, AudioFormatWAV, AudioFormatOGG, AudioFormatFLAC, AudioFormatM4A},
 	}
 }
+

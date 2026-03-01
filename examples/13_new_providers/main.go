@@ -1,6 +1,7 @@
 package main
 
 import (
+	"github.com/BaSui01/agentflow/types"
 	"context"
 	"fmt"
 	"log"
@@ -65,7 +66,7 @@ func testMistral(ctx context.Context, logger *zap.Logger) {
 	// Chat completion
 	req := &llm.ChatRequest{
 		Model: "mistral-large-latest",
-		Messages: []llm.Message{
+		Messages: []types.Message{
 			{Role: llm.RoleUser, Content: "What is the capital of France?"},
 		},
 		MaxTokens:   100,
@@ -108,7 +109,7 @@ func testHunyuan(ctx context.Context, logger *zap.Logger) {
 	// Chat completion
 	req := &llm.ChatRequest{
 		Model: "hunyuan-lite",
-		Messages: []llm.Message{
+		Messages: []types.Message{
 			{Role: llm.RoleUser, Content: "介绍一下北京"},
 		},
 		MaxTokens:   100,
@@ -151,7 +152,7 @@ func testKimi(ctx context.Context, logger *zap.Logger) {
 	// Chat completion
 	req := &llm.ChatRequest{
 		Model: "moonshot-v1-8k",
-		Messages: []llm.Message{
+		Messages: []types.Message{
 			{Role: llm.RoleUser, Content: "什么是月之暗面？"},
 		},
 		MaxTokens:   100,
@@ -195,7 +196,7 @@ func testLlama(ctx context.Context, logger *zap.Logger) {
 	// Chat completion
 	req := &llm.ChatRequest{
 		Model: "meta-llama/Llama-3.3-70B-Instruct-Turbo",
-		Messages: []llm.Message{
+		Messages: []types.Message{
 			{Role: llm.RoleUser, Content: "What is Meta's Llama model?"},
 		},
 		MaxTokens:   100,
@@ -211,3 +212,5 @@ func testLlama(ctx context.Context, logger *zap.Logger) {
 	fmt.Printf("Response: %s\n", resp.Choices[0].Message.Content)
 	fmt.Printf("Usage: %d tokens\n", resp.Usage.TotalTokens)
 }
+
+

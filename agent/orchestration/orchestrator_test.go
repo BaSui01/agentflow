@@ -295,3 +295,4 @@ func TestExecute_ExecutorFailure_ReturnsError(t *testing.T) {
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "executor boom")
 }
+

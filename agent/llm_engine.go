@@ -85,7 +85,7 @@ func (e *LLMEngine) MaxReActIterations() int {
 }
 
 // ChatCompletion calls the LLM to complete a conversation.
-func (e *LLMEngine) ChatCompletion(ctx context.Context, messages []llm.Message) (*llm.ChatResponse, error) {
+func (e *LLMEngine) ChatCompletion(ctx context.Context, messages []types.Message) (*llm.ChatResponse, error) {
 	if e.provider == nil {
 		return nil, ErrProviderNotSet
 	}
@@ -255,7 +255,7 @@ func (e *LLMEngine) chatCompletionStreaming(ctx context.Context, req *llm.ChatRe
 		return nil, err
 	}
 	var (
-		assembled llm.Message
+		assembled types.Message
 		lastID    string
 		lastProv  string
 		lastModel string
@@ -309,7 +309,7 @@ func (e *LLMEngine) chatCompletionStreaming(ctx context.Context, req *llm.ChatRe
 }
 
 // StreamCompletion streams LLM responses.
-func (e *LLMEngine) StreamCompletion(ctx context.Context, messages []llm.Message) (<-chan llm.StreamChunk, error) {
+func (e *LLMEngine) StreamCompletion(ctx context.Context, messages []types.Message) (<-chan llm.StreamChunk, error) {
 	if e.provider == nil {
 		return nil, ErrProviderNotSet
 	}
@@ -366,3 +366,4 @@ func (e *LLMEngine) StreamCompletion(ctx context.Context, messages []llm.Message
 
 	return e.provider.Stream(ctx, req)
 }
+

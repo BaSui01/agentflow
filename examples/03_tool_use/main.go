@@ -1,6 +1,7 @@
 package main
 
 import (
+	"github.com/BaSui01/agentflow/types"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -130,7 +131,7 @@ func main() {
 
 	// 注册 get_weather 工具
 	if err := registry.Register("get_weather", getWeather, tools.ToolMetadata{
-		Schema: llm.ToolSchema{
+		Schema: types.ToolSchema{
 			Name:        "get_weather",
 			Description: "Get the current weather for a given location",
 			Parameters:  weatherSchema,
@@ -142,7 +143,7 @@ func main() {
 
 	// 注册 calculate 工具
 	if err := registry.Register("calculate", calculate, tools.ToolMetadata{
-		Schema: llm.ToolSchema{
+		Schema: types.ToolSchema{
 			Name:        "calculate",
 			Description: "Evaluate a math expression",
 			Parameters:  calculateSchema,
@@ -159,7 +160,7 @@ func main() {
 
 	// ========== 7. 构建带 Tools 的 ChatRequest ==========
 	ctx := context.Background()
-	messages := []llm.Message{
+	messages := []types.Message{
 		{Role: llm.RoleUser, Content: "What's the weather like in Beijing today?"},
 	}
 
@@ -206,7 +207,7 @@ func main() {
 		// 将每个工具结果作为 tool 消息加入对话历史
 		for _, result := range results {
 			fmt.Printf("  ← %s 返回: %s\n", result.Name, string(result.Result))
-			req.Messages = append(req.Messages, llm.Message{
+			req.Messages = append(req.Messages, types.Message{
 				Role:       llm.RoleTool,
 				Content:    string(result.Result),
 				Name:       result.Name,
@@ -218,3 +219,5 @@ func main() {
 	fmt.Println("--- 对话结束 ---")
 	fmt.Printf("总消息数: %d\n", len(req.Messages))
 }
+
+

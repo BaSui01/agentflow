@@ -238,3 +238,4 @@ func (r *RingBuffer) Available() int {
 func (r *RingBuffer) Free() int {
 	return r.size - int(r.writeIdx.Load()-r.readIdx.Load())
 }
+

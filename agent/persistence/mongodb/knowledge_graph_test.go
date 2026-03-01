@@ -130,3 +130,4 @@ func TestMongoKnowledgeGraph_EntityNotFound(t *testing.T) {
 		t.Error("expected error for nonexistent entity, got nil")
 	}
 }
+

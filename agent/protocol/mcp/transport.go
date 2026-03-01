@@ -225,3 +225,4 @@ func (t *SSETransport) Close() error {
 	}
 	return nil
 }
+

@@ -309,3 +309,4 @@ func TestTraceTypes(t *testing.T) {
 	assert.Equal(t, TraceType("agent"), TraceTypeAgent)
 	assert.Equal(t, TraceType("retriever"), TraceTypeRetriever)
 }
+

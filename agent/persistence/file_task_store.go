@@ -489,3 +489,4 @@ func (s *FileTaskStore) cleanupLoop(interval time.Duration) {
 
 // 确保文件任务执行任务任务任务
 var _ TaskStore = (*FileTaskStore)(nil)
+

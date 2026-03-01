@@ -195,3 +195,4 @@ func QuickSetup(ctx context.Context, ag *agent.BaseAgent, opts BuildOptions) err
 	}
 	return nil
 }
+

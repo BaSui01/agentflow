@@ -203,3 +203,4 @@ func (m *mockAgent) Transition(ctx context.Context, newState State) error {
 	m.state = newState
 	return nil
 }
+

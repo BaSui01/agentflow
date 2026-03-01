@@ -247,3 +247,4 @@ func TestMapScores(t *testing.T) {
 func TestOpenAIProvider_ImplementsModerationProvider(t *testing.T) {
 	var _ ModerationProvider = (*OpenAIProvider)(nil)
 }
+

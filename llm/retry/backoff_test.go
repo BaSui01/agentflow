@@ -320,3 +320,4 @@ func TestDoWithResultTyped_Struct(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, 100, val.Value)
 }
+

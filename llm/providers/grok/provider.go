@@ -42,3 +42,4 @@ func grokRequestHook(req *llm.ChatRequest, body *providers.OpenAICompatRequest) 
 		}
 	}
 }
+

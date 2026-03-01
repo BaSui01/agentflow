@@ -301,3 +301,4 @@ func (t *BrowserTool) ExecuteCommand(ctx context.Context, sessionID string, cmd 
 	}
 	return session.Execute(ctx, cmd)
 }
+

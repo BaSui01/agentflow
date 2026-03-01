@@ -284,3 +284,4 @@ func (sg *StateGraph) ApplyNodeOutput(output NodeOutput) error {
 
 	return nil
 }
+

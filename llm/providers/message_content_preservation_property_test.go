@@ -1,6 +1,7 @@
 package providers
 
 import (
+	"github.com/BaSui01/agentflow/types"
 	"encoding/json"
 	"testing"
 
@@ -36,7 +37,7 @@ func TestProperty23_MessageContentPreservation(t *testing.T) {
 		{"whitespace", "  content with   spaces  and\ttabs\t"},
 	}
 
-	roles := []llm.Role{llm.RoleSystem, llm.RoleUser, llm.RoleAssistant}
+	roles := []types.Role{llm.RoleSystem, llm.RoleUser, llm.RoleAssistant}
 
 	// 生成测试用例:5个提供者 * 10个内容变化 * 3个角色=150个用例
 	testCount := 0
@@ -45,7 +46,7 @@ func TestProperty23_MessageContentPreservation(t *testing.T) {
 			for _, role := range roles {
 				testCount++
 				t.Run(provider+"_"+cv.name+"_"+string(role), func(t *testing.T) {
-					msg := llm.Message{
+					msg := types.Message{
 						Role:    role,
 						Content: cv.content,
 					}
@@ -87,13 +88,13 @@ func TestProperty23_NameFieldPreservation(t *testing.T) {
 		{"long name", "very_long_agent_name_that_should_be_preserved"},
 	}
 
-	roles := []llm.Role{llm.RoleSystem, llm.RoleUser, llm.RoleAssistant}
+	roles := []types.Role{llm.RoleSystem, llm.RoleUser, llm.RoleAssistant}
 
 	for _, provider := range providers {
 		for _, nv := range nameVariations {
 			for _, role := range roles {
 				t.Run(provider+"_"+nv.name+"_"+string(role), func(t *testing.T) {
-					msg := llm.Message{
+					msg := types.Message{
 						Role:    role,
 						Content: "Test content",
 						Name:    nv.nameValue,
@@ -121,49 +122,49 @@ func TestProperty23_ToolCallsPreservation(t *testing.T) {
 
 	toolCallVariations := []struct {
 		name      string
-		toolCalls []llm.ToolCall
+		toolCalls []types.ToolCall
 	}{
 		{
 			name: "single tool call",
-			toolCalls: []llm.ToolCall{
+			toolCalls: []types.ToolCall{
 				{ID: "call_001", Name: "get_weather", Arguments: json.RawMessage(`{"location":"Beijing"}`)},
 			},
 		},
 		{
 			name: "multiple tool calls",
-			toolCalls: []llm.ToolCall{
+			toolCalls: []types.ToolCall{
 				{ID: "call_001", Name: "get_weather", Arguments: json.RawMessage(`{"location":"Beijing"}`)},
 				{ID: "call_002", Name: "get_time", Arguments: json.RawMessage(`{"timezone":"UTC"}`)},
 			},
 		},
 		{
 			name: "tool call with complex args",
-			toolCalls: []llm.ToolCall{
+			toolCalls: []types.ToolCall{
 				{ID: "call_003", Name: "search", Arguments: json.RawMessage(`{"query":"test","filters":{"type":"doc","limit":10}}`)},
 			},
 		},
 		{
 			name: "tool call with empty args",
-			toolCalls: []llm.ToolCall{
+			toolCalls: []types.ToolCall{
 				{ID: "call_004", Name: "list_items", Arguments: json.RawMessage(`{}`)},
 			},
 		},
 		{
 			name: "tool call with unicode",
-			toolCalls: []llm.ToolCall{
+			toolCalls: []types.ToolCall{
 				{ID: "call_005", Name: "translate", Arguments: json.RawMessage(`{"text":"你好世界"}`)},
 			},
 		},
 		{
 			name:      "empty tool calls",
-			toolCalls: []llm.ToolCall{},
+			toolCalls: []types.ToolCall{},
 		},
 	}
 
 	for _, provider := range providers {
 		for _, tcv := range toolCallVariations {
 			t.Run(provider+"_"+tcv.name, func(t *testing.T) {
-				msg := llm.Message{
+				msg := types.Message{
 					Role:      llm.RoleAssistant,
 					Content:   "",
 					ToolCalls: tcv.toolCalls,
@@ -220,7 +221,7 @@ func TestProperty23_ToolCallIDPreservation(t *testing.T) {
 	for _, provider := range providers {
 		for _, tcid := range toolCallIDVariations {
 			t.Run(provider+"_"+tcid.name, func(t *testing.T) {
-				msg := llm.Message{
+				msg := types.Message{
 					Role:       llm.RoleTool,
 					Content:    `{"result": "success"}`,
 					ToolCallID: tcid.toolCallID,
@@ -240,22 +241,22 @@ func TestProperty23_AllFieldsPreservation(t *testing.T) {
 
 	testCases := []struct {
 		name    string
-		message llm.Message
+		message types.Message
 	}{
 		{
 			name: "assistant with tool calls",
-			message: llm.Message{
+			message: types.Message{
 				Role:    llm.RoleAssistant,
 				Content: "I'll help you with that.",
 				Name:    "assistant_1",
-				ToolCalls: []llm.ToolCall{
+				ToolCalls: []types.ToolCall{
 					{ID: "call_001", Name: "search", Arguments: json.RawMessage(`{"query":"test"}`)},
 				},
 			},
 		},
 		{
 			name: "tool result",
-			message: llm.Message{
+			message: types.Message{
 				Role:       llm.RoleTool,
 				Content:    `{"results": [1, 2, 3]}`,
 				Name:       "search",
@@ -264,7 +265,7 @@ func TestProperty23_AllFieldsPreservation(t *testing.T) {
 		},
 		{
 			name: "user with name",
-			message: llm.Message{
+			message: types.Message{
 				Role:    llm.RoleUser,
 				Content: "Hello, can you help me?",
 				Name:    "user_john",
@@ -272,7 +273,7 @@ func TestProperty23_AllFieldsPreservation(t *testing.T) {
 		},
 		{
 			name: "system with name",
-			message: llm.Message{
+			message: types.Message{
 				Role:    llm.RoleSystem,
 				Content: "You are a helpful assistant.",
 				Name:    "system_prompt",
@@ -280,11 +281,11 @@ func TestProperty23_AllFieldsPreservation(t *testing.T) {
 		},
 		{
 			name: "assistant with multiple tool calls",
-			message: llm.Message{
+			message: types.Message{
 				Role:    llm.RoleAssistant,
 				Content: "",
 				Name:    "assistant_2",
-				ToolCalls: []llm.ToolCall{
+				ToolCalls: []types.ToolCall{
 					{ID: "call_001", Name: "get_weather", Arguments: json.RawMessage(`{"city":"Beijing"}`)},
 					{ID: "call_002", Name: "get_time", Arguments: json.RawMessage(`{"tz":"Asia/Shanghai"}`)},
 				},
@@ -321,14 +322,14 @@ func TestProperty23_AllFieldsPreservation(t *testing.T) {
 func TestProperty23_MultipleMessagesPreservation(t *testing.T) {
 	providers := []string{"grok", "qwen", "deepseek", "glm", "minimax"}
 
-	messages := []llm.Message{
+	messages := []types.Message{
 		{Role: llm.RoleSystem, Content: "You are a helpful assistant.", Name: "system"},
 		{Role: llm.RoleUser, Content: "What's the weather?", Name: "user_1"},
 		{
 			Role:    llm.RoleAssistant,
 			Content: "Let me check.",
 			Name:    "assistant",
-			ToolCalls: []llm.ToolCall{
+			ToolCalls: []types.ToolCall{
 				{ID: "call_001", Name: "get_weather", Arguments: json.RawMessage(`{"city":"Beijing"}`)},
 			},
 		},
@@ -399,7 +400,7 @@ type miniMaxMessageFormat struct {
 }
 
 // 转换 Message OpenAIFormat 转换单个 llm。 消息到 OpenAI 格式
-func convertMessageOpenAIFormat(msg llm.Message) openAIMessageFormat {
+func convertMessageOpenAIFormat(msg types.Message) openAIMessageFormat {
 	converted := openAIMessageFormat{
 		Role:       string(msg.Role),
 		Content:    msg.Content,
@@ -425,7 +426,7 @@ func convertMessageOpenAIFormat(msg llm.Message) openAIMessageFormat {
 }
 
 // 转换Messages OpenAIFormat 转换多个 llm 。 消息到 OpenAI 格式
-func convertMessagesOpenAIFormat(msgs []llm.Message) []openAIMessageFormat {
+func convertMessagesOpenAIFormat(msgs []types.Message) []openAIMessageFormat {
 	out := make([]openAIMessageFormat, 0, len(msgs))
 	for _, m := range msgs {
 		out = append(out, convertMessageOpenAIFormat(m))
@@ -434,7 +435,7 @@ func convertMessagesOpenAIFormat(msgs []llm.Message) []openAIMessageFormat {
 }
 
 // 转换 MessageMiniMax Format 转换单个 llm 。 消息到 MiniMax 格式
-func convertMessageMiniMaxFormat(msg llm.Message) miniMaxMessageFormat {
+func convertMessageMiniMaxFormat(msg types.Message) miniMaxMessageFormat {
 	converted := miniMaxMessageFormat{
 		Role:    string(msg.Role),
 		Content: msg.Content,
@@ -459,10 +460,12 @@ func convertMessageMiniMaxFormat(msg llm.Message) miniMaxMessageFormat {
 }
 
 // 转换MessagesMiniMaxFormat 转换多个 llm. 消息到 MiniMax 格式
-func convertMessagesMiniMaxFormat(msgs []llm.Message) []miniMaxMessageFormat {
+func convertMessagesMiniMaxFormat(msgs []types.Message) []miniMaxMessageFormat {
 	out := make([]miniMaxMessageFormat, 0, len(msgs))
 	for _, m := range msgs {
 		out = append(out, convertMessageMiniMaxFormat(m))
 	}
 	return out
 }
+
+

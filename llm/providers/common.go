@@ -13,26 +13,26 @@ import (
 	"github.com/BaSui01/agentflow/types"
 )
 
-// MapHTTPError 将 HTTP 状态码映射为带有合适重试标记的 llm.Error
+// MapHTTPError 将 HTTP 状态码映射为带有合适重试标记的 types.Error
 // 这是所有提供者使用的通用错误映射函数
-func MapHTTPError(status int, msg string, provider string) *llm.Error {
+func MapHTTPError(status int, msg string, provider string) *types.Error {
 	switch status {
 	case http.StatusUnauthorized:
-		return &llm.Error{
+		return &types.Error{
 			Code:       llm.ErrUnauthorized,
 			Message:    msg,
 			HTTPStatus: status,
 			Provider:   provider,
 		}
 	case http.StatusForbidden:
-		return &llm.Error{
+		return &types.Error{
 			Code:       llm.ErrForbidden,
 			Message:    msg,
 			HTTPStatus: status,
 			Provider:   provider,
 		}
 	case http.StatusTooManyRequests:
-		return &llm.Error{
+		return &types.Error{
 			Code:       llm.ErrRateLimit,
 			Message:    msg,
 			HTTPStatus: status,
@@ -45,21 +45,21 @@ func MapHTTPError(status int, msg string, provider string) *llm.Error {
 		if strings.Contains(msgLower, "quota") ||
 			strings.Contains(msgLower, "credit") ||
 			strings.Contains(msgLower, "limit") {
-			return &llm.Error{
+			return &types.Error{
 				Code:       llm.ErrQuotaExceeded,
 				Message:    msg,
 				HTTPStatus: status,
 				Provider:   provider,
 			}
 		}
-		return &llm.Error{
+		return &types.Error{
 			Code:       llm.ErrInvalidRequest,
 			Message:    msg,
 			HTTPStatus: status,
 			Provider:   provider,
 		}
 	case http.StatusServiceUnavailable, http.StatusBadGateway, http.StatusGatewayTimeout:
-		return &llm.Error{
+		return &types.Error{
 			Code:       llm.ErrUpstreamError,
 			Message:    msg,
 			HTTPStatus: status,
@@ -67,7 +67,7 @@ func MapHTTPError(status int, msg string, provider string) *llm.Error {
 			Provider:   provider,
 		}
 	case 529: // Model overloaded (used by some providers)
-		return &llm.Error{
+		return &types.Error{
 			Code:       llm.ErrModelOverloaded,
 			Message:    msg,
 			HTTPStatus: status,
@@ -75,7 +75,7 @@ func MapHTTPError(status int, msg string, provider string) *llm.Error {
 			Provider:   provider,
 		}
 	default:
-		return &llm.Error{
+		return &types.Error{
 			Code:       llm.ErrUpstreamError,
 			Message:    msg,
 			HTTPStatus: status,
@@ -309,8 +309,8 @@ type URLCitationDetail struct {
 	Title      string `json:"title"`
 }
 
-// ConvertMessagesToOpenAI 将 llm.Message 切片转换为 OpenAI 兼容格式.
-func ConvertMessagesToOpenAI(msgs []llm.Message) []OpenAICompatMessage {
+// ConvertMessagesToOpenAI 将 types.Message 切片转换为 OpenAI 兼容格式.
+func ConvertMessagesToOpenAI(msgs []types.Message) []OpenAICompatMessage {
 	out := make([]OpenAICompatMessage, 0, len(msgs))
 	for _, m := range msgs {
 		oa := OpenAICompatMessage{
@@ -384,8 +384,8 @@ func ConvertMessagesToOpenAI(msgs []llm.Message) []OpenAICompatMessage {
 	return out
 }
 
-// ConvertToolsToOpenAI 将 llm.ToolSchema 切片转换为 OpenAI 兼容格式.
-func ConvertToolsToOpenAI(tools []llm.ToolSchema) []OpenAICompatTool {
+// ConvertToolsToOpenAI 将 types.ToolSchema 切片转换为 OpenAI 兼容格式.
+func ConvertToolsToOpenAI(tools []types.ToolSchema) []OpenAICompatTool {
 	if len(tools) == 0 {
 		return nil
 	}
@@ -407,7 +407,7 @@ func ConvertToolsToOpenAI(tools []llm.ToolSchema) []OpenAICompatTool {
 func ToLLMChatResponse(oa OpenAICompatResponse, provider string) *llm.ChatResponse {
 	choices := make([]llm.ChatChoice, 0, len(oa.Choices))
 	for _, c := range oa.Choices {
-		msg := llm.Message{
+		msg := types.Message{
 			Role:             llm.RoleAssistant,
 			Content:          c.Message.Content,
 			ReasoningContent: c.Message.ReasoningContent,
@@ -415,9 +415,9 @@ func ToLLMChatResponse(oa OpenAICompatResponse, provider string) *llm.ChatRespon
 			Name:             c.Message.Name,
 		}
 		if len(c.Message.ToolCalls) > 0 {
-			msg.ToolCalls = make([]llm.ToolCall, 0, len(c.Message.ToolCalls))
+			msg.ToolCalls = make([]types.ToolCall, 0, len(c.Message.ToolCalls))
 			for _, tc := range c.Message.ToolCalls {
-				msg.ToolCalls = append(msg.ToolCalls, llm.ToolCall{
+				msg.ToolCalls = append(msg.ToolCalls, types.ToolCall{
 					ID:        tc.ID,
 					Name:      tc.Function.Name,
 					Arguments: tc.Function.Arguments,
@@ -546,7 +546,7 @@ func ListModelsOpenAICompat(ctx context.Context, client *http.Client, baseURL, a
 
 	resp, err := client.Do(httpReq)
 	if err != nil {
-		return nil, &llm.Error{
+		return nil, &types.Error{
 			Code:       llm.ErrUpstreamError,
 			Message:    err.Error(),
 			HTTPStatus: http.StatusBadGateway,
@@ -566,7 +566,7 @@ func ListModelsOpenAICompat(ctx context.Context, client *http.Client, baseURL, a
 		Data   []llm.Model  `json:"data"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&modelsResp); err != nil {
-		return nil, &llm.Error{
+		return nil, &types.Error{
 			Code:       llm.ErrUpstreamError,
 			Message:    err.Error(),
 			HTTPStatus: http.StatusBadGateway,
@@ -577,5 +577,6 @@ func ListModelsOpenAICompat(ctx context.Context, client *http.Client, baseURL, a
 
 	return modelsResp.Data, nil
 }
+
 
 

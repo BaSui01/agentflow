@@ -124,3 +124,4 @@ type Provider interface {
 	// SupportsGeneration 返回提供者是否支持视频生成.
 	SupportsGeneration() bool
 }
+

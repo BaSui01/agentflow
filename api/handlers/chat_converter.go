@@ -124,3 +124,4 @@ func (c *DefaultChatConverter) ToAPIStreamChunk(chunk *llm.StreamChunk) *api.Str
 		Usage:        convertStreamUsage(chunk.Usage),
 	}
 }
+

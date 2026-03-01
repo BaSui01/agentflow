@@ -101,3 +101,4 @@ func (m *ManagedLSP) Close() error {
 	m.wg.Wait()
 	return nil
 }
+

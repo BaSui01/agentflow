@@ -337,3 +337,4 @@ func TestDefaultManagerConfig(t *testing.T) {
 
 // Ensure unused import is used
 var _ = bytes.NewReader
+

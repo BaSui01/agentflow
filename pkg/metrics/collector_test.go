@@ -193,3 +193,4 @@ func TestCollector_MetricsRegistration(t *testing.T) {
 	count := testutil.CollectAndCount(collector.httpRequestsTotal)
 	assert.Greater(t, count, 0)
 }
+

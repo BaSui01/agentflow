@@ -53,3 +53,4 @@ func DefaultVoyageConfig() VoyageConfig {
 		},
 	}
 }
+

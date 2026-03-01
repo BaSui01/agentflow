@@ -137,3 +137,4 @@ func TestRouter_ListProviders_AllTypes(t *testing.T) {
 	assert.Contains(t, providers, CapabilityThreeD)
 	assert.Contains(t, providers, CapabilityModeration)
 }
+

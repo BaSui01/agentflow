@@ -9,6 +9,7 @@
 package openaicompat
 
 import (
+	"github.com/BaSui01/agentflow/types"
 	"bufio"
 	"bytes"
 	"context"
@@ -174,11 +175,11 @@ func (p *Provider) NewRequest(ctx context.Context, method, path string, body io.
 	return httpReq, nil
 }
 
-// Do executes an HTTP request and maps network errors to llm.Error.
+// Do executes an HTTP request and maps network errors to types.Error.
 func (p *Provider) Do(httpReq *http.Request) (*http.Response, error) {
 	resp, err := p.Client.Do(httpReq)
 	if err != nil {
-		return nil, &llm.Error{
+		return nil, &types.Error{
 			Code:       llm.ErrUpstreamError,
 			Message:    err.Error(),
 			HTTPStatus: http.StatusBadGateway,
@@ -219,7 +220,7 @@ func (p *Provider) DoJSON(ctx context.Context, method, path string, payload any,
 		return nil
 	}
 	if err := json.NewDecoder(resp.Body).Decode(out); err != nil {
-		return &llm.Error{
+		return &types.Error{
 			Code:       llm.ErrUpstreamError,
 			Message:    err.Error(),
 			HTTPStatus: http.StatusBadGateway,
@@ -277,7 +278,7 @@ func (p *Provider) Completion(ctx context.Context, req *llm.ChatRequest) (*llm.C
 	// Apply rewriter chain
 	rewrittenReq, err := p.RewriterChain.Execute(ctx, req)
 	if err != nil {
-		return nil, &llm.Error{
+		return nil, &types.Error{
 			Code:       llm.ErrInvalidRequest,
 			Message:    fmt.Sprintf("request rewrite failed: %v", err),
 			HTTPStatus: http.StatusBadRequest,
@@ -350,7 +351,7 @@ func (p *Provider) Stream(ctx context.Context, req *llm.ChatRequest) (<-chan llm
 	// Apply rewriter chain
 	rewrittenReq, err := p.RewriterChain.Execute(ctx, req)
 	if err != nil {
-		return nil, &llm.Error{
+		return nil, &types.Error{
 			Code:       llm.ErrInvalidRequest,
 			Message:    fmt.Sprintf("request rewrite failed: %v", err),
 			HTTPStatus: http.StatusBadRequest,
@@ -451,7 +452,7 @@ func StreamSSE(ctx context.Context, body io.ReadCloser, providerName string) <-c
 					select {
 					case <-ctx.Done():
 						return
-					case ch <- llm.StreamChunk{Err: &llm.Error{
+					case ch <- llm.StreamChunk{Err: &types.Error{
 						Code: llm.ErrUpstreamError, Message: err.Error(),
 						HTTPStatus: http.StatusBadGateway, Retryable: true, Provider: providerName,
 					}}:
@@ -473,7 +474,7 @@ func StreamSSE(ctx context.Context, body io.ReadCloser, providerName string) <-c
 				select {
 				case <-ctx.Done():
 					return
-				case ch <- llm.StreamChunk{Err: &llm.Error{
+				case ch <- llm.StreamChunk{Err: &types.Error{
 					Code: llm.ErrUpstreamError, Message: err.Error(),
 					HTTPStatus: http.StatusBadGateway, Retryable: true, Provider: providerName,
 				}}:
@@ -511,7 +512,7 @@ func StreamSSE(ctx context.Context, body io.ReadCloser, providerName string) <-c
 					Model:        oaResp.Model,
 					Index:        choice.Index,
 					FinishReason: choice.FinishReason,
-					Delta: llm.Message{
+					Delta: types.Message{
 						Role: llm.RoleAssistant,
 					},
 				}
@@ -520,9 +521,9 @@ func StreamSSE(ctx context.Context, body io.ReadCloser, providerName string) <-c
 					chunk.Delta.Refusal = choice.Delta.Refusal
 					chunk.Delta.ReasoningContent = choice.Delta.ReasoningContent
 					if len(choice.Delta.ToolCalls) > 0 {
-						chunk.Delta.ToolCalls = make([]llm.ToolCall, 0, len(choice.Delta.ToolCalls))
+						chunk.Delta.ToolCalls = make([]types.ToolCall, 0, len(choice.Delta.ToolCalls))
 						for _, tc := range choice.Delta.ToolCalls {
-							chunk.Delta.ToolCalls = append(chunk.Delta.ToolCalls, llm.ToolCall{
+							chunk.Delta.ToolCalls = append(chunk.Delta.ToolCalls, types.ToolCall{
 								ID:        tc.ID,
 								Name:      tc.Function.Name,
 								Arguments: tc.Function.Arguments,
@@ -569,3 +570,5 @@ func convertWebSearchOptions(opts *llm.WebSearchOptions) *providers.WebSearchOpt
 	}
 	return result
 }
+
+

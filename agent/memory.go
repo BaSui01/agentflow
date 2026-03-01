@@ -61,3 +61,4 @@ type MemoryManager interface {
 	MemoryWriter
 	MemoryReader
 }
+

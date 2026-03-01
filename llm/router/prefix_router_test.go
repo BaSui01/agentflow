@@ -175,3 +175,4 @@ func BenchmarkPrefixRouter_RouteByModelID(b *testing.B) {
 		router.RouteByModelID("gpt-4o-mini")
 	}
 }
+

@@ -383,3 +383,4 @@ func TestBatchProcessor_Concurrent(t *testing.T) {
 	stats := bp.Stats()
 	assert.GreaterOrEqual(t, stats.Submitted, int64(1))
 }
+

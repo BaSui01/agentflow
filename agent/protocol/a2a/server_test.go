@@ -362,3 +362,4 @@ func TestAgentAdapter(t *testing.T) {
 	assert.Equal(t, AgentType("assistant"), adapter.Type())
 	assert.Contains(t, adapter.Description(), "Test Name")
 }
+

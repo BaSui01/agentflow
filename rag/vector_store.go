@@ -349,3 +349,4 @@ func (c *SemanticCache) Clear(ctx context.Context) error {
 	c.logger.Warn("VectorStore does not support Clearable or DocumentLister, cache not cleared")
 	return nil
 }
+

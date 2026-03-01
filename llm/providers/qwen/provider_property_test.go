@@ -1,6 +1,7 @@
 package qwen
 
 import (
+	"github.com/BaSui01/agentflow/types"
 	"context"
 	"encoding/json"
 	"net/http"
@@ -18,14 +19,14 @@ import (
 func TestProperty3_OpenAIFormatConversion(t *testing.T) {
 	testCases := []struct {
 		name             string
-		messages         []llm.Message
-		tools            []llm.ToolSchema
+		messages         []types.Message
+		tools            []types.ToolSchema
 		expectedMessages int
 		expectedTools    int
 	}{
 		{
 			name: "simple user message",
-			messages: []llm.Message{
+			messages: []types.Message{
 				{Role: llm.RoleUser, Content: "Hello"},
 			},
 			tools:            nil,
@@ -34,7 +35,7 @@ func TestProperty3_OpenAIFormatConversion(t *testing.T) {
 		},
 		{
 			name: "system and user messages",
-			messages: []llm.Message{
+			messages: []types.Message{
 				{Role: llm.RoleSystem, Content: "You are a helpful assistant"},
 				{Role: llm.RoleUser, Content: "Hello"},
 			},
@@ -44,10 +45,10 @@ func TestProperty3_OpenAIFormatConversion(t *testing.T) {
 		},
 		{
 			name: "messages with tools",
-			messages: []llm.Message{
+			messages: []types.Message{
 				{Role: llm.RoleUser, Content: "What's the weather?"},
 			},
-			tools: []llm.ToolSchema{
+			tools: []types.ToolSchema{
 				{
 					Name:        "get_weather",
 					Description: "Get weather information",
@@ -59,11 +60,11 @@ func TestProperty3_OpenAIFormatConversion(t *testing.T) {
 		},
 		{
 			name: "assistant message with tool calls",
-			messages: []llm.Message{
+			messages: []types.Message{
 				{Role: llm.RoleUser, Content: "What's the weather in Beijing?"},
 				{
 					Role: llm.RoleAssistant,
-					ToolCalls: []llm.ToolCall{
+					ToolCalls: []types.ToolCall{
 						{
 							ID:        "call_123",
 							Name:      "get_weather",
@@ -78,11 +79,11 @@ func TestProperty3_OpenAIFormatConversion(t *testing.T) {
 		},
 		{
 			name: "tool result message",
-			messages: []llm.Message{
+			messages: []types.Message{
 				{Role: llm.RoleUser, Content: "What's the weather?"},
 				{
 					Role: llm.RoleAssistant,
-					ToolCalls: []llm.ToolCall{
+					ToolCalls: []types.ToolCall{
 						{ID: "call_123", Name: "get_weather", Arguments: json.RawMessage(`{"location":"Beijing"}`)},
 					},
 				},
@@ -189,3 +190,5 @@ func TestProperty3_OpenAIFormatConversion(t *testing.T) {
 		})
 	}
 }
+
+

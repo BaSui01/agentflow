@@ -226,3 +226,4 @@ func (h *MCPHandler) pushToSSEClient(clientID string, msg *MCPMessage) {
 		h.logger.Warn("SSE client channel full", zap.String("client_id", clientID))
 	}
 }
+

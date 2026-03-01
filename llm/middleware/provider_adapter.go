@@ -108,3 +108,4 @@ func (a *PromptCacheAdapter) Set(key string, resp *llmpkg.ChatResponse) {
 	}
 	_ = a.Cache.Set(context.Background(), key, entry)
 }
+

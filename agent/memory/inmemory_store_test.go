@@ -49,3 +49,4 @@ func TestInMemoryMemoryStore_ListPattern(t *testing.T) {
 	require.Len(t, items, 1)
 	require.Equal(t, "a1", items[0])
 }
+

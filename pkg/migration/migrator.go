@@ -523,3 +523,4 @@ func BuildDatabaseURL(dbType DatabaseType, host string, port int, database, user
 func GetMigrationsPath(dbType DatabaseType) string {
 	return filepath.Join("migrations", string(dbType))
 }
+

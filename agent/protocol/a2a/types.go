@@ -180,3 +180,4 @@ func (c *AgentCard) Validate() error {
 	}
 	return nil
 }
+

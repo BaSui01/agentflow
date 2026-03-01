@@ -291,3 +291,4 @@ func TestCircuitBreakerRegistry_ResetAll(t *testing.T) {
 	reg.ResetAll()
 	assert.Equal(t, CircuitClosed, cb.GetState())
 }
+

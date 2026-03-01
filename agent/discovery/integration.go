@@ -386,3 +386,4 @@ func SetGlobalIntegration(integration *AgentDiscoveryIntegration) {
 	defer globalIntegrationMu.Unlock()
 	globalIntegration = integration
 }
+

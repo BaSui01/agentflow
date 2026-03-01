@@ -315,3 +315,4 @@ func TestFileTaskStore_SaveTask_NilReturnsError(t *testing.T) {
 	err = store.SaveTask(context.Background(), nil)
 	assert.Error(t, err)
 }
+

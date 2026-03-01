@@ -494,3 +494,4 @@ func (c *HTTPClient) SetTimeout(timeout time.Duration) {
 
 // 确保 HTTPClient 执行 A2AClient 接口.
 var _ A2AClient = (*HTTPClient)(nil)
+

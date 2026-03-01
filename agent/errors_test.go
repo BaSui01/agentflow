@@ -169,3 +169,4 @@ func TestPredefinedErrors(t *testing.T) {
 
 	assert.True(t, errors.Is(ErrProviderNotSet, ErrProviderNotSet))
 }
+

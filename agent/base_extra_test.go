@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"github.com/BaSui01/agentflow/types"
 	"context"
 	"testing"
 
@@ -36,7 +37,7 @@ func TestToolManagerExecutor_IsAllowed_TrimSpaces(t *testing.T) {
 func TestToolManagerExecutor_Execute_NilManager(t *testing.T) {
 	exec := newToolManagerExecutor(nil, "agent-1", []string{"calc"}, nil)
 
-	calls := []llm.ToolCall{
+	calls := []types.ToolCall{
 		{ID: "call-1", Name: "calc", Arguments: []byte(`{"x":1}`)},
 	}
 	results := exec.Execute(context.Background(), calls)
@@ -48,7 +49,7 @@ func TestToolManagerExecutor_Execute_NotAllowed(t *testing.T) {
 	tm := &testToolManager{}
 	exec := newToolManagerExecutor(tm, "agent-1", []string{"calc"}, nil)
 
-	calls := []llm.ToolCall{
+	calls := []types.ToolCall{
 		{ID: "call-1", Name: "unknown", Arguments: []byte(`{}`)},
 	}
 	results := exec.Execute(context.Background(), calls)
@@ -58,7 +59,7 @@ func TestToolManagerExecutor_Execute_NotAllowed(t *testing.T) {
 
 func TestToolManagerExecutor_Execute_AllowedCalls(t *testing.T) {
 	tm := &testToolManager{
-		executeForAgentFn: func(ctx context.Context, agentID string, calls []llm.ToolCall) []llmtools.ToolResult {
+		executeForAgentFn: func(ctx context.Context, agentID string, calls []types.ToolCall) []llmtools.ToolResult {
 			results := make([]llmtools.ToolResult, len(calls))
 			for i, c := range calls {
 				results[i] = llmtools.ToolResult{
@@ -72,7 +73,7 @@ func TestToolManagerExecutor_Execute_AllowedCalls(t *testing.T) {
 	}
 	exec := newToolManagerExecutor(tm, "agent-1", []string{"calc", "search"}, nil)
 
-	calls := []llm.ToolCall{
+	calls := []types.ToolCall{
 		{ID: "call-1", Name: "calc"},
 		{ID: "call-2", Name: "unknown"},
 		{ID: "call-3", Name: "search"},
@@ -86,14 +87,14 @@ func TestToolManagerExecutor_Execute_AllowedCalls(t *testing.T) {
 
 func TestToolManagerExecutor_Execute_WithEventBus(t *testing.T) {
 	tm := &testToolManager{
-		executeForAgentFn: func(ctx context.Context, agentID string, calls []llm.ToolCall) []llmtools.ToolResult {
+		executeForAgentFn: func(ctx context.Context, agentID string, calls []types.ToolCall) []llmtools.ToolResult {
 			return []llmtools.ToolResult{{ToolCallID: calls[0].ID, Name: calls[0].Name}}
 		},
 	}
 	bus := &testEventBus{}
 	exec := newToolManagerExecutor(tm, "agent-1", []string{"calc"}, bus)
 
-	calls := []llm.ToolCall{{ID: "call-1", Name: "calc"}}
+	calls := []types.ToolCall{{ID: "call-1", Name: "calc"}}
 	results := exec.Execute(context.Background(), calls)
 	require.Len(t, results, 1)
 	// Should have published start and end events
@@ -102,13 +103,13 @@ func TestToolManagerExecutor_Execute_WithEventBus(t *testing.T) {
 
 func TestToolManagerExecutor_ExecuteOne(t *testing.T) {
 	tm := &testToolManager{
-		executeForAgentFn: func(ctx context.Context, agentID string, calls []llm.ToolCall) []llmtools.ToolResult {
+		executeForAgentFn: func(ctx context.Context, agentID string, calls []types.ToolCall) []llmtools.ToolResult {
 			return []llmtools.ToolResult{{ToolCallID: calls[0].ID, Name: calls[0].Name, Result: []byte(`"42"`)}}
 		},
 	}
 	exec := newToolManagerExecutor(tm, "agent-1", []string{"calc"}, nil)
 
-	result := exec.ExecuteOne(context.Background(), llm.ToolCall{ID: "call-1", Name: "calc"})
+	result := exec.ExecuteOne(context.Background(), types.ToolCall{ID: "call-1", Name: "calc"})
 	assert.Equal(t, "call-1", result.ToolCallID)
 	assert.Empty(t, result.Error)
 }
@@ -274,3 +275,5 @@ func TestBaseAgent_InitGuardrails(t *testing.T) {
 	assert.NotNil(t, ba.inputValidatorChain)
 	assert.NotNil(t, ba.outputValidator)
 }
+
+

@@ -113,3 +113,4 @@ func TestRedisManager_Exists(t *testing.T) {
 func TestRedisManager_ImplementsManager(t *testing.T) {
 	var _ Manager = (*redisManager)(nil)
 }
+

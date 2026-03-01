@@ -284,3 +284,4 @@ func runMigrateReset(args []string) {
 		os.Exit(1)
 	}
 }
+

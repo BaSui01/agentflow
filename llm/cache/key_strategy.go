@@ -12,3 +12,4 @@ type KeyStrategy interface {
 	// Name 返回策略名称（用于日志和调试）
 	Name() string
 }
+

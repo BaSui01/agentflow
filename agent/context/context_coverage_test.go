@@ -217,3 +217,4 @@ func TestEngineer_HardTruncate_Empty(t *testing.T) {
 	result := eng.hardTruncate(nil, 100)
 	assert.Empty(t, result)
 }
+

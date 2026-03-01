@@ -437,3 +437,4 @@ func (m *ProceduralMemory) FindByTrigger(trigger string) []*Procedure {
 	}
 	return results
 }
+

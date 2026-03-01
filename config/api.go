@@ -649,3 +649,4 @@ func requestIDFromRequest(r *http.Request) string {
 	}
 	return strings.TrimSpace(r.Header.Get("X-Request-Id"))
 }
+

@@ -168,7 +168,7 @@ func (e *LLMExecutor) Provider() llm.Provider {
 }
 
 // 完整向LLM发送完成请求.
-func (e *LLMExecutor) Complete(ctx context.Context, messages []llm.Message) (*llm.ChatResponse, error) {
+func (e *LLMExecutor) Complete(ctx context.Context, messages []types.Message) (*llm.ChatResponse, error) {
 	if e.provider == nil {
 		return nil, ErrProviderNotSet
 	}
@@ -195,7 +195,7 @@ func (e *LLMExecutor) Complete(ctx context.Context, messages []llm.Message) (*ll
 }
 
 // Stream 向 LLM 发送流报请求 。
-func (e *LLMExecutor) Stream(ctx context.Context, messages []llm.Message) (<-chan llm.StreamChunk, error) {
+func (e *LLMExecutor) Stream(ctx context.Context, messages []types.Message) (<-chan llm.StreamChunk, error) {
 	if e.provider == nil {
 		return nil, ErrProviderNotSet
 	}
@@ -211,7 +211,7 @@ func (e *LLMExecutor) Stream(ctx context.Context, messages []llm.Message) (<-cha
 }
 
 // 提取 Last UserQuery 提取最后的用户信件内容 。
-func extractLastUserQuery(messages []llm.Message) string {
+func extractLastUserQuery(messages []types.Message) string {
 	for i := len(messages) - 1; i >= 0; i-- {
 		if messages[i].Role == llm.RoleUser {
 			return messages[i].Content
@@ -459,7 +459,7 @@ func (a *ModularAgent) Execute(ctx context.Context, input *Input) (*Output, erro
 	}
 
 	// 构建信件
-	messages := []llm.Message{
+	messages := []types.Message{
 		{Role: llm.RoleUser, Content: input.Content},
 	}
 
@@ -504,7 +504,7 @@ func (a *ModularAgent) Plan(ctx context.Context, input *Input) (*PlanResult, err
 	// 参加 LLM 的代表, 即时规划
 	planPrompt := "Please create a step-by-step plan for: " + input.Content
 
-	messages := []llm.Message{
+	messages := []types.Message{
 		{Role: llm.RoleUser, Content: planPrompt},
 	}
 
@@ -550,3 +550,4 @@ func (a *ModularAgent) Memory() MemoryManager {
 func (a *ModularAgent) Tools() ToolManager {
 	return a.tools
 }
+

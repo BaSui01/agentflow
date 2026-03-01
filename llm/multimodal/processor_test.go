@@ -1,6 +1,7 @@
 package multimodal
 
 import (
+	"github.com/BaSui01/agentflow/types"
 	"context"
 	"testing"
 
@@ -102,7 +103,7 @@ func TestMultimodalProvider_Completion_NoMultimodal(t *testing.T) {
 
 	mp := NewMultimodalProvider(mock, nil)
 	req := &MultimodalRequest{}
-	req.ChatRequest.Messages = []llm.Message{{Role: "user", Content: "hi"}}
+	req.ChatRequest.Messages = []types.Message{{Role: "user", Content: "hi"}}
 
 	_, err := mp.Completion(context.Background(), req)
 	require.NoError(t, err)
@@ -114,7 +115,7 @@ func TestMultimodalProvider_Stream(t *testing.T) {
 		name: "openai",
 		streamFn: func(_ context.Context, req *llm.ChatRequest) (<-chan llm.StreamChunk, error) {
 			ch := make(chan llm.StreamChunk, 1)
-			ch <- llm.StreamChunk{Delta: llm.Message{Content: "hi"}}
+			ch <- llm.StreamChunk{Delta: types.Message{Content: "hi"}}
 			close(ch)
 			return ch, nil
 		},
@@ -177,3 +178,5 @@ func TestMultimodalProvider_SupportedModalities(t *testing.T) {
 		})
 	}
 }
+
+

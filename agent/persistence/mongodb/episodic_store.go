@@ -156,3 +156,4 @@ func (s *MongoEpisodicStore) findEvents(ctx context.Context, filter bson.D, opts
 
 // Compile-time interface check.
 var _ memory.EpisodicStore = (*MongoEpisodicStore)(nil)
+

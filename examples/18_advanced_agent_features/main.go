@@ -167,3 +167,4 @@ func demoSkillsRegistry(logger *zap.Logger) {
 		fmt.Printf("   Found skill: %s (%s)\n", skill.Definition.Name, skill.Definition.Category)
 	}
 }
+

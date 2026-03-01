@@ -226,3 +226,4 @@ func (p *KlingProvider) pollGeneration(ctx context.Context, taskID string) (*kli
 		}
 	}
 }
+

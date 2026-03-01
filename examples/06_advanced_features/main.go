@@ -1,6 +1,7 @@
 package main
 
 import (
+	"github.com/BaSui01/agentflow/types"
 	"context"
 	"fmt"
 	"log"
@@ -152,7 +153,7 @@ func demoToolSelection(logger *zap.Logger) {
 	selector := agent.NewDynamicToolSelector(baseAgent, *selectorConfig)
 
 	// Define available tools
-	availableTools := []llm.ToolSchema{
+	availableTools := []types.ToolSchema{
 		{
 			Name:        "web_search",
 			Description: "Search the internet for latest information",
@@ -321,3 +322,5 @@ func demoPromptEngineering(logger *zap.Logger) {
 	fmt.Println("\n渲染的 Bug 修复提示词:")
 	fmt.Println(bugFixPrompt)
 }
+
+

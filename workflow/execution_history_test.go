@@ -157,3 +157,4 @@ func TestExecutionHistoryStore_ListByStatus(t *testing.T) {
 	running := store.ListByStatus(ExecutionStatusRunning)
 	assert.Empty(t, running)
 }
+

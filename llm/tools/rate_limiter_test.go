@@ -169,3 +169,4 @@ func BenchmarkTokenBucketLimiter_AllowConcurrent(b *testing.B) {
 		}
 	})
 }
+

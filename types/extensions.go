@@ -167,3 +167,4 @@ func (r *ExtensionRegistry) HasObservability() bool {
 func (r *ExtensionRegistry) HasGuardrails() bool {
 	return r.Guardrails != nil
 }
+

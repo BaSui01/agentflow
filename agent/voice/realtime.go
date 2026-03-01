@@ -345,3 +345,4 @@ func (s *VoiceSession) Interrupt() {
 	s.agent.metricsMu.Unlock()
 	s.agent.logger.Debug("speech interrupted")
 }
+

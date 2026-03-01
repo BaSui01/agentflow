@@ -174,3 +174,4 @@ func (gc *GuardrailsCoordinator) InputValidatorCount() int {
 	}
 	return gc.inputValidatorChain.Len()
 }
+

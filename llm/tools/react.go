@@ -1,6 +1,7 @@
 package tools
 
 import (
+	"github.com/BaSui01/agentflow/types"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -44,7 +45,7 @@ func NewReActExecutor(provider llm.Provider, toolExecutor ToolExecutor, config R
 // Execute 运行 ReAct 循环，返回最终响应和所有步骤.
 func (r *ReActExecutor) Execute(ctx context.Context, req *llm.ChatRequest) (*llm.ChatResponse, []ReActStep, error) {
 	steps := make([]ReActStep, 0)
-	messages := append([]llm.Message{}, req.Messages...)
+	messages := append([]types.Message{}, req.Messages...)
 
 	for i := 0; i < r.config.MaxIterations; i++ {
 		r.logger.Debug("ReAct iteration", zap.Int("iteration", i+1))
@@ -135,8 +136,8 @@ func (r *ReActExecutor) ExecuteWithTrace(ctx context.Context, req *llm.ChatReque
 type ReActStep struct {
 	StepNumber   int              `json:"step_number"`
 	Thought      string           `json:"thought,omitempty"`
-	Actions      []llm.ToolCall   `json:"actions,omitempty"`
-	Observations []llm.ToolResult `json:"observations,omitempty"`
+	Actions      []types.ToolCall   `json:"actions,omitempty"`
+	Observations []types.ToolResult `json:"observations,omitempty"`
 	Timestamp    string           `json:"timestamp"`
 	TokensUsed   int              `json:"tokens_used,omitempty"`
 }
@@ -164,7 +165,7 @@ func (r *ReActExecutor) ExecuteStream(ctx context.Context, req *llm.ChatRequest)
 
 	go func() {
 		defer close(eventCh)
-		messages := append([]llm.Message{}, req.Messages...)
+		messages := append([]types.Message{}, req.Messages...)
 
 		for i := 0; i < r.config.MaxIterations; i++ {
 			select {
@@ -186,7 +187,7 @@ func (r *ReActExecutor) ExecuteStream(ctx context.Context, req *llm.ChatRequest)
 			}
 
 			var (
-				assembledMessage llm.Message
+				assembledMessage types.Message
 				toolCallOrder    []string
 				toolCallByID     map[string]*struct {
 					id           string
@@ -278,7 +279,7 @@ func (r *ReActExecutor) ExecuteStream(ctx context.Context, req *llm.ChatRequest)
 			}
 
 			assembledMessage.Role = llm.RoleAssistant
-			nativeToolCalls := make([]llm.ToolCall, 0, len(toolCallOrder))
+			nativeToolCalls := make([]types.ToolCall, 0, len(toolCallOrder))
 			for _, id := range toolCallOrder {
 				acc := toolCallByID[id]
 				if acc == nil {
@@ -297,7 +298,7 @@ func (r *ReActExecutor) ExecuteStream(ctx context.Context, req *llm.ChatRequest)
 						args = json.RawMessage(raw)
 					}
 				}
-				nativeToolCalls = append(nativeToolCalls, llm.ToolCall{ID: acc.id, Name: acc.name, Arguments: args})
+				nativeToolCalls = append(nativeToolCalls, types.ToolCall{ID: acc.id, Name: acc.name, Arguments: args})
 			}
 			assembledMessage.ToolCalls = nativeToolCalls
 
@@ -366,8 +367,8 @@ type ReActStreamEvent struct {
 	Type          string            `json:"type"`
 	Iteration     int               `json:"iteration,omitempty"`
 	Chunk         *llm.StreamChunk  `json:"chunk,omitempty"`
-	ToolCalls     []llm.ToolCall    `json:"tool_calls,omitempty"`
-	ToolResults   []llm.ToolResult  `json:"tool_results,omitempty"`
+	ToolCalls     []types.ToolCall    `json:"tool_calls,omitempty"`
+	ToolResults   []types.ToolResult  `json:"tool_results,omitempty"`
 	ToolCallID    string            `json:"tool_call_id,omitempty"`
 	ToolName      string            `json:"tool_name,omitempty"`
 	ProgressData  any               `json:"progress_data,omitempty"`
@@ -380,14 +381,14 @@ type ReActStreamEvent struct {
 func (r *ReActExecutor) executeToolsWithStreaming(
 	ctx context.Context,
 	streamExec StreamableToolExecutor,
-	calls []llm.ToolCall,
+	calls []types.ToolCall,
 	eventCh chan<- ReActStreamEvent,
-) []llm.ToolResult {
-	results := make([]llm.ToolResult, len(calls))
+) []types.ToolResult {
+	results := make([]types.ToolResult, len(calls))
 
 	for i, call := range calls {
 		streamCh := streamExec.ExecuteOneStream(ctx, call)
-		result := llm.ToolResult{
+		result := types.ToolResult{
 			ToolCallID: call.ID,
 			Name:       call.Name,
 		}
@@ -412,8 +413,8 @@ func (r *ReActExecutor) executeToolsWithStreaming(
 					result.Result = raw
 				}
 			case ToolStreamComplete:
-				// complete 事件的 Data 是 llm.ToolResult
-				if tr, ok := event.Data.(llm.ToolResult); ok {
+				// complete 事件的 Data 是 types.ToolResult
+				if tr, ok := event.Data.(types.ToolResult); ok {
 					result = tr
 				}
 			case ToolStreamError:
@@ -428,3 +429,5 @@ func (r *ReActExecutor) executeToolsWithStreaming(
 
 	return results
 }
+
+

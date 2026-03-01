@@ -217,3 +217,4 @@ func (p *DeepgramProvider) TranscribeFile(ctx context.Context, filepath string, 
 
 	return p.Transcribe(ctx, opts)
 }
+

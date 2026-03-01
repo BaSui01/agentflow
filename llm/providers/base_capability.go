@@ -1,6 +1,7 @@
 package providers
 
 import (
+	"github.com/BaSui01/agentflow/types"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -71,7 +72,7 @@ func (p *BaseCapabilityProvider) PostJSONDecode(ctx context.Context, endpoint st
 		return err
 	}
 	if err := json.Unmarshal(data, result); err != nil {
-		return &llm.Error{
+		return &types.Error{
 			Code:       llm.ErrUpstreamError,
 			Message:    fmt.Sprintf("failed to decode response: %s", err),
 			HTTPStatus: http.StatusBadGateway,
@@ -94,7 +95,7 @@ func (p *BaseCapabilityProvider) GetJSONDecode(ctx context.Context, endpoint str
 		return err
 	}
 	if err := json.Unmarshal(data, result); err != nil {
-		return &llm.Error{
+		return &types.Error{
 			Code:       llm.ErrUpstreamError,
 			Message:    fmt.Sprintf("failed to decode response: %s", err),
 			HTTPStatus: http.StatusBadGateway,
@@ -139,7 +140,7 @@ func (p *BaseCapabilityProvider) DoRaw(ctx context.Context, method, endpoint str
 
 	resp, err := p.Client.Do(req)
 	if err != nil {
-		return nil, &llm.Error{
+		return nil, &types.Error{
 			Code:       llm.ErrUpstreamError,
 			Message:    err.Error(),
 			HTTPStatus: http.StatusBadGateway,
@@ -169,3 +170,5 @@ func ChooseCapabilityModel(reqModel, defaultModel string) string {
 	}
 	return defaultModel
 }
+
+

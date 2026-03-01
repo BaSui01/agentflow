@@ -322,3 +322,4 @@ type idempotencyEntry struct {
 	response  *ChatResponse
 	expiresAt time.Time
 }
+

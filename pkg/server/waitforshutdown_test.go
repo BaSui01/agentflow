@@ -43,3 +43,4 @@ func TestManager_WaitForShutdown_ErrorChannel(t *testing.T) {
 
 	assert.False(t, m.IsRunning())
 }
+

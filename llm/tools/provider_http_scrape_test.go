@@ -177,3 +177,4 @@ func TestDefaultHTTPScrapeConfig(t *testing.T) {
 	assert.Equal(t, 30*time.Second, cfg.Timeout)
 	assert.Contains(t, cfg.UserAgent, "AgentFlow")
 }
+

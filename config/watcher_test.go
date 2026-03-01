@@ -319,3 +319,4 @@ func TestFileWatcher_ContextCancel(t *testing.T) {
 	require.NoError(t, w.Stop())
 	assert.False(t, w.IsRunning())
 }
+

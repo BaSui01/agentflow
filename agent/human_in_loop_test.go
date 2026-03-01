@@ -190,3 +190,4 @@ func TestApprovalEvents(t *testing.T) {
 	assert.Equal(t, EventApprovalResponded, respEvent.Type())
 	assert.Equal(t, now, respEvent.Timestamp())
 }
+

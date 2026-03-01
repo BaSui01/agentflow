@@ -294,3 +294,4 @@ func TestAsyncTaskToRecord(t *testing.T) {
 		assert.Contains(t, string(rec.Data), "foo")
 	})
 }
+

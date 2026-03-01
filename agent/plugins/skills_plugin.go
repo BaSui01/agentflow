@@ -88,3 +88,4 @@ func prependSkillInstructions(prompt string, instructions []string) string {
 	sb.WriteString(prompt)
 	return sb.String()
 }
+

@@ -1,6 +1,7 @@
 package embedding
 
 import (
+	"github.com/BaSui01/agentflow/types"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -141,7 +142,7 @@ func (p *BaseProvider) DoRequest(ctx context.Context, method, endpoint string, b
 
 	resp, err := p.client.Do(req)
 	if err != nil {
-		return nil, &llm.Error{
+		return nil, &types.Error{
 			Code:       llm.ErrUpstreamError,
 			Message:    err.Error(),
 			HTTPStatus: http.StatusBadGateway,
@@ -164,7 +165,7 @@ func (p *BaseProvider) DoRequest(ctx context.Context, method, endpoint string, b
 }
 
 // 映射 HTTPerror 映射 HTTP 状态到 llm. 错误。
-func mapHTTPError(status int, msg, provider string) *llm.Error {
+func mapHTTPError(status int, msg, provider string) *types.Error {
 	code := llm.ErrUpstreamError
 	retryable := status >= 500
 
@@ -180,7 +181,7 @@ func mapHTTPError(status int, msg, provider string) *llm.Error {
 		code = llm.ErrInvalidRequest
 	}
 
-	return &llm.Error{
+	return &types.Error{
 		Code:       code,
 		Message:    msg,
 		HTTPStatus: status,
@@ -199,3 +200,5 @@ func ChooseModel(reqModel, defaultModel, fallback string) string {
 	}
 	return fallback
 }
+
+

@@ -1,6 +1,7 @@
 package grok
 
 import (
+	"github.com/BaSui01/agentflow/types"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -117,7 +118,7 @@ func TestProperty2_BearerTokenAuthentication(t *testing.T) {
 
 			ctx := context.Background()
 			req := &llm.ChatRequest{
-				Messages: []llm.Message{
+				Messages: []types.Message{
 					{Role: llm.RoleUser, Content: "test"},
 				},
 			}
@@ -172,7 +173,7 @@ func TestProperty2_BearerTokenAuthentication(t *testing.T) {
 		})
 
 		req := &llm.ChatRequest{
-			Messages: []llm.Message{
+			Messages: []types.Message{
 				{Role: llm.RoleUser, Content: "test"},
 			},
 		}
@@ -295,7 +296,7 @@ func TestProperty5_DefaultModelSelectionPriority(t *testing.T) {
 			ctx := context.Background()
 			req := &llm.ChatRequest{
 				Model: tc.requestModel,
-				Messages: []llm.Message{
+				Messages: []types.Message{
 					{Role: llm.RoleUser, Content: "test"},
 				},
 			}
@@ -352,7 +353,7 @@ func TestProperty5_DefaultModelSelectionPriority(t *testing.T) {
 		ctx := context.Background()
 		req := &llm.ChatRequest{
 			Model: "request-model",
-			Messages: []llm.Message{
+			Messages: []types.Message{
 				{Role: llm.RoleUser, Content: "test"},
 			},
 		}
@@ -387,3 +388,5 @@ func TestProperty5_DefaultModelSelectionPriority(t *testing.T) {
 		assert.Equal(t, "grok-beta", model)
 	})
 }
+
+

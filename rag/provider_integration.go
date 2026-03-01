@@ -228,3 +228,4 @@ func NewJinaRetriever(apiKey string, logger *zap.Logger) *EnhancedRetriever {
 		RerankProvider:    rerankProvider,
 	}, logger)
 }
+

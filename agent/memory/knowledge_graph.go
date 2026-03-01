@@ -245,3 +245,4 @@ func (g *InMemoryKnowledgeGraph) dfs(ctx context.Context, current, target string
 		g.dfs(ctx, next, target, depth-1, visited, append(path, next), paths)
 	}
 }
+

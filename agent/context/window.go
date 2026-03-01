@@ -264,3 +264,4 @@ func (w *WindowManager) summarize(ctx context.Context, messages []types.Message)
 	result = append(result, tail...)
 	return result, nil
 }
+

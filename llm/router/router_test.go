@@ -134,3 +134,4 @@ func TestWeightedRouter_FilterBySLA(t *testing.T) {
 		t.Errorf("Expected fast model, got %s", result.ModelID)
 	}
 }
+

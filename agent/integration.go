@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"github.com/BaSui01/agentflow/types"
 	"context"
 	"fmt"
 	"strings"
@@ -665,9 +666,9 @@ type toolSelectorRunnerAdapter struct {
 }
 
 func (a *toolSelectorRunnerAdapter) SelectTools(ctx context.Context, task string, availableTools any) (any, error) {
-	tools, ok := availableTools.([]llm.ToolSchema)
+	tools, ok := availableTools.([]types.ToolSchema)
 	if !ok {
-		return nil, fmt.Errorf("availableTools: expected []llm.ToolSchema, got %T", availableTools)
+		return nil, fmt.Errorf("availableTools: expected []types.ToolSchema, got %T", availableTools)
 	}
 	return a.selector.SelectTools(ctx, task, tools)
 }
@@ -690,3 +691,5 @@ func (a *promptEnhancerRunnerAdapter) EnhanceUserPrompt(prompt, context string) 
 func AsPromptEnhancerRunner(enhancer *PromptEnhancer) PromptEnhancerRunner {
 	return &promptEnhancerRunnerAdapter{enhancer: enhancer}
 }
+
+

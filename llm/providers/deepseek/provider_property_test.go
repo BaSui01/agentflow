@@ -1,6 +1,7 @@
 package deepseek
 
 import (
+	"github.com/BaSui01/agentflow/types"
 	"context"
 	"encoding/json"
 	"net/http"
@@ -98,7 +99,7 @@ func TestProperty6_CredentialOverrideFromContext(t *testing.T) {
 
 			// 提出完成请求
 			req := &llm.ChatRequest{
-				Messages: []llm.Message{
+				Messages: []types.Message{
 					{Role: llm.RoleUser, Content: "test"},
 				},
 			}
@@ -158,7 +159,7 @@ func TestProperty6_CredentialOverrideFromContext(t *testing.T) {
 		})
 
 		req := &llm.ChatRequest{
-			Messages: []llm.Message{
+			Messages: []types.Message{
 				{Role: llm.RoleUser, Content: "test"},
 			},
 		}
@@ -215,7 +216,7 @@ func TestProperty6_CredentialOverrideFromContext(t *testing.T) {
 		ctx := context.Background()
 
 		req := &llm.ChatRequest{
-			Messages: []llm.Message{
+			Messages: []types.Message{
 				{Role: llm.RoleUser, Content: "test"},
 			},
 		}
@@ -227,3 +228,5 @@ func TestProperty6_CredentialOverrideFromContext(t *testing.T) {
 			"Config API key should be used when no override is present")
 	})
 }
+
+

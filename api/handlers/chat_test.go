@@ -421,3 +421,4 @@ func TestChatHandler_ConvertToLLMRequest(t *testing.T) {
 	assert.Equal(t, map[string]string{"key": "value"}, llmReq.Metadata)
 	assert.Equal(t, []string{"test"}, llmReq.Tags)
 }
+

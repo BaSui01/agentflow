@@ -1,6 +1,7 @@
 package reasoning
 
 import (
+	"github.com/BaSui01/agentflow/types"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -71,7 +72,7 @@ const (
 type DynamicPlanner struct {
 	provider     llm.Provider
 	toolExecutor tools.ToolExecutor
-	toolSchemas  []llm.ToolSchema
+	toolSchemas  []types.ToolSchema
 	config       DynamicPlannerConfig
 	logger       *zap.Logger
 
@@ -84,7 +85,7 @@ type DynamicPlanner struct {
 }
 
 // NewDynamic Planner创建了新的动态计划.
-func NewDynamicPlanner(provider llm.Provider, executor tools.ToolExecutor, schemas []llm.ToolSchema, config DynamicPlannerConfig, logger *zap.Logger) *DynamicPlanner {
+func NewDynamicPlanner(provider llm.Provider, executor tools.ToolExecutor, schemas []types.ToolSchema, config DynamicPlannerConfig, logger *zap.Logger) *DynamicPlanner {
 	if logger == nil {
 		logger = zap.NewNop()
 	}
@@ -195,7 +196,7 @@ Generate 1-3 next steps with alternatives. Output as JSON:
 
 	resp, err := d.provider.Completion(ctx, &llm.ChatRequest{
 		Model: "gpt-4o",
-		Messages: []llm.Message{
+		Messages: []types.Message{
 			{Role: llm.RoleUser, Content: prompt},
 		},
 		Temperature: 0.4,
@@ -367,13 +368,13 @@ func (d *DynamicPlanner) executeNode(ctx context.Context, node *PlanNode) (strin
 
 	// 作为工具执行
 	argsJSON, _ := json.Marshal(map[string]string{"input": node.Description})
-	call := llm.ToolCall{
+	call := types.ToolCall{
 		ID:        node.ID,
 		Name:      node.Action,
 		Arguments: argsJSON,
 	}
 
-	results := d.toolExecutor.Execute(ctx, []llm.ToolCall{call})
+	results := d.toolExecutor.Execute(ctx, []types.ToolCall{call})
 	if len(results) > 0 {
 		if results[0].Error != "" {
 			return "", 0, fmt.Errorf("tool error: %s", results[0].Error)
@@ -391,7 +392,7 @@ Think through this step and provide your reasoning and conclusion.`, node.Descri
 
 	resp, err := d.provider.Completion(ctx, &llm.ChatRequest{
 		Model: "gpt-4o",
-		Messages: []llm.Message{
+		Messages: []types.Message{
 			{Role: llm.RoleUser, Content: prompt},
 		},
 		Temperature: 0.5,
@@ -525,7 +526,7 @@ Synthesize a final answer based on these results.`, task, joinStrings(results, "
 
 	resp, err := d.provider.Completion(ctx, &llm.ChatRequest{
 		Model: "gpt-4o",
-		Messages: []llm.Message{
+		Messages: []types.Message{
 			{Role: llm.RoleUser, Content: prompt},
 		},
 		Temperature: 0.3,
@@ -631,3 +632,5 @@ func joinStrings(parts []string, sep string) string {
 	}
 	return result
 }
+
+

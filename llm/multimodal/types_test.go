@@ -374,3 +374,4 @@ func TestProcessor_ConvertToGeneric(t *testing.T) {
 	assert.Contains(t, result[0].Content, "hello")
 	assert.Contains(t, result[0].Content, "[image content: photo.png]")
 }
+

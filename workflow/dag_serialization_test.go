@@ -823,3 +823,4 @@ func TestComplexWorkflowSerialization(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, def.Name, loadedYAML.Name)
 }
+

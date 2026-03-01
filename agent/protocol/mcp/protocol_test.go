@@ -1,6 +1,7 @@
 package mcp
 
 import (
+	"github.com/BaSui01/agentflow/types"
 	"encoding/json"
 	"testing"
 
@@ -12,7 +13,7 @@ import (
 // TestFromLLMToolSchema_ValidParameters verifies that valid JSON parameters
 // are correctly deserialized into a ToolDefinition.
 func TestFromLLMToolSchema_ValidParameters(t *testing.T) {
-	schema := llm.ToolSchema{
+	schema := types.ToolSchema{
 		Name:        "test_tool",
 		Description: "A test tool",
 		Parameters:  json.RawMessage(`{"type":"object","properties":{"name":{"type":"string"}}}`),
@@ -29,7 +30,7 @@ func TestFromLLMToolSchema_ValidParameters(t *testing.T) {
 // TestFromLLMToolSchema_InvalidJSON verifies that invalid JSON in Parameters
 // returns an error instead of silently ignoring it.
 func TestFromLLMToolSchema_InvalidJSON(t *testing.T) {
-	schema := llm.ToolSchema{
+	schema := types.ToolSchema{
 		Name:        "bad_tool",
 		Description: "Tool with bad params",
 		Parameters:  json.RawMessage(`{not valid json}`),
@@ -44,7 +45,7 @@ func TestFromLLMToolSchema_InvalidJSON(t *testing.T) {
 // TestFromLLMToolSchema_EmptyParameters verifies that empty/nil Parameters
 // produce a ToolDefinition with nil InputSchema and no error.
 func TestFromLLMToolSchema_EmptyParameters(t *testing.T) {
-	schema := llm.ToolSchema{
+	schema := types.ToolSchema{
 		Name:        "empty_tool",
 		Description: "Tool with no params",
 		Parameters:  nil,
@@ -78,3 +79,5 @@ func TestFromLLMToolSchema_Roundtrip(t *testing.T) {
 	assert.Equal(t, original.Description, restored.Description)
 	assert.Equal(t, "object", restored.InputSchema["type"])
 }
+
+

@@ -193,3 +193,4 @@ func (rw *ResponseWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
 	}
 	return nil, nil, fmt.Errorf("underlying ResponseWriter does not implement http.Hijacker")
 }
+

@@ -92,3 +92,4 @@ func NewTaskStoreOrExit(config StoreConfig) TaskStore {
 	}
 	return store
 }
+

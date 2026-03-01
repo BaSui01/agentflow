@@ -15,7 +15,7 @@ import (
 )
 
 // ChatCompletion 调用 LLM 完成对话
-func (b *BaseAgent) ChatCompletion(ctx context.Context, messages []llm.Message) (*llm.ChatResponse, error) {
+func (b *BaseAgent) ChatCompletion(ctx context.Context, messages []types.Message) (*llm.ChatResponse, error) {
 	if b.provider == nil {
 		return nil, ErrProviderNotSet
 	}
@@ -163,7 +163,7 @@ func (b *BaseAgent) ChatCompletion(ctx context.Context, messages []llm.Message) 
 			return nil, err
 		}
 		var (
-			assembled llm.Message
+			assembled types.Message
 			lastID    string
 			lastProv  string
 			lastModel string
@@ -236,7 +236,7 @@ func (b *BaseAgent) ChatCompletion(ctx context.Context, messages []llm.Message) 
 }
 
 // StreamCompletion 流式调用 LLM
-func (b *BaseAgent) StreamCompletion(ctx context.Context, messages []llm.Message) (<-chan llm.StreamChunk, error) {
+func (b *BaseAgent) StreamCompletion(ctx context.Context, messages []types.Message) (<-chan llm.StreamChunk, error) {
 	if b.provider == nil {
 		return nil, ErrProviderNotSet
 	}
@@ -291,3 +291,4 @@ func (b *BaseAgent) StreamCompletion(ctx context.Context, messages []llm.Message
 
 	return b.provider.Stream(ctx, req)
 }
+

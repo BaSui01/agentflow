@@ -187,3 +187,4 @@ var (
 func IsNotFound(err error) bool {
 	return err == persistence.ErrNotFound
 }
+

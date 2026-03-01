@@ -286,3 +286,4 @@ func TestServiceLocator_GetTyped_WrongType(t *testing.T) {
 
 // Suppress unused import warning
 var _ llm.Provider = (*testProvider)(nil)
+

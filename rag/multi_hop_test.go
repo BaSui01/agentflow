@@ -622,3 +622,4 @@ func TestMultiHopReasoner_QueryDeduplication(t *testing.T) {
 		t.Errorf("expected status to be completed, got %s", chain.Status)
 	}
 }
+

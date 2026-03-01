@@ -1,6 +1,7 @@
 package reasoning
 
 import (
+	"github.com/BaSui01/agentflow/types"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -261,7 +262,7 @@ Format as JSON array: [{"thought": "next step", "reasoning": "why"}]`, task, par
 
 	resp, err := t.provider.Completion(ctx, &llm.ChatRequest{
 		Model: "gpt-4o",
-		Messages: []llm.Message{
+		Messages: []types.Message{
 			{Role: llm.RoleUser, Content: prompt},
 		},
 		Temperature: 0.8,
@@ -350,7 +351,7 @@ Respond with only a number between 0.0 and 1.0`, task, thought.Content)
 
 	resp, err := t.provider.Completion(ctx, &llm.ChatRequest{
 		Model: "gpt-4o-mini",
-		Messages: []llm.Message{
+		Messages: []types.Message{
 			{Role: llm.RoleUser, Content: prompt},
 		},
 		Temperature: 0.1,
@@ -393,3 +394,5 @@ func (t *TreeOfThought) selectTopBranches(thoughts []ReasoningStep, n int) []Rea
 	}
 	return filtered
 }
+
+

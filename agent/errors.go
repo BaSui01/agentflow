@@ -164,3 +164,4 @@ func (e ErrInvalidTransition) ToAgentError() *Error {
 		WithMetadata("from_state", e.From).
 		WithMetadata("to_state", e.To)
 }
+

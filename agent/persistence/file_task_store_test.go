@@ -254,3 +254,4 @@ func TestAsyncTask_IsRecoverable_Method(t *testing.T) {
 	task.Status = TaskStatusCompleted
 	assert.False(t, task.IsRecoverable())
 }
+

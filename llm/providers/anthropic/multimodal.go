@@ -51,3 +51,4 @@ func (p *ClaudeProvider) GetFineTuningJob(ctx context.Context, jobID string) (*l
 func (p *ClaudeProvider) CancelFineTuningJob(ctx context.Context, jobID string) error {
 	return providers.NotSupportedError(p.Name(), "fine-tuning")
 }
+

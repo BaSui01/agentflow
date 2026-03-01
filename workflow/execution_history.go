@@ -198,3 +198,4 @@ func (s *ExecutionHistoryStore) ListByStatus(status ExecutionStatus) []*Executio
 	}
 	return result
 }
+

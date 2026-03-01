@@ -1,6 +1,7 @@
 package deliberation
 
 import (
+	"github.com/BaSui01/agentflow/types"
 	"context"
 	"fmt"
 	"strconv"
@@ -34,7 +35,7 @@ func NewLLMReasoner(provider llm.Provider, model string, logger *zap.Logger) *LL
 func (r *LLMReasoner) Think(ctx context.Context, prompt string) (string, float64, error) {
 	req := &llm.ChatRequest{
 		Model: r.model,
-		Messages: []llm.Message{
+		Messages: []types.Message{
 			{
 				Role:    llm.RoleSystem,
 				Content: reasoningSystemPrompt,
@@ -100,3 +101,5 @@ Where <value> is a decimal number between 0 and 1 representing how confident you
 Example:
 Based on the available tools and task description, the best approach is to use the search tool first.
 CONFIDENCE: 0.85`
+
+

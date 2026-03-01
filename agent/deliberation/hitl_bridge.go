@@ -143,3 +143,4 @@ func (b *HITLBridge) DeliberateWithApproval(ctx context.Context, task Task) (*De
 		return result, fmt.Errorf("unknown hitl response action: %s", resp.Action)
 	}
 }
+

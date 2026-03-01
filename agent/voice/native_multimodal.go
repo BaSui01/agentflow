@@ -198,3 +198,4 @@ func (r *NativeAudioReasoner) Interrupt() {
 	r.mu.Unlock()
 	r.logger.Debug("audio processing interrupted")
 }
+

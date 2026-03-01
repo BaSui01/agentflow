@@ -261,3 +261,4 @@ func TestNewEstimatorAdapter_CJKAwareness(t *testing.T) {
 	assert.Greater(t, cjkCount, 0)
 	assert.Greater(t, asciiCount, 0)
 }
+

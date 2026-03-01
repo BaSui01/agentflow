@@ -1,6 +1,7 @@
 package hosted
 
 import (
+	"github.com/BaSui01/agentflow/types"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -33,7 +34,7 @@ type HostedTool interface {
 	Type() HostedToolType
 	Name() string
 	Description() string
-	Schema() llm.ToolSchema
+	Schema() types.ToolSchema
 	Execute(ctx context.Context, args json.RawMessage) (json.RawMessage, error)
 }
 
@@ -90,10 +91,10 @@ func (r *ToolRegistry) List() []HostedTool {
 }
 
 // GetSchemas 返回所有工具的策略 。
-func (r *ToolRegistry) GetSchemas() []llm.ToolSchema {
+func (r *ToolRegistry) GetSchemas() []types.ToolSchema {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	schemas := make([]llm.ToolSchema, 0, len(r.tools))
+	schemas := make([]types.ToolSchema, 0, len(r.tools))
 	for _, t := range r.tools {
 		schemas = append(schemas, t.Schema())
 	}
@@ -138,7 +139,7 @@ func (t *WebSearchTool) Type() HostedToolType { return ToolTypeWebSearch }
 func (t *WebSearchTool) Name() string         { return "web_search" }
 func (t *WebSearchTool) Description() string  { return "Search the web for current information" }
 
-func (t *WebSearchTool) Schema() llm.ToolSchema {
+func (t *WebSearchTool) Schema() types.ToolSchema {
 	params, err := json.Marshal(map[string]any{
 		"type": "object",
 		"properties": map[string]any{
@@ -150,7 +151,7 @@ func (t *WebSearchTool) Schema() llm.ToolSchema {
 	if err != nil {
 		params = []byte("{}")
 	}
-	return llm.ToolSchema{Name: t.Name(), Description: t.Description(), Parameters: params}
+	return types.ToolSchema{Name: t.Name(), Description: t.Description(), Parameters: params}
 }
 
 // WebSearchArgs 代表网络搜索参数.
@@ -252,7 +253,7 @@ func (t *FileSearchTool) Type() HostedToolType { return ToolTypeFileSearch }
 func (t *FileSearchTool) Name() string         { return "file_search" }
 func (t *FileSearchTool) Description() string  { return "Search through uploaded files" }
 
-func (t *FileSearchTool) Schema() llm.ToolSchema {
+func (t *FileSearchTool) Schema() types.ToolSchema {
 	params, err := json.Marshal(map[string]any{
 		"type": "object",
 		"properties": map[string]any{
@@ -264,7 +265,7 @@ func (t *FileSearchTool) Schema() llm.ToolSchema {
 	if err != nil {
 		params = []byte("{}")
 	}
-	return llm.ToolSchema{Name: t.Name(), Description: t.Description(), Parameters: params}
+	return types.ToolSchema{Name: t.Name(), Description: t.Description(), Parameters: params}
 }
 
 func (t *FileSearchTool) Execute(ctx context.Context, args json.RawMessage) (json.RawMessage, error) {
@@ -366,3 +367,5 @@ func WithMetrics(onExecute func(name string, duration time.Duration, err error))
 		}
 	}
 }
+
+

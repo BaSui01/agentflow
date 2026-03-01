@@ -320,3 +320,4 @@ func TestGitHubSource_SearchRepos_ExtractsLicense(t *testing.T) {
 	assert.Equal(t, "MIT License", repos[0].License)
 }
 
+

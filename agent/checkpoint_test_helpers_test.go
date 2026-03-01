@@ -244,3 +244,4 @@ func (c *mockRedisClient) ZRevRange(_ context.Context, key string, start, stop i
 func (c *mockRedisClient) ZRemRangeByScore(_ context.Context, _, _, _ string) error {
 	return nil
 }
+

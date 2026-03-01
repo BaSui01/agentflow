@@ -94,3 +94,4 @@ func (r *ProviderRegistry) Len() int {
 	defer r.mu.RUnlock()
 	return len(r.providers)
 }
+

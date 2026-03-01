@@ -150,3 +150,4 @@ func (p *VoyageProvider) RerankSimple(ctx context.Context, query string, documen
 	}
 	return resp.Results, nil
 }
+

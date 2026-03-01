@@ -266,3 +266,4 @@ func TestTokenBudgetManager_AlertFiredOnlyOnce(t *testing.T) {
 	defer mu.Unlock()
 	assert.Equal(t, 1, count, "alert should fire only once per window")
 }
+

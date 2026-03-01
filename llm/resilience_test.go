@@ -184,3 +184,4 @@ func TestNewResilientProviderSimple(t *testing.T) {
 	rp := NewResilientProviderSimple(inner, nil, zap.NewNop())
 	assert.Equal(t, "simple", rp.Name())
 }
+

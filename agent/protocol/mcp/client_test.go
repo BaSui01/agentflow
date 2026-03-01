@@ -300,3 +300,4 @@ func TestMCPHandler_Dispatch_PromptsGet(t *testing.T) {
 	assert.Nil(t, resp.Error)
 	assert.NotNil(t, resp.Result) // ensure result is accessible
 }
+

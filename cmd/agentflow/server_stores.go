@@ -155,3 +155,4 @@ func (s *Server) wireDefaultRuntimeAgent(agentRegistry *agent.AgentRegistry) {
 
 	s.logger.Info("Default runtime agent factory registered")
 }
+

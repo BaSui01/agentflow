@@ -146,3 +146,4 @@ func (l *CSVLoader) resolveContentColumns(header []string) []int {
 func (l *CSVLoader) SupportedTypes() []string {
 	return []string{".csv"}
 }
+

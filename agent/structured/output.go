@@ -1,6 +1,7 @@
 package structured
 
 import (
+	"github.com/BaSui01/agentflow/types"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -88,7 +89,7 @@ func (s *StructuredOutput[T]) Schema() *JSONSchema {
 // 它使用本地结构输出 如果提供者支持它,
 // 否则会回到即时工程
 func (s *StructuredOutput[T]) Generate(ctx context.Context, prompt string) (*T, error) {
-	messages := []llm.Message{
+	messages := []types.Message{
 		{Role: llm.RoleUser, Content: prompt},
 	}
 	return s.GenerateWithMessages(ctx, messages)
@@ -97,7 +98,7 @@ func (s *StructuredOutput[T]) Generate(ctx context.Context, prompt string) (*T, 
 // 生成 Messages 从信件列表中生成结构化输出 。
 // 它使用本地结构输出 如果提供者支持它,
 // 否则会回到即时工程
-func (s *StructuredOutput[T]) GenerateWithMessages(ctx context.Context, messages []llm.Message) (*T, error) {
+func (s *StructuredOutput[T]) GenerateWithMessages(ctx context.Context, messages []types.Message) (*T, error) {
 	if s.supportsNativeStructuredOutput() {
 		return s.generateNative(ctx, messages)
 	}
@@ -106,14 +107,14 @@ func (s *StructuredOutput[T]) GenerateWithMessages(ctx context.Context, messages
 
 // 生成 WithParse 生成结构化输出并返回详细解析结果 。
 func (s *StructuredOutput[T]) GenerateWithParse(ctx context.Context, prompt string) (*ParseResult[T], error) {
-	messages := []llm.Message{
+	messages := []types.Message{
 		{Role: llm.RoleUser, Content: prompt},
 	}
 	return s.GenerateWithMessagesAndParse(ctx, messages)
 }
 
 // 生成与Messages AndParse 从消息中生成结构化输出并返回详细解析结果.
-func (s *StructuredOutput[T]) GenerateWithMessagesAndParse(ctx context.Context, messages []llm.Message) (*ParseResult[T], error) {
+func (s *StructuredOutput[T]) GenerateWithMessagesAndParse(ctx context.Context, messages []types.Message) (*ParseResult[T], error) {
 	var raw string
 	var value *T
 	var parseErrors []ParseError
@@ -151,13 +152,13 @@ func (s *StructuredOutput[T]) supportsNativeStructuredOutput() bool {
 }
 
 // 生成 Native 使用提供者的本地结构输出能力.
-func (s *StructuredOutput[T]) generateNative(ctx context.Context, messages []llm.Message) (*T, error) {
+func (s *StructuredOutput[T]) generateNative(ctx context.Context, messages []types.Message) (*T, error) {
 	value, _, err := s.generateNativeWithRaw(ctx, messages)
 	return value, err
 }
 
 // 生成 NativeWithRaw 使用本地结构输出并返回原始响应。
-func (s *StructuredOutput[T]) generateNativeWithRaw(ctx context.Context, messages []llm.Message) (*T, string, error) {
+func (s *StructuredOutput[T]) generateNativeWithRaw(ctx context.Context, messages []types.Message) (*T, string, error) {
 	// 为请求构建 JSON Schema
 	schemaJSON, err := json.Marshal(s.schema)
 	if err != nil {
@@ -171,7 +172,7 @@ func (s *StructuredOutput[T]) generateNativeWithRaw(ctx context.Context, message
 	}
 
 	// 添加带有计划指令的系统消息
-	systemMsg := llm.Message{
+	systemMsg := types.Message{
 		Role: llm.RoleSystem,
 		Content: fmt.Sprintf(
 			"You must respond with valid JSON that conforms to the following JSON Schema:\n%s\n\nRespond only with the JSON object, no additional text.",
@@ -180,7 +181,7 @@ func (s *StructuredOutput[T]) generateNativeWithRaw(ctx context.Context, message
 	}
 
 	// 预收系统消息
-	allMessages := append([]llm.Message{systemMsg}, messages...)
+	allMessages := append([]types.Message{systemMsg}, messages...)
 
 	strict := true
 	req := &llm.ChatRequest{
@@ -216,13 +217,13 @@ func (s *StructuredOutput[T]) generateNativeWithRaw(ctx context.Context, message
 }
 
 // 生成WithPromptEngineering 使用即时工程来获得结构化输出.
-func (s *StructuredOutput[T]) generateWithPromptEngineering(ctx context.Context, messages []llm.Message) (*T, error) {
+func (s *StructuredOutput[T]) generateWithPromptEngineering(ctx context.Context, messages []types.Message) (*T, error) {
 	value, _, _, err := s.generateWithPromptEngineeringDetailed(ctx, messages)
 	return value, err
 }
 
 // 生成与Prompt工程 详细使用即时工程并返回详细结果.
-func (s *StructuredOutput[T]) generateWithPromptEngineeringDetailed(ctx context.Context, messages []llm.Message) (*T, string, []ParseError, error) {
+func (s *StructuredOutput[T]) generateWithPromptEngineeringDetailed(ctx context.Context, messages []types.Message) (*T, string, []ParseError, error) {
 	// 构建快捷的 JSON 计划
 	schemaJSON, err := s.schema.ToJSONIndent()
 	if err != nil {
@@ -232,13 +233,13 @@ func (s *StructuredOutput[T]) generateWithPromptEngineeringDetailed(ctx context.
 	// 为结构化输出创建详细系统提示
 	systemPrompt := s.buildStructuredOutputPrompt(string(schemaJSON))
 
-	systemMsg := llm.Message{
+	systemMsg := types.Message{
 		Role:    llm.RoleSystem,
 		Content: systemPrompt,
 	}
 
 	// 预收系统消息
-	allMessages := append([]llm.Message{systemMsg}, messages...)
+	allMessages := append([]types.Message{systemMsg}, messages...)
 
 	req := &llm.ChatRequest{
 		Messages: allMessages,
@@ -385,3 +386,5 @@ func (s *StructuredOutput[T]) ParseWithResult(jsonStr string) *ParseResult[T] {
 		Errors: errors,
 	}
 }
+
+

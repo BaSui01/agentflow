@@ -582,3 +582,4 @@ func (s *DefaultMCPServer) Serve(ctx context.Context, transport Transport) error
 		}
 	}
 }
+

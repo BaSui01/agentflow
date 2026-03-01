@@ -576,3 +576,4 @@ func TestLLMVisionAdapter_PlanActions_InvalidJSON(t *testing.T) {
 
 // Ensure unused import is used
 var _ = json.Marshal
+

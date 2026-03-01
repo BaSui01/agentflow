@@ -254,3 +254,4 @@ func (e *CompositionExecutor) buildCapabilityInput(
 	}
 	return capInput
 }
+

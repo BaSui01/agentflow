@@ -504,3 +504,4 @@ func TestGeminiProvider_ImplementsProvider(t *testing.T) {
 func TestFluxProvider_ImplementsProvider(t *testing.T) {
 	var _ Provider = (*FluxProvider)(nil)
 }
+

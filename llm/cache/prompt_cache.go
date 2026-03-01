@@ -411,3 +411,4 @@ func (c *LRUCache) Stats() (size int, capacity int) {
 	defer c.mu.RUnlock()
 	return len(c.items), c.capacity
 }
+

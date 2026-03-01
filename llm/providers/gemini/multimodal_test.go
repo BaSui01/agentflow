@@ -1,6 +1,7 @@
 package gemini
 
 import (
+	"github.com/BaSui01/agentflow/types"
 	"context"
 	"encoding/json"
 	"net/http"
@@ -21,7 +22,7 @@ func TestGeminiProvider_MultimodalNotSupported(t *testing.T) {
 	t.Run("TranscribeAudio", func(t *testing.T) {
 		_, err := p.TranscribeAudio(ctx, &llm.AudioTranscriptionRequest{})
 		require.Error(t, err)
-		llmErr, ok := err.(*llm.Error)
+		llmErr, ok := err.(*types.Error)
 		require.True(t, ok)
 		assert.Equal(t, llm.ErrInvalidRequest, llmErr.Code)
 		assert.Contains(t, llmErr.Message, "not supported")
@@ -123,3 +124,5 @@ func TestGeminiProvider_CreateEmbedding_Success(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, resp.Data, 1)
 }
+
+

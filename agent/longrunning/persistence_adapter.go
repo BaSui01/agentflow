@@ -126,3 +126,4 @@ func asyncTaskToRecord(at *persistence.AsyncTask) (*TaskRecord, error) {
 		Metadata: at.Metadata,
 	}, nil
 }
+

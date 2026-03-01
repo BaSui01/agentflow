@@ -79,3 +79,4 @@ func TestNewProviderFromConfig_GenericOpenAICompat_NoBaseURL(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "base_url is required")
 }
+

@@ -20,3 +20,4 @@ func DoWithResultTyped[T any](r Retryer, ctx context.Context, fn func() (T, erro
 	}
 	return result.(T), nil
 }
+

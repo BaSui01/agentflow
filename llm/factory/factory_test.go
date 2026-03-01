@@ -361,3 +361,4 @@ func TestNewRegistryFromConfig_NoDefault(t *testing.T) {
 	_, err = reg.Default()
 	require.Error(t, err) // no default set
 }
+

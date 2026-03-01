@@ -241,3 +241,4 @@ func TestRandomStrategy_NoIdleWorkers(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "w1", worker.ID())
 }
+

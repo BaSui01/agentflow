@@ -1,6 +1,7 @@
 package a2a
 
 import (
+	"github.com/BaSui01/agentflow/types"
 	"encoding/json"
 	"testing"
 
@@ -143,10 +144,10 @@ func TestAgentCardGenerator_CapabilitiesByType(t *testing.T) {
 
 // 模拟工具 Provider 执行工具Schema 提供测试。
 type mockToolProvider struct {
-	tools map[string][]llm.ToolSchema
+	tools map[string][]types.ToolSchema
 }
 
-func (m *mockToolProvider) GetAllowedTools(agentID string) []llm.ToolSchema {
+func (m *mockToolProvider) GetAllowedTools(agentID string) []types.ToolSchema {
 	if tools, ok := m.tools[agentID]; ok {
 		return tools
 	}
@@ -176,7 +177,7 @@ func TestAgentCardGenerator_GenerateWithTools(t *testing.T) {
 	paramsJSON, _ := json.Marshal(params)
 
 	toolProvider := &mockToolProvider{
-		tools: map[string][]llm.ToolSchema{
+		tools: map[string][]types.ToolSchema{
 			"tool-agent": {
 				{
 					Name:        "search",
@@ -243,7 +244,7 @@ func TestBuildAgentURL(t *testing.T) {
 func TestConvertToolSchema(t *testing.T) {
 	params := json.RawMessage(`{"type":"object","properties":{"name":{"type":"string"}}}`)
 
-	schema := llm.ToolSchema{
+	schema := types.ToolSchema{
 		Name:        "test_tool",
 		Description: "A test tool",
 		Parameters:  params,
@@ -258,7 +259,7 @@ func TestConvertToolSchema(t *testing.T) {
 }
 
 func TestConvertToolSchema_InvalidJSON(t *testing.T) {
-	schema := llm.ToolSchema{
+	schema := types.ToolSchema{
 		Name:        "bad_tool",
 		Description: "Tool with invalid params",
 		Parameters:  json.RawMessage(`{invalid json}`),
@@ -271,3 +272,5 @@ func TestConvertToolSchema_InvalidJSON(t *testing.T) {
 	assert.NotNil(t, toolDef.Parameters)
 	assert.Equal(t, structured.TypeObject, toolDef.Parameters.Type)
 }
+
+

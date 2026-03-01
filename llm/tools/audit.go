@@ -617,3 +617,4 @@ func LogCostAlert(auditLogger AuditLogger, agentID, userID string, cost float64,
 		Metadata:  map[string]string{"alert_type": alertType},
 	})
 }
+

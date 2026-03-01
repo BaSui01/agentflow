@@ -310,3 +310,4 @@ func TestDecodeJSONBody_WithinLimit(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, "small", result.Name)
 }
+

@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"github.com/BaSui01/agentflow/types"
 	"context"
 	"fmt"
 	"time"
@@ -166,7 +167,7 @@ func (s *MessageBuildStep) Name() string { return "message_build" }
 func (s *MessageBuildStep) Execute(ctx context.Context, pc *PipelineContext, next StepFunc) error {
 	b := pc.agent
 
-	pc.Messages = []llm.Message{
+	pc.Messages = []types.Message{
 		{
 			Role:    llm.RoleSystem,
 			Content: b.config.PromptBundle.RenderSystemPromptWithVars(pc.Input.Variables),
@@ -176,7 +177,7 @@ func (s *MessageBuildStep) Execute(ctx context.Context, pc *PipelineContext, nex
 	if len(pc.RestoredMessages) > 0 {
 		pc.Messages = append(pc.Messages, pc.RestoredMessages...)
 	}
-	pc.Messages = append(pc.Messages, llm.Message{
+	pc.Messages = append(pc.Messages, types.Message{
 		Role:    llm.RoleUser,
 		Content: pc.Input.Content,
 	})
@@ -212,7 +213,7 @@ func (s *LLMExecutionStep) Execute(ctx context.Context, pc *PipelineContext, nex
 			)
 			if lastValidationResult != nil {
 				feedbackMsg := b.buildValidationFeedbackMessage(lastValidationResult)
-				pc.Messages = append(pc.Messages, llm.Message{
+				pc.Messages = append(pc.Messages, types.Message{
 					Role:    llm.RoleUser,
 					Content: feedbackMsg,
 				})
@@ -363,3 +364,5 @@ func (s *PersistStep) Execute(ctx context.Context, pc *PipelineContext, next Ste
 
 	return next(ctx, pc)
 }
+
+

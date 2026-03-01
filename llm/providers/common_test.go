@@ -72,7 +72,7 @@ func (f *failReader) Read(p []byte) (int, error) {
 
 func TestConvertMessagesToOpenAI(t *testing.T) {
 	t.Run("simple text messages", func(t *testing.T) {
-		msgs := []llm.Message{
+		msgs := []types.Message{
 			{Role: llm.RoleSystem, Content: "You are helpful"},
 			{Role: llm.RoleUser, Content: "Hello"},
 			{Role: llm.RoleAssistant, Content: "Hi there"},
@@ -86,11 +86,11 @@ func TestConvertMessagesToOpenAI(t *testing.T) {
 	})
 
 	t.Run("message with tool calls", func(t *testing.T) {
-		msgs := []llm.Message{
+		msgs := []types.Message{
 			{
 				Role:    llm.RoleAssistant,
 				Content: "",
-				ToolCalls: []llm.ToolCall{
+				ToolCalls: []types.ToolCall{
 					{ID: "tc1", Name: "search", Arguments: json.RawMessage(`{"q":"test"}`)},
 				},
 			},
@@ -104,7 +104,7 @@ func TestConvertMessagesToOpenAI(t *testing.T) {
 	})
 
 	t.Run("message with tool call ID", func(t *testing.T) {
-		msgs := []llm.Message{
+		msgs := []types.Message{
 			{Role: llm.RoleTool, Content: "result", ToolCallID: "tc1"},
 		}
 		result := ConvertMessagesToOpenAI(msgs)
@@ -113,7 +113,7 @@ func TestConvertMessagesToOpenAI(t *testing.T) {
 	})
 
 	t.Run("message with images (URL)", func(t *testing.T) {
-		msgs := []llm.Message{
+		msgs := []types.Message{
 			{
 				Role:    llm.RoleUser,
 				Content: "What is this?",
@@ -131,7 +131,7 @@ func TestConvertMessagesToOpenAI(t *testing.T) {
 	})
 
 	t.Run("message with images (base64)", func(t *testing.T) {
-		msgs := []llm.Message{
+		msgs := []types.Message{
 			{
 				Role: llm.RoleUser,
 				Images: []types.ImageContent{
@@ -162,11 +162,11 @@ func TestConvertToolsToOpenAI(t *testing.T) {
 	})
 
 	t.Run("empty tools", func(t *testing.T) {
-		assert.Nil(t, ConvertToolsToOpenAI([]llm.ToolSchema{}))
+		assert.Nil(t, ConvertToolsToOpenAI([]types.ToolSchema{}))
 	})
 
 	t.Run("converts tools", func(t *testing.T) {
-		tools := []llm.ToolSchema{
+		tools := []types.ToolSchema{
 			{Name: "search", Description: "Search the web", Parameters: json.RawMessage(`{"type":"object"}`)},
 		}
 		result := ConvertToolsToOpenAI(tools)
@@ -429,7 +429,7 @@ func TestListModelsOpenAICompat(t *testing.T) {
 			BearerTokenHeaders,
 		)
 		require.Error(t, err)
-		llmErr, ok := err.(*llm.Error)
+		llmErr, ok := err.(*types.Error)
 		require.True(t, ok)
 		assert.Equal(t, llm.ErrUnauthorized, llmErr.Code)
 	})
@@ -437,5 +437,6 @@ func TestListModelsOpenAICompat(t *testing.T) {
 
 // =============================================================================
 // detectImageMIME tests
+
 
 

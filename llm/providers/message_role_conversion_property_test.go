@@ -1,6 +1,7 @@
 package providers
 
 import (
+	"github.com/BaSui01/agentflow/types"
 	"testing"
 
 	"github.com/BaSui01/agentflow/llm"
@@ -11,7 +12,7 @@ import (
 // 需求: 12.1、12.2、12.3、12.4
 //
 // 此属性测试验证对于任何提供者和任何消息数组，
-// 提供者正确映射每个 llm.Role（system、user、assistant、tool）
+// 提供者正确映射每个 types.Role（system、user、assistant、tool）
 // 到提供者特定的角色格式.
 // 通过对所有提供者进行全面测试，实现至少 100 次迭代.
 
@@ -20,7 +21,7 @@ func TestProperty22_MessageRoleConversion(t *testing.T) {
 	// 定义所有角色测试用例
 	roleTestCases := []struct {
 		name         string
-		role         llm.Role
+		role         types.Role
 		expectedRole string
 		requirement  string
 	}{
@@ -70,7 +71,7 @@ func TestProperty22_MessageRoleConversion(t *testing.T) {
 	testCases := make([]struct {
 		name         string
 		provider     string
-		role         llm.Role
+		role         types.Role
 		expectedRole string
 		content      string
 		requirement  string
@@ -83,7 +84,7 @@ func TestProperty22_MessageRoleConversion(t *testing.T) {
 				testCases = append(testCases, struct {
 					name         string
 					provider     string
-					role         llm.Role
+					role         types.Role
 					expectedRole string
 					content      string
 					requirement  string
@@ -107,7 +108,7 @@ func TestProperty22_MessageRoleConversion(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			// 用指定的角色创建消息
-			msg := llm.Message{
+			msg := types.Message{
 				Role:    tc.role,
 				Content: tc.content,
 			}
@@ -144,7 +145,7 @@ func TestProperty22_MultipleMessagesWithDifferentRoles(t *testing.T) {
 	for _, providerName := range providerNames {
 		t.Run(providerName, func(t *testing.T) {
 			// 创建包含全部四个角色的消息
-			messages := []llm.Message{
+			messages := []types.Message{
 				{Role: llm.RoleSystem, Content: "You are a helpful assistant"},
 				{Role: llm.RoleUser, Content: "Hello"},
 				{Role: llm.RoleAssistant, Content: "Hi there!"},
@@ -179,9 +180,9 @@ func TestProperty22_RoleConversionPreservesContent(t *testing.T) {
 	testContent := "Test content with special chars: 你好 🌍 @#$%"
 
 	for _, providerName := range providerNames {
-		for _, role := range []llm.Role{llm.RoleSystem, llm.RoleUser, llm.RoleAssistant} {
+		for _, role := range []types.Role{llm.RoleSystem, llm.RoleUser, llm.RoleAssistant} {
 			t.Run(providerName+"_"+string(role), func(t *testing.T) {
-				msg := llm.Message{
+				msg := types.Message{
 					Role:    role,
 					Content: testContent,
 				}
@@ -208,7 +209,7 @@ func TestProperty22_ToolRoleWithToolCallID(t *testing.T) {
 	for _, providerName := range providerNames {
 		t.Run(providerName, func(t *testing.T) {
 			toolCallID := "call_abc123"
-			msg := llm.Message{
+			msg := types.Message{
 				Role:       llm.RoleTool,
 				Content:    "tool result",
 				ToolCallID: toolCallID,
@@ -242,7 +243,7 @@ func TestProperty22_SystemRoleVariations(t *testing.T) {
 	for _, provider := range providers {
 		for _, tc := range testCases {
 			t.Run(provider+"_"+tc.name, func(t *testing.T) {
-				msg := llm.Message{
+				msg := types.Message{
 					Role:    llm.RoleSystem,
 					Content: tc.content,
 				}
@@ -285,7 +286,7 @@ func TestProperty22_UserRoleVariations(t *testing.T) {
 	for _, provider := range providers {
 		for _, tc := range testCases {
 			t.Run(provider+"_"+tc.name, func(t *testing.T) {
-				msg := llm.Message{
+				msg := types.Message{
 					Role:    llm.RoleUser,
 					Content: tc.content,
 				}
@@ -328,7 +329,7 @@ func TestProperty22_AssistantRoleVariations(t *testing.T) {
 	for _, provider := range providers {
 		for _, tc := range testCases {
 			t.Run(provider+"_"+tc.name, func(t *testing.T) {
-				msg := llm.Message{
+				msg := types.Message{
 					Role:    llm.RoleAssistant,
 					Content: tc.content,
 				}
@@ -372,7 +373,7 @@ func TestProperty22_ToolRoleVariations(t *testing.T) {
 	for _, provider := range providers {
 		for _, tc := range testCases {
 			t.Run(provider+"_"+tc.name, func(t *testing.T) {
-				msg := llm.Message{
+				msg := types.Message{
 					Role:       llm.RoleTool,
 					Content:    tc.content,
 					ToolCallID: tc.toolCallID,
@@ -405,8 +406,8 @@ type mockMiniMaxMessage struct {
 	Name    string `json:"name,omitempty"`
 }
 
-// mockConvertMessageOpenAI 转换单个 llm.Message 到 OpenAI 格式
-func mockConvertMessageOpenAI(msg llm.Message) mockOpenAIMessage {
+// mockConvertMessageOpenAI 转换单个 types.Message 到 OpenAI 格式
+func mockConvertMessageOpenAI(msg types.Message) mockOpenAIMessage {
 	converted := mockOpenAIMessage{
 		Role:       string(msg.Role),
 		Content:    msg.Content,
@@ -416,8 +417,8 @@ func mockConvertMessageOpenAI(msg llm.Message) mockOpenAIMessage {
 	return converted
 }
 
-// mockConvertMessagesOpenAI 转换多个 llm.Message 到 OpenAI 格式
-func mockConvertMessagesOpenAI(msgs []llm.Message) []mockOpenAIMessage {
+// mockConvertMessagesOpenAI 转换多个 types.Message 到 OpenAI 格式
+func mockConvertMessagesOpenAI(msgs []types.Message) []mockOpenAIMessage {
 	out := make([]mockOpenAIMessage, 0, len(msgs))
 	for _, m := range msgs {
 		out = append(out, mockConvertMessageOpenAI(m))
@@ -425,8 +426,8 @@ func mockConvertMessagesOpenAI(msgs []llm.Message) []mockOpenAIMessage {
 	return out
 }
 
-// mockConvertMessageMiniMax 转换单个 llm.Message 到 MiniMax 格式
-func mockConvertMessageMiniMax(msg llm.Message) mockMiniMaxMessage {
+// mockConvertMessageMiniMax 转换单个 types.Message 到 MiniMax 格式
+func mockConvertMessageMiniMax(msg types.Message) mockMiniMaxMessage {
 	converted := mockMiniMaxMessage{
 		Role:    string(msg.Role),
 		Content: msg.Content,
@@ -435,11 +436,13 @@ func mockConvertMessageMiniMax(msg llm.Message) mockMiniMaxMessage {
 	return converted
 }
 
-// mockConvertMessagesMiniMax 转换多个 llm.Message 到 MiniMax 格式
-func mockConvertMessagesMiniMax(msgs []llm.Message) []mockMiniMaxMessage {
+// mockConvertMessagesMiniMax 转换多个 types.Message 到 MiniMax 格式
+func mockConvertMessagesMiniMax(msgs []types.Message) []mockMiniMaxMessage {
 	out := make([]mockMiniMaxMessage, 0, len(msgs))
 	for _, m := range msgs {
 		out = append(out, mockConvertMessageMiniMax(m))
 	}
 	return out
 }
+
+

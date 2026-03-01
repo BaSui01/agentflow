@@ -1,6 +1,7 @@
 package router
 
 import (
+	"github.com/BaSui01/agentflow/types"
 	"context"
 	"fmt"
 	"testing"
@@ -37,7 +38,7 @@ func (p *testProvider) Completion(ctx context.Context, req *llm.ChatRequest) (*l
 	return &llm.ChatResponse{
 		Model: req.Model,
 		Choices: []llm.ChatChoice{{
-			Message: llm.Message{Role: llm.RoleAssistant, Content: "response from " + p.name},
+			Message: types.Message{Role: llm.RoleAssistant, Content: "response from " + p.name},
 		}},
 		Usage: llm.ChatUsage{TotalTokens: 10},
 	}, nil
@@ -78,7 +79,7 @@ func TestSemanticRouter_Route_Success(t *testing.T) {
 	classifier.completionFn = func(ctx context.Context, req *llm.ChatRequest) (*llm.ChatResponse, error) {
 		return &llm.ChatResponse{
 			Choices: []llm.ChatChoice{{
-				Message: llm.Message{Content: `{"intent":"code_generation","confidence":0.9}`},
+				Message: types.Message{Content: `{"intent":"code_generation","confidence":0.9}`},
 			}},
 		}, nil
 	}
@@ -92,7 +93,7 @@ func TestSemanticRouter_Route_Success(t *testing.T) {
 	router := NewSemanticRouter(classifier, providers, cfg, nil)
 
 	resp, err := router.Route(context.Background(), &llm.ChatRequest{
-		Messages: []llm.Message{{Role: llm.RoleUser, Content: "Write a function"}},
+		Messages: []types.Message{{Role: llm.RoleUser, Content: "Write a function"}},
 	})
 	require.NoError(t, err)
 	assert.NotNil(t, resp)
@@ -113,7 +114,7 @@ func TestSemanticRouter_Route_ClassifierFails_UsesDefault(t *testing.T) {
 	router := NewSemanticRouter(classifier, providers, cfg, nil)
 
 	resp, err := router.Route(context.Background(), &llm.ChatRequest{
-		Messages: []llm.Message{{Role: llm.RoleUser, Content: "Hello"}},
+		Messages: []types.Message{{Role: llm.RoleUser, Content: "Hello"}},
 	})
 	require.NoError(t, err)
 	assert.NotNil(t, resp)
@@ -124,7 +125,7 @@ func TestSemanticRouter_Route_AllProvidersFail(t *testing.T) {
 	classifier.completionFn = func(ctx context.Context, req *llm.ChatRequest) (*llm.ChatResponse, error) {
 		return &llm.ChatResponse{
 			Choices: []llm.ChatChoice{{
-				Message: llm.Message{Content: `{"intent":"chat","confidence":0.9}`},
+				Message: types.Message{Content: `{"intent":"chat","confidence":0.9}`},
 			}},
 		}, nil
 	}
@@ -142,7 +143,7 @@ func TestSemanticRouter_Route_AllProvidersFail(t *testing.T) {
 	router := NewSemanticRouter(classifier, providers, cfg, nil)
 
 	_, err := router.Route(context.Background(), &llm.ChatRequest{
-		Messages: []llm.Message{{Role: llm.RoleUser, Content: "Hello"}},
+		Messages: []types.Message{{Role: llm.RoleUser, Content: "Hello"}},
 	})
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "all routes failed")
@@ -155,7 +156,7 @@ func TestSemanticRouter_ClassifyIntent_CachesResult(t *testing.T) {
 		callCount++
 		return &llm.ChatResponse{
 			Choices: []llm.ChatChoice{{
-				Message: llm.Message{Content: `{"intent":"chat","confidence":0.8}`},
+				Message: types.Message{Content: `{"intent":"chat","confidence":0.8}`},
 			}},
 		}, nil
 	}
@@ -167,7 +168,7 @@ func TestSemanticRouter_ClassifyIntent_CachesResult(t *testing.T) {
 	router := NewSemanticRouter(classifier, nil, cfg, nil)
 
 	req := &llm.ChatRequest{
-		Messages: []llm.Message{{Role: llm.RoleUser, Content: "Hello"}},
+		Messages: []types.Message{{Role: llm.RoleUser, Content: "Hello"}},
 	}
 
 	// First call
@@ -221,7 +222,7 @@ func TestSemanticRouter_CheckFeatures(t *testing.T) {
 // ====== Helper Function Tests ======
 
 func TestExtractUserMessage(t *testing.T) {
-	msgs := []llm.Message{
+	msgs := []types.Message{
 		{Role: llm.RoleSystem, Content: "system"},
 		{Role: llm.RoleUser, Content: "first user"},
 		{Role: llm.RoleAssistant, Content: "assistant"},
@@ -232,7 +233,7 @@ func TestExtractUserMessage(t *testing.T) {
 
 func TestExtractUserMessage_Empty(t *testing.T) {
 	assert.Equal(t, "", extractUserMessage(nil))
-	assert.Equal(t, "", extractUserMessage([]llm.Message{{Role: llm.RoleSystem, Content: "sys"}}))
+	assert.Equal(t, "", extractUserMessage([]types.Message{{Role: llm.RoleSystem, Content: "sys"}}))
 }
 
 func TestExtractJSONFromResponse(t *testing.T) {
@@ -301,3 +302,5 @@ func TestClassificationCache_Miss(t *testing.T) {
 	cache := newClassificationCache(time.Minute)
 	assert.Nil(t, cache.get("nonexistent"))
 }
+
+

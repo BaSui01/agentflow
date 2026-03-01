@@ -219,3 +219,4 @@ type FeedbackEvent struct {
 
 func (e *FeedbackEvent) Timestamp() time.Time { return e.Timestamp_ }
 func (e *FeedbackEvent) Type() EventType      { return EventFeedback }
+

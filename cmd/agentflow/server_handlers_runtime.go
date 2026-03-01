@@ -241,3 +241,4 @@ func (s *Server) initRAGHandler() {
 	s.logger.Info("RAG handler initialized (in-memory store, embedding provider ready)",
 		zap.String("provider", embProvider.Name()))
 }
+

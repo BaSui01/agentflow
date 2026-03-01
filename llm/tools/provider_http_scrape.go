@@ -277,3 +277,4 @@ func extractHTMLImages(rawHTML string) []ScrapedImage {
 
 // 编译期接口检查
 var _ WebScrapeProvider = (*HTTPScrapeProvider)(nil)
+

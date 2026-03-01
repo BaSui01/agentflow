@@ -324,3 +324,4 @@ func TestProperty26_IterationCount(t *testing.T) {
 	assert.GreaterOrEqual(t, totalIterations, 100,
 		"Property 26 should have at least 100 test iterations, got %d", totalIterations)
 }
+

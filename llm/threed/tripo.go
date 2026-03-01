@@ -195,3 +195,4 @@ func (p *TripoProvider) pollTask(ctx context.Context, taskID string) (*tripoResp
 		}
 	}
 }
+

@@ -127,3 +127,4 @@ func TestDefaultDuckDuckGoConfig(t *testing.T) {
 	cfg := DefaultDuckDuckGoConfig()
 	assert.Equal(t, 15*time.Second, cfg.Timeout)
 }
+

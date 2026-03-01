@@ -196,3 +196,4 @@ func TestCapabilityType_Constants(t *testing.T) {
 	assert.Equal(t, CapabilityType("query"), CapabilityTypeQuery)
 	assert.Equal(t, CapabilityType("stream"), CapabilityTypeStream)
 }
+

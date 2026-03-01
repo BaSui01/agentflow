@@ -1,6 +1,7 @@
 package doubao
 
 import (
+	"github.com/BaSui01/agentflow/types"
 	"context"
 	"encoding/json"
 	"net/http"
@@ -42,7 +43,7 @@ func TestDoubaoProvider_CreateContextCache(t *testing.T) {
 		},
 	}, zap.NewNop())
 
-	resp, err := p.CreateContextCache(context.Background(), "test-model", []llm.Message{
+	resp, err := p.CreateContextCache(context.Background(), "test-model", []types.Message{
 		{Role: llm.RoleSystem, Content: "You are helpful"},
 	}, "session", 3600)
 	require.NoError(t, err)
@@ -88,7 +89,7 @@ func TestDoubaoProvider_CompletionWithContext(t *testing.T) {
 	}, zap.NewNop())
 
 	resp, err := p.CompletionWithContext(context.Background(), "ctx-123", &llm.ChatRequest{
-		Messages: []llm.Message{
+		Messages: []types.Message{
 			{Role: llm.RoleUser, Content: "Hi"},
 		},
 	})
@@ -117,7 +118,9 @@ func TestDoubaoProvider_CreateContextCache_Error(t *testing.T) {
 
 	_, err := p.CreateContextCache(context.Background(), "bad-model", nil, "", 0)
 	require.Error(t, err)
-	llmErr, ok := err.(*llm.Error)
+	llmErr, ok := err.(*types.Error)
 	require.True(t, ok)
 	assert.Equal(t, llm.ErrInvalidRequest, llmErr.Code)
 }
+
+

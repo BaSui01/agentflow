@@ -50,3 +50,4 @@ func (p *ReflectionPlugin) AroundExecute(ctx context.Context, pc *agent.Pipeline
 	// Fallback: reflection didn't produce typed output, run normal pipeline
 	return next(ctx, pc)
 }
+

@@ -187,3 +187,4 @@ func BenchmarkHierarchicalKeyStrategy_GenerateKey(b *testing.B) {
 		strategy.GenerateKey(req)
 	}
 }
+

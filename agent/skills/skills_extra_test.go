@@ -149,3 +149,4 @@ func TestDefaultSkillManager_ClearCache(t *testing.T) {
 	// Index should still be intact
 	assert.Equal(t, 1, mgr.GetIndexedSkillsCount())
 }
+

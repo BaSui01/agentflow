@@ -1,6 +1,7 @@
 package a2a
 
 import (
+	"github.com/BaSui01/agentflow/types"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -25,7 +26,7 @@ type AgentType string
 
 // ToolSchema Provider为一代理提供了工具计划.
 type ToolSchemaProvider interface {
-	GetAllowedTools(agentID string) []llm.ToolSchema
+	GetAllowedTools(agentID string) []types.ToolSchema
 }
 
 // AgentCardGenerator通过代理配置生成代理卡.
@@ -131,7 +132,7 @@ func (g *AgentCardGenerator) addToolsFromProvider(card *AgentCard, agentID strin
 }
 
 // 转换 ToolSchema 转换一个 llm。 ToolSchema 到工具定义。
-func convertToolSchema(schema llm.ToolSchema) ToolDefinition {
+func convertToolSchema(schema types.ToolSchema) ToolDefinition {
 	var params *structured.JSONSchema
 
 	// 将参数 JSON 分析为 JSONSchema
@@ -190,3 +191,5 @@ func (c *SimpleAgentConfig) Tools() []string { return c.AgentTools }
 
 // 元数据返回代理元数据 。
 func (c *SimpleAgentConfig) Metadata() map[string]string { return c.AgentMetadata }
+
+

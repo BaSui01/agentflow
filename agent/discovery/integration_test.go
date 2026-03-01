@@ -299,3 +299,4 @@ func TestSetGlobalIntegration(t *testing.T) {
 	assert.Equal(t, integration, got)
 	SetGlobalIntegration(nil)
 }
+

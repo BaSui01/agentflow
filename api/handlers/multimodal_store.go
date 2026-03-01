@@ -55,3 +55,4 @@ func (s *MemoryReferenceStore) Cleanup(expireBefore time.Time) {
 	}
 	s.mu.Unlock()
 }
+

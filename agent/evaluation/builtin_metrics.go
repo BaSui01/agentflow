@@ -282,3 +282,4 @@ func NewRegistryWithBuiltinMetrics() *MetricRegistry {
 	RegisterBuiltinMetrics(registry)
 	return registry
 }
+

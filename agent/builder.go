@@ -473,3 +473,4 @@ func (b *AgentBuilder) Validate() error {
 
 	return nil
 }
+

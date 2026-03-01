@@ -66,3 +66,4 @@ func runtimeStreamEmitterFromContext(ctx context.Context) (RuntimeStreamEmitter,
 	emit, ok := v.(RuntimeStreamEmitter)
 	return emit, ok && emit != nil
 }
+

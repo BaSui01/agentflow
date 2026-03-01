@@ -1,6 +1,7 @@
 package cache
 
 import (
+	"github.com/BaSui01/agentflow/types"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -267,9 +268,9 @@ func NewCachingToolExecutor(executor tools.ToolExecutor, cache *ToolResultCache,
 }
 
 // Execute 使用缓存执行工具调用.
-func (e *CachingToolExecutor) Execute(ctx context.Context, calls []llm.ToolCall) []tools.ToolResult {
+func (e *CachingToolExecutor) Execute(ctx context.Context, calls []types.ToolCall) []tools.ToolResult {
 	results := make([]tools.ToolResult, len(calls))
-	var uncachedCalls []llm.ToolCall
+	var uncachedCalls []types.ToolCall
 	var uncachedIndices []int
 
 	// 检查每次调用的缓存
@@ -311,8 +312,8 @@ func (e *CachingToolExecutor) Execute(ctx context.Context, calls []llm.ToolCall)
 }
 
 // ExecuteOne 使用缓存执行单个工具调用.
-func (e *CachingToolExecutor) ExecuteOne(ctx context.Context, call llm.ToolCall) tools.ToolResult {
-	results := e.Execute(ctx, []llm.ToolCall{call})
+func (e *CachingToolExecutor) ExecuteOne(ctx context.Context, call types.ToolCall) tools.ToolResult {
+	results := e.Execute(ctx, []types.ToolCall{call})
 	if len(results) > 0 {
 		return results[0]
 	}
@@ -322,3 +323,5 @@ func (e *CachingToolExecutor) ExecuteOne(ctx context.Context, call llm.ToolCall)
 		Error:      "no result returned",
 	}
 }
+
+

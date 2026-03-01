@@ -2,6 +2,7 @@
 package mongodb
 
 import (
+	"github.com/BaSui01/agentflow/types"
 	"context"
 	"fmt"
 	"time"
@@ -32,7 +33,7 @@ type PromptDocument struct {
 
 	// Embedded PromptBundle fields.
 	System      agent.SystemPrompt `bson:"system"      json:"system"`
-	Tools       []llm.ToolSchema   `bson:"tools"       json:"tools,omitempty"`
+	Tools       []types.ToolSchema   `bson:"tools"       json:"tools,omitempty"`
 	Examples    []agent.Example    `bson:"examples"    json:"examples,omitempty"`
 	Constraints []string           `bson:"constraints" json:"constraints,omitempty"`
 }
@@ -205,3 +206,5 @@ func (s *MongoPromptStore) SetActive(ctx context.Context, id string) error {
 	)
 	return err
 }
+
+

@@ -306,3 +306,4 @@ func BenchmarkKnowledgeGraph_GetNeighbors(b *testing.B) {
 		graph.GetNeighbors("node0", 3)
 	}
 }
+

@@ -157,3 +157,4 @@ func (l *JSONLoader) extractID(obj map[string]any, source string, index int) str
 func (l *JSONLoader) SupportedTypes() []string {
 	return []string{".json", ".jsonl"}
 }
+

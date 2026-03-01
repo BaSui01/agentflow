@@ -110,3 +110,4 @@ func TestUpdateIDFStats_TotalDocLen_Accumulates(t *testing.T) {
 		t.Fatalf("expected avgDocLen=2.0, got %f", cr.avgDocLen)
 	}
 }
+

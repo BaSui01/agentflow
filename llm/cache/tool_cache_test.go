@@ -1,6 +1,7 @@
 package cache
 
 import (
+	"github.com/BaSui01/agentflow/types"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -180,7 +181,7 @@ func TestHierarchicalKeyStrategy_EmptyMessages(t *testing.T) {
 func TestHierarchicalKeyStrategy_SameHistoryProducesSameKey(t *testing.T) {
 	s := NewHierarchicalKeyStrategy()
 
-	msgs := []llm.Message{
+	msgs := []types.Message{
 		{Role: llm.RoleSystem, Content: "You are helpful"},
 		{Role: llm.RoleUser, Content: "Hello"},
 	}
@@ -188,13 +189,13 @@ func TestHierarchicalKeyStrategy_SameHistoryProducesSameKey(t *testing.T) {
 	key1 := s.GenerateKey(&llm.ChatRequest{
 		TenantID: "t1",
 		Model:    "gpt-4o",
-		Messages: append(msgs, llm.Message{Role: llm.RoleUser, Content: "Q1"}),
+		Messages: append(msgs, types.Message{Role: llm.RoleUser, Content: "Q1"}),
 	})
 
 	key2 := s.GenerateKey(&llm.ChatRequest{
 		TenantID: "t1",
 		Model:    "gpt-4o",
-		Messages: append(msgs, llm.Message{Role: llm.RoleUser, Content: "Q2"}),
+		Messages: append(msgs, types.Message{Role: llm.RoleUser, Content: "Q2"}),
 	})
 
 	// Same prefix (history), different last message doesn't affect key
@@ -204,10 +205,10 @@ func TestHierarchicalKeyStrategy_SameHistoryProducesSameKey(t *testing.T) {
 // ====== CachingToolExecutor Tests ======
 
 type mockToolExecutor struct {
-	executeFn func(ctx context.Context, calls []llm.ToolCall) []tools.ToolResult
+	executeFn func(ctx context.Context, calls []types.ToolCall) []tools.ToolResult
 }
 
-func (m *mockToolExecutor) Execute(ctx context.Context, calls []llm.ToolCall) []tools.ToolResult {
+func (m *mockToolExecutor) Execute(ctx context.Context, calls []types.ToolCall) []tools.ToolResult {
 	if m.executeFn != nil {
 		return m.executeFn(ctx, calls)
 	}
@@ -222,8 +223,8 @@ func (m *mockToolExecutor) Execute(ctx context.Context, calls []llm.ToolCall) []
 	return results
 }
 
-func (m *mockToolExecutor) ExecuteOne(ctx context.Context, call llm.ToolCall) tools.ToolResult {
-	results := m.Execute(ctx, []llm.ToolCall{call})
+func (m *mockToolExecutor) ExecuteOne(ctx context.Context, call types.ToolCall) tools.ToolResult {
+	results := m.Execute(ctx, []types.ToolCall{call})
 	return results[0]
 }
 
@@ -231,7 +232,7 @@ func TestCachingToolExecutor_CacheHit(t *testing.T) {
 	cache := NewToolResultCache(DefaultToolCacheConfig(), nil)
 	execCount := 0
 	executor := &mockToolExecutor{
-		executeFn: func(ctx context.Context, calls []llm.ToolCall) []tools.ToolResult {
+		executeFn: func(ctx context.Context, calls []types.ToolCall) []tools.ToolResult {
 			execCount++
 			results := make([]tools.ToolResult, len(calls))
 			for i, c := range calls {
@@ -247,7 +248,7 @@ func TestCachingToolExecutor_CacheHit(t *testing.T) {
 
 	cachingExec := NewCachingToolExecutor(executor, cache, nil)
 
-	call := llm.ToolCall{ID: "c1", Name: "search", Arguments: json.RawMessage(`{"q":"test"}`)}
+	call := types.ToolCall{ID: "c1", Name: "search", Arguments: json.RawMessage(`{"q":"test"}`)}
 
 	// First call: cache miss, executes
 	r1 := cachingExec.ExecuteOne(context.Background(), call)
@@ -269,7 +270,7 @@ func TestCachingToolExecutor_MixedCacheHitMiss(t *testing.T) {
 	// Pre-populate cache for one call
 	cache.Set("search", json.RawMessage(`{"q":"cached"}`), json.RawMessage(`{"r":"from_cache"}`), "")
 
-	calls := []llm.ToolCall{
+	calls := []types.ToolCall{
 		{ID: "c1", Name: "search", Arguments: json.RawMessage(`{"q":"cached"}`)},
 		{ID: "c2", Name: "calc", Arguments: json.RawMessage(`{"x":1}`)},
 	}
@@ -288,12 +289,12 @@ func TestHashKeyStrategy_DifferentRequestsDifferentKeys(t *testing.T) {
 
 	key1 := s.GenerateKey(&llm.ChatRequest{
 		Model:    "gpt-4o",
-		Messages: []llm.Message{{Role: llm.RoleUser, Content: "Hello"}},
+		Messages: []types.Message{{Role: llm.RoleUser, Content: "Hello"}},
 	})
 
 	key2 := s.GenerateKey(&llm.ChatRequest{
 		Model:    "gpt-4o",
-		Messages: []llm.Message{{Role: llm.RoleUser, Content: "World"}},
+		Messages: []types.Message{{Role: llm.RoleUser, Content: "World"}},
 	})
 
 	assert.NotEqual(t, key1, key2)
@@ -304,13 +305,15 @@ func TestHashKeyStrategy_DifferentModels(t *testing.T) {
 
 	key1 := s.GenerateKey(&llm.ChatRequest{
 		Model:    "gpt-4o",
-		Messages: []llm.Message{{Role: llm.RoleUser, Content: "Hello"}},
+		Messages: []types.Message{{Role: llm.RoleUser, Content: "Hello"}},
 	})
 
 	key2 := s.GenerateKey(&llm.ChatRequest{
 		Model:    "claude-3",
-		Messages: []llm.Message{{Role: llm.RoleUser, Content: "Hello"}},
+		Messages: []types.Message{{Role: llm.RoleUser, Content: "Hello"}},
 	})
 
 	assert.NotEqual(t, key1, key2)
 }
+
+

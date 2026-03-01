@@ -263,3 +263,4 @@ func TestCLI_Output(t *testing.T) {
 
 	assert.Contains(t, output, "No migrations applied yet")
 }
+

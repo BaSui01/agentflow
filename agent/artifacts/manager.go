@@ -328,3 +328,4 @@ func computeChecksum(data []byte) string {
 	hash := sha256.Sum256(data)
 	return hex.EncodeToString(hash[:])
 }
+

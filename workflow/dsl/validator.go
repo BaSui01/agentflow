@@ -206,3 +206,4 @@ func extractVariableRefs(s string) []string {
 	}
 	return refs
 }
+

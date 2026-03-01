@@ -170,3 +170,4 @@ func TestLLMJudge_GetConfig(t *testing.T) {
 	assert.Equal(t, cfg.ScoreRange, got.ScoreRange)
 	assert.Equal(t, cfg.RequireReasoning, got.RequireReasoning)
 }
+

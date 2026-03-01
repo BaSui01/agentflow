@@ -76,3 +76,4 @@ func TestConfigAPIMiddleware_RequireAuth_AuthFailureAuditLog(t *testing.T) {
 	assert.Equal(t, "GET", fields["method"])
 	assert.Equal(t, "req-123", fields["request_id"])
 }
+

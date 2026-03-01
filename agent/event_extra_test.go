@@ -56,3 +56,4 @@ func TestFeatureManager_Getters(t *testing.T) {
 	assert.Nil(t, fm.GetEnhancedMemory())
 	assert.Nil(t, fm.GetObservability())
 }
+

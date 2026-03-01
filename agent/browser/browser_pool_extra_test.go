@@ -213,3 +213,4 @@ func TestBrowserPool_ConcurrentAcquireRelease(t *testing.T) {
 
 	pool.Close()
 }
+

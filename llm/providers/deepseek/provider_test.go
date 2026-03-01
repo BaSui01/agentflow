@@ -1,6 +1,7 @@
 package deepseek
 
 import (
+	"github.com/BaSui01/agentflow/types"
 	"context"
 	"encoding/json"
 	"net/http"
@@ -80,7 +81,7 @@ func TestDeepSeekProvider_Completion(t *testing.T) {
 	}, zap.NewNop())
 
 	resp, err := p.Completion(context.Background(), &llm.ChatRequest{
-		Messages: []llm.Message{{Role: llm.RoleUser, Content: "Hi"}},
+		Messages: []types.Message{{Role: llm.RoleUser, Content: "Hi"}},
 	})
 	require.NoError(t, err)
 	assert.Equal(t, "deepseek", resp.Provider)
@@ -109,7 +110,7 @@ func TestDeepSeekProvider_Completion_ReasoningMode(t *testing.T) {
 	}, zap.NewNop())
 
 	resp, err := p.Completion(context.Background(), &llm.ChatRequest{
-		Messages:      []llm.Message{{Role: llm.RoleUser, Content: "Think about this"}},
+		Messages:      []types.Message{{Role: llm.RoleUser, Content: "Think about this"}},
 		ReasoningMode: "thinking",
 	})
 	require.NoError(t, err)
@@ -136,7 +137,7 @@ func TestDeepSeekProvider_Completion_ReasoningMode_Extended(t *testing.T) {
 	}, zap.NewNop())
 
 	_, err := p.Completion(context.Background(), &llm.ChatRequest{
-		Messages:      []llm.Message{{Role: llm.RoleUser, Content: "Hi"}},
+		Messages:      []types.Message{{Role: llm.RoleUser, Content: "Hi"}},
 		ReasoningMode: "extended",
 	})
 	require.NoError(t, err)
@@ -164,7 +165,7 @@ func TestDeepSeekProvider_Completion_ReasoningMode_WithExplicitModel(t *testing.
 	// When model is explicitly set, the hook should NOT override it
 	_, err := p.Completion(context.Background(), &llm.ChatRequest{
 		Model:         "deepseek-chat",
-		Messages:      []llm.Message{{Role: llm.RoleUser, Content: "Hi"}},
+		Messages:      []types.Message{{Role: llm.RoleUser, Content: "Hi"}},
 		ReasoningMode: "thinking",
 	})
 	require.NoError(t, err)
@@ -183,10 +184,10 @@ func TestDeepSeekProvider_Completion_Error(t *testing.T) {
 	}, zap.NewNop())
 
 	_, err := p.Completion(context.Background(), &llm.ChatRequest{
-		Messages: []llm.Message{{Role: llm.RoleUser, Content: "Hi"}},
+		Messages: []types.Message{{Role: llm.RoleUser, Content: "Hi"}},
 	})
 	require.Error(t, err)
-	llmErr, ok := err.(*llm.Error)
+	llmErr, ok := err.(*types.Error)
 	require.True(t, ok)
 	assert.Equal(t, llm.ErrUnauthorized, llmErr.Code)
 }
@@ -214,7 +215,7 @@ func TestDeepSeekProvider_Stream(t *testing.T) {
 	}, zap.NewNop())
 
 	ch, err := p.Stream(context.Background(), &llm.ChatRequest{
-		Messages: []llm.Message{{Role: llm.RoleUser, Content: "Hi"}},
+		Messages: []types.Message{{Role: llm.RoleUser, Content: "Hi"}},
 	})
 	require.NoError(t, err)
 
@@ -239,7 +240,7 @@ func TestDeepSeekProvider_Stream_Error(t *testing.T) {
 	}, zap.NewNop())
 
 	_, err := p.Stream(context.Background(), &llm.ChatRequest{
-		Messages: []llm.Message{{Role: llm.RoleUser, Content: "Hi"}},
+		Messages: []types.Message{{Role: llm.RoleUser, Content: "Hi"}},
 	})
 	require.Error(t, err)
 }
@@ -268,7 +269,7 @@ func TestDeepSeekProvider_NotSupported(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			err := tt.callFn()
 			require.Error(t, err)
-			llmErr, ok := err.(*llm.Error)
+			llmErr, ok := err.(*types.Error)
 			require.True(t, ok)
 			assert.Equal(t, llm.ErrInvalidRequest, llmErr.Code)
 			assert.Contains(t, llmErr.Message, tt.feature)
@@ -317,3 +318,5 @@ func TestDeepseekRequestHook(t *testing.T) {
 		})
 	}
 }
+
+

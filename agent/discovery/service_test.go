@@ -311,3 +311,4 @@ func TestDefaultServiceConfig(t *testing.T) {
 	assert.Equal(t, 15*time.Second, cfg.HeartbeatInterval)
 	assert.True(t, cfg.EnableMetrics)
 }
+

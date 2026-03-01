@@ -1,6 +1,7 @@
 package providers
 
 import (
+	"github.com/BaSui01/agentflow/types"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -37,7 +38,7 @@ func doOpenAICompatRequest[Req any, Resp any](
 
 	resp, err := client.Do(httpReq)
 	if err != nil {
-		return nil, &llm.Error{
+		return nil, &types.Error{
 			Code:       llm.ErrUpstreamError,
 			Message:    err.Error(),
 			HTTPStatus: http.StatusBadGateway,
@@ -54,7 +55,7 @@ func doOpenAICompatRequest[Req any, Resp any](
 
 	var result Resp
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return nil, &llm.Error{
+		return nil, &types.Error{
 			Code:       llm.ErrUpstreamError,
 			Message:    err.Error(),
 			HTTPStatus: http.StatusBadGateway,
@@ -104,7 +105,7 @@ func GenerateAudioOpenAICompat(ctx context.Context, client *http.Client, baseURL
 
 	resp, err := client.Do(httpReq)
 	if err != nil {
-		return nil, &llm.Error{
+		return nil, &types.Error{
 			Code:       llm.ErrUpstreamError,
 			Message:    err.Error(),
 			HTTPStatus: http.StatusBadGateway,
@@ -122,7 +123,7 @@ func GenerateAudioOpenAICompat(ctx context.Context, client *http.Client, baseURL
 	// 读取音频数据（直接从已有的 resp.Body 读取）
 	var buf bytes.Buffer
 	if _, err := buf.ReadFrom(resp.Body); err != nil {
-		return nil, &llm.Error{
+		return nil, &types.Error{
 			Code:       llm.ErrUpstreamError,
 			Message:    err.Error(),
 			HTTPStatus: http.StatusBadGateway,
@@ -150,11 +151,13 @@ func CreateEmbeddingOpenAICompat(ctx context.Context, client *http.Client, baseU
 // =============================================================================
 
 // NotSupportedError 返回不支持的错误
-func NotSupportedError(providerName, feature string) *llm.Error {
-	return &llm.Error{
+func NotSupportedError(providerName, feature string) *types.Error {
+	return &types.Error{
 		Code:       llm.ErrInvalidRequest,
 		Message:    fmt.Sprintf("%s is not supported by %s", feature, providerName),
 		HTTPStatus: http.StatusNotImplemented,
 		Provider:   providerName,
 	}
 }
+
+

@@ -65,3 +65,4 @@ func TestBuildVersion_ReturnsDev(t *testing.T) {
 	v := buildVersion()
 	assert.Equal(t, "dev", v)
 }
+

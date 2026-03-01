@@ -48,3 +48,4 @@ type MusicUsage struct {
 	DurationSeconds float64 `json:"duration_seconds"`
 	Credits         float64 `json:"credits,omitempty"`
 }
+

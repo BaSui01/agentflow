@@ -1,6 +1,7 @@
 package a2a
 
 import (
+	"github.com/BaSui01/agentflow/types"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -54,10 +55,10 @@ func (m *propMockAgent) Metadata() map[string]string { return m.metadata }
 
 // propTool Provider执行工具Schema Provider用于属性测试.
 type propToolProvider struct {
-	tools map[string][]llm.ToolSchema
+	tools map[string][]types.ToolSchema
 }
 
-func (p *propToolProvider) GetAllowedTools(agentID string) []llm.ToolSchema {
+func (p *propToolProvider) GetAllowedTools(agentID string) []types.ToolSchema {
 	if tools, ok := p.tools[agentID]; ok {
 		return tools
 	}
@@ -161,7 +162,7 @@ func TestProperty_AgentCard_ToolsReflectAgentTools(t *testing.T) {
 
 		// 生成工具的随机数量
 		numTools := rapid.IntRange(0, 5).Draw(rt, "numTools")
-		toolSchemas := make([]llm.ToolSchema, numTools)
+		toolSchemas := make([]types.ToolSchema, numTools)
 		toolNames := make([]string, numTools)
 
 		for i := 0; i < numTools; i++ {
@@ -169,7 +170,7 @@ func TestProperty_AgentCard_ToolsReflectAgentTools(t *testing.T) {
 			toolDesc := rapid.StringMatching(`[A-Za-z][a-zA-Z0-9 ]{5,50}`).Draw(rt, fmt.Sprintf("toolDesc_%d", i))
 
 			toolNames[i] = toolName
-			toolSchemas[i] = llm.ToolSchema{
+			toolSchemas[i] = types.ToolSchema{
 				Name:        toolName,
 				Description: toolDesc,
 				Parameters:  json.RawMessage(`{"type":"object"}`),
@@ -185,7 +186,7 @@ func TestProperty_AgentCard_ToolsReflectAgentTools(t *testing.T) {
 		}
 
 		toolProvider := &propToolProvider{
-			tools: map[string][]llm.ToolSchema{
+			tools: map[string][]types.ToolSchema{
 				agentID: toolSchemas,
 			},
 		}
@@ -364,7 +365,7 @@ func TestProperty_AgentCard_ToolDefinitionCompleteness(t *testing.T) {
 		}
 		paramsJSON, _ := json.Marshal(params)
 
-		toolSchema := llm.ToolSchema{
+		toolSchema := types.ToolSchema{
 			Name:        toolName,
 			Description: toolDesc,
 			Parameters:  paramsJSON,
@@ -382,3 +383,5 @@ func TestProperty_AgentCard_ToolDefinitionCompleteness(t *testing.T) {
 		assert.NotNil(t, toolDef.Parameters, "Tool parameters should not be nil")
 	})
 }
+
+

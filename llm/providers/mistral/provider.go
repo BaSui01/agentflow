@@ -42,3 +42,4 @@ func mistralRequestHook(req *llm.ChatRequest, body *providers.OpenAICompatReques
 		}
 	}
 }
+

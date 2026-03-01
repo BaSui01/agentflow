@@ -515,3 +515,4 @@ func (m *CapabilityMatcher) FindLeastLoadedAgent(ctx context.Context, requiredCa
 
 // 确保能力Matcher执行Matcher接口.
 var _ Matcher = (*CapabilityMatcher)(nil)
+

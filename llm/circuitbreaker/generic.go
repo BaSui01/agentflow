@@ -20,3 +20,4 @@ func CallWithResultTyped[T any](cb CircuitBreaker, ctx context.Context, fn func(
 	}
 	return result.(T), nil
 }
+

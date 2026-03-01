@@ -226,3 +226,4 @@ func (p *FluxProvider) Edit(ctx context.Context, req *EditRequest) (*GenerateRes
 func (p *FluxProvider) CreateVariation(ctx context.Context, req *VariationRequest) (*GenerateResponse, error) {
 	return nil, fmt.Errorf("flux does not support image variations")
 }
+

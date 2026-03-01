@@ -1,6 +1,7 @@
 package reasoning
 
 import (
+	"github.com/BaSui01/agentflow/types"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -56,14 +57,14 @@ type MemoryEntry struct {
 type ReflexionExecutor struct {
 	provider     llm.Provider
 	toolExecutor tools.ToolExecutor
-	toolSchemas  []llm.ToolSchema
+	toolSchemas  []types.ToolSchema
 	config       ReflexionConfig
 	memory       *ReflexionMemory
 	logger       *zap.Logger
 }
 
 // 新ReflexionExecutor创建了新的Reflexion执行器.
-func NewReflexionExecutor(provider llm.Provider, executor tools.ToolExecutor, schemas []llm.ToolSchema, config ReflexionConfig, logger *zap.Logger) *ReflexionExecutor {
+func NewReflexionExecutor(provider llm.Provider, executor tools.ToolExecutor, schemas []types.ToolSchema, config ReflexionConfig, logger *zap.Logger) *ReflexionExecutor {
 	if logger == nil {
 		logger = zap.NewNop()
 	}
@@ -158,7 +159,7 @@ func (r *ReflexionExecutor) executeTrial(ctx context.Context, task string, trial
 	prompt := sb.String()
 
 	resp, err := r.provider.Completion(ctx, &llm.ChatRequest{
-		Model: "gpt-4o", Messages: []llm.Message{{Role: llm.RoleUser, Content: prompt}},
+		Model: "gpt-4o", Messages: []types.Message{{Role: llm.RoleUser, Content: prompt}},
 		Tools: r.toolSchemas, Temperature: 0.3, MaxTokens: 2000,
 	})
 	if err != nil {
@@ -186,7 +187,7 @@ func (r *ReflexionExecutor) executeTrial(ctx context.Context, task string, trial
 func (r *ReflexionExecutor) evaluateTrial(ctx context.Context, task string, trial *Trial) (float64, int, error) {
 	prompt := fmt.Sprintf("Rate this response (0.0-1.0):\nTask: %s\nResponse: %s\nJSON: {\"score\": X}", task, trial.Result)
 	resp, err := r.provider.Completion(ctx, &llm.ChatRequest{
-		Model: "gpt-4o", Messages: []llm.Message{{Role: llm.RoleUser, Content: prompt}}, Temperature: 0.1, MaxTokens: 100,
+		Model: "gpt-4o", Messages: []types.Message{{Role: llm.RoleUser, Content: prompt}}, Temperature: 0.1, MaxTokens: 100,
 	})
 	if err != nil {
 		return 0.5, 0, err
@@ -210,7 +211,7 @@ func (r *ReflexionExecutor) evaluateTrial(ctx context.Context, task string, tria
 func (r *ReflexionExecutor) generateReflection(ctx context.Context, task string, trial *Trial) (*Reflection, int, error) {
 	prompt := fmt.Sprintf("Analyze this attempt:\nTask: %s\nResult: %s\nScore: %.2f\nJSON: {\"analysis\": \"\", \"mistakes\": [], \"next_strategy\": \"\"}", task, trial.Result, trial.Score)
 	resp, err := r.provider.Completion(ctx, &llm.ChatRequest{
-		Model: "gpt-4o", Messages: []llm.Message{{Role: llm.RoleUser, Content: prompt}}, Temperature: 0.3, MaxTokens: 500,
+		Model: "gpt-4o", Messages: []types.Message{{Role: llm.RoleUser, Content: prompt}}, Temperature: 0.3, MaxTokens: 500,
 	})
 	if err != nil {
 		return &Reflection{Analysis: "Error", NextStrategy: "Try again"}, 0, err
@@ -246,3 +247,5 @@ func extractJSONFromContent(s string) string {
 	}
 	return s
 }
+
+

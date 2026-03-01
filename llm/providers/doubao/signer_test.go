@@ -41,3 +41,4 @@ func TestHmacSHA256(t *testing.T) {
 	assert.NotEmpty(t, result)
 	assert.Len(t, result, 32) // SHA256 produces 32 bytes
 }
+

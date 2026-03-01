@@ -1,6 +1,7 @@
 package claude
 
 import (
+	"github.com/BaSui01/agentflow/types"
 	"context"
 	"testing"
 
@@ -34,10 +35,12 @@ func TestClaudeProvider_MultimodalNotSupported(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			err := tt.fn()
 			require.Error(t, err)
-			llmErr, ok := err.(*llm.Error)
+			llmErr, ok := err.(*types.Error)
 			require.True(t, ok)
 			assert.Equal(t, llm.ErrInvalidRequest, llmErr.Code)
 			assert.Contains(t, llmErr.Message, "not supported")
 		})
 	}
 }
+
+

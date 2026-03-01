@@ -1,6 +1,7 @@
 package main
 
 import (
+	"github.com/BaSui01/agentflow/types"
 	"context"
 	"fmt"
 	"log"
@@ -39,7 +40,7 @@ func main() {
 	ctx := context.Background()
 	req := &llm.ChatRequest{
 		Model: "gpt-3.5-turbo",
-		Messages: []llm.Message{
+		Messages: []types.Message{
 			{
 				Role:    llm.RoleUser,
 				Content: "Write a short poem about Go programming language.",
@@ -65,3 +66,5 @@ func main() {
 	}
 	fmt.Println("\n---")
 }
+
+

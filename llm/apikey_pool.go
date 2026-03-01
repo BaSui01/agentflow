@@ -411,3 +411,4 @@ type APIKeyStats struct {
 	LastErrorAt    *time.Time `json:"last_error_at"`
 	LastError      string     `json:"last_error"`
 }
+

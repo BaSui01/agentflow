@@ -553,3 +553,4 @@ func (s *JSONSchema) HasProperty(name string) bool {
 	_, ok := s.Properties[name]
 	return ok
 }
+

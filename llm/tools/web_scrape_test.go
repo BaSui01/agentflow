@@ -250,3 +250,4 @@ func TestDefaultWebScrapeToolConfig(t *testing.T) {
 	assert.True(t, cfg.DefaultOpts.IncludeLinks)
 	assert.Equal(t, 50000, cfg.DefaultOpts.MaxLength)
 }
+

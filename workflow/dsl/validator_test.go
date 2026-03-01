@@ -718,3 +718,4 @@ func TestParser_ParseFile_NotFound(t *testing.T) {
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "read DSL file")
 }
+

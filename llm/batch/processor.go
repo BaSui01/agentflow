@@ -296,3 +296,4 @@ func (s BatchStats) BatchEfficiency() float64 {
 	}
 	return float64(s.Completed+s.Failed) / float64(s.Batched)
 }
+

@@ -403,3 +403,4 @@ func (d *Deployer) ExportManifest(deploymentID string) ([]byte, error) {
 
 	return json.MarshalIndent(manifest, "", "  ")
 }
+

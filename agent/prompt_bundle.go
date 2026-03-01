@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"github.com/BaSui01/agentflow/types"
 	"regexp"
 	"strings"
 
@@ -13,7 +14,7 @@ import (
 type PromptBundle struct {
 	Version     string            `json:"version"`
 	System      SystemPrompt      `json:"system"`
-	Tools       []llm.ToolSchema  `json:"tools,omitempty"`
+	Tools       []types.ToolSchema  `json:"tools,omitempty"`
 	Examples    []Example         `json:"examples,omitempty"`
 	Memory      MemoryConfig      `json:"memory,omitempty"`
 	Plan        *PlanConfig       `json:"plan,omitempty"`
@@ -255,20 +256,20 @@ func extractTemplateVars(text string) []string {
 }
 
 // RenderExamplesAsMessages 将 Examples 渲染为 LLM Message 格式
-func (b PromptBundle) RenderExamplesAsMessages() []llm.Message {
+func (b PromptBundle) RenderExamplesAsMessages() []types.Message {
 	if len(b.Examples) == 0 {
 		return nil
 	}
-	messages := make([]llm.Message, 0, len(b.Examples)*2)
+	messages := make([]types.Message, 0, len(b.Examples)*2)
 	for _, ex := range b.Examples {
 		if user := strings.TrimSpace(ex.User); user != "" {
-			messages = append(messages, llm.Message{
+			messages = append(messages, types.Message{
 				Role:    llm.RoleUser,
 				Content: user,
 			})
 		}
 		if assistant := strings.TrimSpace(ex.Assistant); assistant != "" {
-			messages = append(messages, llm.Message{
+			messages = append(messages, types.Message{
 				Role:    llm.RoleAssistant,
 				Content: assistant,
 			})
@@ -278,11 +279,11 @@ func (b PromptBundle) RenderExamplesAsMessages() []llm.Message {
 }
 
 // RenderExamplesAsMessagesWithVars 渲染 Examples 并替换变量
-func (b PromptBundle) RenderExamplesAsMessagesWithVars(vars map[string]string) []llm.Message {
+func (b PromptBundle) RenderExamplesAsMessagesWithVars(vars map[string]string) []types.Message {
 	if len(b.Examples) == 0 {
 		return nil
 	}
-	messages := make([]llm.Message, 0, len(b.Examples)*2)
+	messages := make([]types.Message, 0, len(b.Examples)*2)
 	for _, ex := range b.Examples {
 		user := strings.TrimSpace(ex.User)
 		assistant := strings.TrimSpace(ex.Assistant)
@@ -291,13 +292,13 @@ func (b PromptBundle) RenderExamplesAsMessagesWithVars(vars map[string]string) [
 			assistant = replaceTemplateVars(assistant, vars)
 		}
 		if user != "" {
-			messages = append(messages, llm.Message{
+			messages = append(messages, types.Message{
 				Role:    llm.RoleUser,
 				Content: user,
 			})
 		}
 		if assistant != "" {
-			messages = append(messages, llm.Message{
+			messages = append(messages, types.Message{
 				Role:    llm.RoleAssistant,
 				Content: assistant,
 			})
@@ -315,3 +316,5 @@ func (b PromptBundle) HasExamples() bool {
 func (b *PromptBundle) AppendExamples(examples ...Example) {
 	b.Examples = append(b.Examples, examples...)
 }
+
+

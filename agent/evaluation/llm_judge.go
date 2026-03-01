@@ -1,6 +1,7 @@
 package evaluation
 
 import (
+	"github.com/BaSui01/agentflow/types"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -201,7 +202,7 @@ func (j *LLMJudge) Judge(ctx context.Context, input *EvalInput, output *EvalOutp
 	// 调用 LLM 进行评估
 	req := &llm.ChatRequest{
 		Model: j.config.Model,
-		Messages: []llm.Message{
+		Messages: []types.Message{
 			{Role: llm.RoleUser, Content: prompt},
 		},
 		Temperature: 0.1, // Low temperature for consistent evaluation
@@ -540,3 +541,5 @@ func sqrt(x float64) float64 {
 	}
 	return z
 }
+
+

@@ -1,6 +1,7 @@
 package evaluation
 
 import (
+	"github.com/BaSui01/agentflow/types"
 	"context"
 	"encoding/json"
 	"testing"
@@ -27,7 +28,7 @@ func (m *mockProvider) Completion(ctx context.Context, req *llm.ChatRequest) (*l
 	}
 	return &llm.ChatResponse{
 		Choices: []llm.ChatChoice{
-			{Message: llm.Message{Content: m.response}},
+			{Message: types.Message{Content: m.response}},
 		},
 	}, nil
 }
@@ -337,3 +338,5 @@ func TestHelperFunctions(t *testing.T) {
 		assert.InDelta(t, 0.0, sqrt(-1.0), 0.001)
 	})
 }
+
+

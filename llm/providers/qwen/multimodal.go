@@ -57,3 +57,4 @@ func (p *QwenProvider) GetFineTuningJob(ctx context.Context, jobID string) (*llm
 func (p *QwenProvider) CancelFineTuningJob(ctx context.Context, jobID string) error {
 	return providers.NotSupportedError(p.Name(), "fine-tuning")
 }
+

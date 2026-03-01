@@ -462,3 +462,4 @@ func TestLoadFromEnv_Function(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "env-only-agent", cfg.Agent.Name)
 }
+

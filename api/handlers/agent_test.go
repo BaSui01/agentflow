@@ -506,3 +506,4 @@ func TestAgentHandler_HandlePlanAgent_ValidAgentID(t *testing.T) {
 	// Should pass validation (501 = not yet implemented, but not 400)
 	assert.NotEqual(t, http.StatusBadRequest, w.Code)
 }
+

@@ -1,6 +1,7 @@
 package deliberation
 
 import (
+	"github.com/BaSui01/agentflow/types"
 	"context"
 	"testing"
 	"time"
@@ -54,7 +55,7 @@ func TestLLMReasoner_Think(t *testing.T) {
 		completionFn: func(ctx context.Context, req *llm.ChatRequest) (*llm.ChatResponse, error) {
 			return &llm.ChatResponse{
 				Choices: []llm.ChatChoice{
-					{Message: llm.Message{Content: "analysis\nCONFIDENCE: 0.85"}},
+					{Message: types.Message{Content: "analysis\nCONFIDENCE: 0.85"}},
 				},
 			}, nil
 		},
@@ -327,3 +328,5 @@ func (p *testLLMProvider) Name() string                                    { ret
 func (p *testLLMProvider) SupportsNativeFunctionCalling() bool             { return false }
 func (p *testLLMProvider) ListModels(ctx context.Context) ([]llm.Model, error) { return nil, nil }
 func (p *testLLMProvider) Endpoints() llm.ProviderEndpoints                { return llm.ProviderEndpoints{} }
+
+

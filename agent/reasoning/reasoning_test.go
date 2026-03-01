@@ -1,6 +1,7 @@
 package reasoning
 
 import (
+	"github.com/BaSui01/agentflow/types"
 	"context"
 	"encoding/json"
 	"testing"
@@ -24,7 +25,7 @@ func (p *testProvider) Completion(ctx context.Context, req *llm.ChatRequest) (*l
 		return p.completionFn(ctx, req)
 	}
 	return &llm.ChatResponse{
-		Choices: []llm.ChatChoice{{Message: llm.Message{Content: "mock"}}},
+		Choices: []llm.ChatChoice{{Message: types.Message{Content: "mock"}}},
 	}, nil
 }
 func (p *testProvider) Stream(context.Context, *llm.ChatRequest) (<-chan llm.StreamChunk, error) {
@@ -45,10 +46,10 @@ func (p *testProvider) Endpoints() llm.ProviderEndpoints {
 // --- mock tool executor (satisfies tools.ToolExecutor) ---
 
 type testToolExecutor struct {
-	executeFn func(ctx context.Context, calls []llm.ToolCall) []tools.ToolResult
+	executeFn func(ctx context.Context, calls []types.ToolCall) []tools.ToolResult
 }
 
-func (e *testToolExecutor) Execute(ctx context.Context, calls []llm.ToolCall) []tools.ToolResult {
+func (e *testToolExecutor) Execute(ctx context.Context, calls []types.ToolCall) []tools.ToolResult {
 	if e.executeFn != nil {
 		return e.executeFn(ctx, calls)
 	}
@@ -61,8 +62,8 @@ func (e *testToolExecutor) Execute(ctx context.Context, calls []llm.ToolCall) []
 	return results
 }
 
-func (e *testToolExecutor) ExecuteOne(ctx context.Context, call llm.ToolCall) tools.ToolResult {
-	results := e.Execute(ctx, []llm.ToolCall{call})
+func (e *testToolExecutor) ExecuteOne(ctx context.Context, call types.ToolCall) tools.ToolResult {
+	results := e.Execute(ctx, []types.ToolCall{call})
 	if len(results) > 0 {
 		return results[0]
 	}
@@ -202,7 +203,7 @@ func TestReWOO_ExecuteSteps_CircularDependency(t *testing.T) {
 func TestReWOO_ExecuteTool(t *testing.T) {
 	t.Parallel()
 	executor := &testToolExecutor{
-		executeFn: func(_ context.Context, calls []llm.ToolCall) []tools.ToolResult {
+		executeFn: func(_ context.Context, calls []types.ToolCall) []tools.ToolResult {
 			return []tools.ToolResult{{ToolCallID: calls[0].ID, Result: json.RawMessage(`"found"`)}}
 		},
 	}
@@ -213,7 +214,7 @@ func TestReWOO_ExecuteTool(t *testing.T) {
 func TestReWOO_ExecuteTool_Error(t *testing.T) {
 	t.Parallel()
 	executor := &testToolExecutor{
-		executeFn: func(_ context.Context, calls []llm.ToolCall) []tools.ToolResult {
+		executeFn: func(_ context.Context, calls []types.ToolCall) []tools.ToolResult {
 			return []tools.ToolResult{{ToolCallID: calls[0].ID, Error: "fail"}}
 		},
 	}
@@ -224,7 +225,7 @@ func TestReWOO_ExecuteTool_Error(t *testing.T) {
 func TestReWOO_ExecuteTool_NoResult(t *testing.T) {
 	t.Parallel()
 	executor := &testToolExecutor{
-		executeFn: func(_ context.Context, _ []llm.ToolCall) []tools.ToolResult { return nil },
+		executeFn: func(_ context.Context, _ []types.ToolCall) []tools.ToolResult { return nil },
 	}
 	r := NewReWOO(nil, executor, nil, DefaultReWOOConfig(), zap.NewNop())
 	assert.Equal(t, "No result", r.executeTool(context.Background(), "s", "q"))
@@ -471,7 +472,7 @@ func TestReWOO_Execute_Success(t *testing.T) {
 			case callCount == 1:
 				// Plan generation
 				return &llm.ChatResponse{
-					Choices: []llm.ChatChoice{{Message: llm.Message{
+					Choices: []llm.ChatChoice{{Message: types.Message{
 						Content: `[{"id":"#E1","tool":"search","arguments":"golang","reasoning":"find info"}]`,
 					}}},
 					Usage: llm.ChatUsage{TotalTokens: 50},
@@ -479,14 +480,14 @@ func TestReWOO_Execute_Success(t *testing.T) {
 			default:
 				// Synthesis
 				return &llm.ChatResponse{
-					Choices: []llm.ChatChoice{{Message: llm.Message{Content: "final answer"}}},
+					Choices: []llm.ChatChoice{{Message: types.Message{Content: "final answer"}}},
 					Usage:   llm.ChatUsage{TotalTokens: 30},
 				}, nil
 			}
 		},
 	}
 	executor := &testToolExecutor{
-		executeFn: func(_ context.Context, calls []llm.ToolCall) []tools.ToolResult {
+		executeFn: func(_ context.Context, calls []types.ToolCall) []tools.ToolResult {
 			return []tools.ToolResult{{ToolCallID: calls[0].ID, Result: json.RawMessage(`"search result"`)}}
 		},
 	}
@@ -511,7 +512,7 @@ func TestTreeOfThought_Execute_HighScoreEarlyReturn(t *testing.T) {
 			if callCount == 1 {
 				// generateThoughts: return thoughts as JSON
 				return &llm.ChatResponse{
-					Choices: []llm.ChatChoice{{Message: llm.Message{
+					Choices: []llm.ChatChoice{{Message: types.Message{
 						Content: `[{"thought":"approach A","reasoning":"good"},{"thought":"approach B","reasoning":"also good"}]`,
 					}}},
 					Usage: llm.ChatUsage{TotalTokens: 20},
@@ -519,7 +520,7 @@ func TestTreeOfThought_Execute_HighScoreEarlyReturn(t *testing.T) {
 			}
 			// evaluateSingle: return high score
 			return &llm.ChatResponse{
-				Choices: []llm.ChatChoice{{Message: llm.Message{Content: "0.95"}}},
+				Choices: []llm.ChatChoice{{Message: types.Message{Content: "0.95"}}},
 				Usage:   llm.ChatUsage{TotalTokens: 5},
 			}, nil
 		},
@@ -545,7 +546,7 @@ func TestTreeOfThought_Execute_MaxDepthReached(t *testing.T) {
 	provider := &testProvider{
 		completionFn: func(_ context.Context, _ *llm.ChatRequest) (*llm.ChatResponse, error) {
 			return &llm.ChatResponse{
-				Choices: []llm.ChatChoice{{Message: llm.Message{Content: "0.5"}}},
+				Choices: []llm.ChatChoice{{Message: types.Message{Content: "0.5"}}},
 				Usage:   llm.ChatUsage{TotalTokens: 5},
 			}, nil
 		},
@@ -570,7 +571,7 @@ func TestTreeOfThought_GenerateThoughts_WithParent(t *testing.T) {
 	provider := &testProvider{
 		completionFn: func(_ context.Context, req *llm.ChatRequest) (*llm.ChatResponse, error) {
 			return &llm.ChatResponse{
-				Choices: []llm.ChatChoice{{Message: llm.Message{
+				Choices: []llm.ChatChoice{{Message: types.Message{
 					Content: `[{"thought":"child thought","reasoning":"follows parent"}]`,
 				}}},
 				Usage: llm.ChatUsage{TotalTokens: 10},
@@ -595,7 +596,7 @@ func TestTreeOfThought_GenerateThoughts_FallbackOnBadJSON(t *testing.T) {
 	provider := &testProvider{
 		completionFn: func(_ context.Context, _ *llm.ChatRequest) (*llm.ChatResponse, error) {
 			return &llm.ChatResponse{
-				Choices: []llm.ChatChoice{{Message: llm.Message{Content: "not valid json"}}},
+				Choices: []llm.ChatChoice{{Message: types.Message{Content: "not valid json"}}},
 				Usage:   llm.ChatUsage{TotalTokens: 10},
 			}, nil
 		},
@@ -617,7 +618,7 @@ func TestTreeOfThought_EvaluateSequential(t *testing.T) {
 	provider := &testProvider{
 		completionFn: func(_ context.Context, _ *llm.ChatRequest) (*llm.ChatResponse, error) {
 			return &llm.ChatResponse{
-				Choices: []llm.ChatChoice{{Message: llm.Message{Content: "0.75"}}},
+				Choices: []llm.ChatChoice{{Message: types.Message{Content: "0.75"}}},
 				Usage:   llm.ChatUsage{TotalTokens: 5},
 			}, nil
 		},
@@ -657,7 +658,7 @@ func TestTreeOfThought_EvaluateSingle_OutOfRange(t *testing.T) {
 	provider := &testProvider{
 		completionFn: func(_ context.Context, _ *llm.ChatRequest) (*llm.ChatResponse, error) {
 			return &llm.ChatResponse{
-				Choices: []llm.ChatChoice{{Message: llm.Message{Content: "5.0"}}},
+				Choices: []llm.ChatChoice{{Message: types.Message{Content: "5.0"}}},
 				Usage:   llm.ChatUsage{TotalTokens: 5},
 			}, nil
 		},
@@ -682,13 +683,13 @@ func TestReflexionExecutor_Execute_SuccessOnFirstTrial(t *testing.T) {
 			if callCount == 1 {
 				// executeTrial: action
 				return &llm.ChatResponse{
-					Choices: []llm.ChatChoice{{Message: llm.Message{Content: "solution"}}},
+					Choices: []llm.ChatChoice{{Message: types.Message{Content: "solution"}}},
 					Usage:   llm.ChatUsage{TotalTokens: 20},
 				}, nil
 			}
 			// evaluateTrial: high score
 			return &llm.ChatResponse{
-				Choices: []llm.ChatChoice{{Message: llm.Message{Content: `{"score": 0.9}`}}},
+				Choices: []llm.ChatChoice{{Message: types.Message{Content: `{"score": 0.9}`}}},
 				Usage:   llm.ChatUsage{TotalTokens: 10},
 			}, nil
 		},
@@ -717,19 +718,19 @@ func TestReflexionExecutor_Execute_MultipleTrials(t *testing.T) {
 			case 1:
 				// Trial 1 action
 				return &llm.ChatResponse{
-					Choices: []llm.ChatChoice{{Message: llm.Message{Content: "attempt 1"}}},
+					Choices: []llm.ChatChoice{{Message: types.Message{Content: "attempt 1"}}},
 					Usage:   llm.ChatUsage{TotalTokens: 10},
 				}, nil
 			case 2:
 				// Trial 1 evaluation: low score
 				return &llm.ChatResponse{
-					Choices: []llm.ChatChoice{{Message: llm.Message{Content: `{"score": 0.3}`}}},
+					Choices: []llm.ChatChoice{{Message: types.Message{Content: `{"score": 0.3}`}}},
 					Usage:   llm.ChatUsage{TotalTokens: 5},
 				}, nil
 			case 3:
 				// Trial 1 reflection
 				return &llm.ChatResponse{
-					Choices: []llm.ChatChoice{{Message: llm.Message{
+					Choices: []llm.ChatChoice{{Message: types.Message{
 						Content: `{"analysis":"needs improvement","mistakes":["wrong approach"],"next_strategy":"try harder"}`,
 					}}},
 					Usage: llm.ChatUsage{TotalTokens: 10},
@@ -737,13 +738,13 @@ func TestReflexionExecutor_Execute_MultipleTrials(t *testing.T) {
 			case 4:
 				// Trial 2 action
 				return &llm.ChatResponse{
-					Choices: []llm.ChatChoice{{Message: llm.Message{Content: "attempt 2"}}},
+					Choices: []llm.ChatChoice{{Message: types.Message{Content: "attempt 2"}}},
 					Usage:   llm.ChatUsage{TotalTokens: 10},
 				}, nil
 			default:
 				// Trial 2 evaluation: high score
 				return &llm.ChatResponse{
-					Choices: []llm.ChatChoice{{Message: llm.Message{Content: `{"score": 0.9}`}}},
+					Choices: []llm.ChatChoice{{Message: types.Message{Content: `{"score": 0.9}`}}},
 					Usage:   llm.ChatUsage{TotalTokens: 5},
 				}, nil
 			}
@@ -772,22 +773,22 @@ func TestReflexionExecutor_Execute_WithToolCalls(t *testing.T) {
 			if callCount == 1 {
 				// Return tool calls
 				return &llm.ChatResponse{
-					Choices: []llm.ChatChoice{{Message: llm.Message{
-						ToolCalls: []llm.ToolCall{{ID: "tc1", Name: "search", Arguments: json.RawMessage(`{"q":"test"}`)}},
+					Choices: []llm.ChatChoice{{Message: types.Message{
+						ToolCalls: []types.ToolCall{{ID: "tc1", Name: "search", Arguments: json.RawMessage(`{"q":"test"}`)}},
 					}}},
 					Usage: llm.ChatUsage{TotalTokens: 15},
 				}, nil
 			}
 			// Evaluation: high score
 			return &llm.ChatResponse{
-				Choices: []llm.ChatChoice{{Message: llm.Message{Content: `{"score": 0.85}`}}},
+				Choices: []llm.ChatChoice{{Message: types.Message{Content: `{"score": 0.85}`}}},
 				Usage:   llm.ChatUsage{TotalTokens: 5},
 			}, nil
 		},
 	}
 
 	executor := &testToolExecutor{
-		executeFn: func(_ context.Context, calls []llm.ToolCall) []tools.ToolResult {
+		executeFn: func(_ context.Context, calls []types.ToolCall) []tools.ToolResult {
 			return []tools.ToolResult{{ToolCallID: calls[0].ID, Result: json.RawMessage(`"tool result"`)}}
 		},
 	}
@@ -816,7 +817,7 @@ func TestPlanAndExecute_Execute_Success(t *testing.T) {
 			case 1:
 				// createPlan
 				return &llm.ChatResponse{
-					Choices: []llm.ChatChoice{{Message: llm.Message{
+					Choices: []llm.ChatChoice{{Message: types.Message{
 						Content: `{"goal":"solve","steps":[{"id":"step_1","description":"do thing","tool":"search","arguments":"query"}]}`,
 					}}},
 					Usage: llm.ChatUsage{TotalTokens: 30},
@@ -824,7 +825,7 @@ func TestPlanAndExecute_Execute_Success(t *testing.T) {
 			default:
 				// synthesizeAnswer
 				return &llm.ChatResponse{
-					Choices: []llm.ChatChoice{{Message: llm.Message{Content: "final synthesis"}}},
+					Choices: []llm.ChatChoice{{Message: types.Message{Content: "final synthesis"}}},
 					Usage:   llm.ChatUsage{TotalTokens: 20},
 				}, nil
 			}
@@ -832,7 +833,7 @@ func TestPlanAndExecute_Execute_Success(t *testing.T) {
 	}
 
 	executor := &testToolExecutor{
-		executeFn: func(_ context.Context, calls []llm.ToolCall) []tools.ToolResult {
+		executeFn: func(_ context.Context, calls []types.ToolCall) []tools.ToolResult {
 			return []tools.ToolResult{{ToolCallID: calls[0].ID, Result: json.RawMessage(`"tool done"`)}}
 		},
 	}
@@ -860,7 +861,7 @@ func TestPlanAndExecute_Execute_LLMStep(t *testing.T) {
 			case 1:
 				// createPlan: step without tool
 				return &llm.ChatResponse{
-					Choices: []llm.ChatChoice{{Message: llm.Message{
+					Choices: []llm.ChatChoice{{Message: types.Message{
 						Content: `{"goal":"think","steps":[{"id":"step_1","description":"analyze the problem"}]}`,
 					}}},
 					Usage: llm.ChatUsage{TotalTokens: 20},
@@ -868,13 +869,13 @@ func TestPlanAndExecute_Execute_LLMStep(t *testing.T) {
 			case 2:
 				// executeLLMStep
 				return &llm.ChatResponse{
-					Choices: []llm.ChatChoice{{Message: llm.Message{Content: "analysis result"}}},
+					Choices: []llm.ChatChoice{{Message: types.Message{Content: "analysis result"}}},
 					Usage:   llm.ChatUsage{TotalTokens: 15},
 				}, nil
 			default:
 				// synthesizeAnswer
 				return &llm.ChatResponse{
-					Choices: []llm.ChatChoice{{Message: llm.Message{Content: "final answer"}}},
+					Choices: []llm.ChatChoice{{Message: types.Message{Content: "final answer"}}},
 					Usage:   llm.ChatUsage{TotalTokens: 10},
 				}, nil
 			}
@@ -901,7 +902,7 @@ func TestPlanAndExecute_Execute_ToolFailure_Replan(t *testing.T) {
 			case 1:
 				// createPlan: two steps, first will fail
 				return &llm.ChatResponse{
-					Choices: []llm.ChatChoice{{Message: llm.Message{
+					Choices: []llm.ChatChoice{{Message: types.Message{
 						Content: `{"goal":"do","steps":[{"id":"step_1","description":"fail step","tool":"bad_tool","arguments":"x"},{"id":"step_2","description":"next","tool":"good_tool","arguments":"y"}]}`,
 					}}},
 					Usage: llm.ChatUsage{TotalTokens: 20},
@@ -909,7 +910,7 @@ func TestPlanAndExecute_Execute_ToolFailure_Replan(t *testing.T) {
 			case 2:
 				// replan: new plan with one step
 				return &llm.ChatResponse{
-					Choices: []llm.ChatChoice{{Message: llm.Message{
+					Choices: []llm.ChatChoice{{Message: types.Message{
 						Content: `{"goal":"retry","steps":[{"id":"step_r1","description":"retry step","tool":"good_tool","arguments":"z"}]}`,
 					}}},
 					Usage: llm.ChatUsage{TotalTokens: 15},
@@ -917,7 +918,7 @@ func TestPlanAndExecute_Execute_ToolFailure_Replan(t *testing.T) {
 			default:
 				// synthesizeAnswer
 				return &llm.ChatResponse{
-					Choices: []llm.ChatChoice{{Message: llm.Message{Content: "recovered answer"}}},
+					Choices: []llm.ChatChoice{{Message: types.Message{Content: "recovered answer"}}},
 					Usage:   llm.ChatUsage{TotalTokens: 10},
 				}, nil
 			}
@@ -926,7 +927,7 @@ func TestPlanAndExecute_Execute_ToolFailure_Replan(t *testing.T) {
 
 	firstCall := true
 	executor := &testToolExecutor{
-		executeFn: func(_ context.Context, calls []llm.ToolCall) []tools.ToolResult {
+		executeFn: func(_ context.Context, calls []types.ToolCall) []tools.ToolResult {
 			if firstCall {
 				firstCall = false
 				return []tools.ToolResult{{ToolCallID: calls[0].ID, Error: "tool broken"}}
@@ -957,7 +958,7 @@ func TestPlanAndExecute_Execute_PlanFailed(t *testing.T) {
 			if callCount == 1 {
 				// createPlan
 				return &llm.ChatResponse{
-					Choices: []llm.ChatChoice{{Message: llm.Message{
+					Choices: []llm.ChatChoice{{Message: types.Message{
 						Content: `{"goal":"do","steps":[{"id":"step_1","description":"fail","tool":"bad","arguments":"x"}]}`,
 					}}},
 					Usage: llm.ChatUsage{TotalTokens: 20},
@@ -968,7 +969,7 @@ func TestPlanAndExecute_Execute_PlanFailed(t *testing.T) {
 	}
 
 	executor := &testToolExecutor{
-		executeFn: func(_ context.Context, calls []llm.ToolCall) []tools.ToolResult {
+		executeFn: func(_ context.Context, calls []types.ToolCall) []tools.ToolResult {
 			return []tools.ToolResult{{ToolCallID: calls[0].ID, Error: "broken"}}
 		},
 	}
@@ -995,20 +996,20 @@ func TestPlanAndExecute_CreatePlan_BadJSON(t *testing.T) {
 			if callCount == 1 {
 				// createPlan: bad JSON, should fallback to minimal plan
 				return &llm.ChatResponse{
-					Choices: []llm.ChatChoice{{Message: llm.Message{Content: "not json"}}},
+					Choices: []llm.ChatChoice{{Message: types.Message{Content: "not json"}}},
 					Usage:   llm.ChatUsage{TotalTokens: 10},
 				}, nil
 			}
 			if callCount == 2 {
 				// executeLLMStep for the fallback step
 				return &llm.ChatResponse{
-					Choices: []llm.ChatChoice{{Message: llm.Message{Content: "direct result"}}},
+					Choices: []llm.ChatChoice{{Message: types.Message{Content: "direct result"}}},
 					Usage:   llm.ChatUsage{TotalTokens: 10},
 				}, nil
 			}
 			// synthesizeAnswer
 			return &llm.ChatResponse{
-				Choices: []llm.ChatChoice{{Message: llm.Message{Content: "synthesized"}}},
+				Choices: []llm.ChatChoice{{Message: types.Message{Content: "synthesized"}}},
 				Usage:   llm.ChatUsage{TotalTokens: 10},
 			}, nil
 		},
@@ -1036,7 +1037,7 @@ func TestDynamicPlanner_Execute_Success(t *testing.T) {
 			case 1:
 				// generateNextSteps: initial plan
 				return &llm.ChatResponse{
-					Choices: []llm.ChatChoice{{Message: llm.Message{
+					Choices: []llm.ChatChoice{{Message: types.Message{
 						Content: `[{"action":"search","description":"find info","confidence":0.8}]`,
 					}}},
 					Usage: llm.ChatUsage{TotalTokens: 20},
@@ -1044,13 +1045,13 @@ func TestDynamicPlanner_Execute_Success(t *testing.T) {
 			case 2:
 				// executeLLMNode
 				return &llm.ChatResponse{
-					Choices: []llm.ChatChoice{{Message: llm.Message{Content: "Final Answer: the result is 42"}}},
+					Choices: []llm.ChatChoice{{Message: types.Message{Content: "Final Answer: the result is 42"}}},
 					Usage:   llm.ChatUsage{TotalTokens: 15},
 				}, nil
 			default:
 				// synthesizeFinalAnswer
 				return &llm.ChatResponse{
-					Choices: []llm.ChatChoice{{Message: llm.Message{Content: "42"}}},
+					Choices: []llm.ChatChoice{{Message: types.Message{Content: "42"}}},
 					Usage:   llm.ChatUsage{TotalTokens: 10},
 				}, nil
 			}
@@ -1080,7 +1081,7 @@ func TestIterativeDeepening_Execute_Success(t *testing.T) {
 			case callCount == 1:
 				// analyzeQuery
 				return &llm.ChatResponse{
-					Choices: []llm.ChatChoice{{Message: llm.Message{
+					Choices: []llm.ChatChoice{{Message: types.Message{
 						Content: `{"aspects":["aspect1"],"initial_queries":["query1"],"depth_strategy":"breadth_first"}`,
 					}}},
 					Usage: llm.ChatUsage{TotalTokens: 20},
@@ -1088,7 +1089,7 @@ func TestIterativeDeepening_Execute_Success(t *testing.T) {
 			case callCount == 2:
 				// generateDirections
 				return &llm.ChatResponse{
-					Choices: []llm.ChatChoice{{Message: llm.Message{
+					Choices: []llm.ChatChoice{{Message: types.Message{
 						Content: `[{"direction":"dir1","query":"q1","priority":0.9}]`,
 					}}},
 					Usage: llm.ChatUsage{TotalTokens: 10},
@@ -1096,7 +1097,7 @@ func TestIterativeDeepening_Execute_Success(t *testing.T) {
 			case callCount == 3:
 				// executeQueries -> generateQueries
 				return &llm.ChatResponse{
-					Choices: []llm.ChatChoice{{Message: llm.Message{
+					Choices: []llm.ChatChoice{{Message: types.Message{
 						Content: `[{"finding":"found something","relevance":0.9,"source":"test"}]`,
 					}}},
 					Usage: llm.ChatUsage{TotalTokens: 15},
@@ -1104,7 +1105,7 @@ func TestIterativeDeepening_Execute_Success(t *testing.T) {
 			default:
 				// synthesize
 				return &llm.ChatResponse{
-					Choices: []llm.ChatChoice{{Message: llm.Message{Content: "synthesized answer"}}},
+					Choices: []llm.ChatChoice{{Message: types.Message{Content: "synthesized answer"}}},
 					Usage:   llm.ChatUsage{TotalTokens: 10},
 				}, nil
 			}
@@ -1123,3 +1124,5 @@ func TestIterativeDeepening_Execute_Success(t *testing.T) {
 	assert.Equal(t, "iterative_deepening", result.Pattern)
 	assert.NotEmpty(t, result.FinalAnswer)
 }
+
+

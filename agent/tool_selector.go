@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"github.com/BaSui01/agentflow/types"
 	"context"
 	"fmt"
 	"math"
@@ -14,7 +15,7 @@ import (
 
 // ToolScore 工具评分
 type ToolScore struct {
-	Tool               llm.ToolSchema `json:"tool"`
+	Tool               types.ToolSchema `json:"tool"`
 	SemanticSimilarity float64        `json:"semantic_similarity"` // Semantic similarity (0-1)
 	EstimatedCost      float64        `json:"estimated_cost"`      // Estimated cost
 	AvgLatency         time.Duration  `json:"avg_latency"`         // Average latency
@@ -61,10 +62,10 @@ func defaultToolSelectionConfigValue() ToolSelectionConfig {
 // ToolSelector 工具选择器接口
 type ToolSelector interface {
 	// SelectTools 基于任务选择最佳工具
-	SelectTools(ctx context.Context, task string, availableTools []llm.ToolSchema) ([]llm.ToolSchema, error)
+	SelectTools(ctx context.Context, task string, availableTools []types.ToolSchema) ([]types.ToolSchema, error)
 
 	// ScoreTools 对工具进行评分
-	ScoreTools(ctx context.Context, task string, tools []llm.ToolSchema) ([]ToolScore, error)
+	ScoreTools(ctx context.Context, task string, tools []types.ToolSchema) ([]ToolScore, error)
 }
 
 // DynamicToolSelector 动态工具选择器
@@ -106,7 +107,7 @@ func NewDynamicToolSelector(agent *BaseAgent, config ToolSelectionConfig) *Dynam
 }
 
 // SelectTools 选择最佳工具
-func (s *DynamicToolSelector) SelectTools(ctx context.Context, task string, availableTools []llm.ToolSchema) ([]llm.ToolSchema, error) {
+func (s *DynamicToolSelector) SelectTools(ctx context.Context, task string, availableTools []types.ToolSchema) ([]types.ToolSchema, error) {
 	if !s.config.Enabled || len(availableTools) == 0 {
 		return availableTools, nil
 	}
@@ -137,7 +138,7 @@ func (s *DynamicToolSelector) SelectTools(ctx context.Context, task string, avai
 	}
 
 	// 4. 选择 Top-K 工具
-	selected := []llm.ToolSchema{}
+	selected := []types.ToolSchema{}
 	for i, score := range scores {
 		if i >= s.config.MaxTools {
 			break
@@ -157,7 +158,7 @@ func (s *DynamicToolSelector) SelectTools(ctx context.Context, task string, avai
 }
 
 // ScoreTools 对工具进行评分
-func (s *DynamicToolSelector) ScoreTools(ctx context.Context, task string, tools []llm.ToolSchema) ([]ToolScore, error) {
+func (s *DynamicToolSelector) ScoreTools(ctx context.Context, task string, tools []types.ToolSchema) ([]ToolScore, error) {
 	scores := make([]ToolScore, len(tools))
 
 	for i, tool := range tools {
@@ -187,7 +188,7 @@ func (s *DynamicToolSelector) ScoreTools(ctx context.Context, task string, tools
 }
 
 // 计算任务和工具之间的语义相似性
-func (s *DynamicToolSelector) calculateSemanticSimilarity(task string, tool llm.ToolSchema) float64 {
+func (s *DynamicToolSelector) calculateSemanticSimilarity(task string, tool types.ToolSchema) float64 {
 	// 简化版本:基于关键字的匹配
 	// 生产应使用矢量嵌入法+余弦相近性
 
@@ -222,7 +223,7 @@ func (s *DynamicToolSelector) calculateSemanticSimilarity(task string, tool llm.
 }
 
 // 成本估计工具执行费用
-func (s *DynamicToolSelector) estimateCost(tool llm.ToolSchema) float64 {
+func (s *DynamicToolSelector) estimateCost(tool types.ToolSchema) float64 {
 	// 简化版本:根据工具类型估算
 	// 制作应使用历史数据统计
 
@@ -308,7 +309,7 @@ func (s *DynamicToolSelector) llmRanking(ctx context.Context, task string, score
 		s.config.MaxTools,
 	)
 
-	messages := []llm.Message{
+	messages := []types.Message{
 		{
 			Role:    llm.RoleSystem,
 			Content: "你是一个工具选择专家，擅长为任务选择最合适的工具。",
@@ -435,3 +436,5 @@ func parseToolIndices(text string) []int {
 
 	return indices
 }
+
+

@@ -51,3 +51,4 @@ func SecureHTTPClient(timeout time.Duration) *http.Client {
 		Transport: SecureTransport(),
 	}
 }
+

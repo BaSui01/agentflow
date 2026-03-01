@@ -1,6 +1,7 @@
 package observability
 
 import (
+	"github.com/BaSui01/agentflow/types"
 	"context"
 	"time"
 
@@ -60,7 +61,7 @@ func NewMetrics() (*Metrics, error) {
 	}
 
 	// 错误计数
-	m.errorTotal, err = meter.Int64Counter("llm.error.total",
+	m.errorTotal, err = meter.Int64Counter("types.Error.total",
 		metric.WithDescription("Total number of errors"),
 		metric.WithUnit("{error}"))
 	if err != nil {
@@ -280,3 +281,5 @@ func (m *Metrics) RecordToolCall(ctx context.Context, toolName string, duration 
 func (m *Metrics) Tracer() trace.Tracer {
 	return m.tracer
 }
+
+

@@ -125,3 +125,4 @@ func parseHeading(line string) (heading string, level int) {
 func (l *MarkdownLoader) SupportedTypes() []string {
 	return []string{".md"}
 }
+

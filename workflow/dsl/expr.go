@@ -458,3 +458,4 @@ func toFloat64(v any) (float64, bool) {
 func parseNumber(s string) (float64, error) {
 	return strconv.ParseFloat(s, 64)
 }
+

@@ -267,3 +267,4 @@ func (f *fakeTokenCounter) CountTokens(_ string) int { return f.count }
 
 // Ensure it satisfies the interface
 var _ types.TokenCounter = (*fakeTokenCounter)(nil)
+

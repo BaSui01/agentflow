@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"github.com/BaSui01/agentflow/types"
 	"context"
 	"fmt"
 	"strings"
@@ -36,7 +37,7 @@ func (b *BaseAgent) Plan(ctx context.Context, input *Input) (*PlanResult, error)
 - 估算每个步骤的复杂度`, input.Content)
 
 	// 构建消息
-	messages := []llm.Message{
+	messages := []types.Message{
 		{
 			Role:    llm.RoleSystem,
 			Content: b.config.PromptBundle.RenderSystemPromptWithVars(input.Variables),
@@ -127,7 +128,7 @@ func (b *BaseAgent) Execute(ctx context.Context, input *Input) (_ *Output, execE
 	}
 
 	// 3c. ConversationStore: restore conversation history
-	var restoredMessages []llm.Message
+	var restoredMessages []types.Message
 	conversationID := input.ChannelID
 	if conversationID != "" && b.conversationStore != nil {
 		conv, convErr := b.conversationStore.GetByID(ctx, conversationID)
@@ -139,8 +140,8 @@ func (b *BaseAgent) Execute(ctx context.Context, input *Input) (_ *Output, execE
 			)
 		} else if conv != nil {
 			for _, msg := range conv.Messages {
-				restoredMessages = append(restoredMessages, llm.Message{
-					Role:    llm.Role(msg.Role),
+				restoredMessages = append(restoredMessages, types.Message{
+					Role:    types.Role(msg.Role),
 					Content: msg.Content,
 				})
 			}
@@ -213,7 +214,7 @@ func (b *BaseAgent) Execute(ctx context.Context, input *Input) (_ *Output, execE
 	}
 
 	// 5. 加载最近的记忆（如果有）
-	var contextMessages []llm.Message
+	var contextMessages []types.Message
 	if b.memory != nil {
 		b.recentMemoryMu.RLock()
 		hasMemory := len(b.recentMemory) > 0
@@ -223,9 +224,9 @@ func (b *BaseAgent) Execute(ctx context.Context, input *Input) (_ *Output, execE
 				if mem.Kind == MemoryShortTerm {
 					role := llm.RoleAssistant
 					if r, ok := mem.Metadata["role"].(string); ok && r != "" {
-						role = llm.Role(r)
+						role = types.Role(r)
 					}
-					contextMessages = append(contextMessages, llm.Message{
+					contextMessages = append(contextMessages, types.Message{
 						Role:    role,
 						Content: mem.Content,
 					})
@@ -236,7 +237,7 @@ func (b *BaseAgent) Execute(ctx context.Context, input *Input) (_ *Output, execE
 	}
 
 	// 6. 构建消息
-	messages := []llm.Message{
+	messages := []types.Message{
 		{
 			Role:    llm.RoleSystem,
 			Content: b.config.PromptBundle.RenderSystemPromptWithVars(input.Variables),
@@ -252,7 +253,7 @@ func (b *BaseAgent) Execute(ctx context.Context, input *Input) (_ *Output, execE
 	}
 
 	// 添加用户输入
-	messages = append(messages, llm.Message{
+	messages = append(messages, types.Message{
 		Role:    llm.RoleUser,
 		Content: input.Content,
 	})
@@ -279,7 +280,7 @@ func (b *BaseAgent) Execute(ctx context.Context, input *Input) (_ *Output, execE
 			// 为重试添加验证失败的反馈
 			if lastValidationResult != nil {
 				feedbackMsg := b.buildValidationFeedbackMessage(lastValidationResult)
-				messages = append(messages, llm.Message{
+				messages = append(messages, types.Message{
 					Role:    llm.RoleUser,
 					Content: feedbackMsg,
 				})
@@ -582,6 +583,8 @@ func parsePlanSteps(content string) []string {
 
 	return steps
 }
+
+
 
 
 

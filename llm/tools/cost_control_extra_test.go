@@ -144,3 +144,4 @@ func TestCostController_GetUsage(t *testing.T) {
 	usage := cc.GetUsage(BudgetScopeGlobal, "", BudgetPeriodDaily)
 	assert.GreaterOrEqual(t, usage, 0.0)
 }
+

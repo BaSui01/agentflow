@@ -266,3 +266,4 @@ func TestDefaultPoolConfig(t *testing.T) {
 	assert.Greater(t, config.ConnMaxLifetime, time.Duration(0))
 	assert.Greater(t, config.ConnMaxIdleTime, time.Duration(0))
 }
+

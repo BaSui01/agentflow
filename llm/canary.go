@@ -391,3 +391,4 @@ func (m *CanaryMonitor) getProviderStats(providerID uint, providerCode string, d
 		FailedCalls: result.FailedCalls,
 	}
 }
+

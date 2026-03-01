@@ -751,3 +751,4 @@ func TestStreamWriter_Write(t *testing.T) {
 	time.Sleep(10 * time.Millisecond)
 	stream.Close()
 }
+

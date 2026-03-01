@@ -87,3 +87,4 @@ func (r *LoaderRegistry) SupportedTypes() []string {
 	sort.Strings(exts)
 	return exts
 }
+

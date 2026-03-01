@@ -84,3 +84,4 @@ type Provider interface {
 	// 支持的返回大小支持的图像大小 。
 	SupportedSizes() []string
 }
+

@@ -299,3 +299,4 @@ func (b *AgenticBrowser) GetHistory() []ActionRecord {
 func ScreenshotToBase64(s *Screenshot) string {
 	return base64.StdEncoding.EncodeToString(s.Data)
 }
+

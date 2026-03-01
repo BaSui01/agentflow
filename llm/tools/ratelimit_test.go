@@ -468,3 +468,4 @@ func TestRateLimitMiddleware_Rejected(t *testing.T) {
 	assert.Contains(t, err.Error(), "rate limit exceeded")
 	assert.Equal(t, 1, callCount)
 }
+

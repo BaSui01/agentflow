@@ -150,3 +150,4 @@ func (p *JinaProvider) RerankSimple(ctx context.Context, query string, documents
 	}
 	return resp.Results, nil
 }
+

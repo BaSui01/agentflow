@@ -412,3 +412,4 @@ func (g *SchemaGenerator) GenerateSchemaFromValue(v any) (*JSONSchema, error) {
 	}
 	return g.GenerateSchema(reflect.TypeOf(v))
 }
+

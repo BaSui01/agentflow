@@ -41,3 +41,4 @@ func (s *Server) initHotReloadManager() error {
 
 	return nil
 }
+

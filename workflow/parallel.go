@@ -187,3 +187,4 @@ func (w *ParallelWorkflow) Tasks() []Task {
 	copy(tasks, w.tasks)
 	return tasks
 }
+

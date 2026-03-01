@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"github.com/BaSui01/agentflow/types"
 	"context"
 	"sync/atomic"
 	"testing"
@@ -48,7 +49,7 @@ func TestReflectionExecutor_ExecuteWithReflection_Disabled(t *testing.T) {
 			{
 				Index:        0,
 				FinishReason: "stop",
-				Message: llm.Message{
+				Message: types.Message{
 					Role:    llm.RoleAssistant,
 					Content: "Hello! How can I help?",
 				},
@@ -119,7 +120,7 @@ func TestReflectionExecutor_ExecuteWithReflection_Success(t *testing.T) {
 		ID: "response-1", Provider: "mock", Model: "gpt-4",
 		Choices: []llm.ChatChoice{{
 			Index: 0, FinishReason: "stop",
-			Message: llm.Message{Role: llm.RoleAssistant, Content: "Short answer"},
+			Message: types.Message{Role: llm.RoleAssistant, Content: "Short answer"},
 		}},
 		Usage: llm.ChatUsage{TotalTokens: 10},
 	}
@@ -129,7 +130,7 @@ func TestReflectionExecutor_ExecuteWithReflection_Success(t *testing.T) {
 		ID: "critique-1", Provider: "mock", Model: "gpt-4",
 		Choices: []llm.ChatChoice{{
 			Index: 0, FinishReason: "stop",
-			Message: llm.Message{
+			Message: types.Message{
 				Role:    llm.RoleAssistant,
 				Content: "评分：5/10\n问题：\n- 回答太简短\n改进建议：\n- 提供更详细的信息",
 			},
@@ -142,7 +143,7 @@ func TestReflectionExecutor_ExecuteWithReflection_Success(t *testing.T) {
 		ID: "response-2", Provider: "mock", Model: "gpt-4",
 		Choices: []llm.ChatChoice{{
 			Index: 0, FinishReason: "stop",
-			Message: llm.Message{
+			Message: types.Message{
 				Role:    llm.RoleAssistant,
 				Content: "Detailed and comprehensive answer with all necessary information",
 			},
@@ -155,7 +156,7 @@ func TestReflectionExecutor_ExecuteWithReflection_Success(t *testing.T) {
 		ID: "critique-2", Provider: "mock", Model: "gpt-4",
 		Choices: []llm.ChatChoice{{
 			Index: 0, FinishReason: "stop",
-			Message: llm.Message{
+			Message: types.Message{
 				Role:    llm.RoleAssistant,
 				Content: "评分：9/10\n问题：\n改进建议：",
 			},
@@ -321,3 +322,5 @@ func TestReflectionExecutor_extractScore(t *testing.T) {
 		})
 	}
 }
+
+

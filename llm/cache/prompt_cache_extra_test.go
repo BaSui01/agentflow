@@ -147,3 +147,4 @@ func TestMultiLevelCache_LocalOnly(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 10, got.TokensSaved)
 }
+

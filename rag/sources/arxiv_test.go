@@ -158,3 +158,4 @@ func TestNewArxivSource_CustomConfig(t *testing.T) {
 	assert.Equal(t, 5, src.config.RetryCount)
 	assert.Equal(t, []string{"cs.AI"}, src.config.Categories)
 }
+

@@ -53,3 +53,4 @@ func ValidateExternalURL(rawURL string) error {
 	}
 	return nil
 }
+

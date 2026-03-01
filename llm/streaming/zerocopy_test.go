@@ -479,3 +479,4 @@ func TestDefaultBackpressureConfig(t *testing.T) {
 	assert.Equal(t, 0.2, cfg.LowWaterMark)
 	assert.Equal(t, DropPolicyBlock, cfg.DropPolicy)
 }
+

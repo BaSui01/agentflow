@@ -311,3 +311,4 @@ func TestCompositionExecutor_NilExecutor(t *testing.T) {
 		t.Fatal("expected error for nil agent executor")
 	}
 }
+

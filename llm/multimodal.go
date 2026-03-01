@@ -227,3 +227,4 @@ type FineTuningError struct {
 	Message string `json:"message"`
 	Param   string `json:"param,omitempty"`
 }
+

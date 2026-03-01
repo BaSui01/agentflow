@@ -436,3 +436,4 @@ func TestInMemoryInstanceProviderDeleteNotFound(t *testing.T) {
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "instance not found")
 }
+

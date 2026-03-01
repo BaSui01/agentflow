@@ -207,3 +207,4 @@ func TestDiscoveryProtocol_NotifyHandlers(t *testing.T) {
 		t.Fatal("handler not called")
 	}
 }
+

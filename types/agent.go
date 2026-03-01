@@ -40,3 +40,4 @@ type Named interface {
 	// Name returns the agent's human-readable display name.
 	Name() string
 }
+

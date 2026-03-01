@@ -50,3 +50,4 @@ func NewProviderFromConfig(cfg FactoryConfig) (Provider, error) {
 		return nil, fmt.Errorf("unsupported image provider type: %s", t)
 	}
 }
+

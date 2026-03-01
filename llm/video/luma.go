@@ -220,3 +220,4 @@ func (p *LumaProvider) pollGeneration(ctx context.Context, id string) (*lumaResp
 		}
 	}
 }
+

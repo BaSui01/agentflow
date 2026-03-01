@@ -415,3 +415,4 @@ func TestGetTyped_MapType(t *testing.T) {
 	assert.Equal(t, 1, val["a"])
 	assert.Equal(t, 2, val["b"])
 }
+

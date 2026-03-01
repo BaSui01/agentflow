@@ -110,3 +110,4 @@ func TestFileCheckpointStore_Rollback_Basic(t *testing.T) {
 	// JSON round-trip turns int into float64 in map[string]any
 	assert.Equal(t, float64(1), latest.Metadata["rollback_from_version"])
 }
+

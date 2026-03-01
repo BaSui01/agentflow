@@ -526,3 +526,4 @@ func (s *RedisMessageStore) Stats(ctx context.Context) (*MessageStoreStats, erro
 
 // 确保 RedisMessageStore 执行信件系统
 var _ MessageStore = (*RedisMessageStore)(nil)
+

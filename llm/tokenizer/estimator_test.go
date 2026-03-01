@@ -241,3 +241,4 @@ func TestGetTokenizerOrEstimator(t *testing.T) {
 	tok = GetTokenizerOrEstimator("test-or-estimator")
 	assert.Equal(t, e, tok)
 }
+

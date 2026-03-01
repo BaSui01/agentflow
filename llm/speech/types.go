@@ -123,3 +123,4 @@ type STTProvider interface {
 	// SupportedFormats 返回支持的音频格式.
 	SupportedFormats() []string
 }
+

@@ -433,3 +433,4 @@ func TestSchemaGenerator_DefaultValues(t *testing.T) {
 	assert.Equal(t, 3.14, schema.Properties["float_val"].Default)
 	assert.Equal(t, true, schema.Properties["bool_val"].Default)
 }
+

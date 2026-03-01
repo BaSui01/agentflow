@@ -176,3 +176,4 @@ func (h *RAGHandler) HandleIndex(w http.ResponseWriter, r *http.Request) {
 		"indexed": len(docs),
 	})
 }
+

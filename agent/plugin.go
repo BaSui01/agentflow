@@ -344,3 +344,4 @@ func (a *PluginEnabledAgent) Registry() *PluginRegistry {
 func (a *PluginEnabledAgent) UnderlyingAgent() Agent {
 	return a.agent
 }
+

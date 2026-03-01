@@ -29,3 +29,4 @@ type ServiceInfo struct {
 	// DependsOn lists service names that must be started before this one.
 	DependsOn []string
 }
+

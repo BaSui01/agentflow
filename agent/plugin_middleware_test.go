@@ -163,3 +163,4 @@ func TestPluginEnabledAgent_Execute_MiddlewareOrder(t *testing.T) {
 	// Execution order: first -> second -> third -> base agent.
 	assert.Equal(t, []string{"first", "second", "third"}, order)
 }
+

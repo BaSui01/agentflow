@@ -1,6 +1,7 @@
 package main
 
 import (
+	"github.com/BaSui01/agentflow/types"
 	"context"
 	"fmt"
 	"log"
@@ -58,7 +59,7 @@ func testOpenAIResponsesAPI(ctx context.Context, logger *zap.Logger) {
 
 	req := &llm.ChatRequest{
 		Model: "gpt-4o-mini",
-		Messages: []llm.Message{
+		Messages: []types.Message{
 			{Role: llm.RoleUser, Content: "用一句话解释什么是 AI"},
 		},
 	}
@@ -91,7 +92,7 @@ func testOpenAIChatCompletions(ctx context.Context, logger *zap.Logger) {
 
 	req := &llm.ChatRequest{
 		Model: "gpt-4o-mini",
-		Messages: []llm.Message{
+		Messages: []types.Message{
 			{Role: llm.RoleUser, Content: "用一句话解释什么是机器学习"},
 		},
 	}
@@ -123,7 +124,7 @@ func testClaudeMessagesAPI(ctx context.Context, logger *zap.Logger) {
 
 	req := &llm.ChatRequest{
 		Model: "claude-3-5-sonnet-20241022",
-		Messages: []llm.Message{
+		Messages: []types.Message{
 			{Role: llm.RoleSystem, Content: "你是一个专业的技术顾问"},
 			{Role: llm.RoleUser, Content: "用一句话解释什么是深度学习"},
 		},
@@ -156,7 +157,7 @@ func testGeminiGenerateContent(ctx context.Context, logger *zap.Logger) {
 
 	req := &llm.ChatRequest{
 		Model: "gemini-2.5-flash",
-		Messages: []llm.Message{
+		Messages: []types.Message{
 			{Role: llm.RoleUser, Content: "用一句话解释什么是神经网络"},
 		},
 	}
@@ -177,7 +178,7 @@ func testGeminiGenerateContent(ctx context.Context, logger *zap.Logger) {
 // testToolCalling 测试工具调用
 func testToolCalling(ctx context.Context, logger *zap.Logger) {
 	// 定义工具
-	tools := []llm.ToolSchema{
+	tools := []types.ToolSchema{
 		{
 			Name:        "get_weather",
 			Description: "获取指定城市的天气信息",
@@ -207,7 +208,7 @@ func testToolCalling(ctx context.Context, logger *zap.Logger) {
 	testProviderToolCalling(ctx, logger, "gemini", tools)
 }
 
-func testProviderToolCalling(ctx context.Context, logger *zap.Logger, providerName string, tools []llm.ToolSchema) {
+func testProviderToolCalling(ctx context.Context, logger *zap.Logger, providerName string, tools []types.ToolSchema) {
 	var provider llm.Provider
 
 	switch providerName {
@@ -247,7 +248,7 @@ func testProviderToolCalling(ctx context.Context, logger *zap.Logger, providerNa
 	}
 
 	req := &llm.ChatRequest{
-		Messages: []llm.Message{
+		Messages: []types.Message{
 			{Role: llm.RoleUser, Content: "北京今天天气怎么样？"},
 		},
 		Tools: tools,
@@ -268,3 +269,5 @@ func testProviderToolCalling(ctx context.Context, logger *zap.Logger, providerNa
 		fmt.Printf("响应: %s\n", resp.Choices[0].Message.Content)
 	}
 }
+
+

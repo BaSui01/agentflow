@@ -106,3 +106,4 @@ func TestMultiLevelCache_IsCacheable(t *testing.T) {
 		t.Error("request with tools should not be cacheable")
 	}
 }
+

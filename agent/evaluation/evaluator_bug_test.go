@@ -182,3 +182,4 @@ func TestEvaluate_StopOnFailure_NoZeroValueDilution(t *testing.T) {
 	// Summary.TotalTasks must equal len(report.Results)
 	assert.Equal(t, len(report.Results), report.Summary.TotalTasks)
 }
+

@@ -1,6 +1,7 @@
 package reasoning
 
 import (
+	"github.com/BaSui01/agentflow/types"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -39,13 +40,13 @@ func DefaultPlanExecuteConfig() PlanExecuteConfig {
 type PlanAndExecute struct {
 	provider     llm.Provider
 	toolExecutor tools.ToolExecutor
-	toolSchemas  []llm.ToolSchema
+	toolSchemas  []types.ToolSchema
 	config       PlanExecuteConfig
 	logger       *zap.Logger
 }
 
 // NewPlanAndExecute创建了一个新的"计划"和"执行"推理器.
-func NewPlanAndExecute(provider llm.Provider, executor tools.ToolExecutor, schemas []llm.ToolSchema, config PlanExecuteConfig, logger *zap.Logger) *PlanAndExecute {
+func NewPlanAndExecute(provider llm.Provider, executor tools.ToolExecutor, schemas []types.ToolSchema, config PlanExecuteConfig, logger *zap.Logger) *PlanAndExecute {
 	if logger == nil {
 		logger = zap.NewNop()
 	}
@@ -220,7 +221,7 @@ Keep the plan focused and achievable (max %d steps).`, strings.Join(toolDescs, "
 
 	resp, err := p.provider.Completion(ctx, &llm.ChatRequest{
 		Model: "gpt-4o",
-		Messages: []llm.Message{
+		Messages: []types.Message{
 			{Role: llm.RoleUser, Content: prompt},
 		},
 		Temperature: 0.3,
@@ -279,13 +280,13 @@ func (p *PlanAndExecute) executeStep(ctx context.Context, plan *ExecutionPlan) (
 	if step.Tool != "" {
 		// 执行工具
 		argsJSON, _ := json.Marshal(map[string]string{"input": step.Arguments})
-		call := llm.ToolCall{
+		call := types.ToolCall{
 			ID:        step.ID,
 			Name:      step.Tool,
 			Arguments: argsJSON,
 		}
 
-		results := p.toolExecutor.Execute(ctx, []llm.ToolCall{call})
+		results := p.toolExecutor.Execute(ctx, []types.ToolCall{call})
 		if len(results) > 0 {
 			if results[0].Error != "" {
 				step.Status = "failed"
@@ -335,7 +336,7 @@ Execute this step and provide the result.`, plan.Goal, strings.Join(context, "\n
 
 	resp, err := p.provider.Completion(ctx, &llm.ChatRequest{
 		Model: "gpt-4o",
-		Messages: []llm.Message{
+		Messages: []types.Message{
 			{Role: llm.RoleUser, Content: prompt},
 		},
 		Temperature: 0.5,
@@ -382,7 +383,7 @@ Create a new plan to continue from here. Output as JSON:
 
 	resp, err := p.provider.Completion(ctx, &llm.ChatRequest{
 		Model: "gpt-4o",
-		Messages: []llm.Message{
+		Messages: []types.Message{
 			{Role: llm.RoleUser, Content: prompt},
 		},
 		Temperature: 0.4,
@@ -431,7 +432,7 @@ Based on these results, provide a clear and complete final answer.`, task, strin
 
 	resp, err := p.provider.Completion(ctx, &llm.ChatRequest{
 		Model: "gpt-4o",
-		Messages: []llm.Message{
+		Messages: []types.Message{
 			{Role: llm.RoleUser, Content: prompt},
 		},
 		Temperature: 0.3,
@@ -457,3 +458,5 @@ func extractJSONObject(s string) string {
 	}
 	return s
 }
+
+

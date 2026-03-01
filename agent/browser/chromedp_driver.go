@@ -352,3 +352,4 @@ func (b *ChromeDPBrowser) GetState(ctx context.Context) (*PageState, error) {
 func (b *ChromeDPBrowser) Close() error {
 	return b.driver.Close()
 }
+

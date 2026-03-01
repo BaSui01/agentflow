@@ -187,3 +187,4 @@ func TestInMemoryEpisodicStore_QueryLimit(t *testing.T) {
 	require.NoError(t, err)
 	assert.Len(t, events, 3)
 }
+

@@ -376,3 +376,4 @@ func TestPIIDetector_ImplementsValidator(t *testing.T) {
 func TestPIIDetector_ImplementsFilter(t *testing.T) {
 	var _ Filter = (*PIIDetector)(nil)
 }
+

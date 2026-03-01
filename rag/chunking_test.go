@@ -411,3 +411,4 @@ func BenchmarkDocumentChunker_RecursiveChunking(b *testing.B) {
 		chunker.ChunkDocument(doc)
 	}
 }
+

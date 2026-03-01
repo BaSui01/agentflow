@@ -154,3 +154,4 @@ func (f *AgentFactory) ToAgentConfig(def *AgentDefinition) map[string]interface{
 
 	return m
 }
+

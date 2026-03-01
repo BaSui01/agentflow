@@ -1,6 +1,7 @@
 package tools
 
 import (
+	"github.com/BaSui01/agentflow/types"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -161,7 +162,7 @@ func NewWebScrapeTool(config WebScrapeToolConfig, logger *zap.Logger) (ToolFunc,
 	}
 
 	metadata := ToolMetadata{
-		Schema: llm.ToolSchema{
+		Schema: types.ToolSchema{
 			Name:        "web_scrape",
 			Description: "Scrape and extract content from a web page URL. Returns the page content in the specified format (markdown, text, or html).",
 			Parameters: json.RawMessage(`{
@@ -220,3 +221,5 @@ func RegisterWebScrapeTool(registry ToolRegistry, config WebScrapeToolConfig, lo
 	fn, metadata := NewWebScrapeTool(config, logger)
 	return registry.Register("web_scrape", fn, metadata)
 }
+
+

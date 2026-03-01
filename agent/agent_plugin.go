@@ -145,3 +145,4 @@ func (r *AgentPluginRegistry) ShutdownAll(ctx context.Context) error {
 	}
 	return nil
 }
+

@@ -54,3 +54,4 @@ func TestSecureHTTPClient(t *testing.T) {
 		t.Fatal("Transport should not be nil")
 	}
 }
+

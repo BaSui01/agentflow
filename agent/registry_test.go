@@ -145,3 +145,4 @@ func TestCachingResolver_WithoutMemory(t *testing.T) {
 	require.True(t, ok)
 	assert.Nil(t, ba.memory)
 }
+

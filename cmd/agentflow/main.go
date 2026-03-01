@@ -220,3 +220,4 @@ Examples:
   agentflow health --addr http://localhost:8080
   agentflow version`)
 }
+

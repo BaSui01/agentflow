@@ -73,3 +73,4 @@ func TestResilientProvider_SupportsNativeFunctionCalling(t *testing.T) {
 
 	assert.True(t, supports)
 }
+

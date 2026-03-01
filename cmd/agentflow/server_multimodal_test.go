@@ -66,3 +66,4 @@ func TestInitHandlers_MultimodalRejectsNonRedisBackend(t *testing.T) {
 	require.Error(t, err)
 	assert.ErrorContains(t, err, "multimodal.reference_store_backend must be redis")
 }
+

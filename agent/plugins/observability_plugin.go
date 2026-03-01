@@ -57,3 +57,4 @@ func (p *ObservabilityPlugin) AroundExecute(ctx context.Context, pc *agent.Pipel
 
 	return nil
 }
+

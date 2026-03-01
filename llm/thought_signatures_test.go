@@ -126,3 +126,4 @@ func TestGenerateSignatureID(t *testing.T) {
 	id2 := generateSignatureID("test-sig-2")
 	assert.NotEmpty(t, id2)
 }
+

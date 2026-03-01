@@ -41,3 +41,4 @@ func (f *DefaultProviderFactory) CreateProvider(providerCode string, apiKey stri
 
 	return constructor(apiKey, baseURL)
 }
+

@@ -1,6 +1,7 @@
 package openaicompat
 
 import (
+	"github.com/BaSui01/agentflow/types"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -151,7 +152,7 @@ func TestProvider_Completion_Success(t *testing.T) {
 	}, zap.NewNop())
 
 	resp, err := p.Completion(context.Background(), &llm.ChatRequest{
-		Messages: []llm.Message{{Role: llm.RoleUser, Content: "Hi"}},
+		Messages: []types.Message{{Role: llm.RoleUser, Content: "Hi"}},
 	})
 	require.NoError(t, err)
 	require.NotNil(t, resp)
@@ -168,7 +169,7 @@ func TestProvider_Completion_HTTPError(t *testing.T) {
 		name       string
 		statusCode int
 		body       string
-		wantCode   llm.ErrorCode
+		wantCode   types.ErrorCode
 	}{
 		{
 			name:       "401 unauthorized",
@@ -205,10 +206,10 @@ func TestProvider_Completion_HTTPError(t *testing.T) {
 			}, zap.NewNop())
 
 			_, err := p.Completion(context.Background(), &llm.ChatRequest{
-				Messages: []llm.Message{{Role: llm.RoleUser, Content: "Hi"}},
+				Messages: []types.Message{{Role: llm.RoleUser, Content: "Hi"}},
 			})
 			require.Error(t, err)
-			var llmErr *llm.Error
+			var llmErr *types.Error
 			require.ErrorAs(t, err, &llmErr)
 			assert.Equal(t, tt.wantCode, llmErr.Code)
 		})
@@ -229,10 +230,10 @@ func TestProvider_Completion_InvalidJSON(t *testing.T) {
 	}, zap.NewNop())
 
 	_, err := p.Completion(context.Background(), &llm.ChatRequest{
-		Messages: []llm.Message{{Role: llm.RoleUser, Content: "Hi"}},
+		Messages: []types.Message{{Role: llm.RoleUser, Content: "Hi"}},
 	})
 	require.Error(t, err)
-	var llmErr *llm.Error
+	var llmErr *types.Error
 	require.ErrorAs(t, err, &llmErr)
 	assert.Equal(t, llm.ErrUpstreamError, llmErr.Code)
 }
@@ -260,7 +261,7 @@ func TestProvider_Completion_CredentialOverride(t *testing.T) {
 
 	ctx := llm.WithCredentialOverride(context.Background(), llm.CredentialOverride{APIKey: "override-key"})
 	_, err := p.Completion(ctx, &llm.ChatRequest{
-		Messages: []llm.Message{{Role: llm.RoleUser, Content: "Hi"}},
+		Messages: []types.Message{{Role: llm.RoleUser, Content: "Hi"}},
 	})
 	require.NoError(t, err)
 	assert.Equal(t, "override-key", capturedKey)
@@ -295,7 +296,7 @@ func TestProvider_Completion_RequestHook(t *testing.T) {
 	}, zap.NewNop())
 
 	_, err := p.Completion(context.Background(), &llm.ChatRequest{
-		Messages: []llm.Message{{Role: llm.RoleUser, Content: "Hi"}},
+		Messages: []types.Message{{Role: llm.RoleUser, Content: "Hi"}},
 	})
 	require.NoError(t, err)
 	assert.Equal(t, "hooked-model", receivedModel)
@@ -341,7 +342,7 @@ func TestProvider_Stream_Success(t *testing.T) {
 	p := New(Config{ProviderName: "test", APIKey: "key", BaseURL: server.URL}, zap.NewNop())
 
 	ch, err := p.Stream(context.Background(), &llm.ChatRequest{
-		Messages: []llm.Message{{Role: llm.RoleUser, Content: "Hi"}},
+		Messages: []types.Message{{Role: llm.RoleUser, Content: "Hi"}},
 	})
 	require.NoError(t, err)
 
@@ -368,10 +369,10 @@ func TestProvider_Stream_HTTPError(t *testing.T) {
 	p := New(Config{ProviderName: "test", APIKey: "key", BaseURL: server.URL}, zap.NewNop())
 
 	_, err := p.Stream(context.Background(), &llm.ChatRequest{
-		Messages: []llm.Message{{Role: llm.RoleUser, Content: "Hi"}},
+		Messages: []types.Message{{Role: llm.RoleUser, Content: "Hi"}},
 	})
 	require.Error(t, err)
-	var llmErr *llm.Error
+	var llmErr *types.Error
 	require.ErrorAs(t, err, &llmErr)
 	assert.Equal(t, llm.ErrRateLimit, llmErr.Code)
 }
@@ -399,11 +400,11 @@ func TestProvider_Stream_ToolCallDelta(t *testing.T) {
 
 	p := New(Config{ProviderName: "test", APIKey: "key", BaseURL: server.URL}, zap.NewNop())
 	ch, err := p.Stream(context.Background(), &llm.ChatRequest{
-		Messages: []llm.Message{{Role: llm.RoleUser, Content: "Hi"}},
+		Messages: []types.Message{{Role: llm.RoleUser, Content: "Hi"}},
 	})
 	require.NoError(t, err)
 
-	var toolCalls []llm.ToolCall
+	var toolCalls []types.ToolCall
 	for chunk := range ch {
 		require.Nil(t, chunk.Err)
 		toolCalls = append(toolCalls, chunk.Delta.ToolCalls...)
@@ -510,3 +511,5 @@ func TestProvider_resolveAPIKey(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func boolPtr(b bool) *bool { return &b }
+
+

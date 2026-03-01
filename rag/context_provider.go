@@ -105,3 +105,4 @@ func truncateText(s string, maxLen int) string {
 	}
 	return truncated + "..."
 }
+

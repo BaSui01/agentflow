@@ -116,3 +116,4 @@ func (p *JinaProvider) EmbedQuery(ctx context.Context, query string) ([]float64,
 func (p *JinaProvider) EmbedDocuments(ctx context.Context, documents []string) ([][]float64, error) {
 	return p.BaseProvider.EmbedDocuments(ctx, documents, p.Embed)
 }
+

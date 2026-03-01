@@ -1,6 +1,7 @@
 package providers
 
 import (
+	"github.com/BaSui01/agentflow/types"
 	"context"
 	"fmt"
 	"math"
@@ -87,7 +88,7 @@ func (p *RetryableProvider) Completion(ctx context.Context, req *llm.ChatRequest
 
 		// 不可重复的错误立即返回 。
 		if p.config.RetryableOnly {
-			if llmErr, ok := err.(*llm.Error); ok && !llmErr.Retryable {
+			if llmErr, ok := err.(*types.Error); ok && !llmErr.Retryable {
 				return nil, err
 			}
 		}
@@ -125,7 +126,7 @@ func (p *RetryableProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<
 		lastErr = err
 
 		if p.config.RetryableOnly {
-			if llmErr, ok := err.(*llm.Error); ok && !llmErr.Retryable {
+			if llmErr, ok := err.(*types.Error); ok && !llmErr.Retryable {
 				return nil, err
 			}
 		}
@@ -145,3 +146,5 @@ func (p *RetryableProvider) calculateDelay(attempt int) time.Duration {
 	}
 	return time.Duration(delay)
 }
+
+

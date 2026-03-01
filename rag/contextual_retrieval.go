@@ -606,3 +606,4 @@ func sortResultsByFinalScore(results []RetrievalResult) {
 		}
 	}
 }
+

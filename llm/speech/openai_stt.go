@@ -195,3 +195,4 @@ func (p *OpenAISTTProvider) TranscribeFile(ctx context.Context, filepath string,
 
 	return p.Transcribe(ctx, opts)
 }
+

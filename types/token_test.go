@@ -58,3 +58,4 @@ func TestEstimateTokenizer_Counting(t *testing.T) {
 		t.Fatalf("expected positive tool tokens, got %d", got)
 	}
 }
+

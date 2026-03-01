@@ -1,6 +1,7 @@
 package evaluation
 
 import (
+	"github.com/BaSui01/agentflow/types"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -419,7 +420,7 @@ func (m *mockJudgeProvider) Completion(ctx context.Context, req *llm.ChatRequest
 	}
 	return &llm.ChatResponse{
 		Choices: []llm.ChatChoice{
-			{Message: llm.Message{Content: m.response}},
+			{Message: types.Message{Content: m.response}},
 		},
 	}, nil
 }
@@ -445,3 +446,5 @@ func (m *mockJudgeProvider) ListModels(ctx context.Context) ([]llm.Model, error)
 }
 
 func (m *mockJudgeProvider) Endpoints() llm.ProviderEndpoints { return llm.ProviderEndpoints{} }
+
+

@@ -237,3 +237,4 @@ func generateSignatureID(sig string) string {
 	hash := sha256.Sum256([]byte(sig + time.Now().String()))
 	return hex.EncodeToString(hash[:8])
 }
+

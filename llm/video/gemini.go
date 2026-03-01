@@ -182,3 +182,4 @@ func (p *GeminiProvider) Analyze(ctx context.Context, req *AnalyzeRequest) (*Ana
 func (p *GeminiProvider) Generate(ctx context.Context, req *GenerateRequest) (*GenerateResponse, error) {
 	return nil, fmt.Errorf("video generation not supported by gemini provider")
 }
+

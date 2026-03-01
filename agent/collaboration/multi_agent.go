@@ -805,3 +805,4 @@ func (c *NetworkCoordinator) Coordinate(ctx context.Context, agents map[string]a
 	// 简化实现：类似广播模式
 	return NewBroadcastCoordinator(c.config, c.hub, c.logger).Coordinate(ctx, agents, input)
 }
+

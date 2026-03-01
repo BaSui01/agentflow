@@ -267,3 +267,4 @@ func TestDefaultBridgeConfig(t *testing.T) {
 		t.Error("AutoSync should default to true")
 	}
 }
+

@@ -368,3 +368,4 @@ func TestCrew_AddTask_AutoID(t *testing.T) {
 	assert.Equal(t, "task_1", crew.Tasks[0].ID)
 	assert.Equal(t, "task_2", crew.Tasks[1].ID)
 }
+

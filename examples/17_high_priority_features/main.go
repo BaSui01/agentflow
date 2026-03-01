@@ -232,3 +232,4 @@ func demoVisualBuilder(ctx context.Context, logger *zap.Logger) {
 	fmt.Printf("   Built DAG workflow: %s\n", dag.Name())
 	fmt.Printf("   Nodes: %d, Entry: %s\n", len(dag.Graph().Nodes()), dag.Graph().GetEntry())
 }
+

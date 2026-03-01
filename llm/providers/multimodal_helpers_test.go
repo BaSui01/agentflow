@@ -175,3 +175,4 @@ func TestNotSupportedError_Details(t *testing.T) {
 	assert.Contains(t, err.Message, "test-provider")
 	assert.Equal(t, http.StatusNotImplemented, err.HTTPStatus)
 }
+

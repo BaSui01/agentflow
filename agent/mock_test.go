@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"github.com/BaSui01/agentflow/types"
 	"context"
 	"sync"
 
@@ -95,17 +96,17 @@ func (m *testMemoryManager) Get(ctx context.Context, id string) (*MemoryRecord, 
 
 // testToolManager implements ToolManager for testing
 type testToolManager struct {
-	getAllowedToolsFn func(agentID string) []llm.ToolSchema
-	executeForAgentFn func(ctx context.Context, agentID string, calls []llm.ToolCall) []llmtools.ToolResult
+	getAllowedToolsFn func(agentID string) []types.ToolSchema
+	executeForAgentFn func(ctx context.Context, agentID string, calls []types.ToolCall) []llmtools.ToolResult
 }
 
-func (t *testToolManager) GetAllowedTools(agentID string) []llm.ToolSchema {
+func (t *testToolManager) GetAllowedTools(agentID string) []types.ToolSchema {
 	if t.getAllowedToolsFn != nil {
 		return t.getAllowedToolsFn(agentID)
 	}
 	return nil
 }
-func (t *testToolManager) ExecuteForAgent(ctx context.Context, agentID string, calls []llm.ToolCall) []llmtools.ToolResult {
+func (t *testToolManager) ExecuteForAgent(ctx context.Context, agentID string, calls []types.ToolCall) []llmtools.ToolResult {
 	if t.executeForAgentFn != nil {
 		return t.executeForAgentFn(ctx, agentID, calls)
 	}
@@ -146,3 +147,5 @@ func (b *testEventBus) Stop() {
 		b.stopFn()
 	}
 }
+
+

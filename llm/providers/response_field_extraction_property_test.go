@@ -1,6 +1,7 @@
 package providers
 
 import (
+	"github.com/BaSui01/agentflow/types"
 	"encoding/json"
 	"testing"
 	"time"
@@ -87,15 +88,15 @@ type testMiniMaxUsage struct {
 func toChatResponseOpenAI(oa testOpenAIResponse, provider string) *llm.ChatResponse {
 	choices := make([]llm.ChatChoice, 0, len(oa.Choices))
 	for _, c := range oa.Choices {
-		msg := llm.Message{
+		msg := types.Message{
 			Role:    llm.RoleAssistant,
 			Content: c.Message.Content,
 			Name:    c.Message.Name,
 		}
 		if len(c.Message.ToolCalls) > 0 {
-			msg.ToolCalls = make([]llm.ToolCall, 0, len(c.Message.ToolCalls))
+			msg.ToolCalls = make([]types.ToolCall, 0, len(c.Message.ToolCalls))
 			for _, tc := range c.Message.ToolCalls {
-				msg.ToolCalls = append(msg.ToolCalls, llm.ToolCall{
+				msg.ToolCalls = append(msg.ToolCalls, types.ToolCall{
 					ID:        tc.ID,
 					Name:      tc.Function.Name,
 					Arguments: tc.Function.Arguments,
@@ -131,7 +132,7 @@ func toChatResponseOpenAI(oa testOpenAIResponse, provider string) *llm.ChatRespo
 func toChatResponseMiniMax(mm testMiniMaxResponse, provider string) *llm.ChatResponse {
 	choices := make([]llm.ChatChoice, 0, len(mm.Choices))
 	for _, c := range mm.Choices {
-		msg := llm.Message{
+		msg := types.Message{
 			Role:    llm.RoleAssistant,
 			Content: c.Message.Content,
 			Name:    c.Message.Name,
@@ -764,3 +765,5 @@ func TestProperty24_IterationCount(t *testing.T) {
 	assert.GreaterOrEqual(t, totalIterations, 100,
 		"Property 24 should have at least 100 test iterations, got %d", totalIterations)
 }
+
+

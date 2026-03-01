@@ -414,3 +414,4 @@ func ConvertHealthStatus(hs *llm.HealthStatus) *api.ProviderHealthResponse {
 		Message:   hs.Message,
 	}
 }
+

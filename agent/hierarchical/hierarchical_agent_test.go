@@ -435,3 +435,4 @@ func TestParseSubtasks_MissingFields(t *testing.T) {
 	assert.Equal(t, "original task", tasks[0].Input.Content) // falls back to original
 	assert.Equal(t, 5, tasks[0].Priority)
 }
+

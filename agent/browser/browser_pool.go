@@ -202,3 +202,4 @@ func NewChromeDPBrowserFactory(logger *zap.Logger) *ChromeDPBrowserFactory {
 func (f *ChromeDPBrowserFactory) Create(config BrowserConfig) (Browser, error) {
 	return NewChromeDPBrowser(config, f.logger)
 }
+

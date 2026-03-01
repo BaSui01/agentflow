@@ -434,3 +434,4 @@ func (c *crewAgentAdapter) Negotiate(_ context.Context, _ crews.Proposal) (*crew
 		Response: c.agent.ID(),
 	}, nil
 }
+

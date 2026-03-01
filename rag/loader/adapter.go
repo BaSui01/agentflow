@@ -105,3 +105,4 @@ func (a *ArxivSourceAdapter) Load(ctx context.Context, source string) ([]rag.Doc
 func (a *ArxivSourceAdapter) SupportedTypes() []string {
 	return []string{}
 }
+

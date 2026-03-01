@@ -42,3 +42,4 @@ func kimiRequestHook(req *llm.ChatRequest, body *providers.OpenAICompatRequest) 
 		}
 	}
 }
+

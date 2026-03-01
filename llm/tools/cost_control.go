@@ -780,3 +780,4 @@ func CreateToolCost(toolName string, baseCost, costPerUnit float64) *ToolCost {
 		Unit:        CostUnitCredits,
 	}
 }
+

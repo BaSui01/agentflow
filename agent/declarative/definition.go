@@ -68,3 +68,4 @@ type GuardrailsConfig struct {
 	OnInputFailure  string `yaml:"on_input_failure,omitempty" json:"on_input_failure,omitempty"`   // "reject", "warn", "ignore"
 	OnOutputFailure string `yaml:"on_output_failure,omitempty" json:"on_output_failure,omitempty"` // "reject", "warn", "ignore"
 }
+

@@ -229,3 +229,4 @@ func TestConfigAPIHandler_HandleChanges_GET(t *testing.T) {
 	resp, _ := decodeConfigResponse(t, w)
 	assert.True(t, resp.Success)
 }
+

@@ -628,3 +628,4 @@ func GetPermissionContext(ctx context.Context) (*PermissionContext, bool) {
 	permCtx, ok := ctx.Value(permissionContextKey).(*PermissionContext)
 	return permCtx, ok
 }
+

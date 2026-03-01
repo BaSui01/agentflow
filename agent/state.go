@@ -37,3 +37,4 @@ func CanTransition(from, to State) bool {
 }
 
 // ErrInvalidTransition 定义见 agent/errors.go。
+

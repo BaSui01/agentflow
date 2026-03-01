@@ -1,6 +1,7 @@
 package conversation
 
 import (
+	"github.com/BaSui01/agentflow/types"
 	"context"
 	"fmt"
 	"testing"
@@ -56,12 +57,12 @@ func TestConversationTree_AddMessage(t *testing.T) {
 	t.Parallel()
 	tree := NewConversationTree("t1")
 
-	state := tree.AddMessage(llm.Message{Role: "user", Content: "hello"})
+	state := tree.AddMessage(types.Message{Role: "user", Content: "hello"})
 	require.NotNil(t, state)
 	assert.Len(t, state.Messages, 1)
 	assert.Equal(t, "hello", state.Messages[0].Content)
 
-	state2 := tree.AddMessage(llm.Message{Role: "assistant", Content: "hi"})
+	state2 := tree.AddMessage(types.Message{Role: "assistant", Content: "hi"})
 	require.NotNil(t, state2)
 	assert.Len(t, state2.Messages, 2)
 }
@@ -69,7 +70,7 @@ func TestConversationTree_AddMessage(t *testing.T) {
 func TestConversationTree_GetCurrentState(t *testing.T) {
 	t.Parallel()
 	tree := NewConversationTree("t1")
-	tree.AddMessage(llm.Message{Role: "user", Content: "hello"})
+	tree.AddMessage(types.Message{Role: "user", Content: "hello"})
 
 	state := tree.GetCurrentState()
 	require.NotNil(t, state)
@@ -79,8 +80,8 @@ func TestConversationTree_GetCurrentState(t *testing.T) {
 func TestConversationTree_GetMessages(t *testing.T) {
 	t.Parallel()
 	tree := NewConversationTree("t1")
-	tree.AddMessage(llm.Message{Role: "user", Content: "hello"})
-	tree.AddMessage(llm.Message{Role: "assistant", Content: "hi"})
+	tree.AddMessage(types.Message{Role: "user", Content: "hello"})
+	tree.AddMessage(types.Message{Role: "assistant", Content: "hi"})
 
 	msgs := tree.GetMessages()
 	assert.Len(t, msgs, 2)
@@ -89,7 +90,7 @@ func TestConversationTree_GetMessages(t *testing.T) {
 func TestConversationTree_Fork(t *testing.T) {
 	t.Parallel()
 	tree := NewConversationTree("t1")
-	tree.AddMessage(llm.Message{Role: "user", Content: "hello"})
+	tree.AddMessage(types.Message{Role: "user", Content: "hello"})
 
 	branch, err := tree.Fork("experiment")
 	require.NoError(t, err)
@@ -108,7 +109,7 @@ func TestConversationTree_Fork_DuplicateName(t *testing.T) {
 func TestConversationTree_SwitchBranch(t *testing.T) {
 	t.Parallel()
 	tree := NewConversationTree("t1")
-	tree.AddMessage(llm.Message{Role: "user", Content: "hello"})
+	tree.AddMessage(types.Message{Role: "user", Content: "hello"})
 	_, err := tree.Fork("alt")
 	require.NoError(t, err)
 
@@ -121,8 +122,8 @@ func TestConversationTree_SwitchBranch(t *testing.T) {
 func TestConversationTree_Rollback(t *testing.T) {
 	t.Parallel()
 	tree := NewConversationTree("t1")
-	tree.AddMessage(llm.Message{Role: "user", Content: "msg1"})
-	tree.AddMessage(llm.Message{Role: "user", Content: "msg2"})
+	tree.AddMessage(types.Message{Role: "user", Content: "msg1"})
+	tree.AddMessage(types.Message{Role: "user", Content: "msg2"})
 
 	history := tree.GetHistory()
 	require.Len(t, history, 3) // root + 2 messages
@@ -140,8 +141,8 @@ func TestConversationTree_Rollback_NotFound(t *testing.T) {
 func TestConversationTree_RollbackN(t *testing.T) {
 	t.Parallel()
 	tree := NewConversationTree("t1")
-	tree.AddMessage(llm.Message{Role: "user", Content: "msg1"})
-	tree.AddMessage(llm.Message{Role: "user", Content: "msg2"})
+	tree.AddMessage(types.Message{Role: "user", Content: "msg1"})
+	tree.AddMessage(types.Message{Role: "user", Content: "msg2"})
 
 	require.NoError(t, tree.RollbackN(1))
 	assert.Len(t, tree.GetHistory(), 2)
@@ -196,12 +197,12 @@ func TestConversationTree_DeleteBranch_NotFound(t *testing.T) {
 func TestConversationTree_MergeBranch(t *testing.T) {
 	t.Parallel()
 	tree := NewConversationTree("t1")
-	tree.AddMessage(llm.Message{Role: "user", Content: "shared"})
+	tree.AddMessage(types.Message{Role: "user", Content: "shared"})
 
 	_, err := tree.Fork("alt")
 	require.NoError(t, err)
 	require.NoError(t, tree.SwitchBranch("alt"))
-	tree.AddMessage(llm.Message{Role: "user", Content: "alt msg"})
+	tree.AddMessage(types.Message{Role: "user", Content: "alt msg"})
 
 	require.NoError(t, tree.SwitchBranch("main"))
 	require.NoError(t, tree.MergeBranch("alt"))
@@ -219,7 +220,7 @@ func TestConversationTree_MergeBranch_NotFound(t *testing.T) {
 func TestConversationTree_ExportImport(t *testing.T) {
 	t.Parallel()
 	tree := NewConversationTree("t1")
-	tree.AddMessage(llm.Message{Role: "user", Content: "hello"})
+	tree.AddMessage(types.Message{Role: "user", Content: "hello"})
 
 	data, err := tree.Export()
 	require.NoError(t, err)
@@ -233,7 +234,7 @@ func TestConversationTree_ExportImport(t *testing.T) {
 func TestConversationTree_Snapshot(t *testing.T) {
 	t.Parallel()
 	tree := NewConversationTree("t1")
-	tree.AddMessage(llm.Message{Role: "user", Content: "hello"})
+	tree.AddMessage(types.Message{Role: "user", Content: "hello"})
 
 	snap := tree.Snapshot("v1")
 	require.NotNil(t, snap)
@@ -243,7 +244,7 @@ func TestConversationTree_Snapshot(t *testing.T) {
 func TestConversationTree_FindSnapshot(t *testing.T) {
 	t.Parallel()
 	tree := NewConversationTree("t1")
-	tree.AddMessage(llm.Message{Role: "user", Content: "hello"})
+	tree.AddMessage(types.Message{Role: "user", Content: "hello"})
 	tree.Snapshot("v1")
 
 	found := tree.FindSnapshot("v1")
@@ -256,9 +257,9 @@ func TestConversationTree_FindSnapshot(t *testing.T) {
 func TestConversationTree_RestoreSnapshot(t *testing.T) {
 	t.Parallel()
 	tree := NewConversationTree("t1")
-	tree.AddMessage(llm.Message{Role: "user", Content: "msg1"})
+	tree.AddMessage(types.Message{Role: "user", Content: "msg1"})
 	tree.Snapshot("v1")
-	tree.AddMessage(llm.Message{Role: "user", Content: "msg2"})
+	tree.AddMessage(types.Message{Role: "user", Content: "msg2"})
 
 	require.NoError(t, tree.RestoreSnapshot("v1"))
 	msgs := tree.GetMessages()
@@ -433,3 +434,5 @@ func TestGroupChatManager_CreateGetChat(t *testing.T) {
 	_, ok = mgr.GetChat("nonexistent")
 	assert.False(t, ok)
 }
+
+

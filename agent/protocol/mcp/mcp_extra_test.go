@@ -271,3 +271,4 @@ func TestMCPClient_NotConnected_Operations(t *testing.T) {
 	_, err = c.GetPrompt(ctx, "test", nil)
 	assert.Error(t, err)
 }
+

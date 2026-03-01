@@ -129,3 +129,4 @@ func (s *PersistentCheckpointStore) DeleteCheckpoint(ctx context.Context, execID
 	}
 	return nil
 }
+

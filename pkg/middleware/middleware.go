@@ -599,3 +599,4 @@ func TenantRateLimiter(ctx context.Context, rps float64, burst int, logger *zap.
 		})
 	}
 }
+

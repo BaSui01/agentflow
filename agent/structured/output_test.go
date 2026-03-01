@@ -1,6 +1,7 @@
 package structured
 
 import (
+	"github.com/BaSui01/agentflow/types"
 	"context"
 	"encoding/json"
 	"testing"
@@ -22,7 +23,7 @@ func (m *mockProvider) Completion(ctx context.Context, req *llm.ChatRequest) (*l
 	}
 	return &llm.ChatResponse{
 		Choices: []llm.ChatChoice{
-			{Message: llm.Message{Content: m.response}},
+			{Message: types.Message{Content: m.response}},
 		},
 	}, nil
 }
@@ -152,7 +153,7 @@ func TestStructuredOutput_GenerateWithMessages(t *testing.T) {
 		so, err := NewStructuredOutput[TestTaskResult](provider)
 		require.NoError(t, err)
 
-		messages := []llm.Message{
+		messages := []types.Message{
 			{Role: llm.RoleUser, Content: "Generate a task result"},
 		}
 		result, err := so.GenerateWithMessages(context.Background(), messages)
@@ -507,3 +508,5 @@ func TestParseResult_JSON(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, string(data), `"raw"`)
 }
+
+

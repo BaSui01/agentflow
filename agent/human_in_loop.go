@@ -412,3 +412,4 @@ func (s *InMemoryApprovalStore) Update(ctx context.Context, request *ApprovalReq
 	s.requests[request.ID] = request
 	return nil
 }
+

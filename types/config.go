@@ -253,3 +253,4 @@ func (c *AgentConfig) Validate() error {
 	}
 	return nil
 }
+

@@ -267,3 +267,4 @@ func TestDefaultExplainabilityConfig(t *testing.T) {
 	assert.True(t, cfg.RecordAlternatives)
 	assert.True(t, cfg.RecordFactors)
 }
+

@@ -333,3 +333,4 @@ func TestResponseWriter_CapturesStatus(t *testing.T) {
 	assert.Equal(t, http.StatusNotFound, rw.status)
 	assert.Equal(t, http.StatusNotFound, inner.Code)
 }
+

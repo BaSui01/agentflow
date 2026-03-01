@@ -47,3 +47,4 @@ func TestDefaultProviderFactory_CreateProvider(t *testing.T) {
 		assert.Equal(t, "v2", p.Name())
 	})
 }
+

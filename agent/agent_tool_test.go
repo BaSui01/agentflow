@@ -272,3 +272,4 @@ func TestAgentTool_Agent(t *testing.T) {
 	at := NewAgentTool(agent, nil)
 	assert.Equal(t, agent, at.Agent())
 }
+

@@ -240,3 +240,4 @@ func TestDefaultWebSearchToolConfig(t *testing.T) {
 	assert.Equal(t, time.Minute, cfg.RateLimit.Window)
 	assert.Equal(t, 10, cfg.DefaultOpts.MaxResults)
 }
+

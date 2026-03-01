@@ -439,3 +439,4 @@ func (r *Router) HasCapability(cap Capability) bool {
 	}
 	return false
 }
+

@@ -736,3 +736,4 @@ func TestMilvusStore_ListDocumentIDs(t *testing.T) {
 		t.Fatalf("expected collection required error, got: %v", err)
 	}
 }
+

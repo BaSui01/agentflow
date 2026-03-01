@@ -92,3 +92,4 @@ func TestCanaryStageConstants(t *testing.T) {
 	assert.Equal(t, CanaryStage("100pct"), CanaryStage100Pct)
 	assert.Equal(t, CanaryStage("rollback"), CanaryStageRollback)
 }
+

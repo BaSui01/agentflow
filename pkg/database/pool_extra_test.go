@@ -305,3 +305,4 @@ func TestPoolStats_Fields(t *testing.T) {
 	assert.Equal(t, int64(1), stats.MaxIdleClosed)
 	assert.Equal(t, int64(2), stats.MaxLifetimeClosed)
 }
+

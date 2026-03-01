@@ -474,3 +474,4 @@ func TestDeepgramProvider_TranscribeFile_NotFound(t *testing.T) {
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to open file")
 }
+

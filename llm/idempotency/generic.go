@@ -36,3 +36,4 @@ func GetTyped[T any](m Manager, ctx context.Context, key string) (T, bool, error
 func SetTyped[T any](m Manager, ctx context.Context, key string, result T, ttl time.Duration) error {
 	return m.Set(ctx, key, result, ttl)
 }
+

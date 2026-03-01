@@ -881,3 +881,4 @@ func (o *AgentOperator) ImportCRD(data []byte) error {
 	}
 	return o.RegisterAgent(&agent)
 }
+

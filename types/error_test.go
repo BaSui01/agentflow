@@ -28,3 +28,4 @@ func TestError_ChainingAndHelpers(t *testing.T) {
 		t.Fatalf("expected non-empty error string")
 	}
 }
+

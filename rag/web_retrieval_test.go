@@ -335,3 +335,4 @@ func TestRetrieve_TopKLimit(t *testing.T) {
 	require.NoError(t, err)
 	assert.LessOrEqual(t, len(results), cfg.TopK)
 }
+

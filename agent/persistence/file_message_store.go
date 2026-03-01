@@ -535,3 +535,4 @@ func (s *FileMessageStore) cleanupLoop(interval time.Duration) {
 
 // 确保文件MessageStore执行信件Store
 var _ MessageStore = (*FileMessageStore)(nil)
+

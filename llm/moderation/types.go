@@ -62,3 +62,4 @@ type ModerationScores struct {
 	Illicit         float64 `json:"illicit"`
 	IllicitViolent  float64 `json:"illicit_violent"`
 }
+

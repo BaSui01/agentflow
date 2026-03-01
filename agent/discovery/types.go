@@ -435,3 +435,4 @@ type DiscoveryFilter struct {
 	// 仅用于远程代理的远程过滤器 。
 	Remote *bool `json:"remote,omitempty"`
 }
+

@@ -1,6 +1,7 @@
 package providers
 
 import (
+	"github.com/BaSui01/agentflow/types"
 	"encoding/json"
 	"testing"
 
@@ -18,7 +19,7 @@ import (
 func TestProperty20_ToolResultMessageConversion(t *testing.T) {
 	testCases := []struct {
 		name        string
-		message     llm.Message
+		message     types.Message
 		provider    string
 		requirement string
 		description string
@@ -26,7 +27,7 @@ func TestProperty20_ToolResultMessageConversion(t *testing.T) {
 		// 基本工具结果案例
 		{
 			name: "Simple tool result with string content",
-			message: llm.Message{
+			message: types.Message{
 				Role:       llm.RoleTool,
 				Content:    `{"result": "success"}`,
 				Name:       "search",
@@ -38,7 +39,7 @@ func TestProperty20_ToolResultMessageConversion(t *testing.T) {
 		},
 		{
 			name: "Tool result with numeric content",
-			message: llm.Message{
+			message: types.Message{
 				Role:       llm.RoleTool,
 				Content:    `{"value": 42}`,
 				Name:       "calculate",
@@ -50,7 +51,7 @@ func TestProperty20_ToolResultMessageConversion(t *testing.T) {
 		},
 		{
 			name: "Tool result with boolean content",
-			message: llm.Message{
+			message: types.Message{
 				Role:       llm.RoleTool,
 				Content:    `{"success": true}`,
 				Name:       "validate",
@@ -62,7 +63,7 @@ func TestProperty20_ToolResultMessageConversion(t *testing.T) {
 		},
 		{
 			name: "Tool result with array content",
-			message: llm.Message{
+			message: types.Message{
 				Role:       llm.RoleTool,
 				Content:    `{"items": ["a", "b", "c"]}`,
 				Name:       "list_items",
@@ -74,7 +75,7 @@ func TestProperty20_ToolResultMessageConversion(t *testing.T) {
 		},
 		{
 			name: "Tool result with nested object",
-			message: llm.Message{
+			message: types.Message{
 				Role:       llm.RoleTool,
 				Content:    `{"user": {"name": "John", "age": 30}}`,
 				Name:       "get_user",
@@ -88,7 +89,7 @@ func TestProperty20_ToolResultMessageConversion(t *testing.T) {
 		// 复杂内容案件
 		{
 			name: "Tool result with complex JSON",
-			message: llm.Message{
+			message: types.Message{
 				Role: llm.RoleTool,
 				Content: `{
 					"status": "success",
@@ -109,7 +110,7 @@ func TestProperty20_ToolResultMessageConversion(t *testing.T) {
 		},
 		{
 			name: "Tool result with empty object",
-			message: llm.Message{
+			message: types.Message{
 				Role:       llm.RoleTool,
 				Content:    `{}`,
 				Name:       "empty_result",
@@ -121,7 +122,7 @@ func TestProperty20_ToolResultMessageConversion(t *testing.T) {
 		},
 		{
 			name: "Tool result with null values",
-			message: llm.Message{
+			message: types.Message{
 				Role:       llm.RoleTool,
 				Content:    `{"value": null, "error": null}`,
 				Name:       "nullable_result",
@@ -133,7 +134,7 @@ func TestProperty20_ToolResultMessageConversion(t *testing.T) {
 		},
 		{
 			name: "Tool result with special characters",
-			message: llm.Message{
+			message: types.Message{
 				Role:       llm.RoleTool,
 				Content:    `{"message": "Hello \"World\"!\nNew line\tTab"}`,
 				Name:       "format_text",
@@ -145,7 +146,7 @@ func TestProperty20_ToolResultMessageConversion(t *testing.T) {
 		},
 		{
 			name: "Tool result with Unicode",
-			message: llm.Message{
+			message: types.Message{
 				Role:       llm.RoleTool,
 				Content:    `{"text": "你好世界 🌍"}`,
 				Name:       "translate",
@@ -159,7 +160,7 @@ func TestProperty20_ToolResultMessageConversion(t *testing.T) {
 		// 工具CallID 变量
 		{
 			name: "Tool result with short ToolCallID",
-			message: llm.Message{
+			message: types.Message{
 				Role:       llm.RoleTool,
 				Content:    `{"result": "ok"}`,
 				Name:       "ping",
@@ -171,7 +172,7 @@ func TestProperty20_ToolResultMessageConversion(t *testing.T) {
 		},
 		{
 			name: "Tool result with long ToolCallID",
-			message: llm.Message{
+			message: types.Message{
 				Role:       llm.RoleTool,
 				Content:    `{"result": "ok"}`,
 				Name:       "test",
@@ -183,7 +184,7 @@ func TestProperty20_ToolResultMessageConversion(t *testing.T) {
 		},
 		{
 			name: "Tool result with UUID ToolCallID",
-			message: llm.Message{
+			message: types.Message{
 				Role:       llm.RoleTool,
 				Content:    `{"result": "ok"}`,
 				Name:       "test",
@@ -195,7 +196,7 @@ func TestProperty20_ToolResultMessageConversion(t *testing.T) {
 		},
 		{
 			name: "Tool result with alphanumeric ToolCallID",
-			message: llm.Message{
+			message: types.Message{
 				Role:       llm.RoleTool,
 				Content:    `{"result": "ok"}`,
 				Name:       "test",
@@ -207,7 +208,7 @@ func TestProperty20_ToolResultMessageConversion(t *testing.T) {
 		},
 		{
 			name: "Tool result with underscore ToolCallID",
-			message: llm.Message{
+			message: types.Message{
 				Role:       llm.RoleTool,
 				Content:    `{"result": "ok"}`,
 				Name:       "test",
@@ -221,7 +222,7 @@ func TestProperty20_ToolResultMessageConversion(t *testing.T) {
 		// 工具名称变化
 		{
 			name: "Tool result with simple name",
-			message: llm.Message{
+			message: types.Message{
 				Role:       llm.RoleTool,
 				Content:    `{"result": "ok"}`,
 				Name:       "test",
@@ -233,7 +234,7 @@ func TestProperty20_ToolResultMessageConversion(t *testing.T) {
 		},
 		{
 			name: "Tool result with underscore name",
-			message: llm.Message{
+			message: types.Message{
 				Role:       llm.RoleTool,
 				Content:    `{"result": "ok"}`,
 				Name:       "get_user_data",
@@ -245,7 +246,7 @@ func TestProperty20_ToolResultMessageConversion(t *testing.T) {
 		},
 		{
 			name: "Tool result with long name",
-			message: llm.Message{
+			message: types.Message{
 				Role:       llm.RoleTool,
 				Content:    `{"result": "ok"}`,
 				Name:       "fetch_user_profile_data_from_database",
@@ -257,7 +258,7 @@ func TestProperty20_ToolResultMessageConversion(t *testing.T) {
 		},
 		{
 			name: "Tool result with numeric suffix name",
-			message: llm.Message{
+			message: types.Message{
 				Role:       llm.RoleTool,
 				Content:    `{"result": "ok"}`,
 				Name:       "tool_v2",
@@ -269,7 +270,7 @@ func TestProperty20_ToolResultMessageConversion(t *testing.T) {
 		},
 		{
 			name: "Tool result with camelCase name",
-			message: llm.Message{
+			message: types.Message{
 				Role:       llm.RoleTool,
 				Content:    `{"result": "ok"}`,
 				Name:       "getUserData",
@@ -283,7 +284,7 @@ func TestProperty20_ToolResultMessageConversion(t *testing.T) {
 		// 错误结果大小写
 		{
 			name: "Tool result with error",
-			message: llm.Message{
+			message: types.Message{
 				Role:       llm.RoleTool,
 				Content:    `{"error": "Not found", "code": 404}`,
 				Name:       "search",
@@ -295,7 +296,7 @@ func TestProperty20_ToolResultMessageConversion(t *testing.T) {
 		},
 		{
 			name: "Tool result with exception",
-			message: llm.Message{
+			message: types.Message{
 				Role:       llm.RoleTool,
 				Content:    `{"exception": "ValueError", "message": "Invalid input"}`,
 				Name:       "validate",
@@ -307,7 +308,7 @@ func TestProperty20_ToolResultMessageConversion(t *testing.T) {
 		},
 		{
 			name: "Tool result with timeout",
-			message: llm.Message{
+			message: types.Message{
 				Role:       llm.RoleTool,
 				Content:    `{"error": "timeout", "duration": 30000}`,
 				Name:       "fetch",
@@ -321,7 +322,7 @@ func TestProperty20_ToolResultMessageConversion(t *testing.T) {
 		// 内容大的案件
 		{
 			name: "Tool result with large array",
-			message: llm.Message{
+			message: types.Message{
 				Role:       llm.RoleTool,
 				Content:    `{"items": [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20]}`,
 				Name:       "list_all",
@@ -333,7 +334,7 @@ func TestProperty20_ToolResultMessageConversion(t *testing.T) {
 		},
 		{
 			name: "Tool result with long string",
-			message: llm.Message{
+			message: types.Message{
 				Role:       llm.RoleTool,
 				Content:    `{"text": "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris."}`,
 				Name:       "generate_text",
@@ -347,7 +348,7 @@ func TestProperty20_ToolResultMessageConversion(t *testing.T) {
 		// 多个外地案件
 		{
 			name: "Tool result with many fields",
-			message: llm.Message{
+			message: types.Message{
 				Role:       llm.RoleTool,
 				Content:    `{"field1": "a", "field2": "b", "field3": "c", "field4": "d", "field5": "e"}`,
 				Name:       "multi_field",
@@ -363,7 +364,7 @@ func TestProperty20_ToolResultMessageConversion(t *testing.T) {
 	providers := []string{"openai", "grok", "qwen", "deepseek", "glm"}
 	expandedTestCases := make([]struct {
 		name        string
-		message     llm.Message
+		message     types.Message
 		provider    string
 		requirement string
 		description string
@@ -404,7 +405,7 @@ func TestProperty20_ToolResultMessageConversion(t *testing.T) {
 }
 
 // 测试 OpenAI 兼容 ToolResult 转换测试工具结果转换 OpenAI 兼容提供者
-func testOpenAICompatibleToolResultConversion(t *testing.T, msg llm.Message, provider, requirement, description string) {
+func testOpenAICompatibleToolResultConversion(t *testing.T, msg types.Message, provider, requirement, description string) {
 	// 使用光谱之后的模拟函数转换
 	converted := mockConvertToolResultOpenAI(msg)
 
@@ -439,7 +440,7 @@ func TestProperty20_EmptyToolCallID(t *testing.T) {
 
 	for _, provider := range providers {
 		t.Run("empty_tool_call_id_"+provider, func(t *testing.T) {
-			msg := llm.Message{
+			msg := types.Message{
 				Role:       llm.RoleTool,
 				Content:    `{"result": "ok"}`,
 				Name:       "test",
@@ -459,7 +460,7 @@ func TestProperty20_EmptyToolCallID(t *testing.T) {
 // TestProperty20  NonToolRole 验证非工具消息不是转换为工具结果
 func TestProperty20_NonToolRole(t *testing.T) {
 	testCases := []struct {
-		role llm.Role
+		role types.Role
 		name string
 	}{
 		{llm.RoleUser, "user"},
@@ -469,7 +470,7 @@ func TestProperty20_NonToolRole(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run("non_tool_role_"+tc.name, func(t *testing.T) {
-			msg := llm.Message{
+			msg := types.Message{
 				Role:       tc.role,
 				Content:    "test content",
 				ToolCallID: "call_123", // Has ToolCallID but wrong role
@@ -505,7 +506,7 @@ func TestProperty20_ContentPreservation(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			msg := llm.Message{
+			msg := types.Message{
 				Role:       llm.RoleTool,
 				Content:    tc.content,
 				Name:       "test",
@@ -541,7 +542,7 @@ func TestProperty20_JSONValidity(t *testing.T) {
 			assert.True(t, json.Valid([]byte(tc.content)),
 				"Test case should have valid JSON input")
 
-			msg := llm.Message{
+			msg := types.Message{
 				Role:       llm.RoleTool,
 				Content:    tc.content,
 				Name:       "test",
@@ -573,7 +574,7 @@ type mockOpenAIToolResultMessage struct {
 	ToolCallID string `json:"tool_call_id,omitempty"`
 }
 
-func mockConvertToolResultOpenAI(msg llm.Message) mockOpenAIToolResultMessage {
+func mockConvertToolResultOpenAI(msg types.Message) mockOpenAIToolResultMessage {
 	converted := mockOpenAIToolResultMessage{
 		Role:    string(msg.Role),
 		Content: msg.Content,
@@ -587,3 +588,5 @@ func mockConvertToolResultOpenAI(msg llm.Message) mockOpenAIToolResultMessage {
 
 	return converted
 }
+
+

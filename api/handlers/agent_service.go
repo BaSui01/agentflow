@@ -59,3 +59,4 @@ func (s *DefaultAgentService) ResolveForOperation(ctx context.Context, agentID s
 		fmt.Sprintf("agent %s is not configured — no agent resolver available", op)).
 		WithHTTPStatus(http.StatusNotImplemented)
 }
+

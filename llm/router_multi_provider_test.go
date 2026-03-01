@@ -150,3 +150,4 @@ func TestMultiProviderRouter_SelectProviderWithModel(t *testing.T) {
 		t.Fatalf("expected error for unknown model")
 	}
 }
+

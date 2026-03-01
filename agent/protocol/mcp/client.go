@@ -522,3 +522,4 @@ func (c *DefaultMCPClient) BatchCallTools(ctx context.Context, calls []types.Too
 
 	return results, nil
 }
+

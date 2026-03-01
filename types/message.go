@@ -127,3 +127,4 @@ func (m Message) WithMetadata(metadata any) Message {
 	m.Metadata = metadata
 	return m
 }
+

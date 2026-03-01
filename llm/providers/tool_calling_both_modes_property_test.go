@@ -1,6 +1,7 @@
 package providers
 
 import (
+	"github.com/BaSui01/agentflow/types"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -193,9 +194,9 @@ func TestProperty21_ToolCallingInBothModes(t *testing.T) {
 		}
 
 		// 生成请求工具
-		tools := make([]llm.ToolSchema, numToolCalls)
+		tools := make([]types.ToolSchema, numToolCalls)
 		for i := 0; i < numToolCalls; i++ {
-			tools[i] = llm.ToolSchema{
+			tools[i] = types.ToolSchema{
 				Name:        toolCalls[i].Name,
 				Description: fmt.Sprintf("Tool %d description", i),
 				Parameters:  json.RawMessage(`{"type":"object","properties":{}}`),
@@ -209,7 +210,7 @@ func TestProperty21_ToolCallingInBothModes(t *testing.T) {
 
 			req := &llm.ChatRequest{
 				Model: "test-model",
-				Messages: []llm.Message{
+				Messages: []types.Message{
 					{Role: llm.RoleUser, Content: "Test message"},
 				},
 				Tools: tools,
@@ -237,7 +238,7 @@ func TestProperty21_ToolCallingInBothModes(t *testing.T) {
 
 			req := &llm.ChatRequest{
 				Model: "test-model",
-				Messages: []llm.Message{
+				Messages: []types.Message{
 					{Role: llm.RoleUser, Content: "Test message"},
 				},
 				Tools: tools,
@@ -247,7 +248,7 @@ func TestProperty21_ToolCallingInBothModes(t *testing.T) {
 			require.NoError(t, err)
 
 			// 从流中收集全部工具呼叫
-			var receivedToolCalls []llm.ToolCall
+			var receivedToolCalls []types.ToolCall
 			for chunk := range chunks {
 				if chunk.Err != nil {
 					t.Fatalf("Stream error: %v", chunk.Err)
@@ -379,7 +380,7 @@ func parseSSEStream(body io.Reader, ch chan<- llm.StreamChunk) {
 
 				var chunk mockStreamChunk
 				if err := json.Unmarshal([]byte(jsonData), &chunk); err != nil {
-					ch <- llm.StreamChunk{Err: &llm.Error{Code: llm.ErrUpstreamError, Message: err.Error()}}
+					ch <- llm.StreamChunk{Err: &types.Error{Code: llm.ErrUpstreamError, Message: err.Error()}}
 					return
 				}
 
@@ -389,15 +390,15 @@ func parseSSEStream(body io.Reader, ch chan<- llm.StreamChunk) {
 						Model:        chunk.Model,
 						Index:        choice.Index,
 						FinishReason: choice.FinishReason,
-						Delta: llm.Message{
+						Delta: types.Message{
 							Role:    llm.RoleAssistant,
 							Content: choice.Delta.Content,
 						},
 					}
 					if len(choice.Delta.ToolCalls) > 0 {
-						streamChunk.Delta.ToolCalls = make([]llm.ToolCall, 0, len(choice.Delta.ToolCalls))
+						streamChunk.Delta.ToolCalls = make([]types.ToolCall, 0, len(choice.Delta.ToolCalls))
 						for _, tc := range choice.Delta.ToolCalls {
-							streamChunk.Delta.ToolCalls = append(streamChunk.Delta.ToolCalls, llm.ToolCall{
+							streamChunk.Delta.ToolCalls = append(streamChunk.Delta.ToolCalls, types.ToolCall{
 								ID:        tc.ID,
 								Name:      tc.Function.Name,
 								Arguments: json.RawMessage(tc.Function.Arguments),
@@ -410,7 +411,7 @@ func parseSSEStream(body io.Reader, ch chan<- llm.StreamChunk) {
 		}
 		if err != nil {
 			if err != io.EOF {
-				ch <- llm.StreamChunk{Err: &llm.Error{Code: llm.ErrUpstreamError, Message: err.Error()}}
+				ch <- llm.StreamChunk{Err: &types.Error{Code: llm.ErrUpstreamError, Message: err.Error()}}
 			}
 			return
 		}
@@ -418,7 +419,7 @@ func parseSSEStream(body io.Reader, ch chan<- llm.StreamChunk) {
 }
 
 // 转换的辅助功能
-func convertMessagesToMap(msgs []llm.Message) []map[string]any {
+func convertMessagesToMap(msgs []types.Message) []map[string]any {
 	result := make([]map[string]any, 0, len(msgs))
 	for _, m := range msgs {
 		msg := map[string]any{
@@ -436,7 +437,7 @@ func convertMessagesToMap(msgs []llm.Message) []map[string]any {
 	return result
 }
 
-func convertToolsToMap(tools []llm.ToolSchema) []map[string]any {
+func convertToolsToMap(tools []types.ToolSchema) []map[string]any {
 	if len(tools) == 0 {
 		return nil
 	}
@@ -457,14 +458,14 @@ func convertToolsToMap(tools []llm.ToolSchema) []map[string]any {
 func convertToLLMResponse(resp mockCompletionResponse) *llm.ChatResponse {
 	choices := make([]llm.ChatChoice, 0, len(resp.Choices))
 	for _, c := range resp.Choices {
-		msg := llm.Message{
+		msg := types.Message{
 			Role:    llm.RoleAssistant,
 			Content: c.Message.Content,
 		}
 		if len(c.Message.ToolCalls) > 0 {
-			msg.ToolCalls = make([]llm.ToolCall, 0, len(c.Message.ToolCalls))
+			msg.ToolCalls = make([]types.ToolCall, 0, len(c.Message.ToolCalls))
 			for _, tc := range c.Message.ToolCalls {
-				msg.ToolCalls = append(msg.ToolCalls, llm.ToolCall{
+				msg.ToolCalls = append(msg.ToolCalls, types.ToolCall{
 					ID:        tc.ID,
 					Name:      tc.Function.Name,
 					Arguments: json.RawMessage(tc.Function.Arguments),
@@ -661,9 +662,9 @@ func TestProperty21_ToolCallingBothModes_TableDriven(t *testing.T) {
 			server := mockToolCallServer(t, tc.toolCalls, isStream)
 			defer server.Close()
 
-			tools := make([]llm.ToolSchema, len(tc.toolCalls))
+			tools := make([]types.ToolSchema, len(tc.toolCalls))
 			for i, tcall := range tc.toolCalls {
-				tools[i] = llm.ToolSchema{
+				tools[i] = types.ToolSchema{
 					Name:        tcall.Name,
 					Description: fmt.Sprintf("Tool %s", tcall.Name),
 					Parameters:  json.RawMessage(`{"type":"object"}`),
@@ -672,7 +673,7 @@ func TestProperty21_ToolCallingBothModes_TableDriven(t *testing.T) {
 
 			req := &llm.ChatRequest{
 				Model: "test-model",
-				Messages: []llm.Message{
+				Messages: []types.Message{
 					{Role: llm.RoleUser, Content: "Test message"},
 				},
 				Tools: tools,
@@ -682,7 +683,7 @@ func TestProperty21_ToolCallingBothModes_TableDriven(t *testing.T) {
 				chunks, err := mockProviderStream(server.URL, req)
 				require.NoError(t, err)
 
-				var receivedToolCalls []llm.ToolCall
+				var receivedToolCalls []types.ToolCall
 				for chunk := range chunks {
 					require.Nil(t, chunk.Err, "Stream should not have errors")
 					if len(chunk.Delta.ToolCalls) > 0 {
@@ -724,7 +725,7 @@ func TestProperty21_ToolCallingPreservesToolCallFields(t *testing.T) {
 				rapid.IntRange(0, 1000).Draw(rt, "argNum")),
 		}
 
-		tools := []llm.ToolSchema{
+		tools := []types.ToolSchema{
 			{
 				Name:        toolCall.Name,
 				Description: "Test tool",
@@ -734,7 +735,7 @@ func TestProperty21_ToolCallingPreservesToolCallFields(t *testing.T) {
 
 		req := &llm.ChatRequest{
 			Model: "test-model",
-			Messages: []llm.Message{
+			Messages: []types.Message{
 				{Role: llm.RoleUser, Content: "Test"},
 			},
 			Tools: tools,
@@ -758,7 +759,7 @@ func TestProperty21_ToolCallingPreservesToolCallFields(t *testing.T) {
 		chunks, err := mockProviderStream(server.URL, req)
 		require.NoError(t, err)
 
-		var streamedToolCalls []llm.ToolCall
+		var streamedToolCalls []types.ToolCall
 		for chunk := range chunks {
 			if len(chunk.Delta.ToolCalls) > 0 {
 				streamedToolCalls = append(streamedToolCalls, chunk.Delta.ToolCalls...)
@@ -794,10 +795,10 @@ func TestProperty21_ToolCallingWithToolChoice(t *testing.T) {
 
 				req := &llm.ChatRequest{
 					Model: "test-model",
-					Messages: []llm.Message{
+					Messages: []types.Message{
 						{Role: llm.RoleUser, Content: "Test"},
 					},
-					Tools: []llm.ToolSchema{
+					Tools: []types.ToolSchema{
 						{Name: "search", Parameters: json.RawMessage(`{}`)},
 					},
 					ToolChoice: toolChoice,
@@ -807,7 +808,7 @@ func TestProperty21_ToolCallingWithToolChoice(t *testing.T) {
 					chunks, err := mockProviderStream(server.URL, req)
 					require.NoError(t, err)
 
-					var received []llm.ToolCall
+					var received []types.ToolCall
 					for chunk := range chunks {
 						if len(chunk.Delta.ToolCalls) > 0 {
 							received = append(received, chunk.Delta.ToolCalls...)
@@ -823,3 +824,5 @@ func TestProperty21_ToolCallingWithToolChoice(t *testing.T) {
 		}
 	}
 }
+
+

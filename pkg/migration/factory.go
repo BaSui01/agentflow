@@ -76,3 +76,4 @@ func NewMigratorFromURL(dbType, dbURL string) (*DefaultMigrator, error) {
 		TableName:    "schema_migrations",
 	})
 }
+

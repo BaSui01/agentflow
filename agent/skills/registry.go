@@ -314,3 +314,4 @@ func (r *Registry) Import(data []byte) error {
 	r.logger.Info("skills imported", zap.Int("count", len(defs)))
 	return nil
 }
+

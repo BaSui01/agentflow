@@ -424,3 +424,4 @@ func TestHandoffManager_ExecutionError(t *testing.T) {
 	require.NotNil(t, handoff.Result)
 	assert.Equal(t, "execution failed", handoff.Result.Error)
 }
+

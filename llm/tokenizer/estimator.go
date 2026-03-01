@@ -107,3 +107,4 @@ func isCJK(r rune) bool {
 		(r >= 0x3000 && r <= 0x303F) || // CJK Symbols and Punctuation
 		(r >= 0xFF00 && r <= 0xFFEF) // Halfwidth and Fullwidth Forms
 }
+

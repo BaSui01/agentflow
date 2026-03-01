@@ -1,6 +1,7 @@
 package rag
 
 import (
+	"github.com/BaSui01/agentflow/types"
 	"strings"
 	"unicode"
 
@@ -708,3 +709,5 @@ func isCJKRune(r rune) bool {
 func isWhitespace(r rune) bool {
 	return unicode.IsSpace(r)
 }
+
+

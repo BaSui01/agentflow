@@ -47,3 +47,4 @@ var (
 	// ErrTaskNotFound 表示未找到任务 。
 	ErrTaskNotFound = errors.New("a2a: task not found")
 )
+

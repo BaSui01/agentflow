@@ -765,3 +765,4 @@ func (tq *TransformedQuery) ToJSON() ([]byte, error) {
 func (tq *TransformedQuery) FromJSON(data []byte) error {
 	return json.Unmarshal(data, tq)
 }
+

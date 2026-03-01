@@ -55,9 +55,9 @@ type Agent interface {
 // ContextManager 上下文管理器接口
 // 使用 pkg/context.AgentContextManager 作为标准实现
 type ContextManager interface {
-	PrepareMessages(ctx context.Context, messages []llm.Message, currentQuery string) ([]llm.Message, error)
-	GetStatus(messages []llm.Message) any
-	EstimateTokens(messages []llm.Message) int
+	PrepareMessages(ctx context.Context, messages []types.Message, currentQuery string) ([]types.Message, error)
+	GetStatus(messages []types.Message) any
+	EstimateTokens(messages []types.Message) int
 }
 
 // Input Agent 输入
@@ -305,12 +305,12 @@ func (e toolManagerExecutor) isAllowed(toolName string) bool {
 	return ok
 }
 
-func (e toolManagerExecutor) Execute(ctx context.Context, calls []llm.ToolCall) []llmtools.ToolResult {
+func (e toolManagerExecutor) Execute(ctx context.Context, calls []types.ToolCall) []llmtools.ToolResult {
 	traceID, _ := types.TraceID(ctx)
 	runID, _ := types.RunID(ctx)
 	promptVer, _ := types.PromptBundleVersion(ctx)
 
-	publish := func(stage string, call llm.ToolCall, errMsg string) {
+	publish := func(stage string, call types.ToolCall, errMsg string) {
 		if e.bus == nil {
 			return
 		}
@@ -341,7 +341,7 @@ func (e toolManagerExecutor) Execute(ctx context.Context, calls []llm.ToolCall) 
 	}
 
 	out := make([]llmtools.ToolResult, len(calls))
-	allowedCalls := make([]llm.ToolCall, 0, len(calls))
+	allowedCalls := make([]types.ToolCall, 0, len(calls))
 	allowedIdx := make([]int, 0, len(calls))
 
 	for i, c := range calls {
@@ -379,8 +379,8 @@ func (e toolManagerExecutor) Execute(ctx context.Context, calls []llm.ToolCall) 
 	return out
 }
 
-func (e toolManagerExecutor) ExecuteOne(ctx context.Context, call llm.ToolCall) llmtools.ToolResult {
-	res := e.Execute(ctx, []llm.ToolCall{call})
+func (e toolManagerExecutor) ExecuteOne(ctx context.Context, call types.ToolCall) llmtools.ToolResult {
+	res := e.Execute(ctx, []types.ToolCall{call})
 	if len(res) == 0 {
 		return llmtools.ToolResult{ToolCallID: call.ID, Name: call.Name, Error: "no tool result"}
 	}
@@ -677,4 +677,5 @@ func (b *BaseAgent) AddOutputFilter(f guardrails.Filter) {
 	}
 	b.outputValidator.AddFilter(f)
 }
+
 

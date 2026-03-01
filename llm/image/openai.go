@@ -296,3 +296,4 @@ func (p *OpenAIProvider) CreateVariation(ctx context.Context, req *VariationRequ
 		CreatedAt: time.Now(),
 	}, nil
 }
+

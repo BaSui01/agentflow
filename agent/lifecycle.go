@@ -223,3 +223,4 @@ func (lm *LifecycleManager) Restart(ctx context.Context) error {
 	lm.logger.Info("agent restarted successfully")
 	return nil
 }
+

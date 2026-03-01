@@ -431,3 +431,4 @@ func main() {
 	reportJSON, _ := json.MarshalIndent(report, "", "  ")
 	fmt.Printf("\n📋 Full Report (JSON):\n%s\n", string(reportJSON))
 }
+

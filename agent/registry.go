@@ -301,3 +301,4 @@ func CreateAgent(
 	}
 	return registry.Create(config, provider, memory, toolManager, bus, logger)
 }
+

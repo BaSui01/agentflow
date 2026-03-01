@@ -1,6 +1,7 @@
 package reasoning
 
 import (
+	"github.com/BaSui01/agentflow/types"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -325,7 +326,7 @@ Generate queries that explore NEW aspects not covered by previous findings.`, co
 Respond as a JSON array of strings, e.g.: ["query 1", "query 2", "query 3"]`
 
 	resp, err := id.provider.Completion(ctx, &llm.ChatRequest{
-		Messages: []llm.Message{
+		Messages: []types.Message{
 			{Role: llm.RoleUser, Content: prompt},
 		},
 		Temperature: 0.7,
@@ -380,7 +381,7 @@ Provide your analysis as a JSON array of findings:
 Focus on factual, specific, and actionable insights. Rate relevance from 0.0 to 1.0.`, query)
 
 	resp, err := id.provider.Completion(ctx, &llm.ChatRequest{
-		Messages: []llm.Message{
+		Messages: []types.Message{
 			{Role: llm.RoleUser, Content: prompt},
 		},
 		Temperature: 0.3,
@@ -446,7 +447,7 @@ Respond as JSON array:
 Priority should be 0.0-1.0 based on how important this direction is.`, task, findingsStr.String(), id.config.Breadth)
 
 	resp, err := id.provider.Completion(ctx, &llm.ChatRequest{
-		Messages: []llm.Message{
+		Messages: []types.Message{
 			{Role: llm.RoleUser, Content: prompt},
 		},
 		Temperature: 0.6,
@@ -494,7 +495,7 @@ Synthesize these findings into a clear, comprehensive answer. Include:
 Be thorough but concise.`, task, findingsStr.String())
 
 	resp, err := id.provider.Completion(ctx, &llm.ChatRequest{
-		Messages: []llm.Message{
+		Messages: []types.Message{
 			{Role: llm.RoleUser, Content: prompt},
 		},
 		Temperature: 0.3,
@@ -534,3 +535,5 @@ func (id *IterativeDeepening) calculateConfidence(findings []researchFinding) fl
 
 	return confidence
 }
+
+

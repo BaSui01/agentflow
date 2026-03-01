@@ -288,3 +288,4 @@ type HandoffOptions struct {
 func generateHandoffID() string {
 	return fmt.Sprintf("hoff_%d", time.Now().UnixNano())
 }
+

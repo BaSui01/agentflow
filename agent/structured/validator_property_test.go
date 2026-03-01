@@ -285,3 +285,4 @@ func TestProperty_SchemaValidation_DeeplyNestedErrorPath(t *testing.T) {
 		assert.Contains(t, validationErr.Errors[0].Message, "boolean", "Message should mention expected type")
 	})
 }
+

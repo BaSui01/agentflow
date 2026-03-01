@@ -1,6 +1,7 @@
 package tools
 
 import (
+	"github.com/BaSui01/agentflow/types"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -158,7 +159,7 @@ func NewWebSearchTool(config WebSearchToolConfig, logger *zap.Logger) (ToolFunc,
 	}
 
 	metadata := ToolMetadata{
-		Schema: llm.ToolSchema{
+		Schema: types.ToolSchema{
 			Name:        "web_search",
 			Description: "Search the web for information. Returns a list of relevant results with titles, URLs, and snippets.",
 			Parameters: json.RawMessage(`{
@@ -213,3 +214,5 @@ func RegisterWebSearchTool(registry ToolRegistry, config WebSearchToolConfig, lo
 	fn, metadata := NewWebSearchTool(config, logger)
 	return registry.Register("web_search", fn, metadata)
 }
+
+

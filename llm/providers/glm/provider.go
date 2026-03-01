@@ -43,3 +43,4 @@ func glmRequestHook(req *llm.ChatRequest, body *providers.OpenAICompatRequest) {
 		}
 	}
 }
+

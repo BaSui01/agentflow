@@ -176,3 +176,4 @@ func TestPluginRegistry_Unregister_NotFound(t *testing.T) {
 	err := r.Unregister("missing")
 	assert.Error(t, err)
 }
+

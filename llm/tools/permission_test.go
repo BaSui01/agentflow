@@ -487,3 +487,4 @@ func (m *mockApprovalHandler) RequestApproval(ctx context.Context, permCtx *Perm
 func (m *mockApprovalHandler) CheckApprovalStatus(ctx context.Context, approvalID string) (bool, error) {
 	return true, nil
 }
+

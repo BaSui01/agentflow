@@ -373,3 +373,4 @@ func TestSelectAdaptiveMode(t *testing.T) {
 		assert.Equal(t, ModeDeliberate, engine.selectAdaptiveMode(task))
 	})
 }
+

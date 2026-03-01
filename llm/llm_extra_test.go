@@ -189,3 +189,4 @@ func TestSimpleCircuitBreaker_Call_FailuresOpenCircuit(t *testing.T) {
 	err := cb.Call(context.Background(), func() error { return nil })
 	assert.ErrorIs(t, err, ErrCircuitOpen)
 }
+

@@ -60,3 +60,4 @@ func TestNewProviderFromConfig(t *testing.T) {
 		})
 	}
 }
+

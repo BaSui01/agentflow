@@ -1,6 +1,7 @@
 package mcp
 
 import (
+	"github.com/BaSui01/agentflow/types"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -156,11 +157,11 @@ const (
 )
 
 // ToLLMToolSchema 将 MCP 工具定义转换为 LLM 工具 Schema
-func (t *ToolDefinition) ToLLMToolSchema() llm.ToolSchema {
+func (t *ToolDefinition) ToLLMToolSchema() types.ToolSchema {
 	// 将 map[string]any 转换为 json.RawMessage
 	parametersJSON, _ := json.Marshal(t.InputSchema)
 
-	return llm.ToolSchema{
+	return types.ToolSchema{
 		Name:        t.Name,
 		Description: t.Description,
 		Parameters:  parametersJSON,
@@ -168,7 +169,7 @@ func (t *ToolDefinition) ToLLMToolSchema() llm.ToolSchema {
 }
 
 // FromLLMToolSchema 从 LLM 工具 Schema 创建 MCP 工具定义
-func FromLLMToolSchema(schema llm.ToolSchema) (ToolDefinition, error) {
+func FromLLMToolSchema(schema types.ToolSchema) (ToolDefinition, error) {
 	// 将 json.RawMessage 转换为 map[string]any
 	var inputSchema map[string]any
 	if len(schema.Parameters) > 0 {
@@ -283,3 +284,5 @@ func NewMCPError(id any, code int, message string, data any) *MCPMessage {
 		},
 	}
 }
+
+

@@ -1,6 +1,7 @@
 package workflow
 
 import (
+	"github.com/BaSui01/agentflow/types"
 	"context"
 	"errors"
 	"fmt"
@@ -88,7 +89,7 @@ func (s *LLMStep) Execute(ctx context.Context, input any) (any, error) {
 
 	req := &llm.ChatRequest{
 		Model: s.Model,
-		Messages: []llm.Message{
+		Messages: []types.Message{
 			{Role: llm.RoleUser, Content: userContent},
 		},
 		Temperature: float32(s.Temperature),
@@ -195,3 +196,5 @@ func (s *CodeStep) Execute(ctx context.Context, input any) (any, error) {
 	}
 	return nil, fmt.Errorf("CodeStep: handler not configured")
 }
+
+

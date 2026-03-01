@@ -1,6 +1,7 @@
 package claude
 
 import (
+	"github.com/BaSui01/agentflow/types"
 	"context"
 	"encoding/base64"
 	"encoding/json"
@@ -85,7 +86,7 @@ func TestClaudeProvider_Headers_APIKey(t *testing.T) {
 	}, zap.NewNop())
 
 	_, err := p.Completion(context.Background(), &llm.ChatRequest{
-		Messages: []llm.Message{{Role: llm.RoleUser, Content: "Hi"}},
+		Messages: []types.Message{{Role: llm.RoleUser, Content: "Hi"}},
 	})
 	require.NoError(t, err)
 	assert.Equal(t, "sk-test-123", capturedHeaders.Get("x-api-key"))
@@ -112,7 +113,7 @@ func TestClaudeProvider_Headers_CustomVersion(t *testing.T) {
 	}, zap.NewNop())
 
 	_, err := p.Completion(context.Background(), &llm.ChatRequest{
-		Messages: []llm.Message{{Role: llm.RoleUser, Content: "Hi"}},
+		Messages: []types.Message{{Role: llm.RoleUser, Content: "Hi"}},
 	})
 	require.NoError(t, err)
 	assert.Equal(t, "2024-01-01", capturedVersion)
@@ -121,11 +122,11 @@ func TestClaudeProvider_Headers_CustomVersion(t *testing.T) {
 // --- convertToClaudeMessages ---
 
 func TestConvertToClaudeMessages(t *testing.T) {
-	msgs := []llm.Message{
+	msgs := []types.Message{
 		{Role: llm.RoleSystem, Content: "You are helpful"},
 		{Role: llm.RoleDeveloper, Content: "Always answer in JSON"},
 		{Role: llm.RoleUser, Content: "Hello"},
-		{Role: llm.RoleAssistant, Content: "Hi there", ToolCalls: []llm.ToolCall{
+		{Role: llm.RoleAssistant, Content: "Hi there", ToolCalls: []types.ToolCall{
 			{ID: "tc_1", Name: "search", Arguments: json.RawMessage(`{"q":"test"}`)},
 		}},
 		{Role: llm.RoleTool, ToolCallID: "tc_1", Content: "result data"},
@@ -225,7 +226,7 @@ func TestClaudeProvider_Completion(t *testing.T) {
 	}, zap.NewNop())
 
 	resp, err := p.Completion(context.Background(), &llm.ChatRequest{
-		Messages: []llm.Message{
+		Messages: []types.Message{
 			{Role: llm.RoleSystem, Content: "Be helpful"},
 			{Role: llm.RoleUser, Content: "Hi"},
 		},
@@ -268,7 +269,7 @@ func TestClaudeProvider_Completion_WithToolCalls(t *testing.T) {
 	}, zap.NewNop())
 
 	resp, err := p.Completion(context.Background(), &llm.ChatRequest{
-		Messages: []llm.Message{{Role: llm.RoleUser, Content: "Search for test"}},
+		Messages: []types.Message{{Role: llm.RoleUser, Content: "Search for test"}},
 	})
 	require.NoError(t, err)
 	require.Len(t, resp.Choices, 1)
@@ -298,7 +299,7 @@ func TestClaudeProvider_Completion_ThinkingContentBlock(t *testing.T) {
 	}, zap.NewNop())
 
 	resp, err := p.Completion(context.Background(), &llm.ChatRequest{
-		Messages: []llm.Message{{Role: llm.RoleUser, Content: "2+2?"}},
+		Messages: []types.Message{{Role: llm.RoleUser, Content: "2+2?"}},
 	})
 	require.NoError(t, err)
 	assert.Equal(t, "2+2=4", resp.Choices[0].Message.Content)
@@ -320,10 +321,10 @@ func TestClaudeProvider_Completion_Error(t *testing.T) {
 	}, zap.NewNop())
 
 	_, err := p.Completion(context.Background(), &llm.ChatRequest{
-		Messages: []llm.Message{{Role: llm.RoleUser, Content: "Hi"}},
+		Messages: []types.Message{{Role: llm.RoleUser, Content: "Hi"}},
 	})
 	require.Error(t, err)
-	llmErr, ok := err.(*llm.Error)
+	llmErr, ok := err.(*types.Error)
 	require.True(t, ok)
 	assert.Equal(t, llm.ErrUnauthorized, llmErr.Code)
 }
@@ -382,7 +383,7 @@ func TestClaudeProvider_Stream(t *testing.T) {
 	}, zap.NewNop())
 
 	ch, err := p.Stream(context.Background(), &llm.ChatRequest{
-		Messages: []llm.Message{{Role: llm.RoleUser, Content: "Hi"}},
+		Messages: []types.Message{{Role: llm.RoleUser, Content: "Hi"}},
 	})
 	require.NoError(t, err)
 
@@ -461,7 +462,7 @@ func TestClaudeProvider_Stream_ToolCall(t *testing.T) {
 	}, zap.NewNop())
 
 	ch, err := p.Stream(context.Background(), &llm.ChatRequest{
-		Messages: []llm.Message{{Role: llm.RoleUser, Content: "Weather?"}},
+		Messages: []types.Message{{Role: llm.RoleUser, Content: "Weather?"}},
 	})
 	require.NoError(t, err)
 
@@ -495,10 +496,10 @@ func TestClaudeProvider_Stream_Error(t *testing.T) {
 	}, zap.NewNop())
 
 	_, err := p.Stream(context.Background(), &llm.ChatRequest{
-		Messages: []llm.Message{{Role: llm.RoleUser, Content: "Hi"}},
+		Messages: []types.Message{{Role: llm.RoleUser, Content: "Hi"}},
 	})
 	require.Error(t, err)
-	llmErr, ok := err.(*llm.Error)
+	llmErr, ok := err.(*types.Error)
 	require.True(t, ok)
 	assert.Equal(t, llm.ErrRateLimit, llmErr.Code)
 	assert.True(t, llmErr.Retryable)
@@ -574,7 +575,7 @@ func TestClaudeProvider_ListModels_Error(t *testing.T) {
 
 	_, err := p.ListModels(context.Background())
 	require.Error(t, err)
-	llmErr, ok := err.(*llm.Error)
+	llmErr, ok := err.(*types.Error)
 	require.True(t, ok)
 	assert.Equal(t, llm.ErrForbidden, llmErr.Code)
 }
@@ -713,7 +714,7 @@ func TestClaudeProvider_Stream_NoEmptyChunksForJsonDelta(t *testing.T) {
 	}, zap.NewNop())
 
 	ch, err := p.Stream(context.Background(), &llm.ChatRequest{
-		Messages: []llm.Message{{Role: llm.RoleUser, Content: "calc"}},
+		Messages: []types.Message{{Role: llm.RoleUser, Content: "calc"}},
 	})
 	require.NoError(t, err)
 
@@ -762,7 +763,7 @@ func TestClaudeProvider_Stream_InputTokensFromMessageStart(t *testing.T) {
 	}, zap.NewNop())
 
 	ch, err := p.Stream(context.Background(), &llm.ChatRequest{
-		Messages: []llm.Message{{Role: llm.RoleUser, Content: "Hi"}},
+		Messages: []types.Message{{Role: llm.RoleUser, Content: "Hi"}},
 	})
 	require.NoError(t, err)
 
@@ -780,7 +781,7 @@ func TestClaudeProvider_Stream_InputTokensFromMessageStart(t *testing.T) {
 // --- Bug G: multiple system messages concatenation ---
 
 func TestConvertToClaudeMessages_MultipleSystem(t *testing.T) {
-	msgs := []llm.Message{
+	msgs := []types.Message{
 		{Role: llm.RoleSystem, Content: "You are helpful."},
 		{Role: llm.RoleSystem, Content: "Be concise."},
 		{Role: llm.RoleUser, Content: "Hi"},
@@ -807,3 +808,5 @@ func TestToClaudeChatResponse_MultipleThinkingBlocks(t *testing.T) {
 	assert.Equal(t, "Step 1: analyze\n\nStep 2: conclude", *resp.Choices[0].Message.ReasoningContent)
 	assert.Equal(t, []string{"sig1", "sig2"}, resp.ThoughtSignatures)
 }
+
+

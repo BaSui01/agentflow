@@ -617,3 +617,4 @@ func TestLogCostAlert(t *testing.T) {
 	assert.Equal(t, 99.5, entries[0].Cost)
 	assert.Equal(t, "threshold_exceeded", entries[0].Metadata["alert_type"])
 }
+

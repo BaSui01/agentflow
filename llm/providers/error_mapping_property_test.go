@@ -1,6 +1,7 @@
 package providers
 
 import (
+	"github.com/BaSui01/agentflow/types"
 	"net/http"
 	"testing"
 
@@ -21,7 +22,7 @@ func TestProperty12_HTTPStatusToErrorCodeMapping(t *testing.T) {
 		status         int
 		msg            string
 		provider       string
-		expectedCode   llm.ErrorCode
+		expectedCode   types.ErrorCode
 		expectedRetry  bool
 		expectedStatus int
 		requirement    string
@@ -1193,3 +1194,5 @@ func TestProperty12_RetryableFlagConsistency(t *testing.T) {
 		})
 	}
 }
+
+

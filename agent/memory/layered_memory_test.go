@@ -351,3 +351,4 @@ func TestWorkingMemory_Concurrent(t *testing.T) {
 	}
 	wg.Wait()
 }
+

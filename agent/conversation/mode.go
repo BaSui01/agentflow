@@ -282,3 +282,4 @@ func (m *GroupChatManager) GetChat(id string) (*Conversation, bool) {
 	conv, ok := m.conversations[id]
 	return conv, ok
 }
+

@@ -1,6 +1,7 @@
 package minimax
 
 import (
+	"github.com/BaSui01/agentflow/types"
 	"context"
 	"encoding/json"
 	"net/http"
@@ -85,7 +86,7 @@ func TestProperty19_ToolCallResponseParsing(t *testing.T) {
 
 			ctx := context.Background()
 			req := &llm.ChatRequest{
-				Messages: []llm.Message{
+				Messages: []types.Message{
 					{Role: llm.RoleUser, Content: "test"},
 				},
 			}
@@ -109,3 +110,5 @@ func TestProperty19_ToolCallResponseParsing(t *testing.T) {
 		})
 	}
 }
+
+

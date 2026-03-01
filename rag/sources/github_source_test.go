@@ -163,3 +163,4 @@ func TestNewGitHubSource_CustomConfig(t *testing.T) {
 	assert.Equal(t, "test-token", src.config.Token)
 	assert.Equal(t, 50, src.config.MaxResults)
 }
+

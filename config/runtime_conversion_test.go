@@ -41,3 +41,4 @@ func TestConfig_ToRuntimeConfig_NilReceiver(t *testing.T) {
 	runtimeCfg := cfg.ToRuntimeConfig()
 	assert.Equal(t, "", runtimeCfg.Core.ID)
 }
+

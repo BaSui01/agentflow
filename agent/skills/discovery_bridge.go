@@ -174,3 +174,4 @@ func buildSkillMetadata(skill *Skill) map[string]string {
 	}
 	return meta
 }
+

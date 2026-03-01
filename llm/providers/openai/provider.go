@@ -93,7 +93,7 @@ func (p *OpenAIProvider) Completion(ctx context.Context, req *llm.ChatRequest) (
 	// Apply rewriter chain (与基类保持一致)
 	rewrittenReq, err := p.RewriterChain.Execute(ctx, req)
 	if err != nil {
-		return nil, &llm.Error{
+		return nil, &types.Error{
 			Code: llm.ErrInvalidRequest, Message: fmt.Sprintf("request rewrite failed: %v", err),
 			HTTPStatus: http.StatusBadRequest, Provider: p.Name(),
 		}
@@ -348,7 +348,7 @@ func (p *OpenAIProvider) buildResponsesRequest(req *llm.ChatRequest) openAIRespo
 }
 
 // convertMessagesToResponsesInput converts messages to Responses API input format.
-func convertMessagesToResponsesInput(msgs []llm.Message) []any {
+func convertMessagesToResponsesInput(msgs []types.Message) []any {
 	items := make([]any, 0, len(msgs))
 	for _, m := range msgs {
 		switch m.Role {
@@ -404,7 +404,7 @@ func convertMessagesToResponsesInput(msgs []llm.Message) []any {
 
 // buildInputContent builds the content field for a Responses API input item.
 // Returns a string for text-only, or []inputContentPart for multimodal.
-func buildInputContent(m llm.Message) any {
+func buildInputContent(m types.Message) any {
 	if len(m.Images) == 0 && len(m.Videos) == 0 {
 		return m.Content
 	}
@@ -466,7 +466,7 @@ func toResponsesAPIChatResponse(resp openAIResponsesResponse, provider string) *
 	for _, output := range resp.Output {
 		switch output.Type {
 		case "message":
-			msg := llm.Message{Role: llm.Role(output.Role)}
+			msg := types.Message{Role: types.Role(output.Role)}
 			for _, content := range output.Content {
 				switch content.Type {
 				case "output_text":
@@ -494,12 +494,12 @@ func toResponsesAPIChatResponse(resp openAIResponsesResponse, provider string) *
 			if len(choices) == 0 || choices[len(choices)-1].Message.Role != llm.RoleAssistant {
 				choices = append(choices, llm.ChatChoice{
 					Index: choiceIdx, FinishReason: "tool_calls",
-					Message: llm.Message{Role: llm.RoleAssistant},
+					Message: types.Message{Role: llm.RoleAssistant},
 				})
 				choiceIdx++
 			}
 			lastIdx := len(choices) - 1
-			choices[lastIdx].Message.ToolCalls = append(choices[lastIdx].Message.ToolCalls, llm.ToolCall{
+			choices[lastIdx].Message.ToolCalls = append(choices[lastIdx].Message.ToolCalls, types.ToolCall{
 				ID:        output.CallID,
 				Name:      output.Name,
 				Arguments: output.Arguments,
@@ -563,7 +563,7 @@ func (p *OpenAIProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-ch
 	// Apply rewriter chain
 	rewrittenReq, err := p.RewriterChain.Execute(ctx, req)
 	if err != nil {
-		return nil, &llm.Error{
+		return nil, &types.Error{
 			Code: llm.ErrInvalidRequest, Message: fmt.Sprintf("request rewrite failed: %v", err),
 			HTTPStatus: http.StatusBadRequest, Provider: p.Name(),
 		}
@@ -630,7 +630,7 @@ func streamResponsesSSE(ctx context.Context, body io.ReadCloser, providerName st
 					select {
 					case <-ctx.Done():
 						return
-					case ch <- llm.StreamChunk{Err: &llm.Error{
+					case ch <- llm.StreamChunk{Err: &types.Error{
 						Code: llm.ErrUpstreamError, Message: err.Error(),
 						HTTPStatus: http.StatusBadGateway, Retryable: true, Provider: providerName,
 					}}:
@@ -677,7 +677,7 @@ func streamResponsesSSE(ctx context.Context, body io.ReadCloser, providerName st
 					return
 				case ch <- llm.StreamChunk{
 					ID: currentID, Provider: providerName, Model: currentModel,
-					Delta: llm.Message{Role: llm.RoleAssistant, Content: delta},
+					Delta: types.Message{Role: llm.RoleAssistant, Content: delta},
 				}:
 				}
 
@@ -688,7 +688,7 @@ func streamResponsesSSE(ctx context.Context, body io.ReadCloser, providerName st
 					return
 				case ch <- llm.StreamChunk{
 					ID: currentID, Provider: providerName, Model: currentModel,
-					Delta: llm.Message{Role: llm.RoleAssistant, Refusal: &delta},
+					Delta: types.Message{Role: llm.RoleAssistant, Refusal: &delta},
 				}:
 				}
 
@@ -764,9 +764,9 @@ func streamResponsesSSE(ctx context.Context, body io.ReadCloser, providerName st
 					return
 				case ch <- llm.StreamChunk{
 					ID: currentID, Provider: providerName, Model: currentModel,
-					Delta: llm.Message{
+					Delta: types.Message{
 						Role: llm.RoleAssistant,
-						ToolCalls: []llm.ToolCall{{
+						ToolCalls: []types.ToolCall{{
 							ID:        itemID,
 							Name:      name,
 							Arguments: json.RawMessage(arguments),
@@ -781,7 +781,7 @@ func streamResponsesSSE(ctx context.Context, body io.ReadCloser, providerName st
 				select {
 				case <-ctx.Done():
 					return
-				case ch <- llm.StreamChunk{Err: &llm.Error{
+				case ch <- llm.StreamChunk{Err: &types.Error{
 					Code: llm.ErrUpstreamError, Message: errMsg,
 					HTTPStatus: http.StatusBadGateway, Provider: providerName,
 				}}:
@@ -792,4 +792,5 @@ func streamResponsesSSE(ctx context.Context, body io.ReadCloser, providerName st
 	}()
 	return ch
 }
+
 

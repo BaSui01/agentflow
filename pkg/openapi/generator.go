@@ -1,6 +1,7 @@
 package openapi
 
 import (
+	"github.com/BaSui01/agentflow/types"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -102,7 +103,7 @@ type JSONSchema struct {
 type GeneratedTool struct {
 	Name        string         `json:"name"`
 	Description string         `json:"description"`
-	Schema      llm.ToolSchema `json:"schema"`
+	Schema      types.ToolSchema `json:"schema"`
 	Method      string         `json:"method"`
 	Path        string         `json:"path"`
 	BaseURL     string         `json:"base_url"`
@@ -290,7 +291,7 @@ func (g *Generator) operationToTool(spec *OpenAPISpec, path, method string, op *
 	return &GeneratedTool{
 		Name:        name,
 		Description: description,
-		Schema: llm.ToolSchema{
+		Schema: types.ToolSchema{
 			Name:        name,
 			Description: description,
 			Parameters:  paramsJSON,
@@ -331,3 +332,5 @@ func sanitizePath(path string) string {
 	path = strings.Trim(path, "_")
 	return path
 }
+
+

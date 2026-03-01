@@ -158,3 +158,4 @@ func TestDefaultTelemetryConfig(t *testing.T) {
 	assert.Equal(t, "agentflow", cfg.ServiceName)
 	assert.InDelta(t, 0.1, cfg.SampleRate, 0.001)
 }
+

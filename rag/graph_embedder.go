@@ -112,3 +112,4 @@ func normalize64(vec []float64) {
 		vec[i] = vec[i] / norm
 	}
 }
+

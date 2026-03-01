@@ -390,3 +390,4 @@ func TestNativeAgentAdapter_InAgentStep(t *testing.T) {
 	require.True(t, ok)
 	assert.Equal(t, "step result", out.Content)
 }
+

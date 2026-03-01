@@ -302,3 +302,4 @@ const (
 	// 信件状态失败, 表示信件在最大重试后失败
 	MessageStatusFailed MessageStatus = "failed"
 )
+

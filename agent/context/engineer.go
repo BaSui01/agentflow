@@ -461,3 +461,4 @@ func (e *Engineer) CanAddMessage(msgs []types.Message, newMsg types.Message) boo
 	maxTokens := e.config.MaxContextTokens - e.config.ReserveForOutput
 	return currentTokens+newTokens <= maxTokens
 }
+

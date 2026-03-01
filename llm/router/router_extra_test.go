@@ -110,3 +110,4 @@ func TestWeightedRouter_Select_WeightedFallback(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "only", result.ModelID)
 }
+

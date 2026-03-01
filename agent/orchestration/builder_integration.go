@@ -59,3 +59,4 @@ func (a *OrchestratorAdapter) Execute(ctx context.Context, task *agent.Orchestra
 		Metadata:  result.Metadata,
 	}, nil
 }
+

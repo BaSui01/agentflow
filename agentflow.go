@@ -145,3 +145,4 @@ func New(opts ...Option) (*agent.BaseAgent, error) {
 		WithLogger(o.logger).
 		Build()
 }
+

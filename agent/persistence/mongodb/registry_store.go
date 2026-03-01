@@ -102,3 +102,4 @@ func (s *MongoRegistryStore) Delete(ctx context.Context, id string) error {
 
 // Compile-time interface check.
 var _ discovery.RegistryStore = (*MongoRegistryStore)(nil)
+

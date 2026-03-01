@@ -253,3 +253,4 @@ const (
 	HighlightRead  DocumentHighlightKind = 2
 	HighlightWrite DocumentHighlightKind = 3
 )
+

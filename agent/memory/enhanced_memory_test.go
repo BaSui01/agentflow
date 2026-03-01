@@ -179,3 +179,4 @@ func TestDefaultEnhancedMemoryConfig_Values(t *testing.T) {
 	assert.True(t, cfg.LongTermEnabled)
 	assert.True(t, cfg.ConsolidationEnabled)
 }
+

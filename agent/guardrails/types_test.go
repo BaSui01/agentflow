@@ -307,3 +307,4 @@ func TestFailureActionConstants(t *testing.T) {
 	assert.Equal(t, FailureAction("warn"), FailureActionWarn)
 	assert.Equal(t, FailureAction("retry"), FailureActionRetry)
 }
+

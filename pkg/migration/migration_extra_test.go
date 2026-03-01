@@ -231,3 +231,4 @@ func TestMigrator_Close_NilMigrate(t *testing.T) {
 	err := m.Close()
 	assert.NoError(t, err)
 }
+

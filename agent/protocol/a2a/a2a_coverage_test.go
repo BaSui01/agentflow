@@ -546,3 +546,4 @@ func TestAgentCard_SetGetMetadata(t *testing.T) {
 	_, ok = card2.GetMetadata("key")
 	assert.False(t, ok)
 }
+

@@ -624,3 +624,4 @@ func TestPineconeStore_Defaults(t *testing.T) {
 		t.Fatalf("expected non-nil logger with nil input")
 	}
 }
+

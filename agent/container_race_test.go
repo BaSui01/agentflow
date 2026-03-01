@@ -105,3 +105,4 @@ func TestServiceLocator_ConcurrentTypedGetters(t *testing.T) {
 
 	wg.Wait()
 }
+

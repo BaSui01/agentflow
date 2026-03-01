@@ -301,3 +301,4 @@ func TestNewDefaultExecutorWithConfig_SanitizesInvalidValues(t *testing.T) {
 	assert.Equal(t, 2.0, executor.config.RetryBackoff)
 }
 
+

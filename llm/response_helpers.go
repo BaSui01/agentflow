@@ -13,3 +13,4 @@ func FirstChoice(resp *ChatResponse) (ChatChoice, error) {
 	}
 	return resp.Choices[0], nil
 }
+

@@ -344,3 +344,4 @@ var (
 	ErrCircuitOpen            = errors.New("熔断器已打开")
 	ErrTooManyCallsInHalfOpen = errors.New("半开状态下调用次数过多")
 )
+

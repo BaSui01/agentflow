@@ -135,3 +135,4 @@ func (h *WorkflowHandler) HandleList(w http.ResponseWriter, r *http.Request) {
 		"workflows": []any{},
 	})
 }
+

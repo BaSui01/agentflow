@@ -1,6 +1,7 @@
 package hosted
 
 import (
+	"github.com/BaSui01/agentflow/types"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -53,7 +54,7 @@ func (t *RetrievalTool) Description() string {
 	return "Retrieve relevant documents using semantic search"
 }
 
-func (t *RetrievalTool) Schema() llm.ToolSchema {
+func (t *RetrievalTool) Schema() types.ToolSchema {
 	params, err := json.Marshal(map[string]any{
 		"type": "object",
 		"properties": map[string]any{
@@ -75,7 +76,7 @@ func (t *RetrievalTool) Schema() llm.ToolSchema {
 	if err != nil {
 		params = []byte("{}")
 	}
-	return llm.ToolSchema{Name: t.Name(), Description: t.Description(), Parameters: params}
+	return types.ToolSchema{Name: t.Name(), Description: t.Description(), Parameters: params}
 }
 
 // retrievalArgs represents the arguments for retrieval.
@@ -113,3 +114,5 @@ func (t *RetrievalTool) Execute(ctx context.Context, args json.RawMessage) (json
 
 	return json.Marshal(results)
 }
+
+

@@ -140,3 +140,4 @@ func TestQPSCounter_BumpWindow_LargeGap(t *testing.T) {
 	}
 	assert.Equal(t, int64(0), total)
 }
+

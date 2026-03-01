@@ -221,3 +221,4 @@ func TestChooseModel_Consistency(t *testing.T) {
 	assert.Equal(t, result2, result3, "Function should be deterministic")
 	assert.Equal(t, "test-model", result1, "Should consistently return request model")
 }
+

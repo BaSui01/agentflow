@@ -637,3 +637,4 @@ func TestDAGExecutor_GetHistoryStore(t *testing.T) {
 	store := exec.GetHistoryStore()
 	assert.NotNil(t, store)
 }
+

@@ -93,3 +93,4 @@ func TestProviderRegistry_ReplaceExisting(t *testing.T) {
 	assert.Equal(t, "new", p.Name())
 	assert.Equal(t, 1, r.Len())
 }
+

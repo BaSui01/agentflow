@@ -624,3 +624,4 @@ func TestEstimateTokenizer_EmptyTools(t *testing.T) {
 	count := tok.EstimateToolTokens(nil)
 	assert.Equal(t, 0, count)
 }
+

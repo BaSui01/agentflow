@@ -1,6 +1,7 @@
 package glm
 
 import (
+	"github.com/BaSui01/agentflow/types"
 	"context"
 	"encoding/json"
 	"net/http"
@@ -20,7 +21,7 @@ func TestProperty12_HTTPStatusToErrorCodeMapping(t *testing.T) {
 		name          string
 		httpStatus    int
 		errorMessage  string
-		expectedCode  llm.ErrorCode
+		expectedCode  types.ErrorCode
 		expectedRetry bool
 	}{
 		{
@@ -135,7 +136,7 @@ func TestProperty12_HTTPStatusToErrorCodeMapping(t *testing.T) {
 			// 提出完成请求
 			ctx := context.Background()
 			req := &llm.ChatRequest{
-				Messages: []llm.Message{
+				Messages: []types.Message{
 					{Role: llm.RoleUser, Content: "test"},
 				},
 			}
@@ -146,8 +147,8 @@ func TestProperty12_HTTPStatusToErrorCodeMapping(t *testing.T) {
 			assert.Error(t, err, "Should return an error")
 
 			// 校验错误是类型 llm 。 错误
-			llmErr, ok := err.(*llm.Error)
-			assert.True(t, ok, "Error should be of type *llm.Error")
+			llmErr, ok := err.(*types.Error)
+			assert.True(t, ok, "Error should be of type *types.Error")
 
 			// 校验错误代码
 			assert.Equal(t, tc.expectedCode, llmErr.Code,
@@ -201,7 +202,7 @@ func TestProperty12_HTTPStatusToErrorCodeMapping(t *testing.T) {
 
 		ctx := context.Background()
 		req := &llm.ChatRequest{
-			Messages: []llm.Message{
+			Messages: []types.Message{
 				{Role: llm.RoleUser, Content: "test"},
 			},
 		}
@@ -212,11 +213,13 @@ func TestProperty12_HTTPStatusToErrorCodeMapping(t *testing.T) {
 		assert.Error(t, err, "Should return an error")
 
 		// 校验错误是类型 llm 。 错误
-		llmErr, ok := err.(*llm.Error)
-		assert.True(t, ok, "Error should be of type *llm.Error")
+		llmErr, ok := err.(*types.Error)
+		assert.True(t, ok, "Error should be of type *types.Error")
 
 		// 校验错误代码
 		assert.Equal(t, llm.ErrUnauthorized, llmErr.Code,
 			"Error code should be ErrUnauthorized")
 	})
 }
+
+

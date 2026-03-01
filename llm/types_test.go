@@ -96,3 +96,4 @@ func TestTableNames(t *testing.T) {
 	assert.Equal(t, "sc_llm_provider_models", LLMProviderModel{}.TableName())
 	assert.Equal(t, "sc_llm_provider_api_keys", LLMProviderAPIKey{}.TableName())
 }
+

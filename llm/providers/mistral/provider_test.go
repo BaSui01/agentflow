@@ -1,6 +1,7 @@
 package mistral
 
 import (
+	"github.com/BaSui01/agentflow/types"
 	"context"
 	"encoding/json"
 	"net/http"
@@ -118,7 +119,7 @@ func TestMistralProvider_Completion(t *testing.T) {
 	p := NewMistralProvider(cfg, zap.NewNop())
 
 	resp, err := p.Completion(context.Background(), &llm.ChatRequest{
-		Messages: []llm.Message{
+		Messages: []types.Message{
 			{Role: llm.RoleUser, Content: "Hi"},
 		},
 	})
@@ -156,7 +157,7 @@ func TestMistralProvider_Completion_WithCustomModel(t *testing.T) {
 
 	resp, err := p.Completion(context.Background(), &llm.ChatRequest{
 		Model:    "mistral-small-latest",
-		Messages: []llm.Message{{Role: llm.RoleUser, Content: "Hi"}},
+		Messages: []types.Message{{Role: llm.RoleUser, Content: "Hi"}},
 	})
 	require.NoError(t, err)
 	assert.Equal(t, "mistral-small-latest", capturedRequest.Model)
@@ -179,10 +180,10 @@ func TestMistralProvider_Completion_Error(t *testing.T) {
 	}, zap.NewNop())
 
 	_, err := p.Completion(context.Background(), &llm.ChatRequest{
-		Messages: []llm.Message{{Role: llm.RoleUser, Content: "Hi"}},
+		Messages: []types.Message{{Role: llm.RoleUser, Content: "Hi"}},
 	})
 	require.Error(t, err)
-	llmErr, ok := err.(*llm.Error)
+	llmErr, ok := err.(*types.Error)
 	require.True(t, ok)
 	assert.Equal(t, llm.ErrUnauthorized, llmErr.Code)
 }
@@ -200,10 +201,10 @@ func TestMistralProvider_Completion_RateLimited(t *testing.T) {
 	}, zap.NewNop())
 
 	_, err := p.Completion(context.Background(), &llm.ChatRequest{
-		Messages: []llm.Message{{Role: llm.RoleUser, Content: "Hi"}},
+		Messages: []types.Message{{Role: llm.RoleUser, Content: "Hi"}},
 	})
 	require.Error(t, err)
-	llmErr, ok := err.(*llm.Error)
+	llmErr, ok := err.(*types.Error)
 	require.True(t, ok)
 	assert.Equal(t, llm.ErrRateLimit, llmErr.Code)
 	assert.True(t, llmErr.Retryable)
@@ -222,10 +223,10 @@ func TestMistralProvider_Completion_ServerError(t *testing.T) {
 	}, zap.NewNop())
 
 	_, err := p.Completion(context.Background(), &llm.ChatRequest{
-		Messages: []llm.Message{{Role: llm.RoleUser, Content: "Hi"}},
+		Messages: []types.Message{{Role: llm.RoleUser, Content: "Hi"}},
 	})
 	require.Error(t, err)
-	llmErr, ok := err.(*llm.Error)
+	llmErr, ok := err.(*types.Error)
 	require.True(t, ok)
 	assert.Equal(t, llm.ErrUpstreamError, llmErr.Code)
 	assert.True(t, llmErr.Retryable)
@@ -262,7 +263,7 @@ func TestMistralProvider_Stream(t *testing.T) {
 	}, zap.NewNop())
 
 	ch, err := p.Stream(context.Background(), &llm.ChatRequest{
-		Messages: []llm.Message{{Role: llm.RoleUser, Content: "Hi"}},
+		Messages: []types.Message{{Role: llm.RoleUser, Content: "Hi"}},
 	})
 	require.NoError(t, err)
 
@@ -303,7 +304,7 @@ func TestMistralProvider_Stream_MultipleChunks(t *testing.T) {
 	}, zap.NewNop())
 
 	ch, err := p.Stream(context.Background(), &llm.ChatRequest{
-		Messages: []llm.Message{{Role: llm.RoleUser, Content: "Hi"}},
+		Messages: []types.Message{{Role: llm.RoleUser, Content: "Hi"}},
 	})
 	require.NoError(t, err)
 
@@ -326,10 +327,10 @@ func TestMistralProvider_Stream_Error(t *testing.T) {
 	}, zap.NewNop())
 
 	_, err := p.Stream(context.Background(), &llm.ChatRequest{
-		Messages: []llm.Message{{Role: llm.RoleUser, Content: "Hi"}},
+		Messages: []types.Message{{Role: llm.RoleUser, Content: "Hi"}},
 	})
 	require.Error(t, err)
-	llmErr, ok := err.(*llm.Error)
+	llmErr, ok := err.(*types.Error)
 	require.True(t, ok)
 	assert.Equal(t, llm.ErrRateLimit, llmErr.Code)
 }
@@ -386,8 +387,8 @@ func TestMistralProvider_NotSupported(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			err := tt.callFn()
 			require.Error(t, err)
-			llmErr, ok := err.(*llm.Error)
-			require.True(t, ok, "error should be *llm.Error")
+			llmErr, ok := err.(*types.Error)
+			require.True(t, ok, "error should be *types.Error")
 			assert.Equal(t, llm.ErrInvalidRequest, llmErr.Code)
 			assert.Contains(t, llmErr.Message, tt.feature)
 			assert.Equal(t, http.StatusNotImplemented, llmErr.HTTPStatus)
@@ -512,3 +513,5 @@ func TestMistralProvider_HealthCheck_Unhealthy(t *testing.T) {
 	require.Error(t, err)
 	assert.False(t, status.Healthy)
 }
+
+

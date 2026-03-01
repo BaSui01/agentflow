@@ -236,3 +236,4 @@ func TestBatchExecutor_ExecuteBatched(t *testing.T) {
 	results := be.ExecuteBatched(context.Background(), calls)
 	assert.Len(t, results.Results, 3)
 }
+

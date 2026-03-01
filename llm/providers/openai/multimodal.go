@@ -1,6 +1,7 @@
 package openai
 
 import (
+	"github.com/BaSui01/agentflow/types"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -31,7 +32,7 @@ func (p *OpenAIProvider) GenerateImage(ctx context.Context, req *llm.ImageGenera
 
 // GenerateVideo OpenAI 不支持视频生成.
 func (p *OpenAIProvider) GenerateVideo(ctx context.Context, req *llm.VideoGenerationRequest) (*llm.VideoGenerationResponse, error) {
-	return nil, &llm.Error{
+	return nil, &types.Error{
 		Code:       llm.ErrInvalidRequest,
 		Message:    "video generation is not supported by OpenAI",
 		HTTPStatus: http.StatusNotImplemented,
@@ -203,7 +204,7 @@ func (p *OpenAIProvider) newRequest(ctx context.Context, method, path string, bo
 func (p *OpenAIProvider) do(req *http.Request) (*http.Response, error) {
 	resp, err := p.Provider.Client.Do(req)
 	if err != nil {
-		return nil, &llm.Error{
+		return nil, &types.Error{
 			Code:       llm.ErrUpstreamError,
 			Message:    err.Error(),
 			HTTPStatus: http.StatusBadGateway,
@@ -244,7 +245,7 @@ func (p *OpenAIProvider) doJSON(ctx context.Context, method, path string, payloa
 		return nil
 	}
 	if err := json.NewDecoder(resp.Body).Decode(out); err != nil {
-		return &llm.Error{
+		return &types.Error{
 			Code:       llm.ErrUpstreamError,
 			Message:    err.Error(),
 			HTTPStatus: http.StatusBadGateway,
@@ -282,7 +283,7 @@ func (p *OpenAIProvider) doBytes(ctx context.Context, method, path string, paylo
 
 	data, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, &llm.Error{
+		return nil, &types.Error{
 			Code:       llm.ErrUpstreamError,
 			Message:    err.Error(),
 			HTTPStatus: http.StatusBadGateway,
@@ -312,7 +313,7 @@ func (p *OpenAIProvider) doMultipartJSON(ctx context.Context, path string, body 
 	}
 
 	if err := json.NewDecoder(resp.Body).Decode(out); err != nil {
-		return &llm.Error{
+		return &types.Error{
 			Code:       llm.ErrUpstreamError,
 			Message:    err.Error(),
 			HTTPStatus: http.StatusBadGateway,
@@ -322,3 +323,5 @@ func (p *OpenAIProvider) doMultipartJSON(ctx context.Context, path string, body 
 	}
 	return nil
 }
+
+

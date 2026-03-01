@@ -316,3 +316,4 @@ func (w *DAGWorkflow) ToDAGDefinition() *DAGDefinition {
 	
 	return def
 }
+

@@ -105,3 +105,4 @@ func (p *OpenAIProvider) EmbedQuery(ctx context.Context, query string) ([]float6
 func (p *OpenAIProvider) EmbedDocuments(ctx context.Context, documents []string) ([][]float64, error) {
 	return p.BaseProvider.EmbedDocuments(ctx, documents, p.Embed)
 }
+

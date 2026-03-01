@@ -200,3 +200,4 @@ func TestMetrics_RecordToolCall(t *testing.T) {
 	m.RecordToolCall(context.Background(), "search", 100*time.Millisecond, true)
 	m.RecordToolCall(context.Background(), "calc", 50*time.Millisecond, false)
 }
+

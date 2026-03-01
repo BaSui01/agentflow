@@ -113,3 +113,4 @@ func TestSimpleEventBus_HandlersCopiedBeforeIteration(t *testing.T) {
 		t.Error("expected handler to be called at least once")
 	}
 }
+

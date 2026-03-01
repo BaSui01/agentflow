@@ -172,3 +172,4 @@ func NewClientFromOptions(opts *options.ClientOptions, dbName string, logger *za
 
 	return c, nil
 }
+

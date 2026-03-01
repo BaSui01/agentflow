@@ -226,3 +226,4 @@ func (p *MiniMaxVideoProvider) retrieveFileURL(ctx context.Context, fileID strin
 
 	return fileResp.File.DownloadURL, nil
 }
+

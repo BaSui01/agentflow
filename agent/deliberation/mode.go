@@ -401,3 +401,4 @@ type Task struct {
 	SuggestedTool  string         `json:"suggested_tool,omitempty"`
 	Parameters     map[string]any `json:"parameters,omitempty"`
 }
+

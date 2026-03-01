@@ -1032,3 +1032,4 @@ func (s *HTTPServer) AgentCount() int {
 
 // 确保 HTTPServer 执行 A2AServer 接口。
 var _ A2AServer = (*HTTPServer)(nil)
+

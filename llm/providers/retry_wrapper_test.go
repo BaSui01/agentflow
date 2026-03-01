@@ -1,6 +1,7 @@
 package providers
 
 import (
+	"github.com/BaSui01/agentflow/types"
 	"context"
 	"fmt"
 	"testing"
@@ -77,7 +78,7 @@ func TestRetryableProvider_Completion_RetriesRetryableError(t *testing.T) {
 		completionFn: func(ctx context.Context, req *llm.ChatRequest) (*llm.ChatResponse, error) {
 			calls++
 			if calls < 3 {
-				return nil, &llm.Error{Code: llm.ErrUpstreamError, Retryable: true}
+				return nil, &types.Error{Code: llm.ErrUpstreamError, Retryable: true}
 			}
 			return &llm.ChatResponse{Model: "ok"}, nil
 		},
@@ -96,7 +97,7 @@ func TestRetryableProvider_Completion_NonRetryableReturnsImmediately(t *testing.
 		name: "test",
 		completionFn: func(ctx context.Context, req *llm.ChatRequest) (*llm.ChatResponse, error) {
 			calls++
-			return nil, &llm.Error{Code: llm.ErrUnauthorized, Retryable: false}
+			return nil, &types.Error{Code: llm.ErrUnauthorized, Retryable: false}
 		},
 	}
 	rp := NewRetryableProvider(inner, RetryConfig{MaxRetries: 3, InitialDelay: time.Millisecond, MaxDelay: time.Millisecond, BackoffFactor: 1.0, RetryableOnly: true}, zap.NewNop())
@@ -112,7 +113,7 @@ func TestRetryableProvider_Completion_ExhaustsRetries(t *testing.T) {
 		name: "test",
 		completionFn: func(ctx context.Context, req *llm.ChatRequest) (*llm.ChatResponse, error) {
 			calls++
-			return nil, &llm.Error{Code: llm.ErrUpstreamError, Retryable: true}
+			return nil, &types.Error{Code: llm.ErrUpstreamError, Retryable: true}
 		},
 	}
 	rp := NewRetryableProvider(inner, RetryConfig{MaxRetries: 2, InitialDelay: time.Millisecond, MaxDelay: time.Millisecond, BackoffFactor: 1.0, RetryableOnly: true}, zap.NewNop())
@@ -145,7 +146,7 @@ func TestRetryableProvider_Stream_NonRetryableReturnsImmediately(t *testing.T) {
 		name: "test",
 		streamFn: func(ctx context.Context, req *llm.ChatRequest) (<-chan llm.StreamChunk, error) {
 			calls++
-			return nil, &llm.Error{Code: llm.ErrUnauthorized, Retryable: false}
+			return nil, &types.Error{Code: llm.ErrUnauthorized, Retryable: false}
 		},
 	}
 	rp := NewRetryableProvider(inner, RetryConfig{MaxRetries: 3, InitialDelay: time.Millisecond, MaxDelay: time.Millisecond, BackoffFactor: 1.0, RetryableOnly: true}, zap.NewNop())
@@ -193,7 +194,7 @@ func TestRetryableProvider_Completion_ContextCancelled(t *testing.T) {
 	inner := &testInnerProvider{
 		name: "test",
 		completionFn: func(ctx context.Context, req *llm.ChatRequest) (*llm.ChatResponse, error) {
-			return nil, &llm.Error{Code: llm.ErrUpstreamError, Retryable: true}
+			return nil, &types.Error{Code: llm.ErrUpstreamError, Retryable: true}
 		},
 	}
 	rp := NewRetryableProvider(inner, RetryConfig{
@@ -210,4 +211,6 @@ func TestRetryableProvider_Completion_ContextCancelled(t *testing.T) {
 	_, err := rp.Completion(ctx, &llm.ChatRequest{Model: "m"})
 	require.Error(t, err)
 }
+
+
 

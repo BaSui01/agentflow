@@ -48,3 +48,4 @@ func TestOpenDatabase_UnsupportedDriver(t *testing.T) {
 	require.Nil(t, db)
 	require.Contains(t, err.Error(), "unsupported database driver")
 }
+

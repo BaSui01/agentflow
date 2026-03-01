@@ -245,3 +245,4 @@ func demoObservabilitySystem(logger *zap.Logger) {
 			agentID, m.TotalTasks, m.TaskSuccessRate*100, m.AvgLatency)
 	}
 }
+

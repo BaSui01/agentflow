@@ -1,6 +1,7 @@
 package gemini
 
 import (
+	"github.com/BaSui01/agentflow/types"
 	"bufio"
 	"bytes"
 	"context"
@@ -106,7 +107,7 @@ func (p *GeminiProvider) ListModels(ctx context.Context) ([]llm.Model, error) {
 
 	resp, err := p.client.Do(httpReq)
 	if err != nil {
-		return nil, &llm.Error{
+		return nil, &types.Error{
 			Code:       llm.ErrUpstreamError,
 			Message:    err.Error(),
 			HTTPStatus: http.StatusBadGateway,
@@ -134,7 +135,7 @@ func (p *GeminiProvider) ListModels(ctx context.Context) ([]llm.Model, error) {
 		} `json:"models"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&modelsResp); err != nil {
-		return nil, &llm.Error{
+		return nil, &types.Error{
 			Code:       llm.ErrUpstreamError,
 			Message:    err.Error(),
 			HTTPStatus: http.StatusBadGateway,
@@ -361,7 +362,7 @@ func (p *GeminiProvider) resolveAPIKey(ctx context.Context) string {
 }
 
 // convertToGeminiContents 将统一格式转换为 Gemini 格式
-func convertToGeminiContents(msgs []llm.Message) (*geminiContent, []geminiContent) {
+func convertToGeminiContents(msgs []types.Message) (*geminiContent, []geminiContent) {
 	var systemInstruction *geminiContent
 	var contents []geminiContent
 
@@ -437,7 +438,7 @@ func convertToGeminiContents(msgs []llm.Message) (*geminiContent, []geminiConten
 	return systemInstruction, contents
 }
 
-func convertToGeminiTools(tools []llm.ToolSchema) []geminiTool {
+func convertToGeminiTools(tools []types.ToolSchema) []geminiTool {
 	if len(tools) == 0 {
 		return nil
 	}
@@ -467,7 +468,7 @@ func (p *GeminiProvider) Completion(ctx context.Context, req *llm.ChatRequest) (
 	// 统一入口：应用改写器链
 	rewrittenReq, err := p.rewriterChain.Execute(ctx, req)
 	if err != nil {
-		return nil, &llm.Error{
+		return nil, &types.Error{
 			Code:       llm.ErrInvalidRequest,
 			Message:    fmt.Sprintf("request rewrite failed: %v", err),
 			HTTPStatus: http.StatusBadRequest,
@@ -506,7 +507,7 @@ func (p *GeminiProvider) Completion(ctx context.Context, req *llm.ChatRequest) (
 
 	resp, err := p.client.Do(httpReq)
 	if err != nil {
-		return nil, &llm.Error{
+		return nil, &types.Error{
 			Code:       llm.ErrUpstreamError,
 			Message:    err.Error(),
 			HTTPStatus: http.StatusBadGateway,
@@ -523,7 +524,7 @@ func (p *GeminiProvider) Completion(ctx context.Context, req *llm.ChatRequest) (
 
 	var geminiResp geminiResponse
 	if err := json.NewDecoder(resp.Body).Decode(&geminiResp); err != nil {
-		return nil, &llm.Error{
+		return nil, &types.Error{
 			Code:       llm.ErrUpstreamError,
 			Message:    err.Error(),
 			HTTPStatus: http.StatusBadGateway,
@@ -544,7 +545,7 @@ func (p *GeminiProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-ch
 	// 统一入口：应用改写器链
 	rewrittenReq, err := p.rewriterChain.Execute(ctx, req)
 	if err != nil {
-		return nil, &llm.Error{
+		return nil, &types.Error{
 			Code:       llm.ErrInvalidRequest,
 			Message:    fmt.Sprintf("request rewrite failed: %v", err),
 			HTTPStatus: http.StatusBadRequest,
@@ -569,7 +570,7 @@ func (p *GeminiProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-ch
 
 	payload, err := json.Marshal(body)
 	if err != nil {
-		return nil, &llm.Error{
+		return nil, &types.Error{
 			Code:       llm.ErrInvalidRequest,
 			Message:    fmt.Sprintf("failed to marshal request: %v", err),
 			HTTPStatus: http.StatusBadRequest,
@@ -582,7 +583,7 @@ func (p *GeminiProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-ch
 
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(payload))
 	if err != nil {
-		return nil, &llm.Error{
+		return nil, &types.Error{
 			Code:       llm.ErrInternalError,
 			Message:    fmt.Sprintf("failed to create request: %v", err),
 			HTTPStatus: http.StatusInternalServerError,
@@ -594,7 +595,7 @@ func (p *GeminiProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-ch
 
 	resp, err := p.client.Do(httpReq)
 	if err != nil {
-		return nil, &llm.Error{
+		return nil, &types.Error{
 			Code:       llm.ErrUpstreamError,
 			Message:    err.Error(),
 			HTTPStatus: http.StatusBadGateway,
@@ -623,7 +624,7 @@ func (p *GeminiProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-ch
 					case <-ctx.Done():
 						return
 					case ch <- llm.StreamChunk{
-						Err: &llm.Error{
+						Err: &types.Error{
 							Code:       llm.ErrUpstreamError,
 							Message:    err.Error(),
 							HTTPStatus: http.StatusBadGateway,
@@ -663,7 +664,7 @@ func (p *GeminiProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-ch
 					Model:        model,
 					Index:        candidate.Index,
 					FinishReason: normalizeFinishReason(candidate.FinishReason),
-					Delta: llm.Message{
+					Delta: types.Message{
 						Role: llm.RoleAssistant,
 					},
 				}
@@ -684,7 +685,7 @@ func (p *GeminiProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-ch
 							continue
 						}
 						toolCallID := fmt.Sprintf("call_%s_%d_%d", part.FunctionCall.Name, candidate.Index, toolCallIndex)
-						chunk.Delta.ToolCalls = append(chunk.Delta.ToolCalls, llm.ToolCall{
+						chunk.Delta.ToolCalls = append(chunk.Delta.ToolCalls, types.ToolCall{
 							ID:        toolCallID,
 							Name:      part.FunctionCall.Name,
 							Arguments: argsJSON,
@@ -722,7 +723,7 @@ func toGeminiChatResponse(gr geminiResponse, provider, model string) *llm.ChatRe
 	choices := make([]llm.ChatChoice, 0, len(gr.Candidates))
 
 	for _, candidate := range gr.Candidates {
-		msg := llm.Message{
+		msg := types.Message{
 			Role: llm.RoleAssistant,
 		}
 
@@ -745,7 +746,7 @@ func toGeminiChatResponse(gr geminiResponse, provider, model string) *llm.ChatRe
 				if gr.ResponseID != "" {
 					toolCallID = fmt.Sprintf("call_%s_%s_%d", gr.ResponseID, part.FunctionCall.Name, toolCallIndex)
 				}
-				msg.ToolCalls = append(msg.ToolCalls, llm.ToolCall{
+				msg.ToolCalls = append(msg.ToolCalls, types.ToolCall{
 					ID:        toolCallID,
 					Name:      part.FunctionCall.Name,
 					Arguments: argsJSON,
@@ -826,7 +827,7 @@ func checkPromptFeedback(resp geminiResponse, provider string) error {
 	if resp.PromptFeedback.BlockMessage != "" {
 		msg = fmt.Sprintf("%s — %s", msg, resp.PromptFeedback.BlockMessage)
 	}
-	return &llm.Error{
+	return &types.Error{
 		Code:       llm.ErrContentFiltered,
 		Message:    msg,
 		HTTPStatus: http.StatusBadRequest,
@@ -926,3 +927,5 @@ func convertSafetySettings(settings []providers.GeminiSafetySetting) []geminiSaf
 	}
 	return out
 }
+
+

@@ -358,3 +358,4 @@ func TestFileCheckpointStore_DirectoryStructure(t *testing.T) {
 	latestFile := filepath.Join(threadDir, "latest.txt")
 	assert.FileExists(t, latestFile)
 }
+

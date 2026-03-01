@@ -267,3 +267,4 @@ func TestMaxHistorySize_Enforcement(t *testing.T) {
 	assert.LessOrEqual(t, len(m.LatencyHistory), maxHistorySize)
 	assert.LessOrEqual(t, len(m.QualityHistory), maxHistorySize)
 }
+

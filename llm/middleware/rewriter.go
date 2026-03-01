@@ -75,3 +75,4 @@ func (c *RewriterChain) GetRewriters() []RequestRewriter {
 	copy(out, c.rewriters)
 	return out
 }
+

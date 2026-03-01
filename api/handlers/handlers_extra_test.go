@@ -1092,3 +1092,4 @@ func TestHandleAPIKeyStats_WithKeys(t *testing.T) {
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
 	assert.True(t, resp.Success)
 }
+

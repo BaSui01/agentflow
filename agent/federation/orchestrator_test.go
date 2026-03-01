@@ -297,3 +297,4 @@ func TestOrchestrator_StopDoubleClose(t *testing.T) {
 	orch.Stop()
 	orch.Stop()
 }
+

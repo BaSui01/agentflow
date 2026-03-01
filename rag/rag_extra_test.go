@@ -561,3 +561,4 @@ func TestMin(t *testing.T) {
 	assert.Equal(t, 3, min(5, 3))
 	assert.Equal(t, 4, min(4, 4))
 }
+

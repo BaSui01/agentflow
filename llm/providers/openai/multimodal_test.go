@@ -1,6 +1,7 @@
 package openai
 
 import (
+	"github.com/BaSui01/agentflow/types"
 	"context"
 	"encoding/json"
 	"io"
@@ -67,7 +68,7 @@ func TestOpenAIProvider_GenerateImage_HTTPError(t *testing.T) {
 	p := newTestProvider(t, server.URL, false)
 	_, err := p.GenerateImage(context.Background(), &llm.ImageGenerationRequest{Prompt: ""})
 	require.Error(t, err)
-	llmErr, ok := err.(*llm.Error)
+	llmErr, ok := err.(*types.Error)
 	require.True(t, ok)
 	assert.Equal(t, llm.ErrInvalidRequest, llmErr.Code)
 }
@@ -78,7 +79,7 @@ func TestOpenAIProvider_GenerateVideo_NotSupported(t *testing.T) {
 	p := newTestProvider(t, "http://unused", false)
 	_, err := p.GenerateVideo(context.Background(), &llm.VideoGenerationRequest{})
 	require.Error(t, err)
-	llmErr, ok := err.(*llm.Error)
+	llmErr, ok := err.(*types.Error)
 	require.True(t, ok)
 	assert.Equal(t, llm.ErrInvalidRequest, llmErr.Code)
 	assert.Contains(t, llmErr.Message, "not supported")
@@ -240,7 +241,7 @@ func TestOpenAIProvider_CreateEmbedding_HTTPError(t *testing.T) {
 		Input: []string{"hello"},
 	})
 	require.Error(t, err)
-	llmErr, ok := err.(*llm.Error)
+	llmErr, ok := err.(*types.Error)
 	require.True(t, ok)
 	assert.Equal(t, llm.ErrRateLimit, llmErr.Code)
 }
@@ -407,8 +408,10 @@ func TestOpenAIProvider_Completion_CredentialOverride(t *testing.T) {
 
 	ctx := llm.WithCredentialOverride(context.Background(), llm.CredentialOverride{APIKey: "override-key"})
 	_, err := p.Completion(ctx, &llm.ChatRequest{
-		Messages: []llm.Message{{Role: llm.RoleUser, Content: "Hi"}},
+		Messages: []types.Message{{Role: llm.RoleUser, Content: "Hi"}},
 	})
 	require.NoError(t, err)
 	assert.Equal(t, "Bearer override-key", capturedAuth)
 }
+
+

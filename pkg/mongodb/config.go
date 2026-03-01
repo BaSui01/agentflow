@@ -127,3 +127,4 @@ func buildTLSConfig(cfg config.MongoDBConfig) (*tls.Config, error) {
 
 // DefaultHealthCheckInterval is used when the config value is zero.
 const DefaultHealthCheckInterval = 30 * time.Second
+

@@ -29,3 +29,4 @@ func TestHealthMonitor_DefaultScore_QPSLimit_AndProbe(t *testing.T) {
 		t.Fatalf("expected score 0.0 when probe is unhealthy, got %v", got)
 	}
 }
+

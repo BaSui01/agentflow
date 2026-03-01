@@ -488,3 +488,4 @@ func (r *HybridRetriever) getDocumentByID(id string) *Document {
 	}
 	return nil
 }
+

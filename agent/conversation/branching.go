@@ -1,6 +1,7 @@
 package conversation
 
 import (
+	"github.com/BaSui01/agentflow/types"
 	"encoding/json"
 	"fmt"
 	"sync"
@@ -13,7 +14,7 @@ import (
 type ConversationState struct {
 	ID        string         `json:"id"`
 	ParentID  string         `json:"parent_id,omitempty"`
-	Messages  []llm.Message  `json:"messages"`
+	Messages  []types.Message  `json:"messages"`
 	Metadata  map[string]any `json:"metadata,omitempty"`
 	CreatedAt time.Time      `json:"created_at"`
 	Label     string         `json:"label,omitempty"`
@@ -44,7 +45,7 @@ type ConversationTree struct {
 func NewConversationTree(id string) *ConversationTree {
 	rootState := &ConversationState{
 		ID:        "state_0",
-		Messages:  []llm.Message{},
+		Messages:  []types.Message{},
 		CreatedAt: time.Now(),
 		Label:     "root",
 	}
@@ -67,7 +68,7 @@ func NewConversationTree(id string) *ConversationTree {
 }
 
 // 添加 Message 为活动分支添加了消息 。
-func (t *ConversationTree) AddMessage(msg llm.Message) *ConversationState {
+func (t *ConversationTree) AddMessage(msg types.Message) *ConversationState {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
@@ -84,7 +85,7 @@ func (t *ConversationTree) AddMessage(msg llm.Message) *ConversationState {
 	newState := &ConversationState{
 		ID:        fmt.Sprintf("state_%d", t.stateCounter),
 		ParentID:  currentState.ID,
-		Messages:  append(append([]llm.Message{}, currentState.Messages...), msg),
+		Messages:  append(append([]types.Message{}, currentState.Messages...), msg),
 		CreatedAt: time.Now(),
 		Metadata:  make(map[string]any),
 	}
@@ -109,7 +110,7 @@ func (t *ConversationTree) GetCurrentState() *ConversationState {
 }
 
 // GetMessages 返回当前状态下的所有信件 。
-func (t *ConversationTree) GetMessages() []llm.Message {
+func (t *ConversationTree) GetMessages() []types.Message {
 	state := t.GetCurrentState()
 	if state == nil {
 		return nil
@@ -139,7 +140,7 @@ func (t *ConversationTree) Fork(branchName string) (*Branch, error) {
 	forkState := &ConversationState{
 		ID:        fmt.Sprintf("state_%d", t.stateCounter),
 		ParentID:  currentState.ID,
-		Messages:  append([]llm.Message{}, currentState.Messages...),
+		Messages:  append([]types.Message{}, currentState.Messages...),
 		CreatedAt: time.Now(),
 		Label:     fmt.Sprintf("fork from %s", t.ActiveBranch),
 		Metadata:  make(map[string]any),
@@ -309,7 +310,7 @@ func (t *ConversationTree) MergeBranch(sourceBranch string) error {
 		newState := &ConversationState{
 			ID:        fmt.Sprintf("state_%d", t.stateCounter),
 			ParentID:  currentState.ID,
-			Messages:  append(append([]llm.Message{}, currentState.Messages...), msg),
+			Messages:  append(append([]types.Message{}, currentState.Messages...), msg),
 			CreatedAt: time.Now(),
 			Label:     fmt.Sprintf("merged from %s", sourceBranch),
 			Metadata:  map[string]any{"merged_from": sourceBranch},
@@ -395,3 +396,5 @@ func (t *ConversationTree) RestoreSnapshot(label string) error {
 
 	return fmt.Errorf("snapshot state not found in any branch")
 }
+
+

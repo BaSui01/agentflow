@@ -484,3 +484,4 @@ func TestSortValidatorsByPriority(t *testing.T) {
 	assert.Equal(t, "v3", validators[2].Name())
 	assert.Equal(t, "v4", validators[3].Name())
 }
+

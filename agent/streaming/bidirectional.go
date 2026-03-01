@@ -766,3 +766,4 @@ func (w *StreamWriter) Write(p []byte) (n int, err error) {
 	}
 	return len(p), nil
 }
+

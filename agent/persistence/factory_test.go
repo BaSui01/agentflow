@@ -138,3 +138,4 @@ func TestMessage_IsAcked(t *testing.T) {
 	msg.AckedAt = &now
 	assert.True(t, msg.IsAcked())
 }
+

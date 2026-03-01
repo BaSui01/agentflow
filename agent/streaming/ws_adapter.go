@@ -99,3 +99,4 @@ func WebSocketStreamFactory(url string, logger *zap.Logger) func() (StreamConnec
 		return NewWebSocketStreamConnection(conn, logger), nil
 	}
 }
+
