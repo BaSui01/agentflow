@@ -1,12 +1,11 @@
 package agent
 
 import (
-	"github.com/BaSui01/agentflow/types"
 	"context"
+	"github.com/BaSui01/agentflow/types"
 	"testing"
 
 	"github.com/BaSui01/agentflow/agent/guardrails"
-	"github.com/BaSui01/agentflow/llm"
 	llmtools "github.com/BaSui01/agentflow/llm/tools"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -275,5 +274,3 @@ func TestBaseAgent_InitGuardrails(t *testing.T) {
 	assert.NotNil(t, ba.inputValidatorChain)
 	assert.NotNil(t, ba.outputValidator)
 }
-
-

@@ -1,23 +1,22 @@
 package conversation
 
 import (
-	"github.com/BaSui01/agentflow/types"
 	"encoding/json"
 	"fmt"
 	"sync"
 	"time"
 
-	"github.com/BaSui01/agentflow/llm"
+	"github.com/BaSui01/agentflow/types"
 )
 
 // 对话状态(Conversation State)代表时间点的对话状态.
 type ConversationState struct {
-	ID        string         `json:"id"`
-	ParentID  string         `json:"parent_id,omitempty"`
-	Messages  []types.Message  `json:"messages"`
-	Metadata  map[string]any `json:"metadata,omitempty"`
-	CreatedAt time.Time      `json:"created_at"`
-	Label     string         `json:"label,omitempty"`
+	ID        string          `json:"id"`
+	ParentID  string          `json:"parent_id,omitempty"`
+	Messages  []types.Message `json:"messages"`
+	Metadata  map[string]any  `json:"metadata,omitempty"`
+	CreatedAt time.Time       `json:"created_at"`
+	Label     string          `json:"label,omitempty"`
 }
 
 // 分会代表谈话分会.
@@ -396,5 +395,3 @@ func (t *ConversationTree) RestoreSnapshot(label string) error {
 
 	return fmt.Errorf("snapshot state not found in any branch")
 }
-
-

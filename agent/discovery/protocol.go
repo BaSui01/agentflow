@@ -329,7 +329,7 @@ func (p *DiscoveryProtocol) startHTTPServer() error {
 // 处理/发现/代理
 func (p *DiscoveryProtocol) handleListAgents(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		p.writeProtocolError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
 
@@ -346,25 +346,23 @@ func (p *DiscoveryProtocol) handleListAgents(w http.ResponseWriter, r *http.Requ
 
 	agents, err := p.Discover(ctx, filter)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		p.writeProtocolError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(agents)
+	p.writeProtocolJSON(w, http.StatusOK, agents)
 }
 
 // handleGet Agent hands 获取/发现/代理/{id}
 func (p *DiscoveryProtocol) handleGetAgent(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		p.writeProtocolError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
 
 	// 从路径提取代理 ID
 	agentID := r.URL.Path[len("/discovery/agents/"):]
 	if agentID == "" {
-		http.Error(w, "agent ID required", http.StatusBadRequest)
+		p.writeProtocolError(w, http.StatusBadRequest, "agent ID required")
 		return
 	}
 
@@ -379,53 +377,67 @@ func (p *DiscoveryProtocol) handleGetAgent(w http.ResponseWriter, r *http.Reques
 		var err error
 		agent, err = p.registry.GetAgent(ctx, agentID)
 		if err != nil {
-			http.Error(w, "agent not found", http.StatusNotFound)
+			p.writeProtocolError(w, http.StatusNotFound, "agent not found")
 			return
 		}
 	}
 
 	if agent == nil {
-		http.Error(w, "agent not found", http.StatusNotFound)
+		p.writeProtocolError(w, http.StatusNotFound, "agent not found")
 		return
 	}
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(agent)
+	p.writeProtocolJSON(w, http.StatusOK, agent)
 }
 
 // 通知手柄 POST/发现/通知
 func (p *DiscoveryProtocol) handleAnnounce(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		p.writeProtocolError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
 
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
-		http.Error(w, "failed to read body", http.StatusBadRequest)
+		p.writeProtocolError(w, http.StatusBadRequest, "failed to read body")
 		return
 	}
 
 	var info AgentInfo
 	if err := json.Unmarshal(body, &info); err != nil {
-		http.Error(w, "invalid JSON", http.StatusBadRequest)
+		p.writeProtocolError(w, http.StatusBadRequest, "invalid JSON")
 		return
 	}
 
 	ctx := r.Context()
 	if err := p.Announce(ctx, &info); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		p.writeProtocolError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-
-	w.WriteHeader(http.StatusOK)
-	w.Write([]byte(`{"status":"ok"}`))
+	p.writeProtocolJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
 // 获得/发现/健康
 func (p *DiscoveryProtocol) handleHealth(w http.ResponseWriter, r *http.Request) {
+	p.writeProtocolJSON(w, http.StatusOK, map[string]string{"status": "healthy"})
+}
+
+func (p *DiscoveryProtocol) writeProtocolJSON(w http.ResponseWriter, status int, data any) {
 	w.Header().Set("Content-Type", "application/json")
-	w.Write([]byte(`{"status":"healthy"}`))
+	w.WriteHeader(status)
+	if err := json.NewEncoder(w).Encode(data); err != nil {
+		p.logger.Warn("failed to write discovery protocol response", zap.Error(err))
+	}
+}
+
+func (p *DiscoveryProtocol) writeProtocolError(w http.ResponseWriter, status int, message string) {
+	p.writeProtocolJSON(w, status, map[string]any{
+		"success": false,
+		"error": map[string]string{
+			"code":    "DISCOVERY_PROTOCOL_ERROR",
+			"message": message,
+		},
+		"timestamp": time.Now().UTC(),
+	})
 }
 
 // 启动多收听器。
@@ -767,4 +779,3 @@ func joinStrings(strs []string, sep string) string {
 
 // 确保发现协议执行协议接口。
 var _ Protocol = (*DiscoveryProtocol)(nil)
-

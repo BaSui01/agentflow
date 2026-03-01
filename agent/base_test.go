@@ -1,8 +1,8 @@
 package agent
 
 import (
-	"github.com/BaSui01/agentflow/types"
 	"context"
+	"github.com/BaSui01/agentflow/types"
 	"testing"
 
 	"github.com/BaSui01/agentflow/llm"
@@ -215,7 +215,7 @@ func TestBaseAgent_SaveMemory(t *testing.T) {
 		saveFn: func(ctx context.Context, rec MemoryRecord) error {
 			saveCalled = true
 			assert.Equal(t, "test-agent", rec.AgentID)
-			assert.Equal(t, MemoryShortTerm, rec.Kind)
+			assert.Equal(t, types.MemoryCategory(MemoryShortTerm), rec.Kind)
 			assert.Equal(t, "test content", rec.Content)
 			return nil
 		},
@@ -251,7 +251,7 @@ func TestBaseAgent_RecallMemory(t *testing.T) {
 		{
 			ID:      "mem-1",
 			AgentID: "test-agent",
-			Kind:    MemoryLongTerm,
+			Kind:    types.MemoryCategory(MemoryLongTerm),
 			Content: "relevant memory",
 		},
 	}
@@ -291,7 +291,7 @@ func TestBaseAgent_Observe(t *testing.T) {
 		saveFn: func(ctx context.Context, rec MemoryRecord) error {
 			saveCalled = true
 			assert.Equal(t, "test-agent", rec.AgentID)
-			assert.Equal(t, MemoryLongTerm, rec.Kind)
+			assert.Equal(t, types.MemoryCategory(MemoryLongTerm), rec.Kind)
 			assert.Equal(t, "feedback content", rec.Content)
 			return nil
 		},
@@ -522,5 +522,3 @@ func TestSaveMemory_CacheEviction(t *testing.T) {
 	assert.Equal(t, defaultMaxRecentMemory, len(agent.recentMemory))
 	agent.recentMemoryMu.RUnlock()
 }
-
-

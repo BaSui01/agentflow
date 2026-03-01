@@ -1,13 +1,12 @@
 package conversation
 
 import (
-	"github.com/BaSui01/agentflow/types"
 	"context"
 	"fmt"
+	"github.com/BaSui01/agentflow/types"
 	"testing"
 	"time"
 
-	"github.com/BaSui01/agentflow/llm"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
@@ -434,5 +433,3 @@ func TestGroupChatManager_CreateGetChat(t *testing.T) {
 	_, ok = mgr.GetChat("nonexistent")
 	assert.False(t, ok)
 }
-
-

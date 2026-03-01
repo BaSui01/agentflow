@@ -46,19 +46,19 @@ const (
 type RoleStatus string
 
 const (
-	RoleStatusIdle    RoleStatus = "idle"     // 空闲
-	RoleStatusActive  RoleStatus = "active"   // 活跃
-	RoleStatusBlocked RoleStatus = "blocked"  // 阻塞
-	RoleStatusDone    RoleStatus = "done"     // 完成
-	RoleStatusFailed  RoleStatus = "failed"   // 失败
+	RoleStatusIdle    RoleStatus = "idle"    // 空闲
+	RoleStatusActive  RoleStatus = "active"  // 活跃
+	RoleStatusBlocked RoleStatus = "blocked" // 阻塞
+	RoleStatusDone    RoleStatus = "done"    // 完成
+	RoleStatusFailed  RoleStatus = "failed"  // 失败
 )
 
 // RoleCapability 角色能力定义
 type RoleCapability struct {
-	Name        string   `json:"name"`        // 能力名称
-	Description string   `json:"description"` // 能力描述
-	Tools       []string `json:"tools"`       // 可用工具列表
-	InputTypes  []string `json:"input_types"` // 接受的输入类型
+	Name        string   `json:"name"`         // 能力名称
+	Description string   `json:"description"`  // 能力描述
+	Tools       []string `json:"tools"`        // 可用工具列表
+	InputTypes  []string `json:"input_types"`  // 接受的输入类型
 	OutputTypes []string `json:"output_types"` // 产出的输出类型
 }
 
@@ -67,13 +67,13 @@ type RoleDefinition struct {
 	Type          RoleType         `json:"type"`
 	Name          string           `json:"name"`
 	Description   string           `json:"description"`
-	SystemPrompt  string           `json:"system_prompt"`   // 角色的系统提示词
+	SystemPrompt  string           `json:"system_prompt"` // 角色的系统提示词
 	Capabilities  []RoleCapability `json:"capabilities"`
-	Dependencies  []RoleType       `json:"dependencies"`    // 依赖的前置角色
-	MaxConcurrent int              `json:"max_concurrent"`  // 最大并发实例数
-	Timeout       time.Duration    `json:"timeout"`         // 角色执行超时
-	RetryPolicy   *RetryPolicy     `json:"retry_policy"`    // 重试策略
-	Priority      int              `json:"priority"`        // 优先级 (越高越优先)
+	Dependencies  []RoleType       `json:"dependencies"`   // 依赖的前置角色
+	MaxConcurrent int              `json:"max_concurrent"` // 最大并发实例数
+	Timeout       time.Duration    `json:"timeout"`        // 角色执行超时
+	RetryPolicy   *RetryPolicy     `json:"retry_policy"`   // 重试策略
+	Priority      int              `json:"priority"`       // 优先级 (越高越优先)
 }
 
 // RetryPolicy 重试策略
@@ -85,24 +85,24 @@ type RetryPolicy struct {
 
 // RoleInstance 角色实例（运行时状态）
 type RoleInstance struct {
-	ID         string         `json:"id"`
-	Definition RoleDefinition `json:"definition"`
-	AgentID    string         `json:"agent_id"`    // 绑定的 Agent ID
-	Status     RoleStatus     `json:"status"`
-	Input      any    `json:"input,omitempty"`
-	Output     any    `json:"output,omitempty"`
-	Error      string         `json:"error,omitempty"`
-	StartedAt  time.Time      `json:"started_at"`
-	CompletedAt *time.Time    `json:"completed_at,omitempty"`
-	Metadata   map[string]any `json:"metadata,omitempty"`
+	ID          string         `json:"id"`
+	Definition  RoleDefinition `json:"definition"`
+	AgentID     string         `json:"agent_id"` // 绑定的 Agent ID
+	Status      RoleStatus     `json:"status"`
+	Input       any            `json:"input,omitempty"`
+	Output      any            `json:"output,omitempty"`
+	Error       string         `json:"error,omitempty"`
+	StartedAt   time.Time      `json:"started_at"`
+	CompletedAt *time.Time     `json:"completed_at,omitempty"`
+	Metadata    map[string]any `json:"metadata,omitempty"`
 }
 
 // RoleTransition 角色间的数据传递
 type RoleTransition struct {
-	FromRole RoleType    `json:"from_role"`
-	ToRole   RoleType    `json:"to_role"`
-	Data     any `json:"data"`
-	Timestamp time.Time  `json:"timestamp"`
+	FromRole  RoleType  `json:"from_role"`
+	ToRole    RoleType  `json:"to_role"`
+	Data      any       `json:"data"`
+	Timestamp time.Time `json:"timestamp"`
 }
 
 // ============================================================================
@@ -203,14 +203,14 @@ func DefaultPipelineConfig() PipelineConfig {
 // RolePipeline 角色流水线编排器
 // 按照依赖关系自动编排角色执行顺序
 type RolePipeline struct {
-	config     PipelineConfig
-	registry   *RoleRegistry
-	stages     [][]RoleType           // 执行阶段（每个阶段内的角色可并行）
-	instances  map[string]*RoleInstance
+	config      PipelineConfig
+	registry    *RoleRegistry
+	stages      [][]RoleType // 执行阶段（每个阶段内的角色可并行）
+	instances   map[string]*RoleInstance
 	transitions []RoleTransition
-	executeFn  RoleExecuteFunc        // 角色执行函数
-	logger     *zap.Logger
-	mu         sync.RWMutex
+	executeFn   RoleExecuteFunc // 角色执行函数
+	logger      *zap.Logger
+	mu          sync.RWMutex
 }
 
 // RoleExecuteFunc 角色执行函数签名
@@ -251,8 +251,11 @@ func (p *RolePipeline) AddStage(roles ...RoleType) *RolePipeline {
 
 // Execute 执行流水线
 func (p *RolePipeline) Execute(ctx context.Context, initialInput any) (map[RoleType]any, error) {
-	ctx, cancel := context.WithTimeout(ctx, p.config.Timeout)
-	defer cancel()
+	if p.config.Timeout > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, p.config.Timeout)
+		defer cancel()
+	}
 
 	p.logger.Info("starting role pipeline",
 		zap.String("name", p.config.Name),
@@ -458,9 +461,9 @@ func (p *RolePipeline) GetTransitions() []RoleTransition {
 // NewResearchCollectorRole 创建研究资源收集者角色
 func NewResearchCollectorRole() *RoleDefinition {
 	return &RoleDefinition{
-		Type:        RoleCollector,
-		Name:        "Research Collector",
-		Description: "Collects research papers, code repositories, and datasets from academic databases and code platforms.",
+		Type:         RoleCollector,
+		Name:         "Research Collector",
+		Description:  "Collects research papers, code repositories, and datasets from academic databases and code platforms.",
 		SystemPrompt: "You are a research resource collector. Your job is to find relevant papers, code, and datasets for the given research topic. Search arXiv, IEEE Xplore, GitHub, and HuggingFace for the most relevant and recent resources.",
 		Capabilities: []RoleCapability{
 			{
@@ -603,4 +606,3 @@ func RegisterResearchRoles(registry *RoleRegistry) error {
 
 	return nil
 }
-

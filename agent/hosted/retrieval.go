@@ -1,12 +1,11 @@
 package hosted
 
 import (
-	"github.com/BaSui01/agentflow/types"
 	"context"
 	"encoding/json"
 	"fmt"
 
-	"github.com/BaSui01/agentflow/llm"
+	"github.com/BaSui01/agentflow/types"
 	"go.uber.org/zap"
 )
 
@@ -114,5 +113,3 @@ func (t *RetrievalTool) Execute(ctx context.Context, args json.RawMessage) (json
 
 	return json.Marshal(results)
 }
-
-

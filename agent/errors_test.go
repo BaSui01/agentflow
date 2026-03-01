@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/BaSui01/agentflow/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -49,7 +50,7 @@ func TestNewErrorWithCause(t *testing.T) {
 	cause := fmt.Errorf("root cause")
 	err := NewErrorWithCause(ErrCodeExecutionFailed, "exec failed", cause)
 	require.NotNil(t, err)
-	assert.Equal(t, ErrCodeExecutionFailed, err.Base.Code)
+	assert.Equal(t, types.ErrorCode(ErrCodeExecutionFailed), err.Base.Code)
 	assert.Contains(t, err.Error(), "exec failed")
 	assert.NotNil(t, err.Metadata)
 	assert.False(t, err.Timestamp.IsZero())
@@ -157,7 +158,7 @@ func TestErrInvalidTransition_ToAgentError(t *testing.T) {
 	err := ErrInvalidTransition{From: StateReady, To: StateInit}
 	agentErr := err.ToAgentError()
 	require.NotNil(t, agentErr)
-	assert.Equal(t, ErrCodeInvalidTransition, agentErr.Base.Code)
+	assert.Equal(t, types.ErrorCode(ErrCodeInvalidTransition), agentErr.Base.Code)
 	assert.Equal(t, StateReady, agentErr.Metadata["from_state"])
 	assert.Equal(t, StateInit, agentErr.Metadata["to_state"])
 }
@@ -169,4 +170,3 @@ func TestPredefinedErrors(t *testing.T) {
 
 	assert.True(t, errors.Is(ErrProviderNotSet, ErrProviderNotSet))
 }
-
