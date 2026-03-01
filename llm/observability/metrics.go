@@ -1,7 +1,6 @@
 package observability
 
 import (
-	"github.com/BaSui01/agentflow/types"
 	"context"
 	"time"
 
@@ -281,5 +280,3 @@ func (m *Metrics) RecordToolCall(ctx context.Context, toolName string, duration 
 func (m *Metrics) Tracer() trace.Tracer {
 	return m.tracer
 }
-
-

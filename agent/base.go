@@ -15,11 +15,6 @@ import (
 	"go.uber.org/zap"
 )
 
-// defaultMaxRecentMemory is the upper bound for the in-process recent-memory
-// cache. When SaveMemory appends a new record and the cache exceeds this size,
-// the oldest entries are evicted.
-const defaultMaxRecentMemory = 50
-
 // AgentType 定义 Agent 类型
 // 这是一个可扩展的字符串类型，用户可以定义自己的 Agent 类型
 type AgentType string

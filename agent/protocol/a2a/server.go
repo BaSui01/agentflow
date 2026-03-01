@@ -803,11 +803,10 @@ func (s *HTTPServer) executeAsyncTask(ctx context.Context, ag agent.Agent, task 
 
 	// 更新持久性存储
 	if s.taskStore != nil {
-		if err := s.taskStore.UpdateStatus(ctx, task.ID, persistence.TaskStatusRunning, nil, ""); err != nil {
-			s.logger.Warn("failed to update task status in store",
-				zap.String("task_id", task.ID),
-				zap.Error(err),
-			)
+		if err := s.updateTaskStatusWithRetry(ctx, task.ID, persistence.TaskStatusRunning, nil, ""); err != nil {
+			s.asyncTasksMu.Lock()
+			task.Error = appendStoreSyncError(task.Error, err)
+			s.asyncTasksMu.Unlock()
 		}
 	}
 
@@ -836,11 +835,10 @@ func (s *HTTPServer) executeAsyncTask(ctx context.Context, ag agent.Agent, task 
 		} else {
 			status = persistence.TaskStatusCompleted
 		}
-		if updateErr := s.taskStore.UpdateStatus(ctx, task.ID, status, result, errMsg); updateErr != nil {
-			s.logger.Warn("failed to update task status in store",
-				zap.String("task_id", task.ID),
-				zap.Error(updateErr),
-			)
+		if updateErr := s.updateTaskStatusWithRetry(ctx, task.ID, status, result, errMsg); updateErr != nil {
+			s.asyncTasksMu.Lock()
+			task.Error = appendStoreSyncError(task.Error, updateErr)
+			s.asyncTasksMu.Unlock()
 		}
 	}
 
@@ -905,11 +903,43 @@ func (s *HTTPServer) writeError(w http.ResponseWriter, status int, err error) {
 		zap.Error(err),
 	)
 
-	resp := map[string]string{
-		"error": err.Error(),
+	resp := map[string]any{
+		"success": false,
+		"error": map[string]string{
+			"code":    "A2A_ERROR",
+			"message": err.Error(),
+		},
+		"timestamp": time.Now().UTC(),
 	}
 
 	s.writeJSON(w, status, resp)
+}
+
+func (s *HTTPServer) updateTaskStatusWithRetry(ctx context.Context, taskID string, status persistence.TaskStatus, result any, errMsg string) error {
+	var lastErr error
+	for attempt := 1; attempt <= 3; attempt++ {
+		if err := s.taskStore.UpdateStatus(ctx, taskID, status, result, errMsg); err != nil {
+			lastErr = err
+			s.logger.Warn("failed to update task status in store",
+				zap.String("task_id", taskID),
+				zap.String("status", string(status)),
+				zap.Int("attempt", attempt),
+				zap.Error(err),
+			)
+			time.Sleep(time.Duration(attempt*100) * time.Millisecond)
+			continue
+		}
+		return nil
+	}
+	return fmt.Errorf("task store status sync failed after retries: %w", lastErr)
+}
+
+func appendStoreSyncError(base string, err error) string {
+	syncErr := "store_sync_failed: " + err.Error()
+	if base == "" {
+		return syncErr
+	}
+	return base + "; " + syncErr
 }
 
 // 清理已过期 任务删除超过指定期限的已完成或失败的任务 。
@@ -1032,4 +1062,3 @@ func (s *HTTPServer) AgentCount() int {
 
 // 确保 HTTPServer 执行 A2AServer 接口。
 var _ A2AServer = (*HTTPServer)(nil)
-

@@ -6,11 +6,12 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/BaSui01/agentflow/types"
 	"go.uber.org/zap"
 )
 
 // EventType 事件类型
-type EventType string
+type EventType = types.EventType
 
 const (
 	EventStateChange       EventType = "state_change"
@@ -25,25 +26,13 @@ const (
 var subscriptionCounter int64
 
 // Event 事件接口
-type Event interface {
-	Timestamp() time.Time
-	Type() EventType
-}
+type Event = types.Event
 
 // EventHandler 事件处理器
-type EventHandler func(Event)
+type EventHandler = types.EventHandler
 
 // EventBus 定义事件总线接口
-//
-// TODO(L-005): EventBus 目前定义在 agent 包中，但被 workflow、collaboration 等
-// 多个包使用。未来应考虑将 EventBus 接口提升到 types 包或独立的 event 包，
-// 以消除跨层对 agent 包的依赖。
-type EventBus interface {
-	Publish(event Event)
-	Subscribe(eventType EventType, handler EventHandler) string
-	Unsubscribe(subscriptionID string)
-	Stop()
-}
+type EventBus = types.EventBus
 
 // SimpleEventBus 简单的事件总线实现
 type SimpleEventBus struct {
@@ -219,4 +208,3 @@ type FeedbackEvent struct {
 
 func (e *FeedbackEvent) Timestamp() time.Time { return e.Timestamp_ }
 func (e *FeedbackEvent) Type() EventType      { return EventFeedback }
-
