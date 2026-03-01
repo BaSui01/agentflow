@@ -14,26 +14,13 @@ type OpenAIProvider struct {
 
 // NewOpenAIProvider创建了新的OpenAI嵌入提供商.
 func NewOpenAIProvider(cfg OpenAIConfig) *OpenAIProvider {
-	if cfg.BaseURL == "" {
-		cfg.BaseURL = "https://api.openai.com"
-	}
-	if cfg.Model == "" {
-		cfg.Model = "text-embedding-3-large"
-	}
+	cfg.BaseProviderConfig = applyBaseProviderDefaults(cfg.BaseProviderConfig, "https://api.openai.com", "text-embedding-3-large")
 	if cfg.Dimensions == 0 {
 		cfg.Dimensions = 3072
 	}
 
 	return &OpenAIProvider{
-		BaseProvider: NewBaseProvider(BaseConfig{
-			Name:       "openai-embedding",
-			BaseURL:    cfg.BaseURL,
-			APIKey:     cfg.APIKey,
-			Model:      cfg.Model,
-			Dimensions: cfg.Dimensions,
-			MaxBatch:   2048,
-			Timeout:    cfg.Timeout,
-		}),
+		BaseProvider: newProviderBase("openai-embedding", cfg.BaseProviderConfig, cfg.Dimensions, 2048),
 		cfg: cfg,
 	}
 }

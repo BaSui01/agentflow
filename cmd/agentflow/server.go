@@ -25,11 +25,9 @@ import (
 	"github.com/BaSui01/agentflow/llm"
 	"github.com/BaSui01/agentflow/llm/budget"
 	"github.com/BaSui01/agentflow/llm/cache"
-	"github.com/BaSui01/agentflow/llm/embedding"
 	llmfactory "github.com/BaSui01/agentflow/llm/factory"
 	llmmw "github.com/BaSui01/agentflow/llm/middleware"
 	"github.com/BaSui01/agentflow/llm/observability"
-	"github.com/BaSui01/agentflow/llm/providers"
 	"github.com/BaSui01/agentflow/llm/tools"
 	"github.com/BaSui01/agentflow/pkg/metrics"
 	mw "github.com/BaSui01/agentflow/pkg/middleware"
@@ -562,20 +560,21 @@ func (s *Server) initRAGHandler() {
 		return
 	}
 
-	// Create embedding provider based on the configured LLM provider.
-	// Most providers expose an OpenAI-compatible embedding endpoint.
-	embCfg := embedding.OpenAIConfig{
-		BaseProviderConfig: providers.BaseProviderConfig{
-			APIKey:  s.cfg.LLM.APIKey,
-			BaseURL: s.cfg.LLM.BaseURL,
-			Timeout: s.cfg.LLM.Timeout,
-		},
+	embProvider, err := rag.NewEmbeddingProviderFromConfig(
+		s.cfg,
+		rag.EmbeddingProviderType(s.cfg.LLM.DefaultProvider),
+	)
+	if err != nil {
+		s.logger.Warn("RAG handler disabled (failed to create embedding provider)",
+			zap.String("provider", s.cfg.LLM.DefaultProvider),
+			zap.Error(err))
+		return
 	}
-	embProvider := embedding.NewOpenAIProvider(embCfg)
 
 	store := rag.NewInMemoryVectorStore(s.logger)
 	s.ragHandler = handlers.NewRAGHandler(store, embProvider, s.logger)
-	s.logger.Info("RAG handler initialized (in-memory store, embedding provider ready)")
+	s.logger.Info("RAG handler initialized (in-memory store, embedding provider ready)",
+		zap.String("provider", embProvider.Name()))
 }
 
 // initHotReloadManager 初始化热更新管理器

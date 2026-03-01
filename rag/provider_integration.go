@@ -155,9 +155,13 @@ func (r *EnhancedRetriever) applyExternalRerank(ctx context.Context, query strin
 
 // 新 OpenAIREtriever 创建了带有 OpenAI 嵌入式的检索器 。
 func NewOpenAIRetriever(apiKey string, logger *zap.Logger) *EnhancedRetriever {
-	embProvider := embedding.NewOpenAIProvider(embedding.OpenAIConfig{
-		BaseProviderConfig: providers.BaseProviderConfig{APIKey: apiKey},
+	embProvider, err := embedding.NewProviderFromConfig(embedding.FactoryConfig{
+		Type:   embedding.ProviderOpenAI,
+		APIKey: apiKey,
 	})
+	if err != nil {
+		panic(fmt.Sprintf("failed to create openai embedding provider: %v", err))
+	}
 
 	return NewEnhancedRetriever(EnhancedRetrieverConfig{
 		HybridConfig:      DefaultHybridRetrievalConfig(),
@@ -167,11 +171,15 @@ func NewOpenAIRetriever(apiKey string, logger *zap.Logger) *EnhancedRetriever {
 
 // NewCohere Retriever创建了由Cohere嵌入并重排的取回器.
 func NewCohereRetriever(apiKey string, logger *zap.Logger) *EnhancedRetriever {
-	embProvider := embedding.NewCohereProvider(embedding.CohereConfig{
-		BaseProviderConfig: providers.BaseProviderConfig{APIKey: apiKey},
-	})
-	rerankProvider := rerank.NewCohereProvider(rerank.CohereConfig{
+	embProvider, err := embedding.NewProviderFromConfig(embedding.FactoryConfig{
+		Type:   embedding.ProviderCohere,
 		APIKey: apiKey,
+	})
+	if err != nil {
+		panic(fmt.Sprintf("failed to create cohere embedding provider: %v", err))
+	}
+	rerankProvider := rerank.NewCohereProvider(rerank.CohereConfig{
+		BaseProviderConfig: providers.BaseProviderConfig{APIKey: apiKey},
 	})
 
 	return NewEnhancedRetriever(EnhancedRetrieverConfig{
@@ -183,11 +191,15 @@ func NewCohereRetriever(apiKey string, logger *zap.Logger) *EnhancedRetriever {
 
 // NewVoyage Retriever 创建取回器,由Voyage AI嵌入并重排.
 func NewVoyageRetriever(apiKey string, logger *zap.Logger) *EnhancedRetriever {
-	embProvider := embedding.NewVoyageProvider(embedding.VoyageConfig{
-		BaseProviderConfig: providers.BaseProviderConfig{APIKey: apiKey},
-	})
-	rerankProvider := rerank.NewVoyageProvider(rerank.VoyageConfig{
+	embProvider, err := embedding.NewProviderFromConfig(embedding.FactoryConfig{
+		Type:   embedding.ProviderVoyage,
 		APIKey: apiKey,
+	})
+	if err != nil {
+		panic(fmt.Sprintf("failed to create voyage embedding provider: %v", err))
+	}
+	rerankProvider := rerank.NewVoyageProvider(rerank.VoyageConfig{
+		BaseProviderConfig: providers.BaseProviderConfig{APIKey: apiKey},
 	})
 
 	return NewEnhancedRetriever(EnhancedRetrieverConfig{
@@ -199,11 +211,15 @@ func NewVoyageRetriever(apiKey string, logger *zap.Logger) *EnhancedRetriever {
 
 // 新JinaRetriever创建取回器,由Jina AI嵌入并重排.
 func NewJinaRetriever(apiKey string, logger *zap.Logger) *EnhancedRetriever {
-	embProvider := embedding.NewJinaProvider(embedding.JinaConfig{
-		BaseProviderConfig: providers.BaseProviderConfig{APIKey: apiKey},
-	})
-	rerankProvider := rerank.NewJinaProvider(rerank.JinaConfig{
+	embProvider, err := embedding.NewProviderFromConfig(embedding.FactoryConfig{
+		Type:   embedding.ProviderJina,
 		APIKey: apiKey,
+	})
+	if err != nil {
+		panic(fmt.Sprintf("failed to create jina embedding provider: %v", err))
+	}
+	rerankProvider := rerank.NewJinaProvider(rerank.JinaConfig{
+		BaseProviderConfig: providers.BaseProviderConfig{APIKey: apiKey},
 	})
 
 	return NewEnhancedRetriever(EnhancedRetrieverConfig{

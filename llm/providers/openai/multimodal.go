@@ -22,46 +22,10 @@ import (
 // Endpoint: POST /v1/images/generations
 // Models: dall-e-3, dall-e-2, gpt-image-1
 func (p *OpenAIProvider) GenerateImage(ctx context.Context, req *llm.ImageGenerationRequest) (*llm.ImageGenerationResponse, error) {
-	endpoint := fmt.Sprintf("%s/v1/images/generations", strings.TrimRight(p.openaiCfg.BaseURL, "/"))
-
-	payload, err := json.Marshal(req)
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal request: %w", err)
-	}
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(payload))
-	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
-	}
-	p.Provider.Cfg.BuildHeaders(httpReq, p.openaiCfg.APIKey)
-
-	resp, err := p.Provider.Client.Do(httpReq)
-	if err != nil {
-		return nil, &llm.Error{
-			Code:       llm.ErrUpstreamError,
-			Message:    err.Error(),
-			HTTPStatus: http.StatusBadGateway,
-			Retryable:  true,
-			Provider:   p.Name(),
-		}
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode >= 400 {
-		msg := providers.ReadErrorMessage(resp.Body)
-		return nil, providers.MapHTTPError(resp.StatusCode, msg, p.Name())
-	}
-
 	var imageResp llm.ImageGenerationResponse
-	if err := json.NewDecoder(resp.Body).Decode(&imageResp); err != nil {
-		return nil, &llm.Error{
-			Code:       llm.ErrUpstreamError,
-			Message:    err.Error(),
-			HTTPStatus: http.StatusBadGateway,
-			Retryable:  true,
-			Provider:   p.Name(),
-		}
+	if err := p.doJSON(ctx, http.MethodPost, "/v1/images/generations", req, &imageResp); err != nil {
+		return nil, err
 	}
-
 	return &imageResp, nil
 }
 
@@ -83,45 +47,9 @@ func (p *OpenAIProvider) GenerateVideo(ctx context.Context, req *llm.VideoGenera
 // Endpoint: POST /v1/audio/speech
 // Models: tts-1, tts-1-hd, gpt-4o-mini-tts
 func (p *OpenAIProvider) GenerateAudio(ctx context.Context, req *llm.AudioGenerationRequest) (*llm.AudioGenerationResponse, error) {
-	endpoint := fmt.Sprintf("%s/v1/audio/speech", strings.TrimRight(p.openaiCfg.BaseURL, "/"))
-
-	payload, err := json.Marshal(req)
+	audioData, err := p.doBytes(ctx, http.MethodPost, "/v1/audio/speech", req)
 	if err != nil {
-		return nil, fmt.Errorf("failed to marshal request: %w", err)
-	}
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(payload))
-	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
-	}
-	p.Provider.Cfg.BuildHeaders(httpReq, p.openaiCfg.APIKey)
-
-	resp, err := p.Provider.Client.Do(httpReq)
-	if err != nil {
-		return nil, &llm.Error{
-			Code:       llm.ErrUpstreamError,
-			Message:    err.Error(),
-			HTTPStatus: http.StatusBadGateway,
-			Retryable:  true,
-			Provider:   p.Name(),
-		}
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode >= 400 {
-		msg := providers.ReadErrorMessage(resp.Body)
-		return nil, providers.MapHTTPError(resp.StatusCode, msg, p.Name())
-	}
-
-	// 读取音频数据
-	audioData, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, &llm.Error{
-			Code:       llm.ErrUpstreamError,
-			Message:    err.Error(),
-			HTTPStatus: http.StatusBadGateway,
-			Retryable:  true,
-			Provider:   p.Name(),
-		}
+		return nil, err
 	}
 
 	return &llm.AudioGenerationResponse{
@@ -133,9 +61,7 @@ func (p *OpenAIProvider) GenerateAudio(ctx context.Context, req *llm.AudioGenera
 // Endpoint: POST /v1/audio/transcriptions
 // Models: whisper-1, gpt-4o-transcribe, gpt-4o-mini-transcribe
 func (p *OpenAIProvider) TranscribeAudio(ctx context.Context, req *llm.AudioTranscriptionRequest) (*llm.AudioTranscriptionResponse, error) {
-	endpoint := fmt.Sprintf("%s/v1/audio/transcriptions", strings.TrimRight(p.openaiCfg.BaseURL, "/"))
-
-	// 创建多部分形式数据
+	// 创建 multipart/form-data 请求体
 	body := &bytes.Buffer{}
 	writer := multipart.NewWriter(body)
 
@@ -177,39 +103,9 @@ func (p *OpenAIProvider) TranscribeAudio(ctx context.Context, req *llm.AudioTran
 		return nil, fmt.Errorf("failed to finalize multipart body: %w", err)
 	}
 
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, body)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
-	}
-	httpReq.Header.Set("Authorization", "Bearer "+p.openaiCfg.APIKey)
-	httpReq.Header.Set("Content-Type", writer.FormDataContentType())
-
-	resp, err := p.Provider.Client.Do(httpReq)
-	if err != nil {
-		return nil, &llm.Error{
-			Code:       llm.ErrUpstreamError,
-			Message:    err.Error(),
-			HTTPStatus: http.StatusBadGateway,
-			Retryable:  true,
-			Provider:   p.Name(),
-		}
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode >= 400 {
-		msg := providers.ReadErrorMessage(resp.Body)
-		return nil, providers.MapHTTPError(resp.StatusCode, msg, p.Name())
-	}
-
 	var transcriptionResp llm.AudioTranscriptionResponse
-	if err := json.NewDecoder(resp.Body).Decode(&transcriptionResp); err != nil {
-		return nil, &llm.Error{
-			Code:       llm.ErrUpstreamError,
-			Message:    err.Error(),
-			HTTPStatus: http.StatusBadGateway,
-			Retryable:  true,
-			Provider:   p.Name(),
-		}
+	if err := p.doMultipartJSON(ctx, "/v1/audio/transcriptions", body, writer.FormDataContentType(), &transcriptionResp); err != nil {
+		return nil, err
 	}
 
 	return &transcriptionResp, nil
@@ -223,44 +119,9 @@ func (p *OpenAIProvider) TranscribeAudio(ctx context.Context, req *llm.AudioTran
 // Endpoint: POST /v1/embeddings
 // Models: text-embedding-3-small, text-embedding-3-large, text-embedding-ada-002
 func (p *OpenAIProvider) CreateEmbedding(ctx context.Context, req *llm.EmbeddingRequest) (*llm.EmbeddingResponse, error) {
-	endpoint := fmt.Sprintf("%s/v1/embeddings", strings.TrimRight(p.openaiCfg.BaseURL, "/"))
-
-	payload, err := json.Marshal(req)
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal request: %w", err)
-	}
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(payload))
-	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
-	}
-	p.Provider.Cfg.BuildHeaders(httpReq, p.openaiCfg.APIKey)
-
-	resp, err := p.Provider.Client.Do(httpReq)
-	if err != nil {
-		return nil, &llm.Error{
-			Code:       llm.ErrUpstreamError,
-			Message:    err.Error(),
-			HTTPStatus: http.StatusBadGateway,
-			Retryable:  true,
-			Provider:   p.Name(),
-		}
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode >= 400 {
-		msg := providers.ReadErrorMessage(resp.Body)
-		return nil, providers.MapHTTPError(resp.StatusCode, msg, p.Name())
-	}
-
 	var embeddingResp llm.EmbeddingResponse
-	if err := json.NewDecoder(resp.Body).Decode(&embeddingResp); err != nil {
-		return nil, &llm.Error{
-			Code:       llm.ErrUpstreamError,
-			Message:    err.Error(),
-			HTTPStatus: http.StatusBadGateway,
-			Retryable:  true,
-			Provider:   p.Name(),
-		}
+	if err := p.doJSON(ctx, http.MethodPost, "/v1/embeddings", req, &embeddingResp); err != nil {
+		return nil, err
 	}
 
 	return &embeddingResp, nil
@@ -273,44 +134,9 @@ func (p *OpenAIProvider) CreateEmbedding(ctx context.Context, req *llm.Embedding
 // CreateFineTuningJob 创建微调任务.
 // Endpoint: POST /v1/fine_tuning/jobs
 func (p *OpenAIProvider) CreateFineTuningJob(ctx context.Context, req *llm.FineTuningJobRequest) (*llm.FineTuningJob, error) {
-	endpoint := fmt.Sprintf("%s/v1/fine_tuning/jobs", strings.TrimRight(p.openaiCfg.BaseURL, "/"))
-
-	payload, err := json.Marshal(req)
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal request: %w", err)
-	}
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(payload))
-	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
-	}
-	p.Provider.Cfg.BuildHeaders(httpReq, p.openaiCfg.APIKey)
-
-	resp, err := p.Provider.Client.Do(httpReq)
-	if err != nil {
-		return nil, &llm.Error{
-			Code:       llm.ErrUpstreamError,
-			Message:    err.Error(),
-			HTTPStatus: http.StatusBadGateway,
-			Retryable:  true,
-			Provider:   p.Name(),
-		}
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode >= 400 {
-		msg := providers.ReadErrorMessage(resp.Body)
-		return nil, providers.MapHTTPError(resp.StatusCode, msg, p.Name())
-	}
-
 	var job llm.FineTuningJob
-	if err := json.NewDecoder(resp.Body).Decode(&job); err != nil {
-		return nil, &llm.Error{
-			Code:       llm.ErrUpstreamError,
-			Message:    err.Error(),
-			HTTPStatus: http.StatusBadGateway,
-			Retryable:  true,
-			Provider:   p.Name(),
-		}
+	if err := p.doJSON(ctx, http.MethodPost, "/v1/fine_tuning/jobs", req, &job); err != nil {
+		return nil, err
 	}
 
 	return &job, nil
@@ -319,42 +145,11 @@ func (p *OpenAIProvider) CreateFineTuningJob(ctx context.Context, req *llm.FineT
 // ListFineTuningJobs 列出微调任务.
 // Endpoint: GET /v1/fine_tuning/jobs
 func (p *OpenAIProvider) ListFineTuningJobs(ctx context.Context) ([]llm.FineTuningJob, error) {
-	endpoint := fmt.Sprintf("%s/v1/fine_tuning/jobs", strings.TrimRight(p.openaiCfg.BaseURL, "/"))
-
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
-	}
-	p.Provider.Cfg.BuildHeaders(httpReq, p.openaiCfg.APIKey)
-
-	resp, err := p.Provider.Client.Do(httpReq)
-	if err != nil {
-		return nil, &llm.Error{
-			Code:       llm.ErrUpstreamError,
-			Message:    err.Error(),
-			HTTPStatus: http.StatusBadGateway,
-			Retryable:  true,
-			Provider:   p.Name(),
-		}
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode >= 400 {
-		msg := providers.ReadErrorMessage(resp.Body)
-		return nil, providers.MapHTTPError(resp.StatusCode, msg, p.Name())
-	}
-
 	var jobsResp struct {
 		Data []llm.FineTuningJob `json:"data"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&jobsResp); err != nil {
-		return nil, &llm.Error{
-			Code:       llm.ErrUpstreamError,
-			Message:    err.Error(),
-			HTTPStatus: http.StatusBadGateway,
-			Retryable:  true,
-			Provider:   p.Name(),
-		}
+	if err := p.doJSON(ctx, http.MethodGet, "/v1/fine_tuning/jobs", nil, &jobsResp); err != nil {
+		return nil, err
 	}
 
 	return jobsResp.Data, nil
@@ -363,40 +158,9 @@ func (p *OpenAIProvider) ListFineTuningJobs(ctx context.Context) ([]llm.FineTuni
 // GetFineTuningJob 通过 ID 获取微调任务.
 // Endpoint: GET /v1/fine_tuning/jobs/{job_id}
 func (p *OpenAIProvider) GetFineTuningJob(ctx context.Context, jobID string) (*llm.FineTuningJob, error) {
-	endpoint := fmt.Sprintf("%s/v1/fine_tuning/jobs/%s", strings.TrimRight(p.openaiCfg.BaseURL, "/"), jobID)
-
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
-	}
-	p.Provider.Cfg.BuildHeaders(httpReq, p.openaiCfg.APIKey)
-
-	resp, err := p.Provider.Client.Do(httpReq)
-	if err != nil {
-		return nil, &llm.Error{
-			Code:       llm.ErrUpstreamError,
-			Message:    err.Error(),
-			HTTPStatus: http.StatusBadGateway,
-			Retryable:  true,
-			Provider:   p.Name(),
-		}
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode >= 400 {
-		msg := providers.ReadErrorMessage(resp.Body)
-		return nil, providers.MapHTTPError(resp.StatusCode, msg, p.Name())
-	}
-
 	var job llm.FineTuningJob
-	if err := json.NewDecoder(resp.Body).Decode(&job); err != nil {
-		return nil, &llm.Error{
-			Code:       llm.ErrUpstreamError,
-			Message:    err.Error(),
-			HTTPStatus: http.StatusBadGateway,
-			Retryable:  true,
-			Provider:   p.Name(),
-		}
+	if err := p.doJSON(ctx, http.MethodGet, "/v1/fine_tuning/jobs/"+jobID, nil, &job); err != nil {
+		return nil, err
 	}
 
 	return &job, nil
@@ -405,23 +169,13 @@ func (p *OpenAIProvider) GetFineTuningJob(ctx context.Context, jobID string) (*l
 // CancelFineTuningJob 取消微调任务.
 // Endpoint: POST /v1/fine_tuning/jobs/{job_id}/cancel
 func (p *OpenAIProvider) CancelFineTuningJob(ctx context.Context, jobID string) error {
-	endpoint := fmt.Sprintf("%s/v1/fine_tuning/jobs/%s/cancel", strings.TrimRight(p.openaiCfg.BaseURL, "/"), jobID)
-
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, nil)
+	httpReq, err := p.newRequest(ctx, http.MethodPost, "/v1/fine_tuning/jobs/"+jobID+"/cancel", nil)
 	if err != nil {
-		return fmt.Errorf("failed to create request: %w", err)
+		return err
 	}
-	p.Provider.Cfg.BuildHeaders(httpReq, p.openaiCfg.APIKey)
-
-	resp, err := p.Provider.Client.Do(httpReq)
+	resp, err := p.do(httpReq)
 	if err != nil {
-		return &llm.Error{
-			Code:       llm.ErrUpstreamError,
-			Message:    err.Error(),
-			HTTPStatus: http.StatusBadGateway,
-			Retryable:  true,
-			Provider:   p.Name(),
-		}
+		return err
 	}
 	defer resp.Body.Close()
 
@@ -430,5 +184,141 @@ func (p *OpenAIProvider) CancelFineTuningJob(ctx context.Context, jobID string) 
 		return providers.MapHTTPError(resp.StatusCode, msg, p.Name())
 	}
 
+	return nil
+}
+
+func (p *OpenAIProvider) endpoint(path string) string {
+	return fmt.Sprintf("%s%s", strings.TrimRight(p.openaiCfg.BaseURL, "/"), path)
+}
+
+func (p *OpenAIProvider) newRequest(ctx context.Context, method, path string, body io.Reader) (*http.Request, error) {
+	req, err := http.NewRequestWithContext(ctx, method, p.endpoint(path), body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+	p.Provider.Cfg.BuildHeaders(req, p.openaiCfg.APIKey)
+	return req, nil
+}
+
+func (p *OpenAIProvider) do(req *http.Request) (*http.Response, error) {
+	resp, err := p.Provider.Client.Do(req)
+	if err != nil {
+		return nil, &llm.Error{
+			Code:       llm.ErrUpstreamError,
+			Message:    err.Error(),
+			HTTPStatus: http.StatusBadGateway,
+			Retryable:  true,
+			Provider:   p.Name(),
+		}
+	}
+	return resp, nil
+}
+
+func (p *OpenAIProvider) doJSON(ctx context.Context, method, path string, payload any, out any) error {
+	var reqBody io.Reader
+	if payload != nil {
+		data, err := json.Marshal(payload)
+		if err != nil {
+			return fmt.Errorf("failed to marshal request: %w", err)
+		}
+		reqBody = bytes.NewReader(data)
+	}
+
+	req, err := p.newRequest(ctx, method, path, reqBody)
+	if err != nil {
+		return err
+	}
+
+	resp, err := p.do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 400 {
+		msg := providers.ReadErrorMessage(resp.Body)
+		return providers.MapHTTPError(resp.StatusCode, msg, p.Name())
+	}
+
+	if out == nil {
+		return nil
+	}
+	if err := json.NewDecoder(resp.Body).Decode(out); err != nil {
+		return &llm.Error{
+			Code:       llm.ErrUpstreamError,
+			Message:    err.Error(),
+			HTTPStatus: http.StatusBadGateway,
+			Retryable:  true,
+			Provider:   p.Name(),
+		}
+	}
+	return nil
+}
+
+func (p *OpenAIProvider) doBytes(ctx context.Context, method, path string, payload any) ([]byte, error) {
+	var reqBody io.Reader
+	if payload != nil {
+		data, err := json.Marshal(payload)
+		if err != nil {
+			return nil, fmt.Errorf("failed to marshal request: %w", err)
+		}
+		reqBody = bytes.NewReader(data)
+	}
+
+	req, err := p.newRequest(ctx, method, path, reqBody)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := p.do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 400 {
+		msg := providers.ReadErrorMessage(resp.Body)
+		return nil, providers.MapHTTPError(resp.StatusCode, msg, p.Name())
+	}
+
+	data, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, &llm.Error{
+			Code:       llm.ErrUpstreamError,
+			Message:    err.Error(),
+			HTTPStatus: http.StatusBadGateway,
+			Retryable:  true,
+			Provider:   p.Name(),
+		}
+	}
+	return data, nil
+}
+
+func (p *OpenAIProvider) doMultipartJSON(ctx context.Context, path string, body io.Reader, contentType string, out any) error {
+	req, err := p.newRequest(ctx, http.MethodPost, path, body)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", contentType)
+
+	resp, err := p.do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 400 {
+		msg := providers.ReadErrorMessage(resp.Body)
+		return providers.MapHTTPError(resp.StatusCode, msg, p.Name())
+	}
+
+	if err := json.NewDecoder(resp.Body).Decode(out); err != nil {
+		return &llm.Error{
+			Code:       llm.ErrUpstreamError,
+			Message:    err.Error(),
+			HTTPStatus: http.StatusBadGateway,
+			Retryable:  true,
+			Provider:   p.Name(),
+		}
+	}
 	return nil
 }

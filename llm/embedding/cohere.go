@@ -14,23 +14,10 @@ type CohereProvider struct {
 
 // NewCohere Provider创建了一个新的Cohere嵌入提供商.
 func NewCohereProvider(cfg CohereConfig) *CohereProvider {
-	if cfg.BaseURL == "" {
-		cfg.BaseURL = "https://api.cohere.ai"
-	}
-	if cfg.Model == "" {
-		cfg.Model = "embed-v3.5"
-	}
+	cfg.BaseProviderConfig = applyBaseProviderDefaults(cfg.BaseProviderConfig, "https://api.cohere.ai", "embed-v3.5")
 
 	return &CohereProvider{
-		BaseProvider: NewBaseProvider(BaseConfig{
-			Name:       "cohere-embedding",
-			BaseURL:    cfg.BaseURL,
-			APIKey:     cfg.APIKey,
-			Model:      cfg.Model,
-			Dimensions: 1024,
-			MaxBatch:   96,
-			Timeout:    cfg.Timeout,
-		}),
+		BaseProvider: newProviderBase("cohere-embedding", cfg.BaseProviderConfig, 1024, 96),
 		cfg: cfg,
 	}
 }

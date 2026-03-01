@@ -14,23 +14,10 @@ type JinaProvider struct {
 
 // 新JinaProvider创建了新的Jina AI嵌入服务商.
 func NewJinaProvider(cfg JinaConfig) *JinaProvider {
-	if cfg.BaseURL == "" {
-		cfg.BaseURL = "https://api.jina.ai"
-	}
-	if cfg.Model == "" {
-		cfg.Model = "jina-embeddings-v3"
-	}
+	cfg.BaseProviderConfig = applyBaseProviderDefaults(cfg.BaseProviderConfig, "https://api.jina.ai", "jina-embeddings-v3")
 
 	return &JinaProvider{
-		BaseProvider: NewBaseProvider(BaseConfig{
-			Name:       "jina-embedding",
-			BaseURL:    cfg.BaseURL,
-			APIKey:     cfg.APIKey,
-			Model:      cfg.Model,
-			Dimensions: 1024,
-			MaxBatch:   2048,
-			Timeout:    cfg.Timeout,
-		}),
+		BaseProvider: newProviderBase("jina-embedding", cfg.BaseProviderConfig, 1024, 2048),
 		cfg: cfg,
 	}
 }

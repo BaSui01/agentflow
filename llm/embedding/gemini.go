@@ -1,24 +1,20 @@
 package embedding
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
-	"net/http"
-	"strings"
 	"time"
 
+	"github.com/BaSui01/agentflow/llm"
 	"github.com/BaSui01/agentflow/llm/providers"
-	"github.com/BaSui01/agentflow/pkg/tlsutil"
 )
 
 // GeminiProvider 使用 Google Gemini API 执行嵌入.
 // 注: Gemini 使用不同的端点格式: /models/{model}:embedContent
 type GeminiProvider struct {
+	*BaseProvider
 	cfg    GeminiConfig
-	client *http.Client
 }
 
 // GeminiConfig 配置 Gemini 嵌入提供者.
@@ -40,26 +36,13 @@ func DefaultGeminiConfig() GeminiConfig {
 
 // NewGeminiProvider 创建新的 Gemini 嵌入提供者.
 func NewGeminiProvider(cfg GeminiConfig) *GeminiProvider {
-	if cfg.BaseURL == "" {
-		cfg.BaseURL = "https://generativelanguage.googleapis.com/v1beta"
-	}
-	if cfg.Model == "" {
-		cfg.Model = "gemini-embedding-001"
-	}
-	timeout := cfg.Timeout
-	if timeout == 0 {
-		timeout = 30 * time.Second
-	}
+	cfg.BaseProviderConfig = applyBaseProviderDefaults(cfg.BaseProviderConfig, "https://generativelanguage.googleapis.com/v1beta", "gemini-embedding-001")
 
 	return &GeminiProvider{
-		cfg:    cfg,
-		client: tlsutil.SecureHTTPClient(timeout),
+		BaseProvider: newProviderBase("gemini-embedding", cfg.BaseProviderConfig, 3072, 100),
+		cfg:          cfg,
 	}
 }
-
-func (p *GeminiProvider) Name() string      { return "gemini-embedding" }
-func (p *GeminiProvider) Dimensions() int   { return 3072 }
-func (p *GeminiProvider) MaxBatchSize() int { return 100 }
 
 // Gemini TaskType 映射
 type geminiTaskType string
@@ -125,6 +108,15 @@ func mapTaskType(inputType InputType) geminiTaskType {
 
 // Embed 使用 Gemini API 生成嵌入.
 func (p *GeminiProvider) Embed(ctx context.Context, req *EmbeddingRequest) (*EmbeddingResponse, error) {
+	if len(req.Input) == 0 {
+		return nil, &llm.Error{
+			Code:       llm.ErrInvalidRequest,
+			Message:    "input must not be empty",
+			HTTPStatus: 400,
+			Retryable:  false,
+			Provider:   p.Name(),
+		}
+	}
 	model := ChooseModel(req.Model, p.cfg.Model, "gemini-embedding-001")
 	taskType := mapTaskType(req.InputType)
 
@@ -145,8 +137,10 @@ func (p *GeminiProvider) Embed(ctx context.Context, req *EmbeddingRequest) (*Emb
 		body.OutputDimensionality = req.Dimensions
 	}
 
-	endpoint := fmt.Sprintf("%s/models/%s:embedContent", strings.TrimRight(p.cfg.BaseURL, "/"), model)
-	respBody, err := p.doRequest(ctx, endpoint, body)
+	endpoint := fmt.Sprintf("/models/%s:embedContent", model)
+	respBody, err := p.DoRequest(ctx, "POST", endpoint, body, map[string]string{
+		"x-goog-api-key": p.cfg.APIKey,
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -184,9 +178,11 @@ func (p *GeminiProvider) batchEmbed(ctx context.Context, req *EmbeddingRequest, 
 	}
 
 	body := geminiBatchEmbedRequest{Requests: requests}
-	endpoint := fmt.Sprintf("%s/models/%s:batchEmbedContents", strings.TrimRight(p.cfg.BaseURL, "/"), model)
+	endpoint := fmt.Sprintf("/models/%s:batchEmbedContents", model)
 
-	respBody, err := p.doRequest(ctx, endpoint, body)
+	respBody, err := p.DoRequest(ctx, "POST", endpoint, body, map[string]string{
+		"x-goog-api-key": p.cfg.APIKey,
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -212,67 +208,12 @@ func (p *GeminiProvider) batchEmbed(ctx context.Context, req *EmbeddingRequest, 
 	}, nil
 }
 
-// doRequest 使用 Gemini 特定认证执行 HTTP 请求.
-func (p *GeminiProvider) doRequest(ctx context.Context, endpoint string, body any) ([]byte, error) {
-	payload, err := json.Marshal(body)
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal request: %w", err)
-	}
-
-	httpReq, err := http.NewRequestWithContext(ctx, "POST", endpoint, bytes.NewReader(payload))
-	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
-	}
-
-	// Gemini 使用 x-goog-api-key 头（不是 Bearer 令牌）
-	httpReq.Header.Set("x-goog-api-key", p.cfg.APIKey)
-	httpReq.Header.Set("Content-Type", "application/json")
-
-	resp, err := p.client.Do(httpReq)
-	if err != nil {
-		return nil, fmt.Errorf("gemini request failed: %w", err)
-	}
-	defer resp.Body.Close()
-
-	respBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read response: %w", err)
-	}
-
-	if resp.StatusCode >= 400 {
-		return nil, fmt.Errorf("gemini error: status=%d body=%s", resp.StatusCode, string(respBody))
-	}
-
-	return respBody, nil
-}
-
 // EmbedQuery 嵌入单个查询.
 func (p *GeminiProvider) EmbedQuery(ctx context.Context, query string) ([]float64, error) {
-	resp, err := p.Embed(ctx, &EmbeddingRequest{
-		Input:     []string{query},
-		InputType: InputTypeQuery,
-	})
-	if err != nil {
-		return nil, err
-	}
-	if len(resp.Embeddings) == 0 {
-		return nil, fmt.Errorf("no embeddings returned")
-	}
-	return resp.Embeddings[0].Embedding, nil
+	return p.BaseProvider.EmbedQuery(ctx, query, p.Embed)
 }
 
 // EmbedDocuments 嵌入多个文档.
 func (p *GeminiProvider) EmbedDocuments(ctx context.Context, documents []string) ([][]float64, error) {
-	resp, err := p.Embed(ctx, &EmbeddingRequest{
-		Input:     documents,
-		InputType: InputTypeDocument,
-	})
-	if err != nil {
-		return nil, err
-	}
-	result := make([][]float64, len(resp.Embeddings))
-	for i, emb := range resp.Embeddings {
-		result[i] = emb.Embedding
-	}
-	return result, nil
+	return p.BaseProvider.EmbedDocuments(ctx, documents, p.Embed)
 }

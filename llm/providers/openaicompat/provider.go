@@ -164,6 +164,72 @@ func (p *Provider) endpoint(path string) string {
 	return fmt.Sprintf("%s%s", strings.TrimRight(p.Cfg.BaseURL, "/"), path)
 }
 
+// NewRequest builds an HTTP request with provider-specific headers applied.
+func (p *Provider) NewRequest(ctx context.Context, method, path string, body io.Reader, apiKey string) (*http.Request, error) {
+	httpReq, err := http.NewRequestWithContext(ctx, method, p.endpoint(path), body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+	p.buildHeaders(httpReq, apiKey)
+	return httpReq, nil
+}
+
+// Do executes an HTTP request and maps network errors to llm.Error.
+func (p *Provider) Do(httpReq *http.Request) (*http.Response, error) {
+	resp, err := p.Client.Do(httpReq)
+	if err != nil {
+		return nil, &llm.Error{
+			Code:       llm.ErrUpstreamError,
+			Message:    err.Error(),
+			HTTPStatus: http.StatusBadGateway,
+			Retryable:  true,
+			Provider:   p.Name(),
+		}
+	}
+	return resp, nil
+}
+
+// DoJSON sends a JSON request and decodes a JSON response.
+func (p *Provider) DoJSON(ctx context.Context, method, path string, payload any, apiKey string, out any) error {
+	var body io.Reader
+	if payload != nil {
+		data, err := json.Marshal(payload)
+		if err != nil {
+			return fmt.Errorf("failed to marshal request: %w", err)
+		}
+		body = bytes.NewReader(data)
+	}
+
+	httpReq, err := p.NewRequest(ctx, method, path, body, apiKey)
+	if err != nil {
+		return err
+	}
+	resp, err := p.Do(httpReq)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 400 {
+		msg := providers.ReadErrorMessage(resp.Body)
+		return providers.MapHTTPError(resp.StatusCode, msg, p.Name())
+	}
+
+	if out == nil {
+		return nil
+	}
+	if err := json.NewDecoder(resp.Body).Decode(out); err != nil {
+		return &llm.Error{
+			Code:       llm.ErrUpstreamError,
+			Message:    err.Error(),
+			HTTPStatus: http.StatusBadGateway,
+			Retryable:  true,
+			Provider:   p.Name(),
+		}
+	}
+	return nil
+}
+
 // HealthCheck verifies the provider is reachable.
 func (p *Provider) HealthCheck(ctx context.Context) (*llm.HealthStatus, error) {
 	start := time.Now()
@@ -266,37 +332,9 @@ func (p *Provider) Completion(ctx context.Context, req *llm.ChatRequest) (*llm.C
 		p.Cfg.RequestHook(req, &body)
 	}
 
-	payload, err := json.Marshal(body)
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal request: %w", err)
-	}
-
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, p.endpoint(p.Cfg.EndpointPath), bytes.NewReader(payload))
-	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
-	}
-	p.buildHeaders(httpReq, apiKey)
-
-	resp, err := p.Client.Do(httpReq)
-	if err != nil {
-		return nil, &llm.Error{
-			Code: llm.ErrUpstreamError, Message: err.Error(),
-			HTTPStatus: http.StatusBadGateway, Retryable: true, Provider: p.Name(),
-		}
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode >= 400 {
-		msg := providers.ReadErrorMessage(resp.Body)
-		return nil, providers.MapHTTPError(resp.StatusCode, msg, p.Name())
-	}
-
 	var oaResp providers.OpenAICompatResponse
-	if err := json.NewDecoder(resp.Body).Decode(&oaResp); err != nil {
-		return nil, &llm.Error{
-			Code: llm.ErrUpstreamError, Message: err.Error(),
-			HTTPStatus: http.StatusBadGateway, Retryable: true, Provider: p.Name(),
-		}
+	if err := p.DoJSON(ctx, http.MethodPost, p.Cfg.EndpointPath, body, apiKey, &oaResp); err != nil {
+		return nil, err
 	}
 
 	result := providers.ToLLMChatResponse(oaResp, p.Name())
@@ -379,18 +417,14 @@ func (p *Provider) Stream(ctx context.Context, req *llm.ChatRequest) (<-chan llm
 		return nil, fmt.Errorf("failed to marshal request: %w", err)
 	}
 
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, p.endpoint(p.Cfg.EndpointPath), bytes.NewReader(payload))
+	httpReq, err := p.NewRequest(ctx, http.MethodPost, p.Cfg.EndpointPath, bytes.NewReader(payload), apiKey)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
+		return nil, err
 	}
-	p.buildHeaders(httpReq, apiKey)
 
-	resp, err := p.Client.Do(httpReq)
+	resp, err := p.Do(httpReq)
 	if err != nil {
-		return nil, &llm.Error{
-			Code: llm.ErrUpstreamError, Message: err.Error(),
-			HTTPStatus: http.StatusBadGateway, Retryable: true, Provider: p.Name(),
-		}
+		return nil, err
 	}
 	if resp.StatusCode >= 400 {
 		defer resp.Body.Close()

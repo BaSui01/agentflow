@@ -14,23 +14,10 @@ type VoyageProvider struct {
 
 // NewVoyage Provider创建了一个新的Voyage AI嵌入提供商.
 func NewVoyageProvider(cfg VoyageConfig) *VoyageProvider {
-	if cfg.BaseURL == "" {
-		cfg.BaseURL = "https://api.voyageai.com"
-	}
-	if cfg.Model == "" {
-		cfg.Model = "voyage-3-large"
-	}
+	cfg.BaseProviderConfig = applyBaseProviderDefaults(cfg.BaseProviderConfig, "https://api.voyageai.com", "voyage-3-large")
 
 	return &VoyageProvider{
-		BaseProvider: NewBaseProvider(BaseConfig{
-			Name:       "voyage-embedding",
-			BaseURL:    cfg.BaseURL,
-			APIKey:     cfg.APIKey,
-			Model:      cfg.Model,
-			Dimensions: 1024, // voyage-3-large default
-			MaxBatch:   128,
-			Timeout:    cfg.Timeout,
-		}),
+		BaseProvider: newProviderBase("voyage-embedding", cfg.BaseProviderConfig, 1024, 128),
 		cfg: cfg,
 	}
 }

@@ -12,6 +12,7 @@ import (
 
 	"github.com/BaSui01/agentflow/pkg/tlsutil"
 	"github.com/BaSui01/agentflow/llm"
+	"github.com/BaSui01/agentflow/llm/providers"
 )
 
 // BaseProvider为嵌入提供者提供了共同的功能.
@@ -60,6 +61,31 @@ func NewBaseProvider(cfg BaseConfig) *BaseProvider {
 func (p *BaseProvider) Name() string      { return p.name }
 func (p *BaseProvider) Dimensions() int   { return p.dimensions }
 func (p *BaseProvider) MaxBatchSize() int { return p.maxBatch }
+
+func applyBaseProviderDefaults(cfg providers.BaseProviderConfig, defaultBaseURL, defaultModel string) providers.BaseProviderConfig {
+	if cfg.BaseURL == "" {
+		cfg.BaseURL = defaultBaseURL
+	}
+	if cfg.Model == "" {
+		cfg.Model = defaultModel
+	}
+	if cfg.Timeout == 0 {
+		cfg.Timeout = 30 * time.Second
+	}
+	return cfg
+}
+
+func newProviderBase(name string, cfg providers.BaseProviderConfig, dimensions, maxBatch int) *BaseProvider {
+	return NewBaseProvider(BaseConfig{
+		Name:       name,
+		BaseURL:    cfg.BaseURL,
+		APIKey:     cfg.APIKey,
+		Model:      cfg.Model,
+		Dimensions: dimensions,
+		MaxBatch:   maxBatch,
+		Timeout:    cfg.Timeout,
+	})
+}
 
 // 嵌入查询嵌入单个查询字符串.
 func (p *BaseProvider) EmbedQuery(ctx context.Context, query string, embedFn func(context.Context, *EmbeddingRequest) (*EmbeddingResponse, error)) ([]float64, error) {

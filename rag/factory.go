@@ -66,11 +66,11 @@ func NewVectorStoreFromConfig(cfg *config.Config, storeType VectorStoreType, log
 type EmbeddingProviderType string
 
 const (
-	EmbeddingOpenAI EmbeddingProviderType = "openai"
-	EmbeddingCohere EmbeddingProviderType = "cohere"
-	EmbeddingVoyage EmbeddingProviderType = "voyage"
-	EmbeddingJina   EmbeddingProviderType = "jina"
-	EmbeddingGemini EmbeddingProviderType = "gemini"
+	EmbeddingOpenAI EmbeddingProviderType = EmbeddingProviderType(embedding.ProviderOpenAI)
+	EmbeddingCohere EmbeddingProviderType = EmbeddingProviderType(embedding.ProviderCohere)
+	EmbeddingVoyage EmbeddingProviderType = EmbeddingProviderType(embedding.ProviderVoyage)
+	EmbeddingJina   EmbeddingProviderType = EmbeddingProviderType(embedding.ProviderJina)
+	EmbeddingGemini EmbeddingProviderType = EmbeddingProviderType(embedding.ProviderGemini)
 )
 
 // NewEmbeddingProviderFromConfig 根据 LLM 配置创建 embedding.Provider。
@@ -80,37 +80,16 @@ func NewEmbeddingProviderFromConfig(cfg *config.Config, providerType EmbeddingPr
 		return nil, fmt.Errorf("config is nil")
 	}
 
-	apiKey := cfg.LLM.APIKey
 	if providerType == "" {
 		providerType = EmbeddingProviderType(cfg.LLM.DefaultProvider)
 	}
-	if providerType == "" {
-		providerType = EmbeddingOpenAI
-	}
 
-	switch providerType {
-	case EmbeddingOpenAI:
-		embCfg := embedding.OpenAIConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: apiKey}}
-		if cfg.LLM.BaseURL != "" {
-			embCfg.BaseURL = cfg.LLM.BaseURL
-		}
-		return embedding.NewOpenAIProvider(embCfg), nil
-
-	case EmbeddingCohere:
-		return embedding.NewCohereProvider(embedding.CohereConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: apiKey}}), nil
-
-	case EmbeddingVoyage:
-		return embedding.NewVoyageProvider(embedding.VoyageConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: apiKey}}), nil
-
-	case EmbeddingJina:
-		return embedding.NewJinaProvider(embedding.JinaConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: apiKey}}), nil
-
-	case EmbeddingGemini:
-		return embedding.NewGeminiProvider(embedding.GeminiConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: apiKey}}), nil
-
-	default:
-		return nil, fmt.Errorf("unsupported embedding provider type: %s", providerType)
-	}
+	return embedding.NewProviderFromConfig(embedding.FactoryConfig{
+		Type:    embedding.ProviderType(providerType),
+		APIKey:  cfg.LLM.APIKey,
+		BaseURL: cfg.LLM.BaseURL,
+		Timeout: cfg.LLM.Timeout,
+	})
 }
 
 // NewRetrieverFromConfig 一键创建完整的 EnhancedRetriever。
@@ -238,11 +217,17 @@ func newRerankProvider(cfg *config.Config, t RerankProviderType) (RerankProvider
 	apiKey := cfg.LLM.APIKey
 	switch t {
 	case RerankCohere:
-		return rerank.NewCohereProvider(rerank.CohereConfig{APIKey: apiKey}), nil
+		return rerank.NewCohereProvider(rerank.CohereConfig{
+			BaseProviderConfig: providers.BaseProviderConfig{APIKey: apiKey},
+		}), nil
 	case RerankVoyage:
-		return rerank.NewVoyageProvider(rerank.VoyageConfig{APIKey: apiKey}), nil
+		return rerank.NewVoyageProvider(rerank.VoyageConfig{
+			BaseProviderConfig: providers.BaseProviderConfig{APIKey: apiKey},
+		}), nil
 	case RerankJina:
-		return rerank.NewJinaProvider(rerank.JinaConfig{APIKey: apiKey}), nil
+		return rerank.NewJinaProvider(rerank.JinaConfig{
+			BaseProviderConfig: providers.BaseProviderConfig{APIKey: apiKey},
+		}), nil
 	default:
 		return nil, fmt.Errorf("unsupported rerank provider type: %s", t)
 	}

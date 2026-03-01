@@ -267,35 +267,9 @@ func (p *OpenAIProvider) completionWithResponsesAPI(ctx context.Context, req *ll
 		return nil, fmt.Errorf("failed to marshal responses api request: %w", err)
 	}
 
-	endpoint := fmt.Sprintf("%s/v1/responses", strings.TrimRight(p.openaiCfg.BaseURL, "/"))
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(payload))
-	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
-	}
-	if p.Provider.Cfg.BuildHeaders != nil {
-		p.Provider.Cfg.BuildHeaders(httpReq, apiKey)
-	}
-
-	resp, err := p.Provider.Client.Do(httpReq)
-	if err != nil {
-		return nil, &llm.Error{
-			Code: llm.ErrUpstreamError, Message: err.Error(),
-			HTTPStatus: http.StatusBadGateway, Retryable: true, Provider: p.Name(),
-		}
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode >= 400 {
-		msg := providers.ReadErrorMessage(resp.Body)
-		return nil, providers.MapHTTPError(resp.StatusCode, msg, p.Name())
-	}
-
 	var responsesResp openAIResponsesResponse
-	if err := json.NewDecoder(resp.Body).Decode(&responsesResp); err != nil {
-		return nil, &llm.Error{
-			Code: llm.ErrUpstreamError, Message: err.Error(),
-			HTTPStatus: http.StatusBadGateway, Retryable: true, Provider: p.Name(),
-		}
+	if err := p.Provider.DoJSON(ctx, http.MethodPost, "/v1/responses", json.RawMessage(payload), apiKey, &responsesResp); err != nil {
+		return nil, err
 	}
 
 	return toResponsesAPIChatResponse(responsesResp, p.Name()), nil
@@ -616,21 +590,14 @@ func (p *OpenAIProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-ch
 		return nil, fmt.Errorf("failed to marshal responses api stream request: %w", err)
 	}
 
-	endpoint := fmt.Sprintf("%s/v1/responses", strings.TrimRight(p.openaiCfg.BaseURL, "/"))
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(payload))
+	httpReq, err := p.Provider.NewRequest(ctx, http.MethodPost, "/v1/responses", bytes.NewReader(payload), apiKey)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
-	}
-	if p.Provider.Cfg.BuildHeaders != nil {
-		p.Provider.Cfg.BuildHeaders(httpReq, apiKey)
+		return nil, err
 	}
 
-	resp, err := p.Provider.Client.Do(httpReq)
+	resp, err := p.Provider.Do(httpReq)
 	if err != nil {
-		return nil, &llm.Error{
-			Code: llm.ErrUpstreamError, Message: err.Error(),
-			HTTPStatus: http.StatusBadGateway, Retryable: true, Provider: p.Name(),
-		}
+		return nil, err
 	}
 	if resp.StatusCode >= 400 {
 		defer resp.Body.Close()

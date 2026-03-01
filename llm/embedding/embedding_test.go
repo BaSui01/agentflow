@@ -713,7 +713,7 @@ func TestGeminiProviderHTTPError(t *testing.T) {
 	p := NewGeminiProvider(GeminiConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k", BaseURL: srv.URL}})
 	_, err := p.Embed(context.Background(), &EmbeddingRequest{Input: []string{"test"}})
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "403")
+	assert.Contains(t, err.Error(), "FORBIDDEN")
 }
 
 func TestGeminiProviderDefaults(t *testing.T) {
