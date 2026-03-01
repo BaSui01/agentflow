@@ -482,6 +482,10 @@ func (s *Server) initHandlers() error {
 			GoogleAPIKey:         firstNonEmpty(s.cfg.Multimodal.Video.GoogleAPIKey, s.cfg.Multimodal.Image.GeminiAPIKey),
 			RunwayAPIKey:         s.cfg.Multimodal.Video.RunwayAPIKey,
 			VeoAPIKey:            s.cfg.Multimodal.Video.VeoAPIKey,
+			SoraAPIKey:           s.cfg.Multimodal.Video.SoraAPIKey,
+			KlingAPIKey:          s.cfg.Multimodal.Video.KlingAPIKey,
+			LumaAPIKey:           s.cfg.Multimodal.Video.LumaAPIKey,
+			MiniMaxAPIKey:        s.cfg.Multimodal.Video.MiniMaxAPIKey,
 			DefaultImageProvider: s.cfg.Multimodal.DefaultImageProvider,
 			DefaultVideoProvider: s.cfg.Multimodal.DefaultVideoProvider,
 			ReferenceMaxSize:     s.cfg.Multimodal.ReferenceMaxSizeBytes,
@@ -503,6 +507,18 @@ func (s *Server) initHandlers() error {
 			videoProviderCount++
 		}
 		if multimodalCfg.VeoAPIKey != "" && multimodalCfg.GoogleAPIKey == "" {
+			videoProviderCount++
+		}
+		if multimodalCfg.SoraAPIKey != "" {
+			videoProviderCount++
+		}
+		if multimodalCfg.KlingAPIKey != "" {
+			videoProviderCount++
+		}
+		if multimodalCfg.LumaAPIKey != "" {
+			videoProviderCount++
+		}
+		if multimodalCfg.MiniMaxAPIKey != "" {
 			videoProviderCount++
 		}
 		s.logger.Info("Multimodal framework handler initialized",
