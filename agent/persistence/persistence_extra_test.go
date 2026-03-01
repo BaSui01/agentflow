@@ -14,7 +14,8 @@ import (
 func TestMustNewMessageStore_SuccessPath(t *testing.T) {
 	config := DefaultStoreConfig()
 	config.Cleanup.Enabled = false
-	store := MustNewMessageStore(config)
+	store, err := MustNewMessageStore(config)
+	require.NoError(t, err)
 	require.NotNil(t, store)
 	t.Cleanup(func() { store.Close() })
 }
@@ -22,7 +23,8 @@ func TestMustNewMessageStore_SuccessPath(t *testing.T) {
 func TestMustNewTaskStore_SuccessPath(t *testing.T) {
 	config := DefaultStoreConfig()
 	config.Cleanup.Enabled = false
-	store := MustNewTaskStore(config)
+	store, err := MustNewTaskStore(config)
+	require.NoError(t, err)
 	require.NotNil(t, store)
 	t.Cleanup(func() { store.Close() })
 }

@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/BaSui01/agentflow/agent/persistence"
 	"github.com/BaSui01/agentflow/pkg/tlsutil"
 	"go.uber.org/zap"
 )
@@ -50,15 +51,14 @@ type FederatedTask struct {
 	Results      map[string]any `json:"results,omitempty"`
 }
 
-// 任务状态代表联合任务状态.
-// TODO: Consider unifying with persistence.TaskStatus
-type TaskStatus string
+// 任务状态代表联合任务状态（统一复用 persistence.TaskStatus）.
+type TaskStatus = persistence.TaskStatus
 
 const (
-	TaskStatusPending   TaskStatus = "pending"
-	TaskStatusRunning   TaskStatus = "running"
-	TaskStatusCompleted TaskStatus = "completed"
-	TaskStatusFailed    TaskStatus = "failed"
+	TaskStatusPending   TaskStatus = persistence.TaskStatusPending
+	TaskStatusRunning   TaskStatus = persistence.TaskStatusRunning
+	TaskStatusCompleted TaskStatus = persistence.TaskStatusCompleted
+	TaskStatusFailed    TaskStatus = persistence.TaskStatusFailed
 )
 
 // Federation Config配置了联邦管弦乐团.

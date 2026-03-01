@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/BaSui01/agentflow/agent"
+	"github.com/BaSui01/agentflow/agent/persistence"
 	"go.uber.org/zap"
 )
 
@@ -91,17 +92,16 @@ type Task struct {
 	RetryCount  int
 }
 
-// TaskStatus 任务状态
-// TODO: Consider unifying with persistence.TaskStatus
-type TaskStatus string
+// TaskStatus 任务状态（统一复用 persistence.TaskStatus）
+type TaskStatus = persistence.TaskStatus
 
 const (
-	TaskStatusPending   TaskStatus = "pending"
-	TaskStatusAssigned  TaskStatus = "assigned"
-	TaskStatusRunning   TaskStatus = "running"
-	TaskStatusCompleted TaskStatus = "completed"
-	TaskStatusFailed    TaskStatus = "failed"
-	TaskStatusCancelled TaskStatus = "cancelled"
+	TaskStatusPending   TaskStatus = persistence.TaskStatusPending
+	TaskStatusAssigned  TaskStatus = persistence.TaskStatus("assigned")
+	TaskStatusRunning   TaskStatus = persistence.TaskStatusRunning
+	TaskStatusCompleted TaskStatus = persistence.TaskStatusCompleted
+	TaskStatusFailed    TaskStatus = persistence.TaskStatusFailed
+	TaskStatusCancelled TaskStatus = persistence.TaskStatusCancelled
 )
 
 // WorkerStatus 工作者状态

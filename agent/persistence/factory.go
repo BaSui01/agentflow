@@ -2,7 +2,6 @@ package persistence
 
 import (
 	"fmt"
-	"os"
 )
 
 // 新MessageStore 创建基于配置的新信件系统
@@ -33,63 +32,23 @@ func NewTaskStore(config StoreConfig) (TaskStore, error) {
 	}
 }
 
-// MustNewMessageStore 创建 MessageStore，失败时 panic。
-//
-// 此函数仅用于应用初始化阶段（main() 或 init()），不得在请求处理器
-// 或业务逻辑中使用。对于运行时创建，请使用 NewMessageStore()。
-//
-// 示例用法:
-//
-//	func main() {
-//	    store := persistence.MustNewMessageStore(config) // OK - 初始化
-//	    // ...
-//	}
-func MustNewMessageStore(config StoreConfig) MessageStore {
-	store, err := NewMessageStore(config)
-	if err != nil {
-		panic(fmt.Sprintf("failed to create message store: %v", err))
-	}
-	return store
+// MustNewMessageStore 保留旧命名以兼容调用点，但统一返回 error 链路，不再 panic。
+func MustNewMessageStore(config StoreConfig) (MessageStore, error) {
+	return NewMessageStore(config)
 }
 
-// MustNewTaskStore 创建 TaskStore，失败时 panic。
-//
-// 此函数仅用于应用初始化阶段（main() 或 init()），不得在请求处理器
-// 或业务逻辑中使用。对于运行时创建，请使用 NewTaskStore()。
-//
-// 示例用法:
-//
-//	func main() {
-//	    store := persistence.MustNewTaskStore(config) // OK - 初始化
-//	    // ...
-//	}
-func MustNewTaskStore(config StoreConfig) TaskStore {
-	store, err := NewTaskStore(config)
-	if err != nil {
-		panic(fmt.Sprintf("failed to create task store: %v", err))
-	}
-	return store
+// MustNewTaskStore 保留旧命名以兼容调用点，但统一返回 error 链路，不再 panic。
+func MustNewTaskStore(config StoreConfig) (TaskStore, error) {
+	return NewTaskStore(config)
 }
 
-// NewMessageStore OrExit 创建了新的信件存储器,或在错误时退出程序.
-// 这是用于CLI应用的MustNewMessageStore的更安全的替代品.
-func NewMessageStoreOrExit(config StoreConfig) MessageStore {
-	store, err := NewMessageStore(config)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "FATAL: failed to create message store: %v\n", err)
-		os.Exit(1)
-	}
-	return store
+// NewMessageStoreOrExit 保留旧命名以兼容调用点，但统一返回 error 链路，不再进程退出。
+func NewMessageStoreOrExit(config StoreConfig) (MessageStore, error) {
+	return NewMessageStore(config)
 }
 
-// NewTaskStoreOrExit 创建了新的 TaskStore 程序,或者在出错时退出程序.
-// 这是用于CLI应用的MustNewTaskStore的更安全的替代品.
-func NewTaskStoreOrExit(config StoreConfig) TaskStore {
-	store, err := NewTaskStore(config)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "FATAL: failed to create task store: %v\n", err)
-		os.Exit(1)
-	}
-	return store
+// NewTaskStoreOrExit 保留旧命名以兼容调用点，但统一返回 error 链路，不再进程退出。
+func NewTaskStoreOrExit(config StoreConfig) (TaskStore, error) {
+	return NewTaskStore(config)
 }
 

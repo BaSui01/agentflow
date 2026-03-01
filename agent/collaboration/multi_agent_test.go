@@ -10,6 +10,7 @@ import (
 
 	"github.com/BaSui01/agentflow/agent"
 	"github.com/BaSui01/agentflow/agent/persistence"
+	"github.com/BaSui01/agentflow/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
@@ -431,20 +432,18 @@ func TestMessageHub_FromPersistMessage(t *testing.T) {
 	t.Parallel()
 	hub := NewMessageHub(zap.NewNop())
 	now := time.Now()
-	pm := &persistence.Message{
-		ID:        "msg-2",
-		FromID:    "a1",
-		ToID:      "a2",
-		Type:      "response",
+	pm := persistence.NewMessageDAOFromTypes("collab", "a1", "a2", "response", types.Message{
+		Role:      types.RoleAssistant,
 		Content:   "reply",
-		Payload:   map[string]any{"k": "v"},
-		CreatedAt: now,
-	}
+		Timestamp: now,
+		Metadata:  map[string]any{"k": "v"},
+	})
+	pm.ID = "msg-2"
 
 	msg := hub.fromPersistMessage(pm)
 	assert.Equal(t, "msg-2", msg.ID)
 	assert.Equal(t, MessageTypeResponse, msg.Type)
 	assert.Equal(t, "reply", msg.Content)
-	assert.Equal(t, now, msg.Timestamp)
+	assert.True(t, msg.Timestamp.Equal(now))
 }
 

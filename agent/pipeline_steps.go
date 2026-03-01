@@ -76,7 +76,7 @@ func (s *ResourceLoadStep) Execute(ctx context.Context, pc *PipelineContext, nex
 					_ = b.persistence.UpdateRunStatus(ctx, pc.RunID, "failed", nil, fmt.Sprintf("panic: %v", r))
 					b.logger.Error("panic during execution, run marked as failed",
 						zap.Any("panic", r), zap.String("run_id", pc.RunID))
-					panic(r) // re-panic after recording
+					execErr = fmt.Errorf("pipeline execution panic: %v", r)
 				}
 			}
 		}()

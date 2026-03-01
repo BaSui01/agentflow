@@ -8,6 +8,8 @@ package mongodb
 import (
 	"context"
 
+	"go.mongodb.org/mongo-driver/v2/bson"
+
 	"github.com/BaSui01/agentflow/agent"
 	"github.com/BaSui01/agentflow/agent/persistence"
 )
@@ -60,9 +62,11 @@ func NewConversationStoreAdapter(store *MongoConversationStore) *ConversationSto
 func (a *ConversationStoreAdapter) Create(ctx context.Context, doc *agent.ConversationDoc) error {
 	mongoDoc := &ConversationDocument{
 		ID:       doc.ID,
+		ParentID: doc.ParentID,
 		AgentID:  doc.AgentID,
 		TenantID: doc.TenantID,
 		UserID:   doc.UserID,
+		Title:    doc.Title,
 		Messages: convertMessagesToMongo(doc.Messages),
 	}
 	return a.store.Create(ctx, mongoDoc)
@@ -76,9 +80,11 @@ func (a *ConversationStoreAdapter) GetByID(ctx context.Context, id string) (*age
 	}
 	return &agent.ConversationDoc{
 		ID:       doc.ID,
+		ParentID: doc.ParentID,
 		AgentID:  doc.AgentID,
 		TenantID: doc.TenantID,
 		UserID:   doc.UserID,
+		Title:    doc.Title,
 		Messages: convertMessagesFromMongo(doc.Messages),
 	}, nil
 }
@@ -87,6 +93,7 @@ func (a *ConversationStoreAdapter) GetByID(ctx context.Context, id string) (*age
 func (a *ConversationStoreAdapter) AppendMessages(ctx context.Context, conversationID string, msgs []agent.ConversationMessage) error {
 	for _, msg := range msgs {
 		mongoMsg := MessageDocument{
+			ID:        msg.ID,
 			Role:      msg.Role,
 			Content:   msg.Content,
 			Timestamp: msg.Timestamp,
@@ -96,6 +103,87 @@ func (a *ConversationStoreAdapter) AppendMessages(ctx context.Context, conversat
 		}
 	}
 	return nil
+}
+
+// List returns conversations for a tenant/parent with pagination and total count.
+func (a *ConversationStoreAdapter) List(ctx context.Context, tenantID, parentID string, page, pageSize int) ([]*agent.ConversationDoc, int64, error) {
+	if pageSize <= 0 {
+		pageSize = 20
+	}
+	offset := 0
+	if page > 1 {
+		offset = (page - 1) * pageSize
+	}
+	docs, total, err := a.store.List(ctx, ConversationFilter{
+		TenantID: tenantID,
+		ParentID: parentID,
+		Limit:    pageSize,
+		Offset:   offset,
+	})
+	if err != nil {
+		return nil, 0, err
+	}
+	out := make([]*agent.ConversationDoc, len(docs))
+	for i, d := range docs {
+		out[i] = &agent.ConversationDoc{
+			ID:       d.ID,
+			ParentID: d.ParentID,
+			AgentID:  d.AgentID,
+			TenantID: d.TenantID,
+			UserID:   d.UserID,
+			Title:    d.Title,
+		}
+	}
+	return out, total, nil
+}
+
+// Update applies field-level updates to a conversation.
+func (a *ConversationStoreAdapter) Update(ctx context.Context, id string, updates agent.ConversationUpdate) error {
+	fields := bson.D{}
+	if updates.Title != nil {
+		fields = append(fields, bson.E{Key: "title", Value: *updates.Title})
+	}
+	if updates.Metadata != nil {
+		fields = append(fields, bson.E{Key: "metadata", Value: updates.Metadata})
+	}
+	if len(fields) == 0 {
+		return nil
+	}
+	return a.store.Update(ctx, id, fields)
+}
+
+// Delete removes a conversation by ID.
+func (a *ConversationStoreAdapter) Delete(ctx context.Context, id string) error {
+	return a.store.Delete(ctx, id)
+}
+
+// DeleteByParentID removes all conversations under a given parent within a tenant.
+func (a *ConversationStoreAdapter) DeleteByParentID(ctx context.Context, tenantID, parentID string) error {
+	return a.store.DeleteByParentID(ctx, tenantID, parentID)
+}
+
+// GetMessages returns a paginated slice of messages and the total message count.
+func (a *ConversationStoreAdapter) GetMessages(ctx context.Context, conversationID string, offset, limit int) ([]agent.ConversationMessage, int64, error) {
+	docs, total, err := a.store.GetMessages(ctx, conversationID, offset, limit)
+	if err != nil {
+		return nil, 0, err
+	}
+	return convertMessagesFromMongo(docs), total, nil
+}
+
+// DeleteMessage removes a single embedded message by its ID.
+func (a *ConversationStoreAdapter) DeleteMessage(ctx context.Context, conversationID, messageID string) error {
+	return a.store.DeleteMessage(ctx, conversationID, messageID)
+}
+
+// ClearMessages removes all messages from a conversation.
+func (a *ConversationStoreAdapter) ClearMessages(ctx context.Context, conversationID string) error {
+	return a.store.ClearMessages(ctx, conversationID)
+}
+
+// Archive marks a conversation as archived.
+func (a *ConversationStoreAdapter) Archive(ctx context.Context, id string) error {
+	return a.store.Archive(ctx, id)
 }
 
 // Underlying returns the underlying MongoConversationStore for direct access.
@@ -156,6 +244,7 @@ func convertMessagesToMongo(msgs []agent.ConversationMessage) []MessageDocument 
 	docs := make([]MessageDocument, len(msgs))
 	for i, m := range msgs {
 		docs[i] = MessageDocument{
+			ID:        m.ID,
 			Role:      m.Role,
 			Content:   m.Content,
 			Timestamp: m.Timestamp,
@@ -168,6 +257,7 @@ func convertMessagesFromMongo(docs []MessageDocument) []agent.ConversationMessag
 	msgs := make([]agent.ConversationMessage, len(docs))
 	for i, d := range docs {
 		msgs[i] = agent.ConversationMessage{
+			ID:        d.ID,
 			Role:      d.Role,
 			Content:   d.Content,
 			Timestamp: d.Timestamp,
@@ -187,4 +277,3 @@ var (
 func IsNotFound(err error) bool {
 	return err == persistence.ErrNotFound
 }
-

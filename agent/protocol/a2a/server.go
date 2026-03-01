@@ -211,19 +211,7 @@ func (s *HTTPServer) convertToPersistTask(task *asyncTask) *persistence.AsyncTas
 		UpdatedAt: task.UpdatedAt,
 	}
 
-	// 转换状态
-	switch task.Status {
-	case asyncTaskStatusPending:
-		persistTask.Status = persistence.TaskStatusPending
-	case asyncTaskStatusProcessing:
-		persistTask.Status = persistence.TaskStatusRunning
-	case asyncTaskStatusCompleted:
-		persistTask.Status = persistence.TaskStatusCompleted
-	case asyncTaskStatusFailed:
-		persistTask.Status = persistence.TaskStatusFailed
-	default:
-		persistTask.Status = persistence.TaskStatusPending
-	}
+	persistTask.Status = toPersistenceTaskStatus(task.Status)
 
 	if task.Error != "" {
 		persistTask.Error = task.Error
@@ -245,19 +233,7 @@ func (s *HTTPServer) convertFromPersistTask(persistTask *persistence.AsyncTask) 
 		UpdatedAt: persistTask.UpdatedAt,
 	}
 
-	// 转换状态
-	switch persistTask.Status {
-	case persistence.TaskStatusPending:
-		task.Status = asyncTaskStatusPending
-	case persistence.TaskStatusRunning:
-		task.Status = asyncTaskStatusProcessing
-	case persistence.TaskStatusCompleted:
-		task.Status = asyncTaskStatusCompleted
-	case persistence.TaskStatusFailed:
-		task.Status = asyncTaskStatusFailed
-	default:
-		task.Status = asyncTaskStatusPending
-	}
+	task.Status = fromPersistenceTaskStatus(persistTask.Status)
 
 	task.Error = persistTask.Error
 
@@ -713,10 +689,6 @@ func (s *HTTPServer) routeMessage(msg *A2AMessage) (agent.Agent, error) {
 		return ag, nil
 	}
 
-	if !s.config.StrictRouting {
-		return s.getDefaultAgent()
-	}
-
 	return nil, fmt.Errorf("%w: %s", ErrAgentNotFound, agentID)
 }
 
@@ -736,11 +708,41 @@ func validateIncomingMessage(msg *A2AMessage) error {
 	if msg.From == "" {
 		return ErrMessageMissingFrom
 	}
-	// Empty To is allowed to support default-agent fallback routing.
+	// Empty To routes to default agent.
 	if msg.Timestamp.IsZero() {
 		return ErrMessageMissingTimestamp
 	}
 	return nil
+}
+
+func toPersistenceTaskStatus(status string) persistence.TaskStatus {
+	switch status {
+	case asyncTaskStatusPending:
+		return persistence.TaskStatusPending
+	case asyncTaskStatusProcessing:
+		return persistence.TaskStatusRunning
+	case asyncTaskStatusCompleted:
+		return persistence.TaskStatusCompleted
+	case asyncTaskStatusFailed:
+		return persistence.TaskStatusFailed
+	default:
+		return persistence.TaskStatusFailed
+	}
+}
+
+func fromPersistenceTaskStatus(status persistence.TaskStatus) string {
+	switch status {
+	case persistence.TaskStatusPending:
+		return asyncTaskStatusPending
+	case persistence.TaskStatusRunning:
+		return asyncTaskStatusProcessing
+	case persistence.TaskStatusCompleted:
+		return asyncTaskStatusCompleted
+	case persistence.TaskStatusFailed:
+		return asyncTaskStatusFailed
+	default:
+		return asyncTaskStatusFailed
+	}
 }
 
 // 执行任务同步执行任务 。

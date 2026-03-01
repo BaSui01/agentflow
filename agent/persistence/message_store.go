@@ -120,7 +120,7 @@ func NewMessageDAOFromTypes(topic, fromID, toID, msgType string, msg types.Messa
 }
 
 // ToTypesMessage converts persistence DAO data back to canonical types.Message.
-// It prefers the preserved payload snapshot and falls back to minimal field mapping.
+// 仅使用 canonical payload snapshot；无快照或反序列化失败时返回零值消息。
 func (m *Message) ToTypesMessage() types.Message {
 	if m == nil {
 		return types.Message{}
@@ -142,13 +142,7 @@ func (m *Message) ToTypesMessage() types.Message {
 		}
 	}
 
-	// Fallback for legacy records without canonical payload snapshot.
-	return types.Message{
-		Role:      types.RoleUser,
-		Content:   m.Content,
-		Metadata:  cloneStringMap(m.Metadata),
-		Timestamp: m.CreatedAt,
-	}
+	return types.Message{}
 }
 
 func cloneStringMap(in map[string]string) map[string]string {

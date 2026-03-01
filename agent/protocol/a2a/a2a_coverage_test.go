@@ -209,7 +209,7 @@ func TestHTTPServer_ConvertToPersistTask(t *testing.T) {
 		{"processing", "processing", persistence.TaskStatusRunning},
 		{"completed", "completed", persistence.TaskStatusCompleted},
 		{"failed", "failed", persistence.TaskStatusFailed},
-		{"unknown", "xyz", persistence.TaskStatusPending},
+		{"unknown", "xyz", persistence.TaskStatusFailed},
 	}
 
 	for _, tt := range tests {
@@ -246,8 +246,8 @@ func TestHTTPServer_ConvertFromPersistTask(t *testing.T) {
 		{"running", persistence.TaskStatusRunning, "processing"},
 		{"completed", persistence.TaskStatusCompleted, "completed"},
 		{"failed", persistence.TaskStatusFailed, "failed"},
-		{"cancelled", persistence.TaskStatusCancelled, "pending"}, // falls to default
-		{"unknown", persistence.TaskStatus("xyz"), "pending"},
+		{"cancelled", persistence.TaskStatusCancelled, "failed"},
+		{"unknown", persistence.TaskStatus("xyz"), "failed"},
 	}
 
 	for _, tt := range tests {

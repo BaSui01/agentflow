@@ -158,7 +158,9 @@ func (b *BaseAgent) Execute(ctx context.Context, input *Input) (_ *Output, execE
 				_ = b.runStore.UpdateStatus(ctx, runID, "failed", nil, fmt.Sprintf("panic: %v", r))
 				b.logger.Error("panic during execution, run marked as failed",
 					zap.Any("panic", r), zap.String("run_id", runID))
-				panic(r) // re-panic after recording
+				if execErr == nil {
+					execErr = fmt.Errorf("react execution panic: %v", r)
+				}
 			}
 			if execErr != nil && runID != "" && b.runStore != nil {
 				if updateErr := b.runStore.UpdateStatus(ctx, runID, "failed", nil, execErr.Error()); updateErr != nil {

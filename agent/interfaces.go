@@ -103,27 +103,47 @@ type PromptDocument struct {
 }
 
 // ConversationStoreProvider persists conversation history.
-// Implemented by: *mongodb.MongoConversationStore (agent/persistence/mongodb/)
+// Implemented by: *mongodb.ConversationStoreAdapter (agent/persistence/mongodb/)
 type ConversationStoreProvider interface {
+	// ---- 原有 ----
 	Create(ctx context.Context, doc *ConversationDoc) error
 	GetByID(ctx context.Context, id string) (*ConversationDoc, error)
 	AppendMessages(ctx context.Context, conversationID string, msgs []ConversationMessage) error
+
+	// ---- 新增 ----
+	List(ctx context.Context, tenantID, parentID string, page, pageSize int) ([]*ConversationDoc, int64, error)
+	Update(ctx context.Context, id string, updates ConversationUpdate) error
+	Delete(ctx context.Context, id string) error
+	DeleteByParentID(ctx context.Context, tenantID, parentID string) error
+	GetMessages(ctx context.Context, conversationID string, offset, limit int) ([]ConversationMessage, int64, error)
+	DeleteMessage(ctx context.Context, conversationID, messageID string) error
+	ClearMessages(ctx context.Context, conversationID string) error
+	Archive(ctx context.Context, id string) error
 }
 
 // ConversationDoc is a minimal conversation document for the agent layer.
 type ConversationDoc struct {
 	ID       string                `json:"id"`
+	ParentID string                `json:"parent_id,omitempty"`
 	AgentID  string                `json:"agent_id"`
 	TenantID string                `json:"tenant_id"`
 	UserID   string                `json:"user_id"`
+	Title    string                `json:"title,omitempty"`
 	Messages []ConversationMessage `json:"messages"`
 }
 
 // ConversationMessage is a single message in a conversation document.
 type ConversationMessage struct {
+	ID        string    `json:"id,omitempty"`
 	Role      string    `json:"role"`
 	Content   string    `json:"content"`
 	Timestamp time.Time `json:"timestamp"`
+}
+
+// ConversationUpdate contains the fields that can be updated on a conversation.
+type ConversationUpdate struct {
+	Title    *string        `json:"title,omitempty"`
+	Metadata map[string]any `json:"metadata,omitempty"`
 }
 
 // RunStoreProvider records agent execution runs.
@@ -179,4 +199,3 @@ type OrchestrationTaskOutput struct {
 	Duration  time.Duration  `json:"duration"`
 	Metadata  map[string]any `json:"metadata,omitempty"`
 }
-

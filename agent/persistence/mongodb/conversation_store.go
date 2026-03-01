@@ -18,28 +18,32 @@ const conversationsCollection = "conversations"
 
 // ConversationDocument is the MongoDB document for a single conversation.
 type ConversationDocument struct {
-	ID        string            `bson:"_id"        json:"id"`
-	AgentID   string            `bson:"agent_id"   json:"agent_id"`
-	TenantID  string            `bson:"tenant_id"  json:"tenant_id"`
-	UserID    string            `bson:"user_id"    json:"user_id"`
-	Title     string            `bson:"title"      json:"title,omitempty"`
-	Messages  []MessageDocument `bson:"messages"   json:"messages"`
-	Branches  []BranchDocument  `bson:"branches"   json:"branches,omitempty"`
-	Metadata  map[string]any    `bson:"metadata"   json:"metadata,omitempty"`
-	CreatedAt time.Time         `bson:"created_at" json:"created_at"`
-	UpdatedAt time.Time         `bson:"updated_at" json:"updated_at"`
+	ID         string            `bson:"_id"         json:"id"`
+	ParentID   string            `bson:"parent_id"   json:"parent_id,omitempty"`
+	AgentID    string            `bson:"agent_id"    json:"agent_id"`
+	TenantID   string            `bson:"tenant_id"   json:"tenant_id"`
+	UserID     string            `bson:"user_id"     json:"user_id"`
+	Title      string            `bson:"title"       json:"title,omitempty"`
+	Messages   []MessageDocument `bson:"messages"    json:"messages"`
+	Branches   []BranchDocument  `bson:"branches"    json:"branches,omitempty"`
+	Metadata   map[string]any    `bson:"metadata"    json:"metadata,omitempty"`
+	Archived   bool              `bson:"archived"    json:"archived"`
+	ArchivedAt *time.Time        `bson:"archived_at" json:"archived_at,omitempty"`
+	CreatedAt  time.Time         `bson:"created_at"  json:"created_at"`
+	UpdatedAt  time.Time         `bson:"updated_at"  json:"updated_at"`
 }
 
 // MessageDocument maps to types.Message for BSON storage.
 type MessageDocument struct {
-	Role       string              `bson:"role"         json:"role"`
-	Content    string              `bson:"content"      json:"content,omitempty"`
-	Name       string              `bson:"name"         json:"name,omitempty"`
-	ToolCalls  []types.ToolCall    `bson:"tool_calls"   json:"tool_calls,omitempty"`
-	ToolCallID string              `bson:"tool_call_id" json:"tool_call_id,omitempty"`
-	Images     []types.ImageContent `bson:"images"      json:"images,omitempty"`
-	Metadata   any                 `bson:"metadata"     json:"metadata,omitempty"`
-	Timestamp  time.Time           `bson:"timestamp"    json:"timestamp,omitempty"`
+	ID         string               `bson:"id"           json:"id,omitempty"`
+	Role       string               `bson:"role"         json:"role"`
+	Content    string               `bson:"content"      json:"content,omitempty"`
+	Name       string               `bson:"name"         json:"name,omitempty"`
+	ToolCalls  []types.ToolCall     `bson:"tool_calls"   json:"tool_calls,omitempty"`
+	ToolCallID string               `bson:"tool_call_id" json:"tool_call_id,omitempty"`
+	Images     []types.ImageContent `bson:"images"       json:"images,omitempty"`
+	Metadata   any                  `bson:"metadata"     json:"metadata,omitempty"`
+	Timestamp  time.Time            `bson:"timestamp"    json:"timestamp,omitempty"`
 }
 
 // BranchDocument stores conversation branch metadata.
@@ -56,6 +60,7 @@ type BranchDocument struct {
 type ConversationFilter struct {
 	AgentID   string     `json:"agent_id,omitempty"`
 	TenantID  string     `json:"tenant_id,omitempty"`
+	ParentID  string     `json:"parent_id,omitempty"`
 	UserID    string     `json:"user_id,omitempty"`
 	StartTime *time.Time `json:"start_time,omitempty"`
 	EndTime   *time.Time `json:"end_time,omitempty"`
@@ -71,12 +76,22 @@ type ConversationStore interface {
 	GetByID(ctx context.Context, id string) (*ConversationDocument, error)
 	// AppendMessage adds a message to an existing conversation.
 	AppendMessage(ctx context.Context, conversationID string, msg MessageDocument) error
-	// GetMessages returns a paginated slice of messages from a conversation.
-	GetMessages(ctx context.Context, conversationID string, limit, offset int) ([]MessageDocument, error)
-	// List returns conversations matching the filter.
-	List(ctx context.Context, filter ConversationFilter) ([]*ConversationDocument, error)
+	// GetMessages returns a paginated slice of messages and total count.
+	GetMessages(ctx context.Context, conversationID string, offset, limit int) ([]MessageDocument, int64, error)
+	// List returns conversations matching the filter along with total count.
+	List(ctx context.Context, filter ConversationFilter) ([]*ConversationDocument, int64, error)
+	// Update applies field-level updates to a conversation.
+	Update(ctx context.Context, id string, updates bson.D) error
 	// Delete removes a conversation by ID.
 	Delete(ctx context.Context, id string) error
+	// DeleteByParentID removes all conversations under a given parent within a tenant.
+	DeleteByParentID(ctx context.Context, tenantID, parentID string) error
+	// DeleteMessage removes a single embedded message by its ID.
+	DeleteMessage(ctx context.Context, conversationID, messageID string) error
+	// ClearMessages removes all messages from a conversation.
+	ClearMessages(ctx context.Context, conversationID string) error
+	// Archive marks a conversation as archived.
+	Archive(ctx context.Context, id string) error
 	// UpdateBranches replaces the branches array for a conversation.
 	UpdateBranches(ctx context.Context, conversationID string, branches []BranchDocument) error
 }
@@ -93,6 +108,7 @@ func NewConversationStore(ctx context.Context, client *mongoclient.Client) (*Mon
 	indexes := []mongo.IndexModel{
 		{Keys: bson.D{{Key: "agent_id", Value: 1}, {Key: "tenant_id", Value: 1}, {Key: "created_at", Value: -1}}},
 		{Keys: bson.D{{Key: "user_id", Value: 1}, {Key: "tenant_id", Value: 1}}},
+		{Keys: bson.D{{Key: "tenant_id", Value: 1}, {Key: "parent_id", Value: 1}, {Key: "created_at", Value: -1}}},
 	}
 	if err := client.EnsureIndexes(ctx, conversationsCollection, indexes); err != nil {
 		return nil, err
@@ -151,29 +167,44 @@ func (s *MongoConversationStore) AppendMessage(ctx context.Context, conversation
 	return nil
 }
 
-// GetMessages uses $slice projection to paginate the messages array.
-func (s *MongoConversationStore) GetMessages(ctx context.Context, conversationID string, limit, offset int) ([]MessageDocument, error) {
+// GetMessages paginates the messages array and returns the total message count.
+func (s *MongoConversationStore) GetMessages(ctx context.Context, conversationID string, offset, limit int) ([]MessageDocument, int64, error) {
 	if limit <= 0 {
 		limit = 50
 	}
 
-	projection := bson.D{
-		{Key: "messages", Value: bson.D{{Key: "$slice", Value: bson.A{offset, limit}}}},
+	// Fetch slice + total count via aggregation.
+	pipeline := bson.A{
+		bson.D{{Key: "$match", Value: bson.D{{Key: "_id", Value: conversationID}}}},
+		bson.D{{Key: "$project", Value: bson.D{
+			{Key: "total", Value: bson.D{{Key: "$size", Value: "$messages"}}},
+			{Key: "messages", Value: bson.D{{Key: "$slice", Value: bson.A{"$messages", offset, limit}}}},
+		}}},
 	}
-	opts := options.FindOne().SetProjection(projection)
 
-	var doc ConversationDocument
-	err := s.coll.FindOne(ctx, bson.D{{Key: "_id", Value: conversationID}}, opts).Decode(&doc)
-	if err != nil {
-		if err == mongo.ErrNoDocuments {
-			return nil, persistence.ErrNotFound
-		}
-		return nil, err
+	type result struct {
+		Total    int64             `bson:"total"`
+		Messages []MessageDocument `bson:"messages"`
 	}
-	return doc.Messages, nil
+
+	cursor, err := s.coll.Aggregate(ctx, pipeline)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer cursor.Close(ctx)
+
+	var res result
+	if cursor.Next(ctx) {
+		if err := cursor.Decode(&res); err != nil {
+			return nil, 0, err
+		}
+	} else {
+		return nil, 0, persistence.ErrNotFound
+	}
+	return res.Messages, res.Total, nil
 }
 
-func (s *MongoConversationStore) List(ctx context.Context, filter ConversationFilter) ([]*ConversationDocument, error) {
+func (s *MongoConversationStore) List(ctx context.Context, filter ConversationFilter) ([]*ConversationDocument, int64, error) {
 	f := bson.D{}
 	if filter.AgentID != "" {
 		f = append(f, bson.E{Key: "agent_id", Value: filter.AgentID})
@@ -184,6 +215,9 @@ func (s *MongoConversationStore) List(ctx context.Context, filter ConversationFi
 	if filter.UserID != "" {
 		f = append(f, bson.E{Key: "user_id", Value: filter.UserID})
 	}
+	if filter.ParentID != "" {
+		f = append(f, bson.E{Key: "parent_id", Value: filter.ParentID})
+	}
 	if filter.StartTime != nil || filter.EndTime != nil {
 		timeFilter := bson.D{}
 		if filter.StartTime != nil {
@@ -193,6 +227,11 @@ func (s *MongoConversationStore) List(ctx context.Context, filter ConversationFi
 			timeFilter = append(timeFilter, bson.E{Key: "$lte", Value: *filter.EndTime})
 		}
 		f = append(f, bson.E{Key: "created_at", Value: timeFilter})
+	}
+
+	total, err := s.coll.CountDocuments(ctx, f)
+	if err != nil {
+		return nil, 0, err
 	}
 
 	opts := options.Find().SetSort(bson.D{{Key: "created_at", Value: -1}})
@@ -207,15 +246,91 @@ func (s *MongoConversationStore) List(ctx context.Context, filter ConversationFi
 
 	cursor, err := s.coll.Find(ctx, f, opts)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	defer cursor.Close(ctx)
 
 	var docs []*ConversationDocument
 	if err := cursor.All(ctx, &docs); err != nil {
-		return nil, err
+		return nil, 0, err
 	}
-	return docs, nil
+	return docs, total, nil
+}
+
+func (s *MongoConversationStore) Update(ctx context.Context, id string, updates bson.D) error {
+	updates = append(updates, bson.E{Key: "updated_at", Value: time.Now()})
+	result, err := s.coll.UpdateOne(ctx,
+		bson.D{{Key: "_id", Value: id}},
+		bson.D{{Key: "$set", Value: updates}},
+	)
+	if err != nil {
+		return err
+	}
+	if result.MatchedCount == 0 {
+		return persistence.ErrNotFound
+	}
+	return nil
+}
+
+func (s *MongoConversationStore) DeleteByParentID(ctx context.Context, tenantID, parentID string) error {
+	_, err := s.coll.DeleteMany(ctx, bson.D{
+		{Key: "tenant_id", Value: tenantID},
+		{Key: "parent_id", Value: parentID},
+	})
+	return err
+}
+
+func (s *MongoConversationStore) DeleteMessage(ctx context.Context, conversationID, messageID string) error {
+	result, err := s.coll.UpdateOne(ctx,
+		bson.D{{Key: "_id", Value: conversationID}},
+		bson.D{
+			{Key: "$pull", Value: bson.D{{Key: "messages", Value: bson.D{{Key: "id", Value: messageID}}}}},
+			{Key: "$set", Value: bson.D{{Key: "updated_at", Value: time.Now()}}},
+		},
+	)
+	if err != nil {
+		return err
+	}
+	if result.MatchedCount == 0 {
+		return persistence.ErrNotFound
+	}
+	return nil
+}
+
+func (s *MongoConversationStore) ClearMessages(ctx context.Context, conversationID string) error {
+	result, err := s.coll.UpdateOne(ctx,
+		bson.D{{Key: "_id", Value: conversationID}},
+		bson.D{{Key: "$set", Value: bson.D{
+			{Key: "messages", Value: []MessageDocument{}},
+			{Key: "updated_at", Value: time.Now()},
+		}}},
+	)
+	if err != nil {
+		return err
+	}
+	if result.MatchedCount == 0 {
+		return persistence.ErrNotFound
+	}
+	return nil
+}
+
+func (s *MongoConversationStore) Archive(ctx context.Context, id string) error {
+	now := time.Now()
+	result, err := s.coll.UpdateOne(ctx,
+		bson.D{{Key: "_id", Value: id}},
+		bson.D{{Key: "$set", Value: bson.D{
+			{Key: "archived", Value: true},
+			{Key: "archived_at", Value: now},
+			{Key: "updated_at", Value: now},
+		}}},
+	)
+	if err != nil {
+		return err
+	}
+	if result.MatchedCount == 0 {
+		return persistence.ErrNotFound
+	}
+	return nil
 }
 
 func (s *MongoConversationStore) Delete(ctx context.Context, id string) error {
@@ -247,4 +362,3 @@ func (s *MongoConversationStore) UpdateBranches(ctx context.Context, conversatio
 	}
 	return nil
 }
-

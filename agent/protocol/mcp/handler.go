@@ -94,7 +94,7 @@ func (h *MCPHandler) handleMessage(w http.ResponseWriter, r *http.Request) {
 	var msg MCPMessage
 	if err := json.NewDecoder(r.Body).Decode(&msg); err != nil {
 		resp := NewMCPError(nil, ErrorCodeParseError, "parse error", nil)
-		h.writeJSONResponse(w, http.StatusBadRequest, resp)
+		h.writeJSONResponse(w, http.StatusOK, resp)
 		return
 	}
 

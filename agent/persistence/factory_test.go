@@ -64,16 +64,18 @@ func TestNewTaskStore_UnsupportedType(t *testing.T) {
 	assert.Contains(t, err.Error(), "unsupported")
 }
 
-func TestMustNewMessageStore_Panics(t *testing.T) {
+func TestMustNewMessageStore_ReturnsError(t *testing.T) {
 	config := DefaultStoreConfig()
 	config.Type = "unknown"
-	assert.Panics(t, func() { MustNewMessageStore(config) })
+	_, err := MustNewMessageStore(config)
+	assert.Error(t, err)
 }
 
-func TestMustNewTaskStore_Panics(t *testing.T) {
+func TestMustNewTaskStore_ReturnsError(t *testing.T) {
 	config := DefaultStoreConfig()
 	config.Type = "unknown"
-	assert.Panics(t, func() { MustNewTaskStore(config) })
+	_, err := MustNewTaskStore(config)
+	assert.Error(t, err)
 }
 
 func TestRetryConfig_CalculateBackoff(t *testing.T) {
