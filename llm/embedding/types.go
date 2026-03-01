@@ -3,8 +3,6 @@ package embedding
 import (
 	"context"
 	"time"
-
-	"github.com/BaSui01/agentflow/llm"
 )
 
 // EmbeddingRequest 表示生成嵌入的请求.
@@ -78,7 +76,3 @@ type Provider interface {
 	// MaxBatchSize 返回支持的最大批量大小.
 	MaxBatchSize() int
 }
-
-// HealthStatus 表示提供者的健康检查结果.
-// 这是 llm.HealthStatus 的类型别名，统一 Provider 级别的健康状态定义。
-type HealthStatus = llm.HealthStatus

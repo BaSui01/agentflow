@@ -31,13 +31,10 @@ func DefaultRetryPolicy() *RetryPolicy {
 	}
 }
 
-// CircuitState 是断路器状态类型。
-type CircuitState = circuitbreaker.State
-
 // 断路器状态常量。
 const (
-	CircuitClosed  = circuitbreaker.StateClosed
-	CircuitOpen    = circuitbreaker.StateOpen
+	CircuitClosed   = circuitbreaker.StateClosed
+	CircuitOpen     = circuitbreaker.StateOpen
 	CircuitHalfOpen = circuitbreaker.StateHalfOpen
 )
 
@@ -85,15 +82,15 @@ func newSimpleCircuitBreaker(config *CircuitBreakerConfig, logger *zap.Logger) *
 }
 
 // 状态返回当前电路状态 。
-func (cb *simpleCircuitBreaker) State() CircuitState {
-	return CircuitState(cb.state.Load())
+func (cb *simpleCircuitBreaker) State() circuitbreaker.State {
+	return circuitbreaker.State(cb.state.Load())
 }
 
 // 调用以断路器保护功能执行 。
 // 使用 mutex 保护状态检查与转换的原子性，防止并发调用导致状态不一致。
 func (cb *simpleCircuitBreaker) Call(ctx context.Context, fn func() error) error {
 	cb.mu.Lock()
-	state := CircuitState(cb.state.Load())
+	state := circuitbreaker.State(cb.state.Load())
 
 	if state == CircuitOpen {
 		if time.Now().UnixNano()-cb.lastFailureTime.Load() > cb.config.Timeout.Nanoseconds() {
@@ -136,7 +133,7 @@ func (cb *simpleCircuitBreaker) recordSuccess() {
 	cb.mu.Lock()
 	defer cb.mu.Unlock()
 
-	state := CircuitState(cb.state.Load())
+	state := circuitbreaker.State(cb.state.Load())
 	if state == CircuitHalfOpen {
 		successes := cb.successes.Add(1)
 		if successes >= int32(cb.config.SuccessThreshold) {
