@@ -6,11 +6,8 @@ import (
 )
 
 // ErrorCode represents a unified error code across the framework.
-//
-// TODO(L-007): 目前 types.Error、api.ErrorDetail、agent.GuardrailsError 等
-// 多个包各自定义了错误类型。types.Error 是框架内部的 canonical 错误类型，
-// api.ErrorDetail 是面向客户端的 DTO。未来可考虑统一内部错误链路，
-// 仅在 API 边界做 DTO 转换。
+// types.Error is the internal canonical error type; API DTO conversion is
+// centralized at api.ErrorInfoFromTypesError.
 type ErrorCode string
 
 // LLM error codes
@@ -222,4 +219,3 @@ func NewTimeoutError(message string) *Error {
 		WithHTTPStatus(504).
 		WithRetryable(true)
 }
-

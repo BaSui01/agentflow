@@ -166,7 +166,12 @@ func NewExecutor(config ExecutorConfig, logger *zap.Logger, opts ...ExecutorOpti
 	if logger == nil {
 		logger = zap.NewNop()
 	}
-	os.MkdirAll(config.CheckpointDir, 0755)
+	if err := os.MkdirAll(config.CheckpointDir, 0755); err != nil {
+		logger.Warn("failed to create checkpoint directory",
+			zap.String("dir", config.CheckpointDir),
+			zap.Error(err),
+		)
+	}
 
 	e := &Executor{
 		config:     config,

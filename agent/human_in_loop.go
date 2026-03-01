@@ -27,16 +27,16 @@ type HumanInLoopManager struct {
 
 // ApprovalRequest 审批请求
 type ApprovalRequest struct {
-	ID          string                 `json:"id"`
-	AgentID     string                 `json:"agent_id"`
-	Type        ApprovalType           `json:"type"`
-	Content     string                 `json:"content"`
-	Context     map[string]any `json:"context"`
-	Status      ApprovalStatus         `json:"status"`
-	RequestedAt time.Time              `json:"requested_at"`
-	RespondedAt time.Time              `json:"responded_at,omitempty"`
-	Response    *ApprovalResponse      `json:"response,omitempty"`
-	Timeout     time.Duration          `json:"timeout"`
+	ID          string            `json:"id"`
+	AgentID     string            `json:"agent_id"`
+	Type        ApprovalType      `json:"type"`
+	Content     string            `json:"content"`
+	Context     map[string]any    `json:"context"`
+	Status      ApprovalStatus    `json:"status"`
+	RequestedAt time.Time         `json:"requested_at"`
+	RespondedAt time.Time         `json:"responded_at,omitempty"`
+	Response    *ApprovalResponse `json:"response,omitempty"`
+	Timeout     time.Duration     `json:"timeout"`
 
 	// 内部通道
 	responseCh chan *ApprovalResponse
@@ -66,9 +66,9 @@ const (
 
 // ApprovalResponse 审批响应
 type ApprovalResponse struct {
-	Approved bool                   `json:"approved"`
-	Reason   string                 `json:"reason,omitempty"`
-	Feedback string                 `json:"feedback,omitempty"`
+	Approved bool           `json:"approved"`
+	Reason   string         `json:"reason,omitempty"`
+	Feedback string         `json:"feedback,omitempty"`
 	Metadata map[string]any `json:"metadata,omitempty"`
 }
 
@@ -140,7 +140,12 @@ func (m *HumanInLoopManager) RequestApproval(ctx context.Context, agentID string
 		delete(m.pendingRequests, request.ID)
 		m.mu.Unlock()
 
-		m.approvalStore.Update(ctx, request)
+		if err := m.approvalStore.Update(ctx, request); err != nil {
+			m.logger.Error("failed to update approval request after timeout",
+				zap.String("request_id", request.ID),
+				zap.Error(err),
+			)
+		}
 
 		m.logger.Warn("approval request timeout",
 			zap.String("request_id", request.ID),
@@ -275,8 +280,8 @@ type ApprovalPolicy interface {
 
 // Action 需要审批的动作
 type Action struct {
-	Type     string                 `json:"type"`
-	Content  string                 `json:"content"`
+	Type     string         `json:"type"`
+	Content  string         `json:"content"`
 	Metadata map[string]any `json:"metadata"`
 }
 

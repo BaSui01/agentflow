@@ -32,26 +32,26 @@ const (
 // ToolCost 定义工具的成本配置.
 type ToolCost struct {
 	ToolName    string   `json:"tool_name"`
-	BaseCost    float64  `json:"base_cost"`              // Base cost per call
-	CostPerUnit float64  `json:"cost_per_unit"`          // Cost per unit (e.g., per token)
-	Unit        CostUnit `json:"unit"`                   // Cost unit
+	BaseCost    float64  `json:"base_cost"`     // Base cost per call
+	CostPerUnit float64  `json:"cost_per_unit"` // Cost per unit (e.g., per token)
+	Unit        CostUnit `json:"unit"`          // Cost unit
 	Description string   `json:"description,omitempty"`
 }
 
 // Budget 定义预算配置。
 type Budget struct {
-	ID          string         `json:"id"`
-	Name        string         `json:"name"`
-	Description string         `json:"description,omitempty"`
-	Scope       BudgetScope    `json:"scope"`
-	ScopeID     string         `json:"scope_id,omitempty"` // Agent ID, User ID, etc.
-	Limit       float64        `json:"limit"`              // Budget limit
-	Unit        CostUnit       `json:"unit"`
-	Period      BudgetPeriod   `json:"period"`
-	AlertThresholds []float64  `json:"alert_thresholds,omitempty"` // Percentages (e.g., 50, 80, 100)
-	Enabled     bool           `json:"enabled"`
-	CreatedAt   time.Time      `json:"created_at"`
-	UpdatedAt   time.Time      `json:"updated_at"`
+	ID              string       `json:"id"`
+	Name            string       `json:"name"`
+	Description     string       `json:"description,omitempty"`
+	Scope           BudgetScope  `json:"scope"`
+	ScopeID         string       `json:"scope_id,omitempty"` // Agent ID, User ID, etc.
+	Limit           float64      `json:"limit"`              // Budget limit
+	Unit            CostUnit     `json:"unit"`
+	Period          BudgetPeriod `json:"period"`
+	AlertThresholds []float64    `json:"alert_thresholds,omitempty"` // Percentages (e.g., 50, 80, 100)
+	Enabled         bool         `json:"enabled"`
+	CreatedAt       time.Time    `json:"created_at"`
+	UpdatedAt       time.Time    `json:"updated_at"`
 }
 
 // BudgetScope 定义预算的作用域。
@@ -78,38 +78,38 @@ const (
 
 // CostRecord 表示单条成本记录。
 type CostRecord struct {
-	ID        string    `json:"id"`
-	Timestamp time.Time `json:"timestamp"`
-	AgentID   string    `json:"agent_id"`
-	UserID    string    `json:"user_id"`
-	SessionID string    `json:"session_id,omitempty"`
-	ToolName  string    `json:"tool_name"`
-	Cost      float64   `json:"cost"`
-	Unit      CostUnit  `json:"unit"`
+	ID        string            `json:"id"`
+	Timestamp time.Time         `json:"timestamp"`
+	AgentID   string            `json:"agent_id"`
+	UserID    string            `json:"user_id"`
+	SessionID string            `json:"session_id,omitempty"`
+	ToolName  string            `json:"tool_name"`
+	Cost      float64           `json:"cost"`
+	Unit      CostUnit          `json:"unit"`
 	Metadata  map[string]string `json:"metadata,omitempty"`
 }
 
 // CostAlert 表示成本告警.
 type CostAlert struct {
-	ID        string         `json:"id"`
-	Timestamp time.Time      `json:"timestamp"`
-	Level     CostAlertLevel `json:"level"`
-	BudgetID  string         `json:"budget_id"`
-	Message   string         `json:"message"`
-	Current   float64        `json:"current"`
-	Limit     float64        `json:"limit"`
-	Percentage float64       `json:"percentage"`
+	ID         string         `json:"id"`
+	Timestamp  time.Time      `json:"timestamp"`
+	Level      CostAlertLevel `json:"level"`
+	BudgetID   string         `json:"budget_id"`
+	Message    string         `json:"message"`
+	Current    float64        `json:"current"`
+	Limit      float64        `json:"limit"`
+	Percentage float64        `json:"percentage"`
 }
 
 // CostCheckResult 包含成本检查的结果.
 type CostCheckResult struct {
-	Allowed     bool           `json:"allowed"`
-	Cost        float64        `json:"cost"`
-	Budget      *Budget        `json:"budget,omitempty"`
-	CurrentUsage float64       `json:"current_usage"`
-	Remaining   float64        `json:"remaining"`
-	Alert       *CostAlert     `json:"alert,omitempty"`
-	Reason      string         `json:"reason,omitempty"`
+	Allowed      bool       `json:"allowed"`
+	Cost         float64    `json:"cost"`
+	Budget       *Budget    `json:"budget,omitempty"`
+	CurrentUsage float64    `json:"current_usage"`
+	Remaining    float64    `json:"remaining"`
+	Alert        *CostAlert `json:"alert,omitempty"`
+	Reason       string     `json:"reason,omitempty"`
 }
 
 // CostOptimization 表示成本优化建议。
@@ -171,35 +171,35 @@ type CostReportFilter struct {
 
 // CostReport 表示成本报告。
 type CostReport struct {
-	TotalCost    float64                `json:"total_cost"`
-	TotalCalls   int64                  `json:"total_calls"`
-	AverageCost  float64                `json:"average_cost"`
-	ByTool       map[string]float64     `json:"by_tool,omitempty"`
-	ByAgent      map[string]float64     `json:"by_agent,omitempty"`
-	ByUser       map[string]float64     `json:"by_user,omitempty"`
-	ByDay        map[string]float64     `json:"by_day,omitempty"`
-	TopTools     []ToolCostSummary      `json:"top_tools,omitempty"`
-	GeneratedAt  time.Time              `json:"generated_at"`
+	TotalCost   float64            `json:"total_cost"`
+	TotalCalls  int64              `json:"total_calls"`
+	AverageCost float64            `json:"average_cost"`
+	ByTool      map[string]float64 `json:"by_tool,omitempty"`
+	ByAgent     map[string]float64 `json:"by_agent,omitempty"`
+	ByUser      map[string]float64 `json:"by_user,omitempty"`
+	ByDay       map[string]float64 `json:"by_day,omitempty"`
+	TopTools    []ToolCostSummary  `json:"top_tools,omitempty"`
+	GeneratedAt time.Time          `json:"generated_at"`
 }
 
 // ToolCostSummary 汇总工具的成本。
 type ToolCostSummary struct {
-	ToolName   string  `json:"tool_name"`
-	TotalCost  float64 `json:"total_cost"`
-	CallCount  int64   `json:"call_count"`
-	AvgCost    float64 `json:"avg_cost"`
+	ToolName  string  `json:"tool_name"`
+	TotalCost float64 `json:"total_cost"`
+	CallCount int64   `json:"call_count"`
+	AvgCost   float64 `json:"avg_cost"`
 }
 
 // DefaultCostController 是 CostController 的默认实现。
 type DefaultCostController struct {
-	toolCosts       map[string]*ToolCost
-	budgets         map[string]*Budget
-	records         []*CostRecord
-	usage           map[string]float64 // key -> usage
-	tokenCounter    types.TokenCounter
-	alertHandler    CostAlertHandler
-	logger          *zap.Logger
-	mu              sync.RWMutex
+	toolCosts    map[string]*ToolCost
+	budgets      map[string]*Budget
+	records      []*CostRecord
+	usage        map[string]float64 // key -> usage
+	tokenCounter types.TokenCounter
+	alertHandler CostAlertHandler
+	logger       *zap.Logger
+	mu           sync.RWMutex
 }
 
 // CostAlertHandler 处理成本告警.
@@ -221,11 +221,11 @@ func NewCostController(logger *zap.Logger) *DefaultCostController {
 		logger = zap.NewNop()
 	}
 	return &DefaultCostController{
-		toolCosts:       make(map[string]*ToolCost),
-		budgets:         make(map[string]*Budget),
-		records:         make([]*CostRecord, 0),
-		usage:           make(map[string]float64),
-		logger:          logger.With(zap.String("component", "cost_controller")),
+		toolCosts: make(map[string]*ToolCost),
+		budgets:   make(map[string]*Budget),
+		records:   make([]*CostRecord, 0),
+		usage:     make(map[string]float64),
+		logger:    logger.With(zap.String("component", "cost_controller")),
 	}
 }
 
@@ -351,7 +351,11 @@ func (cc *DefaultCostController) CheckBudget(ctx context.Context, agentID, userI
 				result.Alert = alert
 
 				if cc.alertHandler != nil {
-					go cc.alertHandler.HandleAlert(ctx, alert)
+					go func(a *CostAlert) {
+						if err := cc.alertHandler.HandleAlert(ctx, a); err != nil {
+							cc.logger.Warn("failed to handle cost alert", zap.Error(err))
+						}
+					}(alert)
 				}
 
 				cc.logger.Warn("budget alert triggered",
@@ -710,7 +714,11 @@ func CostControlMiddleware(cc CostController, auditLogger AuditLogger) func(Tool
 				Cost:      cost,
 				Unit:      CostUnitCredits,
 			}
-			cc.RecordCost(record)
+			if err := cc.RecordCost(record); err != nil {
+				if auditLogger != nil {
+					LogCostAlert(auditLogger, agentID, userID, cost, "cost_record_failed")
+				}
+			}
 
 			return response, execErr
 		}

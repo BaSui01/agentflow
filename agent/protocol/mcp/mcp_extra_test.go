@@ -36,13 +36,13 @@ func TestDefaultMCPServer_Dispatch_MethodNotFound(t *testing.T) {
 
 func TestDefaultMCPServer_Dispatch_ToolsList(t *testing.T) {
 	s := newTestServer(t)
-	s.RegisterTool(&ToolDefinition{
+	require.NoError(t, s.RegisterTool(&ToolDefinition{
 		Name:        "test-tool",
 		Description: "A test tool",
 		InputSchema: map[string]any{"type": "object"},
 	}, func(ctx context.Context, args map[string]any) (any, error) {
 		return "ok", nil
-	})
+	}))
 
 	result, mcpErr := s.dispatch(context.Background(), "tools/list", nil)
 	require.Nil(t, mcpErr)
@@ -62,13 +62,13 @@ func TestDefaultMCPServer_Dispatch_ToolsCall_MissingName(t *testing.T) {
 
 func TestDefaultMCPServer_Dispatch_ToolsCall_Success(t *testing.T) {
 	s := newTestServer(t)
-	s.RegisterTool(&ToolDefinition{
+	require.NoError(t, s.RegisterTool(&ToolDefinition{
 		Name:        "echo",
 		Description: "Echo tool",
 		InputSchema: map[string]any{"type": "object"},
 	}, func(ctx context.Context, args map[string]any) (any, error) {
 		return args["msg"], nil
-	})
+	}))
 
 	result, mcpErr := s.dispatch(context.Background(), "tools/call", map[string]any{
 		"name":      "echo",
@@ -80,7 +80,7 @@ func TestDefaultMCPServer_Dispatch_ToolsCall_Success(t *testing.T) {
 
 func TestDefaultMCPServer_Dispatch_ResourcesList(t *testing.T) {
 	s := newTestServer(t)
-	s.RegisterResource(&Resource{URI: "file://test", Name: "test", Type: ResourceTypeText})
+	require.NoError(t, s.RegisterResource(&Resource{URI: "file://test", Name: "test", Type: ResourceTypeText}))
 
 	result, mcpErr := s.dispatch(context.Background(), "resources/list", nil)
 	require.Nil(t, mcpErr)
@@ -98,11 +98,11 @@ func TestDefaultMCPServer_Dispatch_ResourcesRead_MissingURI(t *testing.T) {
 
 func TestDefaultMCPServer_Dispatch_PromptsList(t *testing.T) {
 	s := newTestServer(t)
-	s.RegisterPrompt(&PromptTemplate{
+	require.NoError(t, s.RegisterPrompt(&PromptTemplate{
 		Name:        "test-prompt",
 		Description: "A test prompt",
 		Template:    "Hello {{name}}",
-	})
+	}))
 
 	result, mcpErr := s.dispatch(context.Background(), "prompts/list", nil)
 	require.Nil(t, mcpErr)

@@ -377,7 +377,9 @@ Respond with only a number between 0.0 and 1.0`, task, thought.Content)
 	if choiceErr != nil {
 		return 0.5, resp.Usage.TotalTokens
 	}
-	fmt.Sscanf(evalChoice.Message.Content, "%f", &score)
+	if _, err := fmt.Sscanf(evalChoice.Message.Content, "%f", &score); err != nil {
+		return 0.5, resp.Usage.TotalTokens
+	}
 	if score < 0 || score > 1 {
 		score = 0.5
 	}

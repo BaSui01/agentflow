@@ -31,7 +31,7 @@ func TestJinaScraperProvider_Scrape(t *testing.T) {
 		assert.Equal(t, "application/json", r.Header.Get("Accept"))
 
 		w.Header().Set("Content-Type", "text/plain")
-		w.Write([]byte("# Example Domain\n\nThis domain is for use in illustrative examples.\n\n[More info](https://www.iana.org/domains/example)\n\n![Logo](https://example.com/logo.png)"))
+		_, _ = w.Write([]byte("# Example Domain\n\nThis domain is for use in illustrative examples.\n\n[More info](https://www.iana.org/domains/example)\n\n![Logo](https://example.com/logo.png)"))
 	}))
 	defer srv.Close()
 
@@ -71,7 +71,7 @@ func TestJinaScraperProvider_HTMLFormat(t *testing.T) {
 	var capturedFormat string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		capturedFormat = r.Header.Get("X-Return-Format")
-		w.Write([]byte("<html><body>Hello</body></html>"))
+		_, _ = w.Write([]byte("<html><body>Hello</body></html>"))
 	}))
 	defer srv.Close()
 
@@ -92,7 +92,7 @@ func TestJinaScraperProvider_MaxLength(t *testing.T) {
 	t.Parallel()
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.Write([]byte("# Title\n\nThis is a very long content that should be truncated at the specified max length."))
+		_, _ = w.Write([]byte("# Title\n\nThis is a very long content that should be truncated at the specified max length."))
 	}))
 	defer srv.Close()
 
@@ -115,7 +115,7 @@ func TestJinaScraperProvider_Headers(t *testing.T) {
 	var headers http.Header
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		headers = r.Header.Clone()
-		w.Write([]byte("content"))
+		_, _ = w.Write([]byte("content"))
 	}))
 	defer srv.Close()
 
@@ -134,7 +134,8 @@ func TestJinaScraperProvider_Headers(t *testing.T) {
 		ExcludeSelectors: []string{".ads", ".nav"},
 	}
 
-	p.Scrape(context.Background(), "https://example.com", opts)
+	_, err := p.Scrape(context.Background(), "https://example.com", opts)
+	require.NoError(t, err)
 
 	assert.Equal(t, "text", headers.Get("X-Return-Format"))
 	assert.Equal(t, "true", headers.Get("X-With-Links"))
@@ -149,7 +150,7 @@ func TestJinaScraperProvider_APIError(t *testing.T) {
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusTooManyRequests)
-		w.Write([]byte("rate limited"))
+		_, _ = w.Write([]byte("rate limited"))
 	}))
 	defer srv.Close()
 

@@ -120,7 +120,7 @@ func TestProvider_Completion_Success(t *testing.T) {
 		assert.Contains(t, r.Header.Get("Authorization"), "Bearer test-key")
 
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(providers.OpenAICompatResponse{
+		err := json.NewEncoder(w).Encode(providers.OpenAICompatResponse{
 			ID:    "resp-1",
 			Model: "gpt-test",
 			Choices: []providers.OpenAICompatChoice{
@@ -140,6 +140,7 @@ func TestProvider_Completion_Success(t *testing.T) {
 			},
 			Created: 1700000000,
 		})
+		require.NoError(t, err)
 	}))
 	t.Cleanup(server.Close)
 
@@ -244,13 +245,14 @@ func TestProvider_Completion_CredentialOverride(t *testing.T) {
 			capturedKey = auth[7:]
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(providers.OpenAICompatResponse{
+		err := json.NewEncoder(w).Encode(providers.OpenAICompatResponse{
 			ID:    "r1",
 			Model: "m",
 			Choices: []providers.OpenAICompatChoice{
 				{Index: 0, FinishReason: "stop", Message: providers.OpenAICompatMessage{Role: "assistant", Content: "ok"}},
 			},
 		})
+		require.NoError(t, err)
 	}))
 	t.Cleanup(server.Close)
 
@@ -268,23 +270,25 @@ func TestProvider_Completion_RequestHook(t *testing.T) {
 	var receivedModel string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var body providers.OpenAICompatRequest
-		json.NewDecoder(r.Body).Decode(&body)
+		err := json.NewDecoder(r.Body).Decode(&body)
+		require.NoError(t, err)
 		receivedModel = body.Model
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(providers.OpenAICompatResponse{
+		err = json.NewEncoder(w).Encode(providers.OpenAICompatResponse{
 			ID: "r1", Model: receivedModel,
 			Choices: []providers.OpenAICompatChoice{
 				{Index: 0, FinishReason: "stop", Message: providers.OpenAICompatMessage{Role: "assistant", Content: "ok"}},
 			},
 		})
+		require.NoError(t, err)
 	}))
 	t.Cleanup(server.Close)
 
 	p := New(Config{
-		ProviderName:  "test",
-		APIKey:        "key",
-		BaseURL:       server.URL,
-		DefaultModel:  "default-model",
+		ProviderName: "test",
+		APIKey:       "key",
+		BaseURL:      server.URL,
+		DefaultModel: "default-model",
 		RequestHook: func(req *llm.ChatRequest, body *providers.OpenAICompatRequest) {
 			body.Model = "hooked-model"
 		},
@@ -451,7 +455,7 @@ func TestProvider_ListModels_Success(t *testing.T) {
 		assert.Contains(t, r.URL.Path, "/v1/models")
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(struct {
-			Object string     `json:"object"`
+			Object string      `json:"object"`
 			Data   []llm.Model `json:"data"`
 		}{
 			Object: "list",

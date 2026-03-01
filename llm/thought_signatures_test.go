@@ -27,11 +27,11 @@ func TestThoughtSignatureMiddleware_Completion_NoChainID(t *testing.T) {
 func TestThoughtSignatureMiddleware_Completion_WithChainID(t *testing.T) {
 	mgr := NewThoughtSignatureManager(time.Hour)
 	mgr.CreateChain("chain-1")
-	mgr.AddSignature("chain-1", ThoughtSignature{
+	require.NoError(t, mgr.AddSignature("chain-1", ThoughtSignature{
 		ID:        "s1",
 		Signature: "prev-sig",
 		ExpiresAt: time.Now().Add(time.Hour),
-	})
+	}))
 
 	var capturedReq *ChatRequest
 	inner := &testProvider{
@@ -82,9 +82,9 @@ func TestThoughtSignatureMiddleware_Stream(t *testing.T) {
 	}
 	mgr := NewThoughtSignatureManager(time.Hour)
 	mgr.CreateChain("c1")
-	mgr.AddSignature("c1", ThoughtSignature{
+	require.NoError(t, mgr.AddSignature("c1", ThoughtSignature{
 		ID: "s1", Signature: "sig", ExpiresAt: time.Now().Add(time.Hour),
-	})
+	}))
 
 	mw := NewThoughtSignatureMiddleware(inner, mgr)
 	result, err := mw.Stream(context.Background(), &ChatRequest{

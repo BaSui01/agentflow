@@ -76,7 +76,8 @@ func TestRecovery(t *testing.T) {
 
 	assert.Equal(t, http.StatusInternalServerError, rec.Code)
 	var resp map[string]any
-	json.Unmarshal(rec.Body.Bytes(), &resp)
+	err := json.Unmarshal(rec.Body.Bytes(), &resp)
+	require.NoError(t, err)
 	assert.Equal(t, false, resp["success"])
 }
 
@@ -510,7 +511,8 @@ func TestWriteMiddlewareError(t *testing.T) {
 	assert.Contains(t, rec.Header().Get("Content-Type"), "application/json")
 
 	var resp map[string]any
-	json.Unmarshal(rec.Body.Bytes(), &resp)
+	err := json.Unmarshal(rec.Body.Bytes(), &resp)
+	require.NoError(t, err)
 	assert.Equal(t, false, resp["success"])
 	errObj := resp["error"].(map[string]any)
 	assert.Equal(t, "FORBIDDEN", errObj["code"])

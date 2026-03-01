@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"time"
+
+	"github.com/BaSui01/agentflow/types"
 )
 
 // MessageStore定义了信件持久性的界面.
@@ -88,6 +90,101 @@ type Message struct {
 
 	// 过期是信件过期时( 可选)
 	ExpiresAt *time.Time `json:"expires_at,omitempty"`
+}
+
+// MessageDAO 是持久化层的数据对象别名，用于与领域层 types.Message 显式桥接。
+type MessageDAO = Message
+
+const daoPayloadTypesMessageKey = "_types_message"
+
+// NewMessageDAOFromTypes builds a persistence message envelope from a canonical types.Message.
+// Transport fields (topic/from/to/type) remain in DAO fields; rich message fields are preserved in payload.
+func NewMessageDAOFromTypes(topic, fromID, toID, msgType string, msg types.Message) *MessageDAO {
+	createdAt := msg.Timestamp
+	if createdAt.IsZero() {
+		createdAt = time.Now()
+	}
+
+	metadata := normalizeStringMetadata(msg.Metadata)
+	payload := map[string]any{
+		daoPayloadTypesMessageKey: msg,
+	}
+
+	return &MessageDAO{
+		Topic:     topic,
+		FromID:    fromID,
+		ToID:      toID,
+		Type:      msgType,
+		Content:   msg.Content,
+		Payload:   payload,
+		Metadata:  metadata,
+		CreatedAt: createdAt,
+	}
+}
+
+// ToTypesMessage converts persistence DAO data back to canonical types.Message.
+// It prefers the preserved payload snapshot and falls back to minimal field mapping.
+func (m *Message) ToTypesMessage() types.Message {
+	if m == nil {
+		return types.Message{}
+	}
+
+	if raw, ok := m.Payload[daoPayloadTypesMessageKey]; ok {
+		b, err := json.Marshal(raw)
+		if err == nil {
+			var msg types.Message
+			if err := json.Unmarshal(b, &msg); err == nil {
+				if msg.Timestamp.IsZero() {
+					msg.Timestamp = m.CreatedAt
+				}
+				if msg.Metadata == nil && len(m.Metadata) > 0 {
+					msg.Metadata = cloneStringMap(m.Metadata)
+				}
+				return msg
+			}
+		}
+	}
+
+	// Fallback for legacy records without canonical payload snapshot.
+	return types.Message{
+		Role:      types.RoleUser,
+		Content:   m.Content,
+		Metadata:  cloneStringMap(m.Metadata),
+		Timestamp: m.CreatedAt,
+	}
+}
+
+func cloneStringMap(in map[string]string) map[string]string {
+	if len(in) == 0 {
+		return nil
+	}
+	out := make(map[string]string, len(in))
+	for k, v := range in {
+		out[k] = v
+	}
+	return out
+}
+
+func normalizeStringMetadata(in any) map[string]string {
+	switch v := in.(type) {
+	case nil:
+		return nil
+	case map[string]string:
+		return cloneStringMap(v)
+	case map[string]any:
+		out := make(map[string]string, len(v))
+		for k, raw := range v {
+			if s, ok := raw.(string); ok {
+				out[k] = s
+			}
+		}
+		if len(out) == 0 {
+			return nil
+		}
+		return out
+	default:
+		return nil
+	}
 }
 
 // JSON警长执行JSON。 元目录

@@ -237,10 +237,10 @@ func TestMCPHandler_Dispatch_MethodNotFound(t *testing.T) {
 
 func TestMCPHandler_Dispatch_ToolsCall(t *testing.T) {
 	s := NewMCPServer("test", "1.0.0", zap.NewNop())
-	s.RegisterTool(
+	require.NoError(t, s.RegisterTool(
 		&ToolDefinition{Name: "echo", Description: "d", InputSchema: map[string]any{}},
 		func(ctx context.Context, args map[string]any) (any, error) { return "ok", nil },
-	)
+	))
 	h := NewMCPHandler(s, zap.NewNop())
 
 	msg := &MCPMessage{JSONRPC: "2.0", ID: float64(1), Method: "tools/call", Params: map[string]any{"name": "echo"}}
@@ -279,7 +279,7 @@ func TestMCPHandler_PushToSSEClient_FullChannel(t *testing.T) {
 
 func TestMCPHandler_Dispatch_ResourcesRead(t *testing.T) {
 	s := NewMCPServer("test", "1.0.0", zap.NewNop())
-	s.RegisterResource(&Resource{URI: "file://a", Name: "a", Type: ResourceTypeText})
+	require.NoError(t, s.RegisterResource(&Resource{URI: "file://a", Name: "a", Type: ResourceTypeText}))
 	h := NewMCPHandler(s, zap.NewNop())
 
 	msg := &MCPMessage{JSONRPC: "2.0", ID: float64(1), Method: "resources/read", Params: map[string]any{"uri": "file://a"}}
@@ -289,7 +289,7 @@ func TestMCPHandler_Dispatch_ResourcesRead(t *testing.T) {
 
 func TestMCPHandler_Dispatch_PromptsGet(t *testing.T) {
 	s := NewMCPServer("test", "1.0.0", zap.NewNop())
-	s.RegisterPrompt(&PromptTemplate{Name: "greet", Template: "Hello {{name}}", Variables: []string{"name"}})
+	require.NoError(t, s.RegisterPrompt(&PromptTemplate{Name: "greet", Template: "Hello {{name}}", Variables: []string{"name"}}))
 	h := NewMCPHandler(s, zap.NewNop())
 
 	msg := &MCPMessage{

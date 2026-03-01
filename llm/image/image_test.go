@@ -60,7 +60,7 @@ func TestOpenAIProvider_Generate(t *testing.T) {
 		assert.Equal(t, "Bearer test-key", r.Header.Get("Authorization"))
 
 		var req dalleRequest
-		json.NewDecoder(r.Body).Decode(&req)
+		require.NoError(t, json.NewDecoder(r.Body).Decode(&req))
 		assert.Equal(t, "a cat", req.Prompt)
 		assert.Equal(t, "dall-e-3", req.Model)
 
@@ -74,7 +74,7 @@ func TestOpenAIProvider_Generate(t *testing.T) {
 				{URL: "https://example.com/img.png", RevisedPrompt: "a cute cat"},
 			},
 		}
-		json.NewEncoder(w).Encode(resp)
+		require.NoError(t, json.NewEncoder(w).Encode(resp))
 	}))
 	t.Cleanup(srv.Close)
 
@@ -91,7 +91,7 @@ func TestOpenAIProvider_Generate(t *testing.T) {
 func TestOpenAIProvider_Generate_Error(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte(`{"error":"bad prompt"}`))
+		_, _ = w.Write([]byte(`{"error":"bad prompt"}`))
 	}))
 	t.Cleanup(srv.Close)
 
@@ -115,7 +115,7 @@ func TestOpenAIProvider_Edit(t *testing.T) {
 				{URL: "https://example.com/edited.png"},
 			},
 		}
-		json.NewEncoder(w).Encode(resp)
+		require.NoError(t, json.NewEncoder(w).Encode(resp))
 	}))
 	t.Cleanup(srv.Close)
 
@@ -146,7 +146,7 @@ func TestOpenAIProvider_Edit_WithMask(t *testing.T) {
 				{URL: "https://example.com/edited.png"},
 			},
 		}
-		json.NewEncoder(w).Encode(resp)
+		require.NoError(t, json.NewEncoder(w).Encode(resp))
 	}))
 	t.Cleanup(srv.Close)
 
@@ -172,7 +172,7 @@ func TestOpenAIProvider_CreateVariation(t *testing.T) {
 				{URL: "https://example.com/variation.png"},
 			},
 		}
-		json.NewEncoder(w).Encode(resp)
+		require.NoError(t, json.NewEncoder(w).Encode(resp))
 	}))
 	t.Cleanup(srv.Close)
 
@@ -220,7 +220,7 @@ func (t *redirectTransport) RoundTrip(req *http.Request) (*http.Response, error)
 func TestGeminiProvider_Generate(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var req geminiImageRequest
-		json.NewDecoder(r.Body).Decode(&req)
+		require.NoError(t, json.NewDecoder(r.Body).Decode(&req))
 		assert.Len(t, req.Contents, 1)
 		assert.Equal(t, "a cat", req.Contents[0].Parts[0].Text)
 
@@ -248,7 +248,7 @@ func TestGeminiProvider_Generate(t *testing.T) {
 				Data     string `json:"data"`
 			}{MimeType: "image/png", Data: "base64imgdata"},
 		})
-		json.NewEncoder(w).Encode(resp)
+		require.NoError(t, json.NewEncoder(w).Encode(resp))
 	}))
 	t.Cleanup(srv.Close)
 
@@ -266,7 +266,7 @@ func TestGeminiProvider_Generate(t *testing.T) {
 func TestGeminiProvider_Generate_Error(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte(`{"error":"bad"}`))
+		_, _ = w.Write([]byte(`{"error":"bad"}`))
 	}))
 	t.Cleanup(srv.Close)
 
@@ -304,7 +304,7 @@ func TestGeminiProvider_Edit(t *testing.T) {
 				Data     string `json:"data"`
 			}{MimeType: "image/png", Data: "edited"},
 		})
-		json.NewEncoder(w).Encode(resp)
+		require.NoError(t, json.NewEncoder(w).Encode(resp))
 	}))
 	t.Cleanup(srv.Close)
 
@@ -323,7 +323,7 @@ func TestGeminiProvider_Edit(t *testing.T) {
 func TestGeminiProvider_Edit_Error(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte(`{"error":"fail"}`))
+		_, _ = w.Write([]byte(`{"error":"fail"}`))
 	}))
 	t.Cleanup(srv.Close)
 
@@ -364,7 +364,7 @@ func TestGeminiProvider_CreateVariation(t *testing.T) {
 				Data     string `json:"data"`
 			}{MimeType: "image/png", Data: "variation"},
 		})
-		json.NewEncoder(w).Encode(resp)
+		require.NoError(t, json.NewEncoder(w).Encode(resp))
 	}))
 	t.Cleanup(srv.Close)
 
@@ -425,7 +425,7 @@ func TestFluxProvider_Generate_ImmediateReady(t *testing.T) {
 					Sample string `json:"sample"`
 				}{Sample: "https://example.com/result.jpg"},
 			}
-			json.NewEncoder(w).Encode(resp)
+			require.NoError(t, json.NewEncoder(w).Encode(resp))
 			return
 		}
 	}))
@@ -445,7 +445,7 @@ func TestFluxProvider_Generate_ImmediateReady(t *testing.T) {
 func TestFluxProvider_Generate_Error(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte(`{"error":"bad"}`))
+		_, _ = w.Write([]byte(`{"error":"bad"}`))
 	}))
 	t.Cleanup(srv.Close)
 
@@ -471,11 +471,11 @@ func TestFluxProvider_Generate_AspectRatios(t *testing.T) {
 			var capturedBody fluxRequest
 			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				if r.Method == "POST" {
-					json.NewDecoder(r.Body).Decode(&capturedBody)
+					require.NoError(t, json.NewDecoder(r.Body).Decode(&capturedBody))
 					resp := fluxResponse{Status: "Ready", Result: struct {
 						Sample string `json:"sample"`
 					}{Sample: "url"}}
-					json.NewEncoder(w).Encode(resp)
+					require.NoError(t, json.NewEncoder(w).Encode(resp))
 				}
 			}))
 			t.Cleanup(srv.Close)

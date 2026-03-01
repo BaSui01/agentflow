@@ -103,7 +103,10 @@ func runServe(args []string) {
 	// 解析命令行参数
 	fs := flag.NewFlagSet("serve", flag.ExitOnError)
 	configPath := fs.String("config", "", "Path to config file")
-	fs.Parse(args)
+	if err := fs.Parse(args); err != nil {
+		fmt.Fprintf(os.Stderr, "failed to parse serve flags: %v\n", err)
+		os.Exit(1)
+	}
 
 	// 加载配置
 	loader := config.NewLoader()
@@ -125,7 +128,9 @@ func runServe(args []string) {
 
 	// 初始化日志
 	logger := initLogger(cfg.Log)
-	defer logger.Sync()
+	defer func() {
+		_ = logger.Sync()
+	}()
 
 	logger.Info("Starting AgentFlow",
 		zap.String("version", Version),
@@ -166,7 +171,10 @@ func runServe(args []string) {
 func runHealthCheck(args []string) {
 	fs := flag.NewFlagSet("health", flag.ExitOnError)
 	addr := fs.String("addr", "http://localhost:8080", "Server address")
-	fs.Parse(args)
+	if err := fs.Parse(args); err != nil {
+		fmt.Fprintf(os.Stderr, "failed to parse health flags: %v\n", err)
+		os.Exit(1)
+	}
 
 	client := &http.Client{Timeout: 5 * time.Second}
 	resp, err := client.Get(*addr + "/health")

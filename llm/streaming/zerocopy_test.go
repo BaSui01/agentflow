@@ -55,28 +55,33 @@ func TestZeroCopyBuffer_GrowOnWrite(t *testing.T) {
 
 func TestZeroCopyBuffer_Bytes(t *testing.T) {
 	buf := NewZeroCopyBuffer(64)
-	buf.Write([]byte("test"))
+	_, err := buf.Write([]byte("test"))
+	require.NoError(t, err)
 
 	assert.Equal(t, []byte("test"), buf.Bytes())
 }
 
 func TestZeroCopyBuffer_Reset(t *testing.T) {
 	buf := NewZeroCopyBuffer(64)
-	buf.Write([]byte("data"))
+	_, err := buf.Write([]byte("data"))
+	require.NoError(t, err)
 	assert.Equal(t, 4, buf.Len())
 
 	buf.Reset()
 	assert.Equal(t, 0, buf.Len())
 
 	// Can write again after reset
-	buf.Write([]byte("new"))
+	_, err = buf.Write([]byte("new"))
+	require.NoError(t, err)
 	assert.Equal(t, 3, buf.Len())
 }
 
 func TestZeroCopyBuffer_MultipleWrites(t *testing.T) {
 	buf := NewZeroCopyBuffer(64)
-	buf.Write([]byte("hello "))
-	buf.Write([]byte("world"))
+	_, err := buf.Write([]byte("hello "))
+	require.NoError(t, err)
+	_, err = buf.Write([]byte("world"))
+	require.NoError(t, err)
 
 	assert.Equal(t, 11, buf.Len())
 	assert.Equal(t, "hello world", string(buf.Bytes()))
@@ -84,7 +89,8 @@ func TestZeroCopyBuffer_MultipleWrites(t *testing.T) {
 
 func TestZeroCopyBuffer_PartialRead(t *testing.T) {
 	buf := NewZeroCopyBuffer(64)
-	buf.Write([]byte("hello world"))
+	_, err := buf.Write([]byte("hello world"))
+	require.NoError(t, err)
 
 	p := make([]byte, 5)
 	n, err := buf.Read(p)
@@ -285,8 +291,8 @@ func TestBackpressureStream_ReadAfterClose(t *testing.T) {
 	})
 
 	// Write then close
-	s.Write(context.Background(), Token{Content: "last"})
-	s.Close()
+	require.NoError(t, s.Write(context.Background(), Token{Content: "last"}))
+	require.NoError(t, s.Close())
 
 	// Should still read buffered token
 	token, err := s.Read(context.Background())
@@ -306,7 +312,7 @@ func TestBackpressureStream_DropPolicyNewest(t *testing.T) {
 	ctx := context.Background()
 
 	// Fill buffer to trigger high water mark
-	s.Write(ctx, Token{Content: "t1", Index: 0})
+	require.NoError(t, s.Write(ctx, Token{Content: "t1", Index: 0}))
 
 	// This should be dropped (newest policy)
 	err := s.Write(ctx, Token{Content: "t2", Index: 1})
@@ -326,7 +332,7 @@ func TestBackpressureStream_DropPolicyError(t *testing.T) {
 	})
 
 	ctx := context.Background()
-	s.Write(ctx, Token{Content: "t1"})
+	require.NoError(t, s.Write(ctx, Token{Content: "t1"}))
 
 	// Should return error when buffer is at high water mark
 	err := s.Write(ctx, Token{Content: "t2"})
@@ -343,8 +349,8 @@ func TestBackpressureStream_Stats(t *testing.T) {
 	})
 
 	ctx := context.Background()
-	s.Write(ctx, Token{Content: "t1"})
-	s.Write(ctx, Token{Content: "t2"})
+	require.NoError(t, s.Write(ctx, Token{Content: "t1"}))
+	require.NoError(t, s.Write(ctx, Token{Content: "t2"}))
 
 	stats := s.Stats()
 	assert.Equal(t, int64(2), stats.Produced)
@@ -360,7 +366,7 @@ func TestBackpressureStream_BufferLevel(t *testing.T) {
 
 	assert.Equal(t, 0.0, s.BufferLevel())
 
-	s.Write(context.Background(), Token{Content: "t1"})
+	require.NoError(t, s.Write(context.Background(), Token{Content: "t1"}))
 	assert.Equal(t, 0.1, s.BufferLevel())
 }
 
@@ -405,7 +411,7 @@ func TestStreamMultiplexer_Broadcast(t *testing.T) {
 	mux.Start(ctx)
 
 	// Write to source
-	source.Write(ctx, Token{Content: "broadcast", Index: 0})
+	require.NoError(t, source.Write(ctx, Token{Content: "broadcast", Index: 0}))
 
 	// Both consumers should receive
 	t1, err := c1.Read(ctx)

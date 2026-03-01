@@ -73,6 +73,8 @@ const (
 	AlertLimitHit    AlertType = "limit_hit"
 )
 
+const defaultAlertHandlerTimeout = 5 * time.Second
+
 // 警报代表预算警报。
 type Alert struct {
 	Type      AlertType `json:"type"`
@@ -343,14 +345,47 @@ func (m *TokenBudgetManager) fireAlert(alert Alert) {
 		m.alertWg.Add(1)
 		go func() {
 			defer m.alertWg.Done()
-			h(alert)
+
+			done := make(chan struct{})
+			go func() {
+				defer close(done)
+				h(alert)
+			}()
+
+			select {
+			case <-done:
+			case <-time.After(defaultAlertHandlerTimeout):
+				m.logger.Warn("budget alert handler timeout",
+					zap.String("type", string(alert.Type)),
+					zap.Duration("timeout", defaultAlertHandlerTimeout))
+			}
 		}()
+	}
+}
+
+// WaitAlerts waits for all in-flight alert handlers to complete or context cancellation.
+func (m *TokenBudgetManager) WaitAlerts(ctx context.Context) error {
+	done := make(chan struct{})
+	go func() {
+		m.alertWg.Wait()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
 	}
 }
 
 // 重置所有计数器(用于测试).
 func (m *TokenBudgetManager) Reset() {
-	m.alertWg.Wait() // 等待所有 alert goroutine 完成后再重置
+	waitCtx, cancel := context.WithTimeout(context.Background(), defaultAlertHandlerTimeout)
+	if err := m.WaitAlerts(waitCtx); err != nil {
+		m.logger.Warn("reset timeout waiting alert handlers", zap.Error(err))
+	}
+	cancel()
 	m.mu.Lock()
 	defer m.mu.Unlock()
 

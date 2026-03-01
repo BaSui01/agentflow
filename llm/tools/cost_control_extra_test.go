@@ -31,7 +31,7 @@ func TestCostController_SetAlertHandler(t *testing.T) {
 func TestCostController_GetToolCost_Extra(t *testing.T) {
 	cc := NewCostController(zap.NewNop())
 	tc := CreateToolCost("search", 0.01, 0.001)
-	cc.SetToolCost(tc)
+	require.NoError(t, cc.SetToolCost(tc))
 
 	cost, ok := cc.GetToolCost("search")
 	require.True(t, ok)
@@ -43,7 +43,7 @@ func TestCostController_GetToolCost_Extra(t *testing.T) {
 
 func TestCostController_RemoveBudget_Extra(t *testing.T) {
 	cc := NewCostController(zap.NewNop())
-	cc.AddBudget(&Budget{ID: "b1", Name: "test", Limit: 100})
+	require.NoError(t, cc.AddBudget(&Budget{ID: "b1", Name: "test", Limit: 100}))
 
 	err := cc.RemoveBudget("b1")
 	require.NoError(t, err)
@@ -59,7 +59,7 @@ func TestCostController_RemoveBudget_NotFound_Extra(t *testing.T) {
 }
 func TestCostController_GetBudget_Extra(t *testing.T) {
 	cc := NewCostController(zap.NewNop())
-	cc.AddBudget(&Budget{ID: "b1", Name: "test", Limit: 100})
+	require.NoError(t, cc.AddBudget(&Budget{ID: "b1", Name: "test", Limit: 100}))
 
 	budget, ok := cc.GetBudget("b1")
 	require.True(t, ok)
@@ -71,8 +71,8 @@ func TestCostController_GetBudget_Extra(t *testing.T) {
 
 func TestCostController_ListBudgets_Extra(t *testing.T) {
 	cc := NewCostController(zap.NewNop())
-	cc.AddBudget(&Budget{ID: "b1", Name: "budget1", Limit: 100})
-	cc.AddBudget(&Budget{ID: "b2", Name: "budget2", Limit: 200})
+	require.NoError(t, cc.AddBudget(&Budget{ID: "b1", Name: "budget1", Limit: 100}))
+	require.NoError(t, cc.AddBudget(&Budget{ID: "b2", Name: "budget2", Limit: 200}))
 
 	budgets := cc.ListBudgets()
 	assert.Len(t, budgets, 2)
@@ -80,9 +80,9 @@ func TestCostController_ListBudgets_Extra(t *testing.T) {
 
 func TestCostController_GetOptimizations_Extra(t *testing.T) {
 	cc := NewCostController(zap.NewNop())
-	cc.SetToolCost(CreateToolCost("search", 0.01, 0))
-	cc.RecordCost(&CostRecord{ToolName: "search", Cost: 0.01, AgentID: "a1", UserID: "u1"})
-	cc.RecordCost(&CostRecord{ToolName: "search", Cost: 0.01, AgentID: "a1", UserID: "u1"})
+	require.NoError(t, cc.SetToolCost(CreateToolCost("search", 0.01, 0)))
+	require.NoError(t, cc.RecordCost(&CostRecord{ToolName: "search", Cost: 0.01, AgentID: "a1", UserID: "u1"}))
+	require.NoError(t, cc.RecordCost(&CostRecord{ToolName: "search", Cost: 0.01, AgentID: "a1", UserID: "u1"}))
 
 	opts := cc.GetOptimizations("a1", "u1")
 	// May return nil or empty slice depending on analysis
@@ -91,7 +91,7 @@ func TestCostController_GetOptimizations_Extra(t *testing.T) {
 
 func TestCostController_GetCostReport_Extra(t *testing.T) {
 	cc := NewCostController(zap.NewNop())
-	cc.RecordCost(&CostRecord{ToolName: "search", Cost: 0.01, AgentID: "a1", UserID: "u1"})
+	require.NoError(t, cc.RecordCost(&CostRecord{ToolName: "search", Cost: 0.01, AgentID: "a1", UserID: "u1"}))
 
 	report, err := cc.GetCostReport(nil)
 	require.NoError(t, err)
@@ -101,8 +101,8 @@ func TestCostController_GetCostReport_Extra(t *testing.T) {
 
 func TestCostController_GetCostReport_WithFilter(t *testing.T) {
 	cc := NewCostController(zap.NewNop())
-	cc.RecordCost(&CostRecord{ToolName: "search", Cost: 0.01, AgentID: "a1", UserID: "u1"})
-	cc.RecordCost(&CostRecord{ToolName: "calc", Cost: 0.02, AgentID: "a2", UserID: "u2"})
+	require.NoError(t, cc.RecordCost(&CostRecord{ToolName: "search", Cost: 0.01, AgentID: "a1", UserID: "u1"}))
+	require.NoError(t, cc.RecordCost(&CostRecord{ToolName: "calc", Cost: 0.02, AgentID: "a2", UserID: "u2"}))
 
 	report, err := cc.GetCostReport(&CostReportFilter{AgentID: "a1"})
 	require.NoError(t, err)
@@ -138,8 +138,8 @@ func TestCreateToolCost_Func(t *testing.T) {
 func TestCostController_GetUsage(t *testing.T) {
 	cc := NewCostController(zap.NewNop())
 	b := CreateGlobalBudget("g1", "global", 1000, BudgetPeriodDaily)
-	cc.AddBudget(b)
-	cc.RecordCost(&CostRecord{ToolName: "search", Cost: 5.0, AgentID: "a1", UserID: "u1"})
+	require.NoError(t, cc.AddBudget(b))
+	require.NoError(t, cc.RecordCost(&CostRecord{ToolName: "search", Cost: 5.0, AgentID: "a1", UserID: "u1"}))
 
 	usage := cc.GetUsage(BudgetScopeGlobal, "", BudgetPeriodDaily)
 	assert.GreaterOrEqual(t, usage, 0.0)

@@ -61,15 +61,17 @@ func TestDeepSeekProvider_Completion(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, "/chat/completions", r.URL.Path)
 		assert.Contains(t, r.Header.Get("Authorization"), "Bearer ")
-		json.NewDecoder(r.Body).Decode(&capturedRequest)
+		err := json.NewDecoder(r.Body).Decode(&capturedRequest)
+		require.NoError(t, err)
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(providers.OpenAICompatResponse{
+		err = json.NewEncoder(w).Encode(providers.OpenAICompatResponse{
 			ID: "resp-1", Model: "deepseek-chat",
 			Choices: []providers.OpenAICompatChoice{
 				{Index: 0, FinishReason: "stop", Message: providers.OpenAICompatMessage{Role: "assistant", Content: "Hello from DeepSeek"}},
 			},
 			Usage: &providers.OpenAICompatUsage{PromptTokens: 10, CompletionTokens: 5, TotalTokens: 15},
 		})
+		require.NoError(t, err)
 	}))
 	t.Cleanup(func() { server.Close() })
 

@@ -380,7 +380,8 @@ func TestProperty13_CompletionDoesNotSetStreamTrue(t *testing.T) {
 				defer r.Body.Close()
 
 				var req map[string]any
-				json.Unmarshal(body, &req)
+				err := json.Unmarshal(body, &req)
+				require.NoError(t, err)
 				completionCapture.setRequest(req)
 
 				// 返回完成响应

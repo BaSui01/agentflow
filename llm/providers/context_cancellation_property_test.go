@@ -46,7 +46,7 @@ func TestProperty27_ContextCancellation(t *testing.T) {
 					atomic.AddInt32(&requestStarted, 1)
 					time.Sleep(500 * time.Millisecond)
 					w.WriteHeader(http.StatusOK)
-					w.Write([]byte(`{"models":[]}`))
+					_, _ = w.Write([]byte(`{"models":[]}`))
 				}))
 				defer server.Close()
 
@@ -158,7 +158,7 @@ func TestProperty27_ContextTimeout(t *testing.T) {
 				server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 					time.Sleep(2 * time.Second)
 					w.WriteHeader(http.StatusOK)
-					w.Write([]byte(`{"models":[]}`))
+					_, _ = w.Write([]byte(`{"models":[]}`))
 				}))
 				defer server.Close()
 
@@ -307,7 +307,7 @@ func TestProperty27_CancellationCleanup(t *testing.T) {
 				server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 					time.Sleep(500 * time.Millisecond)
 					w.WriteHeader(http.StatusOK)
-					w.Write([]byte(`{"models":[]}`))
+					_, _ = w.Write([]byte(`{"models":[]}`))
 				}))
 				defer server.Close()
 

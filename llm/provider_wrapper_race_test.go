@@ -38,7 +38,7 @@ func TestDefaultProviderFactory_ConcurrentRegisterAndCreate(t *testing.T) {
 			defer wg.Done()
 			for i := 0; i < opsPerGoroutine; i++ {
 				code := fmt.Sprintf("provider-%d-%d", id, i)
-				factory.CreateProvider(code, "key", "url")
+				_, _ = factory.CreateProvider(code, "key", "url")
 			}
 		}(g)
 	}

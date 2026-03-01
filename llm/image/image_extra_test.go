@@ -35,7 +35,7 @@ func TestOpenAIProvider_Edit_WithAllFields(t *testing.T) {
 				{URL: "https://example.com/2.png"},
 			},
 		}
-		json.NewEncoder(w).Encode(resp)
+		require.NoError(t, json.NewEncoder(w).Encode(resp))
 	}))
 	t.Cleanup(srv.Close)
 
@@ -54,7 +54,7 @@ func TestOpenAIProvider_Edit_WithAllFields(t *testing.T) {
 func TestOpenAIProvider_Edit_HTTPError(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte(`{"error":"server error"}`))
+		_, _ = w.Write([]byte(`{"error":"server error"}`))
 	}))
 	t.Cleanup(srv.Close)
 
@@ -87,7 +87,7 @@ func TestOpenAIProvider_CreateVariation_WithAllFields(t *testing.T) {
 				{URL: "https://example.com/v3.png"},
 			},
 		}
-		json.NewEncoder(w).Encode(resp)
+		require.NoError(t, json.NewEncoder(w).Encode(resp))
 	}))
 	t.Cleanup(srv.Close)
 
@@ -104,7 +104,7 @@ func TestOpenAIProvider_CreateVariation_WithAllFields(t *testing.T) {
 func TestOpenAIProvider_CreateVariation_HTTPError(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte(`{"error":"bad"}`))
+		_, _ = w.Write([]byte(`{"error":"bad"}`))
 	}))
 	t.Cleanup(srv.Close)
 
@@ -121,7 +121,7 @@ func TestOpenAIProvider_CreateVariation_HTTPError(t *testing.T) {
 func TestOpenAIProvider_Generate_WithOptionalFields(t *testing.T) {
 	var capturedBody dalleRequest
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		json.NewDecoder(r.Body).Decode(&capturedBody)
+		require.NoError(t, json.NewDecoder(r.Body).Decode(&capturedBody))
 		resp := dalleResponse{
 			Created: 1700000000,
 			Data: []struct {
@@ -132,7 +132,7 @@ func TestOpenAIProvider_Generate_WithOptionalFields(t *testing.T) {
 				{B64JSON: "base64data"},
 			},
 		}
-		json.NewEncoder(w).Encode(resp)
+		require.NoError(t, json.NewEncoder(w).Encode(resp))
 	}))
 	t.Cleanup(srv.Close)
 
@@ -159,14 +159,14 @@ func TestOpenAIProvider_Generate_WithOptionalFields(t *testing.T) {
 func TestFluxProvider_Generate_WithOptionalFields(t *testing.T) {
 	var capturedBody fluxRequest
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		json.NewDecoder(r.Body).Decode(&capturedBody)
+		require.NoError(t, json.NewDecoder(r.Body).Decode(&capturedBody))
 		resp := fluxResponse{
 			Status: "Ready",
 			Result: struct {
 				Sample string `json:"sample"`
 			}{Sample: "https://example.com/img.jpg"},
 		}
-		json.NewEncoder(w).Encode(resp)
+		require.NoError(t, json.NewEncoder(w).Encode(resp))
 	}))
 	t.Cleanup(srv.Close)
 
@@ -194,7 +194,7 @@ func TestFluxProvider_Generate_WithPolling(t *testing.T) {
 				Status:     "Pending",
 				PollingURL: "http://" + r.Host + "/poll/task-456",
 			}
-			json.NewEncoder(w).Encode(resp)
+			require.NoError(t, json.NewEncoder(w).Encode(resp))
 			return
 		}
 		// GET polling endpoint
@@ -206,10 +206,10 @@ func TestFluxProvider_Generate_WithPolling(t *testing.T) {
 					Sample string `json:"sample"`
 				}{Sample: "https://example.com/polled.jpg"},
 			}
-			json.NewEncoder(w).Encode(resp)
+			require.NoError(t, json.NewEncoder(w).Encode(resp))
 		} else {
 			resp := fluxResponse{Status: "Processing"}
-			json.NewEncoder(w).Encode(resp)
+			require.NoError(t, json.NewEncoder(w).Encode(resp))
 		}
 	}))
 	t.Cleanup(srv.Close)
@@ -229,7 +229,7 @@ func TestFluxProvider_Generate_PollContextCancelled(t *testing.T) {
 			Status:     "Pending",
 			PollingURL: "http://" + r.Host + "/poll/task-789",
 		}
-		json.NewEncoder(w).Encode(resp)
+		require.NoError(t, json.NewEncoder(w).Encode(resp))
 	}))
 	t.Cleanup(srv.Close)
 
@@ -251,11 +251,11 @@ func TestFluxProvider_Generate_PollError(t *testing.T) {
 				Status:     "Pending",
 				PollingURL: "http://" + r.Host + "/poll/task-err",
 			}
-			json.NewEncoder(w).Encode(resp)
+			require.NoError(t, json.NewEncoder(w).Encode(resp))
 			return
 		}
 		resp := fluxResponse{Status: "Error"}
-		json.NewEncoder(w).Encode(resp)
+		require.NoError(t, json.NewEncoder(w).Encode(resp))
 	}))
 	t.Cleanup(srv.Close)
 

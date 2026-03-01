@@ -92,7 +92,8 @@ func TestSunoProvider_Generate_Completed(t *testing.T) {
 		assert.Equal(t, "application/json", r.Header.Get("Content-Type"))
 
 		var req sunoRequest
-		json.NewDecoder(r.Body).Decode(&req)
+		err := json.NewDecoder(r.Body).Decode(&req)
+		require.NoError(t, err)
 		assert.Equal(t, "a happy song", req.Prompt)
 		assert.Equal(t, "pop", req.Style)
 
@@ -111,7 +112,8 @@ func TestSunoProvider_Generate_Completed(t *testing.T) {
 			},
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(resp)
+		err = json.NewEncoder(w).Encode(resp)
+		require.NoError(t, err)
 	}))
 	defer server.Close()
 
@@ -136,7 +138,8 @@ func TestSunoProvider_Generate_Completed(t *testing.T) {
 func TestSunoProvider_Generate_HTTPError(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusTooManyRequests)
-		w.Write([]byte("rate limited"))
+		_, err := w.Write([]byte("rate limited"))
+		require.NoError(t, err)
 	}))
 	defer server.Close()
 
@@ -151,12 +154,14 @@ func TestSunoProvider_Generate_HTTPError(t *testing.T) {
 func TestSunoProvider_Generate_CustomModel(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var req sunoRequest
-		json.NewDecoder(r.Body).Decode(&req)
+		err := json.NewDecoder(r.Body).Decode(&req)
+		require.NoError(t, err)
 		assert.Equal(t, "custom-model", req.Model)
 
 		resp := sunoResponse{Status: "completed"}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(resp)
+		err = json.NewEncoder(w).Encode(resp)
+		require.NoError(t, err)
 	}))
 	defer server.Close()
 
@@ -177,7 +182,8 @@ func TestSunoProvider_Generate_Pending_ThenCompleted(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		if r.Method == "POST" {
 			resp := sunoResponse{TaskID: "task-1", Status: "pending"}
-			json.NewEncoder(w).Encode(resp)
+			err := json.NewEncoder(w).Encode(resp)
+			require.NoError(t, err)
 			return
 		}
 		// GET poll
@@ -240,7 +246,8 @@ func TestMiniMaxProvider_Generate_Success(t *testing.T) {
 		assert.Equal(t, "Bearer test-key", r.Header.Get("Authorization"))
 
 		var req miniMaxMusicRequest
-		json.NewDecoder(r.Body).Decode(&req)
+		err := json.NewDecoder(r.Body).Decode(&req)
+		require.NoError(t, err)
 		assert.Equal(t, "music-01", req.Model)
 		assert.Equal(t, "a jazz tune", req.Prompt)
 
@@ -270,14 +277,16 @@ func TestMiniMaxProvider_Generate_Success(t *testing.T) {
 func TestMiniMaxProvider_Generate_WithReferenceAudio(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var req miniMaxMusicRequest
-		json.NewDecoder(r.Body).Decode(&req)
+		err := json.NewDecoder(r.Body).Decode(&req)
+		require.NoError(t, err)
 		assert.Equal(t, "ref-audio-data", req.ReferenceAudio)
 
 		resp := miniMaxMusicResponse{}
 		resp.BaseResp.StatusCode = 0
 		resp.Data.Audio = "audio"
 		resp.ExtraInfo.AudioLength = 60.0
-		json.NewEncoder(w).Encode(resp)
+		err = json.NewEncoder(w).Encode(resp)
+		require.NoError(t, err)
 	}))
 	defer server.Close()
 
@@ -312,7 +321,8 @@ func TestMiniMaxProvider_Generate_APIError(t *testing.T) {
 func TestMiniMaxProvider_Generate_HTTPError(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte("server error"))
+		_, err := w.Write([]byte("server error"))
+		require.NoError(t, err)
 	}))
 	defer server.Close()
 

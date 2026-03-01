@@ -63,11 +63,11 @@ func TestOpenAITTSProvider_Synthesize(t *testing.T) {
 		assert.Equal(t, "Bearer test-key", r.Header.Get("Authorization"))
 
 		var req openAITTSRequest
-		json.NewDecoder(r.Body).Decode(&req)
+		require.NoError(t, json.NewDecoder(r.Body).Decode(&req))
 		assert.Equal(t, "Hello world", req.Input)
 		assert.Equal(t, "tts-1-hd", req.Model)
 
-		w.Write([]byte("fake-audio-data"))
+		_, _ = w.Write([]byte("fake-audio-data"))
 	}))
 	t.Cleanup(srv.Close)
 
@@ -88,12 +88,12 @@ func TestOpenAITTSProvider_Synthesize(t *testing.T) {
 func TestOpenAITTSProvider_Synthesize_CustomParams(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var req openAITTSRequest
-		json.NewDecoder(r.Body).Decode(&req)
+		require.NoError(t, json.NewDecoder(r.Body).Decode(&req))
 		assert.Equal(t, "custom-model", req.Model)
 		assert.Equal(t, "nova", req.Voice)
 		assert.Equal(t, "opus", req.ResponseFormat)
 		assert.Equal(t, 1.5, req.Speed)
-		w.Write([]byte("audio"))
+		_, _ = w.Write([]byte("audio"))
 	}))
 	t.Cleanup(srv.Close)
 
@@ -111,7 +111,7 @@ func TestOpenAITTSProvider_Synthesize_CustomParams(t *testing.T) {
 func TestOpenAITTSProvider_Synthesize_Error(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusTooManyRequests)
-		w.Write([]byte(`{"error":"rate limited"}`))
+		_, _ = w.Write([]byte(`{"error":"rate limited"}`))
 	}))
 	t.Cleanup(srv.Close)
 
@@ -123,7 +123,7 @@ func TestOpenAITTSProvider_Synthesize_Error(t *testing.T) {
 
 func TestOpenAITTSProvider_SynthesizeToFile(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte("audio-bytes"))
+		_, _ = w.Write([]byte("audio-bytes"))
 	}))
 	t.Cleanup(srv.Close)
 
@@ -162,10 +162,10 @@ func TestElevenLabsProvider_Synthesize(t *testing.T) {
 		assert.Equal(t, "test-key", r.Header.Get("xi-api-key"))
 
 		var req elevenLabsTTSRequest
-		json.NewDecoder(r.Body).Decode(&req)
+		require.NoError(t, json.NewDecoder(r.Body).Decode(&req))
 		assert.Equal(t, "Hello", req.Text)
 
-		w.Write([]byte("eleven-audio"))
+		_, _ = w.Write([]byte("eleven-audio"))
 	}))
 	t.Cleanup(srv.Close)
 
@@ -184,7 +184,7 @@ func TestElevenLabsProvider_Synthesize(t *testing.T) {
 func TestElevenLabsProvider_Synthesize_Error(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusUnauthorized)
-		w.Write([]byte(`{"detail":"unauthorized"}`))
+		_, _ = w.Write([]byte(`{"detail":"unauthorized"}`))
 	}))
 	t.Cleanup(srv.Close)
 
@@ -206,7 +206,7 @@ func TestElevenLabsProvider_ListVoices(t *testing.T) {
 				},
 			},
 		}
-		json.NewEncoder(w).Encode(resp)
+		require.NoError(t, json.NewEncoder(w).Encode(resp))
 	}))
 	t.Cleanup(srv.Close)
 
@@ -221,7 +221,7 @@ func TestElevenLabsProvider_ListVoices(t *testing.T) {
 func TestElevenLabsProvider_ListVoices_Error(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusForbidden)
-		w.Write([]byte(`{"detail":"forbidden"}`))
+		_, _ = w.Write([]byte(`{"detail":"forbidden"}`))
 	}))
 	t.Cleanup(srv.Close)
 
@@ -249,7 +249,7 @@ func TestOpenAISTTProvider_Transcribe(t *testing.T) {
 			Language: "en",
 			Duration: 2.5,
 		}
-		json.NewEncoder(w).Encode(resp)
+		require.NoError(t, json.NewEncoder(w).Encode(resp))
 	}))
 	t.Cleanup(srv.Close)
 
@@ -295,7 +295,7 @@ func TestOpenAISTTProvider_Transcribe_WithSegmentsAndWords(t *testing.T) {
 				{Word: "world", Start: 0.5, End: 1.0},
 			},
 		}
-		json.NewEncoder(w).Encode(resp)
+		require.NoError(t, json.NewEncoder(w).Encode(resp))
 	}))
 	t.Cleanup(srv.Close)
 
@@ -312,7 +312,7 @@ func TestOpenAISTTProvider_Transcribe_WithSegmentsAndWords(t *testing.T) {
 func TestOpenAISTTProvider_Transcribe_Error(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte(`{"error":"bad"}`))
+		_, _ = w.Write([]byte(`{"error":"bad"}`))
 	}))
 	t.Cleanup(srv.Close)
 
@@ -327,7 +327,7 @@ func TestOpenAISTTProvider_Transcribe_Error(t *testing.T) {
 func TestOpenAISTTProvider_TranscribeFile(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		resp := whisperResponse{Text: "transcribed"}
-		json.NewEncoder(w).Encode(resp)
+		require.NoError(t, json.NewEncoder(w).Encode(resp))
 	}))
 	t.Cleanup(srv.Close)
 
@@ -380,7 +380,7 @@ func TestDeepgramProvider_Transcribe_WithAudio(t *testing.T) {
 				},
 			},
 		}
-		json.NewEncoder(w).Encode(resp)
+		require.NoError(t, json.NewEncoder(w).Encode(resp))
 	}))
 	t.Cleanup(srv.Close)
 
@@ -399,14 +399,14 @@ func TestDeepgramProvider_Transcribe_WithURL(t *testing.T) {
 		assert.Equal(t, "application/json", r.Header.Get("Content-Type"))
 
 		var body map[string]string
-		json.NewDecoder(r.Body).Decode(&body)
+		require.NoError(t, json.NewDecoder(r.Body).Decode(&body))
 		assert.Equal(t, "https://example.com/audio.mp3", body["url"])
 
 		resp := map[string]any{
 			"metadata": map[string]any{"duration": 1.0},
 			"results":  map[string]any{"channels": []any{}},
 		}
-		json.NewEncoder(w).Encode(resp)
+		require.NoError(t, json.NewEncoder(w).Encode(resp))
 	}))
 	t.Cleanup(srv.Close)
 
@@ -428,7 +428,7 @@ func TestDeepgramProvider_Transcribe_NoInput(t *testing.T) {
 func TestDeepgramProvider_Transcribe_Error(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusUnauthorized)
-		w.Write([]byte(`{"err_msg":"unauthorized"}`))
+		_, _ = w.Write([]byte(`{"err_msg":"unauthorized"}`))
 	}))
 	t.Cleanup(srv.Close)
 
@@ -454,7 +454,7 @@ func TestDeepgramProvider_TranscribeFile(t *testing.T) {
 				},
 			},
 		}
-		json.NewEncoder(w).Encode(resp)
+		require.NoError(t, json.NewEncoder(w).Encode(resp))
 	}))
 	t.Cleanup(srv.Close)
 

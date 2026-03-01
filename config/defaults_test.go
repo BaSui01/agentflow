@@ -79,7 +79,7 @@ func TestDefaultDatabaseConfig(t *testing.T) {
 	assert.Equal(t, "agentflow", cfg.User)
 	assert.Empty(t, cfg.Password)
 	assert.Equal(t, "agentflow", cfg.Name)
-	assert.Equal(t, "disable", cfg.SSLMode)
+	assert.Equal(t, "require", cfg.SSLMode)
 	assert.Equal(t, 25, cfg.MaxOpenConns)
 	assert.Equal(t, 10, cfg.MaxIdleConns)
 	assert.Equal(t, 5*time.Minute, cfg.ConnMaxLifetime)

@@ -2,7 +2,10 @@ package a2a
 
 import (
 	"context"
+	"crypto/sha256"
+	"crypto/subtle"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -36,6 +39,8 @@ type ServerConfig struct {
 	DefaultAgentID string
 	// 请求超时是处理请求的超时.
 	RequestTimeout time.Duration
+	// StrictRouting 启用严格路由：目标代理不存在时直接返回错误，不回退默认代理。
+	StrictRouting bool
 	// 启用 Auth 允许对收到的请求进行认证 。
 	EnableAuth bool
 	// AuthToken 是预期的认证符( 如果 EullAuth 是真实的) 。
@@ -49,6 +54,7 @@ func DefaultServerConfig() *ServerConfig {
 	return &ServerConfig{
 		BaseURL:        "http://localhost:8080",
 		RequestTimeout: 30 * time.Second,
+		StrictRouting:  true,
 		EnableAuth:     false,
 		Logger:         zap.NewNop(),
 	}
@@ -98,6 +104,7 @@ const (
 	asyncTaskStatusProcessing = "processing"
 	asyncTaskStatusCompleted  = "completed"
 	asyncTaskStatusFailed     = "failed"
+	maxA2ARequestBodyBytes    = 1 << 20 // 1 MiB
 )
 
 // NewHTTPServer用给定的配置创建了新的HTTPServer.
@@ -452,10 +459,10 @@ func (s *HTTPServer) authenticate(r *http.Request) bool {
 	// 支持“ Bearer <token>” 格式
 	if strings.HasPrefix(auth, "Bearer ") {
 		token := strings.TrimPrefix(auth, "Bearer ")
-		return token == s.config.AuthToken
+		return secureTokenEqual(token, s.config.AuthToken)
 	}
 
-	return auth == s.config.AuthToken
+	return secureTokenEqual(auth, s.config.AuthToken)
 }
 
 // /. 熟知/代理人.json
@@ -511,7 +518,7 @@ func (s *HTTPServer) handleGetSpecificAgentCard(w http.ResponseWriter, r *http.R
 // 同步处理 POST / a2a/ 消息( 同步)
 func (s *HTTPServer) handleSyncMessage(w http.ResponseWriter, r *http.Request) {
 	// 解析消息
-	msg, err := s.parseMessage(r)
+	msg, err := s.parseMessage(w, r)
 	if err != nil {
 		s.writeError(w, http.StatusBadRequest, err)
 		return
@@ -545,7 +552,7 @@ func (s *HTTPServer) handleSyncMessage(w http.ResponseWriter, r *http.Request) {
 // 同步处理 POST /a2a/消息/同步
 func (s *HTTPServer) handleAsyncMessage(w http.ResponseWriter, r *http.Request) {
 	// 解析消息
-	msg, err := s.parseMessage(r)
+	msg, err := s.parseMessage(w, r)
 	if err != nil {
 		s.writeError(w, http.StatusBadRequest, err)
 		return
@@ -653,25 +660,40 @@ func (s *HTTPServer) handleGetTaskResult(w http.ResponseWriter, r *http.Request)
 }
 
 // 解析请求机构的 A2A 信件 。
-func (s *HTTPServer) parseMessage(r *http.Request) (*A2AMessage, error) {
+func (s *HTTPServer) parseMessage(w http.ResponseWriter, r *http.Request) (*A2AMessage, error) {
+	if r.ContentLength > maxA2ARequestBodyBytes {
+		return nil, fmt.Errorf("request body too large: max %d bytes", maxA2ARequestBodyBytes)
+	}
+
+	r.Body = http.MaxBytesReader(w, r.Body, maxA2ARequestBodyBytes)
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
+		var maxBytesErr *http.MaxBytesError
+		if errors.As(err, &maxBytesErr) {
+			return nil, fmt.Errorf("request body too large: max %d bytes", maxA2ARequestBodyBytes)
+		}
 		return nil, fmt.Errorf("failed to read request body: %w", err)
 	}
 	defer r.Body.Close()
 
-	msg, err := ParseA2AMessage(body)
-	if err != nil {
+	var msg A2AMessage
+	if err := json.Unmarshal(body, &msg); err != nil {
+		return nil, ErrInvalidMessage
+	}
+	if err := validateIncomingMessage(&msg); err != nil {
 		return nil, err
 	}
 
-	return msg, nil
+	return &msg, nil
 }
 
 // 路由Message 向合适的代理商传递消息。
 func (s *HTTPServer) routeMessage(msg *A2AMessage) (agent.Agent, error) {
 	// 在“ 到” 字段中找到代理
-	agentID := msg.To
+	agentID := strings.TrimSpace(msg.To)
+	if agentID == "" {
+		return s.getDefaultAgent()
+	}
 
 	// 如果“ To” 是 URL, 请从中提取代理 ID
 	if strings.Contains(agentID, "/") {
@@ -691,8 +713,34 @@ func (s *HTTPServer) routeMessage(msg *A2AMessage) (agent.Agent, error) {
 		return ag, nil
 	}
 
-	// 返回默认代理
-	return s.getDefaultAgent()
+	if !s.config.StrictRouting {
+		return s.getDefaultAgent()
+	}
+
+	return nil, fmt.Errorf("%w: %s", ErrAgentNotFound, agentID)
+}
+
+func secureTokenEqual(provided, expected string) bool {
+	providedHash := sha256.Sum256([]byte(provided))
+	expectedHash := sha256.Sum256([]byte(expected))
+	return subtle.ConstantTimeCompare(providedHash[:], expectedHash[:]) == 1
+}
+
+func validateIncomingMessage(msg *A2AMessage) error {
+	if msg.ID == "" {
+		return ErrMessageMissingID
+	}
+	if !msg.Type.IsValid() {
+		return ErrMessageInvalidType
+	}
+	if msg.From == "" {
+		return ErrMessageMissingFrom
+	}
+	// Empty To is allowed to support default-agent fallback routing.
+	if msg.Timestamp.IsZero() {
+		return ErrMessageMissingTimestamp
+	}
+	return nil
 }
 
 // 执行任务同步执行任务 。

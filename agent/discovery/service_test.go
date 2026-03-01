@@ -60,7 +60,7 @@ func TestDiscoveryService_RegisterLocalAgent(t *testing.T) {
 	svc := NewDiscoveryService(cfg, zap.NewNop())
 	ctx := context.Background()
 	require.NoError(t, svc.Start(ctx))
-	defer svc.Stop(ctx)
+	defer func() { require.NoError(t, svc.Stop(ctx)) }()
 
 	card := a2a.NewAgentCard("local-agent", "Local Agent", "http://localhost:9090", "1.0.0")
 	card.AddCapability("code_review", "Review code", a2a.CapabilityTypeTask)
@@ -86,7 +86,7 @@ func TestDiscoveryService_UpdateLocalAgentLoad(t *testing.T) {
 	svc := NewDiscoveryService(cfg, zap.NewNop())
 	ctx := context.Background()
 	require.NoError(t, svc.Start(ctx))
-	defer svc.Stop(ctx)
+	defer func() { require.NoError(t, svc.Stop(ctx)) }()
 
 	// No local agent registered yet
 	err := svc.UpdateLocalAgentLoad(0.5)
@@ -113,7 +113,7 @@ func TestDiscoveryService_FindAgents(t *testing.T) {
 	svc := NewDiscoveryService(cfg, zap.NewNop())
 	ctx := context.Background()
 	require.NoError(t, svc.Start(ctx))
-	defer svc.Stop(ctx)
+	defer func() { require.NoError(t, svc.Stop(ctx)) }()
 
 	// Register agents
 	for _, name := range []string{"agent-a", "agent-b"} {
@@ -141,7 +141,7 @@ func TestDiscoveryService_ListAgents(t *testing.T) {
 	svc := NewDiscoveryService(cfg, zap.NewNop())
 	ctx := context.Background()
 	require.NoError(t, svc.Start(ctx))
-	defer svc.Stop(ctx)
+	defer func() { require.NoError(t, svc.Stop(ctx)) }()
 
 	agents, err := svc.ListAgents(ctx)
 	require.NoError(t, err)
@@ -166,7 +166,7 @@ func TestDiscoveryService_FindCapabilities(t *testing.T) {
 	svc := NewDiscoveryService(cfg, zap.NewNop())
 	ctx := context.Background()
 	require.NoError(t, svc.Start(ctx))
-	defer svc.Stop(ctx)
+	defer func() { require.NoError(t, svc.Stop(ctx)) }()
 
 	card := a2a.NewAgentCard("cap-agent", "Test", "http://localhost:8080", "1.0.0")
 	card.AddCapability("deploy", "Deploy", a2a.CapabilityTypeTask)
@@ -192,7 +192,7 @@ func TestDiscoveryService_ComposeCapabilities(t *testing.T) {
 	svc := NewDiscoveryService(cfg, zap.NewNop())
 	ctx := context.Background()
 	require.NoError(t, svc.Start(ctx))
-	defer svc.Stop(ctx)
+	defer func() { require.NoError(t, svc.Stop(ctx)) }()
 
 	// Register agents with different capabilities
 	for _, pair := range []struct{ name, cap string }{
@@ -236,7 +236,7 @@ func TestDiscoveryService_Subscribe(t *testing.T) {
 	svc := NewDiscoveryService(cfg, zap.NewNop())
 	ctx := context.Background()
 	require.NoError(t, svc.Start(ctx))
-	defer svc.Stop(ctx)
+	defer func() { require.NoError(t, svc.Stop(ctx)) }()
 
 	eventCh := make(chan *DiscoveryEvent, 10)
 	subID := svc.Subscribe(func(e *DiscoveryEvent) {
@@ -311,4 +311,3 @@ func TestDefaultServiceConfig(t *testing.T) {
 	assert.Equal(t, 15*time.Second, cfg.HeartbeatInterval)
 	assert.True(t, cfg.EnableMetrics)
 }
-

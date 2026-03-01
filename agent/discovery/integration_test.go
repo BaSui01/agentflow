@@ -20,10 +20,10 @@ type mockAgentCapabilityProvider struct {
 	card         *a2a.AgentCard
 }
 
-func (m *mockAgentCapabilityProvider) ID() string                      { return m.id }
-func (m *mockAgentCapabilityProvider) Name() string                    { return m.name }
+func (m *mockAgentCapabilityProvider) ID() string                        { return m.id }
+func (m *mockAgentCapabilityProvider) Name() string                      { return m.name }
 func (m *mockAgentCapabilityProvider) GetCapabilities() []a2a.Capability { return m.capabilities }
-func (m *mockAgentCapabilityProvider) GetAgentCard() *a2a.AgentCard    { return m.card }
+func (m *mockAgentCapabilityProvider) GetAgentCard() *a2a.AgentCard      { return m.card }
 
 // --- AgentDiscoveryIntegration tests ---
 
@@ -38,7 +38,7 @@ func newTestIntegration(t *testing.T) (*DiscoveryService, *AgentDiscoveryIntegra
 	svc := NewDiscoveryService(cfg, zap.NewNop())
 	ctx := context.Background()
 	require.NoError(t, svc.Start(ctx))
-	t.Cleanup(func() { svc.Stop(ctx) })
+	t.Cleanup(func() { require.NoError(t, svc.Stop(ctx)) })
 
 	intCfg := DefaultIntegrationConfig()
 	intCfg.AutoUnregister = false
@@ -271,7 +271,7 @@ func TestAgentDiscoveryIntegration_StopWithAutoUnregister(t *testing.T) {
 	svc := NewDiscoveryService(cfg, zap.NewNop())
 	ctx := context.Background()
 	require.NoError(t, svc.Start(ctx))
-	defer svc.Stop(ctx)
+	defer func() { require.NoError(t, svc.Stop(ctx)) }()
 
 	intCfg := DefaultIntegrationConfig()
 	intCfg.AutoUnregister = true

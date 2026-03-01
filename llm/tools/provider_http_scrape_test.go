@@ -24,7 +24,7 @@ func TestHTTPScrapeProvider_Scrape_Markdown(t *testing.T) {
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "text/html")
-		w.Write([]byte(`<!DOCTYPE html>
+		_, _ = w.Write([]byte(`<!DOCTYPE html>
 <html><head><title>Test Page</title></head>
 <body>
 <h1>Hello World</h1>
@@ -63,7 +63,7 @@ func TestHTTPScrapeProvider_Scrape_Text(t *testing.T) {
 	t.Parallel()
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.Write([]byte(`<html><body><h1>Title</h1><p>Paragraph one.</p><p>Paragraph two.</p></body></html>`))
+		_, _ = w.Write([]byte(`<html><body><h1>Title</h1><p>Paragraph one.</p><p>Paragraph two.</p></body></html>`))
 	}))
 	defer srv.Close()
 
@@ -83,7 +83,7 @@ func TestHTTPScrapeProvider_Scrape_HTML(t *testing.T) {
 
 	htmlContent := `<html><body><h1>Raw</h1></body></html>`
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.Write([]byte(htmlContent))
+		_, _ = w.Write([]byte(htmlContent))
 	}))
 	defer srv.Close()
 
@@ -101,7 +101,7 @@ func TestHTTPScrapeProvider_MaxLength(t *testing.T) {
 	t.Parallel()
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.Write([]byte(`<html><body><p>This is a long content that should be truncated.</p></body></html>`))
+		_, _ = w.Write([]byte(`<html><body><p>This is a long content that should be truncated.</p></body></html>`))
 	}))
 	defer srv.Close()
 

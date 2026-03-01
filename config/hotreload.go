@@ -940,6 +940,20 @@ func (m *HotReloadManager) UpdateField(path string, value any) error {
 		return fmt.Errorf("failed to set value: %w", err)
 	}
 
+	// V-002: 即使字段级 validator 缺失，也必须执行整体验证；失败时回滚。
+	if err := m.config.Validate(); err != nil {
+		m.config = oldConfigSnapshot
+		m.mu.Unlock()
+		return fmt.Errorf("full configuration validation failed after updating %s: %w", path, err)
+	}
+	if m.validateFunc != nil {
+		if err := m.validateFunc(m.config); err != nil {
+			m.config = oldConfigSnapshot
+			m.mu.Unlock()
+			return fmt.Errorf("custom validation failed after updating %s: %w", path, err)
+		}
+	}
+
 	// 创建变更记录
 	change := ConfigChange{
 		Timestamp:       time.Now(),

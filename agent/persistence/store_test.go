@@ -98,7 +98,9 @@ func TestMemoryMessageStore(t *testing.T) {
 			Topic:   "ack-topic",
 			Content: "To be acked",
 		}
-		store.SaveMessage(ctx, msg)
+		if err := store.SaveMessage(ctx, msg); err != nil {
+			t.Fatalf("SaveMessage failed: %v", err)
+		}
 
 		if err := store.AckMessage(ctx, "ack-test"); err != nil {
 			t.Fatalf("AckMessage failed: %v", err)
@@ -118,7 +120,9 @@ func TestMemoryMessageStore(t *testing.T) {
 			Content:   "Old message",
 			CreatedAt: time.Now().Add(-10 * time.Minute),
 		}
-		store.SaveMessage(ctx, oldMsg)
+		if err := store.SaveMessage(ctx, oldMsg); err != nil {
+			t.Fatalf("SaveMessage old message failed: %v", err)
+		}
 
 		// 创建新未保存的消息
 		newMsg := &Message{
@@ -126,7 +130,9 @@ func TestMemoryMessageStore(t *testing.T) {
 			Topic:   "unacked-topic",
 			Content: "New message",
 		}
-		store.SaveMessage(ctx, newMsg)
+		if err := store.SaveMessage(ctx, newMsg); err != nil {
+			t.Fatalf("SaveMessage new message failed: %v", err)
+		}
 
 		// 获取超过5分钟的信息
 		msgs, err := store.GetUnackedMessages(ctx, "unacked-topic", 5*time.Minute)
@@ -145,7 +151,9 @@ func TestMemoryMessageStore(t *testing.T) {
 			Topic:   "delete-topic",
 			Content: "Delete me",
 		}
-		store.SaveMessage(ctx, msg)
+		if err := store.SaveMessage(ctx, msg); err != nil {
+			t.Fatalf("SaveMessage failed: %v", err)
+		}
 
 		if err := store.DeleteMessage(ctx, "to-delete"); err != nil {
 			t.Fatalf("DeleteMessage failed: %v", err)
@@ -213,7 +221,9 @@ func TestMemoryTaskStore(t *testing.T) {
 			AgentID: "agent-1",
 			Status:  TaskStatusPending,
 		}
-		store.SaveTask(ctx, task)
+		if err := store.SaveTask(ctx, task); err != nil {
+			t.Fatalf("SaveTask failed: %v", err)
+		}
 
 		result := map[string]string{"output": "success"}
 		if err := store.UpdateStatus(ctx, "status-test", TaskStatusCompleted, result, ""); err != nil {
@@ -236,7 +246,9 @@ func TestMemoryTaskStore(t *testing.T) {
 			Status:   TaskStatusRunning,
 			Progress: 0,
 		}
-		store.SaveTask(ctx, task)
+		if err := store.SaveTask(ctx, task); err != nil {
+			t.Fatalf("SaveTask failed: %v", err)
+		}
 
 		if err := store.UpdateProgress(ctx, "progress-test", 50.0); err != nil {
 			t.Fatalf("UpdateProgress failed: %v", err)
@@ -256,7 +268,9 @@ func TestMemoryTaskStore(t *testing.T) {
 			{ID: "list-3", AgentID: "agent-2", Status: TaskStatusCompleted},
 		}
 		for _, task := range tasks {
-			store.SaveTask(ctx, task)
+			if err := store.SaveTask(ctx, task); err != nil {
+				t.Fatalf("SaveTask failed: %v", err)
+			}
 		}
 
 		// 按状态过滤
@@ -298,7 +312,9 @@ func TestMemoryTaskStore(t *testing.T) {
 			{ID: "recover-3", AgentID: "agent-1", Status: TaskStatusCompleted},
 		}
 		for _, task := range tasks {
-			store.SaveTask(ctx, task)
+			if err := store.SaveTask(ctx, task); err != nil {
+				t.Fatalf("SaveTask failed: %v", err)
+			}
 		}
 
 		result, err := store.GetRecoverableTasks(ctx)
@@ -325,7 +341,9 @@ func TestMemoryTaskStore(t *testing.T) {
 			AgentID: "agent-1",
 			Status:  TaskStatusPending,
 		}
-		store.SaveTask(ctx, task)
+		if err := store.SaveTask(ctx, task); err != nil {
+			t.Fatalf("SaveTask failed: %v", err)
+		}
 
 		if err := store.DeleteTask(ctx, "to-delete-task"); err != nil {
 			t.Fatalf("DeleteTask failed: %v", err)
@@ -348,7 +366,9 @@ func TestMemoryTaskStore(t *testing.T) {
 		}
 		now := time.Now().Add(-48 * time.Hour)
 		oldTask.CompletedAt = &now
-		store.SaveTask(ctx, oldTask)
+		if err := store.SaveTask(ctx, oldTask); err != nil {
+			t.Fatalf("SaveTask old task failed: %v", err)
+		}
 
 		// 超过24小时的清理任务
 		count, err := store.Cleanup(ctx, 24*time.Hour)
@@ -421,7 +441,9 @@ func TestFileMessageStore(t *testing.T) {
 			Topic:   "persist-topic",
 			Content: "Persistent message",
 		}
-		store.SaveMessage(ctx, msg)
+		if err := store.SaveMessage(ctx, msg); err != nil {
+			t.Fatalf("SaveMessage failed: %v", err)
+		}
 
 		// 关闭并重新打开商店
 		store.Close()
@@ -491,7 +513,9 @@ func TestFileTaskStore(t *testing.T) {
 			AgentID: "agent-1",
 			Status:  TaskStatusRunning,
 		}
-		store.SaveTask(ctx, task)
+		if err := store.SaveTask(ctx, task); err != nil {
+			t.Fatalf("SaveTask failed: %v", err)
+		}
 
 		// 关闭并重新打开商店
 		store.Close()
@@ -513,17 +537,25 @@ func TestFileTaskStore(t *testing.T) {
 	})
 
 	t.Run("RecoverableTasksAfterRestart", func(t *testing.T) {
+		activeStore, err := NewFileTaskStore(config)
+		if err != nil {
+			t.Fatalf("Failed to create fresh store: %v", err)
+		}
+		defer activeStore.Close()
+
 		// 创建可恢复的任务
 		tasks := []*AsyncTask{
 			{ID: "recover-file-1", AgentID: "agent-1", Status: TaskStatusPending},
 			{ID: "recover-file-2", AgentID: "agent-1", Status: TaskStatusRunning},
 		}
 		for _, task := range tasks {
-			store.SaveTask(ctx, task)
+			if err := activeStore.SaveTask(ctx, task); err != nil {
+				t.Fatalf("SaveTask failed: %v", err)
+			}
 		}
 
 		// 关闭并重新打开商店
-		store.Close()
+		activeStore.Close()
 
 		store2, err := NewFileTaskStore(config)
 		if err != nil {

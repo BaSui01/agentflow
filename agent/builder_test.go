@@ -20,7 +20,7 @@ func TestAgentBuilder_Validate(t *testing.T) {
 				return NewAgentBuilder(Config{Name: "test", Model: "gpt-4"}).
 					WithProvider(&testProvider{name: "test"})
 			},
-			wantErr: "agent ID is required",
+			wantErr: "config.ID is required",
 		},
 		{
 			name: "missing name",
@@ -28,7 +28,7 @@ func TestAgentBuilder_Validate(t *testing.T) {
 				return NewAgentBuilder(Config{ID: "a1", Model: "gpt-4"}).
 					WithProvider(&testProvider{name: "test"})
 			},
-			wantErr: "agent name is required",
+			wantErr: "config.Name is required",
 		},
 		{
 			name: "missing model",
@@ -141,7 +141,11 @@ func TestAgentBuilder_WithObservability(t *testing.T) {
 }
 
 func TestAgentBuilder_Build_NilProvider(t *testing.T) {
-	_, err := NewAgentBuilder(Config{}).Build()
+	_, err := NewAgentBuilder(Config{
+		ID:    "a1",
+		Name:  "test",
+		Model: "gpt-4",
+	}).Build()
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "provider is required")
 }

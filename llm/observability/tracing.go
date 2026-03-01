@@ -223,7 +223,9 @@ func (t *Tracer) EndTrace(ctx context.Context, traceID string, output any, err e
 	}
 
 	if t.exporter != nil {
-		t.exporter.ExportTrace(ctx, tr)
+		if err := t.exporter.ExportTrace(ctx, tr); err != nil {
+			t.logger.Error("failed to export trace", zap.Error(err))
+		}
 	}
 }
 
@@ -291,19 +293,19 @@ type ConversationTrace struct {
 
 // TurnTrace 表示单次对话回合.
 type TurnTrace struct {
-	ID         string        `json:"id"`
-	TurnNumber int           `json:"turn_number"`
-	UserInput  string        `json:"user_input"`
-	Response   string        `json:"response"`
-	Model      string        `json:"model"`
-	Tokens     TokenUsage    `json:"tokens"`
-	Latency    time.Duration `json:"latency"`
-	ToolCalls  []ToolCall    `json:"tool_calls,omitempty"`
-	Timestamp  time.Time     `json:"timestamp"`
+	ID         string         `json:"id"`
+	TurnNumber int            `json:"turn_number"`
+	UserInput  string         `json:"user_input"`
+	Response   string         `json:"response"`
+	Model      string         `json:"model"`
+	Tokens     TokenUsage     `json:"tokens"`
+	Latency    time.Duration  `json:"latency"`
+	ToolCalls  []TurnToolCall `json:"tool_calls,omitempty"`
+	Timestamp  time.Time      `json:"timestamp"`
 }
 
-// ToolCall 表示回合内的工具调用.
-type ToolCall struct {
+// TurnToolCall 表示回合内的工具调用.
+type TurnToolCall struct {
 	Name     string        `json:"name"`
 	Input    any           `json:"input"`
 	Output   any           `json:"output"`

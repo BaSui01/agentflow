@@ -66,11 +66,11 @@ func TestMemoryMessageStore_GetMessages_WithCursorPagination(t *testing.T) {
 
 	ctx := context.Background()
 	for i := 0; i < 5; i++ {
-		store.SaveMessage(ctx, &Message{
+		require.NoError(t, store.SaveMessage(ctx, &Message{
 			ID:      "pg-" + string(rune('a'+i)),
 			Topic:   "pg-topic",
 			Content: "msg",
-		})
+		}))
 	}
 
 	msgs, cursor, err := store.GetMessages(ctx, "pg-topic", "", 2)
@@ -91,8 +91,8 @@ func TestMemoryMessageStore_GetPendingMessages_WithExpired(t *testing.T) {
 
 	ctx := context.Background()
 	past := time.Now().Add(-time.Hour)
-	store.SaveMessage(ctx, &Message{ID: "exp-1", Topic: "exp-topic", Content: "msg", ExpiresAt: &past})
-	store.SaveMessage(ctx, &Message{ID: "val-1", Topic: "exp-topic", Content: "msg"})
+	require.NoError(t, store.SaveMessage(ctx, &Message{ID: "exp-1", Topic: "exp-topic", Content: "msg", ExpiresAt: &past}))
+	require.NoError(t, store.SaveMessage(ctx, &Message{ID: "val-1", Topic: "exp-topic", Content: "msg"}))
 
 	msgs, err := store.GetPendingMessages(ctx, "exp-topic", 10)
 	require.NoError(t, err)
@@ -108,11 +108,11 @@ func TestMemoryMessageStore_GetPendingMessages_MaxRetries(t *testing.T) {
 	t.Cleanup(func() { store.Close() })
 
 	ctx := context.Background()
-	store.SaveMessage(ctx, &Message{ID: "maxr-1", Topic: "maxr-topic", Content: "msg"})
+	require.NoError(t, store.SaveMessage(ctx, &Message{ID: "maxr-1", Topic: "maxr-topic", Content: "msg"}))
 
 	// Increment retry to max
-	store.IncrementRetry(ctx, "maxr-1")
-	store.IncrementRetry(ctx, "maxr-1")
+	require.NoError(t, store.IncrementRetry(ctx, "maxr-1"))
+	require.NoError(t, store.IncrementRetry(ctx, "maxr-1"))
 
 	msgs, err := store.GetPendingMessages(ctx, "maxr-topic", 10)
 	require.NoError(t, err)
@@ -128,8 +128,8 @@ func TestMemoryTaskStore_ListTasks_FilterBySessionID(t *testing.T) {
 	t.Cleanup(func() { store.Close() })
 
 	ctx := context.Background()
-	store.SaveTask(ctx, &AsyncTask{ID: "s1", SessionID: "sess-1", Status: TaskStatusPending})
-	store.SaveTask(ctx, &AsyncTask{ID: "s2", SessionID: "sess-2", Status: TaskStatusPending})
+	require.NoError(t, store.SaveTask(ctx, &AsyncTask{ID: "s1", SessionID: "sess-1", Status: TaskStatusPending}))
+	require.NoError(t, store.SaveTask(ctx, &AsyncTask{ID: "s2", SessionID: "sess-2", Status: TaskStatusPending}))
 
 	tasks, err := store.ListTasks(ctx, TaskFilter{SessionID: "sess-1"})
 	require.NoError(t, err)
@@ -144,8 +144,8 @@ func TestMemoryTaskStore_ListTasks_FilterByType(t *testing.T) {
 	t.Cleanup(func() { store.Close() })
 
 	ctx := context.Background()
-	store.SaveTask(ctx, &AsyncTask{ID: "t1", Type: "typeA", Status: TaskStatusPending})
-	store.SaveTask(ctx, &AsyncTask{ID: "t2", Type: "typeB", Status: TaskStatusPending})
+	require.NoError(t, store.SaveTask(ctx, &AsyncTask{ID: "t1", Type: "typeA", Status: TaskStatusPending}))
+	require.NoError(t, store.SaveTask(ctx, &AsyncTask{ID: "t2", Type: "typeB", Status: TaskStatusPending}))
 
 	tasks, err := store.ListTasks(ctx, TaskFilter{Type: "typeA"})
 	require.NoError(t, err)
@@ -160,8 +160,8 @@ func TestMemoryTaskStore_ListTasks_FilterByParentTaskID(t *testing.T) {
 	t.Cleanup(func() { store.Close() })
 
 	ctx := context.Background()
-	store.SaveTask(ctx, &AsyncTask{ID: "p1", ParentTaskID: "parent-1", Status: TaskStatusPending})
-	store.SaveTask(ctx, &AsyncTask{ID: "p2", ParentTaskID: "parent-2", Status: TaskStatusPending})
+	require.NoError(t, store.SaveTask(ctx, &AsyncTask{ID: "p1", ParentTaskID: "parent-1", Status: TaskStatusPending}))
+	require.NoError(t, store.SaveTask(ctx, &AsyncTask{ID: "p2", ParentTaskID: "parent-2", Status: TaskStatusPending}))
 
 	tasks, err := store.ListTasks(ctx, TaskFilter{ParentTaskID: "parent-1"})
 	require.NoError(t, err)
@@ -176,7 +176,7 @@ func TestMemoryTaskStore_ListTasks_FilterByCreatedTime(t *testing.T) {
 	t.Cleanup(func() { store.Close() })
 
 	ctx := context.Background()
-	store.SaveTask(ctx, &AsyncTask{ID: "ct1", Status: TaskStatusPending})
+	require.NoError(t, store.SaveTask(ctx, &AsyncTask{ID: "ct1", Status: TaskStatusPending}))
 
 	past := time.Now().Add(-time.Hour)
 	future := time.Now().Add(time.Hour)
@@ -202,9 +202,9 @@ func TestMemoryTaskStore_ListTasks_SortByUpdatedAt(t *testing.T) {
 	t.Cleanup(func() { store.Close() })
 
 	ctx := context.Background()
-	store.SaveTask(ctx, &AsyncTask{ID: "su1", Status: TaskStatusPending})
+	require.NoError(t, store.SaveTask(ctx, &AsyncTask{ID: "su1", Status: TaskStatusPending}))
 	time.Sleep(time.Millisecond)
-	store.SaveTask(ctx, &AsyncTask{ID: "su2", Status: TaskStatusPending})
+	require.NoError(t, store.SaveTask(ctx, &AsyncTask{ID: "su2", Status: TaskStatusPending}))
 
 	tasks, err := store.ListTasks(ctx, TaskFilter{OrderBy: "updated_at", OrderDesc: true})
 	require.NoError(t, err)
@@ -219,8 +219,8 @@ func TestMemoryTaskStore_ListTasks_SortByProgress(t *testing.T) {
 	t.Cleanup(func() { store.Close() })
 
 	ctx := context.Background()
-	store.SaveTask(ctx, &AsyncTask{ID: "sp1", Status: TaskStatusRunning, Progress: 10})
-	store.SaveTask(ctx, &AsyncTask{ID: "sp2", Status: TaskStatusRunning, Progress: 90})
+	require.NoError(t, store.SaveTask(ctx, &AsyncTask{ID: "sp1", Status: TaskStatusRunning, Progress: 10}))
+	require.NoError(t, store.SaveTask(ctx, &AsyncTask{ID: "sp2", Status: TaskStatusRunning, Progress: 90}))
 
 	tasks, err := store.ListTasks(ctx, TaskFilter{OrderBy: "progress", OrderDesc: true})
 	require.NoError(t, err)
@@ -235,7 +235,7 @@ func TestMemoryTaskStore_UpdateStatus_WithErrorMsg(t *testing.T) {
 	t.Cleanup(func() { store.Close() })
 
 	ctx := context.Background()
-	store.SaveTask(ctx, &AsyncTask{ID: "err-1", Status: TaskStatusRunning})
+	require.NoError(t, store.SaveTask(ctx, &AsyncTask{ID: "err-1", Status: TaskStatusRunning}))
 
 	err := store.UpdateStatus(ctx, "err-1", TaskStatusFailed, nil, "something went wrong")
 	require.NoError(t, err)

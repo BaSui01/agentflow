@@ -200,7 +200,10 @@ func (p *VeoProvider) pollOperation(ctx context.Context, opName string) (*veoRes
 					Message string `json:"message"`
 				} `json:"error"`
 			}
-			json.NewDecoder(resp.Body).Decode(&opStatus)
+			if err := json.NewDecoder(resp.Body).Decode(&opStatus); err != nil {
+				resp.Body.Close()
+				continue
+			}
 			resp.Body.Close()
 
 			if opStatus.Error != nil {

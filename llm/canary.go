@@ -352,7 +352,12 @@ func (m *CanaryMonitor) checkAndRollback() {
 			m.logger.Warn("auto-rollback triggered",
 				zap.Uint("providerID", deployment.ProviderID),
 				zap.String("reason", reason))
-			m.canaryConfig.TriggerRollback(deployment.ProviderID, reason)
+			if err := m.canaryConfig.TriggerRollback(deployment.ProviderID, reason); err != nil {
+				m.logger.Error("failed to trigger rollback",
+					zap.Uint("providerID", deployment.ProviderID),
+					zap.Error(err),
+				)
+			}
 		}
 	}
 }

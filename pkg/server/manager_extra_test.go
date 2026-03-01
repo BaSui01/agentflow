@@ -53,11 +53,11 @@ func TestManager_Start_ServesMultipleRoutes(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("healthy"))
+		_, _ = w.Write([]byte("healthy"))
 	})
 	mux.HandleFunc("/api/data", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{"status":"ok"}`))
+		_, _ = w.Write([]byte(`{"status":"ok"}`))
 	})
 
 	cfg := DefaultConfig()
@@ -65,7 +65,7 @@ func TestManager_Start_ServesMultipleRoutes(t *testing.T) {
 	m := NewManager(mux, cfg, zap.NewNop())
 
 	require.NoError(t, m.Start())
-	t.Cleanup(func() { m.Shutdown(context.Background()) })
+	t.Cleanup(func() { _ = m.Shutdown(context.Background()) })
 
 	port := m.listener.Addr().(*net.TCPAddr).Port
 	base := fmt.Sprintf("http://127.0.0.1:%d", port)
@@ -136,7 +136,7 @@ func TestManager_StartTLS_DoubleStart(t *testing.T) {
 	m := NewManager(handler, cfg, zap.NewNop())
 
 	require.NoError(t, m.Start())
-	t.Cleanup(func() { m.Shutdown(context.Background()) })
+	t.Cleanup(func() { _ = m.Shutdown(context.Background()) })
 
 	err := m.StartTLS("cert.pem", "key.pem")
 	require.Error(t, err)
@@ -238,7 +238,7 @@ func TestManager_StartTLS_InvalidCert(t *testing.T) {
 
 	err := m.StartTLS(certFile, keyFile)
 	require.NoError(t, err) // StartTLS itself succeeds (async serve)
-	t.Cleanup(func() { m.Shutdown(context.Background()) })
+	t.Cleanup(func() { _ = m.Shutdown(context.Background()) })
 
 	// The error should appear on the error channel
 	select {

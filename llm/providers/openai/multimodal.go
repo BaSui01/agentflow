@@ -149,21 +149,33 @@ func (p *OpenAIProvider) TranscribeAudio(ctx context.Context, req *llm.AudioTran
 	}
 
 	// 添加其他字段
-	writer.WriteField("model", req.Model)
+	if err := writer.WriteField("model", req.Model); err != nil {
+		return nil, fmt.Errorf("failed to write model field: %w", err)
+	}
 	if req.Language != "" {
-		writer.WriteField("language", req.Language)
+		if err := writer.WriteField("language", req.Language); err != nil {
+			return nil, fmt.Errorf("failed to write language field: %w", err)
+		}
 	}
 	if req.Prompt != "" {
-		writer.WriteField("prompt", req.Prompt)
+		if err := writer.WriteField("prompt", req.Prompt); err != nil {
+			return nil, fmt.Errorf("failed to write prompt field: %w", err)
+		}
 	}
 	if req.ResponseFormat != "" {
-		writer.WriteField("response_format", req.ResponseFormat)
+		if err := writer.WriteField("response_format", req.ResponseFormat); err != nil {
+			return nil, fmt.Errorf("failed to write response_format field: %w", err)
+		}
 	}
 	if req.Temperature > 0 {
-		writer.WriteField("temperature", fmt.Sprintf("%f", req.Temperature))
+		if err := writer.WriteField("temperature", fmt.Sprintf("%f", req.Temperature)); err != nil {
+			return nil, fmt.Errorf("failed to write temperature field: %w", err)
+		}
 	}
 
-	writer.Close()
+	if err := writer.Close(); err != nil {
+		return nil, fmt.Errorf("failed to finalize multipart body: %w", err)
+	}
 
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, body)
 	if err != nil {

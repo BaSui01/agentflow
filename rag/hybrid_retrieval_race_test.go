@@ -47,7 +47,9 @@ func TestHybridRetriever_ConcurrentIndexAndRetrieve(t *testing.T) {
 					{ID: fmt.Sprintf("doc-%d-%d-a", id, i), Content: "alpha beta gamma"},
 					{ID: fmt.Sprintf("doc-%d-%d-b", id, i), Content: "delta epsilon zeta"},
 				}
-				retriever.IndexDocuments(docs)
+				if err := retriever.IndexDocuments(docs); err != nil {
+					t.Errorf("IndexDocuments error: %v", err)
+				}
 			}
 		}(g)
 	}
@@ -57,7 +59,9 @@ func TestHybridRetriever_ConcurrentIndexAndRetrieve(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			for i := 0; i < ops; i++ {
-				retriever.Retrieve(context.Background(), "alpha", nil)
+				if _, err := retriever.Retrieve(context.Background(), "alpha", nil); err != nil {
+					t.Errorf("Retrieve error: %v", err)
+				}
 			}
 		}()
 	}

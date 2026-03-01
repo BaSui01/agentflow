@@ -15,7 +15,7 @@ import (
 // 示例：定义一个简单的 GetWeather 工具
 func Example_getWeatherTool() {
 	logger, _ := zap.NewDevelopment()
-	defer logger.Sync()
+	defer func() { _ = logger.Sync() }()
 
 	// 1. 创建工具注册表
 	registry := tools.NewDefaultRegistry(logger)
@@ -119,7 +119,7 @@ func Example_getWeatherTool() {
 // 示例：ReAct 循环集成（伪代码，需要真实的 Provider）
 func Example_reActLoop() {
 	logger, _ := zap.NewDevelopment()
-	defer logger.Sync()
+	defer func() { _ = logger.Sync() }()
 
 	// 1. 创建工具注册表并注册工具
 	registry := tools.NewDefaultRegistry(logger)
@@ -227,7 +227,9 @@ func TestToolExecutor(t *testing.T) {
 		var input struct {
 			Value int `json:"value"`
 		}
-		json.Unmarshal(args, &input)
+		if err := json.Unmarshal(args, &input); err != nil {
+			return nil, err
+		}
 
 		result := map[string]int{"doubled": input.Value * 2}
 		return json.Marshal(result)
@@ -240,7 +242,9 @@ func TestToolExecutor(t *testing.T) {
 		},
 	}
 
-	registry.Register("double", testFunc, metadata)
+	if err := registry.Register("double", testFunc, metadata); err != nil {
+		t.Fatalf("failed to register tool: %v", err)
+	}
 
 	// 执行工具
 	call := llmpkg.ToolCall{
@@ -258,7 +262,9 @@ func TestToolExecutor(t *testing.T) {
 	var output struct {
 		Doubled int `json:"doubled"`
 	}
-	json.Unmarshal(result.Result, &output)
+	if err := json.Unmarshal(result.Result, &output); err != nil {
+		t.Fatalf("failed to decode result: %v", err)
+	}
 
 	if output.Doubled != 10 {
 		t.Errorf("expected 10, got %d", output.Doubled)
@@ -286,7 +292,9 @@ func TestRateLimit(t *testing.T) {
 		},
 	}
 
-	registry.Register("limited_tool", testFunc, metadata)
+	if err := registry.Register("limited_tool", testFunc, metadata); err != nil {
+		t.Fatalf("failed to register limited_tool: %v", err)
+	}
 
 	// 执行工具调用
 	call := llmpkg.ToolCall{
@@ -329,7 +337,9 @@ func TestToolTimeout(t *testing.T) {
 		Timeout: 100 * time.Millisecond, // 很短的超时
 	}
 
-	registry.Register("slow_tool", slowFunc, metadata)
+	if err := registry.Register("slow_tool", slowFunc, metadata); err != nil {
+		t.Fatalf("failed to register slow_tool: %v", err)
+	}
 
 	// 执行工具
 	call := llmpkg.ToolCall{

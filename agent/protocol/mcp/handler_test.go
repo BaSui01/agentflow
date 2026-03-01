@@ -72,10 +72,10 @@ func TestMCPHandler_ServeHTTP_Message_InvalidJSON(t *testing.T) {
 
 func TestMCPHandler_ServeHTTP_Message_ToolsList(t *testing.T) {
 	s := NewMCPServer("test", "1.0.0", zap.NewNop())
-	s.RegisterTool(
+	require.NoError(t, s.RegisterTool(
 		&ToolDefinition{Name: "calc", Description: "Calculator", InputSchema: map[string]any{"type": "object"}},
 		func(ctx context.Context, args map[string]any) (any, error) { return "42", nil },
-	)
+	))
 	h := NewMCPHandler(s, zap.NewNop())
 
 	msg := MCPMessage{JSONRPC: "2.0", ID: float64(1), Method: "tools/list"}
@@ -94,10 +94,10 @@ func TestMCPHandler_ServeHTTP_Message_ToolsList(t *testing.T) {
 
 func TestMCPHandler_ServeHTTP_Message_ToolsCall(t *testing.T) {
 	s := NewMCPServer("test", "1.0.0", zap.NewNop())
-	s.RegisterTool(
+	require.NoError(t, s.RegisterTool(
 		&ToolDefinition{Name: "echo", Description: "Echo", InputSchema: map[string]any{"type": "object"}},
 		func(ctx context.Context, args map[string]any) (any, error) { return "hello", nil },
-	)
+	))
 	h := NewMCPHandler(s, zap.NewNop())
 
 	msg := MCPMessage{JSONRPC: "2.0", ID: float64(1), Method: "tools/call", Params: map[string]any{"name": "echo"}}
@@ -116,7 +116,7 @@ func TestMCPHandler_ServeHTTP_Message_ToolsCall(t *testing.T) {
 
 func TestMCPHandler_ServeHTTP_Message_ResourcesList(t *testing.T) {
 	s := NewMCPServer("test", "1.0.0", zap.NewNop())
-	s.RegisterResource(&Resource{URI: "file://a", Name: "a", Type: ResourceTypeText})
+	require.NoError(t, s.RegisterResource(&Resource{URI: "file://a", Name: "a", Type: ResourceTypeText}))
 	h := NewMCPHandler(s, zap.NewNop())
 
 	msg := MCPMessage{JSONRPC: "2.0", ID: float64(1), Method: "resources/list"}
@@ -135,7 +135,7 @@ func TestMCPHandler_ServeHTTP_Message_ResourcesList(t *testing.T) {
 
 func TestMCPHandler_ServeHTTP_Message_ResourcesRead(t *testing.T) {
 	s := NewMCPServer("test", "1.0.0", zap.NewNop())
-	s.RegisterResource(&Resource{URI: "file://a", Name: "a", Type: ResourceTypeText, Content: "hello"})
+	require.NoError(t, s.RegisterResource(&Resource{URI: "file://a", Name: "a", Type: ResourceTypeText, Content: "hello"}))
 	h := NewMCPHandler(s, zap.NewNop())
 
 	msg := MCPMessage{JSONRPC: "2.0", ID: float64(1), Method: "resources/read", Params: map[string]any{"uri": "file://a"}}
@@ -154,7 +154,7 @@ func TestMCPHandler_ServeHTTP_Message_ResourcesRead(t *testing.T) {
 
 func TestMCPHandler_ServeHTTP_Message_PromptsList(t *testing.T) {
 	s := NewMCPServer("test", "1.0.0", zap.NewNop())
-	s.RegisterPrompt(&PromptTemplate{Name: "greet", Template: "Hello {{name}}", Variables: []string{"name"}})
+	require.NoError(t, s.RegisterPrompt(&PromptTemplate{Name: "greet", Template: "Hello {{name}}", Variables: []string{"name"}}))
 	h := NewMCPHandler(s, zap.NewNop())
 
 	msg := MCPMessage{JSONRPC: "2.0", ID: float64(1), Method: "prompts/list"}
@@ -173,7 +173,7 @@ func TestMCPHandler_ServeHTTP_Message_PromptsList(t *testing.T) {
 
 func TestMCPHandler_ServeHTTP_Message_PromptsGet(t *testing.T) {
 	s := NewMCPServer("test", "1.0.0", zap.NewNop())
-	s.RegisterPrompt(&PromptTemplate{Name: "greet", Template: "Hello {{name}}", Variables: []string{"name"}})
+	require.NoError(t, s.RegisterPrompt(&PromptTemplate{Name: "greet", Template: "Hello {{name}}", Variables: []string{"name"}}))
 	h := NewMCPHandler(s, zap.NewNop())
 
 	msg := MCPMessage{JSONRPC: "2.0", ID: float64(1), Method: "prompts/get", Params: map[string]any{

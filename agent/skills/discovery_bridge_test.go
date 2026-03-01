@@ -76,7 +76,7 @@ func TestSkillDiscoveryBridge_SyncAll(t *testing.T) {
 		WithInstructions("do stuff").
 		WithCategory("coding").
 		Build()
-	mgr.RegisterSkill(skill)
+	require.NoError(t, mgr.RegisterSkill(skill))
 
 	reg := newMockRegistrar()
 	bridge := NewSkillDiscoveryBridge(mgr, reg, "a1", nil)
@@ -98,8 +98,8 @@ func TestSkillDiscoveryBridge_SyncAll_PartialFailure(t *testing.T) {
 	mgr := NewSkillManager(DefaultSkillManagerConfig(), zap.NewNop())
 	s1, _ := NewSkillBuilder("s1", "Skill1").WithInstructions("do").Build()
 	s2, _ := NewSkillBuilder("s2", "Skill2").WithInstructions("do").Build()
-	mgr.RegisterSkill(s1)
-	mgr.RegisterSkill(s2)
+	require.NoError(t, mgr.RegisterSkill(s1))
+	require.NoError(t, mgr.RegisterSkill(s2))
 
 	reg := newMockRegistrar()
 	reg.failRegister = true

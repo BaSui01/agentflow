@@ -929,7 +929,12 @@ func (h *HealthChecker) checkAgent(ctx context.Context, agent *AgentInfo) {
 			})
 		}
 		h.failureCounts[agentID] = 0
-		h.registry.UpdateAgentStatus(ctx, agentID, AgentStatusOnline)
+		if err := h.registry.UpdateAgentStatus(ctx, agentID, AgentStatusOnline); err != nil {
+			h.logger.Warn("failed to mark agent online after health recovery",
+				zap.String("agent_id", agentID),
+				zap.Error(err),
+			)
+		}
 	} else {
 		h.failureCounts[agentID]++
 		h.logger.Warn("agent health check failed",
@@ -939,7 +944,12 @@ func (h *HealthChecker) checkAgent(ctx context.Context, agent *AgentInfo) {
 		)
 
 		if h.failureCounts[agentID] >= h.config.UnhealthyThreshold {
-			h.registry.UpdateAgentStatus(ctx, agentID, AgentStatusUnhealthy)
+			if err := h.registry.UpdateAgentStatus(ctx, agentID, AgentStatusUnhealthy); err != nil {
+				h.logger.Warn("failed to mark agent unhealthy after health check failure",
+					zap.String("agent_id", agentID),
+					zap.Error(err),
+				)
+			}
 			h.registry.emitEvent(&DiscoveryEvent{
 				Type:      DiscoveryEventHealthCheckFailed,
 				AgentID:   agentID,

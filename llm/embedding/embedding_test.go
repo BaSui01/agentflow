@@ -250,7 +250,8 @@ func TestOpenAIProviderEmbed(t *testing.T) {
 		assert.Equal(t, "Bearer test-key", r.Header.Get("Authorization"))
 
 		var req openAIEmbedRequest
-		json.NewDecoder(r.Body).Decode(&req)
+		err := json.NewDecoder(r.Body).Decode(&req)
+		require.NoError(t, err)
 		assert.Equal(t, "text-embedding-3-small", req.Model)
 
 		json.NewEncoder(w).Encode(openAIEmbedResponse{
@@ -321,7 +322,8 @@ func TestCohereProviderEmbed(t *testing.T) {
 		assert.Equal(t, "/v2/embed", r.URL.Path)
 
 		var req cohereEmbedRequest
-		json.NewDecoder(r.Body).Decode(&req)
+		err := json.NewDecoder(r.Body).Decode(&req)
+		require.NoError(t, err)
 		assert.Equal(t, "search_query", req.InputType)
 		assert.Equal(t, []string{"float"}, req.EmbeddingType)
 
@@ -365,13 +367,15 @@ func TestCohereProviderEmbed(t *testing.T) {
 func TestCohereProviderTruncate(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var req cohereEmbedRequest
-		json.NewDecoder(r.Body).Decode(&req)
+		err := json.NewDecoder(r.Body).Decode(&req)
+		require.NoError(t, err)
 		assert.Equal(t, "END", req.Truncate)
-		json.NewEncoder(w).Encode(cohereEmbedResponse{
+		err = json.NewEncoder(w).Encode(cohereEmbedResponse{
 			Embeddings: struct {
 				Float [][]float64 `json:"float"`
 			}{Float: [][]float64{{0.1}}},
 		})
+		require.NoError(t, err)
 	}))
 	defer srv.Close()
 
@@ -428,10 +432,11 @@ func TestJinaProviderEmbed(t *testing.T) {
 		assert.Equal(t, "/v1/embeddings", r.URL.Path)
 
 		var req jinaEmbedRequest
-		json.NewDecoder(r.Body).Decode(&req)
+		err := json.NewDecoder(r.Body).Decode(&req)
+		require.NoError(t, err)
 		assert.Equal(t, "jina-embeddings-v3", req.Model)
 
-		json.NewEncoder(w).Encode(jinaEmbedResponse{
+		err = json.NewEncoder(w).Encode(jinaEmbedResponse{
 			Model: "jina-embeddings-v3",
 			Data: []struct {
 				Object    string    `json:"object"`
@@ -445,6 +450,7 @@ func TestJinaProviderEmbed(t *testing.T) {
 				PromptTokens int `json:"prompt_tokens"`
 			}{TotalTokens: 4, PromptTokens: 4},
 		})
+		require.NoError(t, err)
 	}))
 	defer srv.Close()
 
@@ -476,15 +482,17 @@ func TestJinaProviderInputTypeMapping(t *testing.T) {
 		t.Run(string(tt.inputType), func(t *testing.T) {
 			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				var req jinaEmbedRequest
-				json.NewDecoder(r.Body).Decode(&req)
+				err := json.NewDecoder(r.Body).Decode(&req)
+				require.NoError(t, err)
 				assert.Equal(t, tt.wantTask, req.Task)
-				json.NewEncoder(w).Encode(jinaEmbedResponse{
+				err = json.NewEncoder(w).Encode(jinaEmbedResponse{
 					Data: []struct {
 						Object    string    `json:"object"`
 						Index     int       `json:"index"`
 						Embedding []float64 `json:"embedding"`
 					}{{Index: 0, Embedding: []float64{0.1}}},
 				})
+				require.NoError(t, err)
 			}))
 			defer srv.Close()
 
@@ -501,15 +509,17 @@ func TestJinaProviderInputTypeMapping(t *testing.T) {
 func TestJinaProviderDimensions(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var req jinaEmbedRequest
-		json.NewDecoder(r.Body).Decode(&req)
+		err := json.NewDecoder(r.Body).Decode(&req)
+		require.NoError(t, err)
 		assert.Equal(t, 256, req.Dimensions)
-		json.NewEncoder(w).Encode(jinaEmbedResponse{
+		err = json.NewEncoder(w).Encode(jinaEmbedResponse{
 			Data: []struct {
 				Object    string    `json:"object"`
 				Index     int       `json:"index"`
 				Embedding []float64 `json:"embedding"`
 			}{{Index: 0, Embedding: []float64{0.1}}},
 		})
+		require.NoError(t, err)
 	}))
 	defer srv.Close()
 

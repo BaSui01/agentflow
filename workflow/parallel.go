@@ -110,13 +110,10 @@ func (w *ParallelWorkflow) Execute(ctx context.Context, input any) (any, error) 
 
 	// 创建结果通道
 	resultCh := make(chan TaskResult, len(tasks))
-	var wg sync.WaitGroup
 
 	// 启动所有任务
 	for _, task := range tasks {
-		wg.Add(1)
 		go func(t Task) {
-			defer wg.Done()
 			defer func() {
 				if r := recover(); r != nil {
 					resultCh <- TaskResult{
@@ -135,21 +132,10 @@ func (w *ParallelWorkflow) Execute(ctx context.Context, input any) (any, error) 
 		}(task)
 	}
 
-	// 等待所有任务完成
-	go func() {
-		defer func() {
-			if r := recover(); r != nil {
-				// wg.Wait panicked — channel may already be closed
-			}
-		}()
-		wg.Wait()
-		close(resultCh)
-	}()
-
 	// 收集结果
 	results := make([]TaskResult, 0, len(tasks))
-	for result := range resultCh {
-		results = append(results, result)
+	for i := 0; i < len(tasks); i++ {
+		results = append(results, <-resultCh)
 	}
 
 	// 检查是否有错误

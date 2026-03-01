@@ -29,7 +29,7 @@ func TestSecurityHeaders(t *testing.T) {
 
 func TestSecurityHeaders_ChainedWithOtherMiddleware(t *testing.T) {
 	inner := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte("ok"))
+		_, _ = w.Write([]byte("ok"))
 	})
 
 	handler := Chain(inner, SecurityHeaders(), RequestID())

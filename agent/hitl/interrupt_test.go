@@ -354,11 +354,14 @@ func TestCreateInterruptDefaultTimeout(t *testing.T) {
 
 	go func() {
 		defer close(done)
-		m.CreateInterrupt(context.Background(), InterruptOptions{
+		_, err := m.CreateInterrupt(context.Background(), InterruptOptions{
 			WorkflowID: "wf_default_to",
 			Type:       InterruptTypeApproval,
 			// Timeout: 0 → defaults to 24h
 		})
+		if err != nil {
+			t.Errorf("CreateInterrupt failed: %v", err)
+		}
 	}()
 
 	require.Eventually(t, func() bool {
@@ -375,7 +378,7 @@ func TestCreateInterruptDefaultTimeout(t *testing.T) {
 	assert.Equal(t, 24*time.Hour, pending[0].Timeout)
 
 	// Clean up by resolving
-	_ = m.ResolveInterrupt(context.Background(), createdID, &Response{Approved: true})
+	require.NoError(t, m.ResolveInterrupt(context.Background(), createdID, &Response{Approved: true}))
 	<-done
 }
 
@@ -397,11 +400,14 @@ func TestRegisterHandler(t *testing.T) {
 
 	go func() {
 		defer close(done)
-		m.CreateInterrupt(context.Background(), InterruptOptions{
+		_, err := m.CreateInterrupt(context.Background(), InterruptOptions{
 			WorkflowID: "wf_handler",
 			Type:       InterruptTypeApproval,
 			Timeout:    5 * time.Second,
 		})
+		if err != nil {
+			t.Errorf("CreateInterrupt failed: %v", err)
+		}
 	}()
 
 	require.Eventually(t, func() bool {
@@ -418,7 +424,7 @@ func TestRegisterHandler(t *testing.T) {
 		return handlerCalled.Load() >= 1
 	}, 1*time.Second, 10*time.Millisecond)
 
-	_ = m.ResolveInterrupt(context.Background(), createdID, &Response{Approved: true})
+	require.NoError(t, m.ResolveInterrupt(context.Background(), createdID, &Response{Approved: true}))
 	<-done
 }
 
@@ -434,11 +440,14 @@ func TestGetPendingInterruptsFilter(t *testing.T) {
 	for _, wfID := range []string{"wf_a", "wf_b"} {
 		wfID := wfID
 		go func() {
-			m.CreateInterrupt(ctx, InterruptOptions{
+			_, err := m.CreateInterrupt(ctx, InterruptOptions{
 				WorkflowID: wfID,
 				Type:       InterruptTypeApproval,
 				Timeout:    5 * time.Second,
 			})
+			if err != nil {
+				t.Errorf("CreateInterrupt failed: %v", err)
+			}
 		}()
 	}
 
@@ -460,7 +469,7 @@ func TestGetPendingInterruptsFilter(t *testing.T) {
 		ids = append(ids, p.ID)
 	}
 	for _, id := range ids {
-		_ = m.ResolveInterrupt(ctx, id, &Response{Approved: true})
+		require.NoError(t, m.ResolveInterrupt(ctx, id, &Response{Approved: true}))
 	}
 }
 
@@ -484,11 +493,14 @@ func TestConcurrentResolveAndCancel(t *testing.T) {
 
 			go func() {
 				defer close(done)
-				m.CreateInterrupt(ctx, InterruptOptions{
+				_, err := m.CreateInterrupt(ctx, InterruptOptions{
 					WorkflowID: fmt.Sprintf("wf_race_%d", idx),
 					Type:       InterruptTypeApproval,
 					Timeout:    5 * time.Second,
 				})
+				if err != nil {
+					return
+				}
 			}()
 
 			// Wait for pending
@@ -508,9 +520,9 @@ func TestConcurrentResolveAndCancel(t *testing.T) {
 
 			// Alternate between resolve and cancel
 			if idx%2 == 0 {
-				m.ResolveInterrupt(ctx, createdID, &Response{Approved: true})
+				_ = m.ResolveInterrupt(ctx, createdID, &Response{Approved: true})
 			} else {
-				m.CancelInterrupt(ctx, createdID)
+				_ = m.CancelInterrupt(ctx, createdID)
 			}
 
 			<-done
@@ -532,11 +544,14 @@ func TestDoubleResolveReturnsError(t *testing.T) {
 
 	go func() {
 		defer close(done)
-		m.CreateInterrupt(ctx, InterruptOptions{
+		_, err := m.CreateInterrupt(ctx, InterruptOptions{
 			WorkflowID: "wf_double",
 			Type:       InterruptTypeApproval,
 			Timeout:    5 * time.Second,
 		})
+		if err != nil {
+			t.Errorf("CreateInterrupt failed: %v", err)
+		}
 	}()
 
 	require.Eventually(t, func() bool {

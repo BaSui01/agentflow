@@ -41,7 +41,7 @@ func TestFileMessageStore_PersistsToDisk(t *testing.T) {
 	store, err := NewFileMessageStore(config)
 	require.NoError(t, err)
 	ctx := context.Background()
-	store.SaveMessage(ctx, &Message{ID: "persist1", Topic: "t", Content: "data"})
+	require.NoError(t, store.SaveMessage(ctx, &Message{ID: "persist1", Topic: "t", Content: "data"}))
 	store.Close()
 
 	store2, err := NewFileMessageStore(config)
@@ -56,13 +56,14 @@ func TestFileMessageStore_PersistsToDisk(t *testing.T) {
 func TestFileMessageStore_AckAndCleanup(t *testing.T) {
 	store := newTestFileMessageStore(t)
 	ctx := context.Background()
-	store.SaveMessage(ctx, &Message{ID: "a1", Topic: "t", Content: "c"})
+	require.NoError(t, store.SaveMessage(ctx, &Message{ID: "a1", Topic: "t", Content: "c"}))
 	require.NoError(t, store.AckMessage(ctx, "a1"))
 
 	got, _ := store.GetMessage(ctx, "a1")
 	assert.NotNil(t, got.AckedAt)
 
-	count, err := store.Cleanup(ctx, 0)
+	time.Sleep(2 * time.Millisecond)
+	count, err := store.Cleanup(ctx, time.Millisecond)
 	require.NoError(t, err)
 	assert.Equal(t, 1, count)
 }
@@ -70,7 +71,7 @@ func TestFileMessageStore_AckAndCleanup(t *testing.T) {
 func TestFileMessageStore_DeleteMessage(t *testing.T) {
 	store := newTestFileMessageStore(t)
 	ctx := context.Background()
-	store.SaveMessage(ctx, &Message{ID: "d1", Topic: "t", Content: "c"})
+	require.NoError(t, store.SaveMessage(ctx, &Message{ID: "d1", Topic: "t", Content: "c"}))
 	require.NoError(t, store.DeleteMessage(ctx, "d1"))
 	_, err := store.GetMessage(ctx, "d1")
 	assert.ErrorIs(t, err, ErrNotFound)
@@ -79,9 +80,9 @@ func TestFileMessageStore_DeleteMessage(t *testing.T) {
 func TestFileMessageStore_Stats(t *testing.T) {
 	store := newTestFileMessageStore(t)
 	ctx := context.Background()
-	store.SaveMessage(ctx, &Message{ID: "s1", Topic: "t", Content: "c"})
-	store.SaveMessage(ctx, &Message{ID: "s2", Topic: "t", Content: "c"})
-	store.AckMessage(ctx, "s1")
+	require.NoError(t, store.SaveMessage(ctx, &Message{ID: "s1", Topic: "t", Content: "c"}))
+	require.NoError(t, store.SaveMessage(ctx, &Message{ID: "s2", Topic: "t", Content: "c"}))
+	require.NoError(t, store.AckMessage(ctx, "s1"))
 
 	stats, err := store.Stats(ctx)
 	require.NoError(t, err)
@@ -93,8 +94,8 @@ func TestFileMessageStore_GetPendingMessages(t *testing.T) {
 	store := newTestFileMessageStore(t)
 	ctx := context.Background()
 	past := time.Now().Add(-time.Hour)
-	store.SaveMessage(ctx, &Message{ID: "exp", Topic: "t", Content: "c", ExpiresAt: &past})
-	store.SaveMessage(ctx, &Message{ID: "ok", Topic: "t", Content: "c"})
+	require.NoError(t, store.SaveMessage(ctx, &Message{ID: "exp", Topic: "t", Content: "c", ExpiresAt: &past}))
+	require.NoError(t, store.SaveMessage(ctx, &Message{ID: "ok", Topic: "t", Content: "c"}))
 
 	msgs, err := store.GetPendingMessages(ctx, "t", 10)
 	require.NoError(t, err)
@@ -134,7 +135,7 @@ func TestFileMessageStore_GetMessages_Pagination(t *testing.T) {
 	ctx := context.Background()
 
 	for i := 0; i < 5; i++ {
-		store.SaveMessage(ctx, &Message{ID: fmt.Sprintf("pg%d", i), Topic: "t", Content: "c"})
+		require.NoError(t, store.SaveMessage(ctx, &Message{ID: fmt.Sprintf("pg%d", i), Topic: "t", Content: "c"}))
 	}
 
 	// First page
@@ -159,11 +160,11 @@ func TestFileMessageStore_GetUnackedMessages(t *testing.T) {
 	ctx := context.Background()
 
 	old := time.Now().Add(-2 * time.Hour)
-	store.SaveMessage(ctx, &Message{ID: "old1", Topic: "t", Content: "c", CreatedAt: old})
-	store.SaveMessage(ctx, &Message{ID: "new1", Topic: "t", Content: "c"})
+	require.NoError(t, store.SaveMessage(ctx, &Message{ID: "old1", Topic: "t", Content: "c", CreatedAt: old}))
+	require.NoError(t, store.SaveMessage(ctx, &Message{ID: "new1", Topic: "t", Content: "c"}))
 
 	// Ack one
-	store.AckMessage(ctx, "new1")
+	require.NoError(t, store.AckMessage(ctx, "new1"))
 
 	msgs, err := store.GetUnackedMessages(ctx, "t", time.Hour)
 	require.NoError(t, err)
@@ -180,7 +181,7 @@ func TestFileMessageStore_IncrementRetry(t *testing.T) {
 	store := newTestFileMessageStore(t)
 	ctx := context.Background()
 
-	store.SaveMessage(ctx, &Message{ID: "r1", Topic: "t", Content: "c"})
+	require.NoError(t, store.SaveMessage(ctx, &Message{ID: "r1", Topic: "t", Content: "c"}))
 	require.NoError(t, store.IncrementRetry(ctx, "r1"))
 
 	got, _ := store.GetMessage(ctx, "r1")

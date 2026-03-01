@@ -40,7 +40,7 @@ func TestDuckDuckGoSearchProvider_Search(t *testing.T) {
 			},
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(resp)
+		require.NoError(t, json.NewEncoder(w).Encode(resp))
 	}))
 	defer srv.Close()
 
@@ -89,7 +89,7 @@ func TestDuckDuckGoSearchProvider_MaxResults(t *testing.T) {
 				{Text: "Result 5", FirstURL: "https://example.com/5"},
 			},
 		}
-		json.NewEncoder(w).Encode(resp)
+		require.NoError(t, json.NewEncoder(w).Encode(resp))
 	}))
 	defer srv.Close()
 

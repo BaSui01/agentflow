@@ -18,76 +18,76 @@ import (
 type QueryIntent string
 
 const (
-	IntentFactual       QueryIntent = "factual"        // Simple fact lookup
-	IntentComparison    QueryIntent = "comparison"     // Compare multiple items
-	IntentExplanation   QueryIntent = "explanation"    // Explain a concept
-	IntentProcedural    QueryIntent = "procedural"     // How-to questions
-	IntentAnalytical    QueryIntent = "analytical"     // Analysis/reasoning required
-	IntentCreative      QueryIntent = "creative"       // Creative/generative tasks
-	IntentAggregation   QueryIntent = "aggregation"    // Aggregate information
-	IntentTemporal      QueryIntent = "temporal"       // Time-based queries
-	IntentCausal        QueryIntent = "causal"         // Cause-effect relationships
-	IntentHypothetical  QueryIntent = "hypothetical"   // What-if scenarios
-	IntentUnknown       QueryIntent = "unknown"        // Cannot determine intent
+	IntentFactual      QueryIntent = "factual"      // Simple fact lookup
+	IntentComparison   QueryIntent = "comparison"   // Compare multiple items
+	IntentExplanation  QueryIntent = "explanation"  // Explain a concept
+	IntentProcedural   QueryIntent = "procedural"   // How-to questions
+	IntentAnalytical   QueryIntent = "analytical"   // Analysis/reasoning required
+	IntentCreative     QueryIntent = "creative"     // Creative/generative tasks
+	IntentAggregation  QueryIntent = "aggregation"  // Aggregate information
+	IntentTemporal     QueryIntent = "temporal"     // Time-based queries
+	IntentCausal       QueryIntent = "causal"       // Cause-effect relationships
+	IntentHypothetical QueryIntent = "hypothetical" // What-if scenarios
+	IntentUnknown      QueryIntent = "unknown"      // Cannot determine intent
 )
 
 // 转变 类型代表查询转换类型
 type TransformationType string
 
 const (
-	TransformExpansion     TransformationType = "expansion"      // Generate related queries
-	TransformRewrite       TransformationType = "rewrite"        // Rewrite for better retrieval
-	TransformDecomposition TransformationType = "decomposition"  // Break into sub-queries
-	TransformHyDE          TransformationType = "hyde"           // Hypothetical Document Embedding
-	TransformStepBack      TransformationType = "step_back"      // Step-back prompting
+	TransformExpansion     TransformationType = "expansion"     // Generate related queries
+	TransformRewrite       TransformationType = "rewrite"       // Rewrite for better retrieval
+	TransformDecomposition TransformationType = "decomposition" // Break into sub-queries
+	TransformHyDE          TransformationType = "hyde"          // Hypothetical Document Embedding
+	TransformStepBack      TransformationType = "step_back"     // Step-back prompting
 )
 
 // 已变形查询代表一个带有元数据的已变形查询
 type TransformedQuery struct {
-	Original       string             `json:"original"`
-	Transformed    string             `json:"transformed"`
-	Type           TransformationType `json:"type"`
-	Intent         QueryIntent        `json:"intent,omitempty"`
-	Confidence     float64            `json:"confidence"`
-	SubQueries     []string           `json:"sub_queries,omitempty"`
-	Keywords       []string           `json:"keywords,omitempty"`
-	Entities       []string           `json:"entities,omitempty"`
-	Metadata       map[string]any     `json:"metadata,omitempty"`
+	Original    string             `json:"original"`
+	Transformed string             `json:"transformed"`
+	Type        TransformationType `json:"type"`
+	Intent      QueryIntent        `json:"intent,omitempty"`
+	Confidence  float64            `json:"confidence"`
+	SubQueries  []string           `json:"sub_queries,omitempty"`
+	Keywords    []string           `json:"keywords,omitempty"`
+	Entities    []string           `json:"entities,omitempty"`
+	Metadata    map[string]any     `json:"metadata,omitempty"`
 }
 
 // 查询 TransformConfig 配置查询转换器
 type QueryTransformConfig struct {
 	// 扩展设置
-	EnableExpansion     bool    `json:"enable_expansion"`
-	MaxExpansions       int     `json:"max_expansions"`        // Max expanded queries (3-5)
-	ExpansionDiversity  float64 `json:"expansion_diversity"`   // 0-1, higher = more diverse
+	EnableExpansion    bool    `json:"enable_expansion"`
+	MaxExpansions      int     `json:"max_expansions"`      // Max expanded queries (3-5)
+	ExpansionDiversity float64 `json:"expansion_diversity"` // 0-1, higher = more diverse
 
 	// 重写设置
-	EnableRewriting     bool    `json:"enable_rewriting"`
-	RewriteForRetrieval bool    `json:"rewrite_for_retrieval"` // Optimize for retrieval
+	EnableRewriting     bool `json:"enable_rewriting"`
+	RewriteForRetrieval bool `json:"rewrite_for_retrieval"` // Optimize for retrieval
 
 	// 分解设置
 	EnableDecomposition bool    `json:"enable_decomposition"`
-	MaxSubQueries       int     `json:"max_sub_queries"`       // Max sub-queries (2-5)
-	DecomposeThreshold  float64 `json:"decompose_threshold"`   // Complexity threshold
+	MaxSubQueries       int     `json:"max_sub_queries"`     // Max sub-queries (2-5)
+	DecomposeThreshold  float64 `json:"decompose_threshold"` // Complexity threshold
 
 	// 有意检测
-	EnableIntentDetection bool   `json:"enable_intent_detection"`
+	EnableIntentDetection bool `json:"enable_intent_detection"`
 
 	// HyDE( 嵌入式文档)
-	EnableHyDE          bool    `json:"enable_hyde"`
-	HyDEDocumentCount   int     `json:"hyde_document_count"`   // Number of hypothetical docs
+	EnableHyDE        bool `json:"enable_hyde"`
+	HyDEDocumentCount int  `json:"hyde_document_count"` // Number of hypothetical docs
 
 	// 后退提示
-	EnableStepBack      bool    `json:"enable_step_back"`
+	EnableStepBack bool `json:"enable_step_back"`
 
 	// 缓存
-	EnableCache         bool          `json:"enable_cache"`
-	CacheTTL            time.Duration `json:"cache_ttl"`
+	EnableCache bool          `json:"enable_cache"`
+	CacheTTL    time.Duration `json:"cache_ttl"`
 
 	// LLM 设置
-	UseLLM              bool    `json:"use_llm"`               // Use LLM for transformations
-	Temperature         float64 `json:"temperature"`           // LLM temperature
+	UseLLM      bool    `json:"use_llm"`     // Use LLM for transformations
+	Temperature float64 `json:"temperature"` // LLM temperature
 }
 
 // 默认查询 TransformConfig 返回默认配置
@@ -204,10 +204,10 @@ func (t *QueryTransformer) Transform(ctx context.Context, query string) (*Transf
 	}
 
 	result := &TransformedQuery{
-		Original:   query,
+		Original:    query,
 		Transformed: query,
-		Confidence: 1.0,
-		Metadata:   make(map[string]any),
+		Confidence:  1.0,
+		Metadata:    make(map[string]any),
 	}
 
 	// 1. 侦测意图
@@ -424,7 +424,9 @@ Example: factual, 0.9`, query)
 	if len(parts) >= 2 {
 		intent := QueryIntent(strings.TrimSpace(parts[0]))
 		var confidence float64
-		fmt.Sscanf(strings.TrimSpace(parts[1]), "%f", &confidence)
+		if _, err := fmt.Sscanf(strings.TrimSpace(parts[1]), "%f", &confidence); err != nil {
+			return IntentUnknown, 0.0
+		}
 		return intent, confidence
 	}
 
@@ -699,9 +701,9 @@ func (t *QueryTransformer) extractEntities(query string) []string {
 
 // 扩展Result包含带有元数据的扩展查询
 type ExpansionResult struct {
-	Original   string   `json:"original"`
-	Expansions []string `json:"expansions"`
-	Keywords   []string `json:"keywords"`
+	Original   string      `json:"original"`
+	Expansions []string    `json:"expansions"`
+	Keywords   []string    `json:"keywords"`
 	Intent     QueryIntent `json:"intent"`
 }
 

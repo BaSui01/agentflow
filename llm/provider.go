@@ -8,15 +8,19 @@ import (
 )
 
 // 重导出核心类型，供 llm 包内部及下游使用。
+//
+// L-007 note:
+// Aliases are kept for backward compatibility with existing llm.* imports.
+// New code should prefer importing canonical types from github.com/BaSui01/agentflow/types.
 type (
-	Message      = types.Message
-	Role         = types.Role
-	ToolCall     = types.ToolCall
-	ToolSchema   = types.ToolSchema
-	ToolResult   = types.ToolResult
-	TokenUsage   = types.TokenUsage
-	Error        = types.Error
-	ErrorCode    = types.ErrorCode
+	Message       = types.Message
+	Role          = types.Role
+	ToolCall      = types.ToolCall
+	ToolSchema    = types.ToolSchema
+	ToolResult    = types.ToolResult
+	TokenUsage    = types.TokenUsage
+	Error         = types.Error
+	ErrorCode     = types.ErrorCode
 	ImageContent  = types.ImageContent
 	VideoContent  = types.VideoContent
 	ThinkingBlock = types.ThinkingBlock
@@ -129,7 +133,7 @@ type WebSearchOptions struct {
 
 // WebSearchLocation represents approximate user location for web search.
 type WebSearchLocation struct {
-	Type     string `json:"type,omitempty"`     // "approximate"
+	Type     string `json:"type,omitempty"` // "approximate"
 	Country  string `json:"country,omitempty"`
 	Region   string `json:"region,omitempty"`
 	City     string `json:"city,omitempty"`
@@ -249,9 +253,9 @@ type Model struct {
 
 // ProviderEndpoints 描述提供者使用的所有 API 端点。
 type ProviderEndpoints struct {
-	Completion string `json:"completion"`          // 聊天补全端点
-	Stream     string `json:"stream,omitempty"`    // 流式端点（如果与 Completion 不同）
-	Models     string `json:"models"`              // 模型列表端点
-	Health     string `json:"health,omitempty"`    // 健康检查端点（如果与 Models 不同）
-	BaseURL    string `json:"base_url"`            // 基础 URL
+	Completion string `json:"completion"`       // 聊天补全端点
+	Stream     string `json:"stream,omitempty"` // 流式端点（如果与 Completion 不同）
+	Models     string `json:"models"`           // 模型列表端点
+	Health     string `json:"health,omitempty"` // 健康检查端点（如果与 Models 不同）
+	BaseURL    string `json:"base_url"`         // 基础 URL
 }

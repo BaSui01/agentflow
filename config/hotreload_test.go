@@ -95,7 +95,7 @@ func TestFileWatcher_DetectsChanges(t *testing.T) {
 
 	err = watcher.Start(ctx)
 	require.NoError(t, err)
-	defer watcher.Stop()
+	defer func() { _ = watcher.Stop() }()
 
 	// 等待初始设置
 	time.Sleep(100 * time.Millisecond)
@@ -182,6 +182,19 @@ func TestHotReloadManager_UpdateField_Unknown(t *testing.T) {
 	err := manager.UpdateField("Unknown.Field", "value")
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "unknown configuration field")
+}
+
+func TestHotReloadManager_UpdateField_RollbackOnFullValidationFailure(t *testing.T) {
+	cfg := DefaultConfig()
+	manager := NewHotReloadManager(cfg)
+
+	original := manager.GetConfig().Agent.MaxIterations
+	err := manager.UpdateField("Agent.MaxIterations", -1)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "validation failed")
+
+	current := manager.GetConfig()
+	assert.Equal(t, original, current.Agent.MaxIterations, "invalid update must be rolled back")
 }
 
 func TestHotReloadManager_SanitizedConfig(t *testing.T) {
@@ -417,8 +430,8 @@ func TestConfigAPIHandler_GetChanges(t *testing.T) {
 	handler := NewConfigAPIHandler(manager)
 
 	// 做一些改变
-	manager.UpdateField("Log.Level", "debug")
-	manager.UpdateField("Agent.MaxIterations", 20)
+	require.NoError(t, manager.UpdateField("Log.Level", "debug"))
+	require.NoError(t, manager.UpdateField("Agent.MaxIterations", 20))
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/config/changes?limit=10", nil)
 	w := httptest.NewRecorder()
@@ -564,7 +577,7 @@ agent:
 
 	err = manager.Start(ctx)
 	require.NoError(t, err)
-	defer manager.Stop()
+	defer func() { _ = manager.Stop() }()
 
 	// 追踪变更
 	var changes []ConfigChange

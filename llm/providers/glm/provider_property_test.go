@@ -108,7 +108,7 @@ func TestProperty12_HTTPStatusToErrorCodeMapping(t *testing.T) {
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(tc.httpStatus)
-				json.NewEncoder(w).Encode(providers.OpenAICompatErrorResp{
+				err := json.NewEncoder(w).Encode(providers.OpenAICompatErrorResp{
 					Error: struct {
 						Message string `json:"message"`
 						Type    string `json:"type"`
@@ -119,6 +119,7 @@ func TestProperty12_HTTPStatusToErrorCodeMapping(t *testing.T) {
 						Type:    "error",
 					},
 				})
+				assert.NoError(t, err)
 			}))
 			defer server.Close()
 
@@ -175,7 +176,7 @@ func TestProperty12_HTTPStatusToErrorCodeMapping(t *testing.T) {
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusUnauthorized)
-			json.NewEncoder(w).Encode(providers.OpenAICompatErrorResp{
+			err := json.NewEncoder(w).Encode(providers.OpenAICompatErrorResp{
 				Error: struct {
 					Message string `json:"message"`
 					Type    string `json:"type"`
@@ -186,6 +187,7 @@ func TestProperty12_HTTPStatusToErrorCodeMapping(t *testing.T) {
 					Type:    "error",
 				},
 			})
+			assert.NoError(t, err)
 		}))
 		defer server.Close()
 

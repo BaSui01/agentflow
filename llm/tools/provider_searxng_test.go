@@ -49,7 +49,7 @@ func TestSearXNGSearchProvider_Search(t *testing.T) {
 			},
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(resp)
+		require.NoError(t, json.NewEncoder(w).Encode(resp))
 	}))
 	defer srv.Close()
 
@@ -89,7 +89,7 @@ func TestSearXNGSearchProvider_MaxResults(t *testing.T) {
 				{Title: "R3", URL: "https://3.com", Content: "c3"},
 			},
 		}
-		json.NewEncoder(w).Encode(resp)
+		require.NoError(t, json.NewEncoder(w).Encode(resp))
 	}))
 	defer srv.Close()
 
@@ -118,7 +118,7 @@ func TestSearXNGSearchProvider_QueryParams(t *testing.T) {
 			"safesearch": r.URL.Query().Get("safesearch"),
 			"time_range": r.URL.Query().Get("time_range"),
 		}
-		json.NewEncoder(w).Encode(searxngResponse{})
+		require.NoError(t, json.NewEncoder(w).Encode(searxngResponse{}))
 	}))
 	defer srv.Close()
 
@@ -133,7 +133,8 @@ func TestSearXNGSearchProvider_QueryParams(t *testing.T) {
 		TimeRange:  "week",
 	}
 
-	p.Search(context.Background(), "test query", opts)
+	_, err := p.Search(context.Background(), "test query", opts)
+	require.NoError(t, err)
 	assert.Equal(t, "test query", capturedQuery)
 	assert.Equal(t, "zh", capturedParams["language"])
 	assert.Equal(t, "2", capturedParams["safesearch"])

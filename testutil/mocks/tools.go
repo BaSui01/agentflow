@@ -218,7 +218,9 @@ func (m *MockToolManager) Execute(ctx context.Context, name string, args map[str
 func (m *MockToolManager) ExecuteToolCall(ctx context.Context, tc types.ToolCall) (any, error) {
 	var args map[string]any
 	if len(tc.Arguments) > 0 {
-		json.Unmarshal(tc.Arguments, &args)
+		if err := json.Unmarshal(tc.Arguments, &args); err != nil {
+			return nil, err
+		}
 	}
 	return m.Execute(ctx, tc.Name, args)
 }

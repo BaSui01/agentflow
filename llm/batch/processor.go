@@ -65,7 +65,9 @@ type BatchProcessor struct {
 	handler BatchHandler
 	queue   chan *pendingRequest
 	closed  atomic.Bool
-	wg      sync.WaitGroup
+	// submitMu serializes Close() with Submit() send path to avoid send-on-closed panic.
+	submitMu sync.RWMutex
+	wg       sync.WaitGroup
 	inflight atomic.Int64
 
 	// 计量
@@ -101,6 +103,8 @@ func NewBatchProcessor(config BatchConfig, handler BatchHandler) *BatchProcessor
 // 提交请求并返回响应的通道 。
 func (bp *BatchProcessor) Submit(ctx context.Context, req *Request) <-chan *Response {
 	respCh := make(chan *Response, 1)
+	bp.submitMu.RLock()
+	defer bp.submitMu.RUnlock()
 
 	if bp.closed.Load() {
 		respCh <- &Response{ID: req.ID, Error: ErrBatchClosed}
@@ -259,7 +263,9 @@ func (bp *BatchProcessor) Close() {
 	if bp.closed.Swap(true) {
 		return
 	}
+	bp.submitMu.Lock()
 	close(bp.queue)
+	bp.submitMu.Unlock()
 	bp.wg.Wait()
 }
 

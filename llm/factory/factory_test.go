@@ -224,7 +224,7 @@ func TestProviderRegistry_Unregister(t *testing.T) {
 	reg := llm.NewProviderRegistry()
 	p, _ := NewProviderFromConfig("deepseek", ProviderConfig{APIKey: "sk-test"}, nil)
 	reg.Register("deepseek", p)
-	reg.SetDefault("deepseek")
+	require.NoError(t, reg.SetDefault("deepseek"))
 
 	reg.Unregister("deepseek")
 

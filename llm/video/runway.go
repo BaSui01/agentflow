@@ -192,7 +192,10 @@ func (p *RunwayProvider) pollGeneration(ctx context.Context, id string) (*runway
 			}
 
 			var rResp runwayResponse
-			json.NewDecoder(resp.Body).Decode(&rResp)
+			if err := json.NewDecoder(resp.Body).Decode(&rResp); err != nil {
+				resp.Body.Close()
+				continue
+			}
 			resp.Body.Close()
 
 			switch rResp.Status {

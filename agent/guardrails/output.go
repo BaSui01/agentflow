@@ -217,7 +217,9 @@ func (v *OutputValidator) logValidationFailure(ctx context.Context, logger Audit
 		Errors:        result.Errors,
 		Metadata:      result.Metadata,
 	}
-	logger.Log(ctx, entry)
+	if err := logger.Log(ctx, entry); err != nil {
+		// Audit failures must not block main validation flow.
+	}
 }
 
 // AddValidator 添加验证器

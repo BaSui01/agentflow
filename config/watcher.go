@@ -165,6 +165,10 @@ func (w *FileWatcher) Start(ctx context.Context) error {
 		w.mu.Unlock()
 		return fmt.Errorf("watcher already running")
 	}
+	// S-002: Stop() closes lifecycle channels; Start() must recreate them before reuse.
+	w.stopChan = make(chan struct{})
+	w.eventChan = make(chan FileEvent, defaultEventBufferSize)
+	w.dispatchCh = make(chan string, defaultEventBufferSize)
 	w.running = true
 	w.mu.Unlock()
 
@@ -230,7 +234,7 @@ func (w *FileWatcher) pollLoop(ctx context.Context) {
 // checkFiles 检查所有监视的文件是否有修改
 func (w *FileWatcher) checkFiles() {
 	w.mu.Lock()
-	defer w.mu.Unlock()
+	events := make([]FileEvent, 0, len(w.paths))
 
 	for _, path := range w.paths {
 		info, err := os.Stat(path)
@@ -239,11 +243,11 @@ func (w *FileWatcher) checkFiles() {
 				// 检查文件之前是否被跟踪（已删除）
 				if _, existed := w.lastModTimes[path]; existed {
 					delete(w.lastModTimes, path)
-					w.eventChan <- FileEvent{
+					events = append(events, FileEvent{
 						Path:      path,
 						Op:        FileOpRemove,
 						Timestamp: time.Now(),
-					}
+					})
 				}
 			}
 			continue
@@ -253,20 +257,37 @@ func (w *FileWatcher) checkFiles() {
 		if !existed {
 			// 新文件已创建
 			w.lastModTimes[path] = info.ModTime()
-			w.eventChan <- FileEvent{
+			events = append(events, FileEvent{
 				Path:      path,
 				Op:        FileOpCreate,
 				Timestamp: time.Now(),
-			}
+			})
 		} else if info.ModTime().After(lastMod) {
 			// 文件已修改
 			w.lastModTimes[path] = info.ModTime()
-			w.eventChan <- FileEvent{
+			events = append(events, FileEvent{
 				Path:      path,
 				Op:        FileOpWrite,
 				Timestamp: time.Now(),
-			}
+			})
 		}
+	}
+	w.mu.Unlock()
+
+	// T-003: dispatch outside lock and never block checkFiles on a full channel.
+	for _, evt := range events {
+		w.enqueueEvent(evt)
+	}
+}
+
+func (w *FileWatcher) enqueueEvent(event FileEvent) {
+	select {
+	case w.eventChan <- event:
+	default:
+		w.logger.Warn("dropping file event due to full buffer",
+			zap.String("path", event.Path),
+			zap.String("op", event.Op.String()),
+		)
 	}
 }
 

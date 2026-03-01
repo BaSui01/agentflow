@@ -31,7 +31,7 @@ func TestGitHubSource_SearchRepos_Success(t *testing.T) {
 			},
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(resp)
+		require.NoError(t, json.NewEncoder(w).Encode(resp))
 	})
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
@@ -58,7 +58,7 @@ func TestGitHubSource_SearchRepos_WithToken(t *testing.T) {
 	mux.HandleFunc("/search/repositories", func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, "Bearer test-token-123", r.Header.Get("Authorization"))
 		resp := GitHubSearchResponse{TotalCount: 0, Items: []GitHubRepo{}}
-		json.NewEncoder(w).Encode(resp)
+		require.NoError(t, json.NewEncoder(w).Encode(resp))
 	})
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
@@ -86,13 +86,13 @@ func TestGitHubSource_SearchRepos_ServerError_Retries(t *testing.T) {
 		callCount++
 		if callCount <= 2 {
 			w.WriteHeader(http.StatusInternalServerError)
-			w.Write([]byte("server error"))
+			_, _ = w.Write([]byte("server error"))
 			return
 		}
 		resp := GitHubSearchResponse{TotalCount: 1, Items: []GitHubRepo{
 			{FullName: "user/repo", Stars: 10},
 		}}
-		json.NewEncoder(w).Encode(resp)
+		require.NoError(t, json.NewEncoder(w).Encode(resp))
 	})
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
@@ -118,7 +118,7 @@ func TestGitHubSource_SearchRepos_AllRetriesFail(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/search/repositories", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte("error"))
+		_, _ = w.Write([]byte("error"))
 	})
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
@@ -142,7 +142,7 @@ func TestGitHubSource_SearchRepos_InvalidJSON(t *testing.T) {
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/search/repositories", func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte("not json"))
+		_, _ = w.Write([]byte("not json"))
 	})
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
@@ -206,7 +206,7 @@ func TestGitHubSource_SearchCode_Success(t *testing.T) {
 				{Name: "main.go", Path: "cmd/main.go", Score: 1.0},
 			},
 		}
-		json.NewEncoder(w).Encode(resp)
+		require.NoError(t, json.NewEncoder(w).Encode(resp))
 	})
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
@@ -235,7 +235,7 @@ func TestGitHubSource_SearchCode_NoLanguage(t *testing.T) {
 			TotalCount int                `json:"total_count"`
 			Items      []GitHubCodeResult `json:"items"`
 		}{TotalCount: 0, Items: []GitHubCodeResult{}}
-		json.NewEncoder(w).Encode(resp)
+		require.NoError(t, json.NewEncoder(w).Encode(resp))
 	})
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
@@ -258,7 +258,7 @@ func TestGitHubSource_GetReadme_Success(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/repos/owner/repo/readme", func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, "application/vnd.github.raw+json", r.Header.Get("Accept"))
-		w.Write([]byte("# My Project\n\nThis is the readme."))
+		_, _ = w.Write([]byte("# My Project\n\nThis is the readme."))
 	})
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
@@ -299,7 +299,7 @@ func TestGitHubSource_SearchRepos_ExtractsLicense(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/search/repositories", func(w http.ResponseWriter, r *http.Request) {
 		// Return raw JSON with nested license object
-		w.Write([]byte(`{
+		_, _ = w.Write([]byte(`{
 			"total_count": 1,
 			"items": [{
 				"full_name": "user/repo",

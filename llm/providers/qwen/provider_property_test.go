@@ -104,12 +104,13 @@ func TestProperty3_OpenAIFormatConversion(t *testing.T) {
 			var capturedRequest providers.OpenAICompatRequest
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				// 解码请求正文
-				json.NewDecoder(r.Body).Decode(&capturedRequest)
+				err := json.NewDecoder(r.Body).Decode(&capturedRequest)
+				assert.NoError(t, err)
 
 				// 返回有效的响应
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusOK)
-				json.NewEncoder(w).Encode(providers.OpenAICompatResponse{
+				err = json.NewEncoder(w).Encode(providers.OpenAICompatResponse{
 					ID:    "test-id",
 					Model: "qwen-plus",
 					Choices: []providers.OpenAICompatChoice{
@@ -123,6 +124,7 @@ func TestProperty3_OpenAIFormatConversion(t *testing.T) {
 						},
 					},
 				})
+				assert.NoError(t, err)
 			}))
 			defer server.Close()
 

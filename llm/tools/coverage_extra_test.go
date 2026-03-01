@@ -18,7 +18,7 @@ import (
 func TestCostController_CalculateCost_WithTokenCounter(t *testing.T) {
 	cc := NewCostController(zap.NewNop())
 	cc.SetTokenCounter(&fakeTokenCounter{count: 10})
-	cc.SetToolCost(&ToolCost{ToolName: "search", BaseCost: 0.01, CostPerUnit: 0.001, Unit: CostUnitTokens})
+	require.NoError(t, cc.SetToolCost(&ToolCost{ToolName: "search", BaseCost: 0.01, CostPerUnit: 0.001, Unit: CostUnitTokens}))
 
 	cost, err := cc.CalculateCost("search", json.RawMessage(`{"q":"hello"}`))
 	require.NoError(t, err)
@@ -27,7 +27,7 @@ func TestCostController_CalculateCost_WithTokenCounter(t *testing.T) {
 
 func TestCostController_CalculateCost_Credits(t *testing.T) {
 	cc := NewCostController(zap.NewNop())
-	cc.SetToolCost(&ToolCost{ToolName: "calc", BaseCost: 0.05, CostPerUnit: 0.01, Unit: CostUnitCredits})
+	require.NoError(t, cc.SetToolCost(&ToolCost{ToolName: "calc", BaseCost: 0.05, CostPerUnit: 0.01, Unit: CostUnitCredits}))
 
 	args := json.RawMessage(`{"x":1}`)
 	cost, err := cc.CalculateCost("calc", args)
@@ -38,7 +38,7 @@ func TestCostController_CalculateCost_Credits(t *testing.T) {
 
 func TestCostController_CalculateCost_Dollars(t *testing.T) {
 	cc := NewCostController(zap.NewNop())
-	cc.SetToolCost(&ToolCost{ToolName: "api", BaseCost: 0.1, CostPerUnit: 0.02, Unit: CostUnitDollars})
+	require.NoError(t, cc.SetToolCost(&ToolCost{ToolName: "api", BaseCost: 0.1, CostPerUnit: 0.02, Unit: CostUnitDollars}))
 
 	args := json.RawMessage(`{"data":"test"}`)
 	cost, err := cc.CalculateCost("api", args)
@@ -49,7 +49,7 @@ func TestCostController_CalculateCost_Dollars(t *testing.T) {
 func TestCostController_CalculateCost_TokensFallback(t *testing.T) {
 	cc := NewCostController(zap.NewNop())
 	// No token counter set, so it falls back to char-based estimation
-	cc.SetToolCost(&ToolCost{ToolName: "tok", BaseCost: 0.0, CostPerUnit: 0.001, Unit: CostUnitTokens})
+	require.NoError(t, cc.SetToolCost(&ToolCost{ToolName: "tok", BaseCost: 0.0, CostPerUnit: 0.001, Unit: CostUnitTokens}))
 
 	args := json.RawMessage(`{"text":"hello world"}`)
 	cost, err := cc.CalculateCost("tok", args)
@@ -67,11 +67,11 @@ func TestCostController_CalculateCost_Unknown(t *testing.T) {
 
 func TestCostController_FindApplicableBudgets_AllScopes(t *testing.T) {
 	cc := NewCostController(zap.NewNop())
-	cc.AddBudget(&Budget{ID: "g1", Scope: BudgetScopeGlobal, Limit: 100, Enabled: true})
-	cc.AddBudget(&Budget{ID: "a1", Scope: BudgetScopeAgent, ScopeID: "agent-1", Limit: 50, Enabled: true})
-	cc.AddBudget(&Budget{ID: "u1", Scope: BudgetScopeUser, ScopeID: "user-1", Limit: 30, Enabled: true})
-	cc.AddBudget(&Budget{ID: "s1", Scope: BudgetScopeSession, ScopeID: "sess-1", Limit: 20, Enabled: true})
-	cc.AddBudget(&Budget{ID: "t1", Scope: BudgetScopeTool, ScopeID: "search", Limit: 10, Enabled: true})
+	require.NoError(t, cc.AddBudget(&Budget{ID: "g1", Scope: BudgetScopeGlobal, Limit: 100, Enabled: true}))
+	require.NoError(t, cc.AddBudget(&Budget{ID: "a1", Scope: BudgetScopeAgent, ScopeID: "agent-1", Limit: 50, Enabled: true}))
+	require.NoError(t, cc.AddBudget(&Budget{ID: "u1", Scope: BudgetScopeUser, ScopeID: "user-1", Limit: 30, Enabled: true}))
+	require.NoError(t, cc.AddBudget(&Budget{ID: "s1", Scope: BudgetScopeSession, ScopeID: "sess-1", Limit: 20, Enabled: true}))
+	require.NoError(t, cc.AddBudget(&Budget{ID: "t1", Scope: BudgetScopeTool, ScopeID: "search", Limit: 10, Enabled: true}))
 
 	// CheckBudget exercises findApplicableBudgets internally
 	result, err := cc.CheckBudget(context.Background(), "agent-1", "user-1", "sess-1", "search", 1.0)
@@ -81,12 +81,12 @@ func TestCostController_FindApplicableBudgets_AllScopes(t *testing.T) {
 
 func TestCostController_CheckBudget_Exceeded(t *testing.T) {
 	cc := NewCostController(zap.NewNop())
-	cc.AddBudget(&Budget{
+	require.NoError(t, cc.AddBudget(&Budget{
 		ID: "g1", Scope: BudgetScopeGlobal, Limit: 5, Period: BudgetPeriodTotal,
 		AlertThresholds: []float64{80, 100}, Enabled: true,
-	})
+	}))
 	// Record enough cost to exceed budget
-	cc.RecordCost(&CostRecord{ToolName: "t", Cost: 4.5, AgentID: "a", UserID: "u"})
+	require.NoError(t, cc.RecordCost(&CostRecord{ToolName: "t", Cost: 4.5, AgentID: "a", UserID: "u"}))
 
 	result, err := cc.CheckBudget(context.Background(), "a", "u", "", "t", 2.0)
 	require.NoError(t, err)
@@ -97,12 +97,12 @@ func TestCostController_CheckBudget_AlertTriggered(t *testing.T) {
 	h := &testAlertHandler{}
 	cc := NewCostController(zap.NewNop())
 	cc.SetAlertHandler(h)
-	cc.AddBudget(&Budget{
+	require.NoError(t, cc.AddBudget(&Budget{
 		ID: "g1", Scope: BudgetScopeGlobal, Limit: 10, Period: BudgetPeriodTotal,
 		AlertThresholds: []float64{50, 80, 100}, Enabled: true,
-	})
+	}))
 	// Usage at 4.5 (45%), then adding 1.0 brings it to 5.5 (55%) -- crosses 50% threshold
-	cc.RecordCost(&CostRecord{ToolName: "t", Cost: 4.5, AgentID: "a", UserID: "u"})
+	require.NoError(t, cc.RecordCost(&CostRecord{ToolName: "t", Cost: 4.5, AgentID: "a", UserID: "u"}))
 
 	result, err := cc.CheckBudget(context.Background(), "a", "u", "", "t", 1.0)
 	require.NoError(t, err)
@@ -114,8 +114,8 @@ func TestCostController_CheckBudget_AlertTriggered(t *testing.T) {
 
 func TestCostControlMiddleware_Allowed(t *testing.T) {
 	cc := NewCostController(zap.NewNop())
-	cc.SetToolCost(&ToolCost{ToolName: "echo", BaseCost: 0.01})
-	cc.AddBudget(&Budget{ID: "g1", Scope: BudgetScopeGlobal, Limit: 100, Period: BudgetPeriodTotal, Enabled: true})
+	require.NoError(t, cc.SetToolCost(&ToolCost{ToolName: "echo", BaseCost: 0.01}))
+	require.NoError(t, cc.AddBudget(&Budget{ID: "g1", Scope: BudgetScopeGlobal, Limit: 100, Period: BudgetPeriodTotal, Enabled: true}))
 
 	inner := func(ctx context.Context, args json.RawMessage) (json.RawMessage, error) {
 		return json.RawMessage(`"ok"`), nil
@@ -134,7 +134,7 @@ func TestCostControlMiddleware_Allowed(t *testing.T) {
 
 func TestCostControlMiddleware_BudgetExceeded(t *testing.T) {
 	cc := NewCostController(zap.NewNop())
-	cc.AddBudget(&Budget{ID: "g1", Scope: BudgetScopeGlobal, Limit: 0.5, Period: BudgetPeriodTotal, Enabled: true})
+	require.NoError(t, cc.AddBudget(&Budget{ID: "g1", Scope: BudgetScopeGlobal, Limit: 0.5, Period: BudgetPeriodTotal, Enabled: true}))
 	// Default cost is 1.0 for unknown tools, which exceeds 0.5
 
 	inner := func(ctx context.Context, args json.RawMessage) (json.RawMessage, error) {
@@ -161,8 +161,8 @@ func TestMemoryAuditBackend_Close(t *testing.T) {
 
 type fakeQueueHandler struct{}
 
-func (f *fakeQueueHandler) Enqueue(_ context.Context, _ *RateLimitContext) error          { return nil }
-func (f *fakeQueueHandler) Dequeue(_ context.Context) (*RateLimitContext, error)           { return nil, nil }
+func (f *fakeQueueHandler) Enqueue(_ context.Context, _ *RateLimitContext) error { return nil }
+func (f *fakeQueueHandler) Dequeue(_ context.Context) (*RateLimitContext, error) { return nil, nil }
 
 type fakeDegradeHandler struct{}
 
@@ -191,12 +191,12 @@ func TestNewToolCallChain(t *testing.T) {
 
 func TestToolCallChain_ExecuteChain_Success(t *testing.T) {
 	reg := NewDefaultRegistry(zap.NewNop())
-	reg.Register("step1", func(ctx context.Context, args json.RawMessage) (json.RawMessage, error) {
+	require.NoError(t, reg.Register("step1", func(ctx context.Context, args json.RawMessage) (json.RawMessage, error) {
 		return json.RawMessage(`{"value":"from-step1"}`), nil
-	}, ToolMetadata{Description: "step1"})
-	reg.Register("step2", func(ctx context.Context, args json.RawMessage) (json.RawMessage, error) {
+	}, ToolMetadata{Description: "step1"}))
+	require.NoError(t, reg.Register("step2", func(ctx context.Context, args json.RawMessage) (json.RawMessage, error) {
 		return json.RawMessage(`{"result":"done"}`), nil
-	}, ToolMetadata{Description: "step2"})
+	}, ToolMetadata{Description: "step2"}))
 
 	re := NewResilientExecutor(reg, DefaultFallbackConfig(), zap.NewNop())
 	chain := NewToolCallChain(re, zap.NewNop())
@@ -215,12 +215,12 @@ func TestToolCallChain_ExecuteChain_Success(t *testing.T) {
 
 func TestToolCallChain_ExecuteChain_ErrorStopsChain(t *testing.T) {
 	reg := NewDefaultRegistry(zap.NewNop())
-	reg.Register("fail", func(ctx context.Context, args json.RawMessage) (json.RawMessage, error) {
+	require.NoError(t, reg.Register("fail", func(ctx context.Context, args json.RawMessage) (json.RawMessage, error) {
 		return nil, fmt.Errorf("step failed")
-	}, ToolMetadata{Description: "fail"})
-	reg.Register("step2", func(ctx context.Context, args json.RawMessage) (json.RawMessage, error) {
+	}, ToolMetadata{Description: "fail"}))
+	require.NoError(t, reg.Register("step2", func(ctx context.Context, args json.RawMessage) (json.RawMessage, error) {
 		return json.RawMessage(`"ok"`), nil
-	}, ToolMetadata{Description: "step2"})
+	}, ToolMetadata{Description: "step2"}))
 
 	cfg := DefaultFallbackConfig()
 	cfg.MaxRetries = 0

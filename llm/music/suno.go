@@ -75,7 +75,10 @@ func (p *SunoProvider) Generate(ctx context.Context, req *GenerateRequest) (*Gen
 		Duration:     int(req.Duration),
 	}
 
-	payload, _ := json.Marshal(body)
+	payload, err := json.Marshal(body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal request: %w", err)
+	}
 	endpoint := fmt.Sprintf("%s/suno/create", strings.TrimRight(p.cfg.BaseURL, "/"))
 
 	httpReq, err := http.NewRequestWithContext(ctx, "POST", endpoint, bytes.NewReader(payload))
@@ -158,7 +161,10 @@ func (p *SunoProvider) pollTask(ctx context.Context, taskID string) (*sunoRespon
 			}
 
 			var sResp sunoResponse
-			json.NewDecoder(resp.Body).Decode(&sResp)
+			if err := json.NewDecoder(resp.Body).Decode(&sResp); err != nil {
+				resp.Body.Close()
+				continue
+			}
 			resp.Body.Close()
 
 			if sResp.Status == "completed" || sResp.Status == "success" {

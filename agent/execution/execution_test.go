@@ -703,20 +703,26 @@ func TestSandboxExecutorStatsConcurrency(t *testing.T) {
 
 	done := make(chan struct{})
 	const n = 50
+	errs := make(chan error, n)
 
 	for i := 0; i < n; i++ {
 		go func() {
 			defer func() { done <- struct{}{} }()
-			exec.Execute(context.Background(), &ExecutionRequest{
+			_, err := exec.Execute(context.Background(), &ExecutionRequest{
 				ID:       fmt.Sprintf("concurrent-%d", i),
 				Language: LangPython,
 				Code:     "pass",
 			})
+			errs <- err
 		}()
 	}
 
 	for i := 0; i < n; i++ {
 		<-done
+	}
+	close(errs)
+	for err := range errs {
+		require.NoError(t, err)
 	}
 
 	stats := exec.Stats()

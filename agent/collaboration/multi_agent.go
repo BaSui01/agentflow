@@ -10,6 +10,7 @@ import (
 
 	"github.com/BaSui01/agentflow/agent"
 	"github.com/BaSui01/agentflow/agent/persistence"
+	"github.com/BaSui01/agentflow/types"
 	"github.com/google/uuid"
 	"go.uber.org/zap"
 )
@@ -71,7 +72,10 @@ type Message struct {
 	Content   string
 	Metadata  map[string]any
 	Timestamp time.Time
+	Body      types.Message // Canonical message body bridge to Layer-0 types.Message
 }
+
+const payloadAnyMetadataKey = "_metadata_any"
 
 // MessageType 消息类型
 type MessageType string
@@ -311,29 +315,70 @@ func (h *MessageHub) SendWithContext(ctx context.Context, msg *Message) error {
 
 // toPersistMessage 转换为持久化消息格式
 func (h *MessageHub) toPersistMessage(msg *Message) *persistence.Message {
-	return &persistence.Message{
-		ID:        msg.ID,
-		Topic:     msg.ToID, // 使用 ToID 作为 topic
-		FromID:    msg.FromID,
-		ToID:      msg.ToID,
-		Type:      string(msg.Type),
-		Content:   msg.Content,
-		Payload:   msg.Metadata,
-		CreatedAt: msg.Timestamp,
+	body := msg.Body
+	if body.Content == "" {
+		body.Content = msg.Content
 	}
+	if body.Timestamp.IsZero() {
+		body.Timestamp = msg.Timestamp
+	}
+	if body.Metadata == nil && len(msg.Metadata) > 0 {
+		body.Metadata = toStringMetadata(msg.Metadata)
+	}
+
+	pm := persistence.NewMessageDAOFromTypes(
+		msg.ToID, // topic
+		msg.FromID,
+		msg.ToID,
+		string(msg.Type),
+		body,
+	)
+	pm.ID = msg.ID
+	if len(msg.Metadata) > 0 {
+		if pm.Payload == nil {
+			pm.Payload = make(map[string]any, 1)
+		}
+		pm.Payload[payloadAnyMetadataKey] = msg.Metadata
+	}
+	return pm
 }
 
 // fromPersistMessage 从持久化消息格式转换
 func (h *MessageHub) fromPersistMessage(pm *persistence.Message) *Message {
+	body := pm.ToTypesMessage()
+	metadata := pm.Payload
+	if raw, ok := pm.Payload[payloadAnyMetadataKey]; ok {
+		if m, ok := raw.(map[string]any); ok {
+			metadata = m
+		}
+	}
+
 	return &Message{
 		ID:        pm.ID,
 		FromID:    pm.FromID,
 		ToID:      pm.ToID,
 		Type:      MessageType(pm.Type),
-		Content:   pm.Content,
-		Metadata:  pm.Payload,
-		Timestamp: pm.CreatedAt,
+		Content:   body.Content,
+		Metadata:  metadata,
+		Timestamp: body.Timestamp,
+		Body:      body,
 	}
+}
+
+func toStringMetadata(in map[string]any) map[string]string {
+	if len(in) == 0 {
+		return nil
+	}
+	out := make(map[string]string, len(in))
+	for k, v := range in {
+		if s, ok := v.(string); ok {
+			out[k] = s
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
 }
 
 // ackMessage 确认消息已处理

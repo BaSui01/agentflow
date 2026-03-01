@@ -41,7 +41,7 @@ func TestFileTaskStore_PersistsToDisk(t *testing.T) {
 	store, err := NewFileTaskStore(config)
 	require.NoError(t, err)
 	ctx := context.Background()
-	store.SaveTask(ctx, &AsyncTask{ID: "persist1", AgentID: "a1", Status: TaskStatusPending})
+	require.NoError(t, store.SaveTask(ctx, &AsyncTask{ID: "persist1", AgentID: "a1", Status: TaskStatusPending}))
 	store.Close()
 
 	store2, err := NewFileTaskStore(config)
@@ -56,7 +56,7 @@ func TestFileTaskStore_PersistsToDisk(t *testing.T) {
 func TestFileTaskStore_UpdateStatusAndProgress(t *testing.T) {
 	store := newTestFileTaskStore(t)
 	ctx := context.Background()
-	store.SaveTask(ctx, &AsyncTask{ID: "ft1", AgentID: "a1", Status: TaskStatusPending})
+	require.NoError(t, store.SaveTask(ctx, &AsyncTask{ID: "ft1", AgentID: "a1", Status: TaskStatusPending}))
 
 	require.NoError(t, store.UpdateStatus(ctx, "ft1", TaskStatusRunning, nil, ""))
 	require.NoError(t, store.UpdateProgress(ctx, "ft1", 75.0))
@@ -70,7 +70,7 @@ func TestFileTaskStore_UpdateStatusAndProgress(t *testing.T) {
 func TestFileTaskStore_DeleteTask(t *testing.T) {
 	store := newTestFileTaskStore(t)
 	ctx := context.Background()
-	store.SaveTask(ctx, &AsyncTask{ID: "ft1"})
+	require.NoError(t, store.SaveTask(ctx, &AsyncTask{ID: "ft1"}))
 	require.NoError(t, store.DeleteTask(ctx, "ft1"))
 	_, err := store.GetTask(ctx, "ft1")
 	assert.ErrorIs(t, err, ErrNotFound)
@@ -79,8 +79,8 @@ func TestFileTaskStore_DeleteTask(t *testing.T) {
 func TestFileTaskStore_GetRecoverableTasks(t *testing.T) {
 	store := newTestFileTaskStore(t)
 	ctx := context.Background()
-	store.SaveTask(ctx, &AsyncTask{ID: "ft1", Status: TaskStatusPending})
-	store.SaveTask(ctx, &AsyncTask{ID: "ft2", Status: TaskStatusCompleted})
+	require.NoError(t, store.SaveTask(ctx, &AsyncTask{ID: "ft1", Status: TaskStatusPending}))
+	require.NoError(t, store.SaveTask(ctx, &AsyncTask{ID: "ft2", Status: TaskStatusCompleted}))
 
 	tasks, err := store.GetRecoverableTasks(ctx)
 	require.NoError(t, err)
@@ -92,8 +92,8 @@ func TestFileTaskStore_Cleanup(t *testing.T) {
 	store := newTestFileTaskStore(t)
 	ctx := context.Background()
 	old := time.Now().Add(-2 * time.Hour)
-	store.SaveTask(ctx, &AsyncTask{ID: "old", Status: TaskStatusCompleted, UpdatedAt: old, CompletedAt: &old})
-	store.SaveTask(ctx, &AsyncTask{ID: "new", Status: TaskStatusCompleted, UpdatedAt: time.Now()})
+	require.NoError(t, store.SaveTask(ctx, &AsyncTask{ID: "old", Status: TaskStatusCompleted, UpdatedAt: old, CompletedAt: &old}))
+	require.NoError(t, store.SaveTask(ctx, &AsyncTask{ID: "new", Status: TaskStatusCompleted, UpdatedAt: time.Now()}))
 
 	count, err := store.Cleanup(ctx, time.Hour)
 	require.NoError(t, err)
@@ -103,8 +103,8 @@ func TestFileTaskStore_Cleanup(t *testing.T) {
 func TestFileTaskStore_ListTasks_FilterByType(t *testing.T) {
 	store := newTestFileTaskStore(t)
 	ctx := context.Background()
-	store.SaveTask(ctx, &AsyncTask{ID: "ft1", Type: "build"})
-	store.SaveTask(ctx, &AsyncTask{ID: "ft2", Type: "deploy"})
+	require.NoError(t, store.SaveTask(ctx, &AsyncTask{ID: "ft1", Type: "build"}))
+	require.NoError(t, store.SaveTask(ctx, &AsyncTask{ID: "ft2", Type: "deploy"}))
 
 	tasks, err := store.ListTasks(ctx, TaskFilter{Type: "build"})
 	require.NoError(t, err)
@@ -115,8 +115,8 @@ func TestFileTaskStore_ListTasks_FilterByType(t *testing.T) {
 func TestFileTaskStore_Stats(t *testing.T) {
 	store := newTestFileTaskStore(t)
 	ctx := context.Background()
-	store.SaveTask(ctx, &AsyncTask{ID: "ft1", AgentID: "a1", Status: TaskStatusPending})
-	store.SaveTask(ctx, &AsyncTask{ID: "ft2", AgentID: "a1", Status: TaskStatusFailed})
+	require.NoError(t, store.SaveTask(ctx, &AsyncTask{ID: "ft1", AgentID: "a1", Status: TaskStatusPending}))
+	require.NoError(t, store.SaveTask(ctx, &AsyncTask{ID: "ft2", AgentID: "a1", Status: TaskStatusFailed}))
 
 	stats, err := store.Stats(ctx)
 	require.NoError(t, err)
@@ -136,9 +136,9 @@ func TestFileTaskStore_Ping(t *testing.T) {
 func TestFileTaskStore_ListTasks_FilterByStatus(t *testing.T) {
 	store := newTestFileTaskStore(t)
 	ctx := context.Background()
-	store.SaveTask(ctx, &AsyncTask{ID: "ft1", Status: TaskStatusPending})
-	store.SaveTask(ctx, &AsyncTask{ID: "ft2", Status: TaskStatusRunning})
-	store.SaveTask(ctx, &AsyncTask{ID: "ft3", Status: TaskStatusCompleted})
+	require.NoError(t, store.SaveTask(ctx, &AsyncTask{ID: "ft1", Status: TaskStatusPending}))
+	require.NoError(t, store.SaveTask(ctx, &AsyncTask{ID: "ft2", Status: TaskStatusRunning}))
+	require.NoError(t, store.SaveTask(ctx, &AsyncTask{ID: "ft3", Status: TaskStatusCompleted}))
 
 	tasks, err := store.ListTasks(ctx, TaskFilter{Status: []TaskStatus{TaskStatusPending, TaskStatusRunning}})
 	require.NoError(t, err)
@@ -148,8 +148,8 @@ func TestFileTaskStore_ListTasks_FilterByStatus(t *testing.T) {
 func TestFileTaskStore_ListTasks_FilterBySessionAndAgent(t *testing.T) {
 	store := newTestFileTaskStore(t)
 	ctx := context.Background()
-	store.SaveTask(ctx, &AsyncTask{ID: "ft1", SessionID: "s1", AgentID: "a1"})
-	store.SaveTask(ctx, &AsyncTask{ID: "ft2", SessionID: "s2", AgentID: "a2"})
+	require.NoError(t, store.SaveTask(ctx, &AsyncTask{ID: "ft1", SessionID: "s1", AgentID: "a1"}))
+	require.NoError(t, store.SaveTask(ctx, &AsyncTask{ID: "ft2", SessionID: "s2", AgentID: "a2"}))
 
 	tasks, err := store.ListTasks(ctx, TaskFilter{SessionID: "s1"})
 	require.NoError(t, err)
@@ -168,8 +168,8 @@ func TestFileTaskStore_ListTasks_FilterByParentAndTime(t *testing.T) {
 
 	now := time.Now()
 	past := now.Add(-2 * time.Hour)
-	store.SaveTask(ctx, &AsyncTask{ID: "ft1", ParentTaskID: "p1", CreatedAt: past})
-	store.SaveTask(ctx, &AsyncTask{ID: "ft2", ParentTaskID: "p2", CreatedAt: now})
+	require.NoError(t, store.SaveTask(ctx, &AsyncTask{ID: "ft1", ParentTaskID: "p1", CreatedAt: past}))
+	require.NoError(t, store.SaveTask(ctx, &AsyncTask{ID: "ft2", ParentTaskID: "p2", CreatedAt: now}))
 
 	tasks, err := store.ListTasks(ctx, TaskFilter{ParentTaskID: "p1"})
 	require.NoError(t, err)
@@ -193,8 +193,8 @@ func TestFileTaskStore_ListTasks_SortByUpdatedAt(t *testing.T) {
 	ctx := context.Background()
 
 	now := time.Now()
-	store.SaveTask(ctx, &AsyncTask{ID: "ft1", UpdatedAt: now.Add(-time.Hour)})
-	store.SaveTask(ctx, &AsyncTask{ID: "ft2", UpdatedAt: now})
+	require.NoError(t, store.SaveTask(ctx, &AsyncTask{ID: "ft1", UpdatedAt: now.Add(-time.Hour)}))
+	require.NoError(t, store.SaveTask(ctx, &AsyncTask{ID: "ft2", UpdatedAt: now}))
 
 	tasks, err := store.ListTasks(ctx, TaskFilter{OrderBy: "updated_at", OrderDesc: true})
 	require.NoError(t, err)
@@ -206,8 +206,8 @@ func TestFileTaskStore_ListTasks_SortByPriority(t *testing.T) {
 	store := newTestFileTaskStore(t)
 	ctx := context.Background()
 
-	store.SaveTask(ctx, &AsyncTask{ID: "ft1", Priority: 1})
-	store.SaveTask(ctx, &AsyncTask{ID: "ft2", Priority: 10})
+	require.NoError(t, store.SaveTask(ctx, &AsyncTask{ID: "ft1", Priority: 1}))
+	require.NoError(t, store.SaveTask(ctx, &AsyncTask{ID: "ft2", Priority: 10}))
 
 	tasks, err := store.ListTasks(ctx, TaskFilter{OrderBy: "priority"})
 	require.NoError(t, err)
@@ -220,7 +220,7 @@ func TestFileTaskStore_ListTasks_WithLimitAndOffset(t *testing.T) {
 	ctx := context.Background()
 
 	for i := 0; i < 5; i++ {
-		store.SaveTask(ctx, &AsyncTask{ID: fmt.Sprintf("ft%d", i)})
+		require.NoError(t, store.SaveTask(ctx, &AsyncTask{ID: fmt.Sprintf("ft%d", i)}))
 	}
 
 	tasks, err := store.ListTasks(ctx, TaskFilter{Limit: 2, Offset: 1})
@@ -231,7 +231,7 @@ func TestFileTaskStore_ListTasks_WithLimitAndOffset(t *testing.T) {
 func TestFileTaskStore_UpdateStatus_Completed(t *testing.T) {
 	store := newTestFileTaskStore(t)
 	ctx := context.Background()
-	store.SaveTask(ctx, &AsyncTask{ID: "ft1", Status: TaskStatusRunning})
+	require.NoError(t, store.SaveTask(ctx, &AsyncTask{ID: "ft1", Status: TaskStatusRunning}))
 
 	require.NoError(t, store.UpdateStatus(ctx, "ft1", TaskStatusCompleted, "done", ""))
 	got, _ := store.GetTask(ctx, "ft1")

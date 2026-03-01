@@ -57,7 +57,7 @@ func TestFileStore_GetMetadata(t *testing.T) {
 	ctx := context.Background()
 
 	artifact := &Artifact{ID: "art-1", Name: "test", Type: ArtifactTypeFile}
-	store.Save(ctx, artifact, strings.NewReader("data"))
+	require.NoError(t, store.Save(ctx, artifact, strings.NewReader("data")))
 
 	meta, err := store.GetMetadata(ctx, "art-1")
 	require.NoError(t, err)
@@ -75,7 +75,7 @@ func TestFileStore_Delete(t *testing.T) {
 	ctx := context.Background()
 
 	artifact := &Artifact{ID: "art-1", Name: "test", Type: ArtifactTypeFile}
-	store.Save(ctx, artifact, strings.NewReader("data"))
+	require.NoError(t, store.Save(ctx, artifact, strings.NewReader("data")))
 
 	require.NoError(t, store.Delete(ctx, "art-1"))
 	_, _, err := store.Load(ctx, "art-1")
@@ -92,8 +92,8 @@ func TestFileStore_List_All(t *testing.T) {
 	store := newTestFileStore(t)
 	ctx := context.Background()
 
-	store.Save(ctx, &Artifact{ID: "a1", Name: "f1", Type: ArtifactTypeFile, SessionID: "s1"}, strings.NewReader("d"))
-	store.Save(ctx, &Artifact{ID: "a2", Name: "f2", Type: ArtifactTypeCode, SessionID: "s2"}, strings.NewReader("d"))
+	require.NoError(t, store.Save(ctx, &Artifact{ID: "a1", Name: "f1", Type: ArtifactTypeFile, SessionID: "s1"}, strings.NewReader("d")))
+	require.NoError(t, store.Save(ctx, &Artifact{ID: "a2", Name: "f2", Type: ArtifactTypeCode, SessionID: "s2"}, strings.NewReader("d")))
 
 	results, err := store.List(ctx, ArtifactQuery{})
 	require.NoError(t, err)
@@ -104,8 +104,8 @@ func TestFileStore_List_FilterBySessionID(t *testing.T) {
 	store := newTestFileStore(t)
 	ctx := context.Background()
 
-	store.Save(ctx, &Artifact{ID: "a1", Name: "f1", Type: ArtifactTypeFile, SessionID: "s1"}, strings.NewReader("d"))
-	store.Save(ctx, &Artifact{ID: "a2", Name: "f2", Type: ArtifactTypeFile, SessionID: "s2"}, strings.NewReader("d"))
+	require.NoError(t, store.Save(ctx, &Artifact{ID: "a1", Name: "f1", Type: ArtifactTypeFile, SessionID: "s1"}, strings.NewReader("d")))
+	require.NoError(t, store.Save(ctx, &Artifact{ID: "a2", Name: "f2", Type: ArtifactTypeFile, SessionID: "s2"}, strings.NewReader("d")))
 
 	results, err := store.List(ctx, ArtifactQuery{SessionID: "s1"})
 	require.NoError(t, err)
@@ -117,8 +117,8 @@ func TestFileStore_List_FilterByType(t *testing.T) {
 	store := newTestFileStore(t)
 	ctx := context.Background()
 
-	store.Save(ctx, &Artifact{ID: "a1", Name: "f1", Type: ArtifactTypeFile}, strings.NewReader("d"))
-	store.Save(ctx, &Artifact{ID: "a2", Name: "f2", Type: ArtifactTypeCode}, strings.NewReader("d"))
+	require.NoError(t, store.Save(ctx, &Artifact{ID: "a1", Name: "f1", Type: ArtifactTypeFile}, strings.NewReader("d")))
+	require.NoError(t, store.Save(ctx, &Artifact{ID: "a2", Name: "f2", Type: ArtifactTypeCode}, strings.NewReader("d")))
 
 	results, err := store.List(ctx, ArtifactQuery{Type: ArtifactTypeCode})
 	require.NoError(t, err)
@@ -130,8 +130,8 @@ func TestFileStore_List_FilterByTags(t *testing.T) {
 	store := newTestFileStore(t)
 	ctx := context.Background()
 
-	store.Save(ctx, &Artifact{ID: "a1", Name: "f1", Type: ArtifactTypeFile, Tags: []string{"go", "test"}}, strings.NewReader("d"))
-	store.Save(ctx, &Artifact{ID: "a2", Name: "f2", Type: ArtifactTypeFile, Tags: []string{"python"}}, strings.NewReader("d"))
+	require.NoError(t, store.Save(ctx, &Artifact{ID: "a1", Name: "f1", Type: ArtifactTypeFile, Tags: []string{"go", "test"}}, strings.NewReader("d")))
+	require.NoError(t, store.Save(ctx, &Artifact{ID: "a2", Name: "f2", Type: ArtifactTypeFile, Tags: []string{"python"}}, strings.NewReader("d")))
 
 	results, err := store.List(ctx, ArtifactQuery{Tags: []string{"go"}})
 	require.NoError(t, err)
@@ -144,7 +144,7 @@ func TestFileStore_List_WithLimit(t *testing.T) {
 	ctx := context.Background()
 
 	for i := 0; i < 5; i++ {
-		store.Save(ctx, &Artifact{ID: time.Now().String(), Name: "f", Type: ArtifactTypeFile}, strings.NewReader("d"))
+		require.NoError(t, store.Save(ctx, &Artifact{ID: time.Now().String(), Name: "f", Type: ArtifactTypeFile}, strings.NewReader("d")))
 	}
 
 	results, err := store.List(ctx, ArtifactQuery{Limit: 2})
@@ -156,7 +156,7 @@ func TestFileStore_Archive(t *testing.T) {
 	store := newTestFileStore(t)
 	ctx := context.Background()
 
-	store.Save(ctx, &Artifact{ID: "a1", Name: "f1", Type: ArtifactTypeFile, Status: StatusReady}, strings.NewReader("d"))
+	require.NoError(t, store.Save(ctx, &Artifact{ID: "a1", Name: "f1", Type: ArtifactTypeFile, Status: StatusReady}, strings.NewReader("d")))
 	require.NoError(t, store.Archive(ctx, "a1"))
 
 	meta, _ := store.GetMetadata(ctx, "a1")
@@ -211,7 +211,8 @@ func TestManager_Get(t *testing.T) {
 	mgr := newTestManager(t)
 	ctx := context.Background()
 
-	created, _ := mgr.Create(ctx, "test.txt", ArtifactTypeFile, strings.NewReader("hello"))
+	created, err := mgr.Create(ctx, "test.txt", ArtifactTypeFile, strings.NewReader("hello"))
+	require.NoError(t, err)
 
 	artifact, reader, err := mgr.Get(ctx, created.ID)
 	require.NoError(t, err)
@@ -226,7 +227,8 @@ func TestManager_GetMetadata_FromCache(t *testing.T) {
 	mgr := newTestManager(t)
 	ctx := context.Background()
 
-	created, _ := mgr.Create(ctx, "test.txt", ArtifactTypeFile, strings.NewReader("data"))
+	created, err := mgr.Create(ctx, "test.txt", ArtifactTypeFile, strings.NewReader("data"))
+	require.NoError(t, err)
 
 	meta, err := mgr.GetMetadata(ctx, created.ID)
 	require.NoError(t, err)
@@ -237,10 +239,11 @@ func TestManager_Delete(t *testing.T) {
 	mgr := newTestManager(t)
 	ctx := context.Background()
 
-	created, _ := mgr.Create(ctx, "test.txt", ArtifactTypeFile, strings.NewReader("data"))
+	created, err := mgr.Create(ctx, "test.txt", ArtifactTypeFile, strings.NewReader("data"))
+	require.NoError(t, err)
 	require.NoError(t, mgr.Delete(ctx, created.ID))
 
-	_, _, err := mgr.Get(ctx, created.ID)
+	_, _, err = mgr.Get(ctx, created.ID)
 	assert.Error(t, err)
 }
 
@@ -248,8 +251,10 @@ func TestManager_List(t *testing.T) {
 	mgr := newTestManager(t)
 	ctx := context.Background()
 
-	mgr.Create(ctx, "f1", ArtifactTypeFile, strings.NewReader("d1"))
-	mgr.Create(ctx, "f2", ArtifactTypeCode, strings.NewReader("d2"))
+	_, err := mgr.Create(ctx, "f1", ArtifactTypeFile, strings.NewReader("d1"))
+	require.NoError(t, err)
+	_, err = mgr.Create(ctx, "f2", ArtifactTypeCode, strings.NewReader("d2"))
+	require.NoError(t, err)
 
 	results, err := mgr.List(ctx, ArtifactQuery{})
 	require.NoError(t, err)
@@ -260,7 +265,8 @@ func TestManager_Archive(t *testing.T) {
 	mgr := newTestManager(t)
 	ctx := context.Background()
 
-	created, _ := mgr.Create(ctx, "test.txt", ArtifactTypeFile, strings.NewReader("data"))
+	created, err := mgr.Create(ctx, "test.txt", ArtifactTypeFile, strings.NewReader("data"))
+	require.NoError(t, err)
 	require.NoError(t, mgr.Archive(ctx, created.ID))
 }
 
@@ -268,10 +274,11 @@ func TestManager_CreateVersion(t *testing.T) {
 	mgr := newTestManager(t)
 	ctx := context.Background()
 
-	parent, _ := mgr.Create(ctx, "test.txt", ArtifactTypeFile, strings.NewReader("v1"),
+	parent, err := mgr.Create(ctx, "test.txt", ArtifactTypeFile, strings.NewReader("v1"),
 		WithCreatedBy("user1"),
 		WithSessionID("sess1"),
 	)
+	require.NoError(t, err)
 
 	v2, err := mgr.CreateVersion(ctx, parent.ID, strings.NewReader("v2"))
 	require.NoError(t, err)

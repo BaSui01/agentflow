@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 )
 
@@ -36,7 +37,7 @@ func TestMultiHopReasoner_Reason_Basic(t *testing.T) {
 		{ID: "doc2", Content: "Python is a popular programming language for machine learning."},
 		{ID: "doc3", Content: "TensorFlow is a machine learning framework developed by Google."},
 	}
-	retriever.IndexDocuments(docs)
+	require.NoError(t, retriever.IndexDocuments(docs))
 
 	reasoner := NewMultiHopReasoner(config, retriever, nil, nil, nil, zap.NewNop())
 
@@ -77,7 +78,7 @@ func TestMultiHopReasoner_Reason_WithQueryTransformer(t *testing.T) {
 		{ID: "doc1", Content: "Machine learning algorithms learn from data."},
 		{ID: "doc2", Content: "Deep learning is a type of machine learning."},
 	}
-	retriever.IndexDocuments(docs)
+	require.NoError(t, retriever.IndexDocuments(docs))
 
 	transformerConfig := DefaultQueryTransformConfig()
 	transformerConfig.UseLLM = false
@@ -115,7 +116,7 @@ func TestMultiHopReasoner_Reason_WithLLM(t *testing.T) {
 		{ID: "doc1", Content: "Machine learning is a branch of AI."},
 		{ID: "doc2", Content: "Neural networks are used in deep learning."},
 	}
-	retriever.IndexDocuments(docs)
+	require.NoError(t, retriever.IndexDocuments(docs))
 
 	mockLLM := newMockLLMProvider()
 	reasoner := NewMultiHopReasoner(config, retriever, nil, mockLLM, nil, zap.NewNop())
@@ -168,7 +169,7 @@ func TestMultiHopReasoner_ExecuteHop(t *testing.T) {
 	docs := []Document{
 		{ID: "doc1", Content: "Test document about machine learning."},
 	}
-	retriever.IndexDocuments(docs)
+	require.NoError(t, retriever.IndexDocuments(docs))
 
 	reasoner := NewMultiHopReasoner(config, retriever, nil, nil, nil, zap.NewNop())
 
@@ -206,7 +207,7 @@ func TestMultiHopReasoner_Cache(t *testing.T) {
 	docs := []Document{
 		{ID: "doc1", Content: "Machine learning basics."},
 	}
-	retriever.IndexDocuments(docs)
+	require.NoError(t, retriever.IndexDocuments(docs))
 
 	reasoner := NewMultiHopReasoner(config, retriever, nil, nil, nil, zap.NewNop())
 
@@ -432,7 +433,7 @@ func TestMultiHopReasoner_ReasonBatch(t *testing.T) {
 		{ID: "doc1", Content: "Machine learning basics."},
 		{ID: "doc2", Content: "Python programming language."},
 	}
-	retriever.IndexDocuments(docs)
+	require.NoError(t, retriever.IndexDocuments(docs))
 
 	reasoner := NewMultiHopReasoner(config, retriever, nil, nil, nil, zap.NewNop())
 
@@ -599,7 +600,7 @@ func TestMultiHopReasoner_QueryDeduplication(t *testing.T) {
 		{ID: "doc1", Content: "Machine learning is a subset of artificial intelligence."},
 		{ID: "doc2", Content: "Deep learning uses neural networks."},
 	}
-	retriever.IndexDocuments(docs)
+	require.NoError(t, retriever.IndexDocuments(docs))
 
 	reasoner := NewMultiHopReasoner(config, retriever, nil, nil, nil, zap.NewNop())
 

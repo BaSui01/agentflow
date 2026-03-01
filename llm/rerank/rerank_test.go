@@ -51,7 +51,8 @@ func TestCohereProvider_Rerank(t *testing.T) {
 		assert.Equal(t, "Bearer test-key", r.Header.Get("Authorization"))
 
 		var req cohereRerankRequest
-		json.NewDecoder(r.Body).Decode(&req)
+		err := json.NewDecoder(r.Body).Decode(&req)
+		require.NoError(t, err)
 		assert.Equal(t, "test query", req.Query)
 		assert.Equal(t, 2, len(req.Documents))
 
@@ -69,7 +70,8 @@ func TestCohereProvider_Rerank(t *testing.T) {
 			},
 		}
 		resp.Meta.BilledUnits.SearchUnits = 1
-		json.NewEncoder(w).Encode(resp)
+		err = json.NewEncoder(w).Encode(resp)
+		require.NoError(t, err)
 	}))
 	t.Cleanup(srv.Close)
 
@@ -91,7 +93,8 @@ func TestCohereProvider_Rerank(t *testing.T) {
 func TestCohereProvider_Rerank_Error(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte(`{"message":"bad request"}`))
+		_, err := w.Write([]byte(`{"message":"bad request"}`))
+		require.NoError(t, err)
 	}))
 	t.Cleanup(srv.Close)
 
@@ -118,7 +121,8 @@ func TestCohereProvider_RerankSimple(t *testing.T) {
 				{Index: 0, RelevanceScore: 0.9},
 			},
 		}
-		json.NewEncoder(w).Encode(resp)
+		err := json.NewEncoder(w).Encode(resp)
+		require.NoError(t, err)
 	}))
 	t.Cleanup(srv.Close)
 
@@ -154,7 +158,8 @@ func TestJinaProvider_Rerank(t *testing.T) {
 			},
 		}
 		resp.Usage.TotalTokens = 42
-		json.NewEncoder(w).Encode(resp)
+		err := json.NewEncoder(w).Encode(resp)
+		require.NoError(t, err)
 	}))
 	t.Cleanup(srv.Close)
 
@@ -172,7 +177,8 @@ func TestJinaProvider_Rerank(t *testing.T) {
 func TestJinaProvider_Rerank_Error(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte(`{"error":"internal"}`))
+		_, err := w.Write([]byte(`{"error":"internal"}`))
+		require.NoError(t, err)
 	}))
 	t.Cleanup(srv.Close)
 
@@ -253,7 +259,8 @@ func TestVoyageProvider_Rerank(t *testing.T) {
 func TestVoyageProvider_Rerank_Error(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusUnauthorized)
-		w.Write([]byte(`{"error":"unauthorized"}`))
+		_, err := w.Write([]byte(`{"error":"unauthorized"}`))
+		require.NoError(t, err)
 	}))
 	t.Cleanup(srv.Close)
 

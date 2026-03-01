@@ -11,11 +11,11 @@ import (
 
 // ThoughtSignature 表示一个加密推理签名.
 type ThoughtSignature struct {
-	ID        string                 `json:"id"`
-	Signature string                 `json:"signature"`
-	Model     string                 `json:"model"`
-	CreatedAt time.Time              `json:"created_at"`
-	ExpiresAt time.Time              `json:"expires_at"`
+	ID        string         `json:"id"`
+	Signature string         `json:"signature"`
+	Model     string         `json:"model"`
+	CreatedAt time.Time      `json:"created_at"`
+	ExpiresAt time.Time      `json:"expires_at"`
 	Metadata  map[string]any `json:"metadata,omitempty"`
 }
 
@@ -176,7 +176,10 @@ func (m *ThoughtSignatureMiddleware) Completion(ctx context.Context, req *ChatRe
 				Model:     req.Model,
 				CreatedAt: time.Now(),
 			}
-			m.manager.AddSignature(chainID, sig)
+			if err := m.manager.AddSignature(chainID, sig); err != nil {
+				// Signature persistence is best-effort and should not fail the provider response.
+				continue
+			}
 		}
 	}
 

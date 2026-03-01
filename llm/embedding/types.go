@@ -55,6 +55,10 @@ type EmbeddingUsage struct {
 }
 
 // Provider 定义统一的嵌入提供者接口.
+//
+// L-006 note:
+// Per ADR-003 ("types 包避免定义接口"), provider interfaces stay in consumer packages
+// instead of moving into the zero-dependency types package.
 type Provider interface {
 	// Embed 为给定输入生成嵌入.
 	Embed(ctx context.Context, req *EmbeddingRequest) (*EmbeddingResponse, error)

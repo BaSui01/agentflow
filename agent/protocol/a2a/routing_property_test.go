@@ -339,10 +339,10 @@ func TestProperty_A2A_TaskRouting_MultipleAgents(t *testing.T) {
 	})
 }
 
-// TestProperty A2A TaskRouting 未注册代理Fallback测试未注册代理的倒置行为.
+// TestProperty A2A TaskRouting 未注册代理应报错（显式目标不允许 fallback）.
 // 属性 11: A2A 任务运行正确性
 // ** 参数:要求6.2**
-func TestProperty_A2A_TaskRouting_UnregisteredAgentFallback(t *testing.T) {
+func TestProperty_A2A_TaskRouting_UnregisteredAgentReturnsError(t *testing.T) {
 	rapid.Check(t, func(rt *rapid.T) {
 		// 设置: 用默认代理创建服务器
 		config := DefaultServerConfig()
@@ -366,13 +366,38 @@ func TestProperty_A2A_TaskRouting_UnregisteredAgentFallback(t *testing.T) {
 			Timestamp: time.Now().UTC(),
 		}
 
-		// 执行: 路由信件( 应返回默认代理)
+		// 执行: 显式目标不存在，应返回错误（不再 silent fallback）
 		routedAgent, err := server.routeMessage(taskMsg)
-		require.NoError(t, err, "Should route message with fallback")
+		require.Error(t, err, "Should fail route when explicit target is missing")
+		assert.Nil(t, routedAgent)
+		assert.Contains(t, err.Error(), nonExistentID)
+	})
+}
 
-		// 财产:应归还注册代理人
-		assert.Equal(t, defaultAgentID, routedAgent.ID(),
-			"Should fall back to registered agent when target not found")
+func TestProperty_A2A_TaskRouting_EmptyTargetFallsBackToDefault(t *testing.T) {
+	rapid.Check(t, func(rt *rapid.T) {
+		config := DefaultServerConfig()
+		config.RequestTimeout = 5 * time.Second
+		server := NewHTTPServer(config)
+
+		defaultAgentID := genValidAgentID().Draw(rt, "defaultAgentID")
+		defaultAgent := newRoutingTestAgent(defaultAgentID, "Default Agent", agent.TypeGeneric)
+		err := server.RegisterAgent(defaultAgent)
+		require.NoError(t, err, "Should register default agent successfully")
+
+		taskMsg := &A2AMessage{
+			ID:        genMessageID().Draw(rt, "id"),
+			Type:      A2AMessageTypeTask,
+			From:      genValidAgentID().Draw(rt, "from"),
+			To:        "",
+			Payload:   map[string]any{"content": "test task"},
+			Timestamp: time.Now().UTC(),
+		}
+
+		routedAgent, err := server.routeMessage(taskMsg)
+		require.NoError(t, err, "Empty target should route to default agent")
+		require.NotNil(t, routedAgent)
+		assert.Equal(t, defaultAgentID, routedAgent.ID())
 	})
 }
 

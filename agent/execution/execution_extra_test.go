@@ -224,11 +224,18 @@ func TestSandboxExecutor_MixedStats(t *testing.T) {
 	exec := NewSandboxExecutor(cfg, backend, nil)
 
 	for i := 0; i < 6; i++ {
-		exec.Execute(context.Background(), &ExecutionRequest{
+		result, err := exec.Execute(context.Background(), &ExecutionRequest{
 			ID:       fmt.Sprintf("mixed-%d", i),
 			Language: LangPython,
 			Code:     "pass",
 		})
+		if (i+1)%3 == 0 {
+			require.Error(t, err)
+			assert.Nil(t, result)
+			continue
+		}
+		require.NoError(t, err)
+		require.NotNil(t, result)
 	}
 
 	stats := exec.Stats()

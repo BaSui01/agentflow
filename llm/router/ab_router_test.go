@@ -204,9 +204,10 @@ func TestABRouter_GetMetrics(t *testing.T) {
 
 	// Make some requests
 	for i := 0; i < 10; i++ {
-		router.Completion(context.Background(), &llm.ChatRequest{
+		_, callErr := router.Completion(context.Background(), &llm.ChatRequest{
 			Messages: []llm.Message{{Role: llm.RoleUser, Content: "Hello"}},
 		})
+		require.NoError(t, callErr)
 	}
 
 	metrics := router.GetMetrics()
@@ -223,9 +224,10 @@ func TestABRouter_GetReport(t *testing.T) {
 	router, err := NewABRouter(newTestABConfig(), nil)
 	require.NoError(t, err)
 
-	router.Completion(context.Background(), &llm.ChatRequest{
+	_, err = router.Completion(context.Background(), &llm.ChatRequest{
 		Messages: []llm.Message{{Role: llm.RoleUser, Content: "Hello"}},
 	})
+	require.NoError(t, err)
 
 	report := router.GetReport()
 	assert.Len(t, report, 2)
@@ -330,10 +332,11 @@ func TestABRouter_StickyCache_MaxSize(t *testing.T) {
 
 	// Fill beyond max
 	for i := 0; i < 10; i++ {
-		router.Completion(context.Background(), &llm.ChatRequest{
+		_, callErr := router.Completion(context.Background(), &llm.ChatRequest{
 			UserID:   fmt.Sprintf("user-%d", i),
 			Messages: []llm.Message{{Role: llm.RoleUser, Content: "Hello"}},
 		})
+		require.NoError(t, callErr)
 	}
 
 	router.stickyCacheMu.RLock()

@@ -162,11 +162,12 @@ func TestThoughtSignatureManager_GetLatestSignatures(t *testing.T) {
 	mgr.CreateChain("c1")
 
 	for i := 0; i < 10; i++ {
-		mgr.AddSignature("c1", ThoughtSignature{
+		err := mgr.AddSignature("c1", ThoughtSignature{
 			ID:        "sig",
 			Signature: "s",
 			Model:     "m",
 		})
+		require.NoError(t, err)
 	}
 
 	// Get last 3
@@ -185,16 +186,18 @@ func TestThoughtSignatureManager_CleanExpired(t *testing.T) {
 	mgr := NewThoughtSignatureManager(time.Millisecond)
 	mgr.CreateChain("c1")
 
-	mgr.AddSignature("c1", ThoughtSignature{
+	err := mgr.AddSignature("c1", ThoughtSignature{
 		ID:        "expired",
 		Signature: "s",
 		ExpiresAt: time.Now().Add(-time.Hour), // already expired
 	})
-	mgr.AddSignature("c1", ThoughtSignature{
+	require.NoError(t, err)
+	err = mgr.AddSignature("c1", ThoughtSignature{
 		ID:        "valid",
 		Signature: "s",
 		ExpiresAt: time.Now().Add(time.Hour), // still valid
 	})
+	require.NoError(t, err)
 
 	mgr.CleanExpired()
 
@@ -207,4 +210,3 @@ func TestThoughtSignatureManager_DefaultTTL(t *testing.T) {
 	mgr := NewThoughtSignatureManager(0) // should default to 24h
 	assert.Equal(t, 24*time.Hour, mgr.ttl)
 }
-

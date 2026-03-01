@@ -10,6 +10,7 @@ import (
 	"github.com/BaSui01/agentflow/agent/crews"
 	"github.com/BaSui01/agentflow/agent/handoff"
 	"github.com/BaSui01/agentflow/agent/hierarchical"
+	"github.com/BaSui01/agentflow/llm"
 	"go.uber.org/zap"
 )
 
@@ -141,7 +142,7 @@ func (a *HierarchicalAdapter) Execute(ctx context.Context, task *OrchestrationTa
 		ID:   "orchestration-hierarchical",
 		Name: "orchestration-hierarchical",
 		Type: agent.TypeGeneric,
-	}, nil, nil, nil, nil, a.logger)
+	}, noopProvider{}, nil, nil, nil, a.logger)
 
 	ha := hierarchical.NewHierarchicalAgent(
 		base, supervisor, workers,
@@ -165,6 +166,30 @@ func (a *HierarchicalAdapter) Execute(ctx context.Context, task *OrchestrationTa
 		Metadata:  map[string]any{"supervisor": supervisor.ID()},
 	}, nil
 }
+
+// noopProvider satisfies llm.Provider for orchestration wrappers that don't
+// directly perform model calls through the embedded BaseAgent.
+type noopProvider struct{}
+
+func (noopProvider) Completion(context.Context, *llm.ChatRequest) (*llm.ChatResponse, error) {
+	return nil, fmt.Errorf("not implemented")
+}
+
+func (noopProvider) Stream(context.Context, *llm.ChatRequest) (<-chan llm.StreamChunk, error) {
+	return nil, fmt.Errorf("not implemented")
+}
+
+func (noopProvider) HealthCheck(context.Context) (*llm.HealthStatus, error) {
+	return &llm.HealthStatus{Healthy: true}, nil
+}
+
+func (noopProvider) Name() string { return "noop" }
+
+func (noopProvider) SupportsNativeFunctionCalling() bool { return false }
+
+func (noopProvider) ListModels(context.Context) ([]llm.Model, error) { return nil, nil }
+
+func (noopProvider) Endpoints() llm.ProviderEndpoints { return llm.ProviderEndpoints{} }
 
 // ---------------------------------------------------------------------------
 // HandoffAdapter

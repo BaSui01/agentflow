@@ -23,15 +23,17 @@ const defaultStreamTimeout = 30 * time.Second
 
 // ChatHandler 聊天接口处理器
 type ChatHandler struct {
-	provider llm.Provider
-	logger   *zap.Logger
+	provider  llm.Provider
+	converter ChatConverter
+	logger    *zap.Logger
 }
 
 // NewChatHandler 创建聊天处理器
 func NewChatHandler(provider llm.Provider, logger *zap.Logger) *ChatHandler {
 	return &ChatHandler{
-		provider: provider,
-		logger:   logger,
+		provider:  provider,
+		converter: NewDefaultChatConverter(defaultStreamTimeout),
+		logger:    logger,
 	}
 }
 
@@ -285,103 +287,27 @@ func (h *ChatHandler) validateChatRequest(req *api.ChatRequest) *types.Error {
 
 // convertToLLMRequest 转换为 LLM 请求
 func (h *ChatHandler) convertToLLMRequest(req *api.ChatRequest) *llm.ChatRequest {
-	// 解析超时
-	timeout := defaultStreamTimeout
-	if req.Timeout != "" {
-		if d, err := time.ParseDuration(req.Timeout); err == nil {
-			timeout = d
-		}
-	}
-
-	// 转换 Messages（api.Message -> types.Message）
-	messages := make([]types.Message, len(req.Messages))
-	for i, msg := range req.Messages {
-		messages[i] = types.Message{
-			Role:       types.Role(msg.Role),
-			Content:    msg.Content,
-			Name:       msg.Name,
-			ToolCalls:  msg.ToolCalls,
-			ToolCallID: msg.ToolCallID,
-			Images:     convertAPIImagesToTypes(msg.Images),
-			Metadata:   msg.Metadata,
-			Timestamp:  msg.Timestamp,
-		}
-	}
-
-	// 转换 Tools（api.ToolSchema -> types.ToolSchema）
-	tools := make([]types.ToolSchema, len(req.Tools))
-	for i, tool := range req.Tools {
-		tools[i] = types.ToolSchema{
-			Name:        tool.Name,
-			Description: tool.Description,
-			Parameters:  tool.Parameters,
-			Version:     tool.Version,
-		}
-	}
-
-	return &llm.ChatRequest{
-		TraceID:     req.TraceID,
-		TenantID:    req.TenantID,
-		UserID:      req.UserID,
-		Model:       req.Model,
-		Messages:    messages,
-		MaxTokens:   req.MaxTokens,
-		Temperature: req.Temperature,
-		TopP:        req.TopP,
-		Stop:        req.Stop,
-		Tools:       tools,
-		ToolChoice:  req.ToolChoice,
-		Timeout:     timeout,
-		Metadata:    req.Metadata,
-		Tags:        req.Tags,
-	}
+	return h.converter.ToLLMRequest(req)
 }
 
 // convertToAPIResponse 转换为 API 响应
 func (h *ChatHandler) convertToAPIResponse(resp *llm.ChatResponse) *api.ChatResponse {
-	return &api.ChatResponse{
-		ID:        resp.ID,
-		Provider:  resp.Provider,
-		Model:     resp.Model,
-		Choices:   h.convertChoices(resp.Choices),
-		Usage:     h.convertUsage(resp.Usage),
-		CreatedAt: resp.CreatedAt,
-	}
+	return h.converter.ToAPIResponse(resp)
 }
 
 // convertChoices 转换选择列表
 func (h *ChatHandler) convertChoices(choices []llm.ChatChoice) []api.ChatChoice {
-	result := make([]api.ChatChoice, len(choices))
-	for i, choice := range choices {
-		result[i] = api.ChatChoice{
-			Index:        choice.Index,
-			FinishReason: choice.FinishReason,
-			Message:      convertTypesMessageToAPI(choice.Message),
-		}
-	}
-	return result
+	return h.converter.ToAPIChoices(choices)
 }
 
 // convertUsage 转换使用统计
 func (h *ChatHandler) convertUsage(usage llm.ChatUsage) api.ChatUsage {
-	return api.ChatUsage{
-		PromptTokens:     usage.PromptTokens,
-		CompletionTokens: usage.CompletionTokens,
-		TotalTokens:      usage.TotalTokens,
-	}
+	return h.converter.ToAPIUsage(usage)
 }
 
 // convertToAPIStreamChunk 转换流式块
 func (h *ChatHandler) convertToAPIStreamChunk(chunk *llm.StreamChunk) *api.StreamChunk {
-	return &api.StreamChunk{
-		ID:           chunk.ID,
-		Provider:     chunk.Provider,
-		Model:        chunk.Model,
-		Index:        chunk.Index,
-		Delta:        convertTypesMessageToAPI(chunk.Delta),
-		FinishReason: chunk.FinishReason,
-		Usage:        convertStreamUsage(chunk.Usage),
-	}
+	return h.converter.ToAPIStreamChunk(chunk)
 }
 
 // convertStreamUsage safely converts *llm.ChatUsage to *api.ChatUsage

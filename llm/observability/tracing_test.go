@@ -13,10 +13,10 @@ import (
 // ====== Mock TraceExporter ======
 
 type mockExporter struct {
-	mu         sync.Mutex
-	runs       []*Run
-	traces     []*Trace
-	exportErr  error
+	mu        sync.Mutex
+	runs      []*Run
+	traces    []*Trace
+	exportErr error
 }
 
 func newMockExporter() *mockExporter {
@@ -262,9 +262,10 @@ func TestConversationTracer_ExportJSON(t *testing.T) {
 	ct := NewConversationTracer(tracer)
 
 	ctx, conv := ct.StartConversation(context.Background(), "test")
-	ct.TraceTurn(ctx, "Hello", func() (string, TokenUsage, error) {
+	_, err := ct.TraceTurn(ctx, "Hello", func() (string, TokenUsage, error) {
 		return "Hi!", TokenUsage{Total: 10}, nil
 	})
+	require.NoError(t, err)
 
 	data, err := ct.ExportJSON(conv.ID)
 	require.NoError(t, err)

@@ -709,8 +709,12 @@ func TestWeaviateStore_ListDocumentIDs(t *testing.T) {
 
 		// Parse limit and offset from GraphQL query to simulate server-side pagination
 		var qLimit, qOffset int
-		fmt.Sscanf(extractBetween(req.Query, "limit:", "\n"), "%d", &qLimit)
-		fmt.Sscanf(extractBetween(req.Query, "offset:", "\n"), "%d", &qOffset)
+		if _, err := fmt.Sscanf(extractBetween(req.Query, "limit:", "\n"), "%d", &qLimit); err != nil {
+			t.Fatalf("parse limit: %v", err)
+		}
+		if _, err := fmt.Sscanf(extractBetween(req.Query, "offset:", "\n"), "%d", &qOffset); err != nil {
+			t.Fatalf("parse offset: %v", err)
+		}
 
 		// Apply server-side pagination
 		start := qOffset

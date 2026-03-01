@@ -135,9 +135,9 @@ func TestRetrieve_MergesLocalAndWeb(t *testing.T) {
 		VectorWeight: 0.0,
 	}
 	local := NewHybridRetriever(localCfg, zap.NewNop())
-	local.IndexDocuments([]Document{
+	require.NoError(t, local.IndexDocuments([]Document{
 		{ID: "local1", Content: "test query relevant document"},
-	})
+	}))
 
 	wr := NewWebRetriever(cfg, local, fakeWebSearch(webResults, nil), zap.NewNop())
 
@@ -232,9 +232,9 @@ func TestRetrieve_FallbackToLocal_WhenWebFails(t *testing.T) {
 		VectorWeight: 0.0,
 	}
 	local := NewHybridRetriever(localCfg, zap.NewNop())
-	local.IndexDocuments([]Document{
+	require.NoError(t, local.IndexDocuments([]Document{
 		{ID: "fallback1", Content: "fallback document for test query"},
-	})
+	}))
 
 	failingWeb := fakeWebSearch(nil, fmt.Errorf("network error"))
 

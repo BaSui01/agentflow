@@ -77,6 +77,23 @@ func TestBrowserPool_Acquire_PoolClosed(t *testing.T) {
 	assert.Contains(t, err.Error(), "closed")
 }
 
+func TestBrowserPool_Acquire_ClosedChannelReturnsError(t *testing.T) {
+	pool := &BrowserPool{
+		config:  DefaultBrowserConfig(),
+		pool:    make(chan *ChromeDPBrowser, 1),
+		active:  make(map[*ChromeDPBrowser]bool),
+		maxSize: 1,
+		minIdle: 0,
+		logger:  zap.NewNop(),
+	}
+	close(pool.pool)
+
+	browser, err := pool.Acquire(context.Background())
+	require.Error(t, err)
+	assert.Nil(t, browser)
+	assert.Contains(t, err.Error(), "closed")
+}
+
 // TestBrowserPool_Acquire_PoolExhausted_ContextCancelled tests timeout when pool is full.
 func TestBrowserPool_Acquire_PoolExhausted_ContextCancelled(t *testing.T) {
 	pool := &BrowserPool{

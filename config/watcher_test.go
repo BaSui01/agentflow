@@ -142,6 +142,27 @@ func TestFileWatcher_Lifecycle(t *testing.T) {
 	require.NoError(t, w.Stop())
 }
 
+func TestFileWatcher_RestartAfterStop(t *testing.T) {
+	tmpDir := t.TempDir()
+	f := filepath.Join(tmpDir, "config.yaml")
+	require.NoError(t, os.WriteFile(f, []byte("key: val"), 0644))
+
+	w, err := NewFileWatcher([]string{f}, WithDebounceDelay(20*time.Millisecond))
+	require.NoError(t, err)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+
+	require.NoError(t, w.Start(ctx))
+	require.NoError(t, w.Stop())
+	assert.False(t, w.IsRunning())
+
+	require.NoError(t, w.Start(ctx))
+	assert.True(t, w.IsRunning())
+	require.NoError(t, w.Stop())
+	assert.False(t, w.IsRunning())
+}
+
 // --- OnChange callback ---
 
 func TestFileWatcher_OnChange_Callback(t *testing.T) {
@@ -164,7 +185,7 @@ func TestFileWatcher_OnChange_Callback(t *testing.T) {
 	t.Cleanup(cancel)
 
 	require.NoError(t, w.Start(ctx))
-	t.Cleanup(func() { w.Stop() })
+	t.Cleanup(func() { _ = w.Stop() })
 
 	// Let the watcher initialize
 	time.Sleep(200 * time.Millisecond)
@@ -210,7 +231,7 @@ func TestFileWatcher_DispatchLoop_NoRace(t *testing.T) {
 	t.Cleanup(cancel)
 
 	require.NoError(t, w.Start(ctx))
-	t.Cleanup(func() { w.Stop() })
+	t.Cleanup(func() { _ = w.Stop() })
 
 	// Flood the event channel with rapid events to trigger the race window.
 	for i := 0; i < 50; i++ {
@@ -253,7 +274,7 @@ func TestFileWatcher_DispatchCh_Coalesces(t *testing.T) {
 	t.Cleanup(cancel)
 
 	require.NoError(t, w.Start(ctx))
-	t.Cleanup(func() { w.Stop() })
+	t.Cleanup(func() { _ = w.Stop() })
 
 	// Send 3 events in quick succession for the same path
 	for i := 0; i < 3; i++ {
@@ -295,6 +316,6 @@ func TestFileWatcher_ContextCancel(t *testing.T) {
 	time.Sleep(200 * time.Millisecond)
 
 	// Cleanup
-	w.Stop()
+	require.NoError(t, w.Stop())
 	assert.False(t, w.IsRunning())
 }

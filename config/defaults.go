@@ -82,7 +82,7 @@ func DefaultDatabaseConfig() DatabaseConfig {
 		User:            "agentflow",
 		Password:        "",
 		Name:            "agentflow",
-		SSLMode:         "disable",
+		SSLMode:         "require",
 		MaxOpenConns:    25,
 		MaxIdleConns:    10,
 		ConnMaxLifetime: 5 * time.Minute,

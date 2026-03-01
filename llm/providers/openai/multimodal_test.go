@@ -32,16 +32,16 @@ func TestOpenAIProvider_GenerateImage_Success(t *testing.T) {
 		assert.Equal(t, http.MethodPost, r.Method)
 
 		var req llm.ImageGenerationRequest
-		json.NewDecoder(r.Body).Decode(&req)
+		require.NoError(t, json.NewDecoder(r.Body).Decode(&req))
 		assert.Equal(t, "dall-e-3", req.Model)
 
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(llm.ImageGenerationResponse{
+		require.NoError(t, json.NewEncoder(w).Encode(llm.ImageGenerationResponse{
 			Created: 1700000000,
 			Data: []llm.Image{
 				{URL: "https://example.com/image.png", RevisedPrompt: "a cat"},
 			},
-		})
+		}))
 	}))
 	t.Cleanup(server.Close)
 
@@ -60,7 +60,7 @@ func TestOpenAIProvider_GenerateImage_Success(t *testing.T) {
 func TestOpenAIProvider_GenerateImage_HTTPError(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte(`{"error":{"message":"Invalid prompt"}}`))
+		_, _ = w.Write([]byte(`{"error":{"message":"Invalid prompt"}}`))
 	}))
 	t.Cleanup(server.Close)
 
@@ -91,7 +91,7 @@ func TestOpenAIProvider_GenerateAudio_Success(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, "/v1/audio/speech", r.URL.Path)
 		w.WriteHeader(http.StatusOK)
-		w.Write(audioBytes)
+		_, _ = w.Write(audioBytes)
 	}))
 	t.Cleanup(server.Close)
 
@@ -109,7 +109,7 @@ func TestOpenAIProvider_GenerateAudio_Success(t *testing.T) {
 func TestOpenAIProvider_GenerateAudio_HTTPError(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte(`{"error":{"message":"Server error"}}`))
+		_, _ = w.Write([]byte(`{"error":{"message":"Server error"}}`))
 	}))
 	t.Cleanup(server.Close)
 
@@ -129,17 +129,18 @@ func TestOpenAIProvider_TranscribeAudio_Success(t *testing.T) {
 		require.NoError(t, err)
 		file, _, err := r.FormFile("file")
 		require.NoError(t, err)
-		data, _ := io.ReadAll(file)
+		data, readErr := io.ReadAll(file)
+		require.NoError(t, readErr)
 		assert.Equal(t, []byte("fake-audio"), data)
 		assert.Equal(t, "whisper-1", r.FormValue("model"))
 		assert.Equal(t, "en", r.FormValue("language"))
 
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(llm.AudioTranscriptionResponse{
+		require.NoError(t, json.NewEncoder(w).Encode(llm.AudioTranscriptionResponse{
 			Text:     "Hello world",
 			Language: "en",
 			Duration: 2.5,
-		})
+		}))
 	}))
 	t.Cleanup(server.Close)
 
@@ -156,7 +157,7 @@ func TestOpenAIProvider_TranscribeAudio_Success(t *testing.T) {
 
 func TestOpenAIProvider_TranscribeAudio_WithAllFields(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		r.ParseMultipartForm(10 << 20)
+		require.NoError(t, r.ParseMultipartForm(10<<20))
 		assert.Equal(t, "whisper-1", r.FormValue("model"))
 		assert.Equal(t, "zh", r.FormValue("language"))
 		assert.Equal(t, "some prompt", r.FormValue("prompt"))
@@ -164,7 +165,7 @@ func TestOpenAIProvider_TranscribeAudio_WithAllFields(t *testing.T) {
 		assert.NotEmpty(t, r.FormValue("temperature"))
 
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(llm.AudioTranscriptionResponse{Text: "ok"})
+		require.NoError(t, json.NewEncoder(w).Encode(llm.AudioTranscriptionResponse{Text: "ok"}))
 	}))
 	t.Cleanup(server.Close)
 
@@ -183,7 +184,7 @@ func TestOpenAIProvider_TranscribeAudio_WithAllFields(t *testing.T) {
 func TestOpenAIProvider_TranscribeAudio_HTTPError(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusUnauthorized)
-		w.Write([]byte(`{"error":{"message":"Invalid API key"}}`))
+		_, _ = w.Write([]byte(`{"error":{"message":"Invalid API key"}}`))
 	}))
 	t.Cleanup(server.Close)
 
@@ -201,18 +202,18 @@ func TestOpenAIProvider_CreateEmbedding_Success(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, "/v1/embeddings", r.URL.Path)
 		var req llm.EmbeddingRequest
-		json.NewDecoder(r.Body).Decode(&req)
+		require.NoError(t, json.NewDecoder(r.Body).Decode(&req))
 		assert.Equal(t, "text-embedding-3-small", req.Model)
 
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(llm.EmbeddingResponse{
+		require.NoError(t, json.NewEncoder(w).Encode(llm.EmbeddingResponse{
 			Object: "list",
 			Model:  "text-embedding-3-small",
 			Data: []llm.Embedding{
 				{Object: "embedding", Index: 0, Embedding: []float64{0.1, 0.2, 0.3}},
 			},
 			Usage: llm.ChatUsage{PromptTokens: 5, TotalTokens: 5},
-		})
+		}))
 	}))
 	t.Cleanup(server.Close)
 
@@ -229,7 +230,7 @@ func TestOpenAIProvider_CreateEmbedding_Success(t *testing.T) {
 func TestOpenAIProvider_CreateEmbedding_HTTPError(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusTooManyRequests)
-		w.Write([]byte(`{"error":{"message":"Rate limit"}}`))
+		_, _ = w.Write([]byte(`{"error":{"message":"Rate limit"}}`))
 	}))
 	t.Cleanup(server.Close)
 
@@ -252,11 +253,11 @@ func TestOpenAIProvider_CreateFineTuningJob_Success(t *testing.T) {
 		assert.Equal(t, http.MethodPost, r.Method)
 
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(llm.FineTuningJob{
+		require.NoError(t, json.NewEncoder(w).Encode(llm.FineTuningJob{
 			ID:     "ftjob-123",
 			Model:  "gpt-4o-mini-2024-07-18",
 			Status: "queued",
-		})
+		}))
 	}))
 	t.Cleanup(server.Close)
 
@@ -273,7 +274,7 @@ func TestOpenAIProvider_CreateFineTuningJob_Success(t *testing.T) {
 func TestOpenAIProvider_CreateFineTuningJob_HTTPError(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte(`{"error":{"message":"Invalid file"}}`))
+		_, _ = w.Write([]byte(`{"error":{"message":"Invalid file"}}`))
 	}))
 	t.Cleanup(server.Close)
 
@@ -290,14 +291,14 @@ func TestOpenAIProvider_ListFineTuningJobs_Success(t *testing.T) {
 		assert.Equal(t, http.MethodGet, r.Method)
 
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(struct {
+		require.NoError(t, json.NewEncoder(w).Encode(struct {
 			Data []llm.FineTuningJob `json:"data"`
 		}{
 			Data: []llm.FineTuningJob{
 				{ID: "ftjob-1", Status: "succeeded"},
 				{ID: "ftjob-2", Status: "running"},
 			},
-		})
+		}))
 	}))
 	t.Cleanup(server.Close)
 
@@ -311,7 +312,7 @@ func TestOpenAIProvider_ListFineTuningJobs_Success(t *testing.T) {
 func TestOpenAIProvider_ListFineTuningJobs_HTTPError(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusForbidden)
-		w.Write([]byte(`{"error":{"message":"Forbidden"}}`))
+		_, _ = w.Write([]byte(`{"error":{"message":"Forbidden"}}`))
 	}))
 	t.Cleanup(server.Close)
 
@@ -328,11 +329,11 @@ func TestOpenAIProvider_GetFineTuningJob_Success(t *testing.T) {
 		assert.Equal(t, http.MethodGet, r.Method)
 
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(llm.FineTuningJob{
+		require.NoError(t, json.NewEncoder(w).Encode(llm.FineTuningJob{
 			ID:     "ftjob-123",
 			Status: "succeeded",
 			Model:  "gpt-4o-mini-2024-07-18",
-		})
+		}))
 	}))
 	t.Cleanup(server.Close)
 
@@ -346,7 +347,7 @@ func TestOpenAIProvider_GetFineTuningJob_Success(t *testing.T) {
 func TestOpenAIProvider_GetFineTuningJob_HTTPError(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNotFound)
-		w.Write([]byte(`{"error":{"message":"Not found"}}`))
+		_, _ = w.Write([]byte(`{"error":{"message":"Not found"}}`))
 	}))
 	t.Cleanup(server.Close)
 
@@ -362,7 +363,7 @@ func TestOpenAIProvider_CancelFineTuningJob_Success(t *testing.T) {
 		assert.Equal(t, "/v1/fine_tuning/jobs/ftjob-123/cancel", r.URL.Path)
 		assert.Equal(t, http.MethodPost, r.Method)
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{}`))
+		_, _ = w.Write([]byte(`{}`))
 	}))
 	t.Cleanup(server.Close)
 
@@ -374,7 +375,7 @@ func TestOpenAIProvider_CancelFineTuningJob_Success(t *testing.T) {
 func TestOpenAIProvider_CancelFineTuningJob_HTTPError(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusConflict)
-		w.Write([]byte(`{"error":{"message":"Job already completed"}}`))
+		_, _ = w.Write([]byte(`{"error":{"message":"Job already completed"}}`))
 	}))
 	t.Cleanup(server.Close)
 
@@ -390,12 +391,12 @@ func TestOpenAIProvider_Completion_CredentialOverride(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		capturedAuth = r.Header.Get("Authorization")
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(providers.OpenAICompatResponse{
+		require.NoError(t, json.NewEncoder(w).Encode(providers.OpenAICompatResponse{
 			ID: "resp-1", Model: "gpt-5.2",
 			Choices: []providers.OpenAICompatChoice{
 				{Index: 0, FinishReason: "stop", Message: providers.OpenAICompatMessage{Role: "assistant", Content: "ok"}},
 			},
-		})
+		}))
 	}))
 	t.Cleanup(server.Close)
 

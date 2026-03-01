@@ -159,6 +159,13 @@ func validateExternalURL(rawURL string) error {
 		return fmt.Errorf("unsupported URL scheme: %s", u.Scheme)
 	}
 	host := u.Hostname()
+	if host == "" {
+		return fmt.Errorf("missing URL host")
+	}
+	// Testing hook: allows httptest loopback URLs while keeping strict default SSRF checks.
+	if os.Getenv("AGENTFLOW_ALLOW_PRIVATE_URLS") == "1" {
+		return nil
+	}
 	ip := net.ParseIP(host)
 	if ip != nil {
 		if ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() || ip.IsUnspecified() {

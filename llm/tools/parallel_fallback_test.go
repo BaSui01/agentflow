@@ -46,9 +46,9 @@ func TestParallelExecutor_Execute_Empty(t *testing.T) {
 
 func TestParallelExecutor_Execute_Success(t *testing.T) {
 	reg := NewDefaultRegistry(zap.NewNop())
-	reg.Register("echo", func(ctx context.Context, args json.RawMessage) (json.RawMessage, error) {
+	require.NoError(t, reg.Register("echo", func(ctx context.Context, args json.RawMessage) (json.RawMessage, error) {
 		return args, nil
-	}, ToolMetadata{Description: "echo tool"})
+	}, ToolMetadata{Description: "echo tool"}))
 
 	pe := NewParallelExecutor(reg, DefaultParallelConfig(), zap.NewNop())
 
@@ -78,9 +78,9 @@ func TestParallelExecutor_Execute_ToolNotFound(t *testing.T) {
 
 func TestParallelExecutor_Execute_ToolError(t *testing.T) {
 	reg := NewDefaultRegistry(zap.NewNop())
-	reg.Register("fail", func(ctx context.Context, args json.RawMessage) (json.RawMessage, error) {
+	require.NoError(t, reg.Register("fail", func(ctx context.Context, args json.RawMessage) (json.RawMessage, error) {
 		return nil, fmt.Errorf("tool error")
-	}, ToolMetadata{Description: "failing tool"})
+	}, ToolMetadata{Description: "failing tool"}))
 
 	pe := NewParallelExecutor(reg, DefaultParallelConfig(), zap.NewNop())
 
@@ -94,9 +94,9 @@ func TestParallelExecutor_Execute_ToolError(t *testing.T) {
 
 func TestParallelExecutor_Stats(t *testing.T) {
 	reg := NewDefaultRegistry(zap.NewNop())
-	reg.Register("echo", func(ctx context.Context, args json.RawMessage) (json.RawMessage, error) {
+	require.NoError(t, reg.Register("echo", func(ctx context.Context, args json.RawMessage) (json.RawMessage, error) {
 		return json.RawMessage(`"ok"`), nil
-	}, ToolMetadata{Description: "echo"})
+	}, ToolMetadata{Description: "echo"}))
 
 	pe := NewParallelExecutor(reg, DefaultParallelConfig(), zap.NewNop())
 	pe.Execute(context.Background(), []llmpkg.ToolCall{
@@ -125,9 +125,9 @@ func TestNewResilientExecutor(t *testing.T) {
 }
 func TestResilientExecutor_Execute_Success(t *testing.T) {
 	reg := NewDefaultRegistry(zap.NewNop())
-	reg.Register("echo", func(ctx context.Context, args json.RawMessage) (json.RawMessage, error) {
+	require.NoError(t, reg.Register("echo", func(ctx context.Context, args json.RawMessage) (json.RawMessage, error) {
 		return json.RawMessage(`"ok"`), nil
-	}, ToolMetadata{Description: "echo"})
+	}, ToolMetadata{Description: "echo"}))
 
 	re := NewResilientExecutor(reg, DefaultFallbackConfig(), zap.NewNop())
 	results := re.Execute(context.Background(), []llmpkg.ToolCall{
@@ -139,9 +139,9 @@ func TestResilientExecutor_Execute_Success(t *testing.T) {
 
 func TestResilientExecutor_ExecuteOne_Success(t *testing.T) {
 	reg := NewDefaultRegistry(zap.NewNop())
-	reg.Register("echo", func(ctx context.Context, args json.RawMessage) (json.RawMessage, error) {
+	require.NoError(t, reg.Register("echo", func(ctx context.Context, args json.RawMessage) (json.RawMessage, error) {
 		return json.RawMessage(`"ok"`), nil
-	}, ToolMetadata{Description: "echo"})
+	}, ToolMetadata{Description: "echo"}))
 
 	re := NewResilientExecutor(reg, DefaultFallbackConfig(), zap.NewNop())
 	result := re.ExecuteOne(context.Background(), llmpkg.ToolCall{
@@ -153,13 +153,13 @@ func TestResilientExecutor_ExecuteOne_Success(t *testing.T) {
 func TestResilientExecutor_Execute_WithRetry(t *testing.T) {
 	callCount := 0
 	reg := NewDefaultRegistry(zap.NewNop())
-	reg.Register("flaky", func(ctx context.Context, args json.RawMessage) (json.RawMessage, error) {
+	require.NoError(t, reg.Register("flaky", func(ctx context.Context, args json.RawMessage) (json.RawMessage, error) {
 		callCount++
 		if callCount < 3 {
 			return nil, fmt.Errorf("transient error")
 		}
 		return json.RawMessage(`"ok"`), nil
-	}, ToolMetadata{Description: "flaky"})
+	}, ToolMetadata{Description: "flaky"}))
 
 	cfg := DefaultFallbackConfig()
 	cfg.MaxRetries = 3
@@ -174,9 +174,9 @@ func TestResilientExecutor_Execute_WithRetry(t *testing.T) {
 
 func TestResilientExecutor_Execute_SkipOnError(t *testing.T) {
 	reg := NewDefaultRegistry(zap.NewNop())
-	reg.Register("missing", func(ctx context.Context, args json.RawMessage) (json.RawMessage, error) {
+	require.NoError(t, reg.Register("missing", func(ctx context.Context, args json.RawMessage) (json.RawMessage, error) {
 		return nil, fmt.Errorf("tool not found")
-	}, ToolMetadata{Description: "missing"})
+	}, ToolMetadata{Description: "missing"}))
 
 	cfg := DefaultFallbackConfig()
 	cfg.SkipOnErrors = []string{"tool not found"}
@@ -191,12 +191,12 @@ func TestResilientExecutor_Execute_SkipOnError(t *testing.T) {
 
 func TestResilientExecutor_Execute_WithAlternate(t *testing.T) {
 	reg := NewDefaultRegistry(zap.NewNop())
-	reg.Register("primary", func(ctx context.Context, args json.RawMessage) (json.RawMessage, error) {
+	require.NoError(t, reg.Register("primary", func(ctx context.Context, args json.RawMessage) (json.RawMessage, error) {
 		return nil, fmt.Errorf("primary failed")
-	}, ToolMetadata{Description: "primary"})
-	reg.Register("backup", func(ctx context.Context, args json.RawMessage) (json.RawMessage, error) {
+	}, ToolMetadata{Description: "primary"}))
+	require.NoError(t, reg.Register("backup", func(ctx context.Context, args json.RawMessage) (json.RawMessage, error) {
 		return json.RawMessage(`"backup-ok"`), nil
-	}, ToolMetadata{Description: "backup"})
+	}, ToolMetadata{Description: "backup"}))
 
 	cfg := DefaultFallbackConfig()
 	cfg.Alternates = map[string]string{"primary": "backup"}
@@ -221,9 +221,9 @@ func TestNewBatchExecutor(t *testing.T) {
 
 func TestBatchExecutor_ExecuteBatched(t *testing.T) {
 	reg := NewDefaultRegistry(zap.NewNop())
-	reg.Register("echo", func(ctx context.Context, args json.RawMessage) (json.RawMessage, error) {
+	require.NoError(t, reg.Register("echo", func(ctx context.Context, args json.RawMessage) (json.RawMessage, error) {
 		return args, nil
-	}, ToolMetadata{Description: "echo"})
+	}, ToolMetadata{Description: "echo"}))
 
 	pe := NewParallelExecutor(reg, DefaultParallelConfig(), zap.NewNop())
 	be := NewBatchExecutor(pe, zap.NewNop())

@@ -6,6 +6,7 @@ import (
 
 	"github.com/BaSui01/agentflow/llm"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // 特性: 多提供者支持, 属性 20: 工具结果消息转换
@@ -555,8 +556,8 @@ func TestProperty20_JSONValidity(t *testing.T) {
 
 			// 校验 JSON 内容在内容上相当
 			var inputJSON, outputJSON any
-			json.Unmarshal([]byte(tc.content), &inputJSON)
-			json.Unmarshal([]byte(converted.Content), &outputJSON)
+			require.NoError(t, json.Unmarshal([]byte(tc.content), &inputJSON))
+			require.NoError(t, json.Unmarshal([]byte(converted.Content), &outputJSON))
 			assert.Equal(t, inputJSON, outputJSON,
 				"JSON content should be semantically equivalent after conversion")
 		})

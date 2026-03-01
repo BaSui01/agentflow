@@ -284,7 +284,9 @@ func (m *InterruptManager) handleTimeout(ctx context.Context, interrupt *Interru
 	delete(m.pending, interrupt.ID)
 	m.mu.Unlock()
 
-	m.store.Update(ctx, interrupt)
+	if err := m.store.Update(ctx, interrupt); err != nil {
+		m.logger.Error("failed to persist timeout interrupt", zap.Error(err), zap.String("id", interrupt.ID))
+	}
 	m.logger.Warn("interrupt timeout", zap.String("id", interrupt.ID))
 }
 

@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/BaSui01/agentflow/types"
 	"go.uber.org/zap"
 )
 
@@ -51,16 +52,10 @@ type Task struct {
 
 // HandoffContext为交接提供了上下文.
 type HandoffContext struct {
-	ConversationID string         `json:"conversation_id,omitempty"`
-	Messages       []Message      `json:"messages,omitempty"`
-	Variables      map[string]any `json:"variables,omitempty"`
-	ParentHandoff  string         `json:"parent_handoff,omitempty"`
-}
-
-// 信件代表对话信息 。
-type Message struct {
-	Role    string `json:"role"`
-	Content string `json:"content"`
+	ConversationID string          `json:"conversation_id,omitempty"`
+	Messages       []types.Message `json:"messages,omitempty"`
+	Variables      map[string]any  `json:"variables,omitempty"`
+	ParentHandoff  string          `json:"parent_handoff,omitempty"`
 }
 
 // HandoffResult包含完成交接的结果.

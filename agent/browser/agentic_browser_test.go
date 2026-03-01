@@ -151,7 +151,8 @@ func TestAgenticBrowser_ExecuteTask_WithStartURL(t *testing.T) {
 	ab := NewAgenticBrowser(driver, vision, config, zap.NewNop())
 	task := BrowserTask{ID: "t1", Goal: "test", StartURL: "http://example.com"}
 
-	ab.ExecuteTask(context.Background(), task)
+	_, err := ab.ExecuteTask(context.Background(), task)
+	require.NoError(t, err)
 	assert.True(t, navigated)
 }
 
@@ -401,7 +402,8 @@ func TestBrowserSession_Close(t *testing.T) {
 func TestBrowserSession_GetHistory_ReturnsCopy(t *testing.T) {
 	browser := &mockBrowser{}
 	session := NewBrowserSession("s1", browser, DefaultBrowserConfig(), zap.NewNop())
-	session.Navigate(context.Background(), "http://example.com")
+	_, err := session.Navigate(context.Background(), "http://example.com")
+	require.NoError(t, err)
 
 	h1 := session.GetHistory()
 	h2 := session.GetHistory()
@@ -443,7 +445,8 @@ func TestBrowserTool_CloseSession(t *testing.T) {
 	factory := &mockBrowserFactory{}
 	tool := NewBrowserTool(factory, DefaultBrowserConfig(), zap.NewNop())
 
-	tool.GetOrCreateSession("sess1")
+	_, err := tool.GetOrCreateSession("sess1")
+	require.NoError(t, err)
 	require.NoError(t, tool.CloseSession("sess1"))
 
 	// Closing non-existent session should not error
@@ -454,8 +457,10 @@ func TestBrowserTool_CloseAll(t *testing.T) {
 	factory := &mockBrowserFactory{}
 	tool := NewBrowserTool(factory, DefaultBrowserConfig(), zap.NewNop())
 
-	tool.GetOrCreateSession("s1")
-	tool.GetOrCreateSession("s2")
+	_, err := tool.GetOrCreateSession("s1")
+	require.NoError(t, err)
+	_, err = tool.GetOrCreateSession("s2")
+	require.NoError(t, err)
 
 	require.NoError(t, tool.CloseAll())
 }

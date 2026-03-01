@@ -43,7 +43,7 @@ func TestNewManager(t *testing.T) {
 func TestManager_StartAndShutdown(t *testing.T) {
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("ok"))
+		_, _ = w.Write([]byte("ok"))
 	})
 
 	cfg := DefaultConfig()
@@ -52,7 +52,7 @@ func TestManager_StartAndShutdown(t *testing.T) {
 
 	err := m.Start()
 	require.NoError(t, err)
-	t.Cleanup(func() { m.Shutdown(context.Background()) })
+	t.Cleanup(func() { _ = m.Shutdown(context.Background()) })
 
 	// Server should be reachable
 	// Get the actual port from the listener and connect via 127.0.0.1
@@ -79,7 +79,7 @@ func TestManager_DoubleStart(t *testing.T) {
 	m := NewManager(handler, cfg, zap.NewNop())
 
 	require.NoError(t, m.Start())
-	t.Cleanup(func() { m.Shutdown(context.Background()) })
+	t.Cleanup(func() { _ = m.Shutdown(context.Background()) })
 
 	// Second start should fail
 	err := m.Start()

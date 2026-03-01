@@ -47,7 +47,8 @@ func TestHTTPClient_Discover(t *testing.T) {
 			assert.Equal(t, "/.well-known/agent.json", r.URL.Path)
 			assert.Equal(t, http.MethodGet, r.Method)
 			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode(card)
+			err := json.NewEncoder(w).Encode(card)
+			require.NoError(t, err)
 		}))
 		defer server.Close()
 
@@ -87,7 +88,8 @@ func TestHTTPClient_Discover(t *testing.T) {
 	t.Run("invalid json response", func(t *testing.T) {
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "application/json")
-			w.Write([]byte("invalid json"))
+			_, err := w.Write([]byte("invalid json"))
+			require.NoError(t, err)
 		}))
 		defer server.Close()
 
@@ -110,7 +112,8 @@ func TestHTTPClient_Discover(t *testing.T) {
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			callCount++
 			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode(card)
+			err := json.NewEncoder(w).Encode(card)
+			require.NoError(t, err)
 		}))
 		defer server.Close()
 
@@ -155,7 +158,8 @@ func TestHTTPClient_Send(t *testing.T) {
 					URL:         serverURL, // Use actual server URL
 					Version:     "1.0.0",
 				}
-				json.NewEncoder(w).Encode(card)
+				err := json.NewEncoder(w).Encode(card)
+				require.NoError(t, err)
 				return
 			}
 

@@ -71,11 +71,12 @@ func TestClaudeProvider_Headers_APIKey(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		capturedHeaders = r.Header.Clone()
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(claudeResponse{
+		err := json.NewEncoder(w).Encode(claudeResponse{
 			ID: "msg_1", Role: "assistant", Model: "claude-opus-4.5-20260105",
-			Content: []claudeContent{{Type: "text", Text: "ok"}},
+			Content:    []claudeContent{{Type: "text", Text: "ok"}},
 			StopReason: "end_turn",
 		})
+		require.NoError(t, err)
 	}))
 	t.Cleanup(func() { server.Close() })
 
@@ -97,10 +98,11 @@ func TestClaudeProvider_Headers_CustomVersion(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		capturedVersion = r.Header.Get("anthropic-version")
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(claudeResponse{
+		err := json.NewEncoder(w).Encode(claudeResponse{
 			ID: "msg_1", Role: "assistant", Model: "claude-opus-4.5-20260105",
 			Content: []claudeContent{{Type: "text", Text: "ok"}},
 		})
+		require.NoError(t, err)
 	}))
 	t.Cleanup(func() { server.Close() })
 
@@ -200,10 +202,11 @@ func TestClaudeProvider_Completion(t *testing.T) {
 		assert.Equal(t, "/v1/messages", r.URL.Path)
 		assert.Equal(t, http.MethodPost, r.Method)
 
-		json.NewDecoder(r.Body).Decode(&capturedRequest)
+		err := json.NewDecoder(r.Body).Decode(&capturedRequest)
+		require.NoError(t, err)
 
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(claudeResponse{
+		err = json.NewEncoder(w).Encode(claudeResponse{
 			ID:    "msg_01abc",
 			Role:  "assistant",
 			Model: "claude-opus-4.5-20260105",
@@ -213,6 +216,7 @@ func TestClaudeProvider_Completion(t *testing.T) {
 			StopReason: "end_turn",
 			Usage:      &claudeUsage{InputTokens: 10, OutputTokens: 5},
 		})
+		require.NoError(t, err)
 	}))
 	t.Cleanup(func() { server.Close() })
 
@@ -306,7 +310,8 @@ func TestClaudeProvider_Completion_ThinkingContentBlock(t *testing.T) {
 func TestClaudeProvider_Completion_Error(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusUnauthorized)
-		w.Write([]byte(`{"error":{"message":"Invalid API key","type":"authentication_error"}}`))
+		_, err := w.Write([]byte(`{"error":{"message":"Invalid API key","type":"authentication_error"}}`))
+		require.NoError(t, err)
 	}))
 	t.Cleanup(func() { server.Close() })
 
@@ -480,7 +485,8 @@ func TestClaudeProvider_Stream_ToolCall(t *testing.T) {
 func TestClaudeProvider_Stream_Error(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusTooManyRequests)
-		w.Write([]byte(`{"error":{"message":"Rate limit exceeded","type":"rate_limit_error"}}`))
+		_, err := w.Write([]byte(`{"error":{"message":"Rate limit exceeded","type":"rate_limit_error"}}`))
+		require.NoError(t, err)
 	}))
 	t.Cleanup(func() { server.Close() })
 
@@ -504,7 +510,8 @@ func TestClaudeProvider_HealthCheck(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, "/v1/models", r.URL.Path)
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{"data":[]}`))
+		_, err := w.Write([]byte(`{"data":[]}`))
+		require.NoError(t, err)
 	}))
 	t.Cleanup(func() { server.Close() })
 

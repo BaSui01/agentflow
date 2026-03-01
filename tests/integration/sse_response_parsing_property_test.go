@@ -110,7 +110,7 @@ func TestProperty14_SSEResponseParsing(t *testing.T) {
 		defer server.Close()
 
 		req := &llm.ChatRequest{
-			Model: "test-model",
+			Model: "abab6.5s-chat",
 			Messages: []llm.Message{
 				{Role: llm.RoleUser, Content: "Test message"},
 			},
@@ -352,7 +352,7 @@ func TestProperty14_SSEResponseParsing_DataLineFormat(t *testing.T) {
 		defer server.Close()
 
 		req := &llm.ChatRequest{
-			Model: "test-model",
+			Model: "abab6.5s-chat",
 			Messages: []llm.Message{
 				{Role: llm.RoleUser, Content: "Test"},
 			},
@@ -650,7 +650,11 @@ func TestProperty14_SSEResponseParsing_MiniMaxXMLToolCalls(t *testing.T) {
 		}
 
 		ctx := context.Background()
-		cfg := providers.MiniMaxConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key", BaseURL: server.URL}}
+		cfg := providers.MiniMaxConfig{BaseProviderConfig: providers.BaseProviderConfig{
+			APIKey:  "test-key",
+			BaseURL: server.URL,
+			Model:   "abab6.5s-chat",
+		}}
 		p := minimax.NewMiniMaxProvider(cfg, logger)
 		streamCh, err := p.Stream(ctx, req)
 

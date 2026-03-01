@@ -64,7 +64,7 @@ func TestMemoryMessageStore_GetMessages_Pagination(t *testing.T) {
 	store := newTestMemoryMessageStore(t)
 	ctx := context.Background()
 	for i := 0; i < 5; i++ {
-		store.SaveMessage(ctx, &Message{ID: fmt.Sprintf("p%d", i), Topic: "pag", Content: "c"})
+		require.NoError(t, store.SaveMessage(ctx, &Message{ID: fmt.Sprintf("p%d", i), Topic: "pag", Content: "c"}))
 	}
 
 	msgs, cursor, err := store.GetMessages(ctx, "pag", "", 3)
@@ -103,11 +103,11 @@ func TestMemoryMessageStore_GetPendingMessages_FiltersAckedAndExpired(t *testing
 	ctx := context.Background()
 
 	past := time.Now().Add(-time.Hour)
-	store.SaveMessage(ctx, &Message{ID: "acked", Topic: "pend", Content: "a"})
-	store.AckMessage(ctx, "acked")
+	require.NoError(t, store.SaveMessage(ctx, &Message{ID: "acked", Topic: "pend", Content: "a"}))
+	require.NoError(t, store.AckMessage(ctx, "acked"))
 
-	store.SaveMessage(ctx, &Message{ID: "expired", Topic: "pend", Content: "e", ExpiresAt: &past})
-	store.SaveMessage(ctx, &Message{ID: "pending", Topic: "pend", Content: "p"})
+	require.NoError(t, store.SaveMessage(ctx, &Message{ID: "expired", Topic: "pend", Content: "e", ExpiresAt: &past}))
+	require.NoError(t, store.SaveMessage(ctx, &Message{ID: "pending", Topic: "pend", Content: "p"}))
 
 	msgs, err := store.GetPendingMessages(ctx, "pend", 10)
 	require.NoError(t, err)
@@ -123,8 +123,8 @@ func TestMemoryMessageStore_GetPendingMessages_RespectsMaxRetries(t *testing.T) 
 	t.Cleanup(func() { store.Close() })
 	ctx := context.Background()
 
-	store.SaveMessage(ctx, &Message{ID: "maxed", Topic: "retry", Content: "r", RetryCount: 2})
-	store.SaveMessage(ctx, &Message{ID: "ok", Topic: "retry", Content: "o", RetryCount: 0})
+	require.NoError(t, store.SaveMessage(ctx, &Message{ID: "maxed", Topic: "retry", Content: "r", RetryCount: 2}))
+	require.NoError(t, store.SaveMessage(ctx, &Message{ID: "ok", Topic: "retry", Content: "o", RetryCount: 0}))
 
 	msgs, err := store.GetPendingMessages(ctx, "retry", 10)
 	require.NoError(t, err)
@@ -135,7 +135,7 @@ func TestMemoryMessageStore_GetPendingMessages_RespectsMaxRetries(t *testing.T) 
 func TestMemoryMessageStore_IncrementRetry(t *testing.T) {
 	store := newTestMemoryMessageStore(t)
 	ctx := context.Background()
-	store.SaveMessage(ctx, &Message{ID: "r1", Topic: "t", Content: "c"})
+	require.NoError(t, store.SaveMessage(ctx, &Message{ID: "r1", Topic: "t", Content: "c"}))
 
 	require.NoError(t, store.IncrementRetry(ctx, "r1"))
 	msg, _ := store.GetMessage(ctx, "r1")
@@ -152,8 +152,8 @@ func TestMemoryMessageStore_IncrementRetry_NotFound(t *testing.T) {
 func TestMemoryMessageStore_DeleteMessage_RemovesFromTopic(t *testing.T) {
 	store := newTestMemoryMessageStore(t)
 	ctx := context.Background()
-	store.SaveMessage(ctx, &Message{ID: "d1", Topic: "del", Content: "c"})
-	store.SaveMessage(ctx, &Message{ID: "d2", Topic: "del", Content: "c"})
+	require.NoError(t, store.SaveMessage(ctx, &Message{ID: "d1", Topic: "del", Content: "c"}))
+	require.NoError(t, store.SaveMessage(ctx, &Message{ID: "d2", Topic: "del", Content: "c"}))
 
 	require.NoError(t, store.DeleteMessage(ctx, "d1"))
 	msgs, _, _ := store.GetMessages(ctx, "del", "", 10)
@@ -166,12 +166,12 @@ func TestMemoryMessageStore_Cleanup_RemovesAckedAndExpired(t *testing.T) {
 	ctx := context.Background()
 
 	oldAck := time.Now().Add(-2 * time.Hour)
-	store.SaveMessage(ctx, &Message{ID: "old-ack", Topic: "cl", Content: "c", AckedAt: &oldAck})
+	require.NoError(t, store.SaveMessage(ctx, &Message{ID: "old-ack", Topic: "cl", Content: "c", AckedAt: &oldAck}))
 
 	past := time.Now().Add(-2 * time.Hour)
-	store.SaveMessage(ctx, &Message{ID: "exp", Topic: "cl", Content: "c", ExpiresAt: &past})
+	require.NoError(t, store.SaveMessage(ctx, &Message{ID: "exp", Topic: "cl", Content: "c", ExpiresAt: &past}))
 
-	store.SaveMessage(ctx, &Message{ID: "keep", Topic: "cl", Content: "c"})
+	require.NoError(t, store.SaveMessage(ctx, &Message{ID: "keep", Topic: "cl", Content: "c"}))
 
 	count, err := store.Cleanup(ctx, time.Hour)
 	require.NoError(t, err)
@@ -185,9 +185,9 @@ func TestMemoryMessageStore_Stats(t *testing.T) {
 	store := newTestMemoryMessageStore(t)
 	ctx := context.Background()
 
-	store.SaveMessage(ctx, &Message{ID: "s1", Topic: "st", Content: "c"})
-	store.SaveMessage(ctx, &Message{ID: "s2", Topic: "st", Content: "c"})
-	store.AckMessage(ctx, "s1")
+	require.NoError(t, store.SaveMessage(ctx, &Message{ID: "s1", Topic: "st", Content: "c"}))
+	require.NoError(t, store.SaveMessage(ctx, &Message{ID: "s2", Topic: "st", Content: "c"}))
+	require.NoError(t, store.AckMessage(ctx, "s1"))
 
 	stats, err := store.Stats(ctx)
 	require.NoError(t, err)

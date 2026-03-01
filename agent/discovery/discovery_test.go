@@ -486,7 +486,7 @@ func TestDiscoveryService_Integration(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to start service: %v", err)
 	}
-	defer service.Stop(ctx)
+	defer func() { _ = service.Stop(ctx) }()
 
 	// 注册代理商
 	card := a2a.NewAgentCard("test-agent", "Test Agent", "http://localhost:8080", "1.0.0")

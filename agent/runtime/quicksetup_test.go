@@ -51,9 +51,10 @@ func TestEnabled(t *testing.T) {
 
 func TestBuildAgent_NilProvider(t *testing.T) {
 	cfg := agent.Config{
-		ID:   "test-agent",
-		Name: "Test",
-		Type: agent.TypeAssistant,
+		ID:    "test-agent",
+		Name:  "Test",
+		Type:  agent.TypeAssistant,
+		Model: "gpt-4",
 	}
 	opts := BuildOptions{} // all disabled
 
@@ -64,9 +65,10 @@ func TestBuildAgent_NilProvider(t *testing.T) {
 
 func TestBuildAgent_NilLogger(t *testing.T) {
 	cfg := agent.Config{
-		ID:   "test-agent",
-		Name: "Test",
-		Type: agent.TypeAssistant,
+		ID:    "test-agent",
+		Name:  "Test",
+		Type:  agent.TypeAssistant,
+		Model: "gpt-4",
 	}
 	opts := BuildOptions{}
 
@@ -84,9 +86,10 @@ func TestQuickSetup_NilAgent(t *testing.T) {
 
 func TestBuildAgent_AllDisabled(t *testing.T) {
 	cfg := agent.Config{
-		ID:   "test-agent",
-		Name: "Test",
-		Type: agent.TypeAssistant,
+		ID:    "test-agent",
+		Name:  "Test",
+		Type:  agent.TypeAssistant,
+		Model: "gpt-4",
 	}
 	provider := mocks.NewSuccessProvider("hello")
 	opts := BuildOptions{} // all disabled
@@ -98,9 +101,10 @@ func TestBuildAgent_AllDisabled(t *testing.T) {
 
 func TestBuildAgent_WithSubsystems(t *testing.T) {
 	cfg := agent.Config{
-		ID:   "test-agent",
-		Name: "Test",
-		Type: agent.TypeAssistant,
+		ID:    "test-agent",
+		Name:  "Test",
+		Type:  agent.TypeAssistant,
+		Model: "gpt-4",
 	}
 	provider := mocks.NewSuccessProvider("hello")
 	opts := BuildOptions{
@@ -126,9 +130,10 @@ func TestBuildAgent_WithSubsystems(t *testing.T) {
 
 func TestBuildAgent_EnableAll(t *testing.T) {
 	cfg := agent.Config{
-		ID:   "test-agent",
-		Name: "Test",
-		Type: agent.TypeAssistant,
+		ID:    "test-agent",
+		Name:  "Test",
+		Type:  agent.TypeAssistant,
+		Model: "gpt-4",
 	}
 	provider := mocks.NewSuccessProvider("hello")
 	opts := DefaultBuildOptions()
@@ -142,9 +147,10 @@ func TestBuildAgent_EnableAll(t *testing.T) {
 
 func TestQuickSetup_WithAgent(t *testing.T) {
 	cfg := agent.Config{
-		ID:   "test-agent",
-		Name: "Test",
-		Type: agent.TypeAssistant,
+		ID:    "test-agent",
+		Name:  "Test",
+		Type:  agent.TypeAssistant,
+		Model: "gpt-4",
 	}
 	provider := mocks.NewSuccessProvider("hello")
 
@@ -172,9 +178,10 @@ func TestQuickSetup_WithAgent(t *testing.T) {
 
 func TestQuickSetup_AllEnabled(t *testing.T) {
 	cfg := agent.Config{
-		ID:   "test-agent",
-		Name: "Test",
-		Type: agent.TypeAssistant,
+		ID:    "test-agent",
+		Name:  "Test",
+		Type:  agent.TypeAssistant,
+		Model: "gpt-4",
 	}
 	provider := mocks.NewSuccessProvider("hello")
 
@@ -191,9 +198,10 @@ func TestQuickSetup_AllEnabled(t *testing.T) {
 
 func TestQuickSetup_EmptyNames(t *testing.T) {
 	cfg := agent.Config{
-		ID:   "test-agent",
-		Name: "Test",
-		Type: agent.TypeAssistant,
+		ID:    "test-agent",
+		Name:  "Test",
+		Type:  agent.TypeAssistant,
+		Model: "gpt-4",
 	}
 	provider := mocks.NewSuccessProvider("hello")
 

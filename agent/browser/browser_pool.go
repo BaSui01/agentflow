@@ -84,7 +84,10 @@ func (p *BrowserPool) Acquire(ctx context.Context) (*ChromeDPBrowser, error) {
 
 	// 尝试从池中获取
 	select {
-	case browser := <-p.pool:
+	case browser, ok := <-p.pool:
+		if !ok || browser == nil {
+			return nil, fmt.Errorf("browser pool is closed")
+		}
 		p.mu.Lock()
 		p.active[browser] = true
 		p.mu.Unlock()
@@ -101,7 +104,10 @@ func (p *BrowserPool) Acquire(ctx context.Context) (*ChromeDPBrowser, error) {
 		// 等待可用实例
 		p.logger.Debug("pool exhausted, waiting for available browser")
 		select {
-		case browser := <-p.pool:
+		case browser, ok := <-p.pool:
+			if !ok || browser == nil {
+				return nil, fmt.Errorf("browser pool is closed")
+			}
 			p.mu.Lock()
 			p.active[browser] = true
 			p.mu.Unlock()

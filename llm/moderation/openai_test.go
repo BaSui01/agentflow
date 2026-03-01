@@ -74,7 +74,7 @@ func TestOpenAIProvider_Moderate_TextOnly(t *testing.T) {
 			},
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(resp)
+		require.NoError(t, json.NewEncoder(w).Encode(resp))
 	}))
 	defer server.Close()
 
@@ -97,7 +97,7 @@ func TestOpenAIProvider_Moderate_TextOnly(t *testing.T) {
 func TestOpenAIProvider_Moderate_WithImages(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var req openAIModerationRequest
-		json.NewDecoder(r.Body).Decode(&req)
+		require.NoError(t, json.NewDecoder(r.Body).Decode(&req))
 
 		// Input should be multimodal (array of items)
 		items, ok := req.Input.([]any)
@@ -116,7 +116,7 @@ func TestOpenAIProvider_Moderate_WithImages(t *testing.T) {
 			},
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(resp)
+		require.NoError(t, json.NewEncoder(w).Encode(resp))
 	}))
 	defer server.Close()
 
@@ -135,12 +135,12 @@ func TestOpenAIProvider_Moderate_WithImages(t *testing.T) {
 func TestOpenAIProvider_Moderate_CustomModel(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var req openAIModerationRequest
-		json.NewDecoder(r.Body).Decode(&req)
+		require.NoError(t, json.NewDecoder(r.Body).Decode(&req))
 		assert.Equal(t, "custom-model", req.Model)
 
 		resp := openAIModerationResponse{Model: "custom-model"}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(resp)
+		require.NoError(t, json.NewEncoder(w).Encode(resp))
 	}))
 	defer server.Close()
 
@@ -158,7 +158,7 @@ func TestOpenAIProvider_Moderate_CustomModel(t *testing.T) {
 func TestOpenAIProvider_Moderate_HTTPError(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusTooManyRequests)
-		w.Write([]byte(`{"error":"rate limited"}`))
+		_, _ = w.Write([]byte(`{"error":"rate limited"}`))
 	}))
 	defer server.Close()
 

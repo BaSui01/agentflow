@@ -45,10 +45,11 @@ func TestQwenProvider_GenerateImage_Success(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, "/compatible-mode/v1/images/generations", r.URL.Path)
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(llm.ImageGenerationResponse{
+		err := json.NewEncoder(w).Encode(llm.ImageGenerationResponse{
 			Created: 1700000000,
 			Data:    []llm.Image{{URL: "https://example.com/img.png"}},
 		})
+		require.NoError(t, err)
 	}))
 	t.Cleanup(server.Close)
 
@@ -66,7 +67,8 @@ func TestQwenProvider_GenerateAudio_Success(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, "/compatible-mode/v1/audio/speech", r.URL.Path)
 		w.WriteHeader(http.StatusOK)
-		w.Write(audioData)
+		_, err := w.Write(audioData)
+		require.NoError(t, err)
 	}))
 	t.Cleanup(server.Close)
 
@@ -83,10 +85,11 @@ func TestQwenProvider_CreateEmbedding_Success(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, "/compatible-mode/v1/embeddings", r.URL.Path)
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(llm.EmbeddingResponse{
+		err := json.NewEncoder(w).Encode(llm.EmbeddingResponse{
 			Object: "list",
 			Data:   []llm.Embedding{{Embedding: []float64{0.1, 0.2}}},
 		})
+		require.NoError(t, err)
 	}))
 	t.Cleanup(server.Close)
 

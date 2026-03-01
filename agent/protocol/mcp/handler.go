@@ -95,7 +95,9 @@ func (h *MCPHandler) handleMessage(w http.ResponseWriter, r *http.Request) {
 	if err := json.NewDecoder(r.Body).Decode(&msg); err != nil {
 		resp := NewMCPError(nil, ErrorCodeParseError, "parse error", nil)
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(resp)
+		if encodeErr := json.NewEncoder(w).Encode(resp); encodeErr != nil && h.logger != nil {
+			h.logger.Warn("failed to encode parse error response", zap.Error(encodeErr))
+		}
 		return
 	}
 
@@ -103,7 +105,13 @@ func (h *MCPHandler) handleMessage(w http.ResponseWriter, r *http.Request) {
 	response := h.dispatch(r.Context(), &msg)
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(response)
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		if h.logger == nil {
+			return
+		}
+		h.logger.Warn("failed to encode mcp response", zap.Error(err))
+		return
+	}
 
 	// 如果有 SSE 客户端，也推送响应
 	clientID := r.URL.Query().Get("clientId")
@@ -186,7 +194,9 @@ func (h *MCPHandler) dispatch(ctx context.Context, msg *MCPMessage) *MCPMessage 
 
 	case "logging/setLevel":
 		level, _ := msg.Params["level"].(string)
-		h.server.SetLogLevel(level)
+		if err := h.server.SetLogLevel(level); err != nil {
+			return NewMCPError(msg.ID, ErrorCodeInvalidParams, err.Error(), nil)
+		}
 		return NewMCPResponse(msg.ID, map[string]any{})
 
 	default:

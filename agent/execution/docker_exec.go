@@ -236,7 +236,9 @@ func (d *RealDockerBackend) forceKillContainer(name string) {
 	defer cancel()
 
 	cmd := exec.CommandContext(ctx, "docker", "kill", name)
-	cmd.Run()
+	if err := cmd.Run(); err != nil {
+		d.logger.Debug("failed to kill container", zap.String("name", name), zap.Error(err))
+	}
 
 	d.logger.Debug("killed container", zap.String("name", name))
 }
@@ -246,7 +248,9 @@ func (d *RealDockerBackend) forceRemoveContainer(name string) {
 	defer cancel()
 
 	cmd := exec.CommandContext(ctx, "docker", "rm", "-f", name)
-	cmd.Run()
+	if err := cmd.Run(); err != nil {
+		d.logger.Debug("failed to remove container", zap.String("name", name), zap.Error(err))
+	}
 
 	d.logger.Debug("removed container", zap.String("name", name))
 }

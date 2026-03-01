@@ -45,10 +45,11 @@ func TestGLMProvider_GenerateImage_Success(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, "/api/paas/v4/images/generations", r.URL.Path)
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(llm.ImageGenerationResponse{
+		err := json.NewEncoder(w).Encode(llm.ImageGenerationResponse{
 			Created: 1700000000,
 			Data:    []llm.Image{{URL: "https://example.com/img.png"}},
 		})
+		require.NoError(t, err)
 	}))
 	t.Cleanup(server.Close)
 

@@ -145,15 +145,13 @@ func TestBaseAgent_ExportConfiguration(t *testing.T) {
 }
 
 func TestBaseAgent_ValidateConfiguration_NoProvider(t *testing.T) {
-	ba := NewBaseAgent(Config{
-		ID:   "test-1",
-		Name: "Test",
-		Type: TypeGeneric,
-	}, nil, nil, nil, nil, zap.NewNop())
-
-	err := ba.ValidateConfiguration()
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "provider not set")
+	require.PanicsWithValue(t, "agent.NewBaseAgent: provider must not be nil", func() {
+		_ = NewBaseAgent(Config{
+			ID:   "test-1",
+			Name: "Test",
+			Type: TypeGeneric,
+		}, nil, nil, nil, nil, zap.NewNop())
+	})
 }
 
 func TestBaseAgent_ValidateConfiguration_Success(t *testing.T) {

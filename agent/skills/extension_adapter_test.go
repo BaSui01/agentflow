@@ -14,8 +14,8 @@ func TestSkillsExtensionAdapter_ListSkills(t *testing.T) {
 	mgr := NewSkillManager(DefaultSkillManagerConfig(), zap.NewNop())
 	s1, _ := NewSkillBuilder("s1", "Alpha").WithInstructions("do").Build()
 	s2, _ := NewSkillBuilder("s2", "Beta").WithInstructions("do").Build()
-	mgr.RegisterSkill(s1)
-	mgr.RegisterSkill(s2)
+	require.NoError(t, mgr.RegisterSkill(s1))
+	require.NoError(t, mgr.RegisterSkill(s2))
 
 	adapter := NewSkillsExtensionAdapter(mgr, nil)
 	names := adapter.ListSkills()
@@ -29,7 +29,7 @@ func TestSkillsExtensionAdapter_LoadSkill_ByName(t *testing.T) {
 	config.AutoLoad = false
 	mgr := NewSkillManager(config, zap.NewNop())
 	s1, _ := NewSkillBuilder("s1", "Alpha").WithInstructions("do").Build()
-	mgr.RegisterSkill(s1)
+	require.NoError(t, mgr.RegisterSkill(s1))
 
 	adapter := NewSkillsExtensionAdapter(mgr, nil)
 	require.NoError(t, adapter.LoadSkill(context.Background(), "Alpha"))
@@ -53,7 +53,7 @@ func TestSkillsExtensionAdapter_ExecuteSkill_ViaRegistry(t *testing.T) {
 	handler := func(ctx context.Context, input json.RawMessage) (json.RawMessage, error) {
 		return []byte(`{"result":"executed"}`), nil
 	}
-	reg.Register(&SkillDefinition{ID: "s1", Name: "Alpha", Category: CategoryCoding}, handler)
+	require.NoError(t, reg.Register(&SkillDefinition{ID: "s1", Name: "Alpha", Category: CategoryCoding}, handler))
 
 	adapter := NewSkillsExtensionAdapter(mgr, reg)
 	result, err := adapter.ExecuteSkill(context.Background(), "Alpha", map[string]string{"key": "val"})
@@ -69,7 +69,7 @@ func TestSkillsExtensionAdapter_ExecuteSkill_FallbackToInstructions(t *testing.T
 	s1, _ := NewSkillBuilder("s1", "Alpha").
 		WithInstructions("Do the thing").
 		Build()
-	mgr.RegisterSkill(s1)
+	require.NoError(t, mgr.RegisterSkill(s1))
 
 	adapter := NewSkillsExtensionAdapter(mgr, nil)
 	result, err := adapter.ExecuteSkill(context.Background(), "s1", "input")

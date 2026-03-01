@@ -57,7 +57,7 @@ func TestProviderRegistry_Unregister(t *testing.T) {
 	r := NewProviderRegistry()
 	r.Register("p1", &testProvider{name: "p1"})
 	r.Register("p2", &testProvider{name: "p2"})
-	r.SetDefault("p1")
+	require.NoError(t, r.SetDefault("p1"))
 
 	r.Unregister("p1")
 	assert.Equal(t, 1, r.Len())
@@ -67,7 +67,7 @@ func TestProviderRegistry_Unregister(t *testing.T) {
 	require.Error(t, err)
 
 	// Unregister non-default doesn't clear default
-	r.SetDefault("p2")
+	require.NoError(t, r.SetDefault("p2"))
 	r.Unregister("nonexistent") // no-op
 	p, err := r.Default()
 	require.NoError(t, err)

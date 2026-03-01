@@ -785,6 +785,293 @@ paths:
         '404':
           description: API key not found
 
+  /api/v1/mcp/resources:
+    get:
+      tags: [Protocol]
+      summary: List MCP resources
+      description: |
+        List all available MCP resources.
+        Note: This endpoint is only available when protocol handlers are initialized.
+      x-conditional: "Requires protocol handlers"
+      operationId: listMCPResources
+      security:
+        - ApiKeyAuth: []
+      responses:
+        '200':
+          description: MCP resources list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Envelope'
+
+  /api/v1/mcp/resources/:
+    get:
+      tags: [Protocol]
+      summary: Get MCP resource
+      description: |
+        Get a specific MCP resource by URI suffix.
+        Note: This endpoint is only available when protocol handlers are initialized.
+      x-conditional: "Requires protocol handlers"
+      operationId: getMCPResource
+      security:
+        - ApiKeyAuth: []
+      responses:
+        '200':
+          description: MCP resource
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Envelope'
+        '400':
+          description: Invalid request
+        '404':
+          description: Resource not found
+
+  /api/v1/mcp/tools:
+    get:
+      tags: [Protocol]
+      summary: List MCP tools
+      description: |
+        List all available MCP tools.
+        Note: This endpoint is only available when protocol handlers are initialized.
+      x-conditional: "Requires protocol handlers"
+      operationId: listMCPTools
+      security:
+        - ApiKeyAuth: []
+      responses:
+        '200':
+          description: MCP tools list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Envelope'
+
+  /api/v1/mcp/tools/:
+    post:
+      tags: [Protocol]
+      summary: Call MCP tool
+      description: |
+        Call an MCP tool by name suffix.
+        Note: This endpoint is only available when protocol handlers are initialized.
+      x-conditional: "Requires protocol handlers"
+      operationId: callMCPTool
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                arguments:
+                  type: object
+                  additionalProperties: true
+      responses:
+        '200':
+          description: Tool call result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Envelope'
+        '400':
+          description: Invalid request
+
+  /api/v1/a2a/.well-known/agent.json:
+    get:
+      tags: [Protocol]
+      summary: Get A2A agent card
+      description: |
+        Get an agent card for A2A protocol by query parameter `agent_id`.
+        Note: This endpoint is only available when protocol handlers are initialized.
+      x-conditional: "Requires protocol handlers"
+      operationId: getA2AAgentCard
+      security:
+        - ApiKeyAuth: []
+      responses:
+        '200':
+          description: Agent card
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Envelope'
+        '400':
+          description: Invalid request
+        '404':
+          description: Agent not found
+
+  /api/v1/a2a/tasks:
+    post:
+      tags: [Protocol]
+      summary: Send A2A task
+      description: |
+        Send a task to target agent through A2A protocol.
+        Note: This endpoint is only available when protocol handlers are initialized.
+      x-conditional: "Requires protocol handlers"
+      operationId: sendA2ATask
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        '200':
+          description: Task accepted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Envelope'
+
+  /api/v1/rag/query:
+    post:
+      tags: [RAG]
+      summary: Query RAG index
+      description: |
+        Query indexed documents in RAG store.
+        Note: This endpoint is only available when RAG handler is initialized.
+      x-conditional: "Requires RAG handler"
+      operationId: queryRAG
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                query:
+                  type: string
+                top_k:
+                  type: integer
+      responses:
+        '200':
+          description: Query result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Envelope'
+        '400':
+          description: Invalid request
+
+  /api/v1/rag/index:
+    post:
+      tags: [RAG]
+      summary: Index RAG documents
+      description: |
+        Index documents into RAG store.
+        Note: This endpoint is only available when RAG handler is initialized.
+      x-conditional: "Requires RAG handler"
+      operationId: indexRAG
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                documents:
+                  type: array
+                  items:
+                    type: object
+      responses:
+        '200':
+          description: Indexing result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Envelope'
+        '400':
+          description: Invalid request
+
+  /api/v1/workflows:
+    get:
+      tags: [Workflow]
+      summary: List workflows
+      description: |
+        List available workflows.
+        Note: This endpoint is only available when workflow handler is initialized.
+      x-conditional: "Requires workflow handler"
+      operationId: listWorkflows
+      security:
+        - ApiKeyAuth: []
+      responses:
+        '200':
+          description: Workflow list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Envelope'
+
+  /api/v1/workflows/execute:
+    post:
+      tags: [Workflow]
+      summary: Execute workflow
+      description: |
+        Execute workflow DSL with input payload.
+        Note: This endpoint is only available when workflow handler is initialized.
+      x-conditional: "Requires workflow handler"
+      operationId: executeWorkflow
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                dsl:
+                  type: string
+                input:
+                  type: object
+                  additionalProperties: true
+      responses:
+        '200':
+          description: Workflow execution result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Envelope'
+        '400':
+          description: Invalid request
+
+  /api/v1/workflows/parse:
+    post:
+      tags: [Workflow]
+      summary: Validate workflow DSL
+      description: |
+        Parse and validate workflow DSL without executing it.
+        Note: This endpoint is only available when workflow handler is initialized.
+      x-conditional: "Requires workflow handler"
+      operationId: parseWorkflow
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                dsl:
+                  type: string
+      responses:
+        '200':
+          description: Parse result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Envelope'
+        '400':
+          description: Invalid request
+
 components:
   securitySchemes:
     ApiKeyAuth:

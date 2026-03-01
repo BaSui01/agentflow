@@ -801,7 +801,8 @@ func (s *Server) startMetricsServer() error {
 }
 
 // getFirstAPIKey 返回配置中的第一个 API Key，用于配置 API 的独立认证。
-// 如果未配置任何 API Key，返回空字符串（ConfigAPIMiddleware 会跳过认证检查）。
+// 如果未配置任何 API Key，返回空字符串（ConfigAPIMiddleware 本身不再增加额外认证约束，
+// 但路由仍可能受全局认证中间件保护）。
 func (s *Server) getFirstAPIKey() string {
 	if len(s.cfg.Server.APIKeys) > 0 {
 		return s.cfg.Server.APIKeys[0]

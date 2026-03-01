@@ -29,7 +29,7 @@ func TestFirecrawlProvider_Search(t *testing.T) {
 		assert.Equal(t, "Bearer test-key", r.Header.Get("Authorization"))
 
 		var req firecrawlSearchRequest
-		json.NewDecoder(r.Body).Decode(&req)
+		require.NoError(t, json.NewDecoder(r.Body).Decode(&req))
 		assert.Equal(t, "golang testing", req.Query)
 		assert.Equal(t, 5, req.Limit)
 
@@ -45,7 +45,7 @@ func TestFirecrawlProvider_Search(t *testing.T) {
 			},
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(resp)
+		require.NoError(t, json.NewEncoder(w).Encode(resp))
 	}))
 	defer srv.Close()
 
@@ -77,7 +77,7 @@ func TestFirecrawlProvider_Scrape(t *testing.T) {
 		assert.Equal(t, "Bearer test-key", r.Header.Get("Authorization"))
 
 		var req firecrawlScrapeRequest
-		json.NewDecoder(r.Body).Decode(&req)
+		require.NoError(t, json.NewDecoder(r.Body).Decode(&req))
 		assert.Equal(t, "https://example.com", req.URL)
 		assert.Equal(t, []string{"markdown"}, req.Formats)
 
@@ -92,7 +92,7 @@ func TestFirecrawlProvider_Scrape(t *testing.T) {
 			},
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(resp)
+		require.NoError(t, json.NewEncoder(w).Encode(resp))
 	}))
 	defer srv.Close()
 
@@ -127,7 +127,7 @@ func TestFirecrawlProvider_ScrapeHTML(t *testing.T) {
 	var capturedFormats []string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var req firecrawlScrapeRequest
-		json.NewDecoder(r.Body).Decode(&req)
+		require.NoError(t, json.NewDecoder(r.Body).Decode(&req))
 		capturedFormats = req.Formats
 
 		resp := firecrawlScrapeResponse{
@@ -139,7 +139,7 @@ func TestFirecrawlProvider_ScrapeHTML(t *testing.T) {
 			},
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(resp)
+		require.NoError(t, json.NewEncoder(w).Encode(resp))
 	}))
 	defer srv.Close()
 
@@ -176,7 +176,7 @@ func TestFirecrawlProvider_APIError(t *testing.T) {
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusForbidden)
-		w.Write([]byte(`{"error":"forbidden"}`))
+		_, _ = w.Write([]byte(`{"error":"forbidden"}`))
 	}))
 	defer srv.Close()
 
@@ -197,7 +197,7 @@ func TestFirecrawlProvider_WaitForJS(t *testing.T) {
 	var capturedWaitFor int
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var req firecrawlScrapeRequest
-		json.NewDecoder(r.Body).Decode(&req)
+		require.NoError(t, json.NewDecoder(r.Body).Decode(&req))
 		capturedWaitFor = req.WaitFor
 
 		resp := firecrawlScrapeResponse{
@@ -205,7 +205,7 @@ func TestFirecrawlProvider_WaitForJS(t *testing.T) {
 			Data:    firecrawlScrapeData{Markdown: "content"},
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(resp)
+		require.NoError(t, json.NewEncoder(w).Encode(resp))
 	}))
 	defer srv.Close()
 
@@ -218,7 +218,8 @@ func TestFirecrawlProvider_WaitForJS(t *testing.T) {
 	opts := DefaultWebScrapeOptions()
 	opts.WaitForJS = true
 
-	p.Scrape(context.Background(), "https://example.com", opts)
+	_, err := p.Scrape(context.Background(), "https://example.com", opts)
+	require.NoError(t, err)
 	assert.Equal(t, 3000, capturedWaitFor)
 }
 

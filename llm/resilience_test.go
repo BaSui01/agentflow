@@ -38,9 +38,10 @@ func TestSimpleCircuitBreaker_StartsClosedAndOpens(t *testing.T) {
 
 	// Record failures to open the circuit
 	for i := 0; i < 3; i++ {
-		cb.Call(context.Background(), func() error {
+		err := cb.Call(context.Background(), func() error {
 			return fmt.Errorf("fail")
 		})
+		require.Error(t, err)
 	}
 	assert.Equal(t, CircuitOpen, cb.State())
 
@@ -59,7 +60,8 @@ func TestSimpleCircuitBreaker_HalfOpenToClosed(t *testing.T) {
 
 	// Open the circuit
 	for i := 0; i < 2; i++ {
-		cb.Call(context.Background(), func() error { return fmt.Errorf("fail") })
+		err := cb.Call(context.Background(), func() error { return fmt.Errorf("fail") })
+		require.Error(t, err)
 	}
 	assert.Equal(t, CircuitOpen, cb.State())
 
@@ -85,15 +87,20 @@ func TestSimpleCircuitBreaker_SuccessResetFailures(t *testing.T) {
 	}, logger)
 
 	// 2 failures (not enough to open)
-	cb.Call(context.Background(), func() error { return fmt.Errorf("fail") })
-	cb.Call(context.Background(), func() error { return fmt.Errorf("fail") })
+	err := cb.Call(context.Background(), func() error { return fmt.Errorf("fail") })
+	require.Error(t, err)
+	err = cb.Call(context.Background(), func() error { return fmt.Errorf("fail") })
+	require.Error(t, err)
 
 	// 1 success resets failure count
-	cb.Call(context.Background(), func() error { return nil })
+	err = cb.Call(context.Background(), func() error { return nil })
+	require.NoError(t, err)
 
 	// 2 more failures should not open (counter was reset)
-	cb.Call(context.Background(), func() error { return fmt.Errorf("fail") })
-	cb.Call(context.Background(), func() error { return fmt.Errorf("fail") })
+	err = cb.Call(context.Background(), func() error { return fmt.Errorf("fail") })
+	require.Error(t, err)
+	err = cb.Call(context.Background(), func() error { return fmt.Errorf("fail") })
+	require.Error(t, err)
 	assert.Equal(t, CircuitClosed, cb.State())
 }
 
@@ -146,9 +153,10 @@ func TestResilientProvider_Stream_CircuitOpen(t *testing.T) {
 	}, zap.NewNop())
 
 	// Open the circuit
-	rp.circuitBreaker.Call(context.Background(), func() error { return fmt.Errorf("fail") })
+	err := rp.circuitBreaker.Call(context.Background(), func() error { return fmt.Errorf("fail") })
+	require.Error(t, err)
 
-	_, err := rp.Stream(context.Background(), &ChatRequest{Model: "m"})
+	_, err = rp.Stream(context.Background(), &ChatRequest{Model: "m"})
 	assert.ErrorIs(t, err, ErrCircuitOpen)
 }
 
@@ -176,4 +184,3 @@ func TestNewResilientProviderSimple(t *testing.T) {
 	rp := NewResilientProviderSimple(inner, nil, zap.NewNop())
 	assert.Equal(t, "simple", rp.Name())
 }
-

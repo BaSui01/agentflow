@@ -8,14 +8,23 @@
 package config
 
 import (
+	"crypto/sha256"
+	"crypto/subtle"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"strconv"
 	"strings"
 	"time"
 
 	"go.uber.org/zap"
+)
+
+const (
+	// maxConfigUpdateBodyBytes limits /api/v1/config update payload size.
+	maxConfigUpdateBodyBytes int64 = 1 << 20 // 1 MiB
 )
 
 // --- API 类型定义 ---
@@ -30,11 +39,11 @@ type ConfigAPIHandler struct {
 // apiResponse is the canonical API envelope (§38), local to config to avoid
 // reverse-dependency on the api package.
 type apiResponse struct {
-	Success   bool        `json:"success"`
-	Data      any         `json:"data,omitempty"`
-	Error     *apiError   `json:"error,omitempty"`
-	Timestamp time.Time   `json:"timestamp"`
-	RequestID string      `json:"request_id,omitempty"`
+	Success   bool      `json:"success"`
+	Data      any       `json:"data,omitempty"`
+	Error     *apiError `json:"error,omitempty"`
+	Timestamp time.Time `json:"timestamp"`
+	RequestID string    `json:"request_id,omitempty"`
 }
 
 // apiError is the canonical error structure embedded in apiResponse (§38).
@@ -190,15 +199,64 @@ func (h *ConfigAPIHandler) updateConfig(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	requestID := requestIDFromRequest(r)
+	if r.ContentLength > maxConfigUpdateBodyBytes {
+		writeAPIJSON(w, http.StatusRequestEntityTooLarge, apiResponse{
+			Success: false,
+			Error: &apiError{
+				Code:    "REQUEST_TOO_LARGE",
+				Message: "Request body too large",
+			},
+			Timestamp: time.Now(),
+			RequestID: requestID,
+		})
+		return
+	}
+
+	r.Body = http.MaxBytesReader(w, r.Body, maxConfigUpdateBodyBytes)
 	var req ConfigUpdateRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	decoder := json.NewDecoder(r.Body)
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&req); err != nil {
+		var maxBytesErr *http.MaxBytesError
+		if errors.As(err, &maxBytesErr) {
+			writeAPIJSON(w, http.StatusRequestEntityTooLarge, apiResponse{
+				Success: false,
+				Error: &apiError{
+					Code:    "REQUEST_TOO_LARGE",
+					Message: "Request body too large",
+				},
+				Timestamp: time.Now(),
+				RequestID: requestID,
+			})
+			return
+		}
+		h.logger.Warn("invalid config update request body",
+			zap.String("remote_addr", r.RemoteAddr),
+			zap.String("path", r.URL.Path),
+			zap.String("request_id", requestID),
+			zap.Error(err),
+		)
 		writeAPIJSON(w, http.StatusBadRequest, apiResponse{
 			Success: false,
 			Error: &apiError{
 				Code:    "INVALID_REQUEST",
-				Message: fmt.Sprintf("Invalid request body: %v", err),
+				Message: "Invalid request body",
 			},
 			Timestamp: time.Now(),
+			RequestID: requestID,
+		})
+		return
+	}
+	if err := decoder.Decode(&struct{}{}); err != io.EOF {
+		writeAPIJSON(w, http.StatusBadRequest, apiResponse{
+			Success: false,
+			Error: &apiError{
+				Code:    "INVALID_REQUEST",
+				Message: "Invalid request body",
+			},
+			Timestamp: time.Now(),
+			RequestID: requestID,
 		})
 		return
 	}
@@ -525,7 +583,13 @@ func (m *ConfigAPIMiddleware) RequireAuth(next http.HandlerFunc) http.HandlerFun
 			apiKey := r.Header.Get("X-API-Key")
 			// 不再支持 query string 传递 API key（安全风险：会暴露在日志和浏览器历史中）
 
-			if apiKey != m.apiKey {
+			if !secureTokenEqual(apiKey, m.apiKey) {
+				m.handler.logger.Warn("config api authentication failed",
+					zap.String("remote_addr", r.RemoteAddr),
+					zap.String("path", r.URL.Path),
+					zap.String("method", r.Method),
+					zap.String("request_id", requestIDFromRequest(r)),
+				)
 				writeAPIJSON(w, http.StatusUnauthorized, apiResponse{
 					Success: false,
 					Error: &apiError{
@@ -533,6 +597,7 @@ func (m *ConfigAPIMiddleware) RequireAuth(next http.HandlerFunc) http.HandlerFun
 						Message: "Invalid or missing API key",
 					},
 					Timestamp: time.Now(),
+					RequestID: requestIDFromRequest(r),
 				})
 				return
 			}
@@ -567,4 +632,20 @@ type responseWriter struct {
 func (w *responseWriter) WriteHeader(status int) {
 	w.status = status
 	w.ResponseWriter.WriteHeader(status)
+}
+
+func secureTokenEqual(provided, expected string) bool {
+	providedHash := sha256.Sum256([]byte(provided))
+	expectedHash := sha256.Sum256([]byte(expected))
+	return subtle.ConstantTimeCompare(providedHash[:], expectedHash[:]) == 1
+}
+
+func requestIDFromRequest(r *http.Request) string {
+	if r == nil {
+		return ""
+	}
+	if requestID := strings.TrimSpace(r.Header.Get("X-Request-ID")); requestID != "" {
+		return requestID
+	}
+	return strings.TrimSpace(r.Header.Get("X-Request-Id"))
 }

@@ -21,6 +21,7 @@ type HealthMonitor struct {
 }
 
 type QPSCounter struct {
+	mu      sync.Mutex
 	lastSec atomic.Int64
 	buckets [60]atomic.Int64
 	maxQPS  atomic.Int64 // 配置的最大 QPS（0 表示无限制）
@@ -65,66 +66,51 @@ func (m *HealthMonitor) Stop() {
 }
 
 // GetHealthScore 获取 Provider 的健康分数 (0-1)
-// 使用写锁，因为 getCurrentQPSUnsafe 内部调用 bumpWindow 会修改计数器状态。
 func (m *HealthMonitor) GetHealthScore(providerCode string) float64 {
-	m.mu.Lock()
-	defer m.mu.Unlock()
+	m.mu.RLock()
+	probe, hasProbe := m.probe[providerCode]
+	counter := m.qpsCounter[providerCode]
+	score, hasScore := m.healthScore[providerCode]
+	m.mu.RUnlock()
 
-	if probe, ok := m.probe[providerCode]; ok && !probe.Healthy {
+	if hasProbe && !probe.Healthy {
 		return 0.0 // 主动探活失败，直接熔断
 	}
 
-	if counter, exists := m.qpsCounter[providerCode]; exists && counter.maxQPS.Load() > 0 {
-		currentQPS := m.getCurrentQPSUnsafe(providerCode)
-		if currentQPS >= int(counter.maxQPS.Load()) {
+	if counter != nil && counter.maxQPS.Load() > 0 {
+		if counter.currentQPS(time.Now()) >= int(counter.maxQPS.Load()) {
 			return 0.0 // QPS 超限，标记为不健康
 		}
 	}
 
-	if score, exists := m.healthScore[providerCode]; exists {
+	if hasScore {
 		return score
 	}
 	return 1.0 // 默认健康
 }
 
 // GetCurrentQPS 获取当前 QPS
-// 使用写锁，因为 getCurrentQPSUnsafe 内部调用 bumpWindow 会修改计数器状态。
 func (m *HealthMonitor) GetCurrentQPS(providerCode string) int {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	return m.getCurrentQPSUnsafe(providerCode)
-}
-
-func (m *HealthMonitor) getCurrentQPSUnsafe(providerCode string) int {
-	counter, exists := m.qpsCounter[providerCode]
-	if !exists {
+	m.mu.RLock()
+	counter := m.qpsCounter[providerCode]
+	m.mu.RUnlock()
+	if counter == nil {
 		return 0
 	}
-	now := time.Now()
-	counter.bumpWindow(now.Unix())
-	var total int64
-	for i := range counter.buckets {
-		total += counter.buckets[i].Load()
-	}
-	if total < 0 {
-		return 0
-	}
-	return int(total)
+	return counter.currentQPS(time.Now())
 }
 
 // IncrementQPS 记录一次请求
 func (m *HealthMonitor) IncrementQPS(providerCode string) {
+	now := time.Now()
 	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	if _, exists := m.qpsCounter[providerCode]; !exists {
-		m.qpsCounter[providerCode] = newQPSCounter(time.Now())
+	counter, exists := m.qpsCounter[providerCode]
+	if !exists {
+		counter = newQPSCounter(now)
+		m.qpsCounter[providerCode] = counter
 	}
-
-	counter := m.qpsCounter[providerCode]
-	now := time.Now().Unix()
-	counter.bumpWindow(now)
-	counter.buckets[now%60].Add(1)
+	m.mu.Unlock()
+	counter.increment(now)
 }
 
 // SetMaxQPS 设置 Provider 的最大 QPS（0 表示无限制）
@@ -139,21 +125,36 @@ func (m *HealthMonitor) SetMaxQPS(providerCode string, maxQPS int) {
 }
 
 // GetAllProviderStats 获取所有 Provider 的健康统计
-// 使用写锁，因为 getCurrentQPSUnsafe 内部调用 bumpWindow 会修改计数器状态。
 func (m *HealthMonitor) GetAllProviderStats() []ProviderHealthStats {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	stats := make([]ProviderHealthStats, 0, len(m.healthScore))
+	m.mu.RLock()
+	healthScore := make(map[string]float64, len(m.healthScore))
 	for providerCode, score := range m.healthScore {
+		healthScore[providerCode] = score
+	}
+	probe := make(map[string]ProviderProbeResult, len(m.probe))
+	for providerCode, result := range m.probe {
+		probe[providerCode] = result
+	}
+	qpsCounter := make(map[string]*QPSCounter, len(m.qpsCounter))
+	for providerCode, counter := range m.qpsCounter {
+		qpsCounter[providerCode] = counter
+	}
+	m.mu.RUnlock()
+
+	stats := make([]ProviderHealthStats, 0, len(healthScore))
+	for providerCode, score := range healthScore {
 		lastCheckAt := time.Now()
-		if probe, ok := m.probe[providerCode]; ok && !probe.LastCheckAt.IsZero() {
-			lastCheckAt = probe.LastCheckAt
+		if result, ok := probe[providerCode]; ok && !result.LastCheckAt.IsZero() {
+			lastCheckAt = result.LastCheckAt
+		}
+		currentQPS := 0
+		if counter, ok := qpsCounter[providerCode]; ok {
+			currentQPS = counter.currentQPS(time.Now())
 		}
 		stats = append(stats, ProviderHealthStats{
 			ProviderCode: providerCode,
 			HealthScore:  score,
-			CurrentQPS:   m.getCurrentQPSUnsafe(providerCode),
+			CurrentQPS:   currentQPS,
 			LastCheckAt:  lastCheckAt,
 		})
 	}
@@ -220,6 +221,30 @@ func (c *QPSCounter) bumpWindow(nowSec int64) {
 		}
 		prev = c.lastSec.Load()
 	}
+}
+
+func (c *QPSCounter) currentQPS(now time.Time) int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.bumpWindow(now.Unix())
+	var total int64
+	for i := range c.buckets {
+		total += c.buckets[i].Load()
+	}
+	if total < 0 {
+		return 0
+	}
+	return int(total)
+}
+
+func (c *QPSCounter) increment(now time.Time) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	nowSec := now.Unix()
+	c.bumpWindow(nowSec)
+	c.buckets[nowSec%60].Add(1)
 }
 
 // updateAllProviderHealth 更新所有 Provider 的健康分数

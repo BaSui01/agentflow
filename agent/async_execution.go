@@ -57,10 +57,7 @@ func (e *AsyncExecutor) ExecuteAsync(ctx context.Context, input *Input) (*AsyncE
 		select {
 		case <-ctx.Done():
 			execution.setFailed(ctx.Err())
-			select {
-			case execution.doneCh <- executionResult{Err: ctx.Err()}:
-			default:
-			}
+			execution.notifyDone(ctx, executionResult{Err: ctx.Err()})
 			return
 		default:
 		}
@@ -71,10 +68,7 @@ func (e *AsyncExecutor) ExecuteAsync(ctx context.Context, input *Input) (*AsyncE
 		} else {
 			execution.setCompleted(output)
 		}
-		select {
-		case execution.doneCh <- executionResult{Output: output, Err: err}:
-		case <-ctx.Done():
-		}
+		execution.notifyDone(ctx, executionResult{Output: output, Err: err})
 	}()
 
 	return execution, nil
@@ -113,19 +107,18 @@ func (e *AsyncExecutor) ExecuteWithSubagents(ctx context.Context, input *Input, 
 			continue
 		}
 
-		select {
-		case res := <-exec.doneCh:
-			if res.Err != nil {
-				e.logger.Warn("subagent execution failed",
-					zap.String("execution_id", exec.ID),
-					zap.String("subagent_id", exec.AgentID),
-					zap.String("task_type", "subagent_parallel"),
-					zap.Error(res.Err),
-				)
-			} else {
-				results = append(results, res.Output)
-			}
-		case <-ctx.Done():
+		output, err := exec.Wait(ctx)
+		if err != nil {
+			e.logger.Warn("subagent execution failed",
+				zap.String("execution_id", exec.ID),
+				zap.String("subagent_id", exec.AgentID),
+				zap.String("task_type", "subagent_parallel"),
+				zap.Error(err),
+			)
+		} else {
+			results = append(results, output)
+		}
+		if ctx.Err() != nil {
 			return nil, ctx.Err()
 		}
 	}
@@ -194,6 +187,9 @@ type AsyncExecution struct {
 	endTime time.Time
 
 	doneCh chan executionResult
+	// waitOnce ensures Wait() only consumes doneCh once and then reuses cached result.
+	waitOnce   sync.Once
+	waitResult executionResult
 }
 
 // setCompleted atomically marks the execution as completed.
@@ -253,29 +249,25 @@ const (
 	ExecutionStatusCanceled  ExecutionStatus = "canceled"
 )
 
-// Wait 等待执行完成。可安全地被多次调用。
-// 如果 ctx 被取消，返回 ctx.Err() 但不缓存该错误，后续调用仍可获取实际结果。
+// Wait 等待执行完成。可安全地被多次调用，
+// 首次调用消费 doneCh 并缓存结果，后续调用直接返回缓存值。
 func (e *AsyncExecution) Wait(ctx context.Context) (*Output, error) {
-	e.mu.RLock()
-	if e.status == ExecutionStatusCompleted {
-		output := e.output
-		e.mu.RUnlock()
-		return output, nil
-	}
-	if e.status == ExecutionStatusFailed {
-		errMsg := e.errMsg
-		e.mu.RUnlock()
-		return nil, fmt.Errorf("execution failed: %s", errMsg)
-	}
-	e.mu.RUnlock()
+	e.waitOnce.Do(func() {
+		select {
+		case res := <-e.doneCh:
+			e.waitResult = res
+		case <-ctx.Done():
+			e.waitResult = executionResult{Err: ctx.Err()}
+		}
+	})
+	return e.waitResult.Output, e.waitResult.Err
+}
 
+func (e *AsyncExecution) notifyDone(ctx context.Context, res executionResult) {
 	select {
-	case res := <-e.doneCh:
-		// 放回 channel 以便后续 Wait 调用也能获取结果
-		e.doneCh <- res
-		return res.Output, res.Err
+	case e.doneCh <- res:
 	case <-ctx.Done():
-		return nil, ctx.Err()
+	default:
 	}
 }
 
@@ -364,7 +356,7 @@ func (m *SubagentManager) SpawnSubagent(ctx context.Context, subagent Agent, inp
 				zap.String("execution_id", execution.ID),
 			)
 		}
-		execution.doneCh <- executionResult{Output: output, Err: err}
+		execution.notifyDone(ctx, executionResult{Output: output, Err: err})
 	}()
 
 	return execution, nil
@@ -500,30 +492,30 @@ func (c *RealtimeCoordinator) CoordinateSubagents(ctx context.Context, subagents
 		go func(e *AsyncExecution) {
 			defer wg.Done()
 
-			select {
-			case res := <-e.doneCh:
-				if res.Err != nil {
-					c.logger.Warn("subagent failed",
-						zap.String("execution_id", e.ID),
-						zap.Error(res.Err),
-					)
+			output, err := e.Wait(ctx)
+			if err != nil {
+				if ctx.Err() != nil {
 					return
 				}
-				mu.Lock()
-				results = append(results, res.Output)
-				mu.Unlock()
-
-				// 发布完成事件
-				if c.eventBus != nil {
-					c.eventBus.Publish(&SubagentCompletedEvent{
-						ExecutionID: e.ID,
-						AgentID:     e.AgentID,
-						Output:      res.Output,
-						Timestamp_:  time.Now(),
-					})
-				}
-			case <-ctx.Done():
+				c.logger.Warn("subagent failed",
+					zap.String("execution_id", e.ID),
+					zap.Error(err),
+				)
 				return
+			}
+
+			mu.Lock()
+			results = append(results, output)
+			mu.Unlock()
+
+			// 发布完成事件
+			if c.eventBus != nil {
+				c.eventBus.Publish(&SubagentCompletedEvent{
+					ExecutionID: e.ID,
+					AgentID:     e.AgentID,
+					Output:      output,
+					Timestamp_:  time.Now(),
+				})
 			}
 		}(exec)
 	}

@@ -144,7 +144,8 @@ func TestCircuitBreaker_HalfOpenFailureReOpens(t *testing.T) {
 	assert.Equal(t, CircuitOpen, cb.GetState())
 
 	time.Sleep(5 * time.Millisecond)
-	cb.AllowRequest() // transitions to half-open
+	_, err := cb.AllowRequest() // transitions to half-open
+	assert.NoError(t, err)
 	assert.Equal(t, CircuitHalfOpen, cb.GetState())
 
 	// Failure in half-open re-opens

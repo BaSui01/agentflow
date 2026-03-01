@@ -83,7 +83,8 @@ func TestTripoProvider_ImplementsThreeDProvider(t *testing.T) {
 func TestMeshyProvider_Generate_HTTPError(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte("server error"))
+		_, err := w.Write([]byte("server error"))
+		require.NoError(t, err)
 	}))
 	defer server.Close()
 
@@ -98,7 +99,8 @@ func TestMeshyProvider_Generate_HTTPError(t *testing.T) {
 func TestMeshyProvider_Generate_ImageHTTPError(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte("bad"))
+		_, err := w.Write([]byte("bad"))
+		require.NoError(t, err)
 	}))
 	defer server.Close()
 
@@ -115,7 +117,8 @@ func TestMeshyProvider_Generate_ImageHTTPError(t *testing.T) {
 func TestTripoProvider_Generate_HTTPError(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte("bad request"))
+		_, err := w.Write([]byte("bad request"))
+		require.NoError(t, err)
 	}))
 	defer server.Close()
 

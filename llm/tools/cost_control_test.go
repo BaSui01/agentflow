@@ -47,11 +47,19 @@ func TestGetUsage_MultipleBudgetsSameScope(t *testing.T) {
 
 	b1 := CreateAgentBudget("b1", "budget 1", "agent-1", 1000, BudgetPeriodDaily)
 	b2 := CreateAgentBudget("b2", "budget 2", "agent-1", 500, BudgetPeriodDaily)
-	cc.AddBudget(b1)
-	cc.AddBudget(b2)
+	if err := cc.AddBudget(b1); err != nil {
+		t.Fatalf("AddBudget b1: %v", err)
+	}
+	if err := cc.AddBudget(b2); err != nil {
+		t.Fatalf("AddBudget b2: %v", err)
+	}
 
-	cc.RecordCost(&CostRecord{AgentID: "agent-1", ToolName: "t1", Cost: 10.0, Unit: CostUnitCredits})
-	cc.RecordCost(&CostRecord{AgentID: "agent-1", ToolName: "t2", Cost: 20.0, Unit: CostUnitCredits})
+	if err := cc.RecordCost(&CostRecord{AgentID: "agent-1", ToolName: "t1", Cost: 10.0, Unit: CostUnitCredits}); err != nil {
+		t.Fatalf("RecordCost t1: %v", err)
+	}
+	if err := cc.RecordCost(&CostRecord{AgentID: "agent-1", ToolName: "t2", Cost: 20.0, Unit: CostUnitCredits}); err != nil {
+		t.Fatalf("RecordCost t2: %v", err)
+	}
 
 	// Both budgets match agent-1, so each gets 30.0 of usage.
 	// GetUsage should sum across both budget keys = 60.0
@@ -76,7 +84,9 @@ func TestResetUsageIfNeeded_CalendarBased(t *testing.T) {
 		Period:  BudgetPeriodDaily,
 		Enabled: true,
 	}
-	cc.AddBudget(budget)
+	if err := cc.AddBudget(budget); err != nil {
+		t.Fatalf("AddBudget: %v", err)
+	}
 
 	// Inject an old-period usage key (yesterday)
 	yesterday := time.Now().AddDate(0, 0, -1).Format("2006-01-02")
@@ -120,7 +130,9 @@ func TestResetUsageIfNeeded_TotalPeriodNeverResets(t *testing.T) {
 		Period:  BudgetPeriodTotal,
 		Enabled: true,
 	}
-	cc.AddBudget(budget)
+	if err := cc.AddBudget(budget); err != nil {
+		t.Fatalf("AddBudget: %v", err)
+	}
 
 	key := cc.buildUsageKey(budget)
 	cc.mu.Lock()
@@ -141,10 +153,14 @@ func TestCheckBudget_ExceedsBudget(t *testing.T) {
 	cc := NewCostController(zap.NewNop())
 
 	budget := CreateAgentBudget("b1", "agent budget", "agent-1", 100, BudgetPeriodDaily)
-	cc.AddBudget(budget)
+	if err := cc.AddBudget(budget); err != nil {
+		t.Fatalf("AddBudget: %v", err)
+	}
 
 	// Record 90 credits of usage
-	cc.RecordCost(&CostRecord{AgentID: "agent-1", ToolName: "t1", Cost: 90.0, Unit: CostUnitCredits})
+	if err := cc.RecordCost(&CostRecord{AgentID: "agent-1", ToolName: "t1", Cost: 90.0, Unit: CostUnitCredits}); err != nil {
+		t.Fatalf("RecordCost: %v", err)
+	}
 
 	// Trying to spend 20 more should be denied (90 + 20 > 100)
 	result, err := cc.CheckBudget(context.Background(), "agent-1", "", "", "t1", 20.0)
@@ -180,7 +196,9 @@ func TestCalculateCost_DefaultAndConfigured(t *testing.T) {
 	}
 
 	// Configured tool with base cost only
-	cc.SetToolCost(&ToolCost{ToolName: "my-tool", BaseCost: 5.0, Unit: CostUnitCredits})
+	if err := cc.SetToolCost(&ToolCost{ToolName: "my-tool", BaseCost: 5.0, Unit: CostUnitCredits}); err != nil {
+		t.Fatalf("SetToolCost my-tool: %v", err)
+	}
 	cost, err = cc.CalculateCost("my-tool", nil)
 	if err != nil {
 		t.Fatalf("CalculateCost: %v", err)
@@ -190,7 +208,9 @@ func TestCalculateCost_DefaultAndConfigured(t *testing.T) {
 	}
 
 	// Configured tool with per-unit cost (tokens)
-	cc.SetToolCost(&ToolCost{ToolName: "token-tool", BaseCost: 1.0, CostPerUnit: 0.01, Unit: CostUnitTokens})
+	if err := cc.SetToolCost(&ToolCost{ToolName: "token-tool", BaseCost: 1.0, CostPerUnit: 0.01, Unit: CostUnitTokens}); err != nil {
+		t.Fatalf("SetToolCost token-tool: %v", err)
+	}
 	args := json.RawMessage(`{"prompt": "hello world"}`)
 	cost, err = cc.CalculateCost("token-tool", args)
 	if err != nil {

@@ -33,6 +33,7 @@ type AgentHandler struct {
 	registry      discovery.Registry
 	agentRegistry *agent.AgentRegistry
 	resolver      AgentResolver
+	service       AgentService
 	logger        *zap.Logger
 	mu            sync.RWMutex
 }
@@ -69,12 +70,12 @@ type AgentExecuteResponse struct {
 
 // AgentHealthResponse Agent health check response
 type AgentHealthResponse struct {
-	AgentID   string `json:"agent_id"`
-	Status    string `json:"status"`
-	Healthy   bool   `json:"healthy"`
-	Endpoint  string `json:"endpoint,omitempty"`
+	AgentID   string  `json:"agent_id"`
+	Status    string  `json:"status"`
+	Healthy   bool    `json:"healthy"`
+	Endpoint  string  `json:"endpoint,omitempty"`
 	Load      float64 `json:"load"`
-	CheckedAt string `json:"checked_at"`
+	CheckedAt string  `json:"checked_at"`
 }
 
 // NewAgentHandler creates an Agent handler.
@@ -88,6 +89,7 @@ func NewAgentHandler(registry discovery.Registry, agentRegistry *agent.AgentRegi
 	if len(resolver) > 0 && resolver[0] != nil {
 		h.resolver = resolver[0]
 	}
+	h.service = NewDefaultAgentService(registry, h.resolver)
 	return h
 }
 
@@ -223,61 +225,46 @@ func (h *AgentHandler) HandleExecuteAgent(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	// Try resolver first (live agent instances)
-	if h.resolver != nil {
-		ag, err := h.resolver(r.Context(), req.AgentID)
-		if err != nil {
-			WriteError(w, types.NewNotFoundError(fmt.Sprintf("agent %q not found", req.AgentID)), h.logger)
-			return
-		}
-
-		input := &agent.Input{
-			TraceID:   r.Header.Get("X-Request-ID"),
-			Content:   req.Content,
-			Context:   req.Context,
-			Variables: req.Variables,
-		}
-
-		ctx := r.Context()
-		start := time.Now()
-		output, err := ag.Execute(ctx, input)
-		duration := time.Since(start)
-
-		if err != nil {
-			h.handleAgentError(w, err)
-			return
-		}
-
-		resp := AgentExecuteResponse{
-			TraceID:      output.TraceID,
-			Content:      output.Content,
-			Metadata:     output.Metadata,
-			TokensUsed:   output.TokensUsed,
-			Cost:         output.Cost,
-			Duration:     duration.String(),
-			FinishReason: output.FinishReason,
-		}
-
-		h.logger.Info("agent execution completed",
-			zap.String("agent_id", req.AgentID),
-			zap.Duration("duration", duration),
-			zap.Int("tokens_used", output.TokensUsed),
-		)
-
-		WriteSuccess(w, resp)
+	ag, svcErr := h.service.ResolveForOperation(r.Context(), req.AgentID, AgentOperationExecute)
+	if svcErr != nil {
+		WriteError(w, svcErr, h.logger)
 		return
 	}
 
-	// Fallback: check discovery registry for existence, return 501 if found
-	_, err := h.registry.GetAgent(r.Context(), req.AgentID)
+	input := &agent.Input{
+		TraceID:   r.Header.Get("X-Request-ID"),
+		Content:   req.Content,
+		Context:   req.Context,
+		Variables: req.Variables,
+	}
+
+	ctx := r.Context()
+	start := time.Now()
+	output, err := ag.Execute(ctx, input)
+	duration := time.Since(start)
+
 	if err != nil {
-		WriteError(w, types.NewNotFoundError("agent not found"), h.logger)
+		h.handleAgentError(w, err)
 		return
 	}
 
-	WriteError(w, types.NewInternalError(
-		"agent execution is not configured — no agent resolver available").
-		WithHTTPStatus(http.StatusNotImplemented), h.logger)
+	resp := AgentExecuteResponse{
+		TraceID:      output.TraceID,
+		Content:      output.Content,
+		Metadata:     output.Metadata,
+		TokensUsed:   output.TokensUsed,
+		Cost:         output.Cost,
+		Duration:     duration.String(),
+		FinishReason: output.FinishReason,
+	}
+
+	h.logger.Info("agent execution completed",
+		zap.String("agent_id", req.AgentID),
+		zap.Duration("duration", duration),
+		zap.Int("tokens_used", output.TokensUsed),
+	)
+
+	WriteSuccess(w, resp)
 }
 
 // HandleAgentStream executes an agent with streaming SSE output.
@@ -315,22 +302,9 @@ func (h *AgentHandler) HandleAgentStream(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	if h.resolver == nil {
-		// No resolver — check discovery registry for existence, return appropriate error
-		_, err := h.registry.GetAgent(r.Context(), req.AgentID)
-		if err != nil {
-			WriteError(w, types.NewNotFoundError("agent not found"), h.logger)
-			return
-		}
-		WriteError(w, types.NewInternalError(
-			"agent streaming is not configured — no agent resolver available").
-			WithHTTPStatus(http.StatusNotImplemented), h.logger)
-		return
-	}
-
-	ag, err := h.resolver(r.Context(), req.AgentID)
-	if err != nil {
-		WriteError(w, types.NewNotFoundError(fmt.Sprintf("agent %q not found", req.AgentID)), h.logger)
+	ag, svcErr := h.service.ResolveForOperation(r.Context(), req.AgentID, AgentOperationStream)
+	if svcErr != nil {
+		WriteError(w, svcErr, h.logger)
 		return
 	}
 
@@ -404,7 +378,7 @@ func (h *AgentHandler) HandleAgentStream(w http.ResponseWriter, r *http.Request)
 	// Inject the emitter into context so the agent's streaming path picks it up
 	ctx := agent.WithRuntimeStreamEmitter(r.Context(), emitter)
 
-	_, err = ag.Execute(ctx, input)
+	_, err := ag.Execute(ctx, input)
 	if err != nil {
 		// If headers are already sent (SSE mode), write error as SSE event
 		errPayload, _ := json.Marshal(map[string]string{"error": "agent execution failed"})
@@ -454,22 +428,9 @@ func (h *AgentHandler) HandlePlanAgent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if h.resolver == nil {
-		// No resolver — check discovery registry for existence, return appropriate error
-		_, err := h.registry.GetAgent(r.Context(), req.AgentID)
-		if err != nil {
-			WriteError(w, types.NewNotFoundError("agent not found"), h.logger)
-			return
-		}
-		WriteError(w, types.NewInternalError(
-			"agent planning is not configured — no agent resolver available").
-			WithHTTPStatus(http.StatusNotImplemented), h.logger)
-		return
-	}
-
-	ag, err := h.resolver(r.Context(), req.AgentID)
-	if err != nil {
-		WriteError(w, types.NewNotFoundError(fmt.Sprintf("agent %q not found", req.AgentID)), h.logger)
+	ag, svcErr := h.service.ResolveForOperation(r.Context(), req.AgentID, AgentOperationPlan)
+	if svcErr != nil {
+		WriteError(w, svcErr, h.logger)
 		return
 	}
 

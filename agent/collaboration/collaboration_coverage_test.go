@@ -15,19 +15,19 @@ import (
 // --- mock MessageStore ---
 
 type mockMessageStore struct {
-	saveFn          func(ctx context.Context, msg *persistence.Message) error
-	savesFn         func(ctx context.Context, msgs []*persistence.Message) error
-	getFn           func(ctx context.Context, id string) (*persistence.Message, error)
-	getsFn          func(ctx context.Context, topic, cursor string, limit int) ([]*persistence.Message, string, error)
-	ackFn           func(ctx context.Context, id string) error
-	unackedFn       func(ctx context.Context, topic string, older time.Duration) ([]*persistence.Message, error)
-	pendingFn       func(ctx context.Context, topic string, limit int) ([]*persistence.Message, error)
-	incrRetryFn     func(ctx context.Context, id string) error
-	deleteFn        func(ctx context.Context, id string) error
-	cleanupFn       func(ctx context.Context, older time.Duration) (int, error)
-	statsFn         func(ctx context.Context) (*persistence.MessageStoreStats, error)
-	closeFn         func() error
-	pingFn          func(ctx context.Context) error
+	saveFn      func(ctx context.Context, msg *persistence.Message) error
+	savesFn     func(ctx context.Context, msgs []*persistence.Message) error
+	getFn       func(ctx context.Context, id string) (*persistence.Message, error)
+	getsFn      func(ctx context.Context, topic, cursor string, limit int) ([]*persistence.Message, string, error)
+	ackFn       func(ctx context.Context, id string) error
+	unackedFn   func(ctx context.Context, topic string, older time.Duration) ([]*persistence.Message, error)
+	pendingFn   func(ctx context.Context, topic string, limit int) ([]*persistence.Message, error)
+	incrRetryFn func(ctx context.Context, id string) error
+	deleteFn    func(ctx context.Context, id string) error
+	cleanupFn   func(ctx context.Context, older time.Duration) (int, error)
+	statsFn     func(ctx context.Context) (*persistence.MessageStoreStats, error)
+	closeFn     func() error
+	pingFn      func(ctx context.Context) error
 }
 
 func (m *mockMessageStore) SaveMessage(ctx context.Context, msg *persistence.Message) error {
@@ -409,10 +409,10 @@ func TestMessageHub_StartRetryLoop_WithStore(t *testing.T) {
 
 func TestRolePipeline_GetInstances(t *testing.T) {
 	registry := NewRoleRegistry(zap.NewNop())
-	registry.Register(&RoleDefinition{
+	require.NoError(t, registry.Register(&RoleDefinition{
 		Type: "worker",
 		Name: "Worker",
-	})
+	}))
 	config := PipelineConfig{
 		Name:           "test",
 		MaxConcurrency: 2,
@@ -435,7 +435,7 @@ func TestRolePipeline_GetTransitions(t *testing.T) {
 
 func TestRolePipeline_Execute_WithRetry(t *testing.T) {
 	registry := NewRoleRegistry(zap.NewNop())
-	registry.Register(&RoleDefinition{
+	require.NoError(t, registry.Register(&RoleDefinition{
 		Type:    "worker",
 		Name:    "Worker",
 		Timeout: 5 * time.Second,
@@ -443,7 +443,7 @@ func TestRolePipeline_Execute_WithRetry(t *testing.T) {
 			MaxRetries: 1,
 			Delay:      time.Millisecond,
 		},
-	})
+	}))
 
 	callCount := 0
 	executeFn := func(ctx context.Context, def *RoleDefinition, input any) (any, error) {
@@ -485,15 +485,15 @@ func TestRolePipeline_Execute_RoleNotFound(t *testing.T) {
 
 func TestRolePipeline_Execute_WithDependencies(t *testing.T) {
 	registry := NewRoleRegistry(zap.NewNop())
-	registry.Register(&RoleDefinition{
+	require.NoError(t, registry.Register(&RoleDefinition{
 		Type: "analyzer",
 		Name: "Analyzer",
-	})
-	registry.Register(&RoleDefinition{
+	}))
+	require.NoError(t, registry.Register(&RoleDefinition{
 		Type:         "writer",
 		Name:         "Writer",
 		Dependencies: []RoleType{"analyzer"},
-	})
+	}))
 
 	executeFn := func(ctx context.Context, def *RoleDefinition, input any) (any, error) {
 		return fmt.Sprintf("%s_output", def.Type), nil

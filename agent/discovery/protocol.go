@@ -443,7 +443,10 @@ func (p *DiscoveryProtocol) startMulticast() error {
 	p.multicastConn = conn
 
 	// 设定读取缓冲
-	conn.SetReadBuffer(65536)
+	if err := conn.SetReadBuffer(65536); err != nil {
+		conn.Close()
+		return fmt.Errorf("failed to set multicast read buffer: %w", err)
+	}
 
 	// 开始收听器
 	p.wg.Add(1)
@@ -467,7 +470,10 @@ func (p *DiscoveryProtocol) multicastListener() {
 		case <-p.done:
 			return
 		default:
-			p.multicastConn.SetReadDeadline(time.Now().Add(1 * time.Second))
+			if err := p.multicastConn.SetReadDeadline(time.Now().Add(1 * time.Second)); err != nil {
+				p.logger.Debug("failed to set multicast read deadline", zap.Error(err))
+				continue
+			}
 			n, _, err := p.multicastConn.ReadFromUDP(buf)
 			if err != nil {
 				if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
@@ -524,7 +530,12 @@ func (p *DiscoveryProtocol) processMulticastAnnouncement(info *AgentInfo) {
 		ctx := context.Background()
 		if err := p.registry.RegisterAgent(ctx, info); err != nil {
 			// 尝试更新
-			p.registry.UpdateAgent(ctx, info)
+			if updateErr := p.registry.UpdateAgent(ctx, info); updateErr != nil {
+				p.logger.Debug("failed to update agent from multicast announcement",
+					zap.String("agent_id", info.Card.Name),
+					zap.Error(updateErr),
+				)
+			}
 		}
 	}
 

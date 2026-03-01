@@ -34,9 +34,9 @@ func TestInMemoryApprovalStore_List(t *testing.T) {
 	ctx := context.Background()
 	store := NewInMemoryApprovalStore()
 
-	store.Save(ctx, &ApprovalRequest{ID: "r1", AgentID: "a1", Status: ApprovalStatusPending})
-	store.Save(ctx, &ApprovalRequest{ID: "r2", AgentID: "a1", Status: ApprovalStatusApproved})
-	store.Save(ctx, &ApprovalRequest{ID: "r3", AgentID: "a2", Status: ApprovalStatusPending})
+	require.NoError(t, store.Save(ctx, &ApprovalRequest{ID: "r1", AgentID: "a1", Status: ApprovalStatusPending}))
+	require.NoError(t, store.Save(ctx, &ApprovalRequest{ID: "r2", AgentID: "a1", Status: ApprovalStatusApproved}))
+	require.NoError(t, store.Save(ctx, &ApprovalRequest{ID: "r3", AgentID: "a2", Status: ApprovalStatusPending}))
 
 	// List all for agent a1
 	results, err := store.List(ctx, "a1", "", 10)
@@ -59,7 +59,7 @@ func TestInMemoryApprovalStore_Update(t *testing.T) {
 	store := NewInMemoryApprovalStore()
 
 	req := &ApprovalRequest{ID: "r1", AgentID: "a1", Status: ApprovalStatusPending}
-	store.Save(ctx, req)
+	require.NoError(t, store.Save(ctx, req))
 
 	req.Status = ApprovalStatusApproved
 	require.NoError(t, store.Update(ctx, req))
@@ -96,10 +96,10 @@ func TestHumanInLoopManager_RequestAndRespond(t *testing.T) {
 		for {
 			pending := mgr.GetPendingRequests("agent-1")
 			if len(pending) > 0 {
-				mgr.RespondToApproval(ctx, pending[0].ID, &ApprovalResponse{
+				require.NoError(t, mgr.RespondToApproval(ctx, pending[0].ID, &ApprovalResponse{
 					Approved: true,
 					Reason:   "looks good",
-				})
+				}))
 				return
 			}
 			time.Sleep(5 * time.Millisecond)

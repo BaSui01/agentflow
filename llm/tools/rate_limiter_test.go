@@ -30,7 +30,9 @@ func TestTokenBucketLimiter_Refill(t *testing.T) {
 
 	// 设定所有符牌
 	for i := 0; i < 10; i++ {
-		limiter.Allow()
+		if err := limiter.Allow(); err != nil {
+			t.Fatalf("setup call %d should be allowed, got error: %v", i, err)
+		}
 	}
 
 	// 应该马上驳回
@@ -54,7 +56,9 @@ func TestTokenBucketLimiter_Reset(t *testing.T) {
 
 	// 设定所有符牌
 	for i := 0; i < 5; i++ {
-		limiter.Allow()
+		if err := limiter.Allow(); err != nil {
+			t.Fatalf("setup call %d should be allowed, got error: %v", i, err)
+		}
 	}
 
 	// 应该拒绝
@@ -83,7 +87,9 @@ func TestTokenBucketLimiter_Tokens(t *testing.T) {
 	}
 
 	// 假设一个符号
-	limiter.Allow()
+	if err := limiter.Allow(); err != nil {
+		t.Fatalf("token consume should be allowed, got error: %v", err)
+	}
 
 	// 应该有9个纪念品
 	tokens = limiter.Tokens()
@@ -145,7 +151,9 @@ func BenchmarkTokenBucketLimiter_Allow(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		limiter.Allow()
+		if err := limiter.Allow(); err != nil {
+			b.Fatalf("allow failed: %v", err)
+		}
 	}
 }
 
@@ -155,7 +163,9 @@ func BenchmarkTokenBucketLimiter_AllowConcurrent(b *testing.B) {
 	b.ResetTimer()
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {
-			limiter.Allow()
+			if err := limiter.Allow(); err != nil {
+				b.Fatalf("allow failed: %v", err)
+			}
 		}
 	})
 }

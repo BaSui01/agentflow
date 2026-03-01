@@ -82,10 +82,11 @@ func TestMistralProvider_Completion(t *testing.T) {
 		assert.Equal(t, "/v1/chat/completions", r.URL.Path)
 		assert.Contains(t, r.Header.Get("Authorization"), "Bearer ")
 
-		json.NewDecoder(r.Body).Decode(&capturedRequest)
+		err := json.NewDecoder(r.Body).Decode(&capturedRequest)
+		require.NoError(t, err)
 
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(providers.OpenAICompatResponse{
+		err = json.NewEncoder(w).Encode(providers.OpenAICompatResponse{
 			ID:    "resp-1",
 			Model: "mistral-large-latest",
 			Choices: []providers.OpenAICompatChoice{
@@ -104,6 +105,7 @@ func TestMistralProvider_Completion(t *testing.T) {
 				TotalTokens:      12,
 			},
 		})
+		require.NoError(t, err)
 	}))
 	t.Cleanup(func() { server.Close() })
 
@@ -134,15 +136,17 @@ func TestMistralProvider_Completion(t *testing.T) {
 func TestMistralProvider_Completion_WithCustomModel(t *testing.T) {
 	var capturedRequest providers.OpenAICompatRequest
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		json.NewDecoder(r.Body).Decode(&capturedRequest)
+		err := json.NewDecoder(r.Body).Decode(&capturedRequest)
+		require.NoError(t, err)
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(providers.OpenAICompatResponse{
+		err = json.NewEncoder(w).Encode(providers.OpenAICompatResponse{
 			ID:    "resp-2",
 			Model: "mistral-small-latest",
 			Choices: []providers.OpenAICompatChoice{
 				{Index: 0, FinishReason: "stop", Message: providers.OpenAICompatMessage{Role: "assistant", Content: "ok"}},
 			},
 		})
+		require.NoError(t, err)
 	}))
 	t.Cleanup(func() { server.Close() })
 
@@ -163,9 +167,10 @@ func TestMistralProvider_Completion_Error(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusUnauthorized)
-		json.NewEncoder(w).Encode(map[string]any{
+		err := json.NewEncoder(w).Encode(map[string]any{
 			"error": map[string]any{"message": "Invalid API key", "type": "authentication_error"},
 		})
+		require.NoError(t, err)
 	}))
 	t.Cleanup(func() { server.Close() })
 
@@ -185,7 +190,8 @@ func TestMistralProvider_Completion_Error(t *testing.T) {
 func TestMistralProvider_Completion_RateLimited(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusTooManyRequests)
-		w.Write([]byte(`{"error":{"message":"Rate limit exceeded"}}`))
+		_, err := w.Write([]byte(`{"error":{"message":"Rate limit exceeded"}}`))
+		require.NoError(t, err)
 	}))
 	t.Cleanup(func() { server.Close() })
 
@@ -206,7 +212,8 @@ func TestMistralProvider_Completion_RateLimited(t *testing.T) {
 func TestMistralProvider_Completion_ServerError(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusServiceUnavailable)
-		w.Write([]byte(`{"error":{"message":"Service unavailable"}}`))
+		_, err := w.Write([]byte(`{"error":{"message":"Service unavailable"}}`))
+		require.NoError(t, err)
 	}))
 	t.Cleanup(func() { server.Close() })
 
@@ -241,9 +248,12 @@ func TestMistralProvider_Stream(t *testing.T) {
 			},
 		}
 		data, _ := json.Marshal(chunk)
-		w.Write([]byte("data: "))
-		w.Write(data)
-		w.Write([]byte("\n\ndata: [DONE]\n\n"))
+		_, err := w.Write([]byte("data: "))
+		require.NoError(t, err)
+		_, err = w.Write(data)
+		require.NoError(t, err)
+		_, err = w.Write([]byte("\n\ndata: [DONE]\n\n"))
+		require.NoError(t, err)
 	}))
 	t.Cleanup(func() { server.Close() })
 

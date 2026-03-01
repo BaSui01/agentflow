@@ -45,11 +45,17 @@ func (p *MistralProvider) TranscribeAudio(ctx context.Context, req *llm.AudioTra
 	if _, err := part.Write(req.File); err != nil {
 		return nil, fmt.Errorf("failed to write file: %w", err)
 	}
-	writer.WriteField("model", req.Model)
-	if req.Language != "" {
-		writer.WriteField("language", req.Language)
+	if err := writer.WriteField("model", req.Model); err != nil {
+		return nil, fmt.Errorf("failed to write model field: %w", err)
 	}
-	writer.Close()
+	if req.Language != "" {
+		if err := writer.WriteField("language", req.Language); err != nil {
+			return nil, fmt.Errorf("failed to write language field: %w", err)
+		}
+	}
+	if err := writer.Close(); err != nil {
+		return nil, fmt.Errorf("failed to close multipart writer: %w", err)
+	}
 
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, body)
 	if err != nil {

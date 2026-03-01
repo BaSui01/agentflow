@@ -55,7 +55,7 @@ func TestTavilySearchProvider_Search(t *testing.T) {
 			},
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(resp)
+		require.NoError(t, json.NewEncoder(w).Encode(resp))
 	}))
 	defer srv.Close()
 
@@ -92,7 +92,7 @@ func TestTavilySearchProvider_APIError(t *testing.T) {
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusUnauthorized)
-		w.Write([]byte(`{"error":"invalid api key"}`))
+		_, _ = w.Write([]byte(`{"error":"invalid api key"}`))
 	}))
 	defer srv.Close()
 
@@ -113,10 +113,10 @@ func TestTavilySearchProvider_TimeRangeMapping(t *testing.T) {
 	var capturedDays int
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var req tavilySearchRequest
-		json.NewDecoder(r.Body).Decode(&req)
+		require.NoError(t, json.NewDecoder(r.Body).Decode(&req))
 		capturedDays = req.Days
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(tavilySearchResponse{})
+		require.NoError(t, json.NewEncoder(w).Encode(tavilySearchResponse{}))
 	}))
 	defer srv.Close()
 
@@ -140,7 +140,8 @@ func TestTavilySearchProvider_TimeRangeMapping(t *testing.T) {
 	for _, tt := range tests {
 		opts := DefaultWebSearchOptions()
 		opts.TimeRange = tt.timeRange
-		p.Search(context.Background(), "test", opts)
+		_, err := p.Search(context.Background(), "test", opts)
+		require.NoError(t, err)
 		assert.Equal(t, tt.wantDays, capturedDays, "time_range=%s", tt.timeRange)
 	}
 }
@@ -150,9 +151,9 @@ func TestTavilySearchProvider_DomainFilters(t *testing.T) {
 
 	var capturedReq tavilySearchRequest
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		json.NewDecoder(r.Body).Decode(&capturedReq)
+		require.NoError(t, json.NewDecoder(r.Body).Decode(&capturedReq))
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(tavilySearchResponse{})
+		require.NoError(t, json.NewEncoder(w).Encode(tavilySearchResponse{}))
 	}))
 	defer srv.Close()
 
@@ -166,7 +167,8 @@ func TestTavilySearchProvider_DomainFilters(t *testing.T) {
 	opts.Domains = []string{"go.dev", "golang.org"}
 	opts.ExcludeDomains = []string{"spam.com"}
 
-	p.Search(context.Background(), "test", opts)
+	_, err := p.Search(context.Background(), "test", opts)
+	require.NoError(t, err)
 	assert.Equal(t, []string{"go.dev", "golang.org"}, capturedReq.IncludeDomains)
 	assert.Equal(t, []string{"spam.com"}, capturedReq.ExcludeDomains)
 }

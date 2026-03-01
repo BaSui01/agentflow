@@ -48,7 +48,7 @@ func TestDefaultMCPServer_RegisterResource_Invalid(t *testing.T) {
 
 func TestDefaultMCPServer_GetResource(t *testing.T) {
 	s := newTestServer(t)
-	s.RegisterResource(&Resource{URI: "file://a", Name: "a", Type: ResourceTypeText, Content: "hello"})
+	require.NoError(t, s.RegisterResource(&Resource{URI: "file://a", Name: "a", Type: ResourceTypeText, Content: "hello"}))
 
 	r, err := s.GetResource(context.Background(), "file://a")
 	require.NoError(t, err)
@@ -63,7 +63,7 @@ func TestDefaultMCPServer_GetResource_NotFound(t *testing.T) {
 
 func TestDefaultMCPServer_UpdateResource(t *testing.T) {
 	s := newTestServer(t)
-	s.RegisterResource(&Resource{URI: "file://a", Name: "a", Type: ResourceTypeText, Content: "v1"})
+	require.NoError(t, s.RegisterResource(&Resource{URI: "file://a", Name: "a", Type: ResourceTypeText, Content: "v1"}))
 
 	require.NoError(t, s.UpdateResource(&Resource{URI: "file://a", Name: "a", Type: ResourceTypeText, Content: "v2"}))
 	r, _ := s.GetResource(context.Background(), "file://a")
@@ -72,7 +72,7 @@ func TestDefaultMCPServer_UpdateResource(t *testing.T) {
 
 func TestDefaultMCPServer_DeleteResource(t *testing.T) {
 	s := newTestServer(t)
-	s.RegisterResource(&Resource{URI: "file://a", Name: "a", Type: ResourceTypeText})
+	require.NoError(t, s.RegisterResource(&Resource{URI: "file://a", Name: "a", Type: ResourceTypeText}))
 
 	require.NoError(t, s.DeleteResource("file://a"))
 	_, err := s.GetResource(context.Background(), "file://a")
@@ -121,7 +121,7 @@ func TestDefaultMCPServer_CallTool(t *testing.T) {
 	handler := func(ctx context.Context, args map[string]any) (any, error) {
 		return args["msg"], nil
 	}
-	s.RegisterTool(tool, handler)
+	require.NoError(t, s.RegisterTool(tool, handler))
 
 	result, err := s.CallTool(context.Background(), "echo", map[string]any{"msg": "hello"})
 	require.NoError(t, err)
@@ -137,7 +137,7 @@ func TestDefaultMCPServer_CallTool_NotFound(t *testing.T) {
 func TestDefaultMCPServer_UnregisterTool(t *testing.T) {
 	s := newTestServer(t)
 	tool := &ToolDefinition{Name: "t", Description: "d", InputSchema: map[string]any{}}
-	s.RegisterTool(tool, func(ctx context.Context, args map[string]any) (any, error) { return nil, nil })
+	require.NoError(t, s.RegisterTool(tool, func(ctx context.Context, args map[string]any) (any, error) { return nil, nil }))
 
 	require.NoError(t, s.UnregisterTool("t"))
 	_, err := s.CallTool(context.Background(), "t", nil)
@@ -170,7 +170,7 @@ func TestDefaultMCPServer_RegisterPrompt_Invalid(t *testing.T) {
 
 func TestDefaultMCPServer_GetPrompt(t *testing.T) {
 	s := newTestServer(t)
-	s.RegisterPrompt(&PromptTemplate{Name: "greet", Template: "Hello {{name}}", Variables: []string{"name"}})
+	require.NoError(t, s.RegisterPrompt(&PromptTemplate{Name: "greet", Template: "Hello {{name}}", Variables: []string{"name"}}))
 
 	result, err := s.GetPrompt(context.Background(), "greet", map[string]string{"name": "World"})
 	require.NoError(t, err)
@@ -185,7 +185,7 @@ func TestDefaultMCPServer_GetPrompt_NotFound(t *testing.T) {
 
 func TestDefaultMCPServer_GetPrompt_MissingVariable(t *testing.T) {
 	s := newTestServer(t)
-	s.RegisterPrompt(&PromptTemplate{Name: "greet", Template: "Hello {{name}}", Variables: []string{"name"}})
+	require.NoError(t, s.RegisterPrompt(&PromptTemplate{Name: "greet", Template: "Hello {{name}}", Variables: []string{"name"}}))
 
 	_, err := s.GetPrompt(context.Background(), "greet", map[string]string{})
 	assert.Error(t, err)
@@ -193,7 +193,7 @@ func TestDefaultMCPServer_GetPrompt_MissingVariable(t *testing.T) {
 
 func TestDefaultMCPServer_UnregisterPrompt(t *testing.T) {
 	s := newTestServer(t)
-	s.RegisterPrompt(&PromptTemplate{Name: "p", Template: "t"})
+	require.NoError(t, s.RegisterPrompt(&PromptTemplate{Name: "p", Template: "t"}))
 	require.NoError(t, s.UnregisterPrompt("p"))
 	_, err := s.GetPrompt(context.Background(), "p", nil)
 	assert.Error(t, err)
@@ -214,7 +214,7 @@ func TestDefaultMCPServer_SubscribeResource(t *testing.T) {
 	assert.NotNil(t, ch)
 
 	// Register resource should notify subscriber
-	s.RegisterResource(&Resource{URI: "file://a", Name: "a", Type: ResourceTypeText, Content: "v1"})
+	require.NoError(t, s.RegisterResource(&Resource{URI: "file://a", Name: "a", Type: ResourceTypeText, Content: "v1"}))
 
 	select {
 	case r := <-ch:
@@ -262,10 +262,10 @@ func TestDefaultMCPServer_HandleMessage_MethodNotFound(t *testing.T) {
 
 func TestDefaultMCPServer_HandleMessage_ToolsList(t *testing.T) {
 	s := newTestServer(t)
-	s.RegisterTool(
+	require.NoError(t, s.RegisterTool(
 		&ToolDefinition{Name: "t1", Description: "d", InputSchema: map[string]any{}},
 		func(ctx context.Context, args map[string]any) (any, error) { return nil, nil },
-	)
+	))
 
 	msg := &MCPMessage{JSONRPC: "2.0", ID: float64(1), Method: "tools/list"}
 	resp, err := s.HandleMessage(context.Background(), msg)
@@ -275,10 +275,10 @@ func TestDefaultMCPServer_HandleMessage_ToolsList(t *testing.T) {
 
 func TestDefaultMCPServer_HandleMessage_ToolsCall(t *testing.T) {
 	s := newTestServer(t)
-	s.RegisterTool(
+	require.NoError(t, s.RegisterTool(
 		&ToolDefinition{Name: "echo", Description: "d", InputSchema: map[string]any{}},
 		func(ctx context.Context, args map[string]any) (any, error) { return "ok", nil },
-	)
+	))
 
 	msg := &MCPMessage{JSONRPC: "2.0", ID: float64(1), Method: "tools/call", Params: map[string]any{"name": "echo"}}
 	resp, err := s.HandleMessage(context.Background(), msg)
@@ -297,7 +297,7 @@ func TestDefaultMCPServer_HandleMessage_ToolsCall_MissingName(t *testing.T) {
 
 func TestDefaultMCPServer_HandleMessage_ResourcesList(t *testing.T) {
 	s := newTestServer(t)
-	s.RegisterResource(&Resource{URI: "file://a", Name: "a", Type: ResourceTypeText})
+	require.NoError(t, s.RegisterResource(&Resource{URI: "file://a", Name: "a", Type: ResourceTypeText}))
 
 	msg := &MCPMessage{JSONRPC: "2.0", ID: float64(1), Method: "resources/list"}
 	resp, err := s.HandleMessage(context.Background(), msg)
@@ -307,7 +307,7 @@ func TestDefaultMCPServer_HandleMessage_ResourcesList(t *testing.T) {
 
 func TestDefaultMCPServer_HandleMessage_ResourcesRead(t *testing.T) {
 	s := newTestServer(t)
-	s.RegisterResource(&Resource{URI: "file://a", Name: "a", Type: ResourceTypeText})
+	require.NoError(t, s.RegisterResource(&Resource{URI: "file://a", Name: "a", Type: ResourceTypeText}))
 
 	msg := &MCPMessage{JSONRPC: "2.0", ID: float64(1), Method: "resources/read", Params: map[string]any{"uri": "file://a"}}
 	resp, err := s.HandleMessage(context.Background(), msg)
@@ -326,7 +326,7 @@ func TestDefaultMCPServer_HandleMessage_ResourcesRead_MissingURI(t *testing.T) {
 
 func TestDefaultMCPServer_HandleMessage_PromptsList(t *testing.T) {
 	s := newTestServer(t)
-	s.RegisterPrompt(&PromptTemplate{Name: "p", Template: "t"})
+	require.NoError(t, s.RegisterPrompt(&PromptTemplate{Name: "p", Template: "t"}))
 
 	msg := &MCPMessage{JSONRPC: "2.0", ID: float64(1), Method: "prompts/list"}
 	resp, err := s.HandleMessage(context.Background(), msg)
@@ -336,7 +336,7 @@ func TestDefaultMCPServer_HandleMessage_PromptsList(t *testing.T) {
 
 func TestDefaultMCPServer_HandleMessage_PromptsGet(t *testing.T) {
 	s := newTestServer(t)
-	s.RegisterPrompt(&PromptTemplate{Name: "greet", Template: "Hello {{name}}", Variables: []string{"name"}})
+	require.NoError(t, s.RegisterPrompt(&PromptTemplate{Name: "greet", Template: "Hello {{name}}", Variables: []string{"name"}}))
 
 	msg := &MCPMessage{JSONRPC: "2.0", ID: float64(1), Method: "prompts/get", Params: map[string]any{
 		"name":      "greet",
@@ -367,7 +367,8 @@ func TestDefaultMCPServer_SetLogLevel(t *testing.T) {
 
 func TestDefaultMCPServer_Close(t *testing.T) {
 	s := NewMCPServer("test", "1.0.0", zap.NewNop())
-	s.SubscribeResource(context.Background(), "file://a")
+	_, err := s.SubscribeResource(context.Background(), "file://a")
+	require.NoError(t, err)
 	assert.NoError(t, s.Close())
 }
 
@@ -435,7 +436,7 @@ func TestDefaultMCPServer_Serve_ProcessesMessages(t *testing.T) {
 		cancel()
 	}()
 
-	s.Serve(ctx, transport)
+	require.ErrorIs(t, s.Serve(ctx, transport), context.Canceled)
 	mu.Lock()
 	assert.NotEmpty(t, sentMsgs)
 	mu.Unlock()
@@ -481,7 +482,7 @@ func TestDefaultMCPServer_Serve_InvalidJSONRPCVersion(t *testing.T) {
 		cancel()
 	}()
 
-	s.Serve(ctx, transport)
+	require.ErrorIs(t, s.Serve(ctx, transport), context.Canceled)
 	mu.Lock()
 	require.NotEmpty(t, sentMsgs)
 	assert.NotNil(t, sentMsgs[0].Error)

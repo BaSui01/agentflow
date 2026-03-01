@@ -403,7 +403,7 @@ func TestRecoveryMiddleware(t *testing.T) {
 		require.Error(t, err)
 		var pe *PanicError
 		assert.True(t, errors.As(err, &pe))
-		assert.Equal(t, "panic recovered", pe.Error())
+		assert.Equal(t, "middleware panic: test panic", pe.Error())
 		assert.Equal(t, "test panic", recovered)
 	})
 

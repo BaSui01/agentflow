@@ -38,7 +38,7 @@ func TestArxivSource_Search_Success(t *testing.T) {
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/xml")
-		w.Write([]byte(atomXML))
+		_, _ = w.Write([]byte(atomXML))
 	}))
 	defer srv.Close()
 
@@ -76,7 +76,7 @@ func TestArxivSource_Search_EmptyResults(t *testing.T) {
 </feed>`
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte(atomXML))
+		_, _ = w.Write([]byte(atomXML))
 	}))
 	defer srv.Close()
 
@@ -98,7 +98,7 @@ func TestArxivSource_Search_ServerError_Retries(t *testing.T) {
 			w.WriteHeader(http.StatusServiceUnavailable)
 			return
 		}
-		w.Write([]byte(`<feed xmlns="http://www.w3.org/2005/Atom"><entry><id>1</id><title>Paper</title><summary>Sum</summary></entry></feed>`))
+		_, _ = w.Write([]byte(`<feed xmlns="http://www.w3.org/2005/Atom"><entry><id>1</id><title>Paper</title><summary>Sum</summary></entry></feed>`))
 	}))
 	defer srv.Close()
 
@@ -147,7 +147,7 @@ func TestArxivSource_Search_InvalidXML(t *testing.T) {
 	t.Parallel()
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte("not xml"))
+		_, _ = w.Write([]byte("not xml"))
 	}))
 	defer srv.Close()
 

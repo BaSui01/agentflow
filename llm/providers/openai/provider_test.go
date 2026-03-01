@@ -132,7 +132,8 @@ func TestOpenAIProvider_Completion_Standard(t *testing.T) {
 		assert.Equal(t, "/v1/chat/completions", r.URL.Path)
 		assert.Contains(t, r.Header.Get("Authorization"), "Bearer test-key")
 
-		json.NewDecoder(r.Body).Decode(&capturedRequest)
+		err := json.NewDecoder(r.Body).Decode(&capturedRequest)
+		require.NoError(t, err)
 
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(providers.OpenAICompatResponse{
@@ -174,7 +175,8 @@ func TestOpenAIProvider_Completion_ResponsesAPI(t *testing.T) {
 		assert.Equal(t, "/v1/responses", r.URL.Path)
 
 		var reqBody openAIResponsesRequest
-		json.NewDecoder(r.Body).Decode(&reqBody)
+		err := json.NewDecoder(r.Body).Decode(&reqBody)
+		require.NoError(t, err)
 		assert.NotNil(t, reqBody.Store)
 		assert.True(t, *reqBody.Store)
 
@@ -272,14 +274,16 @@ func TestOpenAIProvider_Completion_ResponsesAPI_PreviousResponseID(t *testing.T)
 	var capturedPrevID string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var reqBody openAIResponsesRequest
-		json.NewDecoder(r.Body).Decode(&reqBody)
+		err := json.NewDecoder(r.Body).Decode(&reqBody)
+		require.NoError(t, err)
 		capturedPrevID = reqBody.PreviousResponseID
 
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(openAIResponsesResponse{
+		err = json.NewEncoder(w).Encode(openAIResponsesResponse{
 			ID: "resp_2", Model: "gpt-5.2",
 			Output: []responsesOutputItem{{Type: "message", Role: "assistant", Content: []responsesContent{{Type: "output_text", Text: "ok"}}}},
 		})
+		require.NoError(t, err)
 	}))
 	t.Cleanup(func() { server.Close() })
 

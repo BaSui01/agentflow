@@ -117,7 +117,9 @@ func (v *DefaultValidator) registerBuiltinFormats() {
 		parts := strings.Split(s, ".")
 		for _, part := range parts {
 			var num int
-			fmt.Sscanf(part, "%d", &num)
+			if _, err := fmt.Sscanf(part, "%d", &num); err != nil {
+				return false
+			}
 			if num < 0 || num > 255 {
 				return false
 			}

@@ -11,11 +11,7 @@ import "time"
 // Note: This is distinct from config.AgentConfig which is for deployment configuration
 // (YAML/env loading, flat structure). This type uses a modular nested structure
 // (Core/LLM/Features/Extensions) for runtime agent behavior configuration.
-//
-// TODO(L-008): config.AgentConfig（部署配置）和 types.AgentConfig（运行时配置）
-// 分布在不同包中，容易混淆。未来可考虑：
-//   1. 在 config 包中提供 ToRuntimeConfig() 方法将部署配置转换为运行时配置
-//   2. 或在文档中更明确地说明两者的使用场景和转换路径
+// Deployment-to-runtime conversion is implemented in config.AgentConfig.ToRuntimeConfig().
 type AgentConfig struct {
 	// Core configuration (required)
 	Core CoreConfig `json:"core"`
@@ -56,11 +52,11 @@ type LLMConfig struct {
 // FeaturesConfig contains optional feature configurations.
 // Each feature is enabled by providing its configuration (nil = disabled).
 type FeaturesConfig struct {
-	Reflection    *ReflectionConfig    `json:"reflection,omitempty"`
-	ToolSelection *ToolSelectionConfig `json:"tool_selection,omitempty"`
+	Reflection     *ReflectionConfig     `json:"reflection,omitempty"`
+	ToolSelection  *ToolSelectionConfig  `json:"tool_selection,omitempty"`
 	PromptEnhancer *PromptEnhancerConfig `json:"prompt_enhancer,omitempty"`
-	Guardrails    *GuardrailsConfig    `json:"guardrails,omitempty"`
-	Memory        *MemoryConfig        `json:"memory,omitempty"`
+	Guardrails     *GuardrailsConfig     `json:"guardrails,omitempty"`
+	Memory         *MemoryConfig         `json:"memory,omitempty"`
 }
 
 // ExtensionsConfig contains extension-specific configurations.
@@ -93,10 +89,10 @@ func DefaultReflectionConfig() *ReflectionConfig {
 
 // ToolSelectionConfig configures dynamic tool selection.
 type ToolSelectionConfig struct {
-	Enabled         bool    `json:"enabled"`
-	MaxTools        int     `json:"max_tools,omitempty"`
+	Enabled             bool    `json:"enabled"`
+	MaxTools            int     `json:"max_tools,omitempty"`
 	SimilarityThreshold float64 `json:"similarity_threshold,omitempty"`
-	Strategy        string  `json:"strategy,omitempty"` // "semantic", "keyword", "hybrid"
+	Strategy            string  `json:"strategy,omitempty"` // "semantic", "keyword", "hybrid"
 }
 
 // DefaultToolSelectionConfig returns sensible defaults for tool selection.
@@ -172,17 +168,17 @@ func DefaultMemoryConfig() *MemoryConfig {
 
 // SkillsConfig configures the skills system.
 type SkillsConfig struct {
-	Enabled     bool     `json:"enabled"`
-	SkillPaths  []string `json:"skill_paths,omitempty"`
-	AutoLoad    bool     `json:"auto_load,omitempty"`
-	MaxLoaded   int      `json:"max_loaded,omitempty"`
+	Enabled    bool     `json:"enabled"`
+	SkillPaths []string `json:"skill_paths,omitempty"`
+	AutoLoad   bool     `json:"auto_load,omitempty"`
+	MaxLoaded  int      `json:"max_loaded,omitempty"`
 }
 
 // MCPConfig configures Model Context Protocol integration.
 type MCPConfig struct {
-	Enabled   bool   `json:"enabled"`
-	Endpoint  string `json:"endpoint,omitempty"`
-	AuthToken string `json:"auth_token,omitempty"`
+	Enabled   bool          `json:"enabled"`
+	Endpoint  string        `json:"endpoint,omitempty"`
+	AuthToken string        `json:"auth_token,omitempty"`
 	Timeout   time.Duration `json:"timeout,omitempty"`
 }
 

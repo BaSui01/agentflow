@@ -139,9 +139,9 @@ func TestMemoryExperimentStore_GetAssignmentCount(t *testing.T) {
 	store := NewMemoryExperimentStore()
 	ctx := context.Background()
 
-	store.RecordAssignment(ctx, "exp-1", "user-1", "variant-a")
-	store.RecordAssignment(ctx, "exp-1", "user-2", "variant-b")
-	store.RecordAssignment(ctx, "exp-1", "user-3", "variant-a")
+	require.NoError(t, store.RecordAssignment(ctx, "exp-1", "user-1", "variant-a"))
+	require.NoError(t, store.RecordAssignment(ctx, "exp-1", "user-2", "variant-b"))
+	require.NoError(t, store.RecordAssignment(ctx, "exp-1", "user-3", "variant-a"))
 
 	counts := store.GetAssignmentCount("exp-1")
 	assert.Equal(t, 2, counts["variant-a"])
@@ -152,9 +152,9 @@ func TestMemoryExperimentStore_GetResultCount(t *testing.T) {
 	store := NewMemoryExperimentStore()
 	ctx := context.Background()
 
-	store.RecordResult(ctx, "exp-1", "variant-a", &EvalResult{Score: 0.8})
-	store.RecordResult(ctx, "exp-1", "variant-a", &EvalResult{Score: 0.9})
-	store.RecordResult(ctx, "exp-1", "variant-b", &EvalResult{Score: 0.7})
+	require.NoError(t, store.RecordResult(ctx, "exp-1", "variant-a", &EvalResult{Score: 0.8}))
+	require.NoError(t, store.RecordResult(ctx, "exp-1", "variant-a", &EvalResult{Score: 0.9}))
+	require.NoError(t, store.RecordResult(ctx, "exp-1", "variant-b", &EvalResult{Score: 0.7}))
 
 	counts := store.GetResultCount("exp-1")
 	assert.Equal(t, 2, counts["variant-a"])

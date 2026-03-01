@@ -96,14 +96,17 @@ func (p *FluxProvider) Generate(ctx context.Context, req *GenerateRequest) (*Gen
 	// 优于宽度/ 高度的一面 2. x
 	if req.Size != "" {
 		var width, height int
-		fmt.Sscanf(req.Size, "%dx%d", &width, &height)
-		// 转换为宽度比
-		if width == height {
-			body.AspectRatio = "1:1"
-		} else if width > height {
-			body.AspectRatio = "16:9"
+		if _, err := fmt.Sscanf(req.Size, "%dx%d", &width, &height); err == nil && width > 0 && height > 0 {
+			// 转换为宽度比
+			if width == height {
+				body.AspectRatio = "1:1"
+			} else if width > height {
+				body.AspectRatio = "16:9"
+			} else {
+				body.AspectRatio = "9:16"
+			}
 		} else {
-			body.AspectRatio = "9:16"
+			body.AspectRatio = "1:1"
 		}
 	} else {
 		body.AspectRatio = "1:1"
@@ -196,7 +199,10 @@ func (p *FluxProvider) pollResult(ctx context.Context, pollingURL string) (*flux
 		}
 
 		var fResp fluxResponse
-		json.NewDecoder(resp.Body).Decode(&fResp)
+		if err := json.NewDecoder(resp.Body).Decode(&fResp); err != nil {
+			resp.Body.Close()
+			continue
+		}
 		resp.Body.Close()
 
 		switch fResp.Status {

@@ -122,6 +122,7 @@ func TestLoadImageFromURL(t *testing.T) {
 		w.Write(pngMagic)
 	}))
 	t.Cleanup(srv.Close)
+	t.Setenv("AGENTFLOW_ALLOW_PRIVATE_URLS", "1")
 
 	content, err := LoadImageFromURL(srv.URL + "/image.png")
 	require.NoError(t, err)
@@ -137,6 +138,7 @@ func TestLoadImageFromURL_DetectFromMagicBytes(t *testing.T) {
 		w.Write(jpegMagic)
 	}))
 	t.Cleanup(srv.Close)
+	t.Setenv("AGENTFLOW_ALLOW_PRIVATE_URLS", "1")
 
 	content, err := LoadImageFromURL(srv.URL + "/image")
 	require.NoError(t, err)
@@ -148,10 +150,23 @@ func TestLoadImageFromURL_HTTPError(t *testing.T) {
 		w.WriteHeader(http.StatusNotFound)
 	}))
 	t.Cleanup(srv.Close)
+	t.Setenv("AGENTFLOW_ALLOW_PRIVATE_URLS", "1")
 
 	_, err := LoadImageFromURL(srv.URL + "/missing.png")
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "status 404")
+}
+
+func TestLoadImageFromURL_RejectsInternalNetwork(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	t.Cleanup(srv.Close)
+
+	_, err := LoadImageFromURL(srv.URL + "/image.png")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "URL validation failed")
+	assert.Contains(t, err.Error(), "internal network")
 }
 
 // --- LoadAudioFromFile tests ---

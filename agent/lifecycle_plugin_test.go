@@ -46,7 +46,9 @@ func TestLifecycleManager_StartAlreadyRunning(t *testing.T) {
 
 	ctx := context.Background()
 	require.NoError(t, lm.Start(ctx))
-	defer lm.Stop(ctx)
+	defer func() {
+		require.NoError(t, lm.Stop(ctx))
+	}()
 
 	err := lm.Start(ctx)
 	assert.Error(t, err)
@@ -84,10 +86,10 @@ type testPlugin struct {
 	shutdownErr error
 }
 
-func (p *testPlugin) Name() string                          { return p.name }
-func (p *testPlugin) Type() PluginType                      { return PluginTypeExtension }
-func (p *testPlugin) Init(ctx context.Context) error        { p.initCalled = true; return p.initErr }
-func (p *testPlugin) Shutdown(ctx context.Context) error    { p.shutCalled = true; return p.shutdownErr }
+func (p *testPlugin) Name() string                       { return p.name }
+func (p *testPlugin) Type() PluginType                   { return PluginTypeExtension }
+func (p *testPlugin) Init(ctx context.Context) error     { p.initCalled = true; return p.initErr }
+func (p *testPlugin) Shutdown(ctx context.Context) error { p.shutCalled = true; return p.shutdownErr }
 
 func TestPluginRegistry_RegisterAndGet(t *testing.T) {
 	r := NewPluginRegistry()
@@ -119,8 +121,8 @@ func TestPluginRegistry_Get_NotFound(t *testing.T) {
 
 func TestPluginRegistry_List(t *testing.T) {
 	r := NewPluginRegistry()
-	r.Register(&testPlugin{name: "p1"})
-	r.Register(&testPlugin{name: "p2"})
+	require.NoError(t, r.Register(&testPlugin{name: "p1"}))
+	require.NoError(t, r.Register(&testPlugin{name: "p2"}))
 
 	plugins := r.List()
 	assert.Len(t, plugins, 2)
@@ -130,8 +132,8 @@ func TestPluginRegistry_Init(t *testing.T) {
 	r := NewPluginRegistry()
 	p1 := &testPlugin{name: "p1"}
 	p2 := &testPlugin{name: "p2"}
-	r.Register(p1)
-	r.Register(p2)
+	require.NoError(t, r.Register(p1))
+	require.NoError(t, r.Register(p2))
 
 	err := r.Init(context.Background())
 	require.NoError(t, err)
@@ -148,8 +150,8 @@ func TestPluginRegistry_Init(t *testing.T) {
 func TestPluginRegistry_Shutdown(t *testing.T) {
 	r := NewPluginRegistry()
 	p1 := &testPlugin{name: "p1"}
-	r.Register(p1)
-	r.Init(context.Background())
+	require.NoError(t, r.Register(p1))
+	require.NoError(t, r.Init(context.Background()))
 
 	err := r.Shutdown(context.Background())
 	require.NoError(t, err)
@@ -159,7 +161,7 @@ func TestPluginRegistry_Shutdown(t *testing.T) {
 func TestPluginRegistry_Unregister(t *testing.T) {
 	r := NewPluginRegistry()
 	p := &testPlugin{name: "unreg"}
-	r.Register(p)
+	require.NoError(t, r.Register(p))
 
 	err := r.Unregister("unreg")
 	require.NoError(t, err)

@@ -183,7 +183,8 @@ func TestHandleCreateAndListAPIKeys(t *testing.T) {
 	// 验证脱敏
 	data, _ := json.Marshal(createResp.Data)
 	var keyResp apiKeyResponse
-	json.Unmarshal(data, &keyResp)
+	err := json.Unmarshal(data, &keyResp)
+	require.NoError(t, err)
 	assert.Equal(t, "https://api.openai.com", keyResp.BaseURL)
 	assert.NotContains(t, keyResp.APIKeyMasked, "sk-test")
 	assert.True(t, len(keyResp.APIKeyMasked) > 0)

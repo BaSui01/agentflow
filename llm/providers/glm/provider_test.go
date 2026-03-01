@@ -74,16 +74,18 @@ func TestGLMProvider_Completion(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, "/api/paas/v4/chat/completions", r.URL.Path)
 		assert.Contains(t, r.Header.Get("Authorization"), "Bearer ")
-		json.NewDecoder(r.Body).Decode(&capturedRequest)
+		err := json.NewDecoder(r.Body).Decode(&capturedRequest)
+		require.NoError(t, err)
 
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(providers.OpenAICompatResponse{
+		err = json.NewEncoder(w).Encode(providers.OpenAICompatResponse{
 			ID: "resp-1", Model: "glm-4-plus",
 			Choices: []providers.OpenAICompatChoice{
 				{Index: 0, FinishReason: "stop", Message: providers.OpenAICompatMessage{Role: "assistant", Content: "Hello from GLM"}},
 			},
 			Usage: &providers.OpenAICompatUsage{PromptTokens: 10, CompletionTokens: 5, TotalTokens: 15},
 		})
+		require.NoError(t, err)
 	}))
 	t.Cleanup(func() { server.Close() })
 
@@ -107,7 +109,8 @@ func TestGLMProvider_Completion(t *testing.T) {
 func TestGLMProvider_Completion_Error(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusUnauthorized)
-		w.Write([]byte(`{"error":{"message":"Invalid API key"}}`))
+		_, err := w.Write([]byte(`{"error":{"message":"Invalid API key"}}`))
+		require.NoError(t, err)
 	}))
 	t.Cleanup(func() { server.Close() })
 
@@ -127,7 +130,8 @@ func TestGLMProvider_Completion_Error(t *testing.T) {
 func TestGLMProvider_Completion_RateLimited(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusTooManyRequests)
-		w.Write([]byte(`{"error":{"message":"Rate limit"}}`))
+		_, err := w.Write([]byte(`{"error":{"message":"Rate limit"}}`))
+		require.NoError(t, err)
 	}))
 	t.Cleanup(func() { server.Close() })
 
@@ -159,9 +163,12 @@ func TestGLMProvider_Stream(t *testing.T) {
 			},
 		}
 		data, _ := json.Marshal(chunk)
-		w.Write([]byte("data: "))
-		w.Write(data)
-		w.Write([]byte("\n\ndata: [DONE]\n\n"))
+		_, err := w.Write([]byte("data: "))
+		require.NoError(t, err)
+		_, err = w.Write(data)
+		require.NoError(t, err)
+		_, err = w.Write([]byte("\n\ndata: [DONE]\n\n"))
+		require.NoError(t, err)
 	}))
 	t.Cleanup(func() { server.Close() })
 
@@ -186,7 +193,8 @@ func TestGLMProvider_Stream(t *testing.T) {
 func TestGLMProvider_Stream_Error(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusTooManyRequests)
-		w.Write([]byte(`{"error":{"message":"Rate limit"}}`))
+		_, err := w.Write([]byte(`{"error":{"message":"Rate limit"}}`))
+		require.NoError(t, err)
 	}))
 	t.Cleanup(func() { server.Close() })
 
@@ -240,7 +248,8 @@ func TestGLMProvider_NotSupported(t *testing.T) {
 func TestGLMProvider_HealthCheck(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		w.Write([]byte(`{"object":"list","data":[]}`))
+		_, err := w.Write([]byte(`{"object":"list","data":[]}`))
+		require.NoError(t, err)
 	}))
 	t.Cleanup(func() { server.Close() })
 
