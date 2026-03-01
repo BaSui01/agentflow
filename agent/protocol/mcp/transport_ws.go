@@ -74,7 +74,6 @@ type WebSocketTransport struct {
 }
 
 // NewWebSocketTransport creates a WebSocket transport with default configuration.
-// This preserves backward compatibility with the original constructor.
 func NewWebSocketTransport(url string, logger *zap.Logger) *WebSocketTransport {
 	return NewWebSocketTransportWithConfig(url, DefaultWSTransportConfig(), logger)
 }

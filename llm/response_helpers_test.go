@@ -60,27 +60,3 @@ func TestFirstChoice(t *testing.T) {
 		})
 	}
 }
-
-func TestMustFirstChoice(t *testing.T) {
-	t.Run("panics on nil response", func(t *testing.T) {
-		assert.Panics(t, func() {
-			MustFirstChoice(nil)
-		})
-	})
-
-	t.Run("panics on empty choices", func(t *testing.T) {
-		assert.Panics(t, func() {
-			MustFirstChoice(&ChatResponse{})
-		})
-	})
-
-	t.Run("returns first choice", func(t *testing.T) {
-		resp := &ChatResponse{
-			Choices: []ChatChoice{
-				{Index: 0, Message: Message{Content: "ok"}},
-			},
-		}
-		choice := MustFirstChoice(resp)
-		assert.Equal(t, "ok", choice.Message.Content)
-	})
-}

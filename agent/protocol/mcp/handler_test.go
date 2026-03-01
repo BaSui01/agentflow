@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/BaSui01/agentflow/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
@@ -530,7 +531,7 @@ func TestDefaultMCPClient_BatchCallTools(t *testing.T) {
 		}
 	})
 
-	calls := []ToolCall{
+	calls := []types.ToolCall{
 		{Name: "tool1", Arguments: json.RawMessage(`{"a": 1}`)},
 		{Name: "tool2", Arguments: json.RawMessage(`{"b": 2}`)},
 	}

@@ -116,7 +116,7 @@ func TestPatternRegistry_Unregister(t *testing.T) {
 	})
 }
 
-func TestPatternRegistry_MustGet(t *testing.T) {
+func TestPatternRegistry_GetCases(t *testing.T) {
 	t.Parallel()
 
 	t.Run("returns pattern when present", func(t *testing.T) {
@@ -124,17 +124,16 @@ func TestPatternRegistry_MustGet(t *testing.T) {
 		reg := NewPatternRegistry()
 		_ = reg.Register(&mockPattern{name: "safe"})
 
-		p := reg.MustGet("safe")
+		p, ok := reg.Get("safe")
+		require.True(t, ok)
 		assert.Equal(t, "safe", p.Name())
 	})
 
-	t.Run("panics on missing pattern", func(t *testing.T) {
+	t.Run("returns false on missing pattern", func(t *testing.T) {
 		t.Parallel()
 		reg := NewPatternRegistry()
 
-		assert.PanicsWithValue(t,
-			`reasoning pattern "missing" not registered`,
-			func() { reg.MustGet("missing") },
-		)
+		_, ok := reg.Get("missing")
+		assert.False(t, ok)
 	})
 }

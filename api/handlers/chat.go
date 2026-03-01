@@ -374,7 +374,7 @@ func convertTypesMessageToAPI(msg types.Message) api.Message {
 }
 
 // Note: convertAPIToolCallsToTypes and convertTypesToolCallsToAPI were removed
-// because api.ToolCall is now a type alias for types.ToolCall — no conversion needed.
+// because api.ToolCall and types.ToolCall are identical aliases, so no conversion is needed.
 
 // =============================================================================
 // 🖼️ Image 转换辅助函数

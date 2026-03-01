@@ -37,7 +37,7 @@ type DefaultMCPClient struct {
 	logger *zap.Logger
 }
 
-// NewMCPClient 创建 MCP 客户端（兼容旧接口，使用 StdioTransport）
+// NewMCPClient 创建 MCP 客户端，使用 StdioTransport。
 func NewMCPClient(reader io.Reader, writer io.Writer, logger *zap.Logger) *DefaultMCPClient {
 	return &DefaultMCPClient{
 		transport:     NewStdioTransport(reader, writer, logger),
@@ -350,7 +350,7 @@ func (c *DefaultMCPClient) UnsubscribeResource(ctx context.Context, uri string) 
 	return nil
 }
 
-// Start 启动客户端消息循环（兼容旧接口，内部调用 messageLoop）
+// Start 启动客户端消息循环。
 func (c *DefaultMCPClient) Start(ctx context.Context) error {
 	c.messageLoop(ctx)
 	return ctx.Err()
@@ -485,14 +485,14 @@ func (c *DefaultMCPClient) handleResourceUpdate(params map[string]any) {
 }
 
 // BatchCallTools 批量调用工具
-func (c *DefaultMCPClient) BatchCallTools(ctx context.Context, calls []ToolCall) ([]any, error) {
+func (c *DefaultMCPClient) BatchCallTools(ctx context.Context, calls []types.ToolCall) ([]any, error) {
 	results := make([]any, len(calls))
 	errors := make([]error, len(calls))
 
 	var wg sync.WaitGroup
 	for i, call := range calls {
 		wg.Add(1)
-		go func(idx int, tc ToolCall) {
+		go func(idx int, tc types.ToolCall) {
 			defer wg.Done()
 
 			var args map[string]any
@@ -522,7 +522,3 @@ func (c *DefaultMCPClient) BatchCallTools(ctx context.Context, calls []ToolCall)
 
 	return results, nil
 }
-
-// ToolCall is a type alias for types.ToolCall to avoid duplicate definitions.
-// The canonical definition lives in types/message.go.
-type ToolCall = types.ToolCall

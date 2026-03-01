@@ -15,11 +15,11 @@ import (
 // Both api/handlers and config packages reference this type to ensure
 // consistent JSON output across the entire API surface.
 type Response struct {
-	Success   bool        `json:"success"`
-	Data      any         `json:"data,omitempty"`
-	Error     *ErrorInfo  `json:"error,omitempty"`
-	Timestamp time.Time   `json:"timestamp"`
-	RequestID string      `json:"request_id,omitempty"`
+	Success   bool       `json:"success"`
+	Data      any        `json:"data,omitempty"`
+	Error     *ErrorInfo `json:"error,omitempty"`
+	Timestamp time.Time  `json:"timestamp"`
+	RequestID string     `json:"request_id,omitempty"`
 }
 
 // ErrorInfo is the canonical error structure embedded in Response.
@@ -143,7 +143,7 @@ type Message struct {
 	// 名称（用于工具消息）
 	Name string `json:"name,omitempty"`
 	// 工具调用（用于助手消息）
-	ToolCalls []ToolCall `json:"tool_calls,omitempty"`
+	ToolCalls []types.ToolCall `json:"tool_calls,omitempty"`
 	// 工具调用 ID（用于工具消息）
 	ToolCallID string `json:"tool_call_id,omitempty"`
 	// 多模式消息的图像内容
@@ -153,15 +153,6 @@ type Message struct {
 	// 消息时间戳
 	Timestamp time.Time `json:"timestamp,omitempty"`
 }
-
-// ToolCall is a type alias for types.ToolCall to avoid duplicate definitions.
-// The canonical definition lives in types.ToolCall (types/message.go).
-//
-// C-013: Design decision — ToolCall uses a type alias because its fields are
-// identical across api and types packages. Message is independently defined
-// because the api layer uses string Role (for JSON) while types uses typed Role,
-// and api.Message includes JSON/Swagger annotations not needed in the types layer.
-type ToolCall = types.ToolCall
 
 // ImageContent 表示多模式消息的图像数据。
 // @Description 图像内容结构

@@ -36,5 +36,4 @@ func CanTransition(from, to State) bool {
 	return false
 }
 
-// Err Invalid Transition 现在定义在错误中. go
-// 此注释用于向后兼容
+// ErrInvalidTransition 定义见 agent/errors.go。

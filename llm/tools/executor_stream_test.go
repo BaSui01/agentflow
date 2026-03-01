@@ -49,8 +49,8 @@ func TestDefaultExecutor_ExecuteOneStream_Success(t *testing.T) {
 	assert.Equal(t, ToolStreamOutput, events[1].Type)
 	assert.Equal(t, ToolStreamComplete, events[2].Type)
 
-	// complete event carries the full ToolResult
-	result, ok := events[2].Data.(ToolResult)
+	// complete event carries the full llmpkg.ToolResult
+	result, ok := events[2].Data.(llmpkg.ToolResult)
 	require.True(t, ok)
 	assert.Equal(t, "echo", result.Name)
 	assert.Empty(t, result.Error)
@@ -300,3 +300,4 @@ func TestNewDefaultExecutorWithConfig_SanitizesInvalidValues(t *testing.T) {
 	assert.Equal(t, 100*time.Millisecond, executor.config.RetryDelay)
 	assert.Equal(t, 2.0, executor.config.RetryBackoff)
 }
+

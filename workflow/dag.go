@@ -18,25 +18,17 @@ func (d Duration) MarshalJSON() ([]byte, error) {
 	return json.Marshal(d.Duration.String())
 }
 
-// UnmarshalJSON deserializes Duration from a string ("30s") or number (nanoseconds).
+// UnmarshalJSON deserializes Duration from a string (e.g. "30s").
 func (d *Duration) UnmarshalJSON(b []byte) error {
-	var v any
+	var v string
 	if err := json.Unmarshal(b, &v); err != nil {
 		return err
 	}
-	switch val := v.(type) {
-	case string:
-		parsed, err := time.ParseDuration(val)
-		if err != nil {
-			return fmt.Errorf("invalid duration string %q: %w", val, err)
-		}
-		d.Duration = parsed
-	case float64:
-		// Backward compatible: accept nanoseconds as number
-		d.Duration = time.Duration(int64(val))
-	default:
-		return fmt.Errorf("invalid duration type: %T", v)
+	parsed, err := time.ParseDuration(v)
+	if err != nil {
+		return fmt.Errorf("invalid duration string %q: %w", v, err)
 	}
+	d.Duration = parsed
 	return nil
 }
 

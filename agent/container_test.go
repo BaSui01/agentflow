@@ -183,21 +183,6 @@ func TestServiceLocator_Get_NotFound(t *testing.T) {
 	assert.False(t, ok)
 }
 
-func TestServiceLocator_MustGet_Success(t *testing.T) {
-	sl := NewServiceLocator()
-	sl.Register("key", "value")
-
-	val := sl.MustGet("key")
-	assert.Equal(t, "value", val)
-}
-
-func TestServiceLocator_MustGet_Panics(t *testing.T) {
-	sl := NewServiceLocator()
-	assert.Panics(t, func() {
-		sl.MustGet("nonexistent")
-	})
-}
-
 func TestServiceLocator_GetProvider(t *testing.T) {
 	sl := NewServiceLocator()
 

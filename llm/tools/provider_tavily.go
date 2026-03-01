@@ -56,10 +56,10 @@ func (p *TavilySearchProvider) Search(ctx context.Context, query string, opts We
 	}
 
 	reqBody := tavilySearchRequest{
-		APIKey:         p.cfg.APIKey,
-		Query:          query,
-		MaxResults:     opts.MaxResults,
-		IncludeAnswer:  false,
+		APIKey:            p.cfg.APIKey,
+		Query:             query,
+		MaxResults:        opts.MaxResults,
+		IncludeAnswer:     false,
 		IncludeRawContent: false,
 	}
 	if opts.MaxResults <= 0 {

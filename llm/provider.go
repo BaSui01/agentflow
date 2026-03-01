@@ -8,10 +8,6 @@ import (
 )
 
 // 重导出核心类型，供 llm 包内部及下游使用。
-//
-// L-007 note:
-// Aliases are kept for backward compatibility with existing llm.* imports.
-// New code should prefer importing canonical types from github.com/BaSui01/agentflow/types.
 type (
 	Message       = types.Message
 	Role          = types.Role

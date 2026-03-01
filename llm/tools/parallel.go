@@ -71,19 +71,19 @@ func NewParallelExecutor(registry ToolRegistry, config ParallelConfig, logger *z
 
 // 并行结果包含并行工具执行的结果.
 type ParallelResult struct {
-	Results       []ToolResult  `json:"results"`
-	TotalDuration time.Duration `json:"total_duration"`
-	Completed     int           `json:"completed"`
-	Failed        int           `json:"failed"`
-	Cancelled     int           `json:"cancelled"`
-	PartialResult bool          `json:"partial_result"`
+	Results       []llmpkg.ToolResult `json:"results"`
+	TotalDuration time.Duration       `json:"total_duration"`
+	Completed     int                 `json:"completed"`
+	Failed        int                 `json:"failed"`
+	Cancelled     int                 `json:"cancelled"`
+	PartialResult bool                `json:"partial_result"`
 }
 
 // Execute运行多个工具调用与货币控制并行.
 func (p *ParallelExecutor) Execute(ctx context.Context, calls []llmpkg.ToolCall) *ParallelResult {
 	start := time.Now()
 	result := &ParallelResult{
-		Results: make([]ToolResult, len(calls)),
+		Results: make([]llmpkg.ToolResult, len(calls)),
 	}
 
 	if len(calls) == 0 {
@@ -118,7 +118,7 @@ func (p *ParallelExecutor) Execute(ctx context.Context, calls []llmpkg.ToolCall)
 			case sem <- struct{}{}:
 				defer func() { <-sem }()
 			case <-execCtx.Done():
-				result.Results[idx] = ToolResult{
+				result.Results[idx] = llmpkg.ToolResult{
 					ToolCallID: c.ID,
 					Name:       c.Name,
 					Error:      "execution cancelled before start",
@@ -175,8 +175,8 @@ func (p *ParallelExecutor) Execute(ctx context.Context, calls []llmpkg.ToolCall)
 }
 
 // 执行 With Retry 执行带有重试逻辑的单一工具调用 。
-func (p *ParallelExecutor) executeWithRetry(ctx context.Context, call llmpkg.ToolCall) ToolResult {
-	var lastResult ToolResult
+func (p *ParallelExecutor) executeWithRetry(ctx context.Context, call llmpkg.ToolCall) llmpkg.ToolResult {
+	var lastResult llmpkg.ToolResult
 	maxAttempts := 1
 	if p.config.RetryOnError {
 		maxAttempts = p.config.MaxRetries + 1
@@ -186,7 +186,7 @@ func (p *ParallelExecutor) executeWithRetry(ctx context.Context, call llmpkg.Too
 		if attempt > 0 {
 			select {
 			case <-ctx.Done():
-				return ToolResult{
+				return llmpkg.ToolResult{
 					ToolCallID: call.ID,
 					Name:       call.Name,
 					Error:      "context cancelled during retry",
@@ -213,9 +213,9 @@ func (p *ParallelExecutor) executeWithRetry(ctx context.Context, call llmpkg.Too
 }
 
 // 执行 Single 执行单个工具调用 。
-func (p *ParallelExecutor) executeSingle(ctx context.Context, call llmpkg.ToolCall) ToolResult {
+func (p *ParallelExecutor) executeSingle(ctx context.Context, call llmpkg.ToolCall) llmpkg.ToolResult {
 	start := time.Now()
-	result := ToolResult{
+	result := llmpkg.ToolResult{
 		ToolCallID: call.ID,
 		Name:       call.Name,
 	}
@@ -318,16 +318,16 @@ func (p *ParallelExecutor) Stats() (total, success, failed int64, avgDuration ti
 // 执行与依赖关系执行工具 。
 // 依赖性被指定为工具调用ID,在调用之前必须完成.
 type ToolCallWithDeps struct {
-	Call         llmpkg.ToolCall                                     `json:"call"`
-	DependsOn    []string                                            `json:"depends_on,omitempty"` // IDs of tool calls that must complete first
-	ResultMapper func(results map[string]ToolResult) json.RawMessage `json:"-"`                    // Optional: modify args based on deps
+	Call         llmpkg.ToolCall                                            `json:"call"`
+	DependsOn    []string                                                   `json:"depends_on,omitempty"` // IDs of tool calls that must complete first
+	ResultMapper func(results map[string]llmpkg.ToolResult) json.RawMessage `json:"-"`                    // Optional: modify args based on deps
 }
 
 // 执行与相互依存执行工具调用尊重依赖命令 。
 func (p *ParallelExecutor) ExecuteWithDependencies(ctx context.Context, calls []ToolCallWithDeps) *ParallelResult {
 	start := time.Now()
 	result := &ParallelResult{
-		Results: make([]ToolResult, len(calls)),
+		Results: make([]llmpkg.ToolResult, len(calls)),
 	}
 
 	if len(calls) == 0 {
@@ -346,7 +346,7 @@ func (p *ParallelExecutor) ExecuteWithDependencies(ctx context.Context, calls []
 
 	// 跟踪完成的成果
 	var mu sync.Mutex
-	completedResults := make(map[string]ToolResult)
+	completedResults := make(map[string]llmpkg.ToolResult)
 	completed := make(map[string]chan struct{})
 	for _, c := range calls {
 		completed[c.Call.ID] = make(chan struct{})
@@ -366,7 +366,7 @@ func (p *ParallelExecutor) ExecuteWithDependencies(ctx context.Context, calls []
 					select {
 					case <-ch:
 					case <-execCtx.Done():
-						result.Results[idx] = ToolResult{
+						result.Results[idx] = llmpkg.ToolResult{
 							ToolCallID: cwd.Call.ID,
 							Name:       cwd.Call.Name,
 							Error:      "context cancelled waiting for dependencies",
@@ -392,7 +392,7 @@ func (p *ParallelExecutor) ExecuteWithDependencies(ctx context.Context, calls []
 			case sem <- struct{}{}:
 				defer func() { <-sem }()
 			case <-execCtx.Done():
-				result.Results[idx] = ToolResult{
+				result.Results[idx] = llmpkg.ToolResult{
 					ToolCallID: call.ID,
 					Name:       call.Name,
 					Error:      "context cancelled before execution",
@@ -458,3 +458,4 @@ func (b *BatchExecutor) ExecuteBatched(ctx context.Context, calls []llmpkg.ToolC
 	// 未来:对辅助工具进行实际分批
 	return b.parallel.Execute(ctx, calls)
 }
+

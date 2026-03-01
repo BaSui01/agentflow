@@ -36,10 +36,6 @@ type RateLimitConfig struct {
 	Window   time.Duration // Time window
 }
 
-// ToolResult is a type alias for llm.ToolResult (re-exported from types.ToolResult).
-// The canonical definition lives in types/tool.go.
-type ToolResult = llm.ToolResult
-
 // ToolRegistry 定义工具注册接口.
 type ToolRegistry interface {
 	Register(name string, fn ToolFunc, metadata ToolMetadata) error
@@ -51,8 +47,8 @@ type ToolRegistry interface {
 
 // ToolExecutor 定义工具执行器接口.
 type ToolExecutor interface {
-	Execute(ctx context.Context, calls []llm.ToolCall) []ToolResult
-	ExecuteOne(ctx context.Context, call llm.ToolCall) ToolResult
+	Execute(ctx context.Context, calls []llm.ToolCall) []llm.ToolResult
+	ExecuteOne(ctx context.Context, call llm.ToolCall) llm.ToolResult
 }
 
 // ToolStreamEventType 定义流式工具执行事件类型.
@@ -272,8 +268,8 @@ func NewDefaultExecutorWithConfig(registry ToolRegistry, logger *zap.Logger, con
 	}
 }
 
-func (e *DefaultExecutor) Execute(ctx context.Context, calls []llm.ToolCall) []ToolResult {
-	results := make([]ToolResult, len(calls))
+func (e *DefaultExecutor) Execute(ctx context.Context, calls []llm.ToolCall) []llm.ToolResult {
+	results := make([]llm.ToolResult, len(calls))
 
 	// 并发执行所有工具调用，单个工具失败不阻塞其他工具
 	var wg sync.WaitGroup
@@ -290,7 +286,7 @@ func (e *DefaultExecutor) Execute(ctx context.Context, calls []llm.ToolCall) []T
 }
 
 // executeWithRetry 执行单个工具调用，失败时按配置重试.
-func (e *DefaultExecutor) executeWithRetry(ctx context.Context, call llm.ToolCall) ToolResult {
+func (e *DefaultExecutor) executeWithRetry(ctx context.Context, call llm.ToolCall) llm.ToolResult {
 	result := e.ExecuteOne(ctx, call)
 	if !result.IsError() || e.config.MaxRetries <= 0 {
 		return result
@@ -322,9 +318,9 @@ func (e *DefaultExecutor) executeWithRetry(ctx context.Context, call llm.ToolCal
 	return result
 }
 
-func (e *DefaultExecutor) ExecuteOne(ctx context.Context, call llm.ToolCall) ToolResult {
+func (e *DefaultExecutor) ExecuteOne(ctx context.Context, call llm.ToolCall) llm.ToolResult {
 	start := time.Now()
-	result := ToolResult{
+	result := llm.ToolResult{
 		ToolCallID: call.ID,
 		Name:       call.Name,
 	}
@@ -511,7 +507,7 @@ func (e *DefaultExecutor) executeStreamingTool(ctx context.Context, call llm.Too
 			ch <- ToolStreamEvent{Type: ToolStreamError, ToolName: call.Name, Error: done.err}
 			return
 		}
-		result := ToolResult{
+		result := llm.ToolResult{
 			ToolCallID: call.ID,
 			Name:       call.Name,
 			Result:     done.res,
@@ -651,4 +647,3 @@ func (tb *tokenBucketLimiter) Reset() {
 	tb.tokens = tb.maxTokens
 	tb.lastRefill = time.Now()
 }
-

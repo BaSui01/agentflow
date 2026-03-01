@@ -51,12 +51,12 @@ func (p *scriptedProvider) Endpoints() llmpkg.ProviderEndpoints {
 	return llmpkg.ProviderEndpoints{}
 }
 
-func (e *countingToolExecutor) Execute(ctx context.Context, calls []llmpkg.ToolCall) []ToolResult {
+func (e *countingToolExecutor) Execute(ctx context.Context, calls []llmpkg.ToolCall) []llmpkg.ToolResult {
 	_ = ctx
 	e.calls = append(e.calls, calls...)
-	out := make([]ToolResult, 0, len(calls))
+	out := make([]llmpkg.ToolResult, 0, len(calls))
 	for _, c := range calls {
-		out = append(out, ToolResult{
+		out = append(out, llmpkg.ToolResult{
 			ToolCallID: c.ID,
 			Name:       c.Name,
 			Result:     json.RawMessage(`{"ok":true}`),
@@ -66,7 +66,7 @@ func (e *countingToolExecutor) Execute(ctx context.Context, calls []llmpkg.ToolC
 	return out
 }
 
-func (e *countingToolExecutor) ExecuteOne(ctx context.Context, call llmpkg.ToolCall) ToolResult {
+func (e *countingToolExecutor) ExecuteOne(ctx context.Context, call llmpkg.ToolCall) llmpkg.ToolResult {
 	return e.Execute(ctx, []llmpkg.ToolCall{call})[0]
 }
 
@@ -169,3 +169,4 @@ func TestReActExecutor_ExecuteStream_AssemblesToolCallArgumentsAcrossChunks(t *t
 		t.Fatalf("unexpected final response: %#v", final)
 	}
 }
+

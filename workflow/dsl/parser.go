@@ -301,7 +301,6 @@ func (p *Parser) resolveCondition(expr string, vars map[string]any) (workflow.Co
 // parseSimpleExpression 解析条件表达式。
 // 支持比较运算符 (==, !=, >, <, >=, <=)、逻辑运算符 (&&, ||, !)、
 // 字段访问 (result.score)、字面量 (数字、字符串、布尔) 和括号分组。
-// 表达式求值失败时回退到旧逻辑（非空即 true），保持向后兼容。
 func (p *Parser) parseSimpleExpression(expr string, vars map[string]any) (workflow.ConditionFunc, error) {
 	eval := &exprEvaluator{}
 	return func(_ context.Context, input any) (bool, error) {
@@ -324,8 +323,7 @@ func (p *Parser) parseSimpleExpression(expr string, vars map[string]any) (workfl
 		// Try expression evaluation
 		result, err := eval.Evaluate(resolved, mergedVars)
 		if err != nil {
-			// Fallback: non-empty and non-false is true (backward compatible)
-			return resolved != "" && resolved != "false" && resolved != "0", nil
+			return false, fmt.Errorf("evaluate condition expression %q: %w", resolved, err)
 		}
 		return result, nil
 	}, nil

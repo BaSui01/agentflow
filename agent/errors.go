@@ -142,7 +142,7 @@ func GetErrorCode(err error) ErrorCode {
 	return types.GetErrorCode(err)
 }
 
-// 预定义错误（向后兼容）
+// 预定义错误
 var (
 	ErrProviderNotSet = NewError(ErrCodeProviderNotSet, "LLM provider not configured")
 	ErrAgentNotReady  = NewError(ErrCodeNotReady, "agent not in ready state")

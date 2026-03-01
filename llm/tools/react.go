@@ -133,12 +133,12 @@ func (r *ReActExecutor) ExecuteWithTrace(ctx context.Context, req *llm.ChatReque
 
 // ReActStep 表示 ReAct 循环（Thought -> Action -> Observation）的一步.
 type ReActStep struct {
-	StepNumber   int            `json:"step_number"`
-	Thought      string         `json:"thought,omitempty"`
-	Actions      []llm.ToolCall `json:"actions,omitempty"`
-	Observations []ToolResult   `json:"observations,omitempty"`
-	Timestamp    string         `json:"timestamp"`
-	TokensUsed   int            `json:"tokens_used,omitempty"`
+	StepNumber   int              `json:"step_number"`
+	Thought      string           `json:"thought,omitempty"`
+	Actions      []llm.ToolCall   `json:"actions,omitempty"`
+	Observations []llm.ToolResult `json:"observations,omitempty"`
+	Timestamp    string           `json:"timestamp"`
+	TokensUsed   int              `json:"tokens_used,omitempty"`
 }
 
 // ReActTrace 表示完整的 ReAct 执行追踪.
@@ -152,7 +152,7 @@ type ReActTrace struct {
 	ErrorMessage string      `json:"error_message,omitempty"`
 }
 
-// LLMCallInfo 记录 LLM 调用详情（用于向后兼容）.
+// LLMCallInfo 记录 LLM 调用详情.
 type LLMCallInfo struct {
 	Request  llm.ChatRequest  `json:"request"`
 	Response llm.ChatResponse `json:"response"`
@@ -367,7 +367,7 @@ type ReActStreamEvent struct {
 	Iteration     int               `json:"iteration,omitempty"`
 	Chunk         *llm.StreamChunk  `json:"chunk,omitempty"`
 	ToolCalls     []llm.ToolCall    `json:"tool_calls,omitempty"`
-	ToolResults   []ToolResult      `json:"tool_results,omitempty"`
+	ToolResults   []llm.ToolResult  `json:"tool_results,omitempty"`
 	ToolCallID    string            `json:"tool_call_id,omitempty"`
 	ToolName      string            `json:"tool_name,omitempty"`
 	ProgressData  any               `json:"progress_data,omitempty"`
@@ -382,14 +382,15 @@ func (r *ReActExecutor) executeToolsWithStreaming(
 	streamExec StreamableToolExecutor,
 	calls []llm.ToolCall,
 	eventCh chan<- ReActStreamEvent,
-) []ToolResult {
-	results := make([]ToolResult, len(calls))
+) []llm.ToolResult {
+	results := make([]llm.ToolResult, len(calls))
 
 	for i, call := range calls {
 		streamCh := streamExec.ExecuteOneStream(ctx, call)
-		var toolResult ToolResult
-		toolResult.ToolCallID = call.ID
-		toolResult.Name = call.Name
+		result := llm.ToolResult{
+			ToolCallID: call.ID,
+			Name:       call.Name,
+		}
 
 		for event := range streamCh {
 			switch event.Type {
@@ -408,21 +409,21 @@ func (r *ReActExecutor) executeToolsWithStreaming(
 			case ToolStreamOutput:
 				// output 事件的 Data 是 json.RawMessage
 				if raw, ok := event.Data.(json.RawMessage); ok {
-					toolResult.Result = raw
+					result.Result = raw
 				}
 			case ToolStreamComplete:
-				// complete 事件的 Data 是 ToolResult
-				if tr, ok := event.Data.(ToolResult); ok {
-					toolResult = tr
+				// complete 事件的 Data 是 llm.ToolResult
+				if tr, ok := event.Data.(llm.ToolResult); ok {
+					result = tr
 				}
 			case ToolStreamError:
 				if event.Error != nil {
-					toolResult.Error = event.Error.Error()
+					result.Error = event.Error.Error()
 				}
 			}
 		}
 
-		results[i] = toolResult
+		results[i] = result
 	}
 
 	return results

@@ -217,8 +217,8 @@ type firecrawlSearchRequest struct {
 }
 
 type firecrawlSearchResponse struct {
-	Success bool                     `json:"success"`
-	Data    []firecrawlSearchResult  `json:"data"`
+	Success bool                    `json:"success"`
+	Data    []firecrawlSearchResult `json:"data"`
 }
 
 type firecrawlSearchResult struct {
@@ -237,8 +237,8 @@ type firecrawlScrapeRequest struct {
 }
 
 type firecrawlScrapeResponse struct {
-	Success bool                  `json:"success"`
-	Data    firecrawlScrapeData   `json:"data"`
+	Success bool                `json:"success"`
+	Data    firecrawlScrapeData `json:"data"`
 }
 
 type firecrawlScrapeData struct {

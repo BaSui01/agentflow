@@ -51,13 +51,13 @@ type scriptedToolExecutor struct {
 	failN int
 }
 
-func (e *scriptedToolExecutor) Execute(_ context.Context, calls []llmpkg.ToolCall) []ToolResult {
-	out := make([]ToolResult, 0, len(calls))
+func (e *scriptedToolExecutor) Execute(_ context.Context, calls []llmpkg.ToolCall) []llmpkg.ToolResult {
+	out := make([]llmpkg.ToolResult, 0, len(calls))
 	for _, c := range calls {
 		e.calls++
 		if e.failN > 0 {
 			e.failN--
-			out = append(out, ToolResult{
+			out = append(out, llmpkg.ToolResult{
 				ToolCallID: c.ID,
 				Name:       c.Name,
 				Error:      "invalid arguments",
@@ -65,7 +65,7 @@ func (e *scriptedToolExecutor) Execute(_ context.Context, calls []llmpkg.ToolCal
 			})
 			continue
 		}
-		out = append(out, ToolResult{
+		out = append(out, llmpkg.ToolResult{
 			ToolCallID: c.ID,
 			Name:       c.Name,
 			Result:     json.RawMessage(`{"ok":true}`),
@@ -75,7 +75,7 @@ func (e *scriptedToolExecutor) Execute(_ context.Context, calls []llmpkg.ToolCal
 	return out
 }
 
-func (e *scriptedToolExecutor) ExecuteOne(ctx context.Context, call llmpkg.ToolCall) ToolResult {
+func (e *scriptedToolExecutor) ExecuteOne(ctx context.Context, call llmpkg.ToolCall) llmpkg.ToolResult {
 	return e.Execute(ctx, []llmpkg.ToolCall{call})[0]
 }
 
@@ -239,3 +239,4 @@ func TestReActExecutor_Execute_MaxIterationsReached(t *testing.T) {
 		t.Fatalf("expected 2 steps, got %d", len(steps))
 	}
 }
+

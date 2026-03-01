@@ -16,31 +16,31 @@ import (
 type AuditEventType string
 
 const (
-	AuditEventToolCall       AuditEventType = "tool_call"
-	AuditEventToolResult     AuditEventType = "tool_result"
+	AuditEventToolCall        AuditEventType = "tool_call"
+	AuditEventToolResult      AuditEventType = "tool_result"
 	AuditEventPermissionCheck AuditEventType = "permission_check"
-	AuditEventRateLimitHit   AuditEventType = "rate_limit_hit"
-	AuditEventCostAlert      AuditEventType = "cost_alert"
+	AuditEventRateLimitHit    AuditEventType = "rate_limit_hit"
+	AuditEventCostAlert       AuditEventType = "cost_alert"
 )
 
 // AuditEntry 表示单条审计记录.
 type AuditEntry struct {
-	ID            string            `json:"id"`
-	Timestamp     time.Time         `json:"timestamp"`
-	EventType     AuditEventType    `json:"event_type"`
-	AgentID       string            `json:"agent_id"`
-	UserID        string            `json:"user_id"`
-	SessionID     string            `json:"session_id,omitempty"`
-	TraceID       string            `json:"trace_id,omitempty"`
-	ToolName      string            `json:"tool_name"`
-	Arguments     json.RawMessage   `json:"arguments,omitempty"`
-	Result        json.RawMessage   `json:"result,omitempty"`
-	Error         string            `json:"error,omitempty"`
-	Duration      time.Duration     `json:"duration,omitempty"`
-	Decision      string            `json:"decision,omitempty"` // For permission checks
-	Cost          float64           `json:"cost,omitempty"`     // For cost tracking
-	Metadata      map[string]string `json:"metadata,omitempty"`
-	RequestIP     string            `json:"request_ip,omitempty"`
+	ID        string            `json:"id"`
+	Timestamp time.Time         `json:"timestamp"`
+	EventType AuditEventType    `json:"event_type"`
+	AgentID   string            `json:"agent_id"`
+	UserID    string            `json:"user_id"`
+	SessionID string            `json:"session_id,omitempty"`
+	TraceID   string            `json:"trace_id,omitempty"`
+	ToolName  string            `json:"tool_name"`
+	Arguments json.RawMessage   `json:"arguments,omitempty"`
+	Result    json.RawMessage   `json:"result,omitempty"`
+	Error     string            `json:"error,omitempty"`
+	Duration  time.Duration     `json:"duration,omitempty"`
+	Decision  string            `json:"decision,omitempty"` // For permission checks
+	Cost      float64           `json:"cost,omitempty"`     // For cost tracking
+	Metadata  map[string]string `json:"metadata,omitempty"`
+	RequestIP string            `json:"request_ip,omitempty"`
 }
 
 // AuditLogger 定义工具层审计日志的接口.
@@ -67,16 +67,16 @@ type AuditLogger interface {
 
 // AuditFilter 定义查询审计条目的过滤器.
 type AuditFilter struct {
-	AgentID    string         `json:"agent_id,omitempty"`
-	UserID     string         `json:"user_id,omitempty"`
-	ToolName   string         `json:"tool_name,omitempty"`
-	EventType  AuditEventType `json:"event_type,omitempty"`
-	StartTime  *time.Time     `json:"start_time,omitempty"`
-	EndTime    *time.Time     `json:"end_time,omitempty"`
-	SessionID  string         `json:"session_id,omitempty"`
-	TraceID    string         `json:"trace_id,omitempty"`
-	Limit      int            `json:"limit,omitempty"`
-	Offset     int            `json:"offset,omitempty"`
+	AgentID   string         `json:"agent_id,omitempty"`
+	UserID    string         `json:"user_id,omitempty"`
+	ToolName  string         `json:"tool_name,omitempty"`
+	EventType AuditEventType `json:"event_type,omitempty"`
+	StartTime *time.Time     `json:"start_time,omitempty"`
+	EndTime   *time.Time     `json:"end_time,omitempty"`
+	SessionID string         `json:"session_id,omitempty"`
+	TraceID   string         `json:"trace_id,omitempty"`
+	Limit     int            `json:"limit,omitempty"`
+	Offset    int            `json:"offset,omitempty"`
 }
 
 // AuditBackend 定义审计存储后端的接口.
@@ -93,13 +93,13 @@ type AuditBackend interface {
 
 // DefaultAuditLogger 是 AuditLogger 的默认实现.
 type DefaultAuditLogger struct {
-	backends     []AuditBackend
-	asyncQueue   chan *AuditEntry
-	wg           sync.WaitGroup
-	logger       *zap.Logger
-	closed       bool
-	closeMu      sync.RWMutex
-	idGenerator  func() string
+	backends    []AuditBackend
+	asyncQueue  chan *AuditEntry
+	wg          sync.WaitGroup
+	logger      *zap.Logger
+	closed      bool
+	closeMu     sync.RWMutex
+	idGenerator func() string
 }
 
 // AuditLoggerConfig 配置审计日志。
@@ -257,9 +257,9 @@ func (al *DefaultAuditLogger) Close() error {
 
 // MemoryAuditBackend 将审计条目存储在内存中.
 type MemoryAuditBackend struct {
-	entries  []*AuditEntry
-	maxSize  int
-	mu       sync.RWMutex
+	entries []*AuditEntry
+	maxSize int
+	mu      sync.RWMutex
 }
 
 // NewMemoryAuditBackend 创建新的内存审计后端.

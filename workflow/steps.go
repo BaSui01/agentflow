@@ -59,7 +59,6 @@ func (s *PassthroughStep) Execute(ctx context.Context, input any) (any, error) {
 
 // LLMStep executes an LLM call.
 // When Provider is set, it performs a real LLM completion request.
-// When Provider is nil, it returns a placeholder map (backward compatible).
 type LLMStep struct {
 	Model       string
 	Prompt      string
@@ -114,7 +113,6 @@ func (s *LLMStep) Execute(ctx context.Context, input any) (any, error) {
 
 // ToolStep executes a tool call.
 // When Registry is set, it performs a real tool execution.
-// When Registry is nil, it returns a placeholder map (backward compatible).
 type ToolStep struct {
 	ToolName string
 	Params   map[string]any
@@ -157,7 +155,6 @@ func (s *ToolStep) Execute(ctx context.Context, input any) (any, error) {
 
 // HumanInputStep waits for human input.
 // When Handler is set, it sends a request to the HITL handler and waits for a response.
-// When Handler is nil, it returns a placeholder map (backward compatible).
 type HumanInputStep struct {
 	Prompt  string
 	Type    string

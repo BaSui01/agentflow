@@ -31,10 +31,8 @@ func TestDuration_UnmarshalJSON_String(t *testing.T) {
 
 func TestDuration_UnmarshalJSON_Number(t *testing.T) {
 	var d Duration
-	// 1000000000 nanoseconds = 1 second
 	err := json.Unmarshal([]byte(`1000000000`), &d)
-	require.NoError(t, err)
-	assert.Equal(t, time.Second, d.Duration)
+	assert.Error(t, err)
 }
 
 func TestDuration_UnmarshalJSON_InvalidString(t *testing.T) {

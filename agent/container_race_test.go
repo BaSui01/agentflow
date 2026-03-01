@@ -44,12 +44,11 @@ func TestServiceLocator_ConcurrentRegisterAndGet(t *testing.T) {
 	wg.Wait()
 }
 
-// TestServiceLocator_ConcurrentMustGet verifies MustGet under concurrency.
-func TestServiceLocator_ConcurrentMustGet(t *testing.T) {
+// TestServiceLocator_ConcurrentGetShared verifies Get under concurrency.
+func TestServiceLocator_ConcurrentGetShared(t *testing.T) {
 	t.Parallel()
 
 	sl := NewServiceLocator()
-	// Pre-register a service so MustGet won't panic
 	sl.Register("shared", "value")
 
 	const goroutines = 50
@@ -60,9 +59,9 @@ func TestServiceLocator_ConcurrentMustGet(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			for i := 0; i < 100; i++ {
-				v := sl.MustGet("shared")
-				if v != "value" {
-					t.Errorf("unexpected value: %v", v)
+				v, ok := sl.Get("shared")
+				if !ok || v != "value" {
+					t.Errorf("unexpected get result: ok=%v value=%v", ok, v)
 				}
 			}
 		}()

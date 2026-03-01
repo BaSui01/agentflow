@@ -374,6 +374,7 @@ func TestParseSimpleExpression_Integration(t *testing.T) {
 		vars     map[string]any
 		input    any
 		expected bool
+		wantErr  bool
 	}{
 		{
 			name:     "runtime input map merged",
@@ -397,11 +398,11 @@ func TestParseSimpleExpression_Integration(t *testing.T) {
 			expected: true,
 		},
 		{
-			name:     "backward compat: simple truthy string",
+			name:     "unknown identifier returns error",
 			expr:     `some_value`,
 			vars:     map[string]any{"some_value": "yes"},
 			input:    nil,
-			expected: true,
+			wantErr:  true,
 		},
 		{
 			name:     "backward compat: false string",
@@ -422,7 +423,7 @@ func TestParseSimpleExpression_Integration(t *testing.T) {
 			expr:     `${threshold}`,
 			vars:     map[string]any{"threshold": "0.5"},
 			input:    nil,
-			expected: true, // "0.5" is truthy (non-empty, not "false", not "0")
+			expected: true,
 		},
 	}
 
@@ -432,6 +433,10 @@ func TestParseSimpleExpression_Integration(t *testing.T) {
 			require.NoError(t, err)
 
 			result, err := condFn(context.Background(), tt.input)
+			if tt.wantErr {
+				require.Error(t, err)
+				return
+			}
 			require.NoError(t, err)
 			assert.Equal(t, tt.expected, result)
 		})

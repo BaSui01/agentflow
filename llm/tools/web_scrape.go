@@ -21,13 +21,13 @@ type WebScrapeProvider interface {
 
 // WebScrape 选项配置了网络刮擦请求 。
 type WebScrapeOptions struct {
-	Format           string   `json:"format"`                        // Output format: "markdown", "text", "html"
-	IncludeLinks     bool     `json:"include_links,omitempty"`       // Include hyperlinks in output
-	IncludeImages    bool     `json:"include_images,omitempty"`      // Include image descriptions
-	MaxLength        int      `json:"max_length,omitempty"`          // Maximum content length in characters
-	WaitForJS        bool     `json:"wait_for_js,omitempty"`         // Wait for JavaScript rendering
-	Selectors        []string `json:"selectors,omitempty"`           // CSS selectors to extract specific elements
-	ExcludeSelectors []string `json:"exclude_selectors,omitempty"`   // CSS selectors to exclude
+	Format           string   `json:"format"`                      // Output format: "markdown", "text", "html"
+	IncludeLinks     bool     `json:"include_links,omitempty"`     // Include hyperlinks in output
+	IncludeImages    bool     `json:"include_images,omitempty"`    // Include image descriptions
+	MaxLength        int      `json:"max_length,omitempty"`        // Maximum content length in characters
+	WaitForJS        bool     `json:"wait_for_js,omitempty"`       // Wait for JavaScript rendering
+	Selectors        []string `json:"selectors,omitempty"`         // CSS selectors to extract specific elements
+	ExcludeSelectors []string `json:"exclude_selectors,omitempty"` // CSS selectors to exclude
 }
 
 // 默认WebScrape 选项返回明智的默认 。

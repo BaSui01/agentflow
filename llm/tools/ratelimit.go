@@ -32,11 +32,11 @@ const (
 type RateLimitScope string
 
 const (
-	RateLimitScopeGlobal  RateLimitScope = "global"   // Global rate limit
-	RateLimitScopeTool    RateLimitScope = "tool"     // Per-tool rate limit
-	RateLimitScopeAgent   RateLimitScope = "agent"    // Per-agent rate limit
-	RateLimitScopeUser    RateLimitScope = "user"     // Per-user rate limit
-	RateLimitScopeSession RateLimitScope = "session"  // Per-session rate limit
+	RateLimitScopeGlobal  RateLimitScope = "global"  // Global rate limit
+	RateLimitScopeTool    RateLimitScope = "tool"    // Per-tool rate limit
+	RateLimitScopeAgent   RateLimitScope = "agent"   // Per-agent rate limit
+	RateLimitScopeUser    RateLimitScope = "user"    // Per-user rate limit
+	RateLimitScopeSession RateLimitScope = "session" // Per-session rate limit
 )
 
 // RateLimitRule 定义速率限制规则.
@@ -60,22 +60,22 @@ type RateLimitRule struct {
 
 // RateLimitContext 为速率限制检查提供上下文.
 type RateLimitContext struct {
-	AgentID   string `json:"agent_id"`
-	UserID    string `json:"user_id"`
-	SessionID string `json:"session_id,omitempty"`
-	ToolName  string `json:"tool_name"`
+	AgentID   string    `json:"agent_id"`
+	UserID    string    `json:"user_id"`
+	SessionID string    `json:"session_id,omitempty"`
+	ToolName  string    `json:"tool_name"`
 	RequestAt time.Time `json:"request_at"`
 }
 
 // RateLimitResult 包含速率限制检查的结果.
 type RateLimitResult struct {
-	Allowed       bool            `json:"allowed"`
-	Rule          *RateLimitRule  `json:"rule,omitempty"`
-	Action        RateLimitAction `json:"action,omitempty"`
-	RetryAfter    time.Duration   `json:"retry_after,omitempty"`
-	RemainingCalls int            `json:"remaining_calls"`
-	ResetAt       time.Time       `json:"reset_at,omitempty"`
-	Reason        string          `json:"reason,omitempty"`
+	Allowed        bool            `json:"allowed"`
+	Rule           *RateLimitRule  `json:"rule,omitempty"`
+	Action         RateLimitAction `json:"action,omitempty"`
+	RetryAfter     time.Duration   `json:"retry_after,omitempty"`
+	RemainingCalls int             `json:"remaining_calls"`
+	ResetAt        time.Time       `json:"reset_at,omitempty"`
+	Reason         string          `json:"reason,omitempty"`
 }
 
 // RateLimitManager 管理速率限制.
@@ -104,14 +104,14 @@ type RateLimitManager interface {
 
 // RateLimitStats 包含速率限制统计信息.
 type RateLimitStats struct {
-	Scope          RateLimitScope `json:"scope"`
-	Key            string         `json:"key"`
-	TotalRequests  int64          `json:"total_requests"`
-	AllowedRequests int64         `json:"allowed_requests"`
-	RejectedRequests int64        `json:"rejected_requests"`
-	CurrentCount   int            `json:"current_count"`
-	WindowStart    time.Time      `json:"window_start"`
-	WindowEnd      time.Time      `json:"window_end"`
+	Scope            RateLimitScope `json:"scope"`
+	Key              string         `json:"key"`
+	TotalRequests    int64          `json:"total_requests"`
+	AllowedRequests  int64          `json:"allowed_requests"`
+	RejectedRequests int64          `json:"rejected_requests"`
+	CurrentCount     int            `json:"current_count"`
+	WindowStart      time.Time      `json:"window_start"`
+	WindowEnd        time.Time      `json:"window_end"`
 }
 
 // DefaultRateLimitManager 是 RateLimitManager 的默认实现.
@@ -500,11 +500,11 @@ func (l *SlidingWindowLimiter) Reset() {
 
 // TokenBucketLimiter 实现令牌桶速率限制。
 type TokenBucketLimiter struct {
-	bucketSize  int
-	refillRate  float64 // tokens per second
-	tokens      float64
-	lastRefill  time.Time
-	mu          sync.Mutex
+	bucketSize int
+	refillRate float64 // tokens per second
+	tokens     float64
+	lastRefill time.Time
+	mu         sync.Mutex
 }
 
 // NewTokenBucketLimiter 创建新的令牌桶限制器.

@@ -454,41 +454,6 @@ func TestDatabaseConfig_DSN(t *testing.T) {
 	}
 }
 
-// --- MustLoad 测试 ---
-
-func TestMustLoad_Success(t *testing.T) {
-	// 创建有效配置文件
-	tmpDir := t.TempDir()
-	configPath := filepath.Join(tmpDir, "config.yaml")
-
-	yamlContent := `
-server:
-  http_port: 8080
-`
-	err := os.WriteFile(configPath, []byte(yamlContent), 0644)
-	require.NoError(t, err)
-
-	// 不应该 panic
-	assert.NotPanics(t, func() {
-		cfg := MustLoad(configPath)
-		assert.Equal(t, 8080, cfg.Server.HTTPPort)
-	})
-}
-
-func TestMustLoad_InvalidFile(t *testing.T) {
-	// 创建无效配置文件
-	tmpDir := t.TempDir()
-	configPath := filepath.Join(tmpDir, "invalid.yaml")
-
-	err := os.WriteFile(configPath, []byte("invalid: [yaml"), 0644)
-	require.NoError(t, err)
-
-	// 应该 panic
-	assert.Panics(t, func() {
-		MustLoad(configPath)
-	})
-}
-
 func TestLoadFromEnv_Function(t *testing.T) {
 	os.Setenv("AGENTFLOW_AGENT_NAME", "env-only-agent")
 	defer os.Unsetenv("AGENTFLOW_AGENT_NAME")

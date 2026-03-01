@@ -19,14 +19,6 @@ import (
 // 📦 通用响应结构
 // =============================================================================
 
-// Response is a type alias for api.Response — the canonical API envelope.
-// The canonical definition lives in api/types.go (§38).
-type Response = api.Response
-
-// ErrorInfo is a type alias for api.ErrorInfo — the canonical error structure.
-// The canonical definition lives in api/types.go (§38).
-type ErrorInfo = api.ErrorInfo
-
 // =============================================================================
 // 🎯 响应辅助函数
 // =============================================================================
@@ -46,7 +38,7 @@ func WriteJSON(w http.ResponseWriter, status int, data any) {
 
 // WriteSuccess 写入成功响应
 func WriteSuccess(w http.ResponseWriter, data any) {
-	WriteJSON(w, http.StatusOK, Response{
+	WriteJSON(w, http.StatusOK, api.Response{
 		Success:   true,
 		Data:      data,
 		Timestamp: time.Now(),
@@ -74,7 +66,7 @@ func WriteError(w http.ResponseWriter, err *types.Error, logger *zap.Logger) {
 		)
 	}
 
-	WriteJSON(w, status, Response{
+	WriteJSON(w, status, api.Response{
 		Success:   false,
 		Error:     errorInfo,
 		Timestamp: time.Now(),

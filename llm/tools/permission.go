@@ -44,16 +44,16 @@ type RuleCondition struct {
 
 // 权限Context为权限检查提供了上下文.
 type PermissionContext struct {
-	AgentID    string            `json:"agent_id"`
-	UserID     string            `json:"user_id"`
-	Roles      []string          `json:"roles"`
-	ToolName   string            `json:"tool_name"`
-	Arguments  map[string]any    `json:"arguments,omitempty"`
-	Metadata   map[string]string `json:"metadata,omitempty"`
-	RequestIP  string            `json:"request_ip,omitempty"`
-	RequestAt  time.Time         `json:"request_at"`
-	TraceID    string            `json:"trace_id,omitempty"`
-	SessionID  string            `json:"session_id,omitempty"`
+	AgentID   string            `json:"agent_id"`
+	UserID    string            `json:"user_id"`
+	Roles     []string          `json:"roles"`
+	ToolName  string            `json:"tool_name"`
+	Arguments map[string]any    `json:"arguments,omitempty"`
+	Metadata  map[string]string `json:"metadata,omitempty"`
+	RequestIP string            `json:"request_ip,omitempty"`
+	RequestAt time.Time         `json:"request_at"`
+	TraceID   string            `json:"trace_id,omitempty"`
+	SessionID string            `json:"session_id,omitempty"`
 }
 
 // 权限检查结果 。
@@ -68,24 +68,24 @@ type PermissionCheckResult struct {
 
 // 角色定义一个带有相关权限的角色.
 type Role struct {
-	ID          string   `json:"id"`
-	Name        string   `json:"name"`
-	Description string   `json:"description,omitempty"`
-	ParentRoles []string `json:"parent_roles,omitempty"` // For role inheritance
-	Permissions []string `json:"permissions,omitempty"`  // Permission rule IDs
+	ID          string    `json:"id"`
+	Name        string    `json:"name"`
+	Description string    `json:"description,omitempty"`
+	ParentRoles []string  `json:"parent_roles,omitempty"` // For role inheritance
+	Permissions []string  `json:"permissions,omitempty"`  // Permission rule IDs
 	CreatedAt   time.Time `json:"created_at"`
 	UpdatedAt   time.Time `json:"updated_at"`
 }
 
 // AgentPermission定义了特定代理权限.
 type AgentPermission struct {
-	AgentID       string   `json:"agent_id"`
-	AllowedTools  []string `json:"allowed_tools,omitempty"`  // Explicit allow list
-	DeniedTools   []string `json:"denied_tools,omitempty"`   // Explicit deny list
-	InheritFrom   string   `json:"inherit_from,omitempty"`   // Parent agent ID
-	MaxCallsPerHour int    `json:"max_calls_per_hour,omitempty"`
-	CreatedAt     time.Time `json:"created_at"`
-	UpdatedAt     time.Time `json:"updated_at"`
+	AgentID         string    `json:"agent_id"`
+	AllowedTools    []string  `json:"allowed_tools,omitempty"` // Explicit allow list
+	DeniedTools     []string  `json:"denied_tools,omitempty"`  // Explicit deny list
+	InheritFrom     string    `json:"inherit_from,omitempty"`  // Parent agent ID
+	MaxCallsPerHour int       `json:"max_calls_per_hour,omitempty"`
+	CreatedAt       time.Time `json:"created_at"`
+	UpdatedAt       time.Time `json:"updated_at"`
 }
 
 // 权限管理器管理工具权限 。

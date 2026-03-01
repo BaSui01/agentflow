@@ -78,7 +78,7 @@ func (b *AgentBuilder) WithProvider(provider llm.Provider) *AgentBuilder {
 
 // WithToolProvider 设置工具调用专用的 LLM Provider。
 // ReAct 循环中的推理和工具调用将使用此 Provider，而最终内容生成仍使用主 Provider。
-// 如果不设置，所有调用都使用主 Provider（向后兼容）。
+// 如果不设置，所有调用都使用主 Provider。
 func (b *AgentBuilder) WithToolProvider(provider llm.Provider) *AgentBuilder {
 	b.toolProvider = provider
 	return b

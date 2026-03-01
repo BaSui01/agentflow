@@ -68,8 +68,8 @@ func NewResilientExecutor(registry ToolRegistry, config *FallbackConfig, logger 
 }
 
 // Execute 执行工具调用（带回退）
-func (e *ResilientExecutor) Execute(ctx context.Context, calls []llmpkg.ToolCall) []ToolResult {
-	results := make([]ToolResult, len(calls))
+func (e *ResilientExecutor) Execute(ctx context.Context, calls []llmpkg.ToolCall) []llmpkg.ToolResult {
+	results := make([]llmpkg.ToolResult, len(calls))
 	for i, call := range calls {
 		results[i] = e.executeWithFallback(ctx, call)
 	}
@@ -77,13 +77,13 @@ func (e *ResilientExecutor) Execute(ctx context.Context, calls []llmpkg.ToolCall
 }
 
 // ExecuteOne 执行单个工具调用（带回退）
-func (e *ResilientExecutor) ExecuteOne(ctx context.Context, call llmpkg.ToolCall) ToolResult {
+func (e *ResilientExecutor) ExecuteOne(ctx context.Context, call llmpkg.ToolCall) llmpkg.ToolResult {
 	return e.executeWithFallback(ctx, call)
 }
 
-func (e *ResilientExecutor) executeWithFallback(ctx context.Context, call llmpkg.ToolCall) ToolResult {
+func (e *ResilientExecutor) executeWithFallback(ctx context.Context, call llmpkg.ToolCall) llmpkg.ToolResult {
 	start := time.Now()
-	result := ToolResult{
+	result := llmpkg.ToolResult{
 		ToolCallID: call.ID,
 		Name:       call.Name,
 	}
@@ -139,8 +139,8 @@ func (e *ResilientExecutor) executeWithFallback(ctx context.Context, call llmpkg
 	return result
 }
 
-func (e *ResilientExecutor) tryExecute(ctx context.Context, call llmpkg.ToolCall) ToolResult {
-	result := ToolResult{
+func (e *ResilientExecutor) tryExecute(ctx context.Context, call llmpkg.ToolCall) llmpkg.ToolResult {
+	result := llmpkg.ToolResult{
 		ToolCallID: call.ID,
 		Name:       call.Name,
 	}
@@ -213,7 +213,7 @@ func (e *ResilientExecutor) getAlternate(toolName string) string {
 	return ""
 }
 
-func (e *ResilientExecutor) executeAlternate(ctx context.Context, original llmpkg.ToolCall, altName string, start time.Time) ToolResult {
+func (e *ResilientExecutor) executeAlternate(ctx context.Context, original llmpkg.ToolCall, altName string, start time.Time) llmpkg.ToolResult {
 	e.logger.Info("switching to alternate tool",
 		zap.String("original", original.Name),
 		zap.String("alternate", altName))
@@ -276,8 +276,8 @@ func NewToolCallChain(executor *ResilientExecutor, logger *zap.Logger) *ToolCall
 
 // ExecuteChain 执行工具调用链
 // 支持工具之间的依赖关系，前一个工具的输出可以作为后一个工具的输入
-func (c *ToolCallChain) ExecuteChain(ctx context.Context, calls []llmpkg.ToolCall) ([]ToolResult, error) {
-	results := make([]ToolResult, 0, len(calls))
+func (c *ToolCallChain) ExecuteChain(ctx context.Context, calls []llmpkg.ToolCall) ([]llmpkg.ToolResult, error) {
+	results := make([]llmpkg.ToolResult, 0, len(calls))
 	context := make(map[string]json.RawMessage) // 存储中间结果
 
 	for _, call := range calls {

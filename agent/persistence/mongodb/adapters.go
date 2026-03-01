@@ -183,9 +183,6 @@ var (
 	_ agent.RunStoreProvider          = (*RunStoreAdapter)(nil)
 )
 
-// ErrNotFound re-exports persistence.ErrNotFound for callers that need to check it.
-var ErrNotFound = persistence.ErrNotFound
-
 // IsNotFound checks if an error is a not-found error.
 func IsNotFound(err error) bool {
 	return err == persistence.ErrNotFound

@@ -85,7 +85,7 @@ func TestDefaultWSTransportConfig(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// Tests: Constructor backward compatibility
+// Tests: constructor defaults
 // ---------------------------------------------------------------------------
 
 func TestNewWebSocketTransport_BackwardCompat(t *testing.T) {

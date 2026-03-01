@@ -638,18 +638,6 @@ func setFieldValue(field reflect.Value, value string) error {
 
 // --- 辅助函数 ---
 
-// Deprecated: MustLoad panics on failure. Use NewLoader().Load() instead.
-//
-// 此函数仅用于应用初始化阶段（main() 或 init()），不得在请求处理器
-// 或业务逻辑中使用。对于运行时配置加载，请使用 NewLoader().Load()。
-func MustLoad(path string) *Config {
-	cfg, err := NewLoader().WithConfigPath(path).Load()
-	if err != nil {
-		panic(fmt.Sprintf("failed to load config: %v", err))
-	}
-	return cfg
-}
-
 // LoadFromEnv 仅从环境变量加载配置
 func LoadFromEnv() (*Config, error) {
 	return NewLoader().Load()

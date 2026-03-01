@@ -181,21 +181,6 @@ func (sl *ServiceLocator) Get(name string) (any, bool) {
 	return service, ok
 }
 
-// Deprecated: MustGet panics if the service is not found.
-// Use Get() instead for safe error handling in production code.
-//
-// 此方法仅用于应用初始化阶段（main() 或 init()），不得在请求处理器
-// 或业务逻辑中使用。对于运行时服务获取，请使用 Get() 方法。
-func (sl *ServiceLocator) MustGet(name string) any {
-	sl.mu.RLock()
-	defer sl.mu.RUnlock()
-	service, ok := sl.services[name]
-	if !ok {
-		panic("service not found: " + name)
-	}
-	return service
-}
-
 // Get Provider 获取 LLM 提供者 。
 func (sl *ServiceLocator) GetProvider() (llm.Provider, bool) {
 	sl.mu.RLock()

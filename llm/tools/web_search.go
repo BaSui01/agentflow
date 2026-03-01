@@ -21,12 +21,12 @@ type WebSearchProvider interface {
 
 // WebSearch 选项配置网络搜索请求。
 type WebSearchOptions struct {
-	MaxResults  int      `json:"max_results"`            // Maximum number of results (default: 10)
-	Language    string   `json:"language,omitempty"`      // Language code (e.g., "en", "zh")
-	Region      string   `json:"region,omitempty"`        // Region code (e.g., "us", "cn")
-	SafeSearch  bool     `json:"safe_search,omitempty"`   // Enable safe search filtering
-	TimeRange   string   `json:"time_range,omitempty"`    // Time range: "day", "week", "month", "year"
-	Domains     []string `json:"domains,omitempty"`       // Restrict to specific domains
+	MaxResults     int      `json:"max_results"`               // Maximum number of results (default: 10)
+	Language       string   `json:"language,omitempty"`        // Language code (e.g., "en", "zh")
+	Region         string   `json:"region,omitempty"`          // Region code (e.g., "us", "cn")
+	SafeSearch     bool     `json:"safe_search,omitempty"`     // Enable safe search filtering
+	TimeRange      string   `json:"time_range,omitempty"`      // Time range: "day", "week", "month", "year"
+	Domains        []string `json:"domains,omitempty"`         // Restrict to specific domains
 	ExcludeDomains []string `json:"exclude_domains,omitempty"` // Exclude specific domains
 }
 
@@ -44,9 +44,9 @@ type WebSearchResult struct {
 	Title       string         `json:"title"`
 	URL         string         `json:"url"`
 	Snippet     string         `json:"snippet"`
-	Content     string         `json:"content,omitempty"`     // Full content if available
+	Content     string         `json:"content,omitempty"`      // Full content if available
 	PublishedAt string         `json:"published_at,omitempty"` // Publication date
-	Score       float64        `json:"score,omitempty"`       // Relevance score (0-1)
+	Score       float64        `json:"score,omitempty"`        // Relevance score (0-1)
 	Metadata    map[string]any `json:"metadata,omitempty"`
 }
 
