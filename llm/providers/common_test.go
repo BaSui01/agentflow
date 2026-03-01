@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/BaSui01/agentflow/llm"
+	"github.com/BaSui01/agentflow/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -116,7 +117,7 @@ func TestConvertMessagesToOpenAI(t *testing.T) {
 			{
 				Role:    llm.RoleUser,
 				Content: "What is this?",
-				Images: []llm.ImageContent{
+				Images: []types.ImageContent{
 					{Type: "url", URL: "https://example.com/img.png"},
 				},
 			},
@@ -133,7 +134,7 @@ func TestConvertMessagesToOpenAI(t *testing.T) {
 		msgs := []llm.Message{
 			{
 				Role: llm.RoleUser,
-				Images: []llm.ImageContent{
+				Images: []types.ImageContent{
 					{Type: "base64", Data: "abc123"},
 				},
 			},
@@ -436,4 +437,5 @@ func TestListModelsOpenAICompat(t *testing.T) {
 
 // =============================================================================
 // detectImageMIME tests
+
 

@@ -14,6 +14,7 @@ import (
 	"github.com/BaSui01/agentflow/llm"
 	"github.com/BaSui01/agentflow/llm/providers"
 	"github.com/BaSui01/agentflow/llm/providers/openaicompat"
+	"github.com/BaSui01/agentflow/types"
 	"go.uber.org/zap"
 )
 
@@ -471,7 +472,7 @@ func toResponsesAPIChatResponse(resp openAIResponsesResponse, provider string) *
 				case "output_text":
 					msg.Content += content.Text
 					for _, ann := range content.Annotations {
-						msg.Annotations = append(msg.Annotations, llm.Annotation{
+						msg.Annotations = append(msg.Annotations, types.Annotation{
 							Type:       ann.Type,
 							StartIndex: ann.StartIndex,
 							EndIndex:   ann.EndIndex,
@@ -791,3 +792,4 @@ func streamResponsesSSE(ctx context.Context, body io.ReadCloser, providerName st
 	}()
 	return ch
 }
+

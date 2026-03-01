@@ -16,8 +16,6 @@ type (
 	ToolResult    = types.ToolResult
 	Error         = types.Error
 	ErrorCode     = types.ErrorCode
-	ImageContent  = types.ImageContent
-	Annotation    = types.Annotation
 )
 
 // 重导出常量.

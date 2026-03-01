@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/BaSui01/agentflow/llm"
+	"github.com/BaSui01/agentflow/types"
 )
 
 // MapHTTPError 将 HTTP 状态码映射为带有合适重试标记的 llm.Error
@@ -425,9 +426,9 @@ func ToLLMChatResponse(oa OpenAICompatResponse, provider string) *llm.ChatRespon
 		}
 		// 映射 annotations
 		if len(c.Message.Annotations) > 0 {
-			msg.Annotations = make([]llm.Annotation, 0, len(c.Message.Annotations))
+			msg.Annotations = make([]types.Annotation, 0, len(c.Message.Annotations))
 			for _, ann := range c.Message.Annotations {
-				a := llm.Annotation{Type: ann.Type}
+				a := types.Annotation{Type: ann.Type}
 				if ann.URLCitation != nil {
 					a.StartIndex = ann.URLCitation.StartIndex
 					a.EndIndex = ann.URLCitation.EndIndex
@@ -576,4 +577,5 @@ func ListModelsOpenAICompat(ctx context.Context, client *http.Client, baseURL, a
 
 	return modelsResp.Data, nil
 }
+
 
