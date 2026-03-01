@@ -9,9 +9,9 @@ import (
 	"time"
 
 	"github.com/BaSui01/agentflow/llm/embedding"
-	"github.com/BaSui01/agentflow/llm/image"
 	"github.com/BaSui01/agentflow/llm/multimodal"
 	"github.com/BaSui01/agentflow/llm/providers"
+	vendorprofile "github.com/BaSui01/agentflow/llm/providers/vendor"
 	"github.com/BaSui01/agentflow/llm/rerank"
 	"github.com/BaSui01/agentflow/llm/speech"
 	"github.com/BaSui01/agentflow/rag"
@@ -186,10 +186,13 @@ func demoMultimodalRouter(ctx context.Context, logger *zap.Logger) {
 
 	// Register providers based on available API keys
 	if key := os.Getenv("OPENAI_API_KEY"); key != "" {
-		router.RegisterEmbedding("openai", embedding.NewOpenAIProvider(embedding.OpenAIConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: key}}), true)
-		router.RegisterTTS("openai", speech.NewOpenAITTSProvider(speech.OpenAITTSConfig{APIKey: key}), true)
-		router.RegisterSTT("openai", speech.NewOpenAISTTProvider(speech.OpenAISTTConfig{APIKey: key}), true)
-		router.RegisterImage("openai", image.NewOpenAIProvider(image.OpenAIConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: key}}), true)
+		openaiProfile := vendorprofile.NewOpenAIProfile(vendorprofile.OpenAIConfig{
+			APIKey: key,
+		}, logger)
+		router.RegisterEmbedding("openai", openaiProfile.Embedding, true)
+		router.RegisterTTS("openai", openaiProfile.TTS, true)
+		router.RegisterSTT("openai", openaiProfile.STT, true)
+		router.RegisterImage("openai", openaiProfile.Image, true)
 	}
 
 	if key := os.Getenv("COHERE_API_KEY"); key != "" {

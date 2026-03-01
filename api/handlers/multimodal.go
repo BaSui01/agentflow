@@ -22,6 +22,7 @@ import (
 	"github.com/BaSui01/agentflow/llm/image"
 	"github.com/BaSui01/agentflow/llm/multimodal"
 	"github.com/BaSui01/agentflow/llm/providers"
+	vendorprofile "github.com/BaSui01/agentflow/llm/providers/vendor"
 	"github.com/BaSui01/agentflow/llm/video"
 	"github.com/BaSui01/agentflow/pkg/tlsutil"
 	"github.com/BaSui01/agentflow/types"
@@ -158,23 +159,21 @@ func NewMultimodalHandlerFromConfig(cfg MultimodalHandlerConfig, logger *zap.Log
 	defaultVideo := strings.TrimSpace(cfg.DefaultVideoProvider)
 
 	if cfg.OpenAIAPIKey != "" {
-		imageProviders["openai"] = image.NewOpenAIProvider(image.OpenAIConfig{
-			BaseProviderConfig: providers.BaseProviderConfig{
-				APIKey:  cfg.OpenAIAPIKey,
-				BaseURL: cfg.OpenAIBaseURL,
-			},
-		})
+		openaiProfile := vendorprofile.NewOpenAIProfile(vendorprofile.OpenAIConfig{
+			APIKey:  cfg.OpenAIAPIKey,
+			BaseURL: cfg.OpenAIBaseURL,
+		}, logger)
+		imageProviders["openai"] = openaiProfile.Image
 		if defaultImage == "" {
 			defaultImage = "openai"
 		}
 	}
 	if cfg.GoogleAPIKey != "" {
-		imageProviders["gemini"] = image.NewGeminiProvider(image.GeminiConfig{
-			BaseProviderConfig: providers.BaseProviderConfig{APIKey: cfg.GoogleAPIKey},
-		})
-		videoProviders["veo"] = video.NewVeoProvider(video.VeoConfig{
-			BaseProviderConfig: providers.BaseProviderConfig{APIKey: cfg.GoogleAPIKey},
+		geminiProfile := vendorprofile.NewGeminiProfile(vendorprofile.GeminiConfig{
+			APIKey: cfg.GoogleAPIKey,
 		}, logger)
+		imageProviders["gemini"] = geminiProfile.Image
+		videoProviders["veo"] = geminiProfile.Video
 		if defaultImage == "" {
 			defaultImage = "gemini"
 		}
