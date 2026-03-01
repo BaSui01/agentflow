@@ -1,11 +1,10 @@
 package providers
 
 import (
-	"github.com/BaSui01/agentflow/types"
 	"encoding/json"
+	"github.com/BaSui01/agentflow/types"
 	"testing"
 
-	"github.com/BaSui01/agentflow/llm"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -643,5 +642,3 @@ func mockConvertToolsMiniMax(tools []types.ToolSchema) []mockMiniMaxTool {
 	}
 	return out
 }
-
-

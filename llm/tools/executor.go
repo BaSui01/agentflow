@@ -1,14 +1,13 @@
 package tools
 
 import (
-	"github.com/BaSui01/agentflow/types"
 	"context"
 	"encoding/json"
 	"fmt"
 	"sync"
 	"time"
 
-	"github.com/BaSui01/agentflow/llm"
+	"github.com/BaSui01/agentflow/types"
 	"go.uber.org/zap"
 )
 
@@ -24,7 +23,7 @@ type StreamingToolFunc func(ctx context.Context, args json.RawMessage, emit Tool
 
 // ToolMetadata 描述工具元数据.
 type ToolMetadata struct {
-	Schema      types.ToolSchema   // Tool JSON Schema
+	Schema      types.ToolSchema // Tool JSON Schema
 	Permission  string           // Required permission (optional)
 	RateLimit   *RateLimitConfig // Rate limit config (optional)
 	Timeout     time.Duration    // Execution timeout (default 30s)
@@ -648,5 +647,3 @@ func (tb *tokenBucketLimiter) Reset() {
 	tb.tokens = tb.maxTokens
 	tb.lastRefill = time.Now()
 }
-
-

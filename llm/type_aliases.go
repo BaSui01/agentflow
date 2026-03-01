@@ -7,3 +7,4 @@ type Message = types.Message
 type Error = types.Error
 type ToolCall = types.ToolCall
 type ToolResult = types.ToolResult
+type ToolSchema = types.ToolSchema

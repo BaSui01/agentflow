@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/BaSui01/agentflow/llm/providers"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -50,7 +51,7 @@ func TestDefaultDeepgramConfig(t *testing.T) {
 // --- OpenAI TTS Provider tests ---
 
 func TestNewOpenAITTSProvider(t *testing.T) {
-	p := NewOpenAITTSProvider(OpenAITTSConfig{APIKey: "test-key"})
+	p := NewOpenAITTSProvider(OpenAITTSConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key"}})
 	assert.Equal(t, "openai-tts", p.Name())
 	assert.Equal(t, "https://api.openai.com", p.cfg.BaseURL)
 	assert.Equal(t, "tts-1-hd", p.cfg.Model)
@@ -71,7 +72,7 @@ func TestOpenAITTSProvider_Synthesize(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	p := NewOpenAITTSProvider(OpenAITTSConfig{APIKey: "test-key", BaseURL: srv.URL})
+	p := NewOpenAITTSProvider(OpenAITTSConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key", BaseURL: srv.URL}})
 	resp, err := p.Synthesize(context.Background(), &TTSRequest{Text: "Hello world"})
 	require.NoError(t, err)
 	assert.Equal(t, "openai-tts", resp.Provider)
@@ -97,7 +98,7 @@ func TestOpenAITTSProvider_Synthesize_CustomParams(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	p := NewOpenAITTSProvider(OpenAITTSConfig{APIKey: "k", BaseURL: srv.URL})
+	p := NewOpenAITTSProvider(OpenAITTSConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k", BaseURL: srv.URL}})
 	_, err := p.Synthesize(context.Background(), &TTSRequest{
 		Text:           "test",
 		Model:          "custom-model",
@@ -115,7 +116,7 @@ func TestOpenAITTSProvider_Synthesize_Error(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	p := NewOpenAITTSProvider(OpenAITTSConfig{APIKey: "k", BaseURL: srv.URL})
+	p := NewOpenAITTSProvider(OpenAITTSConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k", BaseURL: srv.URL}})
 	_, err := p.Synthesize(context.Background(), &TTSRequest{Text: "test"})
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "openai tts error")
@@ -130,7 +131,7 @@ func TestOpenAITTSProvider_SynthesizeToFile(t *testing.T) {
 	dir := t.TempDir()
 	outPath := filepath.Join(dir, "output.mp3")
 
-	p := NewOpenAITTSProvider(OpenAITTSConfig{APIKey: "k", BaseURL: srv.URL})
+	p := NewOpenAITTSProvider(OpenAITTSConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k", BaseURL: srv.URL}})
 	err := p.SynthesizeToFile(context.Background(), &TTSRequest{Text: "test"}, outPath)
 	require.NoError(t, err)
 
@@ -140,7 +141,7 @@ func TestOpenAITTSProvider_SynthesizeToFile(t *testing.T) {
 }
 
 func TestOpenAITTSProvider_ListVoices(t *testing.T) {
-	p := NewOpenAITTSProvider(OpenAITTSConfig{APIKey: "k"})
+	p := NewOpenAITTSProvider(OpenAITTSConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k"}})
 	voices, err := p.ListVoices(context.Background())
 	require.NoError(t, err)
 	assert.Len(t, voices, 6)
@@ -150,7 +151,7 @@ func TestOpenAITTSProvider_ListVoices(t *testing.T) {
 // --- ElevenLabs Provider tests ---
 
 func TestNewElevenLabsProvider(t *testing.T) {
-	p := NewElevenLabsProvider(ElevenLabsConfig{APIKey: "test-key"})
+	p := NewElevenLabsProvider(ElevenLabsConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key"}})
 	assert.Equal(t, "elevenlabs", p.Name())
 	assert.Equal(t, "https://api.elevenlabs.io", p.cfg.BaseURL)
 	assert.Equal(t, "eleven_multilingual_v2", p.cfg.Model)
@@ -169,7 +170,7 @@ func TestElevenLabsProvider_Synthesize(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	p := NewElevenLabsProvider(ElevenLabsConfig{APIKey: "test-key", BaseURL: srv.URL})
+	p := NewElevenLabsProvider(ElevenLabsConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key", BaseURL: srv.URL}})
 	resp, err := p.Synthesize(context.Background(), &TTSRequest{Text: "Hello"})
 	require.NoError(t, err)
 	assert.Equal(t, "elevenlabs", resp.Provider)
@@ -188,7 +189,7 @@ func TestElevenLabsProvider_Synthesize_Error(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	p := NewElevenLabsProvider(ElevenLabsConfig{APIKey: "bad", BaseURL: srv.URL})
+	p := NewElevenLabsProvider(ElevenLabsConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "bad", BaseURL: srv.URL}})
 	_, err := p.Synthesize(context.Background(), &TTSRequest{Text: "test"})
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "elevenlabs error")
@@ -210,7 +211,7 @@ func TestElevenLabsProvider_ListVoices(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	p := NewElevenLabsProvider(ElevenLabsConfig{APIKey: "k", BaseURL: srv.URL})
+	p := NewElevenLabsProvider(ElevenLabsConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k", BaseURL: srv.URL}})
 	voices, err := p.ListVoices(context.Background())
 	require.NoError(t, err)
 	assert.Len(t, voices, 1)
@@ -225,7 +226,7 @@ func TestElevenLabsProvider_ListVoices_Error(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	p := NewElevenLabsProvider(ElevenLabsConfig{APIKey: "k", BaseURL: srv.URL})
+	p := NewElevenLabsProvider(ElevenLabsConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k", BaseURL: srv.URL}})
 	_, err := p.ListVoices(context.Background())
 	assert.Error(t, err)
 }
@@ -233,7 +234,7 @@ func TestElevenLabsProvider_ListVoices_Error(t *testing.T) {
 // --- OpenAI STT Provider tests ---
 
 func TestNewOpenAISTTProvider(t *testing.T) {
-	p := NewOpenAISTTProvider(OpenAISTTConfig{APIKey: "test-key"})
+	p := NewOpenAISTTProvider(OpenAISTTConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key"}})
 	assert.Equal(t, "openai-stt", p.Name())
 	assert.Equal(t, "whisper-1", p.cfg.Model)
 	assert.Equal(t, []string{"flac", "m4a", "mp3", "mp4", "mpeg", "mpga", "oga", "ogg", "wav", "webm"}, p.SupportedFormats())
@@ -253,7 +254,7 @@ func TestOpenAISTTProvider_Transcribe(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	p := NewOpenAISTTProvider(OpenAISTTConfig{APIKey: "k", BaseURL: srv.URL})
+	p := NewOpenAISTTProvider(OpenAISTTConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k", BaseURL: srv.URL}})
 	resp, err := p.Transcribe(context.Background(), &STTRequest{
 		Audio: bytes.NewReader([]byte("fake-audio")),
 	})
@@ -264,7 +265,7 @@ func TestOpenAISTTProvider_Transcribe(t *testing.T) {
 }
 
 func TestOpenAISTTProvider_Transcribe_NoAudio(t *testing.T) {
-	p := NewOpenAISTTProvider(OpenAISTTConfig{APIKey: "k"})
+	p := NewOpenAISTTProvider(OpenAISTTConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k"}})
 	_, err := p.Transcribe(context.Background(), &STTRequest{})
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "audio input is required")
@@ -299,7 +300,7 @@ func TestOpenAISTTProvider_Transcribe_WithSegmentsAndWords(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	p := NewOpenAISTTProvider(OpenAISTTConfig{APIKey: "k", BaseURL: srv.URL})
+	p := NewOpenAISTTProvider(OpenAISTTConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k", BaseURL: srv.URL}})
 	resp, err := p.Transcribe(context.Background(), &STTRequest{
 		Audio: bytes.NewReader([]byte("audio")),
 	})
@@ -316,7 +317,7 @@ func TestOpenAISTTProvider_Transcribe_Error(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	p := NewOpenAISTTProvider(OpenAISTTConfig{APIKey: "k", BaseURL: srv.URL})
+	p := NewOpenAISTTProvider(OpenAISTTConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k", BaseURL: srv.URL}})
 	_, err := p.Transcribe(context.Background(), &STTRequest{
 		Audio: bytes.NewReader([]byte("audio")),
 	})
@@ -335,14 +336,14 @@ func TestOpenAISTTProvider_TranscribeFile(t *testing.T) {
 	audioPath := filepath.Join(dir, "test.mp3")
 	require.NoError(t, os.WriteFile(audioPath, []byte("fake-audio"), 0644))
 
-	p := NewOpenAISTTProvider(OpenAISTTConfig{APIKey: "k", BaseURL: srv.URL})
+	p := NewOpenAISTTProvider(OpenAISTTConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k", BaseURL: srv.URL}})
 	resp, err := p.TranscribeFile(context.Background(), audioPath, nil)
 	require.NoError(t, err)
 	assert.Equal(t, "transcribed", resp.Text)
 }
 
 func TestOpenAISTTProvider_TranscribeFile_NotFound(t *testing.T) {
-	p := NewOpenAISTTProvider(OpenAISTTConfig{APIKey: "k"})
+	p := NewOpenAISTTProvider(OpenAISTTConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k"}})
 	_, err := p.TranscribeFile(context.Background(), "/nonexistent/audio.mp3", nil)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to open file")
@@ -351,7 +352,7 @@ func TestOpenAISTTProvider_TranscribeFile_NotFound(t *testing.T) {
 // --- Deepgram Provider tests ---
 
 func TestNewDeepgramProvider(t *testing.T) {
-	p := NewDeepgramProvider(DeepgramConfig{APIKey: "test-key"})
+	p := NewDeepgramProvider(DeepgramConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key"}})
 	assert.Equal(t, "deepgram", p.Name())
 	assert.Equal(t, "nova-2", p.cfg.Model)
 	assert.Contains(t, p.SupportedFormats(), "mp3")
@@ -384,7 +385,7 @@ func TestDeepgramProvider_Transcribe_WithAudio(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	p := NewDeepgramProvider(DeepgramConfig{APIKey: "test-key", BaseURL: srv.URL})
+	p := NewDeepgramProvider(DeepgramConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key", BaseURL: srv.URL}})
 	resp, err := p.Transcribe(context.Background(), &STTRequest{
 		Audio: bytes.NewReader([]byte("audio-data")),
 	})
@@ -410,7 +411,7 @@ func TestDeepgramProvider_Transcribe_WithURL(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	p := NewDeepgramProvider(DeepgramConfig{APIKey: "k", BaseURL: srv.URL})
+	p := NewDeepgramProvider(DeepgramConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k", BaseURL: srv.URL}})
 	resp, err := p.Transcribe(context.Background(), &STTRequest{
 		AudioURL: "https://example.com/audio.mp3",
 	})
@@ -419,7 +420,7 @@ func TestDeepgramProvider_Transcribe_WithURL(t *testing.T) {
 }
 
 func TestDeepgramProvider_Transcribe_NoInput(t *testing.T) {
-	p := NewDeepgramProvider(DeepgramConfig{APIKey: "k"})
+	p := NewDeepgramProvider(DeepgramConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k"}})
 	_, err := p.Transcribe(context.Background(), &STTRequest{})
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "audio input or URL is required")
@@ -432,7 +433,7 @@ func TestDeepgramProvider_Transcribe_Error(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	p := NewDeepgramProvider(DeepgramConfig{APIKey: "bad", BaseURL: srv.URL})
+	p := NewDeepgramProvider(DeepgramConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "bad", BaseURL: srv.URL}})
 	_, err := p.Transcribe(context.Background(), &STTRequest{
 		Audio: bytes.NewReader([]byte("audio")),
 	})
@@ -462,16 +463,15 @@ func TestDeepgramProvider_TranscribeFile(t *testing.T) {
 	audioPath := filepath.Join(dir, "test.mp3")
 	require.NoError(t, os.WriteFile(audioPath, []byte("audio"), 0644))
 
-	p := NewDeepgramProvider(DeepgramConfig{APIKey: "k", BaseURL: srv.URL})
+	p := NewDeepgramProvider(DeepgramConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k", BaseURL: srv.URL}})
 	resp, err := p.TranscribeFile(context.Background(), audioPath, nil)
 	require.NoError(t, err)
 	assert.Equal(t, "file content", resp.Text)
 }
 
 func TestDeepgramProvider_TranscribeFile_NotFound(t *testing.T) {
-	p := NewDeepgramProvider(DeepgramConfig{APIKey: "k"})
+	p := NewDeepgramProvider(DeepgramConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k"}})
 	_, err := p.TranscribeFile(context.Background(), "/nonexistent/audio.mp3", nil)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to open file")
 }
-

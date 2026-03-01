@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/BaSui01/agentflow/llm/providers"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -31,16 +32,18 @@ func TestDefaultTripoConfig(t *testing.T) {
 // --- Constructor Tests ---
 
 func TestNewMeshyProvider(t *testing.T) {
-	p := NewMeshyProvider(MeshyConfig{APIKey: "key"})
+	p := NewMeshyProvider(MeshyConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "key"}})
 	require.NotNil(t, p)
 	assert.Equal(t, "https://api.meshy.ai/v2", p.cfg.BaseURL)
 }
 
 func TestNewMeshyProvider_CustomConfig(t *testing.T) {
 	p := NewMeshyProvider(MeshyConfig{
-		APIKey:  "key",
-		BaseURL: "https://custom.api.com",
-		Timeout: 10 * time.Second,
+		BaseProviderConfig: providers.BaseProviderConfig{
+			APIKey:  "key",
+			BaseURL: "https://custom.api.com",
+			Timeout: 10 * time.Second,
+		},
 	})
 	assert.Equal(t, "https://custom.api.com", p.cfg.BaseURL)
 }
@@ -50,16 +53,18 @@ func TestMeshyProvider_Name(t *testing.T) {
 }
 
 func TestNewTripoProvider(t *testing.T) {
-	p := NewTripoProvider(TripoConfig{APIKey: "key"})
+	p := NewTripoProvider(TripoConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "key"}})
 	require.NotNil(t, p)
 	assert.Equal(t, "https://api.tripo3d.ai/v2", p.cfg.BaseURL)
 }
 
 func TestNewTripoProvider_CustomConfig(t *testing.T) {
 	p := NewTripoProvider(TripoConfig{
-		APIKey:  "key",
-		BaseURL: "https://custom.tripo.com",
-		Timeout: 10 * time.Second,
+		BaseProviderConfig: providers.BaseProviderConfig{
+			APIKey:  "key",
+			BaseURL: "https://custom.tripo.com",
+			Timeout: 10 * time.Second,
+		},
 	})
 	assert.Equal(t, "https://custom.tripo.com", p.cfg.BaseURL)
 }
@@ -88,7 +93,7 @@ func TestMeshyProvider_Generate_HTTPError(t *testing.T) {
 	}))
 	defer server.Close()
 
-	p := NewMeshyProvider(MeshyConfig{APIKey: "key", BaseURL: server.URL})
+	p := NewMeshyProvider(MeshyConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "key", BaseURL: server.URL}})
 	p.client = server.Client()
 
 	_, err := p.Generate(context.Background(), &GenerateRequest{Prompt: "test"})
@@ -104,7 +109,7 @@ func TestMeshyProvider_Generate_ImageHTTPError(t *testing.T) {
 	}))
 	defer server.Close()
 
-	p := NewMeshyProvider(MeshyConfig{APIKey: "key", BaseURL: server.URL})
+	p := NewMeshyProvider(MeshyConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "key", BaseURL: server.URL}})
 	p.client = server.Client()
 
 	_, err := p.Generate(context.Background(), &GenerateRequest{ImageURL: "https://example.com/img.png"})
@@ -122,7 +127,7 @@ func TestTripoProvider_Generate_HTTPError(t *testing.T) {
 	}))
 	defer server.Close()
 
-	p := NewTripoProvider(TripoConfig{APIKey: "key", BaseURL: server.URL})
+	p := NewTripoProvider(TripoConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "key", BaseURL: server.URL}})
 	p.client = server.Client()
 
 	_, err := p.Generate(context.Background(), &GenerateRequest{Prompt: "test"})
@@ -137,7 +142,7 @@ func TestTripoProvider_Generate_ErrorCode(t *testing.T) {
 	}))
 	defer server.Close()
 
-	p := NewTripoProvider(TripoConfig{APIKey: "key", BaseURL: server.URL})
+	p := NewTripoProvider(TripoConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "key", BaseURL: server.URL}})
 	p.client = server.Client()
 
 	_, err := p.Generate(context.Background(), &GenerateRequest{Prompt: "test"})
@@ -182,7 +187,7 @@ func TestMeshyProvider_Generate_TextTo3D(t *testing.T) {
 	server := newMeshySuccessServer(t)
 	defer server.Close()
 
-	p := NewMeshyProvider(MeshyConfig{APIKey: "test-key", BaseURL: server.URL})
+	p := NewMeshyProvider(MeshyConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key", BaseURL: server.URL}})
 	p.client = server.Client()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -217,7 +222,7 @@ func TestMeshyProvider_Generate_ImageTo3D(t *testing.T) {
 	}))
 	defer server.Close()
 
-	p := NewMeshyProvider(MeshyConfig{APIKey: "key", BaseURL: server.URL})
+	p := NewMeshyProvider(MeshyConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "key", BaseURL: server.URL}})
 	p.client = server.Client()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -259,7 +264,7 @@ func TestMeshyProvider_Generate_HighQualityAndBase64(t *testing.T) {
 	}))
 	defer server.Close()
 
-	p := NewMeshyProvider(MeshyConfig{APIKey: "key", BaseURL: server.URL})
+	p := NewMeshyProvider(MeshyConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "key", BaseURL: server.URL}})
 	p.client = server.Client()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -284,7 +289,7 @@ func TestMeshyProvider_Generate_PollFailed(t *testing.T) {
 	}))
 	defer server.Close()
 
-	p := NewMeshyProvider(MeshyConfig{APIKey: "key", BaseURL: server.URL})
+	p := NewMeshyProvider(MeshyConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "key", BaseURL: server.URL}})
 	p.client = server.Client()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -308,7 +313,7 @@ func TestMeshyProvider_Generate_PollContextCancelled(t *testing.T) {
 	}))
 	defer server.Close()
 
-	p := NewMeshyProvider(MeshyConfig{APIKey: "key", BaseURL: server.URL})
+	p := NewMeshyProvider(MeshyConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "key", BaseURL: server.URL}})
 	p.client = server.Client()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
@@ -342,7 +347,7 @@ func TestTripoProvider_Generate_TextToModel(t *testing.T) {
 	server := newTripoSuccessServer(t)
 	defer server.Close()
 
-	p := NewTripoProvider(TripoConfig{APIKey: "key", BaseURL: server.URL})
+	p := NewTripoProvider(TripoConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "key", BaseURL: server.URL}})
 	p.client = server.Client()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -378,7 +383,7 @@ func TestTripoProvider_Generate_ImageVariants(t *testing.T) {
 	}))
 	defer server.Close()
 
-	p := NewTripoProvider(TripoConfig{APIKey: "key", BaseURL: server.URL})
+	p := NewTripoProvider(TripoConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "key", BaseURL: server.URL}})
 	p.client = server.Client()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -405,7 +410,7 @@ func TestTripoProvider_Generate_PollFailed(t *testing.T) {
 	}))
 	defer server.Close()
 
-	p := NewTripoProvider(TripoConfig{APIKey: "key", BaseURL: server.URL})
+	p := NewTripoProvider(TripoConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "key", BaseURL: server.URL}})
 	p.client = server.Client()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -415,4 +420,3 @@ func TestTripoProvider_Generate_PollFailed(t *testing.T) {
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "failed")
 }
-

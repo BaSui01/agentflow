@@ -1,7 +1,6 @@
 package retry
 
 import (
-	"github.com/BaSui01/agentflow/types"
 	"context"
 	"errors"
 	"fmt"
@@ -231,5 +230,3 @@ func WrapRetryable(err error) error {
 	}
 	return &RetryableError{Err: err}
 }
-
-

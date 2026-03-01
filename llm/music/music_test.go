@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/BaSui01/agentflow/llm/providers"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -31,7 +32,7 @@ func TestDefaultMiniMaxMusicConfig(t *testing.T) {
 // --- Constructor Tests ---
 
 func TestNewSunoProvider(t *testing.T) {
-	p := NewSunoProvider(SunoConfig{APIKey: "key"})
+	p := NewSunoProvider(SunoConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "key"}})
 	require.NotNil(t, p)
 	assert.Equal(t, "https://api.sunoapi.com/v1", p.cfg.BaseURL)
 	assert.Equal(t, "suno-v5", p.cfg.Model)
@@ -39,10 +40,12 @@ func TestNewSunoProvider(t *testing.T) {
 
 func TestNewSunoProvider_CustomConfig(t *testing.T) {
 	p := NewSunoProvider(SunoConfig{
-		APIKey:  "key",
-		BaseURL: "https://custom.suno.com",
-		Model:   "custom-model",
-		Timeout: 10 * time.Second,
+		BaseProviderConfig: providers.BaseProviderConfig{
+			APIKey:  "key",
+			BaseURL: "https://custom.suno.com",
+			Model:   "custom-model",
+			Timeout: 10 * time.Second,
+		},
 	})
 	assert.Equal(t, "https://custom.suno.com", p.cfg.BaseURL)
 	assert.Equal(t, "custom-model", p.cfg.Model)
@@ -53,7 +56,7 @@ func TestSunoProvider_Name(t *testing.T) {
 }
 
 func TestNewMiniMaxProvider(t *testing.T) {
-	p := NewMiniMaxProvider(MiniMaxMusicConfig{APIKey: "key"})
+	p := NewMiniMaxProvider(MiniMaxMusicConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "key"}})
 	require.NotNil(t, p)
 	assert.Equal(t, "https://api.minimax.io", p.cfg.BaseURL)
 	assert.Equal(t, "music-01", p.cfg.Model)
@@ -61,10 +64,12 @@ func TestNewMiniMaxProvider(t *testing.T) {
 
 func TestNewMiniMaxProvider_CustomConfig(t *testing.T) {
 	p := NewMiniMaxProvider(MiniMaxMusicConfig{
-		APIKey:  "key",
-		BaseURL: "https://custom.minimax.com",
-		Model:   "custom-model",
-		Timeout: 10 * time.Second,
+		BaseProviderConfig: providers.BaseProviderConfig{
+			APIKey:  "key",
+			BaseURL: "https://custom.minimax.com",
+			Model:   "custom-model",
+			Timeout: 10 * time.Second,
+		},
 	})
 	assert.Equal(t, "https://custom.minimax.com", p.cfg.BaseURL)
 	assert.Equal(t, "custom-model", p.cfg.Model)
@@ -117,7 +122,7 @@ func TestSunoProvider_Generate_Completed(t *testing.T) {
 	}))
 	defer server.Close()
 
-	p := NewSunoProvider(SunoConfig{APIKey: "test-key", BaseURL: server.URL})
+	p := NewSunoProvider(SunoConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key", BaseURL: server.URL}})
 	p.client = server.Client()
 
 	result, err := p.Generate(context.Background(), &GenerateRequest{
@@ -143,7 +148,7 @@ func TestSunoProvider_Generate_HTTPError(t *testing.T) {
 	}))
 	defer server.Close()
 
-	p := NewSunoProvider(SunoConfig{APIKey: "key", BaseURL: server.URL})
+	p := NewSunoProvider(SunoConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "key", BaseURL: server.URL}})
 	p.client = server.Client()
 
 	_, err := p.Generate(context.Background(), &GenerateRequest{Prompt: "test"})
@@ -165,7 +170,7 @@ func TestSunoProvider_Generate_CustomModel(t *testing.T) {
 	}))
 	defer server.Close()
 
-	p := NewSunoProvider(SunoConfig{APIKey: "key", BaseURL: server.URL})
+	p := NewSunoProvider(SunoConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "key", BaseURL: server.URL}})
 	p.client = server.Client()
 
 	result, err := p.Generate(context.Background(), &GenerateRequest{
@@ -204,7 +209,7 @@ func TestSunoProvider_Generate_Pending_ThenCompleted(t *testing.T) {
 	}))
 	defer server.Close()
 
-	p := NewSunoProvider(SunoConfig{APIKey: "key", BaseURL: server.URL})
+	p := NewSunoProvider(SunoConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "key", BaseURL: server.URL}})
 	p.client = server.Client()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -228,7 +233,7 @@ func TestSunoProvider_Generate_PollFailed(t *testing.T) {
 	}))
 	defer server.Close()
 
-	p := NewSunoProvider(SunoConfig{APIKey: "key", BaseURL: server.URL})
+	p := NewSunoProvider(SunoConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "key", BaseURL: server.URL}})
 	p.client = server.Client()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -260,7 +265,7 @@ func TestMiniMaxProvider_Generate_Success(t *testing.T) {
 	}))
 	defer server.Close()
 
-	p := NewMiniMaxProvider(MiniMaxMusicConfig{APIKey: "test-key", BaseURL: server.URL})
+	p := NewMiniMaxProvider(MiniMaxMusicConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key", BaseURL: server.URL}})
 	p.client = server.Client()
 
 	result, err := p.Generate(context.Background(), &GenerateRequest{Prompt: "a jazz tune"})
@@ -290,7 +295,7 @@ func TestMiniMaxProvider_Generate_WithReferenceAudio(t *testing.T) {
 	}))
 	defer server.Close()
 
-	p := NewMiniMaxProvider(MiniMaxMusicConfig{APIKey: "key", BaseURL: server.URL})
+	p := NewMiniMaxProvider(MiniMaxMusicConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "key", BaseURL: server.URL}})
 	p.client = server.Client()
 
 	result, err := p.Generate(context.Background(), &GenerateRequest{
@@ -310,7 +315,7 @@ func TestMiniMaxProvider_Generate_APIError(t *testing.T) {
 	}))
 	defer server.Close()
 
-	p := NewMiniMaxProvider(MiniMaxMusicConfig{APIKey: "key", BaseURL: server.URL})
+	p := NewMiniMaxProvider(MiniMaxMusicConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "key", BaseURL: server.URL}})
 	p.client = server.Client()
 
 	_, err := p.Generate(context.Background(), &GenerateRequest{Prompt: "test"})
@@ -326,7 +331,7 @@ func TestMiniMaxProvider_Generate_HTTPError(t *testing.T) {
 	}))
 	defer server.Close()
 
-	p := NewMiniMaxProvider(MiniMaxMusicConfig{APIKey: "key", BaseURL: server.URL})
+	p := NewMiniMaxProvider(MiniMaxMusicConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "key", BaseURL: server.URL}})
 	p.client = server.Client()
 
 	_, err := p.Generate(context.Background(), &GenerateRequest{Prompt: "test"})
@@ -340,7 +345,7 @@ func TestMiniMaxProvider_Generate_ContextCancelled(t *testing.T) {
 	}))
 	defer server.Close()
 
-	p := NewMiniMaxProvider(MiniMaxMusicConfig{APIKey: "key", BaseURL: server.URL})
+	p := NewMiniMaxProvider(MiniMaxMusicConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "key", BaseURL: server.URL}})
 	p.client = server.Client()
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -349,4 +354,3 @@ func TestMiniMaxProvider_Generate_ContextCancelled(t *testing.T) {
 	_, err := p.Generate(ctx, &GenerateRequest{Prompt: "test"})
 	assert.Error(t, err)
 }
-

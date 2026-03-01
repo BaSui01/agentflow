@@ -1,13 +1,12 @@
 package tools
 
 import (
-	"github.com/BaSui01/agentflow/types"
 	"context"
 	"encoding/json"
 	"fmt"
 	"time"
 
-	"github.com/BaSui01/agentflow/llm"
+	"github.com/BaSui01/agentflow/types"
 	"go.uber.org/zap"
 )
 
@@ -221,5 +220,3 @@ func RegisterWebScrapeTool(registry ToolRegistry, config WebScrapeToolConfig, lo
 	fn, metadata := NewWebScrapeTool(config, logger)
 	return registry.Register("web_scrape", fn, metadata)
 }
-
-

@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/BaSui01/agentflow/llm/providers"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -38,7 +39,7 @@ func TestDefaultVoyageConfig(t *testing.T) {
 // --- Cohere Provider tests ---
 
 func TestNewCohereProvider(t *testing.T) {
-	p := NewCohereProvider(CohereConfig{APIKey: "test-key"})
+	p := NewCohereProvider(CohereConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key"}})
 	assert.Equal(t, "cohere-rerank", p.Name())
 	assert.Equal(t, 1000, p.MaxDocuments())
 	assert.Equal(t, "https://api.cohere.ai", p.cfg.BaseURL)
@@ -75,7 +76,7 @@ func TestCohereProvider_Rerank(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	p := NewCohereProvider(CohereConfig{APIKey: "test-key", BaseURL: srv.URL})
+	p := NewCohereProvider(CohereConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key", BaseURL: srv.URL}})
 	result, err := p.Rerank(context.Background(), &RerankRequest{
 		Query: "test query",
 		Documents: []Document{
@@ -98,7 +99,7 @@ func TestCohereProvider_Rerank_Error(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	p := NewCohereProvider(CohereConfig{APIKey: "test-key", BaseURL: srv.URL})
+	p := NewCohereProvider(CohereConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key", BaseURL: srv.URL}})
 	_, err := p.Rerank(context.Background(), &RerankRequest{
 		Query:     "test",
 		Documents: []Document{{Text: "doc"}},
@@ -126,7 +127,7 @@ func TestCohereProvider_RerankSimple(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	p := NewCohereProvider(CohereConfig{APIKey: "test-key", BaseURL: srv.URL})
+	p := NewCohereProvider(CohereConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key", BaseURL: srv.URL}})
 	results, err := p.RerankSimple(context.Background(), "query", []string{"doc1"}, 1)
 	require.NoError(t, err)
 	assert.Len(t, results, 1)
@@ -136,7 +137,7 @@ func TestCohereProvider_RerankSimple(t *testing.T) {
 // --- Jina Provider tests ---
 
 func TestNewJinaProvider(t *testing.T) {
-	p := NewJinaProvider(JinaConfig{APIKey: "test-key"})
+	p := NewJinaProvider(JinaConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key"}})
 	assert.Equal(t, "jina-rerank", p.Name())
 	assert.Equal(t, 1024, p.MaxDocuments())
 }
@@ -163,7 +164,7 @@ func TestJinaProvider_Rerank(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	p := NewJinaProvider(JinaConfig{APIKey: "test-key", BaseURL: srv.URL})
+	p := NewJinaProvider(JinaConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key", BaseURL: srv.URL}})
 	result, err := p.Rerank(context.Background(), &RerankRequest{
 		Query:     "query",
 		Documents: []Document{{Text: "doc", ID: "d1"}},
@@ -182,7 +183,7 @@ func TestJinaProvider_Rerank_Error(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	p := NewJinaProvider(JinaConfig{APIKey: "test-key", BaseURL: srv.URL})
+	p := NewJinaProvider(JinaConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key", BaseURL: srv.URL}})
 	_, err := p.Rerank(context.Background(), &RerankRequest{
 		Query:     "q",
 		Documents: []Document{{Text: "d"}},
@@ -209,7 +210,7 @@ func TestJinaProvider_RerankSimple(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	p := NewJinaProvider(JinaConfig{APIKey: "test-key", BaseURL: srv.URL})
+	p := NewJinaProvider(JinaConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key", BaseURL: srv.URL}})
 	results, err := p.RerankSimple(context.Background(), "q", []string{"d"}, 1)
 	require.NoError(t, err)
 	assert.Len(t, results, 1)
@@ -218,7 +219,7 @@ func TestJinaProvider_RerankSimple(t *testing.T) {
 // --- Voyage Provider tests ---
 
 func TestNewVoyageProvider(t *testing.T) {
-	p := NewVoyageProvider(VoyageConfig{APIKey: "test-key"})
+	p := NewVoyageProvider(VoyageConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key"}})
 	assert.Equal(t, "voyage-rerank", p.Name())
 	assert.Equal(t, 1000, p.MaxDocuments())
 }
@@ -243,7 +244,7 @@ func TestVoyageProvider_Rerank(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	p := NewVoyageProvider(VoyageConfig{APIKey: "test-key", BaseURL: srv.URL})
+	p := NewVoyageProvider(VoyageConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key", BaseURL: srv.URL}})
 	result, err := p.Rerank(context.Background(), &RerankRequest{
 		Query:           "query",
 		Documents:       []Document{{Text: "doc text", ID: "d1"}},
@@ -264,7 +265,7 @@ func TestVoyageProvider_Rerank_Error(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	p := NewVoyageProvider(VoyageConfig{APIKey: "bad-key", BaseURL: srv.URL})
+	p := NewVoyageProvider(VoyageConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "bad-key", BaseURL: srv.URL}})
 	_, err := p.Rerank(context.Background(), &RerankRequest{
 		Query:     "q",
 		Documents: []Document{{Text: "d"}},
@@ -289,9 +290,8 @@ func TestVoyageProvider_RerankSimple(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	p := NewVoyageProvider(VoyageConfig{APIKey: "test-key", BaseURL: srv.URL})
+	p := NewVoyageProvider(VoyageConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key", BaseURL: srv.URL}})
 	results, err := p.RerankSimple(context.Background(), "q", []string{"d"}, 1)
 	require.NoError(t, err)
 	assert.Len(t, results, 1)
 }
-
