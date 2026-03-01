@@ -64,7 +64,7 @@ func TestNewGeminiProvider(t *testing.T) {
 }
 
 func TestNewGeminiProvider_Defaults(t *testing.T) {
-	p := NewGeminiProvider(GeminiConfig{})
+	p := NewGeminiProvider(GeminiConfig{}, nil)
 	assert.Equal(t, "gemini-3-flash-preview", p.cfg.Model)
 }
 
@@ -248,7 +248,7 @@ func TestNewRunwayProvider(t *testing.T) {
 }
 
 func TestNewRunwayProvider_Defaults(t *testing.T) {
-	p := NewRunwayProvider(RunwayConfig{})
+	p := NewRunwayProvider(RunwayConfig{}, nil)
 	assert.Equal(t, "https://api.runwayml.com", p.cfg.BaseURL)
 	assert.Equal(t, "gen4_turbo", p.cfg.Model)
 }
@@ -664,6 +664,518 @@ func TestVeoProvider_Generate_CustomDuration(t *testing.T) {
 		Duration: 12,
 	})
 	require.NoError(t, err)
+}
+
+// --- Sora Provider tests ---
+
+func TestDefaultSoraConfig(t *testing.T) {
+	cfg := DefaultSoraConfig()
+	assert.Equal(t, "https://api.openai.com", cfg.BaseURL)
+	assert.Equal(t, "sora-2", cfg.Model)
+	assert.Equal(t, 300*time.Second, cfg.Timeout)
+}
+
+func TestNewSoraProvider(t *testing.T) {
+	p := NewSoraProvider(SoraConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key"}})
+	assert.Equal(t, "sora", p.Name())
+	assert.Equal(t, "sora-2", p.cfg.Model)
+	assert.True(t, p.SupportsGeneration())
+	assert.Equal(t, []VideoFormat{VideoFormatMP4}, p.SupportedFormats())
+}
+
+func TestNewSoraProvider_Defaults(t *testing.T) {
+	p := NewSoraProvider(SoraConfig{})
+	assert.Equal(t, "https://api.openai.com", p.cfg.BaseURL)
+	assert.Equal(t, "sora-2", p.cfg.Model)
+}
+
+func TestSoraProvider_Analyze_NotSupported(t *testing.T) {
+	p := NewSoraProvider(SoraConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k"}})
+	_, err := p.Analyze(context.Background(), &AnalyzeRequest{})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "not supported")
+}
+
+func TestSoraProvider_Generate_SubmitError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte(`{"error":"bad"}`))
+	}))
+	t.Cleanup(srv.Close)
+
+	p := NewSoraProvider(SoraConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k", BaseURL: srv.URL}})
+	_, err := p.Generate(context.Background(), &GenerateRequest{Prompt: "test"})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "sora error")
+}
+
+func TestSoraProvider_Generate_RequestParams(t *testing.T) {
+	var capturedReq soraRequest
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "POST" {
+			assert.Equal(t, "Bearer test-key", r.Header.Get("Authorization"))
+			json.NewDecoder(r.Body).Decode(&capturedReq)
+			json.NewEncoder(w).Encode(soraResponse{ID: "t", Status: "processing"})
+			return
+		}
+		json.NewEncoder(w).Encode(soraResponse{
+			ID:     "t",
+			Status: "completed",
+			Output: struct {
+				VideoURL string `json:"video_url,omitempty"`
+			}{VideoURL: "https://example.com/video.mp4"},
+		})
+	}))
+	t.Cleanup(srv.Close)
+
+	p := NewSoraProvider(SoraConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key", BaseURL: srv.URL}})
+	result, err := p.Generate(context.Background(), &GenerateRequest{
+		Prompt:   "a sunset",
+		ImageURL: "https://example.com/img.png",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "a sunset", capturedReq.Prompt)
+	assert.Equal(t, 8, capturedReq.Duration)
+	assert.Equal(t, "16:9", capturedReq.AspectRatio)
+	assert.Equal(t, "720p", capturedReq.Resolution)
+	assert.Equal(t, "https://example.com/img.png", capturedReq.Image)
+	assert.Equal(t, "sora", result.Provider)
+	assert.Len(t, result.Videos, 1)
+	assert.Equal(t, "https://example.com/video.mp4", result.Videos[0].URL)
+}
+
+func TestSoraProvider_Generate_DurationClamping(t *testing.T) {
+	tests := []struct {
+		name     string
+		duration float64
+		expected int
+	}{
+		{"zero defaults to 8", 0, 8},
+		{"below min clamps to 4", 2, 4},
+		{"above max clamps to 20", 30, 20},
+		{"normal value", 12, 12},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var capturedReq soraRequest
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.Method == "POST" {
+					json.NewDecoder(r.Body).Decode(&capturedReq)
+					w.WriteHeader(http.StatusBadRequest)
+					w.Write([]byte(`{"error":"test"}`))
+					return
+				}
+			}))
+			t.Cleanup(srv.Close)
+			p := NewSoraProvider(SoraConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k", BaseURL: srv.URL}})
+			_, _ = p.Generate(context.Background(), &GenerateRequest{Prompt: "test", Duration: tt.duration})
+			assert.Equal(t, tt.expected, capturedReq.Duration)
+		})
+	}
+}
+
+func TestSoraProvider_PollGeneration_Failed(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "POST" {
+			json.NewEncoder(w).Encode(soraResponse{ID: "t", Status: "processing"})
+			return
+		}
+		json.NewEncoder(w).Encode(soraResponse{
+			ID:     "t",
+			Status: "failed",
+			Error:  &struct{ Message string `json:"message"` }{Message: "content policy"},
+		})
+	}))
+	t.Cleanup(srv.Close)
+	p := NewSoraProvider(SoraConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k", BaseURL: srv.URL}})
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	_, err := p.Generate(ctx, &GenerateRequest{Prompt: "test"})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "content policy")
+}
+
+func TestSoraProvider_ImplementsProvider(t *testing.T) {
+	var _ Provider = (*SoraProvider)(nil)
+}
+
+// --- Luma Provider tests ---
+
+func TestDefaultLumaConfig(t *testing.T) {
+	cfg := DefaultLumaConfig()
+	assert.Equal(t, "https://api.lumalabs.ai", cfg.BaseURL)
+	assert.Equal(t, "ray-2", cfg.Model)
+	assert.Equal(t, 300*time.Second, cfg.Timeout)
+}
+
+func TestNewLumaProvider(t *testing.T) {
+	p := NewLumaProvider(LumaConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key"}})
+	assert.Equal(t, "luma", p.Name())
+	assert.Equal(t, "ray-2", p.cfg.Model)
+	assert.True(t, p.SupportsGeneration())
+	assert.Equal(t, []VideoFormat{VideoFormatMP4}, p.SupportedFormats())
+}
+
+func TestNewLumaProvider_Defaults(t *testing.T) {
+	p := NewLumaProvider(LumaConfig{})
+	assert.Equal(t, "https://api.lumalabs.ai", p.cfg.BaseURL)
+	assert.Equal(t, "ray-2", p.cfg.Model)
+}
+
+func TestLumaProvider_Analyze_NotSupported(t *testing.T) {
+	p := NewLumaProvider(LumaConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k"}})
+	_, err := p.Analyze(context.Background(), &AnalyzeRequest{})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "not supported")
+}
+
+func TestLumaProvider_Generate_SubmitError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte(`{"error":"bad"}`))
+	}))
+	t.Cleanup(srv.Close)
+	p := NewLumaProvider(LumaConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k", BaseURL: srv.URL}})
+	_, err := p.Generate(context.Background(), &GenerateRequest{Prompt: "test"})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "luma error")
+}
+
+func TestLumaProvider_Generate_RequestParams(t *testing.T) {
+	var capturedReq lumaRequest
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "POST" {
+			assert.Equal(t, "Bearer test-key", r.Header.Get("Authorization"))
+			json.NewDecoder(r.Body).Decode(&capturedReq)
+			json.NewEncoder(w).Encode(lumaResponse{ID: "t", State: "queued"})
+			return
+		}
+		json.NewEncoder(w).Encode(lumaResponse{
+			ID:    "t",
+			State: "completed",
+			Assets: struct {
+				Video string `json:"video,omitempty"`
+			}{Video: "https://example.com/video.mp4"},
+		})
+	}))
+	t.Cleanup(srv.Close)
+	p := NewLumaProvider(LumaConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key", BaseURL: srv.URL}})
+	result, err := p.Generate(context.Background(), &GenerateRequest{
+		Prompt:   "a sunset",
+		ImageURL: "https://example.com/img.png",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "a sunset", capturedReq.Prompt)
+	assert.Equal(t, "ray-2", capturedReq.Model)
+	assert.Equal(t, "5s", capturedReq.Duration)
+	assert.Equal(t, "720p", capturedReq.Resolution)
+	assert.Equal(t, "16:9", capturedReq.AspectRatio)
+	assert.NotNil(t, capturedReq.Keyframes)
+	assert.Equal(t, "image", capturedReq.Keyframes.Frame0.Type)
+	assert.Equal(t, "https://example.com/img.png", capturedReq.Keyframes.Frame0.URL)
+	assert.Equal(t, "luma", result.Provider)
+	assert.Len(t, result.Videos, 1)
+	assert.Equal(t, "https://example.com/video.mp4", result.Videos[0].URL)
+}
+
+func TestLumaProvider_PollGeneration_Failed(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "POST" {
+			json.NewEncoder(w).Encode(lumaResponse{ID: "t", State: "queued"})
+			return
+		}
+		json.NewEncoder(w).Encode(lumaResponse{ID: "t", State: "failed", FailureReason: "content policy"})
+	}))
+	t.Cleanup(srv.Close)
+	p := NewLumaProvider(LumaConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k", BaseURL: srv.URL}})
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	_, err := p.Generate(ctx, &GenerateRequest{Prompt: "test"})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "content policy")
+}
+
+func TestLumaProvider_ImplementsProvider(t *testing.T) {
+	var _ Provider = (*LumaProvider)(nil)
+}
+
+// --- Kling Provider tests ---
+
+func TestDefaultKlingConfig(t *testing.T) {
+	cfg := DefaultKlingConfig()
+	assert.Equal(t, "https://api.klingai.com", cfg.BaseURL)
+	assert.Equal(t, "kling-v3-pro", cfg.Model)
+	assert.Equal(t, 300*time.Second, cfg.Timeout)
+}
+
+func TestNewKlingProvider(t *testing.T) {
+	p := NewKlingProvider(KlingConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key"}})
+	assert.Equal(t, "kling", p.Name())
+	assert.Equal(t, "kling-v3-pro", p.cfg.Model)
+	assert.True(t, p.SupportsGeneration())
+	assert.Equal(t, []VideoFormat{VideoFormatMP4}, p.SupportedFormats())
+}
+
+func TestNewKlingProvider_Defaults(t *testing.T) {
+	p := NewKlingProvider(KlingConfig{})
+	assert.Equal(t, "https://api.klingai.com", p.cfg.BaseURL)
+	assert.Equal(t, "kling-v3-pro", p.cfg.Model)
+}
+
+func TestKlingProvider_Analyze_NotSupported(t *testing.T) {
+	p := NewKlingProvider(KlingConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k"}})
+	_, err := p.Analyze(context.Background(), &AnalyzeRequest{})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "not supported")
+}
+
+func TestKlingProvider_Generate_SubmitError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte(`{"error":"bad"}`))
+	}))
+	t.Cleanup(srv.Close)
+	p := NewKlingProvider(KlingConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k", BaseURL: srv.URL}})
+	_, err := p.Generate(context.Background(), &GenerateRequest{Prompt: "test"})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "kling error")
+}
+
+func TestKlingProvider_Generate_TextToVideo(t *testing.T) {
+	var capturedReq klingTextRequest
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "POST" {
+			assert.Contains(t, r.URL.Path, "text2video")
+			assert.Equal(t, "Bearer test-key", r.Header.Get("Authorization"))
+			json.NewDecoder(r.Body).Decode(&capturedReq)
+			json.NewEncoder(w).Encode(klingResponse{TaskID: "t", TaskStatus: "submitted"})
+			return
+		}
+		resp := klingResponse{TaskID: "t", TaskStatus: "succeed"}
+		resp.TaskResult.Videos = []struct {
+			URL      string  `json:"url"`
+			Duration float64 `json:"duration"`
+		}{{URL: "https://example.com/video.mp4", Duration: 5}}
+		json.NewEncoder(w).Encode(resp)
+	}))
+	t.Cleanup(srv.Close)
+	p := NewKlingProvider(KlingConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key", BaseURL: srv.URL}})
+	result, err := p.Generate(context.Background(), &GenerateRequest{
+		Prompt:         "a sunset",
+		NegativePrompt: "blur",
+		AspectRatio:    "9:16",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "a sunset", capturedReq.Prompt)
+	assert.Equal(t, "blur", capturedReq.NegativePrompt)
+	assert.Equal(t, 5, capturedReq.Duration)
+	assert.Equal(t, "9:16", capturedReq.AspectRatio)
+	assert.Equal(t, "kling", result.Provider)
+	assert.Len(t, result.Videos, 1)
+	assert.Equal(t, "https://example.com/video.mp4", result.Videos[0].URL)
+}
+
+func TestKlingProvider_Generate_ImageToVideo(t *testing.T) {
+	var capturedReq klingImageRequest
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "POST" {
+			assert.Contains(t, r.URL.Path, "image2video")
+			json.NewDecoder(r.Body).Decode(&capturedReq)
+			json.NewEncoder(w).Encode(klingResponse{TaskID: "t", TaskStatus: "submitted"})
+			return
+		}
+		resp := klingResponse{TaskID: "t", TaskStatus: "succeed"}
+		resp.TaskResult.Videos = []struct {
+			URL      string  `json:"url"`
+			Duration float64 `json:"duration"`
+		}{{URL: "https://example.com/video.mp4", Duration: 5}}
+		json.NewEncoder(w).Encode(resp)
+	}))
+	t.Cleanup(srv.Close)
+	p := NewKlingProvider(KlingConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k", BaseURL: srv.URL}})
+	_, err := p.Generate(context.Background(), &GenerateRequest{
+		Prompt:   "animate this",
+		ImageURL: "https://example.com/img.png",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "https://example.com/img.png", capturedReq.Image)
+}
+
+func TestKlingProvider_Generate_DurationClamping(t *testing.T) {
+	tests := []struct {
+		name     string
+		duration float64
+		expected int
+	}{
+		{"zero defaults to 5", 0, 5},
+		{"below min clamps to 3", 1, 3},
+		{"above max clamps to 15", 20, 15},
+		{"normal value", 10, 10},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var capturedReq klingTextRequest
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.Method == "POST" {
+					json.NewDecoder(r.Body).Decode(&capturedReq)
+					w.WriteHeader(http.StatusBadRequest)
+					w.Write([]byte(`{"error":"test"}`))
+					return
+				}
+			}))
+			t.Cleanup(srv.Close)
+			p := NewKlingProvider(KlingConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k", BaseURL: srv.URL}})
+			_, _ = p.Generate(context.Background(), &GenerateRequest{Prompt: "test", Duration: tt.duration})
+			assert.Equal(t, tt.expected, capturedReq.Duration)
+		})
+	}
+}
+
+func TestKlingProvider_PollGeneration_Failed(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "POST" {
+			json.NewEncoder(w).Encode(klingResponse{TaskID: "t", TaskStatus: "submitted"})
+			return
+		}
+		json.NewEncoder(w).Encode(klingResponse{TaskID: "t", TaskStatus: "failed", TaskStatusMsg: "content policy"})
+	}))
+	t.Cleanup(srv.Close)
+	p := NewKlingProvider(KlingConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k", BaseURL: srv.URL}})
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	_, err := p.Generate(ctx, &GenerateRequest{Prompt: "test"})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "content policy")
+}
+
+func TestKlingProvider_ImplementsProvider(t *testing.T) {
+	var _ Provider = (*KlingProvider)(nil)
+}
+
+// --- MiniMax Video Provider tests ---
+
+func TestDefaultMiniMaxVideoConfig(t *testing.T) {
+	cfg := DefaultMiniMaxVideoConfig()
+	assert.Equal(t, "https://api.minimax.chat", cfg.BaseURL)
+	assert.Equal(t, "video-01", cfg.Model)
+	assert.Equal(t, 300*time.Second, cfg.Timeout)
+}
+
+func TestNewMiniMaxVideoProvider(t *testing.T) {
+	p := NewMiniMaxVideoProvider(MiniMaxVideoConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key"}})
+	assert.Equal(t, "minimax-video", p.Name())
+	assert.Equal(t, "video-01", p.cfg.Model)
+	assert.True(t, p.SupportsGeneration())
+	assert.Equal(t, []VideoFormat{VideoFormatMP4}, p.SupportedFormats())
+}
+
+func TestNewMiniMaxVideoProvider_Defaults(t *testing.T) {
+	p := NewMiniMaxVideoProvider(MiniMaxVideoConfig{})
+	assert.Equal(t, "https://api.minimax.chat", p.cfg.BaseURL)
+	assert.Equal(t, "video-01", p.cfg.Model)
+}
+
+func TestMiniMaxVideoProvider_Analyze_NotSupported(t *testing.T) {
+	p := NewMiniMaxVideoProvider(MiniMaxVideoConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k"}})
+	_, err := p.Analyze(context.Background(), &AnalyzeRequest{})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "not supported")
+}
+
+func TestMiniMaxVideoProvider_Generate_SubmitError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte(`{"error":"bad"}`))
+	}))
+	t.Cleanup(srv.Close)
+	p := NewMiniMaxVideoProvider(MiniMaxVideoConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k", BaseURL: srv.URL}})
+	_, err := p.Generate(context.Background(), &GenerateRequest{Prompt: "test"})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "minimax error")
+}
+
+func TestMiniMaxVideoProvider_Generate_Success(t *testing.T) {
+	var capturedReq minimaxVideoRequest
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == "POST" && r.URL.Path == "/v1/video_generation":
+			json.NewDecoder(r.Body).Decode(&capturedReq)
+			json.NewEncoder(w).Encode(minimaxVideoCreateResponse{
+				TaskID:   "task-1",
+				BaseResp: struct {
+					StatusCode int    `json:"status_code"`
+					StatusMsg  string `json:"status_msg"`
+				}{StatusCode: 0, StatusMsg: "success"},
+			})
+		case r.URL.Path == "/v1/query/video_generation":
+			json.NewEncoder(w).Encode(minimaxVideoQueryResponse{
+				TaskID: "task-1",
+				Status: "Success",
+				FileID: "file-1",
+				BaseResp: struct {
+					StatusCode int    `json:"status_code"`
+					StatusMsg  string `json:"status_msg"`
+				}{StatusCode: 0, StatusMsg: "success"},
+			})
+		case r.URL.Path == "/v1/files/retrieve":
+			json.NewEncoder(w).Encode(minimaxFileResponse{
+				File: struct {
+					DownloadURL string `json:"download_url"`
+				}{DownloadURL: "https://example.com/video.mp4"},
+				BaseResp: struct {
+					StatusCode int    `json:"status_code"`
+					StatusMsg  string `json:"status_msg"`
+				}{StatusCode: 0, StatusMsg: "success"},
+			})
+		}
+	}))
+	t.Cleanup(srv.Close)
+	p := NewMiniMaxVideoProvider(MiniMaxVideoConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key", BaseURL: srv.URL}})
+	result, err := p.Generate(context.Background(), &GenerateRequest{
+		Prompt:   "a sunset",
+		ImageURL: "https://example.com/img.png",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "a sunset", capturedReq.Prompt)
+	assert.Equal(t, "video-01", capturedReq.Model)
+	assert.Equal(t, "https://example.com/img.png", capturedReq.FirstFrameImage)
+	assert.Equal(t, "minimax-video", result.Provider)
+	assert.Len(t, result.Videos, 1)
+	assert.Equal(t, "https://example.com/video.mp4", result.Videos[0].URL)
+}
+
+func TestMiniMaxVideoProvider_PollGeneration_Failed(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "POST" {
+			json.NewEncoder(w).Encode(minimaxVideoCreateResponse{
+				TaskID:   "task-1",
+				BaseResp: struct {
+					StatusCode int    `json:"status_code"`
+					StatusMsg  string `json:"status_msg"`
+				}{StatusCode: 0, StatusMsg: "success"},
+			})
+			return
+		}
+		json.NewEncoder(w).Encode(minimaxVideoQueryResponse{
+			TaskID: "task-1",
+			Status: "Fail",
+			BaseResp: struct {
+				StatusCode int    `json:"status_code"`
+				StatusMsg  string `json:"status_msg"`
+			}{StatusCode: 0, StatusMsg: "success"},
+		})
+	}))
+	t.Cleanup(srv.Close)
+	p := NewMiniMaxVideoProvider(MiniMaxVideoConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k", BaseURL: srv.URL}})
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	_, err := p.Generate(ctx, &GenerateRequest{Prompt: "test"})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "minimax generation failed")
+}
+
+func TestMiniMaxVideoProvider_ImplementsProvider(t *testing.T) {
+	var _ Provider = (*MiniMaxVideoProvider)(nil)
 }
 
 // --- Interface compliance tests ---

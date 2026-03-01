@@ -10,16 +10,21 @@ import (
 	"time"
 
 	"github.com/BaSui01/agentflow/pkg/tlsutil"
+	"go.uber.org/zap"
 )
 
 // GeminiProvider 使用 Google Gemini 执行视频分析.
 type GeminiProvider struct {
 	cfg    GeminiConfig
 	client *http.Client
+	logger *zap.Logger
 }
 
 // NewGeminiProvider 创建新的 Gemini 视频提供者.
-func NewGeminiProvider(cfg GeminiConfig) *GeminiProvider {
+func NewGeminiProvider(cfg GeminiConfig, logger *zap.Logger) *GeminiProvider {
+	if logger == nil {
+		logger = zap.NewNop()
+	}
 	if cfg.Model == "" {
 		cfg.Model = "gemini-3-flash-preview"
 	}
@@ -31,6 +36,7 @@ func NewGeminiProvider(cfg GeminiConfig) *GeminiProvider {
 	return &GeminiProvider{
 		cfg:    cfg,
 		client: tlsutil.SecureHTTPClient(timeout),
+		logger: logger,
 	}
 }
 
@@ -133,13 +139,14 @@ func (p *GeminiProvider) Analyze(ctx context.Context, req *AnalyzeRequest) (*Ana
 	}
 
 	payload, _ := json.Marshal(body)
-	url := fmt.Sprintf("https://generativelanguage.googleapis.com/v1beta/models/%s:generateContent?key=%s",
-		model, p.cfg.APIKey)
+	url := fmt.Sprintf("https://generativelanguage.googleapis.com/v1beta/models/%s:generateContent",
+		model)
 
 	httpReq, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(payload))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
+	httpReq.Header.Set("Authorization", "Bearer "+p.cfg.APIKey)
 	httpReq.Header.Set("Content-Type", "application/json")
 
 	resp, err := p.client.Do(httpReq)

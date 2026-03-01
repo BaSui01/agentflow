@@ -25,6 +25,11 @@ type RunwayConfig struct {
 	providers.BaseProviderConfig `yaml:",inline"`
 }
 
+// SoraConfig configures the OpenAI Sora video generation provider.
+type SoraConfig struct {
+	providers.BaseProviderConfig `yaml:",inline"`
+}
+
 // DefaultGeminiConfig 返回默认 Gemini 视频配置.
 func DefaultGeminiConfig() GeminiConfig {
 	return GeminiConfig{
@@ -52,6 +57,65 @@ func DefaultRunwayConfig() RunwayConfig {
 		BaseProviderConfig: providers.BaseProviderConfig{
 			BaseURL: "https://api.runwayml.com",
 			Model:   "gen-4.5",
+			Timeout: 300 * time.Second,
+		},
+	}
+}
+
+// DefaultSoraConfig returns the default Sora configuration.
+func DefaultSoraConfig() SoraConfig {
+	return SoraConfig{
+		BaseProviderConfig: providers.BaseProviderConfig{
+			BaseURL: "https://api.openai.com",
+			Model:   "sora-2",
+			Timeout: 300 * time.Second,
+		},
+	}
+}
+
+// KlingConfig configures the Kling AI video generation provider.
+type KlingConfig struct {
+	providers.BaseProviderConfig `yaml:",inline"`
+}
+
+// DefaultKlingConfig returns the default Kling configuration.
+func DefaultKlingConfig() KlingConfig {
+	return KlingConfig{
+		BaseProviderConfig: providers.BaseProviderConfig{
+			BaseURL: "https://api.klingai.com",
+			Model:   "kling-v3-pro",
+			Timeout: 300 * time.Second,
+		},
+	}
+}
+
+// LumaConfig 配置 Luma AI Dream Machine 视频生成提供者.
+type LumaConfig struct {
+	providers.BaseProviderConfig `yaml:",inline"`
+}
+
+// DefaultLumaConfig 返回默认 Luma 配置.
+func DefaultLumaConfig() LumaConfig {
+	return LumaConfig{
+		BaseProviderConfig: providers.BaseProviderConfig{
+			BaseURL: "https://api.lumalabs.ai",
+			Model:   "ray-2",
+			Timeout: 300 * time.Second,
+		},
+	}
+}
+
+// MiniMaxVideoConfig configures the MiniMax Hailuo video generation provider.
+type MiniMaxVideoConfig struct {
+	providers.BaseProviderConfig `yaml:",inline"`
+}
+
+// DefaultMiniMaxVideoConfig returns the default MiniMax video configuration.
+func DefaultMiniMaxVideoConfig() MiniMaxVideoConfig {
+	return MiniMaxVideoConfig{
+		BaseProviderConfig: providers.BaseProviderConfig{
+			BaseURL: "https://api.minimax.chat",
+			Model:   "video-01",
 			Timeout: 300 * time.Second,
 		},
 	}
