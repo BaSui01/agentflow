@@ -472,14 +472,6 @@ func TestDefaultQueryRouterConfig(t *testing.T) {
 		t.Error("expected EnableLLMRouting to be true")
 	}
 
-	if !config.EnableFallback {
-		t.Error("expected EnableFallback to be true")
-	}
-
-	if config.FallbackStrategy != StrategyHybrid {
-		t.Errorf("expected FallbackStrategy to be hybrid, got %s", config.FallbackStrategy)
-	}
-
 	if len(config.Strategies) == 0 {
 		t.Error("expected strategies to be configured")
 	}
@@ -543,11 +535,10 @@ func TestFeedbackStore(t *testing.T) {
 	}
 }
 
-func TestQueryRouter_Fallback(t *testing.T) {
+func TestQueryRouter_LowConfidenceUsesDefaultStrategy(t *testing.T) {
 	config := DefaultQueryRouterConfig()
 	config.EnableLLMRouting = false
-	config.EnableFallback = true
-	config.FallbackStrategy = StrategyBM25
+	config.DefaultStrategy = StrategyBM25
 	config.ConfidenceThreshold = 0.99 // Very high threshold to trigger fallback
 
 	router := NewQueryRouter(config, nil, nil, zap.NewNop())
@@ -560,11 +551,9 @@ func TestQueryRouter_Fallback(t *testing.T) {
 		t.Fatalf("Route failed: %v", err)
 	}
 
-	// 应因信心低而使用回落
-	if decision.Metadata["fallback_used"] == true {
-		if decision.SelectedStrategy != StrategyBM25 {
-			t.Errorf("expected fallback strategy BM25, got %s", decision.SelectedStrategy)
-		}
+	// 低置信度应回落到默认策略
+	if decision.Metadata["default_used"] == true && decision.SelectedStrategy != StrategyBM25 {
+		t.Errorf("expected default strategy BM25, got %s", decision.SelectedStrategy)
 	}
 }
 

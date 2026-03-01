@@ -249,22 +249,29 @@ func (cc *DefaultCostController) CalculateCost(toolName string, args json.RawMes
 	cost := toolCost.BaseCost
 
 	if toolCost.CostPerUnit > 0 && len(args) > 0 {
-		switch toolCost.Unit {
-		case CostUnitTokens:
-			// 如果有 token 计数器，精确计算
-			if cc.tokenCounter != nil {
-				tokens := cc.tokenCounter.CountTokens(string(args))
-				cost += float64(tokens) * toolCost.CostPerUnit
-				break
-			}
-			// fallback: 按字符数估算（1 token ≈ 4 字符）
-			cost += float64(len(args)) / 4.0 * toolCost.CostPerUnit
-		case CostUnitCredits, CostUnitDollars:
-			cost += float64(len(args)) / 100.0 * toolCost.CostPerUnit
-		}
+		cost += cc.estimateVariableCost(toolCost.Unit, args, toolCost.CostPerUnit)
 	}
 
 	return cost, nil
+}
+
+func (cc *DefaultCostController) estimateVariableCost(unit CostUnit, args json.RawMessage, costPerUnit float64) float64 {
+	usageUnits := cc.estimateUsageUnits(unit, args)
+	return usageUnits * costPerUnit
+}
+
+func (cc *DefaultCostController) estimateUsageUnits(unit CostUnit, args json.RawMessage) float64 {
+	switch unit {
+	case CostUnitTokens:
+		if cc.tokenCounter != nil {
+			return float64(cc.tokenCounter.CountTokens(string(args)))
+		}
+		return float64(len(args)) / 4.0
+	case CostUnitCredits, CostUnitDollars:
+		return float64(len(args)) / 100.0
+	default:
+		return 0
+	}
 }
 
 // resetUsageIfNeeded 清理过期周期的用量数据。

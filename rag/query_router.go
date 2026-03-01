@@ -71,10 +71,6 @@ type QueryRouterConfig struct {
 	EnableAdaptiveRouting bool   `json:"enable_adaptive_routing"` // Learn from feedback
 	ConfidenceThreshold  float64 `json:"confidence_threshold"`    // Min confidence for routing
 
-	// 后退设置
-	EnableFallback       bool              `json:"enable_fallback"`
-	FallbackStrategy     RetrievalStrategy `json:"fallback_strategy"`
-
 	// 缓存
 	EnableCache bool          `json:"enable_cache"`
 	CacheTTL    time.Duration `json:"cache_ttl"`
@@ -157,8 +153,6 @@ func DefaultQueryRouterConfig() QueryRouterConfig {
 		EnableLLMRouting:      true,
 		EnableAdaptiveRouting: false,
 		ConfidenceThreshold:   0.5,
-		EnableFallback:        true,
-		FallbackStrategy:      StrategyHybrid,
 		EnableCache:           true,
 		CacheTTL:              10 * time.Minute,
 		LogDecisions:          true,
@@ -349,15 +343,10 @@ func (r *QueryRouter) Route(ctx context.Context, query string) (*RoutingDecision
 	// 选择最佳策略
 	bestStrategy, bestScore := r.selectBestStrategy(decision.Scores)
 
-	// 检查信任阈值
+	// 统一低置信度语义：回落到默认策略，不保留额外 fallback 分支
 	if bestScore < r.config.ConfidenceThreshold {
-		if r.config.EnableFallback {
-			bestStrategy = r.config.FallbackStrategy
-			decision.Metadata["fallback_used"] = true
-		} else {
-			bestStrategy = r.config.DefaultStrategy
-			decision.Metadata["default_used"] = true
-		}
+		bestStrategy = r.config.DefaultStrategy
+		decision.Metadata["default_used"] = true
 	}
 
 	decision.SelectedStrategy = bestStrategy

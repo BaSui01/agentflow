@@ -340,12 +340,12 @@ func TestJSONLoader_Load_SingleObject(t *testing.T) {
 	assert.Equal(t, "single doc", docs[0].Content)
 }
 
-func TestJSONLoader_Load_NoContentField_SerializesAll(t *testing.T) {
+func TestJSONLoader_Load_NoContentField_UsesDefaultContentKey(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
 	path := filepath.Join(dir, "data.json")
-	jsonContent := `{"a":1,"b":"two"}`
+	jsonContent := `{"content":"hello","a":1,"b":"two"}`
 	require.NoError(t, os.WriteFile(path, []byte(jsonContent), 0o644))
 
 	loader := NewJSONLoader(JSONLoaderConfig{})
@@ -353,9 +353,7 @@ func TestJSONLoader_Load_NoContentField_SerializesAll(t *testing.T) {
 
 	require.NoError(t, err)
 	require.Len(t, docs, 1)
-	// Content should be the serialized JSON.
-	assert.Contains(t, docs[0].Content, `"a"`)
-	assert.Contains(t, docs[0].Content, `"b"`)
+	assert.Equal(t, "hello", docs[0].Content)
 }
 
 func TestJSONLoader_Load_JSONL(t *testing.T) {

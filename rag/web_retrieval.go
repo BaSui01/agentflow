@@ -31,10 +31,6 @@ type WebRetrieverConfig struct {
 	// 缓存
 	EnableCache bool          `json:"enable_cache"` // Cache web results
 	CacheTTL    time.Duration `json:"cache_ttl"`    // Cache time-to-live
-
-	// 退后行为
-	FallbackToLocal bool `json:"fallback_to_local"` // Use local-only if web fails
-	FallbackToWeb   bool `json:"fallback_to_web"`   // Use web-only if local fails
 }
 
 // 默认WebRetrieverConfig 返回合理的默认值 。
@@ -50,8 +46,6 @@ func DefaultWebRetrieverConfig() WebRetrieverConfig {
 		DeduplicateByURL: true,
 		EnableCache:      true,
 		CacheTTL:         30 * time.Minute,
-		FallbackToLocal:  true,
-		FallbackToWeb:    true,
 	}
 }
 
@@ -144,23 +138,9 @@ func (wr *WebRetriever) Retrieve(ctx context.Context, query string, queryEmbeddi
 		webResults, webErr = wr.searchWeb(ctx, query)
 	}
 
-	// 用倒计时处理错误
-	if localErr != nil && webErr != nil {
-		return nil, fmt.Errorf("both local and web retrieval failed: local=%w, web=%v", localErr, webErr)
-	}
-
-	if localErr != nil {
-		wr.logger.Warn("local retrieval failed, using web-only", zap.Error(localErr))
-		if !wr.config.FallbackToWeb {
-			return nil, fmt.Errorf("local retrieval failed: %w", localErr)
-		}
-	}
-
-	if webErr != nil {
-		wr.logger.Warn("web retrieval failed, using local-only", zap.Error(webErr))
-		if !wr.config.FallbackToLocal {
-			return nil, fmt.Errorf("web retrieval failed: %w", webErr)
-		}
+	// 统一失败处理入口：仅此处决定是否允许配置化 fallback
+	if err := wr.resolveSourceFailures(localErr, webErr); err != nil {
+		return nil, err
 	}
 
 	// 合并结果
@@ -173,6 +153,25 @@ func (wr *WebRetriever) Retrieve(ctx context.Context, query string, queryEmbeddi
 		zap.Duration("duration", time.Since(start)))
 
 	return merged, nil
+}
+
+func (wr *WebRetriever) resolveSourceFailures(localErr, webErr error) error {
+	if localErr != nil && webErr != nil {
+		return fmt.Errorf("retrieval failed: local=%w; web=%v", localErr, webErr)
+	}
+	if localErr != nil {
+		wr.logger.Warn("local retrieval failed",
+			zap.Error(localErr),
+			zap.String("failure_source", "local"))
+		return fmt.Errorf("local retrieval failed: %w", localErr)
+	}
+	if webErr != nil {
+		wr.logger.Warn("web retrieval failed",
+			zap.Error(webErr),
+			zap.String("failure_source", "web"))
+		return fmt.Errorf("web retrieval failed: %w", webErr)
+	}
+	return nil
 }
 
 // 搜索Web用缓存进行网络搜索。

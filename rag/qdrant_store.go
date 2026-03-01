@@ -338,8 +338,7 @@ func (s *QdrantStore) Search(ctx context.Context, queryEmbedding []float64, topK
 		}
 
 		if doc.ID == "" {
-			// 如果有效载荷不包括 doc id,则返回到指向ID.
-			doc.ID = fmt.Sprint(r.ID)
+			return nil, fmt.Errorf("qdrant result missing payload document id for point: %v", r.ID)
 		}
 
 		score := r.Score
@@ -474,8 +473,7 @@ func (s *QdrantStore) ListDocumentIDs(ctx context.Context, limit int, offset int
 				continue
 			}
 		}
-		// Fallback to point ID
-		ids = append(ids, fmt.Sprint(p.ID))
+		return nil, fmt.Errorf("qdrant point missing payload document id for point: %v", p.ID)
 	}
 
 	return ids, nil

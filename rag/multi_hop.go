@@ -566,17 +566,15 @@ func (r *MultiHopReasoner) deduplicateBySimilarity(
 }
 
 // computeContentSimilarity 计算两个文档的内容相似度
-// 优先使用 embedding 余弦相似度，fallback 到 Jaccard 相似度
+// 统一采用 embedding 余弦相似度策略；无法获得有效 embedding 时返回 0
 func (r *MultiHopReasoner) computeContentSimilarity(
 	ctx context.Context,
 	doc1, doc2 Document,
 ) float64 {
-	// 策略 1：如果两个文档都有 embedding，使用余弦相似度
 	if len(doc1.Embedding) > 0 && len(doc2.Embedding) > 0 && len(doc1.Embedding) == len(doc2.Embedding) {
 		return cosineSimilarity(doc1.Embedding, doc2.Embedding)
 	}
 
-	// 策略 2：如果有 embeddingFunc，动态生成 embedding
 	if r.embeddingFunc != nil {
 		emb1, err1 := r.embeddingFunc(ctx, doc1.Content)
 		emb2, err2 := r.embeddingFunc(ctx, doc2.Content)
@@ -585,42 +583,7 @@ func (r *MultiHopReasoner) computeContentSimilarity(
 		}
 	}
 
-	// 策略 3：Fallback 到 Jaccard 相似度（基于词集合）
-	return jaccardSimilarity(doc1.Content, doc2.Content)
-}
-
-// jaccardSimilarity 计算 Jaccard 相似度（基于词集合）
-func jaccardSimilarity(text1, text2 string) float64 {
-	words1 := tokenizeToSet(text1)
-	words2 := tokenizeToSet(text2)
-
-	if len(words1) == 0 && len(words2) == 0 {
-		return 1.0
-	}
-
-	intersection := 0
-	for w := range words1 {
-		if words2[w] {
-			intersection++
-		}
-	}
-
-	union := len(words1) + len(words2) - intersection
-	if union == 0 {
-		return 0.0
-	}
-
-	return float64(intersection) / float64(union)
-}
-
-// tokenizeToSet 将文本分词为集合
-func tokenizeToSet(text string) map[string]bool {
-	words := strings.Fields(strings.ToLower(text))
-	set := make(map[string]bool, len(words))
-	for _, w := range words {
-		set[w] = true
-	}
-	return set
+	return 0
 }
 
 // 精细查询根据累积上下文生成精细查询

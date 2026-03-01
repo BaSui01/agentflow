@@ -3,6 +3,7 @@ package embedding
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"time"
 )
 
@@ -18,7 +19,7 @@ func NewCohereProvider(cfg CohereConfig) *CohereProvider {
 
 	return &CohereProvider{
 		BaseProvider: newProviderBase("cohere-embedding", cfg.BaseProviderConfig, 1024, 96),
-		cfg: cfg,
+		cfg:          cfg,
 	}
 }
 
@@ -83,7 +84,7 @@ func (p *CohereProvider) Embed(ctx context.Context, req *EmbeddingRequest) (*Emb
 
 	var cResp cohereEmbedResponse
 	if err := json.Unmarshal(respBody, &cResp); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to decode cohere embedding response: %w", err)
 	}
 
 	embeddings := make([]EmbeddingData, len(cResp.Embeddings.Float))
@@ -116,4 +117,3 @@ func (p *CohereProvider) EmbedQuery(ctx context.Context, query string) ([]float6
 func (p *CohereProvider) EmbedDocuments(ctx context.Context, documents []string) ([][]float64, error) {
 	return p.BaseProvider.EmbedDocuments(ctx, documents, p.Embed)
 }
-

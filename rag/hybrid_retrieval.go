@@ -122,6 +122,7 @@ func (r *HybridRetriever) IndexDocuments(docs []Document) error {
 	prevDocIDIndex := r.docIDIndex
 
 	r.documents = docs
+	r.buildDocIndex()
 
 	// 计算 BM25 统计信息
 	if r.config.UseBM25 {
@@ -224,13 +225,9 @@ func (r *HybridRetriever) computeBM25Stats() {
 	totalLen := 0
 	r.docLens = make([]int, len(r.documents))
 	r.docTermFreqs = make([]map[string]int, len(r.documents)) // 预计算词频
-	r.docIDIndex = make(map[string]int, len(r.documents))     // 文档 ID 索引
 	termDocCount := make(map[string]int)
 
 	for i, doc := range r.documents {
-		// 建立文档 ID 到索引的映射（O(1) 查找）
-		r.docIDIndex[doc.ID] = i
-
 		// 分词并计算词频（只做一次！）
 		terms := r.tokenize(doc.Content)
 		r.docLens[i] = len(terms)
@@ -305,16 +302,16 @@ func (r *HybridRetriever) vectorRetrieve(queryEmbedding []float64) map[string]fl
 	if r.vectorStore != nil {
 		results, err := r.vectorStore.Search(context.Background(), queryEmbedding, r.config.RerankTopK)
 		if err != nil {
-			r.logger.Warn("vector store search failed, falling back to in-memory", zap.Error(err))
-		} else {
-			for _, result := range results {
-				scores[result.Document.ID] = result.Score
-			}
+			r.logger.Warn("vector store search failed", zap.Error(err))
 			return scores
 		}
+		for _, result := range results {
+			scores[result.Document.ID] = result.Score
+		}
+		return scores
 	}
 
-	// 回退到内存搜索
+	// 使用内存向量作为主路径（未配置向量存储时）
 	for _, doc := range r.documents {
 		if doc.Embedding == nil {
 			continue
@@ -326,6 +323,13 @@ func (r *HybridRetriever) vectorRetrieve(queryEmbedding []float64) map[string]fl
 	}
 
 	return scores
+}
+
+func (r *HybridRetriever) buildDocIndex() {
+	r.docIDIndex = make(map[string]int, len(r.documents))
+	for i, doc := range r.documents {
+		r.docIDIndex[doc.ID] = i
+	}
 }
 
 // cosineSimilarity 计算余弦相似度
@@ -472,19 +476,8 @@ func (r *HybridRetriever) tokenize(text string) []string {
 // getDocumentByID 根据 ID 获取文档
 // 🚀 性能优化：使用索引实现 O(1) 查找，替代原来的 O(n) 线性扫描
 func (r *HybridRetriever) getDocumentByID(id string) *Document {
-	// 优先使用索引（O(1) 查找）
-	if r.docIDIndex != nil {
-		if idx, ok := r.docIDIndex[id]; ok && idx < len(r.documents) {
-			return &r.documents[idx]
-		}
-		return nil
-	}
-
-	// 回退到线性扫描（兼容未建立索引的情况）
-	for i := range r.documents {
-		if r.documents[i].ID == id {
-			return &r.documents[i]
-		}
+	if idx, ok := r.docIDIndex[id]; ok && idx < len(r.documents) {
+		return &r.documents[idx]
 	}
 	return nil
 }

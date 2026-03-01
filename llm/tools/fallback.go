@@ -60,6 +60,9 @@ func NewResilientExecutor(registry ToolRegistry, config *FallbackConfig, logger 
 	if config == nil {
 		config = DefaultFallbackConfig()
 	}
+	if logger == nil {
+		logger = zap.NewNop()
+	}
 	return &ResilientExecutor{
 		registry: registry,
 		config:   config,
@@ -98,8 +101,8 @@ func (e *ResilientExecutor) executeWithFallback(ctx context.Context, call llmpkg
 			return execResult
 		}
 
-		// 判断回退策略
-		strategy := e.determineStrategy(call.Name, execResult.Error)
+		// 统一回退策略决策入口
+		strategy, altTool := e.resolveFallback(call.Name, execResult.Error)
 		e.logger.Warn("tool execution failed",
 			zap.String("tool", call.Name),
 			zap.Int("attempt", attempt),
@@ -113,14 +116,14 @@ func (e *ResilientExecutor) executeWithFallback(ctx context.Context, call llmpkg
 				continue
 			}
 			// 重试次数用尽，尝试备用工具
-			if alt := e.getAlternate(call.Name); alt != "" {
-				return e.executeAlternate(ctx, call, alt, start)
+			if altTool != "" {
+				return e.executeAlternate(ctx, call, altTool, start)
 			}
 			result = execResult
 
 		case FallbackAlternate:
-			if alt := e.getAlternate(call.Name); alt != "" {
-				return e.executeAlternate(ctx, call, alt, start)
+			if altTool != "" {
+				return e.executeAlternate(ctx, call, altTool, start)
 			}
 			result = execResult
 
@@ -137,6 +140,14 @@ func (e *ResilientExecutor) executeWithFallback(ctx context.Context, call llmpkg
 
 	result.Duration = time.Since(start)
 	return result
+}
+
+func (e *ResilientExecutor) resolveFallback(toolName, errMsg string) (FallbackStrategy, string) {
+	strategy := e.determineStrategy(toolName, errMsg)
+	if strategy == FallbackAlternate || strategy == FallbackRetry {
+		return strategy, e.getAlternate(toolName)
+	}
+	return strategy, ""
 }
 
 func (e *ResilientExecutor) tryExecute(ctx context.Context, call llmpkg.ToolCall) llmpkg.ToolResult {

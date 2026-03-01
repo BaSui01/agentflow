@@ -6,7 +6,9 @@ import (
 	"github.com/BaSui01/agentflow/config"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
+	"gorm.io/driver/mysql"
 	"gorm.io/driver/postgres"
+	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
 
@@ -93,8 +95,12 @@ func OpenDatabase(dbCfg config.DatabaseConfig, logger *zap.Logger) (*gorm.DB, er
 	switch dbCfg.Driver {
 	case "postgres":
 		dialector = postgres.Open(dbCfg.DSN())
+	case "mysql":
+		dialector = mysql.Open(dbCfg.DSN())
+	case "sqlite":
+		dialector = sqlite.Open(dbCfg.DSN())
 	default:
-		return nil, fmt.Errorf("unsupported database driver: %s (supported: postgres)", dbCfg.Driver)
+		return nil, fmt.Errorf("unsupported database driver: %s (supported: postgres, mysql, sqlite)", dbCfg.Driver)
 	}
 
 	db, err := gorm.Open(dialector, &gorm.Config{})
@@ -105,4 +111,3 @@ func OpenDatabase(dbCfg config.DatabaseConfig, logger *zap.Logger) (*gorm.DB, er
 	logger.Info("Database connected", zap.String("driver", dbCfg.Driver))
 	return db, nil
 }
-

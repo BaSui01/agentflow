@@ -134,13 +134,12 @@ func (l *JSONLoader) extractContent(obj map[string]any) string {
 		if val, ok := obj[l.config.ContentField]; ok {
 			return fmt.Sprintf("%v", val)
 		}
+		return ""
 	}
-	// Fallback: serialize the whole object.
-	data, err := json.Marshal(obj)
-	if err != nil {
-		return fmt.Sprintf("%v", obj)
+	if val, ok := obj["content"]; ok {
+		return fmt.Sprintf("%v", val)
 	}
-	return string(data)
+	return ""
 }
 
 // extractID gets the ID from a JSON object or generates one.

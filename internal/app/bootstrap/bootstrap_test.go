@@ -42,10 +42,9 @@ func TestNewLogger_FallbackOnInvalidOutputPath(t *testing.T) {
 func TestOpenDatabase_UnsupportedDriver(t *testing.T) {
 	logger := zap.NewNop()
 	db, err := OpenDatabase(config.DatabaseConfig{
-		Driver: "sqlite",
+		Driver: "oracle",
 	}, logger)
 	require.Error(t, err)
 	require.Nil(t, db)
 	require.Contains(t, err.Error(), "unsupported database driver")
 }
-
