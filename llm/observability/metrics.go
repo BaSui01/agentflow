@@ -29,7 +29,6 @@ type Metrics struct {
 	costPerRequest  metric.Float64Histogram
 	// 高地语
 	activeRequests metric.Int64UpDownCounter
-	circuitState   metric.Int64ObservableGauge
 }
 
 // NewMetrics 创建指标收集器
