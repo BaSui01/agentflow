@@ -360,7 +360,7 @@ func TestParallel_ConcurrencySafety(t *testing.T) {
 }
 
 // ============================================================================
-// Backward compatibility — existing modes unaffected
+// Existing modes remain unaffected
 // ============================================================================
 
 func TestTripwire_BackwardCompatibility_NoTripwire(t *testing.T) {

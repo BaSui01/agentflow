@@ -10,7 +10,7 @@ import (
 	"go.uber.org/zap"
 )
 
-// TestToolProvider_NilFallback 不设置 toolProvider 时，所有调用走 provider（向后兼容）
+// TestToolProvider_NilFallback 不设置 toolProvider 时，所有调用走 provider
 func TestToolProvider_NilFallback(t *testing.T) {
 	logger := zap.NewNop()
 
@@ -254,7 +254,7 @@ func TestToolProvider_FunctionCallingValidation_NilToolProvider(t *testing.T) {
 	assert.Contains(t, err.Error(), "main-no-fc")
 }
 
-// TestToolProvider_BuilderWithoutToolProvider Builder 不设置 toolProvider 时向后兼容
+// TestToolProvider_BuilderWithoutToolProvider Builder 不设置 toolProvider
 func TestToolProvider_BuilderWithoutToolProvider(t *testing.T) {
 	logger := zap.NewNop()
 	mainProvider := &testProvider{name: "main"}
@@ -274,5 +274,5 @@ func TestToolProvider_BuilderWithoutToolProvider(t *testing.T) {
 	assert.NoError(t, err)
 	assert.NotNil(t, agent)
 	assert.Equal(t, mainProvider, agent.Provider())
-	assert.Nil(t, agent.ToolProvider(), "不设置 toolProvider 时应为 nil（向后兼容）")
+	assert.Nil(t, agent.ToolProvider(), "不设置 toolProvider 时应为 nil")
 }

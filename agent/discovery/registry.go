@@ -38,7 +38,7 @@ type CapabilityRegistry struct {
 
 	// store is an optional persistence backend. When non-nil, agent data is
 	// also persisted through this store. When nil, the registry operates
-	// purely in-memory (preserving backward compatibility).
+	// purely in-memory.
 	store RegistryStore
 
 	// logger 是日志实例 。

@@ -492,7 +492,7 @@ func (b *BaseAgent) loadPromptFromStore(ctx context.Context) {
 
 	doc, err := b.promptStore.GetActive(ctx, agentType, name, tenantID)
 	if err != nil {
-		// Not found or error — keep existing config prompt (backward compatible).
+		// Not found or error — keep existing config prompt.
 		b.logger.Debug("no active prompt in store, using config default",
 			zap.String("agent_type", agentType),
 			zap.String("name", name),
