@@ -1,7 +1,6 @@
 package workflow
 
 import (
-	"github.com/BaSui01/agentflow/types"
 	"encoding/json"
 	"fmt"
 	"time"
@@ -273,5 +272,3 @@ func (vw *VisualWorkflow) Validate() error {
 
 	return nil
 }
-
-

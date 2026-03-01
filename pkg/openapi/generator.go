@@ -1,7 +1,6 @@
 package openapi
 
 import (
-	"github.com/BaSui01/agentflow/types"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -13,7 +12,7 @@ import (
 	"time"
 
 	"github.com/BaSui01/agentflow/pkg/tlsutil"
-	"github.com/BaSui01/agentflow/llm"
+	"github.com/BaSui01/agentflow/types"
 	"go.uber.org/zap"
 )
 
@@ -101,14 +100,14 @@ type JSONSchema struct {
 
 // GeneratedTool represents a tool generated from OpenAPI.
 type GeneratedTool struct {
-	Name        string         `json:"name"`
-	Description string         `json:"description"`
+	Name        string           `json:"name"`
+	Description string           `json:"description"`
 	Schema      types.ToolSchema `json:"schema"`
-	Method      string         `json:"method"`
-	Path        string         `json:"path"`
-	BaseURL     string         `json:"base_url"`
-	Parameters  []Parameter    `json:"parameters"`
-	RequestBody *RequestBody   `json:"request_body,omitempty"`
+	Method      string           `json:"method"`
+	Path        string           `json:"path"`
+	BaseURL     string           `json:"base_url"`
+	Parameters  []Parameter      `json:"parameters"`
+	RequestBody *RequestBody     `json:"request_body,omitempty"`
 }
 
 // Generator generates tools from OpenAPI specifications.
@@ -332,5 +331,3 @@ func sanitizePath(path string) string {
 	path = strings.Trim(path, "_")
 	return path
 }
-
-

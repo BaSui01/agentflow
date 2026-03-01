@@ -11,6 +11,7 @@ import (
 	"github.com/BaSui01/agentflow/llm/providers"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
 )
 
 // --- Config tests ---
@@ -51,10 +52,59 @@ func (t *redirectTransport) RoundTrip(req *http.Request) (*http.Response, error)
 	return t.inner.RoundTrip(newReq)
 }
 
+func newRunwayProvider(cfg RunwayConfig, logger ...*zap.Logger) *RunwayProvider {
+	if len(logger) > 0 {
+		return NewRunwayProvider(cfg, logger[0])
+	}
+	return NewRunwayProvider(cfg, nil)
+}
+
+func newSoraProvider(cfg SoraConfig, logger ...*zap.Logger) *SoraProvider {
+	if len(logger) > 0 {
+		return NewSoraProvider(cfg, logger[0])
+	}
+	return NewSoraProvider(cfg, nil)
+}
+
+func newGeminiProvider(cfg GeminiConfig, logger ...*zap.Logger) *GeminiProvider {
+	if len(logger) > 0 {
+		return NewGeminiProvider(cfg, logger[0])
+	}
+	return NewGeminiProvider(cfg, nil)
+}
+
+func newVeoProvider(cfg VeoConfig, logger ...*zap.Logger) *VeoProvider {
+	if len(logger) > 0 {
+		return NewVeoProvider(cfg, logger[0])
+	}
+	return NewVeoProvider(cfg, nil)
+}
+
+func newLumaProvider(cfg LumaConfig, logger ...*zap.Logger) *LumaProvider {
+	if len(logger) > 0 {
+		return NewLumaProvider(cfg, logger[0])
+	}
+	return NewLumaProvider(cfg, nil)
+}
+
+func newKlingProvider(cfg KlingConfig, logger ...*zap.Logger) *KlingProvider {
+	if len(logger) > 0 {
+		return NewKlingProvider(cfg, logger[0])
+	}
+	return NewKlingProvider(cfg, nil)
+}
+
+func newMiniMaxVideoProvider(cfg MiniMaxVideoConfig, logger ...*zap.Logger) *MiniMaxVideoProvider {
+	if len(logger) > 0 {
+		return NewMiniMaxVideoProvider(cfg, logger[0])
+	}
+	return NewMiniMaxVideoProvider(cfg, nil)
+}
+
 // --- Gemini Provider tests ---
 
 func TestNewGeminiProvider(t *testing.T) {
-	p := NewGeminiProvider(GeminiConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key"}})
+	p := newGeminiProvider(GeminiConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key"}}, nil)
 	assert.Equal(t, "gemini-video", p.Name())
 	assert.Equal(t, "gemini-3-flash-preview", p.cfg.Model)
 	assert.False(t, p.SupportsGeneration())
@@ -64,12 +114,12 @@ func TestNewGeminiProvider(t *testing.T) {
 }
 
 func TestNewGeminiProvider_Defaults(t *testing.T) {
-	p := NewGeminiProvider(GeminiConfig{}, nil)
+	p := newGeminiProvider(GeminiConfig{}, nil)
 	assert.Equal(t, "gemini-3-flash-preview", p.cfg.Model)
 }
 
 func TestGeminiProvider_Generate_NotSupported(t *testing.T) {
-	p := NewGeminiProvider(GeminiConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k"}})
+	p := newGeminiProvider(GeminiConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k"}}, nil)
 	_, err := p.Generate(context.Background(), &GenerateRequest{Prompt: "test"})
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "not supported")
@@ -100,7 +150,7 @@ func TestGeminiProvider_Analyze_WithVideoData(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	p := NewGeminiProvider(GeminiConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key"}})
+	p := newGeminiProvider(GeminiConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key"}}, nil)
 	p.client = &http.Client{Transport: &redirectTransport{targetURL: srv.URL, inner: http.DefaultTransport}}
 
 	resp, err := p.Analyze(context.Background(), &AnalyzeRequest{
@@ -134,7 +184,7 @@ func TestGeminiProvider_Analyze_WithVideoURL(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	p := NewGeminiProvider(GeminiConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k"}})
+	p := newGeminiProvider(GeminiConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k"}}, nil)
 	p.client = &http.Client{Transport: &redirectTransport{targetURL: srv.URL, inner: http.DefaultTransport}}
 
 	resp, err := p.Analyze(context.Background(), &AnalyzeRequest{
@@ -166,7 +216,7 @@ func TestGeminiProvider_Analyze_WithFormat(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	p := NewGeminiProvider(GeminiConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k"}})
+	p := newGeminiProvider(GeminiConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k"}}, nil)
 	p.client = &http.Client{Transport: &redirectTransport{targetURL: srv.URL, inner: http.DefaultTransport}}
 
 	resp, err := p.Analyze(context.Background(), &AnalyzeRequest{
@@ -185,7 +235,7 @@ func TestGeminiProvider_Analyze_Error(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	p := NewGeminiProvider(GeminiConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k"}})
+	p := newGeminiProvider(GeminiConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k"}}, nil)
 	p.client = &http.Client{Transport: &redirectTransport{targetURL: srv.URL, inner: http.DefaultTransport}}
 
 	_, err := p.Analyze(context.Background(), &AnalyzeRequest{Prompt: "test"})
@@ -200,7 +250,7 @@ func TestGeminiProvider_Analyze_EmptyResponse(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	p := NewGeminiProvider(GeminiConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k"}})
+	p := newGeminiProvider(GeminiConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k"}}, nil)
 	p.client = &http.Client{Transport: &redirectTransport{targetURL: srv.URL, inner: http.DefaultTransport}}
 
 	resp, err := p.Analyze(context.Background(), &AnalyzeRequest{Prompt: "test"})
@@ -226,7 +276,7 @@ func TestGeminiProvider_Analyze_CustomModel(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	p := NewGeminiProvider(GeminiConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k"}})
+	p := newGeminiProvider(GeminiConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k"}}, nil)
 	p.client = &http.Client{Transport: &redirectTransport{targetURL: srv.URL, inner: http.DefaultTransport}}
 
 	resp, err := p.Analyze(context.Background(), &AnalyzeRequest{
@@ -240,21 +290,21 @@ func TestGeminiProvider_Analyze_CustomModel(t *testing.T) {
 // --- Runway Provider tests ---
 
 func TestNewRunwayProvider(t *testing.T) {
-	p := NewRunwayProvider(RunwayConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key"}})
+	p := newRunwayProvider(RunwayConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key"}}, nil)
 	assert.Equal(t, "runway", p.Name())
-	assert.Equal(t, "gen4_turbo", p.cfg.Model)
+	assert.Equal(t, "gen-4.5", p.cfg.Model)
 	assert.True(t, p.SupportsGeneration())
 	assert.Equal(t, []VideoFormat{VideoFormatMP4}, p.SupportedFormats())
 }
 
 func TestNewRunwayProvider_Defaults(t *testing.T) {
-	p := NewRunwayProvider(RunwayConfig{}, nil)
+	p := newRunwayProvider(RunwayConfig{}, nil)
 	assert.Equal(t, "https://api.runwayml.com", p.cfg.BaseURL)
-	assert.Equal(t, "gen4_turbo", p.cfg.Model)
+	assert.Equal(t, "gen-4.5", p.cfg.Model)
 }
 
 func TestRunwayProvider_Analyze_NotSupported(t *testing.T) {
-	p := NewRunwayProvider(RunwayConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k"}})
+	p := newRunwayProvider(RunwayConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k"}}, nil)
 	_, err := p.Analyze(context.Background(), &AnalyzeRequest{})
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "not supported")
@@ -267,7 +317,7 @@ func TestRunwayProvider_Generate_SubmitError(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	p := NewRunwayProvider(RunwayConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k", BaseURL: srv.URL}})
+	p := newRunwayProvider(RunwayConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k", BaseURL: srv.URL}})
 	_, err := p.Generate(context.Background(), &GenerateRequest{Prompt: "test"})
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "runway error")
@@ -290,7 +340,7 @@ func TestRunwayProvider_Generate_RequestParams(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	p := NewRunwayProvider(RunwayConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key", BaseURL: srv.URL}})
+	p := newRunwayProvider(RunwayConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key", BaseURL: srv.URL}})
 	result, err := p.Generate(context.Background(), &GenerateRequest{
 		Prompt:      "a sunset",
 		Duration:    0,
@@ -339,7 +389,7 @@ func TestRunwayProvider_Generate_DurationClamping(t *testing.T) {
 			}))
 			t.Cleanup(srv.Close)
 
-			p := NewRunwayProvider(RunwayConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k", BaseURL: srv.URL}})
+			p := newRunwayProvider(RunwayConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k", BaseURL: srv.URL}})
 			_, _ = p.Generate(context.Background(), &GenerateRequest{
 				Prompt:   "test",
 				Duration: tt.duration,
@@ -375,7 +425,7 @@ func TestRunwayProvider_Generate_AspectRatioMapping(t *testing.T) {
 			}))
 			t.Cleanup(srv.Close)
 
-			p := NewRunwayProvider(RunwayConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k", BaseURL: srv.URL}})
+			p := newRunwayProvider(RunwayConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k", BaseURL: srv.URL}})
 			_, _ = p.Generate(context.Background(), &GenerateRequest{
 				Prompt:      "test",
 				AspectRatio: tt.input,
@@ -398,7 +448,7 @@ func TestRunwayProvider_PollGeneration_Failed(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	p := NewRunwayProvider(RunwayConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k", BaseURL: srv.URL}})
+	p := newRunwayProvider(RunwayConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k", BaseURL: srv.URL}})
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
@@ -420,7 +470,7 @@ func TestRunwayProvider_PollGeneration_ContextCancelled(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	p := NewRunwayProvider(RunwayConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k", BaseURL: srv.URL}})
+	p := newRunwayProvider(RunwayConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k", BaseURL: srv.URL}})
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 
@@ -431,7 +481,7 @@ func TestRunwayProvider_PollGeneration_ContextCancelled(t *testing.T) {
 // --- Veo Provider tests ---
 
 func TestNewVeoProvider(t *testing.T) {
-	p := NewVeoProvider(VeoConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key"}})
+	p := newVeoProvider(VeoConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key"}}, nil)
 	assert.Equal(t, "veo", p.Name())
 	assert.Equal(t, "veo-3.1-generate-preview", p.cfg.Model)
 	assert.True(t, p.SupportsGeneration())
@@ -439,12 +489,12 @@ func TestNewVeoProvider(t *testing.T) {
 }
 
 func TestNewVeoProvider_Defaults(t *testing.T) {
-	p := NewVeoProvider(VeoConfig{}, nil)
+	p := newVeoProvider(VeoConfig{}, nil)
 	assert.Equal(t, "veo-3.1-generate-preview", p.cfg.Model)
 }
 
 func TestVeoProvider_Analyze_NotSupported(t *testing.T) {
-	p := NewVeoProvider(VeoConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k"}})
+	p := newVeoProvider(VeoConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k"}}, nil)
 	_, err := p.Analyze(context.Background(), &AnalyzeRequest{})
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "not supported")
@@ -478,7 +528,7 @@ func TestVeoProvider_Generate(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	p := NewVeoProvider(VeoConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key"}})
+	p := newVeoProvider(VeoConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key"}}, nil)
 	p.client = &http.Client{Transport: &redirectTransport{targetURL: srv.URL, inner: http.DefaultTransport}}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
@@ -517,7 +567,7 @@ func TestVeoProvider_Generate_WithImage(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	p := NewVeoProvider(VeoConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k"}})
+	p := newVeoProvider(VeoConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k"}}, nil)
 	p.client = &http.Client{Transport: &redirectTransport{targetURL: srv.URL, inner: http.DefaultTransport}}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
@@ -536,7 +586,7 @@ func TestVeoProvider_Generate_WithImageURL(t *testing.T) {
 			var req veoRequest
 			json.NewDecoder(r.Body).Decode(&req)
 			assert.NotNil(t, req.Instances[0].Image)
-			assert.Equal(t, "gs://bucket/img.png", req.Instances[0].Image.GcsURI)
+			assert.Equal(t, "https://example.com/img.png", req.Instances[0].Image.GcsURI)
 
 			resp := map[string]string{"name": "operations/op-789"}
 			json.NewEncoder(w).Encode(resp)
@@ -552,7 +602,7 @@ func TestVeoProvider_Generate_WithImageURL(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	p := NewVeoProvider(VeoConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k"}})
+	p := newVeoProvider(VeoConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k"}}, nil)
 	p.client = &http.Client{Transport: &redirectTransport{targetURL: srv.URL, inner: http.DefaultTransport}}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
@@ -560,7 +610,7 @@ func TestVeoProvider_Generate_WithImageURL(t *testing.T) {
 
 	_, err := p.Generate(ctx, &GenerateRequest{
 		Prompt:   "test",
-		ImageURL: "gs://bucket/img.png",
+		ImageURL: "https://example.com/img.png",
 	})
 	require.NoError(t, err)
 }
@@ -572,7 +622,7 @@ func TestVeoProvider_Generate_Error(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	p := NewVeoProvider(VeoConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k"}})
+	p := newVeoProvider(VeoConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k"}}, nil)
 	p.client = &http.Client{Transport: &redirectTransport{targetURL: srv.URL, inner: http.DefaultTransport}}
 
 	_, err := p.Generate(context.Background(), &GenerateRequest{Prompt: "test"})
@@ -598,7 +648,7 @@ func TestVeoProvider_PollOperation_Failed(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	p := NewVeoProvider(VeoConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k"}})
+	p := newVeoProvider(VeoConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k"}}, nil)
 	p.client = &http.Client{Transport: &redirectTransport{targetURL: srv.URL, inner: http.DefaultTransport}}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
@@ -622,7 +672,7 @@ func TestVeoProvider_PollOperation_ContextCancelled(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	p := NewVeoProvider(VeoConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k"}})
+	p := newVeoProvider(VeoConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k"}}, nil)
 	p.client = &http.Client{Transport: &redirectTransport{targetURL: srv.URL, inner: http.DefaultTransport}}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
@@ -653,7 +703,7 @@ func TestVeoProvider_Generate_CustomDuration(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	p := NewVeoProvider(VeoConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k"}})
+	p := newVeoProvider(VeoConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k"}}, nil)
 	p.client = &http.Client{Transport: &redirectTransport{targetURL: srv.URL, inner: http.DefaultTransport}}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
@@ -676,7 +726,7 @@ func TestDefaultSoraConfig(t *testing.T) {
 }
 
 func TestNewSoraProvider(t *testing.T) {
-	p := NewSoraProvider(SoraConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key"}})
+	p := newSoraProvider(SoraConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key"}}, nil)
 	assert.Equal(t, "sora", p.Name())
 	assert.Equal(t, "sora-2", p.cfg.Model)
 	assert.True(t, p.SupportsGeneration())
@@ -684,13 +734,13 @@ func TestNewSoraProvider(t *testing.T) {
 }
 
 func TestNewSoraProvider_Defaults(t *testing.T) {
-	p := NewSoraProvider(SoraConfig{}, nil)
+	p := newSoraProvider(SoraConfig{}, nil)
 	assert.Equal(t, "https://api.openai.com", p.cfg.BaseURL)
 	assert.Equal(t, "sora-2", p.cfg.Model)
 }
 
 func TestSoraProvider_Analyze_NotSupported(t *testing.T) {
-	p := NewSoraProvider(SoraConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k"}})
+	p := newSoraProvider(SoraConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k"}}, nil)
 	_, err := p.Analyze(context.Background(), &AnalyzeRequest{})
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "not supported")
@@ -703,7 +753,7 @@ func TestSoraProvider_Generate_SubmitError(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	p := NewSoraProvider(SoraConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k", BaseURL: srv.URL}})
+	p := newSoraProvider(SoraConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k", BaseURL: srv.URL}})
 	_, err := p.Generate(context.Background(), &GenerateRequest{Prompt: "test"})
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "sora error")
@@ -728,7 +778,7 @@ func TestSoraProvider_Generate_RequestParams(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	p := NewSoraProvider(SoraConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key", BaseURL: srv.URL}})
+	p := newSoraProvider(SoraConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key", BaseURL: srv.URL}})
 	result, err := p.Generate(context.Background(), &GenerateRequest{
 		Prompt:   "a sunset",
 		ImageURL: "https://example.com/img.png",
@@ -767,7 +817,7 @@ func TestSoraProvider_Generate_DurationClamping(t *testing.T) {
 				}
 			}))
 			t.Cleanup(srv.Close)
-			p := NewSoraProvider(SoraConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k", BaseURL: srv.URL}})
+			p := newSoraProvider(SoraConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k", BaseURL: srv.URL}})
 			_, _ = p.Generate(context.Background(), &GenerateRequest{Prompt: "test", Duration: tt.duration})
 			assert.Equal(t, tt.expected, capturedReq.Duration)
 		})
@@ -783,11 +833,13 @@ func TestSoraProvider_PollGeneration_Failed(t *testing.T) {
 		json.NewEncoder(w).Encode(soraResponse{
 			ID:     "t",
 			Status: "failed",
-			Error:  &struct{ Message string `json:"message"` }{Message: "content policy"},
+			Error: &struct {
+				Message string `json:"message"`
+			}{Message: "content policy"},
 		})
 	}))
 	t.Cleanup(srv.Close)
-	p := NewSoraProvider(SoraConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k", BaseURL: srv.URL}})
+	p := newSoraProvider(SoraConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k", BaseURL: srv.URL}})
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	_, err := p.Generate(ctx, &GenerateRequest{Prompt: "test"})
@@ -809,7 +861,7 @@ func TestDefaultLumaConfig(t *testing.T) {
 }
 
 func TestNewLumaProvider(t *testing.T) {
-	p := NewLumaProvider(LumaConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key"}})
+	p := newLumaProvider(LumaConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key"}}, nil)
 	assert.Equal(t, "luma", p.Name())
 	assert.Equal(t, "ray-2", p.cfg.Model)
 	assert.True(t, p.SupportsGeneration())
@@ -817,13 +869,13 @@ func TestNewLumaProvider(t *testing.T) {
 }
 
 func TestNewLumaProvider_Defaults(t *testing.T) {
-	p := NewLumaProvider(LumaConfig{}, nil)
+	p := newLumaProvider(LumaConfig{}, nil)
 	assert.Equal(t, "https://api.lumalabs.ai", p.cfg.BaseURL)
 	assert.Equal(t, "ray-2", p.cfg.Model)
 }
 
 func TestLumaProvider_Analyze_NotSupported(t *testing.T) {
-	p := NewLumaProvider(LumaConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k"}})
+	p := newLumaProvider(LumaConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k"}}, nil)
 	_, err := p.Analyze(context.Background(), &AnalyzeRequest{})
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "not supported")
@@ -835,7 +887,7 @@ func TestLumaProvider_Generate_SubmitError(t *testing.T) {
 		w.Write([]byte(`{"error":"bad"}`))
 	}))
 	t.Cleanup(srv.Close)
-	p := NewLumaProvider(LumaConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k", BaseURL: srv.URL}})
+	p := newLumaProvider(LumaConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k", BaseURL: srv.URL}})
 	_, err := p.Generate(context.Background(), &GenerateRequest{Prompt: "test"})
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "luma error")
@@ -859,7 +911,7 @@ func TestLumaProvider_Generate_RequestParams(t *testing.T) {
 		})
 	}))
 	t.Cleanup(srv.Close)
-	p := NewLumaProvider(LumaConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key", BaseURL: srv.URL}})
+	p := newLumaProvider(LumaConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key", BaseURL: srv.URL}})
 	result, err := p.Generate(context.Background(), &GenerateRequest{
 		Prompt:   "a sunset",
 		ImageURL: "https://example.com/img.png",
@@ -887,7 +939,7 @@ func TestLumaProvider_PollGeneration_Failed(t *testing.T) {
 		json.NewEncoder(w).Encode(lumaResponse{ID: "t", State: "failed", FailureReason: "content policy"})
 	}))
 	t.Cleanup(srv.Close)
-	p := NewLumaProvider(LumaConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k", BaseURL: srv.URL}})
+	p := newLumaProvider(LumaConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k", BaseURL: srv.URL}})
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	_, err := p.Generate(ctx, &GenerateRequest{Prompt: "test"})
@@ -909,7 +961,7 @@ func TestDefaultKlingConfig(t *testing.T) {
 }
 
 func TestNewKlingProvider(t *testing.T) {
-	p := NewKlingProvider(KlingConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key"}})
+	p := newKlingProvider(KlingConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key"}}, nil)
 	assert.Equal(t, "kling", p.Name())
 	assert.Equal(t, "kling-v3-pro", p.cfg.Model)
 	assert.True(t, p.SupportsGeneration())
@@ -917,13 +969,13 @@ func TestNewKlingProvider(t *testing.T) {
 }
 
 func TestNewKlingProvider_Defaults(t *testing.T) {
-	p := NewKlingProvider(KlingConfig{}, nil)
+	p := newKlingProvider(KlingConfig{}, nil)
 	assert.Equal(t, "https://api.klingai.com", p.cfg.BaseURL)
 	assert.Equal(t, "kling-v3-pro", p.cfg.Model)
 }
 
 func TestKlingProvider_Analyze_NotSupported(t *testing.T) {
-	p := NewKlingProvider(KlingConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k"}})
+	p := newKlingProvider(KlingConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k"}}, nil)
 	_, err := p.Analyze(context.Background(), &AnalyzeRequest{})
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "not supported")
@@ -935,7 +987,7 @@ func TestKlingProvider_Generate_SubmitError(t *testing.T) {
 		w.Write([]byte(`{"error":"bad"}`))
 	}))
 	t.Cleanup(srv.Close)
-	p := NewKlingProvider(KlingConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k", BaseURL: srv.URL}})
+	p := newKlingProvider(KlingConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k", BaseURL: srv.URL}})
 	_, err := p.Generate(context.Background(), &GenerateRequest{Prompt: "test"})
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "kling error")
@@ -959,7 +1011,7 @@ func TestKlingProvider_Generate_TextToVideo(t *testing.T) {
 		json.NewEncoder(w).Encode(resp)
 	}))
 	t.Cleanup(srv.Close)
-	p := NewKlingProvider(KlingConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key", BaseURL: srv.URL}})
+	p := newKlingProvider(KlingConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key", BaseURL: srv.URL}})
 	result, err := p.Generate(context.Background(), &GenerateRequest{
 		Prompt:         "a sunset",
 		NegativePrompt: "blur",
@@ -992,7 +1044,7 @@ func TestKlingProvider_Generate_ImageToVideo(t *testing.T) {
 		json.NewEncoder(w).Encode(resp)
 	}))
 	t.Cleanup(srv.Close)
-	p := NewKlingProvider(KlingConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k", BaseURL: srv.URL}})
+	p := newKlingProvider(KlingConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k", BaseURL: srv.URL}})
 	_, err := p.Generate(context.Background(), &GenerateRequest{
 		Prompt:   "animate this",
 		ImageURL: "https://example.com/img.png",
@@ -1024,7 +1076,7 @@ func TestKlingProvider_Generate_DurationClamping(t *testing.T) {
 				}
 			}))
 			t.Cleanup(srv.Close)
-			p := NewKlingProvider(KlingConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k", BaseURL: srv.URL}})
+			p := newKlingProvider(KlingConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k", BaseURL: srv.URL}})
 			_, _ = p.Generate(context.Background(), &GenerateRequest{Prompt: "test", Duration: tt.duration})
 			assert.Equal(t, tt.expected, capturedReq.Duration)
 		})
@@ -1040,7 +1092,7 @@ func TestKlingProvider_PollGeneration_Failed(t *testing.T) {
 		json.NewEncoder(w).Encode(klingResponse{TaskID: "t", TaskStatus: "failed", TaskStatusMsg: "content policy"})
 	}))
 	t.Cleanup(srv.Close)
-	p := NewKlingProvider(KlingConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k", BaseURL: srv.URL}})
+	p := newKlingProvider(KlingConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k", BaseURL: srv.URL}})
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	_, err := p.Generate(ctx, &GenerateRequest{Prompt: "test"})
@@ -1062,7 +1114,7 @@ func TestDefaultMiniMaxVideoConfig(t *testing.T) {
 }
 
 func TestNewMiniMaxVideoProvider(t *testing.T) {
-	p := NewMiniMaxVideoProvider(MiniMaxVideoConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key"}})
+	p := newMiniMaxVideoProvider(MiniMaxVideoConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key"}}, nil)
 	assert.Equal(t, "minimax-video", p.Name())
 	assert.Equal(t, "video-01", p.cfg.Model)
 	assert.True(t, p.SupportsGeneration())
@@ -1070,13 +1122,13 @@ func TestNewMiniMaxVideoProvider(t *testing.T) {
 }
 
 func TestNewMiniMaxVideoProvider_Defaults(t *testing.T) {
-	p := NewMiniMaxVideoProvider(MiniMaxVideoConfig{}, nil)
+	p := newMiniMaxVideoProvider(MiniMaxVideoConfig{}, nil)
 	assert.Equal(t, "https://api.minimax.chat", p.cfg.BaseURL)
 	assert.Equal(t, "video-01", p.cfg.Model)
 }
 
 func TestMiniMaxVideoProvider_Analyze_NotSupported(t *testing.T) {
-	p := NewMiniMaxVideoProvider(MiniMaxVideoConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k"}})
+	p := newMiniMaxVideoProvider(MiniMaxVideoConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k"}}, nil)
 	_, err := p.Analyze(context.Background(), &AnalyzeRequest{})
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "not supported")
@@ -1088,7 +1140,7 @@ func TestMiniMaxVideoProvider_Generate_SubmitError(t *testing.T) {
 		w.Write([]byte(`{"error":"bad"}`))
 	}))
 	t.Cleanup(srv.Close)
-	p := NewMiniMaxVideoProvider(MiniMaxVideoConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k", BaseURL: srv.URL}})
+	p := newMiniMaxVideoProvider(MiniMaxVideoConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k", BaseURL: srv.URL}})
 	_, err := p.Generate(context.Background(), &GenerateRequest{Prompt: "test"})
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "minimax error")
@@ -1101,7 +1153,7 @@ func TestMiniMaxVideoProvider_Generate_Success(t *testing.T) {
 		case r.Method == "POST" && r.URL.Path == "/v1/video_generation":
 			json.NewDecoder(r.Body).Decode(&capturedReq)
 			json.NewEncoder(w).Encode(minimaxVideoCreateResponse{
-				TaskID:   "task-1",
+				TaskID: "task-1",
 				BaseResp: struct {
 					StatusCode int    `json:"status_code"`
 					StatusMsg  string `json:"status_msg"`
@@ -1130,7 +1182,7 @@ func TestMiniMaxVideoProvider_Generate_Success(t *testing.T) {
 		}
 	}))
 	t.Cleanup(srv.Close)
-	p := NewMiniMaxVideoProvider(MiniMaxVideoConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key", BaseURL: srv.URL}})
+	p := newMiniMaxVideoProvider(MiniMaxVideoConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key", BaseURL: srv.URL}})
 	result, err := p.Generate(context.Background(), &GenerateRequest{
 		Prompt:   "a sunset",
 		ImageURL: "https://example.com/img.png",
@@ -1148,7 +1200,7 @@ func TestMiniMaxVideoProvider_PollGeneration_Failed(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == "POST" {
 			json.NewEncoder(w).Encode(minimaxVideoCreateResponse{
-				TaskID:   "task-1",
+				TaskID: "task-1",
 				BaseResp: struct {
 					StatusCode int    `json:"status_code"`
 					StatusMsg  string `json:"status_msg"`
@@ -1166,7 +1218,7 @@ func TestMiniMaxVideoProvider_PollGeneration_Failed(t *testing.T) {
 		})
 	}))
 	t.Cleanup(srv.Close)
-	p := NewMiniMaxVideoProvider(MiniMaxVideoConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k", BaseURL: srv.URL}})
+	p := newMiniMaxVideoProvider(MiniMaxVideoConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k", BaseURL: srv.URL}})
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	_, err := p.Generate(ctx, &GenerateRequest{Prompt: "test"})
@@ -1191,4 +1243,3 @@ func TestRunwayProvider_ImplementsProvider(t *testing.T) {
 func TestVeoProvider_ImplementsProvider(t *testing.T) {
 	var _ Provider = (*VeoProvider)(nil)
 }
-

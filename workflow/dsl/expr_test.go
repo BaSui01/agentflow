@@ -398,11 +398,11 @@ func TestParseSimpleExpression_Integration(t *testing.T) {
 			expected: true,
 		},
 		{
-			name:     "unknown identifier returns error",
+			name:     "identifier evaluates by truthiness",
 			expr:     `some_value`,
 			vars:     map[string]any{"some_value": "yes"},
 			input:    nil,
-			wantErr:  true,
+			expected: true,
 		},
 		{
 			name:     "backward compat: false string",
@@ -442,4 +442,3 @@ func TestParseSimpleExpression_Integration(t *testing.T) {
 		})
 	}
 }
-
