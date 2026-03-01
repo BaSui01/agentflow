@@ -234,7 +234,7 @@ func TestWithWorkflowStreamEmitter_NilEmitter(t *testing.T) {
 
 func TestWithWorkflowStreamEmitter_NilContext(t *testing.T) {
 	emitter := WorkflowStreamEmitter(func(e WorkflowStreamEvent) {})
-	ctx := WithWorkflowStreamEmitter(nil, emitter)
+	ctx := WithWorkflowStreamEmitter(context.TODO(), emitter)
 	assert.NotNil(t, ctx)
 }
 
@@ -260,7 +260,7 @@ func TestWorkflowStreamEmitterFromContext_NoEmitter(t *testing.T) {
 }
 
 func TestWorkflowStreamEmitterFromContext_NilContext(t *testing.T) {
-	_, ok := workflowStreamEmitterFromContext(nil)
+	_, ok := workflowStreamEmitterFromContext(context.TODO())
 	assert.False(t, ok)
 }
 

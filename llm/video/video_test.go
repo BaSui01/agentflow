@@ -439,7 +439,7 @@ func TestNewVeoProvider(t *testing.T) {
 }
 
 func TestNewVeoProvider_Defaults(t *testing.T) {
-	p := NewVeoProvider(VeoConfig{})
+	p := NewVeoProvider(VeoConfig{}, nil)
 	assert.Equal(t, "veo-3.1-generate-preview", p.cfg.Model)
 }
 
@@ -684,7 +684,7 @@ func TestNewSoraProvider(t *testing.T) {
 }
 
 func TestNewSoraProvider_Defaults(t *testing.T) {
-	p := NewSoraProvider(SoraConfig{})
+	p := NewSoraProvider(SoraConfig{}, nil)
 	assert.Equal(t, "https://api.openai.com", p.cfg.BaseURL)
 	assert.Equal(t, "sora-2", p.cfg.Model)
 }
@@ -817,7 +817,7 @@ func TestNewLumaProvider(t *testing.T) {
 }
 
 func TestNewLumaProvider_Defaults(t *testing.T) {
-	p := NewLumaProvider(LumaConfig{})
+	p := NewLumaProvider(LumaConfig{}, nil)
 	assert.Equal(t, "https://api.lumalabs.ai", p.cfg.BaseURL)
 	assert.Equal(t, "ray-2", p.cfg.Model)
 }
@@ -917,7 +917,7 @@ func TestNewKlingProvider(t *testing.T) {
 }
 
 func TestNewKlingProvider_Defaults(t *testing.T) {
-	p := NewKlingProvider(KlingConfig{})
+	p := NewKlingProvider(KlingConfig{}, nil)
 	assert.Equal(t, "https://api.klingai.com", p.cfg.BaseURL)
 	assert.Equal(t, "kling-v3-pro", p.cfg.Model)
 }
@@ -1070,7 +1070,7 @@ func TestNewMiniMaxVideoProvider(t *testing.T) {
 }
 
 func TestNewMiniMaxVideoProvider_Defaults(t *testing.T) {
-	p := NewMiniMaxVideoProvider(MiniMaxVideoConfig{})
+	p := NewMiniMaxVideoProvider(MiniMaxVideoConfig{}, nil)
 	assert.Equal(t, "https://api.minimax.chat", p.cfg.BaseURL)
 	assert.Equal(t, "video-01", p.cfg.Model)
 }

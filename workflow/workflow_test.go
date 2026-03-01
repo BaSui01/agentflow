@@ -72,10 +72,8 @@ func TestChainWorkflow_ContextCancellation(t *testing.T) {
 
 	step2 := NewFuncStep("step2", func(ctx context.Context, input any) (any, error) {
 		// 模拟长时间运行
-		select {
-		case <-ctx.Done():
-			return nil, ctx.Err()
-		}
+		<-ctx.Done()
+		return nil, ctx.Err()
 	})
 
 	workflow := NewChainWorkflow("test-chain-cancel", "Test chain with cancellation", step1, step2)
