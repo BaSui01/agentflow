@@ -11,12 +11,11 @@ import (
 
 // mockValidator 用于测试的模拟验证器
 type mockValidator struct {
-	name       string
-	priority   int
-	valid      bool
-	err        error
-	execOrder  *[]string // 用于记录执行顺序
-	shouldFail bool
+	name      string
+	priority  int
+	valid     bool
+	err       error
+	execOrder *[]string // 用于记录执行顺序
 }
 
 func newMockValidator(name string, priority int, valid bool) *mockValidator {

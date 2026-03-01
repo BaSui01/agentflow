@@ -15,10 +15,6 @@ import (
 // ExecutionState is the state of a long-running execution.
 type ExecutionState string
 
-// baseRetryDelay is the base delay unit for the linear backoff strategy
-// used when retrying failed execution steps.
-const baseRetryDelay = 1 * time.Second
-
 const (
 	StateInitialized ExecutionState = "initialized"
 	StateRunning     ExecutionState = "running"

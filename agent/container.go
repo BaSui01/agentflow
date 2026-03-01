@@ -22,14 +22,9 @@ type Container struct {
 	logger      *zap.Logger
 
 	// 用于扩展的工厂功能
-	reflectionFactory     func() any
-	toolSelectionFactory  func() any
-	promptEnhancerFactory func() any
-	skillsFactory         func() any
-	mcpFactory            func() any
-	enhancedMemoryFactory func() any
-	observabilityFactory  func() any
-	guardrailsFactory     func() any
+	reflectionFactory    func() any
+	toolSelectionFactory func() any
+	guardrailsFactory    func() any
 }
 
 // NewContaner创建了新的依赖容器.

@@ -468,9 +468,11 @@ func (s *RedisTaskStore) Cleanup(ctx context.Context, olderThan time.Duration) (
 	count := 0
 
 	// 清理已完成的任务
-	completedIDs, err := s.client.ZRangeByScore(ctx, s.statusKey(TaskStatusCompleted), &redis.ZRangeBy{
-		Min: "-inf",
-		Max: strconv.FormatInt(cutoff, 10),
+	completedIDs, err := s.client.ZRangeArgs(ctx, redis.ZRangeArgs{
+		Key:     s.statusKey(TaskStatusCompleted),
+		Start:   "-inf",
+		Stop:    strconv.FormatInt(cutoff, 10),
+		ByScore: true,
 	}).Result()
 	if err == nil {
 		for _, taskID := range completedIDs {
@@ -481,9 +483,11 @@ func (s *RedisTaskStore) Cleanup(ctx context.Context, olderThan time.Duration) (
 	}
 
 	// 清理失败的任务
-	failedIDs, err := s.client.ZRangeByScore(ctx, s.statusKey(TaskStatusFailed), &redis.ZRangeBy{
-		Min: "-inf",
-		Max: strconv.FormatInt(cutoff, 10),
+	failedIDs, err := s.client.ZRangeArgs(ctx, redis.ZRangeArgs{
+		Key:     s.statusKey(TaskStatusFailed),
+		Start:   "-inf",
+		Stop:    strconv.FormatInt(cutoff, 10),
+		ByScore: true,
 	}).Result()
 	if err == nil {
 		for _, taskID := range failedIDs {
@@ -494,9 +498,11 @@ func (s *RedisTaskStore) Cleanup(ctx context.Context, olderThan time.Duration) (
 	}
 
 	// 清理已取消的任务
-	cancelledIDs, err := s.client.ZRangeByScore(ctx, s.statusKey(TaskStatusCancelled), &redis.ZRangeBy{
-		Min: "-inf",
-		Max: strconv.FormatInt(cutoff, 10),
+	cancelledIDs, err := s.client.ZRangeArgs(ctx, redis.ZRangeArgs{
+		Key:     s.statusKey(TaskStatusCancelled),
+		Start:   "-inf",
+		Stop:    strconv.FormatInt(cutoff, 10),
+		ByScore: true,
 	}).Result()
 	if err == nil {
 		for _, taskID := range cancelledIDs {

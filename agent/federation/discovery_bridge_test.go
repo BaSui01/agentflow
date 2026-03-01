@@ -73,13 +73,6 @@ func (m *mockDiscoveryRegistry) registeredCount() int {
 	return len(m.registered)
 }
 
-func (m *mockDiscoveryRegistry) getStatus(id string) (string, bool) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	s, ok := m.statuses[id]
-	return s, ok
-}
-
 func (m *mockDiscoveryRegistry) getUnregistered() []string {
 	m.mu.Lock()
 	defer m.mu.Unlock()

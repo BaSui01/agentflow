@@ -7,10 +7,10 @@ import (
 	"sync"
 
 	"go.uber.org/zap"
-	"nhooyr.io/websocket"
+	"github.com/coder/websocket"
 )
 
-// WebSocketStreamConnection 将 nhooyr.io/websocket 连接适配为 StreamConnection 接口。
+// WebSocketStreamConnection 将 github.com/coder/websocket 连接适配为 StreamConnection 接口。
 // 写操作通过 mutex 保护，因为 WebSocket 不支持并发写。
 type WebSocketStreamConnection struct {
 	conn   *websocket.Conn

@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"go.uber.org/zap"
-	"nhooyr.io/websocket"
+	"github.com/coder/websocket"
 )
 
 // WSState represents the connection state of a WebSocket transport.

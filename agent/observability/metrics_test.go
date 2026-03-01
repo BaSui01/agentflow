@@ -179,7 +179,7 @@ func TestEvaluator_NoStrategies(t *testing.T) {
 	t.Parallel()
 	eval := NewEvaluator(zap.NewNop())
 
-	result, err := eval.Evaluate(nil, nil, nil)
+	result, err := eval.Evaluate(context.TODO(), nil, nil)
 	require.NoError(t, err)
 	assert.Equal(t, 1.0, result.Score)
 }
