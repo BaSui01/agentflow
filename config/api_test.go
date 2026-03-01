@@ -155,36 +155,6 @@ func TestConfigAPIHandler_WriteJSON_ContentType(t *testing.T) {
 	assert.Equal(t, "nosniff", w.Header().Get("X-Content-Type-Options"))
 }
 
-// --- RegisterRoutes ---
-
-func TestConfigAPIHandler_RegisterRoutes(t *testing.T) {
-	manager := NewHotReloadManager(DefaultConfig())
-	h := NewConfigAPIHandler(manager)
-
-	mux := http.NewServeMux()
-	h.RegisterRoutes(mux)
-
-	// Verify routes are registered by making requests
-	tests := []struct {
-		method string
-		path   string
-		status int
-	}{
-		{http.MethodGet, "/api/v1/config", http.StatusOK},
-		{http.MethodGet, "/api/v1/config/fields", http.StatusOK},
-		{http.MethodGet, "/api/v1/config/changes", http.StatusOK},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.method+" "+tt.path, func(t *testing.T) {
-			req := httptest.NewRequest(tt.method, tt.path, nil)
-			w := httptest.NewRecorder()
-			mux.ServeHTTP(w, req)
-			assert.Equal(t, tt.status, w.Code)
-		})
-	}
-}
-
 // --- Middleware: RequireAuth ---
 
 func TestConfigAPIMiddleware_RequireAuth_NoKey(t *testing.T) {
@@ -333,4 +303,3 @@ func TestResponseWriter_CapturesStatus(t *testing.T) {
 	assert.Equal(t, http.StatusNotFound, rw.status)
 	assert.Equal(t, http.StatusNotFound, inner.Code)
 }
-

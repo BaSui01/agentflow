@@ -2,9 +2,10 @@
 //
 // 提供配置查询、更新、热重载触发与变更历史查询能力。
 //
-// TODO(X-008): 对配置更新请求的值进行更严格的输入验证和类型检查。
-// TODO(X-009): 为配置 API 添加独立的速率限制，防止暴力枚举。
-// TODO(X-010): 内部服务间通信应启用 mTLS，确保传输层安全。
+// 安全策略：
+// 1) 配置更新请求启用严格 JSON 校验（含未知字段与尾随数据检测）。
+// 2) 配置 API 中间件启用独立限流，降低暴力枚举风险。
+// 3) 内部通信建议在部署层启用 TLS/mTLS。
 package config
 
 import (
@@ -14,12 +15,16 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
+	"github.com/BaSui01/agentflow/api"
 	"go.uber.org/zap"
+	"golang.org/x/time/rate"
 )
 
 const (
@@ -36,23 +41,8 @@ type ConfigAPIHandler struct {
 	logger        *zap.Logger // X-004: 审计日志
 }
 
-// apiResponse is the canonical API envelope (§38), local to config to avoid
-// reverse-dependency on the api package.
-type apiResponse struct {
-	Success   bool      `json:"success"`
-	Data      any       `json:"data,omitempty"`
-	Error     *apiError `json:"error,omitempty"`
-	Timestamp time.Time `json:"timestamp"`
-	RequestID string    `json:"request_id,omitempty"`
-}
-
-// apiError is the canonical error structure embedded in apiResponse (§38).
-// Details is optional additional context, aligned with api.ErrorInfo.
-type apiError struct {
-	Code    string `json:"code"`
-	Message string `json:"message"`
-	Details string `json:"details,omitempty"`
-}
+type apiResponse = api.Response
+type apiError = api.ErrorInfo
 
 // configData 是配置 API 响应中 Data 字段的内部结构。
 type configData struct {
@@ -117,14 +107,6 @@ func (h *ConfigAPIHandler) SetLogger(logger *zap.Logger) {
 	if logger != nil {
 		h.logger = logger
 	}
-}
-
-// RegisterRoutes 注册配置 API 路由
-func (h *ConfigAPIHandler) RegisterRoutes(mux *http.ServeMux) {
-	mux.HandleFunc("/api/v1/config", h.handleConfig)
-	mux.HandleFunc("/api/v1/config/reload", h.handleReload)
-	mux.HandleFunc("/api/v1/config/fields", h.handleFields)
-	mux.HandleFunc("/api/v1/config/changes", h.handleChanges)
 }
 
 // HandleConfig 处理配置的 GET 和 PUT 请求（导出方法，供外部认证中间件包装使用）
@@ -516,18 +498,7 @@ func validateJSONContentType(w http.ResponseWriter, r *http.Request) bool {
 // writeAPIJSON writes a JSON response using the marshal-first pattern (§6).
 // Uses the same Content-Type and security headers as handlers.WriteJSON.
 func writeAPIJSON(w http.ResponseWriter, status int, data any) {
-	buf, err := json.Marshal(data)
-	if err != nil {
-		w.Header().Set("Content-Type", "application/json; charset=utf-8")
-		w.Header().Set("X-Content-Type-Options", "nosniff")
-		w.WriteHeader(http.StatusInternalServerError)
-		_, _ = w.Write([]byte(`{"success":false,"error":{"code":"INTERNAL_ERROR","message":"failed to encode response"}}`)) //nolint:errcheck // Write 错误可安全忽略（客户端断开）
-		return
-	}
-	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	w.Header().Set("X-Content-Type-Options", "nosniff")
-	w.WriteHeader(status)
-	_, _ = w.Write(buf) //nolint:errcheck // Write 错误可安全忽略（客户端断开）
+	api.WriteJSONResponse(w, status, data)
 }
 
 // handleCORS 处理 CORS 预检请求
@@ -559,6 +530,8 @@ func (h *ConfigAPIHandler) methodNotAllowed(w http.ResponseWriter, r *http.Reque
 type ConfigAPIMiddleware struct {
 	handler *ConfigAPIHandler
 	apiKey  string
+	mu      sync.Mutex
+	limiter map[string]*rate.Limiter
 }
 
 // NewConfigAPIMiddleware 创建一个新的配置API中间件
@@ -566,12 +539,26 @@ func NewConfigAPIMiddleware(handler *ConfigAPIHandler, apiKey string) *ConfigAPI
 	return &ConfigAPIMiddleware{
 		handler: handler,
 		apiKey:  apiKey,
+		limiter: make(map[string]*rate.Limiter),
 	}
 }
 
 // RequireAuth 使用 API 密钥身份验证包装处理程序
 func (m *ConfigAPIMiddleware) RequireAuth(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		if !m.allowRequest(r.RemoteAddr) {
+			writeAPIJSON(w, http.StatusTooManyRequests, apiResponse{
+				Success: false,
+				Error: &apiError{
+					Code:    "RATE_LIMITED",
+					Message: "Too many requests",
+				},
+				Timestamp: time.Now(),
+				RequestID: requestIDFromRequest(r),
+			})
+			return
+		}
+
 		// 跳过 OPTIONS 请求的身份验证（CORS 预检）
 		if r.Method == http.MethodOptions {
 			next(w, r)
@@ -605,6 +592,25 @@ func (m *ConfigAPIMiddleware) RequireAuth(next http.HandlerFunc) http.HandlerFun
 
 		next(w, r)
 	}
+}
+
+func (m *ConfigAPIMiddleware) allowRequest(remoteAddr string) bool {
+	const (
+		rps   = 5.0
+		burst = 20
+	)
+	ip, _, err := net.SplitHostPort(remoteAddr)
+	if err != nil {
+		ip = remoteAddr
+	}
+	m.mu.Lock()
+	lim, ok := m.limiter[ip]
+	if !ok {
+		lim = rate.NewLimiter(rate.Limit(rps), burst)
+		m.limiter[ip] = lim
+	}
+	m.mu.Unlock()
+	return lim.Allow()
 }
 
 // LogRequests 使用请求日志记录来包装处理程序
@@ -649,4 +655,3 @@ func requestIDFromRequest(r *http.Request) string {
 	}
 	return strings.TrimSpace(r.Header.Get("X-Request-Id"))
 }
-

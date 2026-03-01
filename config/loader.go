@@ -4,7 +4,6 @@
 package config
 
 import (
-	"github.com/BaSui01/agentflow/types"
 	"fmt"
 	"os"
 	"reflect"
@@ -801,5 +800,3 @@ type BudgetConfig struct {
 	// 告警阈值 (0.0-1.0)
 	AlertThreshold float64 `yaml:"alert_threshold" env:"ALERT_THRESHOLD"`
 }
-
-

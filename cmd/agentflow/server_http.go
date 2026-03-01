@@ -10,11 +10,10 @@ import (
 	"time"
 
 	"github.com/BaSui01/agentflow/api/handlers"
-	"github.com/BaSui01/agentflow/config"
+	"github.com/BaSui01/agentflow/api/routes"
 	mw "github.com/BaSui01/agentflow/pkg/middleware"
 	"github.com/BaSui01/agentflow/pkg/server"
 	"github.com/BaSui01/agentflow/pkg/tlsutil"
-	"github.com/BaSui01/agentflow/types"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
@@ -23,15 +22,15 @@ import (
 func (s *Server) startHTTPServer() error {
 	mux := http.NewServeMux()
 
-	s.registerSystemRoutes(mux)
-	s.registerChatRoutes(mux)
-	s.registerAgentRoutes(mux)
-	s.registerProviderRoutes(mux)
-	s.registerMultimodalRoutes(mux)
-	s.registerProtocolRoutes(mux)
-	s.registerRAGRoutes(mux)
-	s.registerWorkflowRoutes(mux)
-	s.registerConfigRoutes(mux)
+	routes.RegisterSystem(mux, s.healthHandler, Version, BuildTime, GitCommit)
+	routes.RegisterChat(mux, s.chatHandler, s.logger)
+	routes.RegisterAgent(mux, s.agentHandler, s.logger)
+	routes.RegisterProvider(mux, s.apiKeyHandler, s.logger)
+	routes.RegisterMultimodal(mux, s.multimodalHandler, s.logger)
+	routes.RegisterProtocol(mux, s.protocolHandler, s.logger)
+	routes.RegisterRAG(mux, s.ragHandler, s.logger)
+	routes.RegisterWorkflow(mux, s.workflowHandler, s.logger)
+	routes.RegisterConfig(mux, s.configAPIHandler, s.getFirstAPIKey(), s.logger)
 
 	middlewares := s.buildHTTPMiddlewares()
 	handler := mw.Chain(mux, middlewares...)
@@ -86,122 +85,6 @@ func (s *Server) buildHTTPMiddlewares() []mw.Middleware {
 	)
 
 	return middlewares
-}
-
-func (s *Server) registerSystemRoutes(mux *http.ServeMux) {
-	mux.HandleFunc("/health", s.healthHandler.HandleHealth)
-	mux.HandleFunc("/healthz", s.healthHandler.HandleHealthz)
-	mux.HandleFunc("/ready", s.healthHandler.HandleReady)
-	mux.HandleFunc("/readyz", s.healthHandler.HandleReady)
-	mux.HandleFunc("/version", s.healthHandler.HandleVersion(Version, BuildTime, GitCommit))
-}
-
-func (s *Server) registerChatRoutes(mux *http.ServeMux) {
-	if s.chatHandler == nil {
-		return
-	}
-	mux.HandleFunc("/api/v1/chat/completions", s.chatHandler.HandleCompletion)
-	mux.HandleFunc("/api/v1/chat/completions/stream", s.chatHandler.HandleStream)
-	s.logger.Info("Chat API routes registered")
-}
-
-func (s *Server) registerAgentRoutes(mux *http.ServeMux) {
-	if s.agentHandler == nil {
-		return
-	}
-	mux.HandleFunc("/api/v1/agents", s.agentHandler.HandleListAgents)
-	mux.HandleFunc("/api/v1/agents/execute", s.agentHandler.HandleExecuteAgent)
-	mux.HandleFunc("/api/v1/agents/execute/stream", s.agentHandler.HandleAgentStream)
-	mux.HandleFunc("/api/v1/agents/plan", s.agentHandler.HandlePlanAgent)
-	mux.HandleFunc("/api/v1/agents/health", s.agentHandler.HandleAgentHealth)
-	s.logger.Info("Agent API routes registered")
-}
-
-func (s *Server) registerProviderRoutes(mux *http.ServeMux) {
-	if s.apiKeyHandler == nil {
-		return
-	}
-	mux.HandleFunc("/api/v1/providers", s.apiKeyHandler.HandleListProviders)
-	mux.HandleFunc("/api/v1/providers/{id}/api-keys", func(w http.ResponseWriter, r *http.Request) {
-		switch r.Method {
-		case http.MethodGet:
-			s.apiKeyHandler.HandleListAPIKeys(w, r)
-		case http.MethodPost:
-			s.apiKeyHandler.HandleCreateAPIKey(w, r)
-		default:
-			handlers.WriteErrorMessage(w, http.StatusMethodNotAllowed, types.ErrInvalidRequest, "method not allowed", s.logger)
-		}
-	})
-	mux.HandleFunc("/api/v1/providers/{id}/api-keys/stats", s.apiKeyHandler.HandleAPIKeyStats)
-	mux.HandleFunc("/api/v1/providers/{id}/api-keys/{keyId}", func(w http.ResponseWriter, r *http.Request) {
-		switch r.Method {
-		case http.MethodPut:
-			s.apiKeyHandler.HandleUpdateAPIKey(w, r)
-		case http.MethodDelete:
-			s.apiKeyHandler.HandleDeleteAPIKey(w, r)
-		default:
-			handlers.WriteErrorMessage(w, http.StatusMethodNotAllowed, types.ErrInvalidRequest, "method not allowed", s.logger)
-		}
-	})
-	s.logger.Info("Provider API key routes registered")
-}
-
-func (s *Server) registerMultimodalRoutes(mux *http.ServeMux) {
-	if s.multimodalHandler == nil {
-		return
-	}
-	mux.HandleFunc("/api/v1/multimodal/capabilities", s.multimodalHandler.HandleCapabilities)
-	mux.HandleFunc("/api/v1/multimodal/references", s.multimodalHandler.HandleUploadReference)
-	mux.HandleFunc("/api/v1/multimodal/image", s.multimodalHandler.HandleImage)
-	mux.HandleFunc("/api/v1/multimodal/video", s.multimodalHandler.HandleVideo)
-	mux.HandleFunc("/api/v1/multimodal/plan", s.multimodalHandler.HandlePlan)
-	mux.HandleFunc("/api/v1/multimodal/chat", s.multimodalHandler.HandleChat)
-	s.logger.Info("Multimodal framework routes registered")
-}
-
-func (s *Server) registerProtocolRoutes(mux *http.ServeMux) {
-	if s.protocolHandler == nil {
-		return
-	}
-	ph := s.protocolHandler
-	mux.HandleFunc("/api/v1/mcp/resources", ph.HandleMCPListResources)
-	mux.HandleFunc("/api/v1/mcp/resources/", ph.HandleMCPGetResource)
-	mux.HandleFunc("/api/v1/mcp/tools", ph.HandleMCPListTools)
-	mux.HandleFunc("/api/v1/mcp/tools/", ph.HandleMCPCallTool)
-	mux.HandleFunc("/api/v1/a2a/.well-known/agent.json", ph.HandleA2AAgentCard)
-	mux.HandleFunc("/api/v1/a2a/tasks", ph.HandleA2ASendTask)
-	s.logger.Info("Protocol API routes registered (MCP + A2A)")
-}
-
-func (s *Server) registerRAGRoutes(mux *http.ServeMux) {
-	if s.ragHandler == nil {
-		return
-	}
-	mux.HandleFunc("/api/v1/rag/query", s.ragHandler.HandleQuery)
-	mux.HandleFunc("/api/v1/rag/index", s.ragHandler.HandleIndex)
-	s.logger.Info("RAG API routes registered")
-}
-
-func (s *Server) registerWorkflowRoutes(mux *http.ServeMux) {
-	if s.workflowHandler == nil {
-		return
-	}
-	mux.HandleFunc("/api/v1/workflows/execute", s.workflowHandler.HandleExecute)
-	mux.HandleFunc("/api/v1/workflows/parse", s.workflowHandler.HandleParse)
-	mux.HandleFunc("/api/v1/workflows", s.workflowHandler.HandleList)
-	s.logger.Info("Workflow API routes registered")
-}
-
-func (s *Server) registerConfigRoutes(mux *http.ServeMux) {
-	if s.configAPIHandler == nil {
-		return
-	}
-	configAuth := config.NewConfigAPIMiddleware(s.configAPIHandler, s.getFirstAPIKey())
-	mux.HandleFunc("/api/v1/config", configAuth.RequireAuth(s.configAPIHandler.HandleConfig))
-	mux.HandleFunc("/api/v1/config/reload", configAuth.RequireAuth(s.configAPIHandler.HandleReload))
-	mux.HandleFunc("/api/v1/config/fields", configAuth.RequireAuth(s.configAPIHandler.HandleFields))
-	mux.HandleFunc("/api/v1/config/changes", configAuth.RequireAuth(s.configAPIHandler.HandleChanges))
-	s.logger.Info("Configuration API registered with authentication")
 }
 
 // =============================================================================
@@ -345,7 +228,7 @@ func isLoopbackHost(host string) bool {
 }
 
 // buildAuthMiddleware selects the authentication strategy based on configuration.
-// Priority: JWT (if secret or public key configured) > API Key > nil (dev mode).
+// Priority: JWT (if secret or public key configured) > API Key > fail-closed.
 func (s *Server) buildAuthMiddleware(skipPaths []string) mw.Middleware {
 	jwtCfg := s.cfg.Server.JWT
 	hasJWT := jwtCfg.Secret != "" || jwtCfg.PublicKey != ""
@@ -363,16 +246,30 @@ func (s *Server) buildAuthMiddleware(skipPaths []string) mw.Middleware {
 		s.logger.Info("Authentication: API Key enabled",
 			zap.Int("key_count", len(s.cfg.Server.APIKeys)),
 		)
-		return mw.APIKeyAuth(s.cfg.Server.APIKeys, skipPaths, s.cfg.Server.AllowQueryAPIKey, s.logger)
+		return mw.APIKeyAuth(s.cfg.Server.APIKeys, skipPaths, s.logger)
 	default:
-		if !s.cfg.Server.AllowNoAuth {
-			s.logger.Warn("Authentication is disabled and allow_no_auth is false. " +
-				"Set JWT or API key configuration, or set allow_no_auth=true to explicitly allow unauthenticated access.")
-		} else {
+		if s.cfg.Server.AllowNoAuth {
 			s.logger.Warn("Authentication is disabled (allow_no_auth=true). " +
 				"This is not recommended for production use.")
+			return nil
 		}
-		return nil
+		s.logger.Error("Authentication is required but no JWT/API key is configured; server will reject protected requests")
+		skipSet := make(map[string]struct{}, len(skipPaths))
+		for _, p := range skipPaths {
+			skipSet[p] = struct{}{}
+		}
+		return func(next http.Handler) http.Handler {
+			return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if _, skip := skipSet[r.URL.Path]; skip {
+					next.ServeHTTP(w, r)
+					return
+				}
+				w.Header().Set("Content-Type", "application/json; charset=utf-8")
+				w.Header().Set("X-Content-Type-Options", "nosniff")
+				w.WriteHeader(http.StatusServiceUnavailable)
+				_, _ = w.Write([]byte(`{"success":false,"error":{"code":"AUTH_MISCONFIGURED","message":"authentication is not configured"}}`))
+			})
+		}
 	}
 }
 
@@ -381,4 +278,3 @@ func (s *Server) buildAuthMiddleware(skipPaths []string) mw.Middleware {
 // =============================================================================
 
 // WaitForShutdown 等待关闭信号并优雅关闭
-

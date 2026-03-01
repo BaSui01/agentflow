@@ -1,11 +1,15 @@
 package handlers
 
 import (
+	"bytes"
+	"encoding/json"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/BaSui01/agentflow/agent/protocol/a2a"
 	"github.com/BaSui01/agentflow/agent/protocol/mcp"
+	"github.com/BaSui01/agentflow/api"
 	"github.com/BaSui01/agentflow/types"
 	"go.uber.org/zap"
 )
@@ -137,8 +141,77 @@ func (h *ProtocolHandler) HandleA2AAgentCard(w http.ResponseWriter, r *http.Requ
 
 // HandleA2ASendTask handles POST /api/v1/a2a/tasks
 func (h *ProtocolHandler) HandleA2ASendTask(w http.ResponseWriter, r *http.Request) {
-	// Delegate to the A2A server's HTTP handler which already handles
-	// message parsing, routing, and execution.
-	h.a2aServer.ServeHTTP(w, r)
+	rec := &protocolResponseRecorder{
+		header:     make(http.Header),
+		statusCode: http.StatusOK,
+	}
+	h.a2aServer.ServeHTTP(rec, r)
+
+	for k, vals := range rec.header {
+		for _, v := range vals {
+			w.Header().Add(k, v)
+		}
+	}
+
+	status := rec.statusCode
+	var payload any
+	if len(rec.body) > 0 {
+		var parsed any
+		if err := json.Unmarshal(rec.body, &parsed); err == nil {
+			payload = parsed
+		} else {
+			payload = map[string]any{"raw": string(rec.body)}
+		}
+	}
+
+	success := status >= 200 && status < 400
+	var errInfo *api.ErrorInfo
+	var data any
+	if success {
+		data = payload
+	} else {
+		errInfo = &api.ErrorInfo{
+			Code:    "A2A_ERROR",
+			Message: "a2a request failed",
+		}
+		if m, ok := payload.(map[string]any); ok {
+			if e, ok := m["error"].(map[string]any); ok {
+				if code, ok := e["code"].(string); ok && code != "" {
+					errInfo.Code = code
+				}
+				if msg, ok := e["message"].(string); ok && msg != "" {
+					errInfo.Message = msg
+				}
+			}
+			if msg, ok := m["error"].(string); ok && msg != "" {
+				errInfo.Message = msg
+			}
+		}
+	}
+
+	WriteJSON(w, status, api.Response{
+		Success:   success,
+		Data:      data,
+		Error:     errInfo,
+		Timestamp: time.Now(),
+		RequestID: w.Header().Get("X-Request-ID"),
+	})
 }
 
+type protocolResponseRecorder struct {
+	header     http.Header
+	body       bytes.Buffer
+	statusCode int
+}
+
+func (r *protocolResponseRecorder) Header() http.Header {
+	return r.header
+}
+
+func (r *protocolResponseRecorder) WriteHeader(statusCode int) {
+	r.statusCode = statusCode
+}
+
+func (r *protocolResponseRecorder) Write(p []byte) (int, error) {
+	return r.body.Write(p)
+}
