@@ -49,11 +49,8 @@ import (
 	"time"
 
 	"go.uber.org/zap"
-	"go.uber.org/zap/zapcore"
-	"gorm.io/driver/postgres"
-	"gorm.io/gorm"
 
-	"github.com/BaSui01/agentflow/config"
+	"github.com/BaSui01/agentflow/internal/app/bootstrap"
 	"github.com/BaSui01/agentflow/pkg/telemetry"
 )
 
@@ -108,26 +105,14 @@ func runServe(args []string) {
 		os.Exit(1)
 	}
 
-	// 加载配置
-	loader := config.NewLoader()
-	if *configPath != "" {
-		loader = loader.WithConfigPath(*configPath)
-	}
-
-	cfg, err := loader.Load()
+	cfg, err := bootstrap.LoadAndValidateConfig(*configPath)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to load config: %v\n", err)
-		os.Exit(1)
-	}
-
-	// 验证配置
-	if err := cfg.Validate(); err != nil {
 		fmt.Fprintf(os.Stderr, "Invalid config: %v\n", err)
 		os.Exit(1)
 	}
 
 	// 初始化日志
-	logger := initLogger(cfg.Log)
+	logger := bootstrap.NewLogger(cfg.Log)
 	defer func() {
 		_ = logger.Sync()
 	}()
@@ -145,7 +130,7 @@ func runServe(args []string) {
 	}
 
 	// 初始化数据库连接
-	db, err := openDatabase(cfg.Database, logger)
+	db, err := bootstrap.OpenDatabase(cfg.Database, logger)
 	if err != nil {
 		logger.Warn("Database not available, API key management disabled", zap.Error(err))
 	}
@@ -234,87 +219,4 @@ Examples:
   agentflow migrate status
   agentflow health --addr http://localhost:8080
   agentflow version`)
-}
-
-// =============================================================================
-// 🔧 日志初始化
-// =============================================================================
-
-func initLogger(cfg config.LogConfig) *zap.Logger {
-	// 解析日志级别
-	var level zapcore.Level
-	switch cfg.Level {
-	case "debug":
-		level = zapcore.DebugLevel
-	case "info":
-		level = zapcore.InfoLevel
-	case "warn":
-		level = zapcore.WarnLevel
-	case "error":
-		level = zapcore.ErrorLevel
-	default:
-		level = zapcore.InfoLevel
-	}
-
-	// 配置编码器
-	var encoderConfig zapcore.EncoderConfig
-	if cfg.Format == "console" {
-		encoderConfig = zap.NewDevelopmentEncoderConfig()
-		encoderConfig.EncodeLevel = zapcore.CapitalColorLevelEncoder
-	} else {
-		encoderConfig = zap.NewProductionEncoderConfig()
-		encoderConfig.TimeKey = "timestamp"
-		encoderConfig.EncodeTime = zapcore.ISO8601TimeEncoder
-	}
-
-	// 构建配置
-	zapConfig := zap.Config{
-		Level:            zap.NewAtomicLevelAt(level),
-		Development:      cfg.Format == "console",
-		Encoding:         cfg.Format,
-		EncoderConfig:    encoderConfig,
-		OutputPaths:      cfg.OutputPaths,
-		ErrorOutputPaths: []string{"stderr"},
-	}
-
-	if cfg.Format == "console" {
-		zapConfig.Encoding = "console"
-	} else {
-		zapConfig.Encoding = "json"
-	}
-
-	// 构建 logger
-	logger, err := zapConfig.Build(
-		zap.AddCaller(),
-		zap.AddStacktrace(zapcore.ErrorLevel),
-	)
-	if err != nil {
-		// 回退到基本 logger
-		logger = zap.NewNop()
-	}
-
-	return logger
-}
-
-// openDatabase 根据配置打开数据库连接
-func openDatabase(dbCfg config.DatabaseConfig, logger *zap.Logger) (*gorm.DB, error) {
-	if dbCfg.Driver == "" {
-		return nil, fmt.Errorf("database driver not configured")
-	}
-
-	var dialector gorm.Dialector
-	switch dbCfg.Driver {
-	case "postgres":
-		dialector = postgres.Open(dbCfg.DSN())
-	default:
-		return nil, fmt.Errorf("unsupported database driver: %s (supported: postgres)", dbCfg.Driver)
-	}
-
-	db, err := gorm.Open(dialector, &gorm.Config{})
-	if err != nil {
-		return nil, fmt.Errorf("failed to connect database: %w", err)
-	}
-
-	logger.Info("Database connected", zap.String("driver", dbCfg.Driver))
-	return db, nil
 }

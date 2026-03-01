@@ -5,6 +5,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/BaSui01/agentflow/pkg/middleware"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -13,7 +14,7 @@ func TestSecurityHeaders(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	})
 
-	handler := SecurityHeaders()(inner)
+	handler := middleware.SecurityHeaders()(inner)
 
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodGet, "/", nil)
@@ -32,7 +33,7 @@ func TestSecurityHeaders_ChainedWithOtherMiddleware(t *testing.T) {
 		_, _ = w.Write([]byte("ok"))
 	})
 
-	handler := Chain(inner, SecurityHeaders(), RequestID())
+	handler := middleware.Chain(inner, middleware.SecurityHeaders(), middleware.RequestID())
 
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodGet, "/test", nil)

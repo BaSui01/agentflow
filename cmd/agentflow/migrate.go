@@ -7,7 +7,7 @@ import (
 	"os"
 	"strconv"
 
-	"github.com/BaSui01/agentflow/config"
+	"github.com/BaSui01/agentflow/internal/app/bootstrap"
 	"github.com/BaSui01/agentflow/pkg/migration"
 )
 
@@ -91,25 +91,21 @@ func createMigrator(fs *flag.FlagSet, args []string) (*migration.DefaultMigrator
 		return nil, err
 	}
 
-	// If db-type and db-url are provided, use them directly
-	if *dbType != "" && *dbURL != "" {
-		return migration.NewMigratorFromURL(*dbType, *dbURL)
+	return buildMigrator(*configPath, *dbType, *dbURL)
+}
+
+func buildMigrator(configPath, dbType, dbURL string) (*migration.DefaultMigrator, error) {
+	if dbType != "" && dbURL != "" {
+		return migration.NewMigratorFromURL(dbType, dbURL)
 	}
 
-	// Otherwise, load from config
-	loader := config.NewLoader()
-	if *configPath != "" {
-		loader = loader.WithConfigPath(*configPath)
-	}
-
-	cfg, err := loader.Load()
+	cfg, err := bootstrap.LoadAndValidateConfig(configPath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to load config: %w", err)
+		return nil, err
 	}
 
-	// Override database type if specified
-	if *dbType != "" {
-		cfg.Database.Driver = *dbType
+	if dbType != "" {
+		cfg.Database.Driver = dbType
 	}
 
 	return migration.NewMigratorFromDatabaseConfig(cfg.Database)
@@ -149,31 +145,7 @@ func runMigrateDown(args []string) {
 		os.Exit(1)
 	}
 
-	// Create migrator
-	var migrator *migration.DefaultMigrator
-	var err error
-
-	if *dbType != "" && *dbURL != "" {
-		migrator, err = migration.NewMigratorFromURL(*dbType, *dbURL)
-	} else {
-		loader := config.NewLoader()
-		if *configPath != "" {
-			loader = loader.WithConfigPath(*configPath)
-		}
-
-		cfg, loadErr := loader.Load()
-		if loadErr != nil {
-			fmt.Fprintf(os.Stderr, "Failed to load config: %v\n", loadErr)
-			os.Exit(1)
-		}
-
-		if *dbType != "" {
-			cfg.Database.Driver = *dbType
-		}
-
-		migrator, err = migration.NewMigratorFromDatabaseConfig(cfg.Database)
-	}
-
+	migrator, err := buildMigrator(*configPath, *dbType, *dbURL)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to create migrator: %v\n", err)
 		os.Exit(1)
