@@ -12,7 +12,7 @@ import (
 	"github.com/BaSui01/agentflow/agent/artifacts"
 	"github.com/BaSui01/agentflow/agent/deployment"
 	"github.com/BaSui01/agentflow/agent/hitl"
-	"github.com/BaSui01/agentflow/tools/openapi"
+	"github.com/BaSui01/agentflow/pkg/openapi"
 	"github.com/BaSui01/agentflow/workflow"
 	"go.uber.org/zap"
 )

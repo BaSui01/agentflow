@@ -315,6 +315,8 @@ result, _ := wf.Execute(ctx, input)
 
 ## 🏗️ 项目结构
 
+如果你觉得子目录过多、阅读压力大，先看精简导航：`docs/cn/目录导航（精简版）.md`。
+
 ```
 agentflow/
 ├── types/                    # Layer 0: 零依赖核心类型
@@ -431,8 +433,7 @@ agentflow/
 │   ├── api.go                # 配置 API
 │   └── doc.go                # 包文档
 │
-├── tools/                    # 工具扩展
-│   └── openapi/              # OpenAPI 工具生成
+├── pkg/openapi/              # OpenAPI 工具生成
 │
 ├── cmd/agentflow/            # 应用入口
 │   └── middleware.go         # API 安全中间件

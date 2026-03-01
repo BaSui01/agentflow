@@ -33,36 +33,7 @@ func (s *Server) startHTTPServer() error {
 	s.registerWorkflowRoutes(mux)
 	s.registerConfigRoutes(mux)
 
-	// ========================================
-	// 构建中间件链
-	// ========================================
-	skipAuthPaths := []string{"/health", "/healthz", "/ready", "/readyz", "/version", "/metrics"}
-	rateLimiterCtx, rateLimiterCancel := context.WithCancel(context.Background())
-	s.rateLimiterCancel = rateLimiterCancel
-	tenantRateLimiterCtx, tenantRateLimiterCancel := context.WithCancel(context.Background())
-	s.tenantRateLimiterCancel = tenantRateLimiterCancel
-
-	// Auth strategy: JWT preferred, fallback to API Key, skip if neither configured
-	authMiddleware := s.buildAuthMiddleware(skipAuthPaths)
-
-	middlewares := []mw.Middleware{
-		mw.Recovery(s.logger),
-		mw.RequestID(),
-		mw.SecurityHeaders(),
-		mw.MetricsMiddleware(s.metricsCollector),
-		mw.OTelTracing(),
-		mw.RequestLogger(s.logger),
-		mw.CORS(s.cfg.Server.CORSAllowedOrigins),
-		mw.RateLimiter(rateLimiterCtx, float64(s.cfg.Server.RateLimitRPS), s.cfg.Server.RateLimitBurst, s.logger),
-	}
-	if authMiddleware != nil {
-		middlewares = append(middlewares, authMiddleware)
-	}
-	// Tenant rate limiter runs after auth (needs tenant_id in context)
-	middlewares = append(middlewares,
-		mw.TenantRateLimiter(tenantRateLimiterCtx, float64(s.cfg.Server.TenantRateLimitRPS), s.cfg.Server.TenantRateLimitBurst, s.logger),
-	)
-
+	middlewares := s.buildHTTPMiddlewares()
 	handler := mw.Chain(mux, middlewares...)
 
 	// ========================================
@@ -86,6 +57,35 @@ func (s *Server) startHTTPServer() error {
 
 	s.logger.Info("HTTP server started", zap.Int("port", s.cfg.Server.HTTPPort))
 	return nil
+}
+
+func (s *Server) buildHTTPMiddlewares() []mw.Middleware {
+	skipAuthPaths := []string{"/health", "/healthz", "/ready", "/readyz", "/version", "/metrics"}
+	rateLimiterCtx, rateLimiterCancel := context.WithCancel(context.Background())
+	s.rateLimiterCancel = rateLimiterCancel
+	tenantRateLimiterCtx, tenantRateLimiterCancel := context.WithCancel(context.Background())
+	s.tenantRateLimiterCancel = tenantRateLimiterCancel
+
+	authMiddleware := s.buildAuthMiddleware(skipAuthPaths)
+
+	middlewares := []mw.Middleware{
+		mw.Recovery(s.logger),
+		mw.RequestID(),
+		mw.SecurityHeaders(),
+		mw.MetricsMiddleware(s.metricsCollector),
+		mw.OTelTracing(),
+		mw.RequestLogger(s.logger),
+		mw.CORS(s.cfg.Server.CORSAllowedOrigins),
+		mw.RateLimiter(rateLimiterCtx, float64(s.cfg.Server.RateLimitRPS), s.cfg.Server.RateLimitBurst, s.logger),
+	}
+	if authMiddleware != nil {
+		middlewares = append(middlewares, authMiddleware)
+	}
+	middlewares = append(middlewares,
+		mw.TenantRateLimiter(tenantRateLimiterCtx, float64(s.cfg.Server.TenantRateLimitRPS), s.cfg.Server.TenantRateLimitBurst, s.logger),
+	)
+
+	return middlewares
 }
 
 func (s *Server) registerSystemRoutes(mux *http.ServeMux) {

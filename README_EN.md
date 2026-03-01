@@ -435,8 +435,7 @@ agentflow/
 │   ├── hotreload.go          # Hot-reload & rollback
 │   └── api.go                # Configuration API
 │
-├── tools/                    # Tool extensions
-│   └── openapi/              # OpenAPI tool generator
+├── pkg/openapi/              # OpenAPI tool generator
 │
 ├── cmd/agentflow/            # Application entry
 │   └── middleware.go         # API security middleware
