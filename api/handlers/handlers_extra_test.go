@@ -34,13 +34,13 @@ type mockAgent struct {
 	planFn    func(ctx context.Context, input *agent.Input) (*agent.PlanResult, error)
 }
 
-func (m *mockAgent) ID() string                                          { return m.id }
-func (m *mockAgent) Name() string                                        { return m.name }
-func (m *mockAgent) Type() agent.AgentType                               { return m.agentType }
-func (m *mockAgent) State() agent.State                                  { return m.state }
-func (m *mockAgent) Init(_ context.Context) error                        { return nil }
-func (m *mockAgent) Teardown(_ context.Context) error                    { return nil }
-func (m *mockAgent) Observe(_ context.Context, _ *agent.Feedback) error  { return nil }
+func (m *mockAgent) ID() string                                         { return m.id }
+func (m *mockAgent) Name() string                                       { return m.name }
+func (m *mockAgent) Type() agent.AgentType                              { return m.agentType }
+func (m *mockAgent) State() agent.State                                 { return m.state }
+func (m *mockAgent) Init(_ context.Context) error                       { return nil }
+func (m *mockAgent) Teardown(_ context.Context) error                   { return nil }
+func (m *mockAgent) Observe(_ context.Context, _ *agent.Feedback) error { return nil }
 
 func (m *mockAgent) Execute(ctx context.Context, input *agent.Input) (*agent.Output, error) {
 	if m.executeFn != nil {
@@ -422,7 +422,7 @@ func TestAgentHandler_HandleListAgents_Error(t *testing.T) {
 // =============================================================================
 
 func TestExtractAgentID_WithPathValue(t *testing.T) {
-	r := httptest.NewRequest(http.MethodGet, "/v1/agents/my-agent-1", nil)
+	r := httptest.NewRequest(http.MethodGet, "/api/v1/agents/my-agent-1", nil)
 	r.SetPathValue("id", "my-agent-1")
 
 	id := extractAgentID(r)
@@ -430,7 +430,7 @@ func TestExtractAgentID_WithPathValue(t *testing.T) {
 }
 
 func TestExtractAgentID_InvalidPathValue(t *testing.T) {
-	r := httptest.NewRequest(http.MethodGet, "/v1/agents/bad<id>", nil)
+	r := httptest.NewRequest(http.MethodGet, "/api/v1/agents/bad<id>", nil)
 	r.SetPathValue("id", "bad<id>")
 
 	id := extractAgentID(r)
@@ -438,7 +438,7 @@ func TestExtractAgentID_InvalidPathValue(t *testing.T) {
 }
 
 func TestExtractAgentID_EmptyPath(t *testing.T) {
-	r := httptest.NewRequest(http.MethodGet, "/v1/agents/", nil)
+	r := httptest.NewRequest(http.MethodGet, "/api/v1/agents/", nil)
 
 	id := extractAgentID(r)
 	assert.Equal(t, "", id)
@@ -959,7 +959,7 @@ func TestAgentHandler_HandleGetAgent_RegistryError(t *testing.T) {
 	handler := newTestHandler(reg)
 
 	w := httptest.NewRecorder()
-	r := httptest.NewRequest(http.MethodGet, "/v1/agents/some-agent", nil)
+	r := httptest.NewRequest(http.MethodGet, "/api/v1/agents/some-agent", nil)
 
 	handler.HandleGetAgent(w, r)
 
@@ -1092,4 +1092,3 @@ func TestHandleAPIKeyStats_WithKeys(t *testing.T) {
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
 	assert.True(t, resp.Success)
 }
-

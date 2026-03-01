@@ -38,7 +38,6 @@ func TestDefaultServerConfig(t *testing.T) {
 	assert.Equal(t, 30*time.Second, cfg.ReadTimeout)
 	assert.Equal(t, 30*time.Second, cfg.WriteTimeout)
 	assert.Equal(t, 15*time.Second, cfg.ShutdownTimeout)
-	assert.False(t, cfg.AllowQueryAPIKey)
 	assert.Equal(t, 100, cfg.RateLimitRPS)
 	assert.Equal(t, 200, cfg.RateLimitBurst)
 }
@@ -158,4 +157,3 @@ func TestDefaultTelemetryConfig(t *testing.T) {
 	assert.Equal(t, "agentflow", cfg.ServiceName)
 	assert.InDelta(t, 0.1, cfg.SampleRate, 0.001)
 }
-

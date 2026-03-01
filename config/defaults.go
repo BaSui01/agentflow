@@ -33,7 +33,6 @@ func DefaultServerConfig() ServerConfig {
 		ReadTimeout:          30 * time.Second,
 		WriteTimeout:         30 * time.Second,
 		ShutdownTimeout:      15 * time.Second,
-		AllowQueryAPIKey:     false,
 		RateLimitRPS:         100,
 		RateLimitBurst:       200,
 		TenantRateLimitRPS:   50,
@@ -257,4 +256,3 @@ func DefaultBudgetConfig() BudgetConfig {
 		AlertThreshold:     0.8,
 	}
 }
-

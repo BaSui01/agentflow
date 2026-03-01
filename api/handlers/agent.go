@@ -104,7 +104,7 @@ func NewAgentHandler(registry discovery.Registry, agentRegistry *agent.AgentRegi
 // @Success 200 {object} Response{data=[]AgentInfo} "Agent list"
 // @Failure 500 {object} Response "Internal error"
 // @Security ApiKeyAuth
-// @Router /v1/agents [get]
+// @Router /api/v1/agents [get]
 func (h *AgentHandler) HandleListAgents(w http.ResponseWriter, r *http.Request) {
 	// Parse and validate pagination parameters (V-001)
 	limit := 100 // default
@@ -167,7 +167,7 @@ func (h *AgentHandler) HandleListAgents(w http.ResponseWriter, r *http.Request) 
 // @Success 200 {object} Response{data=AgentInfo} "Agent info"
 // @Failure 404 {object} Response "Agent not found"
 // @Security ApiKeyAuth
-// @Router /v1/agents/{id} [get]
+// @Router /api/v1/agents/{id} [get]
 func (h *AgentHandler) HandleGetAgent(w http.ResponseWriter, r *http.Request) {
 	agentID := extractAgentID(r)
 	if agentID == "" {
@@ -196,7 +196,7 @@ func (h *AgentHandler) HandleGetAgent(w http.ResponseWriter, r *http.Request) {
 // @Failure 404 {object} Response "Agent not found"
 // @Failure 500 {object} Response "Execution failed"
 // @Security ApiKeyAuth
-// @Router /v1/agents/execute [post]
+// @Router /api/v1/agents/execute [post]
 func (h *AgentHandler) HandleExecuteAgent(w http.ResponseWriter, r *http.Request) {
 	if !ValidateContentType(w, r, h.logger) {
 		return
@@ -280,7 +280,7 @@ func (h *AgentHandler) HandleExecuteAgent(w http.ResponseWriter, r *http.Request
 // @Failure 404 {object} Response "Agent not found"
 // @Failure 500 {object} Response "Execution failed"
 // @Security ApiKeyAuth
-// @Router /v1/agents/execute/stream [post]
+// @Router /api/v1/agents/execute/stream [post]
 func (h *AgentHandler) HandleAgentStream(w http.ResponseWriter, r *http.Request) {
 	if !ValidateContentType(w, r, h.logger) {
 		return
@@ -406,7 +406,7 @@ func (h *AgentHandler) HandleAgentStream(w http.ResponseWriter, r *http.Request)
 // @Failure 404 {object} Response "Agent not found"
 // @Failure 500 {object} Response "Plan failed"
 // @Security ApiKeyAuth
-// @Router /v1/agents/plan [post]
+// @Router /api/v1/agents/plan [post]
 func (h *AgentHandler) HandlePlanAgent(w http.ResponseWriter, r *http.Request) {
 	if !ValidateContentType(w, r, h.logger) {
 		return
@@ -459,7 +459,7 @@ func (h *AgentHandler) HandlePlanAgent(w http.ResponseWriter, r *http.Request) {
 // @Failure 404 {object} Response "Agent not found"
 // @Failure 503 {object} Response "Agent not ready"
 // @Security ApiKeyAuth
-// @Router /v1/agents/health [get]
+// @Router /api/v1/agents/health [get]
 func (h *AgentHandler) HandleAgentHealth(w http.ResponseWriter, r *http.Request) {
 	agentID := r.URL.Query().Get("id")
 	if agentID == "" {
@@ -492,7 +492,9 @@ func (h *AgentHandler) HandleAgentHealth(w http.ResponseWriter, r *http.Request)
 		WriteJSON(w, http.StatusServiceUnavailable, api.Response{
 			Success:   false,
 			Data:      resp,
+			Error:     api.ErrorInfoFromTypesError(types.NewServiceUnavailableError("agent is not healthy"), http.StatusServiceUnavailable),
 			Timestamp: time.Now(),
+			RequestID: w.Header().Get("X-Request-ID"),
 		})
 		return
 	}
@@ -532,7 +534,7 @@ func toAgentInfo(info *discovery.AgentInfo) AgentInfo {
 }
 
 // extractAgentID extracts the agent ID from the URL path.
-// Supports both /v1/agents/{id} (PathValue) and /v1/agents/some-id (prefix trim).
+// Supports both /api/v1/agents/{id} (PathValue) and /api/v1/agents/some-id (prefix trim).
 func extractAgentID(r *http.Request) string {
 	// Try Go 1.22+ PathValue first
 	if id := r.PathValue("id"); id != "" {
@@ -541,8 +543,8 @@ func extractAgentID(r *http.Request) string {
 		}
 		return id
 	}
-	// Fallback: extract from URL path by trimming the /v1/agents/ prefix
-	path := strings.TrimPrefix(r.URL.Path, "/v1/agents/")
+	// Fallback: extract from URL path by trimming the /api/v1/agents/ prefix
+	path := strings.TrimPrefix(r.URL.Path, "/api/v1/agents/")
 	if path != "" && path != r.URL.Path && !strings.Contains(path, "/") {
 		if !validAgentID.MatchString(path) {
 			return ""

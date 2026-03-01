@@ -156,7 +156,11 @@ func demoEnhancedRetrieval(ctx context.Context, logger *zap.Logger) {
 	}
 
 	// Create enhanced retriever with Cohere embedding + reranking
-	retriever := rag.NewCohereRetriever(cohereKey, logger)
+	retriever, err := rag.NewCohereRetriever(cohereKey, logger)
+	if err != nil {
+		log.Printf("failed to create retriever: %v", err)
+		return
+	}
 
 	// Index documents
 	docs := []rag.Document{

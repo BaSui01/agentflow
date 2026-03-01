@@ -190,7 +190,7 @@ func TestAgentHandler_HandleGetAgent_Found(t *testing.T) {
 	handler := newTestHandler(reg)
 
 	w := httptest.NewRecorder()
-	r := httptest.NewRequest(http.MethodGet, "/v1/agents/test-id", nil)
+	r := httptest.NewRequest(http.MethodGet, "/api/v1/agents/test-id", nil)
 
 	handler.HandleGetAgent(w, r)
 
@@ -215,7 +215,7 @@ func TestAgentHandler_HandleGetAgent_NotFound(t *testing.T) {
 	handler := newTestHandler(reg)
 
 	w := httptest.NewRecorder()
-	r := httptest.NewRequest(http.MethodGet, "/v1/agents/nonexistent", nil)
+	r := httptest.NewRequest(http.MethodGet, "/api/v1/agents/nonexistent", nil)
 
 	handler.HandleGetAgent(w, r)
 
@@ -506,4 +506,3 @@ func TestAgentHandler_HandlePlanAgent_ValidAgentID(t *testing.T) {
 	// Should pass validation (501 = not yet implemented, but not 400)
 	assert.NotEqual(t, http.StatusBadRequest, w.Code)
 }
-

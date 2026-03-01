@@ -34,6 +34,7 @@ func RegisterAgent(mux *http.ServeMux, agentHandler *handlers.AgentHandler, logg
 		return
 	}
 	mux.HandleFunc("/api/v1/agents", agentHandler.HandleListAgents)
+	mux.HandleFunc("/api/v1/agents/{id}", agentHandler.HandleGetAgent)
 	mux.HandleFunc("/api/v1/agents/execute", agentHandler.HandleExecuteAgent)
 	mux.HandleFunc("/api/v1/agents/execute/stream", agentHandler.HandleAgentStream)
 	mux.HandleFunc("/api/v1/agents/plan", agentHandler.HandlePlanAgent)

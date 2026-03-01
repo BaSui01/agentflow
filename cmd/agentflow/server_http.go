@@ -9,11 +9,13 @@ import (
 	"strings"
 	"time"
 
+	"github.com/BaSui01/agentflow/api"
 	"github.com/BaSui01/agentflow/api/handlers"
 	"github.com/BaSui01/agentflow/api/routes"
 	mw "github.com/BaSui01/agentflow/pkg/middleware"
 	"github.com/BaSui01/agentflow/pkg/server"
 	"github.com/BaSui01/agentflow/pkg/tlsutil"
+	"github.com/BaSui01/agentflow/types"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
@@ -264,10 +266,15 @@ func (s *Server) buildAuthMiddleware(skipPaths []string) mw.Middleware {
 					next.ServeHTTP(w, r)
 					return
 				}
-				w.Header().Set("Content-Type", "application/json; charset=utf-8")
-				w.Header().Set("X-Content-Type-Options", "nosniff")
-				w.WriteHeader(http.StatusServiceUnavailable)
-				_, _ = w.Write([]byte(`{"success":false,"error":{"code":"AUTH_MISCONFIGURED","message":"authentication is not configured"}}`))
+				api.WriteJSONResponse(w, http.StatusServiceUnavailable, api.Response{
+					Success: false,
+					Error: &api.ErrorInfo{
+						Code:    string(types.ErrServiceUnavailable),
+						Message: "authentication is not configured",
+					},
+					Timestamp: time.Now().UTC(),
+					RequestID: w.Header().Get("X-Request-ID"),
+				})
 			})
 		}
 	}

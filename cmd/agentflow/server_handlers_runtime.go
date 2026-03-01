@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/BaSui01/agentflow/agent"
 	"github.com/BaSui01/agentflow/agent/discovery"
@@ -37,7 +38,16 @@ func (s *Server) initHandlers() error {
 				zap.String("provider", s.cfg.LLM.DefaultProvider),
 				zap.Error(err))
 		} else {
-			provider = llm.NewResilientProvider(provider, nil, s.logger)
+			retryPolicy := llm.DefaultRetryPolicy()
+			if s.cfg.LLM.MaxRetries >= 0 {
+				retryPolicy.MaxRetries = s.cfg.LLM.MaxRetries
+			}
+			provider = llm.NewResilientProvider(provider, &llm.ResilientConfig{
+				RetryPolicy:       retryPolicy,
+				CircuitBreaker:    llm.DefaultCircuitBreakerConfig(),
+				EnableIdempotency: true,
+				IdempotencyTTL:    time.Hour,
+			}, s.logger)
 
 			if llmMetrics, mErr := observability.NewMetrics(); mErr != nil {
 				s.logger.Warn("Failed to create LLM metrics", zap.Error(mErr))
@@ -241,4 +251,3 @@ func (s *Server) initRAGHandler() {
 	s.logger.Info("RAG handler initialized (in-memory store, embedding provider ready)",
 		zap.String("provider", embProvider.Name()))
 }
-
