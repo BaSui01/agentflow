@@ -1,13 +1,12 @@
 package a2a
 
 import (
-	"github.com/BaSui01/agentflow/types"
 	"encoding/json"
 	"fmt"
+	"github.com/BaSui01/agentflow/types"
 	"strings"
 
 	"github.com/BaSui01/agentflow/agent/structured"
-	"github.com/BaSui01/agentflow/llm"
 )
 
 // Agent Config Provider 定义访问代理配置的接口.
@@ -191,5 +190,3 @@ func (c *SimpleAgentConfig) Tools() []string { return c.AgentTools }
 
 // 元数据返回代理元数据 。
 func (c *SimpleAgentConfig) Metadata() map[string]string { return c.AgentMetadata }
-
-

@@ -1,7 +1,6 @@
 package hosted
 
 import (
-	"github.com/BaSui01/agentflow/types"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -12,7 +11,7 @@ import (
 	"time"
 
 	"github.com/BaSui01/agentflow/pkg/tlsutil"
-	"github.com/BaSui01/agentflow/llm"
+	"github.com/BaSui01/agentflow/types"
 	"go.uber.org/zap"
 )
 
@@ -367,5 +366,3 @@ func WithMetrics(onExecute func(name string, duration time.Duration, err error))
 		}
 	}
 }
-
-

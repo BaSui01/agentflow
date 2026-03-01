@@ -1,12 +1,11 @@
 package agent
 
 import (
-	"context"
 	"time"
 
+	"github.com/BaSui01/agentflow/agent/pipelinecore"
 	"github.com/BaSui01/agentflow/llm"
 	"github.com/BaSui01/agentflow/types"
-	"github.com/BaSui01/agentflow/agent/pipelinecore"
 )
 
 // PipelineContext carries intermediate state through the pipeline.
@@ -50,5 +49,3 @@ type Pipeline = pipelinecore.Pipeline[PipelineContext]
 func NewPipeline(steps ...ExecutionStep) *Pipeline {
 	return pipelinecore.NewPipeline[PipelineContext](steps...)
 }
-
-

@@ -1,9 +1,9 @@
 package agent
 
 import (
-	"github.com/BaSui01/agentflow/types"
 	"context"
 	"fmt"
+	"github.com/BaSui01/agentflow/types"
 	"strings"
 	"time"
 
@@ -160,8 +160,8 @@ func (b *BaseAgent) Execute(ctx context.Context, input *Input) (_ *Output, execE
 					zap.Any("panic", r), zap.String("run_id", runID))
 				panic(r) // re-panic after recording
 			}
-		if execErr != nil && runID != "" && b.runStore != nil {
-			if updateErr := b.runStore.UpdateStatus(ctx, runID, "failed", nil, execErr.Error()); updateErr != nil {
+			if execErr != nil && runID != "" && b.runStore != nil {
+				if updateErr := b.runStore.UpdateStatus(ctx, runID, "failed", nil, execErr.Error()); updateErr != nil {
 					b.logger.Warn("failed to mark run as failed", zap.Error(updateErr))
 				}
 			}
@@ -221,7 +221,7 @@ func (b *BaseAgent) Execute(ctx context.Context, input *Input) (_ *Output, execE
 		if hasMemory {
 			// 将最近的记忆转换为消息
 			for _, mem := range b.recentMemory {
-				if mem.Kind == MemoryShortTerm {
+				if mem.Kind == types.MemoryCategory(MemoryShortTerm) {
 					role := llm.RoleAssistant
 					if r, ok := mem.Metadata["role"].(string); ok && r != "" {
 						role = types.Role(r)
@@ -583,8 +583,3 @@ func parsePlanSteps(content string) []string {
 
 	return steps
 }
-
-
-
-
-

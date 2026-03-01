@@ -1,11 +1,10 @@
 package mcp
 
 import (
-	"github.com/BaSui01/agentflow/types"
 	"encoding/json"
 	"testing"
 
-	"github.com/BaSui01/agentflow/llm"
+	"github.com/BaSui01/agentflow/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -79,5 +78,3 @@ func TestFromLLMToolSchema_Roundtrip(t *testing.T) {
 	assert.Equal(t, original.Description, restored.Description)
 	assert.Equal(t, "object", restored.InputSchema["type"])
 }
-
-

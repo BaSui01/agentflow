@@ -1,14 +1,13 @@
 package agent
 
 import (
-	"github.com/BaSui01/agentflow/types"
 	"context"
 	"fmt"
+	"github.com/BaSui01/agentflow/types"
 	"strings"
 	"time"
 
 	"github.com/BaSui01/agentflow/agent/memory"
-	"github.com/BaSui01/agentflow/llm"
 	"go.uber.org/zap"
 )
 
@@ -691,5 +690,3 @@ func (a *promptEnhancerRunnerAdapter) EnhanceUserPrompt(prompt, context string) 
 func AsPromptEnhancerRunner(enhancer *PromptEnhancer) PromptEnhancerRunner {
 	return &promptEnhancerRunnerAdapter{enhancer: enhancer}
 }
-
-

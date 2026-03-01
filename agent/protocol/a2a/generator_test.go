@@ -1,12 +1,11 @@
 package a2a
 
 import (
-	"github.com/BaSui01/agentflow/types"
 	"encoding/json"
+	"github.com/BaSui01/agentflow/types"
 	"testing"
 
 	"github.com/BaSui01/agentflow/agent/structured"
-	"github.com/BaSui01/agentflow/llm"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -272,5 +271,3 @@ func TestConvertToolSchema_InvalidJSON(t *testing.T) {
 	assert.NotNil(t, toolDef.Parameters)
 	assert.Equal(t, structured.TypeObject, toolDef.Parameters.Type)
 }
-
-

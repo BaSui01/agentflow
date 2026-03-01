@@ -38,7 +38,7 @@ func (h *MCPHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case "/mcp/message":
 		h.handleMessage(w, r)
 	default:
-		http.NotFound(w, r)
+		h.writeErrorResponse(w, http.StatusNotFound, "MCP_NOT_FOUND", "endpoint not found")
 	}
 }
 
@@ -46,7 +46,7 @@ func (h *MCPHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 func (h *MCPHandler) handleSSE(w http.ResponseWriter, r *http.Request) {
 	flusher, ok := w.(http.Flusher)
 	if !ok {
-		http.Error(w, "SSE not supported", http.StatusInternalServerError)
+		h.writeErrorResponse(w, http.StatusInternalServerError, "MCP_SSE_NOT_SUPPORTED", "SSE not supported")
 		return
 	}
 
@@ -87,37 +87,46 @@ func (h *MCPHandler) handleSSE(w http.ResponseWriter, r *http.Request) {
 // handleMessage 处理 JSON-RPC 消息
 func (h *MCPHandler) handleMessage(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		h.writeErrorResponse(w, http.StatusMethodNotAllowed, "MCP_METHOD_NOT_ALLOWED", "method not allowed")
 		return
 	}
 
 	var msg MCPMessage
 	if err := json.NewDecoder(r.Body).Decode(&msg); err != nil {
 		resp := NewMCPError(nil, ErrorCodeParseError, "parse error", nil)
-		w.Header().Set("Content-Type", "application/json")
-		if encodeErr := json.NewEncoder(w).Encode(resp); encodeErr != nil && h.logger != nil {
-			h.logger.Warn("failed to encode parse error response", zap.Error(encodeErr))
-		}
+		h.writeJSONResponse(w, http.StatusBadRequest, resp)
 		return
 	}
 
 	// 分发请求
 	response := h.dispatch(r.Context(), &msg)
 
-	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(response); err != nil {
-		if h.logger == nil {
-			return
-		}
-		h.logger.Warn("failed to encode mcp response", zap.Error(err))
-		return
-	}
+	h.writeJSONResponse(w, http.StatusOK, response)
 
 	// 如果有 SSE 客户端，也推送响应
 	clientID := r.URL.Query().Get("clientId")
 	if clientID != "" {
 		h.pushToSSEClient(clientID, response)
 	}
+}
+
+func (h *MCPHandler) writeJSONResponse(w http.ResponseWriter, status int, data any) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	if err := json.NewEncoder(w).Encode(data); err != nil && h.logger != nil {
+		h.logger.Warn("failed to encode mcp response", zap.Error(err))
+	}
+}
+
+func (h *MCPHandler) writeErrorResponse(w http.ResponseWriter, status int, code string, message string) {
+	h.writeJSONResponse(w, status, map[string]any{
+		"success": false,
+		"error": map[string]string{
+			"code":    code,
+			"message": message,
+		},
+		"timestamp": time.Now().UTC(),
+	})
 }
 
 // dispatch 分发 JSON-RPC 请求到对应的处理方法
@@ -226,4 +235,3 @@ func (h *MCPHandler) pushToSSEClient(clientID string, msg *MCPMessage) {
 		h.logger.Warn("SSE client channel full", zap.String("client_id", clientID))
 	}
 }
-

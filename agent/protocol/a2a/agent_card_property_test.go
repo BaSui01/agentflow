@@ -1,15 +1,14 @@
 package a2a
 
 import (
-	"github.com/BaSui01/agentflow/types"
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/BaSui01/agentflow/types"
 	"testing"
 
 	"github.com/BaSui01/agentflow/agent"
 	"github.com/BaSui01/agentflow/agent/structured"
-	"github.com/BaSui01/agentflow/llm"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"pgregory.net/rapid"
@@ -383,5 +382,3 @@ func TestProperty_AgentCard_ToolDefinitionCompleteness(t *testing.T) {
 		assert.NotNil(t, toolDef.Parameters, "Tool parameters should not be nil")
 	})
 }
-
-
