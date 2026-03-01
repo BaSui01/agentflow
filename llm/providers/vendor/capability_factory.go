@@ -1,4 +1,4 @@
-package factory
+package vendor
 
 import (
 	"context"
