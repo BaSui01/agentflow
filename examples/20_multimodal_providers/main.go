@@ -110,8 +110,10 @@ func demoRerank(ctx context.Context, logger *zap.Logger) {
 	cohereKey := os.Getenv("COHERE_API_KEY")
 	if cohereKey != "" {
 		provider := rerank.NewCohereProvider(rerank.CohereConfig{
-			APIKey: cohereKey,
-			Model:  "rerank-v3.5",
+			BaseProviderConfig: providers.BaseProviderConfig{
+				APIKey: cohereKey,
+				Model:  "rerank-v3.5",
+			},
 		})
 
 		results, err := provider.RerankSimple(ctx, query, documents, 3)
@@ -129,7 +131,9 @@ func demoRerank(ctx context.Context, logger *zap.Logger) {
 	jinaKey := os.Getenv("JINA_API_KEY")
 	if jinaKey != "" {
 		provider := rerank.NewJinaProvider(rerank.JinaConfig{
-			APIKey: jinaKey,
+			BaseProviderConfig: providers.BaseProviderConfig{
+				APIKey: jinaKey,
+			},
 		})
 
 		results, err := provider.RerankSimple(ctx, query, documents, 3)
@@ -197,11 +201,11 @@ func demoMultimodalRouter(ctx context.Context, logger *zap.Logger) {
 
 	if key := os.Getenv("COHERE_API_KEY"); key != "" {
 		router.RegisterEmbedding("cohere", embedding.NewCohereProvider(embedding.CohereConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: key}}), false)
-		router.RegisterRerank("cohere", rerank.NewCohereProvider(rerank.CohereConfig{APIKey: key}), true)
+		router.RegisterRerank("cohere", rerank.NewCohereProvider(rerank.CohereConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: key}}), true)
 	}
 
 	if key := os.Getenv("ELEVENLABS_API_KEY"); key != "" {
-		router.RegisterTTS("elevenlabs", speech.NewElevenLabsProvider(speech.ElevenLabsConfig{APIKey: key}), false)
+		router.RegisterTTS("elevenlabs", speech.NewElevenLabsProvider(speech.ElevenLabsConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: key}}), false)
 	}
 
 	// List registered providers
@@ -224,4 +228,3 @@ func demoMultimodalRouter(ctx context.Context, logger *zap.Logger) {
 		}
 	}
 }
-

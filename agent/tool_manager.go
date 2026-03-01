@@ -1,10 +1,9 @@
 package agent
 
 import (
-	"github.com/BaSui01/agentflow/types"
 	"context"
+	"github.com/BaSui01/agentflow/types"
 
-	"github.com/BaSui01/agentflow/llm"
 	llmtools "github.com/BaSui01/agentflow/llm/tools"
 )
 
@@ -37,5 +36,3 @@ func filterToolSchemasByWhitelist(all []types.ToolSchema, whitelist []string) []
 	}
 	return out
 }
-
-

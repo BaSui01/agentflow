@@ -23,8 +23,8 @@ func TestDefaultOpenAIConfig(t *testing.T) {
 func TestNewOpenAIProvider(t *testing.T) {
 	p := NewOpenAIProvider(OpenAIConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key"}})
 	require.NotNil(t, p)
-	assert.Equal(t, "https://api.openai.com/v1", p.cfg.BaseURL)
-	assert.Equal(t, "omni-moderation-latest", p.cfg.Model)
+	assert.Equal(t, "https://api.openai.com/v1", p.BaseURL)
+	assert.Equal(t, "omni-moderation-latest", p.Model)
 }
 
 func TestNewOpenAIProvider_CustomConfig(t *testing.T) {
@@ -37,8 +37,8 @@ func TestNewOpenAIProvider_CustomConfig(t *testing.T) {
 		},
 	}
 	p := NewOpenAIProvider(cfg)
-	assert.Equal(t, "https://custom.api.com", p.cfg.BaseURL)
-	assert.Equal(t, "custom-model", p.cfg.Model)
+	assert.Equal(t, "https://custom.api.com", p.BaseURL)
+	assert.Equal(t, "custom-model", p.Model)
 }
 
 func TestOpenAIProvider_Name(t *testing.T) {
@@ -79,7 +79,7 @@ func TestOpenAIProvider_Moderate_TextOnly(t *testing.T) {
 	defer server.Close()
 
 	p := NewOpenAIProvider(OpenAIConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key", BaseURL: server.URL}})
-	p.client = server.Client()
+	p.Client = server.Client()
 
 	result, err := p.Moderate(context.Background(), &ModerationRequest{
 		Input: []string{"some hateful text"},
@@ -121,7 +121,7 @@ func TestOpenAIProvider_Moderate_WithImages(t *testing.T) {
 	defer server.Close()
 
 	p := NewOpenAIProvider(OpenAIConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key", BaseURL: server.URL}})
-	p.client = server.Client()
+	p.Client = server.Client()
 
 	result, err := p.Moderate(context.Background(), &ModerationRequest{
 		Input:  []string{"check this"},
@@ -145,7 +145,7 @@ func TestOpenAIProvider_Moderate_CustomModel(t *testing.T) {
 	defer server.Close()
 
 	p := NewOpenAIProvider(OpenAIConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "key", BaseURL: server.URL}})
-	p.client = server.Client()
+	p.Client = server.Client()
 
 	result, err := p.Moderate(context.Background(), &ModerationRequest{
 		Input: []string{"text"},
@@ -163,11 +163,11 @@ func TestOpenAIProvider_Moderate_HTTPError(t *testing.T) {
 	defer server.Close()
 
 	p := NewOpenAIProvider(OpenAIConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "key", BaseURL: server.URL}})
-	p.client = server.Client()
+	p.Client = server.Client()
 
 	_, err := p.Moderate(context.Background(), &ModerationRequest{Input: []string{"text"}})
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "status=429")
+	assert.Contains(t, err.Error(), "RATE_LIMIT")
 }
 
 func TestOpenAIProvider_Moderate_ContextCancelled(t *testing.T) {
@@ -177,7 +177,7 @@ func TestOpenAIProvider_Moderate_ContextCancelled(t *testing.T) {
 	defer server.Close()
 
 	p := NewOpenAIProvider(OpenAIConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "key", BaseURL: server.URL}})
-	p.client = server.Client()
+	p.Client = server.Client()
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
@@ -247,4 +247,3 @@ func TestMapScores(t *testing.T) {
 func TestOpenAIProvider_ImplementsModerationProvider(t *testing.T) {
 	var _ ModerationProvider = (*OpenAIProvider)(nil)
 }
-

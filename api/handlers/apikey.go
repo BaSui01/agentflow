@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/BaSui01/agentflow/api"
 	"github.com/BaSui01/agentflow/llm"
 	"github.com/BaSui01/agentflow/types"
 	"go.uber.org/zap"
@@ -226,7 +227,7 @@ func (h *APIKeyHandler) HandleCreateAPIKey(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	WriteJSON(w, http.StatusCreated, Response{
+	WriteJSON(w, http.StatusCreated, api.Response{
 		Success:   true,
 		Data:      toAPIKeyResponse(key),
 		Timestamp: time.Now(),
@@ -421,4 +422,3 @@ func (h *APIKeyHandler) HandleAPIKeyStats(w http.ResponseWriter, r *http.Request
 
 	WriteSuccess(w, stats)
 }
-

@@ -69,4 +69,3 @@ func (p *RetryProvider) ListModels(ctx context.Context) ([]llm.Model, error) {
 func (p *RetryProvider) Endpoints() llm.ProviderEndpoints {
 	return p.inner.Endpoints()
 }
-

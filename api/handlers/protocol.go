@@ -155,12 +155,13 @@ func (h *ProtocolHandler) HandleA2ASendTask(w http.ResponseWriter, r *http.Reque
 
 	status := rec.statusCode
 	var payload any
-	if len(rec.body) > 0 {
+	if rec.body.Len() > 0 {
+		bodyBytes := rec.body.Bytes()
 		var parsed any
-		if err := json.Unmarshal(rec.body, &parsed); err == nil {
+		if err := json.Unmarshal(bodyBytes, &parsed); err == nil {
 			payload = parsed
 		} else {
-			payload = map[string]any{"raw": string(rec.body)}
+			payload = map[string]any{"raw": string(bodyBytes)}
 		}
 	}
 

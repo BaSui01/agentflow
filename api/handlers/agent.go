@@ -12,6 +12,7 @@ import (
 
 	"github.com/BaSui01/agentflow/agent"
 	"github.com/BaSui01/agentflow/agent/discovery"
+	"github.com/BaSui01/agentflow/api"
 	"github.com/BaSui01/agentflow/types"
 	"go.uber.org/zap"
 )
@@ -488,7 +489,7 @@ func (h *AgentHandler) HandleAgentHealth(w http.ResponseWriter, r *http.Request)
 	}
 
 	if !healthy {
-		WriteJSON(w, http.StatusServiceUnavailable, Response{
+		WriteJSON(w, http.StatusServiceUnavailable, api.Response{
 			Success:   false,
 			Data:      resp,
 			Timestamp: time.Now(),
@@ -550,4 +551,3 @@ func extractAgentID(r *http.Request) string {
 	}
 	return ""
 }
-
