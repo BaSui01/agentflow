@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/BaSui01/agentflow/pkg/tlsutil"
+	"go.uber.org/zap"
 )
 
 // Runway Provider执行视频生成,使用Runway ML Gen-4.
@@ -17,16 +18,20 @@ import (
 type RunwayProvider struct {
 	cfg    RunwayConfig
 	client *http.Client
+	logger *zap.Logger
 }
 
 // NewRunway Provider创建了新的跑道视频提供商.
-func NewRunwayProvider(cfg RunwayConfig) *RunwayProvider {
+func NewRunwayProvider(cfg RunwayConfig, logger *zap.Logger) *RunwayProvider {
+	if logger == nil {
+		logger = zap.NewNop()
+	}
 	if cfg.BaseURL == "" {
 		cfg.BaseURL = "https://api.runwayml.com"
 	}
 	if cfg.Model == "" {
 		// 可用: gen4 turbo, gen3a turbo, veo3.1, veo3.1 快活, veo3
-		cfg.Model = "gen4_turbo"
+		cfg.Model = "gen-4.5"
 	}
 	timeout := cfg.Timeout
 	if timeout == 0 {
@@ -36,6 +41,7 @@ func NewRunwayProvider(cfg RunwayConfig) *RunwayProvider {
 	return &RunwayProvider{
 		cfg:    cfg,
 		client: tlsutil.SecureHTTPClient(timeout),
+		logger: logger,
 	}
 }
 
@@ -74,6 +80,10 @@ func (p *RunwayProvider) Analyze(ctx context.Context, req *AnalyzeRequest) (*Ana
 // 终点: POST /v1/image to video
 // Auth: 熊克令牌 + X- Runway-Version 信头
 func (p *RunwayProvider) Generate(ctx context.Context, req *GenerateRequest) (*GenerateResponse, error) {
+	if err := ValidateGenerateRequest(req); err != nil {
+		return nil, err
+	}
+
 	model := req.Model
 	if model == "" {
 		model = p.cfg.Model

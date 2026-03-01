@@ -1,7 +1,6 @@
 package metrics
 
 import (
-	"sync"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -46,7 +45,6 @@ type Collector struct {
 	dbQueryDuration   *prometheus.HistogramVec
 
 	logger *zap.Logger
-	mu     sync.RWMutex
 }
 
 // NewCollector 创建指标收集器

@@ -410,7 +410,7 @@ func TestBrowserSession_GetHistory_ReturnsCopy(t *testing.T) {
 	assert.Len(t, h1, 1)
 	assert.Len(t, h2, 1)
 	// Modifying one should not affect the other
-	h1 = append(h1, BrowserCommand{})
+	_ = append(h1, BrowserCommand{})
 	assert.Len(t, session.GetHistory(), 1)
 }
 

@@ -390,9 +390,7 @@ func TestGeminiProvider_Stream_Success(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	var chunks []llm.StreamChunk
-	for c := range ch {
-		chunks = append(chunks, c)
+	for range ch {
 	}
 	// At least we got a channel and it closed without panic
 	assert.NotNil(t, ch)

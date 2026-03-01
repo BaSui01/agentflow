@@ -1,6 +1,0 @@
-{"file": ".claude/commands/trellis/finish-work.md", "reason": "Finish work checklist"}
-{"file": ".trellis/spec/shared/index.md", "reason": "Shared coding standards"}
-{"file": ".claude/commands/trellis/check-backend.md", "reason": "Backend check spec"}
-{"file": "pkg/database/pool.go", "reason": "对标连接管理模式"}
-{"file": "agent/persistence/store.go", "reason": "Store 接口规范"}
-{"file": "llm/tools/audit.go", "reason": "AuditBackend 接口规范"}

@@ -1,8 +1,0 @@
-{"file": ".trellis/workflow.md", "reason": "Project workflow and conventions"}
-{"file": ".trellis/spec/shared/index.md", "reason": "Shared coding standards"}
-{"file": ".trellis/spec/backend/index.md", "reason": "Backend development guide"}
-{"file": ".trellis/spec/backend/api-module.md", "reason": "API module conventions"}
-{"file": ".trellis/spec/backend/quality.md", "reason": "Code quality requirements"}
-{"file": "llm/providers/common.go", "reason": "OpenAI-compatible 共享类型和错误映射"}
-{"file": "llm/providers/config.go", "reason": "所有 provider 配置结构体"}
-{"file": "llm/providers/openaicompat/provider.go", "reason": "OpenAI-compatible 基类实现"}

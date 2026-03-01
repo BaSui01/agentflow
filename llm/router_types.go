@@ -1,8 +1,6 @@
 package llm
 
 import (
-	"context"
-	"sync"
 	"time"
 
 	"go.uber.org/zap"
@@ -24,14 +22,12 @@ const (
 type Router struct {
 	db            *gorm.DB
 	providers     map[string]Provider
-	mu            sync.RWMutex
 	healthMonitor *HealthMonitor
 	canaryConfig  *CanaryConfig
 	logger        *zap.Logger
 
 	healthCheckInterval time.Duration
 	healthCheckTimeout  time.Duration
-	healthCheckCancel   context.CancelFunc
 }
 
 // 路由选项配置路由器

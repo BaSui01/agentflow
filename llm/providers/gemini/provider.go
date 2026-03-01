@@ -291,14 +291,6 @@ type geminiResponse struct {
 	ResponseID     string                `json:"responseId,omitempty"`
 }
 
-type geminiErrorResp struct {
-	Error struct {
-		Code    int    `json:"code"`
-		Message string `json:"message"`
-		Status  string `json:"status"`
-	} `json:"error"`
-}
-
 func (p *GeminiProvider) isVertexAI() bool {
 	return p.cfg.ProjectID != ""
 }

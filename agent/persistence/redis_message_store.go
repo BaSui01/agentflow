@@ -272,9 +272,11 @@ func (s *RedisMessageStore) GetUnackedMessages(ctx context.Context, topic string
 	cutoff := time.Now().Add(-olderThan).UnixNano()
 
 	// 从待定的设定中获取消息ID, 并设定分数 < cutoffee
-	msgIDs, err := s.client.ZRangeByScore(ctx, s.pendingKey(topic), &redis.ZRangeBy{
-		Min: "-inf",
-		Max: strconv.FormatInt(cutoff, 10),
+	msgIDs, err := s.client.ZRangeArgs(ctx, redis.ZRangeArgs{
+		Key:     s.pendingKey(topic),
+		Start:   "-inf",
+		Stop:    strconv.FormatInt(cutoff, 10),
+		ByScore: true,
 	}).Result()
 	if err != nil {
 		return nil, err

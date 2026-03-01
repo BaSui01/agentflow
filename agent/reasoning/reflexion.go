@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/BaSui01/agentflow/llm"
@@ -44,7 +43,6 @@ type Reflection struct {
 
 // 折射记忆存储过去的经验。
 type ReflexionMemory struct {
-	mu      sync.RWMutex
 	entries []MemoryEntry
 }
 

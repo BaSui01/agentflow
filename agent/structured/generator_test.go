@@ -15,7 +15,8 @@ type SimpleStruct struct {
 	Age     int    `json:"age"`
 	Active  bool   `json:"active"`
 	Score   float64
-	private string // unexported, should be skipped
+	//lint:ignore U1000 故意用于测试 schema 跳过未导出字段
+	private string
 }
 
 type StructWithTags struct {

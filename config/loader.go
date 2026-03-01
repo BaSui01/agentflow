@@ -344,9 +344,13 @@ type MultimodalImageConfig struct {
 }
 
 type MultimodalVideoConfig struct {
-	RunwayAPIKey string `yaml:"runway_api_key" env:"RUNWAY_API_KEY" json:"-"`
-	VeoAPIKey    string `yaml:"veo_api_key" env:"VEO_API_KEY" json:"-"`
-	GoogleAPIKey string `yaml:"google_api_key" env:"GOOGLE_API_KEY" json:"-"`
+	RunwayAPIKey  string `yaml:"runway_api_key" env:"RUNWAY_API_KEY" json:"-"`
+	VeoAPIKey     string `yaml:"veo_api_key" env:"VEO_API_KEY" json:"-"`
+	GoogleAPIKey  string `yaml:"google_api_key" env:"GOOGLE_API_KEY" json:"-"`
+	SoraAPIKey    string `yaml:"sora_api_key" env:"SORA_API_KEY" json:"-"`
+	KlingAPIKey   string `yaml:"kling_api_key" env:"KLING_API_KEY" json:"-"`
+	LumaAPIKey    string `yaml:"luma_api_key" env:"LUMA_API_KEY" json:"-"`
+	MiniMaxAPIKey string `yaml:"minimax_api_key" env:"MINIMAX_API_KEY" json:"-"`
 }
 
 // LogConfig 日志配置

@@ -1,10 +1,7 @@
 package rag
 
 import (
-	"fmt"
 	"testing"
-
-	"go.uber.org/zap"
 )
 
 // =============================================================================
@@ -49,72 +46,6 @@ func BenchmarkHybridRetriever_ScaleTest(b *testing.B) {
 // BenchmarkHybridRetriever_TopKVariation 测试不同 TopK 的性能
 func BenchmarkHybridRetriever_TopKVariation(b *testing.B) {
 	b.Skip("需要完整的检索器实现")
-}
-
-// =============================================================================
-// 🔧 辅助函数
-// =============================================================================
-
-// setupBenchmarkRetriever 创建基准测试用的检索器
-func setupBenchmarkRetriever(b *testing.B, numDocs int) *HybridRetriever {
-	b.Helper()
-
-	config := DefaultHybridRetrievalConfig()
-	retriever := NewHybridRetriever(config, zap.NewNop())
-
-	// 生成模拟文档
-	docs := generateMockDocuments(numDocs)
-
-	// 索引文档
-	if err := retriever.IndexDocuments(docs); err != nil {
-		b.Fatal(err)
-	}
-
-	return retriever
-}
-
-// generateMockDocuments 生成模拟文档
-func generateMockDocuments(count int) []Document {
-	docs := make([]Document, count)
-
-	topics := []string{
-		"machine learning",
-		"deep learning",
-		"natural language processing",
-		"computer vision",
-		"reinforcement learning",
-		"neural networks",
-		"data science",
-		"artificial intelligence",
-	}
-
-	for i := 0; i < count; i++ {
-		topic := topics[i%len(topics)]
-		docs[i] = Document{
-			ID: fmt.Sprintf("doc-%d", i),
-			Content: fmt.Sprintf(
-				"This is a document about %s. It contains information about algorithms, "+
-					"techniques, and applications in the field. Document number %d.",
-				topic, i,
-			),
-			Metadata: map[string]any{
-				"topic": topic,
-				"index": i,
-			},
-			Embedding: generateMockEmbedding(768),
-		}
-	}
-
-	return docs
-}
-
-// generateMockEmbedding 生成模拟 embedding
-func generateMockEmbedding(dim int) []float64 {
-	embedding := make([]float64, dim)
-	for i := range embedding {
-		embedding[i] = float64(i) / float64(dim)
-	}
-	return embedding
 }
 
 // =============================================================================

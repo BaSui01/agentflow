@@ -10,12 +10,14 @@ import (
 	"time"
 
 	"github.com/BaSui01/agentflow/pkg/tlsutil"
+	"go.uber.org/zap"
 )
 
 // VeoProvider使用Google Veo 3.1执行视频生成.
 type VeoProvider struct {
 	cfg    VeoConfig
 	client *http.Client
+	logger *zap.Logger
 }
 
 // defaultVeoTimeout is the default HTTP client timeout for Veo video generation requests.
@@ -25,7 +27,10 @@ const defaultVeoTimeout = 300 * time.Second
 const defaultVeoPollInterval = 5 * time.Second
 
 // NewVeoProvider创建了一个新的Veo视频提供商.
-func NewVeoProvider(cfg VeoConfig) *VeoProvider {
+func NewVeoProvider(cfg VeoConfig, logger *zap.Logger) *VeoProvider {
+	if logger == nil {
+		logger = zap.NewNop()
+	}
 	if cfg.Model == "" {
 		cfg.Model = "veo-3.1-generate-preview"
 	}
@@ -37,6 +42,7 @@ func NewVeoProvider(cfg VeoConfig) *VeoProvider {
 	return &VeoProvider{
 		cfg:    cfg,
 		client: tlsutil.SecureHTTPClient(timeout),
+		logger: logger,
 	}
 }
 
@@ -84,6 +90,10 @@ func (p *VeoProvider) Analyze(ctx context.Context, req *AnalyzeRequest) (*Analyz
 
 // 生成视频使用Veo 3.1.
 func (p *VeoProvider) Generate(ctx context.Context, req *GenerateRequest) (*GenerateResponse, error) {
+	if err := ValidateGenerateRequest(req); err != nil {
+		return nil, err
+	}
+
 	model := req.Model
 	if model == "" {
 		model = p.cfg.Model
@@ -120,13 +130,14 @@ func (p *VeoProvider) Generate(ctx context.Context, req *GenerateRequest) (*Gene
 
 	payload, _ := json.Marshal(body)
 	// Veo 3.1 使用 Gemini API 端点: /models/{model}:generateVideos
-	url := fmt.Sprintf("https://generativelanguage.googleapis.com/v1beta/models/%s:generateVideos?key=%s",
-		model, p.cfg.APIKey)
+	url := fmt.Sprintf("https://generativelanguage.googleapis.com/v1beta/models/%s:generateVideos",
+		model)
 
 	httpReq, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(payload))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
+	httpReq.Header.Set("Authorization", "Bearer "+p.cfg.APIKey)
 	httpReq.Header.Set("Content-Type", "application/json")
 
 	resp, err := p.client.Do(httpReq)
@@ -182,11 +193,12 @@ func (p *VeoProvider) pollOperation(ctx context.Context, opName string) (*veoRes
 		case <-ctx.Done():
 			return nil, ctx.Err()
 		case <-ticker.C:
-			url := fmt.Sprintf("https://generativelanguage.googleapis.com/v1beta/%s?key=%s", opName, p.cfg.APIKey)
+			url := fmt.Sprintf("https://generativelanguage.googleapis.com/v1beta/%s", opName)
 			httpReq, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 			if err != nil {
 				return nil, fmt.Errorf("failed to create request: %w", err)
 			}
+			httpReq.Header.Set("Authorization", "Bearer "+p.cfg.APIKey)
 
 			resp, err := p.client.Do(httpReq)
 			if err != nil {

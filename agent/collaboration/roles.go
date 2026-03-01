@@ -360,6 +360,7 @@ func (p *RolePipeline) executeStage(
 				maxAttempts = rd.RetryPolicy.MaxRetries + 1
 			}
 
+		retryLoop:
 			for attempt := 0; attempt < maxAttempts; attempt++ {
 				if attempt > 0 {
 					delay := rd.RetryPolicy.Delay
@@ -371,7 +372,7 @@ func (p *RolePipeline) executeStage(
 					select {
 					case <-roleCtx.Done():
 						err = roleCtx.Err()
-						break
+						break retryLoop
 					case <-time.After(delay):
 					}
 				}
