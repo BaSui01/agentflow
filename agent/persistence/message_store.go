@@ -92,14 +92,11 @@ type Message struct {
 	ExpiresAt *time.Time `json:"expires_at,omitempty"`
 }
 
-// MessageDAO 是持久化层的数据对象别名，用于与领域层 types.Message 显式桥接。
-type MessageDAO = Message
-
 const daoPayloadTypesMessageKey = "_types_message"
 
 // NewMessageDAOFromTypes builds a persistence message envelope from a canonical types.Message.
 // Transport fields (topic/from/to/type) remain in DAO fields; rich message fields are preserved in payload.
-func NewMessageDAOFromTypes(topic, fromID, toID, msgType string, msg types.Message) *MessageDAO {
+func NewMessageDAOFromTypes(topic, fromID, toID, msgType string, msg types.Message) *Message {
 	createdAt := msg.Timestamp
 	if createdAt.IsZero() {
 		createdAt = time.Now()
@@ -110,7 +107,7 @@ func NewMessageDAOFromTypes(topic, fromID, toID, msgType string, msg types.Messa
 		daoPayloadTypesMessageKey: msg,
 	}
 
-	return &MessageDAO{
+	return &Message{
 		Topic:     topic,
 		FromID:    fromID,
 		ToID:      toID,

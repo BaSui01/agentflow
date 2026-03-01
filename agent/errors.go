@@ -7,9 +7,8 @@ import (
 	"github.com/BaSui01/agentflow/types"
 )
 
-// ErrorCode 定义 Agent 错误码
-// 用途类型。 ErrorCode作为与框架保持一致的基础类型.
-type ErrorCode = types.ErrorCode
+// ErrorCode 定义 Agent 错误码。
+type ErrorCode string
 
 // 特定代理错误代码
 // 这些扩展了类型/error.go中定义的基础错误代码
@@ -82,7 +81,7 @@ func (e *Error) Unwrap() error {
 // NewError 创建新的 Agent 错误
 func NewError(code ErrorCode, message string) *Error {
 	return &Error{
-		Base:      types.NewError(code, message),
+		Base:      types.NewError(types.ErrorCode(code), message),
 		Timestamp: time.Now(),
 		Metadata:  make(map[string]any),
 	}
@@ -91,7 +90,7 @@ func NewError(code ErrorCode, message string) *Error {
 // NewErrorWithCause 创建带原因的错误
 func NewErrorWithCause(code ErrorCode, message string, cause error) *Error {
 	return &Error{
-		Base:      types.NewError(code, message).WithCause(cause),
+		Base:      types.NewError(types.ErrorCode(code), message).WithCause(cause),
 		Timestamp: time.Now(),
 		Metadata:  make(map[string]any),
 	}
@@ -137,9 +136,9 @@ func IsRetryable(err error) bool {
 // GetErrorCode 从错误中提取出错误代码
 func GetErrorCode(err error) ErrorCode {
 	if e, ok := err.(*Error); ok {
-		return e.Base.Code
+		return ErrorCode(e.Base.Code)
 	}
-	return types.GetErrorCode(err)
+	return ErrorCode(types.GetErrorCode(err))
 }
 
 // 预定义错误

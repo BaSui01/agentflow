@@ -5,6 +5,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/BaSui01/agentflow/types"
 	"go.uber.org/zap"
 )
 
@@ -59,7 +60,7 @@ func (mc *MemoryCoordinator) Save(ctx context.Context, content string, kind Memo
 
 	rec := MemoryRecord{
 		AgentID:   mc.agentID,
-		Kind:      kind,
+		Kind:      types.MemoryCategory(kind),
 		Content:   content,
 		Metadata:  metadata,
 		CreatedAt: time.Now(),
@@ -164,3 +165,4 @@ func (mc *MemoryCoordinator) RecallRelevant(ctx context.Context, query string, t
 
 	return records, nil
 }
+

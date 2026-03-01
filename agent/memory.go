@@ -7,20 +7,18 @@ import (
 	"github.com/BaSui01/agentflow/types"
 )
 
-// MemoryKind 记忆类型
-// 折旧:使用类型。 用于新代码的内存类型 。
-// 此别名用于后向相容性 。
-type MemoryKind = types.MemoryCategory
+// MemoryKind 记忆类型。
+type MemoryKind string
 
 // 记忆类型常数 - 映射到统一类型. 内存类型
 // 折旧:使用类型。 记忆工作,类型。 记忆 Essodic等.
 const (
-	MemoryShortTerm = types.MemoryWorking   // 短期记忆 -> Working
-	MemoryWorking   = types.MemoryWorking   // 工作记忆
-	MemoryLongTerm  = types.MemorySemantic  // 长期记忆 -> Semantic
-	MemoryEpisodic  = types.MemoryEpisodic  // 情节记忆
-	MemorySemantic  = types.MemorySemantic  // 语义记忆 (新增)
-	MemoryProcedural = types.MemoryProcedural // 程序记忆 (新增)
+	MemoryShortTerm  MemoryKind = MemoryKind(types.MemoryWorking)    // 短期记忆 -> Working
+	MemoryWorking    MemoryKind = MemoryKind(types.MemoryWorking)    // 工作记忆
+	MemoryLongTerm   MemoryKind = MemoryKind(types.MemorySemantic)   // 长期记忆 -> Semantic
+	MemoryEpisodic   MemoryKind = MemoryKind(types.MemoryEpisodic)   // 情节记忆
+	MemorySemantic   MemoryKind = MemoryKind(types.MemorySemantic)   // 语义记忆
+	MemoryProcedural MemoryKind = MemoryKind(types.MemoryProcedural) // 程序记忆
 )
 
 // MemoryRecord 统一记忆结构

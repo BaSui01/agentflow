@@ -499,7 +499,7 @@ func (b *BaseAgent) SaveMemory(ctx context.Context, content string, kind MemoryK
 
 	rec := MemoryRecord{
 		AgentID:   b.config.ID,
-		Kind:      kind,
+		Kind:      types.MemoryCategory(kind),
 		Content:   content,
 		Metadata:  metadata,
 		CreatedAt: time.Now(),
@@ -677,3 +677,4 @@ func (b *BaseAgent) AddOutputFilter(f guardrails.Filter) {
 	}
 	b.outputValidator.AddFilter(f)
 }
+

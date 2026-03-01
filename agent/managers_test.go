@@ -8,6 +8,7 @@ import (
 	"github.com/BaSui01/agentflow/agent/guardrails"
 	"github.com/BaSui01/agentflow/agent/memory"
 	"github.com/BaSui01/agentflow/agent/skills"
+	"github.com/BaSui01/agentflow/types"
 	"go.uber.org/zap"
 )
 
@@ -246,7 +247,7 @@ func (m *mockMemoryManager) Search(ctx context.Context, agentID, query string, t
 
 func (m *mockMemoryManager) LoadRecent(ctx context.Context, agentID string, kind MemoryKind, limit int) ([]MemoryRecord, error) {
 	return []MemoryRecord{
-		{AgentID: agentID, Kind: kind, Content: "test", CreatedAt: time.Now()},
+		{AgentID: agentID, Kind: types.MemoryCategory(kind), Content: "test", CreatedAt: time.Now()},
 	}, nil
 }
 
@@ -351,3 +352,4 @@ func TestMemoryCoordinator_SaveCacheEviction(t *testing.T) {
 		t.Errorf("expected cache size %d, got %d", defaultMaxRecentMemory, len(recent))
 	}
 }
+

@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/BaSui01/agentflow/llm"
+	"github.com/BaSui01/agentflow/types"
 	"go.uber.org/zap"
 )
 
@@ -53,7 +54,7 @@ func (mc *MemoryCache) Save(ctx context.Context, content string, kind MemoryKind
 
 	rec := MemoryRecord{
 		AgentID:   mc.agentID,
-		Kind:      kind,
+		Kind:      types.MemoryCategory(kind),
 		Content:   content,
 		Metadata:  metadata,
 		CreatedAt: time.Now(),
@@ -92,7 +93,7 @@ func (mc *MemoryCache) GetRecentMessages() []llm.Message {
 
 	var msgs []llm.Message
 	for _, mem := range mc.recentMemory {
-		if mem.Kind == MemoryShortTerm {
+		if mem.Kind == types.MemoryCategory(MemoryShortTerm) {
 			role := llm.RoleAssistant
 			if r, ok := mem.Metadata["role"].(string); ok && r != "" {
 				role = llm.Role(r)
@@ -115,3 +116,4 @@ func (mc *MemoryCache) HasRecentMemory() bool {
 	defer mc.recentMemoryMu.RUnlock()
 	return len(mc.recentMemory) > 0
 }
+

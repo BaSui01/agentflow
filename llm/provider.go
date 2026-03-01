@@ -14,12 +14,9 @@ type (
 	ToolCall      = types.ToolCall
 	ToolSchema    = types.ToolSchema
 	ToolResult    = types.ToolResult
-	TokenUsage    = types.TokenUsage
 	Error         = types.Error
 	ErrorCode     = types.ErrorCode
 	ImageContent  = types.ImageContent
-	VideoContent  = types.VideoContent
-	ThinkingBlock = types.ThinkingBlock
 	Annotation    = types.Annotation
 )
 
