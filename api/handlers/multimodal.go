@@ -106,6 +106,10 @@ type MultimodalHandlerConfig struct {
 	GoogleAPIKey         string
 	RunwayAPIKey         string
 	VeoAPIKey            string
+	SoraAPIKey           string
+	KlingAPIKey          string
+	LumaAPIKey           string
+	MiniMaxAPIKey        string
 	DefaultImageProvider string
 	DefaultVideoProvider string
 	ReferenceMaxSize     int64
@@ -170,7 +174,7 @@ func NewMultimodalHandlerFromConfig(cfg MultimodalHandlerConfig, logger *zap.Log
 		})
 		videoProviders["veo"] = video.NewVeoProvider(video.VeoConfig{
 			BaseProviderConfig: providers.BaseProviderConfig{APIKey: cfg.GoogleAPIKey},
-		})
+		}, logger)
 		if defaultImage == "" {
 			defaultImage = "gemini"
 		}
@@ -181,7 +185,7 @@ func NewMultimodalHandlerFromConfig(cfg MultimodalHandlerConfig, logger *zap.Log
 	if cfg.VeoAPIKey != "" {
 		videoProviders["veo"] = video.NewVeoProvider(video.VeoConfig{
 			BaseProviderConfig: providers.BaseProviderConfig{APIKey: cfg.VeoAPIKey},
-		})
+		}, logger)
 		if defaultVideo == "" {
 			defaultVideo = "veo"
 		}
@@ -189,9 +193,41 @@ func NewMultimodalHandlerFromConfig(cfg MultimodalHandlerConfig, logger *zap.Log
 	if cfg.RunwayAPIKey != "" {
 		videoProviders["runway"] = video.NewRunwayProvider(video.RunwayConfig{
 			BaseProviderConfig: providers.BaseProviderConfig{APIKey: cfg.RunwayAPIKey},
-		})
+		}, logger)
 		if defaultVideo == "" {
 			defaultVideo = "runway"
+		}
+	}
+	if cfg.SoraAPIKey != "" {
+		videoProviders["sora"] = video.NewSoraProvider(video.SoraConfig{
+			BaseProviderConfig: providers.BaseProviderConfig{APIKey: cfg.SoraAPIKey},
+		}, logger)
+		if defaultVideo == "" {
+			defaultVideo = "sora"
+		}
+	}
+	if cfg.KlingAPIKey != "" {
+		videoProviders["kling"] = video.NewKlingProvider(video.KlingConfig{
+			BaseProviderConfig: providers.BaseProviderConfig{APIKey: cfg.KlingAPIKey},
+		}, logger)
+		if defaultVideo == "" {
+			defaultVideo = "kling"
+		}
+	}
+	if cfg.LumaAPIKey != "" {
+		videoProviders["luma"] = video.NewLumaProvider(video.LumaConfig{
+			BaseProviderConfig: providers.BaseProviderConfig{APIKey: cfg.LumaAPIKey},
+		}, logger)
+		if defaultVideo == "" {
+			defaultVideo = "luma"
+		}
+	}
+	if cfg.MiniMaxAPIKey != "" {
+		videoProviders["minimax-video"] = video.NewMiniMaxVideoProvider(video.MiniMaxVideoConfig{
+			BaseProviderConfig: providers.BaseProviderConfig{APIKey: cfg.MiniMaxAPIKey},
+		}, logger)
+		if defaultVideo == "" {
+			defaultVideo = "minimax-video"
 		}
 	}
 

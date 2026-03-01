@@ -295,16 +295,6 @@ func (h *ChatHandler) convertToAPIResponse(resp *llm.ChatResponse) *api.ChatResp
 	return h.converter.ToAPIResponse(resp)
 }
 
-// convertChoices 转换选择列表
-func (h *ChatHandler) convertChoices(choices []llm.ChatChoice) []api.ChatChoice {
-	return h.converter.ToAPIChoices(choices)
-}
-
-// convertUsage 转换使用统计
-func (h *ChatHandler) convertUsage(usage llm.ChatUsage) api.ChatUsage {
-	return h.converter.ToAPIUsage(usage)
-}
-
 // convertToAPIStreamChunk 转换流式块
 func (h *ChatHandler) convertToAPIStreamChunk(chunk *llm.StreamChunk) *api.StreamChunk {
 	return h.converter.ToAPIStreamChunk(chunk)
@@ -399,22 +389,6 @@ func convertAPIImagesToTypes(images []api.ImageContent) []types.ImageContent {
 	result := make([]types.ImageContent, len(images))
 	for i, img := range images {
 		result[i] = types.ImageContent{
-			Type: img.Type,
-			URL:  img.URL,
-			Data: img.Data,
-		}
-	}
-	return result
-}
-
-// convertTypesImagesToAPI 将 types.ImageContent 切片转换为 api.ImageContent 切片。
-func convertTypesImagesToAPI(images []types.ImageContent) []api.ImageContent {
-	if len(images) == 0 {
-		return nil
-	}
-	result := make([]api.ImageContent, len(images))
-	for i, img := range images {
-		result[i] = api.ImageContent{
 			Type: img.Type,
 			URL:  img.URL,
 			Data: img.Data,

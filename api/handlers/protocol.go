@@ -135,13 +135,6 @@ func (h *ProtocolHandler) HandleA2AAgentCard(w http.ResponseWriter, r *http.Requ
 	WriteSuccess(w, card)
 }
 
-// a2aSendTaskRequest is the request body for HandleA2ASendTask.
-type a2aSendTaskRequest struct {
-	To      string `json:"to"`
-	From    string `json:"from"`
-	Payload any    `json:"payload"`
-}
-
 // HandleA2ASendTask handles POST /api/v1/a2a/tasks
 func (h *ProtocolHandler) HandleA2ASendTask(w http.ResponseWriter, r *http.Request) {
 	// Delegate to the A2A server's HTTP handler which already handles

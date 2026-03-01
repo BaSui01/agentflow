@@ -8,7 +8,6 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/BaSui01/agentflow/agent"
@@ -35,7 +34,6 @@ type AgentHandler struct {
 	resolver      AgentResolver
 	service       AgentService
 	logger        *zap.Logger
-	mu            sync.RWMutex
 }
 
 // AgentInfo Agent information returned by the API
