@@ -7,7 +7,6 @@ import (
 	"crypto/rsa"
 	"crypto/x509"
 	"encoding/hex"
-	"encoding/json"
 	"encoding/pem"
 	"fmt"
 	"net"
@@ -17,7 +16,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/BaSui01/agentflow/api/handlers"
+	"github.com/BaSui01/agentflow/api"
 	"github.com/BaSui01/agentflow/config"
 	"github.com/BaSui01/agentflow/pkg/metrics"
 	"github.com/BaSui01/agentflow/types"
@@ -106,8 +105,6 @@ func (rw *responseWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
 	return nil, nil, fmt.Errorf("underlying ResponseWriter does not implement http.Hijacker")
 }
 
-// PLACEHOLDER_METRICS_AND_REST
-
 // =============================================================================
 // MetricsMiddleware — records HTTP request metrics via metrics.Collector
 // =============================================================================
@@ -153,6 +150,42 @@ func (w *metricsResponseWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
 	return nil, nil, fmt.Errorf("underlying ResponseWriter does not implement http.Hijacker")
 }
 
+type tracingResponseWriter struct {
+	http.ResponseWriter
+	statusCode int
+	written    bool
+}
+
+func newTracingResponseWriter(w http.ResponseWriter) *tracingResponseWriter {
+	return &tracingResponseWriter{
+		ResponseWriter: w,
+		statusCode:     http.StatusOK,
+	}
+}
+
+func (w *tracingResponseWriter) WriteHeader(code int) {
+	if w.written {
+		return
+	}
+	w.statusCode = code
+	w.written = true
+	w.ResponseWriter.WriteHeader(code)
+}
+
+func (w *tracingResponseWriter) Write(b []byte) (int, error) {
+	if !w.written {
+		w.WriteHeader(http.StatusOK)
+	}
+	return w.ResponseWriter.Write(b)
+}
+
+func (w *tracingResponseWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	if hj, ok := w.ResponseWriter.(http.Hijacker); ok {
+		return hj.Hijack()
+	}
+	return nil, nil, fmt.Errorf("underlying ResponseWriter does not implement http.Hijacker")
+}
+
 // MetricsMiddleware records HTTP request duration, status, and sizes via the
 // provided metrics.Collector.
 func MetricsMiddleware(collector *metrics.Collector) Middleware {
@@ -185,8 +218,6 @@ func MetricsMiddleware(collector *metrics.Collector) Middleware {
 		})
 	}
 }
-
-// PLACEHOLDER_NORMALIZE_AND_REST
 
 var pathSegmentPattern = regexp.MustCompile(
 	`^[0-9a-fA-F]{8,}(-[0-9a-fA-F]{4,}){0,4}$|^[0-9]+$`,
@@ -236,20 +267,18 @@ func OTelTracing() Middleware {
 			)
 			defer span.End()
 
-			rw := handlers.NewResponseWriter(w)
+			rw := newTracingResponseWriter(w)
 			next.ServeHTTP(rw, r.WithContext(ctx))
 
 			span.SetAttributes(
-				attribute.Int("http.response.status_code", rw.StatusCode),
+				attribute.Int("http.response.status_code", rw.statusCode),
 			)
 		})
 	}
 }
 
-// PLACEHOLDER_AUTH_AND_REST
-
-// APIKeyAuth API Key 认证中间件
-func APIKeyAuth(validKeys []string, skipPaths []string, allowQueryAPIKey bool, logger *zap.Logger) Middleware {
+// APIKeyAuth API Key 认证中间件（仅支持 X-API-Key header）
+func APIKeyAuth(validKeys []string, skipPaths []string, logger *zap.Logger) Middleware {
 	keySet := make(map[string]struct{}, len(validKeys))
 	for _, k := range validKeys {
 		keySet[k] = struct{}{}
@@ -265,9 +294,6 @@ func APIKeyAuth(validKeys []string, skipPaths []string, allowQueryAPIKey bool, l
 				return
 			}
 			key := r.Header.Get("X-API-Key")
-			if allowQueryAPIKey && key == "" {
-				key = r.URL.Query().Get("api_key")
-			}
 			if _, ok := keySet[key]; !ok {
 				writeMiddlewareError(w, http.StatusUnauthorized, "AUTHENTICATION", "invalid or missing API key")
 				return
@@ -279,45 +305,39 @@ func APIKeyAuth(validKeys []string, skipPaths []string, allowQueryAPIKey bool, l
 
 // RateLimiter 基于 IP 的请求限流中间件
 func RateLimiter(ctx context.Context, rps float64, burst int, logger *zap.Logger) Middleware {
+	_ = ctx
+	_ = logger
 	type visitor struct {
 		limiter  *rate.Limiter
 		lastSeen time.Time
 	}
 	var (
-		mu       sync.Mutex
-		visitors = make(map[string]*visitor)
+		mu          sync.Mutex
+		visitors    = make(map[string]*visitor)
+		lastCleanup = time.Now()
 	)
-	go func() {
-		ticker := time.NewTicker(time.Minute)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case <-ticker.C:
-				mu.Lock()
-				for ip, v := range visitors {
-					if time.Since(v.lastSeen) > 3*time.Minute {
-						delete(visitors, ip)
-					}
-				}
-				mu.Unlock()
-			}
-		}
-	}()
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			now := time.Now()
 			ip, _, err := net.SplitHostPort(r.RemoteAddr)
 			if err != nil {
 				ip = r.RemoteAddr
 			}
 			mu.Lock()
+			if now.Sub(lastCleanup) >= time.Minute {
+				for k, v := range visitors {
+					if now.Sub(v.lastSeen) > 3*time.Minute {
+						delete(visitors, k)
+					}
+				}
+				lastCleanup = now
+			}
 			v, exists := visitors[ip]
 			if !exists {
 				v = &visitor{limiter: rate.NewLimiter(rate.Limit(rps), burst)}
 				visitors[ip] = v
 			}
-			v.lastSeen = time.Now()
+			v.lastSeen = now
 			mu.Unlock()
 			if !v.limiter.Allow() {
 				writeMiddlewareError(w, http.StatusTooManyRequests, "RATE_LIMITED", "too many requests")
@@ -327,8 +347,6 @@ func RateLimiter(ctx context.Context, rps float64, burst int, logger *zap.Logger
 		})
 	}
 }
-
-// PLACEHOLDER_CORS_AND_REST
 
 // CORS 跨域中间件
 func CORS(allowedOrigins []string) Middleware {
@@ -399,8 +417,6 @@ func generateRequestID() string {
 	return "req-" + hex.EncodeToString(b)
 }
 
-// PLACEHOLDER_JWT_AND_REST
-
 // JWTAuth validates JWT tokens from the Authorization: Bearer header and injects
 // tenant_id, user_id, and roles into the request context.
 func JWTAuth(cfg config.JWTConfig, skipPaths []string, logger *zap.Logger) Middleware {
@@ -460,8 +476,6 @@ func JWTAuth(cfg config.JWTConfig, skipPaths []string, logger *zap.Logger) Middl
 		}
 	}
 
-// PLACEHOLDER_JWT_HANDLER
-
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if _, skip := skipSet[r.URL.Path]; skip {
@@ -515,62 +529,32 @@ func JWTAuth(cfg config.JWTConfig, skipPaths []string, logger *zap.Logger) Middl
 
 // writeMiddlewareError writes a JSON error response.
 func writeMiddlewareError(w http.ResponseWriter, statusCode int, code string, message string) {
-	type errorDetail struct {
-		Code    string `json:"code"`
-		Message string `json:"message"`
-	}
-	type errorResponse struct {
-		Success   bool         `json:"success"`
-		Error     *errorDetail `json:"error"`
-		Timestamp time.Time    `json:"timestamp"`
-	}
-	resp := errorResponse{
-		Success:   false,
-		Error:     &errorDetail{Code: code, Message: message},
+	api.WriteJSONResponse(w, statusCode, api.Response{
+		Success: false,
+		Error: &api.ErrorInfo{
+			Code:    code,
+			Message: message,
+		},
 		Timestamp: time.Now().UTC(),
-	}
-	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	w.Header().Set("X-Content-Type-Options", "nosniff")
-	buf, err := json.Marshal(resp)
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		_, _ = w.Write([]byte(`{"success":false,"error":{"code":"INTERNAL_ERROR","message":"failed to encode error response"}}`))
-		return
-	}
-	w.WriteHeader(statusCode)
-	_, _ = w.Write(buf)
+	})
 }
 
 // TenantRateLimiter applies rate limiting based on the tenant_id in the request context.
 func TenantRateLimiter(ctx context.Context, rps float64, burst int, logger *zap.Logger) Middleware {
+	_ = ctx
+	_ = logger
 	type visitor struct {
 		limiter  *rate.Limiter
 		lastSeen time.Time
 	}
 	var (
-		mu       sync.Mutex
-		visitors = make(map[string]*visitor)
+		mu          sync.Mutex
+		visitors    = make(map[string]*visitor)
+		lastCleanup = time.Now()
 	)
-	go func() {
-		ticker := time.NewTicker(time.Minute)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case <-ticker.C:
-				mu.Lock()
-				for key, v := range visitors {
-					if time.Since(v.lastSeen) > 3*time.Minute {
-						delete(visitors, key)
-					}
-				}
-				mu.Unlock()
-			}
-		}
-	}()
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			now := time.Now()
 			key := ""
 			if tenantID, ok := types.TenantID(r.Context()); ok {
 				key = "tenant:" + tenantID
@@ -583,12 +567,20 @@ func TenantRateLimiter(ctx context.Context, rps float64, burst int, logger *zap.
 			}
 
 			mu.Lock()
+			if now.Sub(lastCleanup) >= time.Minute {
+				for k, v := range visitors {
+					if now.Sub(v.lastSeen) > 3*time.Minute {
+						delete(visitors, k)
+					}
+				}
+				lastCleanup = now
+			}
 			v, exists := visitors[key]
 			if !exists {
 				v = &visitor{limiter: rate.NewLimiter(rate.Limit(rps), burst)}
 				visitors[key] = v
 			}
-			v.lastSeen = time.Now()
+			v.lastSeen = now
 			mu.Unlock()
 
 			if !v.limiter.Allow() {
@@ -599,4 +591,3 @@ func TenantRateLimiter(ctx context.Context, rps float64, burst int, logger *zap.
 		})
 	}
 }
-

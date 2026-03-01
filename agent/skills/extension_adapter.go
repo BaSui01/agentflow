@@ -106,5 +106,3 @@ func (a *SkillsExtensionAdapter) ListSkills() []string {
 	}
 	return names
 }
-
-

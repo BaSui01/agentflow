@@ -1,37 +1,13 @@
 package types
 
-import "context"
-
 // =============================================================================
 // Minimal Agent Execution Interfaces
 // =============================================================================
-// These interfaces define the smallest common contract shared by all agent
-// variants in the framework (agent.Agent, workflow.AgentExecutor,
-// conversation.ConversationAgent, crews.CrewAgent, etc.).
-//
-// The types package is the lowest-level package with no internal dependencies,
-// so placing these interfaces here avoids circular imports.
+// Shared tiny interfaces that are safe to place in the lowest-level package.
 // =============================================================================
 
-// Executor is the minimal agent execution interface.
-// All agent variants share this common contract: an identity (ID) and the
-// ability to execute with arbitrary input/output.
-//
-// Domain-specific agent interfaces (conversation, crew, handoff, evaluation)
-// extend or specialize this contract for their own needs.
-//
-// TODO(L-006): agent.Agent 接口使用强类型 (*Input, *Output)，而 types.Executor
-// 使用 (any, any)。两者有意保持不同：Executor 用于跨包通用场景（workflow 等），
-// agent.Agent 用于 Agent 层内部的类型安全。未来可考虑通过泛型统一。
-type Executor interface {
-	// ID returns the agent's unique identifier.
-	ID() string
-	// Execute runs the agent with the given input and returns the result.
-	Execute(ctx context.Context, input any) (any, error)
-}
-
-// Named is an optional interface for agents that have a display name.
-// Use a type assertion to check if an Executor also implements Named:
+// Named is an optional interface for components that have a display name.
+// Use a type assertion to check if a value also implements Named:
 //
 //	if named, ok := executor.(types.Named); ok {
 //	    fmt.Println(named.Name())
@@ -40,4 +16,3 @@ type Named interface {
 	// Name returns the agent's human-readable display name.
 	Name() string
 }
-

@@ -162,7 +162,7 @@ func TestNormalizePath(t *testing.T) {
 // --- APIKeyAuth ---
 
 func TestAPIKeyAuth_ValidKey(t *testing.T) {
-	handler := APIKeyAuth([]string{"valid-key"}, nil, false, zap.NewNop())(okHandler())
+	handler := APIKeyAuth([]string{"valid-key"}, nil, zap.NewNop())(okHandler())
 	req := httptest.NewRequest("GET", "/api/test", nil)
 	req.Header.Set("X-API-Key", "valid-key")
 	rec := httptest.NewRecorder()
@@ -171,7 +171,7 @@ func TestAPIKeyAuth_ValidKey(t *testing.T) {
 }
 
 func TestAPIKeyAuth_InvalidKey(t *testing.T) {
-	handler := APIKeyAuth([]string{"valid-key"}, nil, false, zap.NewNop())(okHandler())
+	handler := APIKeyAuth([]string{"valid-key"}, nil, zap.NewNop())(okHandler())
 	req := httptest.NewRequest("GET", "/api/test", nil)
 	req.Header.Set("X-API-Key", "wrong-key")
 	rec := httptest.NewRecorder()
@@ -180,7 +180,7 @@ func TestAPIKeyAuth_InvalidKey(t *testing.T) {
 }
 
 func TestAPIKeyAuth_MissingKey(t *testing.T) {
-	handler := APIKeyAuth([]string{"valid-key"}, nil, false, zap.NewNop())(okHandler())
+	handler := APIKeyAuth([]string{"valid-key"}, nil, zap.NewNop())(okHandler())
 	req := httptest.NewRequest("GET", "/api/test", nil)
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
@@ -188,7 +188,7 @@ func TestAPIKeyAuth_MissingKey(t *testing.T) {
 }
 
 func TestAPIKeyAuth_SkipPath(t *testing.T) {
-	handler := APIKeyAuth([]string{"key"}, []string{"/health"}, false, zap.NewNop())(okHandler())
+	handler := APIKeyAuth([]string{"key"}, []string{"/health"}, zap.NewNop())(okHandler())
 	req := httptest.NewRequest("GET", "/health", nil)
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
@@ -196,15 +196,15 @@ func TestAPIKeyAuth_SkipPath(t *testing.T) {
 }
 
 func TestAPIKeyAuth_QueryParam(t *testing.T) {
-	handler := APIKeyAuth([]string{"query-key"}, nil, true, zap.NewNop())(okHandler())
+	handler := APIKeyAuth([]string{"query-key"}, nil, zap.NewNop())(okHandler())
 	req := httptest.NewRequest("GET", "/api/test?api_key=query-key", nil)
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
-	assert.Equal(t, http.StatusOK, rec.Code)
+	assert.Equal(t, http.StatusUnauthorized, rec.Code)
 }
 
 func TestAPIKeyAuth_QueryParamDisabled(t *testing.T) {
-	handler := APIKeyAuth([]string{"query-key"}, nil, false, zap.NewNop())(okHandler())
+	handler := APIKeyAuth([]string{"query-key"}, nil, zap.NewNop())(okHandler())
 	req := httptest.NewRequest("GET", "/api/test?api_key=query-key", nil)
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)

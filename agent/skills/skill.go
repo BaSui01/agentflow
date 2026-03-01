@@ -1,9 +1,9 @@
 package skills
 
 import (
-	"github.com/BaSui01/agentflow/types"
 	"encoding/json"
 	"fmt"
+	"github.com/BaSui01/agentflow/types"
 	"os"
 	"path/filepath"
 	"strings"
@@ -21,10 +21,10 @@ type Skill struct {
 	Tags        []string `json:"tags,omitempty"`     // 标签
 
 	// 核心内容
-	Instructions string                 `json:"instructions"` // 技能指令
-	Tools        []string               `json:"tools"`        // 需要的工具列表
+	Instructions string         `json:"instructions"` // 技能指令
+	Tools        []string       `json:"tools"`        // 需要的工具列表
 	Resources    map[string]any `json:"resources"`    // 资源（文件、数据等）
-	Examples     []SkillExample         `json:"examples"`     // 使用示例
+	Examples     []SkillExample `json:"examples"`     // 使用示例
 
 	// 加载策略
 	LazyLoad     bool     `json:"lazy_load"`    // 是否延迟加载
@@ -458,5 +458,3 @@ func (b *SkillBuilder) Build() (*Skill, error) {
 	}
 	return &b.skill, nil
 }
-
-
