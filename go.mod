@@ -7,6 +7,7 @@ require (
 	github.com/alicebob/miniredis/v2 v2.36.1
 	github.com/chromedp/cdproto v0.0.0-20250724212937-08a3db8b4327
 	github.com/chromedp/chromedp v0.14.2
+	github.com/coder/websocket v1.8.14
 	github.com/glebarez/sqlite v1.11.0
 	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/golang-migrate/migrate/v4 v4.18.1
@@ -31,7 +32,6 @@ require (
 	gorm.io/driver/postgres v1.6.0
 	gorm.io/gorm v1.31.1
 	modernc.org/sqlite v1.23.1
-	nhooyr.io/websocket v1.8.17
 	pgregory.net/rapid v1.2.0
 )
 
