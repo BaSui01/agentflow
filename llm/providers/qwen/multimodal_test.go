@@ -24,7 +24,6 @@ func TestQwenProvider_MultimodalNotSupported(t *testing.T) {
 		name string
 		fn   func() error
 	}{
-		{"GenerateVideo", func() error { _, err := p.GenerateVideo(ctx, &llm.VideoGenerationRequest{}); return err }},
 		{"TranscribeAudio", func() error { _, err := p.TranscribeAudio(ctx, &llm.AudioTranscriptionRequest{}); return err }},
 		{"CreateFineTuningJob", func() error { _, err := p.CreateFineTuningJob(ctx, &llm.FineTuningJobRequest{}); return err }},
 		{"ListFineTuningJobs", func() error { _, err := p.ListFineTuningJobs(ctx); return err }},

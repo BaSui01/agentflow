@@ -14,6 +14,8 @@ const (
 	ProviderCohere ProviderType = "cohere"
 	ProviderVoyage ProviderType = "voyage"
 	ProviderJina   ProviderType = "jina"
+	ProviderQwen   ProviderType = "qwen"
+	ProviderGLM    ProviderType = "glm"
 )
 
 // FactoryConfig 是 rerank 统一工厂输入。
@@ -46,6 +48,10 @@ func NewProviderFromConfig(cfg FactoryConfig) (Provider, error) {
 		return NewVoyageProvider(VoyageConfig{BaseProviderConfig: base}), nil
 	case ProviderJina:
 		return NewJinaProvider(JinaConfig{BaseProviderConfig: base}), nil
+	case ProviderQwen:
+		return NewQwenProvider(QwenConfig{APIKey: cfg.APIKey, BaseURL: cfg.BaseURL, Model: cfg.Model, Timeout: cfg.Timeout}), nil
+	case ProviderGLM:
+		return NewGLMProvider(GLMConfig{APIKey: cfg.APIKey, BaseURL: cfg.BaseURL, Model: cfg.Model, Timeout: cfg.Timeout}), nil
 	default:
 		return nil, fmt.Errorf("unsupported rerank provider type: %s", t)
 	}

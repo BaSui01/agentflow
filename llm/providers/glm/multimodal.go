@@ -1,9 +1,16 @@
 package glm
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"strings"
 
 	providerbase "github.com/BaSui01/agentflow/llm/providers/base"
+
+	"github.com/BaSui01/agentflow/types"
 
 	"github.com/BaSui01/agentflow/llm"
 )
@@ -18,9 +25,11 @@ func (p *GLMProvider) GenerateVideo(ctx context.Context, req *llm.VideoGeneratio
 	return providerbase.GenerateVideoOpenAICompat(ctx, p.Client, p.Cfg.BaseURL, p.ResolveAPIKey(ctx), p.Name(), "/api/paas/v4/videos/generations", req, p.ApplyHeaders)
 }
 
-// GenerateAudio GLM 不支持音频生成.
+// GenerateAudio 使用 GLM 语音合成.
+// Endpoint: POST /api/paas/v4/audio/speech
+// Models: glm-voice
 func (p *GLMProvider) GenerateAudio(ctx context.Context, req *llm.AudioGenerationRequest) (*llm.AudioGenerationResponse, error) {
-	return nil, providerbase.NotSupportedError(p.Name(), "audio generation")
+	return providerbase.GenerateAudioOpenAICompat(ctx, p.Client, p.Cfg.BaseURL, p.ResolveAPIKey(ctx), p.Name(), "/api/paas/v4/audio/speech", req, p.ApplyHeaders)
 }
 
 // TranscribeAudio GLM 不支持音频转录.
@@ -33,22 +42,124 @@ func (p *GLMProvider) CreateEmbedding(ctx context.Context, req *llm.EmbeddingReq
 	return providerbase.CreateEmbeddingOpenAICompat(ctx, p.Client, p.Cfg.BaseURL, p.ResolveAPIKey(ctx), p.Name(), "/api/paas/v4/embeddings", req, p.ApplyHeaders)
 }
 
-// CreateFineTuningJob GLM 不支持微调.
+// CreateFineTuningJob 使用 GLM 创建微调任务.
+// Endpoint: POST /api/paas/v4/fine_tuning/jobs
 func (p *GLMProvider) CreateFineTuningJob(ctx context.Context, req *llm.FineTuningJobRequest) (*llm.FineTuningJob, error) {
-	return nil, providerbase.NotSupportedError(p.Name(), "fine-tuning")
+	baseURL := strings.TrimRight(p.Cfg.BaseURL, "/")
+	endpoint := baseURL + "/api/paas/v4/fine_tuning/jobs"
+
+	payload, err := json.Marshal(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal request: %w", err)
+	}
+
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(payload))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+	p.ApplyHeaders(httpReq, p.ResolveAPIKey(ctx))
+
+	resp, err := p.Client.Do(httpReq)
+	if err != nil {
+		return nil, &types.Error{Code: llm.ErrUpstreamError, Message: err.Error(), HTTPStatus: http.StatusBadGateway, Retryable: true, Provider: p.Name()}
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 400 {
+		msg := providerbase.ReadErrorMessage(resp.Body)
+		return nil, providerbase.MapHTTPError(resp.StatusCode, msg, p.Name())
+	}
+
+	var job llm.FineTuningJob
+	if err := json.NewDecoder(resp.Body).Decode(&job); err != nil {
+		return nil, &types.Error{Code: llm.ErrUpstreamError, Message: err.Error(), HTTPStatus: http.StatusBadGateway, Provider: p.Name()}
+	}
+	return &job, nil
 }
 
-// ListFineTuningJobs GLM 不支持微调.
+// ListFineTuningJobs 列出 GLM 微调任务.
+// Endpoint: GET /api/paas/v4/fine_tuning/jobs
 func (p *GLMProvider) ListFineTuningJobs(ctx context.Context) ([]llm.FineTuningJob, error) {
-	return nil, providerbase.NotSupportedError(p.Name(), "fine-tuning")
+	baseURL := strings.TrimRight(p.Cfg.BaseURL, "/")
+	endpoint := baseURL + "/api/paas/v4/fine_tuning/jobs"
+
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+	p.ApplyHeaders(httpReq, p.ResolveAPIKey(ctx))
+
+	resp, err := p.Client.Do(httpReq)
+	if err != nil {
+		return nil, &types.Error{Code: llm.ErrUpstreamError, Message: err.Error(), HTTPStatus: http.StatusBadGateway, Retryable: true, Provider: p.Name()}
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 400 {
+		msg := providerbase.ReadErrorMessage(resp.Body)
+		return nil, providerbase.MapHTTPError(resp.StatusCode, msg, p.Name())
+	}
+
+	var listResp struct {
+		Data []llm.FineTuningJob `json:"data"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&listResp); err != nil {
+		return nil, &types.Error{Code: llm.ErrUpstreamError, Message: err.Error(), HTTPStatus: http.StatusBadGateway, Provider: p.Name()}
+	}
+	return listResp.Data, nil
 }
 
-// GetFineTuningJob GLM 不支持微调.
+// GetFineTuningJob 获取 GLM 微调任务.
+// Endpoint: GET /api/paas/v4/fine_tuning/jobs/{job_id}
 func (p *GLMProvider) GetFineTuningJob(ctx context.Context, jobID string) (*llm.FineTuningJob, error) {
-	return nil, providerbase.NotSupportedError(p.Name(), "fine-tuning")
+	baseURL := strings.TrimRight(p.Cfg.BaseURL, "/")
+	endpoint := baseURL + "/api/paas/v4/fine_tuning/jobs/" + jobID
+
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+	p.ApplyHeaders(httpReq, p.ResolveAPIKey(ctx))
+
+	resp, err := p.Client.Do(httpReq)
+	if err != nil {
+		return nil, &types.Error{Code: llm.ErrUpstreamError, Message: err.Error(), HTTPStatus: http.StatusBadGateway, Retryable: true, Provider: p.Name()}
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 400 {
+		msg := providerbase.ReadErrorMessage(resp.Body)
+		return nil, providerbase.MapHTTPError(resp.StatusCode, msg, p.Name())
+	}
+
+	var job llm.FineTuningJob
+	if err := json.NewDecoder(resp.Body).Decode(&job); err != nil {
+		return nil, &types.Error{Code: llm.ErrUpstreamError, Message: err.Error(), HTTPStatus: http.StatusBadGateway, Provider: p.Name()}
+	}
+	return &job, nil
 }
 
-// CancelFineTuningJob GLM 不支持微调.
+// CancelFineTuningJob 取消 GLM 微调任务.
+// Endpoint: POST /api/paas/v4/fine_tuning/jobs/{job_id}/cancel
 func (p *GLMProvider) CancelFineTuningJob(ctx context.Context, jobID string) error {
-	return providerbase.NotSupportedError(p.Name(), "fine-tuning")
+	baseURL := strings.TrimRight(p.Cfg.BaseURL, "/")
+	endpoint := baseURL + "/api/paas/v4/fine_tuning/jobs/" + jobID + "/cancel"
+
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, nil)
+	if err != nil {
+		return fmt.Errorf("failed to create request: %w", err)
+	}
+	p.ApplyHeaders(httpReq, p.ResolveAPIKey(ctx))
+
+	resp, err := p.Client.Do(httpReq)
+	if err != nil {
+		return &types.Error{Code: llm.ErrUpstreamError, Message: err.Error(), HTTPStatus: http.StatusBadGateway, Retryable: true, Provider: p.Name()}
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 400 {
+		msg := providerbase.ReadErrorMessage(resp.Body)
+		return providerbase.MapHTTPError(resp.StatusCode, msg, p.Name())
+	}
+	return nil
 }
