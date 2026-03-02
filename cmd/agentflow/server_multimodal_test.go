@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/BaSui01/agentflow/config"
+	"github.com/BaSui01/agentflow/internal/app/bootstrap"
 	"github.com/alicebob/miniredis/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -15,9 +16,9 @@ func TestNewMultimodalRedisReferenceStore_RejectsNonLoopbackPlainHostPort(t *tes
 	cfg := config.DefaultConfig()
 	cfg.Redis.Addr = "10.0.0.8:6379"
 
-	s := &Server{cfg: cfg, logger: zap.NewNop()}
-	store, err := s.newMultimodalRedisReferenceStore("agentflow:test:mm", time.Hour)
+	client, store, err := bootstrap.BuildMultimodalRedisReferenceStore(cfg, "agentflow:test:mm", time.Hour, zap.NewNop())
 	require.Error(t, err)
+	assert.Nil(t, client)
 	assert.Nil(t, store)
 	assert.ErrorContains(t, err, "requires rediss://")
 }
@@ -26,9 +27,9 @@ func TestNewMultimodalRedisReferenceStore_RejectsNonLoopbackRedisScheme(t *testi
 	cfg := config.DefaultConfig()
 	cfg.Redis.Addr = "redis://example.com:6379"
 
-	s := &Server{cfg: cfg, logger: zap.NewNop()}
-	store, err := s.newMultimodalRedisReferenceStore("agentflow:test:mm", time.Hour)
+	client, store, err := bootstrap.BuildMultimodalRedisReferenceStore(cfg, "agentflow:test:mm", time.Hour, zap.NewNop())
 	require.Error(t, err)
+	assert.Nil(t, client)
 	assert.Nil(t, store)
 	assert.ErrorContains(t, err, "insecure redis://")
 }
@@ -41,19 +42,18 @@ func TestNewMultimodalRedisReferenceStore_AllowsLoopbackPlaintext(t *testing.T) 
 	cfg := config.DefaultConfig()
 	cfg.Redis.Addr = mr.Addr()
 
-	s := &Server{cfg: cfg, logger: zap.NewNop()}
-	store, err := s.newMultimodalRedisReferenceStore("agentflow:test:mm", time.Hour)
+	client, store, err := bootstrap.BuildMultimodalRedisReferenceStore(cfg, "agentflow:test:mm", time.Hour, zap.NewNop())
 	require.NoError(t, err)
 	require.NotNil(t, store)
-	require.NotNil(t, s.multimodalRedis)
-	assert.NoError(t, s.multimodalRedis.Close())
+	require.NotNil(t, client)
+	assert.NoError(t, client.Close())
 }
 
 func TestIsLoopbackHost(t *testing.T) {
-	assert.True(t, isLoopbackHost("localhost"))
-	assert.True(t, isLoopbackHost("127.0.0.1"))
-	assert.True(t, isLoopbackHost("::1"))
-	assert.False(t, isLoopbackHost("example.com"))
+	assert.True(t, bootstrap.IsLoopbackHost("localhost"))
+	assert.True(t, bootstrap.IsLoopbackHost("127.0.0.1"))
+	assert.True(t, bootstrap.IsLoopbackHost("::1"))
+	assert.False(t, bootstrap.IsLoopbackHost("example.com"))
 }
 
 func TestInitHandlers_MultimodalRejectsNonRedisBackend(t *testing.T) {
@@ -66,4 +66,3 @@ func TestInitHandlers_MultimodalRejectsNonRedisBackend(t *testing.T) {
 	require.Error(t, err)
 	assert.ErrorContains(t, err, "multimodal.reference_store_backend must be redis")
 }
-

@@ -1,103 +1,47 @@
 package main
 
 import (
-	"context"
-	"fmt"
-	"net"
 	"net/http"
-	"net/url"
-	"strings"
-	"time"
 
-	"github.com/BaSui01/agentflow/api"
-	"github.com/BaSui01/agentflow/api/handlers"
-	"github.com/BaSui01/agentflow/api/routes"
+	"github.com/BaSui01/agentflow/internal/app/bootstrap"
 	mw "github.com/BaSui01/agentflow/pkg/middleware"
 	"github.com/BaSui01/agentflow/pkg/server"
-	"github.com/BaSui01/agentflow/pkg/tlsutil"
-	"github.com/BaSui01/agentflow/types"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
-	"github.com/redis/go-redis/v9"
-	"go.uber.org/zap"
 )
 
 func (s *Server) startHTTPServer() error {
 	mux := http.NewServeMux()
 
-	routes.RegisterSystem(mux, s.healthHandler, Version, BuildTime, GitCommit)
-	routes.RegisterChat(mux, s.chatHandler, s.logger)
-	routes.RegisterAgent(mux, s.agentHandler, s.logger)
-	routes.RegisterProvider(mux, s.apiKeyHandler, s.logger)
-	routes.RegisterMultimodal(mux, s.multimodalHandler, s.logger)
-	routes.RegisterProtocol(mux, s.protocolHandler, s.logger)
-	routes.RegisterRAG(mux, s.ragHandler, s.logger)
-	routes.RegisterWorkflow(mux, s.workflowHandler, s.logger)
-	routes.RegisterConfig(mux, s.configAPIHandler, s.getFirstAPIKey(), s.logger)
+	bootstrap.RegisterHTTPRoutes(
+		mux,
+		bootstrap.HTTPRouteHandlers{
+			Health:     s.healthHandler,
+			Chat:       s.chatHandler,
+			Agent:      s.agentHandler,
+			APIKey:     s.apiKeyHandler,
+			Multimodal: s.multimodalHandler,
+			Protocol:   s.protocolHandler,
+			RAG:        s.ragHandler,
+			Workflow:   s.workflowHandler,
+			ConfigAPI:  s.configAPIHandler,
+		},
+		Version,
+		BuildTime,
+		GitCommit,
+		s.getFirstAPIKey(),
+		s.logger,
+	)
 
-	s.logger.Info("HTTP routes registered",
-		zap.Strings("routes", []string{
-			"/health",
-			"/healthz",
-			"/ready",
-			"/readyz",
-			"/version",
-			"/api/v1/chat/completions",
-			"/api/v1/agents/*",
-			"/api/v1/providers/*",
-			"/api/v1/multimodal/*",
-			"/api/v1/mcp/*",
-			"/api/v1/rag/*",
-			"/api/v1/workflow/*",
-			"/api/v1/config/*",
-			"/metrics",
-		}))
-
-	middlewares := s.buildHTTPMiddlewares()
-	handler := mw.Chain(mux, middlewares...)
+	httpMiddlewares := bootstrap.BuildHTTPMiddlewares(s.cfg.Server, s.metricsCollector, s.logger)
+	s.rateLimiterCancel = httpMiddlewares.RateLimiterCancel
+	s.tenantRateLimiterCancel = httpMiddlewares.TenantRateLimiterCancel
+	handler := mw.Chain(mux, httpMiddlewares.List...)
 
 	// ========================================
 	// 使用 internal/server.Manager
 	// ========================================
-	serverConfig := server.Config{
-		Addr:            fmt.Sprintf(":%d", s.cfg.Server.HTTPPort),
-		ReadTimeout:     s.cfg.Server.ReadTimeout,
-		WriteTimeout:    s.cfg.Server.WriteTimeout,
-		IdleTimeout:     2 * s.cfg.Server.ReadTimeout, // 2x ReadTimeout
-		MaxHeaderBytes:  1 << 20,                      // 1 MB
-		ShutdownTimeout: s.cfg.Server.ShutdownTimeout,
-	}
-
-	s.httpManager = server.NewManager(handler, serverConfig, s.logger)
+	s.httpManager = server.NewManager(handler, bootstrap.BuildHTTPServerConfig(s.cfg.Server), s.logger)
 	return nil
-}
-
-func (s *Server) buildHTTPMiddlewares() []mw.Middleware {
-	skipAuthPaths := []string{"/health", "/healthz", "/ready", "/readyz", "/version", "/metrics"}
-	rateLimiterCtx, rateLimiterCancel := context.WithCancel(context.Background())
-	s.rateLimiterCancel = rateLimiterCancel
-	tenantRateLimiterCtx, tenantRateLimiterCancel := context.WithCancel(context.Background())
-	s.tenantRateLimiterCancel = tenantRateLimiterCancel
-
-	authMiddleware := s.buildAuthMiddleware(skipAuthPaths)
-
-	middlewares := []mw.Middleware{
-		mw.Recovery(s.logger),
-		mw.RequestID(),
-		mw.SecurityHeaders(),
-		mw.MetricsMiddleware(s.metricsCollector),
-		mw.OTelTracing(),
-		mw.RequestLogger(s.logger),
-		mw.CORS(s.cfg.Server.CORSAllowedOrigins),
-		mw.RateLimiter(rateLimiterCtx, float64(s.cfg.Server.RateLimitRPS), s.cfg.Server.RateLimitBurst, s.logger),
-	}
-	if authMiddleware != nil {
-		middlewares = append(middlewares, authMiddleware)
-	}
-	middlewares = append(middlewares,
-		mw.TenantRateLimiter(tenantRateLimiterCtx, float64(s.cfg.Server.TenantRateLimitRPS), s.cfg.Server.TenantRateLimitBurst, s.logger),
-	)
-
-	return middlewares
 }
 
 // =============================================================================
@@ -109,14 +53,7 @@ func (s *Server) startMetricsServer() error {
 	mux := http.NewServeMux()
 	mux.Handle("/metrics", promhttp.Handler())
 
-	serverConfig := server.Config{
-		Addr:            fmt.Sprintf(":%d", s.cfg.Server.MetricsPort),
-		ReadTimeout:     s.cfg.Server.ReadTimeout,
-		WriteTimeout:    s.cfg.Server.WriteTimeout,
-		ShutdownTimeout: s.cfg.Server.ShutdownTimeout,
-	}
-
-	s.metricsManager = server.NewManager(mux, serverConfig, s.logger)
+	s.metricsManager = server.NewManager(mux, bootstrap.BuildMetricsServerConfig(s.cfg.Server), s.logger)
 	return nil
 }
 
@@ -128,160 +65,6 @@ func (s *Server) getFirstAPIKey() string {
 		return s.cfg.Server.APIKeys[0]
 	}
 	return ""
-}
-
-func firstNonEmpty(values ...string) string {
-	for _, v := range values {
-		if strings.TrimSpace(v) != "" {
-			return v
-		}
-	}
-	return ""
-}
-
-func (s *Server) newMultimodalRedisReferenceStore(keyPrefix string, ttl time.Duration) (handlers.ReferenceStore, error) {
-	addr := strings.TrimSpace(s.cfg.Redis.Addr)
-	if addr == "" {
-		return nil, fmt.Errorf("redis address is required when multimodal reference_store_backend=redis")
-	}
-
-	var (
-		opts *redis.Options
-		err  error
-	)
-
-	if strings.HasPrefix(addr, "redis://") || strings.HasPrefix(addr, "rediss://") {
-		parsed, parseErr := url.Parse(addr)
-		if parseErr != nil {
-			return nil, fmt.Errorf("invalid redis url: %w", parseErr)
-		}
-		scheme := strings.ToLower(parsed.Scheme)
-		host := parsed.Hostname()
-		if scheme == "redis" && !isLoopbackHost(host) {
-			return nil, fmt.Errorf("insecure redis:// is only allowed for loopback hosts, use rediss:// for %q", host)
-		}
-
-		opts, err = redis.ParseURL(addr)
-		if err != nil {
-			return nil, fmt.Errorf("invalid redis url: %w", err)
-		}
-		if s.cfg.Redis.Password != "" && opts.Password == "" {
-			opts.Password = s.cfg.Redis.Password
-		}
-		if s.cfg.Redis.DB != 0 && opts.DB == 0 {
-			opts.DB = s.cfg.Redis.DB
-		}
-		if s.cfg.Redis.PoolSize > 0 {
-			opts.PoolSize = s.cfg.Redis.PoolSize
-		}
-		if s.cfg.Redis.MinIdleConns > 0 {
-			opts.MinIdleConns = s.cfg.Redis.MinIdleConns
-		}
-		if scheme == "rediss" && opts.TLSConfig == nil {
-			opts.TLSConfig = tlsutil.DefaultTLSConfig()
-		}
-		if scheme == "redis" && isLoopbackHost(host) {
-			s.logger.Warn("using insecure redis:// for loopback host in multimodal reference store",
-				zap.String("host", host))
-		}
-	} else {
-		host := hostFromAddr(addr)
-		if !isLoopbackHost(host) {
-			return nil, fmt.Errorf("non-loopback redis address %q requires rediss:// scheme", host)
-		}
-
-		opts = &redis.Options{
-			Addr:         addr,
-			Password:     s.cfg.Redis.Password,
-			DB:           s.cfg.Redis.DB,
-			PoolSize:     s.cfg.Redis.PoolSize,
-			MinIdleConns: s.cfg.Redis.MinIdleConns,
-		}
-		s.logger.Warn("using insecure plaintext redis connection for loopback host in multimodal reference store",
-			zap.String("host", host))
-	}
-
-	client := redis.NewClient(opts)
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	if err := client.Ping(ctx).Err(); err != nil {
-		_ = client.Close()
-		return nil, fmt.Errorf("redis ping failed: %w", err)
-	}
-
-	s.multimodalRedis = client
-	return handlers.NewRedisReferenceStore(client, keyPrefix, ttl, s.logger), nil
-}
-
-func hostFromAddr(addr string) string {
-	host, _, err := net.SplitHostPort(addr)
-	if err == nil {
-		return host
-	}
-	return strings.TrimSpace(addr)
-}
-
-func isLoopbackHost(host string) bool {
-	h := strings.TrimSpace(strings.Trim(host, "[]"))
-	if h == "" {
-		return false
-	}
-	if strings.EqualFold(h, "localhost") {
-		return true
-	}
-	ip := net.ParseIP(h)
-	return ip != nil && ip.IsLoopback()
-}
-
-// buildAuthMiddleware selects the authentication strategy based on configuration.
-// Priority: JWT (if secret or public key configured) > API Key > fail-closed.
-func (s *Server) buildAuthMiddleware(skipPaths []string) mw.Middleware {
-	jwtCfg := s.cfg.Server.JWT
-	hasJWT := jwtCfg.Secret != "" || jwtCfg.PublicKey != ""
-	hasAPIKeys := len(s.cfg.Server.APIKeys) > 0
-
-	switch {
-	case hasJWT:
-		s.logger.Info("Authentication: JWT enabled",
-			zap.Bool("hmac", jwtCfg.Secret != ""),
-			zap.Bool("rsa", jwtCfg.PublicKey != ""),
-			zap.String("issuer", jwtCfg.Issuer),
-		)
-		return mw.JWTAuth(jwtCfg, skipPaths, s.logger)
-	case hasAPIKeys:
-		s.logger.Info("Authentication: API Key enabled",
-			zap.Int("key_count", len(s.cfg.Server.APIKeys)),
-		)
-		return mw.APIKeyAuth(s.cfg.Server.APIKeys, skipPaths, s.logger)
-	default:
-		if s.cfg.Server.AllowNoAuth {
-			s.logger.Warn("Authentication is disabled (allow_no_auth=true). " +
-				"This is not recommended for production use.")
-			return nil
-		}
-		s.logger.Error("Authentication is required but no JWT/API key is configured; protected endpoints will return 503 until fixed. Configure server.api_keys or server.jwt, or explicitly set server.allow_no_auth=true for local development. Use /ready for liveness and a protected endpoint smoke test to verify auth wiring.")
-		skipSet := make(map[string]struct{}, len(skipPaths))
-		for _, p := range skipPaths {
-			skipSet[p] = struct{}{}
-		}
-		return func(next http.Handler) http.Handler {
-			return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				if _, skip := skipSet[r.URL.Path]; skip {
-					next.ServeHTTP(w, r)
-					return
-				}
-				api.WriteJSONResponse(w, http.StatusServiceUnavailable, api.Response{
-					Success: false,
-					Error: &api.ErrorInfo{
-						Code:    string(types.ErrServiceUnavailable),
-						Message: "authentication is not configured",
-					},
-					Timestamp: time.Now().UTC(),
-					RequestID: w.Header().Get("X-Request-ID"),
-				})
-			})
-		}
-	}
 }
 
 // =============================================================================

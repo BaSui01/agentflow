@@ -1,4 +1,4 @@
-package workflow
+package adapters
 
 import (
 	"context"
@@ -196,11 +196,11 @@ type mockNativeAgent struct {
 	lastInput *agent.Input
 }
 
-func (a *mockNativeAgent) ID() string              { return a.id }
-func (a *mockNativeAgent) Name() string             { return a.name }
-func (a *mockNativeAgent) Type() agent.AgentType    { return agent.TypeGeneric }
-func (a *mockNativeAgent) State() agent.State       { return agent.StateReady }
-func (a *mockNativeAgent) Init(context.Context) error    { return nil }
+func (a *mockNativeAgent) ID() string                     { return a.id }
+func (a *mockNativeAgent) Name() string                   { return a.name }
+func (a *mockNativeAgent) Type() agent.AgentType          { return agent.TypeGeneric }
+func (a *mockNativeAgent) State() agent.State             { return agent.StateReady }
+func (a *mockNativeAgent) Init(context.Context) error     { return nil }
 func (a *mockNativeAgent) Teardown(context.Context) error { return nil }
 func (a *mockNativeAgent) Plan(context.Context, *agent.Input) (*agent.PlanResult, error) {
 	return nil, nil
@@ -390,4 +390,3 @@ func TestNativeAgentAdapter_InAgentStep(t *testing.T) {
 	require.True(t, ok)
 	assert.Equal(t, "step result", out.Content)
 }
-

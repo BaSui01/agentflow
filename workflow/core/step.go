@@ -11,11 +11,14 @@ import (
 type StepType string
 
 const (
-	StepTypeLLM   StepType = "llm"
-	StepTypeTool  StepType = "tool"
-	StepTypeHuman StepType = "human"
-	StepTypeCode  StepType = "code"
-	StepTypeAgent StepType = "agent"
+	StepTypeLLM              StepType = "llm"
+	StepTypeTool             StepType = "tool"
+	StepTypeHuman            StepType = "human"
+	StepTypeCode             StepType = "code"
+	StepTypeAgent            StepType = "agent"
+	StepTypeHybridRetrieve   StepType = "hybrid_retrieve"
+	StepTypeMultiHopRetrieve StepType = "multi_hop_retrieve"
+	StepTypeRerank           StepType = "rerank"
 )
 
 // StepProtocol 统一步骤协议（Command Pattern）。

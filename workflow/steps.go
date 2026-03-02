@@ -1,15 +1,14 @@
 package workflow
 
 import (
-	"github.com/BaSui01/agentflow/types"
 	"context"
 	"errors"
 	"fmt"
 
-	"github.com/BaSui01/agentflow/llm"
+	"github.com/BaSui01/agentflow/workflow/core"
 )
 
-// ErrNotConfigured is returned when a step's required dependency (Provider, Registry, Handler)
+// ErrNotConfigured is returned when a step's required dependency (Gateway, Registry, Handler)
 // has not been injected. Callers can check for this with errors.Is(err, ErrNotConfigured).
 var ErrNotConfigured = errors.New("step dependency not configured")
 
@@ -59,20 +58,20 @@ func (s *PassthroughStep) Execute(ctx context.Context, input any) (any, error) {
 // ============================================================
 
 // LLMStep executes an LLM call.
-// When Provider is set, it performs a real LLM completion request.
+// When Gateway is set, it performs a real LLM invoke request.
 type LLMStep struct {
 	Model       string
 	Prompt      string
 	Temperature float64
 	MaxTokens   int
-	Provider    llm.Provider // Optional: inject to enable real LLM calls
+	Gateway     core.GatewayLike // Optional: inject to enable real LLM calls
 }
 
 func (s *LLMStep) Name() string { return "llm" }
 
 func (s *LLMStep) Execute(ctx context.Context, input any) (any, error) {
-	if s.Provider == nil {
-		return nil, fmt.Errorf("LLMStep: Provider is nil: %w", ErrNotConfigured)
+	if s.Gateway == nil {
+		return nil, fmt.Errorf("LLMStep: Gateway is nil: %w", ErrNotConfigured)
 	}
 
 	// Build the user message from prompt + input
@@ -87,25 +86,23 @@ func (s *LLMStep) Execute(ctx context.Context, input any) (any, error) {
 		}
 	}
 
-	req := &llm.ChatRequest{
-		Model: s.Model,
-		Messages: []types.Message{
-			{Role: llm.RoleUser, Content: userContent},
-		},
-		Temperature: float32(s.Temperature),
+	req := &core.LLMRequest{
+		Model:       s.Model,
+		Prompt:      userContent,
+		Temperature: s.Temperature,
 		MaxTokens:   s.MaxTokens,
 	}
 
-	resp, err := s.Provider.Completion(ctx, req)
+	resp, err := s.Gateway.Invoke(ctx, req)
 	if err != nil {
-		return nil, fmt.Errorf("LLMStep: completion failed: %w", err)
+		return nil, fmt.Errorf("LLMStep: invoke failed: %w", err)
 	}
 
-	if len(resp.Choices) == 0 {
+	if resp == nil || resp.Content == "" {
 		return nil, fmt.Errorf("LLMStep: empty response from provider")
 	}
 
-	return resp.Choices[0].Message.Content, nil
+	return resp.Content, nil
 }
 
 // ============================================================

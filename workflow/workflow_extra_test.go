@@ -6,9 +6,31 @@ import (
 	"fmt"
 	"testing"
 
+	wfadapters "github.com/BaSui01/agentflow/workflow/adapters"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+type mockAgentInterface struct {
+	id        string
+	name      string
+	response  string
+	err       error
+	calls     int
+	lastInput string
+}
+
+func (a *mockAgentInterface) Execute(ctx context.Context, input string) (string, error) {
+	a.calls++
+	a.lastInput = input
+	if a.err != nil {
+		return "", a.err
+	}
+	return a.response, nil
+}
+
+func (a *mockAgentInterface) ID() string   { return a.id }
+func (a *mockAgentInterface) Name() string { return a.name }
 
 // ============================================================
 // AgentStep options
@@ -16,15 +38,15 @@ import (
 
 func TestAgentStep_WithStepName(t *testing.T) {
 	agent := &mockAgentInterface{id: "a1", name: "agent", response: "ok"}
-	adapter := NewAgentAdapter(agent)
-	step := NewAgentStep(adapter, WithStepName("custom-name"))
+	adapter := wfadapters.NewAgentAdapter(agent)
+	step := wfadapters.NewAgentStep(adapter, wfadapters.WithStepName("custom-name"))
 	assert.Equal(t, "custom-name", step.Name())
 }
 
 func TestAgentStep_WithInputMapper(t *testing.T) {
 	agent := &mockAgentInterface{id: "a1", name: "agent", response: "ok"}
-	adapter := NewAgentAdapter(agent)
-	step := NewAgentStep(adapter, WithInputMapper(func(input any) (any, error) {
+	adapter := wfadapters.NewAgentAdapter(agent)
+	step := wfadapters.NewAgentStep(adapter, wfadapters.WithInputMapper(func(input any) (any, error) {
 		return "mapped:" + input.(string), nil
 	}))
 
@@ -36,8 +58,8 @@ func TestAgentStep_WithInputMapper(t *testing.T) {
 
 func TestAgentStep_WithInputMapper_Error(t *testing.T) {
 	agent := &mockAgentInterface{id: "a1", name: "agent", response: "ok"}
-	adapter := NewAgentAdapter(agent)
-	step := NewAgentStep(adapter, WithInputMapper(func(input any) (any, error) {
+	adapter := wfadapters.NewAgentAdapter(agent)
+	step := wfadapters.NewAgentStep(adapter, wfadapters.WithInputMapper(func(input any) (any, error) {
 		return nil, errors.New("bad input")
 	}))
 
@@ -48,8 +70,8 @@ func TestAgentStep_WithInputMapper_Error(t *testing.T) {
 
 func TestAgentStep_WithOutputMapper(t *testing.T) {
 	agent := &mockAgentInterface{id: "a1", name: "agent", response: "raw"}
-	adapter := NewAgentAdapter(agent)
-	step := NewAgentStep(adapter, WithOutputMapper(func(output any) (any, error) {
+	adapter := wfadapters.NewAgentAdapter(agent)
+	step := wfadapters.NewAgentStep(adapter, wfadapters.WithOutputMapper(func(output any) (any, error) {
 		return "wrapped:" + output.(string), nil
 	}))
 
@@ -60,8 +82,8 @@ func TestAgentStep_WithOutputMapper(t *testing.T) {
 
 func TestAgentStep_WithOutputMapper_Error(t *testing.T) {
 	agent := &mockAgentInterface{id: "a1", name: "agent", response: "raw"}
-	adapter := NewAgentAdapter(agent)
-	step := NewAgentStep(adapter, WithOutputMapper(func(output any) (any, error) {
+	adapter := wfadapters.NewAgentAdapter(agent)
+	step := wfadapters.NewAgentStep(adapter, wfadapters.WithOutputMapper(func(output any) (any, error) {
 		return nil, errors.New("bad output")
 	}))
 
@@ -78,15 +100,15 @@ func TestAgentRouter_Execute(t *testing.T) {
 	a1 := &mockAgentInterface{id: "a1", name: "agent-1", response: "from-a1"}
 	a2 := &mockAgentInterface{id: "a2", name: "agent-2", response: "from-a2"}
 
-	router := NewAgentRouter(func(ctx context.Context, input any, agents map[string]AgentExecutor) (AgentExecutor, error) {
+	router := wfadapters.NewAgentRouter(func(ctx context.Context, input any, agents map[string]wfadapters.AgentExecutor) (wfadapters.AgentExecutor, error) {
 		if input.(string) == "route-to-a2" {
 			return agents["a2"], nil
 		}
 		return agents["a1"], nil
 	})
 
-	router.RegisterAgent(NewAgentAdapter(a1))
-	router.RegisterAgent(NewAgentAdapter(a2))
+	router.RegisterAgent(wfadapters.NewAgentAdapter(a1))
+	router.RegisterAgent(wfadapters.NewAgentAdapter(a2))
 
 	result, err := router.Execute(context.Background(), "route-to-a2")
 	require.NoError(t, err)
@@ -98,19 +120,19 @@ func TestAgentRouter_Execute(t *testing.T) {
 }
 
 func TestAgentRouter_Name(t *testing.T) {
-	router := NewAgentRouter(nil)
+	router := wfadapters.NewAgentRouter(nil)
 	assert.Equal(t, "agent_router", router.Name())
 }
 
 func TestAgentRouter_NoSelector(t *testing.T) {
-	router := NewAgentRouter(nil)
+	router := wfadapters.NewAgentRouter(nil)
 	_, err := router.Execute(context.Background(), "input")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "no agent selector")
 }
 
 func TestAgentRouter_SelectorReturnsNil(t *testing.T) {
-	router := NewAgentRouter(func(ctx context.Context, input any, agents map[string]AgentExecutor) (AgentExecutor, error) {
+	router := wfadapters.NewAgentRouter(func(ctx context.Context, input any, agents map[string]wfadapters.AgentExecutor) (wfadapters.AgentExecutor, error) {
 		return nil, nil
 	})
 	_, err := router.Execute(context.Background(), "input")
@@ -119,7 +141,7 @@ func TestAgentRouter_SelectorReturnsNil(t *testing.T) {
 }
 
 func TestAgentRouter_SelectorError(t *testing.T) {
-	router := NewAgentRouter(func(ctx context.Context, input any, agents map[string]AgentExecutor) (AgentExecutor, error) {
+	router := wfadapters.NewAgentRouter(func(ctx context.Context, input any, agents map[string]wfadapters.AgentExecutor) (wfadapters.AgentExecutor, error) {
 		return nil, errors.New("selection failed")
 	})
 	_, err := router.Execute(context.Background(), "input")
@@ -135,8 +157,8 @@ func TestParallelAgentStep_Execute(t *testing.T) {
 	a1 := &mockAgentInterface{id: "a1", name: "agent-1", response: "r1"}
 	a2 := &mockAgentInterface{id: "a2", name: "agent-2", response: "r2"}
 
-	step := NewParallelAgentStep(
-		[]AgentExecutor{NewAgentAdapter(a1), NewAgentAdapter(a2)},
+	step := wfadapters.NewParallelAgentStep(
+		[]wfadapters.AgentExecutor{wfadapters.NewAgentAdapter(a1), wfadapters.NewAgentAdapter(a2)},
 		func(results []any) (any, error) {
 			return results[0].(string) + "+" + results[1].(string), nil
 		},
@@ -150,7 +172,7 @@ func TestParallelAgentStep_Execute(t *testing.T) {
 }
 
 func TestParallelAgentStep_NoAgents(t *testing.T) {
-	step := NewParallelAgentStep(nil, nil)
+	step := wfadapters.NewParallelAgentStep(nil, nil)
 	_, err := step.Execute(context.Background(), "input")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "no agents configured")
@@ -158,7 +180,7 @@ func TestParallelAgentStep_NoAgents(t *testing.T) {
 
 func TestParallelAgentStep_NoMerger(t *testing.T) {
 	a1 := &mockAgentInterface{id: "a1", name: "agent-1", response: "r1"}
-	step := NewParallelAgentStep([]AgentExecutor{NewAgentAdapter(a1)}, nil)
+	step := wfadapters.NewParallelAgentStep([]wfadapters.AgentExecutor{wfadapters.NewAgentAdapter(a1)}, nil)
 
 	result, err := step.Execute(context.Background(), "input")
 	require.NoError(t, err)
@@ -169,7 +191,7 @@ func TestParallelAgentStep_NoMerger(t *testing.T) {
 
 func TestParallelAgentStep_AgentError(t *testing.T) {
 	a1 := &mockAgentInterface{id: "a1", name: "agent-1", err: errors.New("fail")}
-	step := NewParallelAgentStep([]AgentExecutor{NewAgentAdapter(a1)}, nil)
+	step := wfadapters.NewParallelAgentStep([]wfadapters.AgentExecutor{wfadapters.NewAgentAdapter(a1)}, nil)
 
 	_, err := step.Execute(context.Background(), "input")
 	require.Error(t, err)
@@ -185,14 +207,14 @@ func TestConditionalAgentStep_Execute(t *testing.T) {
 	a2 := &mockAgentInterface{id: "a2", name: "agent-2", response: "from-a2"}
 	def := &mockAgentInterface{id: "def", name: "default", response: "from-default"}
 
-	step := NewConditionalAgentStep().
+	step := wfadapters.NewConditionalAgentStep().
 		When(func(ctx context.Context, input any) bool {
 			return input.(string) == "match-a1"
-		}, NewAgentAdapter(a1)).
+		}, wfadapters.NewAgentAdapter(a1)).
 		When(func(ctx context.Context, input any) bool {
 			return input.(string) == "match-a2"
-		}, NewAgentAdapter(a2)).
-		Default(NewAgentAdapter(def))
+		}, wfadapters.NewAgentAdapter(a2)).
+		Default(wfadapters.NewAgentAdapter(def))
 
 	assert.Equal(t, "conditional_agent", step.Name())
 
@@ -210,7 +232,7 @@ func TestConditionalAgentStep_Execute(t *testing.T) {
 }
 
 func TestConditionalAgentStep_NoMatch_NoDefault(t *testing.T) {
-	step := NewConditionalAgentStep().
+	step := wfadapters.NewConditionalAgentStep().
 		When(func(ctx context.Context, input any) bool { return false }, nil)
 
 	_, err := step.Execute(context.Background(), "input")
@@ -506,4 +528,3 @@ func TestEnhancedCheckpointManager_ResumeFromCheckpoint(t *testing.T) {
 	assert.True(t, ok)
 	assert.Equal(t, "done", result)
 }
-

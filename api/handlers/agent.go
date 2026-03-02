@@ -30,7 +30,6 @@ type AgentResolver func(ctx context.Context, agentID string) (agent.Agent, error
 
 // AgentHandler Agent management handler
 type AgentHandler struct {
-	registry      discovery.Registry
 	agentRegistry *agent.AgentRegistry
 	resolver      AgentResolver
 	service       AgentService
@@ -81,7 +80,6 @@ type AgentHealthResponse struct {
 // The resolver parameter is optional — if nil, execute/stream endpoints return 501.
 func NewAgentHandler(registry discovery.Registry, agentRegistry *agent.AgentRegistry, logger *zap.Logger, resolver ...AgentResolver) *AgentHandler {
 	h := &AgentHandler{
-		registry:      registry,
 		agentRegistry: agentRegistry,
 		logger:        logger,
 	}
@@ -133,9 +131,9 @@ func (h *AgentHandler) HandleListAgents(w http.ResponseWriter, r *http.Request) 
 		offset = parsed
 	}
 
-	agents, err := h.registry.ListAgents(r.Context())
-	if err != nil {
-		h.handleAgentError(w, err)
+	agents, svcErr := h.service.ListAgents(r.Context())
+	if svcErr != nil {
+		WriteError(w, svcErr, h.logger)
 		return
 	}
 
@@ -175,9 +173,9 @@ func (h *AgentHandler) HandleGetAgent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	info, err := h.registry.GetAgent(r.Context(), agentID)
-	if err != nil {
-		WriteError(w, types.NewNotFoundError("agent not found"), h.logger)
+	info, svcErr := h.service.GetAgent(r.Context(), agentID)
+	if svcErr != nil {
+		WriteError(w, svcErr, h.logger)
 		return
 	}
 
@@ -472,9 +470,9 @@ func (h *AgentHandler) HandleAgentHealth(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	info, err := h.registry.GetAgent(r.Context(), agentID)
-	if err != nil {
-		WriteError(w, types.NewNotFoundError("agent not found"), h.logger)
+	info, svcErr := h.service.GetAgent(r.Context(), agentID)
+	if svcErr != nil {
+		WriteError(w, svcErr, h.logger)
 		return
 	}
 

@@ -8,13 +8,15 @@ import (
 	"os"
 	"time"
 
+	"github.com/BaSui01/agentflow/config"
+	"github.com/BaSui01/agentflow/llm/capabilities/audio"
 	"github.com/BaSui01/agentflow/llm/capabilities/embedding"
 	"github.com/BaSui01/agentflow/llm/capabilities/multimodal"
+	"github.com/BaSui01/agentflow/llm/capabilities/rerank"
 	"github.com/BaSui01/agentflow/llm/providers"
 	vendorprofile "github.com/BaSui01/agentflow/llm/providers/vendor"
-	"github.com/BaSui01/agentflow/llm/capabilities/rerank"
-	"github.com/BaSui01/agentflow/llm/capabilities/audio"
 	"github.com/BaSui01/agentflow/rag"
+	ragruntime "github.com/BaSui01/agentflow/rag/runtime"
 	"go.uber.org/zap"
 )
 
@@ -155,8 +157,13 @@ func demoEnhancedRetrieval(ctx context.Context, logger *zap.Logger) {
 		return
 	}
 
-	// Create enhanced retriever with Cohere embedding + reranking
-	retriever, err := rag.NewCohereRetriever(cohereKey, logger)
+	cfg := config.DefaultConfig()
+	cfg.LLM.APIKey = cohereKey
+	cfg.LLM.DefaultProvider = string(rag.EmbeddingCohere)
+	retriever, err := ragruntime.NewBuilder(cfg, logger).
+		WithEmbeddingType(rag.EmbeddingCohere).
+		WithRerankType(rag.RerankCohere).
+		BuildEnhancedRetriever()
 	if err != nil {
 		log.Printf("failed to create retriever: %v", err)
 		return
@@ -177,7 +184,7 @@ func demoEnhancedRetrieval(ctx context.Context, logger *zap.Logger) {
 	}
 
 	// Retrieve with hybrid search + reranking
-	results, err := retriever.RetrieveWithProviders(ctx, "How do neural networks learn?")
+	results, err := retriever.ExecuteRetrievalPipeline(ctx, "How do neural networks learn?")
 	if err != nil {
 		log.Printf("Retrieval error: %v", err)
 		return

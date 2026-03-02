@@ -1,13 +1,12 @@
 package workflow
 
 import (
-	"github.com/BaSui01/agentflow/types"
 	"context"
 	"errors"
 	"fmt"
 	"testing"
 
-	"github.com/BaSui01/agentflow/llm"
+	"github.com/BaSui01/agentflow/workflow/core"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -16,35 +15,22 @@ import (
 // Mock implementations for testing
 // ============================================================
 
-// mockProvider implements llm.Provider for testing.
-type mockProvider struct {
+// mockGateway implements core.GatewayLike for testing.
+type mockGateway struct {
 	name     string
-	response *llm.ChatResponse
+	response *core.LLMResponse
 	err      error
 	calls    int
+	lastReq  *core.LLMRequest
 }
 
-func (m *mockProvider) Completion(ctx context.Context, req *llm.ChatRequest) (*llm.ChatResponse, error) {
+func (m *mockGateway) Invoke(ctx context.Context, req *core.LLMRequest) (*core.LLMResponse, error) {
 	m.calls++
+	m.lastReq = req
 	if m.err != nil {
 		return nil, m.err
 	}
 	return m.response, nil
-}
-
-func (m *mockProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-chan llm.StreamChunk, error) {
-	return nil, fmt.Errorf("not implemented")
-}
-
-func (m *mockProvider) HealthCheck(ctx context.Context) (*llm.HealthStatus, error) {
-	return &llm.HealthStatus{Healthy: true}, nil
-}
-
-func (m *mockProvider) Name() string                        { return m.name }
-func (m *mockProvider) SupportsNativeFunctionCalling() bool { return false }
-func (m *mockProvider) Endpoints() llm.ProviderEndpoints    { return llm.ProviderEndpoints{} }
-func (m *mockProvider) ListModels(ctx context.Context) ([]llm.Model, error) {
-	return nil, nil
 }
 
 // mockTool implements Tool for testing.
@@ -155,7 +141,7 @@ func TestPassthroughStep_Execute(t *testing.T) {
 // LLMStep tests
 // ============================================================
 
-func TestLLMStep_Execute_NilProvider(t *testing.T) {
+func TestLLMStep_Execute_NilGateway(t *testing.T) {
 	step := &LLMStep{
 		Model:  "gpt-4",
 		Prompt: "test prompt",
@@ -167,14 +153,10 @@ func TestLLMStep_Execute_NilProvider(t *testing.T) {
 	assert.ErrorIs(t, err, ErrNotConfigured)
 }
 
-func TestLLMStep_Execute_WithProvider(t *testing.T) {
-	provider := &mockProvider{
+func TestLLMStep_Execute_WithGateway(t *testing.T) {
+	provider := &mockGateway{
 		name: "test-provider",
-		response: &llm.ChatResponse{
-			Choices: []llm.ChatChoice{
-				{Message: types.Message{Role: llm.RoleAssistant, Content: "Hello from LLM"}},
-			},
-		},
+		response: &core.LLMResponse{Content: "Hello from LLM"},
 	}
 
 	step := &LLMStep{
@@ -182,7 +164,7 @@ func TestLLMStep_Execute_WithProvider(t *testing.T) {
 		Prompt:      "Summarize this:",
 		Temperature: 0.7,
 		MaxTokens:   100,
-		Provider:    provider,
+		Gateway:     provider,
 	}
 
 	result, err := step.Execute(context.Background(), "some text")
@@ -191,8 +173,8 @@ func TestLLMStep_Execute_WithProvider(t *testing.T) {
 	assert.Equal(t, 1, provider.calls)
 }
 
-func TestLLMStep_Execute_ProviderError(t *testing.T) {
-	provider := &mockProvider{
+func TestLLMStep_Execute_GatewayError(t *testing.T) {
+	provider := &mockGateway{
 		name: "test-provider",
 		err:  errors.New("API rate limited"),
 	}
@@ -200,25 +182,25 @@ func TestLLMStep_Execute_ProviderError(t *testing.T) {
 	step := &LLMStep{
 		Model:    "gpt-4",
 		Prompt:   "test",
-		Provider: provider,
+		Gateway: provider,
 	}
 
 	_, err := step.Execute(context.Background(), nil)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "completion failed")
+	assert.Contains(t, err.Error(), "invoke failed")
 	assert.Contains(t, err.Error(), "API rate limited")
 }
 
 func TestLLMStep_Execute_EmptyResponse(t *testing.T) {
-	provider := &mockProvider{
+	provider := &mockGateway{
 		name:     "test-provider",
-		response: &llm.ChatResponse{Choices: []llm.ChatChoice{}},
+		response: &core.LLMResponse{Content: ""},
 	}
 
 	step := &LLMStep{
 		Model:    "gpt-4",
 		Prompt:   "test",
-		Provider: provider,
+		Gateway: provider,
 	}
 
 	_, err := step.Execute(context.Background(), nil)
@@ -227,13 +209,9 @@ func TestLLMStep_Execute_EmptyResponse(t *testing.T) {
 }
 
 func TestLLMStep_Execute_WithTemperatureAndMaxTokens(t *testing.T) {
-	provider := &mockProvider{
+	provider := &mockGateway{
 		name: "test-provider",
-		response: &llm.ChatResponse{
-			Choices: []llm.ChatChoice{
-				{Message: types.Message{Role: llm.RoleAssistant, Content: "response"}},
-			},
-		},
+		response: &core.LLMResponse{Content: "response"},
 	}
 
 	step := &LLMStep{
@@ -241,7 +219,7 @@ func TestLLMStep_Execute_WithTemperatureAndMaxTokens(t *testing.T) {
 		Prompt:      "test",
 		Temperature: 0.0,
 		MaxTokens:   1,
-		Provider:    provider,
+		Gateway:     provider,
 	}
 
 	result, err := step.Execute(context.Background(), nil)
@@ -253,14 +231,14 @@ func TestLLMStep_Execute_ContextCancelled(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	provider := &mockProvider{
+	provider := &mockGateway{
 		name: "test-provider",
 		err:  ctx.Err(),
 	}
 
 	step := &LLMStep{
 		Prompt:   "test",
-		Provider: provider,
+		Gateway: provider,
 	}
 
 	_, err := step.Execute(ctx, nil)
@@ -302,26 +280,19 @@ func TestLLMStep_Execute_PromptCombination(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			var capturedReq *llm.ChatRequest
-			provider := &mockProvider{
+			provider := &mockGateway{
 				name: "test",
-				response: &llm.ChatResponse{
-					Choices: []llm.ChatChoice{
-						{Message: types.Message{Role: llm.RoleAssistant, Content: "ok"}},
-					},
-				},
+				response: &core.LLMResponse{Content: "ok"},
 			}
-			// Wrap to capture request
 			step := &LLMStep{
 				Prompt:   tt.prompt,
-				Provider: provider,
+				Gateway:  provider,
 			}
-			// We can't easily capture the request with our simple mock,
-			// so we verify the output is correct (provider returns "ok")
-			_ = capturedReq
 			result, err := step.Execute(context.Background(), tt.input)
 			require.NoError(t, err)
 			assert.Equal(t, "ok", result)
+			require.NotNil(t, provider.lastReq)
+			assert.Equal(t, tt.expectContent, provider.lastReq.Prompt)
 		})
 	}
 }

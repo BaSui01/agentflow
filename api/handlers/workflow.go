@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"net/http"
 
 	"github.com/BaSui01/agentflow/types"
@@ -10,15 +11,20 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// WorkflowExecutor defines the workflow execution facade contract used by handler.
+type WorkflowExecutor interface {
+	ExecuteDAG(ctx context.Context, wf *workflow.DAGWorkflow, input any) (any, error)
+}
+
 // WorkflowHandler handles workflow API requests.
 type WorkflowHandler struct {
-	executor *workflow.DAGExecutor
+	executor WorkflowExecutor
 	parser   *dsl.Parser
 	logger   *zap.Logger
 }
 
 // NewWorkflowHandler creates a new workflow handler.
-func NewWorkflowHandler(executor *workflow.DAGExecutor, parser *dsl.Parser, logger *zap.Logger) *WorkflowHandler {
+func NewWorkflowHandler(executor WorkflowExecutor, parser *dsl.Parser, logger *zap.Logger) *WorkflowHandler {
 	return &WorkflowHandler{
 		executor: executor,
 		parser:   parser,
@@ -58,8 +64,7 @@ func (h *WorkflowHandler) HandleExecute(w http.ResponseWriter, r *http.Request) 
 	}
 
 	// Execute workflow
-	wf.SetExecutor(h.executor)
-	result, err := wf.Execute(r.Context(), req.Input)
+	result, err := h.executor.ExecuteDAG(r.Context(), wf, req.Input)
 	if err != nil {
 		apiErr := types.NewError(types.ErrInternalError, "workflow execution failed: "+err.Error())
 		WriteError(w, apiErr, h.logger)
@@ -135,4 +140,3 @@ func (h *WorkflowHandler) HandleList(w http.ResponseWriter, r *http.Request) {
 		"workflows": []any{},
 	})
 }
-
