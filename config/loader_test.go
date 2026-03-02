@@ -74,12 +74,25 @@ server:
 agent:
   name: "test-agent"
   model: "claude-3"
+  tool_model: "claude-3-haiku"
   max_iterations: 20
   temperature: 0.5
   memory:
     enabled: true
     type: "vector"
     max_messages: 200
+
+llm:
+  default_provider: "openai"
+  api_key: "main-key"
+  base_url: "https://main.example.com"
+  timeout: 70s
+  max_retries: 4
+  tool_provider: "gemini"
+  tool_api_key: "tool-key"
+  tool_base_url: "https://tool.example.com"
+  tool_timeout: 25s
+  tool_max_retries: 2
 
 redis:
   addr: "redis.example.com:6379"
@@ -106,10 +119,21 @@ log:
 
 	assert.Equal(t, "test-agent", cfg.Agent.Name)
 	assert.Equal(t, "claude-3", cfg.Agent.Model)
+	assert.Equal(t, "claude-3-haiku", cfg.Agent.ToolModel)
 	assert.Equal(t, 20, cfg.Agent.MaxIterations)
 	assert.Equal(t, 0.5, cfg.Agent.Temperature)
 	assert.Equal(t, "vector", cfg.Agent.Memory.Type)
 	assert.Equal(t, 200, cfg.Agent.Memory.MaxMessages)
+	assert.Equal(t, "openai", cfg.LLM.DefaultProvider)
+	assert.Equal(t, "main-key", cfg.LLM.APIKey)
+	assert.Equal(t, "https://main.example.com", cfg.LLM.BaseURL)
+	assert.Equal(t, 70*time.Second, cfg.LLM.Timeout)
+	assert.Equal(t, 4, cfg.LLM.MaxRetries)
+	assert.Equal(t, "gemini", cfg.LLM.ToolProvider)
+	assert.Equal(t, "tool-key", cfg.LLM.ToolAPIKey)
+	assert.Equal(t, "https://tool.example.com", cfg.LLM.ToolBaseURL)
+	assert.Equal(t, 25*time.Second, cfg.LLM.ToolTimeout)
+	assert.Equal(t, 2, cfg.LLM.ToolMaxRetries)
 
 	assert.Equal(t, "redis.example.com:6379", cfg.Redis.Addr)
 	assert.Equal(t, "secret", cfg.Redis.Password)
@@ -126,8 +150,19 @@ func TestLoader_LoadFromEnv(t *testing.T) {
 		"AGENTFLOW_SERVER_GRPC_PORT":     "8888",
 		"AGENTFLOW_AGENT_NAME":           "env-agent",
 		"AGENTFLOW_AGENT_MODEL":          "gpt-4-turbo",
+		"AGENTFLOW_AGENT_TOOL_MODEL":     "gpt-4o-mini",
 		"AGENTFLOW_AGENT_MAX_ITERATIONS": "15",
 		"AGENTFLOW_AGENT_TEMPERATURE":    "0.9",
+		"AGENTFLOW_LLM_DEFAULT_PROVIDER": "openai",
+		"AGENTFLOW_LLM_API_KEY":          "main-key-env",
+		"AGENTFLOW_LLM_BASE_URL":         "https://main-env.example.com",
+		"AGENTFLOW_LLM_TIMEOUT":          "50s",
+		"AGENTFLOW_LLM_MAX_RETRIES":      "6",
+		"AGENTFLOW_LLM_TOOL_PROVIDER":    "gemini",
+		"AGENTFLOW_LLM_TOOL_API_KEY":     "tool-key-env",
+		"AGENTFLOW_LLM_TOOL_BASE_URL":    "https://tool-env.example.com",
+		"AGENTFLOW_LLM_TOOL_TIMEOUT":     "15s",
+		"AGENTFLOW_LLM_TOOL_MAX_RETRIES": "2",
 		"AGENTFLOW_REDIS_ADDR":           "env-redis:6379",
 		"AGENTFLOW_LOG_LEVEL":            "warn",
 	}
@@ -152,8 +187,19 @@ func TestLoader_LoadFromEnv(t *testing.T) {
 	assert.Equal(t, 8888, cfg.Server.GRPCPort)
 	assert.Equal(t, "env-agent", cfg.Agent.Name)
 	assert.Equal(t, "gpt-4-turbo", cfg.Agent.Model)
+	assert.Equal(t, "gpt-4o-mini", cfg.Agent.ToolModel)
 	assert.Equal(t, 15, cfg.Agent.MaxIterations)
 	assert.Equal(t, 0.9, cfg.Agent.Temperature)
+	assert.Equal(t, "openai", cfg.LLM.DefaultProvider)
+	assert.Equal(t, "main-key-env", cfg.LLM.APIKey)
+	assert.Equal(t, "https://main-env.example.com", cfg.LLM.BaseURL)
+	assert.Equal(t, 50*time.Second, cfg.LLM.Timeout)
+	assert.Equal(t, 6, cfg.LLM.MaxRetries)
+	assert.Equal(t, "gemini", cfg.LLM.ToolProvider)
+	assert.Equal(t, "tool-key-env", cfg.LLM.ToolAPIKey)
+	assert.Equal(t, "https://tool-env.example.com", cfg.LLM.ToolBaseURL)
+	assert.Equal(t, 15*time.Second, cfg.LLM.ToolTimeout)
+	assert.Equal(t, 2, cfg.LLM.ToolMaxRetries)
 	assert.Equal(t, "env-redis:6379", cfg.Redis.Addr)
 	assert.Equal(t, "warn", cfg.Log.Level)
 }

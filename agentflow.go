@@ -8,15 +8,19 @@
 //	a, err := agentflow.New(agentflow.WithOpenAI("gpt-4o-mini"))
 //	a, err := agentflow.New(agentflow.WithAnthropic("claude-sonnet-4-20250514"))
 //	a, err := agentflow.New(agentflow.WithProvider(myProvider), agentflow.WithModel("custom"))
+//	a, err := agentflow.New(agentflow.WithProvider(mainProvider), agentflow.WithToolProvider(toolProvider))
 package agentflow
 
 import (
+	"context"
 	"fmt"
 	"os"
 
 	"github.com/BaSui01/agentflow/agent"
+	"github.com/BaSui01/agentflow/agent/runtime"
 	"github.com/BaSui01/agentflow/llm"
 	"github.com/BaSui01/agentflow/llm/providers/vendor"
+	"github.com/BaSui01/agentflow/types"
 	"go.uber.org/zap"
 )
 
@@ -28,6 +32,7 @@ type options struct {
 	model        string
 	systemPrompt string
 	provider     llm.Provider
+	toolProvider llm.Provider
 	logger       *zap.Logger
 
 	providerName string
@@ -37,6 +42,12 @@ type options struct {
 // WithProvider sets a pre-built LLM provider.
 func WithProvider(p llm.Provider) Option {
 	return func(o *options) { o.provider = p }
+}
+
+// WithToolProvider sets a dedicated provider for tool-calling/ReAct loops.
+// When omitted, tool-calling falls back to the main provider.
+func WithToolProvider(p llm.Provider) Option {
+	return func(o *options) { o.toolProvider = p }
 }
 
 // WithOpenAI creates an OpenAI provider. API key from OPENAI_API_KEY env.
@@ -126,22 +137,25 @@ func New(opts ...Option) (*agent.BaseAgent, error) {
 		o.logger = zap.NewNop()
 	}
 
-	cfg := agent.Config{
-		ID:    o.name,
-		Name:  o.name,
-		Type:  agent.TypeAssistant,
-		Model: o.model,
+	cfg := types.AgentConfig{
+		Core: types.CoreConfig{
+			ID:   o.name,
+			Name: o.name,
+			Type: string(agent.TypeAssistant),
+		},
+		LLM: types.LLMConfig{
+			Model: o.model,
+		},
 	}
 	if o.systemPrompt != "" {
-		cfg.PromptBundle = agent.PromptBundle{
-			System: agent.SystemPrompt{
-				Identity: o.systemPrompt,
-			},
-		}
+		cfg.Runtime.SystemPrompt = o.systemPrompt
 	}
 
-	return agent.NewAgentBuilder(cfg).
-		WithProvider(p).
-		WithLogger(o.logger).
-		Build()
+	builder := runtime.NewBuilder(p, o.logger).
+		WithOptions(runtime.BuildOptions{})
+	if o.toolProvider != nil {
+		builder.WithToolProvider(o.toolProvider)
+	}
+
+	return builder.Build(context.Background(), cfg)
 }

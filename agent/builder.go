@@ -11,13 +11,14 @@ import (
 	"github.com/BaSui01/agentflow/agent/reasoning"
 	"github.com/BaSui01/agentflow/agent/skills"
 	"github.com/BaSui01/agentflow/llm"
+	"github.com/BaSui01/agentflow/types"
 	"go.uber.org/zap"
 )
 
 // AgentBuilder 提供流式构建 Agent 的能力
 // 支持链式调用，简化 Agent 创建过程
 type AgentBuilder struct {
-	config       Config
+	config       types.AgentConfig
 	provider     llm.Provider
 	toolProvider llm.Provider // 工具调用专用 Provider（可选，为 nil 时退化为 provider）
 	memory       MemoryManager
@@ -26,9 +27,9 @@ type AgentBuilder struct {
 	logger       *zap.Logger
 
 	// 增强功能配置
-	reflectionConfig     *ReflectionExecutorConfig
-	toolSelectionConfig  *ToolSelectionConfig
-	promptEnhancerConfig *PromptEnhancerConfig
+	reflectionConfig       *ReflectionExecutorConfig
+	toolSelectionConfig    *ToolSelectionConfig
+	promptEnhancerConfig   *PromptEnhancerConfig
 	skillsInstance         SkillDiscoverer
 	mcpInstance            MCPServerRunner
 	lspClient              LSPClientRunner
@@ -43,23 +44,24 @@ type AgentBuilder struct {
 
 	// Orchestration and reasoning (optional)
 	orchestratorInstance OrchestratorRunner
-	reasoningRegistry   *reasoning.PatternRegistry
+	reasoningRegistry    *reasoning.PatternRegistry
 
 	errors []error
 }
 
 // NewAgentBuilder 创建 Agent 构建器
-func NewAgentBuilder(config Config) *AgentBuilder {
+func NewAgentBuilder(config types.AgentConfig) *AgentBuilder {
+	ensureAgentType(&config)
 	b := &AgentBuilder{
 		config: config,
 		errors: make([]error, 0),
 	}
 
 	// V-012: Validate required config fields early
-	if config.ID == "" {
+	if config.Core.ID == "" {
 		b.errors = append(b.errors, fmt.Errorf("config.ID is required"))
 	}
-	if config.Name == "" {
+	if config.Core.Name == "" {
 		b.errors = append(b.errors, fmt.Errorf("config.Name is required"))
 	}
 
@@ -88,7 +90,7 @@ func (b *AgentBuilder) WithToolProvider(provider llm.Provider) *AgentBuilder {
 // n <= 0 时忽略，使用默认值 10。
 func (b *AgentBuilder) WithMaxReActIterations(n int) *AgentBuilder {
 	if n > 0 {
-		b.config.MaxReActIterations = n
+		b.config.Runtime.MaxReActIterations = n
 	}
 	return b
 }
@@ -127,7 +129,7 @@ func (b *AgentBuilder) WithReflection(config *ReflectionExecutorConfig) *AgentBu
 		config = DefaultReflectionConfig()
 	}
 	b.reflectionConfig = config
-	b.config.EnableReflection = true
+	setReflectionEnabled(&b.config, true)
 	return b
 }
 
@@ -137,7 +139,7 @@ func (b *AgentBuilder) WithToolSelection(config *ToolSelectionConfig) *AgentBuil
 		config = DefaultToolSelectionConfig()
 	}
 	b.toolSelectionConfig = config
-	b.config.EnableToolSelection = true
+	setToolSelectionEnabled(&b.config, true)
 	return b
 }
 
@@ -147,14 +149,14 @@ func (b *AgentBuilder) WithPromptEnhancer(config *PromptEnhancerConfig) *AgentBu
 		config = DefaultPromptEnhancerConfig()
 	}
 	b.promptEnhancerConfig = config
-	b.config.EnablePromptEnhancer = true
+	setPromptEnhancerEnabled(&b.config, true)
 	return b
 }
 
 // WithSkills 启用 Skills 系统
 func (b *AgentBuilder) WithSkills(discoverer SkillDiscoverer) *AgentBuilder {
 	b.skillsInstance = discoverer
-	b.config.EnableSkills = true
+	setSkillsEnabled(&b.config, true)
 	return b
 }
 
@@ -182,14 +184,14 @@ func (b *AgentBuilder) WithDefaultSkills(directory string, config *skills.SkillM
 // WithMCP 启用 MCP 集成
 func (b *AgentBuilder) WithMCP(server MCPServerRunner) *AgentBuilder {
 	b.mcpInstance = server
-	b.config.EnableMCP = true
+	setMCPEnabled(&b.config, true)
 	return b
 }
 
 // WithLSP 启用 LSP 集成。
 func (b *AgentBuilder) WithLSP(client LSPClientRunner) *AgentBuilder {
 	b.lspClient = client
-	b.config.EnableLSP = true
+	setLSPEnabled(&b.config, true)
 	return b
 }
 
@@ -197,7 +199,7 @@ func (b *AgentBuilder) WithLSP(client LSPClientRunner) *AgentBuilder {
 func (b *AgentBuilder) WithLSPWithLifecycle(client LSPClientRunner, lifecycle LSPLifecycleOwner) *AgentBuilder {
 	b.lspClient = client
 	b.lspLifecycle = lifecycle
-	b.config.EnableLSP = true
+	setLSPEnabled(&b.config, true)
 	return b
 }
 
@@ -239,7 +241,7 @@ func (b *AgentBuilder) WithDefaultMCPServer(name, version string) *AgentBuilder 
 // WithEnhancedMemory 启用增强记忆系统
 func (b *AgentBuilder) WithEnhancedMemory(mem EnhancedMemoryRunner) *AgentBuilder {
 	b.enhancedMemoryInstance = mem
-	b.config.EnableEnhancedMemory = true
+	setEnhancedMemoryEnabled(&b.config, true)
 	return b
 }
 
@@ -259,7 +261,7 @@ func (b *AgentBuilder) WithDefaultEnhancedMemory(config *memory.EnhancedMemoryCo
 // WithObservability 启用可观测性系统
 func (b *AgentBuilder) WithObservability(obs ObservabilityRunner) *AgentBuilder {
 	b.observabilityInstance = obs
-	b.config.EnableObservability = true
+	setObservabilityEnabled(&b.config, true)
 	return b
 }
 
@@ -316,7 +318,7 @@ func (b *AgentBuilder) Build() (*BaseAgent, error) {
 	}
 
 	// V-013: Model is required for agent to function
-	if b.config.Model == "" {
+	if b.config.LLM.Model == "" {
 		return nil, fmt.Errorf("config.Model is required")
 	}
 
@@ -337,7 +339,7 @@ func (b *AgentBuilder) Build() (*BaseAgent, error) {
 
 	// 设置工具专用 Provider（双模型模式）
 	if b.toolProvider != nil {
-		agent.toolProvider = b.toolProvider
+		agent.SetToolProvider(b.toolProvider)
 	}
 
 	// Wire MongoDB persistence stores (required).
@@ -346,28 +348,28 @@ func (b *AgentBuilder) Build() (*BaseAgent, error) {
 	agent.runStore = b.runStore
 
 	// 如果直接在配置上启用了特性标记, 请返回默认配置 。
-	if b.config.EnableReflection && b.reflectionConfig == nil {
+	if isReflectionEnabled(b.config) && b.reflectionConfig == nil {
 		b.reflectionConfig = DefaultReflectionConfig()
 	}
-	if b.config.EnableToolSelection && b.toolSelectionConfig == nil {
+	if isToolSelectionEnabled(b.config) && b.toolSelectionConfig == nil {
 		b.toolSelectionConfig = DefaultToolSelectionConfig()
 	}
-	if b.config.EnablePromptEnhancer && b.promptEnhancerConfig == nil {
+	if isPromptEnhancerEnabled(b.config) && b.promptEnhancerConfig == nil {
 		b.promptEnhancerConfig = DefaultPromptEnhancerConfig()
 	}
 
 	// 启用高级特性
-	if b.config.EnableReflection && b.reflectionConfig != nil {
+	if isReflectionEnabled(b.config) && b.reflectionConfig != nil {
 		reflectionExecutor := NewReflectionExecutor(agent, *b.reflectionConfig)
 		agent.EnableReflection(AsReflectionRunner(reflectionExecutor))
 	}
 
-	if b.config.EnableToolSelection && b.toolSelectionConfig != nil {
+	if isToolSelectionEnabled(b.config) && b.toolSelectionConfig != nil {
 		toolSelector := NewDynamicToolSelector(agent, *b.toolSelectionConfig)
 		agent.EnableToolSelection(AsToolSelectorRunner(toolSelector))
 	}
 
-	if b.config.EnablePromptEnhancer && b.promptEnhancerConfig != nil {
+	if isPromptEnhancerEnabled(b.config) && b.promptEnhancerConfig != nil {
 		promptEnhancer := NewPromptEnhancer(*b.promptEnhancerConfig)
 		agent.EnablePromptEnhancer(AsPromptEnhancerRunner(promptEnhancer))
 	}
@@ -380,21 +382,21 @@ func (b *AgentBuilder) Build() (*BaseAgent, error) {
 }
 
 func (b *AgentBuilder) enableOptionalFeatures(agent *BaseAgent) error {
-	if b.config.EnableSkills {
+	if isSkillsEnabled(b.config) {
 		if err := b.enableSkills(agent); err != nil {
 			return fmt.Errorf("enable skills: %w", err)
 		}
 	}
-	if b.config.EnableMCP {
+	if isMCPEnabled(b.config) {
 		b.enableMCP(agent)
 	}
-	if b.config.EnableLSP {
+	if isLSPEnabled(b.config) {
 		b.enableLSP(agent)
 	}
-	if b.config.EnableEnhancedMemory {
+	if isEnhancedMemoryEnabled(b.config) {
 		b.enableEnhancedMemory(agent)
 	}
-	if b.config.EnableObservability && b.observabilityInstance != nil {
+	if isObservabilityEnabled(b.config) && b.observabilityInstance != nil {
 		agent.EnableObservability(b.observabilityInstance)
 	}
 	return nil
@@ -455,15 +457,15 @@ func (b *AgentBuilder) Validate() error {
 		return fmt.Errorf("builder has %d errors: %v", len(b.errors), b.errors[0])
 	}
 
-	if b.config.ID == "" {
+	if b.config.Core.ID == "" {
 		return fmt.Errorf("agent ID is required")
 	}
 
-	if b.config.Name == "" {
+	if b.config.Core.Name == "" {
 		return fmt.Errorf("agent name is required")
 	}
 
-	if b.config.Model == "" {
+	if b.config.LLM.Model == "" {
 		return fmt.Errorf("model is required")
 	}
 
@@ -473,4 +475,3 @@ func (b *AgentBuilder) Validate() error {
 
 	return nil
 }
-

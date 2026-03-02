@@ -46,6 +46,7 @@ func DefaultAgentConfig() AgentConfig {
 		Name:          "default-agent",
 		Description:   "Default AgentFlow agent",
 		Model:         "gpt-4",
+		ToolModel:     "",
 		SystemPrompt:  "You are a helpful AI assistant.",
 		MaxIterations: 10,
 		Temperature:   0.7,
@@ -152,10 +153,15 @@ func DefaultMongoDBConfig() MongoDBConfig {
 func DefaultLLMConfig() LLMConnectionConfig {
 	return LLMConnectionConfig{
 		DefaultProvider: "openai",
+		ToolProvider:    "",
 		APIKey:          "",
+		ToolAPIKey:      "",
 		BaseURL:         "",
+		ToolBaseURL:     "",
 		Timeout:         2 * time.Minute,
+		ToolTimeout:     0,
 		MaxRetries:      3,
+		ToolMaxRetries:  0,
 	}
 }
 

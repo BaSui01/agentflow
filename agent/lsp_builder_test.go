@@ -11,12 +11,7 @@ func TestAgentBuilder_WithDefaultLSPServer(t *testing.T) {
 	logger := zap.NewNop()
 	provider := &testProvider{name: "test-model"}
 
-	cfg := Config{
-		ID:    "lsp-builder-test",
-		Name:  "LSP Builder Test",
-		Type:  TypeGeneric,
-		Model: "test-model",
-	}
+	cfg := testAgentConfig("lsp-builder-test", "LSP Builder Test", "test-model")
 
 	ag, err := NewAgentBuilder(cfg).
 		WithProvider(provider).

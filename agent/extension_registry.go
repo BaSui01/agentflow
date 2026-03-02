@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/BaSui01/agentflow/agent/memory"
+	"github.com/BaSui01/agentflow/types"
 	"go.uber.org/zap"
 )
 
@@ -175,30 +176,30 @@ func (r *ExtensionRegistry) SaveToEnhancedMemory(ctx context.Context, agentID st
 }
 
 // ValidateConfiguration validates that enabled features have their executors set.
-func (r *ExtensionRegistry) ValidateConfiguration(cfg Config) []string {
+func (r *ExtensionRegistry) ValidateConfiguration(cfg types.AgentConfig) []string {
 	var errors []string
-	if cfg.EnableReflection && r.reflectionExecutor == nil {
+	if isReflectionEnabled(cfg) && r.reflectionExecutor == nil {
 		errors = append(errors, "reflection enabled but executor not set")
 	}
-	if cfg.EnableToolSelection && r.toolSelector == nil {
+	if isToolSelectionEnabled(cfg) && r.toolSelector == nil {
 		errors = append(errors, "tool selection enabled but selector not set")
 	}
-	if cfg.EnablePromptEnhancer && r.promptEnhancer == nil {
+	if isPromptEnhancerEnabled(cfg) && r.promptEnhancer == nil {
 		errors = append(errors, "prompt enhancer enabled but enhancer not set")
 	}
-	if cfg.EnableSkills && r.skillManager == nil {
+	if isSkillsEnabled(cfg) && r.skillManager == nil {
 		errors = append(errors, "skills enabled but manager not set")
 	}
-	if cfg.EnableMCP && r.mcpServer == nil {
+	if isMCPEnabled(cfg) && r.mcpServer == nil {
 		errors = append(errors, "MCP enabled but server not set")
 	}
-	if cfg.EnableLSP && r.lspClient == nil {
+	if isLSPEnabled(cfg) && r.lspClient == nil {
 		errors = append(errors, "LSP enabled but client not set")
 	}
-	if cfg.EnableEnhancedMemory && r.enhancedMemory == nil {
+	if isEnhancedMemoryEnabled(cfg) && r.enhancedMemory == nil {
 		errors = append(errors, "enhanced memory enabled but system not set")
 	}
-	if cfg.EnableObservability && r.observabilitySystem == nil {
+	if isObservabilityEnabled(cfg) && r.observabilitySystem == nil {
 		errors = append(errors, "observability enabled but system not set")
 	}
 	return errors
@@ -211,4 +212,3 @@ func (r *ExtensionRegistry) ExecuteWithReflection(ctx context.Context, input *In
 	}
 	return r.reflectionExecutor.ExecuteWithReflection(ctx, input)
 }
-

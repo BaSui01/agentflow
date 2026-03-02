@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/BaSui01/agentflow/llm"
+	"github.com/BaSui01/agentflow/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
@@ -35,7 +36,7 @@ func TestAgentRegistry_RegisterAndUnregister(t *testing.T) {
 
 	assert.False(t, r.IsRegistered(customType))
 
-	r.Register(customType, func(config Config, provider llm.Provider, memory MemoryManager, toolManager ToolManager, bus EventBus, logger *zap.Logger) (Agent, error) {
+	r.Register(customType, func(config types.AgentConfig, provider llm.Provider, memory MemoryManager, toolManager ToolManager, bus EventBus, logger *zap.Logger) (Agent, error) {
 		return NewBaseAgent(config, provider, memory, toolManager, bus, logger), nil
 	})
 	assert.True(t, r.IsRegistered(customType))
@@ -47,12 +48,8 @@ func TestAgentRegistry_RegisterAndUnregister(t *testing.T) {
 func TestAgentRegistry_Create(t *testing.T) {
 	r := NewAgentRegistry(zap.NewNop())
 
-	cfg := Config{
-		ID:    "a1",
-		Name:  "test",
-		Model: "gpt-4",
-		Type:  TypeAssistant,
-	}
+	cfg := testAgentConfig("a1", "test", "gpt-4")
+	cfg.Core.Type = string(TypeAssistant)
 
 	agent, err := r.Create(cfg, &testProvider{name: "test"}, nil, nil, nil, zap.NewNop())
 	require.NoError(t, err)
@@ -63,7 +60,8 @@ func TestAgentRegistry_Create(t *testing.T) {
 func TestAgentRegistry_Create_UnknownType(t *testing.T) {
 	r := NewAgentRegistry(zap.NewNop())
 
-	cfg := Config{Type: AgentType("unknown")}
+	cfg := testAgentConfig("", "", "")
+	cfg.Core.Type = "unknown"
 	_, err := r.Create(cfg, &testProvider{name: "test"}, nil, nil, nil, zap.NewNop())
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "not registered")

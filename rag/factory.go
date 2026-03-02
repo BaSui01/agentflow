@@ -9,7 +9,6 @@ import (
 
 	"github.com/BaSui01/agentflow/config"
 	"github.com/BaSui01/agentflow/llm/capabilities/embedding"
-	"github.com/BaSui01/agentflow/llm/providers"
 	"github.com/BaSui01/agentflow/llm/capabilities/rerank"
 	"go.uber.org/zap"
 )
@@ -214,23 +213,12 @@ func mapMilvusConfig(c *config.MilvusConfig) MilvusConfig {
 }
 
 func newRerankProvider(cfg *config.Config, t RerankProviderType) (RerankProvider, error) {
-	apiKey := cfg.LLM.APIKey
-	switch t {
-	case RerankCohere:
-		return rerank.NewCohereProvider(rerank.CohereConfig{
-			BaseProviderConfig: providers.BaseProviderConfig{APIKey: apiKey},
-		}), nil
-	case RerankVoyage:
-		return rerank.NewVoyageProvider(rerank.VoyageConfig{
-			BaseProviderConfig: providers.BaseProviderConfig{APIKey: apiKey},
-		}), nil
-	case RerankJina:
-		return rerank.NewJinaProvider(rerank.JinaConfig{
-			BaseProviderConfig: providers.BaseProviderConfig{APIKey: apiKey},
-		}), nil
-	default:
-		return nil, fmt.Errorf("unsupported rerank provider type: %s", t)
-	}
+	return rerank.NewProviderFromConfig(rerank.FactoryConfig{
+		Type:    rerank.ProviderType(t),
+		APIKey:  cfg.LLM.APIKey,
+		BaseURL: cfg.LLM.BaseURL,
+		Timeout: cfg.LLM.Timeout,
+	})
 }
 
 // NewPineconeVectorStore creates a Pinecone-backed VectorStore from a PineconeConfig.
@@ -238,4 +226,3 @@ func newRerankProvider(cfg *config.Config, t RerankProviderType) (RerankProvider
 func NewPineconeVectorStore(cfg PineconeConfig, logger *zap.Logger) VectorStore {
 	return NewPineconeStore(cfg, logger)
 }
-

@@ -7,6 +7,7 @@ import (
 
 	"github.com/BaSui01/agentflow/agent/memory"
 	"github.com/BaSui01/agentflow/agent/skills"
+	"github.com/BaSui01/agentflow/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
@@ -139,17 +140,13 @@ func TestBaseAgent_ExportConfiguration(t *testing.T) {
 	ba := newTestBaseAgent()
 	exported := ba.ExportConfiguration()
 
-	assert.Equal(t, ba.config.ID, exported["id"])
-	assert.Equal(t, ba.config.Name, exported["name"])
+	assert.Equal(t, ba.config.Core.ID, exported["id"])
+	assert.Equal(t, ba.config.Core.Name, exported["name"])
 	assert.NotNil(t, exported["features"])
 }
 
 func TestBaseAgent_ValidateConfiguration_NoProvider(t *testing.T) {
-	ba := NewBaseAgent(Config{
-		ID:   "test-1",
-		Name: "Test",
-		Type: TypeGeneric,
-	}, nil, nil, nil, nil, zap.NewNop())
+	ba := NewBaseAgent(testAgentConfig("test-1", "Test", ""), nil, nil, nil, nil, zap.NewNop())
 
 	err := ba.ValidateConfiguration()
 	require.Error(t, err)
@@ -163,51 +160,21 @@ func TestBaseAgent_ValidateConfiguration_Success(t *testing.T) {
 }
 
 func TestBaseAgent_ValidateConfiguration_MissingExecutors(t *testing.T) {
-	ba := NewBaseAgent(Config{
-		ID:                   "test-1",
-		Name:                 "Test",
-		Type:                 TypeGeneric,
-		EnableReflection:     true,
-		EnableToolSelection:  true,
-		EnablePromptEnhancer: true,
-		EnableSkills:         true,
-		EnableMCP:            true,
-		EnableLSP:            true,
-		EnableEnhancedMemory: true,
-		EnableObservability:  true,
-	}, &testProvider{name: "test"}, nil, nil, nil, zap.NewNop())
+	cfg := testAgentConfig("test-1", "Test", "")
+	cfg.Features.Reflection = &types.ReflectionConfig{Enabled: true}
+	cfg.Features.ToolSelection = &types.ToolSelectionConfig{Enabled: true}
+	cfg.Features.PromptEnhancer = &types.PromptEnhancerConfig{Enabled: true}
+	cfg.Extensions.Skills = &types.SkillsConfig{Enabled: true}
+	cfg.Extensions.MCP = &types.MCPConfig{Enabled: true}
+	cfg.Extensions.LSP = &types.LSPConfig{Enabled: true}
+	cfg.Features.Memory = &types.MemoryConfig{Enabled: true}
+	cfg.Extensions.Observability = &types.ObservabilityConfig{Enabled: true}
+	ba := NewBaseAgent(cfg, &testProvider{name: "test"}, nil, nil, nil, zap.NewNop())
 
 	err := ba.ValidateConfiguration()
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "reflection enabled but executor not set")
 	assert.Contains(t, err.Error(), "tool selection enabled but selector not set")
-}
-
-func TestBaseAgent_QuickSetup(t *testing.T) {
-	ba := newTestBaseAgent()
-	opts := DefaultQuickSetupOptions()
-
-	result, err := ba.QuickSetup(context.Background(), opts)
-	require.NoError(t, err)
-	require.NotNil(t, result)
-	// With default options (all features enabled) and no subsystems wired,
-	// every feature should appear in RequiredSetups.
-	assert.NotEmpty(t, result.RequiredSetups)
-}
-
-func TestDefaultQuickSetupOptions(t *testing.T) {
-	opts := DefaultQuickSetupOptions()
-	assert.True(t, opts.EnableAllFeatures)
-	assert.True(t, opts.EnableReflection)
-	assert.True(t, opts.EnableToolSelection)
-	assert.True(t, opts.EnablePromptEnhancer)
-	assert.True(t, opts.EnableSkills)
-	assert.False(t, opts.EnableMCP) // MCP needs extra config
-	assert.True(t, opts.EnableLSP)
-	assert.True(t, opts.EnableEnhancedMemory)
-	assert.True(t, opts.EnableObservability)
-	assert.Equal(t, 3, opts.ReflectionMaxIterations)
-	assert.Equal(t, 5, opts.ToolSelectionMaxTools)
 }
 
 func TestDefaultEnhancedExecutionOptions(t *testing.T) {
@@ -288,11 +255,7 @@ func TestAsPromptEnhancerRunner(t *testing.T) {
 // ============================================================
 
 func newTestBaseAgent() *BaseAgent {
-	return NewBaseAgent(Config{
-		ID:   "test-agent",
-		Name: "TestAgent",
-		Type: TypeGeneric,
-	}, &testProvider{name: "test"}, nil, nil, nil, zap.NewNop())
+	return NewBaseAgent(testAgentConfig("test-agent", "TestAgent", ""), &testProvider{name: "test"}, nil, nil, nil, zap.NewNop())
 }
 
 type integTestReflectionRunner struct{}
@@ -346,8 +309,7 @@ func (r *integTestEnhancedMemory) RecordEpisode(ctx context.Context, event *memo
 
 type integTestObservability struct{}
 
-func (r *integTestObservability) StartTrace(traceID, agentID string)          {}
-func (r *integTestObservability) EndTrace(traceID, status string, err error)  {}
+func (r *integTestObservability) StartTrace(traceID, agentID string)         {}
+func (r *integTestObservability) EndTrace(traceID, status string, err error) {}
 func (r *integTestObservability) RecordTask(agentID string, success bool, d time.Duration, tokens int, cost, quality float64) {
 }
-

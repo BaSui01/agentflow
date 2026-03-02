@@ -372,136 +372,6 @@ func (b *BaseAgent) PrintFeatureStatus() {
 	)
 }
 
-// QuickSetupOptions 快速设置选项
-type QuickSetupOptions struct {
-	EnableAllFeatures bool
-
-	// 功能开关
-	EnableReflection     bool
-	EnableToolSelection  bool
-	EnablePromptEnhancer bool
-	EnableSkills         bool
-	EnableMCP            bool
-	EnableLSP            bool
-	EnableEnhancedMemory bool
-	EnableObservability  bool
-
-	// 配置
-	ReflectionMaxIterations int
-	ToolSelectionMaxTools   int
-	SkillsDirectory         string
-	MCPServerName           string
-	LSPServerName           string
-	LSPServerVersion        string
-	MemoryTTL               time.Duration
-}
-
-// DefaultQuickSetupOptions 默认快速设置选项
-func DefaultQuickSetupOptions() QuickSetupOptions {
-	return QuickSetupOptions{
-		EnableAllFeatures:       true,
-		EnableReflection:        true,
-		EnableToolSelection:     true,
-		EnablePromptEnhancer:    true,
-		EnableSkills:            true,
-		EnableMCP:               false, // MCP 需要额外配置
-		EnableLSP:               true,
-		EnableEnhancedMemory:    true,
-		EnableObservability:     true,
-		ReflectionMaxIterations: 3,
-		ToolSelectionMaxTools:   5,
-		SkillsDirectory:         "./skills",
-		MCPServerName:           "agent-mcp-server",
-		LSPServerName:           defaultLSPServerName,
-		LSPServerVersion:        defaultLSPServerVersion,
-		MemoryTTL:               24 * time.Hour,
-	}
-}
-
-// QuickSetupResult holds the list of features that the caller must manually
-// enable by calling the corresponding Enable* methods on BaseAgent.
-type QuickSetupResult struct {
-	RequiredSetups []string `json:"required_setups"`
-}
-
-// QuickSetup validates the requested feature configuration and returns a list
-// of features that still need to be enabled.
-// NOTE: This method does NOT automatically enable any features. The caller
-// must inspect RequiredSetups and invoke the corresponding Enable* methods
-// with concrete implementations (e.g. via agent/runtime.QuickSetup).
-func (b *BaseAgent) QuickSetup(ctx context.Context, options QuickSetupOptions) (*QuickSetupResult, error) {
-	b.logger.Info("quick setup: validating feature requirements",
-		zap.Bool("all_features", options.EnableAllFeatures),
-	)
-
-	result := &QuickSetupResult{}
-
-	if options.EnableAllFeatures || options.EnableReflection {
-		if b.reflectionExecutor == nil {
-			result.RequiredSetups = append(result.RequiredSetups,
-				fmt.Sprintf("EnableReflection(executor) — max_iterations: %d", options.ReflectionMaxIterations))
-		}
-	}
-
-	if options.EnableAllFeatures || options.EnableToolSelection {
-		if b.toolSelector == nil {
-			result.RequiredSetups = append(result.RequiredSetups,
-				fmt.Sprintf("EnableToolSelection(selector) — max_tools: %d", options.ToolSelectionMaxTools))
-		}
-	}
-
-	if options.EnableAllFeatures || options.EnablePromptEnhancer {
-		if b.promptEnhancer == nil {
-			result.RequiredSetups = append(result.RequiredSetups, "EnablePromptEnhancer(enhancer)")
-		}
-	}
-
-	if options.EnableAllFeatures || options.EnableSkills {
-		if b.skillManager == nil {
-			result.RequiredSetups = append(result.RequiredSetups,
-				fmt.Sprintf("EnableSkills(manager) — directory: %s", options.SkillsDirectory))
-		}
-	}
-
-	if options.EnableMCP {
-		if b.mcpServer == nil {
-			result.RequiredSetups = append(result.RequiredSetups,
-				fmt.Sprintf("EnableMCP(server) — server_name: %s", options.MCPServerName))
-		}
-	}
-
-	if options.EnableAllFeatures || options.EnableLSP {
-		if b.lspClient == nil {
-			result.RequiredSetups = append(result.RequiredSetups,
-				fmt.Sprintf("EnableLSP(client) — server: %s %s", options.LSPServerName, options.LSPServerVersion))
-		}
-	}
-
-	if options.EnableAllFeatures || options.EnableEnhancedMemory {
-		if b.enhancedMemory == nil {
-			result.RequiredSetups = append(result.RequiredSetups,
-				fmt.Sprintf("EnableEnhancedMemory(system) — ttl: %s", options.MemoryTTL))
-		}
-	}
-
-	if options.EnableAllFeatures || options.EnableObservability {
-		if b.observabilitySystem == nil {
-			result.RequiredSetups = append(result.RequiredSetups, "EnableObservability(system)")
-		}
-	}
-
-	if len(result.RequiredSetups) > 0 {
-		b.logger.Warn("quick setup: features require manual enablement",
-			zap.Int("pending_count", len(result.RequiredSetups)),
-			zap.Strings("required", result.RequiredSetups),
-		)
-	} else {
-		b.logger.Info("quick setup: all requested features already enabled")
-	}
-
-	return result, nil
-}
-
 // ValidateConfiguration 验证配置
 func (b *BaseAgent) ValidateConfiguration() error {
 	errors := []string{}
@@ -512,35 +382,35 @@ func (b *BaseAgent) ValidateConfiguration() error {
 	}
 
 	// 检查功能依赖
-	if b.config.EnableReflection && b.reflectionExecutor == nil {
+	if isReflectionEnabled(b.config) && b.reflectionExecutor == nil {
 		errors = append(errors, "reflection enabled but executor not set")
 	}
 
-	if b.config.EnableToolSelection && b.toolSelector == nil {
+	if isToolSelectionEnabled(b.config) && b.toolSelector == nil {
 		errors = append(errors, "tool selection enabled but selector not set")
 	}
 
-	if b.config.EnablePromptEnhancer && b.promptEnhancer == nil {
+	if isPromptEnhancerEnabled(b.config) && b.promptEnhancer == nil {
 		errors = append(errors, "prompt enhancer enabled but enhancer not set")
 	}
 
-	if b.config.EnableSkills && b.skillManager == nil {
+	if isSkillsEnabled(b.config) && b.skillManager == nil {
 		errors = append(errors, "skills enabled but manager not set")
 	}
 
-	if b.config.EnableMCP && b.mcpServer == nil {
+	if isMCPEnabled(b.config) && b.mcpServer == nil {
 		errors = append(errors, "MCP enabled but server not set")
 	}
 
-	if b.config.EnableLSP && b.lspClient == nil {
+	if isLSPEnabled(b.config) && b.lspClient == nil {
 		errors = append(errors, "LSP enabled but client not set")
 	}
 
-	if b.config.EnableEnhancedMemory && b.enhancedMemory == nil {
+	if isEnhancedMemoryEnabled(b.config) && b.enhancedMemory == nil {
 		errors = append(errors, "enhanced memory enabled but system not set")
 	}
 
-	if b.config.EnableObservability && b.observabilitySystem == nil {
+	if isObservabilityEnabled(b.config) && b.observabilitySystem == nil {
 		errors = append(errors, "observability enabled but system not set")
 	}
 
@@ -562,10 +432,10 @@ func (b *BaseAgent) GetFeatureMetrics() map[string]any {
 		"agent_type": string(b.Type()),
 		"features":   status,
 		"config": map[string]any{
-			"model":       b.config.Model,
-			"provider":    b.config.Provider,
-			"max_tokens":  b.config.MaxTokens,
-			"temperature": b.config.Temperature,
+			"model":       b.config.LLM.Model,
+			"provider":    b.config.LLM.Provider,
+			"max_tokens":  b.config.LLM.MaxTokens,
+			"temperature": b.config.LLM.Temperature,
 		},
 	}
 
@@ -618,23 +488,23 @@ func prependSkillInstructions(prompt string, instructions []string) string {
 // ExportConfiguration 导出配置（用于持久化或分享）
 func (b *BaseAgent) ExportConfiguration() map[string]any {
 	return map[string]any{
-		"id":          b.config.ID,
-		"name":        b.config.Name,
-		"type":        string(b.config.Type),
-		"description": b.config.Description,
-		"model":       b.config.Model,
-		"provider":    b.config.Provider,
+		"id":          b.config.Core.ID,
+		"name":        b.config.Core.Name,
+		"type":        b.config.Core.Type,
+		"description": b.config.Core.Description,
+		"model":       b.config.LLM.Model,
+		"provider":    b.config.LLM.Provider,
 		"features": map[string]bool{
-			"reflection":      b.config.EnableReflection,
-			"tool_selection":  b.config.EnableToolSelection,
-			"prompt_enhancer": b.config.EnablePromptEnhancer,
-			"skills":          b.config.EnableSkills,
-			"mcp":             b.config.EnableMCP,
-			"lsp":             b.config.EnableLSP,
-			"enhanced_memory": b.config.EnableEnhancedMemory,
-			"observability":   b.config.EnableObservability,
+			"reflection":      isReflectionEnabled(b.config),
+			"tool_selection":  isToolSelectionEnabled(b.config),
+			"prompt_enhancer": isPromptEnhancerEnabled(b.config),
+			"skills":          isSkillsEnabled(b.config),
+			"mcp":             isMCPEnabled(b.config),
+			"lsp":             isLSPEnabled(b.config),
+			"enhanced_memory": isEnhancedMemoryEnabled(b.config),
+			"observability":   isObservabilityEnabled(b.config),
 		},
-		"tools":    b.config.Tools,
+		"tools":    b.config.Runtime.Tools,
 		"metadata": b.config.Metadata,
 	}
 }

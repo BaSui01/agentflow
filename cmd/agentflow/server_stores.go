@@ -15,6 +15,7 @@ import (
 	"github.com/BaSui01/agentflow/llm"
 	"github.com/BaSui01/agentflow/llm/capabilities/tools"
 	mongoclient "github.com/BaSui01/agentflow/pkg/mongodb"
+	"github.com/BaSui01/agentflow/types"
 	"go.uber.org/zap"
 )
 
@@ -138,7 +139,7 @@ func (s *Server) wireDefaultRuntimeAgent(agentRegistry *agent.AgentRegistry) {
 	}
 
 	agentRegistry.Register("default", func(
-		cfg agent.Config,
+		cfg types.AgentConfig,
 		provider llm.Provider,
 		mem agent.MemoryManager,
 		tm agent.ToolManager,
@@ -150,9 +151,12 @@ func (s *Server) wireDefaultRuntimeAgent(agentRegistry *agent.AgentRegistry) {
 		opts.EnableSkills = true
 		opts.SkillsConfig = &skills.SkillManagerConfig{MaxLoadedSkills: 50}
 		opts.InitAgent = true
-		return runtime.BuildAgent(context.Background(), cfg, provider, logger, opts)
+		builder := runtime.NewBuilder(provider, logger).WithOptions(opts)
+		if s.toolProvider != nil {
+			builder = builder.WithToolProvider(s.toolProvider)
+		}
+		return builder.Build(context.Background(), cfg)
 	})
 
 	s.logger.Info("Default runtime agent factory registered")
 }
-

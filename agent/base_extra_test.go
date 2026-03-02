@@ -122,16 +122,11 @@ func TestBaseAgent_Accessors(t *testing.T) {
 	tm := &testToolManager{}
 	provider := &testProvider{name: "test"}
 
-	ba := NewBaseAgent(Config{
-		ID:    "ba-1",
-		Name:  "TestBA",
-		Type:  TypeGeneric,
-		Model: "gpt-4",
-	}, provider, mem, tm, nil, zap.NewNop())
+	ba := NewBaseAgent(testAgentConfig("ba-1", "TestBA", "gpt-4"), provider, mem, tm, nil, zap.NewNop())
 
 	assert.Equal(t, mem, ba.Memory())
 	assert.Equal(t, tm, ba.Tools())
-	assert.Equal(t, "ba-1", ba.Config().ID)
+	assert.Equal(t, "ba-1", ba.Config().Core.ID)
 	assert.NotNil(t, ba.Logger())
 	assert.Equal(t, provider, ba.Provider())
 	assert.Nil(t, ba.ToolProvider())
@@ -139,7 +134,7 @@ func TestBaseAgent_Accessors(t *testing.T) {
 }
 
 func TestBaseAgent_SetContextManager(t *testing.T) {
-	ba := NewBaseAgent(Config{ID: "ba-1", Type: TypeGeneric}, &testProvider{name: "test"}, nil, nil, nil, zap.NewNop())
+	ba := NewBaseAgent(testAgentConfig("ba-1", "", ""), &testProvider{name: "test"}, nil, nil, nil, zap.NewNop())
 
 	assert.False(t, ba.ContextEngineEnabled())
 
@@ -152,7 +147,7 @@ func TestBaseAgent_SetContextManager(t *testing.T) {
 }
 
 func TestBaseAgent_SetToolProvider(t *testing.T) {
-	ba := NewBaseAgent(Config{ID: "ba-1", Type: TypeGeneric}, &testProvider{name: "test"}, nil, nil, nil, zap.NewNop())
+	ba := NewBaseAgent(testAgentConfig("ba-1", "", ""), &testProvider{name: "test"}, nil, nil, nil, zap.NewNop())
 
 	tp := &testProvider{name: "tool-provider"}
 	ba.SetToolProvider(tp)
@@ -160,10 +155,12 @@ func TestBaseAgent_SetToolProvider(t *testing.T) {
 }
 
 func TestBaseAgent_MaxReActIterations(t *testing.T) {
-	ba := NewBaseAgent(Config{ID: "ba-1", Type: TypeGeneric}, &testProvider{name: "test"}, nil, nil, nil, zap.NewNop())
+	ba := NewBaseAgent(testAgentConfig("ba-1", "", ""), &testProvider{name: "test"}, nil, nil, nil, zap.NewNop())
 	assert.Equal(t, 10, ba.maxReActIterations())
 
-	ba2 := NewBaseAgent(Config{ID: "ba-2", Type: TypeGeneric, MaxReActIterations: 5}, &testProvider{name: "test"}, nil, nil, nil, zap.NewNop())
+	cfg2 := testAgentConfig("ba-2", "", "")
+	cfg2.Runtime.MaxReActIterations = 5
+	ba2 := NewBaseAgent(cfg2, &testProvider{name: "test"}, nil, nil, nil, zap.NewNop())
 	assert.Equal(t, 5, ba2.maxReActIterations())
 }
 
@@ -200,7 +197,7 @@ func TestGuardrailsError_WithErrors(t *testing.T) {
 // ============================================================
 
 func TestBaseAgent_SetGuardrails(t *testing.T) {
-	ba := NewBaseAgent(Config{ID: "ba-1", Type: TypeGeneric}, &testProvider{name: "test"}, nil, nil, nil, zap.NewNop())
+	ba := NewBaseAgent(testAgentConfig("ba-1", "", ""), &testProvider{name: "test"}, nil, nil, nil, zap.NewNop())
 
 	assert.False(t, ba.GuardrailsEnabled())
 
@@ -215,7 +212,7 @@ func TestBaseAgent_SetGuardrails(t *testing.T) {
 }
 
 func TestBaseAgent_AddInputValidator(t *testing.T) {
-	ba := NewBaseAgent(Config{ID: "ba-1", Type: TypeGeneric}, &testProvider{name: "test"}, nil, nil, nil, zap.NewNop())
+	ba := NewBaseAgent(testAgentConfig("ba-1", "", ""), &testProvider{name: "test"}, nil, nil, nil, zap.NewNop())
 
 	assert.False(t, ba.GuardrailsEnabled())
 
@@ -228,7 +225,7 @@ func TestBaseAgent_AddInputValidator(t *testing.T) {
 }
 
 func TestBaseAgent_AddOutputValidator(t *testing.T) {
-	ba := NewBaseAgent(Config{ID: "ba-1", Type: TypeGeneric}, &testProvider{name: "test"}, nil, nil, nil, zap.NewNop())
+	ba := NewBaseAgent(testAgentConfig("ba-1", "", ""), &testProvider{name: "test"}, nil, nil, nil, zap.NewNop())
 
 	v := guardrails.NewLengthValidator(&guardrails.LengthValidatorConfig{
 		MaxLength: 100,
@@ -239,7 +236,7 @@ func TestBaseAgent_AddOutputValidator(t *testing.T) {
 }
 
 func TestBaseAgent_AddOutputFilter(t *testing.T) {
-	ba := NewBaseAgent(Config{ID: "ba-1", Type: TypeGeneric}, &testProvider{name: "test"}, nil, nil, nil, zap.NewNop())
+	ba := NewBaseAgent(testAgentConfig("ba-1", "", ""), &testProvider{name: "test"}, nil, nil, nil, zap.NewNop())
 
 	f := &testFilter{name: "test-filter"}
 	ba.AddOutputFilter(f)
@@ -264,11 +261,18 @@ func TestBaseAgent_InitGuardrails(t *testing.T) {
 		PIIDetectionEnabled: true,
 	}
 
-	ba := NewBaseAgent(Config{
-		ID:         "ba-1",
-		Type:       TypeGeneric,
-		Guardrails: cfg,
-	}, &testProvider{name: "test"}, nil, nil, nil, zap.NewNop())
+	ac := testAgentConfig("ba-1", "", "")
+	ac.Features.Guardrails = &types.GuardrailsConfig{
+		Enabled:            true,
+		MaxInputLength:     cfg.MaxInputLength,
+		BlockedKeywords:    append([]string(nil), cfg.BlockedKeywords...),
+		PIIDetection:       cfg.PIIDetectionEnabled,
+		InjectionDetection: cfg.InjectionDetection,
+		MaxRetries:         cfg.MaxRetries,
+		OnInputFailure:     string(cfg.OnInputFailure),
+		OnOutputFailure:    string(cfg.OnOutputFailure),
+	}
+	ba := NewBaseAgent(ac, &testProvider{name: "test"}, nil, nil, nil, zap.NewNop())
 
 	assert.True(t, ba.GuardrailsEnabled())
 	assert.NotNil(t, ba.inputValidatorChain)

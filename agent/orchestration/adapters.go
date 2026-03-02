@@ -11,6 +11,7 @@ import (
 	"github.com/BaSui01/agentflow/agent/handoff"
 	"github.com/BaSui01/agentflow/agent/hierarchical"
 	"github.com/BaSui01/agentflow/llm"
+	"github.com/BaSui01/agentflow/types"
 	"go.uber.org/zap"
 )
 
@@ -138,10 +139,12 @@ func (a *HierarchicalAdapter) Execute(ctx context.Context, task *OrchestrationTa
 		workers = task.Agents[1:]
 	}
 
-	base := agent.NewBaseAgent(agent.Config{
-		ID:   "orchestration-hierarchical",
-		Name: "orchestration-hierarchical",
-		Type: agent.TypeGeneric,
+	base := agent.NewBaseAgent(types.AgentConfig{
+		Core: types.CoreConfig{
+			ID:   "orchestration-hierarchical",
+			Name: "orchestration-hierarchical",
+			Type: string(agent.TypeGeneric),
+		},
 	}, noopProvider{}, nil, nil, nil, a.logger)
 
 	ha := hierarchical.NewHierarchicalAgent(
@@ -434,4 +437,3 @@ func (c *crewAgentAdapter) Negotiate(_ context.Context, _ crews.Proposal) (*crew
 		Response: c.agent.ID(),
 	}, nil
 }
-

@@ -18,12 +18,7 @@ func TestNewBaseAgent(t *testing.T) {
 	toolManager := &testToolManager{}
 	bus := &testEventBus{}
 
-	config := Config{
-		ID:    "test-agent",
-		Name:  "Test Agent",
-		Type:  TypeGeneric,
-		Model: "gpt-4",
-	}
+	config := testAgentConfig("test-agent", "Test Agent", "gpt-4")
 
 	agent := NewBaseAgent(config, provider, memory, toolManager, bus, logger)
 
@@ -46,12 +41,7 @@ func TestBaseAgent_Init(t *testing.T) {
 	toolManager := &testToolManager{}
 	bus := &testEventBus{}
 
-	config := Config{
-		ID:    "test-agent",
-		Name:  "Test Agent",
-		Type:  TypeGeneric,
-		Model: "gpt-4",
-	}
+	config := testAgentConfig("test-agent", "Test Agent", "gpt-4")
 
 	agent := NewBaseAgent(config, provider, memory, toolManager, bus, logger)
 
@@ -70,12 +60,7 @@ func TestBaseAgent_StateTransition(t *testing.T) {
 	toolManager := &testToolManager{}
 	bus := &testEventBus{}
 
-	config := Config{
-		ID:    "test-agent",
-		Name:  "Test Agent",
-		Type:  TypeGeneric,
-		Model: "gpt-4",
-	}
+	config := testAgentConfig("test-agent", "Test Agent", "gpt-4")
 
 	agent := NewBaseAgent(config, provider, memory, toolManager, bus, logger)
 
@@ -141,17 +126,8 @@ func TestBaseAgent_Execute(t *testing.T) {
 	toolManager := &testToolManager{}
 	bus := &testEventBus{}
 
-	config := Config{
-		ID:    "test-agent",
-		Name:  "Test Agent",
-		Type:  TypeGeneric,
-		Model: "gpt-4",
-		PromptBundle: PromptBundle{
-			System: SystemPrompt{
-				Identity: "You are a helpful assistant",
-			},
-		},
-	}
+	config := testAgentConfig("test-agent", "Test Agent", "gpt-4")
+	config.Runtime.SystemPrompt = "You are a helpful assistant"
 
 	agent := NewBaseAgent(config, provider, memory, toolManager, bus, logger)
 
@@ -183,12 +159,7 @@ func TestBaseAgent_ExecuteNotReady(t *testing.T) {
 	toolManager := &testToolManager{}
 	bus := &testEventBus{}
 
-	config := Config{
-		ID:    "test-agent",
-		Name:  "Test Agent",
-		Type:  TypeGeneric,
-		Model: "gpt-4",
-	}
+	config := testAgentConfig("test-agent", "Test Agent", "gpt-4")
 
 	agent := NewBaseAgent(config, provider, memory, toolManager, bus, logger)
 
@@ -223,12 +194,7 @@ func TestBaseAgent_SaveMemory(t *testing.T) {
 	toolManager := &testToolManager{}
 	bus := &testEventBus{}
 
-	config := Config{
-		ID:    "test-agent",
-		Name:  "Test Agent",
-		Type:  TypeGeneric,
-		Model: "gpt-4",
-	}
+	config := testAgentConfig("test-agent", "Test Agent", "gpt-4")
 
 	agent := NewBaseAgent(config, provider, memory, toolManager, bus, logger)
 
@@ -264,12 +230,7 @@ func TestBaseAgent_RecallMemory(t *testing.T) {
 	toolManager := &testToolManager{}
 	bus := &testEventBus{}
 
-	config := Config{
-		ID:    "test-agent",
-		Name:  "Test Agent",
-		Type:  TypeGeneric,
-		Model: "gpt-4",
-	}
+	config := testAgentConfig("test-agent", "Test Agent", "gpt-4")
 
 	agent := NewBaseAgent(config, provider, memory, toolManager, bus, logger)
 
@@ -299,12 +260,7 @@ func TestBaseAgent_Observe(t *testing.T) {
 	toolManager := &testToolManager{}
 	bus := &testEventBus{}
 
-	config := Config{
-		ID:    "test-agent",
-		Name:  "Test Agent",
-		Type:  TypeGeneric,
-		Model: "gpt-4",
-	}
+	config := testAgentConfig("test-agent", "Test Agent", "gpt-4")
 
 	agent := NewBaseAgent(config, provider, memory, toolManager, bus, logger)
 
@@ -360,17 +316,8 @@ func TestBaseAgent_Plan(t *testing.T) {
 	toolManager := &testToolManager{}
 	bus := &testEventBus{}
 
-	config := Config{
-		ID:    "test-agent",
-		Name:  "Test Agent",
-		Type:  TypeGeneric,
-		Model: "gpt-4",
-		PromptBundle: PromptBundle{
-			System: SystemPrompt{
-				Identity: "You are a planning expert",
-			},
-		},
-	}
+	config := testAgentConfig("test-agent", "Test Agent", "gpt-4")
+	config.Runtime.SystemPrompt = "You are a planning expert"
 
 	agent := NewBaseAgent(config, provider, memory, toolManager, bus, logger)
 
@@ -429,17 +376,8 @@ func BenchmarkBaseAgent_Execute(b *testing.B) {
 	toolManager := &testToolManager{}
 	bus := &testEventBus{}
 
-	config := Config{
-		ID:    "test-agent",
-		Name:  "Test Agent",
-		Type:  TypeGeneric,
-		Model: "gpt-4",
-		PromptBundle: PromptBundle{
-			System: SystemPrompt{
-				Identity: "You are a helpful assistant",
-			},
-		},
-	}
+	config := testAgentConfig("test-agent", "Test Agent", "gpt-4")
+	config.Runtime.SystemPrompt = "You are a helpful assistant"
 
 	agent := NewBaseAgent(config, provider, memory, toolManager, bus, logger)
 
@@ -474,7 +412,7 @@ func TestSaveMemory_WriteThroughCache(t *testing.T) {
 		},
 	}
 
-	agent := NewBaseAgent(Config{ID: "mem-test", Name: "mem-test", Type: TypeGeneric}, &testProvider{name: "mock"}, mem, nil, nil, logger)
+	agent := NewBaseAgent(testAgentConfig("mem-test", "mem-test", ""), &testProvider{name: "mock"}, mem, nil, nil, logger)
 	ctx := context.Background()
 	_ = agent.Init(ctx)
 
@@ -509,7 +447,7 @@ func TestSaveMemory_CacheEviction(t *testing.T) {
 		saveFn: func(_ context.Context, _ MemoryRecord) error { return nil },
 	}
 
-	agent := NewBaseAgent(Config{ID: "evict-test", Name: "evict-test", Type: TypeGeneric}, &testProvider{name: "mock"}, mem, nil, nil, logger)
+	agent := NewBaseAgent(testAgentConfig("evict-test", "evict-test", ""), &testProvider{name: "mock"}, mem, nil, nil, logger)
 	ctx := context.Background()
 	_ = agent.Init(ctx)
 

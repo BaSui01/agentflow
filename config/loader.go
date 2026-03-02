@@ -112,7 +112,7 @@ type JWTConfig struct {
 }
 
 // AgentConfig Agent 配置，用于 YAML/环境变量加载（扁平结构）。
-// 运行时构建链路统一使用 agent.Config + agent.NewAgentBuilder。
+// 运行时构建链路统一转换为 types.AgentConfig，并交给 runtime.Builder。
 type AgentConfig struct {
 	// 名称
 	Name string `yaml:"name" env:"NAME"`
@@ -120,6 +120,8 @@ type AgentConfig struct {
 	Description string `yaml:"description" env:"DESCRIPTION"`
 	// 模型名称
 	Model string `yaml:"model" env:"MODEL"`
+	// 工具调用阶段模型名称（可选，未设置时回退使用 model）
+	ToolModel string `yaml:"tool_model" env:"TOOL_MODEL"`
 	// 系统提示词
 	SystemPrompt string `yaml:"system_prompt" env:"SYSTEM_PROMPT"`
 	// 最大迭代次数
@@ -296,16 +298,26 @@ type MongoDBConfig struct {
 type LLMConnectionConfig struct {
 	// 默认 Provider
 	DefaultProvider string `yaml:"default_provider" env:"DEFAULT_PROVIDER"`
+	// 工具调用阶段 Provider（可选，未设置时回退 default_provider）
+	ToolProvider string `yaml:"tool_provider" env:"TOOL_PROVIDER"`
 	// API Key（通用）
 	// X-006: 安全建议 — 生产环境中应通过环境变量 AGENTFLOW_LLM_API_KEY 设置，
 	// 避免在 YAML 配置文件中明文存储 API Key。
 	APIKey string `yaml:"api_key" env:"API_KEY"`
+	// 工具调用阶段 API Key（可选，未设置时回退 api_key）
+	ToolAPIKey string `yaml:"tool_api_key" env:"TOOL_API_KEY"`
 	// 基础 URL（可选）
 	BaseURL string `yaml:"base_url" env:"BASE_URL"`
+	// 工具调用阶段基础 URL（可选，未设置时回退 base_url）
+	ToolBaseURL string `yaml:"tool_base_url" env:"TOOL_BASE_URL"`
 	// 请求超时
 	Timeout time.Duration `yaml:"timeout" env:"TIMEOUT"`
+	// 工具调用阶段请求超时（可选，未设置时回退 timeout）
+	ToolTimeout time.Duration `yaml:"tool_timeout" env:"TOOL_TIMEOUT"`
 	// 最大重试次数
 	MaxRetries int `yaml:"max_retries" env:"MAX_RETRIES"`
+	// 工具调用阶段最大重试次数（可选，未设置时回退 max_retries）
+	ToolMaxRetries int `yaml:"tool_max_retries" env:"TOOL_MAX_RETRIES"`
 }
 
 // MultimodalConfig 多模态框架配置（能力层，不绑定具体业务）。

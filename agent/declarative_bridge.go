@@ -9,7 +9,7 @@ import (
 )
 
 // BuildFromDefinition loads a declarative AgentDefinition, validates it,
-// converts it to an agent.Config, and returns a configured AgentBuilder.
+// converts it to types.AgentConfig, and returns a configured AgentBuilder.
 //
 // The caller must still set a Provider (and optionally other dependencies)
 // before calling Build():
@@ -27,50 +27,12 @@ func BuildFromDefinition(def *declarative.AgentDefinition, logger *zap.Logger) (
 		return nil, fmt.Errorf("validate agent definition: %w", err)
 	}
 
-	m := factory.ToAgentConfig(def)
-
-	cfg := Config{
-		ID:   stringFromMap(m, "id"),
-		Name: stringFromMap(m, "name"),
-		Type: AgentType(stringFromMap(m, "type")),
-	}
-	if cfg.ID == "" {
-		cfg.ID = cfg.Name
-	}
-	if cfg.Type == "" {
-		cfg.Type = TypeGeneric
+	runtimeCfg := factory.ToAgentConfig(def)
+	if runtimeCfg.Core.ID == "" {
+		runtimeCfg.Core.ID = runtimeCfg.Core.Name
 	}
 
-	cfg.Description = stringFromMap(m, "description")
-	cfg.Model = stringFromMap(m, "model")
-	cfg.Provider = stringFromMap(m, "provider")
-
-	if v, ok := m["max_tokens"].(int); ok {
-		cfg.MaxTokens = v
-	}
-	if v, ok := m["temperature"].(float64); ok {
-		cfg.Temperature = float32(v)
-	}
-	if v, ok := m["system_prompt"].(string); ok && v != "" {
-		cfg.PromptBundle.System = SystemPrompt{Identity: v}
-	}
-	if v, ok := m["tools"].([]string); ok {
-		cfg.Tools = v
-	}
-
-	// Feature toggles
-	cfg.EnableReflection = boolFromMap(m, "enable_reflection")
-	cfg.EnableToolSelection = boolFromMap(m, "enable_tool_selection")
-	cfg.EnablePromptEnhancer = boolFromMap(m, "enable_prompt_enhancer")
-	cfg.EnableSkills = boolFromMap(m, "enable_skills")
-	cfg.EnableMCP = boolFromMap(m, "enable_mcp")
-	cfg.EnableObservability = boolFromMap(m, "enable_observability")
-
-	if v, ok := m["max_react_iterations"].(int); ok {
-		cfg.MaxReActIterations = v
-	}
-
-	builder := NewAgentBuilder(cfg).WithLogger(logger)
+	builder := NewAgentBuilder(runtimeCfg).WithLogger(logger)
 	return builder, nil
 }
 
@@ -100,18 +62,3 @@ func BuildFromYAML(data []byte, provider llm.Provider, logger *zap.Logger) (*Bas
 	}
 	return builder.WithProvider(provider).Build()
 }
-
-func stringFromMap(m map[string]interface{}, key string) string {
-	if v, ok := m[key].(string); ok {
-		return v
-	}
-	return ""
-}
-
-func boolFromMap(m map[string]interface{}, key string) bool {
-	if v, ok := m[key].(bool); ok {
-		return v
-	}
-	return false
-}
-

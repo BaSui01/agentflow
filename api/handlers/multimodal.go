@@ -25,8 +25,6 @@ import (
 	"github.com/BaSui01/agentflow/llm/capabilities/video"
 	llmcore "github.com/BaSui01/agentflow/llm/core"
 	llmgateway "github.com/BaSui01/agentflow/llm/gateway"
-	"github.com/BaSui01/agentflow/llm/providers"
-	vendorprofile "github.com/BaSui01/agentflow/llm/providers/vendor"
 	llmpolicy "github.com/BaSui01/agentflow/llm/runtime/policy"
 	"github.com/BaSui01/agentflow/pkg/tlsutil"
 	"github.com/BaSui01/agentflow/types"
@@ -165,125 +163,34 @@ func NewMultimodalHandlerFromConfig(cfg MultimodalHandlerConfig, logger *zap.Log
 		logger = zap.NewNop()
 	}
 
-	imageProviders := map[string]image.Provider{}
-	videoProviders := map[string]video.Provider{}
-
-	defaultImage := strings.TrimSpace(cfg.DefaultImageProvider)
-	defaultVideo := strings.TrimSpace(cfg.DefaultVideoProvider)
-
-	if cfg.OpenAIAPIKey != "" {
-		openaiProfile := vendorprofile.NewOpenAIProfile(vendorprofile.OpenAIConfig{
-			APIKey:  cfg.OpenAIAPIKey,
-			BaseURL: cfg.OpenAIBaseURL,
-		}, logger)
-		imageProviders["openai"] = openaiProfile.Image
-		if defaultImage == "" {
-			defaultImage = "openai"
-		}
-	}
-	if cfg.GoogleAPIKey != "" {
-		geminiProfile := vendorprofile.NewGeminiProfile(vendorprofile.GeminiConfig{
-			APIKey:  cfg.GoogleAPIKey,
-			BaseURL: cfg.GoogleBaseURL,
-		}, logger)
-		imageProviders["gemini"] = geminiProfile.Image
-		videoProviders["veo"] = geminiProfile.Video
-		if defaultImage == "" {
-			defaultImage = "gemini"
-		}
-		if defaultVideo == "" {
-			defaultVideo = "veo"
-		}
-	}
-	if cfg.VeoAPIKey != "" {
-		videoProviders["veo"] = video.NewVeoProvider(video.VeoConfig{
-			BaseProviderConfig: providers.BaseProviderConfig{
-				APIKey:  cfg.VeoAPIKey,
-				BaseURL: cfg.VeoBaseURL,
-			},
-		}, logger)
-		if defaultVideo == "" {
-			defaultVideo = "veo"
-		}
-	}
-	if cfg.RunwayAPIKey != "" {
-		videoProviders["runway"] = video.NewRunwayProvider(video.RunwayConfig{
-			BaseProviderConfig: providers.BaseProviderConfig{
-				APIKey:  cfg.RunwayAPIKey,
-				BaseURL: cfg.RunwayBaseURL,
-			},
-		}, logger)
-		if defaultVideo == "" {
-			defaultVideo = "runway"
-		}
-	}
-	if cfg.SoraAPIKey != "" {
-		videoProviders["sora"] = video.NewSoraProvider(video.SoraConfig{
-			BaseProviderConfig: providers.BaseProviderConfig{
-				APIKey:  cfg.SoraAPIKey,
-				BaseURL: cfg.SoraBaseURL,
-			},
-		}, logger)
-		if defaultVideo == "" {
-			defaultVideo = "sora"
-		}
-	}
-	if cfg.KlingAPIKey != "" {
-		videoProviders["kling"] = video.NewKlingProvider(video.KlingConfig{
-			BaseProviderConfig: providers.BaseProviderConfig{
-				APIKey:  cfg.KlingAPIKey,
-				BaseURL: cfg.KlingBaseURL,
-			},
-		}, logger)
-		if defaultVideo == "" {
-			defaultVideo = "kling"
-		}
-	}
-	if cfg.LumaAPIKey != "" {
-		videoProviders["luma"] = video.NewLumaProvider(video.LumaConfig{
-			BaseProviderConfig: providers.BaseProviderConfig{
-				APIKey:  cfg.LumaAPIKey,
-				BaseURL: cfg.LumaBaseURL,
-			},
-		}, logger)
-		if defaultVideo == "" {
-			defaultVideo = "luma"
-		}
-	}
-	if cfg.MiniMaxAPIKey != "" {
-		videoProviders["minimax-video"] = video.NewMiniMaxVideoProvider(video.MiniMaxVideoConfig{
-			BaseProviderConfig: providers.BaseProviderConfig{
-				APIKey:  cfg.MiniMaxAPIKey,
-				BaseURL: cfg.MiniMaxBaseURL,
-			},
-		}, logger)
-		if defaultVideo == "" {
-			defaultVideo = "minimax-video"
-		}
-	}
-
-	if defaultImage != "" {
-		if _, ok := imageProviders[defaultImage]; !ok {
-			logger.Warn("configured default multimodal image provider is unavailable, fallback to auto selection",
-				zap.String("provider", defaultImage))
-			defaultImage = ""
-		}
-	}
-	if defaultVideo != "" {
-		if _, ok := videoProviders[defaultVideo]; !ok {
-			logger.Warn("configured default multimodal video provider is unavailable, fallback to auto selection",
-				zap.String("provider", defaultVideo))
-			defaultVideo = ""
-		}
-	}
+	providerSet := multimodal.BuildProvidersFromConfig(multimodal.ProviderBuilderConfig{
+		OpenAIAPIKey:         cfg.OpenAIAPIKey,
+		OpenAIBaseURL:        cfg.OpenAIBaseURL,
+		GoogleAPIKey:         cfg.GoogleAPIKey,
+		GoogleBaseURL:        cfg.GoogleBaseURL,
+		RunwayAPIKey:         cfg.RunwayAPIKey,
+		RunwayBaseURL:        cfg.RunwayBaseURL,
+		VeoAPIKey:            cfg.VeoAPIKey,
+		VeoBaseURL:           cfg.VeoBaseURL,
+		SoraAPIKey:           cfg.SoraAPIKey,
+		SoraBaseURL:          cfg.SoraBaseURL,
+		KlingAPIKey:          cfg.KlingAPIKey,
+		KlingBaseURL:         cfg.KlingBaseURL,
+		LumaAPIKey:           cfg.LumaAPIKey,
+		LumaBaseURL:          cfg.LumaBaseURL,
+		MiniMaxAPIKey:        cfg.MiniMaxAPIKey,
+		MiniMaxBaseURL:       cfg.MiniMaxBaseURL,
+		DefaultImageProvider: cfg.DefaultImageProvider,
+		DefaultVideoProvider: cfg.DefaultVideoProvider,
+	}, logger)
 
 	return NewMultimodalHandlerWithProviders(
 		cfg.ChatProvider,
 		cfg.PolicyManager,
-		imageProviders,
-		videoProviders,
-		defaultImage,
-		defaultVideo,
+		providerSet.ImageProviders,
+		providerSet.VideoProviders,
+		providerSet.DefaultImage,
+		providerSet.DefaultVideo,
 		cfg.Pipeline,
 		cfg.ReferenceMaxSize,
 		cfg.ReferenceTTL,

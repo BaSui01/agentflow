@@ -7,12 +7,13 @@ import (
 
 	"github.com/BaSui01/agentflow/agent/skills"
 	"github.com/BaSui01/agentflow/llm"
+	"github.com/BaSui01/agentflow/types"
 	"go.uber.org/zap"
 )
 
 // Agent Factory 是创建 Agent 实例的函数
 type AgentFactory func(
-	config Config,
+	config types.AgentConfig,
 	provider llm.Provider,
 	memory MemoryManager,
 	toolManager ToolManager,
@@ -65,16 +66,17 @@ func (r *AgentRegistry) registerBuiltinTypes() {
 // newTypedAgentFactory creates an AgentFactory that applies type-specific PromptBundle defaults.
 func newTypedAgentFactory(agentType AgentType) AgentFactory {
 	return func(
-		config Config,
+		config types.AgentConfig,
 		provider llm.Provider,
 		memory MemoryManager,
 		toolManager ToolManager,
 		bus EventBus,
 		logger *zap.Logger,
 	) (Agent, error) {
+		ensureAgentType(&config)
 		// Apply type-specific defaults only if the user hasn't set a PromptBundle
-		if config.PromptBundle.IsZero() {
-			config.PromptBundle = defaultPromptBundleForType(agentType)
+		if strings.TrimSpace(config.Runtime.SystemPrompt) == "" {
+			config.Runtime.SystemPrompt = defaultPromptBundleForType(agentType).RenderSystemPrompt()
 		}
 		// Apply type-specific skill categories into Metadata for SkillManager discovery
 		if cats := defaultSkillCategoriesForType(agentType); len(cats) > 0 {
@@ -217,7 +219,7 @@ func (r *AgentRegistry) Unregister(agentType AgentType) {
 
 // 创建指定类型的新代理实例
 func (r *AgentRegistry) Create(
-	config Config,
+	config types.AgentConfig,
 	provider llm.Provider,
 	memory MemoryManager,
 	toolManager ToolManager,
@@ -225,22 +227,22 @@ func (r *AgentRegistry) Create(
 	logger *zap.Logger,
 ) (Agent, error) {
 	r.mu.RLock()
-	factory, exists := r.factories[config.Type]
+	factory, exists := r.factories[AgentType(config.Core.Type)]
 	r.mu.RUnlock()
 
 	if !exists {
-		return nil, fmt.Errorf("agent type %q not registered", config.Type)
+		return nil, fmt.Errorf("agent type %q not registered", config.Core.Type)
 	}
 
 	agent, err := factory(config, provider, memory, toolManager, bus, logger)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create agent of type %q: %w", config.Type, err)
+		return nil, fmt.Errorf("failed to create agent of type %q: %w", config.Core.Type, err)
 	}
 
 	r.logger.Info("agent created",
-		zap.String("type", string(config.Type)),
-		zap.String("id", config.ID),
-		zap.String("name", config.Name),
+		zap.String("type", config.Core.Type),
+		zap.String("id", config.Core.ID),
+		zap.String("name", config.Core.Name),
 	)
 
 	return agent, nil
@@ -285,7 +287,7 @@ func InitGlobalRegistry(logger *zap.Logger) {
 
 // Create Agent 使用全球登记册创建代理
 func CreateAgent(
-	config Config,
+	config types.AgentConfig,
 	provider llm.Provider,
 	memory MemoryManager,
 	toolManager ToolManager,
@@ -301,4 +303,3 @@ func CreateAgent(
 	}
 	return registry.Create(config, provider, memory, toolManager, bus, logger)
 }
-

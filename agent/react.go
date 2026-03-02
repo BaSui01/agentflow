@@ -40,7 +40,7 @@ func (b *BaseAgent) Plan(ctx context.Context, input *Input) (*PlanResult, error)
 	messages := []types.Message{
 		{
 			Role:    llm.RoleSystem,
-			Content: b.config.PromptBundle.RenderSystemPromptWithVars(input.Variables),
+			Content: b.promptBundle.RenderSystemPromptWithVars(input.Variables),
 		},
 		{
 			Role:    llm.RoleUser,
@@ -99,7 +99,7 @@ func (b *BaseAgent) Execute(ctx context.Context, input *Input) (_ *Output, execE
 		return nil, err
 	}
 
-	// 以下操作修改共享状态（b.config.PromptBundle），必须在 execMu 保护下执行。
+	// 以下操作修改共享状态（b.promptBundle），必须在 execMu 保护下执行。
 
 	// 3a. PromptStore: load active prompt from MongoDB if available
 	b.loadPromptFromStore(ctx)
@@ -107,10 +107,10 @@ func (b *BaseAgent) Execute(ctx context.Context, input *Input) (_ *Output, execE
 	// 3b. RunStore: record execution start
 	runID := ""
 	{
-		runID = fmt.Sprintf("run_%s_%d", b.config.ID, startTime.UnixNano())
+		runID = fmt.Sprintf("run_%s_%d", b.config.Core.ID, startTime.UnixNano())
 		doc := &RunDoc{
 			ID:        runID,
-			AgentID:   b.config.ID,
+			AgentID:   b.config.Core.ID,
 			TenantID:  input.TenantID,
 			TraceID:   input.TraceID,
 			Status:    "running",
@@ -176,8 +176,8 @@ func (b *BaseAgent) Execute(ctx context.Context, input *Input) (_ *Output, execE
 
 	b.logger.Info("executing task",
 		zap.String("trace_id", input.TraceID),
-		zap.String("agent_id", b.config.ID),
-		zap.String("agent_type", string(b.config.Type)),
+		zap.String("agent_id", b.config.Core.ID),
+		zap.String("agent_type", b.config.Core.Type),
 	)
 
 	// 4. 输入验证(监护)
@@ -196,8 +196,8 @@ func (b *BaseAgent) Execute(ctx context.Context, input *Input) (_ *Output, execE
 
 			// 从配置中检查失败动作
 			failureAction := guardrails.FailureActionReject
-			if b.config.Guardrails != nil {
-				failureAction = b.config.Guardrails.OnInputFailure
+			if b.runtimeGuardrailsCfg != nil {
+				failureAction = b.runtimeGuardrailsCfg.OnInputFailure
 			}
 
 			switch failureAction {
@@ -242,7 +242,7 @@ func (b *BaseAgent) Execute(ctx context.Context, input *Input) (_ *Output, execE
 	messages := []types.Message{
 		{
 			Role:    llm.RoleSystem,
-			Content: b.config.PromptBundle.RenderSystemPromptWithVars(input.Variables),
+			Content: b.promptBundle.RenderSystemPromptWithVars(input.Variables),
 		},
 	}
 
@@ -263,8 +263,8 @@ func (b *BaseAgent) Execute(ctx context.Context, input *Input) (_ *Output, execE
 	// 7. 执行产出验证和重试支持
 	// 要求2.4:对产出验证失败进行重试
 	maxRetries := 0
-	if b.config.Guardrails != nil {
-		maxRetries = b.config.Guardrails.MaxRetries
+	if b.runtimeGuardrailsCfg != nil {
+		maxRetries = b.runtimeGuardrailsCfg.MaxRetries
 	}
 
 	var resp *llm.ChatResponse
@@ -325,8 +325,8 @@ func (b *BaseAgent) Execute(ctx context.Context, input *Input) (_ *Output, execE
 
 				// 检查失败动作
 				failureAction := guardrails.FailureActionReject
-				if b.config.Guardrails != nil {
-					failureAction = b.config.Guardrails.OnOutputFailure
+				if b.runtimeGuardrailsCfg != nil {
+					failureAction = b.runtimeGuardrailsCfg.OnOutputFailure
 				}
 
 				// 如果重试已经配置, 我们还没有用尽重试, 请继续
@@ -441,7 +441,7 @@ func (b *BaseAgent) buildValidationFeedbackMessage(result *guardrails.Validation
 // 这个方法允许 Agent 从外部反馈中学习和改进
 func (b *BaseAgent) Observe(ctx context.Context, feedback *Feedback) error {
 	b.logger.Info("observing feedback",
-		zap.String("agent_id", b.config.ID),
+		zap.String("agent_id", b.config.Core.ID),
 		zap.String("feedback_type", feedback.Type),
 	)
 
@@ -466,7 +466,7 @@ func (b *BaseAgent) Observe(ctx context.Context, feedback *Feedback) error {
 	// 2. 发布反馈事件
 	if b.bus != nil {
 		b.bus.Publish(&FeedbackEvent{
-			AgentID_:     b.config.ID,
+			AgentID_:     b.config.Core.ID,
 			FeedbackType: feedback.Type,
 			Content:      feedback.Content,
 			Data:         feedback.Data,
@@ -475,7 +475,7 @@ func (b *BaseAgent) Observe(ctx context.Context, feedback *Feedback) error {
 	}
 
 	b.logger.Info("feedback observed successfully",
-		zap.String("agent_id", b.config.ID),
+		zap.String("agent_id", b.config.Core.ID),
 		zap.String("feedback_type", feedback.Type),
 	)
 
@@ -489,8 +489,8 @@ func (b *BaseAgent) loadPromptFromStore(ctx context.Context) {
 		return
 	}
 
-	agentType := string(b.config.Type)
-	name := b.config.Name
+	agentType := b.config.Core.Type
+	name := b.config.Core.Name
 	tenantID := "" // default tenant
 
 	doc, err := b.promptStore.GetActive(ctx, agentType, name, tenantID)
@@ -505,10 +505,10 @@ func (b *BaseAgent) loadPromptFromStore(ctx context.Context) {
 
 	// Override only the fields provided by the store, preserving Tools,
 	// Examples, Memory, Plan, and Reflection from the existing config.
-	b.config.PromptBundle.Version = doc.Version
-	b.config.PromptBundle.System = doc.System
+	b.promptBundle.Version = doc.Version
+	b.promptBundle.System = doc.System
 	if len(doc.Constraints) > 0 {
-		b.config.PromptBundle.Constraints = doc.Constraints
+		b.promptBundle.Constraints = doc.Constraints
 	}
 	b.logger.Info("loaded prompt from store",
 		zap.String("version", doc.Version),
@@ -538,7 +538,7 @@ func (b *BaseAgent) persistConversation(ctx context.Context, input *Input, outpu
 	// This handles the "not found" case for new conversations.
 	doc := &ConversationDoc{
 		ID:       conversationID,
-		AgentID:  b.config.ID,
+		AgentID:  b.config.Core.ID,
 		TenantID: input.TenantID,
 		UserID:   input.UserID,
 		Messages: newMsgs,

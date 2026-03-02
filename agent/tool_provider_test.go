@@ -36,12 +36,7 @@ func TestToolProvider_NilFallback(t *testing.T) {
 	}
 	bus := &testEventBus{}
 
-	config := Config{
-		ID:    "test-dual",
-		Name:  "Dual Model Agent",
-		Type:  TypeGeneric,
-		Model: "claude-sonnet-4-6",
-	}
+	config := testAgentConfig("test-dual", "Dual Model Agent", "claude-sonnet-4-6")
 
 	agent := NewBaseAgent(config, mainProvider, nil, nil, bus, logger)
 
@@ -64,12 +59,7 @@ func TestToolProvider_SetAndGet(t *testing.T) {
 	mainProvider := &testProvider{name: "main"}
 	toolProvider := &testProvider{name: "tool"}
 
-	config := Config{
-		ID:    "test-dual",
-		Name:  "Dual Model Agent",
-		Type:  TypeGeneric,
-		Model: "claude-sonnet-4-6",
-	}
+	config := testAgentConfig("test-dual", "Dual Model Agent", "claude-sonnet-4-6")
 
 	agent := NewBaseAgent(config, mainProvider, nil, nil, nil, logger)
 
@@ -116,13 +106,7 @@ func TestToolProvider_NoToolsUsesMainProvider(t *testing.T) {
 		},
 	}
 
-	config := Config{
-		ID:    "test-dual",
-		Name:  "Dual Model Agent",
-		Type:  TypeGeneric,
-		Model: "claude-sonnet-4-6",
-		// 注意：没有配置 Tools
-	}
+	config := testAgentConfig("test-dual", "Dual Model Agent", "claude-sonnet-4-6")
 
 	agent := NewBaseAgent(config, mainProvider, nil, nil, nil, logger)
 	agent.SetToolProvider(toolProvider)
@@ -144,12 +128,7 @@ func TestToolProvider_Builder(t *testing.T) {
 	mainProvider := &testProvider{name: "main"}
 	toolProvider := &testProvider{name: "tool"}
 
-	config := Config{
-		ID:    "test-builder-dual",
-		Name:  "Builder Dual Agent",
-		Type:  TypeGeneric,
-		Model: "claude-sonnet-4-6",
-	}
+	config := testAgentConfig("test-builder-dual", "Builder Dual Agent", "claude-sonnet-4-6")
 
 	agent, err := NewAgentBuilder(config).
 		WithProvider(mainProvider).
@@ -174,13 +153,8 @@ func TestToolProvider_FunctionCallingValidation(t *testing.T) {
 		},
 	}
 
-	config := Config{
-		ID:    "test-dual-fc",
-		Name:  "Dual FC Agent",
-		Type:  TypeGeneric,
-		Model: "claude-sonnet-4-6",
-		Tools: []string{"search"},
-	}
+	config := testAgentConfig("test-dual-fc", "Dual FC Agent", "claude-sonnet-4-6")
+	config.Runtime.Tools = []string{"search"}
 
 	agent := NewBaseAgent(config, mainProvider, nil, toolMgr, nil, logger)
 	agent.SetToolProvider(toolProvider)
@@ -205,13 +179,8 @@ func TestToolProvider_FunctionCallingValidation_StreamCompletion(t *testing.T) {
 		},
 	}
 
-	config := Config{
-		ID:    "test-dual-fc-stream",
-		Name:  "Dual FC Stream Agent",
-		Type:  TypeGeneric,
-		Model: "claude-sonnet-4-6",
-		Tools: []string{"search"},
-	}
+	config := testAgentConfig("test-dual-fc-stream", "Dual FC Stream Agent", "claude-sonnet-4-6")
+	config.Runtime.Tools = []string{"search"}
 
 	agent := NewBaseAgent(config, mainProvider, nil, toolMgr, nil, logger)
 	agent.SetToolProvider(toolProvider)
@@ -235,13 +204,8 @@ func TestToolProvider_FunctionCallingValidation_NilToolProvider(t *testing.T) {
 		},
 	}
 
-	config := Config{
-		ID:    "test-fc-nil-tp",
-		Name:  "FC Nil ToolProvider Agent",
-		Type:  TypeGeneric,
-		Model: "claude-sonnet-4-6",
-		Tools: []string{"search"},
-	}
+	config := testAgentConfig("test-fc-nil-tp", "FC Nil ToolProvider Agent", "claude-sonnet-4-6")
+	config.Runtime.Tools = []string{"search"}
 
 	agent := NewBaseAgent(config, mainProvider, nil, toolMgr, nil, logger)
 	// 不设置 toolProvider → 退化校验 mainProvider
@@ -260,12 +224,7 @@ func TestToolProvider_BuilderWithoutToolProvider(t *testing.T) {
 	logger := zap.NewNop()
 	mainProvider := &testProvider{name: "main"}
 
-	config := Config{
-		ID:    "test-builder-single",
-		Name:  "Builder Single Agent",
-		Type:  TypeGeneric,
-		Model: "claude-sonnet-4-6",
-	}
+	config := testAgentConfig("test-builder-single", "Builder Single Agent", "claude-sonnet-4-6")
 
 	agent, err := NewAgentBuilder(config).
 		WithProvider(mainProvider).

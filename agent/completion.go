@@ -19,6 +19,7 @@ func (b *BaseAgent) ChatCompletion(ctx context.Context, messages []types.Message
 	if b.provider == nil {
 		return nil, ErrProviderNotSet
 	}
+	chatProvider := b.gatewayProvider()
 
 	// 上下文工程：优化消息历史
 	if b.contextEngineEnabled && b.contextManager != nil && len(messages) > 1 {
@@ -45,7 +46,7 @@ func (b *BaseAgent) ChatCompletion(ctx context.Context, messages []types.Message
 		}
 	}
 
-	model := b.config.Model
+	model := b.config.LLM.Model
 	if v, ok := types.LLMModel(ctx); ok && strings.TrimSpace(v) != "" {
 		model = strings.TrimSpace(v)
 	}
@@ -53,8 +54,8 @@ func (b *BaseAgent) ChatCompletion(ctx context.Context, messages []types.Message
 	req := &llm.ChatRequest{
 		Model:       model,
 		Messages:    messages,
-		MaxTokens:   b.config.MaxTokens,
-		Temperature: b.config.Temperature,
+		MaxTokens:   b.config.LLM.MaxTokens,
+		Temperature: b.config.LLM.Temperature,
 	}
 
 	// 运行时配置覆盖：从 context 获取 RunConfig 并应用到请求
@@ -64,14 +65,14 @@ func (b *BaseAgent) ChatCompletion(ctx context.Context, messages []types.Message
 	}
 
 	// 按白名单过滤可用工具
-	if b.toolManager != nil && len(b.config.Tools) > 0 {
-		req.Tools = filterToolSchemasByWhitelist(b.toolManager.GetAllowedTools(b.config.ID), b.config.Tools)
+	if b.toolManager != nil && len(b.config.Runtime.Tools) > 0 {
+		req.Tools = filterToolSchemasByWhitelist(b.toolManager.GetAllowedTools(b.config.Core.ID), b.config.Runtime.Tools)
 	}
 	if len(req.Tools) > 0 {
 		// 确定实际用于工具调用的 provider
-		effectiveToolProvider := b.provider
+		effectiveToolProvider := chatProvider
 		if b.toolProvider != nil {
-			effectiveToolProvider = b.toolProvider
+			effectiveToolProvider = b.gatewayToolProvider()
 		}
 		if effectiveToolProvider != nil && !effectiveToolProvider.SupportsNativeFunctionCalling() {
 			return nil, fmt.Errorf("provider %q does not support native function calling", effectiveToolProvider.Name())
@@ -86,16 +87,18 @@ func (b *BaseAgent) ChatCompletion(ctx context.Context, messages []types.Message
 		// 若存在可用工具：使用流式 ReAct 循环，并将 token/tool 事件发射给上游（RunStream/Workflow）。
 		if len(req.Tools) > 0 && b.toolManager != nil {
 			// 双模型模式：ReAct 循环优先使用 toolProvider（便宜），未设置时退化为主 provider
-			reactProvider := b.provider
+			reactProvider := chatProvider
 			if b.toolProvider != nil {
-				reactProvider = b.toolProvider
+				reactProvider = b.gatewayToolProvider()
 			}
-			executor := llmtools.NewReActExecutor(reactProvider, newToolManagerExecutor(b.toolManager, b.config.ID, b.config.Tools, b.bus), llmtools.ReActConfig{
+			reactReq := *req
+			reactReq.Model = effectiveToolModel(req.Model, b.config.Runtime.ToolModel)
+			executor := llmtools.NewReActExecutor(reactProvider, newToolManagerExecutor(b.toolManager, b.config.Core.ID, b.config.Runtime.Tools, b.bus), llmtools.ReActConfig{
 				MaxIterations: effectiveReActIterations,
 				StopOnError:   false,
 			}, b.logger)
 
-			evCh, err := executor.ExecuteStream(ctx, req)
+			evCh, err := executor.ExecuteStream(ctx, &reactReq)
 			if err != nil {
 				return nil, err
 			}
@@ -158,7 +161,7 @@ func (b *BaseAgent) ChatCompletion(ctx context.Context, messages []types.Message
 		}
 
 		// 无工具：直接走 provider stream，并将 token 发射给上游，同时组装最终响应。
-		streamCh, err := b.provider.Stream(ctx, req)
+		streamCh, err := chatProvider.Stream(ctx, req)
 		if err != nil {
 			return nil, err
 		}
@@ -219,20 +222,22 @@ func (b *BaseAgent) ChatCompletion(ctx context.Context, messages []types.Message
 	// 若存在可用工具：执行 ReAct 循环（LLM -> Tool -> LLM），直到模型停止调用工具或达到最大迭代次数。
 	if len(req.Tools) > 0 && b.toolManager != nil {
 		// 双模型模式：ReAct 循环优先使用 toolProvider（便宜），未设置时退化为主 provider
-		reactProvider := b.provider
+		reactProvider := chatProvider
 		if b.toolProvider != nil {
-			reactProvider = b.toolProvider
+			reactProvider = b.gatewayToolProvider()
 		}
-		reactExecutor := llmtools.NewReActExecutor(reactProvider, newToolManagerExecutor(b.toolManager, b.config.ID, b.config.Tools, b.bus), llmtools.ReActConfig{
+		reactReq := *req
+		reactReq.Model = effectiveToolModel(req.Model, b.config.Runtime.ToolModel)
+		reactExecutor := llmtools.NewReActExecutor(reactProvider, newToolManagerExecutor(b.toolManager, b.config.Core.ID, b.config.Runtime.Tools, b.bus), llmtools.ReActConfig{
 			MaxIterations: effectiveReActIterations,
 			StopOnError:   false,
 		}, b.logger)
 
-		resp, _, err := reactExecutor.Execute(ctx, req)
+		resp, _, err := reactExecutor.Execute(ctx, &reactReq)
 		return resp, err
 	}
 
-	return b.provider.Completion(ctx, req)
+	return chatProvider.Completion(ctx, req)
 }
 
 // StreamCompletion 流式调用 LLM
@@ -240,6 +245,7 @@ func (b *BaseAgent) StreamCompletion(ctx context.Context, messages []types.Messa
 	if b.provider == nil {
 		return nil, ErrProviderNotSet
 	}
+	chatProvider := b.gatewayProvider()
 
 	// 上下文工程：优化消息历史
 	if b.contextEngineEnabled && b.contextManager != nil && len(messages) > 1 {
@@ -258,7 +264,7 @@ func (b *BaseAgent) StreamCompletion(ctx context.Context, messages []types.Messa
 		}
 	}
 
-	model := b.config.Model
+	model := b.config.LLM.Model
 	if v, ok := types.LLMModel(ctx); ok && strings.TrimSpace(v) != "" {
 		model = strings.TrimSpace(v)
 	}
@@ -266,8 +272,8 @@ func (b *BaseAgent) StreamCompletion(ctx context.Context, messages []types.Messa
 	req := &llm.ChatRequest{
 		Model:       model,
 		Messages:    messages,
-		MaxTokens:   b.config.MaxTokens,
-		Temperature: b.config.Temperature,
+		MaxTokens:   b.config.LLM.MaxTokens,
+		Temperature: b.config.LLM.Temperature,
 	}
 
 	// 运行时配置覆盖：从 context 获取 RunConfig 并应用到请求
@@ -275,20 +281,26 @@ func (b *BaseAgent) StreamCompletion(ctx context.Context, messages []types.Messa
 		rc.ApplyToRequest(req, b.config)
 	}
 
-	if b.toolManager != nil && len(b.config.Tools) > 0 {
-		req.Tools = filterToolSchemasByWhitelist(b.toolManager.GetAllowedTools(b.config.ID), b.config.Tools)
+	if b.toolManager != nil && len(b.config.Runtime.Tools) > 0 {
+		req.Tools = filterToolSchemasByWhitelist(b.toolManager.GetAllowedTools(b.config.Core.ID), b.config.Runtime.Tools)
 	}
 	if len(req.Tools) > 0 {
 		// 确定实际用于工具调用的 provider（与 ChatCompletion 保持一致）
-		effectiveToolProvider := b.provider
+		effectiveToolProvider := chatProvider
 		if b.toolProvider != nil {
-			effectiveToolProvider = b.toolProvider
+			effectiveToolProvider = b.gatewayToolProvider()
 		}
 		if effectiveToolProvider != nil && !effectiveToolProvider.SupportsNativeFunctionCalling() {
 			return nil, fmt.Errorf("provider %q does not support native function calling", effectiveToolProvider.Name())
 		}
 	}
 
-	return b.provider.Stream(ctx, req)
+	return chatProvider.Stream(ctx, req)
 }
 
+func effectiveToolModel(mainModel string, configuredToolModel string) string {
+	if v := strings.TrimSpace(configuredToolModel); v != "" {
+		return v
+	}
+	return mainModel
+}

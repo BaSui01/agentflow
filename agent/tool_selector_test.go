@@ -19,12 +19,7 @@ func TestNewDynamicToolSelector(t *testing.T) {
 	toolManager := &testToolManager{}
 	bus := &testEventBus{}
 
-	config := Config{
-		ID:    "test-agent",
-		Name:  "Test Agent",
-		Type:  TypeGeneric,
-		Model: "gpt-4",
-	}
+	config := testAgentConfig("test-agent", "Test Agent", "gpt-4")
 
 	agent := NewBaseAgent(config, provider, memory, toolManager, bus, logger)
 	selectorConfig := defaultToolSelectionConfigValue()
@@ -44,12 +39,7 @@ func TestDynamicToolSelector_SelectTools_Disabled(t *testing.T) {
 	toolManager := &testToolManager{}
 	bus := &testEventBus{}
 
-	config := Config{
-		ID:    "test-agent",
-		Name:  "Test Agent",
-		Type:  TypeGeneric,
-		Model: "gpt-4",
-	}
+	config := testAgentConfig("test-agent", "Test Agent", "gpt-4")
 
 	agent := NewBaseAgent(config, provider, memory, toolManager, bus, logger)
 	selectorConfig := defaultToolSelectionConfigValue()
@@ -77,12 +67,7 @@ func TestDynamicToolSelector_SelectTools_Success(t *testing.T) {
 	toolManager := &testToolManager{}
 	bus := &testEventBus{}
 
-	config := Config{
-		ID:    "test-agent",
-		Name:  "Test Agent",
-		Type:  TypeGeneric,
-		Model: "gpt-4",
-	}
+	config := testAgentConfig("test-agent", "Test Agent", "gpt-4")
 
 	agent := NewBaseAgent(config, provider, memory, toolManager, bus, logger)
 	selectorConfig := defaultToolSelectionConfigValue()
@@ -116,12 +101,7 @@ func TestDynamicToolSelector_ScoreTools(t *testing.T) {
 	toolManager := &testToolManager{}
 	bus := &testEventBus{}
 
-	config := Config{
-		ID:    "test-agent",
-		Name:  "Test Agent",
-		Type:  TypeGeneric,
-		Model: "gpt-4",
-	}
+	config := testAgentConfig("test-agent", "Test Agent", "gpt-4")
 
 	agent := NewBaseAgent(config, provider, memory, toolManager, bus, logger)
 	selectorConfig := defaultToolSelectionConfigValue()
@@ -150,12 +130,7 @@ func TestDynamicToolSelector_calculateSemanticSimilarity(t *testing.T) {
 	toolManager := &testToolManager{}
 	bus := &testEventBus{}
 
-	config := Config{
-		ID:    "test-agent",
-		Name:  "Test Agent",
-		Type:  TypeGeneric,
-		Model: "gpt-4",
-	}
+	config := testAgentConfig("test-agent", "Test Agent", "gpt-4")
 
 	agent := NewBaseAgent(config, provider, memory, toolManager, bus, logger)
 	selectorConfig := defaultToolSelectionConfigValue()
@@ -205,12 +180,7 @@ func TestDynamicToolSelector_UpdateToolStats(t *testing.T) {
 	toolManager := &testToolManager{}
 	bus := &testEventBus{}
 
-	config := Config{
-		ID:    "test-agent",
-		Name:  "Test Agent",
-		Type:  TypeGeneric,
-		Model: "gpt-4",
-	}
+	config := testAgentConfig("test-agent", "Test Agent", "gpt-4")
 
 	agent := NewBaseAgent(config, provider, memory, toolManager, bus, logger)
 	selectorConfig := defaultToolSelectionConfigValue()
@@ -246,12 +216,7 @@ func TestDynamicToolSelector_getReliability(t *testing.T) {
 	toolManager := &testToolManager{}
 	bus := &testEventBus{}
 
-	config := Config{
-		ID:    "test-agent",
-		Name:  "Test Agent",
-		Type:  TypeGeneric,
-		Model: "gpt-4",
-	}
+	config := testAgentConfig("test-agent", "Test Agent", "gpt-4")
 
 	agent := NewBaseAgent(config, provider, memory, toolManager, bus, logger)
 	selectorConfig := defaultToolSelectionConfigValue()
@@ -378,12 +343,7 @@ func TestDynamicToolSelector_SelectTools_WithLLMRanking(t *testing.T) {
 	toolManager := &testToolManager{}
 	bus := &testEventBus{}
 
-	config := Config{
-		ID:    "test-agent",
-		Name:  "Test Agent",
-		Type:  TypeGeneric,
-		Model: "gpt-4",
-	}
+	config := testAgentConfig("test-agent", "Test Agent", "gpt-4")
 
 	agent := NewBaseAgent(config, provider, memory, toolManager, bus, logger)
 	selectorConfig := defaultToolSelectionConfigValue()
@@ -417,12 +377,7 @@ func BenchmarkDynamicToolSelector_SelectTools(b *testing.B) {
 	toolManager := &testToolManager{}
 	bus := &testEventBus{}
 
-	config := Config{
-		ID:    "test-agent",
-		Name:  "Test Agent",
-		Type:  TypeGeneric,
-		Model: "gpt-4",
-	}
+	config := testAgentConfig("test-agent", "Test Agent", "gpt-4")
 
 	agent := NewBaseAgent(config, provider, memory, toolManager, bus, logger)
 	selectorConfig := defaultToolSelectionConfigValue()

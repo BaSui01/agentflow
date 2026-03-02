@@ -7,49 +7,6 @@ import (
 	"github.com/BaSui01/agentflow/types"
 )
 
-// ErrorCode 定义 Agent 错误码。
-type ErrorCode string
-
-// 特定代理错误代码
-// 这些扩展了类型/error.go中定义的基础错误代码
-const (
-	// 状态相关错误
-	ErrCodeInvalidTransition ErrorCode = "AGENT_INVALID_TRANSITION"
-	ErrCodeNotReady          ErrorCode = "AGENT_NOT_READY"
-	ErrCodeBusy              ErrorCode = "AGENT_BUSY"
-	ErrCodeNotFound          ErrorCode = "AGENT_NOT_FOUND"
-
-	// 配置相关错误
-	ErrCodeProviderNotSet ErrorCode = "AGENT_PROVIDER_NOT_SET"
-	ErrCodeInvalidConfig  ErrorCode = "AGENT_INVALID_CONFIG"
-
-	// 执行相关错误
-	ErrCodeExecutionFailed ErrorCode = "AGENT_EXECUTION_FAILED"
-	ErrCodePlanningFailed  ErrorCode = "AGENT_PLANNING_FAILED"
-	ErrCodeTimeout         ErrorCode = "AGENT_TIMEOUT"
-
-	// 工具相关错误
-	ErrCodeToolNotFound   ErrorCode = "AGENT_TOOL_NOT_FOUND"
-	ErrCodeToolNotAllowed ErrorCode = "AGENT_TOOL_NOT_ALLOWED"
-	ErrCodeToolExecFailed ErrorCode = "AGENT_TOOL_EXEC_FAILED"
-	ErrCodeToolValidation ErrorCode = "AGENT_TOOL_VALIDATION"
-
-	// 记忆相关错误
-	ErrCodeMemoryNotSet     ErrorCode = "AGENT_MEMORY_NOT_SET"
-	ErrCodeMemorySaveFailed ErrorCode = "AGENT_MEMORY_SAVE_FAILED"
-	ErrCodeMemoryLoadFailed ErrorCode = "AGENT_MEMORY_LOAD_FAILED"
-
-	// Reflection 相关错误
-	ErrCodeReflectionFailed ErrorCode = "AGENT_REFLECTION_FAILED"
-	ErrCodeCritiqueFailed   ErrorCode = "AGENT_CRITIQUE_FAILED"
-
-	// 上下文相关错误
-	ErrCodeContextOptimizationFailed ErrorCode = "AGENT_CONTEXT_OPTIMIZATION_FAILED"
-
-	// Guardrails 相关错误
-	ErrCodeGuardrailsViolated ErrorCode = "AGENT_GUARDRAILS_VIOLATED"
-)
-
 // Error Agent 统一错误类型
 // Uses Base *types.Error for unified error handling across the framework.
 // Agent-specific fields (AgentID, AgentType, Timestamp, Metadata) extend the base.
@@ -79,18 +36,18 @@ func (e *Error) Unwrap() error {
 }
 
 // NewError 创建新的 Agent 错误
-func NewError(code ErrorCode, message string) *Error {
+func NewError(code types.ErrorCode, message string) *Error {
 	return &Error{
-		Base:      types.NewError(types.ErrorCode(code), message),
+		Base:      types.NewError(code, message),
 		Timestamp: time.Now(),
 		Metadata:  make(map[string]any),
 	}
 }
 
 // NewErrorWithCause 创建带原因的错误
-func NewErrorWithCause(code ErrorCode, message string, cause error) *Error {
+func NewErrorWithCause(code types.ErrorCode, message string, cause error) *Error {
 	return &Error{
-		Base:      types.NewError(types.ErrorCode(code), message).WithCause(cause),
+		Base:      types.NewError(code, message).WithCause(cause),
 		Timestamp: time.Now(),
 		Metadata:  make(map[string]any),
 	}
@@ -134,18 +91,18 @@ func IsRetryable(err error) bool {
 }
 
 // GetErrorCode 从错误中提取出错误代码
-func GetErrorCode(err error) ErrorCode {
+func GetErrorCode(err error) types.ErrorCode {
 	if e, ok := err.(*Error); ok {
-		return ErrorCode(e.Base.Code)
+		return e.Base.Code
 	}
-	return ErrorCode(types.GetErrorCode(err))
+	return types.GetErrorCode(err)
 }
 
 // 预定义错误
 var (
-	ErrProviderNotSet = NewError(ErrCodeProviderNotSet, "LLM provider not configured")
-	ErrAgentNotReady  = NewError(ErrCodeNotReady, "agent not in ready state")
-	ErrAgentBusy      = NewError(ErrCodeBusy, "agent is busy executing another task")
+	ErrProviderNotSet = NewError(types.ErrProviderNotSet, "LLM provider not configured")
+	ErrAgentNotReady  = NewError(types.ErrAgentNotReady, "agent not in ready state")
+	ErrAgentBusy      = NewError(types.ErrAgentBusy, "agent is busy executing another task")
 )
 
 // ErrInvalidTransition 状态转换错误
@@ -160,8 +117,7 @@ func (e ErrInvalidTransition) Error() string {
 
 // ToAgentError 将 ErrInvalidTransition 转换为 Agent.Error
 func (e ErrInvalidTransition) ToAgentError() *Error {
-	return NewError(ErrCodeInvalidTransition, e.Error()).
+	return NewError(types.ErrInvalidTransition, e.Error()).
 		WithMetadata("from_state", e.From).
 		WithMetadata("to_state", e.To)
 }
-

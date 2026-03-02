@@ -10,6 +10,7 @@ import (
 	"github.com/BaSui01/agentflow/agent/guardrails"
 	"github.com/BaSui01/agentflow/llm"
 	llmtools "github.com/BaSui01/agentflow/llm/capabilities/tools"
+	llmgateway "github.com/BaSui01/agentflow/llm/gateway"
 	"github.com/BaSui01/agentflow/types"
 
 	"go.uber.org/zap"
@@ -91,50 +92,22 @@ type Feedback struct {
 	Data    map[string]any `json:"data,omitempty"`
 }
 
-// Config Agent 配置
-type Config struct {
-	ID           string            `json:"id"`
-	Name         string            `json:"name"`
-	Type         AgentType         `json:"type"`
-	Description  string            `json:"description,omitempty"`
-	Model        string            `json:"model"`                   // LLM 模型
-	Provider     string            `json:"provider,omitempty"`      // LLM Provider
-	MaxTokens    int               `json:"max_tokens,omitempty"`    // 最大 token
-	Temperature  float32           `json:"temperature,omitempty"`   // 温度
-	PromptBundle PromptBundle      `json:"prompt_bundle,omitempty"` // 模块化提示词包
-	Tools        []string          `json:"tools,omitempty"`         // 可用工具列表
-	Metadata     map[string]string `json:"metadata,omitempty"`
-
-	// 2025 新增配置（可选）
-	EnableReflection     bool `json:"enable_reflection,omitempty"`
-	EnableToolSelection  bool `json:"enable_tool_selection,omitempty"`
-	EnablePromptEnhancer bool `json:"enable_prompt_enhancer,omitempty"`
-	EnableSkills         bool `json:"enable_skills,omitempty"`
-	EnableMCP            bool `json:"enable_mcp,omitempty"`
-	EnableLSP            bool `json:"enable_lsp,omitempty"`
-	EnableEnhancedMemory bool `json:"enable_enhanced_memory,omitempty"`
-	EnableObservability  bool `json:"enable_observability,omitempty"`
-
-	// ReAct 最大迭代次数，默认 10
-	MaxReActIterations int `json:"max_react_iterations,omitempty"`
-
-	// 2026 Guardrails 配置
-	// Requirements 1.7: 支持自定义验证规则的注册和扩展
-	Guardrails *guardrails.GuardrailsConfig `json:"guardrails,omitempty"`
-}
-
 // BaseAgent 提供可复用的状态管理、记忆、工具与 LLM 能力
 type BaseAgent struct {
-	config  Config
-	state   State
-	stateMu sync.RWMutex
-	execMu  sync.Mutex // 执行互斥锁，防止并发执行
+	config               types.AgentConfig
+	promptBundle         PromptBundle
+	runtimeGuardrailsCfg *guardrails.GuardrailsConfig
+	state                State
+	stateMu              sync.RWMutex
+	execMu               sync.Mutex // 执行互斥锁，防止并发执行
 
-	provider     llm.Provider
-	toolProvider llm.Provider // 工具调用专用 Provider（可选，为 nil 时退化为 provider）
-	memory       MemoryManager
-	toolManager  ToolManager
-	bus          EventBus
+	provider           llm.Provider
+	providerViaGateway llm.Provider
+	toolProvider       llm.Provider // 工具调用专用 Provider（可选，为 nil 时退化为 provider）
+	toolViaGateway     llm.Provider
+	memory             MemoryManager
+	toolManager        ToolManager
+	bus                EventBus
 
 	recentMemory   []MemoryRecord // 缓存最近加载的记忆
 	recentMemoryMu sync.RWMutex   // 保护 recentMemory 的并发访问
@@ -170,7 +143,6 @@ type BaseAgent struct {
 
 	// Composite sub-managers (used by pipeline steps)
 	extensions  *ExtensionRegistry
-	llmEngine   *LLMEngine
 	persistence *PersistenceStores
 	guardrails  *GuardrailsManager
 	memoryCache *MemoryCache
@@ -178,38 +150,42 @@ type BaseAgent struct {
 
 // NewBaseAgent 创建基础 Agent
 func NewBaseAgent(
-	cfg Config,
+	cfg types.AgentConfig,
 	provider llm.Provider,
 	memory MemoryManager,
 	toolManager ToolManager,
 	bus EventBus,
 	logger *zap.Logger,
 ) *BaseAgent {
+	ensureAgentType(&cfg)
 	if logger == nil {
 		logger = zap.NewNop()
 	}
-	agentLogger := logger.With(zap.String("agent_id", cfg.ID), zap.String("agent_type", string(cfg.Type)))
+	agentLogger := logger.With(zap.String("agent_id", cfg.Core.ID), zap.String("agent_type", cfg.Core.Type))
 
 	ba := &BaseAgent{
-		config:      cfg,
-		state:       StateInit,
-		provider:    provider,
-		memory:      memory,
-		toolManager: toolManager,
-		bus:         bus,
-		logger:      agentLogger,
+		config:               cfg,
+		promptBundle:         promptBundleFromConfig(cfg),
+		runtimeGuardrailsCfg: runtimeGuardrailsFromTypes(cfg.Features.Guardrails),
+		state:                StateInit,
+		provider:             provider,
+		providerViaGateway:   wrapProviderWithGateway(provider, agentLogger),
+		memory:               memory,
+		toolManager:          toolManager,
+		bus:                  bus,
+		logger:               agentLogger,
 	}
 
 	// Initialize composite sub-managers for pipeline steps
 	ba.extensions = NewExtensionRegistry(agentLogger)
 	ba.persistence = NewPersistenceStores(agentLogger)
 	ba.guardrails = NewGuardrailsManager(agentLogger)
-	ba.memoryCache = NewMemoryCache(cfg.ID, memory, agentLogger)
+	ba.memoryCache = NewMemoryCache(cfg.Core.ID, memory, agentLogger)
 
 	// 如果配置, 初始化守护栏
-	if cfg.Guardrails != nil {
-		ba.initGuardrails(cfg.Guardrails)
-		ba.guardrails.Init(cfg.Guardrails)
+	if ba.runtimeGuardrailsCfg != nil {
+		ba.initGuardrails(ba.runtimeGuardrailsCfg)
+		ba.guardrails.Init(ba.runtimeGuardrailsCfg)
 	}
 
 	return ba
@@ -379,13 +355,13 @@ func (e toolManagerExecutor) ExecuteOne(ctx context.Context, call types.ToolCall
 }
 
 // ID 返回 Agent ID
-func (b *BaseAgent) ID() string { return b.config.ID }
+func (b *BaseAgent) ID() string { return b.config.Core.ID }
 
 // Name 返回 Agent 名称
-func (b *BaseAgent) Name() string { return b.config.Name }
+func (b *BaseAgent) Name() string { return b.config.Core.Name }
 
 // Type 返回 Agent 类型
-func (b *BaseAgent) Type() AgentType { return b.config.Type }
+func (b *BaseAgent) Type() AgentType { return AgentType(b.config.Core.Type) }
 
 // State 返回当前状态
 func (b *BaseAgent) State() State {
@@ -406,7 +382,7 @@ func (b *BaseAgent) Transition(ctx context.Context, to State) error {
 
 	b.state = to
 	b.logger.Info("state transition",
-		zap.String("agent_id", b.config.ID),
+		zap.String("agent_id", b.config.Core.ID),
 		zap.String("from", string(from)),
 		zap.String("to", string(to)),
 	)
@@ -414,7 +390,7 @@ func (b *BaseAgent) Transition(ctx context.Context, to State) error {
 	// 发布状态变更事件
 	if b.bus != nil {
 		b.bus.Publish(&StateChangeEvent{
-			AgentID_:   b.config.ID,
+			AgentID_:   b.config.Core.ID,
 			FromState:  from,
 			ToState:    to,
 			Timestamp_: time.Now(),
@@ -430,7 +406,7 @@ func (b *BaseAgent) Init(ctx context.Context) error {
 
 	// 加载记忆（如果有）并缓存
 	if b.memory != nil {
-		records, err := b.memory.LoadRecent(ctx, b.config.ID, MemoryShortTerm, defaultMaxRecentMemory)
+		records, err := b.memory.LoadRecent(ctx, b.config.Core.ID, MemoryShortTerm, defaultMaxRecentMemory)
 		if err != nil {
 			b.logger.Warn("failed to load memory", zap.Error(err))
 		} else {
@@ -489,7 +465,7 @@ func (b *BaseAgent) SaveMemory(ctx context.Context, content string, kind MemoryK
 	}
 
 	rec := MemoryRecord{
-		AgentID:   b.config.ID,
+		AgentID:   b.config.Core.ID,
 		Kind:      types.MemoryCategory(kind),
 		Content:   content,
 		Metadata:  metadata,
@@ -518,7 +494,7 @@ func (b *BaseAgent) RecallMemory(ctx context.Context, query string, topK int) ([
 	if b.memory == nil {
 		return []MemoryRecord{}, nil
 	}
-	return b.memory.Search(ctx, b.config.ID, query, topK)
+	return b.memory.Search(ctx, b.config.Core.ID, query, topK)
 }
 
 // Provider 返回 LLM Provider
@@ -528,12 +504,43 @@ func (b *BaseAgent) Provider() llm.Provider { return b.provider }
 func (b *BaseAgent) ToolProvider() llm.Provider { return b.toolProvider }
 
 // SetToolProvider 设置工具调用专用的 LLM Provider
-func (b *BaseAgent) SetToolProvider(p llm.Provider) { b.toolProvider = p }
+func (b *BaseAgent) SetToolProvider(p llm.Provider) {
+	b.toolProvider = p
+	b.toolViaGateway = wrapProviderWithGateway(p, b.logger)
+}
+
+func (b *BaseAgent) gatewayProvider() llm.Provider {
+	if b.providerViaGateway != nil {
+		return b.providerViaGateway
+	}
+	return b.provider
+}
+
+func (b *BaseAgent) gatewayToolProvider() llm.Provider {
+	if b.toolViaGateway != nil {
+		return b.toolViaGateway
+	}
+	if b.toolProvider != nil {
+		return b.toolProvider
+	}
+	return b.gatewayProvider()
+}
+
+func wrapProviderWithGateway(provider llm.Provider, logger *zap.Logger) llm.Provider {
+	if provider == nil {
+		return nil
+	}
+	service := llmgateway.New(llmgateway.Config{
+		ChatProvider: provider,
+		Logger:       logger,
+	})
+	return llmgateway.NewChatProviderAdapter(service, provider)
+}
 
 // maxReActIterations 返回 ReAct 最大迭代次数，默认 10
 func (b *BaseAgent) maxReActIterations() int {
-	if b.config.MaxReActIterations > 0 {
-		return b.config.MaxReActIterations
+	if b.config.Runtime.MaxReActIterations > 0 {
+		return b.config.Runtime.MaxReActIterations
 	}
 	return 10
 }
@@ -545,7 +552,7 @@ func (b *BaseAgent) Memory() MemoryManager { return b.memory }
 func (b *BaseAgent) Tools() ToolManager { return b.toolManager }
 
 // Config 返回配置
-func (b *BaseAgent) Config() Config { return b.config }
+func (b *BaseAgent) Config() types.AgentConfig { return b.config }
 
 // Logger 返回日志器
 func (b *BaseAgent) Logger() *zap.Logger { return b.logger }
@@ -604,13 +611,14 @@ func (e *GuardrailsError) Error() string {
 func (b *BaseAgent) SetGuardrails(cfg *guardrails.GuardrailsConfig) {
 	b.execMu.Lock()
 	defer b.execMu.Unlock()
+	b.runtimeGuardrailsCfg = cfg
+	b.config.Features.Guardrails = typesGuardrailsFromRuntime(cfg)
 	if cfg == nil {
 		b.guardrailsEnabled = false
 		b.inputValidatorChain = nil
 		b.outputValidator = nil
 		return
 	}
-	b.config.Guardrails = cfg
 	b.initGuardrails(cfg)
 }
 
@@ -668,5 +676,3 @@ func (b *BaseAgent) AddOutputFilter(f guardrails.Filter) {
 	}
 	b.outputValidator.AddFilter(f)
 }
-
-

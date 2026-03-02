@@ -3,22 +3,14 @@ package declarative
 import (
 	"fmt"
 
+	"github.com/BaSui01/agentflow/types"
 	"go.uber.org/zap"
 )
 
-// AgentFactory converts AgentDefinition into a runtime config map
-// compatible with agent.NewAgentBuilder.
+// AgentFactory converts AgentDefinition into a typed runtime config model.
 //
 // It does not import the agent package directly to avoid circular dependencies.
-// Callers use the returned map to construct an Agent via the builder:
-//
-//	configMap := factory.ToAgentConfig(def)
-//	builder := agent.NewAgentBuilder(agent.Config{
-//	    ID:    configMap["id"].(string),
-//	    Name:  configMap["name"].(string),
-//	    Model: configMap["model"].(string),
-//	    // ...
-//	})
+// Callers use the returned types.AgentConfig and convert at the runtime boundary.
 type AgentFactory struct {
 	logger *zap.Logger
 }
@@ -54,104 +46,70 @@ func (f *AgentFactory) Validate(def *AgentDefinition) error {
 	return nil
 }
 
-// ToAgentConfig converts an AgentDefinition into a map[string]interface{} that
-// mirrors the fields of agent.Config. Callers use these values to populate
-// agent.Config and call agent.NewAgentBuilder.
-//
-// Keys match the JSON tags of agent.Config:
-//
-//	"id", "name", "type", "description", "model", "provider",
-//	"max_tokens", "temperature", "system_prompt", "tools",
-//	"tool_definitions", "memory", "guardrails", "metadata",
-//	"enable_reflection", "enable_tool_selection", "enable_prompt_enhancer",
-//	"enable_skills", "enable_mcp", "enable_observability",
-//	"max_react_iterations"
-func (f *AgentFactory) ToAgentConfig(def *AgentDefinition) map[string]interface{} {
-	m := map[string]interface{}{
-		"id":    def.ID,
-		"name":  def.Name,
-		"model": def.Model,
+// ToAgentConfig converts an AgentDefinition into a strongly-typed runtime config.
+func (f *AgentFactory) ToAgentConfig(def *AgentDefinition) types.AgentConfig {
+	cfg := types.AgentConfig{
+		Core: types.CoreConfig{
+			ID:          def.ID,
+			Name:        def.Name,
+			Type:        def.Type,
+			Description: def.Description,
+		},
+		LLM: types.LLMConfig{
+			Model:       def.Model,
+			Provider:    def.Provider,
+			MaxTokens:   def.MaxTokens,
+			Temperature: float32(def.Temperature),
+		},
+		Runtime: types.RuntimeConfig{
+			SystemPrompt:       def.SystemPrompt,
+			Tools:              append([]string(nil), def.Tools...),
+			MaxReActIterations: def.Features.MaxReActIterations,
+		},
 	}
 
-	// Optional string fields
-	if def.Type != "" {
-		m["type"] = def.Type
-	}
-	if def.Description != "" {
-		m["description"] = def.Description
-	}
-	if def.Provider != "" {
-		m["provider"] = def.Provider
-	}
-	if def.SystemPrompt != "" {
-		m["system_prompt"] = def.SystemPrompt
-	}
-	if def.Version != "" {
-		m["version"] = def.Version
-	}
-
-	// Optional numeric fields (only set when non-zero)
-	if def.Temperature != 0 {
-		m["temperature"] = def.Temperature
-	}
-	if def.MaxTokens != 0 {
-		m["max_tokens"] = def.MaxTokens
-	}
-
-	// Tools (string names)
-	if len(def.Tools) > 0 {
-		m["tools"] = def.Tools
-	}
-
-	// Tool definitions (richer metadata)
-	if len(def.ToolDefinitions) > 0 {
-		m["tool_definitions"] = def.ToolDefinitions
-	}
-
-	// Memory
-	if def.Memory != nil {
-		m["memory"] = def.Memory
-	}
-
-	// Guardrails
-	if def.Guardrails != nil {
-		m["guardrails"] = def.Guardrails
-	}
-
-	// Metadata
 	if len(def.Metadata) > 0 {
-		m["metadata"] = def.Metadata
+		cfg.Metadata = make(map[string]string, len(def.Metadata))
+		for k, v := range def.Metadata {
+			cfg.Metadata[k] = v
+		}
 	}
 
-	// Feature toggles
-	if def.Features.EnableReflection {
-		m["enable_reflection"] = true
+	if def.Features.EnableReflection || def.Features.MaxReActIterations > 0 {
+		cfg.Features.Reflection = &types.ReflectionConfig{
+			Enabled:       def.Features.EnableReflection,
+			MaxIterations: def.Features.MaxReActIterations,
+		}
 	}
 	if def.Features.EnableToolSelection {
-		m["enable_tool_selection"] = true
+		cfg.Features.ToolSelection = &types.ToolSelectionConfig{Enabled: true}
 	}
 	if def.Features.EnablePromptEnhancer {
-		m["enable_prompt_enhancer"] = true
+		cfg.Features.PromptEnhancer = &types.PromptEnhancerConfig{Enabled: true}
 	}
 	if def.Features.EnableSkills {
-		m["enable_skills"] = true
+		cfg.Extensions.Skills = &types.SkillsConfig{Enabled: true}
 	}
 	if def.Features.EnableMCP {
-		m["enable_mcp"] = true
+		cfg.Extensions.MCP = &types.MCPConfig{Enabled: true}
 	}
 	if def.Features.EnableObservability {
-		m["enable_observability"] = true
+		cfg.Extensions.Observability = &types.ObservabilityConfig{Enabled: true}
 	}
-	if def.Features.MaxReActIterations > 0 {
-		m["max_react_iterations"] = def.Features.MaxReActIterations
+	if def.Guardrails != nil {
+		cfg.Features.Guardrails = &types.GuardrailsConfig{
+			Enabled:         true,
+			MaxRetries:      def.Guardrails.MaxRetries,
+			OnInputFailure:  def.Guardrails.OnInputFailure,
+			OnOutputFailure: def.Guardrails.OnOutputFailure,
+		}
 	}
 
-	f.logger.Debug("converted agent definition to config map",
+	f.logger.Debug("converted agent definition to typed config",
 		zap.String("name", def.Name),
 		zap.String("model", def.Model),
-		zap.Int("config_keys", len(m)),
+		zap.Bool("has_runtime_tools", len(cfg.Runtime.Tools) > 0),
 	)
 
-	return m
+	return cfg
 }
-

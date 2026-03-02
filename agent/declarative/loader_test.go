@@ -309,29 +309,33 @@ func TestAgentFactory_ToAgentConfig_Full(t *testing.T) {
 	}
 
 	factory := NewAgentFactory(zap.NewNop())
-	m := factory.ToAgentConfig(def)
+	cfg := factory.ToAgentConfig(def)
 
-	assert.Equal(t, "agent-1", m["id"])
-	assert.Equal(t, "Full Agent", m["name"])
-	assert.Equal(t, "gpt-4", m["model"])
-	assert.Equal(t, "A fully configured agent", m["description"])
-	assert.Equal(t, "2.0", m["version"])
-	assert.Equal(t, "openai", m["provider"])
-	assert.Equal(t, "You are helpful.", m["system_prompt"])
-	assert.InDelta(t, 0.8, m["temperature"].(float64), 0.001)
-	assert.Equal(t, 4096, m["max_tokens"])
-	assert.Equal(t, []string{"calculator", "search"}, m["tools"])
-	assert.Equal(t, true, m["enable_reflection"])
-	assert.Equal(t, true, m["enable_tool_selection"])
-	assert.Equal(t, true, m["enable_prompt_enhancer"])
-	assert.Equal(t, true, m["enable_skills"])
-	assert.Equal(t, true, m["enable_mcp"])
-	assert.Equal(t, true, m["enable_observability"])
-	assert.Equal(t, 15, m["max_react_iterations"])
+	assert.Equal(t, "agent-1", cfg.Core.ID)
+	assert.Equal(t, "Full Agent", cfg.Core.Name)
+	assert.Equal(t, "A fully configured agent", cfg.Core.Description)
+	assert.Equal(t, "gpt-4", cfg.LLM.Model)
+	assert.Equal(t, "openai", cfg.LLM.Provider)
+	assert.Equal(t, "You are helpful.", cfg.Runtime.SystemPrompt)
+	assert.InDelta(t, 0.8, cfg.LLM.Temperature, 0.001)
+	assert.Equal(t, 4096, cfg.LLM.MaxTokens)
+	assert.Equal(t, []string{"calculator", "search"}, cfg.Runtime.Tools)
+	assert.Equal(t, 15, cfg.Runtime.MaxReActIterations)
 
-	meta := m["metadata"].(map[string]string)
-	assert.Equal(t, "prod", meta["env"])
-	assert.Equal(t, "ai", meta["team"])
+	require.NotNil(t, cfg.Features.Reflection)
+	require.NotNil(t, cfg.Features.ToolSelection)
+	require.NotNil(t, cfg.Features.PromptEnhancer)
+	require.NotNil(t, cfg.Extensions.Skills)
+	require.NotNil(t, cfg.Extensions.MCP)
+	require.NotNil(t, cfg.Extensions.Observability)
+	assert.True(t, cfg.Features.Reflection.Enabled)
+	assert.True(t, cfg.Features.ToolSelection.Enabled)
+	assert.True(t, cfg.Features.PromptEnhancer.Enabled)
+	assert.True(t, cfg.Extensions.Skills.Enabled)
+	assert.True(t, cfg.Extensions.MCP.Enabled)
+	assert.True(t, cfg.Extensions.Observability.Enabled)
+	assert.Equal(t, "prod", cfg.Metadata["env"])
+	assert.Equal(t, "ai", cfg.Metadata["team"])
 }
 
 func TestAgentFactory_ToAgentConfig_Minimal(t *testing.T) {
@@ -341,32 +345,26 @@ func TestAgentFactory_ToAgentConfig_Minimal(t *testing.T) {
 	}
 
 	factory := NewAgentFactory(zap.NewNop())
-	m := factory.ToAgentConfig(def)
+	cfg := factory.ToAgentConfig(def)
 
-	// Required keys always present
-	assert.Equal(t, "", m["id"])
-	assert.Equal(t, "Minimal Agent", m["name"])
-	assert.Equal(t, "gpt-4", m["model"])
-
-	// Optional keys omitted when zero
-	assert.NotContains(t, m, "description")
-	assert.NotContains(t, m, "provider")
-	assert.NotContains(t, m, "system_prompt")
-	assert.NotContains(t, m, "version")
-	assert.NotContains(t, m, "temperature")
-	assert.NotContains(t, m, "max_tokens")
-	assert.NotContains(t, m, "tools")
-	assert.NotContains(t, m, "metadata")
-	assert.NotContains(t, m, "enable_reflection")
-	assert.NotContains(t, m, "enable_mcp")
-	assert.NotContains(t, m, "max_react_iterations")
+	assert.Equal(t, "", cfg.Core.ID)
+	assert.Equal(t, "Minimal Agent", cfg.Core.Name)
+	assert.Equal(t, "gpt-4", cfg.LLM.Model)
+	assert.Empty(t, cfg.Core.Description)
+	assert.Empty(t, cfg.LLM.Provider)
+	assert.Empty(t, cfg.Runtime.SystemPrompt)
+	assert.Empty(t, cfg.Runtime.Tools)
+	assert.Zero(t, cfg.Runtime.MaxReActIterations)
+	assert.Nil(t, cfg.Features.Reflection)
+	assert.Nil(t, cfg.Extensions.MCP)
+	assert.Nil(t, cfg.Metadata)
 }
 
 func TestAgentFactory_ToAgentConfig_NilLogger(t *testing.T) {
 	factory := NewAgentFactory(nil)
 	def := &AgentDefinition{Name: "test", Model: "gpt-4"}
-	m := factory.ToAgentConfig(def)
-	assert.Equal(t, "test", m["name"])
+	cfg := factory.ToAgentConfig(def)
+	assert.Equal(t, "test", cfg.Core.Name)
 }
 
 func TestYAMLLoader_LoadFile_WithMemoryAndGuardrails(t *testing.T) {
@@ -431,21 +429,13 @@ func TestAgentFactory_ToAgentConfig_WithNewFields(t *testing.T) {
 	}
 
 	factory := NewAgentFactory(zap.NewNop())
-	m := factory.ToAgentConfig(def)
+	cfg := factory.ToAgentConfig(def)
 
-	assert.Equal(t, "plan_execute", m["type"])
-
-	mem := m["memory"].(*MemoryConfig)
-	assert.Equal(t, "both", mem.Type)
-	assert.Equal(t, 500, mem.Capacity)
-
-	gr := m["guardrails"].(*GuardrailsConfig)
-	assert.Equal(t, 2, gr.MaxRetries)
-	assert.Equal(t, "reject", gr.OnInputFailure)
-
-	tds := m["tool_definitions"].([]ToolDefinition)
-	assert.Len(t, tds, 1)
-	assert.Equal(t, "calc", tds[0].Name)
+	assert.Equal(t, "plan_execute", cfg.Core.Type)
+	require.NotNil(t, cfg.Features.Guardrails)
+	assert.Equal(t, 2, cfg.Features.Guardrails.MaxRetries)
+	assert.Equal(t, "reject", cfg.Features.Guardrails.OnInputFailure)
+	assert.Equal(t, "ignore", cfg.Features.Guardrails.OnOutputFailure)
 }
 
 func TestAgentFactory_ToAgentConfig_NilMemoryAndGuardrails(t *testing.T) {
@@ -455,12 +445,15 @@ func TestAgentFactory_ToAgentConfig_NilMemoryAndGuardrails(t *testing.T) {
 	}
 
 	factory := NewAgentFactory(zap.NewNop())
-	m := factory.ToAgentConfig(def)
+	cfg := factory.ToAgentConfig(def)
 
-	assert.NotContains(t, m, "type")
-	assert.NotContains(t, m, "memory")
-	assert.NotContains(t, m, "guardrails")
-	assert.NotContains(t, m, "tool_definitions")
+	assert.Equal(t, "Simple", cfg.Core.Name)
+	assert.Equal(t, "gpt-4", cfg.LLM.Model)
+	assert.Empty(t, cfg.Core.Type)
+	assert.Empty(t, cfg.Runtime.Tools)
+	assert.Nil(t, cfg.Features.Guardrails)
+	assert.Nil(t, cfg.Features.Reflection)
+	assert.Nil(t, cfg.Extensions.MCP)
 }
 
 // ============================================================
@@ -498,4 +491,3 @@ func writeTemp(t *testing.T, name, content string) string {
 	require.NoError(t, os.WriteFile(path, []byte(content), 0644))
 	return path
 }
-
