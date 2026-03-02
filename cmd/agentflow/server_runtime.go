@@ -18,6 +18,7 @@ import (
 	"github.com/BaSui01/agentflow/pkg/metrics"
 	mongoclient "github.com/BaSui01/agentflow/pkg/mongodb"
 	"github.com/BaSui01/agentflow/pkg/server"
+	pkgservice "github.com/BaSui01/agentflow/pkg/service"
 	"github.com/BaSui01/agentflow/pkg/telemetry"
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
@@ -35,8 +36,9 @@ type Server struct {
 
 	mongoClient *mongoclient.Client
 
-	httpManager    *server.Manager
-	metricsManager *server.Manager
+	httpManager     *server.Manager
+	metricsManager  *server.Manager
+	serviceRegistry *pkgservice.Registry
 
 	healthHandler     *handlers.HealthHandler
 	chatHandler       *handlers.ChatHandler
@@ -102,6 +104,9 @@ func (s *Server) Start() error {
 	if err := s.startMetricsServer(); err != nil {
 		return fmt.Errorf("failed to start metrics server: %w", err)
 	}
+	if err := s.startLifecycleServices(); err != nil {
+		return fmt.Errorf("failed to start lifecycle services: %w", err)
+	}
 
 	s.logger.Info("All servers started",
 		zap.Int("http_port", s.cfg.Server.HTTPPort),
@@ -111,4 +116,3 @@ func (s *Server) Start() error {
 
 	return nil
 }
-

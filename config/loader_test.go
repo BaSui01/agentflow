@@ -169,6 +169,8 @@ func TestLoader_LoadMultimodalFromEnv(t *testing.T) {
 		"AGENTFLOW_MULTIMODAL_DEFAULT_VIDEO_PROVIDER":     "runway",
 		"AGENTFLOW_MULTIMODAL_IMAGE_OPENAI_API_KEY":       "sk-mm-openai",
 		"AGENTFLOW_MULTIMODAL_VIDEO_RUNWAY_API_KEY":       "rw-mm-key",
+		"AGENTFLOW_MULTIMODAL_VIDEO_RUNWAY_BASE_URL":      "https://runway.example.internal",
+		"AGENTFLOW_MULTIMODAL_VIDEO_SORA_BASE_URL":        "https://sora.example.internal",
 	}
 	for k, v := range envVars {
 		os.Setenv(k, v)
@@ -191,6 +193,8 @@ func TestLoader_LoadMultimodalFromEnv(t *testing.T) {
 	assert.Equal(t, "runway", cfg.Multimodal.DefaultVideoProvider)
 	assert.Equal(t, "sk-mm-openai", cfg.Multimodal.Image.OpenAIAPIKey)
 	assert.Equal(t, "rw-mm-key", cfg.Multimodal.Video.RunwayAPIKey)
+	assert.Equal(t, "https://runway.example.internal", cfg.Multimodal.Video.RunwayBaseURL)
+	assert.Equal(t, "https://sora.example.internal", cfg.Multimodal.Video.SoraBaseURL)
 }
 
 func TestLoader_EnvOverridesYAML(t *testing.T) {
@@ -462,4 +466,3 @@ func TestLoadFromEnv_Function(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "env-only-agent", cfg.Agent.Name)
 }
-

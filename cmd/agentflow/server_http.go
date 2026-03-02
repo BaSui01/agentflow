@@ -34,6 +34,24 @@ func (s *Server) startHTTPServer() error {
 	routes.RegisterWorkflow(mux, s.workflowHandler, s.logger)
 	routes.RegisterConfig(mux, s.configAPIHandler, s.getFirstAPIKey(), s.logger)
 
+	s.logger.Info("HTTP routes registered",
+		zap.Strings("routes", []string{
+			"/health",
+			"/healthz",
+			"/ready",
+			"/readyz",
+			"/version",
+			"/api/v1/chat/completions",
+			"/api/v1/agents/*",
+			"/api/v1/providers/*",
+			"/api/v1/multimodal/*",
+			"/api/v1/mcp/*",
+			"/api/v1/rag/*",
+			"/api/v1/workflow/*",
+			"/api/v1/config/*",
+			"/metrics",
+		}))
+
 	middlewares := s.buildHTTPMiddlewares()
 	handler := mw.Chain(mux, middlewares...)
 
@@ -50,13 +68,6 @@ func (s *Server) startHTTPServer() error {
 	}
 
 	s.httpManager = server.NewManager(handler, serverConfig, s.logger)
-
-	// 启动服务器（非阻塞）
-	if err := s.httpManager.Start(); err != nil {
-		return err
-	}
-
-	s.logger.Info("HTTP server started", zap.Int("port", s.cfg.Server.HTTPPort))
 	return nil
 }
 
@@ -106,13 +117,6 @@ func (s *Server) startMetricsServer() error {
 	}
 
 	s.metricsManager = server.NewManager(mux, serverConfig, s.logger)
-
-	// 启动服务器（非阻塞）
-	if err := s.metricsManager.Start(); err != nil {
-		return err
-	}
-
-	s.logger.Info("Metrics server started", zap.Int("port", s.cfg.Server.MetricsPort))
 	return nil
 }
 
@@ -255,7 +259,7 @@ func (s *Server) buildAuthMiddleware(skipPaths []string) mw.Middleware {
 				"This is not recommended for production use.")
 			return nil
 		}
-		s.logger.Error("Authentication is required but no JWT/API key is configured; server will reject protected requests")
+		s.logger.Error("Authentication is required but no JWT/API key is configured; protected endpoints will return 503 until fixed. Configure server.api_keys or server.jwt, or explicitly set server.allow_no_auth=true for local development. Use /ready for liveness and a protected endpoint smoke test to verify auth wiring.")
 		skipSet := make(map[string]struct{}, len(skipPaths))
 		for _, p := range skipPaths {
 			skipSet[p] = struct{}{}

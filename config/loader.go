@@ -342,13 +342,20 @@ type MultimodalImageConfig struct {
 }
 
 type MultimodalVideoConfig struct {
-	RunwayAPIKey  string `yaml:"runway_api_key" env:"RUNWAY_API_KEY" json:"-"`
-	VeoAPIKey     string `yaml:"veo_api_key" env:"VEO_API_KEY" json:"-"`
-	GoogleAPIKey  string `yaml:"google_api_key" env:"GOOGLE_API_KEY" json:"-"`
-	SoraAPIKey    string `yaml:"sora_api_key" env:"SORA_API_KEY" json:"-"`
-	KlingAPIKey   string `yaml:"kling_api_key" env:"KLING_API_KEY" json:"-"`
-	LumaAPIKey    string `yaml:"luma_api_key" env:"LUMA_API_KEY" json:"-"`
-	MiniMaxAPIKey string `yaml:"minimax_api_key" env:"MINIMAX_API_KEY" json:"-"`
+	RunwayAPIKey   string `yaml:"runway_api_key" env:"RUNWAY_API_KEY" json:"-"`
+	RunwayBaseURL  string `yaml:"runway_base_url" env:"RUNWAY_BASE_URL"`
+	VeoAPIKey      string `yaml:"veo_api_key" env:"VEO_API_KEY" json:"-"`
+	VeoBaseURL     string `yaml:"veo_base_url" env:"VEO_BASE_URL"`
+	GoogleAPIKey   string `yaml:"google_api_key" env:"GOOGLE_API_KEY" json:"-"`
+	GoogleBaseURL  string `yaml:"google_base_url" env:"GOOGLE_BASE_URL"`
+	SoraAPIKey     string `yaml:"sora_api_key" env:"SORA_API_KEY" json:"-"`
+	SoraBaseURL    string `yaml:"sora_base_url" env:"SORA_BASE_URL"`
+	KlingAPIKey    string `yaml:"kling_api_key" env:"KLING_API_KEY" json:"-"`
+	KlingBaseURL   string `yaml:"kling_base_url" env:"KLING_BASE_URL"`
+	LumaAPIKey     string `yaml:"luma_api_key" env:"LUMA_API_KEY" json:"-"`
+	LumaBaseURL    string `yaml:"luma_base_url" env:"LUMA_BASE_URL"`
+	MiniMaxAPIKey  string `yaml:"minimax_api_key" env:"MINIMAX_API_KEY" json:"-"`
+	MiniMaxBaseURL string `yaml:"minimax_base_url" env:"MINIMAX_BASE_URL"`
 }
 
 // LogConfig 日志配置

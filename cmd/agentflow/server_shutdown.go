@@ -36,26 +36,8 @@ func (s *Server) Shutdown() {
 		s.tenantRateLimiterCancel()
 	}
 
-	// 1. 停止热更新管理器
-	if s.hotReloadManager != nil {
-		if err := s.hotReloadManager.Stop(); err != nil {
-			s.logger.Error("Hot reload manager shutdown error", zap.Error(err))
-		}
-	}
-
-	// 2. 关闭 HTTP 服务器（等待 in-flight 请求完成）
-	if s.httpManager != nil {
-		if err := s.httpManager.Shutdown(ctx); err != nil {
-			s.logger.Error("HTTP server shutdown error", zap.Error(err))
-		}
-	}
-
-	// 3. 关闭 Metrics 服务器
-	if s.metricsManager != nil {
-		if err := s.metricsManager.Shutdown(ctx); err != nil {
-			s.logger.Error("Metrics server shutdown error", zap.Error(err))
-		}
-	}
+	// 1-3. 通过统一生命周期注册表关闭 hot reload / HTTP / metrics 服务。
+	s.stopLifecycleServices(ctx)
 
 	// 4. Flush and shutdown telemetry exporters
 	// 必须在 HTTP/Metrics server 关闭之后执行，确保 in-flight 请求的 span/metric 不丢失
@@ -107,4 +89,3 @@ func (s *Server) Shutdown() {
 
 	s.logger.Info("Graceful shutdown completed")
 }
-

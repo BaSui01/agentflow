@@ -9,6 +9,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/time/rate"
 )
 
 // --- Constructor ---
@@ -237,6 +238,35 @@ func TestConfigAPIMiddleware_RequireAuth_EmptyApiKeyAllowsAll(t *testing.T) {
 	w := httptest.NewRecorder()
 	handler(w, req)
 	assert.Equal(t, http.StatusOK, w.Code)
+}
+
+func TestConfigAPIMiddleware_AllowRequest_CleansStaleEntries(t *testing.T) {
+	manager := NewHotReloadManager(DefaultConfig())
+	h := NewConfigAPIHandler(manager)
+	mw := NewConfigAPIMiddleware(h, "")
+
+	now := time.Now()
+	mw.mu.Lock()
+	mw.limiter["stale"] = &configAPILimiterEntry{
+		limiter:  rate.NewLimiter(rate.Limit(5), 20),
+		lastSeen: now.Add(-10 * time.Minute),
+	}
+	mw.limiter["fresh"] = &configAPILimiterEntry{
+		limiter:  rate.NewLimiter(rate.Limit(5), 20),
+		lastSeen: now,
+	}
+	mw.lastCleanup = now.Add(-2 * time.Minute)
+	mw.mu.Unlock()
+
+	assert.True(t, mw.allowRequest("127.0.0.1:12345"))
+
+	mw.mu.Lock()
+	_, staleExists := mw.limiter["stale"]
+	_, freshExists := mw.limiter["fresh"]
+	mw.mu.Unlock()
+
+	assert.False(t, staleExists)
+	assert.True(t, freshExists)
 }
 
 // --- Middleware: LogRequests ---

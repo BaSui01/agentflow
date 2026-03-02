@@ -347,6 +347,72 @@ var hotReloadableFields = map[string]HotReloadableField{
 		RequiresRestart: true,
 		Sensitive:       true,
 	},
+	"Multimodal.Video.SoraAPIKey": {
+		Path:            "Multimodal.Video.SoraAPIKey",
+		Description:     "Multimodal Sora video API key",
+		RequiresRestart: true,
+		Sensitive:       true,
+	},
+	"Multimodal.Video.KlingAPIKey": {
+		Path:            "Multimodal.Video.KlingAPIKey",
+		Description:     "Multimodal Kling video API key",
+		RequiresRestart: true,
+		Sensitive:       true,
+	},
+	"Multimodal.Video.LumaAPIKey": {
+		Path:            "Multimodal.Video.LumaAPIKey",
+		Description:     "Multimodal Luma video API key",
+		RequiresRestart: true,
+		Sensitive:       true,
+	},
+	"Multimodal.Video.MiniMaxAPIKey": {
+		Path:            "Multimodal.Video.MiniMaxAPIKey",
+		Description:     "Multimodal MiniMax video API key",
+		RequiresRestart: true,
+		Sensitive:       true,
+	},
+	"Multimodal.Video.RunwayBaseURL": {
+		Path:            "Multimodal.Video.RunwayBaseURL",
+		Description:     "Multimodal Runway video base URL",
+		RequiresRestart: true,
+		Sensitive:       false,
+	},
+	"Multimodal.Video.VeoBaseURL": {
+		Path:            "Multimodal.Video.VeoBaseURL",
+		Description:     "Multimodal Veo video base URL",
+		RequiresRestart: true,
+		Sensitive:       false,
+	},
+	"Multimodal.Video.GoogleBaseURL": {
+		Path:            "Multimodal.Video.GoogleBaseURL",
+		Description:     "Multimodal Google multimodal base URL",
+		RequiresRestart: true,
+		Sensitive:       false,
+	},
+	"Multimodal.Video.SoraBaseURL": {
+		Path:            "Multimodal.Video.SoraBaseURL",
+		Description:     "Multimodal Sora video base URL",
+		RequiresRestart: true,
+		Sensitive:       false,
+	},
+	"Multimodal.Video.KlingBaseURL": {
+		Path:            "Multimodal.Video.KlingBaseURL",
+		Description:     "Multimodal Kling video base URL",
+		RequiresRestart: true,
+		Sensitive:       false,
+	},
+	"Multimodal.Video.LumaBaseURL": {
+		Path:            "Multimodal.Video.LumaBaseURL",
+		Description:     "Multimodal Luma video base URL",
+		RequiresRestart: true,
+		Sensitive:       false,
+	},
+	"Multimodal.Video.MiniMaxBaseURL": {
+		Path:            "Multimodal.Video.MiniMaxBaseURL",
+		Description:     "Multimodal MiniMax video base URL",
+		RequiresRestart: true,
+		Sensitive:       false,
+	},
 
 	// Qdrant 配置 - 需要重新启动
 	"Qdrant.Host": {
@@ -1140,4 +1206,3 @@ func redactSensitiveFields(data map[string]any, prefix string) {
 		}
 	}
 }
-

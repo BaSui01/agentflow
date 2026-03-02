@@ -1,9 +1,6 @@
 package main
 
 import (
-	"context"
-	"fmt"
-
 	"github.com/BaSui01/agentflow/config"
 	"go.uber.org/zap"
 )
@@ -32,13 +29,7 @@ func (s *Server) initHotReloadManager() error {
 		s.cfg = newConfig
 	})
 
-	ctx := context.Background()
-	if err := s.hotReloadManager.Start(ctx); err != nil {
-		return fmt.Errorf("failed to start hot reload manager: %w", err)
-	}
-
 	s.configAPIHandler = config.NewConfigAPIHandler(s.hotReloadManager)
 
 	return nil
 }
-

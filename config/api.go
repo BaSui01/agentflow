@@ -531,15 +531,23 @@ type ConfigAPIMiddleware struct {
 	handler *ConfigAPIHandler
 	apiKey  string
 	mu      sync.Mutex
-	limiter map[string]*rate.Limiter
+	limiter map[string]*configAPILimiterEntry
+
+	lastCleanup time.Time
+}
+
+type configAPILimiterEntry struct {
+	limiter  *rate.Limiter
+	lastSeen time.Time
 }
 
 // NewConfigAPIMiddleware 创建一个新的配置API中间件
 func NewConfigAPIMiddleware(handler *ConfigAPIHandler, apiKey string) *ConfigAPIMiddleware {
 	return &ConfigAPIMiddleware{
-		handler: handler,
-		apiKey:  apiKey,
-		limiter: make(map[string]*rate.Limiter),
+		handler:     handler,
+		apiKey:      apiKey,
+		limiter:     make(map[string]*configAPILimiterEntry),
+		lastCleanup: time.Now(),
 	}
 }
 
@@ -596,21 +604,38 @@ func (m *ConfigAPIMiddleware) RequireAuth(next http.HandlerFunc) http.HandlerFun
 
 func (m *ConfigAPIMiddleware) allowRequest(remoteAddr string) bool {
 	const (
-		rps   = 5.0
-		burst = 20
+		rps             = 5.0
+		burst           = 20
+		cleanupInterval = time.Minute
+		entryTTL        = 3 * time.Minute
 	)
+	now := time.Now()
 	ip, _, err := net.SplitHostPort(remoteAddr)
 	if err != nil {
 		ip = remoteAddr
 	}
+
 	m.mu.Lock()
-	lim, ok := m.limiter[ip]
-	if !ok {
-		lim = rate.NewLimiter(rate.Limit(rps), burst)
-		m.limiter[ip] = lim
+	if now.Sub(m.lastCleanup) >= cleanupInterval {
+		for key, entry := range m.limiter {
+			if now.Sub(entry.lastSeen) > entryTTL {
+				delete(m.limiter, key)
+			}
+		}
+		m.lastCleanup = now
 	}
+
+	entry, ok := m.limiter[ip]
+	if !ok {
+		entry = &configAPILimiterEntry{
+			limiter: rate.NewLimiter(rate.Limit(rps), burst),
+		}
+		m.limiter[ip] = entry
+	}
+	entry.lastSeen = now
+	allow := entry.limiter.Allow()
 	m.mu.Unlock()
-	return lim.Allow()
+	return allow
 }
 
 // LogRequests 使用请求日志记录来包装处理程序
