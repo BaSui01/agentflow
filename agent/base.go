@@ -7,7 +7,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/BaSui01/agentflow/agent/guardcore"
 	"github.com/BaSui01/agentflow/agent/guardrails"
+	"github.com/BaSui01/agentflow/agent/memorycore"
 	"github.com/BaSui01/agentflow/llm"
 	llmtools "github.com/BaSui01/agentflow/llm/capabilities/tools"
 	llmgateway "github.com/BaSui01/agentflow/llm/gateway"
@@ -117,31 +119,13 @@ type BaseAgent struct {
 	contextManager       ContextManager // 上下文管理器（可选）
 	contextEngineEnabled bool           // 是否启用上下文工程
 
-	// 2025 新增功能（可选启用）
-	// These use workflow-local interfaces (agent/interfaces.go) to avoid circular
-	// dependencies with sub-packages. See quality-guidelines.md §15.
-	reflectionExecutor  ReflectionRunner          // *ReflectionExecutor
-	toolSelector        DynamicToolSelectorRunner // *DynamicToolSelector
-	promptEnhancer      PromptEnhancerRunner      // *PromptEnhancer
-	skillManager        SkillDiscoverer           // *skills.DefaultSkillManager
-	mcpServer           MCPServerRunner           // *mcp.MCPServer — nil-check only
-	lspClient           LSPClientRunner           // *lsp.LSPClient
-	lspLifecycle        LSPLifecycleOwner         // *ManagedLSP
-	enhancedMemory      EnhancedMemoryRunner      // *memory.EnhancedMemorySystem
-	observabilitySystem ObservabilityRunner       // *observability.ObservabilitySystem
-
 	// 2026 Guardrails 功能
 	// Requirements 1.7, 2.4: 输入/输出验证和重试支持
 	inputValidatorChain *guardrails.ValidatorChain
 	outputValidator     *guardrails.OutputValidator
 	guardrailsEnabled   bool
 
-	// MongoDB persistence stores (required)
-	promptStore       PromptStoreProvider
-	conversationStore ConversationStoreProvider
-	runStore          RunStoreProvider
-
-	// Composite sub-managers (used by pipeline steps)
+	// Composite sub-managers
 	extensions  *ExtensionRegistry
 	persistence *PersistenceStores
 	guardrails  *GuardrailsManager
@@ -422,21 +406,7 @@ func (b *BaseAgent) Init(ctx context.Context) error {
 // Teardown 清理资源
 func (b *BaseAgent) Teardown(ctx context.Context) error {
 	b.logger.Info("tearing down agent")
-
-	if b.lspLifecycle != nil {
-		if err := b.lspLifecycle.Close(); err != nil {
-			b.logger.Warn("failed to close lsp lifecycle", zap.Error(err))
-		}
-		return nil
-	}
-
-	if b.lspClient != nil {
-		if err := b.lspClient.Shutdown(ctx); err != nil {
-			b.logger.Warn("failed to shutdown lsp client", zap.Error(err))
-		}
-	}
-
-	return nil
+	return b.extensions.TeardownExtensions(ctx)
 }
 
 // TryLockExec 尝试获取执行锁，防止并发执行
@@ -466,7 +436,7 @@ func (b *BaseAgent) SaveMemory(ctx context.Context, content string, kind MemoryK
 
 	rec := MemoryRecord{
 		AgentID:   b.config.Core.ID,
-		Kind:      types.MemoryCategory(kind),
+		Kind:      kind,
 		Content:   content,
 		Metadata:  metadata,
 		CreatedAt: time.Now(),
@@ -629,17 +599,17 @@ func (b *BaseAgent) GuardrailsEnabled() bool {
 
 // SetPromptStore sets the prompt store provider.
 func (b *BaseAgent) SetPromptStore(store PromptStoreProvider) {
-	b.promptStore = store
+	b.persistence.SetPromptStore(store)
 }
 
 // SetConversationStore sets the conversation store provider.
 func (b *BaseAgent) SetConversationStore(store ConversationStoreProvider) {
-	b.conversationStore = store
+	b.persistence.SetConversationStore(store)
 }
 
 // SetRunStore sets the run store provider.
 func (b *BaseAgent) SetRunStore(store RunStoreProvider) {
-	b.runStore = store
+	b.persistence.SetRunStore(store)
 }
 
 // 添加自定义输入验证器
@@ -675,4 +645,226 @@ func (b *BaseAgent) AddOutputFilter(f guardrails.Filter) {
 		b.guardrailsEnabled = true
 	}
 	b.outputValidator.AddFilter(f)
+}
+
+// =============================================================================
+// Memory & Guardrails Facade (merged from facade_memory_guardrails.go)
+// =============================================================================
+
+// MemoryKind 记忆类型。
+type MemoryKind = memorycore.MemoryKind
+
+const (
+	MemoryShortTerm  MemoryKind = memorycore.MemoryShortTerm
+	MemoryWorking    MemoryKind = memorycore.MemoryWorking
+	MemoryLongTerm   MemoryKind = memorycore.MemoryLongTerm
+	MemoryEpisodic   MemoryKind = memorycore.MemoryEpisodic
+	MemorySemantic   MemoryKind = memorycore.MemorySemantic
+	MemoryProcedural MemoryKind = memorycore.MemoryProcedural
+)
+
+// MemoryRecord 统一记忆结构。
+type MemoryRecord = memorycore.MemoryRecord
+
+// MemoryWriter 记忆写入接口
+type MemoryWriter = memorycore.MemoryWriter
+
+// MemoryReader 记忆读取接口
+type MemoryReader = memorycore.MemoryReader
+
+// MemoryManager 组合读写接口
+type MemoryManager = memorycore.MemoryManager
+
+// keep root-level constant used by existing tests and base agent cache logic.
+const defaultMaxRecentMemory = memorycore.MaxRecentMemory
+
+// MemoryCache is the agent facade type for memory cache.
+type MemoryCache = memorycore.Cache
+
+// NewMemoryCache creates a new MemoryCache.
+func NewMemoryCache(agentID string, memory MemoryManager, logger *zap.Logger) *MemoryCache {
+	return memorycore.NewCache(agentID, memory, logger)
+}
+
+// MemoryCoordinator is the agent facade type for memory coordination.
+type MemoryCoordinator = memorycore.Coordinator
+
+// NewMemoryCoordinator creates a new MemoryCoordinator.
+func NewMemoryCoordinator(agentID string, memory MemoryManager, logger *zap.Logger) *MemoryCoordinator {
+	return memorycore.NewCoordinator(agentID, memory, logger)
+}
+
+// GuardrailsManager is the agent facade type for guardrails management.
+type GuardrailsManager = guardcore.Manager
+
+// NewGuardrailsManager creates a new GuardrailsManager.
+func NewGuardrailsManager(logger *zap.Logger) *GuardrailsManager {
+	return guardcore.NewManager(logger)
+}
+
+// GuardrailsCoordinator is the agent facade type for guardrails coordination.
+type GuardrailsCoordinator = guardcore.Coordinator
+
+// NewGuardrailsCoordinator creates a new GuardrailsCoordinator.
+func NewGuardrailsCoordinator(config *guardrails.GuardrailsConfig, logger *zap.Logger) *GuardrailsCoordinator {
+	return guardcore.NewCoordinator(config, logger)
+}
+
+// =============================================================================
+// State (merged from state.go)
+// =============================================================================
+
+// State 定义 Agent 生命周期状态
+type State string
+
+const (
+	StateInit      State = "init"      // Initializing
+	StateReady     State = "ready"     // Ready to execute
+	StateRunning   State = "running"   // Executing
+	StatePaused    State = "paused"    // Paused (waiting for human/external input)
+	StateCompleted State = "completed" // Completed
+	StateFailed    State = "failed"    // Failed
+)
+
+// validTransitions 定义合法的状态转换
+var validTransitions = map[State][]State{
+	StateInit:      {StateReady, StateFailed},
+	StateReady:     {StateRunning, StateFailed},
+	StateRunning:   {StateReady, StatePaused, StateCompleted, StateFailed}, // Support retry after interruption
+	StatePaused:    {StateRunning, StateCompleted, StateFailed},            // Support direct completion after pause
+	StateCompleted: {StateReady, StateInit},                                // 支持重新调度或完整重初始化
+	StateFailed:    {StateReady, StateInit},                                // 支持重试或重置
+}
+
+// CanTransition 检查状态转换是否合法
+func CanTransition(from, to State) bool {
+	allowed, ok := validTransitions[from]
+	if !ok {
+		return false
+	}
+	for _, s := range allowed {
+		if s == to {
+			return true
+		}
+	}
+	return false
+}
+
+// =============================================================================
+// Error (merged from errors.go)
+// =============================================================================
+
+// Error Agent 统一错误类型
+// Uses Base *types.Error for unified error handling across the framework.
+// Agent-specific fields (AgentID, AgentType, Timestamp, Metadata) extend the base.
+// Access base fields via promoted-style helpers: e.Code, e.Message, e.Retryable, e.Cause.
+type Error struct {
+	Base      *types.Error   `json:"base,inline"`
+	AgentID   string         `json:"agent_id,omitempty"`
+	AgentType AgentType      `json:"agent_type,omitempty"`
+	Timestamp time.Time      `json:"timestamp"`
+	Metadata  map[string]any `json:"metadata,omitempty"`
+}
+
+// Error 实现 error 接口
+func (e *Error) Error() string {
+	if e.Base != nil {
+		return e.Base.Error()
+	}
+	return "[UNKNOWN] agent error"
+}
+
+// Unwrap 支持 errors.Unwrap — delegates to Base
+func (e *Error) Unwrap() error {
+	if e.Base != nil {
+		return e.Base.Unwrap()
+	}
+	return nil
+}
+
+// NewError 创建新的 Agent 错误
+func NewError(code types.ErrorCode, message string) *Error {
+	return &Error{
+		Base:      types.NewError(code, message),
+		Timestamp: time.Now(),
+		Metadata:  make(map[string]any),
+	}
+}
+
+// NewErrorWithCause 创建带原因的错误
+func NewErrorWithCause(code types.ErrorCode, message string, cause error) *Error {
+	return &Error{
+		Base:      types.NewError(code, message).WithCause(cause),
+		Timestamp: time.Now(),
+		Metadata:  make(map[string]any),
+	}
+}
+
+// WithAgent 添加 Agent 信息
+func (e *Error) WithAgent(id string, agentType AgentType) *Error {
+	e.AgentID = id
+	e.AgentType = agentType
+	return e
+}
+
+// WithRetryable 设置是否可重试
+func (e *Error) WithRetryable(retryable bool) *Error {
+	e.Base.Retryable = retryable
+	return e
+}
+
+// WithMetadata 添加元数据
+func (e *Error) WithMetadata(key string, value any) *Error {
+	if e.Metadata == nil {
+		e.Metadata = make(map[string]any)
+	}
+	e.Metadata[key] = value
+	return e
+}
+
+// WithCause 添加原因错误
+func (e *Error) WithCause(cause error) *Error {
+	e.Base.Cause = cause
+	return e
+}
+
+// 如果代理错误可以重试, 是否可重试
+func IsRetryable(err error) bool {
+	if e, ok := err.(*Error); ok {
+		return e.Base.Retryable
+	}
+	// 还要检查类型 错误
+	return types.IsRetryable(err)
+}
+
+// GetErrorCode 从错误中提取出错误代码
+func GetErrorCode(err error) types.ErrorCode {
+	if e, ok := err.(*Error); ok {
+		return e.Base.Code
+	}
+	return types.GetErrorCode(err)
+}
+
+// 预定义错误
+var (
+	ErrProviderNotSet = NewError(types.ErrProviderNotSet, "LLM provider not configured")
+	ErrAgentNotReady  = NewError(types.ErrAgentNotReady, "agent not in ready state")
+	ErrAgentBusy      = NewError(types.ErrAgentBusy, "agent is busy executing another task")
+)
+
+// ErrInvalidTransition 状态转换错误
+type ErrInvalidTransition struct {
+	From State
+	To   State
+}
+
+func (e ErrInvalidTransition) Error() string {
+	return fmt.Sprintf("invalid state transition: %s -> %s", e.From, e.To)
+}
+
+// ToAgentError 将 ErrInvalidTransition 转换为 Agent.Error
+func (e ErrInvalidTransition) ToAgentError() *Error {
+	return NewError(types.ErrInvalidTransition, e.Error()).
+		WithMetadata("from_state", e.From).
+		WithMetadata("to_state", e.To)
 }

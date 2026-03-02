@@ -95,18 +95,21 @@
 
 ## 2.3 多模态能力矩阵（13 个 LLM 供应商）
 
+> 口径：以下为“代码已实现能力矩阵（Implemented Matrix）”，由 `llm/providers/capability_matrix.go` 声明并通过 `pwsh -NoProfile -File scripts/gen_llm_matrix.ps1` 生成（产物：`docs/generated/llm-implemented-matrix.md`）。
+> 维护要求：修改任一 provider 能力实现时，必须在同一提交同步更新 `llm/providers/capability_matrix.go` 并重新生成矩阵文档，禁止手工直接改表格内容。
+
 | Provider | 图像 | 视频 | 音频生成 | 音频转录 | Embedding | 微调 |
 |---|---|---|---|---|---|---|
 | OpenAI | ✅ | ❌ | ✅ | ✅ | ✅ | ✅ |
 | Claude | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
 | Gemini | ✅ | ✅ | ✅ | ❌ | ✅ | ❌ |
 | DeepSeek | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
-| Qwen | ❌ | ❌ | ✅ | ❌ | ✅ | ❌ |
+| Qwen | ✅ | ❌ | ✅ | ❌ | ✅ | ❌ |
 | GLM | ✅ | ✅ | ❌ | ❌ | ✅ | ❌ |
-| Grok | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
-| Doubao | ❌ | ❌ | ✅ | ❌ | ✅ | ❌ |
+| Grok | ✅ | ❌ | ❌ | ❌ | ✅ | ❌ |
+| Doubao | ✅ | ❌ | ✅ | ❌ | ✅ | ❌ |
 | Kimi | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
-| Mistral | ❌ | ❌ | ❌ | ❌ | ✅ | ❌ |
+| Mistral | ❌ | ❌ | ❌ | ✅ | ✅ | ❌ |
 | Hunyuan | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
 | MiniMax | ❌ | ❌ | ✅ | ❌ | ❌ | ❌ |
 | Llama | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
@@ -473,3 +476,4 @@ type Gateway interface {
 - [x] 2026-03-02：完成 Phase-6 发布记录：发布摘要为“LLM 单轨重构完成并切换唯一入口（Gateway/Runtime Router/Capabilities）”；能力供应商矩阵（embedding/image/rerank/speech/video/music/threed/moderation/tools）全部在新架构登记为完成；复核通过 `go test ./...` 与 `pwsh -NoProfile -File scripts/arch_guard.ps1`（guard 仅保留非阻断 warning，状态为 passed）。
 - [x] 2026-03-02：回填 Phase-0 流程状态：已执行重构冻结窗口、分支策略与“本文档作为唯一状态源”的日更机制，后续阶段均按该状态源推进与验收。
 - [x] 2026-03-02：补充双模型路由语义：在 Gateway 单入口下区分 `primary/tool` 调用阶段，并定义缺省回退与观测维度。
+- [x] 2026-03-02：修复 2.3 能力矩阵与代码实现不一致项（Qwen 图像、Grok 图像、Grok Embedding、Doubao 图像、Mistral 音频转录）；新增 `llm/providers/capability_matrix.go` 作为矩阵声明源，并新增 `scripts/gen_llm_matrix.ps1` 自动生成 `docs/generated/llm-implemented-matrix.md`，用于防止后续文档漂移。

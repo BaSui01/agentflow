@@ -465,22 +465,6 @@ func TestDefaultObservabilityConfig(t *testing.T) {
 }
 
 // ============================================================
-// ExtensionRegistry
-// ============================================================
-
-func TestExtensionRegistry_AllFalseByDefault(t *testing.T) {
-	reg := &ExtensionRegistry{}
-	assert.False(t, reg.HasReflection())
-	assert.False(t, reg.HasToolSelection())
-	assert.False(t, reg.HasPromptEnhancer())
-	assert.False(t, reg.HasSkills())
-	assert.False(t, reg.HasMCP())
-	assert.False(t, reg.HasEnhancedMemory())
-	assert.False(t, reg.HasObservability())
-	assert.False(t, reg.HasGuardrails())
-}
-
-// ============================================================
 // JSONSchema
 // ============================================================
 

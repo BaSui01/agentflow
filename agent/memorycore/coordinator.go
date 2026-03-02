@@ -5,7 +5,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/BaSui01/agentflow/types"
 	"go.uber.org/zap"
 )
 
@@ -52,7 +51,7 @@ func (mc *Coordinator) Save(ctx context.Context, content string, kind MemoryKind
 
 	rec := MemoryRecord{
 		AgentID:   mc.agentID,
-		Kind:      types.MemoryCategory(kind),
+		Kind:      kind,
 		Content:   content,
 		Metadata:  metadata,
 		CreatedAt: time.Now(),

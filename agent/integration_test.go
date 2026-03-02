@@ -19,56 +19,56 @@ import (
 
 func TestBaseAgent_EnableReflection(t *testing.T) {
 	ba := newTestBaseAgent()
-	assert.Nil(t, ba.reflectionExecutor)
+	assert.Nil(t, ba.extensions.ReflectionExecutor())
 
 	runner := &integTestReflectionRunner{}
 	ba.EnableReflection(runner)
-	assert.Equal(t, runner, ba.reflectionExecutor)
+	assert.Equal(t, runner, ba.extensions.ReflectionExecutor())
 }
 
 func TestBaseAgent_EnableToolSelection(t *testing.T) {
 	ba := newTestBaseAgent()
-	assert.Nil(t, ba.toolSelector)
+	assert.Nil(t, ba.extensions.ToolSelector())
 
 	sel := &integTestToolSelectorRunner{}
 	ba.EnableToolSelection(sel)
-	assert.Equal(t, sel, ba.toolSelector)
+	assert.Equal(t, sel, ba.extensions.ToolSelector())
 }
 
 func TestBaseAgent_EnablePromptEnhancer(t *testing.T) {
 	ba := newTestBaseAgent()
-	assert.Nil(t, ba.promptEnhancer)
+	assert.Nil(t, ba.extensions.PromptEnhancerExt())
 
 	enh := &integTestPromptEnhancerRunner{}
 	ba.EnablePromptEnhancer(enh)
-	assert.Equal(t, enh, ba.promptEnhancer)
+	assert.Equal(t, enh, ba.extensions.PromptEnhancerExt())
 }
 
 func TestBaseAgent_EnableSkills(t *testing.T) {
 	ba := newTestBaseAgent()
-	assert.Nil(t, ba.skillManager)
+	assert.Nil(t, ba.extensions.SkillManagerExt())
 
 	sm := &integTestSkillDiscoverer{}
 	ba.EnableSkills(sm)
-	assert.Equal(t, sm, ba.skillManager)
+	assert.Equal(t, sm, ba.extensions.SkillManagerExt())
 }
 
 func TestBaseAgent_EnableMCP(t *testing.T) {
 	ba := newTestBaseAgent()
-	assert.Nil(t, ba.mcpServer)
+	assert.Nil(t, ba.extensions.MCPServerExt())
 
 	srv := &integTestMCPServer{}
 	ba.EnableMCP(srv)
-	assert.Equal(t, srv, ba.mcpServer)
+	assert.Equal(t, srv, ba.extensions.MCPServerExt())
 }
 
 func TestBaseAgent_EnableLSP(t *testing.T) {
 	ba := newTestBaseAgent()
-	assert.Nil(t, ba.lspClient)
+	assert.Nil(t, ba.extensions.LSPClientExt())
 
 	client := &integTestLSPClient{}
 	ba.EnableLSP(client)
-	assert.Equal(t, client, ba.lspClient)
+	assert.Equal(t, client, ba.extensions.LSPClientExt())
 }
 
 func TestBaseAgent_EnableLSPWithLifecycle(t *testing.T) {
@@ -77,26 +77,26 @@ func TestBaseAgent_EnableLSPWithLifecycle(t *testing.T) {
 	client := &integTestLSPClient{}
 	lifecycle := &integTestLSPLifecycle{}
 	ba.EnableLSPWithLifecycle(client, lifecycle)
-	assert.Equal(t, client, ba.lspClient)
-	assert.Equal(t, lifecycle, ba.lspLifecycle)
+	assert.Equal(t, client, ba.extensions.LSPClientExt())
+	assert.Equal(t, lifecycle, ba.extensions.LSPLifecycleExt())
 }
 
 func TestBaseAgent_EnableEnhancedMemory(t *testing.T) {
 	ba := newTestBaseAgent()
-	assert.Nil(t, ba.enhancedMemory)
+	assert.Nil(t, ba.extensions.EnhancedMemoryExt())
 
 	mem := &integTestEnhancedMemory{}
 	ba.EnableEnhancedMemory(mem)
-	assert.Equal(t, mem, ba.enhancedMemory)
+	assert.Equal(t, mem, ba.extensions.EnhancedMemoryExt())
 }
 
 func TestBaseAgent_EnableObservability(t *testing.T) {
 	ba := newTestBaseAgent()
-	assert.Nil(t, ba.observabilitySystem)
+	assert.Nil(t, ba.extensions.ObservabilitySystemExt())
 
 	obs := &integTestObservability{}
 	ba.EnableObservability(obs)
-	assert.Equal(t, obs, ba.observabilitySystem)
+	assert.Equal(t, obs, ba.extensions.ObservabilitySystemExt())
 }
 
 func TestBaseAgent_GetFeatureStatus(t *testing.T) {

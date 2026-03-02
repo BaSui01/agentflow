@@ -102,68 +102,37 @@ func (b *BaseAgent) Execute(ctx context.Context, input *Input) (_ *Output, execE
 	// 以下操作修改共享状态（b.promptBundle），必须在 execMu 保护下执行。
 
 	// 3a. PromptStore: load active prompt from MongoDB if available
-	b.loadPromptFromStore(ctx)
+	if doc := b.persistence.LoadPrompt(ctx, b.config.Core.Type, b.config.Core.Name, ""); doc != nil {
+		b.promptBundle.Version = doc.Version
+		b.promptBundle.System = doc.System
+		if len(doc.Constraints) > 0 {
+			b.promptBundle.Constraints = doc.Constraints
+		}
+		b.logger.Info("loaded prompt from store",
+			zap.String("version", doc.Version),
+			zap.String("agent_type", b.config.Core.Type),
+		)
+	}
 
 	// 3b. RunStore: record execution start
-	runID := ""
-	{
-		runID = fmt.Sprintf("run_%s_%d", b.config.Core.ID, startTime.UnixNano())
-		doc := &RunDoc{
-			ID:        runID,
-			AgentID:   b.config.Core.ID,
-			TenantID:  input.TenantID,
-			TraceID:   input.TraceID,
-			Status:    "running",
-			Input:     input.Content,
-			StartTime: startTime,
-		}
-		if b.runStore != nil {
-			if err := b.runStore.RecordRun(ctx, doc); err != nil {
-				b.logger.Warn("failed to record run start", zap.Error(err))
-				runID = "" // disable run tracking on failure
-			}
-		} else {
-			runID = ""
-		}
-	}
+	runID := b.persistence.RecordRun(ctx, b.config.Core.ID, input.TenantID, input.TraceID, input.Content, startTime)
 
 	// 3c. ConversationStore: restore conversation history
-	var restoredMessages []types.Message
 	conversationID := input.ChannelID
-	if conversationID != "" && b.conversationStore != nil {
-		conv, convErr := b.conversationStore.GetByID(ctx, conversationID)
-		if convErr != nil {
-			// ErrNotFound is expected for new conversations; only warn on real errors.
-			b.logger.Debug("conversation not found or error, starting fresh",
-				zap.String("conversation_id", conversationID),
-				zap.Error(convErr),
-			)
-		} else if conv != nil {
-			for _, msg := range conv.Messages {
-				restoredMessages = append(restoredMessages, types.Message{
-					Role:    types.Role(msg.Role),
-					Content: msg.Content,
-				})
-			}
-			b.logger.Debug("restored conversation history",
-				zap.String("conversation_id", conversationID),
-				zap.Int("messages", len(restoredMessages)),
-			)
-		}
-	}
+	restoredMessages := b.persistence.RestoreConversation(ctx, conversationID)
 	defer func() {
 		// Ensure run status is updated on any exit path (including panic).
-		if runID != "" && b.runStore != nil {
+		if runID != "" {
 			if r := recover(); r != nil {
-				_ = b.runStore.UpdateStatus(ctx, runID, "failed", nil, fmt.Sprintf("panic: %v", r))
+				_ = b.persistence.UpdateRunStatus(ctx, runID, "failed", nil, fmt.Sprintf("panic: %v", r))
 				b.logger.Error("panic during execution, run marked as failed",
 					zap.Any("panic", r), zap.String("run_id", runID))
 				if execErr == nil {
 					execErr = fmt.Errorf("react execution panic: %v", r)
 				}
 			}
-			if execErr != nil && runID != "" && b.runStore != nil {
-				if updateErr := b.runStore.UpdateStatus(ctx, runID, "failed", nil, execErr.Error()); updateErr != nil {
+			if execErr != nil {
+				if updateErr := b.persistence.UpdateRunStatus(ctx, runID, "failed", nil, execErr.Error()); updateErr != nil {
 					b.logger.Warn("failed to mark run as failed", zap.Error(updateErr))
 				}
 			}
@@ -223,7 +192,7 @@ func (b *BaseAgent) Execute(ctx context.Context, input *Input) (_ *Output, execE
 		if hasMemory {
 			// 将最近的记忆转换为消息
 			for _, mem := range b.recentMemory {
-				if mem.Kind == types.MemoryCategory(MemoryShortTerm) {
+				if mem.Kind == MemoryShortTerm {
 					role := llm.RoleAssistant
 					if r, ok := mem.Metadata["role"].(string); ok && r != "" {
 						role = types.Role(r)
@@ -391,17 +360,17 @@ func (b *BaseAgent) Execute(ctx context.Context, input *Input) (_ *Output, execE
 	duration := time.Since(startTime)
 
 	// 9a. ConversationStore: persist conversation
-	b.persistConversation(ctx, input, outputContent, conversationID)
+	b.persistence.PersistConversation(ctx, conversationID, b.config.Core.ID, input.TenantID, input.UserID, input.Content, outputContent)
 
 	// 9b. RunStore: update run status
-	if runID != "" && b.runStore != nil {
+	if runID != "" {
 		outputDoc := &RunOutputDoc{
 			Content:      outputContent,
 			TokensUsed:   resp.Usage.TotalTokens,
 			Cost:         0, // cost is computed elsewhere
 			FinishReason: choice.FinishReason,
 		}
-		if err := b.runStore.UpdateStatus(ctx, runID, "completed", outputDoc, ""); err != nil {
+		if err := b.persistence.UpdateRunStatus(ctx, runID, "completed", outputDoc, ""); err != nil {
 			b.logger.Warn("failed to update run status", zap.Error(err))
 		}
 	}
@@ -480,76 +449,6 @@ func (b *BaseAgent) Observe(ctx context.Context, feedback *Feedback) error {
 	)
 
 	return nil
-}
-
-// loadPromptFromStore attempts to load the active prompt from PromptStore.
-// Falls back to the existing config PromptBundle if unavailable.
-func (b *BaseAgent) loadPromptFromStore(ctx context.Context) {
-	if b.promptStore == nil {
-		return
-	}
-
-	agentType := b.config.Core.Type
-	name := b.config.Core.Name
-	tenantID := "" // default tenant
-
-	doc, err := b.promptStore.GetActive(ctx, agentType, name, tenantID)
-	if err != nil {
-		// Not found or error — keep existing config prompt.
-		b.logger.Debug("no active prompt in store, using config default",
-			zap.String("agent_type", agentType),
-			zap.String("name", name),
-		)
-		return
-	}
-
-	// Override only the fields provided by the store, preserving Tools,
-	// Examples, Memory, Plan, and Reflection from the existing config.
-	b.promptBundle.Version = doc.Version
-	b.promptBundle.System = doc.System
-	if len(doc.Constraints) > 0 {
-		b.promptBundle.Constraints = doc.Constraints
-	}
-	b.logger.Info("loaded prompt from store",
-		zap.String("version", doc.Version),
-		zap.String("agent_type", agentType),
-	)
-}
-
-// persistConversation saves the user input and agent output to ConversationStore.
-func (b *BaseAgent) persistConversation(ctx context.Context, input *Input, outputContent, conversationID string) {
-	if conversationID == "" || b.conversationStore == nil {
-		return
-	}
-
-	now := time.Now()
-	newMsgs := []ConversationMessage{
-		{Role: string(llm.RoleUser), Content: input.Content, Timestamp: now},
-		{Role: string(llm.RoleAssistant), Content: outputContent, Timestamp: now},
-	}
-
-	// Try to append to existing conversation first.
-	appendErr := b.conversationStore.AppendMessages(ctx, conversationID, newMsgs)
-	if appendErr == nil {
-		return // successfully appended
-	}
-
-	// AppendMessages failed — attempt to create a new conversation.
-	// This handles the "not found" case for new conversations.
-	doc := &ConversationDoc{
-		ID:       conversationID,
-		AgentID:  b.config.Core.ID,
-		TenantID: input.TenantID,
-		UserID:   input.UserID,
-		Messages: newMsgs,
-	}
-	if createErr := b.conversationStore.Create(ctx, doc); createErr != nil {
-		b.logger.Warn("failed to persist conversation",
-			zap.String("conversation_id", conversationID),
-			zap.NamedError("append_err", appendErr),
-			zap.NamedError("create_err", createErr),
-		)
-	}
 }
 
 // parsePlanSteps 从 LLM 响应中解析执行步骤

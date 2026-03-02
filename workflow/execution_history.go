@@ -4,19 +4,20 @@ import (
 	"sync"
 	"time"
 
-	"github.com/BaSui01/agentflow/agent/persistence"
+	"github.com/BaSui01/agentflow/types"
 )
 
-// ExecutionStatus represents the status of an execution
-type ExecutionStatus = persistence.TaskStatus
+// ExecutionStatus represents the status of an execution.
+// Uses the unified types.ExecutionStatus to avoid cross-layer coupling with agent/persistence.
+type ExecutionStatus = types.ExecutionStatus
 
 const (
 	// ExecutionStatusRunning indicates the execution is in progress
-	ExecutionStatusRunning ExecutionStatus = persistence.TaskStatusRunning
+	ExecutionStatusRunning ExecutionStatus = types.ExecutionStatusRunning
 	// ExecutionStatusCompleted indicates the execution completed successfully
-	ExecutionStatusCompleted ExecutionStatus = persistence.TaskStatusCompleted
+	ExecutionStatusCompleted ExecutionStatus = types.ExecutionStatusCompleted
 	// ExecutionStatusFailed indicates the execution failed
-	ExecutionStatusFailed ExecutionStatus = persistence.TaskStatusFailed
+	ExecutionStatusFailed ExecutionStatus = types.ExecutionStatusFailed
 )
 
 // NodeExecution records the execution of a single node

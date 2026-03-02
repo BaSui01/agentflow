@@ -33,7 +33,35 @@ foreach ($file in $pkgFiles) {
     }
 }
 
-# Rule 2: fat package guard
+# Rule 2: workflow must not import agent/persistence
+$workflowFiles = $files | Where-Object { $_.FullName -match "\\workflow\\" }
+foreach ($file in $workflowFiles) {
+    $matches = Select-String -Path $file.FullName -Pattern '"github.com/BaSui01/agentflow/agent/persistence' -SimpleMatch
+    foreach ($m in $matches) {
+        $rel = $file.FullName.Replace($root + "\", "").Replace("\", "/")
+        $errors += "[LAYER] ${rel}:$($m.LineNumber) workflow must not import agent/persistence"
+    }
+}
+
+# Rule 3: rag must not import agent/workflow/api/cmd
+$ragFiles = $files | Where-Object { $_.FullName -match "\\rag\\" }
+foreach ($file in $ragFiles) {
+    $patterns = @(
+        '"github.com/BaSui01/agentflow/agent/',
+        '"github.com/BaSui01/agentflow/workflow/',
+        '"github.com/BaSui01/agentflow/api/',
+        '"github.com/BaSui01/agentflow/cmd/'
+    )
+    foreach ($pat in $patterns) {
+        $matches = Select-String -Path $file.FullName -Pattern $pat -SimpleMatch
+        foreach ($m in $matches) {
+            $rel = $file.FullName.Replace($root + "\", "").Replace("\", "/")
+            $errors += "[LAYER] ${rel}:$($m.LineNumber) rag layer must not import $pat"
+        }
+    }
+}
+
+# Rule 4: fat package guard
 $groups = $files | Group-Object DirectoryName
 foreach ($g in $groups) {
     $relDir = $g.Name.Replace($root + "\", "").Replace("\", "/")
@@ -42,7 +70,7 @@ foreach ($g in $groups) {
     }
 }
 
-# Rule 3: single-file package allowlist guard
+# Rule 5: single-file package allowlist guard
 $allowOneFile = @(
     ".",
     "internal/app/bootstrap",

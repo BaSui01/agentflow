@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
-	"go.uber.org/zap"
 )
 
 func TestStateChangeEvent(t *testing.T) {
@@ -42,18 +41,5 @@ func TestFeedbackEvent(t *testing.T) {
 	}
 	assert.Equal(t, EventFeedback, e.Type())
 	assert.Equal(t, now, e.Timestamp())
-}
-
-func TestFeatureManager_Getters(t *testing.T) {
-	fm := NewFeatureManager(zap.NewNop())
-
-	// All getters should return nil initially
-	assert.Nil(t, fm.GetToolSelector())
-	assert.Nil(t, fm.GetPromptEnhancer())
-	assert.Nil(t, fm.GetSkillManager())
-	assert.Nil(t, fm.GetMCPServer())
-	assert.Nil(t, fm.GetLSP())
-	assert.Nil(t, fm.GetEnhancedMemory())
-	assert.Nil(t, fm.GetObservability())
 }
 

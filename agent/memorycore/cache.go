@@ -50,7 +50,7 @@ func (mc *Cache) Save(ctx context.Context, content string, kind MemoryKind, meta
 
 	rec := MemoryRecord{
 		AgentID:   mc.agentID,
-		Kind:      types.MemoryCategory(kind),
+		Kind:      kind,
 		Content:   content,
 		Metadata:  metadata,
 		CreatedAt: time.Now(),
@@ -87,7 +87,7 @@ func (mc *Cache) GetRecentMessages() []types.Message {
 
 	var msgs []types.Message
 	for _, mem := range mc.recentMemory {
-		if mem.Kind == types.MemoryCategory(MemoryShortTerm) {
+		if mem.Kind == MemoryShortTerm {
 			role := llm.RoleAssistant
 			if r, ok := mem.Metadata["role"].(string); ok && r != "" {
 				role = types.Role(r)
