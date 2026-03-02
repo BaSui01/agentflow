@@ -251,6 +251,21 @@ func TestCSVLoader_Load_ContentColumns(t *testing.T) {
 	assert.Equal(t, "goodbye", docs[1].Content)
 }
 
+func TestCSVLoader_Load_ContentColumns_NoMatch(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "data.csv")
+	csvContent := "id,text,label\n1,hello world,positive\n2,goodbye,negative"
+	require.NoError(t, os.WriteFile(path, []byte(csvContent), 0o644))
+
+	loader := NewCSVLoader(CSVLoaderConfig{ContentColumns: []string{"not_exists"}})
+	_, err := loader.Load(context.Background(), path)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "none of configured content columns matched header")
+}
+
 func TestCSVLoader_Load_RowsPerDocument(t *testing.T) {
 	t.Parallel()
 

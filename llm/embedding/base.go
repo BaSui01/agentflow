@@ -1,7 +1,6 @@
 package embedding
 
 import (
-	"github.com/BaSui01/agentflow/types"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -11,9 +10,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/BaSui01/agentflow/pkg/tlsutil"
 	"github.com/BaSui01/agentflow/llm"
 	"github.com/BaSui01/agentflow/llm/providers"
+	"github.com/BaSui01/agentflow/pkg/tlsutil"
+	"github.com/BaSui01/agentflow/types"
 )
 
 // BaseProvider为嵌入提供者提供了共同的功能.
@@ -201,4 +201,26 @@ func ChooseModel(reqModel, defaultModel, fallback string) string {
 	return fallback
 }
 
+func validateEmbeddingRequest(req *EmbeddingRequest, provider string) error {
+	if req == nil {
+		return &types.Error{
+			Code:       llm.ErrInvalidRequest,
+			Message:    "request must not be nil",
+			HTTPStatus: http.StatusBadRequest,
+			Retryable:  false,
+			Provider:   provider,
+		}
+	}
 
+	if len(req.Input) == 0 {
+		return &types.Error{
+			Code:       llm.ErrInvalidRequest,
+			Message:    "input must not be empty",
+			HTTPStatus: http.StatusBadRequest,
+			Retryable:  false,
+			Provider:   provider,
+		}
+	}
+
+	return nil
+}

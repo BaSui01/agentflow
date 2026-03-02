@@ -1,8 +1,10 @@
 package factory
 
 import (
+	"strings"
 	"testing"
 
+	"github.com/BaSui01/agentflow/llm"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
@@ -37,8 +39,8 @@ func TestNewProviderFromConfig_AnthropicExtras(t *testing.T) {
 	p, err := NewProviderFromConfig("anthropic", ProviderConfig{
 		APIKey: "sk-test",
 		Extra: map[string]any{
-			"auth_type":          "api_key",
-			"anthropic_version":  "2024-01-01",
+			"auth_type":         "api_key",
+			"anthropic_version": "2024-01-01",
 		},
 	}, zap.NewNop())
 	require.NoError(t, err)
@@ -80,3 +82,26 @@ func TestNewProviderFromConfig_GenericOpenAICompat_NoBaseURL(t *testing.T) {
 	assert.Contains(t, err.Error(), "base_url is required")
 }
 
+func TestRegisterProviderConstructor_CustomDispatch(t *testing.T) {
+	customName := "custom-" + strings.ReplaceAll(strings.ToLower(t.Name()), "/", "-")
+	err := RegisterProviderConstructor(customName, func(_ string, cfg ProviderConfig, logger *zap.Logger) (llm.Provider, error) {
+		return NewProviderFromConfig("deepseek", cfg, logger)
+	})
+	require.NoError(t, err)
+
+	p, err := NewProviderFromConfig(customName, ProviderConfig{APIKey: "sk-test"}, zap.NewNop())
+	require.NoError(t, err)
+	assert.Equal(t, "deepseek", p.Name())
+}
+
+func TestRegisterProviderConstructor_DuplicateRejected(t *testing.T) {
+	customName := "custom-" + strings.ReplaceAll(strings.ToLower(t.Name()), "/", "-")
+	constructor := func(_ string, cfg ProviderConfig, logger *zap.Logger) (llm.Provider, error) {
+		return NewProviderFromConfig("qwen", cfg, logger)
+	}
+
+	require.NoError(t, RegisterProviderConstructor(customName, constructor))
+	err := RegisterProviderConstructor(customName, constructor)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "already registered")
+}

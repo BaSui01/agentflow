@@ -1,13 +1,11 @@
 package embedding
 
 import (
-	"github.com/BaSui01/agentflow/types"
 	"context"
 	"encoding/json"
 	"fmt"
 	"time"
 
-	"github.com/BaSui01/agentflow/llm"
 	"github.com/BaSui01/agentflow/llm/providers"
 )
 
@@ -15,7 +13,7 @@ import (
 // 注: Gemini 使用不同的端点格式: /models/{model}:embedContent
 type GeminiProvider struct {
 	*BaseProvider
-	cfg    GeminiConfig
+	cfg GeminiConfig
 }
 
 // GeminiConfig 配置 Gemini 嵌入提供者.
@@ -109,15 +107,10 @@ func mapTaskType(inputType InputType) geminiTaskType {
 
 // Embed 使用 Gemini API 生成嵌入.
 func (p *GeminiProvider) Embed(ctx context.Context, req *EmbeddingRequest) (*EmbeddingResponse, error) {
-	if len(req.Input) == 0 {
-		return nil, &types.Error{
-			Code:       llm.ErrInvalidRequest,
-			Message:    "input must not be empty",
-			HTTPStatus: 400,
-			Retryable:  false,
-			Provider:   p.Name(),
-		}
+	if err := validateEmbeddingRequest(req, p.Name()); err != nil {
+		return nil, err
 	}
+
 	model := ChooseModel(req.Model, p.cfg.Model, "gemini-embedding-001")
 	taskType := mapTaskType(req.InputType)
 
@@ -218,5 +211,3 @@ func (p *GeminiProvider) EmbedQuery(ctx context.Context, query string) ([]float6
 func (p *GeminiProvider) EmbedDocuments(ctx context.Context, documents []string) ([][]float64, error) {
 	return p.BaseProvider.EmbedDocuments(ctx, documents, p.Embed)
 }
-
-

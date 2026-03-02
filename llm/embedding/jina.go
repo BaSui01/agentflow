@@ -3,6 +3,7 @@ package embedding
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"time"
 )
 
@@ -18,7 +19,7 @@ func NewJinaProvider(cfg JinaConfig) *JinaProvider {
 
 	return &JinaProvider{
 		BaseProvider: newProviderBase("jina-embedding", cfg.BaseProviderConfig, 1024, 2048),
-		cfg: cfg,
+		cfg:          cfg,
 	}
 }
 
@@ -47,6 +48,10 @@ type jinaEmbedResponse struct {
 
 // 嵌入会使用Jina AI生成嵌入.
 func (p *JinaProvider) Embed(ctx context.Context, req *EmbeddingRequest) (*EmbeddingResponse, error) {
+	if err := validateEmbeddingRequest(req, p.Name()); err != nil {
+		return nil, err
+	}
+
 	model := ChooseModel(req.Model, p.cfg.Model, "jina-embeddings-v3")
 
 	body := jinaEmbedRequest{
@@ -84,7 +89,7 @@ func (p *JinaProvider) Embed(ctx context.Context, req *EmbeddingRequest) (*Embed
 
 	var jResp jinaEmbedResponse
 	if err := json.Unmarshal(respBody, &jResp); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to decode jina embedding response: %w", err)
 	}
 
 	embeddings := make([]EmbeddingData, len(jResp.Data))
@@ -116,4 +121,3 @@ func (p *JinaProvider) EmbedQuery(ctx context.Context, query string) ([]float64,
 func (p *JinaProvider) EmbedDocuments(ctx context.Context, documents []string) ([][]float64, error) {
 	return p.BaseProvider.EmbedDocuments(ctx, documents, p.Embed)
 }
-

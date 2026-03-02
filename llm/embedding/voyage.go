@@ -3,6 +3,7 @@ package embedding
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"time"
 )
 
@@ -18,7 +19,7 @@ func NewVoyageProvider(cfg VoyageConfig) *VoyageProvider {
 
 	return &VoyageProvider{
 		BaseProvider: newProviderBase("voyage-embedding", cfg.BaseProviderConfig, 1024, 128),
-		cfg: cfg,
+		cfg:          cfg,
 	}
 }
 
@@ -44,6 +45,10 @@ type voyageEmbedResponse struct {
 
 // Embed使用Voyage AI生成嵌入.
 func (p *VoyageProvider) Embed(ctx context.Context, req *EmbeddingRequest) (*EmbeddingResponse, error) {
+	if err := validateEmbeddingRequest(req, p.Name()); err != nil {
+		return nil, err
+	}
+
 	model := ChooseModel(req.Model, p.cfg.Model, "voyage-3-large")
 
 	body := voyageEmbedRequest{
@@ -69,7 +74,7 @@ func (p *VoyageProvider) Embed(ctx context.Context, req *EmbeddingRequest) (*Emb
 
 	var vResp voyageEmbedResponse
 	if err := json.Unmarshal(respBody, &vResp); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to decode voyage embedding response: %w", err)
 	}
 
 	embeddings := make([]EmbeddingData, len(vResp.Data))
@@ -100,4 +105,3 @@ func (p *VoyageProvider) EmbedQuery(ctx context.Context, query string) ([]float6
 func (p *VoyageProvider) EmbedDocuments(ctx context.Context, documents []string) ([][]float64, error) {
 	return p.BaseProvider.EmbedDocuments(ctx, documents, p.Embed)
 }
-

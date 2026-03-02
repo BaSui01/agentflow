@@ -3,6 +3,7 @@ package embedding
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"time"
 )
 
@@ -21,15 +22,15 @@ func NewOpenAIProvider(cfg OpenAIConfig) *OpenAIProvider {
 
 	return &OpenAIProvider{
 		BaseProvider: newProviderBase("openai-embedding", cfg.BaseProviderConfig, cfg.Dimensions, 2048),
-		cfg: cfg,
+		cfg:          cfg,
 	}
 }
 
 type openAIEmbedRequest struct {
-	Input          any `json:"input"`
-	Model          string      `json:"model"`
-	Dimensions     int         `json:"dimensions,omitempty"`
-	EncodingFormat string      `json:"encoding_format,omitempty"`
+	Input          any    `json:"input"`
+	Model          string `json:"model"`
+	Dimensions     int    `json:"dimensions,omitempty"`
+	EncodingFormat string `json:"encoding_format,omitempty"`
 }
 
 type openAIEmbedResponse struct {
@@ -48,6 +49,10 @@ type openAIEmbedResponse struct {
 
 // 嵌入为给定输入生成嵌入.
 func (p *OpenAIProvider) Embed(ctx context.Context, req *EmbeddingRequest) (*EmbeddingResponse, error) {
+	if err := validateEmbeddingRequest(req, p.Name()); err != nil {
+		return nil, err
+	}
+
 	model := ChooseModel(req.Model, p.cfg.Model, "text-embedding-3-large")
 	dims := req.Dimensions
 	if dims == 0 {
@@ -72,7 +77,7 @@ func (p *OpenAIProvider) Embed(ctx context.Context, req *EmbeddingRequest) (*Emb
 
 	var oaResp openAIEmbedResponse
 	if err := json.Unmarshal(respBody, &oaResp); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to decode openai embedding response: %w", err)
 	}
 
 	embeddings := make([]EmbeddingData, len(oaResp.Data))
@@ -105,4 +110,3 @@ func (p *OpenAIProvider) EmbedQuery(ctx context.Context, query string) ([]float6
 func (p *OpenAIProvider) EmbedDocuments(ctx context.Context, documents []string) ([][]float64, error) {
 	return p.BaseProvider.EmbedDocuments(ctx, documents, p.Embed)
 }
-

@@ -5,13 +5,13 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/BaSui01/agentflow/llm/providers"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"go.uber.org/zap"
 )
 
 // --- Config tests ---
@@ -36,69 +36,89 @@ func TestDefaultRunwayConfig(t *testing.T) {
 	assert.Equal(t, 300*time.Second, cfg.Timeout)
 }
 
-// redirectTransport redirects all requests to a test server.
-type redirectTransport struct {
-	targetURL string
-	inner     http.RoundTripper
+func TestNewProvider_DefaultConfig(t *testing.T) {
+	p, err := NewProvider("sora", nil, nil)
+	require.NoError(t, err)
+	require.NotNil(t, p)
+	assert.Equal(t, "sora", p.Name())
 }
 
-func (t *redirectTransport) RoundTrip(req *http.Request) (*http.Response, error) {
-	newURL := t.targetURL + req.URL.Path + "?" + req.URL.RawQuery
-	newReq, err := http.NewRequestWithContext(req.Context(), req.Method, newURL, req.Body)
-	if err != nil {
-		return nil, err
-	}
-	newReq.Header = req.Header
-	return t.inner.RoundTrip(newReq)
+func TestNewProvider_Alias(t *testing.T) {
+	p, err := NewProvider("minimax", nil, nil)
+	require.NoError(t, err)
+	require.NotNil(t, p)
+	assert.Equal(t, "minimax-video", p.Name())
 }
 
-func newRunwayProvider(cfg RunwayConfig, logger ...*zap.Logger) *RunwayProvider {
-	if len(logger) > 0 {
-		return NewRunwayProvider(cfg, logger[0])
-	}
-	return NewRunwayProvider(cfg, nil)
+func TestNewProvider_InvalidConfigType(t *testing.T) {
+	_, err := NewProvider("runway", GeminiConfig{}, nil)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid config type")
 }
 
-func newSoraProvider(cfg SoraConfig, logger ...*zap.Logger) *SoraProvider {
-	if len(logger) > 0 {
-		return NewSoraProvider(cfg, logger[0])
-	}
-	return NewSoraProvider(cfg, nil)
+func TestNewProvider_UnknownProvider(t *testing.T) {
+	_, err := NewProvider("unknown-video", nil, nil)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "unknown video provider")
 }
 
-func newGeminiProvider(cfg GeminiConfig, logger ...*zap.Logger) *GeminiProvider {
-	if len(logger) > 0 {
-		return NewGeminiProvider(cfg, logger[0])
-	}
-	return NewGeminiProvider(cfg, nil)
+func TestValidateGenerateRequest_AspectRatioAndResolution(t *testing.T) {
+	err := ValidateGenerateRequest(&GenerateRequest{
+		Prompt:      "test",
+		AspectRatio: "bad",
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "aspect_ratio")
+
+	err = ValidateGenerateRequest(&GenerateRequest{
+		Prompt:     "test",
+		Resolution: "2k",
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "resolution")
+
+	err = ValidateGenerateRequest(&GenerateRequest{
+		Prompt:      "test",
+		AspectRatio: "16:9",
+		Resolution:  "1080p",
+	})
+	require.NoError(t, err)
 }
 
-func newVeoProvider(cfg VeoConfig, logger ...*zap.Logger) *VeoProvider {
-	if len(logger) > 0 {
-		return NewVeoProvider(cfg, logger[0])
-	}
-	return NewVeoProvider(cfg, nil)
+func TestValidateGenerateRequest_AllowsDataImageURL(t *testing.T) {
+	err := ValidateGenerateRequest(&GenerateRequest{
+		Prompt:   "test",
+		ImageURL: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAA",
+	})
+	require.NoError(t, err)
 }
 
-func newLumaProvider(cfg LumaConfig, logger ...*zap.Logger) *LumaProvider {
-	if len(logger) > 0 {
-		return NewLumaProvider(cfg, logger[0])
-	}
-	return NewLumaProvider(cfg, nil)
+func TestValidateGenerateRequest_PromptTooLong(t *testing.T) {
+	err := ValidateGenerateRequest(&GenerateRequest{
+		Prompt: strings.Repeat("a", maxVideoPromptLength+1),
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "max length")
 }
 
-func newKlingProvider(cfg KlingConfig, logger ...*zap.Logger) *KlingProvider {
-	if len(logger) > 0 {
-		return NewKlingProvider(cfg, logger[0])
+func TestAcquireVideoGenerateSlot_RespectsLimit(t *testing.T) {
+	var releases []func()
+	for i := 0; i < maxVideoGenerateConcurrency; i++ {
+		release, err := acquireVideoGenerateSlot(context.Background())
+		require.NoError(t, err)
+		releases = append(releases, release)
 	}
-	return NewKlingProvider(cfg, nil)
-}
+	defer func() {
+		for _, release := range releases {
+			release()
+		}
+	}()
 
-func newMiniMaxVideoProvider(cfg MiniMaxVideoConfig, logger ...*zap.Logger) *MiniMaxVideoProvider {
-	if len(logger) > 0 {
-		return NewMiniMaxVideoProvider(cfg, logger[0])
-	}
-	return NewMiniMaxVideoProvider(cfg, nil)
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel()
+	_, err := acquireVideoGenerateSlot(ctx)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, context.DeadlineExceeded)
 }
 
 // --- Gemini Provider tests ---
@@ -240,7 +260,7 @@ func TestGeminiProvider_Analyze_Error(t *testing.T) {
 
 	_, err := p.Analyze(context.Background(), &AnalyzeRequest{Prompt: "test"})
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "gemini video error")
+	assert.Contains(t, err.Error(), "gemini error")
 }
 
 func TestGeminiProvider_Analyze_EmptyResponse(t *testing.T) {
@@ -408,7 +428,7 @@ func TestRunwayProvider_Generate_AspectRatioMapping(t *testing.T) {
 		{"16:9", "1280:720"},
 		{"9:16", "720:1280"},
 		{"1:1", "960:960"},
-		{"custom:ratio", "custom:ratio"},
+		{"4:3", "4:3"},
 	}
 
 	for _, tt := range ratioTests {
@@ -739,6 +759,16 @@ func TestNewSoraProvider_Defaults(t *testing.T) {
 	assert.Equal(t, "sora-2", p.cfg.Model)
 }
 
+func TestSoraProvider_Generate_InvalidModel(t *testing.T) {
+	p := newSoraProvider(SoraConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k"}}, nil)
+	_, err := p.Generate(context.Background(), &GenerateRequest{
+		Prompt: "test",
+		Model:  "sora-injected-model",
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "not allowed")
+}
+
 func TestSoraProvider_Analyze_NotSupported(t *testing.T) {
 	p := newSoraProvider(SoraConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k"}}, nil)
 	_, err := p.Analyze(context.Background(), &AnalyzeRequest{})
@@ -874,6 +904,16 @@ func TestNewLumaProvider_Defaults(t *testing.T) {
 	assert.Equal(t, "ray-2", p.cfg.Model)
 }
 
+func TestLumaProvider_Generate_InvalidModel(t *testing.T) {
+	p := newLumaProvider(LumaConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k"}}, nil)
+	_, err := p.Generate(context.Background(), &GenerateRequest{
+		Prompt: "test",
+		Model:  "ray-custom",
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "not allowed")
+}
+
 func TestLumaProvider_Analyze_NotSupported(t *testing.T) {
 	p := newLumaProvider(LumaConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k"}}, nil)
 	_, err := p.Analyze(context.Background(), &AnalyzeRequest{})
@@ -972,6 +1012,16 @@ func TestNewKlingProvider_Defaults(t *testing.T) {
 	p := newKlingProvider(KlingConfig{}, nil)
 	assert.Equal(t, "https://api.klingai.com", p.cfg.BaseURL)
 	assert.Equal(t, "kling-v3-pro", p.cfg.Model)
+}
+
+func TestKlingProvider_Generate_InvalidModel(t *testing.T) {
+	p := newKlingProvider(KlingConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k"}}, nil)
+	_, err := p.Generate(context.Background(), &GenerateRequest{
+		Prompt: "test",
+		Model:  "kling-custom",
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "not allowed")
 }
 
 func TestKlingProvider_Analyze_NotSupported(t *testing.T) {
@@ -1125,6 +1175,16 @@ func TestNewMiniMaxVideoProvider_Defaults(t *testing.T) {
 	p := newMiniMaxVideoProvider(MiniMaxVideoConfig{}, nil)
 	assert.Equal(t, "https://api.minimax.chat", p.cfg.BaseURL)
 	assert.Equal(t, "video-01", p.cfg.Model)
+}
+
+func TestMiniMaxVideoProvider_Generate_InvalidModel(t *testing.T) {
+	p := newMiniMaxVideoProvider(MiniMaxVideoConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k"}}, nil)
+	_, err := p.Generate(context.Background(), &GenerateRequest{
+		Prompt: "test",
+		Model:  "video-x",
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "not allowed")
 }
 
 func TestMiniMaxVideoProvider_Analyze_NotSupported(t *testing.T) {

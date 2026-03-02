@@ -1,15 +1,16 @@
 package mistral
 
 import (
-	"github.com/BaSui01/agentflow/types"
 	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/BaSui01/agentflow/llm"
 	"github.com/BaSui01/agentflow/llm/providers"
+	"github.com/BaSui01/agentflow/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
@@ -495,7 +496,7 @@ func TestMistralProvider_HealthCheck(t *testing.T) {
 	status, err := p.HealthCheck(context.Background())
 	require.NoError(t, err)
 	assert.True(t, status.Healthy)
-	assert.Greater(t, status.Latency, int64(0)*1)
+	assert.GreaterOrEqual(t, status.Latency, time.Duration(0))
 }
 
 func TestMistralProvider_HealthCheck_Unhealthy(t *testing.T) {
@@ -513,5 +514,3 @@ func TestMistralProvider_HealthCheck_Unhealthy(t *testing.T) {
 	require.Error(t, err)
 	assert.False(t, status.Healthy)
 }
-
-

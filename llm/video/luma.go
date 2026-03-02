@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"time"
 
@@ -20,8 +19,20 @@ type LumaProvider struct {
 	logger *zap.Logger
 }
 
-const defaultLumaTimeout = 300 * time.Second
-const defaultLumaPollInterval = 5 * time.Second
+const defaultLumaDuration = 5
+const minLumaDuration = 4
+const maxLumaDuration = 20
+const defaultLumaResolution = "720p"
+const defaultLumaAspectRatio = "16:9"
+const lumaGenerationPath = "/dream-machine/v1/generations"
+const lumaStateCompleted = "completed"
+const lumaStateFailed = "failed"
+const lumaStateQueued = "queued"
+const lumaStateDreaming = "dreaming"
+
+var lumaAllowedModels = map[string]struct{}{
+	"ray-2": {},
+}
 
 // NewLumaProvider creates a new Luma AI video provider.
 func NewLumaProvider(cfg LumaConfig, logger *zap.Logger) *LumaProvider {
@@ -36,7 +47,7 @@ func NewLumaProvider(cfg LumaConfig, logger *zap.Logger) *LumaProvider {
 	}
 	timeout := cfg.Timeout
 	if timeout == 0 {
-		timeout = defaultLumaTimeout
+		timeout = defaultVideoTimeout
 	}
 	return &LumaProvider{
 		cfg:    cfg,
@@ -45,9 +56,9 @@ func NewLumaProvider(cfg LumaConfig, logger *zap.Logger) *LumaProvider {
 	}
 }
 
-func (p *LumaProvider) Name() string                 { return "luma" }
+func (p *LumaProvider) Name() string                    { return "luma" }
 func (p *LumaProvider) SupportedFormats() []VideoFormat { return []VideoFormat{VideoFormatMP4} }
-func (p *LumaProvider) SupportsGeneration() bool     { return true }
+func (p *LumaProvider) SupportsGeneration() bool        { return true }
 
 type lumaRequest struct {
 	Prompt      string         `json:"prompt"`
@@ -80,6 +91,9 @@ type lumaResponse struct {
 
 // Analyze is not supported by the Luma provider.
 func (p *LumaProvider) Analyze(ctx context.Context, req *AnalyzeRequest) (*AnalyzeResponse, error) {
+	_, span := startProviderSpan(ctx, p.Name(), "analyze")
+	defer span.End()
+
 	return nil, fmt.Errorf("video analysis not supported by luma provider")
 }
 
@@ -87,30 +101,54 @@ func (p *LumaProvider) Analyze(ctx context.Context, req *AnalyzeRequest) (*Analy
 // Endpoint: POST /dream-machine/v1/generations
 // Auth: Bearer token
 func (p *LumaProvider) Generate(ctx context.Context, req *GenerateRequest) (*GenerateResponse, error) {
+	ctx, span := startProviderSpan(ctx, p.Name(), "generate")
+	defer span.End()
+
 	if err := ValidateGenerateRequest(req); err != nil {
 		return nil, err
 	}
+	release, err := acquireVideoGenerateSlot(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer release()
 
 	model := req.Model
 	if model == "" {
 		model = p.cfg.Model
 	}
+	if err := validateAllowedModel("luma", model, lumaAllowedModels); err != nil {
+		return nil, err
+	}
 
 	duration := req.Duration
 	if duration == 0 {
-		duration = 5
+		duration = defaultLumaDuration
+	}
+	if duration < minLumaDuration {
+		duration = minLumaDuration
+	}
+	if duration > maxLumaDuration {
+		duration = maxLumaDuration
 	}
 	durationStr := fmt.Sprintf("%ds", int(duration))
 
 	resolution := req.Resolution
 	if resolution == "" {
-		resolution = "720p"
+		resolution = defaultLumaResolution
 	}
 
 	aspectRatio := req.AspectRatio
 	if aspectRatio == "" {
-		aspectRatio = "16:9"
+		aspectRatio = defaultLumaAspectRatio
 	}
+	p.logger.Info("luma generate start",
+		zap.String("model", model),
+		zap.String("prompt", shortPromptForLog(req.Prompt)),
+		zap.Float64("duration", duration),
+		zap.String("aspect_ratio", aspectRatio),
+		zap.String("resolution", resolution),
+		zap.Bool("image_to_video", req.ImageURL != ""))
 
 	body := lumaRequest{
 		Prompt:      req.Prompt,
@@ -129,9 +167,12 @@ func (p *LumaProvider) Generate(ctx context.Context, req *GenerateRequest) (*Gen
 		}
 	}
 
-	payload, _ := json.Marshal(body)
+	payload, err := marshalJSONRequest("luma", body)
+	if err != nil {
+		return nil, err
+	}
 	httpReq, err := http.NewRequestWithContext(ctx, "POST",
-		p.cfg.BaseURL+"/dream-machine/v1/generations",
+		p.cfg.BaseURL+lumaGenerationPath,
 		bytes.NewReader(payload))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
@@ -146,8 +187,7 @@ func (p *LumaProvider) Generate(ctx context.Context, req *GenerateRequest) (*Gen
 	defer resp.Body.Close()
 
 	if resp.StatusCode >= 400 {
-		errBody, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("luma error: status=%d body=%s", resp.StatusCode, string(errBody))
+		return nil, httpStatusError(p.logger, "luma", "generate", resp.StatusCode, resp.Body)
 	}
 
 	var lResp lumaResponse
@@ -180,16 +220,39 @@ func (p *LumaProvider) Generate(ctx context.Context, req *GenerateRequest) (*Gen
 }
 
 func (p *LumaProvider) pollGeneration(ctx context.Context, id string) (*lumaResponse, error) {
-	ticker := time.NewTicker(defaultLumaPollInterval)
-	defer ticker.Stop()
+	if err := validatePollTaskID(id); err != nil {
+		return nil, fmt.Errorf("invalid luma generation id: %w", err)
+	}
+	timer := time.NewTimer(defaultVideoPollInterval)
+	defer timer.Stop()
+	interval := defaultVideoPollInterval
+	attempts := 0
+	consecutiveErrors := 0
 
 	for {
 		select {
 		case <-ctx.Done():
 			return nil, ctx.Err()
-		case <-ticker.C:
+		case <-timer.C:
+			if err := ctx.Err(); err != nil {
+				return nil, err
+			}
+			attempts++
+			if attempts > maxVideoPollAttempts {
+				return nil, fmt.Errorf("luma polling exceeded max attempts (%d)", maxVideoPollAttempts)
+			}
+			if attempts == pollSlowWarnThreshold {
+				p.logger.Warn("luma polling is taking longer than expected",
+					zap.String("generation_id", id),
+					zap.Int("attempt", attempts))
+			}
+			if attempts%pollProgressLogEvery == 0 {
+				p.logger.Info("luma polling in progress",
+					zap.String("generation_id", id),
+					zap.Int("attempt", attempts))
+			}
 			httpReq, err := http.NewRequestWithContext(ctx, "GET",
-				fmt.Sprintf("%s/dream-machine/v1/generations/%s", p.cfg.BaseURL, id), nil)
+				fmt.Sprintf("%s%s/%s", p.cfg.BaseURL, lumaGenerationPath, id), nil)
 			if err != nil {
 				return nil, fmt.Errorf("failed to create request: %w", err)
 			}
@@ -197,27 +260,56 @@ func (p *LumaProvider) pollGeneration(ctx context.Context, id string) (*lumaResp
 
 			resp, err := p.client.Do(httpReq)
 			if err != nil {
+				consecutiveErrors++
+				p.logger.Warn("luma poll request failed",
+					zap.String("generation_id", id),
+					zap.Int("attempt", attempts),
+					zap.Int("consecutive_errors", consecutiveErrors),
+					zap.Error(err))
+				if consecutiveErrors >= maxVideoPollConsecutiveErrors {
+					return nil, fmt.Errorf("luma polling failed after %d consecutive errors: %w", consecutiveErrors, err)
+				}
+				interval = nextPollInterval(interval)
+				timer.Reset(interval)
 				continue
+			}
+			if resp.StatusCode >= 400 {
+				return nil, statusErrorAndClose(p.logger, "luma", "poll", resp)
 			}
 
 			var lResp lumaResponse
-			if err := json.NewDecoder(resp.Body).Decode(&lResp); err != nil {
-				resp.Body.Close()
+			if err := decodeJSONAndClose(resp, &lResp); err != nil {
+				consecutiveErrors++
+				p.logger.Warn("luma poll decode failed",
+					zap.String("generation_id", id),
+					zap.Int("attempt", attempts),
+					zap.Int("consecutive_errors", consecutiveErrors),
+					zap.Error(err))
+				if consecutiveErrors >= maxVideoPollConsecutiveErrors {
+					return nil, fmt.Errorf("luma polling decode failed after %d consecutive errors: %w", consecutiveErrors, err)
+				}
+				interval = nextPollInterval(interval)
+				timer.Reset(interval)
 				continue
 			}
-			resp.Body.Close()
+			consecutiveErrors = 0
+			interval = defaultVideoPollInterval
 
 			switch lResp.State {
-			case "completed":
+			case lumaStateCompleted:
+				p.logger.Info("luma generate complete",
+					zap.String("generation_id", id),
+					zap.String("status", lResp.State))
 				return &lResp, nil
-			case "failed":
+			case lumaStateFailed:
 				if lResp.FailureReason != "" {
 					return nil, fmt.Errorf("luma generation failed: %s", lResp.FailureReason)
 				}
 				return nil, fmt.Errorf("luma generation failed")
+			case lumaStateQueued, lumaStateDreaming:
+				// Continue polling.
 			}
-			// continue polling for queued, dreaming
+			timer.Reset(interval)
 		}
 	}
 }
-

@@ -4,8 +4,20 @@ import (
 	"fmt"
 	"net"
 	"net/url"
+	"regexp"
 	"strings"
+	"unicode/utf8"
 )
+
+var aspectRatioPattern = regexp.MustCompile(`^\d+:\d+$`)
+
+const maxVideoPromptLength = 4000
+
+var allowedResolutions = map[string]struct{}{
+	"480p":  {},
+	"720p":  {},
+	"1080p": {},
+}
 
 // ValidateGenerateRequest validates common fields of a GenerateRequest.
 // Returns an error if the request is invalid.
@@ -16,10 +28,46 @@ func ValidateGenerateRequest(req *GenerateRequest) error {
 	if strings.TrimSpace(req.Prompt) == "" {
 		return fmt.Errorf("prompt must not be empty")
 	}
+	if utf8.RuneCountInString(req.Prompt) > maxVideoPromptLength {
+		return fmt.Errorf("prompt exceeds max length (%d characters)", maxVideoPromptLength)
+	}
+	if req.Duration < 0 {
+		return fmt.Errorf("duration must be non-negative")
+	}
+	if req.AspectRatio != "" {
+		aspectRatio := strings.TrimSpace(req.AspectRatio)
+		if !aspectRatioPattern.MatchString(aspectRatio) {
+			return fmt.Errorf("aspect_ratio must follow N:M format")
+		}
+	}
+	if req.Resolution != "" {
+		resolution := strings.ToLower(strings.TrimSpace(req.Resolution))
+		if _, ok := allowedResolutions[resolution]; !ok {
+			return fmt.Errorf("resolution must be one of 480p, 720p, 1080p")
+		}
+	}
 	if req.ImageURL != "" {
-		if err := ValidateExternalURL(req.ImageURL); err != nil {
+		imageURL := strings.TrimSpace(req.ImageURL)
+		if strings.HasPrefix(strings.ToLower(imageURL), "data:image/") {
+			return nil
+		}
+		if err := ValidateExternalURL(imageURL); err != nil {
 			return fmt.Errorf("invalid image_url: %w", err)
 		}
+	}
+	return nil
+}
+
+func validateAllowedModel(provider string, model string, allowedModels map[string]struct{}) error {
+	trimmed := strings.TrimSpace(model)
+	if trimmed == "" {
+		return fmt.Errorf("%s model must not be empty", provider)
+	}
+	if len(allowedModels) == 0 {
+		return nil
+	}
+	if _, ok := allowedModels[trimmed]; !ok {
+		return fmt.Errorf("%s model %q is not allowed", provider, trimmed)
 	}
 	return nil
 }
@@ -53,4 +101,3 @@ func ValidateExternalURL(rawURL string) error {
 	}
 	return nil
 }
-

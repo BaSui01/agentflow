@@ -202,7 +202,7 @@ func (e *ResilientExecutor) tryExecute(ctx context.Context, call llmpkg.ToolCall
 func (e *ResilientExecutor) determineStrategy(toolName, errMsg string) FallbackStrategy {
 	// 检查是否应该跳过
 	for _, skipErr := range e.config.SkipOnErrors {
-		if contains(errMsg, skipErr) {
+		if strings.Contains(errMsg, skipErr) {
 			return FallbackSkip
 		}
 	}
@@ -255,20 +255,6 @@ func (e *ResilientExecutor) buildSkipResponse(toolName, errMsg string) json.RawM
 	}
 	data, _ := json.Marshal(resp)
 	return data
-}
-
-func contains(s, substr string) bool {
-	return len(s) >= len(substr) && (s == substr || len(substr) == 0 ||
-		(len(s) > 0 && len(substr) > 0 && findSubstring(s, substr)))
-}
-
-func findSubstring(s, substr string) bool {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
-		}
-	}
-	return false
 }
 
 // ToolCallChain 工具调用链（支持多步骤工具调用）

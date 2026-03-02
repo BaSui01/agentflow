@@ -49,6 +49,10 @@ type cohereEmbedResponse struct {
 
 // 嵌入会使用Cohere生成嵌入.
 func (p *CohereProvider) Embed(ctx context.Context, req *EmbeddingRequest) (*EmbeddingResponse, error) {
+	if err := validateEmbeddingRequest(req, p.Name()); err != nil {
+		return nil, err
+	}
+
 	model := ChooseModel(req.Model, p.cfg.Model, "embed-v3.5")
 
 	body := cohereEmbedRequest{

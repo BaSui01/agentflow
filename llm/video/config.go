@@ -6,21 +6,21 @@ import (
 	"github.com/BaSui01/agentflow/llm/providers"
 )
 
-// GeminiConfig 配置 Google Gemini 视频理解提供者.
-// 嵌入 providers.BaseProviderConfig 以复用 APIKey、Model、Timeout 字段。
-// 保留 ProjectID 和 Location 作为视频领域特有字段。
+// GeminiConfig configures the Google Gemini video understanding provider.
+// It embeds providers.BaseProviderConfig to reuse APIKey, Model, and Timeout.
+// ProjectID and Location remain Gemini-specific fields.
 type GeminiConfig struct {
 	providers.BaseProviderConfig `yaml:",inline"`
-	ProjectID                   string `json:"project_id,omitempty" yaml:"project_id,omitempty"`
-	Location                    string `json:"location,omitempty" yaml:"location,omitempty"`
+	ProjectID                    string `json:"project_id,omitempty" yaml:"project_id,omitempty"`
+	Location                     string `json:"location,omitempty" yaml:"location,omitempty"`
 }
 
-// VeoConfig 配置 Google Veo 视频生成提供者.
+// VeoConfig configures the Google Veo video generation provider.
 type VeoConfig struct {
 	providers.BaseProviderConfig `yaml:",inline"`
 }
 
-// RunwayConfig 配置 Runway ML 视频生成提供者.
+// RunwayConfig configures the Runway ML video generation provider.
 type RunwayConfig struct {
 	providers.BaseProviderConfig `yaml:",inline"`
 }
@@ -30,7 +30,7 @@ type SoraConfig struct {
 	providers.BaseProviderConfig `yaml:",inline"`
 }
 
-// DefaultGeminiConfig 返回默认 Gemini 视频配置.
+// DefaultGeminiConfig returns the default Gemini video configuration.
 func DefaultGeminiConfig() GeminiConfig {
 	return GeminiConfig{
 		BaseProviderConfig: providers.BaseProviderConfig{
@@ -41,23 +41,23 @@ func DefaultGeminiConfig() GeminiConfig {
 	}
 }
 
-// DefaultVeoConfig 返回默认 Veo 配置.
+// DefaultVeoConfig returns the default Veo configuration.
 func DefaultVeoConfig() VeoConfig {
 	return VeoConfig{
 		BaseProviderConfig: providers.BaseProviderConfig{
 			Model:   "veo-3.1-generate-preview",
-			Timeout: 300 * time.Second,
+			Timeout: defaultVideoTimeout,
 		},
 	}
 }
 
-// DefaultRunwayConfig 返回默认 Runway 配置.
+// DefaultRunwayConfig returns the default Runway configuration.
 func DefaultRunwayConfig() RunwayConfig {
 	return RunwayConfig{
 		BaseProviderConfig: providers.BaseProviderConfig{
 			BaseURL: "https://api.runwayml.com",
 			Model:   "gen-4.5",
-			Timeout: 300 * time.Second,
+			Timeout: defaultVideoTimeout,
 		},
 	}
 }
@@ -68,7 +68,7 @@ func DefaultSoraConfig() SoraConfig {
 		BaseProviderConfig: providers.BaseProviderConfig{
 			BaseURL: "https://api.openai.com",
 			Model:   "sora-2",
-			Timeout: 300 * time.Second,
+			Timeout: defaultVideoTimeout,
 		},
 	}
 }
@@ -84,23 +84,23 @@ func DefaultKlingConfig() KlingConfig {
 		BaseProviderConfig: providers.BaseProviderConfig{
 			BaseURL: "https://api.klingai.com",
 			Model:   "kling-v3-pro",
-			Timeout: 300 * time.Second,
+			Timeout: defaultVideoTimeout,
 		},
 	}
 }
 
-// LumaConfig 配置 Luma AI Dream Machine 视频生成提供者.
+// LumaConfig configures the Luma AI Dream Machine video generation provider.
 type LumaConfig struct {
 	providers.BaseProviderConfig `yaml:",inline"`
 }
 
-// DefaultLumaConfig 返回默认 Luma 配置.
+// DefaultLumaConfig returns the default Luma configuration.
 func DefaultLumaConfig() LumaConfig {
 	return LumaConfig{
 		BaseProviderConfig: providers.BaseProviderConfig{
 			BaseURL: "https://api.lumalabs.ai",
 			Model:   "ray-2",
-			Timeout: 300 * time.Second,
+			Timeout: defaultVideoTimeout,
 		},
 	}
 }
@@ -116,8 +116,7 @@ func DefaultMiniMaxVideoConfig() MiniMaxVideoConfig {
 		BaseProviderConfig: providers.BaseProviderConfig{
 			BaseURL: "https://api.minimax.chat",
 			Model:   "video-01",
-			Timeout: 300 * time.Second,
+			Timeout: defaultVideoTimeout,
 		},
 	}
 }
-
