@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/BaSui01/agentflow/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
@@ -262,6 +263,51 @@ func TestSubagentManager_CleanupCompleted_SkipsRecent(t *testing.T) {
 	cleaned := manager.CleanupCompleted(1 * time.Hour)
 	assert.Equal(t, 0, cleaned)
 	assert.Len(t, manager.ListExecutions(), 1)
+}
+
+func TestSubagentManager_SpawnSubagent_ContextIsolation(t *testing.T) {
+	manager := NewSubagentManager(zap.NewNop())
+
+	var (
+		gotParentRun string
+		gotTraceID   string
+		gotSpanID    string
+		gotRunID     string
+	)
+	agent := &asyncStubAgent{
+		id: "sub-iso",
+		executeFn: func(ctx context.Context, input *Input) (*Output, error) {
+			if v, ok := types.ParentRunID(ctx); ok {
+				gotParentRun = v
+			}
+			if v, ok := types.TraceID(ctx); ok {
+				gotTraceID = v
+			}
+			if v, ok := types.SpanID(ctx); ok {
+				gotSpanID = v
+			}
+			if v, ok := types.RunID(ctx); ok {
+				gotRunID = v
+			}
+			return &Output{Content: "ok"}, nil
+		},
+	}
+
+	parentCtx := context.Background()
+	parentCtx = types.WithTraceID(parentCtx, "trace-parent")
+	parentCtx = types.WithRunID(parentCtx, "run-parent")
+
+	exec, err := manager.SpawnSubagent(parentCtx, agent, &Input{Content: "task"})
+	require.NoError(t, err)
+	_, err = exec.Wait(context.Background())
+	require.NoError(t, err)
+
+	assert.Equal(t, "run-parent", gotParentRun)
+	assert.Equal(t, "trace-parent", gotTraceID)
+	assert.NotEmpty(t, gotSpanID)
+	assert.Contains(t, gotSpanID, "span_")
+	assert.NotEmpty(t, gotRunID)
+	assert.NotEqual(t, "run-parent", gotRunID)
 }
 
 // ============================================================

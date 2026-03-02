@@ -6,12 +6,9 @@ import (
 	"time"
 
 	"github.com/BaSui01/agentflow/agent"
-	"github.com/BaSui01/agentflow/agent/collaboration"
 	"github.com/BaSui01/agentflow/agent/crews"
 	"github.com/BaSui01/agentflow/agent/handoff"
-	"github.com/BaSui01/agentflow/agent/hierarchical"
-	"github.com/BaSui01/agentflow/llm"
-	"github.com/BaSui01/agentflow/types"
+	"github.com/BaSui01/agentflow/agent/multiagent"
 	"go.uber.org/zap"
 )
 
@@ -53,25 +50,12 @@ func (a *CollaborationAdapter) Priority(task *OrchestrationTask) int {
 }
 
 func (a *CollaborationAdapter) Execute(ctx context.Context, task *OrchestrationTask) (*OrchestrationResult, error) {
-	var pattern collaboration.CollaborationPattern
-	switch a.coordinationType {
-	case "consensus":
-		pattern = collaboration.PatternConsensus
-	case "pipeline":
-		pattern = collaboration.PatternPipeline
-	case "broadcast":
-		pattern = collaboration.PatternBroadcast
-	default:
-		pattern = collaboration.PatternDebate
+	input := cloneTaskInput(task.Input)
+	if input.Context == nil {
+		input.Context = make(map[string]any)
 	}
-
-	mas := collaboration.NewMultiAgentSystem(task.Agents, collaboration.MultiAgentConfig{
-		Pattern:   pattern,
-		MaxRounds: 3,
-		Timeout:   5 * time.Minute,
-	}, a.logger)
-
-	output, err := mas.Execute(ctx, task.Input)
+	input.Context["coordination_type"] = a.coordinationType
+	output, err := executeMode(ctx, multiagent.ModeCollaboration, task.Agents, input)
 	if err != nil {
 		return nil, fmt.Errorf("collaboration execution failed: %w", err)
 	}
@@ -84,7 +68,7 @@ func (a *CollaborationAdapter) Execute(ctx context.Context, task *OrchestrationT
 	return &OrchestrationResult{
 		Output:    output,
 		AgentUsed: agentIDs,
-		Metadata:  map[string]any{"coordination_type": a.coordinationType},
+		Metadata:  map[string]any{"coordination_type": a.coordinationType, "mode": multiagent.ModeCollaboration},
 	}, nil
 }
 
@@ -123,37 +107,8 @@ func (a *HierarchicalAdapter) Execute(ctx context.Context, task *OrchestrationTa
 		return nil, fmt.Errorf("hierarchical pattern requires at least 2 agents")
 	}
 
-	// First agent with "supervisor" in name is the supervisor; rest are workers.
-	// If none found, use the first agent as supervisor.
-	var supervisor agent.Agent
-	var workers []agent.Agent
-	for _, ag := range task.Agents {
-		if supervisor == nil && hasSupervisor([]agent.Agent{ag}) {
-			supervisor = ag
-		} else {
-			workers = append(workers, ag)
-		}
-	}
-	if supervisor == nil {
-		supervisor = task.Agents[0]
-		workers = task.Agents[1:]
-	}
-
-	base := agent.NewBaseAgent(types.AgentConfig{
-		Core: types.CoreConfig{
-			ID:   "orchestration-hierarchical",
-			Name: "orchestration-hierarchical",
-			Type: string(agent.TypeGeneric),
-		},
-	}, noopProvider{}, nil, nil, nil, a.logger)
-
-	ha := hierarchical.NewHierarchicalAgent(
-		base, supervisor, workers,
-		hierarchical.DefaultHierarchicalConfig(),
-		a.logger,
-	)
-
-	output, err := ha.Execute(ctx, task.Input)
+	supervisorID := resolveSupervisorID(task.Agents)
+	output, err := executeMode(ctx, multiagent.ModeHierarchical, task.Agents, task.Input)
 	if err != nil {
 		return nil, fmt.Errorf("hierarchical execution failed: %w", err)
 	}
@@ -166,33 +121,9 @@ func (a *HierarchicalAdapter) Execute(ctx context.Context, task *OrchestrationTa
 	return &OrchestrationResult{
 		Output:    output,
 		AgentUsed: agentIDs,
-		Metadata:  map[string]any{"supervisor": supervisor.ID()},
+		Metadata:  map[string]any{"supervisor": supervisorID, "mode": multiagent.ModeHierarchical},
 	}, nil
 }
-
-// noopProvider satisfies llm.Provider for orchestration wrappers that don't
-// directly perform model calls through the embedded BaseAgent.
-type noopProvider struct{}
-
-func (noopProvider) Completion(context.Context, *llm.ChatRequest) (*llm.ChatResponse, error) {
-	return nil, fmt.Errorf("not implemented")
-}
-
-func (noopProvider) Stream(context.Context, *llm.ChatRequest) (<-chan llm.StreamChunk, error) {
-	return nil, fmt.Errorf("not implemented")
-}
-
-func (noopProvider) HealthCheck(context.Context) (*llm.HealthStatus, error) {
-	return &llm.HealthStatus{Healthy: true}, nil
-}
-
-func (noopProvider) Name() string { return "noop" }
-
-func (noopProvider) SupportsNativeFunctionCalling() bool { return false }
-
-func (noopProvider) ListModels(context.Context) ([]llm.Model, error) { return nil, nil }
-
-func (noopProvider) Endpoints() llm.ProviderEndpoints { return llm.ProviderEndpoints{} }
 
 // ---------------------------------------------------------------------------
 // HandoffAdapter
@@ -351,39 +282,9 @@ func (a *CrewAdapter) Execute(ctx context.Context, task *OrchestrationTask) (*Or
 		return nil, fmt.Errorf("crew pattern requires at least 1 agent")
 	}
 
-	crew := crews.NewCrew(crews.CrewConfig{
-		Name:    task.ID,
-		Process: crews.ProcessSequential,
-	}, a.logger)
-
-	for _, ag := range task.Agents {
-		crew.AddMember(&crewAgentAdapter{agent: ag}, crews.Role{
-			Name:        ag.Name(),
-			Description: fmt.Sprintf("Agent %s", ag.ID()),
-			Skills:      []string{"general"},
-		})
-	}
-
-	crew.AddTask(crews.CrewTask{
-		ID:          task.ID + "-task",
-		Description: task.Description,
-		Expected:    "task result",
-	})
-
-	crewResult, err := crew.Execute(ctx)
+	output, err := executeMode(ctx, multiagent.ModeCrew, task.Agents, task.Input)
 	if err != nil {
 		return nil, fmt.Errorf("crew execution failed: %w", err)
-	}
-
-	// Aggregate crew results into a single output
-	content := ""
-	for _, tr := range crewResult.TaskResults {
-		if tr.Output != nil {
-			content += fmt.Sprintf("%v", tr.Output)
-		}
-		if tr.Error != "" {
-			content += fmt.Sprintf(" [error: %s]", tr.Error)
-		}
 	}
 
 	agentIDs := make([]string, 0, len(task.Agents))
@@ -391,15 +292,55 @@ func (a *CrewAdapter) Execute(ctx context.Context, task *OrchestrationTask) (*Or
 		agentIDs = append(agentIDs, ag.ID())
 	}
 
+	meta := map[string]any{"mode": multiagent.ModeCrew}
+	if output != nil && output.Metadata != nil {
+		if crewID, ok := output.Metadata["crew_id"]; ok {
+			meta["crew_id"] = crewID
+		}
+	}
+
 	return &OrchestrationResult{
-		Output: &agent.Output{
-			TraceID:  task.Input.TraceID,
-			Content:  content,
-			Duration: crewResult.Duration,
-		},
+		Output:    output,
 		AgentUsed: agentIDs,
-		Metadata:  map[string]any{"crew_id": crewResult.CrewID},
+		Metadata:  meta,
 	}, nil
+}
+
+func executeMode(ctx context.Context, mode string, agents []agent.Agent, input *agent.Input) (*agent.Output, error) {
+	reg := multiagent.GlobalModeRegistry()
+	return reg.Execute(ctx, mode, agents, cloneTaskInput(input))
+}
+
+func cloneTaskInput(in *agent.Input) *agent.Input {
+	if in == nil {
+		return &agent.Input{}
+	}
+	out := *in
+	if in.Context != nil {
+		out.Context = make(map[string]any, len(in.Context))
+		for k, v := range in.Context {
+			out.Context[k] = v
+		}
+	}
+	if in.Variables != nil {
+		out.Variables = make(map[string]string, len(in.Variables))
+		for k, v := range in.Variables {
+			out.Variables[k] = v
+		}
+	}
+	return &out
+}
+
+func resolveSupervisorID(agents []agent.Agent) string {
+	for _, ag := range agents {
+		if hasSupervisor([]agent.Agent{ag}) {
+			return ag.ID()
+		}
+	}
+	if len(agents) == 0 {
+		return ""
+	}
+	return agents[0].ID()
 }
 
 // ---------------------------------------------------------------------------

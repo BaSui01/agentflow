@@ -6,22 +6,23 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/BaSui01/agentflow/types"
 	"go.uber.org/zap"
 )
 
 // EventType 事件类型
-type EventType string
+type EventType = types.AgentEventType
 
 const (
-	EventStateChange       EventType = "state_change"
-	EventToolCall          EventType = "tool_call"
-	EventFeedback          EventType = "feedback"
-	EventApprovalRequested EventType = "approval_requested"
-	EventApprovalResponded EventType = "approval_responded"
-	EventSubagentCompleted EventType = "subagent_completed"
-	EventAgentRunStart     EventType = "agent_run_start"
-	EventAgentRunComplete  EventType = "agent_run_complete"
-	EventAgentRunError     EventType = "agent_run_error"
+	EventStateChange       EventType = types.AgentEventStateChange
+	EventToolCall          EventType = types.AgentEventToolCall
+	EventFeedback          EventType = types.AgentEventFeedback
+	EventApprovalRequested EventType = types.AgentEventApprovalRequested
+	EventApprovalResponded EventType = types.AgentEventApprovalResponded
+	EventSubagentCompleted EventType = types.AgentEventSubagentCompleted
+	EventAgentRunStart     EventType = types.AgentEventRunStart
+	EventAgentRunComplete  EventType = types.AgentEventRunComplete
+	EventAgentRunError     EventType = types.AgentEventRunError
 )
 
 // subscriptionCounter 用于生成唯一订阅 ID，替代 time.Now().UnixNano() 避免并发碰撞

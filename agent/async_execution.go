@@ -342,6 +342,8 @@ func (m *SubagentManager) SpawnSubagent(ctx context.Context, subagent Agent, inp
 	if parentRunID, ok := types.RunID(ctx); ok {
 		childCtx = types.WithParentRunID(childCtx, parentRunID)
 	}
+	// Trace context isolation: share trace_id, but assign an independent span_id for child execution.
+	childCtx = types.WithSpanID(childCtx, "span_"+uuid.New().String())
 	childCtx = types.WithRunID(childCtx, execution.ID)
 
 	m.logger.Debug("spawning subagent",

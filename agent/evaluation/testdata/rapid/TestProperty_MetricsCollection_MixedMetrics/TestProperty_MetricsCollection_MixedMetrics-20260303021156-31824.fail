@@ -1,0 +1,209 @@
+# 2026/03/03 02:11:56.857616 [TestProperty_MetricsCollection_MixedMetrics] [rapid] draw numCustomMetrics: 5
+# 2026/03/03 02:11:56.857616 [TestProperty_MetricsCollection_MixedMetrics] [rapid] draw prompt: "p02 92m2v40gDVj30260L0zjZyn29ry"
+# 2026/03/03 02:11:56.857616 [TestProperty_MetricsCollection_MixedMetrics] [rapid] draw expected: "efC J"
+# 2026/03/03 02:11:56.857616 [TestProperty_MetricsCollection_MixedMetrics] [rapid] draw response: "22IzCY"
+# 2026/03/03 02:11:56.857616 [TestProperty_MetricsCollection_MixedMetrics] [rapid] draw tokensUsed: 11
+# 2026/03/03 02:11:56.857616 [TestProperty_MetricsCollection_MixedMetrics] [rapid] draw latencyMs: 126
+# 2026/03/03 02:11:56.857616 [TestProperty_MetricsCollection_MixedMetrics] [rapid] draw cost: 1
+# 2026/03/03 02:11:56.857616 [TestProperty_MetricsCollection_MixedMetrics] 
+# 	Error Trace:	D:/code/agentflow/agent/evaluation/metrics_collection_property_test.go:174
+# 	            				C:/Users/Administrator/go/pkg/mod/pgregory.net/rapid@v1.2.0/engine.go:371
+# 	            				C:/Users/Administrator/go/pkg/mod/pgregory.net/rapid@v1.2.0/engine.go:380
+# 	            				C:/Users/Administrator/go/pkg/mod/pgregory.net/rapid@v1.2.0/engine.go:205
+# 	            				C:/Users/Administrator/go/pkg/mod/pgregory.net/rapid@v1.2.0/engine.go:120
+# 	            				D:/code/agentflow/agent/evaluation/metrics_collection_property_test.go:134
+# 	            				C:/Program Files/Go/src/runtime/asm_amd64.s:1771
+# 	Error:      	Not equal: 
+# 	            	expected: 9
+# 	            	actual  : 12
+# 	Test:       	TestProperty_MetricsCollection_MixedMetrics
+# 	Messages:   	EvalResult should contain 9 metrics (4 builtin + 5 custom), got 12
+# 
+v0.4.8#16779574746778269875
+0x17678c1eae5d23
+0x1b81c982d2ab8f
+0x4
+0x1e3291f8c2df43
+0x0
+0x1659169e1f95b5
+0x34
+0x10760d29987c9b
+0x0
+0x5e7de0c344e84
+0x1
+0x15301289a20266
+0x0
+0x64a9d8237d36a
+0x3
+0xf767249922966
+0x0
+0x2169281f6b601
+0x0
+0x3c60446e2c920
+0x0
+0x14b29559e8ec07
+0xa
+0x12409fef5cef66
+0x0
+0x6df460653049a
+0x3
+0xb5d7189bd8845
+0x0
+0x123cf7fc8b92a1
+0x31
+0x13fc03b0e6728f
+0x0
+0x6c9239556c0e1
+0x3
+0x16b35cd37d635f
+0x0
+0x15c53a9bc0ef2e
+0x3a
+0x1af8a7f0816306
+0x0
+0x6fff30a996633
+0x5
+0x19e79ca9cf9d47
+0x0
+0x48dbf33e7bca7
+0x1
+0x13b3d7d6edaef4
+0x0
+0x1887fe9a07ca2b
+0x2b
+0x12f02c829de55d
+0x0
+0xf96e5964b56ab
+0xe
+0xbba19cdc0f754
+0x0
+0x18f21bdc832016
+0x20
+0x853d1daa46b2f
+0x0
+0x1def3c08b24f00
+0x2e
+0x1326168f95c636
+0x0
+0x70264f5139e23
+0x4
+0xe6d96379ddca5
+0x0
+0x210fe3bff58b8
+0x1
+0x1dd109134c6b92
+0x0
+0x19280920c0e48e
+0x3
+0x1c8b840194f120
+0x0
+0xa43648d611ab5
+0x7
+0x10c85522d3fe02
+0x0
+0x28775239a34d4
+0x1
+0x1e525302f6ae67
+0x0
+0x1e1f5ed35e1f61
+0x16
+0x15571b80939c6f
+0x0
+0x2c03afe363b0f
+0x1
+0x1ac98e3a24a9cf
+0x0
+0x1ff8a646aa87ef
+0xffffffffffffffff
+0x14e13810b735ca
+0x0
+0x1003dfe1657e20
+0x2e
+0xc18aa2f9a203e
+0x0
+0x190a81ad1b0f02
+0x24
+0x56fe55f65e632
+0x0
+0x14abe7169422d9
+0x3d
+0x15e1b7a31abd2a
+0x0
+0x1ed720305de9e7
+0x32
+0x1461fdaa13efa3
+0x0
+0x3f8a7170c8687
+0x3
+0x8caa72e772b55
+0x0
+0x1d1c0d652687dc
+0xa
+0x10680f9f892aee
+0x0
+0x12c995fb0da093
+0x36
+0x14a9d0aff72f4d
+0x0
+0x14d9cca5b1f933
+0x3d
+0x5504a5e4483be
+0xffecb444c902f
+0x0
+0x1da3e4e30688ef
+0x29
+0x679dc4d520da7
+0x0
+0x12bb450d06b6b6
+0x2a
+0x17cbfc81810b54
+0x0
+0x1368b2126d0167
+0xd
+0xe3ef264b63c08
+0x0
+0x2ef04a8a5c0c9
+0x0
+0xe87e8084f216d
+0x0
+0x166008a168a7e4
+0x14
+0x35bfb3c7549c4
+0xb2cc1bb27a196
+0x0
+0x3bb01a83ef6cb
+0x3
+0xafc64212c386b
+0x0
+0x69db0fa4c25a0
+0x3
+0x13706e57db98d5
+0x0
+0x10e58beeea0a36
+0x13
+0x17add45c865f79
+0x0
+0x1f40d9e6d2fc4f
+0xffffffffffffffff
+0x887ac52a737d6
+0x0
+0x12df0e25fce7fc
+0xd
+0x1fc2d53f4a811a
+0x0
+0x14939ce5cee9a2
+0x23
+0x4854ea76c8cbd
+0x1e01bce2c3c2aa
+0x5431ffe966ef8
+0x1
+0x1209df5b198b17
+0xcf04e5decb8cf
+0x1a
+0x1832ccedc2355
+0x1d48ca97567b16
+0x1cfa20b5ed669
+0x0
+0x0
+0x0
+0x0

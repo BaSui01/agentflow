@@ -7,19 +7,20 @@ import (
 	"sync"
 	"time"
 
+	"github.com/BaSui01/agentflow/types"
 	"go.uber.org/zap"
 )
 
 // 技能类定义了技能类别.
-type SkillCategory string
+type SkillCategory = types.SkillCategory
 
 const (
-	CategoryReasoning     SkillCategory = "reasoning"
-	CategoryCoding        SkillCategory = "coding"
-	CategoryResearch      SkillCategory = "research"
-	CategoryCommunication SkillCategory = "communication"
-	CategoryData          SkillCategory = "data"
-	CategoryAutomation    SkillCategory = "automation"
+	CategoryReasoning     SkillCategory = types.SkillCategoryReasoning
+	CategoryCoding        SkillCategory = types.SkillCategoryCoding
+	CategoryResearch      SkillCategory = types.SkillCategoryResearch
+	CategoryCommunication SkillCategory = types.SkillCategoryCommunication
+	CategoryData          SkillCategory = types.SkillCategoryData
+	CategoryAutomation    SkillCategory = types.SkillCategoryAutomation
 )
 
 // SkillDefinition定义了一种标准化的技能.

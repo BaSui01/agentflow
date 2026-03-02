@@ -87,7 +87,7 @@ func TestProperty_MetricsCollection_WithBuiltinMetrics(t *testing.T) {
 		registry := NewRegistryWithBuiltinMetrics()
 
 		// 预期内置的计量名称
-		expectedMetrics := []string{"accuracy", "latency", "token_usage", "cost"}
+		expectedMetrics := []string{"accuracy", "recall_at_k", "mrr", "groundedness", "latency", "token_usage", "cost"}
 
 		// 生成随机输入/输出数据
 		prompt := rapid.StringMatching(`[a-zA-Z0-9 ]{5,50}`).Draw(rt, "prompt")
@@ -148,8 +148,8 @@ func TestProperty_MetricsCollection_MixedMetrics(t *testing.T) {
 			})
 		}
 
-		// 预期总衡量标准=4个内置+定制
-		expectedTotal := 4 + numCustomMetrics
+		// 预期总衡量标准=7个内置+定制
+		expectedTotal := 7 + numCustomMetrics
 
 		// 生成随机输入/输出数据
 		input := &EvalInput{
@@ -172,7 +172,7 @@ func TestProperty_MetricsCollection_MixedMetrics(t *testing.T) {
 
 		// 校验: 公尺计数总数匹配
 		assert.Equal(rt, expectedTotal, len(result.Metrics),
-			"EvalResult should contain %d metrics (4 builtin + %d custom), got %d",
+			"EvalResult should contain %d metrics (7 builtin + %d custom), got %d",
 			expectedTotal, numCustomMetrics, len(result.Metrics))
 
 		// 校验: 所有自定义度量衡都存在
@@ -182,7 +182,7 @@ func TestProperty_MetricsCollection_MixedMetrics(t *testing.T) {
 		}
 
 		// 校验:所有内置度量衡都存在
-		builtinMetrics := []string{"accuracy", "latency", "token_usage", "cost"}
+		builtinMetrics := []string{"accuracy", "recall_at_k", "mrr", "groundedness", "latency", "token_usage", "cost"}
 		for _, name := range builtinMetrics {
 			_, exists := result.Metrics[name]
 			assert.True(rt, exists, "Builtin metric '%s' should be present in result", name)

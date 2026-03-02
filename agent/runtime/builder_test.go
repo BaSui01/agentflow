@@ -181,3 +181,26 @@ func TestBuilder_Build_WithToolProvider(t *testing.T) {
 	assert.Equal(t, mainProvider, ag.Provider())
 	assert.Equal(t, toolProvider, ag.ToolProvider())
 }
+
+func TestBuilder_Build_WithToolScope(t *testing.T) {
+	cfg := types.AgentConfig{
+		Core: types.CoreConfig{
+			ID:   "test-agent",
+			Name: "Test",
+			Type: "assistant",
+		},
+		LLM: types.LLMConfig{
+			Model: "gpt-4",
+		},
+	}
+	provider := mocks.NewSuccessProvider("hello")
+	toolScope := []string{"search", "calculator"}
+
+	ag, err := NewBuilder(provider, zap.NewNop()).
+		WithToolScope(toolScope).
+		WithOptions(BuildOptions{}).
+		Build(context.Background(), cfg)
+	require.NoError(t, err)
+	require.NotNil(t, ag)
+	assert.Equal(t, toolScope, ag.Config().Runtime.Tools)
+}
