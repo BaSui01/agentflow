@@ -9,7 +9,9 @@ import (
 	"mime/multipart"
 	"net/http"
 	"strings"
+	"time"
 
+	"github.com/BaSui01/agentflow/llm/providers"
 	providerbase "github.com/BaSui01/agentflow/llm/providers/base"
 
 	"github.com/BaSui01/agentflow/types"
@@ -32,14 +34,78 @@ func (p *OpenAIProvider) GenerateImage(ctx context.Context, req *llm.ImageGenera
 	return &imageResp, nil
 }
 
-// GenerateVideo OpenAI 不支持视频生成.
+// GenerateVideo 使用 OpenAI Sora 生成视频.
+// Endpoint: POST /v1/videos/generations (提交) + GET /v1/videos/generations/{id} (轮询)
+// Models: sora
 func (p *OpenAIProvider) GenerateVideo(ctx context.Context, req *llm.VideoGenerationRequest) (*llm.VideoGenerationResponse, error) {
-	return nil, &types.Error{
-		Code:       llm.ErrInvalidRequest,
-		Message:    "video generation is not supported by OpenAI",
-		HTTPStatus: http.StatusNotImplemented,
-		Provider:   p.Name(),
+	// 1. 提交视频生成任务
+	var submitResp openaiVideoSubmitResponse
+	if err := p.doJSON(ctx, http.MethodPost, "/v1/videos/generations", req, &submitResp); err != nil {
+		return nil, err
 	}
+
+	if submitResp.ID == "" {
+		return nil, &types.Error{
+			Code: llm.ErrUpstreamError, Message: "empty video generation id",
+			HTTPStatus: http.StatusBadGateway, Provider: p.Name(),
+		}
+	}
+
+	// 2. 异步轮询等待完成
+	result, err := providers.Poll[llm.VideoGenerationResponse](ctx, providers.PollConfig{
+		Interval:    5 * time.Second,
+		MaxAttempts: 120,
+	}, func(ctx context.Context) providers.PollResult[llm.VideoGenerationResponse] {
+		var statusResp openaiVideoStatusResponse
+		if err := p.doJSON(ctx, http.MethodGet, "/v1/videos/generations/"+submitResp.ID, nil, &statusResp); err != nil {
+			return providers.PollResult[llm.VideoGenerationResponse]{Done: true, Err: err}
+		}
+		switch statusResp.Status {
+		case "completed":
+			resp := &llm.VideoGenerationResponse{
+				ID:      statusResp.ID,
+				Created: statusResp.CreatedAt,
+			}
+			for _, v := range statusResp.Data {
+				resp.Data = append(resp.Data, llm.Video{URL: v.URL})
+			}
+			return providers.PollResult[llm.VideoGenerationResponse]{Done: true, Result: resp}
+		case "failed":
+			errMsg := "video generation failed"
+			if statusResp.Error != nil {
+				errMsg = statusResp.Error.Message
+			}
+			return providers.PollResult[llm.VideoGenerationResponse]{Done: true, Err: &types.Error{
+				Code: llm.ErrUpstreamError, Message: errMsg,
+				HTTPStatus: http.StatusBadGateway, Provider: p.Name(),
+			}}
+		default:
+			return providers.PollResult[llm.VideoGenerationResponse]{}
+		}
+	})
+	if err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
+// openaiVideoSubmitResponse 表示视频生成提交响应.
+type openaiVideoSubmitResponse struct {
+	ID     string `json:"id"`
+	Status string `json:"status"`
+}
+
+// openaiVideoStatusResponse 表示视频生成状态轮询响应.
+type openaiVideoStatusResponse struct {
+	ID        string `json:"id"`
+	Status    string `json:"status"` // pending, processing, completed, failed
+	CreatedAt int64  `json:"created_at"`
+	Data      []struct {
+		URL string `json:"url"`
+	} `json:"data,omitempty"`
+	Error *struct {
+		Message string `json:"message"`
+	} `json:"error,omitempty"`
 }
 
 // =============================================================================

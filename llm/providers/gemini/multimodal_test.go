@@ -17,38 +17,82 @@ import (
 )
 
 func TestGeminiProvider_MultimodalNotSupported(t *testing.T) {
-	p := NewGeminiProvider(providers.GeminiConfig{}, zap.NewNop())
-	ctx := context.Background()
+	// All previously not-supported capabilities are now implemented.
+	// This test is kept as a placeholder for future not-supported checks.
+}
 
-	t.Run("TranscribeAudio", func(t *testing.T) {
-		_, err := p.TranscribeAudio(ctx, &llm.AudioTranscriptionRequest{})
-		require.Error(t, err)
-		llmErr, ok := err.(*types.Error)
-		require.True(t, ok)
-		assert.Equal(t, llm.ErrInvalidRequest, llmErr.Code)
-		assert.Contains(t, llmErr.Message, "not supported")
-	})
+func TestGeminiProvider_TranscribeAudio_Success(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Contains(t, r.URL.Path, "generateContent")
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]any{
+			"candidates": []map[string]any{
+				{"content": map[string]any{"parts": []map[string]any{{"text": "Hello world"}}}},
+			},
+		})
+	}))
+	t.Cleanup(server.Close)
 
-	t.Run("CreateFineTuningJob", func(t *testing.T) {
-		_, err := p.CreateFineTuningJob(ctx, &llm.FineTuningJobRequest{})
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "not supported")
-	})
+	p := NewGeminiProvider(providers.GeminiConfig{
+		BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key", BaseURL: server.URL},
+	}, zap.NewNop())
 
-	t.Run("ListFineTuningJobs", func(t *testing.T) {
-		_, err := p.ListFineTuningJobs(ctx)
-		require.Error(t, err)
+	resp, err := p.TranscribeAudio(context.Background(), &llm.AudioTranscriptionRequest{
+		File: []byte("fake-audio"), Language: "en",
 	})
+	require.NoError(t, err)
+	assert.Equal(t, "Hello world", resp.Text)
+}
 
-	t.Run("GetFineTuningJob", func(t *testing.T) {
-		_, err := p.GetFineTuningJob(ctx, "job-123")
-		require.Error(t, err)
-	})
+func TestGeminiProvider_TranscribeAudio_HTTPError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte(`{"error":{"message":"Bad request"}}`))
+	}))
+	t.Cleanup(server.Close)
 
-	t.Run("CancelFineTuningJob", func(t *testing.T) {
-		err := p.CancelFineTuningJob(ctx, "job-123")
-		require.Error(t, err)
-	})
+	p := NewGeminiProvider(providers.GeminiConfig{
+		BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key", BaseURL: server.URL},
+	}, zap.NewNop())
+
+	_, err := p.TranscribeAudio(context.Background(), &llm.AudioTranscriptionRequest{File: []byte("audio")})
+	require.Error(t, err)
+}
+
+func TestGeminiProvider_CreateFineTuningJob_Success(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "/v1beta/tunedModels", r.URL.Path)
+		assert.Equal(t, http.MethodPost, r.Method)
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]any{
+			"name": "tunedModels/test-123",
+			"metadata": map[string]any{"totalSteps": 100},
+		})
+	}))
+	t.Cleanup(server.Close)
+
+	p := NewGeminiProvider(providers.GeminiConfig{
+		BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key", BaseURL: server.URL},
+	}, zap.NewNop())
+
+	job, err := p.CreateFineTuningJob(context.Background(), &llm.FineTuningJobRequest{Model: "gemini-2.5-flash"})
+	require.NoError(t, err)
+	assert.Equal(t, "tunedModels/test-123", job.ID)
+}
+
+func TestGeminiProvider_CreateFineTuningJob_HTTPError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusForbidden)
+		w.Write([]byte(`{"error":{"message":"Forbidden"}}`))
+	}))
+	t.Cleanup(server.Close)
+
+	p := NewGeminiProvider(providers.GeminiConfig{
+		BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key", BaseURL: server.URL},
+	}, zap.NewNop())
+
+	_, err := p.CreateFineTuningJob(context.Background(), &llm.FineTuningJobRequest{})
+	require.Error(t, err)
 }
 
 func TestGeminiProvider_GenerateImage_Success(t *testing.T) {

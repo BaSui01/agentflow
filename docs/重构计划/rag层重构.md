@@ -154,11 +154,23 @@ rag/
 
 ## 6. 执行计划（单轨替换）
 
+状态值约定（机读）：`Done` / `Partial` / `Todo`
+
+| Phase | 状态 | 完成判据（机读） | 证据路径 |
+|---|---|---|---|
+| Phase-0 冻结与基线 | Todo | 冻结 + 基线测试 + 基线指标三项齐备 | `docs/rag层重构.md` |
+| Phase-1 收敛构建链 | Todo | 唯一构建入口 `runtime.Builder`；并行工厂删除 | `rag/factory.go`、`rag/provider_integration.go` |
+| Phase-2 收敛检索主链 | Todo | 统一 pipeline 落地；hybrid/contextual/multi-hop 挂主链 | `rag/retrieval/pipeline.go` |
+| Phase-3 收敛配置桥接 | Todo | `config.Config` 依赖仅在 `runtime/config_bridge` | `rag/factory.go`、`rag/runtime/config_bridge.go` |
+| Phase-4 统一 LLM 能力接入 | Todo | embedding/rerank 统一经 capability 入口 | `rag/factory.go`、`llm/capabilities/embedding/*` |
+| Phase-5 契约与观测对齐 | Todo | 检索契约 + 错误码 + 评估指标 + 观测字段统一 | `types/`、`rag/core/metrics.go` |
+| Phase-6 守卫与验收 | Todo | 守卫 + 全量测试 + 文档同步 | `architecture_guard_test.go`、`scripts/arch_guard.ps1` |
+
 ## 6.1 Phase-0：冻结与基线
 
 - [ ] 冻结 `rag/` 非重构需求变更。
 - [ ] 固化基线测试（检索准确性、向量后端、分块与重排）。
-- [ ] 基线指标入库（延迟、召回、错误率）。
+- [ ] 基线指标入库（延迟、召回率@K、MRR、错误率）。
 
 ## 6.2 Phase-1：收敛构建链
 
@@ -168,8 +180,9 @@ rag/
 
 ## 6.3 Phase-2：收敛检索主链
 
-- [ ] 建立统一 retrieval pipeline。
+- [ ] 建立统一 retrieval pipeline：`query transform -> retrieve(topK=50-200) -> rerank(topK=5-10) -> compose context`。
 - [ ] 将 `hybrid/contextual/multi-hop` 挂接为主链策略节点。
+- [ ] 明确 Hybrid Search 融合算法：默认使用 RRF（Reciprocal Rank Fusion），可选加权融合 `H = (1-α)K + αV`（α 可配置，默认 0.5）。
 - [ ] 删除并行执行旁路。
 
 ## 6.4 Phase-3：收敛配置桥接
@@ -188,6 +201,8 @@ rag/
 - [ ] 明确并落地 `types` 侧最小检索契约（仅跨层共享字段）。
 - [ ] 错误码统一到 `types.ErrorCode`。
 - [ ] 指标字段与 trace 统一。
+- [ ] 落地 RAG 评估指标定义：`context_relevance`、`faithfulness`、`answer_relevancy`、`recall@K`、`MRR`。
+- [ ] 在 `rag/runtime/` 下增加语义缓存层（embedding-based similarity cache），降低高频相似查询的检索成本。
 
 ## 6.7 Phase-6：守卫与验收
 
@@ -207,27 +222,56 @@ rag/
 
 ## 8. 完成定义（DoD）
 
-- [ ] RAG 仅存在一个构建入口。
-- [ ] RAG 仅存在一个检索主链。
-- [ ] 配置桥接仅存在一套映射实现。
-- [ ] 统一错误码与统一观测字段落地。
-- [ ] 架构守卫、回归测试、文档同步全部通过。
+| DoD 条目 | 状态 | 完成判据（机读） | 证据路径 |
+|---|---|---|---|
+| RAG 仅存在一个构建入口 | Todo | `runtime.Builder` 为唯一入口；并行工厂删除 | `rag/runtime/builder.go` |
+| RAG 仅存在一个检索主链 | Todo | 统一 pipeline 落地；topK 分层策略可配置 | `rag/retrieval/pipeline.go` |
+| Hybrid 融合算法显式选择 | Todo | 默认 RRF；可选加权融合；融合策略可配置 | `rag/retrieval/hybrid.go` |
+| 配置桥接仅存在一套映射实现 | Todo | `config.Config` 依赖仅在 `runtime/config_bridge` | `rag/runtime/config_bridge.go` |
+| RAG 评估指标定义落地 | Todo | `context_relevance/faithfulness/answer_relevancy/recall@K/MRR` 定义完成 | `rag/core/metrics.go` |
+| 语义缓存层落地 | Todo | embedding-based similarity cache 可用 | `rag/runtime/cache.go` |
+| 统一错误码与统一观测字段落地 | Todo | 错误码映射 `types.ErrorCode`；观测字段统一 | `rag/core/errors.go`、`rag/core/metrics.go` |
+| 架构守卫、回归测试、文档同步全部通过 | Todo | 守卫 + 全量测试 + 文档同步 | `architecture_guard_test.go`、`rag/*_test.go` |
 
 ---
 
 ## 9. 风险与控制
 
-- 风险 1：入口收敛导致调用方改造面大。  
+- 风险 1：入口收敛导致调用方改造面大。
 控制：先批量替换调用点，再同阶段删除旧入口。
 
-- 风险 2：检索主链统一影响效果波动。  
+- 风险 2：检索主链统一影响效果波动。
 控制：保留模式策略节点，但统一挂主链；对召回指标做回归对比。
 
-- 风险 3：配置桥接迁移引发环境差异。  
+- 风险 3：配置桥接迁移引发环境差异。
 控制：桥接层单测覆盖所有后端配置分支。
+
+- 风险 4：Hybrid 融合算法选择影响检索质量。
+控制：RRF 作为默认（无需分数归一化，鲁棒性强）；加权融合 α 参数可配置并通过 A/B 评估调优。
+
+- 风险 5：语义缓存命中率低导致额外开销。
+控制：缓存相似度阈值可配置（建议 ≥0.95）；缓存 TTL 与索引更新频率联动；提供旁路开关。
 
 ---
 
-## 10. 变更日志
+## 10. Tokenizer 三套并行治理说明
+
+当前存在三套 Tokenizer 接口，语义不同，不建议强行合并：
+
+| 接口 | 位置 | 语义 | 适用场景 |
+|---|---|---|---|
+| `rag.Tokenizer` | `rag/` | 分块最小接口（`CountTokens(text) int`） | 文档分块时的 token 计数 |
+| `types.Tokenizer` | `types/` | 框架层（Message/ToolSchema 语义） | 跨层 token 预算估算 |
+| `llm/tokenizer.Tokenizer` | `llm/tokenizer/` | LLM 层（error + 模型感知） | 精确 token 计数与模型适配 |
+
+治理规则：
+- `rag/adapters/tokenizer_adapter.go` 负责 `llm/tokenizer -> rag.Tokenizer` 的显式桥接。
+- 禁止在 `rag/` 内直接依赖 `llm/tokenizer`，必须经 adapter。
+- 三者语义差异在本节文档化，后续新增 tokenizer 需求优先复用已有接口。
+
+---
+
+## 11. 变更日志
 
 - [x] 2026-03-02：创建文档，完成 RAG 层重构目标、现状盘点、目标架构与阶段计划定义。
+- [x] 2026-03-02：Review 补充：Phase 表改为机读状态表；Phase-2 补充 topK 分层策略与 Hybrid 融合算法（RRF/加权）；Phase-5 补充 RAG 评估指标定义与语义缓存层；DoD 改为机读判据表并补充融合算法、评估指标、语义缓存条目；新增风险 4（融合算法）与风险 5（语义缓存）；新增 Tokenizer 三套并行治理说明。

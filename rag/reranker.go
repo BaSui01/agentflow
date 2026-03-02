@@ -9,12 +9,6 @@ import (
 	"go.uber.org/zap"
 )
 
-// Reranker 重排序器接口
-type Reranker interface {
-	// Rerank 重排序结果
-	Rerank(ctx context.Context, query string, results []RetrievalResult) ([]RetrievalResult, error)
-}
-
 // RerankerType 重排序器类型
 type RerankerType string
 
@@ -52,18 +46,6 @@ func DefaultCrossEncoderConfig() CrossEncoderConfig {
 		ScoreWeight:    0.7,
 		OriginalWeight: 0.3,
 	}
-}
-
-// CrossEncoderProvider Cross-Encoder 提供器接口
-type CrossEncoderProvider interface {
-	// Score 计算查询-文档对的相关性分数
-	Score(ctx context.Context, pairs []QueryDocPair) ([]float64, error)
-}
-
-// QueryDocPair 查询-文档对
-type QueryDocPair struct {
-	Query    string
-	Document string
 }
 
 // NewCrossEncoderReranker 创建 Cross-Encoder 重排序器
@@ -197,12 +179,6 @@ Document: {{document}}
 
 Relevance score (0-10):`,
 	}
-}
-
-// LLMRerankerProvider LLM 重排序提供器
-type LLMRerankerProvider interface {
-	// ScoreRelevance 评估相关性
-	ScoreRelevance(ctx context.Context, query, document string) (float64, error)
 }
 
 // NewLLMReranker 创建 LLM 重排序器

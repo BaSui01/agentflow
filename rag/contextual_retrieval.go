@@ -78,12 +78,6 @@ func DefaultContextualRetrievalConfig() ContextualRetrievalConfig {
 	}
 }
 
-// ContextProvider 上下文提供器接口
-type ContextProvider interface {
-	// GenerateContext 为 chunk 生成上下文
-	GenerateContext(ctx context.Context, doc Document, chunk string) (string, error)
-}
-
 // LLMContextProvider 基于 LLM 的上下文生成器
 type LLMContextProvider struct {
 	llmProvider func(context.Context, string) (string, error)

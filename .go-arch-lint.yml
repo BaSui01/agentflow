@@ -1,0 +1,42 @@
+version: 3
+workdir: .
+components:
+  types:       { in: types/** }
+  llm_core:    { in: llm/core/** }
+  llm_gateway: { in: llm/gateway/** }
+  llm_runtime: { in: llm/runtime/** }
+  llm_caps:    { in: llm/capabilities/** }
+  llm_provs:   { in: llm/providers/** }
+  agent:       { in: agent/** }
+  rag:         { in: rag/** }
+  workflow:    { in: workflow/** }
+  api:         { in: api/** }
+  cmd:         { in: cmd/** }
+  internal:    { in: internal/** }
+
+commonComponents:
+  - types
+
+deps:
+  types:
+    mayDependOn: []
+  llm_core:
+    mayDependOn: [types]
+  llm_gateway:
+    mayDependOn: [types, llm_core, llm_runtime, llm_caps]
+  llm_runtime:
+    mayDependOn: [types, llm_core]
+  llm_caps:
+    mayDependOn: [types, llm_core, llm_provs]
+  llm_provs:
+    mayDependOn: [types, llm_core]
+  agent:
+    mayDependOn: [types, llm_core, llm_gateway, rag]
+  rag:
+    mayDependOn: [types, llm_core, llm_caps]
+  workflow:
+    mayDependOn: [types, llm_core, llm_gateway, agent, rag]
+  api:
+    mayDependOn: [types, llm_core, llm_gateway, agent, rag, workflow]
+  cmd:
+    mayDependOn: [types, llm_core, llm_gateway, llm_runtime, llm_caps, llm_provs, agent, rag, workflow, api, internal]

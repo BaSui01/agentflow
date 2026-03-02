@@ -7,6 +7,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/BaSui01/agentflow/types"
+
 	"github.com/google/uuid"
 	"go.uber.org/zap"
 )
@@ -335,6 +337,13 @@ func (m *SubagentManager) SpawnSubagent(ctx context.Context, subagent Agent, inp
 	m.executions[execution.ID] = execution
 	m.mu.Unlock()
 
+	// 构建子 agent 上下文：将当前 run_id 注入为 parent_run_id，生成新的子 run_id
+	childCtx := ctx
+	if parentRunID, ok := types.RunID(ctx); ok {
+		childCtx = types.WithParentRunID(childCtx, parentRunID)
+	}
+	childCtx = types.WithRunID(childCtx, execution.ID)
+
 	m.logger.Debug("spawning subagent",
 		zap.String("execution_id", execution.ID),
 		zap.String("subagent_id", subagent.ID()),
@@ -342,7 +351,7 @@ func (m *SubagentManager) SpawnSubagent(ctx context.Context, subagent Agent, inp
 
 	// 异步执行
 	go func() {
-		output, err := subagent.Execute(ctx, inputCopy)
+		output, err := subagent.Execute(childCtx, inputCopy)
 		if err != nil {
 			execution.setFailed(err)
 			m.logger.Warn("subagent execution failed",

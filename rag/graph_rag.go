@@ -10,34 +10,14 @@ import (
 	"go.uber.org/zap"
 )
 
-// 节点代表了知识图中的节点.
-type Node struct {
-	ID         string         `json:"id"`
-	Type       string         `json:"type"`
-	Label      string         `json:"label"`
-	Properties map[string]any `json:"properties,omitempty"`
-	Embedding  []float64      `json:"embedding,omitempty"`
-	CreatedAt  time.Time      `json:"created_at"`
-}
-
-// 边缘代表了节点之间的关系.
-type Edge struct {
-	ID         string         `json:"id"`
-	Source     string         `json:"source"`
-	Target     string         `json:"target"`
-	Type       string         `json:"type"`
-	Properties map[string]any `json:"properties,omitempty"`
-	Weight     float64        `json:"weight"`
-}
-
-// 三相代表一个主题-前相-对象三相.
+// Triple 代表一个主题-谓词-对象三元组。
 type Triple struct {
 	Subject   string `json:"subject"`
 	Predicate string `json:"predicate"`
 	Object    string `json:"object"`
 }
 
-// KnowledgeGraph提供记忆知识图操作.
+// KnowledgeGraph 提供内存知识图操作。
 type KnowledgeGraph struct {
 	nodes    map[string]*Node
 	edges    map[string]*Edge
@@ -153,16 +133,7 @@ type GraphRAG struct {
 	logger      *zap.Logger
 }
 
-// LowLevelVectorStore and LowLevelSearchResult are defined in vector_store.go.
-// GraphRAG uses LowLevelVectorStore for raw embedding storage and search,
-// replacing the previously duplicated GraphVectorStore interface.
-
-// GraphEmbedder 生成嵌入式.
-type GraphEmbedder interface {
-	Embed(ctx context.Context, text string) ([]float64, error)
-}
-
-// GraphRAGConfig 配置了 GraphRAG.
+// GraphRAGConfig 配置了 GraphRAG。
 type GraphRAGConfig struct {
 	GraphWeight   float64 `json:"graph_weight"`    // Weight for graph results
 	VectorWeight  float64 `json:"vector_weight"`   // Weight for vector results
@@ -196,19 +167,7 @@ func NewGraphRAG(graph *KnowledgeGraph, vectorStore LowLevelVectorStore, embedde
 	}
 }
 
-// Graph Retrival Result 代表混合检索结果.
-type GraphRetrievalResult struct {
-	ID           string         `json:"id"`
-	Content      string         `json:"content"`
-	Score        float64        `json:"score"`
-	GraphScore   float64        `json:"graph_score"`
-	VectorScore  float64        `json:"vector_score"`
-	Source       string         `json:"source"` // "graph", "vector", "hybrid"
-	Metadata     map[string]any `json:"metadata,omitempty"`
-	RelatedNodes []*Node        `json:"related_nodes,omitempty"`
-}
-
-// 检索进行混合检索。
+// Retrieve 进行混合检索。
 func (r *GraphRAG) Retrieve(ctx context.Context, query string) ([]GraphRetrievalResult, error) {
 	// 生成查询嵌入
 	queryEmb, err := r.embedder.Embed(ctx, query)

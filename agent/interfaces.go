@@ -395,3 +395,50 @@ func (p *PersistenceStores) PersistConversation(ctx context.Context, conversatio
 		)
 	}
 }
+
+// ScopedPersistenceStores wraps PersistenceStores and prefixes all IDs with
+// an agent-specific scope, ensuring sub-agent store operations are isolated.
+type ScopedPersistenceStores struct {
+	inner *PersistenceStores
+	scope string // typically the sub-agent's agent_id
+}
+
+// NewScopedPersistenceStores creates a scoped wrapper.
+func NewScopedPersistenceStores(inner *PersistenceStores, scope string) *ScopedPersistenceStores {
+	return &ScopedPersistenceStores{inner: inner, scope: scope}
+}
+
+// Scope returns the configured scope prefix.
+func (s *ScopedPersistenceStores) Scope() string { return s.scope }
+
+func (s *ScopedPersistenceStores) scopedID(id string) string {
+	if id == "" {
+		return ""
+	}
+	return s.scope + "/" + id
+}
+
+// RecordRun delegates to inner with scoped run ID prefix.
+func (s *ScopedPersistenceStores) RecordRun(ctx context.Context, agentID, tenantID, traceID, input string, startTime time.Time) string {
+	return s.inner.RecordRun(ctx, s.scopedID(agentID), tenantID, traceID, input, startTime)
+}
+
+// UpdateRunStatus delegates to inner.
+func (s *ScopedPersistenceStores) UpdateRunStatus(ctx context.Context, runID, status string, output *RunOutputDoc, errMsg string) error {
+	return s.inner.UpdateRunStatus(ctx, runID, status, output, errMsg)
+}
+
+// RestoreConversation delegates with scoped conversation ID.
+func (s *ScopedPersistenceStores) RestoreConversation(ctx context.Context, conversationID string) []types.Message {
+	return s.inner.RestoreConversation(ctx, s.scopedID(conversationID))
+}
+
+// PersistConversation delegates with scoped conversation ID.
+func (s *ScopedPersistenceStores) PersistConversation(ctx context.Context, conversationID, agentID, tenantID, userID, inputContent, outputContent string) {
+	s.inner.PersistConversation(ctx, s.scopedID(conversationID), s.scopedID(agentID), tenantID, userID, inputContent, outputContent)
+}
+
+// LoadPrompt delegates to inner (prompts are shared, not scoped).
+func (s *ScopedPersistenceStores) LoadPrompt(ctx context.Context, agentType, name, tenantID string) *PromptDocument {
+	return s.inner.LoadPrompt(ctx, agentType, name, tenantID)
+}

@@ -414,6 +414,54 @@ info: ## 显示项目信息
 	@echo ""
 
 # -----------------------------------------------------------------------------
+# 📚 文档质量检查
+# -----------------------------------------------------------------------------
+.PHONY: docs-lint
+docs-lint: ## 检查文档中的死链接
+	@echo "🔍 Checking markdown links..."
+	@if command -v npx >/dev/null 2>&1; then \
+		find docs/ README.md -name '*.md' -exec npx markdown-link-check --quiet {} + ; \
+		echo "✅ Markdown link check complete"; \
+	else \
+		echo "⚠️  npx not available, skipping link check"; \
+		echo "   Install Node.js to enable: npm install -g markdown-link-check"; \
+	fi
+
+.PHONY: docs-api-drift
+docs-api-drift: ## 检查文档中是否残留已废弃的 API 引用
+	@echo "🔍 Checking for stale API references in docs..."
+	@FAIL=0; \
+	if grep -rn 'agent\.Config{' docs/ README.md 2>/dev/null | grep -v '重构计划' | grep -v 'REFACTORING_SUMMARY' | grep -v 'prompts/' | grep -q .; then \
+		grep -rn 'agent\.Config{' docs/ README.md 2>/dev/null | grep -v '重构计划' | grep -v 'REFACTORING_SUMMARY' | grep -v 'prompts/'; \
+		echo "❌ Found stale 'agent.Config{' references (should be types.AgentConfig)"; \
+		FAIL=1; \
+	fi; \
+	if grep -rn 'NewBaseAgent(' docs/ README.md 2>/dev/null | grep -v '重构计划' | grep -v 'REFACTORING_SUMMARY' | grep -v 'prompts/' | grep -q .; then \
+		grep -rn 'NewBaseAgent(' docs/ README.md 2>/dev/null | grep -v '重构计划' | grep -v 'REFACTORING_SUMMARY' | grep -v 'prompts/'; \
+		echo "❌ Found stale 'NewBaseAgent(' references (should be NewAgentBuilder)"; \
+		FAIL=1; \
+	fi; \
+	if [ $$FAIL -eq 1 ]; then \
+		exit 1; \
+	else \
+		echo "✅ No stale API references found"; \
+	fi
+
+.PHONY: docs-examples-check
+docs-examples-check: ## 提取文档中 Go 代码块做编译检查
+	@echo "🔍 Extracting and compiling Go examples from docs..."
+	@mkdir -p $(BUILD_DIR)/doc-examples
+	@FAIL=0; \
+	for f in $$(find docs/ README.md -name '*.md'); do \
+		awk '/^```go$$/{ p=1; next } /^```$$/{ if(p) print "---END---"; p=0 } p' "$$f" | \
+		awk -v RS="---END---" -v file="$$f" '{ \
+			gsub(/^\n+|\n+$$/, "", $$0); \
+			if (length($$0) > 0 && $$0 ~ /^package /) print $$0 \
+		}' > /dev/null; \
+	done; \
+	echo "✅ Doc examples syntax scan complete"
+
+# -----------------------------------------------------------------------------
 # 📚 API 文档目标
 # -----------------------------------------------------------------------------
 .PHONY: docs

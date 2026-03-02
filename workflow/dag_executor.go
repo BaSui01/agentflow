@@ -7,6 +7,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/BaSui01/agentflow/workflow/observability"
+
 	"go.uber.org/zap"
 )
 
@@ -195,6 +197,7 @@ func (e *DAGExecutor) executeNode(ctx context.Context, graph *DAGGraph, node *DA
 			Data:   input,
 		})
 	}
+	observability.EmitNodeStart(ctx, e.executionID, node.ID, string(node.Type))
 
 	// 熔断器检查
 	cb := e.circuitBreakers.GetOrCreate(node.ID)
@@ -250,6 +253,7 @@ func (e *DAGExecutor) executeNode(ctx context.Context, graph *DAGGraph, node *DA
 					Error:  err,
 				})
 			}
+			observability.EmitNodeError(ctx, e.executionID, node.ID, string(node.Type), time.Since(startTime).Milliseconds(), err)
 			// Record failure in history
 			if nodeExec != nil {
 				e.history.RecordNodeEnd(nodeExec, nil, err)
@@ -279,6 +283,7 @@ func (e *DAGExecutor) executeNode(ctx context.Context, graph *DAGGraph, node *DA
 			Data:   result,
 		})
 	}
+	observability.EmitNodeComplete(ctx, e.executionID, node.ID, string(node.Type), duration.Milliseconds())
 
 	e.logger.Debug("node execution completed",
 		zap.String("node_id", node.ID),

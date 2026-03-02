@@ -10,6 +10,9 @@ const (
 	keyTenantID            contextKey = "tenant_id"
 	keyUserID              contextKey = "user_id"
 	keyRunID               contextKey = "run_id"
+	keyParentRunID         contextKey = "parent_run_id"
+	keySpanID              contextKey = "span_id"
+	keyAgentID             contextKey = "agent_id"
 	keyLLMModel            contextKey = "llm_model"
 	keyPromptBundleVersion contextKey = "prompt_bundle_version"
 	keyRoles               contextKey = "roles"
@@ -56,6 +59,40 @@ func WithRunID(ctx context.Context, runID string) context.Context {
 // RunID extracts run ID from context.
 func RunID(ctx context.Context) (string, bool) {
 	v, ok := ctx.Value(keyRunID).(string)
+	return v, ok && v != ""
+}
+
+// WithParentRunID adds parent run ID to context for sub-agent run hierarchy tracking.
+func WithParentRunID(ctx context.Context, parentRunID string) context.Context {
+	return context.WithValue(ctx, keyParentRunID, parentRunID)
+}
+
+// ParentRunID extracts parent run ID from context.
+func ParentRunID(ctx context.Context) (string, bool) {
+	v, ok := ctx.Value(keyParentRunID).(string)
+	return v, ok && v != ""
+}
+
+// WithSpanID adds span ID to context for trace isolation.
+// Sub-agents get independent span IDs while sharing the parent trace_id.
+func WithSpanID(ctx context.Context, spanID string) context.Context {
+	return context.WithValue(ctx, keySpanID, spanID)
+}
+
+// SpanID extracts span ID from context.
+func SpanID(ctx context.Context) (string, bool) {
+	v, ok := ctx.Value(keySpanID).(string)
+	return v, ok && v != ""
+}
+
+// WithAgentID adds agent ID to context for scope isolation.
+func WithAgentID(ctx context.Context, agentID string) context.Context {
+	return context.WithValue(ctx, keyAgentID, agentID)
+}
+
+// AgentID extracts agent ID from context.
+func AgentID(ctx context.Context) (string, bool) {
+	v, ok := ctx.Value(keyAgentID).(string)
 	return v, ok && v != ""
 }
 

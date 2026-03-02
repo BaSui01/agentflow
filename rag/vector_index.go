@@ -12,27 +12,11 @@ import (
 
 // VectorIndex 向量索引接口
 type VectorIndex interface {
-	// Build 构建索引
 	Build(vectors [][]float64, ids []string) error
-	
-	// Search 搜索最近邻
 	Search(query []float64, k int) ([]SearchResult, error)
-	
-	// Add 添加向量
 	Add(vector []float64, id string) error
-	
-	// Delete 删除向量
 	Delete(id string) error
-	
-	// Size 索引大小
 	Size() int
-}
-
-// SearchResult 搜索结果
-type SearchResult struct {
-	ID       string
-	Distance float64
-	Score    float64 // 1 - distance (for cosine)
 }
 
 // IndexType 索引类型

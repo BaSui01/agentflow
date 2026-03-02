@@ -20,24 +20,22 @@
 
 ```go
 // ✅ 好的设计：专注于翻译
-translatorAgent := agent.NewBaseAgent(agent.Config{
-    Name: "translator",
-    Type: agent.TypeTranslator,
-    // ...
-})
+translatorAgent, _ := agent.NewAgentBuilder(types.AgentConfig{
+    Core: types.CoreConfig{Name: "translator", Type: "translator"},
+}).WithProvider(provider).WithLogger(logger).Build()
 
 // ❌ 避免：一个 Agent 做太多事情
-superAgent := agent.NewBaseAgent(agent.Config{
-    Name: "super-agent",
+superAgent, _ := agent.NewAgentBuilder(types.AgentConfig{
+    Core: types.CoreConfig{Name: "super-agent", Type: "assistant"},
     // 同时处理翻译、分析、总结...
-})
+}).WithProvider(provider).WithLogger(logger).Build()
 ```
 
 ### 2. 使用合适的提示词
 
 ```go
-config := agent.Config{
-    PromptBundle: agent.PromptBundle{
+config := types.AgentConfig{
+    Runtime: types.RuntimeConfig{
         SystemPrompt: `你是一个专业的翻译助手。
 规则：
 1. 保持原文的语气和风格
@@ -52,10 +50,12 @@ config := agent.Config{
 只注册 Agent 需要的工具：
 
 ```go
-config := agent.Config{
-    Tools: []string{
-        "search",      // 只注册需要的工具
-        "calculator",
+config := types.AgentConfig{
+    Runtime: types.RuntimeConfig{
+        Tools: []string{
+            "search",      // 只注册需要的工具
+            "calculator",
+        },
     },
 }
 ```
@@ -106,9 +106,11 @@ for _, task := range tasks {
 ### 4. 合理的 Token 限制
 
 ```go
-config := agent.Config{
-    MaxTokens:   2048,  // 根据任务复杂度设置
-    Temperature: 0.7,   // 创意任务用高温度，精确任务用低温度
+config := types.AgentConfig{
+    LLM: types.LLMConfig{
+        MaxTokens:   2048,  // 根据任务复杂度设置
+        Temperature: 0.7,   // 创意任务用高温度，精确任务用低温度
+    },
 }
 ```
 
@@ -174,12 +176,14 @@ if err != nil {
 ### 1. 使用 Guardrails
 
 ```go
-config := agent.Config{
-    Guardrails: &guardrails.GuardrailsConfig{
-        MaxInputLength:     10000,
-        BlockedKeywords:    []string{"password", "secret"},
-        PIIDetectionEnabled: true,
-        InjectionDetection:  true,
+config := types.AgentConfig{
+    Features: types.FeaturesConfig{
+        Guardrails: &types.GuardrailsConfig{
+            MaxInputLength:     10000,
+            BlockedKeywords:    []string{"password", "secret"},
+            PIIDetectionEnabled: true,
+            InjectionDetection:  true,
+        },
     },
 }
 ```
@@ -243,7 +247,7 @@ func TestAgent_Execute(t *testing.T) {
         },
     }
 
-    agent := NewBaseAgent(config, mockProvider, nil, nil, nil, zap.NewNop())
+    agent, _ := agent.NewAgentBuilder(config).WithProvider(mockProvider).WithLogger(zap.NewNop()).Build()
 
     output, err := agent.Execute(ctx, &Input{Content: "test"})
 
@@ -265,9 +269,7 @@ func TestAgent_Integration(t *testing.T) {
         APIKey: os.Getenv("OPENAI_API_KEY"),
     })
 
-    agent := NewBaseAgent(config, provider, nil, nil, nil, zap.NewNop())
-
-    output, err := agent.Execute(ctx, &Input{Content: "Hello"})
+    agent, _ := agent.NewAgentBuilder(config).WithProvider(provider).WithLogger(zap.NewNop()).Build()
 
     assert.NoError(t, err)
     assert.NotEmpty(t, output.Content)

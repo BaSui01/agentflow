@@ -1,5 +1,18 @@
 # AgentFlow 架构重构总结
 
+> **⚠️ 历史归档文档**
+>
+> 本文档记录的是早期重构阶段（2025-Q3）的状态快照，当前架构已发生重大变化：
+>
+> - `agent.Config` 已迁移为 `types.AgentConfig`（嵌套结构：Core/LLM/Runtime/Features/Extensions）
+> - `agent.NewBaseAgent(...)` 已替换为 `agent.NewAgentBuilder(config).WithProvider(...).Build()` Builder 模式
+> - `internal/database`、`internal/cache`、`internal/metrics`、`internal/server` 已迁移至 `pkg/` 目录
+> - `internal/bridge/` 已删除
+>
+> 如需了解当前架构，请参阅 `docs/重构计划/` 下的最新文档。
+
+---
+
 ## 🎉 完成的改进
 
 ### ✅ 高优先级任务（已完成）

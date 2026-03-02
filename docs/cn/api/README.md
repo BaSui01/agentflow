@@ -133,20 +133,21 @@ const (
 )
 ```
 
-### BaseAgent
+### AgentBuilder
 
-基础 Agent 实现。
+通过 Builder 模式创建 Agent 实例。
 
 ```go
-// 创建 BaseAgent
-func NewBaseAgent(
-    cfg Config,
-    provider llm.Provider,
-    memory MemoryManager,
-    toolManager ToolManager,
-    bus EventBus,
-    logger *zap.Logger,
-) *BaseAgent
+// 创建 AgentBuilder（接受 types.AgentConfig）
+func NewAgentBuilder(config types.AgentConfig) *AgentBuilder
+
+// Builder 链式调用
+func (b *AgentBuilder) WithProvider(provider llm.Provider) *AgentBuilder
+func (b *AgentBuilder) WithLogger(logger *zap.Logger) *AgentBuilder
+func (b *AgentBuilder) WithMemory(memory MemoryManager) *AgentBuilder
+func (b *AgentBuilder) WithToolManager(toolManager ToolManager) *AgentBuilder
+func (b *AgentBuilder) WithEventBus(bus EventBus) *AgentBuilder
+func (b *AgentBuilder) Build() (*BaseAgent, error)
 
 // 主要方法
 func (b *BaseAgent) Init(ctx context.Context) error

@@ -24,12 +24,7 @@ func TestGLMProvider_MultimodalNotSupported(t *testing.T) {
 		name string
 		fn   func() error
 	}{
-		{"GenerateAudio", func() error { _, err := p.GenerateAudio(ctx, &llm.AudioGenerationRequest{}); return err }},
 		{"TranscribeAudio", func() error { _, err := p.TranscribeAudio(ctx, &llm.AudioTranscriptionRequest{}); return err }},
-		{"CreateFineTuningJob", func() error { _, err := p.CreateFineTuningJob(ctx, &llm.FineTuningJobRequest{}); return err }},
-		{"ListFineTuningJobs", func() error { _, err := p.ListFineTuningJobs(ctx); return err }},
-		{"GetFineTuningJob", func() error { _, err := p.GetFineTuningJob(ctx, "j1"); return err }},
-		{"CancelFineTuningJob", func() error { return p.CancelFineTuningJob(ctx, "j1") }},
 	}
 
 	for _, tt := range tests {

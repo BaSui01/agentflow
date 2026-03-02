@@ -5,24 +5,10 @@ import (
 	"fmt"
 
 	"github.com/BaSui01/agentflow/config"
-	"github.com/BaSui01/agentflow/llm/capabilities/rerank"
 	"go.uber.org/zap"
 )
 
-// 嵌入 Provider 包装嵌入. 供检索使用的提供者。
-type EmbeddingProvider interface {
-	EmbedQuery(ctx context.Context, query string) ([]float64, error)
-	EmbedDocuments(ctx context.Context, documents []string) ([][]float64, error)
-	Name() string
-}
-
-// Provider包装重新排序. 供检索使用的提供者。
-type RerankProvider interface {
-	RerankSimple(ctx context.Context, query string, documents []string, topN int) ([]rerank.RerankResult, error)
-	Name() string
-}
-
-// University Retriever扩展了HybridRetriever,由外部嵌入并重新排序提供者.
+// EnhancedRetriever 扩展了 HybridRetriever，由外部嵌入并重新排序提供者。
 type EnhancedRetriever struct {
 	*HybridRetriever
 	embeddingProvider EmbeddingProvider
