@@ -128,17 +128,89 @@ workflow/
 - 将执行状态定义收敛为 `types` 或 `workflow/core/state` 单一定义。
 - 禁止 `workflow` 直接依赖 `agent/persistence`。
 
-## 5.2 LLM 步骤统一
+## 5.2 统一步骤协议（Review 补充）
+
+所有步骤类型（`llm/tool/human/code/agent`）必须实现统一 `StepProtocol` 接口（Command Pattern）：
+
+```go
+// workflow/core/step.go
+type StepProtocol interface {
+    // ID 返回步骤唯一标识
+    ID() string
+    // Type 返回步骤类型（llm/tool/human/code/agent）
+    Type() StepType
+    // Execute 执行步骤，接收上下文与输入，返回输出
+    Execute(ctx context.Context, input StepInput) (StepOutput, error)
+    // Validate 校验步骤配置是否合法
+    Validate() error
+}
+
+type StepInput struct {
+    Data     map[string]any   // 上游步骤输出 / 用户输入
+    Metadata map[string]string // trace_id/run_id/node_id 等
+}
+
+type StepOutput struct {
+    Data     map[string]any
+    Usage    *types.TokenUsage // 可选，LLM 步骤填充
+    Latency  time.Duration
+}
+```
+
+落地状态：
+- [ ] 定义 `StepProtocol` 接口（`workflow/core/step.go`）
+- [ ] `LLMStep` 实现 `StepProtocol`（`workflow/steps/llm.go`）
+- [ ] `ToolStep` 实现 `StepProtocol`（`workflow/steps/tool.go`）
+- [ ] `HumanStep` 实现 `StepProtocol`（`workflow/steps/human.go`）
+- [ ] `CodeStep` 实现 `StepProtocol`（`workflow/steps/code.go`）
+- [ ] `AgentStep` 实现 `StepProtocol`（`workflow/steps/agent.go`）
+
+约束：
+- 所有步骤实现必须放在 `workflow/steps/` 下。
+- `Execute` 内部禁止直接依赖具体 provider/store 实现，仅通过注入的抽象接口调用。
+- 步骤失败必须返回 `workflow/core/errors` 定义的统一错误类型。
+
+## 5.3 Executor 策略模式（Review 补充）
+
+收敛为单一 `Executor` 入口后，内部按 workflow 类型选择调度策略（Strategy Pattern）：
+
+```go
+// workflow/engine/executor.go
+type ScheduleStrategy interface {
+    Schedule(ctx context.Context, dag *DAG, runner StepRunner) error
+}
+
+// 内置策略
+type SequentialStrategy struct{}  // Chain 模式：按序执行
+type ParallelStrategy struct{}    // Parallel 模式：无依赖步骤并发
+type DAGStrategy struct{}         // DAG 模式：拓扑排序 + ready queue 并发
+type RoutingStrategy struct{}     // Routing 模式：条件分支选择
+```
+
+落地状态：
+- [ ] 定义 `ScheduleStrategy` 接口（`workflow/engine/executor.go`）
+- [ ] 实现 `SequentialStrategy`（Chain 模式）
+- [ ] 实现 `ParallelStrategy`（Parallel 模式）
+- [ ] 实现 `DAGStrategy`（拓扑排序 + ready queue 并发）
+- [ ] 实现 `RoutingStrategy`（条件分支选择）
+- [ ] 策略 registry 注册机制
+
+约束：
+- 对外仅暴露 `engine.Executor.Execute(ctx, workflow)`，策略选择在内部完成。
+- 策略由 workflow 定义的 `ExecutionMode` 字段决定，不由调用方指定。
+- 新增策略通过 registry 注册，不新增并行入口。
+
+## 5.4 LLM 步骤统一
 
 - `LLMStep` 仅依赖 `GatewayLike` 抽象（`Invoke/Stream`），不再持有 `llm.Provider`。
 - token/cost/trace 由 gateway 出口统一记录。
 
-## 5.3 适配器统一
+## 5.5 适配器统一
 
 - Agent/RAG 接入统一通过 `workflow/adapters/*`。
 - 核心执行不感知下层实现类型。
 
-## 5.4 观测统一
+## 5.6 观测统一
 
 - 节点级事件统一输出：`node_start/node_complete/node_error`。
 - 统一字段：`trace_id/run_id/workflow_id/node_id/latency_ms`。
@@ -200,3 +272,4 @@ workflow/
 - [x] 2026-03-02：修正“当前问题/守卫”章节与代码现状对齐：`execution_history` 已改用 `types.ExecutionStatus`，并明确 `workflow -> agent/persistence` 禁止依赖守卫已在测试与脚本中落地。
 - [x] 2026-03-02：修正文档状态判定粒度：将“单一执行入口”与“单一状态模型”拆分；回填 Phase-2 与 Phase-6 的已完成项；在总览中标注“部分完成”边界，避免将已完成项与待完成项混写为单一未完成状态。
 - [x] 2026-03-02：将第 6 章（Phase）与第 8 章（DoD）重构为机读判据表：统一状态枚举 `Done/Partial/Todo`，并为每条判据补充证据路径，便于后续自动审计与持续更新。
+- [x] 2026-03-02：Review 补充：新增 5.2 统一步骤协议（`StepProtocol` 接口，Command Pattern）与 5.3 Executor 策略模式（`ScheduleStrategy` 接口，Strategy Pattern），明确 Sequential/Parallel/DAG/Routing 四种内置策略；原 5.2~5.4 章节号顺延为 5.4~5.6。

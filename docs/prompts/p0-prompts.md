@@ -496,7 +496,7 @@ func TestToolProvider_FunctionCallingValidation(t *testing.T) {
         Tools: []string{"search"},
     }
 
-    agent := NewBaseAgent(config, mainProvider, nil, toolMgr, nil, logger)
+    agent, _ := NewAgentBuilder(config).WithProvider(mainProvider).WithToolManager(toolMgr).WithLogger(logger).Build()
     agent.SetToolProvider(toolProvider)
 
     // toolProvider 不支持 function calling

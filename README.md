@@ -146,6 +146,7 @@ func main() {
         },
     }, logger)
 
+    // 注意：provider.Completion 是低级 API，生产环境推荐通过 Agent 或 Gateway 调用
     resp, err := provider.Completion(context.Background(), &llm.ChatRequest{
         Model: "gpt-4o",
         Messages: []llm.Message{
@@ -271,11 +272,15 @@ result, _ := executor.ExecuteWithReflection(ctx, input)
 ### LSP 一键启用
 
 ```go
-cfg := agent.Config{
-    ID:    "assistant-1",
-    Name:  "Assistant",
-    Type:  agent.TypeAssistant,
-    Model: "gpt-4o-mini",
+cfg := types.AgentConfig{
+    Core: types.CoreConfig{
+        ID:   "assistant-1",
+        Name: "Assistant",
+        Type: "assistant",
+    },
+    LLM: types.LLMConfig{
+        Model: "gpt-4o-mini",
+    },
 }
 
 ag, err := agent.NewAgentBuilder(cfg).

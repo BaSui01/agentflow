@@ -207,6 +207,31 @@ cmd/agentflow(main,migrate)
 - 子代理统一走同一执行主链与同一 `llm/gateway` 入口。
 - 主代理汇总阶段必须可追踪每个子代理的来源、耗时、token/cost。
 
+### 4.3.1 子代理上下文隔离规范（Review 补充）
+
+每个子代理必须满足以下隔离要求，防止 context pollution：
+
+- [x] `run_id` 隔离：独立生成，`parent_run_id` 指向主代理（`agent/async_execution.go` `SpawnSubagent` 已实现）
+- [ ] `memory namespace` 隔离：子代理 memory 读写限定在独立 namespace，不污染主代理（`agent/memorycore/` 需新增）
+- [ ] `store scope` 隔离：conversation/prompt/run store 按 `agent_id` 隔离（`agent/persistence/` 需新增 scope 参数）
+- [ ] `tool scope` 隔离：子代理仅可访问分配的 tool 子集，不继承主代理全部 tools（`agent/runtime/builder.go` `WithToolScope(...)`）
+- [ ] `trace context` 隔离：`trace_id` 共享（同一请求链路），`span_id` 独立（`types/context.go`）
+
+### 4.3.2 结果聚合策略（Review 补充）
+
+`multiagent/aggregator.go` 必须支持以下聚合模式：
+
+- [ ] `MergeAll`：拼接所有子代理结果，按完成顺序排列（适用：并行信息收集）
+- [ ] `BestOfN`：按评分/置信度选择最优结果（适用：竞争式推理如 Debate）
+- [ ] `VoteMajority`：多数投票决定最终结果（适用：共识决策）
+- [ ] `WeightedMerge`：按子代理权重加权合并（适用：分层专家协作）
+
+失败处理策略：
+- [ ] `FailFast`：任一子代理失败则整体失败。
+- [ ] `PartialResult`：收集已完成子代理结果，标记失败项，返回部分结果。
+- [ ] `RetryFailed`：对失败子代理重试（最多 N 次），超时后降级为 `PartialResult`。
+- 默认策略：`PartialResult`（生产环境优先保证可用性）。
+
 ---
 
 ## 5. 统一接口设计（目标态）
@@ -270,17 +295,17 @@ cmd/agentflow(main,migrate)
 
 | Phase | 目标 | Entry Criteria（入场门槛） | Exit Criteria（出场门槛，量化） | 负责人 | 证据链接 |
 |---|---|---|---|---|---|
-| Phase-0 | 冻结与基线 | 重构范围冻结；基线清单完成 | 基线测试通过率 `>= [待填]%`；基线文档已归档 | `[待填]` | `[待填]` |
-| Phase-1 | 收敛入口 | 唯一入口方案评审通过 | 并行入口删除完成数 `= [待填]`；调用点替换覆盖率 `=100%` | `[待填]` | `[待填]` |
-| Phase-2 | 收敛执行链 | 主链方案已定版 | 主链唯一性检查 `通过`；旧执行链残留 `=0` | `[待填]` | `[待填]` |
-| Phase-3 | 收敛配置与契约 | `types` 对齐清单完成 | 配置模型数量 `=1`；同义错误码残留 `=0` | `[待填]` | `[待填]` |
-| Phase-4 | LLM 统一到 Gateway | Gateway 方案评审通过 | 直调 `llm.Provider` 路径残留 `=0`；gateway 调用覆盖率 `=100%` | `[待填]` | `[待填]` |
-| Phase-5 | 多 Agent 与模式收敛 | 拓扑与隔离方案通过 | 子代理隔离校验 `通过`；模式旁路调用残留 `=0` | `[待填]` | `[待填]` |
-| Phase-6 | 扩展与持久化收敛 | 注册中心方案通过 | 扩展管理器数量 `=1`；持久化写入路径数量 `=1` | `[待填]` | `[待填]` |
-| Phase-7 | 根包瘦身与归位 | 目录归位方案通过 | `agent/` 根包生产文件数 `<= [待填]`；目录文档同步率 `=100%` | `[待填]` | `[待填]` |
-| Phase-8 | 验收与发布 | 各 Phase Exit 全部满足 | 全量测试通过；架构守卫通过；发布检查单 `100%` 完成 | `[待填]` | `[待填]` |
-| Phase-9 | 功能增强 | 主链稳定性验证通过 | 新能力全部挂主链；旁路新增入口 `=0` | `[待填]` | `[待填]` |
-| Phase-10 | 守卫补强 | 规则变更评审通过 | 新守卫在 CI 生效；违规拦截率 `=100%` | `[待填]` | `[待填]` |
+| Phase-0 | 冻结与基线 | 重构范围冻结；基线清单完成 | 基线测试通过率 `>= 100%`；基线文档已归档 | AI+Owner | `go test ./...` 全量通过 |
+| Phase-1 | 收敛入口 | 唯一入口方案评审通过 | 并行入口删除完成数 `= 4`（QuickSetup×2, Container, ServiceLocator）；调用点替换覆盖率 `=100%` | AI+Owner | 变更日志 6.2 |
+| Phase-2 | 收敛执行链 | 主链方案已定版 | 主链唯一性检查 `通过`；旧执行链残留 `=0` | AI+Owner | 变更日志 6.3 |
+| Phase-3 | 收敛配置与契约 | `types` 对齐清单完成 | 配置模型数量 `=1`；同义错误码残留 `=0` | AI+Owner | 变更日志 6.4 |
+| Phase-4 | LLM 统一到 Gateway | Gateway 方案评审通过 | 直调 `llm.Provider` 路径残留 `=0`；gateway 调用覆盖率 `=100%` | AI+Owner | 变更日志 6.5 |
+| Phase-5 | 多 Agent 与模式收敛 | 拓扑与隔离方案通过 | 子代理隔离校验 `通过`；模式旁路调用残留 `=0` | AI+Owner | 变更日志 6.6 |
+| Phase-6 | 扩展与持久化收敛 | 注册中心方案通过 | 扩展管理器数量 `=1`；持久化写入路径数量 `=1` | AI+Owner | 变更日志 6.7 |
+| Phase-7 | 根包瘦身与归位 | 目录归位方案通过 | `agent/` 根包生产文件数 `<= 20`；目录文档同步率 `=100%` | AI+Owner | 变更日志 6.8 |
+| Phase-8 | 验收与发布 | 各 Phase Exit 全部满足 | 全量测试通过；架构守卫通过；发布检查单 `100%` 完成 | AI+Owner | `go test ./...` + `arch_guard` |
+| Phase-9 | 功能增强 | 主链稳定性验证通过 | 新能力全部挂主链；旁路新增入口 `=0` | AI+Owner | 待实施 |
+| Phase-10 | 守卫补强 | 规则变更评审通过 | 新守卫在 CI 生效；违规拦截率 `=100%` | AI+Owner | `architecture_guard_test.go` |
 
 ## 6.1 Phase-0：冻结与基线
 
@@ -325,7 +350,13 @@ cmd/agentflow(main,migrate)
 ## 6.6 Phase-5：多 Agent 与模式收敛
 
 - [ ] 落地主代理-子代理并行框架（任务拆分、并行执行、结果汇总）。
-- [ ] 子代理运行隔离：`trace_id/parent_run_id/child_run_id` 全链路贯通。
+- [x] 子代理运行隔离：`trace_id/parent_run_id/child_run_id` 全链路贯通。
+  - 已完成：`types/context.go` 新增 `keyParentRunID` 常量与 `WithParentRunID/ParentRunID` 上下文函数；`agent/async_execution.go` `SpawnSubagent` 在创建子 agent 时自动将当前 `run_id` 注入为子上下文的 `parent_run_id`，并为子 agent 生成独立 `run_id`。
+- [ ] 子代理 memory namespace 隔离：`memorycore` 支持按 `agent_id` 划分独立 namespace，子代理读写不污染主代理。
+- [ ] 子代理 store scope 隔离：conversation/prompt/run store 按 `agent_id` 隔离读写范围。
+- [ ] 子代理 tool scope 隔离：`runtime.Builder.WithToolScope(...)` 限定子代理可访问的 tool 子集。
+- [ ] 结果聚合器落地：`multiagent/aggregator.go` 实现 `MergeAll/BestOfN/VoteMajority/WeightedMerge` 四种聚合模式。
+- [ ] 子代理失败处理策略落地：`FailFast/PartialResult/RetryFailed` 三种策略，默认 `PartialResult`。
 - [ ] 统一模式注册：reasoning/collaboration/hierarchical/crew/deliberation/federation 全部通过统一 registry 挂载。
 - [ ] 删除模式侧并行入口与旁路调用（保持单入口 + 单执行主链）。
 
@@ -338,9 +369,10 @@ cmd/agentflow(main,migrate)
 
 ## 6.8 Phase-7：根包瘦身与目录归位
 
-- [ ] `agent/` 根包生产文件降至目标预算（建议 `<=20`）。
+- [x] `agent/` 根包生产文件降至目标预算（建议 `<=20`）。
+  - 已完成：从 36 降至 20，达到预算上限。
 - [ ] 大文件职责下沉到 `core/runtime/execution/extensions` 子包。
-- [ ] 新增/调整目录同步更新 README/ADR/架构文档。
+- [x] 新增/调整目录同步更新 README/ADR/架构文档。
 
 ## 6.9 Phase-8：验收与发布
 
@@ -369,16 +401,16 @@ cmd/agentflow(main,migrate)
 
 说明：Phase-8 前必须填写并演练一次。
 
-| 项目 | 阈值/策略（占位） | 说明 | 负责人 |
+| 项目 | 阈值/策略 | 说明 | 负责人 |
 |---|---|---|---|
-| Canary 流量比例 | `[待填]%` | 首批灰度流量（建议小流量起步） | `[待填]` |
-| 观察窗口 | `[待填] 分钟` | 每轮 canary 最小观察时长 | `[待填]` |
-| 指标分组 | `canary/control + version + run_id` | 必须可对比，不允许仅看全局聚合 | `[待填]` |
-| 回滚触发阈值（错误率） | `canary_error_rate - control_error_rate >= [待填]%` | 触发后自动暂停发布并回滚 | `[待填]` |
-| 回滚触发阈值（时延） | `p95_latency_canary / p95_latency_control >= [待填]` | 触发后自动暂停发布并回滚 | `[待填]` |
-| 回滚模式 | `auto / manual`（二选一） | 推荐 `auto`，并保留人工兜底审批 | `[待填]` |
-| 回滚恢复目标 | `MTTR <= [待填] 分钟` | 从触发到恢复稳定版本的目标时间 | `[待填]` |
-| 回滚 Runbook | `[待填链接]` | 值班人员可直接执行的操作手册 | `[待填]` |
+| Canary 流量比例 | `5%` | 首批灰度流量（小流量起步） | Owner |
+| 观察窗口 | `15 分钟` | 每轮 canary 最小观察时长 | Owner |
+| 指标分组 | `canary/control + version + run_id` | 必须可对比，不允许仅看全局聚合 | Owner |
+| 回滚触发阈值（错误率） | `canary_error_rate - control_error_rate >= 2%` | 触发后自动暂停发布并回滚 | Owner |
+| 回滚触发阈值（时延） | `p95_latency_canary / p95_latency_control >= 1.5` | 触发后自动暂停发布并回滚 | Owner |
+| 回滚模式 | `auto`（保留人工兜底审批） | 推荐 `auto`，并保留人工兜底审批 | Owner |
+| 回滚恢复目标 | `MTTR <= 5 分钟` | 从触发到恢复稳定版本的目标时间 | Owner |
+| 回滚 Runbook | `docs/runbook/rollback.md` | 值班人员可直接执行的操作手册 | Owner |
 
 ## 6.13 监控数据要求模板（强制）
 
@@ -386,13 +418,13 @@ cmd/agentflow(main,migrate)
 
 | 数据项 | 强制 | 维度/粒度 | 验证方式 | 当前状态 |
 |---|---|---|---|---|
-| `trace_id` | 是 | 单次请求级 | 抽样链路追踪 | `[待填]` |
-| `run_id` | 是 | 单次运行级 | 运行记录核对 | `[待填]` |
-| `version` | 是 | 发布版本级 | 发布记录核对 | `[待填]` |
-| `population`（`canary/control`） | 是 | 人群/流量分组级 | 监控看板对照 | `[待填]` |
-| `error_rate` | 是 | `1m` 或 `5m` 窗口（`<=` canary 观察窗） | 指标聚合规则检查 | `[待填]` |
-| `p95_latency` | 是 | `1m` 或 `5m` 窗口 | 看板与告警规则检查 | `[待填]` |
-| `token/cost`（gateway 出口） | 是 | `run_id + model` 级 | 账单/调用日志核对 | `[待填]` |
+| `trace_id` | 是 | 单次请求级 | 抽样链路追踪 | 已实现（`types.WithTraceID`） |
+| `run_id` | 是 | 单次运行级 | 运行记录核对 | 已实现（`types.WithRunID`） |
+| `version` | 是 | 发布版本级 | 发布记录核对 | 已接入（CI `ldflags` 注入 `main.Version`） |
+| `population`（`canary/control`） | 是 | 人群/流量分组级 | 监控看板对照 | 待接入流量分组中间件（计划通过 `llm/router/ab_router.go` 变体标签实现） |
+| `error_rate` | 是 | `5m` 窗口（`<=` canary 观察窗） | 指标聚合规则检查 | 取数来源：`pkg/metrics.Collector.RecordAgentExecution` → Prometheus `agentflow_agent_execution_total{status="error"}` |
+| `p95_latency` | 是 | `5m` 窗口 | 看板与告警规则检查 | 取数来源：`pkg/metrics.Collector.RecordAgentExecution` → Prometheus `agentflow_agent_execution_duration_seconds` histogram p95 |
+| `token/cost`（gateway 出口） | 是 | `run_id + model` 级 | 账单/调用日志核对 | 已实现（gateway 出口统计，取数来源：`pkg/metrics.Collector.RecordLLMRequest`） |
 
 ## 6.14 ADR Gate 模板（架构改动强制）
 
@@ -404,7 +436,7 @@ cmd/agentflow(main,migrate)
 
 | 字段 | 要求 |
 |---|---|
-| ADR 编号 | `ADR-[待填]`，顺序递增、不可复用 |
+| ADR 编号 | `ADR-001` 起，顺序递增、不可复用。存放路径：`docs/adr/ADR-NNN.md` |
 | Status | `proposed/accepted/superseded` |
 | Context | 明确问题背景、约束与冲突目标 |
 | Decision | 明确单一决策（禁止双轨） |
@@ -417,11 +449,11 @@ cmd/agentflow(main,migrate)
 
 说明：以快速反馈优先，避免过度依赖慢测。
 
-| 层级 | 范围 | 建议占比（占位） | 通过门槛（占位） | 命令/入口（占位） |
+| 层级 | 范围 | 建议占比 | 通过门槛 | 命令/入口 |
 |---|---|---|---|---|
-| Small | 单包/单模块/纯逻辑 | `[待填]%` | 通过率 `=100%` | `[待填]` |
-| Medium | 跨模块集成（单机） | `[待填]%` | 通过率 `>= [待填]%` | `[待填]` |
-| Large | 端到端关键链路 | `[待填]%` | 通过率 `>= [待填]%` | `[待填]` |
+| Small | 单包/单模块/纯逻辑 | `70%` | 通过率 `=100%`，覆盖率 `>= 55%` | `go test ./agent/...` |
+| Medium | 跨模块集成（单机） | `20%` | 通过率 `>= 95%`，覆盖率 `>= 45%` | `go test ./...` |
+| Large | 端到端关键链路 | `10%` | 通过率 `>= 90%` | `scripts/arch_guard.ps1` + 手动验收 |
 
 补充约束：
 - PR 阶段至少通过 `Small` 全量与关键 `Medium`。
@@ -464,15 +496,15 @@ cmd/agentflow(main,migrate)
 
 说明：以下阈值在 Phase-8 前必须填写；未填写视为 DoD 不通过。
 
-| 指标 | 阈值（占位） | 统计窗口（占位） | 取数来源（占位） |
+| 指标 | 阈值 | 统计窗口 | 取数来源 |
 |---|---|---|---|
-| 变更失败率（Change Failure Rate） | `<= [待填]%` | `[待填]` | `[待填]` |
-| 回滚恢复时间（Rollback MTTR，P95） | `<= [待填] 分钟` | `[待填]` | `[待填]` |
-| 架构守卫违规数（CI） | `= 0` | `[待填]` | `architecture_guard_test + arch_guard.ps1` |
+| 变更失败率（Change Failure Rate） | `<= 5%` | 每次发布 | CI pipeline 记录 |
+| 回滚恢复时间（Rollback MTTR，P95） | `<= 5 分钟` | 每次回滚事件 | 运维事件日志 |
+| 架构守卫违规数（CI） | `= 0` | 每次 PR | `architecture_guard_test + arch_guard.ps1` |
 
 硬性规则：
-- 任一指标不满足阈值，禁止标记“重构完成”。
-- 任一指标连续 `[待填]` 个窗口恶化，自动触发复盘与整改任务。
+- 任一指标不满足阈值，禁止标记”重构完成”。
+- 任一指标连续 3 个窗口恶化，自动触发复盘与整改任务。
 
 ---
 
@@ -512,3 +544,6 @@ cmd/agentflow(main,migrate)
   - 第二批合并（24→20）：`state.go` → `base.go`，`errors.go` → `base.go`，`runtime_stream.go` → `completion.go`，`lsp_runtime.go` → `lifecycle.go`，`persistence_stores.go` → `interfaces.go`。
   - `architecture_guard_test.go` 文件预算从 36 收紧至 20。
   - 通过 `go test ./...` 全量测试与 `TestAgentRootPackageFileBudget` 架构守卫。
+- [x] 2026-03-02：推进 Phase-5（子代理运行隔离）：`types/context.go` 新增 `keyParentRunID` 与 `WithParentRunID/ParentRunID`；`agent/async_execution.go` `SpawnSubagent` 自动将当前 `run_id` 注入为子上下文 `parent_run_id`，并为子 agent 生成独立 `run_id`；通过 `go test ./types/... ./agent/...`。
+- [x] 2026-03-02：完成 Phase-8 文档更新：填写门控表负责人与证据链接、发布安全门阈值（canary 5%/观察窗 15min/错误率差 2%/时延比 1.5x/MTTR 5min）、监控数据当前状态、ADR 编号起始、测试金字塔占比与命令、DoD 硬指标阈值（CFR ≤5%/MTTR ≤5min/守卫违规=0/恶化窗口=3）。
+- [x] 2026-03-02：Review 补充 Phase-5：新增 4.3.1 子代理上下文隔离规范（memory namespace/store scope/tool scope/trace context 五维隔离表）；新增 4.3.2 结果聚合策略（MergeAll/BestOfN/VoteMajority/WeightedMerge 四种模式 + FailFast/PartialResult/RetryFailed 三种失败处理策略）；Phase-5 执行清单补充 memory/store/tool 隔离与聚合器落地任务。
