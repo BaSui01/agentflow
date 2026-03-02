@@ -437,8 +437,16 @@ agentflow/
 │
 ├── pkg/openapi/              # OpenAPI tool generator
 │
-├── cmd/agentflow/            # Application entry
-│   └── middleware.go         # API security middleware
+├── cmd/agentflow/            # Application entry and runtime wiring
+│   ├── main.go               # CLI entry (serve/migrate/health/version)
+│   ├── migrate.go            # Migration subcommands
+│   ├── server_runtime.go     # Server struct and startup orchestration
+│   ├── server_services.go    # Lifecycle bus based on pkg/service.Registry
+│   ├── server_http.go        # Route registration and HTTP/Metrics manager wiring
+│   ├── server_handlers_runtime.go # Handler init and provider wiring
+│   ├── server_stores.go      # Mongo/RAG/Memory/Audit wiring
+│   ├── server_hotreload.go   # Hot-reload manager initialization
+│   └── server_shutdown.go    # Graceful shutdown flow
 │
 └── examples/                 # Example code
 ```
