@@ -112,14 +112,6 @@ func DefaultQueryTransformConfig() QueryTransformConfig {
 	}
 }
 
-// * LLM 提供者接口 {}
-
-// 基于 LLM 的查询界面
-type QueryLLMProvider interface {
-	// 完整生成给定快件的补全
-	Complete(ctx context.Context, prompt string) (string, error)
-}
-
 // QQ 查询变换器
 
 // Query Transfer 为更好的检索而转换查询

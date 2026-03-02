@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"time"
 
 	"go.uber.org/zap"
 )
@@ -46,24 +47,6 @@ func DefaultHybridRetrievalConfig() HybridRetrievalConfig {
 		TopK:         5,
 		MinScore:     0.3,
 	}
-}
-
-// Document 文档
-type Document struct {
-	ID        string                 `json:"id"`
-	Content   string                 `json:"content"`
-	Metadata  map[string]any `json:"metadata,omitempty"`
-	Embedding []float64              `json:"embedding,omitempty"`
-}
-
-// RetrievalResult 检索结果
-type RetrievalResult struct {
-	Document    Document `json:"document"`
-	BM25Score   float64  `json:"bm25_score"`
-	VectorScore float64  `json:"vector_score"`
-	HybridScore float64  `json:"hybrid_score"`
-	RerankScore float64  `json:"rerank_score,omitempty"`
-	FinalScore  float64  `json:"final_score"`
 }
 
 // HybridRetriever 混合检索器
@@ -152,6 +135,8 @@ func (r *HybridRetriever) IndexDocuments(docs []Document) error {
 
 // Retrieve 混合检索
 func (r *HybridRetriever) Retrieve(ctx context.Context, query string, queryEmbedding []float64) ([]RetrievalResult, error) {
+	retrievalStart := time.Now()
+
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
@@ -195,12 +180,15 @@ func (r *HybridRetriever) Retrieve(ctx context.Context, query string, queryEmbed
 	})
 
 	// 6. Reranking（可选）
+	var rerankDuration time.Duration
 	if r.config.UseReranking && len(results) > 0 {
 		topK := r.config.RerankTopK
 		if topK > len(results) {
 			topK = len(results)
 		}
+		rerankStart := time.Now()
 		results = r.rerank(query, results[:topK])
+		rerankDuration = time.Since(rerankStart)
 	}
 
 	// 7. 返回 Top-K
@@ -210,11 +198,23 @@ func (r *HybridRetriever) Retrieve(ctx context.Context, query string, queryEmbed
 
 	// 8. 过滤低分结果
 	filtered := []RetrievalResult{}
+	contextTokens := 0
 	for _, res := range results {
 		if res.FinalScore >= r.config.MinScore {
 			filtered = append(filtered, res)
+			contextTokens += estimateTokens(res.Document.Content)
 		}
 	}
+
+	// 9. 采集出口度量
+	metrics := collectRetrievalMetrics(ctx, retrievalStart, rerankDuration, r.config.TopK, len(filtered), contextTokens)
+	r.logger.Debug("retrieval metrics",
+		zap.Duration("retrieval_latency", metrics.RetrievalLatency),
+		zap.Duration("rerank_latency", metrics.RerankLatency),
+		zap.Int("topk", metrics.TopK),
+		zap.Int("hit_count", metrics.HitCount),
+		zap.Int("context_tokens", metrics.ContextTokens),
+	)
 
 	return filtered, nil
 }

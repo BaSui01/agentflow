@@ -49,22 +49,7 @@ func DefaultWebRetrieverConfig() WebRetrieverConfig {
 	}
 }
 
-// WebSearchFunc定义了用于网络搜索集成的功能签名.
-// 这让检索器与特定的网络搜索执行脱钩.
-// 用户可以将任何 WebSearch Provider(从llm/tools)包入此功能.
-type WebSearchFunc func(ctx context.Context, query string, maxResults int) ([]WebRetrievalResult, error)
-
-// Web RetrivalResult代表了为RAG所改编的网络搜索的结果.
-type WebRetrievalResult struct {
-	URL     string  `json:"url"`
-	Title   string  `json:"title"`
-	Content string  `json:"content"`
-	Score   float64 `json:"score"`
-}
-
-// WebRetriever将本地RAG检索与实时网络搜索相结合.
-// 它利用可配置的重量分配法将两种来源的结果合并
-// 并提供了两个源失败时的倒置行为.
+// WebRetriever 将本地 RAG 检索与实时网络搜索相结合。
 type WebRetriever struct {
 	config       WebRetrieverConfig
 	localRetriever *HybridRetriever // Local RAG retriever

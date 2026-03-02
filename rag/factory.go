@@ -13,17 +13,6 @@ import (
 	"go.uber.org/zap"
 )
 
-// VectorStoreType 标识要创建的向量存储后端。
-type VectorStoreType string
-
-const (
-	VectorStoreMemory   VectorStoreType = "memory"
-	VectorStoreQdrant   VectorStoreType = "qdrant"
-	VectorStoreWeaviate VectorStoreType = "weaviate"
-	VectorStoreMilvus   VectorStoreType = "milvus"
-	VectorStorePinecone VectorStoreType = "pinecone"
-)
-
 // NewVectorStoreFromConfig 根据指定的后端类型和全局配置创建 VectorStore。
 // 当 storeType 为空字符串时，默认使用 InMemory 后端。
 func NewVectorStoreFromConfig(cfg *config.Config, storeType VectorStoreType, logger *zap.Logger) (VectorStore, error) {
@@ -60,17 +49,6 @@ func NewVectorStoreFromConfig(cfg *config.Config, storeType VectorStoreType, log
 		return nil, fmt.Errorf("unsupported vector store type: %s", storeType)
 	}
 }
-
-// EmbeddingProviderType 标识要创建的嵌入提供者。
-type EmbeddingProviderType string
-
-const (
-	EmbeddingOpenAI EmbeddingProviderType = EmbeddingProviderType(embedding.ProviderOpenAI)
-	EmbeddingCohere EmbeddingProviderType = EmbeddingProviderType(embedding.ProviderCohere)
-	EmbeddingVoyage EmbeddingProviderType = EmbeddingProviderType(embedding.ProviderVoyage)
-	EmbeddingJina   EmbeddingProviderType = EmbeddingProviderType(embedding.ProviderJina)
-	EmbeddingGemini EmbeddingProviderType = EmbeddingProviderType(embedding.ProviderGemini)
-)
 
 // NewEmbeddingProviderFromConfig 根据 LLM 配置创建 embedding.Provider。
 // providerType 指定嵌入提供者类型；为空时默认使用 "openai"。
@@ -129,15 +107,6 @@ func NewRetrieverFromConfig(cfg *config.Config, opts ...RetrieverOption) (*Enhan
 		RerankProvider:    rerankProv,
 	}, logger), nil
 }
-
-// RerankProviderType 标识要创建的重排提供者。
-type RerankProviderType string
-
-const (
-	RerankCohere RerankProviderType = "cohere"
-	RerankVoyage RerankProviderType = "voyage"
-	RerankJina   RerankProviderType = "jina"
-)
 
 // RetrieverOption 配置 NewRetrieverFromConfig 的可选参数。
 type RetrieverOption func(*retrieverOptions)

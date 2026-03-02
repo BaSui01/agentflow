@@ -10,68 +10,6 @@ import (
 	"go.uber.org/zap"
 )
 
-// VectorStore 向量数据库接口
-type VectorStore interface {
-	// 添加文档
-	AddDocuments(ctx context.Context, docs []Document) error
-
-	// 搜索相似文档
-	Search(ctx context.Context, queryEmbedding []float64, topK int) ([]VectorSearchResult, error)
-
-	// 删除文档
-	DeleteDocuments(ctx context.Context, ids []string) error
-
-	// 更新文档
-	UpdateDocument(ctx context.Context, doc Document) error
-
-	// 获取文档数量
-	Count(ctx context.Context) (int, error)
-}
-
-// Clearable is an optional interface for VectorStore implementations that support
-// clearing all stored data. Use type assertion to check support:
-//
-//	if c, ok := store.(Clearable); ok { c.ClearAll(ctx) }
-type Clearable interface {
-	ClearAll(ctx context.Context) error
-}
-
-// DocumentLister is an optional interface for VectorStore implementations that
-// support listing document IDs with pagination. Use type assertion to check support:
-//
-//	if l, ok := store.(DocumentLister); ok { l.ListDocumentIDs(ctx, 100, 0) }
-type DocumentLister interface {
-	ListDocumentIDs(ctx context.Context, limit int, offset int) ([]string, error)
-}
-
-// LowLevelVectorStore is the low-level vector storage interface for raw vectors
-// with metadata. Used by memory systems and graph RAG. For document-level
-// operations, use VectorStore.
-type LowLevelVectorStore interface {
-	// Store stores a vector with its ID and metadata.
-	Store(ctx context.Context, id string, vector []float64, metadata map[string]any) error
-
-	// Search finds the top-K most similar vectors, optionally filtered by metadata.
-	Search(ctx context.Context, query []float64, topK int, filter map[string]any) ([]LowLevelSearchResult, error)
-
-	// Delete removes a vector by ID.
-	Delete(ctx context.Context, id string) error
-}
-
-// LowLevelSearchResult is the search result for LowLevelVectorStore.
-type LowLevelSearchResult struct {
-	ID       string         `json:"id"`
-	Score    float64        `json:"score"`
-	Metadata map[string]any `json:"metadata"`
-}
-
-// VectorSearchResult 向量搜索结果
-type VectorSearchResult struct {
-	Document Document `json:"document"`
-	Score    float64  `json:"score"`
-	Distance float64  `json:"distance"`
-}
-
 // ====== 内存向量存储（用于测试和小规模应用）======
 
 // InMemoryVectorStore 内存向量存储
