@@ -575,7 +575,16 @@ func (s *Service) invokeRerank(ctx context.Context, req *llmcore.UnifiedRequest)
 		return nil, llmcore.InvalidPayloadError(llmcore.CapabilityRerank, "*gateway.RerankInput")
 	}
 
-	providerName := firstNonEmpty(strings.TrimSpace(input.Provider), req.ProviderHint)
+	providerName := strings.TrimSpace(input.Provider)
+	if providerName == "" {
+		providerName = s.capabilities.ResolveRerankProvider(req.Hints.ChatProvider)
+	}
+	if providerName == "" {
+		providerName = s.capabilities.ResolveRerankProvider(metadataValue(req, llmcore.MetadataKeyChatProvider))
+	}
+	if providerName == "" {
+		providerName = req.ProviderHint
+	}
 	resp, err := s.capabilities.RerankDocs(ctx, input.Request, providerName)
 	if err != nil {
 		return nil, err

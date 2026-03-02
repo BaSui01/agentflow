@@ -3,6 +3,7 @@ package capabilities
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 
 	"github.com/BaSui01/agentflow/llm/capabilities/audio"
@@ -26,6 +27,8 @@ type Entry struct {
 	avatarMu      sync.RWMutex
 	avatar        map[string]avatar.Provider
 	defaultAvatar string
+	rerankBindMu  sync.RWMutex
+	chatToRerank  map[string]string
 }
 
 // NewEntry 创建统一能力入口。若 router 为空则创建默认路由器。
@@ -34,8 +37,9 @@ func NewEntry(router *multimodal.Router) *Entry {
 		router = multimodal.NewRouter()
 	}
 	return &Entry{
-		router: router,
-		avatar: make(map[string]avatar.Provider),
+		router:       router,
+		avatar:       make(map[string]avatar.Provider),
+		chatToRerank: make(map[string]string),
 	}
 }
 
@@ -106,6 +110,41 @@ func (e *Entry) Rerank(name string) (rerank.Provider, error) {
 		return nil, fmt.Errorf("capabilities entry is not configured")
 	}
 	return e.router.Rerank(name)
+}
+
+// BindChatToRerank 显式绑定 chat provider 与 rerank provider。
+func (e *Entry) BindChatToRerank(chatProvider string, rerankProvider string) error {
+	if e == nil || e.router == nil {
+		return fmt.Errorf("capabilities entry is not configured")
+	}
+	chat := strings.TrimSpace(chatProvider)
+	rerankName := strings.TrimSpace(rerankProvider)
+	if chat == "" || rerankName == "" {
+		return fmt.Errorf("chat provider and rerank provider are required")
+	}
+	if _, err := e.router.Rerank(rerankName); err != nil {
+		return err
+	}
+
+	e.rerankBindMu.Lock()
+	defer e.rerankBindMu.Unlock()
+	e.chatToRerank[strings.ToLower(chat)] = rerankName
+	return nil
+}
+
+// ResolveRerankProvider 按 chat provider 解析 rerank provider。
+func (e *Entry) ResolveRerankProvider(chatProvider string) string {
+	if e == nil {
+		return ""
+	}
+	chat := strings.TrimSpace(chatProvider)
+	if chat == "" {
+		return ""
+	}
+
+	e.rerankBindMu.RLock()
+	defer e.rerankBindMu.RUnlock()
+	return e.chatToRerank[strings.ToLower(chat)]
 }
 
 // TTS 获取指定 TTS provider（为空时使用默认 provider）。

@@ -3,6 +3,8 @@ package video
 import (
 	"context"
 	"time"
+
+	"github.com/BaSui01/agentflow/types"
 )
 
 // VideoFormat 表示支持的视频格式.
@@ -67,18 +69,19 @@ type BoundingBox struct {
 
 // GenerateRequest 表示视频生成请求.
 type GenerateRequest struct {
-	Prompt         string            `json:"prompt"`
-	NegativePrompt string            `json:"negative_prompt,omitempty"`
-	Model          string            `json:"model,omitempty"`
-	Duration       float64           `json:"duration,omitempty"`     // Duration in seconds
-	AspectRatio    string            `json:"aspect_ratio,omitempty"` // 16:9, 9:16, 1:1
-	Resolution     string            `json:"resolution,omitempty"`   // 720p, 1080p
-	FPS            int               `json:"fps,omitempty"`
-	Seed           int64             `json:"seed,omitempty"`
-	Image          string            `json:"image,omitempty"`           // Image-to-video base64
-	ImageURL       string            `json:"image_url,omitempty"`       // Image-to-video URL
-	ResponseFormat string            `json:"response_format,omitempty"` // url, b64_json
-	Metadata       map[string]string `json:"metadata,omitempty"`
+	Prompt         string                    `json:"prompt"`
+	NegativePrompt string                    `json:"negative_prompt,omitempty"`
+	Mode           types.VideoGenerationMode `json:"mode,omitempty"`
+	Model          string                    `json:"model,omitempty"`
+	Duration       float64                   `json:"duration,omitempty"`     // Duration in seconds
+	AspectRatio    string                    `json:"aspect_ratio,omitempty"` // 16:9, 9:16, 1:1
+	Resolution     string                    `json:"resolution,omitempty"`   // 720p, 1080p
+	FPS            int                       `json:"fps,omitempty"`
+	Seed           int64                     `json:"seed,omitempty"`
+	Image          string                    `json:"image,omitempty"`           // Image-to-video base64
+	ImageURL       string                    `json:"image_url,omitempty"`       // Image-to-video URL
+	ResponseFormat string                    `json:"response_format,omitempty"` // url, b64_json
+	Metadata       map[string]string         `json:"metadata,omitempty"`
 }
 
 // GenerateResponse 表示视频生成响应.
@@ -124,4 +127,3 @@ type Provider interface {
 	// SupportsGeneration 返回提供者是否支持视频生成.
 	SupportsGeneration() bool
 }
-

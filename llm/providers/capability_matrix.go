@@ -23,7 +23,7 @@ var ChatProviderCapabilityMatrix = []ProviderCapability{
 	{Provider: "Qwen", Image: true, Video: true, AudioGenerate: true, AudioSTT: false, Embedding: true, FineTuning: false, Rerank: true},
 	{Provider: "GLM", Image: true, Video: true, AudioGenerate: true, AudioSTT: false, Embedding: true, FineTuning: true, Rerank: true},
 	{Provider: "Grok", Image: true, Video: true, AudioGenerate: false, AudioSTT: false, Embedding: true, FineTuning: false},
-	{Provider: "Doubao", Image: true, Video: true, AudioGenerate: true, AudioSTT: false, Embedding: true, FineTuning: false},
+	{Provider: "Doubao", Image: true, Video: false, AudioGenerate: true, AudioSTT: false, Embedding: true, FineTuning: false},
 	{Provider: "Kimi", Image: false, Video: false, AudioGenerate: false, AudioSTT: false, Embedding: false, FineTuning: false},
 	{Provider: "Mistral", Image: false, Video: false, AudioGenerate: false, AudioSTT: true, Embedding: true, FineTuning: true},
 	{Provider: "Hunyuan", Image: false, Video: false, AudioGenerate: false, AudioSTT: false, Embedding: false, FineTuning: false},

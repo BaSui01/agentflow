@@ -7,8 +7,6 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/BaSui01/agentflow/types"
-
 	"github.com/BaSui01/agentflow/llm"
 	"github.com/BaSui01/agentflow/llm/providers"
 	"github.com/stretchr/testify/assert"
@@ -65,7 +63,7 @@ func TestGeminiProvider_CreateFineTuningJob_Success(t *testing.T) {
 		assert.Equal(t, http.MethodPost, r.Method)
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]any{
-			"name": "tunedModels/test-123",
+			"name":     "tunedModels/test-123",
 			"metadata": map[string]any{"totalSteps": 100},
 		})
 	}))

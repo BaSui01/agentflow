@@ -364,26 +364,7 @@ func TestMistralProvider_NotSupported(t *testing.T) {
 			callFn:  func() error { _, err := p.GenerateAudio(ctx, &llm.AudioGenerationRequest{}); return err },
 			feature: "audio generation",
 		},
-		{
-			name:    "CreateFineTuningJob returns not supported",
-			callFn:  func() error { _, err := p.CreateFineTuningJob(ctx, &llm.FineTuningJobRequest{}); return err },
-			feature: "fine-tuning",
-		},
-		{
-			name:    "ListFineTuningJobs returns not supported",
-			callFn:  func() error { _, err := p.ListFineTuningJobs(ctx); return err },
-			feature: "fine-tuning",
-		},
-		{
-			name:    "GetFineTuningJob returns not supported",
-			callFn:  func() error { _, err := p.GetFineTuningJob(ctx, "job-1"); return err },
-			feature: "fine-tuning",
-		},
-		{
-			name:    "CancelFineTuningJob returns not supported",
-			callFn:  func() error { return p.CancelFineTuningJob(ctx, "job-1") },
-			feature: "fine-tuning",
-		},
+		// Note: FineTuning methods are implemented, see TestMistralProvider_FineTuning_* tests
 	}
 
 	for _, tt := range tests {
@@ -398,6 +379,106 @@ func TestMistralProvider_NotSupported(t *testing.T) {
 			assert.Equal(t, "mistral", llmErr.Provider)
 		})
 	}
+}
+
+// --- FineTuning via httptest ---
+
+func TestMistralProvider_CreateFineTuningJob(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Contains(t, r.URL.Path, "/v1/fine_tuning/jobs")
+		assert.Equal(t, http.MethodPost, r.Method)
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(llm.FineTuningJob{
+			ID:      "ft-job-123",
+			Model:   "mistral-small-latest",
+			Status:  "queued",
+			Object:  "fine_tuning.job",
+		})
+	}))
+	t.Cleanup(func() { server.Close() })
+
+	p := NewMistralProvider(providers.MistralConfig{
+		BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key", BaseURL: server.URL},
+	}, zap.NewNop())
+
+	job, err := p.CreateFineTuningJob(context.Background(), &llm.FineTuningJobRequest{
+		Model:        "mistral-small-latest",
+		TrainingFile: "file-123",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "ft-job-123", job.ID)
+	assert.Equal(t, "queued", job.Status)
+}
+
+func TestMistralProvider_ListFineTuningJobs(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Contains(t, r.URL.Path, "/v1/fine_tuning/jobs")
+		assert.Equal(t, http.MethodGet, r.Method)
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"data": []llm.FineTuningJob{
+				{ID: "ft-job-1", Status: "succeeded"},
+				{ID: "ft-job-2", Status: "running"},
+			},
+		})
+	}))
+	t.Cleanup(func() { server.Close() })
+
+	p := NewMistralProvider(providers.MistralConfig{
+		BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key", BaseURL: server.URL},
+	}, zap.NewNop())
+
+	jobs, err := p.ListFineTuningJobs(context.Background())
+	require.NoError(t, err)
+	assert.Len(t, jobs, 2)
+	assert.Equal(t, "ft-job-1", jobs[0].ID)
+	assert.Equal(t, "ft-job-2", jobs[1].ID)
+}
+
+func TestMistralProvider_GetFineTuningJob(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Contains(t, r.URL.Path, "/v1/fine_tuning/jobs/ft-job-123")
+		assert.Equal(t, http.MethodGet, r.Method)
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(llm.FineTuningJob{
+			ID:     "ft-job-123",
+			Status: "succeeded",
+		})
+	}))
+	t.Cleanup(func() { server.Close() })
+
+	p := NewMistralProvider(providers.MistralConfig{
+		BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key", BaseURL: server.URL},
+	}, zap.NewNop())
+
+	job, err := p.GetFineTuningJob(context.Background(), "ft-job-123")
+	require.NoError(t, err)
+	assert.Equal(t, "ft-job-123", job.ID)
+	assert.Equal(t, "succeeded", job.Status)
+}
+
+func TestMistralProvider_CancelFineTuningJob(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Contains(t, r.URL.Path, "/v1/fine_tuning/jobs/ft-job-123/cancel")
+		assert.Equal(t, http.MethodPost, r.Method)
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(llm.FineTuningJob{
+			ID:     "ft-job-123",
+			Status: "cancelled",
+		})
+	}))
+	t.Cleanup(func() { server.Close() })
+
+	p := NewMistralProvider(providers.MistralConfig{
+		BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key", BaseURL: server.URL},
+	}, zap.NewNop())
+
+	err := p.CancelFineTuningJob(context.Background(), "ft-job-123")
+	require.NoError(t, err)
 }
 
 // --- TranscribeAudio via httptest ---

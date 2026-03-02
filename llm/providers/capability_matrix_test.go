@@ -102,9 +102,9 @@ func TestCapabilityMatrix_KnownCapabilities(t *testing.T) {
 		{"Grok", "Video", true},
 		{"Grok", "Embedding", true},
 
-		// Doubao: image, video, audio, embedding
+		// Doubao: image, audio, embedding
 		{"Doubao", "Image", true},
-		{"Doubao", "Video", true},
+		{"Doubao", "Video", false},
 		{"Doubao", "AudioGenerate", true},
 		{"Doubao", "Embedding", true},
 

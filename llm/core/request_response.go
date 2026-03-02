@@ -9,6 +9,7 @@ type UnifiedRequest struct {
 	ModelHint    string            `json:"model_hint,omitempty"`
 	RoutePolicy  RoutePolicy       `json:"route_policy,omitempty"`
 	TraceID      string            `json:"trace_id,omitempty"`
+	Hints        CapabilityHints   `json:"hints,omitempty"`
 	Payload      any               `json:"payload,omitempty"`
 	Metadata     map[string]string `json:"metadata,omitempty"`
 	Tags         []string          `json:"tags,omitempty"`
