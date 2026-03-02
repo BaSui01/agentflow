@@ -15,7 +15,7 @@ import (
 // Keep the root agent package shrinking over time.
 // This guard prevents adding more production files to agent/.
 func TestAgentRootPackageFileBudget(t *testing.T) {
-	const maxAgentRootFiles = 36
+	const maxAgentRootFiles = 20
 
 	entries, err := os.ReadDir("agent")
 	if err != nil {
@@ -109,6 +109,31 @@ func TestDependencyDirectionGuards(t *testing.T) {
 			sourcePrefix: "pkg",
 			targetPrefix: "cmd",
 			reason:       "infrastructure pkg layer must not depend on composition root",
+		},
+		{
+			sourcePrefix: "workflow",
+			targetPrefix: "agent/persistence",
+			reason:       "workflow must not depend on agent persistence implementation",
+		},
+		{
+			sourcePrefix: "rag",
+			targetPrefix: "agent",
+			reason:       "RAG layer must not depend on agent layer",
+		},
+		{
+			sourcePrefix: "rag",
+			targetPrefix: "workflow",
+			reason:       "RAG layer must not depend on workflow layer",
+		},
+		{
+			sourcePrefix: "rag",
+			targetPrefix: "api",
+			reason:       "RAG layer must not depend on API adapter layer",
+		},
+		{
+			sourcePrefix: "rag",
+			targetPrefix: "cmd",
+			reason:       "RAG layer must not depend on composition root",
 		},
 		{
 			sourcePrefix: "types",

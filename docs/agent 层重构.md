@@ -12,7 +12,7 @@
 - [x] 完成 `types/` 核心契约映射（message/tool/error/context/event/memory/token/config）
 - [x] 完成 Agent 单一入口与单一执行链路落地
 - [x] 完成 Agent 配置模型收敛（去并行配置模型）
-- [ ] 完成 Agent-LLM 调用口收敛到 `llm/gateway`
+- [x] 完成 Agent-LLM 调用口收敛到 `llm/gateway`
 - [ ] 删除旧并行路径（QuickSetup/Container/ServiceLocator/未接线 pipeline 等）
 - [ ] 完成回归测试与架构守卫
 
@@ -57,7 +57,7 @@
 
 ## 2.1 当前基线
 
-- `agent/` 根包生产文件数：`36`（已达到 `architecture_guard_test.go` 的预算上限）。
+- `agent/` 根包生产文件数：`20`（已达到 Phase-7 瘦身目标，`architecture_guard_test.go` 预算上限 20）。
 - 现状存在多套并行机制，核心问题不是“缺功能”，而是“路径重复 + 职责重叠 + 契约分叉”。
 
 ## 2.2 关键并行/重复点
@@ -105,16 +105,18 @@
 - 会话与多模态：`types.Message` / `ToolCall` / `ToolSchema` / `ToolResult`
 - 错误：`types.Error` + `types.ErrorCode`（含 agent 相关通用码）
 - 上下文：`WithTraceID/WithTenantID/WithUserID/WithRunID/WithLLMModel/...`
-- 事件：`types.EventBus` / `Event` / `EventHandler`
-- 记忆：`types.MemoryCategory` / `MemoryRecord` / `MemoryQuery`
+- 执行状态：`types.ExecutionStatus`（Workflow/Agent 共享状态口径）
 - Token：`types.TokenUsage` / `TokenCounter` / `Tokenizer`
 - 配置：`types.AgentConfig`（Core/LLM/Features/Extensions 分层）
 
+说明：
+- `types/event_bus.go` 与 `types/memory.go` 已删除，事件与记忆实现分别收敛到 `agent/event.go` 与 `agent/memorycore`，不再作为跨层 `types` 公共契约。
+
 ## 2.4 当前跨模块耦合点（需治理）
 
-- `workflow/execution_history.go` 依赖 `agent/persistence.TaskStatus`，存在 Workflow 对 Agent 领域类型耦合；应迁移到 `types` 统一执行状态契约。
-- `workflow/steps.go` 的 `LLMStep` 仍直调 `llm.Provider`；后续需与 Agent 一样收敛至 `llm/gateway`。
-- `architecture_guard_test.go` 与 `scripts/arch_guard.ps1` 尚未覆盖 `agent/rag/workflow` 全量方向约束；需补充规则，防止后续边界回退。
+- 已完成：`workflow/execution_history.go` 对 `agent/persistence.TaskStatus` 的依赖已迁移到 `types.ExecutionStatus`，Workflow 对 Agent 持久化类型耦合已解除。
+- 待治理：`workflow/steps.go` 的 `LLMStep` 仍直调 `llm.Provider`；后续需与 Agent 一样收敛至 `llm/gateway`。
+- 已完成：`architecture_guard_test.go` 与 `scripts/arch_guard.ps1` 已覆盖 `workflow -> agent/persistence` 与 `rag -> agent/workflow/api/cmd` 方向约束；后续重点是补强更细粒度的边界守卫。
 
 ---
 
@@ -311,12 +313,14 @@ cmd/agentflow(main,migrate)
 
 ## 6.5 Phase-4：收敛 LLM 调用到 Gateway
 
-- [ ] Agent 执行链从 `llm.Provider` 直调切换为 `llm/gateway`。
-- [ ] 统一 token/cost/trace 来源（以 gateway 出口为准）。
-- [ ] 删除 `llm_engine.go`、`components.LLMExecutor` 等并行 LLM 适配实现。
-- [ ] 双模型回归通过：`toolProvider != nil` 时工具循环走工具模型；`toolProvider == nil` 时回退主模型。
-  - 进行中：`BaseAgent` 新增 `providerViaGateway/toolViaGateway` 内部通道；`ChatCompletion/StreamCompletion` 与 ReAct 主链已切换为调用 gateway 适配 provider（`llm/gateway.ChatProviderAdapter`），不再在主链直接调用裸 `llm.Provider`。
-  - 进行中：`AgentBuilder` 注入 `toolProvider` 路径已统一使用 `SetToolProvider(...)`，确保工具模型同样经 gateway 入口。
+- [x] Agent 执行链从 `llm.Provider` 直调切换为 `llm/gateway`。
+- [x] 统一 token/cost/trace 来源（以 gateway 出口为准）。
+- [x] 删除 `llm_engine.go`、`components.LLMExecutor` 等并行 LLM 适配实现。
+- [x] 双模型回归通过：`toolProvider != nil` 时工具循环走工具模型；`toolProvider == nil` 时回退主模型。
+  - 已完成：`BaseAgent` 新增 `providerViaGateway/toolViaGateway` 内部通道；`ChatCompletion/StreamCompletion` 与 ReAct 主链已切换为调用 gateway 适配 provider（`llm/gateway.ChatProviderAdapter`），不再在主链直接调用裸 `llm.Provider`。
+  - 已完成：`AgentBuilder` 注入 `toolProvider` 路径已统一使用 `SetToolProvider(...)`，确保工具模型同样经 gateway 入口。
+  - 已完成：`llm_engine.go`、`components.go`（`LLMExecutor/ModularAgent`）、`pipeline*.go` 已确认删除。
+  - 已完成：`api/handlers/multimodal.go` 中 `structuredProvider` 已通过 `llmgateway.NewChatProviderAdapter` 包装。
 
 ## 6.6 Phase-5：多 Agent 与模式收敛
 
@@ -327,9 +331,10 @@ cmd/agentflow(main,migrate)
 
 ## 6.7 Phase-6：收敛扩展与持久化
 
-- [ ] 保留唯一扩展注册中心，删除重复管理器。
+- [x] 保留唯一扩展注册中心，删除重复管理器。
 - [ ] 持久化逻辑只保留一套（执行链不再手工重复组装 store 操作）。
 - [ ] 完成 guardrails/memory/observability 的单链路接入。
+  - 已完成：删除 `agent/feature_manager.go` 与其全部测试（`managers_test.go`、`event_extra_test.go`），`FeatureManager` 仅被测试消费、无生产引用。唯一扩展注册中心为 `ExtensionRegistry`。
 
 ## 6.8 Phase-7：根包瘦身与目录归位
 
@@ -434,7 +439,7 @@ cmd/agentflow(main,migrate)
 - [x] `agent/Container` + `AgentFactoryFunc` + `ServiceLocator`
 - [x] `agent/llm_engine.go`
 - [x] `agent/components.go` 中并行 `LLMExecutor/ExtensionManager/ModularAgent`（如不作为唯一主链）
-- [ ] `agent/feature_manager.go`
+- [x] `agent/feature_manager.go`
 - [x] `agent/pipeline*.go`（若未作为最终主链）
 - [x] `agent.Config` 与声明式 map 配置并行入口
 - [x] agent 内重复错误码定义（收敛到 `types.ErrorCode` 后）
@@ -497,3 +502,13 @@ cmd/agentflow(main,migrate)
 - [x] 2026-03-02：推进 Phase-3（错误码收敛第一批）：`agent/errors.go` 删除 `agent.ErrorCode` 与 `ErrCode*` 重复常量，`NewError/NewErrorWithCause/GetErrorCode` 全部改为 `types.ErrorCode`；同步 `agent/errors_test.go`；通过 `go test ./agent -run Error -count=1`、`go test ./agent/...`、`go test ./...` 与 `scripts/arch_guard.ps1`。
 - [x] 2026-03-02：推进 Phase-3（配置收敛第二批）：`BaseAgent` 内部配置正式切换为 `types.AgentConfig`，删除 `agent.Config` 与 `agent/config_types_bridge.go`，`agent/declarative_bridge`/`agent/runtime.Builder`/`cmd/agentflow` 全链路对齐；示例 `04/06/08/09` 全量迁移；通过 `go test ./...` 与 `scripts/arch_guard.ps1`。
 - [x] 2026-03-02：推进 Phase-4（Gateway 收敛第一批）：`BaseAgent` 增加 gateway 包装通道（`providerViaGateway/toolViaGateway`），`ChatCompletion/StreamCompletion` 与 ReAct 路径改为优先走 `llm/gateway.ChatProviderAdapter`；`AgentBuilder` 的 `toolProvider` 注入改为 `SetToolProvider(...)`，确保双模型路径同样经 gateway；通过 `go test ./agent/...`、`go test ./...` 与 `scripts/arch_guard.ps1`。
+- [x] 2026-03-02：完成 Phase-4（Gateway 收敛收尾）：验证主执行路径 `ChatCompletion/StreamCompletion/ReAct` 均通过 `gatewayProvider()/gatewayToolProvider()` 走 gateway；确认 `llm_engine.go/components.go/pipeline*.go` 已删除；`api/handlers/multimodal.go` 中 `structuredProvider` 已通过 `llmgateway.NewChatProviderAdapter` 包装。Phase 4 标记完成。
+- [x] 2026-03-02：完成 Phase-6（扩展收敛第一批）：删除 `agent/feature_manager.go`（仅测试消费，无生产引用）及其全部测试（`managers_test.go`、`event_extra_test.go` 中 FeatureManager 相关）；唯一扩展注册中心为 `ExtensionRegistry`；`agent/` 根包生产文件数从 32 降至 31；通过 `go test ./agent/...`、`go test ./...` 与 `scripts/arch_guard.ps1`。
+- [x] 2026-03-02：完成 Phase-6（持久化路径收敛）：`BaseAgent` 删除直接持有的 `promptStore/conversationStore/runStore` 字段，`SetPromptStore/SetConversationStore/SetRunStore` 全部委托 `b.persistence`；`react.go` Execute 主链中的 prompt 加载、run 记录、会话恢复/保存、run 状态更新全部改为 `b.persistence.*` 方法调用；删除 react.go 中重复的内联方法 `loadPromptFromStore/persistConversation`；`builder.go` Build() 通过 `agent.persistence.Set*Store()` 注入；通过 `go test ./agent/...`、`go test ./...`。
+- [x] 2026-03-02：完成 Phase-6（扩展字段收敛）：`BaseAgent` 删除 9 个直接扩展字段（reflectionExecutor/toolSelector/promptEnhancer/skillManager/mcpServer/lspClient/lspLifecycle/enhancedMemory/observabilitySystem），所有 `Enable*` 方法、`ExecuteEnhanced`、`GetFeatureStatus`、`ValidateConfiguration`、`Teardown` 全部委托 `b.extensions`；guardrails 字段保留不动；`integration_test.go` 测试断言改为 `ba.extensions.*Ext()` getter；通过 `go test ./...` 与架构守卫全部 4 项测试。
+- [x] 2026-03-02：完成 Phase-7（根包瘦身 31→20）：
+  - 第一批合并（31→27）：`tool_manager.go` → `interfaces.go`，`config_helpers.go` → `builder.go`，`run_config.go` → `completion.go`，`facade_memory_guardrails.go` → `base.go`。
+  - 死代码删除（27→24）：删除 `declarative_bridge.go`（0 消费者，循环导入不可移）、`plugin.go` + `plugin_middleware_test.go` + `lifecycle_plugin_test.go`（0 生产消费者）。
+  - 第二批合并（24→20）：`state.go` → `base.go`，`errors.go` → `base.go`，`runtime_stream.go` → `completion.go`，`lsp_runtime.go` → `lifecycle.go`，`persistence_stores.go` → `interfaces.go`。
+  - `architecture_guard_test.go` 文件预算从 36 收紧至 20。
+  - 通过 `go test ./...` 全量测试与 `TestAgentRootPackageFileBudget` 架构守卫。

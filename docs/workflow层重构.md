@@ -10,11 +10,12 @@
 
 - [x] 完成 Workflow 当前实现盘点（执行引擎、步骤体系、DSL、适配器）
 - [x] 完成分层边界确认（Workflow 作为 Layer 3 编排层）
-- [ ] 完成 Workflow 单一执行入口与单一状态模型落地
+- [ ] 完成 Workflow 单一执行入口落地（当前仍存在 Chain/Routing/Parallel/DAG 多入口）
+- [x] 完成 Workflow 单一状态模型落地（`execution_history` 已统一到 `types.ExecutionStatus`）
 - [ ] 完成 Workflow-LLM 调用口收敛到 `llm/gateway`
 - [ ] 完成 Workflow-Agent/RAG 适配边界收敛
-- [ ] 完成 Workflow 契约向 `types` 的最小化对齐
-- [ ] 完成架构守卫与回归测试
+- [ ] 完成 Workflow 契约向 `types` 的最小化对齐（部分完成：执行状态已对齐，LLM 步骤契约未对齐）
+- [ ] 完成架构守卫与回归测试（部分完成：守卫与 `workflow` 子集回归已通过，全量回归待完成）
 
 ---
 
@@ -41,14 +42,15 @@
 
 - `workflow/` 生产文件：根目录 `14`、`dsl/` `4`。
 - 当前执行能力：`Chain`、`DAG`、`Parallel`、`Routing`、`Agent Adapter`、`DSL Parser/Validator`。
+- 当前执行入口：`ChainWorkflow.Execute`、`RoutingWorkflow.Execute`、`ParallelWorkflow.Execute`、`DAGExecutor.Execute` 并存，尚未收敛为单入口。
 
 ## 2.2 关键并行/耦合点
 
 ### A. 状态模型跨层耦合
 
-- `workflow/execution_history.go` 直接依赖 `agent/persistence.TaskStatus`。
+- 历史问题已修复：`workflow/execution_history.go` 已切换为 `types.ExecutionStatus`，不再依赖 `agent/persistence.TaskStatus`。
 
-结论：编排层状态模型被 Agent 领域类型绑定，违反层边界目标。
+结论：该耦合项已清理，状态口径已上收到 `types`。
 
 ### B. LLM 调用路径未统一
 
@@ -64,9 +66,9 @@
 
 ## 2.3 当前跨层耦合点（需治理）
 
-- 状态类型需要上收 `types`（或定义 workflow 自有状态并由 adapter 映射）。
+- 状态类型上收 `types` 已完成；后续仅允许新增状态在 `types` 侧统一定义。
 - LLM 步骤接口应改为 gateway 抽象接口，移除对 `llm.Provider` 的直连。
-- 架构守卫需新增 workflow 侧禁止依赖 `agent/persistence` 的规则。
+- 架构守卫“workflow 禁止依赖 `agent/persistence`”已落地（`architecture_guard_test.go` + `scripts/arch_guard.ps1`）。
 
 ---
 
@@ -145,48 +147,23 @@ workflow/
 
 ## 6. 执行计划（单轨替换）
 
-## 6.1 Phase-0：冻结与基线
+状态值约定（机读）：`Done` / `Partial` / `Todo`
 
-- [ ] 冻结 `workflow/` 非重构需求变更。
-- [ ] 固化基线测试（DAG、DSL、路由、并发执行）。
-- [ ] 固化基线指标（执行耗时、失败率、重试率）。
-
-## 6.2 Phase-1：收敛执行入口
-
-- [ ] 建立唯一 executor 入口并替换调用点。
-- [ ] 清理并行调度路径（若存在旁路）。
-
-## 6.3 Phase-2：收敛状态模型
-
-- [ ] 去除 `workflow -> agent/persistence` 依赖。
-- [ ] 统一状态枚举与历史记录结构。
-
-## 6.4 Phase-3：收敛 LLM 调用到 Gateway
-
-- [ ] `LLMStep` 改造为 gateway 抽象调用。
-- [ ] 删除 `workflow` 直调 provider 代码路径。
-
-## 6.5 Phase-4：收敛适配边界
-
-- [ ] `agent_adapter`、`rag_adapter` 统一放置于 adapters 子层。
-- [ ] 核心包仅保留契约依赖。
-
-## 6.6 Phase-5：DSL 与执行链对齐
-
-- [ ] DSL 节点语义对齐统一步骤协议。
-- [ ] parser/validator 对齐目标状态模型与错误码。
-
-## 6.7 Phase-6：守卫与验收
-
-- [ ] 增加守卫规则：`workflow` 禁止导入 `agent/persistence`。
-- [ ] `go test ./workflow/...`、`go test ./...`、`scripts/arch_guard.ps1` 全通过。
-- [ ] API/README 文档同步。
+| Phase | 状态 | 完成判据（机读） | 证据路径 |
+|---|---|---|---|
+| Phase-0 冻结与基线 | Todo | `workflow` 范围冻结、基线测试清单、基线指标快照三项齐备 | `docs/workflow层重构.md`（当前无冻结记录与基线指标记录） |
+| Phase-1 收敛执行入口 | Partial | 存在且仅存在一个执行入口；并行入口全部下线 | `workflow/workflow.go`、`workflow/routing.go`、`workflow/parallel.go`、`workflow/dag_executor.go`（当前多入口并存） |
+| Phase-2 收敛状态模型 | Done | `workflow` 不导入 `agent/persistence`；执行状态统一到 `types.ExecutionStatus` | `workflow/execution_history.go`、`types/execution.go`、`architecture_guard_test.go`、`scripts/arch_guard.ps1` |
+| Phase-3 收敛 LLM 到 Gateway | Todo | `LLMStep` 仅依赖 gateway 抽象；删除直调 `llm.Provider` 路径 | `workflow/steps.go`（当前仍为 `llm.Provider` + `Completion`） |
+| Phase-4 收敛适配边界 | Partial | `agent_adapter/rag_adapter` 收敛到 `workflow/adapters/*`；核心包不含实现耦合 | `workflow/agent_adapter.go`（仍在根层）；`workflow/`（当前无 `rag_adapter.go`） |
+| Phase-5 DSL 与执行链对齐 | Todo | DSL 节点语义、parser/validator 与目标步骤协议与错误码口径一致 | `workflow/dsl/parser.go`、`workflow/dsl/validator.go`（未形成“已对齐”验收记录） |
+| Phase-6 守卫与验收 | Partial | 守卫规则、`go test ./workflow/...`、`go test ./...`、文档同步全部完成 | `architecture_guard_test.go`、`scripts/arch_guard.ps1`、`workflow/*_test.go`（全量 `go test ./...` 与 API/README 同步未在本文件闭环） |
 
 ---
 
 ## 7. 删除清单（必须执行）
 
-- [ ] `workflow/execution_history.go` 对 `agent/persistence` 的依赖路径
+- [x] `workflow/execution_history.go` 对 `agent/persistence` 的依赖路径
 - [ ] `workflow/steps.go` 直调 `llm.Provider` 路径
 - [ ] 核心执行层中的跨层实现耦合代码
 
@@ -194,11 +171,13 @@ workflow/
 
 ## 8. 完成定义（DoD）
 
-- [ ] Workflow 仅存在一个执行入口。
-- [ ] Workflow 执行状态仅存在一个口径定义。
-- [ ] Workflow 的 LLM 步骤仅通过 gateway 抽象调用。
-- [ ] Workflow 核心层不依赖 `agent/persistence` 等下层实现细节。
-- [ ] 架构守卫、回归测试、文档同步全部通过。
+| DoD 条目 | 状态 | 完成判据（机读） | 证据路径 |
+|---|---|---|---|
+| Workflow 仅存在一个执行入口 | Todo | `workflow` 对外执行入口唯一，其他入口移除或仅作兼容代理后删除 | `workflow/workflow.go`、`workflow/routing.go`、`workflow/parallel.go`、`workflow/dag_executor.go` |
+| Workflow 执行状态仅存在一个口径定义 | Done | 执行状态统一使用 `types.ExecutionStatus`，无 `agent/persistence` 状态耦合 | `workflow/execution_history.go`、`types/execution.go` |
+| Workflow 的 LLM 步骤仅通过 gateway 抽象调用 | Todo | `LLMStep` 不再持有 `llm.Provider`，改为 gateway 接口 `Invoke/Stream` | `workflow/steps.go` |
+| Workflow 核心层不依赖 `agent/persistence` 等下层实现细节 | Done | 无 `workflow -> agent/persistence` 导入；守卫持续拦截 | `architecture_guard_test.go`、`scripts/arch_guard.ps1` |
+| 架构守卫、回归测试、文档同步全部通过 | Partial | 守卫通过 + `workflow` 回归通过 + 全量回归通过 + API/README 完成同步 | `scripts/arch_guard.ps1`、`workflow/*_test.go`、`docs/workflow层重构.md`（待补全量回归与文档同步证据） |
 
 ---
 
@@ -218,3 +197,6 @@ workflow/
 ## 10. 变更日志
 
 - [x] 2026-03-02：创建文档，完成 Workflow 层重构目标、现状盘点、目标架构与阶段计划定义。
+- [x] 2026-03-02：修正“当前问题/守卫”章节与代码现状对齐：`execution_history` 已改用 `types.ExecutionStatus`，并明确 `workflow -> agent/persistence` 禁止依赖守卫已在测试与脚本中落地。
+- [x] 2026-03-02：修正文档状态判定粒度：将“单一执行入口”与“单一状态模型”拆分；回填 Phase-2 与 Phase-6 的已完成项；在总览中标注“部分完成”边界，避免将已完成项与待完成项混写为单一未完成状态。
+- [x] 2026-03-02：将第 6 章（Phase）与第 8 章（DoD）重构为机读判据表：统一状态枚举 `Done/Partial/Todo`，并为每条判据补充证据路径，便于后续自动审计与持续更新。

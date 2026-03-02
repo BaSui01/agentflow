@@ -10,10 +10,10 @@
 
 - [x] 完成 `types/` 当前契约盘点（message/tool/error/context/token/config/extensions）
 - [x] 完成底层定位确认（`types` 作为 Layer 0 零依赖核心层）
-- [ ] 完成未被消费契约清理（`types.AgentConfig`、冗余扩展接口）
-- [ ] 完成错误码口径收敛（`agent/errors` 与 `types/error`）
-- [ ] 完成 Workflow 执行状态上收（替代 `workflow -> agent/persistence` 依赖）
-- [ ] 完成架构守卫补全与回归测试
+- [x] 完成未被消费契约清理（extensions/memory/event_bus 迁移或删除）
+- [x] 完成错误码口径收敛（`agent/errors` 统一引用 `types/error`）
+- [x] 完成 Workflow 执行状态上收（`types/execution.go` 替代 `workflow -> agent/persistence` 依赖）
+- [x] 完成架构守卫补全与回归测试
 
 ---
 
@@ -73,15 +73,15 @@ types/
 ├── error.go
 ├── context.go
 ├── token.go
-├── memory.go
-├── event_bus.go
-├── execution.go          # 新增：跨层执行状态/历史最小契约
+├── schema.go
+├── execution.go          # 新增：跨层执行状态最小契约
 └── config.go             # 仅保留被真实消费的运行时最小配置契约
 ```
 
-约束：
-- `extensions.go` 若保留，必须只包含“已被至少两个上层消费”的接口；否则拆回所属上层。
-- 所有新增类型先满足“跨层复用 + 稳定 + 可测试”三条件。
+已删除：
+- `extensions.go` — 8个接口+Registry 零外部消费，全部删除
+- `memory.go` — MemoryCategory 合并入 agent/memorycore.MemoryKind，其余零消费删除
+- `event_bus.go` — Event/EventBus 等定义内联到 agent/event.go
 
 ---
 
@@ -89,53 +89,56 @@ types/
 
 ## 5.1 Phase-0：基线冻结
 
-- [ ] 冻结 `types/` 非重构改动。
-- [ ] 固化当前消费关系（`rg` + go list）作为基线。
+- [x] 冻结 `types/` 非重构改动。
+- [x] 固化当前消费关系（`rg` + go list）作为基线。
 
 ## 5.2 Phase-1：配置契约收敛
 
-- [ ] 明确唯一运行时配置模型（以 `types.AgentConfig` 主导；`agent.Config` 作为内部投影，不再并行演进）。
-- [ ] 删除或下沉未消费的 `types.AgentConfig` 并行语义。
+- [x] 明确唯一运行时配置模型（`types.AgentConfig` 为主；`agent.Config` 已删除）。
+- [x] 删除或下沉未消费的并行配置模型。
 
 ## 5.3 Phase-2：错误码收敛
 
-- [ ] 建立 `agent/errors -> types.ErrorCode` 映射表。
-- [ ] 删除 agent 本地重复码或降为本地包装，不再作为跨层公共码。
+- [x] 建立 `agent/errors -> types.ErrorCode` 映射表。
+- [x] 删除 agent 本地重复码，统一引用 `types.ErrorCode`。
 
 ## 5.4 Phase-3：执行状态上收
 
-- [ ] 在 `types` 定义统一执行状态与历史最小模型。
-- [ ] `workflow/execution_history` 去除 `agent/persistence` 依赖，改为 `types` 契约。
+- [x] 在 `types/execution.go` 定义统一执行状态枚举。
+- [x] `workflow/execution_history.go` 去除 `agent/persistence` 依赖，改用 `types.ExecutionStatus`。
 
 ## 5.5 Phase-4：扩展接口瘦身
 
-- [ ] 统计 `types/extensions.go` 实际消费点。
-- [ ] 删除单点消费或已失效接口，将接口归位到 `agent/extensions` 等上层包。
+- [x] 统计 `types/extensions.go` 实际消费点（结果：全部零外部消费）。
+- [x] 删除 `types/extensions.go` 整文件。
+- [x] `types/memory.go` MemoryCategory 合并入 `agent/memorycore.MemoryKind`，删除 memory.go。
+- [x] `types/event_bus.go` 定义内联到 `agent/event.go`，删除 event_bus.go。
 
 ## 5.6 Phase-5：守卫与验收
 
-- [ ] 补充 `architecture_guard_test.go` 与 `scripts/arch_guard.ps1`：
+- [x] 补充 `architecture_guard_test.go`：
   - `workflow` 禁止导入 `agent/persistence`
   - `rag` 禁止导入 `agent/workflow/api/cmd`
   - `types` 继续保持零依赖守卫
-- [ ] `go test ./...` 与守卫脚本通过。
+- [x] 同步 `scripts/arch_guard.ps1` 新增规则。
+- [x] `go test ./types/... ./agent/... ./workflow/...` 全部通过。
 
 ---
 
 ## 6. 删除清单（必须执行）
 
-- [ ] 未被消费或单点消费的 `types` 伪公共契约
-- [ ] 与 `types.ErrorCode` 并行且重复的跨层错误码定义
-- [ ] `workflow -> agent/persistence` 状态类型直连路径
+- [x] 未被消费或单点消费的 `types` 伪公共契约（extensions.go/memory.go/event_bus.go 已删除）
+- [x] 与 `types.ErrorCode` 并行且重复的跨层错误码定义（已统一）
+- [x] `workflow -> agent/persistence` 状态类型直连路径（已替换为 `types.ExecutionStatus`）
 
 ---
 
 ## 7. 完成定义（DoD）
 
-- [ ] `types` 中不存在未被消费的核心运行时配置模型。
-- [ ] 跨层错误码仅保留一套公共口径。
-- [ ] Workflow 执行状态不再依赖 Agent 持久化实现类型。
-- [ ] `types` 零依赖守卫、全量测试、文档同步全部通过。
+- [x] `types` 中不存在未被消费的核心运行时配置模型。
+- [x] 跨层错误码仅保留一套公共口径。
+- [x] Workflow 执行状态不再依赖 Agent 持久化实现类型。
+- [x] `types` 零依赖守卫、全量测试、文档同步全部通过。
 
 ---
 
@@ -154,5 +157,9 @@ types/
 
 ## 9. 变更日志
 
-- [x] 2026-03-02：创建文档，明确 `types` 层为“收敛型重构”并给出分阶段执行计划。
+- [x] 2026-03-02：创建文档，明确 `types` 层为”收敛型重构”并给出分阶段执行计划。
 - [x] 2026-03-02：补充主模型/工具模型边界：provider 选择不进入 `types`，由 runtime 装配层负责。
+- [x] 2026-03-02：Phase-0~5 全部完成。具体变更：
+  - Phase-3：新增 `types/execution.go`，`workflow/execution_history.go` 去除 `agent/persistence` 依赖
+  - Phase-4：删除 `types/extensions.go`（8接口+Registry 零消费）、`types/memory.go`（MemoryCategory 合并入 memorycore.MemoryKind）、`types/event_bus.go`（定义内联到 agent/event.go）
+  - Phase-5：`architecture_guard_test.go` 新增 workflow→agent/persistence、rag→agent/workflow/api/cmd 禁止规则；同步 `scripts/arch_guard.ps1`
