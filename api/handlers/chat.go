@@ -9,6 +9,9 @@ import (
 
 	"github.com/BaSui01/agentflow/api"
 	"github.com/BaSui01/agentflow/llm"
+	llmcore "github.com/BaSui01/agentflow/llm/core"
+	llmgateway "github.com/BaSui01/agentflow/llm/gateway"
+	llmpolicy "github.com/BaSui01/agentflow/llm/runtime/policy"
 	"github.com/BaSui01/agentflow/types"
 	"go.uber.org/zap"
 )
@@ -23,15 +26,20 @@ const defaultStreamTimeout = 30 * time.Second
 
 // ChatHandler 聊天接口处理器
 type ChatHandler struct {
-	provider  llm.Provider
+	gateway   llmcore.Gateway
 	converter ChatConverter
 	logger    *zap.Logger
 }
 
 // NewChatHandler 创建聊天处理器
-func NewChatHandler(provider llm.Provider, logger *zap.Logger) *ChatHandler {
+func NewChatHandler(provider llm.Provider, policyManager *llmpolicy.Manager, logger *zap.Logger) *ChatHandler {
+	gw := llmgateway.New(llmgateway.Config{
+		ChatProvider:  provider,
+		PolicyManager: policyManager,
+		Logger:        logger,
+	})
 	return &ChatHandler{
-		provider:  provider,
+		gateway:   gw,
 		converter: NewDefaultChatConverter(defaultStreamTimeout),
 		logger:    logger,
 	}
@@ -78,13 +86,23 @@ func (h *ChatHandler) HandleCompletion(w http.ResponseWriter, r *http.Request) {
 		defer cancel()
 	}
 
-	// 调用 Provider
+	// 通过 gateway 调用统一入口
 	start := time.Now()
-	resp, err := h.provider.Completion(ctx, llmReq)
+	gatewayResp, err := h.gateway.Invoke(ctx, &llmcore.UnifiedRequest{
+		Capability: llmcore.CapabilityChat,
+		ModelHint:  llmReq.Model,
+		TraceID:    llmReq.TraceID,
+		Payload:    llmReq,
+	})
 	duration := time.Since(start)
 
 	if err != nil {
 		h.handleProviderError(w, err)
+		return
+	}
+	resp, ok := gatewayResp.Output.(*llm.ChatResponse)
+	if !ok || resp == nil {
+		WriteError(w, types.NewInternalError("invalid chat gateway response"), h.logger)
 		return
 	}
 
@@ -143,9 +161,14 @@ func (h *ChatHandler) HandleStream(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Connection", "keep-alive")
 	w.Header().Set("X-Accel-Buffering", "no") // 禁用 nginx 缓冲
 
-	// 调用 Provider 流式接口
+	// 调用 gateway 流式接口
 	ctx := r.Context()
-	stream, err := h.provider.Stream(ctx, llmReq)
+	stream, err := h.gateway.Stream(ctx, &llmcore.UnifiedRequest{
+		Capability: llmcore.CapabilityChat,
+		ModelHint:  llmReq.Model,
+		TraceID:    llmReq.TraceID,
+		Payload:    llmReq,
+	})
 	if err != nil {
 		h.handleProviderError(w, err)
 		return
@@ -180,8 +203,17 @@ func (h *ChatHandler) HandleStream(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
+		llmChunk, ok := chunk.Output.(*llm.StreamChunk)
+		if !ok || llmChunk == nil {
+			h.logger.Error("invalid stream chunk payload",
+				zap.String("request_id", requestID),
+			)
+			WriteError(w, types.NewInternalError("invalid stream chunk payload"), h.logger)
+			return
+		}
+
 		// 转换为 API 格式
-		apiChunk := h.convertToAPIStreamChunk(&chunk)
+		apiChunk := h.convertToAPIStreamChunk(llmChunk)
 
 		// 发送 SSE 事件
 		if err := writeSSE(w, []byte("data: ")); err != nil {
@@ -239,14 +271,14 @@ func (h *ChatHandler) validateChatRequest(req *api.ChatRequest) *types.Error {
 	}
 
 	validRoles := map[string]bool{
-		"system": true, "user": true, "assistant": true, "tool": true,
+		"system": true, "developer": true, "user": true, "assistant": true, "tool": true,
 	}
 
 	for i, msg := range req.Messages {
 		// V-006: Role validation
 		if !validRoles[msg.Role] {
 			return types.NewError(types.ErrInvalidRequest,
-				fmt.Sprintf("messages[%d].role must be one of: system, user, assistant, tool", i))
+				fmt.Sprintf("messages[%d].role must be one of: system, developer, user, assistant, tool", i))
 		}
 
 		// V-003: Content length validation per message
@@ -331,16 +363,22 @@ func writeSSE(w http.ResponseWriter, parts ...[]byte) error {
 // =============================================================================
 
 // convertTypesMessageToAPI converts a types.Message to an api.Message,
-// copying all fields including Images, Metadata, and Timestamp.
+// copying all fields including reasoning/thinking/tool/multimodal metadata.
 func convertTypesMessageToAPI(msg types.Message) api.Message {
 	m := api.Message{
-		Role:       string(msg.Role),
-		Content:    msg.Content,
-		Name:       msg.Name,
-		ToolCalls:  msg.ToolCalls,
-		ToolCallID: msg.ToolCallID,
-		Metadata:   msg.Metadata,
-		Timestamp:  msg.Timestamp,
+		Role:             string(msg.Role),
+		Content:          msg.Content,
+		ReasoningContent: msg.ReasoningContent,
+		ThinkingBlocks:   msg.ThinkingBlocks,
+		Refusal:          msg.Refusal,
+		Name:             msg.Name,
+		ToolCalls:        msg.ToolCalls,
+		ToolCallID:       msg.ToolCallID,
+		IsToolError:      msg.IsToolError,
+		Videos:           msg.Videos,
+		Annotations:      msg.Annotations,
+		Metadata:         msg.Metadata,
+		Timestamp:        msg.Timestamp,
 	}
 	if len(msg.Images) > 0 {
 		images := make([]api.ImageContent, len(msg.Images))

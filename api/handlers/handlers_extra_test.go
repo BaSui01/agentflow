@@ -485,7 +485,7 @@ func TestRedisHealthCheck_Error(t *testing.T) {
 // =============================================================================
 
 func TestChatHandler_HandleProviderError_TypedError(t *testing.T) {
-	handler := NewChatHandler(nil, zap.NewNop())
+	handler := NewChatHandler(nil, nil, zap.NewNop())
 
 	w := httptest.NewRecorder()
 	typedErr := types.NewError(types.ErrRateLimit, "too many requests")
@@ -495,7 +495,7 @@ func TestChatHandler_HandleProviderError_TypedError(t *testing.T) {
 }
 
 func TestChatHandler_HandleProviderError_GenericError(t *testing.T) {
-	handler := NewChatHandler(nil, zap.NewNop())
+	handler := NewChatHandler(nil, nil, zap.NewNop())
 
 	w := httptest.NewRecorder()
 	handler.handleProviderError(w, errors.New("unknown error"))
@@ -546,6 +546,41 @@ func TestConvertTypesMessageToAPI_WithMetadata(t *testing.T) {
 	assert.Equal(t, ts, result.Timestamp)
 }
 
+func TestConvertTypesMessageToAPI_WithExtendedFields(t *testing.T) {
+	reasoning := "internal reasoning"
+	refusal := "cannot comply"
+	msg := types.Message{
+		Role:             types.RoleAssistant,
+		Content:          "final answer",
+		ReasoningContent: &reasoning,
+		ThinkingBlocks: []types.ThinkingBlock{
+			{Thinking: "step 1"},
+		},
+		Refusal:     &refusal,
+		IsToolError: true,
+		Videos: []types.VideoContent{
+			{URL: "https://example.com/video.mp4"},
+		},
+		Annotations: []types.Annotation{
+			{Type: "url_citation", URL: "https://example.com", Title: "example"},
+		},
+	}
+
+	result := convertTypesMessageToAPI(msg)
+	require.NotNil(t, result.ReasoningContent)
+	require.NotNil(t, result.Refusal)
+	assert.Equal(t, reasoning, *result.ReasoningContent)
+	assert.Len(t, result.ThinkingBlocks, 1)
+	assert.Equal(t, "step 1", result.ThinkingBlocks[0].Thinking)
+	assert.Equal(t, refusal, *result.Refusal)
+	assert.True(t, result.IsToolError)
+	assert.Len(t, result.Videos, 1)
+	assert.Equal(t, "https://example.com/video.mp4", result.Videos[0].URL)
+	assert.Len(t, result.Annotations, 1)
+	assert.Equal(t, "url_citation", result.Annotations[0].Type)
+	assert.Equal(t, "https://example.com", result.Annotations[0].URL)
+}
+
 // =============================================================================
 // ChatHandler — convertStreamUsage
 // =============================================================================
@@ -573,7 +608,7 @@ func TestConvertStreamUsage_NonNil(t *testing.T) {
 // =============================================================================
 
 func TestChatHandler_ConvertToLLMRequest_WithImages(t *testing.T) {
-	handler := NewChatHandler(nil, zap.NewNop())
+	handler := NewChatHandler(nil, nil, zap.NewNop())
 
 	apiReq := &api.ChatRequest{
 		Model: "gpt-4",
@@ -596,7 +631,7 @@ func TestChatHandler_ConvertToLLMRequest_WithImages(t *testing.T) {
 }
 
 func TestChatHandler_ConvertToLLMRequest_InvalidTimeout(t *testing.T) {
-	handler := NewChatHandler(nil, zap.NewNop())
+	handler := NewChatHandler(nil, nil, zap.NewNop())
 
 	apiReq := &api.ChatRequest{
 		Model: "gpt-4",
@@ -611,6 +646,50 @@ func TestChatHandler_ConvertToLLMRequest_InvalidTimeout(t *testing.T) {
 	assert.Equal(t, 30*time.Second, llmReq.Timeout)
 }
 
+func TestChatHandler_ConvertToLLMRequest_WithExtendedMessageFields(t *testing.T) {
+	handler := NewChatHandler(nil, nil, zap.NewNop())
+
+	reasoning := "internal reasoning"
+	refusal := "cannot comply"
+	apiReq := &api.ChatRequest{
+		Model: "gpt-4",
+		Messages: []api.Message{
+			{
+				Role:             "assistant",
+				Content:          "final answer",
+				ReasoningContent: &reasoning,
+				ThinkingBlocks: []types.ThinkingBlock{
+					{Thinking: "step 1"},
+				},
+				Refusal:     &refusal,
+				IsToolError: true,
+				Videos: []types.VideoContent{
+					{URL: "https://example.com/video.mp4"},
+				},
+				Annotations: []types.Annotation{
+					{Type: "url_citation", URL: "https://example.com", Title: "example"},
+				},
+			},
+		},
+	}
+
+	llmReq := handler.convertToLLMRequest(apiReq)
+	require.Len(t, llmReq.Messages, 1)
+	msg := llmReq.Messages[0]
+	require.NotNil(t, msg.ReasoningContent)
+	require.NotNil(t, msg.Refusal)
+	assert.Equal(t, reasoning, *msg.ReasoningContent)
+	assert.Len(t, msg.ThinkingBlocks, 1)
+	assert.Equal(t, "step 1", msg.ThinkingBlocks[0].Thinking)
+	assert.Equal(t, refusal, *msg.Refusal)
+	assert.True(t, msg.IsToolError)
+	assert.Len(t, msg.Videos, 1)
+	assert.Equal(t, "https://example.com/video.mp4", msg.Videos[0].URL)
+	assert.Len(t, msg.Annotations, 1)
+	assert.Equal(t, "url_citation", msg.Annotations[0].Type)
+	assert.Equal(t, "https://example.com", msg.Annotations[0].URL)
+}
+
 // =============================================================================
 // ChatHandler — HandleCompletion with provider error
 // =============================================================================
@@ -622,7 +701,7 @@ func TestChatHandler_HandleCompletion_ProviderError(t *testing.T) {
 		},
 	}
 
-	handler := NewChatHandler(provider, zap.NewNop())
+	handler := NewChatHandler(provider, nil, zap.NewNop())
 
 	request := api.ChatRequest{
 		Model: "gpt-4",
@@ -646,7 +725,7 @@ func TestChatHandler_HandleCompletion_ProviderError(t *testing.T) {
 // =============================================================================
 
 func TestChatHandler_HandleCompletion_WrongContentType(t *testing.T) {
-	handler := NewChatHandler(nil, zap.NewNop())
+	handler := NewChatHandler(nil, nil, zap.NewNop())
 
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
@@ -668,7 +747,7 @@ func TestChatHandler_HandleStream_ProviderError(t *testing.T) {
 		},
 	}
 
-	handler := NewChatHandler(provider, zap.NewNop())
+	handler := NewChatHandler(provider, nil, zap.NewNop())
 
 	request := api.ChatRequest{
 		Model: "gpt-4",
@@ -707,7 +786,7 @@ func TestChatHandler_HandleStream_StreamErrorChunk(t *testing.T) {
 		},
 	}
 
-	handler := NewChatHandler(provider, zap.NewNop())
+	handler := NewChatHandler(provider, nil, zap.NewNop())
 
 	request := api.ChatRequest{
 		Model: "gpt-4",
@@ -733,7 +812,7 @@ func TestChatHandler_HandleStream_StreamErrorChunk(t *testing.T) {
 // =============================================================================
 
 func TestChatHandler_ValidateChatRequest_InvalidRole(t *testing.T) {
-	handler := NewChatHandler(nil, zap.NewNop())
+	handler := NewChatHandler(nil, nil, zap.NewNop())
 
 	req := &api.ChatRequest{
 		Model: "gpt-4",
@@ -747,12 +826,26 @@ func TestChatHandler_ValidateChatRequest_InvalidRole(t *testing.T) {
 	assert.Contains(t, err.Message, "role must be one of")
 }
 
+func TestChatHandler_ValidateChatRequest_DeveloperRole(t *testing.T) {
+	handler := NewChatHandler(nil, nil, zap.NewNop())
+
+	req := &api.ChatRequest{
+		Model: "gpt-4",
+		Messages: []api.Message{
+			{Role: "developer", Content: "You must output JSON"},
+		},
+	}
+
+	err := handler.validateChatRequest(req)
+	assert.Nil(t, err)
+}
+
 // =============================================================================
 // ChatHandler — validateChatRequest with negative max_tokens
 // =============================================================================
 
 func TestChatHandler_ValidateChatRequest_NegativeMaxTokens(t *testing.T) {
-	handler := NewChatHandler(nil, zap.NewNop())
+	handler := NewChatHandler(nil, nil, zap.NewNop())
 
 	req := &api.ChatRequest{
 		Model: "gpt-4",

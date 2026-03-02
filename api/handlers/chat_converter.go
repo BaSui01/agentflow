@@ -39,14 +39,20 @@ func (c *DefaultChatConverter) ToLLMRequest(req *api.ChatRequest) *llm.ChatReque
 	messages := make([]types.Message, len(req.Messages))
 	for i, msg := range req.Messages {
 		messages[i] = types.Message{
-			Role:       types.Role(msg.Role),
-			Content:    msg.Content,
-			Name:       msg.Name,
-			ToolCalls:  msg.ToolCalls,
-			ToolCallID: msg.ToolCallID,
-			Images:     convertAPIImagesToTypes(msg.Images),
-			Metadata:   msg.Metadata,
-			Timestamp:  msg.Timestamp,
+			Role:             types.Role(msg.Role),
+			Content:          msg.Content,
+			ReasoningContent: msg.ReasoningContent,
+			ThinkingBlocks:   msg.ThinkingBlocks,
+			Refusal:          msg.Refusal,
+			Name:             msg.Name,
+			ToolCalls:        msg.ToolCalls,
+			ToolCallID:       msg.ToolCallID,
+			IsToolError:      msg.IsToolError,
+			Images:           convertAPIImagesToTypes(msg.Images),
+			Videos:           msg.Videos,
+			Annotations:      msg.Annotations,
+			Metadata:         msg.Metadata,
+			Timestamp:        msg.Timestamp,
 		}
 	}
 

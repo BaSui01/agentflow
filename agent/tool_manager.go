@@ -4,7 +4,7 @@ import (
 	"context"
 	"github.com/BaSui01/agentflow/types"
 
-	llmtools "github.com/BaSui01/agentflow/llm/tools"
+	llmtools "github.com/BaSui01/agentflow/llm/capabilities/tools"
 )
 
 // ToolManager为Agent运行时间摘要了"工具列表+工具执行"的能力.

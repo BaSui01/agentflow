@@ -5,7 +5,7 @@ import (
 	"fmt"
 
 	"github.com/BaSui01/agentflow/config"
-	"github.com/BaSui01/agentflow/llm/rerank"
+	"github.com/BaSui01/agentflow/llm/capabilities/rerank"
 	"go.uber.org/zap"
 )
 

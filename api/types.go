@@ -140,14 +140,26 @@ type Message struct {
 	Role string `json:"role" example:"user" binding:"required"`
 	// 消息内容
 	Content string `json:"content,omitempty" example:"Hello, how are you?"`
+	// 推理/思考内容
+	ReasoningContent *string `json:"reasoning_content,omitempty"`
+	// Claude thinking blocks（用于多轮 round-trip）
+	ThinkingBlocks []types.ThinkingBlock `json:"thinking_blocks,omitempty"`
+	// 模型拒绝内容
+	Refusal *string `json:"refusal,omitempty"`
 	// 名称（用于工具消息）
 	Name string `json:"name,omitempty"`
 	// 工具调用（用于助手消息）
 	ToolCalls []types.ToolCall `json:"tool_calls,omitempty"`
 	// 工具调用 ID（用于工具消息）
 	ToolCallID string `json:"tool_call_id,omitempty"`
+	// tool_result 是否为错误结果
+	IsToolError bool `json:"is_tool_error,omitempty"`
 	// 多模式消息的图像内容
 	Images []ImageContent `json:"images,omitempty"`
+	// 多模态消息的视频内容
+	Videos []types.VideoContent `json:"videos,omitempty"`
+	// URL 引用注释
+	Annotations []types.Annotation `json:"annotations,omitempty"`
 	// 自定义元数据
 	Metadata any `json:"metadata,omitempty"`
 	// 消息时间戳

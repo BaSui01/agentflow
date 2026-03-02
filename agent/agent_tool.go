@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"time"
 
-	llmtools "github.com/BaSui01/agentflow/llm/tools"
+	llmtools "github.com/BaSui01/agentflow/llm/capabilities/tools"
 	"github.com/BaSui01/agentflow/types"
 )
 

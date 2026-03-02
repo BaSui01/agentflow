@@ -112,12 +112,7 @@ type JWTConfig struct {
 }
 
 // AgentConfig Agent 配置，用于 YAML/环境变量加载（扁平结构）。
-// 注意：这与 types.AgentConfig 是不同层次的配置结构：
-//   - config.AgentConfig：面向部署配置（YAML 文件 + 环境变量），扁平结构便于序列化
-//   - types.AgentConfig：面向运行时行为，模块化嵌套结构（Core/LLM/Features/Extensions）
-//
-// 两者服务于不同场景，不做结构统一；请通过 AgentConfig.ToRuntimeConfig()
-// 进行显式转换，避免跨层直接混用。
+// 运行时构建链路统一使用 agent.Config + agent.NewAgentBuilder。
 type AgentConfig struct {
 	// 名称
 	Name string `yaml:"name" env:"NAME"`

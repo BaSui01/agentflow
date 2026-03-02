@@ -13,7 +13,7 @@ import (
 	"github.com/BaSui01/agentflow/agent/runtime"
 	"github.com/BaSui01/agentflow/agent/skills"
 	"github.com/BaSui01/agentflow/llm"
-	"github.com/BaSui01/agentflow/llm/tools"
+	"github.com/BaSui01/agentflow/llm/capabilities/tools"
 	mongoclient "github.com/BaSui01/agentflow/pkg/mongodb"
 	"go.uber.org/zap"
 )

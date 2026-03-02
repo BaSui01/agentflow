@@ -8,12 +8,12 @@ import (
 	"os"
 	"time"
 
-	"github.com/BaSui01/agentflow/llm/embedding"
-	"github.com/BaSui01/agentflow/llm/multimodal"
+	"github.com/BaSui01/agentflow/llm/capabilities/embedding"
+	"github.com/BaSui01/agentflow/llm/capabilities/multimodal"
 	"github.com/BaSui01/agentflow/llm/providers"
 	vendorprofile "github.com/BaSui01/agentflow/llm/providers/vendor"
-	"github.com/BaSui01/agentflow/llm/rerank"
-	"github.com/BaSui01/agentflow/llm/speech"
+	"github.com/BaSui01/agentflow/llm/capabilities/rerank"
+	"github.com/BaSui01/agentflow/llm/capabilities/audio"
 	"github.com/BaSui01/agentflow/rag"
 	"go.uber.org/zap"
 )

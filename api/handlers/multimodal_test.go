@@ -17,8 +17,8 @@ import (
 	"time"
 
 	"github.com/BaSui01/agentflow/llm"
-	"github.com/BaSui01/agentflow/llm/image"
-	"github.com/BaSui01/agentflow/llm/video"
+	"github.com/BaSui01/agentflow/llm/capabilities/image"
+	"github.com/BaSui01/agentflow/llm/capabilities/video"
 	"github.com/BaSui01/agentflow/types"
 	"github.com/alicebob/miniredis/v2"
 	"github.com/redis/go-redis/v9"
@@ -157,6 +157,7 @@ func TestMultimodalHandler_ImageReferenceFlow(t *testing.T) {
 	vdo := &mockVideoProvider{}
 	h := NewMultimodalHandlerWithProviders(
 		nil,
+		nil,
 		map[string]image.Provider{"mock": img},
 		map[string]video.Provider{"runway": vdo},
 		"mock",
@@ -195,6 +196,7 @@ func TestMultimodalHandler_VideoReferenceFlow(t *testing.T) {
 	vdo := &mockVideoProvider{}
 	h := NewMultimodalHandlerWithProviders(
 		nil,
+		nil,
 		map[string]image.Provider{"mock": img},
 		map[string]video.Provider{"runway": vdo},
 		"mock",
@@ -231,6 +233,7 @@ func TestMultimodalHandler_PlanUnknownField(t *testing.T) {
 	logger := zap.NewNop()
 	h := NewMultimodalHandlerWithProviders(
 		&mockLLMProvider{},
+		nil,
 		map[string]image.Provider{},
 		map[string]video.Provider{},
 		"",
@@ -257,6 +260,7 @@ func TestMultimodalHandler_Capabilities(t *testing.T) {
 	img := &mockImageProvider{}
 	vdo := &mockVideoProvider{}
 	h := NewMultimodalHandlerWithProviders(
+		nil,
 		nil,
 		map[string]image.Provider{"mock": img},
 		map[string]video.Provider{"runway": vdo},
@@ -296,6 +300,7 @@ func TestMultimodalHandler_DefaultProviderRespected(t *testing.T) {
 func TestMultimodalHandler_UploadReferenceStoreFailure(t *testing.T) {
 	h := NewMultimodalHandlerWithProviders(
 		nil,
+		nil,
 		map[string]image.Provider{},
 		map[string]video.Provider{},
 		"",
@@ -332,6 +337,7 @@ func TestMultimodalHandler_ImageRejectsPrivateReferenceURL(t *testing.T) {
 	img := &mockImageProvider{}
 	h := NewMultimodalHandlerWithProviders(
 		nil,
+		nil,
 		map[string]image.Provider{"mock": img},
 		map[string]video.Provider{},
 		"mock",
@@ -364,6 +370,7 @@ func TestMultimodalHandler_ImageRejectsPrivateReferenceURL(t *testing.T) {
 func TestMultimodalHandler_VideoRejectsPrivateReferenceURL(t *testing.T) {
 	vdo := &mockVideoProvider{}
 	h := NewMultimodalHandlerWithProviders(
+		nil,
 		nil,
 		map[string]image.Provider{},
 		map[string]video.Provider{"runway": vdo},
@@ -529,4 +536,3 @@ func uploadTestReference(t *testing.T, h *MultimodalHandler) string {
 	require.NotEmpty(t, refID)
 	return refID
 }
-

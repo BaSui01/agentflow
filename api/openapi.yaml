@@ -1190,7 +1190,7 @@ components:
             properties:
               role:
                 type: string
-                enum: [system, user, assistant, tool]
+                enum: [system, developer, user, assistant, tool]
               content:
                 type: string
         max_tokens:

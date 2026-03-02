@@ -16,7 +16,7 @@ import (
 
 	"github.com/BaSui01/agentflow/agent"
 	"github.com/BaSui01/agentflow/llm"
-	"github.com/BaSui01/agentflow/llm/factory"
+	"github.com/BaSui01/agentflow/llm/providers/vendor"
 	"go.uber.org/zap"
 )
 
@@ -113,7 +113,7 @@ func New(opts ...Option) (*agent.BaseAgent, error) {
 			return nil, fmt.Errorf("API key is required for %s: set the environment variable or use WithAPIKey", o.providerName)
 		}
 		var err error
-		p, err = factory.NewProviderFromConfig(o.providerName, factory.ProviderConfig{
+		p, err = vendor.NewChatProviderFromConfig(o.providerName, vendor.ChatProviderConfig{
 			APIKey: o.apiKey,
 			Model:  o.model,
 		}, o.logger)
@@ -145,4 +145,3 @@ func New(opts ...Option) (*agent.BaseAgent, error) {
 		WithLogger(o.logger).
 		Build()
 }
-
