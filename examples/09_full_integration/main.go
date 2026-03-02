@@ -15,6 +15,7 @@ import (
 	"github.com/BaSui01/agentflow/llm"
 	"github.com/BaSui01/agentflow/llm/providers"
 	"github.com/BaSui01/agentflow/llm/providers/openai"
+	"github.com/BaSui01/agentflow/types"
 	"go.uber.org/zap"
 )
 
@@ -70,20 +71,27 @@ func demoEnhancedSingleAgent(logger *zap.Logger) {
 
 	// 1. Create base Agent
 	fmt.Println("\n1. Creating base Agent")
-	config := agent.Config{
-		ID:          "enhanced-agent-001",
-		Name:        "Enhanced Agent",
-		Type:        agent.TypeGeneric,
-		Model:       "gpt-4",
-		MaxTokens:   2000,
-		Temperature: 0.7,
-
-		EnableReflection:     true,
-		EnableToolSelection:  true,
-		EnablePromptEnhancer: true,
-		EnableSkills:         true,
-		EnableEnhancedMemory: true,
-		EnableObservability:  true,
+	config := types.AgentConfig{
+		Core: types.CoreConfig{
+			ID:   "enhanced-agent-001",
+			Name: "Enhanced Agent",
+			Type: string(agent.TypeGeneric),
+		},
+		LLM: types.LLMConfig{
+			Model:       "gpt-4",
+			MaxTokens:   2000,
+			Temperature: 0.7,
+		},
+		Features: types.FeaturesConfig{
+			Reflection:     &types.ReflectionConfig{Enabled: true},
+			ToolSelection:  &types.ToolSelectionConfig{Enabled: true},
+			PromptEnhancer: &types.PromptEnhancerConfig{Enabled: true},
+			Memory:         &types.MemoryConfig{Enabled: true},
+		},
+		Extensions: types.ExtensionsConfig{
+			Skills:        &types.SkillsConfig{Enabled: true},
+			Observability: &types.ObservabilityConfig{Enabled: true},
+		},
 	}
 
 	baseAgent := agent.NewBaseAgent(config, provider, nil, nil, nil, logger)
@@ -198,12 +206,16 @@ func demoHierarchicalSystem(logger *zap.Logger) {
 	fmt.Println("\nUse case: complex tasks requiring decomposition and parallel execution")
 
 	// 1. Create Supervisor
-	supervisorConfig := agent.Config{
-		ID:          "supervisor",
-		Name:        "Supervisor Agent",
-		Type:        agent.TypeGeneric,
-		Model:       "gpt-4",
-		Description: "Responsible for task decomposition and result aggregation",
+	supervisorConfig := types.AgentConfig{
+		Core: types.CoreConfig{
+			ID:          "supervisor",
+			Name:        "Supervisor Agent",
+			Type:        string(agent.TypeGeneric),
+			Description: "Responsible for task decomposition and result aggregation",
+		},
+		LLM: types.LLMConfig{
+			Model: "gpt-4",
+		},
 	}
 	supervisor := agent.NewBaseAgent(supervisorConfig, provider, nil, nil, nil, logger)
 
@@ -212,12 +224,16 @@ func demoHierarchicalSystem(logger *zap.Logger) {
 	workerTypes := []string{"analyzer", "reviewer", "optimizer"}
 
 	for i, wType := range workerTypes {
-		workerConfig := agent.Config{
-			ID:          fmt.Sprintf("worker-%d", i+1),
-			Name:        fmt.Sprintf("Worker %s", wType),
-			Type:        agent.AgentType(wType),
-			Model:       "gpt-3.5-turbo",
-			Description: fmt.Sprintf("Specialized in %s tasks", wType),
+		workerConfig := types.AgentConfig{
+			Core: types.CoreConfig{
+				ID:          fmt.Sprintf("worker-%d", i+1),
+				Name:        fmt.Sprintf("Worker %s", wType),
+				Type:        wType,
+				Description: fmt.Sprintf("Specialized in %s tasks", wType),
+			},
+			LLM: types.LLMConfig{
+				Model: "gpt-3.5-turbo",
+			},
 		}
 		worker := agent.NewBaseAgent(workerConfig, provider, nil, nil, nil, logger)
 		workers = append(workers, worker)
@@ -280,12 +296,16 @@ func demoCollaborativeSystem(logger *zap.Logger) {
 	}
 
 	for _, role := range expertRoles {
-		config := agent.Config{
-			ID:          role.id,
-			Name:        role.name,
-			Type:        agent.TypeGeneric,
-			Model:       "gpt-4",
-			Description: role.desc,
+		config := types.AgentConfig{
+			Core: types.CoreConfig{
+				ID:          role.id,
+				Name:        role.name,
+				Type:        string(agent.TypeGeneric),
+				Description: role.desc,
+			},
+			LLM: types.LLMConfig{
+				Model: "gpt-4",
+			},
 		}
 		expert := agent.NewBaseAgent(config, provider, nil, nil, nil, logger)
 		experts = append(experts, expert)
@@ -343,22 +363,30 @@ func demoProductionConfig(logger *zap.Logger) {
 
 	// 1. Agent configuration
 	fmt.Println("\n1. Agent configuration")
-	agentConfig := agent.Config{
-		ID:                   "prod-agent",
-		Name:                 "Production Agent",
-		Type:                 agent.TypeGeneric,
-		Model:                "gpt-4",
-		MaxTokens:            2000,
-		Temperature:          0.7,
-		EnableReflection:     true,
-		EnableToolSelection:  true,
-		EnablePromptEnhancer: true,
-		EnableSkills:         true,
-		EnableEnhancedMemory: true,
-		EnableObservability:  true,
+	agentConfig := types.AgentConfig{
+		Core: types.CoreConfig{
+			ID:   "prod-agent",
+			Name: "Production Agent",
+			Type: string(agent.TypeGeneric),
+		},
+		LLM: types.LLMConfig{
+			Model:       "gpt-4",
+			MaxTokens:   2000,
+			Temperature: 0.7,
+		},
+		Features: types.FeaturesConfig{
+			Reflection:     &types.ReflectionConfig{Enabled: true},
+			ToolSelection:  &types.ToolSelectionConfig{Enabled: true},
+			PromptEnhancer: &types.PromptEnhancerConfig{Enabled: true},
+			Memory:         &types.MemoryConfig{Enabled: true},
+		},
+		Extensions: types.ExtensionsConfig{
+			Skills:        &types.SkillsConfig{Enabled: true},
+			Observability: &types.ObservabilityConfig{Enabled: true},
+		},
 	}
 	fmt.Printf("  Agent: %s (model: %s, max_tokens: %d)\n",
-		agentConfig.Name, agentConfig.Model, agentConfig.MaxTokens)
+		agentConfig.Core.Name, agentConfig.LLM.Model, agentConfig.LLM.MaxTokens)
 
 	// 2. Reflection configuration
 	fmt.Println("\n2. Reflection configuration")
@@ -426,5 +454,3 @@ func demoProductionConfig(logger *zap.Logger) {
 		fmt.Printf("  %s: %v\n", phase.week, phase.features)
 	}
 }
-
-
