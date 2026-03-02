@@ -91,6 +91,9 @@ jobs:
       - name: Check coverage threshold
         run: make coverage-check
 
+      - name: Check docs API drift
+        run: make docs-api-drift
+
   cross-build:
     name: Cross Build (${{ matrix.goos }}/${{ matrix.goarch }})
     runs-on: ubuntu-latest

@@ -19,6 +19,9 @@ const (
 	EventApprovalRequested EventType = "approval_requested"
 	EventApprovalResponded EventType = "approval_responded"
 	EventSubagentCompleted EventType = "subagent_completed"
+	EventAgentRunStart     EventType = "agent_run_start"
+	EventAgentRunComplete  EventType = "agent_run_complete"
+	EventAgentRunError     EventType = "agent_run_error"
 )
 
 // subscriptionCounter 用于生成唯一订阅 ID，替代 time.Now().UnixNano() 避免并发碰撞
@@ -215,3 +218,48 @@ type FeedbackEvent struct {
 
 func (e *FeedbackEvent) Timestamp() time.Time { return e.Timestamp_ }
 func (e *FeedbackEvent) Type() EventType      { return EventFeedback }
+
+// ====== Agent 运行级事件 ======
+
+// AgentRunStartEvent Agent 运行开始事件。
+type AgentRunStartEvent struct {
+	AgentID_    string
+	TraceID     string
+	RunID       string
+	ParentRunID string
+	Timestamp_  time.Time
+}
+
+func (e *AgentRunStartEvent) Timestamp() time.Time { return e.Timestamp_ }
+func (e *AgentRunStartEvent) Type() EventType      { return EventAgentRunStart }
+
+// AgentRunCompleteEvent Agent 运行完成事件。
+type AgentRunCompleteEvent struct {
+	AgentID_         string
+	TraceID          string
+	RunID            string
+	ParentRunID      string
+	LatencyMs        int64
+	PromptTokens     int
+	CompletionTokens int
+	TotalTokens      int
+	Cost             float64
+	Timestamp_       time.Time
+}
+
+func (e *AgentRunCompleteEvent) Timestamp() time.Time { return e.Timestamp_ }
+func (e *AgentRunCompleteEvent) Type() EventType      { return EventAgentRunComplete }
+
+// AgentRunErrorEvent Agent 运行失败事件。
+type AgentRunErrorEvent struct {
+	AgentID_    string
+	TraceID     string
+	RunID       string
+	ParentRunID string
+	LatencyMs   int64
+	Error       string
+	Timestamp_  time.Time
+}
+
+func (e *AgentRunErrorEvent) Timestamp() time.Time { return e.Timestamp_ }
+func (e *AgentRunErrorEvent) Type() EventType      { return EventAgentRunError }

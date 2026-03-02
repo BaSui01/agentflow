@@ -11,7 +11,6 @@ import (
 	"github.com/BaSui01/agentflow/agent/protocol/a2a"
 	"github.com/BaSui01/agentflow/agent/protocol/mcp"
 	"github.com/BaSui01/agentflow/api/handlers"
-	"github.com/BaSui01/agentflow/internal/bridge"
 	"github.com/BaSui01/agentflow/llm"
 	"github.com/BaSui01/agentflow/llm/cache"
 	llmmw "github.com/BaSui01/agentflow/llm/middleware"
@@ -120,9 +119,6 @@ func (s *Server) initHandlers() error {
 
 	discoveryRegistry := discovery.NewCapabilityRegistry(nil, s.logger)
 	agentRegistry := agent.NewAgentRegistry(s.logger)
-
-	bridgeAdapter := bridge.NewDiscoveryRegistrarAdapter(discoveryRegistry)
-	_ = bridgeAdapter
 
 	if s.provider != nil {
 		s.resolver = agent.NewCachingResolver(agentRegistry, s.provider, s.logger)

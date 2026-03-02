@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__grok-search__search_planning",
+      "mcp__grok-search__web_search",
+      "Skill(refactor-agent)",
+      "Skill(refactor-rag)",
+      "Skill(refactor-llm-capabilities)",
+      "Skill(refactor-workflow)"
+    ]
+  }
+}

@@ -23,45 +23,11 @@ $warnings = @()
 
 $files = Get-GoProductionFiles
 
-# Rule 1: dependency direction guard
-$pkgFiles = $files | Where-Object { $_.FullName -match "\\pkg\\" }
-foreach ($file in $pkgFiles) {
-    $matches = Select-String -Path $file.FullName -Pattern '"github.com/BaSui01/agentflow/api/' -SimpleMatch
-    foreach ($m in $matches) {
-        $rel = $file.FullName.Replace($root + "\", "").Replace("\", "/")
-        $errors += "[LAYER] ${rel}:$($m.LineNumber) pkg layer must not import api layer"
-    }
-}
+# NOTE: Dependency direction rules (pkg->api, workflow->agent/persistence,
+# rag->agent/workflow/api/cmd) are now covered by .go-arch-lint.yml.
+# Run `go-arch-lint check` for those checks.
 
-# Rule 2: workflow must not import agent/persistence
-$workflowFiles = $files | Where-Object { $_.FullName -match "\\workflow\\" }
-foreach ($file in $workflowFiles) {
-    $matches = Select-String -Path $file.FullName -Pattern '"github.com/BaSui01/agentflow/agent/persistence' -SimpleMatch
-    foreach ($m in $matches) {
-        $rel = $file.FullName.Replace($root + "\", "").Replace("\", "/")
-        $errors += "[LAYER] ${rel}:$($m.LineNumber) workflow must not import agent/persistence"
-    }
-}
-
-# Rule 3: rag must not import agent/workflow/api/cmd
-$ragFiles = $files | Where-Object { $_.FullName -match "\\rag\\" }
-foreach ($file in $ragFiles) {
-    $patterns = @(
-        '"github.com/BaSui01/agentflow/agent/',
-        '"github.com/BaSui01/agentflow/workflow/',
-        '"github.com/BaSui01/agentflow/api/',
-        '"github.com/BaSui01/agentflow/cmd/'
-    )
-    foreach ($pat in $patterns) {
-        $matches = Select-String -Path $file.FullName -Pattern $pat -SimpleMatch
-        foreach ($m in $matches) {
-            $rel = $file.FullName.Replace($root + "\", "").Replace("\", "/")
-            $errors += "[LAYER] ${rel}:$($m.LineNumber) rag layer must not import $pat"
-        }
-    }
-}
-
-# Rule 4: fat package guard
+# Rule 1: fat package guard (not supported by go-arch-lint)
 $groups = $files | Group-Object DirectoryName
 foreach ($g in $groups) {
     $relDir = $g.Name.Replace($root + "\", "").Replace("\", "/")
@@ -70,7 +36,7 @@ foreach ($g in $groups) {
     }
 }
 
-# Rule 5: single-file package allowlist guard
+# Rule 2: single-file package allowlist guard (not supported by go-arch-lint)
 $allowOneFile = @(
     ".",
     "internal/app/bootstrap",

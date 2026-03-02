@@ -72,6 +72,7 @@ type Builder struct {
 	toolProvider llm.Provider
 	logger       *zap.Logger
 	options      BuildOptions
+	toolScope    []string // tool whitelist for sub-agent isolation (empty = all tools)
 }
 
 // NewBuilder 创建 runtime builder。
@@ -99,6 +100,14 @@ func (b *Builder) WithToolProvider(provider llm.Provider) *Builder {
 	return b
 }
 
+// WithToolScope limits the tools available to the built agent.
+// Only tools whose names appear in the whitelist will be accessible.
+// An empty list means all tools are available (no restriction).
+func (b *Builder) WithToolScope(toolNames []string) *Builder {
+	b.toolScope = toolNames
+	return b
+}
+
 // Build 构造一个 BaseAgent 并按选项接线可选子系统。
 func (b *Builder) Build(ctx context.Context, cfg types.AgentConfig) (*agent.BaseAgent, error) {
 	opts := b.options
@@ -107,6 +116,10 @@ func (b *Builder) Build(ctx context.Context, cfg types.AgentConfig) (*agent.Base
 	}
 
 	cfg2 := cfg
+	// Apply tool scope restriction for sub-agent isolation
+	if len(b.toolScope) > 0 {
+		cfg2.Runtime.Tools = b.toolScope
+	}
 	obsEnabled := enabled(opts.EnableAll, opts.EnableObservability)
 	if cfg2.Extensions.Observability == nil {
 		cfg2.Extensions.Observability = &types.ObservabilityConfig{}
