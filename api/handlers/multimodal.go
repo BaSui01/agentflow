@@ -7,10 +7,7 @@ import (
 	"fmt"
 	"io"
 	"mime"
-	"net"
 	"net/http"
-	"net/netip"
-	"net/url"
 	"sort"
 	"strings"
 	"time"
@@ -26,7 +23,6 @@ import (
 	llmcore "github.com/BaSui01/agentflow/llm/core"
 	llmgateway "github.com/BaSui01/agentflow/llm/gateway"
 	llmpolicy "github.com/BaSui01/agentflow/llm/runtime/policy"
-	"github.com/BaSui01/agentflow/pkg/tlsutil"
 	"github.com/BaSui01/agentflow/types"
 	"go.uber.org/zap"
 )
@@ -37,70 +33,6 @@ const (
 	defaultChatModel      = "gpt-4o-mini"
 	defaultNegativeText   = "blurry, low quality, watermark, text, logo, signature, bad anatomy, deformed, mutated"
 )
-
-var blockedReferenceIPPrefixes = buildBlockedReferenceIPPrefixes()
-
-// PromptContext carries modality-specific prompt build options.
-type PromptContext struct {
-	Modality       string
-	BasePrompt     string
-	Advanced       bool
-	StyleTokens    []string
-	QualityTokens  []string
-	NegativePrompt string
-	Camera         string
-	Mood           string
-}
-
-// PromptResult is the normalized prompt output.
-type PromptResult struct {
-	Prompt         string
-	NegativePrompt string
-}
-
-// PromptPipeline allows framework users to inject custom prompt composition logic.
-type PromptPipeline interface {
-	Build(ctx context.Context, in PromptContext) (PromptResult, error)
-}
-
-// DefaultPromptPipeline provides a generic, domain-agnostic prompt composition strategy.
-type DefaultPromptPipeline struct{}
-
-func (p *DefaultPromptPipeline) Build(ctx context.Context, in PromptContext) (PromptResult, error) {
-	_ = ctx
-	if !in.Advanced {
-		return PromptResult{
-			Prompt:         strings.TrimSpace(in.BasePrompt),
-			NegativePrompt: strings.TrimSpace(in.NegativePrompt),
-		}, nil
-	}
-
-	pieces := []string{}
-	switch in.Modality {
-	case "image":
-		pieces = append(pieces, strings.Join(in.StyleTokens, ", "))
-		pieces = append(pieces, strings.TrimSpace(in.BasePrompt))
-		pieces = append(pieces, strings.Join(in.QualityTokens, ", "))
-	case "video":
-		if strings.TrimSpace(in.Camera) != "" {
-			pieces = append(pieces, "Camera: "+strings.TrimSpace(in.Camera))
-		}
-		if strings.TrimSpace(in.Mood) != "" {
-			pieces = append(pieces, "Mood: "+strings.TrimSpace(in.Mood))
-		}
-		if len(in.StyleTokens) > 0 {
-			pieces = append(pieces, "Style: "+strings.Join(in.StyleTokens, ", "))
-		}
-		pieces = append(pieces, strings.TrimSpace(in.BasePrompt))
-	default:
-		pieces = append(pieces, strings.TrimSpace(in.BasePrompt))
-	}
-
-	return PromptResult{
-		Prompt:         strings.Join(filterEmptyStrings(pieces), ". "),
-		NegativePrompt: strings.TrimSpace(in.NegativePrompt),
-	}, nil
-}
 
 type MultimodalHandlerConfig struct {
 	ChatProvider         llm.Provider
@@ -126,7 +58,7 @@ type MultimodalHandlerConfig struct {
 	ReferenceMaxSize     int64
 	ReferenceTTL         time.Duration
 	ReferenceStore       ReferenceStore
-	Pipeline             PromptPipeline
+	Pipeline             multimodal.PromptPipeline
 }
 
 type referenceAsset struct {
@@ -143,7 +75,7 @@ type MultimodalHandler struct {
 	router             *multimodal.Router
 	gateway            llmcore.Gateway
 	structuredProvider llm.Provider
-	pipeline           PromptPipeline
+	pipeline           multimodal.PromptPipeline
 
 	defaultImageProvider string
 	defaultVideoProvider string
@@ -206,7 +138,7 @@ func NewMultimodalHandlerWithProviders(
 	videoProviders map[string]video.Provider,
 	defaultImage string,
 	defaultVideo string,
-	pipeline PromptPipeline,
+	pipeline multimodal.PromptPipeline,
 	referenceMaxSize int64,
 	referenceTTL time.Duration,
 	referenceStore ReferenceStore,
@@ -216,7 +148,7 @@ func NewMultimodalHandlerWithProviders(
 		logger = zap.NewNop()
 	}
 	if pipeline == nil {
-		pipeline = &DefaultPromptPipeline{}
+		pipeline = &multimodal.DefaultPromptPipeline{}
 	}
 	if referenceMaxSize <= 0 {
 		referenceMaxSize = defaultReferenceBytes
@@ -430,7 +362,7 @@ func (h *MultimodalHandler) HandleImage(w http.ResponseWriter, r *http.Request) 
 		negative = defaultNegativeText
 	}
 
-	promptResult, err := h.pipeline.Build(r.Context(), PromptContext{
+	promptResult, err := h.pipeline.Build(r.Context(), multimodal.PromptContext{
 		Modality:       "image",
 		BasePrompt:     req.Prompt,
 		Advanced:       req.Advanced,
@@ -460,13 +392,13 @@ func (h *MultimodalHandler) HandleImage(w http.ResponseWriter, r *http.Request) 
 				return
 			}
 		} else {
-			validatedURL, urlErr := validatePublicReferenceImageURL(ctx, req.ReferenceImageURL)
+			validatedURL, urlErr := multimodal.ValidatePublicReferenceImageURL(ctx, req.ReferenceImageURL)
 			if urlErr != nil {
 				WriteErrorMessage(w, http.StatusBadRequest, types.ErrInvalidRequest, urlErr.Error(), h.logger)
 				return
 			}
 			var dlErr error
-			data, _, dlErr = h.downloadReferenceImage(ctx, validatedURL)
+			data, _, dlErr = multimodal.DownloadReferenceImage(ctx, validatedURL, h.referenceMaxSize)
 			if dlErr != nil {
 				WriteErrorMessage(w, http.StatusBadRequest, types.ErrInvalidRequest, dlErr.Error(), h.logger)
 				return
@@ -586,7 +518,7 @@ func (h *MultimodalHandler) HandleVideo(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	promptResult, err := h.pipeline.Build(r.Context(), PromptContext{
+	promptResult, err := h.pipeline.Build(r.Context(), multimodal.PromptContext{
 		Modality:       "video",
 		BasePrompt:     req.Prompt,
 		Advanced:       req.Advanced,
@@ -623,7 +555,7 @@ func (h *MultimodalHandler) HandleVideo(w http.ResponseWriter, r *http.Request) 
 			}
 			h.attachReferenceImage(providerName, genReq, data, mimeType)
 		} else {
-			validatedURL, urlErr := validatePublicReferenceImageURL(r.Context(), req.ReferenceImageURL)
+			validatedURL, urlErr := multimodal.ValidatePublicReferenceImageURL(r.Context(), req.ReferenceImageURL)
 			if urlErr != nil {
 				WriteErrorMessage(w, http.StatusBadRequest, types.ErrInvalidRequest, urlErr.Error(), h.logger)
 				return
@@ -955,191 +887,6 @@ func (h *MultimodalHandler) cleanupReferences(now time.Time) {
 	h.referenceStore.Cleanup(now.Add(-h.referenceTTL))
 }
 
-func buildBlockedReferenceIPPrefixes() []netip.Prefix {
-	raw := []string{
-		"0.0.0.0/8",       // "this network"
-		"100.64.0.0/10",   // carrier-grade NAT
-		"192.0.0.0/24",    // IETF protocol assignments
-		"192.0.2.0/24",    // TEST-NET-1
-		"198.18.0.0/15",   // benchmark testing
-		"198.51.100.0/24", // TEST-NET-2
-		"203.0.113.0/24",  // TEST-NET-3
-		"224.0.0.0/4",     // multicast
-		"240.0.0.0/4",     // reserved
-		"2001:db8::/32",   // documentation
-	}
-	prefixes := make([]netip.Prefix, 0, len(raw))
-	for _, cidr := range raw {
-		p, err := netip.ParsePrefix(cidr)
-		if err != nil {
-			continue
-		}
-		prefixes = append(prefixes, p)
-	}
-	return prefixes
-}
-
-func validatePublicReferenceImageURL(ctx context.Context, rawURL string) (string, error) {
-	trimmed := strings.TrimSpace(rawURL)
-	if !ValidateURL(trimmed) {
-		return "", fmt.Errorf("reference_image_url must be a valid http/https URL")
-	}
-
-	u, err := url.Parse(trimmed)
-	if err != nil {
-		return "", fmt.Errorf("reference_image_url must be a valid http/https URL")
-	}
-	host := strings.TrimSpace(u.Hostname())
-	if host == "" {
-		return "", fmt.Errorf("reference_image_url must include a valid host")
-	}
-
-	resolveCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
-	defer cancel()
-	if err := validatePublicHost(resolveCtx, host); err != nil {
-		return "", err
-	}
-
-	return u.String(), nil
-}
-
-func validatePublicHost(ctx context.Context, host string) error {
-	_, err := resolvePublicHostIPs(ctx, host)
-	return err
-}
-
-func resolvePublicHostIPs(ctx context.Context, host string) ([]net.IP, error) {
-	if ip := net.ParseIP(host); ip != nil {
-		if isDisallowedReferenceIP(ip) {
-			return nil, fmt.Errorf("reference_image_url must resolve to a public internet address")
-		}
-		return []net.IP{ip}, nil
-	}
-
-	addrs, err := net.DefaultResolver.LookupIPAddr(ctx, host)
-	if err != nil {
-		return nil, fmt.Errorf("failed to resolve reference_image_url host")
-	}
-	if len(addrs) == 0 {
-		return nil, fmt.Errorf("failed to resolve reference_image_url host")
-	}
-	ips := make([]net.IP, 0, len(addrs))
-	for _, addr := range addrs {
-		if isDisallowedReferenceIP(addr.IP) {
-			return nil, fmt.Errorf("reference_image_url must resolve to a public internet address")
-		}
-		ips = append(ips, addr.IP)
-	}
-	return ips, nil
-}
-
-func isDisallowedReferenceIP(ip net.IP) bool {
-	addr, ok := netip.AddrFromSlice(ip)
-	if !ok {
-		return true
-	}
-	addr = addr.Unmap()
-	if !addr.IsValid() ||
-		addr.IsLoopback() ||
-		addr.IsPrivate() ||
-		addr.IsLinkLocalMulticast() ||
-		addr.IsLinkLocalUnicast() ||
-		addr.IsMulticast() ||
-		addr.IsUnspecified() {
-		return true
-	}
-	for _, p := range blockedReferenceIPPrefixes {
-		if p.Contains(addr) {
-			return true
-		}
-	}
-	return false
-}
-
-func (h *MultimodalHandler) downloadReferenceImage(ctx context.Context, rawURL string) ([]byte, string, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
-	if err != nil {
-		return nil, "", fmt.Errorf("failed to create image download request: %w", err)
-	}
-	client := newReferenceDownloadHTTPClient(20 * time.Second)
-	client.CheckRedirect = func(redirReq *http.Request, via []*http.Request) error {
-		if len(via) >= 10 {
-			return fmt.Errorf("too many redirects while downloading reference image")
-		}
-		_, validateErr := validatePublicReferenceImageURL(ctx, redirReq.URL.String())
-		return validateErr
-	}
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, "", fmt.Errorf("failed to download reference image: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode >= 400 {
-		return nil, "", fmt.Errorf("failed to download reference image: status %d", resp.StatusCode)
-	}
-	data, err := io.ReadAll(io.LimitReader(resp.Body, h.referenceMaxSize+1))
-	if err != nil {
-		return nil, "", fmt.Errorf("failed to read reference image: %w", err)
-	}
-	if int64(len(data)) > h.referenceMaxSize {
-		return nil, "", fmt.Errorf("reference image is too large (max %d bytes)", h.referenceMaxSize)
-	}
-
-	mimeType := resp.Header.Get("Content-Type")
-	if mediaType, _, parseErr := mime.ParseMediaType(mimeType); parseErr == nil {
-		mimeType = mediaType
-	}
-	if mimeType == "" {
-		mimeType = http.DetectContentType(data)
-	}
-	if !strings.HasPrefix(strings.ToLower(mimeType), "image/") {
-		return nil, "", fmt.Errorf("reference URL does not point to an image")
-	}
-	return data, mimeType, nil
-}
-
-func newReferenceDownloadHTTPClient(timeout time.Duration) *http.Client {
-	base := tlsutil.SecureHTTPClient(timeout)
-	transport, ok := base.Transport.(*http.Transport)
-	if !ok || transport == nil {
-		return base
-	}
-
-	dialer := &net.Dialer{
-		Timeout:   10 * time.Second,
-		KeepAlive: 30 * time.Second,
-	}
-	cloned := transport.Clone()
-	cloned.DialContext = func(ctx context.Context, network, addr string) (net.Conn, error) {
-		host, port, err := net.SplitHostPort(addr)
-		if err != nil {
-			return nil, fmt.Errorf("invalid reference image host: %w", err)
-		}
-		host = strings.TrimSpace(strings.Trim(host, "[]"))
-		ips, err := resolvePublicHostIPs(ctx, host)
-		if err != nil {
-			return nil, err
-		}
-
-		var lastErr error
-		for _, ip := range ips {
-			conn, dialErr := dialer.DialContext(ctx, network, net.JoinHostPort(ip.String(), port))
-			if dialErr == nil {
-				return conn, nil
-			}
-			lastErr = dialErr
-		}
-		if lastErr != nil {
-			return nil, fmt.Errorf("failed to connect to reference image host: %w", lastErr)
-		}
-		return nil, fmt.Errorf("failed to connect to reference image host")
-	}
-
-	clientCopy := *base
-	clientCopy.Transport = cloned
-	return &clientCopy
-}
 
 func (h *MultimodalHandler) attachReferenceImage(providerName string, req *video.GenerateRequest, data []byte, mimeType string) {
 	b64 := base64.StdEncoding.EncodeToString(data)
@@ -1192,12 +939,3 @@ func firstChoice(resp *llm.ChatResponse) string {
 	return strings.TrimSpace(resp.Choices[0].Message.Content)
 }
 
-func filterEmptyStrings(items []string) []string {
-	out := make([]string, 0, len(items))
-	for _, s := range items {
-		if t := strings.TrimSpace(s); t != "" {
-			out = append(out, t)
-		}
-	}
-	return out
-}

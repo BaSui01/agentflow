@@ -8,12 +8,12 @@ import (
 )
 
 // NodeEventType 节点事件类型。
-type NodeEventType string
+type NodeEventType = types.WorkflowNodeEventType
 
 const (
-	NodeStart    NodeEventType = "node_start"
-	NodeComplete NodeEventType = "node_complete"
-	NodeError    NodeEventType = "node_error"
+	NodeStart    NodeEventType = types.WorkflowNodeEventStart
+	NodeComplete NodeEventType = types.WorkflowNodeEventComplete
+	NodeError    NodeEventType = types.WorkflowNodeEventError
 )
 
 // NodeEvent 节点级观测事件，统一跨层字段。

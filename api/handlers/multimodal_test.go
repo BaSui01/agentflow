@@ -8,7 +8,6 @@ import (
 	"errors"
 	"fmt"
 	"mime/multipart"
-	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/textproto"
@@ -18,6 +17,7 @@ import (
 
 	"github.com/BaSui01/agentflow/llm"
 	"github.com/BaSui01/agentflow/llm/capabilities/image"
+	"github.com/BaSui01/agentflow/llm/capabilities/multimodal"
 	"github.com/BaSui01/agentflow/llm/capabilities/video"
 	"github.com/BaSui01/agentflow/types"
 	"github.com/alicebob/miniredis/v2"
@@ -401,21 +401,12 @@ func TestMultimodalHandler_VideoRejectsPrivateReferenceURL(t *testing.T) {
 }
 
 func TestValidatePublicReferenceImageURL(t *testing.T) {
-	_, err := validatePublicReferenceImageURL(context.Background(), "http://127.0.0.1/internal.png")
+	_, err := multimodal.ValidatePublicReferenceImageURL(context.Background(), "http://127.0.0.1/internal.png")
 	require.Error(t, err)
 
-	url, err := validatePublicReferenceImageURL(context.Background(), "https://8.8.8.8/path.png")
+	url, err := multimodal.ValidatePublicReferenceImageURL(context.Background(), "https://8.8.8.8/path.png")
 	require.NoError(t, err)
 	assert.Equal(t, "https://8.8.8.8/path.png", url)
-}
-
-func TestIsDisallowedReferenceIP(t *testing.T) {
-	assert.True(t, isDisallowedReferenceIP(net.ParseIP("127.0.0.1")))
-	assert.True(t, isDisallowedReferenceIP(net.ParseIP("10.0.0.1")))
-	assert.True(t, isDisallowedReferenceIP(net.ParseIP("100.64.0.10")))
-	assert.True(t, isDisallowedReferenceIP(net.ParseIP("169.254.1.1")))
-	assert.True(t, isDisallowedReferenceIP(net.ParseIP("::1")))
-	assert.False(t, isDisallowedReferenceIP(net.ParseIP("8.8.8.8")))
 }
 
 func TestMemoryReferenceStore_Cleanup(t *testing.T) {

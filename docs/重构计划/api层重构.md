@@ -24,8 +24,8 @@
 
 | 编号 | 状态 | 问题 | 证据路径 |
 |---|---|---|---|
-| API-001 | Todo | `multimodal` handler 体量大，包含 provider 组装、pipeline 组装、引用资源策略，超出纯适配职责 | `api/handlers/multimodal.go` |
-| API-002 | Todo | `rag` handler 直接执行 embedding + 检索 + 文档组装，缺少用例层隔离 | `api/handlers/rag.go` |
+| API-001 | Done | `multimodal` 的 provider 组装、prompt pipeline、引用资源策略已下沉到 `llm/capabilities/multimodal`，handler 聚焦协议适配与调用 | `api/handlers/multimodal.go`、`llm/capabilities/multimodal/provider_builder.go`、`llm/capabilities/multimodal/prompt_pipeline.go`、`llm/capabilities/multimodal/reference_strategy.go` |
+| API-002 | Done | `rag` handler 已下沉 embedding + 检索 + 文档组装到 `RAGService`，handler 仅保留协议解析与参数校验 | `api/handlers/rag.go`、`api/handlers/rag_service.go` |
 | API-003 | Partial | `agent` handler 已引入 `AgentService`，但仍有部分流程可继续下沉 | `api/handlers/agent.go`、`api/handlers/agent_service.go` |
 | API-004 | Done | `chat` handler 已通过 gateway 统一入口，职责相对清晰 | `api/handlers/chat.go` |
 
@@ -36,7 +36,7 @@
 | Phase | 状态 | 完成判据（机读） | 证据路径 |
 |---|---|---|---|
 | Phase-0 基线冻结 | Todo | 冻结 API 非重构需求 + 固化基线测试与指标 | `docs/api层重构.md`（待补冻结记录） |
-| Phase-1 Handler 职责收敛 | Todo | `multimodal/rag` 业务编排下沉到 usecase/service | `api/handlers/multimodal.go`、`api/handlers/rag.go` |
+| Phase-1 Handler 职责收敛 | Partial | `rag` 已完成下沉，`multimodal` 仍待下沉 | `api/handlers/rag.go`、`api/handlers/rag_service.go`、`api/handlers/multimodal.go` |
 | Phase-2 依赖注入收敛 | Partial | 避免 handler 直接依赖基础设施具体实现 | `api/handlers/agent.go`、`api/handlers/apikey_store.go` |
 | Phase-3 入口统一 | Partial | 统一通过领域入口（gateway/usecase/registry）调用，不在 handler 拼装策略 | `api/handlers/chat.go`（Done），`multimodal.go`（Todo） |
 | Phase-4 验收与文档同步 | Todo | `go test ./api/...`、`go test ./...`、守卫通过 + 文档同步 | `api/handlers/*_test.go`、`scripts/arch_guard.ps1` |
@@ -47,7 +47,7 @@
 
 | DoD 条目 | 状态 | 完成判据（机读） | 证据路径 |
 |---|---|---|---|
-| API 层不承载核心业务决策 | Todo | handler 仅做协议映射、参数校验、调用用例 | `api/handlers/*.go` |
+| API 层不承载核心业务决策 | Partial | `chat/rag` 基本达标，`multimodal` 仍含较多编排逻辑 | `api/handlers/chat.go`、`api/handlers/rag.go`、`api/handlers/multimodal.go` |
 | API 层不拼装底层基础设施细节 | Partial | provider/store 组装在组合根或工厂层完成 | `cmd/agentflow/server_handlers_runtime.go`（部分已做） |
 | 统一错误与响应口径 | Done | 所有 handler 统一使用 `common` 响应与错误写回 | `api/handlers/common.go` |
 | API 层回归通过 | Partial | `go test ./api/...` 通过；全量回归通过 | `api/handlers/*_test.go` |
@@ -58,7 +58,7 @@
 
 | 项目 | 状态 | 说明 | 证据路径 |
 |---|---|---|---|
-| Handler 内复杂业务编排片段 | Todo | 下沉到 `workflow/agent/rag/llm` 用例或 service | `api/handlers/multimodal.go`、`api/handlers/rag.go` |
+| Handler 内复杂业务编排片段 | Partial | `rag` 已下沉到 service；`multimodal` 待继续下沉 | `api/handlers/rag.go`、`api/handlers/rag_service.go`、`api/handlers/multimodal.go` |
 | Handler 直接基础设施构造路径 | Partial | 已减少，但仍有待收敛 | `api/handlers/apikey_store.go`、`api/handlers/multimodal.go` |
 
 ---
@@ -71,9 +71,9 @@ Handler 应仅承担：协议解析 → 参数校验 → 调用领域入口 → 
 
 业务编排逻辑应下沉到领域层的 facade 入口，而非在 handler 中拼装：
 
-- [ ] `multimodal.go` 下沉：provider 组装 + pipeline 组装 + 资源策略 → `llm/gateway` 或 `llm/capabilities/multimodal` facade
-- [ ] `rag.go` 下沉：embedding + 检索 + 文档组装 → `rag/facade.go` 的 `Retrieve(...)` 入口
-- [ ] `agent.go` 继续下沉：部分流程仍在 handler → 继续下沉到 `agent_service.go`
+- [x] `multimodal.go` 下沉（第一批）：provider 组装 + pipeline 组装 + 资源策略 → `llm/capabilities/multimodal`（`provider_builder.go` / `prompt_pipeline.go` / `reference_strategy.go`）
+- [x] `rag.go` 下沉：embedding + 检索 + 文档组装 → `RAGService` 用例入口（`api/handlers/rag_service.go`）
+- [x] `agent.go` 继续下沉（第一批）：`List/Get/Health` 查询路径已下沉到 `agent_service.go`
 - [x] `chat.go` 已通过 gateway 统一，无需改动
 
 ### 5.2 下沉原则
@@ -88,3 +88,6 @@ Handler 应仅承担：协议解析 → 参数校验 → 调用领域入口 → 
 
 - [x] 2026-03-02：创建文档，建立 API 层重构基线与机读状态表（Done/Partial/Todo + 证据路径）。
 - [x] 2026-03-02：Review 补充：新增第 5 章 Handler 职责下沉策略，明确 multimodal/rag/agent 各 handler 的下沉目标与下沉原则。
+- [x] 2026-03-02：完成 `rag` handler 职责下沉：新增 `api/handlers/rag_service.go`（`RAGService` + `DefaultRAGService`），`api/handlers/rag.go` 改为仅负责协议解析/参数校验/响应序列化；新增 `api/handlers/rag_service_test.go`；通过 `go test ./api/handlers/...`。
+- [x] 2026-03-03：推进 `agent` handler 职责下沉（第一批）：`api/handlers/agent_service.go` 新增 `ListAgents/GetAgent` 用例接口，`api/handlers/agent.go` 的 `HandleListAgents/HandleGetAgent/HandleAgentHealth` 已切换经 service 查询，不再直接访问 registry；通过 `go test ./api/handlers/...`。
+- [x] 2026-03-03：推进 `multimodal` 下沉（第一批）：新增 `llm/capabilities/multimodal/prompt_pipeline.go` 与 `reference_strategy.go`，将 prompt pipeline 与引用资源 URL 校验/下载策略从 handler 下沉到能力层；`api/handlers/multimodal.go` 改为调用能力层策略；同步更新 `api/handlers/multimodal_test.go`；通过 `go test ./api/handlers/...` 与 `go test ./llm/capabilities/multimodal/...`。

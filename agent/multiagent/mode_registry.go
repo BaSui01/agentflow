@@ -6,6 +6,7 @@ import (
 	"sync"
 
 	"github.com/BaSui01/agentflow/agent"
+	"go.uber.org/zap"
 )
 
 // ModeStrategy is the unified interface for all agent execution modes.
@@ -78,6 +79,7 @@ var (
 func GlobalModeRegistry() *ModeRegistry {
 	globalModeRegistryOnce.Do(func() {
 		globalModeRegistry = NewModeRegistry()
+		_ = RegisterDefaultModes(globalModeRegistry, zap.NewNop())
 	})
 	return globalModeRegistry
 }

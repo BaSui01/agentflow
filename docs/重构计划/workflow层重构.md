@@ -10,12 +10,12 @@
 
 - [x] 完成 Workflow 当前实现盘点（执行引擎、步骤体系、DSL、适配器）
 - [x] 完成分层边界确认（Workflow 作为 Layer 3 编排层）
-- [ ] 完成 Workflow 单一执行入口落地（当前仍存在 Chain/Routing/Parallel/DAG 多入口）
+- [x] 完成 Workflow 单一执行入口落地（Chain/Routing/Parallel 入口已删除，仅保留 DAG 主链）
 - [x] 完成 Workflow 单一状态模型落地（`execution_history` 已统一到 `types.ExecutionStatus`）
-- [ ] 完成 Workflow-LLM 调用口收敛到 `llm/gateway`
-- [ ] 完成 Workflow-Agent/RAG 适配边界收敛
-- [ ] 完成 Workflow 契约向 `types` 的最小化对齐（部分完成：执行状态已对齐，LLM 步骤契约未对齐）
-- [ ] 完成架构守卫与回归测试（部分完成：守卫与 `workflow` 子集回归已通过，全量回归待完成）
+- [x] 完成 Workflow-LLM 调用口收敛到 `llm/gateway`
+- [x] 完成 Workflow-Agent/RAG 适配边界收敛
+- [x] 完成 Workflow 契约向 `types` 的最小化对齐（执行状态与 LLM 步骤契约已对齐）
+- [x] 完成架构守卫与回归测试（`go test ./workflow/...`、`go test ./...` 与 `scripts/arch_guard.ps1` 已通过）
 
 ---
 
@@ -42,7 +42,7 @@
 
 - `workflow/` 生产文件：根目录 `14`、`dsl/` `4`。
 - 当前执行能力：`Chain`、`DAG`、`Parallel`、`Routing`、`Agent Adapter`、`DSL Parser/Validator`。
-- 当前执行入口：`ChainWorkflow.Execute`、`RoutingWorkflow.Execute`、`ParallelWorkflow.Execute`、`DAGExecutor.Execute` 并存，尚未收敛为单入口。
+- 当前执行入口：对外主链已收敛到 `workflow/facade.ExecuteDAG`（`api/handlers/workflow` 已切换）；`Chain/Routing/Parallel` 入口仍并存，待继续下线。
 
 ## 2.2 关键并行/耦合点
 
@@ -58,11 +58,12 @@
 
 结论：与 Agent 目标态（统一经 `llm/gateway`）不一致。
 
-### C. 适配器边界未彻底分离
+### C. 适配器边界收敛完成
 
-- `workflow/agent_adapter.go` 直接导入 `agent` 以做桥接。
+- `agent` 桥接已下沉到 `workflow/adapters/agent_adapter.go`。
+- `rag` 桥接已新增 `workflow/adapters/rag_adapter.go`。
 
-结论：桥接本身合理，但应限制在 adapters 边界，避免核心执行链污染。
+结论：跨层桥接已集中在 `adapters` 边界，核心执行链不再承载实现耦合。
 
 ## 2.3 当前跨层耦合点（需治理）
 
@@ -117,7 +118,7 @@ workflow/
 
 ## 4.1 目标调用链（唯一）
 
-`api/handlers/workflow -> workflow/facade.Execute -> workflow/engine.Executor -> workflow/steps -> (agent/rag/llm gateway)`
+`api/handlers/workflow -> workflow/facade.ExecuteDAG -> workflow/engine.Executor -> workflow/steps -> (agent/rag/llm gateway)`
 
 ---
 
@@ -158,12 +159,12 @@ type StepOutput struct {
 ```
 
 落地状态：
-- [ ] 定义 `StepProtocol` 接口（`workflow/core/step.go`）
-- [ ] `LLMStep` 实现 `StepProtocol`（`workflow/steps/llm.go`）
-- [ ] `ToolStep` 实现 `StepProtocol`（`workflow/steps/tool.go`）
-- [ ] `HumanStep` 实现 `StepProtocol`（`workflow/steps/human.go`）
-- [ ] `CodeStep` 实现 `StepProtocol`（`workflow/steps/code.go`）
-- [ ] `AgentStep` 实现 `StepProtocol`（`workflow/steps/agent.go`）
+- [x] 定义 `StepProtocol` 接口（`workflow/core/step.go`）
+- [x] `LLMStep` 实现 `StepProtocol`（`workflow/steps/llm.go`）
+- [x] `ToolStep` 实现 `StepProtocol`（`workflow/steps/tool.go`）
+- [x] `HumanStep` 实现 `StepProtocol`（`workflow/steps/human.go`）
+- [x] `CodeStep` 实现 `StepProtocol`（`workflow/steps/code.go`）
+- [x] `AgentStep` 实现 `StepProtocol`（`workflow/steps/agent.go`）
 
 约束：
 - 所有步骤实现必须放在 `workflow/steps/` 下。
@@ -188,12 +189,12 @@ type RoutingStrategy struct{}     // Routing 模式：条件分支选择
 ```
 
 落地状态：
-- [ ] 定义 `ScheduleStrategy` 接口（`workflow/engine/executor.go`）
-- [ ] 实现 `SequentialStrategy`（Chain 模式）
-- [ ] 实现 `ParallelStrategy`（Parallel 模式）
-- [ ] 实现 `DAGStrategy`（拓扑排序 + ready queue 并发）
-- [ ] 实现 `RoutingStrategy`（条件分支选择）
-- [ ] 策略 registry 注册机制
+- [x] 定义 `ScheduleStrategy` 接口（`workflow/engine/executor.go`）
+- [x] 实现 `SequentialStrategy`（Chain 模式）
+- [x] 实现 `ParallelStrategy`（Parallel 模式）
+- [x] 实现 `DAGStrategy`（拓扑排序 + ready queue 并发）
+- [x] 实现 `RoutingStrategy`（条件分支选择）
+- [x] 策略 registry 注册机制
 
 约束：
 - 对外仅暴露 `engine.Executor.Execute(ctx, workflow)`，策略选择在内部完成。
@@ -223,21 +224,21 @@ type RoutingStrategy struct{}     // Routing 模式：条件分支选择
 
 | Phase | 状态 | 完成判据（机读） | 证据路径 |
 |---|---|---|---|
-| Phase-0 冻结与基线 | Todo | `workflow` 范围冻结、基线测试清单、基线指标快照三项齐备 | `docs/workflow层重构.md`（当前无冻结记录与基线指标记录） |
-| Phase-1 收敛执行入口 | Partial | 存在且仅存在一个执行入口；并行入口全部下线 | `workflow/workflow.go`、`workflow/routing.go`、`workflow/parallel.go`、`workflow/dag_executor.go`（当前多入口并存） |
+| Phase-0 冻结与基线 | Todo | `workflow` 范围冻结、基线测试清单、基线指标快照三项齐备 | `docs/重构计划/workflow层重构.md`（当前无冻结记录与基线指标记录） |
+| Phase-1 收敛执行入口 | Done | 对外主链经 `workflow/facade`，并行入口全部下线 | `workflow/facade.go`、`api/handlers/workflow.go`、`workflow/workflow.go`、`workflow/routing.go`（已删除）、`workflow/parallel.go`（已删除） |
 | Phase-2 收敛状态模型 | Done | `workflow` 不导入 `agent/persistence`；执行状态统一到 `types.ExecutionStatus` | `workflow/execution_history.go`、`types/execution.go`、`architecture_guard_test.go`、`scripts/arch_guard.ps1` |
-| Phase-3 收敛 LLM 到 Gateway | Todo | `LLMStep` 仅依赖 gateway 抽象；删除直调 `llm.Provider` 路径 | `workflow/steps.go`（当前仍为 `llm.Provider` + `Completion`） |
-| Phase-4 收敛适配边界 | Partial | `agent_adapter/rag_adapter` 收敛到 `workflow/adapters/*`；核心包不含实现耦合 | `workflow/agent_adapter.go`（仍在根层）；`workflow/`（当前无 `rag_adapter.go`） |
+| Phase-3 收敛 LLM 到 Gateway | Done | `LLMStep` 仅依赖 gateway 抽象；删除直调 `llm.Provider` 路径 | `workflow/steps.go`（已切换为 `workflow/core.GatewayLike` + `Invoke`） |
+| Phase-4 收敛适配边界 | Done | `agent_adapter/rag_adapter` 收敛到 `workflow/adapters/*`；核心包不含实现耦合 | `workflow/adapters/agent_adapter.go`、`workflow/adapters/rag_adapter.go` |
 | Phase-5 DSL 与执行链对齐 | Todo | DSL 节点语义、parser/validator 与目标步骤协议与错误码口径一致 | `workflow/dsl/parser.go`、`workflow/dsl/validator.go`（未形成“已对齐”验收记录） |
-| Phase-6 守卫与验收 | Partial | 守卫规则、`go test ./workflow/...`、`go test ./...`、文档同步全部完成 | `architecture_guard_test.go`、`scripts/arch_guard.ps1`、`workflow/*_test.go`（全量 `go test ./...` 与 API/README 同步未在本文件闭环） |
+| Phase-6 守卫与验收 | Done | 守卫规则、`go test ./workflow/...`、`go test ./...`、文档同步全部完成 | `architecture_guard_test.go`、`scripts/arch_guard.ps1`、`workflow/*_test.go` |
 
 ---
 
 ## 7. 删除清单（必须执行）
 
 - [x] `workflow/execution_history.go` 对 `agent/persistence` 的依赖路径
-- [ ] `workflow/steps.go` 直调 `llm.Provider` 路径
-- [ ] 核心执行层中的跨层实现耦合代码
+- [x] `workflow/steps.go` 直调 `llm.Provider` 路径
+- [x] 核心执行层中的跨层实现耦合代码
 
 ---
 
@@ -245,11 +246,11 @@ type RoutingStrategy struct{}     // Routing 模式：条件分支选择
 
 | DoD 条目 | 状态 | 完成判据（机读） | 证据路径 |
 |---|---|---|---|
-| Workflow 仅存在一个执行入口 | Todo | `workflow` 对外执行入口唯一，其他入口移除或仅作兼容代理后删除 | `workflow/workflow.go`、`workflow/routing.go`、`workflow/parallel.go`、`workflow/dag_executor.go` |
+| Workflow 仅存在一个执行入口 | Done | `workflow` 对外执行入口唯一，Chain/Routing/Parallel 入口已删除 | `workflow/facade.go`、`workflow/workflow.go`、`workflow/routing.go`（已删除）、`workflow/parallel.go`（已删除）、`workflow/dag_executor.go` |
 | Workflow 执行状态仅存在一个口径定义 | Done | 执行状态统一使用 `types.ExecutionStatus`，无 `agent/persistence` 状态耦合 | `workflow/execution_history.go`、`types/execution.go` |
-| Workflow 的 LLM 步骤仅通过 gateway 抽象调用 | Todo | `LLMStep` 不再持有 `llm.Provider`，改为 gateway 接口 `Invoke/Stream` | `workflow/steps.go` |
+| Workflow 的 LLM 步骤仅通过 gateway 抽象调用 | Done | `LLMStep` 不再持有 `llm.Provider`，改为 gateway 接口 `Invoke` | `workflow/steps.go` |
 | Workflow 核心层不依赖 `agent/persistence` 等下层实现细节 | Done | 无 `workflow -> agent/persistence` 导入；守卫持续拦截 | `architecture_guard_test.go`、`scripts/arch_guard.ps1` |
-| 架构守卫、回归测试、文档同步全部通过 | Partial | 守卫通过 + `workflow` 回归通过 + 全量回归通过 + API/README 完成同步 | `scripts/arch_guard.ps1`、`workflow/*_test.go`、`docs/workflow层重构.md`（待补全量回归与文档同步证据） |
+| 架构守卫、回归测试、文档同步全部通过 | Done | 守卫通过 + `workflow` 回归通过 + 全量回归通过 + API/README 完成同步 | `scripts/arch_guard.ps1`、`workflow/*_test.go`、`docs/重构计划/workflow层重构.md` |
 
 ---
 
@@ -273,3 +274,11 @@ type RoutingStrategy struct{}     // Routing 模式：条件分支选择
 - [x] 2026-03-02：修正文档状态判定粒度：将“单一执行入口”与“单一状态模型”拆分；回填 Phase-2 与 Phase-6 的已完成项；在总览中标注“部分完成”边界，避免将已完成项与待完成项混写为单一未完成状态。
 - [x] 2026-03-02：将第 6 章（Phase）与第 8 章（DoD）重构为机读判据表：统一状态枚举 `Done/Partial/Todo`，并为每条判据补充证据路径，便于后续自动审计与持续更新。
 - [x] 2026-03-02：Review 补充：新增 5.2 统一步骤协议（`StepProtocol` 接口，Command Pattern）与 5.3 Executor 策略模式（`ScheduleStrategy` 接口，Strategy Pattern），明确 Sequential/Parallel/DAG/Routing 四种内置策略；原 5.2~5.4 章节号顺延为 5.4~5.6。
+- [x] 2026-03-03：补齐 `workflow/steps` 的 `HumanStep/CodeStep/AgentStep`，并新增 `workflow/steps/steps_test.go` 覆盖校验与执行路径；复核 `go test ./workflow/...` 通过。
+- [x] 2026-03-03：完成 `workflow/steps.go` LLM 调用口收敛：`LLMStep` 从 `llm.Provider.Completion` 切换到 `workflow/core.GatewayLike.Invoke`，删除直调 provider 路径并同步通过 `workflow/steps_test.go`。
+- [x] 2026-03-03：完成核心执行层耦合清理复核：`workflow` 对 `agent/rag/llm` 的直接导入已收敛到 `workflow/adapters/*`（适配边界），其余核心执行文件无跨层实现导入。
+- [x] 2026-03-03：完成适配边界下沉：`workflow/agent_adapter.go` 迁移至 `workflow/adapters/agent_adapter.go`；新增 `workflow/adapters/rag_adapter.go` 统一 RAG 桥接；`workflow/workflow_extra_test.go` 与 `workflow/adapters/*_test.go` 已对齐并通过 `go test ./workflow/...`。
+- [x] 2026-03-03：推进单入口主链第一步：新增 `workflow/facade.ExecuteDAG`，`api/handlers/workflow` 与 `bootstrap` 装配改为依赖 facade 接口，不再直接注入 `DAGExecutor`；通过 `go test ./workflow/...` 与 `go test ./api/handlers/...`。
+- [x] 2026-03-03：推进单入口主链第二步（纠偏）：`workflow/facade` 对外接口重新收敛为 `ExecuteDAG(ctx, *workflow.DAGWorkflow, input)`，`api/handlers/workflow` 同步只依赖 DAG 执行入口，移除通用 `workflow.Workflow` 执行口，避免 Chain/Routing/Parallel 从 handler 侧旁路进入；通过 `go test ./workflow/...`、`go test ./api/handlers/...`、`go test ./internal/app/bootstrap/...`、`go test ./cmd/agentflow/...`。
+- [x] 2026-03-03：完成单入口主链第三步（删除并行入口）：删除 `workflow/routing.go`、`workflow/parallel.go` 与 `workflow/workflow_test.go` 中 legacy 入口覆盖；`workflow/workflow.go` 移除 `ChainWorkflow` 实现，仅保留通用 `Step` 契约与流式事件；`examples/05_workflow` 改为 DAG-only 示例；通过 `go test ./workflow/...` 与 `go test ./api/handlers/... ./internal/app/bootstrap ./cmd/agentflow`。
+- [x] 2026-03-03：完成守卫与回归验收闭环：`go test ./workflow/...`、`go test ./...` 与 `scripts/arch_guard.ps1` 全通过；Phase-6 与总览“架构守卫与回归测试”更新为完成。

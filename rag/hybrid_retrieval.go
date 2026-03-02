@@ -9,7 +9,14 @@ import (
 	"sync"
 	"time"
 
+	"github.com/BaSui01/agentflow/types"
 	"go.uber.org/zap"
+)
+
+// Fusion algorithm constants for hybrid retrieval score merging.
+const (
+	FusionRRF      = "rrf"
+	FusionWeighted = "weighted"
 )
 
 // HybridRetrievalConfig 混合检索配置（基于 2025 年最佳实践）
@@ -31,21 +38,31 @@ type HybridRetrievalConfig struct {
 	// 检索参数
 	TopK     int     `json:"top_k"`
 	MinScore float64 `json:"min_score"`
+
+	// 融合算法
+	// - "rrf": Reciprocal Rank Fusion（默认）
+	// - "weighted": 归一化加权融合
+	FusionAlgorithm string  `json:"fusion_algorithm"`
+	FusionAlpha     float64 `json:"fusion_alpha"` // weighted 模式下 vector 权重（0~1）
+	RRFK            int     `json:"rrf_k"`        // rrf 模式分母平滑参数，默认 60
 }
 
 // DefaultHybridRetrievalConfig 返回默认混合检索配置
 func DefaultHybridRetrievalConfig() HybridRetrievalConfig {
 	return HybridRetrievalConfig{
-		UseBM25:      true,
-		BM25Weight:   0.5,
-		BM25K1:       1.5,
-		BM25B:        0.75,
-		UseVector:    true,
-		VectorWeight: 0.5,
-		UseReranking: true,
-		RerankTopK:   50,
-		TopK:         5,
-		MinScore:     0.3,
+		UseBM25:         true,
+		BM25Weight:      0.5,
+		BM25K1:          1.5,
+		BM25B:           0.75,
+		UseVector:       true,
+		VectorWeight:    0.5,
+		UseReranking:    true,
+		RerankTopK:      50,
+		TopK:            5,
+		MinScore:        0.3,
+		FusionAlgorithm: FusionRRF,
+		FusionAlpha:     0.5,
+		RRFK:            60,
 	}
 }
 
@@ -70,6 +87,10 @@ type HybridRetriever struct {
 
 // NewHybridRetriever 创建混合检索器
 func NewHybridRetriever(config HybridRetrievalConfig, logger *zap.Logger) *HybridRetriever {
+	config = normalizeHybridRetrievalConfig(config)
+	if logger == nil {
+		logger = zap.NewNop()
+	}
 	return &HybridRetriever{
 		config: config,
 		idf:    make(map[string]float64),
@@ -83,6 +104,10 @@ func NewHybridRetrieverWithVectorStore(
 	vectorStore VectorStore,
 	logger *zap.Logger,
 ) *HybridRetriever {
+	config = normalizeHybridRetrievalConfig(config)
+	if logger == nil {
+		logger = zap.NewNop()
+	}
 	return &HybridRetriever{
 		config:      config,
 		idf:         make(map[string]float64),
@@ -356,9 +381,11 @@ func (r *HybridRetriever) cosineSimilarity(a, b []float64) float64 {
 func (r *HybridRetriever) mergeResults(bm25Results, vectorResults map[string]float64) map[string]map[string]float64 {
 	merged := make(map[string]map[string]float64)
 
-	// 归一化 BM25 分数
+	// 归一化分数（weighted 模式使用）
 	bm25Normalized := r.normalizeScores(bm25Results)
 	vectorNormalized := r.normalizeScores(vectorResults)
+	bm25Ranks := rankScoresDescending(bm25Results)
+	vectorRanks := rankScoresDescending(vectorResults)
 
 	// 合并所有文档 ID
 	allIDs := make(map[string]bool)
@@ -374,7 +401,20 @@ func (r *HybridRetriever) mergeResults(bm25Results, vectorResults map[string]flo
 		bm25Score := bm25Normalized[id]
 		vectorScore := vectorNormalized[id]
 
-		hybridScore := bm25Score*r.config.BM25Weight + vectorScore*r.config.VectorWeight
+		hybridScore := 0.0
+		switch r.config.FusionAlgorithm {
+		case FusionWeighted:
+			alpha := r.config.FusionAlpha
+			hybridScore = (1-alpha)*bm25Score + alpha*vectorScore
+		default:
+			k := r.config.RRFK
+			if rank, ok := bm25Ranks[id]; ok {
+				hybridScore += 1.0 / float64(k+rank)
+			}
+			if rank, ok := vectorRanks[id]; ok {
+				hybridScore += 1.0 / float64(k+rank)
+			}
+		}
 
 		merged[id] = map[string]float64{
 			"bm25":   bm25Score,
@@ -384,6 +424,36 @@ func (r *HybridRetriever) mergeResults(bm25Results, vectorResults map[string]flo
 	}
 
 	return merged
+}
+
+func normalizeHybridRetrievalConfig(cfg HybridRetrievalConfig) HybridRetrievalConfig {
+	if cfg.FusionAlgorithm != FusionWeighted {
+		cfg.FusionAlgorithm = FusionRRF
+	}
+	if cfg.FusionAlpha < 0 || cfg.FusionAlpha > 1 {
+		cfg.FusionAlpha = 0.5
+	}
+	if cfg.RRFK <= 0 {
+		cfg.RRFK = 60
+	}
+	return cfg
+}
+
+func rankScoresDescending(scores map[string]float64) map[string]int {
+	type pair struct {
+		id    string
+		score float64
+	}
+	items := make([]pair, 0, len(scores))
+	for id, score := range scores {
+		items = append(items, pair{id: id, score: score})
+	}
+	sort.Slice(items, func(i, j int) bool { return items[i].score > items[j].score })
+	ranks := make(map[string]int, len(items))
+	for i := range items {
+		ranks[items[i].id] = i + 1
+	}
+	return ranks
 }
 
 // normalizeScores 归一化分数（Min-Max）
@@ -482,3 +552,42 @@ func (r *HybridRetriever) getDocumentByID(id string) *Document {
 	return nil
 }
 
+// =============================================================================
+// Retrieval Metrics Helpers (merged from metrics.go)
+// =============================================================================
+// collectRetrievalMetrics 在 RAG 检索出口统一采集度量。
+// 使用 core.RetrievalMetrics（通过 facade 别名 RetrievalMetrics）。
+func collectRetrievalMetrics(
+	ctx context.Context,
+	retrievalStart time.Time,
+	rerankDuration time.Duration,
+	topK int,
+	hitCount int,
+	contextTokens int,
+) RetrievalMetrics {
+	m := RetrievalMetrics{
+		RetrievalLatency: time.Since(retrievalStart),
+		RerankLatency:    rerankDuration,
+		TopK:             topK,
+		HitCount:         hitCount,
+		ContextTokens:    contextTokens,
+	}
+	if traceID, ok := types.TraceID(ctx); ok {
+		m.TraceID = traceID
+	}
+	if runID, ok := types.RunID(ctx); ok {
+		m.RunID = runID
+	}
+	if spanID, ok := types.SpanID(ctx); ok {
+		m.SpanID = spanID
+	}
+	return m
+}
+
+// estimateTokens 粗略估算文本 token 数（英文约 4 字符/token）。
+func estimateTokens(text string) int {
+	if len(text) == 0 {
+		return 0
+	}
+	return (len(text) + 3) / 4
+}

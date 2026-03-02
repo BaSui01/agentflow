@@ -19,24 +19,24 @@ commonComponents:
 
 deps:
   types:
-    mayDependOn: []
-  llm_core:
     mayDependOn: [types]
+  llm_core:
+    mayDependOn: [types, llm_core]
   llm_gateway:
-    mayDependOn: [types, llm_core, llm_runtime, llm_caps]
+    mayDependOn: [types, llm_core, llm_gateway, llm_runtime, llm_caps]
   llm_runtime:
-    mayDependOn: [types, llm_core]
+    mayDependOn: [types, llm_core, llm_runtime]
   llm_caps:
-    mayDependOn: [types, llm_core, llm_provs]
+    mayDependOn: [types, llm_core, llm_caps, llm_provs]
   llm_provs:
-    mayDependOn: [types, llm_core]
+    mayDependOn: [types, llm_core, llm_provs]
   agent:
-    mayDependOn: [types, llm_core, llm_gateway, rag]
-  rag:
-    mayDependOn: [types, llm_core, llm_caps]
-  workflow:
     mayDependOn: [types, llm_core, llm_gateway, agent, rag]
-  api:
+  rag:
+    mayDependOn: [types, llm_core, llm_caps, rag]
+  workflow:
     mayDependOn: [types, llm_core, llm_gateway, agent, rag, workflow]
+  api:
+    mayDependOn: [types, llm_core, llm_gateway, agent, rag, workflow, api]
   cmd:
-    mayDependOn: [types, llm_core, llm_gateway, llm_runtime, llm_caps, llm_provs, agent, rag, workflow, api, internal]
+    mayDependOn: [types, llm_core, llm_gateway, llm_runtime, llm_caps, llm_provs, agent, rag, workflow, api, internal, cmd]

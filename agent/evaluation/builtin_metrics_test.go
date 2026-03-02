@@ -293,10 +293,13 @@ func TestRegisterBuiltinMetrics(t *testing.T) {
 
 		names := registry.List()
 		assert.Contains(t, names, "accuracy")
+		assert.Contains(t, names, "recall_at_k")
+		assert.Contains(t, names, "mrr")
+		assert.Contains(t, names, "groundedness")
 		assert.Contains(t, names, "latency")
 		assert.Contains(t, names, "token_usage")
 		assert.Contains(t, names, "cost")
-		assert.Len(t, names, 4)
+		assert.Len(t, names, 7)
 	})
 }
 
@@ -306,6 +309,9 @@ func TestNewRegistryWithBuiltinMetrics(t *testing.T) {
 
 		names := registry.List()
 		assert.Contains(t, names, "accuracy")
+		assert.Contains(t, names, "recall_at_k")
+		assert.Contains(t, names, "mrr")
+		assert.Contains(t, names, "groundedness")
 		assert.Contains(t, names, "latency")
 		assert.Contains(t, names, "token_usage")
 		assert.Contains(t, names, "cost")
@@ -323,6 +329,9 @@ func TestNewRegistryWithBuiltinMetrics(t *testing.T) {
 		require.NoError(t, err)
 
 		assert.Equal(t, 1.0, result.Metrics["accuracy"])
+		assert.Equal(t, 0.0, result.Metrics["recall_at_k"])
+		assert.Equal(t, 0.0, result.Metrics["mrr"])
+		assert.Equal(t, 0.0, result.Metrics["groundedness"])
 		assert.Equal(t, 100.0, result.Metrics["latency"])
 		assert.Equal(t, 50.0, result.Metrics["token_usage"])
 		assert.Equal(t, 0.01, result.Metrics["cost"])
@@ -345,6 +354,18 @@ func TestMetricImplementsInterface(t *testing.T) {
 
 	t.Run("CostMetric implements Metric", func(t *testing.T) {
 		var _ Metric = (*CostMetric)(nil)
+	})
+
+	t.Run("RecallAtKMetric implements Metric", func(t *testing.T) {
+		var _ Metric = (*RecallAtKMetric)(nil)
+	})
+
+	t.Run("MRRMetric implements Metric", func(t *testing.T) {
+		var _ Metric = (*MRRMetric)(nil)
+	})
+
+	t.Run("GroundednessMetric implements Metric", func(t *testing.T) {
+		var _ Metric = (*GroundednessMetric)(nil)
 	})
 }
 

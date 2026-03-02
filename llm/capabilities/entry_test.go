@@ -102,6 +102,18 @@ func TestEntry_AllCapabilities(t *testing.T) {
 	require.Equal(t, "mock_tool", toolResults[0].Name)
 }
 
+func TestEntry_ResolveRerankProvider_ByChatProvider(t *testing.T) {
+	entry := NewEntry(multimodal.NewRouter())
+	entry.Router().RegisterRerank("qwen-rerank", &mockRerankProvider{name: "qwen-rerank"}, true)
+	entry.Router().RegisterRerank("glm-rerank", &mockRerankProvider{name: "glm-rerank"}, false)
+	require.NoError(t, entry.BindChatToRerank("qwen", "qwen-rerank"))
+	require.NoError(t, entry.BindChatToRerank("GLM", "glm-rerank"))
+
+	require.Equal(t, "qwen-rerank", entry.ResolveRerankProvider("qwen"))
+	require.Equal(t, "glm-rerank", entry.ResolveRerankProvider("glm"))
+	require.Equal(t, "", entry.ResolveRerankProvider("unknown"))
+}
+
 type mockImageProvider struct {
 	name string
 }

@@ -3,6 +3,8 @@ package avatar
 import (
 	"context"
 	"time"
+
+	"github.com/BaSui01/agentflow/types"
 )
 
 // Provider 定义数字人/Avatar 能力接口。
@@ -13,16 +15,19 @@ type Provider interface {
 
 // GenerateRequest 表示 Avatar 生成请求。
 type GenerateRequest struct {
-	Prompt     string            `json:"prompt,omitempty"`
-	Script     string            `json:"script,omitempty"`
-	Model      string            `json:"model,omitempty"`
-	AvatarID   string            `json:"avatar_id,omitempty"`
-	Voice      string            `json:"voice,omitempty"`
-	Duration   float64           `json:"duration,omitempty"`
-	Resolution string            `json:"resolution,omitempty"`
-	AudioURL   string            `json:"audio_url,omitempty"`
-	ImageURL   string            `json:"image_url,omitempty"`
-	Metadata   map[string]string `json:"metadata,omitempty"`
+	Prompt           string                  `json:"prompt,omitempty"`
+	Script           string                  `json:"script,omitempty"`
+	Model            string                  `json:"model,omitempty"`
+	AvatarID         string                  `json:"avatar_id,omitempty"`
+	Voice            string                  `json:"voice,omitempty"`
+	Duration         float64                 `json:"duration,omitempty"`
+	Resolution       string                  `json:"resolution,omitempty"`
+	AudioURL         string                  `json:"audio_url,omitempty"`
+	ImageURL         string                  `json:"image_url,omitempty"`
+	DriveVideoURL    string                  `json:"drive_video_url,omitempty"`
+	DriveMode        types.AvatarDriveMode   `json:"drive_mode,omitempty"`
+	NarrationProfile *types.NarrationProfile `json:"narration_profile,omitempty"`
+	Metadata         map[string]string       `json:"metadata,omitempty"`
 }
 
 // GenerateResponse 表示 Avatar 生成响应。

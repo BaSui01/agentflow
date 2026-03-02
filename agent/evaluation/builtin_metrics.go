@@ -271,6 +271,9 @@ func computeStringSimilarity(a, b string) float64 {
 // RegisterBuiltinMetrics 注册所有内置指标到注册表
 func RegisterBuiltinMetrics(registry *MetricRegistry) {
 	registry.Register(NewAccuracyMetric())
+	registry.Register(NewRecallAtKMetric())
+	registry.Register(NewMRRMetric())
+	registry.Register(NewGroundednessMetric())
 	registry.Register(NewLatencyMetric())
 	registry.Register(NewTokenUsageMetric())
 	registry.Register(NewCostMetric())

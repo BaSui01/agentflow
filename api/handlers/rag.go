@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"errors"
 	"net/http"
 
 	"github.com/BaSui01/agentflow/rag"
@@ -10,17 +11,30 @@ import (
 
 // RAGHandler handles RAG (Retrieval-Augmented Generation) API requests.
 type RAGHandler struct {
-	store     rag.VectorStore
-	embedding rag.EmbeddingProvider
-	logger    *zap.Logger
+	service RAGService
+	logger  *zap.Logger
+}
+
+func asTypesError(err error) *types.Error {
+	if err == nil {
+		return nil
+	}
+	var te *types.Error
+	if ok := errors.As(err, &te); ok && te != nil {
+		return te
+	}
+	return types.NewError(types.ErrInternalError, "internal error").WithCause(err)
 }
 
 // NewRAGHandler creates a new RAG handler.
 func NewRAGHandler(store rag.VectorStore, embedding rag.EmbeddingProvider, logger *zap.Logger) *RAGHandler {
+	return NewRAGHandlerWithService(NewDefaultRAGService(store, embedding), logger)
+}
+
+func NewRAGHandlerWithService(service RAGService, logger *zap.Logger) *RAGHandler {
 	return &RAGHandler{
-		store:     store,
-		embedding: embedding,
-		logger:    logger,
+		service: service,
+		logger:  logger,
 	}
 }
 
@@ -58,21 +72,9 @@ func (h *RAGHandler) HandleQuery(w http.ResponseWriter, r *http.Request) {
 		req.TopK = 5
 	}
 
-	// Generate query embedding
-	queryEmbedding, err := h.embedding.EmbedQuery(r.Context(), req.Query)
+	results, err := h.service.Query(r.Context(), req.Query, req.TopK)
 	if err != nil {
-		apiErr := types.NewError(types.ErrUpstreamError, "failed to generate query embedding").
-			WithCause(err).WithHTTPStatus(http.StatusBadGateway)
-		WriteError(w, apiErr, h.logger)
-		return
-	}
-
-	// Search vector store
-	results, err := h.store.Search(r.Context(), queryEmbedding, req.TopK)
-	if err != nil {
-		apiErr := types.NewError(types.ErrInternalError, "vector search failed").
-			WithCause(err)
-		WriteError(w, apiErr, h.logger)
+		WriteError(w, asTypesError(err), h.logger)
 		return
 	}
 
@@ -128,42 +130,21 @@ func (h *RAGHandler) HandleIndex(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Extract content strings for batch embedding
-	contents := make([]string, len(req.Documents))
+	docs := make([]rag.Document, len(req.Documents))
 	for i, doc := range req.Documents {
 		if doc.Content == "" {
 			WriteErrorMessage(w, http.StatusBadRequest, types.ErrInvalidRequest,
 				"document content is required", h.logger)
 			return
 		}
-		contents[i] = doc.Content
-	}
-
-	// Generate embeddings
-	embeddings, err := h.embedding.EmbedDocuments(r.Context(), contents)
-	if err != nil {
-		apiErr := types.NewError(types.ErrUpstreamError, "failed to generate embeddings").
-			WithCause(err).WithHTTPStatus(http.StatusBadGateway)
-		WriteError(w, apiErr, h.logger)
-		return
-	}
-
-	// Build rag.Document slice
-	docs := make([]rag.Document, len(req.Documents))
-	for i, doc := range req.Documents {
 		docs[i] = rag.Document{
-			ID:        doc.ID,
-			Content:   doc.Content,
-			Metadata:  doc.Metadata,
-			Embedding: embeddings[i],
+			ID:       doc.ID,
+			Content:  doc.Content,
+			Metadata: doc.Metadata,
 		}
 	}
-
-	// Store documents
-	if err := h.store.AddDocuments(r.Context(), docs); err != nil {
-		apiErr := types.NewError(types.ErrInternalError, "failed to index documents").
-			WithCause(err)
-		WriteError(w, apiErr, h.logger)
+	if err := h.service.Index(r.Context(), docs); err != nil {
+		WriteError(w, asTypesError(err), h.logger)
 		return
 	}
 

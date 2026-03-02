@@ -63,6 +63,13 @@ jobs:
       - name: Build all packages
         run: go build ./...
 
+      - name: Install go-arch-lint
+        run: go install github.com/fe3dback/go-arch-lint@latest
+
+      - name: Check architecture dependencies
+        continue-on-error: true
+        run: "$(go env GOPATH)/bin/go-arch-lint" check
+
       - name: Check API contract consistency
         run: go test ./tests/contracts -count=1
 

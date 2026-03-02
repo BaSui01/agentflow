@@ -295,3 +295,93 @@ func TestVoyageProvider_RerankSimple(t *testing.T) {
 	require.NoError(t, err)
 	assert.Len(t, results, 1)
 }
+
+func TestQwenProvider_Rerank(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "/api/v1/services/rerank/text-rerank/text-rerank", r.URL.Path)
+		assert.Equal(t, "Bearer test-key", r.Header.Get("Authorization"))
+		w.Header().Set("Content-Type", "application/json")
+		err := json.NewEncoder(w).Encode(map[string]any{
+			"output": map[string]any{
+				"results": []map[string]any{
+					{"index": 0, "relevance_score": 0.91},
+				},
+			},
+			"usage":      map[string]any{"total_tokens": 33},
+			"request_id": "req-1",
+		})
+		require.NoError(t, err)
+	}))
+	t.Cleanup(srv.Close)
+
+	p := NewQwenProvider(QwenConfig{APIKey: "test-key", BaseURL: srv.URL})
+	resp, err := p.Rerank(context.Background(), &RerankRequest{
+		Query:     "query",
+		Documents: []Document{{ID: "d1", Text: "doc one"}},
+		TopN:      1,
+	})
+	require.NoError(t, err)
+	require.Equal(t, "qwen-rerank", resp.Provider)
+	require.Len(t, resp.Results, 1)
+	require.Equal(t, 33, resp.Usage.TotalTokens)
+}
+
+func TestQwenProvider_Rerank_Error(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusBadRequest)
+		_, err := w.Write([]byte(`{"message":"invalid request"}`))
+		require.NoError(t, err)
+	}))
+	t.Cleanup(srv.Close)
+
+	p := NewQwenProvider(QwenConfig{APIKey: "test-key", BaseURL: srv.URL})
+	_, err := p.Rerank(context.Background(), &RerankRequest{
+		Query:     "query",
+		Documents: []Document{{Text: "doc one"}},
+	})
+	require.Error(t, err)
+}
+
+func TestGLMProvider_Rerank(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "/api/paas/v4/rerank", r.URL.Path)
+		assert.Equal(t, "Bearer test-key", r.Header.Get("Authorization"))
+		w.Header().Set("Content-Type", "application/json")
+		err := json.NewEncoder(w).Encode(map[string]any{
+			"id": "resp-1",
+			"results": []map[string]any{
+				{"index": 0, "relevance_score": 0.87},
+			},
+			"usage": map[string]any{"total_tokens": 21},
+		})
+		require.NoError(t, err)
+	}))
+	t.Cleanup(srv.Close)
+
+	p := NewGLMProvider(GLMConfig{APIKey: "test-key", BaseURL: srv.URL})
+	resp, err := p.Rerank(context.Background(), &RerankRequest{
+		Query:     "query",
+		Documents: []Document{{ID: "d1", Text: "doc one"}},
+		TopN:      1,
+	})
+	require.NoError(t, err)
+	require.Equal(t, "glm-rerank", resp.Provider)
+	require.Len(t, resp.Results, 1)
+	require.Equal(t, 21, resp.Usage.TotalTokens)
+}
+
+func TestGLMProvider_Rerank_Error(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusUnauthorized)
+		_, err := w.Write([]byte(`{"message":"unauthorized"}`))
+		require.NoError(t, err)
+	}))
+	t.Cleanup(srv.Close)
+
+	p := NewGLMProvider(GLMConfig{APIKey: "test-key", BaseURL: srv.URL})
+	_, err := p.Rerank(context.Background(), &RerankRequest{
+		Query:     "query",
+		Documents: []Document{{Text: "doc one"}},
+	})
+	require.Error(t, err)
+}

@@ -40,3 +40,8 @@ type ToolRegistry interface {
 type HumanInputHandler interface {
 	RequestInput(ctx context.Context, prompt string, inputType string, options []string) (any, error)
 }
+
+// AgentExecutor workflow 侧最小 agent 执行抽象。
+type AgentExecutor interface {
+	Execute(ctx context.Context, input any) (any, error)
+}

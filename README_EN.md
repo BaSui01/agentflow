@@ -53,11 +53,15 @@ English | [中文](README.md)
 ### 🔄 Workflow Engine
 
 - **DAG Workflow** - Directed acyclic graph orchestration
-- **Chain Workflow** - Simple linear step sequences
-- **Parallel Execution** - Concurrent branch execution with result aggregation
+- **DAG Node Parallelism** - Concurrent branch execution with result aggregation
 - **Checkpointing** - State persistence and recovery
 - **Circuit Breaker** - DAG node-level circuit breaker protection (Closed/Open/HalfOpen state machine)
 - **YAML DSL Orchestration Language** - Declarative workflow definition with variable interpolation, conditional branching, loops, subgraphs
+
+### 🧱 Startup Composition
+
+- **Single Startup Chain** - `cmd/agentflow/main.go -> internal/app/bootstrap -> cmd/agentflow/server_* -> api/routes -> api/handlers -> domain(agent/rag/workflow/llm)`
+- **Composition Root Boundaries** - `cmd` only composes; runtime construction is centralized in `internal/app/bootstrap` (see `docs/architecture/startup-composition.md`)
 
 ### 🔍 RAG System (Retrieval-Augmented Generation)
 
@@ -70,7 +74,7 @@ English | [中文](README.md)
 - **Document Management** - Auto chunking, metadata filtering, reranking
 - **Academic Data Sources** - arXiv paper retrieval, GitHub repository/code search adapters
 - **DocumentLoader** - Unified document loading interface (Text/Markdown/CSV/JSON)
-- **Config→RAG Bridge** - Configuration-driven RAG pipeline factory
+- **RAG Runtime Builder** - Unified runtime assembly via `rag/runtime.Builder` and config bridge
 - **Graph RAG** - Knowledge graph retrieval augmentation
 - **Query Routing/Transformation** - Intelligent query dispatch and rewriting
 
@@ -402,7 +406,7 @@ agentflow/
 │   ├── pinecone_store.go     # Pinecone implementation
 │   ├── milvus_store.go       # Milvus implementation
 │   ├── weaviate_store.go     # Weaviate implementation
-│   ├── factory.go            # Config→RAG pipeline factory
+│   ├── runtime/              # RAG runtime entry (builder + config bridge)
 │   ├── graph_rag.go          # Graph RAG
 │   ├── query_router.go       # Query routing & transformation
 │   ├── loader/               # Document loaders

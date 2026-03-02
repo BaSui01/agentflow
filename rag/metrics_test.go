@@ -12,6 +12,7 @@ func TestCollectRetrievalMetrics(t *testing.T) {
 	ctx := context.Background()
 	ctx = types.WithTraceID(ctx, "trace-123")
 	ctx = types.WithRunID(ctx, "run-456")
+	ctx = types.WithSpanID(ctx, "span-789")
 
 	start := time.Now().Add(-50 * time.Millisecond)
 	m := collectRetrievalMetrics(ctx, start, 10*time.Millisecond, 5, 3, 200)
@@ -21,6 +22,9 @@ func TestCollectRetrievalMetrics(t *testing.T) {
 	}
 	if m.RunID != "run-456" {
 		t.Fatalf("expected run_id run-456, got %s", m.RunID)
+	}
+	if m.SpanID != "span-789" {
+		t.Fatalf("expected span_id span-789, got %s", m.SpanID)
 	}
 	if m.RetrievalLatency < 50*time.Millisecond {
 		t.Fatalf("expected retrieval_latency >= 50ms, got %v", m.RetrievalLatency)
@@ -46,6 +50,9 @@ func TestCollectRetrievalMetrics_NoContext(t *testing.T) {
 	}
 	if m.RunID != "" {
 		t.Fatalf("expected empty run_id, got %s", m.RunID)
+	}
+	if m.SpanID != "" {
+		t.Fatalf("expected empty span_id, got %s", m.SpanID)
 	}
 }
 

@@ -3,8 +3,6 @@ package rag
 import (
 	"context"
 	"fmt"
-
-	"github.com/BaSui01/agentflow/config"
 	"go.uber.org/zap"
 )
 
@@ -25,6 +23,9 @@ type EnhancedRetrieverConfig struct {
 
 // NewEnhancedRetriever 创建了外部提供者的检索器 。
 func NewEnhancedRetriever(cfg EnhancedRetrieverConfig, logger *zap.Logger) *EnhancedRetriever {
+	if logger == nil {
+		logger = zap.NewNop()
+	}
 	return &EnhancedRetriever{
 		HybridRetriever:   NewHybridRetriever(cfg.HybridConfig, logger),
 		embeddingProvider: cfg.EmbeddingProvider,
@@ -65,8 +66,9 @@ func (r *EnhancedRetriever) IndexDocumentsWithEmbedding(ctx context.Context, doc
 	return r.IndexDocuments(docs)
 }
 
-// 利用外部提供者检索。
-func (r *EnhancedRetriever) RetrieveWithProviders(ctx context.Context, query string) ([]RetrievalResult, error) {
+// ExecuteRetrievalPipeline runs the unified retrieval path for enhanced retriever:
+// embed query -> retrieve -> external rerank(optional).
+func (r *EnhancedRetriever) ExecuteRetrievalPipeline(ctx context.Context, query string) ([]RetrievalResult, error) {
 	// 生成查询嵌入
 	var queryEmbedding []float64
 	if r.embeddingProvider != nil && r.config.UseVector {
@@ -132,51 +134,4 @@ func (r *EnhancedRetriever) applyExternalRerank(ctx context.Context, query strin
 		zap.String("provider", r.rerankProvider.Name()))
 
 	return reranked, nil
-}
-
-// ============================================================
-// 常见供应商组合的工厂功能
-// ============================================================
-
-// 新 OpenAIREtriever 创建了带有 OpenAI 嵌入式的检索器 。
-func NewOpenAIRetriever(apiKey string, logger *zap.Logger) (*EnhancedRetriever, error) {
-	return newRetrieverFromAPIKey(apiKey, logger, EmbeddingOpenAI, "")
-}
-
-// NewCohere Retriever创建了由Cohere嵌入并重排的取回器.
-func NewCohereRetriever(apiKey string, logger *zap.Logger) (*EnhancedRetriever, error) {
-	return newRetrieverFromAPIKey(apiKey, logger, EmbeddingCohere, RerankCohere)
-}
-
-// NewVoyage Retriever 创建取回器,由Voyage AI嵌入并重排.
-func NewVoyageRetriever(apiKey string, logger *zap.Logger) (*EnhancedRetriever, error) {
-	return newRetrieverFromAPIKey(apiKey, logger, EmbeddingVoyage, RerankVoyage)
-}
-
-// 新JinaRetriever创建取回器,由Jina AI嵌入并重排.
-func NewJinaRetriever(apiKey string, logger *zap.Logger) (*EnhancedRetriever, error) {
-	return newRetrieverFromAPIKey(apiKey, logger, EmbeddingJina, RerankJina)
-}
-
-func newRetrieverFromAPIKey(apiKey string, logger *zap.Logger, embType EmbeddingProviderType, rerankType RerankProviderType) (*EnhancedRetriever, error) {
-	cfg := &config.Config{
-		LLM: config.LLMConnectionConfig{
-			DefaultProvider: string(embType),
-			APIKey:          apiKey,
-		},
-	}
-
-	opts := []RetrieverOption{
-		WithLogger(logger),
-		WithEmbeddingType(embType),
-	}
-	if rerankType != "" {
-		opts = append(opts, WithRerankType(rerankType))
-	}
-
-	retriever, err := NewRetrieverFromConfig(cfg, opts...)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create retriever via factory: %w", err)
-	}
-	return retriever, nil
 }

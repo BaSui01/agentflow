@@ -1,0 +1,13 @@
+{
+  "captured_at": "2026-03-03T01:33:02",
+  "metrics": {
+    "latency_ms": 0.0,
+    "recall_at_k": 1.0,
+    "mrr": 1.0,
+    "error_rate": 0.0
+  },
+  "commands": {
+    "metrics_test": "go test -run TestRAGBaselineMetrics -v ./rag -count=1",
+    "suite_test": "go test ./rag/... -count=1"
+  }
+}

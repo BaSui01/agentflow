@@ -6,6 +6,7 @@ import "time"
 type RetrievalMetrics struct {
 	TraceID          string        `json:"trace_id"`
 	RunID            string        `json:"run_id"`
+	SpanID           string        `json:"span_id,omitempty"`
 	RetrievalLatency time.Duration `json:"retrieval_latency_ms"`
 	RerankLatency    time.Duration `json:"rerank_latency_ms"`
 	TopK             int           `json:"topk"`

@@ -1,0 +1,194 @@
+package bootstrap
+
+import (
+	"context"
+	"strings"
+	"time"
+
+	"github.com/BaSui01/agentflow/config"
+	"github.com/BaSui01/agentflow/llm"
+	"github.com/BaSui01/agentflow/llm/cache"
+	llmmw "github.com/BaSui01/agentflow/llm/middleware"
+	"github.com/BaSui01/agentflow/llm/observability"
+	"github.com/BaSui01/agentflow/llm/providers/vendor"
+	llmpolicy "github.com/BaSui01/agentflow/llm/runtime/policy"
+	"go.uber.org/zap"
+)
+
+// LLMHandlerRuntime groups LLM-related runtime dependencies used by API handlers.
+type LLMHandlerRuntime struct {
+	Provider      llm.Provider
+	ToolProvider  llm.Provider
+	BudgetManager *llmpolicy.TokenBudgetManager
+	CostTracker   *observability.CostTracker
+	Cache         *cache.MultiLevelCache
+	Metrics       *observability.Metrics
+	PolicyManager *llmpolicy.Manager
+}
+
+// BuildLLMHandlerRuntime creates the LLM runtime required by handler layer.
+// If no API key is configured, it returns nil and does not create runtime objects.
+func BuildLLMHandlerRuntime(cfg *config.Config, logger *zap.Logger) (*LLMHandlerRuntime, error) {
+	if strings.TrimSpace(cfg.LLM.APIKey) == "" {
+		return nil, nil
+	}
+
+	baseProvider, err := vendor.NewChatProviderFromConfig(cfg.LLM.DefaultProvider, vendor.ChatProviderConfig{
+		APIKey:  cfg.LLM.APIKey,
+		BaseURL: cfg.LLM.BaseURL,
+		Timeout: cfg.LLM.Timeout,
+	}, logger)
+	if err != nil {
+		return nil, err
+	}
+
+	retryPolicy := llmpolicy.DefaultRetryPolicy()
+	if cfg.LLM.MaxRetries >= 0 {
+		retryPolicy.MaxRetries = cfg.LLM.MaxRetries
+	}
+
+	var provider llm.Provider = llm.NewResilientProvider(baseProvider, &llm.ResilientConfig{
+		RetryPolicy:       retryPolicy,
+		CircuitBreaker:    llm.DefaultCircuitBreakerConfig(),
+		EnableIdempotency: true,
+		IdempotencyTTL:    time.Hour,
+	}, logger)
+
+	var llmMetrics *observability.Metrics
+	if metrics, mErr := observability.NewMetrics(); mErr != nil {
+		logger.Warn("Failed to create LLM metrics", zap.Error(mErr))
+	} else {
+		llmMetrics = metrics
+	}
+
+	costTracker := observability.NewCostTracker(observability.NewCostCalculator())
+
+	var budgetManager *llmpolicy.TokenBudgetManager
+	if cfg.Budget.Enabled {
+		budgetManager = llmpolicy.NewTokenBudgetManager(llmpolicy.BudgetConfig{
+			MaxTokensPerMinute: cfg.Budget.MaxTokensPerMinute,
+			MaxTokensPerDay:    cfg.Budget.MaxTokensPerDay,
+			MaxCostPerDay:      cfg.Budget.MaxCostPerDay,
+			AlertThreshold:     cfg.Budget.AlertThreshold,
+		}, logger)
+		logger.Info("Budget manager initialized")
+	}
+
+	policyManager := llmpolicy.NewManager(llmpolicy.ManagerConfig{
+		Budget:      budgetManager,
+		RetryPolicy: retryPolicy,
+	})
+
+	var llmCache *cache.MultiLevelCache
+	if cfg.Cache.Enabled {
+		llmCache = cache.NewMultiLevelCache(nil, &cache.CacheConfig{
+			LocalMaxSize:    cfg.Cache.LocalMaxSize,
+			LocalTTL:        cfg.Cache.LocalTTL,
+			EnableLocal:     true,
+			EnableRedis:     cfg.Cache.EnableRedis,
+			RedisTTL:        cfg.Cache.RedisTTL,
+			KeyStrategyType: cfg.Cache.KeyStrategy,
+		}, logger)
+		logger.Info("LLM cache initialized")
+	}
+
+	chain := llmmw.NewChain(
+		llmmw.RecoveryMiddleware(func(v any) {
+			logger.Error("LLM middleware panic recovered", zap.Any("panic", v))
+		}),
+		llmmw.LoggingMiddleware(logger.Sugar().Infof),
+		llmmw.TimeoutMiddleware(cfg.LLM.Timeout),
+	)
+	if llmMetrics != nil {
+		chain.Use(llmmw.MetricsMiddleware(&llmmw.OtelMetricsAdapter{Metrics: llmMetrics}))
+	}
+	if llmCache != nil {
+		chain.Use(llmmw.CacheMiddleware(&llmmw.PromptCacheAdapter{Cache: llmCache}))
+	}
+	cleaner := llmmw.NewEmptyToolsCleaner()
+	chain.UseFront(llmmw.TransformMiddleware(func(req *llm.ChatRequest) {
+		if req != nil {
+			_, _ = cleaner.Rewrite(context.Background(), req)
+		}
+	}, nil))
+
+	provider = llmmw.NewMiddlewareProvider(provider, chain)
+	toolProvider := buildToolProviderOrFallback(cfg, logger, provider)
+
+	return &LLMHandlerRuntime{
+		Provider:      provider,
+		ToolProvider:  toolProvider,
+		BudgetManager: budgetManager,
+		CostTracker:   costTracker,
+		Cache:         llmCache,
+		Metrics:       llmMetrics,
+		PolicyManager: policyManager,
+	}, nil
+}
+
+func buildToolProviderOrFallback(cfg *config.Config, logger *zap.Logger, mainProvider llm.Provider) llm.Provider {
+	if mainProvider == nil {
+		return nil
+	}
+
+	toolProviderCode := strings.TrimSpace(firstNonEmpty(cfg.LLM.ToolProvider, cfg.LLM.DefaultProvider))
+	toolAPIKey := strings.TrimSpace(firstNonEmpty(cfg.LLM.ToolAPIKey, cfg.LLM.APIKey))
+	toolBaseURL := strings.TrimSpace(firstNonEmpty(cfg.LLM.ToolBaseURL, cfg.LLM.BaseURL))
+	toolTimeout := cfg.LLM.ToolTimeout
+	if toolTimeout <= 0 {
+		toolTimeout = cfg.LLM.Timeout
+	}
+
+	toolRetryPolicy := llmpolicy.DefaultRetryPolicy()
+	toolMaxRetries := cfg.LLM.ToolMaxRetries
+	if toolMaxRetries == 0 {
+		toolMaxRetries = cfg.LLM.MaxRetries
+	}
+	if toolMaxRetries >= 0 {
+		toolRetryPolicy.MaxRetries = toolMaxRetries
+	}
+
+	toolCfgUnspecified := strings.TrimSpace(cfg.LLM.ToolProvider) == "" &&
+		strings.TrimSpace(cfg.LLM.ToolAPIKey) == "" &&
+		strings.TrimSpace(cfg.LLM.ToolBaseURL) == "" &&
+		cfg.LLM.ToolTimeout == 0 &&
+		cfg.LLM.ToolMaxRetries == 0
+	if toolCfgUnspecified {
+		logger.Info("Tool provider uses main provider (no explicit tool LLM config)")
+		return mainProvider
+	}
+
+	toolProvider, err := vendor.NewChatProviderFromConfig(toolProviderCode, vendor.ChatProviderConfig{
+		APIKey:  toolAPIKey,
+		BaseURL: toolBaseURL,
+		Timeout: toolTimeout,
+	}, logger)
+	if err != nil {
+		logger.Warn("Failed to create tool LLM provider, fallback to main provider",
+			zap.String("provider", toolProviderCode),
+			zap.Error(err))
+		return mainProvider
+	}
+
+	toolProvider = llm.NewResilientProvider(toolProvider, &llm.ResilientConfig{
+		RetryPolicy:       toolRetryPolicy,
+		CircuitBreaker:    llm.DefaultCircuitBreakerConfig(),
+		EnableIdempotency: true,
+		IdempotencyTTL:    time.Hour,
+	}, logger)
+
+	logger.Info("Tool LLM provider initialized",
+		zap.String("provider", toolProviderCode),
+		zap.Duration("timeout", toolTimeout),
+		zap.Int("max_retries", toolRetryPolicy.MaxRetries))
+	return toolProvider
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, v := range values {
+		if strings.TrimSpace(v) != "" {
+			return v
+		}
+	}
+	return ""
+}

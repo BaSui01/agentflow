@@ -34,3 +34,14 @@ type Gateway interface {
 	Invoke(ctx context.Context, req *UnifiedRequest) (*UnifiedResponse, error)
 	Stream(ctx context.Context, req *UnifiedRequest) (<-chan UnifiedChunk, error)
 }
+
+// ChatRerankBinding 定义 chat provider 到 rerank provider 的显式绑定关系。
+type ChatRerankBinding struct {
+	ChatProvider   string `json:"chat_provider"`
+	RerankProvider string `json:"rerank_provider"`
+}
+
+// RerankProviderResolver 定义 rerank provider 解析契约，避免上层依赖 provider 私有实现细节。
+type RerankProviderResolver interface {
+	ResolveRerankProvider(chatProvider string) string
+}

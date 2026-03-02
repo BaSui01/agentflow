@@ -140,13 +140,17 @@ func TestService_Invoke_CapabilityBranches(t *testing.T) {
 func newCapabilityServiceForTest() *Service {
 	router := multimodal.NewRouter()
 	router.RegisterEmbedding("emb", &gatewayEmbeddingProvider{}, true)
-	router.RegisterRerank("rerank", &gatewayRerankProvider{}, true)
+	router.RegisterRerank("rerank", &gatewayRerankProvider{name: "rerank"}, true)
+	router.RegisterRerank("qwen-rerank", &gatewayRerankProvider{name: "qwen-rerank"}, false)
 	router.RegisterTTS("tts", &gatewayTTSProvider{}, true)
 	router.RegisterSTT("stt", &gatewaySTTProvider{}, true)
 	router.RegisterMusic("music", &gatewayMusicProvider{}, true)
 	router.RegisterThreeD("threed", &gatewayThreeDProvider{}, true)
 	router.RegisterModeration("mod", &gatewayModerationProvider{}, true)
 	entry := capabilities.NewEntry(router)
+	if err := entry.BindChatToRerank("qwen", "qwen-rerank"); err != nil {
+		panic(err)
+	}
 	entry.RegisterAvatar("avatar", &gatewayAvatarProvider{}, true)
 	entry.SetToolExecutor(&gatewayToolExecutor{})
 	return New(Config{Capabilities: entry})
@@ -183,11 +187,13 @@ func (p *gatewayEmbeddingProvider) Dimensions() int { return 1 }
 
 func (p *gatewayEmbeddingProvider) MaxBatchSize() int { return 32 }
 
-type gatewayRerankProvider struct{}
+type gatewayRerankProvider struct {
+	name string
+}
 
 func (p *gatewayRerankProvider) Rerank(ctx context.Context, req *rerank.RerankRequest) (*rerank.RerankResponse, error) {
 	return &rerank.RerankResponse{
-		Provider: "rerank",
+		Provider: p.name,
 		Model:    req.Model,
 		Results: []rerank.RerankResult{
 			{Index: 0, RelevanceScore: 0.9},
@@ -203,9 +209,32 @@ func (p *gatewayRerankProvider) RerankSimple(ctx context.Context, query string, 
 	return []rerank.RerankResult{{Index: 0, RelevanceScore: 0.9}}, nil
 }
 
-func (p *gatewayRerankProvider) Name() string { return "rerank" }
+func (p *gatewayRerankProvider) Name() string { return p.name }
 
 func (p *gatewayRerankProvider) MaxDocuments() int { return 128 }
+
+func TestService_Invoke_RerankBindingByChatProvider(t *testing.T) {
+	svc := newCapabilityServiceForTest()
+	resp, err := svc.Invoke(context.Background(), &llmcore.UnifiedRequest{
+		Capability: llmcore.CapabilityRerank,
+		Hints: llmcore.CapabilityHints{
+			ChatProvider: "qwen",
+		},
+		Payload: &RerankInput{
+			Request: &rerank.RerankRequest{
+				Query: "hello",
+				Documents: []rerank.Document{
+					{Text: "hello world"},
+				},
+			},
+		},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, resp)
+	rerankResp, ok := resp.Output.(*rerank.RerankResponse)
+	require.True(t, ok)
+	require.Equal(t, "qwen-rerank", rerankResp.Provider)
+}
 
 type gatewayTTSProvider struct{}
 

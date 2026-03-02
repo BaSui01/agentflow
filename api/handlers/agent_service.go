@@ -22,6 +22,8 @@ const (
 // AgentService encapsulates runtime agent resolution and endpoint availability checks.
 type AgentService interface {
 	ResolveForOperation(ctx context.Context, agentID string, op AgentOperation) (agent.Agent, *types.Error)
+	ListAgents(ctx context.Context) ([]*discovery.AgentInfo, *types.Error)
+	GetAgent(ctx context.Context, agentID string) (*discovery.AgentInfo, *types.Error)
 }
 
 // DefaultAgentService is the default AgentService implementation used by AgentHandler.
@@ -58,5 +60,29 @@ func (s *DefaultAgentService) ResolveForOperation(ctx context.Context, agentID s
 	return nil, types.NewInternalError(
 		fmt.Sprintf("agent %s is not configured — no agent resolver available", op)).
 		WithHTTPStatus(http.StatusNotImplemented)
+}
+
+func (s *DefaultAgentService) ListAgents(ctx context.Context) ([]*discovery.AgentInfo, *types.Error) {
+	if s.registry == nil {
+		return nil, types.NewServiceUnavailableError("agent registry is not configured").
+			WithHTTPStatus(http.StatusServiceUnavailable)
+	}
+	agents, err := s.registry.ListAgents(ctx)
+	if err != nil {
+		return nil, types.NewInternalError("failed to list agents").WithCause(err)
+	}
+	return agents, nil
+}
+
+func (s *DefaultAgentService) GetAgent(ctx context.Context, agentID string) (*discovery.AgentInfo, *types.Error) {
+	if s.registry == nil {
+		return nil, types.NewServiceUnavailableError("agent registry is not configured").
+			WithHTTPStatus(http.StatusServiceUnavailable)
+	}
+	info, err := s.registry.GetAgent(ctx, agentID)
+	if err != nil {
+		return nil, types.NewNotFoundError("agent not found")
+	}
+	return info, nil
 }
 

@@ -10,11 +10,11 @@
 
 - [x] 完成 RAG 当前实现盘点（目录、入口、检索策略、向量后端）
 - [x] 完成 RAG 分层边界确认（`rag` 保持 Layer 2，与 `agent` 同级）
-- [ ] 完成 RAG 单一构建入口与单一执行主链落地
-- [ ] 完成 RAG 配置桥接收敛（移除并行工厂语义）
-- [ ] 完成 RAG-LLM 调用口收敛（统一能力入口）
-- [ ] 完成 RAG 契约向 `types` 的最小化对齐
-- [ ] 完成架构守卫与回归测试
+- [x] 完成 RAG 单一构建入口与单一执行主链落地
+- [x] 完成 RAG 配置桥接收敛（移除并行工厂语义）
+- [x] 完成 RAG-LLM 调用口收敛（统一能力入口）
+- [x] 完成 RAG 契约向 `types` 的最小化对齐
+- [x] 完成架构守卫与回归测试
 
 ---
 
@@ -56,8 +56,8 @@
 
 ### B. Provider 接入路径并行
 
-- `factory.go` 使用 `embedding/rerank` 的 `NewProviderFromConfig(...)`
-- `provider_integration.go` 通过 API Key 再次组装配置并回调 `NewRetrieverFromConfig(...)`
+- `factory.go`（已删除）使用 `embedding/rerank` 的 `NewProviderFromConfig(...)`
+- `provider_integration.go`（已清理快捷工厂）曾通过 API Key 再次组装配置并回调 `NewRetrieverFromConfig(...)`
 
 结论：同一目标（创建可用 retriever）有多种入口，增加调用方选择成本。
 
@@ -71,7 +71,7 @@
 
 ## 2.3 当前跨层耦合点（需治理）
 
-- `rag/factory.go`、`rag/provider_integration.go` 直接依赖 `config.Config`，应收敛到 `runtime/config_bridge`。
+- 历史上 `rag/factory.go`、`rag/provider_integration.go` 直接依赖 `config.Config`；现已收敛到 `runtime/config_bridge`。
 - API 层当前可直接拼 `store + embedding`（`api/handlers/rag.go`），后续应优先走 `rag` 用例入口，减少 handler 组装逻辑。
 - 架构守卫尚未显式约束 `rag` 禁止导入 `agent/workflow/api/cmd`。
 
@@ -156,101 +156,101 @@ rag/
 
 状态值约定（机读）：`Done` / `Partial` / `Todo`
 
-| Phase | 状态 | 完成判据（机读） | 证据路径 |
-|---|---|---|---|
-| Phase-0 冻结与基线 | Todo | 冻结 + 基线测试 + 基线指标三项齐备 | `docs/rag层重构.md` |
-| Phase-1 收敛构建链 | Todo | 唯一构建入口 `runtime.Builder`；并行工厂删除 | `rag/factory.go`、`rag/provider_integration.go` |
-| Phase-2 收敛检索主链 | Todo | 统一 pipeline 落地；hybrid/contextual/multi-hop 挂主链 | `rag/retrieval/pipeline.go` |
-| Phase-3 收敛配置桥接 | Todo | `config.Config` 依赖仅在 `runtime/config_bridge` | `rag/factory.go`、`rag/runtime/config_bridge.go` |
-| Phase-4 统一 LLM 能力接入 | Todo | embedding/rerank 统一经 capability 入口 | `rag/factory.go`、`llm/capabilities/embedding/*` |
-| Phase-5 契约与观测对齐 | Todo | 检索契约 + 错误码 + 评估指标 + 观测字段统一 | `types/`、`rag/core/metrics.go` |
-| Phase-6 守卫与验收 | Todo | 守卫 + 全量测试 + 文档同步 | `architecture_guard_test.go`、`scripts/arch_guard.ps1` |
+| Phase                     | 状态    | 完成判据（机读）                                       | 证据路径                                                 |
+| ------------------------- | ------- | ------------------------------------------------------ | -------------------------------------------------------- |
+| Phase-0 冻结与基线        | Done    | 冻结 + 基线测试 + 基线指标三项齐备                     | `docs/重构计划/rag层重构.md`                             |
+| Phase-1 收敛构建链        | Done    | 唯一构建入口 `runtime.Builder`；并行工厂删除           | `rag/runtime/builder.go`、`rag/factory.go`（已删除）     |
+| Phase-2 收敛检索主链      | Done    | 统一 pipeline 落地；hybrid/contextual/multi-hop 挂主链 | `rag/retrieval/pipeline.go`、`rag/retrieval/strategy_nodes.go` |
+| Phase-3 收敛配置桥接      | Done    | `config.Config` 依赖仅在 `runtime/builder.go`          | `rag/runtime/builder.go`（配置映射函数已迁移）           |
+| Phase-4 统一 LLM 能力接入 | Done    | embedding/rerank 统一经 capability 入口                | `rag/runtime/builder.go`、`llm/capabilities/embedding/*` |
+| Phase-5 契约与观测对齐    | Done    | 检索契约 + 错误码 + 评估指标 + 观测字段统一           | `types/retrieval.go`、`rag/core/errors.go`、`rag/core/metrics.go`、`rag/core/shared_contract.go` |
+| Phase-6 守卫与验收        | Done    | 守卫规则已落地；`rag` 子集回归通过；全量测试通过       | `architecture_guard_test.go`、`scripts/arch_guard.ps1`、`rag/*_test.go`   |
 
 ## 6.1 Phase-0：冻结与基线
 
-- [ ] 冻结 `rag/` 非重构需求变更。
-- [ ] 固化基线测试（检索准确性、向量后端、分块与重排）。
-- [ ] 基线指标入库（延迟、召回率@K、MRR、错误率）。
+- [x] 冻结 `rag/` 非重构需求变更。
+- [x] 固化基线测试（检索准确性、向量后端、分块与重排）。
+- [x] 基线指标入库（延迟、召回率@K、MRR、错误率）。
 
 ## 6.2 Phase-1：收敛构建链
 
-- [ ] 落地 `runtime.Builder` 作为唯一构建入口。
-- [ ] 将 `New*Retriever` 快捷工厂改为 builder 的薄封装或删除。
-- [ ] 调用点统一到单入口。
+- [x] 落地 `runtime.Builder` 作为唯一构建入口。
+- [x] 将 `New*Retriever` 快捷工厂改为 builder 的薄封装或删除。
+- [x] 调用点统一到单入口。
 
 ## 6.3 Phase-2：收敛检索主链
 
-- [ ] 建立统一 retrieval pipeline：`query transform -> retrieve(topK=50-200) -> rerank(topK=5-10) -> compose context`。
-- [ ] 将 `hybrid/contextual/multi-hop` 挂接为主链策略节点。
-- [ ] 明确 Hybrid Search 融合算法：默认使用 RRF（Reciprocal Rank Fusion），可选加权融合 `H = (1-α)K + αV`（α 可配置，默认 0.5）。
-- [ ] 删除并行执行旁路。
+- [x] 建立统一 retrieval pipeline：`query transform -> retrieve(topK=50-200) -> rerank(topK=5-10) -> compose context`。
+- [x] 将 `hybrid/contextual/multi-hop` 挂接为主链策略节点。
+- [x] 明确 Hybrid Search 融合算法：默认使用 RRF（Reciprocal Rank Fusion），可选加权融合 `H = (1-α)K + αV`（α 可配置，默认 0.5）。
+- [x] 删除并行执行旁路。
 
 ## 6.4 Phase-3：收敛配置桥接
 
-- [ ] 将 `config.Config` 依赖下沉到 `runtime/config_bridge`。
-- [ ] `core/retrieval/indexing` 禁止直接引用 `config`。
-- [ ] 清理重复映射函数。
+- [x] 将 `config.Config` 依赖下沉到 `runtime/config_bridge`。
+- [x] `core/retrieval/indexing` 禁止直接引用 `config`。
+- [x] 清理重复映射函数。
 
 ## 6.5 Phase-4：统一 LLM 能力接入
 
-- [ ] embedding/rerank 统一经 capability 入口创建。
-- [ ] 清理 provider_integration 与 factory 的重复路径。
+- [x] embedding/rerank 统一经 capability 入口创建。
+- [x] 清理 provider_integration 与 factory 的重复路径。
 
 ## 6.6 Phase-5：契约与观测对齐
 
-- [ ] 明确并落地 `types` 侧最小检索契约（仅跨层共享字段）。
-- [ ] 错误码统一到 `types.ErrorCode`。
-- [ ] 指标字段与 trace 统一。
-- [ ] 落地 RAG 评估指标定义：`context_relevance`、`faithfulness`、`answer_relevancy`、`recall@K`、`MRR`。
-- [ ] 在 `rag/runtime/` 下增加语义缓存层（embedding-based similarity cache），降低高频相似查询的检索成本。
+- [x] 明确并落地 `types` 侧最小检索契约（仅跨层共享字段）。
+- [x] 错误码统一到 `types.ErrorCode`。
+- [x] 指标字段与 trace 统一。
+- [x] 落地 RAG 评估指标定义：`context_relevance`、`faithfulness`、`answer_relevancy`、`recall@K`、`MRR`。
+- [x] 在 `rag/runtime/` 下增加语义缓存层（embedding-based similarity cache），降低高频相似查询的检索成本。
 
 ## 6.7 Phase-6：守卫与验收
 
-- [ ] 增加依赖守卫：`rag` 禁止导入 `agent/workflow/api/cmd`。
-- [ ] `go test ./rag/...`、`go test ./...`、`scripts/arch_guard.ps1` 全通过。
-- [ ] README/教程同步更新入口与调用示例。
+- [x] 增加依赖守卫：`rag` 禁止导入 `agent/workflow/api/cmd`。
+- [x] `go test ./rag/...`、`go test ./...`、`scripts/arch_guard.ps1` 全通过。
+- [x] README/教程同步更新入口与调用示例。
 
 ---
 
 ## 7. 删除清单（必须执行）
 
-- [ ] 并行 retriever 构造入口（重复语义）  
-- [ ] 重复 config 映射与 provider 集成路径  
-- [ ] 非主链检索旁路执行入口
+- [x] 并行 retriever 构造入口（重复语义）
+- [x] 重复 config 映射与 provider 集成路径
+- [x] 非主链检索旁路执行入口
 
 ---
 
 ## 8. 完成定义（DoD）
 
-| DoD 条目 | 状态 | 完成判据（机读） | 证据路径 |
-|---|---|---|---|
-| RAG 仅存在一个构建入口 | Todo | `runtime.Builder` 为唯一入口；并行工厂删除 | `rag/runtime/builder.go` |
-| RAG 仅存在一个检索主链 | Todo | 统一 pipeline 落地；topK 分层策略可配置 | `rag/retrieval/pipeline.go` |
-| Hybrid 融合算法显式选择 | Todo | 默认 RRF；可选加权融合；融合策略可配置 | `rag/retrieval/hybrid.go` |
-| 配置桥接仅存在一套映射实现 | Todo | `config.Config` 依赖仅在 `runtime/config_bridge` | `rag/runtime/config_bridge.go` |
-| RAG 评估指标定义落地 | Todo | `context_relevance/faithfulness/answer_relevancy/recall@K/MRR` 定义完成 | `rag/core/metrics.go` |
-| 语义缓存层落地 | Todo | embedding-based similarity cache 可用 | `rag/runtime/cache.go` |
-| 统一错误码与统一观测字段落地 | Todo | 错误码映射 `types.ErrorCode`；观测字段统一 | `rag/core/errors.go`、`rag/core/metrics.go` |
-| 架构守卫、回归测试、文档同步全部通过 | Todo | 守卫 + 全量测试 + 文档同步 | `architecture_guard_test.go`、`rag/*_test.go` |
+| DoD 条目                             | 状态 | 完成判据（机读）                                                        | 证据路径                                      |
+| ------------------------------------ | ---- | ----------------------------------------------------------------------- | --------------------------------------------- |
+| RAG 仅存在一个构建入口               | Done | `runtime.Builder` 为唯一入口；并行工厂删除                              | `rag/runtime/builder.go`                      |
+| RAG 仅存在一个检索主链               | Done | 统一 pipeline 落地；topK 分层策略可配置；`hybrid/contextual/multi-hop` 挂接统一策略节点 | `rag/retrieval/pipeline.go`、`rag/retrieval/strategy_nodes.go`                    |
+| Hybrid 融合算法显式选择              | Done | 默认 RRF；可选加权融合；融合策略可配置                                  | `rag/hybrid_retrieval.go`                     |
+| 配置桥接仅存在一套映射实现           | Done | `config.Config` 依赖仅在 `runtime/config_bridge`                        | `rag/runtime/config_bridge.go`                |
+| RAG 评估指标定义落地                 | Done | `context_relevance/faithfulness/answer_relevancy/recall@K/MRR` 定义完成 | `rag/core/metrics.go`                         |
+| 语义缓存层落地                       | Done | embedding-based similarity cache 可用                                   | `rag/runtime/cache.go`                        |
+| 统一错误码与统一观测字段落地         | Done | 错误码映射 `types.ErrorCode`；观测字段统一                              | `rag/core/errors.go`、`rag/core/metrics.go`   |
+| 架构守卫、回归测试、文档同步全部通过 | Done | 守卫通过 + `rag` 回归通过 + 全量回归通过 + 文档同步完成                 | `architecture_guard_test.go`、`rag/*_test.go`、`README.md` |
 
 ---
 
 ## 9. 风险与控制
 
 - 风险 1：入口收敛导致调用方改造面大。
-控制：先批量替换调用点，再同阶段删除旧入口。
+  控制：先批量替换调用点，再同阶段删除旧入口。
 
 - 风险 2：检索主链统一影响效果波动。
-控制：保留模式策略节点，但统一挂主链；对召回指标做回归对比。
+  控制：保留模式策略节点，但统一挂主链；对召回指标做回归对比。
 
 - 风险 3：配置桥接迁移引发环境差异。
-控制：桥接层单测覆盖所有后端配置分支。
+  控制：桥接层单测覆盖所有后端配置分支。
 
 - 风险 4：Hybrid 融合算法选择影响检索质量。
-控制：RRF 作为默认（无需分数归一化，鲁棒性强）；加权融合 α 参数可配置并通过 A/B 评估调优。
+  控制：RRF 作为默认（无需分数归一化，鲁棒性强）；加权融合 α 参数可配置并通过 A/B 评估调优。
 
 - 风险 5：语义缓存命中率低导致额外开销。
-控制：缓存相似度阈值可配置（建议 ≥0.95）；缓存 TTL 与索引更新频率联动；提供旁路开关。
+  控制：缓存相似度阈值可配置（建议 ≥0.95）；缓存 TTL 与索引更新频率联动；提供旁路开关。
 
 ---
 
@@ -258,13 +258,14 @@ rag/
 
 当前存在三套 Tokenizer 接口，语义不同，不建议强行合并：
 
-| 接口 | 位置 | 语义 | 适用场景 |
-|---|---|---|---|
-| `rag.Tokenizer` | `rag/` | 分块最小接口（`CountTokens(text) int`） | 文档分块时的 token 计数 |
-| `types.Tokenizer` | `types/` | 框架层（Message/ToolSchema 语义） | 跨层 token 预算估算 |
-| `llm/tokenizer.Tokenizer` | `llm/tokenizer/` | LLM 层（error + 模型感知） | 精确 token 计数与模型适配 |
+| 接口                      | 位置             | 语义                                    | 适用场景                  |
+| ------------------------- | ---------------- | --------------------------------------- | ------------------------- |
+| `rag.Tokenizer`           | `rag/`           | 分块最小接口（`CountTokens(text) int`） | 文档分块时的 token 计数   |
+| `types.Tokenizer`         | `types/`         | 框架层（Message/ToolSchema 语义）       | 跨层 token 预算估算       |
+| `llm/tokenizer.Tokenizer` | `llm/tokenizer/` | LLM 层（error + 模型感知）              | 精确 token 计数与模型适配 |
 
 治理规则：
+
 - `rag/adapters/tokenizer_adapter.go` 负责 `llm/tokenizer -> rag.Tokenizer` 的显式桥接。
 - 禁止在 `rag/` 内直接依赖 `llm/tokenizer`，必须经 adapter。
 - 三者语义差异在本节文档化，后续新增 tokenizer 需求优先复用已有接口。
@@ -275,3 +276,17 @@ rag/
 
 - [x] 2026-03-02：创建文档，完成 RAG 层重构目标、现状盘点、目标架构与阶段计划定义。
 - [x] 2026-03-02：Review 补充：Phase 表改为机读状态表；Phase-2 补充 topK 分层策略与 Hybrid 融合算法（RRF/加权）；Phase-5 补充 RAG 评估指标定义与语义缓存层；DoD 改为机读判据表并补充融合算法、评估指标、语义缓存条目；新增风险 4（融合算法）与风险 5（语义缓存）；新增 Tokenizer 三套并行治理说明。
+- [x] 2026-03-03：完成依赖守卫验收：`architecture_guard_test.go` 已包含 RAG 禁止依赖 `agent/workflow/api/cmd` 规则（`TestDependencyDirectionGuards`），并通过 `go test -run TestDependencyDirectionGuards -count=1 .` 与 `scripts/arch_guard.ps1`。
+- [x] 2026-03-03：完成构建链单入口收敛：删除 `rag/factory.go` 与 `rag/factory_test.go`，清理 `provider_integration` 中 `New*Retriever` 快捷工厂；新增 `rag/runtime/config_bridge.go` 并在 `rag/runtime.Builder` 中落地 `BuildVectorStore/BuildEnhancedRetriever`，`bootstrap` 与示例调用点切到 runtime builder。
+- [x] 2026-03-03：完成 runtime 语义缓存层：新增 `rag/runtime/cache.go` 与 `rag/runtime/cache_test.go`，支持阈值命中、缓存写入与清理（`Clearable`/`DocumentLister` 回退），并通过 `go test ./rag/runtime/...`、`go test ./rag/...`。
+- [x] 2026-03-03：完成 `config` 依赖域收敛复核：`rag` 中 `config` 导入仅存在 `rag/runtime/*`，`core/retrieval/indexing` 侧无直接 `config` 依赖（`rg \"github.com/BaSui01/agentflow/config\" rag | rg -v \"rag/runtime|_test.go\"`）。
+- [x] 2026-03-03：完成契约与观测对齐：新增 `types/retrieval.go` 定义最小跨层检索契约；新增 `rag/core/shared_contract.go` 将 `RetrievalResult/EvalMetrics` 映射到 `types` 契约；新增 `rag/core/errors_test.go` 与 `rag/core/shared_contract_test.go`；`rag/metrics.go` 补充 `span_id` 并由 `rag/metrics_test.go` 覆盖，验证通过 `go test ./types/...`、`go test ./rag/core/...`、`go test ./rag/...`。
+- [x] 2026-03-03：完成文档入口同步：`README.md` / `README_EN.md` 的 RAG 入口描述由 `factory` 更新为 `rag/runtime.Builder`；`docs/cn/tutorials/07.检索增强RAG.md` 与 `docs/en/tutorials/07.RAG.md` 新增“生产装配入口（runtime.Builder）”示例。
+- [x] 2026-03-03：落地统一检索主链执行器：新增 `rag/retrieval/pipeline.go` 与 `rag/retrieval/pipeline_test.go`，实现 `transform -> retrieve -> rerank -> compose` 可注入管线与 topK 分层截断策略；通过 `go test ./rag/retrieval/...` 与 `go test ./rag/...`。
+- [x] 2026-03-03：完成主链策略节点挂接：在 `rag/retrieval/strategy_nodes.go` 与 `rag/retrieval/strategy_node_test.go` 中将 `hybrid/contextual/multi-hop` 收敛为统一 `Retriever` 策略节点（`NewStrategyNode` 工厂）；通过 `go test ./rag/retrieval/...` 与 `go test ./rag/...`。
+- [x] 2026-03-03：完成 Hybrid 融合算法显式化：`rag/hybrid_retrieval.go` 新增融合算法常量 `FusionRRF/FusionWeighted` 与配置归一化（非法算法回退 RRF、非法 alpha 回退 0.5、非法 `rrf_k` 回退 60）；`rag/hybrid_fusion_test.go` 新增归一化用例，验证默认 RRF 与加权融合行为。
+- [x] 2026-03-03：完成旁路入口收敛：删除 `EnhancedRetriever.RetrieveWithProviders`，统一对外为 `ExecuteRetrievalPipeline`（embed query -> retrieve -> rerank）；示例 `examples/20_multimodal_providers` 已切换新入口；新增 `rag/provider_integration_test.go` 覆盖外部 rerank 与 embedding 失败降级路径。
+- [x] 2026-03-03：完成检索主链收敛验收复核：`rag/retrieval/` 下仅保留 `pipeline.go` 与 `strategy_nodes.go` 两类主链实现（无并行旧文件）；`go test ./rag/...` 通过；`go test ./workflow/... ./api/handlers/... ./internal/app/bootstrap ./cmd/agentflow` 通过；`scripts/arch_guard.ps1` 通过（存在历史 warning，不阻断 gate）。
+- [x] 2026-03-03：完成全量回归验收闭环：`go test ./llm/providers/doubao/...`、`go test ./llm/providers/glm/...`、`go test ./...` 与 `scripts/arch_guard.ps1` 全通过；总览“架构守卫与回归测试”与 6.7 验收项更新为完成。
+- [x] 2026-03-03：完成冻结与基线闭环：新增 `docs/重构计划/evidence/rag_freeze_notice-2026-03-03.md` 冻结声明；新增 `rag/baseline_metrics_test.go` 输出 baseline 指标；新增 `scripts/rag_baseline_capture.py` 采集并落盘 `docs/重构计划/evidence/rag_baseline_metrics_latest.json`，覆盖 latency/recall@K/MRR/error_rate。
+- [x] 2026-03-03：完成根包超预算瘦身（22→19）：同职责文件合并并删除旧文件，`vector_convert.go -> vector_store.go`、`tokenizer_adapter.go -> chunking.go`、`metrics.go -> hybrid_retrieval.go`；保持单实现与主链不变；通过 `go test ./rag/...` 与 `scripts/arch_guard.ps1`，`rag` 根包生产文件数降至 `19`（阈值 `<=20`）。

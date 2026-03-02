@@ -227,6 +227,22 @@ arch-guard-ci: ## CI 严格架构守卫（warning 按阈值升级为 error）
 	@ARCH_GUARD_STRICT=1 pwsh -NoProfile -ExecutionPolicy Bypass -File ./scripts/arch_guard.ps1
 	@echo "✅ Strict architecture guard complete"
 
+.PHONY: refactor-plan-lint
+refactor-plan-lint: ## 重构计划格式检查（必须包含 [ ]/[x] 状态与核心章节）
+	@echo "📋 Linting refactor plans..."
+	@python scripts/refactor_plan_guard.py lint
+	@echo "✅ Refactor plan lint complete"
+
+.PHONY: refactor-plan-report
+refactor-plan-report: ## 输出重构计划进度汇总
+	@python scripts/refactor_plan_guard.py report
+
+.PHONY: refactor-plan-gate
+refactor-plan-gate: ## 重构计划收尾门禁（存在 [ ] 则失败）
+	@echo "🚧 Running refactor plan gate..."
+	@python scripts/refactor_plan_guard.py gate
+	@echo "✅ Refactor plan gate passed"
+
 .PHONY: fmt
 fmt: ## 格式化代码
 	@echo "🎨 Formatting code..."

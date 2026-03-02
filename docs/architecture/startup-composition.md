@@ -1,0 +1,49 @@
+# Startup Composition Chain
+
+This document defines the runtime startup chain and composition boundaries.
+
+## Runtime Chain
+
+`cmd/agentflow/main.go -> internal/app/bootstrap.InitializeServeRuntime -> cmd/agentflow/server_* -> api/routes -> api/handlers -> domain(agent/rag/workflow/llm)`
+
+## Composition Boundaries
+
+- `cmd/agentflow` is the composition root and lifecycle host.
+- `internal/app/bootstrap` centralizes startup builders used by `cmd`.
+- `api/handlers` stays focused on protocol conversion and delegates domain behavior.
+
+## Current Builder Split
+
+- `internal/app/bootstrap/bootstrap.go`
+  - config loading/validation
+  - logger and telemetry initialization
+  - database connection setup
+- `internal/app/bootstrap/handler_runtime_builder.go`
+  - LLM provider runtime setup
+  - chat middleware chain setup
+  - policy/cache/metrics/budget runtime wiring
+- `internal/app/bootstrap/domain_runtime_builders.go`
+  - protocol server runtime setup (MCP/A2A)
+  - RAG runtime setup (embedding provider + vector store)
+  - workflow runtime setup (DAG executor + DSL parser)
+- `internal/app/bootstrap/multimodal_runtime_builder.go`
+  - multimodal handler runtime setup (provider config + policy + store binding)
+- `internal/app/bootstrap/multimodal_reference_store_builder.go`
+  - redis reference store client construction and security validation
+- `internal/app/bootstrap/http_auth_builder.go`
+  - HTTP auth middleware selection and fail-closed guard construction
+- `internal/app/bootstrap/http_middleware_builder.go`
+  - HTTP middleware chain assembly and limiter lifecycle cancel wiring
+- `internal/app/bootstrap/http_server_builder.go`
+  - HTTP route registration and startup server config builders (app + metrics)
+- `internal/app/bootstrap/hotreload_runtime_builder.go`
+  - hot-reload manager/api handler construction and callback registration
+- `internal/app/bootstrap/handler_adapters_builder.go`
+  - agent registry/handler and api-key handler adapter builders
+- `internal/app/bootstrap/agent_runtime_factory_builder.go`
+  - default runtime-backed agent factory registration
+- `internal/app/bootstrap/mongo_wiring_builder.go`
+  - Mongo prompt/conversation/run stores wiring
+  - Mongo optional capabilities wiring (audit, memory, ab-testing, registry persistence)
+- `internal/app/bootstrap/mongo_client_builder.go`
+  - MongoDB client creation and startup logging

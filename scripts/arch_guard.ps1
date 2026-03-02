@@ -23,9 +23,27 @@ $warnings = @()
 
 $files = Get-GoProductionFiles
 
-# NOTE: Dependency direction rules (pkg->api, workflow->agent/persistence,
-# rag->agent/workflow/api/cmd) are now covered by .go-arch-lint.yml.
-# Run `go-arch-lint check` for those checks.
+# Rule 0: dependency direction guard via go-arch-lint
+$goArchLint = Get-Command go-arch-lint -ErrorAction SilentlyContinue
+if ($null -eq $goArchLint) {
+    $msg = "[DEPS] go-arch-lint not found in PATH; skip dependency direction checks"
+    if ($strictMode) {
+        $errors += $msg
+    } else {
+        $warnings += $msg
+    }
+} else {
+    Write-Host "Running go-arch-lint check..." -ForegroundColor Cyan
+    & $goArchLint.Source check
+    if ($LASTEXITCODE -ne 0) {
+        $msg = "[DEPS] go-arch-lint check failed"
+        if ($strictMode) {
+            $errors += $msg
+        } else {
+            $warnings += $msg
+        }
+    }
+}
 
 # Rule 1: fat package guard (not supported by go-arch-lint)
 $groups = $files | Group-Object DirectoryName

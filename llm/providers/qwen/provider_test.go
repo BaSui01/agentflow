@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	providerbase "github.com/BaSui01/agentflow/llm/providers/base"
 
@@ -199,7 +200,7 @@ func TestQwenProvider_NotSupported(t *testing.T) {
 		callFn  func() error
 		feature string
 	}{
-		{"GenerateVideo", func() error { _, err := p.GenerateVideo(ctx, &llm.VideoGenerationRequest{}); return err }, "video generation"},
+		// Note: GenerateVideo is implemented, see TestQwenProvider_GenerateVideo test
 		{"TranscribeAudio", func() error { _, err := p.TranscribeAudio(ctx, &llm.AudioTranscriptionRequest{}); return err }, "audio transcription"},
 		{"CreateFineTuningJob", func() error { _, err := p.CreateFineTuningJob(ctx, &llm.FineTuningJobRequest{}); return err }, "fine-tuning"},
 		{"ListFineTuningJobs", func() error { _, err := p.ListFineTuningJobs(ctx); return err }, "fine-tuning"},
@@ -218,6 +219,117 @@ func TestQwenProvider_NotSupported(t *testing.T) {
 			assert.Equal(t, "qwen", llmErr.Provider)
 		})
 	}
+}
+
+// --- GenerateVideo via httptest (async polling) ---
+
+func TestQwenProvider_GenerateVideo(t *testing.T) {
+	submitCalled := false
+	pollCount := 0
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.URL.Path == "/api/v1/services/aigc/video-generation/generation" && r.Method == http.MethodPost:
+			// Submit task
+			submitCalled = true
+			assert.Equal(t, "enable", r.Header.Get("X-DashScope-Async"))
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"output": map[string]interface{}{
+					"task_id": "task-123",
+				},
+				"request_id": "req-1",
+			})
+		case r.URL.Path == "/api/v1/tasks/task-123" && r.Method == http.MethodGet:
+			// Poll task status
+			pollCount++
+			w.Header().Set("Content-Type", "application/json")
+			if pollCount < 3 {
+				// Still pending
+				json.NewEncoder(w).Encode(map[string]interface{}{
+					"output": map[string]interface{}{
+						"task_id":     "task-123",
+						"task_status": "RUNNING",
+					},
+				})
+			} else {
+				// Succeeded
+				json.NewEncoder(w).Encode(map[string]interface{}{
+					"output": map[string]interface{}{
+						"task_id":     "task-123",
+						"task_status": "SUCCEEDED",
+						"video_url":   "https://example.com/video.mp4",
+					},
+				})
+			}
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	t.Cleanup(func() { server.Close() })
+
+	p := NewQwenProvider(providers.QwenConfig{
+		BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key", BaseURL: server.URL},
+	}, zap.NewNop())
+
+	resp, err := p.GenerateVideo(context.Background(), &llm.VideoGenerationRequest{
+		Prompt: "A cat playing piano",
+	})
+	require.NoError(t, err)
+	assert.True(t, submitCalled, "submit endpoint should be called")
+	assert.GreaterOrEqual(t, pollCount, 3, "polling should happen at least 3 times")
+	assert.Equal(t, "task-123", resp.ID)
+	assert.Len(t, resp.Data, 1)
+	assert.Equal(t, "https://example.com/video.mp4", resp.Data[0].URL)
+}
+
+func TestQwenProvider_GenerateVideo_Error(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte(`{"error":{"message":"Invalid request"}}`))
+	}))
+	t.Cleanup(func() { server.Close() })
+
+	p := NewQwenProvider(providers.QwenConfig{
+		BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key", BaseURL: server.URL},
+	}, zap.NewNop())
+
+	_, err := p.GenerateVideo(context.Background(), &llm.VideoGenerationRequest{
+		Prompt: "test",
+	})
+	require.Error(t, err)
+}
+
+func TestQwenProvider_GenerateVideo_PollTimeout(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.URL.Path == "/api/v1/services/aigc/video-generation/generation" && r.Method == http.MethodPost:
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"output": map[string]any{"task_id": "task-timeout"},
+			})
+		case r.URL.Path == "/api/v1/tasks/task-timeout" && r.Method == http.MethodGet:
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"output": map[string]any{
+					"task_id":     "task-timeout",
+					"task_status": "RUNNING",
+				},
+			})
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	t.Cleanup(func() { server.Close() })
+
+	p := NewQwenProvider(providers.QwenConfig{
+		BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key", BaseURL: server.URL},
+	}, zap.NewNop())
+
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+	_, err := p.GenerateVideo(ctx, &llm.VideoGenerationRequest{Prompt: "timeout"})
+	require.Error(t, err)
 }
 
 func TestQwenProvider_HealthCheck(t *testing.T) {
