@@ -1,12 +1,15 @@
 package minimax
 
 import (
-	"github.com/BaSui01/agentflow/types"
 	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	providerbase "github.com/BaSui01/agentflow/llm/providers/base"
+
+	"github.com/BaSui01/agentflow/types"
 
 	"github.com/BaSui01/agentflow/llm"
 	"github.com/BaSui01/agentflow/llm/providers"
@@ -76,24 +79,24 @@ func TestParseXMLToolCall(t *testing.T) {
 			wantName: "get_weather",
 		},
 		{
-			name:   "no XML tags",
+			name:    "no XML tags",
 			content: "Hello, how can I help?",
-			wantOK: false,
+			wantOK:  false,
 		},
 		{
-			name:   "empty between tags",
+			name:    "empty between tags",
 			content: "<tool_calls>\n\n</tool_calls>",
-			wantOK: false,
+			wantOK:  false,
 		},
 		{
-			name:   "invalid JSON between tags",
+			name:    "invalid JSON between tags",
 			content: "<tool_calls>\nnot-json\n</tool_calls>",
-			wantOK: false,
+			wantOK:  false,
 		},
 		{
-			name:   "missing close tag",
+			name:    "missing close tag",
 			content: "<tool_calls>{\"name\":\"test\"}",
-			wantOK: false,
+			wantOK:  false,
 		},
 	}
 
@@ -112,7 +115,7 @@ func TestParseXMLToolCall(t *testing.T) {
 // --- Completion via httptest ---
 
 func TestMiniMaxProvider_Completion(t *testing.T) {
-	var capturedRequest providers.OpenAICompatRequest
+	var capturedRequest providerbase.OpenAICompatRequest
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, "/v1/chat/completions", r.URL.Path)
 		assert.Contains(t, r.Header.Get("Authorization"), "Bearer ")
@@ -120,20 +123,20 @@ func TestMiniMaxProvider_Completion(t *testing.T) {
 		json.NewDecoder(r.Body).Decode(&capturedRequest)
 
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(providers.OpenAICompatResponse{
+		json.NewEncoder(w).Encode(providerbase.OpenAICompatResponse{
 			ID:    "resp-1",
 			Model: "abab6.5s-chat",
-			Choices: []providers.OpenAICompatChoice{
+			Choices: []providerbase.OpenAICompatChoice{
 				{
 					Index:        0,
 					FinishReason: "stop",
-					Message: providers.OpenAICompatMessage{
+					Message: providerbase.OpenAICompatMessage{
 						Role:    "assistant",
 						Content: "Hello from MiniMax",
 					},
 				},
 			},
-			Usage: &providers.OpenAICompatUsage{
+			Usage: &providerbase.OpenAICompatUsage{
 				PromptTokens:     10,
 				CompletionTokens: 5,
 				TotalTokens:      15,
@@ -193,13 +196,13 @@ func TestMiniMaxProvider_Stream(t *testing.T) {
 		w.Header().Set("Content-Type", "text/event-stream")
 		w.WriteHeader(http.StatusOK)
 
-		chunk := providers.OpenAICompatResponse{
+		chunk := providerbase.OpenAICompatResponse{
 			ID:    "stream-1",
 			Model: "abab6.5s-chat",
-			Choices: []providers.OpenAICompatChoice{
+			Choices: []providerbase.OpenAICompatChoice{
 				{
 					Index: 0,
-					Delta: &providers.OpenAICompatMessage{
+					Delta: &providerbase.OpenAICompatMessage{
 						Role:    "assistant",
 						Content: "Hello",
 					},
@@ -242,13 +245,13 @@ func TestMiniMaxProvider_Stream_XMLToolCall(t *testing.T) {
 		w.Header().Set("Content-Type", "text/event-stream")
 		w.WriteHeader(http.StatusOK)
 
-		chunk := providers.OpenAICompatResponse{
+		chunk := providerbase.OpenAICompatResponse{
 			ID:    "stream-tc",
 			Model: "abab6.5s-chat",
-			Choices: []providers.OpenAICompatChoice{
+			Choices: []providerbase.OpenAICompatChoice{
 				{
 					Index: 0,
-					Delta: &providers.OpenAICompatMessage{
+					Delta: &providerbase.OpenAICompatMessage{
 						Role:    "assistant",
 						Content: "<tool_calls>\n{\"name\":\"get_weather\",\"arguments\":{\"city\":\"Beijing\"}}\n</tool_calls>",
 					},
@@ -311,5 +314,3 @@ func TestMiniMaxProvider_Stream_Error(t *testing.T) {
 	assert.Equal(t, llm.ErrUpstreamError, llmErr.Code)
 	assert.True(t, llmErr.Retryable)
 }
-
-

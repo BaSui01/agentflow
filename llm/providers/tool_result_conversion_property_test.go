@@ -1,9 +1,10 @@
 package providers
 
 import (
-	"github.com/BaSui01/agentflow/types"
 	"encoding/json"
 	"testing"
+
+	"github.com/BaSui01/agentflow/types"
 
 	"github.com/BaSui01/agentflow/llm"
 	"github.com/stretchr/testify/assert"
@@ -588,5 +589,3 @@ func mockConvertToolResultOpenAI(msg types.Message) mockOpenAIToolResultMessage 
 
 	return converted
 }
-
-

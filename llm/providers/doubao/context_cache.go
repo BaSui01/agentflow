@@ -1,23 +1,25 @@
 package doubao
 
 import (
-	"github.com/BaSui01/agentflow/types"
 	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
 
+	providerbase "github.com/BaSui01/agentflow/llm/providers/base"
+
+	"github.com/BaSui01/agentflow/types"
+
 	"github.com/BaSui01/agentflow/llm"
-	"github.com/BaSui01/agentflow/llm/providers"
 )
 
 // ContextCacheRequest 创建上下文缓存的请求。
 type ContextCacheRequest struct {
-	Model    string                          `json:"model"`
-	Messages []providers.OpenAICompatMessage `json:"messages"`
-	Mode     string                          `json:"mode,omitempty"` // "session"
-	TTL      int                             `json:"ttl,omitempty"`  // 缓存过期时间（秒）
+	Model    string                             `json:"model"`
+	Messages []providerbase.OpenAICompatMessage `json:"messages"`
+	Mode     string                             `json:"mode,omitempty"` // "session"
+	TTL      int                                `json:"ttl,omitempty"`  // 缓存过期时间（秒）
 }
 
 // ContextCacheResponse 创建上下文缓存的响应。
@@ -32,7 +34,7 @@ type ContextCacheResponse struct {
 func (p *DoubaoProvider) CreateContextCache(ctx context.Context, model string, messages []types.Message, mode string, ttl int) (*ContextCacheResponse, error) {
 	reqBody := ContextCacheRequest{
 		Model:    model,
-		Messages: providers.ConvertMessagesToOpenAI(messages),
+		Messages: providerbase.ConvertMessagesToOpenAI(messages),
 		Mode:     mode,
 		TTL:      ttl,
 	}
@@ -47,8 +49,7 @@ func (p *DoubaoProvider) CreateContextCache(ctx context.Context, model string, m
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
-	httpReq.Header.Set("Authorization", "Bearer "+p.Cfg.APIKey)
-	httpReq.Header.Set("Content-Type", "application/json")
+	p.ApplyHeaders(httpReq, p.ResolveAPIKey(ctx))
 
 	resp, err := p.Client.Do(httpReq)
 	if err != nil {
@@ -63,8 +64,8 @@ func (p *DoubaoProvider) CreateContextCache(ctx context.Context, model string, m
 	defer resp.Body.Close()
 
 	if resp.StatusCode >= 400 {
-		msg := providers.ReadErrorMessage(resp.Body)
-		return nil, providers.MapHTTPError(resp.StatusCode, msg, p.Name())
+		msg := providerbase.ReadErrorMessage(resp.Body)
+		return nil, providerbase.MapHTTPError(resp.StatusCode, msg, p.Name())
 	}
 
 	var result ContextCacheResponse
@@ -83,24 +84,24 @@ func (p *DoubaoProvider) CreateContextCache(ctx context.Context, model string, m
 
 // ContextChatRequest 使用缓存上下文的聊天请求。
 type ContextChatRequest struct {
-	Model       string                          `json:"model"`
-	ContextID   string                          `json:"context_id"`
-	Messages    []providers.OpenAICompatMessage `json:"messages"`
-	Stream      bool                            `json:"stream,omitempty"`
-	MaxTokens   int                             `json:"max_tokens,omitempty"`
-	Temperature float32                         `json:"temperature,omitempty"`
-	TopP        float32                         `json:"top_p,omitempty"`
-	Stop        []string                        `json:"stop,omitempty"`
+	Model       string                             `json:"model"`
+	ContextID   string                             `json:"context_id"`
+	Messages    []providerbase.OpenAICompatMessage `json:"messages"`
+	Stream      bool                               `json:"stream,omitempty"`
+	MaxTokens   int                                `json:"max_tokens,omitempty"`
+	Temperature float32                            `json:"temperature,omitempty"`
+	TopP        float32                            `json:"top_p,omitempty"`
+	Stop        []string                           `json:"stop,omitempty"`
 }
 
 // CompletionWithContext 使用缓存的上下文进行聊天补全。
 func (p *DoubaoProvider) CompletionWithContext(ctx context.Context, contextID string, req *llm.ChatRequest) (*llm.ChatResponse, error) {
-	model := providers.ChooseModel(req, p.Cfg.DefaultModel, p.Cfg.FallbackModel)
+	model := providerbase.ChooseModel(req, p.Cfg.DefaultModel, p.Cfg.FallbackModel)
 
 	reqBody := ContextChatRequest{
 		Model:       model,
 		ContextID:   contextID,
-		Messages:    providers.ConvertMessagesToOpenAI(req.Messages),
+		Messages:    providerbase.ConvertMessagesToOpenAI(req.Messages),
 		MaxTokens:   req.MaxTokens,
 		Temperature: req.Temperature,
 		TopP:        req.TopP,
@@ -117,8 +118,7 @@ func (p *DoubaoProvider) CompletionWithContext(ctx context.Context, contextID st
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
-	httpReq.Header.Set("Authorization", "Bearer "+p.Cfg.APIKey)
-	httpReq.Header.Set("Content-Type", "application/json")
+	p.ApplyHeaders(httpReq, p.ResolveAPIKey(ctx))
 
 	resp, err := p.Client.Do(httpReq)
 	if err != nil {
@@ -133,11 +133,11 @@ func (p *DoubaoProvider) CompletionWithContext(ctx context.Context, contextID st
 	defer resp.Body.Close()
 
 	if resp.StatusCode >= 400 {
-		msg := providers.ReadErrorMessage(resp.Body)
-		return nil, providers.MapHTTPError(resp.StatusCode, msg, p.Name())
+		msg := providerbase.ReadErrorMessage(resp.Body)
+		return nil, providerbase.MapHTTPError(resp.StatusCode, msg, p.Name())
 	}
 
-	var oaResp providers.OpenAICompatResponse
+	var oaResp providerbase.OpenAICompatResponse
 	if err := json.NewDecoder(resp.Body).Decode(&oaResp); err != nil {
 		return nil, &types.Error{
 			Code:       llm.ErrUpstreamError,
@@ -148,7 +148,5 @@ func (p *DoubaoProvider) CompletionWithContext(ctx context.Context, contextID st
 		}
 	}
 
-	return providers.ToLLMChatResponse(oaResp, p.Name()), nil
+	return providerbase.ToLLMChatResponse(oaResp, p.Name()), nil
 }
-
-

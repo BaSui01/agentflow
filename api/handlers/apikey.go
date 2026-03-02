@@ -8,6 +8,7 @@ import (
 
 	"github.com/BaSui01/agentflow/api"
 	"github.com/BaSui01/agentflow/llm"
+	runtimeRouter "github.com/BaSui01/agentflow/llm/runtime/router"
 	"github.com/BaSui01/agentflow/types"
 	"go.uber.org/zap"
 )
@@ -397,13 +398,13 @@ func (h *APIKeyHandler) HandleAPIKeyStats(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	stats := make([]llm.APIKeyStats, 0, len(keys))
+	stats := make([]runtimeRouter.APIKeyStats, 0, len(keys))
 	for _, k := range keys {
 		successRate := 1.0
 		if k.TotalRequests > 0 {
 			successRate = float64(k.TotalRequests-k.FailedRequests) / float64(k.TotalRequests)
 		}
-		stats = append(stats, llm.APIKeyStats{
+		stats = append(stats, runtimeRouter.APIKeyStats{
 			KeyID:          k.ID,
 			Label:          k.Label,
 			BaseURL:        k.BaseURL,

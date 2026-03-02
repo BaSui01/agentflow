@@ -6,13 +6,14 @@ import (
 	"testing"
 	"time"
 
+	llmpolicy "github.com/BaSui01/agentflow/llm/runtime/policy"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 )
 
 func TestDefaultRetryPolicy(t *testing.T) {
-	p := DefaultRetryPolicy()
+	p := llmpolicy.DefaultRetryPolicy()
 	assert.Equal(t, 3, p.MaxRetries)
 	assert.Equal(t, time.Second, p.InitialBackoff)
 	assert.Equal(t, 30*time.Second, p.MaxBackoff)
@@ -128,7 +129,7 @@ func TestResilientProvider_Completion_Idempotency(t *testing.T) {
 		},
 	}
 	rp := NewResilientProvider(inner, &ResilientConfig{
-		RetryPolicy:       DefaultRetryPolicy(),
+		RetryPolicy:       llmpolicy.DefaultRetryPolicy(),
 		CircuitBreaker:    DefaultCircuitBreakerConfig(),
 		EnableIdempotency: true,
 		IdempotencyTTL:    time.Hour,
@@ -148,7 +149,7 @@ func TestResilientProvider_Completion_Idempotency(t *testing.T) {
 func TestResilientProvider_Stream_CircuitOpen(t *testing.T) {
 	inner := &testProvider{name: "inner"}
 	rp := NewResilientProvider(inner, &ResilientConfig{
-		RetryPolicy:    DefaultRetryPolicy(),
+		RetryPolicy:    llmpolicy.DefaultRetryPolicy(),
 		CircuitBreaker: &CircuitBreakerConfig{FailureThreshold: 1, SuccessThreshold: 1, Timeout: time.Hour},
 	}, zap.NewNop())
 
@@ -184,4 +185,3 @@ func TestNewResilientProviderSimple(t *testing.T) {
 	rp := NewResilientProviderSimple(inner, nil, zap.NewNop())
 	assert.Equal(t, "simple", rp.Name())
 }
-

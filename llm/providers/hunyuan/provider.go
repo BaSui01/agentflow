@@ -3,6 +3,7 @@ package hunyuan
 import (
 	"github.com/BaSui01/agentflow/llm"
 	"github.com/BaSui01/agentflow/llm/providers"
+	providerbase "github.com/BaSui01/agentflow/llm/providers/base"
 	"github.com/BaSui01/agentflow/llm/providers/openaicompat"
 	"go.uber.org/zap"
 )
@@ -36,7 +37,7 @@ func NewHunyuanProvider(cfg providers.HunyuanConfig, logger *zap.Logger) *Hunyua
 // hunyuanRequestHook handles Hunyuan-specific request modifications.
 // - Switches to hunyuan-t1 reasoning model for thinking/extended modes.
 // - Routes to hunyuan-functioncall when tools are present and no specific model is set.
-func hunyuanRequestHook(req *llm.ChatRequest, body *providers.OpenAICompatRequest) {
+func hunyuanRequestHook(req *llm.ChatRequest, body *providerbase.OpenAICompatRequest) {
 	// Reasoning mode: switch to hunyuan-t1
 	if req.ReasoningMode == "thinking" || req.ReasoningMode == "extended" {
 		if req.Model == "" {
@@ -51,4 +52,3 @@ func hunyuanRequestHook(req *llm.ChatRequest, body *providers.OpenAICompatReques
 		body.Model = "hunyuan-functioncall"
 	}
 }
-

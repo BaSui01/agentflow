@@ -10,7 +10,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/BaSui01/agentflow/llm/tools"
+	"github.com/BaSui01/agentflow/llm/capabilities/tools"
 	"go.uber.org/zap"
 )
 

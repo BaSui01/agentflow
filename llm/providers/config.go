@@ -31,16 +31,16 @@ type OpenAIConfig struct {
 // ClaudeConfig Claude Provider 配置
 type ClaudeConfig struct {
 	BaseProviderConfig `yaml:",inline"`
-	AnthropicVersion  string `json:"anthropic_version,omitempty" yaml:"anthropic_version,omitempty"` // 默认 "2023-06-01"
+	AnthropicVersion   string `json:"anthropic_version,omitempty" yaml:"anthropic_version,omitempty"` // 默认 "2023-06-01"
 }
 
 // GeminiConfig Gemini Provider 配置
 type GeminiConfig struct {
 	BaseProviderConfig `yaml:",inline"`
-	ProjectID      string                `json:"project_id,omitempty" yaml:"project_id,omitempty"`
-	Region         string                `json:"region,omitempty" yaml:"region,omitempty"`
-	AuthType       string                `json:"auth_type,omitempty" yaml:"auth_type,omitempty"` // "api_key"(默认) | "oauth"
-	SafetySettings []GeminiSafetySetting `json:"safety_settings,omitempty" yaml:"safety_settings,omitempty"`
+	ProjectID          string                `json:"project_id,omitempty" yaml:"project_id,omitempty"`
+	Region             string                `json:"region,omitempty" yaml:"region,omitempty"`
+	AuthType           string                `json:"auth_type,omitempty" yaml:"auth_type,omitempty"` // "api_key"(默认) | "oauth"
+	SafetySettings     []GeminiSafetySetting `json:"safety_settings,omitempty" yaml:"safety_settings,omitempty"`
 }
 
 // GeminiSafetySetting configures safety filter thresholds.
@@ -103,8 +103,7 @@ type LlamaConfig struct {
 // DoubaoConfig ByteDance Doubao Provider 配置
 type DoubaoConfig struct {
 	BaseProviderConfig `yaml:",inline"`
-	AccessKey          string `json:"access_key,omitempty" yaml:"access_key,omitempty"`   // 火山引擎 Access Key
-	SecretKey          string `json:"secret_key,omitempty" yaml:"secret_key,omitempty"`   // 火山引擎 Secret Key
-	Region             string `json:"region,omitempty" yaml:"region,omitempty"`            // 区域，默认 cn-beijing
+	AccessKey          string `json:"access_key,omitempty" yaml:"access_key,omitempty"` // 火山引擎 Access Key
+	SecretKey          string `json:"secret_key,omitempty" yaml:"secret_key,omitempty"` // 火山引擎 Secret Key
+	Region             string `json:"region,omitempty" yaml:"region,omitempty"`         // 区域，默认 cn-beijing
 }
-

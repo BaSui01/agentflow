@@ -11,10 +11,10 @@ import (
 	"github.com/BaSui01/agentflow/api/handlers"
 	"github.com/BaSui01/agentflow/config"
 	"github.com/BaSui01/agentflow/llm"
-	"github.com/BaSui01/agentflow/llm/budget"
 	"github.com/BaSui01/agentflow/llm/cache"
+	"github.com/BaSui01/agentflow/llm/capabilities/tools"
 	"github.com/BaSui01/agentflow/llm/observability"
-	"github.com/BaSui01/agentflow/llm/tools"
+	llmpolicy "github.com/BaSui01/agentflow/llm/runtime/policy"
 	"github.com/BaSui01/agentflow/pkg/metrics"
 	mongoclient "github.com/BaSui01/agentflow/pkg/mongodb"
 	"github.com/BaSui01/agentflow/pkg/server"
@@ -60,7 +60,7 @@ type Server struct {
 
 	provider llm.Provider
 
-	budgetManager *budget.TokenBudgetManager
+	budgetManager *llmpolicy.TokenBudgetManager
 	costTracker   *observability.CostTracker
 	llmCache      *cache.MultiLevelCache
 	llmMetrics    *observability.Metrics

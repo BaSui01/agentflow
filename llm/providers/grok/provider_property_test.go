@@ -1,13 +1,16 @@
 package grok
 
 import (
-	"github.com/BaSui01/agentflow/types"
 	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	providerbase "github.com/BaSui01/agentflow/llm/providers/base"
+
+	"github.com/BaSui01/agentflow/types"
 
 	"github.com/BaSui01/agentflow/llm"
 	"github.com/BaSui01/agentflow/llm/providers"
@@ -91,14 +94,14 @@ func TestProperty2_BearerTokenAuthentication(t *testing.T) {
 
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusOK)
-				json.NewEncoder(w).Encode(providers.OpenAICompatResponse{
+				json.NewEncoder(w).Encode(providerbase.OpenAICompatResponse{
 					ID:    "test-id",
 					Model: "grok-beta",
-					Choices: []providers.OpenAICompatChoice{
+					Choices: []providerbase.OpenAICompatChoice{
 						{
 							Index:        0,
 							FinishReason: "stop",
-							Message: providers.OpenAICompatMessage{
+							Message: providerbase.OpenAICompatMessage{
 								Role:    "assistant",
 								Content: "test response",
 							},
@@ -143,14 +146,14 @@ func TestProperty2_BearerTokenAuthentication(t *testing.T) {
 
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusOK)
-			json.NewEncoder(w).Encode(providers.OpenAICompatResponse{
+			json.NewEncoder(w).Encode(providerbase.OpenAICompatResponse{
 				ID:    "test-id",
 				Model: "grok-beta",
-				Choices: []providers.OpenAICompatChoice{
+				Choices: []providerbase.OpenAICompatChoice{
 					{
 						Index:        0,
 						FinishReason: "stop",
-						Message: providers.OpenAICompatMessage{
+						Message: providerbase.OpenAICompatMessage{
 							Role:    "assistant",
 							Content: "test response",
 						},
@@ -261,20 +264,20 @@ func TestProperty5_DefaultModelSelectionPriority(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			var capturedModel string
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				var reqBody providers.OpenAICompatRequest
+				var reqBody providerbase.OpenAICompatRequest
 				json.NewDecoder(r.Body).Decode(&reqBody)
 				capturedModel = reqBody.Model
 
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusOK)
-				json.NewEncoder(w).Encode(providers.OpenAICompatResponse{
+				json.NewEncoder(w).Encode(providerbase.OpenAICompatResponse{
 					ID:    "test-id",
 					Model: reqBody.Model,
-					Choices: []providers.OpenAICompatChoice{
+					Choices: []providerbase.OpenAICompatChoice{
 						{
 							Index:        0,
 							FinishReason: "stop",
-							Message: providers.OpenAICompatMessage{
+							Message: providerbase.OpenAICompatMessage{
 								Role:    "assistant",
 								Content: "test response",
 							},
@@ -313,7 +316,7 @@ func TestProperty5_DefaultModelSelectionPriority(t *testing.T) {
 	t.Run("model selection in streaming mode", func(t *testing.T) {
 		var capturedModel string
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			var reqBody providers.OpenAICompatRequest
+			var reqBody providerbase.OpenAICompatRequest
 			json.NewDecoder(r.Body).Decode(&reqBody)
 			capturedModel = reqBody.Model
 
@@ -322,13 +325,13 @@ func TestProperty5_DefaultModelSelectionPriority(t *testing.T) {
 			w.Header().Set("Content-Type", "text/event-stream")
 			w.WriteHeader(http.StatusOK)
 
-			data := providers.OpenAICompatResponse{
+			data := providerbase.OpenAICompatResponse{
 				ID:    "test-id",
 				Model: reqBody.Model,
-				Choices: []providers.OpenAICompatChoice{
+				Choices: []providerbase.OpenAICompatChoice{
 					{
 						Index: 0,
-						Delta: &providers.OpenAICompatMessage{
+						Delta: &providerbase.OpenAICompatMessage{
 							Role:    "assistant",
 							Content: "test",
 						},
@@ -372,21 +375,19 @@ func TestProperty5_DefaultModelSelectionPriority(t *testing.T) {
 	})
 
 	t.Run("ChooseModel function logic", func(t *testing.T) {
-		model := providers.ChooseModel(&llm.ChatRequest{Model: "req-model"}, "cfg-model", "grok-beta")
+		model := providerbase.ChooseModel(&llm.ChatRequest{Model: "req-model"}, "cfg-model", "grok-beta")
 		assert.Equal(t, "req-model", model)
 
-		model = providers.ChooseModel(&llm.ChatRequest{Model: ""}, "cfg-model", "grok-beta")
+		model = providerbase.ChooseModel(&llm.ChatRequest{Model: ""}, "cfg-model", "grok-beta")
 		assert.Equal(t, "cfg-model", model)
 
-		model = providers.ChooseModel(&llm.ChatRequest{Model: ""}, "", "grok-beta")
+		model = providerbase.ChooseModel(&llm.ChatRequest{Model: ""}, "", "grok-beta")
 		assert.Equal(t, "grok-beta", model)
 
-		model = providers.ChooseModel(nil, "cfg-model", "grok-beta")
+		model = providerbase.ChooseModel(nil, "cfg-model", "grok-beta")
 		assert.Equal(t, "cfg-model", model)
 
-		model = providers.ChooseModel(nil, "", "grok-beta")
+		model = providerbase.ChooseModel(nil, "", "grok-beta")
 		assert.Equal(t, "grok-beta", model)
 	})
 }
-
-

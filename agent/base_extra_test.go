@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/BaSui01/agentflow/agent/guardrails"
-	llmtools "github.com/BaSui01/agentflow/llm/tools"
+	llmtools "github.com/BaSui01/agentflow/llm/capabilities/tools"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"

@@ -1,12 +1,15 @@
 package doubao
 
 import (
-	"github.com/BaSui01/agentflow/types"
 	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	providerbase "github.com/BaSui01/agentflow/llm/providers/base"
+
+	"github.com/BaSui01/agentflow/types"
 
 	"github.com/BaSui01/agentflow/llm"
 	"github.com/BaSui01/agentflow/llm/providers"
@@ -181,7 +184,7 @@ func TestDoubaoProvider_GenerateImage(t *testing.T) {
 // --- Completion via httptest ---
 
 func TestDoubaoProvider_Completion(t *testing.T) {
-	var capturedRequest providers.OpenAICompatRequest
+	var capturedRequest providerbase.OpenAICompatRequest
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, "/api/v3/chat/completions", r.URL.Path)
 		assert.Contains(t, r.Header.Get("Authorization"), "Bearer ")
@@ -189,20 +192,20 @@ func TestDoubaoProvider_Completion(t *testing.T) {
 		json.NewDecoder(r.Body).Decode(&capturedRequest)
 
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(providers.OpenAICompatResponse{
+		json.NewEncoder(w).Encode(providerbase.OpenAICompatResponse{
 			ID:    "resp-1",
 			Model: "Doubao-1.5-pro-32k",
-			Choices: []providers.OpenAICompatChoice{
+			Choices: []providerbase.OpenAICompatChoice{
 				{
 					Index:        0,
 					FinishReason: "stop",
-					Message: providers.OpenAICompatMessage{
+					Message: providerbase.OpenAICompatMessage{
 						Role:    "assistant",
 						Content: "Hello from Doubao",
 					},
 				},
 			},
-			Usage: &providers.OpenAICompatUsage{
+			Usage: &providerbase.OpenAICompatUsage{
 				PromptTokens:     10,
 				CompletionTokens: 5,
 				TotalTokens:      15,
@@ -246,13 +249,13 @@ func TestDoubaoProvider_Stream(t *testing.T) {
 		w.Header().Set("Content-Type", "text/event-stream")
 		w.WriteHeader(http.StatusOK)
 
-		chunk := providers.OpenAICompatResponse{
+		chunk := providerbase.OpenAICompatResponse{
 			ID:    "stream-1",
 			Model: "Doubao-1.5-pro-32k",
-			Choices: []providers.OpenAICompatChoice{
+			Choices: []providerbase.OpenAICompatChoice{
 				{
 					Index: 0,
-					Delta: &providers.OpenAICompatMessage{
+					Delta: &providerbase.OpenAICompatMessage{
 						Role:    "assistant",
 						Content: "Hello",
 					},
@@ -290,5 +293,3 @@ func TestDoubaoProvider_Stream(t *testing.T) {
 	assert.Equal(t, "Hello", chunks[0].Delta.Content)
 	assert.Equal(t, "doubao", chunks[0].Provider)
 }
-
-

@@ -9,27 +9,10 @@ import (
 	"time"
 
 	"github.com/BaSui01/agentflow/llm/circuitbreaker"
+	llmpolicy "github.com/BaSui01/agentflow/llm/runtime/policy"
 	"github.com/BaSui01/agentflow/types"
 	"go.uber.org/zap"
 )
-
-// 重试政策定义了重试行为 。
-type RetryPolicy struct {
-	MaxRetries     int           `json:"max_retries"`
-	InitialBackoff time.Duration `json:"initial_backoff"`
-	MaxBackoff     time.Duration `json:"max_backoff"`
-	Multiplier     float64       `json:"multiplier"`
-}
-
-// 默认重试政策返回合理默认 。
-func DefaultRetryPolicy() *RetryPolicy {
-	return &RetryPolicy{
-		MaxRetries:     3,
-		InitialBackoff: 1 * time.Second,
-		MaxBackoff:     30 * time.Second,
-		Multiplier:     2.0,
-	}
-}
 
 // 断路器状态常量。
 const (
@@ -149,7 +132,7 @@ func (cb *simpleCircuitBreaker) recordSuccess() {
 // 耐活性 Provider用重试,断路器和一能来包裹一个提供者.
 type ResilientProvider struct {
 	provider       Provider
-	retryPolicy    *RetryPolicy
+	retryPolicy    *llmpolicy.RetryPolicy
 	circuitBreaker *simpleCircuitBreaker
 	idempotencyTTL time.Duration
 	idempotencyMap sync.Map
@@ -158,7 +141,7 @@ type ResilientProvider struct {
 
 // 具有弹性的Config配置有弹性的提供者.
 type ResilientConfig struct {
-	RetryPolicy       *RetryPolicy
+	RetryPolicy       *llmpolicy.RetryPolicy
 	CircuitBreaker    *CircuitBreakerConfig
 	EnableIdempotency bool
 	IdempotencyTTL    time.Duration
@@ -174,11 +157,14 @@ func NewResilientProviderSimple(provider Provider, _ any, logger *zap.Logger) *R
 func NewResilientProvider(provider Provider, config *ResilientConfig, logger *zap.Logger) *ResilientProvider {
 	if config == nil {
 		config = &ResilientConfig{
-			RetryPolicy:       DefaultRetryPolicy(),
+			RetryPolicy:       llmpolicy.DefaultRetryPolicy(),
 			CircuitBreaker:    DefaultCircuitBreakerConfig(),
 			EnableIdempotency: true,
 			IdempotencyTTL:    1 * time.Hour,
 		}
+	}
+	if config.RetryPolicy == nil {
+		config.RetryPolicy = llmpolicy.DefaultRetryPolicy()
 	}
 
 	return &ResilientProvider{
@@ -322,4 +308,3 @@ type idempotencyEntry struct {
 	response  *ChatResponse
 	expiresAt time.Time
 }
-

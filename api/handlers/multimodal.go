@@ -19,11 +19,15 @@ import (
 	"github.com/BaSui01/agentflow/agent/structured"
 	"github.com/BaSui01/agentflow/api"
 	"github.com/BaSui01/agentflow/llm"
-	"github.com/BaSui01/agentflow/llm/image"
-	"github.com/BaSui01/agentflow/llm/multimodal"
+	"github.com/BaSui01/agentflow/llm/capabilities"
+	"github.com/BaSui01/agentflow/llm/capabilities/image"
+	"github.com/BaSui01/agentflow/llm/capabilities/multimodal"
+	"github.com/BaSui01/agentflow/llm/capabilities/video"
+	llmcore "github.com/BaSui01/agentflow/llm/core"
+	llmgateway "github.com/BaSui01/agentflow/llm/gateway"
 	"github.com/BaSui01/agentflow/llm/providers"
 	vendorprofile "github.com/BaSui01/agentflow/llm/providers/vendor"
-	"github.com/BaSui01/agentflow/llm/video"
+	llmpolicy "github.com/BaSui01/agentflow/llm/runtime/policy"
 	"github.com/BaSui01/agentflow/pkg/tlsutil"
 	"github.com/BaSui01/agentflow/types"
 	"go.uber.org/zap"
@@ -102,6 +106,7 @@ func (p *DefaultPromptPipeline) Build(ctx context.Context, in PromptContext) (Pr
 
 type MultimodalHandlerConfig struct {
 	ChatProvider         llm.Provider
+	PolicyManager        *llmpolicy.Manager
 	OpenAIAPIKey         string
 	OpenAIBaseURL        string
 	GoogleAPIKey         string
@@ -136,10 +141,11 @@ type referenceAsset struct {
 }
 
 type MultimodalHandler struct {
-	logger       *zap.Logger
-	chatProvider llm.Provider
-	router       *multimodal.Router
-	pipeline     PromptPipeline
+	logger             *zap.Logger
+	router             *multimodal.Router
+	gateway            llmcore.Gateway
+	structuredProvider llm.Provider
+	pipeline           PromptPipeline
 
 	defaultImageProvider string
 	defaultVideoProvider string
@@ -273,6 +279,7 @@ func NewMultimodalHandlerFromConfig(cfg MultimodalHandlerConfig, logger *zap.Log
 
 	return NewMultimodalHandlerWithProviders(
 		cfg.ChatProvider,
+		cfg.PolicyManager,
 		imageProviders,
 		videoProviders,
 		defaultImage,
@@ -287,6 +294,7 @@ func NewMultimodalHandlerFromConfig(cfg MultimodalHandlerConfig, logger *zap.Log
 
 func NewMultimodalHandlerWithProviders(
 	chatProvider llm.Provider,
+	policyManager *llmpolicy.Manager,
 	imageProviders map[string]image.Provider,
 	videoProviders map[string]video.Provider,
 	defaultImage string,
@@ -339,10 +347,22 @@ func NewMultimodalHandlerWithProviders(
 		router.RegisterVideo(name, videoProviders[name], name == defaultVideo)
 	}
 
+	gw := llmgateway.New(llmgateway.Config{
+		ChatProvider:  chatProvider,
+		Capabilities:  capabilities.NewEntry(router),
+		PolicyManager: policyManager,
+		Logger:        logger,
+	})
+	var structuredProvider llm.Provider
+	if chatProvider != nil {
+		structuredProvider = llmgateway.NewChatProviderAdapter(gw, chatProvider)
+	}
+
 	return &MultimodalHandler{
 		logger:               logger.With(zap.String("handler", "multimodal")),
-		chatProvider:         chatProvider,
 		router:               router,
+		gateway:              gw,
+		structuredProvider:   structuredProvider,
 		pipeline:             pipeline,
 		defaultImageProvider: defaultImage,
 		defaultVideoProvider: defaultVideo,
@@ -373,9 +393,9 @@ func (h *MultimodalHandler) HandleCapabilities(w http.ResponseWriter, r *http.Re
 			"text_to_video":    len(h.videoProviders) > 0,
 			"image_to_video":   len(h.videoProviders) > 0,
 			"advanced_prompt":  true,
-			"chat":             h.chatProvider != nil,
-			"agent_mode":       h.chatProvider != nil,
-			"plan_generation":  h.chatProvider != nil,
+			"chat":             h.structuredProvider != nil,
+			"agent_mode":       h.structuredProvider != nil,
+			"plan_generation":  h.structuredProvider != nil,
 		},
 	})
 }
@@ -516,12 +536,6 @@ func (h *MultimodalHandler) HandleImage(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	imageProvider, err := h.router.Image(providerName)
-	if err != nil {
-		WriteErrorMessage(w, http.StatusBadRequest, types.ErrInvalidRequest, err.Error(), h.logger)
-		return
-	}
-
 	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Minute)
 	defer cancel()
 
@@ -551,30 +565,62 @@ func (h *MultimodalHandler) HandleImage(w http.ResponseWriter, r *http.Request) 
 				return
 			}
 		}
-		resp, err = imageProvider.Edit(ctx, &image.EditRequest{
-			Image:          bytes.NewReader(data),
-			Prompt:         promptResult.Prompt,
-			Model:          req.Model,
-			N:              req.N,
-			Size:           req.Size,
-			ResponseFormat: req.ResponseFormat,
+		gatewayResp, invokeErr := h.gateway.Invoke(ctx, &llmcore.UnifiedRequest{
+			Capability:   llmcore.CapabilityImage,
+			ProviderHint: providerName,
+			ModelHint:    req.Model,
+			Payload: &llmgateway.ImageInput{
+				Provider: providerName,
+				Edit: &image.EditRequest{
+					Image:          bytes.NewReader(data),
+					Prompt:         promptResult.Prompt,
+					Model:          req.Model,
+					N:              req.N,
+					Size:           req.Size,
+					ResponseFormat: req.ResponseFormat,
+				},
+			},
 		})
+		if invokeErr != nil {
+			h.writeProviderError(w, invokeErr)
+			return
+		}
+		var ok bool
+		resp, ok = gatewayResp.Output.(*image.GenerateResponse)
+		if !ok || resp == nil {
+			h.writeProviderError(w, types.NewInternalError("invalid image gateway response"))
+			return
+		}
 	} else {
 		mode = "text-to-image"
-		resp, err = h.router.GenerateImage(ctx, &image.GenerateRequest{
-			Prompt:         promptResult.Prompt,
-			NegativePrompt: promptResult.NegativePrompt,
-			Model:          req.Model,
-			N:              req.N,
-			Size:           req.Size,
-			Quality:        req.Quality,
-			Style:          req.Style,
-			ResponseFormat: req.ResponseFormat,
-		}, providerName)
-	}
-	if err != nil {
-		h.writeProviderError(w, err)
-		return
+		gatewayResp, invokeErr := h.gateway.Invoke(ctx, &llmcore.UnifiedRequest{
+			Capability:   llmcore.CapabilityImage,
+			ProviderHint: providerName,
+			ModelHint:    req.Model,
+			Payload: &llmgateway.ImageInput{
+				Provider: providerName,
+				Generate: &image.GenerateRequest{
+					Prompt:         promptResult.Prompt,
+					NegativePrompt: promptResult.NegativePrompt,
+					Model:          req.Model,
+					N:              req.N,
+					Size:           req.Size,
+					Quality:        req.Quality,
+					Style:          req.Style,
+					ResponseFormat: req.ResponseFormat,
+				},
+			},
+		})
+		if invokeErr != nil {
+			h.writeProviderError(w, invokeErr)
+			return
+		}
+		var ok bool
+		resp, ok = gatewayResp.Output.(*image.GenerateResponse)
+		if !ok || resp == nil {
+			h.writeProviderError(w, types.NewInternalError("invalid image gateway response"))
+			return
+		}
 	}
 
 	WriteSuccess(w, map[string]any{
@@ -682,9 +728,22 @@ func (h *MultimodalHandler) HandleVideo(w http.ResponseWriter, r *http.Request) 
 	ctx, cancel := context.WithTimeout(r.Context(), 6*time.Minute)
 	defer cancel()
 
-	resp, err := h.router.GenerateVideo(ctx, genReq, providerName)
+	gatewayResp, err := h.gateway.Invoke(ctx, &llmcore.UnifiedRequest{
+		Capability:   llmcore.CapabilityVideo,
+		ProviderHint: providerName,
+		ModelHint:    req.Model,
+		Payload: &llmgateway.VideoInput{
+			Provider: providerName,
+			Generate: genReq,
+		},
+	})
 	if err != nil {
 		h.writeProviderError(w, err)
+		return
+	}
+	resp, ok := gatewayResp.Output.(*video.GenerateResponse)
+	if !ok || resp == nil {
+		h.writeProviderError(w, types.NewInternalError("invalid video gateway response"))
 		return
 	}
 
@@ -724,7 +783,7 @@ func (h *MultimodalHandler) HandlePlan(w http.ResponseWriter, r *http.Request) {
 	if !ValidateContentType(w, r, h.logger) {
 		return
 	}
-	if h.chatProvider == nil {
+	if h.structuredProvider == nil {
 		WriteErrorMessage(w, http.StatusServiceUnavailable, types.ErrServiceUnavailable, "chat provider is not configured", h.logger)
 		return
 	}
@@ -758,7 +817,7 @@ Requirements:
 	}
 	prompt = h.promptOptimizer.OptimizePrompt(prompt)
 
-	so, err := structured.NewStructuredOutput[visualPlan](h.chatProvider)
+	so, err := structured.NewStructuredOutput[visualPlan](h.structuredProvider)
 	if err != nil {
 		h.writeProviderError(w, err)
 		return
@@ -805,7 +864,7 @@ func (h *MultimodalHandler) HandleChat(w http.ResponseWriter, r *http.Request) {
 	if !ValidateContentType(w, r, h.logger) {
 		return
 	}
-	if h.chatProvider == nil {
+	if h.structuredProvider == nil {
 		WriteErrorMessage(w, http.StatusServiceUnavailable, types.ErrServiceUnavailable, "chat provider is not configured", h.logger)
 		return
 	}
@@ -842,7 +901,7 @@ func (h *MultimodalHandler) HandleChat(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 
 	if !req.AgentMode {
-		resp, err := h.chatProvider.Completion(ctx, &llm.ChatRequest{
+		resp, err := h.invokeChat(ctx, &llm.ChatRequest{
 			Model:       model,
 			Messages:    llmMessages,
 			Temperature: req.Temperature,
@@ -859,7 +918,7 @@ func (h *MultimodalHandler) HandleChat(w http.ResponseWriter, r *http.Request) {
 	}
 
 	userText := latestUserText(messages)
-	planResp, err := h.chatProvider.Completion(ctx, &llm.ChatRequest{
+	planResp, err := h.invokeChat(ctx, &llm.ChatRequest{
 		Model: model,
 		Messages: []types.Message{
 			{
@@ -890,7 +949,7 @@ func (h *MultimodalHandler) HandleChat(w http.ResponseWriter, r *http.Request) {
 		Content: "Planner output:\n" + planText,
 	})
 
-	finalResp, err := h.chatProvider.Completion(ctx, &llm.ChatRequest{
+	finalResp, err := h.invokeChat(ctx, &llm.ChatRequest{
 		Model:       model,
 		Messages:    finalMessages,
 		Temperature: req.Temperature,
@@ -906,6 +965,28 @@ func (h *MultimodalHandler) HandleChat(w http.ResponseWriter, r *http.Request) {
 		"final_response": finalResp,
 		"final_text":     firstChoice(finalResp),
 	})
+}
+
+func (h *MultimodalHandler) invokeChat(ctx context.Context, req *llm.ChatRequest) (*llm.ChatResponse, error) {
+	if h.gateway == nil {
+		return nil, types.NewServiceUnavailableError("llm gateway is not configured")
+	}
+
+	resp, err := h.gateway.Invoke(ctx, &llmcore.UnifiedRequest{
+		Capability: llmcore.CapabilityChat,
+		ModelHint:  req.Model,
+		TraceID:    req.TraceID,
+		Payload:    req,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	chatResp, ok := resp.Output.(*llm.ChatResponse)
+	if !ok || chatResp == nil {
+		return nil, types.NewInternalError("invalid chat gateway response")
+	}
+	return chatResp, nil
 }
 
 func (h *MultimodalHandler) resolveImageProvider(provider string) (string, error) {

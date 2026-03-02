@@ -1,12 +1,15 @@
 package deepseek
 
 import (
-	"github.com/BaSui01/agentflow/types"
 	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	providerbase "github.com/BaSui01/agentflow/llm/providers/base"
+
+	"github.com/BaSui01/agentflow/types"
 
 	"github.com/BaSui01/agentflow/llm"
 	"github.com/BaSui01/agentflow/llm/providers"
@@ -58,19 +61,19 @@ func TestDeepSeekProvider_SupportsNativeFunctionCalling(t *testing.T) {
 }
 
 func TestDeepSeekProvider_Completion(t *testing.T) {
-	var capturedRequest providers.OpenAICompatRequest
+	var capturedRequest providerbase.OpenAICompatRequest
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, "/chat/completions", r.URL.Path)
 		assert.Contains(t, r.Header.Get("Authorization"), "Bearer ")
 		err := json.NewDecoder(r.Body).Decode(&capturedRequest)
 		require.NoError(t, err)
 		w.Header().Set("Content-Type", "application/json")
-		err = json.NewEncoder(w).Encode(providers.OpenAICompatResponse{
+		err = json.NewEncoder(w).Encode(providerbase.OpenAICompatResponse{
 			ID: "resp-1", Model: "deepseek-chat",
-			Choices: []providers.OpenAICompatChoice{
-				{Index: 0, FinishReason: "stop", Message: providers.OpenAICompatMessage{Role: "assistant", Content: "Hello from DeepSeek"}},
+			Choices: []providerbase.OpenAICompatChoice{
+				{Index: 0, FinishReason: "stop", Message: providerbase.OpenAICompatMessage{Role: "assistant", Content: "Hello from DeepSeek"}},
 			},
-			Usage: &providers.OpenAICompatUsage{PromptTokens: 10, CompletionTokens: 5, TotalTokens: 15},
+			Usage: &providerbase.OpenAICompatUsage{PromptTokens: 10, CompletionTokens: 5, TotalTokens: 15},
 		})
 		require.NoError(t, err)
 	}))
@@ -92,14 +95,14 @@ func TestDeepSeekProvider_Completion(t *testing.T) {
 }
 
 func TestDeepSeekProvider_Completion_ReasoningMode(t *testing.T) {
-	var capturedRequest providers.OpenAICompatRequest
+	var capturedRequest providerbase.OpenAICompatRequest
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		json.NewDecoder(r.Body).Decode(&capturedRequest)
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(providers.OpenAICompatResponse{
+		json.NewEncoder(w).Encode(providerbase.OpenAICompatResponse{
 			ID: "resp-2", Model: "deepseek-reasoner",
-			Choices: []providers.OpenAICompatChoice{
-				{Index: 0, FinishReason: "stop", Message: providers.OpenAICompatMessage{Role: "assistant", Content: "Thinking..."}},
+			Choices: []providerbase.OpenAICompatChoice{
+				{Index: 0, FinishReason: "stop", Message: providerbase.OpenAICompatMessage{Role: "assistant", Content: "Thinking..."}},
 			},
 		})
 	}))
@@ -119,14 +122,14 @@ func TestDeepSeekProvider_Completion_ReasoningMode(t *testing.T) {
 }
 
 func TestDeepSeekProvider_Completion_ReasoningMode_Extended(t *testing.T) {
-	var capturedRequest providers.OpenAICompatRequest
+	var capturedRequest providerbase.OpenAICompatRequest
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		json.NewDecoder(r.Body).Decode(&capturedRequest)
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(providers.OpenAICompatResponse{
+		json.NewEncoder(w).Encode(providerbase.OpenAICompatResponse{
 			ID: "resp-3", Model: "deepseek-reasoner",
-			Choices: []providers.OpenAICompatChoice{
-				{Index: 0, FinishReason: "stop", Message: providers.OpenAICompatMessage{Role: "assistant", Content: "ok"}},
+			Choices: []providerbase.OpenAICompatChoice{
+				{Index: 0, FinishReason: "stop", Message: providerbase.OpenAICompatMessage{Role: "assistant", Content: "ok"}},
 			},
 		})
 	}))
@@ -145,14 +148,14 @@ func TestDeepSeekProvider_Completion_ReasoningMode_Extended(t *testing.T) {
 }
 
 func TestDeepSeekProvider_Completion_ReasoningMode_WithExplicitModel(t *testing.T) {
-	var capturedRequest providers.OpenAICompatRequest
+	var capturedRequest providerbase.OpenAICompatRequest
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		json.NewDecoder(r.Body).Decode(&capturedRequest)
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(providers.OpenAICompatResponse{
+		json.NewEncoder(w).Encode(providerbase.OpenAICompatResponse{
 			ID: "resp-4", Model: "deepseek-chat",
-			Choices: []providers.OpenAICompatChoice{
-				{Index: 0, FinishReason: "stop", Message: providers.OpenAICompatMessage{Role: "assistant", Content: "ok"}},
+			Choices: []providerbase.OpenAICompatChoice{
+				{Index: 0, FinishReason: "stop", Message: providerbase.OpenAICompatMessage{Role: "assistant", Content: "ok"}},
 			},
 		})
 	}))
@@ -197,10 +200,10 @@ func TestDeepSeekProvider_Stream(t *testing.T) {
 		assert.Equal(t, "/chat/completions", r.URL.Path)
 		w.Header().Set("Content-Type", "text/event-stream")
 		w.WriteHeader(http.StatusOK)
-		chunk := providers.OpenAICompatResponse{
+		chunk := providerbase.OpenAICompatResponse{
 			ID: "stream-1", Model: "deepseek-chat",
-			Choices: []providers.OpenAICompatChoice{
-				{Index: 0, Delta: &providers.OpenAICompatMessage{Role: "assistant", Content: "Hello"}},
+			Choices: []providerbase.OpenAICompatChoice{
+				{Index: 0, Delta: &providerbase.OpenAICompatMessage{Role: "assistant", Content: "Hello"}},
 			},
 		}
 		data, _ := json.Marshal(chunk)
@@ -312,11 +315,9 @@ func TestDeepseekRequestHook(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			req := &llm.ChatRequest{Model: tt.reqModel, ReasoningMode: tt.reasoningMode}
-			body := &providers.OpenAICompatRequest{Model: "deepseek-chat"}
+			body := &providerbase.OpenAICompatRequest{Model: "deepseek-chat"}
 			deepseekRequestHook(req, body)
 			assert.Equal(t, tt.expectedModel, body.Model)
 		})
 	}
 }
-
-

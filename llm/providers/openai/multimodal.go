@@ -1,7 +1,6 @@
 package openai
 
 import (
-	"github.com/BaSui01/agentflow/types"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -11,8 +10,11 @@ import (
 	"net/http"
 	"strings"
 
+	providerbase "github.com/BaSui01/agentflow/llm/providers/base"
+
+	"github.com/BaSui01/agentflow/types"
+
 	"github.com/BaSui01/agentflow/llm"
-	"github.com/BaSui01/agentflow/llm/providers"
 )
 
 // =============================================================================
@@ -181,8 +183,8 @@ func (p *OpenAIProvider) CancelFineTuningJob(ctx context.Context, jobID string) 
 	defer resp.Body.Close()
 
 	if resp.StatusCode >= 400 {
-		msg := providers.ReadErrorMessage(resp.Body)
-		return providers.MapHTTPError(resp.StatusCode, msg, p.Name())
+		msg := providerbase.ReadErrorMessage(resp.Body)
+		return providerbase.MapHTTPError(resp.StatusCode, msg, p.Name())
 	}
 
 	return nil
@@ -197,7 +199,7 @@ func (p *OpenAIProvider) newRequest(ctx context.Context, method, path string, bo
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
-	p.Provider.Cfg.BuildHeaders(req, p.openaiCfg.APIKey)
+	p.Provider.ApplyHeaders(req, p.Provider.ResolveAPIKey(ctx))
 	return req, nil
 }
 
@@ -237,8 +239,8 @@ func (p *OpenAIProvider) doJSON(ctx context.Context, method, path string, payloa
 	defer resp.Body.Close()
 
 	if resp.StatusCode >= 400 {
-		msg := providers.ReadErrorMessage(resp.Body)
-		return providers.MapHTTPError(resp.StatusCode, msg, p.Name())
+		msg := providerbase.ReadErrorMessage(resp.Body)
+		return providerbase.MapHTTPError(resp.StatusCode, msg, p.Name())
 	}
 
 	if out == nil {
@@ -277,8 +279,8 @@ func (p *OpenAIProvider) doBytes(ctx context.Context, method, path string, paylo
 	defer resp.Body.Close()
 
 	if resp.StatusCode >= 400 {
-		msg := providers.ReadErrorMessage(resp.Body)
-		return nil, providers.MapHTTPError(resp.StatusCode, msg, p.Name())
+		msg := providerbase.ReadErrorMessage(resp.Body)
+		return nil, providerbase.MapHTTPError(resp.StatusCode, msg, p.Name())
 	}
 
 	data, err := io.ReadAll(resp.Body)
@@ -308,8 +310,8 @@ func (p *OpenAIProvider) doMultipartJSON(ctx context.Context, path string, body 
 	defer resp.Body.Close()
 
 	if resp.StatusCode >= 400 {
-		msg := providers.ReadErrorMessage(resp.Body)
-		return providers.MapHTTPError(resp.StatusCode, msg, p.Name())
+		msg := providerbase.ReadErrorMessage(resp.Body)
+		return providerbase.MapHTTPError(resp.StatusCode, msg, p.Name())
 	}
 
 	if err := json.NewDecoder(resp.Body).Decode(out); err != nil {
@@ -323,5 +325,3 @@ func (p *OpenAIProvider) doMultipartJSON(ctx context.Context, path string, body 
 	}
 	return nil
 }
-
-

@@ -6,7 +6,7 @@ import (
 	"sync"
 
 	"github.com/BaSui01/agentflow/llm"
-	llmtools "github.com/BaSui01/agentflow/llm/tools"
+	llmtools "github.com/BaSui01/agentflow/llm/capabilities/tools"
 )
 
 // testProvider implements llm.Provider for testing

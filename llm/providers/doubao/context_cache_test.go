@@ -1,12 +1,15 @@
 package doubao
 
 import (
-	"github.com/BaSui01/agentflow/types"
 	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	providerbase "github.com/BaSui01/agentflow/llm/providers/base"
+
+	"github.com/BaSui01/agentflow/types"
 
 	"github.com/BaSui01/agentflow/llm"
 	"github.com/BaSui01/agentflow/llm/providers"
@@ -59,20 +62,20 @@ func TestDoubaoProvider_CompletionWithContext(t *testing.T) {
 		assert.Equal(t, "ctx-123", req.ContextID)
 
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(providers.OpenAICompatResponse{
+		json.NewEncoder(w).Encode(providerbase.OpenAICompatResponse{
 			ID:    "resp-1",
 			Model: "Doubao-1.5-pro-32k",
-			Choices: []providers.OpenAICompatChoice{
+			Choices: []providerbase.OpenAICompatChoice{
 				{
 					Index:        0,
 					FinishReason: "stop",
-					Message: providers.OpenAICompatMessage{
+					Message: providerbase.OpenAICompatMessage{
 						Role:    "assistant",
 						Content: "Hello with context",
 					},
 				},
 			},
-			Usage: &providers.OpenAICompatUsage{
+			Usage: &providerbase.OpenAICompatUsage{
 				PromptTokens:     5,
 				CompletionTokens: 3,
 				TotalTokens:      8,
@@ -122,5 +125,3 @@ func TestDoubaoProvider_CreateContextCache_Error(t *testing.T) {
 	require.True(t, ok)
 	assert.Equal(t, llm.ErrInvalidRequest, llmErr.Code)
 }
-
-

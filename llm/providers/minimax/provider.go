@@ -1,11 +1,12 @@
 package minimax
 
 import (
-	"github.com/BaSui01/agentflow/types"
 	"context"
 	"encoding/json"
 	"fmt"
 	"strings"
+
+	"github.com/BaSui01/agentflow/types"
 
 	"github.com/BaSui01/agentflow/llm"
 	"github.com/BaSui01/agentflow/llm/providers"
@@ -105,5 +106,3 @@ func parseXMLToolCall(content string) (types.ToolCall, bool) {
 		Arguments: payload.Arguments,
 	}, true
 }
-
-

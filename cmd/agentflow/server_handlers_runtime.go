@@ -13,11 +13,11 @@ import (
 	"github.com/BaSui01/agentflow/api/handlers"
 	"github.com/BaSui01/agentflow/internal/bridge"
 	"github.com/BaSui01/agentflow/llm"
-	"github.com/BaSui01/agentflow/llm/budget"
 	"github.com/BaSui01/agentflow/llm/cache"
-	llmfactory "github.com/BaSui01/agentflow/llm/factory"
 	llmmw "github.com/BaSui01/agentflow/llm/middleware"
 	"github.com/BaSui01/agentflow/llm/observability"
+	"github.com/BaSui01/agentflow/llm/providers/vendor"
+	llmpolicy "github.com/BaSui01/agentflow/llm/runtime/policy"
 	"github.com/BaSui01/agentflow/rag"
 	"github.com/BaSui01/agentflow/workflow"
 	"github.com/BaSui01/agentflow/workflow/dsl"
@@ -28,7 +28,7 @@ func (s *Server) initHandlers() error {
 	s.healthHandler = handlers.NewHealthHandler(s.logger)
 
 	if s.cfg.LLM.APIKey != "" {
-		provider, err := llmfactory.NewProviderFromConfig(s.cfg.LLM.DefaultProvider, llmfactory.ProviderConfig{
+		provider, err := vendor.NewChatProviderFromConfig(s.cfg.LLM.DefaultProvider, vendor.ChatProviderConfig{
 			APIKey:  s.cfg.LLM.APIKey,
 			BaseURL: s.cfg.LLM.BaseURL,
 			Timeout: s.cfg.LLM.Timeout,
@@ -38,7 +38,7 @@ func (s *Server) initHandlers() error {
 				zap.String("provider", s.cfg.LLM.DefaultProvider),
 				zap.Error(err))
 		} else {
-			retryPolicy := llm.DefaultRetryPolicy()
+			retryPolicy := llmpolicy.DefaultRetryPolicy()
 			if s.cfg.LLM.MaxRetries >= 0 {
 				retryPolicy.MaxRetries = s.cfg.LLM.MaxRetries
 			}
@@ -58,15 +58,20 @@ func (s *Server) initHandlers() error {
 			s.costTracker = observability.NewCostTracker(costCalc)
 
 			if s.cfg.Budget.Enabled {
-				budgetCfg := budget.BudgetConfig{
+				budgetCfg := llmpolicy.BudgetConfig{
 					MaxTokensPerMinute: s.cfg.Budget.MaxTokensPerMinute,
 					MaxTokensPerDay:    s.cfg.Budget.MaxTokensPerDay,
 					MaxCostPerDay:      s.cfg.Budget.MaxCostPerDay,
 					AlertThreshold:     s.cfg.Budget.AlertThreshold,
 				}
-				s.budgetManager = budget.NewTokenBudgetManager(budgetCfg, s.logger)
+				s.budgetManager = llmpolicy.NewTokenBudgetManager(budgetCfg, s.logger)
 				s.logger.Info("Budget manager initialized")
 			}
+
+			policyManager := llmpolicy.NewManager(llmpolicy.ManagerConfig{
+				Budget:      s.budgetManager,
+				RetryPolicy: retryPolicy,
+			})
 
 			if s.cfg.Cache.Enabled {
 				cacheCfg := &cache.CacheConfig{
@@ -104,7 +109,7 @@ func (s *Server) initHandlers() error {
 			provider = llmmw.NewMiddlewareProvider(provider, chain)
 
 			s.provider = provider
-			s.chatHandler = handlers.NewChatHandler(provider, s.logger)
+			s.chatHandler = handlers.NewChatHandler(provider, policyManager, s.logger)
 			s.logger.Info("Chat handler initialized with middleware chain",
 				zap.String("provider", s.cfg.LLM.DefaultProvider))
 		}
@@ -158,6 +163,7 @@ func (s *Server) initHandlers() error {
 
 		multimodalCfg := handlers.MultimodalHandlerConfig{
 			ChatProvider:         s.provider,
+			PolicyManager:        llmpolicy.NewManager(llmpolicy.ManagerConfig{Budget: s.budgetManager}),
 			OpenAIAPIKey:         firstNonEmpty(s.cfg.Multimodal.Image.OpenAIAPIKey, s.cfg.LLM.APIKey),
 			OpenAIBaseURL:        firstNonEmpty(s.cfg.Multimodal.Image.OpenAIBaseURL, s.cfg.LLM.BaseURL),
 			GoogleAPIKey:         firstNonEmpty(s.cfg.Multimodal.Video.GoogleAPIKey, s.cfg.Multimodal.Image.GeminiAPIKey),

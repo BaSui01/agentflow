@@ -3,6 +3,7 @@ package deepseek
 import (
 	"github.com/BaSui01/agentflow/llm"
 	"github.com/BaSui01/agentflow/llm/providers"
+	providerbase "github.com/BaSui01/agentflow/llm/providers/base"
 	"github.com/BaSui01/agentflow/llm/providers/openaicompat"
 	"go.uber.org/zap"
 )
@@ -37,7 +38,7 @@ func NewDeepSeekProvider(cfg providers.DeepSeekConfig, logger *zap.Logger) *Deep
 // deepseekRequestHook handles DeepSeek-specific request modifications.
 // Automatically selects deepseek-reasoner model for thinking/extended reasoning modes.
 // When using reasoner, strips unsupported parameters (temperature, top_p).
-func deepseekRequestHook(req *llm.ChatRequest, body *providers.OpenAICompatRequest) {
+func deepseekRequestHook(req *llm.ChatRequest, body *providerbase.OpenAICompatRequest) {
 	if req.ReasoningMode == "thinking" || req.ReasoningMode == "extended" {
 		if req.Model == "" {
 			body.Model = "deepseek-reasoner"
@@ -48,4 +49,3 @@ func deepseekRequestHook(req *llm.ChatRequest, body *providers.OpenAICompatReque
 		body.TopP = 0
 	}
 }
-

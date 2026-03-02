@@ -1,9 +1,10 @@
 package providers
 
 import (
-	"github.com/BaSui01/agentflow/types"
 	"encoding/json"
 	"testing"
+
+	"github.com/BaSui01/agentflow/types"
 
 	"github.com/BaSui01/agentflow/llm"
 	"github.com/stretchr/testify/assert"
@@ -444,19 +445,19 @@ func TestProperty18_ToolChoiceTypeConsistency(t *testing.T) {
 // 跟踪光谱的模拟转换函数
 
 type mockOpenAIRequestWithToolChoice struct {
-	Model      string        `json:"model"`
-	Messages   []any `json:"messages"`
-	Tools      []any `json:"tools,omitempty"`
-	ToolChoice any   `json:"tool_choice,omitempty"`
-	MaxTokens  int           `json:"max_tokens,omitempty"`
+	Model      string `json:"model"`
+	Messages   []any  `json:"messages"`
+	Tools      []any  `json:"tools,omitempty"`
+	ToolChoice any    `json:"tool_choice,omitempty"`
+	MaxTokens  int    `json:"max_tokens,omitempty"`
 }
 
 type mockMiniMaxRequestWithToolChoice struct {
-	Model      string        `json:"model"`
-	Messages   []any `json:"messages"`
-	Tools      []any `json:"tools,omitempty"`
-	ToolChoice any   `json:"tool_choice,omitempty"`
-	MaxTokens  int           `json:"max_tokens,omitempty"`
+	Model      string `json:"model"`
+	Messages   []any  `json:"messages"`
+	Tools      []any  `json:"tools,omitempty"`
+	ToolChoice any    `json:"tool_choice,omitempty"`
+	MaxTokens  int    `json:"max_tokens,omitempty"`
 }
 
 func mockConvertToOpenAIRequest(req *llm.ChatRequest) *mockOpenAIRequestWithToolChoice {
@@ -504,5 +505,3 @@ func mockConvertToMiniMaxRequest(req *llm.ChatRequest) *mockMiniMaxRequestWithTo
 
 	return result
 }
-
-

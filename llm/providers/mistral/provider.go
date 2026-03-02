@@ -3,6 +3,7 @@ package mistral
 import (
 	"github.com/BaSui01/agentflow/llm"
 	"github.com/BaSui01/agentflow/llm/providers"
+	providerbase "github.com/BaSui01/agentflow/llm/providers/base"
 	"github.com/BaSui01/agentflow/llm/providers/openaicompat"
 	"go.uber.org/zap"
 )
@@ -35,11 +36,10 @@ func NewMistralProvider(cfg providers.MistralConfig, logger *zap.Logger) *Mistra
 
 // mistralRequestHook handles Mistral-specific request modifications.
 // Switches to magistral-medium-latest reasoning model for thinking/extended modes.
-func mistralRequestHook(req *llm.ChatRequest, body *providers.OpenAICompatRequest) {
+func mistralRequestHook(req *llm.ChatRequest, body *providerbase.OpenAICompatRequest) {
 	if req.ReasoningMode == "thinking" || req.ReasoningMode == "extended" {
 		if req.Model == "" {
 			body.Model = "magistral-medium-latest"
 		}
 	}
 }
-

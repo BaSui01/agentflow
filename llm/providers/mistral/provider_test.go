@@ -8,6 +8,8 @@ import (
 	"testing"
 	"time"
 
+	providerbase "github.com/BaSui01/agentflow/llm/providers/base"
+
 	"github.com/BaSui01/agentflow/llm"
 	"github.com/BaSui01/agentflow/llm/providers"
 	"github.com/BaSui01/agentflow/types"
@@ -79,7 +81,7 @@ func TestMistralProvider_EndpointPath(t *testing.T) {
 // --- Completion via httptest ---
 
 func TestMistralProvider_Completion(t *testing.T) {
-	var capturedRequest providers.OpenAICompatRequest
+	var capturedRequest providerbase.OpenAICompatRequest
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, "/v1/chat/completions", r.URL.Path)
 		assert.Contains(t, r.Header.Get("Authorization"), "Bearer ")
@@ -88,20 +90,20 @@ func TestMistralProvider_Completion(t *testing.T) {
 		require.NoError(t, err)
 
 		w.Header().Set("Content-Type", "application/json")
-		err = json.NewEncoder(w).Encode(providers.OpenAICompatResponse{
+		err = json.NewEncoder(w).Encode(providerbase.OpenAICompatResponse{
 			ID:    "resp-1",
 			Model: "mistral-large-latest",
-			Choices: []providers.OpenAICompatChoice{
+			Choices: []providerbase.OpenAICompatChoice{
 				{
 					Index:        0,
 					FinishReason: "stop",
-					Message: providers.OpenAICompatMessage{
+					Message: providerbase.OpenAICompatMessage{
 						Role:    "assistant",
 						Content: "Hello from Mistral",
 					},
 				},
 			},
-			Usage: &providers.OpenAICompatUsage{
+			Usage: &providerbase.OpenAICompatUsage{
 				PromptTokens:     8,
 				CompletionTokens: 4,
 				TotalTokens:      12,
@@ -136,16 +138,16 @@ func TestMistralProvider_Completion(t *testing.T) {
 }
 
 func TestMistralProvider_Completion_WithCustomModel(t *testing.T) {
-	var capturedRequest providers.OpenAICompatRequest
+	var capturedRequest providerbase.OpenAICompatRequest
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		err := json.NewDecoder(r.Body).Decode(&capturedRequest)
 		require.NoError(t, err)
 		w.Header().Set("Content-Type", "application/json")
-		err = json.NewEncoder(w).Encode(providers.OpenAICompatResponse{
+		err = json.NewEncoder(w).Encode(providerbase.OpenAICompatResponse{
 			ID:    "resp-2",
 			Model: "mistral-small-latest",
-			Choices: []providers.OpenAICompatChoice{
-				{Index: 0, FinishReason: "stop", Message: providers.OpenAICompatMessage{Role: "assistant", Content: "ok"}},
+			Choices: []providerbase.OpenAICompatChoice{
+				{Index: 0, FinishReason: "stop", Message: providerbase.OpenAICompatMessage{Role: "assistant", Content: "ok"}},
 			},
 		})
 		require.NoError(t, err)
@@ -242,11 +244,11 @@ func TestMistralProvider_Stream(t *testing.T) {
 		w.Header().Set("Content-Type", "text/event-stream")
 		w.WriteHeader(http.StatusOK)
 
-		chunk := providers.OpenAICompatResponse{
+		chunk := providerbase.OpenAICompatResponse{
 			ID:    "stream-1",
 			Model: "mistral-large-latest",
-			Choices: []providers.OpenAICompatChoice{
-				{Index: 0, Delta: &providers.OpenAICompatMessage{Role: "assistant", Content: "Hello"}},
+			Choices: []providerbase.OpenAICompatChoice{
+				{Index: 0, Delta: &providerbase.OpenAICompatMessage{Role: "assistant", Content: "Hello"}},
 			},
 		}
 		data, _ := json.Marshal(chunk)
@@ -284,11 +286,11 @@ func TestMistralProvider_Stream_MultipleChunks(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 
 		for _, content := range []string{"Hello", " ", "World"} {
-			chunk := providers.OpenAICompatResponse{
+			chunk := providerbase.OpenAICompatResponse{
 				ID:    "stream-2",
 				Model: "mistral-large-latest",
-				Choices: []providers.OpenAICompatChoice{
-					{Index: 0, Delta: &providers.OpenAICompatMessage{Role: "assistant", Content: content}},
+				Choices: []providerbase.OpenAICompatChoice{
+					{Index: 0, Delta: &providerbase.OpenAICompatMessage{Role: "assistant", Content: content}},
 				},
 			}
 			data, _ := json.Marshal(chunk)

@@ -1,12 +1,15 @@
 package deepseek
 
 import (
-	"github.com/BaSui01/agentflow/types"
 	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	providerbase "github.com/BaSui01/agentflow/llm/providers/base"
+
+	"github.com/BaSui01/agentflow/types"
 
 	"github.com/BaSui01/agentflow/llm"
 	"github.com/BaSui01/agentflow/llm/providers"
@@ -63,14 +66,14 @@ func TestProperty6_CredentialOverrideFromContext(t *testing.T) {
 				// 返回有效的响应
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusOK)
-				json.NewEncoder(w).Encode(providers.OpenAICompatResponse{
+				json.NewEncoder(w).Encode(providerbase.OpenAICompatResponse{
 					ID:    "test-id",
 					Model: "deepseek-chat",
-					Choices: []providers.OpenAICompatChoice{
+					Choices: []providerbase.OpenAICompatChoice{
 						{
 							Index:        0,
 							FinishReason: "stop",
-							Message: providers.OpenAICompatMessage{
+							Message: providerbase.OpenAICompatMessage{
 								Role:    "assistant",
 								Content: "test response",
 							},
@@ -126,13 +129,13 @@ func TestProperty6_CredentialOverrideFromContext(t *testing.T) {
 			w.WriteHeader(http.StatusOK)
 
 			// 发送简单的 SSE 响应
-			data := providers.OpenAICompatResponse{
+			data := providerbase.OpenAICompatResponse{
 				ID:    "test-id",
 				Model: "deepseek-chat",
-				Choices: []providers.OpenAICompatChoice{
+				Choices: []providerbase.OpenAICompatChoice{
 					{
 						Index: 0,
-						Delta: &providers.OpenAICompatMessage{
+						Delta: &providerbase.OpenAICompatMessage{
 							Role:    "assistant",
 							Content: "test",
 						},
@@ -187,14 +190,14 @@ func TestProperty6_CredentialOverrideFromContext(t *testing.T) {
 
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusOK)
-			json.NewEncoder(w).Encode(providers.OpenAICompatResponse{
+			json.NewEncoder(w).Encode(providerbase.OpenAICompatResponse{
 				ID:    "test-id",
 				Model: "deepseek-chat",
-				Choices: []providers.OpenAICompatChoice{
+				Choices: []providerbase.OpenAICompatChoice{
 					{
 						Index:        0,
 						FinishReason: "stop",
-						Message: providers.OpenAICompatMessage{
+						Message: providerbase.OpenAICompatMessage{
 							Role:    "assistant",
 							Content: "test response",
 						},
@@ -228,5 +231,3 @@ func TestProperty6_CredentialOverrideFromContext(t *testing.T) {
 			"Config API key should be used when no override is present")
 	})
 }
-
-

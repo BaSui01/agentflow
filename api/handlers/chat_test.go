@@ -152,7 +152,7 @@ func TestChatHandler_HandleCompletion(t *testing.T) {
 				},
 			}
 
-			handler := NewChatHandler(provider, logger)
+			handler := NewChatHandler(provider, nil, logger)
 
 			body, err := json.Marshal(tt.request)
 			require.NoError(t, err)
@@ -224,7 +224,7 @@ func TestChatHandler_HandleStream(t *testing.T) {
 			},
 		}
 
-		handler := NewChatHandler(provider, logger)
+		handler := NewChatHandler(provider, nil, logger)
 
 		request := api.ChatRequest{
 			Model: "gpt-4",
@@ -249,7 +249,7 @@ func TestChatHandler_HandleStream(t *testing.T) {
 
 	t.Run("invalid request", func(t *testing.T) {
 		provider := &mockProvider{}
-		handler := NewChatHandler(provider, logger)
+		handler := NewChatHandler(provider, nil, logger)
 
 		request := api.ChatRequest{
 			// 缺少型号
@@ -273,7 +273,7 @@ func TestChatHandler_HandleStream(t *testing.T) {
 
 func TestChatHandler_ValidateChatRequest(t *testing.T) {
 	logger := zap.NewNop()
-	handler := NewChatHandler(nil, logger)
+	handler := NewChatHandler(nil, nil, logger)
 
 	tests := []struct {
 		name    string
@@ -369,7 +369,7 @@ func TestChatHandler_ValidateChatRequest(t *testing.T) {
 
 func TestChatHandler_ConvertToLLMRequest(t *testing.T) {
 	logger := zap.NewNop()
-	handler := NewChatHandler(nil, logger)
+	handler := NewChatHandler(nil, nil, logger)
 
 	apiReq := &api.ChatRequest{
 		TraceID:  "trace-123",
@@ -421,4 +421,3 @@ func TestChatHandler_ConvertToLLMRequest(t *testing.T) {
 	assert.Equal(t, map[string]string{"key": "value"}, llmReq.Metadata)
 	assert.Equal(t, []string{"test"}, llmReq.Tags)
 }
-

@@ -1,7 +1,6 @@
 package gemini
 
 import (
-	"github.com/BaSui01/agentflow/types"
 	"bufio"
 	"bytes"
 	"context"
@@ -12,6 +11,10 @@ import (
 	"strings"
 	"sync/atomic"
 	"time"
+
+	providerbase "github.com/BaSui01/agentflow/llm/providers/base"
+
+	"github.com/BaSui01/agentflow/types"
 
 	"github.com/BaSui01/agentflow/llm"
 	"github.com/BaSui01/agentflow/llm/middleware"
@@ -84,7 +87,7 @@ func (p *GeminiProvider) HealthCheck(ctx context.Context) (*llm.HealthStatus, er
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		msg := providers.ReadErrorMessage(resp.Body)
+		msg := providerbase.ReadErrorMessage(resp.Body)
 		return &llm.HealthStatus{Healthy: false, Latency: latency}, fmt.Errorf("gemini health check failed: status=%d msg=%s", resp.StatusCode, msg)
 	}
 	return &llm.HealthStatus{Healthy: true, Latency: latency}, nil
@@ -118,8 +121,8 @@ func (p *GeminiProvider) ListModels(ctx context.Context) ([]llm.Model, error) {
 	defer resp.Body.Close()
 
 	if resp.StatusCode >= 400 {
-		msg := providers.ReadErrorMessage(resp.Body)
-		return nil, providers.MapHTTPError(resp.StatusCode, msg, p.Name())
+		msg := providerbase.ReadErrorMessage(resp.Body)
+		return nil, providerbase.MapHTTPError(resp.StatusCode, msg, p.Name())
 	}
 
 	var modelsResp struct {
@@ -496,7 +499,7 @@ func (p *GeminiProvider) Completion(ctx context.Context, req *llm.ChatRequest) (
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal request: %w", err)
 	}
-	model := providers.ChooseModel(req, p.cfg.Model, defaultModel)
+	model := providerbase.ChooseModel(req, p.cfg.Model, defaultModel)
 	endpoint := p.completionEndpoint(model)
 
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(payload))
@@ -518,8 +521,8 @@ func (p *GeminiProvider) Completion(ctx context.Context, req *llm.ChatRequest) (
 	defer resp.Body.Close()
 
 	if resp.StatusCode >= 400 {
-		msg := providers.ReadErrorMessage(resp.Body)
-		return nil, providers.MapHTTPError(resp.StatusCode, msg, p.Name())
+		msg := providerbase.ReadErrorMessage(resp.Body)
+		return nil, providerbase.MapHTTPError(resp.StatusCode, msg, p.Name())
 	}
 
 	var geminiResp geminiResponse
@@ -578,7 +581,7 @@ func (p *GeminiProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-ch
 			Cause:      err,
 		}
 	}
-	model := providers.ChooseModel(req, p.cfg.Model, defaultModel)
+	model := providerbase.ChooseModel(req, p.cfg.Model, defaultModel)
 	endpoint := p.streamEndpoint(model)
 
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(payload))
@@ -606,8 +609,8 @@ func (p *GeminiProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-ch
 	}
 	if resp.StatusCode >= 400 {
 		defer resp.Body.Close()
-		msg := providers.ReadErrorMessage(resp.Body)
-		return nil, providers.MapHTTPError(resp.StatusCode, msg, p.Name())
+		msg := providerbase.ReadErrorMessage(resp.Body)
+		return nil, providerbase.MapHTTPError(resp.StatusCode, msg, p.Name())
 	}
 
 	ch := make(chan llm.StreamChunk)
@@ -927,5 +930,3 @@ func convertSafetySettings(settings []providers.GeminiSafetySetting) []geminiSaf
 	}
 	return out
 }
-
-

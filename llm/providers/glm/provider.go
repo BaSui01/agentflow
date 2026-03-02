@@ -3,6 +3,7 @@ package glm
 import (
 	"github.com/BaSui01/agentflow/llm"
 	"github.com/BaSui01/agentflow/llm/providers"
+	providerbase "github.com/BaSui01/agentflow/llm/providers/base"
 	"github.com/BaSui01/agentflow/llm/providers/openaicompat"
 	"go.uber.org/zap"
 )
@@ -36,11 +37,10 @@ func NewGLMProvider(cfg providers.GLMConfig, logger *zap.Logger) *GLMProvider {
 
 // glmRequestHook handles GLM-specific request modifications.
 // Switches to glm-z1-flash reasoning model for thinking/extended modes.
-func glmRequestHook(req *llm.ChatRequest, body *providers.OpenAICompatRequest) {
+func glmRequestHook(req *llm.ChatRequest, body *providerbase.OpenAICompatRequest) {
 	if req.ReasoningMode == "thinking" || req.ReasoningMode == "extended" {
 		if req.Model == "" {
 			body.Model = "glm-z1-flash"
 		}
 	}
 }
-

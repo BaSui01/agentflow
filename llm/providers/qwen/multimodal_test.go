@@ -1,12 +1,13 @@
 package qwen
 
 import (
-	"github.com/BaSui01/agentflow/types"
 	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/BaSui01/agentflow/types"
 
 	"github.com/BaSui01/agentflow/llm"
 	"github.com/BaSui01/agentflow/llm/providers"
@@ -102,5 +103,3 @@ func TestQwenProvider_CreateEmbedding_Success(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, resp.Data, 1)
 }
-
-

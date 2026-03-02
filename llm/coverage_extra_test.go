@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	llmpolicy "github.com/BaSui01/agentflow/llm/runtime/policy"
 	"github.com/BaSui01/agentflow/types"
 	"github.com/glebarez/sqlite"
 	"github.com/stretchr/testify/assert"
@@ -59,8 +60,8 @@ func TestCanaryConfig_UpdateStage_AllStages(t *testing.T) {
 	cc.mu.Unlock()
 
 	tests := []struct {
-		stage          CanaryStage
-		wantTraffic    int
+		stage       CanaryStage
+		wantTraffic int
 	}{
 		{CanaryStage10Pct, 10},
 		{CanaryStage50Pct, 50},
@@ -104,12 +105,12 @@ func TestCanaryConfig_SetDeployment_WithDB(t *testing.T) {
 	t.Cleanup(cc.Stop)
 
 	deployment := &CanaryDeployment{
-		ProviderID:    1,
-		CanaryVersion: "v2",
-		StableVersion: "v1",
+		ProviderID:     1,
+		CanaryVersion:  "v2",
+		StableVersion:  "v1",
 		TrafficPercent: 10,
-		Stage:         CanaryStage10Pct,
-		StartTime:     time.Now(),
+		Stage:          CanaryStage10Pct,
+		StartTime:      time.Now(),
 	}
 
 	err := cc.SetDeployment(deployment)
@@ -137,7 +138,7 @@ func TestResilientProvider_Completion_RetryOnRetryableError(t *testing.T) {
 	}
 
 	rp := NewResilientProvider(inner, &ResilientConfig{
-		RetryPolicy: &RetryPolicy{
+		RetryPolicy: &llmpolicy.RetryPolicy{
 			MaxRetries:     3,
 			InitialBackoff: time.Millisecond,
 			MaxBackoff:     10 * time.Millisecond,
@@ -166,7 +167,7 @@ func TestResilientProvider_Completion_NonRetryableError(t *testing.T) {
 	}
 
 	rp := NewResilientProvider(inner, &ResilientConfig{
-		RetryPolicy: &RetryPolicy{
+		RetryPolicy: &llmpolicy.RetryPolicy{
 			MaxRetries:     3,
 			InitialBackoff: time.Millisecond,
 			MaxBackoff:     10 * time.Millisecond,
@@ -193,7 +194,7 @@ func TestResilientProvider_Completion_IdempotencyExpired(t *testing.T) {
 	}
 
 	rp := NewResilientProvider(inner, &ResilientConfig{
-		RetryPolicy:       DefaultRetryPolicy(),
+		RetryPolicy:       llmpolicy.DefaultRetryPolicy(),
 		CircuitBreaker:    DefaultCircuitBreakerConfig(),
 		EnableIdempotency: true,
 		IdempotencyTTL:    time.Millisecond, // very short TTL
@@ -225,7 +226,7 @@ func TestResilientProvider_Completion_BackoffCap(t *testing.T) {
 	}
 
 	rp := NewResilientProvider(inner, &ResilientConfig{
-		RetryPolicy: &RetryPolicy{
+		RetryPolicy: &llmpolicy.RetryPolicy{
 			MaxRetries:     5,
 			InitialBackoff: time.Millisecond,
 			MaxBackoff:     2 * time.Millisecond, // cap at 2ms
@@ -264,134 +265,6 @@ func TestResilientProvider_Stream_Success(t *testing.T) {
 	assert.Equal(t, "hello", chunk.Delta.Content)
 }
 
-// --- APIKeyPool: weighted random with zero weights ---
-
-func TestAPIKeyPool_WeightedRandom_ZeroWeights(t *testing.T) {
-	db := setupTestDB(t)
-	ctx := context.Background()
-
-	keys := []*LLMProviderAPIKey{
-		{ProviderID: 1, APIKey: "key1", Priority: 10, Weight: 0, Enabled: true},
-		{ProviderID: 1, APIKey: "key2", Priority: 20, Weight: 0, Enabled: true},
-	}
-	for _, key := range keys {
-		require.NoError(t, db.Create(key).Error)
-	}
-
-	pool := NewAPIKeyPool(db, 1, StrategyWeightedRandom, zap.NewNop())
-	require.NoError(t, pool.LoadKeys(ctx))
-
-	key, err := pool.SelectKey(ctx)
-	require.NoError(t, err)
-	assert.NotNil(t, key)
-}
-
-// --- APIKeyPool: RecordSuccess/Failure for nonexistent key ---
-
-func TestAPIKeyPool_RecordSuccess_NotFound(t *testing.T) {
-	db := setupTestDB(t)
-	pool := NewAPIKeyPool(db, 1, StrategyPriority, zap.NewNop())
-	require.NoError(t, pool.LoadKeys(context.Background()))
-
-	err := pool.RecordSuccess(context.Background(), 9999)
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "API key not found")
-}
-
-func TestAPIKeyPool_RecordFailure_NotFound(t *testing.T) {
-	db := setupTestDB(t)
-	pool := NewAPIKeyPool(db, 1, StrategyPriority, zap.NewNop())
-	require.NoError(t, pool.LoadKeys(context.Background()))
-
-	err := pool.RecordFailure(context.Background(), 9999, "test error")
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "API key not found")
-}
-
-// --- APIKeyPool: LeastUsed strategy ---
-
-func TestAPIKeyPool_LeastUsed(t *testing.T) {
-	db := setupTestDB(t)
-	ctx := context.Background()
-
-	keys := []*LLMProviderAPIKey{
-		{ProviderID: 1, APIKey: "key1", Priority: 10, Weight: 100, Enabled: true, TotalRequests: 100},
-		{ProviderID: 1, APIKey: "key2", Priority: 20, Weight: 100, Enabled: true, TotalRequests: 5},
-		{ProviderID: 1, APIKey: "key3", Priority: 30, Weight: 100, Enabled: true, TotalRequests: 50},
-	}
-	for _, key := range keys {
-		require.NoError(t, db.Create(key).Error)
-	}
-
-	pool := NewAPIKeyPool(db, 1, StrategyLeastUsed, zap.NewNop())
-	require.NoError(t, pool.LoadKeys(ctx))
-
-	key, err := pool.SelectKey(ctx)
-	require.NoError(t, err)
-	assert.Equal(t, "key2", key.APIKey) // least used
-}
-
-// --- MultiProviderRouter: GetAPIKeyPool, SelectAPIKey, RecordAPIKeyUsage, GetAPIKeyStats ---
-
-func TestMultiProviderRouter_GetAPIKeyPool(t *testing.T) {
-	db := setupTestDB(t)
-	factory := NewDefaultProviderFactory()
-	router := NewMultiProviderRouter(db, factory, RouterOptions{Logger: zap.NewNop()})
-	t.Cleanup(router.healthMonitor.Stop)
-
-	// No pools initialized yet
-	assert.Nil(t, router.GetAPIKeyPool(1))
-}
-
-func TestMultiProviderRouter_SelectAPIKey_NoPool(t *testing.T) {
-	db := setupTestDB(t)
-	factory := NewDefaultProviderFactory()
-	router := NewMultiProviderRouter(db, factory, RouterOptions{Logger: zap.NewNop()})
-	t.Cleanup(router.healthMonitor.Stop)
-
-	_, err := router.SelectAPIKey(context.Background(), 999)
-	require.Error(t, err)
-}
-
-func TestMultiProviderRouter_RecordAPIKeyUsage_NoPool(t *testing.T) {
-	db := setupTestDB(t)
-	factory := NewDefaultProviderFactory()
-	router := NewMultiProviderRouter(db, factory, RouterOptions{Logger: zap.NewNop()})
-	t.Cleanup(router.healthMonitor.Stop)
-
-	err := router.RecordAPIKeyUsage(context.Background(), 999, 1, true, "")
-	require.Error(t, err)
-}
-
-func TestMultiProviderRouter_GetAPIKeyStats_Empty(t *testing.T) {
-	db := setupTestDB(t)
-	factory := NewDefaultProviderFactory()
-	router := NewMultiProviderRouter(db, factory, RouterOptions{Logger: zap.NewNop()})
-	t.Cleanup(router.healthMonitor.Stop)
-
-	stats := router.GetAPIKeyStats()
-	assert.Empty(t, stats)
-}
-
-// --- APIKeyPool: NewAPIKeyPool with nil logger ---
-
-func TestAPIKeyPool_NilLogger(t *testing.T) {
-	db := setupTestDB(t)
-	pool := NewAPIKeyPool(db, 1, StrategyRoundRobin, nil)
-	assert.NotNil(t, pool)
-}
-
-// --- APIKeyPool: SelectKey with no keys ---
-
-func TestAPIKeyPool_SelectKey_NoKeys(t *testing.T) {
-	db := setupTestDB(t)
-	pool := NewAPIKeyPool(db, 1, StrategyRoundRobin, zap.NewNop())
-	require.NoError(t, pool.LoadKeys(context.Background()))
-
-	_, err := pool.SelectKey(context.Background())
-	assert.ErrorIs(t, err, ErrNoAvailableAPIKey)
-}
-
 // --- Canary: loadFromDB with DB ---
 
 func TestCanaryConfig_LoadFromDB(t *testing.T) {
@@ -410,4 +283,3 @@ func TestCanaryConfig_LoadFromDB(t *testing.T) {
 	assert.Equal(t, "v2", d.CanaryVersion)
 	assert.Equal(t, CanaryStage10Pct, d.Stage)
 }
-

@@ -7,6 +7,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	providerbase "github.com/BaSui01/agentflow/llm/providers/base"
+
 	"github.com/BaSui01/agentflow/llm"
 	"github.com/BaSui01/agentflow/llm/providers"
 	"github.com/BaSui01/agentflow/types"
@@ -64,11 +66,11 @@ func TestOpenAIProvider_OrganizationHeader(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		capturedOrgHeader = r.Header.Get("OpenAI-Organization")
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(providers.OpenAICompatResponse{
+		json.NewEncoder(w).Encode(providerbase.OpenAICompatResponse{
 			ID:    "resp-1",
 			Model: "gpt-5.2",
-			Choices: []providers.OpenAICompatChoice{
-				{Index: 0, FinishReason: "stop", Message: providers.OpenAICompatMessage{Role: "assistant", Content: "ok"}},
+			Choices: []providerbase.OpenAICompatChoice{
+				{Index: 0, FinishReason: "stop", Message: providerbase.OpenAICompatMessage{Role: "assistant", Content: "ok"}},
 			},
 		})
 	}))
@@ -127,7 +129,7 @@ func TestOpenAIProvider_Endpoints(t *testing.T) {
 // --- Completion (standard Chat Completions API) ---
 
 func TestOpenAIProvider_Completion_Standard(t *testing.T) {
-	var capturedRequest providers.OpenAICompatRequest
+	var capturedRequest providerbase.OpenAICompatRequest
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, "/v1/chat/completions", r.URL.Path)
 		assert.Contains(t, r.Header.Get("Authorization"), "Bearer test-key")
@@ -136,17 +138,17 @@ func TestOpenAIProvider_Completion_Standard(t *testing.T) {
 		require.NoError(t, err)
 
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(providers.OpenAICompatResponse{
+		json.NewEncoder(w).Encode(providerbase.OpenAICompatResponse{
 			ID:    "chatcmpl-1",
 			Model: "gpt-5.2",
-			Choices: []providers.OpenAICompatChoice{
+			Choices: []providerbase.OpenAICompatChoice{
 				{
 					Index:        0,
 					FinishReason: "stop",
-					Message:      providers.OpenAICompatMessage{Role: "assistant", Content: "Hello from OpenAI"},
+					Message:      providerbase.OpenAICompatMessage{Role: "assistant", Content: "Hello from OpenAI"},
 				},
 			},
-			Usage: &providers.OpenAICompatUsage{PromptTokens: 10, CompletionTokens: 5, TotalTokens: 15},
+			Usage: &providerbase.OpenAICompatUsage{PromptTokens: 10, CompletionTokens: 5, TotalTokens: 15},
 		})
 	}))
 	t.Cleanup(func() { server.Close() })
@@ -360,10 +362,10 @@ func TestOpenAIProvider_Stream(t *testing.T) {
 		w.Header().Set("Content-Type", "text/event-stream")
 		w.WriteHeader(http.StatusOK)
 
-		chunk := providers.OpenAICompatResponse{
+		chunk := providerbase.OpenAICompatResponse{
 			ID: "chatcmpl-stream", Model: "gpt-5.2",
-			Choices: []providers.OpenAICompatChoice{
-				{Index: 0, Delta: &providers.OpenAICompatMessage{Role: "assistant", Content: "Hello"}},
+			Choices: []providerbase.OpenAICompatChoice{
+				{Index: 0, Delta: &providerbase.OpenAICompatMessage{Role: "assistant", Content: "Hello"}},
 			},
 		}
 		data, _ := json.Marshal(chunk)
@@ -510,4 +512,3 @@ func TestToResponsesAPIChatResponse(t *testing.T) {
 	assert.Equal(t, 8, result.Usage.TotalTokens)
 	assert.False(t, result.CreatedAt.IsZero())
 }
-

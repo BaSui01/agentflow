@@ -1,12 +1,13 @@
 package providers
 
 import (
-	"github.com/BaSui01/agentflow/types"
 	"context"
 	"errors"
 	"fmt"
 	"net/http"
 	"testing"
+
+	"github.com/BaSui01/agentflow/types"
 
 	"github.com/BaSui01/agentflow/llm"
 	"github.com/BaSui01/agentflow/llm/middleware"
@@ -470,5 +471,3 @@ func convertRewriterErrorToProviderError(rewriterErr error, provider string) err
 		Retryable:  false,
 	}
 }
-
-

@@ -5,6 +5,8 @@ import (
 	"io"
 	"net/http"
 
+	providerbase "github.com/BaSui01/agentflow/llm/providers/base"
+
 	"github.com/BaSui01/agentflow/llm"
 	"github.com/BaSui01/agentflow/llm/providers"
 	"github.com/BaSui01/agentflow/llm/providers/openaicompat"
@@ -60,16 +62,15 @@ func NewDoubaoProvider(cfg providers.DoubaoConfig, logger *zap.Logger) *DoubaoPr
 
 // doubaoRequestHook 处理豆包特有的请求参数。
 // 支持 Thinking（推理模式）参数映射。
-func doubaoRequestHook(req *llm.ChatRequest, body *providers.OpenAICompatRequest) {
+func doubaoRequestHook(req *llm.ChatRequest, body *providerbase.OpenAICompatRequest) {
 	if req.ReasoningMode != "" {
 		switch req.ReasoningMode {
 		case "thinking", "enabled":
-			body.Thinking = &providers.Thinking{Type: "enabled"}
+			body.Thinking = &providerbase.Thinking{Type: "enabled"}
 		case "disabled":
-			body.Thinking = &providers.Thinking{Type: "disabled"}
+			body.Thinking = &providerbase.Thinking{Type: "disabled"}
 		case "auto":
-			body.Thinking = &providers.Thinking{Type: "auto"}
+			body.Thinking = &providerbase.Thinking{Type: "auto"}
 		}
 	}
 }
-

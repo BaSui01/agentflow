@@ -2,8 +2,9 @@ package providers
 
 import (
 	"encoding/json"
-	"github.com/BaSui01/agentflow/types"
 	"testing"
+
+	"github.com/BaSui01/agentflow/types"
 
 	"github.com/stretchr/testify/assert"
 )

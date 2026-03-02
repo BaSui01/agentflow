@@ -1,7 +1,6 @@
 package openaicompat
 
 import (
-	"github.com/BaSui01/agentflow/types"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -10,8 +9,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/BaSui01/agentflow/llm"
 	"github.com/BaSui01/agentflow/llm/providers"
+	providerbase "github.com/BaSui01/agentflow/llm/providers/base"
+
+	"github.com/BaSui01/agentflow/types"
+
+	"github.com/BaSui01/agentflow/llm"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
@@ -121,20 +124,20 @@ func TestProvider_Completion_Success(t *testing.T) {
 		assert.Contains(t, r.Header.Get("Authorization"), "Bearer test-key")
 
 		w.Header().Set("Content-Type", "application/json")
-		err := json.NewEncoder(w).Encode(providers.OpenAICompatResponse{
+		err := json.NewEncoder(w).Encode(providerbase.OpenAICompatResponse{
 			ID:    "resp-1",
 			Model: "gpt-test",
-			Choices: []providers.OpenAICompatChoice{
+			Choices: []providerbase.OpenAICompatChoice{
 				{
 					Index:        0,
 					FinishReason: "stop",
-					Message: providers.OpenAICompatMessage{
+					Message: providerbase.OpenAICompatMessage{
 						Role:    "assistant",
 						Content: "Hello!",
 					},
 				},
 			},
-			Usage: &providers.OpenAICompatUsage{
+			Usage: &providerbase.OpenAICompatUsage{
 				PromptTokens:     5,
 				CompletionTokens: 2,
 				TotalTokens:      7,
@@ -246,11 +249,11 @@ func TestProvider_Completion_CredentialOverride(t *testing.T) {
 			capturedKey = auth[7:]
 		}
 		w.Header().Set("Content-Type", "application/json")
-		err := json.NewEncoder(w).Encode(providers.OpenAICompatResponse{
+		err := json.NewEncoder(w).Encode(providerbase.OpenAICompatResponse{
 			ID:    "r1",
 			Model: "m",
-			Choices: []providers.OpenAICompatChoice{
-				{Index: 0, FinishReason: "stop", Message: providers.OpenAICompatMessage{Role: "assistant", Content: "ok"}},
+			Choices: []providerbase.OpenAICompatChoice{
+				{Index: 0, FinishReason: "stop", Message: providerbase.OpenAICompatMessage{Role: "assistant", Content: "ok"}},
 			},
 		})
 		require.NoError(t, err)
@@ -270,15 +273,15 @@ func TestProvider_Completion_CredentialOverride(t *testing.T) {
 func TestProvider_Completion_RequestHook(t *testing.T) {
 	var receivedModel string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		var body providers.OpenAICompatRequest
+		var body providerbase.OpenAICompatRequest
 		err := json.NewDecoder(r.Body).Decode(&body)
 		require.NoError(t, err)
 		receivedModel = body.Model
 		w.Header().Set("Content-Type", "application/json")
-		err = json.NewEncoder(w).Encode(providers.OpenAICompatResponse{
+		err = json.NewEncoder(w).Encode(providerbase.OpenAICompatResponse{
 			ID: "r1", Model: receivedModel,
-			Choices: []providers.OpenAICompatChoice{
-				{Index: 0, FinishReason: "stop", Message: providers.OpenAICompatMessage{Role: "assistant", Content: "ok"}},
+			Choices: []providerbase.OpenAICompatChoice{
+				{Index: 0, FinishReason: "stop", Message: providerbase.OpenAICompatMessage{Role: "assistant", Content: "ok"}},
 			},
 		})
 		require.NoError(t, err)
@@ -290,7 +293,7 @@ func TestProvider_Completion_RequestHook(t *testing.T) {
 		APIKey:       "key",
 		BaseURL:      server.URL,
 		DefaultModel: "default-model",
-		RequestHook: func(req *llm.ChatRequest, body *providers.OpenAICompatRequest) {
+		RequestHook: func(req *llm.ChatRequest, body *providerbase.OpenAICompatRequest) {
 			body.Model = "hooked-model"
 		},
 	}, zap.NewNop())
@@ -311,23 +314,23 @@ func TestProvider_Stream_Success(t *testing.T) {
 		w.Header().Set("Content-Type", "text/event-stream")
 		w.WriteHeader(http.StatusOK)
 
-		chunks := []providers.OpenAICompatResponse{
+		chunks := []providerbase.OpenAICompatResponse{
 			{
 				ID: "s1", Model: "m",
-				Choices: []providers.OpenAICompatChoice{
-					{Index: 0, Delta: &providers.OpenAICompatMessage{Role: "assistant", Content: "Hel"}},
+				Choices: []providerbase.OpenAICompatChoice{
+					{Index: 0, Delta: &providerbase.OpenAICompatMessage{Role: "assistant", Content: "Hel"}},
 				},
 			},
 			{
 				ID: "s1", Model: "m",
-				Choices: []providers.OpenAICompatChoice{
-					{Index: 0, Delta: &providers.OpenAICompatMessage{Content: "lo"}},
+				Choices: []providerbase.OpenAICompatChoice{
+					{Index: 0, Delta: &providerbase.OpenAICompatMessage{Content: "lo"}},
 				},
 			},
 			{
 				ID: "s1", Model: "m",
-				Choices: []providers.OpenAICompatChoice{
-					{Index: 0, FinishReason: "stop", Delta: &providers.OpenAICompatMessage{}},
+				Choices: []providerbase.OpenAICompatChoice{
+					{Index: 0, FinishReason: "stop", Delta: &providerbase.OpenAICompatMessage{}},
 				},
 			},
 		}
@@ -380,14 +383,14 @@ func TestProvider_Stream_HTTPError(t *testing.T) {
 func TestProvider_Stream_ToolCallDelta(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/event-stream")
-		chunk := providers.OpenAICompatResponse{
+		chunk := providerbase.OpenAICompatResponse{
 			ID: "s1", Model: "m",
-			Choices: []providers.OpenAICompatChoice{
+			Choices: []providerbase.OpenAICompatChoice{
 				{
 					Index: 0,
-					Delta: &providers.OpenAICompatMessage{
-						ToolCalls: []providers.OpenAICompatToolCall{
-							{ID: "tc1", Type: "function", Function: providers.OpenAICompatFunction{Name: "calc", Arguments: json.RawMessage(`{"x":1}`)}},
+					Delta: &providerbase.OpenAICompatMessage{
+						ToolCalls: []providerbase.OpenAICompatToolCall{
+							{ID: "tc1", Type: "function", Function: providerbase.OpenAICompatFunction{Name: "calc", Arguments: json.RawMessage(`{"x":1}`)}},
 						},
 					},
 				},
@@ -446,6 +449,21 @@ func TestProvider_HealthCheck_Failure(t *testing.T) {
 	assert.False(t, status.Healthy)
 }
 
+func TestProvider_HealthCheck_UsesResolvedAPIKey(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "Bearer ctx-key", r.Header.Get("Authorization"))
+		w.WriteHeader(http.StatusOK)
+		fmt.Fprint(w, `{"object":"list","data":[]}`)
+	}))
+	t.Cleanup(server.Close)
+
+	p := New(Config{ProviderName: "test", APIKey: "cfg-key", BaseURL: server.URL}, zap.NewNop())
+	ctx := llm.WithCredentialOverride(context.Background(), llm.CredentialOverride{APIKey: "ctx-key"})
+	status, err := p.HealthCheck(ctx)
+	require.NoError(t, err)
+	assert.True(t, status.Healthy)
+}
+
 // ---------------------------------------------------------------------------
 // ListModels
 // ---------------------------------------------------------------------------
@@ -487,6 +505,40 @@ func TestProvider_ListModels_Error(t *testing.T) {
 	require.Error(t, err)
 }
 
+func TestProvider_ListModels_UsesRoundRobinAPIKeys(t *testing.T) {
+	var authHeaders []string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		authHeaders = append(authHeaders, r.Header.Get("Authorization"))
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(struct {
+			Object string      `json:"object"`
+			Data   []llm.Model `json:"data"`
+		}{
+			Object: "list",
+			Data:   []llm.Model{},
+		})
+	}))
+	t.Cleanup(server.Close)
+
+	p := New(Config{
+		ProviderName: "test",
+		BaseURL:      server.URL,
+		APIKeys: []providers.APIKeyEntry{
+			{Key: "k1"},
+			{Key: "k2"},
+		},
+	}, zap.NewNop())
+
+	_, err := p.ListModels(context.Background())
+	require.NoError(t, err)
+	_, err = p.ListModels(context.Background())
+	require.NoError(t, err)
+
+	require.Len(t, authHeaders, 2)
+	assert.Equal(t, "Bearer k1", authHeaders[0])
+	assert.Equal(t, "Bearer k2", authHeaders[1])
+}
+
 // ---------------------------------------------------------------------------
 // resolveAPIKey
 // ---------------------------------------------------------------------------
@@ -511,5 +563,3 @@ func TestProvider_resolveAPIKey(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func boolPtr(b bool) *bool { return &b }
-
-

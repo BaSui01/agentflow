@@ -1,7 +1,6 @@
 package llama
 
 import (
-	"github.com/BaSui01/agentflow/types"
 	"context"
 	"encoding/json"
 	"net/http"
@@ -9,6 +8,10 @@ import (
 	"os"
 	"testing"
 	"time"
+
+	providerbase "github.com/BaSui01/agentflow/llm/providers/base"
+
+	"github.com/BaSui01/agentflow/types"
 
 	"github.com/BaSui01/agentflow/llm"
 	"github.com/BaSui01/agentflow/llm/providers"
@@ -64,7 +67,7 @@ func TestLlamaProvider_BaseURLSelection(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			cfg := providers.LlamaConfig{
 				BaseProviderConfig: providers.BaseProviderConfig{
-					APIKey:   "test-key",
+					APIKey: "test-key",
 				},
 				Provider: tt.provider,
 			}
@@ -82,9 +85,9 @@ func TestLlamaProvider_Integration(t *testing.T) {
 
 	provider := NewLlamaProvider(providers.LlamaConfig{
 		BaseProviderConfig: providers.BaseProviderConfig{
-			APIKey:   apiKey,
-			Model:    "meta-llama/Llama-3.3-70B-Instruct-Turbo",
-			Timeout:  30 * time.Second,
+			APIKey:  apiKey,
+			Model:   "meta-llama/Llama-3.3-70B-Instruct-Turbo",
+			Timeout: 30 * time.Second,
 		},
 		Provider: "together",
 	}, zap.NewNop())
@@ -156,12 +159,12 @@ func TestLlamaProvider_Completion_Httptest(t *testing.T) {
 		assert.Equal(t, "/v1/chat/completions", r.URL.Path)
 		assert.Contains(t, r.Header.Get("Authorization"), "Bearer ")
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(providers.OpenAICompatResponse{
+		json.NewEncoder(w).Encode(providerbase.OpenAICompatResponse{
 			ID: "resp-1", Model: "meta-llama/Llama-3.3-70B-Instruct-Turbo",
-			Choices: []providers.OpenAICompatChoice{
-				{Index: 0, FinishReason: "stop", Message: providers.OpenAICompatMessage{Role: "assistant", Content: "Hello from Llama"}},
+			Choices: []providerbase.OpenAICompatChoice{
+				{Index: 0, FinishReason: "stop", Message: providerbase.OpenAICompatMessage{Role: "assistant", Content: "Hello from Llama"}},
 			},
-			Usage: &providers.OpenAICompatUsage{PromptTokens: 10, CompletionTokens: 5, TotalTokens: 15},
+			Usage: &providerbase.OpenAICompatUsage{PromptTokens: 10, CompletionTokens: 5, TotalTokens: 15},
 		})
 	}))
 	t.Cleanup(func() { server.Close() })
@@ -225,10 +228,10 @@ func TestLlamaProvider_Stream_Httptest(t *testing.T) {
 		w.Header().Set("Content-Type", "text/event-stream")
 		w.WriteHeader(http.StatusOK)
 		for _, content := range []string{"Hello", " ", "World"} {
-			chunk := providers.OpenAICompatResponse{
+			chunk := providerbase.OpenAICompatResponse{
 				ID: "stream-1", Model: "meta-llama/Llama-3.3-70B-Instruct-Turbo",
-				Choices: []providers.OpenAICompatChoice{
-					{Index: 0, Delta: &providers.OpenAICompatMessage{Role: "assistant", Content: content}},
+				Choices: []providerbase.OpenAICompatChoice{
+					{Index: 0, Delta: &providerbase.OpenAICompatMessage{Role: "assistant", Content: content}},
 				},
 			}
 			data, _ := json.Marshal(chunk)
@@ -336,5 +339,3 @@ func TestLlamaProvider_HealthCheck_Unhealthy(t *testing.T) {
 	require.Error(t, err)
 	assert.False(t, status.Healthy)
 }
-
-

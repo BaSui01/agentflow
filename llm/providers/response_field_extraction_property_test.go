@@ -1,10 +1,11 @@
 package providers
 
 import (
-	"github.com/BaSui01/agentflow/types"
 	"encoding/json"
 	"testing"
 	"time"
+
+	"github.com/BaSui01/agentflow/types"
 
 	"github.com/BaSui01/agentflow/llm"
 	"github.com/stretchr/testify/assert"
@@ -765,5 +766,3 @@ func TestProperty24_IterationCount(t *testing.T) {
 	assert.GreaterOrEqual(t, totalIterations, 100,
 		"Property 24 should have at least 100 test iterations, got %d", totalIterations)
 }
-
-

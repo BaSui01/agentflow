@@ -121,4 +121,3 @@ func hashSHA256(data string) string {
 	h.Write([]byte(data))
 	return hex.EncodeToString(h.Sum(nil))
 }
-

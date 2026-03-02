@@ -1,12 +1,15 @@
 package glm
 
 import (
-	"github.com/BaSui01/agentflow/types"
 	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	providerbase "github.com/BaSui01/agentflow/llm/providers/base"
+
+	"github.com/BaSui01/agentflow/types"
 
 	"github.com/BaSui01/agentflow/llm"
 	"github.com/BaSui01/agentflow/llm/providers"
@@ -109,7 +112,7 @@ func TestProperty12_HTTPStatusToErrorCodeMapping(t *testing.T) {
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(tc.httpStatus)
-				err := json.NewEncoder(w).Encode(providers.OpenAICompatErrorResp{
+				err := json.NewEncoder(w).Encode(providerbase.OpenAICompatErrorResp{
 					Error: struct {
 						Message string `json:"message"`
 						Type    string `json:"type"`
@@ -177,7 +180,7 @@ func TestProperty12_HTTPStatusToErrorCodeMapping(t *testing.T) {
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusUnauthorized)
-			err := json.NewEncoder(w).Encode(providers.OpenAICompatErrorResp{
+			err := json.NewEncoder(w).Encode(providerbase.OpenAICompatErrorResp{
 				Error: struct {
 					Message string `json:"message"`
 					Type    string `json:"type"`
@@ -221,5 +224,3 @@ func TestProperty12_HTTPStatusToErrorCodeMapping(t *testing.T) {
 			"Error code should be ErrUnauthorized")
 	})
 }
-
-

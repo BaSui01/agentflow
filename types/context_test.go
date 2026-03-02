@@ -41,3 +41,35 @@ func TestContextHelpers(t *testing.T) {
 	}
 }
 
+func TestWithRolesCopiesInputSlice(t *testing.T) {
+	roles := []string{"admin", "user"}
+	ctx := WithRoles(context.Background(), roles)
+
+	roles[0] = "hacker"
+
+	got, ok := Roles(ctx)
+	if !ok {
+		t.Fatal("expected roles to exist")
+	}
+	if got[0] != "admin" {
+		t.Fatalf("expected copied roles to remain unchanged, got %v", got)
+	}
+}
+
+func TestRolesReturnsCopiedSlice(t *testing.T) {
+	ctx := WithRoles(context.Background(), []string{"admin", "user"})
+
+	got, ok := Roles(ctx)
+	if !ok {
+		t.Fatal("expected roles to exist")
+	}
+	got[0] = "hacker"
+
+	got2, ok := Roles(ctx)
+	if !ok {
+		t.Fatal("expected roles to exist")
+	}
+	if got2[0] != "admin" {
+		t.Fatalf("expected context roles to remain unchanged, got %v", got2)
+	}
+}
