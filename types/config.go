@@ -19,6 +19,9 @@ type AgentConfig struct {
 	// LLM configuration
 	LLM LLMConfig `json:"llm"`
 
+	// Runtime execution behavior configuration
+	Runtime RuntimeConfig `json:"runtime,omitempty"`
+
 	// Feature configurations (optional)
 	Features FeaturesConfig `json:"features,omitempty"`
 
@@ -49,6 +52,14 @@ type LLMConfig struct {
 	Stop        []string `json:"stop,omitempty"`
 }
 
+// RuntimeConfig contains runtime execution behavior options.
+type RuntimeConfig struct {
+	SystemPrompt       string   `json:"system_prompt,omitempty"`
+	Tools              []string `json:"tools,omitempty"`
+	MaxReActIterations int      `json:"max_react_iterations,omitempty"`
+	ToolModel          string   `json:"tool_model,omitempty"`
+}
+
 // FeaturesConfig contains optional feature configurations.
 // Each feature is enabled by providing its configuration (nil = disabled).
 type FeaturesConfig struct {
@@ -63,6 +74,7 @@ type FeaturesConfig struct {
 type ExtensionsConfig struct {
 	Skills        *SkillsConfig        `json:"skills,omitempty"`
 	MCP           *MCPConfig           `json:"mcp,omitempty"`
+	LSP           *LSPConfig           `json:"lsp,omitempty"`
 	Observability *ObservabilityConfig `json:"observability,omitempty"`
 }
 
@@ -127,6 +139,8 @@ type GuardrailsConfig struct {
 	PIIDetection       bool     `json:"pii_detection,omitempty"`
 	InjectionDetection bool     `json:"injection_detection,omitempty"`
 	MaxRetries         int      `json:"max_retries,omitempty"`
+	OnInputFailure     string   `json:"on_input_failure,omitempty"`
+	OnOutputFailure    string   `json:"on_output_failure,omitempty"`
 }
 
 // DefaultGuardrailsConfig returns sensible defaults.
@@ -182,6 +196,11 @@ type MCPConfig struct {
 	Timeout   time.Duration `json:"timeout,omitempty"`
 }
 
+// LSPConfig configures Language Server Protocol integration.
+type LSPConfig struct {
+	Enabled bool `json:"enabled"`
+}
+
 // ObservabilityConfig configures metrics, tracing, and logging.
 type ObservabilityConfig struct {
 	Enabled        bool   `json:"enabled"`
@@ -235,6 +254,11 @@ func (c *AgentConfig) IsMCPEnabled() bool {
 	return c.Extensions.MCP != nil && c.Extensions.MCP.Enabled
 }
 
+// IsLSPEnabled checks if LSP is enabled.
+func (c *AgentConfig) IsLSPEnabled() bool {
+	return c.Extensions.LSP != nil && c.Extensions.LSP.Enabled
+}
+
 // IsObservabilityEnabled checks if observability is enabled.
 func (c *AgentConfig) IsObservabilityEnabled() bool {
 	return c.Extensions.Observability != nil && c.Extensions.Observability.Enabled
@@ -253,4 +277,3 @@ func (c *AgentConfig) Validate() error {
 	}
 	return nil
 }
-

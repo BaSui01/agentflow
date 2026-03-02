@@ -3,6 +3,7 @@ package agent
 import (
 	"testing"
 
+	"github.com/BaSui01/agentflow/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
@@ -17,7 +18,7 @@ func TestAgentBuilder_Validate(t *testing.T) {
 		{
 			name: "missing ID",
 			setup: func() *AgentBuilder {
-				return NewAgentBuilder(Config{Name: "test", Model: "gpt-4"}).
+				return NewAgentBuilder(testAgentConfig("", "test", "gpt-4")).
 					WithProvider(&testProvider{name: "test"})
 			},
 			wantErr: "config.ID is required",
@@ -25,7 +26,7 @@ func TestAgentBuilder_Validate(t *testing.T) {
 		{
 			name: "missing name",
 			setup: func() *AgentBuilder {
-				return NewAgentBuilder(Config{ID: "a1", Model: "gpt-4"}).
+				return NewAgentBuilder(testAgentConfig("a1", "", "gpt-4")).
 					WithProvider(&testProvider{name: "test"})
 			},
 			wantErr: "config.Name is required",
@@ -33,7 +34,7 @@ func TestAgentBuilder_Validate(t *testing.T) {
 		{
 			name: "missing model",
 			setup: func() *AgentBuilder {
-				return NewAgentBuilder(Config{ID: "a1", Name: "test"}).
+				return NewAgentBuilder(testAgentConfig("a1", "test", "")).
 					WithProvider(&testProvider{name: "test"})
 			},
 			wantErr: "model is required",
@@ -41,14 +42,14 @@ func TestAgentBuilder_Validate(t *testing.T) {
 		{
 			name: "missing provider",
 			setup: func() *AgentBuilder {
-				return NewAgentBuilder(Config{ID: "a1", Name: "test", Model: "gpt-4"})
+				return NewAgentBuilder(testAgentConfig("a1", "test", "gpt-4"))
 			},
 			wantErr: "provider is required",
 		},
 		{
 			name: "valid config",
 			setup: func() *AgentBuilder {
-				return NewAgentBuilder(Config{ID: "a1", Name: "test", Model: "gpt-4"}).
+				return NewAgentBuilder(testAgentConfig("a1", "test", "gpt-4")).
 					WithProvider(&testProvider{name: "test"})
 			},
 		},
@@ -68,101 +69,93 @@ func TestAgentBuilder_Validate(t *testing.T) {
 }
 
 func TestAgentBuilder_WithMaxReActIterations(t *testing.T) {
-	b := NewAgentBuilder(Config{ID: "a1", Name: "test", Model: "gpt-4"}).
+	b := NewAgentBuilder(testAgentConfig("a1", "test", "gpt-4")).
 		WithProvider(&testProvider{name: "test"}).
 		WithMaxReActIterations(5)
-	assert.Equal(t, 5, b.config.MaxReActIterations)
+	assert.Equal(t, 5, b.config.Runtime.MaxReActIterations)
 
 	// Zero or negative should be ignored
-	b2 := NewAgentBuilder(Config{ID: "a1", Name: "test", Model: "gpt-4"}).
+	b2 := NewAgentBuilder(testAgentConfig("a1", "test", "gpt-4")).
 		WithMaxReActIterations(0)
-	assert.Equal(t, 0, b2.config.MaxReActIterations)
+	assert.Equal(t, 0, b2.config.Runtime.MaxReActIterations)
 
-	b3 := NewAgentBuilder(Config{ID: "a1", Name: "test", Model: "gpt-4"}).
+	b3 := NewAgentBuilder(testAgentConfig("a1", "test", "gpt-4")).
 		WithMaxReActIterations(-1)
-	assert.Equal(t, 0, b3.config.MaxReActIterations)
+	assert.Equal(t, 0, b3.config.Runtime.MaxReActIterations)
 }
 
 func TestAgentBuilder_WithMemory(t *testing.T) {
 	mem := &testMemoryManager{}
-	b := NewAgentBuilder(Config{}).WithMemory(mem)
+	b := NewAgentBuilder(types.AgentConfig{}).WithMemory(mem)
 	assert.Equal(t, mem, b.memory)
 }
 
 func TestAgentBuilder_WithToolManager(t *testing.T) {
 	tm := &testToolManager{}
-	b := NewAgentBuilder(Config{}).WithToolManager(tm)
+	b := NewAgentBuilder(types.AgentConfig{}).WithToolManager(tm)
 	assert.Equal(t, tm, b.toolManager)
 }
 
 func TestAgentBuilder_WithEventBus(t *testing.T) {
 	bus := NewEventBus(zap.NewNop())
 	t.Cleanup(func() { bus.Stop() })
-	b := NewAgentBuilder(Config{}).WithEventBus(bus)
+	b := NewAgentBuilder(types.AgentConfig{}).WithEventBus(bus)
 	assert.Equal(t, bus, b.bus)
 }
 
 func TestAgentBuilder_WithReflection(t *testing.T) {
-	b := NewAgentBuilder(Config{}).WithReflection(nil)
-	assert.True(t, b.config.EnableReflection)
+	b := NewAgentBuilder(types.AgentConfig{}).WithReflection(nil)
+	assert.True(t, isReflectionEnabled(b.config))
 	assert.NotNil(t, b.reflectionConfig)
 }
 
 func TestAgentBuilder_WithToolSelection(t *testing.T) {
-	b := NewAgentBuilder(Config{}).WithToolSelection(nil)
-	assert.True(t, b.config.EnableToolSelection)
+	b := NewAgentBuilder(types.AgentConfig{}).WithToolSelection(nil)
+	assert.True(t, isToolSelectionEnabled(b.config))
 	assert.NotNil(t, b.toolSelectionConfig)
 }
 
 func TestAgentBuilder_WithPromptEnhancer(t *testing.T) {
-	b := NewAgentBuilder(Config{}).WithPromptEnhancer(nil)
-	assert.True(t, b.config.EnablePromptEnhancer)
+	b := NewAgentBuilder(types.AgentConfig{}).WithPromptEnhancer(nil)
+	assert.True(t, isPromptEnhancerEnabled(b.config))
 	assert.NotNil(t, b.promptEnhancerConfig)
 }
 
 func TestAgentBuilder_WithMCP(t *testing.T) {
-	b := NewAgentBuilder(Config{}).WithMCP(nil)
-	assert.True(t, b.config.EnableMCP)
+	b := NewAgentBuilder(types.AgentConfig{}).WithMCP(nil)
+	assert.True(t, isMCPEnabled(b.config))
 }
 
 func TestAgentBuilder_WithLSP(t *testing.T) {
-	b := NewAgentBuilder(Config{}).WithLSP(nil)
-	assert.True(t, b.config.EnableLSP)
+	b := NewAgentBuilder(types.AgentConfig{}).WithLSP(nil)
+	assert.True(t, isLSPEnabled(b.config))
 }
 
 func TestAgentBuilder_WithEnhancedMemory(t *testing.T) {
-	b := NewAgentBuilder(Config{}).WithEnhancedMemory(nil)
-	assert.True(t, b.config.EnableEnhancedMemory)
+	b := NewAgentBuilder(types.AgentConfig{}).WithEnhancedMemory(nil)
+	assert.True(t, isEnhancedMemoryEnabled(b.config))
 }
 
 func TestAgentBuilder_WithObservability(t *testing.T) {
-	b := NewAgentBuilder(Config{}).WithObservability(nil)
-	assert.True(t, b.config.EnableObservability)
+	b := NewAgentBuilder(types.AgentConfig{}).WithObservability(nil)
+	assert.True(t, isObservabilityEnabled(b.config))
 }
 
 func TestAgentBuilder_Build_NilProvider(t *testing.T) {
-	_, err := NewAgentBuilder(Config{
-		ID:    "a1",
-		Name:  "test",
-		Model: "gpt-4",
-	}).Build()
+	_, err := NewAgentBuilder(testAgentConfig("a1", "test", "gpt-4")).Build()
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "provider is required")
 }
 
 func TestAgentBuilder_Build_WithErrors(t *testing.T) {
-	b := NewAgentBuilder(Config{}).WithProvider(nil)
+	b := NewAgentBuilder(types.AgentConfig{}).WithProvider(nil)
 	_, err := b.Build()
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "builder has")
 }
 
 func TestAgentBuilder_Build_Success(t *testing.T) {
-	agent, err := NewAgentBuilder(Config{
-		ID:    "a1",
-		Name:  "test",
-		Model: "gpt-4",
-	}).
+	agent, err := NewAgentBuilder(testAgentConfig("a1", "test", "gpt-4")).
 		WithProvider(&testProvider{name: "test"}).
 		WithLogger(zap.NewNop()).
 		Build()
@@ -173,22 +166,35 @@ func TestAgentBuilder_Build_Success(t *testing.T) {
 }
 
 func TestAgentBuilder_WithDefaultMCPServer(t *testing.T) {
-	b := NewAgentBuilder(Config{}).WithDefaultMCPServer("", "")
-	assert.True(t, b.config.EnableMCP)
+	b := NewAgentBuilder(types.AgentConfig{}).WithDefaultMCPServer("", "")
+	assert.True(t, isMCPEnabled(b.config))
 	assert.NotNil(t, b.mcpInstance)
 }
 
 func TestAgentBuilder_WithDefaultEnhancedMemory(t *testing.T) {
-	b := NewAgentBuilder(Config{}).WithDefaultEnhancedMemory(nil)
-	assert.True(t, b.config.EnableEnhancedMemory)
+	b := NewAgentBuilder(types.AgentConfig{}).WithDefaultEnhancedMemory(nil)
+	assert.True(t, isEnhancedMemoryEnabled(b.config))
 	assert.NotNil(t, b.enhancedMemoryInstance)
 }
 
 func TestAgentBuilder_Validate_WithBuilderErrors(t *testing.T) {
-	b := NewAgentBuilder(Config{ID: "a1", Name: "test", Model: "gpt-4"}).
+	b := NewAgentBuilder(testAgentConfig("a1", "test", "gpt-4")).
 		WithProvider(nil) // This adds an error
 	err := b.Validate()
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "builder has")
+}
+
+func testAgentConfig(id, name, model string) types.AgentConfig {
+	return types.AgentConfig{
+		Core: types.CoreConfig{
+			ID:   id,
+			Name: name,
+			Type: string(TypeGeneric),
+		},
+		LLM: types.LLMConfig{
+			Model: model,
+		},
+	}
 }
 

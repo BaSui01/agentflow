@@ -8,6 +8,7 @@ import (
 	"github.com/BaSui01/agentflow/agent/collaboration"
 	"github.com/BaSui01/agentflow/agent/hierarchical"
 	"github.com/BaSui01/agentflow/agent/observability"
+	"github.com/BaSui01/agentflow/types"
 	"go.uber.org/zap"
 )
 
@@ -33,13 +34,17 @@ func main() {
 func demoHierarchicalArchitecture(logger *zap.Logger) {
 	// 1. 创建 Supervisor Agent
 	fmt.Println("1. 创建 Supervisor Agent")
-	supervisorConfig := agent.Config{
-		ID:          "supervisor",
-		Name:        "Supervisor Agent",
-		Type:        agent.TypeGeneric,
-		Model:       "gpt-4",
-		MaxTokens:   2000,
-		Temperature: 0.7,
+	supervisorConfig := types.AgentConfig{
+		Core: types.CoreConfig{
+			ID:   "supervisor",
+			Name: "Supervisor Agent",
+			Type: string(agent.TypeGeneric),
+		},
+		LLM: types.LLMConfig{
+			Model:       "gpt-4",
+			MaxTokens:   2000,
+			Temperature: 0.7,
+		},
 	}
 
 	// 注意：实际使用时需要提供真实的 LLM provider，此处传 nil 仅演示结构
@@ -50,13 +55,17 @@ func demoHierarchicalArchitecture(logger *zap.Logger) {
 	workers := []agent.Agent{}
 
 	for i := 1; i <= 3; i++ {
-		workerConfig := agent.Config{
-			ID:          fmt.Sprintf("worker-%d", i),
-			Name:        fmt.Sprintf("Worker Agent %d", i),
-			Type:        agent.TypeGeneric,
-			Model:       "gpt-3.5-turbo",
-			MaxTokens:   1000,
-			Temperature: 0.7,
+		workerConfig := types.AgentConfig{
+			Core: types.CoreConfig{
+				ID:   fmt.Sprintf("worker-%d", i),
+				Name: fmt.Sprintf("Worker Agent %d", i),
+				Type: string(agent.TypeGeneric),
+			},
+			LLM: types.LLMConfig{
+				Model:       "gpt-3.5-turbo",
+				MaxTokens:   1000,
+				Temperature: 0.7,
+			},
 		}
 		worker := agent.NewBaseAgent(workerConfig, nil, nil, nil, nil, logger)
 		workers = append(workers, worker)
@@ -102,13 +111,17 @@ func demoMultiAgentCollaboration(logger *zap.Logger) {
 
 	agentRoles := []string{"Analyst", "Critic", "Synthesizer"}
 	for i, role := range agentRoles {
-		config := agent.Config{
-			ID:          fmt.Sprintf("agent-%d", i+1),
-			Name:        fmt.Sprintf("%s Agent", role),
-			Type:        agent.TypeGeneric,
-			Model:       "gpt-4",
-			MaxTokens:   1500,
-			Temperature: 0.7,
+		config := types.AgentConfig{
+			Core: types.CoreConfig{
+				ID:   fmt.Sprintf("agent-%d", i+1),
+				Name: fmt.Sprintf("%s Agent", role),
+				Type: string(agent.TypeGeneric),
+			},
+			LLM: types.LLMConfig{
+				Model:       "gpt-4",
+				MaxTokens:   1500,
+				Temperature: 0.7,
+			},
 		}
 		a := agent.NewBaseAgent(config, nil, nil, nil, nil, logger)
 		agents = append(agents, a)
@@ -245,4 +258,3 @@ func demoObservabilitySystem(logger *zap.Logger) {
 			agentID, m.TotalTasks, m.TaskSuccessRate*100, m.AvgLatency)
 	}
 }
-

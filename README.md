@@ -230,7 +230,7 @@ func main() {
         panic(err)
     }
 
-    factory := llm.NewDefaultProviderFactory()
+    factory := llmrouter.NewDefaultProviderFactory()
     factory.RegisterProvider("openai", func(apiKey, baseURL string) (llm.Provider, error) {
         return openaiprov.NewOpenAIProvider(providers.OpenAIConfig{
             BaseProviderConfig: providers.BaseProviderConfig{
@@ -240,12 +240,12 @@ func main() {
         }, logger), nil
     })
 
-    router := llm.NewMultiProviderRouter(db, factory, llm.RouterOptions{Logger: logger})
+    router := llmrouter.NewMultiProviderRouter(db, factory, llmrouter.RouterOptions{Logger: logger})
     if err := router.InitAPIKeyPools(ctx); err != nil {
         panic(err)
     }
 
-    selection, err := router.SelectProviderWithModel(ctx, "gpt-4o", llm.StrategyCostBased)
+    selection, err := router.SelectProviderWithModel(ctx, "gpt-4o", llmrouter.StrategyCostBased)
     if err != nil {
         panic(err)
     }
@@ -290,14 +290,16 @@ if err != nil {
 fmt.Println("LSP enabled:", ag.GetFeatureStatus()["lsp"])
 ```
 
-也可以通过 `runtime.BuildAgent` 一键开关：
+也可以通过 `runtime.Builder` 一键开关：
 
 ```go
 opts := runtime.DefaultBuildOptions()
 opts.EnableAll = false
 opts.EnableLSP = true
 
-ag, err := runtime.BuildAgent(ctx, cfg, provider, logger, opts)
+ag, err := runtime.NewBuilder(provider, logger).
+    WithOptions(opts).
+    Build(ctx, cfg)
 if err != nil {
     panic(err)
 }

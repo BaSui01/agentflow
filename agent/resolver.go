@@ -6,6 +6,7 @@ import (
 	"sync"
 
 	"github.com/BaSui01/agentflow/llm"
+	"github.com/BaSui01/agentflow/types"
 	"go.uber.org/zap"
 	"golang.org/x/sync/singleflight"
 )
@@ -77,10 +78,12 @@ func (r *CachingResolver) Resolve(ctx context.Context, agentID string) (Agent, e
 			return cached, nil
 		}
 
-		cfg := Config{
-			ID:   agentID,
-			Name: agentID,
-			Type: TypeGeneric,
+		cfg := types.AgentConfig{
+			Core: types.CoreConfig{
+				ID:   agentID,
+				Name: agentID,
+				Type: string(TypeGeneric),
+			},
 		}
 		ag, err := r.registry.Create(cfg, r.provider, r.memory, nil, nil, r.logger)
 		if err != nil {
@@ -121,4 +124,3 @@ func (r *CachingResolver) TeardownAll(ctx context.Context) {
 		return true
 	})
 }
-

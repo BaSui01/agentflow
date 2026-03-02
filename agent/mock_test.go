@@ -1,8 +1,8 @@
 package agent
 
 import (
-	"github.com/BaSui01/agentflow/types"
 	"context"
+	"github.com/BaSui01/agentflow/types"
 	"sync"
 
 	"github.com/BaSui01/agentflow/llm"
@@ -123,6 +123,21 @@ type testEventBus struct {
 	mu            sync.Mutex
 }
 
+// testContextManager implements ContextManager for testing.
+type testContextManager struct{}
+
+func (m *testContextManager) PrepareMessages(ctx context.Context, messages []types.Message, currentQuery string) ([]types.Message, error) {
+	return messages, nil
+}
+
+func (m *testContextManager) GetStatus(messages []types.Message) any {
+	return map[string]any{"enabled": true}
+}
+
+func (m *testContextManager) EstimateTokens(messages []types.Message) int {
+	return len(messages) * 10
+}
+
 func (b *testEventBus) Publish(event Event) {
 	b.mu.Lock()
 	b.published = append(b.published, event)
@@ -147,5 +162,3 @@ func (b *testEventBus) Stop() {
 		b.stopFn()
 	}
 }
-
-

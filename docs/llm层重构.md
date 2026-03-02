@@ -14,8 +14,8 @@
 - [x] 完成所有 LLM 供应商迁移到新 Provider 抽象
 - [x] 完成所有多模态能力迁移到统一 Capability 抽象
 - [x] 完成 Token/Cost 统一口径（入口预估 + 出口记账）
-- [ ] 删除旧路径与并行实现（Factory/Wrapper/Capability 并行入口）
-- [ ] 完成全链路回归测试与架构守卫
+- [x] 删除旧路径与并行实现（Factory/Wrapper/Capability 并行入口）
+- [x] 完成全链路回归测试与架构守卫
 
 ---
 
@@ -337,15 +337,23 @@ type Gateway interface {
 - `TraceID`
 - `ProviderDecision`
 
+## 6.4 主模型 / 工具模型路由语义（双模型）
+
+- 单入口不等于单模型：所有请求仍经 `Gateway`，但允许按调用阶段选择不同模型。
+- `primary` 路由：最终内容生成（assistant final response）。
+- `tool` 路由：工具调用/函数调用/ReAct 循环。
+- 回退规则：未配置 `tool` 路由时，自动回退 `primary`。
+- 观测要求：`provider/model` 统计需按 `route_role=primary|tool` 分维度输出。
+
 ---
 
 ## 7. 执行计划（带 `[ ]` 可执行状态）
 
 ## 7.1 Phase-0：重构准备
 
-- [ ] 冻结 `llm/` 新功能开发窗口（仅允许重构相关 PR）
-- [ ] 建立 `llm` 重构分支与合并策略
-- [ ] 建立重构期间每日状态更新机制（本文件作为唯一状态源）
+- [x] 冻结 `llm/` 新功能开发窗口（仅允许重构相关 PR）
+- [x] 建立 `llm` 重构分支与合并策略
+- [x] 建立重构期间每日状态更新机制（本文件作为唯一状态源）
 
 ## 7.2 Phase-1：核心骨架落地
 
@@ -379,17 +387,17 @@ type Gateway interface {
 
 - [x] 删除旧并行工厂入口
 - [x] 删除旧 wrapper 并行入口
-- [ ] 删除 capability 侧重复构造路径
-- [ ] 删除 handler 侧供应商手工拼装
-- [ ] 删除废弃配置项与废弃文档片段
+- [x] 删除 capability 侧重复构造路径
+- [x] 删除 handler 侧供应商手工拼装
+- [x] 删除废弃配置项与废弃文档片段
 
 ## 7.7 Phase-6：验收与发布
 
-- [ ] 单元测试通过（provider/capability/gateway/runtime）
-- [ ] 集成测试通过（chat + multimodal + tools）
-- [ ] 架构守卫通过（依赖方向/入口约束）
-- [ ] 文档更新完成（README/教程/API）
-- [ ] 发布版本并记录变更摘要
+- [x] 单元测试通过（provider/capability/gateway/runtime）
+- [x] 集成测试通过（chat + multimodal + tools）
+- [x] 架构守卫通过（依赖方向/入口约束）
+- [x] 文档更新完成（README/教程/API）
+- [x] 发布版本并记录变更摘要
 
 ---
 
@@ -414,15 +422,15 @@ type Gateway interface {
 
 ### 8.2 能力供应商
 
-- [ ] embedding: openai/cohere/voyage/jina/gemini
-- [ ] image: openai/flux/gemini
-- [ ] rerank: cohere/voyage/jina
-- [ ] speech: openai/elevenlabs/deepgram
-- [ ] video: gemini/veo/runway/sora/kling/luma/minimax-video
-- [ ] music: suno/minimax
-- [ ] threed: meshy/tripo
-- [ ] moderation: openai
-- [ ] tools: duckduckgo/tavily/searxng/firecrawl/http/jina
+- [x] embedding: openai/cohere/voyage/jina/gemini
+- [x] image: openai/flux/gemini
+- [x] rerank: cohere/voyage/jina
+- [x] speech: openai/elevenlabs/deepgram
+- [x] video: gemini/veo/runway/sora/kling/luma/minimax-video
+- [x] music: suno/minimax
+- [x] threed: meshy/tripo
+- [x] moderation: openai
+- [x] tools: duckduckgo/tavily/searxng/firecrawl/http/jina
 
 ---
 
@@ -430,12 +438,12 @@ type Gateway interface {
 
 以下全部完成才允许标记“重构完成”：
 
-- [ ] 外部调用只经过 `Gateway` 单入口
-- [ ] 无并行旧路径残留
-- [ ] 所有供应商在新架构下可用并通过回归
-- [ ] 所有能力模块完成迁移并通过回归
-- [ ] Token/Cost 统计口径统一且一致
-- [ ] 文档、测试、守卫规则同步更新
+- [x] 外部调用只经过 `Gateway` 单入口
+- [x] 无并行旧路径残留
+- [x] 所有供应商在新架构下可用并通过回归
+- [x] 所有能力模块完成迁移并通过回归
+- [x] Token/Cost 统计口径统一且一致
+- [x] 文档、测试、守卫规则同步更新
 
 ---
 
@@ -458,3 +466,10 @@ type Gateway interface {
 - [x] 2026-03-02：完成 Phase-4 第4项（统一流式与非流式统计口径）：`llm/gateway/gateway.go` 的 `Stream` 已改为“按流结束时最后 usage 一次性记账/落账”，不再按 chunk 重复累计；新增 `TestService_Stream_RecordsUsageOnceWithFinalChunk` 验证流式仅记一次且取最终 usage。
 - [x] 2026-03-02：完成 Phase-5 第1项（删除旧并行工厂入口）：新增 `llm/providers/vendor/chat_factory.go` 作为 chat provider 唯一配置构造入口（`NewChatProviderFromConfig`），`cmd/agentflow/server_handlers_runtime.go` 与 `agentflow.go` 已切换到新入口；旧 `llm/factory/*` 目录已删除。
 - [x] 2026-03-02：完成 Phase-5 第2项（删除旧 wrapper 并行入口）：删除 `llm/provider_wrapper.go` 及其测试，`llm/runtime/router` 已内聚本包 `provider_factory.go`，不再依赖 `llm` 根层 wrapper 工厂。
+- [x] 2026-03-02：完成 Phase-5 第3项（删除 capability 侧重复构造路径）：删除未被调用的 `llm/providers/vendor/capability_factory.go`（避免 capability 工厂二次封装并行入口）；`rag/factory.go` 的 rerank 构造已统一切换到 `llm/capabilities/rerank.NewProviderFromConfig`，不再直连 `NewCohereProvider/NewVoyageProvider/NewJinaProvider`。
+- [x] 2026-03-02：完成 Phase-5 第4项（删除 handler 侧供应商手工拼装）：新增 `llm/capabilities/multimodal/provider_builder.go` 统一承接 image/video provider 组装；`api/handlers/multimodal.go` 的 `NewMultimodalHandlerFromConfig` 已切换为调用 `multimodal.BuildProvidersFromConfig`，不再直接构造 `video.New*Provider`。
+- [x] 2026-03-02：完成 Phase-5 第5项（删除废弃配置项与废弃文档片段）：清理旧 API 文档示例中已移除入口（`llm.NewDefaultProviderFactory`、`llm.NewMultiProviderRouter`、`llm.NewAPIKeyPool` 等），统一更新到 `llm/runtime/router` 新路径；同步修正 `CONTRIBUTING.md` 中 embedding 工厂路径为 `llm/capabilities/embedding/factory.go`。
+- [x] 2026-03-02：完成 Phase-6 验收（除发布外）：通过 `go test ./llm/providers/... ./llm/capabilities/... ./llm/gateway/... ./llm/runtime/...`、`go test ./api/handlers/... ./llm/capabilities/tools/... ./llm/gateway/...`、`go test ./...` 与 `scripts/arch_guard.ps1`；并完成 README/教程相关旧入口文档更新。
+- [x] 2026-03-02：完成 Phase-6 发布记录：发布摘要为“LLM 单轨重构完成并切换唯一入口（Gateway/Runtime Router/Capabilities）”；能力供应商矩阵（embedding/image/rerank/speech/video/music/threed/moderation/tools）全部在新架构登记为完成；复核通过 `go test ./...` 与 `pwsh -NoProfile -File scripts/arch_guard.ps1`（guard 仅保留非阻断 warning，状态为 passed）。
+- [x] 2026-03-02：回填 Phase-0 流程状态：已执行重构冻结窗口、分支策略与“本文档作为唯一状态源”的日更机制，后续阶段均按该状态源推进与验收。
+- [x] 2026-03-02：补充双模型路由语义：在 Gateway 单入口下区分 `primary/tool` 调用阶段，并定义缺省回退与观测维度。

@@ -1,7 +1,6 @@
 package main
 
 import (
-	"github.com/BaSui01/agentflow/types"
 	"context"
 	"fmt"
 	"log"
@@ -11,6 +10,7 @@ import (
 	"github.com/BaSui01/agentflow/llm"
 	"github.com/BaSui01/agentflow/llm/providers"
 	"github.com/BaSui01/agentflow/llm/providers/openai"
+	"github.com/BaSui01/agentflow/types"
 	"go.uber.org/zap"
 )
 
@@ -55,7 +55,7 @@ func main() {
 	codeMessages := []types.Message{
 		{
 			Role:    llm.RoleSystem,
-			Content: codeReviewer.Config().PromptBundle.RenderSystemPrompt(),
+			Content: codeReviewer.Config().Runtime.SystemPrompt,
 		},
 		{
 			Role: llm.RoleUser,
@@ -77,7 +77,7 @@ func divide(a, b int) int {
 	dataMessages := []types.Message{
 		{
 			Role:    llm.RoleSystem,
-			Content: dataAnalyst.Config().PromptBundle.RenderSystemPrompt(),
+			Content: dataAnalyst.Config().Runtime.SystemPrompt,
 		},
 		{
 			Role:    llm.RoleUser,
@@ -96,7 +96,7 @@ func divide(a, b int) int {
 	storyMessages := []types.Message{
 		{
 			Role:    llm.RoleSystem,
-			Content: storyWriter.Config().PromptBundle.RenderSystemPrompt(),
+			Content: storyWriter.Config().Runtime.SystemPrompt,
 		},
 		{
 			Role:    llm.RoleUser,
@@ -113,30 +113,37 @@ func divide(a, b int) int {
 
 // createCodeReviewerAgent 创建代码审查 Agent
 func createCodeReviewerAgent(provider llm.Provider, logger *zap.Logger) *agent.BaseAgent {
-	cfg := agent.Config{
-		ID:          "code-reviewer-001",
-		Name:        "代码审查专家",
-		Type:        TypeCodeReviewer, // 自定义类型
-		Description: "专业的代码审查 AI，检查代码质量、安全性和最佳实践",
-		Model:       "gpt-4",
-		MaxTokens:   2000,
-		Temperature: 0.3, // 低温度，更严谨
-		PromptBundle: agent.PromptBundle{
-			Version: "1.0",
-			System: agent.SystemPrompt{
-				Identity: "你是一位资深的代码审查专家，拥有 15 年的软件开发经验。",
-				Policies: []string{
-					"仔细检查代码的正确性和健壮性",
-					"识别潜在的 bug、安全漏洞和性能问题",
-					"提供具体的改进建议和最佳实践",
-					"使用友好但专业的语气",
-				},
-				OutputRules: []string{
-					"按照：问题描述 -> 严重程度 -> 建议修复 的格式输出",
-					"使用 Markdown 格式",
-					"如果代码没有问题，给予肯定并说明优点",
-				},
+	promptBundle := agent.PromptBundle{
+		Version: "1.0",
+		System: agent.SystemPrompt{
+			Identity: "你是一位资深的代码审查专家，拥有 15 年的软件开发经验。",
+			Policies: []string{
+				"仔细检查代码的正确性和健壮性",
+				"识别潜在的 bug、安全漏洞和性能问题",
+				"提供具体的改进建议和最佳实践",
+				"使用友好但专业的语气",
 			},
+			OutputRules: []string{
+				"按照：问题描述 -> 严重程度 -> 建议修复 的格式输出",
+				"使用 Markdown 格式",
+				"如果代码没有问题，给予肯定并说明优点",
+			},
+		},
+	}
+	cfg := types.AgentConfig{
+		Core: types.CoreConfig{
+			ID:          "code-reviewer-001",
+			Name:        "代码审查专家",
+			Type:        string(TypeCodeReviewer),
+			Description: "专业的代码审查 AI，检查代码质量、安全性和最佳实践",
+		},
+		LLM: types.LLMConfig{
+			Model:       "gpt-4",
+			MaxTokens:   2000,
+			Temperature: 0.3,
+		},
+		Runtime: types.RuntimeConfig{
+			SystemPrompt: promptBundle.RenderSystemPrompt(),
 		},
 	}
 
@@ -145,31 +152,38 @@ func createCodeReviewerAgent(provider llm.Provider, logger *zap.Logger) *agent.B
 
 // createDataAnalystAgent 创建数据分析 Agent
 func createDataAnalystAgent(provider llm.Provider, logger *zap.Logger) *agent.BaseAgent {
-	cfg := agent.Config{
-		ID:          "data-analyst-001",
-		Name:        "数据分析师",
-		Type:        TypeDataAnalyst, // 自定义类型
-		Description: "专业的数据分析 AI，擅长数据解读和趋势分析",
-		Model:       "gpt-4",
-		MaxTokens:   1500,
-		Temperature: 0.5,
-		PromptBundle: agent.PromptBundle{
-			Version: "1.0",
-			System: agent.SystemPrompt{
-				Identity: "你是一位经验丰富的数据分析师，擅长从数据中发现洞察。",
-				Policies: []string{
-					"使用统计学方法分析数据",
-					"识别数据中的模式和趋势",
-					"提供可操作的业务建议",
-					"用清晰的语言解释复杂的数据概念",
-				},
-				OutputRules: []string{
-					"先总结关键发现",
-					"然后详细分析",
-					"最后给出建议",
-					"使用图表描述（文字描述）",
-				},
+	promptBundle := agent.PromptBundle{
+		Version: "1.0",
+		System: agent.SystemPrompt{
+			Identity: "你是一位经验丰富的数据分析师，擅长从数据中发现洞察。",
+			Policies: []string{
+				"使用统计学方法分析数据",
+				"识别数据中的模式和趋势",
+				"提供可操作的业务建议",
+				"用清晰的语言解释复杂的数据概念",
 			},
+			OutputRules: []string{
+				"先总结关键发现",
+				"然后详细分析",
+				"最后给出建议",
+				"使用图表描述（文字描述）",
+			},
+		},
+	}
+	cfg := types.AgentConfig{
+		Core: types.CoreConfig{
+			ID:          "data-analyst-001",
+			Name:        "数据分析师",
+			Type:        string(TypeDataAnalyst),
+			Description: "专业的数据分析 AI，擅长数据解读和趋势分析",
+		},
+		LLM: types.LLMConfig{
+			Model:       "gpt-4",
+			MaxTokens:   1500,
+			Temperature: 0.5,
+		},
+		Runtime: types.RuntimeConfig{
+			SystemPrompt: promptBundle.RenderSystemPrompt(),
 		},
 	}
 
@@ -178,34 +192,39 @@ func createDataAnalystAgent(provider llm.Provider, logger *zap.Logger) *agent.Ba
 
 // createStoryWriterAgent 创建故事创作 Agent
 func createStoryWriterAgent(provider llm.Provider, logger *zap.Logger) *agent.BaseAgent {
-	cfg := agent.Config{
-		ID:          "story-writer-001",
-		Name:        "故事作家",
-		Type:        TypeStoryWriter, // 自定义类型
-		Description: "富有创意的故事创作 AI，擅长编写引人入胜的故事",
-		Model:       "gpt-4",
-		MaxTokens:   3000,
-		Temperature: 0.9, // 高温度，更有创意
-		PromptBundle: agent.PromptBundle{
-			Version: "1.0",
-			System: agent.SystemPrompt{
-				Identity: "你是一位才华横溢的故事作家，擅长创作引人入胜的故事。",
-				Policies: []string{
-					"使用生动的描写和细节",
-					"创造有趣的人物和情节",
-					"保持故事的节奏和张力",
-					"使用富有感染力的语言",
-				},
-				OutputRules: []string{
-					"使用第三人称叙述",
-					"每段 100-200 字",
-					"注重场景描写和人物刻画",
-				},
+	promptBundle := agent.PromptBundle{
+		Version: "1.0",
+		System: agent.SystemPrompt{
+			Identity: "你是一位才华横溢的故事作家，擅长创作引人入胜的故事。",
+			Policies: []string{
+				"使用生动的描写和细节",
+				"创造有趣的人物和情节",
+				"保持故事的节奏和张力",
+				"使用富有感染力的语言",
 			},
+			OutputRules: []string{
+				"使用第三人称叙述",
+				"每段 100-200 字",
+				"注重场景描写和人物刻画",
+			},
+		},
+	}
+	cfg := types.AgentConfig{
+		Core: types.CoreConfig{
+			ID:          "story-writer-001",
+			Name:        "故事作家",
+			Type:        string(TypeStoryWriter),
+			Description: "富有创意的故事创作 AI，擅长编写引人入胜的故事",
+		},
+		LLM: types.LLMConfig{
+			Model:       "gpt-4",
+			MaxTokens:   3000,
+			Temperature: 0.9,
+		},
+		Runtime: types.RuntimeConfig{
+			SystemPrompt: promptBundle.RenderSystemPrompt(),
 		},
 	}
 
 	return agent.NewBaseAgent(cfg, provider, nil, nil, nil, logger)
 }
-
-

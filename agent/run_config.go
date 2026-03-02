@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/BaSui01/agentflow/llm"
+	"github.com/BaSui01/agentflow/types"
 )
 
 // runConfigKey is the unexported context key for RunConfig.
@@ -41,7 +42,7 @@ func GetRunConfig(ctx context.Context) *RunConfig {
 // ApplyToRequest applies RunConfig overrides to a ChatRequest.
 // Fields in baseCfg are used as defaults; only non-nil RunConfig fields override them.
 // If rc is nil, this is a no-op.
-func (rc *RunConfig) ApplyToRequest(req *llm.ChatRequest, baseCfg Config) {
+func (rc *RunConfig) ApplyToRequest(req *llm.ChatRequest, baseCfg types.AgentConfig) {
 	if rc == nil || req == nil {
 		return
 	}
@@ -102,4 +103,3 @@ func IntPtr(i int) *int { return &i }
 
 // DurationPtr returns a pointer to the given time.Duration.
 func DurationPtr(d time.Duration) *time.Duration { return &d }
-

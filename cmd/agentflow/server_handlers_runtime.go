@@ -109,6 +109,7 @@ func (s *Server) initHandlers() error {
 			provider = llmmw.NewMiddlewareProvider(provider, chain)
 
 			s.provider = provider
+			s.toolProvider = s.buildToolProviderOrFallback(provider)
 			s.chatHandler = handlers.NewChatHandler(provider, policyManager, s.logger)
 			s.logger.Info("Chat handler initialized with middleware chain",
 				zap.String("provider", s.cfg.LLM.DefaultProvider))
@@ -240,6 +241,64 @@ func (s *Server) initHandlers() error {
 
 	s.logger.Info("Handlers initialized")
 	return nil
+}
+
+func (s *Server) buildToolProviderOrFallback(mainProvider llm.Provider) llm.Provider {
+	if mainProvider == nil {
+		return nil
+	}
+
+	toolProviderCode := strings.TrimSpace(firstNonEmpty(s.cfg.LLM.ToolProvider, s.cfg.LLM.DefaultProvider))
+	toolAPIKey := strings.TrimSpace(firstNonEmpty(s.cfg.LLM.ToolAPIKey, s.cfg.LLM.APIKey))
+	toolBaseURL := strings.TrimSpace(firstNonEmpty(s.cfg.LLM.ToolBaseURL, s.cfg.LLM.BaseURL))
+	toolTimeout := s.cfg.LLM.ToolTimeout
+	if toolTimeout <= 0 {
+		toolTimeout = s.cfg.LLM.Timeout
+	}
+
+	toolRetryPolicy := llmpolicy.DefaultRetryPolicy()
+	toolMaxRetries := s.cfg.LLM.ToolMaxRetries
+	if toolMaxRetries == 0 {
+		toolMaxRetries = s.cfg.LLM.MaxRetries
+	}
+	if toolMaxRetries >= 0 {
+		toolRetryPolicy.MaxRetries = toolMaxRetries
+	}
+
+	toolCfgUnspecified := strings.TrimSpace(s.cfg.LLM.ToolProvider) == "" &&
+		strings.TrimSpace(s.cfg.LLM.ToolAPIKey) == "" &&
+		strings.TrimSpace(s.cfg.LLM.ToolBaseURL) == "" &&
+		s.cfg.LLM.ToolTimeout == 0 &&
+		s.cfg.LLM.ToolMaxRetries == 0
+	if toolCfgUnspecified {
+		s.logger.Info("Tool provider uses main provider (no explicit tool LLM config)")
+		return mainProvider
+	}
+
+	toolProvider, err := vendor.NewChatProviderFromConfig(toolProviderCode, vendor.ChatProviderConfig{
+		APIKey:  toolAPIKey,
+		BaseURL: toolBaseURL,
+		Timeout: toolTimeout,
+	}, s.logger)
+	if err != nil {
+		s.logger.Warn("Failed to create tool LLM provider, fallback to main provider",
+			zap.String("provider", toolProviderCode),
+			zap.Error(err))
+		return mainProvider
+	}
+
+	toolProvider = llm.NewResilientProvider(toolProvider, &llm.ResilientConfig{
+		RetryPolicy:       toolRetryPolicy,
+		CircuitBreaker:    llm.DefaultCircuitBreakerConfig(),
+		EnableIdempotency: true,
+		IdempotencyTTL:    time.Hour,
+	}, s.logger)
+
+	s.logger.Info("Tool LLM provider initialized",
+		zap.String("provider", toolProviderCode),
+		zap.Duration("timeout", toolTimeout),
+		zap.Int("max_retries", toolRetryPolicy.MaxRetries))
+	return toolProvider
 }
 
 func (s *Server) initRAGHandler() {

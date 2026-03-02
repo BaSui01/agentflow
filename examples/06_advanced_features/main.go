@@ -1,7 +1,6 @@
 package main
 
 import (
-	"github.com/BaSui01/agentflow/types"
 	"context"
 	"fmt"
 	"log"
@@ -12,6 +11,7 @@ import (
 	"github.com/BaSui01/agentflow/llm"
 	"github.com/BaSui01/agentflow/llm/providers"
 	"github.com/BaSui01/agentflow/llm/providers/openai"
+	"github.com/BaSui01/agentflow/types"
 	"go.uber.org/zap"
 )
 
@@ -61,17 +61,21 @@ func demoReflection(logger *zap.Logger) {
 	}
 
 	// Create Agent
-	config := agent.Config{
-		ID:          "reflection-agent",
-		Name:        "Reflection Agent",
-		Type:        agent.TypeAnalyzer,
-		Model:       "gpt-4",
-		MaxTokens:   2000,
-		Temperature: 0.7,
+	config := types.AgentConfig{
+		Core: types.CoreConfig{
+			ID:   "reflection-agent",
+			Name: "Reflection Agent",
+			Type: string(agent.TypeAnalyzer),
+		},
+		LLM: types.LLMConfig{
+			Model:       "gpt-4",
+			MaxTokens:   2000,
+			Temperature: 0.7,
+		},
 	}
 
 	// Create prompt bundle
-	config.PromptBundle = agent.PromptBundle{
+	promptBundle := agent.PromptBundle{
 		Version: "1.0",
 		System: agent.SystemPrompt{
 			Role:     "You are a professional content analysis expert",
@@ -81,6 +85,9 @@ func demoReflection(logger *zap.Logger) {
 				"Provide specific improvement suggestions",
 			},
 		},
+	}
+	config.Runtime = types.RuntimeConfig{
+		SystemPrompt: promptBundle.RenderSystemPrompt(),
 	}
 
 	baseAgent := agent.NewBaseAgent(config, provider, nil, nil, nil, logger)
@@ -130,13 +137,17 @@ func demoToolSelection(logger *zap.Logger) {
 	// (tool scoring is keyword-based and works without a provider)
 	provider := createProvider(logger)
 
-	config := agent.Config{
-		ID:          "tool-agent",
-		Name:        "Tool Selection Agent",
-		Type:        agent.TypeGeneric,
-		Model:       "gpt-4",
-		MaxTokens:   2000,
-		Temperature: 0.7,
+	config := types.AgentConfig{
+		Core: types.CoreConfig{
+			ID:   "tool-agent",
+			Name: "Tool Selection Agent",
+			Type: string(agent.TypeGeneric),
+		},
+		LLM: types.LLMConfig{
+			Model:       "gpt-4",
+			MaxTokens:   2000,
+			Temperature: 0.7,
+		},
 	}
 
 	baseAgent := agent.NewBaseAgent(config, provider, nil, nil, nil, logger)
@@ -322,5 +333,3 @@ func demoPromptEngineering(logger *zap.Logger) {
 	fmt.Println("\n渲染的 Bug 修复提示词:")
 	fmt.Println(bugFixPrompt)
 }
-
-

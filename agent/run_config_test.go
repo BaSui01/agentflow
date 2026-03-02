@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/BaSui01/agentflow/llm"
+	"github.com/BaSui01/agentflow/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -59,10 +60,13 @@ func TestRunConfig_GetRunConfig_NoConfig(t *testing.T) {
 }
 
 func TestRunConfig_ApplyToRequest(t *testing.T) {
-	baseCfg := Config{
-		Model:       "base-model",
-		MaxTokens:   1024,
-		Temperature: 0.5,
+	baseCfg := types.AgentConfig{
+		Core: types.CoreConfig{ID: "t", Name: "t", Type: string(TypeGeneric)},
+		LLM: types.LLMConfig{
+			Model:       "base-model",
+			MaxTokens:   1024,
+			Temperature: 0.5,
+		},
 	}
 
 	tests := []struct {
@@ -173,7 +177,7 @@ func TestRunConfig_ApplyToRequest_NilRequest(t *testing.T) {
 	rc := &RunConfig{Model: StringPtr("test")}
 	// Should not panic
 	assert.NotPanics(t, func() {
-		rc.ApplyToRequest(nil, Config{})
+		rc.ApplyToRequest(nil, types.AgentConfig{})
 	})
 }
 

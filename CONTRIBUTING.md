@@ -55,7 +55,7 @@ refactor(workflow): 重构 DAG 执行器
 
 ### Embedding Provider 统一入口约束
 
-- `llm/embedding/factory.go` 是 embedding provider 的唯一构造入口。
+- `llm/capabilities/embedding/factory.go` 是 embedding provider 的唯一构造入口。
 - 新增或修改 embedding provider 时，必须在 `NewProviderFromConfig` 的 `switch` 中注册，禁止新增并行构造路径。
 - 上层模块（如 `rag`、`cmd`）不得直接依赖具体 provider 构造函数（例如 `embedding.NewOpenAIProvider`），必须经由统一工厂入口。
 - 对统一入口相关改动，必须补充回归测试，至少覆盖：

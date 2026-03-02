@@ -59,6 +59,8 @@ type Server struct {
 	tenantRateLimiterCancel context.CancelFunc
 
 	provider llm.Provider
+	// toolProvider is dedicated for tool-calling phase; when nil, runtime falls back to provider.
+	toolProvider llm.Provider
 
 	budgetManager *llmpolicy.TokenBudgetManager
 	costTracker   *observability.CostTracker

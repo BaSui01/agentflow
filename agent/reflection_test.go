@@ -19,12 +19,7 @@ func TestNewReflectionExecutor(t *testing.T) {
 	toolManager := &testToolManager{}
 	bus := &testEventBus{}
 
-	config := Config{
-		ID:    "test-agent",
-		Name:  "Test Agent",
-		Type:  TypeGeneric,
-		Model: "gpt-4",
-	}
+	config := testAgentConfig("test-agent", "Test Agent", "gpt-4")
 
 	agent := NewBaseAgent(config, provider, memory, toolManager, bus, logger)
 	reflectionConfig := DefaultReflectionExecutorConfig()
@@ -75,17 +70,8 @@ func TestReflectionExecutor_ExecuteWithReflection_Disabled(t *testing.T) {
 	toolManager := &testToolManager{}
 	bus := &testEventBus{}
 
-	config := Config{
-		ID:    "test-agent",
-		Name:  "Test Agent",
-		Type:  TypeGeneric,
-		Model: "gpt-4",
-		PromptBundle: PromptBundle{
-			System: SystemPrompt{
-				Identity: "You are a helpful assistant",
-			},
-		},
-	}
+	config := testAgentConfig("test-agent", "Test Agent", "gpt-4")
+	config.Runtime.SystemPrompt = "You are a helpful assistant"
 
 	agent := NewBaseAgent(config, provider, memory, toolManager, bus, logger)
 
@@ -197,17 +183,8 @@ func TestReflectionExecutor_ExecuteWithReflection_Success(t *testing.T) {
 	toolManager := &testToolManager{}
 	bus := &testEventBus{}
 
-	config := Config{
-		ID:    "test-agent",
-		Name:  "Test Agent",
-		Type:  TypeGeneric,
-		Model: "gpt-4",
-		PromptBundle: PromptBundle{
-			System: SystemPrompt{
-				Identity: "You are a helpful assistant",
-			},
-		},
-	}
+	config := testAgentConfig("test-agent", "Test Agent", "gpt-4")
+	config.Runtime.SystemPrompt = "You are a helpful assistant"
 
 	agent := NewBaseAgent(config, provider, memory, toolManager, bus, logger)
 
@@ -244,12 +221,7 @@ func TestReflectionExecutor_parseCritique(t *testing.T) {
 	toolManager := &testToolManager{}
 	bus := &testEventBus{}
 
-	config := Config{
-		ID:    "test-agent",
-		Name:  "Test Agent",
-		Type:  TypeGeneric,
-		Model: "gpt-4",
-	}
+	config := testAgentConfig("test-agent", "Test Agent", "gpt-4")
 
 	agent := NewBaseAgent(config, provider, memory, toolManager, bus, logger)
 	reflectionConfig := DefaultReflectionExecutorConfig()
@@ -282,12 +254,7 @@ func TestReflectionExecutor_extractScore(t *testing.T) {
 	toolManager := &testToolManager{}
 	bus := &testEventBus{}
 
-	config := Config{
-		ID:    "test-agent",
-		Name:  "Test Agent",
-		Type:  TypeGeneric,
-		Model: "gpt-4",
-	}
+	config := testAgentConfig("test-agent", "Test Agent", "gpt-4")
 
 	agent := NewBaseAgent(config, provider, memory, toolManager, bus, logger)
 	reflectionConfig := DefaultReflectionExecutorConfig()

@@ -20,8 +20,8 @@ func TestError_Error(t *testing.T) {
 	}{
 		{
 			name:     "with base error",
-			err:      NewError(ErrCodeProviderNotSet, "provider not set"),
-			expected: "[AGENT_PROVIDER_NOT_SET] provider not set",
+			err:      NewError(types.ErrProviderNotSet, "provider not set"),
+			expected: "[PROVIDER_NOT_SET] provider not set",
 		},
 		{
 			name:     "nil base returns unknown",
@@ -39,7 +39,7 @@ func TestError_Error(t *testing.T) {
 
 func TestError_Unwrap(t *testing.T) {
 	cause := fmt.Errorf("root cause")
-	err := NewErrorWithCause(ErrCodeExecutionFailed, "exec failed", cause)
+	err := NewErrorWithCause(types.ErrUpstreamError, "exec failed", cause)
 	assert.ErrorIs(t, err, cause)
 
 	nilBase := &Error{}
@@ -48,31 +48,31 @@ func TestError_Unwrap(t *testing.T) {
 
 func TestNewErrorWithCause(t *testing.T) {
 	cause := fmt.Errorf("root cause")
-	err := NewErrorWithCause(ErrCodeExecutionFailed, "exec failed", cause)
+	err := NewErrorWithCause(types.ErrUpstreamError, "exec failed", cause)
 	require.NotNil(t, err)
-	assert.Equal(t, types.ErrorCode(ErrCodeExecutionFailed), err.Base.Code)
+	assert.Equal(t, types.ErrUpstreamError, err.Base.Code)
 	assert.Contains(t, err.Error(), "exec failed")
 	assert.NotNil(t, err.Metadata)
 	assert.False(t, err.Timestamp.IsZero())
 }
 
 func TestError_WithAgent(t *testing.T) {
-	err := NewError(ErrCodeNotReady, "not ready").
+	err := NewError(types.ErrAgentNotReady, "not ready").
 		WithAgent("agent-1", TypeAssistant)
 	assert.Equal(t, "agent-1", err.AgentID)
 	assert.Equal(t, TypeAssistant, err.AgentType)
 }
 
 func TestError_WithRetryable(t *testing.T) {
-	err := NewError(ErrCodeTimeout, "timeout").WithRetryable(true)
+	err := NewError(types.ErrTimeout, "timeout").WithRetryable(true)
 	assert.True(t, err.Base.Retryable)
 
-	err2 := NewError(ErrCodeInvalidConfig, "bad config").WithRetryable(false)
+	err2 := NewError(types.ErrInvalidRequest, "bad config").WithRetryable(false)
 	assert.False(t, err2.Base.Retryable)
 }
 
 func TestError_WithMetadata(t *testing.T) {
-	err := NewError(ErrCodeToolNotFound, "tool not found").
+	err := NewError(types.ErrModelNotFound, "tool not found").
 		WithMetadata("tool_name", "calculator").
 		WithMetadata("agent_id", "a1")
 	assert.Equal(t, "calculator", err.Metadata["tool_name"])
@@ -80,7 +80,7 @@ func TestError_WithMetadata(t *testing.T) {
 }
 
 func TestError_WithMetadata_NilMap(t *testing.T) {
-	err := &Error{Base: NewError(ErrCodeToolNotFound, "x").Base}
+	err := &Error{Base: NewError(types.ErrModelNotFound, "x").Base}
 	err.Metadata = nil
 	err = err.WithMetadata("key", "val")
 	assert.Equal(t, "val", err.Metadata["key"])
@@ -88,7 +88,7 @@ func TestError_WithMetadata_NilMap(t *testing.T) {
 
 func TestError_WithCause(t *testing.T) {
 	cause := fmt.Errorf("underlying")
-	err := NewError(ErrCodeExecutionFailed, "failed").WithCause(cause)
+	err := NewError(types.ErrUpstreamError, "failed").WithCause(cause)
 	assert.Equal(t, cause, err.Base.Cause)
 }
 
@@ -100,12 +100,12 @@ func TestIsRetryable(t *testing.T) {
 	}{
 		{
 			name:     "retryable agent error",
-			err:      NewError(ErrCodeTimeout, "timeout").WithRetryable(true),
+			err:      NewError(types.ErrTimeout, "timeout").WithRetryable(true),
 			expected: true,
 		},
 		{
 			name:     "non-retryable agent error",
-			err:      NewError(ErrCodeInvalidConfig, "bad"),
+			err:      NewError(types.ErrInvalidRequest, "bad"),
 			expected: false,
 		},
 		{
@@ -126,12 +126,12 @@ func TestGetErrorCode(t *testing.T) {
 	tests := []struct {
 		name     string
 		err      error
-		expected ErrorCode
+		expected types.ErrorCode
 	}{
 		{
 			name:     "agent error",
-			err:      NewError(ErrCodeProviderNotSet, "no provider"),
-			expected: ErrCodeProviderNotSet,
+			err:      NewError(types.ErrProviderNotSet, "no provider"),
+			expected: types.ErrProviderNotSet,
 		},
 		{
 			name:     "non-agent error",
@@ -158,7 +158,7 @@ func TestErrInvalidTransition_ToAgentError(t *testing.T) {
 	err := ErrInvalidTransition{From: StateReady, To: StateInit}
 	agentErr := err.ToAgentError()
 	require.NotNil(t, agentErr)
-	assert.Equal(t, types.ErrorCode(ErrCodeInvalidTransition), agentErr.Base.Code)
+	assert.Equal(t, types.ErrInvalidTransition, agentErr.Base.Code)
 	assert.Equal(t, StateReady, agentErr.Metadata["from_state"])
 	assert.Equal(t, StateInit, agentErr.Metadata["to_state"])
 }
