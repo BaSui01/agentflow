@@ -477,7 +477,7 @@ handler := Chain(apiHandler,
 
 ### API Key 认证
 
-- 支持 `X-API-Key` Header 和 `api_key` Query Parameter
+- 仅支持 `X-API-Key` Header（不支持 `api_key` Query Parameter）
 - 可配置跳过路径（健康检查、指标端点等）
 
 ### 限流配置建议

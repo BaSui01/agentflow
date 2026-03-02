@@ -1,11 +1,11 @@
-// Package factory provides a centralized factory for creating LLM Provider
-// instances by name. It imports all provider sub-packages and maps string
-// names to their constructors, breaking the import cycle that would occur
-// if this logic lived in the llm package directly.
+// Package factory provides a centralized, registration-based factory for
+// creating LLM Provider instances by name.
 package factory
 
 import (
 	"fmt"
+	"sort"
+	"sync"
 	"time"
 
 	"github.com/BaSui01/agentflow/llm"
@@ -38,151 +38,240 @@ type ProviderConfig struct {
 	Extra   map[string]any          `json:"extra,omitempty" yaml:"extra,omitempty"`
 }
 
-// NewProviderFromConfig creates a Provider instance based on the provider name
-// and a generic ProviderConfig. It maps the name to the appropriate constructor.
+// ProviderConstructor builds a provider for a given name and config.
 //
-// Supported names: openai, anthropic, claude, gemini, deepseek, qwen, glm,
-// grok, kimi, mistral, minimax, hunyuan, doubao, llama.
-func NewProviderFromConfig(name string, cfg ProviderConfig, logger *zap.Logger) (llm.Provider, error) {
-	if logger == nil {
-		logger = zap.NewNop()
+// The name parameter allows alias-specific behavior (e.g. gemini-vertex).
+type ProviderConstructor func(name string, cfg ProviderConfig, logger *zap.Logger) (llm.Provider, error)
+
+var (
+	providerConstructors   = make(map[string]ProviderConstructor)
+	providerConstructorsMu sync.RWMutex
+)
+
+func init() {
+	registerBuiltInConstructors()
+}
+
+func registerBuiltInConstructors() {
+	mustRegisterProviderConstructor("openai", newOpenAIProvider)
+	mustRegisterProviderConstructor("anthropic", newAnthropicProvider)
+	mustRegisterProviderConstructor("claude", newAnthropicProvider)
+	mustRegisterProviderConstructor("gemini", newGeminiProvider)
+	mustRegisterProviderConstructor("gemini-vertex", newGeminiProvider)
+	mustRegisterProviderConstructor("deepseek", newDeepSeekProvider)
+	mustRegisterProviderConstructor("qwen", newQwenProvider)
+	mustRegisterProviderConstructor("glm", newGLMProvider)
+	mustRegisterProviderConstructor("grok", newGrokProvider)
+	mustRegisterProviderConstructor("kimi", newKimiProvider)
+	mustRegisterProviderConstructor("mistral", newMistralProvider)
+	mustRegisterProviderConstructor("minimax", newMiniMaxProvider)
+	mustRegisterProviderConstructor("hunyuan", newHunyuanProvider)
+	mustRegisterProviderConstructor("doubao", newDoubaoProvider)
+	mustRegisterProviderConstructor("llama", newLlamaProvider)
+}
+
+func mustRegisterProviderConstructor(name string, constructor ProviderConstructor) {
+	if err := RegisterProviderConstructor(name, constructor); err != nil {
+		panic(err)
+	}
+}
+
+// RegisterProviderConstructor registers a named provider constructor.
+// Returns an error if the name is empty, constructor is nil, or the name
+// is already registered.
+func RegisterProviderConstructor(name string, constructor ProviderConstructor) error {
+	if name == "" {
+		return fmt.Errorf("provider name cannot be empty")
+	}
+	if constructor == nil {
+		return fmt.Errorf("provider constructor cannot be nil")
 	}
 
-	base := providers.BaseProviderConfig{
+	providerConstructorsMu.Lock()
+	defer providerConstructorsMu.Unlock()
+
+	if _, exists := providerConstructors[name]; exists {
+		return fmt.Errorf("provider constructor already registered for %q", name)
+	}
+
+	providerConstructors[name] = constructor
+	return nil
+}
+
+func getProviderConstructor(name string) (ProviderConstructor, bool) {
+	providerConstructorsMu.RLock()
+	defer providerConstructorsMu.RUnlock()
+
+	constructor, ok := providerConstructors[name]
+	return constructor, ok
+}
+
+func makeBaseProviderConfig(cfg ProviderConfig) providers.BaseProviderConfig {
+	return providers.BaseProviderConfig{
 		APIKey:  cfg.APIKey,
 		APIKeys: cfg.APIKeys,
 		BaseURL: cfg.BaseURL,
 		Model:   cfg.Model,
 		Timeout: cfg.Timeout,
 	}
+}
 
-	switch name {
-	case "openai":
-		oc := providers.OpenAIConfig{BaseProviderConfig: base}
-		if cfg.Extra != nil {
-			if v, ok := cfg.Extra["organization"].(string); ok {
-				oc.Organization = v
-			}
-			if v, ok := cfg.Extra["use_responses_api"].(bool); ok {
-				oc.UseResponsesAPI = v
-			}
+func newOpenAIProvider(_ string, cfg ProviderConfig, logger *zap.Logger) (llm.Provider, error) {
+	oc := providers.OpenAIConfig{BaseProviderConfig: makeBaseProviderConfig(cfg)}
+	if cfg.Extra != nil {
+		if v, ok := cfg.Extra["organization"].(string); ok {
+			oc.Organization = v
 		}
-		return openai.NewOpenAIProvider(oc, logger), nil
-
-	case "anthropic", "claude":
-		cc := providers.ClaudeConfig{BaseProviderConfig: base}
-		if cfg.Extra != nil {
-			if v, ok := cfg.Extra["anthropic_version"].(string); ok {
-				cc.AnthropicVersion = v
-			}
+		if v, ok := cfg.Extra["use_responses_api"].(bool); ok {
+			oc.UseResponsesAPI = v
 		}
-		return claude.NewClaudeProvider(cc, logger), nil
+	}
+	return openai.NewOpenAIProvider(oc, logger), nil
+}
 
-	case "gemini", "gemini-vertex":
-		gc := providers.GeminiConfig{BaseProviderConfig: base}
-		if cfg.Extra != nil {
-			if v, ok := cfg.Extra["project_id"].(string); ok {
-				gc.ProjectID = v
-			}
-			if v, ok := cfg.Extra["region"].(string); ok {
-				gc.Region = v
-			}
-			if v, ok := cfg.Extra["auth_type"].(string); ok {
-				gc.AuthType = v
-			}
+func newAnthropicProvider(_ string, cfg ProviderConfig, logger *zap.Logger) (llm.Provider, error) {
+	cc := providers.ClaudeConfig{BaseProviderConfig: makeBaseProviderConfig(cfg)}
+	if cfg.Extra != nil {
+		if v, ok := cfg.Extra["anthropic_version"].(string); ok {
+			cc.AnthropicVersion = v
 		}
-		// gemini-vertex 别名自动设置 oauth
-		if name == "gemini-vertex" && gc.AuthType == "" {
-			gc.AuthType = "oauth"
+	}
+	return claude.NewClaudeProvider(cc, logger), nil
+}
+
+func newGeminiProvider(name string, cfg ProviderConfig, logger *zap.Logger) (llm.Provider, error) {
+	gc := providers.GeminiConfig{BaseProviderConfig: makeBaseProviderConfig(cfg)}
+	if cfg.Extra != nil {
+		if v, ok := cfg.Extra["project_id"].(string); ok {
+			gc.ProjectID = v
 		}
-		return gemini.NewGeminiProvider(gc, logger), nil
-
-	case "deepseek":
-		return deepseek.NewDeepSeekProvider(providers.DeepSeekConfig{BaseProviderConfig: base}, logger), nil
-
-	case "qwen":
-		return qwen.NewQwenProvider(providers.QwenConfig{BaseProviderConfig: base}, logger), nil
-
-	case "glm":
-		return glm.NewGLMProvider(providers.GLMConfig{BaseProviderConfig: base}, logger), nil
-
-	case "grok":
-		return grok.NewGrokProvider(providers.GrokConfig{BaseProviderConfig: base}, logger), nil
-
-	case "kimi":
-		return kimi.NewKimiProvider(providers.KimiConfig{BaseProviderConfig: base}, logger), nil
-
-	case "mistral":
-		return mistral.NewMistralProvider(providers.MistralConfig{BaseProviderConfig: base}, logger), nil
-
-	case "minimax":
-		return minimax.NewMiniMaxProvider(providers.MiniMaxConfig{BaseProviderConfig: base}, logger), nil
-
-	case "hunyuan":
-		return hunyuan.NewHunyuanProvider(providers.HunyuanConfig{BaseProviderConfig: base}, logger), nil
-
-	case "doubao":
-		return doubao.NewDoubaoProvider(providers.DoubaoConfig{BaseProviderConfig: base}, logger), nil
-
-	case "llama":
-		lc := providers.LlamaConfig{BaseProviderConfig: base}
-		if cfg.Extra != nil {
-			if v, ok := cfg.Extra["provider"].(string); ok {
-				lc.Provider = v
-			}
+		if v, ok := cfg.Extra["region"].(string); ok {
+			gc.Region = v
 		}
-		return llama.NewLlamaProvider(lc, logger), nil
+		if v, ok := cfg.Extra["auth_type"].(string); ok {
+			gc.AuthType = v
+		}
+	}
+	if name == "gemini-vertex" && gc.AuthType == "" {
+		gc.AuthType = "oauth"
+	}
+	return gemini.NewGeminiProvider(gc, logger), nil
+}
 
-	default:
-		// 通用 OpenAI 兼容提供商：任意名称 + base_url 即可接入
-		// 支持 Groq、Fireworks、OpenRouter、Ollama、vLLM 等
-		if cfg.BaseURL == "" {
-			return nil, fmt.Errorf("unknown provider %q: built-in provider not found, and base_url is required for generic OpenAI-compatible provider", name)
+func newDeepSeekProvider(_ string, cfg ProviderConfig, logger *zap.Logger) (llm.Provider, error) {
+	return deepseek.NewDeepSeekProvider(providers.DeepSeekConfig{BaseProviderConfig: makeBaseProviderConfig(cfg)}, logger), nil
+}
+
+func newQwenProvider(_ string, cfg ProviderConfig, logger *zap.Logger) (llm.Provider, error) {
+	return qwen.NewQwenProvider(providers.QwenConfig{BaseProviderConfig: makeBaseProviderConfig(cfg)}, logger), nil
+}
+
+func newGLMProvider(_ string, cfg ProviderConfig, logger *zap.Logger) (llm.Provider, error) {
+	return glm.NewGLMProvider(providers.GLMConfig{BaseProviderConfig: makeBaseProviderConfig(cfg)}, logger), nil
+}
+
+func newGrokProvider(_ string, cfg ProviderConfig, logger *zap.Logger) (llm.Provider, error) {
+	return grok.NewGrokProvider(providers.GrokConfig{BaseProviderConfig: makeBaseProviderConfig(cfg)}, logger), nil
+}
+
+func newKimiProvider(_ string, cfg ProviderConfig, logger *zap.Logger) (llm.Provider, error) {
+	return kimi.NewKimiProvider(providers.KimiConfig{BaseProviderConfig: makeBaseProviderConfig(cfg)}, logger), nil
+}
+
+func newMistralProvider(_ string, cfg ProviderConfig, logger *zap.Logger) (llm.Provider, error) {
+	return mistral.NewMistralProvider(providers.MistralConfig{BaseProviderConfig: makeBaseProviderConfig(cfg)}, logger), nil
+}
+
+func newMiniMaxProvider(_ string, cfg ProviderConfig, logger *zap.Logger) (llm.Provider, error) {
+	return minimax.NewMiniMaxProvider(providers.MiniMaxConfig{BaseProviderConfig: makeBaseProviderConfig(cfg)}, logger), nil
+}
+
+func newHunyuanProvider(_ string, cfg ProviderConfig, logger *zap.Logger) (llm.Provider, error) {
+	return hunyuan.NewHunyuanProvider(providers.HunyuanConfig{BaseProviderConfig: makeBaseProviderConfig(cfg)}, logger), nil
+}
+
+func newDoubaoProvider(_ string, cfg ProviderConfig, logger *zap.Logger) (llm.Provider, error) {
+	return doubao.NewDoubaoProvider(providers.DoubaoConfig{BaseProviderConfig: makeBaseProviderConfig(cfg)}, logger), nil
+}
+
+func newLlamaProvider(_ string, cfg ProviderConfig, logger *zap.Logger) (llm.Provider, error) {
+	lc := providers.LlamaConfig{BaseProviderConfig: makeBaseProviderConfig(cfg)}
+	if cfg.Extra != nil {
+		if v, ok := cfg.Extra["provider"].(string); ok {
+			lc.Provider = v
 		}
-		oc := openaicompat.Config{
-			ProviderName: name,
-			APIKey:       cfg.APIKey,
-			APIKeys:      cfg.APIKeys,
-			BaseURL:      cfg.BaseURL,
-			DefaultModel: cfg.Model,
+	}
+	return llama.NewLlamaProvider(lc, logger), nil
+}
+
+func newOpenAICompatProvider(name string, cfg ProviderConfig, logger *zap.Logger) (llm.Provider, error) {
+	if cfg.BaseURL == "" {
+		return nil, fmt.Errorf("unknown provider %q: built-in provider not found, and base_url is required for generic OpenAI-compatible provider", name)
+	}
+
+	oc := openaicompat.Config{
+		ProviderName: name,
+		APIKey:       cfg.APIKey,
+		APIKeys:      cfg.APIKeys,
+		BaseURL:      cfg.BaseURL,
+		DefaultModel: cfg.Model,
+	}
+	if cfg.Extra != nil {
+		if v, ok := cfg.Extra["endpoint_path"].(string); ok {
+			oc.EndpointPath = v
 		}
-		if cfg.Extra != nil {
-			if v, ok := cfg.Extra["endpoint_path"].(string); ok {
-				oc.EndpointPath = v
-			}
-			if v, ok := cfg.Extra["models_endpoint"].(string); ok {
-				oc.ModelsEndpoint = v
-			}
-			if v, ok := cfg.Extra["auth_header"].(string); ok {
-				oc.AuthHeaderName = v
-			}
-			if v, ok := cfg.Extra["supports_tools"].(bool); ok {
-				oc.SupportsTools = &v
-			}
-			if v, ok := cfg.Extra["api_keys"].([]any); ok {
-				for _, k := range v {
-					if s, ok := k.(string); ok {
-						oc.APIKeys = append(oc.APIKeys, providers.APIKeyEntry{Key: s})
-					}
+		if v, ok := cfg.Extra["models_endpoint"].(string); ok {
+			oc.ModelsEndpoint = v
+		}
+		if v, ok := cfg.Extra["auth_header"].(string); ok {
+			oc.AuthHeaderName = v
+		}
+		if v, ok := cfg.Extra["supports_tools"].(bool); ok {
+			oc.SupportsTools = &v
+		}
+		if v, ok := cfg.Extra["api_keys"].([]any); ok {
+			for _, k := range v {
+				if s, ok := k.(string); ok {
+					oc.APIKeys = append(oc.APIKeys, providers.APIKeyEntry{Key: s})
 				}
 			}
 		}
-		logger.Info("creating generic OpenAI-compatible provider",
-			zap.String("provider", name),
-			zap.String("base_url", cfg.BaseURL))
-		return openaicompat.New(oc, logger), nil
 	}
+
+	logger.Info("creating generic OpenAI-compatible provider",
+		zap.String("provider", name),
+		zap.String("base_url", cfg.BaseURL))
+	return openaicompat.New(oc, logger), nil
 }
 
-// SupportedProviders returns the list of built-in provider names.
-// Any name not in this list will be treated as a generic OpenAI-compatible
-// provider, requiring base_url in the configuration.
-func SupportedProviders() []string {
-	return []string{
-		"openai", "anthropic", "claude", "gemini", "gemini-vertex", "deepseek",
-		"qwen", "glm", "grok", "kimi", "mistral",
-		"minimax", "hunyuan", "doubao", "llama",
+// NewProviderFromConfig creates a Provider instance based on the provider name
+// and a generic ProviderConfig.
+//
+// For registered names, it dispatches to the corresponding constructor.
+// For unregistered names, it falls back to a generic OpenAI-compatible provider
+// and requires base_url.
+func NewProviderFromConfig(name string, cfg ProviderConfig, logger *zap.Logger) (llm.Provider, error) {
+	if logger == nil {
+		logger = zap.NewNop()
 	}
+
+	if constructor, ok := getProviderConstructor(name); ok {
+		return constructor(name, cfg, logger)
+	}
+	return newOpenAICompatProvider(name, cfg, logger)
+}
+
+// SupportedProviders returns all registered provider names.
+func SupportedProviders() []string {
+	providerConstructorsMu.RLock()
+	defer providerConstructorsMu.RUnlock()
+
+	names := make([]string, 0, len(providerConstructors))
+	for name := range providerConstructors {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
 }
 
 // RegistryConfig describes multiple providers and which one is the default.
@@ -224,4 +313,3 @@ func NewRegistryFromConfig(cfg RegistryConfig, logger *zap.Logger) (*llm.Provide
 
 	return reg, nil
 }
-

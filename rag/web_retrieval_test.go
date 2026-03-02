@@ -30,8 +30,6 @@ func TestDefaultWebRetrieverConfig(t *testing.T) {
 	assert.True(t, cfg.DeduplicateByURL)
 	assert.True(t, cfg.EnableCache)
 	assert.Equal(t, 30*time.Minute, cfg.CacheTTL)
-	assert.True(t, cfg.FallbackToLocal)
-	assert.True(t, cfg.FallbackToWeb)
 }
 
 // ---------------------------------------------------------------------------
@@ -215,12 +213,11 @@ func TestRetrieve_NoDeduplicate(t *testing.T) {
 // 退后行为
 // ---------------------------------------------------------------------------
 
-func TestRetrieve_FallbackToLocal_WhenWebFails(t *testing.T) {
+func TestRetrieve_WebFailureReturnsError(t *testing.T) {
 	t.Parallel()
 
 	cfg := DefaultWebRetrieverConfig()
 	cfg.EnableCache = false
-	cfg.FallbackToLocal = true
 	cfg.MinScore = 0.0
 	cfg.ParallelSearch = false
 
@@ -240,17 +237,15 @@ func TestRetrieve_FallbackToLocal_WhenWebFails(t *testing.T) {
 
 	wr := NewWebRetriever(cfg, local, failingWeb, zap.NewNop())
 
-	results, err := wr.Retrieve(context.Background(), "test query", nil)
-	require.NoError(t, err, "should succeed via local fallback")
-	assert.NotEmpty(t, results)
+	_, err := wr.Retrieve(context.Background(), "test query", nil)
+	require.Error(t, err, "web failure should be explicit")
 }
 
-func TestRetrieve_NoFallback_WhenWebFails(t *testing.T) {
+func TestRetrieve_NoLocal_WebFails(t *testing.T) {
 	t.Parallel()
 
 	cfg := DefaultWebRetrieverConfig()
 	cfg.EnableCache = false
-	cfg.FallbackToLocal = false
 	cfg.ParallelSearch = false
 
 	failingWeb := fakeWebSearch(nil, fmt.Errorf("network error"))
@@ -268,7 +263,6 @@ func TestRetrieve_BothFail(t *testing.T) {
 	cfg := DefaultWebRetrieverConfig()
 	cfg.EnableCache = false
 	cfg.ParallelSearch = false
-	cfg.FallbackToLocal = false // disable fallback so web error propagates
 
 	// webSearchFn 是零 QQ 搜索Web 返回错误“ 未配置网络搜索功能 ”
 	wr := NewWebRetriever(cfg, nil, nil, zap.NewNop())

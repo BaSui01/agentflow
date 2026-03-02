@@ -72,6 +72,9 @@ func (l *CSVLoader) Load(ctx context.Context, source string) ([]rag.Document, er
 
 	// Determine which column indices to use for content.
 	contentIndices := l.resolveContentColumns(header)
+	if len(contentIndices) == 0 {
+		return nil, fmt.Errorf("csv loader: none of configured content columns matched header: %v", l.config.ContentColumns)
+	}
 
 	var docs []rag.Document
 	for i := 0; i < len(dataRows); i += l.config.RowsPerDocument {
@@ -130,13 +133,6 @@ func (l *CSVLoader) resolveContentColumns(header []string) []int {
 	for i, h := range header {
 		if wanted[strings.ToLower(h)] {
 			indices = append(indices, i)
-		}
-	}
-	// Fallback: if no columns matched, use all.
-	if len(indices) == 0 {
-		indices = make([]int, len(header))
-		for i := range header {
-			indices[i] = i
 		}
 	}
 	return indices

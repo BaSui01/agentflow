@@ -175,9 +175,20 @@ func DefaultMultimodalConfig() MultimodalConfig {
 			GeminiAPIKey:  "",
 		},
 		Video: MultimodalVideoConfig{
-			RunwayAPIKey: "",
-			VeoAPIKey:    "",
-			GoogleAPIKey: "",
+			RunwayAPIKey:   "",
+			RunwayBaseURL:  "https://api.runwayml.com",
+			VeoAPIKey:      "",
+			VeoBaseURL:     "https://generativelanguage.googleapis.com",
+			GoogleAPIKey:   "",
+			GoogleBaseURL:  "https://generativelanguage.googleapis.com",
+			SoraAPIKey:     "",
+			SoraBaseURL:    "https://api.openai.com",
+			KlingAPIKey:    "",
+			KlingBaseURL:   "https://api.klingai.com",
+			LumaAPIKey:     "",
+			LumaBaseURL:    "https://api.lumalabs.ai",
+			MiniMaxAPIKey:  "",
+			MiniMaxBaseURL: "https://api.minimax.chat",
 		},
 	}
 }

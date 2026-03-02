@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/BaSui01/agentflow/config"
+	"github.com/BaSui01/agentflow/pkg/telemetry"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"gorm.io/driver/mysql"
@@ -11,6 +12,14 @@ import (
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
+
+// ServeRuntime holds dependencies required by cmd/agentflow serve runtime.
+type ServeRuntime struct {
+	Config    *config.Config
+	Logger    *zap.Logger
+	Telemetry *telemetry.Providers
+	DB        *gorm.DB
+}
 
 // LoadAndValidateConfig loads application config from defaults, file, and env,
 // then validates the final result.
@@ -110,4 +119,32 @@ func OpenDatabase(dbCfg config.DatabaseConfig, logger *zap.Logger) (*gorm.DB, er
 
 	logger.Info("Database connected", zap.String("driver", dbCfg.Driver))
 	return db, nil
+}
+
+// InitializeServeRuntime centralizes startup bootstrapping for the serve command:
+// config loading/validation, logger creation, telemetry init, and DB connection.
+func InitializeServeRuntime(configPath string) (*ServeRuntime, error) {
+	cfg, err := LoadAndValidateConfig(configPath)
+	if err != nil {
+		return nil, err
+	}
+
+	logger := NewLogger(cfg.Log)
+
+	otelProviders, err := telemetry.Init(cfg.Telemetry, logger)
+	if err != nil {
+		logger.Warn("failed to initialize telemetry", zap.Error(err))
+	}
+
+	db, err := OpenDatabase(cfg.Database, logger)
+	if err != nil {
+		logger.Warn("Database not available, API key management disabled", zap.Error(err))
+	}
+
+	return &ServeRuntime{
+		Config:    cfg,
+		Logger:    logger,
+		Telemetry: otelProviders,
+		DB:        db,
+	}, nil
 }

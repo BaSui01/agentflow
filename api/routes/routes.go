@@ -5,7 +5,6 @@ import (
 
 	"github.com/BaSui01/agentflow/api/handlers"
 	"github.com/BaSui01/agentflow/config"
-	"github.com/BaSui01/agentflow/types"
 	"go.uber.org/zap"
 )
 
@@ -46,28 +45,12 @@ func RegisterProvider(mux *http.ServeMux, apiKeyHandler *handlers.APIKeyHandler,
 	if apiKeyHandler == nil {
 		return
 	}
-	mux.HandleFunc("/api/v1/providers", apiKeyHandler.HandleListProviders)
-	mux.HandleFunc("/api/v1/providers/{id}/api-keys", func(w http.ResponseWriter, r *http.Request) {
-		switch r.Method {
-		case http.MethodGet:
-			apiKeyHandler.HandleListAPIKeys(w, r)
-		case http.MethodPost:
-			apiKeyHandler.HandleCreateAPIKey(w, r)
-		default:
-			handlers.WriteErrorMessage(w, http.StatusMethodNotAllowed, types.ErrInvalidRequest, "method not allowed", logger)
-		}
-	})
-	mux.HandleFunc("/api/v1/providers/{id}/api-keys/stats", apiKeyHandler.HandleAPIKeyStats)
-	mux.HandleFunc("/api/v1/providers/{id}/api-keys/{keyId}", func(w http.ResponseWriter, r *http.Request) {
-		switch r.Method {
-		case http.MethodPut:
-			apiKeyHandler.HandleUpdateAPIKey(w, r)
-		case http.MethodDelete:
-			apiKeyHandler.HandleDeleteAPIKey(w, r)
-		default:
-			handlers.WriteErrorMessage(w, http.StatusMethodNotAllowed, types.ErrInvalidRequest, "method not allowed", logger)
-		}
-	})
+	mux.HandleFunc("GET /api/v1/providers", apiKeyHandler.HandleListProviders)
+	mux.HandleFunc("GET /api/v1/providers/{id}/api-keys", apiKeyHandler.HandleListAPIKeys)
+	mux.HandleFunc("POST /api/v1/providers/{id}/api-keys", apiKeyHandler.HandleCreateAPIKey)
+	mux.HandleFunc("GET /api/v1/providers/{id}/api-keys/stats", apiKeyHandler.HandleAPIKeyStats)
+	mux.HandleFunc("PUT /api/v1/providers/{id}/api-keys/{keyId}", apiKeyHandler.HandleUpdateAPIKey)
+	mux.HandleFunc("DELETE /api/v1/providers/{id}/api-keys/{keyId}", apiKeyHandler.HandleDeleteAPIKey)
 	logger.Info("Provider API key routes registered")
 }
 

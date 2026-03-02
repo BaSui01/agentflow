@@ -1,12 +1,14 @@
 package middleware
 
 import (
+	"bufio"
 	"context"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
 	"encoding/json"
 	"encoding/pem"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -21,6 +23,20 @@ import (
 	"github.com/BaSui01/agentflow/config"
 	"github.com/BaSui01/agentflow/types"
 )
+
+type flushTrackingWriter struct {
+	*httptest.ResponseRecorder
+	flushed bool
+}
+
+func (w *flushTrackingWriter) Flush() {
+	w.flushed = true
+	w.ResponseRecorder.Flush()
+}
+
+func (w *flushTrackingWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	return nil, nil, nil
+}
 
 func encodeRSAPublicKeyPEM(pub *rsa.PublicKey) ([]byte, error) {
 	der, err := x509.MarshalPKIXPublicKey(pub)
@@ -107,6 +123,13 @@ func TestResponseWriter_WriteHeader(t *testing.T) {
 	assert.Equal(t, http.StatusNotFound, rec.Code)
 }
 
+func TestResponseWriter_Flush(t *testing.T) {
+	rec := &flushTrackingWriter{ResponseRecorder: httptest.NewRecorder()}
+	rw := &responseWriter{ResponseWriter: rec, statusCode: http.StatusOK}
+	rw.Flush()
+	assert.True(t, rec.flushed)
+}
+
 // --- metricsResponseWriter ---
 
 func TestMetricsResponseWriter_WriteHeader_OnlyOnce(t *testing.T) {
@@ -133,6 +156,13 @@ func TestMetricsResponseWriter_Flush(t *testing.T) {
 	mrw := &metricsResponseWriter{ResponseWriter: rec}
 	// Should not panic even if underlying doesn't implement Flusher
 	mrw.Flush()
+}
+
+func TestTracingResponseWriter_Flush(t *testing.T) {
+	rec := &flushTrackingWriter{ResponseRecorder: httptest.NewRecorder()}
+	rw := newTracingResponseWriter(rec)
+	rw.Flush()
+	assert.True(t, rec.flushed)
 }
 
 // --- normalizePath ---
@@ -345,6 +375,48 @@ func TestRateLimiter_BlocksExcessRequests(t *testing.T) {
 	assert.Equal(t, http.StatusTooManyRequests, rec2.Code)
 }
 
+func TestRateLimiter_UsesForwardedIPWhenProxyTrusted(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	handler := RateLimiter(ctx, 1, 1, zap.NewNop())(okHandler())
+
+	req1 := httptest.NewRequest("GET", "/test", nil)
+	req1.RemoteAddr = "10.0.0.1:1234"
+	req1.Header.Set("X-Forwarded-For", "203.0.113.10")
+	rec1 := httptest.NewRecorder()
+	handler.ServeHTTP(rec1, req1)
+	assert.Equal(t, http.StatusOK, rec1.Code)
+
+	req2 := httptest.NewRequest("GET", "/test", nil)
+	req2.RemoteAddr = "10.0.0.1:4321"
+	req2.Header.Set("X-Forwarded-For", "203.0.113.11")
+	rec2 := httptest.NewRecorder()
+	handler.ServeHTTP(rec2, req2)
+	assert.Equal(t, http.StatusOK, rec2.Code)
+}
+
+func TestRateLimiter_IgnoresForwardedIPWhenRemoteUntrusted(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	handler := RateLimiter(ctx, 1, 1, zap.NewNop())(okHandler())
+
+	req1 := httptest.NewRequest("GET", "/test", nil)
+	req1.RemoteAddr = "8.8.8.8:1234"
+	req1.Header.Set("X-Forwarded-For", "203.0.113.10")
+	rec1 := httptest.NewRecorder()
+	handler.ServeHTTP(rec1, req1)
+	assert.Equal(t, http.StatusOK, rec1.Code)
+
+	req2 := httptest.NewRequest("GET", "/test", nil)
+	req2.RemoteAddr = "8.8.8.8:4321"
+	req2.Header.Set("X-Forwarded-For", "203.0.113.11")
+	rec2 := httptest.NewRecorder()
+	handler.ServeHTTP(rec2, req2)
+	assert.Equal(t, http.StatusTooManyRequests, rec2.Code)
+}
+
 // --- TenantRateLimiter ---
 
 func TestTenantRateLimiter_WithTenantID(t *testing.T) {
@@ -530,4 +602,3 @@ func TestGenerateRequestID(t *testing.T) {
 	id2 := generateRequestID()
 	assert.NotEqual(t, id, id2)
 }
-

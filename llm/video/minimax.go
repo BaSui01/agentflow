@@ -5,8 +5,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
+	"net/url"
 	"time"
 
 	"github.com/BaSui01/agentflow/pkg/tlsutil"
@@ -20,8 +20,15 @@ type MiniMaxVideoProvider struct {
 	logger *zap.Logger
 }
 
-const defaultMiniMaxVideoTimeout = 300 * time.Second
-const defaultMiniMaxVideoPollInterval = 5 * time.Second
+const minimaxCreatePath = "/v1/video_generation"
+const minimaxQueryPath = "/v1/query/video_generation"
+const minimaxRetrievePath = "/v1/files/retrieve"
+const minimaxStatusSuccess = "Success"
+const minimaxStatusFail = "Fail"
+
+var minimaxAllowedModels = map[string]struct{}{
+	"video-01": {},
+}
 
 // NewMiniMaxVideoProvider creates a new MiniMax video provider.
 func NewMiniMaxVideoProvider(cfg MiniMaxVideoConfig, logger *zap.Logger) *MiniMaxVideoProvider {
@@ -36,7 +43,7 @@ func NewMiniMaxVideoProvider(cfg MiniMaxVideoConfig, logger *zap.Logger) *MiniMa
 	}
 	timeout := cfg.Timeout
 	if timeout == 0 {
-		timeout = defaultMiniMaxVideoTimeout
+		timeout = defaultVideoTimeout
 	}
 	return &MiniMaxVideoProvider{
 		cfg:    cfg,
@@ -45,9 +52,9 @@ func NewMiniMaxVideoProvider(cfg MiniMaxVideoConfig, logger *zap.Logger) *MiniMa
 	}
 }
 
-func (p *MiniMaxVideoProvider) Name() string                 { return "minimax-video" }
+func (p *MiniMaxVideoProvider) Name() string                    { return "minimax-video" }
 func (p *MiniMaxVideoProvider) SupportedFormats() []VideoFormat { return []VideoFormat{VideoFormatMP4} }
-func (p *MiniMaxVideoProvider) SupportsGeneration() bool     { return true }
+func (p *MiniMaxVideoProvider) SupportsGeneration() bool        { return true }
 
 type minimaxVideoRequest struct {
 	Model           string `json:"model"`
@@ -85,19 +92,43 @@ type minimaxFileResponse struct {
 
 // Analyze is not supported by the MiniMax video provider.
 func (p *MiniMaxVideoProvider) Analyze(ctx context.Context, req *AnalyzeRequest) (*AnalyzeResponse, error) {
+	_, span := startProviderSpan(ctx, p.Name(), "analyze")
+	defer span.End()
+
 	return nil, fmt.Errorf("video analysis not supported by minimax-video provider")
 }
 
 // Generate creates a video using MiniMax Hailuo AI.
 func (p *MiniMaxVideoProvider) Generate(ctx context.Context, req *GenerateRequest) (*GenerateResponse, error) {
+	ctx, span := startProviderSpan(ctx, p.Name(), "generate")
+	defer span.End()
+
 	if err := ValidateGenerateRequest(req); err != nil {
 		return nil, err
 	}
+	release, err := acquireVideoGenerateSlot(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer release()
 
 	model := req.Model
 	if model == "" {
 		model = p.cfg.Model
 	}
+	if err := validateAllowedModel("minimax", model, minimaxAllowedModels); err != nil {
+		return nil, err
+	}
+	if req.Duration != 0 || req.AspectRatio != "" || req.Resolution != "" {
+		p.logger.Warn("minimax generate ignores unsupported fields",
+			zap.Float64("duration", req.Duration),
+			zap.String("aspect_ratio", req.AspectRatio),
+			zap.String("resolution", req.Resolution))
+	}
+	p.logger.Info("minimax generate start",
+		zap.String("model", model),
+		zap.String("prompt", shortPromptForLog(req.Prompt)),
+		zap.Bool("image_to_video", req.ImageURL != ""))
 
 	body := minimaxVideoRequest{
 		Model:  model,
@@ -107,9 +138,12 @@ func (p *MiniMaxVideoProvider) Generate(ctx context.Context, req *GenerateReques
 		body.FirstFrameImage = req.ImageURL
 	}
 
-	payload, _ := json.Marshal(body)
+	payload, err := marshalJSONRequest("minimax", body)
+	if err != nil {
+		return nil, err
+	}
 	httpReq, err := http.NewRequestWithContext(ctx, "POST",
-		p.cfg.BaseURL+"/v1/video_generation",
+		p.cfg.BaseURL+minimaxCreatePath,
 		bytes.NewReader(payload))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
@@ -124,8 +158,7 @@ func (p *MiniMaxVideoProvider) Generate(ctx context.Context, req *GenerateReques
 	defer resp.Body.Close()
 
 	if resp.StatusCode >= 400 {
-		errBody, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("minimax error: status=%d body=%s", resp.StatusCode, string(errBody))
+		return nil, httpStatusError(p.logger, "minimax", "generate", resp.StatusCode, resp.Body)
 	}
 
 	var createResp minimaxVideoCreateResponse
@@ -140,6 +173,9 @@ func (p *MiniMaxVideoProvider) Generate(ctx context.Context, req *GenerateReques
 	if err != nil {
 		return nil, err
 	}
+	if queryResp.FileID == "" {
+		return nil, fmt.Errorf("minimax generation succeeded but returned empty file_id")
+	}
 
 	downloadURL, err := p.retrieveFileURL(ctx, queryResp.FileID)
 	if err != nil {
@@ -147,6 +183,9 @@ func (p *MiniMaxVideoProvider) Generate(ctx context.Context, req *GenerateReques
 	}
 
 	videos := []VideoData{{URL: downloadURL}}
+	p.logger.Info("minimax generate complete",
+		zap.String("task_id", queryResp.TaskID),
+		zap.Int("videos", len(videos)))
 	return &GenerateResponse{
 		Provider: p.Name(),
 		Model:    model,
@@ -159,16 +198,39 @@ func (p *MiniMaxVideoProvider) Generate(ctx context.Context, req *GenerateReques
 }
 
 func (p *MiniMaxVideoProvider) pollGeneration(ctx context.Context, taskID string) (*minimaxVideoQueryResponse, error) {
-	ticker := time.NewTicker(defaultMiniMaxVideoPollInterval)
-	defer ticker.Stop()
+	if err := validatePollTaskID(taskID); err != nil {
+		return nil, fmt.Errorf("invalid minimax task id: %w", err)
+	}
+	timer := time.NewTimer(defaultVideoPollInterval)
+	defer timer.Stop()
+	interval := defaultVideoPollInterval
+	attempts := 0
+	consecutiveErrors := 0
 
 	for {
 		select {
 		case <-ctx.Done():
 			return nil, ctx.Err()
-		case <-ticker.C:
+		case <-timer.C:
+			if err := ctx.Err(); err != nil {
+				return nil, err
+			}
+			attempts++
+			if attempts > maxVideoPollAttempts {
+				return nil, fmt.Errorf("minimax polling exceeded max attempts (%d)", maxVideoPollAttempts)
+			}
+			if attempts == pollSlowWarnThreshold {
+				p.logger.Warn("minimax polling is taking longer than expected",
+					zap.String("task_id", taskID),
+					zap.Int("attempt", attempts))
+			}
+			if attempts%pollProgressLogEvery == 0 {
+				p.logger.Info("minimax polling in progress",
+					zap.String("task_id", taskID),
+					zap.Int("attempt", attempts))
+			}
 			httpReq, err := http.NewRequestWithContext(ctx, "GET",
-				fmt.Sprintf("%s/v1/query/video_generation?task_id=%s", p.cfg.BaseURL, taskID), nil)
+				fmt.Sprintf("%s%s?task_id=%s", p.cfg.BaseURL, minimaxQueryPath, url.QueryEscape(taskID)), nil)
 			if err != nil {
 				return nil, fmt.Errorf("failed to create poll request: %w", err)
 			}
@@ -176,30 +238,65 @@ func (p *MiniMaxVideoProvider) pollGeneration(ctx context.Context, taskID string
 
 			resp, err := p.client.Do(httpReq)
 			if err != nil {
+				consecutiveErrors++
+				p.logger.Warn("minimax poll request failed",
+					zap.String("task_id", taskID),
+					zap.Int("attempt", attempts),
+					zap.Int("consecutive_errors", consecutiveErrors),
+					zap.Error(err))
+				if consecutiveErrors >= maxVideoPollConsecutiveErrors {
+					return nil, fmt.Errorf("minimax polling failed after %d consecutive errors: %w", consecutiveErrors, err)
+				}
+				interval = nextPollInterval(interval)
+				timer.Reset(interval)
 				continue
+			}
+			if resp.StatusCode >= 400 {
+				return nil, statusErrorAndClose(p.logger, "minimax", "poll", resp)
 			}
 
 			var qResp minimaxVideoQueryResponse
-			if err := json.NewDecoder(resp.Body).Decode(&qResp); err != nil {
-				resp.Body.Close()
+			if err := decodeJSONAndClose(resp, &qResp); err != nil {
+				consecutiveErrors++
+				p.logger.Warn("minimax poll decode failed",
+					zap.String("task_id", taskID),
+					zap.Int("attempt", attempts),
+					zap.Int("consecutive_errors", consecutiveErrors),
+					zap.Error(err))
+				if consecutiveErrors >= maxVideoPollConsecutiveErrors {
+					return nil, fmt.Errorf("minimax polling decode failed after %d consecutive errors: %w", consecutiveErrors, err)
+				}
+				interval = nextPollInterval(interval)
+				timer.Reset(interval)
 				continue
 			}
-			resp.Body.Close()
+			consecutiveErrors = 0
+			interval = defaultVideoPollInterval
 
 			switch qResp.Status {
-			case "Success":
+			case minimaxStatusSuccess:
 				return &qResp, nil
-			case "Fail":
-				return nil, fmt.Errorf("minimax generation failed for task %s", taskID)
+			case minimaxStatusFail:
+				p.logger.Error("minimax generation failed",
+					zap.String("task_id", taskID),
+					zap.String("status", qResp.Status),
+					zap.String("status_msg", qResp.BaseResp.StatusMsg))
+				return nil, fmt.Errorf("minimax generation failed")
 			}
 			// continue polling on Queueing or Processing
+			timer.Reset(interval)
 		}
 	}
 }
 
 func (p *MiniMaxVideoProvider) retrieveFileURL(ctx context.Context, fileID string) (string, error) {
+	// MiniMax video generation is a provider-specific three-stage workflow:
+	// create task -> poll task status -> retrieve file URL by file_id.
+	if err := validatePollTaskID(fileID); err != nil {
+		return "", fmt.Errorf("invalid minimax file id: %w", err)
+	}
 	httpReq, err := http.NewRequestWithContext(ctx, "GET",
-		fmt.Sprintf("%s/v1/files/retrieve?file_id=%s", p.cfg.BaseURL, fileID), nil)
+		fmt.Sprintf("%s%s?file_id=%s", p.cfg.BaseURL, minimaxRetrievePath, url.QueryEscape(fileID)), nil)
 	if err != nil {
 		return "", fmt.Errorf("failed to create file retrieve request: %w", err)
 	}
@@ -212,8 +309,7 @@ func (p *MiniMaxVideoProvider) retrieveFileURL(ctx context.Context, fileID strin
 	defer resp.Body.Close()
 
 	if resp.StatusCode >= 400 {
-		errBody, _ := io.ReadAll(resp.Body)
-		return "", fmt.Errorf("minimax file retrieve error: status=%d body=%s", resp.StatusCode, string(errBody))
+		return "", httpStatusError(p.logger, "minimax", "retrieve_file", resp.StatusCode, resp.Body)
 	}
 
 	var fileResp minimaxFileResponse
@@ -226,4 +322,3 @@ func (p *MiniMaxVideoProvider) retrieveFileURL(ctx context.Context, fileID strin
 
 	return fileResp.File.DownloadURL, nil
 }
-

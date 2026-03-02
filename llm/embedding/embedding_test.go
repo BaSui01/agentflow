@@ -3,6 +3,7 @@ package embedding
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -10,7 +11,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/BaSui01/agentflow/llm"
 	"github.com/BaSui01/agentflow/llm/providers"
+	"github.com/BaSui01/agentflow/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -313,6 +316,57 @@ func TestOpenAIProviderDefaults(t *testing.T) {
 	assert.Equal(t, "openai-embedding", p.Name())
 	assert.Equal(t, 3072, p.Dimensions())
 	assert.Equal(t, 2048, p.MaxBatchSize())
+}
+
+func TestProvidersRejectEmptyInput(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name     string
+		provider Provider
+	}{
+		{
+			name: "openai",
+			provider: NewOpenAIProvider(OpenAIConfig{
+				BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k"},
+			}),
+		},
+		{
+			name: "cohere",
+			provider: NewCohereProvider(CohereConfig{
+				BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k"},
+			}),
+		},
+		{
+			name: "voyage",
+			provider: NewVoyageProvider(VoyageConfig{
+				BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k"},
+			}),
+		},
+		{
+			name: "jina",
+			provider: NewJinaProvider(JinaConfig{
+				BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k"},
+			}),
+		},
+		{
+			name: "gemini",
+			provider: NewGeminiProvider(GeminiConfig{
+				BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k"},
+			}),
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := tc.provider.Embed(context.Background(), &EmbeddingRequest{Input: []string{}})
+			require.Error(t, err)
+
+			var providerErr *types.Error
+			require.True(t, errors.As(err, &providerErr), "error should be *types.Error")
+			assert.Equal(t, llm.ErrInvalidRequest, providerErr.Code)
+		})
+	}
 }
 
 // --- Cohere Provider ---
@@ -782,4 +836,3 @@ func TestProviderContextCanceled(t *testing.T) {
 	_, err := p.Embed(ctx, &EmbeddingRequest{Input: []string{"test"}})
 	require.Error(t, err)
 }
-

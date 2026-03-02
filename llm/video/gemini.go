@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"time"
 
@@ -13,14 +12,14 @@ import (
 	"go.uber.org/zap"
 )
 
-// GeminiProvider 使用 Google Gemini 执行视频分析.
+// GeminiProvider analyzes video content using Google Gemini.
 type GeminiProvider struct {
 	cfg    GeminiConfig
 	client *http.Client
 	logger *zap.Logger
 }
 
-// NewGeminiProvider 创建新的 Gemini 视频提供者.
+// NewGeminiProvider creates a new Gemini video provider.
 func NewGeminiProvider(cfg GeminiConfig, logger *zap.Logger) *GeminiProvider {
 	if logger == nil {
 		logger = zap.NewNop()
@@ -93,16 +92,24 @@ type geminiResponse struct {
 	} `json:"usageMetadata"`
 }
 
-// Analyze 利用 Gemini 多模态能力分析视频内容.
+// Analyze processes video understanding requests with Gemini multimodal capabilities.
 func (p *GeminiProvider) Analyze(ctx context.Context, req *AnalyzeRequest) (*AnalyzeResponse, error) {
+	ctx, span := startProviderSpan(ctx, p.Name(), "analyze")
+	defer span.End()
+
 	model := req.Model
 	if model == "" {
 		model = p.cfg.Model
 	}
+	p.logger.Info("gemini video analyze start",
+		zap.String("model", model),
+		zap.String("prompt", shortPromptForLog(req.Prompt)),
+		zap.Bool("has_video_data", req.VideoData != ""),
+		zap.Bool("has_video_url", req.VideoURL != ""))
 
 	var parts []geminiVideoPart
 
-	// 添加视频内容
+	// Add video content.
 	if req.VideoData != "" {
 		mimeType := fmt.Sprintf("video/%s", req.VideoFormat)
 		if req.VideoFormat == "" {
@@ -127,7 +134,7 @@ func (p *GeminiProvider) Analyze(ctx context.Context, req *AnalyzeRequest) (*Ana
 		})
 	}
 
-	// 添加提示
+	// Add the user prompt.
 	parts = append(parts, geminiVideoPart{Text: req.Prompt})
 
 	body := geminiRequest{
@@ -138,7 +145,10 @@ func (p *GeminiProvider) Analyze(ctx context.Context, req *AnalyzeRequest) (*Ana
 		},
 	}
 
-	payload, _ := json.Marshal(body)
+	payload, err := marshalJSONRequest("gemini video", body)
+	if err != nil {
+		return nil, err
+	}
 	url := fmt.Sprintf("https://generativelanguage.googleapis.com/v1beta/models/%s:generateContent",
 		model)
 
@@ -156,8 +166,7 @@ func (p *GeminiProvider) Analyze(ctx context.Context, req *AnalyzeRequest) (*Ana
 	defer resp.Body.Close()
 
 	if resp.StatusCode >= 400 {
-		errBody, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("gemini video error: status=%d body=%s", resp.StatusCode, string(errBody))
+		return nil, httpStatusError(p.logger, "gemini", "analyze", resp.StatusCode, resp.Body)
 	}
 
 	var gResp geminiResponse
@@ -170,16 +179,22 @@ func (p *GeminiProvider) Analyze(ctx context.Context, req *AnalyzeRequest) (*Ana
 		content = gResp.Candidates[0].Content.Parts[0].Text
 	}
 
-	return &AnalyzeResponse{
+	result := &AnalyzeResponse{
 		Provider:  p.Name(),
 		Model:     model,
 		Content:   content,
 		CreatedAt: time.Now(),
-	}, nil
+	}
+	p.logger.Info("gemini video analyze complete",
+		zap.String("model", model),
+		zap.Int("content_length", len(content)))
+	return result, nil
 }
 
-// Generate 不被 Gemini 视频提供者支持.
+// Generate is not supported by the Gemini video provider.
 func (p *GeminiProvider) Generate(ctx context.Context, req *GenerateRequest) (*GenerateResponse, error) {
+	_, span := startProviderSpan(ctx, p.Name(), "generate")
+	defer span.End()
+
 	return nil, fmt.Errorf("video generation not supported by gemini provider")
 }
-

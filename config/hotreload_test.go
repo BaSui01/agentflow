@@ -300,6 +300,8 @@ func TestGetHotReloadableFields(t *testing.T) {
 	assert.Contains(t, fields, "Log.Level")
 	assert.Contains(t, fields, "Agent.MaxIterations")
 	assert.Contains(t, fields, "Server.HTTPPort")
+	assert.Contains(t, fields, "Multimodal.Video.SoraAPIKey")
+	assert.Contains(t, fields, "Multimodal.Video.RunwayBaseURL")
 }
 
 func TestIsHotReloadable(t *testing.T) {
@@ -608,4 +610,3 @@ agent:
 	// 由于 CI 环境中的计时问题，所以我们只是验证没有发生错误
 	t.Logf("Detected %d changes", len(changes))
 }
-

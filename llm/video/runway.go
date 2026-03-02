@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"time"
 
@@ -19,6 +18,19 @@ type RunwayProvider struct {
 	cfg    RunwayConfig
 	client *http.Client
 	logger *zap.Logger
+}
+
+const defaultRunwayDuration = 5
+const minRunwayDuration = 2
+const maxRunwayDuration = 10
+const defaultRunwayRatio = "1280:720"
+const runwayCreatePath = "/v1/image_to_video"
+const runwayTaskPathPrefix = "/v1/tasks/"
+const runwayStatusSucceeded = "SUCCEEDED"
+const runwayStatusFailed = "FAILED"
+
+var runwayAllowedModels = map[string]struct{}{
+	"gen-4.5": {},
 }
 
 // NewRunway Provider创建了新的跑道视频提供商.
@@ -35,7 +47,7 @@ func NewRunwayProvider(cfg RunwayConfig, logger *zap.Logger) *RunwayProvider {
 	}
 	timeout := cfg.Timeout
 	if timeout == 0 {
-		timeout = 300 * time.Second
+		timeout = defaultVideoTimeout
 	}
 
 	return &RunwayProvider{
@@ -73,6 +85,9 @@ type runwayResponse struct {
 
 // 分析不由跑道支持.
 func (p *RunwayProvider) Analyze(ctx context.Context, req *AnalyzeRequest) (*AnalyzeResponse, error) {
+	_, span := startProviderSpan(ctx, p.Name(), "analyze")
+	defer span.End()
+
 	return nil, fmt.Errorf("video analysis not supported by runway provider")
 }
 
@@ -80,28 +95,39 @@ func (p *RunwayProvider) Analyze(ctx context.Context, req *AnalyzeRequest) (*Ana
 // 终点: POST /v1/image to video
 // Auth: 熊克令牌 + X- Runway-Version 信头
 func (p *RunwayProvider) Generate(ctx context.Context, req *GenerateRequest) (*GenerateResponse, error) {
+	ctx, span := startProviderSpan(ctx, p.Name(), "generate")
+	defer span.End()
+
 	if err := ValidateGenerateRequest(req); err != nil {
 		return nil, err
 	}
+	release, err := acquireVideoGenerateSlot(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer release()
 
 	model := req.Model
 	if model == "" {
 		model = p.cfg.Model
 	}
+	if err := validateAllowedModel("runway", model, runwayAllowedModels); err != nil {
+		return nil, err
+	}
 
 	duration := int(req.Duration)
 	if duration == 0 {
-		duration = 5
+		duration = defaultRunwayDuration
 	}
-	if duration < 2 {
-		duration = 2
+	if duration < minRunwayDuration {
+		duration = minRunwayDuration
 	}
-	if duration > 10 {
-		duration = 10
+	if duration > maxRunwayDuration {
+		duration = maxRunwayDuration
 	}
 
 	// 转换宽比格式
-	ratio := "1280:720" // default 16:9
+	ratio := defaultRunwayRatio // default 16:9
 	if req.AspectRatio != "" {
 		switch req.AspectRatio {
 		case "16:9":
@@ -114,6 +140,12 @@ func (p *RunwayProvider) Generate(ctx context.Context, req *GenerateRequest) (*G
 			ratio = req.AspectRatio
 		}
 	}
+	p.logger.Info("runway generate start",
+		zap.String("model", model),
+		zap.String("prompt", shortPromptForLog(req.Prompt)),
+		zap.Int("duration", duration),
+		zap.String("ratio", ratio),
+		zap.Bool("image_to_video", req.ImageURL != ""))
 
 	body := runwayRequest{
 		Model:      model,
@@ -126,9 +158,12 @@ func (p *RunwayProvider) Generate(ctx context.Context, req *GenerateRequest) (*G
 		body.PromptImage = req.ImageURL
 	}
 
-	payload, _ := json.Marshal(body)
+	payload, err := marshalJSONRequest("runway", body)
+	if err != nil {
+		return nil, err
+	}
 	httpReq, err := http.NewRequestWithContext(ctx, "POST",
-		p.cfg.BaseURL+"/v1/image_to_video",
+		p.cfg.BaseURL+runwayCreatePath,
 		bytes.NewReader(payload))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
@@ -144,8 +179,7 @@ func (p *RunwayProvider) Generate(ctx context.Context, req *GenerateRequest) (*G
 	defer resp.Body.Close()
 
 	if resp.StatusCode >= 400 {
-		errBody, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("runway error: status=%d body=%s", resp.StatusCode, string(errBody))
+		return nil, httpStatusError(p.logger, "runway", "generate", resp.StatusCode, resp.Body)
 	}
 
 	var rResp runwayResponse
@@ -180,16 +214,39 @@ func (p *RunwayProvider) Generate(ctx context.Context, req *GenerateRequest) (*G
 }
 
 func (p *RunwayProvider) pollGeneration(ctx context.Context, id string) (*runwayResponse, error) {
-	ticker := time.NewTicker(5 * time.Second)
-	defer ticker.Stop()
+	if err := validatePollTaskID(id); err != nil {
+		return nil, fmt.Errorf("invalid runway task id: %w", err)
+	}
+	timer := time.NewTimer(defaultVideoPollInterval)
+	defer timer.Stop()
+	interval := defaultVideoPollInterval
+	attempts := 0
+	consecutiveErrors := 0
 
 	for {
 		select {
 		case <-ctx.Done():
 			return nil, ctx.Err()
-		case <-ticker.C:
+		case <-timer.C:
+			if err := ctx.Err(); err != nil {
+				return nil, err
+			}
+			attempts++
+			if attempts > maxVideoPollAttempts {
+				return nil, fmt.Errorf("runway polling exceeded max attempts (%d)", maxVideoPollAttempts)
+			}
+			if attempts == pollSlowWarnThreshold {
+				p.logger.Warn("runway polling is taking longer than expected",
+					zap.String("task_id", id),
+					zap.Int("attempt", attempts))
+			}
+			if attempts%pollProgressLogEvery == 0 {
+				p.logger.Info("runway polling in progress",
+					zap.String("task_id", id),
+					zap.Int("attempt", attempts))
+			}
 			httpReq, err := http.NewRequestWithContext(ctx, "GET",
-				fmt.Sprintf("%s/v1/tasks/%s", p.cfg.BaseURL, id), nil)
+				p.cfg.BaseURL+runwayTaskPathPrefix+id, nil)
 			if err != nil {
 				return nil, fmt.Errorf("failed to create request: %w", err)
 			}
@@ -198,27 +255,56 @@ func (p *RunwayProvider) pollGeneration(ctx context.Context, id string) (*runway
 
 			resp, err := p.client.Do(httpReq)
 			if err != nil {
+				consecutiveErrors++
+				p.logger.Warn("runway poll request failed",
+					zap.String("task_id", id),
+					zap.Int("attempt", attempts),
+					zap.Int("consecutive_errors", consecutiveErrors),
+					zap.Error(err))
+				if consecutiveErrors >= maxVideoPollConsecutiveErrors {
+					return nil, fmt.Errorf("runway polling failed after %d consecutive errors: %w", consecutiveErrors, err)
+				}
+				interval = nextPollInterval(interval)
+				timer.Reset(interval)
 				continue
+			}
+
+			if resp.StatusCode >= 400 {
+				return nil, statusErrorAndClose(p.logger, "runway", "poll", resp)
 			}
 
 			var rResp runwayResponse
-			if err := json.NewDecoder(resp.Body).Decode(&rResp); err != nil {
-				resp.Body.Close()
+			if err := decodeJSONAndClose(resp, &rResp); err != nil {
+				consecutiveErrors++
+				p.logger.Warn("runway poll decode failed",
+					zap.String("task_id", id),
+					zap.Int("attempt", attempts),
+					zap.Int("consecutive_errors", consecutiveErrors),
+					zap.Error(err))
+				if consecutiveErrors >= maxVideoPollConsecutiveErrors {
+					return nil, fmt.Errorf("runway polling decode failed after %d consecutive errors: %w", consecutiveErrors, err)
+				}
+				interval = nextPollInterval(interval)
+				timer.Reset(interval)
 				continue
 			}
-			resp.Body.Close()
+			consecutiveErrors = 0
+			interval = defaultVideoPollInterval
 
 			switch rResp.Status {
-			case "SUCCEEDED":
+			case runwayStatusSucceeded:
+				p.logger.Info("runway generate complete",
+					zap.String("task_id", id),
+					zap.Int("videos", len(rResp.Output)))
 				return &rResp, nil
-			case "FAILED":
+			case runwayStatusFailed:
 				if rResp.Failure != "" {
 					return nil, fmt.Errorf("runway generation failed: %s", rResp.Failure)
 				}
 				return nil, fmt.Errorf("runway generation failed")
 			}
-			// 继续投票 PENDING,跑
+			// Continue polling while generation is pending/running.
+			timer.Reset(interval)
 		}
 	}
 }
-

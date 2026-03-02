@@ -105,12 +105,19 @@ type MultimodalHandlerConfig struct {
 	OpenAIAPIKey         string
 	OpenAIBaseURL        string
 	GoogleAPIKey         string
+	GoogleBaseURL        string
 	RunwayAPIKey         string
+	RunwayBaseURL        string
 	VeoAPIKey            string
+	VeoBaseURL           string
 	SoraAPIKey           string
+	SoraBaseURL          string
 	KlingAPIKey          string
+	KlingBaseURL         string
 	LumaAPIKey           string
+	LumaBaseURL          string
 	MiniMaxAPIKey        string
+	MiniMaxBaseURL       string
 	DefaultImageProvider string
 	DefaultVideoProvider string
 	ReferenceMaxSize     int64
@@ -170,7 +177,8 @@ func NewMultimodalHandlerFromConfig(cfg MultimodalHandlerConfig, logger *zap.Log
 	}
 	if cfg.GoogleAPIKey != "" {
 		geminiProfile := vendorprofile.NewGeminiProfile(vendorprofile.GeminiConfig{
-			APIKey: cfg.GoogleAPIKey,
+			APIKey:  cfg.GoogleAPIKey,
+			BaseURL: cfg.GoogleBaseURL,
 		}, logger)
 		imageProviders["gemini"] = geminiProfile.Image
 		videoProviders["veo"] = geminiProfile.Video
@@ -183,7 +191,10 @@ func NewMultimodalHandlerFromConfig(cfg MultimodalHandlerConfig, logger *zap.Log
 	}
 	if cfg.VeoAPIKey != "" {
 		videoProviders["veo"] = video.NewVeoProvider(video.VeoConfig{
-			BaseProviderConfig: providers.BaseProviderConfig{APIKey: cfg.VeoAPIKey},
+			BaseProviderConfig: providers.BaseProviderConfig{
+				APIKey:  cfg.VeoAPIKey,
+				BaseURL: cfg.VeoBaseURL,
+			},
 		}, logger)
 		if defaultVideo == "" {
 			defaultVideo = "veo"
@@ -191,7 +202,10 @@ func NewMultimodalHandlerFromConfig(cfg MultimodalHandlerConfig, logger *zap.Log
 	}
 	if cfg.RunwayAPIKey != "" {
 		videoProviders["runway"] = video.NewRunwayProvider(video.RunwayConfig{
-			BaseProviderConfig: providers.BaseProviderConfig{APIKey: cfg.RunwayAPIKey},
+			BaseProviderConfig: providers.BaseProviderConfig{
+				APIKey:  cfg.RunwayAPIKey,
+				BaseURL: cfg.RunwayBaseURL,
+			},
 		}, logger)
 		if defaultVideo == "" {
 			defaultVideo = "runway"
@@ -199,7 +213,10 @@ func NewMultimodalHandlerFromConfig(cfg MultimodalHandlerConfig, logger *zap.Log
 	}
 	if cfg.SoraAPIKey != "" {
 		videoProviders["sora"] = video.NewSoraProvider(video.SoraConfig{
-			BaseProviderConfig: providers.BaseProviderConfig{APIKey: cfg.SoraAPIKey},
+			BaseProviderConfig: providers.BaseProviderConfig{
+				APIKey:  cfg.SoraAPIKey,
+				BaseURL: cfg.SoraBaseURL,
+			},
 		}, logger)
 		if defaultVideo == "" {
 			defaultVideo = "sora"
@@ -207,7 +224,10 @@ func NewMultimodalHandlerFromConfig(cfg MultimodalHandlerConfig, logger *zap.Log
 	}
 	if cfg.KlingAPIKey != "" {
 		videoProviders["kling"] = video.NewKlingProvider(video.KlingConfig{
-			BaseProviderConfig: providers.BaseProviderConfig{APIKey: cfg.KlingAPIKey},
+			BaseProviderConfig: providers.BaseProviderConfig{
+				APIKey:  cfg.KlingAPIKey,
+				BaseURL: cfg.KlingBaseURL,
+			},
 		}, logger)
 		if defaultVideo == "" {
 			defaultVideo = "kling"
@@ -215,7 +235,10 @@ func NewMultimodalHandlerFromConfig(cfg MultimodalHandlerConfig, logger *zap.Log
 	}
 	if cfg.LumaAPIKey != "" {
 		videoProviders["luma"] = video.NewLumaProvider(video.LumaConfig{
-			BaseProviderConfig: providers.BaseProviderConfig{APIKey: cfg.LumaAPIKey},
+			BaseProviderConfig: providers.BaseProviderConfig{
+				APIKey:  cfg.LumaAPIKey,
+				BaseURL: cfg.LumaBaseURL,
+			},
 		}, logger)
 		if defaultVideo == "" {
 			defaultVideo = "luma"
@@ -223,7 +246,10 @@ func NewMultimodalHandlerFromConfig(cfg MultimodalHandlerConfig, logger *zap.Log
 	}
 	if cfg.MiniMaxAPIKey != "" {
 		videoProviders["minimax-video"] = video.NewMiniMaxVideoProvider(video.MiniMaxVideoConfig{
-			BaseProviderConfig: providers.BaseProviderConfig{APIKey: cfg.MiniMaxAPIKey},
+			BaseProviderConfig: providers.BaseProviderConfig{
+				APIKey:  cfg.MiniMaxAPIKey,
+				BaseURL: cfg.MiniMaxBaseURL,
+			},
 		}, logger)
 		if defaultVideo == "" {
 			defaultVideo = "minimax-video"
@@ -1187,4 +1213,3 @@ func filterEmptyStrings(items []string) []string {
 	}
 	return out
 }
-

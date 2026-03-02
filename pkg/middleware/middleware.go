@@ -7,6 +7,7 @@ import (
 	"crypto/rsa"
 	"crypto/x509"
 	"encoding/hex"
+	"encoding/json"
 	"encoding/pem"
 	"fmt"
 	"net"
@@ -16,7 +17,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/BaSui01/agentflow/api"
 	"github.com/BaSui01/agentflow/config"
 	"github.com/BaSui01/agentflow/pkg/metrics"
 	"github.com/BaSui01/agentflow/types"
@@ -95,6 +95,13 @@ type responseWriter struct {
 func (rw *responseWriter) WriteHeader(code int) {
 	rw.statusCode = code
 	rw.ResponseWriter.WriteHeader(code)
+}
+
+// Flush implements http.Flusher for SSE streaming support.
+func (rw *responseWriter) Flush() {
+	if f, ok := rw.ResponseWriter.(http.Flusher); ok {
+		f.Flush()
+	}
 }
 
 // Hijack implements http.Hijacker so WebSocket upgrades work through the logging middleware.
@@ -179,6 +186,13 @@ func (w *tracingResponseWriter) Write(b []byte) (int, error) {
 	return w.ResponseWriter.Write(b)
 }
 
+// Flush implements http.Flusher for SSE streaming support.
+func (w *tracingResponseWriter) Flush() {
+	if f, ok := w.ResponseWriter.(http.Flusher); ok {
+		f.Flush()
+	}
+}
+
 func (w *tracingResponseWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
 	if hj, ok := w.ResponseWriter.(http.Hijacker); ok {
 		return hj.Hijack()
@@ -247,6 +261,63 @@ func normalizePath(path string) string {
 		return path
 	}
 	return strings.Join(segments, "/")
+}
+
+func clientIPFromRequest(r *http.Request) string {
+	if r == nil {
+		return ""
+	}
+
+	remoteIP := parseIPFromAddr(r.RemoteAddr)
+	if isTrustedForwardSource(remoteIP) {
+		if ip := parseForwardedForHeader(r.Header.Get("X-Forwarded-For")); ip != "" {
+			return ip
+		}
+		if ip := parseIPFromAddr(r.Header.Get("X-Real-IP")); ip != "" {
+			return ip
+		}
+	}
+
+	if remoteIP != "" {
+		return remoteIP
+	}
+	return strings.TrimSpace(r.RemoteAddr)
+}
+
+func parseForwardedForHeader(value string) string {
+	for _, part := range strings.Split(value, ",") {
+		if ip := parseIPFromAddr(part); ip != "" {
+			return ip
+		}
+	}
+	return ""
+}
+
+func parseIPFromAddr(raw string) string {
+	trimmed := strings.TrimSpace(strings.Trim(raw, "[]"))
+	if trimmed == "" {
+		return ""
+	}
+	if ip := net.ParseIP(trimmed); ip != nil {
+		return ip.String()
+	}
+	host, _, err := net.SplitHostPort(trimmed)
+	if err != nil {
+		return ""
+	}
+	host = strings.TrimSpace(strings.Trim(host, "[]"))
+	if ip := net.ParseIP(host); ip != nil {
+		return ip.String()
+	}
+	return ""
+}
+
+func isTrustedForwardSource(ipStr string) bool {
+	ip := net.ParseIP(strings.TrimSpace(ipStr))
+	if ip == nil {
+		return false
+	}
+	return ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast()
 }
 
 // OTelTracing creates a span for each HTTP request using the global OTel tracer.
@@ -319,10 +390,7 @@ func RateLimiter(ctx context.Context, rps float64, burst int, logger *zap.Logger
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			now := time.Now()
-			ip, _, err := net.SplitHostPort(r.RemoteAddr)
-			if err != nil {
-				ip = r.RemoteAddr
-			}
+			ip := clientIPFromRequest(r)
 			mu.Lock()
 			if now.Sub(lastCleanup) >= time.Minute {
 				for k, v := range visitors {
@@ -529,14 +597,44 @@ func JWTAuth(cfg config.JWTConfig, skipPaths []string, logger *zap.Logger) Middl
 
 // writeMiddlewareError writes a JSON error response.
 func writeMiddlewareError(w http.ResponseWriter, statusCode int, code string, message string) {
-	api.WriteJSONResponse(w, statusCode, api.Response{
+	resp := middlewareErrorResponse{
 		Success: false,
-		Error: &api.ErrorInfo{
+		Error: &middlewareErrorInfo{
 			Code:    code,
 			Message: message,
 		},
 		Timestamp: time.Now().UTC(),
-	})
+	}
+
+	buf, err := json.Marshal(resp)
+	if err != nil {
+		fallback := middlewareErrorResponse{
+			Success: false,
+			Error: &middlewareErrorInfo{
+				Code:    "INTERNAL_ERROR",
+				Message: "failed to encode response",
+			},
+			Timestamp: time.Now().UTC(),
+		}
+		buf, _ = json.Marshal(fallback)
+		statusCode = http.StatusInternalServerError
+	}
+
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	w.WriteHeader(statusCode)
+	_, _ = w.Write(buf)
+}
+
+type middlewareErrorResponse struct {
+	Success   bool                 `json:"success"`
+	Error     *middlewareErrorInfo `json:"error,omitempty"`
+	Timestamp time.Time            `json:"timestamp"`
+}
+
+type middlewareErrorInfo struct {
+	Code    string `json:"code"`
+	Message string `json:"message"`
 }
 
 // TenantRateLimiter applies rate limiting based on the tenant_id in the request context.
@@ -559,10 +657,7 @@ func TenantRateLimiter(ctx context.Context, rps float64, burst int, logger *zap.
 			if tenantID, ok := types.TenantID(r.Context()); ok {
 				key = "tenant:" + tenantID
 			} else {
-				ip, _, err := net.SplitHostPort(r.RemoteAddr)
-				if err != nil {
-					ip = r.RemoteAddr
-				}
+				ip := clientIPFromRequest(r)
 				key = "ip:" + ip
 			}
 

@@ -105,6 +105,12 @@
 - **配置热重载与回滚** - 文件监听自动重载、版本化历史、一键回滚、验证钩子
 - **MCP WebSocket 心跳重连** — 指数退避重连、连接状态监控
 
+## ⚠️ 认证迁移说明（2026-03）
+
+- API Key 仅支持 `X-API-Key` Header，`api_key` Query 参数已禁用且不再受支持。
+- 当未配置 JWT/API Key 且 `server.allow_no_auth=false` 时，受保护接口会 fail-closed 返回 `503`。
+- 升级建议：生产环境必须显式配置 `server.api_keys` 或 `server.jwt`；仅本地开发可设置 `server.allow_no_auth=true`。
+
 ## 🚀 快速开始
 
 ```bash
@@ -435,8 +441,16 @@ agentflow/
 │
 ├── pkg/openapi/              # OpenAPI 工具生成
 │
-├── cmd/agentflow/            # 应用入口
-│   └── middleware.go         # API 安全中间件
+├── cmd/agentflow/            # 应用入口与运行时装配
+│   ├── main.go               # CLI 入口（serve/migrate/health/version）
+│   ├── migrate.go            # 迁移子命令
+│   ├── server_runtime.go     # Server 结构与启动编排
+│   ├── server_services.go    # 基于 pkg/service.Registry 的生命周期总线
+│   ├── server_http.go        # 路由注册与 HTTP/Metrics 管理器构建
+│   ├── server_handlers_runtime.go # handler 初始化与 provider 装配
+│   ├── server_stores.go      # Mongo/RAG/Memory/Audit 装配
+│   ├── server_hotreload.go   # 热重载管理器初始化
+│   └── server_shutdown.go    # 优雅关闭流程
 │
 └── examples/                 # 示例代码（19 个场景）
 ```

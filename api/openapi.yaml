@@ -6,7 +6,7 @@ info:
 
     Notes:
     - API key authentication is accepted via `X-API-Key` header.
-    - Query-string `api_key` is disabled by default for security reasons.
+    - Query-string `api_key` authentication is not supported; use `X-API-Key` header only.
   version: 1.3.0
   contact:
     name: AgentFlow Team
@@ -916,15 +916,19 @@ paths:
         content:
           application/json:
             schema:
-              type: object
-              additionalProperties: true
+              $ref: '#/components/schemas/A2ARequest'
       responses:
         '200':
           description: Task accepted
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Envelope'
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/A2AResponse'
 
   /api/v1/rag/query:
     post:
@@ -1299,6 +1303,36 @@ components:
         checked_at:
           type: string
 
+    A2ARequest:
+      type: object
+      required: [task]
+      properties:
+        task:
+          type: string
+          description: Task description or query.
+          example: "What is the weather today?"
+        context:
+          type: object
+          additionalProperties: true
+          description: Optional context payload.
+        stream:
+          type: boolean
+          default: false
+          description: Whether to stream response.
+
+    A2AResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [pending, processing, completed, failed]
+          example: pending
+        result:
+          type: object
+          additionalProperties: true
+        error:
+          type: string
+
     Provider:
       type: object
       properties:
@@ -1443,10 +1477,12 @@ components:
           type: array
           items:
             type: string
+          description: Enabled image providers (e.g. openai, gemini).
         video_providers:
           type: array
           items:
             type: string
+          description: Enabled video providers (veo, runway, sora, kling, luma, minimax-video).
         default_image_provider:
           type: string
         default_video_provider:
@@ -1526,6 +1562,8 @@ components:
           type: string
         provider:
           type: string
+          description: Optional target provider override.
+          enum: [veo, runway, sora, kling, luma, minimax-video]
         duration:
           type: number
         aspect_ratio:

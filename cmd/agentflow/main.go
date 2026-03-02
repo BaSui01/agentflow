@@ -51,7 +51,6 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/BaSui01/agentflow/internal/app/bootstrap"
-	"github.com/BaSui01/agentflow/pkg/telemetry"
 )
 
 // =============================================================================
@@ -105,14 +104,14 @@ func runServe(args []string) {
 		os.Exit(1)
 	}
 
-	cfg, err := bootstrap.LoadAndValidateConfig(*configPath)
+	runtime, err := bootstrap.InitializeServeRuntime(*configPath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Invalid config: %v\n", err)
 		os.Exit(1)
 	}
 
 	// 初始化日志
-	logger := bootstrap.NewLogger(cfg.Log)
+	logger := runtime.Logger
 	defer func() {
 		_ = logger.Sync()
 	}()
@@ -123,20 +122,8 @@ func runServe(args []string) {
 		zap.String("git_commit", GitCommit),
 	)
 
-	// Initialize OpenTelemetry
-	otelProviders, err := telemetry.Init(cfg.Telemetry, logger)
-	if err != nil {
-		logger.Warn("failed to initialize telemetry", zap.Error(err))
-	}
-
-	// 初始化数据库连接
-	db, err := bootstrap.OpenDatabase(cfg.Database, logger)
-	if err != nil {
-		logger.Warn("Database not available, API key management disabled", zap.Error(err))
-	}
-
 	// 创建服务器（传入配置文件路径以支持热更新）
-	server := NewServer(cfg, *configPath, logger, otelProviders, db)
+	server := NewServer(runtime.Config, *configPath, logger, runtime.Telemetry, runtime.DB)
 
 	// 启动服务器
 	if err := server.Start(); err != nil {
@@ -220,4 +207,3 @@ Examples:
   agentflow health --addr http://localhost:8080
   agentflow version`)
 }
-

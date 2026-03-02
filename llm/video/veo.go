@@ -5,8 +5,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/BaSui01/agentflow/pkg/tlsutil"
@@ -20,11 +20,11 @@ type VeoProvider struct {
 	logger *zap.Logger
 }
 
-// defaultVeoTimeout is the default HTTP client timeout for Veo video generation requests.
-const defaultVeoTimeout = 300 * time.Second
-
-// defaultVeoPollInterval is the interval between polling attempts for Veo operation status.
-const defaultVeoPollInterval = 5 * time.Second
+const defaultVeoDuration = 8
+const minVeoDuration = 4
+const maxVeoDuration = 20
+const defaultVeoAspectRatio = "16:9"
+const defaultVeoBaseURL = "https://generativelanguage.googleapis.com"
 
 // NewVeoProvider创建了一个新的Veo视频提供商.
 func NewVeoProvider(cfg VeoConfig, logger *zap.Logger) *VeoProvider {
@@ -34,9 +34,12 @@ func NewVeoProvider(cfg VeoConfig, logger *zap.Logger) *VeoProvider {
 	if cfg.Model == "" {
 		cfg.Model = "veo-3.1-generate-preview"
 	}
+	if cfg.BaseURL == "" {
+		cfg.BaseURL = defaultVeoBaseURL
+	}
 	timeout := cfg.Timeout
 	if timeout == 0 {
-		timeout = defaultVeoTimeout
+		timeout = defaultVideoTimeout
 	}
 
 	return &VeoProvider{
@@ -85,14 +88,25 @@ type veoResponse struct {
 
 // Veo不支持分析。
 func (p *VeoProvider) Analyze(ctx context.Context, req *AnalyzeRequest) (*AnalyzeResponse, error) {
+	_, span := startProviderSpan(ctx, p.Name(), "analyze")
+	defer span.End()
+
 	return nil, fmt.Errorf("video analysis not supported by veo provider, use gemini instead")
 }
 
 // 生成视频使用Veo 3.1.
 func (p *VeoProvider) Generate(ctx context.Context, req *GenerateRequest) (*GenerateResponse, error) {
+	ctx, span := startProviderSpan(ctx, p.Name(), "generate")
+	defer span.End()
+
 	if err := ValidateGenerateRequest(req); err != nil {
 		return nil, err
 	}
+	release, err := acquireVideoGenerateSlot(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer release()
 
 	model := req.Model
 	if model == "" {
@@ -114,13 +128,30 @@ func (p *VeoProvider) Generate(ctx context.Context, req *GenerateRequest) (*Gene
 
 	duration := int(req.Duration)
 	if duration == 0 {
-		duration = 8
+		duration = defaultVeoDuration
 	}
+	if duration < minVeoDuration {
+		duration = minVeoDuration
+	}
+	if duration > maxVeoDuration {
+		duration = maxVeoDuration
+	}
+
+	aspectRatio := req.AspectRatio
+	if aspectRatio == "" {
+		aspectRatio = defaultVeoAspectRatio
+	}
+	p.logger.Info("veo generate start",
+		zap.String("model", model),
+		zap.String("prompt", shortPromptForLog(req.Prompt)),
+		zap.Int("duration", duration),
+		zap.String("aspect_ratio", aspectRatio),
+		zap.Bool("image_to_video", req.Image != "" || req.ImageURL != ""))
 
 	body := veoRequest{
 		Instances: []veoInstance{instance},
 		Parameters: veoParams{
-			AspectRatio:     req.AspectRatio,
+			AspectRatio:     aspectRatio,
 			NegativePrompt:  req.NegativePrompt,
 			DurationSeconds: duration,
 			EnhancePrompt:   true,
@@ -128,9 +159,12 @@ func (p *VeoProvider) Generate(ctx context.Context, req *GenerateRequest) (*Gene
 		},
 	}
 
-	payload, _ := json.Marshal(body)
-	// Veo 3.1 使用 Gemini API 端点: /models/{model}:generateVideos
-	url := fmt.Sprintf("https://generativelanguage.googleapis.com/v1beta/models/%s:generateVideos",
+	payload, err := marshalJSONRequest("veo", body)
+	if err != nil {
+		return nil, err
+	}
+	// Veo 3.1 endpoint: /v1beta/models/{model}:generateVideos.
+	url := fmt.Sprintf("%s/models/%s:generateVideos", veoAPIBase(p.cfg.BaseURL),
 		model)
 
 	httpReq, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(payload))
@@ -147,8 +181,7 @@ func (p *VeoProvider) Generate(ctx context.Context, req *GenerateRequest) (*Gene
 	defer resp.Body.Close()
 
 	if resp.StatusCode >= 400 {
-		errBody, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("veo error: status=%d body=%s", resp.StatusCode, string(errBody))
+		return nil, httpStatusError(p.logger, "veo", "generate", resp.StatusCode, resp.Body)
 	}
 
 	var opResp struct {
@@ -159,7 +192,7 @@ func (p *VeoProvider) Generate(ctx context.Context, req *GenerateRequest) (*Gene
 	}
 
 	// 完成投票
-	result, err := p.pollOperation(ctx, opResp.Name)
+	result, err := p.pollGeneration(ctx, opResp.Name)
 	if err != nil {
 		return nil, err
 	}
@@ -184,16 +217,39 @@ func (p *VeoProvider) Generate(ctx context.Context, req *GenerateRequest) (*Gene
 	}, nil
 }
 
-func (p *VeoProvider) pollOperation(ctx context.Context, opName string) (*veoResponse, error) {
-	ticker := time.NewTicker(defaultVeoPollInterval)
-	defer ticker.Stop()
+func (p *VeoProvider) pollGeneration(ctx context.Context, opName string) (*veoResponse, error) {
+	if err := validatePollOperationName(opName); err != nil {
+		return nil, fmt.Errorf("invalid veo operation name: %w", err)
+	}
+	timer := time.NewTimer(defaultVideoPollInterval)
+	defer timer.Stop()
+	interval := defaultVideoPollInterval
+	attempts := 0
+	consecutiveErrors := 0
 
 	for {
 		select {
 		case <-ctx.Done():
 			return nil, ctx.Err()
-		case <-ticker.C:
-			url := fmt.Sprintf("https://generativelanguage.googleapis.com/v1beta/%s", opName)
+		case <-timer.C:
+			if err := ctx.Err(); err != nil {
+				return nil, err
+			}
+			attempts++
+			if attempts > maxVideoPollAttempts {
+				return nil, fmt.Errorf("veo polling exceeded max attempts (%d)", maxVideoPollAttempts)
+			}
+			if attempts == pollSlowWarnThreshold {
+				p.logger.Warn("veo polling is taking longer than expected",
+					zap.String("operation", opName),
+					zap.Int("attempt", attempts))
+			}
+			if attempts%pollProgressLogEvery == 0 {
+				p.logger.Info("veo polling in progress",
+					zap.String("operation", opName),
+					zap.Int("attempt", attempts))
+			}
+			url := fmt.Sprintf("%s/%s", veoAPIBase(p.cfg.BaseURL), opName)
 			httpReq, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 			if err != nil {
 				return nil, fmt.Errorf("failed to create request: %w", err)
@@ -202,7 +258,21 @@ func (p *VeoProvider) pollOperation(ctx context.Context, opName string) (*veoRes
 
 			resp, err := p.client.Do(httpReq)
 			if err != nil {
+				consecutiveErrors++
+				p.logger.Warn("veo poll request failed",
+					zap.String("operation", opName),
+					zap.Int("attempt", attempts),
+					zap.Int("consecutive_errors", consecutiveErrors),
+					zap.Error(err))
+				if consecutiveErrors >= maxVideoPollConsecutiveErrors {
+					return nil, fmt.Errorf("veo polling failed after %d consecutive errors: %w", consecutiveErrors, err)
+				}
+				interval = nextPollInterval(interval)
+				timer.Reset(interval)
 				continue
+			}
+			if resp.StatusCode >= 400 {
+				return nil, statusErrorAndClose(p.logger, "veo", "poll", resp)
 			}
 
 			var opStatus struct {
@@ -212,19 +282,44 @@ func (p *VeoProvider) pollOperation(ctx context.Context, opName string) (*veoRes
 					Message string `json:"message"`
 				} `json:"error"`
 			}
-			if err := json.NewDecoder(resp.Body).Decode(&opStatus); err != nil {
-				resp.Body.Close()
+			if err := decodeJSONAndClose(resp, &opStatus); err != nil {
+				consecutiveErrors++
+				p.logger.Warn("veo poll decode failed",
+					zap.String("operation", opName),
+					zap.Int("attempt", attempts),
+					zap.Int("consecutive_errors", consecutiveErrors),
+					zap.Error(err))
+				if consecutiveErrors >= maxVideoPollConsecutiveErrors {
+					return nil, fmt.Errorf("veo polling decode failed after %d consecutive errors: %w", consecutiveErrors, err)
+				}
+				interval = nextPollInterval(interval)
+				timer.Reset(interval)
 				continue
 			}
-			resp.Body.Close()
+			consecutiveErrors = 0
+			interval = defaultVideoPollInterval
 
 			if opStatus.Error != nil {
 				return nil, fmt.Errorf("veo generation failed: %s", opStatus.Error.Message)
 			}
 			if opStatus.Done {
+				p.logger.Info("veo generate complete",
+					zap.String("operation", opName),
+					zap.Int("videos", len(opStatus.Response.Predictions)))
 				return &opStatus.Response, nil
 			}
+			timer.Reset(interval)
 		}
 	}
 }
 
+func veoAPIBase(baseURL string) string {
+	trimmed := strings.TrimRight(strings.TrimSpace(baseURL), "/")
+	if trimmed == "" {
+		trimmed = defaultVeoBaseURL
+	}
+	if strings.HasSuffix(trimmed, "/v1beta") {
+		return trimmed
+	}
+	return trimmed + "/v1beta"
+}
