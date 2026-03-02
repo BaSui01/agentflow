@@ -1,13 +1,16 @@
 package openai
 
 import (
-	"github.com/BaSui01/agentflow/types"
 	"context"
 	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	providerbase "github.com/BaSui01/agentflow/llm/providers/base"
+
+	"github.com/BaSui01/agentflow/types"
 
 	"github.com/BaSui01/agentflow/llm"
 	"github.com/BaSui01/agentflow/llm/providers"
@@ -392,10 +395,10 @@ func TestOpenAIProvider_Completion_CredentialOverride(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		capturedAuth = r.Header.Get("Authorization")
 		w.Header().Set("Content-Type", "application/json")
-		require.NoError(t, json.NewEncoder(w).Encode(providers.OpenAICompatResponse{
+		require.NoError(t, json.NewEncoder(w).Encode(providerbase.OpenAICompatResponse{
 			ID: "resp-1", Model: "gpt-5.2",
-			Choices: []providers.OpenAICompatChoice{
-				{Index: 0, FinishReason: "stop", Message: providers.OpenAICompatMessage{Role: "assistant", Content: "ok"}},
+			Choices: []providerbase.OpenAICompatChoice{
+				{Index: 0, FinishReason: "stop", Message: providerbase.OpenAICompatMessage{Role: "assistant", Content: "ok"}},
 			},
 		}))
 	}))
@@ -413,5 +416,3 @@ func TestOpenAIProvider_Completion_CredentialOverride(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "Bearer override-key", capturedAuth)
 }
-
-

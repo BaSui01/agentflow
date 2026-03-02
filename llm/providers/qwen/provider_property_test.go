@@ -1,12 +1,15 @@
 package qwen
 
 import (
-	"github.com/BaSui01/agentflow/types"
 	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	providerbase "github.com/BaSui01/agentflow/llm/providers/base"
+
+	"github.com/BaSui01/agentflow/types"
 
 	"github.com/BaSui01/agentflow/llm"
 	"github.com/BaSui01/agentflow/llm/providers"
@@ -102,7 +105,7 @@ func TestProperty3_OpenAIFormatConversion(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			// 创建测试服务器以抓取请求
-			var capturedRequest providers.OpenAICompatRequest
+			var capturedRequest providerbase.OpenAICompatRequest
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				// 解码请求正文
 				err := json.NewDecoder(r.Body).Decode(&capturedRequest)
@@ -111,14 +114,14 @@ func TestProperty3_OpenAIFormatConversion(t *testing.T) {
 				// 返回有效的响应
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusOK)
-				err = json.NewEncoder(w).Encode(providers.OpenAICompatResponse{
+				err = json.NewEncoder(w).Encode(providerbase.OpenAICompatResponse{
 					ID:    "test-id",
 					Model: "qwen-plus",
-					Choices: []providers.OpenAICompatChoice{
+					Choices: []providerbase.OpenAICompatChoice{
 						{
 							Index:        0,
 							FinishReason: "stop",
-							Message: providers.OpenAICompatMessage{
+							Message: providerbase.OpenAICompatMessage{
 								Role:    "assistant",
 								Content: "test response",
 							},
@@ -190,5 +193,3 @@ func TestProperty3_OpenAIFormatConversion(t *testing.T) {
 		})
 	}
 }
-
-

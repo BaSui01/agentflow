@@ -1,9 +1,10 @@
 package providers
 
 import (
-	"github.com/BaSui01/agentflow/types"
 	"context"
 	"testing"
+
+	"github.com/BaSui01/agentflow/types"
 
 	"github.com/BaSui01/agentflow/llm"
 	"github.com/BaSui01/agentflow/llm/middleware"
@@ -432,5 +433,3 @@ func TestProperty8_RewriterChainName(t *testing.T) {
 	assert.Equal(t, "empty_tools_cleaner", cleaner.Name(),
 		"EmptyToolsCleaner should have correct name for logging and debugging")
 }
-
-

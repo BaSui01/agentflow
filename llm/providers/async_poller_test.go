@@ -76,4 +76,3 @@ func TestPoll_MaxAttempts(t *testing.T) {
 		t.Errorf("expected 3 calls, got %d", calls)
 	}
 }
-

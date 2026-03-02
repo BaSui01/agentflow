@@ -1,13 +1,14 @@
 package gemini
 
 import (
-	"github.com/BaSui01/agentflow/types"
 	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/BaSui01/agentflow/types"
 
 	"github.com/BaSui01/agentflow/llm"
 	"github.com/BaSui01/agentflow/llm/providers"
@@ -413,5 +414,3 @@ func TestGeminiProvider_Stream_HTTPError(t *testing.T) {
 	})
 	require.Error(t, err)
 }
-
-

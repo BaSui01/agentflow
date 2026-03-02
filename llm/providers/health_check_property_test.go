@@ -283,4 +283,3 @@ func TestHealthCheckIterationCount(t *testing.T) {
 	assert.GreaterOrEqual(t, totalIterations, 100,
 		"Health check tests should have at least 100 iterations, got %d", totalIterations)
 }
-

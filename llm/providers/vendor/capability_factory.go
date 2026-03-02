@@ -7,9 +7,9 @@ import (
 	"time"
 
 	"github.com/BaSui01/agentflow/llm"
-	"github.com/BaSui01/agentflow/llm/embedding"
-	"github.com/BaSui01/agentflow/llm/image"
-	"github.com/BaSui01/agentflow/llm/rerank"
+	"github.com/BaSui01/agentflow/llm/capabilities/embedding"
+	"github.com/BaSui01/agentflow/llm/capabilities/image"
+	"github.com/BaSui01/agentflow/llm/capabilities/rerank"
 	"gorm.io/gorm"
 )
 

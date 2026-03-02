@@ -13,10 +13,12 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/BaSui01/agentflow/pkg/tlsutil"
+	providerbase "github.com/BaSui01/agentflow/llm/providers/base"
+
 	"github.com/BaSui01/agentflow/llm"
 	"github.com/BaSui01/agentflow/llm/middleware"
 	"github.com/BaSui01/agentflow/llm/providers"
+	"github.com/BaSui01/agentflow/pkg/tlsutil"
 	"github.com/BaSui01/agentflow/types"
 	"go.uber.org/zap"
 )
@@ -80,7 +82,7 @@ func (p *ClaudeProvider) HealthCheck(ctx context.Context) (*llm.HealthStatus, er
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		msg := providers.ReadErrorMessage(resp.Body)
+		msg := providerbase.ReadErrorMessage(resp.Body)
 		return &llm.HealthStatus{Healthy: false, Latency: latency}, fmt.Errorf("claude health check failed: status=%d msg=%s", resp.StatusCode, msg)
 	}
 	return &llm.HealthStatus{Healthy: true, Latency: latency}, nil
@@ -120,8 +122,8 @@ func (p *ClaudeProvider) ListModels(ctx context.Context) ([]llm.Model, error) {
 	defer resp.Body.Close()
 
 	if resp.StatusCode >= 400 {
-		msg := providers.ReadErrorMessage(resp.Body)
-		return nil, providers.MapHTTPError(resp.StatusCode, msg, p.Name())
+		msg := providerbase.ReadErrorMessage(resp.Body)
+		return nil, providerbase.MapHTTPError(resp.StatusCode, msg, p.Name())
 	}
 
 	var modelsResp struct {
@@ -159,7 +161,7 @@ func (p *ClaudeProvider) ListModels(ctx context.Context) ([]llm.Model, error) {
 	return models, nil
 }
 
-	// Claude 的消息结构与 OpenAI 不同
+// Claude 的消息结构与 OpenAI 不同
 type claudeMessage struct {
 	Role    string          `json:"role"` // user 或 assistant
 	Content []claudeContent `json:"content"`
@@ -172,7 +174,7 @@ type claudeContent struct {
 	Name      string          `json:"name,omitempty"`
 	Input     json.RawMessage `json:"input,omitempty"`
 	ToolUseID string          `json:"tool_use_id,omitempty"`
-	Content   string          `json:"content,omitempty"` // for tool_result
+	Content   string          `json:"content,omitempty"`  // for tool_result
 	IsError   *bool           `json:"is_error,omitempty"` // for tool_result: 标记工具执行失败
 	// Image source fields (for type="image")
 	Source *claudeImageSource `json:"source,omitempty"`
@@ -466,7 +468,7 @@ func (p *ClaudeProvider) Completion(ctx context.Context, req *llm.ChatRequest) (
 	system, messages := convertToClaudeMessages(req.Messages)
 
 	body := claudeRequest{
-		Model:       providers.ChooseModel(req, p.cfg.Model, "claude-opus-4.5-20260105"),
+		Model:       providerbase.ChooseModel(req, p.cfg.Model, "claude-opus-4.5-20260105"),
 		Messages:    messages,
 		System:      system,
 		MaxTokens:   chooseMaxTokens(req),
@@ -508,8 +510,8 @@ func (p *ClaudeProvider) Completion(ctx context.Context, req *llm.ChatRequest) (
 	defer resp.Body.Close()
 
 	if resp.StatusCode >= 400 {
-		msg := providers.ReadErrorMessage(resp.Body)
-		return nil, providers.MapHTTPError(resp.StatusCode, msg, p.Name())
+		msg := providerbase.ReadErrorMessage(resp.Body)
+		return nil, providerbase.MapHTTPError(resp.StatusCode, msg, p.Name())
 	}
 
 	var claudeResp claudeResponse
@@ -543,7 +545,7 @@ func (p *ClaudeProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-ch
 	system, messages := convertToClaudeMessages(req.Messages)
 
 	body := claudeRequest{
-		Model:       providers.ChooseModel(req, p.cfg.Model, "claude-opus-4.5-20260105"),
+		Model:       providerbase.ChooseModel(req, p.cfg.Model, "claude-opus-4.5-20260105"),
 		Messages:    messages,
 		System:      system,
 		MaxTokens:   chooseMaxTokens(req),
@@ -598,8 +600,8 @@ func (p *ClaudeProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-ch
 	}
 	if resp.StatusCode >= 400 {
 		defer resp.Body.Close()
-		msg := providers.ReadErrorMessage(resp.Body)
-		return nil, providers.MapHTTPError(resp.StatusCode, msg, p.Name())
+		msg := providerbase.ReadErrorMessage(resp.Body)
+		return nil, providerbase.MapHTTPError(resp.StatusCode, msg, p.Name())
 	}
 
 	ch := make(chan llm.StreamChunk)
@@ -612,7 +614,7 @@ func (p *ClaudeProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-ch
 		var currentID string
 		var currentModel string
 		var toolCallAccumulator = make(map[int]*types.ToolCall) // 累积工具调用
-		var startUsage *claudeUsage                           // message_start 中的初始 usage
+		var startUsage *claudeUsage                             // message_start 中的初始 usage
 
 		for {
 			line, err := reader.ReadString('\n')
@@ -999,4 +1001,3 @@ func detectImageMediaType(b64Data string) string {
 		return "image/png"
 	}
 }
-

@@ -1,12 +1,15 @@
 package qwen
 
 import (
-	"github.com/BaSui01/agentflow/types"
 	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	providerbase "github.com/BaSui01/agentflow/llm/providers/base"
+
+	"github.com/BaSui01/agentflow/types"
 
 	"github.com/BaSui01/agentflow/llm"
 	"github.com/BaSui01/agentflow/llm/providers"
@@ -58,19 +61,19 @@ func TestQwenProvider_SupportsNativeFunctionCalling(t *testing.T) {
 }
 
 func TestQwenProvider_Completion(t *testing.T) {
-	var capturedRequest providers.OpenAICompatRequest
+	var capturedRequest providerbase.OpenAICompatRequest
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, "/compatible-mode/v1/chat/completions", r.URL.Path)
 		assert.Contains(t, r.Header.Get("Authorization"), "Bearer ")
 		err := json.NewDecoder(r.Body).Decode(&capturedRequest)
 		require.NoError(t, err)
 		w.Header().Set("Content-Type", "application/json")
-		err = json.NewEncoder(w).Encode(providers.OpenAICompatResponse{
+		err = json.NewEncoder(w).Encode(providerbase.OpenAICompatResponse{
 			ID: "resp-1", Model: "qwen3-235b-a22b",
-			Choices: []providers.OpenAICompatChoice{
-				{Index: 0, FinishReason: "stop", Message: providers.OpenAICompatMessage{Role: "assistant", Content: "Hello from Qwen"}},
+			Choices: []providerbase.OpenAICompatChoice{
+				{Index: 0, FinishReason: "stop", Message: providerbase.OpenAICompatMessage{Role: "assistant", Content: "Hello from Qwen"}},
 			},
-			Usage: &providers.OpenAICompatUsage{PromptTokens: 10, CompletionTokens: 5, TotalTokens: 15},
+			Usage: &providerbase.OpenAICompatUsage{PromptTokens: 10, CompletionTokens: 5, TotalTokens: 15},
 		})
 		require.NoError(t, err)
 	}))
@@ -139,10 +142,10 @@ func TestQwenProvider_Stream(t *testing.T) {
 		assert.Equal(t, "/compatible-mode/v1/chat/completions", r.URL.Path)
 		w.Header().Set("Content-Type", "text/event-stream")
 		w.WriteHeader(http.StatusOK)
-		chunk := providers.OpenAICompatResponse{
+		chunk := providerbase.OpenAICompatResponse{
 			ID: "stream-1", Model: "qwen3-235b-a22b",
-			Choices: []providers.OpenAICompatChoice{
-				{Index: 0, Delta: &providers.OpenAICompatMessage{Role: "assistant", Content: "Hello"}},
+			Choices: []providerbase.OpenAICompatChoice{
+				{Index: 0, Delta: &providerbase.OpenAICompatMessage{Role: "assistant", Content: "Hello"}},
 			},
 		}
 		data, _ := json.Marshal(chunk)
@@ -232,5 +235,3 @@ func TestQwenProvider_HealthCheck(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, status.Healthy)
 }
-
-

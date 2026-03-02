@@ -1,13 +1,14 @@
 package providers_test
 
 import (
-	"github.com/BaSui01/agentflow/types"
 	"context"
 	"net/http"
 	"net/http/httptest"
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/BaSui01/agentflow/types"
 
 	"github.com/BaSui01/agentflow/llm"
 	"github.com/BaSui01/agentflow/llm/providers"
@@ -354,5 +355,3 @@ func TestProperty27_IterationCount(t *testing.T) {
 	assert.GreaterOrEqual(t, totalIterations, 100,
 		"Property 27 should have at least 100 test iterations, got %d", totalIterations)
 }
-
-

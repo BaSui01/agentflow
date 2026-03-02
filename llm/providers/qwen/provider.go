@@ -3,6 +3,7 @@ package qwen
 import (
 	"github.com/BaSui01/agentflow/llm"
 	"github.com/BaSui01/agentflow/llm/providers"
+	providerbase "github.com/BaSui01/agentflow/llm/providers/base"
 	"github.com/BaSui01/agentflow/llm/providers/openaicompat"
 	"go.uber.org/zap"
 )
@@ -37,11 +38,10 @@ func NewQwenProvider(cfg providers.QwenConfig, logger *zap.Logger) *QwenProvider
 // qwenRequestHook handles Qwen-specific request modifications.
 // Switches to qwen3-max for thinking/extended reasoning modes.
 // Qwen3 series natively supports thinking mode; qwen3-max enables it by default.
-func qwenRequestHook(req *llm.ChatRequest, body *providers.OpenAICompatRequest) {
+func qwenRequestHook(req *llm.ChatRequest, body *providerbase.OpenAICompatRequest) {
 	if req.ReasoningMode == "thinking" || req.ReasoningMode == "extended" {
 		if req.Model == "" {
 			body.Model = "qwen3-max"
 		}
 	}
 }
-

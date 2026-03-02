@@ -3,11 +3,11 @@ package vendor
 import (
 	"time"
 
-	"github.com/BaSui01/agentflow/llm/embedding"
-	"github.com/BaSui01/agentflow/llm/image"
+	"github.com/BaSui01/agentflow/llm/capabilities/embedding"
+	"github.com/BaSui01/agentflow/llm/capabilities/image"
+	"github.com/BaSui01/agentflow/llm/capabilities/video"
 	"github.com/BaSui01/agentflow/llm/providers"
 	llmgemini "github.com/BaSui01/agentflow/llm/providers/gemini"
-	"github.com/BaSui01/agentflow/llm/video"
 	"go.uber.org/zap"
 )
 

@@ -1,11 +1,12 @@
 package minimax
 
 import (
-	"github.com/BaSui01/agentflow/types"
 	"context"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/BaSui01/agentflow/types"
 
 	"github.com/BaSui01/agentflow/llm"
 	"github.com/BaSui01/agentflow/llm/providers"
@@ -62,5 +63,3 @@ func TestMiniMaxProvider_GenerateAudio_Success(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, audioData, resp.Audio)
 }
-
-

@@ -3,6 +3,7 @@ package kimi
 import (
 	"github.com/BaSui01/agentflow/llm"
 	"github.com/BaSui01/agentflow/llm/providers"
+	providerbase "github.com/BaSui01/agentflow/llm/providers/base"
 	"github.com/BaSui01/agentflow/llm/providers/openaicompat"
 	"go.uber.org/zap"
 )
@@ -35,11 +36,10 @@ func NewKimiProvider(cfg providers.KimiConfig, logger *zap.Logger) *KimiProvider
 
 // kimiRequestHook handles Kimi-specific request modifications.
 // Switches to k1 reasoning model for thinking/extended modes.
-func kimiRequestHook(req *llm.ChatRequest, body *providers.OpenAICompatRequest) {
+func kimiRequestHook(req *llm.ChatRequest, body *providerbase.OpenAICompatRequest) {
 	if req.ReasoningMode == "thinking" || req.ReasoningMode == "extended" {
 		if req.Model == "" {
 			body.Model = "k1"
 		}
 	}
 }
-

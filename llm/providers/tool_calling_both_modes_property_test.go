@@ -1,7 +1,6 @@
 package providers
 
 import (
-	"github.com/BaSui01/agentflow/types"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -10,6 +9,8 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/BaSui01/agentflow/types"
 
 	"github.com/BaSui01/agentflow/llm"
 	"github.com/stretchr/testify/assert"
@@ -824,5 +825,3 @@ func TestProperty21_ToolCallingWithToolChoice(t *testing.T) {
 		}
 	}
 }
-
-

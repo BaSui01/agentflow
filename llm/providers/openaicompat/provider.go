@@ -9,7 +9,6 @@
 package openaicompat
 
 import (
-	"github.com/BaSui01/agentflow/types"
 	"bufio"
 	"bytes"
 	"context"
@@ -21,10 +20,14 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/BaSui01/agentflow/pkg/tlsutil"
+	providerbase "github.com/BaSui01/agentflow/llm/providers/base"
+
+	"github.com/BaSui01/agentflow/types"
+
 	"github.com/BaSui01/agentflow/llm"
 	"github.com/BaSui01/agentflow/llm/middleware"
 	"github.com/BaSui01/agentflow/llm/providers"
+	"github.com/BaSui01/agentflow/pkg/tlsutil"
 	"go.uber.org/zap"
 )
 
@@ -60,7 +63,7 @@ type Config struct {
 
 	// RequestHook is an optional function to modify the request body before sending.
 	// Use this for provider-specific fields (e.g., DeepSeek's ReasoningMode model selection).
-	RequestHook func(req *llm.ChatRequest, body *providers.OpenAICompatRequest)
+	RequestHook func(req *llm.ChatRequest, body *providerbase.OpenAICompatRequest)
 
 	// SupportsTools indicates whether this provider supports native function calling.
 	// Defaults to true if not set.
@@ -127,6 +130,17 @@ func (p *Provider) SupportsNativeFunctionCalling() bool {
 // SetBuildHeaders sets custom header builder for the provider.
 func (p *Provider) SetBuildHeaders(fn func(req *http.Request, apiKey string)) {
 	p.Cfg.BuildHeaders = fn
+}
+
+// ApplyHeaders applies provider-specific headers to the request.
+func (p *Provider) ApplyHeaders(req *http.Request, apiKey string) {
+	p.buildHeaders(req, apiKey)
+}
+
+// ResolveAPIKey returns the effective API key for this request context.
+// Resolution order: context override -> APIKeys round-robin -> APIKey.
+func (p *Provider) ResolveAPIKey(ctx context.Context) string {
+	return p.resolveAPIKey(ctx)
 }
 
 // buildHeaders applies headers to the HTTP request.
@@ -212,8 +226,8 @@ func (p *Provider) DoJSON(ctx context.Context, method, path string, payload any,
 	defer resp.Body.Close()
 
 	if resp.StatusCode >= 400 {
-		msg := providers.ReadErrorMessage(resp.Body)
-		return providers.MapHTTPError(resp.StatusCode, msg, p.Name())
+		msg := providerbase.ReadErrorMessage(resp.Body)
+		return providerbase.MapHTTPError(resp.StatusCode, msg, p.Name())
 	}
 
 	if out == nil {
@@ -238,7 +252,7 @@ func (p *Provider) HealthCheck(ctx context.Context) (*llm.HealthStatus, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
-	p.buildHeaders(httpReq, p.Cfg.APIKey)
+	p.buildHeaders(httpReq, p.resolveAPIKey(ctx))
 
 	resp, err := p.Client.Do(httpReq)
 	latency := time.Since(start)
@@ -248,7 +262,7 @@ func (p *Provider) HealthCheck(ctx context.Context) (*llm.HealthStatus, error) {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		msg := providers.ReadErrorMessage(resp.Body)
+		msg := providerbase.ReadErrorMessage(resp.Body)
 		return &llm.HealthStatus{Healthy: false, Latency: latency},
 			fmt.Errorf("%s health check failed: status=%d msg=%s", p.Cfg.ProviderName, resp.StatusCode, msg)
 	}
@@ -258,8 +272,9 @@ func (p *Provider) HealthCheck(ctx context.Context) (*llm.HealthStatus, error) {
 
 // ListModels returns the list of available models.
 func (p *Provider) ListModels(ctx context.Context) ([]llm.Model, error) {
-	return providers.ListModelsOpenAICompat(
-		ctx, p.Client, p.Cfg.BaseURL, p.Cfg.APIKey, p.Cfg.ProviderName,
+	apiKey := p.resolveAPIKey(ctx)
+	return providerbase.ListModelsOpenAICompat(
+		ctx, p.Client, p.Cfg.BaseURL, apiKey, p.Cfg.ProviderName,
 		p.Cfg.ModelsEndpoint, p.buildHeaders,
 	)
 }
@@ -288,12 +303,12 @@ func (p *Provider) Completion(ctx context.Context, req *llm.ChatRequest) (*llm.C
 	req = rewrittenReq
 
 	apiKey := p.resolveAPIKey(ctx)
-	model := providers.ChooseModel(req, p.Cfg.DefaultModel, p.Cfg.FallbackModel)
+	model := providerbase.ChooseModel(req, p.Cfg.DefaultModel, p.Cfg.FallbackModel)
 
-	body := providers.OpenAICompatRequest{
+	body := providerbase.OpenAICompatRequest{
 		Model:               model,
-		Messages:            providers.ConvertMessagesToOpenAI(req.Messages),
-		Tools:               providers.ConvertToolsToOpenAI(req.Tools),
+		Messages:            providerbase.ConvertMessagesToOpenAI(req.Messages),
+		Tools:               providerbase.ConvertToolsToOpenAI(req.Tools),
 		MaxTokens:           req.MaxTokens,
 		Temperature:         req.Temperature,
 		TopP:                req.TopP,
@@ -314,7 +329,7 @@ func (p *Provider) Completion(ctx context.Context, req *llm.ChatRequest) (*llm.C
 	if req.ToolChoice != nil {
 		body.ToolChoice = req.ToolChoice
 	}
-	if rf := providers.ConvertResponseFormat(req.ResponseFormat); rf != nil {
+	if rf := providerbase.ConvertResponseFormat(req.ResponseFormat); rf != nil {
 		body.ResponseFormat = rf
 	}
 
@@ -333,12 +348,12 @@ func (p *Provider) Completion(ctx context.Context, req *llm.ChatRequest) (*llm.C
 		p.Cfg.RequestHook(req, &body)
 	}
 
-	var oaResp providers.OpenAICompatResponse
+	var oaResp providerbase.OpenAICompatResponse
 	if err := p.DoJSON(ctx, http.MethodPost, p.Cfg.EndpointPath, body, apiKey, &oaResp); err != nil {
 		return nil, err
 	}
 
-	result := providers.ToLLMChatResponse(oaResp, p.Name())
+	result := providerbase.ToLLMChatResponse(oaResp, p.Name())
 	if oaResp.Created != 0 {
 		result.CreatedAt = time.Unix(oaResp.Created, 0)
 	}
@@ -361,12 +376,12 @@ func (p *Provider) Stream(ctx context.Context, req *llm.ChatRequest) (<-chan llm
 	req = rewrittenReq
 
 	apiKey := p.resolveAPIKey(ctx)
-	model := providers.ChooseModel(req, p.Cfg.DefaultModel, p.Cfg.FallbackModel)
+	model := providerbase.ChooseModel(req, p.Cfg.DefaultModel, p.Cfg.FallbackModel)
 
-	body := providers.OpenAICompatRequest{
+	body := providerbase.OpenAICompatRequest{
 		Model:               model,
-		Messages:            providers.ConvertMessagesToOpenAI(req.Messages),
-		Tools:               providers.ConvertToolsToOpenAI(req.Tools),
+		Messages:            providerbase.ConvertMessagesToOpenAI(req.Messages),
+		Tools:               providerbase.ConvertToolsToOpenAI(req.Tools),
 		MaxTokens:           req.MaxTokens,
 		Temperature:         req.Temperature,
 		TopP:                req.TopP,
@@ -388,11 +403,11 @@ func (p *Provider) Stream(ctx context.Context, req *llm.ChatRequest) (<-chan llm
 	if req.ToolChoice != nil {
 		body.ToolChoice = req.ToolChoice
 	}
-	if rf := providers.ConvertResponseFormat(req.ResponseFormat); rf != nil {
+	if rf := providerbase.ConvertResponseFormat(req.ResponseFormat); rf != nil {
 		body.ResponseFormat = rf
 	}
 	if req.StreamOptions != nil {
-		body.StreamOptions = &providers.StreamOptions{
+		body.StreamOptions = &providerbase.StreamOptions{
 			IncludeUsage:      req.StreamOptions.IncludeUsage,
 			ChunkIncludeUsage: req.StreamOptions.ChunkIncludeUsage,
 		}
@@ -429,8 +444,8 @@ func (p *Provider) Stream(ctx context.Context, req *llm.ChatRequest) (<-chan llm
 	}
 	if resp.StatusCode >= 400 {
 		defer resp.Body.Close()
-		msg := providers.ReadErrorMessage(resp.Body)
-		return nil, providers.MapHTTPError(resp.StatusCode, msg, p.Name())
+		msg := providerbase.ReadErrorMessage(resp.Body)
+		return nil, providerbase.MapHTTPError(resp.StatusCode, msg, p.Name())
 	}
 
 	return StreamSSE(ctx, resp.Body, p.Name()), nil
@@ -469,7 +484,7 @@ func StreamSSE(ctx context.Context, body io.ReadCloser, providerName string) <-c
 				return
 			}
 
-			var oaResp providers.OpenAICompatResponse
+			var oaResp providerbase.OpenAICompatResponse
 			if err := json.Unmarshal([]byte(data), &oaResp); err != nil {
 				select {
 				case <-ctx.Done():
@@ -550,17 +565,17 @@ func StreamSSE(ctx context.Context, body io.ReadCloser, providerName string) <-c
 }
 
 // convertWebSearchOptions converts llm.WebSearchOptions to the wire format.
-func convertWebSearchOptions(opts *llm.WebSearchOptions) *providers.WebSearchOptions {
+func convertWebSearchOptions(opts *llm.WebSearchOptions) *providerbase.WebSearchOptions {
 	if opts == nil {
 		return nil
 	}
-	result := &providers.WebSearchOptions{
+	result := &providerbase.WebSearchOptions{
 		SearchContextSize: opts.SearchContextSize,
 	}
 	if opts.UserLocation != nil {
-		result.UserLocation = &providers.WebSearchUserLocation{
+		result.UserLocation = &providerbase.WebSearchUserLocation{
 			Type: "approximate",
-			Approximate: &providers.WebSearchApproxLocation{
+			Approximate: &providerbase.WebSearchApproxLocation{
 				Country:  opts.UserLocation.Country,
 				Region:   opts.UserLocation.Region,
 				City:     opts.UserLocation.City,
@@ -570,5 +585,3 @@ func convertWebSearchOptions(opts *llm.WebSearchOptions) *providers.WebSearchOpt
 	}
 	return result
 }
-
-

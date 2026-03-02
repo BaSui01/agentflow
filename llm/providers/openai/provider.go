@@ -11,6 +11,8 @@ import (
 	"strings"
 	"time"
 
+	providerbase "github.com/BaSui01/agentflow/llm/providers/base"
+
 	"github.com/BaSui01/agentflow/llm"
 	"github.com/BaSui01/agentflow/llm/providers"
 	"github.com/BaSui01/agentflow/llm/providers/openaicompat"
@@ -53,6 +55,7 @@ func NewOpenAIProvider(cfg providers.OpenAIConfig, logger *zap.Logger) *OpenAIPr
 		Provider: openaicompat.New(openaicompat.Config{
 			ProviderName:  "openai",
 			APIKey:        cfg.APIKey,
+			APIKeys:       cfg.APIKeys,
 			BaseURL:       cfg.BaseURL,
 			DefaultModel:  cfg.Model,
 			FallbackModel: "gpt-5.2", // 2026: GPT-5.2
@@ -100,13 +103,7 @@ func (p *OpenAIProvider) Completion(ctx context.Context, req *llm.ChatRequest) (
 	}
 	req = rewrittenReq
 
-	apiKey := p.Provider.Cfg.APIKey
-	if c, ok := llm.CredentialOverrideFromContext(ctx); ok {
-		if strings.TrimSpace(c.APIKey) != "" {
-			apiKey = strings.TrimSpace(c.APIKey)
-		}
-	}
-
+	apiKey := p.Provider.ResolveAPIKey(ctx)
 	return p.completionWithResponsesAPI(ctx, req, apiKey)
 }
 
@@ -279,7 +276,7 @@ func (p *OpenAIProvider) completionWithResponsesAPI(ctx context.Context, req *ll
 // buildResponsesRequest converts a ChatRequest to a Responses API request.
 func (p *OpenAIProvider) buildResponsesRequest(req *llm.ChatRequest) openAIResponsesRequest {
 	body := openAIResponsesRequest{
-		Model:             providers.ChooseModel(req, p.openaiCfg.Model, "gpt-5.2"),
+		Model:             providerbase.ChooseModel(req, p.openaiCfg.Model, "gpt-5.2"),
 		ToolChoice:        req.ToolChoice,
 		Store:             req.Store,
 		Metadata:          req.Metadata,
@@ -340,7 +337,7 @@ func (p *OpenAIProvider) buildResponsesRequest(req *llm.ChatRequest) openAIRespo
 	// ResponseFormat → text.format
 	if req.ResponseFormat != nil {
 		body.Text = &responsesTextParam{
-			Format: providers.ConvertResponseFormat(req.ResponseFormat),
+			Format: providerbase.ConvertResponseFormat(req.ResponseFormat),
 		}
 	}
 
@@ -570,12 +567,7 @@ func (p *OpenAIProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-ch
 	}
 	req = rewrittenReq
 
-	apiKey := p.Provider.Cfg.APIKey
-	if c, ok := llm.CredentialOverrideFromContext(ctx); ok {
-		if strings.TrimSpace(c.APIKey) != "" {
-			apiKey = strings.TrimSpace(c.APIKey)
-		}
-	}
+	apiKey := p.Provider.ResolveAPIKey(ctx)
 
 	body := p.buildResponsesRequest(req)
 	body.Stream = true
@@ -602,8 +594,8 @@ func (p *OpenAIProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-ch
 	}
 	if resp.StatusCode >= 400 {
 		defer resp.Body.Close()
-		msg := providers.ReadErrorMessage(resp.Body)
-		return nil, providers.MapHTTPError(resp.StatusCode, msg, p.Name())
+		msg := providerbase.ReadErrorMessage(resp.Body)
+		return nil, providerbase.MapHTTPError(resp.StatusCode, msg, p.Name())
 	}
 
 	return streamResponsesSSE(ctx, resp.Body, p.Name()), nil
@@ -792,5 +784,3 @@ func streamResponsesSSE(ctx context.Context, body io.ReadCloser, providerName st
 	}()
 	return ch
 }
-
-

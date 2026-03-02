@@ -52,4 +52,3 @@ func Poll[T any](ctx context.Context, cfg PollConfig, check PollFunc[T]) (*T, er
 		}
 	}
 }
-

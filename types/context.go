@@ -83,12 +83,15 @@ func PromptBundleVersion(ctx context.Context) (string, bool) {
 
 // WithRoles adds user roles to context.
 func WithRoles(ctx context.Context, roles []string) context.Context {
-	return context.WithValue(ctx, keyRoles, roles)
+	copied := append([]string(nil), roles...)
+	return context.WithValue(ctx, keyRoles, copied)
 }
 
 // Roles extracts user roles from context.
 func Roles(ctx context.Context) ([]string, bool) {
 	v, ok := ctx.Value(keyRoles).([]string)
-	return v, ok && len(v) > 0
+	if !ok || len(v) == 0 {
+		return nil, false
+	}
+	return append([]string(nil), v...), true
 }
-

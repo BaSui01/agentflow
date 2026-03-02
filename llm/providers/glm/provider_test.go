@@ -1,12 +1,15 @@
 package glm
 
 import (
-	"github.com/BaSui01/agentflow/types"
 	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	providerbase "github.com/BaSui01/agentflow/llm/providers/base"
+
+	"github.com/BaSui01/agentflow/types"
 
 	"github.com/BaSui01/agentflow/llm"
 	"github.com/BaSui01/agentflow/llm/providers"
@@ -71,7 +74,7 @@ func TestGLMProvider_SupportsNativeFunctionCalling(t *testing.T) {
 // --- Completion via httptest ---
 
 func TestGLMProvider_Completion(t *testing.T) {
-	var capturedRequest providers.OpenAICompatRequest
+	var capturedRequest providerbase.OpenAICompatRequest
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, "/api/paas/v4/chat/completions", r.URL.Path)
 		assert.Contains(t, r.Header.Get("Authorization"), "Bearer ")
@@ -79,12 +82,12 @@ func TestGLMProvider_Completion(t *testing.T) {
 		require.NoError(t, err)
 
 		w.Header().Set("Content-Type", "application/json")
-		err = json.NewEncoder(w).Encode(providers.OpenAICompatResponse{
+		err = json.NewEncoder(w).Encode(providerbase.OpenAICompatResponse{
 			ID: "resp-1", Model: "glm-4-plus",
-			Choices: []providers.OpenAICompatChoice{
-				{Index: 0, FinishReason: "stop", Message: providers.OpenAICompatMessage{Role: "assistant", Content: "Hello from GLM"}},
+			Choices: []providerbase.OpenAICompatChoice{
+				{Index: 0, FinishReason: "stop", Message: providerbase.OpenAICompatMessage{Role: "assistant", Content: "Hello from GLM"}},
 			},
-			Usage: &providers.OpenAICompatUsage{PromptTokens: 10, CompletionTokens: 5, TotalTokens: 15},
+			Usage: &providerbase.OpenAICompatUsage{PromptTokens: 10, CompletionTokens: 5, TotalTokens: 15},
 		})
 		require.NoError(t, err)
 	}))
@@ -157,10 +160,10 @@ func TestGLMProvider_Stream(t *testing.T) {
 		w.Header().Set("Content-Type", "text/event-stream")
 		w.WriteHeader(http.StatusOK)
 
-		chunk := providers.OpenAICompatResponse{
+		chunk := providerbase.OpenAICompatResponse{
 			ID: "stream-1", Model: "glm-4-plus",
-			Choices: []providers.OpenAICompatChoice{
-				{Index: 0, Delta: &providers.OpenAICompatMessage{Role: "assistant", Content: "Hello"}},
+			Choices: []providerbase.OpenAICompatChoice{
+				{Index: 0, Delta: &providerbase.OpenAICompatMessage{Role: "assistant", Content: "Hello"}},
 			},
 		}
 		data, _ := json.Marshal(chunk)
@@ -262,5 +265,3 @@ func TestGLMProvider_HealthCheck(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, status.Healthy)
 }
-
-

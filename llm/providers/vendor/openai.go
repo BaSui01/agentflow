@@ -3,24 +3,24 @@ package vendor
 import (
 	"time"
 
-	"github.com/BaSui01/agentflow/llm/embedding"
-	"github.com/BaSui01/agentflow/llm/image"
+	speech "github.com/BaSui01/agentflow/llm/capabilities/audio"
+	"github.com/BaSui01/agentflow/llm/capabilities/embedding"
+	"github.com/BaSui01/agentflow/llm/capabilities/image"
 	"github.com/BaSui01/agentflow/llm/providers"
 	llmopenai "github.com/BaSui01/agentflow/llm/providers/openai"
-	"github.com/BaSui01/agentflow/llm/speech"
 	"go.uber.org/zap"
 )
 
 type OpenAIConfig struct {
-	APIKey       string
-	BaseURL      string
-	ChatModel    string
-	EmbeddingModel string
-	ImageModel   string
-	TTSModel     string
-	STTModel     string
-	Voice        string
-	Timeout      time.Duration
+	APIKey          string
+	BaseURL         string
+	ChatModel       string
+	EmbeddingModel  string
+	ImageModel      string
+	TTSModel        string
+	STTModel        string
+	Voice           string
+	Timeout         time.Duration
 	UseResponsesAPI bool
 }
 

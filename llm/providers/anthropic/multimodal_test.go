@@ -1,9 +1,10 @@
 package claude
 
 import (
-	"github.com/BaSui01/agentflow/types"
 	"context"
 	"testing"
+
+	"github.com/BaSui01/agentflow/types"
 
 	"github.com/BaSui01/agentflow/llm"
 	"github.com/BaSui01/agentflow/llm/providers"
@@ -42,5 +43,3 @@ func TestClaudeProvider_MultimodalNotSupported(t *testing.T) {
 		})
 	}
 }
-
-

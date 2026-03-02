@@ -1,12 +1,15 @@
 package minimax
 
 import (
-	"github.com/BaSui01/agentflow/types"
 	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	providerbase "github.com/BaSui01/agentflow/llm/providers/base"
+
+	"github.com/BaSui01/agentflow/types"
 
 	"github.com/BaSui01/agentflow/llm"
 	"github.com/BaSui01/agentflow/llm/providers"
@@ -20,15 +23,15 @@ import (
 func TestProperty19_ToolCallResponseParsing(t *testing.T) {
 	testCases := []struct {
 		name              string
-		responseToolCalls []providers.OpenAICompatToolCall
+		responseToolCalls []providerbase.OpenAICompatToolCall
 		responseContent   string
 		expectedToolCalls int
 		expectedToolNames []string
 	}{
 		{
 			name: "single tool call",
-			responseToolCalls: []providers.OpenAICompatToolCall{
-				{ID: "call_1", Type: "function", Function: providers.OpenAICompatFunction{
+			responseToolCalls: []providerbase.OpenAICompatToolCall{
+				{ID: "call_1", Type: "function", Function: providerbase.OpenAICompatFunction{
 					Name: "get_weather", Arguments: json.RawMessage(`{"location":"Beijing"}`)}},
 			},
 			expectedToolCalls: 1,
@@ -36,10 +39,10 @@ func TestProperty19_ToolCallResponseParsing(t *testing.T) {
 		},
 		{
 			name: "multiple tool calls",
-			responseToolCalls: []providers.OpenAICompatToolCall{
-				{ID: "call_1", Type: "function", Function: providers.OpenAICompatFunction{
+			responseToolCalls: []providerbase.OpenAICompatToolCall{
+				{ID: "call_1", Type: "function", Function: providerbase.OpenAICompatFunction{
 					Name: "get_weather", Arguments: json.RawMessage(`{"location":"Beijing"}`)}},
-				{ID: "call_2", Type: "function", Function: providers.OpenAICompatFunction{
+				{ID: "call_2", Type: "function", Function: providerbase.OpenAICompatFunction{
 					Name: "get_time", Arguments: json.RawMessage(`{"timezone":"Asia/Shanghai"}`)}},
 			},
 			expectedToolCalls: 2,
@@ -58,14 +61,14 @@ func TestProperty19_ToolCallResponseParsing(t *testing.T) {
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusOK)
-				json.NewEncoder(w).Encode(providers.OpenAICompatResponse{
+				json.NewEncoder(w).Encode(providerbase.OpenAICompatResponse{
 					ID:    "test-id",
 					Model: "abab6.5s-chat",
-					Choices: []providers.OpenAICompatChoice{
+					Choices: []providerbase.OpenAICompatChoice{
 						{
 							Index:        0,
 							FinishReason: "stop",
-							Message: providers.OpenAICompatMessage{
+							Message: providerbase.OpenAICompatMessage{
 								Role:      "assistant",
 								Content:   tc.responseContent,
 								ToolCalls: tc.responseToolCalls,
@@ -110,5 +113,3 @@ func TestProperty19_ToolCallResponseParsing(t *testing.T) {
 		})
 	}
 }
-
-

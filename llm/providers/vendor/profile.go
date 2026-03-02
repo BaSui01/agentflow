@@ -4,10 +4,10 @@ import (
 	"strings"
 
 	"github.com/BaSui01/agentflow/llm"
-	"github.com/BaSui01/agentflow/llm/embedding"
-	"github.com/BaSui01/agentflow/llm/image"
-	"github.com/BaSui01/agentflow/llm/speech"
-	"github.com/BaSui01/agentflow/llm/video"
+	speech "github.com/BaSui01/agentflow/llm/capabilities/audio"
+	"github.com/BaSui01/agentflow/llm/capabilities/embedding"
+	"github.com/BaSui01/agentflow/llm/capabilities/image"
+	"github.com/BaSui01/agentflow/llm/capabilities/video"
 )
 
 // Profile 按供应商聚合能力，避免按功能分散配置造成重复。

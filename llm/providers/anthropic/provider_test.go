@@ -1,7 +1,6 @@
 package claude
 
 import (
-	"github.com/BaSui01/agentflow/types"
 	"context"
 	"encoding/base64"
 	"encoding/json"
@@ -9,6 +8,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/BaSui01/agentflow/types"
 
 	"github.com/BaSui01/agentflow/llm"
 	"github.com/BaSui01/agentflow/llm/providers"
@@ -808,5 +809,3 @@ func TestToClaudeChatResponse_MultipleThinkingBlocks(t *testing.T) {
 	assert.Equal(t, "Step 1: analyze\n\nStep 2: conclude", *resp.Choices[0].Message.ReasoningContent)
 	assert.Equal(t, []string{"sig1", "sig2"}, resp.ThoughtSignatures)
 }
-
-

@@ -1,8 +1,9 @@
 package providers
 
 import (
-	"github.com/BaSui01/agentflow/types"
 	"testing"
+
+	"github.com/BaSui01/agentflow/types"
 
 	"github.com/BaSui01/agentflow/llm"
 	"github.com/stretchr/testify/assert"
@@ -444,5 +445,3 @@ func mockConvertMessagesMiniMax(msgs []types.Message) []mockMiniMaxMessage {
 	}
 	return out
 }
-
-

@@ -59,43 +59,6 @@ func TestNoOpRateLimiter_Reset(t *testing.T) {
 }
 
 // ============================================================
-// APIKeyPool
-// ============================================================
-
-func TestAPIKeyPool_SelectPriority_Empty(t *testing.T) {
-	pool := &APIKeyPool{}
-	result := pool.selectPriority(nil)
-	assert.Nil(t, result)
-}
-
-func TestAPIKeyPool_SelectPriority_Single(t *testing.T) {
-	pool := &APIKeyPool{}
-	keys := []*LLMProviderAPIKey{{ID: 1, Priority: 1}}
-	result := pool.selectPriority(keys)
-	assert.Equal(t, uint(1), result.ID)
-}
-
-func TestAPIKeyPool_CalculateSuccessRate(t *testing.T) {
-	pool := &APIKeyPool{}
-	tests := []struct {
-		name     string
-		key      *LLMProviderAPIKey
-		expected float64
-	}{
-		{"no requests", &LLMProviderAPIKey{TotalRequests: 0}, 1.0},
-		{"all success", &LLMProviderAPIKey{TotalRequests: 100, FailedRequests: 0}, 1.0},
-		{"half failed", &LLMProviderAPIKey{TotalRequests: 100, FailedRequests: 50}, 0.5},
-		{"all failed", &LLMProviderAPIKey{TotalRequests: 10, FailedRequests: 10}, 0.0},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			rate := pool.calculateSuccessRate(tt.key)
-			assert.InDelta(t, tt.expected, rate, 0.001)
-		})
-	}
-}
-
-// ============================================================
 // ResilientProvider — Stream (non-duplicate tests only)
 // ============================================================
 
@@ -124,10 +87,10 @@ func (m *mockLLMProviderExtra) HealthCheck(_ context.Context) (*HealthStatus, er
 	return &HealthStatus{Healthy: true}, nil
 }
 
-func (m *mockLLMProviderExtra) Name() string                                        { return "mock-extra" }
-func (m *mockLLMProviderExtra) SupportsNativeFunctionCalling() bool                 { return false }
-func (m *mockLLMProviderExtra) ListModels(_ context.Context) ([]Model, error)       { return nil, nil }
-func (m *mockLLMProviderExtra) Endpoints() ProviderEndpoints                        { return ProviderEndpoints{} }
+func (m *mockLLMProviderExtra) Name() string                                  { return "mock-extra" }
+func (m *mockLLMProviderExtra) SupportsNativeFunctionCalling() bool           { return false }
+func (m *mockLLMProviderExtra) ListModels(_ context.Context) ([]Model, error) { return nil, nil }
+func (m *mockLLMProviderExtra) Endpoints() ProviderEndpoints                  { return ProviderEndpoints{} }
 
 func TestResilientProvider_Stream_ClosedCircuit(t *testing.T) {
 	provider := &mockLLMProviderExtra{}
@@ -189,4 +152,3 @@ func TestSimpleCircuitBreaker_Call_FailuresOpenCircuit(t *testing.T) {
 	err := cb.Call(context.Background(), func() error { return nil })
 	assert.ErrorIs(t, err, ErrCircuitOpen)
 }
-
