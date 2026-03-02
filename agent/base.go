@@ -185,12 +185,8 @@ func NewBaseAgent(
 	bus EventBus,
 	logger *zap.Logger,
 ) *BaseAgent {
-	// V-014: Nil check for critical parameters
-	if provider == nil {
-		panic("agent.NewBaseAgent: provider must not be nil")
-	}
 	if logger == nil {
-		panic("agent.NewBaseAgent: logger must not be nil")
+		logger = zap.NewNop()
 	}
 	agentLogger := logger.With(zap.String("agent_id", cfg.ID), zap.String("agent_type", string(cfg.Type)))
 

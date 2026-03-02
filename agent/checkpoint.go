@@ -17,15 +17,15 @@ import (
 
 // Checkpoint Agent 执行检查点（基于 LangGraph 2026 标准）
 type Checkpoint struct {
-	ID        string                 `json:"id"`
-	ThreadID  string                 `json:"thread_id"` // 会话线程 ID
-	AgentID   string                 `json:"agent_id"`
-	Version   int                    `json:"version"` // 版本号（线程内递增）
-	State     State                  `json:"state"`
-	Messages  []CheckpointMessage    `json:"messages"`
-	Metadata  map[string]any `json:"metadata"`
-	CreatedAt time.Time              `json:"created_at"`
-	ParentID  string                 `json:"parent_id,omitempty"` // 父检查点 ID
+	ID        string              `json:"id"`
+	ThreadID  string              `json:"thread_id"` // 会话线程 ID
+	AgentID   string              `json:"agent_id"`
+	Version   int                 `json:"version"` // 版本号（线程内递增）
+	State     State               `json:"state"`
+	Messages  []CheckpointMessage `json:"messages"`
+	Metadata  map[string]any      `json:"metadata"`
+	CreatedAt time.Time           `json:"created_at"`
+	ParentID  string              `json:"parent_id,omitempty"` // 父检查点 ID
 
 	// ExecutionContext 工作流执行上下文
 	ExecutionContext *ExecutionContext `json:"execution_context,omitempty"`
@@ -33,10 +33,10 @@ type Checkpoint struct {
 
 // CheckpointMessage 检查点消息
 type CheckpointMessage struct {
-	Role      string                 `json:"role"`
-	Content   string                 `json:"content"`
-	ToolCalls []CheckpointToolCall   `json:"tool_calls,omitempty"`
-	Metadata  map[string]any `json:"metadata,omitempty"`
+	Role      string               `json:"role"`
+	Content   string               `json:"content"`
+	ToolCalls []CheckpointToolCall `json:"tool_calls,omitempty"`
+	Metadata  map[string]any       `json:"metadata,omitempty"`
 }
 
 // CheckpointToolCall 工具调用记录
@@ -50,8 +50,8 @@ type CheckpointToolCall struct {
 
 // ExecutionContext 工作流执行上下文
 type ExecutionContext struct {
-	WorkflowID  string                 `json:"workflow_id,omitempty"`
-	CurrentNode string                 `json:"current_node,omitempty"`
+	WorkflowID  string         `json:"workflow_id,omitempty"`
+	CurrentNode string         `json:"current_node,omitempty"`
 	NodeResults map[string]any `json:"node_results,omitempty"`
 	Variables   map[string]any `json:"variables,omitempty"`
 }
@@ -110,6 +110,7 @@ type CheckpointManager struct {
 	autoSaveEnabled  bool
 	autoSaveInterval time.Duration
 	autoSaveCancel   context.CancelFunc
+	autoSaveDone     chan struct{}
 	autoSaveMu       sync.Mutex
 }
 
@@ -217,9 +218,10 @@ func (m *CheckpointManager) EnableAutoSave(ctx context.Context, agent Agent, thr
 	// 为自动保存 goroutine 创建可删除上下文
 	autoSaveCtx, cancel := context.WithCancel(ctx)
 	m.autoSaveCancel = cancel
+	m.autoSaveDone = make(chan struct{})
 
 	// 开始自动保存出轨
-	go m.autoSaveLoop(autoSaveCtx, agent, threadID)
+	go m.autoSaveLoop(autoSaveCtx, m.autoSaveDone, agent, threadID)
 
 	m.logger.Info("auto-save enabled",
 		zap.Duration("interval", interval),
@@ -232,26 +234,35 @@ func (m *CheckpointManager) EnableAutoSave(ctx context.Context, agent Agent, thr
 // 禁用自动保存停止自动检查
 func (m *CheckpointManager) DisableAutoSave() {
 	m.autoSaveMu.Lock()
-	defer m.autoSaveMu.Unlock()
-
 	if !m.autoSaveEnabled {
+		m.autoSaveMu.Unlock()
 		return
 	}
 
-	if m.autoSaveCancel != nil {
-		m.autoSaveCancel()
-		m.autoSaveCancel = nil
-	}
-
+	cancel := m.autoSaveCancel
+	done := m.autoSaveDone
+	m.autoSaveCancel = nil
+	m.autoSaveDone = nil
 	m.autoSaveEnabled = false
+	m.autoSaveMu.Unlock()
+
+	if cancel != nil {
+		cancel()
+	}
+	if done != nil {
+		<-done
+	}
 
 	m.logger.Info("auto-save disabled")
 }
 
 // 自动保存环路运行自动检查点保存环路
-func (m *CheckpointManager) autoSaveLoop(ctx context.Context, agent Agent, threadID string) {
+func (m *CheckpointManager) autoSaveLoop(ctx context.Context, done chan struct{}, agent Agent, threadID string) {
 	ticker := time.NewTicker(m.autoSaveInterval)
-	defer ticker.Stop()
+	defer func() {
+		ticker.Stop()
+		close(done)
+	}()
 
 	for {
 		select {
@@ -329,7 +340,7 @@ func (m *CheckpointManager) RollbackToVersion(ctx context.Context, agent Agent, 
 	type transitioner interface {
 		Transition(ctx context.Context, newState State) error
 	}
-	
+
 	if t, ok := agent.(transitioner); ok {
 		if err := t.Transition(ctx, checkpoint.State); err != nil {
 			return fmt.Errorf("failed to restore state: %w", err)
@@ -1391,4 +1402,3 @@ func (s *FileCheckpointStore) listVersionsUnlocked(ctx context.Context, threadID
 
 	return versions, nil
 }
-

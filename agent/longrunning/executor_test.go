@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -41,6 +42,26 @@ func waitForState(t *testing.T, exec *Execution, want ExecutionState, timeout ti
 	got := exec.State
 	exec.mu.Unlock()
 	t.Fatalf("timed out waiting for state %s, got %s", want, got)
+}
+
+func waitForCheckpointFile(t *testing.T, dir, execID string, timeout time.Duration) []byte {
+	t.Helper()
+
+	path := filepath.Join(dir, execID+".json")
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		data, err := os.ReadFile(path)
+		if err == nil {
+			return data
+		}
+		if !os.IsNotExist(err) {
+			t.Fatalf("failed reading checkpoint file: %v", err)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	t.Fatalf("checkpoint file not found: %s", path)
+	return nil
 }
 
 func TestExecutionLifecycle(t *testing.T) {
@@ -162,11 +183,7 @@ func TestCheckpointSaveLoad(t *testing.T) {
 	waitForState(t, exec, StateCompleted, 5*time.Second)
 
 	// Verify checkpoint file exists on disk.
-	path := fmt.Sprintf("%s/%s.json", cfg.CheckpointDir, exec.ID)
-	data, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatalf("checkpoint file not found: %v", err)
-	}
+	data := waitForCheckpointFile(t, cfg.CheckpointDir, exec.ID, 2*time.Second)
 
 	var loaded Execution
 	if err := json.Unmarshal(data, &loaded); err != nil {
@@ -325,6 +342,7 @@ func TestNamedStepRegistrationAndResume(t *testing.T) {
 	// Register steps in the new executor's registry.
 	e2.Registry().Register("step-a", namedSteps[0].Func)
 	e2.Registry().Register("step-b", namedSteps[1].Func)
+	waitForCheckpointFile(t, cfg.CheckpointDir, exec.ID, 2*time.Second)
 
 	loaded, err := e2.LoadExecution(exec.ID)
 	if err != nil {
@@ -471,4 +489,3 @@ func TestResumeExecutionMissingRegistryStep(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
-

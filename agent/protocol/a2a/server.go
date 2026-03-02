@@ -799,6 +799,10 @@ func (s *HTTPServer) executeAsyncTask(ctx context.Context, ag agent.Agent, task 
 
 	// 处理状态更新
 	s.asyncTasksMu.Lock()
+	if task.Status != asyncTaskStatusPending && task.Status != asyncTaskStatusProcessing {
+		s.asyncTasksMu.Unlock()
+		return
+	}
 	task.Status = asyncTaskStatusProcessing
 	task.UpdatedAt = time.Now()
 	s.asyncTasksMu.Unlock()
