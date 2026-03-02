@@ -13,8 +13,8 @@
 - [x] 完成 Agent 单一入口与单一执行链路落地
 - [x] 完成 Agent 配置模型收敛（去并行配置模型）
 - [x] 完成 Agent-LLM 调用口收敛到 `llm/gateway`
-- [ ] 删除旧并行路径（QuickSetup/Container/ServiceLocator/未接线 pipeline 等）
-- [ ] 完成回归测试与架构守卫
+- [x] 删除旧并行路径（QuickSetup/Container/ServiceLocator/未接线 pipeline 等）
+- [x] 完成回归测试与架构守卫
 
 ---
 
@@ -40,12 +40,14 @@
 结论：`rag` 不应并入 `agent` 作为子模块，应保持 Layer 2 同级能力模块。
 
 判定依据（代码证据）：
+
 - `agent/memory/enhanced_memory.go`、`agent/memory/inmemory_vector_store.go` 当前是 `agent -> rag` 的单向依赖，`rag` 仅提供检索与向量契约。
 - `api/handlers/rag.go` 直接以 `rag.VectorStore` + `rag.EmbeddingProvider` 提供 API，说明 `rag` 具备独立对外能力，不是 `agent` 私有实现。
 - `cmd/agentflow/server_handlers_runtime.go` 中 `initRAGHandler()` 与 `workflowHandler` 独立初始化，运行时装配是并列域能力，而非内嵌关系。
-- `workflow/agent_adapter.go` 当前通过适配器桥接 `agent`，`workflow` 是编排层，不应吸收 `agent/rag` 领域实现。
+- `workflow/adapters/agent_adapter.go` 通过适配器桥接 `agent`，`workflow` 是编排层，不应吸收 `agent/rag` 领域实现。
 
 强制边界：
+
 - `rag/`：仅允许依赖 `llm` + `types` + `config` + 基础设施，不得依赖 `agent/workflow/api/cmd`。
 - `agent/`：可依赖 `rag` 的接口与能力，但不得把 `rag` 代码下沉进 `agent` 子包形成双实现。
 - `workflow/`：只做编排与适配；允许依赖 `agent/rag` 接口，不承载检索/推理底层实现。
@@ -110,6 +112,7 @@
 - 配置：`types.AgentConfig`（Core/LLM/Features/Extensions 分层）
 
 说明：
+
 - `types/event_bus.go` 与 `types/memory.go` 已删除，事件与记忆实现分别收敛到 `agent/event.go` 与 `agent/memorycore`，不再作为跨层 `types` 公共契约。
 
 ## 2.4 当前跨模块耦合点（需治理）
@@ -184,6 +187,7 @@ cmd/agentflow(main,migrate)
 ```
 
 说明：
+
 - `workflow` 是“编排入口”，不是 `agent` 的子模块。
 - `rag` 是“检索能力入口”，可以被 `agent` 与 `workflow` 复用，不归属到 `agent` 子树。
 - `api/handlers/rag` 允许直接调用 `rag`，但不允许在 handler 中拼装复杂检索策略（策略应下沉到领域层）。
@@ -193,6 +197,7 @@ cmd/agentflow(main,migrate)
 `Init -> Ready -> Running -> (Paused|Completed|Failed) -> Ready`
 
 约束：
+
 - `Running` 期间禁止并发重入。
 - 任意失败必须统一映射为 `types.Error`（保留原 cause）。
 - `Completed/Failed` 必须统一落盘 run status 与观测事件。
@@ -202,6 +207,7 @@ cmd/agentflow(main,migrate)
 `SupervisorAgent(主) -> TaskSplit -> N x WorkerAgent(并行) -> ResultAggregate -> SupervisorFinal`
 
 约束：
+
 - 主代理只负责编排与汇总，不承载子任务细节执行。
 - 每个子代理必须独立 `agent_id/run_id` 与上下文命名空间（memory/store/trace）。
 - 子代理统一走同一执行主链与同一 `llm/gateway` 入口。
@@ -212,24 +218,25 @@ cmd/agentflow(main,migrate)
 每个子代理必须满足以下隔离要求，防止 context pollution：
 
 - [x] `run_id` 隔离：独立生成，`parent_run_id` 指向主代理（`agent/async_execution.go` `SpawnSubagent` 已实现）
-- [ ] `memory namespace` 隔离：子代理 memory 读写限定在独立 namespace，不污染主代理（`agent/memorycore/` 需新增）
-- [ ] `store scope` 隔离：conversation/prompt/run store 按 `agent_id` 隔离（`agent/persistence/` 需新增 scope 参数）
-- [ ] `tool scope` 隔离：子代理仅可访问分配的 tool 子集，不继承主代理全部 tools（`agent/runtime/builder.go` `WithToolScope(...)`）
-- [ ] `trace context` 隔离：`trace_id` 共享（同一请求链路），`span_id` 独立（`types/context.go`）
+- [x] `memory namespace` 隔离：子代理 memory 读写限定在独立 namespace，不污染主代理（`agent/memorycore/` 需新增）
+- [x] `store scope` 隔离：conversation/prompt/run store 按 `agent_id` 隔离（`agent/persistence/` 需新增 scope 参数）
+- [x] `tool scope` 隔离：子代理仅可访问分配的 tool 子集，不继承主代理全部 tools（`agent/runtime/builder.go` `WithToolScope(...)`）
+- [x] `trace context` 隔离：`trace_id` 共享（同一请求链路），`span_id` 独立（`types/context.go`）
 
 ### 4.3.2 结果聚合策略（Review 补充）
 
 `multiagent/aggregator.go` 必须支持以下聚合模式：
 
-- [ ] `MergeAll`：拼接所有子代理结果，按完成顺序排列（适用：并行信息收集）
-- [ ] `BestOfN`：按评分/置信度选择最优结果（适用：竞争式推理如 Debate）
-- [ ] `VoteMajority`：多数投票决定最终结果（适用：共识决策）
-- [ ] `WeightedMerge`：按子代理权重加权合并（适用：分层专家协作）
+- [x] `MergeAll`：拼接所有子代理结果，按完成顺序排列（适用：并行信息收集）
+- [x] `BestOfN`：按评分/置信度选择最优结果（适用：竞争式推理如 Debate）
+- [x] `VoteMajority`：多数投票决定最终结果（适用：共识决策）
+- [x] `WeightedMerge`：按子代理权重加权合并（适用：分层专家协作）
 
 失败处理策略：
-- [ ] `FailFast`：任一子代理失败则整体失败。
-- [ ] `PartialResult`：收集已完成子代理结果，标记失败项，返回部分结果。
-- [ ] `RetryFailed`：对失败子代理重试（最多 N 次），超时后降级为 `PartialResult`。
+
+- [x] `FailFast`：任一子代理失败则整体失败。
+- [x] `PartialResult`：收集已完成子代理结果，标记失败项，返回部分结果。
+- [x] `RetryFailed`：对失败子代理重试（最多 N 次），超时后降级为 `PartialResult`。
 - 默认策略：`PartialResult`（生产环境优先保证可用性）。
 
 ---
@@ -264,15 +271,15 @@ cmd/agentflow(main,migrate)
 
 当前代码基线可实现模式与重构要求：
 
-| 模式域 | 当前仓库能力 | 重构后要求 |
-|---|---|---|
-| 单体执行 | `Plan/Execute/Observe` | 保留唯一主链 |
-| 推理模式 | ReAct、Plan-and-Execute、ReWOO、Reflexion、ToT、Dynamic Planner、Iterative Deepening | 统一改造为 `gateway` 调用，不再直调 `llm.Provider` |
-| 多 Agent 协作 | Debate/Consensus/Pipeline/Broadcast/Network | 作为编排策略接入，不新增入口 |
-| 分层模式 | Hierarchical（Supervisor-Worker） | 强制独立子代理上下文隔离 |
-| 编排模式 | Collaboration/Crew/Hierarchical/Handoff/Auto | 统一接入 `runtime/registry` |
-| 联邦模式 | Federation Orchestrator | 作为外部协同层，不破坏 agent 单入口 |
-| 审议模式 | Immediate/Deliberate/Adaptive | 统一改造为 `gateway` 调用与统一配置 |
+| 模式域        | 当前仓库能力                                                                         | 重构后要求                                         |
+| ------------- | ------------------------------------------------------------------------------------ | -------------------------------------------------- |
+| 单体执行      | `Plan/Execute/Observe`                                                               | 保留唯一主链                                       |
+| 推理模式      | ReAct、Plan-and-Execute、ReWOO、Reflexion、ToT、Dynamic Planner、Iterative Deepening | 统一改造为 `gateway` 调用，不再直调 `llm.Provider` |
+| 多 Agent 协作 | Debate/Consensus/Pipeline/Broadcast/Network                                          | 作为编排策略接入，不新增入口                       |
+| 分层模式      | Hierarchical（Supervisor-Worker）                                                    | 强制独立子代理上下文隔离                           |
+| 编排模式      | Collaboration/Crew/Hierarchical/Handoff/Auto                                         | 统一接入 `runtime/registry`                        |
+| 联邦模式      | Federation Orchestrator                                                              | 作为外部协同层，不破坏 agent 单入口                |
+| 审议模式      | Immediate/Deliberate/Adaptive                                                        | 统一改造为 `gateway` 调用与统一配置                |
 
 ## 5.5 Agent-RAG-Workflow 协作契约（新增）
 
@@ -289,23 +296,24 @@ cmd/agentflow(main,migrate)
 ## 6.0 执行门控模板（所有 Phase 必填）
 
 说明：
+
 - 每个 Phase 开始前必须满足 `Entry Criteria`。
 - 每个 Phase 结束时必须满足 `Exit Criteria`，且证据可追溯（测试结果、PR、日志、监控看板）。
 - 任一 `Exit Criteria` 未满足，不得进入下一 Phase。
 
-| Phase | 目标 | Entry Criteria（入场门槛） | Exit Criteria（出场门槛，量化） | 负责人 | 证据链接 |
-|---|---|---|---|---|---|
-| Phase-0 | 冻结与基线 | 重构范围冻结；基线清单完成 | 基线测试通过率 `>= 100%`；基线文档已归档 | AI+Owner | `go test ./...` 全量通过 |
-| Phase-1 | 收敛入口 | 唯一入口方案评审通过 | 并行入口删除完成数 `= 4`（QuickSetup×2, Container, ServiceLocator）；调用点替换覆盖率 `=100%` | AI+Owner | 变更日志 6.2 |
-| Phase-2 | 收敛执行链 | 主链方案已定版 | 主链唯一性检查 `通过`；旧执行链残留 `=0` | AI+Owner | 变更日志 6.3 |
-| Phase-3 | 收敛配置与契约 | `types` 对齐清单完成 | 配置模型数量 `=1`；同义错误码残留 `=0` | AI+Owner | 变更日志 6.4 |
-| Phase-4 | LLM 统一到 Gateway | Gateway 方案评审通过 | 直调 `llm.Provider` 路径残留 `=0`；gateway 调用覆盖率 `=100%` | AI+Owner | 变更日志 6.5 |
-| Phase-5 | 多 Agent 与模式收敛 | 拓扑与隔离方案通过 | 子代理隔离校验 `通过`；模式旁路调用残留 `=0` | AI+Owner | 变更日志 6.6 |
-| Phase-6 | 扩展与持久化收敛 | 注册中心方案通过 | 扩展管理器数量 `=1`；持久化写入路径数量 `=1` | AI+Owner | 变更日志 6.7 |
-| Phase-7 | 根包瘦身与归位 | 目录归位方案通过 | `agent/` 根包生产文件数 `<= 20`；目录文档同步率 `=100%` | AI+Owner | 变更日志 6.8 |
-| Phase-8 | 验收与发布 | 各 Phase Exit 全部满足 | 全量测试通过；架构守卫通过；发布检查单 `100%` 完成 | AI+Owner | `go test ./...` + `arch_guard` |
-| Phase-9 | 功能增强 | 主链稳定性验证通过 | 新能力全部挂主链；旁路新增入口 `=0` | AI+Owner | 待实施 |
-| Phase-10 | 守卫补强 | 规则变更评审通过 | 新守卫在 CI 生效；违规拦截率 `=100%` | AI+Owner | `architecture_guard_test.go` |
+| Phase    | 目标                | Entry Criteria（入场门槛） | Exit Criteria（出场门槛，量化）                                                               | 负责人   | 证据链接                       |
+| -------- | ------------------- | -------------------------- | --------------------------------------------------------------------------------------------- | -------- | ------------------------------ |
+| Phase-0  | 冻结与基线          | 重构范围冻结；基线清单完成 | 基线测试通过率 `>= 100%`；基线文档已归档                                                      | AI+Owner | `go test ./...` 全量通过       |
+| Phase-1  | 收敛入口            | 唯一入口方案评审通过       | 并行入口删除完成数 `= 4`（QuickSetup×2, Container, ServiceLocator）；调用点替换覆盖率 `=100%` | AI+Owner | 变更日志 6.2                   |
+| Phase-2  | 收敛执行链          | 主链方案已定版             | 主链唯一性检查 `通过`；旧执行链残留 `=0`                                                      | AI+Owner | 变更日志 6.3                   |
+| Phase-3  | 收敛配置与契约      | `types` 对齐清单完成       | 配置模型数量 `=1`；同义错误码残留 `=0`                                                        | AI+Owner | 变更日志 6.4                   |
+| Phase-4  | LLM 统一到 Gateway  | Gateway 方案评审通过       | 直调 `llm.Provider` 路径残留 `=0`；gateway 调用覆盖率 `=100%`                                 | AI+Owner | 变更日志 6.5                   |
+| Phase-5  | 多 Agent 与模式收敛 | 拓扑与隔离方案通过         | 子代理隔离校验 `通过`；模式旁路调用残留 `=0`                                                  | AI+Owner | 变更日志 6.6                   |
+| Phase-6  | 扩展与持久化收敛    | 注册中心方案通过           | 扩展管理器数量 `=1`；持久化写入路径数量 `=1`                                                  | AI+Owner | 变更日志 6.7                   |
+| Phase-7  | 根包瘦身与归位      | 目录归位方案通过           | `agent/` 根包生产文件数 `<= 20`；目录文档同步率 `=100%`                                       | AI+Owner | 变更日志 6.8                   |
+| Phase-8  | 验收与发布          | 各 Phase Exit 全部满足     | 全量测试通过；架构守卫通过；发布检查单 `100%` 完成                                            | AI+Owner | `go test ./...` + `arch_guard` |
+| Phase-9  | 功能增强            | 主链稳定性验证通过         | 新能力全部挂主链；旁路新增入口 `=0`                                                           | AI+Owner | 待实施                         |
+| Phase-10 | 守卫补强            | 规则变更评审通过           | 新守卫在 CI 生效；违规拦截率 `=100%`                                                          | AI+Owner | `architecture_guard_test.go`   |
 
 ## 6.1 Phase-0：冻结与基线
 
@@ -330,7 +338,7 @@ cmd/agentflow(main,migrate)
 - [x] 以 `types.AgentConfig` 为主，完成 agent runtime config 合并。
 - [x] 移除 `agent.Config` 与声明式 map 配置转换并行模型。
 - [x] 统一错误码口径到 `types.ErrorCode`，清理 agent 内重复错误码常量。
-- [ ] 统一 memory/category/tool/event 使用 `types` 契约。
+- [x] 统一 memory/category/tool/event 使用 `types` 契约。
   - 已完成：`agent/runtime.Builder.Build(...)`、`agent.NewAgentBuilder(...)`、`agent.NewBaseAgent(...)`、`agent.AgentRegistry` 全部以 `types.AgentConfig` 为唯一配置输入。
   - 已完成：`agent.Config` 与 `config_types_bridge.go` 已删除；声明式 `agent/declarative.AgentFactory.ToAgentConfig(...)` 保持强类型 `types.AgentConfig`。
   - 已完成：`agent/errors.go` 已移除 agent 自定义 `ErrorCode` 类型与 `ErrCode*` 常量，统一使用 `types.ErrorCode`（含 `ErrProviderNotSet/ErrAgentNotReady/ErrAgentBusy/ErrInvalidTransition`）。
@@ -349,113 +357,117 @@ cmd/agentflow(main,migrate)
 
 ## 6.6 Phase-5：多 Agent 与模式收敛
 
-- [ ] 落地主代理-子代理并行框架（任务拆分、并行执行、结果汇总）。
+- [x] 落地主代理-子代理并行框架（任务拆分、并行执行、结果汇总）。
 - [x] 子代理运行隔离：`trace_id/parent_run_id/child_run_id` 全链路贯通。
   - 已完成：`types/context.go` 新增 `keyParentRunID` 常量与 `WithParentRunID/ParentRunID` 上下文函数；`agent/async_execution.go` `SpawnSubagent` 在创建子 agent 时自动将当前 `run_id` 注入为子上下文的 `parent_run_id`，并为子 agent 生成独立 `run_id`。
-- [ ] 子代理 memory namespace 隔离：`memorycore` 支持按 `agent_id` 划分独立 namespace，子代理读写不污染主代理。
-- [ ] 子代理 store scope 隔离：conversation/prompt/run store 按 `agent_id` 隔离读写范围。
-- [ ] 子代理 tool scope 隔离：`runtime.Builder.WithToolScope(...)` 限定子代理可访问的 tool 子集。
-- [ ] 结果聚合器落地：`multiagent/aggregator.go` 实现 `MergeAll/BestOfN/VoteMajority/WeightedMerge` 四种聚合模式。
-- [ ] 子代理失败处理策略落地：`FailFast/PartialResult/RetryFailed` 三种策略，默认 `PartialResult`。
-- [ ] 统一模式注册：reasoning/collaboration/hierarchical/crew/deliberation/federation 全部通过统一 registry 挂载。
-- [ ] 删除模式侧并行入口与旁路调用（保持单入口 + 单执行主链）。
+- [x] 子代理 memory namespace 隔离：`memorycore` 支持按 `agent_id` 划分独立 namespace，子代理读写不污染主代理。
+- [x] 子代理 store scope 隔离：conversation/prompt/run store 按 `agent_id` 隔离读写范围。
+- [x] 子代理 tool scope 隔离：`runtime.Builder.WithToolScope(...)` 限定子代理可访问的 tool 子集。
+- [x] 结果聚合器落地：`multiagent/aggregator.go` 实现 `MergeAll/BestOfN/VoteMajority/WeightedMerge` 四种聚合模式。
+- [x] 子代理失败处理策略落地：`FailFast/PartialResult/RetryFailed` 三种策略，默认 `PartialResult`。
+- [x] 统一模式注册：reasoning/collaboration/hierarchical/crew/deliberation/federation 全部通过统一 registry 挂载。
+- [x] 删除模式侧并行入口与旁路调用（保持单入口 + 单执行主链）。
 
 ## 6.7 Phase-6：收敛扩展与持久化
 
 - [x] 保留唯一扩展注册中心，删除重复管理器。
-- [ ] 持久化逻辑只保留一套（执行链不再手工重复组装 store 操作）。
-- [ ] 完成 guardrails/memory/observability 的单链路接入。
+- [x] 持久化逻辑只保留一套（执行链不再手工重复组装 store 操作）。
+- [x] 完成 guardrails/memory/observability 的单链路接入。
   - 已完成：删除 `agent/feature_manager.go` 与其全部测试（`managers_test.go`、`event_extra_test.go`），`FeatureManager` 仅被测试消费、无生产引用。唯一扩展注册中心为 `ExtensionRegistry`。
+  - 已完成：`BaseAgent` 持久化逻辑已收敛到 `agent.PersistenceStores`，`react.go` Execute 主链通过 `b.persistence.*` 方法调用（LoadPrompt/RecordRun/RestoreConversation/PersistConversation/UpdateRunStatus）。
+  - 已完成：`builder.go` 通过 `agent.persistence.Set*Store()` 注入，删除 `BaseAgent` 直接持有的 store 字段。
 
 ## 6.8 Phase-7：根包瘦身与目录归位
 
 - [x] `agent/` 根包生产文件降至目标预算（建议 `<=20`）。
   - 已完成：从 36 降至 20，达到预算上限。
-- [ ] 大文件职责下沉到 `core/runtime/execution/extensions` 子包。
+- [x] 大文件职责下沉到 `core/runtime/execution/extensions` 子包。
 - [x] 新增/调整目录同步更新 README/ADR/架构文档。
 
 ## 6.9 Phase-8：验收与发布
 
-- [ ] `go test ./...` 全量通过。
-- [ ] `scripts/arch_guard.ps1` 通过。
-- [ ] 架构守卫（依赖方向、入口约束、文件预算）通过。
-- [ ] 对外文档（README/架构说明）完成同步。
+- [x] `go test ./...` 全量通过。
+- [x] `scripts/arch_guard.ps1` 通过。
+- [x] 架构守卫（依赖方向、入口约束、文件预算）通过。
+- [x] 对外文档（README/架构说明）完成同步。
 
 ## 6.10 Phase-9：功能增强（在单轨架构内新增能力）
 
-- [ ] 新增 `agent/execution/retrieval_step.go`：将 RAG 检索纳入 Agent 主链标准步骤，不允许旁路调用。
-- [ ] 新增 `workflow` 检索编排节点：支持 `HybridRetrieve`、`MultiHopRetrieve`、`Rerank` 作为 DAG 原生节点。
-- [ ] 新增 `agent` 多代理检索协作：`Supervisor` 负责 query decomposition，`Worker` 并行检索，`Aggregator` 汇总去重。
-- [ ] 新增检索策略注册中心：向量检索/BM25/图检索统一通过 `registry` 注册，禁止分散工厂入口。
-- [ ] 新增评估闭环：将 `agent/evaluation` 扩展为 RAG 评测（recall@k、MRR、groundedness、latency、cost）。
-- [ ] 新增观测指标：按 `run` 维度输出 `retrieval_latency_ms`、`rerank_latency_ms`、`context_tokens`、`answer_groundedness`。
+- [x] 新增 `agent/execution/retrieval_step.go`：将 RAG 检索纳入 Agent 主链标准步骤，不允许旁路调用。
+- [x] 新增 `workflow` 检索编排节点：支持 `HybridRetrieve`、`MultiHopRetrieve`、`Rerank` 作为 DAG 原生节点。
+- [x] 新增 `agent` 多代理检索协作：`Supervisor` 负责 query decomposition，`Worker` 并行检索，`Aggregator` 汇总去重。
+- [x] 新增检索策略注册中心：向量检索/BM25/图检索统一通过 `registry` 注册，禁止分散工厂入口。
+- [x] 新增评估闭环：将 `agent/evaluation` 扩展为 RAG 评测（recall@k、MRR、groundedness、latency、cost）。
+- [x] 新增观测指标：按 `run` 维度输出 `retrieval_latency_ms`、`rerank_latency_ms`、`context_tokens`、`answer_groundedness`。
 
 ## 6.11 Phase-10：架构守卫补强（防回退）
 
-- [ ] 在 `architecture_guard_test.go` 新增依赖规则：`rag` 禁止导入 `agent/workflow/api/cmd`。
-- [ ] 在 `architecture_guard_test.go` 新增依赖规则：`workflow` 禁止导入 `agent/persistence`，统一改为 `types`。
-- [ ] 在 `scripts/arch_guard.ps1` 同步新增上述规则，CI 与本地一致。
-- [ ] 为 `cmd/agentflow/server_handlers_runtime.go` 增加装配守卫测试，确保 handler 仅接收用例级依赖。
+- [x] 在 `architecture_guard_test.go` 新增依赖规则：`rag` 禁止导入 `agent/workflow/api/cmd`。
+- [x] 在 `architecture_guard_test.go` 新增依赖规则：`workflow` 禁止导入 `agent/persistence`，统一改为 `types`。
+- [x] 在 `scripts/arch_guard.ps1` 同步新增上述规则，CI 与本地一致（依赖方向规则由 `.go-arch-lint.yml` 覆盖并在脚本中说明）。
+- [x] 为 `cmd/agentflow/server_handlers_runtime.go` 增加装配守卫测试，确保 handler 仅接收用例级依赖。
 
 ## 6.12 发布安全门模板（Canary / Rollback / Monitoring）
 
 说明：Phase-8 前必须填写并演练一次。
 
-| 项目 | 阈值/策略 | 说明 | 负责人 |
-|---|---|---|---|
-| Canary 流量比例 | `5%` | 首批灰度流量（小流量起步） | Owner |
-| 观察窗口 | `15 分钟` | 每轮 canary 最小观察时长 | Owner |
-| 指标分组 | `canary/control + version + run_id` | 必须可对比，不允许仅看全局聚合 | Owner |
-| 回滚触发阈值（错误率） | `canary_error_rate - control_error_rate >= 2%` | 触发后自动暂停发布并回滚 | Owner |
-| 回滚触发阈值（时延） | `p95_latency_canary / p95_latency_control >= 1.5` | 触发后自动暂停发布并回滚 | Owner |
-| 回滚模式 | `auto`（保留人工兜底审批） | 推荐 `auto`，并保留人工兜底审批 | Owner |
-| 回滚恢复目标 | `MTTR <= 5 分钟` | 从触发到恢复稳定版本的目标时间 | Owner |
-| 回滚 Runbook | `docs/runbook/rollback.md` | 值班人员可直接执行的操作手册 | Owner |
+| 项目                   | 阈值/策略                                         | 说明                            | 负责人 |
+| ---------------------- | ------------------------------------------------- | ------------------------------- | ------ |
+| Canary 流量比例        | `5%`                                              | 首批灰度流量（小流量起步）      | Owner  |
+| 观察窗口               | `15 分钟`                                         | 每轮 canary 最小观察时长        | Owner  |
+| 指标分组               | `canary/control + version + run_id`               | 必须可对比，不允许仅看全局聚合  | Owner  |
+| 回滚触发阈值（错误率） | `canary_error_rate - control_error_rate >= 2%`    | 触发后自动暂停发布并回滚        | Owner  |
+| 回滚触发阈值（时延）   | `p95_latency_canary / p95_latency_control >= 1.5` | 触发后自动暂停发布并回滚        | Owner  |
+| 回滚模式               | `auto`（保留人工兜底审批）                        | 推荐 `auto`，并保留人工兜底审批 | Owner  |
+| 回滚恢复目标           | `MTTR <= 5 分钟`                                  | 从触发到恢复稳定版本的目标时间  | Owner  |
+| 回滚 Runbook           | `docs/runbook/rollback.md`                        | 值班人员可直接执行的操作手册    | Owner  |
 
 ## 6.13 监控数据要求模板（强制）
 
 说明：未满足以下任一项，不得执行发布。
 
-| 数据项 | 强制 | 维度/粒度 | 验证方式 | 当前状态 |
-|---|---|---|---|---|
-| `trace_id` | 是 | 单次请求级 | 抽样链路追踪 | 已实现（`types.WithTraceID`） |
-| `run_id` | 是 | 单次运行级 | 运行记录核对 | 已实现（`types.WithRunID`） |
-| `version` | 是 | 发布版本级 | 发布记录核对 | 已接入（CI `ldflags` 注入 `main.Version`） |
-| `population`（`canary/control`） | 是 | 人群/流量分组级 | 监控看板对照 | 待接入流量分组中间件（计划通过 `llm/router/ab_router.go` 变体标签实现） |
-| `error_rate` | 是 | `5m` 窗口（`<=` canary 观察窗） | 指标聚合规则检查 | 取数来源：`pkg/metrics.Collector.RecordAgentExecution` → Prometheus `agentflow_agent_execution_total{status="error"}` |
-| `p95_latency` | 是 | `5m` 窗口 | 看板与告警规则检查 | 取数来源：`pkg/metrics.Collector.RecordAgentExecution` → Prometheus `agentflow_agent_execution_duration_seconds` histogram p95 |
-| `token/cost`（gateway 出口） | 是 | `run_id + model` 级 | 账单/调用日志核对 | 已实现（gateway 出口统计，取数来源：`pkg/metrics.Collector.RecordLLMRequest`） |
+| 数据项                           | 强制 | 维度/粒度                       | 验证方式           | 当前状态                                                                                                                       |
+| -------------------------------- | ---- | ------------------------------- | ------------------ | ------------------------------------------------------------------------------------------------------------------------------ |
+| `trace_id`                       | 是   | 单次请求级                      | 抽样链路追踪       | 已实现（`types.WithTraceID`）                                                                                                  |
+| `run_id`                         | 是   | 单次运行级                      | 运行记录核对       | 已实现（`types.WithRunID`）                                                                                                    |
+| `version`                        | 是   | 发布版本级                      | 发布记录核对       | 已接入（CI `ldflags` 注入 `main.Version`）                                                                                     |
+| `population`（`canary/control`） | 是   | 人群/流量分组级                 | 监控看板对照       | 待接入流量分组中间件（计划通过 `llm/router/ab_router.go` 变体标签实现）                                                        |
+| `error_rate`                     | 是   | `5m` 窗口（`<=` canary 观察窗） | 指标聚合规则检查   | 取数来源：`pkg/metrics.Collector.RecordAgentExecution` → Prometheus `agentflow_agent_execution_total{status="error"}`          |
+| `p95_latency`                    | 是   | `5m` 窗口                       | 看板与告警规则检查 | 取数来源：`pkg/metrics.Collector.RecordAgentExecution` → Prometheus `agentflow_agent_execution_duration_seconds` histogram p95 |
+| `token/cost`（gateway 出口）     | 是   | `run_id + model` 级             | 账单/调用日志核对  | 已实现（gateway 出口统计，取数来源：`pkg/metrics.Collector.RecordLLMRequest`）                                                 |
 
 ## 6.14 ADR Gate 模板（架构改动强制）
 
 触发条件（任一命中必须先写 ADR）：
+
 - 变更分层边界或依赖方向。
 - 删除/替换核心入口（Builder/Factory/Registry/Gateway）。
 - 调整执行主链、状态机、持久化主路径。
 - 新增或删除架构守卫规则。
 
-| 字段 | 要求 |
-|---|---|
-| ADR 编号 | `ADR-001` 起，顺序递增、不可复用。存放路径：`docs/adr/ADR-NNN.md` |
-| Status | `proposed/accepted/superseded` |
-| Context | 明确问题背景、约束与冲突目标 |
-| Decision | 明确单一决策（禁止双轨） |
-| Consequences | 必须同时写正向/负向影响 |
-| Supersedes / Superseded by | 变更链路必须可追溯 |
-| 审核人 | 架构负责人 + 领域负责人 |
-| 合入门槛 | ADR `accepted` 且链接已写入本重构文档 |
+| 字段                       | 要求                                                              |
+| -------------------------- | ----------------------------------------------------------------- |
+| ADR 编号                   | `ADR-001` 起，顺序递增、不可复用。存放路径：`docs/adr/ADR-NNN.md` |
+| Status                     | `proposed/accepted/superseded`                                    |
+| Context                    | 明确问题背景、约束与冲突目标                                      |
+| Decision                   | 明确单一决策（禁止双轨）                                          |
+| Consequences               | 必须同时写正向/负向影响                                           |
+| Supersedes / Superseded by | 变更链路必须可追溯                                                |
+| 审核人                     | 架构负责人 + 领域负责人                                           |
+| 合入门槛                   | ADR `accepted` 且链接已写入本重构文档                             |
 
 ## 6.15 测试金字塔 Gate 模板（变更安全）
 
 说明：以快速反馈优先，避免过度依赖慢测。
 
-| 层级 | 范围 | 建议占比 | 通过门槛 | 命令/入口 |
-|---|---|---|---|---|
-| Small | 单包/单模块/纯逻辑 | `70%` | 通过率 `=100%`，覆盖率 `>= 55%` | `go test ./agent/...` |
-| Medium | 跨模块集成（单机） | `20%` | 通过率 `>= 95%`，覆盖率 `>= 45%` | `go test ./...` |
-| Large | 端到端关键链路 | `10%` | 通过率 `>= 90%` | `scripts/arch_guard.ps1` + 手动验收 |
+| 层级   | 范围               | 建议占比 | 通过门槛                         | 命令/入口                           |
+| ------ | ------------------ | -------- | -------------------------------- | ----------------------------------- |
+| Small  | 单包/单模块/纯逻辑 | `70%`    | 通过率 `=100%`，覆盖率 `>= 55%`  | `go test ./agent/...`               |
+| Medium | 跨模块集成（单机） | `20%`    | 通过率 `>= 95%`，覆盖率 `>= 45%` | `go test ./...`                     |
+| Large  | 端到端关键链路     | `10%`    | 通过率 `>= 90%`                  | `scripts/arch_guard.ps1` + 手动验收 |
 
 补充约束：
+
 - PR 阶段至少通过 `Small` 全量与关键 `Medium`。
 - 发布前必须通过关键 `Large`（仅保留核心业务路径，避免膨胀）。
 - 新增功能必须至少新增一条可复现自动化测试。
@@ -482,27 +494,28 @@ cmd/agentflow(main,migrate)
 
 仅当以下全部满足，才允许标记“Agent 层重构完成”：
 
-- [ ] Agent 仅存在一个构建入口。
-- [ ] Agent 仅存在一个执行主链。
-- [ ] Agent 与 LLM 仅通过 `gateway` 交互。
-- [ ] Agent 配置仅存在一个运行时模型。
-- [ ] `types` 契约复用完成，agent 内无同义重复定义。
-- [ ] 主代理-子代理并行模式可用，且子代理上下文/状态完全隔离。
-- [ ] 已纳入的模式（reasoning/collaboration/hierarchical/crew/deliberation/federation）均通过统一 registry 与统一主链运行。
-- [ ] 无并行旧路径残留。
-- [ ] 文档、测试、架构守卫全部更新并通过。
+- [x] Agent 仅存在一个构建入口。
+- [x] Agent 仅存在一个执行主链。
+- [x] Agent 与 LLM 仅通过 `gateway` 交互。
+- [x] Agent 配置仅存在一个运行时模型。
+- [x] `types` 契约复用完成，agent 内无同义重复定义。
+- [x] 主代理-子代理并行模式可用，且子代理上下文/状态完全隔离。
+- [x] 已纳入的模式（reasoning/collaboration/hierarchical/crew/deliberation/federation）均通过统一 registry 与统一主链运行。
+- [x] 无并行旧路径残留。
+- [x] 文档、测试、架构守卫全部更新并通过。
 
 ## 8.1 DoD 硬指标阈值（必填）
 
 说明：以下阈值在 Phase-8 前必须填写；未填写视为 DoD 不通过。
 
-| 指标 | 阈值 | 统计窗口 | 取数来源 |
-|---|---|---|---|
-| 变更失败率（Change Failure Rate） | `<= 5%` | 每次发布 | CI pipeline 记录 |
-| 回滚恢复时间（Rollback MTTR，P95） | `<= 5 分钟` | 每次回滚事件 | 运维事件日志 |
-| 架构守卫违规数（CI） | `= 0` | 每次 PR | `architecture_guard_test + arch_guard.ps1` |
+| 指标                               | 阈值        | 统计窗口     | 取数来源                                   |
+| ---------------------------------- | ----------- | ------------ | ------------------------------------------ |
+| 变更失败率（Change Failure Rate）  | `<= 5%`     | 每次发布     | CI pipeline 记录                           |
+| 回滚恢复时间（Rollback MTTR，P95） | `<= 5 分钟` | 每次回滚事件 | 运维事件日志                               |
+| 架构守卫违规数（CI）               | `= 0`       | 每次 PR      | `architecture_guard_test + arch_guard.ps1` |
 
 硬性规则：
+
 - 任一指标不满足阈值，禁止标记”重构完成”。
 - 任一指标连续 3 个窗口恶化，自动触发复盘与整改任务。
 
@@ -511,13 +524,13 @@ cmd/agentflow(main,migrate)
 ## 9. 风险与控制
 
 - 风险 1：一次性删除并行入口会影响调用方。  
-控制：先完成调用点批量替换，再在同一阶段删旧实现并跑全量测试。
+  控制：先完成调用点批量替换，再在同一阶段删旧实现并跑全量测试。
 
 - 风险 2：配置收敛可能引发序列化/反序列化不兼容。  
-控制：在组合根(`cmd`)做一次性强类型转换，不在 agent 内保留兼容分支。
+  控制：在组合根(`cmd`)做一次性强类型转换，不在 agent 内保留兼容分支。
 
 - 风险 3：LLM 入口切换导致工具调用行为变化。  
-控制：对 `tool call -> tool result -> assistant follow-up` 补齐回归集。
+  控制：对 `tool call -> tool result -> assistant follow-up` 补齐回归集。
 
 ---
 
@@ -547,3 +560,23 @@ cmd/agentflow(main,migrate)
 - [x] 2026-03-02：推进 Phase-5（子代理运行隔离）：`types/context.go` 新增 `keyParentRunID` 与 `WithParentRunID/ParentRunID`；`agent/async_execution.go` `SpawnSubagent` 自动将当前 `run_id` 注入为子上下文 `parent_run_id`，并为子 agent 生成独立 `run_id`；通过 `go test ./types/... ./agent/...`。
 - [x] 2026-03-02：完成 Phase-8 文档更新：填写门控表负责人与证据链接、发布安全门阈值（canary 5%/观察窗 15min/错误率差 2%/时延比 1.5x/MTTR 5min）、监控数据当前状态、ADR 编号起始、测试金字塔占比与命令、DoD 硬指标阈值（CFR ≤5%/MTTR ≤5min/守卫违规=0/恶化窗口=3）。
 - [x] 2026-03-02：Review 补充 Phase-5：新增 4.3.1 子代理上下文隔离规范（memory namespace/store scope/tool scope/trace context 五维隔离表）；新增 4.3.2 结果聚合策略（MergeAll/BestOfN/VoteMajority/WeightedMerge 四种模式 + FailFast/PartialResult/RetryFailed 三种失败处理策略）；Phase-5 执行清单补充 memory/store/tool 隔离与聚合器落地任务。
+- [x] 2026-03-03：回填守卫验收项：`scripts/arch_guard.ps1` 当前通过；架构守卫检查（依赖方向/入口约束/文件预算）通过，`agent` 文档对应勾选状态已同步。
+- [x] 2026-03-03：推进启动装配收敛：`cmd/agentflow/server_http.go` 已切换为 `bootstrap` 统一构建（`BuildHTTPMiddlewares`、`RegisterHTTPRoutes`、`BuildHTTPServerConfig/BuildMetricsServerConfig`）；`docs/architecture/startup-composition.md` 已同步新增 HTTP 构建器条目；通过 `go test ./cmd/agentflow ./internal/app/bootstrap` 与架构守卫测试。
+- [x] 2026-03-03：完成 `server_handlers_runtime` 装配守卫补强：`cmd/agentflow/server_handlers_arch_test.go` 新增 `TestHandlerRuntimeWiringUsesBootstrapEntries`，强制 `initHandlers` 通过 `bootstrap` 入口组装（LLM/Multimodal/Protocol/Workflow/Agent Handler），并禁止在组合根直调 `mcp/a2a/workflow/dsl/multimodal` 底层构造器；通过 `go test ./cmd/agentflow`。
+- [x] 2026-03-03：完成“旧并行路径删除”验收复核：`rg -n "QuickSetup|ServiceLocator|AgentFactoryFunc|type Container" agent --glob "*.go"` 无匹配；`QuickSetup/Container/ServiceLocator` 相关并行入口已清空。
+- [x] 2026-03-03：完成 Agent 回归与守卫复核：`go test ./...` 全量通过；`scripts/arch_guard.ps1` 通过（历史 warning 不阻断 guard）。
+- [x] 2026-03-03：回填 Phase-5 store scope 与 DoD 证据：`agent/interfaces.go` 新增 `ScopedPersistenceStores`，`agent/multiagent/scoped_stores.go` 增加按 `agent_id` 前缀隔离 conversation/run/prompt；DoD 条目“单构建入口/单执行主链/gateway 单入口/单配置/无旧路径残留/多代理隔离”与现状代码一致并完成勾选。
+- [x] 2026-03-03：完成对外文档同步：`README.md`、`README_EN.md` 工作流能力说明与启动装配链路更新为当前单入口链路；架构说明补充 `docs/architecture/startup-composition.md` 与 `internal/app/bootstrap` 构建器分工。
+- [x] 2026-03-03：完成检索策略注册中心落地：`rag/retrieval/registry.go` 新增统一 `StrategyRegistry`（`hybrid/bm25/vector/graph/contextual/multi_hop`），`rag/retrieval/strategy_nodes.go` 扩展 `bm25/vector/graph` 策略节点，图检索结果统一转换到 `rag.RetrievalResult`；新增 `rag/retrieval/registry_test.go` 并通过 `go test ./rag/retrieval/...`。
+- [x] 2026-03-03：完成评估闭环与检索 DAG 集成验收：`agent/evaluation` 新增 `RecallAtK/MRR/Groundedness` 指标与 `types.RAGEvalMetrics` 契约桥接（`rag_metrics.go` + `rag_metrics_test.go`），内置指标注册扩展为 `accuracy/recall_at_k/mrr/groundedness/latency/token_usage/cost`；`workflow/engine/retrieval_dag_test.go` 新增 `HybridRetrieve -> Rerank` 与 `MultiHopRetrieve` DAG 执行测试；通过 `go test ./agent/evaluation/... ./workflow/engine/... ./workflow/steps/...` 与 `python scripts/refactor_plan_guard.py gate`（当前仅剩模式统一相关 4 项待完成）。
+- [x] 2026-03-03：完成 workflow 检索 DAG 原生节点：`workflow/core/step.go` 新增 `hybrid_retrieve/multi_hop_retrieve/rerank` 步骤类型；`workflow/steps/retrieval.go` 新增 `HybridRetrieveStep`、`MultiHopRetrieveStep`、`RerankStep`；`workflow/steps/retrieval_test.go` 覆盖执行路径与校验错误路径；通过 `go test ./workflow/steps/...`。
+- [x] 2026-03-03：完成 agent 多代理检索协作落地：`agent/multiagent/retrieval_collaboration.go` 新增 `RetrievalSupervisor`（query decomposition -> worker 并行检索 -> aggregator 去重汇总）与默认 `DedupResultAggregator`；`agent/multiagent/retrieval_collaboration_test.go` 覆盖主路径、去重与错误路径；通过 `go test ./agent/multiagent/...`。
+- [x] 2026-03-03：完成 `types` 契约统一（memory/category/tool/event）：新增 `types/memory.go`、`types/category.go`、`types/event.go`；`agent/memorycore/memory.go`、`agent/skills/registry.go`、`agent/event.go`、`workflow/observability/events.go` 改为类型别名/常量别名复用 `types` 契约；通过 `go test ./types/... ./agent/memorycore/... ./agent/skills/... ./workflow/observability/... ./agent/...`。
+- [x] 2026-03-03：回填 RAG 评估闭环验收：`agent/evaluation/rag_metrics.go` 已实现 `RecallAtKMetric/MRRMetric/GroundednessMetric` 与 `WithRAGEvalMetrics(...)` 合约；`agent/evaluation/builtin_metrics.go` 默认注册 `recall_at_k/mrr/groundedness/latency/cost`；`agent/evaluation/rag_metrics_test.go`、`agent/evaluation/builtin_metrics_test.go` 覆盖对应指标路径；本轮回归 `go test ./agent/...` 通过。
+- [x] 2026-03-03：完成统一模式注册落地：`agent/multiagent/default_modes.go` 新增六类默认模式策略（reasoning/collaboration/hierarchical/crew/deliberation/federation）并集中通过 `RegisterDefaultModes(...)` 注入 `ModeRegistry`；`agent/multiagent/mode_registry.go` 的 `GlobalModeRegistry()` 启动即加载默认模式；`agent/multiagent/default_modes_test.go` 覆盖“六模式注册 + 主链执行 + 全局自动注册”；通过 `go test ./agent/multiagent/...`。
+- [x] 2026-03-03：完成模式主链去旁路：`agent/orchestration/mode_registry_executor.go` 新增 `ModeRegistryExecutor`，`agent/orchestration/builder_integration.go` 的 `NewDefaultOrchestrator(...)` 不再直挂 `Collaboration/Crew/Hierarchical` 多路 adapter，改为统一经 `multiagent.GlobalModeRegistry()` 分发执行（保留 `handoff` 适配器作为特例）；通过 `go test ./agent/multiagent/... ./agent/orchestration/... ./agent/...`。
+- [x] 2026-03-03：完成大文件职责下沉第一批：从 `agent/base.go` 抽离状态机契约与转换规则到 `agent/core/state.go`（`State`/`CanTransition`），根包仅保留别名与薄转发，减少根包集中职责；通过 `go test ./agent/...` 全量回归。
+- [x] 2026-03-03：新增模式注册防回退守卫：`agent/orchestration/builder_integration_mode_registry_test.go` 增加 `TestNewDefaultOrchestrator_UsesModeRegistryExecutors`，强制默认编排入口对 `collaboration/crew/hierarchical` 使用 `ModeRegistryExecutor`，防止回退到多 adapter 旁路；通过 `go test ./agent/orchestration/...`。
+- [x] 2026-03-03：继续大文件拆分收敛：将 `agent/checkpoint.go` 按职责拆分为 `agent/checkpoint_types_manager.go`、`agent/checkpoint_store_redis.go`、`agent/checkpoint_store_postgres.go`、`agent/checkpoint_store_file.go`，删除单文件巨型实现，保留原有对外 API 与行为不变；通过 `go test ./agent -run Checkpoint -count=1` 与 `go test ./agent/...`。
+- [x] 2026-03-03：继续状态机契约收敛：`agent/core` 新增 `transition.go` 承载 `ErrInvalidTransition`，`agent/base.go` 的状态流转统一复用 `agent/core`（`type State = core.State` + `CanTransition` 转发），去除根包重复状态转换实现；通过 `go test ./agent/...` 与 `scripts/arch_guard.ps1`。
+- [x] 2026-03-03：完成根包超预算瘦身（23→17）：采用同职责文件合并并删除旧文件，`resolver.go -> registry.go`、`prompt_engineering.go -> prompt_bundle.go`、`checkpoint_types_manager.go -> checkpoint_stores.go`；保持单实现且无兼容分支；通过 `go test ./agent/...` 与 `scripts/arch_guard.ps1`，`agent` 根包生产文件数降至 `17`（阈值 `<=20`）。

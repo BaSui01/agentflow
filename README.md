@@ -54,11 +54,15 @@
 ### 🔄 工作流引擎
 
 - **DAG 工作流** - 支持有向无环图的复杂逻辑编排
-- **Chain 工作流** - 简单的线性步骤序列
-- **并行执行** - 支持分支并发执行与结果聚合
+- **DAG 节点并行执行** - 支持分支并发执行与结果聚合
 - **状态持久化** - 支持检查点 (Checkpoint) 的保存与恢复
 - **熔断器 (Circuit Breaker)** - DAG 节点级熔断保护（Closed/Open/HalfOpen 三态机）
 - **YAML DSL 编排语言** - 声明式工作流定义，支持变量插值、条件分支、循环、子图
+
+### 🧱 启动装配链路
+
+- **单入口启动链路** - `cmd/agentflow/main.go -> internal/app/bootstrap -> cmd/agentflow/server_* -> api/routes -> api/handlers -> domain(agent/rag/workflow/llm)`
+- **组合根职责收敛** - `cmd` 仅做装配；运行时构建集中在 `internal/app/bootstrap`（详见 `docs/architecture/startup-composition.md`）
 
 ### 🔍 RAG 系统 (检索增强生成)
 
@@ -71,7 +75,7 @@
 - **文档管理** - 自动分块 (Chunking)、元数据过滤、重排序 (Reranker)
 - **学术数据源** - arXiv 论文检索、GitHub 仓库/代码搜索适配器
 - **DocumentLoader** — 统一文档加载接口（Text/Markdown/CSV/JSON）
-- **Config→RAG 桥接** — 配置驱动的 RAG 管线工厂
+- **RAG Runtime Builder** — 统一通过 `rag/runtime.Builder` 完成配置桥接与运行时装配
 - **Graph RAG** — 知识图谱检索增强
 - **查询路由/变换** — 智能查询分发与改写
 
@@ -402,7 +406,7 @@ agentflow/
 ├── rag/                      # Layer 2: RAG 系统
 │   ├── loader/               # DocumentLoader（Text/Markdown/CSV/JSON）
 │   ├── sources/              # 数据源适配器（arXiv, GitHub）
-│   ├── factory.go            # Config→RAG 桥接工厂
+│   ├── runtime/              # RAG 运行时构建入口（Builder + config bridge）
 │   ├── graph_rag.go          # Graph RAG 知识图谱检索
 │   ├── query_router.go       # 查询路由/变换
 │   ├── chunking.go           # 文档分块
@@ -428,7 +432,7 @@ agentflow/
 │   ├── routing.go            # 路由节点
 │   ├── state_reducer.go      # 状态归约
 │   ├── steps.go              # 步骤定义
-│   ├── agent_adapter.go      # Agent 适配器
+│   ├── adapters/             # Agent/RAG 适配器
 │   ├── builder_visual.go     # 可视化构建器
 │   ├── circuit_breaker.go    # DAG 熔断器（三态机 + 注册表）
 │   ├── checkpoint_enhanced.go # 增强检查点

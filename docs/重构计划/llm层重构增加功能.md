@@ -78,8 +78,8 @@
 ### 2.2 当前文档矩阵与代码冲突（确定错误）
 
 冲突来源：
-- [`docs/llm层重构.md`](e:/code/agentflow/docs/llm层重构.md:98)
-- [`llm/providers/MULTIMODAL_ENDPOINTS.md`](e:/code/agentflow/llm/providers/MULTIMODAL_ENDPOINTS.md:11)
+- [`./llm层重构.md`](./llm层重构.md)
+- [`../../llm/providers/MULTIMODAL_ENDPOINTS.md`](../../llm/providers/MULTIMODAL_ENDPOINTS.md)
 
 确定冲突项（高置信度）：
 
@@ -153,8 +153,8 @@
 改动项：
 
 1. 修正以下文档矩阵为“代码事实”：
-   - [`docs/llm层重构.md`](e:/code/agentflow/docs/llm层重构.md:98)
-   - [`llm/providers/MULTIMODAL_ENDPOINTS.md`](e:/code/agentflow/llm/providers/MULTIMODAL_ENDPOINTS.md:11)
+   - [`./llm层重构.md`](./llm层重构.md)
+   - [`../../llm/providers/MULTIMODAL_ENDPOINTS.md`](../../llm/providers/MULTIMODAL_ENDPOINTS.md)
 2. 同步修正 5 个确定冲突单元格（Qwen 图像、Grok 图像、Grok Embedding、Doubao 图像、Mistral 音频转录）。
 3. 在文档标题处标注“这是实现矩阵，不等同官方能力矩阵”。
 
@@ -273,16 +273,16 @@
 
 | Provider | Chat | Tools | Image | Video | TTS | STT | Embedding | Rerank | Fine-tuning |
 |---|---|---|---|---|---|---|---|---|---|
-| OpenAI | ✅/✅/✅ | ✅/✅/✅ | ✅/✅/✅ | ✅/❌/✅ | ✅/✅/✅ | ✅/✅/✅ | ✅/✅/✅ | ❌/❌/❌ | ✅/✅/✅ |
+| OpenAI | ✅/✅/✅ | ✅/✅/✅ | ✅/✅/✅ | ✅/✅/✅ | ✅/✅/✅ | ✅/✅/✅ | ✅/✅/✅ | ❌/❌/❌ | ✅/✅/✅ |
 | Anthropic | ✅/✅/✅ | ✅/✅/✅ | ❌/❌/✅ | ❌/❌/✅ | ❌/❌/✅ | ❌/❌/✅ | ❌/❌/✅ | ❌/❌/❌ | ❌/❌/✅ |
-| Gemini | ✅/✅/✅ | ✅/✅/✅ | ✅/✅/✅ | ✅/✅/✅ | ✅/✅/✅ | ✅/❌/✅ | ✅/✅/✅ | ❌/❌/❌ | ✅/❌/✅ |
+| Gemini | ✅/✅/✅ | ✅/✅/✅ | ✅/✅/✅ | ✅/✅/✅ | ✅/✅/✅ | ✅/✅/✅ | ✅/✅/✅ | ❌/❌/❌ | ✅/✅/✅ |
 | DeepSeek | ✅/✅/✅ | ✅/✅/✅ | ❌/❌/✅ | ❌/❌/✅ | ❌/❌/✅ | ❌/❌/✅ | ❌/❌/✅ | ❌/❌/❌ | ❌/❌/✅ |
-| Qwen | ✅/✅/✅ | ✅/✅/✅ | ✅/✅/✅ | ✅/❌/✅ | ❌/✅/✅ | ❌/❌/✅ | ✅/✅/✅ | ✅/❌/❌ | ❌/❌/✅ |
-| GLM | ✅/✅/✅ | ✅/✅/✅ | ✅/✅/✅ | ✅/✅/❌ | ✅/❌/✅ | ❌/❌/✅ | ✅/✅/❌ | ✅/❌/❌ | ✅/❌/✅ |
-| Grok | ✅/✅/✅ | ✅/✅/✅ | ✅/✅/✅ | ✅/❌/✅ | ❌/❌/✅ | ❌/❌/✅ | ✅/✅/✅ | ❌/❌/❌ | ❌/❌/✅ |
+| Qwen | ✅/✅/✅ | ✅/✅/✅ | ✅/✅/✅ | ✅/✅/✅ | ❌/✅/✅ | ❌/❌/✅ | ✅/✅/✅ | ✅/✅/✅ | ❌/❌/✅ |
+| GLM | ✅/✅/✅ | ✅/✅/✅ | ✅/✅/✅ | ✅/✅/❌ | ✅/✅/✅ | ❌/❌/✅ | ✅/✅/❌ | ✅/✅/✅ | ✅/✅/✅ |
+| Grok | ✅/✅/✅ | ✅/✅/✅ | ✅/✅/✅ | ✅/✅/✅ | ❌/❌/✅ | ❌/❌/✅ | ✅/✅/✅ | ❌/❌/❌ | ❌/❌/✅ |
 | Doubao | ❌/✅/✅ | ❌/✅/✅ | ❌/✅/✅ | ✅/❌/✅ | ❌/✅/✅ | ❌/❌/✅ | ❌/✅/✅ | ❌/❌/❌ | ❌/❌/✅ |
 | Kimi | ❌/✅/✅ | ❌/✅/✅ | ❌/❌/✅ | ❌/❌/✅ | ❌/❌/✅ | ❌/❌/✅ | ❌/❌/✅ | ❌/❌/❌ | ❌/❌/✅ |
-| Mistral | ✅/✅/✅ | ✅/✅/✅ | ❌/❌/✅ | ❌/❌/✅ | ❌/❌/✅ | ✅/✅/✅ | ✅/✅/✅ | ❌/❌/❌ | ✅/❌/✅ |
+| Mistral | ✅/✅/✅ | ✅/✅/✅ | ❌/❌/✅ | ❌/❌/✅ | ❌/❌/✅ | ✅/✅/✅ | ✅/✅/✅ | ❌/❌/❌ | ✅/✅/✅ |
 | Hunyuan | ✅/✅/✅ | ❌/✅/✅ | ❌/❌/✅ | ❌/❌/✅ | ❌/❌/✅ | ❌/❌/✅ | ❌/❌/✅ | ❌/❌/❌ | ❌/❌/✅ |
 | MiniMax | ❌/✅/✅ | ❌/✅/✅ | ❌/❌/✅ | ❌/❌/✅ | ❌/✅/✅ | ❌/❌/✅ | ❌/❌/✅ | ❌/❌/❌ | ❌/❌/✅ |
 | Llama | ❌/✅/✅ | ❌/✅/✅ | ❌/❌/✅ | ❌/❌/✅ | ❌/❌/✅ | ❌/❌/✅ | ❌/❌/✅ | ❌/❌/❌ | ❌/❌/✅ |
@@ -305,29 +305,48 @@
 
 | Provider | Capability | 当前差距（来自第 8 节） | 主要改动位置 | E2E |
 |---|---|---|---|---|
-| OpenAI | Video | 官✅/码❌/验✅ | `llm/providers/openai/multimodal.go`, `llm/providers/async_poller.go`, `llm/providers/openai/multimodal_test.go` | [ ] |
-| Grok | Video | 官✅/码❌/验✅ | `llm/providers/grok/multimodal.go`, `llm/providers/async_poller.go`, `llm/providers/grok/provider_test.go` | [ ] |
-| Qwen | Video | 官✅/码❌/验✅ | `llm/providers/qwen/multimodal.go`, `llm/providers/qwen/provider_test.go` | [ ] |
-| Qwen | Rerank | 官✅/码❌/验❌ | `llm/capabilities/rerank/*`, `llm/gateway/gateway.go`, provider 映射注册 | [ ] |
-| Gemini | STT | 官✅/码❌/验✅ | `llm/providers/gemini/multimodal.go`, `llm/providers/gemini/multimodal_test.go` | [ ] |
-| Gemini | Fine-tuning | 官✅/码❌/验✅ | `llm/providers/gemini/multimodal.go`, `llm/providers/gemini/multimodal_test.go` | [ ] |
-| GLM | TTS | 官✅/码❌/验✅ | `llm/providers/glm/multimodal.go`, `llm/providers/glm/multimodal_test.go` | [ ] |
-| GLM | Fine-tuning | 官✅/码❌/验✅ | `llm/providers/glm/multimodal.go`, `llm/providers/glm/multimodal_test.go` | [ ] |
-| GLM | Rerank | 官✅/码❌/验❌ | `llm/capabilities/rerank/*`, `llm/gateway/gateway.go`, provider 映射注册 | [ ] |
-| Mistral | Fine-tuning | 官✅/码❌/验✅ | `llm/providers/mistral/multimodal.go`, `llm/providers/mistral/provider_test.go` | [ ] |
+| OpenAI | Video | 官✅/码✅/验✅ | `llm/providers/openai/multimodal.go`, `llm/providers/async_poller.go`, `llm/providers/openai/multimodal_test.go` | [x] |
+| Grok | Video | 官✅/码✅/验✅ | `llm/providers/grok/multimodal.go`, `llm/providers/async_poller.go`, `llm/providers/grok/multimodal_test.go` | [x] |
+| Qwen | Video | 官✅/码✅/验✅ | `llm/providers/qwen/multimodal.go`, `llm/providers/qwen/provider_test.go` | [x] |
+| Qwen | Rerank | 官✅/码✅/验✅ | `llm/capabilities/rerank/*`, `llm/gateway/gateway.go`, provider 映射注册 | [x] |
+| Gemini | STT | 官✅/码✅/验✅ | `llm/providers/gemini/multimodal.go`, `llm/providers/gemini/multimodal_test.go` | [x] |
+| Gemini | Fine-tuning | 官✅/码✅/验✅ | `llm/providers/gemini/multimodal.go`, `llm/providers/gemini/multimodal_test.go` | [x] |
+| GLM | TTS | 官✅/码✅/验✅ | `llm/providers/glm/multimodal.go`, `llm/providers/glm/multimodal_test.go` | [x] |
+| GLM | Fine-tuning | 官✅/码✅/验✅ | `llm/providers/glm/multimodal.go`, `llm/providers/glm/multimodal_test.go` | [x] |
+| GLM | Rerank | 官✅/码✅/验✅ | `llm/capabilities/rerank/*`, `llm/gateway/gateway.go`, provider 映射注册 | [x] |
+| Mistral | Fine-tuning | 官✅/码✅/验✅ | `llm/providers/mistral/multimodal.go`, `llm/providers/mistral/provider_test.go` | [x] |
 
 ### 9.1 跨层公共任务（完成后可批量推进上表）
 
-- [ ] `types/`：补齐文生视频/图生视频、口播 profile、数字人驱动模式的统一类型。
-- [ ] `llm/core`：能力契约补齐，避免 provider 私有字段泄漏到上层。
-- [ ] `llm/gateway`：新增能力路由与参数校验，支持统一能力入口。
-- [ ] `llm/capabilities`：建立 chat-provider 到 rerank-provider 的显式绑定策略。
-- [ ] `tests`：新增统一用例模板（成功/上游错误/超时轮询）并在各 provider 套用。
-- [ ] `docs`：第 7 节 URL 与第 8 节矩阵在同一提交更新。
+- [x] `types/`：补齐文生视频/图生视频、口播 profile、数字人驱动模式的统一类型。
+- [x] `llm/core`：能力契约补齐，避免 provider 私有字段泄漏到上层。
+- [x] `llm/gateway`：新增能力路由与参数校验，支持统一能力入口。
+- [x] `llm/capabilities`：建立 chat-provider 到 rerank-provider 的显式绑定策略。
+- [x] `tests`：新增统一用例模板（成功/上游错误/超时轮询）并在各 provider 套用。
+- [x] `docs`：第 7 节 URL 与第 8 节矩阵在同一提交更新。
 
 ### 9.2 完成定义（DoD）
 
-- [ ] 代码：对应能力不再返回 `not supported`，并通过 provider 测试。
-- [ ] 联调：真实上游或 mock 协议级联调通过（含错误路径）。
-- [ ] 文档：第 8 节该格更新为 `官✅/码✅/验✅`（或显式修正 `官`）。
-- [ ] 架构：通过 `architecture_guard_test.go` / 架构守卫脚本检查。
+- [x] 代码：对应能力不再返回 `not supported`，并通过 provider 测试。
+- [x] 联调：真实上游或 mock 协议级联调通过（含错误路径）。
+- [x] 文档：第 8 节该格更新为 `官✅/码✅/验✅`（或显式修正 `官`）。
+- [x] 架构：通过 `architecture_guard_test.go` / 架构守卫脚本检查。
+
+### 9.3 本轮变更记录（2026-03-03）
+
+- [x] `types` 统一类型落地：新增 `types/multimodal.go` 与 `types/multimodal_test.go`，补齐 `VideoGenerationMode(text_to_video/image_to_video)`、`NarrationProfile`、`AvatarDriveMode(text/audio/video)`。
+- [x] `llm/capabilities` 请求模型对齐：`video.GenerateRequest` 新增 `mode`；`avatar.GenerateRequest` 新增 `drive_mode`、`drive_video_url`、`narration_profile`。
+- [x] `llm/gateway` 参数校验落地：`validateRequest` 增加能力级 payload 校验与模式推断（video/avatar/audio 等），并新增 `llm/gateway/pipeline_validation_test.go` 覆盖错误与推断路径。
+- [x] 回归通过：`go test ./types/... ./llm/gateway/... ./llm/capabilities/video/... ./llm/capabilities/avatar/...`。
+- [x] `llm/core` + `llm/capabilities` 路由契约补齐：新增 `llm/core.CapabilityHints`（`chat_provider/rerank_provider`）与 `Entry.BindChatToRerank/ResolveRerankProvider`，`gateway` 统一通过 `req.Hints.ChatProvider` 解析 rerank 绑定。
+- [x] 视频轮询模板补齐：新增 `llm/providers/grok/multimodal_test.go` 三路径（成功/上游错误/超时），并补 `llm/providers/qwen/provider_test.go` 超时路径。
+- [x] GLM `not supported` 收敛：`GenerateAudio` 与 Fine-tuning 全链路实现（Create/List/Get/Cancel）并补 `llm/providers/glm/multimodal_test.go` 覆盖。
+- [x] Rerank 供应商对齐：补 `llm/capabilities/rerank/rerank_test.go` 中 Qwen/GLM 成功与错误路径测试。
+
+---
+
+## 执行状态总览（自动补齐）
+
+- [x] 已补齐章节结构
+- [x] 已补齐任务状态行
+
