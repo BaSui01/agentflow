@@ -6,12 +6,11 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/BaSui01/agentflow/types"
 	"go.uber.org/zap"
 )
 
 // EventType 事件类型
-type EventType = types.EventType
+type EventType string
 
 const (
 	EventStateChange       EventType = "state_change"
@@ -26,13 +25,21 @@ const (
 var subscriptionCounter int64
 
 // Event 事件接口
-type Event = types.Event
+type Event interface {
+	Timestamp() time.Time
+	Type() EventType
+}
 
 // EventHandler 事件处理器
-type EventHandler = types.EventHandler
+type EventHandler func(Event)
 
 // EventBus 定义事件总线接口
-type EventBus = types.EventBus
+type EventBus interface {
+	Publish(event Event)
+	Subscribe(eventType EventType, handler EventHandler) string
+	Unsubscribe(subscriptionID string)
+	Stop()
+}
 
 // SimpleEventBus 简单的事件总线实现
 type SimpleEventBus struct {

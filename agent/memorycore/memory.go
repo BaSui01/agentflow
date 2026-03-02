@@ -3,8 +3,6 @@ package memorycore
 import (
 	"context"
 	"time"
-
-	"github.com/BaSui01/agentflow/types"
 )
 
 // MaxRecentMemory is the upper bound for in-process recent-memory cache.
@@ -14,19 +12,19 @@ const MaxRecentMemory = 50
 type MemoryKind string
 
 const (
-	MemoryShortTerm  MemoryKind = MemoryKind(types.MemoryWorking)
-	MemoryWorking    MemoryKind = MemoryKind(types.MemoryWorking)
-	MemoryLongTerm   MemoryKind = MemoryKind(types.MemorySemantic)
-	MemoryEpisodic   MemoryKind = MemoryKind(types.MemoryEpisodic)
-	MemorySemantic   MemoryKind = MemoryKind(types.MemorySemantic)
-	MemoryProcedural MemoryKind = MemoryKind(types.MemoryProcedural)
+	MemoryShortTerm  MemoryKind = "working"
+	MemoryWorking    MemoryKind = "working"
+	MemoryLongTerm   MemoryKind = "semantic"
+	MemoryEpisodic   MemoryKind = "episodic"
+	MemorySemantic   MemoryKind = "semantic"
+	MemoryProcedural MemoryKind = "procedural"
 )
 
 // MemoryRecord is the unified memory record.
 type MemoryRecord struct {
-	ID        string               `json:"id"`
-	AgentID   string               `json:"agent_id"`
-	Kind      types.MemoryCategory `json:"kind"`
+	ID        string     `json:"id"`
+	AgentID   string     `json:"agent_id"`
+	Kind      MemoryKind `json:"kind"`
 	Content   string               `json:"content"`
 	Metadata  map[string]any       `json:"metadata,omitempty"`
 	VectorID  string               `json:"vector_id,omitempty"`

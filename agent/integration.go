@@ -57,57 +57,47 @@ func DefaultEnhancedExecutionOptions() EnhancedExecutionOptions {
 
 // EnableReflection 启用 Reflection 机制
 func (b *BaseAgent) EnableReflection(executor ReflectionRunner) {
-	b.reflectionExecutor = executor
-	b.logger.Info("reflection enabled")
+	b.extensions.EnableReflection(executor)
 }
 
 // EnableToolSelection 启用动态工具选择
 func (b *BaseAgent) EnableToolSelection(selector DynamicToolSelectorRunner) {
-	b.toolSelector = selector
-	b.logger.Info("tool selection enabled")
+	b.extensions.EnableToolSelection(selector)
 }
 
 // EnablePromptEnhancer 启用提示词增强
 func (b *BaseAgent) EnablePromptEnhancer(enhancer PromptEnhancerRunner) {
-	b.promptEnhancer = enhancer
-	b.logger.Info("prompt enhancer enabled")
+	b.extensions.EnablePromptEnhancer(enhancer)
 }
 
 // EnableSkills 启用 Skills 系统
 func (b *BaseAgent) EnableSkills(manager SkillDiscoverer) {
-	b.skillManager = manager
-	b.logger.Info("skills system enabled")
+	b.extensions.EnableSkills(manager)
 }
 
 // EnableMCP 启用 MCP 集成
 func (b *BaseAgent) EnableMCP(server MCPServerRunner) {
-	b.mcpServer = server
-	b.logger.Info("MCP integration enabled")
+	b.extensions.EnableMCP(server)
 }
 
 // EnableLSP 启用 LSP 集成。
 func (b *BaseAgent) EnableLSP(client LSPClientRunner) {
-	b.lspClient = client
-	b.logger.Info("LSP integration enabled")
+	b.extensions.EnableLSP(client)
 }
 
 // EnableLSPWithLifecycle 启用 LSP，并注册可选生命周期对象（例如 *ManagedLSP）。
 func (b *BaseAgent) EnableLSPWithLifecycle(client LSPClientRunner, lifecycle LSPLifecycleOwner) {
-	b.lspClient = client
-	b.lspLifecycle = lifecycle
-	b.logger.Info("LSP integration enabled with lifecycle")
+	b.extensions.EnableLSPWithLifecycle(client, lifecycle)
 }
 
 // EnableEnhancedMemory 启用增强记忆系统
 func (b *BaseAgent) EnableEnhancedMemory(memorySystem EnhancedMemoryRunner) {
-	b.enhancedMemory = memorySystem
-	b.logger.Info("enhanced memory enabled")
+	b.extensions.EnableEnhancedMemory(memorySystem)
 }
 
 // EnableObservability 启用可观测性系统
 func (b *BaseAgent) EnableObservability(obsSystem ObservabilityRunner) {
-	b.observabilitySystem = obsSystem
-	b.logger.Info("observability enabled")
+	b.extensions.EnableObservability(obsSystem)
 }
 
 // ExecuteEnhanced 增强执行（集成所有功能）
@@ -126,22 +116,22 @@ func (b *BaseAgent) ExecuteEnhanced(ctx context.Context, input *Input, options E
 
 	// 1. 可观测性：开始追踪
 	var traceID string
-	if options.UseObservability && b.observabilitySystem != nil {
+	if options.UseObservability && b.extensions.ObservabilitySystemExt() != nil {
 		traceID = input.TraceID
 		b.logger.Debug("trace started", zap.String("trace_id", traceID))
-		b.observabilitySystem.StartTrace(traceID, b.ID())
+		b.extensions.ObservabilitySystemExt().StartTrace(traceID, b.ID())
 	}
 
 	// 2. Skills：发现并加载技能
 	var skillInstructions []string
-	if options.UseSkills && b.skillManager != nil {
+	if options.UseSkills && b.extensions.SkillManagerExt() != nil {
 		query := options.SkillsQuery
 		if query == "" {
 			query = input.Content
 		}
 		b.logger.Debug("discovering skills", zap.String("query", query))
 
-		found, err := b.skillManager.DiscoverSkills(ctx, query)
+		found, err := b.extensions.SkillManagerExt().DiscoverSkills(ctx, query)
 		if err != nil {
 			b.logger.Warn("skill discovery failed", zap.Error(err))
 		} else {
@@ -162,10 +152,10 @@ func (b *BaseAgent) ExecuteEnhanced(ctx context.Context, input *Input, options E
 
 	// 3. 增强记忆：加载上下文
 	var memoryContext []string
-	if options.UseEnhancedMemory && b.enhancedMemory != nil {
+	if options.UseEnhancedMemory && b.extensions.EnhancedMemoryExt() != nil {
 		if options.LoadWorkingMemory {
 			b.logger.Debug("loading working memory")
-			working, err := b.enhancedMemory.LoadWorking(ctx, b.ID())
+			working, err := b.extensions.EnhancedMemoryExt().LoadWorking(ctx, b.ID())
 			if err != nil {
 				b.logger.Warn("failed to load working memory", zap.Error(err))
 			} else {
@@ -181,7 +171,7 @@ func (b *BaseAgent) ExecuteEnhanced(ctx context.Context, input *Input, options E
 		}
 		if options.LoadShortTermMemory {
 			b.logger.Debug("loading short-term memory")
-			shortTerm, err := b.enhancedMemory.LoadShortTerm(ctx, b.ID(), 5)
+			shortTerm, err := b.extensions.EnhancedMemoryExt().LoadShortTerm(ctx, b.ID(), 5)
 			if err != nil {
 				b.logger.Warn("failed to load short-term memory", zap.Error(err))
 			} else {
@@ -198,7 +188,7 @@ func (b *BaseAgent) ExecuteEnhanced(ctx context.Context, input *Input, options E
 	}
 
 	// 4. 提示词增强
-	if options.UsePromptEnhancer && b.promptEnhancer != nil {
+	if options.UsePromptEnhancer && b.extensions.PromptEnhancerExt() != nil {
 		b.logger.Debug("enhancing prompt")
 		// 构建上下文
 		contextStr := ""
@@ -209,7 +199,7 @@ func (b *BaseAgent) ExecuteEnhanced(ctx context.Context, input *Input, options E
 			contextStr += "Memory: " + fmt.Sprintf("%v", memoryContext) + "\n"
 		}
 
-		enhanced, err := b.promptEnhancer.EnhanceUserPrompt(input.Content, contextStr)
+		enhanced, err := b.extensions.PromptEnhancerExt().EnhanceUserPrompt(input.Content, contextStr)
 		if err != nil {
 			b.logger.Warn("prompt enhancement failed", zap.Error(err))
 		} else {
@@ -230,7 +220,7 @@ func (b *BaseAgent) ExecuteEnhanced(ctx context.Context, input *Input, options E
 	}
 
 	// 如果启用增强记忆，标记跳过基础记忆保存以避免重复
-	if options.UseEnhancedMemory && b.enhancedMemory != nil && options.SaveToMemory {
+	if options.UseEnhancedMemory && b.extensions.EnhancedMemoryExt() != nil && options.SaveToMemory {
 		if enhancedInput.Context == nil {
 			enhancedInput.Context = make(map[string]any)
 		}
@@ -238,11 +228,11 @@ func (b *BaseAgent) ExecuteEnhanced(ctx context.Context, input *Input, options E
 	}
 
 	// 5. 动态工具选择
-	if options.UseToolSelection && b.toolSelector != nil && b.toolManager != nil {
+	if options.UseToolSelection && b.extensions.ToolSelector() != nil && b.toolManager != nil {
 		b.logger.Debug("selecting tools dynamically")
 		// 获取可用工具
 		availableTools := b.toolManager.GetAllowedTools(b.ID())
-		selected, err := b.toolSelector.SelectTools(ctx, enhancedPrompt, availableTools)
+		selected, err := b.extensions.ToolSelector().SelectTools(ctx, enhancedPrompt, availableTools)
 		if err != nil {
 			b.logger.Warn("tool selection failed", zap.Error(err))
 		} else {
@@ -255,10 +245,10 @@ func (b *BaseAgent) ExecuteEnhanced(ctx context.Context, input *Input, options E
 	var output *Output
 	var err error
 
-	if options.UseReflection && b.reflectionExecutor != nil {
+	if options.UseReflection && b.extensions.ReflectionExecutor() != nil {
 		// 使用 Reflection 执行
 		b.logger.Debug("executing with reflection")
-		result, execErr := b.reflectionExecutor.ExecuteWithReflection(ctx, enhancedInput)
+		result, execErr := b.extensions.ReflectionExecutor().ExecuteWithReflection(ctx, enhancedInput)
 		if execErr != nil {
 			return nil, fmt.Errorf("reflection execution failed: %w", execErr)
 		}
@@ -277,15 +267,15 @@ func (b *BaseAgent) ExecuteEnhanced(ctx context.Context, input *Input, options E
 
 	if err != nil {
 		// 可观测性：记录错误
-		if options.UseObservability && b.observabilitySystem != nil {
+		if options.UseObservability && b.extensions.ObservabilitySystemExt() != nil {
 			b.logger.Error("execution failed", zap.Error(err))
-			b.observabilitySystem.EndTrace(traceID, "failed", err)
+			b.extensions.ObservabilitySystemExt().EndTrace(traceID, "failed", err)
 		}
 		return nil, err
 	}
 
 	// 7. 保存到增强记忆
-	if options.UseEnhancedMemory && b.enhancedMemory != nil && options.SaveToMemory {
+	if options.UseEnhancedMemory && b.extensions.EnhancedMemoryExt() != nil && options.SaveToMemory {
 		b.logger.Debug("saving to enhanced memory")
 
 		// 保存短期记忆
@@ -294,7 +284,7 @@ func (b *BaseAgent) ExecuteEnhanced(ctx context.Context, input *Input, options E
 			"tokens":   output.TokensUsed,
 			"cost":     output.Cost,
 		}
-		if err := b.enhancedMemory.SaveShortTerm(ctx, b.ID(), output.Content, metadata); err != nil {
+		if err := b.extensions.EnhancedMemoryExt().SaveShortTerm(ctx, b.ID(), output.Content, metadata); err != nil {
 			b.logger.Warn("failed to save short-term memory", zap.Error(err))
 		}
 
@@ -313,20 +303,20 @@ func (b *BaseAgent) ExecuteEnhanced(ctx context.Context, input *Input, options E
 				"reflection": options.UseReflection,
 			},
 		}
-		if err := b.enhancedMemory.RecordEpisode(ctx, event); err != nil {
+		if err := b.extensions.EnhancedMemoryExt().RecordEpisode(ctx, event); err != nil {
 			b.logger.Warn("failed to record episode", zap.Error(err))
 		}
 	}
 
 	// 8. 可观测性：记录指标
-	if options.UseObservability && b.observabilitySystem != nil {
+	if options.UseObservability && b.extensions.ObservabilitySystemExt() != nil {
 		duration := time.Since(startTime)
 		if options.RecordMetrics {
 			b.logger.Debug("recording metrics")
-			b.observabilitySystem.RecordTask(b.ID(), true, duration, output.TokensUsed, output.Cost, 0.8)
+			b.extensions.ObservabilitySystemExt().RecordTask(b.ID(), true, duration, output.TokensUsed, output.Cost, 0.8)
 		}
 		if options.RecordTrace {
-			b.observabilitySystem.EndTrace(traceID, "completed", nil)
+			b.extensions.ObservabilitySystemExt().EndTrace(traceID, "completed", nil)
 		}
 	}
 
@@ -341,17 +331,9 @@ func (b *BaseAgent) ExecuteEnhanced(ctx context.Context, input *Input, options E
 
 // GetFeatureStatus 获取功能启用状态
 func (b *BaseAgent) GetFeatureStatus() map[string]bool {
-	return map[string]bool{
-		"reflection":      b.reflectionExecutor != nil,
-		"tool_selection":  b.toolSelector != nil,
-		"prompt_enhancer": b.promptEnhancer != nil,
-		"skills":          b.skillManager != nil,
-		"mcp":             b.mcpServer != nil,
-		"lsp":             b.lspClient != nil,
-		"enhanced_memory": b.enhancedMemory != nil,
-		"observability":   b.observabilitySystem != nil,
-		"context_manager": b.contextManager != nil,
-	}
+	status := b.extensions.GetFeatureStatus()
+	status["context_manager"] = b.contextManager != nil
+	return status
 }
 
 // PrintFeatureStatus 打印功能状态
@@ -374,44 +356,11 @@ func (b *BaseAgent) PrintFeatureStatus() {
 
 // ValidateConfiguration 验证配置
 func (b *BaseAgent) ValidateConfiguration() error {
-	errors := []string{}
+	errors := b.extensions.ValidateConfiguration(b.config)
 
 	// 检查必需组件
 	if b.provider == nil {
 		errors = append(errors, "provider not set")
-	}
-
-	// 检查功能依赖
-	if isReflectionEnabled(b.config) && b.reflectionExecutor == nil {
-		errors = append(errors, "reflection enabled but executor not set")
-	}
-
-	if isToolSelectionEnabled(b.config) && b.toolSelector == nil {
-		errors = append(errors, "tool selection enabled but selector not set")
-	}
-
-	if isPromptEnhancerEnabled(b.config) && b.promptEnhancer == nil {
-		errors = append(errors, "prompt enhancer enabled but enhancer not set")
-	}
-
-	if isSkillsEnabled(b.config) && b.skillManager == nil {
-		errors = append(errors, "skills enabled but manager not set")
-	}
-
-	if isMCPEnabled(b.config) && b.mcpServer == nil {
-		errors = append(errors, "MCP enabled but server not set")
-	}
-
-	if isLSPEnabled(b.config) && b.lspClient == nil {
-		errors = append(errors, "LSP enabled but client not set")
-	}
-
-	if isEnhancedMemoryEnabled(b.config) && b.enhancedMemory == nil {
-		errors = append(errors, "enhanced memory enabled but system not set")
-	}
-
-	if isObservabilityEnabled(b.config) && b.observabilitySystem == nil {
-		errors = append(errors, "observability enabled but system not set")
 	}
 
 	if len(errors) > 0 {

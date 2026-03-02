@@ -7,22 +7,22 @@ import (
 	"sync"
 	"time"
 
-	"github.com/BaSui01/agentflow/types"
+	"github.com/BaSui01/agentflow/agent/memorycore"
 	"go.uber.org/zap"
 )
 
-// Memory type constants — convenience aliases for types.MemoryCategory values.
+// Memory type constants — convenience aliases for memorycore.MemoryKind values.
 const (
-	MemoryTypeEpisodic   = types.MemoryEpisodic   // Event-based memories
-	MemoryTypeSemantic   = types.MemorySemantic   // Factual knowledge
-	MemoryTypeWorking    = types.MemoryWorking    // Short-term context
-	MemoryTypeProcedural = types.MemoryProcedural // How-to knowledge
+	MemoryTypeEpisodic   = memorycore.MemoryEpisodic   // Event-based memories
+	MemoryTypeSemantic   = memorycore.MemorySemantic   // Factual knowledge
+	MemoryTypeWorking    = memorycore.MemoryWorking    // Short-term context
+	MemoryTypeProcedural = memorycore.MemoryProcedural // How-to knowledge
 )
 
 // MemoryEntry 代表单个内存条目.
 type MemoryEntry struct {
-	ID          string               `json:"id"`
-	Type        types.MemoryCategory `json:"type"`
+	ID          string              `json:"id"`
+	Type        memorycore.MemoryKind `json:"type"`
 	Content     string         `json:"content"`
 	Embedding   []float32      `json:"embedding,omitempty"`
 	Importance  float64        `json:"importance"`

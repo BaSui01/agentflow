@@ -6,9 +6,6 @@ import (
 	"time"
 
 	"github.com/BaSui01/agentflow/agent/guardrails"
-	"github.com/BaSui01/agentflow/agent/memory"
-	"github.com/BaSui01/agentflow/agent/skills"
-	"github.com/BaSui01/agentflow/types"
 	"go.uber.org/zap"
 )
 
@@ -151,68 +148,7 @@ func TestGuardrailsCoordinator_BuildFeedbackMessage(t *testing.T) {
 	}
 }
 
-func TestFeatureManager_Basic(t *testing.T) {
-	logger := zap.NewNop()
-	fm := NewFeatureManager(logger)
-
-	// 最初所有已禁用
-	features := fm.EnabledFeatures()
-	if len(features) != 0 {
-		t.Errorf("expected no enabled features, got %v", features)
-	}
-}
-
-func TestFeatureManager_EnableDisable(t *testing.T) {
-	logger := zap.NewNop()
-	fm := NewFeatureManager(logger)
-
-	// 启用反射
-	fm.EnableReflection(&stubReflectionRunner{})
-	if !fm.IsReflectionEnabled() {
-		t.Error("expected reflection to be enabled")
-	}
-	if fm.GetReflection() == nil {
-		t.Error("expected to get non-nil reflection runner")
-	}
-
-	// 禁用反射
-	fm.DisableReflection()
-	if fm.IsReflectionEnabled() {
-		t.Error("expected reflection to be disabled")
-	}
-	if fm.GetReflection() != nil {
-		t.Error("expected nil after disable")
-	}
-}
-
-func TestFeatureManager_AllFeatures(t *testing.T) {
-	logger := zap.NewNop()
-	fm := NewFeatureManager(logger)
-
-	// 启用所有特性
-	fm.EnableReflection(&stubReflectionRunner{})
-	fm.EnableToolSelection(&stubToolSelectorRunner{})
-	fm.EnablePromptEnhancer(&stubPromptEnhancerRunner{})
-	fm.EnableSkills(&stubSkillDiscoverer{})
-	fm.EnableMCP(struct{ MCPServerRunner }{})
-	fm.EnableLSP(&stubLSPClient{})
-	fm.EnableEnhancedMemory(&stubEnhancedMemory{})
-	fm.EnableObservability(&stubObservability{})
-
-	features := fm.EnabledFeatures()
-	if len(features) != 8 {
-		t.Errorf("expected 8 enabled features, got %d: %v", len(features), features)
-	}
-
-	// 全部禁用
-	fm.DisableAll()
-	features = fm.EnabledFeatures()
-	if len(features) != 0 {
-		t.Errorf("expected no enabled features after DisableAll, got %v", features)
-	}
-}
-
-// 帮助功能
+// contains checks if s contains substr.
 func contains(s, substr string) bool {
 	return len(s) >= len(substr) && (s == substr || len(s) > 0 && containsHelper(s, substr))
 }
@@ -226,85 +162,34 @@ func containsHelper(s, substr string) bool {
 	return false
 }
 
-// 用于测试的模拟内存管理器
+// mockMemoryManager is a test double for MemoryManager.
 type mockMemoryManager struct{}
 
-func (m *mockMemoryManager) Save(ctx context.Context, record MemoryRecord) error {
+func (m *mockMemoryManager) Save(_ context.Context, _ MemoryRecord) error {
 	return nil
 }
 
-func (m *mockMemoryManager) Delete(ctx context.Context, id string) error {
+func (m *mockMemoryManager) Delete(_ context.Context, _ string) error {
 	return nil
 }
 
-func (m *mockMemoryManager) Clear(ctx context.Context, agentID string, kind MemoryKind) error {
+func (m *mockMemoryManager) Clear(_ context.Context, _ string, _ MemoryKind) error {
 	return nil
 }
 
-func (m *mockMemoryManager) Search(ctx context.Context, agentID, query string, topK int) ([]MemoryRecord, error) {
+func (m *mockMemoryManager) Search(_ context.Context, _, _ string, _ int) ([]MemoryRecord, error) {
 	return []MemoryRecord{}, nil
 }
 
-func (m *mockMemoryManager) LoadRecent(ctx context.Context, agentID string, kind MemoryKind, limit int) ([]MemoryRecord, error) {
+func (m *mockMemoryManager) LoadRecent(_ context.Context, agentID string, kind MemoryKind, _ int) ([]MemoryRecord, error) {
 	return []MemoryRecord{
-		{AgentID: agentID, Kind: types.MemoryCategory(kind), Content: "test", CreatedAt: time.Now()},
+		{AgentID: agentID, Kind: kind, Content: "test", CreatedAt: time.Now()},
 	}, nil
 }
 
-func (m *mockMemoryManager) Get(ctx context.Context, id string) (*MemoryRecord, error) {
+func (m *mockMemoryManager) Get(_ context.Context, _ string) (*MemoryRecord, error) {
 	return nil, nil
 }
-
-// Stub types for FeatureManager typed interface tests
-
-type stubReflectionRunner struct{}
-
-func (s *stubReflectionRunner) ExecuteWithReflection(_ context.Context, _ *Input) (any, error) {
-	return nil, nil
-}
-
-type stubToolSelectorRunner struct{}
-
-func (s *stubToolSelectorRunner) SelectTools(_ context.Context, _ string, _ any) (any, error) {
-	return nil, nil
-}
-
-type stubPromptEnhancerRunner struct{}
-
-func (s *stubPromptEnhancerRunner) EnhanceUserPrompt(prompt, _ string) (string, error) {
-	return prompt, nil
-}
-
-type stubSkillDiscoverer struct{}
-
-func (s *stubSkillDiscoverer) DiscoverSkills(_ context.Context, _ string) ([]*skills.Skill, error) {
-	return nil, nil
-}
-
-type stubLSPClient struct{}
-
-func (s *stubLSPClient) Shutdown(_ context.Context) error { return nil }
-
-type stubEnhancedMemory struct{}
-
-func (s *stubEnhancedMemory) LoadWorking(_ context.Context, _ string) ([]any, error) {
-	return nil, nil
-}
-func (s *stubEnhancedMemory) LoadShortTerm(_ context.Context, _ string, _ int) ([]any, error) {
-	return nil, nil
-}
-func (s *stubEnhancedMemory) SaveShortTerm(_ context.Context, _, _ string, _ map[string]any) error {
-	return nil
-}
-func (s *stubEnhancedMemory) RecordEpisode(_ context.Context, _ *memory.EpisodicEvent) error {
-	return nil
-}
-
-type stubObservability struct{}
-
-func (s *stubObservability) StartTrace(_, _ string)                                          {}
-func (s *stubObservability) EndTrace(_, _ string, _ error)                                   {}
-func (s *stubObservability) RecordTask(_ string, _ bool, _ time.Duration, _ int, _, _ float64) {}
 
 // TestMemoryCoordinator_SaveWriteThroughCache verifies that Save() appends
 // the new record to the in-process recentMemory cache.
