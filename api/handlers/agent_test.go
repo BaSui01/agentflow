@@ -506,3 +506,56 @@ func TestAgentHandler_HandlePlanAgent_ValidAgentID(t *testing.T) {
 	// Should pass validation (501 = not yet implemented, but not 400)
 	assert.NotEqual(t, http.StatusBadRequest, w.Code)
 }
+
+func TestAgentHandler_HandleExecuteAgent_InvalidRoutingParams(t *testing.T) {
+	reg := newMockRegistry()
+	handler := newTestHandler(reg)
+
+	tests := []struct {
+		name string
+		req  AgentExecuteRequest
+	}{
+		{
+			name: "invalid provider",
+			req: AgentExecuteRequest{
+				AgentID:  "agent-1",
+				Content:  "hello",
+				Provider: "bad/provider",
+			},
+		},
+		{
+			name: "invalid route policy",
+			req: AgentExecuteRequest{
+				AgentID:     "agent-1",
+				Content:     "hello",
+				RoutePolicy: "fastest",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			body, _ := json.Marshal(tt.req)
+			w := httptest.NewRecorder()
+			r := httptest.NewRequest(http.MethodPost, "/v1/agents/execute", bytes.NewReader(body))
+			r.Header.Set("Content-Type", "application/json")
+
+			handler.HandleExecuteAgent(w, r)
+			assert.Equal(t, http.StatusBadRequest, w.Code)
+		})
+	}
+}
+
+func TestAgentHandler_HandleCapabilities(t *testing.T) {
+	handler := newTestHandler(newMockRegistry())
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodGet, "/api/v1/agents/capabilities", nil)
+
+	handler.HandleCapabilities(w, r)
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	var resp Response
+	err := json.NewDecoder(w.Body).Decode(&resp)
+	require.NoError(t, err)
+	assert.True(t, resp.Success)
+}

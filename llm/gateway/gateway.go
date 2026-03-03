@@ -218,6 +218,7 @@ func (s *Service) Stream(ctx context.Context, req *llmcore.UnifiedRequest) (<-ch
 	if !ok || chatReq == nil {
 		return nil, llmcore.InvalidPayloadError(llmcore.CapabilityChat, "*llm.ChatRequest")
 	}
+	mergeChatRoutingMetadata(req, chatReq)
 
 	source, err := s.chatProvider.Stream(ctx, chatReq)
 	if err != nil {
@@ -302,6 +303,7 @@ func (s *Service) invokeChat(ctx context.Context, req *llmcore.UnifiedRequest) (
 	if !ok || chatReq == nil {
 		return nil, llmcore.InvalidPayloadError(llmcore.CapabilityChat, "*llm.ChatRequest")
 	}
+	mergeChatRoutingMetadata(req, chatReq)
 
 	resp, err := s.chatProvider.Completion(ctx, chatReq)
 	if err != nil {
@@ -1107,6 +1109,113 @@ func cloneMetadata(src map[string]string) map[string]string {
 	return dst
 }
 
+func cloneTags(src []string) []string {
+	if len(src) == 0 {
+		return nil
+	}
+	out := make([]string, len(src))
+	copy(out, src)
+	return out
+}
+
+func mergeChatRoutingMetadata(req *llmcore.UnifiedRequest, chatReq *llm.ChatRequest) {
+	if req == nil || chatReq == nil {
+		return
+	}
+
+	if len(req.Metadata) > 0 {
+		if chatReq.Metadata == nil {
+			chatReq.Metadata = make(map[string]string, len(req.Metadata))
+		}
+		for k, v := range req.Metadata {
+			if strings.TrimSpace(chatReq.Metadata[k]) == "" {
+				chatReq.Metadata[k] = v
+			}
+		}
+	}
+
+	providerHint := firstNonEmpty(
+		strings.TrimSpace(chatReq.Metadata[llmcore.MetadataKeyChatProvider]),
+		strings.TrimSpace(chatReq.Metadata["provider"]),
+		strings.TrimSpace(chatReq.Metadata["provider_hint"]),
+		strings.TrimSpace(req.ProviderHint),
+		strings.TrimSpace(req.Hints.ChatProvider),
+	)
+	if providerHint != "" {
+		if chatReq.Metadata == nil {
+			chatReq.Metadata = make(map[string]string, 1)
+		}
+		chatReq.Metadata[llmcore.MetadataKeyChatProvider] = providerHint
+		req.ProviderHint = providerHint
+		if req.Hints.ChatProvider == "" {
+			req.Hints.ChatProvider = providerHint
+		}
+	}
+
+	routePolicy := normalizeRoutePolicy(firstNonEmpty(
+		strings.TrimSpace(chatReq.Metadata["route_policy"]),
+		string(req.RoutePolicy),
+	))
+	if routePolicy != "" {
+		if chatReq.Metadata == nil {
+			chatReq.Metadata = make(map[string]string, 1)
+		}
+		chatReq.Metadata["route_policy"] = string(routePolicy)
+		req.RoutePolicy = routePolicy
+	}
+
+	if len(chatReq.Tags) == 0 && len(req.Tags) > 0 {
+		chatReq.Tags = cloneTags(req.Tags)
+	}
+}
+
+func normalizeRoutePolicy(raw string) llmcore.RoutePolicy {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "cost", "cost_first":
+		return llmcore.RoutePolicyCostFirst
+	case "health", "health_first":
+		return llmcore.RoutePolicyHealthFirst
+	case "latency", "latency_first":
+		return llmcore.RoutePolicyLatencyFirst
+	case "balanced":
+		return llmcore.RoutePolicyBalanced
+	default:
+		return ""
+	}
+}
+
+func providerHintFromMetadata(metadata map[string]string) string {
+	if len(metadata) == 0 {
+		return ""
+	}
+	return firstNonEmpty(
+		strings.TrimSpace(metadata[llmcore.MetadataKeyChatProvider]),
+		strings.TrimSpace(metadata["provider"]),
+		strings.TrimSpace(metadata["provider_hint"]),
+	)
+}
+
+func buildUnifiedChatRequest(req *llm.ChatRequest) *llmcore.UnifiedRequest {
+	if req == nil {
+		return &llmcore.UnifiedRequest{Capability: llmcore.CapabilityChat}
+	}
+	metadata := cloneMetadata(req.Metadata)
+	providerHint := providerHintFromMetadata(metadata)
+	return &llmcore.UnifiedRequest{
+		Capability:   llmcore.CapabilityChat,
+		ProviderHint: providerHint,
+		ModelHint:    req.Model,
+		RoutePolicy:  normalizeRoutePolicy(firstNonEmpty(strings.TrimSpace(metadata["route_policy"]), "balanced")),
+		TraceID:      req.TraceID,
+		Hints: llmcore.CapabilityHints{
+			ChatProvider: providerHint,
+		},
+		Payload:  req,
+		Metadata: metadata,
+		Tags:     cloneTags(req.Tags),
+	}
+}
+
 func parseInt(raw string) int {
 	if raw == "" {
 		return 0
@@ -1160,12 +1269,7 @@ func (a *ChatProviderAdapter) Completion(ctx context.Context, req *llm.ChatReque
 	if a.gateway == nil {
 		return nil, llmcore.GatewayUnavailableError("llm gateway is not configured")
 	}
-	resp, err := a.gateway.Invoke(ctx, &llmcore.UnifiedRequest{
-		Capability: llmcore.CapabilityChat,
-		ModelHint:  req.Model,
-		TraceID:    req.TraceID,
-		Payload:    req,
-	})
+	resp, err := a.gateway.Invoke(ctx, buildUnifiedChatRequest(req))
 	if err != nil {
 		return nil, err
 	}
@@ -1180,12 +1284,7 @@ func (a *ChatProviderAdapter) Stream(ctx context.Context, req *llm.ChatRequest) 
 	if a.gateway == nil {
 		return nil, llmcore.GatewayUnavailableError("llm gateway is not configured")
 	}
-	stream, err := a.gateway.Stream(ctx, &llmcore.UnifiedRequest{
-		Capability: llmcore.CapabilityChat,
-		ModelHint:  req.Model,
-		TraceID:    req.TraceID,
-		Payload:    req,
-	})
+	stream, err := a.gateway.Stream(ctx, buildUnifiedChatRequest(req))
 	if err != nil {
 		return nil, err
 	}

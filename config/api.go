@@ -58,6 +58,12 @@ type configData struct {
 	// 更改列出配置更改
 	Changes []ConfigChange `json:"changes,omitempty"`
 
+	// CurrentVersion 当前配置版本
+	CurrentVersion int `json:"current_version,omitempty"`
+
+	// HistorySize 历史快照数量
+	HistorySize int `json:"history_size,omitempty"`
+
 	// RequiresRestart 表示是否需要重启
 	RequiresRestart bool `json:"requires_restart,omitempty"`
 }
@@ -129,6 +135,11 @@ func (h *ConfigAPIHandler) HandleChanges(w http.ResponseWriter, r *http.Request)
 	h.handleChanges(w, r)
 }
 
+// HandleRollback 处理配置回滚请求（导出方法）
+func (h *ConfigAPIHandler) HandleRollback(w http.ResponseWriter, r *http.Request) {
+	h.handleRollback(w, r)
+}
+
 // handleConfig 处理配置的 GET 和 PUT 请求
 func (h *ConfigAPIHandler) handleConfig(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
@@ -153,6 +164,18 @@ func (h *ConfigAPIHandler) handleConfig(w http.ResponseWriter, r *http.Request) 
 // @Failure 500 {object} apiResponse "内部服务器错误"
 // @Router /api/v1/config [get]
 func (h *ConfigAPIHandler) getConfig(w http.ResponseWriter, r *http.Request) {
+	if cfg := h.manager.GetConfig(); cfg == nil {
+		writeAPIJSON(w, http.StatusInternalServerError, apiResponse{
+			Success: false,
+			Error: &apiError{
+				Code:    "INTERNAL_ERROR",
+				Message: "Configuration unavailable",
+			},
+			Timestamp: time.Now(),
+		})
+		return
+	}
+
 	config := h.manager.SanitizedConfig()
 
 	writeAPIJSON(w, http.StatusOK, apiResponse{
@@ -257,11 +280,12 @@ func (h *ConfigAPIHandler) updateConfig(w http.ResponseWriter, r *http.Request) 
 
 	var errors []string
 	var requiresRestart bool
+	hotFields := GetHotReloadableFields()
 
 	// X-004: 审计日志 — 记录配置变更请求
 	for path, value := range req.Updates {
 		// 检查字段是否已知
-		field, known := hotReloadableFields[path]
+		field, known := hotFields[path]
 		if !known {
 			errors = append(errors, fmt.Sprintf("Unknown field: %s", path))
 			continue
@@ -400,11 +424,12 @@ func (h *ConfigAPIHandler) handleFields(w http.ResponseWriter, r *http.Request) 
 	}
 
 	fields := make(map[string]FieldInfo)
-	for path, field := range hotReloadableFields {
+	for path, field := range GetHotReloadableFields() {
+		reloadable := IsHotReloadable(path)
 		info := FieldInfo{
 			Path:            path,
 			Description:     field.Description,
-			RequiresRestart: field.RequiresRestart,
+			RequiresRestart: !reloadable,
 			Sensitive:       field.Sensitive,
 		}
 
@@ -464,14 +489,85 @@ func (h *ConfigAPIHandler) handleChanges(w http.ResponseWriter, r *http.Request)
 	}
 
 	changes := h.manager.GetChangeLog(limit)
+	history := h.manager.GetConfigHistory()
+	currentVersion := h.manager.GetCurrentVersion()
 
 	writeAPIJSON(w, http.StatusOK, apiResponse{
 		Success: true,
 		Data: configData{
-			Message: fmt.Sprintf("Retrieved %d configuration changes", len(changes)),
-			Changes: changes,
+			Message:        fmt.Sprintf("Retrieved %d configuration changes", len(changes)),
+			Changes:        changes,
+			CurrentVersion: currentVersion,
+			HistorySize:    len(history),
 		},
 		Timestamp: time.Now(),
+	})
+}
+
+// handleRollback 处理配置回滚请求
+// @Summary 回滚配置
+// @Description 回滚到上一个版本，或通过 version 参数回滚到指定版本
+// @Tags config
+// @Accept json
+// @Produce json
+// @Param version query int false "目标版本号"
+// @Success 200 {object} apiResponse "配置已回滚"
+// @Failure 400 {object} apiResponse "无效请求"
+// @Failure 500 {object} apiResponse "回滚失败"
+// @Router /api/v1/config/rollback [post]
+func (h *ConfigAPIHandler) handleRollback(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodOptions {
+		h.handleCORS(w, r)
+		return
+	}
+
+	if r.Method != http.MethodPost {
+		h.methodNotAllowed(w, r)
+		return
+	}
+
+	var rollbackErr error
+	if versionStr := strings.TrimSpace(r.URL.Query().Get("version")); versionStr != "" {
+		version, err := strconv.Atoi(versionStr)
+		if err != nil || version <= 0 {
+			writeAPIJSON(w, http.StatusBadRequest, apiResponse{
+				Success: false,
+				Error: &apiError{
+					Code:    "INVALID_REQUEST",
+					Message: "version must be a positive integer",
+				},
+				Timestamp: time.Now(),
+				RequestID: requestIDFromRequest(r),
+			})
+			return
+		}
+		rollbackErr = h.manager.RollbackToVersion(version)
+	} else {
+		rollbackErr = h.manager.Rollback()
+	}
+
+	if rollbackErr != nil {
+		writeAPIJSON(w, http.StatusInternalServerError, apiResponse{
+			Success: false,
+			Error: &apiError{
+				Code:    "INTERNAL_ERROR",
+				Message: fmt.Sprintf("Failed to rollback configuration: %v", rollbackErr),
+			},
+			Timestamp: time.Now(),
+			RequestID: requestIDFromRequest(r),
+		})
+		return
+	}
+
+	writeAPIJSON(w, http.StatusOK, apiResponse{
+		Success: true,
+		Data: configData{
+			Message:        "Configuration rolled back successfully",
+			Config:         h.manager.SanitizedConfig(),
+			CurrentVersion: h.manager.GetCurrentVersion(),
+		},
+		Timestamp: time.Now(),
+		RequestID: requestIDFromRequest(r),
 	})
 }
 
@@ -583,6 +679,7 @@ func (m *ConfigAPIMiddleware) RequireAuth(next http.HandlerFunc) http.HandlerFun
 					zap.String("remote_addr", r.RemoteAddr),
 					zap.String("path", r.URL.Path),
 					zap.String("method", r.Method),
+					zap.String("provided_api_key", MaskAPIKey(apiKey)),
 					zap.String("request_id", requestIDFromRequest(r)),
 				)
 				writeAPIJSON(w, http.StatusUnauthorized, apiResponse{

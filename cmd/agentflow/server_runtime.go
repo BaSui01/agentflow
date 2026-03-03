@@ -40,15 +40,16 @@ type Server struct {
 	metricsManager  *server.Manager
 	serviceRegistry *pkgservice.Registry
 
-	healthHandler     *handlers.HealthHandler
-	chatHandler       *handlers.ChatHandler
-	agentHandler      *handlers.AgentHandler
-	apiKeyHandler     *handlers.APIKeyHandler
-	ragHandler        *handlers.RAGHandler
-	workflowHandler   *handlers.WorkflowHandler
-	protocolHandler   *handlers.ProtocolHandler
-	multimodalHandler *handlers.MultimodalHandler
-	multimodalRedis   *redis.Client
+	healthHandler       *handlers.HealthHandler
+	chatHandler         *handlers.ChatHandler
+	agentHandler        *handlers.AgentHandler
+	apiKeyHandler       *handlers.APIKeyHandler
+	toolRegistryHandler *handlers.ToolRegistryHandler
+	ragHandler          *handlers.RAGHandler
+	workflowHandler     *handlers.WorkflowHandler
+	protocolHandler     *handlers.ProtocolHandler
+	multimodalHandler   *handlers.MultimodalHandler
+	multimodalRedis     *redis.Client
 
 	metricsCollector *metrics.Collector
 

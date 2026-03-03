@@ -139,6 +139,17 @@ func TestChatHandler_HandleCompletion(t *testing.T) {
 			},
 			expectedStatus: http.StatusBadRequest,
 		},
+		{
+			name: "invalid route policy",
+			request: api.ChatRequest{
+				Model: "gpt-4",
+				Messages: []api.Message{
+					{Role: "user", Content: "Hello"},
+				},
+				RoutePolicy: "fastest",
+			},
+			expectedStatus: http.StatusBadRequest,
+		},
 	}
 
 	for _, tt := range tests {
@@ -353,6 +364,28 @@ func TestChatHandler_ValidateChatRequest(t *testing.T) {
 			},
 			wantErr: true,
 		},
+		{
+			name: "invalid provider hint",
+			request: &api.ChatRequest{
+				Model: "gpt-4",
+				Messages: []api.Message{
+					{Role: "user", Content: "Hello"},
+				},
+				Provider: "bad/provider",
+			},
+			wantErr: true,
+		},
+		{
+			name: "invalid route policy",
+			request: &api.ChatRequest{
+				Model: "gpt-4",
+				Messages: []api.Message{
+					{Role: "user", Content: "Hello"},
+				},
+				RoutePolicy: "fastest",
+			},
+			wantErr: true,
+		},
 	}
 
 	for _, tt := range tests {
@@ -420,4 +453,18 @@ func TestChatHandler_ConvertToLLMRequest(t *testing.T) {
 	assert.Equal(t, 30*time.Second, llmReq.Timeout)
 	assert.Equal(t, map[string]string{"key": "value"}, llmReq.Metadata)
 	assert.Equal(t, []string{"test"}, llmReq.Tags)
+}
+
+func TestChatHandler_HandleCapabilities(t *testing.T) {
+	handler := NewChatHandler(nil, nil, zap.NewNop())
+
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodGet, "/api/v1/chat/capabilities", nil)
+	handler.HandleCapabilities(w, r)
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	var resp Response
+	err := json.NewDecoder(w.Body).Decode(&resp)
+	require.NoError(t, err)
+	assert.True(t, resp.Success)
 }

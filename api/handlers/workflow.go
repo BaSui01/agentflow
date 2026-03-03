@@ -31,11 +31,16 @@ type workflowExecuteRequest struct {
 	DAGJSON string `json:"dag_json,omitempty"`
 	DAGYAML string `json:"dag_yaml,omitempty"`
 	DAGFile string `json:"dag_file,omitempty"`
+	Source  string `json:"source,omitempty"`
 	Input   any    `json:"input"`
 }
 
 // HandleExecute handles POST /api/v1/workflows/execute
 func (h *WorkflowHandler) HandleExecute(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		WriteErrorMessage(w, http.StatusMethodNotAllowed, types.ErrInvalidRequest, "method not allowed", h.logger)
+		return
+	}
 	if !ValidateContentType(w, r, h.logger) {
 		return
 	}
@@ -50,7 +55,7 @@ func (h *WorkflowHandler) HandleExecute(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	wf, apiErr := h.service.BuildDAGWorkflow(req)
+	wf, source, apiErr := h.service.BuildDAGWorkflow(req)
 	if apiErr != nil {
 		WriteError(w, apiErr, h.logger)
 		return
@@ -75,11 +80,13 @@ func (h *WorkflowHandler) HandleExecute(w http.ResponseWriter, r *http.Request) 
 
 	h.logger.Info("workflow executed",
 		zap.String("name", wf.Name()),
+		zap.String("source", source),
 	)
 
 	WriteSuccess(w, map[string]any{
-		"workflow": wf.Name(),
-		"result":   result,
+		"workflow":        wf.Name(),
+		"workflow_source": source,
+		"result":          result,
 	})
 }
 
@@ -90,6 +97,10 @@ type workflowParseRequest struct {
 
 // HandleParse handles POST /api/v1/workflows/parse (validate DSL)
 func (h *WorkflowHandler) HandleParse(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		WriteErrorMessage(w, http.StatusMethodNotAllowed, types.ErrInvalidRequest, "method not allowed", h.logger)
+		return
+	}
 	if !ValidateContentType(w, r, h.logger) {
 		return
 	}
@@ -114,9 +125,32 @@ func (h *WorkflowHandler) HandleParse(w http.ResponseWriter, r *http.Request) {
 
 // HandleList handles GET /api/v1/workflows
 func (h *WorkflowHandler) HandleList(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		WriteErrorMessage(w, http.StatusMethodNotAllowed, types.ErrInvalidRequest, "method not allowed", h.logger)
+		return
+	}
 	// Currently returns an empty list as workflows are not persisted.
 	// This endpoint exists for API completeness and future extension.
 	WriteSuccess(w, map[string]any{
 		"workflows": []any{},
+	})
+}
+
+// HandleCapabilities handles GET /api/v1/workflows/capabilities
+func (h *WorkflowHandler) HandleCapabilities(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		WriteErrorMessage(w, http.StatusMethodNotAllowed, types.ErrInvalidRequest, "method not allowed", h.logger)
+		return
+	}
+	WriteSuccess(w, map[string]any{
+		"sources": []string{
+			"auto",
+			"dsl",
+			"dsl_file",
+			"dag_json",
+			"dag_yaml",
+			"dag_file",
+		},
+		"default_source": "auto",
 	})
 }

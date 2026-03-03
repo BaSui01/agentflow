@@ -49,10 +49,15 @@ type AgentInfo struct {
 
 // AgentExecuteRequest Agent execution request
 type AgentExecuteRequest struct {
-	AgentID   string            `json:"agent_id" binding:"required"`
-	Content   string            `json:"content" binding:"required"`
-	Context   map[string]any    `json:"context,omitempty"`
-	Variables map[string]string `json:"variables,omitempty"`
+	AgentID     string            `json:"agent_id" binding:"required"`
+	Content     string            `json:"content" binding:"required"`
+	Provider    string            `json:"provider,omitempty"`
+	Model       string            `json:"model,omitempty"`
+	RoutePolicy string            `json:"route_policy,omitempty"`
+	Metadata    map[string]string `json:"metadata,omitempty"`
+	Tags        []string          `json:"tags,omitempty"`
+	Context     map[string]any    `json:"context,omitempty"`
+	Variables   map[string]string `json:"variables,omitempty"`
 }
 
 // AgentExecuteResponse Agent execution response
@@ -133,7 +138,7 @@ func (h *AgentHandler) HandleListAgents(w http.ResponseWriter, r *http.Request) 
 
 	agents, svcErr := h.service.ListAgents(r.Context())
 	if svcErr != nil {
-		WriteError(w, svcErr, h.logger)
+		h.handleAgentError(w, svcErr)
 		return
 	}
 
@@ -175,7 +180,7 @@ func (h *AgentHandler) HandleGetAgent(w http.ResponseWriter, r *http.Request) {
 
 	info, svcErr := h.service.GetAgent(r.Context(), agentID)
 	if svcErr != nil {
-		WriteError(w, svcErr, h.logger)
+		h.handleAgentError(w, svcErr)
 		return
 	}
 
@@ -210,21 +215,14 @@ func (h *AgentHandler) HandleExecuteAgent(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	// V-004: Content length validation
-	if len(req.Content) > 100000 {
-		WriteErrorMessage(w, http.StatusBadRequest, types.ErrInvalidRequest,
-			"content length exceeds maximum of 100000 characters", h.logger)
-		return
-	}
-
-	if !validAgentID.MatchString(req.AgentID) {
-		WriteErrorMessage(w, http.StatusBadRequest, types.ErrInvalidRequest, "invalid agent ID format", h.logger)
+	if apiErr := h.validateAgentExecuteRequest(&req); apiErr != nil {
+		WriteError(w, apiErr.WithHTTPStatus(http.StatusBadRequest), h.logger)
 		return
 	}
 
 	resp, duration, execErr := h.service.ExecuteAgent(r.Context(), req, r.Header.Get("X-Request-ID"))
 	if execErr != nil {
-		WriteError(w, execErr, h.logger)
+		h.handleAgentError(w, execErr)
 		return
 	}
 
@@ -267,14 +265,14 @@ func (h *AgentHandler) HandleAgentStream(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	if !validAgentID.MatchString(req.AgentID) {
-		WriteErrorMessage(w, http.StatusBadRequest, types.ErrInvalidRequest, "invalid agent ID format", h.logger)
+	if apiErr := h.validateAgentExecuteRequest(&req); apiErr != nil {
+		WriteError(w, apiErr.WithHTTPStatus(http.StatusBadRequest), h.logger)
 		return
 	}
 
 	// Preserve non-stream error semantics (404/501) before committing SSE headers.
 	if _, svcErr := h.service.ResolveForOperation(r.Context(), req.AgentID, AgentOperationStream); svcErr != nil {
-		WriteError(w, svcErr, h.logger)
+		h.handleAgentError(w, svcErr)
 		return
 	}
 
@@ -382,14 +380,14 @@ func (h *AgentHandler) HandlePlanAgent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if !validAgentID.MatchString(req.AgentID) {
-		WriteErrorMessage(w, http.StatusBadRequest, types.ErrInvalidRequest, "invalid agent ID format", h.logger)
+	if apiErr := h.validateAgentExecuteRequest(&req); apiErr != nil {
+		WriteError(w, apiErr.WithHTTPStatus(http.StatusBadRequest), h.logger)
 		return
 	}
 
 	plan, planErr := h.service.PlanAgent(r.Context(), req, r.Header.Get("X-Request-ID"))
 	if planErr != nil {
-		WriteError(w, planErr, h.logger)
+		h.handleAgentError(w, planErr)
 		return
 	}
 
@@ -421,7 +419,7 @@ func (h *AgentHandler) HandleAgentHealth(w http.ResponseWriter, r *http.Request)
 
 	info, svcErr := h.service.GetAgent(r.Context(), agentID)
 	if svcErr != nil {
-		WriteError(w, svcErr, h.logger)
+		h.handleAgentError(w, svcErr)
 		return
 	}
 
@@ -447,6 +445,24 @@ func (h *AgentHandler) HandleAgentHealth(w http.ResponseWriter, r *http.Request)
 	}
 
 	WriteSuccess(w, resp)
+}
+
+// HandleCapabilities handles GET /api/v1/agents/capabilities
+func (h *AgentHandler) HandleCapabilities(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		WriteErrorMessage(w, http.StatusMethodNotAllowed, types.ErrInvalidRequest, "method not allowed", h.logger)
+		return
+	}
+
+	WriteSuccess(w, map[string]any{
+		"route_params":         []string{"provider", "model", "route_policy", "tags", "metadata"},
+		"route_policies":       supportedRoutePolicies(),
+		"default_route_policy": "balanced",
+		"notes": []string{
+			"routing params are normalized in agent service and forwarded to llm runtime context",
+			"provider hint effectiveness depends on runtime provider implementation",
+		},
+	})
 }
 
 // =============================================================================
@@ -492,4 +508,34 @@ func extractAgentID(r *http.Request) string {
 		return path
 	}
 	return ""
+}
+
+func (h *AgentHandler) validateAgentExecuteRequest(req *AgentExecuteRequest) *types.Error {
+	if req == nil {
+		return types.NewInvalidRequestError("request is required")
+	}
+
+	req.AgentID = strings.TrimSpace(req.AgentID)
+	req.Content = strings.TrimSpace(req.Content)
+	req.Model = strings.TrimSpace(req.Model)
+
+	if req.AgentID == "" || req.Content == "" {
+		return types.NewInvalidRequestError("agent_id and content are required")
+	}
+	if !validAgentID.MatchString(req.AgentID) {
+		return types.NewInvalidRequestError("invalid agent ID format")
+	}
+	if len(req.Content) > 100000 {
+		return types.NewInvalidRequestError("content length exceeds maximum of 100000 characters")
+	}
+	if _, err := normalizeProviderHint(req.Provider); err != nil {
+		return err
+	}
+	if _, err := normalizeRoutePolicy(req.RoutePolicy); err != nil {
+		return err
+	}
+
+	req.Metadata = normalizeRouteMetadata(req.Metadata)
+	req.Tags = normalizeRouteTags(req.Tags)
+	return nil
 }

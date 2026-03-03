@@ -86,11 +86,17 @@ func TestDefaultRAGService_Query(t *testing.T) {
 		&fakeRAGEmbedding{queryVec: []float64{1, 2, 3}},
 	)
 
-	got, err := svc.Query(context.Background(), "hello", 3)
+	got, err := svc.Query(context.Background(), "hello", 3, RAGQueryOptions{Strategy: "vector"})
 	if err != nil {
 		t.Fatalf("Query error: %v", err)
 	}
-	if len(got) != 1 || got[0].Score != 0.9 {
+	if got == nil {
+		t.Fatal("query response is nil")
+	}
+	if got.EffectiveStrategy != "vector" {
+		t.Fatalf("unexpected effective strategy: %s", got.EffectiveStrategy)
+	}
+	if len(got.Results) != 1 || got.Results[0].Score != 0.9 {
 		t.Fatalf("unexpected query result: %#v", got)
 	}
 }
@@ -100,11 +106,25 @@ func TestDefaultRAGService_Query_EmbeddingError(t *testing.T) {
 		&fakeRAGStore{},
 		&fakeRAGEmbedding{err: errors.New("embed failed")},
 	)
-	_, err := svc.Query(context.Background(), "hello", 3)
+	_, err := svc.Query(context.Background(), "hello", 3, RAGQueryOptions{})
 	if err == nil {
 		t.Fatal("expected error")
 	}
 	if te, ok := err.(*types.Error); !ok || te.Code != types.ErrUpstreamError {
+		t.Fatalf("unexpected error type/code: %#v", err)
+	}
+}
+
+func TestDefaultRAGService_Query_InvalidStrategy(t *testing.T) {
+	svc := NewDefaultRAGService(
+		&fakeRAGStore{},
+		&fakeRAGEmbedding{queryVec: []float64{1, 2, 3}},
+	)
+	_, err := svc.Query(context.Background(), "hello", 3, RAGQueryOptions{Strategy: "graph_rag"})
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if te, ok := err.(*types.Error); !ok || te.Code != types.ErrInvalidRequest {
 		t.Fatalf("unexpected error type/code: %#v", err)
 	}
 }
@@ -123,5 +143,32 @@ func TestDefaultRAGService_Index(t *testing.T) {
 	}
 	if len(store.addDocs) != 1 || len(store.addDocs[0].Embedding) != 2 {
 		t.Fatalf("embedding not written into docs: %#v", store.addDocs)
+	}
+}
+
+func TestDefaultRAGService_Query_BM25(t *testing.T) {
+	store := &fakeRAGStore{}
+	svc := NewDefaultRAGService(
+		store,
+		&fakeRAGEmbedding{
+			queryVec: []float64{1, 0},
+			docVecs:  [][]float64{{1, 0}},
+		},
+	)
+	if err := svc.Index(context.Background(), []rag.Document{
+		{ID: "doc-1", Content: "agentflow rag strategy routing"},
+	}); err != nil {
+		t.Fatalf("Index error: %v", err)
+	}
+
+	got, err := svc.Query(context.Background(), "strategy", 3, RAGQueryOptions{Strategy: "bm25"})
+	if err != nil {
+		t.Fatalf("Query error: %v", err)
+	}
+	if got.EffectiveStrategy != "bm25" {
+		t.Fatalf("unexpected effective strategy: %s", got.EffectiveStrategy)
+	}
+	if len(got.Results) == 0 {
+		t.Fatal("expected bm25 results")
 	}
 }

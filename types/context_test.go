@@ -35,6 +35,16 @@ func TestContextHelpers(t *testing.T) {
 		t.Fatalf("LLMModel mismatch: %v %v", got, ok)
 	}
 
+	ctx = WithLLMProvider(ctx, "openai")
+	if got, ok := LLMProvider(ctx); !ok || got != "openai" {
+		t.Fatalf("LLMProvider mismatch: %v %v", got, ok)
+	}
+
+	ctx = WithLLMRoutePolicy(ctx, "balanced")
+	if got, ok := LLMRoutePolicy(ctx); !ok || got != "balanced" {
+		t.Fatalf("LLMRoutePolicy mismatch: %v %v", got, ok)
+	}
+
 	ctx = WithPromptBundleVersion(ctx, "v1")
 	if got, ok := PromptBundleVersion(ctx); !ok || got != "v1" {
 		t.Fatalf("PromptBundleVersion mismatch: %v %v", got, ok)

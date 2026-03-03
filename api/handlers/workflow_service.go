@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"path/filepath"
 	"strings"
@@ -20,7 +21,7 @@ type WorkflowExecutor interface {
 
 // WorkflowService encapsulates workflow parsing, validation and execution use-cases.
 type WorkflowService interface {
-	BuildDAGWorkflow(req workflowExecuteRequest) (*workflow.DAGWorkflow, *types.Error)
+	BuildDAGWorkflow(req workflowExecuteRequest) (*workflow.DAGWorkflow, string, *types.Error)
 	Execute(ctx context.Context, wf *workflow.DAGWorkflow, input any, streamEmitter workflow.WorkflowStreamEmitter, nodeEmitter workflowobs.NodeEventEmitter) (any, *types.Error)
 	ValidateDSL(rawDSL string) workflowDSLValidationResult
 }
@@ -43,9 +44,9 @@ func newDefaultWorkflowService(executor WorkflowExecutor, parser *dsl.Parser) Wo
 	}
 }
 
-func (s *defaultWorkflowService) BuildDAGWorkflow(req workflowExecuteRequest) (*workflow.DAGWorkflow, *types.Error) {
+func (s *defaultWorkflowService) BuildDAGWorkflow(req workflowExecuteRequest) (*workflow.DAGWorkflow, string, *types.Error) {
 	if s.parser == nil {
-		return nil, types.NewInternalError("workflow parser is not configured")
+		return nil, "", types.NewInternalError("workflow parser is not configured")
 	}
 
 	var (
@@ -53,37 +54,46 @@ func (s *defaultWorkflowService) BuildDAGWorkflow(req workflowExecuteRequest) (*
 		err error
 	)
 
-	switch {
-	case req.DAGFile != "":
+	source, resolveErr := resolveWorkflowSource(req)
+	if resolveErr != nil {
+		return nil, "", types.NewError(types.ErrInvalidRequest, resolveErr.Error()).
+			WithHTTPStatus(http.StatusBadRequest)
+	}
+
+	switch source {
+	case workflowSourceDAGFile:
 		var def *workflow.DAGDefinition
 		def, err = loadDAGDefinition(req.DAGFile)
 		if err == nil {
 			wf, err = def.ToDAGWorkflow()
 		}
-	case req.DAGJSON != "":
+	case workflowSourceDAGJSON:
 		var def *workflow.DAGDefinition
 		def, err = workflow.FromJSON(req.DAGJSON)
 		if err == nil {
 			wf, err = def.ToDAGWorkflow()
 		}
-	case req.DAGYAML != "":
+	case workflowSourceDAGYAML:
 		var def *workflow.DAGDefinition
 		def, err = workflow.FromYAML(req.DAGYAML)
 		if err == nil {
 			wf, err = def.ToDAGWorkflow()
 		}
-	case req.DSLFile != "":
+	case workflowSourceDSLFile:
 		wf, err = s.parser.ParseFile(req.DSLFile)
-	default:
+	case workflowSourceDSL:
 		wf, err = s.parser.Parse([]byte(req.DSL))
-	}
-
-	if err != nil {
-		return nil, types.NewError(types.ErrInvalidRequest, "invalid workflow DSL: "+err.Error()).
+	default:
+		return nil, "", types.NewError(types.ErrInvalidRequest, "unsupported workflow source: "+source).
 			WithHTTPStatus(http.StatusBadRequest)
 	}
 
-	return wf, nil
+	if err != nil {
+		return nil, "", types.NewError(types.ErrInvalidRequest, "invalid workflow DSL: "+err.Error()).
+			WithHTTPStatus(http.StatusBadRequest)
+	}
+
+	return wf, source, nil
 }
 
 func (s *defaultWorkflowService) Execute(
@@ -144,5 +154,73 @@ func loadDAGDefinition(filename string) (*workflow.DAGDefinition, error) {
 		return workflow.LoadFromYAMLFile(filename)
 	default:
 		return nil, types.NewError(types.ErrInvalidRequest, "dag_file must be .json/.yml/.yaml")
+	}
+}
+
+const (
+	workflowSourceAuto    = "auto"
+	workflowSourceDSL     = "dsl"
+	workflowSourceDSLFile = "dsl_file"
+	workflowSourceDAGJSON = "dag_json"
+	workflowSourceDAGYAML = "dag_yaml"
+	workflowSourceDAGFile = "dag_file"
+)
+
+func resolveWorkflowSource(req workflowExecuteRequest) (string, error) {
+	source := strings.ToLower(strings.TrimSpace(req.Source))
+	if source == "" || source == workflowSourceAuto {
+		available := make([]string, 0, 5)
+		if strings.TrimSpace(req.DSL) != "" {
+			available = append(available, workflowSourceDSL)
+		}
+		if strings.TrimSpace(req.DSLFile) != "" {
+			available = append(available, workflowSourceDSLFile)
+		}
+		if strings.TrimSpace(req.DAGJSON) != "" {
+			available = append(available, workflowSourceDAGJSON)
+		}
+		if strings.TrimSpace(req.DAGYAML) != "" {
+			available = append(available, workflowSourceDAGYAML)
+		}
+		if strings.TrimSpace(req.DAGFile) != "" {
+			available = append(available, workflowSourceDAGFile)
+		}
+		if len(available) == 0 {
+			return "", fmt.Errorf("dsl/dsl_file/dag_json/dag_yaml/dag_file is required")
+		}
+		if len(available) > 1 {
+			return "", fmt.Errorf("multiple workflow sources provided: %s; please set source explicitly", strings.Join(available, ","))
+		}
+		return available[0], nil
+	}
+
+	switch source {
+	case workflowSourceDSL:
+		if strings.TrimSpace(req.DSL) == "" {
+			return "", fmt.Errorf("source=%s requires dsl", workflowSourceDSL)
+		}
+		return source, nil
+	case workflowSourceDSLFile:
+		if strings.TrimSpace(req.DSLFile) == "" {
+			return "", fmt.Errorf("source=%s requires dsl_file", workflowSourceDSLFile)
+		}
+		return source, nil
+	case workflowSourceDAGJSON:
+		if strings.TrimSpace(req.DAGJSON) == "" {
+			return "", fmt.Errorf("source=%s requires dag_json", workflowSourceDAGJSON)
+		}
+		return source, nil
+	case workflowSourceDAGYAML:
+		if strings.TrimSpace(req.DAGYAML) == "" {
+			return "", fmt.Errorf("source=%s requires dag_yaml", workflowSourceDAGYAML)
+		}
+		return source, nil
+	case workflowSourceDAGFile:
+		if strings.TrimSpace(req.DAGFile) == "" {
+			return "", fmt.Errorf("source=%s requires dag_file", workflowSourceDAGFile)
+		}
+		return source, nil
+	default:
+		return "", fmt.Errorf("unsupported source: %s", source)
 	}
 }

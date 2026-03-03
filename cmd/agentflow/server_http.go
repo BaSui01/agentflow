@@ -19,6 +19,7 @@ func (s *Server) startHTTPServer() error {
 			Chat:       s.chatHandler,
 			Agent:      s.agentHandler,
 			APIKey:     s.apiKeyHandler,
+			Tools:      s.toolRegistryHandler,
 			Multimodal: s.multimodalHandler,
 			Protocol:   s.protocolHandler,
 			RAG:        s.ragHandler,
