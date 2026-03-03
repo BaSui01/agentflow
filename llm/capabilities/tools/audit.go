@@ -1,11 +1,14 @@
 package tools
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -322,31 +325,7 @@ func (m *MemoryAuditBackend) Query(ctx context.Context, filter *AuditFilter) ([]
 
 // matchesFilter 检查条目是否匹配过滤器。
 func (m *MemoryAuditBackend) matchesFilter(entry *AuditEntry, filter *AuditFilter) bool {
-	if filter.AgentID != "" && entry.AgentID != filter.AgentID {
-		return false
-	}
-	if filter.UserID != "" && entry.UserID != filter.UserID {
-		return false
-	}
-	if filter.ToolName != "" && entry.ToolName != filter.ToolName {
-		return false
-	}
-	if filter.EventType != "" && entry.EventType != filter.EventType {
-		return false
-	}
-	if filter.SessionID != "" && entry.SessionID != filter.SessionID {
-		return false
-	}
-	if filter.TraceID != "" && entry.TraceID != filter.TraceID {
-		return false
-	}
-	if filter.StartTime != nil && entry.Timestamp.Before(*filter.StartTime) {
-		return false
-	}
-	if filter.EndTime != nil && entry.Timestamp.After(*filter.EndTime) {
-		return false
-	}
-	return true
+	return matchesAuditFilter(entry, filter)
 }
 
 // Close 关闭内存后端。
@@ -456,22 +435,103 @@ func (f *FileAuditBackend) rotateFile(date string) error {
 
 // Query 从文件中检索审计条目（功能有限）.
 func (f *FileAuditBackend) Query(ctx context.Context, filter *AuditFilter) ([]*AuditEntry, error) {
-	// 注意: 这是一个仅读取当前文件的简化实现
-	// 生产环境需要根据过滤器从多个文件中读取
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
-	if f.currentFile == nil {
-		return []*AuditEntry{}, nil
+	entries := make([]*AuditEntry, 0, 128)
+	pattern := filepath.Join(f.dir, "audit_*.jsonl")
+	files, err := filepath.Glob(pattern)
+	if err != nil {
+		return nil, fmt.Errorf("glob audit files: %w", err)
+	}
+	sort.Strings(files)
+	for _, file := range files {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		fd, openErr := os.Open(file)
+		if openErr != nil {
+			f.logger.Warn("skip unreadable audit file", zap.String("file", file), zap.Error(openErr))
+			continue
+		}
+		scanner := bufio.NewScanner(fd)
+		// Raise scanner token size for large argument/result payload.
+		buf := make([]byte, 0, 64*1024)
+		scanner.Buffer(buf, 4*1024*1024)
+		for scanner.Scan() {
+			line := strings.TrimSpace(scanner.Text())
+			if line == "" {
+				continue
+			}
+			var entry AuditEntry
+			if err := json.Unmarshal([]byte(line), &entry); err != nil {
+				f.logger.Debug("skip invalid audit json line", zap.String("file", file), zap.Error(err))
+				continue
+			}
+			if !matchesAuditFilter(&entry, filter) {
+				continue
+			}
+			cp := entry
+			entries = append(entries, &cp)
+		}
+		if scanErr := scanner.Err(); scanErr != nil {
+			f.logger.Warn("scan audit file failed", zap.String("file", file), zap.Error(scanErr))
+		}
+		_ = fd.Close()
 	}
 
-	// 完整实现需要:
-	// 1. 列出目录中的所有文件
-	// 2. 根据日期范围过滤文件
-	// 3. 读取并解析每个文件
-	// 4. 应用过滤器并返回结果
+	// newest first
+	sort.Slice(entries, func(i, j int) bool {
+		return entries[i].Timestamp.After(entries[j].Timestamp)
+	})
 
-	return []*AuditEntry{}, fmt.Errorf("file query not fully implemented; use memory backend for queries")
+	offset := 0
+	limit := 0
+	if filter != nil {
+		offset = filter.Offset
+		limit = filter.Limit
+	}
+	if offset > 0 {
+		if offset >= len(entries) {
+			return []*AuditEntry{}, nil
+		}
+		entries = entries[offset:]
+	}
+	if limit > 0 && len(entries) > limit {
+		entries = entries[:limit]
+	}
+	return entries, nil
+}
+
+func matchesAuditFilter(entry *AuditEntry, filter *AuditFilter) bool {
+	if filter == nil {
+		return true
+	}
+	if filter.AgentID != "" && entry.AgentID != filter.AgentID {
+		return false
+	}
+	if filter.UserID != "" && entry.UserID != filter.UserID {
+		return false
+	}
+	if filter.ToolName != "" && entry.ToolName != filter.ToolName {
+		return false
+	}
+	if filter.EventType != "" && entry.EventType != filter.EventType {
+		return false
+	}
+	if filter.SessionID != "" && entry.SessionID != filter.SessionID {
+		return false
+	}
+	if filter.TraceID != "" && entry.TraceID != filter.TraceID {
+		return false
+	}
+	if filter.StartTime != nil && entry.Timestamp.Before(*filter.StartTime) {
+		return false
+	}
+	if filter.EndTime != nil && entry.Timestamp.After(*filter.EndTime) {
+		return false
+	}
+	return true
 }
 
 // Close 关闭文件后端。

@@ -515,7 +515,6 @@ func (r *HybridRetriever) rerank(query string, results []RetrievalResult) []Retr
 
 // calculateRerankScore 计算重排序分数
 func (r *HybridRetriever) calculateRerankScore(query, content string) float64 {
-	// 简化实现：基于词重叠和位置
 	queryTerms := r.tokenize(query)
 	contentTerms := r.tokenize(content)
 
@@ -523,17 +522,40 @@ func (r *HybridRetriever) calculateRerankScore(query, content string) float64 {
 		return 0.0
 	}
 
-	matchCount := 0
-	for _, qTerm := range queryTerms {
-		for _, cTerm := range contentTerms {
-			if qTerm == cTerm {
-				matchCount++
-				break
-			}
+	contentFreq := make(map[string]int, len(contentTerms))
+	firstPos := make(map[string]int, len(contentTerms))
+	for i, term := range contentTerms {
+		contentFreq[term]++
+		if _, ok := firstPos[term]; !ok {
+			firstPos[term] = i
 		}
 	}
 
-	return float64(matchCount) / float64(len(queryTerms))
+	var covered int
+	var tfAccum float64
+	var posAccum float64
+	for _, qTerm := range queryTerms {
+		if tf, ok := contentFreq[qTerm]; ok {
+			covered++
+			tfAccum += math.Log(1 + float64(tf))
+			pos := firstPos[qTerm]
+			posAccum += 1.0 / float64(pos+1)
+		}
+	}
+	if covered == 0 {
+		return 0
+	}
+
+	coverage := float64(covered) / float64(len(queryTerms))
+	tfScore := tfAccum / float64(len(queryTerms))
+	posScore := posAccum / float64(len(queryTerms))
+
+	// Weighted lexical relevance with early-position bias.
+	score := 0.65*coverage + 0.25*tfScore + 0.10*posScore
+	if score > 1 {
+		return 1
+	}
+	return score
 }
 
 // tokenize 分词

@@ -3,6 +3,9 @@ package observability
 import (
 	"context"
 	"fmt"
+	"math"
+	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -486,26 +489,26 @@ func calculatePercentile(durations []time.Duration, percentile float64) time.Dur
 	if len(durations) == 0 {
 		return 0
 	}
-
-	// 简化实现：排序后取对应位置
+	if percentile <= 0 {
+		percentile = 0
+	}
+	if percentile >= 1 {
+		percentile = 1
+	}
 	sorted := make([]time.Duration, len(durations))
 	copy(sorted, durations)
-
-	// 冒泡排序（简化）
-	for i := 0; i < len(sorted); i++ {
-		for j := i + 1; j < len(sorted); j++ {
-			if sorted[i] > sorted[j] {
-				sorted[i], sorted[j] = sorted[j], sorted[i]
-			}
-		}
+	sort.Slice(sorted, func(i, j int) bool { return sorted[i] < sorted[j] })
+	// Linear interpolation percentile (same style as Prometheus quantile).
+	pos := percentile * float64(len(sorted)-1)
+	lo := int(math.Floor(pos))
+	hi := int(math.Ceil(pos))
+	if lo == hi {
+		return sorted[lo]
 	}
-
-	idx := int(float64(len(sorted)) * percentile)
-	if idx >= len(sorted) {
-		idx = len(sorted) - 1
-	}
-
-	return sorted[idx]
+	frac := pos - float64(lo)
+	loV := float64(sorted[lo])
+	hiV := float64(sorted[hi])
+	return time.Duration(loV + (hiV-loV)*frac)
 }
 
 func calculateAvg(values []float64) float64 {
@@ -525,21 +528,92 @@ func calculateAvg(values []float64) float64 {
 type SimpleEvaluationStrategy struct{}
 
 func (s *SimpleEvaluationStrategy) Evaluate(ctx context.Context, input *agent.Input, output *agent.Output) (*EvaluationResult, error) {
-	// 简化实现：基于输出长度评分
-	score := 0.8
-	if len(output.Content) < 10 {
-		score = 0.3
-	} else if len(output.Content) < 50 {
-		score = 0.6
+	outputText := strings.TrimSpace(output.Content)
+	inputText := strings.TrimSpace(input.Content)
+	if outputText == "" {
+		return &EvaluationResult{
+			Score: 0,
+			Dimensions: map[string]float64{
+				"completeness": 0,
+				"relevance":    0,
+			},
+			Feedback:  "empty output",
+			Timestamp: time.Now(),
+		}, nil
+	}
+	lengthScore := 1.0
+	l := len([]rune(outputText))
+	switch {
+	case l < 30:
+		lengthScore = 0.4
+	case l < 80:
+		lengthScore = 0.7
+	}
+	inputTerms := tokenizeText(inputText)
+	outputTerms := tokenizeText(outputText)
+	relevance := lexicalRecall(inputTerms, outputTerms)
+	structure := structureScore(outputText)
+	score := 0.45*relevance + 0.35*lengthScore + 0.20*structure
+	if score > 1 {
+		score = 1
 	}
 
 	return &EvaluationResult{
 		Score: score,
 		Dimensions: map[string]float64{
-			"completeness": score,
-			"relevance":    score,
+			"completeness": lengthScore,
+			"relevance":    relevance,
+			"structure":    structure,
 		},
 		Timestamp: time.Now(),
 	}, nil
+}
+
+func tokenizeText(s string) []string {
+	s = strings.ToLower(strings.TrimSpace(s))
+	return strings.FieldsFunc(s, func(r rune) bool {
+		return r == '\n' || r == '\t' || r == ' ' || r == ',' || r == '.' || r == '，' || r == '。' || r == ':' || r == '：' || r == ';' || r == '；'
+	})
+}
+
+func lexicalRecall(inputTerms, outputTerms []string) float64 {
+	if len(inputTerms) == 0 {
+		return 1
+	}
+	outSet := map[string]struct{}{}
+	for _, t := range outputTerms {
+		outSet[t] = struct{}{}
+	}
+	seen := map[string]struct{}{}
+	matched := 0
+	for _, t := range inputTerms {
+		if t == "" {
+			continue
+		}
+		if _, ok := seen[t]; ok {
+			continue
+		}
+		seen[t] = struct{}{}
+		if _, ok := outSet[t]; ok {
+			matched++
+		}
+	}
+	if len(seen) == 0 {
+		return 1
+	}
+	return float64(matched) / float64(len(seen))
+}
+
+func structureScore(text string) float64 {
+	hasLineBreak := strings.Contains(text, "\n")
+	hasPunct := strings.ContainsAny(text, "。.!?；;:")
+	switch {
+	case hasLineBreak && hasPunct:
+		return 1
+	case hasLineBreak || hasPunct:
+		return 0.8
+	default:
+		return 0.6
+	}
 }
 
