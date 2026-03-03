@@ -8,6 +8,7 @@ import (
 	"github.com/BaSui01/agentflow/agent"
 	"github.com/BaSui01/agentflow/agent/memory"
 	"github.com/BaSui01/agentflow/agent/observability"
+	"github.com/BaSui01/agentflow/agent/reasoning"
 	"github.com/BaSui01/agentflow/agent/skills"
 	"github.com/BaSui01/agentflow/llm"
 	"github.com/BaSui01/agentflow/types"
@@ -39,6 +40,20 @@ type BuildOptions struct {
 
 	// 设定时使用可观察性系统代替默认执行.
 	ObservabilitySystem agent.ObservabilityRunner
+
+	// Optional pass-throughs for AgentBuilder runtime controls.
+	MaxReActIterations int
+	MemoryManager      agent.MemoryManager
+	ToolManager        agent.ToolManager
+	EventBus           agent.EventBus
+	LSPClient          agent.LSPClientRunner
+
+	// Optional pass-throughs for AgentBuilder advanced wiring.
+	PromptStore       agent.PromptStoreProvider
+	ConversationStore agent.ConversationStoreProvider
+	RunStore          agent.RunStoreProvider
+	Orchestrator      agent.OrchestratorRunner
+	ReasoningRegistry *reasoning.PatternRegistry
 
 	// InitAgent在接线后呼叫Init(ctx).
 	InitAgent bool
@@ -129,8 +144,42 @@ func (b *Builder) Build(ctx context.Context, cfg types.AgentConfig) (*agent.Base
 	agentBuilder := agent.NewAgentBuilder(cfg2).
 		WithProvider(b.provider).
 		WithLogger(b.logger)
+
+	if opts.MaxReActIterations > 0 {
+		agentBuilder.WithMaxReActIterations(opts.MaxReActIterations)
+	}
+	if opts.MemoryManager != nil {
+		agentBuilder.WithMemory(opts.MemoryManager)
+	}
+	if opts.ToolManager != nil {
+		agentBuilder.WithToolManager(opts.ToolManager)
+	}
+	if opts.EventBus != nil {
+		agentBuilder.WithEventBus(opts.EventBus)
+	}
 	if b.toolProvider != nil {
 		agentBuilder.WithToolProvider(b.toolProvider)
+	}
+	if opts.PromptStore != nil {
+		agentBuilder.WithPromptStore(opts.PromptStore)
+	}
+	if opts.ConversationStore != nil {
+		agentBuilder.WithConversationStore(opts.ConversationStore)
+	}
+	if opts.RunStore != nil {
+		agentBuilder.WithRunStore(opts.RunStore)
+	}
+	if opts.Orchestrator != nil {
+		agentBuilder.WithOrchestrator(opts.Orchestrator)
+		if agentBuilder.Orchestrator() == nil {
+			return nil, fmt.Errorf("configure orchestrator: unexpected nil")
+		}
+	}
+	if opts.ReasoningRegistry != nil {
+		agentBuilder.WithReasoning(opts.ReasoningRegistry)
+		if agentBuilder.ReasoningRegistry() == nil {
+			return nil, fmt.Errorf("configure reasoning registry: unexpected nil")
+		}
 	}
 
 	if enabled(opts.EnableAll, opts.EnableReflection) {
@@ -150,24 +199,29 @@ func (b *Builder) Build(ctx context.Context, cfg types.AgentConfig) (*agent.Base
 	if enabled(opts.EnableAll, opts.EnableMCP) {
 		agentBuilder.WithDefaultMCPServer(strings.TrimSpace(opts.MCPServerName), strings.TrimSpace(opts.MCPServerVersion))
 	}
-	if enabled(opts.EnableAll, opts.EnableLSP) {
+	if opts.LSPClient != nil {
+		agentBuilder.WithLSP(opts.LSPClient)
+	} else if enabled(opts.EnableAll, opts.EnableLSP) {
 		agentBuilder.WithDefaultLSPServer(strings.TrimSpace(opts.LSPServerName), strings.TrimSpace(opts.LSPServerVersion))
 	}
 	if enabled(opts.EnableAll, opts.EnableEnhancedMemory) {
 		agentBuilder.WithDefaultEnhancedMemory(opts.EnhancedMemoryConfig)
 	}
+	if obsEnabled {
+		if opts.ObservabilitySystem != nil {
+			agentBuilder.WithObservability(opts.ObservabilitySystem)
+		} else {
+			agentBuilder.WithObservability(observability.NewObservabilitySystem(b.logger))
+		}
+	}
+
+	if err := agentBuilder.Validate(); err != nil {
+		return nil, err
+	}
 
 	ag, err := agentBuilder.Build()
 	if err != nil {
 		return nil, err
-	}
-
-	if cfg2.Extensions.Observability != nil && cfg2.Extensions.Observability.Enabled {
-		if opts.ObservabilitySystem != nil {
-			ag.EnableObservability(opts.ObservabilitySystem)
-		} else {
-			ag.EnableObservability(observability.NewObservabilitySystem(b.logger))
-		}
 	}
 
 	if err := ag.ValidateConfiguration(); err != nil {

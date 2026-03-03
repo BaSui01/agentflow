@@ -1,6 +1,7 @@
 package workflow
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"time"
@@ -207,6 +208,17 @@ func (b *VisualBuilder) convertNode(vnode VisualNode) (*DAGNode, error) {
 			Options: vnode.Config.Options,
 			Timeout: vnode.Config.Timeout,
 		}
+
+	case VNodeCode:
+		dagNode.Type = NodeTypeAction
+		step := &CodeStep{
+			Handler: func(ctx context.Context, input any) (any, error) {
+				return input, nil
+			},
+		}
+		// Persist step identity in metadata for downstream diagnostics.
+		dagNode.Metadata["step_name"] = step.Name()
+		dagNode.Step = step
 
 	case VNodeSubflow:
 		dagNode.Type = NodeTypeSubGraph

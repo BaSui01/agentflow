@@ -3,6 +3,8 @@ package artifacts
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"io"
 	"strings"
 	"testing"
@@ -321,9 +323,13 @@ func TestManager_NilLogger(t *testing.T) {
 // --- Helper function tests ---
 
 func TestComputeChecksum(t *testing.T) {
-	c1 := computeChecksum([]byte("hello"))
-	c2 := computeChecksum([]byte("hello"))
-	c3 := computeChecksum([]byte("world"))
+	checksum := func(data []byte) string {
+		sum := sha256.Sum256(data)
+		return hex.EncodeToString(sum[:])
+	}
+	c1 := checksum([]byte("hello"))
+	c2 := checksum([]byte("hello"))
+	c3 := checksum([]byte("world"))
 	assert.Equal(t, c1, c2)
 	assert.NotEqual(t, c1, c3)
 }
@@ -337,4 +343,3 @@ func TestDefaultManagerConfig(t *testing.T) {
 
 // Ensure unused import is used
 var _ = bytes.NewReader
-

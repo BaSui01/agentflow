@@ -2,8 +2,6 @@ package artifacts
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"fmt"
 	"io"
 	"sync"
@@ -323,9 +321,3 @@ func withVersion(version int) CreateOption {
 func generateArtifactID() string {
 	return fmt.Sprintf("art_%d", time.Now().UnixNano())
 }
-
-func computeChecksum(data []byte) string {
-	hash := sha256.Sum256(data)
-	return hex.EncodeToString(hash[:])
-}
-

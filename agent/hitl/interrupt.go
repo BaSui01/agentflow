@@ -151,9 +151,6 @@ func (m *InterruptManager) CreateInterrupt(ctx context.Context, opts InterruptOp
 		return nil, fmt.Errorf("failed to save interrupt: %w", err)
 	}
 
-	// 通知处理者
-	m.notifyHandlers(ctx, interrupt)
-
 	// 以响应频道创建待补中断
 	interruptCtx, cancel := context.WithTimeout(ctx, interrupt.Timeout)
 	pending := &pendingInterrupt{
@@ -165,6 +162,9 @@ func (m *InterruptManager) CreateInterrupt(ctx context.Context, opts InterruptOp
 	m.mu.Lock()
 	m.pending[interrupt.ID] = pending
 	m.mu.Unlock()
+
+	// 通知处理者（必须在 pending 注册后，避免处理器提前 Resolve 产生 not found）
+	m.notifyHandlers(ctx, interrupt)
 
 	// 等待回应
 	select {
@@ -359,4 +359,3 @@ func (s *InMemoryInterruptStore) Update(ctx context.Context, interrupt *Interrup
 	s.interrupts[interrupt.ID] = interrupt
 	return nil
 }
-

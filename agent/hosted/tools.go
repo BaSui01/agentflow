@@ -23,6 +23,7 @@ const (
 	ToolTypeFileSearch HostedToolType = "file_search"
 	ToolTypeCodeExec   HostedToolType = "code_execution"
 	ToolTypeRetrieval  HostedToolType = "retrieval"
+	ToolTypeBrowser    HostedToolType = "browser_automation"
 
 	// maxResponseSize is the maximum allowed response body size (1MB).
 	maxResponseSize = 1 << 20

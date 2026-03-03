@@ -34,7 +34,7 @@ func (m *inMemoryManager) LoadRecent(_ context.Context, agentID string, _ Memory
 }
 
 func (m *inMemoryManager) Search(_ context.Context, agentID string, _ string, topK int) ([]MemoryRecord, error) {
-	return m.LoadRecent(nil, agentID, "", topK)
+	return m.LoadRecent(context.Background(), agentID, "", topK)
 }
 
 func (m *inMemoryManager) Get(_ context.Context, _ string) (*MemoryRecord, error) {

@@ -1,6 +1,7 @@
 package workflow
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -68,12 +69,12 @@ func FromJSON(jsonStr string) (*DAGDefinition, error) {
 	if err := json.Unmarshal([]byte(jsonStr), &def); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal from JSON: %w", err)
 	}
-	
+
 	// Validate the loaded definition
 	if err := ValidateDAGDefinition(&def); err != nil {
 		return nil, fmt.Errorf("validation failed: %w", err)
 	}
-	
+
 	return &def, nil
 }
 
@@ -83,12 +84,12 @@ func FromYAML(yamlStr string) (*DAGDefinition, error) {
 	if err := yaml.Unmarshal([]byte(yamlStr), &def); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal from YAML: %w", err)
 	}
-	
+
 	// Validate the loaded definition
 	if err := ValidateDAGDefinition(&def); err != nil {
 		return nil, fmt.Errorf("validation failed: %w", err)
 	}
-	
+
 	return &def, nil
 }
 
@@ -98,7 +99,7 @@ func LoadFromJSONFile(filename string) (*DAGDefinition, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to read file: %w", err)
 	}
-	
+
 	return FromJSON(string(data))
 }
 
@@ -108,7 +109,7 @@ func LoadFromYAMLFile(filename string) (*DAGDefinition, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to read file: %w", err)
 	}
-	
+
 	return FromYAML(string(data))
 }
 
@@ -118,11 +119,11 @@ func (d *DAGDefinition) SaveToJSONFile(filename string) error {
 	if err != nil {
 		return fmt.Errorf("marshal DAG to JSON: %w", err)
 	}
-	
+
 	if err := os.WriteFile(filename, []byte(jsonStr), 0644); err != nil {
 		return fmt.Errorf("failed to write file: %w", err)
 	}
-	
+
 	return nil
 }
 
@@ -132,11 +133,11 @@ func (d *DAGDefinition) SaveToYAMLFile(filename string) error {
 	if err != nil {
 		return fmt.Errorf("marshal DAG to YAML: %w", err)
 	}
-	
+
 	if err := os.WriteFile(filename, []byte(yamlStr), 0644); err != nil {
 		return fmt.Errorf("failed to write file: %w", err)
 	}
-	
+
 	return nil
 }
 
@@ -145,38 +146,38 @@ func ValidateDAGDefinition(def *DAGDefinition) error {
 	if def.Name == "" {
 		return fmt.Errorf("workflow name is required")
 	}
-	
+
 	if len(def.Nodes) == 0 {
 		return fmt.Errorf("workflow must have at least one node")
 	}
-	
+
 	if def.Entry == "" {
 		return fmt.Errorf("entry node is required")
 	}
-	
+
 	// Check that entry node exists
 	entryExists := false
 	nodeIDs := make(map[string]bool)
-	
+
 	for _, node := range def.Nodes {
 		if node.ID == "" {
 			return fmt.Errorf("node ID is required")
 		}
-		
+
 		if nodeIDs[node.ID] {
 			return fmt.Errorf("duplicate node ID: %s", node.ID)
 		}
 		nodeIDs[node.ID] = true
-		
+
 		if node.ID == def.Entry {
 			entryExists = true
 		}
-		
+
 		// Validate node type
 		if node.Type == "" {
 			return fmt.Errorf("node %s: type is required", node.ID)
 		}
-		
+
 		// Validate node-specific requirements
 		switch NodeType(node.Type) {
 		case NodeTypeAction:
@@ -232,11 +233,11 @@ func ValidateDAGDefinition(def *DAGDefinition) error {
 			return fmt.Errorf("node %s: invalid node type: %s", node.ID, node.Type)
 		}
 	}
-	
+
 	if !entryExists {
 		return fmt.Errorf("entry node %s does not exist", def.Entry)
 	}
-	
+
 	// Validate that all referenced nodes exist
 	for _, node := range def.Nodes {
 		// Check Next references
@@ -245,14 +246,14 @@ func ValidateDAGDefinition(def *DAGDefinition) error {
 				return fmt.Errorf("node %s: next node %s does not exist", node.ID, nextID)
 			}
 		}
-		
+
 		// Check OnTrue references
 		for _, trueID := range node.OnTrue {
 			if !nodeIDs[trueID] {
 				return fmt.Errorf("node %s: on_true node %s does not exist", node.ID, trueID)
 			}
 		}
-		
+
 		// Check OnFalse references
 		for _, falseID := range node.OnFalse {
 			if !nodeIDs[falseID] {
@@ -260,8 +261,106 @@ func ValidateDAGDefinition(def *DAGDefinition) error {
 			}
 		}
 	}
-	
+
 	return nil
+}
+
+// ToDAGWorkflow converts a validated DAGDefinition into an executable DAGWorkflow.
+// Runtime-only handlers (step logic/condition expression parsing) are intentionally
+// represented with safe defaults so structure can execute deterministically.
+func (d *DAGDefinition) ToDAGWorkflow() (*DAGWorkflow, error) {
+	if err := ValidateDAGDefinition(d); err != nil {
+		return nil, fmt.Errorf("validate DAG definition: %w", err)
+	}
+
+	builder := NewDAGBuilder(d.Name).WithDescription(d.Description)
+	for _, nodeDef := range d.Nodes {
+		nodeType := NodeType(nodeDef.Type)
+		nb := builder.AddNode(nodeDef.ID, nodeType)
+
+		switch nodeType {
+		case NodeTypeAction:
+			nb.WithStep(&PassthroughStep{})
+			if nodeDef.Step != "" {
+				nb.WithMetadata("step_name", nodeDef.Step)
+			}
+		case NodeTypeCondition:
+			nb.WithCondition(func(ctx context.Context, input any) (bool, error) {
+				return true, nil
+			})
+			if nodeDef.Condition != "" {
+				nb.WithMetadata("condition_expr", nodeDef.Condition)
+			}
+			if len(nodeDef.OnTrue) > 0 {
+				nb.WithOnTrue(nodeDef.OnTrue...)
+			}
+			if len(nodeDef.OnFalse) > 0 {
+				nb.WithOnFalse(nodeDef.OnFalse...)
+			}
+		case NodeTypeLoop:
+			loopCfg := LoopConfig{
+				Type:          LoopType(nodeDef.Loop.Type),
+				MaxIterations: nodeDef.Loop.MaxIterations,
+			}
+			switch loopCfg.Type {
+			case LoopTypeWhile:
+				loopCfg.Condition = func(ctx context.Context, input any) (bool, error) {
+					return false, nil
+				}
+				if nodeDef.Loop.Condition != "" {
+					nb.WithMetadata("loop_condition", nodeDef.Loop.Condition)
+				}
+			case LoopTypeForEach:
+				loopCfg.Iterator = func(ctx context.Context, input any) ([]any, error) {
+					return []any{}, nil
+				}
+			}
+			nb.WithLoop(loopCfg)
+		case NodeTypeParallel, NodeTypeCheckpoint:
+			// No extra runtime configuration required.
+		case NodeTypeSubGraph:
+			subWorkflow, err := nodeDef.SubGraph.ToDAGWorkflow()
+			if err != nil {
+				return nil, fmt.Errorf("convert subgraph node %s: %w", nodeDef.ID, err)
+			}
+			nb.WithSubGraph(subWorkflow.Graph())
+		default:
+			return nil, fmt.Errorf("unsupported node type: %s", nodeDef.Type)
+		}
+
+		if nodeDef.Error != nil {
+			nb.WithErrorConfig(ErrorConfig{
+				Strategy:      ErrorStrategy(nodeDef.Error.Strategy),
+				MaxRetries:    nodeDef.Error.MaxRetries,
+				RetryDelayMs:  nodeDef.Error.RetryDelayMs,
+				FallbackValue: nodeDef.Error.FallbackValue,
+			})
+		}
+		for k, v := range nodeDef.Metadata {
+			nb.WithMetadata(k, v)
+		}
+		nb.Done()
+
+		for _, nextID := range nodeDef.Next {
+			builder.AddEdge(nodeDef.ID, nextID)
+		}
+		for _, trueID := range nodeDef.OnTrue {
+			builder.AddEdge(nodeDef.ID, trueID)
+		}
+		for _, falseID := range nodeDef.OnFalse {
+			builder.AddEdge(nodeDef.ID, falseID)
+		}
+	}
+
+	builder.SetEntry(d.Entry)
+	wf, err := builder.Build()
+	if err != nil {
+		return nil, fmt.Errorf("build workflow from definition: %w", err)
+	}
+	for k, v := range d.Metadata {
+		wf.SetMetadata(k, v)
+	}
+	return wf, nil
 }
 
 // ToDAGDefinition converts a DAGWorkflow to a DAGDefinition for serialization
@@ -274,7 +373,7 @@ func (w *DAGWorkflow) ToDAGDefinition() *DAGDefinition {
 		Nodes:       make([]NodeDefinition, 0, len(w.graph.nodes)),
 		Metadata:    w.metadata,
 	}
-	
+
 	// Convert nodes
 	for _, node := range w.graph.nodes {
 		nodeDef := NodeDefinition{
@@ -282,19 +381,19 @@ func (w *DAGWorkflow) ToDAGDefinition() *DAGDefinition {
 			Type:     string(node.Type),
 			Metadata: node.Metadata,
 		}
-		
+
 		// Set node-specific fields
 		if node.Step != nil {
 			nodeDef.Step = node.Step.Name()
 		}
-		
+
 		if node.LoopConfig != nil {
 			nodeDef.Loop = &LoopDefinition{
 				Type:          string(node.LoopConfig.Type),
 				MaxIterations: node.LoopConfig.MaxIterations,
 			}
 		}
-		
+
 		if node.SubGraph != nil {
 			// Recursively convert subgraph
 			subWorkflow := &DAGWorkflow{
@@ -305,15 +404,14 @@ func (w *DAGWorkflow) ToDAGDefinition() *DAGDefinition {
 			}
 			nodeDef.SubGraph = subWorkflow.ToDAGDefinition()
 		}
-		
+
 		// Get edges for this node
 		if edges, ok := w.graph.edges[node.ID]; ok {
 			nodeDef.Next = edges
 		}
-		
+
 		def.Nodes = append(def.Nodes, nodeDef)
 	}
-	
+
 	return def
 }
-

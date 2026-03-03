@@ -7,6 +7,9 @@ import (
 	"strings"
 
 	"github.com/BaSui01/agentflow/workflow"
+	"github.com/BaSui01/agentflow/workflow/core"
+	"github.com/BaSui01/agentflow/workflow/engine"
+	"go.uber.org/zap"
 	"gopkg.in/yaml.v3"
 )
 
@@ -16,6 +19,8 @@ type Parser struct {
 	stepRegistry map[string]func(config map[string]any) (workflow.Step, error)
 	// conditionRegistry 条件表达式注册表
 	conditionRegistry map[string]workflow.ConditionFunc
+	// stepDeps 为 engine-step integration 注入依赖（可选）
+	stepDeps engine.StepDependencies
 }
 
 // NewParser 创建 DSL 解析器
@@ -36,6 +41,12 @@ func (p *Parser) RegisterStep(name string, factory func(config map[string]any) (
 // RegisterCondition 注册命名条件
 func (p *Parser) RegisterCondition(name string, fn workflow.ConditionFunc) {
 	p.conditionRegistry[name] = fn
+}
+
+// WithStepDependencies configures shared dependencies for engine-backed step creation.
+func (p *Parser) WithStepDependencies(deps engine.StepDependencies) *Parser {
+	p.stepDeps = deps
+	return p
 }
 
 // ParseFile 从文件解析 DSL
@@ -62,14 +73,13 @@ func (p *Parser) Parse(data []byte) (*workflow.DAGWorkflow, error) {
 	// 2. 解析变量，构建插值上下文
 	vars := p.resolveVariables(dsl.Variables)
 
-	// 3. 构建 DAGGraph
-	graph, err := p.buildGraph(&dsl, vars)
+	// 3. 构建并验证 DAGWorkflow（统一走 DAGBuilder）
+	wf, err := p.buildWorkflow(dsl.Name, dsl.Description, dsl.Workflow, &dsl, vars)
 	if err != nil {
-		return nil, fmt.Errorf("build graph: %w", err)
+		return nil, fmt.Errorf("build workflow: %w", err)
 	}
 
-	// 4. 创建 DAGWorkflow
-	wf := workflow.NewDAGWorkflow(dsl.Name, dsl.Description, graph)
+	// 4. 注入 workflow metadata
 	for k, v := range dsl.Metadata {
 		wf.SetMetadata(k, v)
 	}
@@ -112,33 +122,79 @@ func (p *Parser) interpolate(template string, vars map[string]any) string {
 	return result
 }
 
-// buildGraph 从 DSL 构建 DAGGraph
-func (p *Parser) buildGraph(dsl *WorkflowDSL, vars map[string]any) (*workflow.DAGGraph, error) {
-	graph := workflow.NewDAGGraph()
+// buildWorkflow 从 DSL 节点定义构建 DAGWorkflow。
+func (p *Parser) buildWorkflow(
+	name string,
+	description string,
+	nodesDef WorkflowNodesDef,
+	dsl *WorkflowDSL,
+	vars map[string]any,
+) (*workflow.DAGWorkflow, error) {
+	builder := workflow.NewDAGBuilder(name).
+		WithDescription(description).
+		WithLogger(zap.NewNop())
 
-	for _, nodeDef := range dsl.Workflow.Nodes {
+	for _, nodeDef := range nodesDef.Nodes {
 		node, err := p.buildNode(&nodeDef, dsl, vars)
 		if err != nil {
 			return nil, fmt.Errorf("build node %s: %w", nodeDef.ID, err)
 		}
-		graph.AddNode(node)
 
-		// 添加边
-		for _, nextID := range nodeDef.Next {
-			graph.AddEdge(nodeDef.ID, nextID)
+		nodeBuilder := builder.AddNode(node.ID, node.Type)
+		switch node.Type {
+		case workflow.NodeTypeAction:
+			if node.Step != nil {
+				nodeBuilder.WithStep(node.Step)
+			}
+		case workflow.NodeTypeCondition:
+			if node.Condition != nil {
+				nodeBuilder.WithCondition(node.Condition)
+			}
+			if len(nodeDef.OnTrue) > 0 {
+				nodeBuilder.WithOnTrue(nodeDef.OnTrue...)
+			}
+			if len(nodeDef.OnFalse) > 0 {
+				nodeBuilder.WithOnFalse(nodeDef.OnFalse...)
+			}
+		case workflow.NodeTypeLoop:
+			if node.LoopConfig != nil {
+				nodeBuilder.WithLoop(*node.LoopConfig)
+			}
+		case workflow.NodeTypeSubGraph:
+			if node.SubGraph != nil {
+				nodeBuilder.WithSubGraph(node.SubGraph)
+			}
 		}
 
-		// 条件节点的分支也作为边
+		for k, v := range node.Metadata {
+			if k == "on_true" || k == "on_false" {
+				continue
+			}
+			nodeBuilder.WithMetadata(k, v)
+		}
+
+		if node.ErrorConfig != nil {
+			nodeBuilder.WithErrorConfig(*node.ErrorConfig)
+		}
+		nodeBuilder.Done()
+
+		for _, nextID := range nodeDef.Next {
+			builder.AddEdge(nodeDef.ID, nextID)
+		}
 		for _, trueID := range nodeDef.OnTrue {
-			graph.AddEdge(nodeDef.ID, trueID)
+			builder.AddEdge(nodeDef.ID, trueID)
 		}
 		for _, falseID := range nodeDef.OnFalse {
-			graph.AddEdge(nodeDef.ID, falseID)
+			builder.AddEdge(nodeDef.ID, falseID)
 		}
 	}
 
-	graph.SetEntry(dsl.Workflow.Entry)
-	return graph, nil
+	builder.SetEntry(nodesDef.Entry)
+	wf, err := builder.Build()
+	if err != nil {
+		return nil, err
+	}
+	return wf, nil
 }
 
 // buildNode 构建单个节点
@@ -190,15 +246,11 @@ func (p *Parser) buildNode(def *NodeDef, dsl *WorkflowDSL, vars map[string]any) 
 
 	case workflow.NodeTypeSubGraph:
 		if def.SubGraph != nil {
-			subDSL := &WorkflowDSL{
-				Name:     dsl.Name + "_sub",
-				Workflow: *def.SubGraph,
-			}
-			subGraph, err := p.buildGraph(subDSL, vars)
+			subWf, err := p.buildWorkflow(dsl.Name+"_sub", "subgraph", *def.SubGraph, dsl, vars)
 			if err != nil {
 				return nil, fmt.Errorf("build subgraph: %w", err)
 			}
-			node.SubGraph = subGraph
+			node.SubGraph = subWf.Graph()
 		}
 	}
 
@@ -250,10 +302,15 @@ func (p *Parser) resolveStep(def *NodeDef, dsl *WorkflowDSL, vars map[string]any
 				model = m
 			}
 		}
-		return &workflow.LLMStep{
-			Model:  model,
-			Prompt: prompt,
-		}, nil
+		spec := engine.StepSpec{
+			ID:          def.ID,
+			Type:        core.StepTypeLLM,
+			Model:       model,
+			Prompt:      prompt,
+			Temperature: readFloat64(stepDef.Config, "temperature"),
+			MaxTokens:   readInt(stepDef.Config, "max_tokens"),
+		}
+		return p.newEngineBackedStep(spec, "llm")
 
 	case "tool":
 		params := make(map[string]any)
@@ -264,15 +321,38 @@ func (p *Parser) resolveStep(def *NodeDef, dsl *WorkflowDSL, vars map[string]any
 				params[k] = v
 			}
 		}
-		return &workflow.ToolStep{
-			ToolName: stepDef.Tool,
-			Params:   params,
-		}, nil
+		spec := engine.StepSpec{
+			ID:         def.ID,
+			Type:       core.StepTypeTool,
+			ToolName:   stepDef.Tool,
+			ToolParams: params,
+		}
+		return p.newEngineBackedStep(spec, stepDef.Tool)
 
 	case "human_input":
-		return &workflow.HumanInputStep{
-			Prompt: p.interpolate(stepDef.Prompt, vars),
-		}, nil
+		spec := engine.StepSpec{
+			ID:          def.ID,
+			Type:        core.StepTypeHuman,
+			InputPrompt: p.interpolate(stepDef.Prompt, vars),
+		}
+		if inputType, ok := stepDef.Config["type"].(string); ok {
+			spec.InputType = inputType
+		}
+		return p.newEngineBackedStep(spec, "human_input")
+
+	case "code":
+		spec := engine.StepSpec{
+			ID:   def.ID,
+			Type: core.StepTypeCode,
+		}
+		return p.newEngineBackedStep(spec, "code")
+
+	case "agent":
+		spec := engine.StepSpec{
+			ID:   def.ID,
+			Type: core.StepTypeAgent,
+		}
+		return p.newEngineBackedStep(spec, "agent")
 
 	case "passthrough":
 		return &workflow.PassthroughStep{}, nil
@@ -329,6 +409,171 @@ func (p *Parser) parseSimpleExpression(expr string, vars map[string]any) (workfl
 	}, nil
 }
 
+func (p *Parser) newEngineBackedStep(spec engine.StepSpec, name string) (workflow.Step, error) {
+	node, err := engine.BuildExecutionNode(spec, p.effectiveStepDeps())
+	if err != nil {
+		return nil, err
+	}
+	return &protocolStepAdapter{
+		name:     name,
+		stepType: spec.Type,
+		step:     node.Step,
+	}, nil
+}
+
+func (p *Parser) effectiveStepDeps() engine.StepDependencies {
+	deps := p.stepDeps
+	if deps.Gateway == nil {
+		deps.Gateway = noopGateway{}
+	}
+	if deps.ToolRegistry == nil {
+		deps.ToolRegistry = noopToolRegistry{}
+	}
+	if deps.HumanHandler == nil {
+		deps.HumanHandler = noopHumanHandler{}
+	}
+	if deps.AgentExecutor == nil {
+		deps.AgentExecutor = noopAgentExecutor{}
+	}
+	if deps.CodeHandler == nil {
+		deps.CodeHandler = func(ctx context.Context, input core.StepInput) (map[string]any, error) {
+			return nil, fmt.Errorf("step dependency not configured")
+		}
+	}
+	return deps
+}
+
+func readInt(cfg map[string]any, key string) int {
+	if cfg == nil {
+		return 0
+	}
+	v, ok := cfg[key]
+	if !ok {
+		return 0
+	}
+	switch n := v.(type) {
+	case int:
+		return n
+	case int32:
+		return int(n)
+	case int64:
+		return int(n)
+	case float64:
+		return int(n)
+	default:
+		return 0
+	}
+}
+
+func readFloat64(cfg map[string]any, key string) float64 {
+	if cfg == nil {
+		return 0
+	}
+	v, ok := cfg[key]
+	if !ok {
+		return 0
+	}
+	switch n := v.(type) {
+	case float64:
+		return n
+	case float32:
+		return float64(n)
+	case int:
+		return float64(n)
+	case int32:
+		return float64(n)
+	case int64:
+		return float64(n)
+	default:
+		return 0
+	}
+}
+
+type protocolStepAdapter struct {
+	name     string
+	stepType core.StepType
+	step     core.StepProtocol
+}
+
+type noopGateway struct{}
+
+func (noopGateway) Invoke(ctx context.Context, req *core.LLMRequest) (*core.LLMResponse, error) {
+	return nil, fmt.Errorf("step dependency not configured")
+}
+
+type noopToolRegistry struct{}
+
+func (noopToolRegistry) ExecuteTool(ctx context.Context, name string, params map[string]any) (any, error) {
+	return nil, fmt.Errorf("step dependency not configured")
+}
+
+type noopHumanHandler struct{}
+
+func (noopHumanHandler) RequestInput(ctx context.Context, prompt string, inputType string, options []string) (any, error) {
+	return nil, fmt.Errorf("step dependency not configured")
+}
+
+type noopAgentExecutor struct{}
+
+func (noopAgentExecutor) Execute(ctx context.Context, input any) (any, error) {
+	return nil, fmt.Errorf("step dependency not configured")
+}
+
+func (s *protocolStepAdapter) Name() string {
+	if s.name != "" {
+		return s.name
+	}
+	return string(s.stepType)
+}
+
+func (s *protocolStepAdapter) Execute(ctx context.Context, input any) (any, error) {
+	stepInput := core.StepInput{Data: make(map[string]any)}
+	if inputMap, ok := input.(map[string]any); ok {
+		stepInput.Data = inputMap
+	} else if input != nil {
+		stepInput.Data["input"] = input
+	}
+
+	nodeID := s.step.ID()
+	result, err := engine.NewExecutor().Execute(
+		ctx,
+		engine.ModeSequential,
+		[]*engine.ExecutionNode{
+			{
+				ID:    nodeID,
+				Step:  s.step,
+				Input: stepInput,
+			},
+		},
+		engine.DefaultStepRunner,
+	)
+	if err != nil {
+		return nil, err
+	}
+	out := result.Outputs[nodeID]
+
+	switch s.stepType {
+	case core.StepTypeLLM:
+		if v, ok := out.Data["content"]; ok {
+			return v, nil
+		}
+	case core.StepTypeTool:
+		if v, ok := out.Data["result"]; ok {
+			return v, nil
+		}
+	case core.StepTypeHuman:
+		if v, ok := out.Data["input"]; ok {
+			return v, nil
+		}
+	}
+	if len(out.Data) == 1 {
+		for _, v := range out.Data {
+			return v, nil
+		}
+	}
+	return out.Data, nil
+}
+
 // resolveLoop 解析循环配置
 func (p *Parser) resolveLoop(def *LoopDef, vars map[string]any) (*workflow.LoopConfig, error) {
 	config := &workflow.LoopConfig{
@@ -353,4 +598,3 @@ func (p *Parser) registerBuiltinSteps() {
 		return &workflow.PassthroughStep{}, nil
 	})
 }
-

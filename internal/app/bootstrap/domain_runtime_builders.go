@@ -1,6 +1,8 @@
 package bootstrap
 
 import (
+	"context"
+
 	"github.com/BaSui01/agentflow/agent/protocol/a2a"
 	"github.com/BaSui01/agentflow/agent/protocol/mcp"
 	"github.com/BaSui01/agentflow/config"
@@ -32,11 +34,22 @@ type WorkflowRuntime struct {
 }
 
 // BuildWorkflowRuntime creates workflow parser and DAG executor.
-func BuildWorkflowRuntime(logger *zap.Logger) *WorkflowRuntime {
-	executor := workflow.NewDAGExecutor(nil, logger)
+func BuildWorkflowRuntime(logger *zap.Logger, opts ...WorkflowRuntimeOptions) *WorkflowRuntime {
+	var cfg WorkflowRuntimeOptions
+	if len(opts) > 0 {
+		cfg = opts[0]
+	}
+	executor := workflow.NewDAGExecutor(buildWorkflowCheckpointManager(cfg), logger)
+	parser := dsl.NewParser()
+	parser.RegisterCondition("always_true", func(ctx context.Context, input any) (bool, error) {
+		return true, nil
+	})
+	if len(opts) > 0 {
+		parser.WithStepDependencies(buildStepDependencies(cfg, logger))
+	}
 	return &WorkflowRuntime{
 		Facade: workflow.NewFacade(executor),
-		Parser: dsl.NewParser(),
+		Parser: parser,
 	}
 }
 

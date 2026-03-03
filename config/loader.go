@@ -136,6 +136,22 @@ type AgentConfig struct {
 	StreamEnabled bool `yaml:"stream_enabled" env:"STREAM_ENABLED"`
 	// 记忆配置
 	Memory MemoryConfig `yaml:"memory" env:"MEMORY"`
+	// 检查点配置
+	Checkpoint CheckpointConfig `yaml:"checkpoint" env:"CHECKPOINT"`
+}
+
+// CheckpointConfig Agent 检查点存储配置。
+type CheckpointConfig struct {
+	// 是否启用检查点持久化
+	Enabled bool `yaml:"enabled" env:"ENABLED"`
+	// 后端类型: file, redis, postgres
+	Backend string `yaml:"backend" env:"BACKEND"`
+	// 文件后端目录
+	FilePath string `yaml:"file_path" env:"FILE_PATH"`
+	// Redis 键前缀
+	RedisPrefix string `yaml:"redis_prefix" env:"REDIS_PREFIX"`
+	// Redis TTL
+	RedisTTL time.Duration `yaml:"redis_ttl" env:"REDIS_TTL"`
 }
 
 // MemoryConfig 记忆配置
@@ -681,6 +697,28 @@ func (c *Config) Validate() error {
 
 	if c.Agent.Temperature < 0 || c.Agent.Temperature > 2 {
 		errs = append(errs, "temperature must be between 0 and 2")
+	}
+	if c.Agent.Checkpoint.Enabled {
+		backend := strings.TrimSpace(strings.ToLower(c.Agent.Checkpoint.Backend))
+		switch backend {
+		case "file":
+			if strings.TrimSpace(c.Agent.Checkpoint.FilePath) == "" {
+				errs = append(errs, "agent.checkpoint.file_path is required when backend=file")
+			}
+		case "redis":
+			if strings.TrimSpace(c.Redis.Addr) == "" {
+				errs = append(errs, "redis.addr is required when agent.checkpoint.backend=redis")
+			}
+			if strings.TrimSpace(c.Agent.Checkpoint.RedisPrefix) == "" {
+				errs = append(errs, "agent.checkpoint.redis_prefix is required when backend=redis")
+			}
+		case "postgres":
+			if strings.TrimSpace(c.Database.Driver) != "postgres" {
+				errs = append(errs, "database.driver must be postgres when agent.checkpoint.backend=postgres")
+			}
+		default:
+			errs = append(errs, "agent.checkpoint.backend must be one of: file, redis, postgres")
+		}
 	}
 	if c.Multimodal.ReferenceMaxSizeBytes <= 0 {
 		errs = append(errs, "multimodal.reference_max_size_bytes must be positive")

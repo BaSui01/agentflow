@@ -1,9 +1,11 @@
 package main
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/BaSui01/agentflow/agent"
+	"github.com/BaSui01/agentflow/agent/hitl"
 	"github.com/BaSui01/agentflow/api/handlers"
 	"github.com/BaSui01/agentflow/internal/app/bootstrap"
 	"go.uber.org/zap"
@@ -99,6 +101,20 @@ func (s *Server) initHandlers() error {
 	s.logger.Info("Protocol handler initialized (MCP + A2A)")
 
 	ragRuntime, err := bootstrap.BuildRAGHandlerRuntime(s.cfg, s.logger)
+	var workflowStore bootstrap.WorkflowRuntimeOptions
+	workflowStore.LLMProvider = s.provider
+	workflowStore.DefaultModel = s.cfg.Agent.Model
+	workflowStore.HITLManager = hitl.NewInterruptManager(hitl.NewInMemoryInterruptStore(), s.logger)
+	if s.resolver != nil {
+		workflowStore.AgentResolver = func(ctx context.Context, agentID string) (agent.Agent, error) {
+			return s.resolver.Resolve(ctx, agentID)
+		}
+	}
+	checkpointStore, ckptErr := bootstrap.BuildAgentCheckpointStore(s.cfg, s.db, s.logger)
+	if ckptErr != nil {
+		return fmt.Errorf("failed to build checkpoint store: %w", ckptErr)
+	}
+	workflowStore.CheckpointStore = checkpointStore
 	if err != nil {
 		s.logger.Warn("RAG handler disabled (failed to create embedding provider)",
 			zap.String("provider", s.cfg.LLM.DefaultProvider),
@@ -107,11 +123,13 @@ func (s *Server) initHandlers() error {
 		s.logger.Info("RAG handler disabled (no LLM API key for embedding)")
 	} else {
 		s.ragHandler = handlers.NewRAGHandler(ragRuntime.Store, ragRuntime.EmbeddingProvider, s.logger)
+		workflowStore.RetrievalStore = ragRuntime.Store
+		workflowStore.EmbeddingProvider = ragRuntime.EmbeddingProvider
 		s.logger.Info("RAG handler initialized (in-memory store, embedding provider ready)",
 			zap.String("provider", ragRuntime.EmbeddingProvider.Name()))
 	}
 
-	workflowRuntime := bootstrap.BuildWorkflowRuntime(s.logger)
+	workflowRuntime := bootstrap.BuildWorkflowRuntime(s.logger, workflowStore)
 	s.workflowHandler = handlers.NewWorkflowHandler(workflowRuntime.Facade, workflowRuntime.Parser, s.logger)
 	s.logger.Info("Workflow handler initialized")
 
