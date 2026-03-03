@@ -23,6 +23,13 @@
 - Tool Registry: `/api/v1/tools*`
 - Config API: `/api/v1/config*`
 
+## 工具共用与自动生效
+
+- 对外工具注册入口：`/api/v1/tools*`（列表/创建/更新/删除/targets/reload）。
+- `chat` 与 `agent` 共享同一套 runtime `ToolManager`（同一注册中心，不是两套独立工具池）。
+- 当 DB 中工具注册发生变更时，服务层会触发 runtime reload；成功后会重置 agent resolver 缓存，确保新工具白名单立即生效（无需重启进程）。
+- 关键链路：`cmd/agentflow/server_handlers_runtime.go`（`toolRegistryRuntimeAdapter.ReloadBindings -> onReload -> resolver.ResetCache`）。
+
 ## 关键构造示例
 
 ### Chat Handler

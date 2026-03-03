@@ -823,6 +823,7 @@ paths:
       summary: List tool registrations
       description: |
         List all DB-managed hosted tool registrations.
+        These registrations are shared by both chat and agent runtime tool loops (single shared registry).
         Note: This endpoint is only available when database and tooling runtime are configured.
       x-conditional: "Requires database connection and tool runtime"
       operationId: listToolRegistrations
@@ -847,6 +848,8 @@ paths:
       summary: Create tool registration
       description: |
         Create a DB-managed tool alias and apply it to runtime immediately.
+        The runtime uses a shared ToolManager for chat and agent. After DB write, bindings are reloaded
+        and agent resolver cache is reset so updated tools become effective without service restart.
         Note: This endpoint is only available when database and tooling runtime are configured.
       x-conditional: "Requires database connection and tool runtime"
       operationId: createToolRegistration
@@ -892,6 +895,9 @@ paths:
     post:
       tags: [Tool]
       summary: Reload tool runtime from DB
+      description: |
+        Reload DB-backed tool bindings into the shared chat/agent runtime tool registry.
+        On successful reload, agent resolver cache is reset to ensure new bindings take effect immediately.
       operationId: reloadToolRuntime
       security:
         - ApiKeyAuth: []
