@@ -30,3 +30,15 @@ func BuildAPIKeyHandler(db *gorm.DB, logger *zap.Logger) *handlers.APIKeyHandler
 	}
 	return handlers.NewAPIKeyHandler(handlers.NewGormAPIKeyStore(db), logger)
 }
+
+// BuildToolRegistryHandler creates DB-backed tool registration handler when runtime is available.
+func BuildToolRegistryHandler(
+	db *gorm.DB,
+	runtime handlers.ToolRegistryRuntime,
+	logger *zap.Logger,
+) *handlers.ToolRegistryHandler {
+	if db == nil || runtime == nil {
+		return nil
+	}
+	return handlers.NewToolRegistryHandler(handlers.NewGormToolRegistryStore(db), runtime, logger)
+}

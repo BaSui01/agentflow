@@ -8,13 +8,53 @@ import (
 	"github.com/BaSui01/agentflow/agent/hitl"
 	"github.com/BaSui01/agentflow/api/handlers"
 	"github.com/BaSui01/agentflow/internal/app/bootstrap"
+	"github.com/BaSui01/agentflow/rag"
 	"go.uber.org/zap"
 )
 
+type toolRegistryRuntimeAdapter struct {
+	runtime  *bootstrap.AgentToolingRuntime
+	onReload func(ctx context.Context)
+}
+
+func (a *toolRegistryRuntimeAdapter) ReloadBindings(ctx context.Context) error {
+	if a == nil || a.runtime == nil {
+		return nil
+	}
+	if err := a.runtime.ReloadBindings(ctx); err != nil {
+		return err
+	}
+	if a.onReload != nil {
+		a.onReload(ctx)
+	}
+	return nil
+}
+
+func (a *toolRegistryRuntimeAdapter) BaseToolNames() []string {
+	if a == nil || a.runtime == nil {
+		return nil
+	}
+	return a.runtime.BaseToolNames()
+}
+
 func (s *Server) initHandlers() error {
 	s.healthHandler = handlers.NewHealthHandler(s.logger)
+	if s.db != nil {
+		s.healthHandler.RegisterCheck(handlers.NewDatabaseHealthCheck("database", func(ctx context.Context) error {
+			sqlDB, err := s.db.DB()
+			if err != nil {
+				return err
+			}
+			return sqlDB.PingContext(ctx)
+		}))
+	}
+	if s.mongoClient != nil {
+		s.healthHandler.RegisterCheck(handlers.NewDatabaseHealthCheck("mongodb", func(ctx context.Context) error {
+			return s.mongoClient.Ping(ctx)
+		}))
+	}
 
-	llmRuntime, err := bootstrap.BuildLLMHandlerRuntime(s.cfg, s.logger)
+	llmRuntime, err := bootstrap.BuildLLMHandlerRuntime(s.cfg, s.db, s.logger)
 	if err != nil {
 		s.logger.Warn("Failed to create LLM runtime, chat endpoints disabled",
 			zap.String("provider", s.cfg.LLM.DefaultProvider),
@@ -28,29 +68,9 @@ func (s *Server) initHandlers() error {
 		s.costTracker = llmRuntime.CostTracker
 		s.llmCache = llmRuntime.Cache
 		s.llmMetrics = llmRuntime.Metrics
-		s.chatHandler = handlers.NewChatHandler(llmRuntime.Provider, llmRuntime.PolicyManager, s.logger)
-		s.logger.Info("Chat handler initialized with middleware chain",
-			zap.String("provider", s.cfg.LLM.DefaultProvider))
 	}
 
 	discoveryRegistry, agentRegistry := bootstrap.BuildAgentRegistries(s.logger)
-
-	if s.provider != nil {
-		s.resolver = agent.NewCachingResolver(agentRegistry, s.provider, s.logger)
-
-		if err := s.wireMongoStores(s.resolver, discoveryRegistry); err != nil {
-			return fmt.Errorf("failed to wire MongoDB stores: %w", err)
-		}
-
-		bootstrap.RegisterDefaultRuntimeAgentFactory(agentRegistry, s.provider, s.toolProvider, s.logger)
-		s.logger.Info("Default runtime agent factory registered")
-
-		s.agentHandler = bootstrap.BuildAgentHandler(discoveryRegistry, agentRegistry, s.logger, s.resolver.Resolve)
-		s.logger.Info("Agent handler initialized with resolver")
-	} else {
-		s.agentHandler = bootstrap.BuildAgentHandler(discoveryRegistry, agentRegistry, s.logger)
-		s.logger.Info("Agent handler initialized without resolver (no LLM provider)")
-	}
 
 	if s.apiKeyHandler = bootstrap.BuildAPIKeyHandler(s.db, s.logger); s.apiKeyHandler != nil {
 		s.logger.Info("API key handler initialized")
@@ -73,6 +93,9 @@ func (s *Server) initHandlers() error {
 			return fmt.Errorf("failed to initialize multimodal redis reference store: %w", err)
 		}
 		s.multimodalRedis = redisClient
+		s.healthHandler.RegisterCheck(handlers.NewRedisHealthCheck("redis", func(ctx context.Context) error {
+			return s.multimodalRedis.Ping(ctx).Err()
+		}))
 
 		multimodalRuntime, err := bootstrap.BuildMultimodalRuntime(
 			s.cfg,
@@ -101,6 +124,90 @@ func (s *Server) initHandlers() error {
 	s.logger.Info("Protocol handler initialized (MCP + A2A)")
 
 	ragRuntime, err := bootstrap.BuildRAGHandlerRuntime(s.cfg, s.logger)
+	var ragStore rag.VectorStore
+	var ragEmbedding rag.EmbeddingProvider
+	if err != nil {
+		s.logger.Warn("RAG handler disabled (failed to create embedding provider)",
+			zap.String("provider", s.cfg.LLM.DefaultProvider),
+			zap.Error(err))
+	} else if ragRuntime == nil {
+		s.logger.Info("RAG handler disabled (no LLM API key for embedding)")
+	} else {
+		s.ragHandler = handlers.NewRAGHandler(ragRuntime.Store, ragRuntime.EmbeddingProvider, s.logger)
+		ragStore = ragRuntime.Store
+		ragEmbedding = ragRuntime.EmbeddingProvider
+		s.logger.Info("RAG handler initialized (in-memory store, embedding provider ready)",
+			zap.String("provider", ragRuntime.EmbeddingProvider.Name()))
+	}
+
+	toolingRuntime, toolErr := bootstrap.BuildAgentToolingRuntime(bootstrap.AgentToolingOptions{
+		RetrievalStore:    ragStore,
+		EmbeddingProvider: ragEmbedding,
+		MCPServer:         protocolRuntime.MCPServer,
+		EnableMCPTools:    true,
+		DB:                s.db,
+	}, s.logger)
+	if toolErr != nil {
+		return fmt.Errorf("failed to build agent tooling runtime: %w", toolErr)
+	}
+	toolRuntimeAdapter := &toolRegistryRuntimeAdapter{
+		runtime: toolingRuntime,
+		onReload: func(ctx context.Context) {
+			if s.resolver != nil {
+				s.resolver.ResetCache(ctx)
+				s.logger.Info("Agent resolver cache reset after tool runtime reload")
+			}
+		},
+	}
+	if s.toolRegistryHandler = bootstrap.BuildToolRegistryHandler(s.db, toolRuntimeAdapter, s.logger); s.toolRegistryHandler != nil {
+		s.logger.Info("Tool registry handler initialized")
+	} else {
+		s.logger.Info("Tool registry handler disabled (database or tooling runtime unavailable)")
+	}
+
+	if llmRuntime != nil && s.provider != nil {
+		var chatToolManager agent.ToolManager
+		if toolingRuntime != nil {
+			chatToolManager = toolingRuntime.ToolManager
+		}
+		s.chatHandler = handlers.NewChatHandlerWithRuntime(
+			llmRuntime.Provider,
+			llmRuntime.PolicyManager,
+			chatToolManager,
+			s.logger,
+		)
+		s.logger.Info("Chat handler initialized with middleware chain",
+			zap.String("provider", s.cfg.LLM.DefaultProvider))
+	}
+
+	if s.provider != nil {
+		resolver := agent.NewCachingResolver(agentRegistry, s.provider, s.logger).
+			WithDefaultModel(s.cfg.Agent.Model)
+		if toolingRuntime != nil && toolingRuntime.ToolManager != nil {
+			resolver = resolver.WithToolManager(toolingRuntime.ToolManager)
+			if len(toolingRuntime.ToolNames) > 0 {
+				resolver = resolver.WithRuntimeTools(toolingRuntime.ToolNames)
+			}
+			s.logger.Info("Agent tool manager initialized",
+				zap.Int("tool_count", len(toolingRuntime.ToolNames)),
+				zap.Strings("tools", toolingRuntime.ToolNames))
+		}
+		s.resolver = resolver
+
+		if err := s.wireMongoStores(s.resolver, discoveryRegistry); err != nil {
+			return fmt.Errorf("failed to wire MongoDB stores: %w", err)
+		}
+
+		bootstrap.RegisterDefaultRuntimeAgentFactory(agentRegistry, s.provider, s.toolProvider, s.logger)
+		s.logger.Info("Default runtime agent factory registered")
+
+		s.agentHandler = bootstrap.BuildAgentHandler(discoveryRegistry, agentRegistry, s.logger, s.resolver.Resolve)
+		s.logger.Info("Agent handler initialized with resolver")
+	} else {
+		s.agentHandler = bootstrap.BuildAgentHandler(discoveryRegistry, agentRegistry, s.logger)
+		s.logger.Info("Agent handler initialized without resolver (no LLM provider)")
+	}
+
 	var workflowStore bootstrap.WorkflowRuntimeOptions
 	workflowStore.LLMProvider = s.provider
 	workflowStore.DefaultModel = s.cfg.Agent.Model
@@ -115,19 +222,8 @@ func (s *Server) initHandlers() error {
 		return fmt.Errorf("failed to build checkpoint store: %w", ckptErr)
 	}
 	workflowStore.CheckpointStore = checkpointStore
-	if err != nil {
-		s.logger.Warn("RAG handler disabled (failed to create embedding provider)",
-			zap.String("provider", s.cfg.LLM.DefaultProvider),
-			zap.Error(err))
-	} else if ragRuntime == nil {
-		s.logger.Info("RAG handler disabled (no LLM API key for embedding)")
-	} else {
-		s.ragHandler = handlers.NewRAGHandler(ragRuntime.Store, ragRuntime.EmbeddingProvider, s.logger)
-		workflowStore.RetrievalStore = ragRuntime.Store
-		workflowStore.EmbeddingProvider = ragRuntime.EmbeddingProvider
-		s.logger.Info("RAG handler initialized (in-memory store, embedding provider ready)",
-			zap.String("provider", ragRuntime.EmbeddingProvider.Name()))
-	}
+	workflowStore.RetrievalStore = ragStore
+	workflowStore.EmbeddingProvider = ragEmbedding
 
 	workflowRuntime := bootstrap.BuildWorkflowRuntime(s.logger, workflowStore)
 	s.workflowHandler = handlers.NewWorkflowHandler(workflowRuntime.Facade, workflowRuntime.Parser, s.logger)

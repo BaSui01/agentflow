@@ -23,6 +23,8 @@ const (
 	ToolTypeFileSearch HostedToolType = "file_search"
 	ToolTypeCodeExec   HostedToolType = "code_execution"
 	ToolTypeRetrieval  HostedToolType = "retrieval"
+	ToolTypeMCP        HostedToolType = "mcp"
+	ToolTypeAlias      HostedToolType = "alias"
 
 	// maxResponseSize is the maximum allowed response body size (1MB).
 	maxResponseSize = 1 << 20
@@ -68,6 +70,17 @@ func (r *ToolRegistry) Register(tool HostedTool) {
 	defer r.mu.Unlock()
 	r.tools[tool.Name()] = tool
 	r.logger.Info("registered hosted tool", zap.String("name", tool.Name()))
+}
+
+// Unregister removes a hosted tool by name.
+func (r *ToolRegistry) Unregister(name string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if _, ok := r.tools[name]; !ok {
+		return
+	}
+	delete(r.tools, name)
+	r.logger.Info("unregistered hosted tool", zap.String("name", name))
 }
 
 // 按名称获取主机工具 。

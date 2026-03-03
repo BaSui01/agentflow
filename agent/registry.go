@@ -314,12 +314,15 @@ func CreateAgent(
 // to ensure concurrent requests for the same agentID only trigger one
 // Create+Init cycle.
 type CachingResolver struct {
-	registry *AgentRegistry
-	provider llm.Provider
-	memory   MemoryManager // optional; nil means stateless agents
-	logger   *zap.Logger
-	agents   sync.Map
-	group    singleflight.Group
+	registry  *AgentRegistry
+	provider  llm.Provider
+	memory    MemoryManager // optional; nil means stateless agents
+	tools     ToolManager
+	logger    *zap.Logger
+	agents    sync.Map
+	group     singleflight.Group
+	toolNames []string
+	modelHint string
 
 	// MongoDB persistence stores (required)
 	promptStore       PromptStoreProvider
@@ -341,6 +344,48 @@ func NewCachingResolver(registry *AgentRegistry, provider llm.Provider, logger *
 // When non-nil, agents created by this resolver will have memory capabilities.
 func (r *CachingResolver) WithMemory(m MemoryManager) *CachingResolver {
 	r.memory = m
+	return r
+}
+
+// WithToolManager sets the ToolManager used when creating new agent instances.
+// When non-nil, resolved agents can call tools during execution.
+func (r *CachingResolver) WithToolManager(m ToolManager) *CachingResolver {
+	r.tools = m
+	return r
+}
+
+// WithRuntimeTools sets a default tool whitelist for resolved agents.
+// If empty, the resolver derives tool names from ToolManager.GetAllowedTools(agentID).
+func (r *CachingResolver) WithRuntimeTools(toolNames []string) *CachingResolver {
+	if len(toolNames) == 0 {
+		r.toolNames = nil
+		return r
+	}
+	out := make([]string, 0, len(toolNames))
+	seen := make(map[string]struct{}, len(toolNames))
+	for _, name := range toolNames {
+		name = strings.TrimSpace(name)
+		if name == "" {
+			continue
+		}
+		if _, ok := seen[name]; ok {
+			continue
+		}
+		seen[name] = struct{}{}
+		out = append(out, name)
+	}
+	if len(out) == 0 {
+		r.toolNames = nil
+		return r
+	}
+	r.toolNames = out
+	return r
+}
+
+// WithDefaultModel sets the default model used for resolved agents.
+// Agent request can still override it at runtime via model routing params.
+func (r *CachingResolver) WithDefaultModel(model string) *CachingResolver {
+	r.modelHint = strings.TrimSpace(model)
 	return r
 }
 
@@ -383,7 +428,27 @@ func (r *CachingResolver) Resolve(ctx context.Context, agentID string) (Agent, e
 				Type: string(TypeGeneric),
 			},
 		}
-		ag, err := r.registry.Create(cfg, r.provider, r.memory, nil, nil, r.logger)
+		if r.modelHint != "" {
+			cfg.LLM.Model = r.modelHint
+		}
+		toolNames := r.toolNames
+		if len(toolNames) == 0 && r.tools != nil {
+			schemas := r.tools.GetAllowedTools(agentID)
+			if len(schemas) > 0 {
+				toolNames = make([]string, 0, len(schemas))
+				for _, schema := range schemas {
+					name := strings.TrimSpace(schema.Name)
+					if name == "" {
+						continue
+					}
+					toolNames = append(toolNames, name)
+				}
+			}
+		}
+		if len(toolNames) > 0 {
+			cfg.Runtime.Tools = append([]string(nil), toolNames...)
+		}
+		ag, err := r.registry.Create(cfg, r.provider, r.memory, r.tools, nil, r.logger)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create agent %q: %w", agentID, err)
 		}
@@ -419,6 +484,22 @@ func (r *CachingResolver) TeardownAll(ctx context.Context) {
 					zap.Error(err))
 			}
 		}
+		return true
+	})
+}
+
+// ResetCache tears down and removes all cached agent instances.
+// Future Resolve calls will recreate agents with latest runtime settings.
+func (r *CachingResolver) ResetCache(ctx context.Context) {
+	r.agents.Range(func(key, value any) bool {
+		if ag, ok := value.(Agent); ok {
+			if err := ag.Teardown(ctx); err != nil {
+				r.logger.Warn("Failed to teardown cached agent during reset",
+					zap.String("agent_id", key.(string)),
+					zap.Error(err))
+			}
+		}
+		r.agents.Delete(key)
 		return true
 	})
 }
