@@ -2,6 +2,7 @@ package rag
 
 import (
 	"fmt"
+	"math"
 	"strings"
 	"unicode"
 
@@ -433,34 +434,33 @@ func (c *DocumentChunker) fixedSizeChunking(doc Document) []Chunk {
 // splitIntoSentences 分割成句子
 func (c *DocumentChunker) splitIntoSentences(text string) []string {
 	sentences := []string{}
-
-	// 简化实现：按标点符号分割
-	delimiters := []rune{'.', '。', '!', '！', '?', '？', '\n'}
-
-	currentSentence := ""
-	for _, char := range text {
-		currentSentence += string(char)
-
-		isDelimiter := false
-		for _, delim := range delimiters {
-			if char == delim {
-				isDelimiter = true
-				break
-			}
-		}
-
-		if isDelimiter {
-			trimmed := strings.TrimFunc(currentSentence, isWhitespace)
-			if trimmed != "" {
-				sentences = append(sentences, trimmed)
-			}
-			currentSentence = ""
-		}
+	runes := []rune(text)
+	var current []rune
+	maxSentenceRunes := c.config.ChunkSize * 3
+	if maxSentenceRunes < 128 {
+		maxSentenceRunes = 128
 	}
-
-	// 添加最后一个句子
-	if strings.TrimFunc(currentSentence, isWhitespace) != "" {
-		sentences = append(sentences, strings.TrimFunc(currentSentence, isWhitespace))
+	for i, ch := range runes {
+		current = append(current, ch)
+		next := rune(0)
+		if i+1 < len(runes) {
+			next = runes[i+1]
+		}
+		isBoundary := isSentenceBoundary(ch, next) || (ch == '\n' && len(current) > 1)
+		if !isBoundary && len(current) < maxSentenceRunes {
+			continue
+		}
+		trimmed := strings.TrimFunc(string(current), isWhitespace)
+		if trimmed != "" {
+			sentences = append(sentences, trimmed)
+		}
+		current = current[:0]
+	}
+	if len(current) > 0 {
+		trimmed := strings.TrimFunc(string(current), isWhitespace)
+		if trimmed != "" {
+			sentences = append(sentences, trimmed)
+		}
 	}
 
 	return sentences
@@ -473,11 +473,10 @@ func (c *DocumentChunker) calculateSentenceSimilarities(sentences []string) []fl
 	}
 
 	similarities := make([]float64, len(sentences)-1)
+	idf := sentenceIDF(sentences)
 
 	for i := 0; i < len(sentences)-1; i++ {
-		// 简化实现：词重叠相似度
-		// 生产环境应使用句子嵌入模型
-		similarities[i] = c.wordOverlapSimilarity(sentences[i], sentences[i+1])
+		similarities[i] = c.tfidfCosineSimilarity(sentences[i], sentences[i+1], idf)
 	}
 
 	return similarities
@@ -525,8 +524,6 @@ type StructuralBlock struct {
 // identifyStructuralBlocks 识别结构块
 func (c *DocumentChunker) identifyStructuralBlocks(content string) []StructuralBlock {
 	blocks := []StructuralBlock{}
-
-	// 简化实现：识别代码块和表格
 	lines := strings.Split(content, "\n")
 
 	currentBlock := StructuralBlock{Type: "text"}
@@ -564,7 +561,7 @@ func (c *DocumentChunker) identifyStructuralBlocks(content string) []StructuralB
 				}
 				inCodeBlock = true
 			}
-		} else if strings.Contains(line, "|") && strings.Count(line, "|") >= 2 {
+		} else if isMarkdownTableLine(line) {
 			// 可能是表格
 			if !inTable {
 				if currentBlock.Content != "" {
@@ -580,6 +577,22 @@ func (c *DocumentChunker) identifyStructuralBlocks(content string) []StructuralB
 				inTable = true
 			} else {
 				currentBlock.Content += line + "\n"
+			}
+		} else if isHeaderLine(line) && !inCodeBlock && !inTable && c.config.PreserveHeaders {
+			if currentBlock.Content != "" {
+				currentBlock.EndPos = currentPos
+				blocks = append(blocks, currentBlock)
+			}
+			currentBlock = StructuralBlock{
+				Type:     "header",
+				Content:  line + "\n",
+				StartPos: currentPos,
+				EndPos:   currentPos + lineLen,
+			}
+			blocks = append(blocks, currentBlock)
+			currentBlock = StructuralBlock{
+				Type:     "text",
+				StartPos: currentPos + lineLen,
 			}
 		} else {
 			if inTable {
@@ -620,7 +633,6 @@ func (t *SimpleTokenizer) CountTokens(text string) int {
 }
 
 func (t *SimpleTokenizer) Encode(text string) []int {
-	// 简化实现
 	tokens := make([]int, len(text)/4)
 	for i := range tokens {
 		tokens[i] = i
@@ -690,6 +702,93 @@ func isCJKRune(r rune) bool {
 // isWhitespace 检查是否为空白字符
 func isWhitespace(r rune) bool {
 	return unicode.IsSpace(r)
+}
+
+func isSentenceBoundary(ch rune, next rune) bool {
+	switch ch {
+	case '。', '！', '？', '\n':
+		return true
+	case '.', '!', '?', ';', '；', ':', '：':
+		return next == 0 || unicode.IsSpace(next)
+	default:
+		return false
+	}
+}
+
+func isMarkdownTableLine(line string) bool {
+	l := strings.TrimSpace(line)
+	return strings.Count(l, "|") >= 2
+}
+
+func isHeaderLine(line string) bool {
+	l := strings.TrimSpace(line)
+	return strings.HasPrefix(l, "#")
+}
+
+func sentenceIDF(sentences []string) map[string]float64 {
+	df := map[string]int{}
+	for _, sentence := range sentences {
+		seen := map[string]struct{}{}
+		for _, term := range tokenizeForSimilarity(sentence) {
+			seen[term] = struct{}{}
+		}
+		for term := range seen {
+			df[term]++
+		}
+	}
+	n := float64(len(sentences))
+	idf := map[string]float64{}
+	for term, d := range df {
+		idf[term] = math.Log((n+1)/(float64(d)+1)) + 1
+	}
+	return idf
+}
+
+func tokenizeForSimilarity(s string) []string {
+	s = strings.ToLower(strings.TrimSpace(s))
+	return strings.FieldsFunc(s, func(r rune) bool {
+		return unicode.IsSpace(r) || unicode.IsPunct(r)
+	})
+}
+
+func (c *DocumentChunker) tfidfCosineSimilarity(s1, s2 string, idf map[string]float64) float64 {
+	w1 := tokenizeForSimilarity(s1)
+	w2 := tokenizeForSimilarity(s2)
+	if len(w1) == 0 || len(w2) == 0 {
+		return 0
+	}
+	tf1 := map[string]float64{}
+	tf2 := map[string]float64{}
+	for _, t := range w1 {
+		tf1[t]++
+	}
+	for _, t := range w2 {
+		tf2[t]++
+	}
+	var dot, norm1, norm2 float64
+	for term, v1 := range tf1 {
+		w := idf[term]
+		if w == 0 {
+			w = 1
+		}
+		x := v1 * w
+		norm1 += x * x
+		if v2, ok := tf2[term]; ok {
+			dot += x * (v2 * w)
+		}
+	}
+	for term, v2 := range tf2 {
+		w := idf[term]
+		if w == 0 {
+			w = 1
+		}
+		y := v2 * w
+		norm2 += y * y
+	}
+	if norm1 == 0 || norm2 == 0 {
+		return 0
+	}
+	return dot / (math.Sqrt(norm1) * math.Sqrt(norm2))
 }
 
 // =============================================================================

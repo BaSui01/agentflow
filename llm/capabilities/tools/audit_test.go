@@ -415,7 +415,7 @@ func TestFileAuditBackend_WriteAndClose(t *testing.T) {
 	require.NoError(t, backend.Close())
 }
 
-func TestFileAuditBackend_QueryNotImplemented(t *testing.T) {
+func TestFileAuditBackend_QueryFromFiles(t *testing.T) {
 	dir := t.TempDir()
 	backend, err := NewFileAuditBackend(&FileAuditBackendConfig{
 		Directory: dir,
@@ -430,9 +430,10 @@ func TestFileAuditBackend_QueryNotImplemented(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	_, err = backend.Query(context.Background(), &AuditFilter{})
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "not fully implemented")
+	results, err := backend.Query(context.Background(), &AuditFilter{})
+	require.NoError(t, err)
+	require.Len(t, results, 1)
+	assert.Equal(t, "test-1", results[0].ID)
 }
 
 func TestFileAuditBackend_QueryNoFile(t *testing.T) {

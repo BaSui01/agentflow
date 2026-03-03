@@ -1,9 +1,11 @@
 package hierarchical
 
 import (
+	cryptorand "crypto/rand"
 	"context"
 	"encoding/json"
 	"fmt"
+	"math/big"
 	"strings"
 	"sync"
 	"time"
@@ -232,7 +234,7 @@ func (h *HierarchicalAgent) decomposeTask(ctx context.Context, input *agent.Inpu
 		return nil, err
 	}
 
-	// 解析子任务（简化实现）
+	// 解析子任务（JSON 直解析 -> 代码块提取 -> 回退单任务）
 	subtasks := h.parseSubtasks(output.Content, input)
 
 	return subtasks, nil
@@ -590,13 +592,21 @@ func (s *RandomStrategy) SelectWorker(ctx context.Context, task *Task, workers [
 		return nil, fmt.Errorf("no workers available")
 	}
 
-	// 简化实现：返回第一个空闲的
+	idleWorkers := make([]agent.Agent, 0, len(workers))
 	for _, worker := range workers {
 		if ws, ok := status[worker.ID()]; ok && ws.Status == "idle" {
-			return worker, nil
+			idleWorkers = append(idleWorkers, worker)
 		}
 	}
-
-	return workers[0], nil
+	candidates := workers
+	if len(idleWorkers) > 0 {
+		candidates = idleWorkers
+	}
+	// Use crypto-random selection to avoid deterministic hotspot on worker[0].
+	n, err := cryptorand.Int(cryptorand.Reader, big.NewInt(int64(len(candidates))))
+	if err != nil {
+		return candidates[0], nil
+	}
+	return candidates[n.Int64()], nil
 }
 

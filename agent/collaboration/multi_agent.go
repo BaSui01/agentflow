@@ -128,7 +128,8 @@ func NewMultiAgentSystem(agents []agent.Agent, config MultiAgentConfig, logger *
 	}
 
 	var coordinator Coordinator
-	switch config.Pattern {
+	normalizedPattern := CollaborationPattern(strings.ToLower(strings.TrimSpace(string(config.Pattern))))
+	switch normalizedPattern {
 	case PatternDebate:
 		coordinator = NewDebateCoordinator(config, hub, logger)
 	case PatternConsensus:
@@ -145,7 +146,7 @@ func NewMultiAgentSystem(agents []agent.Agent, config MultiAgentConfig, logger *
 
 	return &MultiAgentSystem{
 		agents:      agentMap,
-		pattern:     config.Pattern,
+		pattern:     normalizedPattern,
 		messageHub:  hub,
 		coordinator: coordinator,
 		config:      config,
@@ -160,7 +161,22 @@ func (m *MultiAgentSystem) Execute(ctx context.Context, input *agent.Input) (*ag
 		zap.Int("agents", len(m.agents)),
 	)
 
-	output, err := m.coordinator.Coordinate(ctx, m.agents, input)
+	coordinator := m.coordinator
+	// Enforce runtime routing by pattern to avoid stale/miswired coordinator instances.
+	switch m.pattern {
+	case PatternConsensus:
+		coordinator = NewConsensusCoordinator(m.config, m.messageHub, m.logger)
+	case PatternPipeline:
+		coordinator = NewPipelineCoordinator(m.config, m.messageHub, m.logger)
+	case PatternBroadcast:
+		coordinator = NewBroadcastCoordinator(m.config, m.messageHub, m.logger)
+	case PatternNetwork:
+		coordinator = NewNetworkCoordinator(m.config, m.messageHub, m.logger)
+	default:
+		coordinator = NewDebateCoordinator(m.config, m.messageHub, m.logger)
+	}
+
+	output, err := coordinator.Coordinate(ctx, m.agents, input)
 	if err != nil {
 		return nil, err
 	}
@@ -551,15 +567,27 @@ func NewDebateCoordinator(config MultiAgentConfig, hub *MessageHub, logger *zap.
 }
 
 func (c *DebateCoordinator) Coordinate(ctx context.Context, agents map[string]agent.Agent, input *agent.Input) (*agent.Output, error) {
-	c.logger.Info("debate coordination started")
+	c.logger.Info("debate coordination started",
+		zap.Int("agents", len(agents)),
+		zap.Int("max_rounds", c.config.MaxRounds),
+	)
 
-	// 1. 每个 Agent 提出初始观点
-	proposals := make(map[string]*agent.Output)
+	// Deterministic agent ordering for reproducible debate rounds.
+	orderedIDs := sortedAgentIDs(agents)
+	if len(orderedIDs) == 0 {
+		return nil, fmt.Errorf("debate requires at least one agent")
+	}
 
-	for id, a := range agents {
-		output, err := a.Execute(ctx, input)
+	// Phase 1 — Initial proposals: each agent independently responds to the original question.
+	proposals := make(map[string]*agent.Output, len(orderedIDs))
+	for _, id := range orderedIDs {
+		if err := ctx.Err(); err != nil {
+			return nil, fmt.Errorf("debate cancelled during initial proposals: %w", err)
+		}
+
+		output, err := agents[id].Execute(ctx, input)
 		if err != nil {
-			c.logger.Warn("agent proposal failed",
+			c.logger.Warn("agent initial proposal failed",
 				zap.String("agent_id", id),
 				zap.Error(err),
 			)
@@ -567,51 +595,135 @@ func (c *DebateCoordinator) Coordinate(ctx context.Context, agents map[string]ag
 		}
 		proposals[id] = output
 	}
+	if len(proposals) == 0 {
+		return nil, fmt.Errorf("all agents failed during initial proposal phase")
+	}
 
-	// 2. 多轮辩论
-	for round := 0; round < c.config.MaxRounds; round++ {
-		c.logger.Debug("debate round", zap.Int("round", round+1))
+	// Phase 2 — Multi-round debate: each agent reviews others' positions and refines its own.
+	for round := 1; round <= c.config.MaxRounds; round++ {
+		if err := ctx.Err(); err != nil {
+			return nil, fmt.Errorf("debate cancelled at round %d: %w", round, err)
+		}
 
-		// 每个 Agent 评论其他 Agent 的观点
-		for id, a := range agents {
-			// 构建辩论提示
-			debatePrompt := fmt.Sprintf("原始问题：%s\n\n其他观点：\n", input.Content)
+		c.logger.Debug("debate round started", zap.Int("round", round))
 
-			for otherID, proposal := range proposals {
-				if otherID != id {
-					debatePrompt += fmt.Sprintf("\nAgent %s: %s\n", otherID, proposal.Content)
+		for _, id := range orderedIDs {
+			// Build a structured debate prompt with all peer positions.
+			var otherPositions strings.Builder
+			for _, peerID := range orderedIDs {
+				if peerID == id {
+					continue
+				}
+				if p, ok := proposals[peerID]; ok {
+					otherPositions.WriteString(fmt.Sprintf("\n--- Agent [%s] ---\n%s\n", peerID, p.Content))
 				}
 			}
+			if otherPositions.Len() == 0 {
+				continue // sole agent, nothing to debate
+			}
 
-			debatePrompt += "\n请评论这些观点并提出你的改进意见。"
+			debatePrompt := fmt.Sprintf(
+				"You are participating in a structured multi-agent debate (Round %d/%d).\n\n"+
+					"## Original Question\n%s\n\n"+
+					"## Your Previous Position\n%s\n\n"+
+					"## Other Agents' Positions\n%s\n\n"+
+					"## Instructions\n"+
+					"1. Identify the strongest and weakest points in each position above.\n"+
+					"2. Acknowledge valid arguments from other agents.\n"+
+					"3. Refute incorrect or incomplete reasoning with evidence.\n"+
+					"4. Synthesize an improved, well-structured response that integrates the best insights.\n"+
+					"5. Clearly state your refined position.\n",
+				round, c.config.MaxRounds,
+				input.Content,
+				proposals[id].Content,
+				otherPositions.String(),
+			)
 
 			debateInput := &agent.Input{
 				TraceID: input.TraceID,
 				Content: debatePrompt,
+				Context: map[string]any{
+					"debate_round": round,
+					"max_rounds":   c.config.MaxRounds,
+					"agent_id":     id,
+				},
 			}
 
-			output, err := a.Execute(ctx, debateInput)
+			output, err := agents[id].Execute(ctx, debateInput)
 			if err != nil {
 				c.logger.Warn("agent debate round failed",
 					zap.String("agent_id", id),
-					zap.Int("round", round+1),
+					zap.Int("round", round),
 					zap.Error(err),
 				)
-				continue
+				continue // keep the previous proposal
 			}
-
 			proposals[id] = output
 		}
 	}
 
-	// 3. 选择最佳答案（简化：选择第一个）
-	var finalOutput *agent.Output
-	for _, output := range proposals {
-		finalOutput = output
-		break
+	// Phase 3 — Judge synthesis: use the first agent as judge to produce a final synthesis.
+	judgeID := orderedIDs[0]
+	var allPositions strings.Builder
+	for _, id := range orderedIDs {
+		if p, ok := proposals[id]; ok {
+			allPositions.WriteString(fmt.Sprintf("\n--- Agent [%s] (final position) ---\n%s\n", id, p.Content))
+		}
 	}
 
-	c.logger.Info("debate coordination completed")
+	synthesisPrompt := fmt.Sprintf(
+		"You are the final judge in a multi-agent debate.\n\n"+
+			"## Original Question\n%s\n\n"+
+			"## All Agents' Final Positions\n%s\n\n"+
+			"## Instructions\n"+
+			"1. Evaluate each agent's final position for accuracy, completeness, and reasoning quality.\n"+
+			"2. Identify points of agreement across agents (consensus areas).\n"+
+			"3. Resolve remaining disagreements by selecting the best-supported arguments.\n"+
+			"4. Produce a single, authoritative, well-structured answer that synthesizes the strongest elements.\n"+
+			"5. Do NOT simply pick one agent's answer — integrate and improve upon all of them.\n",
+		input.Content,
+		allPositions.String(),
+	)
+
+	synthesisInput := &agent.Input{
+		TraceID: input.TraceID,
+		Content: synthesisPrompt,
+		Context: map[string]any{
+			"phase":      "synthesis",
+			"judge_id":   judgeID,
+			"num_agents": len(proposals),
+		},
+	}
+
+	finalOutput, err := agents[judgeID].Execute(ctx, synthesisInput)
+	if err != nil {
+		// Fallback: return the first available proposal if synthesis fails.
+		c.logger.Warn("judge synthesis failed, falling back to best proposal",
+			zap.String("judge_id", judgeID),
+			zap.Error(err),
+		)
+		for _, id := range orderedIDs {
+			if p, ok := proposals[id]; ok {
+				return p, nil
+			}
+		}
+		return nil, fmt.Errorf("debate completed but no valid proposals remain")
+	}
+
+	// Aggregate token usage and cost from all rounds.
+	totalTokens, totalCost := aggregateUsage(proposals)
+	finalOutput.TokensUsed += totalTokens
+	finalOutput.Cost += totalCost
+	finalOutput.Metadata = mergeMetadata(finalOutput.Metadata, map[string]any{
+		"debate_rounds":     c.config.MaxRounds,
+		"participating_ids": orderedIDs,
+		"judge_id":          judgeID,
+	})
+
+	c.logger.Info("debate coordination completed",
+		zap.Int("rounds", c.config.MaxRounds),
+		zap.Int("proposals", len(proposals)),
+	)
 
 	return finalOutput, nil
 }
@@ -632,30 +744,195 @@ func NewConsensusCoordinator(config MultiAgentConfig, hub *MessageHub, logger *z
 }
 
 func (c *ConsensusCoordinator) Coordinate(ctx context.Context, agents map[string]agent.Agent, input *agent.Input) (*agent.Output, error) {
-	c.logger.Info("consensus coordination started")
+	c.logger.Info("consensus coordination started",
+		zap.Int("agents", len(agents)),
+		zap.Float64("threshold", c.config.ConsensusThreshold),
+	)
 
-	// 1. 收集所有 Agent 的输出
-	outputs := make([]*agent.Output, 0, len(agents))
+	orderedIDs := sortedAgentIDs(agents)
+	if len(orderedIDs) == 0 {
+		return nil, fmt.Errorf("consensus requires at least one agent")
+	}
 
-	for id, a := range agents {
-		output, err := a.Execute(ctx, input)
+	// Phase 1 — Independent proposals.
+	proposals := make(map[string]*agent.Output, len(orderedIDs))
+	for _, id := range orderedIDs {
+		if err := ctx.Err(); err != nil {
+			return nil, fmt.Errorf("consensus cancelled during proposals: %w", err)
+		}
+
+		output, err := agents[id].Execute(ctx, input)
 		if err != nil {
-			c.logger.Warn("agent execution failed",
+			c.logger.Warn("agent proposal failed",
 				zap.String("agent_id", id),
 				zap.Error(err),
 			)
 			continue
 		}
-		outputs = append(outputs, output)
+		proposals[id] = output
 	}
-	if len(outputs) == 0 {
-		return nil, fmt.Errorf("no valid outputs")
+	if len(proposals) == 0 {
+		return nil, fmt.Errorf("all agents failed during proposal phase")
 	}
 
-	// 返回第一个输出作为共识结果
-	finalOutput := outputs[0]
+	// Phase 2 — Multi-round consensus building.
+	for round := 1; round <= c.config.MaxRounds; round++ {
+		if err := ctx.Err(); err != nil {
+			return nil, fmt.Errorf("consensus cancelled at round %d: %w", round, err)
+		}
 
-	c.logger.Info("consensus coordination completed")
+		c.logger.Debug("consensus round started", zap.Int("round", round))
+
+		// Each agent reviews all proposals and votes.
+		votes := make(map[string][]string, len(proposals)) // candidateID -> voterIDs
+		for _, voterID := range orderedIDs {
+			if _, ok := proposals[voterID]; !ok {
+				continue
+			}
+
+			var allProposals strings.Builder
+			for _, candID := range orderedIDs {
+				if p, ok := proposals[candID]; ok {
+					allProposals.WriteString(fmt.Sprintf("\n--- Proposal by Agent [%s] ---\n%s\n", candID, p.Content))
+				}
+			}
+
+			votePrompt := fmt.Sprintf(
+				"You are participating in a consensus-building process (Round %d/%d).\n\n"+
+					"## Original Question\n%s\n\n"+
+					"## All Current Proposals\n%s\n\n"+
+					"## Instructions\n"+
+					"1. Evaluate each proposal for correctness, completeness, and clarity.\n"+
+					"2. State which agent's proposal you agree with most and why (use the agent ID in brackets).\n"+
+					"3. Identify specific points of agreement and disagreement.\n"+
+					"4. Suggest concrete improvements that could move toward consensus.\n"+
+					"5. Start your response with: VOTE: [agent_id]\n",
+				round, c.config.MaxRounds,
+				input.Content,
+				allProposals.String(),
+			)
+
+			voteInput := &agent.Input{
+				TraceID: input.TraceID,
+				Content: votePrompt,
+				Context: map[string]any{
+					"consensus_round": round,
+					"voter_id":        voterID,
+				},
+			}
+
+			voteOutput, err := agents[voterID].Execute(ctx, voteInput)
+			if err != nil {
+				c.logger.Warn("agent vote failed",
+					zap.String("agent_id", voterID),
+					zap.Int("round", round),
+					zap.Error(err),
+				)
+				continue
+			}
+
+			// Parse vote: extract the voted agent ID from the output.
+			votedID := parseVote(voteOutput.Content, orderedIDs)
+			if votedID == "" {
+				votedID = voterID // default: self-vote
+			}
+			votes[votedID] = append(votes[votedID], voterID)
+
+			// Update the voter's proposal with their refined position.
+			proposals[voterID] = voteOutput
+		}
+
+		// Check if consensus threshold is met.
+		totalVoters := 0
+		for _, voters := range votes {
+			totalVoters += len(voters)
+		}
+		if totalVoters > 0 {
+			for candID, voters := range votes {
+				ratio := float64(len(voters)) / float64(totalVoters)
+				c.logger.Debug("vote tally",
+					zap.String("candidate", candID),
+					zap.Int("votes", len(voters)),
+					zap.Float64("ratio", ratio),
+				)
+				if ratio >= c.config.ConsensusThreshold {
+					c.logger.Info("consensus reached",
+						zap.String("winner", candID),
+						zap.Float64("ratio", ratio),
+						zap.Int("round", round),
+					)
+					result := proposals[candID]
+					result.Metadata = mergeMetadata(result.Metadata, map[string]any{
+						"consensus_round": round,
+						"consensus_ratio": ratio,
+						"winner_id":       candID,
+						"total_voters":    totalVoters,
+					})
+					return result, nil
+				}
+			}
+		}
+	}
+
+	// Phase 3 — No consensus reached; synthesize a merged answer.
+	c.logger.Info("consensus threshold not met, synthesizing merged answer")
+
+	synthesizerID := orderedIDs[0]
+	var allPositions strings.Builder
+	for _, id := range orderedIDs {
+		if p, ok := proposals[id]; ok {
+			allPositions.WriteString(fmt.Sprintf("\n--- Agent [%s] ---\n%s\n", id, p.Content))
+		}
+	}
+
+	mergePrompt := fmt.Sprintf(
+		"Multiple agents could not reach consensus on the following question after %d rounds.\n\n"+
+			"## Original Question\n%s\n\n"+
+			"## All Agents' Final Positions\n%s\n\n"+
+			"## Instructions\n"+
+			"1. Identify the areas of agreement (common ground).\n"+
+			"2. For areas of disagreement, evaluate the evidence and reasoning quality of each position.\n"+
+			"3. Produce a single, balanced, well-structured synthesis that:\n"+
+			"   - Incorporates all valid points of agreement.\n"+
+			"   - Resolves disagreements by selecting the best-supported position.\n"+
+			"   - Clearly notes any remaining uncertainties.\n",
+		c.config.MaxRounds,
+		input.Content,
+		allPositions.String(),
+	)
+
+	mergeInput := &agent.Input{
+		TraceID: input.TraceID,
+		Content: mergePrompt,
+		Context: map[string]any{
+			"phase":          "merge",
+			"synthesizer_id": synthesizerID,
+		},
+	}
+
+	finalOutput, err := agents[synthesizerID].Execute(ctx, mergeInput)
+	if err != nil {
+		// Fallback to the proposal with the most votes (or first available).
+		for _, id := range orderedIDs {
+			if p, ok := proposals[id]; ok {
+				return p, nil
+			}
+		}
+		return nil, fmt.Errorf("consensus failed and no proposals available")
+	}
+
+	totalTokens, totalCost := aggregateUsage(proposals)
+	finalOutput.TokensUsed += totalTokens
+	finalOutput.Cost += totalCost
+	finalOutput.Metadata = mergeMetadata(finalOutput.Metadata, map[string]any{
+		"consensus_reached": false,
+		"total_rounds":      c.config.MaxRounds,
+		"synthesizer_id":    synthesizerID,
+	})
+
+	c.logger.Info("consensus coordination completed (merged)",
+		zap.Int("rounds", c.config.MaxRounds),
+	)
 
 	return finalOutput, nil
 }
@@ -676,44 +953,75 @@ func NewPipelineCoordinator(config MultiAgentConfig, hub *MessageHub, logger *za
 }
 
 func (c *PipelineCoordinator) Coordinate(ctx context.Context, agents map[string]agent.Agent, input *agent.Input) (*agent.Output, error) {
-	c.logger.Info("pipeline coordination started")
+	c.logger.Info("pipeline coordination started", zap.Int("stages", len(agents)))
 
-	// 按顺序执行每个 Agent
+	// Deterministic stage ordering by agent ID.
+	orderedIDs := sortedAgentIDs(agents)
+	if len(orderedIDs) == 0 {
+		return nil, fmt.Errorf("pipeline requires at least one agent")
+	}
+
 	currentInput := input
 	var currentOutput *agent.Output
+	totalStages := len(orderedIDs)
 
-	// 按 ID 排序确保流水线执行顺序确定
-	keys := make([]string, 0, len(agents))
-	for k := range agents {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-	agentList := make([]agent.Agent, 0, len(agents))
-	for _, k := range keys {
-		agentList = append(agentList, agents[k])
-	}
+	for i, id := range orderedIDs {
+		stage := i + 1
 
-	for i, a := range agentList {
-		c.logger.Debug("pipeline stage",
-			zap.Int("stage", i+1),
-			zap.String("agent_id", a.ID()),
+		if err := ctx.Err(); err != nil {
+			return nil, fmt.Errorf("pipeline cancelled at stage %d/%d: %w", stage, totalStages, err)
+		}
+
+		c.logger.Debug("pipeline stage executing",
+			zap.Int("stage", stage),
+			zap.Int("total_stages", totalStages),
+			zap.String("agent_id", id),
 		)
 
-		output, err := a.Execute(ctx, currentInput)
+		// For stages after the first, wrap the previous output with pipeline context.
+		if i > 0 && currentOutput != nil {
+			pipelinePrompt := fmt.Sprintf(
+				"You are stage %d of %d in a processing pipeline.\n\n"+
+					"## Original Request\n%s\n\n"+
+					"## Output From Previous Stage (Stage %d)\n%s\n\n"+
+					"## Instructions\n"+
+					"Process the previous stage's output according to your expertise.\n"+
+					"Build upon and refine the work done so far.\n"+
+					"Maintain consistency with the original request's intent.\n",
+				stage, totalStages,
+				input.Content,
+				stage-1,
+				currentOutput.Content,
+			)
+
+			currentInput = &agent.Input{
+				TraceID: input.TraceID,
+				Content: pipelinePrompt,
+				Context: mergeContextMaps(input.Context, map[string]any{
+					"pipeline_stage": stage,
+					"total_stages":   totalStages,
+					"previous_agent": orderedIDs[i-1],
+				}),
+			}
+		}
+
+		output, err := agents[id].Execute(ctx, currentInput)
 		if err != nil {
-			return nil, fmt.Errorf("pipeline stage %d failed: %w", i+1, err)
+			return nil, fmt.Errorf("pipeline stage %d/%d (agent %s) failed: %w", stage, totalStages, id, err)
 		}
-
 		currentOutput = output
-
-		// 下一个 Agent 的输入是当前输出
-		currentInput = &agent.Input{
-			TraceID: input.TraceID,
-			Content: output.Content,
-		}
 	}
 
-	c.logger.Info("pipeline coordination completed")
+	if currentOutput == nil {
+		return nil, fmt.Errorf("pipeline produced no output")
+	}
+
+	currentOutput.Metadata = mergeMetadata(currentOutput.Metadata, map[string]any{
+		"pipeline_stages": totalStages,
+		"stage_order":     orderedIDs,
+	})
+
+	c.logger.Info("pipeline coordination completed", zap.Int("stages", totalStages))
 
 	return currentOutput, nil
 }
@@ -734,51 +1042,116 @@ func NewBroadcastCoordinator(config MultiAgentConfig, hub *MessageHub, logger *z
 }
 
 func (c *BroadcastCoordinator) Coordinate(ctx context.Context, agents map[string]agent.Agent, input *agent.Input) (*agent.Output, error) {
-	c.logger.Info("broadcast coordination started")
+	c.logger.Info("broadcast coordination started", zap.Int("agents", len(agents)))
 
-	// 并行执行所有 Agent
-	outputs := make([]*agent.Output, 0, len(agents))
-	var mu sync.Mutex
+	orderedIDs := sortedAgentIDs(agents)
+	if len(orderedIDs) == 0 {
+		return nil, fmt.Errorf("broadcast requires at least one agent")
+	}
+
+	// Phase 1 — Fan-out: execute all agents in parallel.
+	type agentResult struct {
+		id     string
+		output *agent.Output
+		err    error
+	}
+
+	results := make([]agentResult, len(orderedIDs))
 	var wg sync.WaitGroup
 
-	for _, a := range agents {
+	for i, id := range orderedIDs {
 		wg.Add(1)
-		go func(agent agent.Agent) {
+		go func(idx int, agentID string) {
 			defer wg.Done()
 
-			output, err := agent.Execute(ctx, input)
-			if err != nil {
-				c.logger.Warn("agent execution failed",
-					zap.String("agent_id", agent.ID()),
-					zap.Error(err),
-				)
-				return
-			}
-
-			mu.Lock()
-			outputs = append(outputs, output)
-			mu.Unlock()
-		}(a)
+			output, err := agents[agentID].Execute(ctx, input)
+			results[idx] = agentResult{id: agentID, output: output, err: err}
+		}(i, id)
 	}
 
 	wg.Wait()
 
-	if len(outputs) == 0 {
-		return nil, fmt.Errorf("all agents failed")
+	// Collect successful outputs in deterministic order.
+	succeeded := make([]agentResult, 0, len(results))
+	for _, r := range results {
+		if r.err != nil {
+			c.logger.Warn("agent execution failed",
+				zap.String("agent_id", r.id),
+				zap.Error(r.err),
+			)
+			continue
+		}
+		succeeded = append(succeeded, r)
 	}
 
-	// 合并所有输出
-	var sb strings.Builder
-	for i, output := range outputs {
-		sb.WriteString(fmt.Sprintf("Agent %d:\n%s\n\n", i+1, output.Content))
+	if len(succeeded) == 0 {
+		return nil, fmt.Errorf("all agents failed during broadcast execution")
 	}
 
-	finalOutput := &agent.Output{
+	// Phase 2 — Fan-in: synthesize all outputs into a coherent result.
+	// If only one agent succeeded, return its output directly.
+	if len(succeeded) == 1 {
+		return succeeded[0].output, nil
+	}
+
+	synthesizerID := orderedIDs[0]
+	var allOutputs strings.Builder
+	for _, r := range succeeded {
+		allOutputs.WriteString(fmt.Sprintf("\n--- Agent [%s] ---\n%s\n", r.id, r.output.Content))
+	}
+
+	synthesisPrompt := fmt.Sprintf(
+		"Multiple agents have independently responded to the same question.\n\n"+
+			"## Original Question\n%s\n\n"+
+			"## Individual Agent Responses\n%s\n\n"+
+			"## Instructions\n"+
+			"1. Review all agent responses for accuracy and completeness.\n"+
+			"2. Identify common themes, agreements, and unique insights from each agent.\n"+
+			"3. Synthesize a single, comprehensive answer that:\n"+
+			"   - Combines the best insights from all responses.\n"+
+			"   - Resolves any contradictions by favoring the most well-reasoned position.\n"+
+			"   - Provides a complete, well-structured answer.\n",
+		input.Content,
+		allOutputs.String(),
+	)
+
+	synthesisInput := &agent.Input{
 		TraceID: input.TraceID,
-		Content: sb.String(),
+		Content: synthesisPrompt,
+		Context: map[string]any{
+			"phase":          "synthesis",
+			"synthesizer_id": synthesizerID,
+			"num_responses":  len(succeeded),
+		},
 	}
 
-	c.logger.Info("broadcast coordination completed")
+	finalOutput, err := agents[synthesizerID].Execute(ctx, synthesisInput)
+	if err != nil {
+		// Fallback: return the first successful output.
+		c.logger.Warn("broadcast synthesis failed, returning first output",
+			zap.Error(err),
+		)
+		return succeeded[0].output, nil
+	}
+
+	// Aggregate total usage.
+	totalTokens, totalCost := 0, 0.0
+	for _, r := range succeeded {
+		totalTokens += r.output.TokensUsed
+		totalCost += r.output.Cost
+	}
+	finalOutput.TokensUsed += totalTokens
+	finalOutput.Cost += totalCost
+	finalOutput.Metadata = mergeMetadata(finalOutput.Metadata, map[string]any{
+		"broadcast_agents": len(succeeded),
+		"failed_agents":    len(results) - len(succeeded),
+		"synthesizer_id":   synthesizerID,
+	})
+
+	c.logger.Info("broadcast coordination completed",
+		zap.Int("succeeded", len(succeeded)),
+		zap.Int("failed", len(results)-len(succeeded)),
+	)
 
 	return finalOutput, nil
 }
@@ -799,10 +1172,269 @@ func NewNetworkCoordinator(config MultiAgentConfig, hub *MessageHub, logger *zap
 }
 
 func (c *NetworkCoordinator) Coordinate(ctx context.Context, agents map[string]agent.Agent, input *agent.Input) (*agent.Output, error) {
-	c.logger.Info("network coordination started")
+	c.logger.Info("network coordination started",
+		zap.Int("agents", len(agents)),
+		zap.Int("max_rounds", c.config.MaxRounds),
+	)
 
-	// 网络模式：Agent 之间可以自由通信
-	// 简化实现：类似广播模式
-	return NewBroadcastCoordinator(c.config, c.hub, c.logger).Coordinate(ctx, agents, input)
+	orderedIDs := sortedAgentIDs(agents)
+	if len(orderedIDs) == 0 {
+		return nil, fmt.Errorf("network requires at least one agent")
+	}
+
+	// Phase 1 — Initial independent responses.
+	positions := make(map[string]*agent.Output, len(orderedIDs))
+	for _, id := range orderedIDs {
+		if err := ctx.Err(); err != nil {
+			return nil, fmt.Errorf("network cancelled during initial phase: %w", err)
+		}
+
+		output, err := agents[id].Execute(ctx, input)
+		if err != nil {
+			c.logger.Warn("agent initial response failed",
+				zap.String("agent_id", id),
+				zap.Error(err),
+			)
+			continue
+		}
+		positions[id] = output
+	}
+	if len(positions) == 0 {
+		return nil, fmt.Errorf("all agents failed during initial response phase")
+	}
+
+	// Phase 2 — Multi-round peer-to-peer communication.
+	// In each round, every agent exchanges messages with every other agent
+	// through the message hub, then refines its position.
+	rounds := c.config.MaxRounds
+	if rounds <= 0 {
+		rounds = 1
+	}
+	for round := 1; round <= rounds; round++ {
+		if err := ctx.Err(); err != nil {
+			return nil, fmt.Errorf("network cancelled at round %d: %w", round, err)
+		}
+
+		c.logger.Debug("network communication round", zap.Int("round", round))
+
+		// Each agent broadcasts its current position to peers via the hub.
+		for _, id := range orderedIDs {
+			if pos, ok := positions[id]; ok {
+				_ = c.hub.SendWithContext(ctx, &Message{
+					FromID:  id,
+					Type:    MessageTypeProposal,
+					Content: pos.Content,
+					Metadata: map[string]any{
+						"round": round,
+					},
+					Timestamp: time.Now(),
+				})
+			}
+		}
+
+		// Each agent reads peer messages and refines its position.
+		for _, id := range orderedIDs {
+			if _, ok := positions[id]; !ok {
+				continue
+			}
+
+			// Collect peer positions visible to this agent.
+			var peerInsights strings.Builder
+			for _, peerID := range orderedIDs {
+				if peerID == id {
+					continue
+				}
+				if p, ok := positions[peerID]; ok {
+					peerInsights.WriteString(fmt.Sprintf("\n--- Peer [%s] (round %d) ---\n%s\n", peerID, round, p.Content))
+				}
+			}
+
+			if peerInsights.Len() == 0 {
+				continue
+			}
+
+			networkPrompt := fmt.Sprintf(
+				"You are agent [%s] in a peer-to-peer network (Round %d/%d).\n"+
+					"Each agent has specialized knowledge and you've received messages from your peers.\n\n"+
+					"## Original Question\n%s\n\n"+
+					"## Your Current Position\n%s\n\n"+
+					"## Peer Messages Received\n%s\n\n"+
+					"## Instructions\n"+
+					"1. Consider each peer's perspective carefully.\n"+
+					"2. Identify new information or arguments that strengthen or challenge your position.\n"+
+					"3. Update your position by incorporating valuable peer insights.\n"+
+					"4. Highlight any specific points where you changed your mind and why.\n"+
+					"5. Maintain your expertise while being open to valid corrections.\n",
+				id, round, rounds,
+				input.Content,
+				positions[id].Content,
+				peerInsights.String(),
+			)
+
+			networkInput := &agent.Input{
+				TraceID: input.TraceID,
+				Content: networkPrompt,
+				Context: map[string]any{
+					"network_round": round,
+					"agent_id":      id,
+					"peer_count":    len(orderedIDs) - 1,
+				},
+			}
+
+			output, err := agents[id].Execute(ctx, networkInput)
+			if err != nil {
+				c.logger.Warn("agent network round failed",
+					zap.String("agent_id", id),
+					zap.Int("round", round),
+					zap.Error(err),
+				)
+				continue // keep previous position
+			}
+			positions[id] = output
+		}
+	}
+
+	// Phase 3 — Final aggregation: first agent synthesizes all evolved positions.
+	aggregatorID := orderedIDs[0]
+	var allPositions strings.Builder
+	for _, id := range orderedIDs {
+		if p, ok := positions[id]; ok {
+			allPositions.WriteString(fmt.Sprintf("\n--- Agent [%s] (final) ---\n%s\n", id, p.Content))
+		}
+	}
+
+	aggregatePrompt := fmt.Sprintf(
+		"After %d rounds of peer-to-peer discussion, all agents have refined their positions.\n\n"+
+			"## Original Question\n%s\n\n"+
+			"## All Agents' Final Positions\n%s\n\n"+
+			"## Instructions\n"+
+			"1. Agents have already exchanged and incorporated each other's feedback.\n"+
+			"2. Identify the converged consensus points.\n"+
+			"3. For remaining differences, select the most well-supported position.\n"+
+			"4. Produce a final, unified, comprehensive answer.\n",
+		rounds,
+		input.Content,
+		allPositions.String(),
+	)
+
+	aggregateInput := &agent.Input{
+		TraceID: input.TraceID,
+		Content: aggregatePrompt,
+		Context: map[string]any{
+			"phase":         "aggregation",
+			"aggregator_id": aggregatorID,
+			"num_agents":    len(positions),
+			"total_rounds":  rounds,
+		},
+	}
+
+	finalOutput, err := agents[aggregatorID].Execute(ctx, aggregateInput)
+	if err != nil {
+		// Fallback to first available position.
+		for _, id := range orderedIDs {
+			if p, ok := positions[id]; ok {
+				return p, nil
+			}
+		}
+		return nil, fmt.Errorf("network coordination failed with no available positions")
+	}
+
+	totalTokens, totalCost := aggregateUsage(positions)
+	finalOutput.TokensUsed += totalTokens
+	finalOutput.Cost += totalCost
+	finalOutput.Metadata = mergeMetadata(finalOutput.Metadata, map[string]any{
+		"network_rounds":    rounds,
+		"participating_ids": orderedIDs,
+		"aggregator_id":     aggregatorID,
+	})
+
+	c.logger.Info("network coordination completed",
+		zap.Int("rounds", rounds),
+		zap.Int("agents", len(positions)),
+	)
+
+	return finalOutput, nil
 }
 
+// ---------------------------------------------------------------------------
+// Shared helpers for coordinators
+// ---------------------------------------------------------------------------
+
+// sortedAgentIDs returns deterministic, lexicographically sorted agent IDs.
+func sortedAgentIDs(agents map[string]agent.Agent) []string {
+	ids := make([]string, 0, len(agents))
+	for id := range agents {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	return ids
+}
+
+// aggregateUsage sums TokensUsed and Cost from a map of outputs.
+func aggregateUsage(outputs map[string]*agent.Output) (totalTokens int, totalCost float64) {
+	for _, o := range outputs {
+		if o != nil {
+			totalTokens += o.TokensUsed
+			totalCost += o.Cost
+		}
+	}
+	return
+}
+
+// mergeMetadata non-destructively merges extra key-value pairs into an
+// existing metadata map. If base is nil a new map is allocated.
+func mergeMetadata(base map[string]any, extra map[string]any) map[string]any {
+	if base == nil {
+		base = make(map[string]any, len(extra))
+	}
+	for k, v := range extra {
+		base[k] = v
+	}
+	return base
+}
+
+// mergeContextMaps merges two context maps, with override taking precedence.
+func mergeContextMaps(base map[string]any, override map[string]any) map[string]any {
+	if len(base) == 0 && len(override) == 0 {
+		return nil
+	}
+	merged := make(map[string]any, len(base)+len(override))
+	for k, v := range base {
+		merged[k] = v
+	}
+	for k, v := range override {
+		merged[k] = v
+	}
+	return merged
+}
+
+// parseVote extracts a voted agent ID from an output string.
+// It looks for the pattern "VOTE: [agent_id]" and validates against known IDs.
+func parseVote(content string, validIDs []string) string {
+	// Build a set for O(1) lookup.
+	valid := make(map[string]struct{}, len(validIDs))
+	for _, id := range validIDs {
+		valid[id] = struct{}{}
+	}
+
+	// Search for "VOTE:" prefix (case-insensitive).
+	lower := strings.ToLower(content)
+	idx := strings.Index(lower, "vote:")
+	if idx < 0 {
+		return ""
+	}
+	rest := strings.TrimSpace(content[idx+5:]) // skip "vote:"
+
+	// Extract the token after "VOTE:" (may be wrapped in brackets).
+	rest = strings.TrimLeft(rest, "[ \t")
+	end := strings.IndexAny(rest, "] \t\n\r,")
+	if end < 0 {
+		end = len(rest)
+	}
+	candidate := strings.TrimSpace(rest[:end])
+
+	if _, ok := valid[candidate]; ok {
+		return candidate
+	}
+	return ""
+}

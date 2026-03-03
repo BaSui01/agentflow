@@ -47,6 +47,8 @@ This document defines the runtime startup chain and composition boundaries.
   - ToolManager bridge wiring (`hosted.ToolRegistry -> agent.ToolManager`)
   - built-in retrieval tool and MCP tool bridge registration (`mcp_*`)
   - shared ToolManager injection target for both `AgentHandler` and `ChatHandler` local tool loop
+  - DB-backed dynamic bindings reload support (`/api/v1/tools*` writes -> runtime reload)
+  - runtime reload callback hook for resolver cache reset (new tool bindings effective immediately)
 - `internal/app/bootstrap/mongo_wiring_builder.go`
   - Mongo prompt/conversation/run stores wiring
   - Mongo optional capabilities wiring (audit, memory, ab-testing, registry persistence)
