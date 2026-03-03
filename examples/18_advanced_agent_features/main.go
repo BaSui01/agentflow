@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/BaSui01/agentflow/agent"
@@ -22,11 +23,22 @@ import (
 	"github.com/BaSui01/agentflow/agent/protocol/a2a"
 	"github.com/BaSui01/agentflow/agent/protocol/mcp"
 	"github.com/BaSui01/agentflow/agent/reasoning"
+	agentruntime "github.com/BaSui01/agentflow/agent/runtime"
 	"github.com/BaSui01/agentflow/agent/skills"
+	"github.com/BaSui01/agentflow/agent/streaming"
+	"github.com/BaSui01/agentflow/agent/structured"
+	"github.com/BaSui01/agentflow/agent/voice"
 	"github.com/BaSui01/agentflow/llm"
+	llmbatch "github.com/BaSui01/agentflow/llm/batch"
+	llmcache "github.com/BaSui01/agentflow/llm/cache"
+	llmtools "github.com/BaSui01/agentflow/llm/capabilities/tools"
+	llmrouter "github.com/BaSui01/agentflow/llm/runtime/router"
 	"github.com/BaSui01/agentflow/rag"
 	"github.com/BaSui01/agentflow/types"
+	"github.com/coder/websocket"
+	"github.com/glebarez/sqlite"
 	"go.uber.org/zap"
+	"gorm.io/gorm"
 )
 
 func main() {
@@ -77,7 +89,317 @@ func main() {
 	// 14. Reasoning Patterns Reachability
 	demoReasoningPatterns(logger)
 
+	// 15. Streaming Subsystem Reachability
+	demoStreamingSubsystem(logger)
+
+	// 16. Structured Output Reachability
+	demoStructuredOutput(logger)
+
+	// 17. Voice Subsystem Reachability
+	demoVoiceSubsystem(logger)
+
+	// 18. LLM Canary Subsystem Reachability
+	demoLLMCanary(logger)
+
+	// 19. LLM Core Extensions Reachability
+	demoLLMCoreExtensions(logger)
+
+	// 20. LLM Advanced Runtime Reachability
+	demoLLMAdvancedRuntime(logger)
+
+	// 21. LLM Tool Cache Reachability
+	demoLLMToolCache(logger)
+
+	// 22. Full Module Integration Reachability (llm/rag/pkg)
+	demoFullModuleIntegrationReachability()
+
 	fmt.Println("\n=== All Advanced Features Demonstrated ===")
+}
+
+func demoLLMCanary(logger *zap.Logger) {
+	fmt.Println("18. LLM Canary Subsystem Reachability")
+	fmt.Println("-------------------------------------")
+
+	db, err := setupCanaryDemoDB()
+	if err != nil {
+		fmt.Printf("   setup canary db error: %v\n\n", err)
+		return
+	}
+
+	canaryCfg := llmrouter.NewCanaryConfig(db, logger)
+	defer canaryCfg.Stop()
+
+	deployment := &llm.CanaryDeployment{
+		ProviderID:     1,
+		CanaryVersion:  "gpt-4o-2026-03",
+		StableVersion:  "gpt-4o-2025-12",
+		TrafficPercent: 10,
+		Stage:          llm.CanaryStage10Pct,
+		StartTime:      time.Now(),
+		MaxErrorRate:   0.15,
+		MaxLatencyP95:  500 * time.Millisecond,
+		AutoRollback:   true,
+	}
+	_ = canaryCfg.SetDeployment(deployment)
+	_ = canaryCfg.GetDeployment(1)
+	_ = canaryCfg.UpdateStage(1, llm.CanaryStage50Pct)
+	_ = canaryCfg.GetAllDeployments()
+	_ = canaryCfg.TriggerRollback(1, "demo rollback")
+	canaryCfg.RemoveDeployment(1)
+	fmt.Printf("   Canary deployments after cleanup: %d\n", len(canaryCfg.GetAllDeployments()))
+
+	monitor := llm.NewCanaryMonitor(db, canaryCfg, logger)
+	startCtx, cancel := context.WithCancel(context.Background())
+	cancel()
+	done := make(chan struct{})
+	go func() {
+		monitor.Start(startCtx)
+		close(done)
+	}()
+	<-done
+	monitor.Stop()
+	fmt.Println()
+}
+
+func setupCanaryDemoDB() (*gorm.DB, error) {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err != nil {
+		return nil, err
+	}
+
+	if err := db.Exec(`CREATE TABLE sc_llm_canary_deployments (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		provider_id INTEGER,
+		canary_version TEXT,
+		stable_version TEXT,
+		traffic_percent INTEGER,
+		stage TEXT,
+		max_error_rate REAL,
+		max_latency_p95_ms INTEGER,
+		auto_rollback BOOLEAN,
+		started_at DATETIME,
+		completed_at DATETIME,
+		rollback_reason TEXT,
+		updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+	)`).Error; err != nil {
+		return nil, err
+	}
+	if err := db.Exec(`CREATE TABLE sc_audit_logs (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		tenant_id INTEGER,
+		user_id INTEGER,
+		action TEXT,
+		resource_type TEXT,
+		resource_id TEXT,
+		details TEXT,
+		created_at DATETIME
+	)`).Error; err != nil {
+		return nil, err
+	}
+	if err := db.Exec(`CREATE TABLE sc_llm_usage_logs (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		provider_id INTEGER,
+		status TEXT,
+		latency_ms REAL,
+		created_at DATETIME
+	)`).Error; err != nil {
+		return nil, err
+	}
+
+	return db, nil
+}
+
+func demoLLMCoreExtensions(logger *zap.Logger) {
+	fmt.Println("19. LLM Core Extensions Reachability")
+	fmt.Println("------------------------------------")
+
+	cred := llm.CredentialOverride{
+		APIKey:    "sk-demo-key",
+		SecretKey: "demo-secret",
+	}
+	_ = cred.String()
+	_, _ = cred.MarshalJSON()
+	ctx := llm.WithCredentialOverride(context.Background(), cred)
+	_, _ = llm.CredentialOverrideFromContext(ctx)
+
+	security := &llm.NoOpSecurityProvider{}
+	identity, _ := security.Authenticate(ctx, cred)
+	_ = security.Authorize(ctx, identity, "provider", "invoke")
+
+	audit := &llm.NoOpAuditLogger{}
+	_ = audit.Log(ctx, llm.AuditEvent{
+		Timestamp: time.Now(),
+		EventType: "provider.request",
+		ActorID:   "demo",
+		Result:    "success",
+	})
+	_, _ = audit.Query(ctx, llm.AuditFilter{})
+
+	limiter := &llm.NoOpRateLimiter{}
+	_, _ = limiter.Allow(ctx, "tenant-demo")
+	_, _ = limiter.AllowN(ctx, "tenant-demo", 2)
+	_ = limiter.Reset(ctx, "tenant-demo")
+
+	tracer := &llm.NoOpTracer{}
+	_, span := tracer.StartSpan(ctx, "demo-span")
+	span.SetAttribute("key", "value")
+	span.AddEvent("event", map[string]any{"ok": true})
+	span.SetError(fmt.Errorf("demo error"))
+	span.End()
+
+	m1 := llm.ProviderMiddlewareFunc(func(next llm.Provider) llm.Provider { return next })
+	m2 := llm.ProviderMiddlewareFunc(func(next llm.Provider) llm.Provider { return next })
+	_ = m1.Wrap(&demoProvider{})
+	_ = llm.ChainProviderMiddleware(&demoProvider{}, m1, m2)
+
+	registry := llm.NewProviderRegistry()
+	registry.Register("demo", &demoProvider{})
+	_, _ = registry.Get("demo")
+	_ = registry.SetDefault("demo")
+	_, _ = registry.Default()
+	_ = registry.List()
+	registry.Unregister("demo")
+	_ = registry.Len()
+
+	fmt.Println()
+}
+
+func demoLLMAdvancedRuntime(logger *zap.Logger) {
+	fmt.Println("20. LLM Advanced Runtime Reachability")
+	fmt.Println("-------------------------------------")
+
+	ctx := context.Background()
+
+	// resilience.NewResilientProviderSimple
+	resilient := llm.NewResilientProviderSimple(&reasonerProvider{}, nil, logger)
+	_, _ = resilient.Completion(ctx, &llm.ChatRequest{
+		Model: "demo-model",
+		Messages: []types.Message{
+			{Role: llm.RoleUser, Content: "resilience ping"},
+		},
+	})
+
+	// thought_signatures manager + middleware
+	tsMgr := llm.NewThoughtSignatureManager(0)
+	_ = tsMgr.CreateChain("demo-chain")
+	_ = tsMgr.GetChain("demo-chain")
+	_ = tsMgr.AddSignature("demo-chain", llm.ThoughtSignature{
+		ID:        "sig-0",
+		Signature: "prev-signature",
+		Model:     "demo-model",
+		CreatedAt: time.Now(),
+	})
+	_ = tsMgr.GetLatestSignatures("demo-chain", 5)
+
+	tsMiddleware := llm.NewThoughtSignatureMiddleware(&reasonerProvider{}, tsMgr)
+	_, _ = tsMiddleware.Completion(ctx, &llm.ChatRequest{
+		Model: "demo-model",
+		Metadata: map[string]string{
+			"thought_chain_id": "demo-chain",
+		},
+		Messages: []types.Message{
+			{Role: llm.RoleUser, Content: "think with signatures"},
+		},
+	})
+	stream, _ := tsMiddleware.Stream(ctx, &llm.ChatRequest{
+		Model: "demo-model",
+		Metadata: map[string]string{
+			"thought_chain_id": "demo-chain",
+		},
+		Messages: []types.Message{
+			{Role: llm.RoleUser, Content: "stream signatures"},
+		},
+	})
+	for range stream {
+	}
+	_, _ = tsMiddleware.HealthCheck(ctx)
+	_ = tsMiddleware.Name()
+	_ = tsMiddleware.SupportsNativeFunctionCalling()
+	_, _ = tsMiddleware.ListModels(ctx)
+	_ = tsMiddleware.Endpoints()
+	tsMgr.CleanExpired()
+
+	// batch processor defaults + constructor
+	batchCfg := llmbatch.DefaultBatchConfig()
+	batchProcessor := llmbatch.NewBatchProcessor(batchCfg, func(ctx context.Context, requests []*llmbatch.Request) []*llmbatch.Response {
+		responses := make([]*llmbatch.Response, 0, len(requests))
+		for _, req := range requests {
+			responses = append(responses, &llmbatch.Response{
+				ID:      req.ID,
+				Content: "ok",
+				Tokens:  1,
+			})
+		}
+		return responses
+	})
+	_, _ = batchProcessor.SubmitSync(ctx, &llmbatch.Request{
+		ID:    "batch-1",
+		Model: "demo-model",
+		Messages: []llmbatch.Message{
+			{Role: "user", Content: "batch ping"},
+		},
+	})
+	batchProcessor.Close()
+	_ = batchProcessor.Stats().BatchEfficiency()
+
+	// llm types table names
+	_ = llm.LLMModel{}.TableName()
+	_ = llm.LLMProvider{}.TableName()
+	_ = llm.LLMProviderModel{}.TableName()
+	_ = llm.LLMProviderAPIKey{}.TableName()
+
+	fmt.Println()
+}
+
+func demoLLMToolCache(logger *zap.Logger) {
+	fmt.Println("21. LLM Tool Cache Reachability")
+	fmt.Println("-------------------------------")
+
+	cfg := llmcache.DefaultToolCacheConfig()
+	cfg.MaxEntries = 2
+	cfg.DefaultTTL = 30 * time.Millisecond
+	cfg.ToolTTLOverrides = map[string]time.Duration{
+		"fast_tool": 10 * time.Millisecond,
+	}
+	cfg.ExcludedTools = []string{"never_cache"}
+
+	cache := llmcache.NewToolResultCache(cfg, logger)
+
+	argsA := json.RawMessage(`{"q":"a"}`)
+	argsB := json.RawMessage(`{"q":"b"}`)
+	argsC := json.RawMessage(`{"q":"c"}`)
+
+	cache.Set("never_cache", argsA, json.RawMessage(`{"v":"excluded"}`), "")
+	_, _ = cache.Get("never_cache", argsA) // excluded path
+
+	cache.Set("fast_tool", argsA, json.RawMessage(`{"v":"ttl"}`), "")
+	time.Sleep(15 * time.Millisecond)
+	_, _ = cache.Get("fast_tool", argsA) // ttl expiry path
+
+	cache.Set("search", argsA, json.RawMessage(`{"v":"A"}`), "")
+	cache.Set("search", argsB, json.RawMessage(`{"v":"B"}`), "")
+	cache.Set("search", argsC, json.RawMessage(`{"v":"C"}`), "") // eviction path
+
+	cache.Invalidate("search", argsB)
+	cache.InvalidateTool("search")
+	cache.Clear()
+	_ = cache.Stats()
+
+	executor := &demoLLMToolExecutor{}
+	cachingExecutor := llmcache.NewCachingToolExecutor(executor, cache, logger)
+
+	calls := []types.ToolCall{
+		{ID: "tc-1", Name: "search", Arguments: json.RawMessage(`{"q":"agentflow"}`)},
+		{ID: "tc-2", Name: "calc", Arguments: json.RawMessage(`{"x":1}`)},
+	}
+	_ = cachingExecutor.Execute(context.Background(), calls)
+	_ = cachingExecutor.ExecuteOne(context.Background(), types.ToolCall{
+		ID:        "tc-3",
+		Name:      "search",
+		Arguments: json.RawMessage(`{"q":"agentflow"}`),
+	})
+
+	fmt.Println()
 }
 
 func demoFederation(logger *zap.Logger) {
@@ -308,10 +630,11 @@ func demoSkillsRegistry(logger *zap.Logger) {
 	fmt.Println("4. Agent Skills Registry")
 	fmt.Println("------------------------")
 
+	ctx := context.Background()
 	registry := skills.NewRegistry(logger)
 
 	// Register skills
-	registry.Register(&skills.SkillDefinition{
+	_ = registry.Register(&skills.SkillDefinition{
 		Name:        "web_search",
 		Category:    skills.CategoryResearch,
 		Description: "Search the web for information",
@@ -320,7 +643,7 @@ func demoSkillsRegistry(logger *zap.Logger) {
 		return json.Marshal(map[string]string{"result": "search results"})
 	})
 
-	registry.Register(&skills.SkillDefinition{
+	_ = registry.Register(&skills.SkillDefinition{
 		Name:        "code_review",
 		Category:    skills.CategoryCoding,
 		Description: "Review code for issues and improvements",
@@ -329,7 +652,7 @@ func demoSkillsRegistry(logger *zap.Logger) {
 		return json.Marshal(map[string]string{"result": "code review complete"})
 	})
 
-	registry.Register(&skills.SkillDefinition{
+	_ = registry.Register(&skills.SkillDefinition{
 		Name:        "data_analysis",
 		Category:    skills.CategoryData,
 		Description: "Analyze data and generate insights",
@@ -350,7 +673,49 @@ func demoSkillsRegistry(logger *zap.Logger) {
 	// Invoke a skill
 	if skill, ok := registry.GetByName("web_search"); ok {
 		fmt.Printf("   Found skill: %s (%s)\n", skill.Definition.Name, skill.Definition.Category)
+		_, _ = registry.Get(skill.Definition.ID)
+		_, _ = registry.Invoke(ctx, skill.Definition.ID, json.RawMessage(`{"q":"agentflow"}`))
+		_ = registry.Disable(skill.Definition.ID)
+		_ = registry.Enable(skill.Definition.ID)
+		_ = registry.Unregister(skill.Definition.ID)
 	}
+
+	exported, _ := registry.Export()
+	registryImported := skills.NewRegistry(logger)
+	_ = registryImported.Import(exported)
+
+	builderSkill, _ := skills.NewSkillBuilder("demo_skill", "Demo Skill").
+		WithDescription("demo builder path").
+		WithInstructions("analyze {{target}}").
+		WithCategory("coding").
+		WithTags("demo", "builder").
+		WithTools("demo_tool").
+		WithResource("notes.txt", "builder resource").
+		WithExample("input", "output", "explanation").
+		WithLazyLoad(true).
+		WithPriority(7).
+		WithDependencies("dep_skill").
+		Build()
+
+	tmpSkillDir, _ := os.MkdirTemp("", "skills-demo-*")
+	defer os.RemoveAll(tmpSkillDir)
+	_ = skills.SaveSkillToDirectory(builderSkill, tmpSkillDir)
+
+	managerCfg := skills.DefaultSkillManagerConfig()
+	managerCfg.AutoLoad = true
+	manager := skills.NewSkillManager(managerCfg, logger)
+	_ = manager.RegisterSkill(builderSkill)
+
+	registrar := &demoCapabilityRegistrar{capabilities: make(map[string]*skills.CapabilityDescriptor)}
+	discoveryBridge := skills.NewSkillDiscoveryBridge(manager, registrar, "demo-agent", logger)
+	_ = discoveryBridge.SyncAll(ctx)
+	_ = discoveryBridge.RegisterSkillAsCapability(ctx, builderSkill)
+	_ = discoveryBridge.UnregisterSkill(ctx, builderSkill.ID)
+
+	extensionAdapter := skills.NewSkillsExtensionAdapter(manager, registryImported)
+	_ = extensionAdapter.LoadSkill(ctx, builderSkill.ID)
+	_, _ = extensionAdapter.ExecuteSkill(ctx, builderSkill.Name, map[string]any{"target": "service"})
+	_ = extensionAdapter.ListSkills()
 }
 
 func demoAsyncExecution(logger *zap.Logger) {
@@ -535,6 +900,7 @@ func demoRunConfigHelpers() {
 	baseCfg := types.AgentConfig{}
 	retrieved.ApplyToRequest(req, baseCfg)
 	effectiveMaxIter := retrieved.EffectiveMaxReActIterations(10)
+	_ = agentruntime.NewBuilder(&demoProvider{}, zap.NewNop()).WithToolScope([]string{"demo_tool"})
 
 	fmt.Printf("   Request model: %s\n", req.Model)
 	fmt.Printf("   Request temperature: %.1f\n", req.Temperature)
@@ -1047,6 +1413,205 @@ func demoReasoningPatterns(logger *zap.Logger) {
 	fmt.Println()
 }
 
+func demoStreamingSubsystem(logger *zap.Logger) {
+	fmt.Println("15. Streaming Subsystem Reachability")
+	fmt.Println("------------------------------------")
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	cfg := streaming.DefaultStreamConfig()
+	cfg.EnableHeartbeat = false
+	cfg.BufferSize = 16
+
+	mockConn := &demoStreamConnection{
+		readQueue: make(chan *streaming.StreamChunk, 8),
+	}
+	mockConn.readQueue <- &streaming.StreamChunk{Type: streaming.StreamTypeText, Text: "hello stream", Data: []byte("hello stream")}
+	mockConn.readQueue <- &streaming.StreamChunk{Type: streaming.StreamTypeAudio, Data: []byte{1, 2, 3, 4}}
+	streamHandler := &demoStreamHandler{}
+
+	stream := streaming.NewBidirectionalStream(cfg, streamHandler, mockConn, func() (streaming.StreamConnection, error) {
+		return mockConn, nil
+	}, logger)
+	_ = stream.Start(ctx)
+	_ = stream.Send(streaming.StreamChunk{Type: streaming.StreamTypeText, Text: "outbound text"})
+
+	receiveCh := stream.Receive()
+	select {
+	case <-receiveCh:
+	case <-time.After(50 * time.Millisecond):
+	}
+
+	textAdapter := streaming.NewTextStreamAdapter(stream)
+	_ = textAdapter.SendText("adapter text", true)
+	textIn := textAdapter.ReceiveText()
+	select {
+	case <-textIn:
+	case <-time.After(50 * time.Millisecond):
+	}
+
+	audioAdapter := streaming.NewAudioStreamAdapter(stream, 16000, 1)
+	_ = audioAdapter.SendAudio([]byte{9, 8, 7})
+	audioIn := audioAdapter.ReceiveAudio()
+	select {
+	case <-audioIn:
+	case <-time.After(50 * time.Millisecond):
+	}
+
+	session := streaming.NewStreamSession(stream)
+	session.RecordSent(128)
+	session.RecordReceived(64)
+
+	reader := streaming.NewStreamReader(stream)
+	writer := streaming.NewStreamWriter(stream)
+	_, _ = writer.Write([]byte("writer payload"))
+	buf := make([]byte, 8)
+	_, _ = reader.Read(buf)
+	_ = stream.GetState()
+
+	manager := streaming.NewStreamManager(logger)
+	mgrConn := &demoStreamConnection{readQueue: make(chan *streaming.StreamChunk, 2)}
+	mgrConn.readQueue <- &streaming.StreamChunk{Type: streaming.StreamTypeText, Text: "manager chunk"}
+	managed := manager.CreateStream(cfg, nil, mgrConn, func() (streaming.StreamConnection, error) { return mgrConn, nil })
+	_, _ = manager.GetStream(managed.ID)
+	_ = manager.CloseStream(managed.ID)
+
+	wsServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		conn, err := websocket.Accept(w, r, nil)
+		if err != nil {
+			return
+		}
+		defer conn.Close(websocket.StatusNormalClosure, "done")
+		for {
+			msgType, data, err := conn.Read(r.Context())
+			if err != nil {
+				return
+			}
+			if err := conn.Write(r.Context(), msgType, data); err != nil {
+				return
+			}
+		}
+	}))
+	defer wsServer.Close()
+
+	wsURL := "ws" + strings.TrimPrefix(wsServer.URL, "http")
+	wsConnRaw, _, wsErr := websocket.Dial(context.Background(), wsURL, nil)
+	if wsErr == nil {
+		wsConn := streaming.NewWebSocketStreamConnection(wsConnRaw, logger)
+		_ = wsConn.WriteChunk(context.Background(), streaming.StreamChunk{Type: streaming.StreamTypeText, Text: "ws message"})
+		_, _ = wsConn.ReadChunk(context.Background())
+		_ = wsConn.IsAlive()
+		_ = wsConn.Close()
+	}
+
+	wsFactory := streaming.WebSocketStreamFactory(wsURL, logger)
+	factoryConn, factoryErr := wsFactory()
+	if factoryErr == nil && factoryConn != nil {
+		_ = factoryConn.IsAlive()
+		_ = factoryConn.Close()
+	}
+
+	_ = stream.Close()
+	fmt.Println("   Streaming bidirectional/session/adapter/ws paths wired")
+	fmt.Println()
+}
+
+func demoStructuredOutput(logger *zap.Logger) {
+	_ = logger
+	fmt.Println("16. Structured Output Reachability")
+	fmt.Println("----------------------------------")
+
+	ctx := context.Background()
+	generator := structured.NewSchemaGenerator()
+	_, _ = generator.GenerateSchemaFromValue(demoStructuredRecord{})
+
+	schema := structured.NewSchema(structured.TypeObject).
+		AddProperty("status", structured.NewEnumSchema("success", "failure")).
+		AddProperty("message", structured.NewStringSchema().WithMinLength(1)).
+		AddRequired("status", "message")
+
+	rawSchema, _ := schema.ToJSON()
+	parsedSchema, _ := structured.FromJSON(rawSchema)
+
+	provider := &structuredDemoProvider{}
+	so, _ := structured.NewStructuredOutputWithSchema[demoStructuredRecord](provider, parsedSchema)
+	_ = so.Schema()
+
+	parseResult, _ := so.GenerateWithParse(ctx, "return structured result")
+	if parseResult != nil {
+		_ = parseResult.IsValid()
+	}
+
+	parseResult2, _ := so.GenerateWithMessagesAndParse(ctx, []types.Message{
+		{Role: llm.RoleUser, Content: "generate with messages"},
+	})
+	if parseResult2 != nil {
+		_ = parseResult2.IsValid()
+	}
+
+	_, _ = so.Parse(`{"status":"success","message":"parsed"}`)
+	_ = so.ValidateValue(&demoStructuredRecord{Status: "success", Message: "ok"})
+	_ = so.ParseWithResult(`{"status":"success","message":"result"}`).IsValid()
+
+	fmt.Println("   Structured output generator/schema/parse paths wired")
+	fmt.Println()
+}
+
+func demoVoiceSubsystem(logger *zap.Logger) {
+	fmt.Println("17. Voice Subsystem Reachability")
+	fmt.Println("--------------------------------")
+
+	ctx := context.Background()
+	voiceCfg := voice.DefaultVoiceConfig()
+	voiceAgent := voice.NewVoiceAgent(
+		voiceCfg,
+		&demoSTTProvider{},
+		&demoTTSProvider{},
+		&demoVoiceLLMHandler{},
+		logger,
+	)
+
+	session, _ := voiceAgent.Start(ctx)
+	if session != nil {
+		_ = session.SendAudio(voice.AudioChunk{
+			Data:       []byte{1, 2, 3},
+			SampleRate: voiceCfg.SampleRate,
+			Channels:   1,
+			Timestamp:  time.Now(),
+		})
+		speechCh := session.ReceiveSpeech()
+		select {
+		case <-speechCh:
+		case <-time.After(100 * time.Millisecond):
+		}
+		session.Interrupt()
+		_ = session.Close()
+	}
+	_ = voiceAgent.GetState()
+	_ = voiceAgent.GetMetrics()
+
+	nativeCfg := voice.DefaultNativeAudioConfig()
+	reasoner := voice.NewNativeAudioReasoner(&demoNativeAudioProvider{}, nativeCfg, logger)
+	_, _ = reasoner.Process(ctx, voice.MultimodalInput{
+		Text:      "voice demo request",
+		Timestamp: time.Now(),
+	})
+	frameIn := make(chan voice.AudioFrame, 1)
+	frameIn <- voice.AudioFrame{Data: []byte{9, 9}, SampleRate: nativeCfg.SampleRate, Duration: 20, Timestamp: time.Now()}
+	close(frameIn)
+	frameOut, _ := reasoner.StreamProcess(ctx, frameIn)
+	select {
+	case <-frameOut:
+	case <-time.After(100 * time.Millisecond):
+	}
+	_ = reasoner.GetMetrics()
+	reasoner.Interrupt()
+
+	fmt.Println("   Voice agent/session/native-audio paths wired")
+	fmt.Println()
+}
+
 type demoQueryDecomposer struct{}
 
 func (d *demoQueryDecomposer) Decompose(ctx context.Context, query string) ([]string, error) {
@@ -1091,6 +1656,32 @@ func (p *reasonerProvider) SupportsNativeFunctionCalling() bool { return false }
 func (p *reasonerProvider) ListModels(ctx context.Context) ([]llm.Model, error) { return nil, nil }
 
 func (p *reasonerProvider) Endpoints() llm.ProviderEndpoints { return llm.ProviderEndpoints{} }
+
+type demoLLMToolExecutor struct{}
+
+func (e *demoLLMToolExecutor) Execute(ctx context.Context, calls []types.ToolCall) []llmtools.ToolResult {
+	results := make([]llmtools.ToolResult, len(calls))
+	for i, call := range calls {
+		results[i] = llmtools.ToolResult{
+			ToolCallID: call.ID,
+			Name:       call.Name,
+			Result:     json.RawMessage(`{"ok":true}`),
+		}
+	}
+	return results
+}
+
+func (e *demoLLMToolExecutor) ExecuteOne(ctx context.Context, call types.ToolCall) llmtools.ToolResult {
+	results := e.Execute(ctx, []types.ToolCall{call})
+	if len(results) == 0 {
+		return llmtools.ToolResult{
+			ToolCallID: call.ID,
+			Name:       call.Name,
+			Error:      "no result",
+		}
+	}
+	return results[0]
+}
 
 type reasoningDemoProvider struct{}
 
@@ -1190,3 +1781,240 @@ func (e *reasoningToolExecutor) ExecuteOne(ctx context.Context, call types.ToolC
 	}
 	return results[0]
 }
+
+type demoCapabilityRegistrar struct {
+	capabilities map[string]*skills.CapabilityDescriptor
+}
+
+func (r *demoCapabilityRegistrar) RegisterCapability(ctx context.Context, desc *skills.CapabilityDescriptor) error {
+	if desc == nil {
+		return fmt.Errorf("nil capability descriptor")
+	}
+	r.capabilities[desc.Name] = desc
+	return nil
+}
+
+func (r *demoCapabilityRegistrar) UnregisterCapability(ctx context.Context, agentID string, capabilityName string) error {
+	delete(r.capabilities, capabilityName)
+	return nil
+}
+
+type demoStreamConnection struct {
+	mu        sync.Mutex
+	readQueue chan *streaming.StreamChunk
+	closed    bool
+}
+
+func (c *demoStreamConnection) ReadChunk(ctx context.Context) (*streaming.StreamChunk, error) {
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case chunk := <-c.readQueue:
+		return chunk, nil
+	default:
+		return &streaming.StreamChunk{
+			Type:      streaming.StreamTypeText,
+			Text:      "default inbound",
+			Data:      []byte("default inbound"),
+			Timestamp: time.Now(),
+		}, nil
+	}
+}
+
+func (c *demoStreamConnection) WriteChunk(ctx context.Context, chunk streaming.StreamChunk) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.closed {
+		return fmt.Errorf("connection closed")
+	}
+	return nil
+}
+
+func (c *demoStreamConnection) Close() error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.closed = true
+	return nil
+}
+
+func (c *demoStreamConnection) IsAlive() bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return !c.closed
+}
+
+type demoStreamHandler struct{}
+
+func (h *demoStreamHandler) OnInbound(ctx context.Context, chunk streaming.StreamChunk) (*streaming.StreamChunk, error) {
+	return &chunk, nil
+}
+
+func (h *demoStreamHandler) OnOutbound(ctx context.Context, chunk streaming.StreamChunk) error {
+	return nil
+}
+
+func (h *demoStreamHandler) OnStateChange(state streaming.StreamState) {}
+
+type demoStructuredRecord struct {
+	Status  string `json:"status" jsonschema:"enum=success,failure,required"`
+	Message string `json:"message" jsonschema:"required,minLength=1"`
+}
+
+type structuredDemoProvider struct{}
+
+func (p *structuredDemoProvider) Completion(ctx context.Context, req *llm.ChatRequest) (*llm.ChatResponse, error) {
+	return &llm.ChatResponse{
+		Model: req.Model,
+		Choices: []llm.ChatChoice{
+			{
+				Index: 0,
+				Message: types.Message{
+					Role:    llm.RoleAssistant,
+					Content: `{"status":"success","message":"structured demo response"}`,
+				},
+			},
+		},
+		Usage: llm.ChatUsage{TotalTokens: 12},
+	}, nil
+}
+
+func (p *structuredDemoProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-chan llm.StreamChunk, error) {
+	ch := make(chan llm.StreamChunk)
+	close(ch)
+	return ch, nil
+}
+
+func (p *structuredDemoProvider) HealthCheck(ctx context.Context) (*llm.HealthStatus, error) {
+	return &llm.HealthStatus{Healthy: true}, nil
+}
+
+func (p *structuredDemoProvider) Name() string { return "structured-demo-provider" }
+
+func (p *structuredDemoProvider) SupportsNativeFunctionCalling() bool { return false }
+
+func (p *structuredDemoProvider) ListModels(ctx context.Context) ([]llm.Model, error) {
+	return nil, nil
+}
+
+func (p *structuredDemoProvider) Endpoints() llm.ProviderEndpoints { return llm.ProviderEndpoints{} }
+
+type demoSTTProvider struct{}
+
+func (p *demoSTTProvider) StartStream(ctx context.Context, sampleRate int) (voice.STTStream, error) {
+	return &demoSTTStream{
+		transcriptCh: make(chan voice.TranscriptEvent, 4),
+	}, nil
+}
+
+func (p *demoSTTProvider) Name() string { return "demo-stt" }
+
+type demoSTTStream struct {
+	transcriptCh chan voice.TranscriptEvent
+	closed       bool
+	mu           sync.Mutex
+}
+
+func (s *demoSTTStream) Send(chunk voice.AudioChunk) error {
+	s.mu.Lock()
+	closed := s.closed
+	s.mu.Unlock()
+	if closed {
+		return fmt.Errorf("stt stream closed")
+	}
+	select {
+	case s.transcriptCh <- voice.TranscriptEvent{
+		Text:       "transcribed demo text",
+		IsFinal:    true,
+		Confidence: 0.9,
+		Timestamp:  time.Now(),
+	}:
+	default:
+	}
+	return nil
+}
+
+func (s *demoSTTStream) Receive() <-chan voice.TranscriptEvent { return s.transcriptCh }
+
+func (s *demoSTTStream) Close() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.closed {
+		return nil
+	}
+	s.closed = true
+	close(s.transcriptCh)
+	return nil
+}
+
+type demoTTSProvider struct{}
+
+func (p *demoTTSProvider) Synthesize(ctx context.Context, text string) (<-chan voice.SpeechEvent, error) {
+	out := make(chan voice.SpeechEvent, 1)
+	out <- voice.SpeechEvent{
+		Audio:     []byte("audio"),
+		Text:      text,
+		IsFinal:   true,
+		Timestamp: time.Now(),
+	}
+	close(out)
+	return out, nil
+}
+
+func (p *demoTTSProvider) SynthesizeStream(ctx context.Context, textChan <-chan string) (<-chan voice.SpeechEvent, error) {
+	out := make(chan voice.SpeechEvent, 4)
+	go func() {
+		defer close(out)
+		for text := range textChan {
+			select {
+			case <-ctx.Done():
+				return
+			case out <- voice.SpeechEvent{
+				Audio:     []byte("audio"),
+				Text:      text,
+				IsFinal:   true,
+				Timestamp: time.Now(),
+			}:
+			}
+		}
+	}()
+	return out, nil
+}
+
+func (p *demoTTSProvider) Name() string { return "demo-tts" }
+
+type demoVoiceLLMHandler struct{}
+
+func (h *demoVoiceLLMHandler) ProcessStream(ctx context.Context, input string) (<-chan string, error) {
+	out := make(chan string, 1)
+	out <- "voice llm response"
+	close(out)
+	return out, nil
+}
+
+type demoNativeAudioProvider struct{}
+
+func (p *demoNativeAudioProvider) ProcessAudio(ctx context.Context, input voice.MultimodalInput) (*voice.MultimodalOutput, error) {
+	return &voice.MultimodalOutput{
+		Text:       "native audio response",
+		Transcript: input.Text,
+		TokensUsed: 8,
+		Confidence: 0.88,
+	}, nil
+}
+
+func (p *demoNativeAudioProvider) StreamAudio(ctx context.Context, input <-chan voice.AudioFrame) (<-chan voice.AudioFrame, error) {
+	out := make(chan voice.AudioFrame, 4)
+	go func() {
+		defer close(out)
+		for frame := range input {
+			select {
+			case <-ctx.Done():
+				return
+			case out <- frame:
+			}
+		}
+	}()
+	return out, nil
+}
+
+func (p *demoNativeAudioProvider) Name() string { return "demo-native-audio" }

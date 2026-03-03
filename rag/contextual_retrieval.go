@@ -51,9 +51,9 @@ type ContextualRetrievalConfig struct {
 	CacheTTL      time.Duration `json:"cache_ttl"` // 缓存过期时间，默认 1h
 
 	// 分块配置（新增）
-	ChunkSize     int  `json:"chunk_size"`       // 分块大小，默认 500
-	ChunkOverlap  int  `json:"chunk_overlap"`    // 重叠大小，默认 50
-	ChunkByTokens bool `json:"chunk_by_tokens"`  // 按 token 还是字符分块
+	ChunkSize     int  `json:"chunk_size"`      // 分块大小，默认 500
+	ChunkOverlap  int  `json:"chunk_overlap"`   // 重叠大小，默认 50
+	ChunkByTokens bool `json:"chunk_by_tokens"` // 按 token 还是字符分块
 
 	// BM25 参数（新增）
 	BM25K1 float64 `json:"bm25_k1"` // BM25 k1 参数，默认 1.2
@@ -205,6 +205,9 @@ func (r *ContextualRetrieval) Retrieve(ctx context.Context, query string, queryE
 
 	if r.config.UseReranking {
 		results = r.rerankWithContext(query, results)
+	}
+	if len(queryEmbedding) > 0 {
+		results = r.rerankWithEmbedding(queryEmbedding, results)
 	}
 
 	return results, nil
@@ -600,4 +603,3 @@ func sortResultsByFinalScore(results []RetrievalResult) {
 		}
 	}
 }
-

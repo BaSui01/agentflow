@@ -19,7 +19,7 @@ This document defines the runtime startup chain and composition boundaries.
   - logger and telemetry initialization
   - database connection setup
 - `internal/app/bootstrap/handler_runtime_builder.go`
-  - LLM provider runtime setup
+  - LLM runtime setup (`llm/runtime/router` multi-provider pool + routed provider as chat main entry)
   - chat middleware chain setup
   - policy/cache/metrics/budget runtime wiring
 - `internal/app/bootstrap/domain_runtime_builders.go`
@@ -39,9 +39,14 @@ This document defines the runtime startup chain and composition boundaries.
 - `internal/app/bootstrap/hotreload_runtime_builder.go`
   - hot-reload manager/api handler construction and callback registration
 - `internal/app/bootstrap/handler_adapters_builder.go`
-  - agent registry/handler and api-key handler adapter builders
+  - agent registry/handler and api-key/tool-registry handler adapter builders
 - `internal/app/bootstrap/agent_runtime_factory_builder.go`
   - default runtime-backed agent factory registration
+- `internal/app/bootstrap/agent_tooling_runtime_builder.go`
+  - hosted tool registry composition for agent runtime
+  - ToolManager bridge wiring (`hosted.ToolRegistry -> agent.ToolManager`)
+  - built-in retrieval tool and MCP tool bridge registration (`mcp_*`)
+  - shared ToolManager injection target for both `AgentHandler` and `ChatHandler` local tool loop
 - `internal/app/bootstrap/mongo_wiring_builder.go`
   - Mongo prompt/conversation/run stores wiring
   - Mongo optional capabilities wiring (audit, memory, ab-testing, registry persistence)

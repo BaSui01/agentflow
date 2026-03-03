@@ -42,6 +42,7 @@ func NewRAGHandlerWithService(service RAGService, logger *zap.Logger) *RAGHandle
 type ragQueryRequest struct {
 	Query      string `json:"query"`
 	TopK       int    `json:"top_k"`
+	Strategy   string `json:"strategy,omitempty"`
 	Collection string `json:"collection"`
 }
 
@@ -55,6 +56,10 @@ type ragQueryResult struct {
 
 // HandleQuery handles POST /api/v1/rag/query
 func (h *RAGHandler) HandleQuery(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		WriteErrorMessage(w, http.StatusMethodNotAllowed, types.ErrInvalidRequest, "method not allowed", h.logger)
+		return
+	}
 	if !ValidateContentType(w, r, h.logger) {
 		return
 	}
@@ -72,15 +77,17 @@ func (h *RAGHandler) HandleQuery(w http.ResponseWriter, r *http.Request) {
 		req.TopK = 5
 	}
 
-	results, err := h.service.Query(r.Context(), req.Query, req.TopK)
+	queryResponse, err := h.service.Query(r.Context(), req.Query, req.TopK, RAGQueryOptions{
+		Strategy: req.Strategy,
+	})
 	if err != nil {
 		WriteError(w, asTypesError(err), h.logger)
 		return
 	}
 
 	// Convert to response
-	items := make([]ragQueryResult, 0, len(results))
-	for _, res := range results {
+	items := make([]ragQueryResult, 0, len(queryResponse.Results))
+	for _, res := range queryResponse.Results {
 		items = append(items, ragQueryResult{
 			ID:       res.Document.ID,
 			Content:  res.Document.Content,
@@ -92,12 +99,16 @@ func (h *RAGHandler) HandleQuery(w http.ResponseWriter, r *http.Request) {
 	h.logger.Info("rag query completed",
 		zap.String("query", req.Query),
 		zap.Int("top_k", req.TopK),
+		zap.String("requested_strategy", queryResponse.RequestedStrategy),
+		zap.String("effective_strategy", queryResponse.EffectiveStrategy),
 		zap.Int("results", len(items)),
 	)
 
 	WriteSuccess(w, map[string]any{
-		"query":   req.Query,
-		"results": items,
+		"query":              req.Query,
+		"requested_strategy": queryResponse.RequestedStrategy,
+		"effective_strategy": queryResponse.EffectiveStrategy,
+		"results":            items,
 	})
 }
 
@@ -116,6 +127,10 @@ type ragIndexRequest struct {
 
 // HandleIndex handles POST /api/v1/rag/index
 func (h *RAGHandler) HandleIndex(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		WriteErrorMessage(w, http.StatusMethodNotAllowed, types.ErrInvalidRequest, "method not allowed", h.logger)
+		return
+	}
 	if !ValidateContentType(w, r, h.logger) {
 		return
 	}
@@ -158,3 +173,15 @@ func (h *RAGHandler) HandleIndex(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// HandleCapabilities handles GET /api/v1/rag/capabilities
+func (h *RAGHandler) HandleCapabilities(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		WriteErrorMessage(w, http.StatusMethodNotAllowed, types.ErrInvalidRequest, "method not allowed", h.logger)
+		return
+	}
+
+	WriteSuccess(w, map[string]any{
+		"query_strategies": h.service.SupportedStrategies(),
+		"default_strategy": "auto",
+	})
+}

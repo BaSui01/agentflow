@@ -14,6 +14,8 @@ const (
 	keySpanID              contextKey = "span_id"
 	keyAgentID             contextKey = "agent_id"
 	keyLLMModel            contextKey = "llm_model"
+	keyLLMProvider         contextKey = "llm_provider"
+	keyLLMRoutePolicy      contextKey = "llm_route_policy"
 	keyPromptBundleVersion contextKey = "prompt_bundle_version"
 	keyRoles               contextKey = "roles"
 )
@@ -104,6 +106,28 @@ func WithLLMModel(ctx context.Context, model string) context.Context {
 // LLMModel extracts LLM model from context.
 func LLMModel(ctx context.Context) (string, bool) {
 	v, ok := ctx.Value(keyLLMModel).(string)
+	return v, ok && v != ""
+}
+
+// WithLLMProvider adds LLM provider hint to context.
+func WithLLMProvider(ctx context.Context, provider string) context.Context {
+	return context.WithValue(ctx, keyLLMProvider, provider)
+}
+
+// LLMProvider extracts LLM provider hint from context.
+func LLMProvider(ctx context.Context) (string, bool) {
+	v, ok := ctx.Value(keyLLMProvider).(string)
+	return v, ok && v != ""
+}
+
+// WithLLMRoutePolicy adds LLM route policy to context.
+func WithLLMRoutePolicy(ctx context.Context, routePolicy string) context.Context {
+	return context.WithValue(ctx, keyLLMRoutePolicy, routePolicy)
+}
+
+// LLMRoutePolicy extracts LLM route policy from context.
+func LLMRoutePolicy(ctx context.Context) (string, bool) {
+	v, ok := ctx.Value(keyLLMRoutePolicy).(string)
 	return v, ok && v != ""
 }
 

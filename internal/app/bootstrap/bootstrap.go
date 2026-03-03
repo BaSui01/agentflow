@@ -24,19 +24,25 @@ type ServeRuntime struct {
 // LoadAndValidateConfig loads application config from defaults, file, and env,
 // then validates the final result.
 func LoadAndValidateConfig(configPath string) (*config.Config, error) {
-	loader := config.NewLoader()
-	if configPath != "" {
-		loader = loader.WithConfigPath(configPath)
+	if configPath == "" {
+		cfg, err := config.LoadFromEnv()
+		if err != nil {
+			return nil, fmt.Errorf("failed to load config: %w", err)
+		}
+		if err := cfg.Validate(); err != nil {
+			return nil, fmt.Errorf("invalid config: %w", err)
+		}
+		return cfg, nil
 	}
 
-	cfg, err := loader.Load()
+	cfg, err := config.NewLoader().
+		WithConfigPath(configPath).
+		WithEnvPrefix("AGENTFLOW").
+		WithValidator(func(c *config.Config) error { return c.Validate() }).
+		Load()
 	if err != nil {
 		return nil, fmt.Errorf("failed to load config: %w", err)
 	}
-	if err := cfg.Validate(); err != nil {
-		return nil, fmt.Errorf("invalid config: %w", err)
-	}
-
 	return cfg, nil
 }
 

@@ -9,6 +9,7 @@ import (
 
 	"github.com/BaSui01/agentflow/llm"
 	llmtools "github.com/BaSui01/agentflow/llm/capabilities/tools"
+	llmcore "github.com/BaSui01/agentflow/llm/core"
 	"github.com/BaSui01/agentflow/types"
 
 	"go.uber.org/zap"
@@ -63,6 +64,7 @@ func (b *BaseAgent) ChatCompletion(ctx context.Context, messages []types.Message
 	if rc != nil {
 		rc.ApplyToRequest(req, b.config)
 	}
+	applyContextRouteHints(req, ctx)
 
 	// 按白名单过滤可用工具
 	if b.toolManager != nil && len(b.config.Runtime.Tools) > 0 {
@@ -280,6 +282,7 @@ func (b *BaseAgent) StreamCompletion(ctx context.Context, messages []types.Messa
 	if rc := GetRunConfig(ctx); rc != nil {
 		rc.ApplyToRequest(req, b.config)
 	}
+	applyContextRouteHints(req, ctx)
 
 	if b.toolManager != nil && len(b.config.Runtime.Tools) > 0 {
 		req.Tools = filterToolSchemasByWhitelist(b.toolManager.GetAllowedTools(b.config.Core.ID), b.config.Runtime.Tools)
@@ -317,6 +320,8 @@ type runConfigKey struct{}
 // are applied, leaving the base Config defaults intact.
 type RunConfig struct {
 	Model              *string           `json:"model,omitempty"`
+	Provider           *string           `json:"provider,omitempty"`
+	RoutePolicy        *string           `json:"route_policy,omitempty"`
 	Temperature        *float32          `json:"temperature,omitempty"`
 	MaxTokens          *int              `json:"max_tokens,omitempty"`
 	TopP               *float32          `json:"top_p,omitempty"`
@@ -350,6 +355,24 @@ func (rc *RunConfig) ApplyToRequest(req *llm.ChatRequest, baseCfg types.AgentCon
 
 	if rc.Model != nil {
 		req.Model = *rc.Model
+	}
+	if rc.Provider != nil {
+		provider := strings.TrimSpace(*rc.Provider)
+		if provider != "" {
+			if req.Metadata == nil {
+				req.Metadata = make(map[string]string, 2)
+			}
+			req.Metadata[llmcore.MetadataKeyChatProvider] = provider
+		}
+	}
+	if rc.RoutePolicy != nil {
+		routePolicy := strings.TrimSpace(*rc.RoutePolicy)
+		if routePolicy != "" {
+			if req.Metadata == nil {
+				req.Metadata = make(map[string]string, 2)
+			}
+			req.Metadata["route_policy"] = routePolicy
+		}
 	}
 	if rc.Temperature != nil {
 		req.Temperature = *rc.Temperature
@@ -468,4 +491,22 @@ func runtimeStreamEmitterFromContext(ctx context.Context) (RuntimeStreamEmitter,
 	}
 	emit, ok := v.(RuntimeStreamEmitter)
 	return emit, ok && emit != nil
+}
+
+func applyContextRouteHints(req *llm.ChatRequest, ctx context.Context) {
+	if req == nil {
+		return
+	}
+	if provider, ok := types.LLMProvider(ctx); ok && strings.TrimSpace(provider) != "" {
+		if req.Metadata == nil {
+			req.Metadata = make(map[string]string, 2)
+		}
+		req.Metadata[llmcore.MetadataKeyChatProvider] = strings.TrimSpace(provider)
+	}
+	if routePolicy, ok := types.LLMRoutePolicy(ctx); ok && strings.TrimSpace(routePolicy) != "" {
+		if req.Metadata == nil {
+			req.Metadata = make(map[string]string, 2)
+		}
+		req.Metadata["route_policy"] = strings.TrimSpace(routePolicy)
+	}
 }

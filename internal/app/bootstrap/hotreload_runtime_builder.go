@@ -15,15 +15,21 @@ type HotReloadRuntime struct {
 func BuildHotReloadRuntime(cfg *config.Config, configPath string, logger *zap.Logger) *HotReloadRuntime {
 	opts := []config.HotReloadOption{
 		config.WithHotReloadLogger(logger),
+		config.WithMaxHistorySize(20),
+		config.WithValidateFunc(func(newConfig *config.Config) error {
+			return newConfig.Validate()
+		}),
 	}
 	if configPath != "" {
 		opts = append(opts, config.WithConfigPath(configPath))
 	}
 
 	manager := config.NewHotReloadManager(cfg, opts...)
+	apiHandler := config.NewConfigAPIHandler(manager)
+	apiHandler.SetLogger(logger)
 	return &HotReloadRuntime{
 		Manager:    manager,
-		APIHandler: config.NewConfigAPIHandler(manager),
+		APIHandler: apiHandler,
 	}
 }
 
@@ -46,5 +52,12 @@ func RegisterHotReloadCallbacks(
 		if onReload != nil {
 			onReload(oldConfig, newConfig)
 		}
+	})
+
+	manager.OnRollback(func(event config.RollbackEvent) {
+		logger.Warn("Configuration rolled back",
+			zap.String("reason", event.Reason),
+			zap.Int("version", event.Version),
+		)
 	})
 }

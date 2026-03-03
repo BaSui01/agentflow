@@ -550,12 +550,15 @@ func (m *HotReloadManager) Start(ctx context.Context) error {
 	// 如果设置了配置路径则启动文件监视程序
 	if m.configPath != "" {
 		watcher, err := NewFileWatcher(
-			[]string{m.configPath},
+			nil,
 			WithWatcherLogger(m.logger),
 			WithDebounceDelay(500*time.Millisecond),
 		)
 		if err != nil {
 			return fmt.Errorf("failed to create file watcher: %w", err)
+		}
+		if err := watcher.AddPath(m.configPath); err != nil {
+			return fmt.Errorf("failed to register config path: %w", err)
 		}
 
 		watcher.OnChange(m.handleFileChange)
@@ -563,13 +566,22 @@ func (m *HotReloadManager) Start(ctx context.Context) error {
 		if err := watcher.Start(m.ctx); err != nil {
 			return fmt.Errorf("failed to start file watcher: %w", err)
 		}
+		if !watcher.IsRunning() {
+			return fmt.Errorf("file watcher failed to enter running state")
+		}
 
 		m.watcher = watcher
 	}
 
 	m.running = true
 	m.logger.Info("Hot reload manager started",
-		zap.String("config_path", m.configPath))
+		zap.String("config_path", m.configPath),
+		zap.Strings("watch_paths", func() []string {
+			if m.watcher == nil {
+				return nil
+			}
+			return m.watcher.Paths()
+		}()))
 
 	return nil
 }
@@ -588,10 +600,25 @@ func (m *HotReloadManager) Stop() error {
 	}
 
 	if m.watcher != nil {
-		if err := m.watcher.Stop(); err != nil {
+		for _, p := range m.watcher.Paths() {
+			if err := m.watcher.RemovePath(p); err != nil {
+				m.logger.Warn("Failed to remove watcher path before stop",
+					zap.String("path", p),
+					zap.Error(err),
+				)
+			}
+		}
+		if m.watcher.IsRunning() {
+			if err := m.watcher.Stop(); err != nil {
+				m.logger.Error("Failed to stop file watcher",
+					zap.String("config_path", m.configPath),
+					zap.Error(err),
+				)
+			}
+		} else {
 			m.logger.Error("Failed to stop file watcher",
 				zap.String("config_path", m.configPath),
-				zap.Error(err),
+				zap.String("reason", "watcher not running"),
 			)
 		}
 	}

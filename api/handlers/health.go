@@ -71,6 +71,7 @@ func (h *HealthHandler) RegisterCheck(check HealthCheck) {
 // @Failure 503 {object} ServiceHealthResponse "服务不健康"
 // @Router /health [get]
 func (h *HealthHandler) HandleHealth(w http.ResponseWriter, r *http.Request) {
+	w = NewResponseWriter(w)
 	status := ServiceHealthResponse{
 		Status:    "healthy",
 		Timestamp: time.Now(),
@@ -87,6 +88,7 @@ func (h *HealthHandler) HandleHealth(w http.ResponseWriter, r *http.Request) {
 // @Success 200 {object} ServiceHealthResponse "服务处于活动状态"
 // @Router /healthz [get]
 func (h *HealthHandler) HandleHealthz(w http.ResponseWriter, r *http.Request) {
+	w = NewResponseWriter(w)
 	// Liveness probe - 只检查服务是否运行
 	status := ServiceHealthResponse{
 		Status:    "healthy",

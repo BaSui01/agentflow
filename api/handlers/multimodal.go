@@ -350,7 +350,7 @@ func (h *MultimodalHandler) HandleImage(w http.ResponseWriter, r *http.Request) 
 		WriteErrorMessage(w, http.StatusBadRequest, types.ErrInvalidRequest, "prompt is required", h.logger)
 		return
 	}
-	if req.N < 0 {
+	if !ValidateNonNegative(float64(req.N)) {
 		WriteErrorMessage(w, http.StatusBadRequest, types.ErrInvalidRequest, "n must be non-negative", h.logger)
 		return
 	}

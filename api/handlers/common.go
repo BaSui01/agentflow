@@ -161,6 +161,11 @@ type ResponseWriter struct {
 	Written    bool
 }
 
+var (
+	_ http.Hijacker = (*ResponseWriter)(nil)
+	_ http.Flusher  = (*ResponseWriter)(nil)
+)
+
 // NewResponseWriter 创建新的 ResponseWriter
 func NewResponseWriter(w http.ResponseWriter) *ResponseWriter {
 	return &ResponseWriter{
@@ -184,6 +189,13 @@ func (rw *ResponseWriter) Write(b []byte) (int, error) {
 		rw.WriteHeader(http.StatusOK)
 	}
 	return rw.ResponseWriter.Write(b)
+}
+
+// Flush implements http.Flusher by forwarding to the underlying writer when supported.
+func (rw *ResponseWriter) Flush() {
+	if f, ok := rw.ResponseWriter.(http.Flusher); ok {
+		f.Flush()
+	}
 }
 
 // Hijack implements http.Hijacker so WebSocket upgrades work through wrapped ResponseWriters.

@@ -13,13 +13,14 @@
 
 路由注册在 `api/routes/routes.go`，统一挂载到 `/api/v1/*`：
 
-- Chat: `/api/v1/chat/completions`、`/api/v1/chat/completions/stream`
-- Agent: `/api/v1/agents`、`/api/v1/agents/execute`、`/api/v1/agents/execute/stream`、`/api/v1/agents/plan`、`/api/v1/agents/health`
+- Chat: `/api/v1/chat/capabilities`、`/api/v1/chat/completions`、`/api/v1/chat/completions/stream`
+- Agent: `/api/v1/agents`、`/api/v1/agents/capabilities`、`/api/v1/agents/execute`、`/api/v1/agents/execute/stream`、`/api/v1/agents/plan`、`/api/v1/agents/health`
 - RAG: `/api/v1/rag/query`、`/api/v1/rag/index`
 - Workflow: `/api/v1/workflows/execute`、`/api/v1/workflows/parse`、`/api/v1/workflows`
 - Multimodal: `/api/v1/multimodal/*`
 - Protocol: `/api/v1/mcp/*`、`/api/v1/a2a/*`
 - Provider API Key: `/api/v1/providers/*`
+- Tool Registry: `/api/v1/tools*`
 - Config API: `/api/v1/config*`
 
 ## 关键构造示例
@@ -32,7 +33,7 @@ http.HandleFunc("/api/v1/chat/completions", chatHandler.HandleCompletion)
 http.HandleFunc("/api/v1/chat/completions/stream", chatHandler.HandleStream)
 ```
 
-说明：`ChatHandler` 内部通过 `llm/gateway` 统一调用 `Invoke/Stream`，不直接在 handler 层拼装 provider 细节。
+说明：`ChatHandler` 通过 `ChatService` 统一路由参数并调用 `llm/gateway` `Invoke/Stream`，不在 handler 层拼装 provider 细节。
 
 ### Agent Handler
 

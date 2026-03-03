@@ -2,6 +2,7 @@ package bootstrap
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"time"
 
@@ -12,7 +13,9 @@ import (
 	"github.com/BaSui01/agentflow/llm/observability"
 	"github.com/BaSui01/agentflow/llm/providers/vendor"
 	llmpolicy "github.com/BaSui01/agentflow/llm/runtime/policy"
+	llmrouter "github.com/BaSui01/agentflow/llm/runtime/router"
 	"go.uber.org/zap"
+	"gorm.io/gorm"
 )
 
 // LLMHandlerRuntime groups LLM-related runtime dependencies used by API handlers.
@@ -27,17 +30,13 @@ type LLMHandlerRuntime struct {
 }
 
 // BuildLLMHandlerRuntime creates the LLM runtime required by handler layer.
-// If no API key is configured, it returns nil and does not create runtime objects.
-func BuildLLMHandlerRuntime(cfg *config.Config, logger *zap.Logger) (*LLMHandlerRuntime, error) {
-	if strings.TrimSpace(cfg.LLM.APIKey) == "" {
-		return nil, nil
+// The main provider entry is multi-provider router + routed provider.
+func BuildLLMHandlerRuntime(cfg *config.Config, db *gorm.DB, logger *zap.Logger) (*LLMHandlerRuntime, error) {
+	if db == nil {
+		return nil, fmt.Errorf("database is required for multi-provider router runtime")
 	}
 
-	baseProvider, err := vendor.NewChatProviderFromConfig(cfg.LLM.DefaultProvider, vendor.ChatProviderConfig{
-		APIKey:  cfg.LLM.APIKey,
-		BaseURL: cfg.LLM.BaseURL,
-		Timeout: cfg.LLM.Timeout,
-	}, logger)
+	baseProvider, err := buildRoutedMainProvider(cfg, db, logger)
 	if err != nil {
 		return nil, err
 	}
@@ -124,6 +123,41 @@ func BuildLLMHandlerRuntime(cfg *config.Config, logger *zap.Logger) (*LLMHandler
 		Metrics:       llmMetrics,
 		PolicyManager: policyManager,
 	}, nil
+}
+
+func buildRoutedMainProvider(cfg *config.Config, db *gorm.DB, logger *zap.Logger) (llm.Provider, error) {
+	factory := &vendorRouterProviderFactory{
+		timeout: cfg.LLM.Timeout,
+		logger:  logger,
+	}
+	router := llmrouter.NewMultiProviderRouter(db, factory, llmrouter.RouterOptions{Logger: logger})
+	if err := router.InitAPIKeyPools(context.Background()); err != nil {
+		router.Stop()
+		return nil, fmt.Errorf("failed to initialize llm router api key pools: %w", err)
+	}
+	if len(router.GetAPIKeyStats()) == 0 {
+		router.Stop()
+		return nil, fmt.Errorf("no active provider api keys found in llm router pool")
+	}
+
+	logger.Info("LLM main provider initialized with multi-provider router")
+	return llmrouter.NewRoutedChatProvider(router, llmrouter.RoutedChatProviderOptions{
+		DefaultStrategy: llmrouter.StrategyQPSBased,
+		Logger:          logger,
+	}), nil
+}
+
+type vendorRouterProviderFactory struct {
+	timeout time.Duration
+	logger  *zap.Logger
+}
+
+func (f *vendorRouterProviderFactory) CreateProvider(providerCode string, apiKey string, baseURL string) (llmrouter.Provider, error) {
+	return vendor.NewChatProviderFromConfig(providerCode, vendor.ChatProviderConfig{
+		APIKey:  strings.TrimSpace(apiKey),
+		BaseURL: strings.TrimSpace(baseURL),
+		Timeout: f.timeout,
+	}, f.logger)
 }
 
 func buildToolProviderOrFallback(cfg *config.Config, logger *zap.Logger, mainProvider llm.Provider) llm.Provider {

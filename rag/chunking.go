@@ -107,8 +107,12 @@ func (c *DocumentChunker) recursiveChunking(doc Document) []Chunk {
 // recursiveSplit 递归分割
 func (c *DocumentChunker) recursiveSplit(text string, separators []string, startPos int, depth int) []Chunk {
 	if len(separators) == 0 {
-		// 最后一级：按字符分割（句子边界感知）
-		return c.splitByCharactersWithBoundary(text, startPos)
+		// 最后一级：根据配置选择字符切分方式
+		// PreserveHeaders=true 时优先句子边界切分；否则走纯字符切分兜底。
+		if c.config.PreserveHeaders {
+			return c.splitByCharactersWithBoundary(text, startPos)
+		}
+		return c.splitByCharacters(text, startPos)
 	}
 
 	separator := separators[0]
@@ -446,7 +450,7 @@ func (c *DocumentChunker) splitIntoSentences(text string) []string {
 		}
 
 		if isDelimiter {
-			trimmed := strings.TrimSpace(currentSentence)
+			trimmed := strings.TrimFunc(currentSentence, isWhitespace)
 			if trimmed != "" {
 				sentences = append(sentences, trimmed)
 			}
@@ -455,8 +459,8 @@ func (c *DocumentChunker) splitIntoSentences(text string) []string {
 	}
 
 	// 添加最后一个句子
-	if strings.TrimSpace(currentSentence) != "" {
-		sentences = append(sentences, strings.TrimSpace(currentSentence))
+	if strings.TrimFunc(currentSentence, isWhitespace) != "" {
+		sentences = append(sentences, strings.TrimFunc(currentSentence, isWhitespace))
 	}
 
 	return sentences
