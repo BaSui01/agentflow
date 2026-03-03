@@ -44,7 +44,7 @@
 - `agent/memory/enhanced_memory.go`、`agent/memory/inmemory_vector_store.go` 当前是 `agent -> rag` 的单向依赖，`rag` 仅提供检索与向量契约。
 - `api/handlers/rag.go` 直接以 `rag.VectorStore` + `rag.EmbeddingProvider` 提供 API，说明 `rag` 具备独立对外能力，不是 `agent` 私有实现。
 - `cmd/agentflow/server_handlers_runtime.go` 中 `initRAGHandler()` 与 `workflowHandler` 独立初始化，运行时装配是并列域能力，而非内嵌关系。
-- `workflow/adapters/agent_adapter.go` 通过适配器桥接 `agent`，`workflow` 是编排层，不应吸收 `agent/rag` 领域实现。
+- `workflow` 通过 `workflow/steps/agent.go` + `engine.StepDependencies` 桥接 `agent`，`workflow` 是编排层，不应吸收 `agent/rag` 领域实现。
 
 强制边界：
 

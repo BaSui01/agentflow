@@ -59,6 +59,13 @@ func DefaultAgentConfig() AgentConfig {
 			MaxMessages: 100,
 			TokenLimit:  8000,
 		},
+		Checkpoint: CheckpointConfig{
+			Enabled:     true,
+			Backend:     "file",
+			FilePath:    "./checkpoints",
+			RedisPrefix: "agentflow:checkpoint",
+			RedisTTL:    24 * time.Hour,
+		},
 	}
 }
 

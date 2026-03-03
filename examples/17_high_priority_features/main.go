@@ -7,6 +7,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
+	"os"
 	"time"
 
 	"github.com/BaSui01/agentflow/agent/artifacts"
@@ -14,6 +16,8 @@ import (
 	"github.com/BaSui01/agentflow/agent/hitl"
 	"github.com/BaSui01/agentflow/pkg/openapi"
 	"github.com/BaSui01/agentflow/workflow"
+	"github.com/BaSui01/agentflow/workflow/dsl"
+	workflowobs "github.com/BaSui01/agentflow/workflow/observability"
 	"go.uber.org/zap"
 )
 
@@ -41,6 +45,9 @@ func main() {
 	// 6. Visual Workflow Builder
 	demoVisualBuilder(ctx, logger)
 
+	// 7. DSL Parser + Workflow Observability Context
+	demoDSLParserAndObservability(ctx)
+
 	fmt.Println("\n=== All demos completed ===")
 }
 
@@ -55,6 +62,10 @@ func demoArtifacts(ctx context.Context, logger *zap.Logger) {
 	artifact, err := manager.Create(ctx, "test.txt", artifacts.ArtifactTypeFile, data,
 		artifacts.WithTags("demo", "test"),
 		artifacts.WithCreatedBy("demo_user"),
+		artifacts.WithMetadata(map[string]any{"scenario": "high-priority-demo"}),
+		artifacts.WithMimeType("text/plain"),
+		artifacts.WithSessionID("demo-session-17"),
+		artifacts.WithTTL(2*time.Minute),
 	)
 	if err != nil {
 		fmt.Printf("   Error: %v\n", err)
@@ -62,9 +73,35 @@ func demoArtifacts(ctx context.Context, logger *zap.Logger) {
 	}
 	fmt.Printf("   Created artifact: %s (size: %d bytes)\n", artifact.ID, artifact.Size)
 
+	metadata, _ := manager.GetMetadata(ctx, artifact.ID)
+	loadedMeta := "missing"
+	if metadata != nil {
+		loadedMeta = metadata.Name
+	}
+	loadedArtifact, reader, err := manager.Get(ctx, artifact.ID)
+	if err == nil && reader != nil {
+		_, _ = io.ReadAll(reader)
+		_ = reader.Close()
+	}
+	fmt.Printf("   Loaded artifact: %s\n", loadedArtifact.ID)
+	fmt.Printf("   Metadata name: %s\n", loadedMeta)
+
+	_ = manager.Archive(ctx, artifact.ID)
+
+	v2, err := manager.CreateVersion(ctx, artifact.ID, bytes.NewReader([]byte("v2 content")))
+	if err == nil {
+		fmt.Printf("   Created artifact version: %s (parent=%s)\n", v2.ID, artifact.ID)
+		_ = manager.Delete(ctx, v2.ID)
+	}
+
 	// List artifacts
 	list, _ := manager.List(ctx, artifacts.ArtifactQuery{Tags: []string{"demo"}})
-	fmt.Printf("   Found %d artifacts with 'demo' tag\n\n", len(list))
+	fmt.Printf("   Found %d artifacts with 'demo' tag\n", len(list))
+
+	deleted, cleanupErr := manager.Cleanup(ctx)
+	fmt.Printf("   Cleanup deleted: %d (err=%v)\n", deleted, cleanupErr)
+	_ = manager.Delete(ctx, artifact.ID)
+	fmt.Println()
 }
 
 func demoHITL(ctx context.Context, logger *zap.Logger) {
@@ -192,7 +229,40 @@ func demoCheckpoints(ctx context.Context, logger *zap.Logger) {
 
 	// Compare versions
 	diff, _ := manager.Compare(ctx, "thread_demo", 1, 3)
-	fmt.Printf("   Diff v1->v3: changed=%v\n\n", diff.ChangedNodes)
+	fmt.Printf("   Diff v1->v3: changed=%v\n", diff.ChangedNodes)
+
+	// Create + resume + rollback with real manager methods
+	graph := workflow.NewDAGGraph()
+	graph.AddNode(&workflow.DAGNode{
+		ID:   "start",
+		Type: workflow.NodeTypeAction,
+		Step: workflow.NewFuncStep("start", func(ctx context.Context, input any) (any, error) {
+			return "ok", nil
+		}),
+	})
+	graph.SetEntry("start")
+	executor := workflow.NewDAGExecutor(nil, logger)
+
+	created, err := manager.CreateCheckpoint(ctx, executor, graph, "thread_demo_rt", map[string]any{"demo": true})
+	if err != nil {
+		fmt.Printf("   CreateCheckpoint error: %v\n\n", err)
+		return
+	}
+
+	resumed, err := manager.ResumeFromCheckpoint(ctx, created.ID, graph)
+	if err != nil {
+		fmt.Printf("   ResumeFromCheckpoint error: %v\n\n", err)
+		return
+	}
+	_, resumedOK := resumed.GetNodeResult("start")
+
+	rolled, err := manager.Rollback(ctx, "thread_demo_rt", 1)
+	if err != nil {
+		fmt.Printf("   Rollback error: %v\n\n", err)
+		return
+	}
+
+	fmt.Printf("   Runtime checkpoint: id=%s resumed_start=%v rollback_version=%d\n\n", created.ID, resumedOK, rolled.Version)
 }
 
 func demoVisualBuilder(ctx context.Context, logger *zap.Logger) {
@@ -207,11 +277,13 @@ func demoVisualBuilder(ctx context.Context, logger *zap.Logger) {
 			{ID: "start", Type: workflow.VNodeStart, Label: "Start", Position: workflow.Position{X: 100, Y: 100}},
 			{ID: "llm", Type: workflow.VNodeLLM, Label: "LLM Call", Position: workflow.Position{X: 300, Y: 100},
 				Config: workflow.NodeConfig{Model: "gpt-4", Prompt: "Hello"}},
-			{ID: "end", Type: workflow.VNodeEnd, Label: "End", Position: workflow.Position{X: 500, Y: 100}},
+			{ID: "code", Type: workflow.VNodeCode, Label: "Code Step", Position: workflow.Position{X: 500, Y: 100}},
+			{ID: "end", Type: workflow.VNodeEnd, Label: "End", Position: workflow.Position{X: 700, Y: 100}},
 		},
 		Edges: []workflow.VisualEdge{
 			{ID: "e1", Source: "start", Target: "llm"},
-			{ID: "e2", Source: "llm", Target: "end"},
+			{ID: "e2", Source: "llm", Target: "code"},
+			{ID: "e3", Source: "code", Target: "end"},
 		},
 	}
 
@@ -223,13 +295,112 @@ func demoVisualBuilder(ctx context.Context, logger *zap.Logger) {
 
 	// Build executable DAG
 	builder := workflow.NewVisualBuilder()
+	builder.RegisterStep("custom-tool", workflow.NewFuncStep("custom-tool", func(ctx context.Context, input any) (any, error) {
+		return map[string]any{"ok": true, "source": "visual-builder"}, nil
+	}))
+
+	toolWorkflow := &workflow.VisualWorkflow{
+		ID:   "vw_tool",
+		Name: "Tool Workflow",
+		Nodes: []workflow.VisualNode{
+			{ID: "start", Type: workflow.VNodeStart, Label: "Start"},
+			{ID: "tool", Type: workflow.VNodeTool, Label: "Tool", Config: workflow.NodeConfig{ToolName: "custom-tool"}},
+		},
+		Edges: []workflow.VisualEdge{
+			{ID: "te1", Source: "start", Target: "tool"},
+		},
+	}
+	if _, err := builder.Build(toolWorkflow); err != nil {
+		fmt.Printf("   Build tool workflow error: %v\n", err)
+	}
+
+	serialized, err := vw.Export()
+	if err != nil {
+		fmt.Printf("   Export error: %v\n", err)
+		return
+	}
+	imported, err := workflow.Import(serialized)
+	if err != nil {
+		fmt.Printf("   Import error: %v\n", err)
+		return
+	}
+
 	dag, err := builder.Build(vw)
 	if err != nil {
 		fmt.Printf("   Build error: %v\n", err)
 		return
 	}
 
-	fmt.Printf("   Built DAG workflow: %s\n", dag.Name())
+	fmt.Printf("   Built DAG workflow: %s (imported=%s)\n", dag.Name(), imported.Name)
 	fmt.Printf("   Nodes: %d, Entry: %s\n", len(dag.Graph().Nodes()), dag.Graph().GetEntry())
+	executor := workflow.NewDAGExecutor(nil, logger)
+	out, execErr := executor.Execute(ctx, dag.Graph(), map[string]any{"message": "demo"})
+	fmt.Printf("   Execute result type: %T, err: %v\n", out, execErr)
 }
 
+func demoDSLParserAndObservability(ctx context.Context) {
+	fmt.Println("7. DSL Parser + Workflow Observability Context")
+
+	const dslYAML = `
+version: "1.0"
+name: "dsl-observability-demo"
+description: "ParseFile + RegisterCondition + stream/observe context demo"
+workflow:
+  entry: start
+  nodes:
+    - id: start
+      type: action
+      step_def:
+        type: passthrough
+      next: [check]
+    - id: check
+      type: condition
+      condition: always_true
+      on_true: [done]
+      on_false: [fallback]
+    - id: done
+      type: action
+      step_def:
+        type: passthrough
+    - id: fallback
+      type: action
+      step_def:
+        type: passthrough
+`
+
+	tmpFile, err := os.CreateTemp("", "agentflow-dsl-*.yaml")
+	if err != nil {
+		fmt.Printf("   CreateTemp error: %v\n", err)
+		return
+	}
+	defer os.Remove(tmpFile.Name())
+	if _, err = tmpFile.WriteString(dslYAML); err != nil {
+		fmt.Printf("   Write DSL error: %v\n", err)
+		_ = tmpFile.Close()
+		return
+	}
+	_ = tmpFile.Close()
+
+	parser := dsl.NewParser()
+	parser.RegisterCondition("always_true", func(ctx context.Context, input any) (bool, error) {
+		return true, nil
+	})
+
+	wf, err := parser.ParseFile(tmpFile.Name())
+	if err != nil {
+		fmt.Printf("   ParseFile error: %v\n", err)
+		return
+	}
+
+	streamEvents := 0
+	nodeEvents := 0
+	obsCtx := workflow.WithWorkflowStreamEmitter(ctx, func(event workflow.WorkflowStreamEvent) {
+		streamEvents++
+	})
+	obsCtx = workflowobs.WithNodeEventEmitter(obsCtx, func(event workflowobs.NodeEvent) {
+		nodeEvents++
+	})
+
+	result, err := wf.Execute(obsCtx, map[string]any{"source": "dsl-demo"})
+	fmt.Printf("   Result type: %T, err: %v, stream_events=%d, node_events=%d\n", result, err, streamEvents, nodeEvents)
+}

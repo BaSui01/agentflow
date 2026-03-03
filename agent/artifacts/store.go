@@ -211,4 +211,3 @@ func (s *FileStore) saveIndex() error {
 	}
 	return os.WriteFile(indexPath, data, 0o600)
 }
-

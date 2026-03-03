@@ -609,10 +609,10 @@ endif
 	@echo "🗄️ Creating migration files..."
 	@TIMESTAMP=$$(date +%Y%m%d%H%M%S); \
 	for db in postgres mysql sqlite; do \
-		touch migrations/$$db/$${TIMESTAMP}_$(NAME).up.sql; \
-		touch migrations/$$db/$${TIMESTAMP}_$(NAME).down.sql; \
-		echo "Created: migrations/$$db/$${TIMESTAMP}_$(NAME).up.sql"; \
-		echo "Created: migrations/$$db/$${TIMESTAMP}_$(NAME).down.sql"; \
+		touch pkg/migration/migrations/$$db/$${TIMESTAMP}_$(NAME).up.sql; \
+		touch pkg/migration/migrations/$$db/$${TIMESTAMP}_$(NAME).down.sql; \
+		echo "Created: pkg/migration/migrations/$$db/$${TIMESTAMP}_$(NAME).up.sql"; \
+		echo "Created: pkg/migration/migrations/$$db/$${TIMESTAMP}_$(NAME).down.sql"; \
 	done
 	@echo "✅ Migration files created"
 

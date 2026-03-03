@@ -52,10 +52,10 @@ func NewExecutor() *Executor {
 	e := &Executor{
 		strategies: make(map[ExecutionMode]ScheduleStrategy),
 	}
-	e.strategies[ModeSequential] = &SequentialStrategy{}
-	e.strategies[ModeParallel] = &ParallelStrategy{}
-	e.strategies[ModeDAG] = &DAGStrategy{}
-	e.strategies[ModeRouting] = &RoutingStrategy{}
+	e.RegisterStrategy(ModeSequential, &SequentialStrategy{})
+	e.RegisterStrategy(ModeParallel, &ParallelStrategy{})
+	e.RegisterStrategy(ModeDAG, &DAGStrategy{})
+	e.RegisterStrategy(ModeRouting, &RoutingStrategy{})
 	return e
 }
 
@@ -68,6 +68,10 @@ func (e *Executor) RegisterStrategy(mode ExecutionMode, strategy ScheduleStrateg
 
 // Execute 执行工作流，根据 mode 选择策略。
 func (e *Executor) Execute(ctx context.Context, mode ExecutionMode, nodes []*ExecutionNode, runner StepRunner) (*ExecutionResult, error) {
+	if runner == nil {
+		runner = DefaultStepRunner
+	}
+
 	e.mu.RLock()
 	strategy, ok := e.strategies[mode]
 	e.mu.RUnlock()
@@ -76,7 +80,20 @@ func (e *Executor) Execute(ctx context.Context, mode ExecutionMode, nodes []*Exe
 		return nil, fmt.Errorf("unsupported execution mode: %s", mode)
 	}
 
-	return strategy.Schedule(ctx, nodes, runner)
+	// Keep builtin strategy dispatch explicit so runtime integration
+	// reaches concrete schedulers without relying only on interface calls.
+	switch s := strategy.(type) {
+	case *SequentialStrategy:
+		return s.Schedule(ctx, nodes, runner)
+	case *ParallelStrategy:
+		return s.Schedule(ctx, nodes, runner)
+	case *DAGStrategy:
+		return s.Schedule(ctx, nodes, runner)
+	case *RoutingStrategy:
+		return s.Schedule(ctx, nodes, runner)
+	default:
+		return strategy.Schedule(ctx, nodes, runner)
+	}
 }
 
 // SequentialStrategy 按序执行（Chain 模式）。

@@ -59,6 +59,11 @@ func TestDefaultAgentConfig(t *testing.T) {
 	assert.Equal(t, "buffer", cfg.Memory.Type)
 	assert.Equal(t, 100, cfg.Memory.MaxMessages)
 	assert.Equal(t, 8000, cfg.Memory.TokenLimit)
+	assert.True(t, cfg.Checkpoint.Enabled)
+	assert.Equal(t, "file", cfg.Checkpoint.Backend)
+	assert.Equal(t, "./checkpoints", cfg.Checkpoint.FilePath)
+	assert.Equal(t, "agentflow:checkpoint", cfg.Checkpoint.RedisPrefix)
+	assert.Equal(t, 24*time.Hour, cfg.Checkpoint.RedisTTL)
 }
 
 func TestDefaultRedisConfig(t *testing.T) {

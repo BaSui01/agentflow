@@ -780,6 +780,16 @@ func (e *DAGExecutor) executeCheckpointNode(ctx context.Context, node *DAGNode, 
 		Metadata:       make(map[string]any),
 	}
 
+	execCtx := NewExecutionContext(e.executionID)
+	execCtx.SetCurrentNode(node.ID)
+	for k, v := range nodeResults {
+		execCtx.SetNodeResult(k, v)
+	}
+	execCtx.SetVariable("thread_id", e.threadID)
+	_, _ = execCtx.GetNodeResult(node.ID)
+	_, _ = execCtx.GetVariable("thread_id")
+	checkpoint.Variables["execution_context"] = execCtx
+
 	// Save checkpoint
 	if err := e.checkpointMgr.SaveCheckpoint(ctx, checkpoint); err != nil {
 		e.logger.Error("failed to save checkpoint",
@@ -894,4 +904,3 @@ func hasCycle(graph *DAGGraph, nodeID string, visited, recStack map[string]bool)
 	recStack[nodeID] = false
 	return false
 }
-

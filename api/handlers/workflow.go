@@ -3,10 +3,13 @@ package handlers
 import (
 	"context"
 	"net/http"
+	"path/filepath"
+	"strings"
 
 	"github.com/BaSui01/agentflow/types"
 	"github.com/BaSui01/agentflow/workflow"
 	"github.com/BaSui01/agentflow/workflow/dsl"
+	workflowobs "github.com/BaSui01/agentflow/workflow/observability"
 	"go.uber.org/zap"
 	"gopkg.in/yaml.v3"
 )
@@ -34,8 +37,12 @@ func NewWorkflowHandler(executor WorkflowExecutor, parser *dsl.Parser, logger *z
 
 // workflowExecuteRequest is the request body for HandleExecute.
 type workflowExecuteRequest struct {
-	DSL   string `json:"dsl"`
-	Input any    `json:"input"`
+	DSL     string `json:"dsl"`
+	DSLFile string `json:"dsl_file,omitempty"`
+	DAGJSON string `json:"dag_json,omitempty"`
+	DAGYAML string `json:"dag_yaml,omitempty"`
+	DAGFile string `json:"dag_file,omitempty"`
+	Input   any    `json:"input"`
 }
 
 // HandleExecute handles POST /api/v1/workflows/execute
@@ -49,13 +56,39 @@ func (h *WorkflowHandler) HandleExecute(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	if req.DSL == "" {
-		WriteErrorMessage(w, http.StatusBadRequest, types.ErrInvalidRequest, "dsl is required", h.logger)
+	if req.DSL == "" && req.DSLFile == "" && req.DAGJSON == "" && req.DAGYAML == "" && req.DAGFile == "" {
+		WriteErrorMessage(w, http.StatusBadRequest, types.ErrInvalidRequest, "dsl/dsl_file/dag_json/dag_yaml/dag_file is required", h.logger)
 		return
 	}
 
 	// Parse DSL into workflow
-	wf, err := h.parser.Parse([]byte(req.DSL))
+	var (
+		wf  *workflow.DAGWorkflow
+		err error
+	)
+	if req.DAGFile != "" {
+		var def *workflow.DAGDefinition
+		def, err = loadDAGDefinition(req.DAGFile)
+		if err == nil {
+			wf, err = def.ToDAGWorkflow()
+		}
+	} else if req.DAGJSON != "" {
+		var def *workflow.DAGDefinition
+		def, err = workflow.FromJSON(req.DAGJSON)
+		if err == nil {
+			wf, err = def.ToDAGWorkflow()
+		}
+	} else if req.DAGYAML != "" {
+		var def *workflow.DAGDefinition
+		def, err = workflow.FromYAML(req.DAGYAML)
+		if err == nil {
+			wf, err = def.ToDAGWorkflow()
+		}
+	} else if req.DSLFile != "" {
+		wf, err = h.parser.ParseFile(req.DSLFile)
+	} else {
+		wf, err = h.parser.Parse([]byte(req.DSL))
+	}
 	if err != nil {
 		apiErr := types.NewError(types.ErrInvalidRequest, "invalid workflow DSL: "+err.Error()).
 			WithHTTPStatus(http.StatusBadRequest)
@@ -64,7 +97,21 @@ func (h *WorkflowHandler) HandleExecute(w http.ResponseWriter, r *http.Request) 
 	}
 
 	// Execute workflow
-	result, err := h.executor.ExecuteDAG(r.Context(), wf, req.Input)
+	execCtx := workflow.WithWorkflowStreamEmitter(r.Context(), func(event workflow.WorkflowStreamEvent) {
+		h.logger.Debug("workflow stream event",
+			zap.String("type", string(event.Type)),
+			zap.String("node_id", event.NodeID),
+		)
+	})
+	execCtx = workflowobs.WithNodeEventEmitter(execCtx, func(event workflowobs.NodeEvent) {
+		h.logger.Debug("workflow node event",
+			zap.String("type", string(event.Type)),
+			zap.String("node_id", event.NodeID),
+			zap.String("workflow_id", event.WorkflowID),
+		)
+	})
+
+	result, err := h.executor.ExecuteDAG(execCtx, wf, req.Input)
 	if err != nil {
 		apiErr := types.NewError(types.ErrInternalError, "workflow execution failed: "+err.Error())
 		WriteError(w, apiErr, h.logger)
@@ -139,4 +186,15 @@ func (h *WorkflowHandler) HandleList(w http.ResponseWriter, r *http.Request) {
 	WriteSuccess(w, map[string]any{
 		"workflows": []any{},
 	})
+}
+
+func loadDAGDefinition(filename string) (*workflow.DAGDefinition, error) {
+	switch strings.ToLower(filepath.Ext(filename)) {
+	case ".json":
+		return workflow.LoadFromJSONFile(filename)
+	case ".yml", ".yaml":
+		return workflow.LoadFromYAMLFile(filename)
+	default:
+		return nil, types.NewError(types.ErrInvalidRequest, "dag_file must be .json/.yml/.yaml")
+	}
 }

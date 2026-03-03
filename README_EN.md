@@ -60,7 +60,7 @@ English | [中文](README.md)
 
 ### 🧱 Startup Composition
 
-- **Single Startup Chain** - `cmd/agentflow/main.go -> internal/app/bootstrap -> cmd/agentflow/server_* -> api/routes -> api/handlers -> domain(agent/rag/workflow/llm)`
+- **Single Startup Chain** - `cmd(main) -> internal/app/bootstrap -> cmd(server_*) -> api/routes -> api/handlers -> domain(agent/rag/workflow/llm)`
 - **Composition Root Boundaries** - `cmd` only composes; runtime construction is centralized in `internal/app/bootstrap` (see `docs/architecture/startup-composition.md`)
 
 ### 🔍 RAG System (Retrieval-Augmented Generation)
@@ -424,9 +424,7 @@ agentflow/
 │   ├── dag.go                # DAG workflow
 │   ├── dag_executor.go       # DAG executor
 │   ├── dag_builder.go        # DAG builder
-│   ├── parallel.go           # Parallel execution
 │   ├── steps.go              # Step definitions
-│   ├── routing.go            # Workflow routing
 │   ├── circuit_breaker.go    # Circuit breaker (three-state machine + registry)
 │   ├── builder_visual.go     # Visual workflow builder
 │   └── dsl/                  # YAML DSL orchestration

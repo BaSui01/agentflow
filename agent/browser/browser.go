@@ -48,6 +48,15 @@ type BrowserResult struct {
 	Title      string          `json:"title,omitempty"`
 }
 
+// Screenshot represents a browser screenshot payload.
+type Screenshot struct {
+	Data      []byte    `json:"data"`
+	Width     int       `json:"width"`
+	Height    int       `json:"height"`
+	Timestamp time.Time `json:"timestamp"`
+	URL       string    `json:"url"`
+}
+
 // PageState 代表浏览器页面的当前状态.
 type PageState struct {
 	URL          string            `json:"url"`
@@ -217,6 +226,11 @@ func (s *BrowserSession) Wait(ctx context.Context, selector string, timeout time
 	})
 }
 
+// GetState returns current page state from the underlying browser.
+func (s *BrowserSession) GetState(ctx context.Context) (*PageState, error) {
+	return s.browser.GetState(ctx)
+}
+
 // 关闭会话 。
 func (s *BrowserSession) Close() error {
 	return s.browser.Close()
@@ -301,4 +315,3 @@ func (t *BrowserTool) ExecuteCommand(ctx context.Context, sessionID string, cmd 
 	}
 	return session.Execute(ctx, cmd)
 }
-

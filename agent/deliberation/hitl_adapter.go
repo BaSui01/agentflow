@@ -3,9 +3,38 @@ package deliberation
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/BaSui01/agentflow/agent/hitl"
 )
+
+// InterruptRequester is a local interface for HITL integration.
+// Matches the subset of hitl.InterruptManager needed by workflow runtime.
+type InterruptRequester interface {
+	RequestApproval(ctx context.Context, opts ApprovalRequest) (*ApprovalResponse, error)
+}
+
+// ApprovalRequest describes what the human needs to review.
+type ApprovalRequest struct {
+	Title       string
+	Description string
+	Data        any
+	Options     []ApprovalOption
+	Timeout     time.Duration
+}
+
+// ApprovalOption is a single choice presented to the reviewer.
+type ApprovalOption struct {
+	ID    string
+	Label string
+}
+
+// ApprovalResponse carries the human reviewer's decision.
+type ApprovalResponse struct {
+	Action   string // "approve", "reject", "modify"
+	Feedback string
+	Data     any
+}
 
 // HITLInterruptAdapter adapts hitl.InterruptManager to the InterruptRequester
 // interface. This is the only file in the deliberation package that imports
@@ -14,7 +43,7 @@ type HITLInterruptAdapter struct {
 	manager *hitl.InterruptManager
 }
 
-// NewHITLInterruptAdapter wraps an InterruptManager for use with HITLBridge.
+// NewHITLInterruptAdapter wraps an InterruptManager for deliberation integration.
 func NewHITLInterruptAdapter(manager *hitl.InterruptManager) *HITLInterruptAdapter {
 	return &HITLInterruptAdapter{manager: manager}
 }
@@ -56,4 +85,3 @@ func (a *HITLInterruptAdapter) RequestApproval(ctx context.Context, opts Approva
 		Data:     resp.Input,
 	}, nil
 }
-

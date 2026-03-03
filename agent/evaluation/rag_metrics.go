@@ -2,7 +2,6 @@ package evaluation
 
 import (
 	"context"
-	"fmt"
 	"math"
 
 	"github.com/BaSui01/agentflow/types"
@@ -269,16 +268,4 @@ func clamp01(v float64) float64 {
 		return 1
 	}
 	return v
-}
-
-func validateRAGMetricsForDebug(output *EvalOutput) error {
-	if output == nil || output.Metadata == nil {
-		return nil
-	}
-	if _, ok := output.Metadata[metadataKeyRAGEvalMetrics]; ok {
-		if _, ok := extractRAGEvalMetrics(output); !ok {
-			return fmt.Errorf("invalid %s payload", metadataKeyRAGEvalMetrics)
-		}
-	}
-	return nil
 }

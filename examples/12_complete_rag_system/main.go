@@ -6,7 +6,9 @@ import (
 	"log"
 
 	agentcontext "github.com/BaSui01/agentflow/agent/context"
+	llmrerank "github.com/BaSui01/agentflow/llm/capabilities/rerank"
 	"github.com/BaSui01/agentflow/rag"
+	ragruntime "github.com/BaSui01/agentflow/rag/runtime"
 	"github.com/BaSui01/agentflow/types"
 	"go.uber.org/zap"
 )
@@ -125,6 +127,94 @@ func main() {
 	fmt.Printf("原始消息数: %d\n", len(messages))
 	fmt.Printf("管理后消息数: %d\n", len(managed))
 
+	// 8. RAG runtime Builder 集成示例
+	demoRuntimeBuilder(logger)
+
 	fmt.Println("\n=== 完成 ===")
 }
 
+func demoRuntimeBuilder(logger *zap.Logger) {
+	fmt.Println("\n=== Runtime Builder 集成 ===")
+	ctx := context.Background()
+
+	hybridCfg := rag.DefaultHybridRetrievalConfig()
+	hybridCfg.TopK = 3
+	store := rag.NewInMemoryVectorStore(logger)
+
+	builder := ragruntime.NewBuilder(nil, logger).
+		WithLogger(logger).
+		WithVectorStore(store).
+		WithEmbeddingProvider(exampleEmbeddingProvider{}).
+		WithRerankProvider(exampleRerankProvider{}).
+		WithHybridConfig(hybridCfg)
+
+	if _, err := builder.BuildEnhancedRetriever(); err != nil {
+		log.Fatalf("BuildEnhancedRetriever failed: %v", err)
+	}
+	if _, err := builder.BuildHybridRetriever(); err != nil {
+		log.Fatalf("BuildHybridRetriever failed: %v", err)
+	}
+	if _, err := builder.BuildHybridRetrieverWithVectorStore(); err != nil {
+		log.Fatalf("BuildHybridRetrieverWithVectorStore failed: %v", err)
+	}
+
+	runtimeCache, err := ragruntime.NewSemanticCache(store, ragruntime.SemanticCacheConfig{
+		SimilarityThreshold: 0.7,
+	}, logger)
+	if err != nil {
+		log.Fatalf("NewSemanticCache failed: %v", err)
+	}
+	if err := runtimeCache.Set(ctx, rag.Document{
+		ID:        "runtime-cache-doc",
+		Content:   "runtime semantic cache demo",
+		Embedding: []float64{0.1, 0.2, 0.3},
+	}); err != nil {
+		log.Fatalf("runtime cache set failed: %v", err)
+	}
+	if _, hit := runtimeCache.Get(ctx, []float64{0.1, 0.2, 0.3}); !hit {
+		log.Fatal("runtime cache get expected hit")
+	}
+	if err := runtimeCache.Clear(ctx); err != nil {
+		log.Fatalf("runtime cache clear failed: %v", err)
+	}
+
+	fmt.Println("runtime.Builder 已接入 provider/store 注入与 hybrid 检索构建")
+}
+
+type exampleEmbeddingProvider struct{}
+
+func (exampleEmbeddingProvider) EmbedQuery(_ context.Context, _ string) ([]float64, error) {
+	return []float64{0.1, 0.2, 0.3}, nil
+}
+
+func (exampleEmbeddingProvider) EmbedDocuments(_ context.Context, docs []string) ([][]float64, error) {
+	out := make([][]float64, len(docs))
+	for i := range docs {
+		out[i] = []float64{0.1, 0.2, 0.3}
+	}
+	return out, nil
+}
+
+func (exampleEmbeddingProvider) Name() string {
+	return "example-embedding-provider"
+}
+
+type exampleRerankProvider struct{}
+
+func (exampleRerankProvider) RerankSimple(_ context.Context, _ string, docs []string, topN int) ([]llmrerank.RerankResult, error) {
+	if topN > len(docs) {
+		topN = len(docs)
+	}
+	results := make([]llmrerank.RerankResult, 0, topN)
+	for i := 0; i < topN; i++ {
+		results = append(results, llmrerank.RerankResult{
+			Index:          i,
+			RelevanceScore: float64(topN - i),
+		})
+	}
+	return results, nil
+}
+
+func (exampleRerankProvider) Name() string {
+	return "example-rerank-provider"
+}
