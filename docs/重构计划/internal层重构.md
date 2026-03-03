@@ -39,7 +39,7 @@
 | DoD 条目 | 状态 | 判据（机读） | 证据路径 |
 |---|---|---|---|
 | internal 目录职责单一 | Done | 仅存在 bootstrap 相关实现；无领域业务逻辑 | `internal/app/bootstrap/bootstrap.go` |
-| 启动链路不被破坏 | Done | `cmd -> internal/app/bootstrap -> server_* -> api/...` 保持成立 | `cmd/agentflow/main.go`、`cmd/agentflow/server_http.go` |
+| 启动链路不被破坏 | Done | `cmd/agentflow/main.runServe -> internal/app/bootstrap.InitializeServeRuntime -> cmd/agentflow/server_*.Start -> bootstrap.RegisterHTTPRoutes -> api/...` 保持成立 | `cmd/agentflow/main.go`、`cmd/agentflow/server_runtime.go`、`cmd/agentflow/server_http.go` |
 | 无未接线 internal 适配器 | Done | internal 下无“只创建不使用”适配器实现 | `cmd/agentflow/server_handlers_runtime.go`、`rg \"internal/bridge|NewDiscoveryRegistrarAdapter\"` |
 
 ---

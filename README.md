@@ -17,7 +17,6 @@
 - **Reflection 机制** - 自我评估与迭代改进
 - **动态工具选择** - 智能工具匹配，减少 Token 消耗
 - **双模型架构 (toolProvider)** - 便宜模型做工具调用，贵模型做内容生成，大幅降低成本
-- **Browser Automation** - 浏览器自动化（chromedp 驱动、连接池、视觉适配器）
 - **Skills 系统** - 动态技能加载
 - **MCP/A2A 协议** - 完整 Agent 互操作协议栈 (支持 Google A2A & Anthropic MCP)
 - **Guardrails** - 输入/输出验证、PII 检测、注入防护、自定义验证规则
@@ -61,7 +60,7 @@
 
 ### 🧱 启动装配链路
 
-- **单入口启动链路** - `cmd(main) -> internal/app/bootstrap -> cmd(server_*) -> api/routes -> api/handlers -> domain(agent/rag/workflow/llm)`
+- **单入口启动链路** - `cmd/agentflow/main.runServe -> internal/app/bootstrap.InitializeServeRuntime -> cmd/agentflow/server_*.Start -> bootstrap.RegisterHTTPRoutes -> api/routes -> api/handlers -> domain(agent/rag/workflow/llm)`
 - **组合根职责收敛** - `cmd` 仅做装配；运行时构建集中在 `internal/app/bootstrap`（详见 `docs/architecture/startup-composition.md`）
 
 ### 🔍 RAG 系统 (检索增强生成)
@@ -387,12 +386,6 @@ agentflow/
 │   ├── artifacts/            # Artifact 管理
 │   ├── voice/                # 语音交互
 │   ├── lsp/                  # LSP 协议支持
-│   ├── browser/              # 浏览器自动化
-│   │   ├── browser.go        # Browser 接口 + BrowserTool
-│   │   ├── chromedp_driver.go # chromedp 驱动实现
-│   │   ├── browser_pool.go   # 浏览器连接池
-│   │   ├── vision_adapter.go # 视觉适配器（截图→LLM）
-│   │   └── agentic_browser.go # Agent 级浏览器封装
 │   ├── streaming/            # 双向通信增强
 │   ├── guardrails/           # 护栏系统
 │   ├── protocol/             # A2A/MCP 协议
@@ -507,7 +500,6 @@ agentflow/
 - **OpenTelemetry** - 分布式追踪
 - **Zap** - 结构化日志
 - **tiktoken-go** - OpenAI Token 计数
-- **chromedp** - 浏览器自动化
 - **nhooyr.io/websocket** - WebSocket 客户端
 - **golang-migrate** - 数据库迁移
 - **yaml.v3** - YAML 解析

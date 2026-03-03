@@ -4,7 +4,7 @@ This document defines the runtime startup chain and composition boundaries.
 
 ## Runtime Chain
 
-`cmd/agentflow/main.go -> internal/app/bootstrap.InitializeServeRuntime -> cmd/agentflow/server_* -> api/routes -> api/handlers -> domain(agent/rag/workflow/llm)`
+`cmd/agentflow/main.go:runServe -> internal/app/bootstrap.InitializeServeRuntime -> cmd/agentflow.NewServer(...).Start -> cmd/agentflow/server_handlers_runtime.go:initHandlers -> cmd/agentflow/server_http.go:startHTTPServer -> internal/app/bootstrap.RegisterHTTPRoutes -> api/routes -> api/handlers -> domain(agent/rag/workflow/llm)`
 
 ## Composition Boundaries
 

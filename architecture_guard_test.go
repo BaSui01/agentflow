@@ -242,6 +242,73 @@ func TestDependencyDirectionGuards(t *testing.T) {
 	}
 }
 
+// API handlers must stay at protocol-adapter boundary.
+// Allow infra imports only in explicit store adapter files.
+func TestAPIHandlerInfraImportGuards(t *testing.T) {
+	const (
+		handlerDir = "api/handlers"
+	)
+	disallowedPrefixes := []string{
+		"gorm.io/",
+		"github.com/BaSui01/agentflow/llm/runtime/router",
+		"github.com/BaSui01/agentflow/llm/providers/",
+	}
+	allowlistFileSuffix := []string{
+		"_store.go",
+	}
+
+	fset := token.NewFileSet()
+	var violations []string
+
+	walkErr := filepath.WalkDir(handlerDir, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			return nil
+		}
+		if !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
+			return nil
+		}
+
+		rel, err := filepath.Rel(".", path)
+		if err != nil {
+			return err
+		}
+		rel = filepath.ToSlash(rel)
+		for _, suffix := range allowlistFileSuffix {
+			if strings.HasSuffix(rel, suffix) {
+				return nil
+			}
+		}
+
+		file, err := parser.ParseFile(fset, path, nil, parser.ImportsOnly)
+		if err != nil {
+			return fmt.Errorf("parse imports for %s: %w", rel, err)
+		}
+		for _, imp := range file.Imports {
+			importPath, err := strconv.Unquote(imp.Path.Value)
+			if err != nil {
+				return fmt.Errorf("unquote import path for %s: %w", rel, err)
+			}
+			for _, prefix := range disallowedPrefixes {
+				if strings.HasPrefix(importPath, prefix) {
+					violations = append(violations, fmt.Sprintf("%s imports %s", rel, importPath))
+				}
+			}
+		}
+		return nil
+	})
+
+	if walkErr != nil {
+		t.Fatalf("scan api handler infra import guards: %v", walkErr)
+	}
+	if len(violations) > 0 {
+		slices.Sort(violations)
+		t.Fatalf("api handler infra import violations:\n%s", strings.Join(violations, "\n"))
+	}
+}
+
 func TestCmdEntrypointImportAllowlist(t *testing.T) {
 	allowedImports := map[string]map[string]struct{}{
 		"cmd/agentflow/main.go": {

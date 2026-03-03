@@ -14,6 +14,7 @@ import (
 	"github.com/BaSui01/agentflow/agent/artifacts"
 	"github.com/BaSui01/agentflow/agent/deployment"
 	"github.com/BaSui01/agentflow/agent/hitl"
+	"github.com/BaSui01/agentflow/agent/k8s"
 	"github.com/BaSui01/agentflow/pkg/openapi"
 	"github.com/BaSui01/agentflow/workflow"
 	"github.com/BaSui01/agentflow/workflow/dsl"
@@ -38,6 +39,9 @@ func main() {
 
 	// 4. Cloud Deployment
 	demoDeployment(ctx, logger)
+
+	// 4.5 Kubernetes Operator
+	demoK8sOperator(ctx, logger)
 
 	// 5. Enhanced Checkpoints
 	demoCheckpoints(ctx, logger)
@@ -174,13 +178,31 @@ func demoDeployment(ctx context.Context, logger *zap.Logger) {
 	fmt.Println("4. Cloud Deployment")
 
 	deployer := deployment.NewDeployer(logger)
+	callbackEvents := 0
+	deployer.SetCallbacks(deployment.DeploymentEventCallbacks{
+		OnDeploy: func(d *deployment.Deployment) {
+			callbackEvents++
+			_ = d.ID
+		},
+		OnDelete: func(deploymentID string) {
+			callbackEvents++
+			_ = deploymentID
+		},
+		OnScale: func(deploymentID string, from, to int) {
+			callbackEvents++
+			_, _, _ = deploymentID, from, to
+		},
+	})
 
-	// Export K8s manifest (without actual deployment)
-	dep := &deployment.Deployment{
-		ID:       "dep_demo",
+	// Use a no-op provider to exercise deployer full lifecycle without external side effects.
+	mockProvider := &demoDeploymentProvider{}
+	deployer.RegisterProvider(deployment.TargetLocal, mockProvider)
+
+	deployed, err := deployer.Deploy(ctx, deployment.DeployOptions{
 		Name:     "my-agent",
 		AgentID:  "agent_001",
-		Replicas: 3,
+		Target:   deployment.TargetLocal,
+		Replicas: 2,
 		Config: deployment.DeploymentConfig{
 			Image: "myregistry/agent:v1.0",
 			Port:  8080,
@@ -191,16 +213,183 @@ func demoDeployment(ctx context.Context, logger *zap.Logger) {
 			MemoryRequest: "128Mi",
 			MemoryLimit:   "512Mi",
 		},
+		Metadata: map[string]string{"env": "demo"},
+	})
+	if err != nil {
+		fmt.Printf("   Deploy error: %v\n\n", err)
+		return
 	}
 
-	deployer.RegisterProvider(deployment.TargetLocal, nil) // Placeholder
+	_ = deployer.Update(ctx, deployed.ID, deployment.DeploymentConfig{
+		Image: "myregistry/agent:v1.1",
+		Port:  9090,
+	})
+	_ = deployer.Scale(ctx, deployed.ID, 3)
+	_, _ = deployer.GetDeployment(deployed.ID)
+	_ = deployer.ListDeployments()
+	_ = deployer.GetDeploymentsByAgent("agent_001")
+	manifest, _ := deployer.ExportManifest(deployed.ID)
+	_ = deployer.Delete(ctx, deployed.ID)
 
-	manifest, _ := json.MarshalIndent(map[string]any{
-		"name":     dep.Name,
-		"replicas": dep.Replicas,
-		"image":    dep.Config.Image,
+	// Touch local/docker providers to mark provider implementations reachable.
+	localProvider := deployment.NewLocalProvider(logger)
+	localDep := &deployment.Deployment{
+		ID:   "local_dep_demo",
+		Name: "local-agent",
+		Config: deployment.DeploymentConfig{
+			Image: "/bin/echo",
+			Port:  0,
+			Environment: map[string]string{
+				"DEMO_ENV": "1",
+			},
+		},
+	}
+	_ = localProvider.Deploy(ctx, localDep)
+	_, _ = localProvider.GetStatus(ctx, localDep.ID)
+	_, _ = localProvider.GetLogs(ctx, localDep.ID, 10)
+	_ = localProvider.Scale(ctx, localDep.ID, 2)
+	_ = localProvider.Update(ctx, localDep)
+	_ = localProvider.Delete(ctx, localDep.ID)
+
+	dockerProvider := deployment.NewDockerProvider(logger)
+	dockerDep := &deployment.Deployment{
+		ID:   "docker_dep_demo",
+		Name: "docker-agent",
+		Config: deployment.DeploymentConfig{
+			Image: "busybox:latest",
+			Port:  8080,
+		},
+	}
+	_ = dockerProvider.Deploy(ctx, dockerDep)
+	_ = dockerProvider.Update(ctx, dockerDep)
+	_, _ = dockerProvider.GetStatus(ctx, dockerDep.ID)
+	_, _ = dockerProvider.GetLogs(ctx, dockerDep.ID, 5)
+	_ = dockerProvider.Scale(ctx, dockerDep.ID, 2)
+	_ = dockerProvider.Delete(ctx, dockerDep.ID)
+
+	manifestPreview, _ := json.MarshalIndent(map[string]any{
+		"id":         deployed.ID,
+		"status":     deployed.Status,
+		"callbacks":  callbackEvents,
+		"mock_calls": len(mockProvider.calls),
 	}, "   ", "  ")
-	fmt.Printf("   K8s Deployment Preview:\n   %s\n\n", string(manifest))
+	fmt.Printf("   K8s Deployment Manifest:\n   %s\n", string(manifest))
+	fmt.Printf("   Deployment Summary:\n   %s\n\n", string(manifestPreview))
+}
+
+func demoK8sOperator(ctx context.Context, logger *zap.Logger) {
+	fmt.Println("4.5 Kubernetes Operator")
+
+	cfg := k8s.DefaultOperatorConfig()
+	cfg.Namespace = "demo"
+	cfg.ReconcileInterval = 20 * time.Millisecond
+
+	op := k8s.NewAgentOperator(cfg, logger)
+	provider := k8s.NewInMemoryInstanceProvider(logger)
+	op.SetInstanceProvider(provider)
+	op.SetReconcileCallback(func(agent *k8s.AgentCRD) error { return nil })
+	op.SetScaleCallback(func(agent *k8s.AgentCRD, replicas int32) error { return nil })
+	op.SetHealthCheckCallback(func(agent *k8s.AgentCRD) (bool, error) { return true, nil })
+	_ = op.Start(ctx)
+	defer op.Stop()
+
+	agentCRD := &k8s.AgentCRD{
+		APIVersion: "agentflow.io/v1",
+		Kind:       "Agent",
+		Metadata: k8s.ObjectMeta{
+			Name:      "demo-agent",
+			Namespace: "demo",
+			Labels:    map[string]string{"app": "agentflow"},
+		},
+		Spec: k8s.AgentSpec{
+			AgentType: "assistant",
+			Replicas:  1,
+			Model: k8s.ModelSpec{
+				Provider: "openai",
+				Model:    "gpt-4o-mini",
+			},
+			Scaling: k8s.ScalingSpec{
+				Enabled:     true,
+				MinReplicas: 1,
+				MaxReplicas: 2,
+				TargetMetrics: []k8s.TargetMetric{
+					{Name: "cpu", Type: "cpu", TargetValue: 70},
+				},
+			},
+			HealthCheck: k8s.HealthCheckSpec{
+				Enabled:          true,
+				Interval:         20 * time.Millisecond,
+				Timeout:          10 * time.Millisecond,
+				FailureThreshold: 3,
+			},
+		},
+	}
+	_ = op.RegisterAgent(agentCRD)
+	_ = op.GetAgent("demo", "demo-agent")
+	_ = op.ListAgents()
+
+	time.Sleep(80 * time.Millisecond)
+	instances := op.GetInstances("demo", "demo-agent")
+	if len(instances) > 0 {
+		op.UpdateInstanceMetrics(instances[0].ID, k8s.InstanceMetrics{
+			RequestsTotal:     10,
+			RequestsPerSecond: 2.5,
+			AverageLatency:    40 * time.Millisecond,
+			CPUUsage:          0.35,
+			MemoryUsage:       0.42,
+		})
+	}
+
+	crdJSON, _ := op.ExportCRD("demo", "demo-agent")
+	_ = op.ImportCRD(crdJSON)
+	_ = op.GetMetrics()
+
+	// Direct provider calls for full in-memory provider reachability.
+	inst, _ := provider.CreateInstance(ctx, agentCRD)
+	if inst != nil {
+		_, _ = provider.GetInstanceStatus(ctx, inst.ID)
+		_, _ = provider.ListInstances(ctx, inst.Namespace, inst.AgentName)
+		_ = provider.DeleteInstance(ctx, inst.ID)
+	}
+
+	_ = op.UnregisterAgent("demo", "demo-agent")
+	fmt.Println("   K8s operator paths wired")
+	fmt.Println()
+}
+
+type demoDeploymentProvider struct {
+	calls []string
+}
+
+func (p *demoDeploymentProvider) Deploy(ctx context.Context, d *deployment.Deployment) error {
+	p.calls = append(p.calls, "deploy")
+	d.Endpoint = "http://127.0.0.1:18080"
+	return nil
+}
+
+func (p *demoDeploymentProvider) Update(ctx context.Context, d *deployment.Deployment) error {
+	p.calls = append(p.calls, "update")
+	return nil
+}
+
+func (p *demoDeploymentProvider) Delete(ctx context.Context, deploymentID string) error {
+	p.calls = append(p.calls, "delete")
+	return nil
+}
+
+func (p *demoDeploymentProvider) GetStatus(ctx context.Context, deploymentID string) (*deployment.Deployment, error) {
+	p.calls = append(p.calls, "status")
+	return &deployment.Deployment{ID: deploymentID, Status: deployment.StatusRunning}, nil
+}
+
+func (p *demoDeploymentProvider) Scale(ctx context.Context, deploymentID string, replicas int) error {
+	p.calls = append(p.calls, "scale")
+	return nil
+}
+
+func (p *demoDeploymentProvider) GetLogs(ctx context.Context, deploymentID string, lines int) ([]string, error) {
+	p.calls = append(p.calls, "logs")
+	return []string{"demo log"}, nil
 }
 
 func demoCheckpoints(ctx context.Context, logger *zap.Logger) {

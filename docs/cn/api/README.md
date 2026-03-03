@@ -290,22 +290,10 @@ func (g *KnowledgeGraph) QueryByType(nodeType string) []*Node
 
 ```go
 type Workflow interface {
-    Execute(ctx context.Context, input interface{}) (interface{}, error)
+    Execute(ctx context.Context, input any) (any, error)
     Name() string
     Description() string
 }
-```
-
-### ChainWorkflow
-
-链式工作流。
-
-```go
-// 创建链式工作流
-func NewChainWorkflow(name string, steps []Step) *ChainWorkflow
-
-// 执行
-func (w *ChainWorkflow) Execute(ctx context.Context, input interface{}) (interface{}, error)
 ```
 
 ### DAGWorkflow
@@ -316,15 +304,23 @@ DAG 工作流。
 // 创建 DAG 构建器
 func NewDAGBuilder(name string) *DAGBuilder
 
-// 添加节点
-func (b *DAGBuilder) AddNode(node *DAGNode) *DAGBuilder
+// 添加节点（返回 NodeBuilder）
+func (b *DAGBuilder) AddNode(id string, nodeType NodeType) *NodeBuilder
 
 // 添加边
 func (b *DAGBuilder) AddEdge(from, to string) *DAGBuilder
 
+// 设置入口
+func (b *DAGBuilder) SetEntry(nodeID string) *DAGBuilder
+
 // 构建
 func (b *DAGBuilder) Build() (*DAGWorkflow, error)
+
+// 执行
+func (w *DAGWorkflow) Execute(ctx context.Context, input any) (any, error)
 ```
+
+说明：当前推荐的工作流执行模型为 DAG 单入口，文档中的链式/路由/并行旧入口不再作为主链 API 使用。
 
 ---
 

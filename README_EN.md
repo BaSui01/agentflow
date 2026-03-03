@@ -17,7 +17,6 @@ English | [中文](README.md)
 - **Reflection** - Self-evaluation and iterative improvement
 - **Dynamic Tool Selection** - Intelligent tool matching, reduced token consumption
 - **Dual-Model Architecture (toolProvider)** - Cheap model for tool calls, expensive model for content generation, significantly reducing costs
-- **Browser Automation** - Browser automation (chromedp driver, connection pool, vision adapter)
 - **Skills System** - Dynamic skill loading
 - **MCP/A2A Protocol** - Complete agent interoperability protocol stack (Google A2A & Anthropic MCP)
 - **Guardrails** - Input/output validation, PII detection, injection protection, custom validation rules
@@ -60,7 +59,7 @@ English | [中文](README.md)
 
 ### 🧱 Startup Composition
 
-- **Single Startup Chain** - `cmd(main) -> internal/app/bootstrap -> cmd(server_*) -> api/routes -> api/handlers -> domain(agent/rag/workflow/llm)`
+- **Single Startup Chain** - `cmd/agentflow/main.runServe -> internal/app/bootstrap.InitializeServeRuntime -> cmd/agentflow/server_*.Start -> bootstrap.RegisterHTTPRoutes -> api/routes -> api/handlers -> domain(agent/rag/workflow/llm)`
 - **Composition Root Boundaries** - `cmd` only composes; runtime construction is centralized in `internal/app/bootstrap` (see `docs/architecture/startup-composition.md`)
 
 ### 🔍 RAG System (Retrieval-Augmented Generation)
@@ -267,11 +266,15 @@ result, _ := executor.ExecuteWithReflection(ctx, input)
 ### One-Click LSP Enablement
 
 ```go
-cfg := agent.Config{
-    ID:    "assistant-1",
-    Name:  "Assistant",
-    Type:  agent.TypeAssistant,
-    Model: "gpt-4o-mini",
+cfg := types.AgentConfig{
+    Core: types.CoreConfig{
+        ID:   "assistant-1",
+        Name: "Assistant",
+        Type: "assistant",
+    },
+    LLM: types.LLMConfig{
+        Model: "gpt-4o-mini",
+    },
 }
 
 ag, err := agent.NewAgentBuilder(cfg).
@@ -377,12 +380,6 @@ agentflow/
 │   ├── artifacts/            # Artifact management
 │   ├── voice/                # Voice capabilities
 │   ├── lsp/                  # LSP server integration
-│   ├── browser/              # Browser automation
-│   │   ├── browser.go        # Browser interface + BrowserTool
-│   │   ├── chromedp_driver.go # chromedp driver implementation
-│   │   ├── browser_pool.go   # Browser connection pool
-│   │   ├── vision_adapter.go # Vision adapter (screenshot→LLM)
-│   │   └── agentic_browser.go # Agent-level browser wrapper
 │   ├── streaming/            # Bidirectional communication
 │   ├── guardrails/           # Safety guardrails
 │   ├── protocol/             # A2A/MCP protocols
@@ -500,7 +497,6 @@ agentflow/
 - **OpenTelemetry** - Distributed tracing
 - **Zap** - Structured logging
 - **tiktoken-go** - OpenAI token counting
-- **chromedp** - Browser automation
 - **nhooyr.io/websocket** - WebSocket client
 - **golang-migrate** - Database migrations
 - **yaml.v3** - YAML parsing

@@ -5,7 +5,6 @@ import (
 	"testing"
 
 	"github.com/BaSui01/agentflow/agent"
-	"github.com/BaSui01/agentflow/agent/crews"
 	"github.com/BaSui01/agentflow/agent/handoff"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -16,20 +15,16 @@ func handoffTask() handoff.Task {
 	return handoff.Task{Type: "test", Description: "test"}
 }
 
-func crewsProposal() crews.Proposal {
-	return crews.Proposal{Message: "test"}
-}
-
 // ---------------------------------------------------------------------------
 // CollaborationAdapter
 // ---------------------------------------------------------------------------
 
 func TestNewCollaborationAdapter(t *testing.T) {
 	tests := []struct {
-		name               string
-		coordinationType   string
-		logger             *zap.Logger
-		expectedCoordType  string
+		name              string
+		coordinationType  string
+		logger            *zap.Logger
+		expectedCoordType string
 	}{
 		{"nil logger defaults", "consensus", nil, "consensus"},
 		{"empty type defaults to debate", "", zap.NewNop(), "debate"},
@@ -390,23 +385,3 @@ func TestCrewAdapter_Execute_Success(t *testing.T) {
 	assert.Len(t, result.AgentUsed, 2)
 	assert.Equal(t, "trace-1", result.Output.TraceID)
 }
-
-// ---------------------------------------------------------------------------
-// crewAgentAdapter
-// ---------------------------------------------------------------------------
-
-func TestCrewAgentAdapter_ID(t *testing.T) {
-	ma := newMockAgent("test-id", "test-name", agent.TypeGeneric)
-	adapter := &crewAgentAdapter{agent: ma}
-	assert.Equal(t, "test-id", adapter.ID())
-}
-
-func TestCrewAgentAdapter_Negotiate(t *testing.T) {
-	ma := newMockAgent("test-id", "test-name", agent.TypeGeneric)
-	adapter := &crewAgentAdapter{agent: ma}
-	result, err := adapter.Negotiate(context.Background(), crewsProposal())
-	require.NoError(t, err)
-	assert.True(t, result.Accepted)
-	assert.Equal(t, "test-id", result.Response)
-}
-

@@ -8,20 +8,22 @@ import (
 
 	"github.com/BaSui01/agentflow/api"
 	"github.com/BaSui01/agentflow/llm"
-	runtimeRouter "github.com/BaSui01/agentflow/llm/runtime/router"
 	"github.com/BaSui01/agentflow/types"
 	"go.uber.org/zap"
 )
 
 // APIKeyHandler 处理 API Key 管理的 CRUD 操作
 type APIKeyHandler struct {
-	store  APIKeyStore
+	svc    APIKeyService
 	logger *zap.Logger
 }
 
 // NewAPIKeyHandler 创建 APIKeyHandler
 func NewAPIKeyHandler(store APIKeyStore, logger *zap.Logger) *APIKeyHandler {
-	return &APIKeyHandler{store: store, logger: logger}
+	return &APIKeyHandler{
+		svc:    NewDefaultAPIKeyService(store),
+		logger: logger,
+	}
 }
 
 // maskAPIKey 脱敏 API Key，仅显示末 4 位
@@ -73,13 +75,13 @@ func (h *APIKeyHandler) HandleListProviders(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	providers, err := h.store.ListProviders()
-	if err != nil {
-		WriteErrorMessage(w, http.StatusInternalServerError, types.ErrInternalError, "failed to list providers", h.logger)
+	providersData, svcErr := h.svc.ListProviders()
+	if svcErr != nil {
+		WriteError(w, svcErr, h.logger)
 		return
 	}
 
-	WriteSuccess(w, providers)
+	WriteSuccess(w, providersData)
 }
 
 // apiKeyResponse 脱敏后的 API Key 响应
@@ -96,6 +98,22 @@ type apiKeyResponse struct {
 	FailedRequests int64  `json:"failed_requests"`
 	RateLimitRPM   int    `json:"rate_limit_rpm"`
 	RateLimitRPD   int    `json:"rate_limit_rpd"`
+}
+
+type apiKeyStatsResponse struct {
+	KeyID          uint       `json:"key_id"`
+	Label          string     `json:"label"`
+	BaseURL        string     `json:"base_url"`
+	Enabled        bool       `json:"enabled"`
+	IsHealthy      bool       `json:"is_healthy"`
+	TotalRequests  int64      `json:"total_requests"`
+	FailedRequests int64      `json:"failed_requests"`
+	SuccessRate    float64    `json:"success_rate"`
+	CurrentRPM     int        `json:"current_rpm"`
+	CurrentRPD     int        `json:"current_rpd"`
+	LastUsedAt     *time.Time `json:"last_used_at,omitempty"`
+	LastErrorAt    *time.Time `json:"last_error_at,omitempty"`
+	LastError      string     `json:"last_error,omitempty"`
 }
 
 func toAPIKeyResponse(k llm.LLMProviderAPIKey) apiKeyResponse {
@@ -128,15 +146,10 @@ func (h *APIKeyHandler) HandleListAPIKeys(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	keys, err := h.store.ListAPIKeys(providerID)
-	if err != nil {
-		WriteErrorMessage(w, http.StatusInternalServerError, types.ErrInternalError, "failed to list API keys", h.logger)
+	resp, svcErr := h.svc.ListAPIKeys(providerID)
+	if svcErr != nil {
+		WriteError(w, svcErr, h.logger)
 		return
-	}
-
-	resp := make([]apiKeyResponse, 0, len(keys))
-	for _, k := range keys {
-		resp = append(resp, toAPIKeyResponse(k))
 	}
 	WriteSuccess(w, resp)
 }
@@ -175,62 +188,15 @@ func (h *APIKeyHandler) HandleCreateAPIKey(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	if strings.TrimSpace(req.APIKey) == "" {
-		WriteErrorMessage(w, http.StatusBadRequest, types.ErrInvalidRequest, "api_key is required", h.logger)
-		return
-	}
-
-	if req.BaseURL != "" && !ValidateURL(req.BaseURL) {
-		WriteErrorMessage(w, http.StatusBadRequest, types.ErrInvalidRequest, "base_url must be a valid HTTP or HTTPS URL", h.logger)
-		return
-	}
-
-	if !ValidateNonNegative(float64(req.Priority)) {
-		WriteErrorMessage(w, http.StatusBadRequest, types.ErrInvalidRequest, "priority must be non-negative", h.logger)
-		return
-	}
-
-	if !ValidateNonNegative(float64(req.Weight)) {
-		WriteErrorMessage(w, http.StatusBadRequest, types.ErrInvalidRequest, "weight must be non-negative", h.logger)
-		return
-	}
-
-	if !ValidateNonNegative(float64(req.RateLimitRPM)) {
-		WriteErrorMessage(w, http.StatusBadRequest, types.ErrInvalidRequest, "rate_limit_rpm must be non-negative", h.logger)
-		return
-	}
-
-	if !ValidateNonNegative(float64(req.RateLimitRPD)) {
-		WriteErrorMessage(w, http.StatusBadRequest, types.ErrInvalidRequest, "rate_limit_rpd must be non-negative", h.logger)
-		return
-	}
-
-	key := llm.LLMProviderAPIKey{
-		ProviderID:   providerID,
-		APIKey:       req.APIKey,
-		BaseURL:      req.BaseURL,
-		Label:        req.Label,
-		Priority:     req.Priority,
-		Weight:       req.Weight,
-		Enabled:      req.Enabled == nil || *req.Enabled,
-		RateLimitRPM: req.RateLimitRPM,
-		RateLimitRPD: req.RateLimitRPD,
-	}
-	if key.Priority == 0 {
-		key.Priority = 100
-	}
-	if key.Weight == 0 {
-		key.Weight = 100
-	}
-
-	if err := h.store.CreateAPIKey(&key); err != nil {
-		WriteErrorMessage(w, http.StatusInternalServerError, types.ErrInternalError, "failed to create API key", h.logger)
+	resp, svcErr := h.svc.CreateAPIKey(providerID, req)
+	if svcErr != nil {
+		WriteError(w, svcErr, h.logger)
 		return
 	}
 
 	WriteJSON(w, http.StatusCreated, api.Response{
 		Success:   true,
-		Data:      toAPIKeyResponse(key),
+		Data:      resp,
 		Timestamp: time.Now(),
 		RequestID: w.Header().Get("X-Request-ID"),
 	})
@@ -266,12 +232,6 @@ func (h *APIKeyHandler) HandleUpdateAPIKey(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	existing, err := h.store.GetAPIKey(keyID, providerID)
-	if err != nil {
-		WriteErrorMessage(w, http.StatusNotFound, types.ErrInvalidRequest, "API key not found", h.logger)
-		return
-	}
-
 	if !ValidateContentType(w, r, h.logger) {
 		return
 	}
@@ -281,70 +241,12 @@ func (h *APIKeyHandler) HandleUpdateAPIKey(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	if req.BaseURL != nil && *req.BaseURL != "" && !ValidateURL(*req.BaseURL) {
-		WriteErrorMessage(w, http.StatusBadRequest, types.ErrInvalidRequest, "base_url must be a valid HTTP or HTTPS URL", h.logger)
+	resp, svcErr := h.svc.UpdateAPIKey(providerID, keyID, req)
+	if svcErr != nil {
+		WriteError(w, svcErr, h.logger)
 		return
 	}
-
-	if req.Priority != nil && !ValidateNonNegative(float64(*req.Priority)) {
-		WriteErrorMessage(w, http.StatusBadRequest, types.ErrInvalidRequest, "priority must be non-negative", h.logger)
-		return
-	}
-
-	if req.Weight != nil && !ValidateNonNegative(float64(*req.Weight)) {
-		WriteErrorMessage(w, http.StatusBadRequest, types.ErrInvalidRequest, "weight must be non-negative", h.logger)
-		return
-	}
-
-	if req.RateLimitRPM != nil && !ValidateNonNegative(float64(*req.RateLimitRPM)) {
-		WriteErrorMessage(w, http.StatusBadRequest, types.ErrInvalidRequest, "rate_limit_rpm must be non-negative", h.logger)
-		return
-	}
-
-	if req.RateLimitRPD != nil && !ValidateNonNegative(float64(*req.RateLimitRPD)) {
-		WriteErrorMessage(w, http.StatusBadRequest, types.ErrInvalidRequest, "rate_limit_rpd must be non-negative", h.logger)
-		return
-	}
-
-	updates := map[string]any{}
-	if req.BaseURL != nil {
-		updates["base_url"] = *req.BaseURL
-	}
-	if req.Label != nil {
-		updates["label"] = *req.Label
-	}
-	if req.Priority != nil {
-		updates["priority"] = *req.Priority
-	}
-	if req.Weight != nil {
-		updates["weight"] = *req.Weight
-	}
-	if req.Enabled != nil {
-		updates["enabled"] = *req.Enabled
-	}
-	if req.RateLimitRPM != nil {
-		updates["rate_limit_rpm"] = *req.RateLimitRPM
-	}
-	if req.RateLimitRPD != nil {
-		updates["rate_limit_rpd"] = *req.RateLimitRPD
-	}
-
-	if len(updates) == 0 {
-		WriteErrorMessage(w, http.StatusBadRequest, types.ErrInvalidRequest, "no fields to update", h.logger)
-		return
-	}
-
-	if err := h.store.UpdateAPIKey(&existing, updates); err != nil {
-		WriteErrorMessage(w, http.StatusInternalServerError, types.ErrInternalError, "failed to update API key", h.logger)
-		return
-	}
-
-	// 重新加载
-	if err := h.store.ReloadAPIKey(&existing); err != nil {
-		WriteErrorMessage(w, http.StatusInternalServerError, types.ErrInternalError, "failed to reload API key", h.logger)
-		return
-	}
-	WriteSuccess(w, toAPIKeyResponse(existing))
+	WriteSuccess(w, resp)
 }
 
 // HandleDeleteAPIKey DELETE /api/v1/providers/{id}/api-keys/{keyId}
@@ -366,13 +268,8 @@ func (h *APIKeyHandler) HandleDeleteAPIKey(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	rowsAffected, err := h.store.DeleteAPIKey(keyID, providerID)
-	if err != nil {
-		WriteErrorMessage(w, http.StatusInternalServerError, types.ErrInternalError, "failed to delete API key", h.logger)
-		return
-	}
-	if rowsAffected == 0 {
-		WriteErrorMessage(w, http.StatusNotFound, types.ErrInvalidRequest, "API key not found", h.logger)
+	if svcErr := h.svc.DeleteAPIKey(providerID, keyID); svcErr != nil {
+		WriteError(w, svcErr, h.logger)
 		return
 	}
 
@@ -392,33 +289,10 @@ func (h *APIKeyHandler) HandleAPIKeyStats(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	keys, err := h.store.ListAPIKeys(providerID)
-	if err != nil {
-		WriteErrorMessage(w, http.StatusInternalServerError, types.ErrInternalError, "failed to load API keys", h.logger)
+	stats, svcErr := h.svc.ListAPIKeyStats(providerID)
+	if svcErr != nil {
+		WriteError(w, svcErr, h.logger)
 		return
-	}
-
-	stats := make([]runtimeRouter.APIKeyStats, 0, len(keys))
-	for _, k := range keys {
-		successRate := 1.0
-		if k.TotalRequests > 0 {
-			successRate = float64(k.TotalRequests-k.FailedRequests) / float64(k.TotalRequests)
-		}
-		stats = append(stats, runtimeRouter.APIKeyStats{
-			KeyID:          k.ID,
-			Label:          k.Label,
-			BaseURL:        k.BaseURL,
-			Enabled:        k.Enabled,
-			IsHealthy:      k.IsHealthy(),
-			TotalRequests:  k.TotalRequests,
-			FailedRequests: k.FailedRequests,
-			SuccessRate:    successRate,
-			CurrentRPM:     k.CurrentRPM,
-			CurrentRPD:     k.CurrentRPD,
-			LastUsedAt:     k.LastUsedAt,
-			LastErrorAt:    k.LastErrorAt,
-			LastError:      k.LastError,
-		})
 	}
 
 	WriteSuccess(w, stats)

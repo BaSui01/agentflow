@@ -168,7 +168,7 @@ agent/
 
 ## 4.1 目标调用链（唯一）
 
-`cmd/agentflow/main.go -> internal/app/bootstrap -> cmd/agentflow/server_* -> api/routes -> api/handlers -> workflow/agent usecase -> agent/runtime.Builder -> agent/core.Execute -> llm/gateway.Invoke|Stream`
+`cmd/agentflow/main.go:runServe -> internal/app/bootstrap.InitializeServeRuntime -> cmd/agentflow.NewServer(...).Start -> cmd/agentflow/server_*.initHandlers/startHTTPServer -> bootstrap.RegisterHTTPRoutes -> api/routes -> api/handlers -> workflow/agent usecase -> agent/runtime.Builder -> agent/core.Execute -> llm/gateway.Invoke|Stream`
 
 ## 4.1.1 目标分层调用图（含 RAG/Workflow/Internal）
 
@@ -176,6 +176,7 @@ agent/
 cmd/agentflow(main,migrate)
   -> internal/app/bootstrap (配置/日志/遥测/DB)
   -> cmd/agentflow/server_* (组合根装配)
+      -> bootstrap.RegisterHTTPRoutes
   -> api/routes
   -> api/handlers
       -> workflow (编排用例，可选)

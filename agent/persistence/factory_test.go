@@ -17,17 +17,6 @@ func TestNewMessageStore_Memory(t *testing.T) {
 	t.Cleanup(func() { store.Close() })
 }
 
-func TestNewMessageStore_File(t *testing.T) {
-	config := DefaultStoreConfig()
-	config.Type = StoreTypeFile
-	config.BaseDir = t.TempDir()
-	config.Cleanup.Enabled = false
-	store, err := NewMessageStore(config)
-	require.NoError(t, err)
-	assert.NotNil(t, store)
-	t.Cleanup(func() { store.Close() })
-}
-
 func TestNewMessageStore_UnsupportedType(t *testing.T) {
 	config := DefaultStoreConfig()
 	config.Type = "unknown"
@@ -45,37 +34,12 @@ func TestNewTaskStore_Memory(t *testing.T) {
 	t.Cleanup(func() { store.Close() })
 }
 
-func TestNewTaskStore_File(t *testing.T) {
-	config := DefaultStoreConfig()
-	config.Type = StoreTypeFile
-	config.BaseDir = t.TempDir()
-	config.Cleanup.Enabled = false
-	store, err := NewTaskStore(config)
-	require.NoError(t, err)
-	assert.NotNil(t, store)
-	t.Cleanup(func() { store.Close() })
-}
-
 func TestNewTaskStore_UnsupportedType(t *testing.T) {
 	config := DefaultStoreConfig()
 	config.Type = "unknown"
 	_, err := NewTaskStore(config)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "unsupported")
-}
-
-func TestMustNewMessageStore_ReturnsError(t *testing.T) {
-	config := DefaultStoreConfig()
-	config.Type = "unknown"
-	_, err := MustNewMessageStore(config)
-	assert.Error(t, err)
-}
-
-func TestMustNewTaskStore_ReturnsError(t *testing.T) {
-	config := DefaultStoreConfig()
-	config.Type = "unknown"
-	_, err := MustNewTaskStore(config)
-	assert.Error(t, err)
 }
 
 func TestRetryConfig_CalculateBackoff(t *testing.T) {
@@ -140,4 +104,3 @@ func TestMessage_IsAcked(t *testing.T) {
 	msg.AckedAt = &now
 	assert.True(t, msg.IsAcked())
 }
-

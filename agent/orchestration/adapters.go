@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/BaSui01/agentflow/agent"
-	"github.com/BaSui01/agentflow/agent/crews"
 	"github.com/BaSui01/agentflow/agent/handoff"
 	"github.com/BaSui01/agentflow/agent/multiagent"
 	"go.uber.org/zap"
@@ -341,40 +340,4 @@ func resolveSupervisorID(agents []agent.Agent) string {
 		return ""
 	}
 	return agents[0].ID()
-}
-
-// ---------------------------------------------------------------------------
-// crewAgentAdapter wraps agent.Agent to satisfy crews.CrewAgent.
-// ---------------------------------------------------------------------------
-
-type crewAgentAdapter struct {
-	agent agent.Agent
-}
-
-func (c *crewAgentAdapter) ID() string { return c.agent.ID() }
-
-func (c *crewAgentAdapter) Execute(ctx context.Context, task crews.CrewTask) (*crews.TaskResult, error) {
-	input := &agent.Input{
-		Content: task.Description,
-	}
-	if task.Context != "" {
-		input.Content = task.Context + "\n" + task.Description
-	}
-
-	output, err := c.agent.Execute(ctx, input)
-	if err != nil {
-		return nil, fmt.Errorf("agent execution failed: %w", err)
-	}
-
-	return &crews.TaskResult{
-		TaskID: task.ID,
-		Output: output.Content,
-	}, nil
-}
-
-func (c *crewAgentAdapter) Negotiate(_ context.Context, _ crews.Proposal) (*crews.NegotiationResult, error) {
-	return &crews.NegotiationResult{
-		Accepted: true,
-		Response: c.agent.ID(),
-	}, nil
 }

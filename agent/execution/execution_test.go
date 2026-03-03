@@ -612,14 +612,6 @@ func TestCodeValidator(t *testing.T) {
 	})
 }
 
-// --- escapeShellArg ---
-
-func TestEscapeShellArg(t *testing.T) {
-	assert.Equal(t, "hello", escapeShellArg("hello"))
-	assert.Equal(t, "it'\\''s", escapeShellArg("it's"))
-	assert.Equal(t, "", escapeShellArg(""))
-}
-
 // --- containsPattern / findPattern ---
 
 func TestContainsPattern(t *testing.T) {

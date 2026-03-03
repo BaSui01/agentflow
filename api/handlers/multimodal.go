@@ -1,9 +1,7 @@
 package handlers
 
 import (
-	"bytes"
 	"context"
-	"encoding/base64"
 	"fmt"
 	"io"
 	"mime"
@@ -76,6 +74,7 @@ type MultimodalHandler struct {
 	gateway            llmcore.Gateway
 	structuredProvider llm.Provider
 	pipeline           multimodal.PromptPipeline
+	service            multimodalService
 
 	defaultImageProvider string
 	defaultVideoProvider string
@@ -197,7 +196,7 @@ func NewMultimodalHandlerWithProviders(
 		structuredProvider = llmgateway.NewChatProviderAdapter(gw, chatProvider)
 	}
 
-	return &MultimodalHandler{
+	handler := &MultimodalHandler{
 		logger:               logger.With(zap.String("handler", "multimodal")),
 		router:               router,
 		gateway:              gw,
@@ -213,6 +212,15 @@ func NewMultimodalHandlerWithProviders(
 		referenceTTL:         referenceTTL,
 		referenceStore:       referenceStore,
 	}
+	handler.service = newDefaultMultimodalService(
+		handler.gateway,
+		handler.pipeline,
+		handler.resolveImageProvider,
+		handler.resolveVideoProvider,
+		handler.getReference,
+		handler.referenceMaxSize,
+	)
+	return handler
 }
 
 func (h *MultimodalHandler) HandleCapabilities(w http.ResponseWriter, r *http.Request) {
@@ -351,123 +359,18 @@ func (h *MultimodalHandler) HandleImage(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	providerName, err := h.resolveImageProvider(req.Provider)
+	result, err := h.service.GenerateImage(r.Context(), req)
 	if err != nil {
-		WriteErrorMessage(w, http.StatusBadRequest, types.ErrInvalidRequest, err.Error(), h.logger)
+		WriteErrorMessage(w, toHTTPStatus(err), errorCodeFrom(err, types.ErrUpstreamError), strings.TrimSpace(err.Error()), h.logger)
 		return
-	}
-
-	negative := strings.TrimSpace(req.NegativePrompt)
-	if negative == "" {
-		negative = defaultNegativeText
-	}
-
-	promptResult, err := h.pipeline.Build(r.Context(), multimodal.PromptContext{
-		Modality:       "image",
-		BasePrompt:     req.Prompt,
-		Advanced:       req.Advanced,
-		StyleTokens:    req.StyleTokens,
-		QualityTokens:  req.QualityTokens,
-		NegativePrompt: negative,
-	})
-	if err != nil {
-		h.writeProviderError(w, err)
-		return
-	}
-
-	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Minute)
-	defer cancel()
-
-	var mode string
-	var resp *image.GenerateResponse
-
-	if req.ReferenceID != "" || strings.TrimSpace(req.ReferenceImageURL) != "" {
-		mode = "image-to-image"
-		var data []byte
-		if req.ReferenceID != "" {
-			var ok bool
-			data, _, ok = h.getReference(req.ReferenceID)
-			if !ok {
-				WriteErrorMessage(w, http.StatusBadRequest, types.ErrInvalidRequest, "reference_id not found or expired", h.logger)
-				return
-			}
-		} else {
-			validatedURL, urlErr := multimodal.ValidatePublicReferenceImageURL(ctx, req.ReferenceImageURL)
-			if urlErr != nil {
-				WriteErrorMessage(w, http.StatusBadRequest, types.ErrInvalidRequest, urlErr.Error(), h.logger)
-				return
-			}
-			var dlErr error
-			data, _, dlErr = multimodal.DownloadReferenceImage(ctx, validatedURL, h.referenceMaxSize)
-			if dlErr != nil {
-				WriteErrorMessage(w, http.StatusBadRequest, types.ErrInvalidRequest, dlErr.Error(), h.logger)
-				return
-			}
-		}
-		gatewayResp, invokeErr := h.gateway.Invoke(ctx, &llmcore.UnifiedRequest{
-			Capability:   llmcore.CapabilityImage,
-			ProviderHint: providerName,
-			ModelHint:    req.Model,
-			Payload: &llmgateway.ImageInput{
-				Provider: providerName,
-				Edit: &image.EditRequest{
-					Image:          bytes.NewReader(data),
-					Prompt:         promptResult.Prompt,
-					Model:          req.Model,
-					N:              req.N,
-					Size:           req.Size,
-					ResponseFormat: req.ResponseFormat,
-				},
-			},
-		})
-		if invokeErr != nil {
-			h.writeProviderError(w, invokeErr)
-			return
-		}
-		var ok bool
-		resp, ok = gatewayResp.Output.(*image.GenerateResponse)
-		if !ok || resp == nil {
-			h.writeProviderError(w, types.NewInternalError("invalid image gateway response"))
-			return
-		}
-	} else {
-		mode = "text-to-image"
-		gatewayResp, invokeErr := h.gateway.Invoke(ctx, &llmcore.UnifiedRequest{
-			Capability:   llmcore.CapabilityImage,
-			ProviderHint: providerName,
-			ModelHint:    req.Model,
-			Payload: &llmgateway.ImageInput{
-				Provider: providerName,
-				Generate: &image.GenerateRequest{
-					Prompt:         promptResult.Prompt,
-					NegativePrompt: promptResult.NegativePrompt,
-					Model:          req.Model,
-					N:              req.N,
-					Size:           req.Size,
-					Quality:        req.Quality,
-					Style:          req.Style,
-					ResponseFormat: req.ResponseFormat,
-				},
-			},
-		})
-		if invokeErr != nil {
-			h.writeProviderError(w, invokeErr)
-			return
-		}
-		var ok bool
-		resp, ok = gatewayResp.Output.(*image.GenerateResponse)
-		if !ok || resp == nil {
-			h.writeProviderError(w, types.NewInternalError("invalid image gateway response"))
-			return
-		}
 	}
 
 	WriteSuccess(w, map[string]any{
-		"mode":             mode,
-		"provider":         providerName,
-		"effective_prompt": promptResult.Prompt,
-		"negative_prompt":  promptResult.NegativePrompt,
-		"response":         resp,
+		"mode":             result.Mode,
+		"provider":         result.Provider,
+		"effective_prompt": result.EffectivePrompt,
+		"negative_prompt":  result.NegativePrompt,
+		"response":         result.Response,
 	})
 }
 
@@ -512,85 +415,17 @@ func (h *MultimodalHandler) HandleVideo(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	providerName, err := h.resolveVideoProvider(req.Provider)
+	result, err := h.service.GenerateVideo(r.Context(), req)
 	if err != nil {
-		WriteErrorMessage(w, http.StatusBadRequest, types.ErrInvalidRequest, err.Error(), h.logger)
-		return
-	}
-
-	promptResult, err := h.pipeline.Build(r.Context(), multimodal.PromptContext{
-		Modality:       "video",
-		BasePrompt:     req.Prompt,
-		Advanced:       req.Advanced,
-		StyleTokens:    req.StyleTokens,
-		NegativePrompt: req.NegativePrompt,
-		Camera:         req.Camera,
-		Mood:           req.Mood,
-	})
-	if err != nil {
-		h.writeProviderError(w, err)
-		return
-	}
-
-	genReq := &video.GenerateRequest{
-		Prompt:         promptResult.Prompt,
-		NegativePrompt: promptResult.NegativePrompt,
-		Model:          req.Model,
-		Duration:       req.Duration,
-		AspectRatio:    req.AspectRatio,
-		Resolution:     req.Resolution,
-		FPS:            req.FPS,
-		Seed:           req.Seed,
-		ResponseFormat: req.ResponseFormat,
-	}
-
-	mode := "text-to-video"
-	if req.ReferenceID != "" || strings.TrimSpace(req.ReferenceImageURL) != "" {
-		mode = "image-to-video"
-		if req.ReferenceID != "" {
-			data, mimeType, ok := h.getReference(req.ReferenceID)
-			if !ok {
-				WriteErrorMessage(w, http.StatusBadRequest, types.ErrInvalidRequest, "reference_id not found or expired", h.logger)
-				return
-			}
-			h.attachReferenceImage(providerName, genReq, data, mimeType)
-		} else {
-			validatedURL, urlErr := multimodal.ValidatePublicReferenceImageURL(r.Context(), req.ReferenceImageURL)
-			if urlErr != nil {
-				WriteErrorMessage(w, http.StatusBadRequest, types.ErrInvalidRequest, urlErr.Error(), h.logger)
-				return
-			}
-			genReq.ImageURL = validatedURL
-		}
-	}
-
-	ctx, cancel := context.WithTimeout(r.Context(), 6*time.Minute)
-	defer cancel()
-
-	gatewayResp, err := h.gateway.Invoke(ctx, &llmcore.UnifiedRequest{
-		Capability:   llmcore.CapabilityVideo,
-		ProviderHint: providerName,
-		ModelHint:    req.Model,
-		Payload: &llmgateway.VideoInput{
-			Provider: providerName,
-			Generate: genReq,
-		},
-	})
-	if err != nil {
-		h.writeProviderError(w, err)
-		return
-	}
-	resp, ok := gatewayResp.Output.(*video.GenerateResponse)
-	if !ok || resp == nil {
-		h.writeProviderError(w, types.NewInternalError("invalid video gateway response"))
+		WriteErrorMessage(w, toHTTPStatus(err), errorCodeFrom(err, types.ErrUpstreamError), strings.TrimSpace(err.Error()), h.logger)
 		return
 	}
 
 	WriteSuccess(w, map[string]any{
-		"mode":             mode,
-		"provider":         providerName,
-		"effective_prompt": promptResult.Prompt,
-		"response":         resp,
+		"mode":             result.Mode,
+		"provider":         result.Provider,
+		"effective_prompt": result.EffectivePrompt,
+		"response":         result.Response,
 	})
 }
 
@@ -887,19 +722,6 @@ func (h *MultimodalHandler) cleanupReferences(now time.Time) {
 	h.referenceStore.Cleanup(now.Add(-h.referenceTTL))
 }
 
-
-func (h *MultimodalHandler) attachReferenceImage(providerName string, req *video.GenerateRequest, data []byte, mimeType string) {
-	b64 := base64.StdEncoding.EncodeToString(data)
-	if providerName == "veo" {
-		req.Image = b64
-		return
-	}
-	if mimeType == "" {
-		mimeType = "image/png"
-	}
-	req.ImageURL = fmt.Sprintf("data:%s;base64,%s", mimeType, b64)
-}
-
 func convertAPIMessages(messages []api.Message) []types.Message {
 	out := make([]types.Message, 0, len(messages))
 	for _, msg := range messages {
@@ -938,4 +760,3 @@ func firstChoice(resp *llm.ChatResponse) string {
 	}
 	return strings.TrimSpace(resp.Choices[0].Message.Content)
 }
-
