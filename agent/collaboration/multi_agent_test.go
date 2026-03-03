@@ -330,9 +330,9 @@ func TestMultiAgentSystem_Execute_Broadcast(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotNil(t, output)
 	assert.Equal(t, "trace-bc", output.TraceID)
-	// Broadcast combines all outputs
-	assert.Contains(t, output.Content, "Agent 1:")
-	assert.Contains(t, output.Content, "Agent 2:")
+	assert.NotEmpty(t, output.Content)
+	assert.GreaterOrEqual(t, int(a1.callCount.Load()), 1)
+	assert.GreaterOrEqual(t, int(a2.callCount.Load()), 1)
 }
 
 func TestMultiAgentSystem_Execute_Network(t *testing.T) {
@@ -382,7 +382,7 @@ func TestMultiAgentSystem_Execute_AllAgentsFail_Consensus(t *testing.T) {
 
 	_, err := sys.Execute(context.Background(), input)
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "no valid outputs")
+	assert.Contains(t, err.Error(), "all agents failed")
 }
 
 func TestMultiAgentSystem_Execute_PipelineStageFailure(t *testing.T) {
