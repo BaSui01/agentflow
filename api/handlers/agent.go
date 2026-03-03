@@ -222,43 +222,16 @@ func (h *AgentHandler) HandleExecuteAgent(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	ag, svcErr := h.service.ResolveForOperation(r.Context(), req.AgentID, AgentOperationExecute)
-	if svcErr != nil {
-		WriteError(w, svcErr, h.logger)
+	resp, duration, execErr := h.service.ExecuteAgent(r.Context(), req, r.Header.Get("X-Request-ID"))
+	if execErr != nil {
+		WriteError(w, execErr, h.logger)
 		return
-	}
-
-	input := &agent.Input{
-		TraceID:   r.Header.Get("X-Request-ID"),
-		Content:   req.Content,
-		Context:   req.Context,
-		Variables: req.Variables,
-	}
-
-	ctx := r.Context()
-	start := time.Now()
-	output, err := ag.Execute(ctx, input)
-	duration := time.Since(start)
-
-	if err != nil {
-		h.handleAgentError(w, err)
-		return
-	}
-
-	resp := AgentExecuteResponse{
-		TraceID:      output.TraceID,
-		Content:      output.Content,
-		Metadata:     output.Metadata,
-		TokensUsed:   output.TokensUsed,
-		Cost:         output.Cost,
-		Duration:     duration.String(),
-		FinishReason: output.FinishReason,
 	}
 
 	h.logger.Info("agent execution completed",
 		zap.String("agent_id", req.AgentID),
 		zap.Duration("duration", duration),
-		zap.Int("tokens_used", output.TokensUsed),
+		zap.Int("tokens_used", resp.TokensUsed),
 	)
 
 	WriteSuccess(w, resp)
@@ -299,8 +272,8 @@ func (h *AgentHandler) HandleAgentStream(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	ag, svcErr := h.service.ResolveForOperation(r.Context(), req.AgentID, AgentOperationStream)
-	if svcErr != nil {
+	// Preserve non-stream error semantics (404/501) before committing SSE headers.
+	if _, svcErr := h.service.ResolveForOperation(r.Context(), req.AgentID, AgentOperationStream); svcErr != nil {
 		WriteError(w, svcErr, h.logger)
 		return
 	}
@@ -365,18 +338,7 @@ func (h *AgentHandler) HandleAgentStream(w http.ResponseWriter, r *http.Request)
 		flusher.Flush()
 	}
 
-	input := &agent.Input{
-		TraceID:   r.Header.Get("X-Request-ID"),
-		Content:   req.Content,
-		Context:   req.Context,
-		Variables: req.Variables,
-	}
-
-	// Inject the emitter into context so the agent's streaming path picks it up
-	ctx := agent.WithRuntimeStreamEmitter(r.Context(), emitter)
-
-	_, err := ag.Execute(ctx, input)
-	if err != nil {
+	if execErr := h.service.ExecuteAgentStream(r.Context(), req, r.Header.Get("X-Request-ID"), emitter); execErr != nil {
 		// If headers are already sent (SSE mode), write error as SSE event
 		errPayload, _ := json.Marshal(map[string]string{"error": "agent execution failed"})
 		fmt.Fprintf(w, "event: error\ndata: %s\n\n", errPayload)
@@ -425,22 +387,9 @@ func (h *AgentHandler) HandlePlanAgent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ag, svcErr := h.service.ResolveForOperation(r.Context(), req.AgentID, AgentOperationPlan)
-	if svcErr != nil {
-		WriteError(w, svcErr, h.logger)
-		return
-	}
-
-	input := &agent.Input{
-		TraceID:   r.Header.Get("X-Request-ID"),
-		Content:   req.Content,
-		Context:   req.Context,
-		Variables: req.Variables,
-	}
-
-	plan, err := ag.Plan(r.Context(), input)
-	if err != nil {
-		h.handleAgentError(w, err)
+	plan, planErr := h.service.PlanAgent(r.Context(), req, r.Header.Get("X-Request-ID"))
+	if planErr != nil {
+		WriteError(w, planErr, h.logger)
 		return
 	}
 
@@ -504,17 +453,10 @@ func (h *AgentHandler) HandleAgentHealth(w http.ResponseWriter, r *http.Request)
 // Helper Functions
 // =============================================================================
 
-// handleAgentError handles agent errors
+// handleAgentError handles agent errors.
+// Kept for test/backward compatibility while execution mapping is now centralized in AgentService.
 func (h *AgentHandler) handleAgentError(w http.ResponseWriter, err error) {
-	if typedErr, ok := err.(*types.Error); ok {
-		WriteError(w, typedErr, h.logger)
-		return
-	}
-
-	internalErr := types.NewInternalError("agent operation failed").
-		WithCause(err)
-
-	WriteError(w, internalErr, h.logger)
+	WriteError(w, toTypesAgentError(err), h.logger)
 }
 
 // toAgentInfo converts a discovery.AgentInfo to the API AgentInfo

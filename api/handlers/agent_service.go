@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/BaSui01/agentflow/agent"
 	"github.com/BaSui01/agentflow/agent/discovery"
@@ -24,6 +25,9 @@ type AgentService interface {
 	ResolveForOperation(ctx context.Context, agentID string, op AgentOperation) (agent.Agent, *types.Error)
 	ListAgents(ctx context.Context) ([]*discovery.AgentInfo, *types.Error)
 	GetAgent(ctx context.Context, agentID string) (*discovery.AgentInfo, *types.Error)
+	ExecuteAgent(ctx context.Context, req AgentExecuteRequest, traceID string) (*AgentExecuteResponse, time.Duration, *types.Error)
+	PlanAgent(ctx context.Context, req AgentExecuteRequest, traceID string) (*agent.PlanResult, *types.Error)
+	ExecuteAgentStream(ctx context.Context, req AgentExecuteRequest, traceID string, emitter agent.RuntimeStreamEmitter) *types.Error
 }
 
 // DefaultAgentService is the default AgentService implementation used by AgentHandler.
@@ -86,3 +90,71 @@ func (s *DefaultAgentService) GetAgent(ctx context.Context, agentID string) (*di
 	return info, nil
 }
 
+func (s *DefaultAgentService) ExecuteAgent(ctx context.Context, req AgentExecuteRequest, traceID string) (*AgentExecuteResponse, time.Duration, *types.Error) {
+	ag, err := s.ResolveForOperation(ctx, req.AgentID, AgentOperationExecute)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	input := toAgentInput(req, traceID)
+	start := time.Now()
+	output, execErr := ag.Execute(ctx, input)
+	duration := time.Since(start)
+	if execErr != nil {
+		return nil, duration, toTypesAgentError(execErr)
+	}
+
+	return &AgentExecuteResponse{
+		TraceID:      output.TraceID,
+		Content:      output.Content,
+		Metadata:     output.Metadata,
+		TokensUsed:   output.TokensUsed,
+		Cost:         output.Cost,
+		Duration:     duration.String(),
+		FinishReason: output.FinishReason,
+	}, duration, nil
+}
+
+func (s *DefaultAgentService) PlanAgent(ctx context.Context, req AgentExecuteRequest, traceID string) (*agent.PlanResult, *types.Error) {
+	ag, err := s.ResolveForOperation(ctx, req.AgentID, AgentOperationPlan)
+	if err != nil {
+		return nil, err
+	}
+	plan, planErr := ag.Plan(ctx, toAgentInput(req, traceID))
+	if planErr != nil {
+		return nil, toTypesAgentError(planErr)
+	}
+	return plan, nil
+}
+
+func (s *DefaultAgentService) ExecuteAgentStream(ctx context.Context, req AgentExecuteRequest, traceID string, emitter agent.RuntimeStreamEmitter) *types.Error {
+	ag, err := s.ResolveForOperation(ctx, req.AgentID, AgentOperationStream)
+	if err != nil {
+		return err
+	}
+	streamCtx := agent.WithRuntimeStreamEmitter(ctx, emitter)
+	_, execErr := ag.Execute(streamCtx, toAgentInput(req, traceID))
+	if execErr != nil {
+		return toTypesAgentError(execErr)
+	}
+	return nil
+}
+
+func toAgentInput(req AgentExecuteRequest, traceID string) *agent.Input {
+	return &agent.Input{
+		TraceID:   traceID,
+		Content:   req.Content,
+		Context:   req.Context,
+		Variables: req.Variables,
+	}
+}
+
+func toTypesAgentError(err error) *types.Error {
+	if err == nil {
+		return nil
+	}
+	if typedErr, ok := err.(*types.Error); ok {
+		return typedErr
+	}
+	return types.NewInternalError("agent operation failed").WithCause(err)
+}
