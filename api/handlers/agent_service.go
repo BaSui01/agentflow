@@ -4,10 +4,12 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/BaSui01/agentflow/agent"
 	"github.com/BaSui01/agentflow/agent/discovery"
+	llmcore "github.com/BaSui01/agentflow/llm/core"
 	"github.com/BaSui01/agentflow/types"
 )
 
@@ -96,9 +98,10 @@ func (s *DefaultAgentService) ExecuteAgent(ctx context.Context, req AgentExecute
 		return nil, 0, err
 	}
 
+	execCtx := applyAgentRoutingContext(ctx, req)
 	input := toAgentInput(req, traceID)
 	start := time.Now()
-	output, execErr := ag.Execute(ctx, input)
+	output, execErr := ag.Execute(execCtx, input)
 	duration := time.Since(start)
 	if execErr != nil {
 		return nil, duration, toTypesAgentError(execErr)
@@ -120,7 +123,7 @@ func (s *DefaultAgentService) PlanAgent(ctx context.Context, req AgentExecuteReq
 	if err != nil {
 		return nil, err
 	}
-	plan, planErr := ag.Plan(ctx, toAgentInput(req, traceID))
+	plan, planErr := ag.Plan(applyAgentRoutingContext(ctx, req), toAgentInput(req, traceID))
 	if planErr != nil {
 		return nil, toTypesAgentError(planErr)
 	}
@@ -132,7 +135,7 @@ func (s *DefaultAgentService) ExecuteAgentStream(ctx context.Context, req AgentE
 	if err != nil {
 		return err
 	}
-	streamCtx := agent.WithRuntimeStreamEmitter(ctx, emitter)
+	streamCtx := agent.WithRuntimeStreamEmitter(applyAgentRoutingContext(ctx, req), emitter)
 	_, execErr := ag.Execute(streamCtx, toAgentInput(req, traceID))
 	if execErr != nil {
 		return toTypesAgentError(execErr)
@@ -157,4 +160,55 @@ func toTypesAgentError(err error) *types.Error {
 		return typedErr
 	}
 	return types.NewInternalError("agent operation failed").WithCause(err)
+}
+
+func applyAgentRoutingContext(ctx context.Context, req AgentExecuteRequest) context.Context {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
+	rc := &agent.RunConfig{
+		Metadata: normalizeRouteMetadata(req.Metadata),
+		Tags:     normalizeRouteTags(req.Tags),
+	}
+	hasRunConfig := len(rc.Metadata) > 0 || len(rc.Tags) > 0
+
+	model := strings.TrimSpace(req.Model)
+	if model != "" {
+		rc.Model = agent.StringPtr(model)
+		ctx = types.WithLLMModel(ctx, model)
+		hasRunConfig = true
+	}
+
+	provider, providerErr := normalizeProviderHint(req.Provider)
+	if providerErr == nil && provider != "" {
+		rc.Provider = agent.StringPtr(provider)
+		ctx = types.WithLLMProvider(ctx, provider)
+		hasRunConfig = true
+	}
+
+	routePolicy, routeErr := normalizeRoutePolicy(req.RoutePolicy)
+	if routeErr == nil && routePolicy != "" {
+		policy := string(routePolicy)
+		rc.RoutePolicy = agent.StringPtr(policy)
+		ctx = types.WithLLMRoutePolicy(ctx, policy)
+		hasRunConfig = true
+	}
+
+	if provider != "" || routePolicy != "" {
+		if rc.Metadata == nil {
+			rc.Metadata = make(map[string]string)
+		}
+		if provider != "" {
+			rc.Metadata[llmcore.MetadataKeyChatProvider] = provider
+		}
+		if routePolicy != "" {
+			rc.Metadata["route_policy"] = string(routePolicy)
+		}
+	}
+
+	if hasRunConfig {
+		ctx = agent.WithRunConfig(ctx, rc)
+	}
+	return ctx
 }

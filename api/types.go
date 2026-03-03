@@ -47,6 +47,10 @@ type ChatRequest struct {
 	UserID string `json:"user_id,omitempty" example:"user-1"`
 	// 模型名称（例如 gpt-4、claude-3-opus）
 	Model string `json:"model" example:"gpt-4" binding:"required"`
+	// Provider 路由提示（如 openai/anthropic）
+	Provider string `json:"provider,omitempty" example:"openai"`
+	// 路由策略（balanced/cost_first/health_first/latency_first）
+	RoutePolicy string `json:"route_policy,omitempty" example:"balanced"`
 	// 对话消息
 	Messages []Message `json:"messages" binding:"required"`
 	// 生成的最大 Token 数量

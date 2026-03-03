@@ -11,11 +11,12 @@ import (
 type RoutingStrategy string
 
 const (
-	StrategyTagBased    RoutingStrategy = "tag"
-	StrategyCostBased   RoutingStrategy = "cost"
-	StrategyQPSBased    RoutingStrategy = "qps"
-	StrategyHealthBased RoutingStrategy = "health"
-	StrategyCanary      RoutingStrategy = "canary"
+	StrategyTagBased     RoutingStrategy = "tag"
+	StrategyCostBased    RoutingStrategy = "cost"
+	StrategyQPSBased     RoutingStrategy = "qps"
+	StrategyHealthBased  RoutingStrategy = "health"
+	StrategyLatencyBased RoutingStrategy = "latency"
+	StrategyCanary       RoutingStrategy = "canary"
 )
 
 // Router 是 MultiProviderRouter 的基础结构体，提供 DB、健康监控等基础设施。
@@ -41,9 +42,11 @@ type RouterOptions struct {
 type ProviderSelection struct {
 	Provider     Provider
 	ProviderID   uint
+	APIKeyID     uint
 	ProviderCode string
 	ModelID      uint
 	ModelName    string
+	RemoteModel  string
 	IsCanary     bool
 	Strategy     RoutingStrategy
 }

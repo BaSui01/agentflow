@@ -30,6 +30,8 @@ tags:
     description: Agent management and execution endpoints
   - name: Provider
     description: LLM provider and API key management endpoints
+  - name: Tool
+    description: DB-backed hosted tool registration endpoints
   - name: Multimodal
     description: Framework-level multimodal capabilities
 
@@ -139,6 +141,21 @@ paths:
           description: Invalid request
         '500':
           description: Internal error
+
+  /api/v1/chat/capabilities:
+    get:
+      tags: [Chat]
+      summary: Get chat routing capabilities
+      operationId: chatCapabilities
+      security:
+        - ApiKeyAuth: []
+      responses:
+        '200':
+          description: Chat routing capabilities
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Envelope'
 
   /api/v1/chat/completions/stream:
     post:
@@ -450,6 +467,21 @@ paths:
                           $ref: '#/components/schemas/AgentInfo'
         '500':
           description: Internal error
+
+  /api/v1/agents/capabilities:
+    get:
+      tags: [Agent]
+      summary: Get agent routing capabilities
+      operationId: agentCapabilities
+      security:
+        - ApiKeyAuth: []
+      responses:
+        '200':
+          description: Agent routing capabilities
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Envelope'
 
   /api/v1/agents/execute:
     post:
@@ -784,6 +816,149 @@ paths:
                 $ref: '#/components/schemas/Envelope'
         '404':
           description: API key not found
+
+  /api/v1/tools:
+    get:
+      tags: [Tool]
+      summary: List tool registrations
+      description: |
+        List all DB-managed hosted tool registrations.
+        Note: This endpoint is only available when database and tooling runtime are configured.
+      x-conditional: "Requires database connection and tool runtime"
+      operationId: listToolRegistrations
+      security:
+        - ApiKeyAuth: []
+      responses:
+        '200':
+          description: Tool registration list
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/ToolRegistration'
+    post:
+      tags: [Tool]
+      summary: Create tool registration
+      description: |
+        Create a DB-managed tool alias and apply it to runtime immediately.
+        Note: This endpoint is only available when database and tooling runtime are configured.
+      x-conditional: "Requires database connection and tool runtime"
+      operationId: createToolRegistration
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateToolRegistrationRequest'
+      responses:
+        '201':
+          description: Tool registration created
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/ToolRegistration'
+        '400':
+          description: Invalid request
+
+  /api/v1/tools/targets:
+    get:
+      tags: [Tool]
+      summary: List runtime base tool targets
+      operationId: listToolTargets
+      security:
+        - ApiKeyAuth: []
+      responses:
+        '200':
+          description: Runtime base targets
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Envelope'
+
+  /api/v1/tools/reload:
+    post:
+      tags: [Tool]
+      summary: Reload tool runtime from DB
+      operationId: reloadToolRuntime
+      security:
+        - ApiKeyAuth: []
+      responses:
+        '200':
+          description: Runtime reloaded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Envelope'
+
+  /api/v1/tools/{id}:
+    put:
+      tags: [Tool]
+      summary: Update tool registration
+      operationId: updateToolRegistration
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+          description: Tool registration ID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateToolRegistrationRequest'
+      responses:
+        '200':
+          description: Tool registration updated
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/ToolRegistration'
+        '404':
+          description: Tool registration not found
+    delete:
+      tags: [Tool]
+      summary: Delete tool registration
+      operationId: deleteToolRegistration
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+          description: Tool registration ID
+      responses:
+        '200':
+          description: Tool registration deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Envelope'
+        '404':
+          description: Tool registration not found
 
   /api/v1/mcp/resources:
     get:
@@ -1183,6 +1358,15 @@ components:
           type: string
           description: Model name (e.g. gpt-4, claude-3-opus)
           example: "gpt-4"
+        provider:
+          type: string
+          description: Optional provider routing hint (e.g. openai, anthropic).
+          example: "openai"
+        route_policy:
+          type: string
+          enum: [balanced, cost_first, health_first, latency_first]
+          description: Optional routing policy for service-layer dispatch.
+          example: "balanced"
         messages:
           type: array
           items:
@@ -1260,6 +1444,27 @@ components:
           type: string
         content:
           type: string
+        provider:
+          type: string
+          description: Optional provider routing hint.
+          example: "openai"
+        model:
+          type: string
+          description: Optional model override for this execution.
+          example: "gpt-4o"
+        route_policy:
+          type: string
+          enum: [balanced, cost_first, health_first, latency_first]
+          description: Optional routing policy for service-layer dispatch.
+          example: "balanced"
+        metadata:
+          type: object
+          additionalProperties:
+            type: string
+        tags:
+          type: array
+          items:
+            type: string
         context:
           type: object
           additionalProperties: true
@@ -1469,6 +1674,61 @@ components:
           nullable: true
         last_error:
           type: string
+
+    ToolRegistration:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        description:
+          type: string
+        target:
+          type: string
+        parameters:
+          type: object
+          additionalProperties: true
+        enabled:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    CreateToolRegistrationRequest:
+      type: object
+      required: [name, target]
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        target:
+          type: string
+        parameters:
+          type: object
+          additionalProperties: true
+        enabled:
+          type: boolean
+          default: true
+
+    UpdateToolRegistrationRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        target:
+          type: string
+        parameters:
+          type: object
+          additionalProperties: true
+        enabled:
+          type: boolean
 
     MultimodalCapabilities:
       type: object

@@ -1,12 +1,12 @@
 package handlers
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"time"
 
+	"github.com/BaSui01/agentflow/agent"
 	"github.com/BaSui01/agentflow/api"
 	"github.com/BaSui01/agentflow/llm"
 	llmcore "github.com/BaSui01/agentflow/llm/core"
@@ -28,20 +28,45 @@ const defaultStreamTimeout = 30 * time.Second
 type ChatHandler struct {
 	gateway   llmcore.Gateway
 	converter ChatConverter
+	service   ChatService
 	logger    *zap.Logger
 }
 
 // NewChatHandler 创建聊天处理器
 func NewChatHandler(provider llm.Provider, policyManager *llmpolicy.Manager, logger *zap.Logger) *ChatHandler {
+	return NewChatHandlerWithRuntime(provider, policyManager, nil, logger)
+}
+
+// NewChatHandlerWithRuntime creates a chat handler with routing runtime dependencies.
+func NewChatHandlerWithRuntime(
+	provider llm.Provider,
+	policyManager *llmpolicy.Manager,
+	toolManager agent.ToolManager,
+	logger *zap.Logger,
+) *ChatHandler {
 	gw := llmgateway.New(llmgateway.Config{
 		ChatProvider:  provider,
 		PolicyManager: policyManager,
 		Logger:        logger,
 	})
-	return &ChatHandler{
+	handler := &ChatHandler{
 		gateway:   gw,
 		converter: NewDefaultChatConverter(defaultStreamTimeout),
 		logger:    logger,
+	}
+	chatProvider := llmgateway.NewChatProviderAdapter(handler.gateway, provider)
+	handler.service = newDefaultChatService(handler.gateway, chatProvider, toolManager, handler.converter, logger)
+	return handler
+}
+
+// NewChatHandlerWithService creates a chat handler with an explicit service.
+func NewChatHandlerWithService(service ChatService, logger *zap.Logger) *ChatHandler {
+	if logger == nil {
+		logger = zap.NewNop()
+	}
+	return &ChatHandler{
+		service: service,
+		logger:  logger,
 	}
 }
 
@@ -75,51 +100,28 @@ func (h *ChatHandler) HandleCompletion(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 转换为 LLM 请求
-	llmReq := h.convertToLLMRequest(&req)
-
-	// 设置超时
-	ctx := r.Context()
-	if llmReq.Timeout > 0 {
-		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(ctx, llmReq.Timeout)
-		defer cancel()
+	if h.service == nil {
+		WriteError(w, types.NewInternalError("chat service is not configured"), h.logger)
+		return
 	}
 
-	// 通过 gateway 调用统一入口
-	start := time.Now()
-	gatewayResp, err := h.gateway.Invoke(ctx, &llmcore.UnifiedRequest{
-		Capability: llmcore.CapabilityChat,
-		ModelHint:  llmReq.Model,
-		TraceID:    llmReq.TraceID,
-		Payload:    llmReq,
-	})
-	duration := time.Since(start)
-
+	result, err := h.service.Complete(r.Context(), &req)
 	if err != nil {
-		h.handleProviderError(w, err)
+		WriteError(w, err, h.logger)
 		return
 	}
-	resp, ok := gatewayResp.Output.(*llm.ChatResponse)
-	if !ok || resp == nil {
-		WriteError(w, types.NewInternalError("invalid chat gateway response"), h.logger)
-		return
-	}
-
-	// 转换响应
-	apiResp := h.convertToAPIResponse(resp)
 
 	// 记录日志
 	requestID := w.Header().Get("X-Request-ID")
 	h.logger.Info("chat completion",
 		zap.String("request_id", requestID),
 		zap.String("model", req.Model),
-		zap.Int("prompt_tokens", resp.Usage.PromptTokens),
-		zap.Int("completion_tokens", resp.Usage.CompletionTokens),
-		zap.Duration("duration", duration),
+		zap.Int("prompt_tokens", result.Raw.Usage.PromptTokens),
+		zap.Int("completion_tokens", result.Raw.Usage.CompletionTokens),
+		zap.Duration("duration", result.Duration),
 	)
 
-	WriteSuccess(w, apiResp)
+	WriteSuccess(w, result.Response)
 }
 
 // HandleStream 处理流式聊天请求
@@ -152,25 +154,20 @@ func (h *ChatHandler) HandleStream(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 转换为 LLM 请求
-	llmReq := h.convertToLLMRequest(&req)
-
 	// 设置 SSE 响应头
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
 	w.Header().Set("X-Accel-Buffering", "no") // 禁用 nginx 缓冲
 
-	// 调用 gateway 流式接口
-	ctx := r.Context()
-	stream, err := h.gateway.Stream(ctx, &llmcore.UnifiedRequest{
-		Capability: llmcore.CapabilityChat,
-		ModelHint:  llmReq.Model,
-		TraceID:    llmReq.TraceID,
-		Payload:    llmReq,
-	})
+	if h.service == nil {
+		WriteError(w, types.NewInternalError("chat service is not configured"), h.logger)
+		return
+	}
+
+	stream, err := h.service.Stream(r.Context(), &req)
 	if err != nil {
-		h.handleProviderError(w, err)
+		WriteError(w, err, h.logger)
 		return
 	}
 
@@ -256,7 +253,7 @@ func (h *ChatHandler) validateChatRequest(req *api.ChatRequest) *types.Error {
 	}
 
 	// 验证 max_tokens 参数
-	if req.MaxTokens < 0 || req.MaxTokens > 128000 {
+	if !ValidateNonNegative(float64(req.MaxTokens)) || req.MaxTokens > 128000 {
 		return types.NewError(types.ErrInvalidRequest, "max_tokens must be between 0 and 128000")
 	}
 
@@ -270,13 +267,19 @@ func (h *ChatHandler) validateChatRequest(req *api.ChatRequest) *types.Error {
 		return types.NewInvalidRequestError("top_p must be between 0 and 1")
 	}
 
-	validRoles := map[string]bool{
-		"system": true, "developer": true, "user": true, "assistant": true, "tool": true,
+	if _, err := normalizeProviderHint(req.Provider); err != nil {
+		return err
 	}
+	if _, err := normalizeRoutePolicy(req.RoutePolicy); err != nil {
+		return err
+	}
+
+	validRoles := []string{"system", "developer", "user", "assistant", "tool"}
+	validImageTypes := []string{"url", "base64"}
 
 	for i, msg := range req.Messages {
 		// V-006: Role validation
-		if !validRoles[msg.Role] {
+		if !ValidateEnum(msg.Role, validRoles) {
 			return types.NewError(types.ErrInvalidRequest,
 				fmt.Sprintf("messages[%d].role must be one of: system, developer, user, assistant, tool", i))
 		}
@@ -288,9 +291,8 @@ func (h *ChatHandler) validateChatRequest(req *api.ChatRequest) *types.Error {
 		}
 
 		// V-007: ImageContent.Type enum validation
-		validImageTypes := map[string]bool{"url": true, "base64": true}
 		for j, img := range msg.Images {
-			if !validImageTypes[img.Type] {
+			if !ValidateEnum(img.Type, validImageTypes) {
 				return types.NewError(types.ErrInvalidRequest,
 					fmt.Sprintf("messages[%d].images[%d].type must be one of: url, base64", i, j))
 			}
@@ -300,14 +302,31 @@ func (h *ChatHandler) validateChatRequest(req *api.ChatRequest) *types.Error {
 	return nil
 }
 
+// HandleCapabilities handles GET /api/v1/chat/capabilities
+func (h *ChatHandler) HandleCapabilities(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		WriteErrorMessage(w, http.StatusMethodNotAllowed, types.ErrInvalidRequest, "method not allowed", h.logger)
+		return
+	}
+	if h.service == nil {
+		WriteError(w, types.NewInternalError("chat service is not configured"), h.logger)
+		return
+	}
+
+	WriteSuccess(w, map[string]any{
+		"route_params":         []string{"provider", "model", "route_policy", "tags", "metadata"},
+		"route_policies":       h.service.SupportedRoutePolicies(),
+		"default_route_policy": h.service.DefaultRoutePolicy(),
+		"notes": []string{
+			"provider/model/route_policy are routed by service layer",
+			"provider hint effectiveness depends on runtime provider implementation",
+		},
+	})
+}
+
 // convertToLLMRequest 转换为 LLM 请求
 func (h *ChatHandler) convertToLLMRequest(req *api.ChatRequest) *llm.ChatRequest {
 	return h.converter.ToLLMRequest(req)
-}
-
-// convertToAPIResponse 转换为 API 响应
-func (h *ChatHandler) convertToAPIResponse(resp *llm.ChatResponse) *api.ChatResponse {
-	return h.converter.ToAPIResponse(resp)
 }
 
 // convertToAPIStreamChunk 转换流式块
@@ -416,22 +435,4 @@ func convertAPIImagesToTypes(images []api.ImageContent) []types.ImageContent {
 		}
 	}
 	return result
-}
-
-// =============================================================================
-// 🏥 HealthStatus 转换辅助函数
-// =============================================================================
-
-// ConvertHealthStatus 将 llm.HealthStatus 转换为 api.ProviderHealthResponse。
-// 主要处理 Latency 的 time.Duration -> string 格式化。
-func ConvertHealthStatus(hs *llm.HealthStatus) *api.ProviderHealthResponse {
-	if hs == nil {
-		return nil
-	}
-	return &api.ProviderHealthResponse{
-		Healthy:   hs.Healthy,
-		Latency:   hs.Latency.String(),
-		ErrorRate: hs.ErrorRate,
-		Message:   hs.Message,
-	}
 }

@@ -4,9 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/glebarez/sqlite"
 	"go.uber.org/zap"
-	"gorm.io/gorm"
 )
 
 type mockProvider struct {
@@ -52,10 +50,8 @@ func TestMultiProviderRouter_SelectProviderWithModel(t *testing.T) {
 
 	logger := zap.NewNop()
 
-	db, err := gorm.Open(sqlite.Open("file::memory:?cache=shared"), &gorm.Config{})
-	if err != nil {
-		t.Fatalf("open db: %v", err)
-	}
+	db := openRouterTestDB(t)
+	var err error
 	if err := db.AutoMigrate(&LLMProvider{}, &LLMModel{}, &LLMProviderModel{}, &LLMProviderAPIKey{}); err != nil {
 		t.Fatalf("AutoMigrate: %v", err)
 	}
@@ -148,5 +144,88 @@ func TestMultiProviderRouter_SelectProviderWithModel(t *testing.T) {
 	// 未知的模型应该返回已输入错误 。
 	if _, err := router.SelectProviderWithModel(context.Background(), "no-such-model", StrategyCostBased); err == nil {
 		t.Fatalf("expected error for unknown model")
+	}
+}
+
+func TestMultiProviderRouter_SelectProviderByCodeWithModel(t *testing.T) {
+	t.Parallel()
+
+	logger := zap.NewNop()
+	db := openRouterTestDB(t)
+	var err error
+	if err := db.AutoMigrate(&LLMProvider{}, &LLMModel{}, &LLMProviderModel{}, &LLMProviderAPIKey{}); err != nil {
+		t.Fatalf("AutoMigrate: %v", err)
+	}
+
+	pA := LLMProvider{Code: "mockA", Name: "Mock A", Status: LLMProviderStatusActive}
+	pB := LLMProvider{Code: "mockB", Name: "Mock B", Status: LLMProviderStatusActive}
+	if err := db.Create(&pA).Error; err != nil {
+		t.Fatalf("create provider A: %v", err)
+	}
+	if err := db.Create(&pB).Error; err != nil {
+		t.Fatalf("create provider B: %v", err)
+	}
+
+	model := LLMModel{ModelName: "gpt-4o", DisplayName: "GPT-4o", Enabled: true}
+	if err := db.Create(&model).Error; err != nil {
+		t.Fatalf("create model: %v", err)
+	}
+	pmA := LLMProviderModel{
+		ModelID:         model.ID,
+		ProviderID:      pA.ID,
+		RemoteModelName: "remote-a",
+		BaseURL:         "http://example-a",
+		PriceInput:      0.001,
+		PriceCompletion: 0.002,
+		Priority:        10,
+		Enabled:         true,
+	}
+	pmB := LLMProviderModel{
+		ModelID:         model.ID,
+		ProviderID:      pB.ID,
+		RemoteModelName: "remote-b",
+		BaseURL:         "http://example-b",
+		PriceInput:      0.010,
+		PriceCompletion: 0.020,
+		Priority:        20,
+		Enabled:         true,
+	}
+	if err := db.Create(&pmA).Error; err != nil {
+		t.Fatalf("create provider model A: %v", err)
+	}
+	if err := db.Create(&pmB).Error; err != nil {
+		t.Fatalf("create provider model B: %v", err)
+	}
+	keyA := LLMProviderAPIKey{ProviderID: pA.ID, APIKey: "kA", Enabled: true, Weight: 100, Priority: 10}
+	keyB := LLMProviderAPIKey{ProviderID: pB.ID, APIKey: "kB", Enabled: true, Weight: 100, Priority: 10}
+	if err := db.Create(&keyA).Error; err != nil {
+		t.Fatalf("create api key A: %v", err)
+	}
+	if err := db.Create(&keyB).Error; err != nil {
+		t.Fatalf("create api key B: %v", err)
+	}
+
+	factory := NewDefaultProviderFactory()
+	factory.RegisterProvider("mockA", func(apiKey, baseURL string) (Provider, error) { return &mockProvider{name: "mockA"}, nil })
+	factory.RegisterProvider("mockB", func(apiKey, baseURL string) (Provider, error) { return &mockProvider{name: "mockB"}, nil })
+
+	router := NewMultiProviderRouter(db, factory, RouterOptions{Logger: logger})
+	t.Cleanup(router.healthMonitor.Stop)
+	if err := router.InitAPIKeyPools(context.Background()); err != nil {
+		t.Fatalf("InitAPIKeyPools: %v", err)
+	}
+
+	selection, err := router.SelectProviderByCodeWithModel(context.Background(), "mockB", "gpt-4o", StrategyCostBased)
+	if err != nil {
+		t.Fatalf("SelectProviderByCodeWithModel: %v", err)
+	}
+	if selection.ProviderCode != "mockB" {
+		t.Fatalf("expected provider mockB, got %s", selection.ProviderCode)
+	}
+	if selection.RemoteModel != "remote-b" {
+		t.Fatalf("expected remote model remote-b, got %s", selection.RemoteModel)
+	}
+	if selection.APIKeyID == 0 {
+		t.Fatal("expected api key id to be populated")
 	}
 }
