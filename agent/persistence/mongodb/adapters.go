@@ -11,7 +11,6 @@ import (
 	"go.mongodb.org/mongo-driver/v2/bson"
 
 	"github.com/BaSui01/agentflow/agent"
-	"github.com/BaSui01/agentflow/agent/persistence"
 )
 
 // =============================================================================
@@ -272,8 +271,3 @@ var (
 	_ agent.ConversationStoreProvider = (*ConversationStoreAdapter)(nil)
 	_ agent.RunStoreProvider          = (*RunStoreAdapter)(nil)
 )
-
-// IsNotFound checks if an error is a not-found error.
-func IsNotFound(err error) bool {
-	return err == persistence.ErrNotFound
-}

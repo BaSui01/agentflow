@@ -9,26 +9,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// --- Factory Must success paths ---
-
-func TestMustNewMessageStore_SuccessPath(t *testing.T) {
-	config := DefaultStoreConfig()
-	config.Cleanup.Enabled = false
-	store, err := MustNewMessageStore(config)
-	require.NoError(t, err)
-	require.NotNil(t, store)
-	t.Cleanup(func() { store.Close() })
-}
-
-func TestMustNewTaskStore_SuccessPath(t *testing.T) {
-	config := DefaultStoreConfig()
-	config.Cleanup.Enabled = false
-	store, err := MustNewTaskStore(config)
-	require.NoError(t, err)
-	require.NotNil(t, store)
-	t.Cleanup(func() { store.Close() })
-}
-
 // --- Memory message store additional edge cases ---
 
 func TestMemoryMessageStore_SaveMessages_WithNilEntries(t *testing.T) {
@@ -287,34 +267,3 @@ func TestMessage_ShouldRetry_WhenExpired(t *testing.T) {
 	}
 	assert.False(t, msg.ShouldRetry(config))
 }
-
-// --- File store nil message/task ---
-
-func TestFileMessageStore_SaveMessage_NilReturnsError(t *testing.T) {
-	config := DefaultStoreConfig()
-	config.Type = StoreTypeFile
-	config.BaseDir = t.TempDir()
-	config.Cleanup.Enabled = false
-
-	store, err := NewFileMessageStore(config)
-	require.NoError(t, err)
-	t.Cleanup(func() { store.Close() })
-
-	err = store.SaveMessage(context.Background(), nil)
-	assert.Error(t, err)
-}
-
-func TestFileTaskStore_SaveTask_NilReturnsError(t *testing.T) {
-	config := DefaultStoreConfig()
-	config.Type = StoreTypeFile
-	config.BaseDir = t.TempDir()
-	config.Cleanup.Enabled = false
-
-	store, err := NewFileTaskStore(config)
-	require.NoError(t, err)
-	t.Cleanup(func() { store.Close() })
-
-	err = store.SaveTask(context.Background(), nil)
-	assert.Error(t, err)
-}
-

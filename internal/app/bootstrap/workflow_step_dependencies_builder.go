@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/BaSui01/agentflow/agent"
-	"github.com/BaSui01/agentflow/agent/browser"
 	"github.com/BaSui01/agentflow/agent/deliberation"
 	"github.com/BaSui01/agentflow/agent/execution"
 	"github.com/BaSui01/agentflow/agent/hitl"
@@ -77,14 +76,6 @@ func buildHostedWorkflowTools(opts WorkflowRuntimeOptions, logger *zap.Logger) (
 	_ = codeTool.Type()
 	_ = codeTool.Description()
 	_ = codeTool.Schema()
-
-	browserFactory := browser.NewChromeDPBrowserFactory(logger)
-	browserTool := browser.NewBrowserTool(browserFactory, browser.DefaultBrowserConfig(), logger)
-	browserHostedTool := hosted.NewBrowserAutomationTool(browserTool, logger)
-	registry.Register(browserHostedTool)
-	_ = browserHostedTool.Type()
-	_ = browserHostedTool.Description()
-	_ = browserHostedTool.Schema()
 
 	if opts.RetrievalStore != nil && opts.EmbeddingProvider != nil {
 		retrievalTool := hosted.NewRetrievalTool(

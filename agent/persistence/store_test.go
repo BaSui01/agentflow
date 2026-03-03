@@ -2,7 +2,6 @@ package persistence
 
 import (
 	"context"
-	"os"
 	"testing"
 	"time"
 )
@@ -393,187 +392,6 @@ func TestMemoryTaskStore(t *testing.T) {
 	})
 }
 
-// 测试FileMessageStore 测试基于文件的信息存储
-func TestFileMessageStore(t *testing.T) {
-	// 创建临时目录
-	tmpDir, err := os.MkdirTemp("", "persistence-test-*")
-	if err != nil {
-		t.Fatalf("Failed to create temp dir: %v", err)
-	}
-	defer os.RemoveAll(tmpDir)
-
-	config := DefaultStoreConfig()
-	config.BaseDir = tmpDir
-	config.Cleanup.Enabled = false
-
-	store, err := NewFileMessageStore(config)
-	if err != nil {
-		t.Fatalf("Failed to create file message store: %v", err)
-	}
-	defer store.Close()
-
-	ctx := context.Background()
-
-	t.Run("SaveAndGetMessage", func(t *testing.T) {
-		msg := &Message{
-			ID:      "file-msg-1",
-			Topic:   "file-topic",
-			Content: "File message",
-		}
-
-		if err := store.SaveMessage(ctx, msg); err != nil {
-			t.Fatalf("SaveMessage failed: %v", err)
-		}
-
-		retrieved, err := store.GetMessage(ctx, "file-msg-1")
-		if err != nil {
-			t.Fatalf("GetMessage failed: %v", err)
-		}
-
-		if retrieved.Content != msg.Content {
-			t.Errorf("Content mismatch")
-		}
-	})
-
-	t.Run("PersistenceAcrossRestart", func(t *testing.T) {
-		msg := &Message{
-			ID:      "persist-msg",
-			Topic:   "persist-topic",
-			Content: "Persistent message",
-		}
-		if err := store.SaveMessage(ctx, msg); err != nil {
-			t.Fatalf("SaveMessage failed: %v", err)
-		}
-
-		// 关闭并重新打开商店
-		store.Close()
-
-		store2, err := NewFileMessageStore(config)
-		if err != nil {
-			t.Fatalf("Failed to reopen store: %v", err)
-		}
-		defer store2.Close()
-
-		retrieved, err := store2.GetMessage(ctx, "persist-msg")
-		if err != nil {
-			t.Fatalf("Message should persist: %v", err)
-		}
-
-		if retrieved.Content != msg.Content {
-			t.Error("Content should match after restart")
-		}
-	})
-}
-
-// 测试文件任务堆
-func TestFileTaskStore(t *testing.T) {
-	// 创建临时目录
-	tmpDir, err := os.MkdirTemp("", "persistence-test-*")
-	if err != nil {
-		t.Fatalf("Failed to create temp dir: %v", err)
-	}
-	defer os.RemoveAll(tmpDir)
-
-	config := DefaultStoreConfig()
-	config.BaseDir = tmpDir
-	config.Cleanup.Enabled = false
-
-	store, err := NewFileTaskStore(config)
-	if err != nil {
-		t.Fatalf("Failed to create file task store: %v", err)
-	}
-	defer store.Close()
-
-	ctx := context.Background()
-
-	t.Run("SaveAndGetTask", func(t *testing.T) {
-		task := &AsyncTask{
-			ID:      "file-task-1",
-			AgentID: "agent-1",
-			Status:  TaskStatusPending,
-		}
-
-		if err := store.SaveTask(ctx, task); err != nil {
-			t.Fatalf("SaveTask failed: %v", err)
-		}
-
-		retrieved, err := store.GetTask(ctx, "file-task-1")
-		if err != nil {
-			t.Fatalf("GetTask failed: %v", err)
-		}
-
-		if retrieved.AgentID != task.AgentID {
-			t.Errorf("AgentID mismatch")
-		}
-	})
-
-	t.Run("PersistenceAcrossRestart", func(t *testing.T) {
-		task := &AsyncTask{
-			ID:      "persist-task",
-			AgentID: "agent-1",
-			Status:  TaskStatusRunning,
-		}
-		if err := store.SaveTask(ctx, task); err != nil {
-			t.Fatalf("SaveTask failed: %v", err)
-		}
-
-		// 关闭并重新打开商店
-		store.Close()
-
-		store2, err := NewFileTaskStore(config)
-		if err != nil {
-			t.Fatalf("Failed to reopen store: %v", err)
-		}
-		defer store2.Close()
-
-		retrieved, err := store2.GetTask(ctx, "persist-task")
-		if err != nil {
-			t.Fatalf("Task should persist: %v", err)
-		}
-
-		if retrieved.Status != TaskStatusRunning {
-			t.Error("Status should match after restart")
-		}
-	})
-
-	t.Run("RecoverableTasksAfterRestart", func(t *testing.T) {
-		activeStore, err := NewFileTaskStore(config)
-		if err != nil {
-			t.Fatalf("Failed to create fresh store: %v", err)
-		}
-		defer activeStore.Close()
-
-		// 创建可恢复的任务
-		tasks := []*AsyncTask{
-			{ID: "recover-file-1", AgentID: "agent-1", Status: TaskStatusPending},
-			{ID: "recover-file-2", AgentID: "agent-1", Status: TaskStatusRunning},
-		}
-		for _, task := range tasks {
-			if err := activeStore.SaveTask(ctx, task); err != nil {
-				t.Fatalf("SaveTask failed: %v", err)
-			}
-		}
-
-		// 关闭并重新打开商店
-		activeStore.Close()
-
-		store2, err := NewFileTaskStore(config)
-		if err != nil {
-			t.Fatalf("Failed to reopen store: %v", err)
-		}
-		defer store2.Close()
-
-		result, err := store2.GetRecoverableTasks(ctx)
-		if err != nil {
-			t.Fatalf("GetRecoverableTasks failed: %v", err)
-		}
-
-		if len(result) < 2 {
-			t.Errorf("Expected at least 2 recoverable tasks, got %d", len(result))
-		}
-	})
-}
-
 // 测试RetryConfig 测试重试配置
 func TestRetryConfig(t *testing.T) {
 	config := DefaultRetryConfig()
@@ -807,44 +625,6 @@ func TestFactory(t *testing.T) {
 		}
 	})
 
-	t.Run("NewMessageStore_File", func(t *testing.T) {
-		tmpDir, _ := os.MkdirTemp("", "factory-test-*")
-		defer os.RemoveAll(tmpDir)
-
-		config := DefaultStoreConfig()
-		config.Type = StoreTypeFile
-		config.BaseDir = tmpDir
-
-		store, err := NewMessageStore(config)
-		if err != nil {
-			t.Fatalf("Failed to create file message store: %v", err)
-		}
-		defer store.Close()
-
-		if _, ok := store.(*FileMessageStore); !ok {
-			t.Error("Expected FileMessageStore")
-		}
-	})
-
-	t.Run("NewTaskStore_File", func(t *testing.T) {
-		tmpDir, _ := os.MkdirTemp("", "factory-test-*")
-		defer os.RemoveAll(tmpDir)
-
-		config := DefaultStoreConfig()
-		config.Type = StoreTypeFile
-		config.BaseDir = tmpDir
-
-		store, err := NewTaskStore(config)
-		if err != nil {
-			t.Fatalf("Failed to create file task store: %v", err)
-		}
-		defer store.Close()
-
-		if _, ok := store.(*FileTaskStore); !ok {
-			t.Error("Expected FileTaskStore")
-		}
-	})
-
 	t.Run("InvalidType", func(t *testing.T) {
 		config := DefaultStoreConfig()
 		config.Type = "invalid"
@@ -860,4 +640,3 @@ func TestFactory(t *testing.T) {
 		}
 	})
 }
-

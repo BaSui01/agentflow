@@ -564,19 +564,6 @@ func (c *execCommand) ExitCode() int {
 	return c.exitCode
 }
 
-func escapeShellArg(s string) string {
-	// 为 shell 逃出单引号
-	result := make([]byte, 0, len(s)+10)
-	for i := 0; i < len(s); i++ {
-		if s[i] == '\'' {
-			result = append(result, '\'', '\\', '\'', '\'')
-		} else {
-			result = append(result, s[i])
-		}
-	}
-	return string(result)
-}
-
 // processBackend使用本地进程执行 ElectionBackend.
 // 警告: 不如多克安全 - 只在信任的环境中使用.
 type ProcessBackend struct {

@@ -156,6 +156,32 @@ func TestValidator_ActionNode_StepNotFound(t *testing.T) {
 	assert.Contains(t, errMsgs, `node a: step "missing_step" not found in steps`)
 }
 
+func TestValidator_StepTypeAndRequiredFields(t *testing.T) {
+	v := NewValidator()
+	dsl := &WorkflowDSL{
+		Version: "1.0",
+		Name:    "step-type-test",
+		Steps: map[string]StepDef{
+			"bad_type":   {Type: "unknown"},
+			"llm_no_p":   {Type: "llm"},
+			"tool_no_t":  {Type: "tool"},
+			"human_no_p": {Type: "human_input"},
+		},
+		Workflow: WorkflowNodesDef{
+			Entry: "start",
+			Nodes: []NodeDef{
+				{ID: "start", Type: "action", StepDef: &StepDef{Type: "passthrough"}},
+			},
+		},
+	}
+	errs := v.Validate(dsl)
+	errMsgs := errStrings(errs)
+	assert.Contains(t, errMsgs, `step bad_type: invalid type "unknown"`)
+	assert.Contains(t, errMsgs, "step llm_no_p: llm step requires prompt")
+	assert.Contains(t, errMsgs, "step tool_no_t: tool step requires tool")
+	assert.Contains(t, errMsgs, "step human_no_p: human_input step requires prompt")
+}
+
 func TestValidator_ConditionNode_NoCondition(t *testing.T) {
 	v := NewValidator()
 	dsl := &WorkflowDSL{
@@ -317,6 +343,37 @@ func TestValidator_StepAgentNotFound(t *testing.T) {
 	errs := v.Validate(dsl)
 	errMsgs := errStrings(errs)
 	assert.Contains(t, errMsgs, `step s1: agent "missing_agent" not found`)
+}
+
+func TestValidator_InlineStepReferencesValidated(t *testing.T) {
+	v := NewValidator()
+	dsl := &WorkflowDSL{
+		Version: "1.0",
+		Name:    "inline-ref-test",
+		Agents:  map[string]AgentDef{},
+		Tools:   map[string]ToolDef{},
+		Workflow: WorkflowNodesDef{
+			Entry: "a",
+			Nodes: []NodeDef{
+				{
+					ID:   "a",
+					Type: "action",
+					StepDef: &StepDef{
+						Type:   "tool",
+						Tool:   "missing_tool",
+						Agent:  "missing_agent",
+						Prompt: "hello ${missing_var}",
+					},
+				},
+			},
+		},
+		Variables: map[string]VariableDef{},
+	}
+	errs := v.Validate(dsl)
+	errMsgs := errStrings(errs)
+	assert.Contains(t, errMsgs, `step node a inline step_def: agent "missing_agent" not found`)
+	assert.Contains(t, errMsgs, `step node a inline step_def: tool "missing_tool" not found`)
+	assert.Contains(t, errMsgs, `step node a inline step_def: variable "missing_var" referenced in prompt not defined`)
 }
 
 func TestValidator_StepToolNotFound(t *testing.T) {
@@ -653,7 +710,7 @@ workflow:
 	p := NewParser()
 	_, err := p.Parse([]byte(yaml))
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "unknown step type")
+	assert.Contains(t, err.Error(), `step custom: invalid type "unknown_type"`)
 }
 
 func TestParser_Parse_LLMStepWithAgent(t *testing.T) {
@@ -718,4 +775,3 @@ func TestParser_ParseFile_NotFound(t *testing.T) {
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "read DSL file")
 }
-

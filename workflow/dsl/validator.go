@@ -59,6 +59,9 @@ func (v *Validator) Validate(dsl *WorkflowDSL) []error {
 		errs = append(errs, v.validateNode(&node, dsl, nodeIDs)...)
 	}
 
+	// 验证 Step 定义与类型约束
+	errs = append(errs, v.validateStepDefinitions(dsl)...)
+
 	// 验证引用完整性
 	errs = append(errs, v.validateReferences(dsl, nodeIDs)...)
 
@@ -86,6 +89,10 @@ func (v *Validator) validateNode(node *NodeDef, dsl *WorkflowDSL, nodeIDs map[st
 			if _, ok := dsl.Steps[node.Step]; !ok {
 				errs = append(errs, fmt.Errorf("node %s: step %q not found in steps", node.ID, node.Step))
 			}
+		}
+		if node.StepDef != nil {
+			errs = append(errs, v.validateStepDefinition(fmt.Sprintf("node %s inline step_def", node.ID), *node.StepDef)...)
+			errs = append(errs, v.validateStepReferences(fmt.Sprintf("node %s inline step_def", node.ID), *node.StepDef, dsl)...)
 		}
 
 	case "condition":
@@ -148,16 +155,7 @@ func (v *Validator) validateReferences(dsl *WorkflowDSL, _ map[string]bool) []er
 
 	// 验证 step 中引用的 agent 和 tool 存在
 	for stepName, step := range dsl.Steps {
-		if step.Agent != "" && dsl.Agents != nil {
-			if _, ok := dsl.Agents[step.Agent]; !ok {
-				errs = append(errs, fmt.Errorf("step %s: agent %q not found", stepName, step.Agent))
-			}
-		}
-		if step.Tool != "" && dsl.Tools != nil {
-			if _, ok := dsl.Tools[step.Tool]; !ok {
-				errs = append(errs, fmt.Errorf("step %s: tool %q not found", stepName, step.Tool))
-			}
-		}
+		errs = append(errs, v.validateStepReferences(stepName, step, dsl)...)
 	}
 
 	// 验证 agent 中引用的 tool 存在
@@ -171,15 +169,71 @@ func (v *Validator) validateReferences(dsl *WorkflowDSL, _ map[string]bool) []er
 		}
 	}
 
-	// 验证变量插值引用
+	return errs
+}
+
+func (v *Validator) validateStepDefinitions(dsl *WorkflowDSL) []error {
+	var errs []error
 	for stepName, step := range dsl.Steps {
-		if step.Prompt != "" {
-			refs := extractVariableRefs(step.Prompt)
-			for _, ref := range refs {
-				if dsl.Variables != nil {
-					if _, ok := dsl.Variables[ref]; !ok {
-						errs = append(errs, fmt.Errorf("step %s: variable %q referenced in prompt not defined", stepName, ref))
-					}
+		errs = append(errs, v.validateStepDefinition(stepName, step)...)
+	}
+	return errs
+}
+
+func (v *Validator) validateStepDefinition(stepName string, step StepDef) []error {
+	var errs []error
+
+	validStepTypes := map[string]bool{
+		"llm":         true,
+		"tool":        true,
+		"human_input": true,
+		"code":        true,
+		"agent":       true,
+		"passthrough": true,
+	}
+	if !validStepTypes[step.Type] {
+		errs = append(errs, fmt.Errorf("step %s: invalid type %q", stepName, step.Type))
+		return errs
+	}
+
+	switch step.Type {
+	case "llm":
+		if strings.TrimSpace(step.Prompt) == "" {
+			errs = append(errs, fmt.Errorf("step %s: llm step requires prompt", stepName))
+		}
+	case "tool":
+		if strings.TrimSpace(step.Tool) == "" {
+			errs = append(errs, fmt.Errorf("step %s: tool step requires tool", stepName))
+		}
+	case "human_input":
+		if strings.TrimSpace(step.Prompt) == "" {
+			errs = append(errs, fmt.Errorf("step %s: human_input step requires prompt", stepName))
+		}
+	}
+
+	return errs
+}
+
+func (v *Validator) validateStepReferences(stepName string, step StepDef, dsl *WorkflowDSL) []error {
+	var errs []error
+
+	if step.Agent != "" && dsl.Agents != nil {
+		if _, ok := dsl.Agents[step.Agent]; !ok {
+			errs = append(errs, fmt.Errorf("step %s: agent %q not found", stepName, step.Agent))
+		}
+	}
+	if step.Tool != "" && dsl.Tools != nil {
+		if _, ok := dsl.Tools[step.Tool]; !ok {
+			errs = append(errs, fmt.Errorf("step %s: tool %q not found", stepName, step.Tool))
+		}
+	}
+
+	if step.Prompt != "" {
+		refs := extractVariableRefs(step.Prompt)
+		for _, ref := range refs {
+			if dsl.Variables != nil {
+				if _, ok := dsl.Variables[ref]; !ok {
+					errs = append(errs, fmt.Errorf("step %s: variable %q referenced in prompt not defined", stepName, ref))
 				}
 			}
 		}
@@ -206,4 +260,3 @@ func extractVariableRefs(s string) []string {
 	}
 	return refs
 }
-
