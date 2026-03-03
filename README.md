@@ -61,7 +61,7 @@
 
 ### 🧱 启动装配链路
 
-- **单入口启动链路** - `cmd/agentflow/main.go -> internal/app/bootstrap -> cmd/agentflow/server_* -> api/routes -> api/handlers -> domain(agent/rag/workflow/llm)`
+- **单入口启动链路** - `cmd(main) -> internal/app/bootstrap -> cmd(server_*) -> api/routes -> api/handlers -> domain(agent/rag/workflow/llm)`
 - **组合根职责收敛** - `cmd` 仅做装配；运行时构建集中在 `internal/app/bootstrap`（详见 `docs/architecture/startup-composition.md`）
 
 ### 🔍 RAG 系统 (检索增强生成)
@@ -428,11 +428,7 @@ agentflow/
 │   ├── dag_builder.go        # DAG 构建器
 │   ├── dag_executor.go       # DAG 执行器
 │   ├── dag_serialization.go  # DAG 序列化
-│   ├── parallel.go           # 并行执行
-│   ├── routing.go            # 路由节点
-│   ├── state_reducer.go      # 状态归约
 │   ├── steps.go              # 步骤定义
-│   ├── adapters/             # Agent/RAG 适配器
 │   ├── builder_visual.go     # 可视化构建器
 │   ├── circuit_breaker.go    # DAG 熔断器（三态机 + 注册表）
 │   ├── checkpoint_enhanced.go # 增强检查点

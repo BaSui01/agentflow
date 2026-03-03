@@ -386,8 +386,8 @@ DAG执行器.Execute(ctx, input):
   - StateChangeEvent 状态变更事件 {AgentID, FromState, ToState}
   - ToolCallEvent 工具调用事件 {ToolName, Stage: start|end, RunID}
   - FeedbackEvent 反馈事件 {FeedbackType, Content, Data}
-  - ApprovalRequestedEvent 审批请求事件
-  - ApprovalRespondedEvent 审批响应事件
+  - AgentRunStartEvent 运行开始事件
+  - AgentRunCompleteEvent 运行完成事件
   - SubagentCompletedEvent 子Agent完成事件
 
 画 3 个订阅者方框接收事件：
