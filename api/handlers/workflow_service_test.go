@@ -29,7 +29,7 @@ func (s *workflowExecutorStub) ExecuteDAG(ctx context.Context, wf *workflow.DAGW
 func TestWorkflowService_BuildDAGWorkflow_FromDSL_Success(t *testing.T) {
 	svc := newDefaultWorkflowService(&workflowExecutorStub{}, dsl.NewParser())
 
-	wf, err := svc.BuildDAGWorkflow(workflowExecuteRequest{
+	wf, source, err := svc.BuildDAGWorkflow(workflowExecuteRequest{
 		DSL: `
 version: "1.0"
 name: "test-workflow"
@@ -46,13 +46,14 @@ workflow:
 	})
 	require.Nil(t, err)
 	require.NotNil(t, wf)
+	assert.Equal(t, "dsl", source)
 	assert.Equal(t, "test-workflow", wf.Name())
 }
 
 func TestWorkflowService_BuildDAGWorkflow_InvalidDAGFileExtension(t *testing.T) {
 	svc := newDefaultWorkflowService(&workflowExecutorStub{}, dsl.NewParser())
 
-	wf, err := svc.BuildDAGWorkflow(workflowExecuteRequest{
+	wf, _, err := svc.BuildDAGWorkflow(workflowExecuteRequest{
 		DAGFile: "workflow.txt",
 	})
 	require.Nil(t, wf)
@@ -60,6 +61,44 @@ func TestWorkflowService_BuildDAGWorkflow_InvalidDAGFileExtension(t *testing.T) 
 	assert.Equal(t, types.ErrInvalidRequest, err.Code)
 	assert.Equal(t, http.StatusBadRequest, err.HTTPStatus)
 	assert.Contains(t, err.Error(), "dag_file must be .json/.yml/.yaml")
+}
+
+func TestWorkflowService_BuildDAGWorkflow_SourceMismatch(t *testing.T) {
+	svc := newDefaultWorkflowService(&workflowExecutorStub{}, dsl.NewParser())
+
+	wf, _, err := svc.BuildDAGWorkflow(workflowExecuteRequest{
+		Source: "dag_json",
+		DSL: `
+version: "1.0"
+name: "test-workflow"
+steps:
+  s1:
+    type: "passthrough"
+workflow:
+  entry: "n1"
+  nodes:
+    - id: "n1"
+      type: "action"
+      step: "s1"
+`,
+	})
+	require.Nil(t, wf)
+	require.NotNil(t, err)
+	assert.Equal(t, types.ErrInvalidRequest, err.Code)
+	assert.Contains(t, err.Error(), "source=dag_json requires dag_json")
+}
+
+func TestWorkflowService_BuildDAGWorkflow_AutoSourceConflict(t *testing.T) {
+	svc := newDefaultWorkflowService(&workflowExecutorStub{}, dsl.NewParser())
+
+	wf, _, err := svc.BuildDAGWorkflow(workflowExecuteRequest{
+		DSL:     "version: \"1.0\"\nname: \"wf\"\nworkflow:\n  entry: \"n1\"\n  nodes: []\n",
+		DAGJSON: `{"name":"wf","entry":"n1","nodes":[]}`,
+	})
+	require.Nil(t, wf)
+	require.NotNil(t, err)
+	assert.Equal(t, types.ErrInvalidRequest, err.Code)
+	assert.Contains(t, err.Error(), "multiple workflow sources provided")
 }
 
 func TestWorkflowService_ValidateDSL_InvalidYAML(t *testing.T) {

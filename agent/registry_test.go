@@ -144,3 +144,64 @@ func TestCachingResolver_WithoutMemory(t *testing.T) {
 	assert.Nil(t, ba.memory)
 }
 
+func TestCachingResolver_WithToolManagerAndDerivedTools(t *testing.T) {
+	logger := zap.NewNop()
+	registry := NewAgentRegistry(logger)
+	provider := &testProvider{name: "mock"}
+	toolManager := &testToolManager{
+		getAllowedToolsFn: func(agentID string) []types.ToolSchema {
+			assert.Equal(t, "agent-tools", agentID)
+			return []types.ToolSchema{
+				{Name: "retrieval"},
+				{Name: "web_search"},
+			}
+		},
+	}
+
+	resolver := NewCachingResolver(registry, provider, logger).WithToolManager(toolManager)
+	ag, err := resolver.Resolve(context.Background(), "agent-tools")
+	require.NoError(t, err)
+
+	ba, ok := ag.(*BaseAgent)
+	require.True(t, ok)
+	require.NotNil(t, ba.toolManager)
+	assert.ElementsMatch(t, []string{"retrieval", "web_search"}, ba.config.Runtime.Tools)
+}
+
+func TestCachingResolver_WithRuntimeToolsOverride(t *testing.T) {
+	logger := zap.NewNop()
+	registry := NewAgentRegistry(logger)
+	provider := &testProvider{name: "mock"}
+	toolManager := &testToolManager{
+		getAllowedToolsFn: func(agentID string) []types.ToolSchema {
+			return []types.ToolSchema{
+				{Name: "retrieval"},
+				{Name: "web_search"},
+			}
+		},
+	}
+
+	resolver := NewCachingResolver(registry, provider, logger).
+		WithToolManager(toolManager).
+		WithRuntimeTools([]string{"retrieval", "retrieval", "  web_search  ", ""})
+	ag, err := resolver.Resolve(context.Background(), "agent-tools-override")
+	require.NoError(t, err)
+
+	ba, ok := ag.(*BaseAgent)
+	require.True(t, ok)
+	assert.ElementsMatch(t, []string{"retrieval", "web_search"}, ba.config.Runtime.Tools)
+}
+
+func TestCachingResolver_WithDefaultModel(t *testing.T) {
+	logger := zap.NewNop()
+	registry := NewAgentRegistry(logger)
+	provider := &testProvider{name: "mock"}
+
+	resolver := NewCachingResolver(registry, provider, logger).WithDefaultModel("gpt-4o-mini")
+	ag, err := resolver.Resolve(context.Background(), "agent-model-default")
+	require.NoError(t, err)
+
+	ba, ok := ag.(*BaseAgent)
+	require.True(t, ok)
+	assert.Equal(t, "gpt-4o-mini", ba.config.LLM.Model)
+}
