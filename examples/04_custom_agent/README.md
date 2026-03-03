@@ -23,4 +23,4 @@ go run main.go
 
 ## 代码说明
 
-通过 `agent.Config` 的 `PromptBundle` 字段定义 Agent 的系统提示词，包括身份（Identity）、策略（Policies）和输出规则（OutputRules）。不同 Agent 使用不同的 Temperature 和 MaxTokens 配置。
+示例先用 `agent.PromptBundle` 组装系统提示词，再映射到 `types.AgentConfig.Runtime.SystemPrompt`，最后通过 `agent.NewBaseAgent(...)` 创建 Agent。不同 Agent 使用不同的 `types.AgentConfig.LLM` 参数（如 Temperature、MaxTokens）。

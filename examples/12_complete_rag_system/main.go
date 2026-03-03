@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"strings"
 
 	agentcontext "github.com/BaSui01/agentflow/agent/context"
 	llmrerank "github.com/BaSui01/agentflow/llm/capabilities/rerank"
@@ -130,6 +131,9 @@ func main() {
 	// 8. RAG runtime Builder 集成示例
 	demoRuntimeBuilder(logger)
 
+	// 9. Context manager 集成示例
+	demoContextManagers(logger)
+
 	fmt.Println("\n=== 完成 ===")
 }
 
@@ -181,6 +185,80 @@ func demoRuntimeBuilder(logger *zap.Logger) {
 	fmt.Println("runtime.Builder 已接入 provider/store 注入与 hybrid 检索构建")
 }
 
+func demoContextManagers(logger *zap.Logger) {
+	fmt.Println("\n=== Context Managers 集成 ===")
+	ctx := context.Background()
+
+	overflowMessages := []types.Message{
+		{Role: types.RoleSystem, Content: "You are a strict assistant. " + strings.Repeat("rule ", 80)},
+		{Role: types.RoleUser, Content: strings.Repeat("very long user message ", 120)},
+		{Role: types.RoleAssistant, Content: strings.Repeat("very long assistant message ", 120)},
+	}
+
+	engineer := agentcontext.New(agentcontext.Config{
+		MaxContextTokens: 80,
+		ReserveForOutput: 0,
+		SoftLimit:        0.2,
+		WarnLimit:        0.4,
+		HardLimit:        0.6,
+		TargetUsage:      0.3,
+		Strategy:         agentcontext.StrategyAdaptive,
+	}, logger)
+	status := engineer.GetStatus(overflowMessages)
+	fmt.Printf("engineer level=%s usage=%.2f\n", status.Level.String(), status.UsageRatio)
+	_, _ = engineer.MustFit(ctx, overflowMessages, "compress")
+	_ = engineer.GetStats()
+	_ = engineer.EstimateTokens(overflowMessages)
+	_ = engineer.CanAddMessage(overflowMessages, types.Message{Role: types.RoleUser, Content: "next"})
+
+	agentCfg := agentcontext.DefaultAgentContextConfig("gpt-4o")
+	agentCfg.MaxContextTokens = 80
+	agentCfg.ReserveForOutput = 0
+	manager := agentcontext.NewAgentContextManager(agentCfg, logger)
+	manager.SetSummaryProvider(func(_ context.Context, _ []types.Message) (string, error) {
+		return "summary", nil
+	})
+	_, _ = manager.PrepareMessages(ctx, overflowMessages, "prepare")
+	_ = manager.GetStatus(overflowMessages)
+	_ = manager.CanAddMessage(overflowMessages, types.Message{Role: types.RoleAssistant, Content: "ok"})
+	_ = manager.EstimateTokens(overflowMessages)
+	_ = manager.GetStats()
+	_ = manager.ShouldCompress(overflowMessages)
+	_ = manager.GetRecommendation(overflowMessages)
+
+	slide := agentcontext.NewWindowManager(agentcontext.WindowConfig{
+		Strategy:      agentcontext.StrategySlidingWindow,
+		MaxTokens:     120,
+		MaxMessages:   2,
+		ReserveTokens: 10,
+		KeepSystemMsg: true,
+		KeepLastN:     1,
+	}, nil, nil)
+	_, _ = slide.PrepareMessages(ctx, overflowMessages, "slide")
+	_ = slide.GetStatus(overflowMessages)
+	_ = slide.EstimateTokens(overflowMessages)
+
+	budget := agentcontext.NewWindowManager(agentcontext.WindowConfig{
+		Strategy:      agentcontext.StrategyTokenBudget,
+		MaxTokens:     120,
+		ReserveTokens: 10,
+		KeepSystemMsg: true,
+		KeepLastN:     1,
+	}, nil, nil)
+	_, _ = budget.PrepareMessages(ctx, overflowMessages, "budget")
+
+	summary := agentcontext.NewWindowManager(agentcontext.WindowConfig{
+		Strategy:      agentcontext.StrategySummarize,
+		MaxTokens:     120,
+		ReserveTokens: 10,
+		KeepSystemMsg: true,
+		KeepLastN:     1,
+	}, nil, simpleSummarizer{})
+	_, _ = summary.PrepareMessages(ctx, overflowMessages, "summary")
+
+	fmt.Println("agent/context 的 Engineer/AgentContextManager/WindowManager 已接入示例链路")
+}
+
 type exampleEmbeddingProvider struct{}
 
 func (exampleEmbeddingProvider) EmbedQuery(_ context.Context, _ string) ([]float64, error) {
@@ -217,4 +295,10 @@ func (exampleRerankProvider) RerankSimple(_ context.Context, _ string, docs []st
 
 func (exampleRerankProvider) Name() string {
 	return "example-rerank-provider"
+}
+
+type simpleSummarizer struct{}
+
+func (simpleSummarizer) Summarize(_ context.Context, messages []types.Message) (string, error) {
+	return fmt.Sprintf("summary(%d)", len(messages)), nil
 }

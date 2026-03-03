@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"time"
 
@@ -8,6 +9,7 @@ import (
 	"github.com/BaSui01/agentflow/agent/collaboration"
 	"github.com/BaSui01/agentflow/agent/hierarchical"
 	"github.com/BaSui01/agentflow/agent/observability"
+	"github.com/BaSui01/agentflow/agent/persistence"
 	"github.com/BaSui01/agentflow/types"
 	"go.uber.org/zap"
 )
@@ -101,6 +103,10 @@ func demoHierarchicalArchitecture(logger *zap.Logger) {
 		fmt.Printf("  - %s: 状态=%s\n", w.ID(), w.State())
 	}
 
+	coordinator := hierarchical.NewTaskCoordinator(workers, hierarchicalConfig, logger)
+	status := coordinator.GetWorkerStatus()
+	fmt.Printf("  - TaskCoordinator 状态数: %d\n", len(status))
+
 	_ = hierarchicalAgent
 }
 
@@ -181,6 +187,67 @@ func demoMultiAgentCollaboration(logger *zap.Logger) {
 	_ = debateSystem
 	_ = pipelineSystem
 	_ = broadcastSystem
+
+	// 6. 角色流水线（RolePipeline）主链调用
+	fmt.Println("\n6. 角色流水线编排")
+	demoRolePipeline(logger)
+}
+
+func demoRolePipeline(logger *zap.Logger) {
+	registry := collaboration.NewRoleRegistry(logger)
+	_ = collaboration.RegisterResearchRoles(registry)
+
+	roles := registry.List()
+	fmt.Printf("  已注册研究角色: %d\n", len(roles))
+
+	collector, ok := registry.Get(collaboration.RoleCollector)
+	if ok {
+		fmt.Printf("  收集者角色: %s\n", collector.Name)
+	}
+
+	pipelineCfg := collaboration.DefaultPipelineConfig()
+	pipelineCfg.Name = "research-role-pipeline-demo"
+	pipelineCfg.MaxConcurrency = 2
+	pipelineCfg.Timeout = 3 * time.Second
+
+	executeFn := func(ctx context.Context, role *collaboration.RoleDefinition, input any) (any, error) {
+		_ = ctx
+		return map[string]any{
+			"role":   role.Type,
+			"input":  input,
+			"output": fmt.Sprintf("%s_done", role.Type),
+		}, nil
+	}
+
+	pipeline := collaboration.NewRolePipeline(pipelineCfg, registry, executeFn, logger).
+		AddStage(collaboration.RoleCollector).
+		AddStage(collaboration.RoleFilter, collaboration.RoleGenerator).
+		AddStage(collaboration.RoleWriter)
+
+	results, err := pipeline.Execute(context.Background(), map[string]any{"topic": "agentflow"})
+	if err != nil {
+		fmt.Printf("  角色流水线执行失败: %v\n", err)
+	} else {
+		fmt.Printf("  角色流水线结果数: %d\n", len(results))
+	}
+
+	fmt.Printf("  角色实例数: %d, 转换记录数: %d\n", len(pipeline.GetInstances()), len(pipeline.GetTransitions()))
+
+	_ = registry.Unregister(collaboration.RoleWriter)
+
+	// 7. 带持久化的消息中心（覆盖 NewMessageHubWithStore）
+	store := persistence.NewMemoryMessageStore(persistence.StoreConfig{Type: "memory"})
+	hub := collaboration.NewMessageHubWithStore(logger, store)
+	hub.CreateChannel("demo-a")
+	hub.CreateChannel("demo-b")
+	_ = hub.Send(&collaboration.Message{
+		FromID:  "demo-a",
+		ToID:    "demo-b",
+		Type:    collaboration.MessageTypeProposal,
+		Content: "hello from persisted hub",
+	})
+	_, _ = hub.Receive("demo-b", 100*time.Millisecond)
+	_ = hub.Close()
 }
 
 func demoObservabilitySystem(logger *zap.Logger) {
@@ -257,4 +324,49 @@ func demoObservabilitySystem(logger *zap.Logger) {
 		fmt.Printf("  - %s: 任务=%d, 成功率=%.0f%%, 平均延迟=%v\n",
 			agentID, m.TotalTasks, m.TaskSuccessRate*100, m.AvgLatency)
 	}
+
+	// 6. Explainability tracker paths
+	explainCfg := observability.DefaultExplainabilityConfig()
+	explainCfg.MaxTraceAge = time.Minute
+	explainCfg.MaxTracesPerAgent = 10
+	tracker := observability.NewExplainabilityTracker(explainCfg)
+	rTrace := tracker.StartTrace("session-1", "demo-agent")
+	if rTrace != nil {
+		tracker.AddStep(rTrace.ID, observability.ReasoningStep{
+			Type:    "thought",
+			Content: "Analyze query and choose tool",
+		})
+		decision := observability.Decision{
+			Type:        observability.DecisionToolSelection,
+			Description: "choose search tool",
+			Reasoning:   "query needs external facts",
+			Confidence:  0.9,
+			Alternatives: []observability.Alternative{
+				{Option: "search", Score: 0.9, Reason: "has latest info", WasChosen: true},
+				{Option: "local_cache", Score: 0.4, Reason: "may be stale"},
+			},
+			Factors: []observability.Factor{
+				{Name: "freshness", Weight: 0.8, Impact: "positive", Explanation: "latest data required"},
+			},
+		}
+		tracker.RecordDecision(rTrace.ID, decision)
+		tracker.EndTrace(rTrace.ID, true, "completed", "")
+		_ = tracker.GetTrace(rTrace.ID)
+		_ = tracker.GetAgentTraces("demo-agent")
+		_ = tracker.ExplainDecision(decision)
+		report, repErr := tracker.GenerateAuditReport(rTrace.ID)
+		if repErr == nil && report != nil {
+			_, _ = report.Export()
+		}
+	}
+
+	// 7. Simple evaluation strategy path
+	eval := &observability.SimpleEvaluationStrategy{}
+	_, _ = eval.Evaluate(context.Background(), &agent.Input{
+		TraceID: "trace-eval",
+		Content: "summarize this incident",
+	}, &agent.Output{
+		TraceID: "trace-eval",
+		Content: "incident summary output",
+	})
 }

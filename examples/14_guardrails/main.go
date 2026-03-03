@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"log"
 
+	"github.com/BaSui01/agentflow/agent/guardcore"
 	"github.com/BaSui01/agentflow/agent/guardrails"
+	"go.uber.org/zap"
 )
 
 func main() {
@@ -21,6 +23,15 @@ func main() {
 
 	// 3. Validator Chain Example
 	demonstrateValidatorChain(ctx)
+
+	// 4. Output Filter + Registry Example
+	demonstrateOutputAndRegistries(ctx)
+
+	// 5. Guardcore Coordinator Example
+	demonstrateGuardcoreCoordinator(ctx)
+
+	// 6. Shadow AI Advanced Example
+	demonstrateShadowAI(ctx)
 }
 
 // demonstratePIIDetection shows how to detect and mask PII data.
@@ -167,6 +178,101 @@ func demonstrateValidatorChain(ctx context.Context) {
 	if executed, ok := result.Metadata["execution_order"].([]string); ok {
 		fmt.Printf("Validators executed: %v\n", executed)
 	}
+}
+
+// demonstrateOutputAndRegistries wires content filter, validator wrapper and registries.
+func demonstrateOutputAndRegistries(ctx context.Context) {
+	fmt.Println("--- 4. Output Filter + Registries ---")
+
+	filter, err := guardrails.NewContentFilter(guardrails.DefaultContentFilterConfig())
+	if err != nil {
+		log.Fatalf("ContentFilter init error: %v", err)
+	}
+	_ = filter.Name()
+	_ = filter.AddPattern("(?i)password")
+	_ = filter.AddPattern("(?i)secret")
+	filter.SetReplacement("[filtered]")
+	_, _ = filter.Filter(ctx, "password=123")
+	_ = filter.Detect("my secret is hidden")
+	_ = filter.GetPatterns()
+	_ = filter.RemovePattern("(?i)secret")
+
+	v := guardrails.NewContentFilterValidator(filter, 55)
+	_ = v.Name()
+	_ = v.Priority()
+	_, _ = v.Validate(ctx, "password: 123456")
+
+	vReg := guardrails.NewValidatorRegistry()
+	vReg.Register(v)
+	_, _ = vReg.Get(v.Name())
+	_ = vReg.List()
+	vReg.Unregister(v.Name())
+
+	fReg := guardrails.NewFilterRegistry()
+	fReg.Register(filter)
+	_, _ = fReg.Get(filter.Name())
+	_ = fReg.List()
+	fReg.Unregister(filter.Name())
+
+	fmt.Println("Output/registry paths wired")
+}
+
+// demonstrateGuardcoreCoordinator wires guardcore coordinator APIs.
+func demonstrateGuardcoreCoordinator(ctx context.Context) {
+	fmt.Println("--- 5. Guardcore Coordinator ---")
+
+	cfg := guardrails.DefaultConfig()
+	cfg.BlockedKeywords = []string{"forbidden"}
+	cfg.InjectionDetection = true
+	cfg.PIIDetectionEnabled = true
+	cfg.MaxInputLength = 200
+
+	c := guardcore.NewCoordinator(cfg, zapLogger())
+	_, _ = c.ValidateInput(ctx, "this has forbidden keyword")
+	_, _, _ = c.ValidateOutput(ctx, "safe output")
+
+	c.SetEnabled(true)
+	_ = c.GetConfig()
+	c.AddInputValidator(guardrails.NewLengthValidator(&guardrails.LengthValidatorConfig{
+		MaxLength: 50,
+		Action:    guardrails.LengthActionReject,
+	}))
+	c.AddOutputValidator(guardrails.NewKeywordValidator(&guardrails.KeywordValidatorConfig{
+		BlockedKeywords: []string{"leak"},
+		Action:          guardrails.KeywordActionWarn,
+	}))
+	localFilter, _ := guardrails.NewContentFilter(&guardrails.ContentFilterConfig{
+		BlockedPatterns: []string{"token"},
+		Replacement:     "[masked]",
+	})
+	c.AddOutputFilter(localFilter)
+	chain := c.GetInputValidatorChain()
+	if chain != nil {
+		_ = c.InputValidatorCount()
+	}
+	_ = c.GetOutputValidator()
+
+	msg := c.BuildValidationFeedbackMessage(&guardrails.ValidationResult{
+		Valid: false,
+		Errors: []guardrails.ValidationError{
+			{Code: "BLOCKED_KEYWORD", Message: "forbidden keyword", Severity: guardrails.SeverityHigh},
+		},
+	})
+	fmt.Printf("Feedback preview: %s\n", truncate(msg, 80))
+}
+
+// demonstrateShadowAI wires remaining ShadowAIDetector paths.
+func demonstrateShadowAI(ctx context.Context) {
+	fmt.Println("--- 6. Shadow AI Advanced ---")
+	detector := guardrails.NewShadowAIDetector(guardrails.DefaultShadowAIConfig(), zapLogger())
+	_ = detector.AddPattern("custom_secret", "api_key", `custom_[a-z0-9]{16}`, "high", "custom token")
+	_ = detector.ScanContent(ctx, "custom_abcd1234efgh5678", "demo", "u1")
+	_ = detector.GetDetections(10)
+}
+
+func zapLogger() *zap.Logger {
+	logger, _ := zap.NewDevelopment()
+	return logger
 }
 
 // truncate truncates a string to maxLen characters.

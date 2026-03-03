@@ -2,15 +2,19 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
+	"time"
 
 	"github.com/BaSui01/agentflow/agent/conversation"
 	"github.com/BaSui01/agentflow/agent/crews"
+	"github.com/BaSui01/agentflow/agent/declarative"
 	"github.com/BaSui01/agentflow/agent/handoff"
 	"github.com/BaSui01/agentflow/agent/hosted"
 	"github.com/BaSui01/agentflow/agent/streaming"
 	"github.com/BaSui01/agentflow/llm/observability"
+	"github.com/BaSui01/agentflow/types"
 	"go.uber.org/zap"
 )
 
@@ -29,13 +33,16 @@ func main() {
 	// 3. Role-based Crews
 	demoCrews(logger)
 
-	// 4. Conversation Mode
+	// 4. Declarative Agent Definition
+	demoDeclarative(logger)
+
+	// 5. Conversation Mode
 	demoConversation(logger)
 
-	// 5. Bidirectional Streaming
+	// 6. Bidirectional Streaming
 	demoBidirectionalStreaming(logger)
 
-	// 6. Tracing Integration
+	// 7. Tracing Integration
 	demoTracing(logger)
 
 	fmt.Println("\n=== All Medium Priority Features Demonstrated ===")
@@ -46,6 +53,11 @@ func demoHostedTools(logger *zap.Logger) {
 	fmt.Println("-----------------------------------")
 
 	registry := hosted.NewToolRegistry(logger)
+	registry.Use(
+		hosted.WithTimeout(200*time.Millisecond),
+		hosted.WithLogging(logger),
+		hosted.WithMetrics(func(name string, duration time.Duration, err error) {}),
+	)
 
 	// Register web search tool (需要真实的搜索 API Key)
 	webSearch := hosted.NewWebSearchTool(hosted.WebSearchConfig{
@@ -54,6 +66,23 @@ func demoHostedTools(logger *zap.Logger) {
 		MaxResults: 5,
 	})
 	registry.Register(webSearch)
+	_ = webSearch.Schema()
+
+	// Register file search tool (in-memory mock store).
+	fileStore := &mockFileSearchStore{}
+	fileTool := hosted.NewFileSearchTool(fileStore, 3)
+	registry.Register(fileTool)
+	_ = fileTool.Type()
+	_ = fileTool.Name()
+	_ = fileTool.Description()
+	_ = fileTool.Schema()
+	_ = fileStore.Index(context.Background(), "f1", []byte("agentflow hosted file search"))
+
+	fileArgs, _ := json.Marshal(map[string]any{
+		"query":       "agentflow",
+		"max_results": 2,
+	})
+	_, _ = registry.Execute(context.Background(), fileTool.Name(), fileArgs)
 
 	fmt.Printf("   Registered tool: %s - %s\n", webSearch.Name(), webSearch.Description())
 	fmt.Printf("   Tool type: %s\n", webSearch.Type())
@@ -64,6 +93,7 @@ func demoAgentHandoff(logger *zap.Logger) {
 	fmt.Println("2. Agent Handoff Protocol")
 	fmt.Println("-------------------------")
 
+	ctx := context.Background()
 	manager := handoff.NewHandoffManager(logger)
 
 	// Create mock agent
@@ -74,9 +104,52 @@ func demoAgentHandoff(logger *zap.Logger) {
 		},
 	}
 	manager.RegisterAgent(agent)
+	manager.RegisterAgent(&MockHandoffAgent{
+		id: "review-agent",
+		capabilities: []handoff.AgentCapability{
+			{Name: "review", TaskTypes: []string{"review"}, Priority: 20},
+		},
+	})
 
 	fmt.Printf("   Registered agent: %s\n", agent.ID())
-	fmt.Printf("   Capabilities: %v\n\n", agent.Capabilities()[0].TaskTypes)
+	fmt.Printf("   Capabilities: %v\n", agent.Capabilities()[0].TaskTypes)
+
+	task := handoff.Task{
+		Type:        "review",
+		Description: "Review deployment checklist",
+		Input:       map[string]any{"doc": "checklist-v1"},
+		Priority:    1,
+	}
+	found, findErr := manager.FindAgent(task)
+	if findErr != nil {
+		fmt.Printf("   FindAgent error: %v\n\n", findErr)
+		return
+	}
+	fmt.Printf("   Best agent for task: %s\n", found.ID())
+
+	ho, err := manager.Handoff(ctx, handoff.HandoffOptions{
+		FromAgentID: "coordinator-agent",
+		Task:        task,
+		Context: handoff.HandoffContext{
+			ConversationID: "conv-demo",
+			Variables:      map[string]any{"priority": "high"},
+		},
+		Timeout: time.Second,
+		Wait:    true,
+	})
+	if err != nil {
+		fmt.Printf("   Handoff error: %v\n\n", err)
+		return
+	}
+	fmt.Printf("   Handoff status: %s (id=%s)\n", ho.Status, ho.ID)
+
+	stored, getErr := manager.GetHandoff(ho.ID)
+	if getErr == nil && stored != nil && stored.Result != nil {
+		fmt.Printf("   Handoff result: %v\n", stored.Result.Output)
+	}
+
+	manager.UnregisterAgent(agent.ID())
+	fmt.Printf("   Unregistered agent: %s\n\n", agent.ID())
 }
 
 // MockHandoffAgent implements handoff.HandoffAgent for demo.
@@ -99,23 +172,23 @@ func demoCrews(logger *zap.Logger) {
 	fmt.Println("3. Role-based Crews (CrewAI-style)")
 	fmt.Println("----------------------------------")
 
-	crew := crews.NewCrew(crews.CrewConfig{
+	sequentialCrew := crews.NewCrew(crews.CrewConfig{
 		Name:        "Research Team",
 		Description: "A team for research tasks",
 		Process:     crews.ProcessSequential,
 	}, logger)
 
 	// Add members with roles
-	researcher := &MockCrewAgent{id: "researcher"}
-	crew.AddMember(researcher, crews.Role{
+	researcher := &MockCrewAgent{id: "researcher", voteFor: "researcher"}
+	sequentialCrew.AddMember(researcher, crews.Role{
 		Name:        "Researcher",
 		Description: "Conducts research",
 		Goal:        "Find relevant information",
 		Skills:      []string{"research", "analysis"},
 	})
 
-	writer := &MockCrewAgent{id: "writer"}
-	crew.AddMember(writer, crews.Role{
+	writer := &MockCrewAgent{id: "writer", voteFor: "writer"}
+	sequentialCrew.AddMember(writer, crews.Role{
 		Name:        "Writer",
 		Description: "Writes content",
 		Goal:        "Create clear documentation",
@@ -123,21 +196,89 @@ func demoCrews(logger *zap.Logger) {
 	})
 
 	// Add task
-	crew.AddTask(crews.CrewTask{
+	sequentialCrew.AddTask(crews.CrewTask{
 		Description: "Research AI frameworks",
 		Expected:    "Summary report",
 		Priority:    1,
 	})
 
-	fmt.Printf("   Crew: %s\n", crew.Name)
-	fmt.Printf("   Process: %s\n", crew.Process)
-	fmt.Printf("   Members: %d\n", len(crew.Members))
-	fmt.Printf("   Tasks: %d\n\n", len(crew.Tasks))
+	seqResult, seqErr := sequentialCrew.Execute(context.Background())
+	if seqErr != nil {
+		fmt.Printf("   Sequential execute error: %v\n", seqErr)
+	}
+
+	hierarchicalCrew := crews.NewCrew(crews.CrewConfig{
+		Name:        "Manager Team",
+		Description: "A team for delegated execution",
+		Process:     crews.ProcessHierarchical,
+	}, logger)
+	manager := &MockCrewAgent{id: "manager", voteFor: "manager"}
+	hierarchicalCrew.AddMember(manager, crews.Role{
+		Name:            "Manager",
+		Description:     "Delegates tasks",
+		Goal:            "Complete tasks via delegation",
+		AllowDelegation: true,
+	})
+	hierarchicalCrew.AddMember(&MockCrewAgent{id: "specialist", voteFor: "specialist"}, crews.Role{
+		Name:        "Specialist",
+		Description: "Handles specialist tasks",
+		Goal:        "Solve technical tasks",
+	})
+	hierarchicalCrew.AddTask(crews.CrewTask{
+		Description: "Build deployment checklist",
+		Expected:    "Checklist document",
+		Priority:    1,
+	})
+	hierResult, hierErr := hierarchicalCrew.Execute(context.Background())
+	if hierErr != nil {
+		fmt.Printf("   Hierarchical execute error: %v\n", hierErr)
+	}
+
+	consensusCrew := crews.NewCrew(crews.CrewConfig{
+		Name:        "Consensus Team",
+		Description: "A team for consensus voting",
+		Process:     crews.ProcessConsensus,
+	}, logger)
+	consensusCrew.AddMember(&MockCrewAgent{id: "judge-a", voteFor: "judge-b"}, crews.Role{Name: "Judge A", Goal: "vote"})
+	consensusCrew.AddMember(&MockCrewAgent{id: "judge-b", voteFor: "judge-b"}, crews.Role{Name: "Judge B", Goal: "vote"})
+	consensusCrew.AddTask(crews.CrewTask{
+		Description: "Choose owner for final report",
+		Expected:    "Owner decision",
+		Priority:    1,
+	})
+	conResult, conErr := consensusCrew.Execute(context.Background())
+	if conErr != nil {
+		fmt.Printf("   Consensus execute error: %v\n", conErr)
+	}
+
+	fmt.Printf("   Sequential results: %d\n", len(seqResult.TaskResults))
+	fmt.Printf("   Hierarchical results: %d\n", len(hierResult.TaskResults))
+	fmt.Printf("   Consensus results: %d\n\n", len(conResult.TaskResults))
+}
+
+type mockFileSearchStore struct{}
+
+func (s *mockFileSearchStore) Search(ctx context.Context, query string, limit int) ([]hosted.FileSearchResult, error) {
+	results := []hosted.FileSearchResult{
+		{FileID: "f1", FileName: "demo.txt", Content: "agentflow hosted tools", Score: 0.91},
+		{FileID: "f2", FileName: "notes.txt", Content: "file search example", Score: 0.82},
+	}
+	if limit > 0 && limit < len(results) {
+		return results[:limit], nil
+	}
+	return results, nil
+}
+
+func (s *mockFileSearchStore) Index(ctx context.Context, fileID string, content []byte) error {
+	_ = fileID
+	_ = content
+	return nil
 }
 
 // MockCrewAgent implements crews.CrewAgent for demo.
 type MockCrewAgent struct {
-	id string
+	id      string
+	voteFor string
 }
 
 func (a *MockCrewAgent) ID() string { return a.id }
@@ -145,7 +286,61 @@ func (a *MockCrewAgent) Execute(ctx context.Context, task crews.CrewTask) (*crew
 	return &crews.TaskResult{TaskID: task.ID, Output: "done"}, nil
 }
 func (a *MockCrewAgent) Negotiate(ctx context.Context, p crews.Proposal) (*crews.NegotiationResult, error) {
-	return &crews.NegotiationResult{Accepted: true}, nil
+	resp := a.voteFor
+	if resp == "" {
+		resp = a.id
+	}
+	return &crews.NegotiationResult{Accepted: true, Response: resp}, nil
+}
+
+func demoDeclarative(logger *zap.Logger) {
+	fmt.Println("4. Declarative Agent Definition")
+	fmt.Println("-------------------------------")
+
+	loader := declarative.NewYAMLLoader()
+	yamlDef := []byte(`
+id: declarative-demo
+name: DeclarativeDemo
+model: gpt-4o-mini
+provider: openai
+temperature: 0.2
+max_tokens: 512
+system_prompt: You are a concise assistant.
+tools: [search]
+features:
+  enable_reflection: true
+  max_react_iterations: 2
+metadata:
+  env: demo
+`)
+
+	defFromYAML, err := loader.LoadBytes(yamlDef, "yaml")
+	if err != nil {
+		fmt.Printf("   Load YAML failed: %v\n\n", err)
+		return
+	}
+
+	jsonDef := []byte(`{"id":"json-demo","name":"JSONDemo","model":"gpt-4o-mini","temperature":0.1}`)
+	_, _ = loader.LoadBytes(jsonDef, "json")
+
+	tmpFile, err := os.CreateTemp("", "agent-def-*.yaml")
+	if err == nil {
+		_, _ = tmpFile.Write(yamlDef)
+		_ = tmpFile.Close()
+		_, _ = loader.LoadFile(tmpFile.Name())
+		_ = os.Remove(tmpFile.Name())
+	}
+
+	factory := declarative.NewAgentFactory(logger)
+	if err := factory.Validate(defFromYAML); err != nil {
+		fmt.Printf("   Validate failed: %v\n\n", err)
+		return
+	}
+	cfg := factory.ToAgentConfig(defFromYAML)
+
+	fmt.Printf("   Loaded definition: %s\n", defFromYAML.Name)
+	fmt.Printf("   Runtime model: %s\n", cfg.LLM.Model)
+	fmt.Printf("   Runtime tools: %d\n\n", len(cfg.Runtime.Tools))
 }
 
 func demoConversation(logger *zap.Logger) {
@@ -164,10 +359,45 @@ func demoConversation(logger *zap.Logger) {
 		logger,
 	)
 
+	result, err := conv.Start(context.Background(), "请开始协作讨论")
+	if err != nil {
+		fmt.Printf("   Start conversation failed: %v\n\n", err)
+		return
+	}
+
+	messages := conv.GetMessages()
+
+	chatManager := conversation.NewGroupChatManager(logger)
+	managed := chatManager.CreateChat(agents, conversation.DefaultConversationConfig())
+	_, _ = chatManager.GetChat(managed.ID)
+
+	tree := conversation.NewConversationTree("conv-tree-demo")
+	tree.AddMessage(types.Message{Role: "user", Content: "需求分析"})
+	_, _ = tree.Fork("alt")
+	_ = tree.SwitchBranch("alt")
+	tree.AddMessage(types.Message{Role: "assistant", Content: "备选方案"})
+	_ = tree.SwitchBranch("main")
+	_ = tree.MergeBranch("alt")
+	tree.Snapshot("v1")
+	_ = tree.RollbackN(1)
+	_ = tree.RestoreSnapshot("v1")
+	_ = tree.DeleteBranch("alt")
+	_ = tree.FindSnapshot("v1")
+	_ = tree.GetCurrentState()
+	_ = tree.GetHistory()
+	_ = tree.ListBranches()
+	_, _ = tree.Export()
+	if data, exportErr := tree.Export(); exportErr == nil {
+		_, _ = conversation.Import(data)
+	}
+	_ = tree.GetMessages()
+
 	fmt.Printf("   Conversation ID: %s\n", conv.ID)
 	fmt.Printf("   Mode: %s\n", conv.Mode)
 	fmt.Printf("   Agents: %d\n", len(conv.Agents))
 	fmt.Printf("   Max rounds: %d\n\n", conv.Config.MaxRounds)
+	fmt.Printf("   Termination: %s (rounds=%d)\n", result.TerminationReason, result.TotalRounds)
+	fmt.Printf("   Message count: %d\n\n", len(messages))
 }
 
 // MockConvAgent implements conversation.ConversationAgent for demo.
