@@ -11,6 +11,9 @@
 >
 > 如需了解当前架构，请参阅 `docs/重构计划/` 下的最新文档。
 
+> 当前真实启动链路（2026-03-03）：
+> `cmd/agentflow/main.runServe -> internal/app/bootstrap.InitializeServeRuntime -> cmd/agentflow/server_*.Start -> bootstrap.RegisterHTTPRoutes -> api/routes -> api/handlers -> domain(agent/rag/workflow/llm)`。
+
 ---
 
 ## 🎉 完成的改进
@@ -42,12 +45,12 @@ healthHandler := handlers.NewHealthHandler(logger)
 http.HandleFunc("/health", healthHandler.HandleHealth)
 
 // 聊天接口
-chatHandler := handlers.NewChatHandler(provider, logger)
-http.HandleFunc("/v1/chat/completions", chatHandler.HandleCompletion)
+chatHandler := handlers.NewChatHandler(provider, policyManager, logger)
+http.HandleFunc("/api/v1/chat/completions", chatHandler.HandleCompletion)
 
 // Agent 管理
-agentHandler := handlers.NewAgentHandler(registry, logger)
-http.HandleFunc("/v1/agents", agentHandler.HandleListAgents)
+agentHandler := handlers.NewAgentHandler(discoveryRegistry, agentRegistry, logger)
+http.HandleFunc("/api/v1/agents", agentHandler.HandleListAgents)
 ```
 
 ---
@@ -372,14 +375,14 @@ func main() {
 
     // 6. 创建 handlers
     healthHandler := handlers.NewHealthHandler(logger)
-    chatHandler := handlers.NewChatHandler(provider, logger)
-    agentHandler := handlers.NewAgentHandler(registry, logger)
+    chatHandler := handlers.NewChatHandler(provider, policyManager, logger)
+    agentHandler := handlers.NewAgentHandler(discoveryRegistry, agentRegistry, logger)
 
     // 7. 注册路由
     mux := http.NewServeMux()
     mux.HandleFunc("/health", healthHandler.HandleHealth)
-    mux.HandleFunc("/v1/chat/completions", chatHandler.HandleCompletion)
-    mux.HandleFunc("/v1/agents", agentHandler.HandleListAgents)
+    mux.HandleFunc("/api/v1/chat/completions", chatHandler.HandleCompletion)
+    mux.HandleFunc("/api/v1/agents", agentHandler.HandleListAgents)
 
     // 8. 启动服务器
     serverManager := server.NewManager(mux, cfg.Server, logger)
@@ -414,3 +417,4 @@ func main() {
 - 文档更完善 📚
 
 项目现在已经达到了**生产级别的代码质量标准**！🎉
+

@@ -1,13 +1,17 @@
 # P0 优化提示词
 
+> 状态说明（2026-03-03）：本文件是历史优化提示词归档。  
+> 当前真实实现已落地在 `cmd/agentflow/server_http.go` + `internal/app/bootstrap/http_*_builder.go`，HTTP 中间件与认证链不再在 `cmd/agentflow/main.go` 中手工拼装。
+
 ## P0-1: API 安全中间件
 
 ### 需求背景
-cmd/agentflow/main.go 的 startHTTPServer（第 380 行）直接用 http.NewServeMux() 裸挂 handler，没有任何中间件。生产环境必须有认证、限流、CORS、日志、panic 恢复。
+历史问题：曾经在 `cmd/agentflow/main.go` 中直接裸挂 `http.NewServeMux()`。  
+当前状态：已改为 `cmd/agentflow/server_http.go:startHTTPServer` 调用 `bootstrap.BuildHTTPMiddlewares` 与 `bootstrap.RegisterHTTPRoutes`，默认链路包含 Recovery/RequestID/SecurityHeaders/Metrics/Tracing/RequestLogger/CORS/RateLimiter/Auth/TenantRateLimiter。
 
 ### 需要修改的文件
 
-#### 新建文件：cmd/agentflow/middleware.go
+#### 历史方案（已完成，不再按此路径改动）：cmd/agentflow/middleware.go
 
 ```go
 package main
@@ -180,9 +184,9 @@ func CORS(allowedOrigins []string) Middleware {
 }
 ```
 
-#### 修改文件：cmd/agentflow/main.go
+#### 当前实际改动位置：cmd/agentflow/server_http.go + internal/app/bootstrap/http_middleware_builder.go + internal/app/bootstrap/http_auth_builder.go
 
-在 startHTTPServer 方法中，将 `s.httpServer.Handler = mux` 改为用中间件链包装：
+当前实现由 `bootstrap.BuildHTTPMiddlewares(...)` 统一返回中间件链，并在 `server_http.go` 中通过 `mw.Chain(mux, middlewares...)` 组装：
 
 ```go
 func (s *Server) startHTTPServer() error {

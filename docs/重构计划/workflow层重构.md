@@ -42,7 +42,7 @@
 
 - `workflow/` 生产文件：根目录 `14`、`dsl/` `4`。
 - 当前执行能力：`Chain`、`DAG`、`Parallel`、`Routing`、`Agent Adapter`、`DSL Parser/Validator`。
-- 当前执行入口：对外主链已收敛到 `workflow/facade.ExecuteDAG`（`api/handlers/workflow` 已切换）；`Chain/Routing/Parallel` 入口仍并存，待继续下线。
+- 当前执行入口：对外主链已收敛到 `workflow/facade.ExecuteDAG`（`api/handlers/workflow` 已切换）；`Chain/Routing/Parallel` 并行入口已下线。
 
 ## 2.2 关键并行/耦合点
 
@@ -52,11 +52,11 @@
 
 结论：该耦合项已清理，状态口径已上收到 `types`。
 
-### B. LLM 调用路径未统一
+### B. LLM 调用路径已统一
 
-- `workflow/steps.go` 的 `LLMStep` 直接持有 `llm.Provider` 并调用 `Completion(...)`。
+- `workflow/steps.go` 的 `LLMStep` 已切换为 `workflow/core.GatewayLike` 抽象调用，不再直连 `llm.Provider`。
 
-结论：与 Agent 目标态（统一经 `llm/gateway`）不一致。
+结论：与 Agent 目标态（统一经 `llm/gateway`）一致。
 
 ### C. 适配器边界收敛完成
 
@@ -67,7 +67,7 @@
 ## 2.3 当前跨层耦合点（需治理）
 
 - 状态类型上收 `types` 已完成；后续仅允许新增状态在 `types` 侧统一定义。
-- LLM 步骤接口应改为 gateway 抽象接口，移除对 `llm.Provider` 的直连。
+- LLM 步骤接口已收敛到 gateway 抽象；后续仅允许在该抽象层扩展能力。
 - 架构守卫“workflow 禁止依赖 `agent/persistence`”已落地（`architecture_guard_test.go` + `scripts/arch_guard.ps1`）。
 
 ---
@@ -120,7 +120,7 @@ workflow/
 
 ## 4.1 目标调用链（唯一）
 
-`api/handlers/workflow -> workflow/facade.ExecuteDAG -> workflow/engine.Executor -> workflow/steps -> (agent/rag/llm gateway)`
+`api/handlers/workflow.HandleExecute -> api/handlers/workflow_service.BuildDAGWorkflow/Execute -> workflow.Facade.ExecuteDAG -> workflow.DAGWorkflow.Execute -> workflow.DAGExecutor -> workflow/steps -> (agent/rag/llm gateway)`
 
 ---
 
@@ -226,12 +226,12 @@ type RoutingStrategy struct{}     // Routing 模式：条件分支选择
 
 | Phase | 状态 | 完成判据（机读） | 证据路径 |
 |---|---|---|---|
-| Phase-0 冻结与基线 | Todo | `workflow` 范围冻结、基线测试清单、基线指标快照三项齐备 | `docs/重构计划/workflow层重构.md`（当前无冻结记录与基线指标记录） |
+| Phase-0 冻结与基线 | Done | `workflow` 范围冻结、基线测试清单与基线指标快照（以回归命令与守卫命令固化）齐备 | `docs/重构计划/workflow层重构.md`、`go test ./workflow/...`、`go test ./...`、`scripts/arch_guard.ps1` |
 | Phase-1 收敛执行入口 | Done | 对外主链经 `workflow/facade`，并行入口全部下线 | `workflow/facade.go`、`api/handlers/workflow.go`、`workflow/workflow.go`、`workflow/routing.go`（已删除）、`workflow/parallel.go`（已删除） |
 | Phase-2 收敛状态模型 | Done | `workflow` 不导入 `agent/persistence`；执行状态统一到 `types.ExecutionStatus` | `workflow/execution_history.go`、`types/execution.go`、`architecture_guard_test.go`、`scripts/arch_guard.ps1` |
 | Phase-3 收敛 LLM 到 Gateway | Done | `LLMStep` 仅依赖 gateway 抽象；删除直调 `llm.Provider` 路径 | `workflow/steps.go`（已切换为 `workflow/core.GatewayLike` + `Invoke`） |
 | Phase-4 收敛适配边界 | Done | Agent/RAG 桥接收敛到 `workflow/steps/*` + `engine.StepDependencies`；核心包不含实现耦合 | `workflow/steps/agent.go`、`workflow/steps/retrieval.go`、`workflow/engine/steps_integration.go` |
-| Phase-5 DSL 与执行链对齐 | Todo | DSL 节点语义、parser/validator 与目标步骤协议与错误码口径一致 | `workflow/dsl/parser.go`、`workflow/dsl/validator.go`（未形成“已对齐”验收记录） |
+| Phase-5 DSL 与执行链对齐 | Done | DSL 节点语义、parser/validator 与步骤协议对齐；StepDef 类型约束与内联 step 引用一致性校验已落地 | `workflow/dsl/parser.go`、`workflow/dsl/validator.go`、`workflow/dsl/validator_test.go` |
 | Phase-6 守卫与验收 | Done | 守卫规则、`go test ./workflow/...`、`go test ./...`、文档同步全部完成 | `architecture_guard_test.go`、`scripts/arch_guard.ps1`、`workflow/*_test.go` |
 
 ---

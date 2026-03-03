@@ -124,7 +124,7 @@ rag/
 
 ## 4.1 目标调用链（唯一）
 
-`cmd/agentflow/main.go -> bootstrap -> server_handlers_runtime.initRAG -> rag/runtime.Builder -> rag/retrieval.pipeline -> llm capabilities(embedding/rerank)`
+`cmd/agentflow/main.go:runServe -> internal/app/bootstrap.InitializeServeRuntime -> cmd/agentflow/server_handlers_runtime.initHandlers -> bootstrap.BuildRAGHandlerRuntime -> rag/runtime.Builder -> rag/retrieval.ExecuteRetrievalPipeline -> llm capabilities(embedding/rerank)`
 
 ---
 
