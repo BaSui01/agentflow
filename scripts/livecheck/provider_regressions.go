@@ -11,6 +11,7 @@ import (
 
 	"github.com/BaSui01/agentflow/llm"
 	"github.com/BaSui01/agentflow/llm/providers"
+	claudeprov "github.com/BaSui01/agentflow/llm/providers/anthropic"
 	geminiprov "github.com/BaSui01/agentflow/llm/providers/gemini"
 	openaiprov "github.com/BaSui01/agentflow/llm/providers/openai"
 	"github.com/BaSui01/agentflow/types"
@@ -436,6 +437,172 @@ func runGeminiModelAwareRegression(ctx context.Context, logger *zap.Logger) erro
 		zap.String("gemini_image_aspect_ratio", asString(genCfg["aspectRatio"])),
 		zap.String("veo_operation_id", veoResp.ID),
 		zap.String("veo_aspect_ratio", asString(veoParams["aspectRatio"])),
+	)
+	return nil
+}
+
+func runAnthropicCompatEndpointRegression(ctx context.Context, logger *zap.Logger) error {
+	logger.Info("test M: anthropic compatibility endpoint regression start")
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/v1/models":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"models":[{"name":"models/glm-5","owned_by":"openai-compatible"}]}`))
+		case "/v1/messages":
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"id":         "msg_compat_livecheck",
+				"type":       "message",
+				"role":       "assistant",
+				"model":      "glm-5",
+				"content":    "OK",
+				"stopReason": "end_turn",
+				"usage": map[string]any{
+					"prompt_tokens":     12,
+					"completion_tokens": 5,
+					"total_tokens":      17,
+				},
+			})
+		default:
+			w.WriteHeader(http.StatusNotFound)
+			_, _ = w.Write([]byte(`{"error":{"message":"unexpected endpoint"}}`))
+		}
+	}))
+	defer server.Close()
+
+	p := claudeprov.NewClaudeProvider(providers.ClaudeConfig{
+		BaseProviderConfig: providers.BaseProviderConfig{
+			APIKey:  "test-key",
+			BaseURL: server.URL,
+			Model:   "glm-5",
+			Timeout: 15 * time.Second,
+		},
+	}, logger)
+
+	models, err := p.ListModels(ctx)
+	if err != nil {
+		return fmt.Errorf("anthropic compat list models failed: %w", err)
+	}
+	if !hasModel(models, "glm-5") {
+		return fmt.Errorf("anthropic compat model glm-5 not found in models envelope")
+	}
+
+	resp, err := p.Completion(ctx, &llm.ChatRequest{
+		Model: "glm-5",
+		Messages: []types.Message{
+			{Role: llm.RoleUser, Content: "Reply with exactly: OK"},
+		},
+	})
+	if err != nil {
+		return fmt.Errorf("anthropic compat completion failed: %w", err)
+	}
+	choice, err := llm.FirstChoice(resp)
+	if err != nil {
+		return fmt.Errorf("anthropic compat no choice: %w", err)
+	}
+	if strings.TrimSpace(choice.Message.Content) != "OK" {
+		return fmt.Errorf("anthropic compat content mismatch: got=%q want=OK", strings.TrimSpace(choice.Message.Content))
+	}
+	if resp.Usage.PromptTokens != 12 || resp.Usage.CompletionTokens != 5 || resp.Usage.TotalTokens != 17 {
+		return fmt.Errorf("anthropic compat usage mismatch: got=%+v", resp.Usage)
+	}
+
+	logger.Info("test M: anthropic compatibility endpoint regression done",
+		zap.String("model", resp.Model),
+		zap.Int("prompt_tokens", resp.Usage.PromptTokens),
+		zap.Int("completion_tokens", resp.Usage.CompletionTokens),
+	)
+	return nil
+}
+
+func runGeminiCompatEndpointRegression(ctx context.Context, logger *zap.Logger) error {
+	logger.Info("test N: gemini compatibility endpoint regression start")
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/v1beta/models":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"object":"list","data":[{"id":"glm-5","max_input_tokens":128000,"max_output_tokens":8192}]}`))
+		case "/v1beta/models/glm-5:generateContent":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{
+				"response_id":"resp_gemini_compat",
+				"model_version":"glm-5",
+				"candidates":[
+					{
+						"index":0,
+						"finish_reason":"STOP",
+						"content":{
+							"role":"model",
+							"parts":[
+								{"text":"OK"},
+								{"function_call":{"name":"lookup","arguments":{"city":"Shanghai"}}}
+							]
+						}
+					}
+				],
+				"usage_metadata":{
+					"prompt_token_count":9,
+					"candidates_token_count":4,
+					"total_token_count":13,
+					"thoughts_token_count":1
+				}
+			}`))
+		default:
+			w.WriteHeader(http.StatusNotFound)
+			_, _ = w.Write([]byte(`{"error":{"message":"unexpected endpoint"}}`))
+		}
+	}))
+	defer server.Close()
+
+	p := geminiprov.NewGeminiProvider(providers.GeminiConfig{
+		BaseProviderConfig: providers.BaseProviderConfig{
+			APIKey:  "test-key",
+			BaseURL: server.URL,
+			Model:   "glm-5",
+			Timeout: 15 * time.Second,
+		},
+	}, logger)
+
+	models, err := p.ListModels(ctx)
+	if err != nil {
+		return fmt.Errorf("gemini compat list models failed: %w", err)
+	}
+	if !hasModel(models, "glm-5") {
+		return fmt.Errorf("gemini compat model glm-5 not found in data envelope")
+	}
+
+	resp, err := p.Completion(ctx, &llm.ChatRequest{
+		Model: "glm-5",
+		Messages: []types.Message{
+			{Role: llm.RoleUser, Content: "Reply with exactly: OK"},
+		},
+	})
+	if err != nil {
+		return fmt.Errorf("gemini compat completion failed: %w", err)
+	}
+	choice, err := llm.FirstChoice(resp)
+	if err != nil {
+		return fmt.Errorf("gemini compat no choice: %w", err)
+	}
+	if strings.TrimSpace(choice.Message.Content) != "OK" {
+		return fmt.Errorf("gemini compat content mismatch: got=%q want=OK", strings.TrimSpace(choice.Message.Content))
+	}
+	if len(choice.Message.ToolCalls) != 1 {
+		return fmt.Errorf("gemini compat expected 1 tool call, got %d", len(choice.Message.ToolCalls))
+	}
+	if choice.Message.ToolCalls[0].Name != "lookup" {
+		return fmt.Errorf("gemini compat tool call name mismatch: got=%q", choice.Message.ToolCalls[0].Name)
+	}
+	if resp.Usage.PromptTokens != 9 || resp.Usage.CompletionTokens != 4 || resp.Usage.TotalTokens != 13 {
+		return fmt.Errorf("gemini compat usage mismatch: got=%+v", resp.Usage)
+	}
+
+	logger.Info("test N: gemini compatibility endpoint regression done",
+		zap.String("model", resp.Model),
+		zap.Int("prompt_tokens", resp.Usage.PromptTokens),
+		zap.Int("completion_tokens", resp.Usage.CompletionTokens),
 	)
 	return nil
 }
