@@ -46,6 +46,19 @@ func normalizeRoutePolicy(raw string) (llmcore.RoutePolicy, *types.Error) {
 	}
 }
 
+func normalizeEndpointMode(raw string) (string, *types.Error) {
+	mode := strings.ToLower(strings.TrimSpace(raw))
+	if mode == "" {
+		return "", nil
+	}
+	switch mode {
+	case "auto", "responses", "chat_completions":
+		return mode, nil
+	default:
+		return "", types.NewInvalidRequestError("endpoint_mode must be one of: auto, responses, chat_completions")
+	}
+}
+
 func normalizeRouteTags(in []string) []string {
 	if len(in) == 0 {
 		return nil
@@ -87,7 +100,7 @@ func normalizeRouteMetadata(in map[string]string) map[string]string {
 	return out
 }
 
-func applyChatRouteMetadata(metadata map[string]string, provider string, policy llmcore.RoutePolicy) map[string]string {
+func applyChatRouteMetadata(metadata map[string]string, provider string, policy llmcore.RoutePolicy, endpointMode string) map[string]string {
 	out := normalizeRouteMetadata(metadata)
 	if out == nil {
 		out = make(map[string]string)
@@ -97,6 +110,9 @@ func applyChatRouteMetadata(metadata map[string]string, provider string, policy 
 	}
 	if policy != "" {
 		out["route_policy"] = string(policy)
+	}
+	if endpointMode != "" {
+		out["endpoint_mode"] = endpointMode
 	}
 	return out
 }

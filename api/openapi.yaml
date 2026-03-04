@@ -186,6 +186,73 @@ paths:
         '500':
           description: Internal error
 
+  /v1/chat/completions:
+    post:
+      tags: [Chat]
+      summary: OpenAI-compatible chat completions
+      description: |
+        OpenAI protocol adapter endpoint.
+        Internally routed to the same ChatService/gateway chain as `/api/v1/chat/completions`.
+        Supports both non-stream and `stream=true` SSE mode.
+      operationId: openAICompatChatCompletions
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        '200':
+          description: OpenAI-compatible chat completion response (JSON or SSE)
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+            text/event-stream:
+              schema:
+                type: string
+        '400':
+          description: Invalid request
+        '500':
+          description: Internal error
+
+  /v1/responses:
+    post:
+      tags: [Chat]
+      summary: OpenAI-compatible responses API
+      description: |
+        OpenAI Responses protocol adapter endpoint.
+        Internally routed to the same ChatService/gateway chain as `/api/v1/chat/completions`.
+      operationId: openAICompatResponses
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        '200':
+          description: OpenAI-compatible responses API result (JSON or SSE)
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+            text/event-stream:
+              schema:
+                type: string
+        '400':
+          description: Invalid request
+        '500':
+          description: Internal error
+
   /api/v1/multimodal/capabilities:
     get:
       tags: [Multimodal]
@@ -1373,6 +1440,11 @@ components:
           enum: [balanced, cost_first, health_first, latency_first]
           description: Optional routing policy for service-layer dispatch.
           example: "balanced"
+        endpoint_mode:
+          type: string
+          enum: [auto, responses, chat_completions]
+          description: Optional OpenAI endpoint mode override for chat provider dispatch.
+          example: "responses"
         messages:
           type: array
           items:
@@ -1395,6 +1467,23 @@ components:
           type: number
           description: Nucleus sampling parameter (0-1)
           example: 1.0
+        frequency_penalty:
+          type: number
+          description: Frequency penalty (provider-specific, typically -2 to 2)
+        presence_penalty:
+          type: number
+          description: Presence penalty (provider-specific, typically -2 to 2)
+        repetition_penalty:
+          type: number
+          description: Repetition penalty (provider-specific)
+        n:
+          type: integer
+          minimum: 1
+        logprobs:
+          type: boolean
+        top_logprobs:
+          type: integer
+          minimum: 0
         stop:
           type: array
           items:
@@ -1406,9 +1495,63 @@ components:
             $ref: '#/components/schemas/ToolSchema'
           description: Available tools for function calling
         tool_choice:
-          type: string
-          description: Tool selection mode (auto, none, or specific tool name)
+          oneOf:
+            - type: string
+            - type: object
+          description: Tool selection mode (auto, none, required, or structured object)
           example: "auto"
+        response_format:
+          type: object
+          additionalProperties: true
+          description: Structured output format (text/json_object/json_schema)
+        stream_options:
+          type: object
+          properties:
+            include_usage:
+              type: boolean
+            chunk_include_usage:
+              type: boolean
+        parallel_tool_calls:
+          type: boolean
+        service_tier:
+          type: string
+        user:
+          type: string
+        max_completion_tokens:
+          type: integer
+          minimum: 1
+        reasoning_effort:
+          type: string
+          description: none/minimal/low/medium/high/xhigh
+        store:
+          type: boolean
+        modalities:
+          type: array
+          items:
+            type: string
+        web_search_options:
+          type: object
+          properties:
+            search_context_size:
+              type: string
+            user_location:
+              type: object
+              description: Supports both OpenAI chat format (type+approximate) and responses format (type/country/region/city/timezone).
+              additionalProperties: true
+            allowed_domains:
+              type: array
+              description: Domain allowlist for Responses web_search tool filters.allowed_domains.
+              items:
+                type: string
+        previous_response_id:
+          type: string
+        include:
+          type: array
+          items:
+            type: string
+        truncation:
+          type: string
+          enum: [auto, disabled]
         timeout:
           type: string
           description: Request timeout duration

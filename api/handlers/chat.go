@@ -273,6 +273,9 @@ func (h *ChatHandler) validateChatRequest(req *api.ChatRequest) *types.Error {
 	if _, err := normalizeRoutePolicy(req.RoutePolicy); err != nil {
 		return err
 	}
+	if _, err := normalizeEndpointMode(req.EndpointMode); err != nil {
+		return err
+	}
 
 	validRoles := []string{"system", "developer", "user", "assistant", "tool"}
 	validImageTypes := []string{"url", "base64"}
@@ -314,11 +317,11 @@ func (h *ChatHandler) HandleCapabilities(w http.ResponseWriter, r *http.Request)
 	}
 
 	WriteSuccess(w, map[string]any{
-		"route_params":         []string{"provider", "model", "route_policy", "tags", "metadata"},
+		"route_params":         []string{"provider", "model", "route_policy", "endpoint_mode", "tags", "metadata"},
 		"route_policies":       h.service.SupportedRoutePolicies(),
 		"default_route_policy": h.service.DefaultRoutePolicy(),
 		"notes": []string{
-			"provider/model/route_policy are routed by service layer",
+			"provider/model/route_policy/endpoint_mode are routed by service layer",
 			"provider hint effectiveness depends on runtime provider implementation",
 		},
 	})
