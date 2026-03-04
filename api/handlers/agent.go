@@ -289,6 +289,10 @@ func (h *AgentHandler) HandleAgentStream(w http.ResponseWriter, r *http.Request)
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
 	w.Header().Set("X-Accel-Buffering", "no")
+	requestID := r.Header.Get("X-Request-ID")
+	if requestID == "" {
+		requestID = w.Header().Get("X-Request-ID")
+	}
 
 	// Build the RuntimeStreamEmitter that bridges agent events to SSE
 	emitter := func(event agent.RuntimeStreamEvent) {
@@ -336,9 +340,23 @@ func (h *AgentHandler) HandleAgentStream(w http.ResponseWriter, r *http.Request)
 		flusher.Flush()
 	}
 
-	if execErr := h.service.ExecuteAgentStream(r.Context(), req, r.Header.Get("X-Request-ID"), emitter); execErr != nil {
+	execErr := h.service.ExecuteAgentStream(r.Context(), req, requestID, emitter)
+	if execErr != nil {
+		h.logger.Error("agent stream execution failed",
+			zap.String("agent_id", req.AgentID),
+			zap.String("request_id", requestID),
+			zap.Error(execErr),
+		)
+
 		// If headers are already sent (SSE mode), write error as SSE event
-		errPayload, _ := json.Marshal(map[string]string{"error": "agent execution failed"})
+		errPayload, err := json.Marshal(map[string]any{
+			"code":       string(types.ErrInternalError),
+			"message":    "agent execution failed",
+			"request_id": requestID,
+		})
+		if err != nil {
+			errPayload = []byte(`{"code":"INTERNAL_ERROR","message":"agent execution failed"}`)
+		}
 		fmt.Fprintf(w, "event: error\ndata: %s\n\n", errPayload)
 		flusher.Flush()
 	}
@@ -347,8 +365,17 @@ func (h *AgentHandler) HandleAgentStream(w http.ResponseWriter, r *http.Request)
 	fmt.Fprint(w, "data: [DONE]\n\n")
 	flusher.Flush()
 
+	if execErr != nil {
+		h.logger.Warn("agent stream finished with error",
+			zap.String("agent_id", req.AgentID),
+			zap.String("request_id", requestID),
+		)
+		return
+	}
+
 	h.logger.Info("agent stream completed",
 		zap.String("agent_id", req.AgentID),
+		zap.String("request_id", requestID),
 	)
 }
 

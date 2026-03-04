@@ -117,13 +117,13 @@ type EpisodicStore interface {
 
 // EpisodicEvent 情节事件
 type EpisodicEvent struct {
-	ID        string                 `json:"id"`
-	AgentID   string                 `json:"agent_id"`
-	Type      string                 `json:"type"`    // 事件类型
-	Content   string                 `json:"content"` // 事件内容
+	ID        string         `json:"id"`
+	AgentID   string         `json:"agent_id"`
+	Type      string         `json:"type"`    // 事件类型
+	Content   string         `json:"content"` // 事件内容
 	Context   map[string]any `json:"context"` // 上下文
-	Timestamp time.Time              `json:"timestamp"`
-	Duration  time.Duration          `json:"duration"` // 事件持续时间
+	Timestamp time.Time      `json:"timestamp"`
+	Duration  time.Duration  `json:"duration"` // 事件持续时间
 }
 
 // EpisodicQuery 情节查询
@@ -155,23 +155,23 @@ type KnowledgeGraph interface {
 
 // Entity 实体
 type Entity struct {
-	ID         string                 `json:"id"`
-	Type       string                 `json:"type"`
-	Name       string                 `json:"name"`
+	ID         string         `json:"id"`
+	Type       string         `json:"type"`
+	Name       string         `json:"name"`
 	Properties map[string]any `json:"properties"`
-	CreatedAt  time.Time              `json:"created_at"`
-	UpdatedAt  time.Time              `json:"updated_at"`
+	CreatedAt  time.Time      `json:"created_at"`
+	UpdatedAt  time.Time      `json:"updated_at"`
 }
 
 // Relation 关系
 type Relation struct {
-	ID         string                 `json:"id"`
-	FromID     string                 `json:"from_id"`
-	ToID       string                 `json:"to_id"`
-	Type       string                 `json:"type"`
+	ID         string         `json:"id"`
+	FromID     string         `json:"from_id"`
+	ToID       string         `json:"to_id"`
+	Type       string         `json:"type"`
 	Properties map[string]any `json:"properties"`
-	Weight     float64                `json:"weight"`
-	CreatedAt  time.Time              `json:"created_at"`
+	Weight     float64        `json:"weight"`
+	CreatedAt  time.Time      `json:"created_at"`
 }
 
 // MemoryConsolidator 记忆整合器
@@ -183,6 +183,7 @@ type MemoryConsolidator struct {
 
 	// 运行状态
 	running   bool
+	runEpoch  uint64
 	stopCh    chan struct{}
 	closeOnce sync.Once
 	mu        sync.Mutex
@@ -475,10 +476,13 @@ func (c *MemoryConsolidator) Start(ctx context.Context) error {
 	}
 	c.stopCh = make(chan struct{})
 	c.closeOnce = sync.Once{}
+	c.runEpoch++
+	epoch := c.runEpoch
+	stopCh := c.stopCh
 	c.running = true
 	c.mu.Unlock()
 
-	go c.run(ctx)
+	go c.run(ctx, epoch, stopCh)
 
 	c.logger.Info("memory consolidator started")
 
@@ -505,10 +509,16 @@ func (c *MemoryConsolidator) Stop() error {
 }
 
 // run 运行整合循环
-func (c *MemoryConsolidator) run(ctx context.Context) {
+func (c *MemoryConsolidator) run(ctx context.Context, epoch uint64, stopCh chan struct{}) {
 	defer func() {
 		c.mu.Lock()
-		c.running = false
+		// 仅允许当前代次 goroutine 更新运行状态，避免旧 goroutine 覆盖新 Start 状态。
+		if c.runEpoch == epoch {
+			c.running = false
+			if c.stopCh == stopCh {
+				c.stopCh = nil
+			}
+		}
 		c.mu.Unlock()
 	}()
 
@@ -530,7 +540,7 @@ func (c *MemoryConsolidator) run(ctx context.Context) {
 				c.logger.Error("consolidation failed", zap.Error(err))
 			}
 			cancel() // 确保释放资源
-		case <-c.stopCh:
+		case <-stopCh:
 			c.logger.Debug("consolidator stopped via stopCh")
 			return
 		case <-ctx.Done():
@@ -636,4 +646,3 @@ func extractMemoryKey(memory any) (string, bool) {
 	key, ok := m["key"].(string)
 	return key, ok && key != ""
 }
-

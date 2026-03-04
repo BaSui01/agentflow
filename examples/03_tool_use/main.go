@@ -1,17 +1,17 @@
 package main
 
 import (
-	"github.com/BaSui01/agentflow/types"
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/BaSui01/agentflow/types"
 	"log"
 	"os"
 
 	"github.com/BaSui01/agentflow/llm"
+	"github.com/BaSui01/agentflow/llm/capabilities/tools"
 	"github.com/BaSui01/agentflow/llm/providers"
 	"github.com/BaSui01/agentflow/llm/providers/openai"
-	"github.com/BaSui01/agentflow/llm/capabilities/tools"
 	"go.uber.org/zap"
 )
 
@@ -120,7 +120,7 @@ func main() {
 	cfg := providers.OpenAIConfig{
 		BaseProviderConfig: providers.BaseProviderConfig{
 			APIKey:  apiKey,
-			BaseURL: "https://api.openai.com/v1",
+			BaseURL: "https://api.openai.com",
 			Model:   "gpt-3.5-turbo",
 		},
 	}
@@ -219,5 +219,3 @@ func main() {
 	fmt.Println("--- 对话结束 ---")
 	fmt.Printf("总消息数: %d\n", len(req.Messages))
 }
-
-

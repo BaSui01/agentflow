@@ -1,4 +1,4 @@
-package a2a
+﻿package a2a
 
 import (
 	"bytes"
@@ -140,7 +140,7 @@ func (c *HTTPClient) Discover(ctx context.Context, url string) (*AgentCard, erro
 	}
 
 	if lastErr != nil {
-		return nil, fmt.Errorf("%w: %v", ErrRemoteUnavailable, lastErr)
+		return nil, fmt.Errorf("%w: %w", ErrRemoteUnavailable, lastErr)
 	}
 	defer resp.Body.Close()
 
@@ -156,7 +156,7 @@ func (c *HTTPClient) Discover(ctx context.Context, url string) (*AgentCard, erro
 
 	var card AgentCard
 	if err := json.Unmarshal(body, &card); err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrInvalidMessage, err)
+		return nil, fmt.Errorf("%w: %w", ErrInvalidMessage, err)
 	}
 
 	// 验证卡片
@@ -237,7 +237,7 @@ func (c *HTTPClient) Send(ctx context.Context, msg *A2AMessage) (*A2AMessage, er
 	}
 
 	if lastErr != nil {
-		return nil, fmt.Errorf("%w: %v", ErrRemoteUnavailable, lastErr)
+		return nil, fmt.Errorf("%w: %w", ErrRemoteUnavailable, lastErr)
 	}
 	defer resp.Body.Close()
 
@@ -255,7 +255,7 @@ func (c *HTTPClient) Send(ctx context.Context, msg *A2AMessage) (*A2AMessage, er
 
 	var response A2AMessage
 	if err := json.Unmarshal(respBody, &response); err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrInvalidMessage, err)
+		return nil, fmt.Errorf("%w: %w", ErrInvalidMessage, err)
 	}
 
 	return &response, nil
@@ -308,7 +308,7 @@ func (c *HTTPClient) SendAsync(ctx context.Context, msg *A2AMessage) (string, er
 	// 执行请求
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return "", fmt.Errorf("%w: %v", ErrRemoteUnavailable, err)
+		return "", fmt.Errorf("%w: %w", ErrRemoteUnavailable, err)
 	}
 	defer resp.Body.Close()
 
@@ -326,7 +326,7 @@ func (c *HTTPClient) SendAsync(ctx context.Context, msg *A2AMessage) (string, er
 
 	var asyncResp AsyncResponse
 	if err := json.Unmarshal(respBody, &asyncResp); err != nil {
-		return "", fmt.Errorf("%w: %v", ErrInvalidMessage, err)
+		return "", fmt.Errorf("%w: %w", ErrInvalidMessage, err)
 	}
 
 	if asyncResp.TaskID == "" {
@@ -393,7 +393,7 @@ func (c *HTTPClient) GetResultFromAgent(ctx context.Context, agentURL, taskID st
 	// 执行请求
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrRemoteUnavailable, err)
+		return nil, fmt.Errorf("%w: %w", ErrRemoteUnavailable, err)
 	}
 	defer resp.Body.Close()
 
@@ -419,7 +419,7 @@ func (c *HTTPClient) GetResultFromAgent(ctx context.Context, agentURL, taskID st
 
 	var result A2AMessage
 	if err := json.Unmarshal(respBody, &result); err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrInvalidMessage, err)
+		return nil, fmt.Errorf("%w: %w", ErrInvalidMessage, err)
 	}
 
 	return &result, nil

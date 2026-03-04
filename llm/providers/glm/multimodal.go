@@ -68,8 +68,7 @@ func (p *GLMProvider) CreateFineTuningJob(ctx context.Context, req *llm.FineTuni
 	resp, err := p.Client.Do(httpReq)
 	if err != nil {
 		return nil, &types.Error{
-			Code: llm.ErrUpstreamError, Message: err.Error(),
-			HTTPStatus: http.StatusBadGateway, Retryable: true, Provider: p.Name(),
+			Code: llm.ErrUpstreamError, Message: err.Error(), Cause: err, HTTPStatus: http.StatusBadGateway, Retryable: true, Provider: p.Name(),
 		}
 	}
 	defer resp.Body.Close()
@@ -82,8 +81,7 @@ func (p *GLMProvider) CreateFineTuningJob(ctx context.Context, req *llm.FineTuni
 	var job llm.FineTuningJob
 	if err := json.NewDecoder(resp.Body).Decode(&job); err != nil {
 		return nil, &types.Error{
-			Code: llm.ErrUpstreamError, Message: err.Error(),
-			HTTPStatus: http.StatusBadGateway, Provider: p.Name(),
+			Code: llm.ErrUpstreamError, Message: err.Error(), Cause: err, HTTPStatus: http.StatusBadGateway, Provider: p.Name(),
 		}
 	}
 	return &job, nil
@@ -102,8 +100,7 @@ func (p *GLMProvider) ListFineTuningJobs(ctx context.Context) ([]llm.FineTuningJ
 	resp, err := p.Client.Do(httpReq)
 	if err != nil {
 		return nil, &types.Error{
-			Code: llm.ErrUpstreamError, Message: err.Error(),
-			HTTPStatus: http.StatusBadGateway, Retryable: true, Provider: p.Name(),
+			Code: llm.ErrUpstreamError, Message: err.Error(), Cause: err, HTTPStatus: http.StatusBadGateway, Retryable: true, Provider: p.Name(),
 		}
 	}
 	defer resp.Body.Close()
@@ -118,8 +115,7 @@ func (p *GLMProvider) ListFineTuningJobs(ctx context.Context) ([]llm.FineTuningJ
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&listResp); err != nil {
 		return nil, &types.Error{
-			Code: llm.ErrUpstreamError, Message: err.Error(),
-			HTTPStatus: http.StatusBadGateway, Provider: p.Name(),
+			Code: llm.ErrUpstreamError, Message: err.Error(), Cause: err, HTTPStatus: http.StatusBadGateway, Provider: p.Name(),
 		}
 	}
 	return listResp.Data, nil
@@ -138,8 +134,7 @@ func (p *GLMProvider) GetFineTuningJob(ctx context.Context, jobID string) (*llm.
 	resp, err := p.Client.Do(httpReq)
 	if err != nil {
 		return nil, &types.Error{
-			Code: llm.ErrUpstreamError, Message: err.Error(),
-			HTTPStatus: http.StatusBadGateway, Retryable: true, Provider: p.Name(),
+			Code: llm.ErrUpstreamError, Message: err.Error(), Cause: err, HTTPStatus: http.StatusBadGateway, Retryable: true, Provider: p.Name(),
 		}
 	}
 	defer resp.Body.Close()
@@ -152,8 +147,7 @@ func (p *GLMProvider) GetFineTuningJob(ctx context.Context, jobID string) (*llm.
 	var job llm.FineTuningJob
 	if err := json.NewDecoder(resp.Body).Decode(&job); err != nil {
 		return nil, &types.Error{
-			Code: llm.ErrUpstreamError, Message: err.Error(),
-			HTTPStatus: http.StatusBadGateway, Provider: p.Name(),
+			Code: llm.ErrUpstreamError, Message: err.Error(), Cause: err, HTTPStatus: http.StatusBadGateway, Provider: p.Name(),
 		}
 	}
 	return &job, nil
@@ -172,8 +166,7 @@ func (p *GLMProvider) CancelFineTuningJob(ctx context.Context, jobID string) err
 	resp, err := p.Client.Do(httpReq)
 	if err != nil {
 		return &types.Error{
-			Code: llm.ErrUpstreamError, Message: err.Error(),
-			HTTPStatus: http.StatusBadGateway, Retryable: true, Provider: p.Name(),
+			Code: llm.ErrUpstreamError, Message: err.Error(), Cause: err, HTTPStatus: http.StatusBadGateway, Retryable: true, Provider: p.Name(),
 		}
 	}
 	defer resp.Body.Close()

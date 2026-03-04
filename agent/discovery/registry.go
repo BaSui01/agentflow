@@ -711,7 +711,12 @@ func (r *CapabilityRegistry) emitEvent(event *DiscoveryEvent) {
 		go func() {
 			defer func() {
 				if rec := recover(); rec != nil {
-					r.logger.Error("event handler panicked", zap.Any("recover", rec))
+					r.logger.Error("event handler panicked",
+						zap.Any("recover", rec),
+						zap.Error(recoveredPanicToError(rec)),
+						zap.String("event_type", string(event.Type)),
+						zap.Stack("stack"),
+					)
 				}
 			}()
 
@@ -728,6 +733,13 @@ func (r *CapabilityRegistry) emitEvent(event *DiscoveryEvent) {
 			}
 		}()
 	}
+}
+
+func recoveredPanicToError(v any) error {
+	if err, ok := v.(error); ok {
+		return err
+	}
+	return fmt.Errorf("panic: %v", v)
 }
 
 // 复制 AgentInfo 创建 AgentInfo 的深层副本.
@@ -1033,4 +1045,3 @@ func mustMarshal(v any) json.RawMessage {
 
 // 确保能力登记工具注册界面。
 var _ Registry = (*CapabilityRegistry)(nil)
-

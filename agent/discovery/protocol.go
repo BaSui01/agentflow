@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -13,6 +14,12 @@ import (
 
 	"github.com/BaSui01/agentflow/pkg/tlsutil"
 	"go.uber.org/zap"
+)
+
+const (
+	maxAnnounceBodyBytes      = 1 << 20 // 1 MiB
+	internalProtocolErrMsg    = "internal server error"
+	requestBodyTooLargeErrMsg = "request body too large"
 )
 
 // 发现协议是协议界面的默认执行.
@@ -122,6 +129,8 @@ func (p *DiscoveryProtocol) Start(ctx context.Context) error {
 		p.runMu.Unlock()
 		return fmt.Errorf("protocol already running")
 	}
+	p.done = make(chan struct{})
+	p.closeOnce = sync.Once{}
 
 	// 启用时启动 HTTP 服务器
 	if p.config.EnableHTTP {
@@ -346,7 +355,7 @@ func (p *DiscoveryProtocol) handleListAgents(w http.ResponseWriter, r *http.Requ
 
 	agents, err := p.Discover(ctx, filter)
 	if err != nil {
-		p.writeProtocolError(w, http.StatusInternalServerError, err.Error())
+		p.writeProtocolInternalError(w, "failed to discover agents", err)
 		return
 	}
 	p.writeProtocolJSON(w, http.StatusOK, agents)
@@ -396,8 +405,14 @@ func (p *DiscoveryProtocol) handleAnnounce(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
+	r.Body = http.MaxBytesReader(w, r.Body, maxAnnounceBodyBytes)
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
+		var maxBytesErr *http.MaxBytesError
+		if errors.As(err, &maxBytesErr) {
+			p.writeProtocolError(w, http.StatusRequestEntityTooLarge, requestBodyTooLargeErrMsg)
+			return
+		}
 		p.writeProtocolError(w, http.StatusBadRequest, "failed to read body")
 		return
 	}
@@ -410,7 +425,7 @@ func (p *DiscoveryProtocol) handleAnnounce(w http.ResponseWriter, r *http.Reques
 
 	ctx := r.Context()
 	if err := p.Announce(ctx, &info); err != nil {
-		p.writeProtocolError(w, http.StatusInternalServerError, err.Error())
+		p.writeProtocolInternalError(w, "failed to announce agent", err)
 		return
 	}
 	p.writeProtocolJSON(w, http.StatusOK, map[string]string{"status": "ok"})
@@ -438,6 +453,15 @@ func (p *DiscoveryProtocol) writeProtocolError(w http.ResponseWriter, status int
 		},
 		"timestamp": time.Now().UTC(),
 	})
+}
+
+func (p *DiscoveryProtocol) writeProtocolInternalError(w http.ResponseWriter, message string, err error) {
+	if err != nil {
+		p.logger.Error(message, zap.Error(err))
+	} else {
+		p.logger.Error(message)
+	}
+	p.writeProtocolError(w, http.StatusInternalServerError, internalProtocolErrMsg)
 }
 
 // 启动多收听器。

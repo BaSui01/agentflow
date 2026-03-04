@@ -172,6 +172,8 @@ type Provider interface {
     HealthCheck(ctx context.Context) (*HealthStatus, error)
     Name() string
     SupportsNativeFunctionCalling() bool
+    ListModels(ctx context.Context) ([]Model, error)
+    Endpoints() ProviderEndpoints
 }
 ```
 

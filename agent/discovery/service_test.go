@@ -45,6 +45,14 @@ func TestDiscoveryService_StartStop(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, svc.running)
 
+	// Restart should work after stop.
+	err = svc.Start(ctx)
+	require.NoError(t, err)
+	assert.True(t, svc.running)
+	err = svc.Stop(ctx)
+	require.NoError(t, err)
+	assert.False(t, svc.running)
+
 	// Double stop is a no-op
 	err = svc.Stop(ctx)
 	require.NoError(t, err)
@@ -311,4 +319,3 @@ func TestDefaultServiceConfig(t *testing.T) {
 	assert.Equal(t, 15*time.Second, cfg.HeartbeatInterval)
 	assert.True(t, cfg.EnableMetrics)
 }
-

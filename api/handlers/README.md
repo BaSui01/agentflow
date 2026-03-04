@@ -46,8 +46,8 @@ http.HandleFunc("/api/v1/chat/completions/stream", chatHandler.HandleStream)
 
 ```go
 agentHandler := handlers.NewAgentHandler(discoveryRegistry, agentRegistry, logger, resolver)
-http.HandleFunc("/api/v1/agents", agentHandler.HandleListAgents)
-http.HandleFunc("/api/v1/agents/execute", agentHandler.HandleExecuteAgent)
+http.HandleFunc("GET /api/v1/agents", agentHandler.HandleListAgents)
+http.HandleFunc("POST /api/v1/agents/execute", agentHandler.HandleExecuteAgent)
 ```
 
 说明：`AgentHandler` 的执行、规划、流式调用统一走 `AgentService`。

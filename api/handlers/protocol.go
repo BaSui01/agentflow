@@ -57,6 +57,7 @@ func (h *ProtocolHandler) HandleMCPGetResource(w http.ResponseWriter, r *http.Re
 	resource, err := h.mcpServer.GetResource(r.Context(), uri)
 	if err != nil {
 		apiErr := types.NewError(types.ErrInvalidRequest, "resource not found: "+err.Error()).
+			WithCause(err).
 			WithHTTPStatus(http.StatusNotFound)
 		WriteError(w, apiErr, h.logger)
 		return
@@ -105,7 +106,8 @@ func (h *ProtocolHandler) HandleMCPCallTool(w http.ResponseWriter, r *http.Reque
 
 	result, err := h.mcpServer.CallTool(r.Context(), name, req.Arguments)
 	if err != nil {
-		apiErr := types.NewError(types.ErrInternalError, "tool call failed: "+err.Error())
+		apiErr := types.NewError(types.ErrInternalError, "tool call failed: "+err.Error()).
+			WithCause(err)
 		WriteError(w, apiErr, h.logger)
 		return
 	}
@@ -131,6 +133,7 @@ func (h *ProtocolHandler) HandleA2AAgentCard(w http.ResponseWriter, r *http.Requ
 	card, err := h.a2aServer.GetAgentCard(agentID)
 	if err != nil {
 		apiErr := types.NewError(types.ErrInvalidRequest, "agent not found: "+err.Error()).
+			WithCause(err).
 			WithHTTPStatus(http.StatusNotFound)
 		WriteError(w, apiErr, h.logger)
 		return

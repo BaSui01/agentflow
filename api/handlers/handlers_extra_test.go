@@ -1037,6 +1037,8 @@ func TestAgentHandler_HandleAgentStream_WithResolver_ExecutionError(t *testing.T
 
 	// Should contain error event and DONE
 	assert.Contains(t, w.Body.String(), "event: error")
+	assert.Contains(t, w.Body.String(), "\"code\":\"INTERNAL_ERROR\"")
+	assert.Contains(t, w.Body.String(), "\"request_id\":")
 	assert.Contains(t, w.Body.String(), "[DONE]")
 }
 

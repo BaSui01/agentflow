@@ -356,15 +356,15 @@ func (b *BaseAgent) PrintFeatureStatus() {
 
 // ValidateConfiguration 验证配置
 func (b *BaseAgent) ValidateConfiguration() error {
-	errors := b.extensions.ValidateConfiguration(b.config)
+	validationErrors := b.extensions.ValidateConfiguration(b.config)
 
 	// 检查必需组件
 	if b.provider == nil {
-		errors = append(errors, "provider not set")
+		validationErrors = append(validationErrors, "provider not set")
 	}
 
-	if len(errors) > 0 {
-		return fmt.Errorf("configuration validation failed: %v", errors)
+	if len(validationErrors) > 0 {
+		return fmt.Errorf("configuration validation failed: %s", strings.Join(validationErrors, "; "))
 	}
 
 	b.logger.Info("configuration validated successfully")

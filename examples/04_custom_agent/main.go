@@ -38,7 +38,7 @@ func main() {
 	cfg := providers.OpenAIConfig{
 		BaseProviderConfig: providers.BaseProviderConfig{
 			APIKey:  apiKey,
-			BaseURL: "https://api.openai.com/v1",
+			BaseURL: "https://api.openai.com",
 		},
 	}
 	provider := openai.NewOpenAIProvider(cfg, logger)

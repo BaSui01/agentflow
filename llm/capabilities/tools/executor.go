@@ -442,14 +442,14 @@ func (e *DefaultExecutor) executeStreamingTool(ctx context.Context, call types.T
 	// 获取元数据（用于超时）
 	_, meta, err := e.registry.Get(call.Name)
 	if err != nil {
-		ch <- ToolStreamEvent{Type: ToolStreamError, ToolName: call.Name, Error: fmt.Errorf("tool not found: %s", err.Error())}
+		ch <- ToolStreamEvent{Type: ToolStreamError, ToolName: call.Name, Error: fmt.Errorf("tool not found: %w", err)}
 		return
 	}
 
 	// 检查速率限制
 	if reg, ok := e.registry.(*DefaultRegistry); ok {
 		if err := reg.checkRateLimit(call.Name); err != nil {
-			ch <- ToolStreamEvent{Type: ToolStreamError, ToolName: call.Name, Error: fmt.Errorf("rate limit exceeded: %s", err.Error())}
+			ch <- ToolStreamEvent{Type: ToolStreamError, ToolName: call.Name, Error: fmt.Errorf("rate limit exceeded: %w", err)}
 			return
 		}
 	}
@@ -458,7 +458,7 @@ func (e *DefaultExecutor) executeStreamingTool(ctx context.Context, call types.T
 	if len(call.Arguments) > 0 {
 		var tmp any
 		if err := json.Unmarshal(call.Arguments, &tmp); err != nil {
-			ch <- ToolStreamEvent{Type: ToolStreamError, ToolName: call.Name, Error: fmt.Errorf("invalid arguments: %s", err.Error())}
+			ch <- ToolStreamEvent{Type: ToolStreamError, ToolName: call.Name, Error: fmt.Errorf("invalid arguments: %w", err)}
 			return
 		}
 	}

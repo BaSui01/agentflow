@@ -273,11 +273,10 @@ func (p *OpenAIProvider) do(req *http.Request) (*http.Response, error) {
 	resp, err := p.Provider.Client.Do(req)
 	if err != nil {
 		return nil, &types.Error{
-			Code:       llm.ErrUpstreamError,
-			Message:    err.Error(),
-			HTTPStatus: http.StatusBadGateway,
-			Retryable:  true,
-			Provider:   p.Name(),
+			Code:    llm.ErrUpstreamError,
+			Message: err.Error(), Cause: err, HTTPStatus: http.StatusBadGateway,
+			Retryable: true,
+			Provider:  p.Name(),
 		}
 	}
 	return resp, nil
@@ -314,11 +313,10 @@ func (p *OpenAIProvider) doJSON(ctx context.Context, method, path string, payloa
 	}
 	if err := json.NewDecoder(resp.Body).Decode(out); err != nil {
 		return &types.Error{
-			Code:       llm.ErrUpstreamError,
-			Message:    err.Error(),
-			HTTPStatus: http.StatusBadGateway,
-			Retryable:  true,
-			Provider:   p.Name(),
+			Code:    llm.ErrUpstreamError,
+			Message: err.Error(), Cause: err, HTTPStatus: http.StatusBadGateway,
+			Retryable: true,
+			Provider:  p.Name(),
 		}
 	}
 	return nil
@@ -352,11 +350,10 @@ func (p *OpenAIProvider) doBytes(ctx context.Context, method, path string, paylo
 	data, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, &types.Error{
-			Code:       llm.ErrUpstreamError,
-			Message:    err.Error(),
-			HTTPStatus: http.StatusBadGateway,
-			Retryable:  true,
-			Provider:   p.Name(),
+			Code:    llm.ErrUpstreamError,
+			Message: err.Error(), Cause: err, HTTPStatus: http.StatusBadGateway,
+			Retryable: true,
+			Provider:  p.Name(),
 		}
 	}
 	return data, nil
@@ -382,11 +379,10 @@ func (p *OpenAIProvider) doMultipartJSON(ctx context.Context, path string, body 
 
 	if err := json.NewDecoder(resp.Body).Decode(out); err != nil {
 		return &types.Error{
-			Code:       llm.ErrUpstreamError,
-			Message:    err.Error(),
-			HTTPStatus: http.StatusBadGateway,
-			Retryable:  true,
-			Provider:   p.Name(),
+			Code:    llm.ErrUpstreamError,
+			Message: err.Error(), Cause: err, HTTPStatus: http.StatusBadGateway,
+			Retryable: true,
+			Provider:  p.Name(),
 		}
 	}
 	return nil

@@ -194,11 +194,10 @@ func (p *Provider) Do(httpReq *http.Request) (*http.Response, error) {
 	resp, err := p.Client.Do(httpReq)
 	if err != nil {
 		return nil, &types.Error{
-			Code:       llm.ErrUpstreamError,
-			Message:    err.Error(),
-			HTTPStatus: http.StatusBadGateway,
-			Retryable:  true,
-			Provider:   p.Name(),
+			Code:    llm.ErrUpstreamError,
+			Message: err.Error(), Cause: err, HTTPStatus: http.StatusBadGateway,
+			Retryable: true,
+			Provider:  p.Name(),
 		}
 	}
 	return resp, nil
@@ -235,11 +234,10 @@ func (p *Provider) DoJSON(ctx context.Context, method, path string, payload any,
 	}
 	if err := json.NewDecoder(resp.Body).Decode(out); err != nil {
 		return &types.Error{
-			Code:       llm.ErrUpstreamError,
-			Message:    err.Error(),
-			HTTPStatus: http.StatusBadGateway,
-			Retryable:  true,
-			Provider:   p.Name(),
+			Code:    llm.ErrUpstreamError,
+			Message: err.Error(), Cause: err, HTTPStatus: http.StatusBadGateway,
+			Retryable: true,
+			Provider:  p.Name(),
 		}
 	}
 	return nil
@@ -468,8 +466,7 @@ func StreamSSE(ctx context.Context, body io.ReadCloser, providerName string) <-c
 					case <-ctx.Done():
 						return
 					case ch <- llm.StreamChunk{Err: &types.Error{
-						Code: llm.ErrUpstreamError, Message: err.Error(),
-						HTTPStatus: http.StatusBadGateway, Retryable: true, Provider: providerName,
+						Code: llm.ErrUpstreamError, Message: err.Error(), Cause: err, HTTPStatus: http.StatusBadGateway, Retryable: true, Provider: providerName,
 					}}:
 					}
 				}
@@ -490,8 +487,7 @@ func StreamSSE(ctx context.Context, body io.ReadCloser, providerName string) <-c
 				case <-ctx.Done():
 					return
 				case ch <- llm.StreamChunk{Err: &types.Error{
-					Code: llm.ErrUpstreamError, Message: err.Error(),
-					HTTPStatus: http.StatusBadGateway, Retryable: true, Provider: providerName,
+					Code: llm.ErrUpstreamError, Message: err.Error(), Cause: err, HTTPStatus: http.StatusBadGateway, Retryable: true, Provider: providerName,
 				}}:
 				}
 				return

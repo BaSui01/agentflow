@@ -3,6 +3,7 @@ package rag
 import (
 	"context"
 	"crypto/sha256"
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -51,11 +52,11 @@ func DefaultWebRetrieverConfig() WebRetrieverConfig {
 
 // WebRetriever 将本地 RAG 检索与实时网络搜索相结合。
 type WebRetriever struct {
-	config       WebRetrieverConfig
+	config         WebRetrieverConfig
 	localRetriever *HybridRetriever // Local RAG retriever
-	webSearchFn  WebSearchFunc      // Web search function
-	cache        *webResultCache    // Result cache
-	logger       *zap.Logger
+	webSearchFn    WebSearchFunc    // Web search function
+	cache          *webResultCache  // Result cache
+	logger         *zap.Logger
 }
 
 // 新WebRetriever创建了新的网络增强检索器.
@@ -142,7 +143,7 @@ func (wr *WebRetriever) Retrieve(ctx context.Context, query string, queryEmbeddi
 
 func (wr *WebRetriever) resolveSourceFailures(localErr, webErr error) error {
 	if localErr != nil && webErr != nil {
-		return fmt.Errorf("retrieval failed: local=%w; web=%v", localErr, webErr)
+		return fmt.Errorf("retrieval failed: %w", errors.Join(localErr, webErr))
 	}
 	if localErr != nil {
 		wr.logger.Warn("local retrieval failed",
@@ -315,4 +316,3 @@ func truncateStr(s string, maxLen int) string {
 	}
 	return s[:maxLen] + "..."
 }
-

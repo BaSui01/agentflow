@@ -1,10 +1,10 @@
 package reasoning
 
 import (
-	"github.com/BaSui01/agentflow/types"
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/BaSui01/agentflow/types"
 	"strings"
 	"time"
 
@@ -44,6 +44,20 @@ type PlanAndExecute struct {
 	config       PlanExecuteConfig
 	logger       *zap.Logger
 }
+
+const (
+	planStatusPlanning  = "planning"
+	planStatusExecuting = "executing"
+	planStatusReplan    = "replanning"
+	planStatusCompleted = "completed"
+	planStatusFailed    = "failed"
+
+	stepStatusPending   = "pending"
+	stepStatusRunning   = "running"
+	stepStatusCompleted = "completed"
+	stepStatusFailed    = "failed"
+	stepStatusSkipped   = "skipped"
+)
 
 // NewPlanAndExecute创建了一个新的"计划"和"执行"推理器.
 func NewPlanAndExecute(provider llm.Provider, executor tools.ToolExecutor, schemas []types.ToolSchema, config PlanExecuteConfig, logger *zap.Logger) *PlanAndExecute {
@@ -109,7 +123,7 @@ func (p *PlanAndExecute) Execute(ctx context.Context, task string) (*ReasoningRe
 
 	// 第二阶段:实施适应性再规划计划
 	replanAttempts := 0
-	for plan.Status != "completed" && plan.Status != "failed" {
+	for plan.Status != planStatusCompleted && plan.Status != planStatusFailed {
 		select {
 		case <-ctx.Done():
 			return nil, ctx.Err()
@@ -131,7 +145,7 @@ func (p *PlanAndExecute) Execute(ctx context.Context, task string) (*ReasoningRe
 				replanAttempts++
 
 				if replanErr != nil {
-					plan.Status = "failed"
+					plan.Status = planStatusFailed
 					result.Steps = append(result.Steps, ReasoningStep{
 						StepID:  "replan_failed",
 						Type:    "backtrack",
@@ -149,7 +163,7 @@ func (p *PlanAndExecute) Execute(ctx context.Context, task string) (*ReasoningRe
 				continue
 			}
 
-			plan.Status = "failed"
+			plan.Status = planStatusFailed
 			break
 		}
 
@@ -162,12 +176,12 @@ func (p *PlanAndExecute) Execute(ctx context.Context, task string) (*ReasoningRe
 
 		// 检查计划是否完成
 		if plan.CurrentStep >= len(plan.Steps) {
-			plan.Status = "completed"
+			plan.Status = planStatusCompleted
 		}
 	}
 
 	// 第3阶段:合成最后答案
-	if plan.Status == "completed" {
+	if plan.Status == planStatusCompleted {
 		answer, synthTokens, err := p.synthesizeAnswer(ctx, task, plan)
 		result.TotalTokens += synthTokens
 		if err != nil {
@@ -249,15 +263,15 @@ Keep the plan focused and achievable (max %d steps).`, strings.Join(toolDescs, "
 			Steps: []ExecutionStep{{
 				ID:          "step_1",
 				Description: "Attempt to solve the task directly",
-				Status:      "pending",
+				Status:      stepStatusPending,
 			}},
 		}
 	}
 
-	plan.Status = "executing"
+	plan.Status = planStatusExecuting
 	plan.CurrentStep = 0
 	for i := range plan.Steps {
-		plan.Steps[i].Status = "pending"
+		plan.Steps[i].Status = stepStatusPending
 	}
 
 	return &plan, tokens, nil
@@ -269,7 +283,7 @@ func (p *PlanAndExecute) executeStep(ctx context.Context, plan *ExecutionPlan) (
 	}
 
 	step := &plan.Steps[plan.CurrentStep]
-	step.Status = "running"
+	step.Status = stepStatusRunning
 	tokens := 0
 
 	p.logger.Debug("executing step",
@@ -289,7 +303,7 @@ func (p *PlanAndExecute) executeStep(ctx context.Context, plan *ExecutionPlan) (
 		results := p.toolExecutor.Execute(ctx, []types.ToolCall{call})
 		if len(results) > 0 {
 			if results[0].Error != "" {
-				step.Status = "failed"
+				step.Status = stepStatusFailed
 				step.Error = results[0].Error
 				return step, tokens, fmt.Errorf("tool execution failed: %s", results[0].Error)
 			}
@@ -300,14 +314,14 @@ func (p *PlanAndExecute) executeStep(ctx context.Context, plan *ExecutionPlan) (
 		result, stepTokens, err := p.executeLLMStep(ctx, plan, step)
 		tokens += stepTokens
 		if err != nil {
-			step.Status = "failed"
+			step.Status = stepStatusFailed
 			step.Error = err.Error()
 			return step, tokens, err
 		}
 		step.Result = result
 	}
 
-	step.Status = "completed"
+	step.Status = stepStatusCompleted
 	plan.CurrentStep++
 	plan.CompletedSteps = append(plan.CompletedSteps, step.ID)
 
@@ -319,7 +333,7 @@ func (p *PlanAndExecute) executeLLMStep(ctx context.Context, plan *ExecutionPlan
 	var context []string
 	for i := 0; i < plan.CurrentStep; i++ {
 		s := plan.Steps[i]
-		if s.Status == "completed" {
+		if s.Status == stepStatusCompleted {
 			context = append(context, fmt.Sprintf("Step %s: %s -> %s", s.ID, s.Description, truncate(s.Result, 200)))
 		}
 	}
@@ -410,7 +424,7 @@ Create a new plan to continue from here. Output as JSON:
 	newPlan.Steps = append(currentPlan.Steps[:currentPlan.CurrentStep], newPlan.Steps...)
 	newPlan.CurrentStep = currentPlan.CurrentStep
 	newPlan.CompletedSteps = currentPlan.CompletedSteps
-	newPlan.Status = "executing"
+	newPlan.Status = planStatusExecuting
 
 	return &newPlan, tokens, nil
 }
@@ -418,7 +432,7 @@ Create a new plan to continue from here. Output as JSON:
 func (p *PlanAndExecute) synthesizeAnswer(ctx context.Context, task string, plan *ExecutionPlan) (string, int, error) {
 	var stepResults []string
 	for _, s := range plan.Steps {
-		if s.Status == "completed" {
+		if s.Status == stepStatusCompleted {
 			stepResults = append(stepResults, fmt.Sprintf("- %s: %s", s.Description, truncate(s.Result, 300)))
 		}
 	}
@@ -458,5 +472,3 @@ func extractJSONObject(s string) string {
 	}
 	return s
 }
-
-

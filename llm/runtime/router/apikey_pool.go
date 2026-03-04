@@ -43,12 +43,12 @@ type APIKeyPool struct {
 }
 
 // NewAPIKeyPool 创建 API Key 池
-func NewAPIKeyPool(db *gorm.DB, providerID uint, strategy APIKeySelectionStrategy, logger *zap.Logger) *APIKeyPool {
+func NewAPIKeyPool(db *gorm.DB, providerID uint, strategy APIKeySelectionStrategy, logger *zap.Logger) (*APIKeyPool, error) {
 	if logger == nil {
 		logger = zap.NewNop()
 	}
 	if strategy == "" {
-		panic("NewAPIKeyPool: strategy must not be empty")
+		return nil, fmt.Errorf("new API key pool: strategy must not be empty")
 	}
 
 	pool := &APIKeyPool{
@@ -59,7 +59,7 @@ func NewAPIKeyPool(db *gorm.DB, providerID uint, strategy APIKeySelectionStrateg
 		rng:        rand.New(rand.NewSource(time.Now().UnixNano())),
 	}
 
-	return pool
+	return pool, nil
 }
 
 // LoadKeys 从数据库加载 API Keys
@@ -240,6 +240,7 @@ func (p *APIKeyPool) RecordSuccess(ctx context.Context, keyID uint) error {
 						p.logger.Error("panic in async API key update",
 							zap.Uint("key_id", s.ID),
 							zap.Any("panic", r),
+							zap.Error(recoveredPanicToError(r)),
 							zap.Stack("stack"))
 					}
 				}()
@@ -325,6 +326,7 @@ func (p *APIKeyPool) RecordFailure(ctx context.Context, keyID uint, errMsg strin
 						p.logger.Error("panic in async API key failure update",
 							zap.Uint("key_id", s.ID),
 							zap.Any("panic", r),
+							zap.Error(recoveredPanicToError(r)),
 							zap.Stack("stack"))
 					}
 				}()
@@ -358,6 +360,13 @@ func (p *APIKeyPool) RecordFailure(ctx context.Context, keyID uint, errMsg strin
 	}
 
 	return errors.New("API key not found")
+}
+
+func recoveredPanicToError(v any) error {
+	if err, ok := v.(error); ok {
+		return err
+	}
+	return fmt.Errorf("panic: %v", v)
 }
 
 // GetStats 获取统计信息

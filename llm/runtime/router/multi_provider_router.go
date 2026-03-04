@@ -65,7 +65,14 @@ func (r *MultiProviderRouter) InitAPIKeyPools(ctx context.Context) error {
 
 	// 为每个提供商创建 API Key 池
 	for _, provider := range providers {
-		pool := NewAPIKeyPool(r.db, provider.ID, StrategyWeightedRandom, r.logger)
+		pool, err := NewAPIKeyPool(r.db, provider.ID, StrategyWeightedRandom, r.logger)
+		if err != nil {
+			r.logger.Error("failed to create API key pool",
+				zap.Uint("provider_id", provider.ID),
+				zap.String("provider_code", provider.Code),
+				zap.Error(err))
+			continue
+		}
 		if err := pool.LoadKeys(ctx); err != nil {
 			r.logger.Error("failed to load API keys",
 				zap.Uint("provider_id", provider.ID),

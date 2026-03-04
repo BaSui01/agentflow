@@ -2,12 +2,34 @@ package mcp
 
 import (
 	"encoding/json"
+	"errors"
 	"testing"
 
 	"github.com/BaSui01/agentflow/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func TestMCPError_Unwrap(t *testing.T) {
+	root := errors.New("tool backend failed")
+	mcpErr := NewMCPInternalError(root)
+
+	require.NotNil(t, mcpErr)
+	assert.Equal(t, ErrorCodeInternalError, mcpErr.Code)
+	assert.Equal(t, root.Error(), mcpErr.Error())
+	assert.ErrorIs(t, mcpErr, root)
+}
+
+func TestNewMCPError_OmitsCauseFromJSON(t *testing.T) {
+	msg := NewMCPError(float64(1), ErrorCodeInvalidParams, "missing required parameter: name", nil)
+	require.NotNil(t, msg)
+	require.NotNil(t, msg.Error)
+
+	raw, err := json.Marshal(msg.Error)
+	require.NoError(t, err)
+	assert.NotContains(t, string(raw), "cause")
+	assert.Nil(t, msg.Error.Cause)
+}
 
 // TestFromLLMToolSchema_ValidParameters verifies that valid JSON parameters
 // are correctly deserialized into a ToolDefinition.

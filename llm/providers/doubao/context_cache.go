@@ -54,11 +54,10 @@ func (p *DoubaoProvider) CreateContextCache(ctx context.Context, model string, m
 	resp, err := p.Client.Do(httpReq)
 	if err != nil {
 		return nil, &types.Error{
-			Code:       llm.ErrUpstreamError,
-			Message:    err.Error(),
-			HTTPStatus: http.StatusBadGateway,
-			Retryable:  true,
-			Provider:   p.Name(),
+			Code:    llm.ErrUpstreamError,
+			Message: err.Error(), Cause: err, HTTPStatus: http.StatusBadGateway,
+			Retryable: true,
+			Provider:  p.Name(),
 		}
 	}
 	defer resp.Body.Close()
@@ -71,11 +70,10 @@ func (p *DoubaoProvider) CreateContextCache(ctx context.Context, model string, m
 	var result ContextCacheResponse
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		return nil, &types.Error{
-			Code:       llm.ErrUpstreamError,
-			Message:    err.Error(),
-			HTTPStatus: http.StatusBadGateway,
-			Retryable:  true,
-			Provider:   p.Name(),
+			Code:    llm.ErrUpstreamError,
+			Message: err.Error(), Cause: err, HTTPStatus: http.StatusBadGateway,
+			Retryable: true,
+			Provider:  p.Name(),
 		}
 	}
 
@@ -123,11 +121,10 @@ func (p *DoubaoProvider) CompletionWithContext(ctx context.Context, contextID st
 	resp, err := p.Client.Do(httpReq)
 	if err != nil {
 		return nil, &types.Error{
-			Code:       llm.ErrUpstreamError,
-			Message:    err.Error(),
-			HTTPStatus: http.StatusBadGateway,
-			Retryable:  true,
-			Provider:   p.Name(),
+			Code:    llm.ErrUpstreamError,
+			Message: err.Error(), Cause: err, HTTPStatus: http.StatusBadGateway,
+			Retryable: true,
+			Provider:  p.Name(),
 		}
 	}
 	defer resp.Body.Close()
@@ -140,11 +137,10 @@ func (p *DoubaoProvider) CompletionWithContext(ctx context.Context, contextID st
 	var oaResp providerbase.OpenAICompatResponse
 	if err := json.NewDecoder(resp.Body).Decode(&oaResp); err != nil {
 		return nil, &types.Error{
-			Code:       llm.ErrUpstreamError,
-			Message:    err.Error(),
-			HTTPStatus: http.StatusBadGateway,
-			Retryable:  true,
-			Provider:   p.Name(),
+			Code:    llm.ErrUpstreamError,
+			Message: err.Error(), Cause: err, HTTPStatus: http.StatusBadGateway,
+			Retryable: true,
+			Provider:  p.Name(),
 		}
 	}
 

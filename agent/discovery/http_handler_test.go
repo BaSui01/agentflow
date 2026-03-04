@@ -111,6 +111,23 @@ func TestHandleAnnounce(t *testing.T) {
 		assert.Equal(t, http.StatusBadRequest, w.Code)
 	})
 
+	t.Run("POST body too large", func(t *testing.T) {
+		oversized := bytes.Repeat([]byte("a"), maxAnnounceBodyBytes+1)
+		req := httptest.NewRequest(http.MethodPost, "/discovery/announce", bytes.NewReader(oversized))
+		w := httptest.NewRecorder()
+		proto.handleAnnounce(w, req)
+		assert.Equal(t, http.StatusRequestEntityTooLarge, w.Code)
+	})
+
+	t.Run("POST internal error is sanitized", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodPost, "/discovery/announce", bytes.NewReader([]byte(`{}`)))
+		w := httptest.NewRecorder()
+		proto.handleAnnounce(w, req)
+		assert.Equal(t, http.StatusInternalServerError, w.Code)
+		assert.Contains(t, w.Body.String(), internalProtocolErrMsg)
+		assert.NotContains(t, w.Body.String(), "invalid agent info")
+	})
+
 	t.Run("GET not allowed", func(t *testing.T) {
 		req := httptest.NewRequest(http.MethodGet, "/discovery/announce", nil)
 		w := httptest.NewRecorder()
@@ -190,4 +207,3 @@ func TestCapabilityMatcher_CapabilityMatches_Fuzzy(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotEmpty(t, results)
 }
-

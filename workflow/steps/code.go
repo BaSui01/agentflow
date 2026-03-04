@@ -41,7 +41,7 @@ func (s *CodeStep) Execute(ctx context.Context, input core.StepInput) (core.Step
 
 	data, err := s.Handler(ctx, input)
 	if err != nil {
-		return core.StepOutput{}, core.NewStepError(s.id, core.StepTypeCode, fmt.Errorf("%w: %v", core.ErrStepExecution, err))
+		return core.StepOutput{}, core.NewStepError(s.id, core.StepTypeCode, fmt.Errorf("%w: %w", core.ErrStepExecution, err))
 	}
 	if data == nil {
 		data = map[string]any{}
@@ -52,4 +52,3 @@ func (s *CodeStep) Execute(ctx context.Context, input core.StepInput) (core.Step
 		Latency: time.Since(start),
 	}, nil
 }
-

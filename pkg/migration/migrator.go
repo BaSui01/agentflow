@@ -62,9 +62,9 @@ type MigrationStatus struct {
 
 // MigrationInfo contains information about the current migration state
 type MigrationInfo struct {
-	CurrentVersion uint
-	Dirty          bool
-	TotalMigrations int
+	CurrentVersion    uint
+	Dirty             bool
+	TotalMigrations   int
 	AppliedMigrations int
 	PendingMigrations int
 }
@@ -400,7 +400,7 @@ func (m *DefaultMigrator) Close() error {
 	}
 
 	if len(errs) > 0 {
-		return fmt.Errorf("failed to close migrator: %v", errs)
+		return fmt.Errorf("failed to close migrator: %w", errors.Join(errs...))
 	}
 
 	return nil
@@ -523,4 +523,3 @@ func BuildDatabaseURL(dbType DatabaseType, host string, port int, database, user
 func GetMigrationsPath(dbType DatabaseType) string {
 	return filepath.Join("migrations", string(dbType))
 }
-

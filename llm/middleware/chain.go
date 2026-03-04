@@ -243,6 +243,15 @@ func (e *PanicError) Error() string {
 	return fmt.Sprintf("middleware panic: %v", e.Value)
 }
 
+// Unwrap exposes the original panic error (when panic payload is error) so
+// callers can use errors.Is/errors.As on recovered panics.
+func (e *PanicError) Unwrap() error {
+	if err, ok := e.Value.(error); ok {
+		return err
+	}
+	return nil
+}
+
 // TracingMiddleware 添加分布式追踪.
 func TracingMiddleware(tracer llmpkg.Tracer) Middleware {
 	return func(next Handler) Handler {
@@ -303,4 +312,3 @@ func TransformMiddleware(reqTransform func(*llmpkg.ChatRequest), respTransform f
 		}
 	}
 }
-

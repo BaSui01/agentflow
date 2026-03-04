@@ -2,6 +2,7 @@ package bootstrap
 
 import (
 	"fmt"
+	"os"
 
 	"github.com/BaSui01/agentflow/config"
 	"github.com/BaSui01/agentflow/pkg/telemetry"
@@ -47,7 +48,7 @@ func LoadAndValidateConfig(configPath string) (*config.Config, error) {
 }
 
 // NewLogger creates the application logger from config.
-// It always returns a usable logger; on build failure it returns zap.NewNop().
+// It always returns a usable logger; on build failure it falls back to stderr JSON logger.
 func NewLogger(cfg config.LogConfig) *zap.Logger {
 	var level zapcore.Level
 	switch cfg.Level {
@@ -93,8 +94,17 @@ func NewLogger(cfg config.LogConfig) *zap.Logger {
 		zap.AddStacktrace(zapcore.ErrorLevel),
 	)
 	if err != nil {
-		fmt.Printf("WARN: failed to initialize logger, fallback to no-op logger: %v\n", err)
-		logger = zap.NewNop()
+		fallbackCore := zapcore.NewCore(
+			zapcore.NewJSONEncoder(zap.NewProductionEncoderConfig()),
+			zapcore.Lock(os.Stderr),
+			zap.NewAtomicLevelAt(level),
+		)
+		logger = zap.New(
+			fallbackCore,
+			zap.AddCaller(),
+			zap.AddStacktrace(zapcore.ErrorLevel),
+		)
+		logger.Warn("failed to initialize configured logger, using stderr fallback", zap.Error(err))
 	}
 
 	return logger

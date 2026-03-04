@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -286,6 +287,29 @@ func TestDefaultMCPServer_HandleMessage_ToolsCall(t *testing.T) {
 	assert.Nil(t, resp.Error)
 }
 
+func TestDefaultMCPServer_HandleMessage_ToolsCall_InternalErrorPreservesCause(t *testing.T) {
+	s := newTestServer(t)
+	root := errors.New("tool execution failed")
+	require.NoError(t, s.RegisterTool(
+		&ToolDefinition{Name: "broken", Description: "d", InputSchema: map[string]any{}},
+		func(ctx context.Context, args map[string]any) (any, error) { return nil, root },
+	))
+
+	msg := &MCPMessage{
+		JSONRPC: "2.0",
+		ID:      float64(1),
+		Method:  "tools/call",
+		Params:  map[string]any{"name": "broken"},
+	}
+	resp, err := s.HandleMessage(context.Background(), msg)
+	require.NoError(t, err)
+	require.NotNil(t, resp)
+	require.NotNil(t, resp.Error)
+	assert.Equal(t, ErrorCodeInternalError, resp.Error.Code)
+	assert.Equal(t, root.Error(), resp.Error.Message)
+	assert.ErrorIs(t, resp.Error, root)
+}
+
 func TestDefaultMCPServer_HandleMessage_ToolsCall_MissingName(t *testing.T) {
 	s := newTestServer(t)
 	msg := &MCPMessage{JSONRPC: "2.0", ID: float64(1), Method: "tools/call", Params: map[string]any{}}
@@ -519,4 +543,3 @@ func (m *mockTransport) Receive(ctx context.Context) (*MCPMessage, error) {
 func (m *mockTransport) Close() error {
 	return nil
 }
-

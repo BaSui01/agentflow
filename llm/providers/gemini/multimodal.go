@@ -110,7 +110,7 @@ func (p *GeminiProvider) TranscribeAudio(ctx context.Context, req *llm.AudioTran
 
 	resp, err := p.client.Do(httpReq)
 	if err != nil {
-		return nil, &types.Error{Code: llm.ErrUpstreamError, Message: err.Error(), HTTPStatus: http.StatusBadGateway, Retryable: true, Provider: p.Name()}
+		return nil, &types.Error{Code: llm.ErrUpstreamError, Message: err.Error(), Cause: err, HTTPStatus: http.StatusBadGateway, Retryable: true, Provider: p.Name()}
 	}
 	defer resp.Body.Close()
 
@@ -129,7 +129,7 @@ func (p *GeminiProvider) TranscribeAudio(ctx context.Context, req *llm.AudioTran
 		} `json:"candidates"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&geminiResp); err != nil {
-		return nil, &types.Error{Code: llm.ErrUpstreamError, Message: err.Error(), HTTPStatus: http.StatusBadGateway, Provider: p.Name()}
+		return nil, &types.Error{Code: llm.ErrUpstreamError, Message: err.Error(), Cause: err, HTTPStatus: http.StatusBadGateway, Provider: p.Name()}
 	}
 
 	text := ""
@@ -169,9 +169,9 @@ func (p *GeminiProvider) CreateFineTuningJob(ctx context.Context, req *llm.FineT
 	endpoint := fmt.Sprintf("%s/v1beta/tunedModels", strings.TrimRight(p.cfg.BaseURL, "/"))
 
 	geminiReq := map[string]any{
-		"baseModel":       req.Model,
-		"displayName":     req.Suffix,
-		"tuningTask":      map[string]any{"hyperparameters": req.Hyperparameters},
+		"baseModel":        req.Model,
+		"displayName":      req.Suffix,
+		"tuningTask":       map[string]any{"hyperparameters": req.Hyperparameters},
 		"trainingDatasets": req.TrainingFile,
 	}
 
@@ -188,7 +188,7 @@ func (p *GeminiProvider) CreateFineTuningJob(ctx context.Context, req *llm.FineT
 
 	resp, err := p.client.Do(httpReq)
 	if err != nil {
-		return nil, &types.Error{Code: llm.ErrUpstreamError, Message: err.Error(), HTTPStatus: http.StatusBadGateway, Retryable: true, Provider: p.Name()}
+		return nil, &types.Error{Code: llm.ErrUpstreamError, Message: err.Error(), Cause: err, HTTPStatus: http.StatusBadGateway, Retryable: true, Provider: p.Name()}
 	}
 	defer resp.Body.Close()
 
@@ -200,12 +200,12 @@ func (p *GeminiProvider) CreateFineTuningJob(ctx context.Context, req *llm.FineT
 	var geminiResp struct {
 		Name     string `json:"name"`
 		Metadata struct {
-			TotalSteps    int `json:"totalSteps"`
-			TunedModel    string `json:"tunedModel"`
+			TotalSteps int    `json:"totalSteps"`
+			TunedModel string `json:"tunedModel"`
 		} `json:"metadata"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&geminiResp); err != nil {
-		return nil, &types.Error{Code: llm.ErrUpstreamError, Message: err.Error(), HTTPStatus: http.StatusBadGateway, Provider: p.Name()}
+		return nil, &types.Error{Code: llm.ErrUpstreamError, Message: err.Error(), Cause: err, HTTPStatus: http.StatusBadGateway, Provider: p.Name()}
 	}
 
 	return &llm.FineTuningJob{
@@ -228,7 +228,7 @@ func (p *GeminiProvider) ListFineTuningJobs(ctx context.Context) ([]llm.FineTuni
 
 	resp, err := p.client.Do(httpReq)
 	if err != nil {
-		return nil, &types.Error{Code: llm.ErrUpstreamError, Message: err.Error(), HTTPStatus: http.StatusBadGateway, Retryable: true, Provider: p.Name()}
+		return nil, &types.Error{Code: llm.ErrUpstreamError, Message: err.Error(), Cause: err, HTTPStatus: http.StatusBadGateway, Retryable: true, Provider: p.Name()}
 	}
 	defer resp.Body.Close()
 
@@ -246,7 +246,7 @@ func (p *GeminiProvider) ListFineTuningJobs(ctx context.Context) ([]llm.FineTuni
 		} `json:"tunedModels"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&listResp); err != nil {
-		return nil, &types.Error{Code: llm.ErrUpstreamError, Message: err.Error(), HTTPStatus: http.StatusBadGateway, Provider: p.Name()}
+		return nil, &types.Error{Code: llm.ErrUpstreamError, Message: err.Error(), Cause: err, HTTPStatus: http.StatusBadGateway, Provider: p.Name()}
 	}
 
 	jobs := make([]llm.FineTuningJob, len(listResp.TunedModels))
@@ -273,7 +273,7 @@ func (p *GeminiProvider) GetFineTuningJob(ctx context.Context, jobID string) (*l
 
 	resp, err := p.client.Do(httpReq)
 	if err != nil {
-		return nil, &types.Error{Code: llm.ErrUpstreamError, Message: err.Error(), HTTPStatus: http.StatusBadGateway, Retryable: true, Provider: p.Name()}
+		return nil, &types.Error{Code: llm.ErrUpstreamError, Message: err.Error(), Cause: err, HTTPStatus: http.StatusBadGateway, Retryable: true, Provider: p.Name()}
 	}
 	defer resp.Body.Close()
 
@@ -288,7 +288,7 @@ func (p *GeminiProvider) GetFineTuningJob(ctx context.Context, jobID string) (*l
 		State     string `json:"state"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&tunedModel); err != nil {
-		return nil, &types.Error{Code: llm.ErrUpstreamError, Message: err.Error(), HTTPStatus: http.StatusBadGateway, Provider: p.Name()}
+		return nil, &types.Error{Code: llm.ErrUpstreamError, Message: err.Error(), Cause: err, HTTPStatus: http.StatusBadGateway, Provider: p.Name()}
 	}
 
 	return &llm.FineTuningJob{
@@ -311,7 +311,7 @@ func (p *GeminiProvider) CancelFineTuningJob(ctx context.Context, jobID string) 
 
 	resp, err := p.client.Do(httpReq)
 	if err != nil {
-		return &types.Error{Code: llm.ErrUpstreamError, Message: err.Error(), HTTPStatus: http.StatusBadGateway, Retryable: true, Provider: p.Name()}
+		return &types.Error{Code: llm.ErrUpstreamError, Message: err.Error(), Cause: err, HTTPStatus: http.StatusBadGateway, Retryable: true, Provider: p.Name()}
 	}
 	defer resp.Body.Close()
 

@@ -2,6 +2,7 @@ package workflow
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 	"sync/atomic"
@@ -674,7 +675,7 @@ func (e *DAGExecutor) executeParallelNode(ctx context.Context, graph *DAGGraph, 
 				if r := recover(); r != nil {
 					resultChan <- result{
 						nodeID: nodeID,
-						err:    fmt.Errorf("node %s panicked: %v", nodeID, r),
+						err:    fmt.Errorf("node %s panicked: %w", nodeID, recoveredPanicToError(r)),
 					}
 				}
 			}()
@@ -703,19 +704,19 @@ func (e *DAGExecutor) executeParallelNode(ctx context.Context, graph *DAGGraph, 
 
 	// Collect results
 	results := make(map[string]any)
-	var errors []error
+	var errs []error
 
 	for res := range resultChan {
 		if res.err != nil {
-			errors = append(errors, fmt.Errorf("node %s: %w", res.nodeID, res.err))
+			errs = append(errs, fmt.Errorf("node %s: %w", res.nodeID, res.err))
 		} else {
 			results[res.nodeID] = res.output
 		}
 	}
 
 	// Check for errors
-	if len(errors) > 0 {
-		return nil, fmt.Errorf("parallel execution failed: %v", errors)
+	if len(errs) > 0 {
+		return nil, fmt.Errorf("parallel execution failed: %w", errors.Join(errs...))
 	}
 
 	e.logger.Debug("parallel execution completed",
@@ -903,4 +904,11 @@ func hasCycle(graph *DAGGraph, nodeID string, visited, recStack map[string]bool)
 
 	recStack[nodeID] = false
 	return false
+}
+
+func recoveredPanicToError(v any) error {
+	if err, ok := v.(error); ok {
+		return err
+	}
+	return fmt.Errorf("panic: %v", v)
 }

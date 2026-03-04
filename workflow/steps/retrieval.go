@@ -59,7 +59,7 @@ func (s *HybridRetrieveStep) Execute(ctx context.Context, input core.StepInput) 
 	start := time.Now()
 	results, err := s.Retriever.Retrieve(ctx, query, nil)
 	if err != nil {
-		return core.StepOutput{}, core.NewStepError(s.id, core.StepTypeHybridRetrieve, fmt.Errorf("%w: %v", core.ErrStepExecution, err))
+		return core.StepOutput{}, core.NewStepError(s.id, core.StepTypeHybridRetrieve, fmt.Errorf("%w: %w", core.ErrStepExecution, err))
 	}
 	return core.StepOutput{
 		Data: map[string]any{
@@ -103,7 +103,7 @@ func (s *MultiHopRetrieveStep) Execute(ctx context.Context, input core.StepInput
 	start := time.Now()
 	chain, err := s.Reasoner.Reason(ctx, query)
 	if err != nil {
-		return core.StepOutput{}, core.NewStepError(s.id, core.StepTypeMultiHopRetrieve, fmt.Errorf("%w: %v", core.ErrStepExecution, err))
+		return core.StepOutput{}, core.NewStepError(s.id, core.StepTypeMultiHopRetrieve, fmt.Errorf("%w: %w", core.ErrStepExecution, err))
 	}
 	results := flattenReasoningChain(chain)
 	return core.StepOutput{
@@ -153,7 +153,7 @@ func (s *RerankStep) Execute(ctx context.Context, input core.StepInput) (core.St
 	start := time.Now()
 	out, err := s.Reranker.Rerank(ctx, query, rawResults)
 	if err != nil {
-		return core.StepOutput{}, core.NewStepError(s.id, core.StepTypeRerank, fmt.Errorf("%w: %v", core.ErrStepExecution, err))
+		return core.StepOutput{}, core.NewStepError(s.id, core.StepTypeRerank, fmt.Errorf("%w: %w", core.ErrStepExecution, err))
 	}
 	return core.StepOutput{
 		Data: map[string]any{
@@ -209,4 +209,3 @@ func flattenReasoningChain(chain *rag.ReasoningChain) []rag.RetrievalResult {
 	})
 	return out
 }
-

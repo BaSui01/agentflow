@@ -1,9 +1,9 @@
 package main
 
 import (
-	"github.com/BaSui01/agentflow/types"
 	"context"
 	"fmt"
+	"github.com/BaSui01/agentflow/types"
 	"log"
 	"os"
 
@@ -28,7 +28,7 @@ func main() {
 	cfg := providers.OpenAIConfig{
 		BaseProviderConfig: providers.BaseProviderConfig{
 			APIKey:  apiKey,
-			BaseURL: "https://api.openai.com/v1",
+			BaseURL: "https://api.openai.com",
 			Model:   "gpt-3.5-turbo",
 		},
 	}
@@ -66,5 +66,3 @@ func main() {
 	}
 	fmt.Println("\n---")
 }
-
-

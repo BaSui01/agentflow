@@ -547,11 +547,10 @@ func ListModelsOpenAICompat(ctx context.Context, client *http.Client, baseURL, a
 	resp, err := client.Do(httpReq)
 	if err != nil {
 		return nil, &types.Error{
-			Code:       llm.ErrUpstreamError,
-			Message:    err.Error(),
-			HTTPStatus: http.StatusBadGateway,
-			Retryable:  true,
-			Provider:   providerName,
+			Code:    llm.ErrUpstreamError,
+			Message: err.Error(), Cause: err, HTTPStatus: http.StatusBadGateway,
+			Retryable: true,
+			Provider:  providerName,
 		}
 	}
 	defer resp.Body.Close()
@@ -567,11 +566,10 @@ func ListModelsOpenAICompat(ctx context.Context, client *http.Client, baseURL, a
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&modelsResp); err != nil {
 		return nil, &types.Error{
-			Code:       llm.ErrUpstreamError,
-			Message:    err.Error(),
-			HTTPStatus: http.StatusBadGateway,
-			Retryable:  true,
-			Provider:   providerName,
+			Code:    llm.ErrUpstreamError,
+			Message: err.Error(), Cause: err, HTTPStatus: http.StatusBadGateway,
+			Retryable: true,
+			Provider:  providerName,
 		}
 	}
 

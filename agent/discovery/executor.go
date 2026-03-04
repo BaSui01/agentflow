@@ -1,4 +1,4 @@
-package discovery
+﻿package discovery
 
 import (
 	"context"
@@ -55,7 +55,7 @@ func (e *CompositionExecutor) Execute(ctx context.Context, result *CompositionRe
 		return nil, fmt.Errorf("composition result is nil")
 	}
 	if !result.Complete {
-		return nil, fmt.Errorf("composition is incomplete: missing capabilities %v", result.MissingCapabilities)
+		return nil, fmt.Errorf("composition is incomplete: missing capabilities: %v", result.MissingCapabilities)
 	}
 	if e.agentExecutor == nil {
 		return nil, fmt.Errorf("agent executor is nil")

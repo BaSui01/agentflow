@@ -10,20 +10,20 @@ import (
 
 // HumanStep 通过 HumanInputHandler 请求人工输入。
 type HumanStep struct {
-	id      string
-	Prompt  string
+	id        string
+	Prompt    string
 	InputType string
-	Options []string
-	Timeout time.Duration
-	Handler core.HumanInputHandler
+	Options   []string
+	Timeout   time.Duration
+	Handler   core.HumanInputHandler
 }
 
 // NewHumanStep 创建人工步骤。
 func NewHumanStep(id string, handler core.HumanInputHandler) *HumanStep {
 	return &HumanStep{
-		id:      id,
+		id:        id,
 		InputType: "text",
-		Handler: handler,
+		Handler:   handler,
 	}
 }
 
@@ -59,7 +59,7 @@ func (s *HumanStep) Execute(ctx context.Context, input core.StepInput) (core.Ste
 		if runCtx.Err() != nil {
 			return core.StepOutput{}, core.NewStepError(s.id, core.StepTypeHuman, core.ErrStepTimeout)
 		}
-		return core.StepOutput{}, core.NewStepError(s.id, core.StepTypeHuman, fmt.Errorf("%w: %v", core.ErrStepExecution, err))
+		return core.StepOutput{}, core.NewStepError(s.id, core.StepTypeHuman, fmt.Errorf("%w: %w", core.ErrStepExecution, err))
 	}
 
 	output := core.StepOutput{

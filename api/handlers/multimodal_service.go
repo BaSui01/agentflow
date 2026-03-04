@@ -70,7 +70,8 @@ func newDefaultMultimodalService(
 func (s *defaultMultimodalService) GenerateImage(ctx context.Context, req multimodalImageRequest) (*multimodalImageResult, error) {
 	providerName, err := s.resolveImageProvider(req.Provider)
 	if err != nil {
-		return nil, types.NewError(types.ErrInvalidRequest, err.Error())
+		return nil, types.NewError(types.ErrInvalidRequest, err.Error()).
+			WithCause(err)
 	}
 
 	negative := strings.TrimSpace(req.NegativePrompt)
@@ -165,7 +166,8 @@ func (s *defaultMultimodalService) GenerateImage(ctx context.Context, req multim
 func (s *defaultMultimodalService) GenerateVideo(ctx context.Context, req multimodalVideoRequest) (*multimodalVideoResult, error) {
 	providerName, err := s.resolveVideoProvider(req.Provider)
 	if err != nil {
-		return nil, types.NewError(types.ErrInvalidRequest, err.Error())
+		return nil, types.NewError(types.ErrInvalidRequest, err.Error()).
+			WithCause(err)
 	}
 
 	promptResult, err := s.pipeline.Build(ctx, multimodal.PromptContext{
@@ -205,7 +207,8 @@ func (s *defaultMultimodalService) GenerateVideo(ctx context.Context, req multim
 		} else {
 			validatedURL, urlErr := multimodal.ValidatePublicReferenceImageURL(ctx, req.ReferenceImageURL)
 			if urlErr != nil {
-				return nil, types.NewError(types.ErrInvalidRequest, urlErr.Error())
+				return nil, types.NewError(types.ErrInvalidRequest, urlErr.Error()).
+					WithCause(urlErr)
 			}
 			genReq.ImageURL = validatedURL
 		}
@@ -249,11 +252,13 @@ func (s *defaultMultimodalService) resolveReferenceImage(ctx context.Context, re
 
 	validatedURL, urlErr := multimodal.ValidatePublicReferenceImageURL(ctx, referenceURL)
 	if urlErr != nil {
-		return nil, types.NewError(types.ErrInvalidRequest, urlErr.Error())
+		return nil, types.NewError(types.ErrInvalidRequest, urlErr.Error()).
+			WithCause(urlErr)
 	}
 	data, _, dlErr := multimodal.DownloadReferenceImage(ctx, validatedURL, s.referenceMaxSize)
 	if dlErr != nil {
-		return nil, types.NewError(types.ErrInvalidRequest, dlErr.Error())
+		return nil, types.NewError(types.ErrInvalidRequest, dlErr.Error()).
+			WithCause(dlErr)
 	}
 	return data, nil
 }
