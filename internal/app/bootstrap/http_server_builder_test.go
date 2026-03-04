@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/BaSui01/agentflow/agent/hosted"
+	"github.com/BaSui01/agentflow/api/handlers"
 	"github.com/glebarez/sqlite"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -36,6 +37,7 @@ func setupToolRegistryTestDB(t *testing.T) *gorm.DB {
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	require.NoError(t, err)
 	require.NoError(t, db.AutoMigrate(&hosted.ToolRegistration{}))
+	require.NoError(t, db.AutoMigrate(&hosted.ToolProviderConfig{}))
 	return db
 }
 
@@ -48,16 +50,27 @@ func TestBuildToolRegistryHandler(t *testing.T) {
 	assert.NotNil(t, BuildToolRegistryHandler(db, runtime, zap.NewNop()))
 }
 
+func TestBuildToolProviderHandler(t *testing.T) {
+	db := setupToolRegistryTestDB(t)
+	runtime := &toolRegistryRuntimeStub{targets: []string{"retrieval"}}
+
+	assert.Nil(t, BuildToolProviderHandler(nil, runtime, zap.NewNop()))
+	assert.Nil(t, BuildToolProviderHandler(db, nil, zap.NewNop()))
+	assert.NotNil(t, BuildToolProviderHandler(db, runtime, zap.NewNop()))
+}
+
 func TestRegisterHTTPRoutes_RegistersToolsEndpoints(t *testing.T) {
 	db := setupToolRegistryTestDB(t)
 	runtime := &toolRegistryRuntimeStub{targets: []string{"retrieval"}}
 	toolHandler := BuildToolRegistryHandler(db, runtime, zap.NewNop())
+	providerHandler := BuildToolProviderHandler(db, runtime, zap.NewNop())
 	require.NotNil(t, toolHandler)
+	require.NotNil(t, providerHandler)
 
 	mux := http.NewServeMux()
 	RegisterHTTPRoutes(
 		mux,
-		HTTPRouteHandlers{Tools: toolHandler},
+		HTTPRouteHandlers{Tools: toolHandler, ToolProviders: providerHandler},
 		"test-version",
 		"test-build-time",
 		"test-git-commit",
@@ -87,5 +100,42 @@ func TestRegisterHTTPRoutes_RegistersToolsEndpoints(t *testing.T) {
 	mux.ServeHTTP(listRec, listReq)
 	assert.Equal(t, http.StatusOK, listRec.Code)
 	assert.True(t, strings.Contains(listRec.Body.String(), "knowledge_search"))
+
+	providerReq := httptest.NewRequest(
+		http.MethodPut,
+		"/api/v1/tools/providers/tavily",
+		bytes.NewBufferString(`{"api_key":"key","timeout_seconds":15,"priority":10}`),
+	)
+	providerReq.Header.Set("Content-Type", "application/json")
+	providerRec := httptest.NewRecorder()
+	mux.ServeHTTP(providerRec, providerReq)
+	assert.Equal(t, http.StatusOK, providerRec.Code)
 }
 
+func TestRegisterHTTPRoutes_RegistersOpenAICompatChatEndpoints(t *testing.T) {
+	chatHandler := handlers.NewChatHandler(nil, nil, zap.NewNop())
+	require.NotNil(t, chatHandler)
+
+	mux := http.NewServeMux()
+	RegisterHTTPRoutes(
+		mux,
+		HTTPRouteHandlers{Chat: chatHandler},
+		"test-version",
+		"test-build-time",
+		"test-git-commit",
+		"",
+		zap.NewNop(),
+	)
+
+	compatChatReq := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", bytes.NewBufferString(`{"model":"gpt-4o","messages":[{"role":"user","content":"hi"}]}`))
+	compatChatReq.Header.Set("Content-Type", "application/json")
+	compatChatRec := httptest.NewRecorder()
+	mux.ServeHTTP(compatChatRec, compatChatReq)
+	assert.NotEqual(t, http.StatusNotFound, compatChatRec.Code)
+
+	compatRespReq := httptest.NewRequest(http.MethodPost, "/v1/responses", bytes.NewBufferString(`{"model":"gpt-4o","input":"hi"}`))
+	compatRespReq.Header.Set("Content-Type", "application/json")
+	compatRespRec := httptest.NewRecorder()
+	mux.ServeHTTP(compatRespRec, compatRespReq)
+	assert.NotEqual(t, http.StatusNotFound, compatRespRec.Code)
+}

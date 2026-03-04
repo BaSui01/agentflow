@@ -84,6 +84,9 @@ func (r *AgentToolingRuntime) ReloadBindings(ctx context.Context) error {
 	if r == nil || r.Registry == nil || r.db == nil {
 		return nil
 	}
+	if err := r.reloadWebSearchProvider(ctx); err != nil {
+		return err
+	}
 
 	var rows []hosted.ToolRegistration
 	if err := r.db.WithContext(ctx).
@@ -230,6 +233,44 @@ func (r *AgentToolingRuntime) rebuildToolNamesLocked() {
 	}
 	sort.Strings(out)
 	r.ToolNames = out
+}
+
+func (r *AgentToolingRuntime) reloadWebSearchProvider(ctx context.Context) error {
+	var providers []hosted.ToolProviderConfig
+	if err := r.db.WithContext(ctx).
+		Where("enabled = ?", true).
+		Order("priority ASC, id ASC").
+		Find(&providers).Error; err != nil {
+		return fmt.Errorf("load web search providers: %w", err)
+	}
+
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	// clear previous runtime-managed web_search entry.
+	delete(r.baseToolNames, "web_search")
+	r.Registry.Unregister("web_search")
+
+	for _, row := range providers {
+		tool, err := hosted.NewProviderBackedWebSearchHostedTool(row, r.logger)
+		if err != nil {
+			r.logger.Warn("skip invalid web search provider config",
+				zap.Uint("id", row.ID),
+				zap.String("provider", row.Provider),
+				zap.Error(err))
+			continue
+		}
+		r.Registry.Register(tool)
+		r.baseToolNames[tool.Name()] = struct{}{}
+		r.logger.Info("web search provider activated",
+			zap.Uint("id", row.ID),
+			zap.String("provider", row.Provider),
+			zap.Int("priority", row.Priority))
+		break
+	}
+
+	r.rebuildToolNamesLocked()
+	return nil
 }
 
 type aliasHostedTool struct {

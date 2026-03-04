@@ -164,6 +164,11 @@ func (s *Server) initHandlers() error {
 	} else {
 		s.logger.Info("Tool registry handler disabled (database or tooling runtime unavailable)")
 	}
+	if s.toolProviderHandler = bootstrap.BuildToolProviderHandler(s.db, toolRuntimeAdapter, s.logger); s.toolProviderHandler != nil {
+		s.logger.Info("Tool provider handler initialized")
+	} else {
+		s.logger.Info("Tool provider handler disabled (database or tooling runtime unavailable)")
+	}
 
 	if llmRuntime != nil && s.provider != nil {
 		var chatToolManager agent.ToolManager

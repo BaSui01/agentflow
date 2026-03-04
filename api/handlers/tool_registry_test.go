@@ -36,6 +36,7 @@ func setupToolRegistryDB(t *testing.T) *gorm.DB {
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	require.NoError(t, err)
 	require.NoError(t, db.AutoMigrate(&hosted.ToolRegistration{}))
+	require.NoError(t, db.AutoMigrate(&hosted.ToolProviderConfig{}))
 	return db
 }
 

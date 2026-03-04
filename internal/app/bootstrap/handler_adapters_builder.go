@@ -42,3 +42,15 @@ func BuildToolRegistryHandler(
 	}
 	return handlers.NewToolRegistryHandler(handlers.NewGormToolRegistryStore(db), runtime, logger)
 }
+
+// BuildToolProviderHandler creates DB-backed tool provider config handler when runtime is available.
+func BuildToolProviderHandler(
+	db *gorm.DB,
+	runtime handlers.ToolRegistryRuntime,
+	logger *zap.Logger,
+) *handlers.ToolProviderHandler {
+	if db == nil || runtime == nil {
+		return nil
+	}
+	return handlers.NewToolProviderHandler(handlers.NewGormToolProviderStore(db), runtime, logger)
+}
