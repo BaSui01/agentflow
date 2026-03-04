@@ -124,17 +124,24 @@ func (p *GeminiProvider) ListModels(ctx context.Context) ([]llm.Model, error) {
 		return nil, providerbase.MapHTTPError(resp.StatusCode, msg, p.Name())
 	}
 
+	type geminiModelPayload struct {
+		Name                  string   `json:"name"`
+		ID                    string   `json:"id"`
+		Model                 string   `json:"model"`
+		BaseModelID           string   `json:"baseModelId"`
+		Version               string   `json:"version"`
+		DisplayName           string   `json:"displayName"`
+		Description           string   `json:"description"`
+		InputTokenLimit       int      `json:"inputTokenLimit"`
+		OutputTokenLimit      int      `json:"outputTokenLimit"`
+		MaxInputTokens        int      `json:"max_input_tokens"`
+		MaxOutputTokens       int      `json:"max_output_tokens"`
+		SupportedMethods      []string `json:"supportedGenerationMethods"`
+		SupportedMethodsSnake []string `json:"supported_generation_methods"`
+	}
 	var modelsResp struct {
-		Models []struct {
-			Name             string   `json:"name"`
-			BaseModelID      string   `json:"baseModelId"`
-			Version          string   `json:"version"`
-			DisplayName      string   `json:"displayName"`
-			Description      string   `json:"description"`
-			InputTokenLimit  int      `json:"inputTokenLimit"`
-			OutputTokenLimit int      `json:"outputTokenLimit"`
-			SupportedMethods []string `json:"supportedGenerationMethods"`
-		} `json:"models"`
+		Models []geminiModelPayload `json:"models"`
+		Data   []geminiModelPayload `json:"data"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&modelsResp); err != nil {
 		return nil, &types.Error{
@@ -145,18 +152,45 @@ func (p *GeminiProvider) ListModels(ctx context.Context) ([]llm.Model, error) {
 		}
 	}
 
+	source := modelsResp.Models
+	if len(source) == 0 && len(modelsResp.Data) > 0 {
+		source = modelsResp.Data
+	}
+
 	// 转换为统一格式
-	models := make([]llm.Model, 0, len(modelsResp.Models))
-	for _, m := range modelsResp.Models {
+	models := make([]llm.Model, 0, len(source))
+	for _, m := range source {
 		// 提取模型 ID（去掉 "models/" 前缀）
-		modelID := strings.TrimPrefix(m.Name, "models/")
+		modelID := strings.TrimSpace(firstNonEmpty(
+			strings.TrimPrefix(strings.TrimSpace(m.Name), "models/"),
+			strings.TrimSpace(m.ID),
+			strings.TrimSpace(m.Model),
+		))
+		if modelID == "" {
+			continue
+		}
+		caps := convertGeminiCapabilities(m.SupportedMethods)
+		if len(caps) == 0 {
+			caps = convertGeminiCapabilities(m.SupportedMethodsSnake)
+		}
+		maxInput := m.InputTokenLimit
+		if maxInput == 0 {
+			maxInput = m.MaxInputTokens
+		}
+		maxOutput := m.OutputTokenLimit
+		if maxOutput == 0 {
+			maxOutput = m.MaxOutputTokens
+		}
 		model := llm.Model{
 			ID:              modelID,
 			Object:          "model",
 			OwnedBy:         "google",
-			MaxInputTokens:  m.InputTokenLimit,
-			MaxOutputTokens: m.OutputTokenLimit,
-			Capabilities:    convertGeminiCapabilities(m.SupportedMethods),
+			MaxInputTokens:  maxInput,
+			MaxOutputTokens: maxOutput,
+			Capabilities:    caps,
+		}
+		if len(model.Capabilities) == 0 {
+			model.Capabilities = []string{"chat"}
 		}
 		models = append(models, model)
 	}
@@ -202,6 +236,30 @@ type geminiPart struct {
 	FunctionResponse *geminiFunctionResponse `json:"functionResponse,omitempty"`
 }
 
+func (p *geminiPart) UnmarshalJSON(data []byte) error {
+	var aux struct {
+		Text                  string                  `json:"text"`
+		Thought               *bool                   `json:"thought"`
+		ThoughtSnake          *bool                   `json:"is_thought"`
+		InlineData            *geminiInlineData       `json:"inlineData"`
+		InlineDataSnake       *geminiInlineData       `json:"inline_data"`
+		FunctionCall          *geminiFunctionCall     `json:"functionCall"`
+		FunctionCallSnake     *geminiFunctionCall     `json:"function_call"`
+		FunctionResponse      *geminiFunctionResponse `json:"functionResponse"`
+		FunctionResponseSnake *geminiFunctionResponse `json:"function_response"`
+	}
+	if err := json.Unmarshal(data, &aux); err != nil {
+		return err
+	}
+
+	p.Text = aux.Text
+	p.Thought = firstBoolPtr(aux.Thought, aux.ThoughtSnake)
+	p.InlineData = firstInlineData(aux.InlineData, aux.InlineDataSnake)
+	p.FunctionCall = firstFunctionCall(aux.FunctionCall, aux.FunctionCallSnake)
+	p.FunctionResponse = firstFunctionResponse(aux.FunctionResponse, aux.FunctionResponseSnake)
+	return nil
+}
+
 type geminiInlineData struct {
 	MimeType string `json:"mimeType"`
 	Data     string `json:"data"` // base64 encoded
@@ -210,6 +268,23 @@ type geminiInlineData struct {
 type geminiFunctionCall struct {
 	Name string         `json:"name"`
 	Args map[string]any `json:"args"`
+}
+
+func (f *geminiFunctionCall) UnmarshalJSON(data []byte) error {
+	var aux struct {
+		Name      string         `json:"name"`
+		Args      map[string]any `json:"args"`
+		Arguments map[string]any `json:"arguments"`
+	}
+	if err := json.Unmarshal(data, &aux); err != nil {
+		return err
+	}
+	f.Name = strings.TrimSpace(aux.Name)
+	f.Args = aux.Args
+	if len(f.Args) == 0 {
+		f.Args = aux.Arguments
+	}
+	return nil
 }
 
 type geminiFunctionResponse struct {
@@ -273,6 +348,30 @@ type geminiCandidate struct {
 	SafetyRatings []any         `json:"safetyRatings,omitempty"`
 }
 
+func (c *geminiCandidate) UnmarshalJSON(data []byte) error {
+	var aux struct {
+		Content            geminiContent `json:"content"`
+		FinishReason       string        `json:"finishReason"`
+		FinishReasonSnake  string        `json:"finish_reason"`
+		Index              int           `json:"index"`
+		SafetyRatings      []any         `json:"safetyRatings"`
+		SafetyRatingsSnake []any         `json:"safety_ratings"`
+	}
+	if err := json.Unmarshal(data, &aux); err != nil {
+		return err
+	}
+
+	c.Content = aux.Content
+	c.FinishReason = strings.TrimSpace(firstNonEmpty(aux.FinishReason, aux.FinishReasonSnake))
+	c.Index = aux.Index
+	if len(aux.SafetyRatings) > 0 {
+		c.SafetyRatings = aux.SafetyRatings
+	} else {
+		c.SafetyRatings = aux.SafetyRatingsSnake
+	}
+	return nil
+}
+
 type geminiUsageMetadata struct {
 	PromptTokenCount     int `json:"promptTokenCount"`
 	CandidatesTokenCount int `json:"candidatesTokenCount"`
@@ -280,9 +379,56 @@ type geminiUsageMetadata struct {
 	ThoughtsTokenCount   int `json:"thoughtsTokenCount,omitempty"`
 }
 
+func (u *geminiUsageMetadata) UnmarshalJSON(data []byte) error {
+	var aux struct {
+		PromptTokenCount          *int `json:"promptTokenCount"`
+		PromptTokenCountSnake     *int `json:"prompt_token_count"`
+		PromptTokens              *int `json:"prompt_tokens"`
+		CandidatesTokenCount      *int `json:"candidatesTokenCount"`
+		CandidatesTokenCountSnake *int `json:"candidates_token_count"`
+		CompletionTokens          *int `json:"completion_tokens"`
+		OutputTokens              *int `json:"output_tokens"`
+		TotalTokenCount           *int `json:"totalTokenCount"`
+		TotalTokenCountSnake      *int `json:"total_token_count"`
+		TotalTokens               *int `json:"total_tokens"`
+		ThoughtsTokenCount        *int `json:"thoughtsTokenCount"`
+		ThoughtsTokenCountSnake   *int `json:"thoughts_token_count"`
+		ReasoningTokens           *int `json:"reasoning_tokens"`
+	}
+	if err := json.Unmarshal(data, &aux); err != nil {
+		return err
+	}
+
+	u.PromptTokenCount = firstInt(aux.PromptTokenCount, aux.PromptTokenCountSnake, aux.PromptTokens)
+	u.CandidatesTokenCount = firstInt(
+		aux.CandidatesTokenCount,
+		aux.CandidatesTokenCountSnake,
+		aux.CompletionTokens,
+		aux.OutputTokens,
+	)
+	u.TotalTokenCount = firstInt(aux.TotalTokenCount, aux.TotalTokenCountSnake, aux.TotalTokens)
+	u.ThoughtsTokenCount = firstInt(aux.ThoughtsTokenCount, aux.ThoughtsTokenCountSnake, aux.ReasoningTokens)
+	return nil
+}
+
 type geminiPromptFeedback struct {
 	BlockReason  string `json:"blockReason,omitempty"`
 	BlockMessage string `json:"blockReasonMessage,omitempty"`
+}
+
+func (p *geminiPromptFeedback) UnmarshalJSON(data []byte) error {
+	var aux struct {
+		BlockReason       string `json:"blockReason"`
+		BlockReasonSnake  string `json:"block_reason"`
+		BlockMessage      string `json:"blockReasonMessage"`
+		BlockMessageSnake string `json:"block_reason_message"`
+	}
+	if err := json.Unmarshal(data, &aux); err != nil {
+		return err
+	}
+	p.BlockReason = strings.TrimSpace(firstNonEmpty(aux.BlockReason, aux.BlockReasonSnake))
+	p.BlockMessage = strings.TrimSpace(firstNonEmpty(aux.BlockMessage, aux.BlockMessageSnake))
+	return nil
 }
 
 type geminiResponse struct {
@@ -291,6 +437,32 @@ type geminiResponse struct {
 	PromptFeedback *geminiPromptFeedback `json:"promptFeedback,omitempty"`
 	ModelVersion   string                `json:"modelVersion,omitempty"`
 	ResponseID     string                `json:"responseId,omitempty"`
+}
+
+func (r *geminiResponse) UnmarshalJSON(data []byte) error {
+	var aux struct {
+		Candidates          []geminiCandidate     `json:"candidates"`
+		UsageMetadata       *geminiUsageMetadata  `json:"usageMetadata"`
+		UsageMetadataSnake  *geminiUsageMetadata  `json:"usage_metadata"`
+		Usage               *geminiUsageMetadata  `json:"usage"`
+		PromptFeedback      *geminiPromptFeedback `json:"promptFeedback"`
+		PromptFeedbackSnake *geminiPromptFeedback `json:"prompt_feedback"`
+		ModelVersion        string                `json:"modelVersion"`
+		ModelVersionSnake   string                `json:"model_version"`
+		ResponseID          string                `json:"responseId"`
+		ResponseIDSnake     string                `json:"response_id"`
+		ID                  string                `json:"id"`
+	}
+	if err := json.Unmarshal(data, &aux); err != nil {
+		return err
+	}
+
+	r.Candidates = aux.Candidates
+	r.UsageMetadata = firstUsageMetadata(aux.UsageMetadata, aux.UsageMetadataSnake, aux.Usage)
+	r.PromptFeedback = firstPromptFeedback(aux.PromptFeedback, aux.PromptFeedbackSnake)
+	r.ModelVersion = strings.TrimSpace(firstNonEmpty(aux.ModelVersion, aux.ModelVersionSnake))
+	r.ResponseID = strings.TrimSpace(firstNonEmpty(aux.ResponseID, aux.ResponseIDSnake, aux.ID))
+	return nil
 }
 
 func (p *GeminiProvider) isVertexAI() bool {
@@ -910,6 +1082,84 @@ func strPtr(s string) *string {
 		return nil
 	}
 	return &s
+}
+
+func firstInt(values ...*int) int {
+	for _, v := range values {
+		if v != nil {
+			return *v
+		}
+	}
+	return 0
+}
+
+func firstBoolPtr(values ...*bool) *bool {
+	for _, v := range values {
+		if v != nil {
+			out := *v
+			return &out
+		}
+	}
+	return nil
+}
+
+func firstInlineData(values ...*geminiInlineData) *geminiInlineData {
+	for _, v := range values {
+		if v != nil {
+			out := *v
+			return &out
+		}
+	}
+	return nil
+}
+
+func firstFunctionCall(values ...*geminiFunctionCall) *geminiFunctionCall {
+	for _, v := range values {
+		if v != nil {
+			out := *v
+			return &out
+		}
+	}
+	return nil
+}
+
+func firstFunctionResponse(values ...*geminiFunctionResponse) *geminiFunctionResponse {
+	for _, v := range values {
+		if v != nil {
+			out := *v
+			return &out
+		}
+	}
+	return nil
+}
+
+func firstUsageMetadata(values ...*geminiUsageMetadata) *geminiUsageMetadata {
+	for _, v := range values {
+		if v != nil {
+			out := *v
+			return &out
+		}
+	}
+	return nil
+}
+
+func firstPromptFeedback(values ...*geminiPromptFeedback) *geminiPromptFeedback {
+	for _, v := range values {
+		if v != nil {
+			out := *v
+			return &out
+		}
+	}
+	return nil
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, v := range values {
+		if strings.TrimSpace(v) != "" {
+			return v
+		}
+	}
+	return ""
 }
 
 // convertSafetySettings converts config safety settings to request format.

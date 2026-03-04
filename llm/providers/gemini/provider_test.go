@@ -286,6 +286,54 @@ func TestGeminiProvider_Completion_WithToolCalls(t *testing.T) {
 	assert.Contains(t, resp.Choices[0].Message.ToolCalls[0].ID, "call_")
 }
 
+func TestGeminiProvider_Completion_TolerantSnakeCaseResponse(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"response_id":"resp_snake_1",
+			"model_version":"gemini-compat",
+			"candidates":[
+				{
+					"index":0,
+					"finish_reason":"STOP",
+					"content":{
+						"role":"model",
+						"parts":[
+							{"text":"hello"},
+							{"function_call":{"name":"lookup","arguments":{"city":"Hangzhou"}}}
+						]
+					}
+				}
+			],
+			"usage_metadata":{
+				"prompt_token_count":9,
+				"candidates_token_count":6,
+				"total_token_count":15,
+				"thoughts_token_count":2
+			}
+		}`))
+	}))
+	t.Cleanup(func() { server.Close() })
+
+	p := NewGeminiProvider(providers.GeminiConfig{
+		BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key", BaseURL: server.URL},
+	}, zap.NewNop())
+
+	resp, err := p.Completion(context.Background(), &llm.ChatRequest{
+		Messages: []types.Message{{Role: llm.RoleUser, Content: "Hi"}},
+	})
+	require.NoError(t, err)
+	require.Len(t, resp.Choices, 1)
+	assert.Equal(t, "hello", resp.Choices[0].Message.Content)
+	assert.Equal(t, "stop", resp.Choices[0].FinishReason)
+	require.Len(t, resp.Choices[0].Message.ToolCalls, 1)
+	assert.Equal(t, "lookup", resp.Choices[0].Message.ToolCalls[0].Name)
+	assert.JSONEq(t, `{"city":"Hangzhou"}`, string(resp.Choices[0].Message.ToolCalls[0].Arguments))
+	assert.Equal(t, 15, resp.Usage.TotalTokens)
+	require.NotNil(t, resp.Usage.CompletionTokensDetails)
+	assert.Equal(t, 2, resp.Usage.CompletionTokensDetails.ReasoningTokens)
+}
+
 func TestGeminiProvider_Completion_Error(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusUnauthorized)
@@ -453,6 +501,31 @@ func TestGeminiProvider_ListModels(t *testing.T) {
 	assert.Equal(t, 1000000, models[0].MaxInputTokens)
 	assert.Contains(t, models[0].Capabilities, "chat")
 	assert.Contains(t, models[0].Capabilities, "token_counting")
+}
+
+func TestGeminiProvider_ListModels_TolerantOpenAIEnvelope(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"object":"list",
+			"data":[
+				{"id":"glm-5","owned_by":"openai-compatible","max_input_tokens":128000,"max_output_tokens":8192}
+			]
+		}`))
+	}))
+	t.Cleanup(func() { server.Close() })
+
+	p := NewGeminiProvider(providers.GeminiConfig{
+		BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key", BaseURL: server.URL},
+	}, zap.NewNop())
+
+	models, err := p.ListModels(context.Background())
+	require.NoError(t, err)
+	require.Len(t, models, 1)
+	assert.Equal(t, "glm-5", models[0].ID)
+	assert.Equal(t, 128000, models[0].MaxInputTokens)
+	assert.Equal(t, 8192, models[0].MaxOutputTokens)
+	assert.Contains(t, models[0].Capabilities, "chat")
 }
 
 func TestGeminiProvider_ListModels_Error(t *testing.T) {
