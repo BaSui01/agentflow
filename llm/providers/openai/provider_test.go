@@ -170,6 +170,67 @@ func TestOpenAIProvider_Completion_Standard(t *testing.T) {
 	assert.Equal(t, 15, resp.Usage.TotalTokens)
 }
 
+func TestOpenAIProvider_Completion_EndpointModeResponsesOverridesConfig(t *testing.T) {
+	var calledPath string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calledPath = r.URL.Path
+		w.Header().Set("Content-Type", "application/json")
+		require.NoError(t, json.NewEncoder(w).Encode(openAIResponsesResponse{
+			ID:     "resp_override",
+			Model:  "gpt-5.2",
+			Status: "completed",
+			Output: []responsesOutputItem{
+				{
+					Type:    "message",
+					Role:    "assistant",
+					Content: []responsesContent{{Type: "output_text", Text: "ok"}},
+				},
+			},
+		}))
+	}))
+	t.Cleanup(func() { server.Close() })
+
+	p := NewOpenAIProvider(providers.OpenAIConfig{
+		BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key", BaseURL: server.URL},
+		UseResponsesAPI:    false,
+	}, zap.NewNop())
+
+	_, err := p.Completion(context.Background(), &llm.ChatRequest{
+		Messages: []types.Message{{Role: llm.RoleUser, Content: "Hi"}},
+		Metadata: map[string]string{"endpoint_mode": "responses"},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "/v1/responses", calledPath)
+}
+
+func TestOpenAIProvider_Completion_EndpointModeChatOverridesConfig(t *testing.T) {
+	var calledPath string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calledPath = r.URL.Path
+		w.Header().Set("Content-Type", "application/json")
+		require.NoError(t, json.NewEncoder(w).Encode(providerbase.OpenAICompatResponse{
+			ID:    "chatcmpl_override",
+			Model: "gpt-5.2",
+			Choices: []providerbase.OpenAICompatChoice{
+				{Index: 0, FinishReason: "stop", Message: providerbase.OpenAICompatMessage{Role: "assistant", Content: "ok"}},
+			},
+		}))
+	}))
+	t.Cleanup(func() { server.Close() })
+
+	p := NewOpenAIProvider(providers.OpenAIConfig{
+		BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key", BaseURL: server.URL},
+		UseResponsesAPI:    true,
+	}, zap.NewNop())
+
+	_, err := p.Completion(context.Background(), &llm.ChatRequest{
+		Messages: []types.Message{{Role: llm.RoleUser, Content: "Hi"}},
+		Metadata: map[string]string{"endpoint_mode": "chat_completions"},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "/v1/chat/completions", calledPath)
+}
+
 // --- Completion (Responses API) ---
 
 func TestOpenAIProvider_Completion_ResponsesAPI(t *testing.T) {
@@ -224,6 +285,63 @@ func TestOpenAIProvider_Completion_ResponsesAPI(t *testing.T) {
 	require.Len(t, resp.Choices, 1)
 	assert.Equal(t, "Hello from Responses API", resp.Choices[0].Message.Content)
 	assert.Equal(t, 14, resp.Usage.TotalTokens)
+}
+
+func TestOpenAIProvider_Completion_ResponsesAPI_MapsNativeWebSearchTool(t *testing.T) {
+	var raw map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "/v1/responses", r.URL.Path)
+		err := json.NewDecoder(r.Body).Decode(&raw)
+		require.NoError(t, err)
+
+		w.Header().Set("Content-Type", "application/json")
+		err = json.NewEncoder(w).Encode(openAIResponsesResponse{
+			ID: "resp_web_search_missing", Model: "gpt-5.2", Status: "completed",
+			Output: []responsesOutputItem{
+				{Type: "message", Role: "assistant", Content: []responsesContent{{Type: "output_text", Text: "ok"}}},
+			},
+		})
+		require.NoError(t, err)
+	}))
+	t.Cleanup(func() { server.Close() })
+
+	p := NewOpenAIProvider(providers.OpenAIConfig{
+		BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key", BaseURL: server.URL},
+		UseResponsesAPI:    true,
+	}, zap.NewNop())
+
+	_, err := p.Completion(context.Background(), &llm.ChatRequest{
+		Messages: []types.Message{{Role: llm.RoleUser, Content: "Hi"}},
+		Tools: []types.ToolSchema{
+			{
+				Name:        "web_search",
+				Description: "native web search",
+				Parameters:  json.RawMessage(`{"type":"object","properties":{"query":{"type":"string"}}}`),
+			},
+		},
+		WebSearchOptions: &llm.WebSearchOptions{
+			SearchContextSize: "high",
+			AllowedDomains:    []string{"example.com", "docs.example.com"},
+			UserLocation: &llm.WebSearchLocation{
+				Country: "US",
+				City:    "San Francisco",
+			},
+		},
+	})
+	require.NoError(t, err)
+
+	tool := findResponsesWebSearchTool(t, raw)
+	assert.Equal(t, "high", tool["search_context_size"])
+	userLocation, ok := tool["user_location"].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, "approximate", userLocation["type"])
+	assert.Equal(t, "US", userLocation["country"])
+	assert.Equal(t, "San Francisco", userLocation["city"])
+	filters, ok := tool["filters"].(map[string]any)
+	require.True(t, ok)
+	allowedDomains, ok := filters["allowed_domains"].([]any)
+	require.True(t, ok)
+	assert.Equal(t, []any{"example.com", "docs.example.com"}, allowedDomains)
 }
 
 func TestOpenAIProvider_Completion_ResponsesAPI_WithToolCalls(t *testing.T) {
@@ -394,6 +512,42 @@ func TestOpenAIProvider_Stream(t *testing.T) {
 	assert.Equal(t, "openai", chunks[0].Provider)
 }
 
+func TestOpenAIProvider_Stream_EndpointModeChatOverridesConfig(t *testing.T) {
+	var calledPath string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calledPath = r.URL.Path
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(http.StatusOK)
+		chunk := providerbase.OpenAICompatResponse{
+			ID:    "chatcmpl-stream",
+			Model: "gpt-5.2",
+			Choices: []providerbase.OpenAICompatChoice{
+				{Index: 0, Delta: &providerbase.OpenAICompatMessage{Role: "assistant", Content: "ok"}},
+			},
+		}
+		data, _ := json.Marshal(chunk)
+		_, _ = w.Write([]byte("data: "))
+		_, _ = w.Write(data)
+		_, _ = w.Write([]byte("\n\ndata: [DONE]\n\n"))
+	}))
+	t.Cleanup(func() { server.Close() })
+
+	p := NewOpenAIProvider(providers.OpenAIConfig{
+		BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key", BaseURL: server.URL},
+		UseResponsesAPI:    true,
+	}, zap.NewNop())
+
+	ch, err := p.Stream(context.Background(), &llm.ChatRequest{
+		Messages: []types.Message{{Role: llm.RoleUser, Content: "Hi"}},
+		Metadata: map[string]string{"endpoint_mode": "chat_completions"},
+	})
+	require.NoError(t, err)
+	for range ch {
+	}
+
+	assert.Equal(t, "/v1/chat/completions", calledPath)
+}
+
 func TestOpenAIProvider_Stream_ResponsesAPI_ToolArgsAreAccumulated(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/event-stream")
@@ -433,6 +587,158 @@ func TestOpenAIProvider_Stream_ResponsesAPI_ToolArgsAreAccumulated(t *testing.T)
 	assert.Equal(t, "fc_1", gotToolCall.ID)
 	assert.Equal(t, "lookup", gotToolCall.Name)
 	assert.JSONEq(t, `{"city":"NYC"}`, string(gotToolCall.Arguments))
+}
+
+func TestOpenAIProvider_Stream_ResponsesAPI_MapsNativeWebSearchTool(t *testing.T) {
+	var raw map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		err := json.NewDecoder(r.Body).Decode(&raw)
+		require.NoError(t, err)
+
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("event: response.created\n"))
+		_, _ = w.Write([]byte(`data: {"type":"response.created","response":{"id":"resp_1","model":"gpt-5.2"}}` + "\n\n"))
+		_, _ = w.Write([]byte("event: response.output_text.delta\n"))
+		_, _ = w.Write([]byte(`data: {"type":"response.output_text.delta","delta":"ok"}` + "\n\n"))
+		_, _ = w.Write([]byte("data: [DONE]\n\n"))
+	}))
+	t.Cleanup(func() { server.Close() })
+
+	p := NewOpenAIProvider(providers.OpenAIConfig{
+		BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key", BaseURL: server.URL},
+		UseResponsesAPI:    true,
+	}, zap.NewNop())
+
+	ch, err := p.Stream(context.Background(), &llm.ChatRequest{
+		Messages: []types.Message{{Role: llm.RoleUser, Content: "Hi"}},
+		Tools: []types.ToolSchema{
+			{
+				Name:       "web_search_preview",
+				Parameters: json.RawMessage(`{"type":"object","properties":{"query":{"type":"string"}}}`),
+			},
+		},
+		WebSearchOptions: &llm.WebSearchOptions{
+			SearchContextSize: "low",
+			AllowedDomains:    []string{"news.example.com"},
+			UserLocation: &llm.WebSearchLocation{
+				Country: "CN",
+				City:    "Shanghai",
+			},
+		},
+	})
+	require.NoError(t, err)
+	for range ch {
+	}
+
+	tool := findResponsesWebSearchTool(t, raw)
+	assert.Equal(t, "low", tool["search_context_size"])
+	userLocation, ok := tool["user_location"].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, "approximate", userLocation["type"])
+	assert.Equal(t, "CN", userLocation["country"])
+	assert.Equal(t, "Shanghai", userLocation["city"])
+	filters, ok := tool["filters"].(map[string]any)
+	require.True(t, ok)
+	allowedDomains, ok := filters["allowed_domains"].([]any)
+	require.True(t, ok)
+	assert.Equal(t, []any{"news.example.com"}, allowedDomains)
+}
+
+func TestOpenAIProvider_Completion_ResponsesAPI_AutoAddsWebSearchToolFromOptions(t *testing.T) {
+	var raw map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		err := json.NewDecoder(r.Body).Decode(&raw)
+		require.NoError(t, err)
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(openAIResponsesResponse{
+			ID: "resp_auto_ws", Model: "gpt-5.2", Status: "completed",
+			Output: []responsesOutputItem{
+				{Type: "message", Role: "assistant", Content: []responsesContent{{Type: "output_text", Text: "ok"}}},
+			},
+		})
+	}))
+	t.Cleanup(func() { server.Close() })
+
+	p := NewOpenAIProvider(providers.OpenAIConfig{
+		BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key", BaseURL: server.URL},
+		UseResponsesAPI:    true,
+	}, zap.NewNop())
+
+	_, err := p.Completion(context.Background(), &llm.ChatRequest{
+		Messages: []types.Message{{Role: llm.RoleUser, Content: "Hi"}},
+		WebSearchOptions: &llm.WebSearchOptions{
+			SearchContextSize: "medium",
+			AllowedDomains:    []string{"openai.com"},
+		},
+	})
+	require.NoError(t, err)
+
+	tool := findResponsesWebSearchTool(t, raw)
+	assert.Equal(t, "medium", tool["search_context_size"])
+	filters, ok := tool["filters"].(map[string]any)
+	require.True(t, ok)
+	allowedDomains, ok := filters["allowed_domains"].([]any)
+	require.True(t, ok)
+	assert.Equal(t, []any{"openai.com"}, allowedDomains)
+}
+
+func TestOpenAIProvider_Completion_ResponsesAPI_MapsIncludeAndTruncation(t *testing.T) {
+	var raw map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		err := json.NewDecoder(r.Body).Decode(&raw)
+		require.NoError(t, err)
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(openAIResponsesResponse{
+			ID: "resp_include_truncation", Model: "gpt-5.2", Status: "completed",
+			Output: []responsesOutputItem{
+				{Type: "message", Role: "assistant", Content: []responsesContent{{Type: "output_text", Text: "ok"}}},
+			},
+		})
+	}))
+	t.Cleanup(func() { server.Close() })
+
+	p := NewOpenAIProvider(providers.OpenAIConfig{
+		BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key", BaseURL: server.URL},
+		UseResponsesAPI:    true,
+	}, zap.NewNop())
+
+	_, err := p.Completion(context.Background(), &llm.ChatRequest{
+		Messages:   []types.Message{{Role: llm.RoleUser, Content: "Hi"}},
+		Include:    []string{"output_text.logprobs", "reasoning.encrypted_content"},
+		Truncation: "auto",
+	})
+	require.NoError(t, err)
+
+	includeRaw, ok := raw["include"].([]any)
+	require.True(t, ok)
+	require.Len(t, includeRaw, 2)
+	assert.Equal(t, "output_text.logprobs", includeRaw[0])
+	assert.Equal(t, "reasoning.encrypted_content", includeRaw[1])
+	assert.Equal(t, "auto", raw["truncation"])
+}
+
+func findResponsesWebSearchTool(t *testing.T, raw map[string]any) map[string]any {
+	t.Helper()
+
+	toolsAny, ok := raw["tools"]
+	require.True(t, ok, "responses request should contain tools field")
+
+	tools, ok := toolsAny.([]any)
+	require.True(t, ok, "responses tools should be array")
+	require.NotEmpty(t, tools, "responses tools should not be empty")
+
+	for _, item := range tools {
+		tool, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		if toolType, _ := tool["type"].(string); toolType == "web_search" {
+			return tool
+		}
+	}
+	require.Fail(t, "web_search tool not found in responses request")
+	return nil
 }
 
 func TestBuildInputContent_IncludesVideoAsInputFile(t *testing.T) {
