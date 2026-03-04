@@ -45,6 +45,7 @@ type Server struct {
 	agentHandler        *handlers.AgentHandler
 	apiKeyHandler       *handlers.APIKeyHandler
 	toolRegistryHandler *handlers.ToolRegistryHandler
+	toolProviderHandler *handlers.ToolProviderHandler
 	ragHandler          *handlers.RAGHandler
 	workflowHandler     *handlers.WorkflowHandler
 	protocolHandler     *handlers.ProtocolHandler

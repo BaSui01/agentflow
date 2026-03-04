@@ -27,6 +27,8 @@ func RegisterChat(mux *http.ServeMux, chatHandler *handlers.ChatHandler, logger 
 	mux.HandleFunc("GET /api/v1/chat/capabilities", chatHandler.HandleCapabilities)
 	mux.HandleFunc("POST /api/v1/chat/completions", chatHandler.HandleCompletion)
 	mux.HandleFunc("POST /api/v1/chat/completions/stream", chatHandler.HandleStream)
+	mux.HandleFunc("POST /v1/chat/completions", chatHandler.HandleOpenAICompatChatCompletions)
+	mux.HandleFunc("POST /v1/responses", chatHandler.HandleOpenAICompatResponses)
 	logger.Info("Chat API routes registered")
 }
 
@@ -57,16 +59,24 @@ func RegisterProvider(mux *http.ServeMux, apiKeyHandler *handlers.APIKeyHandler,
 	logger.Info("Provider API key routes registered")
 }
 
-func RegisterTools(mux *http.ServeMux, toolHandler *handlers.ToolRegistryHandler, logger *zap.Logger) {
-	if toolHandler == nil {
+func RegisterTools(mux *http.ServeMux, toolHandler *handlers.ToolRegistryHandler, providerHandler *handlers.ToolProviderHandler, logger *zap.Logger) {
+	if toolHandler == nil && providerHandler == nil {
 		return
 	}
-	mux.HandleFunc("GET /api/v1/tools", toolHandler.HandleList)
-	mux.HandleFunc("POST /api/v1/tools", toolHandler.HandleCreate)
-	mux.HandleFunc("GET /api/v1/tools/targets", toolHandler.HandleListTargets)
-	mux.HandleFunc("POST /api/v1/tools/reload", toolHandler.HandleReload)
-	mux.HandleFunc("PUT /api/v1/tools/{id}", toolHandler.HandleUpdate)
-	mux.HandleFunc("DELETE /api/v1/tools/{id}", toolHandler.HandleDelete)
+	if toolHandler != nil {
+		mux.HandleFunc("GET /api/v1/tools", toolHandler.HandleList)
+		mux.HandleFunc("POST /api/v1/tools", toolHandler.HandleCreate)
+		mux.HandleFunc("GET /api/v1/tools/targets", toolHandler.HandleListTargets)
+		mux.HandleFunc("POST /api/v1/tools/reload", toolHandler.HandleReload)
+		mux.HandleFunc("PUT /api/v1/tools/{id}", toolHandler.HandleUpdate)
+		mux.HandleFunc("DELETE /api/v1/tools/{id}", toolHandler.HandleDelete)
+	}
+	if providerHandler != nil {
+		mux.HandleFunc("GET /api/v1/tools/providers", providerHandler.HandleList)
+		mux.HandleFunc("PUT /api/v1/tools/providers/{provider}", providerHandler.HandleUpsert)
+		mux.HandleFunc("DELETE /api/v1/tools/providers/{provider}", providerHandler.HandleDelete)
+		mux.HandleFunc("POST /api/v1/tools/providers/reload", providerHandler.HandleReload)
+	}
 	logger.Info("Tool registry routes registered")
 }
 

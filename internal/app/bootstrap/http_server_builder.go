@@ -13,16 +13,17 @@ import (
 
 // HTTPRouteHandlers groups handler dependencies used by HTTP route registration.
 type HTTPRouteHandlers struct {
-	Health     *handlers.HealthHandler
-	Chat       *handlers.ChatHandler
-	Agent      *handlers.AgentHandler
-	APIKey     *handlers.APIKeyHandler
-	Tools      *handlers.ToolRegistryHandler
-	Multimodal *handlers.MultimodalHandler
-	Protocol   *handlers.ProtocolHandler
-	RAG        *handlers.RAGHandler
-	Workflow   *handlers.WorkflowHandler
-	ConfigAPI  *config.ConfigAPIHandler
+	Health        *handlers.HealthHandler
+	Chat          *handlers.ChatHandler
+	Agent         *handlers.AgentHandler
+	APIKey        *handlers.APIKeyHandler
+	Tools         *handlers.ToolRegistryHandler
+	ToolProviders *handlers.ToolProviderHandler
+	Multimodal    *handlers.MultimodalHandler
+	Protocol      *handlers.ProtocolHandler
+	RAG           *handlers.RAGHandler
+	Workflow      *handlers.WorkflowHandler
+	ConfigAPI     *config.ConfigAPIHandler
 }
 
 // RegisterHTTPRoutes wires all API routes into the provided mux and logs route summary.
@@ -39,7 +40,7 @@ func RegisterHTTPRoutes(
 	routes.RegisterChat(mux, handlers.Chat, logger)
 	routes.RegisterAgent(mux, handlers.Agent, logger)
 	routes.RegisterProvider(mux, handlers.APIKey, logger)
-	routes.RegisterTools(mux, handlers.Tools, logger)
+	routes.RegisterTools(mux, handlers.Tools, handlers.ToolProviders, logger)
 	routes.RegisterMultimodal(mux, handlers.Multimodal, logger)
 	routes.RegisterProtocol(mux, handlers.Protocol, logger)
 	routes.RegisterRAG(mux, handlers.RAG, logger)
@@ -54,6 +55,8 @@ func RegisterHTTPRoutes(
 			"/readyz",
 			"/version",
 			"/api/v1/chat/completions",
+			"/v1/chat/completions",
+			"/v1/responses",
 			"/api/v1/agents/*",
 			"/api/v1/providers/*",
 			"/api/v1/tools/*",

@@ -14,6 +14,7 @@
 路由注册在 `api/routes/routes.go`，统一挂载到 `/api/v1/*`：
 
 - Chat: `/api/v1/chat/capabilities`、`/api/v1/chat/completions`、`/api/v1/chat/completions/stream`
+- OpenAI 兼容入站：`/v1/chat/completions`、`/v1/responses`（协议适配到同一 ChatService/gateway 链路）
 - Agent: `/api/v1/agents`、`/api/v1/agents/capabilities`、`/api/v1/agents/execute`、`/api/v1/agents/execute/stream`、`/api/v1/agents/plan`、`/api/v1/agents/health`
 - RAG: `/api/v1/rag/query`、`/api/v1/rag/index`
 - Workflow: `/api/v1/workflows/execute`、`/api/v1/workflows/parse`、`/api/v1/workflows`
@@ -21,11 +22,13 @@
 - Protocol: `/api/v1/mcp/*`、`/api/v1/a2a/*`
 - Provider API Key: `/api/v1/providers/*`
 - Tool Registry: `/api/v1/tools*`
+  - Tool Provider Config: `/api/v1/tools/providers`、`/api/v1/tools/providers/{provider}`、`/api/v1/tools/providers/reload`
 - Config API: `/api/v1/config*`
 
 ## 工具共用与自动生效
 
 - 对外工具注册入口：`/api/v1/tools*`（列表/创建/更新/删除/targets/reload）。
+- 对外工具 Provider 配置入口：`/api/v1/tools/providers/*`（按 provider 持久化 `web_search` 配置并触发 runtime reload）。
 - `chat` 与 `agent` 共享同一套 runtime `ToolManager`（同一注册中心，不是两套独立工具池）。
 - 当 DB 中工具注册发生变更时，服务层会触发 runtime reload；成功后会重置 agent resolver 缓存，确保新工具白名单立即生效（无需重启进程）。
 - 关键链路：`cmd/agentflow/server_handlers_runtime.go`（`toolRegistryRuntimeAdapter.ReloadBindings -> onReload -> resolver.ResetCache`）。
