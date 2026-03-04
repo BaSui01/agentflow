@@ -4,9 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"flag"
 	"fmt"
 	"math"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -21,6 +23,7 @@ import (
 	"github.com/BaSui01/agentflow/rag"
 	"github.com/BaSui01/agentflow/types"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 )
 
 type liveToolManager struct {
@@ -187,32 +190,405 @@ func pickChatModel(models []llm.Model) (string, error) {
 	return models[0].ID, nil
 }
 
+const (
+	suiteLive  = "live"
+	suiteFault = "fault"
+	suiteAll   = "all"
+)
+
+type runOptions struct {
+	suite  string
+	only   []string
+	logDir string
+	list   bool
+}
+
+type liveRuntime struct {
+	chatProvider     llm.Provider
+	chatModel        string
+	embeddingBaseURL string
+	embeddingAPIKey  string
+}
+
+type liveTest struct {
+	name         string
+	suite        string
+	requiresLive bool
+	run          func(context.Context, *zap.Logger, *liveRuntime) error
+}
+
 func main() {
-	logger, _ := zap.NewDevelopment()
-	defer logger.Sync()
+	opts, err := parseRunOptions()
+	if err != nil {
+		panic(err)
+	}
+
+	logger, logPath, cleanup, err := newLivecheckLogger(opts.logDir)
+	if err != nil {
+		panic(err)
+	}
+	defer cleanup()
+
+	if logPath != "" {
+		logger.Info("livecheck file logging enabled", zap.String("log_file", logPath))
+	}
+
+	allTests := buildTestPlan()
+	if opts.list {
+		printTestPlan(allTests)
+		return
+	}
+
+	selectedTests, err := selectTests(allTests, opts.suite, opts.only)
+	if err != nil {
+		logger.Fatal("failed to select tests", zap.Error(err))
+	}
+
+	requireLive := false
+	requireEmbedding := false
+	for _, tc := range selectedTests {
+		if tc.requiresLive {
+			requireLive = true
+		}
+		if strings.HasPrefix(strings.ToUpper(tc.name), "C-") {
+			requireEmbedding = true
+		}
+	}
 
 	ctx := context.Background()
-	chatBaseURL, err := getenvRequired("AGENT_BASE_URL")
-	if err != nil {
-		logger.Fatal("missing environment variable", zap.Error(err))
-	}
-	chatAPIKey, err := getenvRequired("AGENT_API_KEY")
-	if err != nil {
-		logger.Fatal("missing environment variable", zap.Error(err))
-	}
-	embeddingBaseURL, err := getenvRequired("EMBEDDING_BASE_URL")
-	if err != nil {
-		logger.Fatal("missing environment variable", zap.Error(err))
-	}
-	embeddingAPIKey, err := getenvRequired("EMBEDDING_API_KEY")
-	if err != nil {
-		logger.Fatal("missing environment variable", zap.Error(err))
+	var runtimeDeps *liveRuntime
+	if requireLive {
+		runtimeDeps, err = setupLiveRuntime(ctx, logger, requireEmbedding)
+		if err != nil {
+			logger.Fatal("failed to setup live runtime", zap.Error(err))
+		}
 	}
 
 	logger.Info("live check started",
-		zap.String("chat_base_url", chatBaseURL),
-		zap.String("embedding_base_url", embeddingBaseURL),
+		zap.String("suite", opts.suite),
+		zap.Strings("only", opts.only),
+		zap.Int("selected_tests", len(selectedTests)),
 	)
+
+	failures := 0
+	for _, tc := range selectedTests {
+		start := time.Now()
+		runErr := tc.run(ctx, logger, runtimeDeps)
+		if runErr != nil {
+			failures++
+			logger.Error("live test failed",
+				zap.String("test", tc.name),
+				zap.Error(runErr),
+				zap.Duration("duration", time.Since(start)),
+			)
+			continue
+		}
+		logger.Info("live test passed",
+			zap.String("test", tc.name),
+			zap.Duration("duration", time.Since(start)),
+		)
+	}
+
+	if failures > 0 {
+		logger.Fatal("live check finished with failures",
+			zap.Int("total", len(selectedTests)),
+			zap.Int("failed", failures),
+		)
+	}
+
+	logger.Info("live check finished successfully",
+		zap.Int("total", len(selectedTests)),
+		zap.Int("failed", failures),
+	)
+}
+
+func parseRunOptions() (runOptions, error) {
+	var opts runOptions
+	var onlyRaw string
+
+	flag.StringVar(&opts.suite, "suite", suiteLive, "test suite: live|fault|all")
+	flag.StringVar(&onlyRaw, "only", "", "comma-separated test selectors, e.g. A,B,D,E,G or X1,X2")
+	flag.StringVar(&opts.logDir, "log-dir", "scripts/livecheck/logs", "directory for timestamped log file")
+	flag.BoolVar(&opts.list, "list", false, "list all available tests and exit")
+	flag.Parse()
+
+	opts.suite = strings.ToLower(strings.TrimSpace(opts.suite))
+	switch opts.suite {
+	case suiteLive, suiteFault, suiteAll:
+	default:
+		return runOptions{}, fmt.Errorf("invalid --suite=%q, expected one of: live|fault|all", opts.suite)
+	}
+
+	opts.only = parseOnlySelectors(onlyRaw)
+	return opts, nil
+}
+
+func parseOnlySelectors(raw string) []string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return nil
+	}
+
+	parts := strings.FieldsFunc(raw, func(r rune) bool {
+		return r == ',' || r == ';' || r == ' ' || r == '\t' || r == '\n'
+	})
+
+	out := make([]string, 0, len(parts))
+	seen := make(map[string]struct{}, len(parts))
+	for _, p := range parts {
+		v := strings.ToUpper(strings.TrimSpace(p))
+		if v == "" {
+			continue
+		}
+		if _, ok := seen[v]; ok {
+			continue
+		}
+		seen[v] = struct{}{}
+		out = append(out, v)
+	}
+	return out
+}
+
+func newLivecheckLogger(logDir string) (*zap.Logger, string, func(), error) {
+	logDir = strings.TrimSpace(logDir)
+	if logDir == "" {
+		l, err := zap.NewDevelopment()
+		if err != nil {
+			return nil, "", nil, err
+		}
+		return l, "", func() { _ = l.Sync() }, nil
+	}
+
+	if err := os.MkdirAll(logDir, 0o755); err != nil {
+		return nil, "", nil, fmt.Errorf("create log dir: %w", err)
+	}
+
+	ts := time.Now().Format("20060102-150405")
+	logPath := filepath.Join(logDir, "livecheck-"+ts+".log")
+	file, err := os.OpenFile(logPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
+	if err != nil {
+		return nil, "", nil, fmt.Errorf("open log file: %w", err)
+	}
+
+	encCfg := zap.NewDevelopmentEncoderConfig()
+	encCfg.EncodeTime = zapcore.ISO8601TimeEncoder
+
+	consoleCore := zapcore.NewCore(
+		zapcore.NewConsoleEncoder(encCfg),
+		zapcore.AddSync(os.Stdout),
+		zap.DebugLevel,
+	)
+	fileCore := zapcore.NewCore(
+		zapcore.NewConsoleEncoder(encCfg),
+		zapcore.AddSync(file),
+		zap.DebugLevel,
+	)
+
+	logger := zap.New(
+		zapcore.NewTee(consoleCore, fileCore),
+		zap.AddCaller(),
+		zap.AddStacktrace(zap.ErrorLevel),
+	)
+
+	cleanup := func() {
+		_ = logger.Sync()
+		_ = file.Close()
+	}
+
+	return logger, logPath, cleanup, nil
+}
+
+func buildTestPlan() []liveTest {
+	return []liveTest{
+		{
+			name:         "A-basic-agent",
+			suite:        suiteLive,
+			requiresLive: true,
+			run: func(ctx context.Context, logger *zap.Logger, deps *liveRuntime) error {
+				return runAgentBasic(ctx, logger, deps.chatProvider, deps.chatModel)
+			},
+		},
+		{
+			name:         "B-tool-loop",
+			suite:        suiteLive,
+			requiresLive: true,
+			run: func(ctx context.Context, logger *zap.Logger, deps *liveRuntime) error {
+				return runAgentToolLoop(ctx, logger, deps.chatProvider, deps.chatModel)
+			},
+		},
+		{
+			name:         "C-rag-embedding",
+			suite:        suiteLive,
+			requiresLive: true,
+			run: func(ctx context.Context, logger *zap.Logger, deps *liveRuntime) error {
+				return runRAGEmbedding(ctx, logger, deps.embeddingBaseURL, deps.embeddingAPIKey)
+			},
+		},
+		{
+			name:         "D-skills-mcp",
+			suite:        suiteLive,
+			requiresLive: true,
+			run: func(ctx context.Context, logger *zap.Logger, deps *liveRuntime) error {
+				return runSkillsAndMCP(ctx, logger, deps.chatProvider, deps.chatModel)
+			},
+		},
+		{
+			name:         "E-multi-agent-collaboration",
+			suite:        suiteLive,
+			requiresLive: true,
+			run: func(ctx context.Context, logger *zap.Logger, deps *liveRuntime) error {
+				return runMultiAgentCollaboration(ctx, logger, deps.chatProvider, deps.chatModel)
+			},
+		},
+		{
+			name:         "F-hierarchical-subtasks",
+			suite:        suiteLive,
+			requiresLive: true,
+			run: func(ctx context.Context, logger *zap.Logger, deps *liveRuntime) error {
+				return runHierarchicalExecution(ctx, logger, deps.chatProvider, deps.chatModel)
+			},
+		},
+		{
+			name:         "G-subagent-delegation",
+			suite:        suiteLive,
+			requiresLive: true,
+			run: func(ctx context.Context, logger *zap.Logger, deps *liveRuntime) error {
+				return runSubAgentDelegation(ctx, logger, deps.chatProvider, deps.chatModel)
+			},
+		},
+		{
+			name:  "H-openai-responses-web-search",
+			suite: suiteLive,
+			run: func(ctx context.Context, logger *zap.Logger, _ *liveRuntime) error {
+				return runOpenAIResponsesWebSearchRegression(ctx, logger)
+			},
+		},
+		{
+			name:  "I-gemini-model-aware-adapter",
+			suite: suiteLive,
+			run: func(ctx context.Context, logger *zap.Logger, _ *liveRuntime) error {
+				return runGeminiModelAwareRegression(ctx, logger)
+			},
+		},
+		{
+			name:  "J-anthropic-glm5-remote-compat",
+			suite: suiteLive,
+			run: func(ctx context.Context, logger *zap.Logger, _ *liveRuntime) error {
+				return runAnthropicGLM5RemoteCompat(ctx, logger)
+			},
+		},
+		{
+			name:  "K-gemini-glm5-remote-compat",
+			suite: suiteLive,
+			run: func(ctx context.Context, logger *zap.Logger, _ *liveRuntime) error {
+				return runGeminiGLM5RemoteCompat(ctx, logger)
+			},
+		},
+		{
+			name:  "L-openai-endpoint-mode-routing",
+			suite: suiteLive,
+			run: func(ctx context.Context, logger *zap.Logger, _ *liveRuntime) error {
+				return runOpenAIEndpointModeRoutingRegression(ctx, logger)
+			},
+		},
+		{
+			name:  "X1-timeout",
+			suite: suiteFault,
+			run: func(ctx context.Context, logger *zap.Logger, _ *liveRuntime) error {
+				return runFaultTimeout(ctx, logger)
+			},
+		},
+		{
+			name:  "X2-empty-model-list",
+			suite: suiteFault,
+			run: func(ctx context.Context, logger *zap.Logger, _ *liveRuntime) error {
+				return runFaultEmptyModelList(ctx, logger)
+			},
+		},
+		{
+			name:  "X3-mcp-tool-error",
+			suite: suiteFault,
+			run: func(ctx context.Context, logger *zap.Logger, _ *liveRuntime) error {
+				return runFaultMCPToolError(ctx, logger)
+			},
+		},
+		{
+			name:  "X4-rag-dimension-mismatch",
+			suite: suiteFault,
+			run: func(ctx context.Context, logger *zap.Logger, _ *liveRuntime) error {
+				return runFaultRAGDimensionMismatch(ctx, logger)
+			},
+		},
+	}
+}
+
+func printTestPlan(tests []liveTest) {
+	fmt.Println("Available tests:")
+	for _, tc := range tests {
+		fmt.Printf("  - %s (%s)\n", tc.name, tc.suite)
+	}
+}
+
+func selectTests(all []liveTest, suite string, only []string) ([]liveTest, error) {
+	filtered := make([]liveTest, 0, len(all))
+	for _, tc := range all {
+		if suite != suiteAll && tc.suite != suite {
+			continue
+		}
+		filtered = append(filtered, tc)
+	}
+	if len(filtered) == 0 {
+		return nil, fmt.Errorf("no tests available in suite %q", suite)
+	}
+
+	if len(only) == 0 {
+		return filtered, nil
+	}
+
+	selected := make([]liveTest, 0, len(filtered))
+	for _, tc := range filtered {
+		for _, selector := range only {
+			if selectorMatches(selector, tc.name) {
+				selected = append(selected, tc)
+				break
+			}
+		}
+	}
+	if len(selected) == 0 {
+		return nil, fmt.Errorf("no tests matched --only=%v in suite %q", only, suite)
+	}
+	return selected, nil
+}
+
+func selectorMatches(selector, testName string) bool {
+	s := strings.ToUpper(strings.TrimSpace(selector))
+	t := strings.ToUpper(strings.TrimSpace(testName))
+	if s == "" || t == "" {
+		return false
+	}
+	return s == t || strings.HasPrefix(t, s+"-")
+}
+
+func setupLiveRuntime(ctx context.Context, logger *zap.Logger, requireEmbedding bool) (*liveRuntime, error) {
+	chatBaseURL, err := getenvRequired("AGENT_BASE_URL")
+	if err != nil {
+		return nil, err
+	}
+	chatAPIKey, err := getenvRequired("AGENT_API_KEY")
+	if err != nil {
+		return nil, err
+	}
+
+	embeddingBaseURL := strings.TrimSpace(os.Getenv("EMBEDDING_BASE_URL"))
+	embeddingAPIKey := strings.TrimSpace(os.Getenv("EMBEDDING_API_KEY"))
+	if requireEmbedding {
+		if embeddingBaseURL == "" {
+			return nil, errors.New("EMBEDDING_BASE_URL is required")
+		}
+		if embeddingAPIKey == "" {
+			return nil, errors.New("EMBEDDING_API_KEY is required")
+		}
+	}
 
 	chatProvider := openai.NewOpenAIProvider(providers.OpenAIConfig{
 		BaseProviderConfig: providers.BaseProviderConfig{
@@ -227,7 +603,7 @@ func main() {
 	models, err := chatProvider.ListModels(modelsCtx)
 	cancelModels()
 	if err != nil {
-		logger.Fatal("ListModels failed", zap.Error(err))
+		return nil, fmt.Errorf("ListModels failed: %w", err)
 	}
 
 	modelIDs := make([]string, 0, len(models))
@@ -237,28 +613,26 @@ func main() {
 		}
 		modelIDs = append(modelIDs, m.ID)
 	}
-	logger.Info("models fetched", zap.Int("count", len(models)), zap.Strings("first_10", modelIDs))
+	logger.Info("models fetched",
+		zap.Int("count", len(models)),
+		zap.Strings("first_10", modelIDs),
+	)
 
 	chatModel := getenvWithDefault("AGENT_MODEL", "")
 	if chatModel == "" {
 		chatModel, err = pickChatModel(models)
 		if err != nil {
-			logger.Fatal("failed to choose model", zap.Error(err))
+			return nil, fmt.Errorf("failed to choose model: %w", err)
 		}
 	}
 	logger.Info("chat model selected", zap.String("model", chatModel))
 
-	if err := runAgentBasic(ctx, logger, chatProvider, chatModel); err != nil {
-		logger.Fatal("basic agent test failed", zap.Error(err))
-	}
-	if err := runAgentToolLoop(ctx, logger, chatProvider, chatModel); err != nil {
-		logger.Fatal("tool loop test failed", zap.Error(err))
-	}
-	if err := runRAGEmbedding(ctx, logger, embeddingBaseURL, embeddingAPIKey); err != nil {
-		logger.Fatal("rag+embedding test failed", zap.Error(err))
-	}
-
-	logger.Info("live check finished successfully")
+	return &liveRuntime{
+		chatProvider:     chatProvider,
+		chatModel:        chatModel,
+		embeddingBaseURL: embeddingBaseURL,
+		embeddingAPIKey:  embeddingAPIKey,
+	}, nil
 }
 
 func runAgentBasic(ctx context.Context, logger *zap.Logger, provider llm.Provider, model string) error {
@@ -552,4 +926,12 @@ func inferEmbeddingDimensions(model string) int {
 	default:
 		return 3072
 	}
+}
+
+func truncateText(s string, n int) string {
+	s = strings.TrimSpace(s)
+	if n <= 0 || len(s) <= n {
+		return s
+	}
+	return s[:n] + "..."
 }

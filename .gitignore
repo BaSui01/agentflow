@@ -32,3 +32,4 @@ test_artifacts/
 
 # Claude Code skills (user-local)
 .claude/skills/agentflow
+scripts/livecheck/logs/
