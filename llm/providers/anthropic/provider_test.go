@@ -281,6 +281,41 @@ func TestClaudeProvider_Completion_WithToolCalls(t *testing.T) {
 	assert.Equal(t, "tool_use", resp.Choices[0].FinishReason)
 }
 
+func TestClaudeProvider_Completion_TolerantStringContentAndUsageAliases(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"id":         "msg_compat_1",
+			"type":       "message",
+			"role":       "assistant",
+			"model":      "glm-5",
+			"content":    "compat-ok",
+			"stopReason": "end_turn",
+			"usage": map[string]any{
+				"prompt_tokens":     11,
+				"completion_tokens": 7,
+				"total_tokens":      18,
+			},
+		})
+	}))
+	t.Cleanup(func() { server.Close() })
+
+	p := NewClaudeProvider(providers.ClaudeConfig{
+		BaseProviderConfig: providers.BaseProviderConfig{APIKey: "sk-test", BaseURL: server.URL},
+	}, zap.NewNop())
+
+	resp, err := p.Completion(context.Background(), &llm.ChatRequest{
+		Messages: []types.Message{{Role: llm.RoleUser, Content: "compat?"}},
+	})
+	require.NoError(t, err)
+	require.Len(t, resp.Choices, 1)
+	assert.Equal(t, "compat-ok", resp.Choices[0].Message.Content)
+	assert.Equal(t, "end_turn", resp.Choices[0].FinishReason)
+	assert.Equal(t, 11, resp.Usage.PromptTokens)
+	assert.Equal(t, 7, resp.Usage.CompletionTokens)
+	assert.Equal(t, 18, resp.Usage.TotalTokens)
+}
+
 func TestClaudeProvider_Completion_ThinkingContentBlock(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -561,6 +596,25 @@ func TestClaudeProvider_ListModels(t *testing.T) {
 	require.Len(t, models, 1)
 	assert.Equal(t, "claude-3-opus", models[0].ID)
 	assert.Equal(t, "anthropic", models[0].OwnedBy)
+}
+
+func TestClaudeProvider_ListModels_TolerantModelsEnvelope(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "/v1/models", r.URL.Path)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"models":[{"name":"models/glm-5","owned_by":"openai-compatible"}]}`))
+	}))
+	t.Cleanup(func() { server.Close() })
+
+	p := NewClaudeProvider(providers.ClaudeConfig{
+		BaseProviderConfig: providers.BaseProviderConfig{APIKey: "sk-test", BaseURL: server.URL},
+	}, zap.NewNop())
+
+	models, err := p.ListModels(context.Background())
+	require.NoError(t, err)
+	require.Len(t, models, 1)
+	assert.Equal(t, "glm-5", models[0].ID)
+	assert.Equal(t, "openai-compatible", models[0].OwnedBy)
 }
 
 func TestClaudeProvider_ListModels_Error(t *testing.T) {

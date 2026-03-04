@@ -492,6 +492,20 @@ func buildTestPlan() []liveTest {
 			},
 		},
 		{
+			name:  "M-anthropic-compat-endpoint",
+			suite: suiteLive,
+			run: func(ctx context.Context, logger *zap.Logger, _ *liveRuntime) error {
+				return runAnthropicCompatEndpointRegression(ctx, logger)
+			},
+		},
+		{
+			name:  "N-gemini-compat-endpoint",
+			suite: suiteLive,
+			run: func(ctx context.Context, logger *zap.Logger, _ *liveRuntime) error {
+				return runGeminiCompatEndpointRegression(ctx, logger)
+			},
+		},
+		{
 			name:  "X1-timeout",
 			suite: suiteFault,
 			run: func(ctx context.Context, logger *zap.Logger, _ *liveRuntime) error {
