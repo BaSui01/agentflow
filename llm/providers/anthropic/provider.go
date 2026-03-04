@@ -125,13 +125,19 @@ func (p *ClaudeProvider) ListModels(ctx context.Context) ([]llm.Model, error) {
 		return nil, providerbase.MapHTTPError(resp.StatusCode, msg, p.Name())
 	}
 
+	type claudeModelPayload struct {
+		ID          string `json:"id"`
+		Name        string `json:"name"`
+		Model       string `json:"model"`
+		DisplayName string `json:"display_name"`
+		CreatedAt   string `json:"created_at"`
+		Created     int64  `json:"created"`
+		Type        string `json:"type"`
+		OwnedBy     string `json:"owned_by"`
+	}
 	var modelsResp struct {
-		Data []struct {
-			ID          string `json:"id"`
-			DisplayName string `json:"display_name"`
-			CreatedAt   string `json:"created_at"`
-			Type        string `json:"type"`
-		} `json:"data"`
+		Data   []claudeModelPayload `json:"data"`
+		Models []claudeModelPayload `json:"models"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&modelsResp); err != nil {
 		return nil, &types.Error{
@@ -142,17 +148,28 @@ func (p *ClaudeProvider) ListModels(ctx context.Context) ([]llm.Model, error) {
 		}
 	}
 
-	models := make([]llm.Model, 0, len(modelsResp.Data))
-	for _, m := range modelsResp.Data {
+	source := modelsResp.Data
+	if len(source) == 0 && len(modelsResp.Models) > 0 {
+		source = modelsResp.Models
+	}
+
+	models := make([]llm.Model, 0, len(source))
+	for _, m := range source {
+		id := strings.TrimSpace(firstNonEmpty(m.ID, m.Model, strings.TrimPrefix(m.Name, "models/")))
+		if id == "" {
+			continue
+		}
 		var created int64
 		if t, err := time.Parse(time.RFC3339, m.CreatedAt); err == nil {
 			created = t.Unix()
+		} else if m.Created > 0 {
+			created = m.Created
 		}
 		models = append(models, llm.Model{
-			ID:      m.ID,
+			ID:      id,
 			Object:  "model",
 			Created: created,
-			OwnedBy: "anthropic",
+			OwnedBy: strings.TrimSpace(firstNonEmpty(m.OwnedBy, "anthropic")),
 		})
 	}
 
@@ -227,6 +244,30 @@ type claudeUsage struct {
 	CacheReadInputTokens     int `json:"cache_read_input_tokens,omitempty"`
 }
 
+func (u *claudeUsage) UnmarshalJSON(data []byte) error {
+	var aux struct {
+		InputTokens                   *int `json:"input_tokens"`
+		InputTokensCamel              *int `json:"inputTokens"`
+		OutputTokens                  *int `json:"output_tokens"`
+		OutputTokensCamel             *int `json:"outputTokens"`
+		PromptTokens                  *int `json:"prompt_tokens"`
+		CompletionTokens              *int `json:"completion_tokens"`
+		CacheCreationInputTokens      *int `json:"cache_creation_input_tokens"`
+		CacheCreationInputTokensCamel *int `json:"cacheCreationInputTokens"`
+		CacheReadInputTokens          *int `json:"cache_read_input_tokens"`
+		CacheReadInputTokensCamel     *int `json:"cacheReadInputTokens"`
+	}
+	if err := json.Unmarshal(data, &aux); err != nil {
+		return err
+	}
+
+	u.InputTokens = firstInt(aux.InputTokens, aux.InputTokensCamel, aux.PromptTokens)
+	u.OutputTokens = firstInt(aux.OutputTokens, aux.OutputTokensCamel, aux.CompletionTokens)
+	u.CacheCreationInputTokens = firstInt(aux.CacheCreationInputTokens, aux.CacheCreationInputTokensCamel)
+	u.CacheReadInputTokens = firstInt(aux.CacheReadInputTokens, aux.CacheReadInputTokensCamel)
+	return nil
+}
+
 type claudeResponse struct {
 	ID           string          `json:"id"`
 	Type         string          `json:"type"` // message, content_block_delta, etc.
@@ -236,6 +277,66 @@ type claudeResponse struct {
 	StopReason   string          `json:"stop_reason"`
 	StopSequence string          `json:"stop_sequence,omitempty"`
 	Usage        *claudeUsage    `json:"usage,omitempty"`
+}
+
+func (r *claudeResponse) UnmarshalJSON(data []byte) error {
+	var aux struct {
+		ID                string          `json:"id"`
+		Type              string          `json:"type"`
+		Role              string          `json:"role"`
+		Content           json.RawMessage `json:"content"`
+		Model             string          `json:"model"`
+		StopReason        string          `json:"stop_reason"`
+		StopReasonCamel   string          `json:"stopReason"`
+		FinishReason      string          `json:"finish_reason"`
+		StopSequence      string          `json:"stop_sequence"`
+		StopSequenceCamel string          `json:"stopSequence"`
+		Usage             *claudeUsage    `json:"usage"`
+	}
+	if err := json.Unmarshal(data, &aux); err != nil {
+		return err
+	}
+
+	r.ID = aux.ID
+	r.Type = aux.Type
+	r.Role = aux.Role
+	r.Model = aux.Model
+	r.StopReason = strings.TrimSpace(firstNonEmpty(aux.StopReason, aux.StopReasonCamel, aux.FinishReason))
+	r.StopSequence = strings.TrimSpace(firstNonEmpty(aux.StopSequence, aux.StopSequenceCamel))
+	r.Usage = aux.Usage
+
+	contentRaw := bytes.TrimSpace(aux.Content)
+	if len(contentRaw) == 0 || string(contentRaw) == "null" {
+		r.Content = nil
+		return nil
+	}
+
+	switch contentRaw[0] {
+	case '[':
+		var blocks []claudeContent
+		if err := json.Unmarshal(contentRaw, &blocks); err != nil {
+			return err
+		}
+		r.Content = blocks
+	case '"':
+		var text string
+		if err := json.Unmarshal(contentRaw, &text); err != nil {
+			return err
+		}
+		if strings.TrimSpace(text) != "" {
+			r.Content = []claudeContent{{Type: "text", Text: text}}
+		}
+	case '{':
+		var block claudeContent
+		if err := json.Unmarshal(contentRaw, &block); err != nil {
+			return err
+		}
+		r.Content = []claudeContent{block}
+	default:
+		r.Content = nil
+	}
+
+	return nil
 }
 
 // 流式响应的事件类型
@@ -992,4 +1093,22 @@ func detectImageMediaType(b64Data string) string {
 	default:
 		return "image/png"
 	}
+}
+
+func firstInt(values ...*int) int {
+	for _, v := range values {
+		if v != nil {
+			return *v
+		}
+	}
+	return 0
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, v := range values {
+		if strings.TrimSpace(v) != "" {
+			return v
+		}
+	}
+	return ""
 }
