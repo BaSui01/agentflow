@@ -623,8 +623,7 @@ func streamResponsesSSE(ctx context.Context, body io.ReadCloser, providerName st
 					case <-ctx.Done():
 						return
 					case ch <- llm.StreamChunk{Err: &types.Error{
-						Code: llm.ErrUpstreamError, Message: err.Error(),
-						HTTPStatus: http.StatusBadGateway, Retryable: true, Provider: providerName,
+						Code: llm.ErrUpstreamError, Message: err.Error(), Cause: err, HTTPStatus: http.StatusBadGateway, Retryable: true, Provider: providerName,
 					}}:
 					}
 				}

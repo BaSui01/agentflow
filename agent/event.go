@@ -142,6 +142,7 @@ func (b *SimpleEventBus) processEvents() {
 						if r := recover(); r != nil {
 							b.logger.Error("event handler panicked",
 								zap.Any("recover", r),
+								zap.Error(panicPayloadToError(r)),
 								zap.String("event_type", string(event.Type())),
 								zap.Stack("stack"),
 							)

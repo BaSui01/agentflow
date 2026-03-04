@@ -38,7 +38,7 @@ func (s *AgentStep) Execute(ctx context.Context, input core.StepInput) (core.Ste
 
 	result, err := s.Agent.Execute(ctx, input.Data)
 	if err != nil {
-		return core.StepOutput{}, core.NewStepError(s.id, core.StepTypeAgent, fmt.Errorf("%w: %v", core.ErrStepExecution, err))
+		return core.StepOutput{}, core.NewStepError(s.id, core.StepTypeAgent, fmt.Errorf("%w: %w", core.ErrStepExecution, err))
 	}
 
 	return core.StepOutput{
@@ -48,4 +48,3 @@ func (s *AgentStep) Execute(ctx context.Context, input core.StepInput) (core.Ste
 		Latency: time.Since(start),
 	}, nil
 }
-

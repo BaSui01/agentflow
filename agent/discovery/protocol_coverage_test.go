@@ -98,6 +98,8 @@ func TestDiscoveryProtocol_StartStop_LocalOnly(t *testing.T) {
 	assert.Error(t, err)
 
 	require.NoError(t, proto.Stop(ctx))
+	require.NoError(t, proto.Start(ctx))
+	require.NoError(t, proto.Stop(ctx))
 }
 
 func TestDiscoveryProtocol_StartStop_WithHTTP(t *testing.T) {
@@ -207,4 +209,3 @@ func TestDiscoveryProtocol_NotifyHandlers(t *testing.T) {
 		t.Fatal("handler not called")
 	}
 }
-

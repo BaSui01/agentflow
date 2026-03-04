@@ -143,6 +143,32 @@ type MCPError struct {
 	Code    int    `json:"code"`
 	Message string `json:"message"`
 	Data    any    `json:"data,omitempty"`
+	Cause   error  `json:"-"`
+}
+
+// Error implements the error interface.
+func (e *MCPError) Error() string {
+	if e == nil {
+		return "<nil>"
+	}
+	if strings.TrimSpace(e.Message) != "" {
+		return e.Message
+	}
+	if e.Cause != nil {
+		return e.Cause.Error()
+	}
+	if e.Code != 0 {
+		return fmt.Sprintf("mcp error code %d", e.Code)
+	}
+	return "mcp error"
+}
+
+// Unwrap exposes the underlying cause for errors.Is/errors.As.
+func (e *MCPError) Unwrap() error {
+	if e == nil {
+		return nil
+	}
+	return e.Cause
 }
 
 // 标准错误码
@@ -275,10 +301,24 @@ func NewMCPError(id any, code int, message string, data any) *MCPMessage {
 	return &MCPMessage{
 		JSONRPC: "2.0",
 		ID:      id,
-		Error: &MCPError{
-			Code:    code,
-			Message: message,
-			Data:    data,
-		},
+		Error:   NewMCPErrorValue(code, message, data, nil),
 	}
+}
+
+// NewMCPErrorValue creates a MCPError value with an optional cause.
+func NewMCPErrorValue(code int, message string, data any, cause error) *MCPError {
+	return &MCPError{
+		Code:    code,
+		Message: message,
+		Data:    data,
+		Cause:   cause,
+	}
+}
+
+// NewMCPInternalError creates a standard internal error with causal chain.
+func NewMCPInternalError(err error) *MCPError {
+	if err == nil {
+		return NewMCPErrorValue(ErrorCodeInternalError, "internal error", nil, nil)
+	}
+	return NewMCPErrorValue(ErrorCodeInternalError, err.Error(), nil, err)
 }

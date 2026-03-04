@@ -22,6 +22,13 @@ func setupTestDB(t *testing.T) *gorm.DB {
 	return db
 }
 
+func TestNewAPIKeyPool_EmptyStrategy(t *testing.T) {
+	db := setupTestDB(t)
+	pool, err := NewAPIKeyPool(db, 1, "", zap.NewNop())
+	require.Error(t, err)
+	require.Nil(t, pool)
+}
+
 func TestAPIKeyPool_SelectKey(t *testing.T) {
 	db := setupTestDB(t)
 	ctx := context.Background()
@@ -51,8 +58,9 @@ func TestAPIKeyPool_SelectKey(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			pool := NewAPIKeyPool(db, 1, tt.strategy, zap.NewNop())
-			err := pool.LoadKeys(ctx)
+			pool, err := NewAPIKeyPool(db, 1, tt.strategy, zap.NewNop())
+			require.NoError(t, err)
+			err = pool.LoadKeys(ctx)
 			require.NoError(t, err)
 
 			key, err := pool.SelectKey(ctx)
@@ -81,7 +89,8 @@ func TestAPIKeyPool_RoundRobin(t *testing.T) {
 		require.NoError(t, db.Create(key).Error)
 	}
 
-	pool := NewAPIKeyPool(db, 1, StrategyRoundRobin, zap.NewNop())
+	pool, err := NewAPIKeyPool(db, 1, StrategyRoundRobin, zap.NewNop())
+	require.NoError(t, err)
 	require.NoError(t, pool.LoadKeys(ctx))
 
 	// 轮询应该依次返回不同的 key
@@ -112,7 +121,8 @@ func TestAPIKeyPool_Priority(t *testing.T) {
 		require.NoError(t, db.Create(key).Error)
 	}
 
-	pool := NewAPIKeyPool(db, 1, StrategyPriority, zap.NewNop())
+	pool, err := NewAPIKeyPool(db, 1, StrategyPriority, zap.NewNop())
+	require.NoError(t, err)
 	require.NoError(t, pool.LoadKeys(ctx))
 
 	// 应该总是返回优先级最高的 key
@@ -141,11 +151,12 @@ func TestAPIKeyPool_RateLimiting(t *testing.T) {
 
 	require.NoError(t, db.Create(key).Error)
 
-	pool := NewAPIKeyPool(db, 1, StrategyPriority, zap.NewNop())
+	pool, err := NewAPIKeyPool(db, 1, StrategyPriority, zap.NewNop())
+	require.NoError(t, err)
 	require.NoError(t, pool.LoadKeys(ctx))
 
 	// 应该返回错误，因为所有 key 都被限流
-	_, err := pool.SelectKey(ctx)
+	_, err = pool.SelectKey(ctx)
 	assert.ErrorIs(t, err, ErrAllKeysRateLimited)
 }
 
@@ -163,11 +174,12 @@ func TestAPIKeyPool_RecordUsage(t *testing.T) {
 
 	require.NoError(t, db.Create(key).Error)
 
-	pool := NewAPIKeyPool(db, 1, StrategyPriority, zap.NewNop())
+	pool, err := NewAPIKeyPool(db, 1, StrategyPriority, zap.NewNop())
+	require.NoError(t, err)
 	require.NoError(t, pool.LoadKeys(ctx))
 
 	// 记录成功
-	err := pool.RecordSuccess(ctx, key.ID)
+	err = pool.RecordSuccess(ctx, key.ID)
 	assert.NoError(t, err)
 
 	// 记录失败

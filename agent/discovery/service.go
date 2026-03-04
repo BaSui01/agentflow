@@ -26,6 +26,7 @@ type DiscoveryService struct {
 	localMu    sync.RWMutex
 
 	// 状态
+	runMu     sync.Mutex
 	running   bool
 	done      chan struct{}
 	closeOnce sync.Once
@@ -103,9 +104,14 @@ func NewDiscoveryService(config *ServiceConfig, logger *zap.Logger) *DiscoverySe
 
 // 启动发现服务.
 func (s *DiscoveryService) Start(ctx context.Context) error {
+	s.runMu.Lock()
+	defer s.runMu.Unlock()
+
 	if s.running {
 		return fmt.Errorf("service already running")
 	}
+	s.done = make(chan struct{})
+	s.closeOnce = sync.Once{}
 
 	// 开始注册
 	if reg, ok := s.registry.(*CapabilityRegistry); ok {
@@ -116,6 +122,7 @@ func (s *DiscoveryService) Start(ctx context.Context) error {
 
 	// 开始协议
 	if err := s.protocol.Start(ctx); err != nil {
+		_ = s.registry.Close()
 		return fmt.Errorf("failed to start protocol: %w", err)
 	}
 
@@ -125,14 +132,17 @@ func (s *DiscoveryService) Start(ctx context.Context) error {
 		go s.heartbeatLoop()
 	}
 
-	s.running = true
 	s.logger.Info("discovery service started")
+	s.running = true
 
 	return nil
 }
 
 // 停止发现服务。
 func (s *DiscoveryService) Stop(ctx context.Context) error {
+	s.runMu.Lock()
+	defer s.runMu.Unlock()
+
 	if !s.running {
 		return nil
 	}
@@ -407,4 +417,3 @@ func SetGlobalDiscoveryService(service *DiscoveryService) {
 	defer globalServiceMu.Unlock()
 	globalService = service
 }
-

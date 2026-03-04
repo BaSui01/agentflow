@@ -1,6 +1,7 @@
 # 多模态功能实现总结
 
 > 完成时间：2026年2月20日
+> 说明：本文“实现完成”指接口/方法已覆盖实现；能力可用性以支持矩阵为准，不支持能力统一返回 `NotSupportedError`。
 
 ## ✅ 已完成的工作
 
@@ -41,25 +42,25 @@
 - ✅ `CreateEmbeddingOpenAICompat()` - Embedding
 - ✅ `NotSupportedError()` - 不支持错误
 
-### 4. Provider 实现
+### 4. Provider 接口覆盖实现（能力可用性见矩阵）
 
-为所有 13 个 Provider 实现了多模态方法：
+已为所有 13 个 Provider 完成多模态接口方法覆盖；单项能力是否可用见下方矩阵：
 
 | Provider | 文件路径 | 状态 |
 |----------|---------|------|
-| OpenAI | `llm/providers/openai/multimodal.go` | ✅ 完整实现 |
-| Gemini | `llm/providers/gemini/multimodal.go` | ✅ 完整实现 |
-| Qwen | `llm/providers/qwen/multimodal.go` | ✅ 完整实现 |
-| GLM | `llm/providers/glm/multimodal.go` | ✅ 完整实现 |
-| Doubao | `llm/providers/doubao/multimodal.go` | ✅ 完整实现 |
-| MiniMax | `llm/providers/minimax/multimodal.go` | ✅ 完整实现 |
-| Mistral | `llm/providers/mistral/multimodal.go` | ✅ 完整实现 |
-| DeepSeek | `llm/providers/deepseek/multimodal.go` | ✅ 完整实现 |
-| Grok | `llm/providers/grok/multimodal.go` | ✅ 完整实现 |
-| Kimi | `llm/providers/kimi/multimodal.go` | ✅ 完整实现 |
-| Llama | `llm/providers/llama/multimodal.go` | ✅ 完整实现 |
-| Hunyuan | `llm/providers/hunyuan/multimodal.go` | ✅ 完整实现 |
-| Claude | `llm/providers/anthropic/multimodal.go` | ✅ 完整实现 |
+| OpenAI | `llm/providers/openai/multimodal.go` | ✅ 接口覆盖完成（能力见矩阵） |
+| Gemini | `llm/providers/gemini/multimodal.go` | ✅ 接口覆盖完成（能力见矩阵） |
+| Qwen | `llm/providers/qwen/multimodal.go` | ✅ 接口覆盖完成（能力见矩阵） |
+| GLM | `llm/providers/glm/multimodal.go` | ✅ 接口覆盖完成（能力见矩阵） |
+| Doubao | `llm/providers/doubao/multimodal.go` | ✅ 接口覆盖完成（能力见矩阵） |
+| MiniMax | `llm/providers/minimax/multimodal.go` | ✅ 接口覆盖完成（能力见矩阵） |
+| Mistral | `llm/providers/mistral/multimodal.go` | ✅ 接口覆盖完成（能力见矩阵） |
+| DeepSeek | `llm/providers/deepseek/multimodal.go` | ✅ 接口覆盖完成（能力见矩阵） |
+| Grok | `llm/providers/grok/multimodal.go` | ✅ 接口覆盖完成（能力见矩阵） |
+| Kimi | `llm/providers/kimi/multimodal.go` | ✅ 接口覆盖完成（能力见矩阵） |
+| Llama | `llm/providers/llama/multimodal.go` | ✅ 接口覆盖完成（能力见矩阵） |
+| Hunyuan | `llm/providers/hunyuan/multimodal.go` | ✅ 接口覆盖完成（能力见矩阵） |
+| Claude | `llm/providers/anthropic/multimodal.go` | ✅ 接口覆盖完成（能力见矩阵） |
 
 ---
 
@@ -257,7 +258,7 @@ fmt.Printf("Fine-tuning job created: %s\n", job.ID)
 
 ## 🚀 下一步
 
-1. ✅ 为所有 Provider 实现多模态方法
+1. ✅ 为所有 Provider 完成多模态接口覆盖
 2. ⏳ 添加单元测试
 3. ⏳ 添加集成测试
 4. ⏳ 添加使用示例

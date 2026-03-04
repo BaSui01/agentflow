@@ -779,7 +779,7 @@ func (m *HotReloadManager) notifyCallbacksSafe(changeCallbacks []ChangeCallback,
 				zap.Any("panic", r),
 				zap.Stack("stack"),
 			)
-			retErr = fmt.Errorf("callback panicked: %v", r)
+			retErr = fmt.Errorf("callback panicked: %w", panicPayloadToError(r))
 		}
 	}()
 	for _, cb := range changeCallbacks {
@@ -791,6 +791,13 @@ func (m *HotReloadManager) notifyCallbacksSafe(changeCallbacks []ChangeCallback,
 		cb(oldConfig, newConfig)
 	}
 	return nil
+}
+
+func panicPayloadToError(v any) error {
+	if err, ok := v.(error); ok {
+		return err
+	}
+	return fmt.Errorf("panic: %v", v)
 }
 
 // detectChanges 检测新旧配置之间的变化
@@ -936,6 +943,7 @@ func (m *HotReloadManager) rollbackLocked(targetConfig *Config, reason string, o
 				if r := recover(); r != nil {
 					m.logger.Error("rollback callback panicked",
 						zap.Any("panic", r),
+						zap.Error(panicPayloadToError(r)),
 						zap.Stack("stack"),
 					)
 				}

@@ -40,11 +40,10 @@ func doOpenAICompatRequest[Req any, Resp any](
 	resp, err := client.Do(httpReq)
 	if err != nil {
 		return nil, &types.Error{
-			Code:       llm.ErrUpstreamError,
-			Message:    err.Error(),
-			HTTPStatus: http.StatusBadGateway,
-			Retryable:  true,
-			Provider:   providerName,
+			Code:    llm.ErrUpstreamError,
+			Message: err.Error(), Cause: err, HTTPStatus: http.StatusBadGateway,
+			Retryable: true,
+			Provider:  providerName,
 		}
 	}
 	defer resp.Body.Close()
@@ -57,11 +56,10 @@ func doOpenAICompatRequest[Req any, Resp any](
 	var result Resp
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		return nil, &types.Error{
-			Code:       llm.ErrUpstreamError,
-			Message:    err.Error(),
-			HTTPStatus: http.StatusBadGateway,
-			Retryable:  true,
-			Provider:   providerName,
+			Code:    llm.ErrUpstreamError,
+			Message: err.Error(), Cause: err, HTTPStatus: http.StatusBadGateway,
+			Retryable: true,
+			Provider:  providerName,
 		}
 	}
 
@@ -107,11 +105,10 @@ func GenerateAudioOpenAICompat(ctx context.Context, client *http.Client, baseURL
 	resp, err := client.Do(httpReq)
 	if err != nil {
 		return nil, &types.Error{
-			Code:       llm.ErrUpstreamError,
-			Message:    err.Error(),
-			HTTPStatus: http.StatusBadGateway,
-			Retryable:  true,
-			Provider:   providerName,
+			Code:    llm.ErrUpstreamError,
+			Message: err.Error(), Cause: err, HTTPStatus: http.StatusBadGateway,
+			Retryable: true,
+			Provider:  providerName,
 		}
 	}
 	defer resp.Body.Close()
@@ -125,11 +122,10 @@ func GenerateAudioOpenAICompat(ctx context.Context, client *http.Client, baseURL
 	var buf bytes.Buffer
 	if _, err := buf.ReadFrom(resp.Body); err != nil {
 		return nil, &types.Error{
-			Code:       llm.ErrUpstreamError,
-			Message:    err.Error(),
-			HTTPStatus: http.StatusBadGateway,
-			Retryable:  true,
-			Provider:   providerName,
+			Code:    llm.ErrUpstreamError,
+			Message: err.Error(), Cause: err, HTTPStatus: http.StatusBadGateway,
+			Retryable: true,
+			Provider:  providerName,
 		}
 	}
 

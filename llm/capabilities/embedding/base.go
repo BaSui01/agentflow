@@ -143,11 +143,10 @@ func (p *BaseProvider) DoRequest(ctx context.Context, method, endpoint string, b
 	resp, err := p.client.Do(req)
 	if err != nil {
 		return nil, &types.Error{
-			Code:       llm.ErrUpstreamError,
-			Message:    err.Error(),
-			HTTPStatus: http.StatusBadGateway,
-			Retryable:  true,
-			Provider:   p.name,
+			Code:    llm.ErrUpstreamError,
+			Message: err.Error(), Cause: err, HTTPStatus: http.StatusBadGateway,
+			Retryable: true,
+			Provider:  p.name,
 		}
 	}
 	defer resp.Body.Close()

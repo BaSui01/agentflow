@@ -126,9 +126,12 @@ func (b *BaseAgent) Execute(ctx context.Context, input *Input) (_ *Output, execE
 			if r := recover(); r != nil {
 				_ = b.persistence.UpdateRunStatus(ctx, runID, "failed", nil, fmt.Sprintf("panic: %v", r))
 				b.logger.Error("panic during execution, run marked as failed",
-					zap.Any("panic", r), zap.String("run_id", runID))
+					zap.Any("panic", r),
+					zap.Error(panicPayloadToError(r)),
+					zap.String("run_id", runID),
+				)
 				if execErr == nil {
-					execErr = fmt.Errorf("react execution panic: %v", r)
+					execErr = fmt.Errorf("react execution panic: %w", panicPayloadToError(r))
 				}
 			}
 			if execErr != nil {
@@ -404,6 +407,13 @@ func (b *BaseAgent) buildValidationFeedbackMessage(result *guardrails.Validation
 	}
 	sb.WriteString("\nPlease provide a corrected response.")
 	return sb.String()
+}
+
+func panicPayloadToError(v any) error {
+	if err, ok := v.(error); ok {
+		return err
+	}
+	return fmt.Errorf("panic: %v", v)
 }
 
 // Observe 处理反馈并更新 Agent 状态

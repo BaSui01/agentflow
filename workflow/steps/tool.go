@@ -21,7 +21,7 @@ func NewToolStep(id string, toolName string, registry core.ToolRegistry) *ToolSt
 	return &ToolStep{id: id, ToolName: toolName, Registry: registry}
 }
 
-func (s *ToolStep) ID() string        { return s.id }
+func (s *ToolStep) ID() string          { return s.id }
 func (s *ToolStep) Type() core.StepType { return core.StepTypeTool }
 
 func (s *ToolStep) Validate() error {
@@ -54,7 +54,7 @@ func (s *ToolStep) Execute(ctx context.Context, input core.StepInput) (core.Step
 
 	result, err := s.Registry.ExecuteTool(ctx, s.ToolName, params)
 	if err != nil {
-		return core.StepOutput{}, core.NewStepError(s.id, core.StepTypeTool, fmt.Errorf("%w: %v", core.ErrStepExecution, err))
+		return core.StepOutput{}, core.NewStepError(s.id, core.StepTypeTool, fmt.Errorf("%w: %w", core.ErrStepExecution, err))
 	}
 
 	return core.StepOutput{

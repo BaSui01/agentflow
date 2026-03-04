@@ -26,7 +26,7 @@ func main() {
 	provider := openai.NewOpenAIProvider(providers.OpenAIConfig{
 		BaseProviderConfig: providers.BaseProviderConfig{
 			APIKey:  apiKey,
-			BaseURL: "https://api.openai.com/v1",
+			BaseURL: "https://api.openai.com",
 			Model:   "gpt-3.5-turbo",
 		},
 	}, logger)

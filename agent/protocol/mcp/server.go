@@ -31,7 +31,7 @@ type DefaultMCPServer struct {
 	subscriptions map[string][]chan Resource
 	subsMu        sync.RWMutex
 
-	logger *zap.Logger
+	logger   *zap.Logger
 	logLevel zap.AtomicLevel
 }
 
@@ -440,7 +440,7 @@ func (s *DefaultMCPServer) handleInitialize(_ map[string]any) (any, *MCPError) {
 func (s *DefaultMCPServer) handleToolsList(ctx context.Context) (any, *MCPError) {
 	tools, err := s.ListTools(ctx)
 	if err != nil {
-		return nil, &MCPError{Code: ErrorCodeInternalError, Message: err.Error()}
+		return nil, NewMCPInternalError(err)
 	}
 	return map[string]any{"tools": tools}, nil
 }
@@ -456,7 +456,7 @@ func (s *DefaultMCPServer) handleToolsCall(ctx context.Context, params map[strin
 
 	result, err := s.CallTool(ctx, name, args)
 	if err != nil {
-		return nil, &MCPError{Code: ErrorCodeInternalError, Message: err.Error()}
+		return nil, NewMCPInternalError(err)
 	}
 	return result, nil
 }
@@ -464,7 +464,7 @@ func (s *DefaultMCPServer) handleToolsCall(ctx context.Context, params map[strin
 func (s *DefaultMCPServer) handleResourcesList(ctx context.Context) (any, *MCPError) {
 	resources, err := s.ListResources(ctx)
 	if err != nil {
-		return nil, &MCPError{Code: ErrorCodeInternalError, Message: err.Error()}
+		return nil, NewMCPInternalError(err)
 	}
 	return map[string]any{"resources": resources}, nil
 }
@@ -477,7 +477,7 @@ func (s *DefaultMCPServer) handleResourcesRead(ctx context.Context, params map[s
 
 	resource, err := s.GetResource(ctx, uri)
 	if err != nil {
-		return nil, &MCPError{Code: ErrorCodeInternalError, Message: err.Error()}
+		return nil, NewMCPInternalError(err)
 	}
 	return resource, nil
 }
@@ -485,7 +485,7 @@ func (s *DefaultMCPServer) handleResourcesRead(ctx context.Context, params map[s
 func (s *DefaultMCPServer) handlePromptsList(ctx context.Context) (any, *MCPError) {
 	prompts, err := s.ListPrompts(ctx)
 	if err != nil {
-		return nil, &MCPError{Code: ErrorCodeInternalError, Message: err.Error()}
+		return nil, NewMCPInternalError(err)
 	}
 	return map[string]any{"prompts": prompts}, nil
 }
@@ -508,7 +508,7 @@ func (s *DefaultMCPServer) handlePromptsGet(ctx context.Context, params map[stri
 
 	rendered, err := s.GetPrompt(ctx, name, vars)
 	if err != nil {
-		return nil, &MCPError{Code: ErrorCodeInternalError, Message: err.Error()}
+		return nil, NewMCPInternalError(err)
 	}
 	return rendered, nil
 }
@@ -582,4 +582,3 @@ func (s *DefaultMCPServer) Serve(ctx context.Context, transport Transport) error
 		}
 	}
 }
-

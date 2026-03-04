@@ -24,7 +24,7 @@ func NewLLMStep(id string, gateway core.GatewayLike) *LLMStep {
 	return &LLMStep{id: id, Gateway: gateway}
 }
 
-func (s *LLMStep) ID() string        { return s.id }
+func (s *LLMStep) ID() string          { return s.id }
 func (s *LLMStep) Type() core.StepType { return core.StepTypeLLM }
 
 func (s *LLMStep) Validate() error {
@@ -61,7 +61,7 @@ func (s *LLMStep) Execute(ctx context.Context, input core.StepInput) (core.StepO
 
 	resp, err := s.Gateway.Invoke(ctx, req)
 	if err != nil {
-		return core.StepOutput{}, core.NewStepError(s.id, core.StepTypeLLM, fmt.Errorf("%w: %v", core.ErrStepExecution, err))
+		return core.StepOutput{}, core.NewStepError(s.id, core.StepTypeLLM, fmt.Errorf("%w: %w", core.ErrStepExecution, err))
 	}
 
 	output := core.StepOutput{

@@ -145,7 +145,7 @@ func (s *QdrantStore) ensureCollection(ctx context.Context, vectorSize int) erro
 		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 			raw, err := io.ReadAll(resp.Body)
 			if err != nil {
-				s.ensureErr = fmt.Errorf("qdrant create collection failed: status=%d (failed to read body: %v)", resp.StatusCode, err)
+				s.ensureErr = fmt.Errorf("qdrant create collection failed: status=%d (failed to read body: %w)", resp.StatusCode, err)
 				return
 			}
 			s.ensureErr = fmt.Errorf("qdrant create collection failed: status=%d body=%s", resp.StatusCode, string(raw))
@@ -343,9 +343,9 @@ func (s *QdrantStore) Search(ctx context.Context, queryEmbedding []float64, topK
 
 		score := r.Score
 		out = append(out, VectorSearchResult{
-			Document:  doc,
-			Score:     score,
-			Distance:  1.0 - score,
+			Document: doc,
+			Score:    score,
+			Distance: 1.0 - score,
 		})
 	}
 
@@ -509,4 +509,3 @@ func (s *QdrantStore) ClearAll(ctx context.Context) error {
 	s.logger.Info("all points cleared from collection", zap.String("collection", s.cfg.Collection))
 	return nil
 }
-

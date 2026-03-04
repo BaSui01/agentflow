@@ -62,7 +62,7 @@ func (p *QwenProvider) GenerateVideo(ctx context.Context, req *llm.VideoGenerati
 
 	resp, err := p.Client.Do(httpReq)
 	if err != nil {
-		return nil, &types.Error{Code: llm.ErrUpstreamError, Message: err.Error(), HTTPStatus: http.StatusBadGateway, Retryable: true, Provider: p.Name()}
+		return nil, &types.Error{Code: llm.ErrUpstreamError, Message: err.Error(), Cause: err, HTTPStatus: http.StatusBadGateway, Retryable: true, Provider: p.Name()}
 	}
 	defer resp.Body.Close()
 
@@ -73,7 +73,7 @@ func (p *QwenProvider) GenerateVideo(ctx context.Context, req *llm.VideoGenerati
 
 	var submitResp qwenAsyncTaskResponse
 	if err := json.NewDecoder(resp.Body).Decode(&submitResp); err != nil {
-		return nil, &types.Error{Code: llm.ErrUpstreamError, Message: err.Error(), HTTPStatus: http.StatusBadGateway, Provider: p.Name()}
+		return nil, &types.Error{Code: llm.ErrUpstreamError, Message: err.Error(), Cause: err, HTTPStatus: http.StatusBadGateway, Provider: p.Name()}
 	}
 
 	taskID := submitResp.Output.TaskID
@@ -95,7 +95,7 @@ func (p *QwenProvider) GenerateVideo(ctx context.Context, req *llm.VideoGenerati
 		pollResp, err := p.Client.Do(pollReq)
 		if err != nil {
 			return providers.PollResult[llm.VideoGenerationResponse]{Done: true, Err: &types.Error{
-				Code: llm.ErrUpstreamError, Message: err.Error(), HTTPStatus: http.StatusBadGateway, Retryable: true, Provider: p.Name(),
+				Code: llm.ErrUpstreamError, Message: err.Error(), Cause: err, HTTPStatus: http.StatusBadGateway, Retryable: true, Provider: p.Name(),
 			}}
 		}
 		defer pollResp.Body.Close()
@@ -108,7 +108,7 @@ func (p *QwenProvider) GenerateVideo(ctx context.Context, req *llm.VideoGenerati
 		var taskResp qwenAsyncTaskResponse
 		if err := json.NewDecoder(pollResp.Body).Decode(&taskResp); err != nil {
 			return providers.PollResult[llm.VideoGenerationResponse]{Done: true, Err: &types.Error{
-				Code: llm.ErrUpstreamError, Message: err.Error(), HTTPStatus: http.StatusBadGateway, Provider: p.Name(),
+				Code: llm.ErrUpstreamError, Message: err.Error(), Cause: err, HTTPStatus: http.StatusBadGateway, Provider: p.Name(),
 			}}
 		}
 

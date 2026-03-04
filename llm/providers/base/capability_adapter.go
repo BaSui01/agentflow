@@ -142,11 +142,10 @@ func (p *BaseCapabilityProvider) DoRaw(ctx context.Context, method, endpoint str
 	resp, err := p.Client.Do(req)
 	if err != nil {
 		return nil, &types.Error{
-			Code:       llm.ErrUpstreamError,
-			Message:    err.Error(),
-			HTTPStatus: http.StatusBadGateway,
-			Retryable:  true,
-			Provider:   p.ProviderName,
+			Code:    llm.ErrUpstreamError,
+			Message: err.Error(), Cause: err, HTTPStatus: http.StatusBadGateway,
+			Retryable: true,
+			Provider:  p.ProviderName,
 		}
 	}
 	defer resp.Body.Close()

@@ -13,20 +13,20 @@ func RegisterSystem(mux *http.ServeMux, healthHandler *handlers.HealthHandler, v
 	if healthHandler == nil {
 		return
 	}
-	mux.HandleFunc("/health", healthHandler.HandleHealth)
-	mux.HandleFunc("/healthz", healthHandler.HandleHealthz)
-	mux.HandleFunc("/ready", healthHandler.HandleReady)
-	mux.HandleFunc("/readyz", healthHandler.HandleReady)
-	mux.HandleFunc("/version", healthHandler.HandleVersion(version, buildTime, gitCommit))
+	mux.HandleFunc("GET /health", healthHandler.HandleHealth)
+	mux.HandleFunc("GET /healthz", healthHandler.HandleHealthz)
+	mux.HandleFunc("GET /ready", healthHandler.HandleReady)
+	mux.HandleFunc("GET /readyz", healthHandler.HandleReady)
+	mux.HandleFunc("GET /version", healthHandler.HandleVersion(version, buildTime, gitCommit))
 }
 
 func RegisterChat(mux *http.ServeMux, chatHandler *handlers.ChatHandler, logger *zap.Logger) {
 	if chatHandler == nil {
 		return
 	}
-	mux.HandleFunc("/api/v1/chat/capabilities", chatHandler.HandleCapabilities)
-	mux.HandleFunc("/api/v1/chat/completions", chatHandler.HandleCompletion)
-	mux.HandleFunc("/api/v1/chat/completions/stream", chatHandler.HandleStream)
+	mux.HandleFunc("GET /api/v1/chat/capabilities", chatHandler.HandleCapabilities)
+	mux.HandleFunc("POST /api/v1/chat/completions", chatHandler.HandleCompletion)
+	mux.HandleFunc("POST /api/v1/chat/completions/stream", chatHandler.HandleStream)
 	logger.Info("Chat API routes registered")
 }
 
@@ -34,13 +34,13 @@ func RegisterAgent(mux *http.ServeMux, agentHandler *handlers.AgentHandler, logg
 	if agentHandler == nil {
 		return
 	}
-	mux.HandleFunc("/api/v1/agents", agentHandler.HandleListAgents)
-	mux.HandleFunc("/api/v1/agents/{id}", agentHandler.HandleGetAgent)
-	mux.HandleFunc("/api/v1/agents/capabilities", agentHandler.HandleCapabilities)
-	mux.HandleFunc("/api/v1/agents/execute", agentHandler.HandleExecuteAgent)
-	mux.HandleFunc("/api/v1/agents/execute/stream", agentHandler.HandleAgentStream)
-	mux.HandleFunc("/api/v1/agents/plan", agentHandler.HandlePlanAgent)
-	mux.HandleFunc("/api/v1/agents/health", agentHandler.HandleAgentHealth)
+	mux.HandleFunc("GET /api/v1/agents", agentHandler.HandleListAgents)
+	mux.HandleFunc("GET /api/v1/agents/{id}", agentHandler.HandleGetAgent)
+	mux.HandleFunc("GET /api/v1/agents/capabilities", agentHandler.HandleCapabilities)
+	mux.HandleFunc("POST /api/v1/agents/execute", agentHandler.HandleExecuteAgent)
+	mux.HandleFunc("POST /api/v1/agents/execute/stream", agentHandler.HandleAgentStream)
+	mux.HandleFunc("POST /api/v1/agents/plan", agentHandler.HandlePlanAgent)
+	mux.HandleFunc("GET /api/v1/agents/health", agentHandler.HandleAgentHealth)
 	logger.Info("Agent API routes registered")
 }
 
@@ -74,12 +74,12 @@ func RegisterMultimodal(mux *http.ServeMux, multimodalHandler *handlers.Multimod
 	if multimodalHandler == nil {
 		return
 	}
-	mux.HandleFunc("/api/v1/multimodal/capabilities", multimodalHandler.HandleCapabilities)
-	mux.HandleFunc("/api/v1/multimodal/references", multimodalHandler.HandleUploadReference)
-	mux.HandleFunc("/api/v1/multimodal/image", multimodalHandler.HandleImage)
-	mux.HandleFunc("/api/v1/multimodal/video", multimodalHandler.HandleVideo)
-	mux.HandleFunc("/api/v1/multimodal/plan", multimodalHandler.HandlePlan)
-	mux.HandleFunc("/api/v1/multimodal/chat", multimodalHandler.HandleChat)
+	mux.HandleFunc("GET /api/v1/multimodal/capabilities", multimodalHandler.HandleCapabilities)
+	mux.HandleFunc("POST /api/v1/multimodal/references", multimodalHandler.HandleUploadReference)
+	mux.HandleFunc("POST /api/v1/multimodal/image", multimodalHandler.HandleImage)
+	mux.HandleFunc("POST /api/v1/multimodal/video", multimodalHandler.HandleVideo)
+	mux.HandleFunc("POST /api/v1/multimodal/plan", multimodalHandler.HandlePlan)
+	mux.HandleFunc("POST /api/v1/multimodal/chat", multimodalHandler.HandleChat)
 	logger.Info("Multimodal framework routes registered")
 }
 
@@ -87,12 +87,12 @@ func RegisterProtocol(mux *http.ServeMux, protocolHandler *handlers.ProtocolHand
 	if protocolHandler == nil {
 		return
 	}
-	mux.HandleFunc("/api/v1/mcp/resources", protocolHandler.HandleMCPListResources)
-	mux.HandleFunc("/api/v1/mcp/resources/", protocolHandler.HandleMCPGetResource)
-	mux.HandleFunc("/api/v1/mcp/tools", protocolHandler.HandleMCPListTools)
-	mux.HandleFunc("/api/v1/mcp/tools/", protocolHandler.HandleMCPCallTool)
-	mux.HandleFunc("/api/v1/a2a/.well-known/agent.json", protocolHandler.HandleA2AAgentCard)
-	mux.HandleFunc("/api/v1/a2a/tasks", protocolHandler.HandleA2ASendTask)
+	mux.HandleFunc("GET /api/v1/mcp/resources", protocolHandler.HandleMCPListResources)
+	mux.HandleFunc("GET /api/v1/mcp/resources/", protocolHandler.HandleMCPGetResource)
+	mux.HandleFunc("GET /api/v1/mcp/tools", protocolHandler.HandleMCPListTools)
+	mux.HandleFunc("POST /api/v1/mcp/tools/", protocolHandler.HandleMCPCallTool)
+	mux.HandleFunc("GET /api/v1/a2a/.well-known/agent.json", protocolHandler.HandleA2AAgentCard)
+	mux.HandleFunc("POST /api/v1/a2a/tasks", protocolHandler.HandleA2ASendTask)
 	logger.Info("Protocol API routes registered (MCP + A2A)")
 }
 
@@ -100,9 +100,9 @@ func RegisterRAG(mux *http.ServeMux, ragHandler *handlers.RAGHandler, logger *za
 	if ragHandler == nil {
 		return
 	}
-	mux.HandleFunc("/api/v1/rag/capabilities", ragHandler.HandleCapabilities)
-	mux.HandleFunc("/api/v1/rag/query", ragHandler.HandleQuery)
-	mux.HandleFunc("/api/v1/rag/index", ragHandler.HandleIndex)
+	mux.HandleFunc("GET /api/v1/rag/capabilities", ragHandler.HandleCapabilities)
+	mux.HandleFunc("POST /api/v1/rag/query", ragHandler.HandleQuery)
+	mux.HandleFunc("POST /api/v1/rag/index", ragHandler.HandleIndex)
 	logger.Info("RAG API routes registered")
 }
 
@@ -110,10 +110,10 @@ func RegisterWorkflow(mux *http.ServeMux, workflowHandler *handlers.WorkflowHand
 	if workflowHandler == nil {
 		return
 	}
-	mux.HandleFunc("/api/v1/workflows/capabilities", workflowHandler.HandleCapabilities)
-	mux.HandleFunc("/api/v1/workflows/execute", workflowHandler.HandleExecute)
-	mux.HandleFunc("/api/v1/workflows/parse", workflowHandler.HandleParse)
-	mux.HandleFunc("/api/v1/workflows", workflowHandler.HandleList)
+	mux.HandleFunc("GET /api/v1/workflows/capabilities", workflowHandler.HandleCapabilities)
+	mux.HandleFunc("POST /api/v1/workflows/execute", workflowHandler.HandleExecute)
+	mux.HandleFunc("POST /api/v1/workflows/parse", workflowHandler.HandleParse)
+	mux.HandleFunc("GET /api/v1/workflows", workflowHandler.HandleList)
 	logger.Info("Workflow API routes registered")
 }
 
@@ -132,10 +132,16 @@ func RegisterConfig(mux *http.ServeMux, cfgHandler *config.ConfigAPIHandler, fir
 			)
 		})
 	}
-	mux.HandleFunc("/api/v1/config", withLogging(cfgHandler.HandleConfig))
-	mux.HandleFunc("/api/v1/config/reload", withLogging(cfgHandler.HandleReload))
-	mux.HandleFunc("/api/v1/config/rollback", withLogging(cfgHandler.HandleRollback))
-	mux.HandleFunc("/api/v1/config/fields", withLogging(cfgHandler.HandleFields))
-	mux.HandleFunc("/api/v1/config/changes", withLogging(cfgHandler.HandleChanges))
+	mux.HandleFunc("GET /api/v1/config", withLogging(cfgHandler.HandleConfig))
+	mux.HandleFunc("PUT /api/v1/config", withLogging(cfgHandler.HandleConfig))
+	mux.HandleFunc("OPTIONS /api/v1/config", withLogging(cfgHandler.HandleConfig))
+	mux.HandleFunc("POST /api/v1/config/reload", withLogging(cfgHandler.HandleReload))
+	mux.HandleFunc("OPTIONS /api/v1/config/reload", withLogging(cfgHandler.HandleReload))
+	mux.HandleFunc("POST /api/v1/config/rollback", withLogging(cfgHandler.HandleRollback))
+	mux.HandleFunc("OPTIONS /api/v1/config/rollback", withLogging(cfgHandler.HandleRollback))
+	mux.HandleFunc("GET /api/v1/config/fields", withLogging(cfgHandler.HandleFields))
+	mux.HandleFunc("OPTIONS /api/v1/config/fields", withLogging(cfgHandler.HandleFields))
+	mux.HandleFunc("GET /api/v1/config/changes", withLogging(cfgHandler.HandleChanges))
+	mux.HandleFunc("OPTIONS /api/v1/config/changes", withLogging(cfgHandler.HandleChanges))
 	logger.Info("Configuration API registered with authentication")
 }

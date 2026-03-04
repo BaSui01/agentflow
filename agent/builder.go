@@ -311,7 +311,7 @@ func (b *AgentBuilder) ReasoningRegistry() *reasoning.PatternRegistry {
 func (b *AgentBuilder) Build() (*BaseAgent, error) {
 	// 检查构建过程中的错误
 	if len(b.errors) > 0 {
-		return nil, fmt.Errorf("builder has %d errors: %v", len(b.errors), b.errors[0])
+		return nil, fmt.Errorf("builder has %d errors: %w", len(b.errors), b.errors[0])
 	}
 
 	// 验证必需字段
@@ -456,7 +456,7 @@ func (b *AgentBuilder) enableEnhancedMemory(agent *BaseAgent) {
 // Validate 验证配置是否有效
 func (b *AgentBuilder) Validate() error {
 	if len(b.errors) > 0 {
-		return fmt.Errorf("builder has %d errors: %v", len(b.errors), b.errors[0])
+		return fmt.Errorf("builder has %d errors: %w", len(b.errors), b.errors[0])
 	}
 
 	if b.config.Core.ID == "" {

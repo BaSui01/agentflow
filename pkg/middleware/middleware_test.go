@@ -373,6 +373,13 @@ func TestRateLimiter_BlocksExcessRequests(t *testing.T) {
 	rec2 := httptest.NewRecorder()
 	handler.ServeHTTP(rec2, req)
 	assert.Equal(t, http.StatusTooManyRequests, rec2.Code)
+
+	var resp map[string]any
+	err := json.Unmarshal(rec2.Body.Bytes(), &resp)
+	require.NoError(t, err)
+	errObj, ok := resp["error"].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, string(types.ErrRateLimit), errObj["code"])
 }
 
 func TestRateLimiter_UsesForwardedIPWhenProxyTrusted(t *testing.T) {
@@ -438,6 +445,13 @@ func TestTenantRateLimiter_WithTenantID(t *testing.T) {
 	rec2 := httptest.NewRecorder()
 	handler.ServeHTTP(rec2, req)
 	assert.Equal(t, http.StatusTooManyRequests, rec2.Code)
+
+	var resp map[string]any
+	err := json.Unmarshal(rec2.Body.Bytes(), &resp)
+	require.NoError(t, err)
+	errObj, ok := resp["error"].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, string(types.ErrRateLimit), errObj["code"])
 }
 
 func TestTenantRateLimiter_FallbackToIP(t *testing.T) {
@@ -451,6 +465,44 @@ func TestTenantRateLimiter_FallbackToIP(t *testing.T) {
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 	assert.Equal(t, http.StatusOK, rec.Code)
+}
+
+func TestRateLimiter_ContextCanceled(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	handler := RateLimiter(ctx, 100, 10, zap.NewNop())(okHandler())
+	req := httptest.NewRequest("GET", "/test", nil)
+	req.RemoteAddr = "127.0.0.1:1234"
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusServiceUnavailable, rec.Code)
+	var resp map[string]any
+	err := json.Unmarshal(rec.Body.Bytes(), &resp)
+	require.NoError(t, err)
+	errObj, ok := resp["error"].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, string(types.ErrServiceUnavailable), errObj["code"])
+}
+
+func TestTenantRateLimiter_ContextCanceled(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	handler := TenantRateLimiter(ctx, 100, 10, zap.NewNop())(okHandler())
+	req := httptest.NewRequest("GET", "/test", nil)
+	req.RemoteAddr = "127.0.0.1:1234"
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusServiceUnavailable, rec.Code)
+	var resp map[string]any
+	err := json.Unmarshal(rec.Body.Bytes(), &resp)
+	require.NoError(t, err)
+	errObj, ok := resp["error"].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, string(types.ErrServiceUnavailable), errObj["code"])
 }
 
 // --- JWTAuth ---
@@ -508,6 +560,26 @@ func TestJWTAuth_InvalidToken(t *testing.T) {
 	req.Header.Set("Authorization", "Bearer invalid.token.here")
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
+	assert.Equal(t, http.StatusUnauthorized, rec.Code)
+}
+
+func TestJWTAuth_MissingExpClaim(t *testing.T) {
+	secret := "this-is-a-very-long-secret-key-for-testing-purposes"
+	cfg := config.JWTConfig{Secret: secret}
+
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+		"tenant_id": "t-123",
+		"user_id":   "u-456",
+	})
+	tokenStr, err := token.SignedString([]byte(secret))
+	require.NoError(t, err)
+
+	handler := JWTAuth(cfg, nil, zap.NewNop())(okHandler())
+	req := httptest.NewRequest("GET", "/api/test", nil)
+	req.Header.Set("Authorization", "Bearer "+tokenStr)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
 	assert.Equal(t, http.StatusUnauthorized, rec.Code)
 }
 

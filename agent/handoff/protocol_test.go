@@ -15,14 +15,14 @@ import (
 
 // mockHandoffAgent implements HandoffAgent with function callbacks.
 type mockHandoffAgent struct {
-	id             string
-	capabilities   []AgentCapability
-	canHandleFn    func(task Task) bool
-	acceptFn       func(ctx context.Context, handoff *Handoff) error
-	executeFn      func(ctx context.Context, handoff *Handoff) (*HandoffResult, error)
+	id           string
+	capabilities []AgentCapability
+	canHandleFn  func(task Task) bool
+	acceptFn     func(ctx context.Context, handoff *Handoff) error
+	executeFn    func(ctx context.Context, handoff *Handoff) (*HandoffResult, error)
 }
 
-func (m *mockHandoffAgent) ID() string                    { return m.id }
+func (m *mockHandoffAgent) ID() string                      { return m.id }
 func (m *mockHandoffAgent) Capabilities() []AgentCapability { return m.capabilities }
 
 func (m *mockHandoffAgent) CanHandle(task Task) bool {
@@ -425,3 +425,88 @@ func TestHandoffManager_ExecutionError(t *testing.T) {
 	assert.Equal(t, "execution failed", handoff.Result.Error)
 }
 
+func TestHandoffManager_PendingCleanup_OnRejectTimeoutCancelAndSuccess(t *testing.T) {
+	mgr := NewHandoffManager(zap.NewNop())
+
+	// Reject path
+	rejectAgent := &mockHandoffAgent{
+		id: "reject-agent",
+		acceptFn: func(_ context.Context, _ *Handoff) error {
+			return errors.New("reject")
+		},
+	}
+	mgr.RegisterAgent(rejectAgent)
+	_, _ = mgr.Handoff(context.Background(), HandoffOptions{
+		FromAgentID: "source",
+		ToAgentID:   "reject-agent",
+		Task:        Task{Type: "code"},
+		Wait:        true,
+		Timeout:     100 * time.Millisecond,
+	})
+	assert.Equal(t, 0, pendingCount(mgr))
+
+	// Timeout path
+	timeoutAgent := &mockHandoffAgent{
+		id: "timeout-agent",
+		executeFn: func(_ context.Context, _ *Handoff) (*HandoffResult, error) {
+			time.Sleep(200 * time.Millisecond)
+			return &HandoffResult{Output: "late"}, nil
+		},
+	}
+	mgr.RegisterAgent(timeoutAgent)
+	_, _ = mgr.Handoff(context.Background(), HandoffOptions{
+		FromAgentID: "source",
+		ToAgentID:   "timeout-agent",
+		Task:        Task{Type: "code"},
+		Wait:        true,
+		Timeout:     10 * time.Millisecond,
+	})
+	assert.Equal(t, 0, pendingCount(mgr))
+
+	// Cancel path
+	cancelAgent := &mockHandoffAgent{
+		id: "cancel-agent",
+		executeFn: func(ctx context.Context, _ *Handoff) (*HandoffResult, error) {
+			<-ctx.Done()
+			return nil, ctx.Err()
+		},
+	}
+	mgr.RegisterAgent(cancelAgent)
+	cancelCtx, cancel := context.WithCancel(context.Background())
+	go func() {
+		time.Sleep(10 * time.Millisecond)
+		cancel()
+	}()
+	_, _ = mgr.Handoff(cancelCtx, HandoffOptions{
+		FromAgentID: "source",
+		ToAgentID:   "cancel-agent",
+		Task:        Task{Type: "code"},
+		Wait:        true,
+		Timeout:     2 * time.Second,
+	})
+	assert.Equal(t, 0, pendingCount(mgr))
+
+	// Success path
+	successAgent := &mockHandoffAgent{
+		id: "success-agent",
+		executeFn: func(_ context.Context, _ *Handoff) (*HandoffResult, error) {
+			return &HandoffResult{Output: "ok"}, nil
+		},
+	}
+	mgr.RegisterAgent(successAgent)
+	_, err := mgr.Handoff(context.Background(), HandoffOptions{
+		FromAgentID: "source",
+		ToAgentID:   "success-agent",
+		Task:        Task{Type: "code"},
+		Wait:        true,
+		Timeout:     time.Second,
+	})
+	require.NoError(t, err)
+	assert.Equal(t, 0, pendingCount(mgr))
+}
+
+func pendingCount(mgr *HandoffManager) int {
+	mgr.mu.RLock()
+	defer mgr.mu.RUnlock()
+	return len(mgr.pending)
+}

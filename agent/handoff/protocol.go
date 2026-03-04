@@ -196,6 +196,7 @@ func (m *HandoffManager) Handoff(ctx context.Context, opts HandoffOptions) (*Han
 	// 接受移交
 	if err := targetAgent.AcceptHandoff(ctx, handoff); err != nil {
 		handoff.Status = StatusRejected
+		m.finalizePending(handoff.ID, nil)
 		return handoff, fmt.Errorf("handoff rejected: %w", err)
 	}
 
@@ -220,8 +221,13 @@ func (m *HandoffManager) Handoff(ctx context.Context, opts HandoffOptions) (*Han
 		handoff.mu.Lock()
 		handoff.Status = StatusFailed
 		handoff.mu.Unlock()
+		m.cleanupPending(handoff.ID, resultCh)
 		return handoff, fmt.Errorf("handoff timeout")
 	case <-ctx.Done():
+		handoff.mu.Lock()
+		handoff.Status = StatusFailed
+		handoff.mu.Unlock()
+		m.cleanupPending(handoff.ID, resultCh)
 		return handoff, ctx.Err()
 	}
 }
@@ -257,10 +263,8 @@ func (m *HandoffManager) executeHandoff(ctx context.Context, agent HandoffAgent,
 		zap.Int64("duration_ms", result.Duration),
 	)
 
-	select {
-	case resultCh <- result:
-	default:
-	}
+	m.sendResult(resultCh, result)
+	m.cleanupPending(handoff.ID, resultCh)
 }
 
 // 找汉多夫拿回身份证
@@ -289,3 +293,41 @@ func generateHandoffID() string {
 	return fmt.Sprintf("hoff_%d", time.Now().UnixNano())
 }
 
+func (m *HandoffManager) finalizePending(handoffID string, result *HandoffResult) {
+	m.mu.Lock()
+	resultCh, exists := m.pending[handoffID]
+	if exists {
+		delete(m.pending, handoffID)
+	}
+	m.mu.Unlock()
+
+	if !exists {
+		return
+	}
+	if result != nil {
+		m.sendResult(resultCh, result)
+	}
+	close(resultCh)
+}
+
+func (m *HandoffManager) cleanupPending(handoffID string, expected chan *HandoffResult) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	resultCh, exists := m.pending[handoffID]
+	if !exists || resultCh != expected {
+		return
+	}
+	delete(m.pending, handoffID)
+	close(resultCh)
+}
+
+func (m *HandoffManager) sendResult(resultCh chan *HandoffResult, result *HandoffResult) {
+	defer func() {
+		_ = recover() // result channel may already be closed on timeout/cancel path
+	}()
+	select {
+	case resultCh <- result:
+	default:
+	}
+}

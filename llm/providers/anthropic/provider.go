@@ -112,11 +112,10 @@ func (p *ClaudeProvider) ListModels(ctx context.Context) ([]llm.Model, error) {
 	resp, err := p.client.Do(httpReq)
 	if err != nil {
 		return nil, &types.Error{
-			Code:       llm.ErrUpstreamError,
-			Message:    err.Error(),
-			HTTPStatus: http.StatusBadGateway,
-			Retryable:  true,
-			Provider:   p.Name(),
+			Code:    llm.ErrUpstreamError,
+			Message: err.Error(), Cause: err, HTTPStatus: http.StatusBadGateway,
+			Retryable: true,
+			Provider:  p.Name(),
 		}
 	}
 	defer resp.Body.Close()
@@ -136,11 +135,10 @@ func (p *ClaudeProvider) ListModels(ctx context.Context) ([]llm.Model, error) {
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&modelsResp); err != nil {
 		return nil, &types.Error{
-			Code:       llm.ErrUpstreamError,
-			Message:    err.Error(),
-			HTTPStatus: http.StatusBadGateway,
-			Retryable:  true,
-			Provider:   p.Name(),
+			Code:    llm.ErrUpstreamError,
+			Message: err.Error(), Cause: err, HTTPStatus: http.StatusBadGateway,
+			Retryable: true,
+			Provider:  p.Name(),
 		}
 	}
 
@@ -500,11 +498,10 @@ func (p *ClaudeProvider) Completion(ctx context.Context, req *llm.ChatRequest) (
 	resp, err := p.client.Do(httpReq)
 	if err != nil {
 		return nil, &types.Error{
-			Code:       llm.ErrUpstreamError,
-			Message:    err.Error(),
-			HTTPStatus: http.StatusBadGateway,
-			Retryable:  true,
-			Provider:   p.Name(),
+			Code:    llm.ErrUpstreamError,
+			Message: err.Error(), Cause: err, HTTPStatus: http.StatusBadGateway,
+			Retryable: true,
+			Provider:  p.Name(),
 		}
 	}
 	defer resp.Body.Close()
@@ -517,11 +514,10 @@ func (p *ClaudeProvider) Completion(ctx context.Context, req *llm.ChatRequest) (
 	var claudeResp claudeResponse
 	if err := json.NewDecoder(resp.Body).Decode(&claudeResp); err != nil {
 		return nil, &types.Error{
-			Code:       llm.ErrUpstreamError,
-			Message:    err.Error(),
-			HTTPStatus: http.StatusBadGateway,
-			Retryable:  true,
-			Provider:   p.Name(),
+			Code:    llm.ErrUpstreamError,
+			Message: err.Error(), Cause: err, HTTPStatus: http.StatusBadGateway,
+			Retryable: true,
+			Provider:  p.Name(),
 		}
 	}
 
@@ -590,12 +586,10 @@ func (p *ClaudeProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-ch
 	resp, err := p.client.Do(httpReq)
 	if err != nil {
 		return nil, &types.Error{
-			Code:       llm.ErrUpstreamError,
-			Message:    err.Error(),
-			HTTPStatus: http.StatusBadGateway,
-			Retryable:  true,
-			Provider:   p.Name(),
-			Cause:      err,
+			Code:    llm.ErrUpstreamError,
+			Message: err.Error(), Cause: err, HTTPStatus: http.StatusBadGateway,
+			Retryable: true,
+			Provider:  p.Name(),
 		}
 	}
 	if resp.StatusCode >= 400 {
@@ -625,11 +619,10 @@ func (p *ClaudeProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-ch
 						return
 					case ch <- llm.StreamChunk{
 						Err: &types.Error{
-							Code:       llm.ErrUpstreamError,
-							Message:    err.Error(),
-							HTTPStatus: http.StatusBadGateway,
-							Retryable:  true,
-							Provider:   p.Name(),
+							Code:    llm.ErrUpstreamError,
+							Message: err.Error(), Cause: err, HTTPStatus: http.StatusBadGateway,
+							Retryable: true,
+							Provider:  p.Name(),
 						},
 					}:
 					}
@@ -660,11 +653,10 @@ func (p *ClaudeProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-ch
 					return
 				case ch <- llm.StreamChunk{
 					Err: &types.Error{
-						Code:       llm.ErrUpstreamError,
-						Message:    err.Error(),
-						HTTPStatus: http.StatusBadGateway,
-						Retryable:  true,
-						Provider:   p.Name(),
+						Code:    llm.ErrUpstreamError,
+						Message: err.Error(), Cause: err, HTTPStatus: http.StatusBadGateway,
+						Retryable: true,
+						Provider:  p.Name(),
 					},
 				}:
 				}

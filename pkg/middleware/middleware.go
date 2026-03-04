@@ -60,13 +60,25 @@ func Recovery(logger *zap.Logger) Middleware {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			defer func() {
 				if err := recover(); err != nil {
-					logger.Error("panic recovered", zap.Any("error", err), zap.String("path", r.URL.Path))
-					writeMiddlewareError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "internal server error")
+					logger.Error("panic recovered",
+						zap.Any("error", err),
+						zap.Error(recoveredPanicToError(err)),
+						zap.String("path", r.URL.Path),
+						zap.Stack("stack"),
+					)
+					writeMiddlewareError(w, http.StatusInternalServerError, string(types.ErrInternalError), "internal server error")
 				}
 			}()
 			next.ServeHTTP(w, r)
 		})
 	}
+}
+
+func recoveredPanicToError(v any) error {
+	if err, ok := v.(error); ok {
+		return err
+	}
+	return fmt.Errorf("panic: %v", v)
 }
 
 // RequestLogger 请求日志中间件
@@ -366,7 +378,7 @@ func APIKeyAuth(validKeys []string, skipPaths []string, logger *zap.Logger) Midd
 			}
 			key := r.Header.Get("X-API-Key")
 			if _, ok := keySet[key]; !ok {
-				writeMiddlewareError(w, http.StatusUnauthorized, "AUTHENTICATION", "invalid or missing API key")
+				writeMiddlewareError(w, http.StatusUnauthorized, string(types.ErrAuthentication), "invalid or missing API key")
 				return
 			}
 			next.ServeHTTP(w, r)
@@ -376,8 +388,9 @@ func APIKeyAuth(validKeys []string, skipPaths []string, logger *zap.Logger) Midd
 
 // RateLimiter 基于 IP 的请求限流中间件
 func RateLimiter(ctx context.Context, rps float64, burst int, logger *zap.Logger) Middleware {
-	_ = ctx
-	_ = logger
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	type visitor struct {
 		limiter  *rate.Limiter
 		lastSeen time.Time
@@ -389,6 +402,16 @@ func RateLimiter(ctx context.Context, rps float64, burst int, logger *zap.Logger
 	)
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			select {
+			case <-ctx.Done():
+				if logger != nil {
+					logger.Warn("rate limiter context canceled", zap.Error(ctx.Err()))
+				}
+				writeMiddlewareError(w, http.StatusServiceUnavailable, string(types.ErrServiceUnavailable), "service shutting down")
+				return
+			default:
+			}
+
 			now := time.Now()
 			ip := clientIPFromRequest(r)
 			mu.Lock()
@@ -408,7 +431,7 @@ func RateLimiter(ctx context.Context, rps float64, burst int, logger *zap.Logger
 			v.lastSeen = now
 			mu.Unlock()
 			if !v.limiter.Allow() {
-				writeMiddlewareError(w, http.StatusTooManyRequests, "RATE_LIMITED", "too many requests")
+				writeMiddlewareError(w, http.StatusTooManyRequests, string(types.ErrRateLimit), "too many requests")
 				return
 			}
 			next.ServeHTTP(w, r)
@@ -519,7 +542,10 @@ func JWTAuth(cfg config.JWTConfig, skipPaths []string, logger *zap.Logger) Middl
 
 	hmacSecret := []byte(cfg.Secret)
 
-	parserOpts := []jwt.ParserOption{jwt.WithValidMethods([]string{"HS256", "RS256"})}
+	parserOpts := []jwt.ParserOption{
+		jwt.WithValidMethods([]string{"HS256", "RS256"}),
+		jwt.WithExpirationRequired(),
+	}
 	if cfg.Issuer != "" {
 		parserOpts = append(parserOpts, jwt.WithIssuer(cfg.Issuer))
 	}
@@ -553,7 +579,7 @@ func JWTAuth(cfg config.JWTConfig, skipPaths []string, logger *zap.Logger) Middl
 
 			authHeader := r.Header.Get("Authorization")
 			if !strings.HasPrefix(authHeader, "Bearer ") {
-				writeMiddlewareError(w, http.StatusUnauthorized, "AUTHENTICATION", "missing or malformed Authorization header")
+				writeMiddlewareError(w, http.StatusUnauthorized, string(types.ErrAuthentication), "missing or malformed Authorization header")
 				return
 			}
 			tokenStr := strings.TrimPrefix(authHeader, "Bearer ")
@@ -561,13 +587,13 @@ func JWTAuth(cfg config.JWTConfig, skipPaths []string, logger *zap.Logger) Middl
 			token, err := jwt.Parse(tokenStr, keyFunc, parserOpts...)
 			if err != nil {
 				logger.Debug("JWT validation failed", zap.Error(err))
-				writeMiddlewareError(w, http.StatusUnauthorized, "AUTHENTICATION", "invalid or expired token")
+				writeMiddlewareError(w, http.StatusUnauthorized, string(types.ErrAuthentication), "invalid or expired token")
 				return
 			}
 
 			claims, ok := token.Claims.(jwt.MapClaims)
 			if !ok || !token.Valid {
-				writeMiddlewareError(w, http.StatusUnauthorized, "AUTHENTICATION", "invalid token claims")
+				writeMiddlewareError(w, http.StatusUnauthorized, string(types.ErrAuthentication), "invalid token claims")
 				return
 			}
 
@@ -611,7 +637,7 @@ func writeMiddlewareError(w http.ResponseWriter, statusCode int, code string, me
 		fallback := middlewareErrorResponse{
 			Success: false,
 			Error: &middlewareErrorInfo{
-				Code:    "INTERNAL_ERROR",
+				Code:    string(types.ErrInternalError),
 				Message: "failed to encode response",
 			},
 			Timestamp: time.Now().UTC(),
@@ -639,8 +665,9 @@ type middlewareErrorInfo struct {
 
 // TenantRateLimiter applies rate limiting based on the tenant_id in the request context.
 func TenantRateLimiter(ctx context.Context, rps float64, burst int, logger *zap.Logger) Middleware {
-	_ = ctx
-	_ = logger
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	type visitor struct {
 		limiter  *rate.Limiter
 		lastSeen time.Time
@@ -652,6 +679,16 @@ func TenantRateLimiter(ctx context.Context, rps float64, burst int, logger *zap.
 	)
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			select {
+			case <-ctx.Done():
+				if logger != nil {
+					logger.Warn("tenant rate limiter context canceled", zap.Error(ctx.Err()))
+				}
+				writeMiddlewareError(w, http.StatusServiceUnavailable, string(types.ErrServiceUnavailable), "service shutting down")
+				return
+			default:
+			}
+
 			now := time.Now()
 			key := ""
 			if tenantID, ok := types.TenantID(r.Context()); ok {
@@ -679,7 +716,7 @@ func TenantRateLimiter(ctx context.Context, rps float64, burst int, logger *zap.
 			mu.Unlock()
 
 			if !v.limiter.Allow() {
-				writeMiddlewareError(w, http.StatusTooManyRequests, "RATE_LIMITED", "tenant rate limit exceeded")
+				writeMiddlewareError(w, http.StatusTooManyRequests, string(types.ErrRateLimit), "tenant rate limit exceeded")
 				return
 			}
 			next.ServeHTTP(w, r)

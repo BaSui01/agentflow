@@ -90,6 +90,7 @@ func (s *defaultWorkflowService) BuildDAGWorkflow(req workflowExecuteRequest) (*
 
 	if err != nil {
 		return nil, "", types.NewError(types.ErrInvalidRequest, "invalid workflow DSL: "+err.Error()).
+			WithCause(err).
 			WithHTTPStatus(http.StatusBadRequest)
 	}
 
@@ -113,7 +114,8 @@ func (s *defaultWorkflowService) Execute(
 
 	result, err := s.executor.ExecuteDAG(execCtx, wf, input)
 	if err != nil {
-		return nil, types.NewError(types.ErrInternalError, "workflow execution failed: "+err.Error())
+		return nil, types.NewError(types.ErrInternalError, "workflow execution failed: "+err.Error()).
+			WithCause(err)
 	}
 	return result, nil
 }

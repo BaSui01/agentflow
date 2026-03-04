@@ -1,4 +1,4 @@
-package discovery
+﻿package discovery
 
 import (
 	"context"
@@ -199,7 +199,7 @@ func (c *CapabilityComposer) Compose(ctx context.Context, req *CompositionReques
 	result.Complete = len(missingCapabilities) == 0
 
 	if !result.Complete && !req.AllowPartial && !c.config.AllowPartialComposition {
-		return nil, fmt.Errorf("incomplete composition: missing capabilities %v", missingCapabilities)
+		return nil, fmt.Errorf("incomplete composition: missing capabilities: %v", missingCapabilities)
 	}
 
 	// 5. 应用最大剂限

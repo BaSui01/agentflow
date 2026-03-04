@@ -69,7 +69,7 @@ func (p *MistralProvider) TranscribeAudio(ctx context.Context, req *llm.AudioTra
 
 	resp, err := p.Client.Do(httpReq)
 	if err != nil {
-		return nil, &types.Error{Code: llm.ErrUpstreamError, Message: err.Error(), HTTPStatus: http.StatusBadGateway, Retryable: true, Provider: p.Name()}
+		return nil, &types.Error{Code: llm.ErrUpstreamError, Message: err.Error(), Cause: err, HTTPStatus: http.StatusBadGateway, Retryable: true, Provider: p.Name()}
 	}
 	defer resp.Body.Close()
 
@@ -80,7 +80,7 @@ func (p *MistralProvider) TranscribeAudio(ctx context.Context, req *llm.AudioTra
 
 	var transcriptionResp llm.AudioTranscriptionResponse
 	if err := json.NewDecoder(resp.Body).Decode(&transcriptionResp); err != nil {
-		return nil, &types.Error{Code: llm.ErrUpstreamError, Message: err.Error(), HTTPStatus: http.StatusBadGateway, Retryable: true, Provider: p.Name()}
+		return nil, &types.Error{Code: llm.ErrUpstreamError, Message: err.Error(), Cause: err, HTTPStatus: http.StatusBadGateway, Retryable: true, Provider: p.Name()}
 	}
 	return &transcriptionResp, nil
 }
@@ -102,7 +102,7 @@ func (p *MistralProvider) CreateEmbedding(ctx context.Context, req *llm.Embeddin
 
 	resp, err := p.Client.Do(httpReq)
 	if err != nil {
-		return nil, &types.Error{Code: llm.ErrUpstreamError, Message: err.Error(), HTTPStatus: http.StatusBadGateway, Retryable: true, Provider: p.Name()}
+		return nil, &types.Error{Code: llm.ErrUpstreamError, Message: err.Error(), Cause: err, HTTPStatus: http.StatusBadGateway, Retryable: true, Provider: p.Name()}
 	}
 	defer resp.Body.Close()
 
@@ -113,7 +113,7 @@ func (p *MistralProvider) CreateEmbedding(ctx context.Context, req *llm.Embeddin
 
 	var embeddingResp llm.EmbeddingResponse
 	if err := json.NewDecoder(resp.Body).Decode(&embeddingResp); err != nil {
-		return nil, &types.Error{Code: llm.ErrUpstreamError, Message: err.Error(), HTTPStatus: http.StatusBadGateway, Retryable: true, Provider: p.Name()}
+		return nil, &types.Error{Code: llm.ErrUpstreamError, Message: err.Error(), Cause: err, HTTPStatus: http.StatusBadGateway, Retryable: true, Provider: p.Name()}
 	}
 	return &embeddingResp, nil
 }
@@ -136,7 +136,7 @@ func (p *MistralProvider) CreateFineTuningJob(ctx context.Context, req *llm.Fine
 
 	resp, err := p.Client.Do(httpReq)
 	if err != nil {
-		return nil, &types.Error{Code: llm.ErrUpstreamError, Message: err.Error(), HTTPStatus: http.StatusBadGateway, Retryable: true, Provider: p.Name()}
+		return nil, &types.Error{Code: llm.ErrUpstreamError, Message: err.Error(), Cause: err, HTTPStatus: http.StatusBadGateway, Retryable: true, Provider: p.Name()}
 	}
 	defer resp.Body.Close()
 
@@ -147,7 +147,7 @@ func (p *MistralProvider) CreateFineTuningJob(ctx context.Context, req *llm.Fine
 
 	var job llm.FineTuningJob
 	if err := json.NewDecoder(resp.Body).Decode(&job); err != nil {
-		return nil, &types.Error{Code: llm.ErrUpstreamError, Message: err.Error(), HTTPStatus: http.StatusBadGateway, Provider: p.Name()}
+		return nil, &types.Error{Code: llm.ErrUpstreamError, Message: err.Error(), Cause: err, HTTPStatus: http.StatusBadGateway, Provider: p.Name()}
 	}
 	return &job, nil
 }
@@ -165,7 +165,7 @@ func (p *MistralProvider) ListFineTuningJobs(ctx context.Context) ([]llm.FineTun
 
 	resp, err := p.Client.Do(httpReq)
 	if err != nil {
-		return nil, &types.Error{Code: llm.ErrUpstreamError, Message: err.Error(), HTTPStatus: http.StatusBadGateway, Retryable: true, Provider: p.Name()}
+		return nil, &types.Error{Code: llm.ErrUpstreamError, Message: err.Error(), Cause: err, HTTPStatus: http.StatusBadGateway, Retryable: true, Provider: p.Name()}
 	}
 	defer resp.Body.Close()
 
@@ -178,7 +178,7 @@ func (p *MistralProvider) ListFineTuningJobs(ctx context.Context) ([]llm.FineTun
 		Data []llm.FineTuningJob `json:"data"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&listResp); err != nil {
-		return nil, &types.Error{Code: llm.ErrUpstreamError, Message: err.Error(), HTTPStatus: http.StatusBadGateway, Provider: p.Name()}
+		return nil, &types.Error{Code: llm.ErrUpstreamError, Message: err.Error(), Cause: err, HTTPStatus: http.StatusBadGateway, Provider: p.Name()}
 	}
 	return listResp.Data, nil
 }
@@ -196,7 +196,7 @@ func (p *MistralProvider) GetFineTuningJob(ctx context.Context, jobID string) (*
 
 	resp, err := p.Client.Do(httpReq)
 	if err != nil {
-		return nil, &types.Error{Code: llm.ErrUpstreamError, Message: err.Error(), HTTPStatus: http.StatusBadGateway, Retryable: true, Provider: p.Name()}
+		return nil, &types.Error{Code: llm.ErrUpstreamError, Message: err.Error(), Cause: err, HTTPStatus: http.StatusBadGateway, Retryable: true, Provider: p.Name()}
 	}
 	defer resp.Body.Close()
 
@@ -207,7 +207,7 @@ func (p *MistralProvider) GetFineTuningJob(ctx context.Context, jobID string) (*
 
 	var job llm.FineTuningJob
 	if err := json.NewDecoder(resp.Body).Decode(&job); err != nil {
-		return nil, &types.Error{Code: llm.ErrUpstreamError, Message: err.Error(), HTTPStatus: http.StatusBadGateway, Provider: p.Name()}
+		return nil, &types.Error{Code: llm.ErrUpstreamError, Message: err.Error(), Cause: err, HTTPStatus: http.StatusBadGateway, Provider: p.Name()}
 	}
 	return &job, nil
 }
@@ -225,7 +225,7 @@ func (p *MistralProvider) CancelFineTuningJob(ctx context.Context, jobID string)
 
 	resp, err := p.Client.Do(httpReq)
 	if err != nil {
-		return &types.Error{Code: llm.ErrUpstreamError, Message: err.Error(), HTTPStatus: http.StatusBadGateway, Retryable: true, Provider: p.Name()}
+		return &types.Error{Code: llm.ErrUpstreamError, Message: err.Error(), Cause: err, HTTPStatus: http.StatusBadGateway, Retryable: true, Provider: p.Name()}
 	}
 	defer resp.Body.Close()
 

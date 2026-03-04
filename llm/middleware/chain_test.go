@@ -422,6 +422,17 @@ func TestRecoveryMiddleware(t *testing.T) {
 		_, err := h(context.Background(), simpleReq())
 		require.Error(t, err)
 	})
+
+	t.Run("panic error preserves unwrap chain", func(t *testing.T) {
+		root := errors.New("root panic")
+		panicking := func(ctx context.Context, req *llmpkg.ChatRequest) (*llmpkg.ChatResponse, error) {
+			panic(root)
+		}
+		h := NewChain(RecoveryMiddleware(nil)).Then(panicking)
+		_, err := h(context.Background(), simpleReq())
+		require.Error(t, err)
+		assert.ErrorIs(t, err, root)
+	})
 }
 
 // --- TracingMiddleware ---
@@ -440,8 +451,8 @@ func (s *testSpan) SetAttribute(key string, value any) {
 	s.attrs[key] = value
 }
 func (s *testSpan) AddEvent(name string, _ map[string]any) { s.events = append(s.events, name) }
-func (s *testSpan) SetError(err error)                      { s.err = err }
-func (s *testSpan) End()                                    { s.ended = true }
+func (s *testSpan) SetError(err error)                     { s.err = err }
+func (s *testSpan) End()                                   { s.ended = true }
 
 type testTracer struct {
 	span *testSpan
@@ -549,5 +560,3 @@ func TestTransformMiddleware(t *testing.T) {
 		assert.False(t, called)
 	})
 }
-
-
