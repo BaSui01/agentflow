@@ -428,9 +428,34 @@ func TestChatHandler_ConvertToLLMRequest(t *testing.T) {
 			},
 		},
 		ToolChoice: "auto",
-		Timeout:    "30s",
-		Metadata:   map[string]string{"key": "value"},
-		Tags:       []string{"test"},
+		ResponseFormat: &api.ResponseFormat{
+			Type: "json_schema",
+			JSONSchema: &api.ResponseFormatJSONSchema{
+				Name:   "out",
+				Schema: map[string]any{"type": "object"},
+			},
+		},
+		ParallelToolCalls:   boolPtr(true),
+		ServiceTier:         stringPtr("auto"),
+		User:                "openai-user",
+		MaxCompletionTokens: intPtr(80),
+		ReasoningEffort:     "low",
+		Store:               boolPtr(true),
+		Modalities:          []string{"text"},
+		WebSearchOptions: &api.WebSearchOptions{
+			SearchContextSize: "high",
+			AllowedDomains:    []string{"example.com"},
+			UserLocation: &api.WebSearchLocation{
+				Country: "US",
+				City:    "San Francisco",
+			},
+		},
+		PreviousResponseID: "resp_prev_1",
+		Include:            []string{"output_text"},
+		Truncation:         "auto",
+		Timeout:            "30s",
+		Metadata:           map[string]string{"key": "value"},
+		Tags:               []string{"test"},
 	}
 
 	llmReq := handler.convertToLLMRequest(apiReq)
@@ -450,6 +475,30 @@ func TestChatHandler_ConvertToLLMRequest(t *testing.T) {
 	assert.Len(t, llmReq.Tools, 1)
 	assert.Equal(t, "test_tool", llmReq.Tools[0].Name)
 	assert.Equal(t, "auto", llmReq.ToolChoice)
+	require.NotNil(t, llmReq.ResponseFormat)
+	assert.Equal(t, llm.ResponseFormatType("json_schema"), llmReq.ResponseFormat.Type)
+	require.NotNil(t, llmReq.ResponseFormat.JSONSchema)
+	assert.Equal(t, "out", llmReq.ResponseFormat.JSONSchema.Name)
+	require.NotNil(t, llmReq.ParallelToolCalls)
+	assert.True(t, *llmReq.ParallelToolCalls)
+	require.NotNil(t, llmReq.ServiceTier)
+	assert.Equal(t, "auto", *llmReq.ServiceTier)
+	assert.Equal(t, "openai-user", llmReq.User)
+	require.NotNil(t, llmReq.MaxCompletionTokens)
+	assert.Equal(t, 80, *llmReq.MaxCompletionTokens)
+	assert.Equal(t, "low", llmReq.ReasoningEffort)
+	require.NotNil(t, llmReq.Store)
+	assert.True(t, *llmReq.Store)
+	assert.Equal(t, []string{"text"}, llmReq.Modalities)
+	require.NotNil(t, llmReq.WebSearchOptions)
+	assert.Equal(t, "high", llmReq.WebSearchOptions.SearchContextSize)
+	assert.Equal(t, []string{"example.com"}, llmReq.WebSearchOptions.AllowedDomains)
+	require.NotNil(t, llmReq.WebSearchOptions.UserLocation)
+	assert.Equal(t, "US", llmReq.WebSearchOptions.UserLocation.Country)
+	assert.Equal(t, "San Francisco", llmReq.WebSearchOptions.UserLocation.City)
+	assert.Equal(t, "resp_prev_1", llmReq.PreviousResponseID)
+	assert.Equal(t, []string{"output_text"}, llmReq.Include)
+	assert.Equal(t, "auto", llmReq.Truncation)
 	assert.Equal(t, 30*time.Second, llmReq.Timeout)
 	assert.Equal(t, map[string]string{"key": "value"}, llmReq.Metadata)
 	assert.Equal(t, []string{"test"}, llmReq.Tags)
@@ -468,3 +517,9 @@ func TestChatHandler_HandleCapabilities(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, resp.Success)
 }
+
+func boolPtr(v bool) *bool { return &v }
+
+func intPtr(v int) *int { return &v }
+
+func stringPtr(v string) *string { return &v }

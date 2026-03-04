@@ -67,20 +67,40 @@ func (c *DefaultChatConverter) ToLLMRequest(req *api.ChatRequest) *llm.ChatReque
 	}
 
 	return &llm.ChatRequest{
-		TraceID:     req.TraceID,
-		TenantID:    req.TenantID,
-		UserID:      req.UserID,
-		Model:       req.Model,
-		Messages:    messages,
-		MaxTokens:   req.MaxTokens,
-		Temperature: req.Temperature,
-		TopP:        req.TopP,
-		Stop:        req.Stop,
-		Tools:       tools,
-		ToolChoice:  req.ToolChoice,
-		Timeout:     timeout,
-		Metadata:    req.Metadata,
-		Tags:        req.Tags,
+		TraceID:             req.TraceID,
+		TenantID:            req.TenantID,
+		UserID:              req.UserID,
+		Model:               req.Model,
+		Messages:            messages,
+		MaxTokens:           req.MaxTokens,
+		Temperature:         req.Temperature,
+		TopP:                req.TopP,
+		FrequencyPenalty:    req.FrequencyPenalty,
+		PresencePenalty:     req.PresencePenalty,
+		RepetitionPenalty:   req.RepetitionPenalty,
+		N:                   req.N,
+		LogProbs:            req.LogProbs,
+		TopLogProbs:         req.TopLogProbs,
+		Stop:                req.Stop,
+		Tools:               tools,
+		ToolChoice:          req.ToolChoice,
+		ResponseFormat:      convertAPIResponseFormat(req.ResponseFormat),
+		ParallelToolCalls:   req.ParallelToolCalls,
+		ServiceTier:         req.ServiceTier,
+		User:                req.User,
+		StreamOptions:       convertAPIStreamOptions(req.StreamOptions),
+		MaxCompletionTokens: req.MaxCompletionTokens,
+		ReasoningEffort:     req.ReasoningEffort,
+		Store:               req.Store,
+		Modalities:          req.Modalities,
+		WebSearchOptions:    convertAPIWebSearchOptions(req.WebSearchOptions),
+		ReasoningMode:       req.Metadata["reasoning_mode"],
+		PreviousResponseID:  req.PreviousResponseID,
+		Timeout:             timeout,
+		Metadata:            req.Metadata,
+		Tags:                req.Tags,
+		Include:             req.Include,
+		Truncation:          req.Truncation,
 	}
 }
 
@@ -131,3 +151,50 @@ func (c *DefaultChatConverter) ToAPIStreamChunk(chunk *llm.StreamChunk) *api.Str
 	}
 }
 
+func convertAPIResponseFormat(in *api.ResponseFormat) *llm.ResponseFormat {
+	if in == nil {
+		return nil
+	}
+	out := &llm.ResponseFormat{
+		Type: llm.ResponseFormatType(in.Type),
+	}
+	if in.JSONSchema != nil {
+		out.JSONSchema = &llm.JSONSchemaParam{
+			Name:        in.JSONSchema.Name,
+			Description: in.JSONSchema.Description,
+			Schema:      in.JSONSchema.Schema,
+			Strict:      in.JSONSchema.Strict,
+		}
+	}
+	return out
+}
+
+func convertAPIStreamOptions(in *api.StreamOptions) *llm.StreamOptions {
+	if in == nil {
+		return nil
+	}
+	return &llm.StreamOptions{
+		IncludeUsage:      in.IncludeUsage,
+		ChunkIncludeUsage: in.ChunkIncludeUsage,
+	}
+}
+
+func convertAPIWebSearchOptions(in *api.WebSearchOptions) *llm.WebSearchOptions {
+	if in == nil {
+		return nil
+	}
+	out := &llm.WebSearchOptions{
+		SearchContextSize: in.SearchContextSize,
+		AllowedDomains:    append([]string(nil), in.AllowedDomains...),
+	}
+	if in.UserLocation != nil {
+		out.UserLocation = &llm.WebSearchLocation{
+			Type:     in.UserLocation.Type,
+			Country:  in.UserLocation.Country,
+			Region:   in.UserLocation.Region,
+			City:     in.UserLocation.City,
+			Timezone: in.UserLocation.Timezone,
+		}
+	}
+	return out
+}

@@ -141,9 +141,13 @@ func (s *defaultChatService) buildUnifiedRequest(req *api.ChatRequest) (*llmcore
 	if err != nil {
 		return nil, nil, err
 	}
+	endpointMode, err := normalizeEndpointMode(req.EndpointMode)
+	if err != nil {
+		return nil, nil, err
+	}
 
 	llmReq := s.converter.ToLLMRequest(req)
-	llmReq.Metadata = applyChatRouteMetadata(llmReq.Metadata, provider, routePolicy)
+	llmReq.Metadata = applyChatRouteMetadata(llmReq.Metadata, provider, routePolicy, endpointMode)
 	llmReq.Tags = normalizeRouteTags(llmReq.Tags)
 
 	return &llmcore.UnifiedRequest{

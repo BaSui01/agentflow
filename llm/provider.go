@@ -109,6 +109,7 @@ type StreamOptions struct {
 type WebSearchOptions struct {
 	SearchContextSize string             `json:"search_context_size,omitempty"` // low/medium/high
 	UserLocation      *WebSearchLocation `json:"user_location,omitempty"`
+	AllowedDomains    []string           `json:"allowed_domains,omitempty"` // Responses web_search filters.allowed_domains
 }
 
 // WebSearchLocation represents approximate user location for web search.
@@ -122,21 +123,21 @@ type WebSearchLocation struct {
 
 // ChatRequest 表示聊天补全请求.
 type ChatRequest struct {
-	TraceID        string            `json:"trace_id"`
-	TenantID       string            `json:"tenant_id,omitempty"`
-	UserID         string            `json:"user_id,omitempty"`
-	Model          string            `json:"model"`
-	Messages       []types.Message   `json:"messages"`
-	MaxTokens      int               `json:"max_tokens,omitempty"`
-	Temperature    float32           `json:"temperature,omitempty"`
-	TopP           float32           `json:"top_p,omitempty"`
-	Stop           []string          `json:"stop,omitempty"`
+	TraceID        string             `json:"trace_id"`
+	TenantID       string             `json:"tenant_id,omitempty"`
+	UserID         string             `json:"user_id,omitempty"`
+	Model          string             `json:"model"`
+	Messages       []types.Message    `json:"messages"`
+	MaxTokens      int                `json:"max_tokens,omitempty"`
+	Temperature    float32            `json:"temperature,omitempty"`
+	TopP           float32            `json:"top_p,omitempty"`
+	Stop           []string           `json:"stop,omitempty"`
 	Tools          []types.ToolSchema `json:"tools,omitempty"`
-	ToolChoice     any               `json:"tool_choice,omitempty"`
-	ResponseFormat *ResponseFormat   `json:"response_format,omitempty"`
-	Timeout        time.Duration     `json:"timeout,omitempty"`
-	Metadata       map[string]string `json:"metadata,omitempty"`
-	Tags           []string          `json:"tags,omitempty"`
+	ToolChoice     any                `json:"tool_choice,omitempty"`
+	ResponseFormat *ResponseFormat    `json:"response_format,omitempty"`
+	Timeout        time.Duration      `json:"timeout,omitempty"`
+	Metadata       map[string]string  `json:"metadata,omitempty"`
+	Tags           []string           `json:"tags,omitempty"`
 
 	// 采样参数
 	FrequencyPenalty  *float32       `json:"frequency_penalty,omitempty"`
@@ -156,6 +157,8 @@ type ChatRequest struct {
 	Store               *bool             `json:"store,omitempty"`                 // 是否存储用于蒸馏/评估
 	Modalities          []string          `json:"modalities,omitempty"`            // ["text", "audio"]
 	WebSearchOptions    *WebSearchOptions `json:"web_search_options,omitempty"`    // 内置 web 搜索
+	Include             []string          `json:"include,omitempty"`               // Responses API include
+	Truncation          string            `json:"truncation,omitempty"`            // Responses API truncation: auto/disabled
 
 	// 扩展字段
 	ReasoningMode      string   `json:"reasoning_mode,omitempty"`
@@ -177,8 +180,8 @@ type ChatResponse struct {
 
 // ChatChoice 表示响应中的单个选项.
 type ChatChoice struct {
-	Index        int     `json:"index"`
-	FinishReason string  `json:"finish_reason,omitempty"`
+	Index        int           `json:"index"`
+	FinishReason string        `json:"finish_reason,omitempty"`
 	Message      types.Message `json:"message"`
 }
 
@@ -207,14 +210,14 @@ type CompletionTokensDetails struct {
 
 // StreamChunk 表示流式响应块.
 type StreamChunk struct {
-	ID           string     `json:"id,omitempty"`
-	Provider     string     `json:"provider,omitempty"`
-	Model        string     `json:"model,omitempty"`
-	Index        int        `json:"index,omitempty"`
+	ID           string        `json:"id,omitempty"`
+	Provider     string        `json:"provider,omitempty"`
+	Model        string        `json:"model,omitempty"`
+	Index        int           `json:"index,omitempty"`
 	Delta        types.Message `json:"delta"`
-	FinishReason string     `json:"finish_reason,omitempty"`
-	Usage        *ChatUsage `json:"usage,omitempty"`
-	Err          *types.Error `json:"error,omitempty"`
+	FinishReason string        `json:"finish_reason,omitempty"`
+	Usage        *ChatUsage    `json:"usage,omitempty"`
+	Err          *types.Error  `json:"error,omitempty"`
 }
 
 // Model 表示提供者支持的一个模型.
@@ -239,4 +242,3 @@ type ProviderEndpoints struct {
 	Health     string `json:"health,omitempty"` // 健康检查端点（如果与 Models 不同）
 	BaseURL    string `json:"base_url"`         // 基础 URL
 }
-

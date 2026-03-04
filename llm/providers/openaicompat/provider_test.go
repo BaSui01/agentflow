@@ -305,6 +305,55 @@ func TestProvider_Completion_RequestHook(t *testing.T) {
 	assert.Equal(t, "hooked-model", receivedModel)
 }
 
+func TestProvider_Completion_WebSearchOptionsForwarded(t *testing.T) {
+	var capturedRequest providerbase.OpenAICompatRequest
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		err := json.NewDecoder(r.Body).Decode(&capturedRequest)
+		require.NoError(t, err)
+
+		w.Header().Set("Content-Type", "application/json")
+		err = json.NewEncoder(w).Encode(providerbase.OpenAICompatResponse{
+			ID:    "resp-web-search",
+			Model: "gpt-test",
+			Choices: []providerbase.OpenAICompatChoice{
+				{Index: 0, FinishReason: "stop", Message: providerbase.OpenAICompatMessage{Role: "assistant", Content: "ok"}},
+			},
+		})
+		require.NoError(t, err)
+	}))
+	t.Cleanup(server.Close)
+
+	p := New(Config{
+		ProviderName: "test",
+		APIKey:       "test-key",
+		BaseURL:      server.URL,
+	}, zap.NewNop())
+
+	_, err := p.Completion(context.Background(), &llm.ChatRequest{
+		Messages: []types.Message{{Role: llm.RoleUser, Content: "Hi"}},
+		WebSearchOptions: &llm.WebSearchOptions{
+			SearchContextSize: "high",
+			UserLocation: &llm.WebSearchLocation{
+				Country:  "US",
+				Region:   "CA",
+				City:     "San Francisco",
+				Timezone: "America/Los_Angeles",
+			},
+		},
+	})
+	require.NoError(t, err)
+
+	require.NotNil(t, capturedRequest.WebSearchOptions)
+	assert.Equal(t, "high", capturedRequest.WebSearchOptions.SearchContextSize)
+	require.NotNil(t, capturedRequest.WebSearchOptions.UserLocation)
+	assert.Equal(t, "approximate", capturedRequest.WebSearchOptions.UserLocation.Type)
+	require.NotNil(t, capturedRequest.WebSearchOptions.UserLocation.Approximate)
+	assert.Equal(t, "US", capturedRequest.WebSearchOptions.UserLocation.Approximate.Country)
+	assert.Equal(t, "CA", capturedRequest.WebSearchOptions.UserLocation.Approximate.Region)
+	assert.Equal(t, "San Francisco", capturedRequest.WebSearchOptions.UserLocation.Approximate.City)
+	assert.Equal(t, "America/Los_Angeles", capturedRequest.WebSearchOptions.UserLocation.Approximate.Timezone)
+}
+
 // ---------------------------------------------------------------------------
 // Stream
 // ---------------------------------------------------------------------------
@@ -415,6 +464,49 @@ func TestProvider_Stream_ToolCallDelta(t *testing.T) {
 	require.Len(t, toolCalls, 1)
 	assert.Equal(t, "calc", toolCalls[0].Name)
 	assert.Equal(t, "tc1", toolCalls[0].ID)
+}
+
+func TestProvider_Stream_WebSearchOptionsForwarded(t *testing.T) {
+	var capturedRequest providerbase.OpenAICompatRequest
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		err := json.NewDecoder(r.Body).Decode(&capturedRequest)
+		require.NoError(t, err)
+
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(http.StatusOK)
+		chunk := providerbase.OpenAICompatResponse{
+			ID: "s1", Model: "m",
+			Choices: []providerbase.OpenAICompatChoice{
+				{Index: 0, Delta: &providerbase.OpenAICompatMessage{Role: "assistant", Content: "ok"}},
+			},
+		}
+		data, _ := json.Marshal(chunk)
+		fmt.Fprintf(w, "data: %s\n\n", data)
+		fmt.Fprint(w, "data: [DONE]\n\n")
+	}))
+	t.Cleanup(server.Close)
+
+	p := New(Config{ProviderName: "test", APIKey: "key", BaseURL: server.URL}, zap.NewNop())
+	ch, err := p.Stream(context.Background(), &llm.ChatRequest{
+		Messages: []types.Message{{Role: llm.RoleUser, Content: "Hi"}},
+		WebSearchOptions: &llm.WebSearchOptions{
+			SearchContextSize: "medium",
+			UserLocation: &llm.WebSearchLocation{
+				Country: "CN",
+				City:    "Shanghai",
+			},
+		},
+	})
+	require.NoError(t, err)
+	for range ch {
+	}
+
+	require.NotNil(t, capturedRequest.WebSearchOptions)
+	assert.Equal(t, "medium", capturedRequest.WebSearchOptions.SearchContextSize)
+	require.NotNil(t, capturedRequest.WebSearchOptions.UserLocation)
+	require.NotNil(t, capturedRequest.WebSearchOptions.UserLocation.Approximate)
+	assert.Equal(t, "CN", capturedRequest.WebSearchOptions.UserLocation.Approximate.Country)
+	assert.Equal(t, "Shanghai", capturedRequest.WebSearchOptions.UserLocation.Approximate.City)
 }
 
 // ---------------------------------------------------------------------------

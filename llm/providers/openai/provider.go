@@ -89,7 +89,7 @@ func (p *OpenAIProvider) Endpoints() llm.ProviderEndpoints {
 // Completion 覆写基类方法，支持 Responses API 路由.
 // 当 UseResponsesAPI 启用时走 /v1/responses，否则委托给 openaicompat.Provider.Completion.
 func (p *OpenAIProvider) Completion(ctx context.Context, req *llm.ChatRequest) (*llm.ChatResponse, error) {
-	if !p.openaiCfg.UseResponsesAPI {
+	if !p.useResponsesAPIForRequest(req) {
 		return p.Provider.Completion(ctx, req)
 	}
 
@@ -123,6 +123,7 @@ type openAIResponsesRequest struct {
 	PreviousResponseID string              `json:"previous_response_id,omitempty"`
 	Store              *bool               `json:"store,omitempty"`
 	Metadata           map[string]string   `json:"metadata,omitempty"`
+	Include            []string            `json:"include,omitempty"`
 	Truncation         string              `json:"truncation,omitempty"` // "auto" or "disabled"
 	Reasoning          *responsesReasoning `json:"reasoning,omitempty"`
 	Text               *responsesTextParam `json:"text,omitempty"`
@@ -280,6 +281,8 @@ func (p *OpenAIProvider) buildResponsesRequest(req *llm.ChatRequest) openAIRespo
 		ToolChoice:        req.ToolChoice,
 		Store:             req.Store,
 		Metadata:          req.Metadata,
+		Include:           req.Include,
+		Truncation:        strings.TrimSpace(req.Truncation),
 		User:              req.User,
 		ServiceTier:       req.ServiceTier,
 		TopLogProbs:       req.TopLogProbs,
@@ -307,27 +310,8 @@ func (p *OpenAIProvider) buildResponsesRequest(req *llm.ChatRequest) openAIRespo
 	// 构建 input
 	body.Input = convertMessagesToResponsesInput(req.Messages)
 
-	// 构建 tools
-	if len(req.Tools) > 0 {
-		tools := make([]any, 0, len(req.Tools))
-		for _, t := range req.Tools {
-			tool := map[string]any{
-				"type": "function",
-				"name": t.Name,
-			}
-			if t.Description != "" {
-				tool["description"] = t.Description
-			}
-			if len(t.Parameters) > 0 {
-				var params any
-				if err := json.Unmarshal(t.Parameters, &params); err == nil {
-					tool["parameters"] = params
-				}
-			}
-			tools = append(tools, tool)
-		}
-		body.Tools = tools
-	}
+	// 构建 tools（支持 OpenAI Responses 原生 web_search 工具）
+	body.Tools = buildResponsesTools(req)
 
 	// Reasoning: only pass valid effort values
 	if effort, ok := chooseResponsesReasoningEffort(req); ok {
@@ -342,6 +326,130 @@ func (p *OpenAIProvider) buildResponsesRequest(req *llm.ChatRequest) openAIRespo
 	}
 
 	return body
+}
+
+func buildResponsesTools(req *llm.ChatRequest) []any {
+	if req == nil {
+		return nil
+	}
+
+	tools := make([]any, 0, len(req.Tools)+1)
+	hasNativeWebSearch := false
+
+	for _, t := range req.Tools {
+		if isNativeResponsesWebSearchTool(t.Name) {
+			if !hasNativeWebSearch {
+				tools = append(tools, buildResponsesWebSearchTool(req.WebSearchOptions))
+				hasNativeWebSearch = true
+			}
+			continue
+		}
+
+		tool := map[string]any{
+			"type": "function",
+			"name": t.Name,
+		}
+		if t.Description != "" {
+			tool["description"] = t.Description
+		}
+		if len(t.Parameters) > 0 {
+			var params any
+			if err := json.Unmarshal(t.Parameters, &params); err == nil {
+				tool["parameters"] = params
+			}
+		}
+		tools = append(tools, tool)
+	}
+
+	// 仅设置了 web_search_options 时，自动注入原生 web_search tool。
+	if req.WebSearchOptions != nil && !hasNativeWebSearch {
+		tools = append(tools, buildResponsesWebSearchTool(req.WebSearchOptions))
+	}
+
+	if len(tools) == 0 {
+		return nil
+	}
+	return tools
+}
+
+func isNativeResponsesWebSearchTool(name string) bool {
+	switch strings.ToLower(strings.TrimSpace(name)) {
+	case "web_search", "web_search_preview":
+		return true
+	default:
+		return false
+	}
+}
+
+func buildResponsesWebSearchTool(opts *llm.WebSearchOptions) map[string]any {
+	tool := map[string]any{
+		"type": "web_search",
+	}
+	if opts == nil {
+		return tool
+	}
+	if size := strings.TrimSpace(opts.SearchContextSize); size != "" {
+		tool["search_context_size"] = size
+	}
+	if loc := convertResponsesWebSearchLocation(opts.UserLocation); len(loc) > 0 {
+		tool["user_location"] = loc
+	}
+	if domains := normalizeResponsesAllowedDomains(opts.AllowedDomains); len(domains) > 0 {
+		tool["filters"] = map[string]any{
+			"allowed_domains": domains,
+		}
+	}
+	return tool
+}
+
+func normalizeResponsesAllowedDomains(domains []string) []string {
+	if len(domains) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(domains))
+	seen := make(map[string]struct{}, len(domains))
+	for _, d := range domains {
+		v := strings.TrimSpace(d)
+		if v == "" {
+			continue
+		}
+		if _, ok := seen[v]; ok {
+			continue
+		}
+		seen[v] = struct{}{}
+		out = append(out, v)
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+func convertResponsesWebSearchLocation(loc *llm.WebSearchLocation) map[string]any {
+	if loc == nil {
+		return nil
+	}
+
+	out := map[string]any{}
+	locType := strings.TrimSpace(loc.Type)
+	if locType == "" {
+		locType = "approximate"
+	}
+	out["type"] = locType
+
+	if v := strings.TrimSpace(loc.Country); v != "" {
+		out["country"] = v
+	}
+	if v := strings.TrimSpace(loc.Region); v != "" {
+		out["region"] = v
+	}
+	if v := strings.TrimSpace(loc.City); v != "" {
+		out["city"] = v
+	}
+	if v := strings.TrimSpace(loc.Timezone); v != "" {
+		out["timezone"] = v
+	}
+	return out
 }
 
 // convertMessagesToResponsesInput converts messages to Responses API input format.
@@ -455,6 +563,35 @@ func chooseResponsesReasoningEffort(req *llm.ChatRequest) (string, bool) {
 	}
 }
 
+func (p *OpenAIProvider) useResponsesAPIForRequest(req *llm.ChatRequest) bool {
+	mode := resolveEndpointMode(req)
+	switch mode {
+	case "responses":
+		return true
+	case "chat_completions":
+		return false
+	default:
+		return p.openaiCfg.UseResponsesAPI
+	}
+}
+
+func resolveEndpointMode(req *llm.ChatRequest) string {
+	if req == nil || len(req.Metadata) == 0 {
+		return ""
+	}
+
+	switch strings.ToLower(strings.TrimSpace(req.Metadata["endpoint_mode"])) {
+	case "responses":
+		return "responses"
+	case "chat_completions":
+		return "chat_completions"
+	case "auto", "":
+		return ""
+	default:
+		return ""
+	}
+}
+
 // toResponsesAPIChatResponse 将 Responses API 响应转换为统一的 llm.ChatResponse.
 func toResponsesAPIChatResponse(resp openAIResponsesResponse, provider string) *llm.ChatResponse {
 	var choices []llm.ChatChoice
@@ -553,7 +690,7 @@ func mapResponsesStatus(status string) string {
 
 // Stream 覆写基类方法，支持 Responses API 流式.
 func (p *OpenAIProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-chan llm.StreamChunk, error) {
-	if !p.openaiCfg.UseResponsesAPI {
+	if !p.useResponsesAPIForRequest(req) {
 		return p.Provider.Stream(ctx, req)
 	}
 

@@ -139,9 +139,10 @@ func TestChatService_Complete_RoutesByParams(t *testing.T) {
 	svc := newDefaultChatService(gw, nil, nil, NewDefaultChatConverter(defaultStreamTimeout), zap.NewNop())
 
 	result, err := svc.Complete(context.Background(), &api.ChatRequest{
-		Model:       "gpt-4o",
-		Provider:    "openai",
-		RoutePolicy: "cost_first",
+		Model:        "gpt-4o",
+		Provider:     "openai",
+		RoutePolicy:  "cost_first",
+		EndpointMode: "responses",
 		Messages: []api.Message{
 			{Role: "user", Content: "hello"},
 		},
@@ -156,6 +157,7 @@ func TestChatService_Complete_RoutesByParams(t *testing.T) {
 	assert.Equal(t, llmcore.RoutePolicyCostFirst, gw.invokeReq.RoutePolicy)
 	assert.Equal(t, "openai", gw.invokeReq.Metadata[llmcore.MetadataKeyChatProvider])
 	assert.Equal(t, "cost_first", gw.invokeReq.Metadata["route_policy"])
+	assert.Equal(t, "responses", gw.invokeReq.Metadata["endpoint_mode"])
 	assert.Equal(t, "t1", gw.invokeReq.Metadata["tenant"])
 	assert.Equal(t, []string{"prod", "chat"}, gw.invokeReq.Tags)
 }
@@ -176,14 +178,31 @@ func TestChatService_Complete_InvalidRoutePolicy(t *testing.T) {
 	assert.Equal(t, types.ErrInvalidRequest, err.Code)
 }
 
+func TestChatService_Complete_InvalidEndpointMode(t *testing.T) {
+	gw := &chatGatewayStub{}
+	svc := newDefaultChatService(gw, nil, nil, NewDefaultChatConverter(defaultStreamTimeout), zap.NewNop())
+
+	result, err := svc.Complete(context.Background(), &api.ChatRequest{
+		Model:        "gpt-4o",
+		EndpointMode: "responses_api",
+		Messages: []api.Message{
+			{Role: "user", Content: "hello"},
+		},
+	})
+	require.Nil(t, result)
+	require.NotNil(t, err)
+	assert.Equal(t, types.ErrInvalidRequest, err.Code)
+}
+
 func TestChatService_Stream_RoutesByParams(t *testing.T) {
 	gw := &chatGatewayStub{}
 	svc := newDefaultChatService(gw, nil, nil, NewDefaultChatConverter(defaultStreamTimeout), zap.NewNop())
 
 	stream, err := svc.Stream(context.Background(), &api.ChatRequest{
-		Model:       "gpt-4o",
-		Provider:    "openai",
-		RoutePolicy: "balanced",
+		Model:        "gpt-4o",
+		Provider:     "openai",
+		RoutePolicy:  "balanced",
+		EndpointMode: "chat_completions",
 		Messages: []api.Message{
 			{Role: "user", Content: "hello"},
 		},
@@ -193,6 +212,7 @@ func TestChatService_Stream_RoutesByParams(t *testing.T) {
 	require.NotNil(t, gw.streamReq)
 	assert.Equal(t, "openai", gw.streamReq.ProviderHint)
 	assert.Equal(t, llmcore.RoutePolicyBalanced, gw.streamReq.RoutePolicy)
+	assert.Equal(t, "chat_completions", gw.streamReq.Metadata["endpoint_mode"])
 }
 
 func TestChatService_Complete_UsesLocalToolLoopWhenAvailable(t *testing.T) {

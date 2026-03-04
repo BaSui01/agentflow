@@ -113,6 +113,107 @@ func TestGeminiProvider_GenerateImage_Success(t *testing.T) {
 	require.Len(t, resp.Data, 1)
 }
 
+func TestGeminiProvider_GenerateImage_ModelAwareRouting(t *testing.T) {
+	t.Run("imagen model uses predict schema", func(t *testing.T) {
+		var capturedPath string
+		var capturedBody map[string]any
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			capturedPath = r.URL.Path
+			err := json.NewDecoder(r.Body).Decode(&capturedBody)
+			require.NoError(t, err)
+
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"predictions": []map[string]any{
+					{"bytesBase64Encoded": "ZmFrZS1pbWFnZQ=="},
+				},
+			})
+		}))
+		t.Cleanup(server.Close)
+
+		p := NewGeminiProvider(providers.GeminiConfig{
+			BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key", BaseURL: server.URL},
+		}, zap.NewNop())
+
+		resp, err := p.GenerateImage(context.Background(), &llm.ImageGenerationRequest{
+			Model:          "imagen-4.0-fast-generate-001",
+			Prompt:         "a cat",
+			NegativePrompt: "blurry",
+			N:              2,
+			Size:           "1024x1024",
+		})
+		require.NoError(t, err)
+		require.Len(t, resp.Data, 1)
+		assert.NotEmpty(t, resp.Data[0].B64JSON)
+
+		assert.Equal(t, "/v1beta/models/imagen-4.0-fast-generate-001:predict", capturedPath)
+		instances, ok := capturedBody["instances"].([]any)
+		require.True(t, ok)
+		require.Len(t, instances, 1)
+		params, ok := capturedBody["parameters"].(map[string]any)
+		require.True(t, ok)
+		assert.Equal(t, float64(2), params["sampleCount"])
+		assert.Equal(t, "blurry", params["negativePrompt"])
+		assert.Equal(t, "1:1", params["aspectRatio"])
+		_, hasContents := capturedBody["contents"]
+		assert.False(t, hasContents)
+	})
+
+	t.Run("gemini image model uses generateContent schema", func(t *testing.T) {
+		var capturedPath string
+		var capturedBody map[string]any
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			capturedPath = r.URL.Path
+			err := json.NewDecoder(r.Body).Decode(&capturedBody)
+			require.NoError(t, err)
+
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"candidates": []map[string]any{
+					{
+						"content": map[string]any{
+							"parts": []map[string]any{
+								{
+									"inlineData": map[string]any{
+										"mimeType": "image/png",
+										"data":     "ZmFrZS1nZW1pbmktaW1hZ2U=",
+									},
+								},
+							},
+						},
+					},
+				},
+			})
+		}))
+		t.Cleanup(server.Close)
+
+		p := NewGeminiProvider(providers.GeminiConfig{
+			BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key", BaseURL: server.URL},
+		}, zap.NewNop())
+
+		resp, err := p.GenerateImage(context.Background(), &llm.ImageGenerationRequest{
+			Model:  "gemini-3-pro-image-preview",
+			Prompt: "a cat",
+			N:      1,
+			Size:   "1536x1024",
+		})
+		require.NoError(t, err)
+		require.Len(t, resp.Data, 1)
+		assert.NotEmpty(t, resp.Data[0].B64JSON)
+
+		assert.Equal(t, "/v1beta/models/gemini-3-pro-image-preview:generateContent", capturedPath)
+		_, hasInstances := capturedBody["instances"]
+		assert.False(t, hasInstances)
+		contents, ok := capturedBody["contents"].([]any)
+		require.True(t, ok)
+		require.NotEmpty(t, contents)
+		generationConfig, ok := capturedBody["generationConfig"].(map[string]any)
+		require.True(t, ok)
+		assert.Equal(t, float64(1), generationConfig["candidateCount"])
+		assert.Equal(t, "3:2", generationConfig["aspectRatio"])
+	})
+}
+
 func TestGeminiProvider_GenerateVideo_Success(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Contains(t, r.URL.Path, "predictLongRunning")
@@ -128,6 +229,49 @@ func TestGeminiProvider_GenerateVideo_Success(t *testing.T) {
 	resp, err := p.GenerateVideo(context.Background(), &llm.VideoGenerationRequest{Prompt: "a sunset"})
 	require.NoError(t, err)
 	assert.Equal(t, "vid-1", resp.ID)
+}
+
+func TestGeminiProvider_GenerateVideo_ModelAwareRouting(t *testing.T) {
+	var capturedPath string
+	var capturedBody map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		capturedPath = r.URL.Path
+		err := json.NewDecoder(r.Body).Decode(&capturedBody)
+		require.NoError(t, err)
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"name": "operations/veo-op-1",
+		})
+	}))
+	t.Cleanup(server.Close)
+
+	p := NewGeminiProvider(providers.GeminiConfig{
+		BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key", BaseURL: server.URL},
+	}, zap.NewNop())
+
+	resp, err := p.GenerateVideo(context.Background(), &llm.VideoGenerationRequest{
+		Model:       "veo-3.1-fast-generate-preview",
+		Prompt:      "a sunset",
+		Duration:    5,
+		FPS:         24,
+		Resolution:  "1920x1080",
+		AspectRatio: "16:9",
+		Style:       "cinematic",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "operations/veo-op-1", resp.ID)
+
+	assert.Equal(t, "/v1beta/models/veo-3.1-fast-generate-preview:predictLongRunning", capturedPath)
+	instances, ok := capturedBody["instances"].([]any)
+	require.True(t, ok)
+	require.Len(t, instances, 1)
+	params, ok := capturedBody["parameters"].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, float64(5), params["durationSeconds"])
+	assert.Equal(t, float64(24), params["fps"])
+	assert.Equal(t, "1920x1080", params["resolution"])
+	assert.Equal(t, "16:9", params["aspectRatio"])
+	assert.Equal(t, "cinematic", params["style"])
 }
 
 func TestGeminiProvider_GenerateAudio_Success(t *testing.T) {

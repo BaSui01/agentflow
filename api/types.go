@@ -51,6 +51,8 @@ type ChatRequest struct {
 	Provider string `json:"provider,omitempty" example:"openai"`
 	// 路由策略（balanced/cost_first/health_first/latency_first）
 	RoutePolicy string `json:"route_policy,omitempty" example:"balanced"`
+	// OpenAI 端点模式（auto/chat_completions/responses）
+	EndpointMode string `json:"endpoint_mode,omitempty" example:"responses"`
 	// 对话消息
 	Messages []Message `json:"messages" binding:"required"`
 	// 生成的最大 Token 数量
@@ -59,18 +61,94 @@ type ChatRequest struct {
 	Temperature float32 `json:"temperature,omitempty" example:"0.7"`
 	// 核采样参数（0-1）
 	TopP float32 `json:"top_p,omitempty" example:"1.0"`
+	// 频率惩罚（通常范围 -2~2）
+	FrequencyPenalty *float32 `json:"frequency_penalty,omitempty"`
+	// 存在惩罚（通常范围 -2~2）
+	PresencePenalty *float32 `json:"presence_penalty,omitempty"`
+	// 重复惩罚（不同 Provider 语义不同）
+	RepetitionPenalty *float32 `json:"repetition_penalty,omitempty"`
+	// 采样候选数
+	N *int `json:"n,omitempty"`
+	// 是否返回 logprobs
+	LogProbs *bool `json:"logprobs,omitempty"`
+	// 返回 top_logprobs 数
+	TopLogProbs *int `json:"top_logprobs,omitempty"`
 	// 停止序列
 	Stop []string `json:"stop,omitempty"`
 	// 函数调用的可用工具
 	Tools []ToolSchema `json:"tools,omitempty"`
 	// 工具选择模式（字符串如 "auto"/"none"/"required"，或结构化对象）
 	ToolChoice any `json:"tool_choice,omitempty"`
+	// 结构化输出格式
+	ResponseFormat *ResponseFormat `json:"response_format,omitempty"`
+	// 流式附加配置
+	StreamOptions *StreamOptions `json:"stream_options,omitempty"`
+	// 并行工具调用开关
+	ParallelToolCalls *bool `json:"parallel_tool_calls,omitempty"`
+	// 服务层级（provider-specific）
+	ServiceTier *string `json:"service_tier,omitempty"`
+	// OpenAI user 字段
+	User string `json:"user,omitempty"`
+	// 新版最大输出 tokens（优先级高于 max_tokens）
+	MaxCompletionTokens *int `json:"max_completion_tokens,omitempty"`
+	// 推理强度（none/minimal/low/medium/high/xhigh）
+	ReasoningEffort string `json:"reasoning_effort,omitempty"`
+	// 是否存储请求
+	Store *bool `json:"store,omitempty"`
+	// 输出模态（如 ["text","audio"]）
+	Modalities []string `json:"modalities,omitempty"`
+	// 内置 web 搜索配置
+	WebSearchOptions *WebSearchOptions `json:"web_search_options,omitempty"`
+	// Responses API 连续对话上下文 ID
+	PreviousResponseID string `json:"previous_response_id,omitempty"`
+	// Responses API include 字段
+	Include []string `json:"include,omitempty"`
+	// Responses API truncation（auto/disabled）
+	Truncation string `json:"truncation,omitempty"`
 	// 请求超时时长
 	Timeout string `json:"timeout,omitempty" example:"30s"`
 	// 自定义元数据
 	Metadata map[string]string `json:"metadata,omitempty"`
 	// 路由标签
 	Tags []string `json:"tags,omitempty"`
+}
+
+// ResponseFormat 定义结构化输出格式。
+type ResponseFormat struct {
+	// text/json_object/json_schema
+	Type string `json:"type"`
+	// 当 type=json_schema 时可选
+	JSONSchema *ResponseFormatJSONSchema `json:"json_schema,omitempty"`
+}
+
+// ResponseFormatJSONSchema 定义 JSON Schema 输出约束。
+type ResponseFormatJSONSchema struct {
+	Name        string         `json:"name,omitempty"`
+	Description string         `json:"description,omitempty"`
+	Schema      map[string]any `json:"schema"`
+	Strict      *bool          `json:"strict,omitempty"`
+}
+
+// StreamOptions 控制流式响应附加信息。
+type StreamOptions struct {
+	IncludeUsage      bool `json:"include_usage,omitempty"`
+	ChunkIncludeUsage bool `json:"chunk_include_usage,omitempty"`
+}
+
+// WebSearchOptions 定义内置 web_search 工具参数。
+type WebSearchOptions struct {
+	SearchContextSize string             `json:"search_context_size,omitempty"`
+	UserLocation      *WebSearchLocation `json:"user_location,omitempty"`
+	AllowedDomains    []string           `json:"allowed_domains,omitempty"`
+}
+
+// WebSearchLocation 定义 web_search 用户位置。
+type WebSearchLocation struct {
+	Type     string `json:"type,omitempty"`
+	Country  string `json:"country,omitempty"`
+	Region   string `json:"region,omitempty"`
+	City     string `json:"city,omitempty"`
+	Timezone string `json:"timezone,omitempty"`
 }
 
 // ChatResponse 表示聊天完成响应。
