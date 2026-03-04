@@ -87,6 +87,7 @@ func TestBuildAgentToolingRuntime_WithDBRegistrations(t *testing.T) {
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	require.NoError(t, err)
 	require.NoError(t, db.AutoMigrate(&hosted.ToolRegistration{}))
+	require.NoError(t, db.AutoMigrate(&hosted.ToolProviderConfig{}))
 	require.NoError(t, db.Create(&hosted.ToolRegistration{
 		Name:    "knowledge_search",
 		Target:  "retrieval",
