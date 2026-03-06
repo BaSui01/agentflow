@@ -36,6 +36,7 @@ type LocalProvider struct {
 
 // NewLocalProvider creates a new local process provider.
 func NewLocalProvider(logger *zap.Logger) *LocalProvider {
+	// O-004: optional module, nil-safe
 	if logger == nil {
 		logger = zap.NewNop()
 	}

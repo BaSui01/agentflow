@@ -124,6 +124,7 @@ type Deployer struct {
 
 // 新部署者创建了新的部署者.
 func NewDeployer(logger *zap.Logger) *Deployer {
+	// O-004: optional module, nil-safe
 	if logger == nil {
 		logger = zap.NewNop()
 	}

@@ -43,7 +43,7 @@ func setupToolRegistryDB(t *testing.T) *gorm.DB {
 func TestToolRegistryHandler_CRUD_AutoReload(t *testing.T) {
 	db := setupToolRegistryDB(t)
 	runtime := &toolRuntimeStub{targets: []string{"retrieval", "mcp_search"}}
-	handler := NewToolRegistryHandler(NewGormToolRegistryStore(db), runtime, zap.NewNop())
+	handler := NewToolRegistryHandler(hosted.NewGormToolRegistryStore(db), runtime, zap.NewNop())
 
 	createBody := []byte(`{"name":"knowledge_search","target":"retrieval","enabled":true}`)
 	w1 := httptest.NewRecorder()
@@ -65,7 +65,7 @@ func TestToolRegistryHandler_CRUD_AutoReload(t *testing.T) {
 func TestToolRegistryHandler_Create_InvalidTarget(t *testing.T) {
 	db := setupToolRegistryDB(t)
 	runtime := &toolRuntimeStub{targets: []string{"retrieval"}}
-	handler := NewToolRegistryHandler(NewGormToolRegistryStore(db), runtime, zap.NewNop())
+	handler := NewToolRegistryHandler(hosted.NewGormToolRegistryStore(db), runtime, zap.NewNop())
 
 	body := []byte(`{"name":"bad_tool","target":"unknown_target"}`)
 	w := httptest.NewRecorder()
@@ -80,7 +80,7 @@ func TestToolRegistryHandler_Create_InvalidTarget(t *testing.T) {
 func TestToolRegistryHandler_Create_ReservedOrSelfName(t *testing.T) {
 	db := setupToolRegistryDB(t)
 	runtime := &toolRuntimeStub{targets: []string{"retrieval"}}
-	handler := NewToolRegistryHandler(NewGormToolRegistryStore(db), runtime, zap.NewNop())
+	handler := NewToolRegistryHandler(hosted.NewGormToolRegistryStore(db), runtime, zap.NewNop())
 
 	body := []byte(`{"name":"retrieval","target":"retrieval"}`)
 	w := httptest.NewRecorder()

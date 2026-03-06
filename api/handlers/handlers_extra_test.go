@@ -14,6 +14,7 @@ import (
 	"github.com/BaSui01/agentflow/agent"
 	"github.com/BaSui01/agentflow/agent/discovery"
 	"github.com/BaSui01/agentflow/api"
+	"github.com/BaSui01/agentflow/internal/usecase"
 	"github.com/BaSui01/agentflow/llm"
 	"github.com/BaSui01/agentflow/types"
 	"github.com/stretchr/testify/assert"
@@ -86,7 +87,7 @@ func TestAgentHandler_HandleExecuteAgent_WithResolver_Success(t *testing.T) {
 
 	handler := NewAgentHandler(reg, nil, zap.NewNop(), resolver)
 
-	body, _ := json.Marshal(AgentExecuteRequest{
+	body, _ := json.Marshal(usecase.AgentExecuteRequest{
 		AgentID: "test-agent",
 		Content: "hello",
 	})
@@ -123,7 +124,7 @@ func TestAgentHandler_HandleExecuteAgent_WithResolver_ExecutionError(t *testing.
 
 	handler := NewAgentHandler(reg, nil, zap.NewNop(), resolver)
 
-	body, _ := json.Marshal(AgentExecuteRequest{
+	body, _ := json.Marshal(usecase.AgentExecuteRequest{
 		AgentID: "err-agent",
 		Content: "hello",
 	})
@@ -149,7 +150,7 @@ func TestAgentHandler_HandleExecuteAgent_WithResolver_NotFound(t *testing.T) {
 
 	handler := NewAgentHandler(reg, nil, zap.NewNop(), resolver)
 
-	body, _ := json.Marshal(AgentExecuteRequest{
+	body, _ := json.Marshal(usecase.AgentExecuteRequest{
 		AgentID: "missing-agent",
 		Content: "hello",
 	})
@@ -184,7 +185,7 @@ func TestAgentHandler_HandlePlanAgent_WithResolver_Success(t *testing.T) {
 
 	handler := NewAgentHandler(reg, nil, zap.NewNop(), resolver)
 
-	body, _ := json.Marshal(AgentExecuteRequest{
+	body, _ := json.Marshal(usecase.AgentExecuteRequest{
 		AgentID: "plan-agent",
 		Content: "plan this",
 	})
@@ -216,7 +217,7 @@ func TestAgentHandler_HandlePlanAgent_WithResolver_Error(t *testing.T) {
 
 	handler := NewAgentHandler(reg, nil, zap.NewNop(), resolver)
 
-	body, _ := json.Marshal(AgentExecuteRequest{
+	body, _ := json.Marshal(usecase.AgentExecuteRequest{
 		AgentID: "plan-agent",
 		Content: "plan this",
 	})
@@ -242,7 +243,7 @@ func TestAgentHandler_HandlePlanAgent_WithResolver_NotFound(t *testing.T) {
 
 	handler := NewAgentHandler(reg, nil, zap.NewNop(), resolver)
 
-	body, _ := json.Marshal(AgentExecuteRequest{
+	body, _ := json.Marshal(usecase.AgentExecuteRequest{
 		AgentID: "missing",
 		Content: "plan this",
 	})
@@ -266,7 +267,7 @@ func TestAgentHandler_HandleAgentStream_NoResolver_AgentExists(t *testing.T) {
 		withAgent(newTestAgentInfo("stream-agent", discovery.AgentStatusOnline))
 	handler := newTestHandler(reg)
 
-	body, _ := json.Marshal(AgentExecuteRequest{
+	body, _ := json.Marshal(usecase.AgentExecuteRequest{
 		AgentID: "stream-agent",
 		Content: "hello",
 	})
@@ -287,7 +288,7 @@ func TestAgentHandler_HandleAgentStream_NoResolver_NotFound(t *testing.T) {
 	reg := newMockRegistry()
 	handler := newTestHandler(reg)
 
-	body, _ := json.Marshal(AgentExecuteRequest{
+	body, _ := json.Marshal(usecase.AgentExecuteRequest{
 		AgentID: "nonexistent",
 		Content: "hello",
 	})
@@ -324,7 +325,7 @@ func TestAgentHandler_HandleAgentStream_InvalidAgentID(t *testing.T) {
 	reg := newMockRegistry()
 	handler := newTestHandler(reg)
 
-	body, _ := json.Marshal(AgentExecuteRequest{
+	body, _ := json.Marshal(usecase.AgentExecuteRequest{
 		AgentID: "../../../etc/passwd",
 		Content: "hello",
 	})
@@ -345,7 +346,7 @@ func TestAgentHandler_HandleAgentStream_MissingFields(t *testing.T) {
 	reg := newMockRegistry()
 	handler := newTestHandler(reg)
 
-	body, _ := json.Marshal(AgentExecuteRequest{
+	body, _ := json.Marshal(usecase.AgentExecuteRequest{
 		AgentID: "test",
 		Content: "",
 	})
@@ -369,7 +370,7 @@ func TestAgentHandler_HandleAgentStream_WithResolver_NotFound(t *testing.T) {
 	}
 	handler := NewAgentHandler(reg, nil, zap.NewNop(), resolver)
 
-	body, _ := json.Marshal(AgentExecuteRequest{
+	body, _ := json.Marshal(usecase.AgentExecuteRequest{
 		AgentID: "missing",
 		Content: "hello",
 	})
@@ -990,7 +991,7 @@ func TestAgentHandler_HandleAgentStream_WithResolver_Success(t *testing.T) {
 
 	handler := NewAgentHandler(reg, nil, zap.NewNop(), resolver)
 
-	body, _ := json.Marshal(AgentExecuteRequest{
+	body, _ := json.Marshal(usecase.AgentExecuteRequest{
 		AgentID: "stream-agent",
 		Content: "hello",
 	})
@@ -1025,7 +1026,7 @@ func TestAgentHandler_HandleAgentStream_WithResolver_ExecutionError(t *testing.T
 
 	handler := NewAgentHandler(reg, nil, zap.NewNop(), resolver)
 
-	body, _ := json.Marshal(AgentExecuteRequest{
+	body, _ := json.Marshal(usecase.AgentExecuteRequest{
 		AgentID: "err-stream",
 		Content: "hello",
 	})

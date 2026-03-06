@@ -172,6 +172,7 @@ type Evaluator struct {
 
 // 新评价员创建了新的评价员.
 func NewEvaluator(config EvaluatorConfig, logger *zap.Logger) *Evaluator {
+	// O-004: optional module, nil-safe
 	if logger == nil {
 		logger = zap.NewNop()
 	}

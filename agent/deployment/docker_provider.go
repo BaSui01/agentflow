@@ -18,6 +18,7 @@ type DockerProvider struct {
 
 // NewDockerProvider creates a new Docker provider.
 func NewDockerProvider(logger *zap.Logger) *DockerProvider {
+	// O-004: optional module, nil-safe
 	if logger == nil {
 		logger = zap.NewNop()
 	}

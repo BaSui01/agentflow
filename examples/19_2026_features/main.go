@@ -118,7 +118,7 @@ func demoLayeredMemory(logger *zap.Logger) {
 	_, _ = lm.Export()
 
 	episodicStore := memory.NewInMemoryEpisodicStore(logger)
-	_ = episodicStore.RecordEvent(ctx, &memory.EpisodicEvent{
+	_ = episodicStore.RecordEvent(ctx, &types.EpisodicEvent{
 		AgentID: "demo-agent",
 		Type:    "query",
 		Content: "user asked weather",
