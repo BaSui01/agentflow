@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	stdpath "path/filepath"
 	"strings"
 	"time"
 
@@ -204,6 +205,10 @@ func (p *DeepgramProvider) Transcribe(ctx context.Context, req *STTRequest) (*ST
 
 // 转录File转录音频文件.
 func (p *DeepgramProvider) TranscribeFile(ctx context.Context, filepath string, opts *STTRequest) (*STTResponse, error) {
+	filepath = stdpath.Clean(filepath)
+	if strings.Contains(filepath, "..") {
+		return nil, fmt.Errorf("path traversal not allowed")
+	}
 	file, err := os.Open(filepath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open file: %w", err)

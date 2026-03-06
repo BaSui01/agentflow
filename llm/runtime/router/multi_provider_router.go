@@ -129,7 +129,7 @@ func (r *MultiProviderRouter) queryCandidates(ctx context.Context, modelName, pr
 	if providerCode != "" {
 		query = query.Where("p.code = ?", providerCode)
 	}
-	if err := query.Find(&candidates).Error; err != nil {
+	if err := query.Limit(100).Find(&candidates).Error; err != nil {
 		return nil, err
 	}
 	return candidates, nil

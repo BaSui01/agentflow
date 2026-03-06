@@ -63,6 +63,10 @@ func (d *RealDockerBackend) Execute(ctx context.Context, req *ExecutionRequest, 
 
 	// 写入额外文件
 	for filename, content := range req.Files {
+		if strings.Contains(filename, "..") || filepath.IsAbs(filename) || strings.HasPrefix(filename, "/") {
+			result.Error = fmt.Sprintf("invalid filename: %s (path traversal not allowed)", filename)
+			return result, nil
+		}
 		filePath := filepath.Join(tempDir, filename)
 		if err := os.WriteFile(filePath, []byte(content), 0644); err != nil {
 			result.Error = fmt.Sprintf("failed to write file %s: %v", filename, err)
@@ -362,7 +366,8 @@ func (p *RealProcessBackend) Execute(ctx context.Context, req *ExecutionRequest,
 	case LangBash:
 		cmd = exec.CommandContext(ctx, interpreter, codeFile)
 	default:
-		cmd = exec.CommandContext(ctx, interpreter, "-c", req.Code)
+		result.Error = fmt.Sprintf("unsupported language: %s", req.Language)
+		return result, nil
 	}
 
 	cmd.Dir = tempDir

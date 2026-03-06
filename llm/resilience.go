@@ -246,7 +246,14 @@ func (rp *ResilientProvider) Stream(ctx context.Context, req *ChatRequest) (<-ch
 	// Wrap channel to record success/failure based on stream outcome
 	wrapped := make(chan StreamChunk)
 	go func() {
-		defer close(wrapped)
+		defer func() {
+			if r := recover(); r != nil {
+				if rp.logger != nil {
+					rp.logger.Error("panic in Stream goroutine", zap.Any("panic", r))
+				}
+			}
+			close(wrapped)
+		}()
 		var hadError bool
 		for chunk := range ch {
 			if chunk.Err != nil {

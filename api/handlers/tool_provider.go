@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/BaSui01/agentflow/types"
 	"go.uber.org/zap"
 )
 
@@ -32,7 +33,7 @@ type upsertToolProviderRequest struct {
 
 func (h *ToolProviderHandler) HandleList(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		WriteErrorMessage(w, http.StatusMethodNotAllowed, "invalid_request", "method not allowed", h.logger)
+		WriteErrorMessage(w, http.StatusMethodNotAllowed, types.ErrInvalidRequest, "method not allowed", h.logger)
 		return
 	}
 	rows, err := h.svc.List()
@@ -45,7 +46,7 @@ func (h *ToolProviderHandler) HandleList(w http.ResponseWriter, r *http.Request)
 
 func (h *ToolProviderHandler) HandleUpsert(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPut {
-		WriteErrorMessage(w, http.StatusMethodNotAllowed, "invalid_request", "method not allowed", h.logger)
+		WriteErrorMessage(w, http.StatusMethodNotAllowed, types.ErrInvalidRequest, "method not allowed", h.logger)
 		return
 	}
 	if !ValidateContentType(w, r, h.logger) {
@@ -53,7 +54,7 @@ func (h *ToolProviderHandler) HandleUpsert(w http.ResponseWriter, r *http.Reques
 	}
 	provider := extractToolProviderName(r)
 	if strings.TrimSpace(provider) == "" {
-		WriteErrorMessage(w, http.StatusBadRequest, "invalid_request", "provider is required", h.logger)
+		WriteErrorMessage(w, http.StatusBadRequest, types.ErrInvalidRequest, "provider is required", h.logger)
 		return
 	}
 
@@ -78,12 +79,12 @@ func (h *ToolProviderHandler) HandleUpsert(w http.ResponseWriter, r *http.Reques
 
 func (h *ToolProviderHandler) HandleDelete(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodDelete {
-		WriteErrorMessage(w, http.StatusMethodNotAllowed, "invalid_request", "method not allowed", h.logger)
+		WriteErrorMessage(w, http.StatusMethodNotAllowed, types.ErrInvalidRequest, "method not allowed", h.logger)
 		return
 	}
 	provider := extractToolProviderName(r)
 	if strings.TrimSpace(provider) == "" {
-		WriteErrorMessage(w, http.StatusBadRequest, "invalid_request", "provider is required", h.logger)
+		WriteErrorMessage(w, http.StatusBadRequest, types.ErrInvalidRequest, "provider is required", h.logger)
 		return
 	}
 	if err := h.svc.Delete(provider); err != nil {
@@ -95,7 +96,7 @@ func (h *ToolProviderHandler) HandleDelete(w http.ResponseWriter, r *http.Reques
 
 func (h *ToolProviderHandler) HandleReload(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		WriteErrorMessage(w, http.StatusMethodNotAllowed, "invalid_request", "method not allowed", h.logger)
+		WriteErrorMessage(w, http.StatusMethodNotAllowed, types.ErrInvalidRequest, "method not allowed", h.logger)
 		return
 	}
 	if err := h.svc.Reload(); err != nil {

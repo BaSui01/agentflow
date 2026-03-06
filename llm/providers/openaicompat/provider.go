@@ -455,6 +455,11 @@ func (p *Provider) Stream(ctx context.Context, req *llm.ChatRequest) (<-chan llm
 func StreamSSE(ctx context.Context, body io.ReadCloser, providerName string) <-chan llm.StreamChunk {
 	ch := make(chan llm.StreamChunk)
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				// panic recovered; body and ch will be closed by defers below
+			}
+		}()
 		defer body.Close()
 		defer close(ch)
 		reader := bufio.NewReader(body)

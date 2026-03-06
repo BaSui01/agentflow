@@ -90,3 +90,9 @@ func (s *StdioTransport) Close() error {
 	_ = s.cmd.Wait()
 	return nil
 }
+
+func (s *StdioTransport) IsAlive() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return !s.closed
+}

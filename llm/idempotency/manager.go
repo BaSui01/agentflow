@@ -39,6 +39,9 @@ type Manager interface {
 
 	// Exists 检查幂等键是否存在
 	Exists(ctx context.Context, key string) (bool, error)
+
+	// Close 停止后台 goroutine，释放资源。幂等，可多次调用。
+	Close()
 }
 
 // redisManager 基于 Redis 的幂等性管理器实现
@@ -164,6 +167,9 @@ func (m *redisManager) Exists(ctx context.Context, key string) (bool, error) {
 
 	return count > 0, nil
 }
+
+// Close 实现 Manager.Close，Redis 实现无后台 goroutine，无操作。
+func (m *redisManager) Close() {}
 
 // memoryManager 基于内存的幂等性管理器实现（用于测试）
 type memoryManager struct {

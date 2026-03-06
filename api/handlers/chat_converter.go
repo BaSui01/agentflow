@@ -9,6 +9,7 @@ import (
 )
 
 // ChatConverter centralizes request/response conversion between API and LLM layers.
+// Implements usecase.ChatConverter (ToLLMRequest, ToAPIResponse) and extends with stream/choices/usage.
 type ChatConverter interface {
 	ToLLMRequest(req *api.ChatRequest) *llm.ChatRequest
 	ToAPIResponse(resp *llm.ChatResponse) *api.ChatResponse

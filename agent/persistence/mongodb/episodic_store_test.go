@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/BaSui01/agentflow/agent/memory"
+	"github.com/BaSui01/agentflow/types"
 )
 
 func TestMongoEpisodicStore_RecordAndQuery(t *testing.T) {
@@ -20,7 +21,7 @@ func TestMongoEpisodicStore_RecordAndQuery(t *testing.T) {
 	}
 
 	now := time.Now()
-	event := &memory.EpisodicEvent{
+	event := &types.EpisodicEvent{
 		ID:        "ep-test-1",
 		AgentID:   "agent-1",
 		Type:      "task_execution",
@@ -59,7 +60,7 @@ func TestMongoEpisodicStore_IdempotentInsert(t *testing.T) {
 		t.Fatalf("NewEpisodicStore: %v", err)
 	}
 
-	event := &memory.EpisodicEvent{
+	event := &types.EpisodicEvent{
 		ID:      "ep-dup-1",
 		AgentID: "agent-1",
 		Type:    "task_execution",
@@ -86,7 +87,7 @@ func TestMongoEpisodicStore_GetTimeline(t *testing.T) {
 
 	base := time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)
 	for i := 0; i < 3; i++ {
-		_ = store.RecordEvent(ctx, &memory.EpisodicEvent{
+		_ = store.RecordEvent(ctx, &types.EpisodicEvent{
 			ID:        "tl-" + string(rune('a'+i)),
 			AgentID:   "agent-tl",
 			Type:      "task_execution",

@@ -19,6 +19,7 @@ import (
 	"github.com/BaSui01/agentflow/llm/capabilities/image"
 	"github.com/BaSui01/agentflow/llm/capabilities/multimodal"
 	"github.com/BaSui01/agentflow/llm/capabilities/video"
+	"github.com/BaSui01/agentflow/pkg/storage"
 	"github.com/BaSui01/agentflow/types"
 	"github.com/alicebob/miniredis/v2"
 	"github.com/redis/go-redis/v9"
@@ -133,12 +134,12 @@ func (m *mockLLMProvider) Endpoints() llm.ProviderEndpoints { return llm.Provide
 
 type failingReferenceStore struct{}
 
-func (s *failingReferenceStore) Save(asset *referenceAsset) error {
+func (s *failingReferenceStore) Save(asset *storage.ReferenceAsset) error {
 	_ = asset
 	return errors.New("reference store unavailable")
 }
 
-func (s *failingReferenceStore) Get(id string) (*referenceAsset, bool) {
+func (s *failingReferenceStore) Get(id string) (*storage.ReferenceAsset, bool) {
 	_ = id
 	return nil, false
 }
@@ -417,12 +418,12 @@ func TestValidatePublicReferenceImageURL(t *testing.T) {
 }
 
 func TestMemoryReferenceStore_Cleanup(t *testing.T) {
-	store := NewMemoryReferenceStore()
-	oldRef := &referenceAsset{
+	store := storage.NewMemoryReferenceStore()
+	oldRef := &storage.ReferenceAsset{
 		ID:        "old",
 		CreatedAt: time.Now().Add(-3 * time.Hour),
 	}
-	newRef := &referenceAsset{
+	newRef := &storage.ReferenceAsset{
 		ID:        "new",
 		CreatedAt: time.Now(),
 	}
@@ -445,8 +446,8 @@ func TestRedisReferenceStore_SaveGetDelete(t *testing.T) {
 	client := redis.NewClient(&redis.Options{Addr: mr.Addr()})
 	defer client.Close()
 
-	store := NewRedisReferenceStore(client, "agentflow:test:mm", 2*time.Hour, zap.NewNop())
-	asset := &referenceAsset{
+	store := storage.NewRedisReferenceStore(client, "agentflow:test:mm", 2*time.Hour, zap.NewNop())
+	asset := &storage.ReferenceAsset{
 		ID:        "ref_1",
 		FileName:  "ref.png",
 		MimeType:  "image/png",
@@ -479,8 +480,8 @@ func TestRedisReferenceStore_TTLExpiry(t *testing.T) {
 	client := redis.NewClient(&redis.Options{Addr: mr.Addr()})
 	defer client.Close()
 
-	store := NewRedisReferenceStore(client, "agentflow:test:mm", 2*time.Second, zap.NewNop())
-	require.NoError(t, store.Save(&referenceAsset{
+	store := storage.NewRedisReferenceStore(client, "agentflow:test:mm", 2*time.Second, zap.NewNop())
+	require.NoError(t, store.Save(&storage.ReferenceAsset{
 		ID:        "ref_2",
 		FileName:  "ref.png",
 		MimeType:  "image/png",

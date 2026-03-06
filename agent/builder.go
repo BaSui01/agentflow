@@ -123,7 +123,7 @@ func (b *AgentBuilder) WithEventBus(bus EventBus) *AgentBuilder {
 	return b
 }
 
-// WithLogger 设置日志器
+// WithLogger 设置日志器。logger 为必选参数，nil 时 Build() 将返回错误。
 func (b *AgentBuilder) WithLogger(logger *zap.Logger) *AgentBuilder {
 	if logger == nil {
 		b.errors = append(b.errors, fmt.Errorf("logger cannot be nil"))
@@ -139,7 +139,7 @@ func (b *AgentBuilder) WithReflection(config *ReflectionExecutorConfig) *AgentBu
 		config = DefaultReflectionConfig()
 	}
 	b.reflectionConfig = config
-	setReflectionEnabled(&b.config, true)
+	ensureReflectionEnabled(&b.config)
 	return b
 }
 
@@ -149,7 +149,7 @@ func (b *AgentBuilder) WithToolSelection(config *ToolSelectionConfig) *AgentBuil
 		config = DefaultToolSelectionConfig()
 	}
 	b.toolSelectionConfig = config
-	setToolSelectionEnabled(&b.config, true)
+	ensureToolSelectionEnabled(&b.config)
 	return b
 }
 
@@ -159,14 +159,14 @@ func (b *AgentBuilder) WithPromptEnhancer(config *PromptEnhancerConfig) *AgentBu
 		config = DefaultPromptEnhancerConfig()
 	}
 	b.promptEnhancerConfig = config
-	setPromptEnhancerEnabled(&b.config, true)
+	ensurePromptEnhancerEnabled(&b.config)
 	return b
 }
 
 // WithSkills 启用 Skills 系统
 func (b *AgentBuilder) WithSkills(discoverer SkillDiscoverer) *AgentBuilder {
 	b.skillsInstance = discoverer
-	setSkillsEnabled(&b.config, true)
+	ensureSkillsEnabled(&b.config)
 	return b
 }
 
@@ -194,14 +194,14 @@ func (b *AgentBuilder) WithDefaultSkills(directory string, config *skills.SkillM
 // WithMCP 启用 MCP 集成
 func (b *AgentBuilder) WithMCP(server MCPServerRunner) *AgentBuilder {
 	b.mcpInstance = server
-	setMCPEnabled(&b.config, true)
+	ensureMCPEnabled(&b.config)
 	return b
 }
 
 // WithLSP 启用 LSP 集成。
 func (b *AgentBuilder) WithLSP(client LSPClientRunner) *AgentBuilder {
 	b.lspClient = client
-	setLSPEnabled(&b.config, true)
+	ensureLSPEnabled(&b.config)
 	return b
 }
 
@@ -209,7 +209,7 @@ func (b *AgentBuilder) WithLSP(client LSPClientRunner) *AgentBuilder {
 func (b *AgentBuilder) WithLSPWithLifecycle(client LSPClientRunner, lifecycle LSPLifecycleOwner) *AgentBuilder {
 	b.lspClient = client
 	b.lspLifecycle = lifecycle
-	setLSPEnabled(&b.config, true)
+	ensureLSPEnabled(&b.config)
 	return b
 }
 
@@ -251,7 +251,7 @@ func (b *AgentBuilder) WithDefaultMCPServer(name, version string) *AgentBuilder 
 // WithEnhancedMemory 启用增强记忆系统
 func (b *AgentBuilder) WithEnhancedMemory(mem EnhancedMemoryRunner) *AgentBuilder {
 	b.enhancedMemoryInstance = mem
-	setEnhancedMemoryEnabled(&b.config, true)
+	ensureEnhancedMemoryEnabled(&b.config)
 	return b
 }
 
@@ -271,7 +271,7 @@ func (b *AgentBuilder) WithDefaultEnhancedMemory(config *memory.EnhancedMemoryCo
 // WithObservability 启用可观测性系统
 func (b *AgentBuilder) WithObservability(obs ObservabilityRunner) *AgentBuilder {
 	b.observabilityInstance = obs
-	setObservabilityEnabled(&b.config, true)
+	ensureObservabilityEnabled(&b.config)
 	return b
 }
 
@@ -319,18 +319,20 @@ func (b *AgentBuilder) ReasoningRegistry() *reasoning.PatternRegistry {
 func (b *AgentBuilder) Build() (*BaseAgent, error) {
 	// 检查构建过程中的错误
 	if len(b.errors) > 0 {
-		return nil, fmt.Errorf("builder has %d errors: %w", len(b.errors), b.errors[0])
+		return nil, NewErrorWithCause(types.ErrInputValidation, "builder validation failed", b.errors[0])
 	}
 
 	// 验证必需字段
 	if b.provider == nil {
-		return nil, fmt.Errorf("provider is required")
+		return nil, ErrProviderNotSet
 	}
 
 	// V-013: Model is required for agent to function
 	if b.config.LLM.Model == "" {
-		return nil, fmt.Errorf("config.Model is required")
+		return nil, NewError(types.ErrInputValidation, "config.Model is required")
 	}
+
+	// V-011: persistence 为可选依赖，nil 时 PersistenceStores 内部会优雅降级（LoadPrompt/RecordRun 等返回空）
 
 	// 设置默认 logger
 	if b.logger == nil {
@@ -359,28 +361,28 @@ func (b *AgentBuilder) Build() (*BaseAgent, error) {
 	agent.persistence.SetRunStore(b.runStore)
 
 	// 如果直接在配置上启用了特性标记, 请返回默认配置 。
-	if isReflectionEnabled(b.config) && b.reflectionConfig == nil {
+	if b.config.IsReflectionEnabled() && b.reflectionConfig == nil {
 		b.reflectionConfig = DefaultReflectionConfig()
 	}
-	if isToolSelectionEnabled(b.config) && b.toolSelectionConfig == nil {
+	if b.config.IsToolSelectionEnabled() && b.toolSelectionConfig == nil {
 		b.toolSelectionConfig = DefaultToolSelectionConfig()
 	}
-	if isPromptEnhancerEnabled(b.config) && b.promptEnhancerConfig == nil {
+	if b.config.IsPromptEnhancerEnabled() && b.promptEnhancerConfig == nil {
 		b.promptEnhancerConfig = DefaultPromptEnhancerConfig()
 	}
 
 	// 启用高级特性
-	if isReflectionEnabled(b.config) && b.reflectionConfig != nil {
+	if b.config.IsReflectionEnabled() && b.reflectionConfig != nil {
 		reflectionExecutor := NewReflectionExecutor(agent, *b.reflectionConfig)
 		agent.EnableReflection(AsReflectionRunner(reflectionExecutor))
 	}
 
-	if isToolSelectionEnabled(b.config) && b.toolSelectionConfig != nil {
+	if b.config.IsToolSelectionEnabled() && b.toolSelectionConfig != nil {
 		toolSelector := NewDynamicToolSelector(agent, *b.toolSelectionConfig)
 		agent.EnableToolSelection(AsToolSelectorRunner(toolSelector))
 	}
 
-	if isPromptEnhancerEnabled(b.config) && b.promptEnhancerConfig != nil {
+	if b.config.IsPromptEnhancerEnabled() && b.promptEnhancerConfig != nil {
 		promptEnhancer := NewPromptEnhancer(*b.promptEnhancerConfig)
 		agent.EnablePromptEnhancer(AsPromptEnhancerRunner(promptEnhancer))
 	}
@@ -393,21 +395,21 @@ func (b *AgentBuilder) Build() (*BaseAgent, error) {
 }
 
 func (b *AgentBuilder) enableOptionalFeatures(agent *BaseAgent) error {
-	if isSkillsEnabled(b.config) {
+	if b.config.IsSkillsEnabled() {
 		if err := b.enableSkills(agent); err != nil {
 			return fmt.Errorf("enable skills: %w", err)
 		}
 	}
-	if isMCPEnabled(b.config) {
+	if b.config.IsMCPEnabled() {
 		b.enableMCP(agent)
 	}
-	if isLSPEnabled(b.config) {
+	if b.config.IsLSPEnabled() {
 		b.enableLSP(agent)
 	}
-	if isEnhancedMemoryEnabled(b.config) {
+	if b.config.IsMemoryEnabled() {
 		b.enableEnhancedMemory(agent)
 	}
-	if isObservabilityEnabled(b.config) && b.observabilityInstance != nil {
+	if b.config.IsObservabilityEnabled() && b.observabilityInstance != nil {
 		agent.EnableObservability(b.observabilityInstance)
 	}
 	return nil
@@ -500,92 +502,60 @@ func ensureAgentType(cfg *types.AgentConfig) {
 	}
 }
 
-func isReflectionEnabled(cfg types.AgentConfig) bool {
-	return cfg.Features.Reflection != nil && cfg.Features.Reflection.Enabled
-}
-
-func isToolSelectionEnabled(cfg types.AgentConfig) bool {
-	return cfg.Features.ToolSelection != nil && cfg.Features.ToolSelection.Enabled
-}
-
-func isPromptEnhancerEnabled(cfg types.AgentConfig) bool {
-	return cfg.Features.PromptEnhancer != nil && cfg.Features.PromptEnhancer.Enabled
-}
-
-func isSkillsEnabled(cfg types.AgentConfig) bool {
-	return cfg.Extensions.Skills != nil && cfg.Extensions.Skills.Enabled
-}
-
-func isMCPEnabled(cfg types.AgentConfig) bool {
-	return cfg.Extensions.MCP != nil && cfg.Extensions.MCP.Enabled
-}
-
-func isLSPEnabled(cfg types.AgentConfig) bool {
-	return cfg.Extensions.LSP != nil && cfg.Extensions.LSP.Enabled
-}
-
-func isEnhancedMemoryEnabled(cfg types.AgentConfig) bool {
-	return cfg.Features.Memory != nil && cfg.Features.Memory.Enabled
-}
-
-func isObservabilityEnabled(cfg types.AgentConfig) bool {
-	return cfg.Extensions.Observability != nil && cfg.Extensions.Observability.Enabled
-}
-
-func setReflectionEnabled(cfg *types.AgentConfig, enabled bool) {
+func ensureReflectionEnabled(cfg *types.AgentConfig) {
 	if cfg.Features.Reflection == nil {
 		cfg.Features.Reflection = &types.ReflectionConfig{}
 	}
-	cfg.Features.Reflection.Enabled = enabled
+	cfg.Features.Reflection.Enabled = true
 }
 
-func setToolSelectionEnabled(cfg *types.AgentConfig, enabled bool) {
+func ensureToolSelectionEnabled(cfg *types.AgentConfig) {
 	if cfg.Features.ToolSelection == nil {
 		cfg.Features.ToolSelection = &types.ToolSelectionConfig{}
 	}
-	cfg.Features.ToolSelection.Enabled = enabled
+	cfg.Features.ToolSelection.Enabled = true
 }
 
-func setPromptEnhancerEnabled(cfg *types.AgentConfig, enabled bool) {
+func ensurePromptEnhancerEnabled(cfg *types.AgentConfig) {
 	if cfg.Features.PromptEnhancer == nil {
 		cfg.Features.PromptEnhancer = &types.PromptEnhancerConfig{}
 	}
-	cfg.Features.PromptEnhancer.Enabled = enabled
+	cfg.Features.PromptEnhancer.Enabled = true
 }
 
-func setSkillsEnabled(cfg *types.AgentConfig, enabled bool) {
+func ensureSkillsEnabled(cfg *types.AgentConfig) {
 	if cfg.Extensions.Skills == nil {
 		cfg.Extensions.Skills = &types.SkillsConfig{}
 	}
-	cfg.Extensions.Skills.Enabled = enabled
+	cfg.Extensions.Skills.Enabled = true
 }
 
-func setMCPEnabled(cfg *types.AgentConfig, enabled bool) {
+func ensureMCPEnabled(cfg *types.AgentConfig) {
 	if cfg.Extensions.MCP == nil {
 		cfg.Extensions.MCP = &types.MCPConfig{}
 	}
-	cfg.Extensions.MCP.Enabled = enabled
+	cfg.Extensions.MCP.Enabled = true
 }
 
-func setLSPEnabled(cfg *types.AgentConfig, enabled bool) {
+func ensureLSPEnabled(cfg *types.AgentConfig) {
 	if cfg.Extensions.LSP == nil {
 		cfg.Extensions.LSP = &types.LSPConfig{}
 	}
-	cfg.Extensions.LSP.Enabled = enabled
+	cfg.Extensions.LSP.Enabled = true
 }
 
-func setEnhancedMemoryEnabled(cfg *types.AgentConfig, enabled bool) {
+func ensureEnhancedMemoryEnabled(cfg *types.AgentConfig) {
 	if cfg.Features.Memory == nil {
 		cfg.Features.Memory = &types.MemoryConfig{}
 	}
-	cfg.Features.Memory.Enabled = enabled
+	cfg.Features.Memory.Enabled = true
 }
 
-func setObservabilityEnabled(cfg *types.AgentConfig, enabled bool) {
+func ensureObservabilityEnabled(cfg *types.AgentConfig) {
 	if cfg.Extensions.Observability == nil {
 		cfg.Extensions.Observability = &types.ObservabilityConfig{}
 	}
-	cfg.Extensions.Observability.Enabled = enabled
+	cfg.Extensions.Observability.Enabled = true
 }
 
 func promptBundleFromConfig(cfg types.AgentConfig) PromptBundle {

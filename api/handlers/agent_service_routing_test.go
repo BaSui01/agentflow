@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/BaSui01/agentflow/agent"
+	"github.com/BaSui01/agentflow/internal/usecase"
 	"github.com/BaSui01/agentflow/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -45,11 +46,11 @@ func (a *routingAwareAgent) Execute(ctx context.Context, _ *agent.Input) (*agent
 
 func TestAgentService_ExecuteAgent_AppliesRoutingContext(t *testing.T) {
 	ag := &routingAwareAgent{}
-	svc := NewDefaultAgentService(nil, func(ctx context.Context, _ string) (agent.Agent, error) {
+	svc := usecase.NewDefaultAgentService(nil, func(ctx context.Context, _ string) (agent.Agent, error) {
 		return ag, nil
 	})
 
-	resp, _, err := svc.ExecuteAgent(context.Background(), AgentExecuteRequest{
+	resp, _, err := svc.ExecuteAgent(context.Background(), usecase.AgentExecuteRequest{
 		AgentID:     "routing-agent",
 		Content:     "hello",
 		Model:       "gpt-4o",
@@ -90,11 +91,11 @@ func TestAgentService_ExecuteAgent_AppliesRoutingContext(t *testing.T) {
 
 func TestAgentService_PlanAgent_AppliesRoutingContext(t *testing.T) {
 	ag := &routingAwareAgent{}
-	svc := NewDefaultAgentService(nil, func(ctx context.Context, _ string) (agent.Agent, error) {
+	svc := usecase.NewDefaultAgentService(nil, func(ctx context.Context, _ string) (agent.Agent, error) {
 		return ag, nil
 	})
 
-	plan, err := svc.PlanAgent(context.Background(), AgentExecuteRequest{
+	plan, err := svc.PlanAgent(context.Background(), usecase.AgentExecuteRequest{
 		AgentID:     "routing-agent",
 		Content:     "hello",
 		RoutePolicy: "latency_first",

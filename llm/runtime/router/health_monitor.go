@@ -10,6 +10,21 @@ import (
 	"gorm.io/gorm"
 )
 
+// Health score thresholds (error rate and latency).
+const (
+	healthErrorRateLow    = 0.01  // < 1%: score 1.0
+	healthErrorRateMedium = 0.05  // 1-5%: score 0.8
+	healthErrorRateHigh   = 0.10  // 5-10%: score 0.5, >10%: score 0.2
+	healthScoreDefault    = 1.0
+	healthScoreLowErr     = 0.8
+	healthScoreMediumErr  = 0.5
+	healthScoreHighErr    = 0.2
+	healthLatencyP95Sec   = 5000.0 // ms, >5s: score *= 0.5
+	healthLatencyP95Warn  = 3000.0 // ms, >3s: score *= 0.8
+	healthLatencyPenalty  = 0.5
+	healthLatencyWarnMult = 0.8
+)
+
 type HealthMonitor struct {
 	mu          sync.RWMutex
 	db          *gorm.DB
@@ -283,33 +298,29 @@ func (m *HealthMonitor) calculateHealthScore(providerCode string) float64 {
 		Scan(&stats)
 
 	if stats.TotalCalls == 0 {
-		return 1.0 // 无数据，默认健康
+		return healthScoreDefault // 无数据，默认健康
 	}
 
 	errorRate := float64(stats.FailedCalls) / float64(stats.TotalCalls)
 
-	// 健康分数计算：
-	// - 错误率 < 1%: 1.0
-	// - 错误率 1-5%: 0.8
-	// - 错误率 5-10%: 0.5
-	// - 错误率 > 10%: 0.2
-	score := 1.0
-	if errorRate > 0.01 {
-		score = 0.8
+	// 健康分数计算：错误率阈值与分数由常量定义
+	score := healthScoreDefault
+	if errorRate > healthErrorRateLow {
+		score = healthScoreLowErr
 	}
-	if errorRate > 0.05 {
-		score = 0.5
+	if errorRate > healthErrorRateMedium {
+		score = healthScoreMediumErr
 	}
-	if errorRate > 0.10 {
-		score = 0.2
+	if errorRate > healthErrorRateHigh {
+		score = healthScoreHighErr
 	}
 
 	// 延迟因子（P95 估算）
 	latencyP95 := stats.AvgLatency * 1.2
-	if latencyP95 > 5000 { // 超过 5 秒
-		score *= 0.5
-	} else if latencyP95 > 3000 { // 超过 3 秒
-		score *= 0.8
+	if latencyP95 > healthLatencyP95Sec {
+		score *= healthLatencyPenalty
+	} else if latencyP95 > healthLatencyP95Warn {
+		score *= healthLatencyWarnMult
 	}
 
 	return score

@@ -76,6 +76,9 @@ func (h *RAGHandler) HandleQuery(w http.ResponseWriter, r *http.Request) {
 	if req.TopK <= 0 {
 		req.TopK = 5
 	}
+	if req.TopK > 256 {
+		req.TopK = 256
+	}
 
 	queryResponse, err := h.service.Query(r.Context(), req.Query, req.TopK, RAGQueryOptions{
 		Strategy: req.Strategy,
@@ -142,6 +145,10 @@ func (h *RAGHandler) HandleIndex(w http.ResponseWriter, r *http.Request) {
 
 	if len(req.Documents) == 0 {
 		WriteErrorMessage(w, http.StatusBadRequest, types.ErrInvalidRequest, "documents cannot be empty", h.logger)
+		return
+	}
+	if len(req.Documents) > 1000 {
+		WriteErrorMessage(w, http.StatusBadRequest, types.ErrInvalidRequest, "documents count exceeds limit of 1000", h.logger)
 		return
 	}
 

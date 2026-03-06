@@ -13,6 +13,9 @@ import (
 	"go.uber.org/zap"
 )
 
+// TODO(refactor): initHandlers contains conditional assembly logic (if/else on config, runtime availability).
+// Consider moving handler assembly decisions to bootstrap to keep cmd as pure composition root.
+//
 type toolRegistryRuntimeAdapter struct {
 	runtime  *bootstrap.AgentToolingRuntime
 	onReload func(ctx context.Context)

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/BaSui01/agentflow/api"
+	"github.com/BaSui01/agentflow/internal/usecase"
 	"github.com/BaSui01/agentflow/llm"
 	llmtools "github.com/BaSui01/agentflow/llm/capabilities/tools"
 	llmcore "github.com/BaSui01/agentflow/llm/core"
@@ -136,7 +137,7 @@ func (s *chatGatewayStub) Stream(_ context.Context, req *llmcore.UnifiedRequest)
 
 func TestChatService_Complete_RoutesByParams(t *testing.T) {
 	gw := &chatGatewayStub{}
-	svc := newDefaultChatService(gw, nil, nil, NewDefaultChatConverter(defaultStreamTimeout), zap.NewNop())
+	svc := usecase.NewDefaultChatService(gw, nil, nil, NewDefaultChatConverter(defaultStreamTimeout), zap.NewNop())
 
 	result, err := svc.Complete(context.Background(), &api.ChatRequest{
 		Model:        "gpt-4o",
@@ -164,7 +165,7 @@ func TestChatService_Complete_RoutesByParams(t *testing.T) {
 
 func TestChatService_Complete_InvalidRoutePolicy(t *testing.T) {
 	gw := &chatGatewayStub{}
-	svc := newDefaultChatService(gw, nil, nil, NewDefaultChatConverter(defaultStreamTimeout), zap.NewNop())
+	svc := usecase.NewDefaultChatService(gw, nil, nil, NewDefaultChatConverter(defaultStreamTimeout), zap.NewNop())
 
 	result, err := svc.Complete(context.Background(), &api.ChatRequest{
 		Model:       "gpt-4o",
@@ -180,7 +181,7 @@ func TestChatService_Complete_InvalidRoutePolicy(t *testing.T) {
 
 func TestChatService_Complete_InvalidEndpointMode(t *testing.T) {
 	gw := &chatGatewayStub{}
-	svc := newDefaultChatService(gw, nil, nil, NewDefaultChatConverter(defaultStreamTimeout), zap.NewNop())
+	svc := usecase.NewDefaultChatService(gw, nil, nil, NewDefaultChatConverter(defaultStreamTimeout), zap.NewNop())
 
 	result, err := svc.Complete(context.Background(), &api.ChatRequest{
 		Model:        "gpt-4o",
@@ -196,7 +197,7 @@ func TestChatService_Complete_InvalidEndpointMode(t *testing.T) {
 
 func TestChatService_Stream_RoutesByParams(t *testing.T) {
 	gw := &chatGatewayStub{}
-	svc := newDefaultChatService(gw, nil, nil, NewDefaultChatConverter(defaultStreamTimeout), zap.NewNop())
+	svc := usecase.NewDefaultChatService(gw, nil, nil, NewDefaultChatConverter(defaultStreamTimeout), zap.NewNop())
 
 	stream, err := svc.Stream(context.Background(), &api.ChatRequest{
 		Model:        "gpt-4o",
@@ -282,7 +283,7 @@ func TestChatService_Complete_UsesLocalToolLoopWhenAvailable(t *testing.T) {
 		},
 	}
 
-	svc := newDefaultChatService(gw, provider, toolManager, NewDefaultChatConverter(defaultStreamTimeout), zap.NewNop())
+	svc := usecase.NewDefaultChatService(gw, provider, toolManager, NewDefaultChatConverter(defaultStreamTimeout), zap.NewNop())
 
 	result, err := svc.Complete(context.Background(), &api.ChatRequest{
 		Model: "gpt-4o",
@@ -311,7 +312,7 @@ func TestChatService_Complete_FallbackGatewayWhenNoToolManager(t *testing.T) {
 			return nil, errors.New("should not call provider completion")
 		},
 	}
-	svc := newDefaultChatService(gw, provider, nil, NewDefaultChatConverter(defaultStreamTimeout), zap.NewNop())
+	svc := usecase.NewDefaultChatService(gw, provider, nil, NewDefaultChatConverter(defaultStreamTimeout), zap.NewNop())
 
 	result, err := svc.Complete(context.Background(), &api.ChatRequest{
 		Model: "gpt-4o",
@@ -374,7 +375,7 @@ func TestChatService_Stream_UsesLocalToolLoopWhenAvailable(t *testing.T) {
 		},
 	}
 
-	svc := newDefaultChatService(gw, provider, toolManager, NewDefaultChatConverter(defaultStreamTimeout), zap.NewNop())
+	svc := usecase.NewDefaultChatService(gw, provider, toolManager, NewDefaultChatConverter(defaultStreamTimeout), zap.NewNop())
 	stream, err := svc.Stream(context.Background(), &api.ChatRequest{
 		Model: "gpt-4o",
 		Messages: []api.Message{

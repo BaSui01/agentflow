@@ -2,8 +2,6 @@ package agent
 
 import (
 	"context"
-	"fmt"
-	"strings"
 	"sync"
 	"time"
 
@@ -69,6 +67,7 @@ type Input struct {
 	Content   string            `json:"content"`
 	Context   map[string]any    `json:"context,omitempty"`   // 额外上下文
 	Variables map[string]string `json:"variables,omitempty"` // 变量替换
+	Overrides *RunConfig        `json:"overrides,omitempty"` // 运行时配置覆盖（优先级高于 context-based RunConfig）
 }
 
 // Output Agent 输出
@@ -103,19 +102,26 @@ type BaseAgent struct {
 	runtimeGuardrailsCfg *guardrails.GuardrailsConfig
 	state                State
 	stateMu              sync.RWMutex
-	execMu               sync.Mutex // 执行互斥锁，防止并发执行
+	// TODO(T-001/T-002): 当前使用 TryLock 拒绝并发请求；
+	// 应引入带超时的 Lock 或请求队列，并将配置锁与执行锁分离。
+	execMu               sync.Mutex    // 执行互斥锁，防止并发执行
+	configMu             sync.RWMutex  // 配置互斥锁，与 execMu 分离，避免配置方法与 Execute 争用
 
-	provider           llm.Provider
-	providerViaGateway llm.Provider
-	toolProvider       llm.Provider // 工具调用专用 Provider（可选，为 nil 时退化为 provider）
-	toolViaGateway     llm.Provider
-	ledger             observability.Ledger
+	provider         llm.Provider
+	gatewayOnce      sync.Once
+	gatewayInstance  llm.Provider
+	toolProvider     llm.Provider // 工具调用专用 Provider（可选，为 nil 时退化为 provider）
+	toolGatewayOnce  sync.Once
+	toolGatewayInst  llm.Provider
+	externalGateway  llm.Provider // injected shared gateway (skips lazy creation)
+	ledger           observability.Ledger
 	memory             MemoryManager
 	toolManager        ToolManager
 	bus                EventBus
 
 	recentMemory   []MemoryRecord // 缓存最近加载的记忆
 	recentMemoryMu sync.RWMutex   // 保护 recentMemory 的并发访问
+	memoryFacade   *UnifiedMemoryFacade
 	logger         *zap.Logger
 
 	// 上下文工程相关
@@ -147,7 +153,7 @@ func NewBaseAgent(
 ) *BaseAgent {
 	ensureAgentType(&cfg)
 	if logger == nil {
-		logger = zap.NewNop()
+		panic("agent.BaseAgent: logger is required and cannot be nil")
 	}
 	agentLogger := logger.With(zap.String("agent_id", cfg.Core.ID), zap.String("agent_type", cfg.Core.Type))
 
@@ -157,7 +163,6 @@ func NewBaseAgent(
 		runtimeGuardrailsCfg: runtimeGuardrailsFromTypes(cfg.Features.Guardrails),
 		state:                StateInit,
 		provider:             provider,
-		providerViaGateway:   wrapProviderWithGateway(provider, agentLogger, ledger),
 		ledger:               ledger,
 		memory:               memory,
 		toolManager:          toolManager,
@@ -170,11 +175,11 @@ func NewBaseAgent(
 	ba.persistence = NewPersistenceStores(agentLogger)
 	ba.guardrails = NewGuardrailsManager(agentLogger)
 	ba.memoryCache = NewMemoryCache(cfg.Core.ID, memory, agentLogger)
+	ba.memoryFacade = NewUnifiedMemoryFacade(memory, nil, agentLogger)
 
 	// 如果配置, 初始化守护栏
 	if ba.runtimeGuardrailsCfg != nil {
 		ba.initGuardrails(ba.runtimeGuardrailsCfg)
-		ba.guardrails.Init(ba.runtimeGuardrailsCfg)
 	}
 
 	return ba
@@ -233,32 +238,17 @@ func (b *BaseAgent) initGuardrails(cfg *guardrails.GuardrailsConfig) {
 	)
 }
 
+// toolManagerExecutor is a pure delegator with event publishing.
+// Whitelist filtering is handled upstream in prepareChatRequest, so this
+// executor no longer duplicates that logic.
 type toolManagerExecutor struct {
-	mgr        ToolManager
-	agentID    string
-	allowedSet map[string]struct{}
-	bus        EventBus
+	mgr     ToolManager
+	agentID string
+	bus     EventBus
 }
 
-func newToolManagerExecutor(mgr ToolManager, agentID string, allowedTools []string, bus EventBus) toolManagerExecutor {
-	allowedSet := make(map[string]struct{}, len(allowedTools))
-	for _, name := range allowedTools {
-		name = strings.TrimSpace(name)
-		if name == "" {
-			continue
-		}
-		allowedSet[name] = struct{}{}
-	}
-	return toolManagerExecutor{mgr: mgr, agentID: agentID, allowedSet: allowedSet, bus: bus}
-}
-
-func (e toolManagerExecutor) isAllowed(toolName string) bool {
-	toolName = strings.TrimSpace(toolName)
-	if toolName == "" {
-		return false
-	}
-	_, ok := e.allowedSet[toolName]
-	return ok
+func newToolManagerExecutor(mgr ToolManager, agentID string, _ []string, bus EventBus) toolManagerExecutor {
+	return toolManagerExecutor{mgr: mgr, agentID: agentID, bus: bus}
 }
 
 func (e toolManagerExecutor) Execute(ctx context.Context, calls []types.ToolCall) []llmtools.ToolResult {
@@ -296,43 +286,15 @@ func (e toolManagerExecutor) Execute(ctx context.Context, calls []types.ToolCall
 		return out
 	}
 
-	out := make([]llmtools.ToolResult, len(calls))
-	allowedCalls := make([]types.ToolCall, 0, len(calls))
-	allowedIdx := make([]int, 0, len(calls))
-
+	results := e.mgr.ExecuteForAgent(ctx, e.agentID, calls)
 	for i, c := range calls {
-		if !e.isAllowed(c.Name) {
-			out[i] = llmtools.ToolResult{
-				ToolCallID: c.ID,
-				Name:       c.Name,
-				Error:      fmt.Sprintf("tool %s not allowed", c.Name),
-			}
-			publish("end", c, out[i].Error)
-			continue
+		errMsg := ""
+		if i < len(results) {
+			errMsg = results[i].Error
 		}
-		allowedCalls = append(allowedCalls, c)
-		allowedIdx = append(allowedIdx, i)
+		publish("end", c, errMsg)
 	}
-
-	if len(allowedCalls) == 0 {
-		return out
-	}
-
-	executed := e.mgr.ExecuteForAgent(ctx, e.agentID, allowedCalls)
-	for i, idx := range allowedIdx {
-		if i < len(executed) {
-			out[idx] = executed[i]
-		} else {
-			out[idx] = llmtools.ToolResult{
-				ToolCallID: allowedCalls[i].ID,
-				Name:       allowedCalls[i].Name,
-				Error:      "no tool result",
-			}
-		}
-		publish("end", allowedCalls[i], out[idx].Error)
-	}
-
-	return out
+	return results
 }
 
 func (e toolManagerExecutor) ExecuteOne(ctx context.Context, call types.ToolCall) llmtools.ToolResult {
@@ -414,9 +376,23 @@ func (b *BaseAgent) Teardown(ctx context.Context) error {
 	return b.extensions.TeardownExtensions(ctx)
 }
 
+// execLockWaitTimeout 短超时等待，避免并发请求直接返回 ErrAgentBusy
+const execLockWaitTimeout = 100 * time.Millisecond
+
 // TryLockExec 尝试获取执行锁，防止并发执行
+// 在超时时间内（默认 100ms）会重试获取锁，而非立即返回失败
 func (b *BaseAgent) TryLockExec() bool {
-	return b.execMu.TryLock()
+	if b.execMu.TryLock() {
+		return true
+	}
+	deadline := time.Now().Add(execLockWaitTimeout)
+	for time.Now().Before(deadline) {
+		if b.execMu.TryLock() {
+			return true
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	return false
 }
 
 // UnlockExec 释放执行锁
@@ -481,21 +457,43 @@ func (b *BaseAgent) ToolProvider() llm.Provider { return b.toolProvider }
 // SetToolProvider 设置工具调用专用的 LLM Provider
 func (b *BaseAgent) SetToolProvider(p llm.Provider) {
 	b.toolProvider = p
-	b.toolViaGateway = wrapProviderWithGateway(p, b.logger, b.ledger)
+	b.toolGatewayOnce = sync.Once{} // reset lazy init
+	b.toolGatewayInst = nil
+}
+
+// SetGateway injects a pre-built shared Gateway instance.
+// When set, lazy gateway creation is skipped.
+func (b *BaseAgent) SetGateway(gw llm.Provider) {
+	b.externalGateway = gw
 }
 
 func (b *BaseAgent) gatewayProvider() llm.Provider {
-	if b.providerViaGateway != nil {
-		return b.providerViaGateway
+	if b.externalGateway != nil {
+		return b.externalGateway
+	}
+	if b.provider == nil || b.ledger == nil {
+		return b.provider
+	}
+	b.gatewayOnce.Do(func() {
+		b.gatewayInstance = wrapProviderWithGateway(b.provider, b.logger, b.ledger)
+	})
+	if b.gatewayInstance != nil {
+		return b.gatewayInstance
 	}
 	return b.provider
 }
 
 func (b *BaseAgent) gatewayToolProvider() llm.Provider {
-	if b.toolViaGateway != nil {
-		return b.toolViaGateway
-	}
 	if b.toolProvider != nil {
+		if b.ledger == nil {
+			return b.toolProvider
+		}
+		b.toolGatewayOnce.Do(func() {
+			b.toolGatewayInst = wrapProviderWithGateway(b.toolProvider, b.logger, b.ledger)
+		})
+		if b.toolGatewayInst != nil {
+			return b.toolGatewayInst
+		}
 		return b.toolProvider
 	}
 	return b.gatewayProvider()
@@ -549,9 +547,10 @@ func (b *BaseAgent) ContextEngineEnabled() bool {
 
 // 设置守护栏为代理设置守护栏
 // 1.7: 支持海关验证规则的登记和延期
+// 使用 configMu，不与 Execute 的 execMu 争用
 func (b *BaseAgent) SetGuardrails(cfg *guardrails.GuardrailsConfig) {
-	b.execMu.Lock()
-	defer b.execMu.Unlock()
+	b.configMu.Lock()
+	defer b.configMu.Unlock()
 	b.runtimeGuardrailsCfg = cfg
 	b.config.Features.Guardrails = typesGuardrailsFromRuntime(cfg)
 	if cfg == nil {
@@ -565,6 +564,8 @@ func (b *BaseAgent) SetGuardrails(cfg *guardrails.GuardrailsConfig) {
 
 // 是否启用了护栏
 func (b *BaseAgent) GuardrailsEnabled() bool {
+	b.configMu.RLock()
+	defer b.configMu.RUnlock()
 	return b.guardrailsEnabled
 }
 
@@ -586,8 +587,8 @@ func (b *BaseAgent) SetRunStore(store RunStoreProvider) {
 // 添加自定义输入验证器
 // 1.7: 支持海关验证规则的登记和延期
 func (b *BaseAgent) AddInputValidator(v guardrails.Validator) {
-	b.execMu.Lock()
-	defer b.execMu.Unlock()
+	b.configMu.Lock()
+	defer b.configMu.Unlock()
 	if b.inputValidatorChain == nil {
 		b.inputValidatorChain = guardrails.NewValidatorChain(nil)
 		b.guardrailsEnabled = true
@@ -598,8 +599,8 @@ func (b *BaseAgent) AddInputValidator(v guardrails.Validator) {
 // 添加输出变量添加自定义输出验证器
 // 1.7: 支持海关验证规则的登记和延期
 func (b *BaseAgent) AddOutputValidator(v guardrails.Validator) {
-	b.execMu.Lock()
-	defer b.execMu.Unlock()
+	b.configMu.Lock()
+	defer b.configMu.Unlock()
 	if b.outputValidator == nil {
 		b.outputValidator = guardrails.NewOutputValidator(nil)
 		b.guardrailsEnabled = true
@@ -609,8 +610,8 @@ func (b *BaseAgent) AddOutputValidator(v guardrails.Validator) {
 
 // 添加 OutputFilter 添加自定义输出过滤器
 func (b *BaseAgent) AddOutputFilter(f guardrails.Filter) {
-	b.execMu.Lock()
-	defer b.execMu.Unlock()
+	b.configMu.Lock()
+	defer b.configMu.Unlock()
 	if b.outputValidator == nil {
 		b.outputValidator = guardrails.NewOutputValidator(nil)
 		b.guardrailsEnabled = true
@@ -618,36 +619,6 @@ func (b *BaseAgent) AddOutputFilter(f guardrails.Filter) {
 	b.outputValidator.AddFilter(f)
 }
 
-// GuardrailsErrorType 定义了 Guardrails 错误的类型。
-type GuardrailsErrorType string
-
-const (
-	GuardrailsErrorTypeInput  GuardrailsErrorType = "input"
-	GuardrailsErrorTypeOutput GuardrailsErrorType = "output"
-)
-
-// GuardrailsError 代表一个 Guardrails 验证错误。
-type GuardrailsError struct {
-	Type    GuardrailsErrorType          `json:"type"`
-	Message string                       `json:"message"`
-	Errors  []guardrails.ValidationError `json:"errors"`
-}
-
-func (e *GuardrailsError) Error() string {
-	if len(e.Errors) == 0 {
-		return fmt.Sprintf("guardrails %s validation failed: %s", e.Type, e.Message)
-	}
-	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("guardrails %s validation failed: %s [", e.Type, e.Message))
-	for i, err := range e.Errors {
-		if i > 0 {
-			sb.WriteString(", ")
-		}
-		sb.WriteString(fmt.Sprintf("%s: %s", err.Code, err.Message))
-	}
-	sb.WriteString("]")
-	return sb.String()
-}
 
 // MemoryKind 记忆类型。
 type MemoryKind = memorycore.MemoryKind
@@ -724,113 +695,3 @@ func CanTransition(from, to State) bool {
 	return agentcore.CanTransition(from, to)
 }
 
-// ErrInvalidTransition 状态转换错误。
-type ErrInvalidTransition struct {
-	From State
-	To   State
-}
-
-func (e ErrInvalidTransition) Error() string {
-	return (agentcore.ErrInvalidTransition{
-		From: e.From,
-		To:   e.To,
-	}).Error()
-}
-
-// ToAgentError 将 ErrInvalidTransition 转换为 Agent.Error。
-func (e ErrInvalidTransition) ToAgentError() *Error {
-	return NewError(types.ErrInvalidTransition, e.Error()).
-		WithMetadata("from_state", e.From).
-		WithMetadata("to_state", e.To)
-}
-
-// Error Agent 统一错误类型。
-type Error struct {
-	Base      *types.Error   `json:"base,inline"`
-	AgentID   string         `json:"agent_id,omitempty"`
-	AgentType AgentType      `json:"agent_type,omitempty"`
-	Timestamp time.Time      `json:"timestamp"`
-	Metadata  map[string]any `json:"metadata,omitempty"`
-}
-
-func (e *Error) Error() string {
-	if e.Base != nil {
-		return e.Base.Error()
-	}
-	return "[UNKNOWN] agent error"
-}
-
-func (e *Error) Unwrap() error {
-	if e.Base != nil {
-		return e.Base.Unwrap()
-	}
-	return nil
-}
-
-// NewError 创建新的 Agent 错误。
-func NewError(code types.ErrorCode, message string) *Error {
-	return &Error{
-		Base:      types.NewError(code, message),
-		Timestamp: time.Now(),
-		Metadata:  make(map[string]any),
-	}
-}
-
-// NewErrorWithCause 创建带原因的错误。
-func NewErrorWithCause(code types.ErrorCode, message string, cause error) *Error {
-	return &Error{
-		Base:      types.NewError(code, message).WithCause(cause),
-		Timestamp: time.Now(),
-		Metadata:  make(map[string]any),
-	}
-}
-
-// WithAgent 添加 Agent 信息。
-func (e *Error) WithAgent(id string, agentType AgentType) *Error {
-	e.AgentID = id
-	e.AgentType = agentType
-	return e
-}
-
-// WithRetryable 设置是否可重试。
-func (e *Error) WithRetryable(retryable bool) *Error {
-	e.Base.Retryable = retryable
-	return e
-}
-
-// WithMetadata 添加元数据。
-func (e *Error) WithMetadata(key string, value any) *Error {
-	if e.Metadata == nil {
-		e.Metadata = make(map[string]any)
-	}
-	e.Metadata[key] = value
-	return e
-}
-
-// WithCause 添加原因错误。
-func (e *Error) WithCause(cause error) *Error {
-	e.Base.Cause = cause
-	return e
-}
-
-// IsRetryable 判断错误是否可重试。
-func IsRetryable(err error) bool {
-	if e, ok := err.(*Error); ok {
-		return e.Base.Retryable
-	}
-	return types.IsRetryable(err)
-}
-
-// GetErrorCode 从错误中提取错误码。
-func GetErrorCode(err error) types.ErrorCode {
-	if e, ok := err.(*Error); ok {
-		return e.Base.Code
-	}
-	return types.GetErrorCode(err)
-}
-
-var (
-	ErrProviderNotSet = NewError(types.ErrProviderNotSet, "LLM provider not configured")
-	ErrAgentNotReady  = NewError(types.ErrAgentNotReady, "agent not in ready state")
-	ErrAgentBusy      = NewError(types.ErrAgentBusy, "agent is busy executing another task")
-)

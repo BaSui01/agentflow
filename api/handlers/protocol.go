@@ -144,6 +144,7 @@ func (h *ProtocolHandler) HandleA2AAgentCard(w http.ResponseWriter, r *http.Requ
 
 // HandleA2ASendTask handles POST /api/v1/a2a/tasks
 func (h *ProtocolHandler) HandleA2ASendTask(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<20) // V-011: limit request body to 1MB
 	rec := &protocolResponseRecorder{
 		header:     make(http.Header),
 		statusCode: http.StatusOK,

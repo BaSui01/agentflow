@@ -46,7 +46,6 @@ func TestPkgOneFileDirectoryAllowlist(t *testing.T) {
 		"database":   "single DB connector entrypoint",
 		"jsonschema": "single JSON schema validator entrypoint",
 		"metrics":    "single metrics collector entrypoint",
-		"middleware": "single middleware composition entrypoint",
 		"openapi":    "single OpenAPI helper entrypoint",
 		"server":     "single server manager entrypoint",
 		"telemetry":  "single telemetry setup/shutdown entrypoint",
@@ -180,6 +179,16 @@ func TestDependencyDirectionGuards(t *testing.T) {
 			sourcePrefix: "types",
 			targetPrefix: "workflow",
 			reason:       "shared types must stay leaf-level and avoid business dependencies",
+		},
+		{
+			sourcePrefix: "llm",
+			targetPrefix: "agent",
+			reason:       "llm layer must not depend on agent layer",
+		},
+		{
+			sourcePrefix: "llm",
+			targetPrefix: "workflow",
+			reason:       "llm layer must not depend on workflow layer",
 		},
 	}
 
@@ -471,5 +480,80 @@ func shouldSkipDir(path string) bool {
 		return true
 	default:
 		return false
+	}
+}
+
+// TestAgentPackageExportedErrorStyle ensures agent root package key API files
+// do not add bare fmt.Errorf. External API should use agent.NewError / types.Error
+// instead. Baseline values are current counts; test fails if count increases.
+func TestAgentPackageExportedErrorStyle(t *testing.T) {
+	keyFiles := []string{
+		"agent/base.go",
+		"agent/react.go",
+		"agent/integration.go",
+		"agent/completion.go",
+	}
+	maxAllowed := map[string]int{
+		"agent/base.go":        0,
+		"agent/react.go":      1,
+		"agent/integration.go": 0,
+		"agent/completion.go": 0,
+	}
+
+	for _, rel := range keyFiles {
+		content, err := os.ReadFile(rel)
+		if err != nil {
+			t.Fatalf("read %s: %v", rel, err)
+		}
+		count := strings.Count(string(content), "fmt.Errorf")
+		baseline, ok := maxAllowed[rel]
+		if !ok {
+			continue
+		}
+		if count > baseline {
+			t.Fatalf("file %s has %d fmt.Errorf, exceeds allowed baseline %d — use agent.NewError instead", rel, count, baseline)
+		}
+	}
+}
+
+// TestWorkflowDSLNoMagicStringStepTypes ensures workflow/dsl/ does not use magic
+// strings for step type comparisons. Step types must use core.StepType constants.
+func TestWorkflowDSLNoMagicStringStepTypes(t *testing.T) {
+	disallowed := []string{
+		`case "llm":`,
+		`case "tool":`,
+		`case "agent":`,
+		`case "orchestration":`,
+		`case "chain":`,
+	}
+
+	entries, err := os.ReadDir("workflow/dsl")
+	if err != nil {
+		t.Fatalf("read workflow/dsl: %v", err)
+	}
+
+	var violations []string
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".go") || strings.HasSuffix(e.Name(), "_test.go") {
+			continue
+		}
+		path := filepath.Join("workflow", "dsl", e.Name())
+		content, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read %s: %v", path, err)
+		}
+		lines := strings.Split(string(content), "\n")
+		for i, line := range lines {
+			trimmed := strings.TrimSpace(line)
+			for _, bad := range disallowed {
+				if strings.Contains(trimmed, bad) {
+					violations = append(violations, fmt.Sprintf("%s:%d: %s (use core.StepType constant)", path, i+1, bad))
+				}
+			}
+		}
+	}
+
+	if len(violations) > 0 {
+		t.Fatalf("workflow/dsl magic string step type violations:\n%s", strings.Join(violations, "\n"))
 	}
 }

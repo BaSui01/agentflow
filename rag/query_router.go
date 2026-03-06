@@ -15,6 +15,25 @@ import (
 
 // QQ 查询运行类型QQ
 
+// 查询路由阈值常量
+const (
+	wordCountShortThreshold  = 5
+	wordCountMediumThreshold = 15
+	complexityEntitiesMany   = 2
+	complexityScoreLong      = 0.3
+	complexityScoreMedium    = 0.15
+	complexityScoreEntitiesMany = 0.2
+	complexityScoreEntitiesSome = 0.1
+	complexityScoreAnalytical   = 0.3
+	complexityScoreComparison  = 0.25
+	complexityScoreCausal      = 0.3
+	complexityScoreHypothetical = 0.25
+	complexityScoreAggregation  = 0.2
+	complexityScorePattern      = 0.1
+	complexityHighThreshold     = 0.6
+	complexityMediumThreshold   = 0.3
+)
+
 // 检索策略代表检索策略
 type RetrievalStrategy string
 
@@ -199,7 +218,21 @@ func (c *routingCache) get(key string) (*RoutingDecision, bool) {
 func (c *routingCache) set(key string, decision *RoutingDecision) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+
+	const maxCacheSize = 10000
+	if len(c.entries) >= maxCacheSize {
+		c.evictExpired()
+	}
 	c.entries[key] = decision
+}
+
+func (c *routingCache) evictExpired() {
+	now := time.Now()
+	for k, v := range c.entries {
+		if now.Sub(v.Timestamp) > c.ttl {
+			delete(c.entries, k)
+		}
+	}
 }
 
 // 储存用于适应性学习的路由反馈
@@ -391,9 +424,9 @@ func (r *QueryRouter) analyzeQuery(ctx context.Context, query string) QueryFeatu
 	}
 
 	// 确定长度类别
-	if features.WordCount <= 5 {
+	if features.WordCount <= wordCountShortThreshold {
 		features.Length = "short"
-	} else if features.WordCount <= 15 {
+	} else if features.WordCount <= wordCountMediumThreshold {
 		features.Length = "medium"
 	} else {
 		features.Length = "long"
@@ -432,25 +465,25 @@ func (r *QueryRouter) determineComplexity(query string, features QueryFeatures) 
 
 	// 长度增加复杂性
 	if features.Length == "long" {
-		complexityScore += 0.3
+		complexityScore += complexityScoreLong
 	} else if features.Length == "medium" {
-		complexityScore += 0.15
+		complexityScore += complexityScoreMedium
 	}
 
 	// 多个实体增加复杂性
-	if len(features.Entities) > 2 {
-		complexityScore += 0.2
+	if len(features.Entities) > complexityEntitiesMany {
+		complexityScore += complexityScoreEntitiesMany
 	} else if len(features.Entities) > 0 {
-		complexityScore += 0.1
+		complexityScore += complexityScoreEntitiesSome
 	}
 
 	// 某些意图比较复杂
 	complexIntents := map[QueryIntent]float64{
-		IntentAnalytical:   0.3,
-		IntentComparison:   0.25,
-		IntentCausal:       0.3,
-		IntentHypothetical: 0.25,
-		IntentAggregation:  0.2,
+		IntentAnalytical:   complexityScoreAnalytical,
+		IntentComparison:   complexityScoreComparison,
+		IntentCausal:       complexityScoreCausal,
+		IntentHypothetical: complexityScoreHypothetical,
+		IntentAggregation:  complexityScoreAggregation,
 	}
 	if score, ok := complexIntents[features.Intent]; ok {
 		complexityScore += score
@@ -465,14 +498,14 @@ func (r *QueryRouter) determineComplexity(query string, features QueryFeatures) 
 	}
 	for _, pattern := range complexPatterns {
 		if strings.Contains(queryLower, pattern) {
-			complexityScore += 0.1
+			complexityScore += complexityScorePattern
 		}
 	}
 
 	// 分类复杂性
-	if complexityScore >= 0.6 {
+	if complexityScore >= complexityHighThreshold {
 		return "high"
-	} else if complexityScore >= 0.3 {
+	} else if complexityScore >= complexityMediumThreshold {
 		return "medium"
 	}
 	return "low"
@@ -753,7 +786,9 @@ func (r *QueryRouter) RouteMulti(ctx context.Context, query string, maxStrategie
 
 // 批量运行
 
-// RouteBatch 路线 多个查询
+// RouteBatch routes multiple queries concurrently.
+// On per-query failure, the corresponding result entry uses DefaultStrategy with zero confidence.
+// Returns the first error encountered (if any) alongside the full results slice.
 func (r *QueryRouter) RouteBatch(ctx context.Context, queries []string) ([]*RoutingDecision, error) {
 	results := make([]*RoutingDecision, len(queries))
 	var wg sync.WaitGroup
@@ -766,11 +801,20 @@ func (r *QueryRouter) RouteBatch(ctx context.Context, queries []string) ([]*Rout
 			defer wg.Done()
 
 			decision, err := r.Route(ctx, q)
-			mu.Lock()
-			defer mu.Unlock()
-
-			if err != nil && firstErr == nil {
-				firstErr = err
+			if err != nil {
+				decision = &RoutingDecision{
+					Query:            q,
+					SelectedStrategy: r.config.DefaultStrategy,
+					Confidence:       0,
+					Scores:           map[RetrievalStrategy]float64{},
+					Metadata:         map[string]any{"error": err.Error()},
+					Timestamp:        time.Now(),
+				}
+				mu.Lock()
+				if firstErr == nil {
+					firstErr = err
+				}
+				mu.Unlock()
 			}
 			results[idx] = decision
 		}(i, query)

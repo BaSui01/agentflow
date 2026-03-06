@@ -28,6 +28,7 @@ type Client struct {
 // NewClient creates a new MongoDB client, pings the server, and starts
 // a background health-check goroutine.
 func NewClient(cfg config.MongoDBConfig, logger *zap.Logger) (*Client, error) {
+	// O-004: optional module, nil-safe
 	if logger == nil {
 		logger = zap.NewNop()
 	}
@@ -150,6 +151,7 @@ func (c *Client) healthCheckLoop(interval time.Duration) {
 // NewClientFromOptions creates a Client from pre-built driver options.
 // Useful for testing with custom options.
 func NewClientFromOptions(opts *options.ClientOptions, dbName string, logger *zap.Logger) (*Client, error) {
+	// O-004: optional module, nil-safe
 	if logger == nil {
 		logger = zap.NewNop()
 	}

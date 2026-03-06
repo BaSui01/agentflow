@@ -1,4 +1,4 @@
-package handlers
+package usecase
 
 import (
 	"regexp"
@@ -10,7 +10,8 @@ import (
 
 var providerHintPattern = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$`)
 
-func supportedRoutePolicies() []string {
+// SupportedRoutePolicies returns the list of valid route policy values.
+func SupportedRoutePolicies() []string {
 	return []string{
 		string(llmcore.RoutePolicyBalanced),
 		string(llmcore.RoutePolicyCostFirst),
@@ -19,7 +20,8 @@ func supportedRoutePolicies() []string {
 	}
 }
 
-func normalizeProviderHint(raw string) (string, *types.Error) {
+// NormalizeProviderHint validates and normalizes the provider hint.
+func NormalizeProviderHint(raw string) (string, *types.Error) {
 	provider := strings.TrimSpace(raw)
 	if provider == "" {
 		return "", nil
@@ -30,7 +32,8 @@ func normalizeProviderHint(raw string) (string, *types.Error) {
 	return provider, nil
 }
 
-func normalizeRoutePolicy(raw string) (llmcore.RoutePolicy, *types.Error) {
+// NormalizeRoutePolicy validates and normalizes the route policy.
+func NormalizeRoutePolicy(raw string) (llmcore.RoutePolicy, *types.Error) {
 	policy := strings.ToLower(strings.TrimSpace(raw))
 	if policy == "" {
 		return llmcore.RoutePolicyBalanced, nil
@@ -46,7 +49,8 @@ func normalizeRoutePolicy(raw string) (llmcore.RoutePolicy, *types.Error) {
 	}
 }
 
-func normalizeEndpointMode(raw string) (string, *types.Error) {
+// NormalizeEndpointMode validates and normalizes the endpoint mode.
+func NormalizeEndpointMode(raw string) (string, *types.Error) {
 	mode := strings.ToLower(strings.TrimSpace(raw))
 	if mode == "" {
 		return "", nil
@@ -59,7 +63,8 @@ func normalizeEndpointMode(raw string) (string, *types.Error) {
 	}
 }
 
-func normalizeRouteTags(in []string) []string {
+// NormalizeRouteTags deduplicates and trims route tags.
+func NormalizeRouteTags(in []string) []string {
 	if len(in) == 0 {
 		return nil
 	}
@@ -82,7 +87,8 @@ func normalizeRouteTags(in []string) []string {
 	return out
 }
 
-func normalizeRouteMetadata(in map[string]string) map[string]string {
+// NormalizeRouteMetadata trims metadata keys.
+func NormalizeRouteMetadata(in map[string]string) map[string]string {
 	if len(in) == 0 {
 		return nil
 	}
@@ -100,8 +106,9 @@ func normalizeRouteMetadata(in map[string]string) map[string]string {
 	return out
 }
 
-func applyChatRouteMetadata(metadata map[string]string, provider string, policy llmcore.RoutePolicy, endpointMode string) map[string]string {
-	out := normalizeRouteMetadata(metadata)
+// ApplyChatRouteMetadata merges provider, policy, and endpoint mode into metadata.
+func ApplyChatRouteMetadata(metadata map[string]string, provider string, policy llmcore.RoutePolicy, endpointMode string) map[string]string {
+	out := NormalizeRouteMetadata(metadata)
 	if out == nil {
 		out = make(map[string]string)
 	}

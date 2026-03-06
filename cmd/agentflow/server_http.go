@@ -36,7 +36,10 @@ func (s *Server) startHTTPServer() error {
 		s.logger,
 	)
 
-	httpMiddlewares := bootstrap.BuildHTTPMiddlewares(s.cfg.Server, s.metricsCollector, s.logger)
+	httpMiddlewares, err := bootstrap.BuildHTTPMiddlewares(s.cfg.Server, s.metricsCollector, s.logger)
+	if err != nil {
+		return err
+	}
 	s.rateLimiterCancel = httpMiddlewares.RateLimiterCancel
 	s.tenantRateLimiterCancel = httpMiddlewares.TenantRateLimiterCancel
 	handler := mw.Chain(mux, httpMiddlewares.List...)
@@ -51,6 +54,9 @@ func (s *Server) startHTTPServer() error {
 // =============================================================================
 // 📊 Metrics 服务器
 // =============================================================================
+//
+// 已知安全风险 (X-005): Metrics 与 pprof 服务无认证、无限流，暴露于独立端口。
+// 生产环境应通过网络隔离或反向代理限制访问。
 
 // startMetricsServer 启动 Metrics 服务器
 func (s *Server) startMetricsServer() error {

@@ -21,23 +21,28 @@ func (l *PDFLoader) Load(ctx context.Context, source string) ([]rag.Document, er
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
+	// X-011: path normalization and traversal check
+	clean := filepath.Clean(source)
+	if strings.Contains(clean, "..") {
+		return nil, fmt.Errorf("pdf loader: source path must not contain ..")
+	}
 
-	data, err := os.ReadFile(source)
+	data, err := os.ReadFile(clean)
 	if err != nil {
 		return nil, fmt.Errorf("pdf loader: %w", err)
 	}
 
-	text, err := l.extractText(source, data)
+	text, err := l.extractText(clean, data)
 	if err != nil {
 		return nil, err
 	}
 
 	doc := rag.Document{
-		ID:   source,
+		ID:   clean,
 		Content: strings.TrimSpace(text),
 		Metadata: map[string]any{
-			"source_file":  filepath.Base(source),
-			"source_path":  source,
+			"source_file":  filepath.Base(clean),
+			"source_path":  clean,
 			"content_type": "application/pdf",
 			"loader":       "pdf",
 		},

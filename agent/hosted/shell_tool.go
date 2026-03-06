@@ -68,6 +68,12 @@ func (c *ShellConfig) isBlocked(cmd string) bool {
 	return false
 }
 
+var dangerousShellPatterns = []string{
+	";", "&&", "||", "|", "`",
+	"$(", "${", "<(", ">(", "\n",
+	">>", "2>", "&>",
+}
+
 func (c *ShellConfig) isAllowed(cmd string) bool {
 	if len(c.AllowedCmds) == 0 {
 		return true
@@ -75,6 +81,15 @@ func (c *ShellConfig) isAllowed(cmd string) bool {
 	lower := strings.ToLower(strings.TrimSpace(cmd))
 	for _, a := range c.AllowedCmds {
 		if strings.HasPrefix(lower, strings.ToLower(a)) {
+			return true
+		}
+	}
+	return false
+}
+
+func (c *ShellConfig) containsDangerousPatterns(cmd string) bool {
+	for _, p := range dangerousShellPatterns {
+		if strings.Contains(cmd, p) {
 			return true
 		}
 	}
@@ -141,6 +156,9 @@ func (t *ShellTool) Execute(ctx context.Context, args json.RawMessage) (json.Raw
 	if t.cfg.isBlocked(a.Command) {
 		return nil, fmt.Errorf("command is blocked: %s", a.Command)
 	}
+	if t.cfg.containsDangerousPatterns(a.Command) {
+		return nil, fmt.Errorf("command contains dangerous shell patterns")
+	}
 	if !t.cfg.isAllowed(a.Command) {
 		return nil, fmt.Errorf("command not in allowed list")
 	}
@@ -155,6 +173,9 @@ func (t *ShellTool) Execute(ctx context.Context, args json.RawMessage) (json.Raw
 
 	workDir := t.cfg.WorkDir
 	if a.WorkingDirectory != "" {
+		if strings.Contains(a.WorkingDirectory, "..") {
+			return nil, fmt.Errorf("working directory must not contain path traversal")
+		}
 		workDir = a.WorkingDirectory
 	}
 

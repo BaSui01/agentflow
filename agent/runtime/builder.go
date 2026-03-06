@@ -92,10 +92,10 @@ type Builder struct {
 	toolScope    []string // tool whitelist for sub-agent isolation (empty = all tools)
 }
 
-// NewBuilder 创建 runtime builder。
+// NewBuilder 创建 runtime builder。logger 为必选参数，nil 时 panic。
 func NewBuilder(provider llm.Provider, logger *zap.Logger) *Builder {
 	if logger == nil {
-		logger = zap.NewNop()
+		panic("runtime.Builder: logger is required and cannot be nil")
 	}
 	return &Builder{
 		provider: provider,
@@ -135,7 +135,7 @@ func (b *Builder) WithToolScope(toolNames []string) *Builder {
 func (b *Builder) Build(ctx context.Context, cfg types.AgentConfig) (*agent.BaseAgent, error) {
 	opts := b.options
 	if b.logger == nil {
-		b.logger = zap.NewNop()
+		panic("runtime.Builder.Build: logger is required and cannot be nil")
 	}
 
 	cfg2 := cfg

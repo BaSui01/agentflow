@@ -531,7 +531,9 @@ func TestJWTAuth_ValidHMACToken(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	})
 
-	handler := JWTAuth(cfg, nil, zap.NewNop())(inner)
+	mw, err := JWTAuth(cfg, nil, zap.NewNop())
+	require.NoError(t, err)
+	handler := mw(inner)
 	req := httptest.NewRequest("GET", "/api/test", nil)
 	req.Header.Set("Authorization", "Bearer "+tokenStr)
 	rec := httptest.NewRecorder()
@@ -544,7 +546,9 @@ func TestJWTAuth_ValidHMACToken(t *testing.T) {
 
 func TestJWTAuth_MissingHeader(t *testing.T) {
 	cfg := config.JWTConfig{Secret: "this-is-a-very-long-secret-key-for-testing-purposes"}
-	handler := JWTAuth(cfg, nil, zap.NewNop())(okHandler())
+	mw, err := JWTAuth(cfg, nil, zap.NewNop())
+	require.NoError(t, err)
+	handler := mw(okHandler())
 
 	req := httptest.NewRequest("GET", "/api/test", nil)
 	rec := httptest.NewRecorder()
@@ -554,7 +558,9 @@ func TestJWTAuth_MissingHeader(t *testing.T) {
 
 func TestJWTAuth_InvalidToken(t *testing.T) {
 	cfg := config.JWTConfig{Secret: "this-is-a-very-long-secret-key-for-testing-purposes"}
-	handler := JWTAuth(cfg, nil, zap.NewNop())(okHandler())
+	mw, err := JWTAuth(cfg, nil, zap.NewNop())
+	require.NoError(t, err)
+	handler := mw(okHandler())
 
 	req := httptest.NewRequest("GET", "/api/test", nil)
 	req.Header.Set("Authorization", "Bearer invalid.token.here")
@@ -574,7 +580,9 @@ func TestJWTAuth_MissingExpClaim(t *testing.T) {
 	tokenStr, err := token.SignedString([]byte(secret))
 	require.NoError(t, err)
 
-	handler := JWTAuth(cfg, nil, zap.NewNop())(okHandler())
+	mw, err := JWTAuth(cfg, nil, zap.NewNop())
+	require.NoError(t, err)
+	handler := mw(okHandler())
 	req := httptest.NewRequest("GET", "/api/test", nil)
 	req.Header.Set("Authorization", "Bearer "+tokenStr)
 	rec := httptest.NewRecorder()
@@ -585,7 +593,9 @@ func TestJWTAuth_MissingExpClaim(t *testing.T) {
 
 func TestJWTAuth_SkipPath(t *testing.T) {
 	cfg := config.JWTConfig{Secret: "this-is-a-very-long-secret-key-for-testing-purposes"}
-	handler := JWTAuth(cfg, []string{"/health"}, zap.NewNop())(okHandler())
+	mw, err := JWTAuth(cfg, []string{"/health"}, zap.NewNop())
+	require.NoError(t, err)
+	handler := mw(okHandler())
 
 	req := httptest.NewRequest("GET", "/health", nil)
 	rec := httptest.NewRecorder()
@@ -602,7 +612,9 @@ func TestJWTAuth_ExpiredToken(t *testing.T) {
 	})
 	tokenStr, _ := token.SignedString([]byte(secret))
 
-	handler := JWTAuth(cfg, nil, zap.NewNop())(okHandler())
+	mw, err := JWTAuth(cfg, nil, zap.NewNop())
+	require.NoError(t, err)
+	handler := mw(okHandler())
 	req := httptest.NewRequest("GET", "/api/test", nil)
 	req.Header.Set("Authorization", "Bearer "+tokenStr)
 	rec := httptest.NewRecorder()
@@ -635,7 +647,9 @@ func TestJWTAuth_RSAToken(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	})
 
-	handler := JWTAuth(cfg, nil, zap.NewNop())(inner)
+	mw, err := JWTAuth(cfg, nil, zap.NewNop())
+	require.NoError(t, err)
+	handler := mw(inner)
 	req := httptest.NewRequest("GET", "/api/test", nil)
 	req.Header.Set("Authorization", "Bearer "+tokenStr)
 	rec := httptest.NewRecorder()

@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"time"
 )
 
 type SSETransport struct {
@@ -89,6 +90,8 @@ func (s *SSETransport) sendLoop() {
 
 func (s *SSETransport) recvLoop() {
 	ctx := s.doneCtx()
+	backoff := 100 * time.Millisecond
+	const maxBackoff = 30 * time.Second
 	for {
 		select {
 		case <-s.done:
@@ -96,6 +99,15 @@ func (s *SSETransport) recvLoop() {
 		default:
 		}
 		s.connectAndRead(ctx)
+		select {
+		case <-s.done:
+			return
+		case <-time.After(backoff):
+		}
+		backoff *= 2
+		if backoff > maxBackoff {
+			backoff = maxBackoff
+		}
 	}
 }
 
@@ -170,4 +182,13 @@ func (s *SSETransport) Close() error {
 		close(s.sendCh)
 	})
 	return nil
+}
+
+func (s *SSETransport) IsAlive() bool {
+	select {
+	case <-s.done:
+		return false
+	default:
+		return true
+	}
 }

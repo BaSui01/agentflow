@@ -1,4 +1,4 @@
-package handlers
+package usecase
 
 import (
 	"context"
@@ -13,6 +13,13 @@ import (
 	"github.com/BaSui01/agentflow/types"
 	"go.uber.org/zap"
 )
+
+// ChatConverter centralizes request/response conversion between API and LLM layers.
+// Implementations are provided by the handlers layer.
+type ChatConverter interface {
+	ToLLMRequest(req *api.ChatRequest) *llm.ChatRequest
+	ToAPIResponse(resp *llm.ChatResponse) *api.ChatResponse
+}
 
 // ChatService encapsulates chat routing and gateway invocation logic.
 type ChatService interface {
@@ -34,7 +41,8 @@ const (
 	chatToolRuntimeAgentID     = "chat"
 )
 
-type defaultChatService struct {
+// DefaultChatService is the default ChatService implementation.
+type DefaultChatService struct {
 	gateway      llmcore.Gateway
 	chatProvider llm.Provider
 	toolManager  agent.ToolManager
@@ -42,7 +50,8 @@ type defaultChatService struct {
 	logger       *zap.Logger
 }
 
-func newDefaultChatService(
+// NewDefaultChatService constructs a ChatService with gateway, provider, tool manager, and converter.
+func NewDefaultChatService(
 	gateway llmcore.Gateway,
 	chatProvider llm.Provider,
 	toolManager agent.ToolManager,
@@ -50,9 +59,9 @@ func newDefaultChatService(
 	logger *zap.Logger,
 ) ChatService {
 	if logger == nil {
-		logger = zap.NewNop()
+		panic("usecase.ChatService: logger is required and cannot be nil")
 	}
-	return &defaultChatService{
+	return &DefaultChatService{
 		gateway:      gateway,
 		chatProvider: chatProvider,
 		toolManager:  toolManager,
@@ -61,7 +70,7 @@ func newDefaultChatService(
 	}
 }
 
-func (s *defaultChatService) Complete(ctx context.Context, req *api.ChatRequest) (*ChatCompletionResult, *types.Error) {
+func (s *DefaultChatService) Complete(ctx context.Context, req *api.ChatRequest) (*ChatCompletionResult, *types.Error) {
 	unifiedReq, llmReq, err := s.buildUnifiedRequest(req)
 	if err != nil {
 		return nil, err
@@ -102,7 +111,7 @@ func (s *defaultChatService) Complete(ctx context.Context, req *api.ChatRequest)
 	}, nil
 }
 
-func (s *defaultChatService) Stream(ctx context.Context, req *api.ChatRequest) (<-chan llmcore.UnifiedChunk, *types.Error) {
+func (s *DefaultChatService) Stream(ctx context.Context, req *api.ChatRequest) (<-chan llmcore.UnifiedChunk, *types.Error) {
 	unifiedReq, llmReq, err := s.buildUnifiedRequest(req)
 	if err != nil {
 		return nil, err
@@ -120,35 +129,35 @@ func (s *defaultChatService) Stream(ctx context.Context, req *api.ChatRequest) (
 	return stream, nil
 }
 
-func (s *defaultChatService) SupportedRoutePolicies() []string {
-	return supportedRoutePolicies()
+func (s *DefaultChatService) SupportedRoutePolicies() []string {
+	return SupportedRoutePolicies()
 }
 
-func (s *defaultChatService) DefaultRoutePolicy() string {
+func (s *DefaultChatService) DefaultRoutePolicy() string {
 	return string(llmcore.RoutePolicyBalanced)
 }
 
-func (s *defaultChatService) buildUnifiedRequest(req *api.ChatRequest) (*llmcore.UnifiedRequest, *llm.ChatRequest, *types.Error) {
+func (s *DefaultChatService) buildUnifiedRequest(req *api.ChatRequest) (*llmcore.UnifiedRequest, *llm.ChatRequest, *types.Error) {
 	if req == nil {
 		return nil, nil, types.NewInvalidRequestError("request is required")
 	}
 
-	provider, err := normalizeProviderHint(req.Provider)
+	provider, err := NormalizeProviderHint(req.Provider)
 	if err != nil {
 		return nil, nil, err
 	}
-	routePolicy, err := normalizeRoutePolicy(req.RoutePolicy)
+	routePolicy, err := NormalizeRoutePolicy(req.RoutePolicy)
 	if err != nil {
 		return nil, nil, err
 	}
-	endpointMode, err := normalizeEndpointMode(req.EndpointMode)
+	endpointMode, err := NormalizeEndpointMode(req.EndpointMode)
 	if err != nil {
 		return nil, nil, err
 	}
 
 	llmReq := s.converter.ToLLMRequest(req)
-	llmReq.Metadata = applyChatRouteMetadata(llmReq.Metadata, provider, routePolicy, endpointMode)
-	llmReq.Tags = normalizeRouteTags(llmReq.Tags)
+	llmReq.Metadata = ApplyChatRouteMetadata(llmReq.Metadata, provider, routePolicy, endpointMode)
+	llmReq.Tags = NormalizeRouteTags(llmReq.Tags)
 
 	return &llmcore.UnifiedRequest{
 		Capability:   llmcore.CapabilityChat,
@@ -165,7 +174,7 @@ func (s *defaultChatService) buildUnifiedRequest(req *api.ChatRequest) (*llmcore
 	}, llmReq, nil
 }
 
-func (s *defaultChatService) buildLocalToolRequest(llmReq *llm.ChatRequest) (*llm.ChatRequest, bool) {
+func (s *DefaultChatService) buildLocalToolRequest(llmReq *llm.ChatRequest) (*llm.ChatRequest, bool) {
 	if llmReq == nil || len(llmReq.Tools) == 0 || s.toolManager == nil || s.chatProvider == nil {
 		return nil, false
 	}
@@ -206,7 +215,7 @@ func (s *defaultChatService) buildLocalToolRequest(llmReq *llm.ChatRequest) (*ll
 	return &reactReq, true
 }
 
-func (s *defaultChatService) executeLocalReAct(ctx context.Context, req *llm.ChatRequest) (*llm.ChatResponse, *types.Error) {
+func (s *DefaultChatService) executeLocalReAct(ctx context.Context, req *llm.ChatRequest) (*llm.ChatResponse, *types.Error) {
 	executor := llmtools.NewReActExecutor(
 		s.chatProvider,
 		newChatToolManagerExecutor(s.toolManager, chatToolRuntimeAgentID, req.Tools),
@@ -227,7 +236,7 @@ func (s *defaultChatService) executeLocalReAct(ctx context.Context, req *llm.Cha
 	return resp, nil
 }
 
-func (s *defaultChatService) streamLocalReAct(ctx context.Context, req *llm.ChatRequest) (<-chan llmcore.UnifiedChunk, *types.Error) {
+func (s *DefaultChatService) streamLocalReAct(ctx context.Context, req *llm.ChatRequest) (<-chan llmcore.UnifiedChunk, *types.Error) {
 	executor := llmtools.NewReActExecutor(
 		s.chatProvider,
 		newChatToolManagerExecutor(s.toolManager, chatToolRuntimeAgentID, req.Tools),
@@ -245,7 +254,12 @@ func (s *defaultChatService) streamLocalReAct(ctx context.Context, req *llm.Chat
 
 	stream := make(chan llmcore.UnifiedChunk)
 	go func() {
-		defer close(stream)
+		defer func() {
+			if r := recover(); r != nil {
+				s.logger.Error("streamLocalReAct relay panic recovered", zap.Any("panic", r))
+			}
+			close(stream)
+		}()
 		for event := range events {
 			switch event.Type {
 			case llmtools.ReActEventLLMChunk:

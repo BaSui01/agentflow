@@ -120,6 +120,10 @@ func NewAudioBase64Content(data string, format AudioFormat) Content {
 
 // LoadImageFromFile 从文件路径加载图像.
 func LoadImageFromFile(path string) (Content, error) {
+	path = filepath.Clean(path)
+	if strings.Contains(path, "..") {
+		return Content{}, fmt.Errorf("path traversal not allowed")
+	}
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return Content{}, fmt.Errorf("failed to read image file: %w", err)
@@ -232,6 +236,10 @@ func LoadImageFromURL(rawURL string) (Content, error) {
 
 // LoadAudioFromFile 加载音频文件.
 func LoadAudioFromFile(path string) (Content, error) {
+	path = filepath.Clean(path)
+	if strings.Contains(path, "..") {
+		return Content{}, fmt.Errorf("path traversal not allowed")
+	}
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return Content{}, fmt.Errorf("failed to read audio file: %w", err)

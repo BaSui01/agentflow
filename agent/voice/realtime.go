@@ -130,6 +130,7 @@ type VoiceMetrics struct {
 
 // NewVoiceAgent创建了新的语音代理.
 func NewVoiceAgent(config VoiceConfig, stt STTProvider, tts TTSProvider, llm LLMHandler, logger *zap.Logger) *VoiceAgent {
+	// O-004: optional module, nil-safe
 	if logger == nil {
 		logger = zap.NewNop()
 	}

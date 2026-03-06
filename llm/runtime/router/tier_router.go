@@ -15,6 +15,29 @@ const (
 	TierFrontier ModelTier = "frontier"
 )
 
+// tier 评分分界常量
+const (
+	msgCountTier1   = 2
+	msgCountTier2   = 5
+	msgCountTier3   = 10
+	msgCountTier4   = 20
+	contentLenTier1 = 500
+	contentLenTier2 = 2000
+	contentLenTier3 = 5000
+	contentLenTier4 = 10000
+	toolCountTier1  = 3
+	toolCountTier2  = 8
+	sysPromptTier1  = 200
+	sysPromptTier2  = 1000
+	sysPromptTier3  = 3000
+	rawScoreTier1   = 5
+	rawScoreTier2   = 10
+	rawScoreTier3   = 15
+	rawScoreTier4   = 20
+	rawScoreTier5   = 25
+	weightDivisor   = 25
+)
+
 // ScoringWeights controls how much each complexity factor contributes.
 // Default weight for each factor is 25, giving a total max score of 100.
 // Adjust individual weights to bias the routing toward specific factors.
@@ -104,16 +127,16 @@ func (t *TierRouter) ScoreComplexity(req *ChatRequest) int {
 
 func msgScore(count int) int {
 	switch {
-	case count <= 2:
-		return 5
-	case count <= 5:
-		return 10
-	case count <= 10:
-		return 15
-	case count <= 20:
-		return 20
+	case count <= msgCountTier1:
+		return rawScoreTier1
+	case count <= msgCountTier2:
+		return rawScoreTier2
+	case count <= msgCountTier3:
+		return rawScoreTier3
+	case count <= msgCountTier4:
+		return rawScoreTier4
 	default:
-		return 25
+		return rawScoreTier5
 	}
 }
 
@@ -123,16 +146,16 @@ func contentLenScore(msgs []Message) int {
 		totalLen += len(m.Content)
 	}
 	switch {
-	case totalLen < 500:
-		return 5
-	case totalLen < 2000:
-		return 10
-	case totalLen < 5000:
-		return 15
-	case totalLen < 10000:
-		return 20
+	case totalLen < contentLenTier1:
+		return rawScoreTier1
+	case totalLen < contentLenTier2:
+		return rawScoreTier2
+	case totalLen < contentLenTier3:
+		return rawScoreTier3
+	case totalLen < contentLenTier4:
+		return rawScoreTier4
 	default:
-		return 25
+		return rawScoreTier5
 	}
 }
 
@@ -140,12 +163,12 @@ func toolScore(count int) int {
 	switch {
 	case count == 0:
 		return 0
-	case count <= 3:
-		return 10
-	case count <= 8:
-		return 15
+	case count <= toolCountTier1:
+		return rawScoreTier2
+	case count <= toolCountTier2:
+		return rawScoreTier3
 	default:
-		return 25
+		return rawScoreTier5
 	}
 }
 
@@ -154,14 +177,14 @@ func systemPromptScore(msgs []Message) int {
 		if m.Role == "system" {
 			sysLen := len(m.Content)
 			switch {
-			case sysLen < 200:
-				return 5
-			case sysLen < 1000:
-				return 10
-			case sysLen < 3000:
-				return 15
+			case sysLen < sysPromptTier1:
+				return rawScoreTier1
+			case sysLen < sysPromptTier2:
+				return rawScoreTier2
+			case sysLen < sysPromptTier3:
+				return rawScoreTier3
 			default:
-				return 25
+				return rawScoreTier5
 			}
 		}
 	}
@@ -171,7 +194,7 @@ func systemPromptScore(msgs []Message) int {
 // applyWeight scales a raw factor score (0-25) by a configured weight.
 // With default weight 25, the output equals the raw score.
 func applyWeight(rawScore, weight int) int {
-	return rawScore * weight / 25
+	return rawScore * weight / weightDivisor
 }
 
 // SelectTier maps a complexity score to a model tier.

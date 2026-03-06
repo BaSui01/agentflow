@@ -1,4 +1,4 @@
-package handlers
+package storage
 
 import (
 	"context"
@@ -12,7 +12,7 @@ import (
 
 const (
 	defaultReferenceStoreKeyPrefix = "agentflow:mm:ref"
-	redisStoreOpTimeout            = 5 * time.Second
+	redisStoreOpTimeout           = 5 * time.Second
 )
 
 type redisReferenceAsset struct {
@@ -24,6 +24,7 @@ type redisReferenceAsset struct {
 	Data      []byte    `json:"data"`
 }
 
+// RedisReferenceStore implements ReferenceStore using Redis.
 type RedisReferenceStore struct {
 	client    *redis.Client
 	keyPrefix string
@@ -31,6 +32,7 @@ type RedisReferenceStore struct {
 	logger    *zap.Logger
 }
 
+// NewRedisReferenceStore creates a Redis-backed reference store.
 func NewRedisReferenceStore(client *redis.Client, keyPrefix string, ttl time.Duration, logger *zap.Logger) *RedisReferenceStore {
 	if logger == nil {
 		logger = zap.NewNop()
@@ -40,7 +42,7 @@ func NewRedisReferenceStore(client *redis.Client, keyPrefix string, ttl time.Dur
 		keyPrefix = defaultReferenceStoreKeyPrefix
 	}
 	if ttl <= 0 {
-		ttl = defaultReferenceTTL
+		ttl = 2 * time.Hour
 	}
 	return &RedisReferenceStore{
 		client:    client,
@@ -50,7 +52,7 @@ func NewRedisReferenceStore(client *redis.Client, keyPrefix string, ttl time.Dur
 	}
 }
 
-func (s *RedisReferenceStore) Save(asset *referenceAsset) error {
+func (s *RedisReferenceStore) Save(asset *ReferenceAsset) error {
 	if asset == nil || s.client == nil {
 		return nil
 	}
@@ -76,7 +78,7 @@ func (s *RedisReferenceStore) Save(asset *referenceAsset) error {
 	return nil
 }
 
-func (s *RedisReferenceStore) Get(id string) (*referenceAsset, bool) {
+func (s *RedisReferenceStore) Get(id string) (*ReferenceAsset, bool) {
 	if s.client == nil {
 		return nil, false
 	}
@@ -98,7 +100,7 @@ func (s *RedisReferenceStore) Get(id string) (*referenceAsset, bool) {
 		return nil, false
 	}
 
-	return &referenceAsset{
+	return &ReferenceAsset{
 		ID:        stored.ID,
 		FileName:  stored.FileName,
 		MimeType:  stored.MimeType,
@@ -127,4 +129,3 @@ func (s *RedisReferenceStore) Cleanup(expireBefore time.Time) {
 func (s *RedisReferenceStore) keyFor(id string) string {
 	return s.keyPrefix + ":" + id
 }
-

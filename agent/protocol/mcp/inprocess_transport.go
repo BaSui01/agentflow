@@ -3,6 +3,7 @@ package mcp
 import (
 	"context"
 	"fmt"
+	"runtime/debug"
 	"sync"
 )
 
@@ -14,19 +15,35 @@ type MCPServerHandler interface {
 
 // InProcessTransport implements Transport for direct in-process communication.
 // No network or subprocess overhead; ideal for testing and embedded servers.
+//
+// Note: This transport is request-response only. Do NOT use it with
+// StartNotificationListener, as the listener would consume request responses.
 type InProcessTransport struct {
-	handler MCPServerHandler
-	recvCh  chan *MCPMessage
-	mu      sync.Mutex
-	closed  bool
+	handler      MCPServerHandler
+	onNotifError func(method string, err error)
+	recvCh       chan *MCPMessage
+	mu           sync.Mutex
+	closed       bool
+}
+
+// InProcessTransportOption configures optional InProcessTransport behavior.
+type InProcessTransportOption func(*InProcessTransport)
+
+// WithNotificationErrorHandler sets a callback for notification handler errors.
+func WithNotificationErrorHandler(fn func(method string, err error)) InProcessTransportOption {
+	return func(t *InProcessTransport) { t.onNotifError = fn }
 }
 
 // NewInProcessTransport creates a transport that routes messages directly to handler.
-func NewInProcessTransport(handler MCPServerHandler) *InProcessTransport {
-	return &InProcessTransport{
+func NewInProcessTransport(handler MCPServerHandler, opts ...InProcessTransportOption) *InProcessTransport {
+	t := &InProcessTransport{
 		handler: handler,
 		recvCh:  make(chan *MCPMessage, 16),
 	}
+	for _, opt := range opts {
+		opt(t)
+	}
+	return t
 }
 
 func (t *InProcessTransport) Send(ctx context.Context, msg *MCPMessage) error {
@@ -42,7 +59,7 @@ func (t *InProcessTransport) Send(ctx context.Context, msg *MCPMessage) error {
 	}
 
 	if msg.Method != "" && msg.ID != nil {
-		resp, err := t.handler.HandleRequest(ctx, msg)
+		resp, err := t.safeHandleRequest(ctx, msg)
 		if err != nil {
 			resp = NewMCPError(msg.ID, ErrorCodeInternalError, err.Error(), nil)
 		}
@@ -57,8 +74,19 @@ func (t *InProcessTransport) Send(ctx context.Context, msg *MCPMessage) error {
 	}
 
 	// Notifications (no ID) are fire-and-forget.
-	_, _ = t.handler.HandleRequest(ctx, msg)
+	if _, err := t.safeHandleRequest(ctx, msg); err != nil && t.onNotifError != nil {
+		t.onNotifError(msg.Method, err)
+	}
 	return nil
+}
+
+func (t *InProcessTransport) safeHandleRequest(ctx context.Context, msg *MCPMessage) (resp *MCPMessage, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			err = fmt.Errorf("handler panic: %v\n%s", r, debug.Stack())
+		}
+	}()
+	return t.handler.HandleRequest(ctx, msg)
 }
 
 func (t *InProcessTransport) Receive(ctx context.Context) (*MCPMessage, error) {
@@ -82,4 +110,10 @@ func (t *InProcessTransport) Close() error {
 	t.closed = true
 	close(t.recvCh)
 	return nil
+}
+
+func (t *InProcessTransport) IsAlive() bool {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return !t.closed
 }

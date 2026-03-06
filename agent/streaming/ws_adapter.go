@@ -4,10 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"sync"
 
-	"go.uber.org/zap"
 	"github.com/coder/websocket"
+	"go.uber.org/zap"
 )
 
 // WebSocketStreamConnection 将 github.com/coder/websocket 连接适配为 StreamConnection 接口。
@@ -86,6 +87,21 @@ func (w *WebSocketStreamConnection) Close() error {
 // IsAlive 检查连接是否存活。
 func (w *WebSocketStreamConnection) IsAlive() bool {
 	return !w.closed
+}
+
+// AcceptWebSocket 接受 WebSocket 连接并校验 Origin。
+// allowedOrigins 非空时仅接受匹配的 Origin；生产环境应配置可信域名（如 "https://example.com"）。
+// allowedOrigins 为空时使用同源校验（基于 r.Host），拒绝跨域请求。
+func AcceptWebSocket(w http.ResponseWriter, r *http.Request, allowedOrigins []string) (*websocket.Conn, error) {
+	patterns := allowedOrigins
+	if len(patterns) == 0 && r != nil && r.Host != "" {
+		patterns = []string{"https://" + r.Host, "http://" + r.Host}
+	}
+	var opts *websocket.AcceptOptions
+	if len(patterns) > 0 {
+		opts = &websocket.AcceptOptions{OriginPatterns: patterns}
+	}
+	return websocket.Accept(w, r, opts)
 }
 
 // WebSocketStreamFactory 创建一个 connFactory 函数，用于 BidirectionalStream 的重连。

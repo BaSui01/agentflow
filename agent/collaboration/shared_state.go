@@ -3,6 +3,8 @@ package collaboration
 import (
 	"context"
 	"sync"
+
+	"go.uber.org/zap"
 )
 
 type SharedState interface {
@@ -16,12 +18,22 @@ type InMemorySharedState struct {
 	data     map[string]any
 	watchers map[string][]chan any
 	mu       sync.RWMutex
+	logger   *zap.Logger
 }
 
 func NewInMemorySharedState() *InMemorySharedState {
+	return NewInMemorySharedStateWithLogger(zap.NewNop())
+}
+
+// NewInMemorySharedStateWithLogger 创建带日志的共享状态，用于记录被跳过的 watcher 通知。
+func NewInMemorySharedStateWithLogger(logger *zap.Logger) *InMemorySharedState {
+	if logger == nil {
+		logger = zap.NewNop()
+	}
 	return &InMemorySharedState{
 		data:     make(map[string]any),
 		watchers: make(map[string][]chan any),
+		logger:   logger,
 	}
 }
 
@@ -41,12 +53,17 @@ func (s *InMemorySharedState) Set(ctx context.Context, key string, value any) er
 		case ch <- value:
 		case <-ctx.Done():
 		default:
+			s.logger.Warn("watcher channel full, update skipped",
+				zap.String("key", key),
+				zap.Int("channel_cap", cap(ch)),
+			)
 		}
 	}
 	return nil
 }
 
 func (s *InMemorySharedState) Watch(ctx context.Context, key string) <-chan any {
+	// T-007: buffer 1 避免 Set 时 default 分支跳过导致漏更新
 	ch := make(chan any, 1)
 	s.mu.Lock()
 	s.watchers[key] = append(s.watchers[key], ch)

@@ -3,6 +3,8 @@ package dsl
 import (
 	"fmt"
 	"strings"
+
+	"github.com/BaSui01/agentflow/workflow/core"
 )
 
 // Validator DSL 验证器
@@ -184,14 +186,17 @@ func (v *Validator) validateStepDefinition(stepName string, step StepDef) []erro
 	var errs []error
 
 	validStepTypes := map[string]bool{
-		"llm":           true,
-		"tool":          true,
-		"human_input":   true,
-		"code":          true,
-		"agent":         true,
-		"orchestration": true,
-		"chain":         true,
-		"passthrough":   true,
+		string(core.StepTypeLLM):              true,
+		string(core.StepTypeTool):             true,
+		string(core.StepTypeHumanInput):       true,
+		string(core.StepTypeCode):             true,
+		string(core.StepTypeAgent):            true,
+		string(core.StepTypeOrchestration):    true,
+		string(core.StepTypeChain):            true,
+		string(core.StepTypePassthrough):      true,
+		string(core.StepTypeHybridRetrieve):   true,
+		string(core.StepTypeMultiHopRetrieve): true,
+		string(core.StepTypeRerank):           true,
 	}
 	if !validStepTypes[step.Type] {
 		errs = append(errs, fmt.Errorf("step %s: invalid type %q", stepName, step.Type))
@@ -199,19 +204,19 @@ func (v *Validator) validateStepDefinition(stepName string, step StepDef) []erro
 	}
 
 	switch step.Type {
-	case "llm":
+	case string(core.StepTypeLLM):
 		if strings.TrimSpace(step.Prompt) == "" {
 			errs = append(errs, fmt.Errorf("step %s: llm step requires prompt", stepName))
 		}
-	case "tool":
+	case string(core.StepTypeTool):
 		if strings.TrimSpace(step.Tool) == "" {
 			errs = append(errs, fmt.Errorf("step %s: tool step requires tool", stepName))
 		}
-	case "human_input":
+	case string(core.StepTypeHumanInput):
 		if strings.TrimSpace(step.Prompt) == "" {
 			errs = append(errs, fmt.Errorf("step %s: human_input step requires prompt", stepName))
 		}
-	case "orchestration":
+	case string(core.StepTypeOrchestration):
 		if step.Orchestration == nil {
 			errs = append(errs, fmt.Errorf("step %s: orchestration step requires orchestration definition", stepName))
 		} else if strings.TrimSpace(step.Orchestration.Mode) == "" {
@@ -219,7 +224,7 @@ func (v *Validator) validateStepDefinition(stepName string, step StepDef) []erro
 		} else if len(step.Orchestration.AgentIDs) == 0 {
 			errs = append(errs, fmt.Errorf("step %s: orchestration step requires agent_ids", stepName))
 		}
-	case "chain":
+	case string(core.StepTypeChain):
 		if step.Chain == nil {
 			errs = append(errs, fmt.Errorf("step %s: chain step requires chain definition", stepName))
 		} else if len(step.Chain.Steps) == 0 {

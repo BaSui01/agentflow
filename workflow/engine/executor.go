@@ -14,7 +14,6 @@ type ExecutionMode string
 const (
 	ModeSequential ExecutionMode = "sequential"
 	ModeParallel   ExecutionMode = "parallel"
-	ModeDAG        ExecutionMode = "dag"
 	ModeRouting    ExecutionMode = "routing"
 )
 
@@ -54,7 +53,6 @@ func NewExecutor() *Executor {
 	}
 	e.RegisterStrategy(ModeSequential, &SequentialStrategy{})
 	e.RegisterStrategy(ModeParallel, &ParallelStrategy{})
-	e.RegisterStrategy(ModeDAG, &DAGStrategy{})
 	e.RegisterStrategy(ModeRouting, &RoutingStrategy{})
 	return e
 }
@@ -86,8 +84,6 @@ func (e *Executor) Execute(ctx context.Context, mode ExecutionMode, nodes []*Exe
 	case *SequentialStrategy:
 		return s.Schedule(ctx, nodes, runner)
 	case *ParallelStrategy:
-		return s.Schedule(ctx, nodes, runner)
-	case *DAGStrategy:
 		return s.Schedule(ctx, nodes, runner)
 	case *RoutingStrategy:
 		return s.Schedule(ctx, nodes, runner)
@@ -163,6 +159,21 @@ func (s *ParallelStrategy) Schedule(ctx context.Context, nodes []*ExecutionNode,
 		wg.Add(1)
 		go func(n *ExecutionNode) {
 			defer wg.Done()
+			defer func() {
+				if r := recover(); r != nil {
+					ch <- nodeResult{
+						id:  n.ID,
+						err: fmt.Errorf("node panicked: %v", r),
+					}
+				}
+			}()
+			// T-006: 入口检查 ctx.Done()，避免 goroutine 在已取消时继续执行
+			select {
+			case <-ctx.Done():
+				ch <- nodeResult{id: n.ID, err: ctx.Err()}
+				return
+			default:
+			}
 			output, err := runner(ctx, n.Step, n.Input)
 			ch <- nodeResult{id: n.ID, output: output, err: err}
 		}(node)
@@ -184,121 +195,6 @@ func (s *ParallelStrategy) Schedule(ctx context.Context, nodes []*ExecutionNode,
 	}
 
 	return result, firstErr
-}
-
-// DAGStrategy 拓扑排序 + ready queue 并发。
-type DAGStrategy struct{}
-
-func (s *DAGStrategy) Schedule(ctx context.Context, nodes []*ExecutionNode, runner StepRunner) (*ExecutionResult, error) {
-	result := &ExecutionResult{
-		Outputs: make(map[string]core.StepOutput),
-		Errors:  make(map[string]error),
-	}
-
-	if len(nodes) == 0 {
-		return result, nil
-	}
-
-	// 构建依赖图
-	nodeMap := make(map[string]*ExecutionNode, len(nodes))
-	inDegree := make(map[string]int, len(nodes))
-	dependents := make(map[string][]string) // nodeID -> 依赖它的节点
-
-	for _, n := range nodes {
-		nodeMap[n.ID] = n
-		inDegree[n.ID] = len(n.Dependencies)
-		for _, dep := range n.Dependencies {
-			dependents[dep] = append(dependents[dep], n.ID)
-		}
-	}
-
-	// 初始 ready queue
-	var ready []*ExecutionNode
-	for _, n := range nodes {
-		if inDegree[n.ID] == 0 {
-			ready = append(ready, n)
-		}
-	}
-
-	var mu sync.Mutex
-	completed := 0
-	total := len(nodes)
-
-	for completed < total {
-		select {
-		case <-ctx.Done():
-			return result, ctx.Err()
-		default:
-		}
-
-		if len(ready) == 0 {
-			return result, fmt.Errorf("DAG deadlock: no ready nodes but %d/%d completed", completed, total)
-		}
-
-		// 并发执行所有 ready 节点
-		batch := ready
-		ready = nil
-
-		type nodeResult struct {
-			id     string
-			output core.StepOutput
-			err    error
-		}
-
-		ch := make(chan nodeResult, len(batch))
-		var wg sync.WaitGroup
-
-		for _, n := range batch {
-			wg.Add(1)
-			go func(node *ExecutionNode) {
-				defer wg.Done()
-				// 合并依赖节点的输出到输入
-				input := node.Input
-				if input.Data == nil {
-					input.Data = make(map[string]any)
-				}
-				mu.Lock()
-				for _, dep := range node.Dependencies {
-					if out, ok := result.Outputs[dep]; ok {
-						for k, v := range out.Data {
-							if _, exists := input.Data[k]; !exists {
-								input.Data[k] = v
-							}
-						}
-					}
-				}
-				mu.Unlock()
-
-				output, err := runner(ctx, node.Step, input)
-				ch <- nodeResult{id: node.ID, output: output, err: err}
-			}(n)
-		}
-
-		wg.Wait()
-		close(ch)
-
-		for nr := range ch {
-			mu.Lock()
-			if nr.err != nil {
-				result.Errors[nr.id] = nr.err
-				mu.Unlock()
-				return result, fmt.Errorf("node %s failed: %w", nr.id, nr.err)
-			}
-			result.Outputs[nr.id] = nr.output
-			completed++
-
-			// 更新依赖计数，找出新的 ready 节点
-			for _, depID := range dependents[nr.id] {
-				inDegree[depID]--
-				if inDegree[depID] == 0 {
-					ready = append(ready, nodeMap[depID])
-				}
-			}
-			mu.Unlock()
-		}
-	}
-
-	return result, nil
 }
 
 // RouteSelector 路由选择函数，根据输入选择要执行的节点。

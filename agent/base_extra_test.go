@@ -16,21 +16,22 @@ import (
 // toolManagerExecutor tests
 // ============================================================
 
-func TestToolManagerExecutor_IsAllowed(t *testing.T) {
-	exec := newToolManagerExecutor(nil, "agent-1", []string{"calc", "search"}, nil)
-
-	assert.True(t, exec.isAllowed("calc"))
-	assert.True(t, exec.isAllowed("search"))
-	assert.False(t, exec.isAllowed("unknown"))
-	assert.False(t, exec.isAllowed(""))
-	assert.False(t, exec.isAllowed("  "))
+func TestFilterToolSchemasByWhitelist(t *testing.T) {
+	tools := []types.ToolSchema{
+		{Name: "calc"},
+		{Name: "search"},
+		{Name: "unknown"},
+	}
+	filtered := filterToolSchemasByWhitelist(tools, []string{"calc", "search"})
+	assert.Len(t, filtered, 2)
+	assert.Equal(t, "calc", filtered[0].Name)
+	assert.Equal(t, "search", filtered[1].Name)
 }
 
-func TestToolManagerExecutor_IsAllowed_TrimSpaces(t *testing.T) {
-	exec := newToolManagerExecutor(nil, "agent-1", []string{" calc ", "search"}, nil)
-
-	assert.True(t, exec.isAllowed("calc"))
-	assert.True(t, exec.isAllowed("search"))
+func TestFilterToolSchemasByWhitelist_EmptyWhitelist(t *testing.T) {
+	tools := []types.ToolSchema{{Name: "calc"}, {Name: "search"}}
+	filtered := filterToolSchemasByWhitelist(tools, nil)
+	assert.Equal(t, tools, filtered)
 }
 
 func TestToolManagerExecutor_Execute_NilManager(t *testing.T) {
@@ -44,19 +45,7 @@ func TestToolManagerExecutor_Execute_NilManager(t *testing.T) {
 	assert.Equal(t, "tool manager not configured", results[0].Error)
 }
 
-func TestToolManagerExecutor_Execute_NotAllowed(t *testing.T) {
-	tm := &testToolManager{}
-	exec := newToolManagerExecutor(tm, "agent-1", []string{"calc"}, nil)
-
-	calls := []types.ToolCall{
-		{ID: "call-1", Name: "unknown", Arguments: []byte(`{}`)},
-	}
-	results := exec.Execute(context.Background(), calls)
-	require.Len(t, results, 1)
-	assert.Contains(t, results[0].Error, "not allowed")
-}
-
-func TestToolManagerExecutor_Execute_AllowedCalls(t *testing.T) {
+func TestToolManagerExecutor_Execute_DelegatesToManager(t *testing.T) {
 	tm := &testToolManager{
 		executeForAgentFn: func(ctx context.Context, agentID string, calls []types.ToolCall) []llmtools.ToolResult {
 			results := make([]llmtools.ToolResult, len(calls))
@@ -70,18 +59,16 @@ func TestToolManagerExecutor_Execute_AllowedCalls(t *testing.T) {
 			return results
 		},
 	}
-	exec := newToolManagerExecutor(tm, "agent-1", []string{"calc", "search"}, nil)
+	exec := newToolManagerExecutor(tm, "agent-1", nil, nil)
 
 	calls := []types.ToolCall{
 		{ID: "call-1", Name: "calc"},
-		{ID: "call-2", Name: "unknown"},
-		{ID: "call-3", Name: "search"},
+		{ID: "call-2", Name: "search"},
 	}
 	results := exec.Execute(context.Background(), calls)
-	require.Len(t, results, 3)
+	require.Len(t, results, 2)
 	assert.Empty(t, results[0].Error)
-	assert.Contains(t, results[1].Error, "not allowed")
-	assert.Empty(t, results[2].Error)
+	assert.Empty(t, results[1].Error)
 }
 
 func TestToolManagerExecutor_Execute_WithEventBus(t *testing.T) {

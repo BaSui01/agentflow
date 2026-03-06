@@ -47,14 +47,16 @@ type EventBus interface {
 
 // SimpleEventBus 简单的事件总线实现
 type SimpleEventBus struct {
-	mu           sync.RWMutex
-	handlers     map[EventType]map[string]EventHandler
-	eventChannel chan Event
-	done         chan struct{}
-	loopDone     chan struct{} // closed when processEvents goroutine exits
-	stopOnce     sync.Once
-	handlerWg    sync.WaitGroup // 跟踪正在运行的 handler goroutine，Stop() 时等待完成
-	logger       *zap.Logger
+	mu            sync.RWMutex
+	handlers      map[EventType]map[string]EventHandler
+	eventChannel  chan Event
+	done          chan struct{}
+	loopDone      chan struct{} // closed when processEvents goroutine exits
+	stopOnce      sync.Once
+	handlerWg     sync.WaitGroup // 跟踪正在运行的 handler goroutine，Stop() 时等待完成
+	logger        *zap.Logger
+	panicErrChan  chan<- error // 可选，handler panic 时写入
+	panicErrChanMu sync.RWMutex
 }
 
 // NewEventBus 创建新的事件总线
@@ -63,7 +65,7 @@ func NewEventBus(logger ...*zap.Logger) EventBus {
 	if len(logger) > 0 && logger[0] != nil {
 		l = logger[0]
 	} else {
-		l = zap.NewNop()
+		panic("agent.EventBus: logger is required and cannot be nil")
 	}
 	bus := &SimpleEventBus{
 		handlers:     make(map[EventType]map[string]EventHandler),
@@ -82,7 +84,11 @@ func (b *SimpleEventBus) Publish(event Event) {
 	case b.eventChannel <- event:
 	case <-b.done:
 	default:
-		// 如果通道满了，丢弃事件
+		// T-005: 通道满时丢弃事件，记录日志便于排查背压
+		b.logger.Warn("event dropped: channel full",
+			zap.String("event_type", string(event.Type())),
+			zap.Time("timestamp", event.Timestamp()),
+		)
 	}
 }
 
@@ -98,6 +104,13 @@ func (b *SimpleEventBus) Subscribe(eventType EventType, handler EventHandler) st
 	id := fmt.Sprintf("%s-%d", eventType, atomic.AddInt64(&subscriptionCounter, 1))
 	b.handlers[eventType][id] = handler
 	return id
+}
+
+// SetPanicErrorChan 设置 handler panic 时写入的 error channel，供调用方消费
+func (b *SimpleEventBus) SetPanicErrorChan(ch chan<- error) {
+	b.panicErrChanMu.Lock()
+	defer b.panicErrChanMu.Unlock()
+	b.panicErrChan = ch
 }
 
 // Unsubscribe 取消订阅
@@ -140,20 +153,50 @@ func (b *SimpleEventBus) processEvents() {
 					defer b.handlerWg.Done()
 					defer func() {
 						if r := recover(); r != nil {
+							err := panicPayloadToError(r)
 							b.logger.Error("event handler panicked",
 								zap.Any("recover", r),
-								zap.Error(panicPayloadToError(r)),
+								zap.Error(err),
 								zap.String("event_type", string(event.Type())),
 								zap.Stack("stack"),
 							)
+							b.panicErrChanMu.RLock()
+							ch := b.panicErrChan
+							b.panicErrChanMu.RUnlock()
+							if ch != nil {
+								select {
+								case ch <- err:
+								default:
+								}
+							}
 						}
 					}()
 					// 添加超时控制，防止 handler 阻塞导致 goroutine 堆积
-					done := make(chan struct{})
-					go func() {
-						defer close(done)
-						h(event)
+				done := make(chan struct{})
+				go func() {
+					defer close(done)
+					defer func() {
+						if r := recover(); r != nil {
+							err := panicPayloadToError(r)
+							b.logger.Error("inner event handler panicked",
+								zap.Any("recover", r),
+								zap.Error(err),
+								zap.String("event_type", string(event.Type())),
+								zap.Stack("stack"),
+							)
+							b.panicErrChanMu.RLock()
+							ch := b.panicErrChan
+							b.panicErrChanMu.RUnlock()
+							if ch != nil {
+								select {
+								case ch <- err:
+								default:
+								}
+							}
+						}
 					}()
+					h(event)
+				}()
 					timer := time.NewTimer(5 * time.Second)
 					defer timer.Stop()
 					select {

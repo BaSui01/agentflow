@@ -91,18 +91,22 @@ func (g *KnowledgeGraph) traverseNeighbors(nodeID string, depth int, visited map
 	}
 	visited[nodeID] = true
 
-	// 外出边缘
 	for _, edgeID := range g.outEdges[nodeID] {
-		edge := g.edges[edgeID]
+		edge, ok := g.edges[edgeID]
+		if !ok || edge == nil {
+			continue
+		}
 		if node, ok := g.nodes[edge.Target]; ok && !visited[edge.Target] {
 			*results = append(*results, node)
 			g.traverseNeighbors(edge.Target, depth-1, visited, results)
 		}
 	}
 
-	// 即将来临的边缘
 	for _, edgeID := range g.inEdges[nodeID] {
-		edge := g.edges[edgeID]
+		edge, ok := g.edges[edgeID]
+		if !ok || edge == nil {
+			continue
+		}
 		if node, ok := g.nodes[edge.Source]; ok && !visited[edge.Source] {
 			*results = append(*results, node)
 			g.traverseNeighbors(edge.Source, depth-1, visited, results)
@@ -265,13 +269,6 @@ func (r *GraphRAG) Retrieve(ctx context.Context, query string) ([]GraphRetrieval
 	)
 
 	return results, nil
-}
-
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
 }
 
 // 添加文件将文档添加到图表和向量存储中 。

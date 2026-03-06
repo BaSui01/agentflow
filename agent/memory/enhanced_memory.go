@@ -13,6 +13,13 @@ import (
 	"go.uber.org/zap"
 )
 
+// LongTermRetriever provides a higher-quality retrieval path for long-term
+// memory search. When set, it replaces the raw LowLevelVectorStore.Search
+// with a RAG pipeline (e.g. BM25+Vector+Rerank fusion).
+type LongTermRetriever interface {
+	Retrieve(ctx context.Context, query string, queryEmbedding []float64) ([]rag.RetrievalResult, error)
+}
+
 // EnhancedMemorySystem 增强的多层记忆系统
 // 实现短期、工作、长期、情节、语义和观测记忆
 type EnhancedMemorySystem struct {
@@ -24,6 +31,9 @@ type EnhancedMemorySystem struct {
 
 	// 长期记忆（向量数据库）- 持久化的重要信息
 	longTerm rag.LowLevelVectorStore
+
+	// 长期记忆高级检索器（可选）— 走 RAG 管线获得更高质量结果
+	longTermRetriever LongTermRetriever
 
 	// 情节记忆（时序数据库）- 时间序列事件
 	episodic EpisodicStore
@@ -100,6 +110,34 @@ type MemoryStore interface {
 	Clear(ctx context.Context) error
 }
 
+func toStoreEntries(raw []any) []types.MemoryEntry {
+	entries := make([]types.MemoryEntry, 0, len(raw))
+	for _, item := range raw {
+		m, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		entry := types.MemoryEntry{}
+		if v, ok := m["key"].(string); ok {
+			entry.Key = v
+		}
+		if v, ok := m["agent_id"].(string); ok {
+			entry.AgentID = v
+		}
+		if v, ok := m["content"].(string); ok {
+			entry.Content = v
+		}
+		if v, ok := m["metadata"].(map[string]any); ok {
+			entry.Metadata = v
+		}
+		if v, ok := m["timestamp"].(time.Time); ok {
+			entry.Timestamp = v
+		}
+		entries = append(entries, entry)
+	}
+	return entries
+}
+
 // VectorItem 向量项
 type VectorItem struct {
 	ID       string
@@ -117,24 +155,13 @@ type BatchVectorStore interface {
 // EpisodicStore 情节记忆存储接口
 type EpisodicStore interface {
 	// 记录事件
-	RecordEvent(ctx context.Context, event *EpisodicEvent) error
+	RecordEvent(ctx context.Context, event *types.EpisodicEvent) error
 
 	// 查询事件
-	QueryEvents(ctx context.Context, query EpisodicQuery) ([]EpisodicEvent, error)
+	QueryEvents(ctx context.Context, query EpisodicQuery) ([]types.EpisodicEvent, error)
 
 	// 获取时间线
-	GetTimeline(ctx context.Context, agentID string, start, end time.Time) ([]EpisodicEvent, error)
-}
-
-// EpisodicEvent 情节事件
-type EpisodicEvent struct {
-	ID        string         `json:"id"`
-	AgentID   string         `json:"agent_id"`
-	Type      string         `json:"type"`    // 事件类型
-	Content   string         `json:"content"` // 事件内容
-	Context   map[string]any `json:"context"` // 上下文
-	Timestamp time.Time      `json:"timestamp"`
-	Duration  time.Duration  `json:"duration"` // 事件持续时间
+	GetTimeline(ctx context.Context, agentID string, start, end time.Time) ([]types.EpisodicEvent, error)
 }
 
 // EpisodicQuery 情节查询
@@ -305,12 +332,16 @@ func (m *EnhancedMemorySystem) SaveShortTermWithVector(
 }
 
 // LoadShortTerm 加载短期记忆
-func (m *EnhancedMemorySystem) LoadShortTerm(ctx context.Context, agentID string, limit int) ([]any, error) {
+func (m *EnhancedMemorySystem) LoadShortTerm(ctx context.Context, agentID string, limit int) ([]types.MemoryEntry, error) {
 	if m.shortTerm == nil {
 		return nil, fmt.Errorf("short-term memory store not configured")
 	}
 	pattern := fmt.Sprintf("short_term:%s:*", agentID)
-	return m.shortTerm.List(ctx, pattern, limit)
+	raw, err := m.shortTerm.List(ctx, pattern, limit)
+	if err != nil {
+		return nil, err
+	}
+	return toStoreEntries(raw), nil
 }
 
 // SaveWorking 保存工作记忆
@@ -332,12 +363,16 @@ func (m *EnhancedMemorySystem) SaveWorking(ctx context.Context, agentID string, 
 }
 
 // LoadWorking 加载工作记忆
-func (m *EnhancedMemorySystem) LoadWorking(ctx context.Context, agentID string) ([]any, error) {
+func (m *EnhancedMemorySystem) LoadWorking(ctx context.Context, agentID string) ([]types.MemoryEntry, error) {
 	if m.working == nil {
 		return nil, fmt.Errorf("working memory store not configured")
 	}
 	pattern := fmt.Sprintf("working:%s:*", agentID)
-	return m.working.List(ctx, pattern, m.config.WorkingMemorySize)
+	raw, err := m.working.List(ctx, pattern, m.config.WorkingMemorySize)
+	if err != nil {
+		return nil, err
+	}
+	return toStoreEntries(raw), nil
 }
 
 // ClearWorking 清除工作记忆
@@ -366,21 +401,54 @@ func (m *EnhancedMemorySystem) SaveLongTerm(ctx context.Context, agentID string,
 	return m.longTerm.Store(ctx, id, vector, metadata)
 }
 
+// SetLongTermRetriever injects a higher-quality retriever (e.g. HybridRetriever
+// from the RAG pipeline) for long-term memory search.
+func (m *EnhancedMemorySystem) SetLongTermRetriever(r LongTermRetriever) {
+	m.longTermRetriever = r
+}
+
 // SearchLongTerm 搜索长期记忆
+// When a LongTermRetriever is set, it is used instead of raw vector search.
 func (m *EnhancedMemorySystem) SearchLongTerm(ctx context.Context, agentID string, queryVector []float64, topK int) ([]rag.LowLevelSearchResult, error) {
 	if !m.config.LongTermEnabled {
 		return nil, fmt.Errorf("long-term memory not enabled")
 	}
 
+	if m.longTermRetriever != nil {
+		return m.searchViaRetriever(ctx, agentID, queryVector, topK)
+	}
+
 	filter := map[string]any{
 		"agent_id": agentID,
 	}
-
 	return m.longTerm.Search(ctx, queryVector, topK, filter)
 }
 
+func (m *EnhancedMemorySystem) searchViaRetriever(ctx context.Context, agentID string, queryVector []float64, topK int) ([]rag.LowLevelSearchResult, error) {
+	query := fmt.Sprintf("agent:%s long-term memory", agentID)
+	results, err := m.longTermRetriever.Retrieve(ctx, query, queryVector)
+	if err != nil {
+		m.logger.Warn("retriever search failed, falling back to vector search",
+			zap.Error(err), zap.String("agent_id", agentID))
+		return m.longTerm.Search(ctx, queryVector, topK, map[string]any{"agent_id": agentID})
+	}
+
+	out := make([]rag.LowLevelSearchResult, 0, len(results))
+	for _, r := range results {
+		if len(out) >= topK {
+			break
+		}
+		out = append(out, rag.LowLevelSearchResult{
+			ID:       r.Document.ID,
+			Score:    r.FinalScore,
+			Metadata: r.Document.Metadata,
+		})
+	}
+	return out, nil
+}
+
 // RecordEpisode 记录情节
-func (m *EnhancedMemorySystem) RecordEpisode(ctx context.Context, event *EpisodicEvent) error {
+func (m *EnhancedMemorySystem) RecordEpisode(ctx context.Context, event *types.EpisodicEvent) error {
 	if !m.config.EpisodicEnabled {
 		return fmt.Errorf("episodic memory not enabled")
 	}
@@ -389,7 +457,7 @@ func (m *EnhancedMemorySystem) RecordEpisode(ctx context.Context, event *Episodi
 }
 
 // QueryEpisodes 查询情节
-func (m *EnhancedMemorySystem) QueryEpisodes(ctx context.Context, query EpisodicQuery) ([]EpisodicEvent, error) {
+func (m *EnhancedMemorySystem) QueryEpisodes(ctx context.Context, query EpisodicQuery) ([]types.EpisodicEvent, error) {
 	if !m.config.EpisodicEnabled {
 		return nil, fmt.Errorf("episodic memory not enabled")
 	}

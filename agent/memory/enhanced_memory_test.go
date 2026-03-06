@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/BaSui01/agentflow/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
@@ -96,7 +97,7 @@ func TestEnhancedMemorySystem_NilStores(t *testing.T) {
 	_, err = sys.LoadWorking(ctx, "a")
 	assert.Error(t, err)
 	assert.Error(t, sys.ClearWorking(ctx, "a"))
-	assert.Error(t, sys.RecordEpisode(ctx, &EpisodicEvent{}))
+	assert.Error(t, sys.RecordEpisode(ctx, &types.EpisodicEvent{}))
 	_, err = sys.QueryEpisodes(ctx, EpisodicQuery{})
 	assert.Error(t, err)
 	assert.Error(t, sys.AddKnowledge(ctx, &Entity{ID: "e1"}))
@@ -114,7 +115,7 @@ func TestEnhancedMemorySystem_Episodic(t *testing.T) {
 	sys := NewEnhancedMemorySystem(nil, nil, nil, store, nil, nil, cfg, zap.NewNop())
 	ctx := context.Background()
 
-	require.NoError(t, sys.RecordEpisode(ctx, &EpisodicEvent{
+	require.NoError(t, sys.RecordEpisode(ctx, &types.EpisodicEvent{
 		AgentID: "agent-1", Type: "action", Content: "did something",
 	}))
 	events, err := sys.QueryEpisodes(ctx, EpisodicQuery{AgentID: "agent-1"})

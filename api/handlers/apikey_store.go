@@ -42,13 +42,13 @@ func NewGormAPIKeyStore(db *gorm.DB) *GormAPIKeyStore {
 
 func (s *GormAPIKeyStore) ListProviders() ([]llm.LLMProvider, error) {
 	var providers []llm.LLMProvider
-	err := s.db.Order("id ASC").Find(&providers).Error
+	err := s.db.Order("id ASC").Limit(500).Find(&providers).Error
 	return providers, err
 }
 
 func (s *GormAPIKeyStore) ListAPIKeys(providerID uint) ([]llm.LLMProviderAPIKey, error) {
 	var keys []llm.LLMProviderAPIKey
-	err := s.db.Where("provider_id = ?", providerID).Order("priority ASC, id ASC").Find(&keys).Error
+	err := s.db.Where("provider_id = ?", providerID).Order("priority ASC, id ASC").Limit(500).Find(&keys).Error
 	return keys, err
 }
 

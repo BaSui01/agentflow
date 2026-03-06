@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/BaSui01/agentflow/types"
 	"go.uber.org/zap"
 )
 
@@ -14,7 +15,7 @@ import (
 // 适用于本地开发、测试和小规模部署场景。
 type InMemoryEpisodicStore struct {
 	mu     sync.RWMutex
-	events []EpisodicEvent
+	events []types.EpisodicEvent
 	logger *zap.Logger
 }
 
@@ -24,13 +25,13 @@ func NewInMemoryEpisodicStore(logger *zap.Logger) *InMemoryEpisodicStore {
 		logger = zap.NewNop()
 	}
 	return &InMemoryEpisodicStore{
-		events: make([]EpisodicEvent, 0),
+		events: make([]types.EpisodicEvent, 0),
 		logger: logger.With(zap.String("component", "episodic_store_inmemory")),
 	}
 }
 
 // RecordEvent 记录一个情节事件。
-func (s *InMemoryEpisodicStore) RecordEvent(ctx context.Context, event *EpisodicEvent) error {
+func (s *InMemoryEpisodicStore) RecordEvent(ctx context.Context, event *types.EpisodicEvent) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -61,7 +62,7 @@ func (s *InMemoryEpisodicStore) RecordEvent(ctx context.Context, event *Episodic
 
 // QueryEvents 按条件查询情节事件。
 // 支持按 agentID、事件类型和时间范围过滤，结果按时间倒序排列。
-func (s *InMemoryEpisodicStore) QueryEvents(ctx context.Context, query EpisodicQuery) ([]EpisodicEvent, error) {
+func (s *InMemoryEpisodicStore) QueryEvents(ctx context.Context, query EpisodicQuery) ([]types.EpisodicEvent, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -69,7 +70,7 @@ func (s *InMemoryEpisodicStore) QueryEvents(ctx context.Context, query EpisodicQ
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	results := make([]EpisodicEvent, 0)
+	results := make([]types.EpisodicEvent, 0)
 	for _, ev := range s.events {
 		if err := ctx.Err(); err != nil {
 			return nil, err
@@ -103,7 +104,7 @@ func (s *InMemoryEpisodicStore) QueryEvents(ctx context.Context, query EpisodicQ
 
 // GetTimeline 获取指定 agent 在时间范围内的事件时间线。
 // 结果按时间正序排列（最早的在前）。
-func (s *InMemoryEpisodicStore) GetTimeline(ctx context.Context, agentID string, start, end time.Time) ([]EpisodicEvent, error) {
+func (s *InMemoryEpisodicStore) GetTimeline(ctx context.Context, agentID string, start, end time.Time) ([]types.EpisodicEvent, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -111,7 +112,7 @@ func (s *InMemoryEpisodicStore) GetTimeline(ctx context.Context, agentID string,
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	results := make([]EpisodicEvent, 0)
+	results := make([]types.EpisodicEvent, 0)
 	for _, ev := range s.events {
 		if err := ctx.Err(); err != nil {
 			return nil, err

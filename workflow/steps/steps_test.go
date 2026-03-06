@@ -10,21 +10,27 @@ import (
 )
 
 type testHumanHandler struct {
-	result any
+	result string
 	err    error
 }
 
-func (h *testHumanHandler) RequestInput(ctx context.Context, prompt string, inputType string, options []string) (any, error) {
-	return h.result, h.err
+func (h *testHumanHandler) RequestInput(ctx context.Context, prompt string, inputType string, options []string) (*core.HumanInputResult, error) {
+	if h.err != nil {
+		return nil, h.err
+	}
+	return &core.HumanInputResult{Value: h.result}, nil
 }
 
 type testAgent struct {
-	result any
+	result string
 	err    error
 }
 
-func (a *testAgent) Execute(ctx context.Context, input any) (any, error) {
-	return a.result, a.err
+func (a *testAgent) Execute(ctx context.Context, input map[string]any) (*core.AgentExecutionOutput, error) {
+	if a.err != nil {
+		return nil, a.err
+	}
+	return &core.AgentExecutionOutput{Content: a.result}, nil
 }
 
 func TestHumanStepExecute(t *testing.T) {

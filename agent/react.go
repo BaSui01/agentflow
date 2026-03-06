@@ -51,13 +51,13 @@ func (b *BaseAgent) Plan(ctx context.Context, input *Input) (*PlanResult, error)
 	// 调用 LLM
 	resp, err := b.ChatCompletion(ctx, messages)
 	if err != nil {
-		return nil, fmt.Errorf("plan generation failed: %w", err)
+		return nil, NewErrorWithCause(types.ErrAgentExecution, "plan generation failed", err)
 	}
 
 	// 解析计划
 	choice, err := llm.FirstChoice(resp)
 	if err != nil {
-		return nil, fmt.Errorf("plan generation returned no choices: %w", err)
+		return nil, NewErrorWithCause(types.ErrLLMResponseEmpty, "plan generation returned no choices", err)
 	}
 	planContent := choice.Message.Content
 	steps := parsePlanSteps(planContent)
@@ -81,7 +81,18 @@ func (b *BaseAgent) Plan(ctx context.Context, input *Input) (*PlanResult, error)
 // Requirements 1.7: 集成输入验证
 // Requirements 2.4: 输出验证失败时支持重试
 func (b *BaseAgent) Execute(ctx context.Context, input *Input) (_ *Output, execErr error) {
+	if input == nil {
+		return nil, NewError(types.ErrInputValidation, "input is nil")
+	}
+	if strings.TrimSpace(input.Content) == "" {
+		return nil, NewError(types.ErrInputValidation, "input content is empty")
+	}
 	startTime := time.Now()
+
+	// 0. Apply Input.Overrides to context (takes precedence over existing RunConfig)
+	if input.Overrides != nil {
+		ctx = WithRunConfig(ctx, input.Overrides)
+	}
 
 	// 1. 尝试获取执行锁
 	if !b.TryLockExec() {
@@ -101,12 +112,13 @@ func (b *BaseAgent) Execute(ctx context.Context, input *Input) (_ *Output, execE
 
 	// 以下操作修改共享状态（b.promptBundle），必须在 execMu 保护下执行。
 
-	// 3a. PromptStore: load active prompt from MongoDB if available
+	// 3a. PromptStore: load active prompt from MongoDB if available (local copy, no shared state mutation)
+	activeBundle := b.promptBundle
 	if doc := b.persistence.LoadPrompt(ctx, b.config.Core.Type, b.config.Core.Name, ""); doc != nil {
-		b.promptBundle.Version = doc.Version
-		b.promptBundle.System = doc.System
+		activeBundle.Version = doc.Version
+		activeBundle.System = doc.System
 		if len(doc.Constraints) > 0 {
-			b.promptBundle.Constraints = doc.Constraints
+			activeBundle.Constraints = doc.Constraints
 		}
 		b.logger.Info("loaded prompt from store",
 			zap.String("version", doc.Version),
@@ -124,14 +136,16 @@ func (b *BaseAgent) Execute(ctx context.Context, input *Input) (_ *Output, execE
 		// Ensure run status is updated on any exit path (including panic).
 		if runID != "" {
 			if r := recover(); r != nil {
-				_ = b.persistence.UpdateRunStatus(ctx, runID, "failed", nil, fmt.Sprintf("panic: %v", r))
+				if updateErr := b.persistence.UpdateRunStatus(ctx, runID, "failed", nil, fmt.Sprintf("panic: %v", r)); updateErr != nil {
+					b.logger.Warn("failed to mark run as failed after panic", zap.Error(updateErr))
+				}
 				b.logger.Error("panic during execution, run marked as failed",
 					zap.Any("panic", r),
 					zap.Error(panicPayloadToError(r)),
 					zap.String("run_id", runID),
 				)
 				if execErr == nil {
-					execErr = fmt.Errorf("react execution panic: %w", panicPayloadToError(r))
+					execErr = NewErrorWithCause(types.ErrAgentExecution, "react execution panic", panicPayloadToError(r))
 				}
 			}
 			if execErr != nil {
@@ -153,11 +167,17 @@ func (b *BaseAgent) Execute(ctx context.Context, input *Input) (_ *Output, execE
 	)
 
 	// 4. 输入验证(监护)
-	if b.guardrailsEnabled && b.inputValidatorChain != nil {
-		validationResult, err := b.inputValidatorChain.Validate(ctx, input.Content)
+	b.configMu.RLock()
+	guardrailsEnabled := b.guardrailsEnabled
+	inputValidatorChain := b.inputValidatorChain
+	runtimeGuardrailsCfg := b.runtimeGuardrailsCfg
+	b.configMu.RUnlock()
+
+	if guardrailsEnabled && inputValidatorChain != nil {
+		validationResult, err := inputValidatorChain.Validate(ctx, input.Content)
 		if err != nil {
 			b.logger.Error("input validation error", zap.Error(err))
-			return nil, fmt.Errorf("input validation error: %w", err)
+			return nil, NewErrorWithCause(types.ErrInputValidation, "input validation error", err)
 		}
 
 		if !validationResult.Valid {
@@ -168,8 +188,8 @@ func (b *BaseAgent) Execute(ctx context.Context, input *Input) (_ *Output, execE
 
 			// 从配置中检查失败动作
 			failureAction := guardrails.FailureActionReject
-			if b.runtimeGuardrailsCfg != nil {
-				failureAction = b.runtimeGuardrailsCfg.OnInputFailure
+			if runtimeGuardrailsCfg != nil {
+				failureAction = runtimeGuardrailsCfg.OnInputFailure
 			}
 
 			switch failureAction {
@@ -214,7 +234,7 @@ func (b *BaseAgent) Execute(ctx context.Context, input *Input) (_ *Output, execE
 	messages := []types.Message{
 		{
 			Role:    llm.RoleSystem,
-			Content: b.promptBundle.RenderSystemPromptWithVars(input.Variables),
+			Content: activeBundle.RenderSystemPromptWithVars(input.Variables),
 		},
 	}
 
@@ -234,10 +254,15 @@ func (b *BaseAgent) Execute(ctx context.Context, input *Input) (_ *Output, execE
 
 	// 7. 执行产出验证和重试支持
 	// 要求2.4:对产出验证失败进行重试
+	b.configMu.RLock()
 	maxRetries := 0
 	if b.runtimeGuardrailsCfg != nil {
 		maxRetries = b.runtimeGuardrailsCfg.MaxRetries
 	}
+	outputValidator := b.outputValidator
+	guardrailsEnabledForOutput := b.guardrailsEnabled
+	runtimeGuardrailsCfgForOutput := b.runtimeGuardrailsCfg
+	b.configMu.RUnlock()
 
 	var resp *llm.ChatResponse
 	var outputContent string
@@ -269,23 +294,23 @@ func (b *BaseAgent) Execute(ctx context.Context, input *Input) (_ *Output, execE
 				zap.Error(err),
 				zap.String("trace_id", input.TraceID),
 			)
-			return nil, fmt.Errorf("execution failed: %w", err)
+			return nil, NewErrorWithCause(types.ErrAgentExecution, "execution failed", err)
 		}
 
 		var choiceErr error
 		choice, choiceErr = llm.FirstChoice(resp)
 		if choiceErr != nil {
-			return nil, fmt.Errorf("execution returned no choices: %w", choiceErr)
+			return nil, NewErrorWithCause(types.ErrLLMResponseEmpty, "execution returned no choices", choiceErr)
 		}
 		outputContent = choice.Message.Content
 
 		// 产出验证(护栏)
-		if b.guardrailsEnabled && b.outputValidator != nil {
+		if guardrailsEnabledForOutput && outputValidator != nil {
 			var filteredContent string
-			filteredContent, lastValidationResult, err = b.outputValidator.ValidateAndFilter(ctx, outputContent)
+			filteredContent, lastValidationResult, err = outputValidator.ValidateAndFilter(ctx, outputContent)
 			if err != nil {
 				b.logger.Error("output validation error", zap.Error(err))
-				return nil, fmt.Errorf("output validation error: %w", err)
+				return nil, NewErrorWithCause(types.ErrOutputValidation, "output validation error", err)
 			}
 
 			if !lastValidationResult.Valid {
@@ -297,8 +322,8 @@ func (b *BaseAgent) Execute(ctx context.Context, input *Input) (_ *Output, execE
 
 				// 检查失败动作
 				failureAction := guardrails.FailureActionReject
-				if b.runtimeGuardrailsCfg != nil {
-					failureAction = b.runtimeGuardrailsCfg.OnOutputFailure
+				if runtimeGuardrailsCfgForOutput != nil {
+					failureAction = runtimeGuardrailsCfgForOutput.OnOutputFailure
 				}
 
 				// 如果重试已经配置, 我们还没有用尽重试, 请继续
@@ -336,12 +361,7 @@ func (b *BaseAgent) Execute(ctx context.Context, input *Input) (_ *Output, execE
 	}
 
 	// 8. 保存记忆（如果增强记忆已接管，则跳过基础记忆保存）
-	skipBaseMemory := false
-	if input.Context != nil {
-		if skip, ok := input.Context["_skip_base_memory"].(bool); ok && skip {
-			skipBaseMemory = true
-		}
-	}
+	skipBaseMemory := b.memoryFacade != nil && b.memoryFacade.SkipBaseMemory()
 	if b.memory != nil && !skipBaseMemory {
 		// 保存用户输入
 		if err := b.SaveMemory(ctx, input.Content, MemoryShortTerm, map[string]any{
@@ -438,7 +458,7 @@ func (b *BaseAgent) Observe(ctx context.Context, feedback *Feedback) error {
 
 		if err := b.SaveMemory(ctx, feedback.Content, MemoryLongTerm, metadata); err != nil {
 			b.logger.Error("failed to save feedback to memory", zap.Error(err))
-			return fmt.Errorf("failed to save feedback: %w", err)
+			return NewErrorWithCause(types.ErrAgentExecution, "failed to save feedback", err)
 		}
 	}
 

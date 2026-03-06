@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/BaSui01/agentflow/api"
+	"github.com/BaSui01/agentflow/internal/usecase"
 	"github.com/BaSui01/agentflow/llm"
 	llmcore "github.com/BaSui01/agentflow/llm/core"
 	"github.com/BaSui01/agentflow/types"
@@ -22,13 +23,13 @@ import (
 type openAICompatServiceStub struct {
 	completeReq    *api.ChatRequest
 	streamReq      *api.ChatRequest
-	completeResult *ChatCompletionResult
+	completeResult *usecase.ChatCompletionResult
 	completeErr    *types.Error
 	streamChunks   []llmcore.UnifiedChunk
 	streamErr      *types.Error
 }
 
-func (s *openAICompatServiceStub) Complete(_ context.Context, req *api.ChatRequest) (*ChatCompletionResult, *types.Error) {
+func (s *openAICompatServiceStub) Complete(_ context.Context, req *api.ChatRequest) (*usecase.ChatCompletionResult, *types.Error) {
 	s.completeReq = req
 	if s.completeErr != nil {
 		return nil, s.completeErr
@@ -59,7 +60,7 @@ func (s *openAICompatServiceStub) DefaultRoutePolicy() string {
 
 func TestChatHandler_OpenAICompatChatCompletions(t *testing.T) {
 	svc := &openAICompatServiceStub{
-		completeResult: &ChatCompletionResult{
+		completeResult: &usecase.ChatCompletionResult{
 			Response: &api.ChatResponse{
 				ID:    "chatcmpl_test",
 				Model: "gpt-5.2",
@@ -182,7 +183,7 @@ func TestChatHandler_OpenAICompatChatCompletions_Stream(t *testing.T) {
 
 func TestChatHandler_OpenAICompatResponses(t *testing.T) {
 	svc := &openAICompatServiceStub{
-		completeResult: &ChatCompletionResult{
+		completeResult: &usecase.ChatCompletionResult{
 			Response: &api.ChatResponse{
 				ID:    "resp_test",
 				Model: "gpt-5.2",
@@ -319,7 +320,7 @@ func TestChatHandler_OpenAICompatResponses_Stream(t *testing.T) {
 
 func TestChatHandler_OpenAICompatResponses_WebSearchToolFilters(t *testing.T) {
 	svc := &openAICompatServiceStub{
-		completeResult: &ChatCompletionResult{
+		completeResult: &usecase.ChatCompletionResult{
 			Response: &api.ChatResponse{
 				ID: "resp_filters",
 				Choices: []api.ChatChoice{

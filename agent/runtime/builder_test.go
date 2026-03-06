@@ -68,21 +68,10 @@ func TestBuilder_Build_NilProvider(t *testing.T) {
 }
 
 func TestBuilder_Build_NilLogger(t *testing.T) {
-	cfg := types.AgentConfig{
-		Core: types.CoreConfig{
-			ID:   "test-agent",
-			Name: "Test",
-			Type: "assistant",
-		},
-		LLM: types.LLMConfig{
-			Model: "gpt-4",
-		},
-	}
-	opts := BuildOptions{}
-
-	builder := NewBuilder(nil, nil).WithOptions(opts)
-	_, err := builder.Build(context.Background(), cfg)
-	require.Error(t, err)
+	// O-004: NewBuilder panics when logger is nil
+	require.Panics(t, func() {
+		NewBuilder(nil, nil)
+	})
 }
 
 func TestBuilder_Build_AllDisabled(t *testing.T) {

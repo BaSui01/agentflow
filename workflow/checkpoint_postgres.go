@@ -164,7 +164,10 @@ func (s *PostgreSQLCheckpointStore) Cleanup(ctx context.Context, retention time.
 		if err != nil {
 			return 0, fmt.Errorf("cleanup expired checkpoints: %w", err)
 		}
-		n, _ := result.RowsAffected()
+		n, err := result.RowsAffected()
+		if err != nil {
+			return 0, fmt.Errorf("rows affected: %w", err)
+		}
 		totalDeleted += n
 	}
 
@@ -184,7 +187,10 @@ func (s *PostgreSQLCheckpointStore) Cleanup(ctx context.Context, retention time.
 		if err != nil {
 			return totalDeleted, fmt.Errorf("cleanup excess versions: %w", err)
 		}
-		n, _ := result.RowsAffected()
+		n, err := result.RowsAffected()
+		if err != nil {
+			return totalDeleted, fmt.Errorf("rows affected: %w", err)
+		}
 		totalDeleted += n
 	}
 

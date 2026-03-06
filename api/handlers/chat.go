@@ -8,11 +8,13 @@ import (
 
 	"github.com/BaSui01/agentflow/agent"
 	"github.com/BaSui01/agentflow/api"
+	"github.com/BaSui01/agentflow/internal/usecase"
 	"github.com/BaSui01/agentflow/llm"
 	llmcore "github.com/BaSui01/agentflow/llm/core"
 	llmgateway "github.com/BaSui01/agentflow/llm/gateway"
 	"github.com/BaSui01/agentflow/llm/observability"
 	llmpolicy "github.com/BaSui01/agentflow/llm/runtime/policy"
+	"github.com/BaSui01/agentflow/pkg/telemetry"
 	"github.com/BaSui01/agentflow/types"
 	"go.uber.org/zap"
 )
@@ -25,11 +27,14 @@ import (
 // when no explicit timeout is provided by the client.
 const defaultStreamTimeout = 30 * time.Second
 
+// maxTokensUpperBound is the maximum allowed value for max_tokens (e.g. GPT-4 context limit).
+const maxTokensUpperBound = 128000
+
 // ChatHandler 聊天接口处理器
 type ChatHandler struct {
 	gateway   llmcore.Gateway
 	converter ChatConverter
-	service   ChatService
+	service   usecase.ChatService
 	logger    *zap.Logger
 }
 
@@ -58,14 +63,14 @@ func NewChatHandlerWithRuntime(
 		logger:    logger,
 	}
 	chatProvider := llmgateway.NewChatProviderAdapter(handler.gateway, provider)
-	handler.service = newDefaultChatService(handler.gateway, chatProvider, toolManager, handler.converter, logger)
+	handler.service = usecase.NewDefaultChatService(handler.gateway, chatProvider, toolManager, handler.converter, logger)
 	return handler
 }
 
 // NewChatHandlerWithService creates a chat handler with an explicit service.
-func NewChatHandlerWithService(service ChatService, logger *zap.Logger) *ChatHandler {
+func NewChatHandlerWithService(service usecase.ChatService, logger *zap.Logger) *ChatHandler {
 	if logger == nil {
-		logger = zap.NewNop()
+		panic("api.ChatHandler: logger is required and cannot be nil")
 	}
 	return &ChatHandler{
 		service: service,
@@ -86,15 +91,17 @@ func NewChatHandlerWithService(service ChatService, logger *zap.Logger) *ChatHan
 // @Security ApiKeyAuth
 // @Router /api/v1/chat/completions [post]
 func (h *ChatHandler) HandleCompletion(w http.ResponseWriter, r *http.Request) {
-	// 验证 Content-Type
-	if !ValidateContentType(w, r, h.logger) {
+	var req api.ChatRequest
+	if !ValidateRequest(w, r, &req, h.logger) {
 		return
 	}
 
-	// 解码请求
-	var req api.ChatRequest
-	if err := DecodeJSONBody(w, r, &req, h.logger); err != nil {
-		return
+	// 从 JWT 上下文强制覆盖身份字段，防止水平越权
+	if tenantID, ok := types.TenantID(r.Context()); ok && tenantID != "" {
+		req.TenantID = tenantID
+	}
+	if userID, ok := types.UserID(r.Context()); ok && userID != "" {
+		req.UserID = userID
 	}
 
 	// 验证请求
@@ -114,9 +121,9 @@ func (h *ChatHandler) HandleCompletion(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 记录日志
 	requestID := w.Header().Get("X-Request-ID")
-	h.logger.Info("chat completion",
+	traceLogger := telemetry.LoggerWithTrace(r.Context(), h.logger)
+	traceLogger.Info("chat completion",
 		zap.String("request_id", requestID),
 		zap.String("model", req.Model),
 		zap.Int("prompt_tokens", result.Raw.Usage.PromptTokens),
@@ -149,6 +156,14 @@ func (h *ChatHandler) HandleStream(w http.ResponseWriter, r *http.Request) {
 	var req api.ChatRequest
 	if err := DecodeJSONBody(w, r, &req, h.logger); err != nil {
 		return
+	}
+
+	// 从 JWT 上下文强制覆盖身份字段，防止水平越权
+	if tenantID, ok := types.TenantID(r.Context()); ok && tenantID != "" {
+		req.TenantID = tenantID
+	}
+	if userID, ok := types.UserID(r.Context()); ok && userID != "" {
+		req.UserID = userID
 	}
 
 	// 验证请求
@@ -190,11 +205,14 @@ func (h *ChatHandler) HandleStream(w http.ResponseWriter, r *http.Request) {
 				zap.String("request_id", requestID),
 				zap.Error(chunk.Err),
 			)
-			// SSE 错误事件 — 使用 json.Marshal 转义错误消息，防止 JSON 注入
-			errPayload, marshalErr := json.Marshal(map[string]string{"error": chunk.Err.Message})
+			// SSE 错误事件 — 包含 code 与 message，使用 json.Marshal 转义防止 JSON 注入
+			errPayload, marshalErr := json.Marshal(map[string]string{
+				"code":    string(chunk.Err.Code),
+				"message": chunk.Err.Message,
+			})
 			if marshalErr != nil {
 				h.logger.Error("failed to marshal error payload", zap.Error(marshalErr))
-				errPayload = []byte(`{"error":"internal error"}`)
+				errPayload = []byte(`{"code":"INTERNAL_ERROR","message":"internal error"}`)
 			}
 			if err := writeSSE(w, []byte("event: error\n"), []byte("data: "), errPayload, []byte("\n\n")); err != nil {
 				h.logger.Error("failed to write SSE error event", zap.Error(err))
@@ -256,7 +274,7 @@ func (h *ChatHandler) validateChatRequest(req *api.ChatRequest) *types.Error {
 	}
 
 	// 验证 max_tokens 参数
-	if !ValidateNonNegative(float64(req.MaxTokens)) || req.MaxTokens > 128000 {
+	if !ValidateNonNegative(float64(req.MaxTokens)) || req.MaxTokens > maxTokensUpperBound {
 		return types.NewError(types.ErrInvalidRequest, "max_tokens must be between 0 and 128000")
 	}
 
@@ -270,13 +288,13 @@ func (h *ChatHandler) validateChatRequest(req *api.ChatRequest) *types.Error {
 		return types.NewInvalidRequestError("top_p must be between 0 and 1")
 	}
 
-	if _, err := normalizeProviderHint(req.Provider); err != nil {
+	if _, err := usecase.NormalizeProviderHint(req.Provider); err != nil {
 		return err
 	}
-	if _, err := normalizeRoutePolicy(req.RoutePolicy); err != nil {
+	if _, err := usecase.NormalizeRoutePolicy(req.RoutePolicy); err != nil {
 		return err
 	}
-	if _, err := normalizeEndpointMode(req.EndpointMode); err != nil {
+	if _, err := usecase.NormalizeEndpointMode(req.EndpointMode); err != nil {
 		return err
 	}
 

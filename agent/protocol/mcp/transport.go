@@ -12,4 +12,7 @@ type Transport interface {
 	Receive(ctx context.Context) (*MCPMessage, error)
 	// Close 关闭传输
 	Close() error
+	// IsAlive reports whether the transport connection is still active.
+	// Implementations that cannot determine liveness should return true.
+	IsAlive() bool
 }

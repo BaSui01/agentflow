@@ -1,4 +1,4 @@
-package handlers
+package usecase
 
 import (
 	"context"
@@ -13,6 +13,10 @@ import (
 	"github.com/BaSui01/agentflow/types"
 )
 
+// AgentResolver resolves an agent ID to a live Agent instance.
+// This decouples the handler from how agents are stored/managed at runtime.
+type AgentResolver func(ctx context.Context, agentID string) (agent.Agent, error)
+
 // AgentOperation identifies the business intent for resolver fallback messages.
 type AgentOperation string
 
@@ -21,6 +25,30 @@ const (
 	AgentOperationStream  AgentOperation = "streaming"
 	AgentOperationPlan    AgentOperation = "planning"
 )
+
+// AgentExecuteRequest is the request payload for agent execute/plan/stream operations.
+type AgentExecuteRequest struct {
+	AgentID     string            `json:"agent_id"`
+	Content     string            `json:"content"`
+	Provider    string            `json:"provider,omitempty"`
+	Model       string            `json:"model,omitempty"`
+	RoutePolicy string            `json:"route_policy,omitempty"`
+	Metadata    map[string]string `json:"metadata,omitempty"`
+	Tags        []string          `json:"tags,omitempty"`
+	Context     map[string]any    `json:"context,omitempty"`
+	Variables   map[string]string `json:"variables,omitempty"`
+}
+
+// AgentExecuteResponse is the response payload for agent execute operations.
+type AgentExecuteResponse struct {
+	TraceID      string         `json:"trace_id"`
+	Content      string         `json:"content"`
+	Metadata     map[string]any `json:"metadata,omitempty"`
+	TokensUsed   int            `json:"tokens_used,omitempty"`
+	Cost         float64        `json:"cost,omitempty"`
+	Duration     string         `json:"duration"`
+	FinishReason string         `json:"finish_reason,omitempty"`
+}
 
 // AgentService encapsulates runtime agent resolution and endpoint availability checks.
 type AgentService interface {
@@ -104,7 +132,7 @@ func (s *DefaultAgentService) ExecuteAgent(ctx context.Context, req AgentExecute
 	output, execErr := ag.Execute(execCtx, input)
 	duration := time.Since(start)
 	if execErr != nil {
-		return nil, duration, toTypesAgentError(execErr)
+		return nil, duration, ToTypesAgentError(execErr)
 	}
 
 	return &AgentExecuteResponse{
@@ -125,7 +153,7 @@ func (s *DefaultAgentService) PlanAgent(ctx context.Context, req AgentExecuteReq
 	}
 	plan, planErr := ag.Plan(applyAgentRoutingContext(ctx, req), toAgentInput(req, traceID))
 	if planErr != nil {
-		return nil, toTypesAgentError(planErr)
+		return nil, ToTypesAgentError(planErr)
 	}
 	return plan, nil
 }
@@ -138,7 +166,7 @@ func (s *DefaultAgentService) ExecuteAgentStream(ctx context.Context, req AgentE
 	streamCtx := agent.WithRuntimeStreamEmitter(applyAgentRoutingContext(ctx, req), emitter)
 	_, execErr := ag.Execute(streamCtx, toAgentInput(req, traceID))
 	if execErr != nil {
-		return toTypesAgentError(execErr)
+		return ToTypesAgentError(execErr)
 	}
 	return nil
 }
@@ -152,7 +180,8 @@ func toAgentInput(req AgentExecuteRequest, traceID string) *agent.Input {
 	}
 }
 
-func toTypesAgentError(err error) *types.Error {
+// ToTypesAgentError converts an error to *types.Error when needed.
+func ToTypesAgentError(err error) *types.Error {
 	if err == nil {
 		return nil
 	}
@@ -168,8 +197,8 @@ func applyAgentRoutingContext(ctx context.Context, req AgentExecuteRequest) cont
 	}
 
 	rc := &agent.RunConfig{
-		Metadata: normalizeRouteMetadata(req.Metadata),
-		Tags:     normalizeRouteTags(req.Tags),
+		Metadata: NormalizeRouteMetadata(req.Metadata),
+		Tags:     NormalizeRouteTags(req.Tags),
 	}
 	hasRunConfig := len(rc.Metadata) > 0 || len(rc.Tags) > 0
 
@@ -180,14 +209,14 @@ func applyAgentRoutingContext(ctx context.Context, req AgentExecuteRequest) cont
 		hasRunConfig = true
 	}
 
-	provider, providerErr := normalizeProviderHint(req.Provider)
+	provider, providerErr := NormalizeProviderHint(req.Provider)
 	if providerErr == nil && provider != "" {
 		rc.Provider = agent.StringPtr(provider)
 		ctx = types.WithLLMProvider(ctx, provider)
 		hasRunConfig = true
 	}
 
-	routePolicy, routeErr := normalizeRoutePolicy(req.RoutePolicy)
+	routePolicy, routeErr := NormalizeRoutePolicy(req.RoutePolicy)
 	if routeErr == nil && routePolicy != "" {
 		policy := string(routePolicy)
 		rc.RoutePolicy = agent.StringPtr(policy)

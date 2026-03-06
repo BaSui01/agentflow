@@ -58,6 +58,17 @@ type StepSpec struct {
 	ChainSteps []tools.ChainStep
 }
 
+// Validate checks that the StepSpec has the minimum required fields.
+func (s StepSpec) Validate() error {
+	if s.ID == "" {
+		return fmt.Errorf("step spec: ID is required")
+	}
+	if s.Type == "" {
+		return fmt.Errorf("step spec %q: Type is required", s.ID)
+	}
+	return nil
+}
+
 // BuildExecutionNode creates an execution node from step spec and shared dependencies.
 func BuildExecutionNode(spec StepSpec, deps StepDependencies) (*ExecutionNode, error) {
 	step, err := buildStep(spec, deps)

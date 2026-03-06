@@ -13,7 +13,11 @@ import (
 	"go.uber.org/zap"
 )
 
-const cacheTypeRAGSemantic = "rag_semantic"
+const (
+	cacheTypeRAGSemantic       = "rag_semantic"
+	cacheBackgroundOpTimeout  = 30 * time.Second
+	cacheEmptyResultTTLFactor = 10
+)
 
 // CacheConfig controls the semantic caching behavior.
 type CacheConfig struct {
@@ -95,7 +99,7 @@ func (c *CachingRetriever) Retrieve(ctx context.Context, query string, queryEmbe
 				zap.String("id", cached[0].Document.ID),
 				zap.String("query", query))
 			go func() {
-				evictCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+				evictCtx, cancel := context.WithTimeout(context.Background(), cacheBackgroundOpTimeout)
 				defer cancel()
 				_ = c.store.DeleteDocuments(evictCtx, []string{cached[0].Document.ID})
 			}()
@@ -124,7 +128,7 @@ func (c *CachingRetriever) Retrieve(ctx context.Context, query string, queryEmbe
 	}
 
 	go func() {
-		writeCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		writeCtx, cancel := context.WithTimeout(context.Background(), cacheBackgroundOpTimeout)
 		defer cancel()
 
 		if c.config.MaxEntries > 0 {
@@ -141,13 +145,21 @@ func (c *CachingRetriever) Retrieve(ctx context.Context, query string, queryEmbe
 		if encErr != nil {
 			return
 		}
+		meta := map[string]any{
+			"query":     query,
+			"cached_at": time.Now().UTC().Format(time.RFC3339),
+		}
+		if len(results) == 0 && c.config.TTL > 0 {
+			emptyTTL := c.config.TTL / cacheEmptyResultTTLFactor
+			if emptyTTL < 30*time.Second {
+				emptyTTL = 30 * time.Second
+			}
+			meta["ttl_ns"] = int64(emptyTTL)
+		}
 		doc := ragcore.Document{
-			ID:      fmt.Sprintf("cache:%d", time.Now().UnixNano()),
-			Content: string(encoded),
-			Metadata: map[string]any{
-				"query":     query,
-				"cached_at": time.Now().UTC().Format(time.RFC3339),
-			},
+			ID:        fmt.Sprintf("cache:%d", time.Now().UnixNano()),
+			Content:   string(encoded),
+			Metadata:  meta,
 			Embedding: queryEmbedding,
 		}
 		_ = c.store.AddDocuments(writeCtx, []ragcore.Document{doc})
@@ -158,9 +170,21 @@ func (c *CachingRetriever) Retrieve(ctx context.Context, query string, queryEmbe
 
 // isExpired checks if a cached document has exceeded the TTL.
 // TTL <= 0 disables expiration. Missing or unparseable cached_at is treated as not expired.
+// When ttl_ns is present in metadata (e.g. for empty-result entries), that value overrides config.TTL.
 func (c *CachingRetriever) isExpired(doc ragcore.Document) bool {
-	if c.config.TTL <= 0 {
+	ttl := c.config.TTL
+	if ttl <= 0 {
 		return false
+	}
+	switch v := doc.Metadata["ttl_ns"].(type) {
+	case int64:
+		if v > 0 {
+			ttl = time.Duration(v)
+		}
+	case float64:
+		if v > 0 {
+			ttl = time.Duration(v)
+		}
 	}
 	cachedAt, ok := doc.Metadata["cached_at"].(string)
 	if !ok {
@@ -170,7 +194,7 @@ func (c *CachingRetriever) isExpired(doc ragcore.Document) bool {
 	if err != nil {
 		return false
 	}
-	return time.Since(t) > c.config.TTL
+	return time.Since(t) > ttl
 }
 
 // Stats returns cache hit/miss counts.

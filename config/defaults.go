@@ -3,6 +3,21 @@ package config
 
 import "time"
 
+// 默认服务地址常量，替代硬编码
+const (
+	DefaultRedisAddr     = "localhost:6379"
+	DefaultPostgresHost  = "localhost"
+	DefaultPostgresPort  = 5432
+	DefaultQdrantHost    = "localhost"
+	DefaultQdrantPort    = 6334
+	DefaultWeaviateHost  = "localhost"
+	DefaultWeaviatePort  = 8080
+	DefaultMilvusHost    = "localhost"
+	DefaultMilvusPort    = 19530
+	DefaultMongoDBHost   = "localhost"
+	DefaultMongoDBPort   = 27017
+)
+
 type HostedToolsConfig struct {
 	FileOps FileOpsToolConfig `yaml:"file_ops" env:"FILE_OPS"`
 	Shell   ShellToolConfig   `yaml:"shell" env:"SHELL"`
@@ -111,7 +126,7 @@ func DefaultAgentConfig() AgentConfig {
 		},
 		Checkpoint: CheckpointConfig{
 			Enabled:     true,
-			Backend:     "file",
+			Backend:     StorageTypeFile,
 			FilePath:    "./checkpoints",
 			RedisPrefix: "agentflow:checkpoint",
 			RedisTTL:    24 * time.Hour,
@@ -122,7 +137,7 @@ func DefaultAgentConfig() AgentConfig {
 // DefaultRedisConfig 返回默认 Redis 配置
 func DefaultRedisConfig() RedisConfig {
 	return RedisConfig{
-		Addr:         "localhost:6379",
+		Addr:         DefaultRedisAddr,
 		Password:     "",
 		DB:           0,
 		PoolSize:     10,
@@ -133,9 +148,9 @@ func DefaultRedisConfig() RedisConfig {
 // DefaultDatabaseConfig 返回默认数据库配置
 func DefaultDatabaseConfig() DatabaseConfig {
 	return DatabaseConfig{
-		Driver:          "postgres",
-		Host:            "localhost",
-		Port:            5432,
+		Driver:          StorageTypePostgres,
+		Host:            DefaultPostgresHost,
+		Port:            DefaultPostgresPort,
 		User:            "agentflow",
 		Password:        "",
 		Name:            "agentflow",
@@ -149,8 +164,8 @@ func DefaultDatabaseConfig() DatabaseConfig {
 // DefaultQdrantConfig 返回默认 Qdrant 配置
 func DefaultQdrantConfig() QdrantConfig {
 	return QdrantConfig{
-		Host:       "localhost",
-		Port:       6334,
+		Host:       DefaultQdrantHost,
+		Port:       DefaultQdrantPort,
 		APIKey:     "",
 		Collection: "agentflow_vectors",
 	}
@@ -174,8 +189,8 @@ func DefaultWeaviateConfig() WeaviateConfig {
 // DefaultMilvusConfig 返回默认 Milvus 配置
 func DefaultMilvusConfig() MilvusConfig {
 	return MilvusConfig{
-		Host:                 "localhost",
-		Port:                 19530,
+		Host:                 DefaultMilvusHost,
+		Port:                 DefaultMilvusPort,
 		Username:             "",
 		Password:             "",
 		Token:                "",
@@ -194,8 +209,8 @@ func DefaultMilvusConfig() MilvusConfig {
 // DefaultMongoDBConfig 返回默认 MongoDB 配置
 func DefaultMongoDBConfig() MongoDBConfig {
 	return MongoDBConfig{
-		Host:                "localhost",
-		Port:                27017,
+		Host:                DefaultMongoDBHost,
+		Port:                DefaultMongoDBPort,
 		Database:            "agentflow",
 		AuthSource:          "admin",
 		MaxPoolSize:         100,
@@ -228,7 +243,7 @@ func DefaultMultimodalConfig() MultimodalConfig {
 		Enabled:                 true,
 		ReferenceMaxSizeBytes:   8 << 20, // 8MB
 		ReferenceTTL:            2 * time.Hour,
-		ReferenceStoreBackend:   "redis",
+		ReferenceStoreBackend:   StorageTypeRedis,
 		ReferenceStoreKeyPrefix: "agentflow:mm:ref",
 		DefaultImageProvider:    "",
 		DefaultVideoProvider:    "",

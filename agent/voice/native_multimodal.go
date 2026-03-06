@@ -89,6 +89,7 @@ type AudioMetrics struct {
 
 // NewNativeAudioReasoner创造出一个新的本土音频理性.
 func NewNativeAudioReasoner(provider NativeAudioProvider, config NativeAudioConfig, logger *zap.Logger) *NativeAudioReasoner {
+	// O-004: optional module, nil-safe
 	if logger == nil {
 		logger = zap.NewNop()
 	}

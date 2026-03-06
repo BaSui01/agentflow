@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -13,6 +12,9 @@ import (
 	"github.com/BaSui01/agentflow/agent"
 	"github.com/BaSui01/agentflow/agent/discovery"
 	"github.com/BaSui01/agentflow/api"
+	"github.com/BaSui01/agentflow/internal/usecase"
+	"github.com/BaSui01/agentflow/pkg/middleware"
+	"github.com/BaSui01/agentflow/pkg/telemetry"
 	"github.com/BaSui01/agentflow/types"
 	"go.uber.org/zap"
 )
@@ -24,15 +26,11 @@ var validAgentID = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$`)
 // Agent Management Handler
 // =============================================================================
 
-// AgentResolver resolves an agent ID to a live Agent instance.
-// This decouples the handler from how agents are stored/managed at runtime.
-type AgentResolver func(ctx context.Context, agentID string) (agent.Agent, error)
-
 // AgentHandler Agent management handler
 type AgentHandler struct {
 	agentRegistry *agent.AgentRegistry
-	resolver      AgentResolver
-	service       AgentService
+	resolver      usecase.AgentResolver
+	service       usecase.AgentService
 	logger        *zap.Logger
 }
 
@@ -47,30 +45,6 @@ type AgentInfo struct {
 	CreatedAt   string          `json:"created_at,omitempty"`
 }
 
-// AgentExecuteRequest Agent execution request
-type AgentExecuteRequest struct {
-	AgentID     string            `json:"agent_id" binding:"required"`
-	Content     string            `json:"content" binding:"required"`
-	Provider    string            `json:"provider,omitempty"`
-	Model       string            `json:"model,omitempty"`
-	RoutePolicy string            `json:"route_policy,omitempty"`
-	Metadata    map[string]string `json:"metadata,omitempty"`
-	Tags        []string          `json:"tags,omitempty"`
-	Context     map[string]any    `json:"context,omitempty"`
-	Variables   map[string]string `json:"variables,omitempty"`
-}
-
-// AgentExecuteResponse Agent execution response
-type AgentExecuteResponse struct {
-	TraceID      string         `json:"trace_id"`
-	Content      string         `json:"content"`
-	Metadata     map[string]any `json:"metadata,omitempty"`
-	TokensUsed   int            `json:"tokens_used,omitempty"`
-	Cost         float64        `json:"cost,omitempty"`
-	Duration     string         `json:"duration"`
-	FinishReason string         `json:"finish_reason,omitempty"`
-}
-
 // AgentHealthResponse Agent health check response
 type AgentHealthResponse struct {
 	AgentID   string  `json:"agent_id"`
@@ -83,7 +57,7 @@ type AgentHealthResponse struct {
 
 // NewAgentHandler creates an Agent handler.
 // The resolver parameter is optional — if nil, execute/stream endpoints return 501.
-func NewAgentHandler(registry discovery.Registry, agentRegistry *agent.AgentRegistry, logger *zap.Logger, resolver ...AgentResolver) *AgentHandler {
+func NewAgentHandler(registry discovery.Registry, agentRegistry *agent.AgentRegistry, logger *zap.Logger, resolver ...usecase.AgentResolver) *AgentHandler {
 	h := &AgentHandler{
 		agentRegistry: agentRegistry,
 		logger:        logger,
@@ -91,7 +65,7 @@ func NewAgentHandler(registry discovery.Registry, agentRegistry *agent.AgentRegi
 	if len(resolver) > 0 && resolver[0] != nil {
 		h.resolver = resolver[0]
 	}
-	h.service = NewDefaultAgentService(registry, h.resolver)
+	h.service = usecase.NewDefaultAgentService(registry, h.resolver)
 	return h
 }
 
@@ -109,31 +83,31 @@ func NewAgentHandler(registry discovery.Registry, agentRegistry *agent.AgentRegi
 // @Security ApiKeyAuth
 // @Router /api/v1/agents [get]
 func (h *AgentHandler) HandleListAgents(w http.ResponseWriter, r *http.Request) {
-	// Parse and validate pagination parameters (V-001)
-	limit := 100 // default
-	offset := 0  // default
+	// C-003: page-based pagination (page, page_size)
+	page := 1
+	pageSize := 20
 
-	if v := r.URL.Query().Get("limit"); v != "" {
+	if v := r.URL.Query().Get("page"); v != "" {
 		parsed, err := strconv.Atoi(v)
-		if err != nil || parsed < 0 {
+		if err != nil || parsed < 1 {
 			WriteErrorMessage(w, http.StatusBadRequest, types.ErrInvalidRequest,
-				"limit must be a non-negative integer", h.logger)
+				"page must be a positive integer", h.logger)
 			return
 		}
-		limit = parsed
-	}
-	if limit > 1000 {
-		limit = 1000
+		page = parsed
 	}
 
-	if v := r.URL.Query().Get("offset"); v != "" {
+	if v := r.URL.Query().Get("page_size"); v != "" {
 		parsed, err := strconv.Atoi(v)
-		if err != nil || parsed < 0 {
+		if err != nil || parsed < 1 {
 			WriteErrorMessage(w, http.StatusBadRequest, types.ErrInvalidRequest,
-				"offset must be a non-negative integer", h.logger)
+				"page_size must be a positive integer", h.logger)
 			return
 		}
-		offset = parsed
+		pageSize = parsed
+	}
+	if pageSize > 100 {
+		pageSize = 100
 	}
 
 	agents, svcErr := h.service.ListAgents(r.Context())
@@ -142,23 +116,33 @@ func (h *AgentHandler) HandleListAgents(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	// Apply pagination
 	total := len(agents)
-	if offset > total {
-		offset = total
+	totalPages := (total + pageSize - 1) / pageSize
+	if totalPages == 0 {
+		totalPages = 1
 	}
-	end := offset + limit
+	if page > totalPages {
+		page = totalPages
+	}
+	offset := (page - 1) * pageSize
+	end := offset + pageSize
 	if end > total {
 		end = total
 	}
-	page := agents[offset:end]
+	slice := agents[offset:end]
 
-	result := make([]AgentInfo, 0, len(page))
-	for _, a := range page {
+	result := make([]AgentInfo, 0, len(slice))
+	for _, a := range slice {
 		result = append(result, toAgentInfo(a))
 	}
 
-	WriteSuccess(w, result)
+	WriteSuccess(w, map[string]any{
+		"items":       result,
+		"total":       total,
+		"page":        page,
+		"page_size":   pageSize,
+		"total_pages": totalPages,
+	})
 }
 
 // HandleGetAgent gets a single agent's information
@@ -201,12 +185,8 @@ func (h *AgentHandler) HandleGetAgent(w http.ResponseWriter, r *http.Request) {
 // @Security ApiKeyAuth
 // @Router /api/v1/agents/execute [post]
 func (h *AgentHandler) HandleExecuteAgent(w http.ResponseWriter, r *http.Request) {
-	if !ValidateContentType(w, r, h.logger) {
-		return
-	}
-
-	var req AgentExecuteRequest
-	if err := DecodeJSONBody(w, r, &req, h.logger); err != nil {
+	var req usecase.AgentExecuteRequest
+	if !ValidateRequest(w, r, &req, h.logger) {
 		return
 	}
 
@@ -220,13 +200,18 @@ func (h *AgentHandler) HandleExecuteAgent(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	resp, duration, execErr := h.service.ExecuteAgent(r.Context(), req, r.Header.Get("X-Request-ID"))
+	traceID, _ := types.TraceID(r.Context())
+	if traceID == "" {
+		traceID = middleware.RequestIDFromContext(r.Context())
+	}
+	traceLogger := telemetry.LoggerWithTrace(r.Context(), h.logger)
+	resp, duration, execErr := h.service.ExecuteAgent(r.Context(), req, traceID)
 	if execErr != nil {
 		h.handleAgentError(w, execErr)
 		return
 	}
 
-	h.logger.Info("agent execution completed",
+	traceLogger.Info("agent execution completed",
 		zap.String("agent_id", req.AgentID),
 		zap.Duration("duration", duration),
 		zap.Int("tokens_used", resp.TokensUsed),
@@ -251,12 +236,8 @@ func (h *AgentHandler) HandleExecuteAgent(w http.ResponseWriter, r *http.Request
 // @Security ApiKeyAuth
 // @Router /api/v1/agents/execute/stream [post]
 func (h *AgentHandler) HandleAgentStream(w http.ResponseWriter, r *http.Request) {
-	if !ValidateContentType(w, r, h.logger) {
-		return
-	}
-
-	var req AgentExecuteRequest
-	if err := DecodeJSONBody(w, r, &req, h.logger); err != nil {
+	var req usecase.AgentExecuteRequest
+	if !ValidateRequest(w, r, &req, h.logger) {
 		return
 	}
 
@@ -271,7 +252,7 @@ func (h *AgentHandler) HandleAgentStream(w http.ResponseWriter, r *http.Request)
 	}
 
 	// Preserve non-stream error semantics (404/501) before committing SSE headers.
-	if _, svcErr := h.service.ResolveForOperation(r.Context(), req.AgentID, AgentOperationStream); svcErr != nil {
+	if _, svcErr := h.service.ResolveForOperation(r.Context(), req.AgentID, usecase.AgentOperationStream); svcErr != nil {
 		h.handleAgentError(w, svcErr)
 		return
 	}
@@ -289,9 +270,12 @@ func (h *AgentHandler) HandleAgentStream(w http.ResponseWriter, r *http.Request)
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
 	w.Header().Set("X-Accel-Buffering", "no")
-	requestID := r.Header.Get("X-Request-ID")
+	requestID := middleware.RequestIDFromContext(r.Context())
 	if requestID == "" {
-		requestID = w.Header().Get("X-Request-ID")
+		requestID = r.Header.Get("X-Request-ID")
+		if requestID == "" {
+			requestID = w.Header().Get("X-Request-ID")
+		}
 	}
 
 	// Build the RuntimeStreamEmitter that bridges agent events to SSE
@@ -348,14 +332,19 @@ func (h *AgentHandler) HandleAgentStream(w http.ResponseWriter, r *http.Request)
 			zap.Error(execErr),
 		)
 
-		// If headers are already sent (SSE mode), write error as SSE event
-		errPayload, err := json.Marshal(map[string]any{
-			"code":       string(types.ErrInternalError),
-			"message":    "agent execution failed",
-			"request_id": requestID,
-		})
-		if err != nil {
-			errPayload = []byte(`{"code":"INTERNAL_ERROR","message":"agent execution failed"}`)
+		// If headers are already sent (SSE mode), write error as SSE event.
+		// Use api.ErrorInfo for consistency with JSON API error format.
+		status := execErr.HTTPStatus
+		if status == 0 {
+			status = api.HTTPStatusFromErrorCode(execErr.Code)
+		}
+		errInfo := api.ErrorInfoFromTypesError(execErr, status)
+		errPayload, marshalErr := json.Marshal(struct {
+			Error     *api.ErrorInfo `json:"error"`
+			RequestID string         `json:"request_id"`
+		}{Error: errInfo, RequestID: requestID})
+		if marshalErr != nil {
+			errPayload = []byte(`{"error":{"code":"INTERNAL_ERROR","message":"agent execution failed"},"request_id":"` + requestID + `"}`)
 		}
 		fmt.Fprintf(w, "event: error\ndata: %s\n\n", errPayload)
 		flusher.Flush()
@@ -393,12 +382,8 @@ func (h *AgentHandler) HandleAgentStream(w http.ResponseWriter, r *http.Request)
 // @Security ApiKeyAuth
 // @Router /api/v1/agents/plan [post]
 func (h *AgentHandler) HandlePlanAgent(w http.ResponseWriter, r *http.Request) {
-	if !ValidateContentType(w, r, h.logger) {
-		return
-	}
-
-	var req AgentExecuteRequest
-	if err := DecodeJSONBody(w, r, &req, h.logger); err != nil {
+	var req usecase.AgentExecuteRequest
+	if !ValidateRequest(w, r, &req, h.logger) {
 		return
 	}
 
@@ -483,7 +468,7 @@ func (h *AgentHandler) HandleCapabilities(w http.ResponseWriter, r *http.Request
 
 	WriteSuccess(w, map[string]any{
 		"route_params":         []string{"provider", "model", "route_policy", "tags", "metadata"},
-		"route_policies":       supportedRoutePolicies(),
+		"route_policies":       usecase.SupportedRoutePolicies(),
 		"default_route_policy": "balanced",
 		"notes": []string{
 			"routing params are normalized in agent service and forwarded to llm runtime context",
@@ -497,9 +482,8 @@ func (h *AgentHandler) HandleCapabilities(w http.ResponseWriter, r *http.Request
 // =============================================================================
 
 // handleAgentError handles agent errors.
-// Kept for test/backward compatibility while execution mapping is now centralized in AgentService.
 func (h *AgentHandler) handleAgentError(w http.ResponseWriter, err error) {
-	WriteError(w, toTypesAgentError(err), h.logger)
+	WriteError(w, usecase.ToTypesAgentError(err), h.logger)
 }
 
 // toAgentInfo converts a discovery.AgentInfo to the API AgentInfo
@@ -537,7 +521,7 @@ func extractAgentID(r *http.Request) string {
 	return ""
 }
 
-func (h *AgentHandler) validateAgentExecuteRequest(req *AgentExecuteRequest) *types.Error {
+func (h *AgentHandler) validateAgentExecuteRequest(req *usecase.AgentExecuteRequest) *types.Error {
 	if req == nil {
 		return types.NewInvalidRequestError("request is required")
 	}
@@ -555,14 +539,14 @@ func (h *AgentHandler) validateAgentExecuteRequest(req *AgentExecuteRequest) *ty
 	if len(req.Content) > 100000 {
 		return types.NewInvalidRequestError("content length exceeds maximum of 100000 characters")
 	}
-	if _, err := normalizeProviderHint(req.Provider); err != nil {
+	if _, err := usecase.NormalizeProviderHint(req.Provider); err != nil {
 		return err
 	}
-	if _, err := normalizeRoutePolicy(req.RoutePolicy); err != nil {
+	if _, err := usecase.NormalizeRoutePolicy(req.RoutePolicy); err != nil {
 		return err
 	}
 
-	req.Metadata = normalizeRouteMetadata(req.Metadata)
-	req.Tags = normalizeRouteTags(req.Tags)
+	req.Metadata = usecase.NormalizeRouteMetadata(req.Metadata)
+	req.Tags = usecase.NormalizeRouteTags(req.Tags)
 	return nil
 }

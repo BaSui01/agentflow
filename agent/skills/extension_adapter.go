@@ -6,13 +6,8 @@ import (
 	"fmt"
 )
 
-// SkillsExtensionAdapter adapts DefaultSkillManager to the types.SkillsExtension interface.
-// This bridges the gap between the Skills system and the extension registry.
-//
-// types.SkillsExtension interface:
-//   - LoadSkill(ctx context.Context, name string) error
-//   - ExecuteSkill(ctx context.Context, name string, input any) (any, error)
-//   - ListSkills() []string
+// SkillsExtensionAdapter adapts DefaultSkillManager and Registry for extension-registry integration.
+// Exposes LoadSkill, ExecuteSkill, and ListSkills for skill loading, execution, and discovery.
 type SkillsExtensionAdapter struct {
 	manager  *DefaultSkillManager
 	registry *Registry

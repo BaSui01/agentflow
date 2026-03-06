@@ -455,7 +455,8 @@ func (d *DockerBackend) buildCommand(req *ExecutionRequest) []string {
 	case LangBash:
 		return []string{"sh", "-c", req.Code}
 	default:
-		return []string{"sh", "-c", req.Code}
+		// 不支持的语言不执行用户代码，避免 -c 注入风险
+		return []string{"sh", "-c", "echo 'unsupported language' && exit 1"}
 	}
 }
 
@@ -686,7 +687,8 @@ func (p *ProcessBackend) buildArgs(req *ExecutionRequest) []string {
 	case LangGo:
 		return []string{"run", "-"} // Read from stdin
 	default:
-		return []string{"-c", req.Code}
+		// 不支持的语言不执行用户代码，避免 -c 注入风险
+		return []string{"-c", "echo 'unsupported language' && exit 1"}
 	}
 }
 

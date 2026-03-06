@@ -3,6 +3,7 @@ package types
 import (
 	"errors"
 	"fmt"
+	"net/http"
 )
 
 // ErrorCode represents a unified error code across the framework.
@@ -34,11 +35,23 @@ const (
 
 // Agent error codes
 const (
-	ErrAgentNotReady      ErrorCode = "AGENT_NOT_READY"
-	ErrAgentBusy          ErrorCode = "AGENT_BUSY"
-	ErrInvalidTransition  ErrorCode = "INVALID_TRANSITION"
-	ErrProviderNotSet     ErrorCode = "PROVIDER_NOT_SET"
-	ErrGuardrailsViolated ErrorCode = "GUARDRAILS_VIOLATED"
+	ErrAgentNotReady        ErrorCode = "AGENT_NOT_READY"
+	ErrAgentNotFound        ErrorCode = "AGENT_NOT_FOUND"
+	ErrAgentBusy            ErrorCode = "AGENT_BUSY"
+	ErrInvalidTransition    ErrorCode = "INVALID_TRANSITION"
+	ErrProviderNotSet       ErrorCode = "PROVIDER_NOT_SET"
+	ErrProviderNotSupported ErrorCode = "PROVIDER_NOT_SUPPORTED"
+	ErrGuardrailsViolated   ErrorCode = "GUARDRAILS_VIOLATED"
+	ErrAgentExecution       ErrorCode = "AGENT_EXECUTION"
+	ErrLLMResponseEmpty     ErrorCode = "LLM_RESPONSE_EMPTY"
+	ErrInputValidation      ErrorCode = "INPUT_VALIDATION"
+	ErrOutputValidation     ErrorCode = "OUTPUT_VALIDATION"
+)
+
+// A2A protocol error codes
+const (
+	ErrTaskNotFound ErrorCode = "TASK_NOT_FOUND"
+	ErrTaskNotReady ErrorCode = "TASK_NOT_READY"
 )
 
 // Context error codes
@@ -52,7 +65,7 @@ const (
 type Error struct {
 	Code       ErrorCode `json:"code"`
 	Message    string    `json:"message"`
-	HTTPStatus int       `json:"http_status,omitempty"`
+	HTTPStatus int       `json:"-"`
 	Retryable  bool      `json:"retryable"`
 	Provider   string    `json:"provider,omitempty"`
 	Cause      error     `json:"-"`
@@ -174,48 +187,48 @@ func IsErrorCode(err error, code ErrorCode) bool {
 // NewInvalidRequestError 创建无效请求错误
 func NewInvalidRequestError(message string) *Error {
 	return NewError(ErrInvalidRequest, message).
-		WithHTTPStatus(400).
+		WithHTTPStatus(http.StatusBadRequest).
 		WithRetryable(false)
 }
 
 // NewAuthenticationError 创建认证错误
 func NewAuthenticationError(message string) *Error {
 	return NewError(ErrAuthentication, message).
-		WithHTTPStatus(401).
+		WithHTTPStatus(http.StatusUnauthorized).
 		WithRetryable(false)
 }
 
 // NewNotFoundError 创建未找到错误
 func NewNotFoundError(message string) *Error {
 	return NewError(ErrModelNotFound, message).
-		WithHTTPStatus(404).
+		WithHTTPStatus(http.StatusNotFound).
 		WithRetryable(false)
 }
 
 // NewRateLimitError 创建限流错误
 func NewRateLimitError(message string) *Error {
 	return NewError(ErrRateLimit, message).
-		WithHTTPStatus(429).
+		WithHTTPStatus(http.StatusTooManyRequests).
 		WithRetryable(true)
 }
 
 // NewInternalError 创建内部错误
 func NewInternalError(message string) *Error {
 	return NewError(ErrInternalError, message).
-		WithHTTPStatus(500).
+		WithHTTPStatus(http.StatusInternalServerError).
 		WithRetryable(false)
 }
 
 // NewServiceUnavailableError 创建服务不可用错误
 func NewServiceUnavailableError(message string) *Error {
 	return NewError(ErrServiceUnavailable, message).
-		WithHTTPStatus(503).
+		WithHTTPStatus(http.StatusServiceUnavailable).
 		WithRetryable(true)
 }
 
 // NewTimeoutError 创建超时错误
 func NewTimeoutError(message string) *Error {
 	return NewError(ErrTimeout, message).
-		WithHTTPStatus(504).
+		WithHTTPStatus(http.StatusGatewayTimeout).
 		WithRetryable(true)
 }

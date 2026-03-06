@@ -64,10 +64,19 @@ func (s *AgentStep) Execute(ctx context.Context, input core.StepInput) (core.Ste
 		return core.StepOutput{}, core.NewStepError(s.id, core.StepTypeAgent, fmt.Errorf("%w: %w", core.ErrStepExecution, err))
 	}
 
-	return core.StepOutput{
+	output := core.StepOutput{
 		Data: map[string]any{
-			"result": result,
+			"result": result.Content,
 		},
 		Latency: time.Since(start),
-	}, nil
+		Agent: &core.AgentExecutionMetadata{
+			AgentID:      s.AgentID,
+			TokensUsed:   result.TokensUsed,
+			Cost:         result.Cost,
+			Duration:     result.Duration,
+			FinishReason: result.FinishReason,
+		},
+	}
+
+	return output, nil
 }

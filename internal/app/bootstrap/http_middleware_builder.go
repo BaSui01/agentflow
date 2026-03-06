@@ -21,12 +21,19 @@ func BuildHTTPMiddlewares(
 	serverCfg config.ServerConfig,
 	collector *metrics.Collector,
 	logger *zap.Logger,
-) HTTPMiddlewares {
-	skipAuthPaths := []string{"/health", "/healthz", "/ready", "/readyz", "/version", "/metrics"}
+) (HTTPMiddlewares, error) {
+	// skipAuthPaths: 主 HTTP 服务的免认证路径。/metrics 运行在独立 Metrics 端口，不经过此中间件；
+	// 生产环境应通过网络隔离或反向代理限制 /metrics 访问。
+	skipAuthPaths := []string{"/health", "/healthz", "/ready", "/readyz", "/version"}
 	rateLimiterCtx, rateLimiterCancel := context.WithCancel(context.Background())
 	tenantRateLimiterCtx, tenantRateLimiterCancel := context.WithCancel(context.Background())
 
-	authMiddleware := BuildAuthMiddleware(serverCfg, skipAuthPaths, logger)
+	authMiddleware, err := BuildAuthMiddleware(serverCfg, skipAuthPaths, logger)
+	if err != nil {
+		rateLimiterCancel()
+		tenantRateLimiterCancel()
+		return HTTPMiddlewares{}, err
+	}
 
 	middlewares := []mw.Middleware{
 		mw.Recovery(logger),
@@ -49,5 +56,5 @@ func BuildHTTPMiddlewares(
 		List:                    middlewares,
 		RateLimiterCancel:       rateLimiterCancel,
 		TenantRateLimiterCancel: tenantRateLimiterCancel,
-	}
+	}, nil
 }

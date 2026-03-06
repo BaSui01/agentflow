@@ -36,3 +36,7 @@
 - 所有架构相关改动必须同步更新对应文档（README/ADR/架构说明）中的目录与链路描述。
 - 提交前必须通过架构守卫（如 `architecture_guard_test.go`、`scripts/arch_guard.ps1`）对应规则。
 - 如果确需突破架构规则，必须先提交 ADR 或架构变更说明，再实施代码改动。
+
+### 6) 测试与质量建议
+
+- **Goroutine 泄漏检测**：建议在关键包（如 `agent/`）的 `TestMain` 中集成 `go.uber.org/goleak` 的 `VerifyTestMain`，以检测测试后的 goroutine 泄漏。若现有测试存在 background goroutines 导致大量误报，可先用 `goleak.IgnoreTopFunction` 忽略已知安全 goroutine，或暂不启用，待测试稳定性提升后再接入。

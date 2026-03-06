@@ -98,6 +98,11 @@ type Task struct {
 type TaskStatus = persistence.TaskStatus
 
 const (
+	WorkerStatusBusy = "busy"
+	WorkerStatusIdle = "idle"
+)
+
+const (
 	TaskStatusPending   TaskStatus = persistence.TaskStatusPending
 	TaskStatusAssigned  TaskStatus = persistence.TaskStatus("assigned")
 	TaskStatusRunning   TaskStatus = persistence.TaskStatusRunning
@@ -173,6 +178,11 @@ func (h *HierarchicalAgent) Execute(ctx context.Context, input *agent.Input) (*a
 		wg.Add(1)
 		go func(idx int, task *Task) {
 			defer wg.Done()
+			defer func() {
+				if r := recover(); r != nil {
+					errors[idx] = fmt.Errorf("subtask panicked: %v", r)
+				}
+			}()
 
 			result, err := h.coordinator.ExecuteTask(ctx, task)
 			results[idx] = result
@@ -368,7 +378,7 @@ func NewTaskCoordinator(workers []agent.Agent, config HierarchicalConfig, logger
 	for _, worker := range workers {
 		coordinator.workerStatus[worker.ID()] = &WorkerStatus{
 			AgentID:    worker.ID(),
-			Status:     "idle",
+			Status:     WorkerStatusIdle,
 			LastActive: time.Now(),
 			Load:       0.0,
 		}
@@ -408,7 +418,7 @@ func (c *TaskCoordinator) ExecuteTask(ctx context.Context, task *Task) (*agent.O
 	task.StartedAt = time.Now()
 
 	// 3. 更新工作者状态
-	c.updateWorkerStatus(worker.ID(), "busy", task)
+	c.updateWorkerStatus(worker.ID(), WorkerStatusBusy, task)
 
 	// 4. 执行任务（带超时和重试）
 	var output *agent.Output
@@ -446,7 +456,7 @@ func (c *TaskCoordinator) ExecuteTask(ctx context.Context, task *Task) (*agent.O
 	if execErr != nil {
 		task.Status = TaskStatusFailed
 		task.Error = execErr
-		c.updateWorkerStatus(worker.ID(), "idle", nil)
+		c.updateWorkerStatus(worker.ID(), WorkerStatusIdle, nil)
 		c.incrementWorkerFailures(worker.ID())
 		return nil, execErr
 	}
@@ -455,7 +465,7 @@ func (c *TaskCoordinator) ExecuteTask(ctx context.Context, task *Task) (*agent.O
 	task.Result = output
 
 	// 6. 更新工作者状态
-	c.updateWorkerStatus(worker.ID(), "idle", nil)
+	c.updateWorkerStatus(worker.ID(), WorkerStatusIdle, nil)
 	c.incrementWorkerCompletions(worker.ID(), task.CompletedAt.Sub(task.StartedAt))
 
 	c.logger.Debug("task completed",
@@ -478,7 +488,7 @@ func (c *TaskCoordinator) updateWorkerStatus(workerID string, status string, tas
 		ws.LastActive = time.Now()
 
 		// 更新负载
-		if status == "busy" {
+		if status == WorkerStatusBusy {
 			ws.Load = 1.0
 		} else {
 			ws.Load = 0.0
@@ -545,7 +555,7 @@ func (s *RoundRobinStrategy) SelectWorker(ctx context.Context, task *Task, worke
 		idx := (s.current + i) % len(workers)
 		worker := workers[idx]
 
-		if ws, ok := status[worker.ID()]; ok && ws.Status == "idle" {
+		if ws, ok := status[worker.ID()]; ok && ws.Status == WorkerStatusIdle {
 			s.current = (idx + 1) % len(workers)
 			return worker, nil
 		}
@@ -594,7 +604,7 @@ func (s *RandomStrategy) SelectWorker(ctx context.Context, task *Task, workers [
 
 	idleWorkers := make([]agent.Agent, 0, len(workers))
 	for _, worker := range workers {
-		if ws, ok := status[worker.ID()]; ok && ws.Status == "idle" {
+		if ws, ok := status[worker.ID()]; ok && ws.Status == WorkerStatusIdle {
 			idleWorkers = append(idleWorkers, worker)
 		}
 	}

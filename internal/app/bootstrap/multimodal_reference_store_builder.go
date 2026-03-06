@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/BaSui01/agentflow/api/handlers"
 	"github.com/BaSui01/agentflow/config"
+	"github.com/BaSui01/agentflow/pkg/storage"
 	"github.com/BaSui01/agentflow/pkg/tlsutil"
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
@@ -21,7 +21,7 @@ func BuildMultimodalRedisReferenceStore(
 	keyPrefix string,
 	ttl time.Duration,
 	logger *zap.Logger,
-) (*redis.Client, handlers.ReferenceStore, error) {
+) (*redis.Client, storage.ReferenceStore, error) {
 	addr := strings.TrimSpace(cfg.Redis.Addr)
 	if addr == "" {
 		return nil, nil, fmt.Errorf("redis address is required when multimodal reference_store_backend=redis")
@@ -91,7 +91,7 @@ func BuildMultimodalRedisReferenceStore(
 		return nil, nil, fmt.Errorf("redis ping failed: %w", err)
 	}
 
-	return client, handlers.NewRedisReferenceStore(client, keyPrefix, ttl, logger), nil
+	return client, storage.NewRedisReferenceStore(client, keyPrefix, ttl, logger), nil
 }
 
 func hostFromAddr(addr string) string {

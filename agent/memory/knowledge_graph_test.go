@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/BaSui01/agentflow/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
@@ -151,9 +152,9 @@ func TestInMemoryEpisodicStore_RecordQuery(t *testing.T) {
 	store := NewInMemoryEpisodicStore(zap.NewNop())
 	ctx := context.Background()
 
-	require.NoError(t, store.RecordEvent(ctx, &EpisodicEvent{AgentID: "a1", Type: "action", Content: "deployed"}))
-	require.NoError(t, store.RecordEvent(ctx, &EpisodicEvent{AgentID: "a2", Type: "action", Content: "tested"}))
-	require.NoError(t, store.RecordEvent(ctx, &EpisodicEvent{AgentID: "a1", Type: "observation", Content: "healthy"}))
+	require.NoError(t, store.RecordEvent(ctx, &types.EpisodicEvent{AgentID: "a1", Type: "action", Content: "deployed"}))
+	require.NoError(t, store.RecordEvent(ctx, &types.EpisodicEvent{AgentID: "a2", Type: "action", Content: "tested"}))
+	require.NoError(t, store.RecordEvent(ctx, &types.EpisodicEvent{AgentID: "a1", Type: "observation", Content: "healthy"}))
 
 	events, err := store.QueryEvents(ctx, EpisodicQuery{AgentID: "a1"})
 	require.NoError(t, err)
@@ -165,8 +166,8 @@ func TestInMemoryEpisodicStore_QueryByType(t *testing.T) {
 	store := NewInMemoryEpisodicStore(zap.NewNop())
 	ctx := context.Background()
 
-	require.NoError(t, store.RecordEvent(ctx, &EpisodicEvent{AgentID: "a1", Type: "action", Content: "act1"}))
-	require.NoError(t, store.RecordEvent(ctx, &EpisodicEvent{AgentID: "a1", Type: "observation", Content: "obs1"}))
+	require.NoError(t, store.RecordEvent(ctx, &types.EpisodicEvent{AgentID: "a1", Type: "action", Content: "act1"}))
+	require.NoError(t, store.RecordEvent(ctx, &types.EpisodicEvent{AgentID: "a1", Type: "observation", Content: "obs1"}))
 
 	events, err := store.QueryEvents(ctx, EpisodicQuery{AgentID: "a1", Type: "action"})
 	require.NoError(t, err)
@@ -180,7 +181,7 @@ func TestInMemoryEpisodicStore_QueryLimit(t *testing.T) {
 	ctx := context.Background()
 
 	for i := 0; i < 10; i++ {
-		require.NoError(t, store.RecordEvent(ctx, &EpisodicEvent{AgentID: "a1", Type: "action", Content: "act"}))
+		require.NoError(t, store.RecordEvent(ctx, &types.EpisodicEvent{AgentID: "a1", Type: "action", Content: "act"}))
 	}
 
 	events, err := store.QueryEvents(ctx, EpisodicQuery{AgentID: "a1", Limit: 3})

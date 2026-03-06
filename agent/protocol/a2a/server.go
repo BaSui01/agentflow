@@ -85,7 +85,9 @@ type HTTPServer struct {
 	cardGenerator *AgentCardGenerator
 }
 
-// ayncTask 代表正在处理的同步任务。
+// asyncTask 代表正在处理的 A2A 异步任务。
+// Status 与 persistence.TaskStatus 语义重叠：pending/processing 对应 TaskStatusPending/TaskStatusRunning，
+// completed/failed 对应 TaskStatusCompleted/TaskStatusFailed。asyncTask 为协议层内存状态，TaskStatus 为持久化层状态。
 type asyncTask struct {
 	ID        string      `json:"id"`
 	AgentID   string      `json:"agent_id"`

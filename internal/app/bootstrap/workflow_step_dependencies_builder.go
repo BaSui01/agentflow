@@ -182,7 +182,7 @@ type hitlHumanInputHandler struct {
 	requester deliberation.InterruptRequester
 }
 
-func (h hitlHumanInputHandler) RequestInput(ctx context.Context, prompt string, inputType string, options []string) (any, error) {
+func (h hitlHumanInputHandler) RequestInput(ctx context.Context, prompt string, inputType string, options []string) (*core.HumanInputResult, error) {
 	if h.requester == nil {
 		return nil, fmt.Errorf("workflow hitl requester is not configured")
 	}
@@ -211,10 +211,15 @@ func (h hitlHumanInputHandler) RequestInput(ctx context.Context, prompt string, 
 		return nil, err
 	}
 
-	return map[string]any{
-		"action":   resp.Action,
-		"feedback": resp.Feedback,
-		"data":     resp.Data,
+	optionID := resp.Action
+	if data, ok := resp.Data.(map[string]any); ok {
+		if oid, ok := data["option_id"].(string); ok && oid != "" {
+			optionID = oid
+		}
+	}
+	return &core.HumanInputResult{
+		Value:    resp.Feedback,
+		OptionID: optionID,
 	}, nil
 }
 
@@ -222,21 +227,16 @@ type resolverAgentExecutor struct {
 	resolver WorkflowAgentResolver
 }
 
-func (e resolverAgentExecutor) Execute(ctx context.Context, input any) (any, error) {
+func (e resolverAgentExecutor) Execute(ctx context.Context, input map[string]any) (*core.AgentExecutionOutput, error) {
 	if e.resolver == nil {
 		return nil, fmt.Errorf("workflow agent resolver is not configured")
 	}
 
-	inputMap, ok := input.(map[string]any)
-	if !ok {
-		return nil, fmt.Errorf("workflow agent step input must be map[string]any")
-	}
-
-	agentID, _ := inputMap["agent_id"].(string)
+	agentID, _ := input["agent_id"].(string)
 	if agentID == "" {
 		return nil, fmt.Errorf("workflow agent step requires input.agent_id")
 	}
-	content, _ := inputMap["content"].(string)
+	content, _ := input["content"].(string)
 
 	ag, err := e.resolver(ctx, agentID)
 	if err != nil {
@@ -245,12 +245,18 @@ func (e resolverAgentExecutor) Execute(ctx context.Context, input any) (any, err
 
 	out, err := ag.Execute(ctx, &agent.Input{
 		Content: content,
-		Context: inputMap,
+		Context: input,
 	})
 	if err != nil {
 		return nil, err
 	}
-	return out.Content, nil
+	return &core.AgentExecutionOutput{
+		Content:      out.Content,
+		TokensUsed:   out.TokensUsed,
+		Cost:         out.Cost,
+		Duration:     out.Duration,
+		FinishReason: out.FinishReason,
+	}, nil
 }
 
 type hostedCodeHandler struct {

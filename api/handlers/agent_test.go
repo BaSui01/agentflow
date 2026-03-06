@@ -12,6 +12,7 @@ import (
 
 	"github.com/BaSui01/agentflow/agent/discovery"
 	"github.com/BaSui01/agentflow/agent/protocol/a2a"
+	"github.com/BaSui01/agentflow/internal/usecase"
 	"github.com/BaSui01/agentflow/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -150,12 +151,12 @@ func TestAgentHandler_HandleListAgents_Empty(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, resp.Success)
 
-	dataBytes, err := json.Marshal(resp.Data)
-	require.NoError(t, err)
-	var agents []AgentInfo
-	err = json.Unmarshal(dataBytes, &agents)
-	require.NoError(t, err)
-	assert.Empty(t, agents)
+	dataMap, ok := resp.Data.(map[string]any)
+	require.True(t, ok)
+	items, ok := dataMap["items"].([]any)
+	require.True(t, ok)
+	assert.Empty(t, items)
+	assert.Equal(t, float64(0), dataMap["total"])
 }
 
 func TestAgentHandler_HandleListAgents_WithAgents(t *testing.T) {
@@ -176,12 +177,12 @@ func TestAgentHandler_HandleListAgents_WithAgents(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, resp.Success)
 
-	dataBytes, err := json.Marshal(resp.Data)
-	require.NoError(t, err)
-	var agents []AgentInfo
-	err = json.Unmarshal(dataBytes, &agents)
-	require.NoError(t, err)
-	assert.Len(t, agents, 2)
+	dataMap, ok := resp.Data.(map[string]any)
+	require.True(t, ok)
+	items, ok := dataMap["items"].([]any)
+	require.True(t, ok)
+	assert.Len(t, items, 2)
+	assert.Equal(t, float64(2), dataMap["total"])
 }
 
 func TestAgentHandler_HandleGetAgent_Found(t *testing.T) {
@@ -245,7 +246,7 @@ func TestAgentHandler_HandleExecuteAgent_AgentNotFound(t *testing.T) {
 	reg := newMockRegistry()
 	handler := newTestHandler(reg)
 
-	body, _ := json.Marshal(AgentExecuteRequest{
+	body, _ := json.Marshal(usecase.AgentExecuteRequest{
 		AgentID: "nonexistent",
 		Content: "hello",
 	})
@@ -263,7 +264,7 @@ func TestAgentHandler_HandleExecuteAgent_LocalAgent(t *testing.T) {
 		withAgent(newTestAgentInfo("local-agent", discovery.AgentStatusOnline))
 	handler := newTestHandler(reg)
 
-	body, _ := json.Marshal(AgentExecuteRequest{
+	body, _ := json.Marshal(usecase.AgentExecuteRequest{
 		AgentID: "local-agent",
 		Content: "hello",
 	})
@@ -293,7 +294,7 @@ func TestAgentHandler_HandlePlanAgent_AgentNotFound(t *testing.T) {
 	reg := newMockRegistry()
 	handler := newTestHandler(reg)
 
-	body, _ := json.Marshal(AgentExecuteRequest{
+	body, _ := json.Marshal(usecase.AgentExecuteRequest{
 		AgentID: "nonexistent",
 		Content: "hello",
 	})
@@ -424,7 +425,7 @@ func TestAgentHandler_HandleExecuteAgent_InvalidAgentID(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			body, _ := json.Marshal(AgentExecuteRequest{
+			body, _ := json.Marshal(usecase.AgentExecuteRequest{
 				AgentID: tt.agentID,
 				Content: "hello",
 			})
@@ -444,7 +445,7 @@ func TestAgentHandler_HandleExecuteAgent_ValidAgentID(t *testing.T) {
 		withAgent(newTestAgentInfo("valid-agent-1", discovery.AgentStatusOnline))
 	handler := newTestHandler(reg)
 
-	body, _ := json.Marshal(AgentExecuteRequest{
+	body, _ := json.Marshal(usecase.AgentExecuteRequest{
 		AgentID: "valid-agent-1",
 		Content: "hello",
 	})
@@ -473,7 +474,7 @@ func TestAgentHandler_HandlePlanAgent_InvalidAgentID(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			body, _ := json.Marshal(AgentExecuteRequest{
+			body, _ := json.Marshal(usecase.AgentExecuteRequest{
 				AgentID: tt.agentID,
 				Content: "hello",
 			})
@@ -493,7 +494,7 @@ func TestAgentHandler_HandlePlanAgent_ValidAgentID(t *testing.T) {
 		withAgent(newTestAgentInfo("plan-agent", discovery.AgentStatusOnline))
 	handler := newTestHandler(reg)
 
-	body, _ := json.Marshal(AgentExecuteRequest{
+	body, _ := json.Marshal(usecase.AgentExecuteRequest{
 		AgentID: "plan-agent",
 		Content: "hello",
 	})
@@ -513,11 +514,11 @@ func TestAgentHandler_HandleExecuteAgent_InvalidRoutingParams(t *testing.T) {
 
 	tests := []struct {
 		name string
-		req  AgentExecuteRequest
+		req  usecase.AgentExecuteRequest
 	}{
 		{
 			name: "invalid provider",
-			req: AgentExecuteRequest{
+			req: usecase.AgentExecuteRequest{
 				AgentID:  "agent-1",
 				Content:  "hello",
 				Provider: "bad/provider",
@@ -525,7 +526,7 @@ func TestAgentHandler_HandleExecuteAgent_InvalidRoutingParams(t *testing.T) {
 		},
 		{
 			name: "invalid route policy",
-			req: AgentExecuteRequest{
+			req: usecase.AgentExecuteRequest{
 				AgentID:     "agent-1",
 				Content:     "hello",
 				RoutePolicy: "fastest",

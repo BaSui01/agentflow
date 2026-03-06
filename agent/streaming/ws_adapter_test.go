@@ -29,7 +29,7 @@ func TestWebSocketStreamConnection_ImplementsStreamConnection(t *testing.T) {
 func wsTestServer(t *testing.T) *httptest.Server {
 	t.Helper()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		conn, err := websocket.Accept(w, r, nil)
+		conn, err := AcceptWebSocket(w, r, nil)
 		if err != nil {
 			return
 		}
@@ -239,7 +239,7 @@ func TestWebSocketStreamFactory_InvalidURL(t *testing.T) {
 func TestWebSocketStreamConnection_ReadChunk_InvalidJSON(t *testing.T) {
 	// Server that sends invalid JSON.
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		conn, err := websocket.Accept(w, r, nil)
+		conn, err := AcceptWebSocket(w, r, nil)
 		if err != nil {
 			return
 		}
