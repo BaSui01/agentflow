@@ -147,7 +147,7 @@ func createCodeReviewerAgent(provider llm.Provider, logger *zap.Logger) *agent.B
 		},
 	}
 
-	return agent.NewBaseAgent(cfg, provider, nil, nil, nil, logger)
+	return agent.NewBaseAgent(cfg, provider, nil, nil, nil, logger, nil)
 }
 
 // createDataAnalystAgent 创建数据分析 Agent
@@ -187,7 +187,7 @@ func createDataAnalystAgent(provider llm.Provider, logger *zap.Logger) *agent.Ba
 		},
 	}
 
-	return agent.NewBaseAgent(cfg, provider, nil, nil, nil, logger)
+	return agent.NewBaseAgent(cfg, provider, nil, nil, nil, logger, nil)
 }
 
 // createStoryWriterAgent 创建故事创作 Agent
@@ -226,5 +226,5 @@ func createStoryWriterAgent(provider llm.Provider, logger *zap.Logger) *agent.Ba
 		},
 	}
 
-	return agent.NewBaseAgent(cfg, provider, nil, nil, nil, logger)
+	return agent.NewBaseAgent(cfg, provider, nil, nil, nil, logger, nil)
 }

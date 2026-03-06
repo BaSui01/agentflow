@@ -26,6 +26,9 @@ func TestNewLoaderRegistry_HasBuiltinLoaders(t *testing.T) {
 	assert.Contains(t, types, ".csv")
 	assert.Contains(t, types, ".json")
 	assert.Contains(t, types, ".jsonl")
+	assert.Contains(t, types, ".pdf")
+	assert.Contains(t, types, ".html")
+	assert.Contains(t, types, ".htm")
 }
 
 func TestLoaderRegistry_Register_CustomLoader(t *testing.T) {

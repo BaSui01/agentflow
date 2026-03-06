@@ -11,6 +11,7 @@ import (
 	"github.com/BaSui01/agentflow/llm"
 	llmcore "github.com/BaSui01/agentflow/llm/core"
 	llmgateway "github.com/BaSui01/agentflow/llm/gateway"
+	"github.com/BaSui01/agentflow/llm/observability"
 	llmpolicy "github.com/BaSui01/agentflow/llm/runtime/policy"
 	"github.com/BaSui01/agentflow/types"
 	"go.uber.org/zap"
@@ -34,7 +35,7 @@ type ChatHandler struct {
 
 // NewChatHandler 创建聊天处理器
 func NewChatHandler(provider llm.Provider, policyManager *llmpolicy.Manager, logger *zap.Logger) *ChatHandler {
-	return NewChatHandlerWithRuntime(provider, policyManager, nil, logger)
+	return NewChatHandlerWithRuntime(provider, policyManager, nil, nil, logger)
 }
 
 // NewChatHandlerWithRuntime creates a chat handler with routing runtime dependencies.
@@ -42,11 +43,13 @@ func NewChatHandlerWithRuntime(
 	provider llm.Provider,
 	policyManager *llmpolicy.Manager,
 	toolManager agent.ToolManager,
+	ledger observability.Ledger,
 	logger *zap.Logger,
 ) *ChatHandler {
 	gw := llmgateway.New(llmgateway.Config{
 		ChatProvider:  provider,
 		PolicyManager: policyManager,
+		Ledger:        ledger,
 		Logger:        logger,
 	})
 	handler := &ChatHandler{

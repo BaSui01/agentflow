@@ -2,6 +2,7 @@ package main
 
 import (
 	"net/http"
+	"net/http/pprof"
 
 	"github.com/BaSui01/agentflow/internal/app/bootstrap"
 	mw "github.com/BaSui01/agentflow/pkg/middleware"
@@ -26,6 +27,7 @@ func (s *Server) startHTTPServer() error {
 			RAG:           s.ragHandler,
 			Workflow:      s.workflowHandler,
 			ConfigAPI:     s.configAPIHandler,
+			Cost:          s.costHandler,
 		},
 		Version,
 		BuildTime,
@@ -54,6 +56,12 @@ func (s *Server) startHTTPServer() error {
 func (s *Server) startMetricsServer() error {
 	mux := http.NewServeMux()
 	mux.Handle("/metrics", promhttp.Handler())
+
+	mux.HandleFunc("/debug/pprof/", pprof.Index)
+	mux.HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
+	mux.HandleFunc("/debug/pprof/profile", pprof.Profile)
+	mux.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
+	mux.HandleFunc("/debug/pprof/trace", pprof.Trace)
 
 	s.metricsManager = server.NewManager(mux, bootstrap.BuildMetricsServerConfig(s.cfg.Server), s.logger)
 	return nil

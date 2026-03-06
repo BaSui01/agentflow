@@ -62,6 +62,12 @@ type Config struct {
 
 	// Budget Token 预算管理配置
 	Budget BudgetConfig `yaml:"budget" env:"BUDGET"`
+
+	// HostedTools Hosted 工具配置
+	HostedTools HostedToolsConfig `yaml:"hosted_tools" env:"HOSTED_TOOLS"`
+
+	// WorkflowCheckpoint Workflow 检查点配置
+	WorkflowCheckpoint WorkflowCheckpointConfig `yaml:"workflow_checkpoint" env:"WORKFLOW_CHECKPOINT"`
 }
 
 // ServerConfig 服务器配置

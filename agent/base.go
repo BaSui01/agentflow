@@ -14,6 +14,7 @@ import (
 	"github.com/BaSui01/agentflow/llm"
 	llmtools "github.com/BaSui01/agentflow/llm/capabilities/tools"
 	llmgateway "github.com/BaSui01/agentflow/llm/gateway"
+	"github.com/BaSui01/agentflow/llm/observability"
 	"github.com/BaSui01/agentflow/types"
 
 	"go.uber.org/zap"
@@ -108,6 +109,7 @@ type BaseAgent struct {
 	providerViaGateway llm.Provider
 	toolProvider       llm.Provider // 工具调用专用 Provider（可选，为 nil 时退化为 provider）
 	toolViaGateway     llm.Provider
+	ledger             observability.Ledger
 	memory             MemoryManager
 	toolManager        ToolManager
 	bus                EventBus
@@ -141,6 +143,7 @@ func NewBaseAgent(
 	toolManager ToolManager,
 	bus EventBus,
 	logger *zap.Logger,
+	ledger observability.Ledger,
 ) *BaseAgent {
 	ensureAgentType(&cfg)
 	if logger == nil {
@@ -154,7 +157,8 @@ func NewBaseAgent(
 		runtimeGuardrailsCfg: runtimeGuardrailsFromTypes(cfg.Features.Guardrails),
 		state:                StateInit,
 		provider:             provider,
-		providerViaGateway:   wrapProviderWithGateway(provider, agentLogger),
+		providerViaGateway:   wrapProviderWithGateway(provider, agentLogger, ledger),
+		ledger:               ledger,
 		memory:               memory,
 		toolManager:          toolManager,
 		bus:                  bus,
@@ -477,7 +481,7 @@ func (b *BaseAgent) ToolProvider() llm.Provider { return b.toolProvider }
 // SetToolProvider 设置工具调用专用的 LLM Provider
 func (b *BaseAgent) SetToolProvider(p llm.Provider) {
 	b.toolProvider = p
-	b.toolViaGateway = wrapProviderWithGateway(p, b.logger)
+	b.toolViaGateway = wrapProviderWithGateway(p, b.logger, b.ledger)
 }
 
 func (b *BaseAgent) gatewayProvider() llm.Provider {
@@ -497,12 +501,13 @@ func (b *BaseAgent) gatewayToolProvider() llm.Provider {
 	return b.gatewayProvider()
 }
 
-func wrapProviderWithGateway(provider llm.Provider, logger *zap.Logger) llm.Provider {
+func wrapProviderWithGateway(provider llm.Provider, logger *zap.Logger, ledger observability.Ledger) llm.Provider {
 	if provider == nil {
 		return nil
 	}
 	service := llmgateway.New(llmgateway.Config{
 		ChatProvider: provider,
+		Ledger:       ledger,
 		Logger:       logger,
 	})
 	return llmgateway.NewChatProviderAdapter(service, provider)

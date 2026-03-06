@@ -90,7 +90,7 @@ func demoReflection(logger *zap.Logger) {
 		SystemPrompt: promptBundle.RenderSystemPrompt(),
 	}
 
-	baseAgent := agent.NewBaseAgent(config, provider, nil, nil, nil, logger)
+	baseAgent := agent.NewBaseAgent(config, provider, nil, nil, nil, logger, nil)
 
 	// Configure Reflection
 	reflectionConfig := agent.ReflectionExecutorConfig{
@@ -150,7 +150,7 @@ func demoToolSelection(logger *zap.Logger) {
 		},
 	}
 
-	baseAgent := agent.NewBaseAgent(config, provider, nil, nil, nil, logger)
+	baseAgent := agent.NewBaseAgent(config, provider, nil, nil, nil, logger, nil)
 
 	// Configure dynamic tool selection
 	selectorConfig := agent.DefaultToolSelectionConfig()

@@ -94,7 +94,7 @@ func demoEnhancedSingleAgent(logger *zap.Logger) {
 		},
 	}
 
-	baseAgent := agent.NewBaseAgent(config, provider, nil, nil, nil, logger)
+	baseAgent := agent.NewBaseAgent(config, provider, nil, nil, nil, logger, nil)
 
 	// 2. Enable Reflection
 	fmt.Println("2. Enabling Reflection")
@@ -217,7 +217,7 @@ func demoHierarchicalSystem(logger *zap.Logger) {
 			Model: "gpt-4",
 		},
 	}
-	supervisor := agent.NewBaseAgent(supervisorConfig, provider, nil, nil, nil, logger)
+	supervisor := agent.NewBaseAgent(supervisorConfig, provider, nil, nil, nil, logger, nil)
 
 	// 2. Create Workers
 	workers := []agent.Agent{}
@@ -235,7 +235,7 @@ func demoHierarchicalSystem(logger *zap.Logger) {
 				Model: "gpt-3.5-turbo",
 			},
 		}
-		worker := agent.NewBaseAgent(workerConfig, provider, nil, nil, nil, logger)
+		worker := agent.NewBaseAgent(workerConfig, provider, nil, nil, nil, logger, nil)
 		workers = append(workers, worker)
 	}
 
@@ -307,7 +307,7 @@ func demoCollaborativeSystem(logger *zap.Logger) {
 				Model: "gpt-4",
 			},
 		}
-		expert := agent.NewBaseAgent(config, provider, nil, nil, nil, logger)
+		expert := agent.NewBaseAgent(config, provider, nil, nil, nil, logger, nil)
 		experts = append(experts, expert)
 	}
 

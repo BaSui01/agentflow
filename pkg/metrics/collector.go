@@ -39,6 +39,10 @@ type Collector struct {
 	cacheEvictions *prometheus.CounterVec
 	cacheSize      *prometheus.GaugeVec
 
+	// 工具调用指标
+	toolCallsTotal    *prometheus.CounterVec
+	toolCallDuration  *prometheus.HistogramVec
+
 	// 数据库指标
 	dbConnectionsOpen *prometheus.GaugeVec
 	dbConnectionsIdle *prometheus.GaugeVec
@@ -208,6 +212,26 @@ func NewCollector(namespace string, logger *zap.Logger) *Collector {
 		[]string{"cache_type"},
 	)
 
+	// 工具调用指标
+	c.toolCallsTotal = promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Namespace: namespace,
+			Name:      "tool_calls_total",
+			Help:      "Total number of tool calls",
+		},
+		[]string{"tool_name", "status"},
+	)
+
+	c.toolCallDuration = promauto.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Namespace: namespace,
+			Name:      "tool_call_duration_seconds",
+			Help:      "Tool call duration in seconds",
+			Buckets:   prometheus.DefBuckets,
+		},
+		[]string{"tool_name"},
+	)
+
 	// 数据库指标
 	c.dbConnectionsOpen = promauto.NewGaugeVec(
 		prometheus.GaugeOpts{
@@ -311,6 +335,16 @@ func (c *Collector) RecordCacheEviction(cacheType string) {
 // RecordCacheSize 记录缓存当前大小
 func (c *Collector) RecordCacheSize(cacheType string, size int) {
 	c.cacheSize.WithLabelValues(cacheType).Set(float64(size))
+}
+
+// =============================================================================
+// 🔧 工具调用指标记录
+// =============================================================================
+
+// RecordToolCall 记录一次工具调用
+func (c *Collector) RecordToolCall(toolName, status string, duration time.Duration) {
+	c.toolCallsTotal.WithLabelValues(toolName, status).Inc()
+	c.toolCallDuration.WithLabelValues(toolName).Observe(duration.Seconds())
 }
 
 // =============================================================================

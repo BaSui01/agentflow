@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/BaSui01/agentflow/pkg/metrics"
 	"github.com/BaSui01/agentflow/pkg/tlsutil"
 	"github.com/BaSui01/agentflow/types"
 	"go.uber.org/zap"
@@ -25,8 +26,9 @@ const (
 	ToolTypeRetrieval  HostedToolType = "retrieval"
 	ToolTypeMCP        HostedToolType = "mcp"
 	ToolTypeAlias      HostedToolType = "alias"
+	ToolTypeFileOps    HostedToolType = "file_ops"
+	ToolTypeShell      HostedToolType = "shell"
 
-	// maxResponseSize is the maximum allowed response body size (1MB).
 	maxResponseSize = 1 << 20
 )
 
@@ -50,18 +52,31 @@ type ToolRegistry struct {
 	tools       map[string]HostedTool
 	middlewares []ToolMiddleware
 	logger      *zap.Logger
+	metrics     *metrics.Collector
 	mu          sync.RWMutex
 }
 
 // NewToolRegistry创建了新的主机工具注册.
-func NewToolRegistry(logger *zap.Logger) *ToolRegistry {
+func NewToolRegistry(logger *zap.Logger, opts ...ToolRegistryOption) *ToolRegistry {
 	if logger == nil {
 		logger = zap.NewNop()
 	}
-	return &ToolRegistry{
+	r := &ToolRegistry{
 		tools:  make(map[string]HostedTool),
 		logger: logger.With(zap.String("component", "hosted_tools")),
 	}
+	for _, opt := range opts {
+		opt(r)
+	}
+	return r
+}
+
+// ToolRegistryOption configures optional dependencies for ToolRegistry.
+type ToolRegistryOption func(*ToolRegistry)
+
+// WithToolMetrics injects a Prometheus metrics collector for tool call instrumentation.
+func WithToolMetrics(c *metrics.Collector) ToolRegistryOption {
+	return func(r *ToolRegistry) { r.metrics = c }
 }
 
 // 注册注册一个主机工具 。
@@ -315,19 +330,28 @@ func (r *ToolRegistry) Execute(ctx context.Context, name string, args json.RawMe
 	tool, ok := r.tools[name]
 	middlewares := make([]ToolMiddleware, len(r.middlewares))
 	copy(middlewares, r.middlewares)
+	mc := r.metrics
 	r.mu.RUnlock()
 
 	if !ok {
 		return nil, fmt.Errorf("tool not found: %s", name)
 	}
 
-	// Build the middleware chain: last middleware wraps first, so iterate in reverse.
 	var fn ToolExecuteFunc = tool.Execute
 	for i := len(middlewares) - 1; i >= 0; i-- {
 		fn = middlewares[i](fn)
 	}
 
-	return fn(ctx, args)
+	start := time.Now()
+	result, err := fn(ctx, args)
+	if mc != nil {
+		status := "success"
+		if err != nil {
+			status = "error"
+		}
+		mc.RecordToolCall(name, status, time.Since(start))
+	}
+	return result, err
 }
 
 // WithTimeout returns a middleware that enforces an execution timeout.

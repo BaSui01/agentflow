@@ -19,6 +19,8 @@ const (
 	StepTypeHybridRetrieve   StepType = "hybrid_retrieve"
 	StepTypeMultiHopRetrieve StepType = "multi_hop_retrieve"
 	StepTypeRerank           StepType = "rerank"
+	StepTypeOrchestration    StepType = "orchestration"
+	StepTypeChain            StepType = "chain"
 )
 
 // StepProtocol 统一步骤协议（Command Pattern）。

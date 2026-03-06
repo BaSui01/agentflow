@@ -10,8 +10,12 @@ import (
 
 // AgentStep 通过 AgentExecutor 抽象执行 agent。
 type AgentStep struct {
-	id    string
-	Agent core.AgentExecutor
+	id          string
+	AgentID     string
+	AgentModel  string
+	AgentPrompt string
+	AgentTools  []string
+	Agent       core.AgentExecutor
 }
 
 // NewAgentStep 创建 agent 步骤。
@@ -36,7 +40,26 @@ func (s *AgentStep) Execute(ctx context.Context, input core.StepInput) (core.Ste
 
 	start := time.Now()
 
-	result, err := s.Agent.Execute(ctx, input.Data)
+	data := make(map[string]any)
+	for k, v := range input.Data {
+		data[k] = v
+	}
+	if s.AgentID != "" {
+		if _, exists := data["agent_id"]; !exists {
+			data["agent_id"] = s.AgentID
+		}
+	}
+	if s.AgentModel != "" {
+		data["agent_model"] = s.AgentModel
+	}
+	if s.AgentPrompt != "" {
+		data["agent_prompt"] = s.AgentPrompt
+	}
+	if len(s.AgentTools) > 0 {
+		data["agent_tools"] = s.AgentTools
+	}
+
+	result, err := s.Agent.Execute(ctx, data)
 	if err != nil {
 		return core.StepOutput{}, core.NewStepError(s.id, core.StepTypeAgent, fmt.Errorf("%w: %w", core.ErrStepExecution, err))
 	}

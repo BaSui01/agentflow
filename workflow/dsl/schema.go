@@ -57,11 +57,35 @@ type ToolDef struct {
 
 // StepDef 步骤定义
 type StepDef struct {
-	Type   string                 `yaml:"type" json:"type"` // llm, tool, human_input, code, passthrough
-	Agent  string                 `yaml:"agent,omitempty" json:"agent,omitempty"`   // 引用 agents 中的 agent
-	Tool   string                 `yaml:"tool,omitempty" json:"tool,omitempty"`     // 引用 tools 中的工具
-	Prompt string                 `yaml:"prompt,omitempty" json:"prompt,omitempty"` // 支持 ${variable} 插值
-	Config map[string]any `yaml:"config,omitempty" json:"config,omitempty"`
+	Type          string                 `yaml:"type" json:"type"` // llm, tool, human_input, code, passthrough, orchestration, agent
+	Agent         string                 `yaml:"agent,omitempty" json:"agent,omitempty"`
+	InlineAgent   *AgentDef              `yaml:"inline_agent,omitempty" json:"inline_agent,omitempty"`
+	Tool          string                 `yaml:"tool,omitempty" json:"tool,omitempty"`
+	Prompt        string                 `yaml:"prompt,omitempty" json:"prompt,omitempty"`
+	Config        map[string]any         `yaml:"config,omitempty" json:"config,omitempty"`
+	Orchestration *OrchestrationStepDef  `yaml:"orchestration,omitempty" json:"orchestration,omitempty"`
+	Chain         *ChainStepDef          `yaml:"chain,omitempty" json:"chain,omitempty"`
+	SubGraph      *WorkflowNodesDef      `yaml:"subgraph,omitempty" json:"subgraph,omitempty"`
+}
+
+type ChainStepDef struct {
+	Steps []ChainStepEntry `yaml:"steps" json:"steps"`
+}
+
+type ChainStepEntry struct {
+	Tool       string            `yaml:"tool" json:"tool"`
+	Args       map[string]any    `yaml:"args,omitempty" json:"args,omitempty"`
+	ArgMapping map[string]string `yaml:"arg_mapping,omitempty" json:"arg_mapping,omitempty"`
+	OnError    string            `yaml:"on_error,omitempty" json:"on_error,omitempty"`
+	MaxRetries int               `yaml:"max_retries,omitempty" json:"max_retries,omitempty"`
+}
+
+// OrchestrationStepDef 多 Agent 编排步骤定义
+type OrchestrationStepDef struct {
+	Mode      string   `yaml:"mode" json:"mode"`
+	AgentIDs  []string `yaml:"agent_ids" json:"agent_ids"`
+	MaxRounds int      `yaml:"max_rounds,omitempty" json:"max_rounds,omitempty"`
+	TimeoutMs int      `yaml:"timeout_ms,omitempty" json:"timeout_ms,omitempty"`
 }
 
 // WorkflowNodesDef 工作流节点定义

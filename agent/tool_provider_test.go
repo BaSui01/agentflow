@@ -38,7 +38,7 @@ func TestToolProvider_NilFallback(t *testing.T) {
 
 	config := testAgentConfig("test-dual", "Dual Model Agent", "claude-sonnet-4-6")
 
-	agent := NewBaseAgent(config, mainProvider, nil, nil, bus, logger)
+	agent := NewBaseAgent(config, mainProvider, nil, nil, bus, logger, nil)
 
 	// toolProvider 应该为 nil
 	assert.Nil(t, agent.ToolProvider(), "toolProvider 未设置时应为 nil")
@@ -61,7 +61,7 @@ func TestToolProvider_SetAndGet(t *testing.T) {
 
 	config := testAgentConfig("test-dual", "Dual Model Agent", "claude-sonnet-4-6")
 
-	agent := NewBaseAgent(config, mainProvider, nil, nil, nil, logger)
+	agent := NewBaseAgent(config, mainProvider, nil, nil, nil, logger, nil)
 
 	// 初始为 nil
 	assert.Nil(t, agent.ToolProvider())
@@ -108,7 +108,7 @@ func TestToolProvider_NoToolsUsesMainProvider(t *testing.T) {
 
 	config := testAgentConfig("test-dual", "Dual Model Agent", "claude-sonnet-4-6")
 
-	agent := NewBaseAgent(config, mainProvider, nil, nil, nil, logger)
+	agent := NewBaseAgent(config, mainProvider, nil, nil, nil, logger, nil)
 	agent.SetToolProvider(toolProvider)
 
 	resp, err := agent.ChatCompletion(context.Background(), []types.Message{
@@ -156,7 +156,7 @@ func TestToolProvider_FunctionCallingValidation(t *testing.T) {
 	config := testAgentConfig("test-dual-fc", "Dual FC Agent", "claude-sonnet-4-6")
 	config.Runtime.Tools = []string{"search"}
 
-	agent := NewBaseAgent(config, mainProvider, nil, toolMgr, nil, logger)
+	agent := NewBaseAgent(config, mainProvider, nil, toolMgr, nil, logger, nil)
 	agent.SetToolProvider(toolProvider)
 
 	_, err := agent.ChatCompletion(context.Background(), []types.Message{
@@ -182,7 +182,7 @@ func TestToolProvider_FunctionCallingValidation_StreamCompletion(t *testing.T) {
 	config := testAgentConfig("test-dual-fc-stream", "Dual FC Stream Agent", "claude-sonnet-4-6")
 	config.Runtime.Tools = []string{"search"}
 
-	agent := NewBaseAgent(config, mainProvider, nil, toolMgr, nil, logger)
+	agent := NewBaseAgent(config, mainProvider, nil, toolMgr, nil, logger, nil)
 	agent.SetToolProvider(toolProvider)
 
 	_, err := agent.StreamCompletion(context.Background(), []types.Message{
@@ -207,7 +207,7 @@ func TestToolProvider_FunctionCallingValidation_NilToolProvider(t *testing.T) {
 	config := testAgentConfig("test-fc-nil-tp", "FC Nil ToolProvider Agent", "claude-sonnet-4-6")
 	config.Runtime.Tools = []string{"search"}
 
-	agent := NewBaseAgent(config, mainProvider, nil, toolMgr, nil, logger)
+	agent := NewBaseAgent(config, mainProvider, nil, toolMgr, nil, logger, nil)
 	// 不设置 toolProvider → 退化校验 mainProvider
 
 	_, err := agent.ChatCompletion(context.Background(), []types.Message{

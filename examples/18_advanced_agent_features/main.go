@@ -1005,7 +1005,7 @@ func demoRegistryReachability(logger *zap.Logger) {
 		bus agent.EventBus,
 		logger *zap.Logger,
 	) (agent.Agent, error) {
-		return agent.NewBaseAgent(cfg, provider, memory, toolManager, bus, logger), nil
+		return agent.NewBaseAgent(cfg, provider, memory, toolManager, bus, logger, nil), nil
 	})
 	fmt.Printf("   Custom type registered: %v\n", reg.IsRegistered(customType))
 	reg.Unregister(customType)

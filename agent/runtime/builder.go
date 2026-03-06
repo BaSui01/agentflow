@@ -7,10 +7,11 @@ import (
 
 	"github.com/BaSui01/agentflow/agent"
 	"github.com/BaSui01/agentflow/agent/memory"
-	"github.com/BaSui01/agentflow/agent/observability"
+	agentobs "github.com/BaSui01/agentflow/agent/observability"
 	"github.com/BaSui01/agentflow/agent/reasoning"
 	"github.com/BaSui01/agentflow/agent/skills"
 	"github.com/BaSui01/agentflow/llm"
+	llmobs "github.com/BaSui01/agentflow/llm/observability"
 	"github.com/BaSui01/agentflow/types"
 	"go.uber.org/zap"
 )
@@ -85,6 +86,7 @@ func enabled(all bool, v bool) bool { return all || v }
 type Builder struct {
 	provider     llm.Provider
 	toolProvider llm.Provider
+	ledger       llmobs.Ledger
 	logger       *zap.Logger
 	options      BuildOptions
 	toolScope    []string // tool whitelist for sub-agent isolation (empty = all tools)
@@ -112,6 +114,12 @@ func (b *Builder) WithOptions(opts BuildOptions) *Builder {
 // 未设置时，工具调用退化使用主 provider。
 func (b *Builder) WithToolProvider(provider llm.Provider) *Builder {
 	b.toolProvider = provider
+	return b
+}
+
+// WithLedger 设置 cost/usage 落账器。
+func (b *Builder) WithLedger(ledger llmobs.Ledger) *Builder {
+	b.ledger = ledger
 	return b
 }
 
@@ -144,6 +152,9 @@ func (b *Builder) Build(ctx context.Context, cfg types.AgentConfig) (*agent.Base
 	agentBuilder := agent.NewAgentBuilder(cfg2).
 		WithProvider(b.provider).
 		WithLogger(b.logger)
+	if b.ledger != nil {
+		agentBuilder.WithLedger(b.ledger)
+	}
 
 	if opts.MaxReActIterations > 0 {
 		agentBuilder.WithMaxReActIterations(opts.MaxReActIterations)
@@ -211,7 +222,7 @@ func (b *Builder) Build(ctx context.Context, cfg types.AgentConfig) (*agent.Base
 		if opts.ObservabilitySystem != nil {
 			agentBuilder.WithObservability(opts.ObservabilitySystem)
 		} else {
-			agentBuilder.WithObservability(observability.NewObservabilitySystem(b.logger))
+			agentBuilder.WithObservability(agentobs.NewObservabilitySystem(b.logger))
 		}
 	}
 

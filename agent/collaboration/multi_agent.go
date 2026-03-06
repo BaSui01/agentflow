@@ -46,10 +46,11 @@ type MultiAgentSystem struct {
 // MultiAgentConfig 多 Agent 配置
 type MultiAgentConfig struct {
 	Pattern            CollaborationPattern `json:"pattern"`
-	MaxRounds          int                  `json:"max_rounds"`          // 最大轮次
-	ConsensusThreshold float64              `json:"consensus_threshold"` // 共识阈值
+	MaxRounds          int                  `json:"max_rounds"`
+	ConsensusThreshold float64              `json:"consensus_threshold"`
 	Timeout            time.Duration        `json:"timeout"`
 	EnableVoting       bool                 `json:"enable_voting"`
+	SharedState        SharedState          `json:"-"`
 }
 
 // DefaultMultiAgentConfig 默认配置
@@ -179,6 +180,10 @@ func (m *MultiAgentSystem) Execute(ctx context.Context, input *agent.Input) (*ag
 	output, err := coordinator.Coordinate(ctx, m.agents, input)
 	if err != nil {
 		return nil, err
+	}
+
+	if m.config.SharedState != nil {
+		_ = m.config.SharedState.Set(ctx, "result:"+string(m.pattern), output)
 	}
 
 	m.logger.Info("multi-agent collaboration completed")
@@ -573,7 +578,7 @@ func (c *DebateCoordinator) Coordinate(ctx context.Context, agents map[string]ag
 	)
 
 	// Deterministic agent ordering for reproducible debate rounds.
-	orderedIDs := sortedAgentIDs(agents)
+	orderedIDs := SortedAgentIDs(agents)
 	if len(orderedIDs) == 0 {
 		return nil, fmt.Errorf("debate requires at least one agent")
 	}
@@ -711,10 +716,10 @@ func (c *DebateCoordinator) Coordinate(ctx context.Context, agents map[string]ag
 	}
 
 	// Aggregate token usage and cost from all rounds.
-	totalTokens, totalCost := aggregateUsage(proposals)
+	totalTokens, totalCost := AggregateUsage(proposals)
 	finalOutput.TokensUsed += totalTokens
 	finalOutput.Cost += totalCost
-	finalOutput.Metadata = mergeMetadata(finalOutput.Metadata, map[string]any{
+	finalOutput.Metadata = MergeMetadata(finalOutput.Metadata, map[string]any{
 		"debate_rounds":     c.config.MaxRounds,
 		"participating_ids": orderedIDs,
 		"judge_id":          judgeID,
@@ -749,7 +754,7 @@ func (c *ConsensusCoordinator) Coordinate(ctx context.Context, agents map[string
 		zap.Float64("threshold", c.config.ConsensusThreshold),
 	)
 
-	orderedIDs := sortedAgentIDs(agents)
+	orderedIDs := SortedAgentIDs(agents)
 	if len(orderedIDs) == 0 {
 		return nil, fmt.Errorf("consensus requires at least one agent")
 	}
@@ -862,7 +867,7 @@ func (c *ConsensusCoordinator) Coordinate(ctx context.Context, agents map[string
 						zap.Int("round", round),
 					)
 					result := proposals[candID]
-					result.Metadata = mergeMetadata(result.Metadata, map[string]any{
+					result.Metadata = MergeMetadata(result.Metadata, map[string]any{
 						"consensus_round": round,
 						"consensus_ratio": ratio,
 						"winner_id":       candID,
@@ -921,10 +926,10 @@ func (c *ConsensusCoordinator) Coordinate(ctx context.Context, agents map[string
 		return nil, fmt.Errorf("consensus failed and no proposals available")
 	}
 
-	totalTokens, totalCost := aggregateUsage(proposals)
+	totalTokens, totalCost := AggregateUsage(proposals)
 	finalOutput.TokensUsed += totalTokens
 	finalOutput.Cost += totalCost
-	finalOutput.Metadata = mergeMetadata(finalOutput.Metadata, map[string]any{
+	finalOutput.Metadata = MergeMetadata(finalOutput.Metadata, map[string]any{
 		"consensus_reached": false,
 		"total_rounds":      c.config.MaxRounds,
 		"synthesizer_id":    synthesizerID,
@@ -956,7 +961,7 @@ func (c *PipelineCoordinator) Coordinate(ctx context.Context, agents map[string]
 	c.logger.Info("pipeline coordination started", zap.Int("stages", len(agents)))
 
 	// Deterministic stage ordering by agent ID.
-	orderedIDs := sortedAgentIDs(agents)
+	orderedIDs := SortedAgentIDs(agents)
 	if len(orderedIDs) == 0 {
 		return nil, fmt.Errorf("pipeline requires at least one agent")
 	}
@@ -1016,7 +1021,7 @@ func (c *PipelineCoordinator) Coordinate(ctx context.Context, agents map[string]
 		return nil, fmt.Errorf("pipeline produced no output")
 	}
 
-	currentOutput.Metadata = mergeMetadata(currentOutput.Metadata, map[string]any{
+	currentOutput.Metadata = MergeMetadata(currentOutput.Metadata, map[string]any{
 		"pipeline_stages": totalStages,
 		"stage_order":     orderedIDs,
 	})
@@ -1044,7 +1049,7 @@ func NewBroadcastCoordinator(config MultiAgentConfig, hub *MessageHub, logger *z
 func (c *BroadcastCoordinator) Coordinate(ctx context.Context, agents map[string]agent.Agent, input *agent.Input) (*agent.Output, error) {
 	c.logger.Info("broadcast coordination started", zap.Int("agents", len(agents)))
 
-	orderedIDs := sortedAgentIDs(agents)
+	orderedIDs := SortedAgentIDs(agents)
 	if len(orderedIDs) == 0 {
 		return nil, fmt.Errorf("broadcast requires at least one agent")
 	}
@@ -1142,7 +1147,7 @@ func (c *BroadcastCoordinator) Coordinate(ctx context.Context, agents map[string
 	}
 	finalOutput.TokensUsed += totalTokens
 	finalOutput.Cost += totalCost
-	finalOutput.Metadata = mergeMetadata(finalOutput.Metadata, map[string]any{
+	finalOutput.Metadata = MergeMetadata(finalOutput.Metadata, map[string]any{
 		"broadcast_agents": len(succeeded),
 		"failed_agents":    len(results) - len(succeeded),
 		"synthesizer_id":   synthesizerID,
@@ -1177,7 +1182,7 @@ func (c *NetworkCoordinator) Coordinate(ctx context.Context, agents map[string]a
 		zap.Int("max_rounds", c.config.MaxRounds),
 	)
 
-	orderedIDs := sortedAgentIDs(agents)
+	orderedIDs := SortedAgentIDs(agents)
 	if len(orderedIDs) == 0 {
 		return nil, fmt.Errorf("network requires at least one agent")
 	}
@@ -1339,10 +1344,10 @@ func (c *NetworkCoordinator) Coordinate(ctx context.Context, agents map[string]a
 		return nil, fmt.Errorf("network coordination failed with no available positions")
 	}
 
-	totalTokens, totalCost := aggregateUsage(positions)
+	totalTokens, totalCost := AggregateUsage(positions)
 	finalOutput.TokensUsed += totalTokens
 	finalOutput.Cost += totalCost
-	finalOutput.Metadata = mergeMetadata(finalOutput.Metadata, map[string]any{
+	finalOutput.Metadata = MergeMetadata(finalOutput.Metadata, map[string]any{
 		"network_rounds":    rounds,
 		"participating_ids": orderedIDs,
 		"aggregator_id":     aggregatorID,
@@ -1360,8 +1365,8 @@ func (c *NetworkCoordinator) Coordinate(ctx context.Context, agents map[string]a
 // Shared helpers for coordinators
 // ---------------------------------------------------------------------------
 
-// sortedAgentIDs returns deterministic, lexicographically sorted agent IDs.
-func sortedAgentIDs(agents map[string]agent.Agent) []string {
+// SortedAgentIDs returns deterministic, lexicographically sorted agent IDs.
+func SortedAgentIDs(agents map[string]agent.Agent) []string {
 	ids := make([]string, 0, len(agents))
 	for id := range agents {
 		ids = append(ids, id)
@@ -1370,8 +1375,8 @@ func sortedAgentIDs(agents map[string]agent.Agent) []string {
 	return ids
 }
 
-// aggregateUsage sums TokensUsed and Cost from a map of outputs.
-func aggregateUsage(outputs map[string]*agent.Output) (totalTokens int, totalCost float64) {
+// AggregateUsage sums TokensUsed and Cost from a map of outputs.
+func AggregateUsage(outputs map[string]*agent.Output) (totalTokens int, totalCost float64) {
 	for _, o := range outputs {
 		if o != nil {
 			totalTokens += o.TokensUsed
@@ -1381,9 +1386,9 @@ func aggregateUsage(outputs map[string]*agent.Output) (totalTokens int, totalCos
 	return
 }
 
-// mergeMetadata non-destructively merges extra key-value pairs into an
+// MergeMetadata non-destructively merges extra key-value pairs into an
 // existing metadata map. If base is nil a new map is allocated.
-func mergeMetadata(base map[string]any, extra map[string]any) map[string]any {
+func MergeMetadata(base map[string]any, extra map[string]any) map[string]any {
 	if base == nil {
 		base = make(map[string]any, len(extra))
 	}

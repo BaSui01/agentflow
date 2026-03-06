@@ -75,29 +75,15 @@ func TestCostCalculator_DefaultPrices_Coverage(t *testing.T) {
 
 // ====== Additional CostTracker Tests ======
 
-func TestCostTracker_UnknownModel(t *testing.T) {
+func TestCostTracker_RecordCount(t *testing.T) {
 	calc := NewCostCalculator()
 	tracker := NewCostTracker(calc)
 
-	cost := tracker.Track("unknown", "unknown", 1000, 500)
-	assert.Equal(t, 0.0, cost)
+	tracker.Record("openai", "gpt-4o", "", 1000, 500)
+	tracker.Record("openai", "gpt-4o", "", 1000, 500)
 
-	summary := tracker.Summary()
-	assert.Equal(t, 1, summary.RequestCount)
-	assert.Equal(t, 0.0, summary.TotalCost)
-}
-
-func TestCostTracker_AvgCalculations(t *testing.T) {
-	calc := NewCostCalculator()
-	tracker := NewCostTracker(calc)
-
-	tracker.Track("openai", "gpt-4o", 1000, 500)
-	tracker.Track("openai", "gpt-4o", 1000, 500)
-
-	summary := tracker.Summary()
-	assert.Equal(t, 2, summary.RequestCount)
-	assert.InDelta(t, summary.TotalCost/2, summary.AvgCostPerReq, 0.0001)
-	assert.Equal(t, float64(summary.TotalTokens)/2, summary.AvgTokensPerReq)
+	assert.Len(t, tracker.Records(), 2)
+	assert.True(t, tracker.TotalCost() > 0)
 }
 
 // ====== Metrics Tests ======

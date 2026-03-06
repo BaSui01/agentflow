@@ -15,6 +15,7 @@ import (
 	"github.com/BaSui01/agentflow/api"
 	"github.com/BaSui01/agentflow/llm"
 	"github.com/BaSui01/agentflow/llm/capabilities"
+	"github.com/BaSui01/agentflow/llm/observability"
 	"github.com/BaSui01/agentflow/llm/capabilities/image"
 	"github.com/BaSui01/agentflow/llm/capabilities/multimodal"
 	"github.com/BaSui01/agentflow/llm/capabilities/video"
@@ -35,6 +36,7 @@ const (
 type MultimodalHandlerConfig struct {
 	ChatProvider         llm.Provider
 	PolicyManager        *llmpolicy.Manager
+	Ledger               observability.Ledger
 	OpenAIAPIKey         string
 	OpenAIBaseURL        string
 	GoogleAPIKey         string
@@ -118,6 +120,7 @@ func NewMultimodalHandlerFromConfig(cfg MultimodalHandlerConfig, logger *zap.Log
 	return NewMultimodalHandlerWithProviders(
 		cfg.ChatProvider,
 		cfg.PolicyManager,
+		cfg.Ledger,
 		providerSet.ImageProviders,
 		providerSet.VideoProviders,
 		providerSet.DefaultImage,
@@ -133,6 +136,7 @@ func NewMultimodalHandlerFromConfig(cfg MultimodalHandlerConfig, logger *zap.Log
 func NewMultimodalHandlerWithProviders(
 	chatProvider llm.Provider,
 	policyManager *llmpolicy.Manager,
+	ledger observability.Ledger,
 	imageProviders map[string]image.Provider,
 	videoProviders map[string]video.Provider,
 	defaultImage string,
@@ -189,6 +193,7 @@ func NewMultimodalHandlerWithProviders(
 		ChatProvider:  chatProvider,
 		Capabilities:  capabilities.NewEntry(router),
 		PolicyManager: policyManager,
+		Ledger:        ledger,
 		Logger:        logger,
 	})
 	var structuredProvider llm.Provider

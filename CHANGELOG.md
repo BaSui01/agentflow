@@ -5,6 +5,26 @@ All notable changes to AgentFlow will be documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.6.0] - 2026-03-06
+
+### Added
+- Deliberation multi-agent mode: multi-round self-reflection with convergence detection, replacing placeholder implementation
+- SharedState/Blackboard interface for inter-agent shared state with InMemorySharedState implementation
+- OrchestrationStep for Workflow DAG: bridge multi-agent collaboration (collaboration/hierarchical/crew/deliberation) into workflow nodes via DSL `type: orchestration`
+- AgentTeam unified abstraction: `Team` interface with adapters for Collaboration, Hierarchical, and Crew modes (`agent/teamadapter`)
+- File operations tools: `read_file`, `write_file`, `edit_file`, `list_directory` with path allowlist security
+- Shell command tool: `run_command` with command blacklist/whitelist and timeout support
+- MCP Client: `DefaultMCPClient` with `StdioTransport` (subprocess) and `SSETransport` (HTTP SSE) for connecting to external MCP servers
+- Declarative tool chain DSL: `ToolChain` with sequential execution, argument mapping, and error strategies (fail/skip/retry)
+- Workflow Checkpoint PostgreSQL persistence: `PostgreSQLCheckpointStore` with JSONB storage and version management
+- PDF document loader: `PDFLoader` using `pdftotext` with fallback to raw text extraction
+- HTML document loader: `HTMLLoader` using `golang.org/x/net/html` with script/style filtering
+- Unified cost tracking service: `CostTracker` with per-provider, per-model, per-agent cost aggregation
+
+### Changed
+- Upgraded version to 1.6.0
+- Exported `SortedAgentIDs`, `AggregateUsage`, `MergeMetadata` from `agent/collaboration` for cross-package reuse
+
 ## [1.5.0] - 2026-03-06
 
 ### Added

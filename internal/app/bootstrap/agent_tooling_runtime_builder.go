@@ -331,20 +331,36 @@ func (m *hostedToolManager) ExecuteForAgent(ctx context.Context, agentID string,
 		return nil
 	}
 	out := make([]llmtools.ToolResult, len(calls))
+	var wg sync.WaitGroup
 	for i, call := range calls {
-		start := time.Now()
-		raw, err := m.registry.Execute(ctx, call.Name, call.Arguments)
-		out[i] = llmtools.ToolResult{
-			ToolCallID: call.ID,
-			Name:       call.Name,
-			Duration:   time.Since(start),
-		}
-		if err != nil {
-			out[i].Error = err.Error()
-			continue
-		}
-		out[i].Result = raw
+		wg.Add(1)
+		go func(idx int, c types.ToolCall) {
+			defer wg.Done()
+
+			if err := ctx.Err(); err != nil {
+				out[idx] = llmtools.ToolResult{
+					ToolCallID: c.ID,
+					Name:       c.Name,
+					Error:      err.Error(),
+				}
+				return
+			}
+
+			start := time.Now()
+			raw, err := m.registry.Execute(ctx, c.Name, c.Arguments)
+			out[idx] = llmtools.ToolResult{
+				ToolCallID: c.ID,
+				Name:       c.Name,
+				Duration:   time.Since(start),
+			}
+			if err != nil {
+				out[idx].Error = err.Error()
+				return
+			}
+			out[idx].Result = raw
+		}(i, call)
 	}
+	wg.Wait()
 	return out
 }
 

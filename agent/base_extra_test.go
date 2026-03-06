@@ -122,7 +122,7 @@ func TestBaseAgent_Accessors(t *testing.T) {
 	tm := &testToolManager{}
 	provider := &testProvider{name: "test"}
 
-	ba := NewBaseAgent(testAgentConfig("ba-1", "TestBA", "gpt-4"), provider, mem, tm, nil, zap.NewNop())
+	ba := NewBaseAgent(testAgentConfig("ba-1", "TestBA", "gpt-4"), provider, mem, tm, nil, zap.NewNop(), nil)
 
 	assert.Equal(t, mem, ba.Memory())
 	assert.Equal(t, tm, ba.Tools())
@@ -134,7 +134,7 @@ func TestBaseAgent_Accessors(t *testing.T) {
 }
 
 func TestBaseAgent_SetContextManager(t *testing.T) {
-	ba := NewBaseAgent(testAgentConfig("ba-1", "", ""), &testProvider{name: "test"}, nil, nil, nil, zap.NewNop())
+	ba := NewBaseAgent(testAgentConfig("ba-1", "", ""), &testProvider{name: "test"}, nil, nil, nil, zap.NewNop(), nil)
 
 	assert.False(t, ba.ContextEngineEnabled())
 
@@ -147,7 +147,7 @@ func TestBaseAgent_SetContextManager(t *testing.T) {
 }
 
 func TestBaseAgent_SetToolProvider(t *testing.T) {
-	ba := NewBaseAgent(testAgentConfig("ba-1", "", ""), &testProvider{name: "test"}, nil, nil, nil, zap.NewNop())
+	ba := NewBaseAgent(testAgentConfig("ba-1", "", ""), &testProvider{name: "test"}, nil, nil, nil, zap.NewNop(), nil)
 
 	tp := &testProvider{name: "tool-provider"}
 	ba.SetToolProvider(tp)
@@ -155,12 +155,12 @@ func TestBaseAgent_SetToolProvider(t *testing.T) {
 }
 
 func TestBaseAgent_MaxReActIterations(t *testing.T) {
-	ba := NewBaseAgent(testAgentConfig("ba-1", "", ""), &testProvider{name: "test"}, nil, nil, nil, zap.NewNop())
+	ba := NewBaseAgent(testAgentConfig("ba-1", "", ""), &testProvider{name: "test"}, nil, nil, nil, zap.NewNop(), nil)
 	assert.Equal(t, 10, ba.maxReActIterations())
 
 	cfg2 := testAgentConfig("ba-2", "", "")
 	cfg2.Runtime.MaxReActIterations = 5
-	ba2 := NewBaseAgent(cfg2, &testProvider{name: "test"}, nil, nil, nil, zap.NewNop())
+	ba2 := NewBaseAgent(cfg2, &testProvider{name: "test"}, nil, nil, nil, zap.NewNop(), nil)
 	assert.Equal(t, 5, ba2.maxReActIterations())
 }
 
@@ -197,7 +197,7 @@ func TestGuardrailsError_WithErrors(t *testing.T) {
 // ============================================================
 
 func TestBaseAgent_SetGuardrails(t *testing.T) {
-	ba := NewBaseAgent(testAgentConfig("ba-1", "", ""), &testProvider{name: "test"}, nil, nil, nil, zap.NewNop())
+	ba := NewBaseAgent(testAgentConfig("ba-1", "", ""), &testProvider{name: "test"}, nil, nil, nil, zap.NewNop(), nil)
 
 	assert.False(t, ba.GuardrailsEnabled())
 
@@ -212,7 +212,7 @@ func TestBaseAgent_SetGuardrails(t *testing.T) {
 }
 
 func TestBaseAgent_AddInputValidator(t *testing.T) {
-	ba := NewBaseAgent(testAgentConfig("ba-1", "", ""), &testProvider{name: "test"}, nil, nil, nil, zap.NewNop())
+	ba := NewBaseAgent(testAgentConfig("ba-1", "", ""), &testProvider{name: "test"}, nil, nil, nil, zap.NewNop(), nil)
 
 	assert.False(t, ba.GuardrailsEnabled())
 
@@ -225,7 +225,7 @@ func TestBaseAgent_AddInputValidator(t *testing.T) {
 }
 
 func TestBaseAgent_AddOutputValidator(t *testing.T) {
-	ba := NewBaseAgent(testAgentConfig("ba-1", "", ""), &testProvider{name: "test"}, nil, nil, nil, zap.NewNop())
+	ba := NewBaseAgent(testAgentConfig("ba-1", "", ""), &testProvider{name: "test"}, nil, nil, nil, zap.NewNop(), nil)
 
 	v := guardrails.NewLengthValidator(&guardrails.LengthValidatorConfig{
 		MaxLength: 100,
@@ -236,7 +236,7 @@ func TestBaseAgent_AddOutputValidator(t *testing.T) {
 }
 
 func TestBaseAgent_AddOutputFilter(t *testing.T) {
-	ba := NewBaseAgent(testAgentConfig("ba-1", "", ""), &testProvider{name: "test"}, nil, nil, nil, zap.NewNop())
+	ba := NewBaseAgent(testAgentConfig("ba-1", "", ""), &testProvider{name: "test"}, nil, nil, nil, zap.NewNop(), nil)
 
 	f := &testFilter{name: "test-filter"}
 	ba.AddOutputFilter(f)
@@ -272,7 +272,7 @@ func TestBaseAgent_InitGuardrails(t *testing.T) {
 		OnInputFailure:     string(cfg.OnInputFailure),
 		OnOutputFailure:    string(cfg.OnOutputFailure),
 	}
-	ba := NewBaseAgent(ac, &testProvider{name: "test"}, nil, nil, nil, zap.NewNop())
+	ba := NewBaseAgent(ac, &testProvider{name: "test"}, nil, nil, nil, zap.NewNop(), nil)
 
 	assert.True(t, ba.GuardrailsEnabled())
 	assert.NotNil(t, ba.inputValidatorChain)

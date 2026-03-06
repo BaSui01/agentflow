@@ -39,6 +39,8 @@ func NewLoaderRegistry() *LoaderRegistry {
 		NewMarkdownLoader(),
 		NewCSVLoader(CSVLoaderConfig{}),
 		NewJSONLoader(JSONLoaderConfig{}),
+		NewPDFLoader(),
+		NewHTMLLoader(),
 	}
 	for _, l := range builtins {
 		for _, ext := range l.SupportedTypes() {

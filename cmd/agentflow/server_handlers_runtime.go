@@ -8,6 +8,7 @@ import (
 	"github.com/BaSui01/agentflow/agent/hitl"
 	"github.com/BaSui01/agentflow/api/handlers"
 	"github.com/BaSui01/agentflow/internal/app/bootstrap"
+	"github.com/BaSui01/agentflow/llm/observability"
 	"github.com/BaSui01/agentflow/rag"
 	"go.uber.org/zap"
 )
@@ -68,6 +69,7 @@ func (s *Server) initHandlers() error {
 		s.costTracker = llmRuntime.CostTracker
 		s.llmCache = llmRuntime.Cache
 		s.llmMetrics = llmRuntime.Metrics
+		s.costHandler = handlers.NewCostHandler(llmRuntime.CostTracker, s.logger)
 	}
 
 	discoveryRegistry, agentRegistry := bootstrap.BuildAgentRegistries(s.logger)
@@ -97,10 +99,15 @@ func (s *Server) initHandlers() error {
 			return s.multimodalRedis.Ping(ctx).Err()
 		}))
 
+		var ledger observability.Ledger
+		if llmRuntime != nil {
+			ledger = llmRuntime.Ledger
+		}
 		multimodalRuntime, err := bootstrap.BuildMultimodalRuntime(
 			s.cfg,
 			s.provider,
 			s.budgetManager,
+			ledger,
 			referenceStore,
 			s.logger,
 		)
@@ -179,6 +186,7 @@ func (s *Server) initHandlers() error {
 			llmRuntime.Provider,
 			llmRuntime.PolicyManager,
 			chatToolManager,
+			llmRuntime.Ledger,
 			s.logger,
 		)
 		s.logger.Info("Chat handler initialized with middleware chain",
@@ -203,7 +211,11 @@ func (s *Server) initHandlers() error {
 			return fmt.Errorf("failed to wire MongoDB stores: %w", err)
 		}
 
-		bootstrap.RegisterDefaultRuntimeAgentFactory(agentRegistry, s.provider, s.toolProvider, s.logger)
+		var ledger observability.Ledger
+		if llmRuntime != nil {
+			ledger = llmRuntime.Ledger
+		}
+		bootstrap.RegisterDefaultRuntimeAgentFactory(agentRegistry, s.provider, s.toolProvider, ledger, s.logger)
 		s.logger.Info("Default runtime agent factory registered")
 
 		s.agentHandler = bootstrap.BuildAgentHandler(discoveryRegistry, agentRegistry, s.logger, s.resolver.Resolve)
@@ -227,6 +239,11 @@ func (s *Server) initHandlers() error {
 		return fmt.Errorf("failed to build checkpoint store: %w", ckptErr)
 	}
 	workflowStore.CheckpointStore = checkpointStore
+	if s.db != nil {
+		if wfStore, err := bootstrap.BuildWorkflowPostgreSQLCheckpointStore(context.Background(), s.db); err == nil && wfStore != nil {
+			workflowStore.WorkflowCheckpointStore = wfStore
+		}
+	}
 	workflowStore.RetrievalStore = ragStore
 	workflowStore.EmbeddingProvider = ragEmbedding
 

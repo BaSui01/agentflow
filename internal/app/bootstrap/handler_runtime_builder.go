@@ -24,6 +24,7 @@ type LLMHandlerRuntime struct {
 	ToolProvider  llm.Provider
 	BudgetManager *llmpolicy.TokenBudgetManager
 	CostTracker   *observability.CostTracker
+	Ledger        observability.Ledger
 	Cache         *cache.MultiLevelCache
 	Metrics       *observability.Metrics
 	PolicyManager *llmpolicy.Manager
@@ -61,6 +62,7 @@ func BuildLLMHandlerRuntime(cfg *config.Config, db *gorm.DB, logger *zap.Logger)
 	}
 
 	costTracker := observability.NewCostTracker(observability.NewCostCalculator())
+	ledger := observability.NewCostTrackerLedger(costTracker)
 
 	var budgetManager *llmpolicy.TokenBudgetManager
 	if cfg.Budget.Enabled {
@@ -119,6 +121,7 @@ func BuildLLMHandlerRuntime(cfg *config.Config, db *gorm.DB, logger *zap.Logger)
 		ToolProvider:  toolProvider,
 		BudgetManager: budgetManager,
 		CostTracker:   costTracker,
+		Ledger:        ledger,
 		Cache:         llmCache,
 		Metrics:       llmMetrics,
 		PolicyManager: policyManager,

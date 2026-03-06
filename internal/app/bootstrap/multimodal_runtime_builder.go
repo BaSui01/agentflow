@@ -7,6 +7,7 @@ import (
 	"github.com/BaSui01/agentflow/api/handlers"
 	"github.com/BaSui01/agentflow/config"
 	"github.com/BaSui01/agentflow/llm"
+	"github.com/BaSui01/agentflow/llm/observability"
 	llmpolicy "github.com/BaSui01/agentflow/llm/runtime/policy"
 	"go.uber.org/zap"
 )
@@ -34,6 +35,7 @@ func BuildMultimodalRuntime(
 	cfg *config.Config,
 	chatProvider llm.Provider,
 	budgetManager *llmpolicy.TokenBudgetManager,
+	ledger observability.Ledger,
 	referenceStore handlers.ReferenceStore,
 	logger *zap.Logger,
 ) (*MultimodalRuntime, error) {
@@ -49,6 +51,7 @@ func BuildMultimodalRuntime(
 	multimodalCfg := handlers.MultimodalHandlerConfig{
 		ChatProvider:         chatProvider,
 		PolicyManager:        llmpolicy.NewManager(llmpolicy.ManagerConfig{Budget: budgetManager}),
+		Ledger:               ledger,
 		OpenAIAPIKey:         firstNonEmpty(cfg.Multimodal.Image.OpenAIAPIKey, cfg.LLM.APIKey),
 		OpenAIBaseURL:        firstNonEmpty(cfg.Multimodal.Image.OpenAIBaseURL, cfg.LLM.BaseURL),
 		GoogleAPIKey:         firstNonEmpty(cfg.Multimodal.Video.GoogleAPIKey, cfg.Multimodal.Image.GeminiAPIKey),

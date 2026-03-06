@@ -3,24 +3,74 @@ package config
 
 import "time"
 
+type HostedToolsConfig struct {
+	FileOps FileOpsToolConfig `yaml:"file_ops" env:"FILE_OPS"`
+	Shell   ShellToolConfig   `yaml:"shell" env:"SHELL"`
+	MCP     MCPToolConfig     `yaml:"mcp" env:"MCP"`
+}
+
+type FileOpsToolConfig struct {
+	Enabled      bool     `yaml:"enabled" env:"ENABLED"`
+	AllowedPaths []string `yaml:"allowed_paths" env:"ALLOWED_PATHS"`
+	MaxFileSize  int64    `yaml:"max_file_size" env:"MAX_FILE_SIZE"`
+}
+
+type ShellToolConfig struct {
+	Enabled     bool           `yaml:"enabled" env:"ENABLED"`
+	Timeout     time.Duration  `yaml:"timeout" env:"TIMEOUT"`
+	BlockedCmds []string       `yaml:"blocked_cmds" env:"BLOCKED_CMDS"`
+}
+
+type MCPToolConfig struct {
+	Enabled bool     `yaml:"enabled" env:"ENABLED"`
+	Command string  `yaml:"command" env:"COMMAND"`
+	Args    []string `yaml:"args" env:"ARGS"`
+	BaseURL string  `yaml:"base_url" env:"BASE_URL"`
+}
+
+type WorkflowCheckpointConfig struct {
+	Backend string `yaml:"backend" env:"BACKEND"`
+}
+
+func DefaultHostedToolsConfig() HostedToolsConfig {
+	return HostedToolsConfig{
+		FileOps: FileOpsToolConfig{
+			Enabled:     false,
+			MaxFileSize: 10 << 20,
+		},
+		Shell: ShellToolConfig{
+			Enabled: false,
+			Timeout: 30 * time.Second,
+		},
+	}
+}
+
+func DefaultWorkflowCheckpointConfig() WorkflowCheckpointConfig {
+	return WorkflowCheckpointConfig{
+		Backend: "memory",
+	}
+}
+
 // DefaultConfig 返回默认配置
 func DefaultConfig() *Config {
 	return &Config{
-		Server:     DefaultServerConfig(),
-		Agent:      DefaultAgentConfig(),
-		Redis:      DefaultRedisConfig(),
-		Database:   DefaultDatabaseConfig(),
-		Qdrant:     DefaultQdrantConfig(),
-		Weaviate:   DefaultWeaviateConfig(),
-		Milvus:     DefaultMilvusConfig(),
-		MongoDB:    DefaultMongoDBConfig(),
-		LLM:        DefaultLLMConfig(),
-		Multimodal: DefaultMultimodalConfig(),
-		Log:        DefaultLogConfig(),
-		Telemetry:  DefaultTelemetryConfig(),
-		Tools:      DefaultToolsConfig(),
-		Cache:      DefaultCacheConfig(),
-		Budget:     DefaultBudgetConfig(),
+		Server:             DefaultServerConfig(),
+		Agent:              DefaultAgentConfig(),
+		Redis:              DefaultRedisConfig(),
+		Database:           DefaultDatabaseConfig(),
+		Qdrant:             DefaultQdrantConfig(),
+		Weaviate:           DefaultWeaviateConfig(),
+		Milvus:             DefaultMilvusConfig(),
+		MongoDB:            DefaultMongoDBConfig(),
+		LLM:                DefaultLLMConfig(),
+		Multimodal:         DefaultMultimodalConfig(),
+		Log:                DefaultLogConfig(),
+		Telemetry:          DefaultTelemetryConfig(),
+		Tools:              DefaultToolsConfig(),
+		Cache:              DefaultCacheConfig(),
+		Budget:             DefaultBudgetConfig(),
+		HostedTools:        DefaultHostedToolsConfig(),
+		WorkflowCheckpoint: DefaultWorkflowCheckpointConfig(),
 	}
 }
 
@@ -250,7 +300,7 @@ func DefaultToolsConfig() ToolsConfig {
 			Timeout: 15 * time.Second,
 		},
 		HTTPScrape: HTTPScrapeToolConfig{
-			UserAgent: "Mozilla/5.0 (compatible; AgentFlow/1.0)",
+			UserAgent: "Mozilla/5.0 (compatible; AgentFlow/1.6)",
 			Timeout:   30 * time.Second,
 		},
 	}
