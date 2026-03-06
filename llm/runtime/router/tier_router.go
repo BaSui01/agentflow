@@ -15,14 +15,35 @@ const (
 	TierFrontier ModelTier = "frontier"
 )
 
+// ScoringWeights controls how much each complexity factor contributes.
+// Default weight for each factor is 25, giving a total max score of 100.
+// Adjust individual weights to bias the routing toward specific factors.
+type ScoringWeights struct {
+	MessageCount  int `json:"message_count" yaml:"message_count"`
+	ContentLength int `json:"content_length" yaml:"content_length"`
+	ToolCount     int `json:"tool_count" yaml:"tool_count"`
+	SystemPrompt  int `json:"system_prompt" yaml:"system_prompt"`
+}
+
+// DefaultScoringWeights returns equal weights totaling 100.
+func DefaultScoringWeights() ScoringWeights {
+	return ScoringWeights{
+		MessageCount:  25,
+		ContentLength: 25,
+		ToolCount:     25,
+		SystemPrompt:  25,
+	}
+}
+
 // TierConfig maps tiers to model names.
 type TierConfig struct {
-	Enabled           bool     `json:"enabled" yaml:"enabled"`
-	NanoModels        []string `json:"nano_models" yaml:"nano_models"`
-	StandardModels    []string `json:"standard_models" yaml:"standard_models"`
-	FrontierModels    []string `json:"frontier_models" yaml:"frontier_models"`
-	NanoThreshold     int      `json:"nano_threshold" yaml:"nano_threshold"`
-	FrontierThreshold int      `json:"frontier_threshold" yaml:"frontier_threshold"`
+	Enabled           bool           `json:"enabled" yaml:"enabled"`
+	NanoModels        []string       `json:"nano_models" yaml:"nano_models"`
+	StandardModels    []string       `json:"standard_models" yaml:"standard_models"`
+	FrontierModels    []string       `json:"frontier_models" yaml:"frontier_models"`
+	NanoThreshold     int            `json:"nano_threshold" yaml:"nano_threshold"`
+	FrontierThreshold int            `json:"frontier_threshold" yaml:"frontier_threshold"`
+	Weights           ScoringWeights `json:"weights" yaml:"weights"`
 }
 
 // DefaultTierConfig returns sensible defaults.
@@ -34,6 +55,7 @@ func DefaultTierConfig() TierConfig {
 		FrontierModels:    []string{"gpt-4.5", "claude-opus", "gemini-ultra"},
 		NanoThreshold:     30,
 		FrontierThreshold: 70,
+		Weights:           DefaultScoringWeights(),
 	}
 }
 
@@ -54,82 +76,102 @@ func NewTierRouter(config TierConfig, logger *zap.Logger) *TierRouter {
 	if config.FrontierThreshold <= 0 {
 		config.FrontierThreshold = 70
 	}
+	w := config.Weights
+	if w.MessageCount == 0 && w.ContentLength == 0 && w.ToolCount == 0 && w.SystemPrompt == 0 {
+		config.Weights = DefaultScoringWeights()
+	}
 	return &TierRouter{config: config, logger: logger}
 }
 
-// ScoreComplexity returns 0-100 complexity score for a chat request.
+// ScoreComplexity returns a complexity score for a chat request.
+// Each factor produces a raw 0-25 value, then scales by its configured weight.
+// With default weights (all 25), the score range is 0-100.
 func (t *TierRouter) ScoreComplexity(req *ChatRequest) int {
 	if req == nil {
 		return 50
 	}
 
+	w := t.config.Weights
 	score := 0
 
-	// Factor 1: Total message count (0-25 points)
-	msgCount := len(req.Messages)
-	switch {
-	case msgCount <= 2:
-		score += 5
-	case msgCount <= 5:
-		score += 10
-	case msgCount <= 10:
-		score += 15
-	case msgCount <= 20:
-		score += 20
-	default:
-		score += 25
-	}
+	score += applyWeight(msgScore(len(req.Messages)), w.MessageCount)
+	score += applyWeight(contentLenScore(req.Messages), w.ContentLength)
+	score += applyWeight(toolScore(len(req.Tools)), w.ToolCount)
+	score += applyWeight(systemPromptScore(req.Messages), w.SystemPrompt)
 
-	// Factor 2: Total content length (0-25 points)
+	return score
+}
+
+func msgScore(count int) int {
+	switch {
+	case count <= 2:
+		return 5
+	case count <= 5:
+		return 10
+	case count <= 10:
+		return 15
+	case count <= 20:
+		return 20
+	default:
+		return 25
+	}
+}
+
+func contentLenScore(msgs []Message) int {
 	totalLen := 0
-	for _, m := range req.Messages {
+	for _, m := range msgs {
 		totalLen += len(m.Content)
 	}
 	switch {
 	case totalLen < 500:
-		score += 5
+		return 5
 	case totalLen < 2000:
-		score += 10
+		return 10
 	case totalLen < 5000:
-		score += 15
+		return 15
 	case totalLen < 10000:
-		score += 20
+		return 20
 	default:
-		score += 25
+		return 25
 	}
+}
 
-	// Factor 3: Tools present (0-25 points)
-	toolCount := len(req.Tools)
+func toolScore(count int) int {
 	switch {
-	case toolCount == 0:
-		score += 0
-	case toolCount <= 3:
-		score += 10
-	case toolCount <= 8:
-		score += 15
+	case count == 0:
+		return 0
+	case count <= 3:
+		return 10
+	case count <= 8:
+		return 15
 	default:
-		score += 25
+		return 25
 	}
+}
 
-	// Factor 4: System prompt complexity (0-25 points)
-	for _, m := range req.Messages {
+func systemPromptScore(msgs []Message) int {
+	for _, m := range msgs {
 		if m.Role == "system" {
 			sysLen := len(m.Content)
 			switch {
 			case sysLen < 200:
-				score += 5
+				return 5
 			case sysLen < 1000:
-				score += 10
+				return 10
 			case sysLen < 3000:
-				score += 15
+				return 15
 			default:
-				score += 25
+				return 25
 			}
-			break
 		}
 	}
+	return 0
+}
 
-	return score
+// applyWeight scales a raw factor score (0-25) by a configured weight.
+// With default weight 25, the output equals the raw score.
+func applyWeight(rawScore, weight int) int {
+	return rawScore * weight / 25
 }
 
 // SelectTier maps a complexity score to a model tier.

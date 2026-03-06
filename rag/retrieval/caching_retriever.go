@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sync/atomic"
 	"time"
 
 	"github.com/BaSui01/agentflow/rag"
@@ -30,15 +31,16 @@ func DefaultCacheConfig() CacheConfig {
 }
 
 // CachingRetriever wraps a Retriever with embedding-based semantic caching.
-// On cache hit (query embedding similarity >= threshold), cached results are
-// returned without calling the underlying retriever.
+// TTL-based lazy eviction: expired entries are detected and removed on read.
+// MaxEntries enforcement: new writes are skipped when the store is full.
 type CachingRetriever struct {
-	inner  Retriever
-	store  ragcore.VectorStore
-	config CacheConfig
-	logger *zap.Logger
-	hits   int64
-	misses int64
+	inner     Retriever
+	store     ragcore.VectorStore
+	config    CacheConfig
+	logger    *zap.Logger
+	hits      atomic.Int64
+	misses    atomic.Int64
+	evictions atomic.Int64
 }
 
 // NewCachingRetriever creates a caching retriever wrapper.
@@ -58,6 +60,7 @@ func NewCachingRetriever(inner Retriever, store ragcore.VectorStore, config Cach
 }
 
 // Retrieve attempts cache lookup first, falls back to inner retriever on miss.
+// Expired entries (TTL exceeded) are lazily evicted and treated as misses.
 func (c *CachingRetriever) Retrieve(ctx context.Context, query string, queryEmbedding []float64) ([]rag.RetrievalResult, error) {
 	if !c.config.Enabled || c.store == nil || len(queryEmbedding) == 0 {
 		return c.inner.Retrieve(ctx, query, queryEmbedding)
@@ -65,23 +68,48 @@ func (c *CachingRetriever) Retrieve(ctx context.Context, query string, queryEmbe
 
 	cached, err := c.store.Search(ctx, queryEmbedding, 1)
 	if err == nil && len(cached) > 0 && cached[0].Score >= c.config.SimilarityThreshold {
-		var results []rag.RetrievalResult
-		if unmarshalErr := json.Unmarshal([]byte(cached[0].Document.Content), &results); unmarshalErr == nil {
-			c.hits++
-			c.logger.Debug("semantic cache hit",
-				zap.String("query", query),
-				zap.Float64("score", cached[0].Score))
-			return results, nil
+		if c.isExpired(cached[0].Document) {
+			c.evictions.Add(1)
+			c.logger.Debug("semantic cache entry expired, evicting",
+				zap.String("id", cached[0].Document.ID),
+				zap.String("query", query))
+			go func() {
+				evictCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+				defer cancel()
+				_ = c.store.DeleteDocuments(evictCtx, []string{cached[0].Document.ID})
+			}()
+		} else {
+			var results []rag.RetrievalResult
+			if unmarshalErr := json.Unmarshal([]byte(cached[0].Document.Content), &results); unmarshalErr == nil {
+				c.hits.Add(1)
+				c.logger.Debug("semantic cache hit",
+					zap.String("query", query),
+					zap.Float64("score", cached[0].Score))
+				return results, nil
+			}
 		}
 	}
 
-	c.misses++
+	c.misses.Add(1)
 	results, err := c.inner.Retrieve(ctx, query, queryEmbedding)
 	if err != nil {
 		return nil, err
 	}
 
 	go func() {
+		writeCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		if c.config.MaxEntries > 0 {
+			count, countErr := c.store.Count(writeCtx)
+			if countErr == nil && count >= c.config.MaxEntries {
+				c.logger.Debug("cache full, skipping write",
+					zap.Int("count", count),
+					zap.Int("max", c.config.MaxEntries))
+				return
+			}
+		}
+
 		encoded, encErr := json.Marshal(results)
 		if encErr != nil {
 			return
@@ -95,13 +123,35 @@ func (c *CachingRetriever) Retrieve(ctx context.Context, query string, queryEmbe
 			},
 			Embedding: queryEmbedding,
 		}
-		_ = c.store.AddDocuments(ctx, []ragcore.Document{doc})
+		_ = c.store.AddDocuments(writeCtx, []ragcore.Document{doc})
 	}()
 
 	return results, nil
 }
 
+// isExpired checks if a cached document has exceeded the TTL.
+// TTL <= 0 disables expiration. Missing or unparseable cached_at is treated as not expired.
+func (c *CachingRetriever) isExpired(doc ragcore.Document) bool {
+	if c.config.TTL <= 0 {
+		return false
+	}
+	cachedAt, ok := doc.Metadata["cached_at"].(string)
+	if !ok {
+		return false
+	}
+	t, err := time.Parse(time.RFC3339, cachedAt)
+	if err != nil {
+		return false
+	}
+	return time.Since(t) > c.config.TTL
+}
+
 // Stats returns cache hit/miss counts.
 func (c *CachingRetriever) Stats() (hits, misses int64) {
-	return c.hits, c.misses
+	return c.hits.Load(), c.misses.Load()
+}
+
+// Evictions returns the count of expired entries evicted during reads.
+func (c *CachingRetriever) Evictions() int64 {
+	return c.evictions.Load()
 }

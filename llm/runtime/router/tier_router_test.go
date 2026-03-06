@@ -156,7 +156,6 @@ func TestResolveModel_Enabled(t *testing.T) {
 	t.Parallel()
 	tr := newTestTierRouter(true)
 
-	// Simple request → low score → nano tier → gpt-4o-mini
 	simple := &ChatRequest{
 		Model: "gpt-4o",
 		Messages: []Message{
@@ -168,7 +167,6 @@ func TestResolveModel_Enabled(t *testing.T) {
 		t.Fatalf("expected gpt-4o-mini for simple request, got %s", got)
 	}
 
-	// Complex request → high score → frontier tier → gpt-4.5
 	msgs := make([]Message, 25)
 	msgs[0] = Message{Role: "system", Content: strings.Repeat("x", 5000)}
 	for i := 1; i < 25; i++ {
@@ -231,6 +229,121 @@ func TestExtractFamily(t *testing.T) {
 		got := extractFamily(tt.model)
 		if got != tt.want {
 			t.Errorf("extractFamily(%q) = %q, want %q", tt.model, got, tt.want)
+		}
+	}
+}
+
+// --- Custom weight tests ---
+
+func TestScoreComplexity_CustomWeights(t *testing.T) {
+	t.Parallel()
+
+	cfg := DefaultTierConfig()
+	cfg.Enabled = true
+	cfg.Weights = ScoringWeights{
+		MessageCount:  50,
+		ContentLength: 0,
+		ToolCount:     0,
+		SystemPrompt:  0,
+	}
+	tr := NewTierRouter(cfg, zap.NewNop())
+
+	req := &ChatRequest{
+		Model: "gpt-4o",
+		Messages: []Message{
+			{Role: "user", Content: "Hello"},
+		},
+	}
+	score := tr.ScoreComplexity(req)
+
+	// msgScore=5 (<=2 msgs), applyWeight(5, 50) = 5*50/25 = 10
+	// All other weights are 0
+	if score != 10 {
+		t.Fatalf("expected score 10 with MessageCount=50 only, got %d", score)
+	}
+}
+
+func TestScoreComplexity_ToolHeavyWeighting(t *testing.T) {
+	t.Parallel()
+
+	cfg := DefaultTierConfig()
+	cfg.Enabled = true
+	cfg.Weights = ScoringWeights{
+		MessageCount:  10,
+		ContentLength: 10,
+		ToolCount:     50,
+		SystemPrompt:  10,
+	}
+	tr := NewTierRouter(cfg, zap.NewNop())
+
+	tools := make([]types.ToolSchema, 10)
+	for i := range tools {
+		tools[i] = types.ToolSchema{Name: "tool"}
+	}
+	req := &ChatRequest{
+		Model: "gpt-4o",
+		Messages: []Message{
+			{Role: "user", Content: "hi"},
+		},
+		Tools: tools,
+	}
+	score := tr.ScoreComplexity(req)
+
+	// msg: applyWeight(5, 10) = 5*10/25 = 2
+	// content: applyWeight(5, 10) = 2
+	// tools (>8): applyWeight(25, 50) = 25*50/25 = 50
+	// system: applyWeight(0, 10) = 0
+	// total = 54
+	if score != 54 {
+		t.Fatalf("expected score 54 with tool-heavy weights, got %d", score)
+	}
+}
+
+func TestScoreComplexity_ZeroWeightsDefault(t *testing.T) {
+	t.Parallel()
+
+	cfg := TierConfig{
+		Enabled:           true,
+		NanoThreshold:     30,
+		FrontierThreshold: 70,
+	}
+	tr := NewTierRouter(cfg, zap.NewNop())
+
+	req := &ChatRequest{
+		Model: "gpt-4o",
+		Messages: []Message{
+			{Role: "user", Content: "Hello"},
+		},
+	}
+	score := tr.ScoreComplexity(req)
+
+	// Zero weights → defaults applied → same as default: 5+5+0+0 = 10
+	if score != 10 {
+		t.Fatalf("expected score 10 with default weights, got %d", score)
+	}
+}
+
+func TestApplyWeight(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		raw, weight, want int
+	}{
+		{5, 25, 5},
+		{10, 25, 10},
+		{15, 25, 15},
+		{20, 25, 20},
+		{25, 25, 25},
+		{5, 50, 10},
+		{25, 50, 50},
+		{5, 10, 2},
+		{25, 0, 0},
+		{0, 25, 0},
+	}
+	for _, tt := range tests {
+		got := applyWeight(tt.raw, tt.weight)
+		if got != tt.want {
+			t.Errorf("applyWeight(%d, %d) = %d, want %d", tt.raw, tt.weight, got, tt.want)
 		}
 	}
 }
