@@ -127,6 +127,16 @@ func RegisterWorkflow(mux *http.ServeMux, workflowHandler *handlers.WorkflowHand
 	logger.Info("Workflow API routes registered")
 }
 
+func RegisterCost(mux *http.ServeMux, costHandler *handlers.CostHandler, logger *zap.Logger) {
+	if costHandler == nil {
+		return
+	}
+	mux.HandleFunc("GET /api/v1/cost/summary", costHandler.HandleSummary)
+	mux.HandleFunc("GET /api/v1/cost/records", costHandler.HandleRecords)
+	mux.HandleFunc("POST /api/v1/cost/reset", costHandler.HandleReset)
+	logger.Info("Cost API routes registered")
+}
+
 func RegisterConfig(mux *http.ServeMux, cfgHandler *config.ConfigAPIHandler, firstAPIKey string, logger *zap.Logger) {
 	if cfgHandler == nil {
 		return

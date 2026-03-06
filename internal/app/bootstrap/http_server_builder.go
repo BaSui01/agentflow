@@ -24,6 +24,7 @@ type HTTPRouteHandlers struct {
 	RAG           *handlers.RAGHandler
 	Workflow      *handlers.WorkflowHandler
 	ConfigAPI     *config.ConfigAPIHandler
+	Cost          *handlers.CostHandler
 }
 
 // RegisterHTTPRoutes wires all API routes into the provided mux and logs route summary.
@@ -46,6 +47,7 @@ func RegisterHTTPRoutes(
 	routes.RegisterRAG(mux, handlers.RAG, logger)
 	routes.RegisterWorkflow(mux, handlers.Workflow, logger)
 	routes.RegisterConfig(mux, handlers.ConfigAPI, firstAPIKey, logger)
+	routes.RegisterCost(mux, handlers.Cost, logger)
 
 	logger.Info("HTTP routes registered",
 		zap.Strings("routes", []string{
