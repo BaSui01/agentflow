@@ -115,7 +115,7 @@ var _ llmcore.Gateway = (*Service)(nil)
 func New(cfg Config) *Service {
 	logger := cfg.Logger
 	if logger == nil {
-		logger = zap.NewNop()
+		panic("llm.Gateway: logger is required and cannot be nil")
 	}
 	calc := cfg.CostCalculator
 	if calc == nil {
@@ -226,8 +226,13 @@ func (s *Service) Stream(ctx context.Context, req *llmcore.UnifiedRequest) (<-ch
 	}
 
 	out := make(chan llmcore.UnifiedChunk)
-	go func() {
-		defer close(out)
+	go func(ctx context.Context) {
+		defer func() {
+			if r := recover(); r != nil {
+				s.logger.Error("stream relay panic recovered", zap.Any("panic", r))
+			}
+			close(out)
+		}()
 		traceID := firstNonEmpty(req.TraceID, chatReq.TraceID)
 		var (
 			finalUsage    *llmcore.Usage
@@ -289,7 +294,7 @@ func (s *Service) Stream(ctx context.Context, req *llmcore.UnifiedRequest) (<-ch
 			})
 			s.recordLedger(ctx, req, traceID, finalDecision, *finalUsage, *finalCost)
 		}
-	}()
+	}(ctx)
 
 	return out, nil
 }
@@ -1291,7 +1296,12 @@ func (a *ChatProviderAdapter) Stream(ctx context.Context, req *llm.ChatRequest) 
 
 	out := make(chan llm.StreamChunk)
 	go func() {
-		defer close(out)
+		defer func() {
+			if r := recover(); r != nil {
+				zap.L().Error("ChatProviderAdapter stream relay panic recovered", zap.Any("panic", r))
+			}
+			close(out)
+		}()
 		for chunk := range stream {
 			if chunk.Err != nil {
 				out <- llm.StreamChunk{Err: chunk.Err}

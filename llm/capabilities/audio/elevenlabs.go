@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	stdpath "path/filepath"
 	"strings"
 	"time"
 
@@ -116,6 +117,10 @@ func (p *ElevenLabsProvider) Synthesize(ctx context.Context, req *TTSRequest) (*
 
 // 将文本转换为语音并保存为文件。
 func (p *ElevenLabsProvider) SynthesizeToFile(ctx context.Context, req *TTSRequest, filepath string) error {
+	filepath = stdpath.Clean(filepath)
+	if strings.Contains(filepath, "..") {
+		return fmt.Errorf("path traversal not allowed")
+	}
 	resp, err := p.Synthesize(ctx, req)
 	if err != nil {
 		return err

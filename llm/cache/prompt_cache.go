@@ -206,7 +206,10 @@ func (c *MultiLevelCache) GenerateKey(req any) string {
 	chatReq, ok := req.(*llmpkg.ChatRequest)
 	if !ok {
 		// 回退到默认 Hash 实现
-		data, _ := json.Marshal(req)
+		data, err := json.Marshal(req)
+		if err != nil {
+			return ""
+		}
 		hash := sha256.Sum256(data)
 		return "llm:cache:" + hex.EncodeToString(hash[:16])
 	}

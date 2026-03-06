@@ -17,6 +17,7 @@ import (
 	llmcore "github.com/BaSui01/agentflow/llm/core"
 	"github.com/BaSui01/agentflow/types"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
 )
 
 func TestService_Invoke_CapabilityBranches(t *testing.T) {
@@ -153,7 +154,7 @@ func newCapabilityServiceForTest() *Service {
 	}
 	entry.RegisterAvatar("avatar", &gatewayAvatarProvider{}, true)
 	entry.SetToolExecutor(&gatewayToolExecutor{})
-	return New(Config{Capabilities: entry})
+	return New(Config{Capabilities: entry, Logger: zap.NewNop()})
 }
 
 type gatewayEmbeddingProvider struct{}

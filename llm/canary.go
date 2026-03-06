@@ -131,6 +131,8 @@ func (c *CanaryConfig) SetDeployment(deployment *CanaryDeployment) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
+	// T-008: DB writes (Update/Create + in-memory map update) should run in a transaction when c.db is available.
+	// TODO(concurrency): Wrap c.db.Transaction(...) around the DB writes below for atomicity.
 	// 写入数据库
 	record := map[string]any{
 		"provider_id":        deployment.ProviderID,
