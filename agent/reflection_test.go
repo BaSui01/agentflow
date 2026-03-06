@@ -21,7 +21,7 @@ func TestNewReflectionExecutor(t *testing.T) {
 
 	config := testAgentConfig("test-agent", "Test Agent", "gpt-4")
 
-	agent := NewBaseAgent(config, provider, memory, toolManager, bus, logger)
+	agent := NewBaseAgent(config, provider, memory, toolManager, bus, logger, nil)
 	reflectionConfig := DefaultReflectionExecutorConfig()
 
 	executor := NewReflectionExecutor(agent, reflectionConfig)
@@ -73,7 +73,7 @@ func TestReflectionExecutor_ExecuteWithReflection_Disabled(t *testing.T) {
 	config := testAgentConfig("test-agent", "Test Agent", "gpt-4")
 	config.Runtime.SystemPrompt = "You are a helpful assistant"
 
-	agent := NewBaseAgent(config, provider, memory, toolManager, bus, logger)
+	agent := NewBaseAgent(config, provider, memory, toolManager, bus, logger, nil)
 
 	ctx := context.Background()
 	_ = agent.Init(ctx)
@@ -186,7 +186,7 @@ func TestReflectionExecutor_ExecuteWithReflection_Success(t *testing.T) {
 	config := testAgentConfig("test-agent", "Test Agent", "gpt-4")
 	config.Runtime.SystemPrompt = "You are a helpful assistant"
 
-	agent := NewBaseAgent(config, provider, memory, toolManager, bus, logger)
+	agent := NewBaseAgent(config, provider, memory, toolManager, bus, logger, nil)
 
 	ctx := context.Background()
 	_ = agent.Init(ctx)
@@ -223,7 +223,7 @@ func TestReflectionExecutor_parseCritique(t *testing.T) {
 
 	config := testAgentConfig("test-agent", "Test Agent", "gpt-4")
 
-	agent := NewBaseAgent(config, provider, memory, toolManager, bus, logger)
+	agent := NewBaseAgent(config, provider, memory, toolManager, bus, logger, nil)
 	reflectionConfig := DefaultReflectionExecutorConfig()
 	executor := NewReflectionExecutor(agent, reflectionConfig)
 
@@ -256,7 +256,7 @@ func TestReflectionExecutor_extractScore(t *testing.T) {
 
 	config := testAgentConfig("test-agent", "Test Agent", "gpt-4")
 
-	agent := NewBaseAgent(config, provider, memory, toolManager, bus, logger)
+	agent := NewBaseAgent(config, provider, memory, toolManager, bus, logger, nil)
 	reflectionConfig := DefaultReflectionExecutorConfig()
 	executor := NewReflectionExecutor(agent, reflectionConfig)
 

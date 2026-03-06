@@ -37,7 +37,7 @@ func TestAgentRegistry_RegisterAndUnregister(t *testing.T) {
 	assert.False(t, r.IsRegistered(customType))
 
 	r.Register(customType, func(config types.AgentConfig, provider llm.Provider, memory MemoryManager, toolManager ToolManager, bus EventBus, logger *zap.Logger) (Agent, error) {
-		return NewBaseAgent(config, provider, memory, toolManager, bus, logger), nil
+		return NewBaseAgent(config, provider, memory, toolManager, bus, logger, nil), nil
 	})
 	assert.True(t, r.IsRegistered(customType))
 

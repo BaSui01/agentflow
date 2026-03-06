@@ -89,7 +89,7 @@ func newTypedAgentFactory(agentType AgentType) AgentFactory {
 				config.Metadata["skill_categories"] = joinSkillCategories(cats)
 			}
 		}
-		return NewBaseAgent(config, provider, memory, toolManager, bus, logger), nil
+		return NewBaseAgent(config, provider, memory, toolManager, bus, logger, nil), nil
 	}
 }
 

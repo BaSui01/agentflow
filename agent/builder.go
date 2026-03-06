@@ -14,6 +14,7 @@ import (
 	"github.com/BaSui01/agentflow/types"
 
 	"github.com/BaSui01/agentflow/agent/guardrails"
+	"github.com/BaSui01/agentflow/llm/observability"
 	"go.uber.org/zap"
 )
 
@@ -23,6 +24,7 @@ type AgentBuilder struct {
 	config       types.AgentConfig
 	provider     llm.Provider
 	toolProvider llm.Provider // 工具调用专用 Provider（可选，为 nil 时退化为 provider）
+	ledger       observability.Ledger
 	memory       MemoryManager
 	toolManager  ToolManager
 	bus          EventBus
@@ -85,6 +87,12 @@ func (b *AgentBuilder) WithProvider(provider llm.Provider) *AgentBuilder {
 // 如果不设置，所有调用都使用主 Provider。
 func (b *AgentBuilder) WithToolProvider(provider llm.Provider) *AgentBuilder {
 	b.toolProvider = provider
+	return b
+}
+
+// WithLedger 设置 cost/usage 落账器，用于 gateway 成本采集。
+func (b *AgentBuilder) WithLedger(ledger observability.Ledger) *AgentBuilder {
+	b.ledger = ledger
 	return b
 }
 
@@ -337,6 +345,7 @@ func (b *AgentBuilder) Build() (*BaseAgent, error) {
 		b.toolManager,
 		b.bus,
 		b.logger,
+		b.ledger,
 	)
 
 	// 设置工具专用 Provider（双模型模式）

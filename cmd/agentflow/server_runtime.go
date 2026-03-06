@@ -56,6 +56,7 @@ type Server struct {
 
 	hotReloadManager *config.HotReloadManager
 	configAPIHandler *config.ConfigAPIHandler
+	costHandler     *handlers.CostHandler
 
 	rateLimiterCancel       context.CancelFunc
 	tenantRateLimiterCancel context.CancelFunc

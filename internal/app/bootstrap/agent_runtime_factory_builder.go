@@ -7,6 +7,7 @@ import (
 	"github.com/BaSui01/agentflow/agent/runtime"
 	"github.com/BaSui01/agentflow/agent/skills"
 	"github.com/BaSui01/agentflow/llm"
+	"github.com/BaSui01/agentflow/llm/observability"
 	"github.com/BaSui01/agentflow/types"
 	"go.uber.org/zap"
 )
@@ -16,6 +17,7 @@ func RegisterDefaultRuntimeAgentFactory(
 	agentRegistry *agent.AgentRegistry,
 	provider llm.Provider,
 	toolProvider llm.Provider,
+	ledger observability.Ledger,
 	logger *zap.Logger,
 ) {
 	if provider == nil {
@@ -39,6 +41,9 @@ func RegisterDefaultRuntimeAgentFactory(
 		builder := runtime.NewBuilder(provider, logger).WithOptions(opts)
 		if toolProvider != nil {
 			builder = builder.WithToolProvider(toolProvider)
+		}
+		if ledger != nil {
+			builder = builder.WithLedger(ledger)
 		}
 		return builder.Build(context.Background(), cfg)
 	})

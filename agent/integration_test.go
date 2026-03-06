@@ -146,7 +146,7 @@ func TestBaseAgent_ExportConfiguration(t *testing.T) {
 }
 
 func TestBaseAgent_ValidateConfiguration_NoProvider(t *testing.T) {
-	ba := NewBaseAgent(testAgentConfig("test-1", "Test", ""), nil, nil, nil, nil, zap.NewNop())
+	ba := NewBaseAgent(testAgentConfig("test-1", "Test", ""), nil, nil, nil, nil, zap.NewNop(), nil)
 
 	err := ba.ValidateConfiguration()
 	require.Error(t, err)
@@ -169,7 +169,7 @@ func TestBaseAgent_ValidateConfiguration_MissingExecutors(t *testing.T) {
 	cfg.Extensions.LSP = &types.LSPConfig{Enabled: true}
 	cfg.Features.Memory = &types.MemoryConfig{Enabled: true}
 	cfg.Extensions.Observability = &types.ObservabilityConfig{Enabled: true}
-	ba := NewBaseAgent(cfg, &testProvider{name: "test"}, nil, nil, nil, zap.NewNop())
+	ba := NewBaseAgent(cfg, &testProvider{name: "test"}, nil, nil, nil, zap.NewNop(), nil)
 
 	err := ba.ValidateConfiguration()
 	require.Error(t, err)
@@ -255,7 +255,7 @@ func TestAsPromptEnhancerRunner(t *testing.T) {
 // ============================================================
 
 func newTestBaseAgent() *BaseAgent {
-	return NewBaseAgent(testAgentConfig("test-agent", "TestAgent", ""), &testProvider{name: "test"}, nil, nil, nil, zap.NewNop())
+	return NewBaseAgent(testAgentConfig("test-agent", "TestAgent", ""), &testProvider{name: "test"}, nil, nil, nil, zap.NewNop(), nil)
 }
 
 type integTestReflectionRunner struct{}

@@ -280,9 +280,9 @@ func demoFullModuleIntegrationReachability() {
 	_ = ref_llm_observability_ConversationTracer.ExportJSON
 	_ = ref_llm_observability_ConversationTracer.GetConversation
 	_ = ref_llm_observability_ConversationTracer.TraceTurn
+	_ = ref_llm_observability_CostTracker.Record
 	_ = ref_llm_observability_CostTracker.Reset
-	_ = ref_llm_observability_CostTracker.Summary
-	_ = ref_llm_observability_CostTracker.Track
+	_ = ref_llm_observability_CostTracker.TotalCost
 	_ = ref_llm_observability_Tracer.AddFeedback
 	_ = ref_llm_observability_Tracer.GetRun
 	_ = ref_llm_observability_Tracer.GetTrace

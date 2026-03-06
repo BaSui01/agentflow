@@ -50,7 +50,7 @@ func demoHierarchicalArchitecture(logger *zap.Logger) {
 	}
 
 	// 注意：实际使用时需要提供真实的 LLM provider，此处传 nil 仅演示结构
-	supervisor := agent.NewBaseAgent(supervisorConfig, nil, nil, nil, nil, logger)
+	supervisor := agent.NewBaseAgent(supervisorConfig, nil, nil, nil, nil, logger, nil)
 
 	// 2. 创建 Worker Agents
 	fmt.Println("2. 创建 Worker Agents")
@@ -69,7 +69,7 @@ func demoHierarchicalArchitecture(logger *zap.Logger) {
 				Temperature: 0.7,
 			},
 		}
-		worker := agent.NewBaseAgent(workerConfig, nil, nil, nil, nil, logger)
+		worker := agent.NewBaseAgent(workerConfig, nil, nil, nil, nil, logger, nil)
 		workers = append(workers, worker)
 	}
 
@@ -129,7 +129,7 @@ func demoMultiAgentCollaboration(logger *zap.Logger) {
 				Temperature: 0.7,
 			},
 		}
-		a := agent.NewBaseAgent(config, nil, nil, nil, nil, logger)
+		a := agent.NewBaseAgent(config, nil, nil, nil, nil, logger, nil)
 		agents = append(agents, a)
 	}
 

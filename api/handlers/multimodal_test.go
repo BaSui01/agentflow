@@ -158,6 +158,7 @@ func TestMultimodalHandler_ImageReferenceFlow(t *testing.T) {
 	h := NewMultimodalHandlerWithProviders(
 		nil,
 		nil,
+		nil,
 		map[string]image.Provider{"mock": img},
 		map[string]video.Provider{"runway": vdo},
 		"mock",
@@ -197,6 +198,7 @@ func TestMultimodalHandler_VideoReferenceFlow(t *testing.T) {
 	h := NewMultimodalHandlerWithProviders(
 		nil,
 		nil,
+		nil,
 		map[string]image.Provider{"mock": img},
 		map[string]video.Provider{"runway": vdo},
 		"mock",
@@ -234,6 +236,7 @@ func TestMultimodalHandler_PlanUnknownField(t *testing.T) {
 	h := NewMultimodalHandlerWithProviders(
 		&mockLLMProvider{},
 		nil,
+		nil,
 		map[string]image.Provider{},
 		map[string]video.Provider{},
 		"",
@@ -260,6 +263,7 @@ func TestMultimodalHandler_Capabilities(t *testing.T) {
 	img := &mockImageProvider{}
 	vdo := &mockVideoProvider{}
 	h := NewMultimodalHandlerWithProviders(
+		nil,
 		nil,
 		nil,
 		map[string]image.Provider{"mock": img},
@@ -301,6 +305,7 @@ func TestMultimodalHandler_UploadReferenceStoreFailure(t *testing.T) {
 	h := NewMultimodalHandlerWithProviders(
 		nil,
 		nil,
+		nil,
 		map[string]image.Provider{},
 		map[string]video.Provider{},
 		"",
@@ -338,6 +343,7 @@ func TestMultimodalHandler_ImageRejectsPrivateReferenceURL(t *testing.T) {
 	h := NewMultimodalHandlerWithProviders(
 		nil,
 		nil,
+		nil,
 		map[string]image.Provider{"mock": img},
 		map[string]video.Provider{},
 		"mock",
@@ -370,6 +376,7 @@ func TestMultimodalHandler_ImageRejectsPrivateReferenceURL(t *testing.T) {
 func TestMultimodalHandler_VideoRejectsPrivateReferenceURL(t *testing.T) {
 	vdo := &mockVideoProvider{}
 	h := NewMultimodalHandlerWithProviders(
+		nil,
 		nil,
 		nil,
 		map[string]image.Provider{},

@@ -25,13 +25,14 @@ type WorkflowAgentResolver func(ctx context.Context, agentID string) (agent.Agen
 
 // WorkflowRuntimeOptions carries optional runtime integrations for workflow steps.
 type WorkflowRuntimeOptions struct {
-	LLMProvider       llm.Provider
-	DefaultModel      string
-	AgentResolver     WorkflowAgentResolver
-	RetrievalStore    rag.VectorStore
-	EmbeddingProvider rag.EmbeddingProvider
-	CheckpointStore   agent.CheckpointStore
-	HITLManager       *hitl.InterruptManager
+	LLMProvider             llm.Provider
+	DefaultModel            string
+	AgentResolver           WorkflowAgentResolver
+	RetrievalStore         rag.VectorStore
+	EmbeddingProvider      rag.EmbeddingProvider
+	CheckpointStore        agent.CheckpointStore
+	WorkflowCheckpointStore workflow.CheckpointStore
+	HITLManager            *hitl.InterruptManager
 }
 
 func buildStepDependencies(opts WorkflowRuntimeOptions, logger *zap.Logger) engine.StepDependencies {
@@ -44,9 +45,10 @@ func buildStepDependencies(opts WorkflowRuntimeOptions, logger *zap.Logger) engi
 	_ = ensureAutoApproveHITL(hitlManager, logger)
 
 	return engine.StepDependencies{
-		Gateway:      newLLMProviderGateway(opts.LLMProvider, opts.DefaultModel),
-		ToolRegistry: hostedToolRegistryAdapter{registry: toolRegistry},
-		HumanHandler: hitlHumanInputHandler{requester: requester},
+		Gateway:       newLLMProviderGateway(opts.LLMProvider, opts.DefaultModel),
+		ToolRegistry:  hostedToolRegistryAdapter{registry: toolRegistry},
+		ChainRegistry: toolRegistry,
+		HumanHandler:  hitlHumanInputHandler{requester: requester},
 		AgentExecutor: resolverAgentExecutor{
 			resolver: opts.AgentResolver,
 		},
@@ -339,7 +341,18 @@ func (a workflowCheckpointManagerAdapter) SaveCheckpoint(ctx context.Context, cp
 	return a.manager.SaveCheckpoint(ctx, payload)
 }
 
+type checkpointStoreManagerAdapter struct {
+	store workflow.CheckpointStore
+}
+
+func (a checkpointStoreManagerAdapter) SaveCheckpoint(ctx context.Context, cp *workflow.EnhancedCheckpoint) error {
+	return a.store.Save(ctx, cp)
+}
+
 func buildWorkflowCheckpointManager(opts WorkflowRuntimeOptions) workflow.CheckpointManager {
+	if opts.WorkflowCheckpointStore != nil {
+		return checkpointStoreManagerAdapter{store: opts.WorkflowCheckpointStore}
+	}
 	if opts.CheckpointStore == nil {
 		return nil
 	}
