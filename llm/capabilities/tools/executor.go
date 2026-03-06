@@ -4,9 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
+	"github.com/BaSui01/agentflow/pkg/jsonschema"
 	"github.com/BaSui01/agentflow/types"
 	"go.uber.org/zap"
 )
@@ -344,7 +346,7 @@ func (e *DefaultExecutor) ExecuteOne(ctx context.Context, call types.ToolCall) t
 		}
 	}
 
-	// 3. 参数校验（简单校验：确保是有效 JSON）
+	// 3. 参数校验：JSON Schema 验证
 	if len(call.Arguments) > 0 {
 		var tmp any
 		if err := json.Unmarshal(call.Arguments, &tmp); err != nil {
@@ -352,6 +354,20 @@ func (e *DefaultExecutor) ExecuteOne(ctx context.Context, call types.ToolCall) t
 			result.Duration = time.Since(start)
 			e.logger.Error("invalid tool arguments", zap.String("name", call.Name), zap.Error(err))
 			return result
+		}
+		if len(meta.Schema.Parameters) > 0 {
+			if validationErrs := jsonschema.ValidateArgs(call.Arguments, meta.Schema.Parameters); len(validationErrs) > 0 {
+				msgs := make([]string, len(validationErrs))
+				for i, ve := range validationErrs {
+					msgs[i] = ve.Error()
+				}
+				result.Error = fmt.Sprintf("schema validation failed: %s", strings.Join(msgs, "; "))
+				result.Duration = time.Since(start)
+				e.logger.Warn("tool arguments schema validation failed",
+					zap.String("name", call.Name),
+					zap.Strings("errors", msgs))
+				return result
+			}
 		}
 	}
 
@@ -454,12 +470,22 @@ func (e *DefaultExecutor) executeStreamingTool(ctx context.Context, call types.T
 		}
 	}
 
-	// 参数校验
+	// 参数校验：JSON Schema 验证
 	if len(call.Arguments) > 0 {
 		var tmp any
 		if err := json.Unmarshal(call.Arguments, &tmp); err != nil {
 			ch <- ToolStreamEvent{Type: ToolStreamError, ToolName: call.Name, Error: fmt.Errorf("invalid arguments: %w", err)}
 			return
+		}
+		if len(meta.Schema.Parameters) > 0 {
+			if validationErrs := jsonschema.ValidateArgs(call.Arguments, meta.Schema.Parameters); len(validationErrs) > 0 {
+				msgs := make([]string, len(validationErrs))
+				for i, ve := range validationErrs {
+					msgs[i] = ve.Error()
+				}
+				ch <- ToolStreamEvent{Type: ToolStreamError, ToolName: call.Name, Error: fmt.Errorf("schema validation failed: %s", strings.Join(msgs, "; "))}
+				return
+			}
 		}
 	}
 

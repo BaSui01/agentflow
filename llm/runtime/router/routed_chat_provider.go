@@ -14,6 +14,7 @@ type RoutedChatProviderOptions struct {
 	DefaultStrategy RoutingStrategy
 	Fallback        Provider
 	Logger          *zap.Logger
+	TierRouter      *TierRouter
 }
 
 // RoutedChatProvider routes chat requests to providers selected by MultiProviderRouter.
@@ -22,6 +23,7 @@ type RoutedChatProvider struct {
 	defaultStrategy RoutingStrategy
 	fallback        Provider
 	logger          *zap.Logger
+	tierRouter      *TierRouter
 }
 
 // NewRoutedChatProvider creates a routed provider entrypoint.
@@ -39,6 +41,7 @@ func NewRoutedChatProvider(router *MultiProviderRouter, opts RoutedChatProviderO
 		defaultStrategy: defaultStrategy,
 		fallback:        opts.Fallback,
 		logger:          logger,
+		tierRouter:      opts.TierRouter,
 	}
 }
 
@@ -156,6 +159,10 @@ func (p *RoutedChatProvider) selectProvider(ctx context.Context, req *ChatReques
 	model := strings.TrimSpace(req.Model)
 	if model == "" {
 		return nil, types.NewInvalidRequestError("model is required")
+	}
+
+	if p.tierRouter != nil {
+		model = p.tierRouter.ResolveModel(req)
 	}
 
 	providerHint := extractProviderHint(req)

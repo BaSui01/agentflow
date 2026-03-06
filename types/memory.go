@@ -11,7 +11,8 @@ const (
 	MemoryLongTerm   MemoryKind = "semantic"
 	MemoryEpisodic   MemoryKind = "episodic"
 	MemorySemantic   MemoryKind = "semantic"
-	MemoryProcedural MemoryKind = "procedural"
+	MemoryProcedural     MemoryKind = "procedural"
+	MemoryObservational  MemoryKind = "observational"
 )
 
 // MemoryRecord is the cross-layer memory payload contract.
