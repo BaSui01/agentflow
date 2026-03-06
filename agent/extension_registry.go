@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/BaSui01/agentflow/agent/memory"
 	"github.com/BaSui01/agentflow/types"
 	"go.uber.org/zap"
 )
@@ -156,7 +155,7 @@ func (r *ExtensionRegistry) SaveToEnhancedMemory(ctx context.Context, agentID st
 	if err := r.enhancedMemory.SaveShortTerm(ctx, agentID, output.Content, metadata); err != nil {
 		r.logger.Warn("failed to save short-term memory", zap.Error(err))
 	}
-	event := &memory.EpisodicEvent{
+	event := &types.EpisodicEvent{
 		ID:        fmt.Sprintf("%s-%d", agentID, time.Now().UnixNano()),
 		AgentID:   agentID,
 		Type:      "task_execution",
@@ -178,37 +177,37 @@ func (r *ExtensionRegistry) SaveToEnhancedMemory(ctx context.Context, agentID st
 // ValidateConfiguration validates that enabled features have their executors set.
 func (r *ExtensionRegistry) ValidateConfiguration(cfg types.AgentConfig) []string {
 	var errors []string
-	if isReflectionEnabled(cfg) && r.reflectionExecutor == nil {
+	if cfg.IsReflectionEnabled() && r.reflectionExecutor == nil {
 		errors = append(errors, "reflection enabled but executor not set")
 	}
-	if isToolSelectionEnabled(cfg) && r.toolSelector == nil {
+	if cfg.IsToolSelectionEnabled() && r.toolSelector == nil {
 		errors = append(errors, "tool selection enabled but selector not set")
 	}
-	if isPromptEnhancerEnabled(cfg) && r.promptEnhancer == nil {
+	if cfg.IsPromptEnhancerEnabled() && r.promptEnhancer == nil {
 		errors = append(errors, "prompt enhancer enabled but enhancer not set")
 	}
-	if isSkillsEnabled(cfg) && r.skillManager == nil {
+	if cfg.IsSkillsEnabled() && r.skillManager == nil {
 		errors = append(errors, "skills enabled but manager not set")
 	}
-	if isMCPEnabled(cfg) && r.mcpServer == nil {
+	if cfg.IsMCPEnabled() && r.mcpServer == nil {
 		errors = append(errors, "MCP enabled but server not set")
 	}
-	if isLSPEnabled(cfg) && r.lspClient == nil {
+	if cfg.IsLSPEnabled() && r.lspClient == nil {
 		errors = append(errors, "LSP enabled but client not set")
 	}
-	if isEnhancedMemoryEnabled(cfg) && r.enhancedMemory == nil {
+	if cfg.IsMemoryEnabled() && r.enhancedMemory == nil {
 		errors = append(errors, "enhanced memory enabled but system not set")
 	}
-	if isObservabilityEnabled(cfg) && r.observabilitySystem == nil {
+	if cfg.IsObservabilityEnabled() && r.observabilitySystem == nil {
 		errors = append(errors, "observability enabled but system not set")
 	}
 	return errors
 }
 
 // ExecuteWithReflection delegates to the reflection executor.
-func (r *ExtensionRegistry) ExecuteWithReflection(ctx context.Context, input *Input) (any, error) {
+func (r *ExtensionRegistry) ExecuteWithReflection(ctx context.Context, input *Input) (*Output, error) {
 	if r.reflectionExecutor == nil {
-		return nil, fmt.Errorf("reflection executor not set")
+		return nil, NewError(types.ErrAgentNotReady, "reflection executor not set")
 	}
 	return r.reflectionExecutor.ExecuteWithReflection(ctx, input)
 }

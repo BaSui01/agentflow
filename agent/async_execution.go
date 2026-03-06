@@ -10,6 +10,7 @@ import (
 	"github.com/BaSui01/agentflow/types"
 
 	"github.com/google/uuid"
+	"go.opentelemetry.io/otel"
 	"go.uber.org/zap"
 )
 
@@ -54,8 +55,23 @@ func (e *AsyncExecutor) ExecuteAsync(ctx context.Context, input *Input) (*AsyncE
 	)
 
 	// 异步执行
-	go func() {
-		// P-010: 在执行前检查 ctx 是否已取消，避免不必要的工作
+	go func(ctx context.Context) {
+		ctx, span := otel.Tracer("agent").Start(ctx, "async_execution")
+		defer span.End()
+
+		defer func() {
+			if r := recover(); r != nil {
+				panicErr := fmt.Errorf("async execution panicked: %v", r)
+				e.logger.Error("async execution panicked",
+					zap.String("execution_id", execution.ID),
+					zap.Any("recover", r),
+					zap.Stack("stack"),
+				)
+				execution.setFailed(panicErr)
+				execution.notifyDone(ctx, executionResult{Err: panicErr})
+			}
+		}()
+
 		select {
 		case <-ctx.Done():
 			execution.setFailed(ctx.Err())
@@ -71,7 +87,7 @@ func (e *AsyncExecutor) ExecuteAsync(ctx context.Context, input *Input) (*AsyncE
 			execution.setCompleted(output)
 		}
 		execution.notifyDone(ctx, executionResult{Output: output, Err: err})
-	}()
+	}(ctx)
 
 	return execution, nil
 }
@@ -248,7 +264,7 @@ const (
 	ExecutionStatusRunning   ExecutionStatus = "running"
 	ExecutionStatusCompleted ExecutionStatus = "completed"
 	ExecutionStatusFailed    ExecutionStatus = "failed"
-	ExecutionStatusCanceled  ExecutionStatus = "canceled"
+	ExecutionStatusCancelled ExecutionStatus = "cancelled"
 )
 
 // Wait 等待执行完成。可安全地被多次调用，
@@ -353,6 +369,20 @@ func (m *SubagentManager) SpawnSubagent(ctx context.Context, subagent Agent, inp
 
 	// 异步执行
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				panicErr := fmt.Errorf("subagent execution panicked: %v", r)
+				m.logger.Error("subagent execution panicked",
+					zap.String("execution_id", execution.ID),
+					zap.String("subagent_id", subagent.ID()),
+					zap.Any("recover", r),
+					zap.Stack("stack"),
+				)
+				execution.setFailed(panicErr)
+				execution.notifyDone(ctx, executionResult{Err: panicErr})
+			}
+		}()
+
 		output, err := subagent.Execute(childCtx, inputCopy)
 		if err != nil {
 			execution.setFailed(err)

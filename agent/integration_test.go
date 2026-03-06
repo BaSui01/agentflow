@@ -5,8 +5,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/BaSui01/agentflow/agent/memory"
-	"github.com/BaSui01/agentflow/agent/skills"
 	"github.com/BaSui01/agentflow/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -260,13 +258,13 @@ func newTestBaseAgent() *BaseAgent {
 
 type integTestReflectionRunner struct{}
 
-func (r *integTestReflectionRunner) ExecuteWithReflection(ctx context.Context, input *Input) (any, error) {
+func (r *integTestReflectionRunner) ExecuteWithReflection(ctx context.Context, input *Input) (*Output, error) {
 	return nil, nil
 }
 
 type integTestToolSelectorRunner struct{}
 
-func (r *integTestToolSelectorRunner) SelectTools(ctx context.Context, task string, tools any) (any, error) {
+func (r *integTestToolSelectorRunner) SelectTools(ctx context.Context, task string, tools []types.ToolSchema) ([]types.ToolSchema, error) {
 	return nil, nil
 }
 
@@ -278,7 +276,7 @@ func (r *integTestPromptEnhancerRunner) EnhanceUserPrompt(prompt, ctx string) (s
 
 type integTestSkillDiscoverer struct{}
 
-func (r *integTestSkillDiscoverer) DiscoverSkills(ctx context.Context, task string) ([]*skills.Skill, error) {
+func (r *integTestSkillDiscoverer) DiscoverSkills(ctx context.Context, task string) ([]*types.DiscoveredSkill, error) {
 	return nil, nil
 }
 
@@ -294,16 +292,16 @@ func (r *integTestLSPLifecycle) Close() error { return nil }
 
 type integTestEnhancedMemory struct{}
 
-func (r *integTestEnhancedMemory) LoadWorking(ctx context.Context, agentID string) ([]any, error) {
+func (r *integTestEnhancedMemory) LoadWorking(ctx context.Context, agentID string) ([]types.MemoryEntry, error) {
 	return nil, nil
 }
-func (r *integTestEnhancedMemory) LoadShortTerm(ctx context.Context, agentID string, limit int) ([]any, error) {
+func (r *integTestEnhancedMemory) LoadShortTerm(ctx context.Context, agentID string, limit int) ([]types.MemoryEntry, error) {
 	return nil, nil
 }
 func (r *integTestEnhancedMemory) SaveShortTerm(ctx context.Context, agentID, content string, metadata map[string]any) error {
 	return nil
 }
-func (r *integTestEnhancedMemory) RecordEpisode(ctx context.Context, event *memory.EpisodicEvent) error {
+func (r *integTestEnhancedMemory) RecordEpisode(ctx context.Context, event *types.EpisodicEvent) error {
 	return nil
 }
 

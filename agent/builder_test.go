@@ -105,53 +105,53 @@ func TestAgentBuilder_WithEventBus(t *testing.T) {
 
 func TestAgentBuilder_WithReflection(t *testing.T) {
 	b := NewAgentBuilder(types.AgentConfig{}).WithReflection(nil)
-	assert.True(t, isReflectionEnabled(b.config))
+	assert.True(t, b.config.IsReflectionEnabled())
 	assert.NotNil(t, b.reflectionConfig)
 }
 
 func TestAgentBuilder_WithToolSelection(t *testing.T) {
 	b := NewAgentBuilder(types.AgentConfig{}).WithToolSelection(nil)
-	assert.True(t, isToolSelectionEnabled(b.config))
+	assert.True(t, b.config.IsToolSelectionEnabled())
 	assert.NotNil(t, b.toolSelectionConfig)
 }
 
 func TestAgentBuilder_WithPromptEnhancer(t *testing.T) {
 	b := NewAgentBuilder(types.AgentConfig{}).WithPromptEnhancer(nil)
-	assert.True(t, isPromptEnhancerEnabled(b.config))
+	assert.True(t, b.config.IsPromptEnhancerEnabled())
 	assert.NotNil(t, b.promptEnhancerConfig)
 }
 
 func TestAgentBuilder_WithMCP(t *testing.T) {
 	b := NewAgentBuilder(types.AgentConfig{}).WithMCP(nil)
-	assert.True(t, isMCPEnabled(b.config))
+	assert.True(t, b.config.IsMCPEnabled())
 }
 
 func TestAgentBuilder_WithLSP(t *testing.T) {
 	b := NewAgentBuilder(types.AgentConfig{}).WithLSP(nil)
-	assert.True(t, isLSPEnabled(b.config))
+	assert.True(t, b.config.IsLSPEnabled())
 }
 
 func TestAgentBuilder_WithEnhancedMemory(t *testing.T) {
 	b := NewAgentBuilder(types.AgentConfig{}).WithEnhancedMemory(nil)
-	assert.True(t, isEnhancedMemoryEnabled(b.config))
+	assert.True(t, b.config.IsMemoryEnabled())
 }
 
 func TestAgentBuilder_WithObservability(t *testing.T) {
 	b := NewAgentBuilder(types.AgentConfig{}).WithObservability(nil)
-	assert.True(t, isObservabilityEnabled(b.config))
+	assert.True(t, b.config.IsObservabilityEnabled())
 }
 
 func TestAgentBuilder_Build_NilProvider(t *testing.T) {
 	_, err := NewAgentBuilder(testAgentConfig("a1", "test", "gpt-4")).Build()
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "provider is required")
+	assert.Contains(t, err.Error(), "provider not configured")
 }
 
 func TestAgentBuilder_Build_WithErrors(t *testing.T) {
 	b := NewAgentBuilder(types.AgentConfig{}).WithProvider(nil)
 	_, err := b.Build()
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "builder has")
+	assert.Contains(t, err.Error(), "builder validation failed")
 }
 
 func TestAgentBuilder_Build_Success(t *testing.T) {
@@ -167,13 +167,13 @@ func TestAgentBuilder_Build_Success(t *testing.T) {
 
 func TestAgentBuilder_WithDefaultMCPServer(t *testing.T) {
 	b := NewAgentBuilder(types.AgentConfig{}).WithDefaultMCPServer("", "")
-	assert.True(t, isMCPEnabled(b.config))
+	assert.True(t, b.config.IsMCPEnabled())
 	assert.NotNil(t, b.mcpInstance)
 }
 
 func TestAgentBuilder_WithDefaultEnhancedMemory(t *testing.T) {
 	b := NewAgentBuilder(types.AgentConfig{}).WithDefaultEnhancedMemory(nil)
-	assert.True(t, isEnhancedMemoryEnabled(b.config))
+	assert.True(t, b.config.IsMemoryEnabled())
 	assert.NotNil(t, b.enhancedMemoryInstance)
 }
 

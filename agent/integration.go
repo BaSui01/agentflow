@@ -3,36 +3,29 @@ package agent
 import (
 	"context"
 	"fmt"
-	"github.com/BaSui01/agentflow/types"
 	"strings"
 	"time"
 
-	"github.com/BaSui01/agentflow/agent/memory"
+	"github.com/BaSui01/agentflow/types"
 	"go.uber.org/zap"
 )
 
 // EnhancedExecutionOptions 增强执行选项
 type EnhancedExecutionOptions struct {
-	// Reflection 选项
 	UseReflection bool
 
-	// 工具选择选项
 	UseToolSelection bool
 
-	// 提示词增强选项
 	UsePromptEnhancer bool
 
-	// Skills 选项
 	UseSkills   bool
 	SkillsQuery string
 
-	// 记忆选项
 	UseEnhancedMemory   bool
 	LoadWorkingMemory   bool
 	LoadShortTermMemory bool
 	SaveToMemory        bool
 
-	// 可观测性选项
 	UseObservability bool
 	RecordMetrics    bool
 	RecordTrace      bool
@@ -93,6 +86,7 @@ func (b *BaseAgent) EnableLSPWithLifecycle(client LSPClientRunner, lifecycle LSP
 // EnableEnhancedMemory 启用增强记忆系统
 func (b *BaseAgent) EnableEnhancedMemory(memorySystem EnhancedMemoryRunner) {
 	b.extensions.EnableEnhancedMemory(memorySystem)
+	b.memoryFacade = NewUnifiedMemoryFacade(b.memory, memorySystem, b.logger)
 }
 
 // EnableObservability 启用可观测性系统
@@ -101,8 +95,34 @@ func (b *BaseAgent) EnableObservability(obsSystem ObservabilityRunner) {
 }
 
 // ExecuteEnhanced 增强执行（集成所有功能）
+// Uses a middleware pipeline so that each step is an independent, composable unit.
 func (b *BaseAgent) ExecuteEnhanced(ctx context.Context, input *Input, options EnhancedExecutionOptions) (*Output, error) {
-	startTime := time.Now()
+	if input == nil {
+		return nil, NewError(types.ErrInputValidation, "input is nil")
+	}
+	if input.TraceID != "" {
+		ctx = types.WithTraceID(ctx, input.TraceID)
+	}
+	pipeline := NewExecutionPipeline(b.coreExecutor(options))
+
+	if options.UseObservability && b.extensions.ObservabilitySystemExt() != nil {
+		pipeline.Use(b.observabilityMiddleware(options))
+	}
+	if options.UseSkills && b.extensions.SkillManagerExt() != nil {
+		pipeline.Use(b.skillsMiddleware(options))
+	}
+	if options.UseEnhancedMemory && b.extensions.EnhancedMemoryExt() != nil {
+		pipeline.Use(b.memoryLoadMiddleware(options))
+	}
+	if options.UsePromptEnhancer && b.extensions.PromptEnhancerExt() != nil {
+		pipeline.Use(b.promptEnhancerMiddleware())
+	}
+	if options.UseToolSelection && b.extensions.ToolSelector() != nil && b.toolManager != nil {
+		pipeline.Use(b.toolSelectionMiddleware())
+	}
+	if options.UseEnhancedMemory && b.extensions.EnhancedMemoryExt() != nil && options.SaveToMemory {
+		pipeline.Use(b.memorySaveMiddleware())
+	}
 
 	b.logger.Info("starting enhanced execution",
 		zap.String("trace_id", input.TraceID),
@@ -114,26 +134,93 @@ func (b *BaseAgent) ExecuteEnhanced(ctx context.Context, input *Input, options E
 		zap.Bool("observability", options.UseObservability),
 	)
 
-	// 1. 可观测性：开始追踪
-	var traceID string
-	if options.UseObservability && b.extensions.ObservabilitySystemExt() != nil {
-		traceID = input.TraceID
-		b.logger.Debug("trace started", zap.String("trace_id", traceID))
-		b.extensions.ObservabilitySystemExt().StartTrace(traceID, b.ID())
-	}
+	return pipeline.Execute(ctx, input)
+}
 
-	// 2. Skills：发现并加载技能
-	var skillInstructions []string
-	if options.UseSkills && b.extensions.SkillManagerExt() != nil {
+// coreExecutor returns the innermost execution function (Reflection or plain Execute).
+func (b *BaseAgent) coreExecutor(options EnhancedExecutionOptions) ExecutionFunc {
+	return func(ctx context.Context, input *Input) (*Output, error) {
+		if options.UseReflection && b.extensions.ReflectionExecutor() != nil {
+			b.logger.Debug("executing with reflection")
+			output, err := b.extensions.ReflectionExecutor().ExecuteWithReflection(ctx, input)
+			if err != nil {
+				return nil, NewErrorWithCause(types.ErrAgentExecution, "reflection execution failed", err)
+			}
+			return output, nil
+		}
+		return b.Execute(ctx, input)
+	}
+}
+
+// --- context keys for inter-middleware data passing ---
+
+type enhancedCtxKey int
+
+const (
+	ctxKeySkillInstructions enhancedCtxKey = iota
+	ctxKeyMemoryContext
+)
+
+func withSkillInstructions(ctx context.Context, instructions []string) context.Context {
+	return context.WithValue(ctx, ctxKeySkillInstructions, instructions)
+}
+
+func skillInstructionsFromCtx(ctx context.Context) []string {
+	v, _ := ctx.Value(ctxKeySkillInstructions).([]string)
+	return v
+}
+
+func withMemoryContext(ctx context.Context, memCtx []string) context.Context {
+	return context.WithValue(ctx, ctxKeyMemoryContext, memCtx)
+}
+
+func memoryContextFromCtx(ctx context.Context) []string {
+	v, _ := ctx.Value(ctxKeyMemoryContext).([]string)
+	return v
+}
+
+// --- Middleware implementations ---
+
+func (b *BaseAgent) observabilityMiddleware(options EnhancedExecutionOptions) ExecutionMiddleware {
+	return func(ctx context.Context, input *Input, next ExecutionFunc) (*Output, error) {
+		startTime := time.Now()
+		traceID := input.TraceID
+		b.extensions.ObservabilitySystemExt().StartTrace(traceID, b.ID())
+
+		output, err := next(ctx, input)
+
+		if err != nil {
+			b.extensions.ObservabilitySystemExt().EndTrace(traceID, "failed", err)
+			return nil, err
+		}
+		duration := time.Since(startTime)
+		if options.RecordMetrics {
+			b.extensions.ObservabilitySystemExt().RecordTask(b.ID(), true, duration, output.TokensUsed, output.Cost, 0.8)
+		}
+		if options.RecordTrace {
+			b.extensions.ObservabilitySystemExt().EndTrace(traceID, "completed", nil)
+		}
+		b.logger.Info("enhanced execution completed",
+			zap.String("trace_id", input.TraceID),
+			zap.Duration("total_duration", duration),
+			zap.Int("tokens_used", output.TokensUsed),
+		)
+		return output, nil
+	}
+}
+
+func (b *BaseAgent) skillsMiddleware(options EnhancedExecutionOptions) ExecutionMiddleware {
+	return func(ctx context.Context, input *Input, next ExecutionFunc) (*Output, error) {
 		query := options.SkillsQuery
 		if query == "" {
 			query = input.Content
 		}
-		b.logger.Debug("discovering skills", zap.String("query", query))
+		b.logger.Debug("discovering skills", zap.String("trace_id", input.TraceID), zap.String("query", query))
 
+		var skillInstructions []string
 		found, err := b.extensions.SkillManagerExt().DiscoverSkills(ctx, query)
 		if err != nil {
-			b.logger.Warn("skill discovery failed", zap.Error(err))
+			b.logger.Warn("skill discovery failed", zap.String("trace_id", input.TraceID), zap.Error(err))
 		} else {
 			for _, s := range found {
 				if s == nil {
@@ -143,191 +230,116 @@ func (b *BaseAgent) ExecuteEnhanced(ctx context.Context, input *Input, options E
 			}
 			b.logger.Info("skills discovered", zap.Int("count", len(skillInstructions)))
 		}
-	}
 
-	enhancedPrompt := input.Content
-	if len(skillInstructions) > 0 {
-		enhancedPrompt = prependSkillInstructions(input.Content, skillInstructions)
+		if len(skillInstructions) > 0 {
+			input = shallowCopyInput(input)
+			input.Content = prependSkillInstructions(input.Content, skillInstructions)
+		}
+		ctx = withSkillInstructions(ctx, skillInstructions)
+		return next(ctx, input)
 	}
+}
 
-	// 3. 增强记忆：加载上下文
-	var memoryContext []string
-	if options.UseEnhancedMemory && b.extensions.EnhancedMemoryExt() != nil {
+func (b *BaseAgent) memoryLoadMiddleware(options EnhancedExecutionOptions) ExecutionMiddleware {
+	return func(ctx context.Context, input *Input, next ExecutionFunc) (*Output, error) {
+		var memoryContext []string
 		if options.LoadWorkingMemory {
-			b.logger.Debug("loading working memory")
+			b.logger.Debug("loading working memory", zap.String("trace_id", input.TraceID))
 			working, err := b.extensions.EnhancedMemoryExt().LoadWorking(ctx, b.ID())
 			if err != nil {
-				b.logger.Warn("failed to load working memory", zap.Error(err))
+				b.logger.Warn("failed to load working memory", zap.String("trace_id", input.TraceID), zap.Error(err))
 			} else {
-				for _, w := range working {
-					if wm, ok := w.(map[string]any); ok {
-						if content, ok := wm["content"].(string); ok {
-							memoryContext = append(memoryContext, content)
-						}
+				for _, entry := range working {
+					if entry.Content != "" {
+						memoryContext = append(memoryContext, entry.Content)
 					}
 				}
-				b.logger.Info("working memory loaded", zap.Int("count", len(working)))
+				b.logger.Info("working memory loaded", zap.String("trace_id", input.TraceID), zap.Int("count", len(working)))
 			}
 		}
 		if options.LoadShortTermMemory {
-			b.logger.Debug("loading short-term memory")
+			b.logger.Debug("loading short-term memory", zap.String("trace_id", input.TraceID))
 			shortTerm, err := b.extensions.EnhancedMemoryExt().LoadShortTerm(ctx, b.ID(), 5)
 			if err != nil {
-				b.logger.Warn("failed to load short-term memory", zap.Error(err))
+				b.logger.Warn("failed to load short-term memory", zap.String("trace_id", input.TraceID), zap.Error(err))
 			} else {
-				for _, st := range shortTerm {
-					if stm, ok := st.(map[string]any); ok {
-						if content, ok := stm["content"].(string); ok {
-							memoryContext = append(memoryContext, content)
-						}
+				for _, entry := range shortTerm {
+					if entry.Content != "" {
+						memoryContext = append(memoryContext, entry.Content)
 					}
 				}
-				b.logger.Info("short-term memory loaded", zap.Int("count", len(shortTerm)))
+				b.logger.Info("short-term memory loaded", zap.String("trace_id", input.TraceID), zap.Int("count", len(shortTerm)))
 			}
 		}
-	}
 
-	// 4. 提示词增强
-	if options.UsePromptEnhancer && b.extensions.PromptEnhancerExt() != nil {
-		b.logger.Debug("enhancing prompt")
-		// 构建上下文
+		ctx = withMemoryContext(ctx, memoryContext)
+		return next(ctx, input)
+	}
+}
+
+func (b *BaseAgent) promptEnhancerMiddleware() ExecutionMiddleware {
+	return func(ctx context.Context, input *Input, next ExecutionFunc) (*Output, error) {
+		b.logger.Debug("enhancing prompt", zap.String("trace_id", input.TraceID))
 		contextStr := ""
-		if len(skillInstructions) > 0 {
-			contextStr += "Skills: " + fmt.Sprintf("%v", skillInstructions) + "\n"
+		if si := skillInstructionsFromCtx(ctx); len(si) > 0 {
+			contextStr += "Skills: " + fmt.Sprintf("%v", si) + "\n"
 		}
-		if len(memoryContext) > 0 {
-			contextStr += "Memory: " + fmt.Sprintf("%v", memoryContext) + "\n"
+		if mc := memoryContextFromCtx(ctx); len(mc) > 0 {
+			contextStr += "Memory: " + fmt.Sprintf("%v", mc) + "\n"
 		}
 
 		enhanced, err := b.extensions.PromptEnhancerExt().EnhanceUserPrompt(input.Content, contextStr)
 		if err != nil {
-			b.logger.Warn("prompt enhancement failed", zap.Error(err))
+			b.logger.Warn("prompt enhancement failed", zap.String("trace_id", input.TraceID), zap.Error(err))
 		} else {
-			enhancedPrompt = enhanced
-			b.logger.Info("prompt enhanced")
+			input = shallowCopyInput(input)
+			input.Content = enhanced
+			b.logger.Info("prompt enhanced", zap.String("trace_id", input.TraceID))
 		}
+		return next(ctx, input)
 	}
-
-	// 更新输入内容
-	enhancedInput := &Input{
-		TraceID:   input.TraceID,
-		TenantID:  input.TenantID,
-		UserID:    input.UserID,
-		ChannelID: input.ChannelID,
-		Content:   enhancedPrompt,
-		Context:   input.Context,
-		Variables: input.Variables,
-	}
-
-	// 如果启用增强记忆，标记跳过基础记忆保存以避免重复
-	if options.UseEnhancedMemory && b.extensions.EnhancedMemoryExt() != nil && options.SaveToMemory {
-		if enhancedInput.Context == nil {
-			enhancedInput.Context = make(map[string]any)
-		}
-		enhancedInput.Context["_skip_base_memory"] = true
-	}
-
-	// 5. 动态工具选择
-	if options.UseToolSelection && b.extensions.ToolSelector() != nil && b.toolManager != nil {
-		b.logger.Debug("selecting tools dynamically")
-		// 获取可用工具
-		availableTools := b.toolManager.GetAllowedTools(b.ID())
-		selected, err := b.extensions.ToolSelector().SelectTools(ctx, enhancedPrompt, availableTools)
-		if err != nil {
-			b.logger.Warn("tool selection failed", zap.Error(err))
-		} else {
-			b.logger.Info("tools selected dynamically", zap.Any("selected", selected))
-			// 这里可以更新 Agent 的工具列表
-		}
-	}
-
-	// 6. 执行任务
-	var output *Output
-	var err error
-
-	if options.UseReflection && b.extensions.ReflectionExecutor() != nil {
-		// 使用 Reflection 执行
-		b.logger.Debug("executing with reflection")
-		result, execErr := b.extensions.ReflectionExecutor().ExecuteWithReflection(ctx, enhancedInput)
-		if execErr != nil {
-			return nil, fmt.Errorf("reflection execution failed: %w", execErr)
-		}
-
-		// 提取最终输出
-		if reflectionResult, ok := result.(interface{ GetFinalOutput() *Output }); ok {
-			output = reflectionResult.GetFinalOutput()
-		} else {
-			// 回退到普通执行
-			output, err = b.Execute(ctx, enhancedInput)
-		}
-	} else {
-		// 普通执行
-		output, err = b.Execute(ctx, enhancedInput)
-	}
-
-	if err != nil {
-		// 可观测性：记录错误
-		if options.UseObservability && b.extensions.ObservabilitySystemExt() != nil {
-			b.logger.Error("execution failed", zap.Error(err))
-			b.extensions.ObservabilitySystemExt().EndTrace(traceID, "failed", err)
-		}
-		return nil, err
-	}
-
-	// 7. 保存到增强记忆
-	if options.UseEnhancedMemory && b.extensions.EnhancedMemoryExt() != nil && options.SaveToMemory {
-		b.logger.Debug("saving to enhanced memory")
-
-		// 保存短期记忆
-		metadata := map[string]any{
-			"trace_id": input.TraceID,
-			"tokens":   output.TokensUsed,
-			"cost":     output.Cost,
-		}
-		if err := b.extensions.EnhancedMemoryExt().SaveShortTerm(ctx, b.ID(), output.Content, metadata); err != nil {
-			b.logger.Warn("failed to save short-term memory", zap.Error(err))
-		}
-
-		// 记录情节
-		event := &memory.EpisodicEvent{
-			ID:        fmt.Sprintf("%s-%d", b.ID(), time.Now().UnixNano()),
-			AgentID:   b.ID(),
-			Type:      "task_execution",
-			Content:   output.Content,
-			Timestamp: time.Now(),
-			Duration:  output.Duration,
-			Context: map[string]any{
-				"trace_id":   input.TraceID,
-				"tokens":     output.TokensUsed,
-				"cost":       output.Cost,
-				"reflection": options.UseReflection,
-			},
-		}
-		if err := b.extensions.EnhancedMemoryExt().RecordEpisode(ctx, event); err != nil {
-			b.logger.Warn("failed to record episode", zap.Error(err))
-		}
-	}
-
-	// 8. 可观测性：记录指标
-	if options.UseObservability && b.extensions.ObservabilitySystemExt() != nil {
-		duration := time.Since(startTime)
-		if options.RecordMetrics {
-			b.logger.Debug("recording metrics")
-			b.extensions.ObservabilitySystemExt().RecordTask(b.ID(), true, duration, output.TokensUsed, output.Cost, 0.8)
-		}
-		if options.RecordTrace {
-			b.extensions.ObservabilitySystemExt().EndTrace(traceID, "completed", nil)
-		}
-	}
-
-	b.logger.Info("enhanced execution completed",
-		zap.String("trace_id", input.TraceID),
-		zap.Duration("total_duration", time.Since(startTime)),
-		zap.Int("tokens_used", output.TokensUsed),
-	)
-
-	return output, nil
 }
+
+func (b *BaseAgent) toolSelectionMiddleware() ExecutionMiddleware {
+	return func(ctx context.Context, input *Input, next ExecutionFunc) (*Output, error) {
+		b.logger.Debug("selecting tools dynamically", zap.String("trace_id", input.TraceID))
+		availableTools := b.toolManager.GetAllowedTools(b.ID())
+		selected, err := b.extensions.ToolSelector().SelectTools(ctx, input.Content, availableTools)
+		if err != nil {
+			b.logger.Warn("tool selection failed", zap.String("trace_id", input.TraceID), zap.Error(err))
+		} else {
+			b.logger.Info("tools selected dynamically", zap.String("trace_id", input.TraceID), zap.Any("selected", selected))
+		}
+		return next(ctx, input)
+	}
+}
+
+func (b *BaseAgent) memorySaveMiddleware() ExecutionMiddleware {
+	return func(ctx context.Context, input *Input, next ExecutionFunc) (*Output, error) {
+		output, err := next(ctx, input)
+		if err != nil {
+			return nil, err
+		}
+		b.logger.Debug("saving to enhanced memory", zap.String("trace_id", input.TraceID))
+		b.extensions.SaveToEnhancedMemory(ctx, b.ID(), input, output, false)
+		return output, nil
+	}
+}
+
+// shallowCopyInput creates a shallow copy of Input so that middlewares
+// can safely mutate Content/Context without affecting the caller's value.
+func shallowCopyInput(in *Input) *Input {
+	cp := *in
+	if in.Context != nil {
+		cp.Context = make(map[string]any, len(in.Context))
+		for k, v := range in.Context {
+			cp.Context[k] = v
+		}
+	}
+	return &cp
+}
+
+// --- Remaining helpers (unchanged) ---
 
 // GetFeatureStatus 获取功能启用状态
 func (b *BaseAgent) GetFeatureStatus() map[string]bool {
@@ -358,13 +370,12 @@ func (b *BaseAgent) PrintFeatureStatus() {
 func (b *BaseAgent) ValidateConfiguration() error {
 	validationErrors := b.extensions.ValidateConfiguration(b.config)
 
-	// 检查必需组件
 	if b.provider == nil {
 		validationErrors = append(validationErrors, "provider not set")
 	}
 
 	if len(validationErrors) > 0 {
-		return fmt.Errorf("configuration validation failed: %s", strings.Join(validationErrors, "; "))
+		return NewError(types.ErrInputValidation, "configuration validation failed: "+strings.Join(validationErrors, "; "))
 	}
 
 	b.logger.Info("configuration validated successfully")
@@ -388,7 +399,6 @@ func (b *BaseAgent) GetFeatureMetrics() map[string]any {
 		},
 	}
 
-	// 添加功能计数
 	enabledCount := 0
 	for _, enabled := range status {
 		if enabled {
@@ -444,14 +454,14 @@ func (b *BaseAgent) ExportConfiguration() map[string]any {
 		"model":       b.config.LLM.Model,
 		"provider":    b.config.LLM.Provider,
 		"features": map[string]bool{
-			"reflection":      isReflectionEnabled(b.config),
-			"tool_selection":  isToolSelectionEnabled(b.config),
-			"prompt_enhancer": isPromptEnhancerEnabled(b.config),
-			"skills":          isSkillsEnabled(b.config),
-			"mcp":             isMCPEnabled(b.config),
-			"lsp":             isLSPEnabled(b.config),
-			"enhanced_memory": isEnhancedMemoryEnabled(b.config),
-			"observability":   isObservabilityEnabled(b.config),
+			"reflection":      b.config.IsReflectionEnabled(),
+			"tool_selection":  b.config.IsToolSelectionEnabled(),
+			"prompt_enhancer": b.config.IsPromptEnhancerEnabled(),
+			"skills":          b.config.IsSkillsEnabled(),
+			"mcp":             b.config.IsMCPEnabled(),
+			"lsp":             b.config.IsLSPEnabled(),
+			"enhanced_memory": b.config.IsMemoryEnabled(),
+			"observability":   b.config.IsObservabilityEnabled(),
 		},
 		"tools":    b.config.Runtime.Tools,
 		"metadata": b.config.Metadata,
@@ -469,8 +479,12 @@ type reflectionRunnerAdapter struct {
 	executor *ReflectionExecutor
 }
 
-func (a *reflectionRunnerAdapter) ExecuteWithReflection(ctx context.Context, input *Input) (any, error) {
-	return a.executor.ExecuteWithReflection(ctx, input)
+func (a *reflectionRunnerAdapter) ExecuteWithReflection(ctx context.Context, input *Input) (*Output, error) {
+	result, err := a.executor.ExecuteWithReflection(ctx, input)
+	if err != nil {
+		return nil, err
+	}
+	return result.FinalOutput, nil
 }
 
 // AsReflectionRunner wraps a *ReflectionExecutor as a ReflectionRunner.
@@ -478,22 +492,10 @@ func AsReflectionRunner(executor *ReflectionExecutor) ReflectionRunner {
 	return &reflectionRunnerAdapter{executor: executor}
 }
 
-// toolSelectorRunnerAdapter wraps *DynamicToolSelector to satisfy DynamicToolSelectorRunner.
-type toolSelectorRunnerAdapter struct {
-	selector *DynamicToolSelector
-}
-
-func (a *toolSelectorRunnerAdapter) SelectTools(ctx context.Context, task string, availableTools any) (any, error) {
-	tools, ok := availableTools.([]types.ToolSchema)
-	if !ok {
-		return nil, fmt.Errorf("availableTools: expected []types.ToolSchema, got %T", availableTools)
-	}
-	return a.selector.SelectTools(ctx, task, tools)
-}
-
 // AsToolSelectorRunner wraps a *DynamicToolSelector as a DynamicToolSelectorRunner.
+// Since the interface now uses concrete types, this is a direct cast.
 func AsToolSelectorRunner(selector *DynamicToolSelector) DynamicToolSelectorRunner {
-	return &toolSelectorRunnerAdapter{selector: selector}
+	return selector
 }
 
 // promptEnhancerRunnerAdapter wraps *PromptEnhancer to satisfy PromptEnhancerRunner.
@@ -508,4 +510,48 @@ func (a *promptEnhancerRunnerAdapter) EnhanceUserPrompt(prompt, context string) 
 // AsPromptEnhancerRunner wraps a *PromptEnhancer as a PromptEnhancerRunner.
 func AsPromptEnhancerRunner(enhancer *PromptEnhancer) PromptEnhancerRunner {
 	return &promptEnhancerRunnerAdapter{enhancer: enhancer}
+}
+
+// =============================================================================
+// Execution Pipeline (middleware chain)
+// =============================================================================
+
+// ExecutionFunc is the core agent execution function signature.
+type ExecutionFunc func(ctx context.Context, input *Input) (*Output, error)
+
+// ExecutionMiddleware wraps an ExecutionFunc, adding pre/post processing.
+// Call next to proceed to the next middleware (or the core executor).
+type ExecutionMiddleware func(ctx context.Context, input *Input, next ExecutionFunc) (*Output, error)
+
+// ExecutionPipeline chains middlewares around a core ExecutionFunc.
+type ExecutionPipeline struct {
+	middlewares []ExecutionMiddleware
+	core        ExecutionFunc
+}
+
+// NewExecutionPipeline creates a pipeline that wraps the given core function.
+func NewExecutionPipeline(core ExecutionFunc) *ExecutionPipeline {
+	return &ExecutionPipeline{core: core}
+}
+
+// Use appends one or more middlewares. They execute in the order added
+// (first added = outermost wrapper).
+func (p *ExecutionPipeline) Use(mws ...ExecutionMiddleware) {
+	p.middlewares = append(p.middlewares, mws...)
+}
+
+// Execute runs the full middleware chain followed by the core function.
+func (p *ExecutionPipeline) Execute(ctx context.Context, input *Input) (*Output, error) {
+	if input == nil {
+		return nil, NewError(types.ErrInputValidation, "pipeline input is nil")
+	}
+	fn := p.core
+	for i := len(p.middlewares) - 1; i >= 0; i-- {
+		mw := p.middlewares[i]
+		next := fn
+		fn = func(ctx context.Context, input *Input) (*Output, error) {
+			return mw(ctx, input, next)
+		}
+	}
+	return fn(ctx, input)
 }

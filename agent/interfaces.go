@@ -22,8 +22,6 @@ import (
 	"github.com/BaSui01/agentflow/llm"
 	llmtools "github.com/BaSui01/agentflow/llm/capabilities/tools"
 
-	"github.com/BaSui01/agentflow/agent/memory"
-	"github.com/BaSui01/agentflow/agent/skills"
 	"github.com/BaSui01/agentflow/types"
 
 	"go.uber.org/zap"
@@ -32,14 +30,13 @@ import (
 // ReflectionRunner executes a task with iterative self-reflection.
 // Implemented by: *ReflectionExecutor (agent/reflection.go)
 type ReflectionRunner interface {
-	ExecuteWithReflection(ctx context.Context, input *Input) (any, error)
+	ExecuteWithReflection(ctx context.Context, input *Input) (*Output, error)
 }
 
 // DynamicToolSelectorRunner dynamically selects tools relevant to a given task.
-// This uses any for availableTools to match the integration.go call site signature.
-// Implemented by: *DynamicToolSelector (agent/tool_selector.go) via adapter
+// Implemented by: *DynamicToolSelector (agent/tool_selector.go)
 type DynamicToolSelectorRunner interface {
-	SelectTools(ctx context.Context, task string, availableTools any) (any, error)
+	SelectTools(ctx context.Context, task string, availableTools []types.ToolSchema) ([]types.ToolSchema, error)
 }
 
 // PromptEnhancerRunner enhances user prompts with additional context.
@@ -51,7 +48,7 @@ type PromptEnhancerRunner interface {
 // SkillDiscoverer discovers skills relevant to a task.
 // Implemented by: *skills.DefaultSkillManager (agent/skills/)
 type SkillDiscoverer interface {
-	DiscoverSkills(ctx context.Context, task string) ([]*skills.Skill, error)
+	DiscoverSkills(ctx context.Context, task string) ([]*types.DiscoveredSkill, error)
 }
 
 // MCPServerRunner represents an MCP server instance.
@@ -75,10 +72,10 @@ type LSPLifecycleOwner interface {
 // EnhancedMemoryRunner provides advanced memory capabilities.
 // Implemented by: *memory.EnhancedMemorySystem (agent/memory/)
 type EnhancedMemoryRunner interface {
-	LoadWorking(ctx context.Context, agentID string) ([]any, error)
-	LoadShortTerm(ctx context.Context, agentID string, limit int) ([]any, error)
+	LoadWorking(ctx context.Context, agentID string) ([]types.MemoryEntry, error)
+	LoadShortTerm(ctx context.Context, agentID string, limit int) ([]types.MemoryEntry, error)
 	SaveShortTerm(ctx context.Context, agentID, content string, metadata map[string]any) error
-	RecordEpisode(ctx context.Context, event *memory.EpisodicEvent) error
+	RecordEpisode(ctx context.Context, event *types.EpisodicEvent) error
 }
 
 // ObservabilityRunner provides metrics, tracing, and logging.
@@ -601,4 +598,46 @@ func (at *AgentTool) Name() string {
 // Agent returns the underlying Agent instance.
 func (at *AgentTool) Agent() Agent {
 	return at.agent
+}
+
+// =============================================================================
+// Team (multi-agent collaboration)
+// =============================================================================
+
+type TeamMember struct {
+	Agent Agent
+	Role  string
+}
+
+type TeamResult struct {
+	Content    string
+	TokensUsed int
+	Cost       float64
+	Duration   time.Duration
+	Metadata   map[string]any
+}
+
+type TeamOption func(*TeamOptions)
+type TeamOptions struct {
+	MaxRounds int
+	Timeout   time.Duration
+	Context   map[string]any
+}
+
+func WithMaxRounds(n int) TeamOption {
+	return func(o *TeamOptions) { o.MaxRounds = n }
+}
+
+func WithTeamTimeout(d time.Duration) TeamOption {
+	return func(o *TeamOptions) { o.Timeout = d }
+}
+
+func WithTeamContext(ctx map[string]any) TeamOption {
+	return func(o *TeamOptions) { o.Context = ctx }
+}
+
+type Team interface {
+	ID() string
+	Members() []TeamMember
+	Execute(ctx context.Context, task string, opts ...TeamOption) (*TeamResult, error)
 }
