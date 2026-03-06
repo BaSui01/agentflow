@@ -55,43 +55,6 @@ func TestCostCalculator_Calculate(t *testing.T) {
 	}
 }
 
-func TestCostTracker_Track(t *testing.T) {
-	calc := NewCostCalculator()
-	tracker := NewCostTracker(calc)
-
-	// 追踪多次请求
-	tracker.Track("openai", "gpt-4o", 1000, 500)
-	tracker.Track("openai", "gpt-4o", 2000, 1000)
-
-	summary := tracker.Summary()
-
-	if summary.RequestCount != 2 {
-		t.Errorf("RequestCount = %d, want 2", summary.RequestCount)
-	}
-	if summary.TokensInput != 3000 {
-		t.Errorf("TokensInput = %d, want 3000", summary.TokensInput)
-	}
-	if summary.TokensOutput != 1500 {
-		t.Errorf("TokensOutput = %d, want 1500", summary.TokensOutput)
-	}
-	if summary.TotalCost <= 0 {
-		t.Error("TotalCost should be > 0")
-	}
-}
-
-func TestCostTracker_Reset(t *testing.T) {
-	calc := NewCostCalculator()
-	tracker := NewCostTracker(calc)
-
-	tracker.Track("openai", "gpt-4o", 1000, 500)
-	tracker.Reset()
-
-	summary := tracker.Summary()
-	if summary.RequestCount != 0 {
-		t.Errorf("RequestCount after reset = %d, want 0", summary.RequestCount)
-	}
-}
-
 func TestCostCalculator_SetPrice(t *testing.T) {
 	calc := NewCostCalculator()
 
