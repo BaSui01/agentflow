@@ -24,6 +24,28 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Changed
 - Upgraded version to 1.6.0
 - Exported `SortedAgentIDs`, `AggregateUsage`, `MergeMetadata` from `agent/collaboration` for cross-package reuse
+- Unified error system: `types.Error` → `agent.Error` → `llm.Error` → `core.StepError` → `api.ErrorInfo` layered wrapping
+- Eliminated `config` → `api` transitive dependency; config types inlined locally
+- Migrated handler orchestration logic to `internal/usecase/` (agent_service, chat_service)
+- Migrated `ReferenceStore` from `api/handlers/` to `pkg/storage/`
+- Migrated `GormToolRegistryStore` from `api/handlers/` to `agent/hosted/store.go`
+- Agent root package slimmed: extracted `errors.go`, `request.go`, `run_config.go`, `memory_facade.go`
+- All workflow step errors unified to `core.NewStepError` format
+- DSL parser/validator: magic strings replaced with `core.StepType` constants
+- Config defaults: hardcoded addresses/values extracted to named constants
+- Architecture guard expanded: 8 tests covering file budget, dependency direction, handler infra imports, DSL magic strings
+
+### Fixed
+- **Security**: shell_tool command injection hardened (dangerous patterns + path traversal); docker_exec path traversal; WebSocket Origin validation; CORS `"*"` rejection; audio/multimodal file path traversal
+- **Goroutine safety**: added `defer recover()` to federation/hierarchical/TreeOfThought/reasoning goroutines; recover errors propagated via channels instead of silently logged
+- **Resource leaks**: longrunning executor map cleanup; InMemoryVectorStore max entries + eviction; MCP CloseAll stops healthLoop; idempotency Manager exposes Close(); discovery timer reuse
+- **Concurrency**: skills registry TOCTOU eliminated (Lock-recheck pattern); RefreshIndex single-Lock; configMu separated from execMu in agent base; shared_state watcher skip logged
+- **Input validation**: nil input guards on react.go/integration.go/Pipeline.Execute; skills manager/skill empty-value checks; prepareChatRequest messages validation
+- **Observability**: TraceID injected into ctx at ExecuteEnhanced entry; all integration middleware logs carry trace_id; dag_executor logs enriched with trace_id/workflow_id; RequestLogger records request_id; core modules panic on nil logger
+- **API contract**: health endpoint uses unified `api.Response`; SSE errors aligned to `api.ErrorInfo`; agent list pagination metadata; `types.Error.HTTPStatus` hidden from JSON (`json:"-"`)
+- **State machine**: A2A errors mapped to `types.ErrorCode`; `StepTypeHumanInput` constant added; `StorageType` constants for config loader
+- Architecture guard: `pkg/middleware` allowlist updated; `tool_registry_service.go` gorm dependency removed
+- Test fixes: streaming/gateway logger nil panic; workflow step error message assertions
 
 ## [1.5.0] - 2026-03-06
 
