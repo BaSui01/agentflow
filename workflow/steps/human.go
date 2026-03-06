@@ -64,7 +64,8 @@ func (s *HumanStep) Execute(ctx context.Context, input core.StepInput) (core.Ste
 
 	output := core.StepOutput{
 		Data: map[string]any{
-			"input": result,
+			"input":     result.Value,
+			"option_id": result.OptionID,
 		},
 		Latency: time.Since(start),
 	}

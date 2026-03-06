@@ -53,6 +53,7 @@ type QdrantStore struct {
 
 // 新克德兰特斯多尔创建了克德兰特后卫矢量斯多尔.
 func NewQdrantStore(cfg QdrantConfig, logger *zap.Logger) *QdrantStore {
+	// O-004: optional module, nil-safe
 	if logger == nil {
 		logger = zap.NewNop()
 	}
@@ -122,7 +123,11 @@ func (s *QdrantStore) ensureCollection(ctx context.Context, vectorSize int) erro
 		}
 
 		endpoint := fmt.Sprintf("%s/collections/%s", s.baseURL, url.PathEscape(s.cfg.Collection))
-		reqBody, _ := json.Marshal(body)
+		reqBody, err := json.Marshal(body)
+		if err != nil {
+			s.ensureErr = fmt.Errorf("marshal qdrant collection body: %w", err)
+			return
+		}
 		req, err := http.NewRequestWithContext(ctx, http.MethodPut, endpoint, bytes.NewReader(reqBody))
 		if err != nil {
 			s.ensureErr = err

@@ -290,7 +290,7 @@ func (p *Parser) resolveStep(def *NodeDef, dsl *WorkflowDSL, vars map[string]any
 
 	// 根据类型创建 Step
 	switch stepDef.Type {
-	case "llm":
+	case string(core.StepTypeLLM):
 		prompt := p.interpolate(stepDef.Prompt, vars)
 		// Resolve model name: if an agent is referenced, look up its model;
 		// otherwise fall back to config["model"] or empty string.
@@ -315,7 +315,7 @@ func (p *Parser) resolveStep(def *NodeDef, dsl *WorkflowDSL, vars map[string]any
 		}
 		return p.newEngineBackedStep(spec, "llm")
 
-	case "tool":
+	case string(core.StepTypeTool):
 		params := make(map[string]any)
 		for k, v := range stepDef.Config {
 			if s, ok := v.(string); ok {
@@ -332,7 +332,7 @@ func (p *Parser) resolveStep(def *NodeDef, dsl *WorkflowDSL, vars map[string]any
 		}
 		return p.newEngineBackedStep(spec, stepDef.Tool)
 
-	case "human_input":
+	case string(core.StepTypeHumanInput):
 		spec := engine.StepSpec{
 			ID:          def.ID,
 			Type:        core.StepTypeHuman,
@@ -341,16 +341,16 @@ func (p *Parser) resolveStep(def *NodeDef, dsl *WorkflowDSL, vars map[string]any
 		if inputType, ok := stepDef.Config["type"].(string); ok {
 			spec.InputType = inputType
 		}
-		return p.newEngineBackedStep(spec, "human_input")
+		return p.newEngineBackedStep(spec, string(core.StepTypeHumanInput))
 
-	case "code":
+	case string(core.StepTypeCode):
 		spec := engine.StepSpec{
 			ID:   def.ID,
 			Type: core.StepTypeCode,
 		}
 		return p.newEngineBackedStep(spec, "code")
 
-	case "agent":
+	case string(core.StepTypeAgent):
 		spec := engine.StepSpec{
 			ID:      def.ID,
 			Type:    core.StepTypeAgent,
@@ -365,7 +365,7 @@ func (p *Parser) resolveStep(def *NodeDef, dsl *WorkflowDSL, vars map[string]any
 		}
 		return p.newEngineBackedStep(spec, "agent")
 
-	case "orchestration":
+	case string(core.StepTypeOrchestration):
 		if stepDef.Orchestration == nil {
 			return nil, fmt.Errorf("orchestration step requires orchestration definition")
 		}
@@ -381,7 +381,7 @@ func (p *Parser) resolveStep(def *NodeDef, dsl *WorkflowDSL, vars map[string]any
 		}
 		return p.newEngineBackedStep(spec, "orchestration")
 
-	case "chain":
+	case string(core.StepTypeChain):
 		if stepDef.Chain == nil {
 			return nil, fmt.Errorf("chain step requires chain definition")
 		}
@@ -410,7 +410,7 @@ func (p *Parser) resolveStep(def *NodeDef, dsl *WorkflowDSL, vars map[string]any
 		}
 		return p.newEngineBackedStep(spec, "chain")
 
-	case "passthrough":
+	case string(core.StepTypePassthrough):
 		return &workflow.PassthroughStep{}, nil
 
 	default:
@@ -568,13 +568,13 @@ func (noopToolRegistry) ExecuteTool(ctx context.Context, name string, params map
 
 type noopHumanHandler struct{}
 
-func (noopHumanHandler) RequestInput(ctx context.Context, prompt string, inputType string, options []string) (any, error) {
+func (noopHumanHandler) RequestInput(ctx context.Context, prompt string, inputType string, options []string) (*core.HumanInputResult, error) {
 	return nil, fmt.Errorf("step dependency not configured")
 }
 
 type noopAgentExecutor struct{}
 
-func (noopAgentExecutor) Execute(ctx context.Context, input any) (any, error) {
+func (noopAgentExecutor) Execute(ctx context.Context, input map[string]any) (*core.AgentExecutionOutput, error) {
 	return nil, fmt.Errorf("step dependency not configured")
 }
 

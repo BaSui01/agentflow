@@ -33,7 +33,7 @@ func (r testReranker) Rerank(context.Context, string, []rag.RetrievalResult) ([]
 	return r.results, nil
 }
 
-func TestExecutor_DAG_WithRetrievalSteps(t *testing.T) {
+func TestExecutor_Sequential_WithRetrievalSteps(t *testing.T) {
 	exec := NewExecutor()
 
 	hybrid := workflowsteps.NewHybridRetrieveStep("hybrid-1", testHybridRetriever{
@@ -52,18 +52,17 @@ func TestExecutor_DAG_WithRetrievalSteps(t *testing.T) {
 			},
 		},
 		{
-			ID:           "rerank",
-			Step:         rerank,
-			Dependencies: []string{"hybrid"},
-			Input:        core.StepInput{},
+			ID:    "rerank",
+			Step:  rerank,
+			Input: core.StepInput{},
 		},
 	}
 
-	result, err := exec.Execute(context.Background(), ModeDAG, nodes, func(ctx context.Context, step core.StepProtocol, input core.StepInput) (core.StepOutput, error) {
+	result, err := exec.Execute(context.Background(), ModeSequential, nodes, func(ctx context.Context, step core.StepProtocol, input core.StepInput) (core.StepOutput, error) {
 		return step.Execute(ctx, input)
 	})
 	if err != nil {
-		t.Fatalf("dag execute failed: %v", err)
+		t.Fatalf("sequential execute failed: %v", err)
 	}
 	if _, ok := result.Outputs["hybrid"]; !ok {
 		t.Fatal("missing hybrid output")
@@ -78,7 +77,7 @@ func TestExecutor_DAG_WithRetrievalSteps(t *testing.T) {
 	}
 }
 
-func TestExecutor_DAG_WithMultiHopRetrieveStep(t *testing.T) {
+func TestExecutor_Sequential_WithMultiHopRetrieveStep(t *testing.T) {
 	exec := NewExecutor()
 	chain := &rag.ReasoningChain{
 		Hops: []rag.ReasoningHop{
@@ -97,11 +96,11 @@ func TestExecutor_DAG_WithMultiHopRetrieveStep(t *testing.T) {
 			},
 		},
 	}
-	result, err := exec.Execute(context.Background(), ModeDAG, nodes, func(ctx context.Context, s core.StepProtocol, in core.StepInput) (core.StepOutput, error) {
+	result, err := exec.Execute(context.Background(), ModeSequential, nodes, func(ctx context.Context, s core.StepProtocol, in core.StepInput) (core.StepOutput, error) {
 		return s.Execute(ctx, in)
 	})
 	if err != nil {
-		t.Fatalf("dag execute failed: %v", err)
+		t.Fatalf("sequential execute failed: %v", err)
 	}
 	out, ok := result.Outputs["mh"]
 	if !ok {

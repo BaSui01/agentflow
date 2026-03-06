@@ -187,7 +187,7 @@ func TestLLMStep_Execute_GatewayError(t *testing.T) {
 
 	_, err := step.Execute(context.Background(), nil)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "invoke failed")
+	assert.Contains(t, err.Error(), "step execution failed")
 	assert.Contains(t, err.Error(), "API rate limited")
 }
 
@@ -479,7 +479,7 @@ func TestHumanInputStep_Execute_HandlerError(t *testing.T) {
 
 	_, err := step.Execute(context.Background(), nil)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "request failed")
+	assert.Contains(t, err.Error(), "step execution failed")
 	assert.Contains(t, err.Error(), "timeout waiting for human")
 }
 
@@ -505,7 +505,7 @@ func TestCodeStep_Execute_NilHandler(t *testing.T) {
 
 	_, err := step.Execute(context.Background(), nil)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "handler not configured")
+	assert.Contains(t, err.Error(), "step dependency not configured")
 }
 
 

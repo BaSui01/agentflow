@@ -34,14 +34,14 @@ func (r *testToolRegistry) ExecuteTool(ctx context.Context, name string, params 
 
 type testHumanHandler struct{}
 
-func (h *testHumanHandler) RequestInput(ctx context.Context, prompt string, inputType string, options []string) (any, error) {
-	return "approved", nil
+func (h *testHumanHandler) RequestInput(ctx context.Context, prompt string, inputType string, options []string) (*core.HumanInputResult, error) {
+	return &core.HumanInputResult{Value: "approved"}, nil
 }
 
 type testAgentExecutor struct{}
 
-func (a *testAgentExecutor) Execute(ctx context.Context, input any) (any, error) {
-	return "agent-done", nil
+func (a *testAgentExecutor) Execute(ctx context.Context, input map[string]any) (*core.AgentExecutionOutput, error) {
+	return &core.AgentExecutionOutput{Content: "agent-done"}, nil
 }
 
 type testOrchestrationAgent struct {

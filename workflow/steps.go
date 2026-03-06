@@ -71,7 +71,7 @@ func (s *LLMStep) Name() string { return "llm" }
 
 func (s *LLMStep) Execute(ctx context.Context, input any) (any, error) {
 	if s.Gateway == nil {
-		return nil, fmt.Errorf("LLMStep: Gateway is nil: %w", ErrNotConfigured)
+		return nil, core.NewStepError("llm", core.StepTypeLLM, ErrNotConfigured)
 	}
 
 	// Build the user message from prompt + input
@@ -95,11 +95,11 @@ func (s *LLMStep) Execute(ctx context.Context, input any) (any, error) {
 
 	resp, err := s.Gateway.Invoke(ctx, req)
 	if err != nil {
-		return nil, fmt.Errorf("LLMStep: invoke failed: %w", err)
+		return nil, core.NewStepError("llm", core.StepTypeLLM, fmt.Errorf("%w: %w", core.ErrStepExecution, err))
 	}
 
 	if resp == nil || resp.Content == "" {
-		return nil, fmt.Errorf("LLMStep: empty response from provider")
+		return nil, core.NewStepError("llm", core.StepTypeLLM, fmt.Errorf("%w: empty response", core.ErrStepExecution))
 	}
 
 	return resp.Content, nil
@@ -121,7 +121,7 @@ func (s *ToolStep) Name() string { return s.ToolName }
 
 func (s *ToolStep) Execute(ctx context.Context, input any) (any, error) {
 	if s.Registry == nil {
-		return nil, fmt.Errorf("ToolStep %q: Registry is nil: %w", s.ToolName, ErrNotConfigured)
+		return nil, core.NewStepError(s.ToolName, core.StepTypeTool, ErrNotConfigured)
 	}
 
 	// Merge static params with dynamic input if input is a map
@@ -141,7 +141,7 @@ func (s *ToolStep) Execute(ctx context.Context, input any) (any, error) {
 
 	result, err := s.Registry.ExecuteTool(ctx, s.ToolName, params)
 	if err != nil {
-		return nil, fmt.Errorf("ToolStep %q: execution failed: %w", s.ToolName, err)
+		return nil, core.NewStepError(s.ToolName, core.StepTypeTool, fmt.Errorf("%w: %w", core.ErrStepExecution, err))
 	}
 
 	return result, nil
@@ -165,12 +165,12 @@ func (s *HumanInputStep) Name() string { return "human_input" }
 
 func (s *HumanInputStep) Execute(ctx context.Context, input any) (any, error) {
 	if s.Handler == nil {
-		return nil, fmt.Errorf("HumanInputStep: Handler is nil: %w", ErrNotConfigured)
+		return nil, core.NewStepError("human_input", core.StepTypeHumanInput, ErrNotConfigured)
 	}
 
 	result, err := s.Handler.RequestInput(ctx, s.Prompt, s.Type, s.Options)
 	if err != nil {
-		return nil, fmt.Errorf("HumanInputStep: request failed: %w", err)
+		return nil, core.NewStepError("human_input", core.StepTypeHumanInput, fmt.Errorf("%w: %w", core.ErrStepExecution, err))
 	}
 
 	return result, nil
@@ -191,7 +191,7 @@ func (s *CodeStep) Execute(ctx context.Context, input any) (any, error) {
 	if s.Handler != nil {
 		return s.Handler(ctx, input)
 	}
-	return nil, fmt.Errorf("CodeStep: handler not configured")
+	return nil, core.NewStepError("code", core.StepTypeCode, ErrNotConfigured)
 }
 
 

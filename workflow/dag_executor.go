@@ -8,6 +8,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/BaSui01/agentflow/types"
 	"github.com/BaSui01/agentflow/workflow/observability"
 
 	"go.uber.org/zap"
@@ -101,7 +102,10 @@ func (e *DAGExecutor) Execute(ctx context.Context, graph *DAGGraph, input any) (
 	e.history = NewExecutionHistory(e.executionID, "")
 	e.mu.Unlock()
 
+	traceID, _ := types.TraceID(ctx)
 	e.logger.Info("starting DAG execution",
+		zap.String("trace_id", traceID),
+		zap.String("workflow_id", e.executionID),
 		zap.String("execution_id", e.executionID),
 		zap.String("entry_node", graph.entry),
 	)
@@ -137,6 +141,8 @@ func (e *DAGExecutor) Execute(ctx context.Context, graph *DAGGraph, input any) (
 
 	if err != nil {
 		e.logger.Error("DAG execution failed",
+			zap.String("trace_id", traceID),
+			zap.String("workflow_id", e.executionID),
 			zap.String("execution_id", e.executionID),
 			zap.Error(err),
 		)
@@ -144,6 +150,8 @@ func (e *DAGExecutor) Execute(ctx context.Context, graph *DAGGraph, input any) (
 	}
 
 	e.logger.Info("DAG execution completed",
+		zap.String("trace_id", traceID),
+		zap.String("workflow_id", e.executionID),
 		zap.String("execution_id", e.executionID),
 		zap.Int("nodes_executed", len(e.visitedNodes)),
 	)
@@ -185,7 +193,10 @@ func (e *DAGExecutor) executeNode(ctx context.Context, graph *DAGGraph, node *DA
 		nodeExec = e.history.RecordNodeStart(node.ID, node.Type, input)
 	}
 
+	traceID, _ := types.TraceID(ctx)
 	e.logger.Debug("executing node",
+		zap.String("trace_id", traceID),
+		zap.String("workflow_id", e.executionID),
 		zap.String("node_id", node.ID),
 		zap.String("node_type", string(node.Type)),
 	)
@@ -296,9 +307,12 @@ func (e *DAGExecutor) executeNode(ctx context.Context, graph *DAGGraph, node *DA
 
 // handleNodeError handles errors based on the node's error strategy
 func (e *DAGExecutor) handleNodeError(ctx context.Context, graph *DAGGraph, node *DAGNode, input any, originalErr error, duration time.Duration) (any, error) {
+	traceID, _ := types.TraceID(ctx)
 	// Default to fail-fast if no error config
 	if node.ErrorConfig == nil {
 		e.logger.Error("node execution failed",
+			zap.String("trace_id", traceID),
+			zap.String("workflow_id", e.executionID),
 			zap.String("node_id", node.ID),
 			zap.String("node_type", string(node.Type)),
 			zap.Duration("duration", duration),
@@ -310,6 +324,8 @@ func (e *DAGExecutor) handleNodeError(ctx context.Context, graph *DAGGraph, node
 	switch node.ErrorConfig.Strategy {
 	case ErrorStrategySkip:
 		e.logger.Warn("node execution failed, skipping",
+			zap.String("trace_id", traceID),
+			zap.String("workflow_id", e.executionID),
 			zap.String("node_id", node.ID),
 			zap.Error(originalErr),
 		)
@@ -320,6 +336,8 @@ func (e *DAGExecutor) handleNodeError(ctx context.Context, graph *DAGGraph, node
 
 	default: // ErrorStrategyFailFast
 		e.logger.Error("node execution failed",
+			zap.String("trace_id", traceID),
+			zap.String("workflow_id", e.executionID),
 			zap.String("node_id", node.ID),
 			zap.String("node_type", string(node.Type)),
 			zap.Duration("duration", duration),

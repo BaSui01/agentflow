@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+
+	"github.com/BaSui01/agentflow/workflow/core"
 )
 
 // SubgraphExecutor executes a subgraph workflow DAG and returns the result.
@@ -15,6 +17,7 @@ type SubgraphExecutor interface {
 type SubgraphTool struct {
 	Name        string
 	Description string
+	InputSchema map[string]any
 	executor    SubgraphExecutor
 }
 
@@ -27,40 +30,50 @@ func NewSubgraphTool(name, description string, executor SubgraphExecutor) *Subgr
 	}
 }
 
+// WithInputSchema sets a custom JSON Schema for the tool's input parameters.
+func (t *SubgraphTool) WithInputSchema(schema map[string]any) *SubgraphTool {
+	t.InputSchema = schema
+	return t
+}
+
 // Execute runs the subgraph with the provided JSON arguments and returns the result as JSON.
 func (t *SubgraphTool) Execute(ctx context.Context, args json.RawMessage) (json.RawMessage, error) {
 	if t.executor == nil {
-		return nil, fmt.Errorf("subgraph tool %q: no executor configured", t.Name)
+		return nil, core.NewStepError(t.Name, core.StepTypeTool, fmt.Errorf("no executor configured"))
 	}
 
 	var input any
 	if len(args) > 0 {
 		if err := json.Unmarshal(args, &input); err != nil {
-			return nil, fmt.Errorf("subgraph tool %q: unmarshal args: %w", t.Name, err)
+			return nil, core.NewStepError(t.Name, core.StepTypeTool, fmt.Errorf("unmarshal args: %w", err))
 		}
 	}
 
 	result, err := t.executor.ExecuteSubgraph(ctx, input)
 	if err != nil {
-		return nil, fmt.Errorf("subgraph tool %q: execution failed: %w", t.Name, err)
+		return nil, core.NewStepError(t.Name, core.StepTypeTool, fmt.Errorf("execution failed: %w", err))
 	}
 
 	out, err := json.Marshal(result)
 	if err != nil {
-		return nil, fmt.Errorf("subgraph tool %q: marshal result: %w", t.Name, err)
+		return nil, core.NewStepError(t.Name, core.StepTypeTool, fmt.Errorf("marshal result: %w", err))
 	}
 	return out, nil
 }
 
 // ToolSchema returns the tool schema for agent registration.
 func (t *SubgraphTool) ToolSchema() map[string]any {
+	schema := t.InputSchema
+	if schema == nil {
+		schema = map[string]any{
+			"type":       "object",
+			"properties": map[string]any{},
+		}
+	}
 	return map[string]any{
 		"name":        t.Name,
 		"description": t.Description,
-		"inputSchema": map[string]any{
-			"type":       "object",
-			"properties": map[string]any{},
-		},
+		"inputSchema": schema,
 	}
 }
 
