@@ -139,7 +139,7 @@ func demoEnhancedSingleAgent(logger *zap.Logger) {
 	fmt.Println("7. Enabling enhanced memory system")
 	memoryConfig := memory.DefaultEnhancedMemoryConfig()
 	enhancedMemory := memory.NewEnhancedMemorySystem(
-		nil, nil, nil, nil, nil,
+		nil, nil, nil, nil, nil, nil,
 		memoryConfig,
 		logger,
 	)

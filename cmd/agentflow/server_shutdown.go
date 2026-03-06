@@ -64,10 +64,12 @@ func (s *Server) Shutdown() {
 	}
 
 	// 7. 关闭 MongoDB 连接
-	if err := s.mongoClient.Close(ctx); err != nil {
-		s.logger.Error("MongoDB close error", zap.Error(err))
-	} else {
-		s.logger.Info("MongoDB connection closed")
+	if s.mongoClient != nil {
+		if err := s.mongoClient.Close(ctx); err != nil {
+			s.logger.Error("MongoDB close error", zap.Error(err))
+		} else {
+			s.logger.Info("MongoDB connection closed")
+		}
 	}
 
 	// 7.1 关闭多模态 Redis 连接（如果启用）

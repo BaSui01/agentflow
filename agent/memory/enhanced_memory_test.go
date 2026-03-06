@@ -86,7 +86,7 @@ func TestEnhancedMemorySystem_NilStores(t *testing.T) {
 	cfg.LongTermEnabled = false
 	cfg.EpisodicEnabled = false
 	cfg.SemanticEnabled = false
-	sys := NewEnhancedMemorySystem(nil, nil, nil, nil, nil, cfg, zap.NewNop())
+	sys := NewEnhancedMemorySystem(nil, nil, nil, nil, nil, nil, cfg, zap.NewNop())
 	ctx := context.Background()
 
 	assert.Error(t, sys.SaveShortTerm(ctx, "a", "c", nil))
@@ -111,7 +111,7 @@ func TestEnhancedMemorySystem_Episodic(t *testing.T) {
 	cfg.ConsolidationEnabled = false
 	cfg.EpisodicEnabled = true
 	store := NewInMemoryEpisodicStore(zap.NewNop())
-	sys := NewEnhancedMemorySystem(nil, nil, nil, store, nil, cfg, zap.NewNop())
+	sys := NewEnhancedMemorySystem(nil, nil, nil, store, nil, nil, cfg, zap.NewNop())
 	ctx := context.Background()
 
 	require.NoError(t, sys.RecordEpisode(ctx, &EpisodicEvent{
@@ -128,7 +128,7 @@ func TestEnhancedMemorySystem_Semantic(t *testing.T) {
 	cfg.ConsolidationEnabled = false
 	cfg.SemanticEnabled = true
 	kg := NewInMemoryKnowledgeGraph(zap.NewNop())
-	sys := NewEnhancedMemorySystem(nil, nil, nil, nil, kg, cfg, zap.NewNop())
+	sys := NewEnhancedMemorySystem(nil, nil, nil, nil, kg, nil, cfg, zap.NewNop())
 	ctx := context.Background()
 
 	require.NoError(t, sys.AddKnowledge(ctx, &Entity{ID: "e1", Type: "concept", Name: "Go"}))

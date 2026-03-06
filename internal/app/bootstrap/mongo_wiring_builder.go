@@ -80,11 +80,20 @@ func WireMongoRuntimeStores(
 		}
 	}
 
+	var observationStore *mongostore.MongoObservationStore
+	if memoryStore != nil {
+		observationStore, err = mongostore.NewObservationStore(ctx, client)
+		if err != nil {
+			logger.Warn("failed to create MongoDB observation store", zap.Error(err))
+		}
+	}
+
 	var enhancedMemory *memory.EnhancedMemorySystem
 	if memoryStore != nil {
 		memCfg := memory.DefaultEnhancedMemoryConfig()
 		memCfg.EpisodicEnabled = episodicStore != nil
 		memCfg.SemanticEnabled = knowledgeGraph != nil
+		memCfg.ObservationEnabled = observationStore != nil
 
 		working := memory.NewInMemoryMemoryStore(memory.InMemoryMemoryStoreConfig{
 			MaxEntries: memCfg.WorkingMemorySize,
@@ -98,13 +107,18 @@ func WireMongoRuntimeStores(
 		if knowledgeGraph != nil {
 			semantic = knowledgeGraph
 		}
+		var obsStore memory.ObservationStore
+		if observationStore != nil {
+			obsStore = observationStore
+		}
 
 		enhancedMemory = memory.NewEnhancedMemorySystem(
-			memoryStore, working, nil, episodic, semantic, memCfg, logger,
+			memoryStore, working, nil, episodic, semantic, obsStore, memCfg, logger,
 		)
 		logger.Info("MongoDB enhanced memory system initialized",
 			zap.Bool("episodic", episodicStore != nil),
 			zap.Bool("semantic", knowledgeGraph != nil),
+			zap.Bool("observation", observationStore != nil),
 		)
 	}
 

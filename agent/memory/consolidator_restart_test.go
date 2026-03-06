@@ -21,7 +21,7 @@ func TestMemoryConsolidator_StopThenRestart(t *testing.T) {
 	cfg.ConsolidationEnabled = true
 	cfg.ConsolidationInterval = 50 * time.Millisecond
 
-	system := NewEnhancedMemorySystem(nil, nil, nil, nil, nil, cfg, zap.NewNop())
+	system := NewEnhancedMemorySystem(nil, nil, nil, nil, nil, nil, cfg, zap.NewNop())
 	c := system.consolidator
 	require.NotNil(t, c)
 
@@ -49,7 +49,7 @@ func TestMemoryConsolidator_StopClosesChannel(t *testing.T) {
 	cfg.ConsolidationEnabled = true
 	cfg.ConsolidationInterval = 1 * time.Hour // long interval so ticker won't fire
 
-	system := NewEnhancedMemorySystem(nil, nil, nil, nil, nil, cfg, zap.NewNop())
+	system := NewEnhancedMemorySystem(nil, nil, nil, nil, nil, nil, cfg, zap.NewNop())
 	c := system.consolidator
 	require.NotNil(t, c)
 
@@ -78,7 +78,7 @@ func TestMemoryConsolidator_RestartGoroutineExits(t *testing.T) {
 	cfg.ConsolidationEnabled = true
 	cfg.ConsolidationInterval = 10 * time.Millisecond
 
-	system := NewEnhancedMemorySystem(nil, nil, nil, nil, nil, cfg, zap.NewNop())
+	system := NewEnhancedMemorySystem(nil, nil, nil, nil, nil, nil, cfg, zap.NewNop())
 	c := system.consolidator
 	require.NotNil(t, c)
 
@@ -109,7 +109,7 @@ func TestMemoryConsolidator_ConcurrentStopStart(t *testing.T) {
 	cfg.ConsolidationEnabled = true
 	cfg.ConsolidationInterval = 10 * time.Millisecond
 
-	system := NewEnhancedMemorySystem(nil, nil, nil, nil, nil, cfg, zap.NewNop())
+	system := NewEnhancedMemorySystem(nil, nil, nil, nil, nil, nil, cfg, zap.NewNop())
 	c := system.consolidator
 	require.NotNil(t, c)
 

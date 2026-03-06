@@ -3,16 +3,18 @@ package memory
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/BaSui01/agentflow/rag"
+	"github.com/BaSui01/agentflow/types"
 
 	"go.uber.org/zap"
 )
 
 // EnhancedMemorySystem 增强的多层记忆系统
-// 实现短期、工作、长期、情节和语义记忆
+// 实现短期、工作、长期、情节、语义和观测记忆
 type EnhancedMemorySystem struct {
 	// 短期记忆（Redis/内存）- 最近的交互
 	shortTerm MemoryStore
@@ -28,6 +30,11 @@ type EnhancedMemorySystem struct {
 
 	// 语义记忆（知识图谱）- 结构化知识
 	semantic KnowledgeGraph
+
+	// 观测记忆 - 对话压缩与精炼
+	observationStore ObservationStore
+	observer         *Observer
+	reflector        *Reflector
 
 	// 记忆整合器
 	consolidator     *MemoryConsolidator
@@ -58,6 +65,10 @@ type EnhancedMemoryConfig struct {
 
 	// 语义记忆配置
 	SemanticEnabled bool `json:"semantic_enabled"` // 是否启用语义记忆
+
+	// 观测记忆配置
+	ObservationEnabled bool           `json:"observation_enabled"` // 是否启用观测记忆
+	ObserverConfig     ObserverConfig `json:"observer_config"`     // Observer 配置
 
 	// 记忆整合配置
 	ConsolidationEnabled  bool          `json:"consolidation_enabled"`  // 是否启用记忆整合
@@ -207,6 +218,7 @@ func NewEnhancedMemorySystem(
 	longTerm rag.LowLevelVectorStore,
 	episodic EpisodicStore,
 	semantic KnowledgeGraph,
+	observationStore ObservationStore,
 	config EnhancedMemoryConfig,
 	logger *zap.Logger,
 ) *EnhancedMemorySystem {
@@ -215,16 +227,16 @@ func NewEnhancedMemorySystem(
 	}
 
 	system := &EnhancedMemorySystem{
-		shortTerm: shortTerm,
-		working:   working,
-		longTerm:  longTerm,
-		episodic:  episodic,
-		semantic:  semantic,
-		config:    config,
-		logger:    logger.With(zap.String("component", "enhanced_memory")),
+		shortTerm:        shortTerm,
+		working:          working,
+		longTerm:         longTerm,
+		episodic:         episodic,
+		semantic:         semantic,
+		observationStore: observationStore,
+		config:           config,
+		logger:           logger.With(zap.String("component", "enhanced_memory")),
 	}
 
-	// 使用 sync.Once 确保 consolidator 只初始化一次
 	if config.ConsolidationEnabled {
 		system.initConsolidator(logger)
 	}
@@ -251,7 +263,7 @@ func NewDefaultEnhancedMemorySystem(config EnhancedMemoryConfig, logger *zap.Log
 		longTerm = NewInMemoryVectorStore(InMemoryVectorStoreConfig{Dimension: config.VectorDimension}, logger)
 	}
 
-	system := NewEnhancedMemorySystem(shortTerm, working, longTerm, nil, nil, config, logger)
+	system := NewEnhancedMemorySystem(shortTerm, working, longTerm, nil, nil, nil, config, logger)
 	if config.ConsolidationEnabled {
 		_ = system.AddDefaultConsolidationStrategies()
 	}
@@ -410,6 +422,84 @@ func (m *EnhancedMemorySystem) QueryKnowledge(ctx context.Context, entityID stri
 	}
 
 	return m.semantic.QueryEntity(ctx, entityID)
+}
+
+// EnableObservationPipeline 启用观测管线（Observer + Reflector），
+// 需要 LLM CompletionFunc 来驱动压缩与精炼。
+func (m *EnhancedMemorySystem) EnableObservationPipeline(completeFn CompletionFunc) {
+	cfg := m.config.ObserverConfig
+	if cfg.MaxMessagesPerBatch == 0 {
+		cfg = DefaultObserverConfig()
+	}
+	m.observer = NewObserver(cfg, completeFn, m.logger)
+	m.reflector = NewReflector(completeFn, m.logger)
+}
+
+// ProcessObservation 对一批对话消息执行观测：Observer 压缩 -> Reflector 精炼 -> Store 持久化。
+func (m *EnhancedMemorySystem) ProcessObservation(ctx context.Context, agentID string, messages []types.Message) (*Observation, error) {
+	if !m.config.ObservationEnabled || m.observationStore == nil {
+		return nil, fmt.Errorf("observation memory not configured")
+	}
+	if m.observer == nil {
+		return nil, fmt.Errorf("observation pipeline not enabled, call EnableObservationPipeline first")
+	}
+
+	draft, err := m.observer.Observe(ctx, agentID, messages)
+	if err != nil {
+		return nil, fmt.Errorf("observer: %w", err)
+	}
+	if draft == nil {
+		return nil, nil
+	}
+
+	if m.reflector != nil {
+		existing, _ := m.observationStore.LoadRecent(ctx, agentID, 10)
+		draft, err = m.reflector.Reflect(ctx, existing, draft)
+		if err != nil {
+			return nil, fmt.Errorf("reflector: %w", err)
+		}
+	}
+
+	if err := m.observationStore.Save(ctx, *draft); err != nil {
+		return nil, fmt.Errorf("save observation: %w", err)
+	}
+
+	m.logger.Debug("observation processed",
+		zap.String("agent_id", agentID),
+		zap.String("obs_id", draft.ID),
+	)
+	return draft, nil
+}
+
+// GetRecentObservations 从 Store 加载最近的观测记录。
+func (m *EnhancedMemorySystem) GetRecentObservations(ctx context.Context, agentID string, limit int) ([]Observation, error) {
+	if !m.config.ObservationEnabled || m.observationStore == nil {
+		return nil, fmt.Errorf("observation memory not configured")
+	}
+	return m.observationStore.LoadRecent(ctx, agentID, limit)
+}
+
+// BuildObservationContext 构建观测上下文摘要，可直接拼接到 system prompt。
+func (m *EnhancedMemorySystem) BuildObservationContext(ctx context.Context, agentID string, limit int) (string, error) {
+	if !m.config.ObservationEnabled || m.observationStore == nil {
+		return "", nil
+	}
+
+	observations, err := m.observationStore.LoadRecent(ctx, agentID, limit)
+	if err != nil {
+		return "", fmt.Errorf("load observations: %w", err)
+	}
+	if len(observations) == 0 {
+		return "", nil
+	}
+
+	var sb strings.Builder
+	sb.WriteString("## Observation Memory\n\n")
+	for i := len(observations) - 1; i >= 0; i-- {
+		obs := observations[i]
+		fmt.Fprintf(&sb, "[%s] %s\n\n", obs.Date, obs.Content)
+	}
+	return sb.String(), nil
 }
 
 // StartConsolidation 启动记忆整合

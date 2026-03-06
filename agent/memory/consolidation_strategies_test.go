@@ -25,7 +25,7 @@ func TestMaxPerAgentPrunerStrategy_ShortTerm(t *testing.T) {
 	cfg.ShortTermMaxSize = 2
 	cfg.WorkingMemorySize = 0
 
-	system := NewEnhancedMemorySystem(shortTerm, nil, nil, nil, nil, cfg, zap.NewNop())
+	system := NewEnhancedMemorySystem(shortTerm, nil, nil, nil, nil, nil, cfg, zap.NewNop())
 	require.NoError(t, system.AddDefaultConsolidationStrategies())
 
 	for i := 0; i < 3; i++ {
