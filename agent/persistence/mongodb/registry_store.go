@@ -71,7 +71,8 @@ func (s *MongoRegistryStore) Load(ctx context.Context, id string) (*discovery.Ag
 }
 
 func (s *MongoRegistryStore) LoadAll(ctx context.Context) ([]*discovery.AgentInfo, error) {
-	cursor, err := s.coll.Find(ctx, bson.D{})
+	opts := options.Find().SetLimit(1000)
+	cursor, err := s.coll.Find(ctx, bson.D{}, opts)
 	if err != nil {
 		return nil, err
 	}

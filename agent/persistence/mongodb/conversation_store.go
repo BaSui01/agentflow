@@ -272,6 +272,9 @@ func (s *MongoConversationStore) Update(ctx context.Context, id string, updates 
 	return nil
 }
 
+// DeleteByParentID implements ConversationStore.DeleteByParentID.
+// 安全要求: 调用方必须确保 tenantID 来自可信来源（如 JWT 或已验证的租户上下文），
+// 不得使用用户可控的 tenantID，否则可能导致跨租户数据泄露。
 func (s *MongoConversationStore) DeleteByParentID(ctx context.Context, tenantID, parentID string) error {
 	_, err := s.coll.DeleteMany(ctx, bson.D{
 		{Key: "tenant_id", Value: tenantID},

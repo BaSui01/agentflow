@@ -1,50 +1,38 @@
 package a2a
 
-import "errors"
+import (
+	"net/http"
 
-// 代理卡验证错误.
-var (
-	// 错失 名称表示代理卡缺少一个名称.
-	ErrMissingName = errors.New("agent card: missing name")
-	// ErrMissing Description 显示代理卡缺少描述 。
-	ErrMissingDescription = errors.New("agent card: missing description")
-	// ErrMissingURL 显示代理卡缺少一个 URL 。
-	ErrMissingURL = errors.New("agent card: missing url")
-	// ErrMissingVersion表示代理卡缺少一个版本.
-	ErrMissingVersion = errors.New("agent card: missing version")
+	"github.com/BaSui01/agentflow/types"
 )
 
-// A2A 协议错误 。
+// 代理卡验证错误（映射到 types.ErrInvalidRequest）.
 var (
-	// ErrAgentNotFound表示未找到被请求的代理人.
-	ErrAgentNotFound = errors.New("a2a: agent not found")
-	// ErrRemote Uncomputing 表示远程代理无法使用 。
-	ErrRemoteUnavailable = errors.New("a2a: remote agent unavailable")
-	// ErrAuth 失败表示认证失败 。
-	ErrAuthFailed = errors.New("a2a: authentication failed")
-	// ErrInvalidMessage 表示信件格式无效 。
-	ErrInvalidMessage = errors.New("a2a: invalid message format")
+	ErrMissingName        = types.NewError(types.ErrInvalidRequest, "agent card: missing name").WithHTTPStatus(http.StatusBadRequest).WithRetryable(false)
+	ErrMissingDescription = types.NewError(types.ErrInvalidRequest, "agent card: missing description").WithHTTPStatus(http.StatusBadRequest).WithRetryable(false)
+	ErrMissingURL        = types.NewError(types.ErrInvalidRequest, "agent card: missing url").WithHTTPStatus(http.StatusBadRequest).WithRetryable(false)
+	ErrMissingVersion     = types.NewError(types.ErrInvalidRequest, "agent card: missing version").WithHTTPStatus(http.StatusBadRequest).WithRetryable(false)
 )
 
-// A2A 信件验证错误 。
+// A2A 协议错误.
 var (
-	// ErrMessage MissingID 显示消息缺少一个ID.
-	ErrMessageMissingID = errors.New("a2a message: missing id")
-	// ErrMessage InvalidType 表示消息类型无效 。
-	ErrMessageInvalidType = errors.New("a2a message: invalid type")
-	// 误差 显示信件缺少发送者 。
-	ErrMessageMissingFrom = errors.New("a2a message: missing from")
-	// ErrMessage Missing To 表示信件缺少收件人 。
-	ErrMessageMissingTo = errors.New("a2a message: missing to")
-	// ErrMessage Missing Timestamp 显示消息缺少一个时间戳 。
-	ErrMessageMissingTimestamp = errors.New("a2a message: missing timestamp")
+	ErrAgentNotFound    = types.NewError(types.ErrAgentNotFound, "a2a: agent not found").WithHTTPStatus(http.StatusNotFound).WithRetryable(false)
+	ErrRemoteUnavailable = types.NewError(types.ErrServiceUnavailable, "a2a: remote agent unavailable").WithHTTPStatus(http.StatusServiceUnavailable).WithRetryable(true)
+	ErrAuthFailed       = types.NewError(types.ErrAuthentication, "a2a: authentication failed").WithHTTPStatus(http.StatusUnauthorized).WithRetryable(false)
+	ErrInvalidMessage   = types.NewError(types.ErrInvalidRequest, "a2a: invalid message format").WithHTTPStatus(http.StatusBadRequest).WithRetryable(false)
 )
 
-// A2A客户端出错.
+// A2A 信件验证错误（映射到 types.ErrInvalidRequest）.
 var (
-	// ErrTask NotReady 表示正在处理同步任务 。
-	ErrTaskNotReady = errors.New("a2a: task not ready")
-	// ErrTaskNotFound 表示未找到任务 。
-	ErrTaskNotFound = errors.New("a2a: task not found")
+	ErrMessageMissingID        = types.NewError(types.ErrInvalidRequest, "a2a message: missing id").WithHTTPStatus(http.StatusBadRequest).WithRetryable(false)
+	ErrMessageInvalidType      = types.NewError(types.ErrInvalidRequest, "a2a message: invalid type").WithHTTPStatus(http.StatusBadRequest).WithRetryable(false)
+	ErrMessageMissingFrom      = types.NewError(types.ErrInvalidRequest, "a2a message: missing from").WithHTTPStatus(http.StatusBadRequest).WithRetryable(false)
+	ErrMessageMissingTo        = types.NewError(types.ErrInvalidRequest, "a2a message: missing to").WithHTTPStatus(http.StatusBadRequest).WithRetryable(false)
+	ErrMessageMissingTimestamp = types.NewError(types.ErrInvalidRequest, "a2a message: missing timestamp").WithHTTPStatus(http.StatusBadRequest).WithRetryable(false)
 )
 
+// A2A 客户端错误.
+var (
+	ErrTaskNotReady = types.NewError(types.ErrTaskNotReady, "a2a: task not ready").WithHTTPStatus(http.StatusAccepted).WithRetryable(true)
+	ErrTaskNotFound = types.NewError(types.ErrTaskNotFound, "a2a: task not found").WithHTTPStatus(http.StatusNotFound).WithRetryable(false)
+)

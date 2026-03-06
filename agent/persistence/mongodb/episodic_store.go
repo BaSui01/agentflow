@@ -10,6 +10,7 @@ import (
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
 
 	"github.com/BaSui01/agentflow/agent/memory"
+	"github.com/BaSui01/agentflow/types"
 	mongoclient "github.com/BaSui01/agentflow/pkg/mongodb"
 )
 
@@ -47,7 +48,7 @@ func NewEpisodicStore(ctx context.Context, client *mongoclient.Client) (*MongoEp
 	return &MongoEpisodicStore{coll: coll}, nil
 }
 
-func (s *MongoEpisodicStore) RecordEvent(ctx context.Context, event *memory.EpisodicEvent) error {
+func (s *MongoEpisodicStore) RecordEvent(ctx context.Context, event *types.EpisodicEvent) error {
 	if event == nil {
 		return fmt.Errorf("event is nil")
 	}
@@ -76,7 +77,7 @@ func (s *MongoEpisodicStore) RecordEvent(ctx context.Context, event *memory.Epis
 	return err
 }
 
-func (s *MongoEpisodicStore) QueryEvents(ctx context.Context, query memory.EpisodicQuery) ([]memory.EpisodicEvent, error) {
+func (s *MongoEpisodicStore) QueryEvents(ctx context.Context, query memory.EpisodicQuery) ([]types.EpisodicEvent, error) {
 	filter := bson.D{}
 	if query.AgentID != "" {
 		filter = append(filter, bson.E{Key: "agent_id", Value: query.AgentID})
@@ -104,7 +105,7 @@ func (s *MongoEpisodicStore) QueryEvents(ctx context.Context, query memory.Episo
 	return s.findEvents(ctx, filter, opts)
 }
 
-func (s *MongoEpisodicStore) GetTimeline(ctx context.Context, agentID string, start, end time.Time) ([]memory.EpisodicEvent, error) {
+func (s *MongoEpisodicStore) GetTimeline(ctx context.Context, agentID string, start, end time.Time) ([]types.EpisodicEvent, error) {
 	filter := bson.D{}
 	if agentID != "" {
 		filter = append(filter, bson.E{Key: "agent_id", Value: agentID})
@@ -127,7 +128,7 @@ func (s *MongoEpisodicStore) GetTimeline(ctx context.Context, agentID string, st
 }
 
 // findEvents is a shared helper for querying episodic events.
-func (s *MongoEpisodicStore) findEvents(ctx context.Context, filter bson.D, opts *options.FindOptionsBuilder) ([]memory.EpisodicEvent, error) {
+func (s *MongoEpisodicStore) findEvents(ctx context.Context, filter bson.D, opts *options.FindOptionsBuilder) ([]types.EpisodicEvent, error) {
 	cursor, err := s.coll.Find(ctx, filter, opts)
 	if err != nil {
 		return nil, err
@@ -139,9 +140,9 @@ func (s *MongoEpisodicStore) findEvents(ctx context.Context, filter bson.D, opts
 		return nil, err
 	}
 
-	events := make([]memory.EpisodicEvent, 0, len(docs))
+	events := make([]types.EpisodicEvent, 0, len(docs))
 	for _, doc := range docs {
-		events = append(events, memory.EpisodicEvent{
+		events = append(events, types.EpisodicEvent{
 			ID:        doc.ID,
 			AgentID:   doc.AgentID,
 			Type:      doc.Type,

@@ -126,7 +126,7 @@ func NewBidirectionalStream(
 	logger *zap.Logger,
 ) *BidirectionalStream {
 	if logger == nil {
-		logger = zap.NewNop()
+		panic("agent.BidirectionalStream: logger is required and cannot be nil")
 	}
 	return &BidirectionalStream{
 		ID:          fmt.Sprintf("stream_%d", time.Now().UnixNano()),
@@ -541,7 +541,7 @@ type StreamManager struct {
 // NewStreamManager创建了新流管理器.
 func NewStreamManager(logger *zap.Logger) *StreamManager {
 	if logger == nil {
-		logger = zap.NewNop()
+		panic("agent.StreamManager: logger is required and cannot be nil")
 	}
 	return &StreamManager{
 		streams: make(map[string]*BidirectionalStream),

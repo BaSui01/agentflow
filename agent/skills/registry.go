@@ -69,10 +69,10 @@ type Registry struct {
 	mu         sync.RWMutex
 }
 
-// NewRegistry创建了新的技能注册.
+// NewRegistry 创建新的技能注册。logger 为必选参数，nil 时 panic。
 func NewRegistry(logger *zap.Logger) *Registry {
 	if logger == nil {
-		logger = zap.NewNop()
+		panic("skills.Registry: logger is required and cannot be nil")
 	}
 	return &Registry{
 		skills:     make(map[string]*SkillInstance),
@@ -158,25 +158,53 @@ func (r *Registry) GetByName(name string) (*SkillInstance, bool) {
 	return nil, false
 }
 
-// ListByCategory 在一个类别中返回技能.
+func copySkillStats(st SkillStats) SkillStats {
+	out := SkillStats{
+		Invocations: st.Invocations,
+		Successes:   st.Successes,
+		Failures:    st.Failures,
+		AvgLatency:  st.AvgLatency,
+	}
+	if st.LastInvoked != nil {
+		t := *st.LastInvoked
+		out.LastInvoked = &t
+	}
+	return out
+}
+
+func copySkillInstance(s *SkillInstance) *SkillInstance {
+	return &SkillInstance{
+		Definition: s.Definition,
+		Handler:    s.Handler,
+		Enabled:    s.Enabled,
+		Stats:      copySkillStats(s.Stats),
+	}
+}
+
+// ListByCategory 在一个类别中返回技能（返回副本，避免与 Invoke 的 stats 更新竞态）.
 func (r *Registry) ListByCategory(category SkillCategory) []*SkillInstance {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	return append([]*SkillInstance{}, r.byCategory[category]...)
+	raw := r.byCategory[category]
+	out := make([]*SkillInstance, 0, len(raw))
+	for _, s := range raw {
+		out = append(out, copySkillInstance(s))
+	}
+	return out
 }
 
-// ListAll 返回所有注册技能 。
+// ListAll 返回所有注册技能（返回副本，避免与 Invoke 的 stats 更新竞态）.
 func (r *Registry) ListAll() []*SkillInstance {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	skills := make([]*SkillInstance, 0, len(r.skills))
 	for _, s := range r.skills {
-		skills = append(skills, s)
+		skills = append(skills, copySkillInstance(s))
 	}
 	return skills
 }
 
-// 通过标签或关键词搜索搜索技能.
+// 通过标签或关键词搜索搜索技能（返回副本，避免与 Invoke 的 stats 更新竞态）.
 func (r *Registry) Search(query string, tags []string) []*SkillInstance {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -187,7 +215,7 @@ func (r *Registry) Search(query string, tags []string) []*SkillInstance {
 		if query != "" {
 			if contains(skill.Definition.Name, query) ||
 				contains(skill.Definition.Description, query) {
-				results = append(results, skill)
+				results = append(results, copySkillInstance(skill))
 				continue
 			}
 		}
@@ -196,7 +224,7 @@ func (r *Registry) Search(query string, tags []string) []*SkillInstance {
 			for _, tag := range tags {
 				for _, skillTag := range skill.Definition.Tags {
 					if skillTag == tag {
-						results = append(results, skill)
+						results = append(results, copySkillInstance(skill))
 						break
 					}
 				}

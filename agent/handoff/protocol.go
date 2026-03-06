@@ -324,7 +324,10 @@ func (m *HandoffManager) cleanupPending(handoffID string, expected chan *Handoff
 
 func (m *HandoffManager) sendResult(resultCh chan *HandoffResult, result *HandoffResult) {
 	defer func() {
-		_ = recover() // result channel may already be closed on timeout/cancel path
+		// 有意拦截并吞掉 panic：向已关闭的 channel 发送会 panic，此处 recover 防止整个 handoff 流程崩溃。
+		if r := recover(); r != nil {
+			m.logger.Warn("sendResult recovered from panic (channel may be closed)", zap.Any("panic", r))
+		}
 	}()
 	select {
 	case resultCh <- result:

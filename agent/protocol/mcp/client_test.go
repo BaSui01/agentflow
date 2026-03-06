@@ -37,6 +37,8 @@ func (m *clientMockTransport) Close() error {
 	return nil
 }
 
+func (m *clientMockTransport) IsAlive() bool { return true }
+
 func TestMCPClient_Initialize(t *testing.T) {
 	transport := &clientMockTransport{}
 	var sent []*MCPMessage

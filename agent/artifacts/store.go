@@ -87,6 +87,8 @@ func safeArtifactDirName(id string) string {
 	return hex.EncodeToString(sum[:16])
 }
 
+// Load 返回指定 artifact 的元数据与内容流。
+// 调用方必须关闭返回的 io.ReadCloser，否则会导致文件句柄泄漏。
 func (s *FileStore) Load(ctx context.Context, artifactID string) (*Artifact, io.ReadCloser, error) {
 	s.mu.RLock()
 	artifact, ok := s.index[artifactID]

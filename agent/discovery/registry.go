@@ -50,6 +50,9 @@ type CapabilityRegistry struct {
 
 	// subscriptionCounter 原子计数器，用于生成唯一订阅 ID
 	subscriptionCounter atomic.Uint64
+
+	// panicErrChan 可选，handler panic 时写入，供调用方消费
+	panicErrChan chan<- error
 }
 
 // 登记册Config拥有能力登记册的配置。
@@ -97,6 +100,13 @@ func WithStore(store RegistryStore) RegistryOption {
 	}
 }
 
+// WithPanicErrorChan 设置 handler panic 时写入的 error channel，供调用方消费
+func WithPanicErrorChan(ch chan<- error) RegistryOption {
+	return func(r *CapabilityRegistry) {
+		r.panicErrChan = ch
+	}
+}
+
 // SetStore sets the persistence backend after construction.
 // This is useful when the store is not available at construction time
 // (e.g., when MongoDB stores are initialized after the registry).
@@ -112,7 +122,7 @@ func NewCapabilityRegistry(config *RegistryConfig, logger *zap.Logger, opts ...R
 		config = DefaultRegistryConfig()
 	}
 	if logger == nil {
-		logger = zap.NewNop()
+		panic("agent.CapabilityRegistry: logger is required and cannot be nil")
 	}
 
 	r := &CapabilityRegistry{
@@ -711,26 +721,53 @@ func (r *CapabilityRegistry) emitEvent(event *DiscoveryEvent) {
 		go func() {
 			defer func() {
 				if rec := recover(); rec != nil {
+					err := recoveredPanicToError(rec)
 					r.logger.Error("event handler panicked",
 						zap.Any("recover", rec),
-						zap.Error(recoveredPanicToError(rec)),
+						zap.Error(err),
 						zap.String("event_type", string(event.Type)),
 						zap.Stack("stack"),
 					)
+					if r.panicErrChan != nil {
+						select {
+						case r.panicErrChan <- err:
+						default:
+						}
+					}
 				}
 			}()
 
 			// 添加超时控制，防止 handler 阻塞导致 goroutine 堆积
-			done := make(chan struct{})
-			go func() {
-				defer close(done)
-				h(event)
+		done := make(chan struct{})
+		go func() {
+			defer close(done)
+			defer func() {
+				if rec := recover(); rec != nil {
+					err := recoveredPanicToError(rec)
+					r.logger.Error("inner event handler panicked",
+						zap.Any("recover", rec),
+						zap.Error(err),
+						zap.String("event_type", string(event.Type)),
+						zap.Stack("stack"),
+					)
+					if r.panicErrChan != nil {
+						select {
+						case r.panicErrChan <- err:
+						default:
+						}
+					}
+				}
 			}()
-			select {
-			case <-done:
-			case <-time.After(5 * time.Second):
-				r.logger.Warn("event handler timeout")
-			}
+			h(event)
+		}()
+		// P-007: 使用 NewTimer 替代 time.After，避免循环中持续分配 timer
+		timer := time.NewTimer(5 * time.Second)
+		defer timer.Stop()
+		select {
+		case <-done:
+		case <-timer.C:
+			r.logger.Warn("event handler timeout")
+		}
 		}()
 	}
 }
@@ -1009,6 +1046,9 @@ func (h *HealthChecker) performHealthCheck(ctx context.Context, agent *AgentInfo
 		}
 		resp, err := client.Do(req)
 		if err != nil {
+			if resp != nil {
+				resp.Body.Close()
+			}
 			result.Healthy = false
 			result.Status = AgentStatusUnhealthy
 			result.Message = fmt.Sprintf("health check request failed: %v", err)

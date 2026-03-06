@@ -410,7 +410,9 @@ func (s *MemoryTaskStore) Stats(ctx context.Context) (*TaskStoreStats, error) {
 	return stats, nil
 }
 
-// 清理Loop 运行定期清理
+// cleanupLoop 运行定期清理
+// T-009: 仅使用单一 mu，无多锁交叉；先 RLock 检查 closed 后立即 RUnlock，再调用 Cleanup（内部 Lock），
+// 不持有 RLock 时调用 Cleanup，避免同一 goroutine 上 RLock→Lock 自死锁。
 func (s *MemoryTaskStore) cleanupLoop(interval time.Duration) {
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()

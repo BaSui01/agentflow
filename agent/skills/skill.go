@@ -68,6 +68,9 @@ type SkillManifest struct {
 
 // LoadSkillFromDirectory 从目录加载技能
 func LoadSkillFromDirectory(dir string) (*Skill, error) {
+	if strings.TrimSpace(dir) == "" {
+		return nil, fmt.Errorf("dir is required")
+	}
 	manifestPath := filepath.Join(dir, "SKILL.json")
 
 	data, err := os.ReadFile(manifestPath)

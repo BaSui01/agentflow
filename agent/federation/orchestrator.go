@@ -92,7 +92,7 @@ type Orchestrator struct {
 // 特劳斯·汉德勒处理联邦任务.
 type TaskHandler func(ctx context.Context, task *FederatedTask) (any, error)
 
-// 新奥尔良创造了一个新的联邦管弦乐团.
+// NewOrchestrator 创建新的联邦编排器。logger 为必选参数，nil 时退化为 zap.NewNop()。
 func NewOrchestrator(config FederationConfig, logger *zap.Logger) *Orchestrator {
 	if logger == nil {
 		logger = zap.NewNop()
@@ -268,6 +268,15 @@ func (o *Orchestrator) distributeTask(ctx context.Context, task *FederatedTask) 
 		wg.Add(1)
 		go func(nid string) {
 			defer wg.Done()
+			defer func() {
+				if r := recover(); r != nil {
+					resultCh <- struct {
+						nodeID string
+						result any
+						err    error
+					}{nid, nil, fmt.Errorf("node panicked: %v", r)}
+				}
+			}()
 			result, err := o.executeOnNode(ctx, nid, task)
 			resultCh <- struct {
 				nodeID string

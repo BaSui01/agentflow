@@ -305,6 +305,8 @@ func (e *Executor) Start(ctx context.Context, execID string, initialState any) e
 }
 
 func (e *Executor) runExecution(ctx context.Context, exec *Execution, steps []StepFunc, state any) {
+	defer e.cleanupExecutionChannels(exec.ID)
+
 	checkpointTicker := time.NewTicker(e.config.CheckpointInterval)
 	heartbeatTicker := time.NewTicker(e.config.HeartbeatInterval)
 	defer checkpointTicker.Stop()
@@ -460,6 +462,21 @@ func (e *Executor) runExecution(ctx context.Context, exec *Execution, steps []St
 		zap.String("exec_id", exec.ID),
 		zap.Duration("duration", exec.EndTime.Sub(exec.StartTime)),
 	)
+}
+
+func (e *Executor) cleanupExecutionChannels(execID string) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if ch, ok := e.pauseCh[execID]; ok {
+		close(ch)
+		delete(e.pauseCh, execID)
+	}
+	if ch, ok := e.resumeCh[execID]; ok {
+		close(ch)
+		delete(e.resumeCh, execID)
+	}
+	delete(e.steps, execID)
+	delete(e.namedSteps, execID)
 }
 
 // saveCheckpoint persists execution state via the CheckpointStore.

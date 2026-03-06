@@ -96,11 +96,15 @@ func (c *TrajectoryCollector) Finalize(answer string, totalTokens int, duration 
 	return c.record
 }
 
-// Record returns the current trajectory record (may be incomplete).
+// Record returns a snapshot of the current trajectory record (may be incomplete).
+// The returned copy is safe to read without holding any lock.
 func (c *TrajectoryCollector) Record() *TrajectoryRecord {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	return c.record
+	snapshot := *c.record
+	snapshot.Steps = make([]TrajectoryStep, len(c.record.Steps))
+	copy(snapshot.Steps, c.record.Steps)
+	return &snapshot
 }
 
 // TrajectoryStepOption configures optional fields on a TrajectoryStep.

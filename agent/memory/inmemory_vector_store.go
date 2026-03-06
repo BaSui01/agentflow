@@ -17,6 +17,10 @@ type InMemoryVectorStoreConfig struct {
 	// 尺寸在 > 0时验证存储/搜索向量。
 	Dimension int
 
+	// MaxEntries limits the number of stored vectors. 0 means unlimited.
+	// When the limit is reached, the oldest entry is evicted.
+	MaxEntries int
+
 	// 现在用于测试。 默认时间 。 现在。
 	Now func() time.Time
 }
@@ -30,11 +34,12 @@ type vectorEntry struct {
 // InMemoryVectorStore是增强MemorySystem的基本矢量执行.
 // 它支持通过平等进行元数据过滤和同位素相似性搜索.
 type InMemoryVectorStore struct {
-	mu        sync.RWMutex
-	items     map[string]vectorEntry
-	dimension int
-	now       func() time.Time
-	logger    *zap.Logger
+	mu         sync.RWMutex
+	items      map[string]vectorEntry
+	dimension  int
+	maxEntries int
+	now        func() time.Time
+	logger     *zap.Logger
 }
 
 func NewInMemoryVectorStore(config InMemoryVectorStoreConfig, logger *zap.Logger) *InMemoryVectorStore {
@@ -46,10 +51,11 @@ func NewInMemoryVectorStore(config InMemoryVectorStoreConfig, logger *zap.Logger
 		now = time.Now
 	}
 	return &InMemoryVectorStore{
-		items:     make(map[string]vectorEntry),
-		dimension: config.Dimension,
-		now:       now,
-		logger:    logger.With(zap.String("component", "vector_store_inmemory")),
+		items:      make(map[string]vectorEntry),
+		dimension:  config.Dimension,
+		maxEntries: config.MaxEntries,
+		now:        now,
+		logger:     logger.With(zap.String("component", "vector_store_inmemory")),
 	}
 }
 
@@ -70,12 +76,32 @@ func (s *InMemoryVectorStore) Store(ctx context.Context, id string, vector []flo
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	if s.maxEntries > 0 && len(s.items) >= s.maxEntries {
+		if _, exists := s.items[id]; !exists {
+			s.evictOldestLocked()
+		}
+	}
+
 	s.items[id] = vectorEntry{
 		vector:    append([]float64(nil), vector...),
 		metadata:  cloneMap(metadata),
 		createdAt: s.now(),
 	}
 	return nil
+}
+
+func (s *InMemoryVectorStore) evictOldestLocked() {
+	var oldestID string
+	var oldestTime time.Time
+	for id, entry := range s.items {
+		if oldestID == "" || entry.createdAt.Before(oldestTime) {
+			oldestID = id
+			oldestTime = entry.createdAt
+		}
+	}
+	if oldestID != "" {
+		delete(s.items, oldestID)
+	}
 }
 
 func (s *InMemoryVectorStore) Search(ctx context.Context, query []float64, topK int, filter map[string]any) ([]rag.LowLevelSearchResult, error) {

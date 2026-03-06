@@ -41,7 +41,7 @@ type ToolHandler func(ctx context.Context, args map[string]any) (any, error)
 // NewMCPServer 创建 MCP 服务器
 func NewMCPServer(name, version string, logger *zap.Logger) *DefaultMCPServer {
 	if logger == nil {
-		logger = zap.NewNop()
+		panic("agent.MCPServer: logger is required and cannot be nil")
 	}
 
 	return &DefaultMCPServer{

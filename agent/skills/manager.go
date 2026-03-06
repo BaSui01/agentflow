@@ -11,13 +11,14 @@ import (
 	"time"
 	"unicode"
 
+	"github.com/BaSui01/agentflow/types"
 	"go.uber.org/zap"
 )
 
 // SkillManager 技能管理器
 type SkillManager interface {
 	// 技能发现
-	DiscoverSkills(ctx context.Context, task string) ([]*Skill, error)
+	DiscoverSkills(ctx context.Context, task string) ([]*types.DiscoveredSkill, error)
 
 	// 技能加载
 	LoadSkill(ctx context.Context, skillID string) (*Skill, error)
@@ -95,7 +96,10 @@ func NewSkillManager(config SkillManagerConfig, logger *zap.Logger) *DefaultSkil
 }
 
 // DiscoverSkills 发现适合任务的技能
-func (m *DefaultSkillManager) DiscoverSkills(ctx context.Context, task string) ([]*Skill, error) {
+func (m *DefaultSkillManager) DiscoverSkills(ctx context.Context, task string) ([]*types.DiscoveredSkill, error) {
+	if strings.TrimSpace(task) == "" {
+		return nil, fmt.Errorf("task cannot be empty")
+	}
 	m.logger.Debug("discovering skills for task", zap.String("task", task))
 
 	// 1. 搜索匹配的技能
@@ -103,7 +107,7 @@ func (m *DefaultSkillManager) DiscoverSkills(ctx context.Context, task string) (
 
 	if len(metadata) == 0 {
 		m.logger.Info("no matching skills found", zap.String("task", task))
-		return []*Skill{}, nil
+		return []*types.DiscoveredSkill{}, nil
 	}
 
 	// 2. 加载技能并评分
@@ -115,6 +119,14 @@ func (m *DefaultSkillManager) DiscoverSkills(ctx context.Context, task string) (
 	scored := []scoredSkill{}
 
 	for _, meta := range metadata {
+		// P-006: 已加载的 skill 直接复用，避免 N+1 LoadSkill 磁盘 I/O
+		if cached, ok := m.GetSkill(meta.ID); ok {
+			score := cached.MatchesTask(task)
+			if score >= m.config.MinMatchScore {
+				scored = append(scored, scoredSkill{skill: cached, score: score})
+			}
+			continue
+		}
 		skill, err := m.LoadSkill(ctx, meta.ID)
 		if err != nil {
 			m.logger.Warn("failed to load skill",
@@ -140,15 +152,15 @@ func (m *DefaultSkillManager) DiscoverSkills(ctx context.Context, task string) (
 		return scored[i].score > scored[j].score
 	})
 
-	// 4. 返回 Top-K 技能
+	// 4. 返回 Top-K 技能（转换为 types.DiscoveredSkill 供 agent 层使用）
 	maxSkills := m.config.MaxLoadedSkills
 	if maxSkills <= 0 || maxSkills > len(scored) {
 		maxSkills = len(scored)
 	}
 
-	result := make([]*Skill, maxSkills)
+	result := make([]*types.DiscoveredSkill, maxSkills)
 	for i := 0; i < maxSkills; i++ {
-		result[i] = scored[i].skill
+		result[i] = skillToDiscoveredSkill(scored[i].skill)
 	}
 
 	m.logger.Info("discovered skills",
@@ -159,8 +171,25 @@ func (m *DefaultSkillManager) DiscoverSkills(ctx context.Context, task string) (
 	return result, nil
 }
 
+func skillToDiscoveredSkill(s *Skill) *types.DiscoveredSkill {
+	if s == nil {
+		return nil
+	}
+	return &types.DiscoveredSkill{
+		ID:           s.ID,
+		Name:         s.Name,
+		Description:  s.Description,
+		Instructions: s.Instructions,
+		Category:     s.Category,
+		Tags:         append([]string{}, s.Tags...),
+	}
+}
+
 // LoadSkill 加载技能
 func (m *DefaultSkillManager) LoadSkill(ctx context.Context, skillID string) (*Skill, error) {
+	if strings.TrimSpace(skillID) == "" {
+		return nil, fmt.Errorf("skillID is required")
+	}
 	return m.loadSkill(ctx, skillID, map[string]struct{}{})
 }
 
@@ -236,7 +265,12 @@ func (m *DefaultSkillManager) loadSkill(ctx context.Context, skillID string, loa
 	}
 
 	// 存储到已加载技能
+	// T-004: Lock 内重新检查，避免 TOCTOU 竞态（其他 goroutine 可能已加载）
 	m.mu.Lock()
+	if existing, ok := m.skills[skillID]; ok {
+		m.mu.Unlock()
+		return existing, nil
+	}
 	m.skills[skillID] = skill
 	m.mu.Unlock()
 
@@ -458,16 +492,13 @@ func (m *DefaultSkillManager) ScanDirectory(dir string) error {
 func (m *DefaultSkillManager) RefreshIndex() error {
 	m.logger.Info("refreshing skill index")
 
-	m.mu.RLock()
+	// T-008: 单一 Lock 完成 copy+clear，避免 RLock→RUnlock→Lock 窗口
+	m.mu.Lock()
 	directories := append([]string(nil), m.directories...)
 	inMemory := make(map[string]*Skill, len(m.inMemory))
 	for id, skill := range m.inMemory {
 		inMemory[id] = skill.Clone()
 	}
-	m.mu.RUnlock()
-
-	// 清空索引
-	m.mu.Lock()
 	m.index = make(map[string]*SkillMetadata)
 	m.mu.Unlock()
 

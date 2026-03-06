@@ -14,6 +14,9 @@ const (
 	LengthActionTruncate LengthAction = "truncate"
 	// LengthActionReject 拒绝处理
 	LengthActionReject LengthAction = "reject"
+
+	// DefaultMaxLength 默认最大输入长度（字符数）
+	DefaultMaxLength = 10000
 )
 
 // LengthValidatorConfig 长度验证器配置
@@ -29,7 +32,7 @@ type LengthValidatorConfig struct {
 // DefaultLengthValidatorConfig 返回默认配置
 func DefaultLengthValidatorConfig() *LengthValidatorConfig {
 	return &LengthValidatorConfig{
-		MaxLength: 10000,
+		MaxLength: DefaultMaxLength,
 		Action:    LengthActionReject,
 		Priority:  10, // 高优先级，最先执行
 	}

@@ -109,11 +109,7 @@ type Coordinator interface {
 // NewMultiAgentSystem 创建多 Agent 系统
 func NewMultiAgentSystem(agents []agent.Agent, config MultiAgentConfig, logger *zap.Logger) *MultiAgentSystem {
 	if logger == nil {
-		var err error
-		logger, err = zap.NewProduction()
-		if err != nil {
-			logger = zap.NewNop()
-		}
+		panic("agent.MultiAgentSystem: logger is required and cannot be nil")
 	}
 
 	agentMap := make(map[string]agent.Agent)
@@ -183,7 +179,9 @@ func (m *MultiAgentSystem) Execute(ctx context.Context, input *agent.Input) (*ag
 	}
 
 	if m.config.SharedState != nil {
-		_ = m.config.SharedState.Set(ctx, "result:"+string(m.pattern), output)
+		if err := m.config.SharedState.Set(ctx, "result:"+string(m.pattern), output); err != nil {
+			m.logger.Warn("failed to set shared state result", zap.Error(err), zap.String("pattern", string(m.pattern)))
+		}
 	}
 
 	m.logger.Info("multi-agent collaboration completed")
@@ -514,6 +512,11 @@ func (h *MessageHub) RecoverMessages(ctx context.Context) error {
 // StartRetryLoop 启动消息重试循环
 func (h *MessageHub) StartRetryLoop(ctx context.Context, interval time.Duration) {
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				h.logger.Error("panic in StartRetryLoop", zap.Any("panic", r))
+			}
+		}()
 		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
 
@@ -1068,6 +1071,19 @@ func (c *BroadcastCoordinator) Coordinate(ctx context.Context, agents map[string
 		wg.Add(1)
 		go func(idx int, agentID string) {
 			defer wg.Done()
+			defer func() {
+				if r := recover(); r != nil {
+					results[idx] = agentResult{
+						id:  agentID,
+						err: fmt.Errorf("agent panicked: %v", r),
+					}
+					c.logger.Error("parallel agent execution panicked",
+						zap.String("agent_id", agentID),
+						zap.Any("recover", r),
+						zap.Stack("stack"),
+					)
+				}
+			}()
 
 			output, err := agents[agentID].Execute(ctx, input)
 			results[idx] = agentResult{id: agentID, output: output, err: err}

@@ -35,7 +35,7 @@ func WithToolsChangedHandler(fn ToolsChangedHandler) ClientOption {
 
 func NewDefaultMCPClient(transport Transport, logger *zap.Logger, opts ...ClientOption) *DefaultMCPClient {
 	if logger == nil {
-		logger = zap.NewNop()
+		panic("agent.MCPClient: logger is required and cannot be nil")
 	}
 	c := &DefaultMCPClient{
 		transport: transport,
@@ -222,7 +222,10 @@ func (c *DefaultMCPClient) GetPrompt(ctx context.Context, name string, vars map[
 	}
 	if messages, ok := raw["messages"].([]any); ok && len(messages) > 0 {
 		if mm, ok := messages[0].(map[string]any); ok {
-			if content, ok := mm["content"].(map[string]any); ok {
+			switch content := mm["content"].(type) {
+			case string:
+				return content, nil
+			case map[string]any:
 				if text, ok := content["text"].(string); ok {
 					return text, nil
 				}

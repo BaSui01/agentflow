@@ -73,6 +73,10 @@ type Response struct {
 }
 
 // InterruptStore定义了中断的存储接口.
+//
+// TODO(concurrency): Persistence implementations (e.g. PostgreSQL) should support WithTransaction
+// for atomic Save+Update flows. CreateInterrupt does Save then later Update; ResolveInterrupt does Update.
+// InMemoryInterruptStore does not need transactions.
 type InterruptStore interface {
 	Save(ctx context.Context, interrupt *Interrupt) error
 	Load(ctx context.Context, interruptID string) (*Interrupt, error)

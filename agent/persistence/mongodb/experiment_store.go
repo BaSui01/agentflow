@@ -128,7 +128,8 @@ func (s *MongoExperimentStore) LoadExperiment(ctx context.Context, id string) (*
 }
 
 func (s *MongoExperimentStore) ListExperiments(ctx context.Context) ([]*evaluation.Experiment, error) {
-	cursor, err := s.experiments.Find(ctx, bson.D{}, options.Find().SetSort(bson.D{{Key: "start_time", Value: 1}}))
+	opts := options.Find().SetSort(bson.D{{Key: "start_time", Value: 1}}).SetLimit(500)
+	cursor, err := s.experiments.Find(ctx, bson.D{}, opts)
 	if err != nil {
 		return nil, err
 	}
@@ -197,7 +198,8 @@ func (s *MongoExperimentStore) RecordResult(ctx context.Context, experimentID, v
 }
 
 func (s *MongoExperimentStore) GetResults(ctx context.Context, experimentID string) (map[string][]*evaluation.EvalResult, error) {
-	cursor, err := s.results.Find(ctx, bson.D{{Key: "experiment_id", Value: experimentID}})
+	opts := options.Find().SetLimit(1000)
+	cursor, err := s.results.Find(ctx, bson.D{{Key: "experiment_id", Value: experimentID}}, opts)
 	if err != nil {
 		return nil, err
 	}

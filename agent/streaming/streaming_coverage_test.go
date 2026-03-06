@@ -15,7 +15,7 @@ import (
 // --- StreamManager ---
 
 func TestStreamManager_CreateGetClose_Coverage(t *testing.T) {
-	mgr := NewStreamManager(nil)
+	mgr := NewStreamManager(zap.NewNop())
 	conn := &mockConn{isAliveFn: func() bool { return true }}
 	handler := &mockHandler{}
 

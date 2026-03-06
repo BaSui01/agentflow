@@ -7,50 +7,10 @@ import (
 	"time"
 
 	"github.com/BaSui01/agentflow/agent"
-	"github.com/BaSui01/agentflow/agent/collaboration"
 	"github.com/BaSui01/agentflow/agent/crews"
-	"github.com/BaSui01/agentflow/agent/hierarchical"
-	"github.com/BaSui01/agentflow/llm"
-	"github.com/BaSui01/agentflow/types"
+	"github.com/BaSui01/agentflow/agent/multiagent"
 	"go.uber.org/zap"
 )
-
-type noopProvider struct{}
-
-func (noopProvider) Completion(context.Context, *llm.ChatRequest) (*llm.ChatResponse, error) {
-	return nil, fmt.Errorf("not implemented")
-}
-
-func (noopProvider) Stream(context.Context, *llm.ChatRequest) (<-chan llm.StreamChunk, error) {
-	return nil, fmt.Errorf("not implemented")
-}
-
-func (noopProvider) HealthCheck(context.Context) (*llm.HealthStatus, error) {
-	return &llm.HealthStatus{Healthy: true}, nil
-}
-
-func (noopProvider) Name() string { return "noop" }
-
-func (noopProvider) SupportsNativeFunctionCalling() bool { return false }
-
-func (noopProvider) ListModels(context.Context) ([]llm.Model, error) { return nil, nil }
-
-func (noopProvider) Endpoints() llm.ProviderEndpoints { return llm.ProviderEndpoints{} }
-
-func collaborationPattern(s string) collaboration.CollaborationPattern {
-	switch strings.ToLower(strings.TrimSpace(s)) {
-	case "consensus":
-		return collaboration.PatternConsensus
-	case "pipeline":
-		return collaboration.PatternPipeline
-	case "broadcast":
-		return collaboration.PatternBroadcast
-	case "network":
-		return collaboration.PatternNetwork
-	default:
-		return collaboration.PatternDebate
-	}
-}
 
 func crewProcess(s string) crews.ProcessType {
 	switch strings.ToLower(strings.TrimSpace(s)) {
@@ -63,11 +23,14 @@ func crewProcess(s string) crews.ProcessType {
 	}
 }
 
+// collaborationTeam executes via multiagent.ModeRegistry (collaboration mode)
+// instead of directly importing agent/collaboration.
 type collaborationTeam struct {
-	id      string
-	agents  []agent.Agent
-	pattern string
-	logger  *zap.Logger
+	id       string
+	agents   []agent.Agent
+	pattern  string
+	logger   *zap.Logger
+	registry *multiagent.ModeRegistry
 }
 
 func (t *collaborationTeam) ID() string { return t.id }
@@ -85,25 +48,25 @@ func (t *collaborationTeam) Execute(ctx context.Context, task string, opts ...ag
 	for _, fn := range opts {
 		fn(o)
 	}
-	config := collaboration.MultiAgentConfig{
-		Pattern:   collaborationPattern(t.pattern),
-		MaxRounds: o.MaxRounds,
-		Timeout:   o.Timeout,
+
+	input := &agent.Input{
+		Content: task,
+		Context: map[string]any{
+			"coordination_type": t.pattern,
+		},
 	}
-	if o.MaxRounds > 0 {
-		config.MaxRounds = o.MaxRounds
+	if o.Context != nil {
+		for k, v := range o.Context {
+			input.Context[k] = v
+		}
 	}
-	if o.Timeout > 0 {
-		config.Timeout = o.Timeout
-	}
-	sys := collaboration.NewMultiAgentSystem(t.agents, config, t.logger)
-	input := &agent.Input{Content: task, Context: o.Context}
+
 	if o.Timeout > 0 {
 		var cancel context.CancelFunc
 		ctx, cancel = context.WithTimeout(ctx, o.Timeout)
 		defer cancel()
 	}
-	out, err := sys.Execute(ctx, input)
+	out, err := t.registry.Execute(ctx, multiagent.ModeCollaboration, t.agents, input)
 	if err != nil {
 		return nil, err
 	}
@@ -116,18 +79,28 @@ func (t *collaborationTeam) Execute(ctx context.Context, task string, opts ...ag
 	}, nil
 }
 
+// NewCollaborationTeam creates a Team backed by the collaboration multi-agent mode.
 func NewCollaborationTeam(id string, agents []agent.Agent, pattern string, logger *zap.Logger) agent.Team {
 	if logger == nil {
 		logger = zap.NewNop()
 	}
-	return &collaborationTeam{id: id, agents: agents, pattern: pattern, logger: logger}
+	return &collaborationTeam{
+		id:       id,
+		agents:   agents,
+		pattern:  pattern,
+		logger:   logger,
+		registry: multiagent.GlobalModeRegistry(),
+	}
 }
 
+// hierarchicalTeam executes via multiagent.ModeRegistry (hierarchical mode)
+// instead of directly importing agent/hierarchical.
 type hierarchicalTeam struct {
 	id         string
 	supervisor agent.Agent
 	workers    []agent.Agent
 	logger     *zap.Logger
+	registry   *multiagent.ModeRegistry
 }
 
 func (t *hierarchicalTeam) ID() string { return t.id }
@@ -146,21 +119,19 @@ func (t *hierarchicalTeam) Execute(ctx context.Context, task string, opts ...age
 	for _, fn := range opts {
 		fn(o)
 	}
-	base := agent.NewBaseAgent(types.AgentConfig{
-		Core: types.CoreConfig{ID: "team-hierarchical-base", Name: "team-hierarchical-base", Type: string(agent.TypeGeneric)},
-	}, noopProvider{}, nil, nil, nil, t.logger, nil)
-	config := hierarchical.DefaultHierarchicalConfig()
-	if o.Timeout > 0 {
-		config.TaskTimeout = o.Timeout
-	}
-	ha := hierarchical.NewHierarchicalAgent(base, t.supervisor, t.workers, config, t.logger)
+
+	// Agents slice: supervisor first, then workers (convention for hierarchical mode)
+	agents := make([]agent.Agent, 0, 1+len(t.workers))
+	agents = append(agents, t.supervisor)
+	agents = append(agents, t.workers...)
+
 	input := &agent.Input{Content: task, Context: o.Context}
 	if o.Timeout > 0 {
 		var cancel context.CancelFunc
 		ctx, cancel = context.WithTimeout(ctx, o.Timeout)
 		defer cancel()
 	}
-	out, err := ha.Execute(ctx, input)
+	out, err := t.registry.Execute(ctx, multiagent.ModeHierarchical, agents, input)
 	if err != nil {
 		return nil, err
 	}
@@ -173,11 +144,18 @@ func (t *hierarchicalTeam) Execute(ctx context.Context, task string, opts ...age
 	}, nil
 }
 
+// NewHierarchicalTeam creates a Team backed by the hierarchical multi-agent mode.
 func NewHierarchicalTeam(id string, supervisor agent.Agent, workers []agent.Agent, logger *zap.Logger) agent.Team {
 	if logger == nil {
 		logger = zap.NewNop()
 	}
-	return &hierarchicalTeam{id: id, supervisor: supervisor, workers: workers, logger: logger}
+	return &hierarchicalTeam{
+		id:         id,
+		supervisor: supervisor,
+		workers:    workers,
+		logger:     logger,
+		registry:   multiagent.GlobalModeRegistry(),
+	}
 }
 
 type crewAgentAdapter struct {
@@ -260,9 +238,9 @@ func (t *crewTeam) Execute(ctx context.Context, task string, opts ...agent.TeamO
 		}
 	}
 	return &agent.TeamResult{
-		Content:   content,
-		Duration:  result.Duration,
-		Metadata:  map[string]any{"crew_id": result.CrewID},
+		Content:  content,
+		Duration: result.Duration,
+		Metadata: map[string]any{"crew_id": result.CrewID},
 	}, nil
 }
 

@@ -33,7 +33,7 @@ func (c *FileOpsConfig) resolveAndValidate(path string) (string, error) {
 	}
 	abs = filepath.Clean(abs)
 	if len(c.AllowedPaths) == 0 {
-		return abs, nil
+		return "", fmt.Errorf("file operations require at least one allowed path to be configured")
 	}
 	for _, p := range c.AllowedPaths {
 		prefix := filepath.Clean(p)
@@ -67,7 +67,7 @@ func (t *ReadFileTool) Name() string         { return "read_file" }
 func (t *ReadFileTool) Description() string { return "Read file content" }
 
 func (t *ReadFileTool) Schema() types.ToolSchema {
-	params, _ := json.Marshal(map[string]any{
+	params, err := json.Marshal(map[string]any{
 		"type": "object",
 		"properties": map[string]any{
 			"path":   map[string]any{"type": "string", "description": "File path"},
@@ -76,6 +76,9 @@ func (t *ReadFileTool) Schema() types.ToolSchema {
 		},
 		"required": []string{"path"},
 	})
+	if err != nil {
+		return types.ToolSchema{Name: t.Name(), Description: t.Description(), Parameters: []byte("{}")}
+	}
 	return types.ToolSchema{Name: t.Name(), Description: t.Description(), Parameters: params}
 }
 
@@ -133,7 +136,11 @@ func (t *ReadFileTool) Execute(ctx context.Context, args json.RawMessage) (json.
 	if err != nil {
 		return nil, fmt.Errorf("read failed: %w", err)
 	}
-	return json.Marshal(map[string]any{"content": string(content), "size": len(content)})
+	data, err := json.Marshal(map[string]any{"content": string(content), "size": len(content)})
+	if err != nil {
+		return nil, fmt.Errorf("marshal read_file result: %w", err)
+	}
+	return data, nil
 }
 
 type WriteFileTool struct {
@@ -149,7 +156,7 @@ func (t *WriteFileTool) Name() string         { return "write_file" }
 func (t *WriteFileTool) Description() string { return "Write content to file" }
 
 func (t *WriteFileTool) Schema() types.ToolSchema {
-	params, _ := json.Marshal(map[string]any{
+	params, err := json.Marshal(map[string]any{
 		"type": "object",
 		"properties": map[string]any{
 			"path":    map[string]any{"type": "string", "description": "File path"},
@@ -157,6 +164,9 @@ func (t *WriteFileTool) Schema() types.ToolSchema {
 		},
 		"required": []string{"path", "content"},
 	})
+	if err != nil {
+		return types.ToolSchema{Name: t.Name(), Description: t.Description(), Parameters: []byte("{}")}
+	}
 	return types.ToolSchema{Name: t.Name(), Description: t.Description(), Parameters: params}
 }
 
@@ -187,7 +197,11 @@ func (t *WriteFileTool) Execute(ctx context.Context, args json.RawMessage) (json
 	if err := os.WriteFile(resolved, []byte(a.Content), 0644); err != nil {
 		return nil, fmt.Errorf("write failed: %w", err)
 	}
-	return json.Marshal(map[string]any{"path": resolved, "bytes_written": len(a.Content)})
+	data, err := json.Marshal(map[string]any{"path": resolved, "bytes_written": len(a.Content)})
+	if err != nil {
+		return nil, fmt.Errorf("marshal write_file result: %w", err)
+	}
+	return data, nil
 }
 
 type EditFileTool struct {
@@ -203,7 +217,7 @@ func (t *EditFileTool) Name() string         { return "edit_file" }
 func (t *EditFileTool) Description() string { return "Replace old_string with new_string in file" }
 
 func (t *EditFileTool) Schema() types.ToolSchema {
-	params, _ := json.Marshal(map[string]any{
+	params, err := json.Marshal(map[string]any{
 		"type": "object",
 		"properties": map[string]any{
 			"path":       map[string]any{"type": "string", "description": "File path"},
@@ -212,6 +226,9 @@ func (t *EditFileTool) Schema() types.ToolSchema {
 		},
 		"required": []string{"path", "old_string", "new_string"},
 	})
+	if err != nil {
+		return types.ToolSchema{Name: t.Name(), Description: t.Description(), Parameters: []byte("{}")}
+	}
 	return types.ToolSchema{Name: t.Name(), Description: t.Description(), Parameters: params}
 }
 
@@ -251,7 +268,11 @@ func (t *EditFileTool) Execute(ctx context.Context, args json.RawMessage) (json.
 	if err := os.WriteFile(resolved, []byte(newContent), 0644); err != nil {
 		return nil, fmt.Errorf("write failed: %w", err)
 	}
-	return json.Marshal(map[string]any{"path": resolved, "replacements": 1})
+	data, err := json.Marshal(map[string]any{"path": resolved, "replacements": 1})
+	if err != nil {
+		return nil, fmt.Errorf("marshal edit_file result: %w", err)
+	}
+	return data, nil
 }
 
 type ListDirectoryTool struct {
@@ -267,7 +288,7 @@ func (t *ListDirectoryTool) Name() string         { return "list_directory" }
 func (t *ListDirectoryTool) Description() string { return "List directory contents" }
 
 func (t *ListDirectoryTool) Schema() types.ToolSchema {
-	params, _ := json.Marshal(map[string]any{
+	params, err := json.Marshal(map[string]any{
 		"type": "object",
 		"properties": map[string]any{
 			"path":      map[string]any{"type": "string", "description": "Directory path"},
@@ -276,6 +297,9 @@ func (t *ListDirectoryTool) Schema() types.ToolSchema {
 		},
 		"required": []string{"path"},
 	})
+	if err != nil {
+		return types.ToolSchema{Name: t.Name(), Description: t.Description(), Parameters: []byte("{}")}
+	}
 	return types.ToolSchema{Name: t.Name(), Description: t.Description(), Parameters: params}
 }
 
@@ -347,5 +371,9 @@ func (t *ListDirectoryTool) Execute(ctx context.Context, args json.RawMessage) (
 	if err != nil {
 		return nil, err
 	}
-	return json.Marshal(map[string]any{"entries": entries})
+	data, err := json.Marshal(map[string]any{"entries": entries})
+	if err != nil {
+		return nil, fmt.Errorf("marshal list_directory result: %w", err)
+	}
+	return data, nil
 }

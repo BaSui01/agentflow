@@ -29,7 +29,9 @@ type CrewMember struct {
 	Metadata map[string]any `json:"metadata,omitempty"`
 }
 
-// 成员地位代表船员地位。
+// MemberStatus 代表船员成员状态。
+// 语义与 agent/hierarchical.WorkerStatus（idle/busy）相近：idle 对应空闲，working 对应 busy，
+// waiting 表示等待依赖完成。两套常量服务于不同编排模式（Crew vs Hierarchical），暂不统一。
 type MemberStatus string
 
 const (

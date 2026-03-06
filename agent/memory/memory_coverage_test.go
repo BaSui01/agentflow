@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/BaSui01/agentflow/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
@@ -41,7 +42,7 @@ func TestInMemoryEpisodicStore_GetTimeline(t *testing.T) {
 	ctx := context.Background()
 
 	now := time.Now()
-	events := []*EpisodicEvent{
+	events := []*types.EpisodicEvent{
 		{ID: "e1", AgentID: "a1", Type: "action", Timestamp: now.Add(-3 * time.Hour)},
 		{ID: "e2", AgentID: "a1", Type: "action", Timestamp: now.Add(-2 * time.Hour)},
 		{ID: "e3", AgentID: "a2", Type: "action", Timestamp: now.Add(-1 * time.Hour)},

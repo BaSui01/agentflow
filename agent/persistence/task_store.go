@@ -40,7 +40,9 @@ type TaskStore interface {
 	Stats(ctx context.Context) (*TaskStoreStats, error)
 }
 
-// 任务状态 :
+// TaskStatus 是持久化层的任务状态，用于 TaskStore 的存储与恢复。
+// types.ExecutionStatus 是跨层契约状态（API/Workflow/Agent 通用），两者概念重叠但职责不同：
+// TaskStatus 面向异步任务持久化与恢复，ExecutionStatus 面向执行流程的跨层传递。
 type TaskStatus string
 
 const (
