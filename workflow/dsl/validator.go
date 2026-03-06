@@ -184,12 +184,14 @@ func (v *Validator) validateStepDefinition(stepName string, step StepDef) []erro
 	var errs []error
 
 	validStepTypes := map[string]bool{
-		"llm":         true,
-		"tool":        true,
-		"human_input": true,
-		"code":        true,
-		"agent":       true,
-		"passthrough": true,
+		"llm":           true,
+		"tool":          true,
+		"human_input":   true,
+		"code":          true,
+		"agent":         true,
+		"orchestration": true,
+		"chain":         true,
+		"passthrough":   true,
 	}
 	if !validStepTypes[step.Type] {
 		errs = append(errs, fmt.Errorf("step %s: invalid type %q", stepName, step.Type))
@@ -208,6 +210,26 @@ func (v *Validator) validateStepDefinition(stepName string, step StepDef) []erro
 	case "human_input":
 		if strings.TrimSpace(step.Prompt) == "" {
 			errs = append(errs, fmt.Errorf("step %s: human_input step requires prompt", stepName))
+		}
+	case "orchestration":
+		if step.Orchestration == nil {
+			errs = append(errs, fmt.Errorf("step %s: orchestration step requires orchestration definition", stepName))
+		} else if strings.TrimSpace(step.Orchestration.Mode) == "" {
+			errs = append(errs, fmt.Errorf("step %s: orchestration step requires mode", stepName))
+		} else if len(step.Orchestration.AgentIDs) == 0 {
+			errs = append(errs, fmt.Errorf("step %s: orchestration step requires agent_ids", stepName))
+		}
+	case "chain":
+		if step.Chain == nil {
+			errs = append(errs, fmt.Errorf("step %s: chain step requires chain definition", stepName))
+		} else if len(step.Chain.Steps) == 0 {
+			errs = append(errs, fmt.Errorf("step %s: chain step requires at least one step", stepName))
+		} else {
+			for i, ce := range step.Chain.Steps {
+				if strings.TrimSpace(ce.Tool) == "" {
+					errs = append(errs, fmt.Errorf("step %s: chain step[%d] requires tool", stepName, i))
+				}
+			}
 		}
 	}
 

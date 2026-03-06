@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/BaSui01/agentflow/llm/capabilities/tools"
 	"github.com/BaSui01/agentflow/workflow/core"
 	workflowsteps "github.com/BaSui01/agentflow/workflow/steps"
 )
@@ -16,6 +17,10 @@ type StepDependencies struct {
 	HumanHandler  core.HumanInputHandler
 	AgentExecutor core.AgentExecutor
 	CodeHandler   workflowsteps.CodeHandler
+
+	AgentResolver workflowsteps.AgentResolver
+
+	ChainRegistry tools.ToolRegistryLike
 
 	HybridRetriever   workflowsteps.HybridRetriever
 	MultiHopReasoner  workflowsteps.MultiHopReasoner
@@ -39,6 +44,18 @@ type StepSpec struct {
 	Query        string
 	Dependencies []string
 	Input        core.StepInput
+
+	AgentID     string
+	AgentModel  string
+	AgentPrompt string
+	AgentTools  []string
+
+	OrchestrationMode      string
+	OrchestrationAgents    []string
+	OrchestrationMaxRounds int
+	OrchestrationTimeout   time.Duration
+
+	ChainSteps []tools.ChainStep
 }
 
 // BuildExecutionNode creates an execution node from step spec and shared dependencies.
@@ -87,6 +104,10 @@ func buildStep(spec StepSpec, deps StepDependencies) (core.StepProtocol, error) 
 		return step, step.Validate()
 	case core.StepTypeAgent:
 		step := workflowsteps.NewAgentStep(spec.ID, deps.AgentExecutor)
+		step.AgentID = spec.AgentID
+		step.AgentModel = spec.AgentModel
+		step.AgentPrompt = spec.AgentPrompt
+		step.AgentTools = append([]string(nil), spec.AgentTools...)
 		return step, step.Validate()
 	case core.StepTypeHybridRetrieve:
 		step := workflowsteps.NewHybridRetrieveStep(spec.ID, deps.HybridRetriever)
@@ -99,6 +120,21 @@ func buildStep(spec StepSpec, deps StepDependencies) (core.StepProtocol, error) 
 	case core.StepTypeRerank:
 		step := workflowsteps.NewRerankStep(spec.ID, deps.RetrievalReranker)
 		step.Query = spec.Query
+		return step, step.Validate()
+	case core.StepTypeOrchestration:
+		step := workflowsteps.NewOrchestrationStep(spec.ID, deps.AgentResolver, nil, nil)
+		step.Mode = spec.OrchestrationMode
+		step.AgentIDs = append([]string(nil), spec.OrchestrationAgents...)
+		step.MaxRounds = spec.OrchestrationMaxRounds
+		step.Timeout = spec.OrchestrationTimeout
+		return step, step.Validate()
+	case core.StepTypeChain:
+		if deps.ChainRegistry == nil {
+			return nil, fmt.Errorf("chain step requires ChainRegistry")
+		}
+		chain := tools.ToolChain{Name: spec.ID, Steps: spec.ChainSteps}
+		exec := tools.NewChainExecutor(deps.ChainRegistry, tools.DefaultParallelConfig())
+		step := workflowsteps.NewChainStep(spec.ID, chain, exec)
 		return step, step.Validate()
 	default:
 		return nil, fmt.Errorf("unsupported step type: %s", spec.Type)
@@ -174,6 +210,20 @@ func DefaultStepRunner(ctx context.Context, step core.StepProtocol, input core.S
 		}
 		return s.Execute(ctx, input)
 	case *workflowsteps.RerankStep:
+		_ = s.ID()
+		_ = s.Type()
+		if err := s.Validate(); err != nil {
+			return core.StepOutput{}, err
+		}
+		return s.Execute(ctx, input)
+	case *workflowsteps.OrchestrationStep:
+		_ = s.ID()
+		_ = s.Type()
+		if err := s.Validate(); err != nil {
+			return core.StepOutput{}, err
+		}
+		return s.Execute(ctx, input)
+	case *workflowsteps.ChainStep:
 		_ = s.ID()
 		_ = s.Type()
 		if err := s.Validate(); err != nil {

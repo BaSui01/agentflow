@@ -22,6 +22,7 @@ const (
 	ModeCrew          = "crew"
 	ModeDeliberation  = "deliberation"
 	ModeFederation    = "federation"
+	ModeLoop          = "loop"
 )
 
 // RegisterDefaultModes registers built-in mode strategies into a single registry.
@@ -37,8 +38,9 @@ func RegisterDefaultModes(reg *ModeRegistry, logger *zap.Logger) error {
 	reg.Register(newCollaborationModeStrategy(logger))
 	reg.Register(newHierarchicalModeStrategy(logger))
 	reg.Register(newCrewModeStrategy(logger))
-	reg.Register(newPrimaryModeStrategy(ModeDeliberation, logger))
+	reg.Register(newDeliberationModeStrategy(logger))
 	reg.Register(newPrimaryModeStrategy(ModeFederation, logger))
+	reg.Register(newLoopModeStrategy(logger))
 	return nil
 }
 
@@ -83,11 +85,17 @@ func (m *collaborationModeStrategy) Execute(ctx context.Context, agents []agent.
 		return nil, fmt.Errorf("collaboration mode requires at least two agents")
 	}
 	pattern := collaborationPatternFromInput(input)
-	system := collaboration.NewMultiAgentSystem(agents, collaboration.MultiAgentConfig{
+	cfg := collaboration.MultiAgentConfig{
 		Pattern:   pattern,
 		MaxRounds: 3,
 		Timeout:   5 * time.Minute,
-	}, m.logger)
+	}
+	if input != nil && input.Context != nil {
+		if ss, ok := input.Context["shared_state"].(collaboration.SharedState); ok {
+			cfg.SharedState = ss
+		}
+	}
+	system := collaboration.NewMultiAgentSystem(agents, cfg, m.logger)
 	return system.Execute(ctx, input)
 }
 
@@ -142,7 +150,7 @@ func (m *hierarchicalModeStrategy) Execute(ctx context.Context, agents []agent.A
 			Name: "multiagent-hierarchical-mode",
 			Type: string(agent.TypeGeneric),
 		},
-	}, noopProvider{}, nil, nil, nil, m.logger)
+	}, noopProvider{}, nil, nil, nil, m.logger, nil)
 
 	ha := hierarchical.NewHierarchicalAgent(base, supervisor, workers, hierarchical.DefaultHierarchicalConfig(), m.logger)
 	return ha.Execute(ctx, input)
@@ -249,3 +257,104 @@ func (noopProvider) SupportsNativeFunctionCalling() bool { return false }
 func (noopProvider) ListModels(context.Context) ([]llm.Model, error) { return nil, nil }
 
 func (noopProvider) Endpoints() llm.ProviderEndpoints { return llm.ProviderEndpoints{} }
+
+const defaultLoopMaxIterations = 5
+
+type loopModeStrategy struct {
+	logger *zap.Logger
+}
+
+func newLoopModeStrategy(logger *zap.Logger) *loopModeStrategy {
+	return &loopModeStrategy{logger: logger.With(zap.String("mode", ModeLoop))}
+}
+
+func (m *loopModeStrategy) Name() string { return ModeLoop }
+
+func (m *loopModeStrategy) Execute(ctx context.Context, agents []agent.Agent, input *agent.Input) (*agent.Output, error) {
+	if len(agents) == 0 {
+		return nil, fmt.Errorf("loop mode requires at least one agent")
+	}
+
+	maxIterations := defaultLoopMaxIterations
+	if input != nil && input.Context != nil {
+		if v, ok := input.Context["max_iterations"].(int); ok && v > 0 {
+			maxIterations = v
+		}
+	}
+
+	stopKeyword := "LOOP_COMPLETE"
+	if input != nil && input.Context != nil {
+		if v, ok := input.Context["stop_keyword"].(string); ok && v != "" {
+			stopKeyword = v
+		}
+	}
+
+	current := input
+	var lastOutput *agent.Output
+
+	for iter := 1; iter <= maxIterations; iter++ {
+		if err := ctx.Err(); err != nil {
+			return nil, fmt.Errorf("loop cancelled at iteration %d: %w", iter, err)
+		}
+
+		agentIdx := (iter - 1) % len(agents)
+		ag := agents[agentIdx]
+
+		iterInput := &agent.Input{
+			TraceID: current.TraceID,
+			Content: current.Content,
+			Context: map[string]any{
+				"loop_iteration":     iter,
+				"loop_max_iterations": maxIterations,
+			},
+		}
+		if current.Context != nil {
+			for k, v := range current.Context {
+				if _, exists := iterInput.Context[k]; !exists {
+					iterInput.Context[k] = v
+				}
+			}
+		}
+
+		out, err := ag.Execute(ctx, iterInput)
+		if err != nil {
+			m.logger.Warn("agent execution failed in loop",
+				zap.String("agent_id", ag.ID()),
+				zap.Int("iteration", iter),
+				zap.Error(err),
+			)
+			if lastOutput != nil {
+				break
+			}
+			return nil, fmt.Errorf("loop agent %s failed at iteration %d: %w", ag.ID(), iter, err)
+		}
+
+		lastOutput = out
+		m.logger.Debug("loop iteration completed",
+			zap.Int("iteration", iter),
+			zap.String("agent_id", ag.ID()),
+		)
+
+		if strings.Contains(out.Content, stopKeyword) {
+			m.logger.Debug("loop stop condition met", zap.Int("iteration", iter))
+			break
+		}
+
+		current = &agent.Input{
+			TraceID:  input.TraceID,
+			Content:  out.Content,
+			Context:  input.Context,
+			Variables: input.Variables,
+		}
+	}
+
+	if lastOutput == nil {
+		return nil, fmt.Errorf("loop completed without producing any output")
+	}
+
+	if lastOutput.Metadata == nil {
+		lastOutput.Metadata = map[string]any{}
+	}
+	lastOutput.Metadata["mode"] = ModeLoop
+	return lastOutput, nil
+}

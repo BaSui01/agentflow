@@ -5,7 +5,10 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
+	"github.com/BaSui01/agentflow/agent"
+	"github.com/BaSui01/agentflow/llm/capabilities/tools"
 	"github.com/BaSui01/agentflow/workflow"
 	"github.com/BaSui01/agentflow/workflow/core"
 	"github.com/BaSui01/agentflow/workflow/engine"
@@ -349,10 +352,63 @@ func (p *Parser) resolveStep(def *NodeDef, dsl *WorkflowDSL, vars map[string]any
 
 	case "agent":
 		spec := engine.StepSpec{
-			ID:   def.ID,
-			Type: core.StepTypeAgent,
+			ID:      def.ID,
+			Type:    core.StepTypeAgent,
+			AgentID: stepDef.Agent,
+		}
+		if stepDef.InlineAgent != nil {
+			spec.AgentModel = stepDef.InlineAgent.Model
+			spec.AgentPrompt = stepDef.InlineAgent.SystemPrompt
+			if len(stepDef.InlineAgent.Tools) > 0 {
+				spec.AgentTools = append([]string(nil), stepDef.InlineAgent.Tools...)
+			}
 		}
 		return p.newEngineBackedStep(spec, "agent")
+
+	case "orchestration":
+		if stepDef.Orchestration == nil {
+			return nil, fmt.Errorf("orchestration step requires orchestration definition")
+		}
+		spec := engine.StepSpec{
+			ID:                     def.ID,
+			Type:                   core.StepTypeOrchestration,
+			OrchestrationMode:      stepDef.Orchestration.Mode,
+			OrchestrationAgents:   append([]string(nil), stepDef.Orchestration.AgentIDs...),
+			OrchestrationMaxRounds: stepDef.Orchestration.MaxRounds,
+		}
+		if stepDef.Orchestration.TimeoutMs > 0 {
+			spec.OrchestrationTimeout = time.Duration(stepDef.Orchestration.TimeoutMs) * time.Millisecond
+		}
+		return p.newEngineBackedStep(spec, "orchestration")
+
+	case "chain":
+		if stepDef.Chain == nil {
+			return nil, fmt.Errorf("chain step requires chain definition")
+		}
+		chainSteps := make([]tools.ChainStep, len(stepDef.Chain.Steps))
+		for i, ce := range stepDef.Chain.Steps {
+			args := make(map[string]any)
+			for k, v := range ce.Args {
+				if s, ok := v.(string); ok {
+					args[k] = p.interpolate(s, vars)
+				} else {
+					args[k] = v
+				}
+			}
+			chainSteps[i] = tools.ChainStep{
+				ToolName:   ce.Tool,
+				Args:       args,
+				ArgMapping: ce.ArgMapping,
+				OnError:    ce.OnError,
+				MaxRetries: ce.MaxRetries,
+			}
+		}
+		spec := engine.StepSpec{
+			ID:         def.ID,
+			Type:       core.StepTypeChain,
+			ChainSteps: chainSteps,
+		}
+		return p.newEngineBackedStep(spec, "chain")
 
 	case "passthrough":
 		return &workflow.PassthroughStep{}, nil
@@ -434,6 +490,9 @@ func (p *Parser) effectiveStepDeps() engine.StepDependencies {
 	}
 	if deps.AgentExecutor == nil {
 		deps.AgentExecutor = noopAgentExecutor{}
+	}
+	if deps.AgentResolver == nil {
+		deps.AgentResolver = noopAgentResolver{}
 	}
 	if deps.CodeHandler == nil {
 		deps.CodeHandler = func(ctx context.Context, input core.StepInput) (map[string]any, error) {
@@ -519,6 +578,12 @@ func (noopAgentExecutor) Execute(ctx context.Context, input any) (any, error) {
 	return nil, fmt.Errorf("step dependency not configured")
 }
 
+type noopAgentResolver struct{}
+
+func (noopAgentResolver) ResolveAgent(ctx context.Context, agentID string) (agent.Agent, error) {
+	return nil, fmt.Errorf("step dependency not configured")
+}
+
 func (s *protocolStepAdapter) Name() string {
 	if s.name != "" {
 		return s.name
@@ -563,6 +628,14 @@ func (s *protocolStepAdapter) Execute(ctx context.Context, input any) (any, erro
 		}
 	case core.StepTypeHuman:
 		if v, ok := out.Data["input"]; ok {
+			return v, nil
+		}
+	case core.StepTypeOrchestration:
+		if v, ok := out.Data["result"]; ok {
+			return v, nil
+		}
+	case core.StepTypeChain:
+		if v, ok := out.Data["result"]; ok {
 			return v, nil
 		}
 	}

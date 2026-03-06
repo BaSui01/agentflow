@@ -34,7 +34,7 @@ func (m *modeTestAgent) Execute(_ context.Context, input *agent.Input) (*agent.O
 	}, nil
 }
 
-func TestRegisterDefaultModes_RegistersAllSixModes(t *testing.T) {
+func TestRegisterDefaultModes_RegistersAllModes(t *testing.T) {
 	reg := NewModeRegistry()
 	if err := RegisterDefaultModes(reg, zap.NewNop()); err != nil {
 		t.Fatalf("register default modes failed: %v", err)
@@ -47,6 +47,7 @@ func TestRegisterDefaultModes_RegistersAllSixModes(t *testing.T) {
 		ModeCrew:          true,
 		ModeDeliberation:  true,
 		ModeFederation:    true,
+		ModeLoop:          true,
 	}
 	if len(got) != len(want) {
 		t.Fatalf("expected %d modes, got %d (%v)", len(want), len(got), got)
@@ -63,13 +64,15 @@ func TestDefaultPrimaryModes_ExecuteViaUnifiedChain(t *testing.T) {
 	if err := RegisterDefaultModes(reg, zap.NewNop()); err != nil {
 		t.Fatalf("register default modes failed: %v", err)
 	}
-	agents := []agent.Agent{
+	singleAgent := []agent.Agent{&modeTestAgent{id: "a1", name: "agent-1", out: "ok"}}
+	twoAgents := []agent.Agent{
 		&modeTestAgent{id: "a1", name: "agent-1", out: "ok"},
+		&modeTestAgent{id: "a2", name: "agent-2", out: "ok"},
 	}
 	in := &agent.Input{TraceID: "t1", Content: "hello"}
 
-	for _, mode := range []string{ModeReasoning, ModeDeliberation, ModeFederation} {
-		out, err := reg.Execute(context.Background(), mode, agents, in)
+	for _, mode := range []string{ModeReasoning, ModeFederation} {
+		out, err := reg.Execute(context.Background(), mode, singleAgent, in)
 		if err != nil {
 			t.Fatalf("%s execute failed: %v", mode, err)
 		}
@@ -79,6 +82,17 @@ func TestDefaultPrimaryModes_ExecuteViaUnifiedChain(t *testing.T) {
 		if out.Metadata == nil || out.Metadata["mode"] != mode {
 			t.Fatalf("%s metadata missing mode tag: %#v", mode, out.Metadata)
 		}
+	}
+
+	out, err := reg.Execute(context.Background(), ModeDeliberation, twoAgents, in)
+	if err != nil {
+		t.Fatalf("deliberation execute failed: %v", err)
+	}
+	if out.Content == "" {
+		t.Fatalf("deliberation unexpected empty output")
+	}
+	if out.Metadata == nil || out.Metadata["mode"] != ModeDeliberation {
+		t.Fatalf("deliberation metadata missing mode tag: %#v", out.Metadata)
 	}
 }
 
@@ -106,8 +120,8 @@ func TestCollaborationMode_RespectsCoordinationTypeFromInputContext(t *testing.T
 func TestGlobalModeRegistry_AutoRegistersDefaults(t *testing.T) {
 	reg := GlobalModeRegistry()
 	got := reg.List()
-	if len(got) < 6 {
-		t.Fatalf("expected at least 6 default modes, got %d (%v)", len(got), got)
+	if len(got) < 7 {
+		t.Fatalf("expected at least 7 default modes, got %d (%v)", len(got), got)
 	}
 	required := map[string]bool{
 		ModeReasoning:     false,
@@ -116,6 +130,7 @@ func TestGlobalModeRegistry_AutoRegistersDefaults(t *testing.T) {
 		ModeCrew:          false,
 		ModeDeliberation:  false,
 		ModeFederation:    false,
+		ModeLoop:          false,
 	}
 	for _, name := range got {
 		if _, ok := required[name]; ok {
@@ -126,5 +141,71 @@ func TestGlobalModeRegistry_AutoRegistersDefaults(t *testing.T) {
 		if !ok {
 			t.Fatalf("missing default mode in global registry: %s", name)
 		}
+	}
+}
+
+type loopTestAgent struct {
+	id        string
+	name      string
+	callCount int
+	stopAt    int
+}
+
+func (a *loopTestAgent) ID() string                                   { return a.id }
+func (a *loopTestAgent) Name() string                                 { return a.name }
+func (a *loopTestAgent) Type() agent.AgentType                        { return agent.TypeGeneric }
+func (a *loopTestAgent) State() agent.State                           { return agent.StateReady }
+func (a *loopTestAgent) Init(context.Context) error                   { return nil }
+func (a *loopTestAgent) Teardown(context.Context) error               { return nil }
+func (a *loopTestAgent) Plan(context.Context, *agent.Input) (*agent.PlanResult, error) {
+	return nil, nil
+}
+func (a *loopTestAgent) Observe(context.Context, *agent.Feedback) error { return nil }
+func (a *loopTestAgent) Execute(_ context.Context, input *agent.Input) (*agent.Output, error) {
+	a.callCount++
+	content := "working..."
+	if a.callCount >= a.stopAt {
+		content = "done LOOP_COMPLETE"
+	}
+	return &agent.Output{TraceID: input.TraceID, Content: content}, nil
+}
+
+func TestLoopMode_StopsOnKeyword(t *testing.T) {
+	reg := NewModeRegistry()
+	if err := RegisterDefaultModes(reg, zap.NewNop()); err != nil {
+		t.Fatalf("register default modes failed: %v", err)
+	}
+	ag := &loopTestAgent{id: "loop-1", name: "looper", stopAt: 3}
+	in := &agent.Input{TraceID: "t1", Content: "iterate", Context: map[string]any{"max_iterations": 10}}
+
+	out, err := reg.Execute(context.Background(), ModeLoop, []agent.Agent{ag}, in)
+	if err != nil {
+		t.Fatalf("loop mode failed: %v", err)
+	}
+	if ag.callCount != 3 {
+		t.Fatalf("expected 3 iterations, got %d", ag.callCount)
+	}
+	if out.Metadata == nil || out.Metadata["mode"] != ModeLoop {
+		t.Fatalf("missing loop mode tag in metadata: %#v", out.Metadata)
+	}
+}
+
+func TestLoopMode_StopsAtMaxIterations(t *testing.T) {
+	reg := NewModeRegistry()
+	if err := RegisterDefaultModes(reg, zap.NewNop()); err != nil {
+		t.Fatalf("register default modes failed: %v", err)
+	}
+	ag := &loopTestAgent{id: "loop-1", name: "looper", stopAt: 999}
+	in := &agent.Input{TraceID: "t1", Content: "iterate", Context: map[string]any{"max_iterations": 3}}
+
+	out, err := reg.Execute(context.Background(), ModeLoop, []agent.Agent{ag}, in)
+	if err != nil {
+		t.Fatalf("loop mode failed: %v", err)
+	}
+	if ag.callCount != 3 {
+		t.Fatalf("expected 3 iterations (max), got %d", ag.callCount)
+	}
+	if out.Content != "working..." {
+		t.Fatalf("unexpected output: %q", out.Content)
 	}
 }

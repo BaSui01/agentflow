@@ -303,6 +303,46 @@ func TestValidator_SubgraphNode_NoSubgraph(t *testing.T) {
 	assert.Contains(t, errMsgs, "node s: subgraph node requires subgraph definition")
 }
 
+func TestValidator_ChainStep_RequiresChainDef(t *testing.T) {
+	v := NewValidator()
+	dsl := &WorkflowDSL{
+		Version: "1.0",
+		Name:    "test",
+		Steps: map[string]StepDef{
+			"ch1": {Type: "chain"},
+		},
+		Workflow: WorkflowNodesDef{
+			Entry: "a",
+			Nodes: []NodeDef{
+				{ID: "a", Type: "action", Step: "ch1"},
+			},
+		},
+	}
+	errs := v.Validate(dsl)
+	errMsgs := errStrings(errs)
+	assert.Contains(t, errMsgs, "step ch1: chain step requires chain definition")
+}
+
+func TestValidator_ChainStep_EmptySteps(t *testing.T) {
+	v := NewValidator()
+	dsl := &WorkflowDSL{
+		Version: "1.0",
+		Name:    "test",
+		Steps: map[string]StepDef{
+			"ch1": {Type: "chain", Chain: &ChainStepDef{Steps: nil}},
+		},
+		Workflow: WorkflowNodesDef{
+			Entry: "a",
+			Nodes: []NodeDef{
+				{ID: "a", Type: "action", Step: "ch1"},
+			},
+		},
+	}
+	errs := v.Validate(dsl)
+	errMsgs := errStrings(errs)
+	assert.Contains(t, errMsgs, "step ch1: chain step requires at least one step")
+}
+
 // ============================================================
 // Validator — reference validation
 // ============================================================
