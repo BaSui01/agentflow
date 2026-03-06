@@ -212,9 +212,21 @@ func TestProperty_SchemaValidation_MultipleErrorsHavePaths(t *testing.T) {
 	rapid.Check(t, func(rt *rapid.T) {
 		validator := NewValidator()
 
-		field1 := rapid.StringMatching(`[a-z]{3,6}`).Draw(rt, "field1")
-		field2 := rapid.StringMatching(`[a-z]{3,6}`).Draw(rt, "field2")
-		field3 := rapid.StringMatching(`[a-z]{3,6}`).Draw(rt, "field3")
+		used := map[string]struct{}{}
+		drawUniqueField := func(label string) string {
+			for {
+				field := rapid.StringMatching(`[a-z]{3,6}`).Draw(rt, label)
+				if _, exists := used[field]; exists {
+					continue
+				}
+				used[field] = struct{}{}
+				return field
+			}
+		}
+
+		field1 := drawUniqueField("field1")
+		field2 := drawUniqueField("field2")
+		field3 := drawUniqueField("field3")
 
 		schema := NewObjectSchema().
 			AddProperty(field1, NewStringSchema().WithMinLength(10)).

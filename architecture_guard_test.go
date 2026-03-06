@@ -418,7 +418,8 @@ func extractCmdAgentflowDocumentedFiles(readmePath string) (map[string]struct{},
 
 	start := -1
 	for i, line := range lines {
-		if strings.Contains(line, "cmd/agentflow/") {
+		trimmed := strings.TrimSpace(strings.TrimRight(line, "\r"))
+		if strings.HasPrefix(trimmed, "├── cmd/agentflow/") || strings.HasPrefix(trimmed, "└── cmd/agentflow/") {
 			start = i
 			break
 		}

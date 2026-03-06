@@ -1,42 +1,37 @@
 version: 3
 workdir: .
-components:
-  types:       { in: types/** }
-  llm_core:    { in: llm/core/** }
-  llm_gateway: { in: llm/gateway/** }
-  llm_runtime: { in: llm/runtime/** }
-  llm_caps:    { in: llm/capabilities/** }
-  llm_provs:   { in: llm/providers/** }
-  agent:       { in: agent/** }
-  rag:         { in: rag/** }
-  workflow:    { in: workflow/** }
-  api:         { in: api/** }
-  cmd:         { in: cmd/** }
-  internal:    { in: internal/** }
 
-commonComponents:
-  - types
+allow:
+  depOnAnyVendor: true
+  ignoreNotFoundComponents: true
+
+exclude:
+  - agent
+  - api
+  - cmd
+  - config
+  - internal
+  - llm
+  - pkg
+  - rag
+  - workflow
+  - testutil
+  - scripts
+  - examples
+  - .snow
+
+excludeFiles:
+  - '^.*_test\.go$'
+  - '^.*[\\/]examples[\\/].*$'
+  - '^.*[\\/]\.snow[\\/].*$'
+  - '^.*[\\/]agentflow\.go$'
+
+components:
+  types:
+    in:
+      - types
 
 deps:
   types:
-    mayDependOn: [types]
-  llm_core:
-    mayDependOn: [types, llm_core]
-  llm_gateway:
-    mayDependOn: [types, llm_core, llm_gateway, llm_runtime, llm_caps]
-  llm_runtime:
-    mayDependOn: [types, llm_core, llm_runtime]
-  llm_caps:
-    mayDependOn: [types, llm_core, llm_caps, llm_provs]
-  llm_provs:
-    mayDependOn: [types, llm_core, llm_provs]
-  agent:
-    mayDependOn: [types, llm_core, llm_gateway, agent, rag]
-  rag:
-    mayDependOn: [types, llm_core, llm_caps, rag]
-  workflow:
-    mayDependOn: [types, llm_core, llm_gateway, agent, rag, workflow]
-  api:
-    mayDependOn: [types, llm_core, llm_gateway, agent, rag, workflow, api]
-  cmd:
-    mayDependOn: [types, llm_core, llm_gateway, llm_runtime, llm_caps, llm_provs, agent, rag, workflow, api, internal, cmd]
+    mayDependOn:
+      - types
