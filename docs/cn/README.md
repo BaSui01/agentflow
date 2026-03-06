@@ -44,12 +44,22 @@
 - **A/B 测试路由**: 多变体流量分配、粘性路由、动态权重调整
 - **统一 Token 计数器**: tiktoken 适配器 + CJK 估算器
 - **Provider 重试包装器**: 指数退避重试，仅重试可恢复错误
+- **API Key 池**: 多 Key 轮询、限流检测
+- **OpenAI 兼容层**: 统一适配 OpenAI 兼容 API
 
 ### 🤖 智能 Agent 系统
 - **状态管理**: 完整的生命周期管理
-- **记忆系统**: 短期/长期记忆、向量检索
+- **Reflection 机制**: 自我评估与迭代改进
+- **推理模式**: ReAct、ReWOO、Plan-Execute、Tree of Thoughts (ToT)
+- **多层记忆**: 短期/工作记忆、长期记忆、情节记忆、语义记忆、程序性记忆
 - **工具调用**: 原生 Function Calling + ReAct 循环
 - **双模型架构 (toolProvider)**: 便宜模型做工具调用，贵模型做内容生成
+- **MCP/A2A 协议**: 完整 Agent 互操作协议栈 (Google A2A & Anthropic MCP)
+- **Guardrails**: 输入/输出验证、PII 检测、注入防护
+- **Skills 系统**: 动态技能加载
+- **Human-in-the-Loop**: 人工审批节点
+- **Thought Signatures**: 推理链签名，保持多轮推理连续性
+- **声明式 Agent 加载器**: YAML/JSON 定义 Agent，工厂自动装配
 
 ### 📊 工作流编排
 - **多种模式**: 链式、并行、DAG、条件路由
@@ -57,20 +67,52 @@
 - **可视化**: Mermaid/DOT 图生成
 - **熔断器**: DAG 节点级熔断保护（Closed/Open/HalfOpen 三态机）
 - **YAML DSL 编排语言**: 声明式工作流定义，支持变量插值、条件分支、循环
+- **DAG 节点并行执行**: 分支并发执行与结果聚合
+- **状态持久化**: 检查点 (Checkpoint) 的保存与恢复
 
 ### 🔍 RAG 检索增强
 - **混合检索**: 向量搜索 + 关键词搜索
 - **BM25 Contextual Retrieval**: 上下文检索，BM25 参数可调，IDF 缓存
 - **Multi-hop 去重**: 多跳推理链，四阶段去重流程，DedupStats 统计
+- **Web 增强检索**: 本地 RAG + 实时 Web 搜索混合检索
+- **语义缓存**: 基于向量相似度的响应缓存
+- **多向量库**: Qdrant、Pinecone、Milvus、Weaviate 及内置 InMemoryStore
+- **Graph RAG**: 知识图谱检索增强
+- **查询路由**: 智能查询分发与改写
 
 ### 🖼️ 多模态能力
 - **输入理解**: 图像、音频、视频分析
-- **内容生成**: DALL-E、Flux 图像生成；TTS/STT 语音处理
+- **Embedding**: OpenAI、Gemini、Cohere、Jina、Voyage
+- **Image**: DALL-E、Flux、Gemini
+- **Video**: Luma、Sora、Gemini、MiniMax
+- **Audio**: OpenAI TTS/STT、ElevenLabs、Deepgram
+- **Music**: Suno、MiniMax
+- **3D**: Meshy、Tripo
+- **Rerank**: Cohere、Qwen、GLM
 
 ### 🛡️ 企业级能力
 - **API 安全中间件**: API Key 认证、IP 限流、CORS、Panic 恢复
+- **可观测性**: Prometheus 指标、OpenTelemetry 追踪
 - **成本控制与预算管理**: Token 计数、周期重置、成本报告
 - **配置热重载与回滚**: 文件监听自动重载、版本化历史、一键回滚
+- **MCP WebSocket 心跳重连**: 指数退避重连、连接状态监控
+
+---
+
+## HTTP API 概览
+
+| 分组 | 主要端点 |
+|------|----------|
+| **System** | `GET /health`, `/healthz`, `/ready`, `/readyz`, `/version` |
+| **Chat** | `POST /api/v1/chat/completions`, `/completions/stream`, `POST /v1/chat/completions` (OpenAI 兼容) |
+| **Agent** | `GET /api/v1/agents`, `POST /api/v1/agents/execute`, `/execute/stream`, `/plan` |
+| **Provider** | `GET /api/v1/providers`, `GET/POST /api/v1/providers/{id}/api-keys` |
+| **Tools** | `GET/POST /api/v1/tools`, `POST /api/v1/tools/reload`, `PUT/DELETE /api/v1/tools/{id}` |
+| **Multimodal** | `POST /api/v1/multimodal/image`, `/video`, `/chat`, `/plan` |
+| **Protocol** | `GET /api/v1/mcp/resources`, `POST /api/v1/mcp/tools`, `GET /api/v1/a2a/.well-known/agent.json`, `POST /api/v1/a2a/tasks` |
+| **RAG** | `POST /api/v1/rag/query`, `POST /api/v1/rag/index` |
+| **Workflow** | `POST /api/v1/workflows/execute`, `POST /api/v1/workflows/parse`, `GET /api/v1/workflows` |
+| **Config** | `GET/PUT /api/v1/config`, `POST /api/v1/config/reload`, `/rollback` |
 
 ---
 

@@ -38,23 +38,87 @@
 ## 🌟 Core Features
 
 ### 🔌 Unified LLM Abstraction Layer
-- **13+ Provider Support**: OpenAI, Claude, Gemini, DeepSeek, Qwen, GLM, Grok, Kimi, etc.
+
+- **13+ Provider Support**: OpenAI, Claude, Gemini, DeepSeek, Qwen, GLM, Grok, Kimi, Mistral, Hunyuan, MiniMax, Doubao, Llama
 - **Unified Interface**: One codebase for all LLMs
 - **Resilience**: Auto-retry, circuit breaker, idempotency
+- **A/B Testing Routing**: Multi-variant traffic splitting, sticky routing, dynamic weight adjustment, metrics collection
+- **Unified Token Counter**: Tokenizer interface with tiktoken adapter and CJK estimator
+- **Provider Retry Wrapper**: Exponential backoff retry for recoverable errors only
+- **API Key Pool**: Multi-key rotation and rate limit detection
+- **OpenAI Compatibility Layer**: Unified adapter for OpenAI-compatible APIs
 
 ### 🤖 Intelligent Agent System
+
 - **State Management**: Complete lifecycle management
-- **Memory System**: Short-term/long-term memory, vector retrieval
+- **Reflection Mechanism**: Self-evaluation and iterative improvement
+- **Dual-Model Architecture (toolProvider)**: Cheap model for tool calls, expensive model for content generation to reduce cost
+- **Skills System**: Dynamic skill loading
+- **MCP/A2A Protocol Support**: Full Agent interoperability stack (Google A2A & Anthropic MCP)
+- **Guardrails**: Input/output validation, PII detection, injection protection, custom validation rules
+- **Multiple Reasoning Modes**: ReAct, Reflexion, ReWOO, Plan-Execute, Tree of Thoughts (ToT), Dynamic Planner
+- **Multi-Layer Memory**: Short-term (working), long-term, episodic, semantic, procedural memory
+- **Intelligent Decay**: Recency/relevance/utility-based decay algorithm
+- **Human-in-the-Loop**: Human approval nodes
+- **Thought Signatures**: Reasoning chain signatures for multi-turn continuity
+- **Declarative Agent Loader**: YAML/JSON definition with factory auto-assembly
 - **Tool Calling**: Native Function Calling + ReAct loop
 
 ### 📊 Workflow Orchestration
+
 - **Multiple Patterns**: Chain, parallel, DAG, conditional routing
-- **Advanced Features**: Loops, subgraphs, checkpoints, error recovery
+- **Circuit Breaker**: DAG node-level protection (Closed/Open/HalfOpen state machine)
+- **YAML DSL Orchestration**: Declarative workflow definition with variable interpolation, conditionals, loops, subgraphs
+- **DAG Node Parallel Execution**: Branch concurrency and result aggregation
+- **State Persistence**: Checkpoint save and restore
+- **Advanced Features**: Loops, subgraphs, error recovery
 - **Visualization**: Mermaid/DOT graph generation
 
+### 🔍 RAG System (Retrieval-Augmented Generation)
+
+- **Hybrid Retrieval**: Dense vector search + sparse keyword search
+- **BM25 Contextual Retrieval**: Context retrieval with tunable BM25 parameters (k1/b), IDF cache
+- **Multi-Hop Reasoning with Dedup**: Multi-hop reasoning chains, four-stage dedup (ID + content similarity), DedupStats
+- **Web-Enhanced Retrieval**: Local RAG + real-time web search hybrid with weight allocation and result dedup
+- **Semantic Cache**: Vector-similarity response cache to reduce latency and cost
+- **Multiple Vector DBs**: Qdrant, Pinecone, Milvus, Weaviate, and built-in InMemoryStore
+- **Document Management**: Auto-chunking, metadata filtering, reranker
+- **Graph RAG**: Knowledge graph retrieval enhancement
+- **Query Routing**: Intelligent query dispatch and rewriting
+
 ### 🖼️ Multimodal Capabilities
-- **Input Understanding**: Image, audio, video analysis
-- **Content Generation**: DALL-E, Flux image generation; TTS/STT speech processing
+
+- **Embedding**: OpenAI, Gemini, Cohere, Jina, Voyage
+- **Image**: DALL-E, Flux, Gemini
+- **Video**: Luma, Sora, Gemini, MiniMax
+- **Audio**: OpenAI TTS/STT, ElevenLabs, Deepgram
+- **Music**: Suno, MiniMax
+- **3D**: Meshy, Tripo
+- **Rerank**: Cohere, Qwen, GLM
+
+### 🛡️ Enterprise Features
+
+- **Observability**: Prometheus metrics, OpenTelemetry tracing
+- **Cost Control and Budget Management**: Token counting, periodic reset, cost reports, optimization suggestions
+- **Config Hot-Reload with Rollback**: File watcher auto-reload, versioned history, one-click rollback, validation hooks
+- **MCP WebSocket Heartbeat Reconnect**: Exponential backoff reconnect, connection state monitoring
+
+---
+
+## HTTP API Overview
+
+| Group | Endpoints |
+|-------|-----------|
+| **System** | `GET /health`, `/healthz`, `/ready`, `/readyz`, `/version` |
+| **Chat** | `GET /api/v1/chat/capabilities`, `POST /api/v1/chat/completions`, `POST /api/v1/chat/completions/stream`, `POST /v1/chat/completions` (OpenAI compat), `POST /v1/responses` (OpenAI compat) |
+| **Agent** | `GET /api/v1/agents`, `GET /api/v1/agents/{id}`, `GET /api/v1/agents/capabilities`, `POST /api/v1/agents/execute`, `POST /api/v1/agents/execute/stream`, `POST /api/v1/agents/plan`, `GET /api/v1/agents/health` |
+| **Provider** | `GET /api/v1/providers`, `GET/POST /api/v1/providers/{id}/api-keys`, etc. |
+| **Tools** | `GET/POST /api/v1/tools`, `POST /api/v1/tools/reload`, `GET /api/v1/tools/providers`, etc. |
+| **Multimodal** | `GET /api/v1/multimodal/capabilities`, `POST /api/v1/multimodal/image`, `POST /api/v1/multimodal/video`, `POST /api/v1/multimodal/chat`, etc. |
+| **Protocol** | `GET /api/v1/mcp/resources`, `GET /api/v1/mcp/tools`, `POST /api/v1/mcp/tools/`, `GET /api/v1/a2a/.well-known/agent.json`, `POST /api/v1/a2a/tasks` |
+| **RAG** | `GET /api/v1/rag/capabilities`, `POST /api/v1/rag/query`, `POST /api/v1/rag/index` |
+| **Workflow** | `GET /api/v1/workflows/capabilities`, `POST /api/v1/workflows/execute`, `POST /api/v1/workflows/parse`, `GET /api/v1/workflows` |
+| **Config** | `GET/PUT /api/v1/config`, `POST /api/v1/config/reload`, `POST /api/v1/config/rollback`, `GET /api/v1/config/fields`, `GET /api/v1/config/changes` |
 
 ---
 
