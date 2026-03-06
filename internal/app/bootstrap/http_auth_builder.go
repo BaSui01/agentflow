@@ -13,7 +13,7 @@ import (
 
 // BuildAuthMiddleware selects and creates the HTTP auth middleware.
 // Priority: JWT (if secret or public key configured) > API Key > fail-closed.
-func BuildAuthMiddleware(serverCfg config.ServerConfig, skipPaths []string, logger *zap.Logger) mw.Middleware {
+func BuildAuthMiddleware(serverCfg config.ServerConfig, skipPaths []string, logger *zap.Logger) (mw.Middleware, error) {
 	jwtCfg := serverCfg.JWT
 	hasJWT := jwtCfg.Secret != "" || jwtCfg.PublicKey != ""
 	hasAPIKeys := len(serverCfg.APIKeys) > 0
@@ -30,12 +30,12 @@ func BuildAuthMiddleware(serverCfg config.ServerConfig, skipPaths []string, logg
 		logger.Info("Authentication: API Key enabled",
 			zap.Int("key_count", len(serverCfg.APIKeys)),
 		)
-		return mw.APIKeyAuth(serverCfg.APIKeys, skipPaths, logger)
+		return mw.APIKeyAuth(serverCfg.APIKeys, skipPaths, logger), nil
 	default:
 		if serverCfg.AllowNoAuth {
 			logger.Warn("Authentication is disabled (allow_no_auth=true). " +
 				"This is not recommended for production use.")
-			return nil
+			return nil, nil
 		}
 		logger.Error("Authentication is required but no JWT/API key is configured; protected endpoints will return 503 until fixed. Configure server.api_keys or server.jwt, or explicitly set server.allow_no_auth=true for local development. Use /ready for liveness and a protected endpoint smoke test to verify auth wiring.")
 		skipSet := make(map[string]struct{}, len(skipPaths))
@@ -58,6 +58,6 @@ func BuildAuthMiddleware(serverCfg config.ServerConfig, skipPaths []string, logg
 					RequestID: w.Header().Get("X-Request-ID"),
 				})
 			})
-		}
+		}, nil
 	}
 }

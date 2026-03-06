@@ -109,7 +109,9 @@ func BuildLLMHandlerRuntime(cfg *config.Config, db *gorm.DB, logger *zap.Logger)
 	cleaner := llmmw.NewEmptyToolsCleaner()
 	chain.UseFront(llmmw.TransformMiddleware(func(req *llm.ChatRequest) {
 		if req != nil {
-			_, _ = cleaner.Rewrite(context.Background(), req)
+			if _, err := cleaner.Rewrite(context.Background(), req); err != nil {
+				logger.Warn("empty tools cleaner rewrite failed", zap.Error(err))
+			}
 		}
 	}, nil))
 

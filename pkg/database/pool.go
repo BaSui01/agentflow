@@ -222,7 +222,8 @@ func (pm *PoolManager) GetStats() PoolStats {
 // TransactionFunc 事务函数类型
 type TransactionFunc func(tx *gorm.DB) error
 
-// WithTransaction 在事务中执行函数
+// WithTransaction 在事务中执行函数。
+// 推荐：所有涉及多步写操作（如 Read-Modify-Write、批量更新）的业务逻辑应使用此方法包裹，以保证原子性与一致性。
 func (pm *PoolManager) WithTransaction(ctx context.Context, fn TransactionFunc) error {
 	pm.mu.RLock()
 	if pm.closed {

@@ -6,6 +6,7 @@ import (
 
 	"github.com/BaSui01/agentflow/api/handlers"
 	"github.com/BaSui01/agentflow/config"
+	"github.com/BaSui01/agentflow/pkg/storage"
 	"github.com/BaSui01/agentflow/llm"
 	"github.com/BaSui01/agentflow/llm/observability"
 	llmpolicy "github.com/BaSui01/agentflow/llm/runtime/policy"
@@ -36,7 +37,7 @@ func BuildMultimodalRuntime(
 	chatProvider llm.Provider,
 	budgetManager *llmpolicy.TokenBudgetManager,
 	ledger observability.Ledger,
-	referenceStore handlers.ReferenceStore,
+	referenceStore storage.ReferenceStore,
 	logger *zap.Logger,
 ) (*MultimodalRuntime, error) {
 	if !cfg.Multimodal.Enabled {

@@ -125,6 +125,7 @@ type GeneratorConfig struct {
 
 // NewGenerator creates a new OpenAPI tool generator.
 func NewGenerator(config GeneratorConfig, logger *zap.Logger) *Generator {
+	// O-004: optional module, nil-safe
 	if logger == nil {
 		logger = zap.NewNop()
 	}

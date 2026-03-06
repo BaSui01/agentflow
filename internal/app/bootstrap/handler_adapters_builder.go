@@ -3,7 +3,9 @@ package bootstrap
 import (
 	"github.com/BaSui01/agentflow/agent"
 	"github.com/BaSui01/agentflow/agent/discovery"
+	"github.com/BaSui01/agentflow/agent/hosted"
 	"github.com/BaSui01/agentflow/api/handlers"
+	"github.com/BaSui01/agentflow/internal/usecase"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
 )
@@ -18,7 +20,7 @@ func BuildAgentHandler(
 	discoveryRegistry discovery.Registry,
 	agentRegistry *agent.AgentRegistry,
 	logger *zap.Logger,
-	resolver ...handlers.AgentResolver,
+	resolver ...usecase.AgentResolver,
 ) *handlers.AgentHandler {
 	return handlers.NewAgentHandler(discoveryRegistry, agentRegistry, logger, resolver...)
 }
@@ -40,7 +42,7 @@ func BuildToolRegistryHandler(
 	if db == nil || runtime == nil {
 		return nil
 	}
-	return handlers.NewToolRegistryHandler(handlers.NewGormToolRegistryStore(db), runtime, logger)
+	return handlers.NewToolRegistryHandler(hosted.NewGormToolRegistryStore(db), runtime, logger)
 }
 
 // BuildToolProviderHandler creates DB-backed tool provider config handler when runtime is available.

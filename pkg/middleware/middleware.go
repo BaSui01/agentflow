@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"encoding/pem"
 	"fmt"
+	"log"
 	"net"
 	"net/http"
 	"regexp"
@@ -19,6 +20,7 @@ import (
 
 	"github.com/BaSui01/agentflow/config"
 	"github.com/BaSui01/agentflow/pkg/metrics"
+	"github.com/BaSui01/agentflow/pkg/telemetry"
 	"github.com/BaSui01/agentflow/types"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -29,6 +31,11 @@ import (
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 	"golang.org/x/time/rate"
+)
+
+const (
+	visitorCleanupInterval = 3 * time.Minute
+	minJWTSecretLength     = 32
 )
 
 // requestIDKey is the context key for the request ID.
@@ -88,12 +95,14 @@ func RequestLogger(logger *zap.Logger) Middleware {
 			start := time.Now()
 			rw := &responseWriter{ResponseWriter: w, statusCode: http.StatusOK}
 			next.ServeHTTP(rw, r)
-			logger.Info("request",
+			traceLogger := telemetry.LoggerWithTrace(r.Context(), logger)
+			traceLogger.Info("request",
 				zap.String("method", r.Method),
 				zap.String("path", r.URL.Path),
 				zap.Int("status", rw.statusCode),
 				zap.Duration("duration", time.Since(start)),
 				zap.String("remote_addr", r.RemoteAddr),
+				zap.String("request_id", RequestIDFromContext(r.Context())),
 			)
 		})
 	}
@@ -349,6 +358,7 @@ func OTelTracing() Middleware {
 				),
 			)
 			defer span.End()
+			ctx = types.WithTraceID(ctx, span.SpanContext().TraceID().String())
 
 			rw := newTracingResponseWriter(w)
 			next.ServeHTTP(rw, r.WithContext(ctx))
@@ -378,6 +388,7 @@ func APIKeyAuth(validKeys []string, skipPaths []string, logger *zap.Logger) Midd
 			}
 			key := r.Header.Get("X-API-Key")
 			if _, ok := keySet[key]; !ok {
+				logger.Debug("API key auth failed", zap.String("path", r.URL.Path))
 				writeMiddlewareError(w, http.StatusUnauthorized, string(types.ErrAuthentication), "invalid or missing API key")
 				return
 			}
@@ -417,7 +428,7 @@ func RateLimiter(ctx context.Context, rps float64, burst int, logger *zap.Logger
 			mu.Lock()
 			if now.Sub(lastCleanup) >= time.Minute {
 				for k, v := range visitors {
-					if now.Sub(v.lastSeen) > 3*time.Minute {
+					if now.Sub(v.lastSeen) > visitorCleanupInterval {
 						delete(visitors, k)
 					}
 				}
@@ -504,17 +515,22 @@ func SecurityHeaders() Middleware {
 
 func generateRequestID() string {
 	b := make([]byte, 16)
-	_, _ = rand.Read(b)
+	if _, err := rand.Read(b); err != nil {
+		// time-based fallback when crypto/rand fails
+		return fmt.Sprintf("req-%x", time.Now().UnixNano())
+	}
 	return "req-" + hex.EncodeToString(b)
 }
 
 // JWTAuth validates JWT tokens from the Authorization: Bearer header and injects
 // tenant_id, user_id, and roles into the request context.
-func JWTAuth(cfg config.JWTConfig, skipPaths []string, logger *zap.Logger) Middleware {
-	if len(cfg.Secret) > 0 && len(cfg.Secret) < 32 {
-		logger.Warn("JWT HMAC secret is shorter than recommended minimum of 32 bytes",
-			zap.Int("secret_length", len(cfg.Secret)),
+// Returns error when HMAC secret is configured but shorter than minJWTSecretLength (reject startup).
+func JWTAuth(cfg config.JWTConfig, skipPaths []string, logger *zap.Logger) (Middleware, error) {
+	if len(cfg.Secret) > 0 && len(cfg.Secret) < minJWTSecretLength {
+		logger.Warn("JWT HMAC secret is shorter than 32 bytes — NOT recommended for production",
+			zap.Int("length", len(cfg.Secret)),
 		)
+		return nil, fmt.Errorf("JWT HMAC secret must be at least %d bytes, got %d", minJWTSecretLength, len(cfg.Secret))
 	}
 
 	skipSet := make(map[string]struct{}, len(skipPaths))
@@ -618,7 +634,7 @@ func JWTAuth(cfg config.JWTConfig, skipPaths []string, logger *zap.Logger) Middl
 
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
-	}
+	}, nil
 }
 
 // writeMiddlewareError writes a JSON error response.
@@ -642,7 +658,11 @@ func writeMiddlewareError(w http.ResponseWriter, statusCode int, code string, me
 			},
 			Timestamp: time.Now().UTC(),
 		}
-		buf, _ = json.Marshal(fallback)
+		buf, err = json.Marshal(fallback)
+		if err != nil {
+			log.Printf("[middleware] json.Marshal(fallback) failed: %v", err)
+			buf = []byte(`{"success":false,"error":{"code":"INTERNAL_ERROR","message":"failed to encode response"}}`)
+		}
 		statusCode = http.StatusInternalServerError
 	}
 
@@ -701,7 +721,7 @@ func TenantRateLimiter(ctx context.Context, rps float64, burst int, logger *zap.
 			mu.Lock()
 			if now.Sub(lastCleanup) >= time.Minute {
 				for k, v := range visitors {
-					if now.Sub(v.lastSeen) > 3*time.Minute {
+					if now.Sub(v.lastSeen) > visitorCleanupInterval {
 						delete(visitors, k)
 					}
 				}
