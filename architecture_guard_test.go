@@ -44,6 +44,7 @@ func TestPkgOneFileDirectoryAllowlist(t *testing.T) {
 	allowlist := map[string]string{
 		"cache":      "single cohesive cache manager entrypoint",
 		"database":   "single DB connector entrypoint",
+		"jsonschema": "single JSON schema validator entrypoint",
 		"metrics":    "single metrics collector entrypoint",
 		"middleware": "single middleware composition entrypoint",
 		"openapi":    "single OpenAPI helper entrypoint",

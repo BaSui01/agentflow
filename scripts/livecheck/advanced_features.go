@@ -406,7 +406,7 @@ func newLiveBaseAgent(id, name, model, systemPrompt string, provider llm.Provide
 			SystemPrompt: systemPrompt,
 		},
 	}
-	return agent.NewBaseAgent(cfg, provider, nil, nil, nil, logger)
+	return agent.NewBaseAgent(cfg, provider, nil, nil, nil, logger, nil)
 }
 
 func teardownAgents(agents []agent.Agent) {

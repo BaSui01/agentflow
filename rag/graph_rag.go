@@ -124,47 +124,67 @@ func (g *KnowledgeGraph) QueryByType(nodeType string) []*Node {
 	return results
 }
 
+// EntityExtractor extracts entities from text using an LLM.
+type EntityExtractor interface {
+	ExtractEntities(ctx context.Context, text string) ([]Entity, error)
+}
+
 // GraphRAG结合了知识图和向量检索.
 type GraphRAG struct {
-	graph       *KnowledgeGraph
-	vectorStore LowLevelVectorStore
-	embedder    GraphEmbedder
-	config      GraphRAGConfig
-	logger      *zap.Logger
+	graph            *KnowledgeGraph
+	vectorStore      LowLevelVectorStore
+	embedder         GraphEmbedder
+	entityExtractor  EntityExtractor
+	config           GraphRAGConfig
+	logger           *zap.Logger
 }
 
 // GraphRAGConfig 配置了 GraphRAG。
 type GraphRAGConfig struct {
-	GraphWeight   float64 `json:"graph_weight"`    // Weight for graph results
-	VectorWeight  float64 `json:"vector_weight"`   // Weight for vector results
-	MaxGraphDepth int     `json:"max_graph_depth"` // Max traversal depth
-	MaxResults    int     `json:"max_results"`
-	MinScore      float64 `json:"min_score"`
+	GraphWeight          float64 `json:"graph_weight"`            // Weight for graph results
+	VectorWeight         float64 `json:"vector_weight"`           // Weight for vector results
+	MaxGraphDepth        int     `json:"max_graph_depth"`         // Max traversal depth
+	MaxResults           int     `json:"max_results"`
+	MinScore             float64 `json:"min_score"`
+	AutoExtractEntities  bool    `json:"auto_extract_entities"`   // Enable LLM-based auto entity extraction
 }
 
 // 默认 GraphRAGConfig 返回默认配置 。
 func DefaultGraphRAGConfig() GraphRAGConfig {
 	return GraphRAGConfig{
-		GraphWeight:   0.4,
-		VectorWeight:  0.6,
-		MaxGraphDepth: 2,
-		MaxResults:    10,
-		MinScore:      0.5,
+		GraphWeight:         0.4,
+		VectorWeight:        0.6,
+		MaxGraphDepth:       2,
+		MaxResults:          10,
+		MinScore:            0.5,
+		AutoExtractEntities: false,
 	}
 }
 
+// GraphRAGOption configures optional GraphRAG settings.
+type GraphRAGOption func(*GraphRAG)
+
+// WithEntityExtractor enables LLM-based automatic entity extraction.
+func WithEntityExtractor(extractor EntityExtractor) GraphRAGOption {
+	return func(r *GraphRAG) { r.entityExtractor = extractor }
+}
+
 // NewGraphRAG创建了一个新的GraphRAG实例.
-func NewGraphRAG(graph *KnowledgeGraph, vectorStore LowLevelVectorStore, embedder GraphEmbedder, config GraphRAGConfig, logger *zap.Logger) *GraphRAG {
+func NewGraphRAG(graph *KnowledgeGraph, vectorStore LowLevelVectorStore, embedder GraphEmbedder, config GraphRAGConfig, logger *zap.Logger, opts ...GraphRAGOption) *GraphRAG {
 	if logger == nil {
 		logger = zap.NewNop()
 	}
-	return &GraphRAG{
+	r := &GraphRAG{
 		graph:       graph,
 		vectorStore: vectorStore,
 		embedder:    embedder,
 		config:      config,
 		logger:      logger.With(zap.String("component", "graph_rag")),
 	}
+	for _, opt := range opts {
+		opt(r)
+	}
+	return r
 }
 
 // Retrieve 进行混合检索。
@@ -277,8 +297,21 @@ func (r *GraphRAG) AddDocument(ctx context.Context, doc GraphDocument) error {
 	}
 	r.graph.AddNode(node)
 
-	// 如果实体提供了, 则添加实体边缘
-	for _, entity := range doc.Entities {
+	entities := doc.Entities
+
+	if len(entities) == 0 && r.config.AutoExtractEntities && r.entityExtractor != nil {
+		extracted, err := r.entityExtractor.ExtractEntities(ctx, doc.Content)
+		if err != nil {
+			r.logger.Warn("auto entity extraction failed, skipping",
+				zap.String("doc_id", doc.ID), zap.Error(err))
+		} else {
+			entities = extracted
+			r.logger.Debug("auto-extracted entities",
+				zap.String("doc_id", doc.ID), zap.Int("count", len(entities)))
+		}
+	}
+
+	for _, entity := range entities {
 		entityNode := &Node{
 			ID:    entity.ID,
 			Type:  entity.Type,

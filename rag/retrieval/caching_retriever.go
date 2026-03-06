@@ -7,10 +7,13 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/BaSui01/agentflow/pkg/metrics"
 	"github.com/BaSui01/agentflow/rag"
 	ragcore "github.com/BaSui01/agentflow/rag/core"
 	"go.uber.org/zap"
 )
+
+const cacheTypeRAGSemantic = "rag_semantic"
 
 // CacheConfig controls the semantic caching behavior.
 type CacheConfig struct {
@@ -38,25 +41,40 @@ type CachingRetriever struct {
 	store     ragcore.VectorStore
 	config    CacheConfig
 	logger    *zap.Logger
+	metrics   *metrics.Collector
 	hits      atomic.Int64
 	misses    atomic.Int64
 	evictions atomic.Int64
 }
 
 // NewCachingRetriever creates a caching retriever wrapper.
-func NewCachingRetriever(inner Retriever, store ragcore.VectorStore, config CacheConfig, logger *zap.Logger) *CachingRetriever {
+// NewCachingRetriever creates a caching retriever wrapper.
+// Pass a non-nil metrics.Collector to emit Prometheus cache_hits/misses/evictions.
+func NewCachingRetriever(inner Retriever, store ragcore.VectorStore, config CacheConfig, logger *zap.Logger, opts ...CachingRetrieverOption) *CachingRetriever {
 	if logger == nil {
 		logger = zap.NewNop()
 	}
 	if config.SimilarityThreshold <= 0 {
 		config.SimilarityThreshold = 0.92
 	}
-	return &CachingRetriever{
+	cr := &CachingRetriever{
 		inner:  inner,
 		store:  store,
 		config: config,
 		logger: logger,
 	}
+	for _, opt := range opts {
+		opt(cr)
+	}
+	return cr
+}
+
+// CachingRetrieverOption configures optional dependencies.
+type CachingRetrieverOption func(*CachingRetriever)
+
+// WithMetricsCollector injects a Prometheus metrics collector for cache instrumentation.
+func WithMetricsCollector(c *metrics.Collector) CachingRetrieverOption {
+	return func(cr *CachingRetriever) { cr.metrics = c }
 }
 
 // Retrieve attempts cache lookup first, falls back to inner retriever on miss.
@@ -70,6 +88,9 @@ func (c *CachingRetriever) Retrieve(ctx context.Context, query string, queryEmbe
 	if err == nil && len(cached) > 0 && cached[0].Score >= c.config.SimilarityThreshold {
 		if c.isExpired(cached[0].Document) {
 			c.evictions.Add(1)
+			if c.metrics != nil {
+				c.metrics.RecordCacheEviction(cacheTypeRAGSemantic)
+			}
 			c.logger.Debug("semantic cache entry expired, evicting",
 				zap.String("id", cached[0].Document.ID),
 				zap.String("query", query))
@@ -82,6 +103,9 @@ func (c *CachingRetriever) Retrieve(ctx context.Context, query string, queryEmbe
 			var results []rag.RetrievalResult
 			if unmarshalErr := json.Unmarshal([]byte(cached[0].Document.Content), &results); unmarshalErr == nil {
 				c.hits.Add(1)
+				if c.metrics != nil {
+					c.metrics.RecordCacheHit(cacheTypeRAGSemantic)
+				}
 				c.logger.Debug("semantic cache hit",
 					zap.String("query", query),
 					zap.Float64("score", cached[0].Score))
@@ -91,6 +115,9 @@ func (c *CachingRetriever) Retrieve(ctx context.Context, query string, queryEmbe
 	}
 
 	c.misses.Add(1)
+	if c.metrics != nil {
+		c.metrics.RecordCacheMiss(cacheTypeRAGSemantic)
+	}
 	results, err := c.inner.Retrieve(ctx, query, queryEmbedding)
 	if err != nil {
 		return nil, err

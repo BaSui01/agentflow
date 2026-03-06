@@ -780,6 +780,43 @@ func (r *QueryRouter) RouteBatch(ctx context.Context, queries []string) ([]*Rout
 	return results, firstErr
 }
 
+// TransformedRoutingDecision extends RoutingDecision with query transformation results.
+type TransformedRoutingDecision struct {
+	*RoutingDecision
+	ExpandedQueries []string `json:"expanded_queries,omitempty"`
+	HyDEDocument    string   `json:"hyde_document,omitempty"`
+}
+
+// RouteWithTransform performs query transformation (expansion + HyDE) then routes.
+// Combines QueryTransformer and QueryRouter into a single pipeline call.
+func (r *QueryRouter) RouteWithTransform(ctx context.Context, query string) (*TransformedRoutingDecision, error) {
+	result := &TransformedRoutingDecision{}
+
+	if r.queryTransformer != nil {
+		expanded, err := r.queryTransformer.Expand(ctx, query)
+		if err != nil {
+			r.logger.Warn("query expansion failed, using original", zap.Error(err))
+			expanded = []string{query}
+		}
+		result.ExpandedQueries = expanded
+
+		transformed, err := r.queryTransformer.Transform(ctx, query)
+		if err == nil && transformed.Metadata != nil {
+			if hydeDoc, ok := transformed.Metadata["hyde_document"].(string); ok {
+				result.HyDEDocument = hydeDoc
+			}
+		}
+	}
+
+	decision, err := r.Route(ctx, query)
+	if err != nil {
+		return nil, err
+	}
+	result.RoutingDecision = decision
+
+	return result, nil
+}
+
 // JSON 序列化
 
 // ToJSON 串行决定给JSON
