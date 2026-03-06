@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/BaSui01/agentflow/agent/hosted"
 	"github.com/BaSui01/agentflow/api"
 	"github.com/BaSui01/agentflow/types"
 	"go.uber.org/zap"
@@ -18,7 +19,7 @@ type ToolRegistryHandler struct {
 	logger *zap.Logger
 }
 
-func NewToolRegistryHandler(store ToolRegistryStore, runtime ToolRegistryRuntime, logger *zap.Logger) *ToolRegistryHandler {
+func NewToolRegistryHandler(store hosted.ToolRegistryStore, runtime ToolRegistryRuntime, logger *zap.Logger) *ToolRegistryHandler {
 	if logger == nil {
 		logger = zap.NewNop()
 	}
@@ -44,6 +45,7 @@ type updateToolRegistrationRequest struct {
 	Enabled     *bool            `json:"enabled"`
 }
 
+// HandleList returns tool registrations. No pagination: config data is typically small.
 func (h *ToolRegistryHandler) HandleList(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		WriteErrorMessage(w, http.StatusMethodNotAllowed, types.ErrInvalidRequest, "method not allowed", h.logger)
@@ -82,6 +84,10 @@ func (h *ToolRegistryHandler) HandleCreate(w http.ResponseWriter, r *http.Reques
 	if err := DecodeJSONBody(w, r, &req, h.logger); err != nil {
 		return
 	}
+	if strings.TrimSpace(req.Name) == "" || strings.TrimSpace(req.Target) == "" {
+		WriteErrorMessage(w, http.StatusBadRequest, types.ErrInvalidRequest, "name and target are required", h.logger)
+		return
+	}
 	row, svcErr := h.svc.Create(req)
 	if svcErr != nil {
 		WriteError(w, svcErr, h.logger)
@@ -112,7 +118,7 @@ func (h *ToolRegistryHandler) HandleUpdate(w http.ResponseWriter, r *http.Reques
 	if err := DecodeJSONBody(w, r, &req, h.logger); err != nil {
 		return
 	}
-	row, svcErr := h.svc.Update(id, req)
+	row, svcErr := h.svc.Update(r.Context(), id, req)
 	if svcErr != nil {
 		WriteError(w, svcErr, h.logger)
 		return

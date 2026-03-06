@@ -25,7 +25,7 @@ func NewGormToolProviderStore(db *gorm.DB) *GormToolProviderStore {
 
 func (s *GormToolProviderStore) List() ([]hosted.ToolProviderConfig, error) {
 	var rows []hosted.ToolProviderConfig
-	err := s.db.Order("priority ASC, id ASC").Find(&rows).Error
+	err := s.db.Order("priority ASC, id ASC").Limit(500).Find(&rows).Error
 	return rows, err
 }
 

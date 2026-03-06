@@ -134,6 +134,7 @@ func toAPIKeyResponse(k llm.LLMProviderAPIKey) apiKeyResponse {
 }
 
 // HandleListAPIKeys GET /api/v1/providers/{id}/api-keys
+// Upper bound is enforced by store layer Limit; no handler-level pagination.
 func (h *APIKeyHandler) HandleListAPIKeys(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		WriteErrorMessage(w, http.StatusMethodNotAllowed, types.ErrInvalidRequest, "method not allowed", h.logger)

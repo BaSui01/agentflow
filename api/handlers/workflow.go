@@ -41,17 +41,19 @@ func (h *WorkflowHandler) HandleExecute(w http.ResponseWriter, r *http.Request) 
 		WriteErrorMessage(w, http.StatusMethodNotAllowed, types.ErrInvalidRequest, "method not allowed", h.logger)
 		return
 	}
-	if !ValidateContentType(w, r, h.logger) {
-		return
-	}
-
 	var req workflowExecuteRequest
-	if err := DecodeJSONBody(w, r, &req, h.logger); err != nil {
+	if !ValidateRequest(w, r, &req, h.logger) {
 		return
 	}
+	// V-014: Input size is bounded by DecodeJSONBody's MaxBytesReader (1MB in common.go)
 
 	if req.DSL == "" && req.DSLFile == "" && req.DAGJSON == "" && req.DAGYAML == "" && req.DAGFile == "" {
 		WriteErrorMessage(w, http.StatusBadRequest, types.ErrInvalidRequest, "dsl/dsl_file/dag_json/dag_yaml/dag_file is required", h.logger)
+		return
+	}
+	const maxDSLLen = 512 * 1024 // 512KB
+	if len(req.DSL) > maxDSLLen || len(req.DAGJSON) > maxDSLLen || len(req.DAGYAML) > maxDSLLen {
+		WriteErrorMessage(w, http.StatusBadRequest, types.ErrInvalidRequest, "dsl/dag_json/dag_yaml exceeds maximum length of 512KB", h.logger)
 		return
 	}
 

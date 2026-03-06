@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"net/http"
+	"strconv"
 
 	"github.com/BaSui01/agentflow/llm/observability"
 	"github.com/BaSui01/agentflow/types"
@@ -51,9 +52,39 @@ func (h *CostHandler) HandleRecords(w http.ResponseWriter, r *http.Request) {
 		WriteError(w, types.NewInternalError("cost tracker is not configured"), h.logger)
 		return
 	}
+	limit := 100
+	if v := r.URL.Query().Get("limit"); v != "" {
+		parsed, err := strconv.Atoi(v)
+		if err != nil || parsed < 0 {
+			WriteErrorMessage(w, http.StatusBadRequest, types.ErrInvalidRequest, "limit must be a non-negative integer", h.logger)
+			return
+		}
+		limit = parsed
+	}
+	if limit > 1000 {
+		limit = 1000
+	}
+	offset := 0
+	if v := r.URL.Query().Get("offset"); v != "" {
+		parsed, err := strconv.Atoi(v)
+		if err != nil || parsed < 0 {
+			WriteErrorMessage(w, http.StatusBadRequest, types.ErrInvalidRequest, "offset must be a non-negative integer", h.logger)
+			return
+		}
+		offset = parsed
+	}
 	records := h.tracker.Records()
-	out := make([]map[string]any, len(records))
-	for i, rec := range records {
+	total := len(records)
+	if offset > total {
+		offset = total
+	}
+	end := offset + limit
+	if end > total {
+		end = total
+	}
+	page := records[offset:end]
+	out := make([]map[string]any, len(page))
+	for i, rec := range page {
 		out[i] = map[string]any{
 			"provider":      rec.Provider,
 			"model":         rec.Model,
@@ -66,7 +97,7 @@ func (h *CostHandler) HandleRecords(w http.ResponseWriter, r *http.Request) {
 			"timestamp":     rec.Timestamp,
 		}
 	}
-	WriteSuccess(w, map[string]any{"records": out})
+	WriteSuccess(w, map[string]any{"records": out, "total": total, "limit": limit, "offset": offset})
 }
 
 func (h *CostHandler) HandleReset(w http.ResponseWriter, r *http.Request) {

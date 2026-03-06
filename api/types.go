@@ -46,7 +46,7 @@ type ChatRequest struct {
 	// 用户身份
 	UserID string `json:"user_id,omitempty" example:"user-1"`
 	// 模型名称（例如 gpt-4、claude-3-opus）
-	Model string `json:"model" example:"gpt-4" binding:"required"`
+	Model string `json:"model" example:"gpt-4"`
 	// Provider 路由提示（如 openai/anthropic）
 	Provider string `json:"provider,omitempty" example:"openai"`
 	// 路由策略（balanced/cost_first/health_first/latency_first）
@@ -54,7 +54,7 @@ type ChatRequest struct {
 	// OpenAI 端点模式（auto/chat_completions/responses）
 	EndpointMode string `json:"endpoint_mode,omitempty" example:"responses"`
 	// 对话消息
-	Messages []Message `json:"messages" binding:"required"`
+	Messages []Message `json:"messages"`
 	// 生成的最大 Token 数量
 	MaxTokens int `json:"max_tokens,omitempty" example:"4096"`
 	// 采样温度（0-2）
@@ -219,7 +219,7 @@ type StreamChunk struct {
 // @Description 对话消息结构
 type Message struct {
 	// 消息角色（系统、用户、助手、工具）
-	Role string `json:"role" example:"user" binding:"required"`
+	Role string `json:"role" example:"user"`
 	// 消息内容
 	Content string `json:"content,omitempty" example:"Hello, how are you?"`
 	// 推理/思考内容
@@ -296,7 +296,7 @@ type ToolResultDTO struct {
 // @Description 工具调用请求
 type ToolInvokeRequest struct {
 	// 工具参数
-	Arguments json.RawMessage `json:"arguments" binding:"required"`
+	Arguments json.RawMessage `json:"arguments"`
 }
 
 // =============================================================================
@@ -390,9 +390,9 @@ type ProviderHealthResponse struct {
 // @Description 路由请求结构
 type RoutingRequest struct {
 	// 路由的模型名称
-	Model string `json:"model" example:"gpt-4" binding:"required"`
+	Model string `json:"model" example:"gpt-4"`
 	// 路由策略（cost、health、qps、canary、tag）
-	Strategy string `json:"strategy" example:"cost" binding:"required"`
+	Strategy string `json:"strategy" example:"cost"`
 	// 用于基于标签的路由的标签
 	Tags []string `json:"tags,omitempty"`
 }
@@ -467,7 +467,7 @@ type ToolDefinition struct {
 // @Description A2A请求结构
 type A2ARequest struct {
 	// 任务描述或查询
-	Task string `json:"task" example:"What is the weather today?" binding:"required"`
+	Task string `json:"task" example:"What is the weather today?" `
 	// 额外的背景信息
 	Context any `json:"context,omitempty"`
 	// 是否流式传输响应
@@ -483,17 +483,6 @@ type A2AResponse struct {
 	Result any `json:"result,omitempty"`
 	// 如果失败则出现错误消息
 	Error string `json:"error,omitempty"`
-}
-
-// =============================================================================
-// 错误类型
-// =============================================================================
-
-// ErrorResponse表示错误响应。
-// @Description 错误响应结构
-type ErrorResponse struct {
-	// 错误详情
-	Error ErrorInfo `json:"error"`
 }
 
 // =============================================================================

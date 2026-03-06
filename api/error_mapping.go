@@ -1,6 +1,10 @@
 package api
 
-import "github.com/BaSui01/agentflow/types"
+import (
+	"net/http"
+
+	"github.com/BaSui01/agentflow/types"
+)
 
 // ErrorInfoFromTypesError converts internal canonical types.Error to API DTO.
 func ErrorInfoFromTypesError(err *types.Error, status int) *ErrorInfo {
@@ -21,39 +25,39 @@ func HTTPStatusFromErrorCode(code types.ErrorCode) int {
 	switch code {
 	// 4xx 客户端错误
 	case types.ErrInvalidRequest:
-		return 400
+		return http.StatusBadRequest
 	case types.ErrAuthentication, types.ErrUnauthorized:
-		return 401
+		return http.StatusUnauthorized
 	case types.ErrForbidden:
-		return 403
+		return http.StatusForbidden
 	case types.ErrModelNotFound:
-		return 404
+		return http.StatusNotFound
 	case types.ErrRateLimit:
-		return 429
+		return http.StatusTooManyRequests
 	case types.ErrQuotaExceeded:
-		return 402
+		return http.StatusPaymentRequired
 	case types.ErrContextTooLong:
-		return 413
+		return http.StatusRequestEntityTooLarge
 	case types.ErrContentFiltered:
-		return 422
+		return http.StatusUnprocessableEntity
 	case types.ErrToolValidation:
-		return 400
+		return http.StatusBadRequest
 	case types.ErrGuardrailsViolated:
-		return 403
+		return http.StatusForbidden
 
 	// 5xx 服务端错误
 	case types.ErrTimeout, types.ErrUpstreamTimeout:
-		return 504
+		return http.StatusGatewayTimeout
 	case types.ErrModelOverloaded, types.ErrServiceUnavailable, types.ErrProviderUnavailable:
-		return 503
+		return http.StatusServiceUnavailable
 	case types.ErrUpstreamError:
-		return 502
+		return http.StatusBadGateway
 	case types.ErrInternalError:
-		return 500
+		return http.StatusInternalServerError
 
 	// 默认
 	default:
-		return 500
+		return http.StatusInternalServerError
 	}
 }
 

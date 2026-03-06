@@ -49,13 +49,13 @@ func WriteError(w http.ResponseWriter, err *types.Error, logger *zap.Logger) {
 
 	errorInfo := api.ErrorInfoFromTypesError(err, status)
 
-	// 记录错误日志
 	if logger != nil {
 		logger.Error("API error",
 			zap.String("code", string(err.Code)),
 			zap.String("message", err.Message),
 			zap.Int("status", status),
 			zap.Bool("retryable", err.Retryable),
+			zap.String("request_id", w.Header().Get("X-Request-ID")),
 			zap.Error(err.Cause),
 		)
 	}
@@ -86,6 +86,10 @@ func mapErrorCodeToHTTPStatus(code types.ErrorCode) int {
 // 🛡️ 请求验证辅助函数
 // =============================================================================
 
+const maxRequestBodyBytes = 1 << 20 // 1 MB
+
+// TODO(V-008): 引入统一的 ValidateRequest 中间件，替代在每个 handler 中手动校验。
+
 // DecodeJSONBody 解码 JSON 请求体
 func DecodeJSONBody(w http.ResponseWriter, r *http.Request, dst any, logger *zap.Logger) error {
 	if r.Body == nil {
@@ -94,8 +98,8 @@ func DecodeJSONBody(w http.ResponseWriter, r *http.Request, dst any, logger *zap
 		return err
 	}
 
-	// Limit request body to 1 MB to prevent abuse.
-	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
+	// Limit request body to prevent abuse.
+	r.Body = http.MaxBytesReader(w, r.Body, maxRequestBodyBytes)
 
 	decoder := json.NewDecoder(r.Body)
 	decoder.DisallowUnknownFields() // 严格模式：拒绝未知字段
@@ -124,6 +128,19 @@ func ValidateContentType(w http.ResponseWriter, r *http.Request, logger *zap.Log
 	if err != nil || mediaType != "application/json" {
 		apiErr := types.NewInvalidRequestError("Content-Type must be application/json")
 		WriteError(w, apiErr, logger)
+		return false
+	}
+	return true
+}
+
+// ValidateRequest 统一请求校验：Content-Type 检查 + JSON 解码。
+// 适用于需要 application/json 的 POST/PUT 请求。
+// 返回 false 表示校验失败，调用方应直接 return；dst 为解码目标。
+func ValidateRequest(w http.ResponseWriter, r *http.Request, dst any, logger *zap.Logger) bool {
+	if !ValidateContentType(w, r, logger) {
+		return false
+	}
+	if err := DecodeJSONBody(w, r, dst, logger); err != nil {
 		return false
 	}
 	return true

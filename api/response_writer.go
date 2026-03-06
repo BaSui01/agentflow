@@ -2,7 +2,9 @@ package api
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
+	"os"
 	"time"
 )
 
@@ -18,7 +20,13 @@ func WriteJSONResponse(w http.ResponseWriter, status int, data any) {
 			},
 			Timestamp: time.Now().UTC(),
 		}
-		buf, _ = json.Marshal(fallback)
+		buf, err = json.Marshal(fallback)
+		if err != nil {
+			// stderr fallback: WriteJSONResponse 为包级函数无 logger；
+			// 此路径仅在 json.Marshal(Response{}) 本身失败时触发，概率极低。
+			fmt.Fprintf(os.Stderr, "api: json.Marshal fallback failed: %v\n", err)
+			buf = []byte(`{"success":false,"error":{"code":"INTERNAL_ERROR","message":"failed to encode response"},"timestamp":null}`)
+		}
 		status = http.StatusInternalServerError
 	}
 

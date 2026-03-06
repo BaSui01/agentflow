@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/BaSui01/agentflow/api"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
@@ -46,12 +47,15 @@ func TestHealthHandler_HandleHealth(t *testing.T) {
 
 	assert.Equal(t, http.StatusOK, w.Code)
 
-	var status ServiceHealthResponse
-	err := json.NewDecoder(w.Body).Decode(&status)
+	var resp api.Response
+	err := json.NewDecoder(w.Body).Decode(&resp)
 	require.NoError(t, err)
+	require.True(t, resp.Success)
+	require.NotNil(t, resp.Data)
 
-	assert.Equal(t, "healthy", status.Status)
-	assert.False(t, status.Timestamp.IsZero())
+	data, ok := resp.Data.(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, "healthy", data["status"])
 }
 
 func TestHealthHandler_HandleHealthz(t *testing.T) {
@@ -65,12 +69,15 @@ func TestHealthHandler_HandleHealthz(t *testing.T) {
 
 	assert.Equal(t, http.StatusOK, w.Code)
 
-	var status ServiceHealthResponse
-	err := json.NewDecoder(w.Body).Decode(&status)
+	var resp api.Response
+	err := json.NewDecoder(w.Body).Decode(&resp)
 	require.NoError(t, err)
+	require.True(t, resp.Success)
+	require.NotNil(t, resp.Data)
 
-	assert.Equal(t, "healthy", status.Status)
-	assert.False(t, status.Timestamp.IsZero())
+	data, ok := resp.Data.(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, "healthy", data["status"])
 }
 
 func TestHealthHandler_HandleReady(t *testing.T) {
@@ -133,11 +140,33 @@ func TestHealthHandler_HandleReady(t *testing.T) {
 
 			assert.Equal(t, tt.expectedStatus, w.Code)
 
-			var status ServiceHealthResponse
-			err := json.NewDecoder(w.Body).Decode(&status)
+			var resp api.Response
+			err := json.NewDecoder(w.Body).Decode(&resp)
 			require.NoError(t, err)
+			require.NotNil(t, resp.Data)
 
-			tt.checkStatus(t, &status)
+			data, ok := resp.Data.(map[string]any)
+			require.True(t, ok)
+			status := &ServiceHealthResponse{}
+			if s, ok := data["status"].(string); ok {
+				status.Status = s
+			}
+			if c, ok := data["checks"].(map[string]any); ok {
+				status.Checks = make(map[string]CheckResult)
+				for k, v := range c {
+					if m, ok := v.(map[string]any); ok {
+						cr := CheckResult{}
+						if st, ok := m["status"].(string); ok {
+							cr.Status = st
+						}
+						if msg, ok := m["message"].(string); ok {
+							cr.Message = msg
+						}
+						status.Checks[k] = cr
+					}
+				}
+			}
+			tt.checkStatus(t, status)
 		})
 	}
 }

@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/BaSui01/agentflow/api"
 	"go.uber.org/zap"
 )
 
@@ -67,17 +68,17 @@ func (h *HealthHandler) RegisterCheck(check HealthCheck) {
 // @Description 简单的健康检查端点
 // @Tags 健康
 // @Produce json
-// @Success 200 {object} ServiceHealthResponse "服务正常"
-// @Failure 503 {object} ServiceHealthResponse "服务不健康"
+// @Success 200 {object} api.Response "服务正常，data 为 ServiceHealthResponse"
+// @Failure 503 {object} api.Response "服务不健康"
 // @Router /health [get]
 func (h *HealthHandler) HandleHealth(w http.ResponseWriter, r *http.Request) {
 	w = NewResponseWriter(w)
-	status := ServiceHealthResponse{
-		Status:    "healthy",
+	WriteJSON(w, http.StatusOK, api.Response{
+		Success:   true,
+		Data:      ServiceHealthResponse{Status: "healthy", Timestamp: time.Now()},
 		Timestamp: time.Now(),
-	}
-
-	WriteJSON(w, http.StatusOK, status)
+		RequestID: w.Header().Get("X-Request-ID"),
+	})
 }
 
 // HandleHealthz 处理 /healthz 请求（Kubernetes 风格）
@@ -85,17 +86,16 @@ func (h *HealthHandler) HandleHealth(w http.ResponseWriter, r *http.Request) {
 // @Description Kubernetes 的活跃度探针
 // @Tags 健康
 // @Produce json
-// @Success 200 {object} ServiceHealthResponse "服务处于活动状态"
+// @Success 200 {object} api.Response "服务处于活动状态，data 为 ServiceHealthResponse"
 // @Router /healthz [get]
 func (h *HealthHandler) HandleHealthz(w http.ResponseWriter, r *http.Request) {
 	w = NewResponseWriter(w)
-	// Liveness probe - 只检查服务是否运行
-	status := ServiceHealthResponse{
-		Status:    "healthy",
+	WriteJSON(w, http.StatusOK, api.Response{
+		Success:   true,
+		Data:      ServiceHealthResponse{Status: "healthy", Timestamp: time.Now()},
 		Timestamp: time.Now(),
-	}
-
-	WriteJSON(w, http.StatusOK, status)
+		RequestID: w.Header().Get("X-Request-ID"),
+	})
 }
 
 // HandleReady 处理 /ready 或 /readyz 请求（就绪检查）
@@ -149,11 +149,21 @@ func (h *HealthHandler) HandleReady(w http.ResponseWriter, r *http.Request) {
 
 	if !allHealthy {
 		status.Status = "unhealthy"
-		WriteJSON(w, http.StatusServiceUnavailable, status)
+		WriteJSON(w, http.StatusServiceUnavailable, api.Response{
+			Success:   false,
+			Data:      status,
+			Timestamp: time.Now(),
+			RequestID: w.Header().Get("X-Request-ID"),
+		})
 		return
 	}
 
-	WriteJSON(w, http.StatusOK, status)
+	WriteJSON(w, http.StatusOK, api.Response{
+		Success:   true,
+		Data:      status,
+		Timestamp: time.Now(),
+		RequestID: w.Header().Get("X-Request-ID"),
+	})
 }
 
 // HandleVersion 处理 /version 请求
@@ -165,13 +175,13 @@ func (h *HealthHandler) HandleReady(w http.ResponseWriter, r *http.Request) {
 // @Router /version [get]
 func (h *HealthHandler) HandleVersion(version, buildTime, gitCommit string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		info := map[string]string{
-			"version":    version,
-			"build_time": buildTime,
-			"git_commit": gitCommit,
-		}
-
-		WriteSuccess(w, info)
+		w = NewResponseWriter(w)
+		WriteJSON(w, http.StatusOK, api.Response{
+			Success:   true,
+			Data:      map[string]string{"version": version, "build_time": buildTime, "git_commit": gitCommit},
+			Timestamp: time.Now(),
+			RequestID: w.Header().Get("X-Request-ID"),
+		})
 	}
 }
 

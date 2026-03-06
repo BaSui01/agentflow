@@ -1,3 +1,13 @@
+// Package handlers: OpenAI 兼容层
+//
+// 设计说明（C-005/C-006）：OpenAI 兼容端点（/v1/chat/completions、/v1/responses）与自有接口
+// 使用两套错误/响应格式，此为有意设计：
+// - OpenAI 兼容：writeOpenAICompatError / writeOpenAICompatJSON，输出 OpenAI 规范格式（error.type/code/message）
+// - 自有接口：WriteError / WriteSuccess，输出 api.Response 统一格式（success/error/data）
+// 两套格式分别满足不同客户端契约，不做统一。
+//
+// TODO(C-002): OpenAI 兼容错误格式与主 API 的 api.ErrorInfo 不一致，
+// 需要在文档中说明或增加适配层统一。
 package handlers
 
 import (
@@ -233,7 +243,7 @@ func (h *ChatHandler) HandleOpenAICompatChatCompletions(w http.ResponseWriter, r
 	}
 
 	var req openAICompatChatCompletionsRequest
-	if err := decodeOpenAICompatJSON(r, &req); err != nil {
+	if err := decodeOpenAICompatJSON(w, r, &req); err != nil {
 		writeOpenAICompatError(w, err)
 		return
 	}
@@ -273,7 +283,7 @@ func (h *ChatHandler) HandleOpenAICompatResponses(w http.ResponseWriter, r *http
 	}
 
 	var req openAICompatResponsesRequest
-	if err := decodeOpenAICompatJSON(r, &req); err != nil {
+	if err := decodeOpenAICompatJSON(w, r, &req); err != nil {
 		writeOpenAICompatError(w, err)
 		return
 	}
@@ -387,6 +397,7 @@ func (h *ChatHandler) handleOpenAICompatResponsesStream(w http.ResponseWriter, r
 		if chunk.Err != nil {
 			_ = writeSSEEventJSON(w, "error", map[string]any{
 				"type":    "error",
+				"code":    string(chunk.Err.Code),
 				"message": chunk.Err.Message,
 			})
 			_ = writeSSE(w, []byte("data: [DONE]\n\n"))
@@ -1095,16 +1106,24 @@ func toOpenAICompatOutboundToolCalls(calls []types.ToolCall) []openAICompatOutbo
 	return out
 }
 
-func decodeOpenAICompatJSON(r *http.Request, out any) *types.Error {
+func decodeOpenAICompatJSON(w http.ResponseWriter, r *http.Request, out any) *types.Error {
 	if r == nil || r.Body == nil {
 		return types.NewInvalidRequestError("request body is required")
 	}
 	if ct := strings.ToLower(strings.TrimSpace(r.Header.Get("Content-Type"))); ct != "" && !strings.HasPrefix(ct, "application/json") {
 		return types.NewInvalidRequestError("content-type must be application/json")
 	}
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
 	dec := json.NewDecoder(r.Body)
+	dec.DisallowUnknownFields()
 	if err := dec.Decode(out); err != nil {
+		if err.Error() == "http: request body too large" {
+			return types.NewInvalidRequestError("request body too large (max 1MB)")
+		}
 		return types.NewInvalidRequestError("invalid JSON body")
+	}
+	if dec.More() {
+		return types.NewInvalidRequestError("request body must only contain a single JSON object")
 	}
 	return nil
 }

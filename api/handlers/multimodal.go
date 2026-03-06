@@ -22,6 +22,7 @@ import (
 	llmcore "github.com/BaSui01/agentflow/llm/core"
 	llmgateway "github.com/BaSui01/agentflow/llm/gateway"
 	llmpolicy "github.com/BaSui01/agentflow/llm/runtime/policy"
+	"github.com/BaSui01/agentflow/pkg/storage"
 	"github.com/BaSui01/agentflow/types"
 	"go.uber.org/zap"
 )
@@ -31,6 +32,12 @@ const (
 	defaultReferenceTTL   = 2 * time.Hour
 	defaultChatModel      = "gpt-4o-mini"
 	defaultNegativeText   = "blurry, low quality, watermark, text, logo, signature, bad anatomy, deformed, mutated"
+)
+
+var (
+	validImageSizes   = []string{"256x256", "512x512", "1024x1024", "1024x768", "768x1024", "1536x1024", "1024x1536", "1536x1536", "1792x1024", "1024x1792"}
+	validImageQualities = []string{"standard", "hd"}
+	validImageStyles    = []string{"vivid", "natural"}
 )
 
 type MultimodalHandlerConfig struct {
@@ -57,17 +64,8 @@ type MultimodalHandlerConfig struct {
 	DefaultVideoProvider string
 	ReferenceMaxSize     int64
 	ReferenceTTL         time.Duration
-	ReferenceStore       ReferenceStore
+	ReferenceStore       storage.ReferenceStore
 	Pipeline             multimodal.PromptPipeline
-}
-
-type referenceAsset struct {
-	ID        string    `json:"id"`
-	FileName  string    `json:"file_name"`
-	MimeType  string    `json:"mime_type"`
-	Size      int       `json:"size"`
-	CreatedAt time.Time `json:"created_at"`
-	Data      []byte    `json:"-"`
 }
 
 type MultimodalHandler struct {
@@ -88,7 +86,7 @@ type MultimodalHandler struct {
 
 	referenceMaxSize int64
 	referenceTTL     time.Duration
-	referenceStore   ReferenceStore
+	referenceStore   storage.ReferenceStore
 }
 
 func NewMultimodalHandlerFromConfig(cfg MultimodalHandlerConfig, logger *zap.Logger) *MultimodalHandler {
@@ -144,7 +142,7 @@ func NewMultimodalHandlerWithProviders(
 	pipeline multimodal.PromptPipeline,
 	referenceMaxSize int64,
 	referenceTTL time.Duration,
-	referenceStore ReferenceStore,
+	referenceStore storage.ReferenceStore,
 	logger *zap.Logger,
 ) *MultimodalHandler {
 	if logger == nil {
@@ -160,7 +158,7 @@ func NewMultimodalHandlerWithProviders(
 		referenceTTL = defaultReferenceTTL
 	}
 	if referenceStore == nil {
-		referenceStore = NewMemoryReferenceStore()
+		referenceStore = storage.NewMemoryReferenceStore()
 	}
 
 	router := multimodal.NewRouter()
@@ -296,7 +294,7 @@ func (h *MultimodalHandler) HandleUploadReference(w http.ResponseWriter, r *http
 	}
 
 	refID := fmt.Sprintf("ref_%d", time.Now().UnixNano())
-	ref := &referenceAsset{
+	ref := &storage.ReferenceAsset{
 		ID:        refID,
 		FileName:  header.Filename,
 		MimeType:  mimeType,
@@ -359,6 +357,19 @@ func (h *MultimodalHandler) HandleImage(w http.ResponseWriter, r *http.Request) 
 		WriteErrorMessage(w, http.StatusBadRequest, types.ErrInvalidRequest, "n must be non-negative", h.logger)
 		return
 	}
+	// V-015: Size/Quality/Style enum validation
+	if req.Size != "" && !ValidateEnum(req.Size, validImageSizes) {
+		WriteErrorMessage(w, http.StatusBadRequest, types.ErrInvalidRequest, "size must be one of: 256x256, 512x512, 1024x1024, 1024x768, 768x1024, 1536x1024, 1024x1536, 1536x1536, 1792x1024, 1024x1792", h.logger)
+		return
+	}
+	if req.Quality != "" && !ValidateEnum(req.Quality, validImageQualities) {
+		WriteErrorMessage(w, http.StatusBadRequest, types.ErrInvalidRequest, "quality must be one of: standard, hd", h.logger)
+		return
+	}
+	if req.Style != "" && !ValidateEnum(req.Style, validImageStyles) {
+		WriteErrorMessage(w, http.StatusBadRequest, types.ErrInvalidRequest, "style must be one of: vivid, natural", h.logger)
+		return
+	}
 	if len(h.imageProviders) == 0 {
 		WriteErrorMessage(w, http.StatusServiceUnavailable, types.ErrServiceUnavailable, "no image provider configured", h.logger)
 		return
@@ -413,6 +424,15 @@ func (h *MultimodalHandler) HandleVideo(w http.ResponseWriter, r *http.Request) 
 	}
 	if strings.TrimSpace(req.Prompt) == "" {
 		WriteErrorMessage(w, http.StatusBadRequest, types.ErrInvalidRequest, "prompt is required", h.logger)
+		return
+	}
+	// V-012: Duration >0 and <=300, FPS >0 and <=60
+	if req.Duration != 0 && (req.Duration <= 0 || req.Duration > 300) {
+		WriteErrorMessage(w, http.StatusBadRequest, types.ErrInvalidRequest, "duration must be >0 and <=300", h.logger)
+		return
+	}
+	if req.FPS != 0 && (req.FPS <= 0 || req.FPS > 60) {
+		WriteErrorMessage(w, http.StatusBadRequest, types.ErrInvalidRequest, "fps must be >0 and <=60", h.logger)
 		return
 	}
 	if len(h.videoProviders) == 0 {
