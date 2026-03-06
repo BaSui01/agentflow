@@ -99,6 +99,8 @@ func DefaultReflectionConfig() *ReflectionConfig {
 	}
 }
 
+func (c *ReflectionConfig) IsEnabled() bool { return c != nil && c.Enabled }
+
 // ToolSelectionConfig configures dynamic tool selection.
 type ToolSelectionConfig struct {
 	Enabled             bool    `json:"enabled"`
@@ -117,6 +119,8 @@ func DefaultToolSelectionConfig() *ToolSelectionConfig {
 	}
 }
 
+func (c *ToolSelectionConfig) IsEnabled() bool { return c != nil && c.Enabled }
+
 // PromptEnhancerConfig configures prompt enhancement.
 type PromptEnhancerConfig struct {
 	Enabled bool   `json:"enabled"`
@@ -130,6 +134,8 @@ func DefaultPromptEnhancerConfig() *PromptEnhancerConfig {
 		Mode:    "basic",
 	}
 }
+
+func (c *PromptEnhancerConfig) IsEnabled() bool { return c != nil && c.Enabled }
 
 // GuardrailsConfig configures input/output validation.
 type GuardrailsConfig struct {
@@ -154,6 +160,8 @@ func DefaultGuardrailsConfig() *GuardrailsConfig {
 	}
 }
 
+func (c *GuardrailsConfig) IsEnabled() bool { return c != nil && c.Enabled }
+
 // MemoryConfig configures the memory system.
 type MemoryConfig struct {
 	Enabled          bool          `json:"enabled"`
@@ -176,6 +184,8 @@ func DefaultMemoryConfig() *MemoryConfig {
 	}
 }
 
+func (c *MemoryConfig) IsEnabled() bool { return c != nil && c.Enabled }
+
 // ============================================================
 // Extension Configurations
 // ============================================================
@@ -188,6 +198,8 @@ type SkillsConfig struct {
 	MaxLoaded  int      `json:"max_loaded,omitempty"`
 }
 
+func (c *SkillsConfig) IsEnabled() bool { return c != nil && c.Enabled }
+
 // MCPConfig configures Model Context Protocol integration.
 type MCPConfig struct {
 	Enabled   bool          `json:"enabled"`
@@ -196,10 +208,14 @@ type MCPConfig struct {
 	Timeout   time.Duration `json:"timeout,omitempty"`
 }
 
+func (c *MCPConfig) IsEnabled() bool { return c != nil && c.Enabled }
+
 // LSPConfig configures Language Server Protocol integration.
 type LSPConfig struct {
 	Enabled bool `json:"enabled"`
 }
+
+func (c *LSPConfig) IsEnabled() bool { return c != nil && c.Enabled }
 
 // ObservabilityConfig configures metrics, tracing, and logging.
 type ObservabilityConfig struct {
@@ -220,49 +236,21 @@ func DefaultObservabilityConfig() *ObservabilityConfig {
 	}
 }
 
+func (c *ObservabilityConfig) IsEnabled() bool { return c != nil && c.Enabled }
+
 // ============================================================
 // Configuration Helpers
 // ============================================================
 
-// IsReflectionEnabled checks if reflection is enabled.
-func (c *AgentConfig) IsReflectionEnabled() bool {
-	return c.Features.Reflection != nil && c.Features.Reflection.Enabled
-}
-
-// IsToolSelectionEnabled checks if tool selection is enabled.
-func (c *AgentConfig) IsToolSelectionEnabled() bool {
-	return c.Features.ToolSelection != nil && c.Features.ToolSelection.Enabled
-}
-
-// IsGuardrailsEnabled checks if guardrails are enabled.
-func (c *AgentConfig) IsGuardrailsEnabled() bool {
-	return c.Features.Guardrails != nil && c.Features.Guardrails.Enabled
-}
-
-// IsMemoryEnabled checks if memory is enabled.
-func (c *AgentConfig) IsMemoryEnabled() bool {
-	return c.Features.Memory != nil && c.Features.Memory.Enabled
-}
-
-// IsSkillsEnabled checks if skills are enabled.
-func (c *AgentConfig) IsSkillsEnabled() bool {
-	return c.Extensions.Skills != nil && c.Extensions.Skills.Enabled
-}
-
-// IsMCPEnabled checks if MCP is enabled.
-func (c *AgentConfig) IsMCPEnabled() bool {
-	return c.Extensions.MCP != nil && c.Extensions.MCP.Enabled
-}
-
-// IsLSPEnabled checks if LSP is enabled.
-func (c *AgentConfig) IsLSPEnabled() bool {
-	return c.Extensions.LSP != nil && c.Extensions.LSP.Enabled
-}
-
-// IsObservabilityEnabled checks if observability is enabled.
-func (c *AgentConfig) IsObservabilityEnabled() bool {
-	return c.Extensions.Observability != nil && c.Extensions.Observability.Enabled
-}
+func (c *AgentConfig) IsReflectionEnabled() bool      { return c.Features.Reflection.IsEnabled() }
+func (c *AgentConfig) IsToolSelectionEnabled() bool    { return c.Features.ToolSelection.IsEnabled() }
+func (c *AgentConfig) IsGuardrailsEnabled() bool       { return c.Features.Guardrails.IsEnabled() }
+func (c *AgentConfig) IsMemoryEnabled() bool            { return c.Features.Memory.IsEnabled() }
+func (c *AgentConfig) IsPromptEnhancerEnabled() bool    { return c.Features.PromptEnhancer.IsEnabled() }
+func (c *AgentConfig) IsSkillsEnabled() bool            { return c.Extensions.Skills.IsEnabled() }
+func (c *AgentConfig) IsMCPEnabled() bool               { return c.Extensions.MCP.IsEnabled() }
+func (c *AgentConfig) IsLSPEnabled() bool               { return c.Extensions.LSP.IsEnabled() }
+func (c *AgentConfig) IsObservabilityEnabled() bool     { return c.Extensions.Observability.IsEnabled() }
 
 // Validate validates the configuration.
 func (c *AgentConfig) Validate() error {

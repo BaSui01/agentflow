@@ -14,6 +14,21 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// 配置校验边界常量
+const (
+	validateHTTPPortMax      = 65535
+	validateMaxIterationsMax = 10000
+	validateTemperatureMax   = 2
+	validateMaxTokensMax     = 128000
+)
+
+// Checkpoint 存储类型常量，替代 magic string
+const (
+	StorageTypeFile     = "file"
+	StorageTypeRedis    = "redis"
+	StorageTypePostgres = "postgres"
+)
+
 // --- 核心配置结构 ---
 
 // Config 是 AgentFlow 的完整配置结构
@@ -115,6 +130,8 @@ type JWTConfig struct {
 	Issuer string `yaml:"issuer" env:"ISSUER" json:"issuer,omitempty"`
 	// 期望的受众
 	Audience string `yaml:"audience" env:"AUDIENCE" json:"audience,omitempty"`
+	// X-012: 默认 token 有效期，未设置时使用 1h
+	Expiration time.Duration `yaml:"expiration" env:"EXPIRATION" json:"expiration,omitempty"`
 }
 
 // AgentConfig Agent 配置，用于 YAML/环境变量加载（扁平结构）。
@@ -536,7 +553,12 @@ func (l *Loader) Load() (*Config, error) {
 		return nil, fmt.Errorf("failed to load config from env: %w", err)
 	}
 
-	// 4. 运行验证器
+	// 4. X-012: JWT 默认 exp 值
+	if (cfg.Server.JWT.Secret != "" || cfg.Server.JWT.PublicKey != "") && cfg.Server.JWT.Expiration == 0 {
+		cfg.Server.JWT.Expiration = time.Hour
+	}
+
+	// 5. 运行验证器
 	for _, v := range l.validators {
 		if err := v(cfg); err != nil {
 			return nil, fmt.Errorf("config validation failed: %w", err)
@@ -697,29 +719,29 @@ func (c *Config) Validate() error {
 	}
 
 	// V-009: MaxIterations upper bound
-	if c.Agent.MaxIterations > 10000 {
+	if c.Agent.MaxIterations > validateMaxIterationsMax {
 		errs = append(errs, "agent.max_iterations must not exceed 10000")
 	}
 
-	if c.Agent.Temperature < 0 || c.Agent.Temperature > 2 {
+	if c.Agent.Temperature < 0 || c.Agent.Temperature > validateTemperatureMax {
 		errs = append(errs, "temperature must be between 0 and 2")
 	}
 	if c.Agent.Checkpoint.Enabled {
 		backend := strings.TrimSpace(strings.ToLower(c.Agent.Checkpoint.Backend))
 		switch backend {
-		case "file":
+		case StorageTypeFile:
 			if strings.TrimSpace(c.Agent.Checkpoint.FilePath) == "" {
 				errs = append(errs, "agent.checkpoint.file_path is required when backend=file")
 			}
-		case "redis":
+		case StorageTypeRedis:
 			if strings.TrimSpace(c.Redis.Addr) == "" {
 				errs = append(errs, "redis.addr is required when agent.checkpoint.backend=redis")
 			}
 			if strings.TrimSpace(c.Agent.Checkpoint.RedisPrefix) == "" {
 				errs = append(errs, "agent.checkpoint.redis_prefix is required when backend=redis")
 			}
-		case "postgres":
-			if strings.TrimSpace(c.Database.Driver) != "postgres" {
+		case StorageTypePostgres:
+			if strings.TrimSpace(c.Database.Driver) != StorageTypePostgres {
 				errs = append(errs, "database.driver must be postgres when agent.checkpoint.backend=postgres")
 			}
 		default:
@@ -732,7 +754,7 @@ func (c *Config) Validate() error {
 	if c.Multimodal.ReferenceTTL <= 0 {
 		errs = append(errs, "multimodal.reference_ttl must be positive")
 	}
-	if strings.ToLower(strings.TrimSpace(c.Multimodal.ReferenceStoreBackend)) != "redis" {
+	if strings.ToLower(strings.TrimSpace(c.Multimodal.ReferenceStoreBackend)) != StorageTypeRedis {
 		errs = append(errs, "multimodal.reference_store_backend must be redis")
 	}
 	if c.Multimodal.Enabled && strings.TrimSpace(c.Redis.Addr) == "" {
@@ -740,7 +762,7 @@ func (c *Config) Validate() error {
 	}
 
 	// V-010: MaxTokens range validation
-	if c.Agent.MaxTokens < 0 || c.Agent.MaxTokens > 128000 {
+	if c.Agent.MaxTokens < 0 || c.Agent.MaxTokens > validateMaxTokensMax {
 		errs = append(errs, "agent.max_tokens must be between 0 and 128000")
 	}
 
@@ -761,7 +783,7 @@ func (c *Config) Validate() error {
 // 日志记录请使用 SafeDSN()，它会对密码进行掩码处理。
 func (d *DatabaseConfig) DSN() string {
 	switch d.Driver {
-	case "postgres":
+	case StorageTypePostgres:
 		return fmt.Sprintf(
 			"host=%s port=%d user=%s password=%s dbname=%s sslmode=%s",
 			d.Host, d.Port, d.User, d.Password, d.Name, d.SSLMode,
@@ -783,7 +805,7 @@ func (d *DatabaseConfig) DSN() string {
 func (d *DatabaseConfig) SafeDSN() string {
 	maskedPassword := MaskSensitive(d.Password)
 	switch d.Driver {
-	case "postgres":
+	case StorageTypePostgres:
 		return fmt.Sprintf(
 			"host=%s port=%d user=%s password=%s dbname=%s sslmode=%s",
 			d.Host, d.Port, d.User, maskedPassword, d.Name, d.SSLMode,

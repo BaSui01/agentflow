@@ -17,12 +17,13 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
 
-	"github.com/BaSui01/agentflow/api"
+	"github.com/BaSui01/agentflow/types"
 	"go.uber.org/zap"
 	"golang.org/x/time/rate"
 )
@@ -41,8 +42,18 @@ type ConfigAPIHandler struct {
 	logger        *zap.Logger // X-004: 审计日志
 }
 
-type apiResponse = api.Response
-type apiError = api.ErrorInfo
+type apiResponse struct {
+	Success   bool       `json:"success"`
+	Data      any        `json:"data,omitempty"`
+	Error     *apiError  `json:"error,omitempty"`
+	Timestamp time.Time  `json:"timestamp"`
+	RequestID string     `json:"request_id,omitempty"`
+}
+
+type apiError struct {
+	Code    string `json:"code"`
+	Message string `json:"message"`
+}
 
 // configData 是配置 API 响应中 Data 字段的内部结构。
 type configData struct {
@@ -96,10 +107,16 @@ type ConfigUpdateRequest struct {
 
 // NewConfigAPIHandler 创建一个新的配置 API 处理程序。
 // allowedOrigin 指定 CORS 允许的来源，为空时默认不设置 Access-Control-Allow-Origin。
+// X-010: "*" 视为不安全，记录 Warn 并拒绝（不设置 CORS 头）。
 func NewConfigAPIHandler(manager *HotReloadManager, allowedOrigin ...string) *ConfigAPIHandler {
 	origin := ""
 	if len(allowedOrigin) > 0 && allowedOrigin[0] != "" {
-		origin = allowedOrigin[0]
+		o := allowedOrigin[0]
+		if o == "*" {
+			zap.L().Warn("CORS allowedOrigin \"*\" is insecure and rejected; use explicit origins")
+		} else {
+			origin = o
+		}
 	}
 	return &ConfigAPIHandler{
 		manager:       manager,
@@ -168,7 +185,7 @@ func (h *ConfigAPIHandler) getConfig(w http.ResponseWriter, r *http.Request) {
 		writeAPIJSON(w, http.StatusInternalServerError, apiResponse{
 			Success: false,
 			Error: &apiError{
-				Code:    "INTERNAL_ERROR",
+				Code:    string(types.ErrInternalError),
 				Message: "Configuration unavailable",
 			},
 			Timestamp: time.Now(),
@@ -228,7 +245,7 @@ func (h *ConfigAPIHandler) updateConfig(w http.ResponseWriter, r *http.Request) 
 			writeAPIJSON(w, http.StatusRequestEntityTooLarge, apiResponse{
 				Success: false,
 				Error: &apiError{
-					Code:    "REQUEST_TOO_LARGE",
+					Code:    string(types.ErrInputValidation),
 					Message: "Request body too large",
 				},
 				Timestamp: time.Now(),
@@ -245,7 +262,7 @@ func (h *ConfigAPIHandler) updateConfig(w http.ResponseWriter, r *http.Request) 
 		writeAPIJSON(w, http.StatusBadRequest, apiResponse{
 			Success: false,
 			Error: &apiError{
-				Code:    "INVALID_REQUEST",
+				Code:    string(types.ErrInvalidRequest),
 				Message: "Invalid request body",
 			},
 			Timestamp: time.Now(),
@@ -257,7 +274,7 @@ func (h *ConfigAPIHandler) updateConfig(w http.ResponseWriter, r *http.Request) 
 		writeAPIJSON(w, http.StatusBadRequest, apiResponse{
 			Success: false,
 			Error: &apiError{
-				Code:    "INVALID_REQUEST",
+				Code:    string(types.ErrInvalidRequest),
 				Message: "Invalid request body",
 			},
 			Timestamp: time.Now(),
@@ -270,7 +287,7 @@ func (h *ConfigAPIHandler) updateConfig(w http.ResponseWriter, r *http.Request) 
 		writeAPIJSON(w, http.StatusBadRequest, apiResponse{
 			Success: false,
 			Error: &apiError{
-				Code:    "INVALID_REQUEST",
+				Code:    string(types.ErrInvalidRequest),
 				Message: "No updates provided",
 			},
 			Timestamp: time.Now(),
@@ -316,7 +333,7 @@ func (h *ConfigAPIHandler) updateConfig(w http.ResponseWriter, r *http.Request) 
 		writeAPIJSON(w, http.StatusBadRequest, apiResponse{
 			Success: false,
 			Error: &apiError{
-				Code:    "INVALID_REQUEST",
+				Code:    string(types.ErrInvalidRequest),
 				Message: fmt.Sprintf("Some updates failed: %v", errors),
 			},
 			Data: configData{
@@ -364,7 +381,7 @@ func (h *ConfigAPIHandler) handleReload(w http.ResponseWriter, r *http.Request) 
 		writeAPIJSON(w, http.StatusUnsupportedMediaType, apiResponse{
 			Success: false,
 			Error: &apiError{
-				Code:    "INVALID_REQUEST",
+				Code:    string(types.ErrInvalidRequest),
 				Message: "Content-Type must be application/json",
 			},
 			Timestamp: time.Now(),
@@ -380,7 +397,7 @@ func (h *ConfigAPIHandler) handleReload(w http.ResponseWriter, r *http.Request) 
 		writeAPIJSON(w, http.StatusInternalServerError, apiResponse{
 			Success: false,
 			Error: &apiError{
-				Code:    "INTERNAL_ERROR",
+				Code:    string(types.ErrInternalError),
 				Message: fmt.Sprintf("Failed to reload configuration: %v", err),
 			},
 			Timestamp: time.Now(),
@@ -533,7 +550,7 @@ func (h *ConfigAPIHandler) handleRollback(w http.ResponseWriter, r *http.Request
 			writeAPIJSON(w, http.StatusBadRequest, apiResponse{
 				Success: false,
 				Error: &apiError{
-					Code:    "INVALID_REQUEST",
+					Code:    string(types.ErrInvalidRequest),
 					Message: "version must be a positive integer",
 				},
 				Timestamp: time.Now(),
@@ -550,7 +567,7 @@ func (h *ConfigAPIHandler) handleRollback(w http.ResponseWriter, r *http.Request
 		writeAPIJSON(w, http.StatusInternalServerError, apiResponse{
 			Success: false,
 			Error: &apiError{
-				Code:    "INTERNAL_ERROR",
+				Code:    string(types.ErrInternalError),
 				Message: fmt.Sprintf("Failed to rollback configuration: %v", rollbackErr),
 			},
 			Timestamp: time.Now(),
@@ -581,7 +598,7 @@ func validateJSONContentType(w http.ResponseWriter, r *http.Request) bool {
 		writeAPIJSON(w, http.StatusUnsupportedMediaType, apiResponse{
 			Success: false,
 			Error: &apiError{
-				Code:    "INVALID_REQUEST",
+				Code:    string(types.ErrInvalidRequest),
 				Message: "Content-Type must be application/json",
 			},
 			Timestamp: time.Now(),
@@ -594,7 +611,29 @@ func validateJSONContentType(w http.ResponseWriter, r *http.Request) bool {
 // writeAPIJSON writes a JSON response using the marshal-first pattern (§6).
 // Uses the same Content-Type and security headers as handlers.WriteJSON.
 func writeAPIJSON(w http.ResponseWriter, status int, data any) {
-	api.WriteJSONResponse(w, status, data)
+	buf, err := json.Marshal(data)
+	if err != nil {
+		fallback := apiResponse{
+			Success: false,
+			Error: &apiError{
+				Code:    string(types.ErrInternalError),
+				Message: "failed to encode response",
+			},
+			Timestamp: time.Now().UTC(),
+		}
+		buf, _ = json.Marshal(fallback)
+		status = http.StatusInternalServerError
+		if buf == nil {
+			buf = []byte(`{"success":false,"error":{"code":"INTERNAL_ERROR","message":"failed to encode response"}}`)
+			// stderr fallback: writeAPIJSON 为包级函数无 logger；
+			// 此路径仅在 json.Marshal(apiResponse{}) 本身失败时触发，概率极低。
+			fmt.Fprintf(os.Stderr, "config api: json.Marshal fallback failed: %v\n", err)
+		}
+	}
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	w.WriteHeader(status)
+	_, _ = w.Write(buf)
 }
 
 // handleCORS 处理 CORS 预检请求
@@ -613,7 +652,7 @@ func (h *ConfigAPIHandler) methodNotAllowed(w http.ResponseWriter, r *http.Reque
 	writeAPIJSON(w, http.StatusMethodNotAllowed, apiResponse{
 		Success: false,
 		Error: &apiError{
-			Code:    "METHOD_NOT_ALLOWED",
+			Code:    string(types.ErrInvalidRequest),
 			Message: fmt.Sprintf("Method %s not allowed", r.Method),
 		},
 		Timestamp: time.Now(),
@@ -654,7 +693,7 @@ func (m *ConfigAPIMiddleware) RequireAuth(next http.HandlerFunc) http.HandlerFun
 			writeAPIJSON(w, http.StatusTooManyRequests, apiResponse{
 				Success: false,
 				Error: &apiError{
-					Code:    "RATE_LIMITED",
+					Code:    string(types.ErrRateLimit),
 					Message: "Too many requests",
 				},
 				Timestamp: time.Now(),
@@ -685,7 +724,7 @@ func (m *ConfigAPIMiddleware) RequireAuth(next http.HandlerFunc) http.HandlerFun
 				writeAPIJSON(w, http.StatusUnauthorized, apiResponse{
 					Success: false,
 					Error: &apiError{
-						Code:    "UNAUTHORIZED",
+						Code:    string(types.ErrUnauthorized),
 						Message: "Invalid or missing API key",
 					},
 					Timestamp: time.Now(),
