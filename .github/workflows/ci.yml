@@ -70,9 +70,6 @@ jobs:
         continue-on-error: true
         run: "$(go env GOPATH)/bin/go-arch-lint" check
 
-      - name: Check API contract consistency
-        run: go test ./tests/contracts -count=1
-
       - name: Vet selected packages
         run: go vet ${{ steps.pkgset.outputs.pkgs }}
 

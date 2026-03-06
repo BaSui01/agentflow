@@ -181,15 +181,15 @@ coverage-badge: ## 生成覆盖率徽章数据
 	@echo "✅ Coverage badge data: $(BUILD_DIR)/coverage.json"
 
 .PHONY: test-e2e
-test-e2e: ## 运行 E2E 测试
+test-e2e: ## 运行 E2E 测试（需要 Docker 服务）
 	@echo "🧪 Running E2E tests..."
-	$(GO) test ./tests/e2e/... -v -tags=e2e -timeout=10m
+	$(GO) test ./... -v -tags=e2e -timeout=10m -run='^TestE2E'
 	@echo "✅ E2E tests complete"
 
 .PHONY: test-integration
-test-integration: ## 运行集成测试
+test-integration: ## 运行集成测试（需要外部依赖）
 	@echo "🧪 Running integration tests..."
-	$(GO) test ./tests/integration/... -v -timeout=5m
+	$(GO) test ./... -v -tags=integration -timeout=5m
 	@echo "✅ Integration tests complete"
 
 .PHONY: test-all

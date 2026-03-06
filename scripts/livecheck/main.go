@@ -220,12 +220,14 @@ type liveTest struct {
 func main() {
 	opts, err := parseRunOptions()
 	if err != nil {
-		panic(err)
+		fmt.Fprintf(os.Stderr, "failed to parse options: %v\n", err)
+		os.Exit(1)
 	}
 
 	logger, logPath, cleanup, err := newLivecheckLogger(opts.logDir)
 	if err != nil {
-		panic(err)
+		fmt.Fprintf(os.Stderr, "failed to create logger: %v\n", err)
+		os.Exit(1)
 	}
 	defer cleanup()
 
