@@ -85,3 +85,27 @@ type Provider interface {
 	SupportedSizes() []string
 }
 
+// StreamChunk 是流式生成时的单个数据块.
+// 文字 token（Text != ""）与图像数据（Image != nil）互斥出现；Done=true 表示流正常结束.
+type StreamChunk struct {
+	// Text 是模型的流式文字输出（思考/描述内容），在图像到达前逐步推送.
+	Text string
+	// Image 是生成的图像数据，仅最后一批图像 chunk 携带.
+	Image *ImageData
+	// Done 为 true 时表示流已正常结束（此 chunk 不携带数据）.
+	Done bool
+	// Err 不为 nil 时表示流异常终止.
+	Err error
+}
+
+// StreamingProvider 是支持原生流式生成的可选扩展接口.
+// 并非所有 Provider 都实现此接口；调用方通过类型断言检测是否支持.
+// 实现方需保证：emit 按顺序调用；最后一次调用 emit 的 chunk.Done==true 或 chunk.Err!=nil.
+type StreamingProvider interface {
+	Provider
+	// GenerateStream 启动流式生成，通过 emit 回调逐步推送 StreamChunk.
+	// emit 中的 chunk.Done=true 表示流正常结束；chunk.Err!=nil 表示错误终止.
+	// 实现必须在 ctx 取消后尽快退出并推送 chunk.Err=ctx.Err().
+	GenerateStream(ctx context.Context, req *GenerateRequest, emit func(StreamChunk)) error
+}
+
