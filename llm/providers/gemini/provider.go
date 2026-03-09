@@ -23,6 +23,21 @@ import (
 	"go.uber.org/zap"
 )
 
+// 官方端点（可被配置 BaseURL 覆盖）：
+// - Google AI（API Key）：https://generativelanguage.googleapis.com
+//   - POST /v1beta/models/{model}:generateContent
+//   - POST /v1beta/models/{model}:streamGenerateContent?alt=sse
+//   - GET  /v1beta/models
+// - Vertex AI（ProjectID 非空）：https://{region}-aiplatform.googleapis.com
+//   - POST /v1/projects/{project}/locations/{region}/publishers/google/models/{model}:generateContent
+//   - POST /v1/projects/{project}/locations/{region}/publishers/google/models/{model}:streamGenerateContent?alt=sse
+//   - GET  /v1/projects/{project}/locations/{region}/publishers/google/models
+const (
+	defaultGoogleAIBaseURL = "https://generativelanguage.googleapis.com"
+	vertexAIHostPattern    = "https://%s-aiplatform.googleapis.com"
+	defaultVertexRegion   = "us-central1"
+)
+
 // GeminiProvider 实现 Google Gemini 的 LLM Provider
 // Gemini API 特点：
 // 1. 使用 x-goog-api-key 请求头认证
@@ -46,15 +61,15 @@ func NewGeminiProvider(cfg providers.GeminiConfig, logger *zap.Logger) *GeminiPr
 
 	// Vertex AI 模式：设置默认 Region
 	if cfg.ProjectID != "" && cfg.Region == "" {
-		cfg.Region = "us-central1"
+		cfg.Region = defaultVertexRegion
 	}
 
-	// 设置默认 BaseURL
+	// 设置默认 BaseURL（未配置时使用官方端点）
 	if cfg.BaseURL == "" {
 		if cfg.ProjectID != "" {
-			cfg.BaseURL = fmt.Sprintf("https://%s-aiplatform.googleapis.com", cfg.Region)
+			cfg.BaseURL = fmt.Sprintf(vertexAIHostPattern, cfg.Region)
 		} else {
-			cfg.BaseURL = "https://generativelanguage.googleapis.com"
+			cfg.BaseURL = defaultGoogleAIBaseURL
 		}
 	}
 
@@ -713,7 +728,8 @@ func (p *GeminiProvider) Completion(ctx context.Context, req *llm.ChatRequest) (
 }
 
 func (p *GeminiProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-chan llm.StreamChunk, error) {
-	// 统一入口：应用改写器链
+	// 对齐 Google streamGenerateContent：SSE data 行含 JSON，可选 [DONE] 或 error 负载。
+	// 文档：https://ai.google.dev/gemini-api/docs/text-generation（Streaming）
 	rewrittenReq, err := p.rewriterChain.Execute(ctx, req)
 	if err != nil {
 		return nil, &types.Error{
@@ -810,13 +826,44 @@ func (p *GeminiProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-ch
 				continue
 			}
 
-			// Gemini SSE 格式：data: {json}\n\n
+			// Gemini SSE 格式：data: {json}\n\n；官方 streamGenerateContent 文档：
+			// https://ai.google.dev/gemini-api/docs/text-generation#streaming
 			if !strings.HasPrefix(line, "data:") {
 				continue
 			}
 			data := strings.TrimSpace(strings.TrimPrefix(line, "data:"))
 			if data == "" {
 				continue
+			}
+			if data == "[DONE]" {
+				return
+			}
+
+			// 流式中的错误负载：{"error":{"message":"...","code":...}}
+			var errPayload struct {
+				Err *struct {
+					Message string `json:"message"`
+					Code   int    `json:"code"`
+				} `json:"error"`
+			}
+			if err := json.Unmarshal([]byte(data), &errPayload); err == nil && errPayload.Err != nil {
+				msg := strings.TrimSpace(errPayload.Err.Message)
+				if msg == "" {
+					msg = "stream error"
+				}
+				select {
+				case <-ctx.Done():
+					return
+				case ch <- llm.StreamChunk{
+					Err: &types.Error{
+						Code:       llm.ErrUpstreamError,
+						Message:    msg,
+						HTTPStatus: errPayload.Err.Code,
+						Provider:   p.Name(),
+					},
+				}:
+				}
+				return
 			}
 
 			var geminiResp geminiResponse

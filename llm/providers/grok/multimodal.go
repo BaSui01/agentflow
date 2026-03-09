@@ -17,6 +17,12 @@ import (
 	"github.com/BaSui01/agentflow/llm"
 )
 
+// Grok 视频生成端点（BaseURL 默认 defaultGrokBaseURL，在 provider.go 设置）
+const (
+	grokVideoSubmitPath    = "/v1/videos/generations"
+	grokVideoPollPathPrefix = "/v1/videos/generations/"
+)
+
 // GenerateImage generates images using xAI Grok Aurora.
 // Endpoint: POST /v1/images/generations
 // Models: grok-2-image, grok-2-image-latest
@@ -25,7 +31,8 @@ func (p *GrokProvider) GenerateImage(ctx context.Context, req *llm.ImageGenerati
 }
 
 // GenerateVideo 使用 xAI Grok 生成视频.
-// Endpoint: POST /v1/videos/generations (提交) + GET /v1/videos/generations/{id} (轮询)
+// 官方端点（BaseURL 默认 https://api.x.ai，见 provider.go）：
+// POST /v1/videos/generations（提交）→ GET /v1/videos/generations/{id}（轮询）
 func (p *GrokProvider) GenerateVideo(ctx context.Context, req *llm.VideoGenerationRequest) (*llm.VideoGenerationResponse, error) {
 	apiKey := p.ResolveAPIKey(ctx)
 	baseURL := strings.TrimRight(p.Cfg.BaseURL, "/")
@@ -35,7 +42,7 @@ func (p *GrokProvider) GenerateVideo(ctx context.Context, req *llm.VideoGenerati
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal request: %w", err)
 	}
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, baseURL+"/v1/videos/generations", bytes.NewReader(payload))
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, baseURL+grokVideoSubmitPath, bytes.NewReader(payload))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
@@ -69,7 +76,7 @@ func (p *GrokProvider) GenerateVideo(ctx context.Context, req *llm.VideoGenerati
 		Interval:    5 * time.Second,
 		MaxAttempts: 120,
 	}, func(ctx context.Context) providers.PollResult[llm.VideoGenerationResponse] {
-		pollReq, err := http.NewRequestWithContext(ctx, http.MethodGet, baseURL+"/v1/videos/generations/"+submitResp.ID, nil)
+		pollReq, err := http.NewRequestWithContext(ctx, http.MethodGet, baseURL+grokVideoPollPathPrefix+submitResp.ID, nil)
 		if err != nil {
 			return providers.PollResult[llm.VideoGenerationResponse]{Done: true, Err: err}
 		}

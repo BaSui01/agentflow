@@ -194,6 +194,12 @@ func (s *defaultMultimodalService) GenerateVideo(ctx context.Context, req multim
 		Seed:           req.Seed,
 		ResponseFormat: req.ResponseFormat,
 	}
+	if strings.TrimSpace(req.CallbackURL) != "" {
+		if genReq.Metadata == nil {
+			genReq.Metadata = make(map[string]string)
+		}
+		genReq.Metadata["callback_url"] = strings.TrimSpace(req.CallbackURL)
+	}
 
 	mode := "text-to-video"
 	if req.ReferenceID != "" || strings.TrimSpace(req.ReferenceImageURL) != "" {
@@ -275,30 +281,59 @@ func attachReferenceImage(providerName string, req *video.GenerateRequest, data 
 	req.ImageURL = fmt.Sprintf("data:%s;base64,%s", mimeType, b64)
 }
 
-func toHTTPStatus(err error) int {
+// httpStatusAndCodeFrom 将 error 映射为 HTTP 状态码与错误码，供 handler 与 service 共用。
+// 优先使用 types.Error 的 Code 与 HTTPStatus；非 types.Error 时根据错误文案推断 400 或 502。
+func httpStatusAndCodeFrom(err error) (status int, code types.ErrorCode) {
 	var typedErr *types.Error
-	if errors.As(err, &typedErr) {
-		if typedErr != nil && typedErr.Code == types.ErrInvalidRequest {
-			return http.StatusBadRequest
+	if errors.As(err, &typedErr) && typedErr != nil {
+		code = typedErr.Code
+		if typedErr.HTTPStatus != 0 {
+			status = typedErr.HTTPStatus
+		} else {
+			status = errorCodeToHTTPStatus(typedErr.Code)
 		}
+		return status, code
 	}
-	lower := strings.ToLower(strings.TrimSpace(err.Error()))
-	if strings.Contains(lower, "invalid") ||
-		strings.Contains(lower, "required") ||
-		strings.Contains(lower, "unsupported") ||
-		strings.Contains(lower, "not support") {
+	msg := strings.ToLower(strings.TrimSpace(err.Error()))
+	if strings.Contains(msg, "invalid") ||
+		strings.Contains(msg, "required") ||
+		strings.Contains(msg, "unsupported") ||
+		strings.Contains(msg, "not support") {
+		return http.StatusBadRequest, types.ErrInvalidRequest
+	}
+	return http.StatusBadGateway, types.ErrUpstreamError
+}
+
+func errorCodeToHTTPStatus(code types.ErrorCode) int {
+	switch code {
+	case types.ErrInvalidRequest, types.ErrAuthentication, types.ErrUnauthorized,
+		types.ErrForbidden, types.ErrToolValidation, types.ErrInputValidation,
+		types.ErrOutputValidation, types.ErrGuardrailsViolated:
 		return http.StatusBadRequest
+	case types.ErrModelNotFound, types.ErrAgentNotFound:
+		return http.StatusNotFound
+	case types.ErrRateLimit, types.ErrQuotaExceeded:
+		return http.StatusTooManyRequests
+	case types.ErrServiceUnavailable, types.ErrProviderUnavailable, types.ErrRoutingUnavailable:
+		return http.StatusServiceUnavailable
+	case types.ErrUpstreamTimeout, types.ErrTimeout:
+		return http.StatusGatewayTimeout
+	case types.ErrInternalError:
+		return http.StatusInternalServerError
+	default:
+		return http.StatusBadGateway
 	}
-	return http.StatusBadGateway
+}
+
+func toHTTPStatus(err error) int {
+	status, _ := httpStatusAndCodeFrom(err)
+	return status
 }
 
 func errorCodeFrom(err error, fallback types.ErrorCode) types.ErrorCode {
-	var typedErr *types.Error
-	if errors.As(err, &typedErr) && typedErr != nil {
-		return typedErr.Code
-	}
-	if toHTTPStatus(err) == http.StatusBadRequest {
-		return types.ErrInvalidRequest
+	_, code := httpStatusAndCodeFrom(err)
+	if code != "" {
+		return code
 	}
 	return fallback
 }

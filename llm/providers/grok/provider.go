@@ -8,8 +8,10 @@ import (
 	"go.uber.org/zap"
 )
 
+const defaultGrokBaseURL = "https://api.x.ai"
+
 // GrokProvider 实现 xAI Grok LLM 提供者.
-// Grok 使用 OpenAI 兼容的 API 格式.
+// Grok 使用 OpenAI 兼容的 API 格式；默认 Base URL https://api.x.ai
 type GrokProvider struct {
 	*openaicompat.Provider
 }
@@ -17,7 +19,7 @@ type GrokProvider struct {
 // NewGrokProvider 创建新的 Grok 提供者实例.
 func NewGrokProvider(cfg providers.GrokConfig, logger *zap.Logger) *GrokProvider {
 	if cfg.BaseURL == "" {
-		cfg.BaseURL = "https://api.x.ai"
+		cfg.BaseURL = defaultGrokBaseURL
 	}
 
 	return &GrokProvider{

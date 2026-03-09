@@ -168,6 +168,7 @@ func TestMultimodalHandler_ImageReferenceFlow(t *testing.T) {
 		0,
 		0,
 		nil,
+		"",
 		logger,
 	)
 
@@ -192,6 +193,50 @@ func TestMultimodalHandler_ImageReferenceFlow(t *testing.T) {
 	assert.False(t, img.generateCalled)
 }
 
+func TestMultimodalHandler_ImageStream(t *testing.T) {
+	logger := zap.NewNop()
+	img := &mockImageProvider{}
+	h := NewMultimodalHandlerWithProviders(
+		nil,
+		nil,
+		nil,
+		map[string]image.Provider{"mock": img},
+		map[string]video.Provider{},
+		"mock",
+		"",
+		nil,
+		0,
+		0,
+		nil,
+		"",
+		logger,
+	)
+
+	body := map[string]any{
+		"prompt": "a cat",
+		"stream": true,
+	}
+	raw, err := json.Marshal(body)
+	require.NoError(t, err)
+
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPost, "/api/v1/multimodal/image", bytes.NewReader(raw))
+	r.Header.Set("Content-Type", "application/json")
+
+	h.HandleImage(w, r)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	assert.Equal(t, "text/event-stream", w.Header().Get("Content-Type"))
+	bodyStr := w.Body.String()
+	assert.Contains(t, bodyStr, "event: image_generation.started")
+	assert.Contains(t, bodyStr, "event: image_generation.completed")
+	assert.Contains(t, bodyStr, "event: image_generation.done")
+	assert.Contains(t, bodyStr, "data: [DONE]")
+	assert.Contains(t, bodyStr, "https://example.com/image.png")
+	assert.Contains(t, bodyStr, "\"type\":\"image_generation.completed\"")
+	assert.True(t, img.generateCalled)
+}
+
 func TestMultimodalHandler_VideoReferenceFlow(t *testing.T) {
 	logger := zap.NewNop()
 	img := &mockImageProvider{}
@@ -208,6 +253,7 @@ func TestMultimodalHandler_VideoReferenceFlow(t *testing.T) {
 		0,
 		0,
 		nil,
+		"",
 		logger,
 	)
 
@@ -246,6 +292,7 @@ func TestMultimodalHandler_PlanUnknownField(t *testing.T) {
 		0,
 		0,
 		nil,
+		"",
 		logger,
 	)
 
@@ -275,6 +322,7 @@ func TestMultimodalHandler_Capabilities(t *testing.T) {
 		0,
 		0,
 		nil,
+		"",
 		logger,
 	)
 
@@ -315,6 +363,7 @@ func TestMultimodalHandler_UploadReferenceStoreFailure(t *testing.T) {
 		0,
 		0,
 		&failingReferenceStore{},
+		"",
 		zap.NewNop(),
 	)
 
@@ -353,6 +402,7 @@ func TestMultimodalHandler_ImageRejectsPrivateReferenceURL(t *testing.T) {
 		0,
 		0,
 		nil,
+		"",
 		zap.NewNop(),
 	)
 
@@ -388,6 +438,7 @@ func TestMultimodalHandler_VideoRejectsPrivateReferenceURL(t *testing.T) {
 		0,
 		0,
 		nil,
+		"",
 		zap.NewNop(),
 	)
 
