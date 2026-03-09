@@ -57,7 +57,7 @@
 | 厂商 | Provider 名称 | 默认 Base URL | 主要端点 | 流式支持 |
 |------|----------------|---------------|----------|----------|
 | **OpenAI (DALL·E)** | `openai` | `https://api.openai.com` | POST `/v1/images/generations`（及 edits、variations） | 支持：请求体 `stream: true` 时走 **SSE** |
-| **Google Gemini** | `gemini` | 同 Google AI 配置 | 使用 Gemini 图像生成 API | 支持：同上，SSE 流式 |
+| **Google Gemini** | `gemini` | `https://generativelanguage.googleapis.com`（可覆盖） | `POST .../v1beta/models/{model}:generateContent`（同步）或 `streamGenerateContent?alt=sse`（流式）；默认 `gemini-3-pro-image-preview`；支持 `imageConfig`（imageSize 1K/2K/4K、aspectRatio）、`system_instruction`、`google_search` grounding、`thinkingConfig`、`safetySettings`；通过请求 `metadata` 字段透传（见下方 Gemini 专属参数表） | **原生 SSE 真流式**：文字思考 token 实时推送（`image_generation.thinking`），图像数据随后到达 |
 | **BFL Flux** | `flux` | `https://api.bfl.ml` / `https://api.bfl.ai` | POST `/v1/{model}`，GET `/v1/get_result?id=...` 轮询 | 非流式（轮询） |
 | **Stability AI** | `stability` | `https://api.stability.ai` | POST `/v1/generation/{engine_id}/text-to-image`（Stable Diffusion） | 非流式 |
 | **Ideogram** | `ideogram` | `https://api.ideogram.ai` | POST `/v1/ideogram-v3/generate`（multipart/form-data），Api-Key 头 | 非流式 |
@@ -68,7 +68,76 @@
 | **腾讯混元生图** | `tencent` | `https://aiart.tencentcloudapi.com` | TC3-HMAC-SHA256 签名；SubmitTextToImageJob 提交 → QueryTextToImageJob 轮询，ResultImage 返回 URL | 非流式 |
 | **可灵 Kling** | `kling` | `https://api.klingai.com` | POST `/kling/v1/images/generations` 提交 → GET `/kling/v1/images/generations/{task_id}` 轮询；与视频共用 API Key | 非流式 |
 
-- **图像流式**：多模态 API 在 `stream: true` 时返回 SSE，事件名与 payload 对齐 OpenAI 风格：`image_generation.started` → `image_generation.completed`（含 type、index、url/b64_json、created_at、output_format、quality、size、usage 等）→ `image_generation.done` → `data: [DONE]`；错误为 `event: error`。
+### 2.1 Gemini 图像模型版本
+
+| 模型 ID | 代号 | 发布时间 | 最高分辨率 | 生成速度 | 参考图 | Search grounding | 价格（标准/4K） |
+|---------|------|---------|----------|---------|--------|-----------------|----------------|
+| `gemini-2.5-flash-image` | Nano Banana | 2025.08 | 1K | 2-3 秒 | 有限 | — | $0.039/— |
+| `gemini-3-pro-image-preview` | Nano Banana Pro | 2025.11 | 4K | 8-12 秒 | 最多 14 张 | ✅ | $0.134/$0.24 |
+| `gemini-3.1-flash-image-preview` | Nano Banana 2 | 2026.02 | 4K | 4-6 秒 | 待确认 | 预期支持 | ~$0.05/~$0.15 |
+
+默认模型为 `gemini-3-pro-image-preview`，可通过请求体 `model` 字段覆盖。
+
+### 2.2 Gemini 图像专属参数（通过 `metadata` 传入）
+
+调用 `POST /api/v1/multimodal/image` 时，请求体中的 `metadata` 字段可透传以下 Gemini 专属参数：
+
+| `metadata` 键 | 类型 | 说明 | 示例值 |
+|---------------|------|------|--------|
+| `image_size` | string | 图像分辨率，优先级高于通用 `size` 字段 | `"1K"` / `"2K"` / `"4K"` |
+| `aspect_ratio` | string | 宽高比 | `"1:1"` / `"16:9"` / `"9:16"` / `"2:3"` / `"3:2"` / `"4:3"` / `"3:4"` / `"4:5"` / `"5:4"` / `"21:9"` |
+| `response_modalities` | string | 响应模态，逗号分隔；流式时默认 `"TEXT,IMAGE"` 以获得思考反馈 | `"IMAGE"` / `"TEXT,IMAGE"` |
+| `enable_search` | string | 启用 Google Search grounding（仅 Pro 模型支持） | `"true"` |
+| `system_prompt` | string | 系统提示词，引导模型风格/行为 | `"以水墨画风格绘制，笔触写意"` |
+| `thinking_budget` | string | thinking token 预算（整数），较大值提升复杂构图质量 | `"1024"` / `"2048"` |
+| `person_generation` | string | 人物生成策略 | `"ALLOW_ALL"` / `"ALLOW_ADULT"` / `"ALLOW_NONE"` |
+| `safety_threshold` | string | 统一安全过滤阈值，应用于全部 harm category | `"BLOCK_NONE"` / `"BLOCK_FEW"` / `"BLOCK_SOME"` / `"BLOCK_MOST"` |
+| `candidate_count` | string | 候选数量（整数，默认 1） | `"1"` / `"4"` |
+
+> **注意**：`image_size` 中 1K≈1024px、2K≈2048px、4K≈4096px；通用 `size` 字段（如 `"1024x1024"`）会自动映射到最近的 Gemini 分辨率档位。`gemini-2.5-flash-image` 仅支持 1K；`gemini-3-pro-image-preview` 和 `gemini-3.1-flash-image-preview` 支持 1K/2K/4K。
+
+**SSE 流式说明**：当请求携带 `"stream": true` 时，Gemini provider 会走 `streamGenerateContent?alt=sse` 原生流式端点。此时 `response_modalities` 默认为 `"TEXT,IMAGE"`，客户端会实时收到：
+- `image_generation.started`：生成开始
+- `image_generation.thinking`：模型输出的描述/思考文字（连续多条，可直接展示进度）
+- `image_generation.completed`：图像数据（base64）到达
+- `image_generation.done` → `data: [DONE]`：完成
+
+**请求示例（流式 + 联网搜索 + 4K）**：
+```json
+{
+  "provider": "gemini",
+  "model": "gemini-3-pro-image-preview",
+  "prompt": "今日上海外滩的真实天气场景，写实摄影风格",
+  "stream": true,
+  "metadata": {
+    "image_size": "4K",
+    "aspect_ratio": "16:9",
+    "enable_search": "true",
+    "system_prompt": "生成高饱和度写实摄影风格图像，避免卡通化"
+  }
+}
+```
+
+**请求示例（纯图像模式 + 安全限制放宽）**：
+```json
+{
+  "provider": "gemini",
+  "model": "gemini-3.1-flash-image-preview",
+  "prompt": "赛博朋克风格未来都市夜景",
+  "metadata": {
+    "image_size": "4K",
+    "aspect_ratio": "21:9",
+    "response_modalities": "IMAGE",
+    "safety_threshold": "BLOCK_FEW",
+    "thinking_budget": "1024"
+  }
+}
+```
+
+---
+
+- **图像流式**：多模态 API 在 `stream: true` 时返回 SSE，事件序列：`image_generation.started` → `[image_generation.thinking]*`（仅 Gemini 等原生流式 provider）→ `image_generation.completed`（每张图，含 index、url/b64_json、output_format、quality、size、usage 等）→ `image_generation.done` → `data: [DONE]`；错误为 `event: error`。
+- **原生流式 vs 包装流式**：Gemini provider 实现了 `StreamingProvider` 接口，走 `streamGenerateContent?alt=sse`，图像生成过程中实时推送文字思考 token；其他 provider 为阻塞生成后包装 SSE，无 `thinking` 事件。
 - **能力标识**：`GET /api/v1/multimodal/capabilities` 的 `features.image_stream` 表示是否支持图像流式。
 - **说明**：多模态 API 默认装配的图像厂商为 **openai**、**gemini**、**flux**（BFL）、**stability**、**ideogram**、**tongyi**（通义万相）、**zhipu**（智谱）、**baidu**（文心一格）、**doubao**（豆包/火山）、**tencent**（腾讯混元生图）、**kling**（可灵）。**可灵**图像与视频共用 `KlingAPIKey`（配置在 Video 下）。**字节**图像使用 **doubao**，与视频 **seedance**（即梦）为不同配置。OpenAI/Gemini 支持 `stream: true` 的 SSE 流式，其余为轮询或同步返回。
 
