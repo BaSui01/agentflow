@@ -324,11 +324,18 @@ paths:
               $ref: '#/components/schemas/MultimodalImageRequest'
       responses:
         '200':
-          description: Image generation result
+          description: |
+            Image generation result. When request body has `stream: true`, response is SSE (Content-Type text/event-stream)
+            with events aligned to OpenAI image streaming: `image_generation.started`, `image_generation.completed` (one per image),
+            `image_generation.done`, then `data: [DONE]`. Each event data includes a `type` field. Error uses event `error`.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Envelope'
+            text/event-stream:
+              schema:
+                type: string
+                description: SSE stream; events image_generation.started, image_generation.completed, image_generation.done, error; ends with data [DONE]. See https://platform.openai.com/docs/api-reference/images-streaming
         '400':
           description: Invalid request
         '503':
@@ -1886,12 +1893,12 @@ components:
           type: array
           items:
             type: string
-          description: Enabled image providers (e.g. openai, gemini).
+          description: Enabled image providers (e.g. openai, gemini, flux, stability, ideogram, tongyi, zhipu, baidu, doubao, tencent, kling).
         video_providers:
           type: array
           items:
             type: string
-          description: Enabled video providers (veo, runway, sora, kling, luma, minimax-video).
+          description: Enabled video providers (e.g. veo, runway, sora, kling, luma, minimax-video, seedance). Kling (可灵) supports both image and video with the same API key.
         default_image_provider:
           type: string
         default_video_provider:
@@ -1900,6 +1907,12 @@ components:
           type: object
           additionalProperties:
             type: boolean
+          description: |
+            Feature flags; when true, capability is available. Common keys:
+            - image_stream: SSE image generation when stream=true on POST /api/v1/multimodal/image
+            - text_to_video: text-to-video generation
+            - image_to_video: image-to-video generation
+            - text_to_image, image_to_image, reference_upload, advanced_prompt, chat, agent_mode, plan_generation
 
     MultimodalReference:
       type: object
@@ -1945,6 +1958,10 @@ components:
         advanced:
           type: boolean
           default: false
+        stream:
+          type: boolean
+          default: false
+          description: When true, response is SSE (text/event-stream) with events image_generation.started, image_generation.completed (per image), image_generation.done, then data [DONE]. Aligned with OpenAI image streaming API.
         style_tokens:
           type: array
           items:
@@ -2004,6 +2021,10 @@ components:
         reference_image_url:
           type: string
           format: uri
+        callback_url:
+          type: string
+          format: uri
+          description: Optional. For async providers (e.g. Kling/可灵), URL to be notified when the video task completes.
 
     MultimodalPlanRequest:
       type: object

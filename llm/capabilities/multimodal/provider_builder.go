@@ -18,6 +18,32 @@ type ProviderBuilderConfig struct {
 	GoogleAPIKey  string
 	GoogleBaseURL string
 
+	FluxAPIKey  string
+	FluxBaseURL string
+
+	StabilityAPIKey  string
+	StabilityBaseURL string
+
+	IdeogramAPIKey  string
+	IdeogramBaseURL string
+
+	TongyiAPIKey  string
+	TongyiBaseURL string
+
+	ZhipuAPIKey  string
+	ZhipuBaseURL string
+
+	BaiduAPIKey    string
+	BaiduSecretKey string
+	BaiduBaseURL   string
+
+	DoubaoAPIKey  string
+	DoubaoBaseURL string
+
+	TencentSecretId  string
+	TencentSecretKey string
+	TencentBaseURL   string
+
 	RunwayAPIKey  string
 	RunwayBaseURL string
 
@@ -35,6 +61,9 @@ type ProviderBuilderConfig struct {
 
 	MiniMaxAPIKey  string
 	MiniMaxBaseURL string
+
+	SeedanceAPIKey  string
+	SeedanceBaseURL string
 
 	DefaultImageProvider string
 	DefaultVideoProvider string
@@ -87,6 +116,117 @@ func BuildProvidersFromConfig(cfg ProviderBuilderConfig, logger *zap.Logger) Pro
 		}
 	}
 
+	if cfg.FluxAPIKey != "" {
+		result.ImageProviders["flux"] = image.NewFluxProvider(image.FluxConfig{
+			BaseProviderConfig: providers.BaseProviderConfig{
+				APIKey:  cfg.FluxAPIKey,
+				BaseURL: cfg.FluxBaseURL,
+			},
+		})
+		if result.DefaultImage == "" {
+			result.DefaultImage = "flux"
+		}
+	}
+
+	if cfg.StabilityAPIKey != "" {
+		result.ImageProviders["stability"] = image.NewStabilityProvider(image.StabilityConfig{
+			BaseProviderConfig: providers.BaseProviderConfig{
+				APIKey:  cfg.StabilityAPIKey,
+				BaseURL: cfg.StabilityBaseURL,
+			},
+		})
+		if result.DefaultImage == "" {
+			result.DefaultImage = "stability"
+		}
+	}
+
+	if cfg.IdeogramAPIKey != "" {
+		result.ImageProviders["ideogram"] = image.NewIdeogramProvider(image.IdeogramConfig{
+			BaseProviderConfig: providers.BaseProviderConfig{
+				APIKey:  cfg.IdeogramAPIKey,
+				BaseURL: cfg.IdeogramBaseURL,
+			},
+		})
+		if result.DefaultImage == "" {
+			result.DefaultImage = "ideogram"
+		}
+	}
+
+	if cfg.TongyiAPIKey != "" {
+		result.ImageProviders["tongyi"] = image.NewTongyiProvider(image.TongyiConfig{
+			BaseProviderConfig: providers.BaseProviderConfig{
+				APIKey:  cfg.TongyiAPIKey,
+				BaseURL: cfg.TongyiBaseURL,
+			},
+		})
+		if result.DefaultImage == "" {
+			result.DefaultImage = "tongyi"
+		}
+	}
+
+	if cfg.ZhipuAPIKey != "" {
+		result.ImageProviders["zhipu"] = image.NewZhipuProvider(image.ZhipuConfig{
+			BaseProviderConfig: providers.BaseProviderConfig{
+				APIKey:  cfg.ZhipuAPIKey,
+				BaseURL: cfg.ZhipuBaseURL,
+			},
+		})
+		if result.DefaultImage == "" {
+			result.DefaultImage = "zhipu"
+		}
+	}
+
+	if cfg.BaiduAPIKey != "" && cfg.BaiduSecretKey != "" {
+		result.ImageProviders["baidu"] = image.NewBaiduProvider(image.BaiduConfig{
+			BaseProviderConfig: providers.BaseProviderConfig{
+				APIKey:  cfg.BaiduAPIKey,
+				BaseURL: cfg.BaiduBaseURL,
+			},
+			SecretKey: cfg.BaiduSecretKey,
+		})
+		if result.DefaultImage == "" {
+			result.DefaultImage = "baidu"
+		}
+	}
+
+	if cfg.DoubaoAPIKey != "" {
+		result.ImageProviders["doubao"] = image.NewDoubaoProvider(image.DoubaoConfig{
+			BaseProviderConfig: providers.BaseProviderConfig{
+				APIKey:  cfg.DoubaoAPIKey,
+				BaseURL: cfg.DoubaoBaseURL,
+			},
+		})
+		if result.DefaultImage == "" {
+			result.DefaultImage = "doubao"
+		}
+	}
+
+	if cfg.TencentSecretId != "" && cfg.TencentSecretKey != "" {
+		result.ImageProviders["tencent"] = image.NewTencentHunyuanProvider(image.TencentHunyuanConfig{
+			BaseProviderConfig: providers.BaseProviderConfig{
+				APIKey:  cfg.TencentSecretId,
+				BaseURL: cfg.TencentBaseURL,
+			},
+			SecretKey: cfg.TencentSecretKey,
+		})
+		if result.DefaultImage == "" {
+			result.DefaultImage = "tencent"
+		}
+	}
+
+	if cfg.KlingAPIKey != "" {
+		result.ImageProviders["kling"] = image.NewKlingProvider(image.KlingConfig{
+			BaseProviderConfig: providers.BaseProviderConfig{
+				APIKey:  cfg.KlingAPIKey,
+				BaseURL: cfg.KlingBaseURL,
+			},
+		})
+		if result.DefaultImage == "" {
+			result.DefaultImage = "kling"
+		}
+	}
+
+	// 当配置了 VeoAPIKey 时覆盖由 GoogleAPIKey 注册的 veo，优先使用独立 Veo 端点。
 	if cfg.VeoAPIKey != "" {
 		result.VideoProviders["veo"] = video.NewVeoProvider(video.VeoConfig{
 			BaseProviderConfig: providers.BaseProviderConfig{
@@ -111,11 +251,20 @@ func BuildProvidersFromConfig(cfg ProviderBuilderConfig, logger *zap.Logger) Pro
 		}
 	}
 
-	if cfg.SoraAPIKey != "" {
+	// OpenAI 与 Sora 共用同一 API Key（platform.openai.com）；未单独配置 SoraAPIKey 时使用 OpenAIAPIKey 注册 Sora。
+	soraKey := cfg.SoraAPIKey
+	if soraKey == "" {
+		soraKey = cfg.OpenAIAPIKey
+	}
+	soraBase := cfg.SoraBaseURL
+	if soraBase == "" {
+		soraBase = cfg.OpenAIBaseURL
+	}
+	if soraKey != "" {
 		result.VideoProviders["sora"] = video.NewSoraProvider(video.SoraConfig{
 			BaseProviderConfig: providers.BaseProviderConfig{
-				APIKey:  cfg.SoraAPIKey,
-				BaseURL: cfg.SoraBaseURL,
+				APIKey:  soraKey,
+				BaseURL: soraBase,
 			},
 		}, logger)
 		if result.DefaultVideo == "" {
@@ -156,6 +305,18 @@ func BuildProvidersFromConfig(cfg ProviderBuilderConfig, logger *zap.Logger) Pro
 		}, logger)
 		if result.DefaultVideo == "" {
 			result.DefaultVideo = "minimax-video"
+		}
+	}
+
+	if cfg.SeedanceAPIKey != "" {
+		result.VideoProviders["seedance"] = video.NewSeedanceProvider(video.SeedanceConfig{
+			BaseProviderConfig: providers.BaseProviderConfig{
+				APIKey:  cfg.SeedanceAPIKey,
+				BaseURL: cfg.SeedanceBaseURL,
+			},
+		}, logger)
+		if result.DefaultVideo == "" {
+			result.DefaultVideo = "seedance"
 		}
 	}
 

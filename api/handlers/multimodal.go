@@ -30,7 +30,7 @@ import (
 const (
 	defaultReferenceBytes = 8 << 20 // 8MB
 	defaultReferenceTTL   = 2 * time.Hour
-	defaultChatModel      = "gpt-4o-mini"
+	defaultChatModelFallback = "gpt-4o-mini"
 	defaultNegativeText   = "blurry, low quality, watermark, text, logo, signature, bad anatomy, deformed, mutated"
 )
 
@@ -48,6 +48,24 @@ type MultimodalHandlerConfig struct {
 	OpenAIBaseURL        string
 	GoogleAPIKey         string
 	GoogleBaseURL        string
+	FluxAPIKey           string
+	FluxBaseURL          string
+	StabilityAPIKey       string
+	StabilityBaseURL      string
+	IdeogramAPIKey        string
+	IdeogramBaseURL       string
+	TongyiAPIKey          string
+	TongyiBaseURL         string
+	ZhipuAPIKey           string
+	ZhipuBaseURL          string
+	BaiduAPIKey           string
+	BaiduSecretKey        string
+	BaiduBaseURL          string
+	DoubaoAPIKey          string
+	DoubaoBaseURL         string
+	TencentSecretId       string
+	TencentSecretKey      string
+	TencentBaseURL        string
 	RunwayAPIKey         string
 	RunwayBaseURL        string
 	VeoAPIKey            string
@@ -60,12 +78,15 @@ type MultimodalHandlerConfig struct {
 	LumaBaseURL          string
 	MiniMaxAPIKey        string
 	MiniMaxBaseURL       string
+	SeedanceAPIKey       string
+	SeedanceBaseURL      string
 	DefaultImageProvider string
 	DefaultVideoProvider string
 	ReferenceMaxSize     int64
 	ReferenceTTL         time.Duration
 	ReferenceStore       storage.ReferenceStore
 	Pipeline             multimodal.PromptPipeline
+	DefaultChatModel     string
 }
 
 type MultimodalHandler struct {
@@ -87,6 +108,8 @@ type MultimodalHandler struct {
 	referenceMaxSize int64
 	referenceTTL     time.Duration
 	referenceStore   storage.ReferenceStore
+
+	defaultChatModel string
 }
 
 func NewMultimodalHandlerFromConfig(cfg MultimodalHandlerConfig, logger *zap.Logger) *MultimodalHandler {
@@ -99,7 +122,25 @@ func NewMultimodalHandlerFromConfig(cfg MultimodalHandlerConfig, logger *zap.Log
 		OpenAIBaseURL:        cfg.OpenAIBaseURL,
 		GoogleAPIKey:         cfg.GoogleAPIKey,
 		GoogleBaseURL:        cfg.GoogleBaseURL,
-		RunwayAPIKey:         cfg.RunwayAPIKey,
+		FluxAPIKey:           cfg.FluxAPIKey,
+		FluxBaseURL:          cfg.FluxBaseURL,
+		StabilityAPIKey:      cfg.StabilityAPIKey,
+		StabilityBaseURL:     cfg.StabilityBaseURL,
+		IdeogramAPIKey:       cfg.IdeogramAPIKey,
+		IdeogramBaseURL:      cfg.IdeogramBaseURL,
+		TongyiAPIKey:         cfg.TongyiAPIKey,
+		TongyiBaseURL:        cfg.TongyiBaseURL,
+		ZhipuAPIKey:         cfg.ZhipuAPIKey,
+		ZhipuBaseURL:        cfg.ZhipuBaseURL,
+		BaiduAPIKey:         cfg.BaiduAPIKey,
+		BaiduSecretKey:      cfg.BaiduSecretKey,
+		BaiduBaseURL:        cfg.BaiduBaseURL,
+		DoubaoAPIKey:        cfg.DoubaoAPIKey,
+		DoubaoBaseURL:       cfg.DoubaoBaseURL,
+		TencentSecretId:     cfg.TencentSecretId,
+		TencentSecretKey:    cfg.TencentSecretKey,
+		TencentBaseURL:      cfg.TencentBaseURL,
+		RunwayAPIKey:        cfg.RunwayAPIKey,
 		RunwayBaseURL:        cfg.RunwayBaseURL,
 		VeoAPIKey:            cfg.VeoAPIKey,
 		VeoBaseURL:           cfg.VeoBaseURL,
@@ -111,6 +152,8 @@ func NewMultimodalHandlerFromConfig(cfg MultimodalHandlerConfig, logger *zap.Log
 		LumaBaseURL:          cfg.LumaBaseURL,
 		MiniMaxAPIKey:        cfg.MiniMaxAPIKey,
 		MiniMaxBaseURL:       cfg.MiniMaxBaseURL,
+		SeedanceAPIKey:       cfg.SeedanceAPIKey,
+		SeedanceBaseURL:      cfg.SeedanceBaseURL,
 		DefaultImageProvider: cfg.DefaultImageProvider,
 		DefaultVideoProvider: cfg.DefaultVideoProvider,
 	}, logger)
@@ -127,10 +170,13 @@ func NewMultimodalHandlerFromConfig(cfg MultimodalHandlerConfig, logger *zap.Log
 		cfg.ReferenceMaxSize,
 		cfg.ReferenceTTL,
 		cfg.ReferenceStore,
+		cfg.DefaultChatModel,
 		logger,
 	)
 }
 
+// NewMultimodalHandlerWithProviders 使用已构建的 image/video providers 创建 Handler。
+// referenceStore 为 nil 时使用内存实现，仅建议在测试或开发环境使用；生产环境应由组合根注入 Redis 等持久化实现。
 func NewMultimodalHandlerWithProviders(
 	chatProvider llm.Provider,
 	policyManager *llmpolicy.Manager,
@@ -143,6 +189,7 @@ func NewMultimodalHandlerWithProviders(
 	referenceMaxSize int64,
 	referenceTTL time.Duration,
 	referenceStore storage.ReferenceStore,
+	defaultChatModel string,
 	logger *zap.Logger,
 ) *MultimodalHandler {
 	if logger == nil {
@@ -159,6 +206,9 @@ func NewMultimodalHandlerWithProviders(
 	}
 	if referenceStore == nil {
 		referenceStore = storage.NewMemoryReferenceStore()
+	}
+	if defaultChatModel == "" {
+		defaultChatModel = defaultChatModelFallback
 	}
 
 	router := multimodal.NewRouter()
@@ -214,6 +264,7 @@ func NewMultimodalHandlerWithProviders(
 		referenceMaxSize:     referenceMaxSize,
 		referenceTTL:         referenceTTL,
 		referenceStore:       referenceStore,
+		defaultChatModel:     defaultChatModel,
 	}
 	handler.service = newDefaultMultimodalService(
 		handler.gateway,
@@ -240,6 +291,7 @@ func (h *MultimodalHandler) HandleCapabilities(w http.ResponseWriter, r *http.Re
 			"reference_upload": len(h.imageProviders) > 0 || len(h.videoProviders) > 0,
 			"text_to_image":    len(h.imageProviders) > 0,
 			"image_to_image":   len(h.imageProviders) > 0,
+			"image_stream":     len(h.imageProviders) > 0,
 			"text_to_video":    len(h.videoProviders) > 0,
 			"image_to_video":   len(h.videoProviders) > 0,
 			"advanced_prompt":  true,
@@ -330,6 +382,7 @@ type multimodalImageRequest struct {
 	Style             string   `json:"style,omitempty"`
 	ResponseFormat    string   `json:"response_format,omitempty"`
 	Advanced          bool     `json:"advanced,omitempty"`
+	Stream            bool     `json:"stream,omitempty"`
 	StyleTokens       []string `json:"style_tokens,omitempty"`
 	QualityTokens     []string `json:"quality_tokens,omitempty"`
 	ReferenceID       string   `json:"reference_id,omitempty"`
@@ -375,6 +428,11 @@ func (h *MultimodalHandler) HandleImage(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	if req.Stream {
+		h.handleImageStream(w, r, req)
+		return
+	}
+
 	result, err := h.service.GenerateImage(r.Context(), req)
 	if err != nil {
 		WriteErrorMessage(w, toHTTPStatus(err), errorCodeFrom(err, types.ErrUpstreamError), strings.TrimSpace(err.Error()), h.logger)
@@ -390,6 +448,101 @@ func (h *MultimodalHandler) HandleImage(w http.ResponseWriter, r *http.Request) 
 	})
 }
 
+// handleImageStream 以 SSE 流式返回图片生成结果，事件命名与 payload 对齐 OpenAI 官方规范：
+// image_generation.started -> image_generation.completed (每张) -> image_generation.done -> [DONE]
+// 参考: https://platform.openai.com/docs/api-reference/images-streaming
+func (h *MultimodalHandler) handleImageStream(w http.ResponseWriter, r *http.Request, req multimodalImageRequest) {
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+	if flusher, ok := w.(http.Flusher); ok {
+		flusher.Flush()
+	}
+
+	result, err := h.service.GenerateImage(r.Context(), req)
+	if err != nil {
+		code := errorCodeFrom(err, types.ErrUpstreamError)
+		_ = writeSSEEventJSON(w, "error", map[string]any{
+			"type":    "error",
+			"code":    code,
+			"message": strings.TrimSpace(err.Error()),
+		})
+		_ = writeSSE(w, []byte("data: [DONE]\n\n"))
+		return
+	}
+
+	// image_generation.started：与官方兼容，payload 含 type 便于客户端仅解析 data
+	_ = writeSSEEventJSON(w, "image_generation.started", map[string]any{
+		"type":             "image_generation.started",
+		"mode":             result.Mode,
+		"provider":         result.Provider,
+		"effective_prompt": result.EffectivePrompt,
+		"negative_prompt":  result.NegativePrompt,
+	})
+
+	if result.Response != nil {
+		createdAt := int64(0)
+		if !result.Response.CreatedAt.IsZero() {
+			createdAt = result.Response.CreatedAt.Unix()
+		}
+		outputFormat := req.ResponseFormat
+		if outputFormat == "" {
+			outputFormat = "png"
+		}
+		quality := req.Quality
+		if quality == "" {
+			quality = "standard"
+		}
+		size := req.Size
+		if size == "" {
+			size = "1024x1024"
+		}
+
+		for i, img := range result.Response.Images {
+			// image_generation.completed：对齐 OpenAI ImageGenCompletedEvent，每张图一条
+			payload := map[string]any{
+				"type":               "image_generation.completed",
+				"index":              i,
+				"created_at":         createdAt,
+				"output_format":      outputFormat,
+				"quality":            quality,
+				"size":              size,
+			}
+			if img.URL != "" {
+				payload["url"] = img.URL
+			}
+			if img.B64JSON != "" {
+				payload["b64_json"] = img.B64JSON
+			}
+			if img.RevisedPrompt != "" {
+				payload["revised_prompt"] = img.RevisedPrompt
+			}
+			if img.Seed != 0 {
+				payload["seed"] = img.Seed
+			}
+			// 最后一张图携带 usage，与官方 completed 事件一致
+			if i == len(result.Response.Images)-1 && result.Response.Usage.ImagesGenerated > 0 {
+				payload["usage"] = result.Response.Usage
+			}
+			_ = writeSSEEventJSON(w, "image_generation.completed", payload)
+		}
+
+		_ = writeSSEEventJSON(w, "image_generation.done", map[string]any{
+			"type":     "image_generation.done",
+			"mode":     result.Mode,
+			"provider": result.Provider,
+			"usage":    result.Response.Usage,
+		})
+	} else {
+		_ = writeSSEEventJSON(w, "image_generation.done", map[string]any{
+			"type":     "image_generation.done",
+			"mode":     result.Mode,
+			"provider": result.Provider,
+		})
+	}
+	_ = writeSSE(w, []byte("data: [DONE]\n\n"))
+}
+
 type multimodalVideoRequest struct {
 	Prompt            string   `json:"prompt"`
 	NegativePrompt    string   `json:"negative_prompt,omitempty"`
@@ -402,6 +555,7 @@ type multimodalVideoRequest struct {
 	Seed              int64    `json:"seed,omitempty"`
 	ResponseFormat    string   `json:"response_format,omitempty"`
 	Advanced          bool     `json:"advanced,omitempty"`
+	CallbackURL       string   `json:"callback_url,omitempty"` // 可灵等异步视频：任务完成后回调地址
 	StyleTokens       []string `json:"style_tokens,omitempty"`
 	Camera            string   `json:"camera,omitempty"`
 	Mood              string   `json:"mood,omitempty"`
@@ -593,7 +747,7 @@ func (h *MultimodalHandler) HandleChat(w http.ResponseWriter, r *http.Request) {
 
 	model := strings.TrimSpace(req.Model)
 	if model == "" {
-		model = defaultChatModel
+		model = h.defaultChatModel
 	}
 
 	ctx, cancel := context.WithTimeout(r.Context(), 90*time.Second)
@@ -718,17 +872,8 @@ func (h *MultimodalHandler) resolveVideoProvider(provider string) (string, error
 
 func (h *MultimodalHandler) writeProviderError(w http.ResponseWriter, err error) {
 	msg := strings.TrimSpace(err.Error())
-	lower := strings.ToLower(msg)
-
-	switch {
-	case strings.Contains(lower, "invalid"),
-		strings.Contains(lower, "required"),
-		strings.Contains(lower, "unsupported"),
-		strings.Contains(lower, "not support"):
-		WriteErrorMessage(w, http.StatusBadRequest, types.ErrInvalidRequest, msg, h.logger)
-	default:
-		WriteErrorMessage(w, http.StatusBadGateway, types.ErrUpstreamError, msg, h.logger)
-	}
+	status, code := httpStatusAndCodeFrom(err)
+	WriteErrorMessage(w, status, code, msg, h.logger)
 }
 
 func (h *MultimodalHandler) getReference(id string) ([]byte, string, bool) {

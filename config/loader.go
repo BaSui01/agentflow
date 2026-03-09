@@ -375,6 +375,8 @@ type MultimodalConfig struct {
 	DefaultImageProvider string `yaml:"default_image_provider" env:"DEFAULT_IMAGE_PROVIDER"`
 	// 默认视频提供商标识（runway/veo 等）
 	DefaultVideoProvider string `yaml:"default_video_provider" env:"DEFAULT_VIDEO_PROVIDER"`
+	// 默认对话模型（多模态 chat 未传 model 时使用；空则回退 agent.model）
+	DefaultChatModel string `yaml:"default_chat_model" env:"DEFAULT_CHAT_MODEL"`
 	// 图像提供商配置
 	Image MultimodalImageConfig `yaml:"image" env:"IMAGE"`
 	// 视频提供商配置
@@ -385,6 +387,24 @@ type MultimodalImageConfig struct {
 	OpenAIAPIKey  string `yaml:"openai_api_key" env:"OPENAI_API_KEY" json:"-"`
 	OpenAIBaseURL string `yaml:"openai_base_url" env:"OPENAI_BASE_URL"`
 	GeminiAPIKey  string `yaml:"gemini_api_key" env:"GEMINI_API_KEY" json:"-"`
+	FluxAPIKey    string `yaml:"flux_api_key" env:"FLUX_API_KEY" json:"-"`
+	FluxBaseURL   string `yaml:"flux_base_url" env:"FLUX_BASE_URL"`
+	StabilityAPIKey string `yaml:"stability_api_key" env:"STABILITY_API_KEY" json:"-"`
+	StabilityBaseURL string `yaml:"stability_base_url" env:"STABILITY_BASE_URL"`
+	IdeogramAPIKey   string `yaml:"ideogram_api_key" env:"IDEOGRAM_API_KEY" json:"-"`
+	IdeogramBaseURL  string `yaml:"ideogram_base_url" env:"IDEOGRAM_BASE_URL"`
+	TongyiAPIKey     string `yaml:"tongyi_api_key" env:"TONGYI_API_KEY" json:"-"`
+	TongyiBaseURL    string `yaml:"tongyi_base_url" env:"TONGYI_BASE_URL"`
+	ZhipuAPIKey      string `yaml:"zhipu_api_key" env:"ZHIPU_API_KEY" json:"-"`
+	ZhipuBaseURL     string `yaml:"zhipu_base_url" env:"ZHIPU_BASE_URL"`
+	BaiduAPIKey      string `yaml:"baidu_api_key" env:"BAIDU_API_KEY" json:"-"`
+	BaiduSecretKey   string `yaml:"baidu_secret_key" env:"BAIDU_SECRET_KEY" json:"-"`
+	BaiduBaseURL     string `yaml:"baidu_base_url" env:"BAIDU_BASE_URL"`
+	DoubaoAPIKey     string `yaml:"doubao_api_key" env:"DOUBAO_API_KEY" json:"-"`
+	DoubaoBaseURL    string `yaml:"doubao_base_url" env:"DOUBAO_BASE_URL"`
+	TencentSecretId  string `yaml:"tencent_secret_id" env:"TENCENT_SECRET_ID" json:"-"`
+	TencentSecretKey string `yaml:"tencent_secret_key" env:"TENCENT_SECRET_KEY" json:"-"`
+	TencentBaseURL   string `yaml:"tencent_base_url" env:"TENCENT_BASE_URL"`
 }
 
 type MultimodalVideoConfig struct {
@@ -402,6 +422,8 @@ type MultimodalVideoConfig struct {
 	LumaBaseURL    string `yaml:"luma_base_url" env:"LUMA_BASE_URL"`
 	MiniMaxAPIKey  string `yaml:"minimax_api_key" env:"MINIMAX_API_KEY" json:"-"`
 	MiniMaxBaseURL string `yaml:"minimax_base_url" env:"MINIMAX_BASE_URL"`
+	SeedanceAPIKey string `yaml:"seedance_api_key" env:"SEEDANCE_API_KEY" json:"-"`
+	SeedanceBaseURL string `yaml:"seedance_base_url" env:"SEEDANCE_BASE_URL"`
 }
 
 // LogConfig 日志配置

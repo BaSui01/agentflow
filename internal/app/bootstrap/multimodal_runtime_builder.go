@@ -6,10 +6,11 @@ import (
 
 	"github.com/BaSui01/agentflow/api/handlers"
 	"github.com/BaSui01/agentflow/config"
-	"github.com/BaSui01/agentflow/pkg/storage"
 	"github.com/BaSui01/agentflow/llm"
+	"github.com/BaSui01/agentflow/llm/capabilities/multimodal"
 	"github.com/BaSui01/agentflow/llm/observability"
 	llmpolicy "github.com/BaSui01/agentflow/llm/runtime/policy"
+	"github.com/BaSui01/agentflow/pkg/storage"
 	"go.uber.org/zap"
 )
 
@@ -49,65 +50,69 @@ func BuildMultimodalRuntime(
 		return nil, err
 	}
 
-	multimodalCfg := handlers.MultimodalHandlerConfig{
-		ChatProvider:         chatProvider,
-		PolicyManager:        llmpolicy.NewManager(llmpolicy.ManagerConfig{Budget: budgetManager}),
-		Ledger:               ledger,
+	builderConfig := multimodal.ProviderBuilderConfig{
 		OpenAIAPIKey:         firstNonEmpty(cfg.Multimodal.Image.OpenAIAPIKey, cfg.LLM.APIKey),
 		OpenAIBaseURL:        firstNonEmpty(cfg.Multimodal.Image.OpenAIBaseURL, cfg.LLM.BaseURL),
 		GoogleAPIKey:         firstNonEmpty(cfg.Multimodal.Video.GoogleAPIKey, cfg.Multimodal.Image.GeminiAPIKey),
 		GoogleBaseURL:        cfg.Multimodal.Video.GoogleBaseURL,
-		RunwayAPIKey:         cfg.Multimodal.Video.RunwayAPIKey,
-		RunwayBaseURL:        cfg.Multimodal.Video.RunwayBaseURL,
-		VeoAPIKey:            cfg.Multimodal.Video.VeoAPIKey,
-		VeoBaseURL:           cfg.Multimodal.Video.VeoBaseURL,
-		SoraAPIKey:           cfg.Multimodal.Video.SoraAPIKey,
-		SoraBaseURL:          cfg.Multimodal.Video.SoraBaseURL,
-		KlingAPIKey:          cfg.Multimodal.Video.KlingAPIKey,
-		KlingBaseURL:         cfg.Multimodal.Video.KlingBaseURL,
-		LumaAPIKey:           cfg.Multimodal.Video.LumaAPIKey,
-		LumaBaseURL:          cfg.Multimodal.Video.LumaBaseURL,
-		MiniMaxAPIKey:        cfg.Multimodal.Video.MiniMaxAPIKey,
-		MiniMaxBaseURL:       cfg.Multimodal.Video.MiniMaxBaseURL,
+		FluxAPIKey:           cfg.Multimodal.Image.FluxAPIKey,
+		FluxBaseURL:          cfg.Multimodal.Image.FluxBaseURL,
+		StabilityAPIKey:      cfg.Multimodal.Image.StabilityAPIKey,
+		StabilityBaseURL:     cfg.Multimodal.Image.StabilityBaseURL,
+		IdeogramAPIKey:       cfg.Multimodal.Image.IdeogramAPIKey,
+		IdeogramBaseURL:      cfg.Multimodal.Image.IdeogramBaseURL,
+		TongyiAPIKey:         cfg.Multimodal.Image.TongyiAPIKey,
+		TongyiBaseURL:        cfg.Multimodal.Image.TongyiBaseURL,
+		ZhipuAPIKey:         cfg.Multimodal.Image.ZhipuAPIKey,
+		ZhipuBaseURL:        cfg.Multimodal.Image.ZhipuBaseURL,
+		BaiduAPIKey:         cfg.Multimodal.Image.BaiduAPIKey,
+		BaiduSecretKey:      cfg.Multimodal.Image.BaiduSecretKey,
+		BaiduBaseURL:        cfg.Multimodal.Image.BaiduBaseURL,
+		DoubaoAPIKey:        cfg.Multimodal.Image.DoubaoAPIKey,
+		DoubaoBaseURL:       cfg.Multimodal.Image.DoubaoBaseURL,
+		TencentSecretId:     cfg.Multimodal.Image.TencentSecretId,
+		TencentSecretKey:    cfg.Multimodal.Image.TencentSecretKey,
+		TencentBaseURL:      cfg.Multimodal.Image.TencentBaseURL,
+		RunwayAPIKey:        cfg.Multimodal.Video.RunwayAPIKey,
+		RunwayBaseURL:       cfg.Multimodal.Video.RunwayBaseURL,
+		VeoAPIKey:           cfg.Multimodal.Video.VeoAPIKey,
+		VeoBaseURL:          cfg.Multimodal.Video.VeoBaseURL,
+		SoraAPIKey:          cfg.Multimodal.Video.SoraAPIKey,
+		SoraBaseURL:         cfg.Multimodal.Video.SoraBaseURL,
+		KlingAPIKey:         cfg.Multimodal.Video.KlingAPIKey,
+		KlingBaseURL:        cfg.Multimodal.Video.KlingBaseURL,
+		LumaAPIKey:          cfg.Multimodal.Video.LumaAPIKey,
+		LumaBaseURL:         cfg.Multimodal.Video.LumaBaseURL,
+		MiniMaxAPIKey:       cfg.Multimodal.Video.MiniMaxAPIKey,
+		MiniMaxBaseURL:      cfg.Multimodal.Video.MiniMaxBaseURL,
+		SeedanceAPIKey:      cfg.Multimodal.Video.SeedanceAPIKey,
+		SeedanceBaseURL:     cfg.Multimodal.Video.SeedanceBaseURL,
 		DefaultImageProvider: cfg.Multimodal.DefaultImageProvider,
 		DefaultVideoProvider: cfg.Multimodal.DefaultVideoProvider,
-		ReferenceMaxSize:     cfg.Multimodal.ReferenceMaxSizeBytes,
-		ReferenceTTL:         cfg.Multimodal.ReferenceTTL,
-		ReferenceStore:       referenceStore,
 	}
+	providerSet := multimodal.BuildProvidersFromConfig(builderConfig, logger)
 
-	imageProviderCount := 0
-	videoProviderCount := 0
-	if multimodalCfg.OpenAIAPIKey != "" {
-		imageProviderCount++
-	}
-	if multimodalCfg.GoogleAPIKey != "" {
-		imageProviderCount++
-		videoProviderCount++
-	}
-	if multimodalCfg.RunwayAPIKey != "" {
-		videoProviderCount++
-	}
-	if multimodalCfg.VeoAPIKey != "" && multimodalCfg.GoogleAPIKey == "" {
-		videoProviderCount++
-	}
-	if multimodalCfg.SoraAPIKey != "" {
-		videoProviderCount++
-	}
-	if multimodalCfg.KlingAPIKey != "" {
-		videoProviderCount++
-	}
-	if multimodalCfg.LumaAPIKey != "" {
-		videoProviderCount++
-	}
-	if multimodalCfg.MiniMaxAPIKey != "" {
-		videoProviderCount++
-	}
+	pipeline := &multimodal.DefaultPromptPipeline{}
+	handler := handlers.NewMultimodalHandlerWithProviders(
+		chatProvider,
+		llmpolicy.NewManager(llmpolicy.ManagerConfig{Budget: budgetManager}),
+		ledger,
+		providerSet.ImageProviders,
+		providerSet.VideoProviders,
+		providerSet.DefaultImage,
+		providerSet.DefaultVideo,
+		pipeline,
+		cfg.Multimodal.ReferenceMaxSizeBytes,
+		cfg.Multimodal.ReferenceTTL,
+		referenceStore,
+		firstNonEmpty(cfg.Multimodal.DefaultChatModel, cfg.Agent.Model),
+		logger,
+	)
 
 	return &MultimodalRuntime{
-		Handler:            handlers.NewMultimodalHandlerFromConfig(multimodalCfg, logger),
+		Handler:            handler,
 		ReferenceBackend:   backend,
-		ImageProviderCount: imageProviderCount,
-		VideoProviderCount: videoProviderCount,
+		ImageProviderCount: len(providerSet.ImageProviders),
+		VideoProviderCount: len(providerSet.VideoProviders),
 	}, nil
 }
