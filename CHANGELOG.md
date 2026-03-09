@@ -5,6 +5,19 @@ All notable changes to AgentFlow will be documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.6.2] - 2026-03-09
+
+### Added
+- Gemini 图像 provider：新增 3 个模型常量（`gemini-2.5-flash-image` / `gemini-3-pro-image-preview` / `gemini-3.1-flash-image-preview`）
+- Gemini 图像 provider：实现 `StreamingProvider` 接口，通过 `streamGenerateContent?alt=sse` 支持原生 SSE 流式；文字思考 token 实时推送
+- Gemini 图像 provider：补全所有 API 参数支持——`imageConfig`（imageSize 1K/2K/4K、aspectRatio）、`system_instruction`、`tools/google_search`（联网 grounding）、`thinkingConfig`（thinking_budget）、`safetySettings`（统一阈值）、`candidateCount`；均通过 `req.Metadata` 透传
+- `image.StreamingProvider` 可选扩展接口与 `StreamChunk` 类型，供原生流式 provider 实现（类型断言感知，零破坏现有 `Provider` 接口）
+- 多模态 handler：`handleImageStream` 感知 `StreamingProvider`，Gemini 走原生流式路径，新增 `image_generation.thinking` SSE 事件类型
+
+### Changed
+- Gemini 图像 `SupportedSizes()` 改为返回 Gemini 原生格式 `["1K","2K","4K"]`，并自动映射通用像素格式（"1024x1024"→"1K" 等）
+- 文档 `docs/VIDEO_IMAGE_PROVIDERS.md` 补充 Gemini 模型版本对比表、全量参数说明、流式事件序列描述及请求示例
+
 ## [1.6.1] - 2026-03-09
 
 ### Added
