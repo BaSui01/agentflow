@@ -13,6 +13,8 @@ import (
 )
 
 // LumaProvider implements video generation using Luma AI Dream Machine (Ray 2).
+// 官方端点（可被配置 BaseURL 覆盖）：Base https://api.lumalabs.ai
+// POST /dream-machine/v1/generations（提交）→ GET /dream-machine/v1/generations/{id}（轮询）
 type LumaProvider struct {
 	cfg    LumaConfig
 	client *http.Client
@@ -24,6 +26,7 @@ const minLumaDuration = 4
 const maxLumaDuration = 20
 const defaultLumaResolution = "720p"
 const defaultLumaAspectRatio = "16:9"
+const defaultLumaBaseURL = "https://api.lumalabs.ai"
 const lumaGenerationPath = "/dream-machine/v1/generations"
 const lumaStateCompleted = "completed"
 const lumaStateFailed = "failed"
@@ -40,7 +43,7 @@ func NewLumaProvider(cfg LumaConfig, logger *zap.Logger) *LumaProvider {
 		logger = zap.NewNop()
 	}
 	if cfg.BaseURL == "" {
-		cfg.BaseURL = "https://api.lumalabs.ai"
+		cfg.BaseURL = defaultLumaBaseURL
 	}
 	if cfg.Model == "" {
 		cfg.Model = "ray-2"

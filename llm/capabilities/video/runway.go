@@ -13,7 +13,9 @@ import (
 )
 
 // Runway Provider执行视频生成,使用Runway ML Gen-4.
-// API 文件: https://docs.dev.runwayml.com/api/
+// 官方端点（可被配置 BaseURL 覆盖）：Base https://api.runwayml.com
+// POST /v1/image_to_video（提交）→ GET /v1/tasks/{id}（轮询）
+// API 文档: https://docs.dev.runwayml.com/api/
 type RunwayProvider struct {
 	cfg    RunwayConfig
 	client *http.Client
@@ -24,6 +26,7 @@ const defaultRunwayDuration = 5
 const minRunwayDuration = 2
 const maxRunwayDuration = 10
 const defaultRunwayRatio = "1280:720"
+const defaultRunwayBaseURL = "https://api.runwayml.com"
 const runwayCreatePath = "/v1/image_to_video"
 const runwayTaskPathPrefix = "/v1/tasks/"
 const runwayStatusSucceeded = "SUCCEEDED"
@@ -39,7 +42,7 @@ func NewRunwayProvider(cfg RunwayConfig, logger *zap.Logger) *RunwayProvider {
 		logger = zap.NewNop()
 	}
 	if cfg.BaseURL == "" {
-		cfg.BaseURL = "https://api.runwayml.com"
+		cfg.BaseURL = defaultRunwayBaseURL
 	}
 	if cfg.Model == "" {
 		// 可用: gen4 turbo, gen3a turbo, veo3.1, veo3.1 快活, veo3

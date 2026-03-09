@@ -6,13 +6,16 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/BaSui01/agentflow/pkg/tlsutil"
 	"go.uber.org/zap"
 )
 
-// KlingProvider implements video generation using Kling AI.
+// KlingProvider implements video generation using Kling AI (可灵).
+// 官方异步流程：提交任务返回 task_id，通过轮询 GET /v1/videos/{task_id} 或配置 callback_url 获取结果。
+// 参考：https://app.klingai.com/cn/dev/document-api
 type KlingProvider struct {
 	cfg    KlingConfig
 	client *http.Client
@@ -23,6 +26,9 @@ const defaultKlingDuration = 5
 const minKlingDuration = 3
 const maxKlingDuration = 15
 const defaultKlingAspectRatio = "16:9"
+// 可灵官方 Base URL：https://api.klingai.com（可在 KlingConfig.BaseURL 覆盖）
+// 端点：POST /v1/videos/text2video、POST /v1/videos/image2video、GET /v1/videos/{task_id} 查询任务
+const defaultKlingBaseURL = "https://api.klingai.com"
 const klingTextToVideoPath = "/v1/videos/text2video"
 const klingImageToVideoPath = "/v1/videos/image2video"
 const klingTaskPathPrefix = "/v1/videos/"
@@ -39,7 +45,7 @@ func NewKlingProvider(cfg KlingConfig, logger *zap.Logger) *KlingProvider {
 		logger = zap.NewNop()
 	}
 	if cfg.BaseURL == "" {
-		cfg.BaseURL = "https://api.klingai.com"
+		cfg.BaseURL = defaultKlingBaseURL
 	}
 	if cfg.Model == "" {
 		cfg.Model = "kling-v3-pro"
@@ -67,6 +73,7 @@ type klingTextRequest struct {
 	Duration       int     `json:"duration,omitempty"`
 	AspectRatio    string  `json:"aspect_ratio,omitempty"`
 	CfgScale       float64 `json:"cfg_scale,omitempty"`
+	CallbackURL    string  `json:"callback_url,omitempty"` // 可选，可灵任务完成后回调
 }
 
 // klingImageRequest is intentionally separate from klingTextRequest because
@@ -78,6 +85,7 @@ type klingImageRequest struct {
 	Image       string `json:"image"` // accepts public HTTPS URL or data:image/*;base64 URI
 	Duration    int    `json:"duration,omitempty"`
 	AspectRatio string `json:"aspect_ratio,omitempty"`
+	CallbackURL string `json:"callback_url,omitempty"` // 可选，可灵任务完成后回调
 }
 
 type klingResponse struct {
@@ -90,6 +98,13 @@ type klingResponse struct {
 			Duration float64 `json:"duration"`
 		} `json:"videos,omitempty"`
 	} `json:"task_result,omitempty"`
+}
+
+func getKlingCallbackURL(req *GenerateRequest) string {
+	if req == nil || req.Metadata == nil {
+		return ""
+	}
+	return strings.TrimSpace(req.Metadata["callback_url"])
 }
 
 // Analyze is not supported by the Kling provider.
@@ -158,6 +173,7 @@ func (p *KlingProvider) Generate(ctx context.Context, req *GenerateRequest) (*Ge
 			Image:       req.ImageURL,
 			Duration:    duration,
 			AspectRatio: aspectRatio,
+			CallbackURL: getKlingCallbackURL(req),
 		}
 		payload, marshalErr = marshalJSONRequest("kling", body)
 	} else {
@@ -168,6 +184,7 @@ func (p *KlingProvider) Generate(ctx context.Context, req *GenerateRequest) (*Ge
 			NegativePrompt: req.NegativePrompt,
 			Duration:       duration,
 			AspectRatio:    aspectRatio,
+			CallbackURL:    getKlingCallbackURL(req),
 		}
 		payload, marshalErr = marshalJSONRequest("kling", body)
 	}

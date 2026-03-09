@@ -55,6 +55,12 @@ func NewProvider(name string, cfg any, logger *zap.Logger) (Provider, error) {
 			return nil, err
 		}
 		return NewMiniMaxVideoProvider(c, logger), nil
+	case "seedance", "即梦":
+		c, err := resolveSeedanceConfig(cfg)
+		if err != nil {
+			return nil, err
+		}
+		return NewSeedanceProvider(c, logger), nil
 	default:
 		return nil, fmt.Errorf("unknown video provider %q", name)
 	}
@@ -169,5 +175,21 @@ func resolveMiniMaxVideoConfig(cfg any) (MiniMaxVideoConfig, error) {
 		return *c, nil
 	default:
 		return MiniMaxVideoConfig{}, fmt.Errorf("invalid config type for minimax-video: %T", cfg)
+	}
+}
+
+func resolveSeedanceConfig(cfg any) (SeedanceConfig, error) {
+	switch c := cfg.(type) {
+	case nil:
+		return DefaultSeedanceConfig(), nil
+	case SeedanceConfig:
+		return c, nil
+	case *SeedanceConfig:
+		if c == nil {
+			return DefaultSeedanceConfig(), nil
+		}
+		return *c, nil
+	default:
+		return SeedanceConfig{}, fmt.Errorf("invalid config type for seedance: %T", cfg)
 	}
 }

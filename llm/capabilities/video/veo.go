@@ -14,6 +14,8 @@ import (
 )
 
 // VeoProvider使用Google Veo 3.1执行视频生成.
+// 官方端点（可被配置 BaseURL 覆盖）：Base https://generativelanguage.googleapis.com
+// POST .../models/{model}:generateVideos（同步/长轮询）→ GET .../operations/{name} 查询
 type VeoProvider struct {
 	cfg    VeoConfig
 	client *http.Client

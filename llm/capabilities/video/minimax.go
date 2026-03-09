@@ -14,6 +14,8 @@ import (
 )
 
 // MiniMaxVideoProvider implements video generation using MiniMax Hailuo AI.
+// 官方端点（可被配置 BaseURL 覆盖）：Base https://api.minimax.chat
+// POST /v1/video_generation（提交）→ GET /v1/query/video_generation?task_id= （轮询）→ GET /v1/files/retrieve?file_id= （取下载 URL）
 type MiniMaxVideoProvider struct {
 	cfg    MiniMaxVideoConfig
 	client *http.Client
@@ -23,6 +25,7 @@ type MiniMaxVideoProvider struct {
 const minimaxCreatePath = "/v1/video_generation"
 const minimaxQueryPath = "/v1/query/video_generation"
 const minimaxRetrievePath = "/v1/files/retrieve"
+const defaultMiniMaxBaseURL = "https://api.minimax.chat"
 const minimaxStatusSuccess = "Success"
 const minimaxStatusFail = "Fail"
 
@@ -36,7 +39,7 @@ func NewMiniMaxVideoProvider(cfg MiniMaxVideoConfig, logger *zap.Logger) *MiniMa
 		logger = zap.NewNop()
 	}
 	if cfg.BaseURL == "" {
-		cfg.BaseURL = "https://api.minimax.chat"
+		cfg.BaseURL = defaultMiniMaxBaseURL
 	}
 	if cfg.Model == "" {
 		cfg.Model = "video-01"

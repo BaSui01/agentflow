@@ -12,6 +12,22 @@ import (
 	"go.uber.org/zap"
 )
 
+// 官方端点（可被配置 BaseURL 覆盖）：
+// Base: https://api.openai.com
+// 文档: https://platform.openai.com/docs/api-reference/videos
+// POST /v1/videos（提交）→ GET /v1/videos/{video_id}（轮询）→ 可选 GET /v1/videos/{video_id}/content（下载）
+const (
+	defaultSoraDuration     = 8
+	minSoraDuration         = 4
+	maxSoraDuration         = 20
+	defaultSoraAspectRatio  = "16:9"
+	defaultSoraResolution   = "720p"
+	defaultSoraBaseURL      = "https://api.openai.com"
+	soraVideosPath          = "/v1/videos" // 官方: POST 创建, GET /v1/videos/{id} 查询
+	soraStatusCompleted     = "completed"
+	soraStatusFailed        = "failed"
+)
+
 // SoraProvider implements video generation using OpenAI Sora 2.
 type SoraProvider struct {
 	cfg    SoraConfig
@@ -19,17 +35,10 @@ type SoraProvider struct {
 	logger *zap.Logger
 }
 
-const defaultSoraDuration = 8
-const minSoraDuration = 4
-const maxSoraDuration = 20
-const defaultSoraAspectRatio = "16:9"
-const defaultSoraResolution = "720p"
-const soraGenerationPath = "/v1/video/generations"
-const soraStatusCompleted = "completed"
-const soraStatusFailed = "failed"
-
 var soraAllowedModels = map[string]struct{}{
-	"sora-2": {},
+	"sora-2": {}, "sora-2-pro": {},
+	"sora-2-2025-10-06": {}, "sora-2-pro-2025-10-06": {},
+	"sora-2-2025-12-08": {},
 }
 
 // NewSoraProvider creates a new Sora video provider.
@@ -38,7 +47,7 @@ func NewSoraProvider(cfg SoraConfig, logger *zap.Logger) *SoraProvider {
 		logger = zap.NewNop()
 	}
 	if cfg.BaseURL == "" {
-		cfg.BaseURL = "https://api.openai.com"
+		cfg.BaseURL = defaultSoraBaseURL
 	}
 	if cfg.Model == "" {
 		cfg.Model = "sora-2"
@@ -152,7 +161,7 @@ func (p *SoraProvider) Generate(ctx context.Context, req *GenerateRequest) (*Gen
 		return nil, err
 	}
 	httpReq, err := http.NewRequestWithContext(ctx, "POST",
-		p.cfg.BaseURL+soraGenerationPath,
+		p.cfg.BaseURL+soraVideosPath,
 		bytes.NewReader(payload))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
@@ -230,7 +239,7 @@ func (p *SoraProvider) pollGeneration(ctx context.Context, id string) (*soraResp
 					zap.Int("attempt", attempts))
 			}
 			httpReq, err := http.NewRequestWithContext(ctx, "GET",
-				fmt.Sprintf("%s%s/%s", p.cfg.BaseURL, soraGenerationPath, id), nil)
+				fmt.Sprintf("%s%s/%s", p.cfg.BaseURL, soraVideosPath, id), nil)
 			if err != nil {
 				return nil, fmt.Errorf("failed to create request: %w", err)
 			}

@@ -55,7 +55,7 @@ func DefaultVeoConfig() VeoConfig {
 func DefaultRunwayConfig() RunwayConfig {
 	return RunwayConfig{
 		BaseProviderConfig: providers.BaseProviderConfig{
-			BaseURL: "https://api.runwayml.com",
+			BaseURL: defaultRunwayBaseURL,
 			Model:   "gen-4.5",
 			Timeout: defaultVideoTimeout,
 		},
@@ -66,7 +66,7 @@ func DefaultRunwayConfig() RunwayConfig {
 func DefaultSoraConfig() SoraConfig {
 	return SoraConfig{
 		BaseProviderConfig: providers.BaseProviderConfig{
-			BaseURL: "https://api.openai.com",
+			BaseURL: defaultSoraBaseURL,
 			Model:   "sora-2",
 			Timeout: defaultVideoTimeout,
 		},
@@ -78,11 +78,16 @@ type KlingConfig struct {
 	providers.BaseProviderConfig `yaml:",inline"`
 }
 
+// SeedanceConfig configures the Seedance (即梦 / ByteDance) video generation provider.
+type SeedanceConfig struct {
+	providers.BaseProviderConfig `yaml:",inline"`
+}
+
 // DefaultKlingConfig returns the default Kling configuration.
 func DefaultKlingConfig() KlingConfig {
 	return KlingConfig{
 		BaseProviderConfig: providers.BaseProviderConfig{
-			BaseURL: "https://api.klingai.com",
+			BaseURL: defaultKlingBaseURL,
 			Model:   "kling-v3-pro",
 			Timeout: defaultVideoTimeout,
 		},
@@ -98,7 +103,7 @@ type LumaConfig struct {
 func DefaultLumaConfig() LumaConfig {
 	return LumaConfig{
 		BaseProviderConfig: providers.BaseProviderConfig{
-			BaseURL: "https://api.lumalabs.ai",
+			BaseURL: defaultLumaBaseURL,
 			Model:   "ray-2",
 			Timeout: defaultVideoTimeout,
 		},
@@ -114,8 +119,19 @@ type MiniMaxVideoConfig struct {
 func DefaultMiniMaxVideoConfig() MiniMaxVideoConfig {
 	return MiniMaxVideoConfig{
 		BaseProviderConfig: providers.BaseProviderConfig{
-			BaseURL: "https://api.minimax.chat",
+			BaseURL: defaultMiniMaxBaseURL,
 			Model:   "video-01",
+			Timeout: defaultVideoTimeout,
+		},
+	}
+}
+
+// DefaultSeedanceConfig returns the default Seedance (即梦) configuration.
+func DefaultSeedanceConfig() SeedanceConfig {
+	return SeedanceConfig{
+		BaseProviderConfig: providers.BaseProviderConfig{
+			BaseURL: defaultSeedanceBaseURL,
+			Model:   "seedance-2",
 			Timeout: defaultVideoTimeout,
 		},
 	}
