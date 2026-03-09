@@ -449,8 +449,12 @@ func (h *MultimodalHandler) HandleImage(w http.ResponseWriter, r *http.Request) 
 }
 
 // handleImageStream 以 SSE 流式返回图片生成结果，事件命名与 payload 对齐 OpenAI 官方规范：
-// image_generation.started -> image_generation.completed (每张) -> image_generation.done -> [DONE]
+// image_generation.started -> [image_generation.thinking]* -> image_generation.completed (每张) -> image_generation.done -> [DONE]
 // 参考: https://platform.openai.com/docs/api-reference/images-streaming
+//
+// 对于实现了 image.StreamingProvider 的 provider（如 Gemini），会走原生 SSE 流式路径，
+// 在图像生成过程中实时推送 image_generation.thinking 文字事件；
+// 其余 provider 走同步生成路径（阻塞直到图像就绪后一次性推送）。
 func (h *MultimodalHandler) handleImageStream(w http.ResponseWriter, r *http.Request, req multimodalImageRequest) {
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
@@ -459,6 +463,18 @@ func (h *MultimodalHandler) handleImageStream(w http.ResponseWriter, r *http.Req
 		flusher.Flush()
 	}
 
+	// 尝试解析 provider，检查是否支持原生流式
+	providerName, resolveErr := h.resolveImageProvider(req.Provider)
+	if resolveErr == nil {
+		if p, routerErr := h.router.Image(providerName); routerErr == nil {
+			if sp, ok := p.(image.StreamingProvider); ok {
+				h.handleImageNativeStream(w, r, req, providerName, sp)
+				return
+			}
+		}
+	}
+
+	// 回退：同步生成后包装为 SSE
 	result, err := h.service.GenerateImage(r.Context(), req)
 	if err != nil {
 		code := errorCodeFrom(err, types.ErrUpstreamError)
@@ -470,8 +486,109 @@ func (h *MultimodalHandler) handleImageStream(w http.ResponseWriter, r *http.Req
 		_ = writeSSE(w, []byte("data: [DONE]\n\n"))
 		return
 	}
+	h.flushImageResult(w, req, result)
+}
 
-	// image_generation.started：与官方兼容，payload 含 type 便于客户端仅解析 data
+// handleImageNativeStream 使用 image.StreamingProvider 原生 SSE 流式生成，
+// 在图像生成过程中实时推送文字 token（image_generation.thinking 事件）。
+func (h *MultimodalHandler) handleImageNativeStream(
+	w http.ResponseWriter,
+	r *http.Request,
+	req multimodalImageRequest,
+	providerName string,
+	sp image.StreamingProvider,
+) {
+	flusher, canFlush := w.(http.Flusher)
+
+	genReq := &image.GenerateRequest{
+		Prompt:         req.Prompt,
+		NegativePrompt: req.NegativePrompt,
+		Model:          req.Model,
+		Size:           req.Size,
+		Quality:        req.Quality,
+		Style:          req.Style,
+		ResponseFormat: req.ResponseFormat,
+	}
+
+	_ = writeSSEEventJSON(w, "image_generation.started", map[string]any{
+		"type":     "image_generation.started",
+		"provider": providerName,
+		"mode":     "text_to_image",
+	})
+	if canFlush {
+		flusher.Flush()
+	}
+
+	var (
+		collectedImages []image.ImageData
+		imageIndex      int
+	)
+
+	streamErr := sp.GenerateStream(r.Context(), genReq, func(chunk image.StreamChunk) {
+		switch {
+		case chunk.Err != nil:
+			code := errorCodeFrom(chunk.Err, types.ErrUpstreamError)
+			_ = writeSSEEventJSON(w, "error", map[string]any{
+				"type":    "error",
+				"code":    code,
+				"message": strings.TrimSpace(chunk.Err.Error()),
+			})
+			if canFlush {
+				flusher.Flush()
+			}
+		case chunk.Text != "":
+			_ = writeSSEEventJSON(w, "image_generation.thinking", map[string]any{
+				"type": "image_generation.thinking",
+				"text": chunk.Text,
+			})
+			if canFlush {
+				flusher.Flush()
+			}
+		case chunk.Image != nil:
+			collectedImages = append(collectedImages, *chunk.Image)
+			payload := map[string]any{
+				"type":          "image_generation.completed",
+				"index":         imageIndex,
+				"output_format": "png",
+				"quality":       req.Quality,
+				"size":          req.Size,
+			}
+			if chunk.Image.URL != "" {
+				payload["url"] = chunk.Image.URL
+			}
+			if chunk.Image.B64JSON != "" {
+				payload["b64_json"] = chunk.Image.B64JSON
+			}
+			_ = writeSSEEventJSON(w, "image_generation.completed", payload)
+			if canFlush {
+				flusher.Flush()
+			}
+			imageIndex++
+		case chunk.Done:
+			_ = writeSSEEventJSON(w, "image_generation.done", map[string]any{
+				"type":     "image_generation.done",
+				"provider": providerName,
+				"usage": image.ImageUsage{
+					ImagesGenerated: len(collectedImages),
+				},
+			})
+			if canFlush {
+				flusher.Flush()
+			}
+		}
+	})
+
+	if streamErr != nil && r.Context().Err() == nil {
+		h.logger.Warn("gemini stream error", zap.Error(streamErr))
+	}
+	_ = writeSSE(w, []byte("data: [DONE]\n\n"))
+	if canFlush {
+		flusher.Flush()
+	}
+}
+
+// flushImageResult 将同步生成的 result 包装成 SSE 事件推送给客户端.
+func (h *MultimodalHandler) flushImageResult(w http.ResponseWriter, req multimodalImageRequest, result *multimodalImageResult) {
 	_ = writeSSEEventJSON(w, "image_generation.started", map[string]any{
 		"type":             "image_generation.started",
 		"mode":             result.Mode,
@@ -499,14 +616,13 @@ func (h *MultimodalHandler) handleImageStream(w http.ResponseWriter, r *http.Req
 		}
 
 		for i, img := range result.Response.Images {
-			// image_generation.completed：对齐 OpenAI ImageGenCompletedEvent，每张图一条
 			payload := map[string]any{
-				"type":               "image_generation.completed",
-				"index":              i,
-				"created_at":         createdAt,
-				"output_format":      outputFormat,
-				"quality":            quality,
-				"size":              size,
+				"type":          "image_generation.completed",
+				"index":         i,
+				"created_at":    createdAt,
+				"output_format": outputFormat,
+				"quality":       quality,
+				"size":          size,
 			}
 			if img.URL != "" {
 				payload["url"] = img.URL
@@ -520,7 +636,6 @@ func (h *MultimodalHandler) handleImageStream(w http.ResponseWriter, r *http.Req
 			if img.Seed != 0 {
 				payload["seed"] = img.Seed
 			}
-			// 最后一张图携带 usage，与官方 completed 事件一致
 			if i == len(result.Response.Images)-1 && result.Response.Usage.ImagesGenerated > 0 {
 				payload["usage"] = result.Response.Usage
 			}
