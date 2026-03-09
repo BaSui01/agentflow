@@ -5,6 +5,18 @@ All notable changes to AgentFlow will be documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.6.1] - 2026-03-09
+
+### Added
+- 多模态图像厂商：智谱(zhipu)、文心一格(baidu)、豆包/火山(doubao)、腾讯混元生图(tencent)、可灵(kling)；腾讯混元 TC3-HMAC-SHA256 签名实现
+- 可灵 Kling 图像 provider：与视频共用 `KlingAPIKey`，一 Key 双用
+- 文档 `docs/VIDEO_IMAGE_PROVIDERS.md`：接入清单、字节/可灵说明、一 Key 双用（OpenAI/Gemini/Kling）
+
+### Changed
+- 升级版本至 1.6.1
+- OpenAI 一 Key 双用：配置 `openai_api_key` 且未配 `sora_api_key` 时同时注册 openai 图像与 sora 视频
+- OpenAPI：image_providers / video_providers 描述更新
+
 ## [1.6.0] - 2026-03-06
 
 ### Added
