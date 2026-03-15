@@ -3,9 +3,10 @@ package agent
 import (
 	"context"
 	"fmt"
-	"github.com/BaSui01/agentflow/types"
 	"strings"
 	"time"
+
+	"github.com/BaSui01/agentflow/types"
 
 	"github.com/BaSui01/agentflow/agent/guardrails"
 	"github.com/BaSui01/agentflow/llm"
@@ -231,12 +232,12 @@ func (b *BaseAgent) Execute(ctx context.Context, input *Input) (_ *Output, execE
 	}
 
 	// 6. 构建消息
-	messages := []types.Message{
-		{
-			Role:    llm.RoleSystem,
-			Content: activeBundle.RenderSystemPromptWithVars(input.Variables),
-		},
-	}
+	msgCap := 1 + len(contextMessages) + len(restoredMessages) + 1
+	messages := make([]types.Message, 0, msgCap)
+	messages = append(messages, types.Message{
+		Role:    llm.RoleSystem,
+		Content: activeBundle.RenderSystemPromptWithVars(input.Variables),
+	})
 
 	// 添加上下文消息
 	messages = append(messages, contextMessages...)
