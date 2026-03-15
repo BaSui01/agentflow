@@ -18,12 +18,12 @@ import (
 type HopType string
 
 const (
-	HopTypeInitial      HopType = "initial"       // Initial query retrieval
-	HopTypeFollowUp     HopType = "follow_up"     // Follow-up based on previous results
-	HopTypeDecomposed   HopType = "decomposed"    // Sub-query from decomposition
-	HopTypeRefinement   HopType = "refinement"    // Query refinement based on context
-	HopTypeVerification HopType = "verification"  // Verify or cross-check information
-	HopTypeBridging     HopType = "bridging"      // Bridge between concepts
+	HopTypeInitial      HopType = "initial"      // Initial query retrieval
+	HopTypeFollowUp     HopType = "follow_up"    // Follow-up based on previous results
+	HopTypeDecomposed   HopType = "decomposed"   // Sub-query from decomposition
+	HopTypeRefinement   HopType = "refinement"   // Query refinement based on context
+	HopTypeVerification HopType = "verification" // Verify or cross-check information
+	HopTypeBridging     HopType = "bridging"     // Bridge between concepts
 )
 
 // 理由 状态代表推理过程状态.
@@ -38,18 +38,18 @@ const (
 
 // ReasoningHop代表推理链中的一跳
 type ReasoningHop struct {
-	ID            string            `json:"id"`
-	HopNumber     int               `json:"hop_number"`
-	Type          HopType           `json:"type"`
-	Query         string            `json:"query"`
-	TransformedQuery string         `json:"transformed_query,omitempty"`
-	Results       []RetrievalResult `json:"results"`
-	Context       string            `json:"context,omitempty"`       // Accumulated context
-	Reasoning     string            `json:"reasoning,omitempty"`     // LLM reasoning for this hop
-	Confidence    float64           `json:"confidence"`
-	Duration      time.Duration     `json:"duration"`
-	Metadata      map[string]any    `json:"metadata,omitempty"`
-	Timestamp     time.Time         `json:"timestamp"`
+	ID               string            `json:"id"`
+	HopNumber        int               `json:"hop_number"`
+	Type             HopType           `json:"type"`
+	Query            string            `json:"query"`
+	TransformedQuery string            `json:"transformed_query,omitempty"`
+	Results          []RetrievalResult `json:"results"`
+	Context          string            `json:"context,omitempty"`   // Accumulated context
+	Reasoning        string            `json:"reasoning,omitempty"` // LLM reasoning for this hop
+	Confidence       float64           `json:"confidence"`
+	Duration         time.Duration     `json:"duration"`
+	Metadata         map[string]any    `json:"metadata,omitempty"`
+	Timestamp        time.Time         `json:"timestamp"`
 
 	// 去重统计（新增）
 	DedupStats *DedupStats `json:"dedup_stats,omitempty"`
@@ -81,15 +81,18 @@ type ReasoningChain struct {
 	// 全局去重统计（新增）
 	TotalDedupByID         int `json:"total_dedup_by_id"`
 	TotalDedupBySimilarity int `json:"total_dedup_by_similarity"`
+
+	// LLM 调用计数
+	LLMCalls int `json:"llm_calls"`
 }
 
 // MultiHopConfig 配置多跳推理系统
 type MultiHopConfig struct {
 	// 跳跃限制
-	MaxHops           int           `json:"max_hops"`            // Maximum number of hops (2-5)
-	MinHops           int           `json:"min_hops"`            // Minimum hops before stopping
-	HopTimeout        time.Duration `json:"hop_timeout"`         // Timeout per hop
-	TotalTimeout      time.Duration `json:"total_timeout"`       // Total reasoning timeout
+	MaxHops      int           `json:"max_hops"`      // Maximum number of hops (2-5)
+	MinHops      int           `json:"min_hops"`      // Minimum hops before stopping
+	HopTimeout   time.Duration `json:"hop_timeout"`   // Timeout per hop
+	TotalTimeout time.Duration `json:"total_timeout"` // Total reasoning timeout
 
 	// 检索设置
 	ResultsPerHop     int     `json:"results_per_hop"`     // Documents per hop
@@ -103,12 +106,15 @@ type MultiHopConfig struct {
 	ConfidenceThreshold   float64 `json:"confidence_threshold"`    // Stop if confidence exceeds
 
 	// 复制
-	DeduplicateResults bool    `json:"deduplicate_results"` // Remove duplicate documents
+	DeduplicateResults  bool    `json:"deduplicate_results"`  // Remove duplicate documents
 	SimilarityThreshold float64 `json:"similarity_threshold"` // Threshold for deduplication
 
 	// 缓存
 	EnableCache bool          `json:"enable_cache"`
 	CacheTTL    time.Duration `json:"cache_ttl"`
+
+	// LLM 调用预算
+	MaxLLMCalls int `json:"max_llm_calls"` // 0 = unlimited
 }
 
 // 默认多HopConfig 返回默认配置
@@ -236,6 +242,23 @@ func NewMultiHopReasoner(
 	}
 }
 
+func (r *MultiHopReasoner) effectiveMaxLLMCalls() int {
+	if r.config.MaxLLMCalls > 0 {
+		return r.config.MaxLLMCalls
+	}
+	// default: 3 * MaxHops
+	return 3 * r.config.MaxHops
+}
+
+func (r *MultiHopReasoner) tryLLMCall(chain *ReasoningChain) bool {
+	if chain.LLMCalls >= r.effectiveMaxLLMCalls() {
+		r.logger.Debug("LLM budget exhausted", zap.Int("calls", chain.LLMCalls))
+		return false
+	}
+	chain.LLMCalls++
+	return true
+}
+
 // 为查询进行多跳推理
 func (r *MultiHopReasoner) Reason(ctx context.Context, query string) (*ReasoningChain, error) {
 	// 检查缓存
@@ -306,7 +329,7 @@ func (r *MultiHopReasoner) Reason(ctx context.Context, query string) (*Reasoning
 			} else if r.config.EnableQueryRefinement {
 				// 根据上下文生成精细查询
 				hopType = HopTypeFollowUp
-				refinedQuery, err := r.refineQuery(ctx, query, accumulatedContext, hopNum)
+				refinedQuery, err := r.refineQuery(ctx, query, accumulatedContext, hopNum, chain)
 				if err != nil {
 					r.logger.Warn("query refinement failed", zap.Error(err))
 				} else {
@@ -326,7 +349,7 @@ func (r *MultiHopReasoner) Reason(ctx context.Context, query string) (*Reasoning
 		seenQueries[normalizedQuery] = true
 
 		// 执行跳
-		hop, err := r.executeHop(ctx, hopNum, hopType, hopQuery, accumulatedContext, seenDocIDs)
+		hop, err := r.executeHop(ctx, hopNum, hopType, hopQuery, accumulatedContext, seenDocIDs, chain)
 		if err != nil {
 			r.logger.Warn("hop execution failed",
 				zap.Int("hop", hopNum),
@@ -361,7 +384,7 @@ func (r *MultiHopReasoner) Reason(ctx context.Context, query string) (*Reasoning
 	}
 
 	// 如果 LLM 可用, 生成最终答案
-	if r.config.EnableLLMReasoning && r.llmProvider != nil {
+	if r.config.EnableLLMReasoning && r.llmProvider != nil && r.tryLLMCall(chain) {
 		finalAnswer, err := r.generateFinalAnswer(ctx, query, chain)
 		if err != nil {
 			r.logger.Warn("final answer generation failed", zap.Error(err))
@@ -401,6 +424,7 @@ func (r *MultiHopReasoner) executeHop(
 	query string,
 	previousContext string,
 	seenDocIDs map[string]bool,
+	chain *ReasoningChain,
 ) (*ReasoningHop, error) {
 	hopCtx, cancel := context.WithTimeout(ctx, r.config.HopTimeout)
 	defer cancel()
@@ -497,7 +521,7 @@ func (r *MultiHopReasoner) executeHop(
 	}
 
 	// 如果 LLM 可用, 生成此跳动的推理
-	if r.config.EnableLLMReasoning && r.llmProvider != nil {
+	if r.config.EnableLLMReasoning && r.llmProvider != nil && r.tryLLMCall(chain) {
 		reasoning, err := r.generateHopReasoning(hopCtx, query, filteredResults, previousContext)
 		if err != nil {
 			r.logger.Warn("hop reasoning failed", zap.Error(err))
@@ -592,8 +616,9 @@ func (r *MultiHopReasoner) refineQuery(
 	originalQuery string,
 	context string,
 	hopNum int,
+	chain *ReasoningChain,
 ) (string, error) {
-	if r.llmProvider == nil {
+	if r.llmProvider == nil || !r.tryLLMCall(chain) {
 		return originalQuery, nil
 	}
 
@@ -755,7 +780,7 @@ func (r *MultiHopReasoner) shouldStop(
 	}
 
 	// 检查是否有足够的信息( 使用 LLM)
-	if r.config.EnableLLMReasoning && r.llmProvider != nil && hopNum >= r.config.MinHops-1 {
+	if r.config.EnableLLMReasoning && r.llmProvider != nil && r.tryLLMCall(chain) && hopNum >= r.config.MinHops-1 {
 		sufficient, err := r.checkSufficiency(ctx, chain)
 		if err == nil && sufficient {
 			r.logger.Debug("stopping: sufficient information gathered")
@@ -1019,4 +1044,3 @@ func normalizeQueryForDedup(query string) string {
 	// 将多个空间规范化为单个空间
 	return strings.Join(strings.Fields(query), " ")
 }
-
