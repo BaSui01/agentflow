@@ -109,7 +109,7 @@ type Coordinator interface {
 // NewMultiAgentSystem 创建多 Agent 系统
 func NewMultiAgentSystem(agents []agent.Agent, config MultiAgentConfig, logger *zap.Logger) *MultiAgentSystem {
 	if logger == nil {
-		panic("agent.MultiAgentSystem: logger is required and cannot be nil")
+		logger = zap.NewNop()
 	}
 
 	agentMap := make(map[string]agent.Agent)

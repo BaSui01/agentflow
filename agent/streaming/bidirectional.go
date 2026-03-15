@@ -126,7 +126,7 @@ func NewBidirectionalStream(
 	logger *zap.Logger,
 ) *BidirectionalStream {
 	if logger == nil {
-		panic("agent.BidirectionalStream: logger is required and cannot be nil")
+		logger = zap.NewNop()
 	}
 	return &BidirectionalStream{
 		ID:          fmt.Sprintf("stream_%d", time.Now().UnixNano()),

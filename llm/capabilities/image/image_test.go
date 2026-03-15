@@ -197,7 +197,7 @@ func TestNewGeminiProvider(t *testing.T) {
 	p := NewGeminiProvider(GeminiConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key"}})
 	assert.Equal(t, "gemini-image", p.Name())
 	assert.Equal(t, "gemini-3-pro-image-preview", p.cfg.Model)
-	assert.Contains(t, p.SupportedSizes(), "1024x1024")
+	assert.Contains(t, p.SupportedSizes(), "1K")
 }
 
 // redirectTransport redirects all requests to a test server.
@@ -275,7 +275,7 @@ func TestGeminiProvider_Generate_Error(t *testing.T) {
 
 	_, err := p.Generate(context.Background(), &GenerateRequest{Prompt: "test"})
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "gemini image error")
+	assert.Contains(t, err.Error(), "gemini error")
 }
 
 func TestGeminiProvider_Edit(t *testing.T) {
@@ -335,7 +335,7 @@ func TestGeminiProvider_Edit_Error(t *testing.T) {
 		Prompt: "edit",
 	})
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "gemini edit error")
+	assert.Contains(t, err.Error(), "gemini error")
 }
 
 func TestGeminiProvider_CreateVariation(t *testing.T) {

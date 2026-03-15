@@ -115,7 +115,7 @@ var _ llmcore.Gateway = (*Service)(nil)
 func New(cfg Config) *Service {
 	logger := cfg.Logger
 	if logger == nil {
-		panic("llm.Gateway: logger is required and cannot be nil")
+		logger = zap.NewNop()
 	}
 	calc := cfg.CostCalculator
 	if calc == nil {
