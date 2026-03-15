@@ -26,6 +26,7 @@ type Manager struct {
 	logger *zap.Logger
 	mu     sync.RWMutex
 	closed bool
+	done   chan struct{}
 }
 
 // Config 缓存配置
@@ -99,6 +100,7 @@ func NewManager(config Config, logger *zap.Logger) (*Manager, error) {
 		redis:  client,
 		config: config,
 		logger: logger.With(zap.String("component", "cache")),
+		done:   make(chan struct{}),
 	}
 
 	// 启动健康检查
@@ -263,6 +265,7 @@ func (m *Manager) Close() error {
 	}
 
 	m.closed = true
+	close(m.done)
 	m.logger.Info("closing cache manager")
 
 	return m.redis.Close()
@@ -277,13 +280,12 @@ func (m *Manager) healthCheckLoop() {
 	ticker := time.NewTicker(m.config.HealthCheckInterval)
 	defer ticker.Stop()
 
-	for range ticker.C {
-		m.mu.RLock()
-		if m.closed {
-			m.mu.RUnlock()
+	for {
+		select {
+		case <-m.done:
 			return
+		case <-ticker.C:
 		}
-		m.mu.RUnlock()
 
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		if err := m.Ping(ctx); err != nil {
@@ -394,4 +396,3 @@ var ErrCacheMiss = errors.New("cache miss")
 func IsCacheMiss(err error) bool {
 	return errors.Is(err, ErrCacheMiss)
 }
-
