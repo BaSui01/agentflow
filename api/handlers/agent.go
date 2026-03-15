@@ -346,12 +346,18 @@ func (h *AgentHandler) HandleAgentStream(w http.ResponseWriter, r *http.Request)
 		if marshalErr != nil {
 			errPayload = []byte(`{"error":{"code":"INTERNAL_ERROR","message":"agent execution failed"},"request_id":"` + requestID + `"}`)
 		}
-		fmt.Fprintf(w, "event: error\ndata: %s\n\n", errPayload)
+		if _, writeErr := fmt.Fprintf(w, "event: error\ndata: %s\n\n", errPayload); writeErr != nil {
+			h.logger.Debug("SSE error event write failed (client disconnected)", zap.Error(writeErr))
+			return
+		}
 		flusher.Flush()
 	}
 
 	// Send termination marker
-	fmt.Fprint(w, "data: [DONE]\n\n")
+	if _, writeErr := fmt.Fprint(w, "data: [DONE]\n\n"); writeErr != nil {
+		h.logger.Debug("SSE DONE marker write failed (client disconnected)", zap.Error(writeErr))
+		return
+	}
 	flusher.Flush()
 
 	if execErr != nil {

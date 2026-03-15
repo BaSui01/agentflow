@@ -222,3 +222,15 @@ func (rw *ResponseWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
 	}
 	return nil, nil, fmt.Errorf("underlying ResponseWriter does not implement http.Hijacker")
 }
+
+// enforceTenantID overrides TenantID and UserID in an api.ChatRequest with values
+// from the authenticated context (JWT claims). This prevents a client from
+// impersonating another tenant or user by crafting a request body.
+func enforceTenantID(r *http.Request, req *api.ChatRequest) {
+	if tid, ok := types.TenantID(r.Context()); ok && tid != "" {
+		req.TenantID = tid
+	}
+	if uid, ok := types.UserID(r.Context()); ok && uid != "" {
+		req.UserID = uid
+	}
+}

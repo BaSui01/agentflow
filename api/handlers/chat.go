@@ -97,12 +97,7 @@ func (h *ChatHandler) HandleCompletion(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// 从 JWT 上下文强制覆盖身份字段，防止水平越权
-	if tenantID, ok := types.TenantID(r.Context()); ok && tenantID != "" {
-		req.TenantID = tenantID
-	}
-	if userID, ok := types.UserID(r.Context()); ok && userID != "" {
-		req.UserID = userID
-	}
+	enforceTenantID(r, &req)
 
 	// 验证请求
 	if err := h.validateChatRequest(&req); err != nil {
@@ -159,12 +154,7 @@ func (h *ChatHandler) HandleStream(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// 从 JWT 上下文强制覆盖身份字段，防止水平越权
-	if tenantID, ok := types.TenantID(r.Context()); ok && tenantID != "" {
-		req.TenantID = tenantID
-	}
-	if userID, ok := types.UserID(r.Context()); ok && userID != "" {
-		req.UserID = userID
-	}
+	enforceTenantID(r, &req)
 
 	// 验证请求
 	if err := h.validateChatRequest(&req); err != nil {
