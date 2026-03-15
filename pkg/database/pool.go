@@ -16,6 +16,15 @@ import (
 // 🗄️ 数据库连接池管理器
 // =============================================================================
 
+// PoolHealth represents the health state of the database pool.
+type PoolHealth int
+
+const (
+	PoolHealthy PoolHealth = iota
+	PoolDegraded
+	PoolUnhealthy
+)
+
 // PoolManager 数据库连接池管理器
 type PoolManager struct {
 	db     *gorm.DB
@@ -25,6 +34,10 @@ type PoolManager struct {
 	mu     sync.RWMutex
 	closed bool
 	cancel context.CancelFunc // 用于停止 healthCheckLoop goroutine
+
+	failureCount         int
+	degradeAfterFailures int
+	health               PoolHealth
 }
 
 // PoolConfig 连接池配置
@@ -74,10 +87,11 @@ func NewPoolManager(db *gorm.DB, config PoolConfig, logger *zap.Logger) (*PoolMa
 	sqlDB.SetConnMaxIdleTime(config.ConnMaxIdleTime)
 
 	pm := &PoolManager{
-		db:     db,
-		sqlDB:  sqlDB,
-		config: config,
-		logger: logger.With(zap.String("component", "db_pool")),
+		db:                   db,
+		sqlDB:                sqlDB,
+		config:               config,
+		logger:               logger.With(zap.String("component", "db_pool")),
+		degradeAfterFailures: 3,
 	}
 
 	// 启动健康检查
@@ -151,6 +165,18 @@ func (pm *PoolManager) Close() error {
 // 🏥 健康检查
 // =============================================================================
 
+// Health returns the current pool health state.
+func (pm *PoolManager) Health() PoolHealth {
+	pm.mu.RLock()
+	defer pm.mu.RUnlock()
+	return pm.health
+}
+
+// IsHealthy returns true when the pool is in Healthy state.
+func (pm *PoolManager) IsHealthy() bool {
+	return pm.Health() == PoolHealthy
+}
+
 // healthCheckLoop 健康检查循环
 func (pm *PoolManager) healthCheckLoop(ctx context.Context) {
 	ticker := time.NewTicker(pm.config.HealthCheckInterval)
@@ -170,8 +196,24 @@ func (pm *PoolManager) healthCheckLoop(ctx context.Context) {
 
 			checkCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 			if err := pm.Ping(checkCtx); err != nil {
-				pm.logger.Error("database health check failed", zap.Error(err))
+				pm.mu.Lock()
+				pm.failureCount++
+				if pm.failureCount >= pm.degradeAfterFailures {
+					pm.health = PoolUnhealthy
+				} else {
+					pm.health = PoolDegraded
+				}
+				pm.mu.Unlock()
+				pm.logger.Error("database health check failed",
+					zap.Error(err),
+					zap.Int("failure_count", pm.failureCount),
+				)
 			} else {
+				pm.mu.Lock()
+				pm.failureCount = 0
+				pm.health = PoolHealthy
+				pm.mu.Unlock()
+
 				stats := pm.Stats()
 				pm.logger.Debug("database health check passed",
 					zap.Int("open_connections", stats.OpenConnections),
@@ -308,4 +350,3 @@ func isRetryableError(err error) bool {
 
 	return false
 }
-

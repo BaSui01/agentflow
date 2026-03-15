@@ -40,6 +40,9 @@ type DAGExecutor struct {
 // 最大循环深度限制
 const maxLoopDepth = 1000
 
+// defaultWhileMaxIterations 是 While 循环未指定 MaxIterations 时的默认上限
+const defaultWhileMaxIterations = 500
+
 // defaultMaxRetries is the default number of retries for failed nodes.
 const defaultMaxRetries = 3
 
@@ -530,9 +533,16 @@ func (e *DAGExecutor) executeLoopNode(ctx context.Context, graph *DAGGraph, node
 	switch config.Type {
 	case LoopTypeWhile:
 		// While loop: execute while condition is true
+		effectiveMax := config.MaxIterations
+		if effectiveMax <= 0 {
+			effectiveMax = defaultWhileMaxIterations
+		}
 		for {
+			if err := ctx.Err(); err != nil {
+				return nil, err
+			}
 			// Check max iterations
-			if config.MaxIterations > 0 && iteration >= config.MaxIterations {
+			if iteration >= effectiveMax {
 				e.logger.Debug("loop max iterations reached",
 					zap.String("node_id", node.ID),
 					zap.Int("iterations", iteration),
@@ -589,6 +599,9 @@ func (e *DAGExecutor) executeLoopNode(ctx context.Context, graph *DAGGraph, node
 		}
 
 		for i := 0; i < maxIter; i++ {
+			if err := ctx.Err(); err != nil {
+				return nil, err
+			}
 			// Execute loop body
 			nextNodes := graph.GetEdges(node.ID)
 			for _, nextNodeID := range nextNodes {
@@ -624,6 +637,9 @@ func (e *DAGExecutor) executeLoopNode(ctx context.Context, graph *DAGGraph, node
 
 		results := make([]any, 0, len(items))
 		for i, item := range items {
+			if err := ctx.Err(); err != nil {
+				return nil, err
+			}
 			// Check max iterations
 			if config.MaxIterations > 0 && i >= config.MaxIterations {
 				break

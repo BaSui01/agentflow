@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"reflect"
+	"strings"
 	"sync"
 	"time"
 
@@ -265,6 +266,34 @@ func (c *MultiLevelCache) InvalidateByVersion(ctx context.Context, promptVersion
 	return nil
 }
 
+// Warmup 预热本地缓存：从 Redis 加载访问频率最高的条目到本地 LRU。
+func (c *MultiLevelCache) Warmup(ctx context.Context, maxKeys int) error {
+	if c.redis == nil || c.local == nil || maxKeys <= 0 {
+		return nil
+	}
+
+	iter := c.redis.Scan(ctx, 0, c.redisKey("*"), int64(maxKeys)).Iterator()
+	loaded := 0
+	for iter.Next(ctx) {
+		if loaded >= maxKeys {
+			break
+		}
+		data, err := c.redis.Get(ctx, iter.Val()).Bytes()
+		if err != nil {
+			continue
+		}
+		var entry CacheEntry
+		if err := json.Unmarshal(data, &entry); err != nil {
+			continue
+		}
+		localKey := strings.TrimPrefix(iter.Val(), "llm:prompt_cache:")
+		c.local.Set(localKey, &entry)
+		loaded++
+	}
+	c.logger.Info("cache warmup completed", zap.Int("loaded", loaded))
+	return iter.Err()
+}
+
 // ============================================================
 // LRU 本地缓存实现（使用双向链表实现 O(1) 操作）
 // ============================================================
@@ -414,4 +443,3 @@ func (c *LRUCache) Stats() (size int, capacity int) {
 	defer c.mu.RUnlock()
 	return len(c.items), c.capacity
 }
-

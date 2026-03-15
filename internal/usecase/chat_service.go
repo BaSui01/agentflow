@@ -261,16 +261,28 @@ func (s *DefaultChatService) streamLocalReAct(ctx context.Context, req *llm.Chat
 			close(stream)
 		}()
 		for event := range events {
+			var chunk llmcore.UnifiedChunk
 			switch event.Type {
 			case llmtools.ReActEventLLMChunk:
 				if event.Chunk == nil {
 					continue
 				}
-				stream <- llmcore.UnifiedChunk{Output: event.Chunk}
+				chunk = llmcore.UnifiedChunk{Output: event.Chunk}
 			case llmtools.ReActEventError:
-				stream <- llmcore.UnifiedChunk{
+				chunk = llmcore.UnifiedChunk{
 					Err: types.NewInternalError(event.Error),
 				}
+				select {
+				case stream <- chunk:
+				case <-ctx.Done():
+				}
+				return
+			default:
+				continue
+			}
+			select {
+			case stream <- chunk:
+			case <-ctx.Done():
 				return
 			}
 		}

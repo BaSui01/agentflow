@@ -109,8 +109,13 @@ func ReadErrorMessage(body io.Reader) string {
 		return errResp.Error.Message
 	}
 
-	// 回退到原始文本
-	return string(data)
+	// 回退到原始文本（截断防止日志膨胀）
+	const maxFallbackLen = 256
+	s := string(data)
+	if len(s) > maxFallbackLen {
+		s = s[:maxFallbackLen] + "...(truncated)"
+	}
+	return s
 }
 
 // OpenAI 兼容 API 通用类型

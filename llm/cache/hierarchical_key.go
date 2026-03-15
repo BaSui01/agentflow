@@ -40,7 +40,17 @@ func (s *HierarchicalKeyStrategy) GenerateKey(req *llmpkg.ChatRequest) string {
 	// 计算消息 Hash
 	msgHash := hashMessages(msgSlice)
 
-	return fmt.Sprintf("%s:%s", baseKey, msgHash)
+	// 将影响输出的参数纳入 key，防止不同参数命中同一缓存
+	paramsHash := hashParams(req)
+
+	return fmt.Sprintf("%s:%s:%s", baseKey, msgHash, paramsHash)
+}
+
+// hashParams 将影响输出的请求参数哈希为短摘要
+func hashParams(req *llmpkg.ChatRequest) string {
+	h := sha256.New()
+	fmt.Fprintf(h, "tc=%v;temp=%.4f;topp=%.4f", req.ToolChoice, req.Temperature, req.TopP)
+	return hex.EncodeToString(h.Sum(nil)[:6])
 }
 
 // hashMessages 计算消息列表的 Hash
@@ -54,4 +64,3 @@ func hashMessages(msgs []llmpkg.Message) string {
 func NewHierarchicalKeyStrategy() *HierarchicalKeyStrategy {
 	return &HierarchicalKeyStrategy{}
 }
-

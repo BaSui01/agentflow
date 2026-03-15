@@ -175,8 +175,9 @@ func TestMultiHopReasoner_ExecuteHop(t *testing.T) {
 
 	ctx := context.Background()
 	seenDocIDs := make(map[string]bool)
+	chain := &ReasoningChain{}
 
-	hop, err := reasoner.executeHop(ctx, 0, HopTypeInitial, "machine learning", "", seenDocIDs)
+	hop, err := reasoner.executeHop(ctx, 0, HopTypeInitial, "machine learning", "", seenDocIDs, chain)
 	if err != nil {
 		t.Fatalf("executeHop failed: %v", err)
 	}
@@ -622,4 +623,3 @@ func TestMultiHopReasoner_QueryDeduplication(t *testing.T) {
 		t.Errorf("expected status to be completed, got %s", chain.Status)
 	}
 }
-

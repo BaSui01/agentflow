@@ -9,7 +9,7 @@ import (
 
 	"github.com/BaSui01/agentflow/llm"
 	"github.com/BaSui01/agentflow/llm/capabilities"
-	"github.com/BaSui01/agentflow/llm/capabilities/audio"
+	speech "github.com/BaSui01/agentflow/llm/capabilities/audio"
 	"github.com/BaSui01/agentflow/llm/capabilities/avatar"
 	"github.com/BaSui01/agentflow/llm/capabilities/embedding"
 	"github.com/BaSui01/agentflow/llm/capabilities/image"
@@ -248,10 +248,14 @@ func (s *Service) Stream(ctx context.Context, req *llmcore.UnifiedRequest) (<-ch
 			}
 
 			if chunk.Err != nil {
-				out <- llmcore.UnifiedChunk{
+				select {
+				case out <- llmcore.UnifiedChunk{
 					Err:              chunk.Err,
 					TraceID:          traceID,
 					ProviderDecision: decision,
+				}:
+				case <-ctx.Done():
+					return
 				}
 				continue
 			}
@@ -273,12 +277,16 @@ func (s *Service) Stream(ctx context.Context, req *llmcore.UnifiedRequest) (<-ch
 				finalDecision = decision
 			}
 
-			out <- llmcore.UnifiedChunk{
+			select {
+			case out <- llmcore.UnifiedChunk{
 				Output:           &copied,
 				Usage:            usage,
 				Cost:             cost,
 				TraceID:          traceID,
 				ProviderDecision: decision,
+			}:
+			case <-ctx.Done():
+				return
 			}
 		}
 
@@ -1303,18 +1311,24 @@ func (a *ChatProviderAdapter) Stream(ctx context.Context, req *llm.ChatRequest) 
 			close(out)
 		}()
 		for chunk := range stream {
+			var sc llm.StreamChunk
 			if chunk.Err != nil {
-				out <- llm.StreamChunk{Err: chunk.Err}
-				continue
-			}
-			streamChunk, ok := chunk.Output.(*llm.StreamChunk)
-			if !ok || streamChunk == nil {
-				out <- llm.StreamChunk{
-					Err: types.NewInternalError("invalid gateway stream chunk"),
+				sc = llm.StreamChunk{Err: chunk.Err}
+			} else {
+				streamChunk, ok := chunk.Output.(*llm.StreamChunk)
+				if !ok || streamChunk == nil {
+					sc = llm.StreamChunk{
+						Err: types.NewInternalError("invalid gateway stream chunk"),
+					}
+				} else {
+					sc = *streamChunk
 				}
-				continue
 			}
-			out <- *streamChunk
+			select {
+			case out <- sc:
+			case <-ctx.Done():
+				return
+			}
 		}
 	}()
 

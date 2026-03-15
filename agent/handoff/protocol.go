@@ -211,24 +211,23 @@ func (m *HandoffManager) Handoff(ctx context.Context, opts HandoffOptions) (*Han
 	}
 
 	// 执行和等待
+	timeoutCtx, timeoutCancel := context.WithTimeout(ctx, handoff.Timeout)
+	defer timeoutCancel()
 	go m.executeHandoff(ctx, targetAgent, handoff, resultCh)
 
 	select {
 	case result := <-resultCh:
 		handoff.Result = result
 		return handoff, nil
-	case <-time.After(handoff.Timeout):
+	case <-timeoutCtx.Done():
 		handoff.mu.Lock()
 		handoff.Status = StatusFailed
 		handoff.mu.Unlock()
 		m.cleanupPending(handoff.ID, resultCh)
+		if ctx.Err() != nil {
+			return handoff, ctx.Err()
+		}
 		return handoff, fmt.Errorf("handoff timeout")
-	case <-ctx.Done():
-		handoff.mu.Lock()
-		handoff.Status = StatusFailed
-		handoff.mu.Unlock()
-		m.cleanupPending(handoff.ID, resultCh)
-		return handoff, ctx.Err()
 	}
 }
 

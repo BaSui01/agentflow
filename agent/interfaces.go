@@ -243,12 +243,16 @@ func filterToolSchemasByWhitelist(all []types.ToolSchema, whitelist []string) []
 // PersistenceStores (merged from persistence_stores.go)
 // =============================================================================
 
+// defaultMaxRestoreMessages is the maximum number of messages to restore from conversation history.
+const defaultMaxRestoreMessages = 200
+
 // PersistenceStores encapsulates MongoDB persistence store fields extracted from BaseAgent.
 type PersistenceStores struct {
-	promptStore       PromptStoreProvider
-	conversationStore ConversationStoreProvider
-	runStore          RunStoreProvider
-	logger            *zap.Logger
+	promptStore        PromptStoreProvider
+	conversationStore  ConversationStoreProvider
+	runStore           RunStoreProvider
+	logger             *zap.Logger
+	maxRestoreMessages int
 }
 
 // NewPersistenceStores creates a new PersistenceStores.
@@ -269,6 +273,11 @@ func (p *PersistenceStores) SetConversationStore(store ConversationStoreProvider
 // SetRunStore sets the run store provider.
 func (p *PersistenceStores) SetRunStore(store RunStoreProvider) {
 	p.runStore = store
+}
+
+// SetMaxRestoreMessages sets the maximum number of messages to restore.
+func (p *PersistenceStores) SetMaxRestoreMessages(n int) {
+	p.maxRestoreMessages = n
 }
 
 // PromptStore returns the prompt store provider.
@@ -329,24 +338,43 @@ func (p *PersistenceStores) UpdateRunStatus(ctx context.Context, runID, status s
 	return p.runStore.UpdateStatus(ctx, runID, status, output, errMsg)
 }
 
-// RestoreConversation restores conversation history from the store.
+// RestoreConversation restores conversation history from the store using sliding window pagination.
 func (p *PersistenceStores) RestoreConversation(ctx context.Context, conversationID string) []types.Message {
 	if p.conversationStore == nil || conversationID == "" {
 		return nil
 	}
-	conv, err := p.conversationStore.GetByID(ctx, conversationID)
-	if err != nil {
-		p.logger.Debug("conversation not found or error, starting fresh",
+
+	limit := p.maxRestoreMessages
+	if limit <= 0 {
+		limit = defaultMaxRestoreMessages
+	}
+
+	// Use GetMessages with pagination to fetch the most recent messages.
+	_, total, err := p.conversationStore.GetMessages(ctx, conversationID, 0, 1)
+	if err != nil || total == 0 {
+		p.logger.Debug("conversation not found or empty, starting fresh",
 			zap.String("conversation_id", conversationID),
 			zap.Error(err),
 		)
 		return nil
 	}
-	if conv == nil {
+
+	offset := int(total) - limit
+	if offset < 0 {
+		offset = 0
+	}
+
+	raw, _, err := p.conversationStore.GetMessages(ctx, conversationID, offset, limit)
+	if err != nil {
+		p.logger.Debug("failed to restore conversation messages",
+			zap.String("conversation_id", conversationID),
+			zap.Error(err),
+		)
 		return nil
 	}
-	var msgs []types.Message
-	for _, msg := range conv.Messages {
+
+	msgs := make([]types.Message, 0, len(raw))
+	for _, msg := range raw {
 		msgs = append(msgs, types.Message{
 			Role:    types.Role(msg.Role),
 			Content: msg.Content,
@@ -355,6 +383,7 @@ func (p *PersistenceStores) RestoreConversation(ctx context.Context, conversatio
 	p.logger.Debug("restored conversation history",
 		zap.String("conversation_id", conversationID),
 		zap.Int("messages", len(msgs)),
+		zap.Int64("total", total),
 	)
 	return msgs
 }
