@@ -17,7 +17,10 @@ import (
 	"time"
 
 	"github.com/BaSui01/agentflow/agent"
+	"github.com/BaSui01/agentflow/agent/collaboration"
 	"github.com/BaSui01/agentflow/agent/guardrails"
+	"github.com/BaSui01/agentflow/agent/handoff"
+	"github.com/BaSui01/agentflow/agent/memorycore"
 	"github.com/BaSui01/agentflow/agent/multiagent"
 	"github.com/BaSui01/agentflow/agent/protocol/a2a"
 	"github.com/BaSui01/agentflow/agent/protocol/mcp"
@@ -116,6 +119,13 @@ func main() {
 	b34WorkerPoolEmpty()
 	b35WorkerPoolFailFast()
 	b36DAGCycleDetection()
+
+	fmt.Println("\n━━━ Agent 高级功能 ━━━")
+	b37SharedState()
+	b38MemoryManager()
+	b39AgentHandoff()
+	b40DeliberationMode()
+	b41DebateCoordinator()
 
 	printSummary()
 }
@@ -850,3 +860,243 @@ func (a *failAgent) Execute(_ context.Context, _ *agent.Input) (*agent.Output, e
 	return nil, fmt.Errorf("模拟Agent执行失败")
 }
 func (a *failAgent) Observe(_ context.Context, _ *agent.Feedback) error { return nil }
+
+// ═══ Agent 高级功能 ═══
+
+func b37SharedState() {
+	t := time.Now()
+	ss := collaboration.NewInMemorySharedState()
+	ctx := context.Background()
+
+	// Set + Get
+	ss.Set(ctx, "counter", 42)
+	val, ok := ss.Get(ctx, "counter")
+	if !ok || val.(int) != 42 {
+		rec("SharedState读写", "FAIL", time.Since(t), "Get/Set 失败")
+		return
+	}
+
+	// Watch
+	ch := ss.Watch(ctx, "event")
+	go func() {
+		time.Sleep(10 * time.Millisecond)
+		ss.Set(ctx, "event", "fired")
+	}()
+	select {
+	case v := <-ch:
+		if v == "fired" {
+			rec("SharedState读写", "PASS", time.Since(t), "Get/Set/Watch 全部正确")
+		} else {
+			rec("SharedState读写", "WARN", time.Since(t), fmt.Sprintf("Watch收到: %v", v))
+		}
+	case <-time.After(1 * time.Second):
+		rec("SharedState读写", "FAIL", time.Since(t), "Watch 超时")
+	}
+
+	// Snapshot
+	snap := ss.Snapshot(ctx)
+	if len(snap) >= 2 {
+		rec("SharedState快照", "PASS", time.Since(t), fmt.Sprintf("快照包含%d个key", len(snap)))
+	} else {
+		rec("SharedState快照", "WARN", time.Since(t), fmt.Sprintf("快照只有%d个key", len(snap)))
+	}
+}
+
+func b38MemoryManager() {
+	t := time.Now()
+	// 使用自定义内存实现测试 MemoryManager 接口
+	mm := &inMemoryMgr{records: make(map[string]memorycore.MemoryRecord)}
+	ctx := context.Background()
+
+	err := mm.Save(ctx, memorycore.MemoryRecord{
+		ID: "rec1", AgentID: "agent1", Kind: types.MemoryShortTerm,
+		Content: "用户喜欢Go语言", Metadata: map[string]any{"topic": "preference"},
+	})
+	if err != nil {
+		rec("记忆管理器", "FAIL", time.Since(t), fmt.Sprintf("Save失败: %v", err))
+		return
+	}
+
+	records, err := mm.LoadRecent(ctx, "agent1", types.MemoryShortTerm, 10)
+	if err != nil {
+		rec("记忆管理器", "FAIL", time.Since(t), fmt.Sprintf("LoadRecent失败: %v", err))
+		return
+	}
+
+	if len(records) == 1 && records[0].Content == "用户喜欢Go语言" {
+		rec("记忆管理器", "PASS", time.Since(t), "Save+LoadRecent 正确")
+	} else {
+		rec("记忆管理器", "WARN", time.Since(t), fmt.Sprintf("records=%d", len(records)))
+	}
+
+	// 测试 Cache 层
+	cache := memorycore.NewCache("agent1", mm, zap.NewNop())
+	cache.LoadRecent(ctx)
+	err = cache.Save(ctx, "新的记忆内容", types.MemoryShortTerm, nil)
+	if err != nil {
+		rec("记忆Cache层", "FAIL", time.Since(t), err.Error())
+	} else {
+		rec("记忆Cache层", "PASS", time.Since(t), "Cache Save 成功")
+	}
+}
+
+func b39AgentHandoff() {
+	t := time.Now()
+	lg := zap.NewNop()
+	mgr := handoff.NewHandoffManager(lg)
+
+	// 注册两个 Agent
+	agent1 := &handoffMockAgent{id: "support", caps: []handoff.AgentCapability{{Name: "support", TaskTypes: []string{"question"}}}}
+	agent2 := &handoffMockAgent{id: "billing", caps: []handoff.AgentCapability{{Name: "billing", TaskTypes: []string{"payment"}}}}
+	mgr.RegisterAgent(agent1)
+	mgr.RegisterAgent(agent2)
+
+	// 执行 Handoff
+	h, err := mgr.Handoff(context.Background(), handoff.HandoffOptions{
+		FromAgentID: "support",
+		ToAgentID:   "billing",
+		Task:        handoff.Task{Type: "payment", Description: "处理退款", Input: "退款请求"},
+		Timeout:     5 * time.Second,
+		Wait:        true,
+	})
+	if err != nil {
+		rec("Agent Handoff", "FAIL", time.Since(t), fmt.Sprintf("Handoff失败: %v", err))
+		return
+	}
+
+	if h != nil && (h.Status == handoff.StatusCompleted || h.Status == handoff.StatusAccepted || h.Status == handoff.StatusInProgress) {
+		rec("Agent Handoff", "PASS", time.Since(t), fmt.Sprintf("status=%s from=%s to=%s", h.Status, h.FromAgentID, h.ToAgentID))
+	} else if h != nil {
+		rec("Agent Handoff", "WARN", time.Since(t), fmt.Sprintf("status=%s", h.Status))
+	} else {
+		rec("Agent Handoff", "FAIL", time.Since(t), "返回nil")
+	}
+}
+
+func b40DeliberationMode() {
+	t := time.Now()
+
+	agents := []agent.Agent{
+		&mockAgent{id: "thinker1", output: "观点A：Go语言简洁高效"},
+		&mockAgent{id: "thinker2", output: "观点B：Go并发模型优秀"},
+		&mockAgent{id: "synthesizer", output: "综合：Go语言兼具简洁性和强大的并发能力"},
+	}
+
+	registry := multiagent.NewModeRegistry()
+	multiagent.RegisterDefaultModes(registry, zap.NewNop())
+	strategy, err := registry.Get("deliberation")
+	if err != nil {
+		rec("Deliberation深思", "FAIL", time.Since(t), fmt.Sprintf("模式未注册: %v", err))
+		return
+	}
+
+	input := &agent.Input{TraceID: "test-delib", Content: "分析Go语言的优势", Context: map[string]any{"max_rounds": 2}}
+	out, err := strategy.Execute(context.Background(), agents, input)
+	if err != nil {
+		rec("Deliberation深思", "FAIL", time.Since(t), fmt.Sprintf("执行失败: %v", err))
+		return
+	}
+
+	if out != nil && out.Content != "" {
+		rec("Deliberation深思", "PASS", time.Since(t), fmt.Sprintf("输出%d字符", len([]rune(out.Content))))
+	} else {
+		rec("Deliberation深思", "WARN", time.Since(t), "输出为空")
+	}
+}
+
+func b41DebateCoordinator() {
+	t := time.Now()
+
+	agents := []agent.Agent{
+		&mockAgent{id: "debater1", output: "Go最好：简洁、并发、编译快"},
+		&mockAgent{id: "debater2", output: "Rust最好：内存安全、零成本抽象"},
+		&mockAgent{id: "judge", output: "综合：Go适合后端服务，Rust适合系统编程"},
+	}
+
+	// "debate" 不存在，辩论功能在 "collaboration" 模式中
+	registry := multiagent.NewModeRegistry()
+	multiagent.RegisterDefaultModes(registry, zap.NewNop())
+	strategy, err := registry.Get("collaboration")
+	if err != nil {
+		rec("Collaboration协作", "FAIL", time.Since(t), fmt.Sprintf("模式未注册: %v", err))
+		return
+	}
+
+	input := &agent.Input{TraceID: "test-collab", Content: "Go vs Rust 哪个更好？", Context: map[string]any{"max_rounds": 2}}
+	out, err := strategy.Execute(context.Background(), agents, input)
+	if err != nil {
+		rec("Collaboration协作", "FAIL", time.Since(t), fmt.Sprintf("执行失败: %v", err))
+		return
+	}
+
+	if out != nil && out.Content != "" {
+		rec("Collaboration协作", "PASS", time.Since(t), fmt.Sprintf("输出%d字符", len([]rune(out.Content))))
+	} else {
+		rec("Collaboration协作", "WARN", time.Since(t), "输出为空")
+	}
+}
+
+// ─── handoffMockAgent ────────────────────────────────
+
+type handoffMockAgent struct {
+	id   string
+	caps []handoff.AgentCapability
+}
+
+func (a *handoffMockAgent) ID() string                          { return a.id }
+func (a *handoffMockAgent) Capabilities() []handoff.AgentCapability { return a.caps }
+func (a *handoffMockAgent) CanHandle(task handoff.Task) bool {
+	for _, c := range a.caps {
+		for _, tt := range c.TaskTypes {
+			if tt == task.Type { return true }
+		}
+	}
+	return false
+}
+func (a *handoffMockAgent) AcceptHandoff(_ context.Context, h *handoff.Handoff) error {
+	h.Status = handoff.StatusAccepted
+	return nil
+}
+func (a *handoffMockAgent) ExecuteHandoff(_ context.Context, h *handoff.Handoff) (*handoff.HandoffResult, error) {
+	return &handoff.HandoffResult{Output: "处理完成", Duration: 10}, nil
+}
+
+// ─── inMemoryMgr (MemoryManager mock) ────────────────
+
+type inMemoryMgr struct {
+	records map[string]memorycore.MemoryRecord
+	mu      sync.Mutex
+}
+
+func (m *inMemoryMgr) Save(_ context.Context, rec memorycore.MemoryRecord) error {
+	m.mu.Lock(); defer m.mu.Unlock()
+	m.records[rec.ID] = rec
+	return nil
+}
+func (m *inMemoryMgr) Delete(_ context.Context, id string) error {
+	m.mu.Lock(); defer m.mu.Unlock()
+	delete(m.records, id)
+	return nil
+}
+func (m *inMemoryMgr) Clear(_ context.Context, agentID string, _ memorycore.MemoryKind) error {
+	m.mu.Lock(); defer m.mu.Unlock()
+	for k, v := range m.records { if v.AgentID == agentID { delete(m.records, k) } }
+	return nil
+}
+func (m *inMemoryMgr) LoadRecent(_ context.Context, agentID string, kind memorycore.MemoryKind, limit int) ([]memorycore.MemoryRecord, error) {
+	m.mu.Lock(); defer m.mu.Unlock()
+	var out []memorycore.MemoryRecord
+	for _, v := range m.records {
+		if v.AgentID == agentID && v.Kind == kind { out = append(out, v) }
+		if len(out) >= limit { break }
+	}
+	return out, nil
+}
+func (m *inMemoryMgr) Search(_ context.Context, agentID string, _ string, topK int) ([]memorycore.MemoryRecord, error) {
+	return m.LoadRecent(context.Background(), agentID, "", topK)
+}
+func (m *inMemoryMgr) Get(_ context.Context, id string) (*memorycore.MemoryRecord, error) {
+	m.mu.Lock(); defer m.mu.Unlock()
+	if r, ok := m.records[id]; ok { return &r, nil }
+	return nil, fmt.Errorf("not found")
+}
