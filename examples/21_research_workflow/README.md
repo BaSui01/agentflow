@@ -23,4 +23,4 @@ go run main.go
 
 ## 代码说明
 
-每个研究阶段是一个独立函数，按 DAG 拓扑顺序执行。代码注释中包含了使用 `workflow.NewDAGBuilder` 构建真实 DAG 的示例。生产环境中各阶段可接入 LLM、学术 API 和代码执行器。
+每个研究阶段是一个独立函数，在 `main()` 中按 DAG 拓扑顺序顺序调用执行（不依赖 workflow 包）。`main()` 内的注释块展示了生产环境中如何用 `workflow.NewDAGBuilder` 将各阶段改造为真实 DAG 节点的参考写法。生产环境中各阶段可接入 LLM、学术 API 和代码执行器。

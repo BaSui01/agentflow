@@ -5,8 +5,9 @@
 ## 功能
 
 - **层次化架构**：Supervisor-Worker 模式，创建主管 Agent 和多个工作 Agent
-- **多 Agent 协作**：辩论、共识、流水线、广播、网络五种协作模式
+- **多 Agent 协作**：辩论、共识、流水线、广播、网络五种协作模式 + 角色流水线（RolePipeline）
 - **可观测性系统**：MetricsCollector 指标收集 + Tracer 追踪系统
+- **消息中心**：带持久化的 MessageHub（MessageHubWithStore）
 
 ## 前置条件
 

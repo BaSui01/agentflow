@@ -20,10 +20,13 @@
 
 ```go
 type Message struct {
-    Role    Role           `json:"role"`    // 角色: system, user, assistant, tool
-    Content string         `json:"content"` // 消息内容
-    Name    string         `json:"name,omitempty"`
-    Images  []ImageContent `json:"images,omitempty"`
+    Role             Role           `json:"role"`    // 角色: system, user, assistant, tool
+    Content          string         `json:"content"` // 消息内容
+    ReasoningContent *string        `json:"reasoning_content,omitempty"` // 推理/思考内容
+    Name             string         `json:"name,omitempty"`
+    ToolCalls        []ToolCall     `json:"tool_calls,omitempty"`
+    ToolCallID       string         `json:"tool_call_id,omitempty"`
+    Images           []ImageContent `json:"images,omitempty"`
 }
 ```
 
@@ -39,6 +42,7 @@ type Message struct {
 
 ```go
 type ToolCall struct {
+    Index     int             `json:"index,omitempty"` // 流式 delta 中标识同一工具调用的位置索引
     ID        string          `json:"id"`
     Name      string          `json:"name"`
     Arguments json.RawMessage `json:"arguments"`
@@ -236,7 +240,7 @@ func NewHybridRetriever(config HybridRetrievalConfig, logger *zap.Logger) *Hybri
 func (r *HybridRetriever) IndexDocuments(docs []Document)
 
 // 检索
-func (r *HybridRetriever) Retrieve(ctx context.Context, query string, topK int) ([]RetrievalResult, error)
+func (r *HybridRetriever) Retrieve(ctx context.Context, query string, queryEmbedding []float64) ([]RetrievalResult, error)
 ```
 
 ### MultiHopReasoner

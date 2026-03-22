@@ -7,6 +7,7 @@
 - **Hosted Tools**：OpenAI SDK 风格的托管工具注册
 - **Agent Handoff**：Agent 间任务移交协议
 - **Crews**：CrewAI 风格的角色化团队协作
+- **Declarative Agent**：YAML/JSON 声明式 Agent 定义与工厂加载
 - **Conversation**：AutoGen 风格的多 Agent 对话（轮询模式）
 - **Bidirectional Streaming**：双向流式通信管理
 - **Tracing**：LangSmith 风格的调用追踪和可观测性

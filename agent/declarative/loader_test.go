@@ -481,6 +481,188 @@ func TestDetectFormat(t *testing.T) {
 }
 
 // ============================================================
+// Supplementary coverage tests
+// ============================================================
+
+func TestAgentFactory_Validate_BoundaryTemperature(t *testing.T) {
+	factory := NewAgentFactory(zap.NewNop())
+
+	t.Run("temperature exactly 0 is valid", func(t *testing.T) {
+		def := &AgentDefinition{Name: "t", Model: "gpt-4", Temperature: 0}
+		assert.NoError(t, factory.Validate(def))
+	})
+
+	t.Run("temperature exactly 2 is valid", func(t *testing.T) {
+		def := &AgentDefinition{Name: "t", Model: "gpt-4", Temperature: 2.0}
+		assert.NoError(t, factory.Validate(def))
+	})
+
+	t.Run("max_tokens zero is valid", func(t *testing.T) {
+		def := &AgentDefinition{Name: "t", Model: "gpt-4", MaxTokens: 0}
+		assert.NoError(t, factory.Validate(def))
+	})
+}
+
+func TestAgentFactory_ToAgentConfig_ToolsDeepCopy(t *testing.T) {
+	def := &AgentDefinition{
+		Name:  "Copy Agent",
+		Model: "gpt-4",
+		Tools: []string{"a", "b"},
+	}
+	factory := NewAgentFactory(zap.NewNop())
+	cfg := factory.ToAgentConfig(def)
+
+	// Mutating the original should not affect the config
+	def.Tools[0] = "MUTATED"
+	assert.Equal(t, "a", cfg.Runtime.Tools[0], "tools must be deep-copied")
+}
+
+func TestAgentFactory_ToAgentConfig_MetadataDeepCopy(t *testing.T) {
+	def := &AgentDefinition{
+		Name:     "Meta Agent",
+		Model:    "gpt-4",
+		Metadata: map[string]string{"k": "v"},
+	}
+	factory := NewAgentFactory(zap.NewNop())
+	cfg := factory.ToAgentConfig(def)
+
+	def.Metadata["k"] = "MUTATED"
+	assert.Equal(t, "v", cfg.Metadata["k"], "metadata must be deep-copied")
+}
+
+func TestAgentFactory_ToAgentConfig_GuardrailsWithoutReflection(t *testing.T) {
+	def := &AgentDefinition{
+		Name:  "Guarded Only",
+		Model: "gpt-4",
+		Guardrails: &GuardrailsConfig{
+			MaxRetries:      5,
+			OnInputFailure:  "warn",
+			OnOutputFailure: "reject",
+		},
+	}
+	factory := NewAgentFactory(zap.NewNop())
+	cfg := factory.ToAgentConfig(def)
+
+	require.NotNil(t, cfg.Features.Guardrails)
+	assert.True(t, cfg.Features.Guardrails.Enabled)
+	assert.Equal(t, 5, cfg.Features.Guardrails.MaxRetries)
+	assert.Equal(t, "warn", cfg.Features.Guardrails.OnInputFailure)
+	assert.Equal(t, "reject", cfg.Features.Guardrails.OnOutputFailure)
+	assert.Nil(t, cfg.Features.Reflection, "reflection should be nil when not enabled")
+}
+
+func TestAgentFactory_ToAgentConfig_ReflectionViaMaxReActOnly(t *testing.T) {
+	def := &AgentDefinition{
+		Name:  "ReAct Agent",
+		Model: "gpt-4",
+		Features: AgentFeatures{
+			EnableReflection:   false,
+			MaxReActIterations: 8,
+		},
+	}
+	factory := NewAgentFactory(zap.NewNop())
+	cfg := factory.ToAgentConfig(def)
+
+	require.NotNil(t, cfg.Features.Reflection, "reflection config should be set when MaxReActIterations > 0")
+	assert.False(t, cfg.Features.Reflection.Enabled)
+	assert.Equal(t, 8, cfg.Features.Reflection.MaxIterations)
+}
+
+func TestYAMLLoader_LoadBytes_EmptyData(t *testing.T) {
+	loader := NewYAMLLoader()
+
+	t.Run("empty yaml bytes produce zero-value definition", func(t *testing.T) {
+		def, err := loader.LoadBytes([]byte(""), "yaml")
+		require.NoError(t, err)
+		assert.Empty(t, def.Name)
+		assert.Empty(t, def.Model)
+	})
+
+	t.Run("empty json object produces zero-value definition", func(t *testing.T) {
+		def, err := loader.LoadBytes([]byte("{}"), "json")
+		require.NoError(t, err)
+		assert.Empty(t, def.Name)
+	})
+}
+
+func TestYAMLLoader_LoadFile_EmptyYAMLFile(t *testing.T) {
+	path := writeTemp(t, "empty.yaml", "")
+	loader := NewYAMLLoader()
+	def, err := loader.LoadFile(path)
+	require.NoError(t, err)
+	assert.Empty(t, def.Name)
+}
+
+func TestYAMLLoader_LoadFile_FullRoundTrip(t *testing.T) {
+	content := `
+id: rt-agent
+name: RoundTrip Agent
+description: Full round-trip test
+version: "3.0"
+model: claude-3
+provider: anthropic
+temperature: 1.2
+max_tokens: 8192
+system_prompt: Be concise.
+type: rewoo
+tools:
+  - search
+  - calculator
+tool_definitions:
+  - name: search
+    description: Web search
+features:
+  enable_reflection: true
+  enable_tool_selection: true
+  enable_prompt_enhancer: true
+  enable_skills: true
+  enable_mcp: true
+  enable_observability: true
+  max_react_iterations: 20
+memory:
+  type: both
+  capacity: 200
+guardrails:
+  max_retries: 4
+  on_input_failure: warn
+  on_output_failure: reject
+metadata:
+  env: staging
+  team: platform
+`
+	path := writeTemp(t, "full.yaml", content)
+	loader := NewYAMLLoader()
+	def, err := loader.LoadFile(path)
+	require.NoError(t, err)
+
+	// Validate all fields survived the round-trip
+	factory := NewAgentFactory(zap.NewNop())
+	require.NoError(t, factory.Validate(def))
+
+	cfg := factory.ToAgentConfig(def)
+	assert.Equal(t, "rt-agent", cfg.Core.ID)
+	assert.Equal(t, "RoundTrip Agent", cfg.Core.Name)
+	assert.Equal(t, "rewoo", cfg.Core.Type)
+	assert.Equal(t, "claude-3", cfg.LLM.Model)
+	assert.Equal(t, "anthropic", cfg.LLM.Provider)
+	assert.InDelta(t, 1.2, float64(cfg.LLM.Temperature), 0.01)
+	assert.Equal(t, 8192, cfg.LLM.MaxTokens)
+	assert.Equal(t, "Be concise.", cfg.Runtime.SystemPrompt)
+	assert.Equal(t, []string{"search", "calculator"}, cfg.Runtime.Tools)
+	assert.Equal(t, 20, cfg.Runtime.MaxReActIterations)
+	assert.True(t, cfg.Features.Reflection.Enabled)
+	assert.True(t, cfg.Features.ToolSelection.Enabled)
+	assert.True(t, cfg.Features.PromptEnhancer.Enabled)
+	assert.True(t, cfg.Extensions.Skills.Enabled)
+	assert.True(t, cfg.Extensions.MCP.Enabled)
+	assert.True(t, cfg.Extensions.Observability.Enabled)
+	assert.True(t, cfg.Features.Guardrails.Enabled)
+	assert.Equal(t, 4, cfg.Features.Guardrails.MaxRetries)
+	assert.Equal(t, "staging", cfg.Metadata["env"])
+	assert.Equal(t, "platform", cfg.Metadata["team"])
+}
+
+// ============================================================
 // Helper
 // ============================================================
 

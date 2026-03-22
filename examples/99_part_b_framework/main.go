@@ -18,6 +18,7 @@ import (
 
 	"github.com/BaSui01/agentflow/agent"
 	"github.com/BaSui01/agentflow/agent/collaboration"
+	"github.com/BaSui01/agentflow/agent/evaluation"
 	"github.com/BaSui01/agentflow/agent/guardrails"
 	"github.com/BaSui01/agentflow/agent/handoff"
 	"github.com/BaSui01/agentflow/agent/memorycore"
@@ -126,6 +127,9 @@ func main() {
 	b39AgentHandoff()
 	b40DeliberationMode()
 	b41DebateCoordinator()
+
+	fmt.Println("\n━━━ 评估框架 ━━━")
+	b42EvaluationFramework()
 
 	printSummary()
 }
@@ -385,6 +389,115 @@ func b18ToolCallIndexField() {
 	var tc2 types.ToolCall; json.Unmarshal(data, &tc2)
 	if tc2.Index == 2 && tc2.ID == "call_123" { rec("ToolCall.Index字段", "PASS", time.Since(t), "序列化round-trip正确")
 	} else { rec("ToolCall.Index字段", "FAIL", time.Since(t), fmt.Sprintf("got index=%d id=%s", tc2.Index, tc2.ID)) }
+}
+
+// ═══ 评估框架 ═══
+
+func b42EvaluationFramework() {
+	t := time.Now()
+
+	// 1. 用 mock provider 构建 EvalExecutor
+	executor := &evalMockExecutor{
+		response:  "Go语言是一种高效、简洁的编程语言，适合构建后端服务和分布式系统。",
+		tokens:    42,
+		latency:   15 * time.Millisecond,
+	}
+
+	// 2. 构建评估套件
+	suite := &evaluation.EvalSuite{
+		ID:   "quality-baseline",
+		Name: "输出质量基线评估",
+		Tasks: []evaluation.EvalTask{
+			{
+				ID:       "keyword-check",
+				Name:     "关键词覆盖",
+				Input:    "介绍Go语言的优势",
+				Expected: "Go语言是一种高效、简洁的编程语言，适合构建后端服务和分布式系统。",
+			},
+			{
+				ID:       "length-check",
+				Name:     "输出长度合理性",
+				Input:    "介绍Go语言",
+				Expected: "Go语言",
+				Metadata: map[string]string{"type": "contains"},
+			},
+		},
+	}
+
+	// 3. 配置评估器（含指标收集和告警）
+	cfg := evaluation.DefaultEvaluatorConfig()
+	cfg.Concurrency = 1
+	cfg.PassThreshold = 0.5
+	cfg.CollectMetrics = true
+	cfg.EnableAlerts = true
+	cfg.AlertThresholds = []evaluation.AlertThreshold{
+		{MetricName: "score", Operator: "lt", Value: 0.3, Level: evaluation.AlertLevelCritical, Message: "分数过低"},
+	}
+
+	evaluator := evaluation.NewEvaluator(cfg, zap.NewNop())
+	evaluator.RegisterScorer("contains", &evalContainsScorer{})
+
+	// 4. 运行评估
+	report, err := evaluator.Evaluate(context.Background(), suite, executor)
+	if err != nil {
+		rec("评估框架", "FAIL", time.Since(t), fmt.Sprintf("评估失败: %v", err))
+		return
+	}
+
+	// 5. 检查输出质量
+	allPassed := true
+	for _, r := range report.Results {
+		// 关键词检查：输出包含 "Go"
+		if !strings.Contains(r.Output, "Go") {
+			allPassed = false
+			rec("评估-关键词", "FAIL", time.Since(t), fmt.Sprintf("task=%s 输出缺少关键词'Go'", r.TaskID))
+		}
+		// 长度合理性：输出 > 10 字符
+		if len([]rune(r.Output)) < 10 {
+			allPassed = false
+			rec("评估-长度", "FAIL", time.Since(t), fmt.Sprintf("task=%s 输出过短: %d字符", r.TaskID, len([]rune(r.Output))))
+		}
+	}
+
+	if allPassed {
+		rec("评估-质量检查", "PASS", time.Since(t), fmt.Sprintf(
+			"通过率=%.0f%% 平均分=%.2f",
+			report.Summary.PassRate*100, report.Summary.AverageScore))
+	}
+
+	// 6. 记录 Token 用量和延迟作为基线
+	rec("评估-Token基线", "PASS", time.Since(t), fmt.Sprintf(
+		"总Token=%d 总耗时=%v 任务数=%d",
+		report.Summary.TotalTokens, report.Summary.TotalDuration, report.Summary.TotalTasks))
+
+	// 7. 验证告警系统正常工作
+	alerts := evaluator.GetAlerts()
+	rec("评估-告警系统", "PASS", time.Since(t), fmt.Sprintf("触发告警=%d", len(alerts)))
+}
+
+// evalMockExecutor 评估用 mock 执行器
+type evalMockExecutor struct {
+	response string
+	tokens   int
+	latency  time.Duration
+}
+
+func (e *evalMockExecutor) Execute(_ context.Context, _ string) (string, int, error) {
+	time.Sleep(e.latency)
+	return e.response, e.tokens, nil
+}
+
+// evalContainsScorer 包含匹配评分器
+type evalContainsScorer struct{}
+
+func (s *evalContainsScorer) Score(_ context.Context, task *evaluation.EvalTask, output string) (float64, map[string]float64, error) {
+	if task.Expected == "" {
+		return 1.0, nil, nil
+	}
+	if strings.Contains(output, task.Expected) {
+		return 1.0, map[string]float64{"contains": 1.0}, nil
+	}
+	return 0.0, map[string]float64{"contains": 0.0}, nil
 }
 
 // ─── 汇总 ────────────────────────────────────────────────

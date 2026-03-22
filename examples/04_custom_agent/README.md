@@ -4,7 +4,7 @@
 
 ## 功能
 
-- 定义自定义 AgentType（代码审查、数据分析、故事创作）
+- 定义自定义 AgentType（代码审查、数据分析、故事创作、数学辅导、产品经理）
 - 为每个 Agent 配置专属的 PromptBundle（身份、策略、输出规则）
 - 使用不同 Temperature 控制输出风格（审查 0.3 严谨，创作 0.9 发散）
 - 通过 `ChatCompletion` 调用各 Agent

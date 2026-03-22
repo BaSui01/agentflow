@@ -8,8 +8,10 @@
 - **HITL**：Human-in-the-Loop 中断审批机制（异步等待人工确认）
 - **OpenAPI Tools**：从 OpenAPI Spec 自动生成 LLM 可调用的工具
 - **Deployment**：K8s 部署清单生成和预览
+- **K8s Operator**：Kubernetes Operator 模式管理
 - **Enhanced Checkpoints**：工作流检查点的版本管理和时间旅行对比
 - **Visual Builder**：可视化工作流构建器，生成可执行 DAG
+- **DSL Parser & Observability**：DSL 解析器与工作流可观测性
 
 ## 前置条件
 
