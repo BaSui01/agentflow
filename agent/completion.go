@@ -33,7 +33,10 @@ func (b *BaseAgent) ChatCompletion(ctx context.Context, messages []types.Message
 }
 
 // chatCompletionStreaming handles the streaming execution path of ChatCompletion.
+// 支持 Steering：通过 context 中的 SteeringChannel 接收实时引导/停止后发送指令。
 func (b *BaseAgent) chatCompletionStreaming(ctx context.Context, pr *preparedRequest, emit RuntimeStreamEmitter) (*llm.ChatResponse, error) {
+	steerCh, _ := SteeringChannelFromContext(ctx)
+
 	if pr.hasTools {
 		reactReq := *pr.req
 		reactReq.Model = effectiveToolModel(pr.req.Model, b.config.Runtime.ToolModel)
@@ -43,6 +46,10 @@ func (b *BaseAgent) chatCompletionStreaming(ctx context.Context, pr *preparedReq
 			llmtools.ReActConfig{MaxIterations: pr.maxReActIter, StopOnError: false},
 			b.logger,
 		)
+		// 将 steering channel 直接传入 ReAct 执行器（类型统一，无需 adapter）
+		if steerCh != nil {
+			executor.SetSteeringChannel(steerCh.Receive())
+		}
 
 		evCh, err := executor.ExecuteStream(ctx, &reactReq)
 		if err != nil {
@@ -101,6 +108,17 @@ func (b *BaseAgent) chatCompletionStreaming(ctx context.Context, pr *preparedReq
 					ToolName:   ev.ToolName,
 					Data:       ev.ProgressData,
 				})
+			case llmtools.ReActEventSteering:
+				emit(RuntimeStreamEvent{
+					Type:            RuntimeStreamSteering,
+					Timestamp:       time.Now(),
+					SteeringContent: ev.SteeringContent,
+				})
+			case llmtools.ReActEventStopAndSend:
+				emit(RuntimeStreamEvent{
+					Type:      RuntimeStreamStopAndSend,
+					Timestamp: time.Now(),
+				})
 			case llmtools.ReActEventCompleted:
 				final = ev.FinalResponse
 			case llmtools.ReActEventError:
@@ -113,75 +131,160 @@ func (b *BaseAgent) chatCompletionStreaming(ctx context.Context, pr *preparedReq
 		return final, nil
 	}
 
-	streamCh, err := pr.chatProvider.Stream(ctx, pr.req)
-	if err != nil {
-		return nil, err
-	}
-	var (
-		assembled types.Message
-		lastID    string
-		lastProv  string
-		lastModel string
-		lastUsage *llm.ChatUsage
-		lastFR    string
-	)
-	var reasoningBuf strings.Builder
-	for chunk := range streamCh {
-		if chunk.Err != nil {
-			return nil, chunk.Err
+	// 无工具路径：外层 for 循环支持 steering 重试
+	messages := make([]types.Message, len(pr.req.Messages))
+	copy(messages, pr.req.Messages)
+	var cumulativeUsage llm.ChatUsage
+
+	for {
+		streamCtx, cancelStream := context.WithCancel(ctx)
+		pr.req.Messages = messages
+		streamCh, err := pr.chatProvider.Stream(streamCtx, pr.req)
+		if err != nil {
+			cancelStream()
+			return nil, err
 		}
-		if chunk.ID != "" {
-			lastID = chunk.ID
+
+		var (
+			assembled types.Message
+			lastID    string
+			lastProv  string
+			lastModel string
+			lastUsage *llm.ChatUsage
+			lastFR    string
+			steering  *SteeringMessage
+		)
+		var reasoningBuf strings.Builder
+
+	chunkLoop:
+		for {
+			select {
+			case chunk, ok := <-streamCh:
+				if !ok {
+					break chunkLoop
+				}
+				if chunk.Err != nil {
+					cancelStream()
+					return nil, chunk.Err
+				}
+				if chunk.ID != "" {
+					lastID = chunk.ID
+				}
+				if chunk.Provider != "" {
+					lastProv = chunk.Provider
+				}
+				if chunk.Model != "" {
+					lastModel = chunk.Model
+				}
+				if chunk.Usage != nil {
+					lastUsage = chunk.Usage
+				}
+				if chunk.FinishReason != "" {
+					lastFR = chunk.FinishReason
+				}
+				if chunk.Delta.Content != "" {
+					emit(RuntimeStreamEvent{
+						Type:      RuntimeStreamToken,
+						Timestamp: time.Now(),
+						Token:     chunk.Delta.Content,
+						Delta:     chunk.Delta.Content,
+					})
+					assembled.Content += chunk.Delta.Content
+				}
+				if chunk.Delta.ReasoningContent != nil && *chunk.Delta.ReasoningContent != "" {
+					emit(RuntimeStreamEvent{
+						Type:      RuntimeStreamReasoning,
+						Timestamp: time.Now(),
+						Reasoning: *chunk.Delta.ReasoningContent,
+					})
+					reasoningBuf.WriteString(*chunk.Delta.ReasoningContent)
+				}
+			case msg := <-steerChOrNil(steerCh):
+				steering = &msg
+				cancelStream()
+				// drain 剩余 chunks 防止 goroutine 泄漏
+				for range streamCh {
+				}
+				break chunkLoop
+			case <-ctx.Done():
+				cancelStream()
+				return nil, ctx.Err()
+			}
 		}
-		if chunk.Provider != "" {
-			lastProv = chunk.Provider
+		cancelStream()
+
+		// 累计 token 用量（包括被中断的调用）
+		if lastUsage != nil {
+			cumulativeUsage.PromptTokens += lastUsage.PromptTokens
+			cumulativeUsage.CompletionTokens += lastUsage.CompletionTokens
+			cumulativeUsage.TotalTokens += lastUsage.TotalTokens
 		}
-		if chunk.Model != "" {
-			lastModel = chunk.Model
+
+		if steering == nil {
+			// 正常完成，组装 response 返回
+			if reasoningBuf.Len() > 0 {
+				rc := reasoningBuf.String()
+				assembled.ReasoningContent = &rc
+			}
+			assembled.Role = llm.RoleAssistant
+			resp := &llm.ChatResponse{
+				ID:       lastID,
+				Provider: lastProv,
+				Model:    lastModel,
+				Choices: []llm.ChatChoice{{
+					Index:        0,
+					FinishReason: lastFR,
+					Message:      assembled,
+				}},
+				Usage: cumulativeUsage,
+			}
+			return resp, nil
 		}
-		if chunk.Usage != nil {
-			lastUsage = chunk.Usage
+
+		// 处理 steering 消息（零值消息忽略，视为正常完成）
+		if steering.IsZero() {
+			if reasoningBuf.Len() > 0 {
+				rc := reasoningBuf.String()
+				assembled.ReasoningContent = &rc
+			}
+			assembled.Role = llm.RoleAssistant
+			resp := &llm.ChatResponse{
+				ID:       lastID,
+				Provider: lastProv,
+				Model:    lastModel,
+				Choices: []llm.ChatChoice{{
+					Index:        0,
+					FinishReason: lastFR,
+					Message:      assembled,
+				}},
+				Usage: cumulativeUsage,
+			}
+			return resp, nil
 		}
-		if chunk.FinishReason != "" {
-			lastFR = chunk.FinishReason
-		}
-		if chunk.Delta.Content != "" {
+
+		// emit 确认事件
+		switch steering.Type {
+		case SteeringTypeGuide:
 			emit(RuntimeStreamEvent{
-				Type:      RuntimeStreamToken,
-				Timestamp: time.Now(),
-				Token:     chunk.Delta.Content,
-				Delta:     chunk.Delta.Content,
+				Type:            RuntimeStreamSteering,
+				Timestamp:       time.Now(),
+				SteeringContent: steering.Content,
 			})
-			assembled.Content += chunk.Delta.Content
-		}
-		if chunk.Delta.ReasoningContent != nil && *chunk.Delta.ReasoningContent != "" {
+		case SteeringTypeStopAndSend:
 			emit(RuntimeStreamEvent{
-				Type:      RuntimeStreamReasoning,
+				Type:      RuntimeStreamStopAndSend,
 				Timestamp: time.Now(),
-				Reasoning: *chunk.Delta.ReasoningContent,
 			})
-			reasoningBuf.WriteString(*chunk.Delta.ReasoningContent)
 		}
+
+		// 统一的 messages 变换逻辑
+		rc := ""
+		if reasoningBuf.Len() > 0 {
+			rc = reasoningBuf.String()
+		}
+		messages = types.ApplySteeringToMessages(*steering, messages, assembled.Content, rc, llm.RoleAssistant)
+		// 继续外层 for 循环，重新发起流式调用
 	}
-	if reasoningBuf.Len() > 0 {
-		rc := reasoningBuf.String()
-		assembled.ReasoningContent = &rc
-	}
-	assembled.Role = llm.RoleAssistant
-	resp := &llm.ChatResponse{
-		ID:       lastID,
-		Provider: lastProv,
-		Model:    lastModel,
-		Choices: []llm.ChatChoice{{
-			Index:        0,
-			FinishReason: lastFR,
-			Message:      assembled,
-		}},
-	}
-	if lastUsage != nil {
-		resp.Usage = *lastUsage
-	}
-	return resp, nil
 }
 
 // chatCompletionWithTools executes a non-streaming ReAct loop with tools.
@@ -243,6 +346,9 @@ const (
 	RuntimeStreamToolCall     RuntimeStreamEventType = "tool_call"
 	RuntimeStreamToolResult   RuntimeStreamEventType = "tool_result"
 	RuntimeStreamToolProgress RuntimeStreamEventType = "tool_progress"
+	RuntimeStreamSession      RuntimeStreamEventType = "session"
+	RuntimeStreamSteering     RuntimeStreamEventType = "steering"
+	RuntimeStreamStopAndSend  RuntimeStreamEventType = "stop_and_send"
 )
 
 // RuntimeToolCall carries tool invocation metadata in a stream event.
@@ -263,16 +369,17 @@ type RuntimeToolResult struct {
 
 // RuntimeStreamEvent is a single event emitted during streamed Agent execution.
 type RuntimeStreamEvent struct {
-	Type       RuntimeStreamEventType `json:"type"`
-	Timestamp  time.Time              `json:"timestamp"`
-	Token      string                 `json:"token,omitempty"`
-	Delta      string                 `json:"delta,omitempty"`
-	Reasoning  string                 `json:"reasoning,omitempty"`
-	ToolCall   *RuntimeToolCall       `json:"tool_call,omitempty"`
-	ToolResult *RuntimeToolResult     `json:"tool_result,omitempty"`
-	ToolCallID string                 `json:"tool_call_id,omitempty"`
-	ToolName   string                 `json:"tool_name,omitempty"`
-	Data       any                    `json:"data,omitempty"`
+	Type            RuntimeStreamEventType `json:"type"`
+	Timestamp       time.Time              `json:"timestamp"`
+	Token           string                 `json:"token,omitempty"`
+	Delta           string                 `json:"delta,omitempty"`
+	Reasoning       string                 `json:"reasoning,omitempty"`
+	ToolCall        *RuntimeToolCall       `json:"tool_call,omitempty"`
+	ToolResult      *RuntimeToolResult     `json:"tool_result,omitempty"`
+	ToolCallID      string                 `json:"tool_call_id,omitempty"`
+	ToolName        string                 `json:"tool_name,omitempty"`
+	Data            any                    `json:"data,omitempty"`
+	SteeringContent string                 `json:"steering_content,omitempty"` // steering 确认内容
 }
 
 // RuntimeStreamEmitter is a callback that receives runtime stream events.

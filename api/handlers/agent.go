@@ -32,6 +32,7 @@ type AgentHandler struct {
 	resolver      usecase.AgentResolver
 	service       usecase.AgentService
 	logger        *zap.Logger
+	sessionMgr    *agent.SessionManager
 }
 
 // AgentInfo Agent information returned by the API
@@ -61,6 +62,7 @@ func NewAgentHandler(registry discovery.Registry, agentRegistry *agent.AgentRegi
 	h := &AgentHandler{
 		agentRegistry: agentRegistry,
 		logger:        logger,
+		sessionMgr:    agent.NewSessionManager(),
 	}
 	if len(resolver) > 0 && resolver[0] != nil {
 		h.resolver = resolver[0]
@@ -265,6 +267,10 @@ func (h *AgentHandler) HandleAgentStream(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
+	// 创建执行会话（用于 steering/interrupt）
+	session := h.sessionMgr.Create(req.AgentID)
+	defer h.sessionMgr.Remove(session.ID)
+
 	// Set SSE headers
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
@@ -277,6 +283,15 @@ func (h *AgentHandler) HandleAgentStream(w http.ResponseWriter, r *http.Request)
 			requestID = w.Header().Get("X-Request-ID")
 		}
 	}
+
+	// 发送 session 事件（含 execution_id，客户端用于后续 interrupt 调用）
+	if sessionData, err := json.Marshal(map[string]string{"execution_id": session.ID}); err == nil {
+		fmt.Fprintf(w, "event: session\ndata: %s\n\n", sessionData)
+		flusher.Flush()
+	}
+
+	// 将 SteeringChannel 注入 context
+	streamCtx := agent.WithSteeringChannel(r.Context(), session.SteeringCh)
 
 	// Build the RuntimeStreamEmitter that bridges agent events to SSE
 	emitter := func(event agent.RuntimeStreamEvent) {
@@ -308,6 +323,12 @@ func (h *AgentHandler) HandleAgentStream(w http.ResponseWriter, r *http.Request)
 				"tool_name":    event.ToolName,
 				"progress":     event.Data,
 			})
+		case agent.RuntimeStreamSteering:
+			sseEvent = "steering"
+			data, err = json.Marshal(map[string]string{"content": event.SteeringContent})
+		case agent.RuntimeStreamStopAndSend:
+			sseEvent = "stop_and_send"
+			data, err = json.Marshal(map[string]string{"status": "restarting"})
 		default:
 			return
 		}
@@ -327,11 +348,12 @@ func (h *AgentHandler) HandleAgentStream(w http.ResponseWriter, r *http.Request)
 		flusher.Flush()
 	}
 
-	execErr := h.service.ExecuteAgentStream(r.Context(), req, requestID, emitter)
+	execErr := h.service.ExecuteAgentStream(streamCtx, req, requestID, emitter)
 	if execErr != nil {
 		h.logger.Error("agent stream execution failed",
 			zap.String("agent_id", req.AgentID),
 			zap.String("request_id", requestID),
+			zap.String("execution_id", session.ID),
 			zap.Error(execErr),
 		)
 
@@ -374,6 +396,7 @@ func (h *AgentHandler) HandleAgentStream(w http.ResponseWriter, r *http.Request)
 	h.logger.Info("agent stream completed",
 		zap.String("agent_id", req.AgentID),
 		zap.String("request_id", requestID),
+		zap.String("execution_id", session.ID),
 	)
 }
 
@@ -468,6 +491,82 @@ func (h *AgentHandler) HandleAgentHealth(w http.ResponseWriter, r *http.Request)
 	WriteSuccess(w, resp)
 }
 
+// HandleAgentInterrupt handles POST /api/v1/agents/execute/interrupt
+// 统一处理 steer（实时引导）和 stop_and_send（停止后发送）两种中断类型。
+// @Summary Interrupt agent execution
+// @Description Send a steering message to an active streaming execution
+// @Tags agent
+// @Accept json
+// @Produce json
+// @Param request body object true "Interrupt request: execution_id, type (guide|stop_and_send), content"
+// @Success 200 {object} Response "Interrupt accepted"
+// @Failure 400 {object} Response "Invalid request"
+// @Failure 404 {object} Response "Execution not found"
+// @Failure 409 {object} Response "Execution already completed"
+// @Security ApiKeyAuth
+// @Router /api/v1/agents/execute/interrupt [post]
+func (h *AgentHandler) HandleAgentInterrupt(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		ExecutionID string `json:"execution_id"`
+		Type        string `json:"type"`
+		Content     string `json:"content"`
+	}
+	if !ValidateRequest(w, r, &req, h.logger) {
+		return
+	}
+
+	if req.ExecutionID == "" || req.Type == "" || req.Content == "" {
+		WriteErrorMessage(w, http.StatusBadRequest, types.ErrInvalidRequest,
+			"execution_id, type, and content are required", h.logger)
+		return
+	}
+
+	if req.Type != "guide" && req.Type != "stop_and_send" {
+		WriteErrorMessage(w, http.StatusBadRequest, types.ErrInvalidRequest,
+			"type must be 'guide' or 'stop_and_send'", h.logger)
+		return
+	}
+
+	session, ok := h.sessionMgr.Get(req.ExecutionID)
+	if !ok {
+		WriteErrorMessage(w, http.StatusNotFound, types.ErrAgentNotFound,
+			"execution not found", h.logger)
+		return
+	}
+
+	if !session.IsRunning() {
+		WriteErrorMessage(w, http.StatusConflict, types.ErrInvalidRequest,
+			"execution already completed", h.logger)
+		return
+	}
+
+	err := session.SteeringCh.Send(agent.SteeringMessage{
+		Type:    agent.SteeringMessageType(req.Type),
+		Content: req.Content,
+	})
+	if err != nil {
+		if err == agent.ErrSteeringChannelClosed {
+			WriteErrorMessage(w, http.StatusConflict, types.ErrInvalidRequest,
+				"execution already completed", h.logger)
+			return
+		}
+		WriteErrorMessage(w, http.StatusTooManyRequests, types.ErrInvalidRequest,
+			"steering channel is full, try again later", h.logger)
+		return
+	}
+
+	h.logger.Info("agent execution interrupted",
+		zap.String("execution_id", req.ExecutionID),
+		zap.String("type", req.Type),
+	)
+
+	WriteSuccess(w, map[string]string{
+		"execution_id": req.ExecutionID,
+		"type":         req.Type,
+		"status":       "accepted",
+	})
+}
+
 // HandleCapabilities handles GET /api/v1/agents/capabilities
 func (h *AgentHandler) HandleCapabilities(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
@@ -493,6 +592,13 @@ func (h *AgentHandler) HandleCapabilities(w http.ResponseWriter, r *http.Request
 // handleAgentError handles agent errors.
 func (h *AgentHandler) handleAgentError(w http.ResponseWriter, err error) {
 	WriteError(w, usecase.ToTypesAgentError(err), h.logger)
+}
+
+// Shutdown 停止 AgentHandler 的后台资源（SessionManager 清理 goroutine）
+func (h *AgentHandler) Shutdown() {
+	if h.sessionMgr != nil {
+		h.sessionMgr.Stop()
+	}
 }
 
 // toAgentInfo converts a discovery.AgentInfo to the API AgentInfo

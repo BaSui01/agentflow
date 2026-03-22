@@ -41,6 +41,12 @@ func RegisterDefaultModes(reg *ModeRegistry, logger *zap.Logger) error {
 	reg.Register(newDeliberationModeStrategy(logger))
 	reg.Register(newPrimaryModeStrategy(ModeFederation, logger))
 	reg.Register(newLoopModeStrategy(logger))
+
+	// Team modes (supervisor/round_robin/selector/swarm)
+	if err := RegisterTeamModes(reg, logger); err != nil {
+		return err
+	}
+
 	return nil
 }
 

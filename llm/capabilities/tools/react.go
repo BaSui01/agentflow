@@ -17,6 +17,9 @@ type ReActConfig struct {
 	StopOnError   bool // Stop on tool execution error
 }
 
+// SteeringMessage 类型别名，统一使用 types 包定义
+type SteeringMessage = types.SteeringMessage
+
 // ReActExecutor 执行 ReAct（推理与行动）循环.
 // 自动处理 LLM -> Tool -> LLM 多轮对话.
 type ReActExecutor struct {
@@ -24,6 +27,7 @@ type ReActExecutor struct {
 	toolExecutor ToolExecutor
 	logger       *zap.Logger
 	config       ReActConfig
+	steeringCh   <-chan SteeringMessage // 可选：steering 消息接收端
 }
 
 // NewReActExecutor 创建 ReAct 执行器.
@@ -40,6 +44,16 @@ func NewReActExecutor(provider llm.Provider, toolExecutor ToolExecutor, config R
 		logger:       logger,
 		config:       config,
 	}
+}
+
+// SetSteeringChannel 设置 steering 消息接收通道（可选，用于实时引导/停止后发送）
+func (r *ReActExecutor) SetSteeringChannel(ch <-chan SteeringMessage) {
+	r.steeringCh = ch
+}
+
+// steerChOrNil 返回 steering channel 或 nil（select 中永远不触发）
+func (r *ReActExecutor) steerChOrNil() <-chan SteeringMessage {
+	return r.steeringCh
 }
 
 // Execute 运行 ReAct 循环，返回最终响应和所有步骤.
@@ -181,6 +195,7 @@ type LLMCallInfo struct {
 }
 
 // ExecuteStream 执行流式 ReAct 循环.
+// 支持 Steering：通过 SetSteeringChannel 设置的通道接收实时引导/停止后发送指令。
 func (r *ReActExecutor) ExecuteStream(ctx context.Context, req *llm.ChatRequest) (<-chan ReActStreamEvent, error) {
 	eventCh := make(chan ReActStreamEvent, 64) // 带缓冲防止消费者慢导致发送者阻塞
 
@@ -196,13 +211,25 @@ func (r *ReActExecutor) ExecuteStream(ctx context.Context, req *llm.ChatRequest)
 			default:
 			}
 
+			// 迭代开始前检查是否有 pending steering
+			select {
+			case steerMsg := <-r.steerChOrNil():
+				if newMsgs, ok := r.applySteering(steerMsg, messages, "", "", eventCh); ok {
+					messages = newMsgs
+					continue // 用新 messages 重新迭代
+				}
+			default:
+			}
+
 			eventCh <- ReActStreamEvent{Type: ReActEventIterationStart, Iteration: i + 1}
 
 			callReq := *req
 			callReq.Messages = messages
 
-			streamCh, err := r.provider.Stream(ctx, &callReq)
+			streamCtx, cancelStream := context.WithCancel(ctx)
+			streamCh, err := r.provider.Stream(streamCtx, &callReq)
 			if err != nil {
+				cancelStream()
 				eventCh <- ReActStreamEvent{Type: ReActEventError, Error: fmt.Sprintf("LLM stream failed: %s", err.Error())}
 				return
 			}
@@ -218,98 +245,127 @@ func (r *ReActExecutor) ExecuteStream(ctx context.Context, req *llm.ChatRequest)
 				}
 				lastChunkID, lastProvider, lastModel, lastFinishReason string
 				lastUsage                                              *llm.ChatUsage
+				steering                                               *SteeringMessage
 			)
 
-			for chunk := range streamCh {
+		chunkLoop:
+			for {
 				select {
-				case <-ctx.Done():
-					eventCh <- ReActStreamEvent{Type: ReActEventError, Error: fmt.Sprintf("context cancelled: %v", ctx.Err())}
-					return
-				default:
-				}
-
-				eventCh <- ReActStreamEvent{Type: ReActEventLLMChunk, Chunk: &chunk}
-
-				if chunk.Err != nil {
-					eventCh <- ReActStreamEvent{Type: ReActEventError, Error: chunk.Err.Error()}
-					return
-				}
-
-				if chunk.ID != "" {
-					lastChunkID = chunk.ID
-				}
-				if chunk.Provider != "" {
-					lastProvider = chunk.Provider
-				}
-				if chunk.Model != "" {
-					lastModel = chunk.Model
-				}
-				if chunk.Usage != nil {
-					lastUsage = chunk.Usage
-				}
-				if chunk.FinishReason != "" {
-					lastFinishReason = chunk.FinishReason
-				}
-
-				if chunk.Delta.Content != "" {
-					assembledMessage.Content += chunk.Delta.Content
-				}
-				if chunk.Delta.ReasoningContent != nil && *chunk.Delta.ReasoningContent != "" {
-					if assembledMessage.ReasoningContent == nil {
-						s := ""
-						assembledMessage.ReasoningContent = &s
+				case chunk, ok := <-streamCh:
+					if !ok {
+						break chunkLoop
 					}
-					*assembledMessage.ReasoningContent += *chunk.Delta.ReasoningContent
-				}
-				if len(chunk.Delta.ToolCalls) > 0 {
-					if toolCallByID == nil {
-						toolCallByID = make(map[string]*struct {
-							id           string
-							name         string
-							argsFinal    json.RawMessage
-							argsBuilding strings.Builder
-						})
+
+					eventCh <- ReActStreamEvent{Type: ReActEventLLMChunk, Chunk: &chunk}
+
+					if chunk.Err != nil {
+						cancelStream()
+						eventCh <- ReActStreamEvent{Type: ReActEventError, Error: chunk.Err.Error()}
+						return
 					}
-					for _, tc := range chunk.Delta.ToolCalls {
-						// 用 index 作为聚合 key（OpenAI 流式协议：首 chunk 含 id/name，
-						// 后续 chunk 同一 index 的 id/name 为空，只有 arguments 增量）
-						key := fmt.Sprintf("idx_%d", tc.Index)
-						acc := toolCallByID[key]
-						if acc == nil {
-							acc = &struct {
+
+					if chunk.ID != "" {
+						lastChunkID = chunk.ID
+					}
+					if chunk.Provider != "" {
+						lastProvider = chunk.Provider
+					}
+					if chunk.Model != "" {
+						lastModel = chunk.Model
+					}
+					if chunk.Usage != nil {
+						lastUsage = chunk.Usage
+					}
+					if chunk.FinishReason != "" {
+						lastFinishReason = chunk.FinishReason
+					}
+
+					if chunk.Delta.Content != "" {
+						assembledMessage.Content += chunk.Delta.Content
+					}
+					if chunk.Delta.ReasoningContent != nil && *chunk.Delta.ReasoningContent != "" {
+						if assembledMessage.ReasoningContent == nil {
+							s := ""
+							assembledMessage.ReasoningContent = &s
+						}
+						*assembledMessage.ReasoningContent += *chunk.Delta.ReasoningContent
+					}
+					if len(chunk.Delta.ToolCalls) > 0 {
+						if toolCallByID == nil {
+							toolCallByID = make(map[string]*struct {
 								id           string
 								name         string
 								argsFinal    json.RawMessage
 								argsBuilding strings.Builder
-							}{}
-							toolCallByID[key] = acc
-							toolCallOrder = append(toolCallOrder, key)
+							})
 						}
-						// 首 chunk 带 id，后续为空 — 只在非空时更新
-						if strings.TrimSpace(tc.ID) != "" {
-							acc.id = strings.TrimSpace(tc.ID)
+						for _, tc := range chunk.Delta.ToolCalls {
+							// 用 index 作为聚合 key（OpenAI 流式协议：首 chunk 含 id/name，
+							// 后续 chunk 同一 index 的 id/name 为空，只有 arguments 增量）
+							key := fmt.Sprintf("idx_%d", tc.Index)
+							acc := toolCallByID[key]
+							if acc == nil {
+								acc = &struct {
+									id           string
+									name         string
+									argsFinal    json.RawMessage
+									argsBuilding strings.Builder
+								}{}
+								toolCallByID[key] = acc
+								toolCallOrder = append(toolCallOrder, key)
+							}
+							// 首 chunk 带 id，后续为空 — 只在非空时更新
+							if strings.TrimSpace(tc.ID) != "" {
+								acc.id = strings.TrimSpace(tc.ID)
+							}
+							if strings.TrimSpace(tc.Name) != "" {
+								acc.name = strings.TrimSpace(tc.Name)
+							}
+							// 兜底：如果最后仍无 id，生成一个
+							if acc.id == "" {
+								acc.id = fmt.Sprintf("call_%d_%d", i+1, tc.Index+1)
+							}
+							if len(tc.Arguments) == 0 || len(acc.argsFinal) > 0 {
+								continue
+							}
+							var argSegStr string
+							if err := json.Unmarshal(tc.Arguments, &argSegStr); err == nil {
+								acc.argsBuilding.WriteString(argSegStr)
+								continue
+							}
+							if json.Valid(tc.Arguments) {
+								acc.argsFinal = append([]byte(nil), tc.Arguments...)
+								continue
+							}
+							acc.argsBuilding.WriteString(string(tc.Arguments))
 						}
-						if strings.TrimSpace(tc.Name) != "" {
-							acc.name = strings.TrimSpace(tc.Name)
-						}
-						// 兜底：如果最后仍无 id，生成一个
-						if acc.id == "" {
-							acc.id = fmt.Sprintf("call_%d_%d", i+1, tc.Index+1)
-						}
-						if len(tc.Arguments) == 0 || len(acc.argsFinal) > 0 {
-							continue
-						}
-						var argSegStr string
-						if err := json.Unmarshal(tc.Arguments, &argSegStr); err == nil {
-							acc.argsBuilding.WriteString(argSegStr)
-							continue
-						}
-						if json.Valid(tc.Arguments) {
-							acc.argsFinal = append([]byte(nil), tc.Arguments...)
-							continue
-						}
-						acc.argsBuilding.WriteString(string(tc.Arguments))
 					}
+
+				case steerMsg := <-r.steerChOrNil():
+					steering = &steerMsg
+					cancelStream()
+					// drain 剩余 chunks 防止 goroutine 泄漏
+					for range streamCh {
+					}
+					break chunkLoop
+
+				case <-ctx.Done():
+					cancelStream()
+					eventCh <- ReActStreamEvent{Type: ReActEventError, Error: fmt.Sprintf("context cancelled: %v", ctx.Err())}
+					return
+				}
+			}
+			cancelStream()
+
+			// 如果收到 steering，处理后继续外层循环
+			if steering != nil {
+				rc := ""
+				if assembledMessage.ReasoningContent != nil {
+					rc = *assembledMessage.ReasoningContent
+				}
+				if newMsgs, ok := r.applySteering(*steering, messages, assembledMessage.Content, rc, eventCh); ok {
+					messages = newMsgs
+					continue
 				}
 			}
 
@@ -378,6 +434,16 @@ func (r *ReActExecutor) ExecuteStream(ctx context.Context, req *llm.ChatRequest)
 					messages = append(messages, toolMessage)
 				}
 			}
+
+			// 工具执行完成后，检查是否有 pending steering
+			select {
+			case steerMsg := <-r.steerChOrNil():
+				if newMsgs, ok := r.applySteering(steerMsg, messages, "", "", eventCh); ok {
+					messages = newMsgs
+				}
+				// 不 return，继续外层 for 循环
+			default:
+			}
 		}
 
 		eventCh <- ReActStreamEvent{Type: ReActEventError, Error: fmt.Sprintf("max iterations reached (%d)", r.config.MaxIterations)}
@@ -385,6 +451,28 @@ func (r *ReActExecutor) ExecuteStream(ctx context.Context, req *llm.ChatRequest)
 	}()
 
 	return eventCh, nil
+}
+
+// applySteering 根据 steering 消息类型处理 messages 并发送确认事件。
+// partialContent 和 reasoningContent 是被中断时已生成的部分内容。
+// 零值消息（channel 关闭后产生）返回 false，调用方应忽略。
+func (r *ReActExecutor) applySteering(msg SteeringMessage, messages []types.Message, partialContent string, reasoningContent string, eventCh chan<- ReActStreamEvent) ([]types.Message, bool) {
+	if msg.IsZero() {
+		r.logger.Debug("steering: ignoring zero-value message")
+		return messages, false
+	}
+	switch msg.Type {
+	case types.SteeringTypeGuide:
+		eventCh <- ReActStreamEvent{Type: ReActEventSteering, SteeringContent: msg.Content}
+		r.logger.Info("steering: guide received", zap.String("content", msg.Content))
+	case types.SteeringTypeStopAndSend:
+		eventCh <- ReActStreamEvent{Type: ReActEventStopAndSend}
+		r.logger.Info("steering: stop_and_send received", zap.String("content", msg.Content))
+	default:
+		r.logger.Warn("steering: unknown type, ignoring", zap.String("type", string(msg.Type)))
+		return messages, false
+	}
+	return types.ApplySteeringToMessages(msg, messages, partialContent, reasoningContent, llm.RoleAssistant), true
 }
 
 // ReActStreamEvent type constants.
@@ -396,20 +484,23 @@ const (
 	ReActEventToolProgress   = "tool_progress"
 	ReActEventCompleted      = "completed"
 	ReActEventError          = "error"
+	ReActEventSteering       = "steering"
+	ReActEventStopAndSend    = "stop_and_send"
 )
 
 // ReActStreamEvent 表示流式 ReAct 循环事件.
 type ReActStreamEvent struct {
-	Type          string            `json:"type"`
-	Iteration     int               `json:"iteration,omitempty"`
-	Chunk         *llm.StreamChunk  `json:"chunk,omitempty"`
-	ToolCalls     []types.ToolCall    `json:"tool_calls,omitempty"`
-	ToolResults   []types.ToolResult  `json:"tool_results,omitempty"`
-	ToolCallID    string            `json:"tool_call_id,omitempty"`
-	ToolName      string            `json:"tool_name,omitempty"`
-	ProgressData  any               `json:"progress_data,omitempty"`
-	FinalResponse *llm.ChatResponse `json:"final_response,omitempty"`
-	Error         string            `json:"error,omitempty"`
+	Type            string            `json:"type"`
+	Iteration       int               `json:"iteration,omitempty"`
+	Chunk           *llm.StreamChunk  `json:"chunk,omitempty"`
+	ToolCalls       []types.ToolCall  `json:"tool_calls,omitempty"`
+	ToolResults     []types.ToolResult `json:"tool_results,omitempty"`
+	ToolCallID      string            `json:"tool_call_id,omitempty"`
+	ToolName        string            `json:"tool_name,omitempty"`
+	ProgressData    any               `json:"progress_data,omitempty"`
+	FinalResponse   *llm.ChatResponse `json:"final_response,omitempty"`
+	Error           string            `json:"error,omitempty"`
+	SteeringContent string            `json:"steering_content,omitempty"` // steering 确认内容
 }
 
 // executeToolsWithStreaming 使用流式执行器逐个执行工具调用，

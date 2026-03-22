@@ -53,3 +53,57 @@ func (tr ToolResult) ToJSON() string {
 	return string(data)
 }
 
+// =============================================================================
+// Steering Types（实时引导/停止后发送）
+// =============================================================================
+
+// SteeringMessageType 区分引导和停止后发送
+type SteeringMessageType string
+
+const (
+	// SteeringTypeGuide 保留已生成内容，追加引导指令后重新发起流式调用
+	SteeringTypeGuide SteeringMessageType = "guide"
+	// SteeringTypeStopAndSend 丢弃已生成内容，用新消息替换后重新发起流式调用
+	SteeringTypeStopAndSend SteeringMessageType = "stop_and_send"
+)
+
+// SteeringMessage 用户中途注入的消息
+type SteeringMessage struct {
+	Type      SteeringMessageType `json:"type"`
+	Content   string              `json:"content"`
+	Timestamp time.Time           `json:"timestamp"`
+}
+
+// IsZero 检查是否为零值消息（channel 关闭后产生）
+func (m SteeringMessage) IsZero() bool {
+	return m.Type == "" && m.Content == ""
+}
+
+// ApplySteeringToMessages 根据 steering 消息类型变换 messages 数组。
+// partialContent 和 reasoningContent 是被中断时已生成的部分内容。
+// assistantRole 应传入 "assistant" 常量（避免 types 包依赖 llm 包）。
+func ApplySteeringToMessages(msg SteeringMessage, messages []Message, partialContent, reasoningContent string, assistantRole Role) []Message {
+	switch msg.Type {
+	case SteeringTypeGuide:
+		if partialContent != "" {
+			assistantMsg := Message{Role: assistantRole, Content: partialContent}
+			if reasoningContent != "" {
+				assistantMsg.ReasoningContent = &reasoningContent
+			}
+			messages = append(messages, assistantMsg)
+		}
+		messages = append(messages,
+			Message{Role: RoleUser, Content: msg.Content},
+		)
+	case SteeringTypeStopAndSend:
+		// 从末尾向前找到最后一条 user 消息并替换
+		for i := len(messages) - 1; i >= 0; i-- {
+			if messages[i].Role == RoleUser {
+				messages[i] = Message{Role: RoleUser, Content: msg.Content}
+				break
+			}
+		}
+	}
+	return messages
+}
+
