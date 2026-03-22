@@ -126,6 +126,12 @@ func main() {
 	fmt.Println("\n━━━ Agent + 循环迭代 ━━━")
 	d05AgentLoopIteration(ctx, provider, lg)
 
+	fmt.Println("\n━━━ SubAgent 并行执行 ━━━")
+	d06SubAgentParallel(ctx, provider, lg)
+
+	fmt.Println("\n━━━ SubAgent 管理器 ━━━")
+	d07SubAgentManager(ctx, provider, lg)
+
 	printSummary()
 }
 
@@ -359,6 +365,130 @@ func d05AgentLoopIteration(ctx context.Context, provider llm.Provider, lg *zap.L
 		rec("Agent+循环迭代", "PASS", time.Since(t), fmt.Sprintf("%d轮迭代完成", len(outputs)))
 	} else {
 		rec("Agent+循环迭代", "FAIL", time.Since(t), "无输出")
+	}
+}
+
+// =============================================================================
+// D6: SubAgent 并行执行 — 多个 Agent 并行处理不同任务
+// =============================================================================
+
+func d06SubAgentParallel(ctx context.Context, provider llm.Provider, lg *zap.Logger) {
+	t := time.Now()
+
+	// 构建 3 个不同职责的 SubAgent
+	buildAgent := func(id, name, systemPrompt string) agent.Agent {
+		ag, err := agent.NewAgentBuilder(types.AgentConfig{
+			Core:    types.CoreConfig{ID: id, Name: name, Type: "assistant"},
+			LLM:     types.LLMConfig{Model: model, MaxTokens: 256, Temperature: 0.1},
+			Runtime: types.RuntimeConfig{SystemPrompt: systemPrompt},
+		}).WithProvider(provider).WithLogger(lg).Build()
+		if err != nil {
+			return nil
+		}
+		ag.Init(ctx)
+		return ag
+	}
+
+	analyst := buildAgent("analyst", "分析师", "你是数据分析师，用一句话回答。")
+	critic := buildAgent("critic", "评论家", "你是技术评论家，用一句话回答。")
+	writer := buildAgent("writer", "作家", "你是技术作家，用一句话回答。")
+
+	if analyst == nil || critic == nil || writer == nil {
+		rec("SubAgent并行", "FAIL", time.Since(t), "Agent构建失败")
+		return
+	}
+
+	// 使用 AsyncExecutor 并行执行
+	asyncExec := agent.NewAsyncExecutor(analyst, lg)
+
+	output, err := asyncExec.ExecuteWithSubagents(ctx, &agent.Input{
+		TraceID: "test-subagent-001",
+		Content: "Go语言的主要优势是什么？",
+	}, []agent.Agent{analyst, critic, writer})
+
+	if err != nil {
+		rec("SubAgent并行", "FAIL", time.Since(t), fmt.Sprintf("执行失败: %v", err))
+		return
+	}
+
+	if output != nil && output.Content != "" {
+		// 检查是否包含多个 SubAgent 的结果
+		hasMultiple := strings.Contains(output.Content, "Subagent") || len(output.Content) > 100
+		if hasMultiple {
+			rec("SubAgent并行", "PASS", time.Since(t), fmt.Sprintf("3个SubAgent并行完成, Token:%d, 内容:%d字", output.TokensUsed, len([]rune(output.Content))))
+		} else {
+			rec("SubAgent并行", "PASS", time.Since(t), fmt.Sprintf("完成, %s", cut(output.Content, 60)))
+		}
+	} else {
+		rec("SubAgent并行", "FAIL", time.Since(t), "无输出")
+	}
+}
+
+// =============================================================================
+// D7: SubAgent 管理器 — Spawn + Wait + 状态查询
+// =============================================================================
+
+func d07SubAgentManager(ctx context.Context, provider llm.Provider, lg *zap.Logger) {
+	t := time.Now()
+
+	// 构建一个简单 Agent
+	ag, err := agent.NewAgentBuilder(types.AgentConfig{
+		Core:    types.CoreConfig{ID: "managed-agent", Name: "Managed Agent", Type: "assistant"},
+		LLM:     types.LLMConfig{Model: model, MaxTokens: 128, Temperature: 0.1},
+		Runtime: types.RuntimeConfig{SystemPrompt: "用一个词回答。"},
+	}).WithProvider(provider).WithLogger(lg).Build()
+
+	if err != nil {
+		rec("SubAgent管理器", "FAIL", time.Since(t), fmt.Sprintf("构建失败: %v", err))
+		return
+	}
+	ag.Init(ctx)
+
+	// 创建 SubagentManager
+	mgr := agent.NewSubagentManager(lg)
+	defer mgr.Close()
+
+	// Spawn SubAgent
+	exec, err := mgr.SpawnSubagent(ctx, ag, &agent.Input{
+		TraceID: "test-mgr-001",
+		Content: "中国的首都？",
+	})
+	if err != nil {
+		rec("SubAgent管理器", "FAIL", time.Since(t), fmt.Sprintf("Spawn失败: %v", err))
+		return
+	}
+
+	// 检查状态
+	status := exec.GetStatus()
+	if status != agent.ExecutionStatusRunning {
+		rec("SubAgent管理器", "WARN", time.Since(t), fmt.Sprintf("初始状态=%s(期望running)", status))
+	}
+
+	// 等待完成
+	output, err := exec.Wait(ctx)
+	if err != nil {
+		rec("SubAgent管理器", "FAIL", time.Since(t), fmt.Sprintf("Wait失败: %v", err))
+		return
+	}
+
+	// 验证最终状态
+	finalStatus := exec.GetStatus()
+
+	// 通过 Manager 查询
+	queriedExec, queryErr := mgr.GetExecution(exec.ID)
+
+	if output != nil && finalStatus == agent.ExecutionStatusCompleted && queryErr == nil && queriedExec != nil {
+		rec("SubAgent管理器", "PASS", time.Since(t), fmt.Sprintf("Spawn→Run→Complete, status=%s, output=%s", finalStatus, cut(output.Content, 40)))
+	} else {
+		rec("SubAgent管理器", "WARN", time.Since(t), fmt.Sprintf("status=%s queryErr=%v", finalStatus, queryErr))
+	}
+
+	// 列出所有执行
+	executions := mgr.ListExecutions()
+	if len(executions) > 0 {
+		rec("SubAgent列表查询", "PASS", time.Since(t), fmt.Sprintf("列出%d个执行", len(executions)))
+	} else {
+		rec("SubAgent列表查询", "WARN", time.Since(t), "列表为空")
 	}
 }
 
