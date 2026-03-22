@@ -1,6 +1,7 @@
 package tools
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -346,7 +347,12 @@ func (e *DefaultExecutor) ExecuteOne(ctx context.Context, call types.ToolCall) t
 		}
 	}
 
-	// 3. 参数校验：JSON Schema 验证
+	// 3. 参数规范化：处理双重序列化（某些模型返回字符串化的 JSON）
+	if len(call.Arguments) > 0 {
+		call.Arguments = normalizeToolArguments(call.Arguments)
+	}
+
+	// 4. 参数校验：JSON Schema 验证
 	if len(call.Arguments) > 0 {
 		var tmp any
 		if err := json.Unmarshal(call.Arguments, &tmp); err != nil {
@@ -672,4 +678,25 @@ func (tb *tokenBucketLimiter) Reset() {
 	defer tb.mu.Unlock()
 	tb.tokens = tb.maxTokens
 	tb.lastRefill = time.Now()
+}
+
+// normalizeToolArguments 规范化工具调用参数。
+// 作为防御层，处理上游可能遗漏的双重序列化 JSON 字符串。
+// 例如 `"{\\"city\\":\\"北京\\"}"` → `{"city":"北京"}`
+func normalizeToolArguments(raw json.RawMessage) json.RawMessage {
+	if len(raw) == 0 {
+		return raw
+	}
+	trimmed := bytes.TrimSpace(raw)
+	if len(trimmed) > 0 && (trimmed[0] == '{' || trimmed[0] == '[') {
+		return raw // 已经是正常的 JSON 对象/数组
+	}
+	var strVal string
+	if err := json.Unmarshal(raw, &strVal); err == nil && len(strVal) > 0 {
+		inner := bytes.TrimSpace([]byte(strVal))
+		if len(inner) > 0 && (inner[0] == '{' || inner[0] == '[') && json.Valid(inner) {
+			return json.RawMessage(inner)
+		}
+	}
+	return raw
 }

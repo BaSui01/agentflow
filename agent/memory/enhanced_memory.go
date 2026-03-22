@@ -452,6 +452,9 @@ func (m *EnhancedMemorySystem) RecordEpisode(ctx context.Context, event *types.E
 	if !m.config.EpisodicEnabled {
 		return fmt.Errorf("episodic memory not enabled")
 	}
+	if m.episodic == nil {
+		return fmt.Errorf("episodic memory store not configured")
+	}
 
 	return m.episodic.RecordEvent(ctx, event)
 }
@@ -460,6 +463,9 @@ func (m *EnhancedMemorySystem) RecordEpisode(ctx context.Context, event *types.E
 func (m *EnhancedMemorySystem) QueryEpisodes(ctx context.Context, query EpisodicQuery) ([]types.EpisodicEvent, error) {
 	if !m.config.EpisodicEnabled {
 		return nil, fmt.Errorf("episodic memory not enabled")
+	}
+	if m.episodic == nil {
+		return nil, fmt.Errorf("episodic memory store not configured")
 	}
 
 	return m.episodic.QueryEvents(ctx, query)

@@ -24,31 +24,33 @@ const (
 )
 
 func main() {
-	// 1. 创建 Logger
 	logger, _ := zap.NewDevelopment()
 	defer logger.Sync()
 
-	// 2. 从环境变量读取 API Key
 	apiKey := os.Getenv("OPENAI_API_KEY")
 	if apiKey == "" {
 		log.Fatal("请设置环境变量 OPENAI_API_KEY，例如: export OPENAI_API_KEY=sk-xxx")
 	}
 
-	// 3. 配置 Provider
+	baseURL := envOrDefault("OPENAI_BASE_URL", "https://api.openai.com")
+	model := envOrDefault("OPENAI_MODEL", "gpt-4o-mini")
+
 	cfg := providers.OpenAIConfig{
 		BaseProviderConfig: providers.BaseProviderConfig{
 			APIKey:  apiKey,
-			BaseURL: "https://api.openai.com",
+			BaseURL: baseURL,
+			Model:   model,
 		},
 	}
 	provider := openai.NewOpenAIProvider(cfg, logger)
 
-	// 3. 创建多个不同类型的自定义 Agent
-	codeReviewer := createCodeReviewerAgent(provider, logger)
-	dataAnalyst := createDataAnalystAgent(provider, logger)
-	storyWriter := createStoryWriterAgent(provider, logger)
-
 	ctx := context.Background()
+	codeReviewer := createCodeReviewerAgent(ctx, provider, logger, model)
+	dataAnalyst := createDataAnalystAgent(ctx, provider, logger, model)
+	storyWriter := createStoryWriterAgent(ctx, provider, logger, model)
+
+	fmt.Printf("Base URL: %s\n", baseURL)
+	fmt.Printf("Model: %s\n\n", model)
 
 	// 4. 使用代码审查 Agent
 	fmt.Println("=== 代码审查 Agent ===")
@@ -112,7 +114,7 @@ func divide(a, b int) int {
 }
 
 // createCodeReviewerAgent 创建代码审查 Agent
-func createCodeReviewerAgent(provider llm.Provider, logger *zap.Logger) *agent.BaseAgent {
+func createCodeReviewerAgent(ctx context.Context, provider llm.Provider, logger *zap.Logger, model string) *agent.BaseAgent {
 	promptBundle := agent.PromptBundle{
 		Version: "1.0",
 		System: agent.SystemPrompt{
@@ -138,7 +140,7 @@ func createCodeReviewerAgent(provider llm.Provider, logger *zap.Logger) *agent.B
 			Description: "专业的代码审查 AI，检查代码质量、安全性和最佳实践",
 		},
 		LLM: types.LLMConfig{
-			Model:       "gpt-4",
+			Model:       model,
 			MaxTokens:   2000,
 			Temperature: 0.3,
 		},
@@ -147,11 +149,11 @@ func createCodeReviewerAgent(provider llm.Provider, logger *zap.Logger) *agent.B
 		},
 	}
 
-	return agent.NewBaseAgent(cfg, provider, nil, nil, nil, logger, nil)
+	return mustInitAgent(ctx, agent.NewBaseAgent(cfg, provider, nil, nil, nil, logger, nil))
 }
 
 // createDataAnalystAgent 创建数据分析 Agent
-func createDataAnalystAgent(provider llm.Provider, logger *zap.Logger) *agent.BaseAgent {
+func createDataAnalystAgent(ctx context.Context, provider llm.Provider, logger *zap.Logger, model string) *agent.BaseAgent {
 	promptBundle := agent.PromptBundle{
 		Version: "1.0",
 		System: agent.SystemPrompt{
@@ -178,7 +180,7 @@ func createDataAnalystAgent(provider llm.Provider, logger *zap.Logger) *agent.Ba
 			Description: "专业的数据分析 AI，擅长数据解读和趋势分析",
 		},
 		LLM: types.LLMConfig{
-			Model:       "gpt-4",
+			Model:       model,
 			MaxTokens:   1500,
 			Temperature: 0.5,
 		},
@@ -187,11 +189,11 @@ func createDataAnalystAgent(provider llm.Provider, logger *zap.Logger) *agent.Ba
 		},
 	}
 
-	return agent.NewBaseAgent(cfg, provider, nil, nil, nil, logger, nil)
+	return mustInitAgent(ctx, agent.NewBaseAgent(cfg, provider, nil, nil, nil, logger, nil))
 }
 
 // createStoryWriterAgent 创建故事创作 Agent
-func createStoryWriterAgent(provider llm.Provider, logger *zap.Logger) *agent.BaseAgent {
+func createStoryWriterAgent(ctx context.Context, provider llm.Provider, logger *zap.Logger, model string) *agent.BaseAgent {
 	promptBundle := agent.PromptBundle{
 		Version: "1.0",
 		System: agent.SystemPrompt{
@@ -217,7 +219,7 @@ func createStoryWriterAgent(provider llm.Provider, logger *zap.Logger) *agent.Ba
 			Description: "富有创意的故事创作 AI，擅长编写引人入胜的故事",
 		},
 		LLM: types.LLMConfig{
-			Model:       "gpt-4",
+			Model:       model,
 			MaxTokens:   3000,
 			Temperature: 0.9,
 		},
@@ -226,5 +228,20 @@ func createStoryWriterAgent(provider llm.Provider, logger *zap.Logger) *agent.Ba
 		},
 	}
 
-	return agent.NewBaseAgent(cfg, provider, nil, nil, nil, logger, nil)
+	return mustInitAgent(ctx, agent.NewBaseAgent(cfg, provider, nil, nil, nil, logger, nil))
+}
+
+func mustInitAgent(ctx context.Context, ag *agent.BaseAgent) *agent.BaseAgent {
+	if err := ag.Init(ctx); err != nil {
+		log.Fatalf("初始化 Agent 失败: %v", err)
+	}
+	return ag
+}
+
+func envOrDefault(key, fallback string) string {
+	value := os.Getenv(key)
+	if value == "" {
+		return fallback
+	}
+	return value
 }

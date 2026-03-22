@@ -107,6 +107,7 @@ func New(cfg Config, logger *zap.Logger) *Provider {
 		Client: tlsutil.SecureHTTPClient(timeout),
 		Logger: logger,
 		RewriterChain: middleware.NewRewriterChain(
+			middleware.NewXMLToolRewriter(),
 			middleware.NewEmptyToolsCleaner(),
 		),
 	}
@@ -540,9 +541,10 @@ func StreamSSE(ctx context.Context, body io.ReadCloser, providerName string) <-c
 						chunk.Delta.ToolCalls = make([]types.ToolCall, 0, len(choice.Delta.ToolCalls))
 						for _, tc := range choice.Delta.ToolCalls {
 							chunk.Delta.ToolCalls = append(chunk.Delta.ToolCalls, types.ToolCall{
+								Index:     tc.Index,
 								ID:        tc.ID,
 								Name:      tc.Function.Name,
-								Arguments: tc.Function.Arguments,
+								Arguments: providerbase.UnwrapStringifiedJSON(tc.Function.Arguments),
 							})
 						}
 					}

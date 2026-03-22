@@ -36,8 +36,8 @@ import (
 	"github.com/BaSui01/agentflow/rag"
 	"github.com/BaSui01/agentflow/types"
 	"github.com/coder/websocket"
-	"github.com/glebarez/sqlite"
 	"go.uber.org/zap"
+	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
 

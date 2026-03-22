@@ -51,15 +51,13 @@ func createProvider(logger *zap.Logger) llm.Provider {
 	if apiKey == "" {
 		return nil
 	}
-	baseURL := os.Getenv("OPENAI_BASE_URL")
-	if baseURL == "" {
-		baseURL = "https://api.openai.com"
-	}
+	baseURL := envOrDefault("OPENAI_BASE_URL", "https://api.openai.com")
+	model := envOrDefault("OPENAI_MODEL", "gpt-4o-mini")
 	cfg := providers.OpenAIConfig{
 		BaseProviderConfig: providers.BaseProviderConfig{
 			APIKey:  apiKey,
 			BaseURL: baseURL,
-			Model:   "gpt-4",
+			Model:   model,
 		},
 	}
 	return openai.NewOpenAIProvider(cfg, logger)
@@ -78,7 +76,7 @@ func demoEnhancedSingleAgent(logger *zap.Logger) {
 			Type: string(agent.TypeGeneric),
 		},
 		LLM: types.LLMConfig{
-			Model:       "gpt-4",
+			Model:       envOrDefault("OPENAI_MODEL", "gpt-4o-mini"),
 			MaxTokens:   2000,
 			Temperature: 0.7,
 		},
@@ -94,7 +92,7 @@ func demoEnhancedSingleAgent(logger *zap.Logger) {
 		},
 	}
 
-	baseAgent := agent.NewBaseAgent(config, provider, nil, nil, nil, logger, nil)
+	baseAgent := mustInitAgent(ctx, agent.NewBaseAgent(config, provider, nil, nil, nil, logger, nil))
 
 	// 2. Enable Reflection
 	fmt.Println("2. Enabling Reflection")
@@ -214,10 +212,10 @@ func demoHierarchicalSystem(logger *zap.Logger) {
 			Description: "Responsible for task decomposition and result aggregation",
 		},
 		LLM: types.LLMConfig{
-			Model: "gpt-4",
+			Model: envOrDefault("OPENAI_MODEL", "gpt-4o-mini"),
 		},
 	}
-	supervisor := agent.NewBaseAgent(supervisorConfig, provider, nil, nil, nil, logger, nil)
+	supervisor := mustInitAgent(ctx, agent.NewBaseAgent(supervisorConfig, provider, nil, nil, nil, logger, nil))
 
 	// 2. Create Workers
 	workers := []agent.Agent{}
@@ -232,10 +230,10 @@ func demoHierarchicalSystem(logger *zap.Logger) {
 				Description: fmt.Sprintf("Specialized in %s tasks", wType),
 			},
 			LLM: types.LLMConfig{
-				Model: "gpt-3.5-turbo",
+				Model: envOrDefault("OPENAI_MODEL", "gpt-4o-mini"),
 			},
 		}
-		worker := agent.NewBaseAgent(workerConfig, provider, nil, nil, nil, logger, nil)
+		worker := mustInitAgent(ctx, agent.NewBaseAgent(workerConfig, provider, nil, nil, nil, logger, nil))
 		workers = append(workers, worker)
 	}
 
@@ -304,10 +302,10 @@ func demoCollaborativeSystem(logger *zap.Logger) {
 				Description: role.desc,
 			},
 			LLM: types.LLMConfig{
-				Model: "gpt-4",
+				Model: envOrDefault("OPENAI_MODEL", "gpt-4o-mini"),
 			},
 		}
-		expert := agent.NewBaseAgent(config, provider, nil, nil, nil, logger, nil)
+		expert := mustInitAgent(ctx, agent.NewBaseAgent(config, provider, nil, nil, nil, logger, nil))
 		experts = append(experts, expert)
 	}
 
@@ -370,7 +368,7 @@ func demoProductionConfig(logger *zap.Logger) {
 			Type: string(agent.TypeGeneric),
 		},
 		LLM: types.LLMConfig{
-			Model:       "gpt-4",
+			Model:       envOrDefault("OPENAI_MODEL", "gpt-4o-mini"),
 			MaxTokens:   2000,
 			Temperature: 0.7,
 		},
@@ -453,4 +451,19 @@ func demoProductionConfig(logger *zap.Logger) {
 	for _, phase := range phases {
 		fmt.Printf("  %s: %v\n", phase.week, phase.features)
 	}
+}
+
+func mustInitAgent(ctx context.Context, ag *agent.BaseAgent) *agent.BaseAgent {
+	if err := ag.Init(ctx); err != nil {
+		panic(fmt.Sprintf("init agent %s failed: %v", ag.ID(), err))
+	}
+	return ag
+}
+
+func envOrDefault(key, fallback string) string {
+	value := os.Getenv(key)
+	if value == "" {
+		return fallback
+	}
+	return value
 }

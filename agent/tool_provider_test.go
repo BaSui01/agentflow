@@ -1,13 +1,16 @@
 package agent
 
 import (
-	"github.com/BaSui01/agentflow/types"
 	"context"
+	"encoding/json"
+	"strings"
 	"sync/atomic"
 	"testing"
 
 	"github.com/BaSui01/agentflow/llm"
+	"github.com/BaSui01/agentflow/types"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 )
 
@@ -142,14 +145,34 @@ func TestToolProvider_Builder(t *testing.T) {
 	assert.Equal(t, toolProvider, agent.ToolProvider(), "toolProvider 应通过 Builder 正确注入")
 }
 
-// TestToolProvider_FunctionCallingValidation 测试 toolProvider 不支持 function calling 时报错
-func TestToolProvider_FunctionCallingValidation(t *testing.T) {
+// TestToolProvider_XMLFallback_ChatCompletion 不支持原生 FC 时自动降级到 XML 模式
+func TestToolProvider_XMLFallback_ChatCompletion(t *testing.T) {
 	logger := zap.NewNop()
 	mainProvider := &testProvider{name: "main"}
-	toolProvider := &testProvider{name: "cheap-model", supportsNative: false}
+
+	// toolProvider 不支持原生函数调用 → 应自动降级到 XML 模式
+	var capturedReq *llm.ChatRequest
+	toolProvider := &testProvider{
+		name:           "cheap-model",
+		supportsNative: false,
+		completionFn: func(ctx context.Context, req *llm.ChatRequest) (*llm.ChatResponse, error) {
+			capturedReq = req
+			// 返回普通文本响应（不含工具调用），避免触发 ReAct 循环
+			return &llm.ChatResponse{
+				Choices: []llm.ChatChoice{{
+					Message:      types.Message{Content: "I found the answer: 42."},
+					FinishReason: "stop",
+				}},
+			}, nil
+		},
+	}
 	toolMgr := &testToolManager{
 		getAllowedToolsFn: func(agentID string) []types.ToolSchema {
-			return []types.ToolSchema{{Name: "search", Description: "search tool"}}
+			return []types.ToolSchema{{
+				Name:        "search",
+				Description: "search tool",
+				Parameters:  json.RawMessage(`{"type":"object","properties":{"query":{"type":"string"}}}`),
+			}}
 		},
 	}
 
@@ -159,20 +182,54 @@ func TestToolProvider_FunctionCallingValidation(t *testing.T) {
 	agent := NewBaseAgent(config, mainProvider, nil, toolMgr, nil, logger, nil)
 	agent.SetToolProvider(toolProvider)
 
-	_, err := agent.ChatCompletion(context.Background(), []types.Message{
+	resp, err := agent.ChatCompletion(context.Background(), []types.Message{
 		{Role: llm.RoleUser, Content: "search something"},
 	})
 
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "does not support native function calling")
-	assert.Contains(t, err.Error(), "cheap-model")
+	// 不应报错，应自动降级（不再返回 ErrToolProviderNotSupported）
+	require.NoError(t, err)
+	require.NotNil(t, resp)
+
+	// 请求中的 ToolCallMode 应为 XML
+	require.NotNil(t, capturedReq)
+	assert.Equal(t, llm.ToolCallModeXML, capturedReq.ToolCallMode)
+
+	// XMLToolRewriter 应已将工具注入 system prompt 并清除 req.Tools
+	assert.Nil(t, capturedReq.Tools, "XML 模式下 req.Tools 应被清除")
+
+	// system prompt 应包含工具定义
+	hasToolInSystemPrompt := false
+	for _, msg := range capturedReq.Messages {
+		if msg.Role == types.RoleSystem && strings.Contains(msg.Content, "search") && strings.Contains(msg.Content, "<tool_calls>") {
+			hasToolInSystemPrompt = true
+			break
+		}
+	}
+	assert.True(t, hasToolInSystemPrompt, "system prompt 应包含工具定义")
 }
 
-// TestToolProvider_FunctionCallingValidation_StreamCompletion 测试 StreamCompletion 的 FC 校验
-func TestToolProvider_FunctionCallingValidation_StreamCompletion(t *testing.T) {
+// TestToolProvider_XMLFallback_StreamCompletion 流式模式下 XML 降级
+// 注意：StreamCompletion 使用 chatProvider（主 provider），
+// 当 chatProvider 也不支持 FC 时才会降级
+func TestToolProvider_XMLFallback_StreamCompletion(t *testing.T) {
 	logger := zap.NewNop()
-	mainProvider := &testProvider{name: "main"}
-	toolProvider := &testProvider{name: "cheap-model", supportsNative: false}
+
+	// mainProvider 不支持 FC → 降级到 XML
+	var capturedReq *llm.ChatRequest
+	mainProvider := &testProvider{
+		name:           "main-no-fc",
+		supportsNative: false,
+		streamFn: func(ctx context.Context, req *llm.ChatRequest) (<-chan llm.StreamChunk, error) {
+			capturedReq = req
+			ch := make(chan llm.StreamChunk, 1)
+			ch <- llm.StreamChunk{
+				Delta:        types.Message{Content: "No tools needed."},
+				FinishReason: "stop",
+			}
+			close(ch)
+			return ch, nil
+		},
+	}
 	toolMgr := &testToolManager{
 		getAllowedToolsFn: func(agentID string) []types.ToolSchema {
 			return []types.ToolSchema{{Name: "search", Description: "search tool"}}
@@ -183,21 +240,47 @@ func TestToolProvider_FunctionCallingValidation_StreamCompletion(t *testing.T) {
 	config.Runtime.Tools = []string{"search"}
 
 	agent := NewBaseAgent(config, mainProvider, nil, toolMgr, nil, logger, nil)
-	agent.SetToolProvider(toolProvider)
+	// 不设置 toolProvider → chatProvider = mainProvider → 降级到 XML
 
-	_, err := agent.StreamCompletion(context.Background(), []types.Message{
+	ch, err := agent.StreamCompletion(context.Background(), []types.Message{
 		{Role: llm.RoleUser, Content: "search something"},
 	})
 
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "does not support native function calling")
-	assert.Contains(t, err.Error(), "cheap-model")
+	// 不应报错，应自动降级（不再返回 ErrToolProviderNotSupported）
+	require.NoError(t, err)
+	require.NotNil(t, ch)
+
+	var chunks []llm.StreamChunk
+	for c := range ch {
+		chunks = append(chunks, c)
+	}
+	assert.NotEmpty(t, chunks)
+
+	// 验证请求被设置为 XML 模式
+	require.NotNil(t, capturedReq)
+	assert.Equal(t, llm.ToolCallModeXML, capturedReq.ToolCallMode)
+	assert.Nil(t, capturedReq.Tools, "XML 模式下 req.Tools 应被清除")
 }
 
-// TestToolProvider_FunctionCallingValidation_NilToolProvider toolProvider 为 nil 时退化校验 provider
-func TestToolProvider_FunctionCallingValidation_NilToolProvider(t *testing.T) {
+// TestToolProvider_XMLFallback_NilToolProvider toolProvider 为 nil 时退化到 mainProvider，
+// 若 mainProvider 也不支持 FC 则降级到 XML
+func TestToolProvider_XMLFallback_NilToolProvider(t *testing.T) {
 	logger := zap.NewNop()
-	mainProvider := &testProvider{name: "main-no-fc", supportsNative: false}
+
+	var capturedReq *llm.ChatRequest
+	mainProvider := &testProvider{
+		name:           "main-no-fc",
+		supportsNative: false,
+		completionFn: func(ctx context.Context, req *llm.ChatRequest) (*llm.ChatResponse, error) {
+			capturedReq = req
+			return &llm.ChatResponse{
+				Choices: []llm.ChatChoice{{
+					Message:      types.Message{Content: "No tool calls here."},
+					FinishReason: "stop",
+				}},
+			}, nil
+		},
+	}
 	toolMgr := &testToolManager{
 		getAllowedToolsFn: func(agentID string) []types.ToolSchema {
 			return []types.ToolSchema{{Name: "search", Description: "search tool"}}
@@ -208,15 +291,18 @@ func TestToolProvider_FunctionCallingValidation_NilToolProvider(t *testing.T) {
 	config.Runtime.Tools = []string{"search"}
 
 	agent := NewBaseAgent(config, mainProvider, nil, toolMgr, nil, logger, nil)
-	// 不设置 toolProvider → 退化校验 mainProvider
+	// 不设置 toolProvider → 退化到 mainProvider
 
-	_, err := agent.ChatCompletion(context.Background(), []types.Message{
+	resp, err := agent.ChatCompletion(context.Background(), []types.Message{
 		{Role: llm.RoleUser, Content: "search something"},
 	})
 
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "does not support native function calling")
-	assert.Contains(t, err.Error(), "main-no-fc")
+	// 不应报错，应降级到 XML
+	require.NoError(t, err)
+	require.NotNil(t, resp)
+
+	require.NotNil(t, capturedReq)
+	assert.Equal(t, llm.ToolCallModeXML, capturedReq.ToolCallMode)
 }
 
 // TestToolProvider_BuilderWithoutToolProvider Builder 不设置 toolProvider
@@ -236,5 +322,3 @@ func TestToolProvider_BuilderWithoutToolProvider(t *testing.T) {
 	assert.Equal(t, mainProvider, agent.Provider())
 	assert.Nil(t, agent.ToolProvider(), "不设置 toolProvider 时应为 nil")
 }
-
-

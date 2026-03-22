@@ -58,6 +58,7 @@ func NewClaudeProvider(cfg providers.ClaudeConfig, logger *zap.Logger) *ClaudePr
 		client: tlsutil.SecureHTTPClient(timeout),
 		logger: logger,
 		rewriterChain: middleware.NewRewriterChain(
+			middleware.NewXMLToolRewriter(),
 			middleware.NewEmptyToolsCleaner(),
 		),
 	}
@@ -183,19 +184,47 @@ type claudeMessage struct {
 }
 
 type claudeContent struct {
-	Type      string          `json:"type"` // text, tool_use, tool_result, image, thinking
+	Type      string          `json:"type"` // text, tool_use, tool_result, image, thinking, server_tool_use, web_search_tool_result
 	Text      string          `json:"text,omitempty"`
 	ID        string          `json:"id,omitempty"`
 	Name      string          `json:"name,omitempty"`
 	Input     json.RawMessage `json:"input,omitempty"`
 	ToolUseID string          `json:"tool_use_id,omitempty"`
-	Content   string          `json:"content,omitempty"`  // for tool_result
+	Content   string          `json:"content,omitempty"`  // for tool_result (string form)
 	IsError   *bool           `json:"is_error,omitempty"` // for tool_result: 标记工具执行失败
 	// Image source fields (for type="image")
 	Source *claudeImageSource `json:"source,omitempty"`
 	// Thinking fields (for type="thinking")
 	Thinking  string `json:"thinking,omitempty"`
 	Signature string `json:"signature,omitempty"`
+	// Web search fields
+	Citations []claudeCitation `json:"citations,omitempty"` // text 块上的引用标注
+
+	// web_search_tool_result: content 字段可能是 []object（搜索结果条目）
+	// 使用 json.RawMessage 保存原始值，便于 round-trip
+	SearchResults json.RawMessage `json:"search_results,omitempty"`
+
+	// server_tool_use / web_search_tool_result 的 encrypted 不透明字段
+	EncryptedContent string `json:"encrypted_content,omitempty"`
+
+	// web_search_tool_result error
+	ErrorType string `json:"error_type,omitempty"`
+}
+
+// claudeCitation 表示文本块上的引用标注
+type claudeCitation struct {
+	Type           string `json:"type"` // "web_search_result_location"
+	URL            string `json:"url"`
+	Title          string `json:"title"`
+	CitedText      string `json:"cited_text,omitempty"`
+	EncryptedIndex string `json:"encrypted_index,omitempty"`
+	StartIndex     int    `json:"start_index,omitempty"`
+	EndIndex       int    `json:"end_index,omitempty"`
+}
+
+// claudeServerToolUse 表示服务端工具使用计费
+type claudeServerToolUse struct {
+	WebSearchRequests int `json:"web_search_requests,omitempty"`
 }
 
 type claudeImageSource struct {
@@ -232,30 +261,32 @@ type claudeRequest struct {
 	TopP        *float32          `json:"top_p,omitempty"`       // 指针类型：同上
 	StopSeq     []string          `json:"stop_sequences,omitempty"`
 	Stream      bool              `json:"stream,omitempty"`
-	Tools       []claudeTool      `json:"tools,omitempty"`
+	Tools       []json.RawMessage `json:"tools,omitempty"` // 混合类型：普通 function tool + server tool (web_search)
 	ToolChoice  *claudeToolChoice `json:"tool_choice,omitempty"`
 	Thinking    *claudeThinking   `json:"thinking,omitempty"` // Extended Thinking
 }
 
 type claudeUsage struct {
-	InputTokens              int `json:"input_tokens"`
-	OutputTokens             int `json:"output_tokens"`
-	CacheCreationInputTokens int `json:"cache_creation_input_tokens,omitempty"`
-	CacheReadInputTokens     int `json:"cache_read_input_tokens,omitempty"`
+	InputTokens              int                  `json:"input_tokens"`
+	OutputTokens             int                  `json:"output_tokens"`
+	CacheCreationInputTokens int                  `json:"cache_creation_input_tokens,omitempty"`
+	CacheReadInputTokens     int                  `json:"cache_read_input_tokens,omitempty"`
+	ServerToolUse            *claudeServerToolUse `json:"server_tool_use,omitempty"`
 }
 
 func (u *claudeUsage) UnmarshalJSON(data []byte) error {
 	var aux struct {
-		InputTokens                   *int `json:"input_tokens"`
-		InputTokensCamel              *int `json:"inputTokens"`
-		OutputTokens                  *int `json:"output_tokens"`
-		OutputTokensCamel             *int `json:"outputTokens"`
-		PromptTokens                  *int `json:"prompt_tokens"`
-		CompletionTokens              *int `json:"completion_tokens"`
-		CacheCreationInputTokens      *int `json:"cache_creation_input_tokens"`
-		CacheCreationInputTokensCamel *int `json:"cacheCreationInputTokens"`
-		CacheReadInputTokens          *int `json:"cache_read_input_tokens"`
-		CacheReadInputTokensCamel     *int `json:"cacheReadInputTokens"`
+		InputTokens                   *int                 `json:"input_tokens"`
+		InputTokensCamel              *int                 `json:"inputTokens"`
+		OutputTokens                  *int                 `json:"output_tokens"`
+		OutputTokensCamel             *int                 `json:"outputTokens"`
+		PromptTokens                  *int                 `json:"prompt_tokens"`
+		CompletionTokens              *int                 `json:"completion_tokens"`
+		CacheCreationInputTokens      *int                 `json:"cache_creation_input_tokens"`
+		CacheCreationInputTokensCamel *int                 `json:"cacheCreationInputTokens"`
+		CacheReadInputTokens          *int                 `json:"cache_read_input_tokens"`
+		CacheReadInputTokensCamel     *int                 `json:"cacheReadInputTokens"`
+		ServerToolUse                 *claudeServerToolUse `json:"server_tool_use"`
 	}
 	if err := json.Unmarshal(data, &aux); err != nil {
 		return err
@@ -265,6 +296,7 @@ func (u *claudeUsage) UnmarshalJSON(data []byte) error {
 	u.OutputTokens = firstInt(aux.OutputTokens, aux.OutputTokensCamel, aux.CompletionTokens)
 	u.CacheCreationInputTokens = firstInt(aux.CacheCreationInputTokens, aux.CacheCreationInputTokensCamel)
 	u.CacheReadInputTokens = firstInt(aux.CacheReadInputTokens, aux.CacheReadInputTokensCamel)
+	u.ServerToolUse = aux.ServerToolUse
 	return nil
 }
 
@@ -368,10 +400,10 @@ type claudeErrorResp struct {
 
 func (p *ClaudeProvider) buildHeaders(req *http.Request, apiKey string) {
 	req.Header.Set("x-api-key", apiKey)
-	// API 版本：可配置，默认 2023-06-01
+	// API 版本：可配置，默认 2025-04-14（支持 web_search 服务端工具）
 	version := p.cfg.AnthropicVersion
 	if version == "" {
-		version = "2023-06-01"
+		version = "2025-04-14"
 	}
 	req.Header.Set("anthropic-version", version)
 	req.Header.Set("Content-Type", "application/json")
@@ -493,6 +525,34 @@ func convertToClaudeMessages(msgs []types.Message) (string, []claudeMessage) {
 		}
 
 		if len(cm.Content) > 0 {
+			// 多轮回传：如果 assistant 消息的 Metadata 中包含 web search blocks，追加到 content 数组
+			if m.Role == llm.RoleAssistant {
+				if meta, ok := m.Metadata.(map[string]any); ok {
+					if rawBlocks, ok := meta["claude_web_search_blocks"]; ok {
+						switch blocks := rawBlocks.(type) {
+						case []json.RawMessage:
+							for _, raw := range blocks {
+								var block claudeContent
+								if json.Unmarshal(raw, &block) == nil {
+									cm.Content = append(cm.Content, block)
+								}
+							}
+						case []any:
+							// 经过 JSON round-trip 后可能变成 []any
+							for _, item := range blocks {
+								raw, err := json.Marshal(item)
+								if err != nil {
+									continue
+								}
+								var block claudeContent
+								if json.Unmarshal(raw, &block) == nil {
+									cm.Content = append(cm.Content, block)
+								}
+							}
+						}
+					}
+				}
+			}
 			claudeMsgs = append(claudeMsgs, cm)
 		}
 	}
@@ -500,17 +560,73 @@ func convertToClaudeMessages(msgs []types.Message) (string, []claudeMessage) {
 	return strings.Join(systemParts, "\n\n"), claudeMsgs
 }
 
-func convertToClaudeTools(tools []types.ToolSchema) []claudeTool {
-	if len(tools) == 0 {
-		return nil
-	}
-	out := make([]claudeTool, 0, len(tools))
+// convertToClaudeTools 将统一工具列表转换为 Claude API 的混合工具数组。
+// 当 wsOpts 不为 nil 或工具列表中包含 web_search 时，自动注入 web_search_20250305 服务端工具。
+func convertToClaudeTools(tools []types.ToolSchema, wsOpts *llm.WebSearchOptions) []json.RawMessage {
+	hasWebSearch := wsOpts != nil
+	out := make([]json.RawMessage, 0, len(tools)+1)
+
 	for _, t := range tools {
-		out = append(out, claudeTool{
+		// 跳过客户端传入的 web_search 占位工具（避免双重注入）
+		if t.Name == "web_search" || t.Name == "google_search" {
+			hasWebSearch = true
+			continue
+		}
+		raw, err := json.Marshal(claudeTool{
 			Name:        t.Name,
 			Description: t.Description,
 			InputSchema: t.Parameters,
 		})
+		if err != nil {
+			continue
+		}
+		out = append(out, raw)
+	}
+
+	// 注入 web_search_20250305 服务端工具
+	if hasWebSearch {
+		ws := map[string]any{
+			"type": "web_search_20250305",
+			"name": "web_search",
+		}
+		if wsOpts != nil {
+			if len(wsOpts.AllowedDomains) > 0 {
+				ws["allowed_domains"] = wsOpts.AllowedDomains
+			}
+			if len(wsOpts.BlockedDomains) > 0 {
+				ws["blocked_domains"] = wsOpts.BlockedDomains
+			}
+			if wsOpts.MaxUses > 0 {
+				ws["max_uses"] = wsOpts.MaxUses
+			}
+			if wsOpts.UserLocation != nil {
+				loc := map[string]string{}
+				if wsOpts.UserLocation.Type != "" {
+					loc["type"] = wsOpts.UserLocation.Type
+				}
+				if wsOpts.UserLocation.Country != "" {
+					loc["country"] = wsOpts.UserLocation.Country
+				}
+				if wsOpts.UserLocation.Region != "" {
+					loc["region"] = wsOpts.UserLocation.Region
+				}
+				if wsOpts.UserLocation.City != "" {
+					loc["city"] = wsOpts.UserLocation.City
+				}
+				if wsOpts.UserLocation.Timezone != "" {
+					loc["timezone"] = wsOpts.UserLocation.Timezone
+				}
+				if len(loc) > 0 {
+					ws["user_location"] = loc
+				}
+			}
+		}
+		raw, _ := json.Marshal(ws)
+		out = append(out, raw)
+	}
+
+	if len(out) == 0 {
+		return nil
 	}
 	return out
 }
@@ -574,7 +690,7 @@ func (p *ClaudeProvider) Completion(ctx context.Context, req *llm.ChatRequest) (
 		Temperature: float32PtrIfSet(req.Temperature),
 		TopP:        float32PtrIfSet(req.TopP),
 		StopSeq:     req.Stop,
-		Tools:       convertToClaudeTools(req.Tools),
+		Tools:       convertToClaudeTools(req.Tools, req.WebSearchOptions),
 		ToolChoice:  convertClaudeToolChoice(req.ToolChoice),
 		Thinking:    buildThinking(req),
 	}
@@ -650,7 +766,7 @@ func (p *ClaudeProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-ch
 		TopP:        float32PtrIfSet(req.TopP),
 		StopSeq:     req.Stop,
 		Stream:      true,
-		Tools:       convertToClaudeTools(req.Tools),
+		Tools:       convertToClaudeTools(req.Tools, req.WebSearchOptions),
 		ToolChoice:  convertClaudeToolChoice(req.ToolChoice),
 		Thinking:    buildThinking(req),
 	}
@@ -710,6 +826,8 @@ func (p *ClaudeProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-ch
 		var currentModel string
 		var toolCallAccumulator = make(map[int]*types.ToolCall) // 累积工具调用
 		var startUsage *claudeUsage                             // message_start 中的初始 usage
+		var webSearchBlockIndices = make(map[int]bool)          // 标记 server_tool_use / web_search_tool_result 块索引
+		var citationAccumulator = make(map[int][]claudeCitation) // 累积 text 块的引用（流式中通过 content_block_stop 发送）
 
 		for {
 			line, err := reader.ReadString('\n')
@@ -777,16 +895,27 @@ func (p *ClaudeProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-ch
 				}
 
 			case "content_block_start":
-				if event.ContentBlock != nil && event.ContentBlock.Type == "tool_use" {
-					// Bug1 fix: 初始化 Arguments 为 nil，由 input_json_delta 逐步构建
-					toolCallAccumulator[event.Index] = &types.ToolCall{
-						ID:   event.ContentBlock.ID,
-						Name: event.ContentBlock.Name,
+				if event.ContentBlock != nil {
+					switch event.ContentBlock.Type {
+					case "tool_use":
+						// Bug1 fix: 初始化 Arguments 为 nil，由 input_json_delta 逐步构建
+						toolCallAccumulator[event.Index] = &types.ToolCall{
+							ID:   event.ContentBlock.ID,
+							Name: event.ContentBlock.Name,
+						}
+					case "server_tool_use", "web_search_tool_result":
+						// 标记为搜索相关块，静默跳过其增量
+						webSearchBlockIndices[event.Index] = true
 					}
 				}
 
 			case "content_block_delta":
 				if event.Delta != nil {
+					// 跳过 web search 相关块的增量
+					if webSearchBlockIndices[event.Index] {
+						continue
+					}
+
 					var sendChunk bool
 					chunk := llm.StreamChunk{
 						ID:       currentID,
@@ -813,6 +942,9 @@ func (p *ClaudeProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-ch
 						sendChunk = true
 					case "signature_delta":
 						// signature_delta 用于验证 thinking 块完整性，不发送 chunk
+					case "citations_delta":
+						// 引用增量 — 部分 API 版本可能通过 delta 发送引用
+						// 这里累积到 citationAccumulator，在 content_block_stop 时发送
 					}
 
 					if sendChunk {
@@ -843,6 +975,38 @@ func (p *ClaudeProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-ch
 					}
 					delete(toolCallAccumulator, event.Index)
 				}
+
+				// text 块结束时，发送累积的引用标注
+				if citations, ok := citationAccumulator[event.Index]; ok && len(citations) > 0 {
+					annotations := make([]types.Annotation, 0, len(citations))
+					for _, cit := range citations {
+						annotations = append(annotations, types.Annotation{
+							Type:       "url_citation",
+							URL:        cit.URL,
+							Title:      cit.Title,
+							StartIndex: cit.StartIndex,
+							EndIndex:   cit.EndIndex,
+						})
+					}
+					select {
+					case <-ctx.Done():
+						return
+					case ch <- llm.StreamChunk{
+						ID:       currentID,
+						Provider: p.Name(),
+						Model:    currentModel,
+						Index:    event.Index,
+						Delta: types.Message{
+							Role:        llm.RoleAssistant,
+							Annotations: annotations,
+						},
+					}:
+					}
+					delete(citationAccumulator, event.Index)
+				}
+
+				// 清理 web search 块索引
+				delete(webSearchBlockIndices, event.Index)
 
 			case "message_delta":
 				chunk := llm.StreamChunk{
@@ -916,10 +1080,22 @@ func toClaudeChatResponse(cr claudeResponse, provider string) *llm.ChatResponse 
 	var signatures []string
 	var thinkingParts []string
 	var thinkingBlocks []types.ThinkingBlock
+	var webSearchBlocks []json.RawMessage // 保存 server_tool_use / web_search_tool_result 原始块用于多轮回传
+
 	for _, content := range cr.Content {
 		switch content.Type {
 		case "text":
 			msg.Content += content.Text
+			// 提取引用标注
+			for _, cit := range content.Citations {
+				msg.Annotations = append(msg.Annotations, types.Annotation{
+					Type:       "url_citation",
+					URL:        cit.URL,
+					Title:      cit.Title,
+					StartIndex: cit.StartIndex,
+					EndIndex:   cit.EndIndex,
+				})
+			}
 		case "tool_use":
 			msg.ToolCalls = append(msg.ToolCalls, types.ToolCall{
 				ID:        content.ID,
@@ -939,6 +1115,12 @@ func toClaudeChatResponse(cr claudeResponse, provider string) *llm.ChatResponse 
 				Thinking:  content.Thinking,
 				Signature: content.Signature,
 			})
+		case "server_tool_use", "web_search_tool_result":
+			// 保存原始 JSON 用于多轮 round-trip
+			raw, err := json.Marshal(content)
+			if err == nil {
+				webSearchBlocks = append(webSearchBlocks, raw)
+			}
 		}
 	}
 	if len(thinkingParts) > 0 {
@@ -947,6 +1129,11 @@ func toClaudeChatResponse(cr claudeResponse, provider string) *llm.ChatResponse 
 	}
 	if len(thinkingBlocks) > 0 {
 		msg.ThinkingBlocks = thinkingBlocks
+	}
+
+	// 保存 web search blocks 到 metadata 用于多轮回传
+	if len(webSearchBlocks) > 0 {
+		msg.Metadata = map[string]any{"claude_web_search_blocks": webSearchBlocks}
 	}
 
 	resp := &llm.ChatResponse{

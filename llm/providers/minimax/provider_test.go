@@ -63,53 +63,35 @@ func TestMiniMaxProvider_NilLogger(t *testing.T) {
 	assert.Equal(t, "minimax", p.Name())
 }
 
-// --- parseXMLToolCall ---
+// --- SupportsNativeFunctionCalling ---
 
-func TestParseXMLToolCall(t *testing.T) {
-	tests := []struct {
-		name     string
-		content  string
-		wantOK   bool
-		wantName string
-	}{
-		{
-			name:     "valid XML tool call",
-			content:  "<tool_calls>\n{\"name\":\"get_weather\",\"arguments\":{\"city\":\"Beijing\"}}\n</tool_calls>",
-			wantOK:   true,
-			wantName: "get_weather",
+func TestMiniMaxProvider_LegacyModel_NoNativeFunctionCalling(t *testing.T) {
+	p := NewMiniMaxProvider(providers.MiniMaxConfig{
+		BaseProviderConfig: providers.BaseProviderConfig{
+			Model: "abab6.5s-chat",
 		},
-		{
-			name:    "no XML tags",
-			content: "Hello, how can I help?",
-			wantOK:  false,
-		},
-		{
-			name:    "empty between tags",
-			content: "<tool_calls>\n\n</tool_calls>",
-			wantOK:  false,
-		},
-		{
-			name:    "invalid JSON between tags",
-			content: "<tool_calls>\nnot-json\n</tool_calls>",
-			wantOK:  false,
-		},
-		{
-			name:    "missing close tag",
-			content: "<tool_calls>{\"name\":\"test\"}",
-			wantOK:  false,
-		},
-	}
+	}, zap.NewNop())
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			tc, ok := parseXMLToolCall(tt.content)
-			assert.Equal(t, tt.wantOK, ok)
-			if tt.wantOK {
-				assert.Equal(t, tt.wantName, tc.Name)
-				assert.NotEmpty(t, tc.ID)
-			}
-		})
-	}
+	assert.False(t, p.SupportsNativeFunctionCalling(),
+		"旧模型 abab 系列应不支持原生函数调用")
+}
+
+func TestMiniMaxProvider_NewModel_SupportsNativeFunctionCalling(t *testing.T) {
+	p := NewMiniMaxProvider(providers.MiniMaxConfig{
+		BaseProviderConfig: providers.BaseProviderConfig{
+			Model: "MiniMax-Text-01",
+		},
+	}, zap.NewNop())
+
+	assert.True(t, p.SupportsNativeFunctionCalling(),
+		"新模型应支持原生函数调用")
+}
+
+func TestMiniMaxProvider_EmptyModel_SupportsNativeFunctionCalling(t *testing.T) {
+	p := NewMiniMaxProvider(providers.MiniMaxConfig{}, zap.NewNop())
+
+	assert.True(t, p.SupportsNativeFunctionCalling(),
+		"未指定模型时应默认支持原生函数调用")
 }
 
 // --- Completion via httptest ---
@@ -238,9 +220,10 @@ func TestMiniMaxProvider_Stream(t *testing.T) {
 	assert.Equal(t, "minimax", chunks[0].Provider)
 }
 
-func TestMiniMaxProvider_Stream_XMLToolCall(t *testing.T) {
-	// MiniMax Stream overrides the parent to parse XML tool calls from content
-	// This only applies to legacy abab models
+// TestMiniMaxProvider_Stream_LegacyModel_NoProviderLevelXMLParsing
+// 旧模型的 XML 工具调用解析已迁移到框架级 XMLToolCallProvider，
+// MiniMax Provider 自身不再做 XML 解析，内容原样透传。
+func TestMiniMaxProvider_Stream_LegacyModel_NoProviderLevelXMLParsing(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/event-stream")
 		w.WriteHeader(http.StatusOK)
@@ -265,7 +248,7 @@ func TestMiniMaxProvider_Stream_XMLToolCall(t *testing.T) {
 	}))
 	t.Cleanup(func() { server.Close() })
 
-	// Use a legacy abab model to trigger XML tool call parsing
+	// 旧模型 → SupportsNativeFunctionCalling() == false
 	p := NewMiniMaxProvider(providers.MiniMaxConfig{
 		BaseProviderConfig: providers.BaseProviderConfig{
 			APIKey:  "test-key",
@@ -273,6 +256,8 @@ func TestMiniMaxProvider_Stream_XMLToolCall(t *testing.T) {
 			Model:   "abab6.5s-chat",
 		},
 	}, zap.NewNop())
+
+	assert.False(t, p.SupportsNativeFunctionCalling())
 
 	ch, err := p.Stream(context.Background(), &llm.ChatRequest{
 		Messages: []types.Message{{Role: llm.RoleUser, Content: "What is the weather?"}},
@@ -285,10 +270,10 @@ func TestMiniMaxProvider_Stream_XMLToolCall(t *testing.T) {
 	}
 
 	require.Len(t, chunks, 1)
-	// Content should be cleared, tool call should be extracted
-	assert.Empty(t, chunks[0].Delta.Content)
-	require.Len(t, chunks[0].Delta.ToolCalls, 1)
-	assert.Equal(t, "get_weather", chunks[0].Delta.ToolCalls[0].Name)
+	// Provider 不再做 XML 解析，内容原样透传
+	// XML 解析由框架级 XMLToolCallProvider 负责
+	assert.Contains(t, chunks[0].Delta.Content, "<tool_calls>")
+	assert.Empty(t, chunks[0].Delta.ToolCalls, "Provider 自身不应解析 XML 工具调用")
 }
 
 func TestMiniMaxProvider_Stream_Error(t *testing.T) {

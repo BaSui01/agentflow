@@ -110,6 +110,8 @@ type WebSearchOptions struct {
 	SearchContextSize string             `json:"search_context_size,omitempty"` // low/medium/high
 	UserLocation      *WebSearchLocation `json:"user_location,omitempty"`
 	AllowedDomains    []string           `json:"allowed_domains,omitempty"` // Responses web_search filters.allowed_domains
+	BlockedDomains    []string           `json:"blocked_domains,omitempty"` // Anthropic 域名黑名单
+	MaxUses           int                `json:"max_uses,omitempty"`        // Anthropic 搜索次数限制
 }
 
 // WebSearchLocation represents approximate user location for web search.
@@ -159,6 +161,9 @@ type ChatRequest struct {
 	WebSearchOptions    *WebSearchOptions `json:"web_search_options,omitempty"`    // 内置 web 搜索
 	Include             []string          `json:"include,omitempty"`               // Responses API include
 	Truncation          string            `json:"truncation,omitempty"`            // Responses API truncation: auto/disabled
+
+	// 工具调用模式：native（原生 JSON）或 xml（文本降级）
+	ToolCallMode ToolCallMode `json:"tool_call_mode,omitempty"`
 
 	// 扩展字段
 	ReasoningMode      string   `json:"reasoning_mode,omitempty"`

@@ -2,10 +2,10 @@ package agent
 
 import (
 	"context"
-	"fmt"
 	"strings"
 
 	"github.com/BaSui01/agentflow/llm"
+	"github.com/BaSui01/agentflow/llm/middleware"
 	"github.com/BaSui01/agentflow/types"
 
 	"go.uber.org/zap"
@@ -82,15 +82,22 @@ func (b *BaseAgent) prepareChatRequest(ctx context.Context, messages []types.Mes
 		)
 	}
 
-	// 6. Validate tool provider capability
+	// 6. 工具调用模式检测：不支持原生 FC 时自动降级到 XML 模式
 	toolProv := chatProv
 	if b.toolProvider != nil {
 		toolProv = b.gatewayToolProvider()
 	}
-	if len(req.Tools) > 0 {
-		if toolProv != nil && !toolProv.SupportsNativeFunctionCalling() {
-			return nil, ErrToolProviderNotSupported.WithCause(fmt.Errorf("provider %q", toolProv.Name()))
+	if len(req.Tools) > 0 && toolProv != nil && !toolProv.SupportsNativeFunctionCalling() {
+		req.ToolCallMode = llm.ToolCallModeXML
+		wrapped := middleware.NewXMLToolCallProvider(toolProv, b.logger)
+		toolProv = wrapped
+		// 当 chatProv 和 toolProv 指向同一个 provider 时，
+		// StreamCompletion 使用 chatProvider，也需要包装
+		if b.toolProvider == nil {
+			chatProv = wrapped
 		}
+		b.logger.Info("provider does not support native function calling, falling back to XML tool call mode",
+			zap.String("provider", wrapped.Name()))
 	}
 
 	// 7. Effective ReAct iterations

@@ -232,8 +232,8 @@ func TestReActExecutor_Execute_MaxIterationsReached(t *testing.T) {
 	if err == nil {
 		t.Fatalf("expected error, got nil")
 	}
-	if resp != nil {
-		t.Fatalf("expected nil response, got %#v", resp)
+	if resp == nil {
+		t.Fatalf("expected last response to be returned, got nil")
 	}
 	if len(steps) != 2 {
 		t.Fatalf("expected 2 steps, got %d", len(steps))
