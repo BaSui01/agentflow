@@ -72,13 +72,14 @@ type Input struct {
 
 // Output Agent 输出
 type Output struct {
-	TraceID      string         `json:"trace_id"`
-	Content      string         `json:"content"`
-	Metadata     map[string]any `json:"metadata,omitempty"`
-	TokensUsed   int            `json:"tokens_used,omitempty"`
-	Cost         float64        `json:"cost,omitempty"`
-	Duration     time.Duration  `json:"duration"`
-	FinishReason string         `json:"finish_reason,omitempty"`
+	TraceID          string         `json:"trace_id"`
+	Content          string         `json:"content"`
+	ReasoningContent *string        `json:"reasoning_content,omitempty"`
+	Metadata         map[string]any `json:"metadata,omitempty"`
+	TokensUsed       int            `json:"tokens_used,omitempty"`
+	Cost             float64        `json:"cost,omitempty"`
+	Duration         time.Duration  `json:"duration"`
+	FinishReason     string         `json:"finish_reason,omitempty"`
 }
 
 // PlanResult 规划结果

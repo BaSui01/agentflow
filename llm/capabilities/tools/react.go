@@ -235,6 +235,13 @@ func (r *ReActExecutor) ExecuteStream(ctx context.Context, req *llm.ChatRequest)
 				if chunk.Delta.Content != "" {
 					assembledMessage.Content += chunk.Delta.Content
 				}
+				if chunk.Delta.ReasoningContent != nil && *chunk.Delta.ReasoningContent != "" {
+					if assembledMessage.ReasoningContent == nil {
+						s := ""
+						assembledMessage.ReasoningContent = &s
+					}
+					*assembledMessage.ReasoningContent += *chunk.Delta.ReasoningContent
+				}
 				if len(chunk.Delta.ToolCalls) > 0 {
 					if toolCallByID == nil {
 						toolCallByID = make(map[string]*struct {

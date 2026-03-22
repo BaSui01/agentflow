@@ -60,6 +60,13 @@ func (b *BaseAgent) chatCompletionStreaming(ctx context.Context, pr *preparedReq
 						Delta:     ev.Chunk.Delta.Content,
 					})
 				}
+				if ev.Chunk != nil && ev.Chunk.Delta.ReasoningContent != nil && *ev.Chunk.Delta.ReasoningContent != "" {
+					emit(RuntimeStreamEvent{
+						Type:      RuntimeStreamReasoning,
+						Timestamp: time.Now(),
+						Reasoning: *ev.Chunk.Delta.ReasoningContent,
+					})
+				}
 			case llmtools.ReActEventToolsStart:
 				for _, call := range ev.ToolCalls {
 					emit(RuntimeStreamEvent{
@@ -118,6 +125,7 @@ func (b *BaseAgent) chatCompletionStreaming(ctx context.Context, pr *preparedReq
 		lastUsage *llm.ChatUsage
 		lastFR    string
 	)
+	var reasoningBuf strings.Builder
 	for chunk := range streamCh {
 		if chunk.Err != nil {
 			return nil, chunk.Err
@@ -146,6 +154,18 @@ func (b *BaseAgent) chatCompletionStreaming(ctx context.Context, pr *preparedReq
 			})
 			assembled.Content += chunk.Delta.Content
 		}
+		if chunk.Delta.ReasoningContent != nil && *chunk.Delta.ReasoningContent != "" {
+			emit(RuntimeStreamEvent{
+				Type:      RuntimeStreamReasoning,
+				Timestamp: time.Now(),
+				Reasoning: *chunk.Delta.ReasoningContent,
+			})
+			reasoningBuf.WriteString(*chunk.Delta.ReasoningContent)
+		}
+	}
+	if reasoningBuf.Len() > 0 {
+		rc := reasoningBuf.String()
+		assembled.ReasoningContent = &rc
 	}
 	assembled.Role = llm.RoleAssistant
 	resp := &llm.ChatResponse{
@@ -219,6 +239,7 @@ type RuntimeStreamEventType string
 
 const (
 	RuntimeStreamToken        RuntimeStreamEventType = "token"
+	RuntimeStreamReasoning    RuntimeStreamEventType = "reasoning"
 	RuntimeStreamToolCall     RuntimeStreamEventType = "tool_call"
 	RuntimeStreamToolResult   RuntimeStreamEventType = "tool_result"
 	RuntimeStreamToolProgress RuntimeStreamEventType = "tool_progress"
@@ -246,6 +267,7 @@ type RuntimeStreamEvent struct {
 	Timestamp  time.Time              `json:"timestamp"`
 	Token      string                 `json:"token,omitempty"`
 	Delta      string                 `json:"delta,omitempty"`
+	Reasoning  string                 `json:"reasoning,omitempty"`
 	ToolCall   *RuntimeToolCall       `json:"tool_call,omitempty"`
 	ToolResult *RuntimeToolResult     `json:"tool_result,omitempty"`
 	ToolCallID string                 `json:"tool_call_id,omitempty"`

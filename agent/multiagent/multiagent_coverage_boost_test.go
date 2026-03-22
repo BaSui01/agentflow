@@ -415,9 +415,10 @@ func TestLoopMode_StopInReasoningContent(t *testing.T) {
 	ag := &mockAgent{id: "a1", execFn: func(_ context.Context, _ *agent.Input) (*agent.Output, error) {
 		callCount++
 		if callCount >= 2 {
+			rc := "I think LOOP_COMPLETE is appropriate"
 			return &agent.Output{
-				Content:  "still thinking",
-				Metadata: map[string]any{"reasoning_content": "I think LOOP_COMPLETE is appropriate"},
+				Content:          "still thinking",
+				ReasoningContent: &rc,
 			}, nil
 		}
 		return &agent.Output{Content: "working"}, nil

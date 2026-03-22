@@ -409,6 +409,7 @@ func (b *BaseAgent) Execute(ctx context.Context, input *Input) (_ *Output, execE
 	return &Output{
 		TraceID: input.TraceID,
 		Content: outputContent,
+		ReasoningContent: choice.Message.ReasoningContent,
 		Metadata: map[string]any{
 			"model":    resp.Model,
 			"provider": resp.Provider,

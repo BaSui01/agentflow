@@ -2584,3 +2584,547 @@ func strContains(s, substr string) bool {
 	}
 	return false
 }
+
+// ═══ Coverage Boost Round 3 ═══
+
+// --- CachingResolver TeardownAll / ResetCache with cached agents (20%/16.7%) ---
+
+func TestCachingResolver_TeardownAll_WithCachedAgents(t *testing.T) {
+	reg := NewAgentRegistry(zap.NewNop())
+	resolver := NewCachingResolver(reg, &testMockProvider{}, zap.NewNop())
+
+	// Manually store a mock agent in the cache
+	ag := &testSimpleAgent{id: "cached1"}
+	resolver.agents.Store("cached1", ag)
+
+	resolver.TeardownAll(context.Background())
+}
+
+func TestCachingResolver_ResetCache_WithCachedAgents(t *testing.T) {
+	reg := NewAgentRegistry(zap.NewNop())
+	resolver := NewCachingResolver(reg, &testMockProvider{}, zap.NewNop())
+
+	ag := &testSimpleAgent{id: "cached2"}
+	resolver.agents.Store("cached2", ag)
+
+	resolver.ResetCache(context.Background())
+
+	// After reset, cache should be empty
+	_, ok := resolver.agents.Load("cached2")
+	if ok {
+		t.Fatal("expected agent to be removed from cache after reset")
+	}
+}
+
+// --- WithRuntimeTools (77.8%) ---
+
+func TestCachingResolver_WithRuntimeTools(t *testing.T) {
+	reg := NewAgentRegistry(zap.NewNop())
+	resolver := NewCachingResolver(reg, &testMockProvider{}, zap.NewNop())
+
+	// Empty list
+	resolver.WithRuntimeTools(nil)
+	resolver.WithRuntimeTools([]string{})
+
+	// With duplicates and blanks
+	resolver.WithRuntimeTools([]string{"tool1", "  ", "tool1", "tool2", ""})
+
+	// All blank
+	resolver.WithRuntimeTools([]string{"  ", ""})
+}
+
+// --- Build with all features enabled (65.6%) ---
+
+func TestAgentBuilder_Build_WithAllFeatures(t *testing.T) {
+	cfg := testConfig("all-feat")
+	cfg.Features.Reflection = &types.ReflectionConfig{Enabled: true}
+	cfg.Features.ToolSelection = &types.ToolSelectionConfig{Enabled: true}
+	cfg.Features.PromptEnhancer = &types.PromptEnhancerConfig{Enabled: true}
+	cfg.Extensions.Skills = &types.SkillsConfig{Enabled: true}
+	cfg.Extensions.MCP = &types.MCPConfig{Enabled: true}
+	cfg.Extensions.LSP = &types.LSPConfig{Enabled: true}
+	cfg.Features.Memory = &types.MemoryConfig{Enabled: true}
+
+	b := NewAgentBuilder(cfg)
+	b.WithProvider(&testMockProvider{})
+	b.WithLogger(zap.NewNop())
+	b.WithSkills(&mockSkillDiscoverer{})
+	b.WithMCP(&mockMCPServer{})
+	b.WithEnhancedMemory(&mockEnhancedMemory{})
+
+	ag, err := b.Build()
+	if err != nil {
+		t.Fatalf("Build with all features failed: %v", err)
+	}
+	if ag == nil {
+		t.Fatal("expected non-nil agent")
+	}
+}
+
+func TestAgentBuilder_Build_WithToolProvider(t *testing.T) {
+	cfg := testConfig("tool-prov-build")
+	b := NewAgentBuilder(cfg)
+	b.WithProvider(&testMockProvider{})
+	b.WithToolProvider(&testMockProvider{})
+	b.WithLogger(zap.NewNop())
+	ag, err := b.Build()
+	if err != nil {
+		t.Fatalf("Build with tool provider failed: %v", err)
+	}
+	if ag.ToolProvider() == nil {
+		t.Fatal("expected non-nil tool provider")
+	}
+}
+
+// --- prepareChatRequest more branches (64.9%) ---
+
+func TestBaseAgent_PrepareChatRequest_WithModelOverride(t *testing.T) {
+	ag := buildTestAgent(t, "prep-model")
+	ag.Init(context.Background())
+
+	ctx := types.WithLLMModel(context.Background(), "gpt-4-turbo")
+	msgs := []types.Message{{Role: "user", Content: "hello"}}
+
+	output, err := ag.ChatCompletion(ctx, msgs)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if output == nil {
+		t.Fatal("expected non-nil output")
+	}
+}
+
+func TestBaseAgent_PrepareChatRequest_WithRunConfig(t *testing.T) {
+	ag := buildTestAgent(t, "prep-rc")
+	ag.Init(context.Background())
+
+	model := "custom-model"
+	rc := &RunConfig{Model: &model}
+	ctx := WithRunConfig(context.Background(), rc)
+	msgs := []types.Message{{Role: "user", Content: "hello"}}
+
+	output, err := ag.ChatCompletion(ctx, msgs)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if output == nil {
+		t.Fatal("expected non-nil output")
+	}
+}
+
+func TestBaseAgent_PrepareChatRequest_WithToolManager(t *testing.T) {
+	ag := buildTestAgent(t, "prep-tools")
+	ag.toolManager = &mockToolManager{}
+	ag.config.Runtime.Tools = []string{"tool1"}
+	ag.Init(context.Background())
+
+	msgs := []types.Message{{Role: "user", Content: "hello"}}
+	output, err := ag.ChatCompletion(context.Background(), msgs)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if output == nil {
+		t.Fatal("expected non-nil output")
+	}
+}
+
+func TestBaseAgent_PrepareChatRequest_NilMessages(t *testing.T) {
+	ag := buildTestAgent(t, "prep-nil")
+	ag.Init(context.Background())
+
+	_, err := ag.ChatCompletion(context.Background(), nil)
+	if err == nil {
+		t.Fatal("expected error for nil messages")
+	}
+}
+
+// --- toolSelectionMiddleware (0%) ---
+
+func TestBaseAgent_ExecuteEnhanced_WithToolSelection_Error(t *testing.T) {
+	ag := buildTestAgent(t, "ts-err")
+	ag.Init(context.Background())
+	ag.extensions.EnableToolSelection(&mockToolSelector{err: fmt.Errorf("selection failed")})
+
+	output, err := ag.ExecuteEnhanced(context.Background(), &Input{
+		TraceID: "ts-err1",
+		Content: "test tool selection error",
+	}, EnhancedExecutionOptions{
+		UseToolSelection: true,
+	})
+	// Should still succeed (tool selection failure is non-fatal)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if output == nil {
+		t.Fatal("expected non-nil output")
+	}
+}
+
+// --- SaveToEnhancedMemory error paths (75%) ---
+
+func TestExtensionRegistry_SaveToEnhancedMemory_SaveError(t *testing.T) {
+	reg := NewExtensionRegistry(zap.NewNop())
+	mem := &mockEnhancedMemoryWithErrors{saveErr: fmt.Errorf("save failed")}
+	reg.EnableEnhancedMemory(mem)
+
+	// Should not panic, just log warning
+	reg.SaveToEnhancedMemory(context.Background(), "agent1",
+		&Input{TraceID: "t1", Content: "test"},
+		&Output{Content: "result", TokensUsed: 10, Duration: time.Millisecond},
+		false,
+	)
+}
+
+func TestExtensionRegistry_SaveToEnhancedMemory_EpisodeError(t *testing.T) {
+	reg := NewExtensionRegistry(zap.NewNop())
+	mem := &mockEnhancedMemoryWithErrors{episodeErr: fmt.Errorf("episode failed")}
+	reg.EnableEnhancedMemory(mem)
+
+	reg.SaveToEnhancedMemory(context.Background(), "agent1",
+		&Input{TraceID: "t1", Content: "test"},
+		&Output{Content: "result", TokensUsed: 10, Duration: time.Millisecond},
+		false,
+	)
+}
+
+type mockEnhancedMemoryWithErrors struct {
+	saveErr    error
+	episodeErr error
+}
+
+func (m *mockEnhancedMemoryWithErrors) LoadWorking(_ context.Context, _ string) ([]types.MemoryEntry, error) {
+	return nil, nil
+}
+func (m *mockEnhancedMemoryWithErrors) LoadShortTerm(_ context.Context, _ string, _ int) ([]types.MemoryEntry, error) {
+	return nil, nil
+}
+func (m *mockEnhancedMemoryWithErrors) SaveShortTerm(_ context.Context, _, _ string, _ map[string]any) error {
+	return m.saveErr
+}
+func (m *mockEnhancedMemoryWithErrors) RecordEpisode(_ context.Context, _ *types.EpisodicEvent) error {
+	return m.episodeErr
+}
+
+// --- LifecycleManager Start already running / Stop not running (73.3% / 80%) ---
+
+func TestLifecycleManager_Start_AlreadyRunning(t *testing.T) {
+	ag := buildTestAgent(t, "lm-dup-start")
+	// Don't call Init - let LifecycleManager.Start do it
+	lm := NewLifecycleManager(ag, zap.NewNop())
+
+	ctx := context.Background()
+	if err := lm.Start(ctx); err != nil {
+		t.Fatalf("first start failed: %v", err)
+	}
+
+	err := lm.Start(ctx)
+	if err == nil {
+		t.Fatal("expected error for double start")
+	}
+
+	lm.Stop(ctx)
+}
+
+func TestLifecycleManager_Stop_NotRunning(t *testing.T) {
+	ag := buildTestAgent(t, "lm-stop-nr")
+	lm := NewLifecycleManager(ag, zap.NewNop())
+
+	err := lm.Stop(context.Background())
+	if err == nil {
+		t.Fatal("expected error for stopping non-running manager")
+	}
+}
+
+// --- healthCheckLoop context cancel (72.7%) ---
+
+func TestLifecycleManager_HealthCheckLoop_ContextCancel(t *testing.T) {
+	ag := buildTestAgent(t, "lm-ctx-cancel")
+	// Don't call Init - let LifecycleManager.Start do it
+	lm := NewLifecycleManager(ag, zap.NewNop())
+	lm.healthCheckInterval = 50 * time.Millisecond
+
+	ctx, cancel := context.WithCancel(context.Background())
+	if err := lm.Start(ctx); err != nil {
+		t.Fatalf("start failed: %v", err)
+	}
+
+	// Let a few health checks run
+	time.Sleep(150 * time.Millisecond)
+
+	// Cancel context should stop the loop
+	cancel()
+	time.Sleep(100 * time.Millisecond)
+
+	status := lm.GetHealthStatus()
+	if !status.Healthy {
+		t.Log("agent may be in non-ready state, that's ok")
+	}
+}
+
+// --- RenderSystemPromptWithVars (75%) ---
+
+func TestPromptBundle_RenderSystemPromptWithVars(t *testing.T) {
+	b := PromptBundle{
+		System: SystemPrompt{
+			Role: "You are {{agent_name}}",
+		},
+	}
+	result := b.RenderSystemPromptWithVars(map[string]string{"agent_name": "TestBot"})
+	if !strContains(result, "TestBot") {
+		t.Fatalf("expected 'TestBot' in result, got: %s", result)
+	}
+}
+
+func TestPromptBundle_RenderSystemPromptWithVars_NoVars(t *testing.T) {
+	b := PromptBundle{
+		System: SystemPrompt{
+			Role: "You are a helper",
+		},
+	}
+	result := b.RenderSystemPromptWithVars(nil)
+	if !strContains(result, "helper") {
+		t.Fatalf("expected 'helper' in result, got: %s", result)
+	}
+}
+
+// --- UnifiedMemoryFacade SaveInteraction / RecordEpisode error paths (75%) ---
+
+func TestUnifiedMemoryFacade_SaveInteraction_EnhancedError(t *testing.T) {
+	mem := &mockEnhancedMemoryWithErrors{saveErr: fmt.Errorf("save failed")}
+	facade := NewUnifiedMemoryFacade(nil, mem, zap.NewNop())
+	// Should not panic
+	facade.SaveInteraction(context.Background(), "agent1", "trace1", "input", "output")
+}
+
+func TestUnifiedMemoryFacade_RecordEpisode_Error(t *testing.T) {
+	mem := &mockEnhancedMemoryWithErrors{episodeErr: fmt.Errorf("episode failed")}
+	facade := NewUnifiedMemoryFacade(nil, mem, zap.NewNop())
+	// Should not panic
+	facade.RecordEpisode(context.Background(), &types.EpisodicEvent{
+		ID:      "ep1",
+		AgentID: "agent1",
+	})
+}
+
+// --- ExecuteAsync (66.7%) ---
+
+func TestAsyncExecutor_ExecuteAsync_Success2(t *testing.T) {
+	ag := &testSimpleAgent{id: "async-ag", output: "done"}
+	exec := NewAsyncExecutor(ag, zap.NewNop())
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	asyncExec, err := exec.ExecuteAsync(ctx, &Input{TraceID: "a1", Content: "test"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	asyncExec.Wait(ctx)
+
+	if asyncExec.GetStatus() != ExecutionStatusCompleted {
+		t.Fatalf("expected completed, got %s", asyncExec.GetStatus())
+	}
+	if asyncExec.GetOutput() == nil {
+		t.Fatal("expected non-nil output")
+	}
+	if asyncExec.GetError() != "" {
+		t.Fatalf("unexpected error: %v", asyncExec.GetError())
+	}
+}
+
+func TestAsyncExecutor_ExecuteAsync_Failure2(t *testing.T) {
+	ag := &testFailAgent{id: "async-fail"}
+	exec := NewAsyncExecutor(ag, zap.NewNop())
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	asyncExec, err := exec.ExecuteAsync(ctx, &Input{TraceID: "a2", Content: "test"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	asyncExec.Wait(ctx)
+
+	if asyncExec.GetStatus() != ExecutionStatusFailed {
+		t.Fatalf("expected failed, got %s", asyncExec.GetStatus())
+	}
+	if asyncExec.GetError() == "" {
+		t.Fatal("expected non-empty error")
+	}
+}
+
+// ═══ Coverage Boost Round 4 ═══
+
+// --- toolSelectionMiddleware with toolManager (0%) ---
+
+func TestBaseAgent_ExecuteEnhanced_ToolSelectionWithToolManager(t *testing.T) {
+	ag := buildTestAgent(t, "ts-tm")
+	ag.toolManager = &mockToolManager{}
+	ag.Init(context.Background())
+	ag.extensions.EnableToolSelection(&mockToolSelector{})
+
+	output, err := ag.ExecuteEnhanced(context.Background(), &Input{
+		TraceID: "ts-tm1",
+		Content: "test tool selection with tool manager",
+	}, EnhancedExecutionOptions{
+		UseToolSelection: true,
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if output == nil {
+		t.Fatal("expected non-nil output")
+	}
+}
+
+// --- StreamCompletion error path (75%) ---
+
+func TestBaseAgent_StreamCompletion_NilMessages(t *testing.T) {
+	ag := buildTestAgent(t, "stream-nil")
+	ag.Init(context.Background())
+
+	_, err := ag.StreamCompletion(context.Background(), nil)
+	if err == nil {
+		t.Fatal("expected error for nil messages")
+	}
+}
+
+// --- Execute with input overrides (react.go:84 55.5%) ---
+
+func TestBaseAgent_Execute_WithOverrides(t *testing.T) {
+	ag := buildTestAgent(t, "exec-override")
+	ag.Init(context.Background())
+
+	model := "override-model"
+	output, err := ag.Execute(context.Background(), &Input{
+		TraceID:   "ov1",
+		Content:   "test overrides",
+		Overrides: &RunConfig{Model: &model},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if output == nil {
+		t.Fatal("expected non-nil output")
+	}
+}
+
+// --- TeardownExtensions error paths (75%) ---
+
+func TestExtensionRegistry_TeardownExtensions_LSPLifecycleError(t *testing.T) {
+	reg := NewExtensionRegistry(zap.NewNop())
+	reg.lspLifecycle = &mockLSPLifecycleErr{}
+	err := reg.TeardownExtensions(context.Background())
+	// Should still return nil (error is logged, not returned)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+type mockLSPLifecycleErr struct{}
+
+func (m *mockLSPLifecycleErr) Close() error {
+	return fmt.Errorf("close failed")
+}
+
+func TestExtensionRegistry_TeardownExtensions_LSPClientError(t *testing.T) {
+	reg := NewExtensionRegistry(zap.NewNop())
+	reg.lspClient = &mockLSPClientErr{}
+	err := reg.TeardownExtensions(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+type mockLSPClientErr struct{}
+
+func (m *mockLSPClientErr) Shutdown(_ context.Context) error {
+	return fmt.Errorf("shutdown failed")
+}
+
+// --- processEvents: event with no handlers (63.4%) ---
+
+func TestSimpleEventBus_ProcessEvents_NoHandlers(t *testing.T) {
+	bus := NewEventBus(zap.NewNop())
+	// Publish event with no subscribers
+	bus.Publish(&StateChangeEvent{
+		AgentID_:   "test",
+		FromState:  StateReady,
+		ToState:    StateRunning,
+		Timestamp_: time.Now(),
+	})
+	time.Sleep(50 * time.Millisecond)
+	bus.Stop()
+}
+
+// --- processEvents: multiple handlers (63.4%) ---
+
+func TestSimpleEventBus_ProcessEvents_MultipleHandlers(t *testing.T) {
+	bus := NewEventBus(zap.NewNop())
+	count1 := 0
+	count2 := 0
+	bus.Subscribe(EventStateChange, func(e Event) { count1++ })
+	bus.Subscribe(EventStateChange, func(e Event) { count2++ })
+
+	bus.Publish(&StateChangeEvent{
+		AgentID_:   "test",
+		FromState:  StateReady,
+		ToState:    StateRunning,
+		Timestamp_: time.Now(),
+	})
+	time.Sleep(100 * time.Millisecond)
+	bus.Stop()
+
+	if count1 == 0 || count2 == 0 {
+		t.Fatalf("expected both handlers called, got %d and %d", count1, count2)
+	}
+}
+
+// --- Build with feature flags set in config but no explicit With* calls (65.6%) ---
+
+func TestAgentBuilder_Build_WithReflectionFromConfig(t *testing.T) {
+	cfg := testConfig("ref-cfg")
+	cfg.Features.Reflection = &types.ReflectionConfig{Enabled: true}
+	b := NewAgentBuilder(cfg)
+	b.WithProvider(&testMockProvider{})
+	b.WithLogger(zap.NewNop())
+	ag, err := b.Build()
+	if err != nil {
+		t.Fatalf("Build failed: %v", err)
+	}
+	if ag == nil {
+		t.Fatal("expected non-nil agent")
+	}
+}
+
+func TestAgentBuilder_Build_WithToolSelectionFromConfig(t *testing.T) {
+	cfg := testConfig("ts-cfg")
+	cfg.Features.ToolSelection = &types.ToolSelectionConfig{Enabled: true}
+	b := NewAgentBuilder(cfg)
+	b.WithProvider(&testMockProvider{})
+	b.WithLogger(zap.NewNop())
+	ag, err := b.Build()
+	if err != nil {
+		t.Fatalf("Build failed: %v", err)
+	}
+	if ag == nil {
+		t.Fatal("expected non-nil agent")
+	}
+}
+
+func TestAgentBuilder_Build_WithPromptEnhancerFromConfig(t *testing.T) {
+	cfg := testConfig("pe-cfg")
+	cfg.Features.PromptEnhancer = &types.PromptEnhancerConfig{Enabled: true}
+	b := NewAgentBuilder(cfg)
+	b.WithProvider(&testMockProvider{})
+	b.WithLogger(zap.NewNop())
+	ag, err := b.Build()
+	if err != nil {
+		t.Fatalf("Build failed: %v", err)
+	}
+	if ag == nil {
+		t.Fatal("expected non-nil agent")
+	}
+}

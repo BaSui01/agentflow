@@ -8,6 +8,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
 )
 
 // ═══ HostedAdapter 完整测试 ═══
@@ -593,4 +594,419 @@ func TestSanitizeID_ExactlyMaxLength(t *testing.T) {
 	input := "abcdefghijklmnopqrstuvwxyz123456" // exactly 32
 	assert.Equal(t, 32, len(sanitizeID(input)))
 	assert.Equal(t, input, sanitizeID(input))
+}
+
+// ═══ Coverage Boost Round 2 ═══
+
+// --- DockerBackend.Execute more branches (80.9%) ---
+
+func TestDockerBackend_Execute_UnsupportedLanguage(t *testing.T) {
+	d := NewDockerBackend(nil)
+
+	result, err := d.Execute(context.Background(), &ExecutionRequest{
+		ID:       "unsupported-lang",
+		Language: Language("lua"),
+		Code:     "print('hi')",
+	}, DefaultSandboxConfig())
+
+	require.NoError(t, err)
+	assert.False(t, result.Success)
+	assert.Contains(t, result.Error, "no image configured")
+}
+
+func TestDockerBackend_Execute_WithCleanupOnExit(t *testing.T) {
+	cfg := DefaultSandboxConfig()
+	d := NewDockerBackendWithConfig(nil, DockerBackendConfig{
+		CleanupOnExit: true,
+	})
+
+	result, err := d.Execute(context.Background(), &ExecutionRequest{
+		ID:       "cleanup-test",
+		Language: LangPython,
+		Code:     "print('hi')",
+	}, cfg)
+
+	require.NoError(t, err)
+	assert.Equal(t, "cleanup-test", result.ID)
+}
+
+func TestDockerBackend_Execute_TypeScript(t *testing.T) {
+	d := NewDockerBackend(nil)
+
+	result, err := d.Execute(context.Background(), &ExecutionRequest{
+		ID:       "ts-exec",
+		Language: LangTypeScript,
+		Code:     "console.log('hi')",
+	}, DefaultSandboxConfig())
+
+	require.NoError(t, err)
+	assert.Equal(t, "ts-exec", result.ID)
+}
+
+func TestDockerBackend_Execute_BashLanguage(t *testing.T) {
+	d := NewDockerBackend(nil)
+
+	result, err := d.Execute(context.Background(), &ExecutionRequest{
+		ID:       "bash-exec",
+		Language: LangBash,
+		Code:     "echo hi",
+	}, DefaultSandboxConfig())
+
+	require.NoError(t, err)
+	assert.Equal(t, "bash-exec", result.ID)
+}
+
+func TestDockerBackend_Execute_WithMemoryAndCPU(t *testing.T) {
+	d := NewDockerBackend(nil)
+	cfg := DefaultSandboxConfig()
+	cfg.MaxMemoryMB = 256
+	cfg.MaxCPUPercent = 50
+
+	result, err := d.Execute(context.Background(), &ExecutionRequest{
+		ID:       "limits-test",
+		Language: LangPython,
+		Code:     "pass",
+	}, cfg)
+
+	require.NoError(t, err)
+	assert.Equal(t, "limits-test", result.ID)
+}
+
+func TestDockerBackend_Execute_WithMountPaths(t *testing.T) {
+	d := NewDockerBackend(nil)
+	cfg := DefaultSandboxConfig()
+	cfg.MountPaths = map[string]string{"/host/data": "/container/data"}
+
+	result, err := d.Execute(context.Background(), &ExecutionRequest{
+		ID:       "mount-test",
+		Language: LangPython,
+		Code:     "pass",
+	}, cfg)
+
+	require.NoError(t, err)
+	assert.Equal(t, "mount-test", result.ID)
+}
+
+// --- DockerBackend.killContainer / removeContainer (83.3%) ---
+
+func TestDockerBackend_Cleanup_WithActiveContainers2(t *testing.T) {
+	d := NewDockerBackend(nil)
+	d.activeContainers["test-container-1"] = struct{}{}
+	d.activeContainers["test-container-2"] = struct{}{}
+
+	err := d.Cleanup()
+	require.NoError(t, err)
+}
+
+// --- ProcessBackend.Execute more branches (84.6%) ---
+
+func TestProcessBackend_Execute_Disabled(t *testing.T) {
+	p := NewProcessBackendWithConfig(nil, ProcessBackendConfig{Enabled: false})
+
+	result, err := p.Execute(context.Background(), &ExecutionRequest{
+		ID:       "disabled-test",
+		Language: LangPython,
+		Code:     "print('hi')",
+	}, DefaultSandboxConfig())
+
+	require.NoError(t, err)
+	assert.False(t, result.Success)
+	assert.Contains(t, result.Error, "disabled")
+}
+
+func TestProcessBackend_Execute_UnsupportedLanguage(t *testing.T) {
+	p := NewProcessBackendWithConfig(nil, ProcessBackendConfig{Enabled: true})
+
+	result, err := p.Execute(context.Background(), &ExecutionRequest{
+		ID:       "unsupported-proc",
+		Language: Language("cobol"),
+		Code:     "DISPLAY 'HI'",
+	}, DefaultSandboxConfig())
+
+	require.NoError(t, err)
+	assert.False(t, result.Success)
+	assert.Contains(t, result.Error, "no interpreter")
+}
+
+func TestProcessBackend_Execute_TypeScript(t *testing.T) {
+	p := NewProcessBackendWithConfig(nil, ProcessBackendConfig{Enabled: true})
+
+	result, err := p.Execute(context.Background(), &ExecutionRequest{
+		ID:       "ts-proc",
+		Language: LangTypeScript,
+		Code:     "console.log('hi')",
+	}, DefaultSandboxConfig())
+
+	require.NoError(t, err)
+	assert.Equal(t, "ts-proc", result.ID)
+}
+
+func TestProcessBackend_Execute_WithEnvVars(t *testing.T) {
+	p := NewProcessBackendWithConfig(nil, ProcessBackendConfig{Enabled: true})
+	cfg := DefaultSandboxConfig()
+	cfg.EnvVars = map[string]string{"TEST_VAR": "hello"}
+
+	result, err := p.Execute(context.Background(), &ExecutionRequest{
+		ID:       "env-proc",
+		Language: LangPython,
+		Code:     "pass",
+	}, cfg)
+
+	require.NoError(t, err)
+	assert.Equal(t, "env-proc", result.ID)
+}
+
+// --- SandboxTool.Execute (80%) ---
+
+func TestSandboxTool_Execute_Success(t *testing.T) {
+	backend := &testBackend{
+		executeFn: func(ctx context.Context, req *ExecutionRequest, config SandboxConfig) (*ExecutionResult, error) {
+			return &ExecutionResult{
+				ID:       req.ID,
+				Success:  true,
+				ExitCode: 0,
+				Stdout:   "output",
+			}, nil
+		},
+	}
+
+	cfg := DefaultSandboxConfig()
+	executor := NewSandboxExecutor(cfg, backend, nil)
+	tool := NewSandboxTool(executor, nil)
+
+	args := []byte(`{"id":"tool-test","language":"python","code":"print('hi')"}`)
+	result, err := tool.Execute(context.Background(), args)
+	require.NoError(t, err)
+	assert.NotNil(t, result)
+}
+
+func TestSandboxTool_Execute_InvalidJSON(t *testing.T) {
+	backend := &testBackend{}
+	cfg := DefaultSandboxConfig()
+	executor := NewSandboxExecutor(cfg, backend, nil)
+	tool := NewSandboxTool(executor, nil)
+
+	_, err := tool.Execute(context.Background(), []byte(`{invalid`))
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid arguments")
+}
+
+func TestSandboxTool_Execute_WithWarnings(t *testing.T) {
+	backend := &testBackend{
+		executeFn: func(ctx context.Context, req *ExecutionRequest, config SandboxConfig) (*ExecutionResult, error) {
+			return &ExecutionResult{
+				ID:       req.ID,
+				Success:  true,
+				ExitCode: 0,
+			}, nil
+		},
+	}
+
+	cfg := DefaultSandboxConfig()
+	executor := NewSandboxExecutor(cfg, backend, nil)
+	tool := NewSandboxTool(executor, zap.NewNop())
+
+	// Code with dangerous pattern
+	args := []byte(`{"id":"warn-test","language":"python","code":"import os; os.system('ls')"}`)
+	result, err := tool.Execute(context.Background(), args)
+	require.NoError(t, err)
+	assert.NotNil(t, result)
+}
+
+func TestSandboxTool_Execute_BackendError(t *testing.T) {
+	backend := &testBackend{
+		executeFn: func(ctx context.Context, req *ExecutionRequest, config SandboxConfig) (*ExecutionResult, error) {
+			return nil, fmt.Errorf("backend error")
+		},
+	}
+
+	cfg := DefaultSandboxConfig()
+	executor := NewSandboxExecutor(cfg, backend, nil)
+	tool := NewSandboxTool(executor, nil)
+
+	args := []byte(`{"id":"err-test","language":"python","code":"pass"}`)
+	_, err := tool.Execute(context.Background(), args)
+	require.Error(t, err)
+}
+
+// --- mustContext (66.7%) ---
+
+func TestMustContext_WithValue(t *testing.T) {
+	result := mustContext("hello", true)
+	assert.Equal(t, "hello", result)
+}
+
+func TestMustContext_WithoutValue(t *testing.T) {
+	result := mustContext("", false)
+	assert.Equal(t, "", result)
+}
+
+func TestMustContext_ValueButNotOk(t *testing.T) {
+	result := mustContext("something", false)
+	assert.Equal(t, "", result)
+}
+
+// --- SandboxExecutor.Execute nil backend (94.7%) ---
+
+func TestSandboxExecutor_Execute_NilBackend(t *testing.T) {
+	cfg := DefaultSandboxConfig()
+	exec := NewSandboxExecutor(cfg, nil, nil)
+
+	_, err := exec.Execute(context.Background(), &ExecutionRequest{
+		ID:       "nil-backend",
+		Language: LangPython,
+		Code:     "pass",
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "backend is nil")
+}
+
+// --- RealDockerBackend.Execute more branches (28.6%) ---
+
+func TestRealDockerBackend_Execute_UnsupportedLanguage(t *testing.T) {
+	d := NewRealDockerBackend(nil)
+
+	result, err := d.Execute(context.Background(), &ExecutionRequest{
+		ID:       "real-unsupported",
+		Language: Language("lua"),
+		Code:     "print('hi')",
+	}, DefaultSandboxConfig())
+
+	require.NoError(t, err)
+	assert.False(t, result.Success)
+	assert.Contains(t, result.Error, "no image configured")
+}
+
+func TestRealDockerBackend_Execute_WithExtraFiles(t *testing.T) {
+	d := NewRealDockerBackend(nil)
+
+	result, err := d.Execute(context.Background(), &ExecutionRequest{
+		ID:       "extra-files",
+		Language: LangPython,
+		Code:     "pass",
+		Files: map[string]string{
+			"data.txt": "hello world",
+		},
+	}, DefaultSandboxConfig())
+
+	require.NoError(t, err)
+	// Will fail at docker execution but should get past file writing
+	assert.Equal(t, "extra-files", result.ID)
+}
+
+// --- RealProcessBackend.Execute more branches (71.4%) ---
+
+func TestRealProcessBackend_Execute_Disabled(t *testing.T) {
+	p := NewRealProcessBackend(nil, false)
+
+	result, err := p.Execute(context.Background(), &ExecutionRequest{
+		ID:       "disabled-real",
+		Language: LangPython,
+		Code:     "pass",
+	}, DefaultSandboxConfig())
+
+	require.NoError(t, err)
+	assert.False(t, result.Success)
+	assert.Contains(t, result.Error, "disabled")
+}
+
+func TestRealProcessBackend_Execute_SafeBash(t *testing.T) {
+	p := NewRealProcessBackend(nil, true)
+
+	result, err := p.Execute(context.Background(), &ExecutionRequest{
+		ID:       "safe-bash",
+		Language: LangBash,
+		Code:     "echo hello",
+	}, DefaultSandboxConfig())
+
+	require.NoError(t, err)
+	// May succeed or fail depending on env, but should not fail at validation
+	assert.NotContains(t, result.Error, "code validation failed")
+}
+
+func TestRealProcessBackend_Execute_UnsupportedLang(t *testing.T) {
+	p := NewRealProcessBackend(nil, true)
+
+	result, err := p.Execute(context.Background(), &ExecutionRequest{
+		ID:       "unsupported-real",
+		Language: LangGo, // Go is not in the switch for RealProcessBackend
+		Code:     "package main",
+	}, DefaultSandboxConfig())
+
+	require.NoError(t, err)
+	assert.False(t, result.Success)
+}
+
+// --- CodeValidator more coverage ---
+
+func TestCodeValidator_Validate_GoPatterns(t *testing.T) {
+	v := NewCodeValidator()
+	warnings := v.Validate(LangGo, `import "os/exec"; exec.Command("ls")`)
+	assert.NotEmpty(t, warnings)
+}
+
+func TestCodeValidator_Validate_RustPatterns(t *testing.T) {
+	v := NewCodeValidator()
+	warnings := v.Validate(LangRust, `unsafe { std::process::Command::new("ls") }`)
+	assert.NotEmpty(t, warnings)
+}
+
+func TestCodeValidator_Validate_UnknownLanguage(t *testing.T) {
+	v := NewCodeValidator()
+	warnings := v.Validate(Language("lua"), "print('hi')")
+	assert.Empty(t, warnings)
+}
+
+// --- DockerBackend buildDockerArgs with all options ---
+
+func TestDockerBackend_BuildDockerArgs_AllOptions(t *testing.T) {
+	d := NewDockerBackend(nil)
+	cfg := SandboxConfig{
+		MaxMemoryMB:    512,
+		MaxCPUPercent:  75,
+		NetworkEnabled: true,
+		EnvVars:        map[string]string{"CFG_VAR": "val1"},
+		MountPaths:     map[string]string{"/host": "/container"},
+	}
+
+	args := d.buildDockerArgs("test-container", "python:3.12-slim",
+		&ExecutionRequest{
+			Language: LangPython,
+			Code:     "pass",
+			EnvVars:  map[string]string{"REQ_VAR": "val2"},
+		}, cfg, "/tmp/code")
+
+	// Should contain memory, cpu, env vars, mount paths, code mount
+	found := map[string]bool{}
+	for _, arg := range args {
+		if arg == "--memory" {
+			found["memory"] = true
+		}
+		if arg == "--cpus" {
+			found["cpus"] = true
+		}
+	}
+	assert.True(t, found["memory"], "expected --memory flag")
+	assert.True(t, found["cpus"], "expected --cpus flag")
+	// Should NOT contain --network none since NetworkEnabled=true
+	for i, arg := range args {
+		if arg == "--network" && i+1 < len(args) && args[i+1] == "none" {
+			t.Fatal("should not have --network none when NetworkEnabled=true")
+		}
+	}
+}
+
+// --- ProcessBackend buildArgs ---
+
+func TestProcessBackend_BuildArgs_GoLanguage(t *testing.T) {
+	p := NewProcessBackendWithConfig(nil, ProcessBackendConfig{Enabled: true})
+	args := p.buildArgs(&ExecutionRequest{Language: LangGo, Code: "package main"})
+	assert.Contains(t, args, "run")
+}
+
+func TestProcessBackend_BuildArgs_DefaultLanguage(t *testing.T) {
+	p := NewProcessBackendWithConfig(nil, ProcessBackendConfig{Enabled: true})
+	args := p.buildArgs(&ExecutionRequest{Language: Language("unknown"), Code: "code"})
+	// Should use the default fallback
+	assert.NotEmpty(t, args)
 }

@@ -288,6 +288,9 @@ func (h *AgentHandler) HandleAgentStream(w http.ResponseWriter, r *http.Request)
 		case agent.RuntimeStreamToken:
 			sseEvent = "token"
 			data, err = json.Marshal(map[string]string{"content": event.Delta})
+		case agent.RuntimeStreamReasoning:
+			sseEvent = "reasoning"
+			data, err = json.Marshal(map[string]string{"reasoning_content": event.Reasoning})
 		case agent.RuntimeStreamToolCall:
 			sseEvent = "tool_call"
 			if event.ToolCall != nil {
