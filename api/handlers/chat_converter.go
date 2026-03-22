@@ -187,6 +187,8 @@ func convertAPIWebSearchOptions(in *api.WebSearchOptions) *llm.WebSearchOptions 
 	out := &llm.WebSearchOptions{
 		SearchContextSize: in.SearchContextSize,
 		AllowedDomains:    append([]string(nil), in.AllowedDomains...),
+		BlockedDomains:    append([]string(nil), in.BlockedDomains...),
+		MaxUses:           in.MaxUses,
 	}
 	if in.UserLocation != nil {
 		out.UserLocation = &llm.WebSearchLocation{

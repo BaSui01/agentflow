@@ -549,16 +549,22 @@ func TestOpenAIProvider_Stream_EndpointModeChatOverridesConfig(t *testing.T) {
 }
 
 func TestOpenAIProvider_Stream_ResponsesAPI_ToolArgsAreAccumulated(t *testing.T) {
+	// 严格对标 OpenAI 官方文档：函数名通过 response.output_item.added 传递，
+	// 而非 response.function_call_arguments.delta（该事件不含 name 字段）。
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/event-stream")
 		w.WriteHeader(http.StatusOK)
 
 		_, _ = w.Write([]byte("event: response.created\n"))
 		_, _ = w.Write([]byte(`data: {"type":"response.created","response":{"id":"resp_1","model":"gpt-5.2"}}` + "\n\n"))
+		// 函数名在 output_item.added 事件中
+		_, _ = w.Write([]byte("event: response.output_item.added\n"))
+		_, _ = w.Write([]byte(`data: {"type":"response.output_item.added","item":{"id":"fc_1","type":"function_call","name":"lookup"}}` + "\n\n"))
+		// delta 事件只包含参数片段，不含 name
 		_, _ = w.Write([]byte("event: response.function_call_arguments.delta\n"))
-		_, _ = w.Write([]byte(`data: {"type":"response.function_call_arguments.delta","item_id":"fc_1","name":"lookup","delta":"{\"city\":"}` + "\n\n"))
+		_, _ = w.Write([]byte(`data: {"type":"response.function_call_arguments.delta","item_id":"fc_1","delta":"{\"city\":"}` + "\n\n"))
 		_, _ = w.Write([]byte("event: response.function_call_arguments.delta\n"))
-		_, _ = w.Write([]byte(`data: {"type":"response.function_call_arguments.delta","item_id":"fc_1","name":"lookup","delta":"\"NYC\"}"}` + "\n\n"))
+		_, _ = w.Write([]byte(`data: {"type":"response.function_call_arguments.delta","item_id":"fc_1","delta":"\"NYC\"}"}` + "\n\n"))
 		_, _ = w.Write([]byte("event: response.function_call_arguments.done\n"))
 		_, _ = w.Write([]byte(`data: {"type":"response.function_call_arguments.done","item_id":"fc_1"}` + "\n\n"))
 		_, _ = w.Write([]byte("data: [DONE]\n\n"))
@@ -587,6 +593,76 @@ func TestOpenAIProvider_Stream_ResponsesAPI_ToolArgsAreAccumulated(t *testing.T)
 	assert.Equal(t, "fc_1", gotToolCall.ID)
 	assert.Equal(t, "lookup", gotToolCall.Name)
 	assert.JSONEq(t, `{"city":"NYC"}`, string(gotToolCall.Arguments))
+}
+
+func TestOpenAIProvider_Stream_ResponsesAPI_FunctionCallName_FullSequence(t *testing.T) {
+	// 验证完整的函数调用流式事件序列：
+	// output_item.added → arguments.delta(×N) → arguments.done → response.completed
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(http.StatusOK)
+
+		events := []string{
+			`event: response.created` + "\n" +
+				`data: {"type":"response.created","response":{"id":"resp_42","model":"gpt-5.2"}}` + "\n\n",
+			// 非 function_call 类型的 output_item.added 应被忽略
+			`event: response.output_item.added` + "\n" +
+				`data: {"type":"response.output_item.added","item":{"id":"msg_1","type":"message"}}` + "\n\n",
+			// 正确的 function_call output_item.added
+			`event: response.output_item.added` + "\n" +
+				`data: {"type":"response.output_item.added","item":{"id":"fc_abc","type":"function_call","name":"get_weather"}}` + "\n\n",
+			// 参数分片 delta（不含 name 字段）
+			`event: response.function_call_arguments.delta` + "\n" +
+				`data: {"type":"response.function_call_arguments.delta","item_id":"fc_abc","delta":"{\"loc"}` + "\n\n",
+			`event: response.function_call_arguments.delta` + "\n" +
+				`data: {"type":"response.function_call_arguments.delta","item_id":"fc_abc","delta":"ation\":\"Shanghai\"}"}` + "\n\n",
+			// done 事件
+			`event: response.function_call_arguments.done` + "\n" +
+				`data: {"type":"response.function_call_arguments.done","item_id":"fc_abc"}` + "\n\n",
+			// response.completed with usage
+			`event: response.completed` + "\n" +
+				`data: {"type":"response.completed","response":{"id":"resp_42","model":"gpt-5.2","usage":{"input_tokens":10,"output_tokens":5,"total_tokens":15}}}` + "\n\n",
+			"data: [DONE]\n\n",
+		}
+		for _, e := range events {
+			_, _ = w.Write([]byte(e))
+		}
+	}))
+	t.Cleanup(func() { server.Close() })
+
+	p := NewOpenAIProvider(providers.OpenAIConfig{
+		BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key", BaseURL: server.URL},
+		UseResponsesAPI:    true,
+	}, zap.NewNop())
+
+	ch, err := p.Stream(context.Background(), &llm.ChatRequest{
+		Messages: []types.Message{{Role: llm.RoleUser, Content: "What's the weather in Shanghai?"}},
+	})
+	require.NoError(t, err)
+
+	var chunks []llm.StreamChunk
+	for c := range ch {
+		chunks = append(chunks, c)
+	}
+
+	// 应该有 tool_calls chunk 和 usage chunk
+	require.NotEmpty(t, chunks)
+
+	var gotToolCall *types.ToolCall
+	var gotFinishReason string
+	for _, c := range chunks {
+		if len(c.Delta.ToolCalls) > 0 {
+			tc := c.Delta.ToolCalls[0]
+			gotToolCall = &tc
+			gotFinishReason = c.FinishReason
+		}
+	}
+
+	require.NotNil(t, gotToolCall, "should receive a tool call chunk")
+	assert.Equal(t, "fc_abc", gotToolCall.ID)
+	assert.Equal(t, "get_weather", gotToolCall.Name, "function name must come from output_item.added")
+	assert.JSONEq(t, `{"location":"Shanghai"}`, string(gotToolCall.Arguments))
+	assert.Equal(t, "tool_calls", gotFinishReason)
 }
 
 func TestOpenAIProvider_Stream_ResponsesAPI_MapsNativeWebSearchTool(t *testing.T) {

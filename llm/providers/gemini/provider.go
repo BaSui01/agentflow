@@ -78,6 +78,7 @@ func NewGeminiProvider(cfg providers.GeminiConfig, logger *zap.Logger) *GeminiPr
 		client: tlsutil.SecureHTTPClient(timeout),
 		logger: logger,
 		rewriterChain: middleware.NewRewriterChain(
+			middleware.NewXMLToolRewriter(),
 			middleware.NewEmptyToolsCleaner(),
 		),
 	}
@@ -309,12 +310,49 @@ type geminiFunctionResponse struct {
 
 type geminiTool struct {
 	FunctionDeclarations []geminiFunctionDeclaration `json:"functionDeclarations,omitempty"`
+	GoogleSearch         *geminiGoogleSearch         `json:"google_search,omitempty"` // google_search grounding
 }
+
+// geminiGoogleSearch 是 google_search grounding 工具的标记结构体（空对象）
+type geminiGoogleSearch struct{}
 
 type geminiFunctionDeclaration struct {
 	Name        string         `json:"name"`
 	Description string         `json:"description,omitempty"`
 	Parameters  map[string]any `json:"parameters,omitempty"` // JSON Schema
+}
+
+// Grounding Metadata 结构体
+
+type geminiGroundingMetadata struct {
+	WebSearchQueries  []string                 `json:"webSearchQueries,omitempty"`
+	SearchEntryPoint  *geminiSearchEntryPoint  `json:"searchEntryPoint,omitempty"`
+	GroundingChunks   []geminiGroundingChunk   `json:"groundingChunks,omitempty"`
+	GroundingSupports []geminiGroundingSupport `json:"groundingSupports,omitempty"`
+}
+
+type geminiSearchEntryPoint struct {
+	RenderedContent string `json:"renderedContent,omitempty"`
+}
+
+type geminiGroundingChunk struct {
+	Web *geminiGroundingChunkWeb `json:"web,omitempty"`
+}
+
+type geminiGroundingChunkWeb struct {
+	URI   string `json:"uri,omitempty"`
+	Title string `json:"title,omitempty"`
+}
+
+type geminiGroundingSupport struct {
+	Segment              *geminiGroundingSegment `json:"segment,omitempty"`
+	GroundingChunkIndices []int                  `json:"groundingChunkIndices,omitempty"`
+}
+
+type geminiGroundingSegment struct {
+	StartIndex int    `json:"startIndex,omitempty"`
+	EndIndex   int    `json:"endIndex,omitempty"`
+	Text       string `json:"text,omitempty"`
 }
 
 type geminiGenerationConfig struct {
@@ -357,20 +395,23 @@ type geminiRequest struct {
 }
 
 type geminiCandidate struct {
-	Content       geminiContent `json:"content"`
-	FinishReason  string        `json:"finishReason,omitempty"`
-	Index         int           `json:"index"`
-	SafetyRatings []any         `json:"safetyRatings,omitempty"`
+	Content           geminiContent            `json:"content"`
+	FinishReason      string                   `json:"finishReason,omitempty"`
+	Index             int                      `json:"index"`
+	SafetyRatings     []any                    `json:"safetyRatings,omitempty"`
+	GroundingMetadata *geminiGroundingMetadata  `json:"groundingMetadata,omitempty"`
 }
 
 func (c *geminiCandidate) UnmarshalJSON(data []byte) error {
 	var aux struct {
-		Content            geminiContent `json:"content"`
-		FinishReason       string        `json:"finishReason"`
-		FinishReasonSnake  string        `json:"finish_reason"`
-		Index              int           `json:"index"`
-		SafetyRatings      []any         `json:"safetyRatings"`
-		SafetyRatingsSnake []any         `json:"safety_ratings"`
+		Content                geminiContent            `json:"content"`
+		FinishReason           string                   `json:"finishReason"`
+		FinishReasonSnake      string                   `json:"finish_reason"`
+		Index                  int                      `json:"index"`
+		SafetyRatings          []any                    `json:"safetyRatings"`
+		SafetyRatingsSnake     []any                    `json:"safety_ratings"`
+		GroundingMetadata      *geminiGroundingMetadata  `json:"groundingMetadata"`
+		GroundingMetadataSnake *geminiGroundingMetadata  `json:"grounding_metadata"`
 	}
 	if err := json.Unmarshal(data, &aux); err != nil {
 		return err
@@ -384,6 +425,7 @@ func (c *geminiCandidate) UnmarshalJSON(data []byte) error {
 	} else {
 		c.SafetyRatings = aux.SafetyRatingsSnake
 	}
+	c.GroundingMetadata = firstGroundingMetadata(aux.GroundingMetadata, aux.GroundingMetadataSnake)
 	return nil
 }
 
@@ -626,13 +668,19 @@ func convertToGeminiContents(msgs []types.Message) (*geminiContent, []geminiCont
 	return systemInstruction, contents
 }
 
-func convertToGeminiTools(tools []types.ToolSchema) []geminiTool {
-	if len(tools) == 0 {
-		return nil
-	}
+// convertToGeminiTools 将统一工具列表转换为 Gemini 格式。
+// 当 wsOpts 不为 nil 或工具列表中包含 web_search/google_search 时，自动注入 google_search grounding 工具。
+// Gemini API 要求 FunctionDeclarations 和 GoogleSearch 在不同的 tool 条目中。
+func convertToGeminiTools(tools []types.ToolSchema, wsOpts *llm.WebSearchOptions) []geminiTool {
+	needGoogleSearch := wsOpts != nil
 
 	declarations := make([]geminiFunctionDeclaration, 0, len(tools))
 	for _, t := range tools {
+		// 跳过 web_search / google_search 占位工具
+		if t.Name == "web_search" || t.Name == "google_search" {
+			needGoogleSearch = true
+			continue
+		}
 		var params map[string]any
 		if err := json.Unmarshal(t.Parameters, &params); err == nil {
 			declarations = append(declarations, geminiFunctionDeclaration{
@@ -643,13 +691,26 @@ func convertToGeminiTools(tools []types.ToolSchema) []geminiTool {
 		}
 	}
 
-	if len(declarations) == 0 {
-		return nil
+	var result []geminiTool
+
+	// 普通函数工具
+	if len(declarations) > 0 {
+		result = append(result, geminiTool{
+			FunctionDeclarations: declarations,
+		})
 	}
 
-	return []geminiTool{{
-		FunctionDeclarations: declarations,
-	}}
+	// google_search grounding 工具（必须在独立的 tool 条目中）
+	if needGoogleSearch {
+		result = append(result, geminiTool{
+			GoogleSearch: &geminiGoogleSearch{},
+		})
+	}
+
+	if len(result) == 0 {
+		return nil
+	}
+	return result
 }
 
 func (p *GeminiProvider) Completion(ctx context.Context, req *llm.ChatRequest) (*llm.ChatResponse, error) {
@@ -671,7 +732,7 @@ func (p *GeminiProvider) Completion(ctx context.Context, req *llm.ChatRequest) (
 
 	body := geminiRequest{
 		Contents:          contents,
-		Tools:             convertToGeminiTools(req.Tools),
+		Tools:             convertToGeminiTools(req.Tools, req.WebSearchOptions),
 		ToolConfig:        convertToolChoice(req.ToolChoice),
 		SystemInstruction: systemInstruction,
 		SafetySettings:    convertSafetySettings(p.cfg.SafetySettings),
@@ -747,7 +808,7 @@ func (p *GeminiProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-ch
 
 	body := geminiRequest{
 		Contents:          contents,
-		Tools:             convertToGeminiTools(req.Tools),
+		Tools:             convertToGeminiTools(req.Tools, req.WebSearchOptions),
 		ToolConfig:        convertToolChoice(req.ToolChoice),
 		SystemInstruction: systemInstruction,
 		SafetySettings:    convertSafetySettings(p.cfg.SafetySettings),
@@ -871,6 +932,16 @@ func (p *GeminiProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-ch
 				continue
 			}
 
+			// 检查 promptFeedback（安全过滤导致的流式阻断）
+			if err := checkPromptFeedback(geminiResp, p.Name()); err != nil {
+				select {
+				case <-ctx.Done():
+					return
+				case ch <- llm.StreamChunk{Err: err.(*types.Error)}:
+				}
+				return
+			}
+
 			// 处理每个候选响应
 			for _, candidate := range geminiResp.Candidates {
 				chunk := llm.StreamChunk{
@@ -907,6 +978,11 @@ func (p *GeminiProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-ch
 						})
 						toolCallIndex++
 					}
+				}
+
+				// 提取 grounding annotations
+				if candidate.GroundingMetadata != nil {
+					chunk.Delta.Annotations = append(chunk.Delta.Annotations, extractGroundingAnnotations(candidate.GroundingMetadata)...)
 				}
 
 				select {
@@ -968,6 +1044,11 @@ func toGeminiChatResponse(gr geminiResponse, provider, model string) *llm.ChatRe
 				})
 				toolCallIndex++
 			}
+		}
+
+		// 提取 grounding annotations
+		if candidate.GroundingMetadata != nil {
+			msg.Annotations = append(msg.Annotations, extractGroundingAnnotations(candidate.GroundingMetadata)...)
 		}
 
 		choices = append(choices, llm.ChatChoice{
@@ -1219,4 +1300,62 @@ func convertSafetySettings(settings []providers.GeminiSafetySetting) []geminiSaf
 		out[i] = geminiSafetySetting{Category: s.Category, Threshold: s.Threshold}
 	}
 	return out
+}
+
+// extractGroundingAnnotations 从 Gemini grounding metadata 中提取引用标注。
+func extractGroundingAnnotations(gm *geminiGroundingMetadata) []types.Annotation {
+	if gm == nil {
+		return nil
+	}
+
+	var annotations []types.Annotation
+
+	if len(gm.GroundingSupports) > 0 {
+		// 有 GroundingSupports → 用 segment 的位置信息精确定位引用
+		for _, support := range gm.GroundingSupports {
+			for _, idx := range support.GroundingChunkIndices {
+				if idx < 0 || idx >= len(gm.GroundingChunks) {
+					continue
+				}
+				chunk := gm.GroundingChunks[idx]
+				if chunk.Web == nil {
+					continue
+				}
+				ann := types.Annotation{
+					Type:  "url_citation",
+					URL:   chunk.Web.URI,
+					Title: chunk.Web.Title,
+				}
+				if support.Segment != nil {
+					ann.StartIndex = support.Segment.StartIndex
+					ann.EndIndex = support.Segment.EndIndex
+				}
+				annotations = append(annotations, ann)
+			}
+		}
+	} else if len(gm.GroundingChunks) > 0 {
+		// 无 supports → 仅列出所有 GroundingChunks 作为无位置引用
+		for _, chunk := range gm.GroundingChunks {
+			if chunk.Web == nil {
+				continue
+			}
+			annotations = append(annotations, types.Annotation{
+				Type:  "url_citation",
+				URL:   chunk.Web.URI,
+				Title: chunk.Web.Title,
+			})
+		}
+	}
+
+	return annotations
+}
+
+func firstGroundingMetadata(values ...*geminiGroundingMetadata) *geminiGroundingMetadata {
+	for _, v := range values {
+		if v != nil {
+			out := *v
+			return &out
+		}
+	}
+	return nil
 }

@@ -798,6 +798,23 @@ func streamResponsesSSE(ctx context.Context, body io.ReadCloser, providerName st
 					}
 				}
 
+			case "response.output_item.added":
+				// 从 output_item.added 事件提取函数调用名称
+				// 官方文档: 函数名在此事件的 item.name 中，而非 arguments.delta 中
+				item, _ := event["item"].(map[string]any)
+				if item == nil {
+					continue
+				}
+				itemType, _ := item["type"].(string)
+				if itemType != "function_call" {
+					continue
+				}
+				itemID, _ := item["id"].(string)
+				name, _ := item["name"].(string)
+				if itemID != "" && name != "" {
+					toolCallName[itemID] = name
+				}
+
 			case "response.output_text.delta":
 				delta, _ := event["delta"].(string)
 				select {
@@ -822,13 +839,9 @@ func streamResponsesSSE(ctx context.Context, body io.ReadCloser, providerName st
 
 			case "response.function_call_arguments.delta":
 				delta, _ := event["delta"].(string)
-				name, _ := event["name"].(string)
 				itemID, _ := event["item_id"].(string)
 				if itemID == "" {
 					continue
-				}
-				if name != "" {
-					toolCallName[itemID] = name
 				}
 				toolCallArgs[itemID] = append(toolCallArgs[itemID], []byte(delta)...)
 

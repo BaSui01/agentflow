@@ -140,6 +140,8 @@ type WebSearchOptions struct {
 	SearchContextSize string             `json:"search_context_size,omitempty"`
 	UserLocation      *WebSearchLocation `json:"user_location,omitempty"`
 	AllowedDomains    []string           `json:"allowed_domains,omitempty"`
+	BlockedDomains    []string           `json:"blocked_domains,omitempty"`
+	MaxUses           int                `json:"max_uses,omitempty"`
 }
 
 // WebSearchLocation 定义 web_search 用户位置。

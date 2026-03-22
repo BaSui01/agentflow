@@ -91,7 +91,7 @@ func TestClaudeProvider_Headers_APIKey(t *testing.T) {
 	})
 	require.NoError(t, err)
 	assert.Equal(t, "sk-test-123", capturedHeaders.Get("x-api-key"))
-	assert.Equal(t, "2023-06-01", capturedHeaders.Get("anthropic-version"))
+	assert.Equal(t, "2025-04-14", capturedHeaders.Get("anthropic-version"))
 	assert.Equal(t, "application/json", capturedHeaders.Get("Content-Type"))
 }
 
@@ -862,4 +862,257 @@ func TestToClaudeChatResponse_MultipleThinkingBlocks(t *testing.T) {
 	require.NotNil(t, resp.Choices[0].Message.ReasoningContent)
 	assert.Equal(t, "Step 1: analyze\n\nStep 2: conclude", *resp.Choices[0].Message.ReasoningContent)
 	assert.Equal(t, []string{"sig1", "sig2"}, resp.ThoughtSignatures)
+}
+
+// =============================================================================
+// Web Search Tests
+// =============================================================================
+
+func TestConvertToClaudeTools_WithWebSearch(t *testing.T) {
+	// 1. wsOpts 触发注入
+	tools := []types.ToolSchema{
+		{Name: "get_weather", Description: "Get weather", Parameters: json.RawMessage(`{"type":"object"}`)},
+	}
+	wsOpts := &llm.WebSearchOptions{
+		AllowedDomains: []string{"example.com"},
+		BlockedDomains: []string{"spam.com"},
+		MaxUses:        5,
+		UserLocation: &llm.WebSearchLocation{
+			Type:    "approximate",
+			Country: "US",
+		},
+	}
+
+	result := convertToClaudeTools(tools, wsOpts)
+	require.Len(t, result, 2) // 1 function tool + 1 web_search tool
+
+	// 验证普通工具
+	var funcTool map[string]any
+	require.NoError(t, json.Unmarshal(result[0], &funcTool))
+	assert.Equal(t, "get_weather", funcTool["name"])
+
+	// 验证 web_search 工具
+	var wsTool map[string]any
+	require.NoError(t, json.Unmarshal(result[1], &wsTool))
+	assert.Equal(t, "web_search_20250305", wsTool["type"])
+	assert.Equal(t, "web_search", wsTool["name"])
+	assert.Equal(t, float64(5), wsTool["max_uses"])
+	assert.Equal(t, []any{"example.com"}, wsTool["allowed_domains"])
+	assert.Equal(t, []any{"spam.com"}, wsTool["blocked_domains"])
+	loc := wsTool["user_location"].(map[string]any)
+	assert.Equal(t, "US", loc["country"])
+}
+
+func TestConvertToClaudeTools_WithWebSearch_FromToolName(t *testing.T) {
+	// 2. 工具列表中有 web_search 占位工具时，自动替换为 server tool
+	tools := []types.ToolSchema{
+		{Name: "web_search", Description: "Search the web", Parameters: json.RawMessage(`{"type":"object"}`)},
+		{Name: "calculator", Description: "Calc", Parameters: json.RawMessage(`{"type":"object"}`)},
+	}
+
+	result := convertToClaudeTools(tools, nil)
+	require.Len(t, result, 2) // calculator + web_search_20250305
+
+	var names []string
+	for _, raw := range result {
+		var m map[string]any
+		json.Unmarshal(raw, &m)
+		if n, ok := m["name"].(string); ok {
+			names = append(names, n)
+		}
+	}
+	assert.Contains(t, names, "calculator")
+	assert.Contains(t, names, "web_search")
+}
+
+func TestConvertToClaudeTools_NilWebSearchOpts(t *testing.T) {
+	// 3. 无 web search 时不注入
+	tools := []types.ToolSchema{
+		{Name: "calc", Description: "Calc", Parameters: json.RawMessage(`{"type":"object"}`)},
+	}
+	result := convertToClaudeTools(tools, nil)
+	require.Len(t, result, 1)
+}
+
+func TestToClaudeChatResponse_WithWebSearch(t *testing.T) {
+	cr := claudeResponse{
+		ID: "msg_ws", Role: "assistant", Model: "claude-opus-4.5-20260105",
+		Content: []claudeContent{
+			{
+				Type: "server_tool_use",
+				ID:   "srvtoolu_1",
+				Name: "web_search",
+			},
+			{
+				Type: "web_search_tool_result",
+				ID:   "srvtoolu_1",
+			},
+			{
+				Type: "text",
+				Text: "Based on my search, here's the answer.",
+				Citations: []claudeCitation{
+					{
+						Type:       "web_search_result_location",
+						URL:        "https://example.com/article",
+						Title:      "Example Article",
+						StartIndex: 0,
+						EndIndex:   38,
+					},
+				},
+			},
+		},
+		StopReason: "end_turn",
+		Usage:      &claudeUsage{InputTokens: 50, OutputTokens: 30},
+	}
+
+	resp := toClaudeChatResponse(cr, "claude")
+	require.Len(t, resp.Choices, 1)
+	msg := resp.Choices[0].Message
+
+	// 验证文本内容
+	assert.Equal(t, "Based on my search, here's the answer.", msg.Content)
+
+	// 验证 annotations（citations → url_citation）
+	require.Len(t, msg.Annotations, 1)
+	assert.Equal(t, "url_citation", msg.Annotations[0].Type)
+	assert.Equal(t, "https://example.com/article", msg.Annotations[0].URL)
+	assert.Equal(t, "Example Article", msg.Annotations[0].Title)
+	assert.Equal(t, 0, msg.Annotations[0].StartIndex)
+	assert.Equal(t, 38, msg.Annotations[0].EndIndex)
+
+	// 验证 web search blocks 保存到 metadata 用于 round-trip
+	meta, ok := msg.Metadata.(map[string]any)
+	require.True(t, ok)
+	blocks, ok := meta["claude_web_search_blocks"].([]json.RawMessage)
+	require.True(t, ok)
+	assert.Len(t, blocks, 2) // server_tool_use + web_search_tool_result
+}
+
+func TestConvertToClaudeMessages_WebSearchRoundTrip(t *testing.T) {
+	// 模拟 assistant 消息带有 web search metadata
+	wsBlocks := []json.RawMessage{
+		json.RawMessage(`{"type":"server_tool_use","id":"srvtoolu_1","name":"web_search"}`),
+		json.RawMessage(`{"type":"web_search_tool_result","id":"srvtoolu_1","encrypted_content":"enc123"}`),
+	}
+	msgs := []types.Message{
+		{Role: llm.RoleUser, Content: "search for Go 1.22"},
+		{
+			Role:    llm.RoleAssistant,
+			Content: "Here's what I found.",
+			Metadata: map[string]any{
+				"claude_web_search_blocks": wsBlocks,
+			},
+		},
+		{Role: llm.RoleUser, Content: "Tell me more"},
+	}
+
+	_, claudeMsgs := convertToClaudeMessages(msgs)
+	require.Len(t, claudeMsgs, 3)
+
+	// assistant 消息应包含 text + 2 个 web search blocks
+	assistantMsg := claudeMsgs[1]
+	assert.Equal(t, "assistant", assistantMsg.Role)
+	require.GreaterOrEqual(t, len(assistantMsg.Content), 3)
+
+	// 验证 web search blocks 被正确回传
+	assert.Equal(t, "text", assistantMsg.Content[0].Type)
+	assert.Equal(t, "server_tool_use", assistantMsg.Content[1].Type)
+	assert.Equal(t, "web_search_tool_result", assistantMsg.Content[2].Type)
+}
+
+func TestClaudeProvider_Stream_WebSearch(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(http.StatusOK)
+
+		writeSSEEvent(w, "message_start", claudeStreamEvent{
+			Type: "message_start",
+			Message: &claudeResponse{
+				ID: "msg_ws", Model: "claude-opus-4.5-20260105",
+				Usage: &claudeUsage{InputTokens: 20},
+			},
+		})
+
+		// server_tool_use block
+		writeSSEEvent(w, "content_block_start", claudeStreamEvent{
+			Type:  "content_block_start",
+			Index: 0,
+			ContentBlock: &claudeContent{
+				Type: "server_tool_use", ID: "srvtoolu_1", Name: "web_search",
+			},
+		})
+		writeSSEEvent(w, "content_block_stop", claudeStreamEvent{
+			Type: "content_block_stop", Index: 0,
+		})
+
+		// web_search_tool_result block
+		writeSSEEvent(w, "content_block_start", claudeStreamEvent{
+			Type:  "content_block_start",
+			Index: 1,
+			ContentBlock: &claudeContent{
+				Type: "web_search_tool_result", ID: "srvtoolu_1",
+			},
+		})
+		writeSSEEvent(w, "content_block_stop", claudeStreamEvent{
+			Type: "content_block_stop", Index: 1,
+		})
+
+		// text block with content
+		writeSSEEvent(w, "content_block_start", claudeStreamEvent{
+			Type:  "content_block_start",
+			Index: 2,
+			ContentBlock: &claudeContent{Type: "text"},
+		})
+		writeSSEEvent(w, "content_block_delta", claudeStreamEvent{
+			Type: "content_block_delta", Index: 2,
+			Delta: &claudeDelta{Type: "text_delta", Text: "Search results say hello"},
+		})
+		writeSSEEvent(w, "content_block_stop", claudeStreamEvent{
+			Type: "content_block_stop", Index: 2,
+		})
+
+		// message_delta with stop reason
+		writeSSEEvent(w, "message_delta", claudeStreamEvent{
+			Type:  "message_delta",
+			Delta: &claudeDelta{StopReason: "end_turn"},
+			Usage: &claudeUsage{OutputTokens: 15},
+		})
+
+		writeSSEEvent(w, "message_stop", claudeStreamEvent{Type: "message_stop"})
+	}))
+	t.Cleanup(func() { server.Close() })
+
+	p := NewClaudeProvider(providers.ClaudeConfig{
+		BaseProviderConfig: providers.BaseProviderConfig{APIKey: "sk-test", BaseURL: server.URL},
+	}, zap.NewNop())
+
+	ch, err := p.Stream(context.Background(), &llm.ChatRequest{
+		Messages:         []types.Message{{Role: llm.RoleUser, Content: "search something"}},
+		WebSearchOptions: &llm.WebSearchOptions{},
+	})
+	require.NoError(t, err)
+
+	var chunks []llm.StreamChunk
+	for c := range ch {
+		require.Nil(t, c.Err)
+		chunks = append(chunks, c)
+	}
+
+	// 应该有: text delta + message_delta (stop+usage)，server_tool_use 和 web_search_tool_result 块被静默跳过
+	require.GreaterOrEqual(t, len(chunks), 2)
+
+	// 验证文本内容
+	var content string
+	for _, c := range chunks {
+		content += c.Delta.Content
+	}
+	assert.Equal(t, "Search results say hello", content)
+
+	// 不应有空 chunk（web search 块应被静默跳过）
+	for _, c := range chunks {
+		hasContent := c.Delta.Content != "" || len(c.Delta.ToolCalls) > 0 ||
+			c.Delta.ReasoningContent != nil || c.FinishReason != "" ||
+			c.Usage != nil || len(c.Delta.Annotations) > 0
+		assert.True(t, hasContent, "should not emit empty chunks for web search blocks")
+	}
 }

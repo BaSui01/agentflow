@@ -132,6 +132,8 @@ type openAICompatWebSearchOptions struct {
 	SearchContextSize string          `json:"search_context_size,omitempty"`
 	UserLocation      json.RawMessage `json:"user_location,omitempty"`
 	AllowedDomains    []string        `json:"allowed_domains,omitempty"`
+	BlockedDomains    []string        `json:"blocked_domains,omitempty"`
+	MaxUses           int             `json:"max_uses,omitempty"`
 }
 
 type openAICompatWebSearchFilters struct {
@@ -643,6 +645,12 @@ func applyWebSearchOptionsToChatRequest(req *api.ChatRequest, opts *llm.WebSearc
 	if domains := normalizeAllowedDomains(merged.AllowedDomains); len(domains) > 0 {
 		req.Metadata["web_search_allowed_domains"] = strings.Join(domains, ",")
 	}
+	if domains := normalizeAllowedDomains(merged.BlockedDomains); len(domains) > 0 {
+		req.Metadata["web_search_blocked_domains"] = strings.Join(domains, ",")
+	}
+	if merged.MaxUses > 0 {
+		req.Metadata["web_search_max_uses"] = fmt.Sprintf("%d", merged.MaxUses)
+	}
 }
 
 func convertOpenAICompatResponseFormat(raw any) (*api.ResponseFormat, *types.Error) {
@@ -679,8 +687,11 @@ func convertOpenAICompatWebSearchOptions(in *openAICompatWebSearchOptions) *llm.
 		SearchContextSize: strings.TrimSpace(in.SearchContextSize),
 		UserLocation:      parseOpenAICompatWebSearchLocation(in.UserLocation),
 		AllowedDomains:    normalizeAllowedDomains(in.AllowedDomains),
+		BlockedDomains:    normalizeAllowedDomains(in.BlockedDomains),
+		MaxUses:           in.MaxUses,
 	}
-	if out.SearchContextSize == "" && out.UserLocation == nil && len(out.AllowedDomains) == 0 {
+	if out.SearchContextSize == "" && out.UserLocation == nil && len(out.AllowedDomains) == 0 &&
+		len(out.BlockedDomains) == 0 && out.MaxUses == 0 {
 		return nil
 	}
 	return out
@@ -773,6 +784,8 @@ func mergeLLMWebSearchOptions(base *llm.WebSearchOptions, override *llm.WebSearc
 	if base != nil {
 		out.SearchContextSize = strings.TrimSpace(base.SearchContextSize)
 		out.AllowedDomains = normalizeAllowedDomains(base.AllowedDomains)
+		out.BlockedDomains = normalizeAllowedDomains(base.BlockedDomains)
+		out.MaxUses = base.MaxUses
 		if base.UserLocation != nil {
 			out.UserLocation = &llm.WebSearchLocation{
 				Type:     strings.TrimSpace(base.UserLocation.Type),
@@ -789,6 +802,12 @@ func mergeLLMWebSearchOptions(base *llm.WebSearchOptions, override *llm.WebSearc
 		}
 		if domains := normalizeAllowedDomains(override.AllowedDomains); len(domains) > 0 {
 			out.AllowedDomains = domains
+		}
+		if domains := normalizeAllowedDomains(override.BlockedDomains); len(domains) > 0 {
+			out.BlockedDomains = domains
+		}
+		if override.MaxUses > 0 {
+			out.MaxUses = override.MaxUses
 		}
 		if override.UserLocation != nil {
 			if out.UserLocation == nil {
@@ -811,7 +830,8 @@ func mergeLLMWebSearchOptions(base *llm.WebSearchOptions, override *llm.WebSearc
 			}
 		}
 	}
-	if out.SearchContextSize == "" && out.UserLocation == nil && len(out.AllowedDomains) == 0 {
+	if out.SearchContextSize == "" && out.UserLocation == nil && len(out.AllowedDomains) == 0 &&
+		len(out.BlockedDomains) == 0 && out.MaxUses == 0 {
 		return nil
 	}
 	return out
@@ -824,6 +844,8 @@ func toAPIWebSearchOptions(in *llm.WebSearchOptions) *api.WebSearchOptions {
 	out := &api.WebSearchOptions{
 		SearchContextSize: strings.TrimSpace(in.SearchContextSize),
 		AllowedDomains:    normalizeAllowedDomains(in.AllowedDomains),
+		BlockedDomains:    normalizeAllowedDomains(in.BlockedDomains),
+		MaxUses:           in.MaxUses,
 	}
 	if in.UserLocation != nil {
 		out.UserLocation = &api.WebSearchLocation{
@@ -834,7 +856,8 @@ func toAPIWebSearchOptions(in *llm.WebSearchOptions) *api.WebSearchOptions {
 			Timezone: strings.TrimSpace(in.UserLocation.Timezone),
 		}
 	}
-	if out.SearchContextSize == "" && out.UserLocation == nil && len(out.AllowedDomains) == 0 {
+	if out.SearchContextSize == "" && out.UserLocation == nil && len(out.AllowedDomains) == 0 &&
+		len(out.BlockedDomains) == 0 && out.MaxUses == 0 {
 		return nil
 	}
 	return out

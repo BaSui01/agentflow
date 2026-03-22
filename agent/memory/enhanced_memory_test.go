@@ -123,6 +123,23 @@ func TestEnhancedMemorySystem_Episodic(t *testing.T) {
 	assert.Len(t, events, 1)
 }
 
+func TestEnhancedMemorySystem_EpisodicStoreNotConfigured(t *testing.T) {
+	t.Parallel()
+	cfg := DefaultEnhancedMemoryConfig()
+	cfg.ConsolidationEnabled = false
+	cfg.EpisodicEnabled = true
+	sys := NewEnhancedMemorySystem(nil, nil, nil, nil, nil, nil, cfg, zap.NewNop())
+	ctx := context.Background()
+
+	err := sys.RecordEpisode(ctx, &types.EpisodicEvent{AgentID: "agent-1", Type: "action"})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "episodic memory store not configured")
+
+	_, err = sys.QueryEpisodes(ctx, EpisodicQuery{AgentID: "agent-1"})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "episodic memory store not configured")
+}
+
 func TestEnhancedMemorySystem_Semantic(t *testing.T) {
 	t.Parallel()
 	cfg := DefaultEnhancedMemoryConfig()

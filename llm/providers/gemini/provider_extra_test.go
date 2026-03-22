@@ -112,14 +112,14 @@ func TestConvertToGeminiTools_WithValidTools(t *testing.T) {
 		},
 	}
 
-	result := convertToGeminiTools(tools)
+	result := convertToGeminiTools(tools, nil)
 	require.Len(t, result, 1)
 	require.Len(t, result[0].FunctionDeclarations, 1)
 	assert.Equal(t, "get_weather", result[0].FunctionDeclarations[0].Name)
 }
 
 func TestConvertToGeminiTools_Empty(t *testing.T) {
-	result := convertToGeminiTools(nil)
+	result := convertToGeminiTools(nil, nil)
 	assert.Nil(t, result)
 }
 
@@ -127,7 +127,7 @@ func TestConvertToGeminiTools_InvalidJSON(t *testing.T) {
 	tools := []types.ToolSchema{
 		{Name: "bad", Parameters: json.RawMessage(`invalid`)},
 	}
-	result := convertToGeminiTools(tools)
+	result := convertToGeminiTools(tools, nil)
 	assert.Nil(t, result) // all declarations fail to parse -> nil
 }
 
@@ -413,4 +413,289 @@ func TestGeminiProvider_Stream_HTTPError(t *testing.T) {
 		Messages: []types.Message{{Role: llm.RoleUser, Content: "Hi"}},
 	})
 	require.Error(t, err)
+}
+
+func TestGeminiProvider_Stream_PromptBlocked(t *testing.T) {
+	// 验证流式模式下 promptFeedback 安全阻断被正确传递（而非静默丢失）
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		// Gemini 安全阻断: candidates 为空，只有 promptFeedback
+		resp := geminiResponse{
+			PromptFeedback: &geminiPromptFeedback{
+				BlockReason:  "SAFETY",
+				BlockMessage: "content blocked due to safety",
+			},
+		}
+		data, _ := json.Marshal(resp)
+		fmt.Fprintf(w, "data: %s\n\n", data)
+	}))
+	t.Cleanup(server.Close)
+
+	p := NewGeminiProvider(providers.GeminiConfig{
+		BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key", BaseURL: server.URL},
+	}, zap.NewNop())
+
+	ch, err := p.Stream(context.Background(), &llm.ChatRequest{
+		Messages: []types.Message{{Role: llm.RoleUser, Content: "something unsafe"}},
+	})
+	require.NoError(t, err)
+
+	var chunks []llm.StreamChunk
+	for c := range ch {
+		chunks = append(chunks, c)
+	}
+
+	// 必须收到一个包含错误的 chunk
+	require.Len(t, chunks, 1, "should receive exactly one error chunk")
+	require.NotNil(t, chunks[0].Err, "chunk must contain an error")
+	assert.Contains(t, chunks[0].Err.Message, "SAFETY")
+	assert.Contains(t, chunks[0].Err.Message, "safety filter")
+	assert.Equal(t, llm.ErrContentFiltered, chunks[0].Err.Code)
+}
+
+func TestGeminiProvider_Stream_PromptBlocked_NoBlockMessage(t *testing.T) {
+	// 验证只有 blockReason 没有 blockMessage 时也能正确处理
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		resp := geminiResponse{
+			PromptFeedback: &geminiPromptFeedback{
+				BlockReason: "OTHER",
+			},
+		}
+		data, _ := json.Marshal(resp)
+		fmt.Fprintf(w, "data: %s\n\n", data)
+	}))
+	t.Cleanup(server.Close)
+
+	p := NewGeminiProvider(providers.GeminiConfig{
+		BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key", BaseURL: server.URL},
+	}, zap.NewNop())
+
+	ch, err := p.Stream(context.Background(), &llm.ChatRequest{
+		Messages: []types.Message{{Role: llm.RoleUser, Content: "blocked content"}},
+	})
+	require.NoError(t, err)
+
+	var chunks []llm.StreamChunk
+	for c := range ch {
+		chunks = append(chunks, c)
+	}
+
+	require.Len(t, chunks, 1)
+	require.NotNil(t, chunks[0].Err)
+	assert.Contains(t, chunks[0].Err.Message, "OTHER")
+}
+
+// =============================================================================
+// Google Search Grounding Tests
+// =============================================================================
+
+func TestConvertToGeminiTools_WithGoogleSearch(t *testing.T) {
+	// 1. wsOpts 触发注入
+	tools := []types.ToolSchema{
+		{Name: "calc", Description: "Calc", Parameters: json.RawMessage(`{"type":"object"}`)},
+	}
+	wsOpts := &llm.WebSearchOptions{SearchContextSize: "medium"}
+
+	result := convertToGeminiTools(tools, wsOpts)
+	require.Len(t, result, 2) // FunctionDeclarations + GoogleSearch
+
+	// 第一个条目：普通函数工具
+	assert.NotNil(t, result[0].FunctionDeclarations)
+	assert.Nil(t, result[0].GoogleSearch)
+
+	// 第二个条目：google_search（独立条目）
+	assert.Nil(t, result[1].FunctionDeclarations)
+	assert.NotNil(t, result[1].GoogleSearch)
+}
+
+func TestConvertToGeminiTools_WithGoogleSearch_FromToolName(t *testing.T) {
+	// 工具列表中有 web_search 占位工具时，替换为 google_search
+	tools := []types.ToolSchema{
+		{Name: "web_search", Description: "Search", Parameters: json.RawMessage(`{"type":"object"}`)},
+		{Name: "calc", Description: "Calc", Parameters: json.RawMessage(`{"type":"object"}`)},
+	}
+
+	result := convertToGeminiTools(tools, nil)
+	require.Len(t, result, 2)
+	// 验证 google_search 存在
+	hasGoogleSearch := false
+	for _, t := range result {
+		if t.GoogleSearch != nil {
+			hasGoogleSearch = true
+		}
+	}
+	assert.True(t, hasGoogleSearch)
+}
+
+func TestConvertToGeminiTools_OnlyGoogleSearch(t *testing.T) {
+	// 只有 google_search，没有函数工具
+	result := convertToGeminiTools(nil, &llm.WebSearchOptions{})
+	require.Len(t, result, 1)
+	assert.NotNil(t, result[0].GoogleSearch)
+	assert.Nil(t, result[0].FunctionDeclarations)
+}
+
+func TestExtractGroundingAnnotations_WithSupports(t *testing.T) {
+	gm := &geminiGroundingMetadata{
+		GroundingChunks: []geminiGroundingChunk{
+			{Web: &geminiGroundingChunkWeb{URI: "https://example.com/a", Title: "Article A"}},
+			{Web: &geminiGroundingChunkWeb{URI: "https://example.com/b", Title: "Article B"}},
+		},
+		GroundingSupports: []geminiGroundingSupport{
+			{
+				Segment:              &geminiGroundingSegment{StartIndex: 0, EndIndex: 50, Text: "Some text"},
+				GroundingChunkIndices: []int{0},
+			},
+			{
+				Segment:              &geminiGroundingSegment{StartIndex: 51, EndIndex: 100},
+				GroundingChunkIndices: []int{1},
+			},
+		},
+	}
+
+	annotations := extractGroundingAnnotations(gm)
+	require.Len(t, annotations, 2)
+
+	assert.Equal(t, "url_citation", annotations[0].Type)
+	assert.Equal(t, "https://example.com/a", annotations[0].URL)
+	assert.Equal(t, "Article A", annotations[0].Title)
+	assert.Equal(t, 0, annotations[0].StartIndex)
+	assert.Equal(t, 50, annotations[0].EndIndex)
+
+	assert.Equal(t, "url_citation", annotations[1].Type)
+	assert.Equal(t, "https://example.com/b", annotations[1].URL)
+	assert.Equal(t, 51, annotations[1].StartIndex)
+	assert.Equal(t, 100, annotations[1].EndIndex)
+}
+
+func TestExtractGroundingAnnotations_WithoutSupports(t *testing.T) {
+	gm := &geminiGroundingMetadata{
+		GroundingChunks: []geminiGroundingChunk{
+			{Web: &geminiGroundingChunkWeb{URI: "https://example.com/c", Title: "Article C"}},
+		},
+	}
+
+	annotations := extractGroundingAnnotations(gm)
+	require.Len(t, annotations, 1)
+	assert.Equal(t, "url_citation", annotations[0].Type)
+	assert.Equal(t, "https://example.com/c", annotations[0].URL)
+	assert.Equal(t, 0, annotations[0].StartIndex) // 无位置信息
+}
+
+func TestExtractGroundingAnnotations_Nil(t *testing.T) {
+	assert.Nil(t, extractGroundingAnnotations(nil))
+	assert.Nil(t, extractGroundingAnnotations(&geminiGroundingMetadata{}))
+}
+
+func TestGeminiProvider_Completion_WithGrounding(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// 验证请求中包含 google_search 工具
+		var reqBody geminiRequest
+		json.NewDecoder(r.Body).Decode(&reqBody)
+		hasGoogleSearch := false
+		for _, tool := range reqBody.Tools {
+			if tool.GoogleSearch != nil {
+				hasGoogleSearch = true
+			}
+		}
+		assert.True(t, hasGoogleSearch, "request should contain google_search tool")
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(geminiResponse{
+			Candidates: []geminiCandidate{{
+				Content: geminiContent{
+					Role:  "model",
+					Parts: []geminiPart{{Text: "The answer based on search."}},
+				},
+				FinishReason: "STOP",
+				GroundingMetadata: &geminiGroundingMetadata{
+					WebSearchQueries: []string{"test query"},
+					GroundingChunks: []geminiGroundingChunk{
+						{Web: &geminiGroundingChunkWeb{URI: "https://example.com", Title: "Example"}},
+					},
+					GroundingSupports: []geminiGroundingSupport{
+						{
+							Segment:              &geminiGroundingSegment{StartIndex: 0, EndIndex: 27},
+							GroundingChunkIndices: []int{0},
+						},
+					},
+				},
+			}},
+			UsageMetadata: &geminiUsageMetadata{
+				PromptTokenCount:     10,
+				CandidatesTokenCount: 8,
+				TotalTokenCount:      18,
+			},
+		})
+	}))
+	t.Cleanup(server.Close)
+
+	p := NewGeminiProvider(providers.GeminiConfig{
+		BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k", BaseURL: server.URL},
+	}, zap.NewNop())
+
+	resp, err := p.Completion(context.Background(), &llm.ChatRequest{
+		Messages:         []types.Message{{Role: llm.RoleUser, Content: "Search for something"}},
+		WebSearchOptions: &llm.WebSearchOptions{},
+	})
+	require.NoError(t, err)
+	require.Len(t, resp.Choices, 1)
+	assert.Equal(t, "The answer based on search.", resp.Choices[0].Message.Content)
+
+	// 验证 grounding annotations
+	require.Len(t, resp.Choices[0].Message.Annotations, 1)
+	ann := resp.Choices[0].Message.Annotations[0]
+	assert.Equal(t, "url_citation", ann.Type)
+	assert.Equal(t, "https://example.com", ann.URL)
+	assert.Equal(t, "Example", ann.Title)
+	assert.Equal(t, 0, ann.StartIndex)
+	assert.Equal(t, 27, ann.EndIndex)
+}
+
+func TestGeminiProvider_Stream_WithGrounding(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		chunk := geminiResponse{
+			Candidates: []geminiCandidate{{
+				Content: geminiContent{
+					Role:  "model",
+					Parts: []geminiPart{{Text: "Grounded result."}},
+				},
+				FinishReason: "STOP",
+				GroundingMetadata: &geminiGroundingMetadata{
+					GroundingChunks: []geminiGroundingChunk{
+						{Web: &geminiGroundingChunkWeb{URI: "https://news.example.com", Title: "News"}},
+					},
+				},
+			}},
+		}
+		data, _ := json.Marshal(chunk)
+		fmt.Fprintf(w, "data: %s\n\n", data)
+	}))
+	t.Cleanup(server.Close)
+
+	p := NewGeminiProvider(providers.GeminiConfig{
+		BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k", BaseURL: server.URL},
+	}, zap.NewNop())
+
+	ch, err := p.Stream(context.Background(), &llm.ChatRequest{
+		Messages:         []types.Message{{Role: llm.RoleUser, Content: "News?"}},
+		WebSearchOptions: &llm.WebSearchOptions{},
+	})
+	require.NoError(t, err)
+
+	var chunks []llm.StreamChunk
+	for c := range ch {
+		require.Nil(t, c.Err)
+		chunks = append(chunks, c)
+	}
+	require.NotEmpty(t, chunks)
+
+	// 验证流式 grounding annotations
+	assert.Equal(t, "Grounded result.", chunks[0].Delta.Content)
+	require.Len(t, chunks[0].Delta.Annotations, 1)
+	assert.Equal(t, "url_citation", chunks[0].Delta.Annotations[0].Type)
+	assert.Equal(t, "https://news.example.com", chunks[0].Delta.Annotations[0].URL)
+	assert.Equal(t, "News", chunks[0].Delta.Annotations[0].Title)
 }
