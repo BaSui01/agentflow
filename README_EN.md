@@ -90,11 +90,12 @@ English | [中文](README.md)
 
 ### 🎨 Multimodal Capabilities
 - **Embedding** - OpenAI, Gemini, Cohere, Jina, Voyage
-- **Image** - DALL-E, Flux, Gemini
-- **Video** - Runway, Veo, Gemini
+- **Image** - DALL-E, Flux, Gemini, Stability, Ideogram, Tongyi, Zhipu, Baidu, Doubao, Tencent Hunyuan, Kling
+- **Video** - Sora, Runway, Veo, Gemini, Kling, Luma, MiniMax, Seedance
 - **Speech** - OpenAI TTS/STT, ElevenLabs, Deepgram
 - **Music** - Suno, MiniMax
 - **3D** - Meshy, Tripo
+- **Rerank** - Cohere, Qwen, GLM
 
 ### 🛡️ Enterprise-Grade
 
@@ -105,6 +106,7 @@ English | [中文](README.md)
 - **Cost Control & Budget Management** - Token counting, periodic reset, cost reports, optimization suggestions
 - **Configuration Hot-Reload & Rollback** - File watch auto-reload, versioned history, one-click rollback, validation hooks
 - **MCP WebSocket Heartbeat Reconnection** - Exponential backoff reconnection, connection state monitoring
+- **Canary Deployment** - Staged traffic shifting (10%→50%→100%), auto-rollback, error rate/latency monitoring
 
 ## 🚀 Quick Start
 
@@ -458,6 +460,7 @@ agentflow/
 |---------|-------------|
 | [01_simple_chat](examples/01_simple_chat/) | Basic Chat |
 | [02_streaming](examples/02_streaming/) | Streaming Response |
+| [03_tool_use](examples/03_tool_use/) | Tool Use / Function Calling |
 | [04_custom_agent](examples/04_custom_agent/) | Custom Agent |
 | [05_workflow](examples/05_workflow/) | Workflow Orchestration |
 | [06_advanced_features](examples/06_advanced_features/) | Advanced Features |
@@ -478,14 +481,15 @@ agentflow/
 
 ## 📚 Documentation
 
-- [Quick Start](docs/en/01.QuickStart.md)
-- [Provider Configuration](docs/en/02.ProviderConfiguration.md)
-- [Agent Development](docs/en/03.AgentDevelopment.md)
-- [Tool Integration](docs/en/04.ToolIntegration.md)
-- [Workflow Orchestration](docs/en/05.WorkflowOrchestration.md)
-- [Multimodal Processing](docs/en/06.MultimodalProcessing.md)
-- [RAG](docs/en/07.RAG.md)
-- [Multi-Agent Collaboration](docs/en/08.MultiAgentCollaboration.md)
+- [Quick Start](docs/en/tutorials/01.QuickStart.md)
+- [Provider Configuration](docs/en/tutorials/02.ProviderConfiguration.md)
+- [Agent Development](docs/en/tutorials/03.AgentDevelopment.md)
+- [Tool Integration](docs/en/tutorials/04.ToolIntegration.md)
+- [Workflow Orchestration](docs/en/tutorials/05.WorkflowOrchestration.md)
+- [Multimodal Processing](docs/en/tutorials/06.MultimodalProcessing.md)
+- [RAG](docs/en/tutorials/07.RAG.md)
+- [Multi-Agent Collaboration](docs/en/tutorials/08.MultiAgentCollaboration.md)
+- [Multimodal Framework API](docs/en/tutorials/21.MultimodalFrameworkAPI.md)
 
 ## 🔧 Tech Stack
 

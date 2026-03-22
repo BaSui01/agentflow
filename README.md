@@ -92,11 +92,12 @@
 ### 🎨 多模态能力
 
 - **Embedding** - OpenAI, Gemini, Cohere, Jina, Voyage
-- **Image** - DALL-E, Flux, Gemini
-- **Video** - Runway, Veo, Gemini
+- **Image** - DALL-E, Flux, Gemini, Stability, Ideogram, 通义万相, 智谱, 文心一格, 豆包, 腾讯混元, 可灵
+- **Video** - Sora, Runway, Veo, Gemini, 可灵, Luma, MiniMax, 即梦 Seedance
 - **Speech** - OpenAI TTS/STT, ElevenLabs, Deepgram
 - **Music** - Suno, MiniMax
 - **3D** - Meshy, Tripo
+- **Rerank** - Cohere, Qwen, GLM
 
 ### 🛡️ 企业级能力
 
@@ -107,6 +108,7 @@
 - **成本控制与预算管理** - Token 计数、周期重置、成本报告、优化建议
 - **配置热重载与回滚** - 文件监听自动重载、版本化历史、一键回滚、验证钩子
 - **MCP WebSocket 心跳重连** — 指数退避重连、连接状态监控
+- **金丝雀发布 (Canary)** — 分阶段流量切换（10%→50%→100%）、自动回滚、错误率/延迟监控
 
 ## ⚠️ 认证迁移说明（2026-03）
 
@@ -452,7 +454,7 @@ agentflow/
 │   ├── server_hotreload.go   # 热重载管理器初始化
 │   └── server_shutdown.go    # 优雅关闭流程
 │
-└── examples/                 # 示例代码（19 个场景）
+└── examples/                 # 示例代码（20 个场景）
 ```
 
 ## 📖 示例
@@ -461,6 +463,7 @@ agentflow/
 | ---------------------------------------------------------- | ----------------- |
 | [01_simple_chat](examples/01_simple_chat/)                 | 基础对话          |
 | [02_streaming](examples/02_streaming/)                     | 流式响应          |
+| [03_tool_use](examples/03_tool_use/)                       | 工具调用          |
 | [04_custom_agent](examples/04_custom_agent/)               | 自定义 Agent      |
 | [05_workflow](examples/05_workflow/)                       | 工作流编排        |
 | [06_advanced_features](examples/06_advanced_features/)     | 高级特性          |
@@ -489,6 +492,10 @@ agentflow/
 - [多模态处理](docs/cn/tutorials/06.多模态处理.md)
 - [检索增强 RAG](docs/cn/tutorials/07.检索增强RAG.md)
 - [多 Agent 协作](docs/cn/tutorials/08.多Agent协作.md)
+- [Hosted 工具与 MCP](docs/cn/tutorials/09.Hosted工具与MCP.md)
+- [工作流编排进阶](docs/cn/tutorials/10.工作流编排进阶.md)
+- [成本追踪](docs/cn/tutorials/11.成本追踪.md)
+- [多模态框架 API](docs/cn/tutorials/21.多模态框架API.md)
 
 ## 🔧 技术栈
 

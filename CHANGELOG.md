@@ -5,6 +5,25 @@ All notable changes to AgentFlow will be documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.7.0] - 2026-03-22
+
+### Added
+- Canary (金丝雀) 发布改进：`CanaryConfig` 支持从数据库加载活跃部署、`CanaryDeployment` 新增 `AutoRollback`/`RollbackReason` 字段、`ProviderStats` 统计结构
+- HierarchicalAgent 优化：`EnableLoadBalance` 负载均衡配置项、`WorkerStatus` 状态追踪增强
+- 示例代码全面适配 v1.7.0：04/07/09/17/18/19 示例更新
+- Agent 功能矩阵报告更新（`examples/98_agent_feature_matrix`）
+
+### Changed
+- 升级版本至 1.7.0
+- `HierarchicalAgent` 重构：`TaskCoordinator` 工作者状态管理从简单 map 改为 `WorkerStatus` 结构体，支持负载均衡策略
+- `CanaryConfig` 重构：新增 `Stop()` 生命周期方法、`loadFromDB()` 安全处理 nil db、部署映射改为 `provider_id` 索引
+- 示例 07 (Mid Priority Features) README 更新 Hosted Tools 回退链说明
+- 示例 17/18/19 README 更新适配最新 API
+
+### Fixed
+- `CanaryConfig` nil db panic 防护
+- `HierarchicalAgent` 并发安全：`workerStatus` 读写锁保护
+
 ## [1.6.2] - 2026-03-09
 
 ### Added

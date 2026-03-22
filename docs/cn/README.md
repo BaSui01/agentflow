@@ -32,6 +32,9 @@
 | [🎬 多模态框架 API](./tutorials/21.多模态框架API.md) | 能力层多模态 HTTP 接口 | ⭐⭐⭐ |
 | [🔍 检索增强 RAG](./tutorials/07.检索增强RAG.md) | 向量存储和知识检索 | ⭐⭐⭐⭐ |
 | [👥 多 Agent 协作](./tutorials/08.多Agent协作.md) | 多智能体协同工作 | ⭐⭐⭐⭐ |
+| [🔗 Hosted 工具与 MCP](./tutorials/09.Hosted工具与MCP.md) | 托管工具和 MCP 协议集成 | ⭐⭐⭐ |
+| [📊 工作流编排进阶](./tutorials/10.工作流编排进阶.md) | 高级工作流模式与 DSL | ⭐⭐⭐⭐ |
+| [💰 成本追踪](./tutorials/11.成本追踪.md) | Token 计数与成本管理 | ⭐⭐ |
 
 ---
 
@@ -84,7 +87,7 @@
 - **输入理解**: 图像、音频、视频分析
 - **Embedding**: OpenAI、Gemini、Cohere、Jina、Voyage
 - **Image**: DALL-E、Flux、Gemini
-- **Video**: Luma、Sora、Gemini、MiniMax
+- **Video**: Runway、Veo、Sora、Gemini、MiniMax
 - **Audio**: OpenAI TTS/STT、ElevenLabs、Deepgram
 - **Music**: Suno、MiniMax
 - **3D**: Meshy、Tripo
@@ -96,6 +99,7 @@
 - **成本控制与预算管理**: Token 计数、周期重置、成本报告
 - **配置热重载与回滚**: 文件监听自动重载、版本化历史、一键回滚
 - **MCP WebSocket 心跳重连**: 指数退避重连、连接状态监控
+- **金丝雀发布 (Canary)**: 分阶段流量切换（10%→50%→100%）、自动回滚、错误率/延迟监控
 
 ---
 

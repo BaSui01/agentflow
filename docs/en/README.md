@@ -90,7 +90,7 @@
 
 - **Embedding**: OpenAI, Gemini, Cohere, Jina, Voyage
 - **Image**: DALL-E, Flux, Gemini
-- **Video**: Luma, Sora, Gemini, MiniMax
+- **Video**: Runway, Veo, Sora, Gemini, MiniMax
 - **Audio**: OpenAI TTS/STT, ElevenLabs, Deepgram
 - **Music**: Suno, MiniMax
 - **3D**: Meshy, Tripo
@@ -102,6 +102,7 @@
 - **Cost Control and Budget Management**: Token counting, periodic reset, cost reports, optimization suggestions
 - **Config Hot-Reload with Rollback**: File watcher auto-reload, versioned history, one-click rollback, validation hooks
 - **MCP WebSocket Heartbeat Reconnect**: Exponential backoff reconnect, connection state monitoring
+- **Canary Deployment**: Staged traffic shifting (10%→50%→100%), auto-rollback, error rate/latency monitoring
 
 ---
 
