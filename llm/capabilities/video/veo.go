@@ -77,6 +77,7 @@ type veoParams struct {
 	NegativePrompt   string `json:"negativePrompt,omitempty"`
 	PersonGeneration string `json:"personGeneration,omitempty"`
 	DurationSeconds  int    `json:"durationSeconds,omitempty"`
+	Seed             int64  `json:"seed,omitempty"`
 	EnhancePrompt    bool   `json:"enhancePrompt,omitempty"`
 	GenerateAudio    bool   `json:"generateAudio,omitempty"`
 }
@@ -156,6 +157,7 @@ func (p *VeoProvider) Generate(ctx context.Context, req *GenerateRequest) (*Gene
 			AspectRatio:     aspectRatio,
 			NegativePrompt:  req.NegativePrompt,
 			DurationSeconds: duration,
+			Seed:            req.Seed,
 			EnhancePrompt:   true,
 			GenerateAudio:   true,
 		},

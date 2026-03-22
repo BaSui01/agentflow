@@ -73,6 +73,7 @@ type soraRequest struct {
 	Duration    int    `json:"duration,omitempty"`
 	AspectRatio string `json:"aspect_ratio,omitempty"`
 	Resolution  string `json:"resolution,omitempty"`
+	Seed        int64  `json:"seed,omitempty"`
 	Image       string `json:"image,omitempty"` // image URL for image-to-video; prefer public HTTPS URL
 }
 
@@ -151,6 +152,7 @@ func (p *SoraProvider) Generate(ctx context.Context, req *GenerateRequest) (*Gen
 		Duration:    duration,
 		AspectRatio: aspectRatio,
 		Resolution:  resolution,
+		Seed:        req.Seed,
 	}
 	if req.ImageURL != "" {
 		body.Image = req.ImageURL

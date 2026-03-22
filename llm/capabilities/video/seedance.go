@@ -72,6 +72,7 @@ type seedanceSubmitReq struct {
 	ImageURL    string `json:"image_url,omitempty"`
 	Duration    int    `json:"duration,omitempty"`
 	AspectRatio string `json:"aspect_ratio,omitempty"`
+	Seed        int64  `json:"seed,omitempty"`
 }
 
 type seedanceTaskResp struct {
@@ -114,7 +115,7 @@ func (p *SeedanceProvider) Generate(ctx context.Context, req *GenerateRequest) (
 	}
 
 	path := seedanceTextGeneratePath
-	body := seedanceSubmitReq{Prompt: req.Prompt, Duration: duration, AspectRatio: aspect}
+	body := seedanceSubmitReq{Prompt: req.Prompt, Duration: duration, AspectRatio: aspect, Seed: req.Seed}
 	if req.ImageURL != "" {
 		path = seedanceImageGeneratePath
 		body.ImageURL = req.ImageURL

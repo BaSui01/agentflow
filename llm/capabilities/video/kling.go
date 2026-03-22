@@ -73,6 +73,7 @@ type klingTextRequest struct {
 	Duration       int     `json:"duration,omitempty"`
 	AspectRatio    string  `json:"aspect_ratio,omitempty"`
 	CfgScale       float64 `json:"cfg_scale,omitempty"`
+	Seed           int64   `json:"seed,omitempty"`
 	CallbackURL    string  `json:"callback_url,omitempty"` // 可选，可灵任务完成后回调
 }
 
@@ -85,6 +86,7 @@ type klingImageRequest struct {
 	Image       string `json:"image"` // accepts public HTTPS URL or data:image/*;base64 URI
 	Duration    int    `json:"duration,omitempty"`
 	AspectRatio string `json:"aspect_ratio,omitempty"`
+	Seed        int64  `json:"seed,omitempty"`
 	CallbackURL string `json:"callback_url,omitempty"` // 可选，可灵任务完成后回调
 }
 
@@ -173,6 +175,7 @@ func (p *KlingProvider) Generate(ctx context.Context, req *GenerateRequest) (*Ge
 			Image:       req.ImageURL,
 			Duration:    duration,
 			AspectRatio: aspectRatio,
+			Seed:        req.Seed,
 			CallbackURL: getKlingCallbackURL(req),
 		}
 		payload, marshalErr = marshalJSONRequest("kling", body)
@@ -184,6 +187,7 @@ func (p *KlingProvider) Generate(ctx context.Context, req *GenerateRequest) (*Ge
 			NegativePrompt: req.NegativePrompt,
 			Duration:       duration,
 			AspectRatio:    aspectRatio,
+			Seed:           req.Seed,
 			CallbackURL:    getKlingCallbackURL(req),
 		}
 		payload, marshalErr = marshalJSONRequest("kling", body)
