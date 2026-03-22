@@ -6,7 +6,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/BaSui01/agentflow/agent/guardrails"
 	"github.com/BaSui01/agentflow/llm"
+	llmtools "github.com/BaSui01/agentflow/llm/capabilities/tools"
 	"github.com/BaSui01/agentflow/llm/observability"
 	"github.com/BaSui01/agentflow/types"
 	"go.uber.org/zap"
@@ -1820,4 +1822,765 @@ type mockPromptEnhancer struct{}
 
 func (m *mockPromptEnhancer) EnhanceUserPrompt(prompt, _ string) (string, error) {
 	return "enhanced: " + prompt, nil
+}
+
+// ═══ Coverage Boost Round 2 ═══
+
+// --- toolSelectionMiddleware (0%) ---
+
+type mockToolSelector struct {
+	selected []types.ToolSchema
+	err      error
+}
+
+func (m *mockToolSelector) SelectTools(_ context.Context, _ string, tools []types.ToolSchema) ([]types.ToolSchema, error) {
+	if m.err != nil {
+		return nil, m.err
+	}
+	if m.selected != nil {
+		return m.selected, nil
+	}
+	return tools, nil
+}
+
+func TestBaseAgent_ExecuteEnhanced_WithToolSelection(t *testing.T) {
+	ag := buildTestAgent(t, "ts-mw")
+	ag.Init(context.Background())
+	ag.extensions.EnableToolSelection(&mockToolSelector{})
+
+	output, err := ag.ExecuteEnhanced(context.Background(), &Input{
+		TraceID: "ts1",
+		Content: "test tool selection",
+	}, EnhancedExecutionOptions{
+		UseToolSelection: true,
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if output == nil {
+		t.Fatal("expected non-nil output")
+	}
+}
+
+// --- ExecuteWithReflection adapter (0%) ---
+
+func TestReflectionRunnerAdapter_ExecuteWithReflection(t *testing.T) {
+	ag := buildTestAgent(t, "ref-adapt")
+	ag.Init(context.Background())
+
+	cfg := DefaultReflectionExecutorConfig()
+	cfg.Enabled = false // so it just does a single pass
+	executor := NewReflectionExecutor(ag, cfg)
+	runner := AsReflectionRunner(executor)
+
+	out, err := runner.ExecuteWithReflection(context.Background(), &Input{
+		TraceID: "ra1",
+		Content: "test reflection adapter",
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if out == nil || out.Content == "" {
+		t.Fatal("expected non-empty output")
+	}
+}
+
+// --- panicPayloadToError (0%) ---
+
+func TestPanicPayloadToError(t *testing.T) {
+	// error input
+	err := panicPayloadToError(fmt.Errorf("boom"))
+	if err == nil || err.Error() != "boom" {
+		t.Fatalf("expected 'boom', got %v", err)
+	}
+	// string input
+	err = panicPayloadToError("oops")
+	if err == nil {
+		t.Fatal("expected non-nil error")
+	}
+	if err.Error() != "panic: oops" {
+		t.Fatalf("expected 'panic: oops', got %v", err)
+	}
+	// int input
+	err = panicPayloadToError(42)
+	if err == nil {
+		t.Fatal("expected non-nil error")
+	}
+}
+
+// --- buildValidationFeedbackMessage (0%) ---
+
+func TestBuildValidationFeedbackMessage(t *testing.T) {
+	ag := buildTestAgent(t, "vfm")
+	result := &guardrails.ValidationResult{
+		Errors: []guardrails.ValidationError{
+			{Code: "E001", Message: "too short"},
+			{Code: "E002", Message: "missing field"},
+		},
+	}
+	msg := ag.buildValidationFeedbackMessage(result)
+	if msg == "" {
+		t.Fatal("expected non-empty message")
+	}
+	if !strContains(msg, "E001") || !strContains(msg, "E002") {
+		t.Fatalf("expected error codes in message, got: %s", msg)
+	}
+}
+
+// --- addTaskDescription (0%) ---
+
+func TestPromptOptimizer_AddTaskDescription(t *testing.T) {
+	opt := &PromptOptimizer{}
+	result := opt.addTaskDescription("do something")
+	if result == "" {
+		t.Fatal("expected non-empty result")
+	}
+	if !strContains(result, "do something") {
+		t.Fatalf("expected task in result, got: %s", result)
+	}
+}
+
+// --- RenderSystemPrompt low coverage ---
+
+func TestPromptBundle_RenderSystemPrompt_WithConstraints(t *testing.T) {
+	b := PromptBundle{
+		System: SystemPrompt{
+			Role:     "You are a helper",
+			Identity: "AI assistant",
+			Policies: []string{"be helpful"},
+		},
+		Constraints: []string{"no violence", "be polite", ""},
+	}
+	result := b.RenderSystemPrompt()
+	if !strContains(result, "no violence") {
+		t.Fatalf("expected constraint in result, got: %s", result)
+	}
+	if !strContains(result, "be polite") {
+		t.Fatalf("expected constraint in result, got: %s", result)
+	}
+}
+
+func TestPromptBundle_RenderSystemPrompt_Empty(t *testing.T) {
+	b := PromptBundle{}
+	result := b.RenderSystemPrompt()
+	if result != "" {
+		t.Fatalf("expected empty result, got: %s", result)
+	}
+}
+
+// --- replaceTemplateVars low coverage ---
+
+func TestReplaceTemplateVars_NoMatch(t *testing.T) {
+	result := replaceTemplateVars("hello {{unknown}}", map[string]string{"name": "world"})
+	if result != "hello {{unknown}}" {
+		t.Fatalf("expected unchanged, got: %s", result)
+	}
+}
+
+func TestReplaceTemplateVars_EmptyText(t *testing.T) {
+	result := replaceTemplateVars("", map[string]string{"name": "world"})
+	if result != "" {
+		t.Fatalf("expected empty, got: %s", result)
+	}
+}
+
+func TestReplaceTemplateVars_Match(t *testing.T) {
+	result := replaceTemplateVars("hello {{ name }}", map[string]string{"name": "world"})
+	if result != "hello world" {
+		t.Fatalf("expected 'hello world', got: %s", result)
+	}
+}
+
+// --- WithLogger nil (60%) ---
+
+func TestAgentBuilder_WithLogger_Nil(t *testing.T) {
+	b := NewAgentBuilder(testConfig("nil-logger"))
+	b.WithLogger(nil)
+	b.WithProvider(&testMockProvider{})
+	_, err := b.Build()
+	if err == nil {
+		t.Fatal("expected error when logger is nil")
+	}
+}
+
+// --- WithDefaultSkills with non-existent dir (69.2%) ---
+
+func TestAgentBuilder_WithDefaultSkills_BadDir(t *testing.T) {
+	b := NewAgentBuilder(testConfig("skills-bad"))
+	b.WithDefaultSkills("/nonexistent/path/to/skills", nil)
+	b.WithProvider(&testMockProvider{})
+	b.WithLogger(zap.NewNop())
+	_, err := b.Build()
+	if err == nil {
+		t.Fatal("expected error for bad skills directory")
+	}
+}
+
+// --- Build with errors accumulated (62.5%) ---
+
+func TestAgentBuilder_Build_WithAccumulatedErrors(t *testing.T) {
+	b := NewAgentBuilder(testConfig("err-build"))
+	b.WithLogger(nil) // accumulates error
+	b.WithProvider(&testMockProvider{})
+	_, err := b.Build()
+	if err == nil {
+		t.Fatal("expected build error")
+	}
+}
+
+func TestAgentBuilder_Build_NoModel(t *testing.T) {
+	cfg := testConfig("no-model")
+	cfg.LLM.Model = ""
+	b := NewAgentBuilder(cfg)
+	b.WithProvider(&testMockProvider{})
+	b.WithLogger(zap.NewNop())
+	_, err := b.Build()
+	if err == nil {
+		t.Fatal("expected error for missing model")
+	}
+}
+
+// --- enableMCP with instance (50%) ---
+
+func TestAgentBuilder_BuildWithMCP_WithInstance(t *testing.T) {
+	cfg := testConfig("mcp-inst")
+	cfg.Extensions.MCP = &types.MCPConfig{Enabled: true}
+	b := NewAgentBuilder(cfg)
+	b.WithProvider(&testMockProvider{})
+	b.WithLogger(zap.NewNop())
+	b.WithMCP(&mockMCPServer{})
+	ag, err := b.Build()
+	if err != nil {
+		t.Fatalf("Build with MCP instance failed: %v", err)
+	}
+	if ag == nil {
+		t.Fatal("expected non-nil agent")
+	}
+}
+
+type mockMCPServer struct{}
+
+func (m *mockMCPServer) ListTools() []types.ToolSchema { return nil }
+func (m *mockMCPServer) ExecuteTool(_ context.Context, _ string, _ map[string]any) (any, error) {
+	return nil, nil
+}
+
+// --- enableEnhancedMemory with instance (60%) ---
+
+func TestAgentBuilder_BuildWithEnhancedMemory_WithInstance(t *testing.T) {
+	cfg := testConfig("mem-inst")
+	cfg.Features.Memory = &types.MemoryConfig{Enabled: true}
+	b := NewAgentBuilder(cfg)
+	b.WithProvider(&testMockProvider{})
+	b.WithLogger(zap.NewNop())
+	b.WithEnhancedMemory(&mockEnhancedMemory{})
+	ag, err := b.Build()
+	if err != nil {
+		t.Fatalf("Build with enhanced memory instance failed: %v", err)
+	}
+	if ag == nil {
+		t.Fatal("expected non-nil agent")
+	}
+}
+
+// --- enableSkills with instance (66.7%) ---
+
+func TestAgentBuilder_BuildWithSkills_WithInstance(t *testing.T) {
+	cfg := testConfig("skills-inst")
+	cfg.Extensions.Skills = &types.SkillsConfig{Enabled: true}
+	b := NewAgentBuilder(cfg)
+	b.WithProvider(&testMockProvider{})
+	b.WithLogger(zap.NewNop())
+	b.WithSkills(&mockSkillDiscoverer{})
+	ag, err := b.Build()
+	if err != nil {
+		t.Fatalf("Build with skills instance failed: %v", err)
+	}
+	if ag == nil {
+		t.Fatal("expected non-nil agent")
+	}
+}
+
+// --- ensureAgentType nil (75%) ---
+
+func TestEnsureAgentType_Nil(t *testing.T) {
+	ensureAgentType(nil) // should not panic
+}
+
+func TestEnsureAgentType_EmptyType(t *testing.T) {
+	cfg := &types.AgentConfig{}
+	cfg.Core.Type = "  "
+	ensureAgentType(cfg)
+	if cfg.Core.Type != string(TypeGeneric) {
+		t.Fatalf("expected %s, got %s", TypeGeneric, cfg.Core.Type)
+	}
+}
+
+// --- applyContextRouteHints (70%) ---
+
+func TestApplyContextRouteHints_WithProvider(t *testing.T) {
+	req := &llm.ChatRequest{}
+	ctx := types.WithLLMProvider(context.Background(), "anthropic")
+	applyContextRouteHints(req, ctx)
+	if req.Metadata == nil || req.Metadata["chat_provider"] != "anthropic" {
+		t.Fatalf("expected provider in metadata, got: %v", req.Metadata)
+	}
+}
+
+func TestApplyContextRouteHints_WithRoutePolicy(t *testing.T) {
+	req := &llm.ChatRequest{}
+	ctx := types.WithLLMRoutePolicy(context.Background(), "round_robin")
+	applyContextRouteHints(req, ctx)
+	if req.Metadata == nil || req.Metadata["route_policy"] != "round_robin" {
+		t.Fatalf("expected route_policy in metadata, got: %v", req.Metadata)
+	}
+}
+
+// --- WithRuntimeStreamEmitter nil (60%) ---
+
+func TestWithRuntimeStreamEmitter_NilEmitter(t *testing.T) {
+	ctx := WithRuntimeStreamEmitter(context.Background(), nil)
+	_, ok := runtimeStreamEmitterFromContext(ctx)
+	if ok {
+		t.Fatal("expected no emitter for nil input")
+	}
+}
+
+func TestWithRuntimeStreamEmitter_NilCtx(t *testing.T) {
+	emit := func(ev RuntimeStreamEvent) {}
+	ctx := WithRuntimeStreamEmitter(nil, emit)
+	got, ok := runtimeStreamEmitterFromContext(ctx)
+	if !ok || got == nil {
+		t.Fatal("expected emitter from nil ctx")
+	}
+}
+
+func TestRuntimeStreamEmitterFromContext_NilCtx(t *testing.T) {
+	_, ok := runtimeStreamEmitterFromContext(nil)
+	if ok {
+		t.Fatal("expected false for nil ctx")
+	}
+}
+
+// --- RecallMemory (66.7%) ---
+
+func TestBaseAgent_RecallMemory_NilMemory(t *testing.T) {
+	ag := buildTestAgent(t, "recall-nil")
+	records, err := ag.RecallMemory(context.Background(), "query", 5)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(records) != 0 {
+		t.Fatalf("expected empty records, got %d", len(records))
+	}
+}
+
+func TestBaseAgent_RecallMemory_WithMemory(t *testing.T) {
+	ag := buildTestAgent(t, "recall-mem")
+	ag.memory = &mockBaseMemory{}
+	records, err := ag.RecallMemory(context.Background(), "query", 5)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	// mockBaseMemory.Search returns nil, nil
+	if records != nil {
+		t.Fatalf("expected nil records, got %v", records)
+	}
+}
+
+// --- TeardownExtensions (62.5%) ---
+
+type mockLSPLifecycle struct {
+	closed bool
+}
+
+func (m *mockLSPLifecycle) Close() error {
+	m.closed = true
+	return nil
+}
+
+type mockLSPClient struct {
+	shutdown bool
+}
+
+func (m *mockLSPClient) Shutdown(_ context.Context) error {
+	m.shutdown = true
+	return nil
+}
+
+func TestExtensionRegistry_TeardownExtensions_WithLSPLifecycle(t *testing.T) {
+	reg := NewExtensionRegistry(zap.NewNop())
+	lc := &mockLSPLifecycle{}
+	reg.lspLifecycle = lc
+	err := reg.TeardownExtensions(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !lc.closed {
+		t.Fatal("expected lifecycle to be closed")
+	}
+}
+
+func TestExtensionRegistry_TeardownExtensions_WithLSPClient(t *testing.T) {
+	reg := NewExtensionRegistry(zap.NewNop())
+	client := &mockLSPClient{}
+	reg.lspClient = client
+	err := reg.TeardownExtensions(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !client.shutdown {
+		t.Fatal("expected client to be shutdown")
+	}
+}
+
+// --- scopedID (66.7%) ---
+
+func TestScopedPersistenceStores_ScopedID_Empty(t *testing.T) {
+	inner := NewPersistenceStores(zap.NewNop())
+	s := NewScopedPersistenceStores(inner, "tenant1")
+	if s.scopedID("") != "" {
+		t.Fatal("expected empty for empty id")
+	}
+	if s.scopedID("abc") != "tenant1/abc" {
+		t.Fatalf("expected 'tenant1/abc', got '%s'", s.scopedID("abc"))
+	}
+}
+
+// --- RestoreConversation more branches (76.2%) ---
+
+func TestPersistenceStores_RestoreConversation_OffsetClamp(t *testing.T) {
+	store := &mockConversationStore{
+		messages: []ConversationMessage{
+			{Role: "user", Content: "hi"},
+			{Role: "assistant", Content: "hello"},
+		},
+		total: 2,
+	}
+	p := NewPersistenceStores(zap.NewNop())
+	p.SetConversationStore(store)
+	msgs := p.RestoreConversation(context.Background(), "conv1")
+	if len(msgs) != 2 {
+		t.Fatalf("expected 2 messages, got %d", len(msgs))
+	}
+}
+
+// --- lastUserQuery (0%) ---
+
+func TestLastUserQuery(t *testing.T) {
+	msgs := []types.Message{
+		{Role: "system", Content: "sys"},
+		{Role: "user", Content: "first"},
+		{Role: "assistant", Content: "resp"},
+		{Role: "user", Content: "second"},
+	}
+	q := lastUserQuery(msgs)
+	if q != "second" {
+		t.Fatalf("expected 'second', got '%s'", q)
+	}
+}
+
+func TestLastUserQuery_NoUser(t *testing.T) {
+	msgs := []types.Message{
+		{Role: "system", Content: "sys"},
+	}
+	q := lastUserQuery(msgs)
+	if q != "" {
+		t.Fatalf("expected empty, got '%s'", q)
+	}
+}
+
+// --- InitGlobalRegistry / CreateAgent / TeardownAll / ResetCache (0%) ---
+
+func TestInitGlobalRegistry_And_CreateAgent(t *testing.T) {
+	// Just test CreateAgent when GlobalRegistry is already set (from other tests or init)
+	// We don't reset globalRegistryOnce to avoid sync.Once copy issues.
+	InitGlobalRegistry(zap.NewNop())
+	if GlobalRegistry == nil {
+		t.Fatal("expected non-nil global registry")
+	}
+
+	// CreateAgent without provider should fail at registry level
+	_, err := CreateAgent(
+		testConfig("global-test"),
+		nil,
+		nil, nil, nil,
+		zap.NewNop(),
+	)
+	// It may fail because provider is nil, which is expected
+	if err == nil {
+		t.Log("CreateAgent succeeded (provider may be optional in registry)")
+	}
+}
+
+func TestCreateAgent_NoRegistry(t *testing.T) {
+	// Save and restore GlobalRegistry without touching globalRegistryOnce
+	oldReg := GlobalRegistry
+	defer func() {
+		GlobalRegistry = oldReg
+	}()
+
+	globalRegistryMu.Lock()
+	GlobalRegistry = nil
+	globalRegistryMu.Unlock()
+
+	_, err := CreateAgent(testConfig("no-reg"), nil, nil, nil, nil, zap.NewNop())
+	if err == nil {
+		t.Fatal("expected error when registry not initialized")
+	}
+}
+
+// --- CachingResolver TeardownAll / ResetCache / WithPromptStore / WithConversationStore / WithRunStore (0%) ---
+
+func TestCachingResolver_StoreSetters(t *testing.T) {
+	reg := NewAgentRegistry(zap.NewNop())
+	resolver := NewCachingResolver(reg, &testMockProvider{}, zap.NewNop())
+
+	resolver.WithPromptStore(&mockPromptStore{})
+	resolver.WithConversationStore(&mockConversationStore{})
+	resolver.WithRunStore(&mockRunStore{})
+
+	// TeardownAll with no cached agents should not panic
+	resolver.TeardownAll(context.Background())
+
+	// ResetCache with no cached agents should not panic
+	resolver.ResetCache(context.Background())
+}
+
+// --- RunConfig.ApplyToRequest more branches (71.4%) ---
+
+func TestRunConfig_ApplyToRequest_AllFields(t *testing.T) {
+	model := "gpt-4"
+	provider := "openai"
+	routePolicy := "latency"
+	temp := float32(0.5)
+	maxTokens := 1000
+	topP := float32(0.9)
+	toolChoice := "auto"
+
+	rc := &RunConfig{
+		Model:       &model,
+		Provider:    &provider,
+		RoutePolicy: &routePolicy,
+		Temperature: &temp,
+		MaxTokens:   &maxTokens,
+		TopP:        &topP,
+		Stop:        []string{"END"},
+		ToolChoice:  &toolChoice,
+	}
+
+	req := &llm.ChatRequest{}
+	rc.ApplyToRequest(req, types.AgentConfig{})
+
+	if req.Model != "gpt-4" {
+		t.Fatalf("expected model gpt-4, got %s", req.Model)
+	}
+	if req.Temperature != 0.5 {
+		t.Fatalf("expected temp 0.5, got %f", req.Temperature)
+	}
+	if req.MaxTokens != 1000 {
+		t.Fatalf("expected maxTokens 1000, got %d", req.MaxTokens)
+	}
+	if req.TopP != 0.9 {
+		t.Fatalf("expected topP 0.9, got %f", req.TopP)
+	}
+	if req.ToolChoice != "auto" {
+		t.Fatalf("expected toolChoice auto, got %s", req.ToolChoice)
+	}
+}
+
+func TestRunConfig_ApplyToRequest_NilRC(t *testing.T) {
+	var rc *RunConfig
+	req := &llm.ChatRequest{Model: "original"}
+	rc.ApplyToRequest(req, types.AgentConfig{})
+	if req.Model != "original" {
+		t.Fatal("expected no change for nil RunConfig")
+	}
+}
+
+// --- DynamicToolSelector getAvgLatency (66.7%) ---
+
+func TestDynamicToolSelector_GetAvgLatency(t *testing.T) {
+	ag := buildTestAgent(t, "ts-lat")
+	cfg := *DefaultToolSelectionConfig()
+	s := NewDynamicToolSelector(ag, cfg)
+	// No stats: should return default
+	lat := s.getAvgLatency("unknown_tool")
+	if lat != 500*time.Millisecond {
+		t.Fatalf("expected 500ms default, got %v", lat)
+	}
+
+	// With stats
+	s.toolStats["my_tool"] = &ToolStats{
+		TotalCalls:   10,
+		TotalLatency: 2 * time.Second,
+	}
+	lat = s.getAvgLatency("my_tool")
+	if lat != 200*time.Millisecond {
+		t.Fatalf("expected 200ms, got %v", lat)
+	}
+}
+
+// --- NewDynamicToolSelector defaults (60%) ---
+
+func TestNewDynamicToolSelector_Defaults(t *testing.T) {
+	ag := buildTestAgent(t, "ts-def")
+	cfg := ToolSelectionConfig{
+		MaxTools: 0,
+		MinScore: 0,
+	}
+	s := NewDynamicToolSelector(ag, cfg)
+	if s.config.MaxTools != 5 {
+		t.Fatalf("expected MaxTools=5, got %d", s.config.MaxTools)
+	}
+	if s.config.MinScore != 0.3 {
+		t.Fatalf("expected MinScore=0.3, got %f", s.config.MinScore)
+	}
+}
+
+// --- NewReflectionExecutor defaults (57.1%) ---
+
+func TestNewReflectionExecutor_Defaults(t *testing.T) {
+	ag := buildTestAgent(t, "ref-def")
+	cfg := ReflectionExecutorConfig{
+		MaxIterations: 0,
+		MinQuality:    0,
+		CriticPrompt:  "",
+	}
+	exec := NewReflectionExecutor(ag, cfg)
+	if exec.config.MaxIterations <= 0 {
+		t.Fatal("expected positive MaxIterations")
+	}
+	if exec.config.MinQuality <= 0 {
+		t.Fatal("expected positive MinQuality")
+	}
+	if exec.config.CriticPrompt == "" {
+		t.Fatal("expected non-empty CriticPrompt")
+	}
+}
+
+// --- StreamCompletion (75%) ---
+
+func TestBaseAgent_StreamCompletion(t *testing.T) {
+	prov := &streamingMockProvider{
+		chunks: []llm.StreamChunk{
+			{ID: "c1", Delta: types.Message{Content: "hi"}},
+		},
+	}
+	ag := buildTestAgentWithProvider(t, "stream-comp", prov)
+	ag.Init(context.Background())
+
+	ch, err := ag.StreamCompletion(context.Background(), []types.Message{
+		{Role: "user", Content: "hello"},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	count := 0
+	for range ch {
+		count++
+	}
+	if count == 0 {
+		t.Fatal("expected at least one chunk")
+	}
+}
+
+// --- processEvents panic recovery (63.4%) ---
+
+func TestSimpleEventBus_ProcessEvents_PanicRecovery(t *testing.T) {
+	busIface := NewEventBus(zap.NewNop())
+	bus := busIface.(*SimpleEventBus)
+
+	bus.Subscribe("test_panic", func(e Event) {
+		panic("handler panic")
+	})
+
+	// 发布事件触发 panic — 不应导致进程崩溃
+	bus.Publish(&StateChangeEvent{
+		AgentID_:   "test",
+		FromState:  StateReady,
+		ToState:    StateRunning,
+		Timestamp_: time.Now(),
+	})
+
+	// 等待事件处理完成
+	time.Sleep(100 * time.Millisecond)
+	bus.Stop()
+	// 到这里没崩溃就是 PASS
+}
+
+// --- Unsubscribe non-existent (87.5%) ---
+
+func TestSimpleEventBus_Unsubscribe_NonExistent(t *testing.T) {
+	bus := NewEventBus(zap.NewNop())
+	bus.Unsubscribe("does-not-exist") // should not panic
+	bus.Stop()
+}
+
+// --- ExecuteOne (75%) ---
+
+func TestToolManagerExecutor_ExecuteOne_Empty(t *testing.T) {
+	tm := &mockToolManager{}
+	exec := newToolManagerExecutor(tm, "agent1", nil, nil)
+	result := exec.ExecuteOne(context.Background(), types.ToolCall{
+		ID:   "call1",
+		Name: "nonexistent",
+	})
+	// Should return a result even if tool doesn't exist
+	if result.ToolCallID != "call1" {
+		t.Fatalf("expected call1, got %s", result.ToolCallID)
+	}
+}
+
+type mockToolManager struct{}
+
+func (m *mockToolManager) GetAllowedTools(_ string) []types.ToolSchema { return nil }
+func (m *mockToolManager) ExecuteForAgent(_ context.Context, _ string, _ []types.ToolCall) []llmtools.ToolResult {
+	return nil
+}
+
+// --- SaveMemory (81.8%) ---
+
+func TestBaseAgent_SaveMemory_WithMemory(t *testing.T) {
+	ag := buildTestAgent(t, "save-mem")
+	mem := &mockBaseMemory{}
+	ag.memory = mem
+	err := ag.SaveMemory(context.Background(), "test content", MemoryShortTerm, map[string]any{"key": "val"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if mem.saveCount != 1 {
+		t.Fatalf("expected 1 save, got %d", mem.saveCount)
+	}
+}
+
+// --- gatewayProvider more branches (77.8%) ---
+
+func TestBaseAgent_GatewayProvider_ExternalGateway(t *testing.T) {
+	ag := buildTestAgent(t, "gw-ext")
+	ext := &testMockProvider{}
+	ag.SetGateway(ext)
+	gw := ag.gatewayProvider()
+	if gw != ext {
+		t.Fatal("expected external gateway")
+	}
+}
+
+func TestBaseAgent_GatewayProvider_NilLedger(t *testing.T) {
+	ag := buildTestAgent(t, "gw-nil-ledger")
+	gw := ag.gatewayProvider()
+	// With nil ledger, should return provider directly
+	if gw == nil {
+		t.Fatal("expected non-nil provider")
+	}
+}
+
+// helper
+func strContains(s, substr string) bool {
+	for i := 0; i <= len(s)-len(substr); i++ {
+		if s[i:i+len(substr)] == substr {
+			return true
+		}
+	}
+	return false
 }

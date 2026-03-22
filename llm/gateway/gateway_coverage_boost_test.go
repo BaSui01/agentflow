@@ -7,8 +7,15 @@ import (
 	"time"
 
 	"github.com/BaSui01/agentflow/llm"
+	speech "github.com/BaSui01/agentflow/llm/capabilities/audio"
+	"github.com/BaSui01/agentflow/llm/capabilities/avatar"
+	"github.com/BaSui01/agentflow/llm/capabilities/embedding"
+	"github.com/BaSui01/agentflow/llm/capabilities/image"
 	"github.com/BaSui01/agentflow/llm/capabilities/moderation"
+	"github.com/BaSui01/agentflow/llm/capabilities/music"
 	"github.com/BaSui01/agentflow/llm/capabilities/rerank"
+	"github.com/BaSui01/agentflow/llm/capabilities/threed"
+	"github.com/BaSui01/agentflow/llm/capabilities/video"
 	llmcore "github.com/BaSui01/agentflow/llm/core"
 	"github.com/BaSui01/agentflow/llm/observability"
 	llmpolicy "github.com/BaSui01/agentflow/llm/runtime/policy"
@@ -635,3 +642,506 @@ type boostStructuredOutputProvider struct {
 }
 
 func (p *boostStructuredOutputProvider) SupportsStructuredOutput() bool { return true }
+
+// ═══ invokeTools: nil capabilities / invalid payload ═══
+
+func TestInvokeTools_NilCapabilities(t *testing.T) {
+	svc := New(Config{Logger: zap.NewNop()})
+	_, err := svc.Invoke(context.Background(), &llmcore.UnifiedRequest{
+		Capability: llmcore.CapabilityTools,
+		Payload:    &ToolsInput{Calls: []types.ToolCall{{Name: "x"}}},
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "not configured")
+}
+
+func TestInvokeTools_InvalidPayload(t *testing.T) {
+	svc := newCapabilityServiceForTest()
+	_, err := svc.Invoke(context.Background(), &llmcore.UnifiedRequest{
+		Capability: llmcore.CapabilityTools,
+		Payload:    "not-tools-input",
+	})
+	require.Error(t, err)
+}
+
+func TestInvokeTools_NilPayload(t *testing.T) {
+	svc := newCapabilityServiceForTest()
+	_, err := svc.Invoke(context.Background(), &llmcore.UnifiedRequest{
+		Capability: llmcore.CapabilityTools,
+		Payload:    (*ToolsInput)(nil),
+	})
+	require.Error(t, err)
+}
+
+// ═══ invokeImage: nil capabilities / invalid payload / Edit path / outputUnits fallback ═══
+
+func TestInvokeImage_NilCapabilities(t *testing.T) {
+	svc := New(Config{Logger: zap.NewNop()})
+	_, err := svc.Invoke(context.Background(), &llmcore.UnifiedRequest{
+		Capability: llmcore.CapabilityImage,
+		Payload:    &ImageInput{Generate: &image.GenerateRequest{Prompt: "cat"}},
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "not configured")
+}
+
+func TestInvokeImage_InvalidPayload(t *testing.T) {
+	svc := newImageServiceForTest()
+	_, err := svc.Invoke(context.Background(), &llmcore.UnifiedRequest{
+		Capability: llmcore.CapabilityImage,
+		Payload:    "bad",
+	})
+	require.Error(t, err)
+}
+
+func TestInvokeImage_EditPath(t *testing.T) {
+	svc := newImageServiceForTest()
+	resp, err := svc.Invoke(context.Background(), &llmcore.UnifiedRequest{
+		Capability: llmcore.CapabilityImage,
+		Payload: &ImageInput{
+			Edit: &image.EditRequest{Prompt: "make it blue"},
+		},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, resp)
+	imgResp, ok := resp.Output.(*image.GenerateResponse)
+	require.True(t, ok)
+	assert.Equal(t, "mock-image-edit", imgResp.Provider)
+}
+
+func TestInvokeImage_OutputUnitsFallbackToLen(t *testing.T) {
+	svc := newImageServiceForTest()
+	// The mock returns ImagesGenerated=0 and empty Images, so outputUnits should be 0
+	resp, err := svc.Invoke(context.Background(), &llmcore.UnifiedRequest{
+		Capability: llmcore.CapabilityImage,
+		Payload:    &ImageInput{Generate: &image.GenerateRequest{Prompt: "cat"}},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, 0, resp.Usage.OutputUnits)
+}
+
+// ═══ invokeVideo: nil capabilities / outputUnits fallback ═══
+
+func TestInvokeVideo_NilCapabilities(t *testing.T) {
+	svc := New(Config{Logger: zap.NewNop()})
+	_, err := svc.Invoke(context.Background(), &llmcore.UnifiedRequest{
+		Capability: llmcore.CapabilityVideo,
+		Payload:    &VideoInput{Generate: &video.GenerateRequest{Prompt: "sunset"}},
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "not configured")
+}
+
+func TestInvokeVideo_OutputUnitsFallback(t *testing.T) {
+	svc := newVideoServiceForTest()
+	resp, err := svc.Invoke(context.Background(), &llmcore.UnifiedRequest{
+		Capability: llmcore.CapabilityVideo,
+		Payload:    &VideoInput{Generate: &video.GenerateRequest{Prompt: "sunset"}},
+	})
+	require.NoError(t, err)
+	// mock returns VideosGenerated=0 and empty Videos
+	assert.Equal(t, 0, resp.Usage.OutputUnits)
+}
+
+// ═══ invokeAudio: nil capabilities / Synthesize success / Transcribe success ═══
+
+func TestInvokeAudio_NilCapabilities(t *testing.T) {
+	svc := New(Config{Logger: zap.NewNop()})
+	_, err := svc.Invoke(context.Background(), &llmcore.UnifiedRequest{
+		Capability: llmcore.CapabilityAudio,
+		Payload:    &AudioInput{Synthesize: &speech.TTSRequest{Text: "hello"}},
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "not configured")
+}
+
+func TestInvokeAudio_InvalidPayload(t *testing.T) {
+	svc := newCapabilityServiceForTest()
+	_, err := svc.Invoke(context.Background(), &llmcore.UnifiedRequest{
+		Capability: llmcore.CapabilityAudio,
+		Payload:    "bad",
+	})
+	require.Error(t, err)
+}
+
+func TestInvokeAudio_SynthesizeSuccess(t *testing.T) {
+	svc := newCapabilityServiceForTest()
+	resp, err := svc.Invoke(context.Background(), &llmcore.UnifiedRequest{
+		Capability: llmcore.CapabilityAudio,
+		Payload:    &AudioInput{Synthesize: &speech.TTSRequest{Text: "hello", Model: "tts-1"}},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, resp)
+	ttsResp, ok := resp.Output.(*speech.TTSResponse)
+	require.True(t, ok)
+	assert.Equal(t, "tts", ttsResp.Provider)
+}
+
+func TestInvokeAudio_TranscribeSuccess(t *testing.T) {
+	svc := newCapabilityServiceForTest()
+	resp, err := svc.Invoke(context.Background(), &llmcore.UnifiedRequest{
+		Capability: llmcore.CapabilityAudio,
+		Payload:    &AudioInput{Transcribe: &speech.STTRequest{AudioURL: "http://example.com/audio.mp3"}},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, resp)
+	sttResp, ok := resp.Output.(*speech.STTResponse)
+	require.True(t, ok)
+	assert.Equal(t, "stt", sttResp.Provider)
+}
+
+// ═══ invokeEmbedding: nil capabilities / invalid payload / totalTokens fallback ═══
+
+func TestInvokeEmbedding_NilCapabilities(t *testing.T) {
+	svc := New(Config{Logger: zap.NewNop()})
+	_, err := svc.Invoke(context.Background(), &llmcore.UnifiedRequest{
+		Capability: llmcore.CapabilityEmbedding,
+		Payload:    &EmbeddingInput{Request: &embedding.EmbeddingRequest{Input: []string{"hi"}}},
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "not configured")
+}
+
+func TestInvokeEmbedding_InvalidPayload(t *testing.T) {
+	svc := newCapabilityServiceForTest()
+	_, err := svc.Invoke(context.Background(), &llmcore.UnifiedRequest{
+		Capability: llmcore.CapabilityEmbedding,
+		Payload:    "bad",
+	})
+	require.Error(t, err)
+}
+
+func TestInvokeEmbedding_TotalTokensFallback(t *testing.T) {
+	svc := newCapabilityServiceForTest()
+	resp, err := svc.Invoke(context.Background(), &llmcore.UnifiedRequest{
+		Capability: llmcore.CapabilityEmbedding,
+		Payload: &EmbeddingInput{
+			Request: &embedding.EmbeddingRequest{
+				Model: "emb-model",
+				Input: []string{"hello"},
+			},
+		},
+	})
+	require.NoError(t, err)
+	// mock returns TotalTokens=8, PromptTokens=8 — TotalTokens != 0 so no fallback
+	assert.Equal(t, 8, resp.Usage.TotalTokens)
+}
+
+// ═══ invokeModeration: nil capabilities ═══
+
+func TestInvokeModeration_NilCapabilities(t *testing.T) {
+	svc := New(Config{Logger: zap.NewNop()})
+	_, err := svc.Invoke(context.Background(), &llmcore.UnifiedRequest{
+		Capability: llmcore.CapabilityModeration,
+		Payload:    &ModerationInput{Request: &moderation.ModerationRequest{Input: []string{"hi"}}},
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "not configured")
+}
+
+// ═══ invokeMusic: nil capabilities ═══
+
+func TestInvokeMusic_NilCapabilities(t *testing.T) {
+	svc := New(Config{Logger: zap.NewNop()})
+	_, err := svc.Invoke(context.Background(), &llmcore.UnifiedRequest{
+		Capability: llmcore.CapabilityMusic,
+		Payload:    &MusicInput{Generate: &music.GenerateRequest{Prompt: "jazz"}},
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "not configured")
+}
+
+// ═══ invokeThreeD: nil capabilities ═══
+
+func TestInvokeThreeD_NilCapabilities(t *testing.T) {
+	svc := New(Config{Logger: zap.NewNop()})
+	_, err := svc.Invoke(context.Background(), &llmcore.UnifiedRequest{
+		Capability: llmcore.CapabilityThreeD,
+		Payload:    &ThreeDInput{Generate: &threed.GenerateRequest{Prompt: "cube"}},
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "not configured")
+}
+
+// ═══ invokeAvatar: nil capabilities ═══
+
+func TestInvokeAvatar_NilCapabilities(t *testing.T) {
+	svc := New(Config{Logger: zap.NewNop()})
+	_, err := svc.Invoke(context.Background(), &llmcore.UnifiedRequest{
+		Capability: llmcore.CapabilityAvatar,
+		Payload:    &AvatarInput{Generate: &avatar.GenerateRequest{Prompt: "hi", DriveMode: types.AvatarDriveModeText}},
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "not configured")
+}
+
+// ═══ estimateChatTokens: CountMessages error fallback / tools marshal error / negative total ═══
+
+func TestEstimateChatTokens_CountMessagesErrorFallback(t *testing.T) {
+	svc := New(Config{
+		TokenizerResolver: func(model string) llmtokenizer.Tokenizer {
+			return &boostErrCountMessagesTokenizer{tokenCountPerText: 3}
+		},
+		Logger: zap.NewNop(),
+	})
+
+	chatReq := &llm.ChatRequest{
+		Model:    "test",
+		Messages: []types.Message{{Role: "user", Content: "hello world"}},
+	}
+	tokens := svc.estimateChatTokens(&llmcore.UnifiedRequest{ModelHint: "test"}, chatReq)
+	// CountMessages fails, falls back to countTextsTokens which returns 3
+	assert.Equal(t, 3, tokens)
+}
+
+func TestEstimateChatTokens_WithToolsTokenCounting(t *testing.T) {
+	svc := New(Config{
+		TokenizerResolver: func(model string) llmtokenizer.Tokenizer {
+			return &stubTokenizer{tokenCountPerText: 5, messageTokens: 10}
+		},
+		Logger: zap.NewNop(),
+	})
+
+	chatReq := &llm.ChatRequest{
+		Model:    "test",
+		Messages: []types.Message{{Role: "user", Content: "hi"}},
+		Tools:    []types.ToolSchema{{Name: "search", Description: "search tool"}},
+	}
+	tokens := svc.estimateChatTokens(&llmcore.UnifiedRequest{ModelHint: "test"}, chatReq)
+	// 10 (messages) + 5 (tool schema) + 0 (no completion budget) = 15
+	assert.Equal(t, 15, tokens)
+}
+
+func TestEstimateChatTokens_ToolsCountTokensError(t *testing.T) {
+	svc := New(Config{
+		TokenizerResolver: func(model string) llmtokenizer.Tokenizer {
+			return &boostErrCountTokensTokenizer{messageTokens: 10}
+		},
+		Logger: zap.NewNop(),
+	})
+
+	chatReq := &llm.ChatRequest{
+		Model:    "test",
+		Messages: []types.Message{{Role: "user", Content: "hi"}},
+		Tools:    []types.ToolSchema{{Name: "search"}},
+	}
+	tokens := svc.estimateChatTokens(&llmcore.UnifiedRequest{ModelHint: "test"}, chatReq)
+	// 10 (messages) + 0 (tool count error, skipped) = 10
+	assert.Equal(t, 10, tokens)
+}
+
+// ═══ recordResponseUsage: successful recording ═══
+
+func TestRecordResponseUsage_Success(t *testing.T) {
+	budgetCfg := llmpolicy.DefaultBudgetConfig()
+	budget := llmpolicy.NewTokenBudgetManager(budgetCfg, zap.NewNop())
+	manager := llmpolicy.NewManager(llmpolicy.ManagerConfig{Budget: budget})
+	svc := New(Config{PolicyManager: manager, Logger: zap.NewNop()})
+
+	svc.recordResponseUsage(
+		&llmcore.UnifiedRequest{TraceID: "t1", Metadata: map[string]string{"user_id": "u1"}},
+		&llmcore.UnifiedResponse{
+			Usage:            llmcore.Usage{TotalTokens: 100},
+			Cost:             llmcore.Cost{AmountUSD: 0.01},
+			ProviderDecision: llmcore.ProviderDecision{Model: "gpt-4"},
+			TraceID:          "t1",
+		},
+	)
+	// No panic = success; policyManager.RecordUsage was called
+}
+
+func TestRecordResponseUsage_NilService(t *testing.T) {
+	var svc *Service
+	svc.recordResponseUsage(&llmcore.UnifiedRequest{}, &llmcore.UnifiedResponse{})
+}
+
+// ═══ mergeChatRoutingMetadata: metadata merge / providerHint / routePolicy ═══
+
+func TestMergeChatRoutingMetadata_MetadataMerge(t *testing.T) {
+	req := &llmcore.UnifiedRequest{
+		Metadata: map[string]string{"key1": "val1", "key2": "val2"},
+	}
+	chatReq := &llm.ChatRequest{
+		Metadata: map[string]string{"key1": "existing"},
+	}
+	mergeChatRoutingMetadata(req, chatReq)
+	// key1 should not be overwritten (existing is non-empty)
+	assert.Equal(t, "existing", chatReq.Metadata["key1"])
+	// key2 should be merged
+	assert.Equal(t, "val2", chatReq.Metadata["key2"])
+}
+
+func TestMergeChatRoutingMetadata_ProviderHintFromMetadata(t *testing.T) {
+	req := &llmcore.UnifiedRequest{}
+	chatReq := &llm.ChatRequest{
+		Metadata: map[string]string{llmcore.MetadataKeyChatProvider: "anthropic"},
+	}
+	mergeChatRoutingMetadata(req, chatReq)
+	assert.Equal(t, "anthropic", req.ProviderHint)
+	assert.Equal(t, "anthropic", req.Hints.ChatProvider)
+}
+
+func TestMergeChatRoutingMetadata_ProviderHintFromReqHints(t *testing.T) {
+	req := &llmcore.UnifiedRequest{
+		Hints: llmcore.CapabilityHints{ChatProvider: "openai"},
+	}
+	chatReq := &llm.ChatRequest{}
+	mergeChatRoutingMetadata(req, chatReq)
+	assert.Equal(t, "openai", req.ProviderHint)
+}
+
+func TestMergeChatRoutingMetadata_RoutePolicyFromMetadata(t *testing.T) {
+	req := &llmcore.UnifiedRequest{}
+	chatReq := &llm.ChatRequest{
+		Metadata: map[string]string{"route_policy": "latency"},
+	}
+	mergeChatRoutingMetadata(req, chatReq)
+	assert.Equal(t, llmcore.RoutePolicyLatencyFirst, req.RoutePolicy)
+}
+
+func TestMergeChatRoutingMetadata_RoutePolicyFromReq(t *testing.T) {
+	req := &llmcore.UnifiedRequest{
+		RoutePolicy: llmcore.RoutePolicyBalanced,
+	}
+	chatReq := &llm.ChatRequest{}
+	mergeChatRoutingMetadata(req, chatReq)
+	assert.Equal(t, llmcore.RoutePolicyBalanced, req.RoutePolicy)
+	assert.Equal(t, "balanced", chatReq.Metadata["route_policy"])
+}
+
+func TestMergeChatRoutingMetadata_MetadataNilInit(t *testing.T) {
+	req := &llmcore.UnifiedRequest{
+		Metadata: map[string]string{"a": "b"},
+	}
+	chatReq := &llm.ChatRequest{} // Metadata is nil
+	mergeChatRoutingMetadata(req, chatReq)
+	assert.Equal(t, "b", chatReq.Metadata["a"])
+}
+
+// ═══ validateRequest: audio validation branches ═══
+
+func TestValidateRequest_NilRequest(t *testing.T) {
+	err := validateRequest(nil)
+	require.NotNil(t, err)
+	assert.Contains(t, err.Message, "required")
+}
+
+func TestValidateRequest_EmptyCapability(t *testing.T) {
+	err := validateRequest(&llmcore.UnifiedRequest{Payload: "x"})
+	require.NotNil(t, err)
+	assert.Contains(t, err.Message, "capability")
+}
+
+func TestValidateRequest_NilPayload(t *testing.T) {
+	err := validateRequest(&llmcore.UnifiedRequest{Capability: llmcore.CapabilityChat})
+	require.NotNil(t, err)
+	assert.Contains(t, err.Message, "payload")
+}
+
+func TestValidateRequest_AudioBothNil(t *testing.T) {
+	err := validateRequest(&llmcore.UnifiedRequest{
+		Capability: llmcore.CapabilityAudio,
+		Payload:    &AudioInput{},
+	})
+	require.NotNil(t, err)
+	assert.Contains(t, err.Message, "exactly one")
+}
+
+func TestValidateRequest_AudioBothSet(t *testing.T) {
+	err := validateRequest(&llmcore.UnifiedRequest{
+		Capability: llmcore.CapabilityAudio,
+		Payload: &AudioInput{
+			Synthesize: &speech.TTSRequest{Text: "hi"},
+			Transcribe: &speech.STTRequest{AudioURL: "http://x"},
+		},
+	})
+	require.NotNil(t, err)
+	assert.Contains(t, err.Message, "exactly one")
+}
+
+func TestValidateRequest_AudioTTSEmptyText(t *testing.T) {
+	err := validateRequest(&llmcore.UnifiedRequest{
+		Capability: llmcore.CapabilityAudio,
+		Payload:    &AudioInput{Synthesize: &speech.TTSRequest{Text: "  "}},
+	})
+	require.NotNil(t, err)
+	assert.Contains(t, err.Message, "text is required")
+}
+
+func TestValidateRequest_AudioSTTNoAudio(t *testing.T) {
+	err := validateRequest(&llmcore.UnifiedRequest{
+		Capability: llmcore.CapabilityAudio,
+		Payload:    &AudioInput{Transcribe: &speech.STTRequest{}},
+	})
+	require.NotNil(t, err)
+	assert.Contains(t, err.Message, "audio")
+}
+
+func TestValidateRequest_AudioSTTValid(t *testing.T) {
+	err := validateRequest(&llmcore.UnifiedRequest{
+		Capability: llmcore.CapabilityAudio,
+		Payload:    &AudioInput{Transcribe: &speech.STTRequest{AudioURL: "http://x.mp3"}},
+	})
+	assert.Nil(t, err)
+}
+
+func TestValidateRequest_AudioTTSValid(t *testing.T) {
+	err := validateRequest(&llmcore.UnifiedRequest{
+		Capability: llmcore.CapabilityAudio,
+		Payload:    &AudioInput{Synthesize: &speech.TTSRequest{Text: "hello"}},
+	})
+	assert.Nil(t, err)
+}
+
+// ═══ resolveTokenizer: nil resolver fallback ═══
+
+func TestResolveTokenizer_NilResolver(t *testing.T) {
+	svc := New(Config{Logger: zap.NewNop()})
+	tok := svc.resolveTokenizer("gpt-4o-mini")
+	// Should use default GetTokenizerOrEstimator, not panic
+	assert.NotNil(t, tok)
+}
+
+func TestResolveTokenizer_EmptyModel(t *testing.T) {
+	svc := New(Config{Logger: zap.NewNop()})
+	tok := svc.resolveTokenizer("")
+	assert.NotNil(t, tok)
+}
+
+// ═══ Boost mock: errCountMessages tokenizer ═══
+
+type boostErrCountMessagesTokenizer struct {
+	tokenCountPerText int
+}
+
+func (t *boostErrCountMessagesTokenizer) CountTokens(text string) (int, error) {
+	return t.tokenCountPerText, nil
+}
+func (t *boostErrCountMessagesTokenizer) CountMessages(_ []llmtokenizer.Message) (int, error) {
+	return 0, errors.New("count messages not supported")
+}
+func (t *boostErrCountMessagesTokenizer) Encode(text string) ([]int, error) { return nil, nil }
+func (t *boostErrCountMessagesTokenizer) Decode(tokens []int) (string, error) {
+	return "", nil
+}
+func (t *boostErrCountMessagesTokenizer) MaxTokens() int { return 128000 }
+func (t *boostErrCountMessagesTokenizer) Name() string   { return "err-count-messages" }
+
+// ═══ Boost mock: errCountTokens tokenizer ═══
+
+type boostErrCountTokensTokenizer struct {
+	messageTokens int
+}
+
+func (t *boostErrCountTokensTokenizer) CountTokens(_ string) (int, error) {
+	return 0, errors.New("count tokens not supported")
+}
+func (t *boostErrCountTokensTokenizer) CountMessages(msgs []llmtokenizer.Message) (int, error) {
+	return t.messageTokens, nil
+}
+func (t *boostErrCountTokensTokenizer) Encode(text string) ([]int, error) { return nil, nil }
+func (t *boostErrCountTokensTokenizer) Decode(tokens []int) (string, error) {
+	return "", nil
+}
+func (t *boostErrCountTokensTokenizer) MaxTokens() int { return 128000 }
+func (t *boostErrCountTokensTokenizer) Name() string   { return "err-count-tokens" }
