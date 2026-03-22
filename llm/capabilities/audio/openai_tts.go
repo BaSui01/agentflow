@@ -51,6 +51,7 @@ type openAITTSRequest struct {
 	Voice          string  `json:"voice"`
 	ResponseFormat string  `json:"response_format,omitempty"`
 	Speed          float64 `json:"speed,omitempty"`
+	Language       string  `json:"language,omitempty"`
 }
 
 // 合成大小将文本转换为语音.
@@ -76,6 +77,9 @@ func (p *OpenAITTSProvider) Synthesize(ctx context.Context, req *TTSRequest) (*T
 	}
 	if req.Speed > 0 {
 		body.Speed = req.Speed
+	}
+	if req.Language != "" {
+		body.Language = req.Language
 	}
 
 	payload, _ := json.Marshal(body)

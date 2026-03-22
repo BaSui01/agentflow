@@ -11,9 +11,13 @@ import (
 
 	"github.com/BaSui01/agentflow/agent/guardrails"
 	"github.com/BaSui01/agentflow/llm"
+	"github.com/BaSui01/agentflow/llm/observability"
 
 	"go.uber.org/zap"
 )
+
+// defaultCostCalc is a package-level cost calculator for estimating LLM call costs.
+var defaultCostCalc = observability.NewCostCalculator()
 
 // Plan 生成执行计划
 // 使用 LLM 分析任务并生成详细的执行步骤
@@ -392,6 +396,7 @@ func (b *BaseAgent) Execute(ctx context.Context, input *Input) (_ *Output, execE
 	}
 
 	duration := time.Since(startTime)
+	estimatedCost := defaultCostCalc.Calculate(resp.Provider, resp.Model, resp.Usage.PromptTokens, resp.Usage.CompletionTokens)
 
 	// 9a. ConversationStore: persist conversation
 	b.persistence.PersistConversation(ctx, conversationID, b.config.Core.ID, input.TenantID, input.UserID, input.Content, outputContent)
@@ -401,7 +406,7 @@ func (b *BaseAgent) Execute(ctx context.Context, input *Input) (_ *Output, execE
 		outputDoc := &RunOutputDoc{
 			Content:      outputContent,
 			TokensUsed:   resp.Usage.TotalTokens,
-			Cost:         0, // cost is computed elsewhere
+			Cost:         estimatedCost,
 			FinishReason: choice.FinishReason,
 		}
 		if err := b.persistence.UpdateRunStatus(ctx, runID, "completed", outputDoc, ""); err != nil {
@@ -425,6 +430,7 @@ func (b *BaseAgent) Execute(ctx context.Context, input *Input) (_ *Output, execE
 			"provider": resp.Provider,
 		},
 		TokensUsed:   resp.Usage.TotalTokens,
+		Cost:         estimatedCost,
 		Duration:     duration,
 		FinishReason: choice.FinishReason,
 	}, nil

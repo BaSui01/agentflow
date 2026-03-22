@@ -164,11 +164,11 @@ type inputContentPart struct {
 
 // functionCallInputItem represents a function call in the input (for multi-turn).
 type functionCallInputItem struct {
-	Type      string          `json:"type"` // "function_call"
-	ID        string          `json:"id"`
-	CallID    string          `json:"call_id"`
-	Name      string          `json:"name"`
-	Arguments json.RawMessage `json:"arguments"`
+	Type      string `json:"type"` // "function_call"
+	ID        string `json:"id"`
+	CallID    string `json:"call_id"`
+	Name      string `json:"name"`
+	Arguments string `json:"arguments"` // Responses API 要求 string，不是 object
 }
 
 // functionCallOutputItem represents a function call output in the input.
@@ -482,7 +482,7 @@ func convertMessagesToResponsesInput(msgs []types.Message) []any {
 						ID:        tc.ID,
 						CallID:    tc.ID,
 						Name:      tc.Name,
-						Arguments: tc.Arguments,
+						Arguments: string(tc.Arguments),
 					})
 				}
 			} else {

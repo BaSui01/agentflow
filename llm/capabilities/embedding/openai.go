@@ -31,6 +31,7 @@ type openAIEmbedRequest struct {
 	Model          string `json:"model"`
 	Dimensions     int    `json:"dimensions,omitempty"`
 	EncodingFormat string `json:"encoding_format,omitempty"`
+	InputType      string `json:"input_type,omitempty"`
 }
 
 type openAIEmbedResponse struct {
@@ -66,6 +67,9 @@ func (p *OpenAIProvider) Embed(ctx context.Context, req *EmbeddingRequest) (*Emb
 	}
 	if req.EncodingFormat != "" {
 		body.EncodingFormat = req.EncodingFormat
+	}
+	if req.InputType != "" {
+		body.InputType = string(req.InputType)
 	}
 
 	respBody, err := p.DoRequest(ctx, "POST", "/v1/embeddings", body, map[string]string{

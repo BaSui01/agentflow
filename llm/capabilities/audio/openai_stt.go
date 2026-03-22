@@ -123,6 +123,12 @@ func (p *OpenAISTTProvider) Transcribe(ctx context.Context, req *STTRequest) (*S
 		}
 	}
 
+	if req.Temperature != 0 {
+		if err := writer.WriteField("temperature", fmt.Sprintf("%g", req.Temperature)); err != nil {
+			return nil, fmt.Errorf("failed to write temperature field: %w", err)
+		}
+	}
+
 	writer.Close()
 
 	httpReq, err := http.NewRequestWithContext(ctx, "POST",

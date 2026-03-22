@@ -6,7 +6,13 @@
       "Skill(refactor-agent)",
       "Skill(refactor-rag)",
       "Skill(refactor-llm-capabilities)",
-      "Skill(refactor-workflow)"
+      "Skill(refactor-workflow)",
+      "mcp__grok-search__plan_intent",
+      "mcp__grok-search__plan_complexity",
+      "mcp__grok-search__plan_sub_query",
+      "mcp__grok-search__web_fetch",
+      "mcp__grok-search__plan_search_term",
+      "mcp__grok-search__plan_tool_mapping"
     ]
   }
 }

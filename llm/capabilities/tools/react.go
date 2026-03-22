@@ -48,6 +48,7 @@ func (r *ReActExecutor) Execute(ctx context.Context, req *llm.ChatRequest) (*llm
 	messages := append([]types.Message{}, req.Messages...)
 	var lastResp *llm.ChatResponse // 保留最后一次有效响应
 	var totalUsage llm.ChatUsage   // 累计所有迭代的 token 用量
+	var prevPromptTokens int       // 上一轮的 PromptTokens，用于计算增量
 
 	for i := 0; i < r.config.MaxIterations; i++ {
 		r.logger.Debug("ReAct iteration", zap.Int("iteration", i+1))
@@ -59,9 +60,18 @@ func (r *ReActExecutor) Execute(ctx context.Context, req *llm.ChatRequest) (*llm
 			return lastResp, steps, fmt.Errorf("LLM call failed at iteration %d: %w", i+1, err)
 		}
 		lastResp = resp
-		totalUsage.PromptTokens += resp.Usage.PromptTokens
+
+		// 计算增量 token：PromptTokens 包含历史消息，只有增量部分是本轮新增的
+		promptDelta := resp.Usage.PromptTokens - prevPromptTokens
+		if promptDelta < 0 {
+			promptDelta = resp.Usage.PromptTokens
+		}
+		stepTokens := promptDelta + resp.Usage.CompletionTokens
+		prevPromptTokens = resp.Usage.PromptTokens
+
+		totalUsage.PromptTokens += promptDelta
 		totalUsage.CompletionTokens += resp.Usage.CompletionTokens
-		totalUsage.TotalTokens += resp.Usage.TotalTokens
+		totalUsage.TotalTokens += stepTokens
 
 		if len(resp.Choices) == 0 {
 			return resp, steps, fmt.Errorf("no choices in LLM response")
@@ -74,7 +84,7 @@ func (r *ReActExecutor) Execute(ctx context.Context, req *llm.ChatRequest) (*llm
 			StepNumber: i + 1,
 			Thought:    choice.Message.Content,
 			Timestamp:  fmt.Sprintf("%d", i+1),
-			TokensUsed: resp.Usage.TotalTokens,
+			TokensUsed: stepTokens,
 		}
 
 		if len(toolCalls) == 0 {

@@ -5,6 +5,18 @@ All notable changes to AgentFlow will be documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.8.6] - 2026-03-23
+
+### Fixed
+- OpenAI Responses API `function_call` 的 `arguments` 字段类型从 `json.RawMessage` 改为 `string`，符合官方 API 规范
+
+### Added
+- Agent Execute 新增 `CostCalculator` 成本估算，`Output.Cost` 字段不再为 0
+- ReAct token 用量改为增量计算，避免多轮迭代中 PromptTokens 重复累加
+- TTS 新增 `language` 字段支持
+- STT 新增 `temperature` 字段支持
+- Embedding 新增 `input_type` 字段支持
+
 ## [1.7.0] - 2026-03-22
 
 ### Added
