@@ -18,6 +18,7 @@ const (
 
 // ToolCall represents a tool invocation request from the LLM.
 type ToolCall struct {
+	Index     int             `json:"index,omitempty"` // 流式 delta 中标识同一工具调用的位置索引
 	ID        string          `json:"id"`
 	Name      string          `json:"name"`
 	Arguments json.RawMessage `json:"arguments"`

@@ -46,6 +46,7 @@ func NewReActExecutor(provider llm.Provider, toolExecutor ToolExecutor, config R
 func (r *ReActExecutor) Execute(ctx context.Context, req *llm.ChatRequest) (*llm.ChatResponse, []ReActStep, error) {
 	steps := make([]ReActStep, 0)
 	messages := append([]types.Message{}, req.Messages...)
+	var lastResp *llm.ChatResponse // 保留最后一次有效响应
 
 	for i := 0; i < r.config.MaxIterations; i++ {
 		r.logger.Debug("ReAct iteration", zap.Int("iteration", i+1))
@@ -54,8 +55,9 @@ func (r *ReActExecutor) Execute(ctx context.Context, req *llm.ChatRequest) (*llm
 		callReq.Messages = messages
 		resp, err := r.provider.Completion(ctx, &callReq)
 		if err != nil {
-			return nil, steps, fmt.Errorf("LLM call failed at iteration %d: %w", i+1, err)
+			return lastResp, steps, fmt.Errorf("LLM call failed at iteration %d: %w", i+1, err)
 		}
+		lastResp = resp
 
 		if len(resp.Choices) == 0 {
 			return resp, steps, fmt.Errorf("no choices in LLM response")
@@ -103,7 +105,7 @@ func (r *ReActExecutor) Execute(ctx context.Context, req *llm.ChatRequest) (*llm
 	}
 
 	r.logger.Warn("ReAct max iterations reached", zap.Int("max", r.config.MaxIterations))
-	return nil, steps, fmt.Errorf("max iterations reached (%d)", r.config.MaxIterations)
+	return lastResp, steps, fmt.Errorf("max iterations reached (%d)", r.config.MaxIterations)
 }
 
 // ExecuteWithTrace 执行 ReAct 循环并返回完整跟踪信息.
@@ -243,23 +245,30 @@ func (r *ReActExecutor) ExecuteStream(ctx context.Context, req *llm.ChatRequest)
 						})
 					}
 					for _, tc := range chunk.Delta.ToolCalls {
-						id := strings.TrimSpace(tc.ID)
-						if id == "" {
-							id = fmt.Sprintf("call_%d_%d", i+1, len(toolCallOrder)+1)
-						}
-						acc := toolCallByID[id]
+						// 用 index 作为聚合 key（OpenAI 流式协议：首 chunk 含 id/name，
+						// 后续 chunk 同一 index 的 id/name 为空，只有 arguments 增量）
+						key := fmt.Sprintf("idx_%d", tc.Index)
+						acc := toolCallByID[key]
 						if acc == nil {
 							acc = &struct {
 								id           string
 								name         string
 								argsFinal    json.RawMessage
 								argsBuilding strings.Builder
-							}{id: id}
-							toolCallByID[id] = acc
-							toolCallOrder = append(toolCallOrder, id)
+							}{}
+							toolCallByID[key] = acc
+							toolCallOrder = append(toolCallOrder, key)
+						}
+						// 首 chunk 带 id，后续为空 — 只在非空时更新
+						if strings.TrimSpace(tc.ID) != "" {
+							acc.id = strings.TrimSpace(tc.ID)
 						}
 						if strings.TrimSpace(tc.Name) != "" {
 							acc.name = strings.TrimSpace(tc.Name)
+						}
+						// 兜底：如果最后仍无 id，生成一个
+						if acc.id == "" {
+							acc.id = fmt.Sprintf("call_%d_%d", i+1, tc.Index+1)
 						}
 						if len(tc.Arguments) == 0 || len(acc.argsFinal) > 0 {
 							continue
@@ -346,6 +355,7 @@ func (r *ReActExecutor) ExecuteStream(ctx context.Context, req *llm.ChatRequest)
 		}
 
 		eventCh <- ReActStreamEvent{Type: ReActEventError, Error: fmt.Sprintf("max iterations reached (%d)", r.config.MaxIterations)}
+		return
 	}()
 
 	return eventCh, nil
