@@ -389,6 +389,18 @@ func (e *DefaultExecutor) ExecuteOne(ctx context.Context, call types.ToolCall) t
 	}, 1)
 
 	go func() {
+		// 防止工具函数 panic 导致整个进程崩溃
+		defer func() {
+			if r := recover(); r != nil {
+				select {
+				case doneChan <- struct {
+					res json.RawMessage
+					err error
+				}{nil, fmt.Errorf("tool panic: %v", r)}:
+				case <-execCtx.Done():
+				}
+			}
+		}()
 		res, err := fn(execCtx, call.Arguments)
 		// 使用 select 确保即使超时也能退出
 		select {

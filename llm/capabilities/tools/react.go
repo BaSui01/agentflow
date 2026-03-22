@@ -163,7 +163,7 @@ type LLMCallInfo struct {
 
 // ExecuteStream 执行流式 ReAct 循环.
 func (r *ReActExecutor) ExecuteStream(ctx context.Context, req *llm.ChatRequest) (<-chan ReActStreamEvent, error) {
-	eventCh := make(chan ReActStreamEvent)
+	eventCh := make(chan ReActStreamEvent, 64) // 带缓冲防止消费者慢导致发送者阻塞
 
 	go func() {
 		defer close(eventCh)

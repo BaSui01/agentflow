@@ -339,6 +339,11 @@ func (m *loopModeStrategy) Execute(ctx context.Context, agents []agent.Agent, in
 			m.logger.Debug("loop stop condition met", zap.Int("iteration", iter))
 			break
 		}
+		// 思考模型可能把 stop_keyword 放在 Metadata 的推理内容中
+		if meta, ok := out.Metadata["reasoning_content"].(string); ok && strings.Contains(meta, stopKeyword) {
+			m.logger.Debug("loop stop condition met in reasoning_content", zap.Int("iteration", iter))
+			break
+		}
 
 		current = &agent.Input{
 			TraceID:  input.TraceID,
