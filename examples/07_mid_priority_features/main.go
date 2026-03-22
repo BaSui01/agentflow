@@ -60,13 +60,8 @@ func demoHostedTools(logger *zap.Logger) {
 		hosted.WithMetrics(func(name string, duration time.Duration, err error) {}),
 	)
 
-	webSearchCfg, providerNote := selectHostedWebSearchProvider()
-	webSearch, err := hosted.NewProviderBackedWebSearchHostedTool(webSearchCfg, logger)
-	if err != nil {
-		fmt.Printf("   Build web search tool failed: %v\n\n", err)
-		return
-	}
-	registry.Register(webSearch)
+	fallbackCandidates := buildHostedWebSearchCandidates()
+	fallbackNote := describeHostedWebSearchFallback(fallbackCandidates)
 
 	// Register file search tool (in-memory mock store).
 	fileStore := &mockFileSearchStore{}
@@ -85,32 +80,35 @@ func demoHostedTools(logger *zap.Logger) {
 	_, _ = registry.Execute(context.Background(), fileTool.Name(), fileArgs)
 
 	searchArgs, _ := json.Marshal(map[string]any{
-		"query":       "AgentFlow Go framework",
+		"query":       "Go programming language",
 		"max_results": 3,
-		"language":    "zh",
+		"language":    "en",
 	})
-	searchRaw, searchErr := registry.Execute(context.Background(), webSearch.Name(), searchArgs)
+	searchResult, searchErr := executeHostedWebSearchWithFallback(context.Background(), logger, fallbackCandidates, searchArgs)
 
-	fmt.Printf("   Registered tool: %s - %s\n", webSearch.Name(), webSearch.Description())
-	fmt.Printf("   Tool type: %s\n", webSearch.Type())
-	fmt.Printf("   Web search provider: %s\n", providerNote)
+	fmt.Printf("   Registered tool: %s - %s\n", hosted.ToolTypeWebSearch, "Search the web for information. Returns a list of relevant results with titles, URLs, and snippets.")
+	fmt.Printf("   Tool type: %s\n", hosted.ToolTypeWebSearch)
+	fmt.Printf("   Web search fallback chain: %s\n", fallbackNote)
 	if searchErr != nil {
 		fmt.Printf("   Web search execution failed: %v\n", searchErr)
 	} else {
-		var resp demoWebSearchResponse
-		if err := json.Unmarshal(searchRaw, &resp); err != nil {
-			fmt.Printf("   Web search decode failed: %v\n", err)
-		} else {
-			fmt.Printf("   Web search results: %d (%s)\n", resp.TotalCount, resp.Duration)
-			for i, item := range resp.Results {
-				if i >= 2 {
-					break
-				}
-				fmt.Printf("     - %s | %s\n", item.Title, item.URL)
+		fmt.Printf("   Web search provider: %s\n", searchResult.ProviderNote)
+		fmt.Printf("   Web search results: %d (%s)\n", searchResult.Response.TotalCount, searchResult.Response.Duration)
+		for i, item := range searchResult.Response.Results {
+			if i >= 2 {
+				break
 			}
+			fmt.Printf("     - %s | %s\n", item.Title, item.URL)
 		}
 	}
-	fmt.Printf("   Total tools: %d\n\n", len(registry.List()))
+	for _, attempt := range searchResult.Attempts {
+		if attempt.Error != "" {
+			fmt.Printf("   Attempt: %s -> error=%s\n", attempt.Provider, attempt.Error)
+			continue
+		}
+		fmt.Printf("   Attempt: %s -> results=%d (%s)\n", attempt.Provider, attempt.Results, attempt.Duration)
+	}
+	fmt.Printf("   Registered tools (registry): %d\n\n", len(registry.List()))
 }
 
 type demoWebSearchResponse struct {
@@ -126,41 +124,139 @@ type demoWebSearchResultItem struct {
 	Snippet string `json:"snippet"`
 }
 
-func selectHostedWebSearchProvider() (hosted.ToolProviderConfig, string) {
+type hostedWebSearchCandidate struct {
+	Config hosted.ToolProviderConfig
+	Note   string
+}
+
+type hostedWebSearchAttempt struct {
+	Provider string
+	Results  int
+	Duration string
+	Error    string
+}
+
+type hostedWebSearchRunResult struct {
+	Response     demoWebSearchResponse
+	ProviderNote string
+	Attempts     []hostedWebSearchAttempt
+}
+
+func buildHostedWebSearchCandidates() []hostedWebSearchCandidate {
+	candidates := make([]hostedWebSearchCandidate, 0, 4)
 	if apiKey := strings.TrimSpace(os.Getenv("TAVILY_API_KEY")); apiKey != "" {
-		return hosted.ToolProviderConfig{
-			Provider:       string(hosted.ToolProviderTavily),
-			APIKey:         apiKey,
-			BaseURL:        strings.TrimSpace(os.Getenv("TAVILY_BASE_URL")),
-			TimeoutSeconds: 15,
-			Enabled:        true,
-		}, "tavily (检测到 TAVILY_API_KEY)"
+		candidates = append(candidates, hostedWebSearchCandidate{
+			Config: hosted.ToolProviderConfig{
+				Provider:       string(hosted.ToolProviderTavily),
+				APIKey:         apiKey,
+				BaseURL:        strings.TrimSpace(os.Getenv("TAVILY_BASE_URL")),
+				TimeoutSeconds: 15,
+				Enabled:        true,
+			},
+			Note: "tavily (检测到 TAVILY_API_KEY)",
+		})
 	}
 
 	if apiKey := strings.TrimSpace(os.Getenv("FIRECRAWL_API_KEY")); apiKey != "" {
-		return hosted.ToolProviderConfig{
-			Provider:       string(hosted.ToolProviderFirecrawl),
-			APIKey:         apiKey,
-			BaseURL:        strings.TrimSpace(os.Getenv("FIRECRAWL_BASE_URL")),
-			TimeoutSeconds: 15,
-			Enabled:        true,
-		}, "firecrawl (检测到 FIRECRAWL_API_KEY)"
+		candidates = append(candidates, hostedWebSearchCandidate{
+			Config: hosted.ToolProviderConfig{
+				Provider:       string(hosted.ToolProviderFirecrawl),
+				APIKey:         apiKey,
+				BaseURL:        strings.TrimSpace(os.Getenv("FIRECRAWL_BASE_URL")),
+				TimeoutSeconds: 15,
+				Enabled:        true,
+			},
+			Note: "firecrawl (检测到 FIRECRAWL_API_KEY)",
+		})
 	}
 
 	if baseURL := strings.TrimSpace(os.Getenv("SEARXNG_BASE_URL")); baseURL != "" {
-		return hosted.ToolProviderConfig{
-			Provider:       string(hosted.ToolProviderSearXNG),
-			BaseURL:        baseURL,
-			TimeoutSeconds: 15,
-			Enabled:        true,
-		}, "searxng (检测到 SEARXNG_BASE_URL)"
+		candidates = append(candidates, hostedWebSearchCandidate{
+			Config: hosted.ToolProviderConfig{
+				Provider:       string(hosted.ToolProviderSearXNG),
+				BaseURL:        baseURL,
+				TimeoutSeconds: 15,
+				Enabled:        true,
+			},
+			Note: "searxng (检测到 SEARXNG_BASE_URL)",
+		})
 	}
 
-	return hosted.ToolProviderConfig{
-		Provider:       string(hosted.ToolProviderDuckDuckGo),
-		TimeoutSeconds: 15,
-		Enabled:        true,
-	}, "duckduckgo (默认免 Key 演示)"
+	candidates = append(candidates, hostedWebSearchCandidate{
+		Config: hosted.ToolProviderConfig{
+			Provider:       string(hosted.ToolProviderDuckDuckGo),
+			TimeoutSeconds: 15,
+			Enabled:        true,
+		},
+		Note: "duckduckgo (默认免 Key 回退)",
+	})
+
+	return candidates
+}
+
+func describeHostedWebSearchFallback(candidates []hostedWebSearchCandidate) string {
+	notes := make([]string, 0, len(candidates))
+	for _, candidate := range candidates {
+		notes = append(notes, candidate.Note)
+	}
+	return strings.Join(notes, " -> ")
+}
+
+func executeHostedWebSearchWithFallback(ctx context.Context, logger *zap.Logger, candidates []hostedWebSearchCandidate, searchArgs json.RawMessage) (*hostedWebSearchRunResult, error) {
+	result := &hostedWebSearchRunResult{
+		Attempts: make([]hostedWebSearchAttempt, 0, len(candidates)),
+	}
+
+	var lastErr error
+	for _, candidate := range candidates {
+		webSearch, err := hosted.NewProviderBackedWebSearchHostedTool(candidate.Config, logger)
+		if err != nil {
+			lastErr = err
+			result.Attempts = append(result.Attempts, hostedWebSearchAttempt{
+				Provider: candidate.Note,
+				Error:    err.Error(),
+			})
+			continue
+		}
+
+		searchRaw, err := webSearch.Execute(ctx, searchArgs)
+		if err != nil {
+			lastErr = err
+			result.Attempts = append(result.Attempts, hostedWebSearchAttempt{
+				Provider: candidate.Note,
+				Error:    err.Error(),
+			})
+			continue
+		}
+
+		var resp demoWebSearchResponse
+		if err := json.Unmarshal(searchRaw, &resp); err != nil {
+			lastErr = err
+			result.Attempts = append(result.Attempts, hostedWebSearchAttempt{
+				Provider: candidate.Note,
+				Error:    err.Error(),
+			})
+			continue
+		}
+
+		result.Attempts = append(result.Attempts, hostedWebSearchAttempt{
+			Provider: candidate.Note,
+			Results:  resp.TotalCount,
+			Duration: resp.Duration,
+		})
+		if resp.TotalCount > 0 {
+			result.Response = resp
+			result.ProviderNote = candidate.Note
+			return result, nil
+		}
+
+		lastErr = fmt.Errorf("provider %s returned 0 results", candidate.Config.Provider)
+	}
+
+	if lastErr == nil {
+		lastErr = fmt.Errorf("no web search providers available")
+	}
+	return result, lastErr
 }
 
 func demoAgentHandoff(logger *zap.Logger) {

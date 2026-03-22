@@ -37,8 +37,6 @@ import (
 	"github.com/BaSui01/agentflow/types"
 	"github.com/coder/websocket"
 	"go.uber.org/zap"
-	"gorm.io/driver/sqlite"
-	"gorm.io/gorm"
 )
 
 func main() {
@@ -120,13 +118,7 @@ func demoLLMCanary(logger *zap.Logger) {
 	fmt.Println("18. LLM Canary Subsystem Reachability")
 	fmt.Println("-------------------------------------")
 
-	db, err := setupCanaryDemoDB()
-	if err != nil {
-		fmt.Printf("   setup canary db error: %v\n\n", err)
-		return
-	}
-
-	canaryCfg := llmrouter.NewCanaryConfig(db, logger)
+	canaryCfg := llmrouter.NewCanaryConfig(nil, logger)
 	defer canaryCfg.Stop()
 
 	deployment := &llm.CanaryDeployment{
@@ -146,9 +138,10 @@ func demoLLMCanary(logger *zap.Logger) {
 	_ = canaryCfg.GetAllDeployments()
 	_ = canaryCfg.TriggerRollback(1, "demo rollback")
 	canaryCfg.RemoveDeployment(1)
+	fmt.Println("   Canary mode: in-memory")
 	fmt.Printf("   Canary deployments after cleanup: %d\n", len(canaryCfg.GetAllDeployments()))
 
-	monitor := llm.NewCanaryMonitor(db, canaryCfg, logger)
+	monitor := llm.NewCanaryMonitor(nil, canaryCfg, logger)
 	startCtx, cancel := context.WithCancel(context.Background())
 	cancel()
 	done := make(chan struct{})
@@ -159,54 +152,6 @@ func demoLLMCanary(logger *zap.Logger) {
 	<-done
 	monitor.Stop()
 	fmt.Println()
-}
-
-func setupCanaryDemoDB() (*gorm.DB, error) {
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
-	if err != nil {
-		return nil, err
-	}
-
-	if err := db.Exec(`CREATE TABLE sc_llm_canary_deployments (
-		id INTEGER PRIMARY KEY AUTOINCREMENT,
-		provider_id INTEGER,
-		canary_version TEXT,
-		stable_version TEXT,
-		traffic_percent INTEGER,
-		stage TEXT,
-		max_error_rate REAL,
-		max_latency_p95_ms INTEGER,
-		auto_rollback BOOLEAN,
-		started_at DATETIME,
-		completed_at DATETIME,
-		rollback_reason TEXT,
-		updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-	)`).Error; err != nil {
-		return nil, err
-	}
-	if err := db.Exec(`CREATE TABLE sc_audit_logs (
-		id INTEGER PRIMARY KEY AUTOINCREMENT,
-		tenant_id INTEGER,
-		user_id INTEGER,
-		action TEXT,
-		resource_type TEXT,
-		resource_id TEXT,
-		details TEXT,
-		created_at DATETIME
-	)`).Error; err != nil {
-		return nil, err
-	}
-	if err := db.Exec(`CREATE TABLE sc_llm_usage_logs (
-		id INTEGER PRIMARY KEY AUTOINCREMENT,
-		provider_id INTEGER,
-		status TEXT,
-		latency_ms REAL,
-		created_at DATETIME
-	)`).Error; err != nil {
-		return nil, err
-	}
-
-	return db, nil
 }
 
 func demoLLMCoreExtensions(logger *zap.Logger) {

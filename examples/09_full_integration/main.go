@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"time"
 
 	"github.com/BaSui01/agentflow/agent"
 	"github.com/BaSui01/agentflow/agent/collaboration"
@@ -64,7 +65,8 @@ func createProvider(logger *zap.Logger) llm.Provider {
 }
 
 func demoEnhancedSingleAgent(logger *zap.Logger) {
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
+	defer cancel()
 	provider := createProvider(logger)
 
 	// 1. Create base Agent
@@ -98,8 +100,8 @@ func demoEnhancedSingleAgent(logger *zap.Logger) {
 	fmt.Println("2. Enabling Reflection")
 	reflectionConfig := agent.ReflectionExecutorConfig{
 		Enabled:       true,
-		MaxIterations: 3,
-		MinQuality:    0.7,
+		MaxIterations: 1,
+		MinQuality:    0.6,
 	}
 	reflectionExecutor := agent.NewReflectionExecutor(baseAgent, reflectionConfig)
 	baseAgent.EnableReflection(agent.AsReflectionRunner(reflectionExecutor))
@@ -179,7 +181,7 @@ func demoEnhancedSingleAgent(logger *zap.Logger) {
 
 	input := &agent.Input{
 		TraceID: "trace-001",
-		Content: "Review this code for quality issues",
+		Content: "Give 3 concise Go code review checks for a small HTTP handler.",
 	}
 
 	if provider == nil {
@@ -198,7 +200,8 @@ func demoEnhancedSingleAgent(logger *zap.Logger) {
 }
 
 func demoHierarchicalSystem(logger *zap.Logger) {
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), 75*time.Second)
+	defer cancel()
 	provider := createProvider(logger)
 
 	fmt.Println("\nUse case: complex tasks requiring decomposition and parallel execution")
@@ -239,7 +242,10 @@ func demoHierarchicalSystem(logger *zap.Logger) {
 
 	// 3. Create hierarchical system
 	hierarchicalConfig := hierarchical.DefaultHierarchicalConfig()
-	hierarchicalConfig.MaxWorkers = 3
+	hierarchicalConfig.MaxWorkers = 2
+	hierarchicalConfig.TaskTimeout = 20 * time.Second
+	hierarchicalConfig.EnableRetry = false
+	hierarchicalConfig.MaxRetries = 0
 	hierarchicalConfig.WorkerSelection = "least_loaded"
 	hierarchicalConfig.EnableLoadBalance = true
 
@@ -265,7 +271,7 @@ func demoHierarchicalSystem(logger *zap.Logger) {
 
 	input := &agent.Input{
 		TraceID: "trace-hierarchical",
-		Content: "Analyze the performance characteristics of a Go web server",
+		Content: "Break down and answer this briefly: identify two practical performance checks for a Go web server.",
 	}
 	output, err := hierarchicalAgent.Execute(ctx, input)
 	if err != nil {
@@ -276,7 +282,8 @@ func demoHierarchicalSystem(logger *zap.Logger) {
 }
 
 func demoCollaborativeSystem(logger *zap.Logger) {
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
 	provider := createProvider(logger)
 
 	fmt.Println("\nUse case: tasks requiring multiple perspectives and expert opinions")
@@ -290,7 +297,6 @@ func demoCollaborativeSystem(logger *zap.Logger) {
 	}{
 		{"expert-analyst", "Data Analysis Expert", "Specializes in data analysis and statistics"},
 		{"expert-critic", "Critical Thinking Expert", "Specializes in finding issues and flaws"},
-		{"expert-creative", "Creative Expert", "Specializes in innovation and brainstorming"},
 	}
 
 	for _, role := range expertRoles {
@@ -312,8 +318,9 @@ func demoCollaborativeSystem(logger *zap.Logger) {
 	// 2. Create collaborative system (debate mode)
 	debateConfig := collaboration.DefaultMultiAgentConfig()
 	debateConfig.Pattern = collaboration.PatternDebate
-	debateConfig.MaxRounds = 3
+	debateConfig.MaxRounds = 1
 	debateConfig.ConsensusThreshold = 0.7
+	debateConfig.Timeout = 45 * time.Second
 
 	debateSystem := collaboration.NewMultiAgentSystem(experts, debateConfig, logger)
 
@@ -346,7 +353,7 @@ func demoCollaborativeSystem(logger *zap.Logger) {
 
 	input := &agent.Input{
 		TraceID: "trace-collab",
-		Content: "Should we adopt microservices architecture for our new project?",
+		Content: "For a small internal tool, should we start with a modular monolith or microservices? Answer briefly.",
 	}
 	output, err := debateSystem.Execute(ctx, input)
 	if err != nil {

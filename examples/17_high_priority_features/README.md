@@ -25,4 +25,4 @@ go run main.go
 
 ## 代码说明
 
-各功能模块独立演示：`artifacts.NewManager` 管理产物；`hitl.NewInterruptManager` 处理审批中断；`openapi.NewGenerator` 从 Spec 生成工具；`workflow.NewVisualBuilder` 将可视化节点编译为 DAG。
+各功能模块独立演示：`artifacts.NewManager` 管理产物；`hitl.NewInterruptManager` 处理审批中断；`openapi.NewGenerator` 从 Spec 生成工具；`workflow.NewVisualBuilder` 将可视化节点编译为 DAG。Visual Builder 示例使用本地 `tool -> code` 节点链路，保证在无 API Key 条件下也能直接执行。

@@ -1,11 +1,11 @@
 AgentFlow Agent Feature Matrix
-重测时间: 2026-03-22 18:17:32 +08:00
+重测时间: 2026-03-22 19:26:11 +08:00
 
 === 单 Agent 基础 / 简单对话 ===
 路径: examples/01_simple_chat
 命令: go run ./examples/01_simple_chat
 状态: PASS
-耗时: 5.327s
+耗时: 8.331s
 摘要: Base URL: https://ai.xoooox.xyz
 标签: LLM / 单Agent / 对话
 亮点: Base URL: https://ai.xoooox.xyz
@@ -22,7 +22,7 @@ Token usage: prompt=33 completion=11 total=44
 路径: examples/02_streaming
 命令: go run ./examples/02_streaming
 状态: PASS
-耗时: 5.161s
+耗时: 11.103s
 摘要: Base URL: https://ai.xoooox.xyz
 标签: LLM / Streaming
 亮点: Base URL: https://ai.xoooox.xyz
@@ -33,32 +33,32 @@ Base URL: https://ai.xoooox.xyz
 Model: gpt-5.4
 Streaming response:
 ---
-Go runs light with steady grace,  
-Clean and clear in time and space.  
-Goroutines dance, swift threads that sing,  
-While channels hum and messages ring.  
+Go hums in threads of light and speed,  
+A quiet tool for every need.  
+With goroutines that dance and flow,  
+It keeps the busy systems aglow.
 
-With simple words and purpose bright,  
-It builds bold tools with quiet might.  
-From server’s pulse to cloud above,  
-Go codes with speed, and coders love.
+Simple words, yet strong and clear,  
+It builds with purpose, calm, sincere.  
+From server heart to cloud above,  
+Go codes with grace, and speed, and love.
 ---
 
 === 单 Agent 基础 / 工具调用 ===
 路径: examples/03_tool_use
 命令: go run ./examples/03_tool_use
 状态: PASS
-耗时: 10.353s
-摘要: 2026-03-22T18:16:53.170+0800	INFO	tools/executor.go:153	tool registered	{"name": "get_weather", "timeout": "30s"}
+耗时: 7.433s
+摘要: 2026-03-22T19:23:24.502+0800	INFO	tools/executor.go:153	tool registered	{"name": "get_weather", "timeout": "30s"}
 标签: Tools / ReAct
-亮点: 2026-03-22T18:16:53.170+0800	INFO	tools/executor.go:153	tool registered	{"name": "get_weather", "timeout": "30s"}
-亮点: 2026-03-22T18:16:53.206+0800	INFO	tools/executor.go:153	tool registered	{"name": "calculate", "timeout": "30s"}
+亮点: 2026-03-22T19:23:24.502+0800	INFO	tools/executor.go:153	tool registered	{"name": "get_weather", "timeout": "30s"}
+亮点: 2026-03-22T19:23:24.515+0800	INFO	tools/executor.go:153	tool registered	{"name": "calculate", "timeout": "30s"}
 亮点: Base URL: https://ai.xoooox.xyz
 亮点: Model: gpt-5.4
 原始输出:
 === AgentFlow Tool Use / Function Calling 示例 ===
-2026-03-22T18:16:53.170+0800	INFO	tools/executor.go:153	tool registered	{"name": "get_weather", "timeout": "30s"}
-2026-03-22T18:16:53.206+0800	INFO	tools/executor.go:153	tool registered	{"name": "calculate", "timeout": "30s"}
+2026-03-22T19:23:24.502+0800	INFO	tools/executor.go:153	tool registered	{"name": "get_weather", "timeout": "30s"}
+2026-03-22T19:23:24.515+0800	INFO	tools/executor.go:153	tool registered	{"name": "calculate", "timeout": "30s"}
 已注册 2 个工具
 
 --- 开始对话 ---
@@ -68,35 +68,82 @@ User: What's the weather like in Beijing today?
 
 [第 1 轮] LLM 请求调用 1 个工具:
   → get_weather({"location":"Beijing","unit":"celsius"})
-2026-03-22T18:16:56.433+0800	INFO	tools/executor.go:416	tool executed successfully	{"name": "get_weather", "duration": "0s"}
+2026-03-22T19:23:26.960+0800	INFO	tools/executor.go:428	tool executed successfully	{"name": "get_weather", "duration": "0s"}
   ← get_weather 返回: {"condition":"sunny","humidity":65,"location":"Beijing","temperature":22,"unit":"celsius"}
-Assistant: Beijing is sunny today, around 22°C, with 65% humidity.
+Assistant: Beijing is sunny and 22°C today, with 65% humidity.
 --- 对话结束 ---
 总消息数: 3
 
 === 单 Agent 基础 / 自定义 Agent ===
 路径: examples/04_custom_agent
 命令: go run ./examples/04_custom_agent
-状态: WARN
-耗时: 3.733s
-摘要: 2026/03/22 18:17:01 Code review failed: [UNAUTHORIZED] Incorrect API key provided: sk-PEePI***************************************sJcl. You can find your API key at https://platform.openai.com/account/api-keys. (type: invalid_request_error)
+状态: PASS
+耗时: 23.645s
+摘要: 2026-03-22T19:23:29.900+0800	INFO	agent/base.go:356	initializing agent	{"agent_id": "code-reviewer-001", "agent_type": "code-reviewer"}
 标签: AgentBuilder / 配置
-亮点: 2026/03/22 18:17:01 Code review failed: [UNAUTHORIZED] Incorrect API key provided: sk-PEePI***************************************sJcl. You can find your API key at https://platform.openai.com/account/api-keys. (type: invalid_request_error)
-亮点: 2026/03/22 18:17:01 Data analysis failed: [UNAUTHORIZED] Incorrect API key provided: sk-PEePI***************************************sJcl. You can find your API key at https://platform.openai.com/account/api-keys. (type: invalid_request_error)
-亮点: 2026/03/22 18:17:01 Story writing failed: [UNAUTHORIZED] Incorrect API key provided: sk-PEePI***************************************sJcl. You can find your API key at https://platform.openai.com/account/api-keys. (type: invalid_request_error)
+亮点: 2026-03-22T19:23:29.900+0800	INFO	agent/base.go:356	initializing agent	{"agent_id": "code-reviewer-001", "agent_type": "code-reviewer"}
+亮点: 2026-03-22T19:23:29.910+0800	INFO	agent/base.go:335	state transition	{"agent_id": "code-reviewer-001", "agent_type": "code-reviewer", "agent_id": "code-reviewer-001", "from": "init", "to": "ready"}
+亮点: 2026-03-22T19:23:29.910+0800	INFO	agent/base.go:356	initializing agent	{"agent_id": "data-analyst-001", "agent_type": "data-analyst"}
+亮点: 2026-03-22T19:23:29.910+0800	INFO	agent/base.go:335	state transition	{"agent_id": "data-analyst-001", "agent_type": "data-analyst", "agent_id": "data-analyst-001", "from": "init", "to": "ready"}
 原始输出:
+2026-03-22T19:23:29.900+0800	INFO	agent/base.go:356	initializing agent	{"agent_id": "code-reviewer-001", "agent_type": "code-reviewer"}
+2026-03-22T19:23:29.910+0800	INFO	agent/base.go:335	state transition	{"agent_id": "code-reviewer-001", "agent_type": "code-reviewer", "agent_id": "code-reviewer-001", "from": "init", "to": "ready"}
+2026-03-22T19:23:29.910+0800	INFO	agent/base.go:356	initializing agent	{"agent_id": "data-analyst-001", "agent_type": "data-analyst"}
+2026-03-22T19:23:29.910+0800	INFO	agent/base.go:335	state transition	{"agent_id": "data-analyst-001", "agent_type": "data-analyst", "agent_id": "data-analyst-001", "from": "init", "to": "ready"}
+2026-03-22T19:23:29.910+0800	INFO	agent/base.go:356	initializing agent	{"agent_id": "story-writer-001", "agent_type": "story-writer"}
+2026-03-22T19:23:29.910+0800	INFO	agent/base.go:335	state transition	{"agent_id": "story-writer-001", "agent_type": "story-writer", "agent_id": "story-writer-001", "from": "init", "to": "ready"}
+Base URL: https://ai.xoooox.xyz
+Model: gpt-5.4
+
 === 代码审查 Agent ===
-2026/03/22 18:17:01 Code review failed: [UNAUTHORIZED] Incorrect API key provided: sk-PEePI***************************************sJcl. You can find your API key at https://platform.openai.com/account/api-keys. (type: invalid_request_error)
+审查结果: ## 问题描述
+`divide(a, b int)` 直接执行 `a / b`，没有对除数 `b` 做任何校验。  
+当 `b == 0` 时，程序会在运行时发生 `panic`。
+
+**严重程度**：高
+
+**建议修复**：  
+在除法前增加对 `b` 是否为 0 的检查，并根据业务场景选择合适的处理方式，例如返回错误值。
+
+```go
+func divide(a, b int) (int, error) {
+    if b == 0 {
+        return 0, fmt.Errorf("division by zero")
+    }
+    return a / b, nil
+}
+```
+
+---
+
+## 问题描述
+当前函数返回值只有 `int`，无法向调用方传达异常情况，导致错误处理能力较弱。
+
+**严重程度**：中
+
+**建议修复**：  
+将函数签名改为返回 `(int, error)`，这样调用方可以显式处理非法输入，提高代码健壮性和可维护性。
+
+---
+
+## 优点
+这段代码实现非常简洁，逻辑清晰，适合在明确保证 `b != 0` 的受控场景下使用。  
+如果这是内部工具函数，并且调用方已经严格校验参数，那么这种写法在性能和可读性上都比较直接。
+
 === 数据分析 Agent ===
-2026/03/22 18:17:01 Data analysis failed: [UNAUTHORIZED] Incorrect API key provided: sk-PEePI***************************************sJcl. You can find your API key at https://platform.openai.com/account/api-keys. (type: invalid_request_error)
+分析结果: 关键发现：这组数据呈明显上升趋势，虽然中间有小幅波动，但整体数值从 10 增长到 30。  
+详细分析与建议：从序列变化看，数据随时间总体稳步提高，可用文字图表描述为“一条从左下向右上延伸、局部略有起伏的折线”；如果这是业务数据，说明表现整体在改善，建议继续关注增长驱动因素并监测中间波动点。
+
 === 故事创作 Agent ===
-2026/03/22 18:17:01 Story writing failed: [UNAUTHORIZED] Incorrect API key provided: sk-PEePI***************************************sJcl. You can find your API key at https://platform.openai.com/account/api-keys. (type: invalid_request_error)
+故事开头: 凌晨三点，旧城天文台像一艘搁浅在雾里的铁船，铜绿色圆顶被冷雨敲得微微发颤。林栖踩着吱呀作响的旋梯，一路闻见机油、霉纸和尘埃被电流烘热后的焦味。最顶层的观测室里，那台被遗弃了二十年的“回溯仪”正自行苏醒，黄铜齿轮在幽蓝光芒中缓缓咬合，玻璃管里银色液体像月光一样倒流。她的影子被拉长，投在墙上，仿佛另一个迟到了很多年的自己。
+
+她还没来得及后退，仪器中央那枚黑曜石指针便猛地一颤，直直指向她胸前那块从父亲遗物里翻出的怀表。怀表“咔嗒”弹开，里面并非照片，而是一张被岁月熏黄的纸条：不要让他在1979年的雪夜走进那扇门。林栖的呼吸骤然停住，因为那行字的笔迹，分明出自她自己。下一秒，整间观测室的空气像被无形巨手拧紧，窗外的雨声忽然倒着升回天上。
 
 === 工作流编排 / 基础工作流 ===
 路径: examples/05_workflow
 命令: go run ./examples/05_workflow
 状态: PASS
-耗时: 7.044s
+耗时: 8.553s
 摘要: Base URL: https://ai.xoooox.xyz
 标签: Workflow / DAG
 亮点: Base URL: https://ai.xoooox.xyz
@@ -109,45 +156,56 @@ Model: gpt-5.4
 Artificial Intelligence is transforming the world. Machine learning algorithms can now recognize patterns, make predictions, and even create art. The future of AI is both exciting and challenging.
 
 结果：
-- 人工智能正在深刻改变世界。  
-- 机器学习算法已经具备识别模式和进行预测的能力。  
-- 人工智能不仅能处理分析任务，还能够进行艺术创作。  
-- 人工智能的未来前景令人兴奋，但同时也伴随着不少挑战。
+1. 人工智能正在深刻改变世界。  
+2. 机器学习算法已经能够识别模式并进行预测。  
+3. 人工智能不仅用于分析，也开始具备创作艺术的能力。  
+4. 人工智能的未来发展前景令人兴奋。  
+5. 与此同时，人工智能的发展也伴随着挑战。
 
 === Agent 增强 / 高级单 Agent ===
 路径: examples/06_advanced_features
 命令: go run ./examples/06_advanced_features
-状态: WARN
-耗时: 1.746s
-摘要: 2026/03/22 18:17:10 Reflection execution failed: execution failed at iteration 1: [AGENT_NOT_READY] agent not in ready state
+状态: PASS
+耗时: 26.384s
+摘要: 2026-03-22T19:24:01.831+0800	INFO	agent/base.go:356	initializing agent	{"agent_id": "reflection-agent", "agent_type": "analyzer"}
 标签: Reflection / Prompt / ToolSelect
-亮点: 2026-03-22T18:17:10.066+0800	INFO	agent/reflection.go:116	starting reflection execution	{"agent_id": "reflection-agent", "agent_type": "analyzer", "component": "reflection", "trace_id": "trace-001", "max_iterations": 3}
-亮点: 2026-03-22T18:17:10.079+0800	DEBUG	agent/reflection.go:130	reflection iteration	{"agent_id": "reflection-agent", "agent_type": "analyzer", "component": "reflection", "iteration": 1, "trace_id": "trace-001"}
-亮点: 2026/03/22 18:17:10 Reflection execution failed: execution failed at iteration 1: [AGENT_NOT_READY] agent not in ready state
-亮点: 2026-03-22T18:17:10.079+0800	DEBUG	agent/tool_selector.go:115	selecting tools	{"agent_id": "tool-agent", "agent_type": "generic", "component": "tool_selector", "task": "Find the latest GDP data and calculate growth rate", "available_tools": 5}
+亮点: 2026-03-22T19:24:01.831+0800	INFO	agent/base.go:356	initializing agent	{"agent_id": "reflection-agent", "agent_type": "analyzer"}
+亮点: 2026-03-22T19:24:01.840+0800	INFO	agent/base.go:335	state transition	{"agent_id": "reflection-agent", "agent_type": "analyzer", "agent_id": "reflection-agent", "from": "init", "to": "ready"}
+亮点: 2026-03-22T19:24:01.840+0800	INFO	agent/reflection.go:116	starting reflection execution	{"agent_id": "reflection-agent", "agent_type": "analyzer", "component": "reflection", "trace_id": "trace-001", "max_iterations": 3}
+亮点: 2026-03-22T19:24:01.840+0800	DEBUG	agent/reflection.go:130	reflection iteration	{"agent_id": "reflection-agent", "agent_type": "analyzer", "component": "reflection", "iteration": 1, "trace_id": "trace-001"}
 原始输出:
 === Example 1: Reflection Mechanism ===
-2026-03-22T18:17:10.066+0800	INFO	agent/reflection.go:116	starting reflection execution	{"agent_id": "reflection-agent", "agent_type": "analyzer", "component": "reflection", "trace_id": "trace-001", "max_iterations": 3}
-2026-03-22T18:17:10.079+0800	DEBUG	agent/reflection.go:130	reflection iteration	{"agent_id": "reflection-agent", "agent_type": "analyzer", "component": "reflection", "iteration": 1, "trace_id": "trace-001"}
-2026/03/22 18:17:10 Reflection execution failed: execution failed at iteration 1: [AGENT_NOT_READY] agent not in ready state
+2026-03-22T19:24:01.831+0800	INFO	agent/base.go:356	initializing agent	{"agent_id": "reflection-agent", "agent_type": "analyzer"}
+2026-03-22T19:24:01.840+0800	INFO	agent/base.go:335	state transition	{"agent_id": "reflection-agent", "agent_type": "analyzer", "agent_id": "reflection-agent", "from": "init", "to": "ready"}
+2026-03-22T19:24:01.840+0800	INFO	agent/reflection.go:116	starting reflection execution	{"agent_id": "reflection-agent", "agent_type": "analyzer", "component": "reflection", "trace_id": "trace-001", "max_iterations": 3}
+2026-03-22T19:24:01.840+0800	DEBUG	agent/reflection.go:130	reflection iteration	{"agent_id": "reflection-agent", "agent_type": "analyzer", "component": "reflection", "iteration": 1, "trace_id": "trace-001"}
+2026-03-22T19:24:01.840+0800	INFO	agent/base.go:335	state transition	{"agent_id": "reflection-agent", "agent_type": "analyzer", "agent_id": "reflection-agent", "from": "ready", "to": "running"}
+2026-03-22T19:24:01.840+0800	INFO	agent/react.go:164	executing task	{"agent_id": "reflection-agent", "agent_type": "analyzer", "trace_id": "trace-001", "agent_id": "reflection-agent", "agent_type": "analyzer"}
+2026-03-22T19:24:07.511+0800	INFO	agent/react.go:402	execution completed	{"agent_id": "reflection-agent", "agent_type": "analyzer", "trace_id": "trace-001", "duration": "5.6705243s", "tokens_used": 313}
+2026-03-22T19:24:07.511+0800	INFO	agent/base.go:335	state transition	{"agent_id": "reflection-agent", "agent_type": "analyzer", "agent_id": "reflection-agent", "from": "running", "to": "ready"}
+2026-03-22T19:24:21.460+0800	INFO	agent/reflection.go:153	critique completed	{"agent_id": "reflection-agent", "agent_type": "analyzer", "component": "reflection", "iteration": 1, "score": 0.8800000000000001, "is_good": true}
+2026-03-22T19:24:21.461+0800	INFO	agent/reflection.go:161	output quality acceptable	{"agent_id": "reflection-agent", "agent_type": "analyzer", "component": "reflection", "iteration": 1, "score": 0.8800000000000001}
+2026-03-22T19:24:21.461+0800	INFO	agent/reflection.go:186	reflection execution completed	{"agent_id": "reflection-agent", "agent_type": "analyzer", "component": "reflection", "trace_id": "trace-001", "iterations": 1, "total_duration": "19.6201545s", "improved": false}
+Iterations: 1
+Improved: false
+Total duration: 19.6201545s
+
+Iteration 1 critique:
+  Score: 0.88
+  Is good: true
+  Issues: [准确性方面整体较好，内容没有明显事实性错误，但表述较为概括，缺少对“人工智能”类型或应用边界的进一步说明，略显宽泛。 完整性方面基本满足“写一篇关于人工智能的短文”这一任务要求，包含定义、应用、优势、挑战和总结，但内容偏通用，深度有限。 清晰度较高，结构完整、逻辑顺畅、语言易懂，适合作为一般性介绍；不过部分句子较模板化，缺少亮点。 相关性很强，全文始终围绕人工智能展开，没有跑题。 文章风格偏基础科普，缺乏更具体的案例、数据或独特观点，因此整体表现较稳妥但不够出彩。 结尾虽然有总结，但与前文的关联提升空间仍有，整体感染力和观点力度稍弱。 如果希望文章更优秀，可增强语言表现力，减少通用化表达，使其不只是“正确”，而是“更有吸引力”。 结尾可加入更鲜明的观点或展望，例如“AI的未来取决于技术创新与伦理治理的平衡”，提升总结力度。 准确性：9/10 完整性：8/10 清晰度：9/10 相关性：9/10]
+  Suggestions: [可以加入1-2个更具体的真实应用案例，例如AI在医学影像识别、自动驾驶或生成式内容中的作用，以增强文章说服力。 在定义部分可稍作细化，比如区分“模仿人类智能的系统”与“特定任务上的智能能力”，让内容更严谨。 可适当增加一点深度，例如提到生成式AI、机器学习或大语言模型，使文章更贴近当前人工智能的发展现状。]
 
 === Example 2: Dynamic Tool Selection ===
-2026-03-22T18:17:10.079+0800	DEBUG	agent/tool_selector.go:115	selecting tools	{"agent_id": "tool-agent", "agent_type": "generic", "component": "tool_selector", "task": "Find the latest GDP data and calculate growth rate", "available_tools": 5}
-2026-03-22T18:17:10.340+0800	WARN	agent/tool_selector.go:136	LLM ranking failed, using score-based ranking	{"agent_id": "tool-agent", "agent_type": "generic", "component": "tool_selector", "error": "[UPSTREAM_ERROR] No available channel for model gpt-4 under group codex (distributor) (request id: 20260322101709394048137ana068t9) (type: new_api_error)"}
-github.com/BaSui01/agentflow/agent.(*DynamicToolSelector).SelectTools
-	D:/code/agentflow/agent/tool_selector.go:136
-main.demoToolSelection
-	D:/code/agentflow/examples/06_advanced_features/main.go:194
-main.main
-	D:/code/agentflow/examples/06_advanced_features/main.go:29
-runtime.main
-	C:/Program Files/Go/src/runtime/proc.go:290
-2026-03-22T18:17:10.340+0800	INFO	agent/tool_selector.go:152	tools selected	{"agent_id": "tool-agent", "agent_type": "generic", "component": "tool_selector", "selected": 3, "total": 5}
+2026-03-22T19:24:21.461+0800	INFO	agent/base.go:356	initializing agent	{"agent_id": "tool-agent", "agent_type": "generic"}
+2026-03-22T19:24:21.461+0800	INFO	agent/base.go:335	state transition	{"agent_id": "tool-agent", "agent_type": "generic", "agent_id": "tool-agent", "from": "init", "to": "ready"}
+2026-03-22T19:24:21.461+0800	DEBUG	agent/tool_selector.go:115	selecting tools	{"agent_id": "tool-agent", "agent_type": "generic", "component": "tool_selector", "task": "Find the latest GDP data and calculate growth rate", "available_tools": 5}
+2026-03-22T19:24:26.966+0800	INFO	agent/tool_selector.go:152	tools selected	{"agent_id": "tool-agent", "agent_type": "generic", "component": "tool_selector", "selected": 3, "total": 5}
 Task: Find the latest GDP data and calculate growth rate
 Available tools: 5
 Selected tools: 3
 Selected tools:
-  1. database_query - Query database
+  1. web_search - Search the internet for latest information
   2. calculator - Perform mathematical calculations
   3. code_interpreter - Execute Python code
 
@@ -194,11 +252,11 @@ Tool scoring details:
 
 3. 提示词模板库
 可用模板:
-  1. analysis - 分析任务模板
-  2. summary - 总结任务模板
-  3. code_generation - 代码生成模板
-  4. qa - 问题解答模板
-  5. creative - 创意生成模板
+  1. creative - 创意生成模板
+  2. analysis - 分析任务模板
+  3. summary - 总结任务模板
+  4. code_generation - 代码生成模板
+  5. qa - 问题解答模板
 
 使用代码生成模板:
 请用Go编写代码来实现以下功能：
@@ -231,73 +289,77 @@ panic: runtime error: integer divide by zero
 === 多 Agent 与托管工具 / 中优先级能力 ===
 路径: examples/07_mid_priority_features
 命令: go run ./examples/07_mid_priority_features
-状态: WARN
-耗时: 3.136s
-摘要: Web search results: 0 (680.443ms)
+状态: PASS
+耗时: 4.263s
+摘要: 1. Hosted Tools (OpenAI SDK-style)
 标签: HostedTools / Handoff / Crews / Tracing
-亮点: 2026-03-22T18:17:12.751+0800	INFO	hosted/tools.go:87	registered hosted tool	{"component": "hosted_tools", "name": "web_search"}
-亮点: 2026-03-22T18:17:12.768+0800	INFO	hosted/tools.go:87	registered hosted tool	{"component": "hosted_tools", "name": "file_search"}
-亮点: 2026-03-22T18:17:12.769+0800	DEBUG	hosted/tools.go:384	tool execution completed	{"duration": "528.1µs"}
-亮点: 2026-03-22T18:17:12.771+0800	INFO	tools/web_search.go:135	executing web search	{"query": "AgentFlow Go framework", "max_results": 3}
+亮点: 2026-03-22T19:24:30.699+0800	INFO	hosted/tools.go:87	registered hosted tool	{"component": "hosted_tools", "name": "file_search"}
+亮点: 2026-03-22T19:24:30.715+0800	DEBUG	hosted/tools.go:384	tool execution completed	{"duration": "0s"}
+亮点: 2026-03-22T19:24:30.716+0800	INFO	hosted/tools.go:87	registered hosted tool	{"component": "hosted_tools", "name": "web_search"}
+亮点: 2026-03-22T19:24:30.716+0800	INFO	tools/web_search.go:135	executing web search	{"query": "Go programming language", "max_results": 3}
 原始输出:
 === Medium Priority Features Demo ===
 1. Hosted Tools (OpenAI SDK-style)
 -----------------------------------
-2026-03-22T18:17:12.751+0800	INFO	hosted/tools.go:87	registered hosted tool	{"component": "hosted_tools", "name": "web_search"}
-2026-03-22T18:17:12.768+0800	INFO	hosted/tools.go:87	registered hosted tool	{"component": "hosted_tools", "name": "file_search"}
-2026-03-22T18:17:12.769+0800	DEBUG	hosted/tools.go:384	tool execution completed	{"duration": "528.1µs"}
-2026-03-22T18:17:12.771+0800	INFO	tools/web_search.go:135	executing web search	{"query": "AgentFlow Go framework", "max_results": 3}
-2026-03-22T18:17:13.452+0800	INFO	tools/web_search.go:152	web search completed	{"query": "AgentFlow Go framework", "results": 0, "duration": "680.443ms"}
-2026-03-22T18:17:13.452+0800	DEBUG	hosted/tools.go:384	tool execution completed	{"duration": "683.3649ms"}
+2026-03-22T19:24:30.699+0800	INFO	hosted/tools.go:87	registered hosted tool	{"component": "hosted_tools", "name": "file_search"}
+2026-03-22T19:24:30.715+0800	DEBUG	hosted/tools.go:384	tool execution completed	{"duration": "0s"}
+2026-03-22T19:24:30.716+0800	INFO	hosted/tools.go:87	registered hosted tool	{"component": "hosted_tools", "name": "web_search"}
+2026-03-22T19:24:30.716+0800	INFO	tools/web_search.go:135	executing web search	{"query": "Go programming language", "max_results": 3}
+2026-03-22T19:24:31.221+0800	INFO	tools/web_search.go:152	web search completed	{"query": "Go programming language", "results": 3, "duration": "505.7278ms"}
+2026-03-22T19:24:31.221+0800	DEBUG	hosted/tools.go:384	tool execution completed	{"duration": "505.7278ms"}
    Registered tool: web_search - Search the web for information. Returns a list of relevant results with titles, URLs, and snippets.
    Tool type: web_search
-   Web search provider: duckduckgo (默认免 Key 演示)
-   Web search results: 0 (680.443ms)
+   Web search fallback chain: duckduckgo (默认免 Key 回退)
+   Web search provider: duckduckgo (默认免 Key 回退)
+   Web search results: 3 (505.7278ms)
+     - Go (programming language) | https://en.wikipedia.org/wiki/Go_(programming_language)
+     - Fyne (software) — widget toolkit for creating GUI s with Go. | https://duckduckgo.com/Fyne_(software)?kp=1
+   Attempt: duckduckgo (默认免 Key 回退) -> results=3 (505.7278ms)
    Total tools: 2
 
 2. Agent Handoff Protocol
 -------------------------
-2026-03-22T18:17:13.452+0800	INFO	handoff/protocol.go:112	registered agent	{"component": "handoff_manager", "id": "specialist-agent"}
-2026-03-22T18:17:13.452+0800	INFO	handoff/protocol.go:112	registered agent	{"component": "handoff_manager", "id": "review-agent"}
+2026-03-22T19:24:31.221+0800	INFO	handoff/protocol.go:112	registered agent	{"component": "handoff_manager", "id": "specialist-agent"}
+2026-03-22T19:24:31.221+0800	INFO	handoff/protocol.go:112	registered agent	{"component": "handoff_manager", "id": "review-agent"}
    Registered agent: specialist-agent
    Capabilities: [review]
    Best agent for task: review-agent
-2026-03-22T18:17:13.452+0800	INFO	handoff/protocol.go:183	initiating handoff	{"component": "handoff_manager", "id": "hoff_1774174633452434000", "from": "coordinator-agent", "to": "review-agent"}
-2026-03-22T18:17:13.452+0800	INFO	handoff/protocol.go:259	handoff completed	{"component": "handoff_manager", "id": "hoff_1774174633452434000", "status": "completed", "duration_ms": 0}
-   Handoff status: completed (id=hoff_1774174633452434000)
+2026-03-22T19:24:31.221+0800	INFO	handoff/protocol.go:183	initiating handoff	{"component": "handoff_manager", "id": "hoff_1774178671221825700", "from": "coordinator-agent", "to": "review-agent"}
+2026-03-22T19:24:31.221+0800	INFO	handoff/protocol.go:259	handoff completed	{"component": "handoff_manager", "id": "hoff_1774178671221825700", "status": "completed", "duration_ms": 0}
+   Handoff status: completed (id=hoff_1774178671221825700)
    Handoff result: completed
    Unregistered agent: specialist-agent
 
 3. Role-based Crews (CrewAI-style)
 ----------------------------------
-2026-03-22T18:17:13.452+0800	INFO	crews/crew.go:156	added crew member	{"component": "crew", "crew": "Research Team", "id": "researcher", "role": "Researcher"}
-2026-03-22T18:17:13.452+0800	INFO	crews/crew.go:156	added crew member	{"component": "crew", "crew": "Research Team", "id": "writer", "role": "Writer"}
-2026-03-22T18:17:13.452+0800	INFO	crews/crew.go:172	starting crew execution	{"component": "crew", "crew": "Research Team", "tasks": 1}
-2026-03-22T18:17:13.452+0800	INFO	crews/crew.go:198	crew execution completed	{"component": "crew", "crew": "Research Team", "duration": "0s"}
-2026-03-22T18:17:13.452+0800	INFO	crews/crew.go:156	added crew member	{"component": "crew", "crew": "Manager Team", "id": "manager", "role": "Manager"}
-2026-03-22T18:17:13.452+0800	INFO	crews/crew.go:156	added crew member	{"component": "crew", "crew": "Manager Team", "id": "specialist", "role": "Specialist"}
-2026-03-22T18:17:13.452+0800	INFO	crews/crew.go:172	starting crew execution	{"component": "crew", "crew": "Manager Team", "tasks": 1}
-2026-03-22T18:17:13.452+0800	INFO	crews/crew.go:198	crew execution completed	{"component": "crew", "crew": "Manager Team", "duration": "0s"}
-2026-03-22T18:17:13.452+0800	INFO	crews/crew.go:156	added crew member	{"component": "crew", "crew": "Consensus Team", "id": "judge-a", "role": "Judge A"}
-2026-03-22T18:17:13.452+0800	INFO	crews/crew.go:156	added crew member	{"component": "crew", "crew": "Consensus Team", "id": "judge-b", "role": "Judge B"}
-2026-03-22T18:17:13.452+0800	INFO	crews/crew.go:172	starting crew execution	{"component": "crew", "crew": "Consensus Team", "tasks": 1}
-2026-03-22T18:17:13.452+0800	INFO	crews/crew.go:198	crew execution completed	{"component": "crew", "crew": "Consensus Team", "duration": "0s"}
+2026-03-22T19:24:31.221+0800	INFO	crews/crew.go:156	added crew member	{"component": "crew", "crew": "Research Team", "id": "researcher", "role": "Researcher"}
+2026-03-22T19:24:31.221+0800	INFO	crews/crew.go:156	added crew member	{"component": "crew", "crew": "Research Team", "id": "writer", "role": "Writer"}
+2026-03-22T19:24:31.221+0800	INFO	crews/crew.go:172	starting crew execution	{"component": "crew", "crew": "Research Team", "tasks": 1}
+2026-03-22T19:24:31.221+0800	INFO	crews/crew.go:198	crew execution completed	{"component": "crew", "crew": "Research Team", "duration": "0s"}
+2026-03-22T19:24:31.221+0800	INFO	crews/crew.go:156	added crew member	{"component": "crew", "crew": "Manager Team", "id": "manager", "role": "Manager"}
+2026-03-22T19:24:31.221+0800	INFO	crews/crew.go:156	added crew member	{"component": "crew", "crew": "Manager Team", "id": "specialist", "role": "Specialist"}
+2026-03-22T19:24:31.222+0800	INFO	crews/crew.go:172	starting crew execution	{"component": "crew", "crew": "Manager Team", "tasks": 1}
+2026-03-22T19:24:31.222+0800	INFO	crews/crew.go:198	crew execution completed	{"component": "crew", "crew": "Manager Team", "duration": "0s"}
+2026-03-22T19:24:31.222+0800	INFO	crews/crew.go:156	added crew member	{"component": "crew", "crew": "Consensus Team", "id": "judge-a", "role": "Judge A"}
+2026-03-22T19:24:31.222+0800	INFO	crews/crew.go:156	added crew member	{"component": "crew", "crew": "Consensus Team", "id": "judge-b", "role": "Judge B"}
+2026-03-22T19:24:31.222+0800	INFO	crews/crew.go:172	starting crew execution	{"component": "crew", "crew": "Consensus Team", "tasks": 1}
+2026-03-22T19:24:31.222+0800	INFO	crews/crew.go:198	crew execution completed	{"component": "crew", "crew": "Consensus Team", "duration": "0s"}
    Sequential results: 1
    Hierarchical results: 1
    Consensus results: 1
 
 4. Declarative Agent Definition
 -------------------------------
-2026-03-22T18:17:13.466+0800	DEBUG	declarative/factory.go:108	converted agent definition to typed config	{"name": "DeclarativeDemo", "model": "gpt-4o-mini", "has_runtime_tools": true}
+2026-03-22T19:24:31.240+0800	DEBUG	declarative/factory.go:108	converted agent definition to typed config	{"name": "DeclarativeDemo", "model": "gpt-4o-mini", "has_runtime_tools": true}
    Loaded definition: DeclarativeDemo
    Runtime model: gpt-4o-mini
    Runtime tools: 1
 
 4. Conversation Mode (AutoGen-style)
 ------------------------------------
-2026-03-22T18:17:13.466+0800	INFO	conversation/mode.go:106	conversation started	{"component": "conversation", "mode": "round_robin", "agents": 2}
-2026-03-22T18:17:13.466+0800	INFO	conversation/mode.go:168	conversation ended	{"component": "conversation", "reason": "agent_terminated", "rounds": 4}
-   Conversation ID: conv_1774174633466709700
+2026-03-22T19:24:31.240+0800	INFO	conversation/mode.go:106	conversation started	{"component": "conversation", "mode": "round_robin", "agents": 2}
+2026-03-22T19:24:31.240+0800	INFO	conversation/mode.go:168	conversation ended	{"component": "conversation", "reason": "agent_terminated", "rounds": 4}
+   Conversation ID: conv_1774178671240614600
    Mode: round_robin
    Agents: 2
    Max rounds: 10
@@ -307,21 +369,21 @@ panic: runtime error: integer divide by zero
 
 5. Bidirectional Streaming
 --------------------------
-   Stream ID: stream_1774174633467239200
+   Stream ID: stream_1774178671241133000
    Buffer size: 1024
    Max latency: 200ms
    VAD enabled: true
 
 6. Tracing Integration (LangSmith-style)
 ----------------------------------------
-2026-03-22T18:17:13.467+0800	DEBUG	observability/tracing.go:124	run started	{"component": "tracer", "run_id": "run_1774174633467239200", "name": "demo-conversation"}
-2026-03-22T18:17:13.467+0800	DEBUG	observability/tracing.go:146	run ended	{"component": "tracer", "run_id": "run_1774174633467239200", "status": "completed"}
-   Run ID: run_1774174633467239200
+2026-03-22T19:24:31.241+0800	DEBUG	observability/tracing.go:124	run started	{"component": "tracer", "run_id": "run_1774178671241133000", "name": "demo-conversation"}
+2026-03-22T19:24:31.241+0800	DEBUG	observability/tracing.go:146	run ended	{"component": "tracer", "run_id": "run_1774178671241133000", "status": "completed"}
+   Run ID: run_1774178671241133000
    Traces: 2
    Status: completed
 
-2026-03-22T18:17:13.467+0800	DEBUG	observability/tracing.go:124	run started	{"component": "tracer", "run_id": "run_1774174633467239200", "name": "test-chat"}
-   Conversation trace ID: conv_1774174633467239200
+2026-03-22T19:24:31.241+0800	DEBUG	observability/tracing.go:124	run started	{"component": "tracer", "run_id": "run_1774178671241640100", "name": "test-chat"}
+   Conversation trace ID: conv_1774178671241640100
 
 === All Medium Priority Features Demonstrated ===
 
@@ -329,7 +391,7 @@ panic: runtime error: integer divide by zero
 路径: examples/08_low_priority_features
 命令: go run ./examples/08_low_priority_features
 状态: PASS
-耗时: 1.595s
+耗时: 2.575s
 摘要: 1. 创建 Supervisor Agent
 标签: Hierarchy / Collaboration / Observability
 亮点: 配置:
@@ -381,29 +443,29 @@ panic: runtime error: integer divide by zero
   模式: broadcast
 
 6. 角色流水线编排
-2026-03-22T18:17:15.062+0800	INFO	collaboration/roles.go:140	role registered	{"type": "collector", "name": "Research Collector"}
-2026-03-22T18:17:15.074+0800	INFO	collaboration/roles.go:140	role registered	{"type": "filter", "name": "Quality Filter"}
-2026-03-22T18:17:15.074+0800	INFO	collaboration/roles.go:140	role registered	{"type": "generator", "name": "Idea Generator"}
-2026-03-22T18:17:15.074+0800	INFO	collaboration/roles.go:140	role registered	{"type": "validator", "name": "Experiment Validator"}
-2026-03-22T18:17:15.074+0800	INFO	collaboration/roles.go:140	role registered	{"type": "writer", "name": "Report Writer"}
+2026-03-22T19:24:33.816+0800	INFO	collaboration/roles.go:140	role registered	{"type": "collector", "name": "Research Collector"}
+2026-03-22T19:24:33.831+0800	INFO	collaboration/roles.go:140	role registered	{"type": "filter", "name": "Quality Filter"}
+2026-03-22T19:24:33.831+0800	INFO	collaboration/roles.go:140	role registered	{"type": "generator", "name": "Idea Generator"}
+2026-03-22T19:24:33.831+0800	INFO	collaboration/roles.go:140	role registered	{"type": "validator", "name": "Experiment Validator"}
+2026-03-22T19:24:33.831+0800	INFO	collaboration/roles.go:140	role registered	{"type": "writer", "name": "Report Writer"}
   已注册研究角色: 5
   收集者角色: Research Collector
-2026-03-22T18:17:15.074+0800	INFO	collaboration/roles.go:260	starting role pipeline	{"name": "research-role-pipeline-demo", "stages": 3}
-2026-03-22T18:17:15.074+0800	INFO	collaboration/roles.go:268	executing pipeline stage	{"stage": 1, "roles": 1}
-2026-03-22T18:17:15.074+0800	INFO	collaboration/roles.go:346	executing role	{"role": "collector", "instance": "collector_1774174635074032700"}
-2026-03-22T18:17:15.074+0800	INFO	collaboration/roles.go:428	role completed	{"role": "collector", "duration": "0s"}
-2026-03-22T18:17:15.074+0800	INFO	collaboration/roles.go:268	executing pipeline stage	{"stage": 2, "roles": 2}
-2026-03-22T18:17:15.074+0800	INFO	collaboration/roles.go:346	executing role	{"role": "generator", "instance": "generator_1774174635074032700"}
-2026-03-22T18:17:15.074+0800	INFO	collaboration/roles.go:428	role completed	{"role": "generator", "duration": "0s"}
-2026-03-22T18:17:15.074+0800	INFO	collaboration/roles.go:346	executing role	{"role": "filter", "instance": "filter_1774174635074032700"}
-2026-03-22T18:17:15.074+0800	INFO	collaboration/roles.go:428	role completed	{"role": "filter", "duration": "0s"}
-2026-03-22T18:17:15.074+0800	INFO	collaboration/roles.go:268	executing pipeline stage	{"stage": 3, "roles": 1}
-2026-03-22T18:17:15.074+0800	INFO	collaboration/roles.go:346	executing role	{"role": "writer", "instance": "writer_1774174635074032700"}
-2026-03-22T18:17:15.074+0800	INFO	collaboration/roles.go:428	role completed	{"role": "writer", "duration": "0s"}
-2026-03-22T18:17:15.074+0800	INFO	collaboration/roles.go:288	role pipeline completed	{"name": "research-role-pipeline-demo", "total_results": 4}
+2026-03-22T19:24:33.831+0800	INFO	collaboration/roles.go:260	starting role pipeline	{"name": "research-role-pipeline-demo", "stages": 3}
+2026-03-22T19:24:33.831+0800	INFO	collaboration/roles.go:268	executing pipeline stage	{"stage": 1, "roles": 1}
+2026-03-22T19:24:33.831+0800	INFO	collaboration/roles.go:346	executing role	{"role": "collector", "instance": "collector_1774178673831194800"}
+2026-03-22T19:24:33.831+0800	INFO	collaboration/roles.go:428	role completed	{"role": "collector", "duration": "0s"}
+2026-03-22T19:24:33.831+0800	INFO	collaboration/roles.go:268	executing pipeline stage	{"stage": 2, "roles": 2}
+2026-03-22T19:24:33.831+0800	INFO	collaboration/roles.go:346	executing role	{"role": "generator", "instance": "generator_1774178673831194800"}
+2026-03-22T19:24:33.831+0800	INFO	collaboration/roles.go:428	role completed	{"role": "generator", "duration": "0s"}
+2026-03-22T19:24:33.831+0800	INFO	collaboration/roles.go:346	executing role	{"role": "filter", "instance": "filter_1774178673831194800"}
+2026-03-22T19:24:33.831+0800	INFO	collaboration/roles.go:428	role completed	{"role": "filter", "duration": "0s"}
+2026-03-22T19:24:33.831+0800	INFO	collaboration/roles.go:268	executing pipeline stage	{"stage": 3, "roles": 1}
+2026-03-22T19:24:33.831+0800	INFO	collaboration/roles.go:346	executing role	{"role": "writer", "instance": "writer_1774178673831194800"}
+2026-03-22T19:24:33.831+0800	INFO	collaboration/roles.go:428	role completed	{"role": "writer", "duration": "0s"}
+2026-03-22T19:24:33.831+0800	INFO	collaboration/roles.go:288	role pipeline completed	{"name": "research-role-pipeline-demo", "total_results": 4}
   角色流水线结果数: 4
   角色实例数: 4, 转换记录数: 4
-2026-03-22T18:17:15.074+0800	INFO	collaboration/roles.go:176	role unregistered	{"type": "writer"}
+2026-03-22T19:24:33.831+0800	INFO	collaboration/roles.go:176	role unregistered	{"type": "writer"}
 
 === 示例 3: 可观测性系统 ===
 1. 创建可观测性系统
@@ -435,48 +497,50 @@ panic: runtime error: integer divide by zero
 === 集成场景 / 全功能集成 ===
 路径: examples/09_full_integration
 命令: go run ./examples/09_full_integration
-状态: WARN
-耗时: 1.451s
-摘要: Enhanced execution failed: [AGENT_EXECUTION] reflection execution failed: execution failed at iteration 1: [AGENT_NOT_READY] agent not in ready state
+状态: PASS
+耗时: 1m21.174s
+摘要: Scenario 1: Enhanced Single Agent (all features enabled)
 标签: Integration / Production
 亮点: Scenario 1: Enhanced Single Agent (all features enabled)
-亮点: 2026-03-22T18:17:16.518+0800	INFO	agent/extension_registry.go:34	reflection enabled	{"agent_id": "enhanced-agent-001", "agent_type": "generic"}
-亮点: 2026-03-22T18:17:16.527+0800	INFO	agent/extension_registry.go:40	tool selection enabled	{"agent_id": "enhanced-agent-001", "agent_type": "generic"}
-亮点: 2026-03-22T18:17:16.527+0800	INFO	agent/extension_registry.go:46	prompt enhancer enabled	{"agent_id": "enhanced-agent-001", "agent_type": "generic"}
+亮点: 2026-03-22T19:24:36.191+0800	INFO	agent/base.go:356	initializing agent	{"agent_id": "enhanced-agent-001", "agent_type": "generic"}
+亮点: 2026-03-22T19:24:36.205+0800	INFO	agent/base.go:335	state transition	{"agent_id": "enhanced-agent-001", "agent_type": "generic", "agent_id": "enhanced-agent-001", "from": "init", "to": "ready"}
+亮点: 2026-03-22T19:24:36.205+0800	INFO	agent/extension_registry.go:34	reflection enabled	{"agent_id": "enhanced-agent-001", "agent_type": "generic"}
 原始输出:
 === AgentFlow Full Integration Example ===
 
 Scenario 1: Enhanced Single Agent (all features enabled)
 
 1. Creating base Agent
+2026-03-22T19:24:36.191+0800	INFO	agent/base.go:356	initializing agent	{"agent_id": "enhanced-agent-001", "agent_type": "generic"}
+2026-03-22T19:24:36.205+0800	INFO	agent/base.go:335	state transition	{"agent_id": "enhanced-agent-001", "agent_type": "generic", "agent_id": "enhanced-agent-001", "from": "init", "to": "ready"}
 2. Enabling Reflection
-2026-03-22T18:17:16.518+0800	INFO	agent/extension_registry.go:34	reflection enabled	{"agent_id": "enhanced-agent-001", "agent_type": "generic"}
+2026-03-22T19:24:36.205+0800	INFO	agent/extension_registry.go:34	reflection enabled	{"agent_id": "enhanced-agent-001", "agent_type": "generic"}
 3. Enabling dynamic tool selection
-2026-03-22T18:17:16.527+0800	INFO	agent/extension_registry.go:40	tool selection enabled	{"agent_id": "enhanced-agent-001", "agent_type": "generic"}
+2026-03-22T19:24:36.205+0800	INFO	agent/extension_registry.go:40	tool selection enabled	{"agent_id": "enhanced-agent-001", "agent_type": "generic"}
 4. Enabling prompt enhancer
-2026-03-22T18:17:16.527+0800	INFO	agent/extension_registry.go:46	prompt enhancer enabled	{"agent_id": "enhanced-agent-001", "agent_type": "generic"}
+2026-03-22T19:24:36.205+0800	INFO	agent/extension_registry.go:46	prompt enhancer enabled	{"agent_id": "enhanced-agent-001", "agent_type": "generic"}
 5. Enabling Skills system
-2026-03-22T18:17:16.527+0800	INFO	skills/manager.go:391	skill registered	{"component": "skill_manager", "skill_id": "code-review"}
-2026-03-22T18:17:16.527+0800	INFO	agent/extension_registry.go:52	skills system enabled	{"agent_id": "enhanced-agent-001", "agent_type": "generic"}
+2026-03-22T19:24:36.205+0800	INFO	skills/manager.go:391	skill registered	{"component": "skill_manager", "skill_id": "code-review"}
+2026-03-22T19:24:36.205+0800	INFO	agent/extension_registry.go:52	skills system enabled	{"agent_id": "enhanced-agent-001", "agent_type": "generic"}
 6. Enabling MCP integration
-2026-03-22T18:17:16.527+0800	INFO	agent/extension_registry.go:58	MCP integration enabled	{"agent_id": "enhanced-agent-001", "agent_type": "generic"}
+2026-03-22T19:24:36.205+0800	INFO	agent/extension_registry.go:58	MCP integration enabled	{"agent_id": "enhanced-agent-001", "agent_type": "generic"}
 7. Enabling enhanced memory system
-2026-03-22T18:17:16.527+0800	INFO	agent/extension_registry.go:77	enhanced memory enabled	{"agent_id": "enhanced-agent-001", "agent_type": "generic"}
+2026-03-22T19:24:36.205+0800	INFO	agent/extension_registry.go:77	enhanced memory enabled	{"agent_id": "enhanced-agent-001", "agent_type": "generic"}
 8. Enabling observability system
-2026-03-22T18:17:16.527+0800	INFO	agent/extension_registry.go:83	observability enabled	{"agent_id": "enhanced-agent-001", "agent_type": "generic"}
+2026-03-22T19:24:36.205+0800	INFO	agent/extension_registry.go:83	observability enabled	{"agent_id": "enhanced-agent-001", "agent_type": "generic"}
 
 9. Feature status check
-2026-03-22T18:17:16.527+0800	INFO	agent/integration.go:355	Agent Feature Status	{"agent_id": "enhanced-agent-001", "agent_type": "generic", "agent_id": "enhanced-agent-001", "reflection": true, "tool_selection": true, "prompt_enhancer": true, "skills": true, "mcp": true, "lsp": false, "enhanced_memory": true, "observability": true, "context_manager": false}
+2026-03-22T19:24:36.205+0800	INFO	agent/integration.go:355	Agent Feature Status	{"agent_id": "enhanced-agent-001", "agent_type": "generic", "agent_id": "enhanced-agent-001", "reflection": true, "tool_selection": true, "prompt_enhancer": true, "skills": true, "mcp": true, "lsp": false, "enhanced_memory": true, "observability": true, "context_manager": false}
 Enabled features: 7/9
 
 10. Executing enhanced task
-2026-03-22T18:17:16.527+0800	INFO	agent/integration.go:127	starting enhanced execution	{"agent_id": "enhanced-agent-001", "agent_type": "generic", "trace_id": "trace-001", "reflection": true, "tool_selection": true, "prompt_enhancer": true, "skills": true, "enhanced_memory": true, "observability": true}
-2026-03-22T18:17:16.527+0800	DEBUG	agent/integration.go:218	discovering skills	{"agent_id": "enhanced-agent-001", "agent_type": "generic", "trace_id": "trace-001", "query": "Review this code for quality issues"}
-2026-03-22T18:17:16.527+0800	DEBUG	skills/manager.go:103	discovering skills for task	{"component": "skill_manager", "task": "Review this code for quality issues"}
-2026-03-22T18:17:16.527+0800	INFO	skills/manager.go:166	discovered skills	{"component": "skill_manager", "task": "Review this code for quality issues", "found": 0}
-2026-03-22T18:17:16.527+0800	INFO	agent/integration.go:231	skills discovered	{"agent_id": "enhanced-agent-001", "agent_type": "generic", "count": 0}
-2026-03-22T18:17:16.527+0800	DEBUG	agent/integration.go:247	loading working memory	{"agent_id": "enhanced-agent-001", "agent_type": "generic", "trace_id": "trace-001"}
-2026-03-22T18:17:16.527+0800	WARN	agent/integration.go:250	failed to load working memory	{"agent_id": "enhanced-agent-001", "agent_type": "generic", "trace_id": "trace-001", "error": "working memory store not configured"}
+2026-03-22T19:24:36.205+0800	INFO	agent/integration.go:127	starting enhanced execution	{"agent_id": "enhanced-agent-001", "agent_type": "generic", "trace_id": "trace-001", "reflection": true, "tool_selection": true, "prompt_enhancer": true, "skills": true, "enhanced_memory": true, "observability": true}
+2026-03-22T19:24:36.205+0800	DEBUG	agent/integration.go:218	discovering skills	{"agent_id": "enhanced-agent-001", "agent_type": "generic", "trace_id": "trace-001", "query": "Give 3 concise Go code review checks for a small HTTP handler."}
+2026-03-22T19:24:36.205+0800	DEBUG	skills/manager.go:103	discovering skills for task	{"component": "skill_manager", "task": "Give 3 concise Go code review checks for a small HTTP handler."}
+2026-03-22T19:24:36.205+0800	INFO	skills/manager.go:166	discovered skills	{"component": "skill_manager", "task": "Give 3 concise Go code review checks for a small HTTP handler.", "found": 1}
+2026-03-22T19:24:36.205+0800	INFO	agent/integration.go:231	skills discovered	{"agent_id": "enhanced-agent-001", "agent_type": "generic", "count": 1}
+2026-03-22T19:24:36.205+0800	DEBUG	agent/integration.go:247	loading working memory	{"agent_id": "enhanced-agent-001", "agent_type": "generic", "trace_id": "trace-001"}
+2026-03-22T19:24:36.205+0800	WARN	agent/integration.go:250	failed to load working memory	{"agent_id": "enhanced-agent-001", "agent_type": "generic", "trace_id": "trace-001", "error": "working memory store not configured"}
 github.com/BaSui01/agentflow/agent.(*BaseAgent).ExecuteEnhanced.(*BaseAgent).memoryLoadMiddleware.func4
 	D:/code/agentflow/agent/integration.go:250
 github.com/BaSui01/agentflow/agent.(*ExecutionPipeline).Execute.func1
@@ -496,11 +560,11 @@ github.com/BaSui01/agentflow/agent.(*BaseAgent).ExecuteEnhanced
 main.demoEnhancedSingleAgent
 	D:/code/agentflow/examples/09_full_integration/main.go:193
 main.main
-	D:/code/agentflow/examples/09_full_integration/main.go:32
+	D:/code/agentflow/examples/09_full_integration/main.go:33
 runtime.main
 	C:/Program Files/Go/src/runtime/proc.go:290
-2026-03-22T18:17:16.527+0800	DEBUG	agent/integration.go:261	loading short-term memory	{"agent_id": "enhanced-agent-001", "agent_type": "generic", "trace_id": "trace-001"}
-2026-03-22T18:17:16.527+0800	WARN	agent/integration.go:264	failed to load short-term memory	{"agent_id": "enhanced-agent-001", "agent_type": "generic", "trace_id": "trace-001", "error": "short-term memory store not configured"}
+2026-03-22T19:24:36.205+0800	DEBUG	agent/integration.go:261	loading short-term memory	{"agent_id": "enhanced-agent-001", "agent_type": "generic", "trace_id": "trace-001"}
+2026-03-22T19:24:36.205+0800	WARN	agent/integration.go:264	failed to load short-term memory	{"agent_id": "enhanced-agent-001", "agent_type": "generic", "trace_id": "trace-001", "error": "short-term memory store not configured"}
 github.com/BaSui01/agentflow/agent.(*BaseAgent).ExecuteEnhanced.(*BaseAgent).memoryLoadMiddleware.func4
 	D:/code/agentflow/agent/integration.go:264
 github.com/BaSui01/agentflow/agent.(*ExecutionPipeline).Execute.func1
@@ -520,37 +584,119 @@ github.com/BaSui01/agentflow/agent.(*BaseAgent).ExecuteEnhanced
 main.demoEnhancedSingleAgent
 	D:/code/agentflow/examples/09_full_integration/main.go:193
 main.main
-	D:/code/agentflow/examples/09_full_integration/main.go:32
+	D:/code/agentflow/examples/09_full_integration/main.go:33
 runtime.main
 	C:/Program Files/Go/src/runtime/proc.go:290
-2026-03-22T18:17:16.527+0800	DEBUG	agent/integration.go:282	enhancing prompt	{"agent_id": "enhanced-agent-001", "agent_type": "generic", "trace_id": "trace-001"}
-2026-03-22T18:17:16.528+0800	INFO	agent/integration.go:297	prompt enhanced	{"agent_id": "enhanced-agent-001", "agent_type": "generic", "trace_id": "trace-001"}
-2026-03-22T18:17:16.528+0800	DEBUG	agent/integration.go:144	executing with reflection	{"agent_id": "enhanced-agent-001", "agent_type": "generic"}
-2026-03-22T18:17:16.528+0800	INFO	agent/reflection.go:116	starting reflection execution	{"agent_id": "enhanced-agent-001", "agent_type": "generic", "component": "reflection", "trace_id": "trace-001", "max_iterations": 3}
-2026-03-22T18:17:16.528+0800	DEBUG	agent/reflection.go:130	reflection iteration	{"agent_id": "enhanced-agent-001", "agent_type": "generic", "component": "reflection", "iteration": 1, "trace_id": "trace-001"}
-  Enhanced execution failed: [AGENT_EXECUTION] reflection execution failed: execution failed at iteration 1: [AGENT_NOT_READY] agent not in ready state
+2026-03-22T19:24:36.205+0800	DEBUG	agent/integration.go:282	enhancing prompt	{"agent_id": "enhanced-agent-001", "agent_type": "generic", "trace_id": "trace-001"}
+2026-03-22T19:24:36.205+0800	INFO	agent/integration.go:297	prompt enhanced	{"agent_id": "enhanced-agent-001", "agent_type": "generic", "trace_id": "trace-001"}
+2026-03-22T19:24:36.205+0800	DEBUG	agent/integration.go:144	executing with reflection	{"agent_id": "enhanced-agent-001", "agent_type": "generic"}
+2026-03-22T19:24:36.205+0800	INFO	agent/reflection.go:116	starting reflection execution	{"agent_id": "enhanced-agent-001", "agent_type": "generic", "component": "reflection", "trace_id": "trace-001", "max_iterations": 3}
+2026-03-22T19:24:36.205+0800	DEBUG	agent/reflection.go:130	reflection iteration	{"agent_id": "enhanced-agent-001", "agent_type": "generic", "component": "reflection", "iteration": 1, "trace_id": "trace-001"}
+2026-03-22T19:24:36.205+0800	INFO	agent/base.go:335	state transition	{"agent_id": "enhanced-agent-001", "agent_type": "generic", "agent_id": "enhanced-agent-001", "from": "ready", "to": "running"}
+2026-03-22T19:24:36.205+0800	INFO	agent/react.go:164	executing task	{"agent_id": "enhanced-agent-001", "agent_type": "generic", "trace_id": "trace-001", "agent_id": "enhanced-agent-001", "agent_type": "generic"}
+2026-03-22T19:24:41.674+0800	INFO	agent/react.go:402	execution completed	{"agent_id": "enhanced-agent-001", "agent_type": "generic", "trace_id": "trace-001", "duration": "5.4691017s", "tokens_used": 282}
+2026-03-22T19:24:41.675+0800	INFO	agent/base.go:335	state transition	{"agent_id": "enhanced-agent-001", "agent_type": "generic", "agent_id": "enhanced-agent-001", "from": "running", "to": "ready"}
+2026-03-22T19:24:55.507+0800	INFO	agent/reflection.go:153	critique completed	{"agent_id": "enhanced-agent-001", "agent_type": "generic", "component": "reflection", "iteration": 1, "score": 0.9, "is_good": true}
+2026-03-22T19:24:55.507+0800	INFO	agent/reflection.go:161	output quality acceptable	{"agent_id": "enhanced-agent-001", "agent_type": "generic", "component": "reflection", "iteration": 1, "score": 0.9}
+2026-03-22T19:24:55.507+0800	INFO	agent/reflection.go:186	reflection execution completed	{"agent_id": "enhanced-agent-001", "agent_type": "generic", "component": "reflection", "trace_id": "trace-001", "iterations": 1, "total_duration": "19.3021766s", "improved": false}
+2026-03-22T19:24:55.507+0800	DEBUG	agent/integration.go:323	saving to enhanced memory	{"agent_id": "enhanced-agent-001", "agent_type": "generic", "trace_id": "trace-001"}
+2026-03-22T19:24:55.507+0800	WARN	agent/extension_registry.go:156	failed to save short-term memory	{"agent_id": "enhanced-agent-001", "agent_type": "generic", "error": "short-term memory store not configured"}
+github.com/BaSui01/agentflow/agent.(*ExtensionRegistry).SaveToEnhancedMemory
+	D:/code/agentflow/agent/extension_registry.go:156
+github.com/BaSui01/agentflow/agent.(*BaseAgent).ExecuteEnhanced.(*BaseAgent).memorySaveMiddleware.func7
+	D:/code/agentflow/agent/integration.go:324
+github.com/BaSui01/agentflow/agent.(*ExecutionPipeline).Execute.func1
+	D:/code/agentflow/agent/integration.go:553
+github.com/BaSui01/agentflow/agent.(*BaseAgent).ExecuteEnhanced.(*BaseAgent).promptEnhancerMiddleware.func5
+	D:/code/agentflow/agent/integration.go:299
+github.com/BaSui01/agentflow/agent.(*ExecutionPipeline).Execute.func1
+	D:/code/agentflow/agent/integration.go:553
+github.com/BaSui01/agentflow/agent.(*BaseAgent).ExecuteEnhanced.(*BaseAgent).memoryLoadMiddleware.func4
+	D:/code/agentflow/agent/integration.go:276
+github.com/BaSui01/agentflow/agent.(*ExecutionPipeline).Execute.func1
+	D:/code/agentflow/agent/integration.go:553
+github.com/BaSui01/agentflow/agent.(*BaseAgent).ExecuteEnhanced.(*BaseAgent).skillsMiddleware.func3
+	D:/code/agentflow/agent/integration.go:239
+github.com/BaSui01/agentflow/agent.(*ExecutionPipeline).Execute.func1
+	D:/code/agentflow/agent/integration.go:553
+github.com/BaSui01/agentflow/agent.(*BaseAgent).ExecuteEnhanced.(*BaseAgent).observabilityMiddleware.func2
+	D:/code/agentflow/agent/integration.go:190
+github.com/BaSui01/agentflow/agent.(*ExecutionPipeline).Execute.func1
+	D:/code/agentflow/agent/integration.go:553
+github.com/BaSui01/agentflow/agent.(*ExecutionPipeline).Execute
+	D:/code/agentflow/agent/integration.go:556
+github.com/BaSui01/agentflow/agent.(*BaseAgent).ExecuteEnhanced
+	D:/code/agentflow/agent/integration.go:137
+main.demoEnhancedSingleAgent
+	D:/code/agentflow/examples/09_full_integration/main.go:193
+main.main
+	D:/code/agentflow/examples/09_full_integration/main.go:33
+runtime.main
+	C:/Program Files/Go/src/runtime/proc.go:290
+2026-03-22T19:24:55.508+0800	WARN	agent/extension_registry.go:173	failed to record episode	{"agent_id": "enhanced-agent-001", "agent_type": "generic", "error": "episodic memory store not configured"}
+github.com/BaSui01/agentflow/agent.(*ExtensionRegistry).SaveToEnhancedMemory
+	D:/code/agentflow/agent/extension_registry.go:173
+github.com/BaSui01/agentflow/agent.(*BaseAgent).ExecuteEnhanced.(*BaseAgent).memorySaveMiddleware.func7
+	D:/code/agentflow/agent/integration.go:324
+github.com/BaSui01/agentflow/agent.(*ExecutionPipeline).Execute.func1
+	D:/code/agentflow/agent/integration.go:553
+github.com/BaSui01/agentflow/agent.(*BaseAgent).ExecuteEnhanced.(*BaseAgent).promptEnhancerMiddleware.func5
+	D:/code/agentflow/agent/integration.go:299
+github.com/BaSui01/agentflow/agent.(*ExecutionPipeline).Exec
 
-Scenario 2: Hierarchical Multi-Agent System
+...[已截断 5138 字符]...
 
-Use case: complex tasks requiring decomposition and parallel execution
-
-Hierarchical system configuration:
-  - Supervisor: Supervisor Agent
-  - Workers: 3
-  - Selection strategy: least_loaded
-  - Load balancing: true
-  - Task timeout: 5m0s
-2026-03-22T18:17:16.528+0800	INFO	hierarchical/hierarchical_agent.go:158	hierarchical execution started	{"component": "hierarchical_agent", "trace_id": "trace-hierarchical"}
-  Hierarchical execution failed: task decomposition failed: [AGENT_NOT_READY] agent not in ready state
+D:/code/agentflow/examples/09_full_integration/main.go:276
+main.main
+	D:/code/agentflow/examples/09_full_integration/main.go:37
+runtime.main
+	C:/Program Files/Go/src/runtime/proc.go:290
+2026-03-22T19:25:02.239+0800	INFO	hierarchical/hierarchical_agent.go:168	task decomposed	{"component": "hierarchical_agent", "subtasks": 2}
+2026-03-22T19:25:02.239+0800	DEBUG	hierarchical/hierarchical_agent.go:418	executing task	{"component": "task_coordinator", "task_id": "trace-hierarchical-subtask-2", "type": "research"}
+2026-03-22T19:25:02.239+0800	DEBUG	hierarchical/hierarchical_agent.go:418	executing task	{"component": "task_coordinator", "task_id": "trace-hierarchical-subtask-1", "type": "research"}
+2026-03-22T19:25:02.239+0800	INFO	agent/base.go:335	state transition	{"agent_id": "worker-1", "agent_type": "analyzer", "agent_id": "worker-1", "from": "ready", "to": "running"}
+2026-03-22T19:25:02.239+0800	INFO	agent/react.go:164	executing task	{"agent_id": "worker-1", "agent_type": "analyzer", "trace_id": "trace-hierarchical", "agent_id": "worker-1", "agent_type": "analyzer"}
+2026-03-22T19:25:02.239+0800	INFO	agent/base.go:335	state transition	{"agent_id": "worker-2", "agent_type": "reviewer", "agent_id": "worker-2", "from": "ready", "to": "running"}
+2026-03-22T19:25:02.239+0800	INFO	agent/react.go:164	executing task	{"agent_id": "worker-2", "agent_type": "reviewer", "trace_id": "trace-hierarchical", "agent_id": "worker-2", "agent_type": "reviewer"}
+2026-03-22T19:25:22.240+0800	ERROR	agent/react.go:294	execution failed	{"agent_id": "worker-2", "agent_type": "reviewer", "error": "[UPSTREAM_ERROR] Post \"https://ai.xoooox.xyz/v1/chat/completions\": context deadline exceeded: Post \"https://ai.xoooox.xyz/v1/chat/completions\": context deadline exceeded", "trace_id": "trace-hierarchical"}
+github.com/BaSui01/agentflow/agent.(*BaseAgent).Execute
+	D:/code/agentflow/agent/react.go:294
+github.com/BaSui01/agentflow/agent/hierarchical.(*TaskCoordinator).ExecuteTask
+	D:/code/agentflow/agent/hierarchical/hierarchical_agent.go:453
+github.com/BaSui01/agentflow/agent/hierarchical.(*HierarchicalAgent).Execute.func1
+	D:/code/agentflow/agent/hierarchical/hierarchical_agent.go:187
+2026-03-22T19:25:22.240+0800	ERROR	agent/react.go:294	execution failed	{"agent_id": "worker-1", "agent_type": "analyzer", "error": "[UPSTREAM_ERROR] Post \"https://ai.xoooox.xyz/v1/chat/completions\": context deadline exceeded: Post \"https://ai.xoooox.xyz/v1/chat/completions\": context deadline exceeded", "trace_id": "trace-hierarchical"}
+github.com/BaSui01/agentflow/agent.(*BaseAgent).Execute
+	D:/code/agentflow/agent/react.go:294
+github.com/BaSui01/agentflow/agent/hierarchical.(*TaskCoordinator).ExecuteTask
+	D:/code/agentflow/agent/hierarchical/hierarchical_agent.go:453
+github.com/BaSui01/agentflow/agent/hierarchical.(*HierarchicalAgent).Execute.func1
+	D:/code/agentflow/agent/hierarchical/hierarchical_agent.go:187
+2026-03-22T19:25:22.240+0800	INFO	agent/base.go:335	state transition	{"agent_id": "worker-1", "agent_type": "analyzer", "agent_id": "worker-1", "from": "running", "to": "ready"}
+2026-03-22T19:25:22.240+0800	INFO	agent/base.go:335	state transition	{"agent_id": "worker-2", "agent_type": "reviewer", "agent_id": "worker-2", "from": "running", "to": "ready"}
+2026-03-22T19:25:22.240+0800	ERROR	hierarchical/hierarchical_agent.go:198	subtask failed	{"component": "hierarchical_agent", "subtask_index": 0, "error": "[AGENT_EXECUTION] execution failed: [UPSTREAM_ERROR] Post \"https://ai.xoooox.xyz/v1/chat/completions\": context deadline exceeded: Post \"https://ai.xoooox.xyz/v1/chat/completions\": context deadline exceeded"}
+github.com/BaSui01/agentflow/agent/hierarchical.(*HierarchicalAgent).Execute
+	D:/code/agentflow/agent/hierarchical/hierarchical_agent.go:198
+main.demoHierarchicalSystem
+	D:/code/agentflow/examples/09_full_integration/main.go:276
+main.main
+	D:/code/agentflow/examples/09_full_integration/main.go:37
+runtime.main
+	C:/Program Files/Go/src/runtime/proc.go:290
+  Hierarchical execution failed: subtask 0 failed: [AGENT_EXECUTION] execution failed: [UPSTREAM_ERROR] Post "https://ai.xoooox.xyz/v1/chat/completions": context deadline exceeded: Post "https://ai.xoooox.xyz/v1/chat/completions": context deadline exceeded
 
 Scenario 3: Collaborative Multi-Agent System
 
 Use case: tasks requiring multiple perspectives and expert opinions
+2026-03-22T19:25:22.240+0800	INFO	agent/base.go:356	initializing agent	{"agent_id": "expert-analyst", "agent_type": "generic"}
+2026-03-22T19:25:22.240+0800	INFO	agent/base.go:335	state transition	{"agent_id": "expert-analyst", "agent_type": "generic", "agent_id": "expert-analyst", "from": "init", "to": "ready"}
+2026-03-22T19:25:22.240+0800	INFO	agent/base.go:356	initializing agent	{"agent_id": "expert-critic", "agent_type": "generic"}
+2026-03-22T19:25:22.240+0800	INFO	agent/base.go:335	state transition	{"agent_id": "expert-critic", "agent_type": "generic", "agent_id": "expert-critic", "from": "init", "to": "ready"}
 
 Collaborative system configuration:
   - Pattern: debate
-  - Experts: 3
-  - Max rounds: 3
+  - Experts: 2
+  - Max rounds: 1
   - Consensus threshold: 0.70
 
 Available collaboration patterns:
@@ -558,49 +704,52 @@ Available collaboration patterns:
   2. pipeline - Pipeline (use case: Sequential processing)
   3. broadcast - Broadcast (use case: Parallel processing)
   4. network - Network (use case: Free communication)
-2026-03-22T18:17:16.528+0800	INFO	collaboration/multi_agent.go:156	multi-agent collaboration started	{"component": "multi_agent_system", "pattern": "debate", "agents": 3}
-2026-03-22T18:17:16.528+0800	INFO	collaboration/multi_agent.go:578	debate coordination started	{"component": "multi_agent_system", "coordinator": "debate", "agents": 3, "max_rounds": 3}
-2026-03-22T18:17:16.528+0800	WARN	collaboration/multi_agent.go:598	agent initial proposal failed	{"component": "multi_agent_system", "coordinator": "debate", "agent_id": "expert-analyst", "error": "[AGENT_NOT_READY] agent not in ready state"}
-github.com/BaSui01/agentflow/agent/collaboration.(*DebateCoordinator).Coordinate
-	D:/code/agentflow/agent/collaboration/multi_agent.go:598
-github.com/BaSui01/agentflow/agent/collaboration.(*MultiAgentSystem).Execute
-	D:/code/agentflow/agent/collaboration/multi_agent.go:176
-main.demoCollaborativeSystem
-	D:/code/agentflow/examples/09_full_integration/main.go:353
-main.main
-	D:/code/agentflow/examples/09_full_integration/main.go:40
-runtime.main
-	C:/Program Files/Go/src/runtime/proc.go:290
-2026-03-22T18:17:16.528+0800	WARN	collaboration/multi_agent.go:598	agent initial proposal failed	{"component": "multi_agent_system", "coordinator": "debate", "agent_id": "expert-creative", "error": "[AGENT_NOT_READY] agent not in ready state"}
-github.com/BaSui01/agentflow/agent/collaboration.(*DebateCoordinator).Coordinate
-	D:/code/agentflow/agent/collaboration/multi_agent.go:598
-github.com/BaSui01/agentflow/agent/collaboration.(*MultiAgentSystem).Execute
-	D:/code/agentflow/agent/collaboration/multi_agent.go:176
-main.demoCollaborativeSystem
-	D:/code/agentflow/examples/09_full_integration/main.go:353
-main.main
-	D:/code/agentflow/examples/09_full_integration/main.go:40
-runtime.main
-	C:/Program Files/Go/src/runtime/proc.go:290
-2026-03-22T18:17:16.528+0800	WARN	collaboration/multi_agent.go:598	agent initial proposal failed	{"component": "multi_agent_system", "coordinator": "debate", "agent_id": "expert-critic", "error": "[AGENT_NOT_READY] agent not in ready state"}
-github.com/BaSui01/agentflow/agent/collaboration.(*DebateCoordinator).Coordinate
-	D:/code/agentflow/agent/collaboration/multi_agent.go:598
-github.com/BaSui01/agentflow/agent/collaboration.(*MultiAgentSystem).Execute
-	D:/code/agentflow/agent/collaboration/multi_agent.go:176
-main.demoCollaborativeSystem
-	D:/code/agentflow/examples/09_full_integration/main.go:353
-main.main
-	D:/code/agentflow/examples/09_full_integration/main.go:40
-runtime.main
-	C:/Program Files/Go/src/runtime/proc.go:290
-  Collaborative execution failed: all agents failed during initial proposal phase
+2026-03-22T19:25:22.240+0800	INFO	collaboration/multi_agent.go:156	multi-agent collaboration started	{"component": "multi_agent_system", "pattern": "debate", "agents": 2}
+2026-03-22T19:25:22.240+0800	INFO	collaboration/multi_agent.go:578	debate coordination started	{"component": "multi_agent_system", "coordinator": "debate", "agents": 2, "max_rounds": 1}
+2026-03-22T19:25:22.240+0800	INFO	agent/base.go:335	state transition	{"agent_id": "expert-analyst", "agent_type": "generic", "agent_id": "expert-analyst", "from": "ready", "to": "running"}
+2026-03-22T19:25:22.240+0800	INFO	agent/react.go:164	executing task	{"agent_id": "expert-analyst", "agent_type": "generic", "trace_id": "trace-collab", "agent_id": "expert-analyst", "agent_type": "generic"}
+2026-03-22T19:25:25.927+0800	INFO	agent/react.go:402	execution completed	{"agent_id": "expert-analyst", "agent_type": "generic", "trace_id": "trace-collab", "duration": "3.687695s", "tokens_used": 152}
+2026-03-22T19:25:25.927+0800	INFO	agent/base.go:335	state transition	{"agent_id": "expert-analyst", "agent_type": "generic", "agent_id": "expert-analyst", "from": "running", "to": "ready"}
+2026-03-22T19:25:25.927+0800	INFO	agent/base.go:335	state transition	{"agent_id": "expert-critic", "agent_type": "generic", "agent_id": "expert-critic", "from": "ready", "to": "running"}
+2026-03-22T19:25:25.927+0800	INFO	agent/react.go:164	executing task	{"agent_id": "expert-critic", "agent_type": "generic", "trace_id": "trace-collab", "agent_id": "expert-critic", "agent_type": "generic"}
+2026-03-22T19:25:29.574+0800	INFO	agent/react.go:402	execution completed	{"agent_id": "expert-critic", "agent_type": "generic", "trace_id": "trace-collab", "duration": "3.6464534s", "tokens_used": 121}
+2026-03-22T19:25:29.574+0800	INFO	agent/base.go:335	state transition	{"agent_id": "expert-critic", "agent_type": "generic", "agent_id": "expert-critic", "from": "running", "to": "ready"}
+2026-03-22T19:25:29.574+0800	DEBUG	collaboration/multi_agent.go:616	debate round started	{"component": "multi_agent_system", "coordinator": "debate", "round": 1}
+2026-03-22T19:25:29.574+0800	INFO	agent/base.go:335	state transition	{"agent_id": "expert-analyst", "agent_type": "generic", "agent_id": "expert-analyst", "from": "ready", "to": "running"}
+2026-03-22T19:25:29.574+0800	INFO	agent/react.go:164	executing task	{"agent_id": "expert-analyst", "agent_type": "generic", "trace_id": "trace-collab", "agent_id": "expert-analyst", "agent_type": "generic"}
+2026-03-22T19:25:41.281+0800	INFO	agent/react.go:402	execution completed	{"agent_id": "expert-analyst", "agent_type": "generic", "trace_id": "trace-collab", "duration": "11.7065504s", "tokens_used": 936}
+2026-03-22T19:25:41.281+0800	INFO	agent/base.go:335	state transition	{"agent_id": "expert-analyst", "agent_type": "generic", "agent_id": "expert-analyst", "from": "running", "to": "ready"}
+2026-03-22T19:25:41.281+0800	INFO	agent/base.go:335	state transition	{"agent_id": "expert-critic", "agent_type": "generic", "agent_id": "expert-critic", "from": "ready", "to": "running"}
+2026-03-22T19:25:41.281+0800	INFO	agent/react.go:164	executing task	{"agent_id": "expert-critic", "agent_type": "generic", "trace_id": "trace-collab", "agent_id": "expert-critic", "agent_type": "generic"}
+2026-03-22T19:25:49.559+0800	INFO	agent/react.go:402	execution completed	{"agent_id": "expert-critic", "agent_type": "generic", "trace_id": "trace-collab", "duration": "8.2785737s", "tokens_used": 1180}
+2026-03-22T19:25:49.559+0800	INFO	agent/base.go:335	state transition	{"agent_id": "expert-critic", "agent_type": "generic", "agent_id": "expert-critic", "from": "running", "to": "ready"}
+2026-03-22T19:25:49.559+0800	INFO	agent/base.go:335	state transition	{"agent_id": "expert-analyst", "agent_type": "generic", "agent_id": "expert-analyst", "from": "ready", "to": "running"}
+2026-03-22T19:25:49.559+0800	INFO	agent/react.go:164	executing task	{"agent_id": "expert-analyst", "agent_type": "generic", "trace_id": "trace-collab", "agent_id": "expert-analyst", "agent_type": "generic"}
+2026-03-22T19:25:55.012+0800	INFO	agent/react.go:402	execution completed	{"agent_id": "expert-analyst", "agent_type": "generic", "trace_id": "trace-collab", "duration": "5.4527835s", "tokens_used": 1294}
+2026-03-22T19:25:55.012+0800	INFO	agent/base.go:335	state transition	{"agent_id": "expert-analyst", "agent_type": "generic", "agent_id": "expert-analyst", "from": "running", "to": "ready"}
+2026-03-22T19:25:55.012+0800	INFO	collaboration/multi_agent.go:731	debate coordination completed	{"component": "multi_agent_system", "coordinator": "debate", "rounds": 1, "proposals": 2}
+2026-03-22T19:25:55.012+0800	INFO	collaboration/multi_agent.go:187	multi-agent collaboration completed	{"component": "multi_agent_system"}
+  Debate result: Start with a **modular monolith**.
+
+For a small internal tool, it’s usually the best default: **faster to build**, **easier to test/debug/deploy**, and far less operationally complex than microservices. Microservices add distributed-systems overhead like network failures, API/versioning, tracing, harder local development, and data consistency issues.
+
+The key caveat: make the monolith **intentionally modular** with clear boundaries, so you can split parts out later if real pain appears.
+
+Choose **microservices from the start only if you already know you need** things like:
+- independent scaling
+- strict isolation/security boundaries
+- different deployment/runtime needs
+- multiple teams owning separate domains
+- strong DevOps/observability maturity
+
+So: **modular monolith first; extract services only when justified by concrete needs.**
 
 Scenario 4: Production Configuration
 
 Production configuration examples
 
 1. Agent configuration
-  Agent: Production Agent (model: gpt-4, max_tokens: 2000)
+  Agent: Production Agent (model: gpt-5.4, max_tokens: 2000)
 
 2. Reflection configuration
   MaxIterations: 2, MinQuality: 0.75
@@ -632,47 +781,47 @@ Production configuration examples
 路径: examples/12_complete_rag_system
 命令: go run ./examples/12_complete_rag_system
 状态: PASS
-耗时: 352ms
-摘要: 2026-03-22T18:17:16.873+0800	INFO	rag/vector_store.go:42	documents added to vector store	{"count": 3, "total": 3}
+耗时: 2.823s
+摘要: 2026-03-22T19:25:57.830+0800	INFO	rag/vector_store.go:42	documents added to vector store	{"count": 3, "total": 3}
 标签: RAG / Retrieval / Cache
-亮点: 2026-03-22T18:17:16.873+0800	INFO	rag/vector_store.go:42	documents added to vector store	{"count": 3, "total": 3}
-亮点: 2026-03-22T18:17:16.882+0800	INFO	rag/vector_store.go:42	documents added to vector store	{"count": 3, "total": 6}
-亮点: 2026-03-22T18:17:16.882+0800	INFO	rag/hybrid_retrieval.go:155	documents indexed	{"count": 3}
-亮点: 2026-03-22T18:17:16.882+0800	DEBUG	rag/hybrid_retrieval.go:236	retrieval metrics	{"retrieval_latency": "0s", "rerank_latency": "0s", "topk": 5, "hit_count": 3, "context_tokens": 58}
+亮点: 2026-03-22T19:25:57.830+0800	INFO	rag/vector_store.go:42	documents added to vector store	{"count": 3, "total": 3}
+亮点: 2026-03-22T19:25:57.840+0800	INFO	rag/vector_store.go:42	documents added to vector store	{"count": 3, "total": 6}
+亮点: 2026-03-22T19:25:57.840+0800	INFO	rag/hybrid_retrieval.go:155	documents indexed	{"count": 3}
+亮点: 2026-03-22T19:25:57.841+0800	DEBUG	rag/hybrid_retrieval.go:236	retrieval metrics	{"retrieval_latency": "525.6µs", "rerank_latency": "525.6µs", "topk": 5, "hit_count": 3, "context_tokens": 58}
 原始输出:
 === 完整 RAG 系统示例 ===
-2026-03-22T18:17:16.873+0800	INFO	rag/vector_store.go:42	documents added to vector store	{"count": 3, "total": 3}
-2026-03-22T18:17:16.882+0800	INFO	rag/vector_store.go:42	documents added to vector store	{"count": 3, "total": 6}
-2026-03-22T18:17:16.882+0800	INFO	rag/hybrid_retrieval.go:155	documents indexed	{"count": 3}
-2026-03-22T18:17:16.882+0800	DEBUG	rag/hybrid_retrieval.go:236	retrieval metrics	{"retrieval_latency": "0s", "rerank_latency": "0s", "topk": 5, "hit_count": 3, "context_tokens": 58}
+2026-03-22T19:25:57.830+0800	INFO	rag/vector_store.go:42	documents added to vector store	{"count": 3, "total": 3}
+2026-03-22T19:25:57.840+0800	INFO	rag/vector_store.go:42	documents added to vector store	{"count": 3, "total": 6}
+2026-03-22T19:25:57.840+0800	INFO	rag/hybrid_retrieval.go:155	documents indexed	{"count": 3}
+2026-03-22T19:25:57.841+0800	DEBUG	rag/hybrid_retrieval.go:236	retrieval metrics	{"retrieval_latency": "525.6µs", "rerank_latency": "525.6µs", "topk": 5, "hit_count": 3, "context_tokens": 58}
 检索结果:
 1. [Score: 0.842] Rust is a systems programming language focused on safety and performance.
 2. [Score: 0.839] Python is an interpreted, high-level programming language with dynamic typing.
 3. [Score: 0.837] Go is a statically typed, compiled programming language designed at Google.
 
 === 语义缓存 ===
-2026-03-22T18:17:16.882+0800	INFO	rag/vector_store.go:42	documents added to vector store	{"count": 1, "total": 7}
-2026-03-22T18:17:16.882+0800	INFO	rag/vector_store.go:234	semantic cache hit	{"similarity": 1}
+2026-03-22T19:25:57.841+0800	INFO	rag/vector_store.go:42	documents added to vector store	{"count": 1, "total": 7}
+2026-03-22T19:25:57.841+0800	INFO	rag/vector_store.go:234	semantic cache hit	{"similarity": 1}
 缓存命中: Cached response for programming language query
 
 === 上下文压缩 ===
 当前 token 数: 49
 使用率: 0.03%
 建议: OK: context usage normal
-2026-03-22T18:17:16.882+0800	DEBUG	context/engineer.go:158	context engineering	{"tokens": 49, "usage": 0.0002552083333333333, "level": 0}
+2026-03-22T19:25:57.841+0800	DEBUG	context/engineer.go:158	context engineering	{"tokens": 49, "usage": 0.0002552083333333333, "level": 0}
 原始消息数: 5
 管理后消息数: 5
 
 === Runtime Builder 集成 ===
-2026-03-22T18:17:16.882+0800	INFO	rag/vector_store.go:42	documents added to vector store	{"count": 1, "total": 1}
-2026-03-22T18:17:16.882+0800	DEBUG	runtime/cache.go:54	semantic cache hit	{"score": 1}
-2026-03-22T18:17:16.882+0800	INFO	rag/vector_store.go:143	all documents cleared from vector store
+2026-03-22T19:25:57.841+0800	INFO	rag/vector_store.go:42	documents added to vector store	{"count": 1, "total": 1}
+2026-03-22T19:25:57.841+0800	DEBUG	runtime/cache.go:54	semantic cache hit	{"score": 1}
+2026-03-22T19:25:57.841+0800	INFO	rag/vector_store.go:143	all documents cleared from vector store
 runtime.Builder 已接入 provider/store 注入与 hybrid 检索构建
 
 === Context Managers 集成 ===
 engineer level=emergency usage=20.61
-2026-03-22T18:17:16.882+0800	DEBUG	context/engineer.go:158	context engineering	{"tokens": 1649, "usage": 20.6125, "level": 3}
-2026-03-22T18:17:16.882+0800	WARN	context/engineer.go:177	EMERGENCY compression triggered
+2026-03-22T19:25:57.841+0800	DEBUG	context/engineer.go:158	context engineering	{"tokens": 1649, "usage": 20.6125, "level": 3}
+2026-03-22T19:25:57.841+0800	WARN	context/engineer.go:177	EMERGENCY compression triggered
 github.com/BaSui01/agentflow/agent/context.(*Engineer).emergencyCompress
 	D:/code/agentflow/agent/context/engineer.go:177
 github.com/BaSui01/agentflow/agent/context.(*Engineer).Manage
@@ -685,8 +834,8 @@ main.main
 	D:/code/agentflow/examples/12_complete_rag_system/main.go:135
 runtime.main
 	C:/Program Files/Go/src/runtime/proc.go:290
-2026-03-22T18:17:16.882+0800	DEBUG	context/engineer.go:158	context engineering	{"tokens": 1666, "usage": 20.825, "level": 3}
-2026-03-22T18:17:16.882+0800	WARN	context/engineer.go:177	EMERGENCY compression triggered
+2026-03-22T19:25:57.841+0800	DEBUG	context/engineer.go:158	context engineering	{"tokens": 1666, "usage": 20.825, "level": 3}
+2026-03-22T19:25:57.841+0800	WARN	context/engineer.go:177	EMERGENCY compression triggered
 github.com/BaSui01/agentflow/agent/context.(*Engineer).emergencyCompress
 	D:/code/agentflow/agent/context/engineer.go:177
 github.com/BaSui01/agentflow/agent/context.(*Engineer).Manage
@@ -699,8 +848,8 @@ main.main
 	D:/code/agentflow/examples/12_complete_rag_system/main.go:135
 runtime.main
 	C:/Program Files/Go/src/runtime/proc.go:290
-2026-03-22T18:17:16.882+0800	DEBUG	context/engineer.go:158	context engineering	{"tokens": 1683, "usage": 21.0375, "level": 3}
-2026-03-22T18:17:16.882+0800	WARN	context/engineer.go:177	EMERGENCY compression triggered
+2026-03-22T19:25:57.841+0800	DEBUG	context/engineer.go:158	context engineering	{"tokens": 1683, "usage": 21.0375, "level": 3}
+2026-03-22T19:25:57.841+0800	WARN	context/engineer.go:177	EMERGENCY compression triggered
 github.com/BaSui01/agentflow/agent/context.(*Engineer).emergencyCompress
 	D:/code/agentflow/agent/context/engineer.go:177
 github.com/BaSui01/agentflow/agent/context.(*Engineer).Manage
@@ -713,8 +862,8 @@ main.main
 	D:/code/agentflow/examples/12_complete_rag_system/main.go:135
 runtime.main
 	C:/Program Files/Go/src/runtime/proc.go:290
-2026-03-22T18:17:16.882+0800	DEBUG	context/engineer.go:158	context engineering	{"tokens": 1700, "usage": 21.25, "level": 3}
-2026-03-22T18:17:16.882+0800	WARN	context/engineer.go:177	EMERGENCY compression triggered
+2026-03-22T19:25:57.841+0800	DEBUG	context/engineer.go:158	context engineering	{"tokens": 1700, "usage": 21.25, "level": 3}
+2026-03-22T19:25:57.841+0800	WARN	context/engineer.go:177	EMERGENCY compression triggered
 github.com/BaSui01/agentflow/agent/context.(*Engineer).emergencyCompress
 	D:/code/agentflow/agent/context/engineer.go:177
 github.com/BaSui01/agentflow/agent/context.(*Engineer).Manage
@@ -727,8 +876,8 @@ main.main
 	D:/code/agentflow/examples/12_complete_rag_system/main.go:135
 runtime.main
 	C:/Program Files/Go/src/runtime/proc.go:290
-2026-03-22T18:17:16.882+0800	DEBUG	context/engineer.go:158	context engineering	{"tokens": 1717, "usage": 21.4625, "level": 3}
-2026-03-22T18:17:16.882+0800	WARN	context/engineer.go:177	EMERGENCY compression triggered
+2026-03-22T19:25:57.841+0800	DEBUG	context/engineer.go:158	context engineering	{"tokens": 1717, "usage": 21.4625, "level": 3}
+2026-03-22T19:25:57.841+0800	WARN	context/engineer.go:177	EMERGENCY compression triggered
 github.com/BaSui01/agentflow/agent/context.(*Engineer).emergencyCompress
 	D:/code/agentflow/agent/context/engineer.go:177
 github.com/BaSui01/agentflow/agent/context.(*Engineer).Manage
@@ -741,7 +890,7 @@ main.main
 	D:/code/agentflow/examples/12_complete_rag_system/main.go:135
 runtime.main
 	C:/Program Files/Go/src/runtime/proc.go:290
-2026-03-22T18:17:16.882+0800	WARN	context/engineer.go:384	hard truncate triggered
+2026-03-22T19:25:57.841+0800	WARN	context/engineer.go:384	hard truncate triggered
 github.com/BaSui01/agentflow/agent/context.(*Engineer).hardTruncate
 	D:/code/agentflow/agent/context/engineer.go:384
 github.com/BaSui01/agentflow/agent/context.(*Engineer).MustFit
@@ -752,8 +901,8 @@ main.main
 	D:/code/agentflow/examples/12_complete_rag_system/main.go:135
 runtime.main
 	C:/Program Files/Go/src/runtime/proc.go:290
-2026-03-22T18:17:16.883+0800	DEBUG	context/engineer.go:158	context engineering	{"tokens": 1649, "usage": 20.6125, "level": 3}
-2026-03-22T18:17:16.883+0800	WARN	context/engineer.go:177	EMERGENCY compression triggered
+2026-03-22T19:25:57.841+0800	DEBUG	context/engineer.go:158	context engineering	{"tokens": 1649, "usage": 20.6125, "level": 3}
+2026-03-22T19:25:57.841+0800	WARN	context/engineer.go:177	EMERGENCY compression triggered
 github.com/BaSui01/agentflow/agent/context.(*Engineer).emergencyCompress
 	D:/code/agentflow/agent/context/engineer.go:177
 github.com/BaSui01/agentflow/agent/context.(*Engineer).Manage
@@ -768,8 +917,8 @@ main.main
 	D:/code/agentflow/examples/12_complete_rag_system/main.go:135
 runtime.main
 	C:/Program Files/Go/src/runtime/proc.go:290
-2026-03-22T18:17:16.883+0800	DEBUG	context/engineer.go:158	context engineering	{"tokens": 1666, "usage": 20.825, "level": 3}
-2026-03-22T18:17:16.883+0800	WARN	context/engineer.go:177	EMERGENCY compression triggered
+2026-03-22T19:25:57.841+0800	DEBUG	context/engineer.go:158	context engineering	{"tokens": 1666, "usage": 20.825, "level": 3}
+2026-03-22T19:25:57.841+0800	WARN	context/engineer.go:177	EMERGENCY compression triggered
 github.com/BaSui01/agentflow/agent/context.(*Engineer).emergencyCompress
 	D:/code/agentflow/agent/context/engineer.go:177
 github.com/BaSui01/agentflow/agent/context.(*Engineer).Manage
@@ -784,8 +933,8 @@ main.main
 	D:/code/agentflow/examples/12_complete_rag_system/main.go:135
 runtime.main
 	C:/Program Files/Go/src/runtime/proc.go:290
-2026-03-22T18:17:16.883+0800	DEBUG	context/engineer.go:158	context engineering	{"tokens": 1683, "usage": 21.0375, "level": 3}
-2026-03-22T18:17:16.883+0800	WARN	context/engineer.go:177	EMERGENCY compression triggered
+2026-03-22T19:25:57.841+0800	DEBUG	context/engineer.go:158	context engineering	{"tokens": 1683, "usage": 21.0375, "level": 3}
+2026-03-22T19:25:57.841+0800	WARN	context/engineer.go:177	EMERGENCY compression triggered
 github.com/BaSui01/agentflow/agent/context.(*Engineer).emergencyCompress
 	D:/code/agentflow/agent/context/engineer.go:177
 github.com/BaSui01/agentflow/agent/context.(*Engineer).Manage
@@ -800,8 +949,8 @@ main.main
 	D:/code/agentflow/examples/12_complete_rag_system/main.go:135
 runtime.main
 	C:/Program Files/Go/src/runtime/proc.go:290
-2026-03-22T18:17:16.883+0800	DEBUG	context/engineer.go:158	context engineering	{"tokens": 1700, "usage": 21.25, "level": 3}
-2026-03-22T18:17:16.883+0800	WARN	context/engineer.go:177	EMERGENCY compression triggered
+2026-03-22T19:25:57.841+0800	DEBUG	context/engineer.go:158	context engineering	{"tokens": 1700, "usage": 21.25, "level": 3}
+2026-03-22T19:25:57.841+0800	WARN	context/engineer.go:177	EMERGENCY compression triggered
 github.com/BaSui01/agentflow/agent/context.(*Engineer).emergencyCompress
 	D:/code/agentflow/agent/context/engineer.go:177
 github.com/BaSui01/agentflow/agent/context.(*Engineer).Manage
@@ -816,8 +965,8 @@ main.main
 	D:/code/agentflow/examples/12_complete_rag_system/main.go:135
 runtime.main
 	C:/Program Files/Go/src/runtime/proc.go:290
-2026-03-22T18:17:16.883+0800	DEBUG	context/engineer.go:158	context engineering	{"tokens": 1717, "usage": 21.4625, "level": 3}
-2026-03-22T18:17:16.883+0800	WARN	context/engineer.go:177	EMERGENCY compression triggered
+2026-03-22T19:25:57.841+0800	DEBUG	context/engineer.go:158	context engineering	{"tokens": 1717, "usage": 21.4625, "level": 3}
+2026-03-22T19:25:57.841+0800	WARN	context/engineer.go:177	EMERGENCY compression triggered
 github.com/BaSui01/agentflow/agent/context.(*Engineer).emergencyCompress
 	D:/code/agentflow/agent/context/engineer.go:177
 github.com/BaSui01/agentflow/agent/context.(*Engineer).Manage
@@ -832,7 +981,7 @@ main.main
 	D:/code/agentflow/examples/12_complete_rag_system/main.go:135
 runtime.main
 	C:/Program Files/Go/src/runtime/proc.go:290
-2026-03-22T18:17:16.883+0800	WARN	context/engineer.go:384	hard truncate triggered
+2026-03-22T19:25:57.841+0800	WARN	context/engineer.go:384	hard truncate triggered
 github.com/BaSui01/agentflow/agent/context.(*Engineer).hardTruncate
 	D:/code/agentflow/agent/context/engineer.go:384
 github.com/BaSui01/agentflow/agent/context.(*Engineer).MustFit
@@ -853,19 +1002,19 @@ agent/context 的 Engineer/AgentContextManager/WindowManager 已接入示例链�
 路径: examples/14_guardrails
 命令: go run ./examples/14_guardrails
 状态: PASS
-耗时: 343ms
+耗时: 363ms
 摘要: Input: 请联系张三，手机号 13812345678，邮箱 zhangsan@example.com
 标签: PII / Injection / Validators
 亮点: Input: 请联系张三，手机号 13812345678，邮箱 zhangsan@example.com
 亮点: Valid: true
-亮点: Warnings: [检测到 邮箱地址 信息 检测到 手机号 信息]
+亮点: Warnings: [检测到 手机号 信息 检测到 邮箱地址 信息]
 亮点: Masked: 请联系张三，手机号 138****5678，邮箱 z***@example.com
 原始输出:
 === AgentFlow Guardrails Example ===
 --- 1. PII Detection ---
 Input: 请联系张三，手机号 13812345678，邮箱 zhangsan@example.com
 Valid: true
-Warnings: [检测到 邮箱地址 信息 检测到 手机号 信息]
+Warnings: [检测到 手机号 信息 检测到 邮箱地址 信息]
 Masked: 请联系张三，手机号 138****5678，邮箱 z***@example.com
 Direct Mask: 请联系张三，手机号 138****5678，邮箱 z***@example.com
 
@@ -889,7 +1038,7 @@ Validators executed: [length_validator injection_detector keyword_validator pii_
 --- 4. Output Filter + Registries ---
 Output/registry paths wired
 --- 5. Guardcore Coordinator ---
-2026-03-22T18:17:17.219+0800	INFO	guardcore/coordinator.go:65	guardrails initialized	{"component": "guardrails_coordinator", "input_validators": 4, "pii_detection": true, "injection_detection": true}
+2026-03-22T19:25:58.193+0800	INFO	guardcore/coordinator.go:65	guardrails initialized	{"component": "guardrails_coordinator", "input_validators": 4, "pii_detection": true, "injection_detection": true}
 Feedback preview: Your previous response failed validation. Please regenerate your response addres...
 --- 6. Shadow AI Advanced ---
 
@@ -897,7 +1046,7 @@ Feedback preview: Your previous response failed validation. Please regenerate yo
 路径: examples/15_structured_output
 命令: go run ./examples/15_structured_output
 状态: PASS
-耗时: 319ms
+耗时: 2.176s
 摘要: TaskResult Schema:
 标签: JSONSchema / Structured
 亮点: TaskResult Schema:
@@ -1010,10 +1159,10 @@ Valid JSON:
 
 Invalid JSON:
   ✗ Validation errors:
-    - tags: array has 0 items, minimum is 1
     - status: value must be one of: [success failure pending]
     - message: string length 0 is less than minimum 1
     - score: value 150 exceeds maximum 100
+    - tags: array has 0 items, minimum is 1
 
 --- 3. Manual Schema Building ---
 APIResponse Schema:
@@ -1075,7 +1224,7 @@ Sample data validation: ✓ Passed
 路径: examples/16_a2a_protocol
 命令: go run ./examples/16_a2a_protocol
 状态: PASS
-耗时: 1.424s
+耗时: 1.557s
 摘要: Agent Card:
 标签: A2A / Protocol
 亮点: Agent Card:
@@ -1180,23 +1329,23 @@ Capabilities: 1
 
 --- 2. A2A Message Creation ---
 Task Message:
-  ID: c3cabfcb-d56c-4741-b19f-ee7cf50e4278
+  ID: d7fd8b64-d441-43e3-88de-9f0f116bee27
   Type: task
   From: client-agent
   To: assistant-agent
-  Timestamp: 2026-03-22T10:17:18Z
+  Timestamp: 2026-03-22T11:26:01Z
   Validation: ✓ Valid
 
 Reply Message:
-  ID: 5d5fa333-2d92-45c0-8e3d-bc90f4079b22
+  ID: 6b7585d6-989f-41c5-9287-313d7876c291
   Type: result
-  ReplyTo: c3cabfcb-d56c-4741-b19f-ee7cf50e4278
+  ReplyTo: d7fd8b64-d441-43e3-88de-9f0f116bee27
   IsReply: true
 
 Serialized Message:
-{"id":"c3cabfcb-d56c-4741-b19f-ee7cf50e4278","type":"task","from":"client-agent","to":"assistant-agent","payload":{"content":"This is a long document that needs summarization...","options":{"format":"bullet_points","max_length":100},"task":"summarize"},"timestamp":"2026-03-22T10:17:18.9680723Z"}
+{"id":"d7fd8b64-d441-43e3-88de-9f0f116bee27","type":"task","from":"client-agent","to":"assistant-agent","payload":{"content":"This is a long document that needs summarization...","options":{"format":"bullet_points","max_length":100},"task":"summarize"},"timestamp":"2026-03-22T11:26:01.9352978Z"}
 
-Parsed Message ID: c3cabfcb-d56c-4741-b19f-ee7cf50e4278
+Parsed Message ID: d7fd8b64-d441-43e3-88de-9f0f116bee27
 
 --- 3. Client/Server Setup ---
 Client created with timeout: 30s
@@ -1226,57 +1375,57 @@ Server endpoints:
   GET  /a2a/tasks/{id}/result   - Get async result
 
 --- Quick Integration Example ---
-Created task message: c131d96b-6cae-444f-9264-4250823f2d79
+Created task message: 13f0a962-8b72-43b1-8cdb-6e2526804470
 Message type: task
 Message is valid and ready to send
 
 === 工作流编排 / 高优先级能力 ===
 路径: examples/17_high_priority_features
 命令: go run ./examples/17_high_priority_features
-状态: WARN
-耗时: 4.263s
-摘要: 2026-03-22T18:17:23.221+0800	ERROR	workflow/dag_executor.go:316	node execution failed	{"component": "dag_executor", "trace_id": "", "workflow_id": "exec_1774174643221658500_1", "node_id": "llm", "node_type": "action", "duration": "0s", "error": "step llm (llm): step dependency not configured"}
+状态: PASS
+耗时: 5.061s
+摘要: 1. Artifacts Management
 标签: Artifacts / HITL / OpenAPI / VisualBuilder
-亮点: 2026-03-22T18:17:20.537+0800	INFO	artifacts/manager.go:155	creating artifact	{"component": "artifact_manager", "id": "art_1774174640537973000", "name": "test.txt", "type": "file"}
-亮点: 2026-03-22T18:17:20.550+0800	INFO	artifacts/manager.go:175	artifact created	{"component": "artifact_manager", "id": "art_1774174640537973000", "size": 36}
-亮点: Created artifact: art_1774174640537973000 (size: 36 bytes)
-亮点: Loaded artifact: art_1774174640537973000
+亮点: 2026-03-22T19:26:03.763+0800	INFO	artifacts/manager.go:155	creating artifact	{"component": "artifact_manager", "id": "art_1774178763763786200", "name": "test.txt", "type": "file"}
+亮点: 2026-03-22T19:26:03.776+0800	INFO	artifacts/manager.go:175	artifact created	{"component": "artifact_manager", "id": "art_1774178763763786200", "size": 36}
+亮点: Created artifact: art_1774178763763786200 (size: 36 bytes)
+亮点: Loaded artifact: art_1774178763763786200
 原始输出:
 === AgentFlow High Priority Features Demo ===
 1. Artifacts Management
-2026-03-22T18:17:20.537+0800	INFO	artifacts/manager.go:155	creating artifact	{"component": "artifact_manager", "id": "art_1774174640537973000", "name": "test.txt", "type": "file"}
-2026-03-22T18:17:20.550+0800	INFO	artifacts/manager.go:175	artifact created	{"component": "artifact_manager", "id": "art_1774174640537973000", "size": 36}
-   Created artifact: art_1774174640537973000 (size: 36 bytes)
-   Loaded artifact: art_1774174640537973000
+2026-03-22T19:26:03.763+0800	INFO	artifacts/manager.go:155	creating artifact	{"component": "artifact_manager", "id": "art_1774178763763786200", "name": "test.txt", "type": "file"}
+2026-03-22T19:26:03.776+0800	INFO	artifacts/manager.go:175	artifact created	{"component": "artifact_manager", "id": "art_1774178763763786200", "size": 36}
+   Created artifact: art_1774178763763786200 (size: 36 bytes)
+   Loaded artifact: art_1774178763763786200
    Metadata name: test.txt
-2026-03-22T18:17:20.550+0800	INFO	artifacts/manager.go:222	archiving artifact	{"component": "artifact_manager", "id": "art_1774174640537973000"}
-2026-03-22T18:17:20.550+0800	INFO	artifacts/manager.go:155	creating artifact	{"component": "artifact_manager", "id": "art_1774174640550802600", "name": "test.txt", "type": "file"}
-2026-03-22T18:17:20.552+0800	INFO	artifacts/manager.go:175	artifact created	{"component": "artifact_manager", "id": "art_1774174640550802600", "size": 10}
-   Created artifact version: art_1774174640550802600 (parent=art_1774174640537973000)
-2026-03-22T18:17:20.552+0800	INFO	artifacts/manager.go:202	deleting artifact	{"component": "artifact_manager", "id": "art_1774174640550802600"}
+2026-03-22T19:26:03.776+0800	INFO	artifacts/manager.go:222	archiving artifact	{"component": "artifact_manager", "id": "art_1774178763763786200"}
+2026-03-22T19:26:03.777+0800	INFO	artifacts/manager.go:155	creating artifact	{"component": "artifact_manager", "id": "art_1774178763777136500", "name": "test.txt", "type": "file"}
+2026-03-22T19:26:03.778+0800	INFO	artifacts/manager.go:175	artifact created	{"component": "artifact_manager", "id": "art_1774178763777136500", "size": 10}
+   Created artifact version: art_1774178763777136500 (parent=art_1774178763763786200)
+2026-03-22T19:26:03.778+0800	INFO	artifacts/manager.go:202	deleting artifact	{"component": "artifact_manager", "id": "art_1774178763777136500"}
    Found 1 artifacts with 'demo' tag
-2026-03-22T18:17:20.553+0800	INFO	artifacts/manager.go:248	starting artifact cleanup	{"component": "artifact_manager"}
-2026-03-22T18:17:20.553+0800	INFO	artifacts/manager.go:271	artifact cleanup completed	{"component": "artifact_manager", "deleted": 0}
+2026-03-22T19:26:03.778+0800	INFO	artifacts/manager.go:248	starting artifact cleanup	{"component": "artifact_manager"}
+2026-03-22T19:26:03.778+0800	INFO	artifacts/manager.go:271	artifact cleanup completed	{"component": "artifact_manager", "deleted": 0}
    Cleanup deleted: 0 (err=<nil>)
-2026-03-22T18:17:20.553+0800	INFO	artifacts/manager.go:202	deleting artifact	{"component": "artifact_manager", "id": "art_1774174640537973000"}
+2026-03-22T19:26:03.778+0800	INFO	artifacts/manager.go:202	deleting artifact	{"component": "artifact_manager", "id": "art_1774178763763786200"}
 
 2. Human-in-the-Loop Interrupts
-2026-03-22T18:17:20.554+0800	INFO	hitl/interrupt.go:148	creating interrupt	{"component": "interrupt_manager", "id": "int_b2606b13-9246-4ebe-b742-5fcc7ab350fe", "workflow_id": "wf_demo", "type": "approval"}
-2026-03-22T18:17:20.654+0800	INFO	hitl/interrupt.go:206	resolving interrupt	{"component": "interrupt_manager", "id": "int_b2606b13-9246-4ebe-b742-5fcc7ab350fe", "approved": true}
+2026-03-22T19:26:03.779+0800	INFO	hitl/interrupt.go:148	creating interrupt	{"component": "interrupt_manager", "id": "int_b36a3854-a08c-42ca-8b19-afcc700ffb6b", "workflow_id": "wf_demo", "type": "approval"}
+2026-03-22T19:26:03.880+0800	INFO	hitl/interrupt.go:206	resolving interrupt	{"component": "interrupt_manager", "id": "int_b36a3854-a08c-42ca-8b19-afcc700ffb6b", "approved": true}
    Interrupt resolved: approved=true, comment=Auto-approved for demo
 
 3. OpenAPI Tool Generation
-2026-03-22T18:17:20.654+0800	INFO	openapi/generator.go:239	generated tools	{"component": "openapi_generator", "count": 1}
+2026-03-22T19:26:03.880+0800	INFO	openapi/generator.go:239	generated tools	{"component": "openapi_generator", "count": 1}
    Generated 1 tools from OpenAPI spec
    - listUsers: List all users
 
 4. Cloud Deployment
-2026-03-22T18:17:20.654+0800	INFO	deployment/deployer.go:177	deploying agent	{"component": "deployer", "id": "dep_27f5e9e8c9fbd6e3f5b08b16b6423132", "agent_id": "agent_001", "target": "local"}
-2026-03-22T18:17:20.654+0800	INFO	deployment/deployer.go:200	deployment successful	{"component": "deployer", "id": "dep_27f5e9e8c9fbd6e3f5b08b16b6423132", "endpoint": "http://127.0.0.1:18080"}
-2026-03-22T18:17:20.654+0800	INFO	deployment/deployer.go:275	scaling deployment	{"component": "deployer", "id": "dep_27f5e9e8c9fbd6e3f5b08b16b6423132", "from": 2, "to": 3}
-2026-03-22T18:17:20.654+0800	INFO	deployment/deployer.go:256	deployment deleted	{"component": "deployer", "id": "dep_27f5e9e8c9fbd6e3f5b08b16b6423132"}
-2026-03-22T18:17:20.670+0800	INFO	deployment/local_provider.go:109	local process started	{"provider": "local", "id": "local_dep_demo", "port": 36477, "pid": 24948}
-2026-03-22T18:17:20.670+0800	WARN	deployment/local_provider.go:219	scale not supported for local provider	{"provider": "local", "id": "local_dep_demo", "replicas": 2}
+2026-03-22T19:26:03.880+0800	INFO	deployment/deployer.go:177	deploying agent	{"component": "deployer", "id": "dep_0553dd83517772c7e9b419e8bafefa22", "agent_id": "agent_001", "target": "local"}
+2026-03-22T19:26:03.880+0800	INFO	deployment/deployer.go:200	deployment successful	{"component": "deployer", "id": "dep_0553dd83517772c7e9b419e8bafefa22", "endpoint": "http://127.0.0.1:18080"}
+2026-03-22T19:26:03.880+0800	INFO	deployment/deployer.go:275	scaling deployment	{"component": "deployer", "id": "dep_0553dd83517772c7e9b419e8bafefa22", "from": 2, "to": 3}
+2026-03-22T19:26:03.880+0800	INFO	deployment/deployer.go:256	deployment deleted	{"component": "deployer", "id": "dep_0553dd83517772c7e9b419e8bafefa22"}
+2026-03-22T19:26:03.903+0800	INFO	deployment/local_provider.go:109	local process started	{"provider": "local", "id": "local_dep_demo", "port": 41229, "pid": 25256}
+2026-03-22T19:26:03.903+0800	WARN	deployment/local_provider.go:219	scale not supported for local provider	{"provider": "local", "id": "local_dep_demo", "replicas": 2}
 github.com/BaSui01/agentflow/agent/deployment.(*LocalProvider).Scale
 	D:/code/agentflow/agent/deployment/local_provider.go:219
 main.demoDeployment
@@ -1285,13 +1434,13 @@ main.main
 	D:/code/agentflow/examples/17_high_priority_features/main.go:41
 runtime.main
 	C:/Program Files/Go/src/runtime/proc.go:290
-2026-03-22T18:17:20.673+0800	INFO	deployment/local_provider.go:186	local process stopped	{"provider": "local", "id": "local_dep_demo"}
-2026-03-22T18:17:20.678+0800	INFO	deployment/local_provider.go:109	local process started	{"provider": "local", "id": "local_dep_demo", "port": 36478, "pid": 18016}
-2026-03-22T18:17:20.679+0800	INFO	deployment/local_provider.go:186	local process stopped	{"provider": "local", "id": "local_dep_demo"}
-2026-03-22T18:17:21.684+0800	INFO	deployment/docker_provider.go:64	docker container started	{"provider": "docker", "id": "docker_dep_demo", "container": "agentflow-docker_dep_demo"}
-2026-03-22T18:17:21.863+0800	INFO	deployment/docker_provider.go:92	docker container removed	{"provider": "docker", "container": "agentflow-docker_dep_demo"}
-2026-03-22T18:17:22.821+0800	INFO	deployment/docker_provider.go:64	docker container started	{"provider": "docker", "id": "docker_dep_demo", "container": "agentflow-docker_dep_demo"}
-2026-03-22T18:17:23.141+0800	INFO	deployment/docker_provider.go:92	docker container removed	{"provider": "docker", "container": "agentflow-docker_dep_demo"}
+2026-03-22T19:26:03.904+0800	INFO	deployment/local_provider.go:186	local process stopped	{"provider": "local", "id": "local_dep_demo"}
+2026-03-22T19:26:03.910+0800	INFO	deployment/local_provider.go:109	local process started	{"provider": "local", "id": "local_dep_demo", "port": 41230, "pid": 7688}
+2026-03-22T19:26:03.911+0800	INFO	deployment/local_provider.go:186	local process stopped	{"provider": "local", "id": "local_dep_demo"}
+2026-03-22T19:26:05.043+0800	INFO	deployment/docker_provider.go:64	docker container started	{"provider": "docker", "id": "docker_dep_demo", "container": "agentflow-docker_dep_demo"}
+2026-03-22T19:26:05.258+0800	INFO	deployment/docker_provider.go:92	docker container removed	{"provider": "docker", "container": "agentflow-docker_dep_demo"}
+2026-03-22T19:26:06.460+0800	INFO	deployment/docker_provider.go:64	docker container started	{"provider": "docker", "id": "docker_dep_demo", "container": "agentflow-docker_dep_demo"}
+2026-03-22T19:26:06.900+0800	INFO	deployment/docker_provider.go:92	docker container removed	{"provider": "docker", "container": "agentflow-docker_dep_demo"}
    K8s Deployment Manifest:
    {
   "apiVersion": "apps/v1",
@@ -1345,91 +1494,62 @@ runtime.main
    Deployment Summary:
    {
      "callbacks": 3,
-     "id": "dep_27f5e9e8c9fbd6e3f5b08b16b6423132",
+     "id": "dep_0553dd83517772c7e9b419e8bafefa22",
      "mock_calls": 4,
      "status": "running"
    }
 
 4.5 Kubernetes Operator
-2026-03-22T18:17:23.141+0800	INFO	k8s/operator.go:312	starting agent operator	{"namespace": "demo", "reconcileInterval": "20ms"}
-2026-03-22T18:17:23.141+0800	INFO	k8s/operator.go:356	agent registered	{"key": "demo/demo-agent"}
-2026-03-22T18:17:23.141+0800	DEBUG	k8s/operator.go:441	reconciling agent	{"name": "demo-agent", "namespace": "demo"}
-2026-03-22T18:17:23.141+0800	INFO	k8s/operator.go:570	scaling up agent	{"name": "demo-agent", "from": 0, "to": 1}
-2026-03-22T18:17:23.141+0800	DEBUG	k8s/operator.go:614	instance created	{"id": "demo-demo-agent-1774174643141079600"}
-2026-03-22T18:17:23.141+0800	DEBUG	k8s/operator.go:488	reconcile completed	{"name": "demo-agent", "duration": "0s"}
-2026-03-22T18:17:23.161+0800	DEBUG	k8s/operator.go:441	reconciling agent	{"name": "demo-agent", "namespace": "demo"}
-2026-03-22T18:17:23.161+0800	DEBUG	k8s/operator.go:488	reconcile completed	{"name": "demo-agent", "duration": "0s"}
-2026-03-22T18:17:23.181+0800	DEBUG	k8s/operator.go:441	reconciling agent	{"name": "demo-agent", "namespace": "demo"}
-2026-03-22T18:17:23.181+0800	DEBUG	k8s/operator.go:488	reconcile completed	{"name": "demo-agent", "duration": "0s"}
-2026-03-22T18:17:23.201+0800	DEBUG	k8s/operator.go:441	reconciling agent	{"name": "demo-agent", "namespace": "demo"}
-2026-03-22T18:17:23.201+0800	DEBUG	k8s/operator.go:488	reconcile completed	{"name": "demo-agent", "duration": "0s"}
-2026-03-22T18:17:23.221+0800	DEBUG	k8s/operator.go:441	reconciling agent	{"name": "demo-agent", "namespace": "demo"}
-2026-03-22T18:17:23.221+0800	DEBUG	k8s/operator.go:488	reconcile completed	{"name": "demo-agent", "duration": "0s"}
-2026-03-22T18:17:23.221+0800	INFO	k8s/operator.go:356	agent registered	{"key": "demo/demo-agent"}
-2026-03-22T18:17:23.221+0800	DEBUG	k8s/operator.go:441	reconciling agent	{"name": "demo-agent", "namespace": "demo"}
-2026-03-22T18:17:23.221+0800	DEBUG	k8s/operator.go:488	reconcile completed	{"name": "demo-agent", "duration": "0s"}
-2026-03-22T18:17:23.221+0800	DEBUG	k8s/instance_provider.go:56	instance created	{"id": "demo-demo-agent-b39d5cb86a2f7ec0"}
-2026-03-22T18:17:23.221+0800	DEBUG	k8s/instance_provider.go:69	instance deleted	{"id": "demo-demo-agent-b39d5cb86a2f7ec0"}
-2026-03-22T18:17:23.221+0800	INFO	k8s/operator.go:385	agent unregistered	{"key": "demo/demo-agent"}
+2026-03-22T19:26:06.900+0800	INFO	k8s/operator.go:312	starting agent operator	{"namespace": "demo", "reconcileInterval": "20ms"}
+2026-03-22T19:26:06.900+0800	INFO	k8s/operator.go:356	agent registered	{"key": "demo/demo-agent"}
+2026-03-22T19:26:06.900+0800	DEBUG	k8s/operator.go:441	reconciling agent	{"name": "demo-agent", "namespace": "demo"}
+2026-03-22T19:26:06.900+0800	INFO	k8s/operator.go:570	scaling up agent	{"name": "demo-agent", "from": 0, "to": 1}
+2026-03-22T19:26:06.901+0800	DEBUG	k8s/operator.go:614	instance created	{"id": "demo-demo-agent-1774178766901098500"}
+2026-03-22T19:26:06.901+0800	DEBUG	k8s/operator.go:488	reconcile completed	{"name": "demo-agent", "duration": "520.6µs"}
+2026-03-22T19:26:06.921+0800	DEBUG	k8s/operator.go:441	reconciling agent	{"name": "demo-agent", "namespace": "demo"}
+2026-03-22T19:26:06.921+0800	DEBUG	k8s/operator.go:488	reconcile completed	{"name": "demo-agent", "duration": "0s"}
+2026-03-22T19:26:06.941+0800	DEBUG	k8s/operator.go:441	reconciling agent	{"name": "demo-agent", "namespace": "demo"}
+2026-03-22T19:26:06.941+0800	DEBUG	k8s/operator.go:488	reconcile completed	{"name": "demo-agent", "duration": "0s"}
+2026-03-22T19:26:06.960+0800	DEBUG	k8s/operator.go:441	reconciling agent	{"name": "demo-agent", "namespace": "demo"}
+2026-03-22T19:26:06.960+0800	DEBUG	k8s/operator.go:488	reconcile completed	{"name": "demo-agent", "duration": "0s"}
+2026-03-22T19:26:06.980+0800	DEBUG	k8s/operator.go:441	reconciling agent	{"name": "demo-agent", "namespace": "demo"}
+2026-03-22T19:26:06.980+0800	DEBUG	k8s/operator.go:488	reconcile completed	{"name": "demo-agent", "duration": "0s"}
+2026-03-22T19:26:06.980+0800	INFO	k8s/operator.go:356	agent registered	{"key": "demo/demo-agent"}
+2026-03-22T19:26:06.980+0800	DEBUG	k8s/instance_provider.go:56	instance created	{"id": "demo-demo-agent-4e5d28b74f94b9aa"}
+2026-03-22T19:26:06.980+0800	DEBUG	k8s/operator.go:441	reconciling agent	{"name": "demo-agent", "namespace": "demo"}
+2026-03-22T19:26:06.980+0800	DEBUG	k8s/instance_provider.go:69	instance deleted	{"id": "demo-demo-agent-4e5d28b74f94b9aa"}
+2026-03-22T19:26:06.980+0800	DEBUG	k8s/operator.go:488	reconcile completed	{"name": "demo-agent", "duration": "0s"}
+2026-03-22T19:26:06.980+0800	INFO	k8s/operator.go:385	agent unregistered	{"key": "demo/demo-agent"}
    K8s operator paths wired
 
-2026-03-22T18:17:23.221+0800	INFO	k8s/operator.go:339	agent operator stopped
+2026-03-22T19:26:06.980+0800	INFO	k8s/operator.go:339	agent operator stopped
 5. Enhanced Checkpoints with Time-Travel
    Created 3 checkpoint versions
    Diff v1->v3: changed=[node_1]
-2026-03-22T18:17:23.221+0800	INFO	workflow/checkpoint_enhanced.go:129	checkpoint created	{"component": "checkpoint_manager", "id": "wfckpt_1774174643221658500", "thread_id": "thread_demo_rt", "version": 1}
-2026-03-22T18:17:23.221+0800	INFO	workflow/checkpoint_enhanced.go:181	resumed from checkpoint	{"component": "checkpoint_manager", "checkpoint_id": "wfckpt_1774174643221658500", "version": 1, "completed_nodes": 0}
-2026-03-22T18:17:23.221+0800	INFO	workflow/checkpoint_enhanced.go:217	rolled back to version	{"component": "checkpoint_manager", "thread_id": "thread_demo_rt", "version": 1}
-   Runtime checkpoint: id=wfckpt_1774174643221658500 resumed_start=false rollback_version=2
+2026-03-22T19:26:06.981+0800	INFO	workflow/checkpoint_enhanced.go:129	checkpoint created	{"component": "checkpoint_manager", "id": "wfckpt_1774178766981275700", "thread_id": "thread_demo_rt", "version": 1}
+2026-03-22T19:26:06.981+0800	INFO	workflow/checkpoint_enhanced.go:181	resumed from checkpoint	{"component": "checkpoint_manager", "checkpoint_id": "wfckpt_1774178766981275700", "version": 1, "completed_nodes": 0}
+2026-03-22T19:26:06.981+0800	INFO	workflow/checkpoint_enhanced.go:217	rolled back to version	{"component": "checkpoint_manager", "thread_id": "thread_demo_rt", "version": 1}
+   Runtime checkpoint: id=wfckpt_1774178766981275700 resumed_start=false rollback_version=2
 
 6. Visual Workflow Builder
    Built DAG workflow: Demo Workflow (imported=Demo Workflow)
    Nodes: 4, Entry: start
-2026-03-22T18:17:23.221+0800	INFO	workflow/dag_executor.go:109	starting DAG execution	{"component": "dag_executor", "trace_id": "", "workflow_id": "exec_1774174643221658500_1", "execution_id": "exec_1774174643221658500_1", "entry_node": "start"}
-2026-03-22T18:17:23.221+0800	DEBUG	workflow/dag_executor.go:200	executing node	{"component": "dag_executor", "trace_id": "", "workflow_id": "exec_1774174643221658500_1", "node_id": "start", "node_type": "action"}
-2026-03-22T18:17:23.221+0800	DEBUG	workflow/dag_executor.go:426	executing action step	{"component": "dag_executor", "node_id": "start"}
-2026-03-22T18:17:23.221+0800	DEBUG	workflow/dag_executor.go:200	executing node	{"component": "dag_executor", "trace_id": "", "workflow_id": "exec_1774174643221658500_1", "node_id": "llm", "node_type": "action"}
-2026-03-22T18:17:23.221+0800	DEBUG	workflow/dag_executor.go:426	executing action step	{"component": "dag_executor", "node_id": "llm"}
-2026-03-22T18:17:23.221+0800	ERROR	workflow/dag_executor.go:316	node execution failed	{"component": "dag_executor", "trace_id": "", "workflow_id": "exec_1774174643221658500_1", "node_id": "llm", "node_type": "action", "duration": "0s", "error": "step llm (llm): step dependency not configured"}
-github.com/BaSui01/agentflow/workflow.(*DAGExecutor).handleNodeError
-	D:/code/agentflow/workflow/dag_executor.go:316
-github.com/BaSui01/agentflow/workflow.(*DAGExecutor).executeNode
-	D:/code/agentflow/workflow/dag_executor.go:260
-github.com/BaSui01/agentflow/workflow.(*DAGExecutor).executeActionNode
-	D:/code/agentflow/workflow/dag_executor.go:440
-github.com/BaSui01/agentflow/workflow.(*DAGExecutor).executeNode
-	D:/code/agentflow/workflow/dag_executor.go:241
-github.com/BaSui01/agentflow/workflow.(*DAGExecutor).Execute
-	D:/code/agentflow/workflow/dag_executor.go:139
-main.demoVisualBuilder
-	D:/code/agentflow/examples/17_high_priority_features/main.go:526
-main.main
-	D:/code/agentflow/examples/17_high_priority_features/main.go:50
-runtime.main
-	C:/Program Files/Go/src/runtime/proc.go:290
-2026-03-22T18:17:23.221+0800	ERROR	workflow/dag_executor.go:316	node execution failed	{"component": "dag_executor", "trace_id": "", "workflow_id": "exec_1774174643221658500_1", "node_id": "start", "node_type": "action", "duration": "0s", "error": "node llm failed: step llm (llm): step dependency not configured"}
-github.com/BaSui01/agentflow/workflow.(*DAGExecutor).handleNodeError
-	D:/code/agentflow/workflow/dag_executor.go:316
-github.com/BaSui01/agentflow/workflow.(*DAGExecutor).executeNode
-	D:/code/agentflow/workflow/dag_executor.go:260
-github.com/BaSui01/agentflow/workflow.(*DAGExecutor).Execute
-	D:/code/agentflow/workflow/dag_executor.go:139
-main.demoVisualBuilder
-	D:/code/agentflow/examples/17_high_priority_features/main.go:526
-main.main
-	D:/code/agentflow/examples/17_high_priority_features/main.go:50
-runtime.main
-	C:/Program Files/Go/src/runtime/proc.go:290
-2026-03-22T18:17:23.221+0800	ERROR	workflow/dag_executor.go:146	DAG execution failed	{"component": "dag_executor", "trace_id": "", "workflow_id": "exec_1774174643221658500_1", "execution_id": "exec_1774174643221658500_1", "error": "node start failed: node llm failed: step llm (llm): step dependency not configured"}
-github.com/BaSui01/agentflow/workflow.(*DAGExecutor).Execute
-	D:/code/agentflow/workflow/dag_executor.go:146
-main.demoVisualBuilder
-	D:/code/agentflow/examples/17_high_priority_features/main.go:526
-main.main
-	D:/code/agentflow/examples/17_high_priority_features/main.go:50
-runtime.main
-	C:/Program Files/Go/src/runtime/proc.go:290
-   Execute result type: <nil>, err: node start failed: node llm failed: step llm (llm): step dependency not configured
+2026-03-22T19:26:06.981+0800	INFO	workflow/dag_executor.go:109	starting DAG execution	{"component": "dag_executor", "trace_id": "", "workflow_id": "exec_1774178766981275700_1", "execution_id": "exec_1774178766981275700_1", "entry_node": "start"}
+2026-03-22T19:26:06.981+0800	DEBUG	workflow/dag_executor.go:200	executing node	{"component": "dag_executor", "trace_id": "", "workflow_id": "exec_1774178766981275700_1", "node_id": "start", "node_type": "action"}
+2026-03-22T19:26:06.981+0800	DEBUG	workflow/dag_executor.go:426	executing action step	{"component": "dag_executor", "node_id": "start"}
+2026-03-22T19:26:06.981+0800	DEBUG	workflow/dag_executor.go:200	executing node	{"component": "dag_executor", "trace_id": "", "workflow_id": "exec_1774178766981275700_1", "node_id": "draft", "node_type": "action"}
+2026-03-22T19:26:06.981+0800	DEBUG	workflow/dag_executor.go:426	executing action step	{"component": "dag_executor", "node_id": "draft"}
+2026-03-22T19:26:06.981+0800	DEBUG	workflow/dag_executor.go:200	executing node	{"component": "dag_executor", "trace_id": "", "workflow_id": "exec_1774178766981275700_1", "node_id": "code", "node_type": "action"}
+2026-03-22T19:26:06.981+0800	DEBUG	workflow/dag_executor.go:426	executing action step	{"component": "dag_executor", "node_id": "code"}
+2026-03-22T19:26:06.981+0800	DEBUG	workflow/dag_executor.go:200	executing node	{"component": "dag_executor", "trace_id": "", "workflow_id": "exec_1774178766981275700_1", "node_id": "end", "node_type": "action"}
+2026-03-22T19:26:06.981+0800	DEBUG	workflow/dag_executor.go:426	executing action step	{"component": "dag_executor", "node_id": "end"}
+2026-03-22T19:26:06.981+0800	DEBUG	workflow/dag_executor.go:303	node execution completed	{"component": "dag_executor", "node_id": "end", "duration": "0s"}
+2026-03-22T19:26:06.981+0800	DEBUG	workflow/dag_executor.go:303	node execution completed	{"component": "dag_executor", "node_id": "code", "duration": "0s"}
+2026-03-22T19:26:06.981+0800	DEBUG	workflow/dag_executor.go:303	node execution completed	{"component": "dag_executor", "node_id": "draft", "duration": "0s"}
+2026-03-22T19:26:06.981+0800	DEBUG	workflow/dag_executor.go:303	node execution completed	{"component": "dag_executor", "node_id": "start", "duration": "0s"}
+2026-03-22T19:26:06.981+0800	INFO	workflow/dag_executor.go:155	DAG execution completed	{"component": "dag_executor", "trace_id": "", "workflow_id": "exec_1774178766981275700_1", "execution_id": "exec_1774178766981275700_1", "nodes_executed": 4}
+   Execute result type: map[string]interface {}, err: <nil>
+   Execute result: map[string]interface {}{"input":map[string]interface {}{"message":"demo"}, "source":"visual-builder", "stage":"draft", "summary":"local draft for: demo"}
 7. DSL Parser + Workflow Observability Context
    Result type: map[string]interface {}, err: <nil>, stream_events=6, node_events=6
 
@@ -1438,265 +1558,271 @@ runtime.main
 === Agent 增强 / 高级 Agent 总成 ===
 路径: examples/18_advanced_agent_features
 命令: go run ./examples/18_advanced_agent_features
-状态: WARN
-耗时: 5.031s
-摘要: setup canary db error: Binary was compiled with 'CGO_ENABLED=0', go-sqlite3 requires cgo to work. This is a stub
+状态: PASS
+耗时: 3.387s
+摘要: 1. Federated Orchestration
 标签: Federation / Deliberation / LongRunning / Skills
-亮点: 2026-03-22T18:17:25.693+0800	INFO	federation/orchestrator.go:376	federation orchestrator started	{"component": "federation"}
-亮点: 2026-03-22T18:17:25.703+0800	INFO	federation/orchestrator.go:156	node registered	{"component": "federation", "node_id": "node-1"}
-亮点: 2026-03-22T18:17:25.703+0800	INFO	federation/orchestrator.go:156	node registered	{"component": "federation", "node_id": "node-2"}
-亮点: 2026-03-22T18:17:25.703+0800	INFO	federation/orchestrator.go:156	node registered	{"component": "federation", "node_id": "node-3"}
+亮点: 2026-03-22T19:26:07.799+0800	INFO	federation/orchestrator.go:376	federation orchestrator started	{"component": "federation"}
+亮点: 2026-03-22T19:26:07.810+0800	INFO	federation/orchestrator.go:156	node registered	{"component": "federation", "node_id": "node-1"}
+亮点: 2026-03-22T19:26:07.810+0800	INFO	federation/orchestrator.go:156	node registered	{"component": "federation", "node_id": "node-2"}
+亮点: 2026-03-22T19:26:07.810+0800	INFO	federation/orchestrator.go:156	node registered	{"component": "federation", "node_id": "node-3"}
 原始输出:
 === Advanced Agent Features Demo ===
 1. Federated Orchestration
 --------------------------
-2026-03-22T18:17:25.693+0800	INFO	federation/orchestrator.go:376	federation orchestrator started	{"component": "federation"}
-2026-03-22T18:17:25.703+0800	INFO	federation/orchestrator.go:156	node registered	{"component": "federation", "node_id": "node-1"}
-2026-03-22T18:17:25.703+0800	INFO	federation/orchestrator.go:156	node registered	{"component": "federation", "node_id": "node-2"}
-2026-03-22T18:17:25.703+0800	INFO	federation/orchestrator.go:156	node registered	{"component": "federation", "node_id": "node-3"}
+2026-03-22T19:26:07.799+0800	INFO	federation/orchestrator.go:376	federation orchestrator started	{"component": "federation"}
+2026-03-22T19:26:07.810+0800	INFO	federation/orchestrator.go:156	node registered	{"component": "federation", "node_id": "node-1"}
+2026-03-22T19:26:07.810+0800	INFO	federation/orchestrator.go:156	node registered	{"component": "federation", "node_id": "node-2"}
+2026-03-22T19:26:07.810+0800	INFO	federation/orchestrator.go:156	node registered	{"component": "federation", "node_id": "node-3"}
    Registered nodes: 3
    - Primary Node: [compute]
    - Worker Node: [compute storage]
    - Analytics Node: [analytics ml]
-2026-03-22T18:17:25.703+0800	INFO	federation/orchestrator.go:170	node unregistered	{"component": "federation", "node_id": "node-3"}
-2026-03-22T18:17:25.703+0800	INFO	discovery/registry.go:915	health checker started	{"component": "health_checker"}
-2026-03-22T18:17:25.703+0800	INFO	discovery/registry.go:162	capability registry started	{"component": "capability_registry"}
-2026-03-22T18:17:25.703+0800	INFO	discovery/protocol.go:154	discovery protocol started	{"component": "discovery_protocol", "http": false, "multicast": false}
-2026-03-22T18:17:25.703+0800	INFO	discovery/service.go:135	discovery service started	{"component": "discovery_service"}
-2026-03-22T18:17:25.703+0800	INFO	discovery/registry.go:225	agent registered	{"component": "capability_registry", "agent_id": "Primary Node", "capabilities": 1}
-2026-03-22T18:17:25.703+0800	INFO	discovery/registry.go:325	agent updated	{"component": "capability_registry", "agent_id": "Primary Node"}
-2026-03-22T18:17:25.703+0800	DEBUG	discovery/protocol.go:230	agent announced	{"component": "discovery_protocol", "agent_id": "Primary Node"}
-2026-03-22T18:17:25.703+0800	INFO	federation/discovery_bridge.go:95	synced node to discovery	{"component": "discovery_bridge", "node_id": "node-1", "node_name": "Primary Node"}
-2026-03-22T18:17:25.703+0800	INFO	discovery/registry.go:225	agent registered	{"component": "capability_registry", "agent_id": "Worker Node", "capabilities": 2}
-2026-03-22T18:17:25.703+0800	INFO	discovery/registry.go:325	agent updated	{"component": "capability_registry", "agent_id": "Worker Node"}
-2026-03-22T18:17:25.703+0800	DEBUG	discovery/protocol.go:230	agent announced	{"component": "discovery_protocol", "agent_id": "Worker Node"}
-2026-03-22T18:17:25.703+0800	INFO	federation/discovery_bridge.go:95	synced node to discovery	{"component": "discovery_bridge", "node_id": "node-2", "node_name": "Worker Node"}
-2026-03-22T18:17:25.703+0800	WARN	federation/discovery_bridge.go:108	failed to sync node	{"component": "discovery_bridge", "node_id": "node-1", "error": "failed to sync node node-1 to discovery: agent Primary Node already registered"}
+2026-03-22T19:26:07.810+0800	INFO	federation/orchestrator.go:170	node unregistered	{"component": "federation", "node_id": "node-3"}
+2026-03-22T19:26:07.811+0800	INFO	discovery/registry.go:915	health checker started	{"component": "health_checker"}
+2026-03-22T19:26:07.811+0800	INFO	discovery/registry.go:162	capability registry started	{"component": "capability_registry"}
+2026-03-22T19:26:07.811+0800	INFO	discovery/protocol.go:154	discovery protocol started	{"component": "discovery_protocol", "http": false, "multicast": false}
+2026-03-22T19:26:07.811+0800	INFO	discovery/service.go:135	discovery service started	{"component": "discovery_service"}
+2026-03-22T19:26:07.811+0800	INFO	discovery/registry.go:225	agent registered	{"component": "capability_registry", "agent_id": "Primary Node", "capabilities": 1}
+2026-03-22T19:26:07.811+0800	INFO	discovery/registry.go:325	agent updated	{"component": "capability_registry", "agent_id": "Primary Node"}
+2026-03-22T19:26:07.811+0800	DEBUG	discovery/protocol.go:230	agent announced	{"component": "discovery_protocol", "agent_id": "Primary Node"}
+2026-03-22T19:26:07.811+0800	INFO	federation/discovery_bridge.go:95	synced node to discovery	{"component": "discovery_bridge", "node_id": "node-1", "node_name": "Primary Node"}
+2026-03-22T19:26:07.811+0800	INFO	discovery/registry.go:225	agent registered	{"component": "capability_registry", "agent_id": "Worker Node", "capabilities": 2}
+2026-03-22T19:26:07.811+0800	INFO	discovery/registry.go:325	agent updated	{"component": "capability_registry", "agent_id": "Worker Node"}
+2026-03-22T19:26:07.811+0800	DEBUG	discovery/protocol.go:230	agent announced	{"component": "discovery_protocol", "agent_id": "Worker Node"}
+2026-03-22T19:26:07.811+0800	INFO	federation/discovery_bridge.go:95	synced node to discovery	{"component": "discovery_bridge", "node_id": "node-2", "node_name": "Worker Node"}
+2026-03-22T19:26:07.811+0800	WARN	federation/discovery_bridge.go:108	failed to sync node	{"component": "discovery_bridge", "node_id": "node-1", "error": "failed to sync node node-1 to discovery: agent Primary Node already registered"}
 github.com/BaSui01/agentflow/agent/federation.(*DiscoveryBridge).SyncAllNodes
 	D:/code/agentflow/agent/federation/discovery_bridge.go:108
 github.com/BaSui01/agentflow/agent/federation.(*DiscoveryBridge).Start
 	D:/code/agentflow/agent/federation/discovery_bridge.go:158
 main.demoFederation
-	D:/code/agentflow/examples/18_advanced_agent_features/main.go:486
+	D:/code/agentflow/examples/18_advanced_agent_features/main.go:431
 main.main
-	D:/code/agentflow/examples/18_advanced_agent_features/main.go:51
+	D:/code/agentflow/examples/18_advanced_agent_features/main.go:49
 runtime.main
 	C:/Program Files/Go/src/runtime/proc.go:290
-2026-03-22T18:17:25.703+0800	WARN	federation/discovery_bridge.go:108	failed to sync node	{"component": "discovery_bridge", "node_id": "node-2", "error": "failed to sync node node-2 to discovery: agent Worker Node already registered"}
+2026-03-22T19:26:07.811+0800	WARN	federation/discovery_bridge.go:108	failed to sync node	{"component": "discovery_bridge", "node_id": "node-2", "error": "failed to sync node node-2 to discovery: agent Worker Node already registered"}
 github.com/BaSui01/agentflow/agent/federation.(*DiscoveryBridge).SyncAllNodes
 	D:/code/agentflow/agent/federation/discovery_bridge.go:108
 github.com/BaSui01/agentflow/agent/federation.(*DiscoveryBridge).Start
 	D:/code/agentflow/agent/federation/discovery_bridge.go:158
 main.demoFederation
-	D:/code/agentflow/examples/18_advanced_agent_features/main.go:486
+	D:/code/agentflow/examples/18_advanced_agent_features/main.go:431
 main.main
-	D:/code/agentflow/examples/18_advanced_agent_features/main.go:51
+	D:/code/agentflow/examples/18_advanced_agent_features/main.go:49
 runtime.main
 	C:/Program Files/Go/src/runtime/proc.go:290
-2026-03-22T18:17:25.703+0800	WARN	federation/discovery_bridge.go:159	initial sync had errors	{"component": "discovery_bridge", "error": "failed to sync node node-1 to discovery: agent Primary Node already registered"}
+2026-03-22T19:26:07.811+0800	WARN	federation/discovery_bridge.go:159	initial sync had errors	{"component": "discovery_bridge", "error": "failed to sync node node-1 to discovery: agent Primary Node already registered"}
 github.com/BaSui01/agentflow/agent/federation.(*DiscoveryBridge).Start
 	D:/code/agentflow/agent/federation/discovery_bridge.go:159
 main.demoFederation
-	D:/code/agentflow/examples/18_advanced_agent_features/main.go:486
+	D:/code/agentflow/examples/18_advanced_agent_features/main.go:431
 main.main
-	D:/code/agentflow/examples/18_advanced_agent_features/main.go:51
+	D:/code/agentflow/examples/18_advanced_agent_features/main.go:49
 runtime.main
 	C:/Program Files/Go/src/runtime/proc.go:290
-2026-03-22T18:17:25.703+0800	INFO	federation/discovery_bridge.go:164	discovery bridge started	{"component": "discovery_bridge", "sync_interval": "1m0s", "auto_sync": true}
-2026-03-22T18:17:25.734+0800	INFO	federation/discovery_bridge.go:174	discovery bridge stopped	{"component": "discovery_bridge"}
+2026-03-22T19:26:07.811+0800	INFO	federation/discovery_bridge.go:164	discovery bridge started	{"component": "discovery_bridge", "sync_interval": "1m0s", "auto_sync": true}
+2026-03-22T19:26:07.842+0800	INFO	federation/discovery_bridge.go:174	discovery bridge stopped	{"component": "discovery_bridge"}
 
-2026-03-22T18:17:25.734+0800	INFO	discovery/protocol.go:193	discovery protocol stopped	{"component": "discovery_protocol"}
-2026-03-22T18:17:25.734+0800	INFO	discovery/registry.go:923	health checker stopped	{"component": "health_checker"}
-2026-03-22T18:17:25.734+0800	INFO	discovery/registry.go:687	capability registry closed	{"component": "capability_registry"}
-2026-03-22T18:17:25.734+0800	INFO	discovery/service.go:164	discovery service stopped	{"component": "discovery_service"}
-2026-03-22T18:17:25.734+0800	INFO	federation/orchestrator.go:426	federation orchestrator stopped	{"component": "federation"}
+2026-03-22T19:26:07.842+0800	INFO	discovery/protocol.go:193	discovery protocol stopped	{"component": "discovery_protocol"}
+2026-03-22T19:26:07.842+0800	INFO	discovery/registry.go:923	health checker stopped	{"component": "health_checker"}
+2026-03-22T19:26:07.842+0800	INFO	discovery/registry.go:687	capability registry closed	{"component": "capability_registry"}
+2026-03-22T19:26:07.842+0800	INFO	discovery/service.go:164	discovery service stopped	{"component": "discovery_service"}
+2026-03-22T19:26:07.842+0800	INFO	federation/orchestrator.go:426	federation orchestrator stopped	{"component": "federation"}
 2. Agent Deliberation Mode
 --------------------------
    Mode: deliberate
    Max thinking time: 10s
    Min confidence: 0.70
    Self-critique enabled: true
-2026-03-22T18:17:25.734+0800	INFO	deliberation/mode.go:313	deliberation mode changed	{"component": "deliberation", "mode": "immediate"}
+2026-03-22T19:26:07.842+0800	INFO	deliberation/mode.go:313	deliberation mode changed	{"component": "deliberation", "mode": "immediate"}
    Switched to: immediate
-2026-03-22T18:17:25.734+0800	INFO	deliberation/mode.go:313	deliberation mode changed	{"component": "deliberation", "mode": "deliberate"}
+2026-03-22T19:26:07.842+0800	INFO	deliberation/mode.go:313	deliberation mode changed	{"component": "deliberation", "mode": "deliberate"}
    Switched to: deliberate
-2026-03-22T18:17:25.734+0800	INFO	deliberation/mode.go:192	deliberation completed	{"component": "deliberation", "task_id": "task-001", "time": "0s", "iterations": 1, "confidence": 0.85}
+2026-03-22T19:26:07.842+0800	INFO	deliberation/mode.go:192	deliberation completed	{"component": "deliberation", "task_id": "task-001", "time": "0s", "iterations": 1, "confidence": 0.85}
    Deliberation iterations: 1
    Final confidence: 0.85
-2026-03-22T18:17:25.734+0800	DEBUG	deliberation/reasoner.go:63	reasoning complete	{"component": "llm_reasoner", "content_len": 32, "confidence": 0.81}
+2026-03-22T19:26:07.842+0800	DEBUG	deliberation/reasoner.go:63	reasoning complete	{"component": "llm_reasoner", "content_len": 32, "confidence": 0.81}
    LLM reasoner confidence: 0.81
 
 3. Long-Running Agent Executor
 ------------------------------
-2026-03-22T18:17:25.734+0800	INFO	longrunning/executor.go:276	named execution created	{"component": "longrunning", "id": "exec_69b4d23d6f3998af36f7a77eccc126df", "name": "data-pipeline", "steps": 3, "step_names": ["step-1", "step-2", "step-3"]}
-2026-03-22T18:17:25.734+0800	INFO	longrunning/executor.go:235	execution created	{"component": "longrunning", "id": "exec_33c6cae0f1c867bbee66c634fd6fa28b", "name": "legacy-pipeline", "steps": 3}
-2026-03-22T18:17:25.750+0800	INFO	longrunning/executor.go:534	execution pause signaled	{"component": "longrunning", "exec_id": "exec_69b4d23d6f3998af36f7a77eccc126df"}
-2026-03-22T18:17:25.765+0800	DEBUG	longrunning/executor.go:446	step completed	{"component": "longrunning", "exec_id": "exec_69b4d23d6f3998af36f7a77eccc126df", "step": 1, "progress": 33.33333333333333}
-2026-03-22T18:17:25.780+0800	INFO	longrunning/executor.go:567	execution resume signaled	{"component": "longrunning", "exec_id": "exec_69b4d23d6f3998af36f7a77eccc126df"}
-2026-03-22T18:17:25.800+0800	INFO	federation/orchestrator.go:308	federated task completed	{"component": "federation", "task_id": "ftask_1774174645703258300"}
-2026-03-22T18:17:25.811+0800	DEBUG	longrunning/executor.go:446	step completed	{"component": "longrunning", "exec_id": "exec_69b4d23d6f3998af36f7a77eccc126df", "step": 2, "progress": 66.66666666666666}
-2026-03-22T18:17:25.811+0800	DEBUG	longrunning/executor.go:446	step completed	{"component": "longrunning", "exec_id": "exec_69b4d23d6f3998af36f7a77eccc126df", "step": 3, "progress": 100}
-2026-03-22T18:17:25.811+0800	INFO	longrunning/executor.go:461	execution completed	{"component": "longrunning", "exec_id": "exec_69b4d23d6f3998af36f7a77eccc126df", "duration": "76.4334ms"}
-2026-03-22T18:17:25.951+0800	DEBUG	longrunning/executor.go:446	step completed	{"component": "longrunning", "exec_id": "exec_33c6cae0f1c867bbee66c634fd6fa28b", "step": 1, "progress": 33.33333333333333}
-2026-03-22T18:17:25.982+0800	DEBUG	longrunning/executor.go:446	step completed	{"component": "longrunning", "exec_id": "exec_33c6cae0f1c867bbee66c634fd6fa28b", "step": 2, "progress": 66.66666666666666}
-2026-03-22T18:17:25.982+0800	DEBUG	longrunning/executor.go:446	step completed	{"component": "longrunning", "exec_id": "exec_33c6cae0f1c867bbee66c634fd6fa28b", "step": 3, "progress": 100}
-2026-03-22T18:17:25.982+0800	INFO	longrunning/executor.go:461	execution completed	{"component": "longrunning", "exec_id": "exec_33c6cae0f1c867bbee66c634fd6fa28b", "duration": "247.2603ms"}
-2026-03-22T18:17:26.001+0800	INFO	longrunning/executor.go:623	resuming execution from checkpoint	{"component": "longrunning", "exec_id": "exec_69b4d23d6f3998af36f7a77eccc126df", "from_step": 1, "total_steps": 3}
-2026-03-22T18:17:26.001+0800	INFO	longrunning/executor.go:623	resuming execution from checkpoint	{"component": "longrunning", "exec_id": "exec_69b4d23d6f3998af36f7a77eccc126df", "from_step": 1, "total_steps": 3}
-2026-03-22T18:17:26.001+0800	INFO	longrunning/executor.go:623	resuming execution from checkpoint	{"component": "longrunning", "exec_id": "exec_69b4d23d6f3998af36f7a77eccc126df", "from_step": 1, "total_steps": 3}
-2026-03-22T18:17:26.001+0800	INFO	longrunning/executor.go:623	resuming execution from checkpoint	{"component": "longrunning", "exec_id": "exec_69b4d23d6f3998af36f7a77eccc126df", "from_step": 2, "total_steps": 3}
-2026-03-22T18:17:26.001+0800	WARN	longrunning/executor.go:675	skipping execution without step names	{"component": "longrunning", "exec_id": "exec_33c6cae0f1c867bbee66c634fd6fa28b"}
+2026-03-22T19:26:07.843+0800	INFO	longrunning/executor.go:276	named execution created	{"component": "longrunning", "id": "exec_c6cbf7cccfc72b208c1e4e4f7b8f9ccf", "name": "data-pipeline", "steps": 3, "step_names": ["step-1", "step-2", "step-3"]}
+2026-03-22T19:26:07.843+0800	INFO	longrunning/executor.go:235	execution created	{"component": "longrunning", "id": "exec_db21468c7738a7a60048b95c4ae095ed", "name": "legacy-pipeline", "steps": 3}
+2026-03-22T19:26:07.858+0800	INFO	longrunning/executor.go:534	execution pause signaled	{"component": "longrunning", "exec_id": "exec_c6cbf7cccfc72b208c1e4e4f7b8f9ccf"}
+2026-03-22T19:26:07.873+0800	DEBUG	longrunning/executor.go:446	step completed	{"component": "longrunning", "exec_id": "exec_c6cbf7cccfc72b208c1e4e4f7b8f9ccf", "step": 1, "progress": 33.33333333333333}
+2026-03-22T19:26:07.888+0800	INFO	longrunning/executor.go:567	execution resume signaled	{"component": "longrunning", "exec_id": "exec_c6cbf7cccfc72b208c1e4e4f7b8f9ccf"}
+2026-03-22T19:26:07.905+0800	INFO	federation/orchestrator.go:308	federated task completed	{"component": "federation", "task_id": "ftask_1774178767810843300"}
+2026-03-22T19:26:07.919+0800	DEBUG	longrunning/executor.go:446	step completed	{"component": "longrunning", "exec_id": "exec_c6cbf7cccfc72b208c1e4e4f7b8f9ccf", "step": 2, "progress": 66.66666666666666}
+2026-03-22T19:26:07.919+0800	DEBUG	longrunning/executor.go:446	step completed	{"component": "longrunning", "exec_id": "exec_c6cbf7cccfc72b208c1e4e4f7b8f9ccf", "step": 3, "progress": 100}
+2026-03-22T19:26:07.919+0800	INFO	longrunning/executor.go:461	execution completed	{"component": "longrunning", "exec_id": "exec_c6cbf7cccfc72b208c1e4e4f7b8f9ccf", "duration": "75.8848ms"}
+2026-03-22T19:26:08.059+0800	DEBUG	longrunning/executor.go:446	step completed	{"component": "longrunning", "exec_id": "exec_db21468c7738a7a60048b95c4ae095ed", "step": 1, "progress": 33.33333333333333}
+2026-03-22T19:26:08.090+0800	DEBUG	longrunning/executor.go:446	step completed	{"component": "longrunning", "exec_id": "exec_db21468c7738a7a60048b95c4ae095ed", "step": 2, "progress": 66.66666666666666}
+2026-03-22T19:26:08.090+0800	DEBUG	longrunning/executor.go:446	step completed	{"component": "longrunning", "exec_id": "exec_db21468c7738a7a60048b95c4ae095ed", "step": 3, "progress": 100}
+2026-03-22T19:26:08.090+0800	INFO	longrunning/executor.go:461	execution completed	{"component": "longrunning", "exec_id": "exec_db21468c7738a7a60048b95c4ae095ed", "duration": "246.9421ms"}
+2026-03-22T19:26:08.109+0800	INFO	longrunning/executor.go:623	resuming execution from checkpoint	{"component": "longrunning", "exec_id": "exec_c6cbf7cccfc72b208c1e4e4f7b8f9ccf", "from_step": 1, "total_steps": 3}
+2026-03-22T19:26:08.109+0800	INFO	longrunning/executor.go:623	resuming execution from checkpoint	{"component": "longrunning", "exec_id": "exec_c6cbf7cccfc72b208c1e4e4f7b8f9ccf", "from_step": 1, "total_steps": 3}
+2026-03-22T19:26:08.109+0800	INFO	longrunning/executor.go:623	resuming execution from checkpoint	{"component": "longrunning", "exec_id": "exec_c6cbf7cccfc72b208c1e4e4f7b8f9ccf", "from_step": 1, "total_steps": 3}
+2026-03-22T19:26:08.109+0800	INFO	longrunning/executor.go:623	resuming execution from checkpoint	{"component": "longrunning", "exec_id": "exec_c6cbf7cccfc72b208c1e4e4f7b8f9ccf", "from_step": 2, "total_steps": 3}
+2026-03-22T19:26:08.109+0800	WARN	longrunning/executor.go:675	skipping execution without step names	{"component": "longrunning", "exec_id": "exec_db21468c7738a7a60048b95c4ae095ed"}
 github.com/BaSui01/agentflow/agent/longrunning.(*Executor).AutoResumeAll
 	D:/code/agentflow/agent/longrunning/executor.go:675
 main.demoLongRunning
-	D:/code/agentflow/examples/18_advanced_agent_features/main.go:607
+	D:/code/agentflow/examples/18_advanced_agent_features/main.go:552
 main.main
-	D:/code/agentflow/examples/18_advanced_agent_features/main.go:57
+	D:/code/agentflow/examples/18_advanced_agent_features/main.go:55
 runtime.main
 	C:/Program Files/Go/src/runtime/proc.go:290
-2026-03-22T18:17:26.001+0800	WARN	longrunning/executor.go:675	skipping execution without step names	{"component": "longrunning", "exec_id": "exec_33c6cae0f1c867bbee66c634fd6fa28b"}
+2026-03-22T19:26:08.109+0800	WARN	longrunning/executor.go:675	skipping execution without step names	{"component": "longrunning", "exec_id": "exec_db21468c7738a7a60048b95c4ae095ed"}
 github.com/BaSui01/agentflow/agent/longrunning.(*Executor).AutoResumeAll
 	D:/code/agentflow/agent/longrunning/executor.go:675
 main.demoLongRunning
-	D:/code/agentflow/examples/18_advanced_agent_features/main.go:607
+	D:/code/agentflow/examples/18_advanced_agent_features/main.go:552
 main.main
-	D:/code/agentflow/examples/18_advanced_agent_features/main.go:57
+	D:/code/agentflow/examples/18_advanced_agent_features/main.go:55
 runtime.main
 	C:/Program Files/Go/src/runtime/proc.go:290
-   Execution ID: exec_69b4d23d6f3998af36f7a77eccc126df
+2026-03-22T19:26:08.109+0800	DEBUG	longrunning/executor.go:446	step completed	{"component": "longrunning", "exec_id": "exec_c6cbf7cccfc72b208c1e4e4f7b8f9ccf", "step": 3, "progress": 100}
+   Execution ID: exec_c6cbf7cccfc72b208c1e4e4f7b8f9ccf
    Total steps: 3
-2026-03-22T18:17:26.001+0800	DEBUG	longrunning/executor.go:446	step completed	{"component": "longrunning", "exec_id": "exec_69b4d23d6f3998af36f7a77eccc126df", "step": 3, "progress": 100}
    Checkpoint interval: 20ms
    Auto-resume: true
 
-2026-03-22T18:17:26.001+0800	INFO	longrunning/executor.go:461	execution completed	{"component": "longrunning", "exec_id": "exec_69b4d23d6f3998af36f7a77eccc126df", "duration": "266.5988ms"}
+2026-03-22T19:26:08.109+0800	INFO	longrunning/executor.go:461	execution completed	{"component": "longrunning", "exec_id": "exec_c6cbf7cccfc72b208c1e4e4f7b8f9ccf", "duration": "266.2058ms"}
 4. Agent Skills Registry
 ------------------------
-2026-03-22T18:17:26.002+0800	INFO	skills/registry.go:106	skill registered	{"component": "skill_registry", "id": "skill_1774174646002067800", "name": "web_search", "category": "research"}
-2026-03-22T18:17:26.002+0800	INFO	skills/registry.go:106	skill registered	{"component": "skill_registry", "id": "skill_1774174646002067800", "name": "code_review", "category": "coding"}
-2026-03-22T18:17:26.002+0800	INFO	skills/registry.go:106	skill registered	{"component": "skill_registry", "id": "skill_1774174646002067800", "name": "data_analysis", "categ
+2026-03-22T19:26:08.110+0800	INFO	skills/registry.go:106	skill registered	{"component": "skill_registry", "id": "skill_1774178768110360900", "name": "web_search", "category": "research"}
+2026-03-22T19:26:08.110+0800	INFO	skills/registry.go:106	skill registered	{"component": "skill_registry", "id": "skill_1774178768110360900", "name": "code_review", "category": "coding"}
+2026-03-22T19:26:08.110+0800	INFO	skills/registry.go:106	skill registered	{"component": "skill_registry", "id": "skill_1774178768110360900", "name": "data_analysis", "categ
 
-...[已截断 3309704 字符]...
+...[已截断 3008030 字符]...
 
-rectional.go:320	inbound buffer full, dropping chunk	{"component": "bidirectional_stream", "sequence": 0}
+low/agent/streaming.(*BidirectionalStream).processInbound
+	D:/code/agentflow/agent/streaming/bidirectional.go:320
+2026-03-22T19:26:10.248+0800	WARN	streaming/bidirectional.go:320	inbound buffer full, dropping chunk	{"component": "bidirectional_stream", "sequence": 0}
 github.com/BaSui01/agentflow/agent/streaming.(*BidirectionalStream).processInbound
 	D:/code/agentflow/agent/streaming/bidirectional.go:320
-2026-03-22T18:17:28.129+0800	WARN	streaming/bidirectional.go:320	inbound buffer full, dropping chunk	{"component": "bidirectional_stream", "sequence": 0}
+2026-03-22T19:26:10.248+0800	WARN	streaming/bidirectional.go:320	inbound buffer full, dropping chunk	{"component": "bidirectional_stream", "sequence": 0}
 github.com/BaSui01/agentflow/agent/streaming.(*BidirectionalStream).processInbound
 	D:/code/agentflow/agent/streaming/bidirectional.go:320
-2026-03-22T18:17:28.129+0800	WARN	streaming/bidirectional.go:320	inbound buffer full, dropping chunk	{"component": "bidirectional_stream", "sequence": 0}
+2026-03-22T19:26:10.248+0800	WARN	streaming/bidirectional.go:320	inbound buffer full, dropping chunk	{"component": "bidirectional_stream", "sequence": 0}
 github.com/BaSui01/agentflow/agent/streaming.(*BidirectionalStream).processInbound
 	D:/code/agentflow/agent/streaming/bidirectional.go:320
-2026-03-22T18:17:28.129+0800	WARN	streaming/bidirectional.go:320	inbound buffer full, dropping chunk	{"component": "bidirectional_stream", "sequence": 0}
+2026-03-22T19:26:10.248+0800	WARN	streaming/bidirectional.go:320	inbound buffer full, dropping chunk	{"component": "bidirectional_stream", "sequence": 0}
 github.com/BaSui01/agentflow/agent/streaming.(*BidirectionalStream).processInbound
 	D:/code/agentflow/agent/streaming/bidirectional.go:320
-2026-03-22T18:17:28.129+0800	WARN	streaming/bidirectional.go:320	inbound buffer full, dropping chunk	{"component": "bidirectional_stream", "sequence": 0}
+2026-03-22T19:26:10.248+0800	WARN	streaming/bidirectional.go:320	inbound buffer full, dropping chunk	{"component": "bidirectional_stream", "sequence": 0}
 github.com/BaSui01/agentflow/agent/streaming.(*BidirectionalStream).processInbound
 	D:/code/agentflow/agent/streaming/bidirectional.go:320
-2026-03-22T18:17:28.129+0800	WARN	streaming/bidirectional.go:320	inbound buffer full, dropping chunk	{"component": "bidirectional_stream", "sequence": 0}
+2026-03-22T19:26:10.248+0800	WARN	streaming/bidirectional.go:320	inbound buffer full, dropping chunk	{"component": "bidirectional_stream", "sequence": 0}
 github.com/BaSui01/agentflow/agent/streaming.(*BidirectionalStream).processInbound
 	D:/code/agentflow/agent/streaming/bidirectional.go:320
-2026-03-22T18:17:28.129+0800	WARN	streaming/bidirectional.go:320	inbound buffer full, dropping chunk	{"component": "bidirectional_stream", "sequence": 0}
+2026-03-22T19:26:10.248+0800	WARN	streaming/bidirectional.go:320	inbound buffer full, dropping chunk	{"component": "bidirectional_stream", "sequence": 0}
 github.com/BaSui01/agentflow/agent/streaming.(*BidirectionalStream).processInbound
 	D:/code/agentflow/agent/streaming/bidirectional.go:320
-2026-03-22T18:17:28.129+0800	WARN	streaming/bidirectional.go:320	inbound buffer full, dropping chunk	{"component": "bidirectional_stream", "sequence": 0}
+2026-03-22T19:26:10.248+0800	WARN	streaming/bidirectional.go:320	inbound buffer full, dropping chunk	{"component": "bidirectional_stream", "sequence": 0}
 github.com/BaSui01/agentflow/agent/streaming.(*BidirectionalStream).processInbound
 	D:/code/agentflow/agent/streaming/bidirectional.go:320
-2026-03-22T18:17:28.129+0800	WARN	streaming/bidirectional.go:320	inbound buffer full, dropping chunk	{"component": "bidirectional_stream", "sequence": 0}
+2026-03-22T19:26:10.248+0800	WARN	streaming/bidirectional.go:320	inbound buffer full, dropping chunk	{"component": "bidirectional_stream", "sequence": 0}
 github.com/BaSui01/agentflow/agent/streaming.(*BidirectionalStream).processInbound
 	D:/code/agentflow/agent/streaming/bidirectional.go:320
-2026-03-22T18:17:28.129+0800	WARN	streaming/bidirectional.go:320	inbound buffer full, dropping chunk	{"component": "bidirectional_stream", "sequence": 0}
+2026-03-22T19:26:10.248+0800	WARN	streaming/bidirectional.go:320	inbound buffer full, dropping chunk	{"component": "bidirectional_stream", "sequence": 0}
 github.com/BaSui01/agentflow/agent/streaming.(*BidirectionalStream).processInbound
 	D:/code/agentflow/agent/streaming/bidirectional.go:320
-2026-03-22T18:17:28.129+0800	WARN	streaming/bidirectional.go:320	inbound buffer full, dropping chunk	{"component": "bidirectional_stream", "sequence": 0}
+2026-03-22T19:26:10.248+0800	WARN	streaming/bidirectional.go:320	inbound buffer full, dropping chunk	{"component": "bidirectional_stream", "sequence": 0}
 github.com/BaSui01/agentflow/agent/streaming.(*BidirectionalStream).processInbound
 	D:/code/agentflow/agent/streaming/bidirectional.go:320
-2026-03-22T18:17:28.129+0800	WARN	streaming/bidirectional.go:320	inbound buffer full, dropping chunk	{"component": "bidirectional_stream", "sequence": 0}
+2026-03-22T19:26:10.248+0800	WARN	streaming/bidirectional.go:320	inbound buffer full, dropping chunk	{"component": "bidirectional_stream", "sequence": 0}
 github.com/BaSui01/agentflow/agent/streaming.(*BidirectionalStream).processInbound
 	D:/code/agentflow/agent/streaming/bidirectional.go:320
-2026-03-22T18:17:28.129+0800	WARN	streaming/bidirectional.go:320	inbound buffer full, dropping chunk	{"component": "bidirectional_stream", "sequence": 0}
+2026-03-22T19:26:10.248+0800	WARN	streaming/bidirectional.go:320	inbound buffer full, dropping chunk	{"component": "bidirectional_stream", "sequence": 0}
 github.com/BaSui01/agentflow/agent/streaming.(*BidirectionalStream).processInbound
 	D:/code/agentflow/agent/streaming/bidirectional.go:320
-2026-03-22T18:17:28.129+0800	WARN	streaming/bidirectional.go:320	inbound buffer full, dropping chunk	{"component": "bidirectional_stream", "sequence": 0}
+2026-03-22T19:26:10.248+0800	WARN	streaming/bidirectional.go:320	inbound buffer full, dropping chunk	{"component": "bidirectional_stream", "sequence": 0}
 github.com/BaSui01/agentflow/agent/streaming.(*BidirectionalStream).processInbound
 	D:/code/agentflow/agent/streaming/bidirectional.go:320
-2026-03-22T18:17:28.129+0800	WARN	streaming/bidirectional.go:320	inbound buffer full, dropping chunk	{"component": "bidirectional_stream", "sequence": 0}
+2026-03-22T19:26:10.248+0800	WARN	streaming/bidirectional.go:320	inbound buffer full, dropping chunk	{"component": "bidirectional_stream", "sequence": 0}
 github.com/BaSui01/agentflow/agent/streaming.(*BidirectionalStream).processInbound
 	D:/code/agentflow/agent/streaming/bidirectional.go:320
-2026-03-22T18:17:28.129+0800	WARN	streaming/bidirectional.go:320	inbound buffer full, dropping chunk	{"component": "bidirectional_stream", "sequence": 0}
+2026-03-22T19:26:10.248+0800	WARN	streaming/bidirectional.go:320	inbound buffer full, dropping chunk	{"component": "bidirectional_stream", "sequence": 0}
 github.com/BaSui01/agentflow/agent/streaming.(*BidirectionalStream).processInbound
 	D:/code/agentflow/agent/streaming/bidirectional.go:320
-2026-03-22T18:17:28.129+0800	WARN	streaming/bidirectional.go:320	inbound buffer full, dropping chunk	{"component": "bidirectional_stream", "sequence": 0}
+2026-03-22T19:26:10.248+0800	WARN	streaming/bidirectional.go:320	inbound buffer full, dropping chunk	{"component": "bidirectional_stream", "sequence": 0}
 github.com/BaSui01/agentflow/agent/streaming.(*BidirectionalStream).processInbound
 	D:/code/agentflow/agent/streaming/bidirectional.go:320
-2026-03-22T18:17:28.129+0800	WARN	streaming/bidirectional.go:320	inbound buffer full, dropping chunk	{"component": "bidirectional_stream", "sequence": 0}
+2026-03-22T19:26:10.248+0800	WARN	streaming/bidirectional.go:320	inbound buffer full, dropping chunk	{"component": "bidirectional_stream", "sequence": 0}
 github.com/BaSui01/agentflow/agent/streaming.(*BidirectionalStream).processInbound
 	D:/code/agentflow/agent/streaming/bidirectional.go:320
-2026-03-22T18:17:28.129+0800	WARN	streaming/bidirectional.go:320	inbound buffer full, dropping chunk	{"component": "bidirectional_stream", "sequence": 0}
+2026-03-22T19:26:10.248+0800	WARN	streaming/bidirectional.go:320	inbound buffer full, dropping chunk	{"component": "bidirectional_stream", "sequence": 0}
 github.com/BaSui01/agentflow/agent/streaming.(*BidirectionalStream).processInbound
 	D:/code/agentflow/agent/streaming/bidirectional.go:320
-2026-03-22T18:17:28.129+0800	WARN	streaming/bidirectional.go:320	inbound buffer full, dropping chunk	{"component": "bidirectional_stream", "sequence": 0}
+2026-03-22T19:26:10.248+0800	WARN	streaming/bidirectional.go:320	inbound buffer full, dropping chunk	{"component": "bidirectional_stream", "sequence": 0}
 github.com/BaSui01/agentflow/agent/streaming.(*BidirectionalStream).processInbound
 	D:/code/agentflow/agent/streaming/bidirectional.go:320
-2026-03-22T18:17:28.129+0800	WARN	streaming/bidirectional.go:320	inbound buffer full, dropping chunk	{"component": "bidirectional_stream", "sequence": 0}
+2026-03-22T19:26:10.248+0800	WARN	streaming/bidirectional.go:320	inbound buffer full, dropping chunk	{"component": "bidirectional_stream", "sequence": 0}
 github.com/BaSui01/agentflow/agent/streaming.(*BidirectionalStream).processInbound
 	D:/code/agentflow/agent/streaming/bidirectional.go:320
-2026-03-22T18:17:28.129+0800	WARN	streaming/bidirectional.go:320	inbound buffer full, dropping chunk	{"component": "bidirectional_stream", "sequence": 0}
+2026-03-22T19:26:10.248+0800	WARN	streaming/bidirectional.go:320	inbound buffer full, dropping chunk	{"component": "bidirectional_stream", "sequence": 0}
 github.com/BaSui01/agentflow/agent/streaming.(*BidirectionalStream).processInbound
 	D:/code/agentflow/agent/streaming/bidirectional.go:320
-2026-03-22T18:17:28.129+0800	WARN	streaming/bidirectional.go:320	inbound buffer full, dropping chunk	{"component": "bidirectional_stream", "sequence": 0}
+2026-03-22T19:26:10.248+0800	WARN	streaming/bidirectional.go:320	inbound buffer full, dropping chunk	{"component": "bidirectional_stream", "sequence": 0}
 github.com/BaSui01/agentflow/agent/streaming.(*BidirectionalStream).processInbound
 	D:/code/agentflow/agent/streaming/bidirectional.go:320
-2026-03-22T18:17:28.129+0800	WARN	streaming/bidirectional.go:320	inbound buffer full, dropping chunk	{"component": "bidirectional_stream", "sequence": 0}
+2026-03-22T19:26:10.248+0800	WARN	streaming/bidirectional.go:320	inbound buffer full, dropping chunk	{"component": "bidirectional_stream", "sequence": 0}
 github.com/BaSui01/agentflow/agent/streaming.(*BidirectionalStream).processInbound
 	D:/code/agentflow/agent/streaming/bidirectional.go:320
-2026-03-22T18:17:28.129+0800	WARN	streaming/bidirectional.go:320	inbound buffer full, dropping chunk	{"component": "bidirectional_stream", "sequence": 0}
+2026-03-22T19:26:10.248+0800	WARN	streaming/bidirectional.go:320	inbound buffer full, dropping chunk	{"component": "bidirectional_stream", "sequence": 0}
 github.com/BaSui01/agentflow/agent/streaming.(*BidirectionalStream).processInbound
 	D:/code/agentflow/agent/streaming/bidirectional.go:320
-2026-03-22T18:17:28.129+0800	WARN	streaming/bidirectional.go:320	inbound buffer full, dropping chunk	{"component": "bidirectional_stream", "sequence": 0}
+2026-03-22T19:26:10.248+0800	WARN	streaming/bidirectional.go:320	inbound buffer full, dropping chunk	{"component": "bidirectional_stream", "sequence": 0}
 github.com/BaSui01/agentflow/agent/streaming.(*BidirectionalStream).processInbound
 	D:/code/agentflow/agent/streaming/bidirectional.go:320
-2026-03-22T18:17:28.129+0800	WARN	streaming/bidirectional.go:320	inbound buffer full, dropping chunk	{"component": "bidirectional_stream", "sequence": 0}
+2026-03-22T19:26:10.248+0800	WARN	streaming/bidirectional.go:320	inbound buffer full, dropping chunk	{"component": "bidirectional_stream", "sequence": 0}
 github.com/BaSui01/agentflow/agent/streaming.(*BidirectionalStream).processInbound
 	D:/code/agentflow/agent/streaming/bidirectional.go:320
-2026-03-22T18:17:28.129+0800	WARN	streaming/bidirectional.go:320	inbound buffer full, dropping chunk	{"component": "bidirectional_stream", "sequence": 0}
+2026-03-22T19:26:10.248+0800	WARN	streaming/bidirectional.go:320	inbound buffer full, dropping chunk	{"component": "bidirectional_stream", "sequence": 0}
 github.com/BaSui01/agentflow/agent/streaming.(*BidirectionalStream).processInbound
 	D:/code/agentflow/agent/streaming/bidirectional.go:320
-2026-03-22T18:17:28.129+0800	WARN	streaming/bidirectional.go:320	inbound buffer full, dropping chunk	{"component": "bidirectional_stream", "sequence": 0}
+2026-03-22T19:26:10.248+0800	WARN	streaming/bidirectional.go:320	inbound buffer full, dropping chunk	{"component": "bidirectional_stream", "sequence": 0}
 github.com/BaSui01/agentflow/agent/streaming.(*BidirectionalStream).processInbound
 	D:/code/agentflow/agent/streaming/bidirectional.go:320
-2026-03-22T18:17:28.129+0800	WARN	streaming/bidirectional.go:320	inbound buffer full, dropping chunk	{"component": "bidirectional_stream", "sequence": 0}
+2026-03-22T19:26:10.248+0800	WARN	streaming/bidirectional.go:320	inbound buffer full, dropping chunk	{"component": "bidirectional_stream", "sequence": 0}
 github.com/BaSui01/agentflow/agent/streaming.(*BidirectionalStream).processInbound
 	D:/code/agentflow/agent/streaming/bidirectional.go:320
-2026-03-22T18:17:28.129+0800	WARN	streaming/bidirectional.go:320	inbound buffer full, dropping chunk	{"component": "bidirectional_stream", "sequence": 0}
-github.com/BaSui01/agentflow/agent/streaming.(*BidirectionalStream).processInbound
-	D:/code/agentflow/agent/streaming/bidirectional.go:320
-2026-03-22T18:17:28.129+0800	WARN	streaming/bidirectional.go:320	inbound buffer full, dropping chunk	{"component": "bidirectional_stream", "sequence": 0}
-github.com/BaSui01/agentflow/agent/streaming.(*BidirectionalStream).processInbound
-	D:/code/agentflow/agent/streaming/bidirectional.go:320
-2026-03-22T18:17:28.129+0800	WARN	streaming/bidirectional.go:320	inbound buffer full, dropping chunk	{"component": "bidirectional_stream", "sequence": 0}
-github.com/BaSui01/agentflow/agent/streaming.(*BidirectionalStream).processInbound
-	D:/code/agentflow/agent/streaming/bidirectional.go:320
-2026-03-22T18:17:28.129+0800	INFO	streaming/bidirectional.go:247	stream closed	{"component": "bidirectional_stream"}
+2026-03-22T19:26:10.248+0800	INFO	streaming/bidirectional.go:247	stream closed	{"component": "bidirectional_stream"}
    Streaming bidirectional/session/adapter/ws paths wired
 
-2026-03-22T18:17:28.129+0800	DEBUG	streaming/bidirectional.go:345	processOutbound exited	{"component": "bidirectional_stream"}
-2026-03-22T18:17:28.129+0800	DEBUG	streaming/bidirectional.go:318	processInbound exited	{"component": "bidirectional_stream"}
+2026-03-22T19:26:10.248+0800	DEBUG	streaming/bidirectional.go:345	processOutbound exited	{"component": "bidirectional_stream"}
+2026-03-22T19:26:10.248+0800	DEBUG	streaming/bidirectional.go:267	processInbound exited	{"component": "bidirectional_stream"}
 16. Structured Output Reachability
 ----------------------------------
    Structured output generator/schema/parse paths wired
 
 17. Voice Subsystem Reachability
 --------------------------------
-2026-03-22T18:17:28.130+0800	DEBUG	voice/realtime.go:291	transcript received	{"text": "transcribed demo text", "confidence": 0.9}
-2026-03-22T18:17:28.130+0800	DEBUG	voice/realtime.go:347	speech interrupted
-2026-03-22T18:17:28.130+0800	DEBUG	voice/native_multimodal.go:121	audio processed	{"component": "native_audio", "latency_ms": 0, "target_ms": 232}
-2026-03-22T18:17:28.130+0800	DEBUG	voice/native_multimodal.go:200	audio processing interrupted	{"component": "native_audio"}
+2026-03-22T19:26:10.249+0800	DEBUG	voice/realtime.go:291	transcript received	{"text": "transcribed demo text", "confidence": 0.9}
+2026-03-22T19:26:10.249+0800	DEBUG	voice/realtime.go:347	speech interrupted
+2026-03-22T19:26:10.249+0800	DEBUG	voice/native_multimodal.go:121	audio processed	{"component": "native_audio", "latency_ms": 0, "target_ms": 232}
+2026-03-22T19:26:10.249+0800	DEBUG	voice/native_multimodal.go:200	audio processing interrupted	{"component": "native_audio"}
    Voice agent/session/native-audio paths wired
 
 18. LLM Canary Subsystem Reachability
 -------------------------------------
-   setup canary db error: Binary was compiled with 'CGO_ENABLED=0', go-sqlite3 requires cgo to work. This is a stub
+2026-03-22T19:26:10.249+0800	INFO	llm/canary.go:210	provider stage updated	{"providerID": 1, "from": "10pct", "to": "50pct", "trafficPercent": 50}
+2026-03-22T19:26:10.249+0800	WARN	llm/canary.go:257	canary rollback triggered	{"providerID": 1, "reason": "demo rollback"}
+github.com/BaSui01/agentflow/llm.(*CanaryConfig).TriggerRollback
+	D:/code/agentflow/llm/canary.go:257
+main.demoLLMCanary
+	D:/code/agentflow/examples/18_advanced_agent_features/main.go:139
+main.main
+	D:/code/agentflow/examples/18_advanced_agent_features/main.go:100
+runtime.main
+	C:/Program Files/Go/src/runtime/proc.go:290
+   Canary mode: in-memory
+   Canary deployments after cleanup: 0
+2026-03-22T19:26:10.249+0800	INFO	llm/canary.go:315	canary monitor started	{"checkInterval": "30s"}
+2026-03-22T19:26:10.249+0800	INFO	llm/canary.go:320	canary monitor stopped
 
 19. LLM Core Extensions Reachability
 ------------------------------------
@@ -1706,13 +1832,13 @@ github.com/BaSui01/agentflow/agent/streaming.(*BidirectionalStream).processInbou
 
 21. LLM Tool Cache Reachability
 -------------------------------
-2026-03-22T18:17:28.231+0800	DEBUG	cache/tool_cache.go:156	cached tool result	{"tool": "fast_tool", "ttl": "10ms"}
-2026-03-22T18:17:28.246+0800	DEBUG	cache/tool_cache.go:156	cached tool result	{"tool": "search", "ttl": "30ms"}
-2026-03-22T18:17:28.246+0800	DEBUG	cache/tool_cache.go:156	cached tool result	{"tool": "search", "ttl": "30ms"}
-2026-03-22T18:17:28.246+0800	DEBUG	cache/tool_cache.go:156	cached tool result	{"tool": "search", "ttl": "30ms"}
-2026-03-22T18:17:28.246+0800	DEBUG	cache/tool_cache.go:156	cached tool result	{"tool": "search", "ttl": "30ms"}
-2026-03-22T18:17:28.246+0800	DEBUG	cache/tool_cache.go:156	cached tool result	{"tool": "calc", "ttl": "30ms"}
-2026-03-22T18:17:28.246+0800	DEBUG	cache/tool_cache.go:114	cache hit	{"tool": "search", "hit_count": 1}
+2026-03-22T19:26:10.351+0800	DEBUG	cache/tool_cache.go:156	cached tool result	{"tool": "fast_tool", "ttl": "10ms"}
+2026-03-22T19:26:10.366+0800	DEBUG	cache/tool_cache.go:156	cached tool result	{"tool": "search", "ttl": "30ms"}
+2026-03-22T19:26:10.366+0800	DEBUG	cache/tool_cache.go:156	cached tool result	{"tool": "search", "ttl": "30ms"}
+2026-03-22T19:26:10.366+0800	DEBUG	cache/tool_cache.go:156	cached tool result	{"tool": "search", "ttl": "30ms"}
+2026-03-22T19:26:10.366+0800	DEBUG	cache/tool_cache.go:156	cached tool result	{"tool": "search", "ttl": "30ms"}
+2026-03-22T19:26:10.366+0800	DEBUG	cache/tool_cache.go:156	cached tool result	{"tool": "calc", "ttl": "30ms"}
+2026-03-22T19:26:10.366+0800	DEBUG	cache/tool_cache.go:114	cache hit	{"tool": "search", "hit_count": 1}
 
 
 === All Advanced Features Demonstrated ===
@@ -1720,36 +1846,36 @@ github.com/BaSui01/agentflow/agent/streaming.(*BidirectionalStream).processInbou
 === 前沿能力 / 2026 扩展能力 ===
 路径: examples/19_2026_features
 命令: go run ./examples/19_2026_features
-状态: WARN
-耗时: 3.71s
-摘要: redis: 2026/03/22 18:17:30 pool.go:617: redis: connection pool: failed to dial after 5 attempts: dial tcp [::1]:6379: connectex: No connection could be made because the target machine actively refused it.
+状态: PASS
+耗时: 624ms
+摘要: Episodic memories: 1
 标签: Memory / GraphRAG / ShadowAI
 亮点: Episodic memories: 1
 亮点: Episodic search hits: 1
 亮点: Working items: 1
-亮点: 2026-03-22T18:17:29.746+0800	DEBUG	memory/episodic_store.go:55	episodic event recorded	{"component": "episodic_store_inmemory", "id": "ep_1774174649746980700", "agent_id": "demo-agent", "type": "query"}
+亮点: 2026-03-22T19:26:10.913+0800	DEBUG	memory/episodic_store.go:55	episodic event recorded	{"component": "episodic_store_inmemory", "id": "ep_1774178770913389800", "agent_id": "demo-agent", "type": "query"}
 原始输出:
 === 2026 Advanced Features Demo ===
 --- 1. Layered Memory System ---
   Episodic memories: 1
   Episodic search hits: 1
   Working items: 1
-2026-03-22T18:17:29.746+0800	DEBUG	memory/episodic_store.go:55	episodic event recorded	{"component": "episodic_store_inmemory", "id": "ep_1774174649746980700", "agent_id": "demo-agent", "type": "query"}
-2026-03-22T18:17:29.746+0800	DEBUG	memory/intelligent_decay.go:115	memory added	{"id": "m1"}
-2026-03-22T18:17:29.746+0800	DEBUG	memory/intelligent_decay.go:115	memory added	{"id": "m2"}
-2026-03-22T18:17:29.746+0800	INFO	memory/intelligent_decay.go:216	decay completed	{"pruned": 0, "remaining": 2}
-2026-03-22T18:17:29.757+0800	INFO	memory/intelligent_decay.go:216	decay completed	{"pruned": 0, "remaining": 2}
-2026-03-22T18:17:29.767+0800	INFO	memory/intelligent_decay.go:216	decay completed	{"pruned": 0, "remaining": 2}
-2026-03-22T18:17:29.767+0800	DEBUG	memory/knowledge_graph.go:64	entity added	{"component": "knowledge_graph_inmemory", "id": "agentflow", "type": "project", "name": "AgentFlow"}
-2026-03-22T18:17:29.767+0800	DEBUG	memory/knowledge_graph.go:64	entity added	{"component": "knowledge_graph_inmemory", "id": "memory", "type": "feature", "name": "Memory"}
-2026-03-22T18:17:29.767+0800	DEBUG	memory/knowledge_graph.go:64	entity added	{"component": "knowledge_graph_inmemory", "id": "rag", "type": "feature", "name": "RAG"}
-2026-03-22T18:17:29.767+0800	DEBUG	memory/knowledge_graph.go:99	relation added	{"component": "knowledge_graph_inmemory", "id": "rel_1774174649767484700", "from": "agentflow", "to": "memory", "type": "supports"}
-2026-03-22T18:17:29.767+0800	DEBUG	memory/knowledge_graph.go:99	relation added	{"component": "knowledge_graph_inmemory", "id": "rel_1774174649767484700", "from": "agentflow", "to": "rag", "type": "supports"}
-2026-03-22T18:17:29.767+0800	DEBUG	memorycore/coordinator.go:71	saved memory	{"component": "memory_coordinator", "kind": "working", "content_length": 18}
-2026-03-22T18:17:29.767+0800	DEBUG	memorycore/coordinator.go:43	loaded recent memory	{"component": "memory_coordinator", "count": 1, "kind": "working"}
-2026-03-22T18:17:29.767+0800	DEBUG	memorycore/coordinator.go:71	saved memory	{"component": "memory_coordinator", "kind": "working", "content_length": 5}
-2026-03-22T18:17:29.767+0800	DEBUG	memorycore/coordinator.go:71	saved memory	{"component": "memory_coordinator", "kind": "working", "content_length": 8}
-2026-03-22T18:17:29.767+0800	DEBUG	memorycore/coordinator.go:127	recalled relevant memory	{"component": "memory_coordinator", "query": "hello", "count": 0}
+2026-03-22T19:26:10.913+0800	DEBUG	memory/episodic_store.go:55	episodic event recorded	{"component": "episodic_store_inmemory", "id": "ep_1774178770913389800", "agent_id": "demo-agent", "type": "query"}
+2026-03-22T19:26:10.913+0800	DEBUG	memory/intelligent_decay.go:115	memory added	{"id": "m1"}
+2026-03-22T19:26:10.913+0800	DEBUG	memory/intelligent_decay.go:115	memory added	{"id": "m2"}
+2026-03-22T19:26:10.913+0800	INFO	memory/intelligent_decay.go:216	decay completed	{"pruned": 0, "remaining": 2}
+2026-03-22T19:26:10.924+0800	INFO	memory/intelligent_decay.go:216	decay completed	{"pruned": 0, "remaining": 2}
+2026-03-22T19:26:10.934+0800	INFO	memory/intelligent_decay.go:216	decay completed	{"pruned": 0, "remaining": 2}
+2026-03-22T19:26:10.934+0800	DEBUG	memory/knowledge_graph.go:64	entity added	{"component": "knowledge_graph_inmemory", "id": "agentflow", "type": "project", "name": "AgentFlow"}
+2026-03-22T19:26:10.934+0800	DEBUG	memory/knowledge_graph.go:64	entity added	{"component": "knowledge_graph_inmemory", "id": "memory", "type": "feature", "name": "Memory"}
+2026-03-22T19:26:10.934+0800	DEBUG	memory/knowledge_graph.go:64	entity added	{"component": "knowledge_graph_inmemory", "id": "rag", "type": "feature", "name": "RAG"}
+2026-03-22T19:26:10.934+0800	DEBUG	memory/knowledge_graph.go:99	relation added	{"component": "knowledge_graph_inmemory", "id": "rel_1774178770934173400", "from": "agentflow", "to": "memory", "type": "supports"}
+2026-03-22T19:26:10.934+0800	DEBUG	memory/knowledge_graph.go:99	relation added	{"component": "knowledge_graph_inmemory", "id": "rel_1774178770934173400", "from": "agentflow", "to": "rag", "type": "supports"}
+2026-03-22T19:26:10.934+0800	DEBUG	memorycore/coordinator.go:71	saved memory	{"component": "memory_coordinator", "kind": "working", "content_length": 18}
+2026-03-22T19:26:10.934+0800	DEBUG	memorycore/coordinator.go:43	loaded recent memory	{"component": "memory_coordinator", "count": 1, "kind": "working"}
+2026-03-22T19:26:10.934+0800	DEBUG	memorycore/coordinator.go:71	saved memory	{"component": "memory_coordinator", "kind": "working", "content_length": 5}
+2026-03-22T19:26:10.934+0800	DEBUG	memorycore/coordinator.go:71	saved memory	{"component": "memory_coordinator", "kind": "working", "content_length": 8}
+2026-03-22T19:26:10.934+0800	DEBUG	memorycore/coordinator.go:127	recalled relevant memory	{"component": "memory_coordinator", "query": "hello", "count": 0}
   ✓ Layered memory initialized
 
 --- 2. GraphRAG ---
@@ -1763,7 +1889,7 @@ github.com/BaSui01/agentflow/agent/streaming.(*BidirectionalStream).processInbou
   ✓ Native audio config ready (requires provider)
 
 --- 4. Shadow AI Detection ---
-2026-03-22T18:17:29.767+0800	WARN	guardrails/llama_firewall.go:192	shadow AI detected	{"component": "shadow_ai_detector", "pattern": "OpenAI API", "severity": "high", "source": "api.openai.com"}
+2026-03-22T19:26:10.934+0800	WARN	guardrails/llama_firewall.go:192	shadow AI detected	{"component": "shadow_ai_detector", "pattern": "OpenAI API", "severity": "high", "source": "api.openai.com"}
 github.com/BaSui01/agentflow/agent/guardrails.(*ShadowAIDetector).recordDetections
 	D:/code/agentflow/agent/guardrails/llama_firewall.go:192
 github.com/BaSui01/agentflow/agent/guardrails.(*ShadowAIDetector).CheckDomain
@@ -1775,7 +1901,7 @@ main.main
 runtime.main
 	C:/Program Files/Go/src/runtime/proc.go:290
   Detected: OpenAI API (severity: high)
-2026-03-22T18:17:29.767+0800	WARN	guardrails/llama_firewall.go:192	shadow AI detected	{"component": "shadow_ai_detector", "pattern": "OpenAI Key", "severity": "critical", "source": "config.yaml"}
+2026-03-22T19:26:10.934+0800	WARN	guardrails/llama_firewall.go:192	shadow AI detected	{"component": "shadow_ai_detector", "pattern": "OpenAI Key", "severity": "critical", "source": "config.yaml"}
 github.com/BaSui01/agentflow/agent/guardrails.(*ShadowAIDetector).recordDetections
 	D:/code/agentflow/agent/guardrails/llama_firewall.go:192
 github.com/BaSui01/agentflow/agent/guardrails.(*ShadowAIDetector).ScanContent
@@ -1791,102 +1917,93 @@ runtime.main
   ✓ Shadow AI detector operational
 
 --- 5. Infra Managers ---
-redis: 2026/03/22 18:17:30 pool.go:617: redis: connection pool: failed to dial after 5 attempts: dial tcp [::1]:6379: connectex: No connection could be made because the target machine actively refused it.
-redis: 2026/03/22 18:17:30 pool.go:617: redis: connection pool: failed to dial after 5 attempts: dial tcp [::1]:6379: connectex: No connection could be made because the target machine actively refused it.
-redis: 2026/03/22 18:17:30 pool.go:617: redis: connection pool: failed to dial after 5 attempts: dial tcp [::1]:6379: connectex: No connection could be made because the target machine actively refused it.
-redis: 2026/03/22 18:17:30 pool.go:617: redis: connection pool: failed to dial after 5 attempts: dial tcp [::1]:6379: connectex: No connection could be made because the target machine actively refused it.
-redis: 2026/03/22 18:17:30 pool.go:617: redis: connection pool: failed to dial after 5 attempts: dial tcp [::1]:6379: connectex: No connection could be made because the target machine actively refused it.
-redis: 2026/03/22 18:17:30 pool.go:617: redis: connection pool: failed to dial after 5 attempts: dial tcp [::1]:6379: connectex: No connection could be made because the target machine actively refused it.
-redis: 2026/03/22 18:17:31 pool.go:617: redis: connection pool: failed to dial after 5 attempts: dial tcp [::1]:6379: connectex: No connection could be made because the target machine actively refused it.
-redis: 2026/03/22 18:17:31 pool.go:617: redis: connection pool: failed to dial after 5 attempts: dial tcp [::1]:6379: connectex: No connection could be made because the target machine actively refused it.
-redis: 2026/03/22 18:17:31 pool.go:617: redis: connection pool: failed to dial after 5 attempts: dial tcp [::1]:6379: connectex: No connection could be made because the target machine actively refused it.
-redis: 2026/03/22 18:17:31 pool.go:617: redis: connection pool: failed to dial after 5 attempts: dial tcp [::1]:6379: connectex: No connection could be made because the target machine actively refused it.
-redis: 2026/03/22 18:17:31 pool.go:617: redis: connection pool: failed to dial after 5 attempts: dial tcp [::1]:6379: connectex: No connection could be made because the target machine actively refused it.
-redis: 2026/03/22 18:17:31 pool.go:617: redis: connection pool: failed to dial after 5 attempts: dial tcp [::1]:6379: connectex: No connection could be made because the target machine actively refused it.
-  Cache manager unavailable (skip): failed to connect to redis: dial tcp [::1]:6379: connectex: No connection could be made because the target machine actively refused it.
-  DB open failed: Binary was compiled with 'CGO_ENABLED=0', go-sqlite3 requires cgo to work. This is a stub
+  Cache manager demo: no cache backend listening on configured address
+2026-03-22T19:26:10.951+0800	INFO	database/pool.go:104	database pool initialized	{"max_idle_conns": 10, "max_open_conns": 100, "conn_max_lifetime": "1h0m0s"}
+  Pool stats: open=1, in_use=0, idle=1
+  ✓ Database pool manager path wired
+2026-03-22T19:26:10.952+0800	INFO	database/pool.go:159	closing database pool	{"component": "db_pool"}
 
 --- 6. Types Utilities ---
   ✓ Types utility paths wired
 
 --- 7. Discovery Subsystem ---
-2026-03-22T18:17:31.890+0800	INFO	discovery/registry.go:915	health checker started	{"component": "health_checker"}
-2026-03-22T18:17:31.891+0800	INFO	discovery/registry.go:162	capability registry started	{"component": "capability_registry"}
-2026-03-22T18:17:31.891+0800	INFO	discovery/protocol.go:334	HTTP discovery server started	{"component": "discovery_protocol", "addr": "127.0.0.1:36614"}
-2026-03-22T18:17:31.891+0800	INFO	discovery/protocol.go:154	discovery protocol started	{"component": "discovery_protocol", "http": true, "multicast": false}
-2026-03-22T18:17:31.891+0800	INFO	discovery/service.go:135	discovery service started	{"component": "discovery_service"}
-2026-03-22T18:17:31.891+0800	INFO	discovery/registry.go:225	agent registered	{"component": "capability_registry", "agent_id": "demo-agent", "capabilities": 2}
-2026-03-22T18:17:31.891+0800	INFO	discovery/registry.go:325	agent updated	{"component": "capability_registry", "agent_id": "demo-agent"}
-2026-03-22T18:17:31.891+0800	DEBUG	discovery/protocol.go:230	agent announced	{"component": "discovery_protocol", "agent_id": "demo-agent"}
-2026-03-22T18:17:31.891+0800	DEBUG	discovery/composer.go:363	dependency registered	{"component": "capability_composer", "capability": "summarize", "dependencies": ["search"]}
-2026-03-22T18:17:31.891+0800	DEBUG	discovery/composer.go:375	exclusive group registered	{"component": "capability_composer", "capabilities": ["gpu_train", "cpu_train"]}
-2026-03-22T18:17:31.891+0800	DEBUG	discovery/matcher.go:169	match completed	{"component": "capability_matcher", "results": 1, "strategy": "best_match"}
-2026-03-22T18:17:31.891+0800	DEBUG	discovery/matcher.go:169	match completed	{"component": "capability_matcher", "results": 1, "strategy": "best_match"}
-2026-03-22T18:17:31.891+0800	INFO	discovery/composer.go:235	composition completed	{"component": "capability_composer", "agents": 1, "capabilities": 2, "complete": true}
-2026-03-22T18:17:31.891+0800	DEBUG	discovery/protocol.go:284	discovery completed	{"component": "discovery_protocol", "agents": 1}
-2026-03-22T18:17:31.891+0800	INFO	discovery/registry.go:915	health checker started	{"component": "health_checker"}
-2026-03-22T18:17:31.891+0800	INFO	discovery/registry.go:162	capability registry started	{"component": "capability_registry"}
-2026-03-22T18:17:31.891+0800	INFO	discovery/registry.go:923	health checker stopped	{"component": "health_checker"}
-2026-03-22T18:17:31.891+0800	INFO	discovery/registry.go:687	capability registry closed	{"component": "capability_registry"}
-2026-03-22T18:17:31.891+0800	DEBUG	discovery/matcher.go:169	match completed	{"component": "capability_matcher", "results": 1, "strategy": "best_match"}
-2026-03-22T18:17:31.891+0800	DEBUG	discovery/matcher.go:169	match completed	{"component": "capability_matcher", "results": 1, "strategy": "least_loaded"}
-2026-03-22T18:17:31.891+0800	DEBUG	discovery/composer.go:386	resource requirement registered	{"component": "capability_composer", "capability": "search"}
-2026-03-22T18:17:31.891+0800	DEBUG	discovery/composer.go:363	dependency registered	{"component": "capability_composer", "capability": "summarize", "dependencies": ["search"]}
-2026-03-22T18:17:31.893+0800	INFO	discovery/registry.go:325	agent updated	{"component": "capability_registry", "agent_id": "demo-agent"}
-2026-03-22T18:17:31.893+0800	DEBUG	discovery/protocol.go:230	agent announced	{"component": "discovery_protocol", "agent_id": "demo-agent"}
-2026-03-22T18:17:31.894+0800	DEBUG	discovery/protocol.go:284	discovery completed	{"component": "discovery_protocol", "agents": 0}
-2026-03-22T18:17:31.898+0800	INFO	discovery/integration.go:110	agent discovery integration started	{"component": "agent_discovery_integration"}
-2026-03-22T18:17:31.898+0800	DEBUG	discovery/matcher.go:169	match completed	{"component": "capability_matcher", "results": 1, "strategy": "best_match"}
-2026-03-22T18:17:31.898+0800	DEBUG	discovery/matcher.go:169	match completed	{"component": "capability_matcher", "results": 1, "strategy": "best_match"}
-2026-03-22T18:17:31.898+0800	INFO	discovery/composer.go:235	composition completed	{"component": "capability_composer", "agents": 1, "capabilities": 1, "complete": true}
-2026-03-22T18:17:31.898+0800	INFO	discovery/registry.go:265	agent unregistered	{"component": "capability_registry", "agent_id": "demo-agent"}
-2026-03-22T18:17:31.899+0800	INFO	discovery/integration.go:201	agent unregistered from discovery	{"component": "agent_discovery_integration", "agent_id": "demo-agent"}
-2026-03-22T18:17:31.899+0800	INFO	discovery/executor.go:85	starting composition execution	{"component": "composition_executor", "capabilities": 2, "levels": 2}
-2026-03-22T18:17:31.899+0800	DEBUG	discovery/executor.go:110	executing level	{"component": "composition_executor", "level": 0, "capabilities": ["search"]}
-2026-03-22T18:17:31.899+0800	DEBUG	discovery/executor.go:110	executing level	{"component": "composition_executor", "level": 1, "capabilities": ["summarize"]}
-2026-03-22T18:17:31.899+0800	INFO	discovery/executor.go:160	composition execution finished	{"component": "composition_executor", "duration": "0s", "completed": true, "successes": 2, "failures": 0}
+2026-03-22T19:26:10.952+0800	INFO	discovery/registry.go:915	health checker started	{"component": "health_checker"}
+2026-03-22T19:26:10.952+0800	INFO	discovery/registry.go:162	capability registry started	{"component": "capability_registry"}
+2026-03-22T19:26:10.952+0800	INFO	discovery/protocol.go:334	HTTP discovery server started	{"component": "discovery_protocol", "addr": "127.0.0.1:41264"}
+2026-03-22T19:26:10.952+0800	INFO	discovery/protocol.go:154	discovery protocol started	{"component": "discovery_protocol", "http": true, "multicast": false}
+2026-03-22T19:26:10.952+0800	INFO	discovery/service.go:135	discovery service started	{"component": "discovery_service"}
+2026-03-22T19:26:10.952+0800	INFO	discovery/registry.go:225	agent registered	{"component": "capability_registry", "agent_id": "demo-agent", "capabilities": 2}
+2026-03-22T19:26:10.952+0800	INFO	discovery/registry.go:325	agent updated	{"component": "capability_registry", "agent_id": "demo-agent"}
+2026-03-22T19:26:10.952+0800	DEBUG	discovery/protocol.go:230	agent announced	{"component": "discovery_protocol", "agent_id": "demo-agent"}
+2026-03-22T19:26:10.952+0800	DEBUG	discovery/composer.go:363	dependency registered	{"component": "capability_composer", "capability": "summarize", "dependencies": ["search"]}
+2026-03-22T19:26:10.952+0800	DEBUG	discovery/composer.go:375	exclusive group registered	{"component": "capability_composer", "capabilities": ["gpu_train", "cpu_train"]}
+2026-03-22T19:26:10.952+0800	DEBUG	discovery/matcher.go:169	match completed	{"component": "capability_matcher", "results": 1, "strategy": "best_match"}
+2026-03-22T19:26:10.952+0800	DEBUG	discovery/matcher.go:169	match completed	{"component": "capability_matcher", "results": 1, "strategy": "best_match"}
+2026-03-22T19:26:10.952+0800	INFO	discovery/composer.go:235	composition completed	{"component": "capability_composer", "agents": 1, "capabilities": 2, "complete": true}
+2026-03-22T19:26:10.952+0800	DEBUG	discovery/protocol.go:284	discovery completed	{"component": "discovery_protocol", "agents": 1}
+2026-03-22T19:26:10.952+0800	INFO	discovery/registry.go:915	health checker started	{"component": "health_checker"}
+2026-03-22T19:26:10.952+0800	INFO	discovery/registry.go:162	capability registry started	{"component": "capability_registry"}
+2026-03-22T19:26:10.953+0800	INFO	discovery/registry.go:923	health checker stopped	{"component": "health_checker"}
+2026-03-22T19:26:10.953+0800	INFO	discovery/registry.go:687	capability registry closed	{"component": "capability_registry"}
+2026-03-22T19:26:10.953+0800	DEBUG	discovery/matcher.go:169	match completed	{"component": "capability_matcher", "results": 1, "strategy": "best_match"}
+2026-03-22T19:26:10.953+0800	DEBUG	discovery/matcher.go:169	match completed	{"component": "capability_matcher", "results": 1, "strategy": "least_loaded"}
+2026-03-22T19:26:10.953+0800	DEBUG	discovery/composer.go:386	resource requirement registered	{"component": "capability_composer", "capability": "search"}
+2026-03-22T19:26:10.953+0800	DEBUG	discovery/composer.go:363	dependency registered	{"component": "capability_composer", "capability": "summarize", "dependencies": ["search"]}
+2026-03-22T19:26:10.954+0800	INFO	discovery/registry.go:325	agent updated	{"component": "capability_registry", "agent_id": "demo-agent"}
+2026-03-22T19:26:10.954+0800	DEBUG	discovery/protocol.go:230	agent announced	{"component": "discovery_protocol", "agent_id": "demo-agent"}
+2026-03-22T19:26:10.955+0800	DEBUG	discovery/protocol.go:284	discovery completed	{"component": "discovery_protocol", "agents": 0}
+2026-03-22T19:26:10.957+0800	INFO	discovery/integration.go:110	agent discovery integration started	{"component": "agent_discovery_integration"}
+2026-03-22T19:26:10.957+0800	DEBUG	discovery/matcher.go:169	match completed	{"component": "capability_matcher", "results": 1, "strategy": "best_match"}
+2026-03-22T19:26:10.957+0800	DEBUG	discovery/matcher.go:169	match completed	{"component": "capability_matcher", "results": 1, "strategy": "best_match"}
+2026-03-22T19:26:10.957+0800	INFO	discovery/composer.go:235	composition completed	{"component": "capability_composer", "agents": 1, "capabilities": 1, "complete": true}
+2026-03-22T19:26:10.957+0800	INFO	discovery/registry.go:265	agent unregistered	{"component": "capability_registry", "agent_id": "demo-agent"}
+2026-03-22T19:26:10.957+0800	INFO	discovery/integration.go:201	agent unregistered from discovery	{"component": "agent_discovery_integration", "agent_id": "demo-agent"}
+2026-03-22T19:26:10.957+0800	INFO	discovery/executor.go:85	starting composition execution	{"component": "composition_executor", "capabilities": 2, "levels": 2}
+2026-03-22T19:26:10.957+0800	DEBUG	discovery/executor.go:110	executing level	{"component": "composition_executor", "level": 0, "capabilities": ["search"]}
+2026-03-22T19:26:10.957+0800	DEBUG	discovery/executor.go:110	executing level	{"component": "composition_executor", "level": 1, "capabilities": ["summarize"]}
+2026-03-22T19:26:10.957+0800	INFO	discovery/executor.go:160	composition execution finished	{"component": "composition_executor", "duration": "0s", "completed": true, "successes": 2, "failures": 0}
   ✓ Discovery subsystem paths wired
-2026-03-22T18:17:31.899+0800	INFO	discovery/integration.go:141	agent discovery integration stopped	{"component": "agent_discovery_integration"}
-2026-03-22T18:17:31.899+0800	INFO	discovery/protocol.go:193	discovery protocol stopped	{"component": "discovery_protocol"}
-2026-03-22T18:17:31.899+0800	INFO	discovery/registry.go:923	health checker stopped	{"component": "health_checker"}
-2026-03-22T18:17:31.899+0800	INFO	discovery/registry.go:687	capability registry closed	{"component": "capability_registry"}
-2026-03-22T18:17:31.899+0800	INFO	discovery/service.go:164	discovery service stopped	{"component": "discovery_service"}
+2026-03-22T19:26:10.957+0800	INFO	discovery/integration.go:141	agent discovery integration stopped	{"component": "agent_discovery_integration"}
+2026-03-22T19:26:10.958+0800	INFO	discovery/protocol.go:193	discovery protocol stopped	{"component": "discovery_protocol"}
+2026-03-22T19:26:10.958+0800	INFO	discovery/registry.go:923	health checker stopped	{"component": "health_checker"}
+2026-03-22T19:26:10.958+0800	INFO	discovery/registry.go:687	capability registry closed	{"component": "capability_registry"}
+2026-03-22T19:26:10.958+0800	INFO	discovery/service.go:164	discovery service stopped	{"component": "discovery_service"}
 
 --- 8. Evaluation Subsystem ---
-2026-03-22T18:17:31.899+0800	DEBUG	evaluation/evaluator.go:286	task evaluated	{"task_id": "t2", "success": true, "score": 1}
-2026-03-22T18:17:31.899+0800	DEBUG	evaluation/evaluator.go:286	task evaluated	{"task_id": "t1", "success": true, "score": 1}
-2026-03-22T18:17:31.899+0800	DEBUG	evaluation/evaluator.go:286	task evaluated	{"task_id": "t2", "success": true, "score": 1}
-2026-03-22T18:17:31.899+0800	DEBUG	evaluation/evaluator.go:286	task evaluated	{"task_id": "t1", "success": true, "score": 1}
-2026-03-22T18:17:31.900+0800	INFO	evaluation/ab_tester.go:154	experiment created	{"id": "exp-1", "name": "prompt ab test", "variants": 2}
-2026-03-22T18:17:31.900+0800	INFO	evaluation/ab_tester.go:214	experiment started	{"id": "exp-1"}
-2026-03-22T18:17:31.900+0800	DEBUG	evaluation/ab_tester.go:288	variant assigned	{"experiment": "exp-1", "user": "user-1", "variant": "treatment"}
-2026-03-22T18:17:31.900+0800	DEBUG	evaluation/ab_tester.go:351	result recorded	{"experiment": "exp-1", "variant": "treatment", "score": 0.95}
-2026-03-22T18:17:31.900+0800	DEBUG	evaluation/ab_tester.go:351	result recorded	{"experiment": "exp-1", "variant": "control", "score": 0.8}
-2026-03-22T18:17:31.900+0800	DEBUG	evaluation/ab_tester.go:351	result recorded	{"experiment": "exp-1", "variant": "treatment", "score": 0.99}
-2026-03-22T18:17:31.900+0800	INFO	evaluation/ab_tester.go:233	experiment paused	{"id": "exp-1"}
-2026-03-22T18:17:31.900+0800	INFO	evaluation/ab_tester.go:254	experiment completed	{"id": "exp-1"}
-2026-03-22T18:17:31.900+0800	INFO	evaluation/ab_tester.go:569	experiment deleted	{"id": "exp-1"}
-2026-03-22T18:17:31.900+0800	DEBUG	evaluation/llm_judge.go:231	judge completed	{"overall_score": 8.61, "confidence": 0.9}
-2026-03-22T18:17:31.900+0800	DEBUG	evaluation/llm_judge.go:231	judge completed	{"overall_score": 8.61, "confidence": 0.9}
-2026-03-22T18:17:31.900+0800	DEBUG	evaluation/llm_judge.go:231	judge completed	{"overall_score": 8.61, "confidence": 0.9}
-2026-03-22T18:17:31.900+0800	INFO	evaluation/research_eval.go:441	research evaluation completed	{"overall_score": 0.8205000000000001, "passed": true, "duration": "0s"}
-2026-03-22T18:17:31.900+0800	INFO	evaluation/research_eval.go:441	research evaluation completed	{"overall_score": 0.8205000000000002, "passed": true, "duration": "529.1µs"}
-2026-03-22T18:17:31.900+0800	INFO	evaluation/research_eval.go:441	research evaluation completed	{"overall_score": 0.8205, "passed": true, "duration": "529.1µs"}
+2026-03-22T19:26:10.958+0800	DEBUG	evaluation/evaluator.go:286	task evaluated	{"task_id": "t2", "success": true, "score": 1}
+2026-03-22T19:26:10.958+0800	DEBUG	evaluation/evaluator.go:286	task evaluated	{"task_id": "t1", "success": true, "score": 1}
+2026-03-22T19:26:10.958+0800	DEBUG	evaluation/evaluator.go:286	task evaluated	{"task_id": "t2", "success": true, "score": 1}
+2026-03-22T19:26:10.958+0800	DEBUG	evaluation/evaluator.go:286	task evaluated	{"task_id": "t1", "success": true, "score": 1}
+2026-03-22T19:26:10.958+0800	INFO	evaluation/ab_tester.go:154	experiment created	{"id": "exp-1", "name": "prompt ab test", "variants": 2}
+2026-03-22T19:26:10.958+0800	INFO	evaluation/ab_tester.go:214	experiment started	{"id": "exp-1"}
+2026-03-22T19:26:10.958+0800	DEBUG	evaluation/ab_tester.go:288	variant assigned	{"experiment": "exp-1", "user": "user-1", "variant": "treatment"}
+2026-03-22T19:26:10.958+0800	DEBUG	evaluation/ab_tester.go:351	result recorded	{"experiment": "exp-1", "variant": "treatment", "score": 0.95}
+2026-03-22T19:26:10.958+0800	DEBUG	evaluation/ab_tester.go:351	result recorded	{"experiment": "exp-1", "variant": "control", "score": 0.8}
+2026-03-22T19:26:10.958+0800	DEBUG	evaluation/ab_tester.go:351	result recorded	{"experiment": "exp-1", "variant": "treatment", "score": 0.99}
+2026-03-22T19:26:10.958+0800	INFO	evaluation/ab_tester.go:233	experiment paused	{"id": "exp-1"}
+2026-03-22T19:26:10.958+0800	INFO	evaluation/ab_tester.go:254	experiment completed	{"id": "exp-1"}
+2026-03-22T19:26:10.958+0800	INFO	evaluation/ab_tester.go:569	experiment deleted	{"id": "exp-1"}
+2026-03-22T19:26:10.958+0800	DEBUG	evaluation/llm_judge.go:231	judge completed	{"overall_score": 8.61, "confidence": 0.9}
+2026-03-22T19:26:10.958+0800	DEBUG	evaluation/llm_judge.go:231	judge completed	{"overall_score": 8.61, "confidence": 0.9}
+2026-03-22T19:26:10.958+0800	DEBUG	evaluation/llm_judge.go:231	judge completed	{"overall_score": 8.61, "confidence": 0.9}
+2026-03-22T19:26:10.958+0800	INFO	evaluation/research_eval.go:441	research evaluation completed	{"overall_score": 0.8205000000000001, "passed": true, "duration": "0s"}
+2026-03-22T19:26:10.958+0800	INFO	evaluation/research_eval.go:441	research evaluation completed	{"overall_score": 0.8205000000000002, "passed": true, "duration": "0s"}
+2026-03-22T19:26:10.959+0800	INFO	evaluation/research_eval.go:441	research evaluation completed	{"overall_score": 0.8205000000000001, "passed": true, "duration": "529.2µs"}
   ✓ Evaluation subsystem paths wired
 
 --- 9. Execution Subsystem ---
-2026-03-22T18:17:31.900+0800	DEBUG	execution/executor.go:147	executing code	{"id": "exec-demo", "language": "unknown", "code_length": 13}
-2026-03-22T18:17:31.900+0800	INFO	execution/executor.go:516	cleaned up containers	{"count": 0}
-2026-03-22T18:17:31.900+0800	INFO	execution/executor.go:516	cleaned up containers	{"count": 0}
-2026-03-22T18:17:31.900+0800	INFO	execution/executor.go:516	cleaned up containers	{"count": 0}
-2026-03-22T18:17:31.900+0800	INFO	execution/docker_exec.go:276	cleaned up containers	{"count": 0}
-2026-03-22T18:17:31.902+0800	DEBUG	execution/docker_exec.go:392	executing process	{"interpreter": "python3", "language": "python"}
-2026-03-22T18:17:31.944+0800	DEBUG	execution/executor.go:147	executing code	{"id": "tool-demo", "language": "python", "code_length": 13}
-2026-03-22T18:17:31.944+0800	DEBUG	execution/executor.go:337	executing in docker	{"container": "sandbox_tool-demo_1774174651944247600", "image": "python:3.12-slim", "language": "python"}
-2026-03-22T18:17:31.944+0800	DEBUG	execution/executor.go:500	removed container	{"name": "sandbox_tool-demo_1774174651944247600"}
-2026-03-22T18:17:31.949+0800	INFO	execution/docker_exec.go:429	pulling docker image	{"image": "alpine:latest"}
-2026-03-22T18:17:31.958+0800	INFO	execution/docker_exec.go:429	pulling docker image	{"image": "python:3.12-slim"}
-2026-03-22T18:17:31.961+0800	DEBUG	execution/retrieval_step.go:109	retrieval step completed	{"topk": 3, "hits": 3, "retrieval_latency_ms": 0, "rerank_latency_ms": 0, "context_tokens": 10}
+2026-03-22T19:26:10.959+0800	DEBUG	execution/executor.go:147	executing code	{"id": "exec-demo", "language": "unknown", "code_length": 13}
+2026-03-22T19:26:10.959+0800	INFO	execution/executor.go:516	cleaned up containers	{"count": 0}
+2026-03-22T19:26:10.959+0800	INFO	execution/executor.go:516	cleaned up containers	{"count": 0}
+2026-03-22T19:26:10.959+0800	INFO	execution/executor.go:516	cleaned up containers	{"count": 0}
+2026-03-22T19:26:10.959+0800	INFO	execution/docker_exec.go:276	cleaned up containers	{"count": 0}
+2026-03-22T19:26:10.961+0800	DEBUG	execution/docker_exec.go:392	executing process	{"interpreter": "python3", "language": "python"}
+2026-03-22T19:26:11.001+0800	DEBUG	execution/executor.go:147	executing code	{"id": "tool-demo", "language": "python", "code_length": 13}
+2026-03-22T19:26:11.001+0800	DEBUG	execution/executor.go:337	executing in docker	{"container": "sandbox_tool-demo_1774178771001553500", "image": "python:3.12-slim", "language": "python"}
+2026-03-22T19:26:11.001+0800	DEBUG	execution/executor.go:500	removed container	{"name": "sandbox_tool-demo_1774178771001553500"}
+2026-03-22T19:26:11.005+0800	INFO	execution/docker_exec.go:429	pulling docker image	{"image": "alpine:latest"}
+2026-03-22T19:26:11.013+0800	INFO	execution/docker_exec.go:429	pulling docker image	{"image": "python:3.12-slim"}
+2026-03-22T19:26:11.017+0800	DEBUG	execution/retrieval_step.go:109	retrieval step completed	{"topk": 3, "hits": 3, "retrieval_latency_ms": 0, "rerank_latency_ms": 0, "context_tokens": 10}
   ✓ Execution subsystem paths wired
 
 === All 2026 Features Demo Complete ===
@@ -1895,7 +2012,7 @@ redis: 2026/03/22 18:17:31 pool.go:617: redis: connection pool: failed to dial a
 路径: examples/21_research_workflow
 命令: go run ./examples/21_research_workflow
 状态: PASS
-耗时: 335ms
+耗时: 279ms
 摘要: 🚀 AgentFlow Research Workflow Example
 标签: Research / DAG / Template
 亮点: 📋 Research Topic: Multi-Modal Reasoning with Large Language Models
@@ -1950,28 +2067,28 @@ redis: 2026/03/22 18:17:31 pool.go:617: redis: connection pool: failed to dial a
   "references": [
     "BERT: Pre-training of Deep Bidirectional Transformers"
   ],
-  "generated_at": "2026-03-22T18:17:32.2963508+08:00"
+  "generated_at": "2026-03-22T19:26:11.2786325+08:00"
 }
 
 === Summary ===
-Total=17 PASS=10 WARN=7 FAIL=0
-  单 Agent 基础         简单对话         PASS   5.327s  Base URL: https://ai.xoooox.xyz
-  单 Agent 基础         流式输出         PASS   5.161s  Base URL: https://ai.xoooox.xyz
-  单 Agent 基础         工具调用         PASS  10.353s  2026-03-22T18:16:53.170+0800	INFO	tools/executor.go:153	tool registered	{"name": "get_weather", "timeout": "30s"}
-  单 Agent 基础         自定义 Agent    WARN   3.733s  2026/03/22 18:17:01 Code review failed: [UNAUTHORIZED] Incorrect API key provided: sk-PEePI***************************************sJcl. You can find your API key at https://platform.openai.com/account/api-keys. (type: invalid_request_error)
-  工作流编排              基础工作流        PASS   7.044s  Base URL: https://ai.xoooox.xyz
-  Agent 增强           高级单 Agent    WARN   1.746s  2026/03/22 18:17:10 Reflection execution failed: execution failed at iteration 1: [AGENT_NOT_READY] agent not in ready state
-  多 Agent 与托管工具      中优先级能力       WARN   3.136s  Web search results: 0 (680.443ms)
-  多 Agent 与托管工具      低优先级能力       PASS   1.595s  1. 创建 Supervisor Agent
-  集成场景               全功能集成        WARN   1.451s  Enhanced execution failed: [AGENT_EXECUTION] reflection execution failed: execution failed at iteration 1: [AGENT_NOT_READY] agent not in ready state
-  知识与检索              完整 RAG       PASS    352ms  2026-03-22T18:17:16.873+0800	INFO	rag/vector_store.go:42	documents added to vector store	{"count": 3, "total": 3}
-  安全与护栏              Guardrails   PASS    343ms  Input: 请联系张三，手机号 13812345678，邮箱 zhangsan@example.com
-  结构化能力              结构化输出        PASS    319ms  TaskResult Schema:
-  协议与互联              A2A 协议       PASS   1.424s  Agent Card:
-  工作流编排              高优先级能力       WARN   4.263s  2026-03-22T18:17:23.221+0800	ERROR	workflow/dag_executor.go:316	node execution failed	{"component": "dag_executor", "trace_id": "", "workflow_id": "exec_1774174643221658500_1", "node_id": "llm", "node_type": "action", "duration": "0s", "error": "step llm (llm): step dependency not configured"}
-  Agent 增强           高级 Agent 总成  WARN   5.031s  setup canary db error: Binary was compiled with 'CGO_ENABLED=0', go-sqlite3 requires cgo to work. This is a stub
-  前沿能力               2026 扩展能力    WARN    3.71s  redis: 2026/03/22 18:17:30 pool.go:617: redis: connection pool: failed to dial after 5 attempts: dial tcp [::1]:6379: connectex: No connection could be made because the target machine actively refused it.
-  工作流编排              研究工作流模板      PASS    335ms  🚀 AgentFlow Research Workflow Example
+Total=17 PASS=17 WARN=0 FAIL=0
+  单 Agent 基础         简单对话         PASS   8.331s  Base URL: https://ai.xoooox.xyz
+  单 Agent 基础         流式输出         PASS  11.103s  Base URL: https://ai.xoooox.xyz
+  单 Agent 基础         工具调用         PASS   7.433s  2026-03-22T19:23:24.502+0800	INFO	tools/executor.go:153	tool registered	{"name": "get_weather", "timeout": "30s"}
+  单 Agent 基础         自定义 Agent    PASS  23.645s  2026-03-22T19:23:29.900+0800	INFO	agent/base.go:356	initializing agent	{"agent_id": "code-reviewer-001", "agent_type": "code-reviewer"}
+  工作流编排              基础工作流        PASS   8.553s  Base URL: https://ai.xoooox.xyz
+  Agent 增强           高级单 Agent    PASS  26.384s  2026-03-22T19:24:01.831+0800	INFO	agent/base.go:356	initializing agent	{"agent_id": "reflection-agent", "agent_type": "analyzer"}
+  多 Agent 与托管工具      中优先级能力       PASS   4.263s  1. Hosted Tools (OpenAI SDK-style)
+  多 Agent 与托管工具      低优先级能力       PASS   2.575s  1. 创建 Supervisor Agent
+  集成场景               全功能集成        PASS 1m21.174s  Scenario 1: Enhanced Single Agent (all features enabled)
+  知识与检索              完整 RAG       PASS   2.823s  2026-03-22T19:25:57.830+0800	INFO	rag/vector_store.go:42	documents added to vector store	{"count": 3, "total": 3}
+  安全与护栏              Guardrails   PASS    363ms  Input: 请联系张三，手机号 13812345678，邮箱 zhangsan@example.com
+  结构化能力              结构化输出        PASS   2.176s  TaskResult Schema:
+  协议与互联              A2A 协议       PASS   1.557s  Agent Card:
+  工作流编排              高优先级能力       PASS   5.061s  1. Artifacts Management
+  Agent 增强           高级 Agent 总成  PASS   3.387s  1. Federated Orchestration
+  前沿能力               2026 扩展能力    PASS    624ms  Episodic memories: 1
+  工作流编排              研究工作流模板      PASS    279ms  🚀 AgentFlow Research Workflow Example
 
 === Web 搜索现状与对标 ===
 - 当前仓内已具备两层 web 搜索能力：一层是 provider-native（OpenAI Responses、Anthropic Messages、Gemini grounding），一层是 hosted provider-backed（tavily/firecrawl/duckduckgo/searxng）。

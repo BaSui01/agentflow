@@ -464,14 +464,14 @@ func demoVisualBuilder(ctx context.Context, logger *zap.Logger) {
 		Description: "A workflow created with visual builder",
 		Nodes: []workflow.VisualNode{
 			{ID: "start", Type: workflow.VNodeStart, Label: "Start", Position: workflow.Position{X: 100, Y: 100}},
-			{ID: "llm", Type: workflow.VNodeLLM, Label: "LLM Call", Position: workflow.Position{X: 300, Y: 100},
-				Config: workflow.NodeConfig{Model: "gpt-4", Prompt: "Hello"}},
+			{ID: "draft", Type: workflow.VNodeTool, Label: "Draft Step", Position: workflow.Position{X: 300, Y: 100},
+				Config: workflow.NodeConfig{ToolName: "draft-message"}},
 			{ID: "code", Type: workflow.VNodeCode, Label: "Code Step", Position: workflow.Position{X: 500, Y: 100}},
 			{ID: "end", Type: workflow.VNodeEnd, Label: "End", Position: workflow.Position{X: 700, Y: 100}},
 		},
 		Edges: []workflow.VisualEdge{
-			{ID: "e1", Source: "start", Target: "llm"},
-			{ID: "e2", Source: "llm", Target: "code"},
+			{ID: "e1", Source: "start", Target: "draft"},
+			{ID: "e2", Source: "draft", Target: "code"},
 			{ID: "e3", Source: "code", Target: "end"},
 		},
 	}
@@ -484,6 +484,21 @@ func demoVisualBuilder(ctx context.Context, logger *zap.Logger) {
 
 	// Build executable DAG
 	builder := workflow.NewVisualBuilder()
+	builder.RegisterStep("draft-message", workflow.NewFuncStep("draft-message", func(ctx context.Context, input any) (any, error) {
+		payload := map[string]any{
+			"stage":  "draft",
+			"source": "visual-builder",
+		}
+		if inputMap, ok := input.(map[string]any); ok {
+			payload["input"] = inputMap
+			if message, ok := inputMap["message"].(string); ok && message != "" {
+				payload["summary"] = "local draft for: " + message
+			}
+		} else if input != nil {
+			payload["input"] = input
+		}
+		return payload, nil
+	}))
 	builder.RegisterStep("custom-tool", workflow.NewFuncStep("custom-tool", func(ctx context.Context, input any) (any, error) {
 		return map[string]any{"ok": true, "source": "visual-builder"}, nil
 	}))
@@ -525,6 +540,9 @@ func demoVisualBuilder(ctx context.Context, logger *zap.Logger) {
 	executor := workflow.NewDAGExecutor(nil, logger)
 	out, execErr := executor.Execute(ctx, dag.Graph(), map[string]any{"message": "demo"})
 	fmt.Printf("   Execute result type: %T, err: %v\n", out, execErr)
+	if execErr == nil {
+		fmt.Printf("   Execute result: %#v\n", out)
+	}
 }
 
 func demoDSLParserAndObservability(ctx context.Context) {

@@ -11,12 +11,12 @@ import (
 	"sync"
 	"time"
 
-	"github.com/BaSui01/agentflow/agent/memorycore"
-	"github.com/BaSui01/agentflow/agent/execution"
-	"github.com/BaSui01/agentflow/agent/evaluation"
 	"github.com/BaSui01/agentflow/agent/discovery"
+	"github.com/BaSui01/agentflow/agent/evaluation"
+	"github.com/BaSui01/agentflow/agent/execution"
 	"github.com/BaSui01/agentflow/agent/guardrails"
 	"github.com/BaSui01/agentflow/agent/memory"
+	"github.com/BaSui01/agentflow/agent/memorycore"
 	"github.com/BaSui01/agentflow/agent/protocol/a2a"
 	"github.com/BaSui01/agentflow/agent/voice"
 	"github.com/BaSui01/agentflow/llm"
@@ -24,8 +24,8 @@ import (
 	"github.com/BaSui01/agentflow/pkg/database"
 	"github.com/BaSui01/agentflow/rag"
 	"github.com/BaSui01/agentflow/types"
+	"github.com/glebarez/sqlite"
 	"go.uber.org/zap"
-	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
 
@@ -256,39 +256,43 @@ func demoInfraManagers(ctx context.Context, logger *zap.Logger) {
 
 	cacheCfg := cache.DefaultConfig()
 	cacheCfg.HealthCheckInterval = 0
-	cacheManager, err := cache.NewManager(cacheCfg, logger)
-	if err != nil {
-		fmt.Printf("  Cache manager unavailable (skip): %v\n", err)
-	} else {
-		defer cacheManager.Close()
-
-		_ = cacheManager.Set(ctx, "demo:plain", "value", time.Minute)
-		_, _ = cacheManager.Get(ctx, "demo:plain")
-
-		payload := map[string]any{"feature": "infra", "year": 2026}
-		_ = cacheManager.SetJSON(ctx, "demo:json", payload, time.Minute)
-		var out map[string]any
-		_ = cacheManager.GetJSON(ctx, "demo:json", &out)
-		_, _ = json.Marshal(out)
-
-		_ = cacheManager.Delete(ctx, "demo:plain", "demo:json")
-		stats, statsErr := cacheManager.GetStats(ctx)
-		if statsErr != nil {
-			fmt.Printf("  Cache stats unavailable: %v\n", statsErr)
+	if isCacheBackendReachable(cacheCfg.Addr) {
+		cacheManager, err := cache.NewManager(cacheCfg, logger)
+		if err != nil {
+			fmt.Println("  Cache manager demo: backend detected but initialization not completed")
 		} else {
-			fmt.Printf("  Cache stats: keys=%d, hits=%d, misses=%d\n", stats.Keys, stats.Hits, stats.Misses)
+			defer cacheManager.Close()
+
+			_ = cacheManager.Set(ctx, "demo:plain", "value", time.Minute)
+			_, _ = cacheManager.Get(ctx, "demo:plain")
+
+			payload := map[string]any{"feature": "infra", "year": 2026}
+			_ = cacheManager.SetJSON(ctx, "demo:json", payload, time.Minute)
+			var out map[string]any
+			_ = cacheManager.GetJSON(ctx, "demo:json", &out)
+			_, _ = json.Marshal(out)
+
+			_ = cacheManager.Delete(ctx, "demo:plain", "demo:json")
+			stats, statsErr := cacheManager.GetStats(ctx)
+			if statsErr != nil {
+				fmt.Printf("  Cache stats unavailable: %v\n", statsErr)
+			} else {
+				fmt.Printf("  Cache stats: keys=%d, hits=%d, misses=%d\n", stats.Keys, stats.Hits, stats.Misses)
+			}
+			fmt.Println("  ✓ Cache manager path wired")
 		}
-		fmt.Println("  ✓ Cache manager path wired")
+	} else {
+		fmt.Println("  Cache manager demo: no cache backend listening on configured address")
 	}
 
 	gdb, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	if err != nil {
-		fmt.Printf("  DB open failed: %v\n", err)
+		fmt.Printf("  Database demo unavailable: %v\n", err)
 		return
 	}
 	poolManager, err := database.NewPoolManager(gdb, database.DefaultPoolConfig(), logger)
 	if err != nil {
-		fmt.Printf("  Pool manager init failed: %v\n", err)
+		fmt.Printf("  Pool manager demo unavailable: %v\n", err)
 		return
 	}
 	defer poolManager.Close()
@@ -296,6 +300,19 @@ func demoInfraManagers(ctx context.Context, logger *zap.Logger) {
 	poolStats := poolManager.GetStats()
 	fmt.Printf("  Pool stats: open=%d, in_use=%d, idle=%d\n", poolStats.OpenConnections, poolStats.InUse, poolStats.Idle)
 	fmt.Println("  ✓ Database pool manager path wired")
+}
+
+func isCacheBackendReachable(addr string) bool {
+	if strings.TrimSpace(addr) == "" {
+		return false
+	}
+
+	conn, err := net.DialTimeout("tcp", addr, 300*time.Millisecond)
+	if err != nil {
+		return false
+	}
+	_ = conn.Close()
+	return true
 }
 
 func demoTypesUtilities(ctx context.Context) {
@@ -399,10 +416,10 @@ func demoDiscoverySubsystem(ctx context.Context, logger *zap.Logger) {
 		Limit:                5,
 	})
 	comp, _ := service.ComposeCapabilities(ctx, &discovery.CompositionRequest{
-		TaskDescription:       "search and summarize",
-		RequiredCapabilities:  []string{"search", "summarize"},
-		AllowPartial:          true,
-		MaxAgents:             2,
+		TaskDescription:      "search and summarize",
+		RequiredCapabilities: []string{"search", "summarize"},
+		AllowPartial:         true,
+		MaxAgents:            2,
 	})
 	_, _ = service.DiscoverAgents(ctx, &discovery.DiscoveryFilter{Capabilities: []string{"search"}})
 	_, _ = service.GetAgent(ctx, "demo-agent")
@@ -773,7 +790,7 @@ type demoCapabilityProvider struct {
 	card *a2a.AgentCard
 }
 
-func (p *demoCapabilityProvider) ID() string { return p.card.Name }
+func (p *demoCapabilityProvider) ID() string   { return p.card.Name }
 func (p *demoCapabilityProvider) Name() string { return p.card.Name }
 func (p *demoCapabilityProvider) GetCapabilities() []a2a.Capability {
 	return p.card.Capabilities

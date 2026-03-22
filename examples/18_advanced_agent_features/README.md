@@ -23,4 +23,4 @@ go run main.go
 
 ## 代码说明
 
-`federation.NewOrchestrator` 管理联邦节点；`deliberation.NewEngine` 支持 Immediate/Deliberate 模式切换；`longrunning.NewExecutor` 管理多步骤执行和检查点；`skills.NewRegistry` 提供技能的注册、分类查询和标签搜索。
+`federation.NewOrchestrator` 管理联邦节点；`deliberation.NewEngine` 支持 Immediate/Deliberate 模式切换；`longrunning.NewExecutor` 管理多步骤执行和检查点；`skills.NewRegistry` 提供技能的注册、分类查询和标签搜索。LLM Canary 示例默认以内存模式运行，不依赖本地 SQLite/CGO。

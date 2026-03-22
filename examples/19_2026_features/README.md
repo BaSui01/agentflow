@@ -23,4 +23,4 @@ go run main.go
 
 ## 代码说明
 
-`memory.NewLayeredMemory` 创建三层记忆系统；`rag.NewKnowledgeGraph` 构建知识图谱；`guardrails.NewShadowAIDetector` 扫描域名和内容中的未授权 AI 使用。Audio 仅展示配置，需要外部提供商才能实际运行。
+`memory.NewLayeredMemory` 创建三层记忆系统；`rag.NewKnowledgeGraph` 构建知识图谱；`guardrails.NewShadowAIDetector` 扫描域名和内容中的未授权 AI 使用。Infra Managers 示例会先探测本地缓存后端，未就绪时改为本地说明模式；数据库连接池演示使用纯 Go SQLite 内存库。Audio 仅展示配置，需要外部提供商才能实际运行。

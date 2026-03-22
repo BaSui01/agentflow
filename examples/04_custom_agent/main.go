@@ -83,7 +83,7 @@ func divide(a, b int) int {
 		},
 		{
 			Role:    llm.RoleUser,
-			Content: "分析这组数据的趋势: [10, 15, 13, 17, 20, 25, 22, 28, 30]",
+			Content: "数据 [10, 15, 13, 17, 20, 25, 22, 28, 30] 的总体趋势是什么？请用两句话回答。",
 		},
 	}
 	dataResp, err := dataAnalyst.ChatCompletion(ctx, dataMessages)
@@ -102,7 +102,7 @@ func divide(a, b int) int {
 		},
 		{
 			Role:    llm.RoleUser,
-			Content: "写一个关于时间旅行的短篇故事开头",
+			Content: "写一个关于时间旅行的短篇故事开头，控制在两小段内。",
 		},
 	}
 	storyResp, err := storyWriter.ChatCompletion(ctx, storyMessages)
@@ -141,7 +141,7 @@ func createCodeReviewerAgent(ctx context.Context, provider llm.Provider, logger 
 		},
 		LLM: types.LLMConfig{
 			Model:       model,
-			MaxTokens:   2000,
+			MaxTokens:   1200,
 			Temperature: 0.3,
 		},
 		Runtime: types.RuntimeConfig{
@@ -181,7 +181,7 @@ func createDataAnalystAgent(ctx context.Context, provider llm.Provider, logger *
 		},
 		LLM: types.LLMConfig{
 			Model:       model,
-			MaxTokens:   1500,
+			MaxTokens:   300,
 			Temperature: 0.5,
 		},
 		Runtime: types.RuntimeConfig{
@@ -220,7 +220,7 @@ func createStoryWriterAgent(ctx context.Context, provider llm.Provider, logger *
 		},
 		LLM: types.LLMConfig{
 			Model:       model,
-			MaxTokens:   3000,
+			MaxTokens:   600,
 			Temperature: 0.9,
 		},
 		Runtime: types.RuntimeConfig{

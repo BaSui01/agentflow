@@ -14,7 +14,7 @@
 ## 前置条件
 
 - Go 1.24+
-- 无需 API Key（所有示例使用 Mock 对象演示结构）
+- 无需 API Key（Hosted web_search 默认回退到 DuckDuckGo；配置 `TAVILY_API_KEY` / `FIRECRAWL_API_KEY` / `SEARXNG_BASE_URL` 时会按顺序尝试）
 
 ## 运行
 
@@ -25,4 +25,4 @@ go run main.go
 
 ## 代码说明
 
-每个功能模块通过 Mock Agent 演示 API 用法和配置方式，不依赖真实 LLM 调用。重点展示各子系统的初始化、注册和配置流程。
+大部分功能模块通过 Mock Agent 演示 API 用法和配置方式，不依赖真实 LLM 调用；其中 Hosted web_search 使用仓内 provider-backed 实现，按 `tavily -> firecrawl -> searxng -> duckduckgo` 顺序进行运行时回退。重点展示各子系统的初始化、注册和配置流程。
