@@ -138,7 +138,7 @@ AgentFlow 提供以下健康检查端点：
 {
   "status": "healthy",
   "timestamp": "2026-03-22T10:30:00Z",
-  "version": "1.7.0"
+  "version": "1.8.10"
 }
 ```
 

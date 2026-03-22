@@ -388,9 +388,21 @@ agentflow/
 │   ├── base.go               # BaseAgent
 │   ├── completion.go         # ChatCompletion/StreamCompletion (dual-model architecture)
 │   ├── react.go              # Plan/Execute/Observe ReAct loop
+│   ├── steering.go           # Real-time steering (guide/stop_and_send)
+│   ├── session_manager.go    # Session manager (auto-expiry cleanup)
 │   ├── state.go              # State machine
 │   ├── event.go              # Event bus
 │   ├── registry.go           # Agent registry
+│   ├── planner/              # TaskPlanner planning engine
+│   │   ├── planner.go        # Core engine (Kahn cycle detection)
+│   │   ├── plan.go           # Plan/PlanTask data structures
+│   │   ├── executor.go       # Topological sort + parallel execution
+│   │   ├── dispatcher.go     # 3 dispatch strategies (by_role/by_capability/round_robin)
+│   │   └── tools.go          # Built-in tool schemas (create/update/get_plan)
+│   ├── team/                 # AgentTeam multi-agent collaboration
+│   │   ├── team.go           # AgentTeam implementation
+│   │   ├── modes.go          # 4 modes (Supervisor/RoundRobin/Selector/Swarm)
+│   │   └── builder.go        # Fluent builder
 │   ├── declarative/          # Declarative Agent loader (YAML/JSON)
 │   ├── plugins/              # Plugin system & lifecycle
 │   ├── collaboration/        # Multi-agent collaboration

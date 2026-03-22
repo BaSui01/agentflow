@@ -394,9 +394,21 @@ agentflow/
 │   ├── base.go               # BaseAgent
 │   ├── completion.go         # ChatCompletion/StreamCompletion（双模型架构）
 │   ├── react.go              # Plan/Execute/Observe ReAct 循环
+│   ├── steering.go           # 实时引导 Steering（guide/stop_and_send）
+│   ├── session_manager.go    # 会话管理器（自动过期清理）
 │   ├── state.go              # 状态机
 │   ├── event.go              # 事件总线
 │   ├── registry.go           # Agent 注册表
+│   ├── planner/              # TaskPlanner 任务规划引擎
+│   │   ├── planner.go        # 核心引擎（Kahn 环检测）
+│   │   ├── plan.go           # Plan/PlanTask 数据结构
+│   │   ├── executor.go       # 拓扑排序 + 并行执行
+│   │   ├── dispatcher.go     # 3 种分派策略（by_role/by_capability/round_robin）
+│   │   └── tools.go          # 内置工具 Schema（create/update/get_plan）
+│   ├── team/                 # AgentTeam 多 Agent 协作
+│   │   ├── team.go           # AgentTeam 实现
+│   │   ├── modes.go          # 4 种模式（Supervisor/RoundRobin/Selector/Swarm）
+│   │   └── builder.go        # 流式构建器
 │   ├── declarative/          # 声明式 Agent 加载器（YAML/JSON）
 │   ├── plugins/              # 插件系统（注册表、生命周期）
 │   ├── collaboration/        # 多 Agent 协作
