@@ -592,3 +592,38 @@ func TestBaseAgent_Identity(t *testing.T) {
 		t.Fatal("expected non-empty type")
 	}
 }
+
+// ═══ Integration context 辅助函数测试 ═══
+
+func TestMemoryContext(t *testing.T) {
+	ctx := withMemoryContext(context.Background(), []string{"mem1", "mem2"})
+	result := memoryContextFromCtx(ctx)
+	if len(result) != 2 || result[0] != "mem1" {
+		t.Fatalf("expected [mem1 mem2], got %v", result)
+	}
+}
+
+func TestMemoryContext_Missing(t *testing.T) {
+	result := memoryContextFromCtx(context.Background())
+	if len(result) != 0 {
+		t.Fatalf("expected empty, got %v", result)
+	}
+}
+
+// ═══ Completion applyContextRouteHints 测试 ═══
+
+func TestApplyContextRouteHints(t *testing.T) {
+	req := &llm.ChatRequest{Model: "test"}
+	ctx := context.Background()
+	// 不应 panic
+	applyContextRouteHints(req, ctx)
+}
+
+func TestApplyContextRouteHints_WithRunConfig(t *testing.T) {
+	req := &llm.ChatRequest{Model: "test"}
+	ctx := types.WithLLMProvider(context.Background(), "my-provider")
+	applyContextRouteHints(req, ctx)
+	if req.Metadata == nil || req.Metadata["chat_provider"] != "my-provider" {
+		t.Fatalf("expected metadata chat_provider=my-provider, got %v", req.Metadata)
+	}
+}
