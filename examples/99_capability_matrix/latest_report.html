@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Capability Matrix Latest Report</title>
+  <style>
+    body { margin: 0; font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif; background: #f5f1e8; color: #1f2a30; }
+    .wrap { max-width: 1180px; margin: 0 auto; padding: 28px 18px 48px; }
+    .hero { background: linear-gradient(135deg, #17364f, #2d5d78); color: #fff; border-radius: 18px; padding: 24px; }
+    h1 { margin: 0 0 8px; font-size: 32px; }
+    .sub { margin: 0; color: rgba(255,255,255,.82); }
+    .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px,1fr)); gap: 12px; margin-top: 18px; }
+    .stat { background: rgba(255,255,255,.12); border-radius: 14px; padding: 14px 16px; }
+    .label { font-size: 12px; opacity: .8; text-transform: uppercase; letter-spacing: .08em; }
+    .value { font-size: 28px; font-weight: 700; }
+    .panel { margin-top: 18px; background: #fffdf9; border: 1px solid #ddd4c8; border-radius: 16px; padding: 18px; box-shadow: 0 8px 24px rgba(31,42,48,.06); }
+    h2 { margin: 0 0 12px; font-size: 20px; }
+    ul { margin: 0; padding-left: 20px; }
+    li { margin: 8px 0; }
+    pre { margin: 0; white-space: pre-wrap; word-break: break-word; font-size: 13px; line-height: 1.5; background: #fbf7f0; border-radius: 12px; padding: 16px; border: 1px solid #e6ddd0; }
+    .ok { color: #2b7a46; }
+    .bad { color: #b54a3c; }
+    .warn { color: #b78417; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <section class="hero">
+      <h1>Capability Matrix Latest Report</h1>
+      <p class="sub">重测时间：2026-03-22 17:34:13 +08:00。当前环境包含 OpenAI Chat Completions、OpenAI Responses、Anthropic Messages；Gemini 暂未配置。</p>
+      <div class="stats">
+        <div class="stat"><div class="label">Total</div><div class="value">33</div></div>
+        <div class="stat"><div class="label ok">Pass</div><div class="value">25</div></div>
+        <div class="stat"><div class="label bad">Fail</div><div class="value">2</div></div>
+        <div class="stat"><div class="label warn">Warn</div><div class="value">3</div></div>
+        <div class="stat"><div class="label">Skip</div><div class="value">3</div></div>
+      </div>
+    </section>
+    <section class="panel">
+      <h2>重点结果</h2>
+      <ul><li>OpenAI Chat Completions  Stop Sequence      WARN   2.186s  stop token leaked: alpha STOP beta</li><li>OpenAI Responses         Stop Sequence      WARN   2.047s  stop token leaked: alpha STOP beta</li><li>OpenAI Responses         Structured Output  FAIL    393ms  [INVALID_REQUEST] Missing required parameter: &#39;***.***.name&#39;. (type: invalid_request_error)</li><li>OpenAI Responses         Stateful Response  WARN   2.899s  response_id=resp_09e36f299a62ba4e0169bfb75bf2f4819191b3024ca1617925 but memory not observed: 我目前没有记住任何代号。</li><li>Anthropic Messages       Tool Calling       FAIL    295ms  [INVALID_REQUEST] llm request error: http post fail[400]:{&quot;object&quot;:&quot;error&quot;,&quot;message&quot;:&quot;2 validation errors:\n  {&#39;type&#39;: &#39;model_attributes_type&#39;, &#39;loc&#39;: (&#39;body&#39;, &#39;tool_choice&#39;, &#39;ToolChoice&#39;), &#39;msg&#39;: &#39;Input should be a valid dictionary or object to extract fields from&#39;, &#39;input&#39;: &#39;any&#39;}\n  {&#39;type&#39;: &#39;literal_error&#39;, &#39;loc&#39;: (&#39;body&#39;, &#39;tool_choice&#39;, \&quot;literal[&#39;auto&#39;,&#39;required&#39;,&#39;none&#39;]\&quot;), &#39;msg&#39;: \&quot;Input should be &#39;auto&#39;, &#39;required&#39; or &#39;none&#39;\&quot;, &#39;input&#39;: &#39;any&#39;, &#39;ctx&#39;: {&#39;expected&#39;: \&quot;&#39;auto&#39;, &#39;required&#39; or &#39;none&#39;\&quot;}}\n\n  File \&quot;/home/jovyan/LLM/wangn/glm-5-server/sglang-main/sglang-0.5.9/python/sglang/srt/entrypoints/http_server.py\&quot;, line 1351, in openai_v1_chat_completions\n    POST /v1/chat/completions [{&#39;type&#39;: &#39;model_attributes_type&#39;, &#39;loc&#39;: (&#39;body&#39;, &#39;tool_choice&#39;, &#39;ToolChoice&#39;), &#39;msg&#39;: &#39;Input should be a valid dictionary or object to extract fields from&#39;, &#39;input&#39;: &#39;any&#39;}, {&#39;type&#39;: &#39;literal_error&#39;, &#39;loc&#39;: (&#39;body&#39;, &#39;tool_choice&#39;, \&quot;literal[&#39;auto&#39;,&#39;required&#39;,&#39;none&#39;]\&quot;), &#39;msg&#39;: \&quot;Input should be &#39;auto&#39;, &#39;required&#39; or &#39;none&#39;\&quot;, &#39;input&#39;: &#39;any&#39;, &#39;ctx&#39;: {&#39;expected&#39;: \&quot;&#39;auto&#39;, &#39;required&#39; or &#39;none&#39;\&quot;}}]&quot;,&quot;type&quot;:&quot;Bad Request&quot;,&quot;param&quot;:null,&quot;code&quot;:400} (request id: 20260322093329329211828I97pUmkd) (type: bad_response_status_code)</li></ul>
+    </section>
+    <section class="panel">
+      <h2>原始输出</h2>
+      <pre>╔══════════════════════════════════════════════════════════════╗
+║   AgentFlow Provider Capability Matrix                      ║
+╚══════════════════════════════════════════════════════════════╝
+
+=== OpenAI Chat Completions ===
+  base_url:   https://ai.xoooox.xyz
+  models:     https://ai.xoooox.xyz/v1/models
+  completion: https://ai.xoooox.xyz/v1/chat/completions
+  [PASS] Provider Metadata        0s  name=openai mode=chat_completions
+  [PASS] Native Function Call       0s  provider reports native function calling support
+  [PASS] Health Check          281ms  healthy=true latency=281ms
+  [PASS] Models Endpoint       132ms  https://ai.xoooox.xyz/v1/models -&gt; 11 models, sample=gpt-5.2-codex
+  [PASS] Completion Endpoint   2.123s  https://ai.xoooox.xyz/v1/chat/completions -&gt; AgentFlow 是一种把大模型、工具调用和任务编排串起来，让 AI 能按步骤自主完成复杂任务的工作流框架。
+  [PASS] Stream Endpoint      1.706s  https://ai.xoooox.xyz/v1/chat/completions -&gt; 25 chunks, 流式响应的作用是将生成内容实时分段返回，让用户更快看到结果并提升交互体验。
+  [PASS] Multi Turn           6.046s  小明，25岁。
+  [WARN] Stop Sequence        2.186s  stop token leaked: alpha STOP beta
+  [PASS] Structured Output    4.315s  {&quot;creator&quot;:&quot;Guido van Rossum&quot;,&quot;language&quot;:&quot;Python&quot;,&quot;year&quot;:1991}
+  [PASS] Tool Calling          1.28s  tool=get_weather args={&quot;city&quot;:&quot;上海&quot;}
+  [SKIP] Stateful Response        0s  only applicable to OpenAI Responses API
+
+=== OpenAI Responses ===
+  base_url:   https://ai.xoooox.xyz
+  models:     https://ai.xoooox.xyz/v1/models
+  completion: https://ai.xoooox.xyz/v1/responses
+  [PASS] Provider Metadata        0s  name=openai mode=responses
+  [PASS] Native Function Call       0s  provider reports native function calling support
+  [PASS] Health Check          240ms  healthy=true latency=240ms
+  [PASS] Models Endpoint       130ms  https://ai.xoooox.xyz/v1/models -&gt; 11 models, sample=gpt-5.2-codex
+  [PASS] Completion Endpoint   2.296s  https://ai.xoooox.xyz/v1/responses -&gt; AgentFlow 是一种将大模型代理（Agent）的任务拆解为可编排、可执行、可监控的流程框架，用来让 AI 更稳定地完成复杂任务。
+  [PASS] Stream Endpoint      2.301s  https://ai.xoooox.xyz/v1/responses -&gt; 26 chunks, 流式响应的作用是将生成内容实时分段返回给用户，从而降低等待感并提升交互体验。
+  [PASS] Multi Turn           3.999s  小明，25岁。
+  [WARN] Stop Sequence        2.047s  stop token leaked: alpha STOP beta
+  [FAIL] Structured Output     393ms  [INVALID_REQUEST] Missing required parameter: &#39;***.***.name&#39;. (type: invalid_request_error)
+  [PASS] Tool Calling         1.843s  tool=get_weather args=&quot;{\&quot;city\&quot;:\&quot;上海\&quot;}&quot;
+  [WARN] Stateful Response    2.899s  response_id=resp_09e36f299a62ba4e0169bfb75bf2f4819191b3024ca1617925 but memory not observed: 我目前没有记住任何代号。
+
+=== Anthropic Messages ===
+  base_url:   https://ai.xoooox.xyz
+  models:     https://ai.xoooox.xyz/v1/models
+  completion: https://ai.xoooox.xyz/v1/messages
+  [PASS] Provider Metadata        0s  name=claude mode=messages
+  [PASS] Native Function Call       0s  provider reports native function calling support
+  [PASS] Health Check          238ms  healthy=true latency=238ms
+  [PASS] Models Endpoint       129ms  https://ai.xoooox.xyz/v1/models -&gt; 8 models, sample=glm-5
+  [PASS] Completion Endpoint   4.136s  https://ai.xoooox.xyz/v1/messages -&gt; 1. **分析用户请求：**     *   **主题：** AgentFlow。     *   **约束：** 用一句中文解释。     *   **角色：** 简洁的技术助手...
+  [PASS] Stream Endpoint      2.771s  https://ai.xoooox.xyz/v1/messages -&gt; 117 chunks, 用户想要一句中文解释“流式响应”的作用。1.**分析概念：***什么是流式响应？它是一种服务器逐块发送数据，而不是等待整个响应准备好后再一次性发送的技术。*有什么好处？降低延迟（用...
+  [PASS] Multi Turn           2.828s  1. **分析用户请求：** * 用户提问：“我叫什么？今年几岁？”（我叫什么名字？我多大了？） * 约束条件：“只直接回答。”（只直接回答。） * 上下文：用户之前陈述过“我叫小...
+  [PASS] Stop Sequence         612ms  用户要求我原样输出&quot;alpha
+  [SKIP] Structured Output        0s  provider does not expose native structured output support
+  [FAIL] Tool Calling          295ms  [INVALID_REQUEST] llm request error: http post fail[400]:{&quot;object&quot;:&quot;error&quot;,&quot;message&quot;:&quot;2 validation errors:\n  {&#39;type&#39;: &#39;model_attributes_type&#39;, &#39;loc&#39;: (&#39;body&#39;, &#39;tool_choice&#39;, &#39;ToolChoice&#39;), &#39;msg&#39;: &#39;Input should be a valid dictionary or object to extract fields from&#39;, &#39;input&#39;: &#39;any&#39;}\n  {&#39;type&#39;: &#39;literal_error&#39;, &#39;loc&#39;: (&#39;body&#39;, &#39;tool_choice&#39;, \&quot;literal[&#39;auto&#39;,&#39;required&#39;,&#39;none&#39;]\&quot;), &#39;msg&#39;: \&quot;Input should be &#39;auto&#39;, &#39;required&#39; or &#39;none&#39;\&quot;, &#39;input&#39;: &#39;any&#39;, &#39;ctx&#39;: {&#39;expected&#39;: \&quot;&#39;auto&#39;, &#39;required&#39; or &#39;none&#39;\&quot;}}\n\n  File \&quot;/home/jovyan/LLM/wangn/glm-5-server/sglang-main/sglang-0.5.9/python/sglang/srt/entrypoints/http_server.py\&quot;, line 1351, in openai_v1_chat_completions\n    POST /v1/chat/completions [{&#39;type&#39;: &#39;model_attributes_type&#39;, &#39;loc&#39;: (&#39;body&#39;, &#39;tool_choice&#39;, &#39;ToolChoice&#39;), &#39;msg&#39;: &#39;Input should be a valid dictionary or object to extract fields from&#39;, &#39;input&#39;: &#39;any&#39;}, {&#39;type&#39;: &#39;literal_error&#39;, &#39;loc&#39;: (&#39;body&#39;, &#39;tool_choice&#39;, \&quot;literal[&#39;auto&#39;,&#39;required&#39;,&#39;none&#39;]\&quot;), &#39;msg&#39;: \&quot;Input should be &#39;auto&#39;, &#39;required&#39; or &#39;none&#39;\&quot;, &#39;input&#39;: &#39;any&#39;, &#39;ctx&#39;: {&#39;expected&#39;: \&quot;&#39;auto&#39;, &#39;required&#39; or &#39;none&#39;\&quot;}}]&quot;,&quot;type&quot;:&quot;Bad Request&quot;,&quot;param&quot;:null,&quot;code&quot;:400} (request id: 20260322093329329211828I97pUmkd) (type: bad_response_status_code)
+  [SKIP] Stateful Response        0s  only applicable to OpenAI Responses API
+
+=== Summary ===
+Total=33 PASS=25 FAIL=2 WARN=3 SKIP=3
+  OpenAI Chat Completions  Provider Metadata  PASS       0s  name=openai mode=chat_completions
+  OpenAI Chat Completions  Native Function Call PASS       0s  provider reports native function calling support
+  OpenAI Chat Completions  Health Check       PASS    281ms  healthy=true latency=281ms
+  OpenAI Chat Completions  Models Endpoint    PASS    132ms  https://ai.xoooox.xyz/v1/models -&gt; 11 models, sample=gpt-5.2-codex
+  OpenAI Chat Completions  Completion Endpoint PASS   2.123s  https://ai.xoooox.xyz/v1/chat/completions -&gt; AgentFlow 是一种把大模型、工具调用和任务编排串起来，让 AI 能按步骤自主完成复杂任务的工作流框架。
+  OpenAI Chat Completions  Stream Endpoint    PASS   1.706s  https://ai.xoooox.xyz/v1/chat/completions -&gt; 25 chunks, 流式响应的作用是将生成内容实时分段返回，让用户更快看到结果并提升交互体验。
+  OpenAI Chat Completions  Multi Turn         PASS   6.046s  小明，25岁。
+  OpenAI Chat Completions  Stop Sequence      WARN   2.186s  stop token leaked: alpha STOP beta
+  OpenAI Chat Completions  Structured Output  PASS   4.315s  {&quot;creator&quot;:&quot;Guido van Rossum&quot;,&quot;language&quot;:&quot;Python&quot;,&quot;year&quot;:1991}
+  OpenAI Chat Completions  Tool Calling       PASS    1.28s  tool=get_weather args={&quot;city&quot;:&quot;上海&quot;}
+  OpenAI Chat Completions  Stateful Response  SKIP       0s  only applicable to OpenAI Responses API
+  OpenAI Responses         Provider Metadata  PASS       0s  name=openai mode=responses
+  OpenAI Responses         Native Function Call PASS       0s  provider reports native function calling support
+  OpenAI Responses         Health Check       PASS    240ms  healthy=true latency=240ms
+  OpenAI Responses         Models Endpoint    PASS    130ms  https://ai.xoooox.xyz/v1/models -&gt; 11 models, sample=gpt-5.2-codex
+  OpenAI Responses         Completion Endpoint PASS   2.296s  https://ai.xoooox.xyz/v1/responses -&gt; AgentFlow 是一种将大模型代理（Agent）的任务拆解为可编排、可执行、可监控的流程框架，用来让 AI 更稳定地完成复杂任务。
+  OpenAI Responses         Stream Endpoint    PASS   2.301s  https://ai.xoooox.xyz/v1/responses -&gt; 26 chunks, 流式响应的作用是将生成内容实时分段返回给用户，从而降低等待感并提升交互体验。
+  OpenAI Responses         Multi Turn         PASS   3.999s  小明，25岁。
+  OpenAI Responses         Stop Sequence      WARN   2.047s  stop token leaked: alpha STOP beta
+  OpenAI Responses         Structured Output  FAIL    393ms  [INVALID_REQUEST] Missing required parameter: &#39;***.***.name&#39;. (type: invalid_request_error)
+  OpenAI Responses         Tool Calling       PASS   1.843s  tool=get_weather args=&quot;{\&quot;city\&quot;:\&quot;上海\&quot;}&quot;
+  OpenAI Responses         Stateful Response  WARN   2.899s  response_id=resp_09e36f299a62ba4e0169bfb75bf2f4819191b3024ca1617925 but memory not observed: 我目前没有记住任何代号。
+  Anthropic Messages       Provider Metadata  PASS       0s  name=claude mode=messages
+  Anthropic Messages       Native Function Call PASS       0s  provider reports native function calling support
+  Anthropic Messages       Health Check       PASS    238ms  healthy=true latency=238ms
+  Anthropic Messages       Models Endpoint    PASS    129ms  https://ai.xoooox.xyz/v1/models -&gt; 8 models, sample=glm-5
+  Anthropic Messages       Completion Endpoint PASS   4.136s  https://ai.xoooox.xyz/v1/messages -&gt; 1. **分析用户请求：**     *   **主题：** AgentFlow。     *   **约束：** 用一句中文解释。     *   **角色：** 简洁的技术助手...
+  Anthropic Messages       Stream Endpoint    PASS   2.771s  https://ai.xoooox.xyz/v1/messages -&gt; 117 chunks, 用户想要一句中文解释“流式响应”的作用。1.**分析概念：***什么是流式响应？它是一种服务器逐块发送数据，而不是等待整个响应准备好后再一次性发送的技术。*有什么好处？降低延迟（用...
+  Anthropic Messages       Multi Turn         PASS   2.828s  1. **分析用户请求：** * 用户提问：“我叫什么？今年几岁？”（我叫什么名字？我多大了？） * 约束条件：“只直接回答。”（只直接回答。） * 上下文：用户之前陈述过“我叫小...
+  Anthropic Messages       Stop Sequence      PASS    612ms  用户要求我原样输出&quot;alpha
+  Anthropic Messages       Structured Output  SKIP       0s  provider does not expose native structured output support
+  Anthropic Messages       Tool Calling       FAIL    295ms  [INVALID_REQUEST] llm request error: http post fail[400]:{&quot;object&quot;:&quot;error&quot;,&quot;message&quot;:&quot;2 validation errors:\n  {&#39;type&#39;: &#39;model_attributes_type&#39;, &#39;loc&#39;: (&#39;body&#39;, &#39;tool_choice&#39;, &#39;ToolChoice&#39;), &#39;msg&#39;: &#39;Input should be a valid dictionary or object to extract fields from&#39;, &#39;input&#39;: &#39;any&#39;}\n  {&#39;type&#39;: &#39;literal_error&#39;, &#39;loc&#39;: (&#39;body&#39;, &#39;tool_choice&#39;, \&quot;literal[&#39;auto&#39;,&#39;required&#39;,&#39;none&#39;]\&quot;), &#39;msg&#39;: \&quot;Input should be &#39;auto&#39;, &#39;required&#39; or &#39;none&#39;\&quot;, &#39;input&#39;: &#39;any&#39;, &#39;ctx&#39;: {&#39;expected&#39;: \&quot;&#39;auto&#39;, &#39;required&#39; or &#39;none&#39;\&quot;}}\n\n  File \&quot;/home/jovyan/LLM/wangn/glm-5-server/sglang-main/sglang-0.5.9/python/sglang/srt/entrypoints/http_server.py\&quot;, line 1351, in openai_v1_chat_completions\n    POST /v1/chat/completions [{&#39;type&#39;: &#39;model_attributes_type&#39;, &#39;loc&#39;: (&#39;body&#39;, &#39;tool_choice&#39;, &#39;ToolChoice&#39;), &#39;msg&#39;: &#39;Input should be a valid dictionary or object to extract fields from&#39;, &#39;input&#39;: &#39;any&#39;}, {&#39;type&#39;: &#39;literal_error&#39;, &#39;loc&#39;: (&#39;body&#39;, &#39;tool_choice&#39;, \&quot;literal[&#39;auto&#39;,&#39;required&#39;,&#39;none&#39;]\&quot;), &#39;msg&#39;: \&quot;Input should be &#39;auto&#39;, &#39;required&#39; or &#39;none&#39;\&quot;, &#39;input&#39;: &#39;any&#39;, &#39;ctx&#39;: {&#39;expected&#39;: \&quot;&#39;auto&#39;, &#39;required&#39; or &#39;none&#39;\&quot;}}]&quot;,&quot;type&quot;:&quot;Bad Request&quot;,&quot;param&quot;:null,&quot;code&quot;:400} (request id: 20260322093329329211828I97pUmkd) (type: bad_response_status_code)
+  Anthropic Messages       Stateful Response  SKIP       0s  only applicable to OpenAI Responses API
+</pre>
+    </section>
+  </div>
+</body>
+</html>
