@@ -18,12 +18,12 @@ type mockAgent struct {
 	executeFn func(ctx context.Context, input *agent.Input) (*agent.Output, error)
 }
 
-func (m *mockAgent) ID() string                                                  { return m.id }
-func (m *mockAgent) Name() string                                                { return m.id }
-func (m *mockAgent) Type() agent.AgentType                                       { return agent.TypeGeneric }
-func (m *mockAgent) State() agent.State                                          { return agent.StateReady }
-func (m *mockAgent) Init(_ context.Context) error                                { return nil }
-func (m *mockAgent) Teardown(_ context.Context) error                            { return nil }
+func (m *mockAgent) ID() string                       { return m.id }
+func (m *mockAgent) Name() string                     { return m.id }
+func (m *mockAgent) Type() agent.AgentType            { return agent.TypeGeneric }
+func (m *mockAgent) State() agent.State               { return agent.StateReady }
+func (m *mockAgent) Init(_ context.Context) error     { return nil }
+func (m *mockAgent) Teardown(_ context.Context) error { return nil }
 func (m *mockAgent) Plan(_ context.Context, _ *agent.Input) (*agent.PlanResult, error) {
 	return &agent.PlanResult{}, nil
 }
@@ -436,3 +436,20 @@ func TestParseSubtasks_MissingFields(t *testing.T) {
 	assert.Equal(t, 5, tasks[0].Priority)
 }
 
+func TestHierarchicalAgent_ApplyTaskLimit(t *testing.T) {
+	h := &HierarchicalAgent{
+		config: HierarchicalConfig{MaxWorkers: 2},
+		logger: zap.NewNop(),
+	}
+
+	tasks := []*Task{
+		{ID: "t1"},
+		{ID: "t2"},
+		{ID: "t3"},
+	}
+
+	limited := h.applyTaskLimit(tasks)
+	require.Len(t, limited, 2)
+	assert.Equal(t, "t1", limited[0].ID)
+	assert.Equal(t, "t2", limited[1].ID)
+}

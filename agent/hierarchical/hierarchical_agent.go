@@ -1,8 +1,8 @@
 package hierarchical
 
 import (
-	cryptorand "crypto/rand"
 	"context"
+	cryptorand "crypto/rand"
 	"encoding/json"
 	"fmt"
 	"math/big"
@@ -246,6 +246,7 @@ func (h *HierarchicalAgent) decomposeTask(ctx context.Context, input *agent.Inpu
 
 	// 解析子任务（JSON 直解析 -> 代码块提取 -> 回退单任务）
 	subtasks := h.parseSubtasks(output.Content, input)
+	subtasks = h.applyTaskLimit(subtasks)
 
 	return subtasks, nil
 }
@@ -304,6 +305,17 @@ func (h *HierarchicalAgent) parseSubtasks(content string, originalInput *agent.I
 			Status: TaskStatusPending,
 		},
 	}
+}
+
+func (h *HierarchicalAgent) applyTaskLimit(tasks []*Task) []*Task {
+	if h.config.MaxWorkers <= 0 || len(tasks) <= h.config.MaxWorkers {
+		return tasks
+	}
+	h.logger.Warn("subtasks exceed max workers, truncating",
+		zap.Int("subtasks", len(tasks)),
+		zap.Int("max_workers", h.config.MaxWorkers),
+	)
+	return tasks[:h.config.MaxWorkers]
 }
 
 // tryParseSubtaskJSON attempts to parse a JSON array of subtasks.
@@ -619,4 +631,3 @@ func (s *RandomStrategy) SelectWorker(ctx context.Context, task *Task, workers [
 	}
 	return candidates[n.Int64()], nil
 }
-

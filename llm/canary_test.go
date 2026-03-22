@@ -2,6 +2,7 @@ package llm
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -24,11 +25,28 @@ func TestCanaryConfig_GetSetDeployment_NilDB(t *testing.T) {
 	// No deployment initially
 	assert.Nil(t, cc.GetDeployment(1))
 
-	// We can't call SetDeployment with nil DB (it would panic on db.Table)
-	// but we can test GetAllDeployments and RemoveDeployment
-	assert.Empty(t, cc.GetAllDeployments())
+	err := cc.SetDeployment(&CanaryDeployment{
+		ProviderID:     1,
+		CanaryVersion:  "v2",
+		StableVersion:  "v1",
+		TrafficPercent: 10,
+		Stage:          CanaryStage10Pct,
+	})
+	require.NoError(t, err)
 
-	cc.RemoveDeployment(1) // no-op, should not panic
+	assert.NotNil(t, cc.GetDeployment(1))
+	assert.Len(t, cc.GetAllDeployments(), 1)
+
+	err = cc.UpdateStage(1, CanaryStage50Pct)
+	require.NoError(t, err)
+	assert.Equal(t, CanaryStage50Pct, cc.GetDeployment(1).Stage)
+
+	err = cc.TriggerRollback(1, "nil-db rollback")
+	require.NoError(t, err)
+	assert.Equal(t, CanaryStageRollback, cc.GetDeployment(1).Stage)
+
+	cc.RemoveDeployment(1)
+	assert.Nil(t, cc.GetDeployment(1))
 }
 
 func TestCanaryConfig_UpdateStage_NotFound(t *testing.T) {
@@ -85,6 +103,15 @@ func TestCanaryMonitor_NewAndStop(t *testing.T) {
 	monitor.Stop() // should not panic
 }
 
+func TestCanaryMonitor_GetProviderStats_NilDB(t *testing.T) {
+	cc := NewCanaryConfig(nil, zap.NewNop())
+	t.Cleanup(cc.Stop)
+
+	monitor := NewCanaryMonitor(nil, cc, zap.NewNop())
+	stats := monitor.getProviderStats(1, "demo", time.Minute)
+	assert.Equal(t, ProviderStats{}, stats)
+}
+
 func TestCanaryStageConstants(t *testing.T) {
 	assert.Equal(t, CanaryStage("init"), CanaryStageInit)
 	assert.Equal(t, CanaryStage("10pct"), CanaryStage10Pct)
@@ -92,4 +119,3 @@ func TestCanaryStageConstants(t *testing.T) {
 	assert.Equal(t, CanaryStage("100pct"), CanaryStage100Pct)
 	assert.Equal(t, CanaryStage("rollback"), CanaryStageRollback)
 }
-

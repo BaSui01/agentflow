@@ -128,6 +128,10 @@ func (c *CanaryConfig) GetDeployment(providerID uint) *CanaryDeployment {
 
 // SetDeployment 设置金丝雀部署
 func (c *CanaryConfig) SetDeployment(deployment *CanaryDeployment) error {
+	if deployment == nil {
+		return fmt.Errorf("deployment cannot be nil")
+	}
+
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -146,16 +150,18 @@ func (c *CanaryConfig) SetDeployment(deployment *CanaryDeployment) error {
 		"started_at":         deployment.StartTime,
 	}
 
-	if deployment.ID > 0 {
-		// 更新现有记录
-		c.db.Table("sc_llm_canary_deployments").Where("id = ?", deployment.ID).Updates(record)
-	} else {
-		// 创建新记录
-		var newRecord struct {
-			ID uint
+	if c.db != nil {
+		if deployment.ID > 0 {
+			// 更新现有记录
+			c.db.Table("sc_llm_canary_deployments").Where("id = ?", deployment.ID).Updates(record)
+		} else {
+			// 创建新记录
+			var newRecord struct {
+				ID uint
+			}
+			c.db.Table("sc_llm_canary_deployments").Create(record).Scan(&newRecord)
+			deployment.ID = newRecord.ID
 		}
-		c.db.Table("sc_llm_canary_deployments").Create(record).Scan(&newRecord)
-		deployment.ID = newRecord.ID
 	}
 
 	c.deployments[deployment.ProviderID] = deployment
@@ -197,7 +203,9 @@ func (c *CanaryConfig) UpdateStage(providerID uint, newStage CanaryStage) error 
 		updates["completed_at"] = time.Now()
 	}
 
-	c.db.Table("sc_llm_canary_deployments").Where("id = ?", deployment.ID).Updates(updates)
+	if c.db != nil {
+		c.db.Table("sc_llm_canary_deployments").Where("id = ?", deployment.ID).Updates(updates)
+	}
 
 	c.logger.Info("provider stage updated",
 		zap.Uint("providerID", providerID),
@@ -218,31 +226,34 @@ func (c *CanaryConfig) TriggerRollback(providerID uint, reason string) error {
 		return fmt.Errorf("no canary deployment found for provider %d", providerID)
 	}
 
+	previousStage := deployment.Stage
 	deployment.Stage = CanaryStageRollback
 	deployment.TrafficPercent = 0
 	deployment.RollbackReason = reason
 
 	// 写入数据库
-	c.db.Table("sc_llm_canary_deployments").Where("id = ?", deployment.ID).Updates(map[string]any{
-		"stage":           "rollback",
-		"traffic_percent": 0,
-		"rollback_reason": reason,
-	})
+	if c.db != nil {
+		c.db.Table("sc_llm_canary_deployments").Where("id = ?", deployment.ID).Updates(map[string]any{
+			"stage":           "rollback",
+			"traffic_percent": 0,
+			"rollback_reason": reason,
+		})
 
-	// 写入审计日志
-	auditLog := AuditLog{
-		Action:       "canary_rollback",
-		ResourceType: "llm_provider",
-		ResourceID:   strconv.FormatUint(uint64(providerID), 10),
-		Details: map[string]any{
-			"reason":         reason,
-			"canary_version": deployment.CanaryVersion,
-			"stable_version": deployment.StableVersion,
-			"previous_stage": deployment.Stage,
-		},
-		CreatedAt: time.Now(),
+		// 写入审计日志
+		auditLog := AuditLog{
+			Action:       "canary_rollback",
+			ResourceType: "llm_provider",
+			ResourceID:   strconv.FormatUint(uint64(providerID), 10),
+			Details: map[string]any{
+				"reason":         reason,
+				"canary_version": deployment.CanaryVersion,
+				"stable_version": deployment.StableVersion,
+				"previous_stage": previousStage,
+			},
+			CreatedAt: time.Now(),
+		}
+		c.db.Table("sc_audit_logs").Create(&auditLog)
 	}
-	c.db.Table("sc_audit_logs").Create(&auditLog)
 
 	c.logger.Warn("canary rollback triggered",
 		zap.Uint("providerID", providerID),
@@ -365,6 +376,10 @@ func (m *CanaryMonitor) checkAndRollback() {
 }
 
 func (m *CanaryMonitor) getProviderStats(providerID uint, providerCode string, duration time.Duration) ProviderStats {
+	if m.db == nil {
+		return ProviderStats{}
+	}
+
 	since := time.Now().Add(-duration)
 
 	var result struct {
@@ -393,4 +408,3 @@ func (m *CanaryMonitor) getProviderStats(providerID uint, providerCode string, d
 		FailedCalls: result.FailedCalls,
 	}
 }
-
