@@ -1384,3 +1384,440 @@ func (m *mockEnhancedMemory) RecordEpisode(_ context.Context, _ *types.EpisodicE
 	m.episodeCount++
 	return nil
 }
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Coverage Boost Round 3 — lifecycle, memory_facade, scoped persistence,
+// integration middlewares
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// ═══ LifecycleManager ═══
+
+func TestLifecycleManager_StartStop(t *testing.T) {
+	ag := &testSimpleAgent{id: "lm-agent", output: "ok"}
+	lm := NewLifecycleManager(ag, zap.NewNop())
+
+	if lm.IsRunning() {
+		t.Fatal("should not be running before Start")
+	}
+
+	ctx := context.Background()
+	if err := lm.Start(ctx); err != nil {
+		t.Fatalf("Start failed: %v", err)
+	}
+	if !lm.IsRunning() {
+		t.Fatal("should be running after Start")
+	}
+
+	hs := lm.GetHealthStatus()
+	_ = hs // just exercise the accessor
+
+	// Double start should error
+	if err := lm.Start(ctx); err == nil {
+		t.Fatal("expected error on double Start")
+	}
+
+	if err := lm.Stop(ctx); err != nil {
+		t.Fatalf("Stop failed: %v", err)
+	}
+	if lm.IsRunning() {
+		t.Fatal("should not be running after Stop")
+	}
+
+	// Double stop should error
+	if err := lm.Stop(ctx); err == nil {
+		t.Fatal("expected error on double Stop")
+	}
+}
+
+func TestLifecycleManager_Restart(t *testing.T) {
+	ag := &testSimpleAgent{id: "lm-restart", output: "ok"}
+	lm := NewLifecycleManager(ag, zap.NewNop())
+
+	ctx := context.Background()
+	if err := lm.Start(ctx); err != nil {
+		t.Fatalf("Start failed: %v", err)
+	}
+	if err := lm.Restart(ctx); err != nil {
+		t.Fatalf("Restart failed: %v", err)
+	}
+	if !lm.IsRunning() {
+		t.Fatal("should be running after Restart")
+	}
+	lm.Stop(ctx)
+}
+
+// ═══ UnifiedMemoryFacade ═══
+
+func TestUnifiedMemoryFacade_Accessors(t *testing.T) {
+	f := NewUnifiedMemoryFacade(nil, nil, nil)
+	if f.HasBase() {
+		t.Fatal("expected no base")
+	}
+	if f.HasEnhanced() {
+		t.Fatal("expected no enhanced")
+	}
+	if f.Base() != nil {
+		t.Fatal("expected nil base")
+	}
+	if f.Enhanced() != nil {
+		t.Fatal("expected nil enhanced")
+	}
+	if f.SkipBaseMemory() {
+		t.Fatal("expected SkipBaseMemory=false without enhanced")
+	}
+}
+
+func TestUnifiedMemoryFacade_SaveInteraction_NoMemory(t *testing.T) {
+	f := NewUnifiedMemoryFacade(nil, nil, zap.NewNop())
+	// Should not panic
+	f.SaveInteraction(context.Background(), "agent1", "t1", "user input", "agent output")
+}
+
+func TestUnifiedMemoryFacade_SaveInteraction_Enhanced(t *testing.T) {
+	mem := &mockEnhancedMemory{}
+	f := NewUnifiedMemoryFacade(nil, mem, zap.NewNop())
+	if !f.HasEnhanced() {
+		t.Fatal("expected enhanced")
+	}
+	if !f.SkipBaseMemory() {
+		t.Fatal("expected SkipBaseMemory=true with enhanced")
+	}
+	f.SaveInteraction(context.Background(), "agent1", "t1", "user input", "agent output")
+	if mem.savedCount != 1 {
+		t.Fatalf("expected 1 save, got %d", mem.savedCount)
+	}
+}
+
+func TestUnifiedMemoryFacade_SaveInteraction_BaseOnly(t *testing.T) {
+	baseMem := &mockBaseMemory{}
+	f := NewUnifiedMemoryFacade(baseMem, nil, zap.NewNop())
+	if !f.HasBase() {
+		t.Fatal("expected base")
+	}
+	f.SaveInteraction(context.Background(), "agent1", "t1", "user input", "agent output")
+	if baseMem.saveCount != 2 { // user + agent
+		t.Fatalf("expected 2 saves, got %d", baseMem.saveCount)
+	}
+}
+
+func TestUnifiedMemoryFacade_LoadContext_NoEnhanced(t *testing.T) {
+	f := NewUnifiedMemoryFacade(nil, nil, zap.NewNop())
+	ctx := f.LoadContext(context.Background(), "agent1")
+	if len(ctx) != 0 {
+		t.Fatalf("expected empty context, got %v", ctx)
+	}
+}
+
+func TestUnifiedMemoryFacade_LoadContext_Enhanced(t *testing.T) {
+	mem := &mockEnhancedMemoryWithData{
+		working:   []types.MemoryEntry{{Content: "working mem"}},
+		shortTerm: []types.MemoryEntry{{Content: "short term"}},
+	}
+	f := NewUnifiedMemoryFacade(nil, mem, zap.NewNop())
+	ctx := f.LoadContext(context.Background(), "agent1")
+	if len(ctx) != 2 {
+		t.Fatalf("expected 2 context entries, got %d", len(ctx))
+	}
+}
+
+func TestUnifiedMemoryFacade_RecordEpisode(t *testing.T) {
+	mem := &mockEnhancedMemory{}
+	f := NewUnifiedMemoryFacade(nil, mem, zap.NewNop())
+	f.RecordEpisode(context.Background(), &types.EpisodicEvent{ID: "ep1"})
+	if mem.episodeCount != 1 {
+		t.Fatalf("expected 1 episode, got %d", mem.episodeCount)
+	}
+}
+
+func TestUnifiedMemoryFacade_RecordEpisode_NilEnhanced(t *testing.T) {
+	f := NewUnifiedMemoryFacade(nil, nil, zap.NewNop())
+	// Should not panic
+	f.RecordEpisode(context.Background(), &types.EpisodicEvent{ID: "ep2"})
+}
+
+// ═══ ScopedPersistenceStores ═══
+
+func TestScopedPersistenceStores_Basic(t *testing.T) {
+	inner := NewPersistenceStores(zap.NewNop())
+	scoped := NewScopedPersistenceStores(inner, "sub-agent-1")
+
+	if scoped.Scope() != "sub-agent-1" {
+		t.Fatalf("expected scope=sub-agent-1, got %s", scoped.Scope())
+	}
+
+	// LoadPrompt delegates to inner (not scoped)
+	doc := scoped.LoadPrompt(context.Background(), "assistant", "test", "")
+	if doc != nil {
+		t.Fatal("expected nil from nil store")
+	}
+
+	// RecordRun with nil store
+	runID := scoped.RecordRun(context.Background(), "agent1", "tenant1", "trace1", "input", time.Now())
+	if runID != "" {
+		t.Fatalf("expected empty runID, got %s", runID)
+	}
+
+	// UpdateRunStatus with nil store
+	err := scoped.UpdateRunStatus(context.Background(), "run1", "completed", nil, "")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// RestoreConversation with nil store
+	msgs := scoped.RestoreConversation(context.Background(), "conv1")
+	if len(msgs) != 0 {
+		t.Fatalf("expected empty, got %d", len(msgs))
+	}
+
+	// PersistConversation with nil store — should not panic
+	scoped.PersistConversation(context.Background(), "conv1", "agent1", "tenant1", "user1", "in", "out")
+}
+
+func TestScopedPersistenceStores_WithStores(t *testing.T) {
+	inner := NewPersistenceStores(zap.NewNop())
+	inner.SetRunStore(&mockRunStore{})
+	inner.SetPromptStore(&mockPromptStore{
+		doc: PromptDocument{Version: "v3"},
+	})
+
+	scoped := NewScopedPersistenceStores(inner, "scope1")
+
+	runID := scoped.RecordRun(context.Background(), "agent1", "tenant1", "trace1", "input", time.Now())
+	if runID == "" {
+		t.Fatal("expected non-empty runID")
+	}
+
+	doc := scoped.LoadPrompt(context.Background(), "assistant", "test", "")
+	if doc == nil || doc.Version != "v3" {
+		t.Fatal("expected prompt doc with version v3")
+	}
+}
+
+// ═══ ExecuteEnhanced with middleware paths ═══
+
+func TestBaseAgent_ExecuteEnhanced_WithObservability(t *testing.T) {
+	ag := buildTestAgent(t, "enh-obs")
+	ag.Init(context.Background())
+
+	obs := &mockObservability{}
+	ag.extensions.EnableObservability(obs)
+
+	output, err := ag.ExecuteEnhanced(context.Background(), &Input{
+		TraceID: "obs1",
+		Content: "test observability",
+	}, EnhancedExecutionOptions{
+		UseObservability: true,
+		RecordMetrics:    true,
+		RecordTrace:      true,
+	})
+	if err != nil {
+		t.Fatalf("ExecuteEnhanced with observability failed: %v", err)
+	}
+	if output == nil {
+		t.Fatal("expected non-nil output")
+	}
+	if obs.traceStarted != 1 {
+		t.Fatalf("expected 1 trace start, got %d", obs.traceStarted)
+	}
+	if obs.traceEnded != 1 {
+		t.Fatalf("expected 1 trace end, got %d", obs.traceEnded)
+	}
+}
+
+func TestBaseAgent_ExecuteEnhanced_WithSkills(t *testing.T) {
+	ag := buildTestAgent(t, "enh-skills")
+	ag.Init(context.Background())
+
+	skills := &mockSkillDiscoverer{
+		skills: []*types.DiscoveredSkill{
+			{Name: "skill1", Instructions: "use tool A"},
+		},
+	}
+	ag.extensions.EnableSkills(skills)
+
+	output, err := ag.ExecuteEnhanced(context.Background(), &Input{
+		TraceID: "sk1",
+		Content: "test skills",
+	}, EnhancedExecutionOptions{UseSkills: true})
+	if err != nil {
+		t.Fatalf("ExecuteEnhanced with skills failed: %v", err)
+	}
+	if output == nil {
+		t.Fatal("expected non-nil output")
+	}
+}
+
+func TestBaseAgent_ExecuteEnhanced_WithMemoryLoad(t *testing.T) {
+	ag := buildTestAgent(t, "enh-memload")
+	ag.Init(context.Background())
+
+	mem := &mockEnhancedMemoryWithData{
+		working:   []types.MemoryEntry{{Content: "working context"}},
+		shortTerm: []types.MemoryEntry{{Content: "short term context"}},
+	}
+	ag.extensions.EnableEnhancedMemory(mem)
+
+	output, err := ag.ExecuteEnhanced(context.Background(), &Input{
+		TraceID: "ml1",
+		Content: "test memory load",
+	}, EnhancedExecutionOptions{
+		UseEnhancedMemory:   true,
+		LoadWorkingMemory:   true,
+		LoadShortTermMemory: true,
+	})
+	if err != nil {
+		t.Fatalf("ExecuteEnhanced with memory load failed: %v", err)
+	}
+	if output == nil {
+		t.Fatal("expected non-nil output")
+	}
+}
+
+func TestBaseAgent_ExecuteEnhanced_WithMemorySave(t *testing.T) {
+	ag := buildTestAgent(t, "enh-memsave")
+	ag.Init(context.Background())
+
+	mem := &mockEnhancedMemory{}
+	ag.extensions.EnableEnhancedMemory(mem)
+
+	output, err := ag.ExecuteEnhanced(context.Background(), &Input{
+		TraceID: "ms1",
+		Content: "test memory save",
+	}, EnhancedExecutionOptions{
+		UseEnhancedMemory: true,
+		SaveToMemory:      true,
+	})
+	if err != nil {
+		t.Fatalf("ExecuteEnhanced with memory save failed: %v", err)
+	}
+	if output == nil {
+		t.Fatal("expected non-nil output")
+	}
+	if mem.savedCount != 1 {
+		t.Fatalf("expected 1 save, got %d", mem.savedCount)
+	}
+}
+
+func TestBaseAgent_ExecuteEnhanced_WithPromptEnhancer(t *testing.T) {
+	ag := buildTestAgent(t, "enh-prompt")
+	ag.Init(context.Background())
+
+	enhancer := &mockPromptEnhancer{}
+	ag.extensions.EnablePromptEnhancer(enhancer)
+
+	output, err := ag.ExecuteEnhanced(context.Background(), &Input{
+		TraceID: "pe1",
+		Content: "test prompt enhancer",
+	}, EnhancedExecutionOptions{UsePromptEnhancer: true})
+	if err != nil {
+		t.Fatalf("ExecuteEnhanced with prompt enhancer failed: %v", err)
+	}
+	if output == nil {
+		t.Fatal("expected non-nil output")
+	}
+}
+
+func TestBaseAgent_ExecuteEnhanced_AllMiddlewares(t *testing.T) {
+	ag := buildTestAgent(t, "enh-all")
+	ag.Init(context.Background())
+
+	ag.extensions.EnableObservability(&mockObservability{})
+	ag.extensions.EnableSkills(&mockSkillDiscoverer{
+		skills: []*types.DiscoveredSkill{{Name: "s1", Instructions: "do X"}},
+	})
+	mem := &mockEnhancedMemoryWithData{
+		working:   []types.MemoryEntry{{Content: "w"}},
+		shortTerm: []types.MemoryEntry{{Content: "s"}},
+	}
+	ag.extensions.EnableEnhancedMemory(mem)
+	ag.extensions.EnablePromptEnhancer(&mockPromptEnhancer{})
+
+	output, err := ag.ExecuteEnhanced(context.Background(), &Input{
+		TraceID: "all1",
+		Content: "test all middlewares",
+	}, EnhancedExecutionOptions{
+		UseObservability:    true,
+		RecordMetrics:       true,
+		RecordTrace:         true,
+		UseSkills:           true,
+		UseEnhancedMemory:   true,
+		LoadWorkingMemory:   true,
+		LoadShortTermMemory: true,
+		SaveToMemory:        true,
+		UsePromptEnhancer:   true,
+	})
+	if err != nil {
+		t.Fatalf("ExecuteEnhanced with all middlewares failed: %v", err)
+	}
+	if output == nil {
+		t.Fatal("expected non-nil output")
+	}
+}
+
+// ═══ Additional mock types ═══
+
+type mockBaseMemory struct {
+	saveCount int
+}
+
+func (m *mockBaseMemory) Save(_ context.Context, _ MemoryRecord) error {
+	m.saveCount++
+	return nil
+}
+func (m *mockBaseMemory) LoadRecent(_ context.Context, _ string, _ MemoryKind, _ int) ([]MemoryRecord, error) {
+	return nil, nil
+}
+func (m *mockBaseMemory) Search(_ context.Context, _, _ string, _ int) ([]MemoryRecord, error) {
+	return nil, nil
+}
+func (m *mockBaseMemory) Delete(_ context.Context, _ string) error          { return nil }
+func (m *mockBaseMemory) Clear(_ context.Context, _ string, _ MemoryKind) error { return nil }
+func (m *mockBaseMemory) Get(_ context.Context, _ string) (*MemoryRecord, error) { return nil, nil }
+
+type mockEnhancedMemoryWithData struct {
+	working   []types.MemoryEntry
+	shortTerm []types.MemoryEntry
+}
+
+func (m *mockEnhancedMemoryWithData) LoadWorking(_ context.Context, _ string) ([]types.MemoryEntry, error) {
+	return m.working, nil
+}
+func (m *mockEnhancedMemoryWithData) LoadShortTerm(_ context.Context, _ string, _ int) ([]types.MemoryEntry, error) {
+	return m.shortTerm, nil
+}
+func (m *mockEnhancedMemoryWithData) SaveShortTerm(_ context.Context, _, _ string, _ map[string]any) error {
+	return nil
+}
+func (m *mockEnhancedMemoryWithData) RecordEpisode(_ context.Context, _ *types.EpisodicEvent) error {
+	return nil
+}
+
+type mockObservability struct {
+	traceStarted int
+	traceEnded   int
+	taskRecorded int
+}
+
+func (m *mockObservability) StartTrace(_, _ string) {
+	m.traceStarted++
+}
+func (m *mockObservability) EndTrace(_, _ string, _ error) {
+	m.traceEnded++
+}
+func (m *mockObservability) RecordTask(_ string, _ bool, _ time.Duration, _ int, _, _ float64) {
+	m.taskRecorded++
+}
+
+type mockSkillDiscoverer struct {
+	skills []*types.DiscoveredSkill
+}
+
+func (m *mockSkillDiscoverer) DiscoverSkills(_ context.Context, _ string) ([]*types.DiscoveredSkill, error) {
+	return m.skills, nil
+}
+
+type mockPromptEnhancer struct{}
+
+func (m *mockPromptEnhancer) EnhanceUserPrompt(prompt, _ string) (string, error) {
+	return "enhanced: " + prompt, nil
+}
