@@ -138,6 +138,15 @@ func main() {
 	fmt.Println("\n━━━ Agent 流式执行 ━━━")
 	d09AgentStreaming(ctx, provider, lg)
 
+	fmt.Println("\n━━━ Agent Plan 规划 ━━━")
+	d10AgentPlan(ctx, provider, lg)
+
+	fmt.Println("\n━━━ Agent Observe 反馈 ━━━")
+	d11AgentObserve(ctx, provider, lg)
+
+	fmt.Println("\n━━━ RealtimeCoordinator ━━━")
+	d12RealtimeCoordinator(ctx, provider, lg)
+
 	printSummary()
 }
 
@@ -608,5 +617,128 @@ func d09AgentStreaming(ctx context.Context, provider llm.Provider, lg *zap.Logge
 		rec("Agent流式执行", "WARN", time.Since(t), fmt.Sprintf("%d chunks但内容为空", chunkCount))
 	} else {
 		rec("Agent流式执行", "FAIL", time.Since(t), "0 chunks")
+	}
+}
+
+// =============================================================================
+// D10: Agent Plan 规划 — 生成执行计划
+// =============================================================================
+
+func d10AgentPlan(ctx context.Context, provider llm.Provider, lg *zap.Logger) {
+	t := time.Now()
+
+	ag, err := agent.NewAgentBuilder(types.AgentConfig{
+		Core:    types.CoreConfig{ID: "plan-agent", Name: "Plan Agent", Type: "assistant"},
+		LLM:     types.LLMConfig{Model: model, MaxTokens: 1024, Temperature: 0.3},
+		Runtime: types.RuntimeConfig{SystemPrompt: "你是一个项目规划专家。"},
+	}).WithProvider(provider).WithLogger(lg).Build()
+
+	if err != nil {
+		rec("Agent Plan规划", "FAIL", time.Since(t), fmt.Sprintf("构建失败: %v", err))
+		return
+	}
+	ag.Init(ctx)
+
+	planResult, err := ag.Plan(ctx, &agent.Input{
+		TraceID: "test-plan-001",
+		Content: "开发一个简单的 REST API 服务",
+	})
+
+	if err != nil {
+		rec("Agent Plan规划", "FAIL", time.Since(t), fmt.Sprintf("规划失败: %v", err))
+		return
+	}
+
+	if planResult != nil && len(planResult.Steps) > 0 {
+		rec("Agent Plan规划", "PASS", time.Since(t), fmt.Sprintf("%d个步骤, 首步: %s", len(planResult.Steps), cut(planResult.Steps[0], 40)))
+	} else if planResult != nil {
+		rec("Agent Plan规划", "WARN", time.Since(t), "规划结果无步骤")
+	} else {
+		rec("Agent Plan规划", "FAIL", time.Since(t), "无规划结果")
+	}
+}
+
+// =============================================================================
+// D11: Agent Observe 反馈 — 接收反馈并保存到记忆
+// =============================================================================
+
+func d11AgentObserve(ctx context.Context, provider llm.Provider, lg *zap.Logger) {
+	t := time.Now()
+
+	ag, err := agent.NewAgentBuilder(types.AgentConfig{
+		Core:    types.CoreConfig{ID: "observe-agent", Name: "Observe Agent", Type: "assistant"},
+		LLM:     types.LLMConfig{Model: model, MaxTokens: 256, Temperature: 0.1},
+		Runtime: types.RuntimeConfig{SystemPrompt: "你是助手。"},
+	}).WithProvider(provider).WithLogger(lg).Build()
+
+	if err != nil {
+		rec("Agent Observe", "FAIL", time.Since(t), fmt.Sprintf("构建失败: %v", err))
+		return
+	}
+	ag.Init(ctx)
+
+	// 发送反馈（无记忆管理器时应该不报错）
+	err = ag.Observe(ctx, &agent.Feedback{
+		Type:    "approval",
+		Content: "回答很好，继续保持简洁风格。",
+		Data:    map[string]any{"rating": 5},
+	})
+
+	if err != nil {
+		// 无记忆管理器时 Observe 可能返回错误，这是正常的
+		rec("Agent Observe", "WARN", time.Since(t), fmt.Sprintf("Observe: %v", err))
+	} else {
+		rec("Agent Observe", "PASS", time.Since(t), "反馈接收成功")
+	}
+}
+
+// =============================================================================
+// D12: RealtimeCoordinator — 实时协调多个 SubAgent
+// =============================================================================
+
+func d12RealtimeCoordinator(ctx context.Context, provider llm.Provider, lg *zap.Logger) {
+	t := time.Now()
+
+	buildAgent := func(id, prompt string) agent.Agent {
+		ag, err := agent.NewAgentBuilder(types.AgentConfig{
+			Core:    types.CoreConfig{ID: id, Name: id, Type: "assistant"},
+			LLM:     types.LLMConfig{Model: model, MaxTokens: 128, Temperature: 0.1},
+			Runtime: types.RuntimeConfig{SystemPrompt: prompt},
+		}).WithProvider(provider).WithLogger(lg).Build()
+		if err != nil {
+			return nil
+		}
+		ag.Init(ctx)
+		return ag
+	}
+
+	a1 := buildAgent("coord-a1", "用一句话回答，角色是技术专家。")
+	a2 := buildAgent("coord-a2", "用一句话回答，角色是产品经理。")
+
+	if a1 == nil || a2 == nil {
+		rec("RealtimeCoordinator", "FAIL", time.Since(t), "Agent构建失败")
+		return
+	}
+
+	mgr := agent.NewSubagentManager(lg)
+	defer mgr.Close()
+
+	bus := agent.NewEventBus(lg)
+	coordinator := agent.NewRealtimeCoordinator(mgr, bus, lg)
+
+	output, err := coordinator.CoordinateSubagents(ctx, []agent.Agent{a1, a2}, &agent.Input{
+		TraceID: "test-coord-001",
+		Content: "Go语言适合做什么？",
+	})
+
+	if err != nil {
+		rec("RealtimeCoordinator", "FAIL", time.Since(t), fmt.Sprintf("协调失败: %v", err))
+		return
+	}
+
+	if output != nil && output.Content != "" {
+		rec("RealtimeCoordinator", "PASS", time.Since(t), fmt.Sprintf("2个Agent协调完成, Token:%d, %s", output.TokensUsed, cut(output.Content, 50)))
+	} else {
+		rec("RealtimeCoordinator", "WARN", time.Since(t), "输出为空")
 	}
 }
