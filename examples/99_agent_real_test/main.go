@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/BaSui01/agentflow/agent"
+	"github.com/BaSui01/agentflow/agent/hierarchical"
 	"github.com/BaSui01/agentflow/llm"
 	llmtools "github.com/BaSui01/agentflow/llm/capabilities/tools"
 	"github.com/BaSui01/agentflow/llm/providers/openaicompat"
@@ -146,6 +147,9 @@ func main() {
 
 	fmt.Println("\n━━━ RealtimeCoordinator ━━━")
 	d12RealtimeCoordinator(ctx, provider, lg)
+
+	fmt.Println("\n━━━ HierarchicalAgent 层级监督 ━━━")
+	d13HierarchicalAgent(ctx, provider, lg)
 
 	printSummary()
 }
@@ -740,5 +744,68 @@ func d12RealtimeCoordinator(ctx context.Context, provider llm.Provider, lg *zap.
 		rec("RealtimeCoordinator", "PASS", time.Since(t), fmt.Sprintf("2个Agent协调完成, Token:%d, %s", output.TokensUsed, cut(output.Content, 50)))
 	} else {
 		rec("RealtimeCoordinator", "WARN", time.Since(t), "输出为空")
+	}
+}
+
+// =============================================================================
+// D13: HierarchicalAgent — Supervisor 分解任务 + Workers 并行执行 + 聚合
+// =============================================================================
+
+func d13HierarchicalAgent(ctx context.Context, provider llm.Provider, lg *zap.Logger) {
+	t := time.Now()
+
+	buildBaseAgent := func(id, name, prompt string) *agent.BaseAgent {
+		ag, err := agent.NewAgentBuilder(types.AgentConfig{
+			Core:    types.CoreConfig{ID: id, Name: name, Type: "assistant"},
+			LLM:     types.LLMConfig{Model: model, MaxTokens: 512, Temperature: 0.3},
+			Runtime: types.RuntimeConfig{SystemPrompt: prompt},
+		}).WithProvider(provider).WithLogger(lg).Build()
+		if err != nil {
+			return nil
+		}
+		ag.Init(ctx)
+		return ag
+	}
+
+	// Supervisor: 负责分解任务和聚合结果
+	supervisor := buildBaseAgent("supervisor", "Supervisor", "你是任务分解专家。将任务分解为2-3个子任务，输出JSON数组格式。")
+	// Workers: 负责执行子任务
+	worker1 := buildBaseAgent("worker1", "Worker1", "你是技术分析师，用一句话回答。")
+	worker2 := buildBaseAgent("worker2", "Worker2", "你是市场分析师，用一句话回答。")
+
+	if supervisor == nil || worker1 == nil || worker2 == nil {
+		rec("HierarchicalAgent", "FAIL", time.Since(t), "Agent构建失败")
+		return
+	}
+
+	// 创建 HierarchicalAgent
+	hAgent := hierarchical.NewHierarchicalAgent(
+		supervisor,
+		supervisor, // supervisor 同时作为 base 和 supervisor
+		[]agent.Agent{worker1, worker2},
+		hierarchical.HierarchicalConfig{
+			MaxWorkers:      2,
+			TaskTimeout:     60 * time.Second,
+			EnableRetry:     true,
+			MaxRetries:      1,
+			WorkerSelection: "round_robin",
+		},
+		lg,
+	)
+
+	output, err := hAgent.Execute(ctx, &agent.Input{
+		TraceID: "test-hierarchical-001",
+		Content: "分析Go语言在云原生领域的应用前景",
+	})
+
+	if err != nil {
+		rec("HierarchicalAgent", "FAIL", time.Since(t), fmt.Sprintf("执行失败: %v", err))
+		return
+	}
+
+	if output != nil && output.Content != "" {
+		rec("HierarchicalAgent", "PASS", time.Since(t), fmt.Sprintf("层级执行完成, Token:%d, %s", output.TokensUsed, cut(output.Content, 60)))
+	} else {
+		rec("HierarchicalAgent", "WARN", time.Since(t), "输出为空")
 	}
 }
