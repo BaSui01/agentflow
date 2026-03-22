@@ -5,6 +5,18 @@ All notable changes to AgentFlow will be documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.8.10] - 2026-03-23
+
+### Changed
+- `completion.go`: 合并 `steering==nil` 和 `IsZero()` 两个重复分支为单一条件
+- `react.go`: 合并流式/非流式工具执行后的重复结果处理逻辑（-11行）
+- `planner.go`: 提取 `advancePlanStatus()` 消除 `UpdatePlan`/`SetTaskResult` 重复的状态推进代码
+- `executor.go`: 删除单行委托 `setTaskResult`，调用处直接使用 planner 公开 API
+- `dispatcher.go`: `selectRoundRobin` 对 map keys 排序保证轮询顺序确定性
+
+### Fixed
+- `planner.go`: `generatePlanID` 使用完整 UUID 替代截断12位，消除高并发碰撞风险
+
 ## [1.8.6] - 2026-03-23
 
 ### Fixed

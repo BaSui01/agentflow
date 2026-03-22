@@ -41,13 +41,17 @@ func TestRegisterDefaultModes_RegistersAllModes(t *testing.T) {
 	}
 	got := reg.List()
 	want := map[string]bool{
-		ModeReasoning:     true,
-		ModeCollaboration: true,
-		ModeHierarchical:  true,
-		ModeCrew:          true,
-		ModeDeliberation:  true,
-		ModeFederation:    true,
-		ModeLoop:          true,
+		ModeReasoning:      true,
+		ModeCollaboration:  true,
+		ModeHierarchical:   true,
+		ModeCrew:           true,
+		ModeDeliberation:   true,
+		ModeFederation:     true,
+		ModeLoop:           true,
+		ModeTeamSupervisor: true,
+		ModeTeamRoundRobin: true,
+		ModeTeamSelector:   true,
+		ModeTeamSwarm:      true,
 	}
 	if len(got) != len(want) {
 		t.Fatalf("expected %d modes, got %d (%v)", len(want), len(got), got)

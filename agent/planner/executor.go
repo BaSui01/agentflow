@@ -105,7 +105,7 @@ func (e *PlanExecutor) ExecuteWithAgents(ctx context.Context, planID string, exe
 						zap.String("task_id", task.ID),
 						zap.Error(err),
 					)
-					e.setTaskResult(planID, task.ID, TaskStatusFailed, nil, err.Error())
+					e.planner.SetTaskResult(planID, task.ID, TaskStatusFailed, nil, err.Error())
 					return
 				}
 
@@ -113,7 +113,7 @@ func (e *PlanExecutor) ExecuteWithAgents(ctx context.Context, planID string, exe
 					zap.String("task_id", task.ID),
 					zap.String("content_preview", truncate(output.Content, 100)),
 				)
-				e.setTaskResult(planID, task.ID, TaskStatusCompleted, output, "")
+				e.planner.SetTaskResult(planID, task.ID, TaskStatusCompleted, output, "")
 			}()
 		}
 
@@ -149,34 +149,6 @@ func (e *PlanExecutor) setTaskStatus(planID, taskID string, status PlanTaskStatu
 			{TaskID: taskID, Status: &status, Error: errPtr},
 		},
 	})
-}
-
-// setTaskResult updates a task's status and stores its result.
-func (e *PlanExecutor) setTaskResult(planID, taskID string, status PlanTaskStatus, output *TaskOutput, errMsg string) {
-	e.planner.mu.Lock()
-	defer e.planner.mu.Unlock()
-
-	plan, ok := e.planner.plans[planID]
-	if !ok {
-		return
-	}
-	task, ok := plan.Tasks[taskID]
-	if !ok {
-		return
-	}
-
-	task.Status = status
-	task.Result = output
-	task.Error = errMsg
-	plan.UpdatedAt = time.Now()
-
-	if plan.IsComplete() {
-		if plan.HasFailed() {
-			plan.Status = PlanStatusFailed
-		} else {
-			plan.Status = PlanStatusCompleted
-		}
-	}
 }
 
 // aggregateResults combines all completed task results into a single TaskOutput.

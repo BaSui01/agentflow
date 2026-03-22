@@ -3,6 +3,7 @@ package planner
 import (
 	"context"
 	"fmt"
+	"sort"
 	"sync/atomic"
 
 	"go.uber.org/zap"
@@ -106,10 +107,15 @@ func (d *DefaultDispatcher) selectByRole(task *PlanTask, executors map[string]Ex
 
 // selectRoundRobin picks executors in round-robin order.
 func (d *DefaultDispatcher) selectRoundRobin(executors map[string]Executor) (Executor, error) {
-	// Build a stable slice from the map
+	// Build a stable sorted slice from the map (map iteration order is random)
 	list := make([]Executor, 0, len(executors))
-	for _, exec := range executors {
-		list = append(list, exec)
+	keys := make([]string, 0, len(executors))
+	for k := range executors {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	for _, k := range keys {
+		list = append(list, executors[k])
 	}
 
 	idx := d.counter.Add(1) - 1

@@ -220,29 +220,8 @@ func (b *BaseAgent) chatCompletionStreaming(ctx context.Context, pr *preparedReq
 			cumulativeUsage.TotalTokens += lastUsage.TotalTokens
 		}
 
-		if steering == nil {
-			// 正常完成，组装 response 返回
-			if reasoningBuf.Len() > 0 {
-				rc := reasoningBuf.String()
-				assembled.ReasoningContent = &rc
-			}
-			assembled.Role = llm.RoleAssistant
-			resp := &llm.ChatResponse{
-				ID:       lastID,
-				Provider: lastProv,
-				Model:    lastModel,
-				Choices: []llm.ChatChoice{{
-					Index:        0,
-					FinishReason: lastFR,
-					Message:      assembled,
-				}},
-				Usage: cumulativeUsage,
-			}
-			return resp, nil
-		}
-
-		// 处理 steering 消息（零值消息忽略，视为正常完成）
-		if steering.IsZero() {
+		// 正常完成 或 零值 steering（channel 关闭）→ 组装 response 返回
+		if steering == nil || steering.IsZero() {
 			if reasoningBuf.Len() > 0 {
 				rc := reasoningBuf.String()
 				assembled.ReasoningContent = &rc

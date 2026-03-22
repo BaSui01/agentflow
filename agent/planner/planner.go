@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/google/uuid"
 	"go.uber.org/zap"
 )
 
@@ -161,14 +162,7 @@ func (p *TaskPlanner) UpdatePlan(_ context.Context, args UpdatePlanArgs) error {
 	}
 
 	plan.UpdatedAt = time.Now()
-
-	if plan.IsComplete() {
-		if plan.HasFailed() {
-			plan.Status = PlanStatusFailed
-		} else {
-			plan.Status = PlanStatusCompleted
-		}
-	}
+	p.advancePlanStatus(plan)
 
 	return nil
 }
@@ -210,7 +204,41 @@ func (p *TaskPlanner) SetPlanStatus(planID string, status PlanStatus) {
 	}
 }
 
+// SetTaskResult updates a task's status and stores its result atomically.
+// Used by PlanExecutor to record task completion/failure without exposing internal locks.
+func (p *TaskPlanner) SetTaskResult(planID, taskID string, status PlanTaskStatus, output *TaskOutput, errMsg string) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	plan, ok := p.plans[planID]
+	if !ok {
+		return
+	}
+	task, ok := plan.Tasks[taskID]
+	if !ok {
+		return
+	}
+
+	task.Status = status
+	task.Result = output
+	task.Error = errMsg
+	plan.UpdatedAt = time.Now()
+	p.advancePlanStatus(plan)
+}
+
 // validateDependencies checks that all dependency references exist and detects cycles via Kahn's algorithm.
+// advancePlanStatus checks if all tasks are done and sets the plan's final status.
+// Must be called with p.mu held.
+func (p *TaskPlanner) advancePlanStatus(plan *Plan) {
+	if plan.IsComplete() {
+		if plan.HasFailed() {
+			plan.Status = PlanStatusFailed
+		} else {
+			plan.Status = PlanStatusCompleted
+		}
+	}
+}
+
 func validateDependencies(tasks map[string]*PlanTask) error {
 	for _, task := range tasks {
 		for _, depID := range task.Dependencies {
@@ -261,5 +289,5 @@ func validateDependencies(tasks map[string]*PlanTask) error {
 }
 
 func generatePlanID() string {
-	return fmt.Sprintf("plan_%d", time.Now().UnixNano())
+	return fmt.Sprintf("plan_%s", uuid.New().String())
 }

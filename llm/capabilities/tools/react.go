@@ -406,33 +406,22 @@ func (r *ReActExecutor) ExecuteStream(ctx context.Context, req *llm.ChatRequest)
 			}
 
 			eventCh <- ReActStreamEvent{Type: ReActEventToolsStart, ToolCalls: assembledMessage.ToolCalls}
-			// 检查 toolExecutor 是否支持流式执行
+			// 获取工具执行结果（优先流式执行器）
+			var toolResults []types.ToolResult
 			if streamExec, ok := r.toolExecutor.(StreamableToolExecutor); ok {
-				toolResults := r.executeToolsWithStreaming(ctx, streamExec, assembledMessage.ToolCalls, eventCh)
-				eventCh <- ReActStreamEvent{Type: ReActEventToolsEnd, ToolResults: toolResults}
-
-				messages = append(messages, assembledMessage)
-				for _, result := range toolResults {
-					toolMessage := result.ToMessage()
-					if result.Error != "" && r.config.StopOnError {
-						eventCh <- ReActStreamEvent{Type: ReActEventError, Error: fmt.Sprintf("tool execution failed: %s", result.Error)}
-						return
-					}
-					messages = append(messages, toolMessage)
-				}
+				toolResults = r.executeToolsWithStreaming(ctx, streamExec, assembledMessage.ToolCalls, eventCh)
 			} else {
-				toolResults := r.toolExecutor.Execute(ctx, assembledMessage.ToolCalls)
-				eventCh <- ReActStreamEvent{Type: ReActEventToolsEnd, ToolResults: toolResults}
+				toolResults = r.toolExecutor.Execute(ctx, assembledMessage.ToolCalls)
+			}
+			eventCh <- ReActStreamEvent{Type: ReActEventToolsEnd, ToolResults: toolResults}
 
-				messages = append(messages, assembledMessage)
-				for _, result := range toolResults {
-					toolMessage := result.ToMessage()
-					if result.Error != "" && r.config.StopOnError {
-						eventCh <- ReActStreamEvent{Type: ReActEventError, Error: fmt.Sprintf("tool execution failed: %s", result.Error)}
-						return
-					}
-					messages = append(messages, toolMessage)
+			messages = append(messages, assembledMessage)
+			for _, result := range toolResults {
+				if result.Error != "" && r.config.StopOnError {
+					eventCh <- ReActStreamEvent{Type: ReActEventError, Error: fmt.Sprintf("tool execution failed: %s", result.Error)}
+					return
 				}
+				messages = append(messages, result.ToMessage())
 			}
 
 			// 工具执行完成后，检查是否有 pending steering
