@@ -58,7 +58,7 @@ import (
 // =============================================================================
 
 var (
-	Version   = "1.8.4"
+	Version   = "1.8.5"
 	BuildTime = "unknown"
 	GitCommit = "unknown"
 )
