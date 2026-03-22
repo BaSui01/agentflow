@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/BaSui01/agentflow/llm"
 	"github.com/BaSui01/agentflow/types"
 	"go.uber.org/zap"
 )
@@ -186,3 +187,132 @@ func (a *testFailAgent) Execute(_ context.Context, _ *Input) (*Output, error) {
 	return nil, NewError("EXEC_FAILED", "模拟执行失败")
 }
 func (a *testFailAgent) Observe(_ context.Context, _ *Feedback) error { return nil }
+
+// ═══ Builder enable* 方法补充测试 ═══
+
+func TestAgentBuilder_WithDefaultSkills(t *testing.T) {
+	b := NewAgentBuilder(testConfig("skills-default"))
+	b.WithDefaultSkills("", nil)
+}
+
+func TestAgentBuilder_BuildWithoutProvider(t *testing.T) {
+	b := NewAgentBuilder(testConfig("no-provider"))
+	b.WithLogger(zap.NewNop())
+	_, err := b.Build()
+	if err == nil {
+		t.Fatal("expected error without provider")
+	}
+}
+
+func TestAgentBuilder_BuildWithoutLogger(t *testing.T) {
+	b := NewAgentBuilder(testConfig("no-logger"))
+	_, err := b.Build()
+	if err == nil {
+		t.Fatal("expected error without logger")
+	}
+}
+
+func TestAgentBuilder_BuildMinimal(t *testing.T) {
+	b := NewAgentBuilder(testConfig("minimal"))
+	b.WithProvider(&testMockProvider{})
+	b.WithLogger(zap.NewNop())
+	ag, err := b.Build()
+	if err != nil {
+		t.Fatalf("Build failed: %v", err)
+	}
+	if ag == nil {
+		t.Fatal("expected non-nil agent")
+	}
+	if ag.ID() != "minimal" {
+		t.Fatalf("expected id=minimal, got %s", ag.ID())
+	}
+}
+
+// ═══ BaseAgent 状态和生命周期测试 ═══
+
+func TestBaseAgent_InitAndTeardown(t *testing.T) {
+	ag := buildTestAgent(t, "lifecycle")
+	ctx := context.Background()
+
+	if err := ag.Init(ctx); err != nil {
+		t.Fatalf("Init failed: %v", err)
+	}
+	if ag.State() != StateReady {
+		t.Fatalf("expected state=ready after Init, got %s", ag.State())
+	}
+
+	if err := ag.Teardown(ctx); err != nil {
+		t.Fatalf("Teardown failed: %v", err)
+	}
+}
+
+func TestBaseAgent_TryLockExec(t *testing.T) {
+	ag := buildTestAgent(t, "lock-test")
+	ag.Init(context.Background())
+
+	// 第一次锁应该成功
+	if !ag.TryLockExec() {
+		t.Fatal("first lock should succeed")
+	}
+	// 第二次锁应该失败（已锁定）
+	if ag.TryLockExec() {
+		t.Fatal("second lock should fail")
+	}
+	ag.UnlockExec()
+	// 解锁后应该能再次锁定
+	if !ag.TryLockExec() {
+		t.Fatal("lock after unlock should succeed")
+	}
+	ag.UnlockExec()
+}
+
+func TestBaseAgent_SetGateway(t *testing.T) {
+	ag := buildTestAgent(t, "gateway-test")
+	ag.SetGateway(nil) // nil 不应 panic
+}
+
+func TestBaseAgent_Tools(t *testing.T) {
+	ag := buildTestAgent(t, "tools-test")
+	// 无 ToolManager 时返回 nil
+	tm := ag.Tools()
+	if tm != nil {
+		t.Fatal("expected nil ToolManager")
+	}
+}
+
+func TestBaseAgent_Logger(t *testing.T) {
+	ag := buildTestAgent(t, "logger-test")
+	if ag.Logger() == nil {
+		t.Fatal("expected non-nil logger")
+	}
+}
+
+// ═══ 辅助构建函数 ═══
+
+func buildTestAgent(t *testing.T, id string) *BaseAgent {
+	t.Helper()
+	b := NewAgentBuilder(testConfig(id))
+	b.WithProvider(&testMockProvider{})
+	b.WithLogger(zap.NewNop())
+	ag, err := b.Build()
+	if err != nil {
+		t.Fatalf("buildTestAgent failed: %v", err)
+	}
+	return ag
+}
+
+type testMockProvider struct{}
+
+func (p *testMockProvider) Name() string { return "test-mock" }
+func (p *testMockProvider) Completion(_ context.Context, _ *llm.ChatRequest) (*llm.ChatResponse, error) {
+	return &llm.ChatResponse{Choices: []llm.ChatChoice{{Message: types.Message{Content: "mock"}}}}, nil
+}
+func (p *testMockProvider) Stream(_ context.Context, _ *llm.ChatRequest) (<-chan llm.StreamChunk, error) {
+	ch := make(chan llm.StreamChunk, 1); close(ch); return ch, nil
+}
+func (p *testMockProvider) HealthCheck(_ context.Context) (*llm.HealthStatus, error) {
+	return &llm.HealthStatus{Healthy: true}, nil
+}
+func (p *testMockProvider) SupportsNativeFunctionCalling() bool { return true }
+func (p *testMockProvider) ListModels(_ context.Context) ([]llm.Model, error) { return nil, nil }
+func (p *testMockProvider) Endpoints() llm.ProviderEndpoints { return llm.ProviderEndpoints{} }
