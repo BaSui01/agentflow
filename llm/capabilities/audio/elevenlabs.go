@@ -43,8 +43,9 @@ func NewElevenLabsProvider(cfg ElevenLabsConfig) *ElevenLabsProvider {
 func (p *ElevenLabsProvider) Name() string { return "elevenlabs" }
 
 type elevenLabsTTSRequest struct {
-	Text          string `json:"text"`
-	ModelID       string `json:"model_id"`
+	Text         string `json:"text"`
+	ModelID      string `json:"model_id"`
+	LanguageCode string `json:"language_code,omitempty"`
 	VoiceSettings *struct {
 		Stability       float64 `json:"stability,omitempty"`
 		SimilarityBoost float64 `json:"similarity_boost,omitempty"`
@@ -68,8 +69,9 @@ func (p *ElevenLabsProvider) Synthesize(ctx context.Context, req *TTSRequest) (*
 	}
 
 	body := elevenLabsTTSRequest{
-		Text:    req.Text,
-		ModelID: model,
+		Text:         req.Text,
+		ModelID:      model,
+		LanguageCode: req.Language,
 	}
 
 	payload, _ := json.Marshal(body)
