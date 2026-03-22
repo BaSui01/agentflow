@@ -316,3 +316,97 @@ func (p *testMockProvider) HealthCheck(_ context.Context) (*llm.HealthStatus, er
 func (p *testMockProvider) SupportsNativeFunctionCalling() bool { return true }
 func (p *testMockProvider) ListModels(_ context.Context) ([]llm.Model, error) { return nil, nil }
 func (p *testMockProvider) Endpoints() llm.ProviderEndpoints { return llm.ProviderEndpoints{} }
+
+// ═══ Builder enable* 功能开关测试 ═══
+
+func TestAgentBuilder_BuildWithMCP(t *testing.T) {
+	cfg := testConfig("mcp-agent")
+	cfg.Extensions.MCP = &types.MCPConfig{Enabled: true}
+	b := NewAgentBuilder(cfg)
+	b.WithProvider(&testMockProvider{})
+	b.WithLogger(zap.NewNop())
+	ag, err := b.Build()
+	if err != nil {
+		t.Fatalf("Build with MCP failed: %v", err)
+	}
+	if ag == nil {
+		t.Fatal("expected non-nil agent")
+	}
+}
+
+func TestAgentBuilder_BuildWithEnhancedMemory(t *testing.T) {
+	cfg := testConfig("memory-agent")
+	cfg.Features.Memory = &types.MemoryConfig{Enabled: true}
+	b := NewAgentBuilder(cfg)
+	b.WithProvider(&testMockProvider{})
+	b.WithLogger(zap.NewNop())
+	ag, err := b.Build()
+	if err != nil {
+		t.Fatalf("Build with Memory failed: %v", err)
+	}
+	if ag == nil {
+		t.Fatal("expected non-nil agent")
+	}
+}
+
+func TestAgentBuilder_BuildWithLSP(t *testing.T) {
+	cfg := testConfig("lsp-agent")
+	cfg.Extensions.LSP = &types.LSPConfig{Enabled: true}
+	b := NewAgentBuilder(cfg)
+	b.WithProvider(&testMockProvider{})
+	b.WithLogger(zap.NewNop())
+	ag, err := b.Build()
+	if err != nil {
+		t.Fatalf("Build with LSP failed: %v", err)
+	}
+	if ag == nil {
+		t.Fatal("expected non-nil agent")
+	}
+}
+
+func TestAgentBuilder_Validate_Coverage(t *testing.T) {
+	// 有效配置
+	b := NewAgentBuilder(testConfig("valid"))
+	b.WithProvider(&testMockProvider{})
+	b.WithLogger(zap.NewNop())
+	if err := b.Validate(); err != nil {
+		t.Fatalf("valid config should pass: %v", err)
+	}
+
+	// 无效配置（缺少 ID）
+	b2 := NewAgentBuilder(types.AgentConfig{Core: types.CoreConfig{Name: "no-id"}})
+	if err := b2.Validate(); err == nil {
+		t.Fatal("expected error for missing ID")
+	}
+}
+
+func TestBaseAgent_Observe_Coverage(t *testing.T) {
+	ag := buildTestAgent(t, "observe-test")
+	ag.Init(context.Background())
+
+	// 无记忆管理器时 Observe 不应 panic
+	err := ag.Observe(context.Background(), &Feedback{
+		Type:    "approval",
+		Content: "good job",
+		Data:    map[string]any{"rating": 5},
+	})
+	// 无记忆时可能返回 nil 或 error，都可以
+	_ = err
+}
+
+func TestBaseAgent_Plan_Coverage(t *testing.T) {
+	ag := buildTestAgent(t, "plan-test")
+	ag.Init(context.Background())
+
+	// Plan 需要 provider，应该能调用（虽然 mock 返回简单结果）
+	result, err := ag.Plan(context.Background(), &Input{
+		TraceID: "plan-001",
+		Content: "设计一个简单的 API",
+	})
+	if err != nil {
+		t.Fatalf("Plan failed: %v", err)
+	}
+	if result == nil {
+		t.Fatal("expected non-nil plan result")
+	}
+}
