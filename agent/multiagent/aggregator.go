@@ -158,7 +158,10 @@ func voteMajority(results []WorkerResult) *AggregatedResult {
 		candidates = append(candidates, candidate{c, n})
 	}
 	sort.Slice(candidates, func(i, j int) bool {
-		return candidates[i].count > candidates[j].count
+		if candidates[i].count != candidates[j].count {
+			return candidates[i].count > candidates[j].count
+		}
+		return candidates[i].content < candidates[j].content // 平局时按字典序确定性排序
 	})
 
 	winner := candidates[0].content

@@ -137,13 +137,27 @@ func (s *BackpressureStream) Write(ctx context.Context, token Token) error {
 			}
 
 		case DropPolicyOldest:
-			// 丢弃最旧的 token
-			select {
-			case <-s.buffer:
-				s.dropped.Add(1)
-			default:
+			// 丢弃最旧的 token 并写入新 token（循环重试避免 TOCTOU 竞态）
+			for retries := 0; retries < 3; retries++ {
+				select {
+				case <-s.buffer:
+					s.dropped.Add(1)
+				default:
+				}
+				select {
+				case s.buffer <- token:
+					s.produced.Add(1)
+					return nil
+				case <-ctx.Done():
+					return ctx.Err()
+				case <-s.done:
+					return ErrStreamClosed
+				default:
+					// 并发写入导致 buffer 又满了，重试
+					continue
+				}
 			}
-			// 使用 select 保护写入，防止并发 Write 填满 buffer 导致永久阻塞
+			// 重试耗尽，回退到阻塞写入
 			select {
 			case s.buffer <- token:
 				s.produced.Add(1)
@@ -155,9 +169,15 @@ func (s *BackpressureStream) Write(ctx context.Context, token Token) error {
 			}
 
 		case DropPolicyNewest:
-			// 丢弃此 token
-			s.dropped.Add(1)
-			return nil
+			// 先尝试写入，buffer 满时才丢弃
+			select {
+			case s.buffer <- token:
+				s.produced.Add(1)
+				return nil
+			default:
+				s.dropped.Add(1)
+				return nil
+			}
 
 		case DropPolicyError:
 			return ErrBufferFull
