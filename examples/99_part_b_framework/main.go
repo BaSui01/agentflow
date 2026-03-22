@@ -22,7 +22,9 @@ import (
 	"github.com/BaSui01/agentflow/agent/protocol/a2a"
 	"github.com/BaSui01/agentflow/agent/protocol/mcp"
 	"github.com/BaSui01/agentflow/llm"
+	"github.com/BaSui01/agentflow/llm/capabilities/tools"
 	"github.com/BaSui01/agentflow/llm/middleware"
+	provbase "github.com/BaSui01/agentflow/llm/providers/base"
 	llmpolicy "github.com/BaSui01/agentflow/llm/runtime/policy"
 	"github.com/BaSui01/agentflow/llm/streaming"
 	"github.com/BaSui01/agentflow/llm/tokenizer"
@@ -96,6 +98,24 @@ func main() {
 	fmt.Println("\n━━━ 边界条件 ━━━")
 	b23EmptyMessages()
 	b24UnicodeContent()
+
+	fmt.Println("\n━━━ 异常重试 & 非200 ━━━")
+	b25HTTPErrorMapping()
+	b26RetryableErrorDetection()
+	b27NonRetryableError()
+
+	fmt.Println("\n━━━ 工具异常 ━━━")
+	b28ToolPanicRecovery()
+	b29ToolNotFound()
+	b30ToolRateLimit()
+	b31ToolTimeout()
+
+	fmt.Println("\n━━━ 循环边界 ━━━")
+	b32ReActMaxIterationsZero()
+	b33ReActStopOnError()
+	b34WorkerPoolEmpty()
+	b35WorkerPoolFailFast()
+	b36DAGCycleDetection()
 
 	printSummary()
 }
@@ -592,3 +612,241 @@ func (a *mockAgent) Execute(_ context.Context, input *agent.Input) (*agent.Outpu
 	return &agent.Output{TraceID: input.TraceID, Content: a.output, TokensUsed: 10, Duration: time.Millisecond}, nil
 }
 func (a *mockAgent) Observe(_ context.Context, _ *agent.Feedback) error { return nil }
+
+// ═══ 异常重试 & 非200 ═══
+
+func b25HTTPErrorMapping() {
+	t := time.Now()
+	providerbase := provbase.MapHTTPError
+	tests := []struct{ code int; wantRetry bool; wantCode types.ErrorCode }{
+		{401, false, types.ErrUnauthorized},
+		{403, false, types.ErrForbidden},
+		{429, true, types.ErrRateLimit},
+		{500, true, types.ErrUpstreamError},
+		{502, true, types.ErrUpstreamError},
+		{503, true, types.ErrUpstreamError},
+	}
+	allOK := true
+	for _, tt := range tests {
+		err := providerbase(tt.code, "test error", "test")
+		if err.Retryable != tt.wantRetry || err.Code != tt.wantCode {
+			allOK = false
+			rec("HTTP错误映射", "FAIL", time.Since(t), fmt.Sprintf("code=%d: retryable=%v(want %v) code=%s(want %s)", tt.code, err.Retryable, tt.wantRetry, err.Code, tt.wantCode))
+			return
+		}
+	}
+	if allOK {
+		rec("HTTP错误映射", "PASS", time.Since(t), fmt.Sprintf("6种状态码映射正确"))
+	}
+}
+
+func b26RetryableErrorDetection() {
+	t := time.Now()
+	retryable := &types.Error{Code: types.ErrRateLimit, Message: "429", Retryable: true}
+	if types.IsRetryable(retryable) {
+		rec("可重试错误检测", "PASS", time.Since(t), "429 正确标记为可重试")
+	} else {
+		rec("可重试错误检测", "FAIL", time.Since(t), "429 应该可重试")
+	}
+}
+
+func b27NonRetryableError() {
+	t := time.Now()
+	nonRetryable := &types.Error{Code: types.ErrUnauthorized, Message: "401", Retryable: false}
+	if !types.IsRetryable(nonRetryable) {
+		rec("不可重试错误", "PASS", time.Since(t), "401 正确标记为不可重试")
+	} else {
+		rec("不可重试错误", "FAIL", time.Since(t), "401 不应该可重试")
+	}
+}
+
+// ═══ 工具异常 ═══
+
+func b28ToolPanicRecovery() {
+	t := time.Now()
+	lg := zap.NewNop()
+	reg := tools.NewDefaultRegistry(lg)
+	reg.Register("panic_tool", func(_ context.Context, _ json.RawMessage) (json.RawMessage, error) {
+		panic("模拟工具 panic！")
+	}, tools.ToolMetadata{
+		Schema: types.ToolSchema{Name: "panic_tool", Description: "会panic的工具",
+			Parameters: json.RawMessage(`{"type":"object","properties":{"x":{"type":"string"}},"required":["x"]}`)},
+		Timeout: 5 * time.Second,
+	})
+	ex := tools.NewDefaultExecutor(reg, lg)
+	result := ex.ExecuteOne(context.Background(), types.ToolCall{ID: "c1", Name: "panic_tool", Arguments: json.RawMessage(`{"x":"test"}`)})
+	if result.Error != "" && strings.Contains(result.Error, "panic") {
+		rec("工具Panic恢复", "PASS", time.Since(t), "panic被捕获: "+result.Error[:min(len(result.Error), 40)])
+	} else if result.Error != "" {
+		rec("工具Panic恢复", "WARN", time.Since(t), "有错误但非panic: "+result.Error[:min(len(result.Error), 40)])
+	} else {
+		rec("工具Panic恢复", "FAIL", time.Since(t), "panic未被捕获！")
+	}
+}
+
+func b29ToolNotFound() {
+	t := time.Now()
+	lg := zap.NewNop()
+	reg := tools.NewDefaultRegistry(lg)
+	ex := tools.NewDefaultExecutor(reg, lg)
+	result := ex.ExecuteOne(context.Background(), types.ToolCall{ID: "c1", Name: "nonexistent", Arguments: json.RawMessage(`{}`)})
+	if strings.Contains(result.Error, "not found") {
+		rec("工具未找到", "PASS", time.Since(t), "正确返回 not found")
+	} else {
+		rec("工具未找到", "FAIL", time.Since(t), result.Error)
+	}
+}
+
+func b30ToolRateLimit() {
+	t := time.Now()
+	lg := zap.NewNop()
+	reg := tools.NewDefaultRegistry(lg)
+	reg.Register("limited", func(_ context.Context, _ json.RawMessage) (json.RawMessage, error) {
+		return json.RawMessage(`"ok"`), nil
+	}, tools.ToolMetadata{
+		Schema: types.ToolSchema{Name: "limited", Description: "限流工具",
+			Parameters: json.RawMessage(`{"type":"object","properties":{"x":{"type":"string"}},"required":["x"]}`)},
+		Timeout:   5 * time.Second,
+		RateLimit: &tools.RateLimitConfig{MaxCalls: 1, Window: 10 * time.Second},
+	})
+	ex := tools.NewDefaultExecutor(reg, lg)
+	call := types.ToolCall{ID: "c1", Name: "limited", Arguments: json.RawMessage(`{"x":"1"}`)}
+	r1 := ex.ExecuteOne(context.Background(), call)
+	r2 := ex.ExecuteOne(context.Background(), call)
+	if r1.Error == "" && strings.Contains(r2.Error, "rate limit") {
+		rec("工具限流", "PASS", time.Since(t), "第1次成功，第2次被限流")
+	} else {
+		rec("工具限流", "WARN", time.Since(t), fmt.Sprintf("r1=%s r2=%s", r1.Error, r2.Error))
+	}
+}
+
+func b31ToolTimeout() {
+	t := time.Now()
+	lg := zap.NewNop()
+	reg := tools.NewDefaultRegistry(lg)
+	reg.Register("slow", func(ctx context.Context, _ json.RawMessage) (json.RawMessage, error) {
+		select {
+		case <-time.After(5 * time.Second):
+			return json.RawMessage(`"done"`), nil
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
+	}, tools.ToolMetadata{
+		Schema: types.ToolSchema{Name: "slow", Description: "慢工具",
+			Parameters: json.RawMessage(`{"type":"object","properties":{"x":{"type":"string"}},"required":["x"]}`)},
+		Timeout: 100 * time.Millisecond,
+	})
+	ex := tools.NewDefaultExecutor(reg, lg)
+	result := ex.ExecuteOne(context.Background(), types.ToolCall{ID: "c1", Name: "slow", Arguments: json.RawMessage(`{"x":"1"}`)})
+	if strings.Contains(result.Error, "timeout") {
+		rec("工具超时", "PASS", time.Since(t), "100ms超时正确触发")
+	} else {
+		rec("工具超时", "FAIL", time.Since(t), result.Error)
+	}
+}
+
+// ═══ 循环边界 ═══
+
+func b32ReActMaxIterationsZero() {
+	t := time.Now()
+	lg := zap.NewNop()
+	callCount := 0
+	mock := &mockProvider{fn: func() (*llm.ChatResponse, error) {
+		callCount++
+		return &llm.ChatResponse{Choices: []llm.ChatChoice{{Message: types.Message{Content: "done"}}}}, nil
+	}}
+	ex := tools.NewDefaultExecutor(tools.NewDefaultRegistry(lg), lg)
+	re := tools.NewReActExecutor(mock, ex, tools.ReActConfig{MaxIterations: 0}, lg) // 0 应该变成默认值10
+	resp, _, err := re.Execute(context.Background(), &llm.ChatRequest{Model: "test", Messages: []types.Message{{Role: "user", Content: "hi"}}})
+	if err == nil && resp != nil && callCount == 1 {
+		rec("ReAct MaxIter=0", "PASS", time.Since(t), "默认值生效，1次调用即完成")
+	} else {
+		rec("ReAct MaxIter=0", "WARN", time.Since(t), fmt.Sprintf("calls=%d err=%v", callCount, err))
+	}
+}
+
+func b33ReActStopOnError() {
+	t := time.Now()
+	lg := zap.NewNop()
+	callCount := 0
+	mock := &mockProvider{fn: func() (*llm.ChatResponse, error) {
+		callCount++
+		return &llm.ChatResponse{Choices: []llm.ChatChoice{{
+			FinishReason: "tool_calls",
+			Message: types.Message{Role: "assistant", ToolCalls: []types.ToolCall{{ID: "c1", Name: "bad_tool", Arguments: json.RawMessage(`{"x":"1"}`)}}},
+		}}}, nil
+	}}
+	reg := tools.NewDefaultRegistry(lg) // bad_tool 未注册 → 执行失败
+	ex := tools.NewDefaultExecutor(reg, lg)
+	re := tools.NewReActExecutor(mock, ex, tools.ReActConfig{MaxIterations: 5, StopOnError: true}, lg)
+	_, steps, err := re.Execute(context.Background(), &llm.ChatRequest{Model: "test", Messages: []types.Message{{Role: "user", Content: "hi"}}})
+	if err != nil && len(steps) == 1 && strings.Contains(err.Error(), "tool execution failed") {
+		rec("ReAct StopOnError", "PASS", time.Since(t), "第1步工具失败即停止")
+	} else {
+		rec("ReAct StopOnError", "FAIL", time.Since(t), fmt.Sprintf("steps=%d err=%v", len(steps), err))
+	}
+}
+
+func b34WorkerPoolEmpty() {
+	t := time.Now()
+	pool := multiagent.NewWorkerPool(multiagent.DefaultWorkerPoolConfig(), zap.NewNop())
+	results, err := pool.Execute(context.Background(), nil)
+	if err == nil && results == nil {
+		rec("WorkerPool空任务", "PASS", time.Since(t), "空列表返回nil")
+	} else {
+		rec("WorkerPool空任务", "FAIL", time.Since(t), fmt.Sprintf("err=%v results=%v", err, results))
+	}
+}
+
+func b35WorkerPoolFailFast() {
+	t := time.Now()
+	pool := multiagent.NewWorkerPool(multiagent.WorkerPoolConfig{
+		FailurePolicy: multiagent.PolicyFailFast,
+		TaskTimeout:   5 * time.Second,
+	}, zap.NewNop())
+	tasks := []multiagent.WorkerTask{
+		{AgentID: "fail", Agent: &failAgent{}, Input: &agent.Input{TraceID: "t1", Content: "x"}},
+		{AgentID: "ok", Agent: &mockAgent{id: "ok", output: "ok"}, Input: &agent.Input{TraceID: "t2", Content: "y"}},
+	}
+	_, err := pool.Execute(context.Background(), tasks)
+	if err != nil {
+		rec("WorkerPool FailFast", "PASS", time.Since(t), "第1个失败后快速返回错误")
+	} else {
+		rec("WorkerPool FailFast", "WARN", time.Since(t), "未返回错误")
+	}
+}
+
+func b36DAGCycleDetection() {
+	t := time.Now()
+	graph := workflow.NewDAGGraph()
+	graph.AddNode(&workflow.DAGNode{ID: "a", Type: workflow.NodeTypeAction, Step: workflow.NewFuncStep("a", func(_ context.Context, i any) (any, error) { return i, nil })})
+	graph.AddNode(&workflow.DAGNode{ID: "b", Type: workflow.NodeTypeAction, Step: workflow.NewFuncStep("b", func(_ context.Context, i any) (any, error) { return i, nil })})
+	graph.AddEdge("a", "b")
+	graph.AddEdge("b", "a") // 环！
+	graph.SetEntry("a")
+	executor := workflow.NewDAGExecutor(nil, zap.NewNop())
+	_, err := executor.Execute(context.Background(), graph, "input")
+	if err != nil && strings.Contains(err.Error(), "cycle") {
+		rec("DAG环检测", "PASS", time.Since(t), "正确检测到环")
+	} else if err != nil {
+		rec("DAG环检测", "WARN", time.Since(t), "有错误但非cycle: "+err.Error()[:min(len(err.Error()), 60)])
+	} else {
+		rec("DAG环检测", "FAIL", time.Since(t), "未检测到环！")
+	}
+}
+
+// ─── failAgent ────────────────────────────────────
+
+type failAgent struct{}
+
+func (a *failAgent) ID() string                                                    { return "fail" }
+func (a *failAgent) Name() string                                                  { return "fail" }
+func (a *failAgent) Type() agent.AgentType                                         { return "mock" }
+func (a *failAgent) State() agent.State                                            { return "ready" }
+func (a *failAgent) Init(_ context.Context) error                                  { return nil }
+func (a *failAgent) Teardown(_ context.Context) error                              { return nil }
+func (a *failAgent) Plan(_ context.Context, _ *agent.Input) (*agent.PlanResult, error) { return nil, nil }
+func (a *failAgent) Execute(_ context.Context, _ *agent.Input) (*agent.Output, error) {
+	return nil, fmt.Errorf("模拟Agent执行失败")
+}
+func (a *failAgent) Observe(_ context.Context, _ *agent.Feedback) error { return nil }
