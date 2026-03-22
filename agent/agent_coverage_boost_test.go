@@ -627,3 +627,67 @@ func TestApplyContextRouteHints_WithRunConfig(t *testing.T) {
 		t.Fatalf("expected metadata chat_provider=my-provider, got %v", req.Metadata)
 	}
 }
+
+func TestApplyContextRouteHints_NilReq(t *testing.T) {
+	applyContextRouteHints(nil, context.Background()) // 不应 panic
+}
+
+// ═══ Integration 辅助函数测试 ═══
+
+func TestShallowCopyInput(t *testing.T) {
+	input := &Input{TraceID: "t1", Content: "hello", Context: map[string]any{"k": "v"}}
+	copied := shallowCopyInput(input)
+	if copied.TraceID != "t1" || copied.Content != "hello" {
+		t.Fatal("basic fields not copied")
+	}
+}
+
+func TestExecutionPipeline_Use(t *testing.T) {
+	called := false
+	core := func(ctx context.Context, input *Input) (*Output, error) {
+		called = true
+		return &Output{Content: "core"}, nil
+	}
+	pipeline := NewExecutionPipeline(core)
+	// 添加一个 no-op 中间件
+	pipeline.Use(func(ctx context.Context, input *Input, next ExecutionFunc) (*Output, error) {
+		return next(ctx, input)
+	})
+	output, err := pipeline.Execute(context.Background(), &Input{TraceID: "t1", Content: "test"})
+	if err != nil {
+		t.Fatalf("pipeline execute failed: %v", err)
+	}
+	if !called {
+		t.Fatal("core function not called")
+	}
+	if output.Content != "core" {
+		t.Fatalf("expected 'core', got '%s'", output.Content)
+	}
+}
+
+func TestAsToolSelectorRunner(t *testing.T) {
+	// nil DynamicToolSelector 返回 nil DynamicToolSelectorRunner
+	result := AsToolSelectorRunner(nil)
+	// result 是 (*DynamicToolSelector)(nil)，类型非 nil 但值是 nil
+	_ = result
+}
+
+// ═══ Persistence stores 测试 ═══
+
+func TestPersistenceStores_Defaults(t *testing.T) {
+	ps := &PersistenceStores{}
+	ps.SetMaxRestoreMessages(100)
+	ps.SetPromptStore(nil)
+	ps.SetConversationStore(nil)
+	ps.SetRunStore(nil)
+
+	if ps.PromptStore() != nil {
+		t.Fatal("expected nil PromptStore")
+	}
+	if ps.ConversationStore() != nil {
+		t.Fatal("expected nil ConversationStore")
+	}
+	if ps.RunStore() != nil {
+		t.Fatal("expected nil RunStore")
+	}
+}
