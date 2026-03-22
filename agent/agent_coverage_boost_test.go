@@ -410,3 +410,79 @@ func TestBaseAgent_Plan_Coverage(t *testing.T) {
 		t.Fatal("expected non-nil plan result")
 	}
 }
+
+// ═══ Event 补充测试 ═══
+
+func TestSimpleEventBus_SetPanicErrorChan(t *testing.T) {
+	bus := NewEventBus(zap.NewNop())
+	ch := make(chan error, 1)
+	bus.(*SimpleEventBus).SetPanicErrorChan(ch)
+}
+
+// ═══ Completion 补充测试 ═══
+
+func TestWithRuntimeStreamEmitter(t *testing.T) {
+	emitter := func(event RuntimeStreamEvent) {}
+	ctx := WithRuntimeStreamEmitter(context.Background(), emitter)
+	_, ok := runtimeStreamEmitterFromContext(ctx)
+	if !ok {
+		t.Fatal("expected emitter in context")
+	}
+}
+
+func TestRuntimeStreamEmitterFromContext_Missing(t *testing.T) {
+	_, ok := runtimeStreamEmitterFromContext(context.Background())
+	if ok {
+		t.Fatal("expected no emitter in empty context")
+	}
+}
+
+// ═══ Builder enableSkills 测试 ═══
+
+func TestAgentBuilder_BuildWithSkills(t *testing.T) {
+	cfg := testConfig("skills-agent")
+	cfg.Extensions.Skills = &types.SkillsConfig{Enabled: true}
+	b := NewAgentBuilder(cfg)
+	b.WithProvider(&testMockProvider{})
+	b.WithLogger(zap.NewNop())
+	ag, err := b.Build()
+	if err != nil {
+		t.Fatalf("Build with Skills failed: %v", err)
+	}
+	if ag == nil {
+		t.Fatal("expected non-nil agent")
+	}
+}
+
+// ═══ BaseAgent Execute 边界测试 ═══
+
+func TestBaseAgent_Execute_NilInput(t *testing.T) {
+	ag := buildTestAgent(t, "nil-input")
+	ag.Init(context.Background())
+	_, err := ag.Execute(context.Background(), nil)
+	if err == nil {
+		t.Fatal("expected error for nil input")
+	}
+}
+
+func TestBaseAgent_Execute_EmptyContent(t *testing.T) {
+	ag := buildTestAgent(t, "empty-content")
+	ag.Init(context.Background())
+	_, err := ag.Execute(context.Background(), &Input{TraceID: "t1", Content: ""})
+	if err == nil {
+		t.Fatal("expected error for empty content")
+	}
+}
+
+func TestBaseAgent_Execute_AgentBusy(t *testing.T) {
+	ag := buildTestAgent(t, "busy-test")
+	ag.Init(context.Background())
+
+	ag.TryLockExec()
+	defer ag.UnlockExec()
+
+	_, err := ag.Execute(context.Background(), &Input{TraceID: "t1", Content: "test"})
+	if err == nil {
+		t.Fatal("expected ErrAgentBusy")
+	}
+}
