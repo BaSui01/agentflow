@@ -218,6 +218,11 @@ type OpenAICompatRequest struct {
 	Modalities       []string          `json:"modalities,omitempty"`         // ["text", "audio"]
 	WebSearchOptions *WebSearchOptions `json:"web_search_options,omitempty"` // 内置 web 搜索
 	Metadata         map[string]string `json:"metadata,omitempty"`           // OpenAI 级别元数据
+
+	// Responses API 扩展字段
+	PreviousResponseID string   `json:"previous_response_id,omitempty"` // 连续对话上下文 ID
+	Include            []string `json:"include,omitempty"`              // include 字段
+	Truncation         string   `json:"truncation,omitempty"`           // auto/disabled
 }
 
 // StreamOptions 控制流式响应中的额外信息。

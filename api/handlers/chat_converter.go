@@ -132,11 +132,27 @@ func (c *DefaultChatConverter) ToAPIChoices(choices []llm.ChatChoice) []api.Chat
 
 // ToAPIUsage converts llm usage to API usage.
 func (c *DefaultChatConverter) ToAPIUsage(usage llm.ChatUsage) api.ChatUsage {
-	return api.ChatUsage{
+	out := api.ChatUsage{
 		PromptTokens:     usage.PromptTokens,
 		CompletionTokens: usage.CompletionTokens,
 		TotalTokens:      usage.TotalTokens,
 	}
+	if usage.PromptTokensDetails != nil {
+		out.PromptTokensDetails = &api.PromptTokensDetails{
+			CachedTokens:        usage.PromptTokensDetails.CachedTokens,
+			CacheCreationTokens: usage.PromptTokensDetails.CacheCreationTokens,
+			AudioTokens:         usage.PromptTokensDetails.AudioTokens,
+		}
+	}
+	if usage.CompletionTokensDetails != nil {
+		out.CompletionTokensDetails = &api.CompletionTokensDetails{
+			ReasoningTokens:          usage.CompletionTokensDetails.ReasoningTokens,
+			AudioTokens:              usage.CompletionTokensDetails.AudioTokens,
+			AcceptedPredictionTokens: usage.CompletionTokensDetails.AcceptedPredictionTokens,
+			RejectedPredictionTokens: usage.CompletionTokensDetails.RejectedPredictionTokens,
+		}
+	}
+	return out
 }
 
 // ToAPIStreamChunk converts llm stream chunk to API chunk.

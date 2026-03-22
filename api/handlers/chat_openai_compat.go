@@ -170,11 +170,14 @@ type openAICompatChatChunkChoice struct {
 }
 
 type openAICompatOutboundMsg struct {
-	Role       string                         `json:"role,omitempty"`
-	Content    string                         `json:"content,omitempty"`
-	Name       string                         `json:"name,omitempty"`
-	ToolCallID string                         `json:"tool_call_id,omitempty"`
-	ToolCalls  []openAICompatOutboundToolCall `json:"tool_calls,omitempty"`
+	Role             string                         `json:"role,omitempty"`
+	Content          string                         `json:"content,omitempty"`
+	ReasoningContent *string                        `json:"reasoning_content,omitempty"`
+	Refusal          *string                        `json:"refusal,omitempty"`
+	Name             string                         `json:"name,omitempty"`
+	ToolCallID       string                         `json:"tool_call_id,omitempty"`
+	ToolCalls        []openAICompatOutboundToolCall `json:"tool_calls,omitempty"`
+	Annotations      []openAICompatAnnotation       `json:"annotations,omitempty"`
 }
 
 type openAICompatOutboundToolCall struct {
@@ -186,10 +189,32 @@ type openAICompatOutboundToolCall struct {
 	} `json:"function"`
 }
 
+type openAICompatAnnotation struct {
+	Type        string                        `json:"type"`
+	URLCitation *openAICompatURLCitationDetail `json:"url_citation,omitempty"`
+}
+
+type openAICompatURLCitationDetail struct {
+	StartIndex int    `json:"start_index"`
+	EndIndex   int    `json:"end_index"`
+	URL        string `json:"url"`
+	Title      string `json:"title"`
+}
+
+type openAICompatTokenDetails struct {
+	CachedTokens             int `json:"cached_tokens,omitempty"`
+	AudioTokens              int `json:"audio_tokens,omitempty"`
+	ReasoningTokens          int `json:"reasoning_tokens,omitempty"`
+	AcceptedPredictionTokens int `json:"accepted_prediction_tokens,omitempty"`
+	RejectedPredictionTokens int `json:"rejected_prediction_tokens,omitempty"`
+}
+
 type openAICompatChatUsage struct {
-	PromptTokens     int `json:"prompt_tokens"`
-	CompletionTokens int `json:"completion_tokens"`
-	TotalTokens      int `json:"total_tokens"`
+	PromptTokens            int                       `json:"prompt_tokens"`
+	CompletionTokens        int                       `json:"completion_tokens"`
+	TotalTokens             int                       `json:"total_tokens"`
+	PromptTokensDetails     *openAICompatTokenDetails `json:"prompt_tokens_details,omitempty"`
+	CompletionTokensDetails *openAICompatTokenDetails `json:"completion_tokens_details,omitempty"`
 }
 
 type openAICompatResponsesOutput struct {
@@ -1025,9 +1050,11 @@ func toOpenAICompatChatResponse(resp *api.ChatResponse) openAICompatChatResponse
 		Model:   resp.Model,
 		Choices: make([]openAICompatChatChoice, 0, len(resp.Choices)),
 		Usage: openAICompatChatUsage{
-			PromptTokens:     resp.Usage.PromptTokens,
-			CompletionTokens: resp.Usage.CompletionTokens,
-			TotalTokens:      resp.Usage.TotalTokens,
+			PromptTokens:            resp.Usage.PromptTokens,
+			CompletionTokens:        resp.Usage.CompletionTokens,
+			TotalTokens:             resp.Usage.TotalTokens,
+			PromptTokensDetails:     toOpenAICompatPromptTokenDetails(resp.Usage.PromptTokensDetails),
+			CompletionTokensDetails: toOpenAICompatCompletionTokenDetails(resp.Usage.CompletionTokensDetails),
 		},
 	}
 
@@ -1035,11 +1062,14 @@ func toOpenAICompatChatResponse(resp *api.ChatResponse) openAICompatChatResponse
 		out.Choices = append(out.Choices, openAICompatChatChoice{
 			Index: c.Index,
 			Message: openAICompatOutboundMsg{
-				Role:       c.Message.Role,
-				Content:    c.Message.Content,
-				Name:       c.Message.Name,
-				ToolCallID: c.Message.ToolCallID,
-				ToolCalls:  toOpenAICompatOutboundToolCalls(c.Message.ToolCalls),
+				Role:             c.Message.Role,
+				Content:          c.Message.Content,
+				ReasoningContent: c.Message.ReasoningContent,
+				Refusal:          c.Message.Refusal,
+				Name:             c.Message.Name,
+				ToolCallID:       c.Message.ToolCallID,
+				ToolCalls:        toOpenAICompatOutboundToolCalls(c.Message.ToolCalls),
+				Annotations:      toOpenAICompatAnnotations(c.Message.Annotations),
 			},
 			FinishReason: c.FinishReason,
 		})
@@ -1057,11 +1087,13 @@ func toOpenAICompatChatChunkResponse(chunk *llm.StreamChunk, created int64, mode
 			{
 				Index: chunk.Index,
 				Delta: openAICompatOutboundMsg{
-					Role:       string(chunk.Delta.Role),
-					Content:    chunk.Delta.Content,
-					Name:       chunk.Delta.Name,
-					ToolCallID: chunk.Delta.ToolCallID,
-					ToolCalls:  toOpenAICompatOutboundToolCalls(chunk.Delta.ToolCalls),
+					Role:             string(chunk.Delta.Role),
+					Content:          chunk.Delta.Content,
+					ReasoningContent: chunk.Delta.ReasoningContent,
+					Refusal:          chunk.Delta.Refusal,
+					Name:             chunk.Delta.Name,
+					ToolCallID:       chunk.Delta.ToolCallID,
+					ToolCalls:        toOpenAICompatOutboundToolCalls(chunk.Delta.ToolCalls),
 				},
 				FinishReason: nil,
 			},
@@ -1127,6 +1159,48 @@ func toOpenAICompatOutboundToolCalls(calls []types.ToolCall) []openAICompatOutbo
 		out = append(out, item)
 	}
 	return out
+}
+
+func toOpenAICompatAnnotations(annotations []types.Annotation) []openAICompatAnnotation {
+	if len(annotations) == 0 {
+		return nil
+	}
+	out := make([]openAICompatAnnotation, 0, len(annotations))
+	for _, a := range annotations {
+		ann := openAICompatAnnotation{Type: a.Type}
+		if a.URL != "" || a.Title != "" || a.StartIndex != 0 || a.EndIndex != 0 {
+			ann.URLCitation = &openAICompatURLCitationDetail{
+				StartIndex: a.StartIndex,
+				EndIndex:   a.EndIndex,
+				URL:        a.URL,
+				Title:      a.Title,
+			}
+		}
+		out = append(out, ann)
+	}
+	return out
+}
+
+func toOpenAICompatPromptTokenDetails(d *api.PromptTokensDetails) *openAICompatTokenDetails {
+	if d == nil {
+		return nil
+	}
+	return &openAICompatTokenDetails{
+		CachedTokens: d.CachedTokens,
+		AudioTokens:  d.AudioTokens,
+	}
+}
+
+func toOpenAICompatCompletionTokenDetails(d *api.CompletionTokensDetails) *openAICompatTokenDetails {
+	if d == nil {
+		return nil
+	}
+	return &openAICompatTokenDetails{
+		ReasoningTokens:          d.ReasoningTokens,
+		AudioTokens:              d.AudioTokens,
+		AcceptedPredictionTokens: d.AcceptedPredictionTokens,
+		RejectedPredictionTokens: d.RejectedPredictionTokens,
+	}
 }
 
 func decodeOpenAICompatJSON(w http.ResponseWriter, r *http.Request, out any) *types.Error {

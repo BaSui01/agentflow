@@ -190,6 +190,25 @@ type ChatUsage struct {
 	CompletionTokens int `json:"completion_tokens" example:"50"`
 	// 总 Token 数
 	TotalTokens int `json:"total_tokens" example:"150"`
+	// 提示 token 详细统计
+	PromptTokensDetails *PromptTokensDetails `json:"prompt_tokens_details,omitempty"`
+	// 补全 token 详细统计
+	CompletionTokensDetails *CompletionTokensDetails `json:"completion_tokens_details,omitempty"`
+}
+
+// PromptTokensDetails 提示 token 详细统计。
+type PromptTokensDetails struct {
+	CachedTokens        int `json:"cached_tokens"`
+	CacheCreationTokens int `json:"cache_creation_tokens,omitempty"`
+	AudioTokens         int `json:"audio_tokens,omitempty"`
+}
+
+// CompletionTokensDetails 补全 token 详细统计。
+type CompletionTokensDetails struct {
+	ReasoningTokens          int `json:"reasoning_tokens"`
+	AudioTokens              int `json:"audio_tokens,omitempty"`
+	AcceptedPredictionTokens int `json:"accepted_prediction_tokens,omitempty"`
+	RejectedPredictionTokens int `json:"rejected_prediction_tokens,omitempty"`
 }
 
 // StreamChunk 表示流响应块。

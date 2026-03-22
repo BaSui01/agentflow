@@ -480,6 +480,24 @@ func copyInput(src *Input) *Input {
 			dst.Variables[k] = v
 		}
 	}
+	if src.Overrides != nil {
+		cp := *src.Overrides
+		if src.Overrides.Stop != nil {
+			cp.Stop = make([]string, len(src.Overrides.Stop))
+			copy(cp.Stop, src.Overrides.Stop)
+		}
+		if src.Overrides.Metadata != nil {
+			cp.Metadata = make(map[string]string, len(src.Overrides.Metadata))
+			for k, v := range src.Overrides.Metadata {
+				cp.Metadata[k] = v
+			}
+		}
+		if src.Overrides.Tags != nil {
+			cp.Tags = make([]string, len(src.Overrides.Tags))
+			copy(cp.Tags, src.Overrides.Tags)
+		}
+		dst.Overrides = &cp
+	}
 	return dst
 }
 

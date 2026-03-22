@@ -355,11 +355,27 @@ func convertStreamUsage(u *llm.ChatUsage) *api.ChatUsage {
 	if u == nil {
 		return nil
 	}
-	return &api.ChatUsage{
+	out := &api.ChatUsage{
 		PromptTokens:     u.PromptTokens,
 		CompletionTokens: u.CompletionTokens,
 		TotalTokens:      u.TotalTokens,
 	}
+	if u.PromptTokensDetails != nil {
+		out.PromptTokensDetails = &api.PromptTokensDetails{
+			CachedTokens:        u.PromptTokensDetails.CachedTokens,
+			CacheCreationTokens: u.PromptTokensDetails.CacheCreationTokens,
+			AudioTokens:         u.PromptTokensDetails.AudioTokens,
+		}
+	}
+	if u.CompletionTokensDetails != nil {
+		out.CompletionTokensDetails = &api.CompletionTokensDetails{
+			ReasoningTokens:          u.CompletionTokensDetails.ReasoningTokens,
+			AudioTokens:              u.CompletionTokensDetails.AudioTokens,
+			AcceptedPredictionTokens: u.CompletionTokensDetails.AcceptedPredictionTokens,
+			RejectedPredictionTokens: u.CompletionTokensDetails.RejectedPredictionTokens,
+		}
+	}
+	return out
 }
 
 // handleProviderError 处理 Provider 错误

@@ -235,8 +235,14 @@ func (h *HierarchicalAgent) decomposeTask(ctx context.Context, input *agent.Inpu
 ]`, input.Content)
 
 	supervisorInput := &agent.Input{
-		TraceID: input.TraceID,
-		Content: decompositionPrompt,
+		TraceID:   input.TraceID,
+		TenantID:  input.TenantID,
+		UserID:    input.UserID,
+		ChannelID: input.ChannelID,
+		Content:   decompositionPrompt,
+		Context:   input.Context,
+		Variables: input.Variables,
+		Overrides: input.Overrides,
 	}
 
 	output, err := h.supervisor.Execute(ctx, supervisorInput)
@@ -299,8 +305,14 @@ func (h *HierarchicalAgent) parseSubtasks(content string, originalInput *agent.I
 			Type:     "subtask",
 			Priority: 1,
 			Input: &agent.Input{
-				TraceID: originalInput.TraceID,
-				Content: originalInput.Content,
+				TraceID:   originalInput.TraceID,
+				TenantID:  originalInput.TenantID,
+				UserID:    originalInput.UserID,
+				ChannelID: originalInput.ChannelID,
+				Content:   originalInput.Content,
+				Context:   originalInput.Context,
+				Variables: originalInput.Variables,
+				Overrides: originalInput.Overrides,
 			},
 			Status: TaskStatusPending,
 		},
@@ -344,8 +356,14 @@ func (h *HierarchicalAgent) tryParseSubtaskJSON(raw string, originalInput *agent
 			Type:     taskType,
 			Priority: st.Priority,
 			Input: &agent.Input{
-				TraceID: originalInput.TraceID,
-				Content: desc,
+				TraceID:   originalInput.TraceID,
+				TenantID:  originalInput.TenantID,
+				UserID:    originalInput.UserID,
+				ChannelID: originalInput.ChannelID,
+				Content:   desc,
+				Context:   originalInput.Context,
+				Variables: originalInput.Variables,
+				Overrides: originalInput.Overrides,
 			},
 			Status: TaskStatusPending,
 		})
@@ -369,11 +387,29 @@ func (h *HierarchicalAgent) aggregateResults(ctx context.Context, input *agent.I
 	aggregationPrompt += "\n\n请提供综合的最终结果。"
 
 	supervisorInput := &agent.Input{
-		TraceID: input.TraceID,
-		Content: aggregationPrompt,
+		TraceID:   input.TraceID,
+		TenantID:  input.TenantID,
+		UserID:    input.UserID,
+		ChannelID: input.ChannelID,
+		Content:   aggregationPrompt,
+		Context:   input.Context,
+		Variables: input.Variables,
+		Overrides: input.Overrides,
 	}
 
-	return h.supervisor.Execute(ctx, supervisorInput)
+	finalOutput, err := h.supervisor.Execute(ctx, supervisorInput)
+	if err != nil {
+		return nil, err
+	}
+
+	// 合并子任务结果的 TokensUsed、Cost、Duration 到最终 Output
+	for _, r := range results {
+		finalOutput.TokensUsed += r.TokensUsed
+		finalOutput.Cost += r.Cost
+		finalOutput.Duration += r.Duration
+	}
+
+	return finalOutput, nil
 }
 
 // NewTaskCoordinator 创建任务协调器

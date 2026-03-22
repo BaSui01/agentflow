@@ -324,6 +324,9 @@ func (p *Provider) Completion(ctx context.Context, req *llm.ChatRequest) (*llm.C
 		MaxCompletionTokens: req.MaxCompletionTokens,
 		Store:               req.Store,
 		Modalities:          req.Modalities,
+		PreviousResponseID:  req.PreviousResponseID,
+		Include:             req.Include,
+		Truncation:          req.Truncation,
 	}
 	if req.ToolChoice != nil {
 		body.ToolChoice = req.ToolChoice
@@ -398,6 +401,9 @@ func (p *Provider) Stream(ctx context.Context, req *llm.ChatRequest) (<-chan llm
 		MaxCompletionTokens: req.MaxCompletionTokens,
 		Store:               req.Store,
 		Modalities:          req.Modalities,
+		PreviousResponseID:  req.PreviousResponseID,
+		Include:             req.Include,
+		Truncation:          req.Truncation,
 	}
 	if req.ToolChoice != nil {
 		body.ToolChoice = req.ToolChoice
