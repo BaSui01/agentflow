@@ -691,3 +691,121 @@ func TestPersistenceStores_Defaults(t *testing.T) {
 		t.Fatal("expected nil RunStore")
 	}
 }
+
+// ═══ PersistenceStores 操作测试 ═══
+
+func TestPersistenceStores_LoadPrompt(t *testing.T) {
+	ps := &PersistenceStores{}
+	// nil store 不应 panic
+	doc := ps.LoadPrompt(context.Background(), "assistant", "test", "")
+	if doc != nil {
+		t.Fatal("expected nil from nil store")
+	}
+}
+
+func TestPersistenceStores_RecordRun(t *testing.T) {
+	ps := &PersistenceStores{}
+	// nil store 不应 panic
+	runID := ps.RecordRun(context.Background(), "agent1", "tenant1", "trace1", "input", time.Now())
+	if runID != "" {
+		t.Fatalf("expected empty runID from nil store, got %s", runID)
+	}
+}
+
+func TestPersistenceStores_UpdateRunStatus(t *testing.T) {
+	ps := &PersistenceStores{}
+	// nil store 不应 panic
+	ps.UpdateRunStatus(context.Background(), "run1", "completed", nil, "")
+}
+
+func TestPersistenceStores_RestoreConversation(t *testing.T) {
+	ps := &PersistenceStores{}
+	msgs := ps.RestoreConversation(context.Background(), "conv1")
+	if len(msgs) != 0 {
+		t.Fatalf("expected empty messages from nil store, got %d", len(msgs))
+	}
+}
+
+func TestPersistenceStores_PersistConversation(t *testing.T) {
+	ps := &PersistenceStores{}
+	// nil store 不应 panic
+	ps.PersistConversation(context.Background(), "conv1", "agent1", "tenant1", "user1", "input", "output")
+}
+
+// ═══ ExtensionRegistry 更多测试 ═══
+
+func TestExtensionRegistry_AllAccessors(t *testing.T) {
+	reg := NewExtensionRegistry(zap.NewNop())
+	if reg.SkillManagerExt() != nil {
+		t.Fatal("expected nil SkillManagerExt")
+	}
+	if reg.MCPServerExt() != nil {
+		t.Fatal("expected nil MCPServerExt")
+	}
+	if reg.LSPClientExt() != nil {
+		t.Fatal("expected nil LSPClientExt")
+	}
+	if reg.EnhancedMemoryExt() != nil {
+		t.Fatal("expected nil EnhancedMemoryExt")
+	}
+	if reg.ObservabilitySystemExt() != nil {
+		t.Fatal("expected nil ObservabilitySystemExt")
+	}
+	if reg.ReflectionExecutor() != nil {
+		t.Fatal("expected nil ReflectionExecutor")
+	}
+	if reg.ToolSelector() != nil {
+		t.Fatal("expected nil ToolSelector")
+	}
+	if reg.PromptEnhancerExt() != nil {
+		t.Fatal("expected nil PromptEnhancerExt")
+	}
+}
+
+// ═══ BaseAgent WithToolProvider 测试 ═══
+
+func TestAgentBuilder_WithMaxReActIterations_Coverage(t *testing.T) {
+	b := NewAgentBuilder(testConfig("react-iter"))
+	b.WithMaxReActIterations(15)
+	b.WithProvider(&testMockProvider{})
+	b.WithLogger(zap.NewNop())
+	ag, err := b.Build()
+	if err != nil {
+		t.Fatalf("Build failed: %v", err)
+	}
+	_ = ag
+}
+
+func TestAgentBuilder_WithToolProvider(t *testing.T) {
+	b := NewAgentBuilder(testConfig("tool-prov"))
+	b.WithProvider(&testMockProvider{})
+	b.WithToolProvider(&testMockProvider{})
+	b.WithLogger(zap.NewNop())
+	ag, err := b.Build()
+	if err != nil {
+		t.Fatalf("Build failed: %v", err)
+	}
+	_ = ag
+}
+
+func TestAgentBuilder_WithMemory_Coverage(t *testing.T) {
+	b := NewAgentBuilder(testConfig("mem-test"))
+	b.WithProvider(&testMockProvider{})
+	b.WithMemory(nil)
+	b.WithLogger(zap.NewNop())
+	_, err := b.Build()
+	if err != nil {
+		t.Fatalf("Build failed: %v", err)
+	}
+}
+
+func TestAgentBuilder_WithEventBus_Coverage(t *testing.T) {
+	b := NewAgentBuilder(testConfig("bus-test"))
+	b.WithProvider(&testMockProvider{})
+	b.WithEventBus(NewEventBus(zap.NewNop()))
+	b.WithLogger(zap.NewNop())
+	_, err := b.Build()
+	if err != nil {
+		t.Fatalf("Build failed: %v", err)
+	}
+}
