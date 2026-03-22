@@ -2,10 +2,12 @@ package agent
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
 	"github.com/BaSui01/agentflow/llm"
+	"github.com/BaSui01/agentflow/llm/observability"
 	"github.com/BaSui01/agentflow/types"
 	"go.uber.org/zap"
 )
@@ -808,4 +810,577 @@ func TestAgentBuilder_WithEventBus_Coverage(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Build failed: %v", err)
 	}
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Coverage Boost Round 2 — targets: chatCompletionStreaming, wrapProviderWithGateway,
+// coreExecutor (reflection path), ExecuteWithReflection, LoadPrompt, RecordRun,
+// PersistConversation with real store mocks.
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// --- mock provider that returns streaming chunks ---
+
+type streamingMockProvider struct {
+	testMockProvider
+	chunks []llm.StreamChunk
+}
+
+func (p *streamingMockProvider) Stream(_ context.Context, _ *llm.ChatRequest) (<-chan llm.StreamChunk, error) {
+	ch := make(chan llm.StreamChunk, len(p.chunks))
+	for _, c := range p.chunks {
+		ch <- c
+	}
+	close(ch)
+	return ch, nil
+}
+
+// --- mock ReflectionRunner ---
+
+type mockReflectionRunner struct {
+	output *Output
+	err    error
+}
+
+func (m *mockReflectionRunner) ExecuteWithReflection(_ context.Context, input *Input) (*Output, error) {
+	if m.err != nil {
+		return nil, m.err
+	}
+	if m.output != nil {
+		return m.output, nil
+	}
+	return &Output{TraceID: input.TraceID, Content: "reflected", TokensUsed: 5, Duration: time.Millisecond}, nil
+}
+
+// --- mock PromptStoreProvider ---
+
+type mockPromptStore struct {
+	doc PromptDocument
+	err error
+}
+
+func (m *mockPromptStore) GetActive(_ context.Context, _, _, _ string) (PromptDocument, error) {
+	return m.doc, m.err
+}
+
+// --- mock RunStoreProvider ---
+
+type mockRunStore struct {
+	recorded []*RunDoc
+	err      error
+}
+
+func (m *mockRunStore) RecordRun(_ context.Context, doc *RunDoc) error {
+	if m.err != nil {
+		return m.err
+	}
+	m.recorded = append(m.recorded, doc)
+	return nil
+}
+
+func (m *mockRunStore) UpdateStatus(_ context.Context, _, _ string, _ *RunOutputDoc, _ string) error {
+	return nil
+}
+
+// --- mock ConversationStoreProvider ---
+
+type mockConversationStore struct {
+	appendErr error
+	createErr error
+	messages  []ConversationMessage
+	total     int64
+}
+
+func (m *mockConversationStore) Create(_ context.Context, _ *ConversationDoc) error {
+	return m.createErr
+}
+func (m *mockConversationStore) GetByID(_ context.Context, _ string) (*ConversationDoc, error) {
+	return nil, fmt.Errorf("not found")
+}
+func (m *mockConversationStore) AppendMessages(_ context.Context, _ string, _ []ConversationMessage) error {
+	return m.appendErr
+}
+func (m *mockConversationStore) List(_ context.Context, _, _ string, _, _ int) ([]*ConversationDoc, int64, error) {
+	return nil, 0, nil
+}
+func (m *mockConversationStore) Update(_ context.Context, _ string, _ ConversationUpdate) error {
+	return nil
+}
+func (m *mockConversationStore) Delete(_ context.Context, _ string) error { return nil }
+func (m *mockConversationStore) DeleteByParentID(_ context.Context, _, _ string) error {
+	return nil
+}
+func (m *mockConversationStore) GetMessages(_ context.Context, _ string, _, _ int) ([]ConversationMessage, int64, error) {
+	return m.messages, m.total, nil
+}
+func (m *mockConversationStore) DeleteMessage(_ context.Context, _, _ string) error { return nil }
+func (m *mockConversationStore) ClearMessages(_ context.Context, _ string) error    { return nil }
+func (m *mockConversationStore) Archive(_ context.Context, _ string) error           { return nil }
+
+// --- mock Ledger ---
+
+type mockLedger struct{}
+
+func (m *mockLedger) Record(_ context.Context, _ observability.LedgerEntry) error {
+	return nil
+}
+
+// --- helper: build agent with custom provider ---
+
+func buildTestAgentWithProvider(t *testing.T, id string, prov llm.Provider) *BaseAgent {
+	t.Helper()
+	b := NewAgentBuilder(testConfig(id))
+	b.WithProvider(prov)
+	b.WithLogger(zap.NewNop())
+	ag, err := b.Build()
+	if err != nil {
+		t.Fatalf("buildTestAgentWithProvider failed: %v", err)
+	}
+	return ag
+}
+
+// ═══ 1. chatCompletionStreaming — no tools (plain stream) ═══
+
+func TestChatCompletionStreaming_NoTools(t *testing.T) {
+	prov := &streamingMockProvider{
+		chunks: []llm.StreamChunk{
+			{ID: "c1", Model: "m", Provider: "p", Delta: types.Message{Content: "hello "}, FinishReason: ""},
+			{ID: "c1", Model: "m", Provider: "p", Delta: types.Message{Content: "world"}, FinishReason: "stop"},
+		},
+	}
+
+	ag := buildTestAgentWithProvider(t, "stream-no-tools", prov)
+	ag.Init(context.Background())
+
+	var collected []string
+	emitter := func(ev RuntimeStreamEvent) {
+		if ev.Type == RuntimeStreamToken {
+			collected = append(collected, ev.Token)
+		}
+	}
+	ctx := WithRuntimeStreamEmitter(context.Background(), emitter)
+
+	output, err := ag.Execute(ctx, &Input{TraceID: "s1", Content: "hi"})
+	if err != nil {
+		t.Fatalf("streaming execute failed: %v", err)
+	}
+	if output == nil || output.Content == "" {
+		t.Fatal("expected non-empty output from streaming path")
+	}
+	if len(collected) == 0 {
+		t.Fatal("expected emitter to receive tokens")
+	}
+}
+
+func TestChatCompletion_StreamingPath(t *testing.T) {
+	prov := &streamingMockProvider{
+		chunks: []llm.StreamChunk{
+			{ID: "s1", Model: "m", Provider: "p", Delta: types.Message{Content: "streamed"}},
+			{FinishReason: "stop"},
+		},
+	}
+
+	ag := buildTestAgentWithProvider(t, "cc-stream", prov)
+	ag.Init(context.Background())
+
+	var tokens []string
+	emitter := func(ev RuntimeStreamEvent) {
+		if ev.Type == RuntimeStreamToken {
+			tokens = append(tokens, ev.Token)
+		}
+	}
+	ctx := WithRuntimeStreamEmitter(context.Background(), emitter)
+
+	resp, err := ag.ChatCompletion(ctx, []types.Message{
+		{Role: llm.RoleUser, Content: "hello"},
+	})
+	if err != nil {
+		t.Fatalf("ChatCompletion streaming failed: %v", err)
+	}
+	if resp == nil {
+		t.Fatal("expected non-nil response")
+	}
+	if len(tokens) == 0 {
+		t.Fatal("expected tokens from streaming emitter")
+	}
+}
+
+// ═══ 2. wrapProviderWithGateway ═══
+
+func TestWrapProviderWithGateway_NilProvider(t *testing.T) {
+	result := wrapProviderWithGateway(nil, zap.NewNop(), nil)
+	if result != nil {
+		t.Fatal("expected nil for nil provider")
+	}
+}
+
+func TestWrapProviderWithGateway_WithLedger(t *testing.T) {
+	prov := &testMockProvider{}
+	wrapped := wrapProviderWithGateway(prov, zap.NewNop(), &mockLedger{})
+	if wrapped == nil {
+		t.Fatal("expected non-nil wrapped provider")
+	}
+	resp, err := wrapped.Completion(context.Background(), &llm.ChatRequest{
+		Model:    "test",
+		Messages: []types.Message{{Role: llm.RoleUser, Content: "hi"}},
+	})
+	if err != nil {
+		t.Fatalf("wrapped provider completion failed: %v", err)
+	}
+	if resp == nil {
+		t.Fatal("expected non-nil response")
+	}
+}
+
+func TestWrapProviderWithGateway_NilLedger(t *testing.T) {
+	prov := &testMockProvider{}
+	wrapped := wrapProviderWithGateway(prov, zap.NewNop(), nil)
+	if wrapped == nil {
+		t.Fatal("expected non-nil wrapped provider even with nil ledger")
+	}
+}
+
+// ═══ 3. coreExecutor — reflection path ═══
+
+func TestCoreExecutor_WithReflection(t *testing.T) {
+	ag := buildTestAgent(t, "core-reflect")
+	ag.Init(context.Background())
+
+	mockRefl := &mockReflectionRunner{
+		output: &Output{TraceID: "r1", Content: "reflected output", TokensUsed: 7, Duration: time.Millisecond},
+	}
+	ag.extensions.EnableReflection(mockRefl)
+
+	opts := EnhancedExecutionOptions{UseReflection: true}
+	executor := ag.coreExecutor(opts)
+
+	output, err := executor(context.Background(), &Input{TraceID: "r1", Content: "test reflection"})
+	if err != nil {
+		t.Fatalf("coreExecutor with reflection failed: %v", err)
+	}
+	if output.Content != "reflected output" {
+		t.Fatalf("expected 'reflected output', got '%s'", output.Content)
+	}
+}
+
+func TestCoreExecutor_ReflectionError(t *testing.T) {
+	ag := buildTestAgent(t, "core-reflect-err")
+	ag.Init(context.Background())
+
+	mockRefl := &mockReflectionRunner{err: fmt.Errorf("reflection boom")}
+	ag.extensions.EnableReflection(mockRefl)
+
+	opts := EnhancedExecutionOptions{UseReflection: true}
+	executor := ag.coreExecutor(opts)
+
+	_, err := executor(context.Background(), &Input{TraceID: "r2", Content: "test"})
+	if err == nil {
+		t.Fatal("expected error from reflection failure")
+	}
+}
+
+func TestCoreExecutor_NoReflection_FallsBackToExecute(t *testing.T) {
+	ag := buildTestAgent(t, "core-no-reflect")
+	ag.Init(context.Background())
+
+	opts := EnhancedExecutionOptions{UseReflection: false}
+	executor := ag.coreExecutor(opts)
+
+	output, err := executor(context.Background(), &Input{TraceID: "r3", Content: "test"})
+	if err != nil {
+		t.Fatalf("coreExecutor without reflection failed: %v", err)
+	}
+	if output == nil || output.Content == "" {
+		t.Fatal("expected non-empty output")
+	}
+}
+
+// ═══ 4. ExecuteWithReflection via ExtensionRegistry ═══
+
+func TestExtensionRegistry_ExecuteWithReflection_WithRunner(t *testing.T) {
+	reg := NewExtensionRegistry(zap.NewNop())
+	mockRefl := &mockReflectionRunner{
+		output: &Output{TraceID: "ext-r1", Content: "ext reflected", TokensUsed: 3},
+	}
+	reg.EnableReflection(mockRefl)
+
+	output, err := reg.ExecuteWithReflection(context.Background(), &Input{TraceID: "ext-r1", Content: "test"})
+	if err != nil {
+		t.Fatalf("ExecuteWithReflection failed: %v", err)
+	}
+	if output.Content != "ext reflected" {
+		t.Fatalf("expected 'ext reflected', got '%s'", output.Content)
+	}
+}
+
+// ═══ 5. LoadPrompt with real PromptStore ═══
+
+func TestPersistenceStores_LoadPrompt_WithStore(t *testing.T) {
+	ps := NewPersistenceStores(zap.NewNop())
+	store := &mockPromptStore{
+		doc: PromptDocument{
+			Version: "v2",
+			System:  SystemPrompt{Identity: "You are a helpful assistant."},
+		},
+	}
+	ps.SetPromptStore(store)
+
+	doc := ps.LoadPrompt(context.Background(), "assistant", "test-agent", "tenant1")
+	if doc == nil {
+		t.Fatal("expected non-nil prompt document")
+	}
+	if doc.Version != "v2" {
+		t.Fatalf("expected version=v2, got %s", doc.Version)
+	}
+}
+
+func TestPersistenceStores_LoadPrompt_StoreError(t *testing.T) {
+	ps := NewPersistenceStores(zap.NewNop())
+	store := &mockPromptStore{err: fmt.Errorf("db error")}
+	ps.SetPromptStore(store)
+
+	doc := ps.LoadPrompt(context.Background(), "assistant", "test-agent", "")
+	if doc != nil {
+		t.Fatal("expected nil on store error")
+	}
+}
+
+// ═══ 6. RecordRun with real RunStore ═══
+
+func TestPersistenceStores_RecordRun_WithStore(t *testing.T) {
+	ps := NewPersistenceStores(zap.NewNop())
+	store := &mockRunStore{}
+	ps.SetRunStore(store)
+
+	runID := ps.RecordRun(context.Background(), "agent1", "tenant1", "trace1", "hello", time.Now())
+	if runID == "" {
+		t.Fatal("expected non-empty runID")
+	}
+	if len(store.recorded) != 1 {
+		t.Fatalf("expected 1 recorded run, got %d", len(store.recorded))
+	}
+	if store.recorded[0].AgentID != "agent1" {
+		t.Fatalf("expected agent_id=agent1, got %s", store.recorded[0].AgentID)
+	}
+}
+
+func TestPersistenceStores_RecordRun_StoreError(t *testing.T) {
+	ps := NewPersistenceStores(zap.NewNop())
+	store := &mockRunStore{err: fmt.Errorf("db write error")}
+	ps.SetRunStore(store)
+
+	runID := ps.RecordRun(context.Background(), "agent1", "tenant1", "trace1", "hello", time.Now())
+	if runID != "" {
+		t.Fatalf("expected empty runID on error, got %s", runID)
+	}
+}
+
+// ═══ 7. PersistConversation with real ConversationStore ═══
+
+func TestPersistenceStores_PersistConversation_AppendSuccess(t *testing.T) {
+	ps := NewPersistenceStores(zap.NewNop())
+	store := &mockConversationStore{appendErr: nil}
+	ps.SetConversationStore(store)
+
+	ps.PersistConversation(context.Background(), "conv1", "agent1", "tenant1", "user1", "input", "output")
+}
+
+func TestPersistenceStores_PersistConversation_AppendFailCreateSuccess(t *testing.T) {
+	ps := NewPersistenceStores(zap.NewNop())
+	store := &mockConversationStore{
+		appendErr: fmt.Errorf("not found"),
+		createErr: nil,
+	}
+	ps.SetConversationStore(store)
+
+	ps.PersistConversation(context.Background(), "conv2", "agent1", "tenant1", "user1", "input", "output")
+}
+
+func TestPersistenceStores_PersistConversation_BothFail(t *testing.T) {
+	ps := NewPersistenceStores(zap.NewNop())
+	store := &mockConversationStore{
+		appendErr: fmt.Errorf("append fail"),
+		createErr: fmt.Errorf("create fail"),
+	}
+	ps.SetConversationStore(store)
+
+	ps.PersistConversation(context.Background(), "conv3", "agent1", "tenant1", "user1", "input", "output")
+}
+
+// ═══ RestoreConversation with real store ═══
+
+func TestPersistenceStores_RestoreConversation_WithStore(t *testing.T) {
+	ps := NewPersistenceStores(zap.NewNop())
+	store := &mockConversationStore{
+		messages: []ConversationMessage{
+			{Role: "user", Content: "hello"},
+			{Role: "assistant", Content: "hi there"},
+		},
+		total: 2,
+	}
+	ps.SetConversationStore(store)
+	ps.SetMaxRestoreMessages(100)
+
+	msgs := ps.RestoreConversation(context.Background(), "conv1")
+	if len(msgs) != 2 {
+		t.Fatalf("expected 2 messages, got %d", len(msgs))
+	}
+	if msgs[0].Content != "hello" {
+		t.Fatalf("expected first message 'hello', got '%s'", msgs[0].Content)
+	}
+}
+
+// ═══ UpdateRunStatus with real store ═══
+
+func TestPersistenceStores_UpdateRunStatus_WithStore(t *testing.T) {
+	ps := NewPersistenceStores(zap.NewNop())
+	store := &mockRunStore{}
+	ps.SetRunStore(store)
+
+	err := ps.UpdateRunStatus(context.Background(), "run1", "completed", &RunOutputDoc{Content: "done"}, "")
+	if err != nil {
+		t.Fatalf("UpdateRunStatus failed: %v", err)
+	}
+}
+
+// ═══ gatewayProvider / gatewayToolProvider paths ═══
+
+func TestBaseAgent_GatewayProvider_WithLedger(t *testing.T) {
+	prov := &testMockProvider{}
+	ag := NewBaseAgent(
+		testConfig("gw-ledger"),
+		prov,
+		nil, nil, nil,
+		zap.NewNop(),
+		&mockLedger{},
+	)
+	gw := ag.gatewayProvider()
+	if gw == nil {
+		t.Fatal("expected non-nil gateway provider")
+	}
+}
+
+func TestBaseAgent_GatewayToolProvider_WithLedger(t *testing.T) {
+	prov := &testMockProvider{}
+	toolProv := &testMockProvider{}
+	ag := NewBaseAgent(
+		testConfig("gw-tool-ledger"),
+		prov,
+		nil, nil, nil,
+		zap.NewNop(),
+		&mockLedger{},
+	)
+	ag.SetToolProvider(toolProv)
+	gtp := ag.gatewayToolProvider()
+	if gtp == nil {
+		t.Fatal("expected non-nil gateway tool provider")
+	}
+}
+
+func TestBaseAgent_GatewayToolProvider_NoToolProvider(t *testing.T) {
+	prov := &testMockProvider{}
+	ag := NewBaseAgent(
+		testConfig("gw-no-tool"),
+		prov,
+		nil, nil, nil,
+		zap.NewNop(),
+		&mockLedger{},
+	)
+	gtp := ag.gatewayToolProvider()
+	if gtp == nil {
+		t.Fatal("expected non-nil provider (should fall back to gatewayProvider)")
+	}
+}
+
+// ═══ ExecuteEnhanced with reflection option ═══
+
+func TestBaseAgent_ExecuteEnhanced_WithReflection(t *testing.T) {
+	ag := buildTestAgent(t, "enh-reflect")
+	ag.Init(context.Background())
+
+	mockRefl := &mockReflectionRunner{
+		output: &Output{TraceID: "er1", Content: "enhanced reflected", TokensUsed: 4, Duration: time.Millisecond},
+	}
+	ag.extensions.EnableReflection(mockRefl)
+
+	output, err := ag.ExecuteEnhanced(context.Background(), &Input{
+		TraceID: "er1",
+		Content: "test enhanced with reflection",
+	}, EnhancedExecutionOptions{UseReflection: true})
+	if err != nil {
+		t.Fatalf("ExecuteEnhanced with reflection failed: %v", err)
+	}
+	if output.Content != "enhanced reflected" {
+		t.Fatalf("expected 'enhanced reflected', got '%s'", output.Content)
+	}
+}
+
+// ═══ Feature status and metrics ═══
+
+func TestBaseAgent_GetFeatureMetrics_Coverage(t *testing.T) {
+	ag := buildTestAgent(t, "metrics-test2")
+	metrics := ag.GetFeatureMetrics()
+	if metrics["agent_id"] != "metrics-test2" {
+		t.Fatalf("expected agent_id=metrics-test2, got %v", metrics["agent_id"])
+	}
+}
+
+func TestBaseAgent_PrintFeatureStatus_Coverage(t *testing.T) {
+	ag := buildTestAgent(t, "print-status2")
+	ag.PrintFeatureStatus()
+}
+
+func TestBaseAgent_ValidateConfiguration_Coverage(t *testing.T) {
+	ag := buildTestAgent(t, "validate-cfg2")
+	err := ag.ValidateConfiguration()
+	if err != nil {
+		t.Fatalf("ValidateConfiguration failed: %v", err)
+	}
+}
+
+func TestBaseAgent_ExportConfiguration_Coverage(t *testing.T) {
+	ag := buildTestAgent(t, "export-cfg2")
+	cfg := ag.ExportConfiguration()
+	if cfg["id"] != "export-cfg2" {
+		t.Fatalf("expected id=export-cfg2, got %v", cfg["id"])
+	}
+}
+
+// ═══ SaveToEnhancedMemory with real runner ═══
+
+func TestExtensionRegistry_SaveToEnhancedMemory_WithRunner(t *testing.T) {
+	reg := NewExtensionRegistry(zap.NewNop())
+	mem := &mockEnhancedMemory{}
+	reg.EnableEnhancedMemory(mem)
+
+	reg.SaveToEnhancedMemory(context.Background(), "agent1",
+		&Input{TraceID: "t1", Content: "test"},
+		&Output{Content: "result", TokensUsed: 10, Duration: time.Millisecond},
+		true,
+	)
+	if mem.savedCount != 1 {
+		t.Fatalf("expected 1 save, got %d", mem.savedCount)
+	}
+	if mem.episodeCount != 1 {
+		t.Fatalf("expected 1 episode, got %d", mem.episodeCount)
+	}
+}
+
+type mockEnhancedMemory struct {
+	savedCount   int
+	episodeCount int
+}
+
+func (m *mockEnhancedMemory) LoadWorking(_ context.Context, _ string) ([]types.MemoryEntry, error) {
+	return nil, nil
+}
+func (m *mockEnhancedMemory) LoadShortTerm(_ context.Context, _ string, _ int) ([]types.MemoryEntry, error) {
+	return nil, nil
+}
+func (m *mockEnhancedMemory) SaveShortTerm(_ context.Context, _, _ string, _ map[string]any) error {
+	m.savedCount++
+	return nil
+}
+func (m *mockEnhancedMemory) RecordEpisode(_ context.Context, _ *types.EpisodicEvent) error {
+	m.episodeCount++
+	return nil
 }
