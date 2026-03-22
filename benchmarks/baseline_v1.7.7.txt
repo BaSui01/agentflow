@@ -1,0 +1,155 @@
+goos: windows
+goarch: amd64
+pkg: github.com/BaSui01/agentflow/llm/providers/openaicompat
+cpu: AMD Ryzen 5 5600H with Radeon Graphics         
+BenchmarkStreamSSE_Parse-12            	    1792	    676807 ns/op	  118669 B/op	    1806 allocs/op
+BenchmarkStreamSSE_Parse-12            	    1945	    626448 ns/op	  118670 B/op	    1806 allocs/op
+BenchmarkStreamSSE_Parse-12            	    1246	    901243 ns/op	  118667 B/op	    1806 allocs/op
+BenchmarkUnwrapStringifiedJSON/NormalJSON-12         	195447060	         6.003 ns/op	       0 B/op	       0 allocs/op
+BenchmarkUnwrapStringifiedJSON/NormalJSON-12         	197435185	         6.555 ns/op	       0 B/op	       0 allocs/op
+BenchmarkUnwrapStringifiedJSON/NormalJSON-12         	185453835	         6.190 ns/op	       0 B/op	       0 allocs/op
+BenchmarkUnwrapStringifiedJSON/DoubleSerializedJSON-12         	 1572200	       804.1 ns/op	     272 B/op	       5 allocs/op
+BenchmarkUnwrapStringifiedJSON/DoubleSerializedJSON-12         	 1845967	       638.0 ns/op	     272 B/op	       5 allocs/op
+BenchmarkUnwrapStringifiedJSON/DoubleSerializedJSON-12         	 1766874	       654.5 ns/op	     272 B/op	       5 allocs/op
+BenchmarkConvertMessagesToOpenAI-12                            	 1000000	      1638 ns/op	    2048 B/op	       5 allocs/op
+BenchmarkConvertMessagesToOpenAI-12                            	 1000000	      1825 ns/op	    2048 B/op	       5 allocs/op
+BenchmarkConvertMessagesToOpenAI-12                            	 1000000	      2129 ns/op	    2048 B/op	       5 allocs/op
+PASS
+ok  	github.com/BaSui01/agentflow/llm/providers/openaicompat	21.630s
+2026-03-22T23:49:31.441+0800	INFO	tools/executor.go:153	tool registered	{"name": "test_tool", "timeout": "10s"}
+2026-03-22T23:49:31.441+0800	INFO	tools/executor.go:194	tool unregistered	{"name": "test_tool"}
+2026-03-22T23:49:31.441+0800	INFO	tools/executor.go:153	tool registered	{"name": "double", "timeout": "30s"}
+2026-03-22T23:49:31.441+0800	INFO	tools/executor.go:428	tool executed successfully	{"name": "double", "duration": "0s"}
+2026-03-22T23:49:31.441+0800	INFO	tools/executor.go:153	tool registered	{"name": "limited_tool", "timeout": "30s"}
+2026-03-22T23:49:31.441+0800	INFO	tools/executor.go:428	tool executed successfully	{"name": "limited_tool", "duration": "0s"}
+2026-03-22T23:49:31.441+0800	INFO	tools/executor.go:428	tool executed successfully	{"name": "limited_tool", "duration": "0s"}
+2026-03-22T23:49:31.441+0800	WARN	tools/executor.go:345	rate limit exceeded	{"name": "limited_tool"}
+github.com/BaSui01/agentflow/llm/capabilities/tools.(*DefaultExecutor).ExecuteOne
+	D:/code/agentflow/llm/capabilities/tools/executor.go:345
+github.com/BaSui01/agentflow/llm/capabilities/tools_test.TestRateLimit
+	D:/code/agentflow/llm/capabilities/tools/example_test.go:315
+testing.tRunner
+	C:/Program Files/Go/src/testing/testing.go:2036
+2026-03-22T23:49:31.441+0800	INFO	tools/executor.go:153	tool registered	{"name": "slow_tool", "timeout": "100ms"}
+2026-03-22T23:49:31.542+0800	ERROR	tools/executor.go:436	tool execution timeout	{"name": "slow_tool", "timeout": "100ms"}
+github.com/BaSui01/agentflow/llm/capabilities/tools.(*DefaultExecutor).ExecuteOne
+	D:/code/agentflow/llm/capabilities/tools/executor.go:436
+github.com/BaSui01/agentflow/llm/capabilities/tools_test.TestToolTimeout
+	D:/code/agentflow/llm/capabilities/tools/example_test.go:350
+testing.tRunner
+	C:/Program Files/Go/src/testing/testing.go:2036
+2026-03-22T23:49:31.648+0800	INFO	tools/executor.go:153	tool registered	{"name": "test_tool", "timeout": "10s"}
+2026-03-22T23:49:31.648+0800	INFO	tools/executor.go:194	tool unregistered	{"name": "test_tool"}
+2026-03-22T23:49:31.648+0800	INFO	tools/executor.go:153	tool registered	{"name": "double", "timeout": "30s"}
+2026-03-22T23:49:31.648+0800	INFO	tools/executor.go:428	tool executed successfully	{"name": "double", "duration": "0s"}
+2026-03-22T23:49:31.648+0800	INFO	tools/executor.go:153	tool registered	{"name": "limited_tool", "timeout": "30s"}
+2026-03-22T23:49:31.648+0800	INFO	tools/executor.go:428	tool executed successfully	{"name": "limited_tool", "duration": "0s"}
+2026-03-22T23:49:31.648+0800	INFO	tools/executor.go:428	tool executed successfully	{"name": "limited_tool", "duration": "0s"}
+2026-03-22T23:49:31.648+0800	WARN	tools/executor.go:345	rate limit exceeded	{"name": "limited_tool"}
+github.com/BaSui01/agentflow/llm/capabilities/tools.(*DefaultExecutor).ExecuteOne
+	D:/code/agentflow/llm/capabilities/tools/executor.go:345
+github.com/BaSui01/agentflow/llm/capabilities/tools_test.TestRateLimit
+	D:/code/agentflow/llm/capabilities/tools/example_test.go:315
+testing.tRunner
+	C:/Program Files/Go/src/testing/testing.go:2036
+2026-03-22T23:49:31.648+0800	INFO	tools/executor.go:153	tool registered	{"name": "slow_tool", "timeout": "100ms"}
+2026-03-22T23:49:31.749+0800	ERROR	tools/executor.go:436	tool execution timeout	{"name": "slow_tool", "timeout": "100ms"}
+github.com/BaSui01/agentflow/llm/capabilities/tools.(*DefaultExecutor).ExecuteOne
+	D:/code/agentflow/llm/capabilities/tools/executor.go:436
+github.com/BaSui01/agentflow/llm/capabilities/tools_test.TestToolTimeout
+	D:/code/agentflow/llm/capabilities/tools/example_test.go:350
+testing.tRunner
+	C:/Program Files/Go/src/testing/testing.go:2036
+2026-03-22T23:49:31.856+0800	INFO	tools/executor.go:153	tool registered	{"name": "test_tool", "timeout": "10s"}
+2026-03-22T23:49:31.856+0800	INFO	tools/executor.go:194	tool unregistered	{"name": "test_tool"}
+2026-03-22T23:49:31.857+0800	INFO	tools/executor.go:153	tool registered	{"name": "double", "timeout": "30s"}
+2026-03-22T23:49:31.857+0800	INFO	tools/executor.go:428	tool executed successfully	{"name": "double", "duration": "0s"}
+2026-03-22T23:49:31.857+0800	INFO	tools/executor.go:153	tool registered	{"name": "limited_tool", "timeout": "30s"}
+2026-03-22T23:49:31.857+0800	INFO	tools/executor.go:428	tool executed successfully	{"name": "limited_tool", "duration": "0s"}
+2026-03-22T23:49:31.857+0800	INFO	tools/executor.go:428	tool executed successfully	{"name": "limited_tool", "duration": "0s"}
+2026-03-22T23:49:31.857+0800	WARN	tools/executor.go:345	rate limit exceeded	{"name": "limited_tool"}
+github.com/BaSui01/agentflow/llm/capabilities/tools.(*DefaultExecutor).ExecuteOne
+	D:/code/agentflow/llm/capabilities/tools/executor.go:345
+github.com/BaSui01/agentflow/llm/capabilities/tools_test.TestRateLimit
+	D:/code/agentflow/llm/capabilities/tools/example_test.go:315
+testing.tRunner
+	C:/Program Files/Go/src/testing/testing.go:2036
+2026-03-22T23:49:31.857+0800	INFO	tools/executor.go:153	tool registered	{"name": "slow_tool", "timeout": "100ms"}
+2026-03-22T23:49:31.957+0800	ERROR	tools/executor.go:436	tool execution timeout	{"name": "slow_tool", "timeout": "100ms"}
+github.com/BaSui01/agentflow/llm/capabilities/tools.(*DefaultExecutor).ExecuteOne
+	D:/code/agentflow/llm/capabilities/tools/executor.go:436
+github.com/BaSui01/agentflow/llm/capabilities/tools_test.TestToolTimeout
+	D:/code/agentflow/llm/capabilities/tools/example_test.go:350
+testing.tRunner
+	C:/Program Files/Go/src/testing/testing.go:2036
+goos: windows
+goarch: amd64
+pkg: github.com/BaSui01/agentflow/llm/capabilities/tools
+cpu: AMD Ryzen 5 5600H with Radeon Graphics         
+BenchmarkToolExecutor_ExecuteOne-12               	  259268	      4542 ns/op	    1312 B/op	      17 allocs/op
+BenchmarkToolExecutor_ExecuteOne-12               	  292092	      4415 ns/op	    1312 B/op	      17 allocs/op
+BenchmarkToolExecutor_ExecuteOne-12               	  310491	      4473 ns/op	    1312 B/op	      17 allocs/op
+BenchmarkToolRegistry_List-12                     	  732022	      1757 ns/op	    1536 B/op	       1 allocs/op
+BenchmarkToolRegistry_List-12                     	 1000000	      1613 ns/op	    1536 B/op	       1 allocs/op
+BenchmarkToolRegistry_List-12                     	  889500	      1412 ns/op	    1536 B/op	       1 allocs/op
+BenchmarkTokenBucketLimiter_Allow-12              	--- FAIL: BenchmarkTokenBucketLimiter_Allow-12
+    rate_limiter_test.go:155: allow failed: rate limit exceeded: no tokens available
+BenchmarkTokenBucketLimiter_Allow-12              	--- FAIL: BenchmarkTokenBucketLimiter_Allow-12
+    rate_limiter_test.go:155: allow failed: rate limit exceeded: no tokens available
+BenchmarkTokenBucketLimiter_Allow-12              	--- FAIL: BenchmarkTokenBucketLimiter_Allow-12
+    rate_limiter_test.go:155: allow failed: rate limit exceeded: no tokens available
+BenchmarkTokenBucketLimiter_AllowConcurrent-12    	--- FAIL: BenchmarkTokenBucketLimiter_AllowConcurrent-12
+    rate_limiter_test.go:167: allow failed: rate limit exceeded: no tokens available
+    rate_limiter_test.go:167: allow failed: rate limit exceeded: no tokens available
+    rate_limiter_test.go:167: allow failed: rate limit exceeded: no tokens available
+    rate_limiter_test.go:167: allow failed: rate limit exceeded: no tokens available
+    rate_limiter_test.go:167: allow failed: rate limit exceeded: no tokens available
+    rate_limiter_test.go:167: allow failed: rate limit exceeded: no tokens available
+    rate_limiter_test.go:167: allow failed: rate limit exceeded: no tokens available
+    rate_limiter_test.go:167: allow failed: rate limit exceeded: no tokens available
+    rate_limiter_test.go:167: allow failed: rate limit exceeded: no tokens available
+    rate_limiter_test.go:167: allow failed: rate limit exceeded: no tokens available
+    rate_limiter_test.go:167: allow failed: rate limit exceeded: no tokens available
+    rate_limiter_test.go:167: allow failed: rate limit exceeded: no tokens available
+BenchmarkTokenBucketLimiter_AllowConcurrent-12    	--- FAIL: BenchmarkTokenBucketLimiter_AllowConcurrent-12
+    rate_limiter_test.go:167: allow failed: rate limit exceeded: no tokens available
+    rate_limiter_test.go:167: allow failed: rate limit exceeded: no tokens available
+    rate_limiter_test.go:167: allow failed: rate limit exceeded: no tokens available
+    rate_limiter_test.go:167: allow failed: rate limit exceeded: no tokens available
+    rate_limiter_test.go:167: allow failed: rate limit exceeded: no tokens available
+    rate_limiter_test.go:167: allow failed: rate limit exceeded: no tokens available
+    rate_limiter_test.go:167: allow failed: rate limit exceeded: no tokens available
+    rate_limiter_test.go:167: allow failed: rate limit exceeded: no tokens available
+    rate_limiter_test.go:167: allow failed: rate limit exceeded: no tokens available
+    rate_limiter_test.go:167: allow failed: rate limit exceeded: no tokens available
+    rate_limiter_test.go:167: allow failed: rate limit exceeded: no tokens available
+    rate_limiter_test.go:167: allow failed: rate limit exceeded: no tokens available
+BenchmarkTokenBucketLimiter_AllowConcurrent-12    	--- FAIL: BenchmarkTokenBucketLimiter_AllowConcurrent-12
+    rate_limiter_test.go:167: allow failed: rate limit exceeded: no tokens available
+    rate_limiter_test.go:167: allow failed: rate limit exceeded: no tokens available
+    rate_limiter_test.go:167: allow failed: rate limit exceeded: no tokens available
+    rate_limiter_test.go:167: allow failed: rate limit exceeded: no tokens available
+    rate_limiter_test.go:167: allow failed: rate limit exceeded: no tokens available
+    rate_limiter_test.go:167: allow failed: rate limit exceeded: no tokens available
+    rate_limiter_test.go:167: allow failed: rate limit exceeded: no tokens available
+    rate_limiter_test.go:167: allow failed: rate limit exceeded: no tokens available
+    rate_limiter_test.go:167: allow failed: rate limit exceeded: no tokens available
+    rate_limiter_test.go:167: allow failed: rate limit exceeded: no tokens available
+    rate_limiter_test.go:167: allow failed: rate limit exceeded: no tokens available
+    rate_limiter_test.go:167: allow failed: rate limit exceeded: no tokens available
+FAIL
+exit status 1
+FAIL	github.com/BaSui01/agentflow/llm/capabilities/tools	11.431s
+goos: windows
+goarch: amd64
+pkg: github.com/BaSui01/agentflow/agent/memorycore
+cpu: AMD Ryzen 5 5600H with Radeon Graphics         
+BenchmarkCache_Save-12                 	 2029352	       613.3 ns/op	    1269 B/op	       4 allocs/op
+BenchmarkCache_Save-12                 	 2571291	       588.6 ns/op	    1261 B/op	       4 allocs/op
+BenchmarkCache_Save-12                 	 2256096	       548.3 ns/op	    1202 B/op	       4 allocs/op
+BenchmarkCache_GetRecentMessages-12    	   44947	     29090 ns/op	   32512 B/op	       7 allocs/op
+BenchmarkCache_GetRecentMessages-12    	   43573	     25632 ns/op	   32512 B/op	       7 allocs/op
+BenchmarkCache_GetRecentMessages-12    	   47770	     29078 ns/op	   32512 B/op	       7 allocs/op
+PASS
+ok  	github.com/BaSui01/agentflow/agent/memorycore	10.791s
+FAIL

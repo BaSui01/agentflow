@@ -98,6 +98,70 @@ jobs:
       - name: Check docs API drift
         run: make docs-api-drift
 
+  # ── Performance Regression Detection ──────────────────────────────────
+  # This job runs Go benchmarks and compares against the checked-in baseline.
+  #
+  # How to check for regressions:
+  #   1. Download the "benchmark-report" artifact from the workflow run.
+  #   2. Open benchmark-current.txt to see raw numbers.
+  #   3. If a baseline exists, benchstat-diff.txt shows a statistical comparison
+  #      (columns: old, new, delta). Look for "~" (no change) vs "+" (regression).
+  #   4. To update the baseline after intentional changes:
+  #        cp benchmarks/latest.txt benchmarks/baseline_v<VERSION>.txt
+  #        git add benchmarks/ && git commit -m "bench: update baseline"
+  benchmark:
+    name: Benchmark
+    runs-on: ubuntu-latest
+    needs: ci
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Install benchstat
+        run: go install golang.org/x/perf/cmd/benchstat@latest
+
+      - name: Run benchmarks
+        run: |
+          go test -bench=. -benchmem -count=3 -timeout 120s \
+            ./llm/providers/openaicompat/ \
+            ./llm/capabilities/tools/ \
+            ./agent/memorycore/ \
+            | tee benchmark-current.txt
+
+      - name: Compare with baseline (if available)
+        continue-on-error: true
+        run: |
+          # Find the most recent baseline file
+          baseline=$(ls -t benchmarks/baseline_*.txt 2>/dev/null | head -1)
+          if [[ -n "${baseline}" ]]; then
+            echo "Comparing against baseline: ${baseline}"
+            "$(go env GOPATH)/bin/benchstat" "${baseline}" benchmark-current.txt | tee benchstat-diff.txt
+            echo "## Benchmark Comparison" >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+            cat benchstat-diff.txt >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "No baseline found — skipping comparison."
+            echo "## Benchmark" >> "$GITHUB_STEP_SUMMARY"
+            echo "No baseline file in benchmarks/. Comparison skipped." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload benchmark report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: benchmark-report
+          path: |
+            benchmark-current.txt
+            benchstat-diff.txt
+          retention-days: 14
+
   cross-build:
     name: Cross Build (${{ matrix.goos }}/${{ matrix.goarch }})
     runs-on: ubuntu-latest
