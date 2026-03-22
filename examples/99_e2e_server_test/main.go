@@ -4,6 +4,7 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -13,6 +14,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/BaSui01/agentflow/api"
@@ -92,9 +94,29 @@ func (m *mockChatService) Complete(_ context.Context, req *api.ChatRequest) (*us
 	}, nil
 }
 
-func (m *mockChatService) Stream(_ context.Context, _ *api.ChatRequest) (<-chan llmcore.UnifiedChunk, *types.Error) {
-	ch := make(chan llmcore.UnifiedChunk, 1)
-	close(ch)
+func (m *mockChatService) Stream(_ context.Context, req *api.ChatRequest) (<-chan llmcore.UnifiedChunk, *types.Error) {
+	ch := make(chan llmcore.UnifiedChunk, 4)
+	go func() {
+		defer close(ch)
+		// Send two content chunks then a finish chunk.
+		for _, text := range []string{"Hello", " world"} {
+			ch <- llmcore.UnifiedChunk{
+				Output: &llm.StreamChunk{
+					ID:    "chatcmpl-stream-001",
+					Model: req.Model,
+					Delta: types.Message{Role: types.RoleAssistant, Content: text},
+				},
+			}
+		}
+		ch <- llmcore.UnifiedChunk{
+			Output: &llm.StreamChunk{
+				ID:           "chatcmpl-stream-001",
+				Model:        req.Model,
+				Delta:        types.Message{Role: types.RoleAssistant},
+				FinishReason: "stop",
+			},
+		}
+	}()
 	return ch, nil
 }
 
@@ -477,6 +499,250 @@ func testVersionEndpoint(base string) testResult {
 }
 
 // =========================================================================
+// streaming SSE tests
+// =========================================================================
+
+// readSSELines reads the full SSE body and returns non-empty lines.
+func readSSELines(resp *http.Response) ([]string, error) {
+	defer resp.Body.Close()
+	var lines []string
+	scanner := bufio.NewScanner(resp.Body)
+	for scanner.Scan() {
+		line := scanner.Text()
+		if line != "" {
+			lines = append(lines, line)
+		}
+	}
+	return lines, scanner.Err()
+}
+
+func testStreamSSE(base string) testResult {
+	name := "POST /api/v1/chat/completions/stream (SSE format)"
+	payload, _ := json.Marshal(map[string]any{
+		"model":    "gpt-4",
+		"messages": []map[string]string{{"role": "user", "content": "Hi"}},
+	})
+	req, err := http.NewRequest("POST", base+"/api/v1/chat/completions/stream", bytes.NewReader(payload))
+	if err != nil {
+		return testResult{name, false, fmt.Sprintf("new request: %v", err)}
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return testResult{name, false, fmt.Sprintf("request error: %v", err)}
+	}
+	if resp.StatusCode != 200 {
+		resp.Body.Close()
+		return testResult{name, false, fmt.Sprintf("status=%d", resp.StatusCode)}
+	}
+	ct := resp.Header.Get("Content-Type")
+	if !strings.HasPrefix(ct, "text/event-stream") {
+		resp.Body.Close()
+		return testResult{name, false, fmt.Sprintf("Content-Type=%q", ct)}
+	}
+
+	lines, err := readSSELines(resp)
+	if err != nil {
+		return testResult{name, false, fmt.Sprintf("read body: %v", err)}
+	}
+
+	// Verify at least one "data: " prefixed line and a "data: [DONE]" terminator.
+	hasDataPrefix := false
+	hasDone := false
+	for _, line := range lines {
+		if strings.HasPrefix(line, "data: ") && line != "data: [DONE]" {
+			hasDataPrefix = true
+		}
+		if line == "data: [DONE]" {
+			hasDone = true
+		}
+	}
+	if !hasDataPrefix {
+		return testResult{name, false, fmt.Sprintf("no data: prefix lines found, lines=%v", lines)}
+	}
+	if !hasDone {
+		return testResult{name, false, "missing data: [DONE] terminator"}
+	}
+	return testResult{name, true, fmt.Sprintf("%d SSE lines", len(lines))}
+}
+
+func testOpenAICompatStreamSSE(base string) testResult {
+	name := "POST /v1/chat/completions stream=true (OpenAI compat SSE)"
+	payload, _ := json.Marshal(map[string]any{
+		"model":    "gpt-4",
+		"messages": []map[string]string{{"role": "user", "content": "Hi"}},
+		"stream":   true,
+	})
+	req, err := http.NewRequest("POST", base+"/v1/chat/completions", bytes.NewReader(payload))
+	if err != nil {
+		return testResult{name, false, fmt.Sprintf("new request: %v", err)}
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return testResult{name, false, fmt.Sprintf("request error: %v", err)}
+	}
+	if resp.StatusCode != 200 {
+		resp.Body.Close()
+		return testResult{name, false, fmt.Sprintf("status=%d", resp.StatusCode)}
+	}
+	ct := resp.Header.Get("Content-Type")
+	if !strings.HasPrefix(ct, "text/event-stream") {
+		resp.Body.Close()
+		return testResult{name, false, fmt.Sprintf("Content-Type=%q", ct)}
+	}
+
+	lines, err := readSSELines(resp)
+	if err != nil {
+		return testResult{name, false, fmt.Sprintf("read body: %v", err)}
+	}
+
+	hasChunk := false
+	hasDone := false
+	for _, line := range lines {
+		if strings.HasPrefix(line, "data: ") && line != "data: [DONE]" {
+			hasChunk = true
+			// Verify each data line is valid JSON with object=chat.completion.chunk
+			jsonStr := strings.TrimPrefix(line, "data: ")
+			var chunk map[string]any
+			if err := json.Unmarshal([]byte(jsonStr), &chunk); err != nil {
+				return testResult{name, false, fmt.Sprintf("chunk JSON decode: %v, raw=%q", err, jsonStr)}
+			}
+			if obj, _ := chunk["object"].(string); obj != "chat.completion.chunk" {
+				return testResult{name, false, fmt.Sprintf("chunk object=%q", obj)}
+			}
+		}
+		if line == "data: [DONE]" {
+			hasDone = true
+		}
+	}
+	if !hasChunk {
+		return testResult{name, false, "no data chunks found"}
+	}
+	if !hasDone {
+		return testResult{name, false, "missing data: [DONE] terminator"}
+	}
+	return testResult{name, true, fmt.Sprintf("%d SSE lines", len(lines))}
+}
+
+// =========================================================================
+// error scenario tests
+// =========================================================================
+
+func testEmptyBody(base string) testResult {
+	name := "POST /api/v1/chat/completions (empty body → 400)"
+	req, _ := http.NewRequest("POST", base+"/api/v1/chat/completions", http.NoBody)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return testResult{name, false, fmt.Sprintf("request error: %v", err)}
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != 400 {
+		body, _ := io.ReadAll(resp.Body)
+		return testResult{name, false, fmt.Sprintf("status=%d, body=%s", resp.StatusCode, body)}
+	}
+	body, _ := io.ReadAll(resp.Body)
+	var envelope api.Response
+	if err := json.Unmarshal(body, &envelope); err != nil {
+		return testResult{name, false, fmt.Sprintf("JSON decode: %v", err)}
+	}
+	if envelope.Success {
+		return testResult{name, false, "expected success=false"}
+	}
+	return testResult{name, true, ""}
+}
+
+func testInvalidJSON(base string) testResult {
+	name := "POST /api/v1/chat/completions (invalid JSON → 400)"
+	req, _ := http.NewRequest("POST", base+"/api/v1/chat/completions", strings.NewReader("{invalid"))
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return testResult{name, false, fmt.Sprintf("request error: %v", err)}
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != 400 {
+		body, _ := io.ReadAll(resp.Body)
+		return testResult{name, false, fmt.Sprintf("status=%d, body=%s", resp.StatusCode, body)}
+	}
+	body, _ := io.ReadAll(resp.Body)
+	var envelope api.Response
+	if err := json.Unmarshal(body, &envelope); err != nil {
+		return testResult{name, false, fmt.Sprintf("JSON decode: %v", err)}
+	}
+	if envelope.Success {
+		return testResult{name, false, "expected success=false"}
+	}
+	return testResult{name, true, ""}
+}
+
+func testNotFound(base string) testResult {
+	name := "GET /nonexistent (→ 404)"
+	resp, _, err := doJSON("GET", base+"/nonexistent", nil)
+	if err != nil {
+		return testResult{name, false, fmt.Sprintf("request error: %v", err)}
+	}
+	if resp.StatusCode != 404 {
+		return testResult{name, false, fmt.Sprintf("status=%d", resp.StatusCode)}
+	}
+	return testResult{name, true, ""}
+}
+
+// =========================================================================
+// concurrency stress test
+// =========================================================================
+
+func testConcurrentRequests(base string) testResult {
+	name := "Concurrent 10x POST /api/v1/chat/completions"
+	const concurrency = 10
+	payload := map[string]any{
+		"model":    "gpt-4",
+		"messages": []map[string]string{{"role": "user", "content": "Hi"}},
+	}
+
+	var wg sync.WaitGroup
+	type result struct {
+		status   int
+		duration time.Duration
+		err      error
+	}
+	results := make([]result, concurrency)
+
+	start := time.Now()
+	for i := 0; i < concurrency; i++ {
+		wg.Add(1)
+		go func(idx int) {
+			defer wg.Done()
+			t0 := time.Now()
+			resp, _, err := doJSON("POST", base+"/api/v1/chat/completions", payload)
+			d := time.Since(t0)
+			if err != nil {
+				results[idx] = result{err: err, duration: d}
+				return
+			}
+			results[idx] = result{status: resp.StatusCode, duration: d}
+		}(i)
+	}
+	wg.Wait()
+	totalDuration := time.Since(start)
+
+	var totalLatency time.Duration
+	for i, r := range results {
+		if r.err != nil {
+			return testResult{name, false, fmt.Sprintf("request[%d] error: %v", i, r.err)}
+		}
+		if r.status != 200 {
+			return testResult{name, false, fmt.Sprintf("request[%d] status=%d", i, r.status)}
+		}
+		totalLatency += r.duration
+	}
+	avgLatency := totalLatency / concurrency
+	detail := fmt.Sprintf("total=%v, avg_latency=%v", totalDuration, avgLatency)
+	return testResult{name, true, detail}
+}
+
+// =========================================================================
 // main
 // =========================================================================
 
@@ -489,12 +755,22 @@ func main() {
 	fmt.Printf("Server: %s\n\n", base)
 
 	results := []testResult{
+		// existing tests
 		testHealthEndpoint(base),
 		testVersionEndpoint(base),
 		testChatCompletions(base),
 		testOpenAICompatEndpoint(base),
 		testChatCompletionsWithTools(base),
 		testOpenAICompatWithTools(base),
+		// streaming SSE tests
+		testStreamSSE(base),
+		testOpenAICompatStreamSSE(base),
+		// error scenario tests
+		testEmptyBody(base),
+		testInvalidJSON(base),
+		testNotFound(base),
+		// concurrency stress test
+		testConcurrentRequests(base),
 	}
 
 	passed, failed := 0, 0

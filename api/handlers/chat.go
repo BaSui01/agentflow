@@ -73,8 +73,9 @@ func NewChatHandlerWithService(service usecase.ChatService, logger *zap.Logger) 
 		panic("api.ChatHandler: logger is required and cannot be nil")
 	}
 	return &ChatHandler{
-		service: service,
-		logger:  logger,
+		service:   service,
+		converter: NewDefaultChatConverter(defaultStreamTimeout),
+		logger:    logger,
 	}
 }
 
