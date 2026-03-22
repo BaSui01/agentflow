@@ -116,12 +116,15 @@ func main() {
 		log.Fatal("请设置环境变量 OPENAI_API_KEY，例如: export OPENAI_API_KEY=sk-xxx")
 	}
 
+	baseURL := envOrDefault("OPENAI_BASE_URL", "https://api.openai.com")
+	model := envOrDefault("OPENAI_MODEL", "gpt-4o-mini")
+
 	// ========== 4. 创建 Provider ==========
 	cfg := providers.OpenAIConfig{
 		BaseProviderConfig: providers.BaseProviderConfig{
 			APIKey:  apiKey,
-			BaseURL: "https://api.openai.com",
-			Model:   "gpt-3.5-turbo",
+			BaseURL: baseURL,
+			Model:   model,
 		},
 	}
 	provider := openai.NewOpenAIProvider(cfg, logger)
@@ -165,7 +168,7 @@ func main() {
 	}
 
 	req := &llm.ChatRequest{
-		Model:       "gpt-3.5-turbo",
+		Model:       model,
 		Messages:    messages,
 		Tools:       registry.List(), // 将所有已注册工具的 Schema 传给 LLM
 		ToolChoice:  "auto",          // 让 LLM 自动决定是否调用工具
@@ -176,6 +179,8 @@ func main() {
 	// ========== 8. Tool Calling 循环 ==========
 	// LLM 可能返回 ToolCall 而非直接回答，需要循环处理
 	fmt.Println("\n--- 开始对话 ---")
+	fmt.Printf("Base URL: %s\n", baseURL)
+	fmt.Printf("Model: %s\n", model)
 	fmt.Printf("User: %s\n", messages[0].Content)
 
 	for i := 0; i < 5; i++ { // 最多 5 轮工具调用，防止无限循环
@@ -218,4 +223,12 @@ func main() {
 
 	fmt.Println("--- 对话结束 ---")
 	fmt.Printf("总消息数: %d\n", len(req.Messages))
+}
+
+func envOrDefault(key, fallback string) string {
+	value := os.Getenv(key)
+	if value == "" {
+		return fallback
+	}
+	return value
 }

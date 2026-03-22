@@ -23,27 +23,32 @@ func main() {
 		log.Fatal("OPENAI_API_KEY environment variable is required")
 	}
 
+	baseURL := envOrDefault("OPENAI_BASE_URL", "https://api.openai.com")
+	model := envOrDefault("OPENAI_MODEL", "gpt-4o-mini")
+
 	provider := openai.NewOpenAIProvider(providers.OpenAIConfig{
 		BaseProviderConfig: providers.BaseProviderConfig{
 			APIKey:  apiKey,
-			BaseURL: "https://api.openai.com",
-			Model:   "gpt-3.5-turbo",
+			BaseURL: baseURL,
+			Model:   model,
 		},
 	}, logger)
 
 	ctx := context.Background()
-	if err := runDAGWorkflow(ctx, provider); err != nil {
+	if err := runDAGWorkflow(ctx, provider, baseURL, model); err != nil {
 		log.Fatalf("workflow execution failed: %v", err)
 	}
 }
 
-func runDAGWorkflow(ctx context.Context, provider llm.Provider) error {
+func runDAGWorkflow(ctx context.Context, provider llm.Provider, baseURL, model string) error {
 	fmt.Println("=== AgentFlow DAG Workflow 示例 ===")
+	fmt.Printf("Base URL: %s\n", baseURL)
+	fmt.Printf("Model: %s\n", model)
 
 	translateStep := workflow.NewFuncStep("translate", func(ctx context.Context, input any) (any, error) {
 		text := input.(string)
 		resp, err := provider.Completion(ctx, &llm.ChatRequest{
-			Model: "gpt-3.5-turbo",
+			Model: model,
 			Messages: []types.Message{
 				{Role: llm.RoleSystem, Content: "你是一个专业的翻译助手。"},
 				{Role: llm.RoleUser, Content: fmt.Sprintf("请将以下英文翻译成中文：\n\n%s", text)},
@@ -60,7 +65,7 @@ func runDAGWorkflow(ctx context.Context, provider llm.Provider) error {
 	summarizeStep := workflow.NewFuncStep("summarize", func(ctx context.Context, input any) (any, error) {
 		text := input.(string)
 		resp, err := provider.Completion(ctx, &llm.ChatRequest{
-			Model: "gpt-3.5-turbo",
+			Model: model,
 			Messages: []types.Message{
 				{Role: llm.RoleSystem, Content: "你是一个专业的内容总结助手。"},
 				{Role: llm.RoleUser, Content: fmt.Sprintf("请总结以下文章的要点（3-5 条）：\n\n%s", text)},
@@ -92,4 +97,12 @@ func runDAGWorkflow(ctx context.Context, provider llm.Provider) error {
 
 	fmt.Printf("结果：\n%s\n", result)
 	return nil
+}
+
+func envOrDefault(key, fallback string) string {
+	value := os.Getenv(key)
+	if value == "" {
+		return fallback
+	}
+	return value
 }

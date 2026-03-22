@@ -6,68 +6,68 @@ import (
 	"log"
 	"os"
 
-	"github.com/BaSui01/agentflow"
-	"github.com/BaSui01/agentflow/agent"
 	"github.com/BaSui01/agentflow/llm"
 	"github.com/BaSui01/agentflow/llm/providers"
 	"github.com/BaSui01/agentflow/llm/providers/openai"
+	"github.com/BaSui01/agentflow/types"
 	"go.uber.org/zap"
 )
 
 func main() {
-	// 1. 创建 Logger
 	logger, _ := zap.NewDevelopment()
 	defer logger.Sync()
 
-	// 2. 从环境变量读取 API Key
 	apiKey := os.Getenv("OPENAI_API_KEY")
 	if apiKey == "" {
 		log.Fatal("请设置环境变量 OPENAI_API_KEY，例如: export OPENAI_API_KEY=sk-xxx")
 	}
 
-	// 3. 配置 OpenAI Provider
+	baseURL := envOrDefault("OPENAI_BASE_URL", "https://api.openai.com")
+	model := envOrDefault("OPENAI_MODEL", "gpt-4o-mini")
+
 	cfg := providers.OpenAIConfig{
 		BaseProviderConfig: providers.BaseProviderConfig{
 			APIKey:  apiKey,
-			BaseURL: "https://api.openai.com",
-			Model:   "gpt-3.5-turbo",
+			BaseURL: baseURL,
+			Model:   model,
 		},
 	}
-
-	// 3. 创建 Provider
 	provider := openai.NewOpenAIProvider(cfg, logger)
 
-	// 4. 通过顶层便捷入口创建 Agent
-	options := buildOptionSamples(logger, provider, apiKey)
-	chatAgent, err := agentflow.New(options...)
-	if err != nil {
-		log.Fatalf("Create agent failed: %v", err)
-	}
-
-	// 5. 发起对话
 	ctx := context.Background()
-	out, err := chatAgent.Execute(ctx, &agent.Input{
-		Content: "Hello! What is the capital of France?",
-	})
-	if err != nil {
-		log.Fatalf("Agent execution failed: %v", err)
+	req := &llm.ChatRequest{
+		Model: model,
+		Messages: []types.Message{
+			{Role: llm.RoleSystem, Content: "You are a concise and helpful assistant."},
+			{Role: llm.RoleUser, Content: "Hello! What is the capital of France? Please answer in one sentence."},
+		},
+		MaxTokens:   200,
+		Temperature: 0.3,
 	}
 
-	// 6. 打印响应
-	fmt.Printf("Response: %s\n", out.Content)
+	resp, err := provider.Completion(ctx, req)
+	if err != nil {
+		log.Fatalf("Chat completion failed: %v", err)
+	}
+
+	if len(resp.Choices) == 0 {
+		log.Fatal("chat completion returned no choices")
+	}
+
+	fmt.Printf("Base URL: %s\n", baseURL)
+	fmt.Printf("Model: %s\n", model)
+	fmt.Printf("Response: %s\n", resp.Choices[0].Message.Content)
+	fmt.Printf("Token usage: prompt=%d completion=%d total=%d\n",
+		resp.Usage.PromptTokens,
+		resp.Usage.CompletionTokens,
+		resp.Usage.TotalTokens,
+	)
 }
 
-func buildOptionSamples(logger *zap.Logger, provider llm.Provider, apiKey string) []agentflow.Option {
-	return []agentflow.Option{
-		agentflow.WithProvider(provider),
-		agentflow.WithToolProvider(provider),
-		agentflow.WithOpenAI("gpt-3.5-turbo"),
-		agentflow.WithAnthropic("claude-sonnet-4-20250514"),
-		agentflow.WithDeepSeek("deepseek-chat"),
-		agentflow.WithModel("gpt-3.5-turbo"),
-		agentflow.WithName("simple-chat-agent"),
-		agentflow.WithSystemPrompt("You are a helpful assistant."),
-		agentflow.WithLogger(logger),
-		agentflow.WithAPIKey(apiKey),
+func envOrDefault(key, fallback string) string {
+	value := os.Getenv(key)
+	if value == "" {
+		return fallback
 	}
+	return value
 }

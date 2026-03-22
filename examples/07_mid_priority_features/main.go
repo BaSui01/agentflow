@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/BaSui01/agentflow/agent/conversation"
@@ -54,19 +55,18 @@ func demoHostedTools(logger *zap.Logger) {
 
 	registry := hosted.NewToolRegistry(logger)
 	registry.Use(
-		hosted.WithTimeout(200*time.Millisecond),
+		hosted.WithTimeout(5*time.Second),
 		hosted.WithLogging(logger),
 		hosted.WithMetrics(func(name string, duration time.Duration, err error) {}),
 	)
 
-	// Register web search tool (需要真实的搜索 API Key)
-	webSearch := hosted.NewWebSearchTool(hosted.WebSearchConfig{
-		APIKey:     os.Getenv("SEARCH_API_KEY"), // 从环境变量读取
-		Endpoint:   "https://api.search.example.com/search",
-		MaxResults: 5,
-	})
+	webSearchCfg, providerNote := selectHostedWebSearchProvider()
+	webSearch, err := hosted.NewProviderBackedWebSearchHostedTool(webSearchCfg, logger)
+	if err != nil {
+		fmt.Printf("   Build web search tool failed: %v\n\n", err)
+		return
+	}
 	registry.Register(webSearch)
-	_ = webSearch.Schema()
 
 	// Register file search tool (in-memory mock store).
 	fileStore := &mockFileSearchStore{}
@@ -84,9 +84,83 @@ func demoHostedTools(logger *zap.Logger) {
 	})
 	_, _ = registry.Execute(context.Background(), fileTool.Name(), fileArgs)
 
+	searchArgs, _ := json.Marshal(map[string]any{
+		"query":       "AgentFlow Go framework",
+		"max_results": 3,
+		"language":    "zh",
+	})
+	searchRaw, searchErr := registry.Execute(context.Background(), webSearch.Name(), searchArgs)
+
 	fmt.Printf("   Registered tool: %s - %s\n", webSearch.Name(), webSearch.Description())
 	fmt.Printf("   Tool type: %s\n", webSearch.Type())
+	fmt.Printf("   Web search provider: %s\n", providerNote)
+	if searchErr != nil {
+		fmt.Printf("   Web search execution failed: %v\n", searchErr)
+	} else {
+		var resp demoWebSearchResponse
+		if err := json.Unmarshal(searchRaw, &resp); err != nil {
+			fmt.Printf("   Web search decode failed: %v\n", err)
+		} else {
+			fmt.Printf("   Web search results: %d (%s)\n", resp.TotalCount, resp.Duration)
+			for i, item := range resp.Results {
+				if i >= 2 {
+					break
+				}
+				fmt.Printf("     - %s | %s\n", item.Title, item.URL)
+			}
+		}
+	}
 	fmt.Printf("   Total tools: %d\n\n", len(registry.List()))
+}
+
+type demoWebSearchResponse struct {
+	Query      string                    `json:"query"`
+	Results    []demoWebSearchResultItem `json:"results"`
+	TotalCount int                       `json:"total_count"`
+	Duration   string                    `json:"duration"`
+}
+
+type demoWebSearchResultItem struct {
+	Title   string `json:"title"`
+	URL     string `json:"url"`
+	Snippet string `json:"snippet"`
+}
+
+func selectHostedWebSearchProvider() (hosted.ToolProviderConfig, string) {
+	if apiKey := strings.TrimSpace(os.Getenv("TAVILY_API_KEY")); apiKey != "" {
+		return hosted.ToolProviderConfig{
+			Provider:       string(hosted.ToolProviderTavily),
+			APIKey:         apiKey,
+			BaseURL:        strings.TrimSpace(os.Getenv("TAVILY_BASE_URL")),
+			TimeoutSeconds: 15,
+			Enabled:        true,
+		}, "tavily (检测到 TAVILY_API_KEY)"
+	}
+
+	if apiKey := strings.TrimSpace(os.Getenv("FIRECRAWL_API_KEY")); apiKey != "" {
+		return hosted.ToolProviderConfig{
+			Provider:       string(hosted.ToolProviderFirecrawl),
+			APIKey:         apiKey,
+			BaseURL:        strings.TrimSpace(os.Getenv("FIRECRAWL_BASE_URL")),
+			TimeoutSeconds: 15,
+			Enabled:        true,
+		}, "firecrawl (检测到 FIRECRAWL_API_KEY)"
+	}
+
+	if baseURL := strings.TrimSpace(os.Getenv("SEARXNG_BASE_URL")); baseURL != "" {
+		return hosted.ToolProviderConfig{
+			Provider:       string(hosted.ToolProviderSearXNG),
+			BaseURL:        baseURL,
+			TimeoutSeconds: 15,
+			Enabled:        true,
+		}, "searxng (检测到 SEARXNG_BASE_URL)"
+	}
+
+	return hosted.ToolProviderConfig{
+		Provider:       string(hosted.ToolProviderDuckDuckGo),
+		TimeoutSeconds: 15,
+		Enabled:        true,
+	}, "duckduckgo (默认免 Key 演示)"
 }
 
 func demoAgentHandoff(logger *zap.Logger) {
@@ -464,4 +538,3 @@ func demoTracing(logger *zap.Logger) {
 	_, conv := convTracer.StartConversation(ctx, "test-chat")
 	fmt.Printf("   Conversation trace ID: %s\n", conv.ID)
 }
-

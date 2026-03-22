@@ -39,15 +39,13 @@ func createProvider(logger *zap.Logger) llm.Provider {
 	if apiKey == "" {
 		return nil
 	}
-	baseURL := os.Getenv("OPENAI_BASE_URL")
-	if baseURL == "" {
-		baseURL = "https://api.openai.com"
-	}
+	baseURL := envOrDefault("OPENAI_BASE_URL", "https://api.openai.com")
+	model := envOrDefault("OPENAI_MODEL", "gpt-4o-mini")
 	cfg := providers.OpenAIConfig{
 		BaseProviderConfig: providers.BaseProviderConfig{
 			APIKey:  apiKey,
 			BaseURL: baseURL,
-			Model:   "gpt-4",
+			Model:   model,
 		},
 	}
 	return openai.NewOpenAIProvider(cfg, logger)
@@ -68,7 +66,7 @@ func demoReflection(logger *zap.Logger) {
 			Type: string(agent.TypeAnalyzer),
 		},
 		LLM: types.LLMConfig{
-			Model:       "gpt-4",
+			Model:       envOrDefault("OPENAI_MODEL", "gpt-4o-mini"),
 			MaxTokens:   2000,
 			Temperature: 0.7,
 		},
@@ -90,7 +88,7 @@ func demoReflection(logger *zap.Logger) {
 		SystemPrompt: promptBundle.RenderSystemPrompt(),
 	}
 
-	baseAgent := agent.NewBaseAgent(config, provider, nil, nil, nil, logger, nil)
+	baseAgent := mustInitAgent(context.Background(), agent.NewBaseAgent(config, provider, nil, nil, nil, logger, nil))
 
 	// Configure Reflection
 	reflectionConfig := agent.ReflectionExecutorConfig{
@@ -144,13 +142,13 @@ func demoToolSelection(logger *zap.Logger) {
 			Type: string(agent.TypeGeneric),
 		},
 		LLM: types.LLMConfig{
-			Model:       "gpt-4",
+			Model:       envOrDefault("OPENAI_MODEL", "gpt-4o-mini"),
 			MaxTokens:   2000,
 			Temperature: 0.7,
 		},
 	}
 
-	baseAgent := agent.NewBaseAgent(config, provider, nil, nil, nil, logger, nil)
+	baseAgent := mustInitAgent(context.Background(), agent.NewBaseAgent(config, provider, nil, nil, nil, logger, nil))
 
 	// Configure dynamic tool selection
 	selectorConfig := agent.DefaultToolSelectionConfig()
@@ -221,6 +219,21 @@ func demoToolSelection(logger *zap.Logger) {
 	// Update tool statistics
 	selector.UpdateToolStats("web_search", true, 500*time.Millisecond, 0.05)
 	selector.UpdateToolStats("calculator", true, 100*time.Millisecond, 0.01)
+}
+
+func mustInitAgent(ctx context.Context, ag *agent.BaseAgent) *agent.BaseAgent {
+	if err := ag.Init(ctx); err != nil {
+		log.Fatalf("agent init failed: %v", err)
+	}
+	return ag
+}
+
+func envOrDefault(key, fallback string) string {
+	value := os.Getenv(key)
+	if value == "" {
+		return fallback
+	}
+	return value
 }
 
 func demoPromptEngineering(logger *zap.Logger) {

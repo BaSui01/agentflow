@@ -3,13 +3,13 @@ package main
 import (
 	"context"
 	"fmt"
-	"github.com/BaSui01/agentflow/types"
 	"log"
 	"os"
 
 	"github.com/BaSui01/agentflow/llm"
 	"github.com/BaSui01/agentflow/llm/providers"
 	"github.com/BaSui01/agentflow/llm/providers/openai"
+	"github.com/BaSui01/agentflow/types"
 	"go.uber.org/zap"
 )
 
@@ -24,22 +24,22 @@ func main() {
 		log.Fatal("请设置环境变量 OPENAI_API_KEY，例如: export OPENAI_API_KEY=sk-xxx")
 	}
 
-	// 3. 配置 OpenAI Provider
+	baseURL := envOrDefault("OPENAI_BASE_URL", "https://api.openai.com")
+	model := envOrDefault("OPENAI_MODEL", "gpt-4o-mini")
+
 	cfg := providers.OpenAIConfig{
 		BaseProviderConfig: providers.BaseProviderConfig{
 			APIKey:  apiKey,
-			BaseURL: "https://api.openai.com",
-			Model:   "gpt-3.5-turbo",
+			BaseURL: baseURL,
+			Model:   model,
 		},
 	}
 
-	// 3. 创建 Provider
 	provider := openai.NewOpenAIProvider(cfg, logger)
 
-	// 4. 发起流式对话
 	ctx := context.Background()
 	req := &llm.ChatRequest{
-		Model: "gpt-3.5-turbo",
+		Model: model,
 		Messages: []types.Message{
 			{
 				Role:    llm.RoleUser,
@@ -55,7 +55,8 @@ func main() {
 		log.Fatalf("Stream failed: %v", err)
 	}
 
-	// 5. 逐块打印响应
+	fmt.Printf("Base URL: %s\n", baseURL)
+	fmt.Printf("Model: %s\n", model)
 	fmt.Println("Streaming response:")
 	fmt.Println("---")
 	for chunk := range stream {
@@ -65,4 +66,12 @@ func main() {
 		fmt.Print(chunk.Delta.Content)
 	}
 	fmt.Println("\n---")
+}
+
+func envOrDefault(key, fallback string) string {
+	value := os.Getenv(key)
+	if value == "" {
+		return fallback
+	}
+	return value
 }
