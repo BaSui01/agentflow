@@ -132,6 +132,12 @@ func main() {
 	fmt.Println("\n━━━ SubAgent 管理器 ━━━")
 	d07SubAgentManager(ctx, provider, lg)
 
+	fmt.Println("\n━━━ Agent Reflection 自我反思 ━━━")
+	d08AgentReflection(ctx, provider, lg)
+
+	fmt.Println("\n━━━ Agent 流式执行 ━━━")
+	d09AgentStreaming(ctx, provider, lg)
+
 	printSummary()
 }
 
@@ -506,4 +512,101 @@ func printSummary() {
 		fmt.Printf("  %s %-32s %8v  %s\n", i, r.Name, r.D.Round(time.Millisecond), r.Info)
 	}
 	if fl == 0 { fmt.Println("\n  🎉 Agent 框架完整链路全部通过！") } else { fmt.Printf("\n  ⚠️  有 %d 项失败\n", fl) }
+}
+
+// =============================================================================
+// D8: Agent Reflection 自我反思 — 执行→评审→改进循环
+// =============================================================================
+
+func d08AgentReflection(ctx context.Context, provider llm.Provider, lg *zap.Logger) {
+	t := time.Now()
+
+	ag, err := agent.NewAgentBuilder(types.AgentConfig{
+		Core:    types.CoreConfig{ID: "reflect-agent", Name: "Reflect Agent", Type: "assistant"},
+		LLM:     types.LLMConfig{Model: model, MaxTokens: 1024, Temperature: 0.7},
+		Runtime: types.RuntimeConfig{SystemPrompt: "你是一个写作助手，回答简洁。"},
+	}).WithProvider(provider).WithLogger(lg).Build()
+
+	if err != nil {
+		rec("Reflection反思", "FAIL", time.Since(t), fmt.Sprintf("构建失败: %v", err))
+		return
+	}
+	ag.Init(ctx)
+
+	reflector := agent.NewReflectionExecutor(ag, agent.ReflectionExecutorConfig{
+		Enabled:       true,
+		MaxIterations: 2,
+		MinQuality:    0.6,
+	})
+
+	result, err := reflector.ExecuteWithReflection(ctx, &agent.Input{
+		TraceID: "test-reflect-001",
+		Content: "用一句话解释什么是微服务架构。",
+	})
+
+	if err != nil {
+		rec("Reflection反思", "FAIL", time.Since(t), fmt.Sprintf("执行失败: %v", err))
+		return
+	}
+
+	if result != nil && result.FinalOutput != nil && result.FinalOutput.Content != "" {
+		rec("Reflection反思", "PASS", time.Since(t), fmt.Sprintf("迭代%d次, 改进=%v, %s", result.Iterations, result.ImprovedByReflection, cut(result.FinalOutput.Content, 50)))
+	} else if result != nil && result.FinalOutput != nil {
+		rec("Reflection反思", "WARN", time.Since(t), fmt.Sprintf("迭代%d次但content为空", result.Iterations))
+	} else {
+		rec("Reflection反思", "FAIL", time.Since(t), "无输出")
+	}
+}
+
+// =============================================================================
+// D9: Agent 流式执行 — StreamCompletion
+// =============================================================================
+
+func d09AgentStreaming(ctx context.Context, provider llm.Provider, lg *zap.Logger) {
+	t := time.Now()
+
+	ag, err := agent.NewAgentBuilder(types.AgentConfig{
+		Core:    types.CoreConfig{ID: "stream-agent", Name: "Stream Agent", Type: "assistant"},
+		LLM:     types.LLMConfig{Model: model, MaxTokens: 256, Temperature: 0.1},
+		Runtime: types.RuntimeConfig{SystemPrompt: "用一句话回答。"},
+	}).WithProvider(provider).WithLogger(lg).Build()
+
+	if err != nil {
+		rec("Agent流式执行", "FAIL", time.Since(t), fmt.Sprintf("构建失败: %v", err))
+		return
+	}
+	ag.Init(ctx)
+
+	messages := []types.Message{
+		{Role: "system", Content: "用一句话回答。"},
+		{Role: "user", Content: "Go语言是什么？"},
+	}
+
+	stream, err := ag.StreamCompletion(ctx, messages)
+	if err != nil {
+		rec("Agent流式执行", "FAIL", time.Since(t), fmt.Sprintf("Stream失败: %v", err))
+		return
+	}
+
+	var content strings.Builder
+	chunkCount := 0
+	for chunk := range stream {
+		if chunk.Err != nil {
+			rec("Agent流式执行", "FAIL", time.Since(t), fmt.Sprintf("chunk错误: %v", chunk.Err))
+			return
+		}
+		content.WriteString(chunk.Delta.Content)
+		if chunk.Delta.ReasoningContent != nil {
+			content.WriteString(*chunk.Delta.ReasoningContent)
+		}
+		chunkCount++
+	}
+
+	if chunkCount > 0 && content.Len() > 0 {
+		rec("Agent流式执行", "PASS", time.Since(t), fmt.Sprintf("%d chunks, %s", chunkCount, cut(content.String(), 50)))
+	} else if chunkCount > 0 {
+		rec("Agent流式执行", "WARN", time.Since(t), fmt.Sprintf("%d chunks但内容为空", chunkCount))
+	} else {
+		rec("Agent流式执行", "FAIL", time.Since(t), "0 chunks")
+	}
 }
