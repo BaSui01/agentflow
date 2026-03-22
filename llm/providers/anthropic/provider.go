@@ -382,12 +382,13 @@ type claudeStreamEvent struct {
 }
 
 type claudeDelta struct {
-	Type        string `json:"type"` // text_delta, input_json_delta, thinking_delta, signature_delta
-	Text        string `json:"text,omitempty"`
-	PartialJSON string `json:"partial_json,omitempty"`
-	StopReason  string `json:"stop_reason,omitempty"`
-	Thinking    string `json:"thinking,omitempty"`  // for thinking_delta
-	Signature   string `json:"signature,omitempty"` // for signature_delta
+	Type        string          `json:"type"` // text_delta, input_json_delta, thinking_delta, signature_delta, citations_delta
+	Text        string          `json:"text,omitempty"`
+	PartialJSON string          `json:"partial_json,omitempty"`
+	StopReason  string          `json:"stop_reason,omitempty"`
+	Thinking    string          `json:"thinking,omitempty"`  // for thinking_delta
+	Signature   string          `json:"signature,omitempty"` // for signature_delta
+	Citation    *claudeCitation `json:"citation,omitempty"`  // for citations_delta
 }
 
 type claudeErrorResp struct {
@@ -943,8 +944,10 @@ func (p *ClaudeProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-ch
 					case "signature_delta":
 						// signature_delta 用于验证 thinking 块完整性，不发送 chunk
 					case "citations_delta":
-						// 引用增量 — 部分 API 版本可能通过 delta 发送引用
-						// 这里累积到 citationAccumulator，在 content_block_stop 时发送
+						// 引用增量 — 累积到 citationAccumulator，在 content_block_stop 时发送
+						if event.Delta.Citation != nil {
+							citationAccumulator[event.Index] = append(citationAccumulator[event.Index], *event.Delta.Citation)
+						}
 					}
 
 					if sendChunk {
@@ -1157,6 +1160,7 @@ func toClaudeChatResponse(cr claudeResponse, provider string) *llm.ChatResponse 
 		if cr.Usage.CacheCreationInputTokens > 0 || cr.Usage.CacheReadInputTokens > 0 {
 			resp.Usage.PromptTokensDetails = &llm.PromptTokensDetails{
 				CachedTokens: cr.Usage.CacheReadInputTokens,
+				CacheCreationTokens: cr.Usage.CacheCreationInputTokens,
 			}
 		}
 	}
@@ -1253,7 +1257,8 @@ func buildStreamUsage(u *claudeUsage) *llm.ChatUsage {
 	}
 	if u.CacheCreationInputTokens > 0 || u.CacheReadInputTokens > 0 {
 		usage.PromptTokensDetails = &llm.PromptTokensDetails{
-			CachedTokens: u.CacheReadInputTokens,
+			CachedTokens:        u.CacheReadInputTokens,
+			CacheCreationTokens: u.CacheCreationInputTokens,
 		}
 	}
 	return usage

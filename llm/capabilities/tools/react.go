@@ -47,6 +47,7 @@ func (r *ReActExecutor) Execute(ctx context.Context, req *llm.ChatRequest) (*llm
 	steps := make([]ReActStep, 0)
 	messages := append([]types.Message{}, req.Messages...)
 	var lastResp *llm.ChatResponse // 保留最后一次有效响应
+	var totalUsage llm.ChatUsage   // 累计所有迭代的 token 用量
 
 	for i := 0; i < r.config.MaxIterations; i++ {
 		r.logger.Debug("ReAct iteration", zap.Int("iteration", i+1))
@@ -58,6 +59,9 @@ func (r *ReActExecutor) Execute(ctx context.Context, req *llm.ChatRequest) (*llm
 			return lastResp, steps, fmt.Errorf("LLM call failed at iteration %d: %w", i+1, err)
 		}
 		lastResp = resp
+		totalUsage.PromptTokens += resp.Usage.PromptTokens
+		totalUsage.CompletionTokens += resp.Usage.CompletionTokens
+		totalUsage.TotalTokens += resp.Usage.TotalTokens
 
 		if len(resp.Choices) == 0 {
 			return resp, steps, fmt.Errorf("no choices in LLM response")
@@ -76,6 +80,7 @@ func (r *ReActExecutor) Execute(ctx context.Context, req *llm.ChatRequest) (*llm
 		if len(toolCalls) == 0 {
 			r.logger.Info("ReAct completed", zap.Int("iterations", i+1), zap.String("finish_reason", choice.FinishReason))
 			steps = append(steps, step)
+			resp.Usage = totalUsage
 			return resp, steps, nil
 		}
 
@@ -94,6 +99,7 @@ func (r *ReActExecutor) Execute(ctx context.Context, req *llm.ChatRequest) (*llm
 
 		if hasError && r.config.StopOnError {
 			steps = append(steps, step)
+			resp.Usage = totalUsage
 			return resp, steps, fmt.Errorf("tool execution failed, stopping ReAct loop")
 		}
 
@@ -105,6 +111,9 @@ func (r *ReActExecutor) Execute(ctx context.Context, req *llm.ChatRequest) (*llm
 	}
 
 	r.logger.Warn("ReAct max iterations reached", zap.Int("max", r.config.MaxIterations))
+	if lastResp != nil {
+		lastResp.Usage = totalUsage
+	}
 	return lastResp, steps, fmt.Errorf("max iterations reached (%d)", r.config.MaxIterations)
 }
 

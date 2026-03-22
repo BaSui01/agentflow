@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -234,9 +235,18 @@ func (b *BaseAgent) Execute(ctx context.Context, input *Input) (_ *Output, execE
 	// 6. 构建消息
 	msgCap := 1 + len(contextMessages) + len(restoredMessages) + 1
 	messages := make([]types.Message, 0, msgCap)
+
+	// 系统提示：合并 prompt bundle + input.Context 额外上下文
+	systemContent := activeBundle.RenderSystemPromptWithVars(input.Variables)
+	if len(input.Context) > 0 {
+		ctxJSON, err := json.Marshal(input.Context)
+		if err == nil {
+			systemContent += "\n\n<additional_context>\n" + string(ctxJSON) + "\n</additional_context>"
+		}
+	}
 	messages = append(messages, types.Message{
 		Role:    llm.RoleSystem,
-		Content: activeBundle.RenderSystemPromptWithVars(input.Variables),
+		Content: systemContent,
 	})
 
 	// 添加上下文消息

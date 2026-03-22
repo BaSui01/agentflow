@@ -201,8 +201,9 @@ type ChatUsage struct {
 
 // PromptTokensDetails 提示 token 详细统计。
 type PromptTokensDetails struct {
-	CachedTokens int `json:"cached_tokens"`
-	AudioTokens  int `json:"audio_tokens,omitempty"`
+	CachedTokens        int `json:"cached_tokens"`
+	CacheCreationTokens int `json:"cache_creation_tokens,omitempty"`
+	AudioTokens         int `json:"audio_tokens,omitempty"`
 }
 
 // CompletionTokensDetails 补全 token 详细统计。

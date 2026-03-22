@@ -56,6 +56,7 @@ type dalleRequest struct {
 	Quality        string `json:"quality,omitempty"`
 	Style          string `json:"style,omitempty"`
 	ResponseFormat string `json:"response_format,omitempty"`
+	Seed           int64  `json:"seed,omitempty"`
 }
 
 type dalleResponse struct {
@@ -94,6 +95,9 @@ func (p *OpenAIProvider) Generate(ctx context.Context, req *GenerateRequest) (*G
 	}
 	if req.ResponseFormat != "" {
 		body.ResponseFormat = req.ResponseFormat
+	}
+	if req.Seed != 0 {
+		body.Seed = req.Seed
 	}
 
 	payload, _ := json.Marshal(body)
@@ -187,6 +191,11 @@ func (p *OpenAIProvider) Edit(ctx context.Context, req *EditRequest) (*GenerateR
 	if req.Size != "" {
 		if err := writer.WriteField("size", req.Size); err != nil {
 			return nil, fmt.Errorf("failed to write size field: %w", err)
+		}
+	}
+	if req.ResponseFormat != "" {
+		if err := writer.WriteField("response_format", req.ResponseFormat); err != nil {
+			return nil, fmt.Errorf("failed to write response_format field: %w", err)
 		}
 	}
 
