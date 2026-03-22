@@ -486,3 +486,109 @@ func TestBaseAgent_Execute_AgentBusy(t *testing.T) {
 		t.Fatal("expected ErrAgentBusy")
 	}
 }
+
+// ═══ ExecuteEnhanced 测试 ═══
+
+func TestBaseAgent_ExecuteEnhanced_NilInput(t *testing.T) {
+	ag := buildTestAgent(t, "enhanced-nil")
+	ag.Init(context.Background())
+	_, err := ag.ExecuteEnhanced(context.Background(), nil, EnhancedExecutionOptions{})
+	if err == nil {
+		t.Fatal("expected error for nil input")
+	}
+}
+
+func TestBaseAgent_ExecuteEnhanced_Basic(t *testing.T) {
+	ag := buildTestAgent(t, "enhanced-basic")
+	ag.Init(context.Background())
+	output, err := ag.ExecuteEnhanced(context.Background(), &Input{
+		TraceID: "enh-001",
+		Content: "test enhanced execution",
+	}, EnhancedExecutionOptions{})
+	if err != nil {
+		t.Fatalf("ExecuteEnhanced failed: %v", err)
+	}
+	if output == nil {
+		t.Fatal("expected non-nil output")
+	}
+}
+
+// ═══ ExtensionRegistry 测试 ═══
+
+func TestExtensionRegistry_SaveToEnhancedMemory_NilMemory(t *testing.T) {
+	reg := NewExtensionRegistry(zap.NewNop())
+	// nil enhanced memory 不应 panic
+	reg.SaveToEnhancedMemory(context.Background(), "agent1",
+		&Input{TraceID: "t1", Content: "test"},
+		&Output{Content: "result", TokensUsed: 10, Duration: time.Millisecond},
+		false,
+	)
+}
+
+func TestExtensionRegistry_ExecuteWithReflection_NilExecutor(t *testing.T) {
+	reg := NewExtensionRegistry(zap.NewNop())
+	_, err := reg.ExecuteWithReflection(context.Background(), &Input{TraceID: "t1", Content: "test"})
+	if err == nil {
+		t.Fatal("expected error with nil reflection executor")
+	}
+}
+
+// ═══ Integration skillInstructions 测试 ═══
+
+func TestSkillInstructionsContext(t *testing.T) {
+	ctx := withSkillInstructions(context.Background(), []string{"use tool X"})
+	instructions := skillInstructionsFromCtx(ctx)
+	if len(instructions) != 1 || instructions[0] != "use tool X" {
+		t.Fatalf("expected ['use tool X'], got %v", instructions)
+	}
+}
+
+func TestSkillInstructionsContext_Missing(t *testing.T) {
+	instructions := skillInstructionsFromCtx(context.Background())
+	if len(instructions) != 0 {
+		t.Fatal("expected empty instructions in empty context")
+	}
+}
+
+// ═══ BaseAgent Execute 正常路径 ═══
+
+func TestBaseAgent_Execute_Success(t *testing.T) {
+	ag := buildTestAgent(t, "exec-success")
+	ag.Init(context.Background())
+
+	output, err := ag.Execute(context.Background(), &Input{
+		TraceID: "exec-001",
+		Content: "hello",
+	})
+	if err != nil {
+		t.Fatalf("Execute failed: %v", err)
+	}
+	if output == nil || output.Content == "" {
+		t.Fatal("expected non-empty output")
+	}
+}
+
+// ═══ BaseAgent Teardown 测试 ═══
+
+func TestBaseAgent_Teardown_NotReady(t *testing.T) {
+	ag := buildTestAgent(t, "teardown-notready")
+	// 不调用 Init，直接 Teardown
+	err := ag.Teardown(context.Background())
+	// 可能返回错误或 nil，都不应 panic
+	_ = err
+}
+
+// ═══ BaseAgent Name/Type/ID 测试 ═══
+
+func TestBaseAgent_Identity(t *testing.T) {
+	ag := buildTestAgent(t, "identity-test")
+	if ag.ID() != "identity-test" {
+		t.Fatalf("expected id=identity-test, got %s", ag.ID())
+	}
+	if ag.Name() != "identity-test" {
+		t.Fatalf("expected name=identity-test, got %s", ag.Name())
+	}
+	if ag.Type() == "" {
+		t.Fatal("expected non-empty type")
+	}
+}
