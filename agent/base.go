@@ -155,29 +155,34 @@ type LoopObservation struct {
 
 // LoopState is the single mutable state object for closed-loop execution.
 type LoopState struct {
-	LoopStateID           string            `json:"loop_state_id,omitempty"`
-	RunID                 string            `json:"run_id,omitempty"`
-	AgentID               string            `json:"agent_id,omitempty"`
-	Goal                  string            `json:"goal,omitempty"`
-	Plan                  []string          `json:"plan,omitempty"`
-	CurrentPlanID         string            `json:"current_plan_id,omitempty"`
-	PlanVersion           int               `json:"plan_version,omitempty"`
-	CurrentStepID         string            `json:"current_step_id,omitempty"`
-	CurrentStage          LoopStage         `json:"current_stage"`
-	Iteration             int               `json:"iteration"`
-	MaxIterations         int               `json:"max_iterations,omitempty"`
-	Decision              LoopDecision      `json:"decision,omitempty"`
-	StopReason            StopReason        `json:"stop_reason,omitempty"`
-	SelectedReasoningMode string            `json:"selected_reasoning_mode,omitempty"`
-	Confidence            float64           `json:"confidence,omitempty"`
-	NeedHuman             bool              `json:"need_human,omitempty"`
-	CheckpointID          string            `json:"checkpoint_id,omitempty"`
-	Resumable             bool              `json:"resumable,omitempty"`
-	ObservationsSummary   string            `json:"observations_summary,omitempty"`
-	LastOutputSummary     string            `json:"last_output_summary,omitempty"`
-	LastError             string            `json:"last_error,omitempty"`
-	LastOutput            *Output           `json:"-"`
-	Observations          []LoopObservation `json:"observations,omitempty"`
+	LoopStateID           string               `json:"loop_state_id,omitempty"`
+	RunID                 string               `json:"run_id,omitempty"`
+	AgentID               string               `json:"agent_id,omitempty"`
+	Goal                  string               `json:"goal,omitempty"`
+	Plan                  []string             `json:"plan,omitempty"`
+	AcceptanceCriteria    []string             `json:"acceptance_criteria,omitempty"`
+	UnresolvedItems       []string             `json:"unresolved_items,omitempty"`
+	RemainingRisks        []string             `json:"remaining_risks,omitempty"`
+	CurrentPlanID         string               `json:"current_plan_id,omitempty"`
+	PlanVersion           int                  `json:"plan_version,omitempty"`
+	CurrentStepID         string               `json:"current_step_id,omitempty"`
+	CurrentStage          LoopStage            `json:"current_stage"`
+	Iteration             int                  `json:"iteration"`
+	MaxIterations         int                  `json:"max_iterations,omitempty"`
+	Decision              LoopDecision         `json:"decision,omitempty"`
+	StopReason            StopReason           `json:"stop_reason,omitempty"`
+	SelectedReasoningMode string               `json:"selected_reasoning_mode,omitempty"`
+	Confidence            float64              `json:"confidence,omitempty"`
+	NeedHuman             bool                 `json:"need_human,omitempty"`
+	CheckpointID          string               `json:"checkpoint_id,omitempty"`
+	Resumable             bool                 `json:"resumable,omitempty"`
+	ValidationStatus      LoopValidationStatus `json:"validation_status,omitempty"`
+	ValidationSummary     string               `json:"validation_summary,omitempty"`
+	ObservationsSummary   string               `json:"observations_summary,omitempty"`
+	LastOutputSummary     string               `json:"last_output_summary,omitempty"`
+	LastError             string               `json:"last_error,omitempty"`
+	LastOutput            *Output              `json:"-"`
+	Observations          []LoopObservation    `json:"observations,omitempty"`
 }
 
 // NewLoopState creates a new loop state seeded from input.
@@ -276,6 +281,9 @@ func (s *LoopState) CheckpointVariables() map[string]any {
 		"agent_id":                s.AgentID,
 		"goal":                    s.Goal,
 		"plan":                    append([]string(nil), s.Plan...),
+		"acceptance_criteria":     cloneStringSlice(s.AcceptanceCriteria),
+		"unresolved_items":        cloneStringSlice(s.UnresolvedItems),
+		"remaining_risks":         cloneStringSlice(s.RemainingRisks),
 		"current_plan_id":         s.CurrentPlanID,
 		"plan_version":            s.PlanVersion,
 		"current_step":            s.CurrentStepID,
@@ -291,6 +299,8 @@ func (s *LoopState) CheckpointVariables() map[string]any {
 		"need_human":              s.NeedHuman,
 		"checkpoint_id":           s.CheckpointID,
 		"resumable":               s.Resumable,
+		"validation_status":       string(s.ValidationStatus),
+		"validation_summary":      s.ValidationSummary,
 		"observations_summary":    s.ObservationsSummary,
 		"last_output_summary":     s.LastOutputSummary,
 		"last_error":              s.LastError,
@@ -330,9 +340,14 @@ func (s *LoopState) PopulateCheckpoint(checkpoint *Checkpoint) {
 	checkpoint.LoopStateID = s.LoopStateID
 	checkpoint.RunID = s.RunID
 	checkpoint.Goal = s.Goal
+	checkpoint.AcceptanceCriteria = cloneStringSlice(s.AcceptanceCriteria)
+	checkpoint.UnresolvedItems = cloneStringSlice(s.UnresolvedItems)
+	checkpoint.RemainingRisks = cloneStringSlice(s.RemainingRisks)
 	checkpoint.CurrentPlanID = s.CurrentPlanID
 	checkpoint.PlanVersion = s.PlanVersion
 	checkpoint.CurrentStepID = s.CurrentStepID
+	checkpoint.ValidationStatus = s.ValidationStatus
+	checkpoint.ValidationSummary = s.ValidationSummary
 	checkpoint.ObservationsSummary = s.ObservationsSummary
 	checkpoint.LastOutputSummary = s.LastOutputSummary
 	checkpoint.LastError = s.LastError
@@ -342,9 +357,14 @@ func (s *LoopState) PopulateCheckpoint(checkpoint *Checkpoint) {
 	executionContext.RunID = s.RunID
 	executionContext.AgentID = s.AgentID
 	executionContext.Goal = s.Goal
+	executionContext.AcceptanceCriteria = cloneStringSlice(s.AcceptanceCriteria)
+	executionContext.UnresolvedItems = cloneStringSlice(s.UnresolvedItems)
+	executionContext.RemainingRisks = cloneStringSlice(s.RemainingRisks)
 	executionContext.CurrentPlanID = s.CurrentPlanID
 	executionContext.PlanVersion = s.PlanVersion
 	executionContext.CurrentStepID = s.CurrentStepID
+	executionContext.ValidationStatus = s.ValidationStatus
+	executionContext.ValidationSummary = s.ValidationSummary
 	executionContext.ObservationsSummary = s.ObservationsSummary
 	executionContext.LastOutputSummary = s.LastOutputSummary
 	executionContext.LastError = s.LastError
@@ -369,6 +389,15 @@ func (s *LoopState) restoreFromContext(values map[string]any) {
 	}
 	if plan, ok := loopContextStrings(values, "loop_plan", "plan"); ok {
 		s.Plan = plan
+	}
+	if criteria, ok := loopContextStrings(values, "acceptance_criteria"); ok {
+		s.AcceptanceCriteria = criteria
+	}
+	if items, ok := loopContextStrings(values, "unresolved_items"); ok {
+		s.UnresolvedItems = items
+	}
+	if risks, ok := loopContextStrings(values, "remaining_risks"); ok {
+		s.RemainingRisks = risks
 	}
 	if value, ok := loopContextString(values, "current_plan_id"); ok {
 		s.CurrentPlanID = value
@@ -396,6 +425,12 @@ func (s *LoopState) restoreFromContext(values map[string]any) {
 	}
 	if value, ok := loopContextString(values, "selected_reasoning_mode"); ok {
 		s.SelectedReasoningMode = value
+	}
+	if value, ok := loopContextString(values, "validation_status"); ok {
+		s.ValidationStatus = LoopValidationStatus(value)
+	}
+	if value, ok := loopContextString(values, "validation_summary"); ok {
+		s.ValidationSummary = value
 	}
 	if value, ok := loopContextFloat(values, "confidence", "loop_confidence"); ok {
 		s.Confidence = value
@@ -437,8 +472,14 @@ func (s *LoopState) normalizeCheckpointFields() {
 	if s.CurrentPlanID == "" && s.PlanVersion > 0 {
 		s.CurrentPlanID = buildLoopPlanID(s.LoopStateID, s.PlanVersion)
 	}
+	s.AcceptanceCriteria = normalizeStringSlice(s.AcceptanceCriteria)
+	s.UnresolvedItems = normalizeStringSlice(s.UnresolvedItems)
+	s.RemainingRisks = normalizeStringSlice(s.RemainingRisks)
 	if s.CurrentStepID == "" {
 		s.SyncCurrentStep()
+	}
+	if s.ValidationSummary == "" {
+		s.ValidationSummary = summarizeValidationState(s.ValidationStatus, s.UnresolvedItems, s.RemainingRisks)
 	}
 	if s.ObservationsSummary == "" {
 		s.ObservationsSummary = summarizeObservations(s.Observations)
@@ -449,6 +490,23 @@ func (s *LoopState) normalizeCheckpointFields() {
 	if s.LastError == "" {
 		s.LastError = summarizeLastError(s.Observations)
 	}
+}
+
+func (s *LoopState) ApplyValidationResult(result *LoopValidationResult) {
+	if s == nil || result == nil {
+		return
+	}
+	if len(result.AcceptanceCriteria) > 0 {
+		s.AcceptanceCriteria = normalizeStringSlice(result.AcceptanceCriteria)
+	}
+	s.UnresolvedItems = normalizeStringSlice(result.UnresolvedItems)
+	s.RemainingRisks = normalizeStringSlice(result.RemainingRisks)
+	s.ValidationStatus = result.Status
+	s.ValidationSummary = strings.TrimSpace(result.Summary)
+	if s.ValidationSummary == "" {
+		s.ValidationSummary = strings.TrimSpace(result.Reason)
+	}
+	s.normalizeCheckpointFields()
 }
 
 func buildLoopPlanID(loopStateID string, planVersion int) string {
@@ -516,6 +574,29 @@ func summarizeLastError(observations []LoopObservation) string {
 	return ""
 }
 
+func summarizeValidationState(status LoopValidationStatus, unresolvedItems []string, remainingRisks []string) string {
+	if len(unresolvedItems) == 0 && len(remainingRisks) == 0 {
+		switch status {
+		case LoopValidationStatusPassed:
+			return "validation passed"
+		case LoopValidationStatusPending:
+			return "validation pending"
+		case LoopValidationStatusFailed:
+			return "validation failed"
+		default:
+			return ""
+		}
+	}
+	parts := make([]string, 0, 2)
+	if len(unresolvedItems) > 0 {
+		parts = append(parts, "unresolved: "+strings.Join(unresolvedItems, ", "))
+	}
+	if len(remainingRisks) > 0 {
+		parts = append(parts, "risks: "+strings.Join(remainingRisks, ", "))
+	}
+	return strings.Join(parts, "; ")
+}
+
 func summarizeText(text string) string {
 	trimmed := strings.TrimSpace(text)
 	if trimmed == "" {
@@ -549,6 +630,11 @@ func loopContextStrings(values map[string]any, keys ...string) ([]string, bool) 
 			continue
 		}
 		switch typed := raw.(type) {
+		case string:
+			trimmed := strings.TrimSpace(typed)
+			if trimmed != "" {
+				return []string{trimmed}, true
+			}
 		case []string:
 			return append([]string(nil), typed...), true
 		case []any:
@@ -631,6 +717,36 @@ func loopContextObservations(values map[string]any, keys ...string) ([]LoopObser
 		}
 	}
 	return nil, false
+}
+
+func cloneStringSlice(values []string) []string {
+	if len(values) == 0 {
+		return nil
+	}
+	return append([]string(nil), values...)
+}
+
+func normalizeStringSlice(values []string) []string {
+	if len(values) == 0 {
+		return nil
+	}
+	seen := make(map[string]struct{}, len(values))
+	normalized := make([]string, 0, len(values))
+	for _, value := range values {
+		trimmed := strings.TrimSpace(value)
+		if trimmed == "" {
+			continue
+		}
+		if _, ok := seen[trimmed]; ok {
+			continue
+		}
+		seen[trimmed] = struct{}{}
+		normalized = append(normalized, trimmed)
+	}
+	if len(normalized) == 0 {
+		return nil
+	}
+	return normalized
 }
 
 // BaseAgent 提供可复用的状态管理、记忆、工具与 LLM 能力

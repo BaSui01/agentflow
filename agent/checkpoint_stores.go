@@ -958,24 +958,29 @@ func (s *PostgreSQLCheckpointStore) Rollback(ctx context.Context, threadID strin
 // =============================================================================
 // Checkpoint Agent 执行检查点（基于 LangGraph 2026 标准）
 type Checkpoint struct {
-	ID                  string              `json:"id"`
-	ThreadID            string              `json:"thread_id"` // 会话线程 ID
-	AgentID             string              `json:"agent_id"`
-	LoopStateID         string              `json:"loop_state_id,omitempty"`
-	RunID               string              `json:"run_id,omitempty"`
-	Goal                string              `json:"goal,omitempty"`
-	CurrentPlanID       string              `json:"current_plan_id,omitempty"`
-	PlanVersion         int                 `json:"plan_version,omitempty"`
-	CurrentStepID       string              `json:"current_step_id,omitempty"`
-	ObservationsSummary string              `json:"observations_summary,omitempty"`
-	LastOutputSummary   string              `json:"last_output_summary,omitempty"`
-	LastError           string              `json:"last_error,omitempty"`
-	Version             int                 `json:"version"` // 版本号（线程内递增）
-	State               State               `json:"state"`
-	Messages            []CheckpointMessage `json:"messages"`
-	Metadata            map[string]any      `json:"metadata"`
-	CreatedAt           time.Time           `json:"created_at"`
-	ParentID            string              `json:"parent_id,omitempty"` // 父检查点 ID
+	ID                  string               `json:"id"`
+	ThreadID            string               `json:"thread_id"` // 会话线程 ID
+	AgentID             string               `json:"agent_id"`
+	LoopStateID         string               `json:"loop_state_id,omitempty"`
+	RunID               string               `json:"run_id,omitempty"`
+	Goal                string               `json:"goal,omitempty"`
+	AcceptanceCriteria  []string             `json:"acceptance_criteria,omitempty"`
+	UnresolvedItems     []string             `json:"unresolved_items,omitempty"`
+	RemainingRisks      []string             `json:"remaining_risks,omitempty"`
+	CurrentPlanID       string               `json:"current_plan_id,omitempty"`
+	PlanVersion         int                  `json:"plan_version,omitempty"`
+	CurrentStepID       string               `json:"current_step_id,omitempty"`
+	ValidationStatus    LoopValidationStatus `json:"validation_status,omitempty"`
+	ValidationSummary   string               `json:"validation_summary,omitempty"`
+	ObservationsSummary string               `json:"observations_summary,omitempty"`
+	LastOutputSummary   string               `json:"last_output_summary,omitempty"`
+	LastError           string               `json:"last_error,omitempty"`
+	Version             int                  `json:"version"` // 版本号（线程内递增）
+	State               State                `json:"state"`
+	Messages            []CheckpointMessage  `json:"messages"`
+	Metadata            map[string]any       `json:"metadata"`
+	CreatedAt           time.Time            `json:"created_at"`
+	ParentID            string               `json:"parent_id,omitempty"` // 父检查点 ID
 
 	// ExecutionContext 工作流执行上下文
 	ExecutionContext *ExecutionContext `json:"execution_context,omitempty"`
@@ -1000,20 +1005,25 @@ type CheckpointToolCall struct {
 
 // ExecutionContext 工作流执行上下文
 type ExecutionContext struct {
-	WorkflowID          string         `json:"workflow_id,omitempty"`
-	CurrentNode         string         `json:"current_node,omitempty"`
-	NodeResults         map[string]any `json:"node_results,omitempty"`
-	Variables           map[string]any `json:"variables,omitempty"`
-	LoopStateID         string         `json:"loop_state_id,omitempty"`
-	RunID               string         `json:"run_id,omitempty"`
-	AgentID             string         `json:"agent_id,omitempty"`
-	Goal                string         `json:"goal,omitempty"`
-	CurrentPlanID       string         `json:"current_plan_id,omitempty"`
-	PlanVersion         int            `json:"plan_version,omitempty"`
-	CurrentStepID       string         `json:"current_step_id,omitempty"`
-	ObservationsSummary string         `json:"observations_summary,omitempty"`
-	LastOutputSummary   string         `json:"last_output_summary,omitempty"`
-	LastError           string         `json:"last_error,omitempty"`
+	WorkflowID          string               `json:"workflow_id,omitempty"`
+	CurrentNode         string               `json:"current_node,omitempty"`
+	NodeResults         map[string]any       `json:"node_results,omitempty"`
+	Variables           map[string]any       `json:"variables,omitempty"`
+	LoopStateID         string               `json:"loop_state_id,omitempty"`
+	RunID               string               `json:"run_id,omitempty"`
+	AgentID             string               `json:"agent_id,omitempty"`
+	Goal                string               `json:"goal,omitempty"`
+	AcceptanceCriteria  []string             `json:"acceptance_criteria,omitempty"`
+	UnresolvedItems     []string             `json:"unresolved_items,omitempty"`
+	RemainingRisks      []string             `json:"remaining_risks,omitempty"`
+	CurrentPlanID       string               `json:"current_plan_id,omitempty"`
+	PlanVersion         int                  `json:"plan_version,omitempty"`
+	CurrentStepID       string               `json:"current_step_id,omitempty"`
+	ValidationStatus    LoopValidationStatus `json:"validation_status,omitempty"`
+	ValidationSummary   string               `json:"validation_summary,omitempty"`
+	ObservationsSummary string               `json:"observations_summary,omitempty"`
+	LastOutputSummary   string               `json:"last_output_summary,omitempty"`
+	LastError           string               `json:"last_error,omitempty"`
 }
 
 func (c *Checkpoint) LoopContextValues() map[string]any {
@@ -1033,10 +1043,15 @@ func (c *Checkpoint) loopContextValuesNormalized() map[string]any {
 		"loop_state_id":        c.LoopStateID,
 		"run_id":               c.RunID,
 		"goal":                 c.Goal,
+		"acceptance_criteria":  cloneStringSlice(c.AcceptanceCriteria),
+		"unresolved_items":     cloneStringSlice(c.UnresolvedItems),
+		"remaining_risks":      cloneStringSlice(c.RemainingRisks),
 		"current_plan_id":      c.CurrentPlanID,
 		"plan_version":         c.PlanVersion,
 		"current_step":         c.CurrentStepID,
 		"current_step_id":      c.CurrentStepID,
+		"validation_status":    string(c.ValidationStatus),
+		"validation_summary":   c.ValidationSummary,
 		"observations_summary": c.ObservationsSummary,
 		"last_output_summary":  c.LastOutputSummary,
 		"last_error":           c.LastError,
@@ -1054,10 +1069,15 @@ func (c *ExecutionContext) LoopContextValues() map[string]any {
 		"run_id":               c.RunID,
 		"agent_id":             c.AgentID,
 		"goal":                 c.Goal,
+		"acceptance_criteria":  cloneStringSlice(c.AcceptanceCriteria),
+		"unresolved_items":     cloneStringSlice(c.UnresolvedItems),
+		"remaining_risks":      cloneStringSlice(c.RemainingRisks),
 		"current_plan_id":      c.CurrentPlanID,
 		"plan_version":         c.PlanVersion,
 		"current_step":         c.CurrentStepID,
 		"current_step_id":      c.CurrentStepID,
+		"validation_status":    string(c.ValidationStatus),
+		"validation_summary":   c.ValidationSummary,
 		"observations_summary": c.ObservationsSummary,
 		"last_output_summary":  c.LastOutputSummary,
 		"last_error":           c.LastError,
@@ -1095,8 +1115,39 @@ func (c *Checkpoint) normalizeLoopPersistenceFields() {
 	c.RunID = firstNonEmptyString(c.RunID, loopContextStringValue(c.ExecutionContext.Variables, "run_id"), loopContextStringValue(c.Metadata, "run_id"), c.ExecutionContext.RunID)
 	c.AgentID = firstNonEmptyString(c.AgentID, loopContextStringValue(c.ExecutionContext.Variables, "agent_id"), loopContextStringValue(c.Metadata, "agent_id"), c.ExecutionContext.AgentID)
 	c.Goal = firstNonEmptyString(c.Goal, loopContextStringValue(c.ExecutionContext.Variables, "goal"), loopContextStringValue(c.Metadata, "goal"), c.ExecutionContext.Goal)
+	if values, ok := loopContextStrings(c.ExecutionContext.Variables, "acceptance_criteria"); ok && len(c.AcceptanceCriteria) == 0 {
+		c.AcceptanceCriteria = values
+	} else if values, ok := loopContextStrings(c.Metadata, "acceptance_criteria"); ok && len(c.AcceptanceCriteria) == 0 {
+		c.AcceptanceCriteria = values
+	} else if len(c.AcceptanceCriteria) == 0 {
+		c.AcceptanceCriteria = cloneStringSlice(c.ExecutionContext.AcceptanceCriteria)
+	}
+	if values, ok := loopContextStrings(c.ExecutionContext.Variables, "unresolved_items"); ok && len(c.UnresolvedItems) == 0 {
+		c.UnresolvedItems = values
+	} else if values, ok := loopContextStrings(c.Metadata, "unresolved_items"); ok && len(c.UnresolvedItems) == 0 {
+		c.UnresolvedItems = values
+	} else if len(c.UnresolvedItems) == 0 {
+		c.UnresolvedItems = cloneStringSlice(c.ExecutionContext.UnresolvedItems)
+	}
+	if values, ok := loopContextStrings(c.ExecutionContext.Variables, "remaining_risks"); ok && len(c.RemainingRisks) == 0 {
+		c.RemainingRisks = values
+	} else if values, ok := loopContextStrings(c.Metadata, "remaining_risks"); ok && len(c.RemainingRisks) == 0 {
+		c.RemainingRisks = values
+	} else if len(c.RemainingRisks) == 0 {
+		c.RemainingRisks = cloneStringSlice(c.ExecutionContext.RemainingRisks)
+	}
 	c.CurrentPlanID = firstNonEmptyString(c.CurrentPlanID, loopContextStringValue(c.ExecutionContext.Variables, "current_plan_id"), loopContextStringValue(c.Metadata, "current_plan_id"), c.ExecutionContext.CurrentPlanID)
 	c.CurrentStepID = firstNonEmptyString(c.CurrentStepID, loopContextStringValue(c.ExecutionContext.Variables, "current_step_id"), loopContextStringValue(c.ExecutionContext.Variables, "current_step"), loopContextStringValue(c.Metadata, "current_step_id"), loopContextStringValue(c.Metadata, "current_step"), c.ExecutionContext.CurrentStepID)
+	if c.ValidationStatus == "" {
+		if value, ok := loopContextString(c.ExecutionContext.Variables, "validation_status"); ok {
+			c.ValidationStatus = LoopValidationStatus(value)
+		} else if value, ok := loopContextString(c.Metadata, "validation_status"); ok {
+			c.ValidationStatus = LoopValidationStatus(value)
+		} else if c.ExecutionContext.ValidationStatus != "" {
+			c.ValidationStatus = c.ExecutionContext.ValidationStatus
+		}
+	}
+	c.ValidationSummary = firstNonEmptyString(c.ValidationSummary, loopContextStringValue(c.ExecutionContext.Variables, "validation_summary"), loopContextStringValue(c.Metadata, "validation_summary"), c.ExecutionContext.ValidationSummary)
 	c.ObservationsSummary = firstNonEmptyString(c.ObservationsSummary, loopContextStringValue(c.ExecutionContext.Variables, "observations_summary"), loopContextStringValue(c.Metadata, "observations_summary"), c.ExecutionContext.ObservationsSummary)
 	c.LastOutputSummary = firstNonEmptyString(c.LastOutputSummary, loopContextStringValue(c.ExecutionContext.Variables, "last_output_summary"), loopContextStringValue(c.Metadata, "last_output_summary"), c.ExecutionContext.LastOutputSummary)
 	c.LastError = firstNonEmptyString(c.LastError, loopContextStringValue(c.ExecutionContext.Variables, "last_error"), loopContextStringValue(c.Metadata, "last_error"), c.ExecutionContext.LastError)
@@ -1114,11 +1165,18 @@ func (c *Checkpoint) normalizeLoopPersistenceFields() {
 	c.ExecutionContext.RunID = firstNonEmptyString(c.ExecutionContext.RunID, c.RunID)
 	c.ExecutionContext.AgentID = firstNonEmptyString(c.ExecutionContext.AgentID, c.AgentID)
 	c.ExecutionContext.Goal = firstNonEmptyString(c.ExecutionContext.Goal, c.Goal)
+	c.ExecutionContext.AcceptanceCriteria = cloneStringSlice(c.AcceptanceCriteria)
+	c.ExecutionContext.UnresolvedItems = cloneStringSlice(c.UnresolvedItems)
+	c.ExecutionContext.RemainingRisks = cloneStringSlice(c.RemainingRisks)
 	c.ExecutionContext.CurrentPlanID = firstNonEmptyString(c.ExecutionContext.CurrentPlanID, c.CurrentPlanID)
 	if c.ExecutionContext.PlanVersion <= 0 {
 		c.ExecutionContext.PlanVersion = c.PlanVersion
 	}
 	c.ExecutionContext.CurrentStepID = firstNonEmptyString(c.ExecutionContext.CurrentStepID, c.CurrentStepID)
+	if c.ExecutionContext.ValidationStatus == "" {
+		c.ExecutionContext.ValidationStatus = c.ValidationStatus
+	}
+	c.ExecutionContext.ValidationSummary = firstNonEmptyString(c.ExecutionContext.ValidationSummary, c.ValidationSummary)
 	c.ExecutionContext.ObservationsSummary = firstNonEmptyString(c.ExecutionContext.ObservationsSummary, c.ObservationsSummary)
 	c.ExecutionContext.LastOutputSummary = firstNonEmptyString(c.ExecutionContext.LastOutputSummary, c.LastOutputSummary)
 	c.ExecutionContext.LastError = firstNonEmptyString(c.ExecutionContext.LastError, c.LastError)
