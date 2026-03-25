@@ -175,6 +175,18 @@ func TestHotReloadManager_UpdateField(t *testing.T) {
 	assert.GreaterOrEqual(t, len(changes), 1)
 }
 
+func TestHotReloadManager_UpdateField_RecordsHistoryAndSupportsRollback(t *testing.T) {
+	cfg := DefaultConfig()
+	manager := NewHotReloadManager(cfg)
+
+	require.NoError(t, manager.UpdateField("Log.Level", "debug"))
+	assert.Equal(t, "debug", manager.GetConfig().Log.Level)
+	assert.GreaterOrEqual(t, len(manager.GetConfigHistory()), 2)
+
+	require.NoError(t, manager.Rollback())
+	assert.Equal(t, "info", manager.GetConfig().Log.Level)
+}
+
 func TestHotReloadManager_UpdateField_Unknown(t *testing.T) {
 	cfg := DefaultConfig()
 	manager := NewHotReloadManager(cfg)
@@ -373,7 +385,23 @@ func TestConfigAPIHandler_UpdateConfig_InvalidField(t *testing.T) {
 	require.NoError(t, json.NewDecoder(w.Body).Decode(&resp))
 
 	assert.False(t, resp.Success)
-	assert.Contains(t, resp.Error.Message, "Unknown field")
+	assert.Contains(t, resp.Error.Message, "unknown configuration field")
+}
+
+func TestConfigAPIHandler_UpdateConfig_IsAtomicOnFailure(t *testing.T) {
+	cfg := DefaultConfig()
+	manager := NewHotReloadManager(cfg)
+	handler := NewConfigAPIHandler(manager)
+
+	body := `{"updates": {"Log.Level": "debug", "Invalid.Field": "value"}}`
+	req := httptest.NewRequest(http.MethodPut, "/api/v1/config", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	handler.handleConfig(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Equal(t, "info", manager.GetConfig().Log.Level)
 }
 
 func TestConfigAPIHandler_Reload(t *testing.T) {

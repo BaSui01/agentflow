@@ -157,18 +157,19 @@ func (v *VoiceAgent) Start(ctx context.Context) (*VoiceSession, error) {
 		speechChan: make(chan SpeechEvent, defaultSpeechBufferSize),
 		doneChan:   make(chan struct{}),
 	}
+	session.ctx, session.cancel = context.WithCancel(ctx)
 
 	// 启动 STT 流
-	sttStream, err := v.stt.StartStream(ctx, v.config.SampleRate)
+	sttStream, err := v.stt.StartStream(session.ctx, v.config.SampleRate)
 	if err != nil {
 		return nil, fmt.Errorf("failed to start STT: %w", err)
 	}
 	session.sttStream = sttStream
 
 	// 开始处理去例程
-	go session.processAudio(ctx)
-	go session.processTranscripts(ctx)
-	go session.processSpeech(ctx)
+	go session.processAudio(session.ctx)
+	go session.processTranscripts(session.ctx)
+	go session.processSpeech(session.ctx)
 
 	v.metricsMu.Lock()
 	v.metrics.TotalSessions++
@@ -207,12 +208,17 @@ type VoiceSession struct {
 	textChan   chan string
 	speechChan chan SpeechEvent
 	doneChan   chan struct{}
+	ctx        context.Context
+	cancel     context.CancelFunc
 	mu         sync.Mutex
+	sendMu     sync.Mutex
 	closed     bool
 }
 
 // SendAudio向会话发送音频数据.
 func (s *VoiceSession) SendAudio(chunk AudioChunk) error {
+	s.sendMu.Lock()
+	defer s.sendMu.Unlock()
 	s.mu.Lock()
 	if s.closed {
 		s.mu.Unlock()
@@ -235,6 +241,8 @@ func (s *VoiceSession) ReceiveSpeech() <-chan SpeechEvent {
 
 // 关闭会话 。
 func (s *VoiceSession) Close() error {
+	s.sendMu.Lock()
+	defer s.sendMu.Unlock()
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -243,8 +251,10 @@ func (s *VoiceSession) Close() error {
 	}
 	s.closed = true
 
+	if s.cancel != nil {
+		s.cancel()
+	}
 	close(s.doneChan)
-	close(s.audioChan)
 
 	if s.sttStream != nil {
 		s.sttStream.Close()

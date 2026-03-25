@@ -20,7 +20,7 @@ func TestAsyncExecution_SetCompleted(t *testing.T) {
 	exec := &AsyncExecution{
 		ID:     "exec-1",
 		status: ExecutionStatusRunning,
-		doneCh: make(chan executionResult, 1),
+		doneCh: make(chan struct{}),
 	}
 
 	output := &Output{Content: "done"}
@@ -36,7 +36,7 @@ func TestAsyncExecution_SetFailed(t *testing.T) {
 	exec := &AsyncExecution{
 		ID:     "exec-2",
 		status: ExecutionStatusRunning,
-		doneCh: make(chan executionResult, 1),
+		doneCh: make(chan struct{}),
 	}
 
 	exec.setFailed(errors.New("something broke"))
@@ -51,11 +51,11 @@ func TestAsyncExecution_Wait_Success(t *testing.T) {
 	exec := &AsyncExecution{
 		ID:     "exec-3",
 		status: ExecutionStatusRunning,
-		doneCh: make(chan executionResult, 1),
+		doneCh: make(chan struct{}),
 	}
 
 	expected := &Output{Content: "result"}
-	exec.doneCh <- executionResult{Output: expected, Err: nil}
+	exec.notifyDone(executionResult{Output: expected, Err: nil})
 
 	ctx := context.Background()
 	output, err := exec.Wait(ctx)
@@ -72,10 +72,10 @@ func TestAsyncExecution_Wait_Error(t *testing.T) {
 	exec := &AsyncExecution{
 		ID:     "exec-4",
 		status: ExecutionStatusRunning,
-		doneCh: make(chan executionResult, 1),
+		doneCh: make(chan struct{}),
 	}
 
-	exec.doneCh <- executionResult{Output: nil, Err: errors.New("failed")}
+	exec.notifyDone(executionResult{Output: nil, Err: errors.New("failed")})
 
 	output, err := exec.Wait(context.Background())
 	require.Error(t, err)
@@ -87,7 +87,7 @@ func TestAsyncExecution_Wait_ContextCancelled(t *testing.T) {
 	exec := &AsyncExecution{
 		ID:     "exec-5",
 		status: ExecutionStatusRunning,
-		doneCh: make(chan executionResult, 1),
+		doneCh: make(chan struct{}),
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -96,6 +96,27 @@ func TestAsyncExecution_Wait_ContextCancelled(t *testing.T) {
 	_, err := exec.Wait(ctx)
 	require.Error(t, err)
 	assert.Equal(t, context.Canceled, err)
+}
+
+func TestAsyncExecution_Wait_ContextCancelledBeforeCompletionCanRetry(t *testing.T) {
+	exec := &AsyncExecution{
+		ID:     "exec-6",
+		status: ExecutionStatusRunning,
+		doneCh: make(chan struct{}),
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	_, err := exec.Wait(ctx)
+	require.ErrorIs(t, err, context.Canceled)
+
+	expected := &Output{Content: "late result"}
+	exec.notifyDone(executionResult{Output: expected})
+
+	output, err := exec.Wait(context.Background())
+	require.NoError(t, err)
+	require.Equal(t, expected, output)
 }
 
 // ============================================================

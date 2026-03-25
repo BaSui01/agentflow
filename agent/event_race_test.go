@@ -114,3 +114,35 @@ func TestSimpleEventBus_HandlersCopiedBeforeIteration(t *testing.T) {
 	}
 }
 
+func TestSimpleEventBus_StopWaitsForSlowHandler(t *testing.T) {
+	t.Parallel()
+
+	bus := NewEventBus(zap.NewNop())
+
+	handlerDone := make(chan struct{})
+	bus.Subscribe(EventStateChange, func(e Event) {
+		time.Sleep(50 * time.Millisecond)
+		close(handlerDone)
+	})
+
+	bus.Publish(&StateChangeEvent{
+		AgentID_:   "test",
+		FromState:  StateInit,
+		ToState:    StateRunning,
+		Timestamp_: time.Now(),
+	})
+
+	start := time.Now()
+	bus.Stop()
+
+	select {
+	case <-handlerDone:
+	default:
+		t.Fatal("Stop returned before handler completed")
+	}
+
+	if time.Since(start) < 40*time.Millisecond {
+		t.Fatal("Stop should wait for the active handler to finish")
+	}
+}
+

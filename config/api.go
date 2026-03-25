@@ -295,53 +295,38 @@ func (h *ConfigAPIHandler) updateConfig(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	var errors []string
-	var requiresRestart bool
-	hotFields := GetHotReloadableFields()
-
-	// X-004: 审计日志 — 记录配置变更请求
-	for path, value := range req.Updates {
-		// 检查字段是否已知
-		field, known := hotFields[path]
-		if !known {
-			errors = append(errors, fmt.Sprintf("Unknown field: %s", path))
-			continue
-		}
-
-		if field.RequiresRestart {
-			requiresRestart = true
-		}
-
-		if err := h.manager.UpdateField(path, value); err != nil {
-			errors = append(errors, fmt.Sprintf("Failed to update %s: %v", path, err))
-			h.logger.Warn("config update failed",
-				zap.String("field", path),
-				zap.String("remote_addr", r.RemoteAddr),
-				zap.Error(err),
-			)
-		} else {
-			h.logger.Info("config field updated",
-				zap.String("field", path),
-				zap.String("remote_addr", r.RemoteAddr),
-				zap.Bool("sensitive", field.Sensitive),
-				zap.Time("timestamp", time.Now()),
-			)
-		}
-	}
-
-	if len(errors) > 0 {
+	requiresRestart, err := h.manager.UpdateFields(req.Updates, "api")
+	if err != nil {
 		writeAPIJSON(w, http.StatusBadRequest, apiResponse{
 			Success: false,
 			Error: &apiError{
 				Code:    string(types.ErrInvalidRequest),
-				Message: fmt.Sprintf("Some updates failed: %v", errors),
+				Message: err.Error(),
 			},
 			Data: configData{
 				RequiresRestart: requiresRestart,
 			},
 			Timestamp: time.Now(),
 		})
+		for path := range req.Updates {
+			h.logger.Warn("config update failed",
+				zap.String("field", path),
+				zap.String("remote_addr", r.RemoteAddr),
+				zap.Error(err),
+			)
+		}
 		return
+	}
+
+	hotFields := GetHotReloadableFields()
+	for path := range req.Updates {
+		field := hotFields[path]
+		h.logger.Info("config field updated",
+			zap.String("field", path),
+			zap.String("remote_addr", r.RemoteAddr),
+			zap.Bool("sensitive", field.Sensitive),
+			zap.Time("timestamp", time.Now()),
+		)
 	}
 
 	writeAPIJSON(w, http.StatusOK, apiResponse{

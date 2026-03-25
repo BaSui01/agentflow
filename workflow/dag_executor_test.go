@@ -305,6 +305,40 @@ func TestDAGExecutor_Execute_ParallelNode_NoEdges(t *testing.T) {
 	assert.Equal(t, "input", result)
 }
 
+func TestDAGExecutor_Execute_ParallelFanIn_ExecutesJoinOnce(t *testing.T) {
+	t.Parallel()
+
+	g := NewDAGGraph()
+	g.AddNode(&DAGNode{ID: "parallel", Type: NodeTypeParallel})
+
+	branchStepA := &dagExecMockStep{name: "branch_a", output: "a", delay: 20 * time.Millisecond}
+	branchStepB := &dagExecMockStep{name: "branch_b", output: "b", delay: 20 * time.Millisecond}
+	var joinCalls atomic.Int32
+	joinStep := NewFuncStep("join", func(ctx context.Context, input any) (any, error) {
+		joinCalls.Add(1)
+		return "joined", nil
+	})
+
+	g.AddNode(&DAGNode{ID: "branch_a", Type: NodeTypeAction, Step: branchStepA})
+	g.AddNode(&DAGNode{ID: "branch_b", Type: NodeTypeAction, Step: branchStepB})
+	g.AddNode(&DAGNode{ID: "join", Type: NodeTypeAction, Step: joinStep})
+	g.AddEdge("parallel", "branch_a")
+	g.AddEdge("parallel", "branch_b")
+	g.AddEdge("branch_a", "join")
+	g.AddEdge("branch_b", "join")
+	g.SetEntry("parallel")
+
+	exec := NewDAGExecutor(nil, zap.NewNop())
+	result, err := exec.Execute(context.Background(), g, "input")
+	require.NoError(t, err)
+
+	resultMap, ok := result.(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, "joined", resultMap["branch_a"])
+	assert.Equal(t, "joined", resultMap["branch_b"])
+	assert.Equal(t, int32(1), joinCalls.Load())
+}
+
 // ---------------------------------------------------------------------------
 // Loop nodes
 // ---------------------------------------------------------------------------

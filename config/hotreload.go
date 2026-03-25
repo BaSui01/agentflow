@@ -1026,6 +1026,7 @@ func (m *HotReloadManager) rollbackLocked(targetConfig *Config, reason string, o
 	failedConfig := m.config
 	restoredConfig := deepCopyConfig(targetConfig)
 	m.config = restoredConfig
+	m.previousConfig = deepCopyConfig(failedConfig)
 
 	restoredVersion := 0
 	checksum := computeConfigChecksum(targetConfig)
@@ -1052,6 +1053,10 @@ func (m *HotReloadManager) rollbackLocked(targetConfig *Config, reason string, o
 		Applied:   true,
 		Error:     reason,
 	})
+	m.pushHistory(restoredConfig, "rollback")
+	if len(m.changeLog) > 1000 {
+		m.changeLog = m.changeLog[len(m.changeLog)-1000:]
+	}
 
 	for _, cb := range m.rollbackCallbacks {
 		func() {
@@ -1123,86 +1128,52 @@ func (m *HotReloadManager) GetChangeLog(limit int) []ConfigChange {
 	return result
 }
 
+// UpdateFields atomically updates multiple configuration fields through the
+// single ApplyConfig path so history, rollback metadata, and callbacks stay
+// consistent with file-driven reloads.
+func (m *HotReloadManager) UpdateFields(updates map[string]any, source string) (bool, error) {
+	if len(updates) == 0 {
+		return false, fmt.Errorf("no updates provided")
+	}
+
+	m.mu.RLock()
+	newConfig := deepCopyConfig(m.config)
+	m.mu.RUnlock()
+
+	requiresRestart := false
+	for path, value := range updates {
+		field, known := hotReloadableFields[path]
+		if !known {
+			return false, fmt.Errorf("unknown configuration field: %s", path)
+		}
+		if field.Validator != nil {
+			if err := field.Validator(value); err != nil {
+				return false, fmt.Errorf("validation failed for %s: %w", path, err)
+			}
+		}
+		if err := setNestedField(reflect.ValueOf(newConfig).Elem(), path, value); err != nil {
+			return false, fmt.Errorf("failed to set value for %s: %w", path, err)
+		}
+		if field.RequiresRestart {
+			requiresRestart = true
+		}
+	}
+
+	if err := newConfig.Validate(); err != nil {
+		return requiresRestart, fmt.Errorf("full configuration validation failed: %w", err)
+	}
+
+	if err := m.ApplyConfig(newConfig, source); err != nil {
+		return requiresRestart, err
+	}
+
+	return requiresRestart, nil
+}
+
 // UpdateField 更新单个配置字段
 func (m *HotReloadManager) UpdateField(path string, value any) error {
-	m.mu.Lock()
-
-	oldConfigSnapshot := deepCopyConfig(m.config)
-
-	// 检查字段是否已知
-	field, known := hotReloadableFields[path]
-	if !known {
-		m.mu.Unlock()
-		return fmt.Errorf("unknown configuration field: %s", path)
-	}
-
-	// 验证验证器是否存在
-	if field.Validator != nil {
-		if err := field.Validator(value); err != nil {
-			m.mu.Unlock()
-			return fmt.Errorf("validation failed for %s: %w", path, err)
-		}
-	}
-
-	// 获取旧值
-	oldValue, err := m.getFieldValue(path)
-	if err != nil {
-		m.mu.Unlock()
-		return fmt.Errorf("failed to get old value: %w", err)
-	}
-
-	// 设置新值
-	if err := m.setFieldValue(path, value); err != nil {
-		m.mu.Unlock()
-		return fmt.Errorf("failed to set value: %w", err)
-	}
-
-	// V-002: 即使字段级 validator 缺失，也必须执行整体验证；失败时回滚。
-	if err := m.config.Validate(); err != nil {
-		m.config = oldConfigSnapshot
-		m.mu.Unlock()
-		return fmt.Errorf("full configuration validation failed after updating %s: %w", path, err)
-	}
-	if m.validateFunc != nil {
-		if err := m.validateFunc(m.config); err != nil {
-			m.config = oldConfigSnapshot
-			m.mu.Unlock()
-			return fmt.Errorf("custom validation failed after updating %s: %w", path, err)
-		}
-	}
-
-	// 创建变更记录
-	change := ConfigChange{
-		Timestamp:       time.Now(),
-		Source:          "api",
-		Path:            path,
-		OldValue:        oldValue,
-		NewValue:        value,
-		RequiresRestart: field.RequiresRestart,
-		Applied:         true,
-	}
-
-	if field.Sensitive {
-		change.OldValue = "[REDACTED]"
-		change.NewValue = "[REDACTED]"
-	}
-
-	// 记录并通知
-	m.logChange(change)
-	m.changeLog = append(m.changeLog, change)
-	callbacks := append([]ChangeCallback(nil), m.changeCallbacks...)
-	// Bug fix: 在锁内捕获当前配置快照，避免锁外读取 m.config 导致的竞态
-	newConfigSnapshot := deepCopyConfig(m.config)
-	m.mu.Unlock()
-
-	if err := m.notifyCallbacksSafe(callbacks, nil, oldConfigSnapshot, newConfigSnapshot, []ConfigChange{change}); err != nil {
-		m.mu.Lock()
-		m.rollbackLocked(oldConfigSnapshot, fmt.Sprintf("callback error: %v", err), err)
-		m.mu.Unlock()
-		return fmt.Errorf("field updated but callback failed, rolled back: %w", err)
-	}
-
-	return nil
+	_, err := m.UpdateFields(map[string]any{path: value}, "api")
+	return err
 }
 
 // getFieldValue 通过路径获取字段值

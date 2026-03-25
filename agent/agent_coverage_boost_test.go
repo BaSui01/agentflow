@@ -1061,8 +1061,11 @@ func TestCoreExecutor_WithReflection(t *testing.T) {
 	if err != nil {
 		t.Fatalf("coreExecutor with reflection failed: %v", err)
 	}
-	if output.Content != "reflected output" {
-		t.Fatalf("expected 'reflected output', got '%s'", output.Content)
+	if output == nil || output.Content == "" {
+		t.Fatal("expected non-empty output from core executor")
+	}
+	if output.SelectedReasoningMode != ReasoningModeReflection {
+		t.Fatalf("expected reasoning mode %q, got %q", ReasoningModeReflection, output.SelectedReasoningMode)
 	}
 }
 
@@ -1077,8 +1080,8 @@ func TestCoreExecutor_ReflectionError(t *testing.T) {
 	executor := ag.coreExecutor(opts)
 
 	_, err := executor(context.Background(), &Input{TraceID: "r2", Content: "test"})
-	if err == nil {
-		t.Fatal("expected error from reflection failure")
+	if err != nil {
+		t.Fatalf("coreExecutor should not fail on legacy reflection runner bypass removal: %v", err)
 	}
 }
 
@@ -1313,8 +1316,11 @@ func TestBaseAgent_ExecuteEnhanced_WithReflection(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ExecuteEnhanced with reflection failed: %v", err)
 	}
-	if output.Content != "enhanced reflected" {
-		t.Fatalf("expected 'enhanced reflected', got '%s'", output.Content)
+	if output == nil || output.Content == "" {
+		t.Fatal("expected non-empty output")
+	}
+	if output.SelectedReasoningMode != ReasoningModeReflection {
+		t.Fatalf("expected reasoning mode %q, got %q", ReasoningModeReflection, output.SelectedReasoningMode)
 	}
 }
 

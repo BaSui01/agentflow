@@ -31,6 +31,8 @@ type DAGExecutor struct {
 	executionID  string
 	threadID     string
 	nodeResults  map[string]any
+	nodeErrors   map[string]error
+	nodeRunning  map[string]chan struct{}
 	visitedNodes map[string]bool
 	loopDepth    map[string]int // 循环深度追踪
 	history      *ExecutionHistory
@@ -64,6 +66,8 @@ func NewDAGExecutor(checkpointMgr CheckpointManager, logger *zap.Logger) *DAGExe
 		historyStore:    NewExecutionHistoryStore(),
 		logger:          logger.With(zap.String("component", "dag_executor")),
 		nodeResults:     make(map[string]any),
+		nodeErrors:      make(map[string]error),
+		nodeRunning:     make(map[string]chan struct{}),
 		visitedNodes:    make(map[string]bool),
 		circuitBreakers: NewCircuitBreakerRegistry(DefaultCircuitBreakerConfig(), nil, logger),
 	}
@@ -100,6 +104,8 @@ func (e *DAGExecutor) Execute(ctx context.Context, graph *DAGGraph, input any) (
 	e.mu.Lock()
 	e.executionID = generateExecutionID()
 	e.nodeResults = make(map[string]any)
+	e.nodeErrors = make(map[string]error)
+	e.nodeRunning = make(map[string]chan struct{})
 	e.visitedNodes = make(map[string]bool)
 	e.loopDepth = make(map[string]int)
 	e.history = NewExecutionHistory(e.executionID, "")
@@ -176,19 +182,15 @@ func (e *DAGExecutor) GetHistoryStore() *ExecutionHistoryStore {
 // Bug fix (P0): visitedNodes and nodeResults are protected by mu to ensure
 // concurrent safety when parallel nodes share these maps.
 func (e *DAGExecutor) executeNode(ctx context.Context, graph *DAGGraph, node *DAGNode, input any) (any, error) {
-	// Atomic check-and-mark under write lock — prevents concurrent parallel
-	// goroutines from executing the same node twice or reading the map unsafely.
-	e.mu.Lock()
-	if e.visitedNodes[node.ID] {
-		result := e.nodeResults[node.ID]
-		e.mu.Unlock()
-		e.logger.Debug("node already visited, skipping",
-			zap.String("node_id", node.ID),
-		)
-		return result, nil
+	waitCh, shouldExecute := e.beginNodeExecution(node.ID)
+	if !shouldExecute {
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-waitCh:
+			return e.getNodeOutcome(node.ID)
+		}
 	}
-	e.visitedNodes[node.ID] = true
-	e.mu.Unlock()
 
 	// Record node start in history
 	var nodeExec *NodeExecution
@@ -226,8 +228,11 @@ func (e *DAGExecutor) executeNode(ctx context.Context, graph *DAGGraph, node *DA
 			e.history.RecordNodeEnd(nodeExec, nil, cbErr)
 		}
 		if node.ErrorConfig != nil && node.ErrorConfig.FallbackValue != nil {
-			return node.ErrorConfig.FallbackValue, nil
+			result := node.ErrorConfig.FallbackValue
+			e.finishNodeExecution(node.ID, result, nil)
+			return result, nil
 		}
+		e.finishNodeExecution(node.ID, nil, cbErr)
 		return nil, cbErr
 	}
 
@@ -273,6 +278,7 @@ func (e *DAGExecutor) executeNode(ctx context.Context, graph *DAGGraph, node *DA
 			if nodeExec != nil {
 				e.history.RecordNodeEnd(nodeExec, nil, err)
 			}
+			e.finishNodeExecution(node.ID, nil, err)
 			return nil, err
 		}
 	}
@@ -286,9 +292,7 @@ func (e *DAGExecutor) executeNode(ctx context.Context, graph *DAGGraph, node *DA
 	}
 
 	// Store result
-	e.mu.Lock()
-	e.nodeResults[node.ID] = result
-	e.mu.Unlock()
+	e.finishNodeExecution(node.ID, result, nil)
 
 	// Emit node_complete event
 	if emitter, ok := workflowStreamEmitterFromContext(ctx); ok {
@@ -306,6 +310,54 @@ func (e *DAGExecutor) executeNode(ctx context.Context, graph *DAGGraph, node *DA
 	)
 
 	return result, nil
+}
+
+func (e *DAGExecutor) beginNodeExecution(nodeID string) (chan struct{}, bool) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
+	if e.visitedNodes[nodeID] {
+		done := make(chan struct{})
+		close(done)
+		return done, false
+	}
+
+	if running, exists := e.nodeRunning[nodeID]; exists {
+		return running, false
+	}
+
+	running := make(chan struct{})
+	e.nodeRunning[nodeID] = running
+	return running, true
+}
+
+func (e *DAGExecutor) finishNodeExecution(nodeID string, result any, err error) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
+	if err != nil {
+		delete(e.nodeResults, nodeID)
+		e.nodeErrors[nodeID] = err
+	} else {
+		e.nodeResults[nodeID] = result
+		delete(e.nodeErrors, nodeID)
+	}
+	e.visitedNodes[nodeID] = true
+
+	if running, exists := e.nodeRunning[nodeID]; exists {
+		delete(e.nodeRunning, nodeID)
+		close(running)
+	}
+}
+
+func (e *DAGExecutor) getNodeOutcome(nodeID string) (any, error) {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+
+	if err, exists := e.nodeErrors[nodeID]; exists {
+		return nil, err
+	}
+	return e.nodeResults[nodeID], nil
 }
 
 // handleNodeError handles errors based on the node's error strategy

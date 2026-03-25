@@ -135,82 +135,76 @@ func (b *SimpleEventBus) processEvents() {
 	for {
 		select {
 		case event := <-b.eventChannel:
-			b.mu.RLock()
-			src := b.handlers[event.Type()]
-			handlers := make([]EventHandler, 0, len(src))
-			for _, h := range src {
-				handlers = append(handlers, h)
-			}
-			b.mu.RUnlock()
-
-			// Add to WaitGroup before checking done, so Stop() waits for
-			// all handlers. We add the full count upfront to avoid a race
-			// between individual Add(1) calls and Stop()'s Wait().
-			b.handlerWg.Add(len(handlers))
-			for _, handler := range handlers {
-				h := handler // capture loop variable
-				go func() {
-					defer b.handlerWg.Done()
-					defer func() {
-						if r := recover(); r != nil {
-							err := panicPayloadToError(r)
-							b.logger.Error("event handler panicked",
-								zap.Any("recover", r),
-								zap.Error(err),
-								zap.String("event_type", string(event.Type())),
-								zap.Stack("stack"),
-							)
-							b.panicErrChanMu.RLock()
-							ch := b.panicErrChan
-							b.panicErrChanMu.RUnlock()
-							if ch != nil {
-								select {
-								case ch <- err:
-								default:
-								}
-							}
-						}
-					}()
-					// 添加超时控制，防止 handler 阻塞导致 goroutine 堆积
-				done := make(chan struct{})
-				go func() {
-					defer close(done)
-					defer func() {
-						if r := recover(); r != nil {
-							err := panicPayloadToError(r)
-							b.logger.Error("inner event handler panicked",
-								zap.Any("recover", r),
-								zap.Error(err),
-								zap.String("event_type", string(event.Type())),
-								zap.Stack("stack"),
-							)
-							b.panicErrChanMu.RLock()
-							ch := b.panicErrChan
-							b.panicErrChanMu.RUnlock()
-							if ch != nil {
-								select {
-								case ch <- err:
-								default:
-								}
-							}
-						}
-					}()
-					h(event)
-				}()
-					timer := time.NewTimer(5 * time.Second)
-					defer timer.Stop()
-					select {
-					case <-done:
-					case <-timer.C:
-						b.logger.Warn("event handler timed out",
-							zap.String("event_type", string(event.Type())),
-						)
-					}
-				}()
-			}
+			b.dispatchEvent(event)
 		case <-b.done:
+			for {
+				select {
+				case event := <-b.eventChannel:
+					b.dispatchEvent(event)
+				default:
+					return
+				}
+			}
 			return
 		}
+	}
+}
+
+func (b *SimpleEventBus) dispatchEvent(event Event) {
+	b.mu.RLock()
+	src := b.handlers[event.Type()]
+	handlers := make([]EventHandler, 0, len(src))
+	for _, h := range src {
+		handlers = append(handlers, h)
+	}
+	b.mu.RUnlock()
+
+	// Add to WaitGroup before checking done, so Stop() waits for
+	// all handlers. We add the full count upfront to avoid a race
+	// between individual Add(1) calls and Stop()'s Wait().
+	b.handlerWg.Add(len(handlers))
+	for _, handler := range handlers {
+		h := handler // capture loop variable
+		go func() {
+			defer b.handlerWg.Done()
+			defer func() {
+				if r := recover(); r != nil {
+					err := panicPayloadToError(r)
+					b.logger.Error("event handler panicked",
+						zap.Any("recover", r),
+						zap.Error(err),
+						zap.String("event_type", string(event.Type())),
+						zap.Stack("stack"),
+					)
+					b.panicErrChanMu.RLock()
+					ch := b.panicErrChan
+					b.panicErrChanMu.RUnlock()
+					if ch != nil {
+						select {
+						case ch <- err:
+						default:
+						}
+					}
+				}
+			}()
+			// 仅记录超时，不把真正的 handler 工作转移到未跟踪的内层 goroutine，
+			// 否则 Stop() 可能在 handler 仍运行时提前返回。
+			done := make(chan struct{})
+			timer := time.AfterFunc(5*time.Second, func() {
+				select {
+				case <-done:
+				default:
+					b.logger.Warn("event handler timed out",
+						zap.String("event_type", string(event.Type())),
+					)
+				}
+			})
+			defer func() {
+				close(done)
+				timer.Stop()
+			}()
+			h(event)
+		}()
 	}
 }
 

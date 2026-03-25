@@ -46,7 +46,7 @@ func (e *AsyncExecutor) ExecuteAsync(ctx context.Context, input *Input) (*AsyncE
 		Input:     input,
 		status:    ExecutionStatusRunning,
 		StartTime: time.Now(),
-		doneCh:    make(chan executionResult, 1),
+		doneCh:    make(chan struct{}),
 	}
 
 	e.logger.Info("starting async execution",
@@ -68,14 +68,14 @@ func (e *AsyncExecutor) ExecuteAsync(ctx context.Context, input *Input) (*AsyncE
 					zap.Stack("stack"),
 				)
 				execution.setFailed(panicErr)
-				execution.notifyDone(ctx, executionResult{Err: panicErr})
+				execution.notifyDone(executionResult{Err: panicErr})
 			}
 		}()
 
 		select {
 		case <-ctx.Done():
 			execution.setFailed(ctx.Err())
-			execution.notifyDone(ctx, executionResult{Err: ctx.Err()})
+			execution.notifyDone(executionResult{Err: ctx.Err()})
 			return
 		default:
 		}
@@ -86,7 +86,7 @@ func (e *AsyncExecutor) ExecuteAsync(ctx context.Context, input *Input) (*AsyncE
 		} else {
 			execution.setCompleted(output)
 		}
-		execution.notifyDone(ctx, executionResult{Output: output, Err: err})
+		execution.notifyDone(executionResult{Output: output, Err: err})
 	}(ctx)
 
 	return execution, nil
@@ -204,9 +204,8 @@ type AsyncExecution struct {
 	output  *Output
 	endTime time.Time
 
-	doneCh chan executionResult
-	// waitOnce ensures Wait() only consumes doneCh once and then reuses cached result.
-	waitOnce   sync.Once
+	doneCh      chan struct{}
+	doneOnce    sync.Once
 	waitResult executionResult
 }
 
@@ -270,23 +269,19 @@ const (
 // Wait 等待执行完成。可安全地被多次调用，
 // 首次调用消费 doneCh 并缓存结果，后续调用直接返回缓存值。
 func (e *AsyncExecution) Wait(ctx context.Context) (*Output, error) {
-	e.waitOnce.Do(func() {
-		select {
-		case res := <-e.doneCh:
-			e.waitResult = res
-		case <-ctx.Done():
-			e.waitResult = executionResult{Err: ctx.Err()}
-		}
-	})
-	return e.waitResult.Output, e.waitResult.Err
+	select {
+	case <-e.doneCh:
+		return e.waitResult.Output, e.waitResult.Err
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
 }
 
-func (e *AsyncExecution) notifyDone(ctx context.Context, res executionResult) {
-	select {
-	case e.doneCh <- res:
-	case <-ctx.Done():
-	default:
-	}
+func (e *AsyncExecution) notifyDone(res executionResult) {
+	e.doneOnce.Do(func() {
+		e.waitResult = res
+		close(e.doneCh)
+	})
 }
 
 // SubagentManager Subagent 管理器
@@ -346,7 +341,7 @@ func (m *SubagentManager) SpawnSubagent(ctx context.Context, subagent Agent, inp
 		Input:     inputCopy,
 		status:    ExecutionStatusRunning,
 		StartTime: time.Now(),
-		doneCh:    make(chan executionResult, 1),
+		doneCh:    make(chan struct{}),
 	}
 
 	m.mu.Lock()
@@ -379,7 +374,7 @@ func (m *SubagentManager) SpawnSubagent(ctx context.Context, subagent Agent, inp
 					zap.Stack("stack"),
 				)
 				execution.setFailed(panicErr)
-				execution.notifyDone(ctx, executionResult{Err: panicErr})
+				execution.notifyDone(executionResult{Err: panicErr})
 			}
 		}()
 
@@ -397,7 +392,7 @@ func (m *SubagentManager) SpawnSubagent(ctx context.Context, subagent Agent, inp
 				zap.String("execution_id", execution.ID),
 			)
 		}
-		execution.notifyDone(ctx, executionResult{Output: output, Err: err})
+		execution.notifyDone(executionResult{Output: output, Err: err})
 	}()
 
 	return execution, nil

@@ -3,6 +3,7 @@ package voice
 import (
 	"context"
 	"errors"
+	"sync"
 	"testing"
 	"time"
 
@@ -284,6 +285,103 @@ func TestVoiceSession_Interrupt(t *testing.T) {
 
 	metrics := agent.GetMetrics()
 	assert.Equal(t, int64(1), metrics.InterruptionCount)
+}
+
+func TestVoiceSession_Close_CancelsInflightLLMAndTTS(t *testing.T) {
+	ctx := testutil.TestContext(t)
+
+	transcriptCh := make(chan TranscriptEvent, 1)
+	llmCtxDone := make(chan struct{})
+	ttsCtxDone := make(chan struct{})
+	llmStarted := make(chan struct{}, 1)
+	ttsStarted := make(chan struct{}, 1)
+
+	stt := &mockSTTProvider{
+		startStreamFn: func(ctx context.Context, sampleRate int) (STTStream, error) {
+			return &mockSTTStream{
+				receiveFn: func() <-chan TranscriptEvent { return transcriptCh },
+			}, nil
+		},
+	}
+	llm := &mockLLMHandler{
+		processStreamFn: func(ctx context.Context, input string) (<-chan string, error) {
+			llmStarted <- struct{}{}
+			go func() {
+				<-ctx.Done()
+				close(llmCtxDone)
+			}()
+			textCh := make(chan string, 1)
+			textCh <- "reply"
+			close(textCh)
+			return textCh, nil
+		},
+	}
+	tts := &mockTTSProvider{
+		synthesizeStreamFn: func(ctx context.Context, textChan <-chan string) (<-chan SpeechEvent, error) {
+			ttsStarted <- struct{}{}
+			go func() {
+				<-ctx.Done()
+				close(ttsCtxDone)
+			}()
+			speechCh := make(chan SpeechEvent)
+			return speechCh, nil
+		},
+	}
+
+	agent := NewVoiceAgent(DefaultVoiceConfig(), stt, tts, llm, nil)
+	session, err := agent.Start(ctx)
+	require.NoError(t, err)
+
+	transcriptCh <- TranscriptEvent{Text: "hello", IsFinal: true}
+
+	require.Eventually(t, func() bool {
+		return len(llmStarted) == 1 && len(ttsStarted) == 1
+	}, time.Second, 10*time.Millisecond)
+
+	require.NoError(t, session.Close())
+
+	select {
+	case <-llmCtxDone:
+	case <-time.After(time.Second):
+		t.Fatal("expected Close to cancel LLM context")
+	}
+
+	select {
+	case <-ttsCtxDone:
+	case <-time.After(time.Second):
+		t.Fatal("expected Close to cancel TTS context")
+	}
+}
+
+func TestVoiceSession_SendAudioAndClose_Concurrent(t *testing.T) {
+	ctx := testutil.TestContext(t)
+
+	stt := &mockSTTProvider{
+		startStreamFn: func(ctx context.Context, sampleRate int) (STTStream, error) {
+			return &mockSTTStream{}, nil
+		},
+	}
+	agent := NewVoiceAgent(DefaultVoiceConfig(), stt, &mockTTSProvider{}, &mockLLMHandler{}, nil)
+	session, err := agent.Start(ctx)
+	require.NoError(t, err)
+
+	var wg sync.WaitGroup
+	for i := 0; i < 16; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_ = session.SendAudio(AudioChunk{Data: []byte("audio")})
+		}()
+	}
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		_ = session.Close()
+	}()
+
+	wg.Wait()
+	require.NoError(t, session.Close())
 }
 
 // --- NativeAudioReasoner tests ---
