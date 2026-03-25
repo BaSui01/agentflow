@@ -196,6 +196,15 @@ func (s *Server) initHandlers() error {
 			zap.String("provider", s.cfg.LLM.DefaultProvider))
 	}
 
+	checkpointStore, ckptErr := bootstrap.BuildAgentCheckpointStore(s.cfg, s.db, s.logger)
+	if ckptErr != nil {
+		return fmt.Errorf("failed to build checkpoint store: %w", ckptErr)
+	}
+	var checkpointManager *agent.CheckpointManager
+	if checkpointStore != nil {
+		checkpointManager = agent.NewCheckpointManager(checkpointStore, s.logger)
+	}
+
 	if s.provider != nil {
 		resolver := agent.NewCachingResolver(agentRegistry, s.provider, s.logger).
 			WithDefaultModel(s.cfg.Agent.Model)
@@ -218,7 +227,7 @@ func (s *Server) initHandlers() error {
 		if llmRuntime != nil {
 			ledger = llmRuntime.Ledger
 		}
-		bootstrap.RegisterDefaultRuntimeAgentFactory(agentRegistry, s.provider, s.toolProvider, ledger, s.logger)
+		bootstrap.RegisterDefaultRuntimeAgentFactory(agentRegistry, s.provider, s.toolProvider, checkpointManager, ledger, s.logger)
 		s.logger.Info("Default runtime agent factory registered")
 
 		s.agentHandler = bootstrap.BuildAgentHandler(discoveryRegistry, agentRegistry, s.logger, s.resolver.Resolve)
@@ -236,10 +245,6 @@ func (s *Server) initHandlers() error {
 		workflowStore.AgentResolver = func(ctx context.Context, agentID string) (agent.Agent, error) {
 			return s.resolver.Resolve(ctx, agentID)
 		}
-	}
-	checkpointStore, ckptErr := bootstrap.BuildAgentCheckpointStore(s.cfg, s.db, s.logger)
-	if ckptErr != nil {
-		return fmt.Errorf("failed to build checkpoint store: %w", ckptErr)
 	}
 	workflowStore.CheckpointStore = checkpointStore
 	if s.db != nil {

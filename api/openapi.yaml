@@ -616,33 +616,6 @@ paths:
         '500':
           description: Execution failed
 
-  /api/v1/agents/plan:
-    post:
-      tags: [Agent]
-      summary: Plan agent execution
-      operationId: planAgent
-      security:
-        - ApiKeyAuth: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/AgentExecuteRequest'
-      responses:
-        '200':
-          description: Execution plan
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Envelope'
-        '400':
-          description: Invalid request
-        '404':
-          description: Agent not found
-        '500':
-          description: Plan failed
-
   /api/v1/agents/health:
     get:
       tags: [Agent]
@@ -1608,7 +1581,7 @@ components:
         mode:
           type: string
           enum: [reasoning, collaboration, hierarchical, crew, deliberation, federation, parallel, loop]
-          description: Execution mode. Multi-agent requests default to parallel when omitted.
+          description: Execution mode. Only used for multi-agent requests (`agent_ids`). Multi-agent requests default to parallel when omitted.
         content:
           type: string
         provider:

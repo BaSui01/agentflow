@@ -1,10 +1,10 @@
 package reasoning
 
 import (
-	"github.com/BaSui01/agentflow/types"
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/BaSui01/agentflow/types"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -111,6 +111,11 @@ func (d *DynamicPlanner) Execute(ctx context.Context, task string) (*ReasoningRe
 		Task:     task,
 		Metadata: make(map[string]any),
 	}
+	result.Metadata["dynamic_planner_max_plan_depth"] = d.config.MaxPlanDepth
+	result.Metadata["dynamic_planner_confidence_threshold"] = d.config.ConfidenceThreshold
+	result.Metadata["dynamic_planner_backtrack_budget"] = d.config.MaxBacktracks
+	result.Metadata["dynamic_planner_budget_scope"] = "strategy_internal"
+	result.Metadata["internal_stop_cause"] = "completed"
 
 	// 初始化根节点
 	d.mu.Lock()
@@ -151,6 +156,9 @@ func (d *DynamicPlanner) Execute(ctx context.Context, task string) (*ReasoningRe
 	result.TotalLatency = time.Since(start)
 	result.Metadata["backtracks"] = d.backtracks
 	result.Metadata["total_nodes"] = d.nodeCounter.Load()
+	if cause, ok := d.lastInternalStopCause(); ok {
+		result.Metadata["internal_stop_cause"] = cause
+	}
 
 	return result, nil
 }
@@ -288,6 +296,7 @@ func (d *DynamicPlanner) executePlan(ctx context.Context, task string) (string, 
 		if node.Confidence < d.config.ConfidenceThreshold {
 			d.logger.Debug("skipping low confidence node", zap.String("id", node.ID))
 			node.Status = NodeStatusSkipped
+			d.recordInternalStopCause("dynamic_planner_confidence_budget_exhausted")
 			continue
 		}
 
@@ -321,6 +330,8 @@ func (d *DynamicPlanner) executePlan(ctx context.Context, task string) (string, 
 			if err == nil && len(nextSteps) > 0 {
 				node.Children = nextSteps
 			}
+		} else if d.getNodeDepth(node) >= d.config.MaxPlanDepth {
+			d.recordInternalStopCause("dynamic_planner_plan_depth_budget_exhausted")
 		}
 	}
 
@@ -431,6 +442,7 @@ func (d *DynamicPlanner) tryAlternativeOrBacktrack(ctx context.Context, failedNo
 
 	if !canBacktrack {
 		d.logger.Warn("max backtracks reached")
+		d.recordInternalStopCause("dynamic_planner_backtrack_budget_exhausted")
 		return false
 	}
 
@@ -633,4 +645,22 @@ func joinStrings(parts []string, sep string) string {
 	return result
 }
 
+func (d *DynamicPlanner) recordInternalStopCause(cause string) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if d.rootNode == nil {
+		return
+	}
+	if d.rootNode.Error == "" {
+		d.rootNode.Error = cause
+	}
+}
 
+func (d *DynamicPlanner) lastInternalStopCause() (string, bool) {
+	d.mu.RLock()
+	defer d.mu.RUnlock()
+	if d.rootNode == nil || d.rootNode.Error == "" {
+		return "", false
+	}
+	return d.rootNode.Error, true
+}

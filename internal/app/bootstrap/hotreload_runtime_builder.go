@@ -59,5 +59,8 @@ func RegisterHotReloadCallbacks(
 			zap.String("reason", event.Reason),
 			zap.Int("version", event.Version),
 		)
+		if onReload != nil {
+			onReload(event.FailedConfig, event.RestoredConfig)
+		}
 	})
 }

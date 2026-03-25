@@ -958,15 +958,24 @@ func (s *PostgreSQLCheckpointStore) Rollback(ctx context.Context, threadID strin
 // =============================================================================
 // Checkpoint Agent 执行检查点（基于 LangGraph 2026 标准）
 type Checkpoint struct {
-	ID        string              `json:"id"`
-	ThreadID  string              `json:"thread_id"` // 会话线程 ID
-	AgentID   string              `json:"agent_id"`
-	Version   int                 `json:"version"` // 版本号（线程内递增）
-	State     State               `json:"state"`
-	Messages  []CheckpointMessage `json:"messages"`
-	Metadata  map[string]any      `json:"metadata"`
-	CreatedAt time.Time           `json:"created_at"`
-	ParentID  string              `json:"parent_id,omitempty"` // 父检查点 ID
+	ID                  string              `json:"id"`
+	ThreadID            string              `json:"thread_id"` // 会话线程 ID
+	AgentID             string              `json:"agent_id"`
+	LoopStateID         string              `json:"loop_state_id,omitempty"`
+	RunID               string              `json:"run_id,omitempty"`
+	Goal                string              `json:"goal,omitempty"`
+	CurrentPlanID       string              `json:"current_plan_id,omitempty"`
+	PlanVersion         int                 `json:"plan_version,omitempty"`
+	CurrentStepID       string              `json:"current_step_id,omitempty"`
+	ObservationsSummary string              `json:"observations_summary,omitempty"`
+	LastOutputSummary   string              `json:"last_output_summary,omitempty"`
+	LastError           string              `json:"last_error,omitempty"`
+	Version             int                 `json:"version"` // 版本号（线程内递增）
+	State               State               `json:"state"`
+	Messages            []CheckpointMessage `json:"messages"`
+	Metadata            map[string]any      `json:"metadata"`
+	CreatedAt           time.Time           `json:"created_at"`
+	ParentID            string              `json:"parent_id,omitempty"` // 父检查点 ID
 
 	// ExecutionContext 工作流执行上下文
 	ExecutionContext *ExecutionContext `json:"execution_context,omitempty"`
@@ -991,10 +1000,150 @@ type CheckpointToolCall struct {
 
 // ExecutionContext 工作流执行上下文
 type ExecutionContext struct {
-	WorkflowID  string         `json:"workflow_id,omitempty"`
-	CurrentNode string         `json:"current_node,omitempty"`
-	NodeResults map[string]any `json:"node_results,omitempty"`
-	Variables   map[string]any `json:"variables,omitempty"`
+	WorkflowID          string         `json:"workflow_id,omitempty"`
+	CurrentNode         string         `json:"current_node,omitempty"`
+	NodeResults         map[string]any `json:"node_results,omitempty"`
+	Variables           map[string]any `json:"variables,omitempty"`
+	LoopStateID         string         `json:"loop_state_id,omitempty"`
+	RunID               string         `json:"run_id,omitempty"`
+	AgentID             string         `json:"agent_id,omitempty"`
+	Goal                string         `json:"goal,omitempty"`
+	CurrentPlanID       string         `json:"current_plan_id,omitempty"`
+	PlanVersion         int            `json:"plan_version,omitempty"`
+	CurrentStepID       string         `json:"current_step_id,omitempty"`
+	ObservationsSummary string         `json:"observations_summary,omitempty"`
+	LastOutputSummary   string         `json:"last_output_summary,omitempty"`
+	LastError           string         `json:"last_error,omitempty"`
+}
+
+func (c *Checkpoint) LoopContextValues() map[string]any {
+	if c == nil {
+		return nil
+	}
+	c.normalizeLoopPersistenceFields()
+	return c.loopContextValuesNormalized()
+}
+
+func (c *Checkpoint) loopContextValuesNormalized() map[string]any {
+	if c == nil {
+		return nil
+	}
+	values := map[string]any{
+		"agent_id":             c.AgentID,
+		"loop_state_id":        c.LoopStateID,
+		"run_id":               c.RunID,
+		"goal":                 c.Goal,
+		"current_plan_id":      c.CurrentPlanID,
+		"plan_version":         c.PlanVersion,
+		"current_step":         c.CurrentStepID,
+		"current_step_id":      c.CurrentStepID,
+		"observations_summary": c.ObservationsSummary,
+		"last_output_summary":  c.LastOutputSummary,
+		"last_error":           c.LastError,
+	}
+	return values
+}
+
+func (c *ExecutionContext) LoopContextValues() map[string]any {
+	if c == nil {
+		return nil
+	}
+	values := map[string]any{
+		"current_stage":        c.CurrentNode,
+		"loop_state_id":        c.LoopStateID,
+		"run_id":               c.RunID,
+		"agent_id":             c.AgentID,
+		"goal":                 c.Goal,
+		"current_plan_id":      c.CurrentPlanID,
+		"plan_version":         c.PlanVersion,
+		"current_step":         c.CurrentStepID,
+		"current_step_id":      c.CurrentStepID,
+		"observations_summary": c.ObservationsSummary,
+		"last_output_summary":  c.LastOutputSummary,
+		"last_error":           c.LastError,
+	}
+	if len(c.Variables) > 0 {
+		for key, value := range c.Variables {
+			values[key] = value
+		}
+	}
+	return values
+}
+
+func (c *Checkpoint) normalizeLoopPersistenceFields() {
+	if c == nil {
+		return
+	}
+	if c.Metadata == nil {
+		c.Metadata = make(map[string]any)
+	}
+	if c.ExecutionContext == nil {
+		c.ExecutionContext = &ExecutionContext{}
+	}
+	if c.ExecutionContext.Variables == nil {
+		c.ExecutionContext.Variables = make(map[string]any)
+	}
+
+	for key, value := range c.Metadata {
+		c.ExecutionContext.Variables[key] = value
+	}
+	for key, value := range c.ExecutionContext.Variables {
+		c.Metadata[key] = value
+	}
+
+	c.LoopStateID = firstNonEmptyString(c.LoopStateID, loopContextStringValue(c.ExecutionContext.Variables, "loop_state_id"), loopContextStringValue(c.Metadata, "loop_state_id"), c.ExecutionContext.LoopStateID)
+	c.RunID = firstNonEmptyString(c.RunID, loopContextStringValue(c.ExecutionContext.Variables, "run_id"), loopContextStringValue(c.Metadata, "run_id"), c.ExecutionContext.RunID)
+	c.AgentID = firstNonEmptyString(c.AgentID, loopContextStringValue(c.ExecutionContext.Variables, "agent_id"), loopContextStringValue(c.Metadata, "agent_id"), c.ExecutionContext.AgentID)
+	c.Goal = firstNonEmptyString(c.Goal, loopContextStringValue(c.ExecutionContext.Variables, "goal"), loopContextStringValue(c.Metadata, "goal"), c.ExecutionContext.Goal)
+	c.CurrentPlanID = firstNonEmptyString(c.CurrentPlanID, loopContextStringValue(c.ExecutionContext.Variables, "current_plan_id"), loopContextStringValue(c.Metadata, "current_plan_id"), c.ExecutionContext.CurrentPlanID)
+	c.CurrentStepID = firstNonEmptyString(c.CurrentStepID, loopContextStringValue(c.ExecutionContext.Variables, "current_step_id"), loopContextStringValue(c.ExecutionContext.Variables, "current_step"), loopContextStringValue(c.Metadata, "current_step_id"), loopContextStringValue(c.Metadata, "current_step"), c.ExecutionContext.CurrentStepID)
+	c.ObservationsSummary = firstNonEmptyString(c.ObservationsSummary, loopContextStringValue(c.ExecutionContext.Variables, "observations_summary"), loopContextStringValue(c.Metadata, "observations_summary"), c.ExecutionContext.ObservationsSummary)
+	c.LastOutputSummary = firstNonEmptyString(c.LastOutputSummary, loopContextStringValue(c.ExecutionContext.Variables, "last_output_summary"), loopContextStringValue(c.Metadata, "last_output_summary"), c.ExecutionContext.LastOutputSummary)
+	c.LastError = firstNonEmptyString(c.LastError, loopContextStringValue(c.ExecutionContext.Variables, "last_error"), loopContextStringValue(c.Metadata, "last_error"), c.ExecutionContext.LastError)
+	if c.PlanVersion <= 0 {
+		if value, ok := loopContextInt(c.ExecutionContext.Variables, "plan_version"); ok {
+			c.PlanVersion = value
+		} else if value, ok := loopContextInt(c.Metadata, "plan_version"); ok {
+			c.PlanVersion = value
+		} else if c.ExecutionContext.PlanVersion > 0 {
+			c.PlanVersion = c.ExecutionContext.PlanVersion
+		}
+	}
+
+	c.ExecutionContext.LoopStateID = firstNonEmptyString(c.ExecutionContext.LoopStateID, c.LoopStateID)
+	c.ExecutionContext.RunID = firstNonEmptyString(c.ExecutionContext.RunID, c.RunID)
+	c.ExecutionContext.AgentID = firstNonEmptyString(c.ExecutionContext.AgentID, c.AgentID)
+	c.ExecutionContext.Goal = firstNonEmptyString(c.ExecutionContext.Goal, c.Goal)
+	c.ExecutionContext.CurrentPlanID = firstNonEmptyString(c.ExecutionContext.CurrentPlanID, c.CurrentPlanID)
+	if c.ExecutionContext.PlanVersion <= 0 {
+		c.ExecutionContext.PlanVersion = c.PlanVersion
+	}
+	c.ExecutionContext.CurrentStepID = firstNonEmptyString(c.ExecutionContext.CurrentStepID, c.CurrentStepID)
+	c.ExecutionContext.ObservationsSummary = firstNonEmptyString(c.ExecutionContext.ObservationsSummary, c.ObservationsSummary)
+	c.ExecutionContext.LastOutputSummary = firstNonEmptyString(c.ExecutionContext.LastOutputSummary, c.LastOutputSummary)
+	c.ExecutionContext.LastError = firstNonEmptyString(c.ExecutionContext.LastError, c.LastError)
+
+	for key, value := range c.loopContextValuesNormalized() {
+		c.Metadata[key] = value
+		c.ExecutionContext.Variables[key] = value
+	}
+}
+
+func firstNonEmptyString(values ...string) string {
+	for _, value := range values {
+		trimmed := strings.TrimSpace(value)
+		if trimmed != "" {
+			return trimmed
+		}
+	}
+	return ""
+}
+
+func loopContextStringValue(values map[string]any, keys ...string) string {
+	if value, ok := loopContextString(values, keys...); ok {
+		return value
+	}
+	return ""
 }
 
 // CheckpointVersion 检查点版本元数据
@@ -1072,6 +1221,7 @@ func (m *CheckpointManager) SaveCheckpoint(ctx context.Context, checkpoint *Chec
 	if checkpoint.CreatedAt.IsZero() {
 		checkpoint.CreatedAt = time.Now()
 	}
+	checkpoint.normalizeLoopPersistenceFields()
 
 	m.logger.Debug("saving checkpoint",
 		zap.String("checkpoint_id", checkpoint.ID),
@@ -1094,6 +1244,7 @@ func (m *CheckpointManager) LoadCheckpoint(ctx context.Context, checkpointID str
 	if err != nil {
 		return nil, fmt.Errorf("failed to load checkpoint: %w", err)
 	}
+	checkpoint.normalizeLoopPersistenceFields()
 
 	return checkpoint, nil
 }
@@ -1106,37 +1257,65 @@ func (m *CheckpointManager) LoadLatestCheckpoint(ctx context.Context, threadID s
 	if err != nil {
 		return nil, fmt.Errorf("failed to load latest checkpoint: %w", err)
 	}
+	checkpoint.normalizeLoopPersistenceFields()
 
 	return checkpoint, nil
 }
 
 // ResumeFromCheckpoint 从检查点恢复执行
 func (m *CheckpointManager) ResumeFromCheckpoint(ctx context.Context, agent Agent, checkpointID string) error {
+	_, err := m.LoadCheckpointForAgent(ctx, agent, checkpointID)
+	return err
+}
+
+// LoadCheckpointForAgent loads a checkpoint, validates ownership, and restores the agent state.
+func (m *CheckpointManager) LoadCheckpointForAgent(ctx context.Context, agent Agent, checkpointID string) (*Checkpoint, error) {
 	checkpoint, err := m.LoadCheckpoint(ctx, checkpointID)
 	if err != nil {
-		return err
+		return nil, err
 	}
+	if err := m.restoreAgentFromCheckpoint(ctx, agent, checkpoint); err != nil {
+		return nil, err
+	}
+	return checkpoint, nil
+}
 
+// LoadLatestCheckpointForAgent loads the latest checkpoint for the thread and restores the agent state.
+func (m *CheckpointManager) LoadLatestCheckpointForAgent(ctx context.Context, agent Agent, threadID string) (*Checkpoint, error) {
+	checkpoint, err := m.LoadLatestCheckpoint(ctx, threadID)
+	if err != nil {
+		return nil, err
+	}
+	if err := m.restoreAgentFromCheckpoint(ctx, agent, checkpoint); err != nil {
+		return nil, err
+	}
+	return checkpoint, nil
+}
+
+func (m *CheckpointManager) restoreAgentFromCheckpoint(ctx context.Context, agent Agent, checkpoint *Checkpoint) error {
+	if checkpoint == nil {
+		return fmt.Errorf("checkpoint is nil")
+	}
 	m.logger.Info("resuming from checkpoint",
-		zap.String("checkpoint_id", checkpointID),
+		zap.String("checkpoint_id", checkpoint.ID),
 		zap.String("agent_id", checkpoint.AgentID),
 		zap.String("state", string(checkpoint.State)),
 	)
 
-	// 验证 Agent ID
 	if agent.ID() != checkpoint.AgentID {
 		return fmt.Errorf("agent ID mismatch: expected %s, got %s", checkpoint.AgentID, agent.ID())
 	}
 
-	// 恢复状态（需要 Agent 支持状态恢复）
-	if ba, ok := agent.(*BaseAgent); ok {
-		if err := ba.Transition(ctx, checkpoint.State); err != nil {
+	type transitioner interface {
+		Transition(ctx context.Context, newState State) error
+	}
+	if t, ok := agent.(transitioner); ok {
+		if err := t.Transition(ctx, checkpoint.State); err != nil {
 			return fmt.Errorf("failed to restore state: %w", err)
 		}
 	}
 
 	m.logger.Info("checkpoint restored successfully")
-
 	return nil
 }
 

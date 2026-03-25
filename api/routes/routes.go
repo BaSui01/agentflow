@@ -42,7 +42,6 @@ func RegisterAgent(mux *http.ServeMux, agentHandler *handlers.AgentHandler, logg
 	mux.HandleFunc("POST /api/v1/agents/execute", agentHandler.HandleExecuteAgent)
 	mux.HandleFunc("POST /api/v1/agents/execute/stream", agentHandler.HandleAgentStream)
 	mux.HandleFunc("POST /api/v1/agents/execute/interrupt", agentHandler.HandleAgentInterrupt)
-	mux.HandleFunc("POST /api/v1/agents/plan", agentHandler.HandlePlanAgent)
 	mux.HandleFunc("GET /api/v1/agents/health", agentHandler.HandleAgentHealth)
 	logger.Info("Agent API routes registered")
 }

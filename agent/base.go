@@ -2,6 +2,8 @@ package agent
 
 import (
 	"context"
+	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -9,6 +11,7 @@ import (
 	"github.com/BaSui01/agentflow/agent/guardcore"
 	"github.com/BaSui01/agentflow/agent/guardrails"
 	"github.com/BaSui01/agentflow/agent/memorycore"
+	"github.com/BaSui01/agentflow/agent/reasoning"
 	"github.com/BaSui01/agentflow/llm"
 	llmtools "github.com/BaSui01/agentflow/llm/capabilities/tools"
 	llmgateway "github.com/BaSui01/agentflow/llm/gateway"
@@ -72,14 +75,20 @@ type Input struct {
 
 // Output Agent 输出
 type Output struct {
-	TraceID          string         `json:"trace_id"`
-	Content          string         `json:"content"`
-	ReasoningContent *string        `json:"reasoning_content,omitempty"`
-	Metadata         map[string]any `json:"metadata,omitempty"`
-	TokensUsed       int            `json:"tokens_used,omitempty"`
-	Cost             float64        `json:"cost,omitempty"`
-	Duration         time.Duration  `json:"duration"`
-	FinishReason     string         `json:"finish_reason,omitempty"`
+	TraceID               string         `json:"trace_id"`
+	Content               string         `json:"content"`
+	ReasoningContent      *string        `json:"reasoning_content,omitempty"`
+	Metadata              map[string]any `json:"metadata,omitempty"`
+	TokensUsed            int            `json:"tokens_used,omitempty"`
+	Cost                  float64        `json:"cost,omitempty"`
+	Duration              time.Duration  `json:"duration"`
+	FinishReason          string         `json:"finish_reason,omitempty"`
+	CurrentStage          string         `json:"current_stage,omitempty"`
+	IterationCount        int            `json:"iteration_count,omitempty"`
+	SelectedReasoningMode string         `json:"selected_reasoning_mode,omitempty"`
+	StopReason            string         `json:"stop_reason,omitempty"`
+	Resumable             bool           `json:"resumable,omitempty"`
+	CheckpointID          string         `json:"checkpoint_id,omitempty"`
 }
 
 // PlanResult 规划结果
@@ -96,6 +105,533 @@ type Feedback struct {
 	Data    map[string]any `json:"data,omitempty"`
 }
 
+// LoopStage identifies a stage in the default closed-loop execution chain.
+type LoopStage string
+
+const (
+	LoopStagePerceive   LoopStage = "perceive"
+	LoopStageAnalyze    LoopStage = "analyze"
+	LoopStagePlan       LoopStage = "plan"
+	LoopStageAct        LoopStage = "act"
+	LoopStageObserve    LoopStage = "observe"
+	LoopStageEvaluate   LoopStage = "evaluate"
+	LoopStageDecideNext LoopStage = "decide_next"
+)
+
+// StopReason identifies why loop execution stopped.
+type StopReason string
+
+const (
+	StopReasonSolved                   StopReason = "solved"
+	StopReasonMaxIterations            StopReason = "max_iterations"
+	StopReasonTimeout                  StopReason = "timeout"
+	StopReasonNeedHuman                StopReason = "need_human"
+	StopReasonValidationFailed         StopReason = "validation_failed"
+	StopReasonToolFailureUnrecoverable StopReason = "tool_failure_unrecoverable"
+	StopReasonBlocked                  StopReason = "blocked"
+)
+
+// LoopDecision is the allowed next-step decision set produced after evaluation.
+type LoopDecision string
+
+const (
+	LoopDecisionDone     LoopDecision = "done"
+	LoopDecisionContinue LoopDecision = "continue"
+	LoopDecisionReplan   LoopDecision = "replan"
+	LoopDecisionReflect  LoopDecision = "reflect"
+	LoopDecisionEscalate LoopDecision = "escalate"
+)
+
+// LoopObservation records an observation generated during execution.
+type LoopObservation struct {
+	Stage     LoopStage      `json:"stage"`
+	Content   string         `json:"content,omitempty"`
+	Metadata  map[string]any `json:"metadata,omitempty"`
+	Error     string         `json:"error,omitempty"`
+	CreatedAt time.Time      `json:"created_at"`
+	Iteration int            `json:"iteration"`
+}
+
+// LoopState is the single mutable state object for closed-loop execution.
+type LoopState struct {
+	LoopStateID           string            `json:"loop_state_id,omitempty"`
+	RunID                 string            `json:"run_id,omitempty"`
+	AgentID               string            `json:"agent_id,omitempty"`
+	Goal                  string            `json:"goal,omitempty"`
+	Plan                  []string          `json:"plan,omitempty"`
+	CurrentPlanID         string            `json:"current_plan_id,omitempty"`
+	PlanVersion           int               `json:"plan_version,omitempty"`
+	CurrentStepID         string            `json:"current_step_id,omitempty"`
+	CurrentStage          LoopStage         `json:"current_stage"`
+	Iteration             int               `json:"iteration"`
+	MaxIterations         int               `json:"max_iterations,omitempty"`
+	Decision              LoopDecision      `json:"decision,omitempty"`
+	StopReason            StopReason        `json:"stop_reason,omitempty"`
+	SelectedReasoningMode string            `json:"selected_reasoning_mode,omitempty"`
+	Confidence            float64           `json:"confidence,omitempty"`
+	NeedHuman             bool              `json:"need_human,omitempty"`
+	CheckpointID          string            `json:"checkpoint_id,omitempty"`
+	Resumable             bool              `json:"resumable,omitempty"`
+	ObservationsSummary   string            `json:"observations_summary,omitempty"`
+	LastOutputSummary     string            `json:"last_output_summary,omitempty"`
+	LastError             string            `json:"last_error,omitempty"`
+	LastOutput            *Output           `json:"-"`
+	Observations          []LoopObservation `json:"observations,omitempty"`
+}
+
+// NewLoopState creates a new loop state seeded from input.
+func NewLoopState(input *Input, maxIterations int) *LoopState {
+	goal := ""
+	if input != nil {
+		goal = input.Content
+	}
+	if maxIterations <= 0 {
+		maxIterations = 1
+	}
+	state := &LoopState{
+		Goal:          goal,
+		Plan:          []string{},
+		CurrentStage:  LoopStagePerceive,
+		MaxIterations: maxIterations,
+		Observations:  []LoopObservation{},
+	}
+	if input != nil && len(input.Context) > 0 {
+		state.restoreFromContext(input.Context)
+		if state.Goal == "" {
+			state.Goal = goal
+		}
+	}
+	state.SyncCurrentStep()
+	state.normalizeCheckpointFields()
+	return state
+}
+
+func (s *LoopState) AdvanceStage(stage LoopStage) {
+	if s != nil {
+		s.CurrentStage = stage
+	}
+}
+
+func (s *LoopState) MarkStopped(reason StopReason, decision LoopDecision) {
+	if s == nil {
+		return
+	}
+	s.StopReason = reason
+	s.Decision = decision
+}
+
+func (s *LoopState) Terminal() bool {
+	return s != nil && s.StopReason != ""
+}
+
+func (s *LoopState) SyncCurrentStep() {
+	if s == nil || s.CurrentStepID != "" || len(s.Plan) == 0 {
+		return
+	}
+	index := s.Iteration
+	if index < 0 {
+		index = 0
+	}
+	if index >= len(s.Plan) {
+		index = len(s.Plan) - 1
+	}
+	if index >= 0 && index < len(s.Plan) {
+		s.CurrentStepID = s.Plan[index]
+	}
+}
+
+func (s *LoopState) AddObservation(obs LoopObservation) {
+	if s == nil {
+		return
+	}
+	if obs.CreatedAt.IsZero() {
+		obs.CreatedAt = time.Now()
+	}
+	s.Observations = append(s.Observations, obs)
+	s.ObservationsSummary = summarizeObservations(s.Observations)
+	if strings.TrimSpace(obs.Error) != "" {
+		s.LastError = strings.TrimSpace(obs.Error)
+	}
+	if strings.TrimSpace(obs.Content) != "" && obs.Stage == LoopStageAct {
+		s.LastOutputSummary = summarizeText(obs.Content)
+	}
+}
+
+func (s *LoopState) LastObservation() (LoopObservation, bool) {
+	if s == nil || len(s.Observations) == 0 {
+		return LoopObservation{}, false
+	}
+	return s.Observations[len(s.Observations)-1], true
+}
+
+func (s *LoopState) CheckpointVariables() map[string]any {
+	if s == nil {
+		return nil
+	}
+	s.normalizeCheckpointFields()
+	variables := map[string]any{
+		"loop_state_id":           s.LoopStateID,
+		"run_id":                  s.RunID,
+		"agent_id":                s.AgentID,
+		"goal":                    s.Goal,
+		"plan":                    append([]string(nil), s.Plan...),
+		"current_plan_id":         s.CurrentPlanID,
+		"plan_version":            s.PlanVersion,
+		"current_step":            s.CurrentStepID,
+		"current_step_id":         s.CurrentStepID,
+		"current_stage":           string(s.CurrentStage),
+		"iteration":               s.Iteration,
+		"iteration_count":         s.Iteration,
+		"max_iterations":          s.MaxIterations,
+		"decision":                string(s.Decision),
+		"stop_reason":             string(s.StopReason),
+		"selected_reasoning_mode": s.SelectedReasoningMode,
+		"confidence":              s.Confidence,
+		"need_human":              s.NeedHuman,
+		"checkpoint_id":           s.CheckpointID,
+		"resumable":               s.Resumable,
+		"observations_summary":    s.ObservationsSummary,
+		"last_output_summary":     s.LastOutputSummary,
+		"last_error":              s.LastError,
+	}
+	if len(s.Observations) > 0 {
+		variables["loop_observations"] = append([]LoopObservation(nil), s.Observations...)
+	}
+	return variables
+}
+
+func (s *LoopState) PopulateCheckpoint(checkpoint *Checkpoint) {
+	if s == nil || checkpoint == nil {
+		return
+	}
+	variables := s.CheckpointVariables()
+	metadata := cloneMetadata(checkpoint.Metadata)
+	if metadata == nil {
+		metadata = make(map[string]any, len(variables))
+	}
+	for key, value := range variables {
+		metadata[key] = value
+	}
+	var executionContext *ExecutionContext
+	if checkpoint.ExecutionContext != nil {
+		copied := *checkpoint.ExecutionContext
+		executionContext = &copied
+	} else {
+		executionContext = &ExecutionContext{}
+	}
+	if executionContext.Variables == nil {
+		executionContext.Variables = make(map[string]any, len(variables))
+	}
+	for key, value := range variables {
+		executionContext.Variables[key] = value
+	}
+	checkpoint.AgentID = s.AgentID
+	checkpoint.LoopStateID = s.LoopStateID
+	checkpoint.RunID = s.RunID
+	checkpoint.Goal = s.Goal
+	checkpoint.CurrentPlanID = s.CurrentPlanID
+	checkpoint.PlanVersion = s.PlanVersion
+	checkpoint.CurrentStepID = s.CurrentStepID
+	checkpoint.ObservationsSummary = s.ObservationsSummary
+	checkpoint.LastOutputSummary = s.LastOutputSummary
+	checkpoint.LastError = s.LastError
+	checkpoint.Metadata = metadata
+	executionContext.CurrentNode = string(s.CurrentStage)
+	executionContext.LoopStateID = s.LoopStateID
+	executionContext.RunID = s.RunID
+	executionContext.AgentID = s.AgentID
+	executionContext.Goal = s.Goal
+	executionContext.CurrentPlanID = s.CurrentPlanID
+	executionContext.PlanVersion = s.PlanVersion
+	executionContext.CurrentStepID = s.CurrentStepID
+	executionContext.ObservationsSummary = s.ObservationsSummary
+	executionContext.LastOutputSummary = s.LastOutputSummary
+	executionContext.LastError = s.LastError
+	checkpoint.ExecutionContext = executionContext
+}
+
+func (s *LoopState) restoreFromContext(values map[string]any) {
+	if s == nil || len(values) == 0 {
+		return
+	}
+	if value, ok := loopContextString(values, "loop_state_id"); ok {
+		s.LoopStateID = value
+	}
+	if value, ok := loopContextString(values, "run_id"); ok {
+		s.RunID = value
+	}
+	if value, ok := loopContextString(values, "agent_id"); ok {
+		s.AgentID = value
+	}
+	if value, ok := loopContextString(values, "goal"); ok {
+		s.Goal = value
+	}
+	if plan, ok := loopContextStrings(values, "loop_plan", "plan"); ok {
+		s.Plan = plan
+	}
+	if value, ok := loopContextString(values, "current_plan_id"); ok {
+		s.CurrentPlanID = value
+	}
+	if value, ok := loopContextInt(values, "plan_version"); ok {
+		s.PlanVersion = value
+	}
+	if value, ok := loopContextString(values, "current_step", "current_step_id"); ok {
+		s.CurrentStepID = value
+	}
+	if value, ok := loopContextString(values, "current_stage"); ok {
+		s.CurrentStage = LoopStage(value)
+	}
+	if value, ok := loopContextInt(values, "iteration", "iteration_count", "loop_iteration_count"); ok {
+		s.Iteration = value
+	}
+	if value, ok := loopContextInt(values, "max_iterations"); ok && value > 0 {
+		s.MaxIterations = value
+	}
+	if value, ok := loopContextString(values, "decision"); ok {
+		s.Decision = LoopDecision(value)
+	}
+	if value, ok := loopContextString(values, "stop_reason", "loop_stop_reason"); ok {
+		s.StopReason = StopReason(value)
+	}
+	if value, ok := loopContextString(values, "selected_reasoning_mode"); ok {
+		s.SelectedReasoningMode = value
+	}
+	if value, ok := loopContextFloat(values, "confidence", "loop_confidence"); ok {
+		s.Confidence = value
+	}
+	if value, ok := loopContextBool(values, "need_human", "loop_need_human"); ok {
+		s.NeedHuman = value
+	}
+	if value, ok := loopContextString(values, "checkpoint_id"); ok {
+		s.CheckpointID = value
+	}
+	if value, ok := loopContextBool(values, "resumable"); ok {
+		s.Resumable = value
+	}
+	if value, ok := loopContextString(values, "observations_summary"); ok {
+		s.ObservationsSummary = value
+	}
+	if value, ok := loopContextString(values, "last_output_summary"); ok {
+		s.LastOutputSummary = value
+	}
+	if value, ok := loopContextString(values, "last_error"); ok {
+		s.LastError = value
+	}
+	if observations, ok := loopContextObservations(values, "loop_observations", "observations"); ok {
+		s.Observations = observations
+	}
+	s.normalizeCheckpointFields()
+}
+
+func (s *LoopState) normalizeCheckpointFields() {
+	if s == nil {
+		return
+	}
+	if s.PlanVersion <= 0 && len(s.Plan) > 0 {
+		s.PlanVersion = derivePlanVersion(s.Observations)
+		if s.PlanVersion <= 0 {
+			s.PlanVersion = 1
+		}
+	}
+	if s.CurrentPlanID == "" && s.PlanVersion > 0 {
+		s.CurrentPlanID = buildLoopPlanID(s.LoopStateID, s.PlanVersion)
+	}
+	if s.CurrentStepID == "" {
+		s.SyncCurrentStep()
+	}
+	if s.ObservationsSummary == "" {
+		s.ObservationsSummary = summarizeObservations(s.Observations)
+	}
+	if s.LastOutputSummary == "" {
+		s.LastOutputSummary = summarizeLastOutput(s.LastOutput, s.Observations)
+	}
+	if s.LastError == "" {
+		s.LastError = summarizeLastError(s.Observations)
+	}
+}
+
+func buildLoopPlanID(loopStateID string, planVersion int) string {
+	base := strings.TrimSpace(loopStateID)
+	if base == "" {
+		base = "loop"
+	}
+	return fmt.Sprintf("%s-plan-%d", base, planVersion)
+}
+
+func derivePlanVersion(observations []LoopObservation) int {
+	count := 0
+	for _, observation := range observations {
+		if observation.Stage == LoopStagePlan {
+			count++
+		}
+	}
+	return count
+}
+
+func summarizeObservations(observations []LoopObservation) string {
+	if len(observations) == 0 {
+		return ""
+	}
+	parts := make([]string, 0, 3)
+	start := len(observations) - 3
+	if start < 0 {
+		start = 0
+	}
+	for _, observation := range observations[start:] {
+		part := string(observation.Stage)
+		if text := strings.TrimSpace(observation.Error); text != "" {
+			part += ":" + summarizeText(text)
+		} else if text := strings.TrimSpace(observation.Content); text != "" {
+			part += ":" + summarizeText(text)
+		}
+		parts = append(parts, part)
+	}
+	return strings.Join(parts, " | ")
+}
+
+func summarizeLastOutput(output *Output, observations []LoopObservation) string {
+	if output != nil {
+		if text := strings.TrimSpace(output.Content); text != "" {
+			return summarizeText(text)
+		}
+	}
+	for i := len(observations) - 1; i >= 0; i-- {
+		observation := observations[i]
+		if observation.Stage == LoopStageAct {
+			if text := strings.TrimSpace(observation.Content); text != "" {
+				return summarizeText(text)
+			}
+		}
+	}
+	return ""
+}
+
+func summarizeLastError(observations []LoopObservation) string {
+	for i := len(observations) - 1; i >= 0; i-- {
+		if text := strings.TrimSpace(observations[i].Error); text != "" {
+			return summarizeText(text)
+		}
+	}
+	return ""
+}
+
+func summarizeText(text string) string {
+	trimmed := strings.TrimSpace(text)
+	if trimmed == "" {
+		return ""
+	}
+	runes := []rune(trimmed)
+	if len(runes) <= 160 {
+		return trimmed
+	}
+	return string(runes[:160]) + "..."
+}
+
+func loopContextString(values map[string]any, keys ...string) (string, bool) {
+	for _, key := range keys {
+		raw, ok := values[key]
+		if !ok {
+			continue
+		}
+		value, ok := raw.(string)
+		if ok && value != "" {
+			return value, true
+		}
+	}
+	return "", false
+}
+
+func loopContextStrings(values map[string]any, keys ...string) ([]string, bool) {
+	for _, key := range keys {
+		raw, ok := values[key]
+		if !ok {
+			continue
+		}
+		switch typed := raw.(type) {
+		case []string:
+			return append([]string(nil), typed...), true
+		case []any:
+			result := make([]string, 0, len(typed))
+			for _, item := range typed {
+				text, ok := item.(string)
+				if ok && text != "" {
+					result = append(result, text)
+				}
+			}
+			if len(result) > 0 {
+				return result, true
+			}
+		}
+	}
+	return nil, false
+}
+
+func loopContextInt(values map[string]any, keys ...string) (int, bool) {
+	for _, key := range keys {
+		raw, ok := values[key]
+		if !ok {
+			continue
+		}
+		switch typed := raw.(type) {
+		case int:
+			return typed, true
+		case int32:
+			return int(typed), true
+		case int64:
+			return int(typed), true
+		case float64:
+			return int(typed), true
+		}
+	}
+	return 0, false
+}
+
+func loopContextFloat(values map[string]any, keys ...string) (float64, bool) {
+	for _, key := range keys {
+		raw, ok := values[key]
+		if !ok {
+			continue
+		}
+		switch typed := raw.(type) {
+		case float64:
+			return typed, true
+		case float32:
+			return float64(typed), true
+		case int:
+			return float64(typed), true
+		}
+	}
+	return 0, false
+}
+
+func loopContextBool(values map[string]any, keys ...string) (bool, bool) {
+	for _, key := range keys {
+		raw, ok := values[key]
+		if !ok {
+			continue
+		}
+		value, ok := raw.(bool)
+		if ok {
+			return value, true
+		}
+	}
+	return false, false
+}
+
+func loopContextObservations(values map[string]any, keys ...string) ([]LoopObservation, bool) {
+	for _, key := range keys {
+		raw, ok := values[key]
+		if !ok {
+			continue
+		}
+		observations, ok := raw.([]LoopObservation)
+		if ok && len(observations) > 0 {
+			return append([]LoopObservation(nil), observations...), true
+		}
+	}
+	return nil, false
+}
+
 // BaseAgent 提供可复用的状态管理、记忆、工具与 LLM 能力
 type BaseAgent struct {
 	config               types.AgentConfig
@@ -105,20 +641,20 @@ type BaseAgent struct {
 	stateMu              sync.RWMutex
 	// TODO(T-001/T-002): 当前使用 TryLock 拒绝并发请求；
 	// 应引入带超时的 Lock 或请求队列，并将配置锁与执行锁分离。
-	execMu               sync.Mutex    // 执行互斥锁，防止并发执行
-	configMu             sync.RWMutex  // 配置互斥锁，与 execMu 分离，避免配置方法与 Execute 争用
+	execMu   sync.Mutex   // 执行互斥锁，防止并发执行
+	configMu sync.RWMutex // 配置互斥锁，与 execMu 分离，避免配置方法与 Execute 争用
 
-	provider         llm.Provider
-	gatewayOnce      sync.Once
-	gatewayInstance  llm.Provider
-	toolProvider     llm.Provider // 工具调用专用 Provider（可选，为 nil 时退化为 provider）
-	toolGatewayOnce  sync.Once
-	toolGatewayInst  llm.Provider
-	externalGateway  llm.Provider // injected shared gateway (skips lazy creation)
-	ledger           observability.Ledger
-	memory             MemoryManager
-	toolManager        ToolManager
-	bus                EventBus
+	provider        llm.Provider
+	gatewayOnce     sync.Once
+	gatewayInstance llm.Provider
+	toolProvider    llm.Provider // 工具调用专用 Provider（可选，为 nil 时退化为 provider）
+	toolGatewayOnce sync.Once
+	toolGatewayInst llm.Provider
+	externalGateway llm.Provider // injected shared gateway (skips lazy creation)
+	ledger          observability.Ledger
+	memory          MemoryManager
+	toolManager     ToolManager
+	bus             EventBus
 
 	recentMemory   []MemoryRecord // 缓存最近加载的记忆
 	recentMemoryMu sync.RWMutex   // 保护 recentMemory 的并发访问
@@ -140,6 +676,11 @@ type BaseAgent struct {
 	persistence *PersistenceStores
 	guardrails  *GuardrailsManager
 	memoryCache *MemoryCache
+
+	reasoningRegistry *reasoning.PatternRegistry
+	reasoningSelector ReasoningModeSelector
+	completionJudge   CompletionJudge
+	checkpointManager *CheckpointManager
 }
 
 // NewBaseAgent 创建基础 Agent
@@ -169,6 +710,8 @@ func NewBaseAgent(
 		toolManager:          toolManager,
 		bus:                  bus,
 		logger:               agentLogger,
+		reasoningSelector:    NewDefaultReasoningModeSelector(),
+		completionJudge:      NewDefaultCompletionJudge(),
 	}
 
 	// Initialize composite sub-managers for pipeline steps
@@ -585,6 +1128,31 @@ func (b *BaseAgent) SetRunStore(store RunStoreProvider) {
 	b.persistence.SetRunStore(store)
 }
 
+// SetReasoningRegistry stores the reasoning registry used by the default loop executor.
+func (b *BaseAgent) SetReasoningRegistry(registry *reasoning.PatternRegistry) {
+	b.reasoningRegistry = registry
+}
+
+// ReasoningRegistry returns the configured reasoning registry.
+func (b *BaseAgent) ReasoningRegistry() *reasoning.PatternRegistry {
+	return b.reasoningRegistry
+}
+
+// SetReasoningModeSelector stores the mode selector used by the default loop executor.
+func (b *BaseAgent) SetReasoningModeSelector(selector ReasoningModeSelector) {
+	b.reasoningSelector = selector
+}
+
+// SetCompletionJudge stores the completion judge used by the default loop executor.
+func (b *BaseAgent) SetCompletionJudge(judge CompletionJudge) {
+	b.completionJudge = judge
+}
+
+// SetCheckpointManager stores the checkpoint manager used by the default loop executor.
+func (b *BaseAgent) SetCheckpointManager(manager *CheckpointManager) {
+	b.checkpointManager = manager
+}
+
 // 添加自定义输入验证器
 // 1.7: 支持海关验证规则的登记和延期
 func (b *BaseAgent) AddInputValidator(v guardrails.Validator) {
@@ -619,7 +1187,6 @@ func (b *BaseAgent) AddOutputFilter(f guardrails.Filter) {
 	}
 	b.outputValidator.AddFilter(f)
 }
-
 
 // MemoryKind 记忆类型。
 type MemoryKind = memorycore.MemoryKind
@@ -695,4 +1262,3 @@ const (
 func CanTransition(from, to State) bool {
 	return agentcore.CanTransition(from, to)
 }
-

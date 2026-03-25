@@ -17,6 +17,7 @@ func RegisterDefaultRuntimeAgentFactory(
 	agentRegistry *agent.AgentRegistry,
 	provider llm.Provider,
 	toolProvider llm.Provider,
+	checkpointManager *agent.CheckpointManager,
 	ledger observability.Ledger,
 	logger *zap.Logger,
 ) {
@@ -43,6 +44,7 @@ func RegisterDefaultRuntimeAgentFactory(
 			MemoryManager:        mem,
 			ToolManager:          tm,
 			EventBus:             bus,
+			CheckpointManager:    checkpointManager,
 		}
 		opts.EnableAll = false
 		if factoryLogger == nil {

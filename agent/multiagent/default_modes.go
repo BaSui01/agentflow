@@ -75,6 +75,7 @@ func (m *primaryModeStrategy) Execute(ctx context.Context, agents []agent.Agent,
 		out.Metadata = map[string]any{}
 	}
 	out.Metadata["mode"] = m.name
+	applyObservedFields(out, 1, m.name)
 	return out, nil
 }
 
@@ -366,6 +367,12 @@ func (m *loopModeStrategy) Execute(ctx context.Context, agents []agent.Agent, in
 
 	current := input
 	var lastOutput *agent.Output
+	executedIterations := 0
+	stopReason := ""
+	currentStage := ""
+	selectedReasoningMode := ""
+	resumable := false
+	checkpointID := ""
 
 	for iter := 1; iter <= maxIterations; iter++ {
 		if err := ctx.Err(); err != nil {
@@ -404,19 +411,24 @@ func (m *loopModeStrategy) Execute(ctx context.Context, agents []agent.Agent, in
 			return nil, fmt.Errorf("loop agent %s failed at iteration %d: %w", ag.ID(), iter, err)
 		}
 
+		normalizeLoopObservedFields(out, iter)
 		lastOutput = out
+		executedIterations = iter
+		stopReason = out.StopReason
+		currentStage = out.CurrentStage
+		selectedReasoningMode = out.SelectedReasoningMode
+		if out != nil {
+			resumable = out.Resumable
+			checkpointID = out.CheckpointID
+		}
 		m.logger.Debug("loop iteration completed",
 			zap.Int("iteration", iter),
 			zap.String("agent_id", ag.ID()),
+			zap.String("stop_reason", stopReason),
 		)
 
-		if strings.Contains(out.Content, stopKeyword) {
+		if shouldStopLoop(out, stopKeyword) {
 			m.logger.Debug("loop stop condition met", zap.Int("iteration", iter))
-			break
-		}
-		// 思考模型可能把 stop_keyword 放在 ReasoningContent 字段中
-		if out.ReasoningContent != nil && strings.Contains(*out.ReasoningContent, stopKeyword) {
-			m.logger.Debug("loop stop condition met in reasoning_content", zap.Int("iteration", iter))
 			break
 		}
 
@@ -436,5 +448,226 @@ func (m *loopModeStrategy) Execute(ctx context.Context, agents []agent.Agent, in
 		lastOutput.Metadata = map[string]any{}
 	}
 	lastOutput.Metadata["mode"] = ModeLoop
+	normalizeLoopObservedFields(lastOutput, executedIterations)
+	lastOutput.IterationCount = normalizedIterationCount(lastOutput, executedIterations)
+	if lastOutput.IterationCount <= 0 {
+		lastOutput.IterationCount = executedIterations
+	}
+	if lastOutput.StopReason == "" {
+		lastOutput.StopReason = stopReason
+	}
+	if lastOutput.CurrentStage == "" {
+		lastOutput.CurrentStage = currentStage
+	}
+	if lastOutput.SelectedReasoningMode == "" {
+		lastOutput.SelectedReasoningMode = selectedReasoningMode
+	}
+	if lastOutput.CheckpointID == "" {
+		lastOutput.CheckpointID = checkpointID
+	}
+	if !lastOutput.Resumable {
+		lastOutput.Resumable = resumable
+	}
+	applyObservedFields(lastOutput, len(agents), ModeLoop)
 	return lastOutput, nil
+}
+
+func shouldStopLoop(out *agent.Output, stopKeyword string) bool {
+	if out == nil {
+		return false
+	}
+	stopReason := observedStopReason(out)
+	switch stopReason {
+	case "solved", "max_iterations", "timeout", "need_human", "validation_failed", "tool_failure_unrecoverable", "blocked":
+		return true
+	}
+	if stopReason != "" {
+		return false
+	}
+	if strings.TrimSpace(stopKeyword) == "" {
+		return false
+	}
+	if strings.Contains(out.Content, stopKeyword) {
+		return true
+	}
+	if out.ReasoningContent != nil && strings.Contains(*out.ReasoningContent, stopKeyword) {
+		return true
+	}
+	return false
+}
+
+func normalizeLoopObservedFields(out *agent.Output, fallbackIteration int) {
+	if out == nil {
+		return
+	}
+	if out.Metadata == nil {
+		out.Metadata = map[string]any{}
+	}
+	if out.StopReason == "" {
+		out.StopReason = observedStopReason(out)
+	}
+	if out.CurrentStage == "" {
+		out.CurrentStage = observedCurrentStage(out)
+	}
+	if out.IterationCount <= 0 {
+		out.IterationCount = normalizedIterationCount(out, fallbackIteration)
+	}
+	if out.SelectedReasoningMode == "" {
+		out.SelectedReasoningMode = observedReasoningMode(out)
+	}
+	if out.CheckpointID == "" {
+		out.CheckpointID = observedCheckpointID(out)
+	}
+	if !out.Resumable {
+		out.Resumable = observedResumable(out)
+	}
+	if out.StopReason != "" {
+		out.Metadata["stop_reason"] = out.StopReason
+	}
+	if out.CurrentStage != "" {
+		out.Metadata["current_stage"] = out.CurrentStage
+	}
+	if out.IterationCount > 0 {
+		out.Metadata["iteration_count"] = out.IterationCount
+	}
+	if out.SelectedReasoningMode != "" {
+		out.Metadata["selected_reasoning_mode"] = out.SelectedReasoningMode
+	}
+	if out.CheckpointID != "" {
+		out.Metadata["checkpoint_id"] = out.CheckpointID
+	}
+	if out.Resumable {
+		out.Metadata["resumable"] = out.Resumable
+	}
+}
+
+func applyObservedFields(out *agent.Output, agentCount int, mode string) {
+	if out == nil {
+		return
+	}
+	if out.Metadata == nil {
+		out.Metadata = map[string]any{}
+	}
+	out.Metadata["mode"] = mode
+	if agentCount > 0 {
+		out.Metadata["agent_count"] = agentCount
+	}
+	if out.StopReason != "" {
+		out.Metadata["stop_reason"] = out.StopReason
+	}
+	if out.CurrentStage != "" {
+		out.Metadata["current_stage"] = out.CurrentStage
+	}
+	if out.IterationCount > 0 {
+		out.Metadata["iteration_count"] = out.IterationCount
+	}
+	if out.SelectedReasoningMode != "" {
+		out.Metadata["selected_reasoning_mode"] = out.SelectedReasoningMode
+	}
+	if out.CheckpointID != "" {
+		out.Metadata["checkpoint_id"] = out.CheckpointID
+	}
+	if out.Resumable {
+		out.Metadata["resumable"] = out.Resumable
+	}
+}
+
+func observedStopReason(out *agent.Output) string {
+	if out == nil {
+		return ""
+	}
+	if strings.TrimSpace(out.StopReason) != "" {
+		return strings.TrimSpace(out.StopReason)
+	}
+	return metadataString(out.Metadata, "stop_reason", "loop_stop_reason")
+}
+
+func observedCurrentStage(out *agent.Output) string {
+	if out == nil {
+		return ""
+	}
+	if strings.TrimSpace(out.CurrentStage) != "" {
+		return strings.TrimSpace(out.CurrentStage)
+	}
+	return metadataString(out.Metadata, "current_stage")
+}
+
+func observedReasoningMode(out *agent.Output) string {
+	if out == nil {
+		return ""
+	}
+	if strings.TrimSpace(out.SelectedReasoningMode) != "" {
+		return strings.TrimSpace(out.SelectedReasoningMode)
+	}
+	return metadataString(out.Metadata, "selected_reasoning_mode")
+}
+
+func observedCheckpointID(out *agent.Output) string {
+	if out == nil {
+		return ""
+	}
+	if strings.TrimSpace(out.CheckpointID) != "" {
+		return strings.TrimSpace(out.CheckpointID)
+	}
+	return metadataString(out.Metadata, "checkpoint_id")
+}
+
+func observedResumable(out *agent.Output) bool {
+	if out == nil {
+		return false
+	}
+	if out.Resumable {
+		return true
+	}
+	if value, ok := out.Metadata["resumable"].(bool); ok {
+		return value
+	}
+	return false
+}
+
+func normalizedIterationCount(out *agent.Output, fallback int) int {
+	if out == nil {
+		return fallback
+	}
+	if out.IterationCount > 0 {
+		return out.IterationCount
+	}
+	if value, ok := metadataInt(out.Metadata, "iteration_count", "loop_iteration_count"); ok {
+		return value
+	}
+	return fallback
+}
+
+func metadataString(metadata map[string]any, keys ...string) string {
+	for _, key := range keys {
+		value, ok := metadata[key]
+		if !ok {
+			continue
+		}
+		text, ok := value.(string)
+		if ok && strings.TrimSpace(text) != "" {
+			return strings.TrimSpace(text)
+		}
+	}
+	return ""
+}
+
+func metadataInt(metadata map[string]any, keys ...string) (int, bool) {
+	for _, key := range keys {
+		value, ok := metadata[key]
+		if !ok {
+			continue
+		}
+		switch typed := value.(type) {
+		case int:
+			return typed, true
+		case int32:
+			return int(typed), true
+		case int64:
+			return int(typed), true
+		case float64:
+			return int(typed), true
+		}
+	}
+	return 0, false
 }

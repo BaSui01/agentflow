@@ -53,6 +53,7 @@ type BuildOptions struct {
 	PromptStore       agent.PromptStoreProvider
 	ConversationStore agent.ConversationStoreProvider
 	RunStore          agent.RunStoreProvider
+	CheckpointManager *agent.CheckpointManager
 	Orchestrator      agent.OrchestratorRunner
 	ReasoningRegistry *reasoning.PatternRegistry
 
@@ -90,6 +91,14 @@ type Builder struct {
 	logger       *zap.Logger
 	options      BuildOptions
 	toolScope    []string // tool whitelist for sub-agent isolation (empty = all tools)
+}
+
+var defaultRuntimeReasoningModes = []string{
+	"dynamic_planner",
+	"plan_and_execute",
+	"reflexion",
+	"rewoo",
+	"tree_of_thought",
 }
 
 // NewBuilder 创建 runtime builder。logger 为必选参数，nil 时 panic。
@@ -235,6 +244,12 @@ func (b *Builder) Build(ctx context.Context, cfg types.AgentConfig) (*agent.Base
 		return nil, err
 	}
 
+	reasoningRegistry := resolveRuntimeReasoningRegistry(b.provider, cfg2.Core.ID, opts, b.logger)
+	ag.SetReasoningRegistry(reasoningRegistry)
+	if opts.CheckpointManager != nil {
+		ag.SetCheckpointManager(opts.CheckpointManager)
+	}
+
 	if err := ag.ValidateConfiguration(); err != nil {
 		return nil, err
 	}
@@ -246,4 +261,22 @@ func (b *Builder) Build(ctx context.Context, cfg types.AgentConfig) (*agent.Base
 	}
 
 	return ag, nil
+}
+
+func resolveRuntimeReasoningRegistry(
+	provider llm.Provider,
+	agentID string,
+	opts BuildOptions,
+	logger *zap.Logger,
+) *reasoning.PatternRegistry {
+	if opts.ReasoningRegistry != nil {
+		return opts.ReasoningRegistry
+	}
+	return agent.NewDefaultReasoningRegistry(
+		provider,
+		opts.ToolManager,
+		agentID,
+		opts.EventBus,
+		logger,
+	)
 }

@@ -24,11 +24,10 @@ type AgentOperation string
 const (
 	AgentOperationExecute AgentOperation = "execution"
 	AgentOperationStream  AgentOperation = "streaming"
-	AgentOperationPlan    AgentOperation = "planning"
 	maxExecuteAgentCount                 = 5
 )
 
-// AgentExecuteRequest is the request payload for agent execute/plan/stream operations.
+// AgentExecuteRequest is the request payload for agent execute/stream operations.
 type AgentExecuteRequest struct {
 	AgentID     string            `json:"agent_id"`
 	AgentIDs    []string          `json:"agent_ids,omitempty"`
@@ -45,13 +44,19 @@ type AgentExecuteRequest struct {
 
 // AgentExecuteResponse is the response payload for agent execute operations.
 type AgentExecuteResponse struct {
-	TraceID      string         `json:"trace_id"`
-	Content      string         `json:"content"`
-	Metadata     map[string]any `json:"metadata,omitempty"`
-	TokensUsed   int            `json:"tokens_used,omitempty"`
-	Cost         float64        `json:"cost,omitempty"`
-	Duration     string         `json:"duration"`
-	FinishReason string         `json:"finish_reason,omitempty"`
+	TraceID               string         `json:"trace_id"`
+	Content               string         `json:"content"`
+	Metadata              map[string]any `json:"metadata,omitempty"`
+	TokensUsed            int            `json:"tokens_used,omitempty"`
+	Cost                  float64        `json:"cost,omitempty"`
+	Duration              string         `json:"duration"`
+	FinishReason          string         `json:"finish_reason,omitempty"`
+	CurrentStage          string         `json:"current_stage,omitempty"`
+	IterationCount        int            `json:"iteration_count,omitempty"`
+	SelectedReasoningMode string         `json:"selected_reasoning_mode,omitempty"`
+	StopReason            string         `json:"stop_reason,omitempty"`
+	CheckpointID          string         `json:"checkpoint_id,omitempty"`
+	Resumable             bool           `json:"resumable"`
 }
 
 // AgentService encapsulates runtime agent resolution and endpoint availability checks.
@@ -60,7 +65,6 @@ type AgentService interface {
 	ListAgents(ctx context.Context) ([]*discovery.AgentInfo, *types.Error)
 	GetAgent(ctx context.Context, agentID string) (*discovery.AgentInfo, *types.Error)
 	ExecuteAgent(ctx context.Context, req AgentExecuteRequest, traceID string) (*AgentExecuteResponse, time.Duration, *types.Error)
-	PlanAgent(ctx context.Context, req AgentExecuteRequest, traceID string) (*agent.PlanResult, *types.Error)
 	ExecuteAgentStream(ctx context.Context, req AgentExecuteRequest, traceID string, emitter agent.RuntimeStreamEmitter) *types.Error
 }
 
@@ -78,7 +82,7 @@ func NewDefaultAgentService(registry discovery.Registry, resolver AgentResolver)
 	}
 }
 
-// ResolveForOperation resolves an agent for execute/stream/plan operations.
+// ResolveForOperation resolves an agent for execute/stream operations.
 func (s *DefaultAgentService) ResolveForOperation(ctx context.Context, agentID string, op AgentOperation) (agent.Agent, *types.Error) {
 	if s.resolver != nil {
 		ag, err := s.resolver(ctx, agentID)
@@ -133,23 +137,32 @@ func (s *DefaultAgentService) ExecuteAgent(ctx context.Context, req AgentExecute
 	if execErr != nil {
 		return nil, duration, ToTypesAgentError(execErr)
 	}
+	fields := extractExecutionFields(output)
 
 	return &AgentExecuteResponse{
-		TraceID:      output.TraceID,
-		Content:      output.Content,
-		Metadata:     output.Metadata,
-		TokensUsed:   output.TokensUsed,
-		Cost:         output.Cost,
-		Duration:     duration.String(),
-		FinishReason: output.FinishReason,
+		TraceID:               output.TraceID,
+		Content:               output.Content,
+		Metadata:              output.Metadata,
+		TokensUsed:            output.TokensUsed,
+		Cost:                  output.Cost,
+		Duration:              duration.String(),
+		FinishReason:          output.FinishReason,
+		CurrentStage:          fields.CurrentStage,
+		IterationCount:        fields.IterationCount,
+		SelectedReasoningMode: fields.SelectedReasoningMode,
+		StopReason:            fields.StopReason,
+		CheckpointID:          fields.CheckpointID,
+		Resumable:             fields.Resumable,
 	}, duration, nil
 }
 
+// PlanAgent remains an internal helper for package-level tests and direct usecase calls.
+// It is no longer part of the public HTTP/API execution surface.
 func (s *DefaultAgentService) PlanAgent(ctx context.Context, req AgentExecuteRequest, traceID string) (*agent.PlanResult, *types.Error) {
 	if len(req.AgentIDs) > 0 {
 		return nil, types.NewInvalidRequestError("agent_ids is not supported for planning").WithHTTPStatus(http.StatusBadRequest)
 	}
-	ag, err := s.ResolveForOperation(ctx, req.AgentID, AgentOperationPlan)
+	ag, err := s.ResolveForOperation(ctx, req.AgentID, AgentOperationExecute)
 	if err != nil {
 		return nil, err
 	}
@@ -181,8 +194,12 @@ func (s *DefaultAgentService) executeWithResolvedAgents(ctx context.Context, req
 	if len(req.AgentIDs) > maxExecuteAgentCount {
 		return nil, types.NewInvalidRequestError("agent_ids length exceeds maximum of 5").WithHTTPStatus(http.StatusBadRequest)
 	}
-	if len(agentIDs) == 0 {
-		ag, err := s.ResolveForOperation(ctx, req.AgentID, AgentOperationExecute)
+	if len(agentIDs) <= 1 {
+		agentID := strings.TrimSpace(req.AgentID)
+		if agentID == "" && len(agentIDs) == 1 {
+			agentID = agentIDs[0]
+		}
+		ag, err := s.ResolveForOperation(ctx, agentID, AgentOperationExecute)
 		if err != nil {
 			return nil, err
 		}
@@ -266,6 +283,114 @@ func toAgentInput(req AgentExecuteRequest, traceID string) *agent.Input {
 		Context:   req.Context,
 		Variables: req.Variables,
 	}
+}
+
+type executionFieldSnapshot struct {
+	CurrentStage          string
+	IterationCount        int
+	SelectedReasoningMode string
+	StopReason            string
+	CheckpointID          string
+	Resumable             bool
+}
+
+func extractExecutionFields(output *agent.Output) executionFieldSnapshot {
+	if output == nil {
+		return executionFieldSnapshot{}
+	}
+
+	fields := executionFieldSnapshot{
+		CurrentStage:          output.CurrentStage,
+		IterationCount:        output.IterationCount,
+		SelectedReasoningMode: output.SelectedReasoningMode,
+		StopReason:            output.StopReason,
+		CheckpointID:          output.CheckpointID,
+		Resumable:             output.Resumable,
+	}
+	if fields.StopReason == "" {
+		fields.StopReason = output.FinishReason
+	}
+	if output.Metadata == nil {
+		return fields
+	}
+
+	if fields.CurrentStage == "" {
+		fields.CurrentStage = metadataString(output.Metadata, "current_stage")
+	}
+	if fields.IterationCount == 0 {
+		fields.IterationCount = metadataInt(output.Metadata, "iteration_count")
+	}
+	if fields.SelectedReasoningMode == "" {
+		fields.SelectedReasoningMode = metadataString(output.Metadata, "selected_reasoning_mode")
+	}
+	if fields.SelectedReasoningMode == "" {
+		fields.SelectedReasoningMode = metadataString(output.Metadata, "mode")
+	}
+	if fields.StopReason == "" {
+		fields.StopReason = metadataString(output.Metadata, "stop_reason")
+	}
+	if fields.CheckpointID == "" {
+		fields.CheckpointID = metadataString(output.Metadata, "checkpoint_id")
+	}
+	if !fields.Resumable {
+		fields.Resumable = metadataBool(output.Metadata, "resumable")
+	}
+	if stopReason := metadataString(output.Metadata, "stop_reason"); stopReason != "" && output.StopReason == "" {
+		fields.StopReason = stopReason
+	}
+	return fields
+}
+
+func metadataString(metadata map[string]any, key string) string {
+	if metadata == nil {
+		return ""
+	}
+	value, ok := metadata[key]
+	if !ok {
+		return ""
+	}
+	switch typed := value.(type) {
+	case string:
+		return typed
+	case fmt.Stringer:
+		return typed.String()
+	default:
+		return ""
+	}
+}
+
+func metadataInt(metadata map[string]any, key string) int {
+	if metadata == nil {
+		return 0
+	}
+	value, ok := metadata[key]
+	if !ok {
+		return 0
+	}
+	switch typed := value.(type) {
+	case int:
+		return typed
+	case int32:
+		return int(typed)
+	case int64:
+		return int(typed)
+	case float64:
+		return int(typed)
+	default:
+		return 0
+	}
+}
+
+func metadataBool(metadata map[string]any, key string) bool {
+	if metadata == nil {
+		return false
+	}
+	value, ok := metadata[key]
+	if !ok {
+		return false
+	}
+	typed, ok := value.(bool)
+	return ok && typed
 }
 
 // ToTypesAgentError converts an error to *types.Error when needed.

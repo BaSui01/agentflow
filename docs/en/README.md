@@ -112,7 +112,7 @@
 |-------|-----------|
 | **System** | `GET /health`, `/healthz`, `/ready`, `/readyz`, `/version` |
 | **Chat** | `GET /api/v1/chat/capabilities`, `POST /api/v1/chat/completions`, `POST /api/v1/chat/completions/stream`, `POST /v1/chat/completions` (OpenAI compat), `POST /v1/responses` (OpenAI compat) |
-| **Agent** | `GET /api/v1/agents`, `GET /api/v1/agents/{id}`, `GET /api/v1/agents/capabilities`, `POST /api/v1/agents/execute`, `POST /api/v1/agents/execute/stream`, `POST /api/v1/agents/plan`, `GET /api/v1/agents/health` |
+| **Agent** | `GET /api/v1/agents`, `GET /api/v1/agents/{id}`, `GET /api/v1/agents/capabilities`, `POST /api/v1/agents/execute`, `POST /api/v1/agents/execute/stream`, `GET /api/v1/agents/health` |
 | **Provider** | `GET /api/v1/providers`, `GET/POST /api/v1/providers/{id}/api-keys`, etc. |
 | **Tools** | `GET/POST /api/v1/tools`, `POST /api/v1/tools/reload`, `GET /api/v1/tools/providers`, etc. |
 | **Multimodal** | `GET /api/v1/multimodal/capabilities`, `POST /api/v1/multimodal/image`, `POST /api/v1/multimodal/video`, `POST /api/v1/multimodal/chat`, etc. |

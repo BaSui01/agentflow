@@ -2,10 +2,12 @@ package agent
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
 
+	"github.com/BaSui01/agentflow/agent/reasoning"
 	"github.com/BaSui01/agentflow/types"
 	"go.uber.org/zap"
 )
@@ -169,16 +171,942 @@ func (b *BaseAgent) configuredExecutionOptions() EnhancedExecutionOptions {
 // coreExecutor returns the innermost execution function (Reflection or core execution).
 func (b *BaseAgent) coreExecutor(options EnhancedExecutionOptions) ExecutionFunc {
 	return func(ctx context.Context, input *Input) (*Output, error) {
-		if options.UseReflection && b.extensions.ReflectionExecutor() != nil {
-			b.logger.Debug("executing with reflection")
-			output, err := b.extensions.ReflectionExecutor().ExecuteWithReflection(ctx, input)
-			if err != nil {
-				return nil, NewErrorWithCause(types.ErrAgentExecution, "reflection execution failed", err)
-			}
-			return output, nil
+		if err := b.EnsureReady(); err != nil {
+			return nil, err
 		}
-		return b.executeCore(ctx, input)
+		executor := &LoopExecutor{
+			MaxIterations:     b.loopMaxIterations(),
+			Planner:           b.loopPlanner(),
+			StepExecutor:      b.loopStepExecutor(options),
+			Observer:          b.loopObserver(),
+			Selector:          b.loopSelector(options),
+			Judge:             b.completionJudge,
+			ReflectionStep:    b.loopReflectionStep(options),
+			ReasoningRegistry: b.reasoningRegistry,
+			ReflectionEnabled: options.UseReflection && b.extensions.ReflectionExecutor() != nil,
+			CheckpointManager: b.checkpointManager,
+			AgentID:           b.ID(),
+			Logger:            b.logger,
+		}
+		return executor.Execute(ctx, input)
 	}
+}
+
+// CompletionDecision is the normalized evaluation result for loop execution.
+type CompletionDecision struct {
+	Solved         bool         `json:"solved"`
+	NeedReplan     bool         `json:"need_replan,omitempty"`
+	NeedReflection bool         `json:"need_reflection,omitempty"`
+	NeedHuman      bool         `json:"need_human,omitempty"`
+	Decision       LoopDecision `json:"decision"`
+	StopReason     StopReason   `json:"stop_reason,omitempty"`
+	Confidence     float64      `json:"confidence,omitempty"`
+	Reason         string       `json:"reason,omitempty"`
+}
+
+// CompletionJudge decides whether the loop can stop or must continue.
+type CompletionJudge interface {
+	Judge(ctx context.Context, state *LoopState, output *Output, err error) (*CompletionDecision, error)
+}
+
+// DefaultCompletionJudge implements the initial unified stop semantics.
+type DefaultCompletionJudge struct{}
+
+func NewDefaultCompletionJudge() *DefaultCompletionJudge { return &DefaultCompletionJudge{} }
+
+func (j *DefaultCompletionJudge) Judge(ctx context.Context, state *LoopState, output *Output, err error) (*CompletionDecision, error) {
+	if ctx != nil && ctx.Err() != nil {
+		return &CompletionDecision{Decision: LoopDecisionDone, StopReason: StopReasonTimeout, Reason: ctx.Err().Error()}, nil
+	}
+	if state != nil && state.NeedHuman {
+		return &CompletionDecision{
+			NeedHuman:  true,
+			Decision:   LoopDecisionEscalate,
+			StopReason: StopReasonNeedHuman,
+			Confidence: normalizedConfidence(output, state),
+			Reason:     "loop state requires human intervention",
+		}, nil
+	}
+	if err != nil {
+		return &CompletionDecision{Decision: LoopDecisionDone, StopReason: classifyStopReason(err.Error()), Reason: err.Error()}, nil
+	}
+	if output == nil {
+		if reachedMaxIterations(state) {
+			return &CompletionDecision{
+				Decision:   LoopDecisionDone,
+				StopReason: StopReasonMaxIterations,
+				Confidence: normalizedConfidence(output, state),
+				Reason:     "loop iteration budget exhausted",
+			}, nil
+		}
+		return &CompletionDecision{Decision: LoopDecisionReplan, NeedReplan: true, StopReason: StopReasonBlocked, Reason: "output is nil"}, nil
+	}
+	if strings.TrimSpace(output.Content) != "" {
+		return &CompletionDecision{
+			Solved:     true,
+			Decision:   LoopDecisionDone,
+			StopReason: StopReasonSolved,
+			Confidence: normalizedConfidence(output, state),
+			Reason:     "non-empty output produced",
+		}, nil
+	}
+	if reachedMaxIterations(state) {
+		return &CompletionDecision{
+			Decision:   LoopDecisionDone,
+			StopReason: StopReasonMaxIterations,
+			Confidence: normalizedConfidence(output, state),
+			Reason:     "loop iteration budget exhausted",
+		}, nil
+	}
+	return &CompletionDecision{
+		Decision:   LoopDecisionReplan,
+		NeedReplan: true,
+		StopReason: StopReasonBlocked,
+		Confidence: normalizedConfidence(output, state),
+		Reason:     "output content is empty",
+	}, nil
+}
+
+func reachedMaxIterations(state *LoopState) bool {
+	return state != nil && state.MaxIterations > 0 && state.Iteration >= state.MaxIterations
+}
+
+func classifyStopReason(msg string) StopReason {
+	normalized := strings.ToLower(strings.TrimSpace(msg))
+	switch {
+	case strings.Contains(normalized, "timeout"),
+		strings.Contains(normalized, "deadline exceeded"),
+		strings.Contains(normalized, "context deadline exceeded"),
+		strings.Contains(normalized, "context canceled"),
+		strings.Contains(normalized, "context cancelled"):
+		return StopReasonTimeout
+	case strings.Contains(normalized, "validation"):
+		return StopReasonValidationFailed
+	case strings.Contains(normalized, "tool"):
+		return StopReasonToolFailureUnrecoverable
+	default:
+		return StopReasonBlocked
+	}
+}
+
+func normalizedConfidence(output *Output, state *LoopState) float64 {
+	if output != nil && output.Metadata != nil {
+		raw, ok := output.Metadata["confidence"]
+		if ok {
+			value, ok := raw.(float64)
+			if ok {
+				return clampConfidence(value)
+			}
+		}
+	}
+	if state != nil && state.Confidence > 0 {
+		return clampConfidence(state.Confidence)
+	}
+	return 1
+}
+
+func clampConfidence(value float64) float64 {
+	if value < 0 {
+		return 0
+	}
+	if value > 1 {
+		return 1
+	}
+	return value
+}
+
+const (
+	ReasoningModeReact          = "react"
+	ReasoningModeReflection     = "reflection"
+	ReasoningModeReWOO          = "rewoo"
+	ReasoningModePlanAndExecute = "plan_and_execute"
+	ReasoningModeDynamicPlanner = "dynamic_planner"
+	ReasoningModeTreeOfThought  = "tree_of_thought"
+)
+
+var reasoningModeAliases = map[string]string{
+	"react":            ReasoningModeReact,
+	"reflection":       ReasoningModeReflection,
+	"reflexion":        ReasoningModeReflection,
+	"rewoo":            ReasoningModeReWOO,
+	"plan_and_execute": ReasoningModePlanAndExecute,
+	"plan_execute":     ReasoningModePlanAndExecute,
+	"dynamic_planner":  ReasoningModeDynamicPlanner,
+	"tree_of_thought":  ReasoningModeTreeOfThought,
+	"tree-of-thought":  ReasoningModeTreeOfThought,
+	"tree of thought":  ReasoningModeTreeOfThought,
+	"tot":              ReasoningModeTreeOfThought,
+}
+
+var reasoningPatternCandidates = map[string][]string{
+	ReasoningModeReflection:     {"reflexion", ReasoningModeReflection},
+	ReasoningModeReWOO:          {ReasoningModeReWOO},
+	ReasoningModePlanAndExecute: {ReasoningModePlanAndExecute, "plan_execute"},
+	ReasoningModeDynamicPlanner: {ReasoningModeDynamicPlanner},
+	ReasoningModeTreeOfThought:  {ReasoningModeTreeOfThought},
+}
+
+type ReasoningSelection struct {
+	Mode    string
+	Pattern reasoning.ReasoningPattern
+}
+
+type ReasoningModeSelector interface {
+	Select(ctx context.Context, input *Input, state *LoopState, registry *reasoning.PatternRegistry, reflectionEnabled bool) ReasoningSelection
+}
+
+type DefaultReasoningModeSelector struct{}
+
+func NewDefaultReasoningModeSelector() ReasoningModeSelector { return DefaultReasoningModeSelector{} }
+
+func (DefaultReasoningModeSelector) Select(_ context.Context, input *Input, state *LoopState, registry *reasoning.PatternRegistry, reflectionEnabled bool) ReasoningSelection {
+	if selection, ok := selectResumedReasoningMode(state, registry, reflectionEnabled); ok {
+		return selection
+	}
+	if shouldUseReflection(input, state, registry, reflectionEnabled) {
+		return buildReasoningSelection(ReasoningModeReflection, registry)
+	}
+	if shouldUseTreeOfThought(input, state, registry) {
+		return buildReasoningSelection(ReasoningModeTreeOfThought, registry)
+	}
+	if shouldUseDynamicPlanner(input, state, registry) {
+		return buildReasoningSelection(ReasoningModeDynamicPlanner, registry)
+	}
+	if shouldUsePlanAndExecute(input, state, registry) {
+		return buildReasoningSelection(ReasoningModePlanAndExecute, registry)
+	}
+	if shouldUseReWOO(input, state, registry) {
+		return buildReasoningSelection(ReasoningModeReWOO, registry)
+	}
+	return buildReasoningSelection(ReasoningModeReact, registry)
+}
+
+func OutputFromReasoningResult(traceID string, result *reasoning.ReasoningResult) *Output {
+	if result == nil {
+		return &Output{TraceID: traceID}
+	}
+	metadata := make(map[string]any, len(result.Metadata)+4)
+	for key, value := range result.Metadata {
+		metadata[key] = value
+	}
+	metadata["reasoning_pattern"] = result.Pattern
+	metadata["reasoning_task"] = result.Task
+	metadata["reasoning_confidence"] = result.Confidence
+	metadata["reasoning_steps"] = result.Steps
+	return &Output{
+		TraceID:               traceID,
+		Content:               result.FinalAnswer,
+		Metadata:              metadata,
+		TokensUsed:            result.TotalTokens,
+		Duration:              result.TotalLatency,
+		CurrentStage:          "reasoning_completed",
+		IterationCount:        len(result.Steps),
+		SelectedReasoningMode: normalizeReasoningMode(result.Pattern),
+	}
+}
+
+func (b *BaseAgent) loopSelector(options EnhancedExecutionOptions) ReasoningModeSelector {
+	base := b.reasoningSelector
+	if base == nil {
+		base = NewDefaultReasoningModeSelector()
+	}
+	if !(options.UseReflection && b.extensions.ReflectionExecutor() != nil) {
+		return base
+	}
+	return reasoningModeSelectorFunc(func(ctx context.Context, input *Input, state *LoopState, registry *reasoning.PatternRegistry, reflectionEnabled bool) ReasoningSelection {
+		selection := base.Select(ctx, input, state, registry, reflectionEnabled)
+		if strings.TrimSpace(selection.Mode) == "" || selection.Mode == ReasoningModeReact {
+			selection.Mode = ReasoningModeReflection
+		}
+		return selection
+	})
+}
+
+func (b *BaseAgent) loopMaxIterations() int {
+	policy := b.loopControlPolicy()
+	if policy.LoopIterationBudget > 0 {
+		return policy.LoopIterationBudget
+	}
+	return 1
+}
+
+func (b *BaseAgent) loopPlanner() LoopPlannerFunc {
+	return func(ctx context.Context, input *Input, _ *LoopState) (*PlanResult, error) {
+		return b.Plan(ctx, input)
+	}
+}
+
+func (b *BaseAgent) loopObserver() LoopObserveFunc {
+	return func(ctx context.Context, feedback *Feedback, _ *LoopState) error {
+		return b.Observe(ctx, feedback)
+	}
+}
+
+func (b *BaseAgent) loopStepExecutor(options EnhancedExecutionOptions) LoopStepExecutorFunc {
+	return func(ctx context.Context, input *Input, _ *LoopState, selection ReasoningSelection) (*Output, error) {
+		switch {
+		case selection.Pattern != nil:
+			result, err := selection.Pattern.Execute(ctx, input.Content)
+			if err != nil {
+				return nil, NewErrorWithCause(types.ErrAgentExecution, "reasoning execution failed", err)
+			}
+			return OutputFromReasoningResult(input.TraceID, result), nil
+		default:
+			return b.executeCore(ctx, input)
+		}
+	}
+}
+
+func (b *BaseAgent) loopReflectionStep(options EnhancedExecutionOptions) LoopReflectionFunc {
+	if !(options.UseReflection && b.extensions.ReflectionExecutor() != nil) {
+		return nil
+	}
+	reflector, ok := b.extensions.ReflectionExecutor().(interface {
+		ReflectStep(ctx context.Context, input *Input, output *Output, state *LoopState) (*LoopReflectionResult, error)
+	})
+	if !ok {
+		return nil
+	}
+	return func(ctx context.Context, input *Input, output *Output, state *LoopState) (*LoopReflectionResult, error) {
+		result, err := reflector.ReflectStep(ctx, input, output, state)
+		if err != nil {
+			return nil, NewErrorWithCause(types.ErrAgentExecution, "reflection step failed", err)
+		}
+		return result, nil
+	}
+}
+
+func selectResumedReasoningMode(state *LoopState, registry *reasoning.PatternRegistry, reflectionEnabled bool) (ReasoningSelection, bool) {
+	if state == nil {
+		return ReasoningSelection{}, false
+	}
+	if state.CurrentStage == "" || state.CurrentStage == LoopStagePerceive {
+		return ReasoningSelection{}, false
+	}
+	mode := normalizeReasoningMode(state.SelectedReasoningMode)
+	if mode == "" {
+		return ReasoningSelection{}, false
+	}
+	return buildReasoningSelectionWithFallback(mode, registry, reflectionEnabled), true
+}
+
+func buildReasoningSelectionWithFallback(mode string, registry *reasoning.PatternRegistry, reflectionEnabled bool) ReasoningSelection {
+	selection := buildReasoningSelection(mode, registry)
+	if selection.Mode == ReasoningModeReflection && !reflectionEnabled && selection.Pattern == nil {
+		return buildReasoningSelection(ReasoningModeReact, registry)
+	}
+	if selection.Mode != ReasoningModeReact && selection.Mode != ReasoningModeReflection && selection.Pattern == nil {
+		return buildReasoningSelection(ReasoningModeReact, registry)
+	}
+	return selection
+}
+
+func buildReasoningSelection(mode string, registry *reasoning.PatternRegistry) ReasoningSelection {
+	normalized := normalizeReasoningMode(mode)
+	if normalized == "" {
+		normalized = ReasoningModeReact
+	}
+	selection := ReasoningSelection{Mode: normalized}
+	if registry == nil {
+		return selection
+	}
+	for _, candidate := range reasoningPatternCandidates[normalized] {
+		pattern, ok := registry.Get(candidate)
+		if ok {
+			selection.Pattern = pattern
+			return selection
+		}
+	}
+	return selection
+}
+
+func normalizeReasoningMode(value string) string {
+	key := strings.ToLower(strings.TrimSpace(value))
+	if key == "" {
+		return ""
+	}
+	if normalized, ok := reasoningModeAliases[key]; ok {
+		return normalized
+	}
+	return ""
+}
+
+func shouldUseReflection(input *Input, state *LoopState, registry *reasoning.PatternRegistry, reflectionEnabled bool) bool {
+	if !reflectionEnabled && !hasReasoningPattern(registry, ReasoningModeReflection) {
+		return false
+	}
+	return contextBool(input, "requires_reflection") ||
+		contextBool(input, "need_reflection") ||
+		contextBool(input, "quality_critical") ||
+		contextBool(input, "needs_critique") ||
+		contextString(input, "current_stage") == "reflection" ||
+		contextString(input, "loop_stage") == "reflection" ||
+		(state != nil && state.Decision == LoopDecisionReflect) ||
+		(state != nil && state.Iteration > 1 && state.LastOutput != nil && strings.TrimSpace(state.LastOutput.Content) == "")
+}
+
+func shouldUseReWOO(input *Input, state *LoopState, registry *reasoning.PatternRegistry) bool {
+	if !hasReasoningPattern(registry, ReasoningModeReWOO) {
+		return false
+	}
+	if state != nil && len(state.Plan) > 0 && len(state.Plan) >= 3 {
+		return true
+	}
+	return contextBool(input, "tool_intensive") ||
+		contextBool(input, "requires_tools") ||
+		contextBool(input, "requires_observationless_tool_plan") ||
+		intContextAtLeast(input, "tool_count", 2) ||
+		contentContainsAny(input, "tool", "tools", "search", "collect", "gather", "retrieve", "crawl", "inspect")
+}
+
+func shouldUsePlanAndExecute(input *Input, state *LoopState, registry *reasoning.PatternRegistry) bool {
+	if !hasReasoningPattern(registry, ReasoningModePlanAndExecute) {
+		return false
+	}
+	if state != nil && len(state.Plan) > 0 {
+		return true
+	}
+	return contextBool(input, "requires_plan") ||
+		contextBool(input, "multi_step") ||
+		contextBool(input, "needs_replanning") ||
+		contextBool(input, "complex_task") ||
+		intContextAtLeast(input, "plan_steps", 2) ||
+		contentContainsAny(input, "plan", "steps", "implement", "execute", "roadmap", "break down")
+}
+
+func shouldUseDynamicPlanner(input *Input, state *LoopState, registry *reasoning.PatternRegistry) bool {
+	if !hasReasoningPattern(registry, ReasoningModeDynamicPlanner) {
+		return false
+	}
+	return contextBool(input, "requires_backtracking") ||
+		contextBool(input, "blocked") ||
+		contextBool(input, "requires_alternative_paths") ||
+		contextBool(input, "dynamic_replanning") ||
+		contextBool(input, "search_space_large") ||
+		(state != nil && state.Decision == LoopDecisionReplan) ||
+		(state != nil && state.StopReason == StopReasonBlocked) ||
+		contentContainsAny(input, "backtrack", "alternative", "constraint", "optimize")
+}
+
+func shouldUseTreeOfThought(input *Input, state *LoopState, registry *reasoning.PatternRegistry) bool {
+	if !hasReasoningPattern(registry, ReasoningModeTreeOfThought) {
+		return false
+	}
+	if state != nil && state.Iteration > 1 && state.Confidence < 0.5 {
+		return true
+	}
+	return contextBool(input, "high_uncertainty") ||
+		contextBool(input, "explore_multiple_paths") ||
+		contextBool(input, "compare_branches") ||
+		intContextAtLeast(input, "candidate_count", 3) ||
+		contentContainsAny(input, "compare options", "multiple approaches", "explore", "brainstorm", "tradeoff", "uncertain")
+}
+
+func hasReasoningPattern(registry *reasoning.PatternRegistry, mode string) bool {
+	if registry == nil {
+		return false
+	}
+	for _, candidate := range reasoningPatternCandidates[mode] {
+		if _, ok := registry.Get(candidate); ok {
+			return true
+		}
+	}
+	return false
+}
+
+func contextBool(input *Input, key string) bool {
+	if input == nil || len(input.Context) == 0 {
+		return false
+	}
+	value, ok := input.Context[key]
+	if !ok {
+		return false
+	}
+	flag, ok := value.(bool)
+	return ok && flag
+}
+
+func contextString(input *Input, key string) string {
+	if input == nil || len(input.Context) == 0 {
+		return ""
+	}
+	value, ok := input.Context[key]
+	if !ok {
+		return ""
+	}
+	text, _ := value.(string)
+	return strings.TrimSpace(text)
+}
+
+func intContextAtLeast(input *Input, key string, min int) bool {
+	if input == nil || len(input.Context) == 0 {
+		return false
+	}
+	value, ok := input.Context[key]
+	if !ok {
+		return false
+	}
+	switch typed := value.(type) {
+	case int:
+		return typed >= min
+	case int32:
+		return int(typed) >= min
+	case int64:
+		return int(typed) >= min
+	case float64:
+		return int(typed) >= min
+	default:
+		return false
+	}
+}
+
+func contentContainsAny(input *Input, terms ...string) bool {
+	if input == nil {
+		return false
+	}
+	content := strings.ToLower(input.Content)
+	for _, term := range terms {
+		if strings.Contains(content, strings.ToLower(term)) {
+			return true
+		}
+	}
+	return false
+}
+
+type LoopPlannerFunc func(ctx context.Context, input *Input, state *LoopState) (*PlanResult, error)
+type LoopStepExecutorFunc func(ctx context.Context, input *Input, state *LoopState, selection ReasoningSelection) (*Output, error)
+type LoopObserveFunc func(ctx context.Context, feedback *Feedback, state *LoopState) error
+type LoopReflectionFunc func(ctx context.Context, input *Input, output *Output, state *LoopState) (*LoopReflectionResult, error)
+
+type LoopReflectionResult struct {
+	NextInput   *Input
+	Critique    *Critique
+	Observation *LoopObservation
+}
+
+type LoopExecutor struct {
+	MaxIterations     int
+	Planner           LoopPlannerFunc
+	StepExecutor      LoopStepExecutorFunc
+	Observer          LoopObserveFunc
+	Selector          ReasoningModeSelector
+	Judge             CompletionJudge
+	ReflectionStep    LoopReflectionFunc
+	ReasoningRegistry *reasoning.PatternRegistry
+	ReflectionEnabled bool
+	CheckpointManager *CheckpointManager
+	AgentID           string
+	Logger            *zap.Logger
+}
+
+func (e *LoopExecutor) Execute(ctx context.Context, input *Input) (*Output, error) {
+	if input == nil {
+		return nil, NewError("LOOP_INPUT_NIL", "loop input is nil")
+	}
+	if e.StepExecutor == nil {
+		return nil, NewError("LOOP_STEP_EXECUTOR_MISSING", "loop step executor is required")
+	}
+	state := e.initialState(ctx, input)
+	logger := e.logger()
+	selector := e.selector()
+	judge := e.judge()
+	needPlan := e.Planner != nil
+	e.emitStatus(ctx, state, RuntimeStreamStatus, nil)
+	for {
+		if err := ctx.Err(); err != nil {
+			state.AdvanceStage(LoopStageEvaluate)
+			state.MarkStopped(StopReasonTimeout, LoopDecisionDone)
+			return e.finalize(state, state.LastOutput, err)
+		}
+		if state.Iteration >= state.MaxIterations {
+			state.AdvanceStage(LoopStageEvaluate)
+			state.MarkStopped(StopReasonMaxIterations, LoopDecisionDone)
+			return e.finalize(state, state.LastOutput, nil)
+		}
+		state.Iteration++
+		state.AdvanceStage(LoopStagePerceive)
+		e.emitStatus(ctx, state, RuntimeStreamStatus, map[string]any{"status": "stage_changed"})
+		state.AddObservation(LoopObservation{Stage: LoopStagePerceive, Content: strings.TrimSpace(input.Content), Iteration: state.Iteration})
+		state.AdvanceStage(LoopStageAnalyze)
+		e.emitStatus(ctx, state, RuntimeStreamStatus, map[string]any{"status": "stage_changed"})
+		selection := ReasoningSelection{Mode: ReasoningModeReact}
+		if selector != nil {
+			selection = selector.Select(ctx, input, state, e.ReasoningRegistry, e.ReflectionEnabled)
+			if strings.TrimSpace(selection.Mode) == "" {
+				selection.Mode = ReasoningModeReact
+			}
+		}
+		state.SelectedReasoningMode = selection.Mode
+		state.AddObservation(LoopObservation{Stage: LoopStageAnalyze, Content: selection.Mode, Iteration: state.Iteration, Metadata: map[string]any{"reasoning_mode": selection.Mode}})
+		e.emitStatus(ctx, state, RuntimeStreamStatus, map[string]any{"status": "reasoning_mode_selected", "selected_reasoning_mode": selection.Mode})
+		if needPlan {
+			state.AdvanceStage(LoopStagePlan)
+			e.emitStatus(ctx, state, RuntimeStreamStatus, map[string]any{"status": "stage_changed"})
+			planResult, err := e.Planner(ctx, input, state)
+			if err != nil {
+				state.AddObservation(LoopObservation{Stage: LoopStagePlan, Iteration: state.Iteration, Error: err.Error()})
+				state.MarkStopped(classifyStopReason(err.Error()), LoopDecisionDone)
+				return e.finalize(state, state.LastOutput, err)
+			}
+			if planResult == nil || len(planResult.Steps) == 0 {
+				state.Plan = nil
+				state.AddObservation(LoopObservation{Stage: LoopStagePlan, Content: "plan_skipped", Iteration: state.Iteration})
+			} else {
+				state.Plan = append([]string(nil), planResult.Steps...)
+				state.SyncCurrentStep()
+				state.AddObservation(LoopObservation{Stage: LoopStagePlan, Content: "plan_ready", Iteration: state.Iteration, Metadata: map[string]any{"steps": len(planResult.Steps)}})
+			}
+			needPlan = false
+		}
+		state.AdvanceStage(LoopStageAct)
+		state.SyncCurrentStep()
+		e.emitStatus(ctx, state, RuntimeStreamStatus, map[string]any{"status": "stage_changed"})
+		output, execErr := e.StepExecutor(ctx, input, state, selection)
+		state.LastOutput = output
+		if output != nil {
+			if strings.TrimSpace(output.CheckpointID) != "" {
+				state.CheckpointID = output.CheckpointID
+			}
+			state.Resumable = state.Resumable || output.Resumable
+			state.AddObservation(LoopObservation{Stage: LoopStageAct, Content: output.Content, Iteration: state.Iteration, Metadata: cloneMetadata(output.Metadata)})
+		} else if execErr == nil {
+			state.AddObservation(LoopObservation{Stage: LoopStageAct, Iteration: state.Iteration, Content: "empty_output"})
+		}
+		if execErr != nil {
+			state.AddObservation(LoopObservation{Stage: LoopStageAct, Iteration: state.Iteration, Error: execErr.Error()})
+		}
+		state.AdvanceStage(LoopStageObserve)
+		e.emitStatus(ctx, state, RuntimeStreamStatus, map[string]any{"status": "stage_changed"})
+		if observeErr := e.observe(ctx, state, output, execErr); observeErr != nil {
+			state.AddObservation(LoopObservation{Stage: LoopStageObserve, Iteration: state.Iteration, Error: observeErr.Error()})
+			state.MarkStopped(classifyStopReason(observeErr.Error()), LoopDecisionDone)
+			return e.finalize(state, output, observeErr)
+		}
+		e.saveCheckpoint(ctx, input, state, output)
+		state.AdvanceStage(LoopStageEvaluate)
+		e.emitStatus(ctx, state, RuntimeStreamStatus, map[string]any{"status": "stage_changed"})
+		decision, judgeErr := judge.Judge(ctx, state, output, execErr)
+		if judgeErr != nil {
+			state.MarkStopped(classifyStopReason(judgeErr.Error()), LoopDecisionDone)
+			return e.finalize(state, output, judgeErr)
+		}
+		if decision == nil {
+			nilDecisionErr := errors.New("completion judge returned nil decision")
+			state.MarkStopped(StopReasonBlocked, LoopDecisionDone)
+			return e.finalize(state, output, nilDecisionErr)
+		}
+		state.Decision = decision.Decision
+		state.StopReason = decision.StopReason
+		state.Confidence = decision.Confidence
+		state.NeedHuman = decision.NeedHuman
+		if state.NeedHuman && state.StopReason == "" {
+			state.StopReason = StopReasonNeedHuman
+		}
+		state.AddObservation(LoopObservation{
+			Stage:     LoopStageEvaluate,
+			Content:   decision.Reason,
+			Iteration: state.Iteration,
+			Metadata: map[string]any{
+				"decision":        decision.Decision,
+				"confidence":      decision.Confidence,
+				"solved":          decision.Solved,
+				"need_replan":     decision.NeedReplan,
+				"need_reflection": decision.NeedReflection,
+				"need_human":      decision.NeedHuman,
+				"stop_reason":     decision.StopReason,
+			},
+		})
+		e.emitStatus(ctx, state, RuntimeStreamStatus, map[string]any{"status": "completion_judge_decision", "decision": string(decision.Decision), "confidence": decision.Confidence, "stop_reason": string(decision.StopReason)})
+		logger.Debug("loop iteration evaluated", zap.Int("iteration", state.Iteration), zap.String("reasoning_mode", state.SelectedReasoningMode), zap.String("decision", string(decision.Decision)), zap.String("stop_reason", string(state.StopReason)))
+		switch decision.Decision {
+		case LoopDecisionDone, LoopDecisionEscalate:
+			e.emitStatus(ctx, state, RuntimeStreamStatus, map[string]any{"status": "loop_stopped"})
+			return e.finalize(state, output, execErr)
+		case LoopDecisionReplan:
+			state.AdvanceStage(LoopStageDecideNext)
+			e.emitStatus(ctx, state, RuntimeStreamStatus, map[string]any{"status": "stage_changed"})
+			state.Plan = nil
+			state.CurrentStepID = ""
+			needPlan = e.Planner != nil
+		case LoopDecisionContinue:
+			state.AdvanceStage(LoopStageDecideNext)
+			e.emitStatus(ctx, state, RuntimeStreamStatus, map[string]any{"status": "stage_changed"})
+		case LoopDecisionReflect:
+			state.AdvanceStage(LoopStageDecideNext)
+			e.emitStatus(ctx, state, RuntimeStreamStatus, map[string]any{"status": "stage_changed"})
+			nextInput, reflectErr := e.reflect(ctx, input, output, state)
+			if reflectErr != nil {
+				state.MarkStopped(classifyStopReason(reflectErr.Error()), LoopDecisionDone)
+				return e.finalize(state, output, reflectErr)
+			}
+			if nextInput != nil {
+				input = nextInput
+			}
+			needPlan = e.Planner != nil
+		default:
+			unsupportedErr := fmt.Errorf("unsupported loop decision %q", decision.Decision)
+			state.MarkStopped(StopReasonBlocked, LoopDecisionDone)
+			return e.finalize(state, output, unsupportedErr)
+		}
+	}
+}
+
+func (e *LoopExecutor) initialState(ctx context.Context, input *Input) *LoopState {
+	state := NewLoopState(input, e.maxIterations())
+	if state.AgentID == "" {
+		state.AgentID = e.AgentID
+	}
+	if runID, ok := types.RunID(ctx); ok && strings.TrimSpace(runID) != "" {
+		state.RunID = runID
+	} else if input != nil && state.RunID == "" {
+		state.RunID = strings.TrimSpace(input.TraceID)
+	}
+	if state.LoopStateID == "" {
+		state.LoopStateID = buildLoopStateID(input, state, e.AgentID)
+	}
+	if e.CheckpointManager != nil && input != nil && input.Context != nil {
+		if checkpointID, ok := input.Context["checkpoint_id"].(string); ok && strings.TrimSpace(checkpointID) != "" {
+			checkpoint, err := e.CheckpointManager.LoadCheckpoint(ctx, checkpointID)
+			if err != nil {
+				e.logger().Warn("resume checkpoint load failed", zap.String("checkpoint_id", checkpointID), zap.Error(err))
+			} else if checkpoint != nil {
+				state.CheckpointID = checkpoint.ID
+				state.Resumable = true
+				if checkpoint.AgentID != "" {
+					state.AgentID = checkpoint.AgentID
+				}
+				state.restoreFromContext(checkpoint.LoopContextValues())
+				state.restoreFromContext(checkpoint.Metadata)
+				if checkpoint.ExecutionContext != nil {
+					state.restoreFromContext(checkpoint.ExecutionContext.LoopContextValues())
+				}
+			}
+		}
+	}
+	state.SyncCurrentStep()
+	return state
+}
+
+func (e *LoopExecutor) maxIterations() int {
+	if e.MaxIterations > 0 {
+		return e.MaxIterations
+	}
+	return 1
+}
+
+func (e *LoopExecutor) logger() *zap.Logger {
+	if e.Logger != nil {
+		return e.Logger
+	}
+	return zap.NewNop()
+}
+
+func (e *LoopExecutor) selector() ReasoningModeSelector {
+	if e.Selector != nil {
+		return e.Selector
+	}
+	return NewDefaultReasoningModeSelector()
+}
+
+func (e *LoopExecutor) judge() CompletionJudge {
+	if e.Judge != nil {
+		return e.Judge
+	}
+	return NewDefaultCompletionJudge()
+}
+
+func (e *LoopExecutor) observe(ctx context.Context, state *LoopState, output *Output, execErr error) error {
+	if e.Observer == nil {
+		return nil
+	}
+	feedbackType := "loop_iteration"
+	content := ""
+	data := map[string]any{
+		"iteration":               state.Iteration,
+		"current_stage":           state.CurrentStage,
+		"selected_reasoning_mode": state.SelectedReasoningMode,
+		"checkpoint_id":           state.CheckpointID,
+		"resumable":               state.Resumable,
+	}
+	if len(state.Plan) > 0 {
+		data["plan"] = append([]string(nil), state.Plan...)
+	}
+	if output != nil {
+		content = output.Content
+		if output.Metadata != nil {
+			data["output_metadata"] = cloneMetadata(output.Metadata)
+		}
+	}
+	if execErr != nil {
+		feedbackType = "loop_error"
+		content = execErr.Error()
+	}
+	return e.Observer(ctx, &Feedback{Type: feedbackType, Content: content, Data: data}, state)
+}
+
+func (e *LoopExecutor) saveCheckpoint(ctx context.Context, input *Input, state *LoopState, output *Output) {
+	if e.CheckpointManager == nil || state == nil || input == nil {
+		return
+	}
+	threadID := strings.TrimSpace(input.ChannelID)
+	if threadID == "" {
+		threadID = strings.TrimSpace(input.TraceID)
+	}
+	if threadID == "" {
+		threadID = e.AgentID
+	}
+	checkpoint := &Checkpoint{
+		ID:       state.CheckpointID,
+		ThreadID: threadID,
+		AgentID:  e.AgentID,
+		State:    StateRunning,
+	}
+	state.PopulateCheckpoint(checkpoint)
+	if output != nil && strings.TrimSpace(output.Content) != "" {
+		checkpoint.Messages = []CheckpointMessage{{
+			Role:    "assistant",
+			Content: output.Content,
+			Metadata: map[string]any{
+				"iteration_count": state.Iteration,
+			},
+		}}
+	}
+	if err := e.CheckpointManager.SaveCheckpoint(ctx, checkpoint); err != nil {
+		e.logger().Warn("save loop checkpoint failed", zap.Error(err))
+		return
+	}
+	state.CheckpointID = checkpoint.ID
+	state.Resumable = true
+}
+
+func buildLoopStateID(input *Input, state *LoopState, agentID string) string {
+	if state != nil && strings.TrimSpace(state.LoopStateID) != "" {
+		return strings.TrimSpace(state.LoopStateID)
+	}
+	if state != nil && strings.TrimSpace(state.RunID) != "" {
+		return "loop_" + strings.TrimSpace(state.RunID)
+	}
+	if input != nil && strings.TrimSpace(input.TraceID) != "" {
+		return "loop_" + strings.TrimSpace(input.TraceID)
+	}
+	if strings.TrimSpace(agentID) != "" {
+		return "loop_" + strings.TrimSpace(agentID)
+	}
+	return "loop_default"
+}
+
+func (e *LoopExecutor) reflect(ctx context.Context, input *Input, output *Output, state *LoopState) (*Input, error) {
+	if e.ReflectionStep == nil {
+		return input, nil
+	}
+	result, err := e.ReflectionStep(ctx, input, output, state)
+	if err != nil {
+		return nil, err
+	}
+	if result == nil {
+		return input, nil
+	}
+	if result.Observation != nil {
+		observation := *result.Observation
+		if observation.Stage == "" {
+			observation.Stage = LoopStageDecideNext
+		}
+		if observation.Iteration == 0 {
+			observation.Iteration = state.Iteration
+		}
+		state.AddObservation(observation)
+	}
+	if result.NextInput != nil {
+		return result.NextInput, nil
+	}
+	return input, nil
+}
+
+func (e *LoopExecutor) emitStatus(ctx context.Context, state *LoopState, eventType RuntimeStreamEventType, data map[string]any) {
+	emit, ok := runtimeStreamEmitterFromContext(ctx)
+	if !ok || state == nil {
+		return
+	}
+	emit(RuntimeStreamEvent{
+		Type:           eventType,
+		Timestamp:      time.Now(),
+		Data:           data,
+		CurrentStage:   string(state.CurrentStage),
+		IterationCount: state.Iteration,
+		SelectedMode:   state.SelectedReasoningMode,
+		StopReason:     string(state.StopReason),
+		CheckpointID:   state.CheckpointID,
+		Resumable:      state.Resumable,
+	})
+}
+
+func (e *LoopExecutor) finalize(state *LoopState, output *Output, execErr error) (*Output, error) {
+	if state != nil && state.StopReason == "" {
+		switch {
+		case execErr == nil && output != nil && strings.TrimSpace(output.Content) != "":
+			state.StopReason = StopReasonSolved
+		case execErr == nil && state.Iteration >= state.MaxIterations:
+			state.StopReason = StopReasonMaxIterations
+		case execErr != nil:
+			state.StopReason = classifyStopReason(execErr.Error())
+		default:
+			state.StopReason = StopReasonBlocked
+		}
+	}
+	finalOutput := output
+	if finalOutput == nil {
+		finalOutput = &Output{}
+	}
+	if state != nil {
+		finalOutput.IterationCount = state.Iteration
+		finalOutput.CurrentStage = string(state.CurrentStage)
+		finalOutput.SelectedReasoningMode = state.SelectedReasoningMode
+		finalOutput.StopReason = string(state.StopReason)
+		finalOutput.Resumable = state.Resumable
+		finalOutput.CheckpointID = state.CheckpointID
+		if finalOutput.Metadata == nil {
+			finalOutput.Metadata = map[string]any{}
+		}
+		if len(state.Plan) > 0 {
+			finalOutput.Metadata["loop_plan"] = append([]string(nil), state.Plan...)
+		}
+		finalOutput.Metadata["loop_iteration_count"] = state.Iteration
+		finalOutput.Metadata["iteration_count"] = state.Iteration
+		finalOutput.Metadata["loop_stop_reason"] = state.StopReason
+		finalOutput.Metadata["stop_reason"] = string(state.StopReason)
+		finalOutput.Metadata["loop_decision"] = state.Decision
+		finalOutput.Metadata["loop_confidence"] = state.Confidence
+		finalOutput.Metadata["loop_need_human"] = state.NeedHuman
+		finalOutput.Metadata["current_stage"] = string(state.CurrentStage)
+		finalOutput.Metadata["selected_reasoning_mode"] = state.SelectedReasoningMode
+		finalOutput.Metadata["checkpoint_id"] = state.CheckpointID
+		finalOutput.Metadata["resumable"] = state.Resumable
+		if critiques := reflectionCritiquesFromObservations(state.Observations); len(critiques) > 0 {
+			finalOutput.Metadata["reflection_iterations"] = len(critiques)
+			finalOutput.Metadata["reflection_critiques"] = critiques
+		}
+	}
+	if execErr != nil {
+		return finalOutput, execErr
+	}
+	return finalOutput, nil
+}
+
+func cloneMetadata(metadata map[string]any) map[string]any {
+	if len(metadata) == 0 {
+		return nil
+	}
+	cloned := make(map[string]any, len(metadata))
+	for k, v := range metadata {
+		cloned[k] = v
+	}
+	return cloned
+}
+
+type reasoningModeSelectorFunc func(ctx context.Context, input *Input, state *LoopState, registry *reasoning.PatternRegistry, reflectionEnabled bool) ReasoningSelection
+
+func (f reasoningModeSelectorFunc) Select(ctx context.Context, input *Input, state *LoopState, registry *reasoning.PatternRegistry, reflectionEnabled bool) ReasoningSelection {
+	return f(ctx, input, state, registry, reflectionEnabled)
 }
 
 // --- context keys for inter-middleware data passing ---
@@ -542,6 +1470,10 @@ func (a *reflectionRunnerAdapter) ExecuteWithReflection(ctx context.Context, inp
 		return nil, err
 	}
 	return result.FinalOutput, nil
+}
+
+func (a *reflectionRunnerAdapter) ReflectStep(ctx context.Context, input *Input, output *Output, state *LoopState) (*LoopReflectionResult, error) {
+	return a.executor.ReflectStep(ctx, input, output, state)
 }
 
 // AsReflectionRunner wraps a *ReflectionExecutor as a ReflectionRunner.

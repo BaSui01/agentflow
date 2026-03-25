@@ -280,7 +280,7 @@ func (h *AgentHandler) HandleAgentStream(w http.ResponseWriter, r *http.Request)
 	}
 
 	// 发送 session 事件（含 execution_id，客户端用于后续 interrupt 调用）
-	if sessionData, err := json.Marshal(map[string]string{"execution_id": session.ID}); err == nil {
+	if sessionData, err := json.Marshal(streamSessionPayload(session.ID)); err == nil {
 		fmt.Fprintf(w, "event: session\ndata: %s\n\n", sessionData)
 		flusher.Flush()
 	}
@@ -297,33 +297,51 @@ func (h *AgentHandler) HandleAgentStream(w http.ResponseWriter, r *http.Request)
 		switch event.Type {
 		case agent.RuntimeStreamToken:
 			sseEvent = "token"
-			data, err = json.Marshal(map[string]string{"content": event.Delta})
+			data, err = json.Marshal(streamPayload(mergeExecutionFields(map[string]any{"content": event.Delta}, event)))
 		case agent.RuntimeStreamReasoning:
 			sseEvent = "reasoning"
-			data, err = json.Marshal(map[string]string{"reasoning_content": event.Reasoning})
+			data, err = json.Marshal(streamPayload(mergeExecutionFields(map[string]any{"reasoning_content": event.Reasoning}, event)))
 		case agent.RuntimeStreamToolCall:
 			sseEvent = "tool_call"
 			if event.ToolCall != nil {
-				data, err = json.Marshal(event.ToolCall)
+				data, err = json.Marshal(streamPayload(mergeExecutionFields(toolCallPayload(event.ToolCall), event)))
 			}
 		case agent.RuntimeStreamToolResult:
 			sseEvent = "tool_result"
 			if event.ToolResult != nil {
-				data, err = json.Marshal(event.ToolResult)
+				data, err = json.Marshal(streamPayload(mergeExecutionFields(toolResultPayload(event.ToolResult), event)))
 			}
 		case agent.RuntimeStreamToolProgress:
 			sseEvent = "tool_progress"
-			data, err = json.Marshal(map[string]any{
+			data, err = json.Marshal(streamPayload(mergeExecutionFields(map[string]any{
 				"tool_call_id": event.ToolCallID,
 				"tool_name":    event.ToolName,
 				"progress":     event.Data,
-			})
+			}, event)))
+		case agent.RuntimeStreamStatus:
+			sseEvent = "status"
+			fields := map[string]any{}
+			if event.Data != nil {
+				if payload, ok := event.Data.(map[string]any); ok {
+					for key, value := range payload {
+						fields[key] = value
+					}
+				}
+			}
+			h.logger.Debug("agent stream status",
+				zap.String("agent_id", req.AgentID),
+				zap.String("current_stage", event.CurrentStage),
+				zap.Int("iteration_count", event.IterationCount),
+				zap.String("selected_reasoning_mode", event.SelectedMode),
+				zap.String("stop_reason", event.StopReason),
+			)
+			data, err = json.Marshal(streamPayload(mergeExecutionFields(fields, event)))
 		case agent.RuntimeStreamSteering:
 			sseEvent = "steering"
-			data, err = json.Marshal(map[string]string{"content": event.SteeringContent})
+			data, err = json.Marshal(streamPayload(mergeExecutionFields(map[string]any{"content": event.SteeringContent}, event)))
 		case agent.RuntimeStreamStopAndSend:
 			sseEvent = "stop_and_send"
-			data, err = json.Marshal(map[string]string{"status": "restarting"})
+			data, err = json.Marshal(streamPayload(mergeExecutionFields(map[string]any{"status": "restarting"}, event)))
 		default:
 			return
 		}
@@ -393,43 +411,6 @@ func (h *AgentHandler) HandleAgentStream(w http.ResponseWriter, r *http.Request)
 		zap.String("request_id", requestID),
 		zap.String("execution_id", session.ID),
 	)
-}
-
-// HandlePlanAgent plans agent execution
-// @Summary Plan agent execution
-// @Description Get an execution plan for an agent
-// @Tags agent
-// @Accept json
-// @Produce json
-// @Param request body AgentExecuteRequest true "Plan request"
-// @Success 200 {object} Response{data=map[string]any} "Execution plan"
-// @Failure 400 {object} Response "Invalid request"
-// @Failure 404 {object} Response "Agent not found"
-// @Failure 500 {object} Response "Plan failed"
-// @Security ApiKeyAuth
-// @Router /api/v1/agents/plan [post]
-func (h *AgentHandler) HandlePlanAgent(w http.ResponseWriter, r *http.Request) {
-	var req usecase.AgentExecuteRequest
-	if !ValidateRequest(w, r, &req, h.logger) {
-		return
-	}
-
-	if apiErr := h.validateAgentExecuteRequest(&req); apiErr != nil {
-		WriteError(w, apiErr.WithHTTPStatus(http.StatusBadRequest), h.logger)
-		return
-	}
-	if len(req.AgentIDs) > 0 {
-		WriteError(w, types.NewInvalidRequestError("agent_ids is not supported for planning").WithHTTPStatus(http.StatusBadRequest), h.logger)
-		return
-	}
-
-	plan, planErr := h.service.PlanAgent(r.Context(), req, r.Header.Get("X-Request-ID"))
-	if planErr != nil {
-		h.handleAgentError(w, planErr)
-		return
-	}
-
-	WriteSuccess(w, plan)
 }
 
 // HandleAgentHealth checks agent health status
@@ -684,6 +665,76 @@ func (h *AgentHandler) validateAgentExecuteRequest(req *usecase.AgentExecuteRequ
 	req.Metadata = usecase.NormalizeRouteMetadata(req.Metadata)
 	req.Tags = usecase.NormalizeRouteTags(req.Tags)
 	return nil
+}
+
+func streamPayload(fields map[string]any) map[string]any {
+	payload := map[string]any{
+		"current_stage":           "",
+		"iteration_count":         0,
+		"selected_reasoning_mode": "",
+		"stop_reason":             "",
+		"checkpoint_id":           "",
+		"resumable":               false,
+	}
+	for key, value := range fields {
+		payload[key] = value
+	}
+	return payload
+}
+
+func mergeExecutionFields(fields map[string]any, event agent.RuntimeStreamEvent) map[string]any {
+	if fields == nil {
+		fields = map[string]any{}
+	}
+	if event.CurrentStage != "" {
+		fields["current_stage"] = event.CurrentStage
+	}
+	if event.IterationCount > 0 {
+		fields["iteration_count"] = event.IterationCount
+	}
+	if event.SelectedMode != "" {
+		fields["selected_reasoning_mode"] = event.SelectedMode
+	}
+	if event.StopReason != "" {
+		fields["stop_reason"] = event.StopReason
+	}
+	if event.CheckpointID != "" {
+		fields["checkpoint_id"] = event.CheckpointID
+	}
+	if event.Resumable {
+		fields["resumable"] = true
+	}
+	return fields
+}
+
+func streamSessionPayload(executionID string) map[string]any {
+	return streamPayload(map[string]any{
+		"execution_id": executionID,
+	})
+}
+
+func toolCallPayload(toolCall *agent.RuntimeToolCall) map[string]any {
+	if toolCall == nil {
+		return nil
+	}
+	return map[string]any{
+		"id":        toolCall.ID,
+		"name":      toolCall.Name,
+		"arguments": toolCall.Arguments,
+	}
+}
+
+func toolResultPayload(toolResult *agent.RuntimeToolResult) map[string]any {
+	if toolResult == nil {
+		return nil
+	}
+	return map[string]any{
+		"tool_call_id": toolResult.ToolCallID,
+		"name":         toolResult.Name,
+		"result":       toolResult.Result,
+		"error":        toolResult.Error,
+		"duration":     toolResult.Duration,
+	}
 }
 
 func executionLogAgentIDs(req usecase.AgentExecuteRequest) []string {

@@ -3,11 +3,12 @@ package agent
 import (
 	"context"
 	"fmt"
-	"github.com/BaSui01/agentflow/types"
 	"strings"
 	"time"
 
+	"github.com/BaSui01/agentflow/agent/reasoning"
 	"github.com/BaSui01/agentflow/llm"
+	"github.com/BaSui01/agentflow/types"
 	"go.uber.org/zap"
 )
 
@@ -78,14 +79,15 @@ type ReflectionExecutor struct {
 
 // NewReflectionExecutor 创建 Reflection 执行器
 func NewReflectionExecutor(agent *BaseAgent, config ReflectionExecutorConfig) *ReflectionExecutor {
+	policyConfig := reflectionExecutorConfigFromPolicy(agent.loopControlPolicy())
 	if config.MaxIterations <= 0 {
-		config.MaxIterations = 3
+		config.MaxIterations = policyConfig.MaxIterations
 	}
 	if config.MinQuality <= 0 {
-		config.MinQuality = 0.7
+		config.MinQuality = policyConfig.MinQuality
 	}
-	if config.CriticPrompt == "" {
-		config = DefaultReflectionExecutorConfig()
+	if strings.TrimSpace(config.CriticPrompt) == "" {
+		config.CriticPrompt = policyConfig.CriticPrompt
 	}
 
 	return &ReflectionExecutor{
@@ -100,7 +102,6 @@ func (r *ReflectionExecutor) ExecuteWithReflection(ctx context.Context, input *I
 	startTime := time.Now()
 
 	if !r.config.Enabled {
-		// Reflection 未启用，直接执行
 		output, err := r.agent.executeCore(ctx, input)
 		if err != nil {
 			return nil, err
@@ -113,89 +114,90 @@ func (r *ReflectionExecutor) ExecuteWithReflection(ctx context.Context, input *I
 		}, nil
 	}
 
-	r.logger.Info("starting reflection execution",
-		zap.String("trace_id", input.TraceID),
-		zap.Int("max_iterations", r.config.MaxIterations),
-	)
-
-	var (
-		currentInput  = input
-		currentOutput *Output
-		critiques     []Critique
-		improved      = false
-	)
-
-	// Reflection 循环
-	for i := 0; i < r.config.MaxIterations; i++ {
-		r.logger.Debug("reflection iteration",
-			zap.Int("iteration", i+1),
-			zap.String("trace_id", input.TraceID),
-		)
-
-		// 1. 执行任务
-		output, err := r.agent.executeCore(ctx, currentInput)
-		if err != nil {
-			return nil, fmt.Errorf("execution failed at iteration %d: %w", i+1, err)
-		}
-		currentOutput = output
-
-		// 2. 评审结果
-		critique, err := r.critique(ctx, input.Content, output.Content)
-		if err != nil {
-			r.logger.Warn("critique failed, using current output",
-				zap.Error(err),
-				zap.Int("iteration", i+1),
-			)
-			break
-		}
-		critiques = append(critiques, *critique)
-
-		r.logger.Info("critique completed",
-			zap.Int("iteration", i+1),
-			zap.Float64("score", critique.Score),
-			zap.Bool("is_good", critique.IsGood),
-		)
-
-		// 3. 检查是否达标
-		if critique.IsGood {
-			r.logger.Info("output quality acceptable",
-				zap.Int("iteration", i+1),
-				zap.Float64("score", critique.Score),
-			)
-			if i > 0 {
-				improved = true
-			}
-			break
-		}
-
-		// 4. 最后一次迭代，不再改进
-		if i == r.config.MaxIterations-1 {
-			r.logger.Warn("max iterations reached, using current output",
-				zap.Float64("final_score", critique.Score),
-			)
-			break
-		}
-
-		// 5. 基于反馈改进输入
-		currentInput = r.refineInput(input, critique)
-		improved = true
+	r.logger.Info("starting reflection execution", zap.String("trace_id", input.TraceID), zap.Int("max_iterations", r.config.MaxIterations))
+	executor := &LoopExecutor{
+		MaxIterations: r.config.MaxIterations,
+		StepExecutor: func(ctx context.Context, input *Input, _ *LoopState, _ ReasoningSelection) (*Output, error) {
+			return r.agent.executeCore(ctx, input)
+		},
+		Selector: reasoningModeSelectorFunc(func(_ context.Context, _ *Input, _ *LoopState, _ *reasoning.PatternRegistry, _ bool) ReasoningSelection {
+			return ReasoningSelection{Mode: ReasoningModeReflection}
+		}),
+		Judge:             newReflectionCompletionJudge(r.config.MinQuality, r.critique),
+		ReflectionStep:    r.ReflectStep,
+		ReflectionEnabled: true,
+		CheckpointManager: r.agent.checkpointManager,
+		AgentID:           r.agent.ID(),
+		Logger:            r.logger,
 	}
+	output, err := executor.Execute(ctx, input)
+	if err != nil {
+		return nil, err
+	}
+	if output.Metadata == nil {
+		output.Metadata = make(map[string]any, 4)
+	}
+	output.Metadata["reflection_iteration_budget"] = r.config.MaxIterations
+	output.Metadata["reflection_quality_threshold"] = r.config.MinQuality
+	output.Metadata["reflection_budget_scope"] = internalBudgetScope
 
 	duration := time.Since(startTime)
-
+	critiques := outputReflectionCritiques(output)
+	improved := len(critiques) > 1
+	iterations := output.IterationCount
+	if iterations == 0 {
+		iterations = 1
+	}
 	r.logger.Info("reflection execution completed",
 		zap.String("trace_id", input.TraceID),
-		zap.Int("iterations", len(critiques)),
+		zap.Int("iterations", iterations),
 		zap.Duration("total_duration", duration),
-		zap.Bool("improved", improved),
-	)
+		zap.Bool("improved", improved))
 
 	return &ReflectionResult{
-		FinalOutput:          currentOutput,
-		Iterations:           len(critiques),
+		FinalOutput:          output,
+		Iterations:           iterations,
 		Critiques:            critiques,
 		TotalDuration:        duration,
 		ImprovedByReflection: improved,
+	}, nil
+}
+
+func (r *ReflectionExecutor) ReflectStep(ctx context.Context, input *Input, output *Output, state *LoopState) (*LoopReflectionResult, error) {
+	if !r.config.Enabled || input == nil || output == nil {
+		return nil, nil
+	}
+
+	critique := outputReflectionCritique(output)
+	if critique == nil {
+		var err error
+		critique, err = r.critique(ctx, input.Content, output.Content)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	observation := &LoopObservation{
+		Stage:     LoopStageDecideNext,
+		Content:   "reflection_completed",
+		Iteration: state.Iteration,
+		Metadata: map[string]any{
+			"reflection_critique": *critique,
+			"reflection_score":    critique.Score,
+			"reflection_is_good":  critique.IsGood,
+		},
+	}
+	if critique.IsGood || state.Iteration >= state.MaxIterations {
+		return &LoopReflectionResult{
+			Critique:    critique,
+			Observation: observation,
+		}, nil
+	}
+
+	return &LoopReflectionResult{
+		NextInput:   r.refineInput(input, critique),
+		Critique:    critique,
+		Observation: observation,
 	}, nil
 }
 
@@ -362,4 +364,123 @@ func (r *ReflectionExecutor) refineInput(original *Input, critique *Critique) *I
 	refined.Context["reflection_feedback"] = critique
 
 	return refined
+}
+
+func outputReflectionCritiques(output *Output) []Critique {
+	if output == nil || output.Metadata == nil {
+		return nil
+	}
+	critiques := make([]Critique, 0, 2)
+	if rawCritiques, ok := output.Metadata["reflection_critiques"]; ok {
+		storedCritiques, ok := rawCritiques.([]Critique)
+		if ok {
+			critiques = append(critiques, storedCritiques...)
+		}
+	}
+	if critique := outputReflectionCritique(output); critique != nil {
+		critiques = append(critiques, *critique)
+	}
+	if len(critiques) == 0 {
+		return nil
+	}
+	return critiques
+}
+
+func outputReflectionCritique(output *Output) *Critique {
+	if output == nil || output.Metadata == nil {
+		return nil
+	}
+	rawCritique, ok := output.Metadata["reflection_critique"]
+	if !ok {
+		return nil
+	}
+	critique, ok := rawCritique.(Critique)
+	if !ok {
+		return nil
+	}
+	copied := critique
+	return &copied
+}
+
+type reflectionCompletionJudge struct {
+	minQuality float64
+	fallback   CompletionJudge
+	critiqueFn func(context.Context, string, string) (*Critique, error)
+}
+
+func newReflectionCompletionJudge(minQuality float64, critiqueFn func(context.Context, string, string) (*Critique, error)) CompletionJudge {
+	if minQuality <= 0 {
+		minQuality = 0.7
+	}
+	return &reflectionCompletionJudge{
+		minQuality: minQuality,
+		fallback:   NewDefaultCompletionJudge(),
+		critiqueFn: critiqueFn,
+	}
+}
+
+func (j *reflectionCompletionJudge) Judge(ctx context.Context, state *LoopState, output *Output, err error) (*CompletionDecision, error) {
+	decision, judgeErr := j.fallback.Judge(ctx, state, output, err)
+	if judgeErr != nil || decision == nil || err != nil || output == nil || strings.TrimSpace(output.Content) == "" {
+		return decision, judgeErr
+	}
+
+	critique, critiqueErr := j.critiqueFn(ctx, state.Goal, output.Content)
+	if critiqueErr != nil {
+		return nil, critiqueErr
+	}
+	if output.Metadata == nil {
+		output.Metadata = make(map[string]any, 4)
+	}
+	output.Metadata["reflection_critique"] = *critique
+	output.Metadata["reflection_score"] = critique.Score
+	output.Metadata["reflection_is_good"] = critique.IsGood
+	output.Metadata["reflection_quality_threshold"] = j.minQuality
+
+	if critique.IsGood || critique.Score >= j.minQuality {
+		decision.Decision = LoopDecisionDone
+		decision.Solved = true
+		decision.StopReason = StopReasonSolved
+		decision.Confidence = critique.Score
+		decision.Reason = "reflection quality acceptable"
+		return decision, nil
+	}
+
+	if state != nil && state.Iteration >= state.MaxIterations {
+		decision.Decision = LoopDecisionDone
+		decision.StopReason = StopReasonBlocked
+		decision.Confidence = critique.Score
+		decision.Reason = "reflection iteration budget exhausted"
+		if output.Metadata == nil {
+			output.Metadata = make(map[string]any, 4)
+		}
+		output.Metadata["internal_stop_cause"] = "reflection_iteration_budget_exhausted"
+		return decision, nil
+	}
+
+	return &CompletionDecision{
+		Decision:       LoopDecisionReflect,
+		NeedReflection: true,
+		StopReason:     StopReasonBlocked,
+		Confidence:     critique.Score,
+		Reason:         "reflection requested another iteration",
+	}, nil
+}
+
+func reflectionCritiquesFromObservations(observations []LoopObservation) []Critique {
+	critiques := make([]Critique, 0, len(observations))
+	for _, observation := range observations {
+		if observation.Metadata == nil {
+			continue
+		}
+		raw, ok := observation.Metadata["reflection_critique"]
+		if !ok {
+			continue
+		}
+		critique, ok := raw.(Critique)
+		if ok {
+			critiques = append(critiques, critique)
+		}
+	}
+	return critiques
 }

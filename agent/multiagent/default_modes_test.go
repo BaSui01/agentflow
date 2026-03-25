@@ -187,6 +187,7 @@ type loopTestAgent struct {
 	name      string
 	callCount int
 	stopAt    int
+	outputFn  func(call int, input *agent.Input) *agent.Output
 }
 
 func (a *loopTestAgent) ID() string                     { return a.id }
@@ -201,6 +202,9 @@ func (a *loopTestAgent) Plan(context.Context, *agent.Input) (*agent.PlanResult, 
 func (a *loopTestAgent) Observe(context.Context, *agent.Feedback) error { return nil }
 func (a *loopTestAgent) Execute(_ context.Context, input *agent.Input) (*agent.Output, error) {
 	a.callCount++
+	if a.outputFn != nil {
+		return a.outputFn(a.callCount, input), nil
+	}
 	content := "working..."
 	if a.callCount >= a.stopAt {
 		content = "done LOOP_COMPLETE"
@@ -226,6 +230,9 @@ func TestLoopMode_StopsOnKeyword(t *testing.T) {
 	if out.Metadata == nil || out.Metadata["mode"] != ModeLoop {
 		t.Fatalf("missing loop mode tag in metadata: %#v", out.Metadata)
 	}
+	if out.Metadata["iteration_count"] != 3 {
+		t.Fatalf("expected iteration_count 3, got %#v", out.Metadata["iteration_count"])
+	}
 }
 
 func TestLoopMode_StopsAtMaxIterations(t *testing.T) {
@@ -245,5 +252,214 @@ func TestLoopMode_StopsAtMaxIterations(t *testing.T) {
 	}
 	if out.Content != "working..." {
 		t.Fatalf("unexpected output: %q", out.Content)
+	}
+	if out.Metadata["iteration_count"] != 3 {
+		t.Fatalf("expected iteration_count 3, got %#v", out.Metadata["iteration_count"])
+	}
+}
+
+func TestLoopMode_PrefersStandardStopReasonOverKeyword(t *testing.T) {
+	reg := NewModeRegistry()
+	if err := RegisterDefaultModes(reg, zap.NewNop()); err != nil {
+		t.Fatalf("register default modes failed: %v", err)
+	}
+	ag := &loopTestAgent{
+		id:   "loop-1",
+		name: "looper",
+		outputFn: func(call int, input *agent.Input) *agent.Output {
+			return &agent.Output{
+				TraceID:               input.TraceID,
+				Content:               "done without keyword",
+				CurrentStage:          "evaluate",
+				IterationCount:        call,
+				SelectedReasoningMode: "plan_and_execute",
+				StopReason:            "solved",
+				CheckpointID:          "cp-top-level",
+				Resumable:             true,
+			}
+		},
+	}
+
+	out, err := reg.Execute(context.Background(), ModeLoop, []agent.Agent{ag}, &agent.Input{
+		TraceID: "t1",
+		Content: "iterate",
+		Context: map[string]any{"max_iterations": 10, "stop_keyword": "NEVER_MATCH"},
+	})
+	if err != nil {
+		t.Fatalf("loop mode failed: %v", err)
+	}
+	if ag.callCount != 1 {
+		t.Fatalf("expected stop after first iteration by stop_reason, got %d", ag.callCount)
+	}
+	if out.StopReason != "solved" {
+		t.Fatalf("expected solved stop_reason, got %q", out.StopReason)
+	}
+	if out.CurrentStage != "evaluate" {
+		t.Fatalf("expected evaluate stage, got %q", out.CurrentStage)
+	}
+	if out.IterationCount != 1 {
+		t.Fatalf("expected iteration_count 1, got %d", out.IterationCount)
+	}
+	if out.SelectedReasoningMode != "plan_and_execute" {
+		t.Fatalf("expected plan_and_execute mode, got %q", out.SelectedReasoningMode)
+	}
+	if out.Metadata["selected_reasoning_mode"] != "plan_and_execute" {
+		t.Fatalf("expected metadata selected_reasoning_mode, got %#v", out.Metadata["selected_reasoning_mode"])
+	}
+	if out.Metadata["stop_reason"] != "solved" {
+		t.Fatalf("expected metadata stop_reason, got %#v", out.Metadata["stop_reason"])
+	}
+	if out.Metadata["current_stage"] != "evaluate" {
+		t.Fatalf("expected metadata current_stage, got %#v", out.Metadata["current_stage"])
+	}
+	if out.Metadata["checkpoint_id"] != "cp-top-level" {
+		t.Fatalf("expected metadata checkpoint_id, got %#v", out.Metadata["checkpoint_id"])
+	}
+	if out.Metadata["resumable"] != true {
+		t.Fatalf("expected metadata resumable=true, got %#v", out.Metadata["resumable"])
+	}
+}
+
+func TestLoopMode_UsesMetadataFieldsWhenTopLevelFieldsMissing(t *testing.T) {
+	reg := NewModeRegistry()
+	if err := RegisterDefaultModes(reg, zap.NewNop()); err != nil {
+		t.Fatalf("register default modes failed: %v", err)
+	}
+	ag := &loopTestAgent{
+		id:   "loop-1",
+		name: "looper",
+		outputFn: func(call int, input *agent.Input) *agent.Output {
+			return &agent.Output{
+				TraceID: input.TraceID,
+				Content: "metadata stop",
+				Metadata: map[string]any{
+					"stop_reason":             "blocked",
+					"current_stage":           "observe",
+					"iteration_count":         call,
+					"selected_reasoning_mode": "rewoo",
+					"checkpoint_id":           "cp-1",
+					"resumable":               true,
+				},
+			}
+		},
+	}
+
+	out, err := reg.Execute(context.Background(), ModeLoop, []agent.Agent{ag}, &agent.Input{
+		TraceID: "t1",
+		Content: "iterate",
+		Context: map[string]any{"max_iterations": 10},
+	})
+	if err != nil {
+		t.Fatalf("loop mode failed: %v", err)
+	}
+	if ag.callCount != 1 {
+		t.Fatalf("expected stop after first iteration by metadata stop_reason, got %d", ag.callCount)
+	}
+	if out.StopReason != "blocked" {
+		t.Fatalf("expected blocked stop_reason, got %q", out.StopReason)
+	}
+	if out.CurrentStage != "observe" {
+		t.Fatalf("expected observe stage, got %q", out.CurrentStage)
+	}
+	if out.IterationCount != 1 {
+		t.Fatalf("expected iteration_count 1, got %d", out.IterationCount)
+	}
+	if out.SelectedReasoningMode != "rewoo" {
+		t.Fatalf("expected rewoo mode, got %q", out.SelectedReasoningMode)
+	}
+	if out.CheckpointID != "cp-1" {
+		t.Fatalf("expected checkpoint cp-1, got %q", out.CheckpointID)
+	}
+	if !out.Resumable {
+		t.Fatalf("expected resumable output")
+	}
+	if out.Metadata["checkpoint_id"] != "cp-1" {
+		t.Fatalf("expected metadata checkpoint_id cp-1, got %#v", out.Metadata["checkpoint_id"])
+	}
+	if out.Metadata["resumable"] != true {
+		t.Fatalf("expected metadata resumable=true, got %#v", out.Metadata["resumable"])
+	}
+}
+
+func TestLoopMode_FallsBackToStopKeywordOnlyWhenStopReasonMissing(t *testing.T) {
+	reg := NewModeRegistry()
+	if err := RegisterDefaultModes(reg, zap.NewNop()); err != nil {
+		t.Fatalf("register default modes failed: %v", err)
+	}
+	ag := &loopTestAgent{
+		id:   "loop-1",
+		name: "looper",
+		outputFn: func(call int, input *agent.Input) *agent.Output {
+			content := "still working"
+			if call == 2 {
+				content = "done CUSTOM_STOP"
+			}
+			return &agent.Output{
+				TraceID:               input.TraceID,
+				Content:               content,
+				CurrentStage:          "act",
+				IterationCount:        call,
+				SelectedReasoningMode: "react",
+			}
+		},
+	}
+
+	out, err := reg.Execute(context.Background(), ModeLoop, []agent.Agent{ag}, &agent.Input{
+		TraceID: "t1",
+		Content: "iterate",
+		Context: map[string]any{"max_iterations": 10, "stop_keyword": "CUSTOM_STOP"},
+	})
+	if err != nil {
+		t.Fatalf("loop mode failed: %v", err)
+	}
+	if ag.callCount != 2 {
+		t.Fatalf("expected keyword fallback to stop on second iteration, got %d", ag.callCount)
+	}
+	if out.StopReason != "" {
+		t.Fatalf("expected empty stop_reason when only keyword matched, got %q", out.StopReason)
+	}
+	if out.Metadata["iteration_count"] != 2 {
+		t.Fatalf("expected metadata iteration_count 2, got %#v", out.Metadata["iteration_count"])
+	}
+}
+
+func TestReasoningMode_RemainsSingleAgentDefaultInsteadOfLoop(t *testing.T) {
+	reg := NewModeRegistry()
+	if err := RegisterDefaultModes(reg, zap.NewNop()); err != nil {
+		t.Fatalf("register default modes failed: %v", err)
+	}
+	ag := &loopTestAgent{
+		id:   "single-1",
+		name: "single",
+		outputFn: func(call int, input *agent.Input) *agent.Output {
+			return &agent.Output{
+				TraceID:               input.TraceID,
+				Content:               "single agent",
+				CurrentStage:          "evaluate",
+				IterationCount:        call,
+				SelectedReasoningMode: "react",
+				StopReason:            "solved",
+			}
+		},
+	}
+
+	out, err := reg.Execute(context.Background(), ModeReasoning, []agent.Agent{ag}, &agent.Input{
+		TraceID: "t-single",
+		Content: "hello",
+	})
+	if err != nil {
+		t.Fatalf("reasoning mode failed: %v", err)
+	}
+	if ag.callCount != 1 {
+		t.Fatalf("expected single execution, got %d", ag.callCount)
+	}
+	if out.Metadata["mode"] != ModeReasoning {
+		t.Fatalf("expected reasoning mode tag, got %#v", out.Metadata["mode"])
+	}
+	if out.Metadata["mode"] == ModeLoop {
+		t.Fatalf("single agent default must not be loop mode")
+	}
+	if out.Metadata["agent_count"] != 1 {
+		t.Fatalf("expected agent_count 1, got %#v", out.Metadata["agent_count"])
 	}
 }

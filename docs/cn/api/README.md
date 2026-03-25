@@ -110,13 +110,19 @@ Agent 输出。
 
 ```go
 type Output struct {
-    TraceID      string         `json:"trace_id"`
-    Content      string         `json:"content"`
-    Metadata     map[string]any `json:"metadata,omitempty"`
-    TokensUsed   int            `json:"tokens_used,omitempty"`
-    Cost         float64        `json:"cost,omitempty"`
-    Duration     time.Duration  `json:"duration"`
-    FinishReason string         `json:"finish_reason,omitempty"`
+    TraceID               string         `json:"trace_id"`
+    Content               string         `json:"content"`
+    Metadata              map[string]any `json:"metadata,omitempty"`
+    TokensUsed            int            `json:"tokens_used,omitempty"`
+    Cost                  float64        `json:"cost,omitempty"`
+    Duration              time.Duration  `json:"duration"`
+    FinishReason          string         `json:"finish_reason,omitempty"`
+    CurrentStage          string         `json:"current_stage,omitempty"`
+    IterationCount        int            `json:"iteration_count,omitempty"`
+    SelectedReasoningMode string         `json:"selected_reasoning_mode,omitempty"`
+    StopReason            string         `json:"stop_reason,omitempty"`
+    Resumable             bool           `json:"resumable,omitempty"`
+    CheckpointID          string         `json:"checkpoint_id,omitempty"`
 }
 ```
 
@@ -163,7 +169,9 @@ func (b *BaseAgent) Teardown(ctx context.Context) error
 
 说明：
 
-- `Execute(...)` 为默认唯一执行入口，会按 `AgentConfig` 自动串联已启用的 `tool selection / prompt enhancer / skills / enhanced memory / observability` 扩展，再进入核心 ReAct 执行。
+- `Execute(...)` 为默认唯一执行入口，会按 `AgentConfig` 自动串联已启用的 `tool selection / prompt enhancer / skills / enhanced memory / observability` 扩展，再进入闭环主链 `Perceive -> Analyze -> Plan -> Act -> Observe -> Evaluate -> DecideNext`。
+- 默认单 Agent 请求不会经 `multiagent` 模式分发；`multiagent` 仅用于 `agent_ids` 多目标协作请求。
+- `Output` 中的 `current_stage / iteration_count / selected_reasoning_mode / stop_reason / checkpoint_id / resumable` 是默认闭环执行和恢复链路的统一可观测字段。
 - `Observe(...)` 写入的反馈在启用 enhanced memory 时会回流到后续 `Execute(...)` 的上下文注入链路中，不再停留为“仅存储不消费”。
 
 ---

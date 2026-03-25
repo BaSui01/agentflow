@@ -2,9 +2,12 @@ package agent
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
+	"github.com/BaSui01/agentflow/agent/reasoning"
+	"github.com/BaSui01/agentflow/llm"
 	"github.com/BaSui01/agentflow/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -175,6 +178,179 @@ func TestBaseAgent_ValidateConfiguration_MissingExecutors(t *testing.T) {
 	assert.Contains(t, err.Error(), "tool selection enabled but selector not set")
 }
 
+func TestBaseAgent_Execute_DefaultClosedLoopInvokesPlanAndObserve(t *testing.T) {
+	logger := zap.NewNop()
+	var completionCalls int
+	bus := &testEventBus{}
+	provider := &testProvider{
+		name: "mock",
+		completionFn: func(_ context.Context, _ *llm.ChatRequest) (*llm.ChatResponse, error) {
+			completionCalls++
+			switch completionCalls {
+			case 1:
+				return &llm.ChatResponse{
+					Provider: "mock",
+					Model:    "gpt-4",
+					Choices: []llm.ChatChoice{{
+						Message: types.Message{Role: llm.RoleAssistant, Content: "1. inspect\n2. answer"},
+					}},
+				}, nil
+			case 2:
+				return &llm.ChatResponse{
+					Provider: "mock",
+					Model:    "gpt-4",
+					Choices: []llm.ChatChoice{{
+						FinishReason: "stop",
+						Message:      types.Message{Role: llm.RoleAssistant, Content: "closed-loop output"},
+					}},
+					Usage: llm.ChatUsage{TotalTokens: 11},
+				}, nil
+			default:
+				return nil, fmt.Errorf("unexpected completion call %d", completionCalls)
+			}
+		},
+	}
+
+	ag := NewBaseAgent(testAgentConfig("loop-agent", "LoopAgent", "gpt-4"), provider, &testMemoryManager{}, &testToolManager{}, bus, logger, nil)
+	require.NoError(t, ag.Init(context.Background()))
+	ag.SetCompletionJudge(NewDefaultCompletionJudge())
+	ag.SetReasoningModeSelector(NewDefaultReasoningModeSelector())
+
+	output, err := ag.Execute(context.Background(), &Input{TraceID: "trace-loop", Content: "solve this"})
+	require.NoError(t, err)
+	require.NotNil(t, output)
+	assert.Equal(t, 2, completionCalls)
+	assert.Equal(t, "closed-loop output", output.Content)
+	assert.Equal(t, 1, output.IterationCount)
+	assert.Equal(t, string(LoopStageEvaluate), output.CurrentStage)
+	assert.Equal(t, ReasoningModeReact, output.SelectedReasoningMode)
+	require.NotNil(t, output.Metadata)
+	assert.Equal(t, 1, output.Metadata["loop_iteration_count"])
+	assert.Equal(t, StopReasonSolved, output.Metadata["loop_stop_reason"])
+
+	var feedbackSeen bool
+	for _, event := range bus.published {
+		if _, ok := event.(*FeedbackEvent); ok {
+			feedbackSeen = true
+			break
+		}
+	}
+	assert.True(t, feedbackSeen, "expected Observe to publish a feedback event in the default closed loop")
+}
+
+func TestBaseAgent_Execute_DefaultClosedLoopConsumesReasoningRegistry(t *testing.T) {
+	logger := zap.NewNop()
+	var completionCalls int
+	provider := &testProvider{
+		name: "mock",
+		completionFn: func(_ context.Context, _ *llm.ChatRequest) (*llm.ChatResponse, error) {
+			completionCalls++
+			return &llm.ChatResponse{
+				Provider: "mock",
+				Model:    "gpt-4",
+				Choices: []llm.ChatChoice{{
+					Message: types.Message{Role: llm.RoleAssistant, Content: "1. inspect\n2. execute"},
+				}},
+			}, nil
+		},
+	}
+
+	registry := reasoning.NewPatternRegistry()
+	require.NoError(t, registry.Register(integrationReasoningPatternStub{name: ReasoningModePlanAndExecute}))
+
+	ag := NewBaseAgent(testAgentConfig("reasoning-agent", "ReasoningAgent", "gpt-4"), provider, &testMemoryManager{}, &testToolManager{}, &testEventBus{}, logger, nil)
+	require.NoError(t, ag.Init(context.Background()))
+	ag.SetReasoningRegistry(registry)
+	ag.SetReasoningModeSelector(NewDefaultReasoningModeSelector())
+	ag.SetCompletionJudge(NewDefaultCompletionJudge())
+
+	output, err := ag.Execute(context.Background(), &Input{
+		TraceID: "trace-reasoning",
+		Content: "break down and execute this workflow",
+		Context: map[string]any{"complex_task": true},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, output)
+	assert.Equal(t, 1, completionCalls, "planner should consume the provider once and act should be handled by the reasoning registry")
+	assert.Equal(t, ReasoningModePlanAndExecute, output.SelectedReasoningMode)
+	assert.Equal(t, "pattern:plan_and_execute", output.Content)
+	require.NotNil(t, output.Metadata)
+	assert.Equal(t, "plan_and_execute", output.Metadata["reasoning_pattern"])
+}
+
+func TestBaseAgent_Execute_DefaultClosedLoopReflectsWithinMainChain(t *testing.T) {
+	logger := zap.NewNop()
+	var completionCalls int
+	provider := &testProvider{
+		name: "mock",
+		completionFn: func(_ context.Context, _ *llm.ChatRequest) (*llm.ChatResponse, error) {
+			completionCalls++
+			switch completionCalls {
+			case 1:
+				return &llm.ChatResponse{
+					Provider: "mock",
+					Model:    "gpt-4",
+					Choices: []llm.ChatChoice{{
+						Message: types.Message{Role: llm.RoleAssistant, Content: "1. diagnose\n2. fix"},
+					}},
+				}, nil
+			case 2:
+				return &llm.ChatResponse{
+					Provider: "mock",
+					Model:    "gpt-4",
+					Choices: []llm.ChatChoice{{
+						FinishReason: "stop",
+						Message:      types.Message{Role: llm.RoleAssistant, Content: "draft answer"},
+					}},
+				}, nil
+			case 3:
+				return &llm.ChatResponse{
+					Provider: "mock",
+					Model:    "gpt-4",
+					Choices: []llm.ChatChoice{{
+						Message: types.Message{Role: llm.RoleAssistant, Content: "1. verify\n2. finalize"},
+					}},
+				}, nil
+			case 4:
+				return &llm.ChatResponse{
+					Provider: "mock",
+					Model:    "gpt-4",
+					Choices: []llm.ChatChoice{{
+						FinishReason: "stop",
+						Message:      types.Message{Role: llm.RoleAssistant, Content: "refined answer"},
+					}},
+					Usage: llm.ChatUsage{TotalTokens: 21},
+				}, nil
+			default:
+				return nil, fmt.Errorf("unexpected completion call %d", completionCalls)
+			}
+		},
+	}
+
+	judge := &integrationCompletionJudgeStub{decisions: []*CompletionDecision{
+		{Decision: LoopDecisionReflect, NeedReflection: true, StopReason: StopReasonBlocked, Reason: "reflect before finalizing"},
+		{Decision: LoopDecisionDone, Solved: true, StopReason: StopReasonSolved, Reason: "resolved"},
+	}}
+
+	cfg := testAgentConfig("reflect-agent", "ReflectAgent", "gpt-4")
+	cfg.Runtime.MaxReActIterations = 1
+	ag := NewBaseAgent(cfg, provider, &testMemoryManager{}, &testToolManager{}, &testEventBus{}, logger, nil)
+	require.NoError(t, ag.Init(context.Background()))
+	ag.EnableReflection(&integrationLoopReflectionRunner{})
+	ag.SetCompletionJudge(judge)
+	ag.SetReasoningModeSelector(NewDefaultReasoningModeSelector())
+	ag.config.Features.Reflection = &types.ReflectionConfig{Enabled: true, MaxIterations: 2}
+
+	output, err := ag.Execute(context.Background(), &Input{TraceID: "trace-reflect", Content: "improve this answer"})
+	require.NoError(t, err)
+	require.NotNil(t, output)
+	assert.Equal(t, 4, completionCalls)
+	assert.Equal(t, "refined answer", output.Content)
+	require.NotNil(t, output.Metadata)
+	assert.Equal(t, 1, output.Metadata["reflection_iterations"])
+	assert.Equal(t, StopReasonSolved, output.Metadata["loop_stop_reason"])
+}
+
 func TestDefaultEnhancedExecutionOptions(t *testing.T) {
 	opts := DefaultEnhancedExecutionOptions()
 	assert.False(t, opts.UseReflection)
@@ -262,6 +438,37 @@ func (r *integTestReflectionRunner) ExecuteWithReflection(ctx context.Context, i
 	return nil, nil
 }
 
+type integrationLoopReflectionRunner struct{}
+
+func (r *integrationLoopReflectionRunner) ExecuteWithReflection(ctx context.Context, input *Input) (*Output, error) {
+	return nil, nil
+}
+
+func (r *integrationLoopReflectionRunner) ReflectStep(_ context.Context, _ *Input, _ *Output, _ *LoopState) (*LoopReflectionResult, error) {
+	return &LoopReflectionResult{
+		NextInput: &Input{TraceID: "trace-reflect", Content: "refined prompt"},
+		Observation: &LoopObservation{
+			Metadata: map[string]any{
+				"reflection_critique": Critique{Score: 0.45, IsGood: false},
+			},
+		},
+	}, nil
+}
+
+type integrationCompletionJudgeStub struct {
+	decisions []*CompletionDecision
+	index     int
+}
+
+func (s *integrationCompletionJudgeStub) Judge(_ context.Context, _ *LoopState, _ *Output, _ error) (*CompletionDecision, error) {
+	if s.index >= len(s.decisions) {
+		return &CompletionDecision{Decision: LoopDecisionDone, Solved: true, StopReason: StopReasonSolved}, nil
+	}
+	decision := s.decisions[s.index]
+	s.index++
+	return decision, nil
+}
+
 type integTestToolSelectorRunner struct{}
 
 func (r *integTestToolSelectorRunner) SelectTools(ctx context.Context, task string, tools []types.ToolSchema) ([]types.ToolSchema, error) {
@@ -310,4 +517,27 @@ type integTestObservability struct{}
 func (r *integTestObservability) StartTrace(traceID, agentID string)         {}
 func (r *integTestObservability) EndTrace(traceID, status string, err error) {}
 func (r *integTestObservability) RecordTask(agentID string, success bool, d time.Duration, tokens int, cost, quality float64) {
+}
+
+type integrationReasoningPatternStub struct {
+	name string
+}
+
+func (s integrationReasoningPatternStub) Execute(context.Context, string) (*reasoning.ReasoningResult, error) {
+	return &reasoning.ReasoningResult{
+		Pattern:     s.name,
+		Task:        "integration-test",
+		FinalAnswer: "pattern:" + s.name,
+		Confidence:  0.88,
+		Steps: []reasoning.ReasoningStep{
+			{StepID: "step-1", Type: "plan", Content: "use reasoning registry"},
+		},
+		Metadata: map[string]any{
+			"source": "integration-test",
+		},
+	}, nil
+}
+
+func (s integrationReasoningPatternStub) Name() string {
+	return s.name
 }

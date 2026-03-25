@@ -1,10 +1,10 @@
 package reasoning
 
 import (
-	"github.com/BaSui01/agentflow/types"
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/BaSui01/agentflow/types"
 	"strings"
 	"time"
 
@@ -83,6 +83,10 @@ func (r *ReflexionExecutor) Execute(ctx context.Context, task string) (*Reasonin
 	defer cancel()
 
 	result := &ReasoningResult{Pattern: r.Name(), Task: task, Steps: make([]ReasoningStep, 0), Metadata: make(map[string]any)}
+	result.Metadata["reflexion_trial_budget"] = r.config.MaxTrials
+	result.Metadata["reflexion_success_threshold"] = r.config.SuccessThreshold
+	result.Metadata["reflexion_budget_scope"] = "strategy_internal"
+	result.Metadata["internal_stop_cause"] = "completed"
 	var trials []Trial
 	var bestTrial *Trial
 
@@ -90,6 +94,7 @@ func (r *ReflexionExecutor) Execute(ctx context.Context, task string) (*Reasonin
 		select {
 		case <-ctx.Done():
 			result.TotalLatency = time.Since(start)
+			result.Metadata["internal_stop_cause"] = "reflexion_timeout"
 			return result, nil
 		default:
 		}
@@ -135,6 +140,12 @@ func (r *ReflexionExecutor) Execute(ctx context.Context, task string) (*Reasonin
 
 	if bestTrial != nil {
 		result.FinalAnswer = bestTrial.Result
+	}
+	if bestTrial != nil {
+		result.Confidence = bestTrial.Score
+	}
+	if bestTrial != nil && bestTrial.Score < r.config.SuccessThreshold {
+		result.Metadata["internal_stop_cause"] = "reflexion_trial_budget_exhausted"
 	}
 	result.TotalLatency = time.Since(start)
 	return result, nil
@@ -247,5 +258,3 @@ func extractJSONFromContent(s string) string {
 	}
 	return s
 }
-
-

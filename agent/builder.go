@@ -140,6 +140,9 @@ func (b *AgentBuilder) WithReflection(config *ReflectionExecutorConfig) *AgentBu
 	}
 	b.reflectionConfig = config
 	ensureReflectionEnabled(&b.config)
+	b.config.Features.Reflection.MaxIterations = config.MaxIterations
+	b.config.Features.Reflection.MinQuality = config.MinQuality
+	b.config.Features.Reflection.CriticPrompt = config.CriticPrompt
 	return b
 }
 
@@ -373,7 +376,7 @@ func (b *AgentBuilder) Build() (*BaseAgent, error) {
 
 	// 启用高级特性
 	if b.config.IsReflectionEnabled() && b.reflectionConfig != nil {
-		reflectionExecutor := NewReflectionExecutor(agent, *b.reflectionConfig)
+		reflectionExecutor := NewReflectionExecutor(agent, reflectionExecutorConfigFromPolicy(agent.loopControlPolicy()))
 		agent.EnableReflection(AsReflectionRunner(reflectionExecutor))
 	}
 
@@ -390,6 +393,12 @@ func (b *AgentBuilder) Build() (*BaseAgent, error) {
 	if err := b.enableOptionalFeatures(agent); err != nil {
 		return nil, err
 	}
+
+	if b.reasoningRegistry != nil {
+		agent.SetReasoningRegistry(b.reasoningRegistry)
+	}
+	agent.SetReasoningModeSelector(NewDefaultReasoningModeSelector())
+	agent.SetCompletionJudge(NewDefaultCompletionJudge())
 
 	return agent, nil
 }
@@ -607,4 +616,41 @@ func typesGuardrailsFromRuntime(cfg *guardrails.GuardrailsConfig) *types.Guardra
 		OnInputFailure:     string(cfg.OnInputFailure),
 		OnOutputFailure:    string(cfg.OnOutputFailure),
 	}
+}
+
+// NewDefaultReasoningRegistry constructs the default reasoning registry used by
+// runtime.Builder when the caller does not inject one explicitly.
+func NewDefaultReasoningRegistry(
+	provider llm.Provider,
+	toolManager ToolManager,
+	agentID string,
+	bus EventBus,
+	logger *zap.Logger,
+) *reasoning.PatternRegistry {
+	if logger == nil {
+		logger = zap.NewNop()
+	}
+	registry := reasoning.NewPatternRegistry()
+	toolExecutor := newToolManagerExecutor(toolManager, agentID, nil, bus)
+	toolSchemas := reasoningToolSchemas(toolManager, agentID)
+
+	registerDefaultReasoningPattern(registry, reasoning.NewTreeOfThought(provider, toolExecutor, reasoning.DefaultTreeOfThoughtConfig(), logger), logger)
+	registerDefaultReasoningPattern(registry, reasoning.NewReWOO(provider, toolExecutor, toolSchemas, reasoning.DefaultReWOOConfig(), logger), logger)
+	registerDefaultReasoningPattern(registry, reasoning.NewPlanAndExecute(provider, toolExecutor, toolSchemas, reasoning.DefaultPlanExecuteConfig(), logger), logger)
+	registerDefaultReasoningPattern(registry, reasoning.NewDynamicPlanner(provider, toolExecutor, toolSchemas, reasoning.DefaultDynamicPlannerConfig(), logger), logger)
+	registerDefaultReasoningPattern(registry, reasoning.NewReflexionExecutor(provider, toolExecutor, toolSchemas, reasoning.DefaultReflexionConfig(), logger), logger)
+	return registry
+}
+
+func registerDefaultReasoningPattern(registry *reasoning.PatternRegistry, pattern reasoning.ReasoningPattern, logger *zap.Logger) {
+	if err := registry.Register(pattern); err != nil {
+		logger.Warn("skip duplicate default reasoning pattern", zap.String("pattern", pattern.Name()), zap.Error(err))
+	}
+}
+
+func reasoningToolSchemas(toolManager ToolManager, agentID string) []types.ToolSchema {
+	if toolManager == nil {
+		return nil
+	}
+	return toolManager.GetAllowedTools(agentID)
 }

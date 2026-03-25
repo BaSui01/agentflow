@@ -15,7 +15,7 @@
 
 - Chat: `/api/v1/chat/capabilities`、`/api/v1/chat/completions`、`/api/v1/chat/completions/stream`
 - OpenAI 兼容入站：`/v1/chat/completions`、`/v1/responses`（协议适配到同一 ChatService/gateway 链路）
-- Agent: `/api/v1/agents`、`/api/v1/agents/capabilities`、`/api/v1/agents/execute`、`/api/v1/agents/execute/stream`、`/api/v1/agents/plan`、`/api/v1/agents/health`
+- Agent: `/api/v1/agents`、`/api/v1/agents/capabilities`、`/api/v1/agents/execute`、`/api/v1/agents/execute/stream`、`/api/v1/agents/health`
 - RAG: `/api/v1/rag/query`、`/api/v1/rag/index`
 - Workflow: `/api/v1/workflows/execute`、`/api/v1/workflows/parse`、`/api/v1/workflows`
 - Multimodal: `/api/v1/multimodal/*`
@@ -53,7 +53,7 @@ http.HandleFunc("GET /api/v1/agents", agentHandler.HandleListAgents)
 http.HandleFunc("POST /api/v1/agents/execute", agentHandler.HandleExecuteAgent)
 ```
 
-说明：`AgentHandler` 的执行、规划、流式调用统一走 `AgentService`。
+说明：`AgentHandler` 的执行、流式调用统一走 `AgentService`。单 Agent 请求直接调用目标 agent 的默认闭环 `Execute(...)`；只有 `agent_ids` 多目标请求才进入 `multiagent` 模式注册表。
 
 多 Agent 执行也走同一入口，不新增旁路 handler：
 
@@ -71,7 +71,7 @@ http.HandleFunc("POST /api/v1/agents/execute", agentHandler.HandleExecuteAgent)
 - `agent_id` 与 `agent_ids` 二选一。
 - `agent_ids` 最多 5 个。
 - 未显式传 `mode` 时，多 Agent 请求默认走 `parallel`。
-- `plan/stream` 当前仅支持单 agent，不支持 `agent_ids`。
+- `stream` 当前仅支持单 agent，不支持 `agent_ids`。
 
 ## 统一响应与错误
 

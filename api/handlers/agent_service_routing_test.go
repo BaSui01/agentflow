@@ -15,6 +15,8 @@ import (
 type routingAwareAgent struct {
 	lastExecuteCtx context.Context
 	lastPlanCtx    context.Context
+	output         *agent.Output
+	executeCalls   int
 }
 
 func (a *routingAwareAgent) ID() string                     { return "routing-agent" }
@@ -34,6 +36,10 @@ func (a *routingAwareAgent) Plan(ctx context.Context, _ *agent.Input) (*agent.Pl
 
 func (a *routingAwareAgent) Execute(ctx context.Context, _ *agent.Input) (*agent.Output, error) {
 	a.lastExecuteCtx = ctx
+	a.executeCalls++
+	if a.output != nil {
+		return a.output, nil
+	}
 	return &agent.Output{
 		TraceID:      "trace-1",
 		Content:      "ok",
@@ -41,6 +47,14 @@ func (a *routingAwareAgent) Execute(ctx context.Context, _ *agent.Input) (*agent
 		Cost:         0,
 		Duration:     time.Millisecond,
 		FinishReason: "stop",
+		Metadata: map[string]any{
+			"current_stage":           "planning",
+			"iteration_count":         2,
+			"selected_reasoning_mode": "deep",
+			"stop_reason":             "solved",
+			"checkpoint_id":           "ckpt-1",
+			"resumable":               true,
+		},
 	}, nil
 }
 
@@ -87,6 +101,55 @@ func TestAgentService_ExecuteAgent_AppliesRoutingContext(t *testing.T) {
 	assert.Equal(t, "health_first", rc.Metadata["route_policy"])
 	assert.Equal(t, "t1", rc.Metadata["tenant"])
 	assert.Equal(t, []string{"prod"}, rc.Tags)
+	assert.Equal(t, "planning", resp.CurrentStage)
+	assert.Equal(t, 2, resp.IterationCount)
+	assert.Equal(t, "deep", resp.SelectedReasoningMode)
+	assert.Equal(t, "solved", resp.StopReason)
+	assert.Equal(t, "ckpt-1", resp.CheckpointID)
+	assert.True(t, resp.Resumable)
+}
+
+func TestAgentService_ExecuteAgent_PrefersOutputFieldsOverMetadata(t *testing.T) {
+	ag := &routingAwareAgent{
+		output: &agent.Output{
+			TraceID:               "trace-1",
+			Content:               "ok",
+			TokensUsed:            12,
+			Cost:                  0,
+			Duration:              time.Millisecond,
+			FinishReason:          "finish-stop",
+			CurrentStage:          "respond",
+			IterationCount:        4,
+			SelectedReasoningMode: "tree_of_thought",
+			StopReason:            "max_iterations",
+			CheckpointID:          "ckpt-top-level",
+			Resumable:             true,
+			Metadata: map[string]any{
+				"current_stage":           "planning",
+				"iteration_count":         2,
+				"selected_reasoning_mode": "deep",
+				"stop_reason":             "solved",
+				"checkpoint_id":           "ckpt-meta",
+				"resumable":               false,
+			},
+		},
+	}
+	svc := usecase.NewDefaultAgentService(nil, func(ctx context.Context, _ string) (agent.Agent, error) {
+		return ag, nil
+	})
+
+	resp, _, err := svc.ExecuteAgent(context.Background(), usecase.AgentExecuteRequest{
+		AgentID: "routing-agent",
+		Content: "hello",
+	}, "trace-1")
+	require.Nil(t, err)
+	require.NotNil(t, resp)
+	assert.Equal(t, "respond", resp.CurrentStage)
+	assert.Equal(t, 4, resp.IterationCount)
+	assert.Equal(t, "tree_of_thought", resp.SelectedReasoningMode)
+	assert.Equal(t, "max_iterations", resp.StopReason)
+	assert.Equal(t, "ckpt-top-level", resp.CheckpointID)
+	assert.True(t, resp.Resumable)
 }
 
 func TestAgentService_PlanAgent_AppliesRoutingContext(t *testing.T) {
@@ -134,6 +197,34 @@ func TestAgentService_ExecuteAgent_MultiAgentDefaultsToParallel(t *testing.T) {
 	assert.Equal(t, 2, resp.Metadata["agent_count"])
 	require.NotNil(t, agents["agent-1"].lastExecuteCtx)
 	require.NotNil(t, agents["agent-2"].lastExecuteCtx)
+}
+
+func TestAgentService_ExecuteAgent_SingleAgentDoesNotRouteThroughModeLoop(t *testing.T) {
+	ag := &routingAwareAgent{
+		output: &agent.Output{
+			TraceID: "trace-single",
+			Content: "single-agent-result",
+			Metadata: map[string]any{
+				"mode": "single-agent-direct",
+			},
+		},
+	}
+	svc := usecase.NewDefaultAgentService(nil, func(ctx context.Context, _ string) (agent.Agent, error) {
+		return ag, nil
+	})
+
+	resp, _, err := svc.ExecuteAgent(context.Background(), usecase.AgentExecuteRequest{
+		AgentID: "routing-agent",
+		Mode:    "loop",
+		Content: "hello",
+	}, "trace-single")
+	require.Nil(t, err)
+	require.NotNil(t, resp)
+	assert.Equal(t, 1, ag.executeCalls)
+	assert.Equal(t, "single-agent-result", resp.Content)
+	assert.Equal(t, "single-agent-direct", resp.Metadata["mode"])
+	assert.NotEqual(t, "loop", resp.Metadata["mode"])
+	assert.NotEqual(t, "reasoning", resp.Metadata["mode"])
 }
 
 func TestAgentService_SupportedExecutionModes_ContainsParallel(t *testing.T) {

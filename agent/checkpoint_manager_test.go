@@ -156,6 +156,174 @@ func TestCheckpointManager_AutoSave(t *testing.T) {
 	assert.GreaterOrEqual(t, len(checkpoints), 2, "Expected at least 2 auto-saved checkpoints")
 }
 
+func TestCheckpointManager_LoadCheckpointForAgent(t *testing.T) {
+	logger, _ := zap.NewDevelopment()
+	store, err := NewFileCheckpointStore(t.TempDir(), logger)
+	require.NoError(t, err)
+
+	manager := NewCheckpointManager(store, logger)
+	agent := &mockAgent{id: "test-agent", state: StateReady}
+	checkpoint := &Checkpoint{
+		ID:        generateCheckpointID(),
+		ThreadID:  "thread-1",
+		AgentID:   "test-agent",
+		State:     StateRunning,
+		CreatedAt: time.Now(),
+	}
+	require.NoError(t, store.Save(context.Background(), checkpoint))
+
+	loaded, err := manager.LoadCheckpointForAgent(context.Background(), agent, checkpoint.ID)
+	require.NoError(t, err)
+	require.NotNil(t, loaded)
+	assert.Equal(t, checkpoint.ID, loaded.ID)
+	assert.Equal(t, StateRunning, agent.state)
+}
+
+func TestCheckpointManager_LoadLatestCheckpointForAgent(t *testing.T) {
+	logger, _ := zap.NewDevelopment()
+	store, err := NewFileCheckpointStore(t.TempDir(), logger)
+	require.NoError(t, err)
+
+	manager := NewCheckpointManager(store, logger)
+	agent := &mockAgent{id: "test-agent", state: StateReady}
+	threadID := "thread-1"
+	require.NoError(t, store.Save(context.Background(), &Checkpoint{
+		ID:        generateCheckpointID(),
+		ThreadID:  threadID,
+		AgentID:   "test-agent",
+		State:     StateInit,
+		CreatedAt: time.Now().Add(-time.Minute),
+	}))
+	latest := &Checkpoint{
+		ID:        generateCheckpointID(),
+		ThreadID:  threadID,
+		AgentID:   "test-agent",
+		State:     StateRunning,
+		CreatedAt: time.Now(),
+	}
+	require.NoError(t, store.Save(context.Background(), latest))
+
+	loaded, err := manager.LoadLatestCheckpointForAgent(context.Background(), agent, threadID)
+	require.NoError(t, err)
+	require.NotNil(t, loaded)
+	assert.Equal(t, latest.ID, loaded.ID)
+	assert.Equal(t, StateRunning, agent.state)
+}
+
+func TestCheckpointManager_SaveCheckpointPreservesLoopPersistenceFields(t *testing.T) {
+	logger, _ := zap.NewDevelopment()
+	store, err := NewFileCheckpointStore(t.TempDir(), logger)
+	require.NoError(t, err)
+
+	manager := NewCheckpointManager(store, logger)
+	checkpoint := &Checkpoint{
+		ID:                  "cp-loop-fields",
+		ThreadID:            "thread-1",
+		AgentID:             "test-agent",
+		LoopStateID:         "loop-1",
+		RunID:               "run-1",
+		Goal:                "close task",
+		CurrentPlanID:       "loop-1-plan-4",
+		PlanVersion:         4,
+		CurrentStepID:       "step-4",
+		ObservationsSummary: "plan:ready | act:partial",
+		LastOutputSummary:   "partial answer",
+		LastError:           "temporary failure",
+		State:               StateRunning,
+		Metadata: map[string]any{
+			"loop_state_id":        "loop-1",
+			"current_plan_id":      "loop-1-plan-4",
+			"plan_version":         4,
+			"observations_summary": "plan:ready | act:partial",
+			"last_output_summary":  "partial answer",
+			"last_error":           "temporary failure",
+		},
+		ExecutionContext: &ExecutionContext{
+			CurrentNode:         string(LoopStageObserve),
+			LoopStateID:         "loop-1",
+			RunID:               "run-1",
+			AgentID:             "test-agent",
+			Goal:                "close task",
+			CurrentPlanID:       "loop-1-plan-4",
+			PlanVersion:         4,
+			CurrentStepID:       "step-4",
+			ObservationsSummary: "plan:ready | act:partial",
+			LastOutputSummary:   "partial answer",
+			LastError:           "temporary failure",
+			Variables: map[string]any{
+				"loop_state_id":        "loop-1",
+				"current_plan_id":      "loop-1-plan-4",
+				"plan_version":         4,
+				"observations_summary": "plan:ready | act:partial",
+				"last_output_summary":  "partial answer",
+				"last_error":           "temporary failure",
+			},
+		},
+	}
+
+	require.NoError(t, manager.SaveCheckpoint(context.Background(), checkpoint))
+
+	loaded, err := manager.LoadCheckpoint(context.Background(), checkpoint.ID)
+	require.NoError(t, err)
+	assert.Equal(t, "loop-1", loaded.LoopStateID)
+	assert.Equal(t, "run-1", loaded.RunID)
+	assert.Equal(t, "loop-1-plan-4", loaded.CurrentPlanID)
+	assert.Equal(t, 4, loaded.PlanVersion)
+	assert.Equal(t, "step-4", loaded.CurrentStepID)
+	assert.Equal(t, "plan:ready | act:partial", loaded.ObservationsSummary)
+	assert.Equal(t, "partial answer", loaded.LastOutputSummary)
+	assert.Equal(t, "temporary failure", loaded.LastError)
+	require.NotNil(t, loaded.ExecutionContext)
+	assert.Equal(t, "loop-1", loaded.ExecutionContext.LoopStateID)
+	assert.Equal(t, "temporary failure", loaded.ExecutionContext.LastError)
+}
+
+func TestCheckpointManager_SaveCheckpointNormalizesLoopPersistenceFieldsFromExecutionContext(t *testing.T) {
+	logger, _ := zap.NewDevelopment()
+	store, err := NewFileCheckpointStore(t.TempDir(), logger)
+	require.NoError(t, err)
+
+	manager := NewCheckpointManager(store, logger)
+	checkpoint := &Checkpoint{
+		ID:       "cp-normalize",
+		ThreadID: "thread-2",
+		AgentID:  "test-agent",
+		State:    StateRunning,
+		ExecutionContext: &ExecutionContext{
+			CurrentNode: string(LoopStageObserve),
+			Variables: map[string]any{
+				"loop_state_id":        "loop-ctx",
+				"run_id":               "run-ctx",
+				"goal":                 "resume work",
+				"current_plan_id":      "loop-ctx-plan-3",
+				"plan_version":         3,
+				"current_step":         "step-3",
+				"observations_summary": "plan:ready | act:partial",
+				"last_output_summary":  "partial output",
+				"last_error":           "temporary issue",
+			},
+		},
+	}
+
+	require.NoError(t, manager.SaveCheckpoint(context.Background(), checkpoint))
+
+	loaded, err := manager.LoadCheckpoint(context.Background(), checkpoint.ID)
+	require.NoError(t, err)
+	assert.Equal(t, "loop-ctx", loaded.LoopStateID)
+	assert.Equal(t, "run-ctx", loaded.RunID)
+	assert.Equal(t, "resume work", loaded.Goal)
+	assert.Equal(t, "loop-ctx-plan-3", loaded.CurrentPlanID)
+	assert.Equal(t, 3, loaded.PlanVersion)
+	assert.Equal(t, "step-3", loaded.CurrentStepID)
+	assert.Equal(t, "plan:ready | act:partial", loaded.ObservationsSummary)
+	assert.Equal(t, "partial output", loaded.LastOutputSummary)
+	assert.Equal(t, "temporary issue", loaded.LastError)
+	require.NotNil(t, loaded.Metadata)
+	assert.Equal(t, "step-3", loaded.Metadata["current_step"])
+	require.NotNil(t, loaded.ExecutionContext)
+	assert.Equal(t, "step-3", loaded.ExecutionContext.Variables["current_step_id"])
+}
+
 // 模拟 Agent 是 Agent 接口的简单模拟执行,用于测试
 type mockAgent struct {
 	id    string
@@ -203,4 +371,3 @@ func (m *mockAgent) Transition(ctx context.Context, newState State) error {
 	m.state = newState
 	return nil
 }
-

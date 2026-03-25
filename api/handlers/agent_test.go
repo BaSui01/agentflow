@@ -7,9 +7,11 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/BaSui01/agentflow/agent"
 	"github.com/BaSui01/agentflow/agent/discovery"
 	"github.com/BaSui01/agentflow/agent/protocol/a2a"
 	"github.com/BaSui01/agentflow/internal/usecase"
@@ -111,6 +113,49 @@ func (m *mockRegistry) Close() error                                       { ret
 
 // Verify mockRegistry implements discovery.Registry
 var _ discovery.Registry = (*mockRegistry)(nil)
+
+type stubAgentService struct {
+	resolveForOperationFn func(ctx context.Context, agentID string, op usecase.AgentOperation) (agent.Agent, *types.Error)
+	listAgentsFn          func(ctx context.Context) ([]*discovery.AgentInfo, *types.Error)
+	getAgentFn            func(ctx context.Context, agentID string) (*discovery.AgentInfo, *types.Error)
+	executeAgentFn        func(ctx context.Context, req usecase.AgentExecuteRequest, traceID string) (*usecase.AgentExecuteResponse, time.Duration, *types.Error)
+	executeAgentStreamFn  func(ctx context.Context, req usecase.AgentExecuteRequest, traceID string, emitter agent.RuntimeStreamEmitter) *types.Error
+}
+
+func (s *stubAgentService) ResolveForOperation(ctx context.Context, agentID string, op usecase.AgentOperation) (agent.Agent, *types.Error) {
+	if s.resolveForOperationFn != nil {
+		return s.resolveForOperationFn(ctx, agentID, op)
+	}
+	return nil, nil
+}
+
+func (s *stubAgentService) ListAgents(ctx context.Context) ([]*discovery.AgentInfo, *types.Error) {
+	if s.listAgentsFn != nil {
+		return s.listAgentsFn(ctx)
+	}
+	return nil, nil
+}
+
+func (s *stubAgentService) GetAgent(ctx context.Context, agentID string) (*discovery.AgentInfo, *types.Error) {
+	if s.getAgentFn != nil {
+		return s.getAgentFn(ctx, agentID)
+	}
+	return nil, nil
+}
+
+func (s *stubAgentService) ExecuteAgent(ctx context.Context, req usecase.AgentExecuteRequest, traceID string) (*usecase.AgentExecuteResponse, time.Duration, *types.Error) {
+	if s.executeAgentFn != nil {
+		return s.executeAgentFn(ctx, req, traceID)
+	}
+	return nil, 0, nil
+}
+
+func (s *stubAgentService) ExecuteAgentStream(ctx context.Context, req usecase.AgentExecuteRequest, traceID string, emitter agent.RuntimeStreamEmitter) *types.Error {
+	if s.executeAgentStreamFn != nil {
+		return s.executeAgentStreamFn(ctx, req, traceID, emitter)
+	}
+	return nil
+}
 
 // =============================================================================
 // Test helpers
@@ -276,35 +321,6 @@ func TestAgentHandler_HandleExecuteAgent_LocalAgent(t *testing.T) {
 
 	// Local agent execution returns 501 (not yet wired)
 	assert.Equal(t, http.StatusNotImplemented, w.Code)
-}
-
-func TestAgentHandler_HandlePlanAgent_MissingBody(t *testing.T) {
-	reg := newMockRegistry()
-	handler := newTestHandler(reg)
-
-	w := httptest.NewRecorder()
-	r := httptest.NewRequest(http.MethodPost, "/v1/agents/plan", nil)
-
-	handler.HandlePlanAgent(w, r)
-
-	assert.Equal(t, http.StatusBadRequest, w.Code)
-}
-
-func TestAgentHandler_HandlePlanAgent_AgentNotFound(t *testing.T) {
-	reg := newMockRegistry()
-	handler := newTestHandler(reg)
-
-	body, _ := json.Marshal(usecase.AgentExecuteRequest{
-		AgentID: "nonexistent",
-		Content: "hello",
-	})
-	w := httptest.NewRecorder()
-	r := httptest.NewRequest(http.MethodPost, "/v1/agents/plan", bytes.NewReader(body))
-	r.Header.Set("Content-Type", "application/json")
-
-	handler.HandlePlanAgent(w, r)
-
-	assert.Equal(t, http.StatusNotFound, w.Code)
 }
 
 func TestAgentHandler_HandleAgentHealth_Online(t *testing.T) {
@@ -526,53 +542,182 @@ func TestAgentHandler_HandleExecuteAgent_MultiAgentValid(t *testing.T) {
 	assert.NotEqual(t, http.StatusBadRequest, w.Code)
 }
 
-func TestAgentHandler_HandlePlanAgent_InvalidAgentID(t *testing.T) {
-	reg := newMockRegistry()
-	handler := newTestHandler(reg)
-
-	tests := []struct {
-		name    string
-		agentID string
-	}{
-		{"SQL injection", "agent'; DROP TABLE--"},
-		{"path traversal", "../../../etc/passwd"},
-		{"special chars", "agent<script>"},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			body, _ := json.Marshal(usecase.AgentExecuteRequest{
-				AgentID: tt.agentID,
-				Content: "hello",
-			})
-			w := httptest.NewRecorder()
-			r := httptest.NewRequest(http.MethodPost, "/v1/agents/plan", bytes.NewReader(body))
-			r.Header.Set("Content-Type", "application/json")
-
-			handler.HandlePlanAgent(w, r)
-
-			assert.Equal(t, http.StatusBadRequest, w.Code, "agentID=%q should be rejected", tt.agentID)
-		})
-	}
-}
-
-func TestAgentHandler_HandlePlanAgent_ValidAgentID(t *testing.T) {
+func TestAgentHandler_HandleAgentStream_EmbedsExecutionFieldsInPayload(t *testing.T) {
 	reg := newMockRegistry().
-		withAgent(newTestAgentInfo("plan-agent", discovery.AgentStatusOnline))
+		withAgent(newTestAgentInfo("stream-agent", discovery.AgentStatusOnline))
 	handler := newTestHandler(reg)
+	handler.service = &stubAgentService{
+		resolveForOperationFn: func(ctx context.Context, agentID string, op usecase.AgentOperation) (agent.Agent, *types.Error) {
+			return nil, nil
+		},
+		executeAgentStreamFn: func(ctx context.Context, req usecase.AgentExecuteRequest, traceID string, emitter agent.RuntimeStreamEmitter) *types.Error {
+			emitter(agent.RuntimeStreamEvent{
+				Type:  agent.RuntimeStreamToken,
+				Delta: "hello",
+			})
+			return nil
+		},
+	}
 
 	body, _ := json.Marshal(usecase.AgentExecuteRequest{
-		AgentID: "plan-agent",
+		AgentID: "stream-agent",
 		Content: "hello",
 	})
 	w := httptest.NewRecorder()
-	r := httptest.NewRequest(http.MethodPost, "/v1/agents/plan", bytes.NewReader(body))
+	r := httptest.NewRequest(http.MethodPost, "/v1/agents/execute/stream", bytes.NewReader(body))
 	r.Header.Set("Content-Type", "application/json")
 
-	handler.HandlePlanAgent(w, r)
+	handler.HandleAgentStream(w, r)
 
-	// Should pass validation (501 = not yet implemented, but not 400)
-	assert.NotEqual(t, http.StatusBadRequest, w.Code)
+	assert.Equal(t, http.StatusOK, w.Code)
+	lines := strings.Split(w.Body.String(), "\n")
+	var tokenPayload map[string]any
+	for i := 0; i < len(lines); i++ {
+		if lines[i] == "event: token" && i+1 < len(lines) && strings.HasPrefix(lines[i+1], "data: ") {
+			err := json.Unmarshal([]byte(strings.TrimPrefix(lines[i+1], "data: ")), &tokenPayload)
+			require.NoError(t, err)
+			break
+		}
+	}
+	require.NotNil(t, tokenPayload)
+	assert.Equal(t, "hello", tokenPayload["content"])
+	assert.Contains(t, tokenPayload, "current_stage")
+	assert.Contains(t, tokenPayload, "iteration_count")
+	assert.Contains(t, tokenPayload, "selected_reasoning_mode")
+	assert.Contains(t, tokenPayload, "stop_reason")
+	assert.Contains(t, tokenPayload, "checkpoint_id")
+	assert.Contains(t, tokenPayload, "resumable")
+	assert.Equal(t, "", tokenPayload["current_stage"])
+	assert.Equal(t, float64(0), tokenPayload["iteration_count"])
+	assert.Equal(t, false, tokenPayload["resumable"])
+}
+
+func TestAgentHandler_HandleAgentStream_EmitsStatusEventsWithStableExecutionFields(t *testing.T) {
+	reg := newMockRegistry().
+		withAgent(newTestAgentInfo("stream-agent", discovery.AgentStatusOnline))
+	handler := newTestHandler(reg)
+	handler.service = &stubAgentService{
+		resolveForOperationFn: func(ctx context.Context, agentID string, op usecase.AgentOperation) (agent.Agent, *types.Error) {
+			return nil, nil
+		},
+		executeAgentStreamFn: func(ctx context.Context, req usecase.AgentExecuteRequest, traceID string, emitter agent.RuntimeStreamEmitter) *types.Error {
+			emitter(agent.RuntimeStreamEvent{
+				Type:           agent.RuntimeStreamStatus,
+				CurrentStage:   "evaluate",
+				IterationCount: 2,
+				SelectedMode:   "react",
+				StopReason:     "solved",
+				Data: map[string]any{
+					"status":   "completion_judge_decision",
+					"decision": "done",
+				},
+			})
+			emitter(agent.RuntimeStreamEvent{
+				Type:           agent.RuntimeStreamToken,
+				Delta:          "hello",
+				CurrentStage:   "reasoning",
+				IterationCount: 2,
+				SelectedMode:   "react",
+				StopReason:     "solved",
+			})
+			return nil
+		},
+	}
+
+	body, _ := json.Marshal(usecase.AgentExecuteRequest{
+		AgentID: "stream-agent",
+		Content: "hello",
+	})
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPost, "/v1/agents/execute/stream", bytes.NewReader(body))
+	r.Header.Set("Content-Type", "application/json")
+
+	handler.HandleAgentStream(w, r)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	lines := strings.Split(w.Body.String(), "\n")
+	var statusPayload map[string]any
+	var tokenPayload map[string]any
+	for i := 0; i < len(lines); i++ {
+		if lines[i] == "event: status" && i+1 < len(lines) && strings.HasPrefix(lines[i+1], "data: ") {
+			err := json.Unmarshal([]byte(strings.TrimPrefix(lines[i+1], "data: ")), &statusPayload)
+			require.NoError(t, err)
+		}
+		if lines[i] == "event: token" && i+1 < len(lines) && strings.HasPrefix(lines[i+1], "data: ") {
+			err := json.Unmarshal([]byte(strings.TrimPrefix(lines[i+1], "data: ")), &tokenPayload)
+			require.NoError(t, err)
+		}
+	}
+	require.NotNil(t, statusPayload)
+	require.NotNil(t, tokenPayload)
+	assert.Equal(t, "completion_judge_decision", statusPayload["status"])
+	assert.Equal(t, "evaluate", statusPayload["current_stage"])
+	assert.Equal(t, float64(2), statusPayload["iteration_count"])
+	assert.Equal(t, "react", statusPayload["selected_reasoning_mode"])
+	assert.Equal(t, "solved", statusPayload["stop_reason"])
+	assert.Equal(t, "done", statusPayload["decision"])
+
+	assert.Equal(t, "hello", tokenPayload["content"])
+	assert.Equal(t, "reasoning", tokenPayload["current_stage"])
+	assert.Equal(t, float64(2), tokenPayload["iteration_count"])
+	assert.Equal(t, "react", tokenPayload["selected_reasoning_mode"])
+	assert.Equal(t, "solved", tokenPayload["stop_reason"])
+}
+
+func TestAgentHandler_HandleAgentStream_StatusEventPayload(t *testing.T) {
+	reg := newMockRegistry().
+		withAgent(newTestAgentInfo("stream-agent", discovery.AgentStatusOnline))
+	handler := newTestHandler(reg)
+	handler.service = &stubAgentService{
+		resolveForOperationFn: func(ctx context.Context, agentID string, op usecase.AgentOperation) (agent.Agent, *types.Error) {
+			return nil, nil
+		},
+		executeAgentStreamFn: func(ctx context.Context, req usecase.AgentExecuteRequest, traceID string, emitter agent.RuntimeStreamEmitter) *types.Error {
+			emitter(agent.RuntimeStreamEvent{
+				Type:           agent.RuntimeStreamStatus,
+				CurrentStage:   "evaluate",
+				IterationCount: 2,
+				SelectedMode:   "dynamic_planner",
+				StopReason:     "blocked",
+				CheckpointID:   "cp-2",
+				Resumable:      true,
+				Data: map[string]any{
+					"status":   "loop_stopped",
+					"decision": "replan",
+				},
+			})
+			return nil
+		},
+	}
+
+	body, _ := json.Marshal(usecase.AgentExecuteRequest{
+		AgentID: "stream-agent",
+		Content: "hello",
+	})
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPost, "/v1/agents/execute/stream", bytes.NewReader(body))
+	r.Header.Set("Content-Type", "application/json")
+
+	handler.HandleAgentStream(w, r)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	lines := strings.Split(w.Body.String(), "\n")
+	var statusPayload map[string]any
+	for i := 0; i < len(lines); i++ {
+		if lines[i] == "event: status" && i+1 < len(lines) && strings.HasPrefix(lines[i+1], "data: ") {
+			err := json.Unmarshal([]byte(strings.TrimPrefix(lines[i+1], "data: ")), &statusPayload)
+			require.NoError(t, err)
+			break
+		}
+	}
+	require.NotNil(t, statusPayload)
+	assert.Equal(t, "loop_stopped", statusPayload["status"])
+	assert.Equal(t, "evaluate", statusPayload["current_stage"])
+	assert.Equal(t, float64(2), statusPayload["iteration_count"])
+	assert.Equal(t, "dynamic_planner", statusPayload["selected_reasoning_mode"])
+	assert.Equal(t, "blocked", statusPayload["stop_reason"])
+	assert.Equal(t, "cp-2", statusPayload["checkpoint_id"])
+	assert.Equal(t, true, statusPayload["resumable"])
 }
 
 func TestAgentHandler_HandleExecuteAgent_InvalidRoutingParams(t *testing.T) {

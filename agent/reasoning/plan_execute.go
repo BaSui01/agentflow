@@ -106,6 +106,9 @@ func (p *PlanAndExecute) Execute(ctx context.Context, task string) (*ReasoningRe
 		Task:     task,
 		Metadata: make(map[string]any),
 	}
+	result.Metadata["plan_execute_replan_budget"] = p.config.MaxReplanAttempts
+	result.Metadata["plan_execute_max_plan_steps"] = p.config.MaxPlanSteps
+	result.Metadata["plan_execute_budget_scope"] = "strategy_internal"
 
 	// 第一阶段:制定初步计划
 	p.logger.Info("Plan-and-Execute: Creating initial plan")
@@ -123,6 +126,7 @@ func (p *PlanAndExecute) Execute(ctx context.Context, task string) (*ReasoningRe
 
 	// 第二阶段:实施适应性再规划计划
 	replanAttempts := 0
+	internalStopCause := "completed"
 	for plan.Status != planStatusCompleted && plan.Status != planStatusFailed {
 		select {
 		case <-ctx.Done():
@@ -146,6 +150,7 @@ func (p *PlanAndExecute) Execute(ctx context.Context, task string) (*ReasoningRe
 
 				if replanErr != nil {
 					plan.Status = planStatusFailed
+					internalStopCause = "plan_execute_replan_generation_failed"
 					result.Steps = append(result.Steps, ReasoningStep{
 						StepID:  "replan_failed",
 						Type:    "backtrack",
@@ -164,6 +169,11 @@ func (p *PlanAndExecute) Execute(ctx context.Context, task string) (*ReasoningRe
 			}
 
 			plan.Status = planStatusFailed
+			if replanAttempts >= p.config.MaxReplanAttempts {
+				internalStopCause = "plan_execute_replan_budget_exhausted"
+			} else {
+				internalStopCause = "plan_execute_execution_failed"
+			}
 			break
 		}
 
@@ -204,6 +214,7 @@ func (p *PlanAndExecute) Execute(ctx context.Context, task string) (*ReasoningRe
 	result.Metadata["completed_steps"] = plan.CurrentStep
 	result.Metadata["replan_attempts"] = replanAttempts
 	result.Metadata["final_status"] = plan.Status
+	result.Metadata["internal_stop_cause"] = internalStopCause
 
 	return result, nil
 }

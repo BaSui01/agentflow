@@ -36,14 +36,16 @@ func (b *BaseAgent) ChatCompletion(ctx context.Context, messages []types.Message
 // 支持 Steering：通过 context 中的 SteeringChannel 接收实时引导/停止后发送指令。
 func (b *BaseAgent) chatCompletionStreaming(ctx context.Context, pr *preparedRequest, emit RuntimeStreamEmitter) (*llm.ChatResponse, error) {
 	steerCh, _ := SteeringChannelFromContext(ctx)
+	reactIterationBudget := reactToolLoopBudget(pr)
 
 	if pr.hasTools {
+		const selectedMode = ReasoningModeReact
 		reactReq := *pr.req
 		reactReq.Model = effectiveToolModel(pr.req.Model, b.config.Runtime.ToolModel)
 		executor := llmtools.NewReActExecutor(
 			pr.toolProvider,
 			newToolManagerExecutor(b.toolManager, b.config.Core.ID, b.config.Runtime.Tools, b.bus),
-			llmtools.ReActConfig{MaxIterations: pr.maxReActIter, StopOnError: false},
+			llmtools.ReActConfig{MaxIterations: reactIterationBudget, StopOnError: false},
 			b.logger,
 		)
 		// 将 steering channel 直接传入 ReAct 执行器（类型统一，无需 adapter）
@@ -55,30 +57,52 @@ func (b *BaseAgent) chatCompletionStreaming(ctx context.Context, pr *preparedReq
 		if err != nil {
 			return nil, err
 		}
+		emitRuntimeStatus(emit, "reasoning_mode_selected", RuntimeStreamEvent{
+			Timestamp:      time.Now(),
+			CurrentStage:   "reasoning",
+			IterationCount: 0,
+			SelectedMode:   selectedMode,
+			Data: map[string]any{
+				"mode":                   selectedMode,
+				"react_iteration_budget": reactIterationBudget,
+			},
+		})
 		var final *llm.ChatResponse
+		currentIteration := 0
 		for ev := range evCh {
 			switch ev.Type {
+			case llmtools.ReActEventIterationStart:
+				currentIteration = ev.Iteration
 			case llmtools.ReActEventLLMChunk:
 				if ev.Chunk != nil && ev.Chunk.Delta.Content != "" {
 					emit(RuntimeStreamEvent{
-						Type:      RuntimeStreamToken,
-						Timestamp: time.Now(),
-						Token:     ev.Chunk.Delta.Content,
-						Delta:     ev.Chunk.Delta.Content,
+						Type:           RuntimeStreamToken,
+						Timestamp:      time.Now(),
+						Token:          ev.Chunk.Delta.Content,
+						Delta:          ev.Chunk.Delta.Content,
+						CurrentStage:   "reasoning",
+						IterationCount: currentIteration,
+						SelectedMode:   selectedMode,
 					})
 				}
 				if ev.Chunk != nil && ev.Chunk.Delta.ReasoningContent != nil && *ev.Chunk.Delta.ReasoningContent != "" {
 					emit(RuntimeStreamEvent{
-						Type:      RuntimeStreamReasoning,
-						Timestamp: time.Now(),
-						Reasoning: *ev.Chunk.Delta.ReasoningContent,
+						Type:           RuntimeStreamReasoning,
+						Timestamp:      time.Now(),
+						Reasoning:      *ev.Chunk.Delta.ReasoningContent,
+						CurrentStage:   "reasoning",
+						IterationCount: currentIteration,
+						SelectedMode:   selectedMode,
 					})
 				}
 			case llmtools.ReActEventToolsStart:
 				for _, call := range ev.ToolCalls {
 					emit(RuntimeStreamEvent{
-						Type:      RuntimeStreamToolCall,
-						Timestamp: time.Now(),
+						Type:           RuntimeStreamToolCall,
+						Timestamp:      time.Now(),
+						CurrentStage:   "acting",
+						IterationCount: currentIteration,
+						SelectedMode:   selectedMode,
 						ToolCall: &RuntimeToolCall{
 							ID:        call.ID,
 							Name:      call.Name,
@@ -89,8 +113,11 @@ func (b *BaseAgent) chatCompletionStreaming(ctx context.Context, pr *preparedReq
 			case llmtools.ReActEventToolsEnd:
 				for _, tr := range ev.ToolResults {
 					emit(RuntimeStreamEvent{
-						Type:      RuntimeStreamToolResult,
-						Timestamp: time.Now(),
+						Type:           RuntimeStreamToolResult,
+						Timestamp:      time.Now(),
+						CurrentStage:   "acting",
+						IterationCount: currentIteration,
+						SelectedMode:   selectedMode,
 						ToolResult: &RuntimeToolResult{
 							ToolCallID: tr.ToolCallID,
 							Name:       tr.Name,
@@ -102,26 +129,39 @@ func (b *BaseAgent) chatCompletionStreaming(ctx context.Context, pr *preparedReq
 				}
 			case llmtools.ReActEventToolProgress:
 				emit(RuntimeStreamEvent{
-					Type:       RuntimeStreamToolProgress,
-					Timestamp:  time.Now(),
-					ToolCallID: ev.ToolCallID,
-					ToolName:   ev.ToolName,
-					Data:       ev.ProgressData,
+					Type:           RuntimeStreamToolProgress,
+					Timestamp:      time.Now(),
+					ToolCallID:     ev.ToolCallID,
+					ToolName:       ev.ToolName,
+					Data:           ev.ProgressData,
+					CurrentStage:   "acting",
+					IterationCount: currentIteration,
+					SelectedMode:   selectedMode,
 				})
 			case llmtools.ReActEventSteering:
 				emit(RuntimeStreamEvent{
 					Type:            RuntimeStreamSteering,
 					Timestamp:       time.Now(),
 					SteeringContent: ev.SteeringContent,
+					CurrentStage:    "reasoning",
+					IterationCount:  currentIteration,
+					SelectedMode:    selectedMode,
 				})
 			case llmtools.ReActEventStopAndSend:
 				emit(RuntimeStreamEvent{
-					Type:      RuntimeStreamStopAndSend,
-					Timestamp: time.Now(),
+					Type:           RuntimeStreamStopAndSend,
+					Timestamp:      time.Now(),
+					CurrentStage:   "reasoning",
+					IterationCount: currentIteration,
+					SelectedMode:   selectedMode,
 				})
 			case llmtools.ReActEventCompleted:
 				final = ev.FinalResponse
+				stopReason := normalizeRuntimeStopReasonFromResponse(final)
+				emitCompletionLoopStatus(emit, currentIteration, selectedMode, stopReason)
 			case llmtools.ReActEventError:
+				stopReason := string(classifyStopReason(ev.Error))
+				emitCompletionLoopStatus(emit, currentIteration, selectedMode, stopReason)
 				return nil, NewErrorWithCause(types.ErrAgentExecution, "streaming execution error", errors.New(ev.Error))
 			}
 		}
@@ -135,6 +175,11 @@ func (b *BaseAgent) chatCompletionStreaming(ctx context.Context, pr *preparedReq
 	messages := make([]types.Message, len(pr.req.Messages))
 	copy(messages, pr.req.Messages)
 	var cumulativeUsage llm.ChatUsage
+	emitRuntimeStatus(emit, "reasoning_mode_selected", RuntimeStreamEvent{
+		Timestamp:      time.Now(),
+		CurrentStage:   "responding",
+		IterationCount: 1,
+	})
 
 	for {
 		streamCtx, cancelStream := context.WithCancel(ctx)
@@ -184,18 +229,22 @@ func (b *BaseAgent) chatCompletionStreaming(ctx context.Context, pr *preparedReq
 				}
 				if chunk.Delta.Content != "" {
 					emit(RuntimeStreamEvent{
-						Type:      RuntimeStreamToken,
-						Timestamp: time.Now(),
-						Token:     chunk.Delta.Content,
-						Delta:     chunk.Delta.Content,
+						Type:           RuntimeStreamToken,
+						Timestamp:      time.Now(),
+						Token:          chunk.Delta.Content,
+						Delta:          chunk.Delta.Content,
+						CurrentStage:   "responding",
+						IterationCount: 1,
 					})
 					assembled.Content += chunk.Delta.Content
 				}
 				if chunk.Delta.ReasoningContent != nil && *chunk.Delta.ReasoningContent != "" {
 					emit(RuntimeStreamEvent{
-						Type:      RuntimeStreamReasoning,
-						Timestamp: time.Now(),
-						Reasoning: *chunk.Delta.ReasoningContent,
+						Type:           RuntimeStreamReasoning,
+						Timestamp:      time.Now(),
+						Reasoning:      *chunk.Delta.ReasoningContent,
+						CurrentStage:   "responding",
+						IterationCount: 1,
 					})
 					reasoningBuf.WriteString(*chunk.Delta.ReasoningContent)
 				}
@@ -238,6 +287,7 @@ func (b *BaseAgent) chatCompletionStreaming(ctx context.Context, pr *preparedReq
 				}},
 				Usage: cumulativeUsage,
 			}
+			emitCompletionLoopStatus(emit, 1, "", normalizeRuntimeStopReason(lastFR))
 			return resp, nil
 		}
 
@@ -248,11 +298,15 @@ func (b *BaseAgent) chatCompletionStreaming(ctx context.Context, pr *preparedReq
 				Type:            RuntimeStreamSteering,
 				Timestamp:       time.Now(),
 				SteeringContent: steering.Content,
+				CurrentStage:    "responding",
+				IterationCount:  1,
 			})
 		case SteeringTypeStopAndSend:
 			emit(RuntimeStreamEvent{
-				Type:      RuntimeStreamStopAndSend,
-				Timestamp: time.Now(),
+				Type:           RuntimeStreamStopAndSend,
+				Timestamp:      time.Now(),
+				CurrentStage:   "responding",
+				IterationCount: 1,
 			})
 		}
 
@@ -270,10 +324,11 @@ func (b *BaseAgent) chatCompletionStreaming(ctx context.Context, pr *preparedReq
 func (b *BaseAgent) chatCompletionWithTools(ctx context.Context, pr *preparedRequest) (*llm.ChatResponse, error) {
 	reactReq := *pr.req
 	reactReq.Model = effectiveToolModel(pr.req.Model, b.config.Runtime.ToolModel)
+	reactIterationBudget := reactToolLoopBudget(pr)
 	executor := llmtools.NewReActExecutor(
 		pr.toolProvider,
 		newToolManagerExecutor(b.toolManager, b.config.Core.ID, b.config.Runtime.Tools, b.bus),
-		llmtools.ReActConfig{MaxIterations: pr.maxReActIter, StopOnError: false},
+		llmtools.ReActConfig{MaxIterations: reactIterationBudget, StopOnError: false},
 		b.logger,
 	)
 	resp, _, err := executor.Execute(ctx, &reactReq)
@@ -281,6 +336,13 @@ func (b *BaseAgent) chatCompletionWithTools(ctx context.Context, pr *preparedReq
 		return resp, NewErrorWithCause(types.ErrAgentExecution, "ReAct execution failed", err)
 	}
 	return resp, nil
+}
+
+func reactToolLoopBudget(pr *preparedRequest) int {
+	if pr != nil && pr.maxReActIter > 0 {
+		return pr.maxReActIter
+	}
+	return 1
 }
 
 // StreamCompletion 流式调用 LLM
@@ -326,6 +388,7 @@ const (
 	RuntimeStreamToolResult   RuntimeStreamEventType = "tool_result"
 	RuntimeStreamToolProgress RuntimeStreamEventType = "tool_progress"
 	RuntimeStreamSession      RuntimeStreamEventType = "session"
+	RuntimeStreamStatus       RuntimeStreamEventType = "status"
 	RuntimeStreamSteering     RuntimeStreamEventType = "steering"
 	RuntimeStreamStopAndSend  RuntimeStreamEventType = "stop_and_send"
 )
@@ -359,6 +422,12 @@ type RuntimeStreamEvent struct {
 	ToolName        string                 `json:"tool_name,omitempty"`
 	Data            any                    `json:"data,omitempty"`
 	SteeringContent string                 `json:"steering_content,omitempty"` // steering 确认内容
+	CurrentStage    string                 `json:"current_stage,omitempty"`
+	IterationCount  int                    `json:"iteration_count,omitempty"`
+	SelectedMode    string                 `json:"selected_reasoning_mode,omitempty"`
+	StopReason      string                 `json:"stop_reason,omitempty"`
+	CheckpointID    string                 `json:"checkpoint_id,omitempty"`
+	Resumable       bool                   `json:"resumable,omitempty"`
 }
 
 // RuntimeStreamEmitter is a callback that receives runtime stream events.
@@ -385,4 +454,65 @@ func runtimeStreamEmitterFromContext(ctx context.Context) (RuntimeStreamEmitter,
 	}
 	emit, ok := v.(RuntimeStreamEmitter)
 	return emit, ok && emit != nil
+}
+
+func emitRuntimeStatus(emit RuntimeStreamEmitter, status string, event RuntimeStreamEvent) {
+	if emit == nil {
+		return
+	}
+	event.Type = RuntimeStreamStatus
+	if event.Timestamp.IsZero() {
+		event.Timestamp = time.Now()
+	}
+	if event.Data == nil {
+		event.Data = map[string]any{"status": status}
+	} else if payload, ok := event.Data.(map[string]any); ok {
+		if _, exists := payload["status"]; !exists {
+			payload["status"] = status
+		}
+		event.Data = payload
+	}
+	emit(event)
+}
+
+func emitCompletionLoopStatus(emit RuntimeStreamEmitter, iteration int, selectedMode string, stopReason string) {
+	normalizedStopReason := normalizeTopLevelStopReason(stopReason, stopReason)
+	emitRuntimeStatus(emit, "completion_judge_decision", RuntimeStreamEvent{
+		Timestamp:      time.Now(),
+		CurrentStage:   "evaluate",
+		IterationCount: iteration,
+		SelectedMode:   selectedMode,
+		StopReason:     normalizedStopReason,
+		Data: map[string]any{
+			"decision":            "done",
+			"solved":              normalizedStopReason == string(StopReasonSolved),
+			"internal_stop_cause": stopReason,
+		},
+	})
+	emitRuntimeStatus(emit, "loop_stopped", RuntimeStreamEvent{
+		Timestamp:      time.Now(),
+		CurrentStage:   "completed",
+		IterationCount: iteration,
+		SelectedMode:   selectedMode,
+		StopReason:     normalizedStopReason,
+		Data: map[string]any{
+			"state":               "stopped",
+			"internal_stop_cause": stopReason,
+		},
+	})
+}
+
+func normalizeRuntimeStopReasonFromResponse(resp *llm.ChatResponse) string {
+	if resp == nil || len(resp.Choices) == 0 {
+		return normalizeRuntimeStopReason("")
+	}
+	return normalizeRuntimeStopReason(resp.Choices[0].FinishReason)
+}
+
+func normalizeRuntimeStopReason(finishReason string) string {
+	normalized := strings.TrimSpace(finishReason)
+	if normalized == "" {
+		return string(StopReasonSolved)
+	}
+	return normalizeTopLevelStopReason(normalized, normalized)
 }

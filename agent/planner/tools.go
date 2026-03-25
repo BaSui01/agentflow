@@ -144,6 +144,8 @@ func GetPlannerToolSchemas() []types.ToolSchema {
 }
 
 // PlannerToolHandler handles tool calls for planner operations.
+// It is an infrastructure adapter for plan CRUD/status tools only and must not
+// evolve into a default closed-loop agent execution entrypoint.
 type PlannerToolHandler struct {
 	planner *TaskPlanner
 }

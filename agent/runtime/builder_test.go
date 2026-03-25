@@ -2,8 +2,11 @@ package runtime
 
 import (
 	"context"
+	"reflect"
 	"testing"
 
+	"github.com/BaSui01/agentflow/agent"
+	"github.com/BaSui01/agentflow/agent/reasoning"
 	"github.com/BaSui01/agentflow/testutil/mocks"
 	"github.com/BaSui01/agentflow/types"
 	"github.com/stretchr/testify/assert"
@@ -192,4 +195,98 @@ func TestBuilder_Build_WithToolScope(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, ag)
 	assert.Equal(t, toolScope, ag.Config().Runtime.Tools)
+}
+
+func TestBuilder_Build_InjectsDefaultReasoningRegistryWhenUnset(t *testing.T) {
+	cfg := types.AgentConfig{
+		Core: types.CoreConfig{
+			ID:   "test-agent",
+			Name: "Test",
+			Type: "assistant",
+		},
+		LLM: types.LLMConfig{
+			Model: "gpt-4",
+		},
+	}
+	provider := mocks.NewSuccessProvider("hello")
+
+	ag, err := NewBuilder(provider, zap.NewNop()).
+		WithOptions(BuildOptions{}).
+		Build(context.Background(), cfg)
+	require.NoError(t, err)
+	require.NotNil(t, ag)
+	require.NotNil(t, ag.ReasoningRegistry())
+	assert.Equal(t, defaultRuntimeReasoningModes, ag.ReasoningRegistry().List())
+}
+
+func TestBuilder_Build_UsesExplicitReasoningRegistry(t *testing.T) {
+	cfg := types.AgentConfig{
+		Core: types.CoreConfig{
+			ID:   "test-agent",
+			Name: "Test",
+			Type: "assistant",
+		},
+		LLM: types.LLMConfig{
+			Model: "gpt-4",
+		},
+	}
+	provider := mocks.NewSuccessProvider("hello")
+	explicitRegistry := reasoning.NewPatternRegistry()
+
+	ag, err := NewBuilder(provider, zap.NewNop()).
+		WithOptions(BuildOptions{ReasoningRegistry: explicitRegistry}).
+		Build(context.Background(), cfg)
+	require.NoError(t, err)
+	require.NotNil(t, ag)
+	assert.Same(t, explicitRegistry, ag.ReasoningRegistry())
+}
+
+func TestResolveRuntimeReasoningRegistry_PrefersExplicitRegistry(t *testing.T) {
+	explicitRegistry := reasoning.NewPatternRegistry()
+
+	resolved := resolveRuntimeReasoningRegistry(
+		mocks.NewSuccessProvider("hello"),
+		"agent-1",
+		BuildOptions{ReasoningRegistry: explicitRegistry},
+		zap.NewNop(),
+	)
+
+	assert.Same(t, explicitRegistry, resolved)
+}
+
+func TestResolveRuntimeReasoningRegistry_UsesRuntimeDefaultModesOnly(t *testing.T) {
+	resolved := resolveRuntimeReasoningRegistry(
+		mocks.NewSuccessProvider("hello"),
+		"agent-1",
+		BuildOptions{},
+		zap.NewNop(),
+	)
+
+	require.NotNil(t, resolved)
+	assert.Equal(t, defaultRuntimeReasoningModes, resolved.List())
+}
+
+func TestBuilder_Build_InjectsCheckpointManagerWhenProvided(t *testing.T) {
+	cfg := types.AgentConfig{
+		Core: types.CoreConfig{
+			ID:   "test-agent",
+			Name: "Test",
+			Type: "assistant",
+		},
+		LLM: types.LLMConfig{
+			Model: "gpt-4",
+		},
+	}
+	provider := mocks.NewSuccessProvider("hello")
+	checkpointManager := &agent.CheckpointManager{}
+
+	ag, err := NewBuilder(provider, zap.NewNop()).
+		WithOptions(BuildOptions{CheckpointManager: checkpointManager}).
+		Build(context.Background(), cfg)
+	require.NoError(t, err)
+	require.NotNil(t, ag)
+
+	field := reflect.ValueOf(ag).Elem().FieldByName("checkpointManager")
+	require.True(t, field.IsValid())
+	require.Equal(t, reflect.ValueOf(checkpointManager).Pointer(), field.Pointer())
 }
