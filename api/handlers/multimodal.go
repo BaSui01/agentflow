@@ -15,12 +15,12 @@ import (
 	"github.com/BaSui01/agentflow/api"
 	"github.com/BaSui01/agentflow/llm"
 	"github.com/BaSui01/agentflow/llm/capabilities"
-	"github.com/BaSui01/agentflow/llm/observability"
 	"github.com/BaSui01/agentflow/llm/capabilities/image"
 	"github.com/BaSui01/agentflow/llm/capabilities/multimodal"
 	"github.com/BaSui01/agentflow/llm/capabilities/video"
 	llmcore "github.com/BaSui01/agentflow/llm/core"
 	llmgateway "github.com/BaSui01/agentflow/llm/gateway"
+	"github.com/BaSui01/agentflow/llm/observability"
 	llmpolicy "github.com/BaSui01/agentflow/llm/runtime/policy"
 	"github.com/BaSui01/agentflow/pkg/storage"
 	"github.com/BaSui01/agentflow/types"
@@ -28,14 +28,14 @@ import (
 )
 
 const (
-	defaultReferenceBytes = 8 << 20 // 8MB
-	defaultReferenceTTL   = 2 * time.Hour
+	defaultReferenceBytes    = 8 << 20 // 8MB
+	defaultReferenceTTL      = 2 * time.Hour
 	defaultChatModelFallback = "gpt-4o-mini"
-	defaultNegativeText   = "blurry, low quality, watermark, text, logo, signature, bad anatomy, deformed, mutated"
+	defaultNegativeText      = "blurry, low quality, watermark, text, logo, signature, bad anatomy, deformed, mutated"
 )
 
 var (
-	validImageSizes   = []string{"256x256", "512x512", "1024x1024", "1024x768", "768x1024", "1536x1024", "1024x1536", "1536x1536", "1792x1024", "1024x1792"}
+	validImageSizes     = []string{"256x256", "512x512", "1024x1024", "1024x768", "768x1024", "1536x1024", "1024x1536", "1536x1536", "1792x1024", "1024x1792"}
 	validImageQualities = []string{"standard", "hd"}
 	validImageStyles    = []string{"vivid", "natural"}
 )
@@ -50,22 +50,22 @@ type MultimodalHandlerConfig struct {
 	GoogleBaseURL        string
 	FluxAPIKey           string
 	FluxBaseURL          string
-	StabilityAPIKey       string
-	StabilityBaseURL      string
-	IdeogramAPIKey        string
-	IdeogramBaseURL       string
-	TongyiAPIKey          string
-	TongyiBaseURL         string
-	ZhipuAPIKey           string
-	ZhipuBaseURL          string
-	BaiduAPIKey           string
-	BaiduSecretKey        string
-	BaiduBaseURL          string
-	DoubaoAPIKey          string
-	DoubaoBaseURL         string
-	TencentSecretId       string
-	TencentSecretKey      string
-	TencentBaseURL        string
+	StabilityAPIKey      string
+	StabilityBaseURL     string
+	IdeogramAPIKey       string
+	IdeogramBaseURL      string
+	TongyiAPIKey         string
+	TongyiBaseURL        string
+	ZhipuAPIKey          string
+	ZhipuBaseURL         string
+	BaiduAPIKey          string
+	BaiduSecretKey       string
+	BaiduBaseURL         string
+	DoubaoAPIKey         string
+	DoubaoBaseURL        string
+	TencentSecretId      string
+	TencentSecretKey     string
+	TencentBaseURL       string
 	RunwayAPIKey         string
 	RunwayBaseURL        string
 	VeoAPIKey            string
@@ -130,17 +130,17 @@ func NewMultimodalHandlerFromConfig(cfg MultimodalHandlerConfig, logger *zap.Log
 		IdeogramBaseURL:      cfg.IdeogramBaseURL,
 		TongyiAPIKey:         cfg.TongyiAPIKey,
 		TongyiBaseURL:        cfg.TongyiBaseURL,
-		ZhipuAPIKey:         cfg.ZhipuAPIKey,
-		ZhipuBaseURL:        cfg.ZhipuBaseURL,
-		BaiduAPIKey:         cfg.BaiduAPIKey,
-		BaiduSecretKey:      cfg.BaiduSecretKey,
-		BaiduBaseURL:        cfg.BaiduBaseURL,
-		DoubaoAPIKey:        cfg.DoubaoAPIKey,
-		DoubaoBaseURL:       cfg.DoubaoBaseURL,
-		TencentSecretId:     cfg.TencentSecretId,
-		TencentSecretKey:    cfg.TencentSecretKey,
-		TencentBaseURL:      cfg.TencentBaseURL,
-		RunwayAPIKey:        cfg.RunwayAPIKey,
+		ZhipuAPIKey:          cfg.ZhipuAPIKey,
+		ZhipuBaseURL:         cfg.ZhipuBaseURL,
+		BaiduAPIKey:          cfg.BaiduAPIKey,
+		BaiduSecretKey:       cfg.BaiduSecretKey,
+		BaiduBaseURL:         cfg.BaiduBaseURL,
+		DoubaoAPIKey:         cfg.DoubaoAPIKey,
+		DoubaoBaseURL:        cfg.DoubaoBaseURL,
+		TencentSecretId:      cfg.TencentSecretId,
+		TencentSecretKey:     cfg.TencentSecretKey,
+		TencentBaseURL:       cfg.TencentBaseURL,
+		RunwayAPIKey:         cfg.RunwayAPIKey,
 		RunwayBaseURL:        cfg.RunwayBaseURL,
 		VeoAPIKey:            cfg.VeoAPIKey,
 		VeoBaseURL:           cfg.VeoBaseURL,
@@ -1015,13 +1015,20 @@ func convertAPIMessages(messages []api.Message) []types.Message {
 			role = "user"
 		}
 		out = append(out, types.Message{
-			Role:       types.Role(role),
-			Content:    msg.Content,
-			Name:       msg.Name,
-			ToolCalls:  msg.ToolCalls,
-			ToolCallID: msg.ToolCallID,
-			Metadata:   msg.Metadata,
-			Timestamp:  msg.Timestamp,
+			Role:             types.Role(role),
+			Content:          msg.Content,
+			ReasoningContent: msg.ReasoningContent,
+			ThinkingBlocks:   msg.ThinkingBlocks,
+			Refusal:          msg.Refusal,
+			Name:             msg.Name,
+			ToolCalls:        msg.ToolCalls,
+			ToolCallID:       msg.ToolCallID,
+			IsToolError:      msg.IsToolError,
+			Images:           convertAPIImagesToTypes(msg.Images),
+			Videos:           msg.Videos,
+			Annotations:      msg.Annotations,
+			Metadata:         msg.Metadata,
+			Timestamp:        msg.Timestamp,
 		})
 	}
 	return out

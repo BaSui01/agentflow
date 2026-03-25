@@ -164,12 +164,12 @@ type testSimpleAgent struct {
 	output string
 }
 
-func (a *testSimpleAgent) ID() string        { return a.id }
-func (a *testSimpleAgent) Name() string      { return a.id }
-func (a *testSimpleAgent) Type() AgentType   { return "test" }
-func (a *testSimpleAgent) State() State      { return "ready" }
-func (a *testSimpleAgent) Init(_ context.Context) error { return nil }
-func (a *testSimpleAgent) Teardown(_ context.Context) error { return nil }
+func (a *testSimpleAgent) ID() string                                            { return a.id }
+func (a *testSimpleAgent) Name() string                                          { return a.id }
+func (a *testSimpleAgent) Type() AgentType                                       { return "test" }
+func (a *testSimpleAgent) State() State                                          { return "ready" }
+func (a *testSimpleAgent) Init(_ context.Context) error                          { return nil }
+func (a *testSimpleAgent) Teardown(_ context.Context) error                      { return nil }
 func (a *testSimpleAgent) Plan(_ context.Context, _ *Input) (*PlanResult, error) { return nil, nil }
 func (a *testSimpleAgent) Execute(_ context.Context, input *Input) (*Output, error) {
 	return &Output{TraceID: input.TraceID, Content: a.output, TokensUsed: 10, Duration: time.Millisecond}, nil
@@ -180,12 +180,12 @@ type testFailAgent struct {
 	id string
 }
 
-func (a *testFailAgent) ID() string        { return a.id }
-func (a *testFailAgent) Name() string      { return a.id }
-func (a *testFailAgent) Type() AgentType   { return "test" }
-func (a *testFailAgent) State() State      { return "ready" }
-func (a *testFailAgent) Init(_ context.Context) error { return nil }
-func (a *testFailAgent) Teardown(_ context.Context) error { return nil }
+func (a *testFailAgent) ID() string                                            { return a.id }
+func (a *testFailAgent) Name() string                                          { return a.id }
+func (a *testFailAgent) Type() AgentType                                       { return "test" }
+func (a *testFailAgent) State() State                                          { return "ready" }
+func (a *testFailAgent) Init(_ context.Context) error                          { return nil }
+func (a *testFailAgent) Teardown(_ context.Context) error                      { return nil }
 func (a *testFailAgent) Plan(_ context.Context, _ *Input) (*PlanResult, error) { return nil, nil }
 func (a *testFailAgent) Execute(_ context.Context, _ *Input) (*Output, error) {
 	return nil, NewError("EXEC_FAILED", "模拟执行失败")
@@ -312,14 +312,16 @@ func (p *testMockProvider) Completion(_ context.Context, _ *llm.ChatRequest) (*l
 	return &llm.ChatResponse{Choices: []llm.ChatChoice{{Message: types.Message{Content: "mock"}}}}, nil
 }
 func (p *testMockProvider) Stream(_ context.Context, _ *llm.ChatRequest) (<-chan llm.StreamChunk, error) {
-	ch := make(chan llm.StreamChunk, 1); close(ch); return ch, nil
+	ch := make(chan llm.StreamChunk, 1)
+	close(ch)
+	return ch, nil
 }
 func (p *testMockProvider) HealthCheck(_ context.Context) (*llm.HealthStatus, error) {
 	return &llm.HealthStatus{Healthy: true}, nil
 }
-func (p *testMockProvider) SupportsNativeFunctionCalling() bool { return true }
+func (p *testMockProvider) SupportsNativeFunctionCalling() bool               { return true }
 func (p *testMockProvider) ListModels(_ context.Context) ([]llm.Model, error) { return nil, nil }
-func (p *testMockProvider) Endpoints() llm.ProviderEndpoints { return llm.ProviderEndpoints{} }
+func (p *testMockProvider) Endpoints() llm.ProviderEndpoints                  { return llm.ProviderEndpoints{} }
 
 // ═══ Builder enable* 功能开关测试 ═══
 
@@ -916,7 +918,7 @@ func (m *mockConversationStore) GetMessages(_ context.Context, _ string, _, _ in
 }
 func (m *mockConversationStore) DeleteMessage(_ context.Context, _, _ string) error { return nil }
 func (m *mockConversationStore) ClearMessages(_ context.Context, _ string) error    { return nil }
-func (m *mockConversationStore) Archive(_ context.Context, _ string) error           { return nil }
+func (m *mockConversationStore) Archive(_ context.Context, _ string) error          { return nil }
 
 // --- mock Ledger ---
 
@@ -1756,6 +1758,123 @@ func TestBaseAgent_ExecuteEnhanced_AllMiddlewares(t *testing.T) {
 	}
 }
 
+func TestBaseAgent_Execute_UsesConfiguredExtensions(t *testing.T) {
+	var capturedReq *llm.ChatRequest
+	prov := &testProvider{
+		name:           "configured-ext",
+		supportsNative: true,
+		completionFn: func(_ context.Context, req *llm.ChatRequest) (*llm.ChatResponse, error) {
+			copied := *req
+			copied.Messages = append([]types.Message(nil), req.Messages...)
+			copied.Tools = append([]types.ToolSchema(nil), req.Tools...)
+			capturedReq = &copied
+			return &llm.ChatResponse{
+				Provider: "configured-ext",
+				Model:    "gpt-4o-mini",
+				Choices: []llm.ChatChoice{{
+					Message: types.Message{Role: types.RoleAssistant, Content: "ok"},
+				}},
+			}, nil
+		},
+	}
+
+	ag := buildTestAgentWithProvider(t, "exec-configured", prov)
+	ag.Init(context.Background())
+	ag.toolManager = &testToolManager{
+		getAllowedToolsFn: func(_ string) []types.ToolSchema {
+			return []types.ToolSchema{{Name: "tool-a"}, {Name: "tool-b"}}
+		},
+	}
+	ag.config.Features.ToolSelection = &types.ToolSelectionConfig{Enabled: true}
+	ag.config.Features.PromptEnhancer = &types.PromptEnhancerConfig{Enabled: true}
+	ag.EnableToolSelection(&mockToolSelector{selected: []types.ToolSchema{{Name: "tool-b"}}})
+	ag.EnablePromptEnhancer(&mockPromptEnhancer{})
+
+	output, err := ag.Execute(context.Background(), &Input{
+		TraceID: "configured-ext-1",
+		Content: "hello",
+	})
+	if err != nil {
+		t.Fatalf("Execute with configured extensions failed: %v", err)
+	}
+	if output == nil {
+		t.Fatal("expected non-nil output")
+	}
+	if capturedReq == nil {
+		t.Fatal("expected captured request")
+	}
+	if len(capturedReq.Tools) != 1 || capturedReq.Tools[0].Name != "tool-b" {
+		t.Fatalf("expected selected tool whitelist [tool-b], got %#v", capturedReq.Tools)
+	}
+	if got := capturedReq.Messages[len(capturedReq.Messages)-1].Content; got != "enhanced: hello" {
+		t.Fatalf("expected enhanced prompt, got %q", got)
+	}
+}
+
+func TestBaseAgent_Observe_WithEnhancedMemoryFeedsExecute(t *testing.T) {
+	var capturedReq *llm.ChatRequest
+	prov := &testProvider{
+		name:           "enhanced-memory",
+		supportsNative: true,
+		completionFn: func(_ context.Context, req *llm.ChatRequest) (*llm.ChatResponse, error) {
+			copied := *req
+			copied.Messages = append([]types.Message(nil), req.Messages...)
+			capturedReq = &copied
+			return &llm.ChatResponse{
+				Provider: "enhanced-memory",
+				Model:    "gpt-4o-mini",
+				Choices: []llm.ChatChoice{{
+					Message: types.Message{Role: types.RoleAssistant, Content: "ok"},
+				}},
+			}, nil
+		},
+	}
+
+	ag := buildTestAgentWithProvider(t, "observe-enhanced", prov)
+	ag.Init(context.Background())
+	ag.config.Features.Memory = &types.MemoryConfig{Enabled: true}
+
+	mem := &statefulEnhancedMemory{}
+	ag.EnableEnhancedMemory(mem)
+
+	if err := ag.Observe(context.Background(), &Feedback{
+		Type:    "correction",
+		Content: "remember this correction",
+	}); err != nil {
+		t.Fatalf("Observe failed: %v", err)
+	}
+
+	output, err := ag.Execute(context.Background(), &Input{
+		TraceID: "observe-enhanced-1",
+		Content: "follow-up request",
+	})
+	if err != nil {
+		t.Fatalf("Execute after Observe failed: %v", err)
+	}
+	if output == nil {
+		t.Fatal("expected non-nil output")
+	}
+	if capturedReq == nil {
+		t.Fatal("expected captured request")
+	}
+	if got := capturedReq.Messages[0].Content; !strContains(got, "remember this correction") {
+		t.Fatalf("expected system prompt to include saved feedback, got %q", got)
+	}
+	foundFeedback := false
+	for _, entry := range mem.shortTerm {
+		if entry.Content == "remember this correction" {
+			foundFeedback = true
+			break
+		}
+	}
+	if !foundFeedback {
+		t.Fatalf("expected feedback to be stored in enhanced memory, got %#v", mem.shortTerm)
+	}
+	if mem.episodeCount < 1 {
+		t.Fatalf("expected feedback execution to record at least 1 episode, got %d", mem.episodeCount)
+	}
+}
+
 // ═══ Additional mock types ═══
 
 type mockBaseMemory struct {
@@ -1772,8 +1891,8 @@ func (m *mockBaseMemory) LoadRecent(_ context.Context, _ string, _ MemoryKind, _
 func (m *mockBaseMemory) Search(_ context.Context, _, _ string, _ int) ([]MemoryRecord, error) {
 	return nil, nil
 }
-func (m *mockBaseMemory) Delete(_ context.Context, _ string) error          { return nil }
-func (m *mockBaseMemory) Clear(_ context.Context, _ string, _ MemoryKind) error { return nil }
+func (m *mockBaseMemory) Delete(_ context.Context, _ string) error               { return nil }
+func (m *mockBaseMemory) Clear(_ context.Context, _ string, _ MemoryKind) error  { return nil }
 func (m *mockBaseMemory) Get(_ context.Context, _ string) (*MemoryRecord, error) { return nil, nil }
 
 type mockEnhancedMemoryWithData struct {
@@ -1791,6 +1910,37 @@ func (m *mockEnhancedMemoryWithData) SaveShortTerm(_ context.Context, _, _ strin
 	return nil
 }
 func (m *mockEnhancedMemoryWithData) RecordEpisode(_ context.Context, _ *types.EpisodicEvent) error {
+	return nil
+}
+
+type statefulEnhancedMemory struct {
+	shortTerm    []types.MemoryEntry
+	episodeCount int
+}
+
+func (m *statefulEnhancedMemory) LoadWorking(_ context.Context, _ string) ([]types.MemoryEntry, error) {
+	return nil, nil
+}
+
+func (m *statefulEnhancedMemory) LoadShortTerm(_ context.Context, _ string, limit int) ([]types.MemoryEntry, error) {
+	if limit <= 0 || limit >= len(m.shortTerm) {
+		return append([]types.MemoryEntry(nil), m.shortTerm...), nil
+	}
+	return append([]types.MemoryEntry(nil), m.shortTerm[:limit]...), nil
+}
+
+func (m *statefulEnhancedMemory) SaveShortTerm(_ context.Context, agentID, content string, metadata map[string]any) error {
+	m.shortTerm = append(m.shortTerm, types.MemoryEntry{
+		AgentID:   agentID,
+		Content:   content,
+		Metadata:  metadata,
+		Timestamp: time.Now(),
+	})
+	return nil
+}
+
+func (m *statefulEnhancedMemory) RecordEpisode(_ context.Context, _ *types.EpisodicEvent) error {
+	m.episodeCount++
 	return nil
 }
 

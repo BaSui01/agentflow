@@ -222,6 +222,30 @@ func TestRunConfig_EffectiveMaxReActIterations(t *testing.T) {
 	}
 }
 
+func TestMergeRunConfig(t *testing.T) {
+	base := &RunConfig{
+		Model:         StringPtr("base-model"),
+		Metadata:      map[string]string{"tenant": "t1"},
+		Tags:          []string{"existing"},
+		ToolWhitelist: []string{"tool-a"},
+	}
+	override := &RunConfig{
+		MaxTokens:     IntPtr(2048),
+		Metadata:      map[string]string{"route": "balanced"},
+		DisableTools:  true,
+		ToolWhitelist: []string{"tool-b"},
+	}
+
+	merged := MergeRunConfig(base, override)
+	require.NotNil(t, merged)
+	assert.Equal(t, "base-model", *merged.Model)
+	assert.Equal(t, 2048, *merged.MaxTokens)
+	assert.Equal(t, map[string]string{"tenant": "t1", "route": "balanced"}, merged.Metadata)
+	assert.Equal(t, []string{"existing"}, merged.Tags)
+	assert.Equal(t, []string{"tool-b"}, merged.ToolWhitelist)
+	assert.False(t, merged.DisableTools)
+}
+
 func TestRunConfig_HelperFunctions(t *testing.T) {
 	t.Run("StringPtr", func(t *testing.T) {
 		p := StringPtr("hello")
@@ -247,4 +271,3 @@ func TestRunConfig_HelperFunctions(t *testing.T) {
 		assert.Equal(t, 5*time.Second, *p)
 	})
 }
-

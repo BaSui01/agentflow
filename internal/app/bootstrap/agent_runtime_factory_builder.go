@@ -24,21 +24,38 @@ func RegisterDefaultRuntimeAgentFactory(
 		return
 	}
 
-	agentRegistry.Register("default", func(
+	agentRegistry.Register(agent.TypeGeneric, func(
 		cfg types.AgentConfig,
-		provider llm.Provider,
+		runtimeProvider llm.Provider,
 		mem agent.MemoryManager,
 		tm agent.ToolManager,
 		bus agent.EventBus,
-		logger *zap.Logger,
+		factoryLogger *zap.Logger,
 	) (agent.Agent, error) {
-		opts := runtime.DefaultBuildOptions()
+		opts := runtime.BuildOptions{
+			EnableReflection:     true,
+			EnableToolSelection:  true,
+			EnablePromptEnhancer: true,
+			EnableSkills:         true,
+			EnableEnhancedMemory: true,
+			EnableObservability:  true,
+			SkillsConfig:         &skills.SkillManagerConfig{MaxLoadedSkills: 50},
+			MemoryManager:        mem,
+			ToolManager:          tm,
+			EventBus:             bus,
+		}
 		opts.EnableAll = false
-		opts.EnableSkills = true
-		opts.SkillsConfig = &skills.SkillManagerConfig{MaxLoadedSkills: 50}
-		opts.InitAgent = true
+		if factoryLogger == nil {
+			factoryLogger = logger
+		}
+		if factoryLogger == nil {
+			factoryLogger = zap.NewNop()
+		}
+		if runtimeProvider == nil {
+			runtimeProvider = provider
+		}
 
-		builder := runtime.NewBuilder(provider, logger).WithOptions(opts)
+		builder := runtime.NewBuilder(runtimeProvider, factoryLogger).WithOptions(opts)
 		if toolProvider != nil {
 			builder = builder.WithToolProvider(toolProvider)
 		}

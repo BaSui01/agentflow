@@ -314,15 +314,16 @@ func CreateAgent(
 // to ensure concurrent requests for the same agentID only trigger one
 // Create+Init cycle.
 type CachingResolver struct {
-	registry  *AgentRegistry
-	provider  llm.Provider
-	memory    MemoryManager // optional; nil means stateless agents
-	tools     ToolManager
-	logger    *zap.Logger
-	agents    sync.Map
-	group     singleflight.Group
-	toolNames []string
-	modelHint string
+	registry       *AgentRegistry
+	provider       llm.Provider
+	memory         MemoryManager // optional; nil means stateless agents
+	enhancedMemory EnhancedMemoryRunner
+	tools          ToolManager
+	logger         *zap.Logger
+	agents         sync.Map
+	group          singleflight.Group
+	toolNames      []string
+	modelHint      string
 
 	// MongoDB persistence stores (required)
 	promptStore       PromptStoreProvider
@@ -344,6 +345,14 @@ func NewCachingResolver(registry *AgentRegistry, provider llm.Provider, logger *
 // When non-nil, agents created by this resolver will have memory capabilities.
 func (r *CachingResolver) WithMemory(m MemoryManager) *CachingResolver {
 	r.memory = m
+	return r
+}
+
+// WithEnhancedMemory sets the enhanced memory system used when creating new
+// agent instances. When non-nil, resolved BaseAgent instances will use this
+// shared enhanced memory runtime instead of a per-agent default instance.
+func (r *CachingResolver) WithEnhancedMemory(mem EnhancedMemoryRunner) *CachingResolver {
+	r.enhancedMemory = mem
 	return r
 }
 
@@ -458,6 +467,9 @@ func (r *CachingResolver) Resolve(ctx context.Context, agentID string) (Agent, e
 			ba.SetPromptStore(r.promptStore)
 			ba.SetConversationStore(r.conversationStore)
 			ba.SetRunStore(r.runStore)
+			if r.enhancedMemory != nil {
+				ba.EnableEnhancedMemory(r.enhancedMemory)
+			}
 		}
 
 		if err := ag.Init(ctx); err != nil {

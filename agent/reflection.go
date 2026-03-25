@@ -1,9 +1,9 @@
 package agent
 
 import (
-	"github.com/BaSui01/agentflow/types"
 	"context"
 	"fmt"
+	"github.com/BaSui01/agentflow/types"
 	"strings"
 	"time"
 
@@ -101,7 +101,7 @@ func (r *ReflectionExecutor) ExecuteWithReflection(ctx context.Context, input *I
 
 	if !r.config.Enabled {
 		// Reflection 未启用，直接执行
-		output, err := r.agent.Execute(ctx, input)
+		output, err := r.agent.executeCore(ctx, input)
 		if err != nil {
 			return nil, err
 		}
@@ -133,7 +133,7 @@ func (r *ReflectionExecutor) ExecuteWithReflection(ctx context.Context, input *I
 		)
 
 		// 1. 执行任务
-		output, err := r.agent.Execute(ctx, currentInput)
+		output, err := r.agent.executeCore(ctx, currentInput)
 		if err != nil {
 			return nil, fmt.Errorf("execution failed at iteration %d: %w", i+1, err)
 		}
@@ -363,5 +363,3 @@ func (r *ReflectionExecutor) refineInput(original *Input, critique *Critique) *I
 
 	return refined
 }
-
-

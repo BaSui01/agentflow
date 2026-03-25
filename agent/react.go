@@ -87,6 +87,10 @@ func (b *BaseAgent) Plan(ctx context.Context, input *Input) (*PlanResult, error)
 // Requirements 1.7: 集成输入验证
 // Requirements 2.4: 输出验证失败时支持重试
 func (b *BaseAgent) Execute(ctx context.Context, input *Input) (_ *Output, execErr error) {
+	return b.executeWithPipeline(ctx, input, b.configuredExecutionOptions())
+}
+
+func (b *BaseAgent) executeCore(ctx context.Context, input *Input) (_ *Output, execErr error) {
 	if input == nil {
 		return nil, NewError(types.ErrInputValidation, "input is nil")
 	}
@@ -111,7 +115,7 @@ func (b *BaseAgent) Execute(ctx context.Context, input *Input) (_ *Output, execE
 
 	// 0c. Apply Input.Overrides to context (takes precedence over existing RunConfig)
 	if input.Overrides != nil {
-		ctx = WithRunConfig(ctx, input.Overrides)
+		ctx = WithRunConfig(ctx, MergeRunConfig(GetRunConfig(ctx), input.Overrides))
 	}
 
 	// 1. 尝试获取执行锁
@@ -436,8 +440,8 @@ func (b *BaseAgent) Execute(ctx context.Context, input *Input) (_ *Output, execE
 
 	// 9. 返回结果
 	return &Output{
-		TraceID: input.TraceID,
-		Content: outputContent,
+		TraceID:          input.TraceID,
+		Content:          outputContent,
 		ReasoningContent: choice.Message.ReasoningContent,
 		Metadata: map[string]any{
 			"model":    resp.Model,
@@ -476,18 +480,29 @@ func (b *BaseAgent) Observe(ctx context.Context, feedback *Feedback) error {
 		zap.String("feedback_type", feedback.Type),
 	)
 
-	// 1. 保存反馈到长期记忆
-	if b.memory != nil {
-		metadata := map[string]any{
-			"feedback_type": feedback.Type,
-			"timestamp":     time.Now(),
-		}
+	metadata := map[string]any{
+		"feedback_type": feedback.Type,
+		"timestamp":     time.Now(),
+	}
+	for k, v := range feedback.Data {
+		metadata[k] = v
+	}
 
-		// 合并额外的数据
-		for k, v := range feedback.Data {
-			metadata[k] = v
+	// 1. 保存反馈到记忆系统
+	switch {
+	case b.memoryFacade != nil && b.memoryFacade.HasEnhanced():
+		if err := b.memoryFacade.Enhanced().SaveShortTerm(ctx, b.ID(), feedback.Content, metadata); err != nil {
+			b.logger.Error("failed to save feedback to enhanced memory", zap.Error(err))
+			return NewErrorWithCause(types.ErrAgentExecution, "failed to save feedback", err)
 		}
-
+		b.memoryFacade.RecordEpisode(ctx, &types.EpisodicEvent{
+			AgentID:   b.ID(),
+			Type:      "feedback",
+			Content:   feedback.Content,
+			Context:   metadata,
+			Timestamp: time.Now(),
+		})
+	case b.memory != nil:
 		if err := b.SaveMemory(ctx, feedback.Content, MemoryLongTerm, metadata); err != nil {
 			b.logger.Error("failed to save feedback to memory", zap.Error(err))
 			return NewErrorWithCause(types.ErrAgentExecution, "failed to save feedback", err)

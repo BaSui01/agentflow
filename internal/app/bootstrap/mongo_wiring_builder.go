@@ -115,6 +115,7 @@ func WireMongoRuntimeStores(
 		enhancedMemory = memory.NewEnhancedMemorySystem(
 			memoryStore, working, nil, episodic, semantic, obsStore, memCfg, logger,
 		)
+		resolver.WithEnhancedMemory(enhancedMemory)
 		logger.Info("MongoDB enhanced memory system initialized",
 			zap.Bool("episodic", episodicStore != nil),
 			zap.Bool("semantic", knowledgeGraph != nil),

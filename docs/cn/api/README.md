@@ -161,6 +161,11 @@ func (b *BaseAgent) Observe(ctx context.Context, feedback *Feedback) error
 func (b *BaseAgent) Teardown(ctx context.Context) error
 ```
 
+说明：
+
+- `Execute(...)` 为默认唯一执行入口，会按 `AgentConfig` 自动串联已启用的 `tool selection / prompt enhancer / skills / enhanced memory / observability` 扩展，再进入核心 ReAct 执行。
+- `Observe(...)` 写入的反馈在启用 enhanced memory 时会回流到后续 `Execute(...)` 的上下文注入链路中，不再停留为“仅存储不消费”。
+
 ---
 
 ## LLM Provider 接口

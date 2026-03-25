@@ -51,8 +51,8 @@ if ($agentRootFiles.Count -gt $maxAgentRootFiles) {
 $allowOneFilePkg = @(
     "cache",
     "database",
+    "jsonschema",
     "metrics",
-    "middleware",
     "openapi",
     "server",
     "telemetry",

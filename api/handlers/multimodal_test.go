@@ -15,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/BaSui01/agentflow/api"
 	"github.com/BaSui01/agentflow/llm"
 	"github.com/BaSui01/agentflow/llm/capabilities/image"
 	"github.com/BaSui01/agentflow/llm/capabilities/multimodal"
@@ -191,6 +192,47 @@ func TestMultimodalHandler_ImageReferenceFlow(t *testing.T) {
 	assert.Equal(t, http.StatusOK, w.Code)
 	assert.True(t, img.editCalled)
 	assert.False(t, img.generateCalled)
+}
+
+func TestConvertAPIMessages_PreservesMultimodalFields(t *testing.T) {
+	reasoning := "reasoning"
+	refusal := "refusal"
+	messages := []api.Message{
+		{
+			Role:             "user",
+			Content:          "describe this",
+			ReasoningContent: &reasoning,
+			ThinkingBlocks:   []types.ThinkingBlock{{Thinking: "step 1"}},
+			Refusal:          &refusal,
+			IsToolError:      true,
+			Images: []api.ImageContent{
+				{Type: "url", URL: "https://example.com/image.png"},
+			},
+			Videos: []types.VideoContent{
+				{URL: "https://example.com/video.mp4"},
+			},
+			Annotations: []types.Annotation{
+				{Type: "url_citation", URL: "https://example.com"},
+			},
+			Metadata:  map[string]any{"k": "v"},
+			Timestamp: time.Now(),
+		},
+	}
+
+	converted := convertAPIMessages(messages)
+	require.Len(t, converted, 1)
+	assert.Equal(t, "describe this", converted[0].Content)
+	require.NotNil(t, converted[0].ReasoningContent)
+	assert.Equal(t, reasoning, *converted[0].ReasoningContent)
+	require.NotNil(t, converted[0].Refusal)
+	assert.Equal(t, refusal, *converted[0].Refusal)
+	assert.True(t, converted[0].IsToolError)
+	require.Len(t, converted[0].Images, 1)
+	assert.Equal(t, "https://example.com/image.png", converted[0].Images[0].URL)
+	require.Len(t, converted[0].Videos, 1)
+	assert.Equal(t, "https://example.com/video.mp4", converted[0].Videos[0].URL)
+	require.Len(t, converted[0].Annotations, 1)
+	assert.Equal(t, "https://example.com", converted[0].Annotations[0].URL)
 }
 
 func TestMultimodalHandler_ImageStream(t *testing.T) {

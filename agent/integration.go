@@ -97,6 +97,10 @@ func (b *BaseAgent) EnableObservability(obsSystem ObservabilityRunner) {
 // ExecuteEnhanced 增强执行（集成所有功能）
 // Uses a middleware pipeline so that each step is an independent, composable unit.
 func (b *BaseAgent) ExecuteEnhanced(ctx context.Context, input *Input, options EnhancedExecutionOptions) (*Output, error) {
+	return b.executeWithPipeline(ctx, input, options)
+}
+
+func (b *BaseAgent) executeWithPipeline(ctx context.Context, input *Input, options EnhancedExecutionOptions) (*Output, error) {
 	if input == nil {
 		return nil, NewError(types.ErrInputValidation, "input is nil")
 	}
@@ -137,7 +141,32 @@ func (b *BaseAgent) ExecuteEnhanced(ctx context.Context, input *Input, options E
 	return pipeline.Execute(ctx, input)
 }
 
-// coreExecutor returns the innermost execution function (Reflection or plain Execute).
+func (b *BaseAgent) configuredExecutionOptions() EnhancedExecutionOptions {
+	options := DefaultEnhancedExecutionOptions()
+	options.UseReflection = b.config.IsReflectionEnabled() && b.extensions.ReflectionExecutor() != nil
+	options.UseToolSelection = b.config.IsToolSelectionEnabled() && b.extensions.ToolSelector() != nil && b.toolManager != nil
+	options.UsePromptEnhancer = b.config.IsPromptEnhancerEnabled() && b.extensions.PromptEnhancerExt() != nil
+	options.UseSkills = b.config.IsSkillsEnabled() && b.extensions.SkillManagerExt() != nil
+	options.UseEnhancedMemory = b.config.IsMemoryEnabled() && b.extensions.EnhancedMemoryExt() != nil
+	if !options.UseEnhancedMemory {
+		options.LoadWorkingMemory = false
+		options.LoadShortTermMemory = false
+		options.SaveToMemory = false
+	}
+
+	options.UseObservability = b.config.IsObservabilityEnabled() && b.extensions.ObservabilitySystemExt() != nil
+	if obsCfg := b.config.Extensions.Observability; obsCfg != nil {
+		options.RecordMetrics = obsCfg.MetricsEnabled
+		options.RecordTrace = obsCfg.TracingEnabled
+	} else if !options.UseObservability {
+		options.RecordMetrics = false
+		options.RecordTrace = false
+	}
+
+	return options
+}
+
+// coreExecutor returns the innermost execution function (Reflection or core execution).
 func (b *BaseAgent) coreExecutor(options EnhancedExecutionOptions) ExecutionFunc {
 	return func(ctx context.Context, input *Input) (*Output, error) {
 		if options.UseReflection && b.extensions.ReflectionExecutor() != nil {
@@ -148,7 +177,7 @@ func (b *BaseAgent) coreExecutor(options EnhancedExecutionOptions) ExecutionFunc
 			}
 			return output, nil
 		}
-		return b.Execute(ctx, input)
+		return b.executeCore(ctx, input)
 	}
 }
 
@@ -272,6 +301,13 @@ func (b *BaseAgent) memoryLoadMiddleware(options EnhancedExecutionOptions) Execu
 			}
 		}
 
+		if len(memoryContext) > 0 {
+			input = shallowCopyInput(input)
+			if input.Context == nil {
+				input.Context = make(map[string]any, 1)
+			}
+			input.Context["memory_context"] = append([]string(nil), memoryContext...)
+		}
 		ctx = withMemoryContext(ctx, memoryContext)
 		return next(ctx, input)
 	}
@@ -308,7 +344,28 @@ func (b *BaseAgent) toolSelectionMiddleware() ExecutionMiddleware {
 		if err != nil {
 			b.logger.Warn("tool selection failed", zap.String("trace_id", input.TraceID), zap.Error(err))
 		} else {
-			b.logger.Info("tools selected dynamically", zap.String("trace_id", input.TraceID), zap.Any("selected", selected))
+			toolNames := make([]string, 0, len(selected))
+			for _, tool := range selected {
+				name := strings.TrimSpace(tool.Name)
+				if name == "" {
+					continue
+				}
+				toolNames = append(toolNames, name)
+			}
+
+			override := &RunConfig{}
+			if len(toolNames) == 0 {
+				override.DisableTools = true
+			} else {
+				override.ToolWhitelist = toolNames
+			}
+			ctx = WithRunConfig(ctx, MergeRunConfig(GetRunConfig(ctx), override))
+
+			b.logger.Info("tools selected dynamically",
+				zap.String("trace_id", input.TraceID),
+				zap.Strings("selected_tools", toolNames),
+				zap.Bool("tools_disabled", len(toolNames) == 0),
+			)
 		}
 		return next(ctx, input)
 	}

@@ -144,6 +144,24 @@ func TestCachingResolver_WithoutMemory(t *testing.T) {
 	assert.Nil(t, ba.memory)
 }
 
+func TestCachingResolver_WithEnhancedMemory(t *testing.T) {
+	logger := zap.NewNop()
+	registry := NewAgentRegistry(logger)
+	provider := &testProvider{name: "mock"}
+	enhanced := &mockEnhancedMemory{}
+
+	resolver := NewCachingResolver(registry, provider, logger).WithEnhancedMemory(enhanced)
+
+	ag, err := resolver.Resolve(context.Background(), "test-with-enhanced-mem")
+	require.NoError(t, err)
+
+	ba, ok := ag.(*BaseAgent)
+	require.True(t, ok)
+	assert.Equal(t, enhanced, ba.extensions.EnhancedMemoryExt())
+	require.NotNil(t, ba.memoryFacade)
+	assert.True(t, ba.memoryFacade.HasEnhanced())
+}
+
 func TestCachingResolver_WithToolManagerAndDerivedTools(t *testing.T) {
 	logger := zap.NewNop()
 	registry := NewAgentRegistry(logger)

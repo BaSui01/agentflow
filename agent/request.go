@@ -3,13 +3,260 @@ package agent
 import (
 	"context"
 	"strings"
+	"time"
 
 	"github.com/BaSui01/agentflow/llm"
+	llmcore "github.com/BaSui01/agentflow/llm/core"
 	"github.com/BaSui01/agentflow/llm/middleware"
 	"github.com/BaSui01/agentflow/types"
 
 	"go.uber.org/zap"
 )
+
+// runConfigKey is the unexported context key for RunConfig.
+type runConfigKey struct{}
+
+// RunConfig provides runtime overrides for Agent execution.
+// All pointer fields use nil to indicate "no override" — only non-nil values
+// are applied, leaving the base Config defaults intact.
+type RunConfig struct {
+	Model              *string           `json:"model,omitempty"`
+	Provider           *string           `json:"provider,omitempty"`
+	RoutePolicy        *string           `json:"route_policy,omitempty"`
+	Temperature        *float32          `json:"temperature,omitempty"`
+	MaxTokens          *int              `json:"max_tokens,omitempty"`
+	TopP               *float32          `json:"top_p,omitempty"`
+	Stop               []string          `json:"stop,omitempty"`
+	ToolChoice         *string           `json:"tool_choice,omitempty"`
+	ToolWhitelist      []string          `json:"tool_whitelist,omitempty"`
+	DisableTools       bool              `json:"disable_tools,omitempty"`
+	Timeout            *time.Duration    `json:"timeout,omitempty"`
+	MaxReActIterations *int              `json:"max_react_iterations,omitempty"`
+	Metadata           map[string]string `json:"metadata,omitempty"`
+	Tags               []string          `json:"tags,omitempty"`
+}
+
+// WithRunConfig stores a RunConfig in the context.
+func WithRunConfig(ctx context.Context, rc *RunConfig) context.Context {
+	return context.WithValue(ctx, runConfigKey{}, rc)
+}
+
+// GetRunConfig retrieves the RunConfig from the context.
+// Returns nil if no RunConfig is present.
+func GetRunConfig(ctx context.Context) *RunConfig {
+	rc, _ := ctx.Value(runConfigKey{}).(*RunConfig)
+	return rc
+}
+
+// ApplyToRequest applies RunConfig overrides to a ChatRequest.
+// Fields in baseCfg are used as defaults; only non-nil RunConfig fields override them.
+// If rc is nil, this is a no-op.
+func (rc *RunConfig) ApplyToRequest(req *llm.ChatRequest, baseCfg types.AgentConfig) {
+	if rc == nil || req == nil {
+		return
+	}
+
+	if rc.Model != nil {
+		req.Model = *rc.Model
+	}
+	if rc.Provider != nil {
+		provider := strings.TrimSpace(*rc.Provider)
+		if provider != "" {
+			if req.Metadata == nil {
+				req.Metadata = make(map[string]string, 2)
+			}
+			req.Metadata[llmcore.MetadataKeyChatProvider] = provider
+		}
+	}
+	if rc.RoutePolicy != nil {
+		routePolicy := strings.TrimSpace(*rc.RoutePolicy)
+		if routePolicy != "" {
+			if req.Metadata == nil {
+				req.Metadata = make(map[string]string, 2)
+			}
+			req.Metadata["route_policy"] = routePolicy
+		}
+	}
+	if rc.Temperature != nil {
+		req.Temperature = *rc.Temperature
+	}
+	if rc.MaxTokens != nil {
+		req.MaxTokens = *rc.MaxTokens
+	}
+	if rc.TopP != nil {
+		req.TopP = *rc.TopP
+	}
+	if len(rc.Stop) > 0 {
+		req.Stop = rc.Stop
+	}
+	if rc.ToolChoice != nil {
+		req.ToolChoice = *rc.ToolChoice
+	}
+	if rc.Timeout != nil {
+		req.Timeout = *rc.Timeout
+	}
+	if len(rc.Metadata) > 0 {
+		if req.Metadata == nil {
+			req.Metadata = make(map[string]string, len(rc.Metadata))
+		}
+		for k, v := range rc.Metadata {
+			req.Metadata[k] = v
+		}
+	}
+	if len(rc.Tags) > 0 {
+		req.Tags = rc.Tags
+	}
+}
+
+// EffectiveMaxReActIterations returns the RunConfig override if set,
+// otherwise falls back to defaultVal.
+func (rc *RunConfig) EffectiveMaxReActIterations(defaultVal int) int {
+	if rc != nil && rc.MaxReActIterations != nil {
+		return *rc.MaxReActIterations
+	}
+	return defaultVal
+}
+
+// MergeRunConfig merges two RunConfigs, preserving base values unless override
+// explicitly provides a replacement. The returned config is always a deep copy.
+func MergeRunConfig(base *RunConfig, override *RunConfig) *RunConfig {
+	switch {
+	case base == nil && override == nil:
+		return nil
+	case base == nil:
+		return cloneRunConfig(override)
+	case override == nil:
+		return cloneRunConfig(base)
+	}
+
+	merged := cloneRunConfig(base)
+	if override.Model != nil {
+		merged.Model = cloneStringPtr(override.Model)
+	}
+	if override.Provider != nil {
+		merged.Provider = cloneStringPtr(override.Provider)
+	}
+	if override.RoutePolicy != nil {
+		merged.RoutePolicy = cloneStringPtr(override.RoutePolicy)
+	}
+	if override.Temperature != nil {
+		merged.Temperature = cloneFloat32Ptr(override.Temperature)
+	}
+	if override.MaxTokens != nil {
+		merged.MaxTokens = cloneIntPtr(override.MaxTokens)
+	}
+	if override.TopP != nil {
+		merged.TopP = cloneFloat32Ptr(override.TopP)
+	}
+	if len(override.Stop) > 0 {
+		merged.Stop = append([]string(nil), override.Stop...)
+	}
+	if override.ToolChoice != nil {
+		merged.ToolChoice = cloneStringPtr(override.ToolChoice)
+	}
+	if override.DisableTools {
+		merged.DisableTools = true
+		merged.ToolWhitelist = nil
+	}
+	if len(override.ToolWhitelist) > 0 {
+		merged.ToolWhitelist = append([]string(nil), override.ToolWhitelist...)
+		merged.DisableTools = false
+	}
+	if override.Timeout != nil {
+		merged.Timeout = cloneDurationPtr(override.Timeout)
+	}
+	if override.MaxReActIterations != nil {
+		merged.MaxReActIterations = cloneIntPtr(override.MaxReActIterations)
+	}
+	if len(override.Metadata) > 0 {
+		if merged.Metadata == nil {
+			merged.Metadata = make(map[string]string, len(override.Metadata))
+		}
+		for k, v := range override.Metadata {
+			merged.Metadata[k] = v
+		}
+	}
+	if len(override.Tags) > 0 {
+		merged.Tags = append([]string(nil), override.Tags...)
+	}
+	return merged
+}
+
+func cloneRunConfig(rc *RunConfig) *RunConfig {
+	if rc == nil {
+		return nil
+	}
+	out := *rc
+	out.Model = cloneStringPtr(rc.Model)
+	out.Provider = cloneStringPtr(rc.Provider)
+	out.RoutePolicy = cloneStringPtr(rc.RoutePolicy)
+	out.Temperature = cloneFloat32Ptr(rc.Temperature)
+	out.MaxTokens = cloneIntPtr(rc.MaxTokens)
+	out.TopP = cloneFloat32Ptr(rc.TopP)
+	out.Stop = append([]string(nil), rc.Stop...)
+	out.ToolChoice = cloneStringPtr(rc.ToolChoice)
+	out.ToolWhitelist = append([]string(nil), rc.ToolWhitelist...)
+	out.Timeout = cloneDurationPtr(rc.Timeout)
+	out.MaxReActIterations = cloneIntPtr(rc.MaxReActIterations)
+	out.Metadata = cloneStringMap(rc.Metadata)
+	out.Tags = append([]string(nil), rc.Tags...)
+	return &out
+}
+
+func cloneStringPtr(v *string) *string {
+	if v == nil {
+		return nil
+	}
+	out := *v
+	return &out
+}
+
+func cloneFloat32Ptr(v *float32) *float32 {
+	if v == nil {
+		return nil
+	}
+	out := *v
+	return &out
+}
+
+func cloneIntPtr(v *int) *int {
+	if v == nil {
+		return nil
+	}
+	out := *v
+	return &out
+}
+
+func cloneDurationPtr(v *time.Duration) *time.Duration {
+	if v == nil {
+		return nil
+	}
+	out := *v
+	return &out
+}
+
+func cloneStringMap(in map[string]string) map[string]string {
+	if len(in) == 0 {
+		return nil
+	}
+	out := make(map[string]string, len(in))
+	for k, v := range in {
+		out[k] = v
+	}
+	return out
+}
+
+// StringPtr returns a pointer to the given string.
+func StringPtr(s string) *string { return &s }
+
+// Float32Ptr returns a pointer to the given float32.
+func Float32Ptr(f float32) *float32 { return &f }
+
+// IntPtr returns a pointer to the given int.
+func IntPtr(i int) *int { return &i }
+
+// DurationPtr returns a pointer to the given time.Duration.
+func DurationPtr(d time.Duration) *time.Duration { return &d }
 
 // preparedRequest holds the fully-built ChatRequest together with provider
 // references needed by the execution paths (streaming, ReAct, plain completion).
@@ -75,11 +322,16 @@ func (b *BaseAgent) prepareChatRequest(ctx context.Context, messages []types.Mes
 	applyContextRouteHints(req, ctx)
 
 	// 5. Tool whitelist filtering
-	if b.toolManager != nil && len(b.config.Runtime.Tools) > 0 {
-		req.Tools = filterToolSchemasByWhitelist(
-			b.toolManager.GetAllowedTools(b.config.Core.ID),
-			b.config.Runtime.Tools,
-		)
+	if b.toolManager != nil {
+		allowedTools := b.toolManager.GetAllowedTools(b.config.Core.ID)
+		switch {
+		case rc != nil && rc.DisableTools:
+			req.Tools = nil
+		case rc != nil && len(rc.ToolWhitelist) > 0:
+			req.Tools = filterToolSchemasByWhitelist(allowedTools, rc.ToolWhitelist)
+		case len(b.config.Runtime.Tools) > 0:
+			req.Tools = filterToolSchemasByWhitelist(allowedTools, b.config.Runtime.Tools)
+		}
 	}
 
 	// 6. 工具调用模式检测：不支持原生 FC 时自动降级到 XML 模式
