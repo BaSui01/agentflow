@@ -23,6 +23,9 @@ func TestNewLoopStateDefaults(t *testing.T) {
 	if state.Observations == nil {
 		t.Fatalf("expected non-nil observations slice")
 	}
+	if state.ValidationStatus != "" {
+		t.Fatalf("expected empty initial validation status, got %q", state.ValidationStatus)
+	}
 }
 
 func TestLoopStateAddObservationSetsTimestamp(t *testing.T) {
@@ -112,6 +115,9 @@ func TestNewLoopStateRestoresResumeContext(t *testing.T) {
 			"agent_id":                "agent-1",
 			"goal":                    "resume goal",
 			"plan":                    []any{"step-1", "step-2"},
+			"acceptance_criteria":     []any{"tests pass", "docs updated"},
+			"unresolved_items":        []any{"run integration tests"},
+			"remaining_risks":         []any{"edge-case coverage"},
 			"current_plan_id":         "loop-1-plan-3",
 			"plan_version":            float64(3),
 			"current_stage":           "observe",
@@ -120,6 +126,8 @@ func TestNewLoopStateRestoresResumeContext(t *testing.T) {
 			"selected_reasoning_mode": "plan_and_execute",
 			"checkpoint_id":           "cp-1",
 			"resumable":               true,
+			"validation_status":       "pending",
+			"validation_summary":      "unresolved: run integration tests; risks: edge-case coverage",
 			"observations_summary":    "plan:ready | act:draft",
 			"last_output_summary":     "draft answer",
 			"last_error":              "tool failed",
@@ -140,6 +148,15 @@ func TestNewLoopStateRestoresResumeContext(t *testing.T) {
 	}
 	if state.CurrentPlanID != "loop-1-plan-3" {
 		t.Fatalf("expected current_plan_id restored, got %q", state.CurrentPlanID)
+	}
+	if len(state.AcceptanceCriteria) != 2 || state.AcceptanceCriteria[0] != "tests pass" {
+		t.Fatalf("expected acceptance_criteria restored, got %#v", state.AcceptanceCriteria)
+	}
+	if len(state.UnresolvedItems) != 1 || state.UnresolvedItems[0] != "run integration tests" {
+		t.Fatalf("expected unresolved_items restored, got %#v", state.UnresolvedItems)
+	}
+	if len(state.RemainingRisks) != 1 || state.RemainingRisks[0] != "edge-case coverage" {
+		t.Fatalf("expected remaining_risks restored, got %#v", state.RemainingRisks)
 	}
 	if state.PlanVersion != 3 {
 		t.Fatalf("expected plan_version 3, got %d", state.PlanVersion)
@@ -162,6 +179,12 @@ func TestNewLoopStateRestoresResumeContext(t *testing.T) {
 	if state.CheckpointID != "cp-1" || !state.Resumable {
 		t.Fatalf("expected checkpoint resume markers restored, got checkpoint=%q resumable=%v", state.CheckpointID, state.Resumable)
 	}
+	if state.ValidationStatus != LoopValidationStatusPending {
+		t.Fatalf("expected validation_status pending, got %q", state.ValidationStatus)
+	}
+	if state.ValidationSummary == "" {
+		t.Fatalf("expected validation_summary restored")
+	}
 	if state.ObservationsSummary != "plan:ready | act:draft" {
 		t.Fatalf("expected observations_summary restored, got %q", state.ObservationsSummary)
 	}
@@ -180,6 +203,9 @@ func TestLoopStateCheckpointVariables(t *testing.T) {
 		AgentID:               "agent-1",
 		Goal:                  "solve",
 		Plan:                  []string{"a", "b"},
+		AcceptanceCriteria:    []string{"tests pass"},
+		UnresolvedItems:       []string{"run tests"},
+		RemainingRisks:        []string{"race conditions"},
 		CurrentPlanID:         "loop-1-plan-2",
 		PlanVersion:           2,
 		CurrentStepID:         "b",
@@ -193,6 +219,8 @@ func TestLoopStateCheckpointVariables(t *testing.T) {
 		NeedHuman:             true,
 		CheckpointID:          "cp-1",
 		Resumable:             true,
+		ValidationStatus:      LoopValidationStatusPending,
+		ValidationSummary:     "unresolved: run tests; risks: race conditions",
 		ObservationsSummary:   "observe:obs",
 		LastOutputSummary:     "partial output",
 		LastError:             "recoverable error",
@@ -211,6 +239,15 @@ func TestLoopStateCheckpointVariables(t *testing.T) {
 	if variables["current_plan_id"] != "loop-1-plan-2" {
 		t.Fatalf("expected current_plan_id in checkpoint variables, got %#v", variables["current_plan_id"])
 	}
+	if got := variables["acceptance_criteria"]; len(got.([]string)) != 1 {
+		t.Fatalf("expected acceptance_criteria in checkpoint variables, got %#v", got)
+	}
+	if got := variables["unresolved_items"]; len(got.([]string)) != 1 {
+		t.Fatalf("expected unresolved_items in checkpoint variables, got %#v", got)
+	}
+	if got := variables["remaining_risks"]; len(got.([]string)) != 1 {
+		t.Fatalf("expected remaining_risks in checkpoint variables, got %#v", got)
+	}
 	if variables["plan_version"] != 2 {
 		t.Fatalf("expected plan_version in checkpoint variables, got %#v", variables["plan_version"])
 	}
@@ -225,6 +262,12 @@ func TestLoopStateCheckpointVariables(t *testing.T) {
 	}
 	if variables["selected_reasoning_mode"] != "rewoo" {
 		t.Fatalf("expected selected mode in checkpoint variables, got %#v", variables["selected_reasoning_mode"])
+	}
+	if variables["validation_status"] != "pending" {
+		t.Fatalf("expected validation_status in checkpoint variables, got %#v", variables["validation_status"])
+	}
+	if variables["validation_summary"] == "" {
+		t.Fatalf("expected validation_summary in checkpoint variables, got %#v", variables["validation_summary"])
 	}
 	if variables["observations_summary"] != "observe:obs" {
 		t.Fatalf("expected observations_summary in checkpoint variables, got %#v", variables["observations_summary"])
@@ -244,10 +287,15 @@ func TestLoopStatePopulateCheckpointMirrorsStateFields(t *testing.T) {
 		AgentID:             "agent-1",
 		Goal:                "solve task",
 		Plan:                []string{"step-1", "step-2"},
+		AcceptanceCriteria:  []string{"tests pass"},
+		UnresolvedItems:     []string{"run tests"},
+		RemainingRisks:      []string{"race conditions"},
 		CurrentPlanID:       "loop-1-plan-1",
 		PlanVersion:         1,
 		CurrentStepID:       "step-2",
 		CurrentStage:        LoopStageObserve,
+		ValidationStatus:    LoopValidationStatusPending,
+		ValidationSummary:   "unresolved: run tests; risks: race conditions",
 		ObservationsSummary: "plan:ready | act:partial",
 		LastOutputSummary:   "partial answer",
 		LastError:           "temporary tool timeout",
@@ -261,6 +309,15 @@ func TestLoopStatePopulateCheckpointMirrorsStateFields(t *testing.T) {
 	}
 	if checkpoint.RunID != "run-1" {
 		t.Fatalf("expected checkpoint run_id, got %q", checkpoint.RunID)
+	}
+	if len(checkpoint.AcceptanceCriteria) != 1 || checkpoint.AcceptanceCriteria[0] != "tests pass" {
+		t.Fatalf("expected checkpoint acceptance_criteria, got %#v", checkpoint.AcceptanceCriteria)
+	}
+	if len(checkpoint.UnresolvedItems) != 1 || checkpoint.UnresolvedItems[0] != "run tests" {
+		t.Fatalf("expected checkpoint unresolved_items, got %#v", checkpoint.UnresolvedItems)
+	}
+	if checkpoint.ValidationStatus != LoopValidationStatusPending {
+		t.Fatalf("expected checkpoint validation_status pending, got %q", checkpoint.ValidationStatus)
 	}
 	if checkpoint.CurrentPlanID != "loop-1-plan-1" {
 		t.Fatalf("expected checkpoint current_plan_id, got %q", checkpoint.CurrentPlanID)
@@ -283,10 +340,15 @@ func TestLoopStatePopulateCheckpointMergesExistingMetadataAndExecutionContext(t 
 		AgentID:             "agent-2",
 		Goal:                "merge fields",
 		Plan:                []string{"step-1"},
+		AcceptanceCriteria:  []string{"tests pass"},
+		UnresolvedItems:     []string{"run tests"},
+		RemainingRisks:      []string{"edge cases"},
 		CurrentPlanID:       "loop-2-plan-1",
 		PlanVersion:         1,
 		CurrentStepID:       "step-1",
 		CurrentStage:        LoopStagePlan,
+		ValidationStatus:    LoopValidationStatusPending,
+		ValidationSummary:   "unresolved: run tests; risks: edge cases",
 		ObservationsSummary: "plan:step-1",
 		LastOutputSummary:   "draft",
 		LastError:           "warn",
@@ -311,7 +373,47 @@ func TestLoopStatePopulateCheckpointMergesExistingMetadataAndExecutionContext(t 
 	if checkpoint.Metadata["current_plan_id"] != "loop-2-plan-1" {
 		t.Fatalf("expected current_plan_id merged into metadata, got %#v", checkpoint.Metadata["current_plan_id"])
 	}
+	if checkpoint.Metadata["validation_status"] != "pending" {
+		t.Fatalf("expected validation_status merged into metadata, got %#v", checkpoint.Metadata["validation_status"])
+	}
 	if checkpoint.ExecutionContext.Variables["last_error"] != "warn" {
 		t.Fatalf("expected last_error merged into execution context, got %#v", checkpoint.ExecutionContext.Variables["last_error"])
+	}
+}
+
+func TestLoopStateApplyValidationResult(t *testing.T) {
+	state := &LoopState{AcceptanceCriteria: []string{"tests pass"}}
+
+	state.ApplyValidationResult(&LoopValidationResult{
+		Status:          LoopValidationStatusPending,
+		Summary:         "unresolved: run tests; risks: race conditions",
+		UnresolvedItems: []string{"run tests"},
+		RemainingRisks:  []string{"race conditions"},
+	})
+
+	if state.ValidationStatus != LoopValidationStatusPending {
+		t.Fatalf("expected validation_status pending, got %q", state.ValidationStatus)
+	}
+	if len(state.UnresolvedItems) != 1 || state.UnresolvedItems[0] != "run tests" {
+		t.Fatalf("expected unresolved_items applied, got %#v", state.UnresolvedItems)
+	}
+	if len(state.RemainingRisks) != 1 || state.RemainingRisks[0] != "race conditions" {
+		t.Fatalf("expected remaining_risks applied, got %#v", state.RemainingRisks)
+	}
+	if state.ValidationSummary == "" {
+		t.Fatalf("expected validation_summary applied")
+	}
+}
+
+func TestNewLoopStateRestoresSingleStringAcceptanceCriteria(t *testing.T) {
+	state := NewLoopState(&Input{
+		Content: "verify result",
+		Context: map[string]any{
+			"acceptance_criteria": "tests pass",
+		},
+	}, 1)
+
+	if len(state.AcceptanceCriteria) != 1 || state.AcceptanceCriteria[0] != "tests pass" {
+		t.Fatalf("expected single-string acceptance_criteria restored, got %#v", state.AcceptanceCriteria)
 	}
 }

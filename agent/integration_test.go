@@ -399,6 +399,40 @@ func TestBaseAgent_Execute_DefaultClosedLoopNeedsValidationAndToolVerificationBe
 	}
 }
 
+func TestBaseAgent_Execute_DefaultClosedLoopKeepsCodeTaskOpenWithoutVerificationEvidence(t *testing.T) {
+	logger := zap.NewNop()
+	provider := &testProvider{
+		name: "mock",
+		completionFn: func(_ context.Context, _ *llm.ChatRequest) (*llm.ChatResponse, error) {
+			return &llm.ChatResponse{
+				Provider: "mock",
+				Model:    "gpt-4",
+				Choices: []llm.ChatChoice{{
+					FinishReason: "stop",
+					Message:      types.Message{Role: llm.RoleAssistant, Content: "implemented the fix"},
+				}},
+			}, nil
+		},
+	}
+
+	ag := NewBaseAgent(testAgentConfig("code-validate-agent", "CodeValidateAgent", "gpt-4"), provider, &testMemoryManager{}, &testToolManager{}, &testEventBus{}, logger, nil)
+	require.NoError(t, ag.Init(context.Background()))
+	ag.SetCompletionJudge(NewDefaultCompletionJudge())
+	ag.SetReasoningModeSelector(NewDefaultReasoningModeSelector())
+
+	output, err := ag.Execute(context.Background(), &Input{
+		TraceID: "trace-code-validate",
+		Content: "fix the Go bug and verify the result",
+		Context: map[string]any{
+			"task_type": "code",
+		},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, output)
+	assert.Equal(t, string(StopReasonMaxIterations), output.StopReason)
+	assert.Equal(t, "pending", output.Metadata["validation_status"])
+}
+
 func TestBaseAgent_Execute_DefaultClosedLoopHonorsRunConfigMaxLoopIterations(t *testing.T) {
 	logger := zap.NewNop()
 	var completionCalls int

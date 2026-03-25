@@ -9,13 +9,14 @@ import (
 func TestDefaultCompletionJudgeJudgeSolved(t *testing.T) {
 	judge := NewDefaultCompletionJudge()
 
-	decision, err := judge.Judge(context.Background(), &LoopState{Iteration: 1, MaxIterations: 3}, &Output{
-		Content: "done",
-		Metadata: map[string]any{
-			"confidence":               0.75,
-			"acceptance_criteria_met":  true,
-			"tool_verification_passed": true,
-		},
+	decision, err := judge.Judge(context.Background(), &LoopState{
+		Iteration:         1,
+		MaxIterations:     3,
+		ValidationStatus:  LoopValidationStatusPassed,
+		ValidationSummary: "validation passed",
+	}, &Output{
+		Content:  "done",
+		Metadata: map[string]any{"confidence": 0.75},
 	}, nil)
 	if err != nil {
 		t.Fatalf("judge returned error: %v", err)
@@ -54,12 +55,13 @@ func TestDefaultCompletionJudgeJudgeMaxIterations(t *testing.T) {
 func TestDefaultCompletionJudgeJudgeSolvedTakesPriorityOverMaxIterations(t *testing.T) {
 	judge := NewDefaultCompletionJudge()
 
-	decision, err := judge.Judge(context.Background(), &LoopState{Iteration: 3, MaxIterations: 3}, &Output{
+	decision, err := judge.Judge(context.Background(), &LoopState{
+		Iteration:         3,
+		MaxIterations:     3,
+		ValidationStatus:  LoopValidationStatusPassed,
+		ValidationSummary: "validation passed",
+	}, &Output{
 		Content: "done",
-		Metadata: map[string]any{
-			"acceptance_criteria_met":  true,
-			"tool_verification_passed": true,
-		},
 	}, nil)
 	if err != nil {
 		t.Fatalf("judge returned error: %v", err)
@@ -75,7 +77,11 @@ func TestDefaultCompletionJudgeJudgeSolvedTakesPriorityOverMaxIterations(t *test
 func TestDefaultCompletionJudgeJudgeEmptyOutputRequiresReplan(t *testing.T) {
 	judge := NewDefaultCompletionJudge()
 
-	decision, err := judge.Judge(context.Background(), &LoopState{Iteration: 1, MaxIterations: 3}, &Output{
+	decision, err := judge.Judge(context.Background(), &LoopState{
+		Iteration:        1,
+		MaxIterations:    3,
+		ValidationStatus: LoopValidationStatusPassed,
+	}, &Output{
 		Content: "   ",
 	}, nil)
 	if err != nil {
@@ -151,8 +157,9 @@ func TestDefaultCompletionJudgeJudgeNeedHuman(t *testing.T) {
 	judge := NewDefaultCompletionJudge()
 
 	decision, err := judge.Judge(context.Background(), &LoopState{
-		NeedHuman:  true,
-		Confidence: 0.25,
+		NeedHuman:        true,
+		Confidence:       0.25,
+		ValidationStatus: LoopValidationStatusPending,
 	}, &Output{}, nil)
 	if err != nil {
 		t.Fatalf("judge returned error: %v", err)
@@ -210,12 +217,12 @@ func TestReflectionCompletionJudgeTreatsIterationBudgetAsInternalCause(t *testin
 func TestDefaultCompletionJudgeTopLevelStopReasonDoesNotDependOnRetryBudget(t *testing.T) {
 	judge := NewDefaultCompletionJudge()
 
-	decision, err := judge.Judge(context.Background(), &LoopState{Iteration: 1, MaxIterations: 5}, &Output{
+	decision, err := judge.Judge(context.Background(), &LoopState{
+		Iteration:        1,
+		MaxIterations:    5,
+		ValidationStatus: LoopValidationStatusPassed,
+	}, &Output{
 		Content: "final answer",
-		Metadata: map[string]any{
-			"acceptance_criteria_met":  true,
-			"tool_verification_passed": true,
-		},
 	}, nil)
 	if err != nil {
 		t.Fatalf("judge returned error: %v", err)
@@ -228,11 +235,14 @@ func TestDefaultCompletionJudgeTopLevelStopReasonDoesNotDependOnRetryBudget(t *t
 func TestDefaultCompletionJudgeRequiresAcceptanceCriteriaBeforeSolved(t *testing.T) {
 	judge := NewDefaultCompletionJudge()
 
-	decision, err := judge.Judge(context.Background(), &LoopState{Iteration: 1, MaxIterations: 3}, &Output{
+	decision, err := judge.Judge(context.Background(), &LoopState{
+		Iteration:          1,
+		MaxIterations:      3,
+		AcceptanceCriteria: []string{"tests pass"},
+		ValidationStatus:   LoopValidationStatusFailed,
+		ValidationSummary:  "acceptance criteria not met",
+	}, &Output{
 		Content: "draft answer",
-		Metadata: map[string]any{
-			"acceptance_criteria_met": false,
-		},
 	}, nil)
 	if err != nil {
 		t.Fatalf("judge returned error: %v", err)
@@ -249,9 +259,12 @@ func TestDefaultCompletionJudgeDoesNotTreatNonEmptyOutputAsSolvedWithoutValidati
 	judge := NewDefaultCompletionJudge()
 
 	decision, err := judge.Judge(context.Background(), &LoopState{
-		Goal:          "return a verified answer",
-		Iteration:     1,
-		MaxIterations: 3,
+		Goal:              "return a verified answer",
+		Iteration:         1,
+		MaxIterations:     3,
+		ValidationStatus:  LoopValidationStatusPending,
+		ValidationSummary: "validation required before completion",
+		UnresolvedItems:   []string{"add validation evidence"},
 	}, &Output{
 		Content: "draft answer",
 	}, nil)
@@ -269,12 +282,14 @@ func TestDefaultCompletionJudgeDoesNotTreatNonEmptyOutputAsSolvedWithoutValidati
 func TestDefaultCompletionJudgeRequiresToolVerificationBeforeSolved(t *testing.T) {
 	judge := NewDefaultCompletionJudge()
 
-	decision, err := judge.Judge(context.Background(), &LoopState{Iteration: 1, MaxIterations: 3}, &Output{
+	decision, err := judge.Judge(context.Background(), &LoopState{
+		Iteration:         1,
+		MaxIterations:     3,
+		ValidationStatus:  LoopValidationStatusPending,
+		ValidationSummary: "tool verification pending",
+		UnresolvedItems:   []string{"verify tool-backed output"},
+	}, &Output{
 		Content: "tool backed answer",
-		Metadata: map[string]any{
-			"tool_used":                 true,
-			"tool_verification_pending": true,
-		},
 	}, nil)
 	if err != nil {
 		t.Fatalf("judge returned error: %v", err)
@@ -290,13 +305,13 @@ func TestDefaultCompletionJudgeRequiresToolVerificationBeforeSolved(t *testing.T
 func TestDefaultCompletionJudgeAllowsSolvedAfterAcceptanceAndVerification(t *testing.T) {
 	judge := NewDefaultCompletionJudge()
 
-	decision, err := judge.Judge(context.Background(), &LoopState{Iteration: 1, MaxIterations: 3}, &Output{
-		Content: "verified answer",
-		Metadata: map[string]any{
-			"acceptance_criteria_met":  true,
-			"tool_verification_passed": true,
-			"confidence":               0.92,
-		},
+	decision, err := judge.Judge(context.Background(), &LoopState{
+		Iteration:        1,
+		MaxIterations:    3,
+		ValidationStatus: LoopValidationStatusPassed,
+	}, &Output{
+		Content:  "verified answer",
+		Metadata: map[string]any{"confidence": 0.92},
 	}, nil)
 	if err != nil {
 		t.Fatalf("judge returned error: %v", err)

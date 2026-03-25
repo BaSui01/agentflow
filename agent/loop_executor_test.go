@@ -746,6 +746,11 @@ func TestLoopExecutor_ExecuteResumesFromCheckpointContext(t *testing.T) {
 					"current_step_id":         "step-2",
 					"selected_reasoning_mode": ReasoningModePlanAndExecute,
 					"plan":                    []string{"step-1", "step-2"},
+					"acceptance_criteria":     []string{"tests pass"},
+					"unresolved_items":        []string{"run integration tests"},
+					"remaining_risks":         []string{"edge-case coverage"},
+					"validation_status":       "pending",
+					"validation_summary":      "unresolved: run integration tests; risks: edge-case coverage",
 				},
 			},
 		},
@@ -779,6 +784,12 @@ func TestLoopExecutor_ExecuteResumesFromCheckpointContext(t *testing.T) {
 	}
 	if seenState.CurrentStepID != "step-2" {
 		t.Fatalf("expected resumed current step id, got %q", seenState.CurrentStepID)
+	}
+	if seenState.ValidationStatus != LoopValidationStatusPending {
+		t.Fatalf("expected resumed validation_status pending, got %q", seenState.ValidationStatus)
+	}
+	if len(seenState.UnresolvedItems) == 0 || seenState.UnresolvedItems[0] != "run integration tests" {
+		t.Fatalf("expected resumed unresolved_items to retain checkpoint item, got %#v", seenState.UnresolvedItems)
 	}
 	if seenState.SelectedReasoningMode != ReasoningModeReact {
 		t.Fatalf("expected runtime-selected reasoning mode, got %q", seenState.SelectedReasoningMode)
@@ -828,8 +839,8 @@ func TestLoopExecutor_SaveCheckpointPersistsLoopResumeFields(t *testing.T) {
 	if store.checkpoint.Metadata["run_id"] != "run-1" {
 		t.Fatalf("expected run_id persisted, got %#v", store.checkpoint.Metadata["run_id"])
 	}
-	if store.checkpoint.Metadata["current_stage"] != "observe" {
-		t.Fatalf("expected current_stage observe, got %#v", store.checkpoint.Metadata["current_stage"])
+	if store.checkpoint.Metadata["current_stage"] != "validate" {
+		t.Fatalf("expected current_stage validate, got %#v", store.checkpoint.Metadata["current_stage"])
 	}
 	if store.checkpoint.Metadata["iteration_count"] != 1 {
 		t.Fatalf("expected iteration_count 1, got %#v", store.checkpoint.Metadata["iteration_count"])
@@ -837,10 +848,51 @@ func TestLoopExecutor_SaveCheckpointPersistsLoopResumeFields(t *testing.T) {
 	if store.checkpoint.Metadata["selected_reasoning_mode"] != ReasoningModePlanAndExecute {
 		t.Fatalf("expected selected mode persisted, got %#v", store.checkpoint.Metadata["selected_reasoning_mode"])
 	}
+	if store.checkpoint.Metadata["validation_status"] != "passed" {
+		t.Fatalf("expected validation_status passed, got %#v", store.checkpoint.Metadata["validation_status"])
+	}
+	if store.checkpoint.ValidationStatus != LoopValidationStatusPassed {
+		t.Fatalf("expected checkpoint validation_status passed, got %q", store.checkpoint.ValidationStatus)
+	}
 	if store.checkpoint.ExecutionContext == nil {
 		t.Fatal("expected execution context")
 	}
 	if store.checkpoint.ExecutionContext.Variables["current_step"] != "step-2" {
 		t.Fatalf("expected current_step step-2, got %#v", store.checkpoint.ExecutionContext.Variables["current_step"])
+	}
+}
+
+func TestLoopExecutor_ExecuteKeepsCodeTaskOpenWithoutVerificationEvidence(t *testing.T) {
+	executor := &LoopExecutor{
+		MaxIterations: 2,
+		StepExecutor: func(_ context.Context, _ *Input, _ *LoopState, _ ReasoningSelection) (*Output, error) {
+			return &Output{
+				Content: "implemented code change",
+				Metadata: map[string]any{
+					"generated_code": "package main\nfunc main(){ println(\"hi\") }",
+					"code_language":  "go",
+				},
+			}, nil
+		},
+		Selector: loopExecutorSelectorStub{mode: ReasoningModeReact},
+		Judge:    NewDefaultCompletionJudge(),
+		Logger:   zap.NewNop(),
+	}
+
+	output, err := executor.Execute(context.Background(), &Input{
+		Content: "fix the Go bug and verify the result",
+		Context: map[string]any{"task_type": "code"},
+	})
+	if err != nil {
+		t.Fatalf("execute returned error: %v", err)
+	}
+	if output.IterationCount != 2 {
+		t.Fatalf("expected code task to keep looping until verification evidence exists, got %d iterations", output.IterationCount)
+	}
+	if output.StopReason != string(StopReasonMaxIterations) {
+		t.Fatalf("expected missing code verification evidence to end by budget, got %q", output.StopReason)
+	}
+	if output.Metadata["validation_status"] != "pending" {
+		t.Fatalf("expected pending validation_status, got %#v", output.Metadata["validation_status"])
 	}
 }
