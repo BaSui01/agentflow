@@ -117,9 +117,9 @@ func (b *BaseAgent) executeCore(ctx context.Context, input *Input) (_ *Output, e
 	// 0b. Inject Input.Context well-known keys into Go context (overrides top-level fields)
 	ctx = applyInputContext(ctx, input.Context)
 
-	// 0c. Apply Input.Overrides to context (takes precedence over existing RunConfig)
-	if input.Overrides != nil {
-		ctx = WithRunConfig(ctx, MergeRunConfig(GetRunConfig(ctx), input.Overrides))
+	// 0c. Apply runtime overrides from context and input in a single precedence chain.
+	if runConfig := ResolveRunConfig(ctx, input); runConfig != nil {
+		ctx = WithRunConfig(ctx, runConfig)
 	}
 
 	// 1. 尝试获取执行锁

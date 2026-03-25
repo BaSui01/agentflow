@@ -4,9 +4,11 @@ import (
 	"context"
 	"reflect"
 	"testing"
+	"time"
 
 	"github.com/BaSui01/agentflow/agent"
 	"github.com/BaSui01/agentflow/agent/reasoning"
+	"github.com/BaSui01/agentflow/llm"
 	"github.com/BaSui01/agentflow/testutil/mocks"
 	"github.com/BaSui01/agentflow/types"
 	"github.com/stretchr/testify/assert"
@@ -174,6 +176,27 @@ func TestBuilder_Build_WithToolProvider(t *testing.T) {
 	assert.Equal(t, toolProvider, ag.ToolProvider())
 }
 
+func TestBuilder_Build_PassesThroughMaxLoopIterations(t *testing.T) {
+	cfg := types.AgentConfig{
+		Core: types.CoreConfig{
+			ID:   "test-agent",
+			Name: "Test",
+			Type: "assistant",
+		},
+		LLM: types.LLMConfig{
+			Model: "gpt-4",
+		},
+	}
+	provider := mocks.NewSuccessProvider("hello")
+
+	ag, err := NewBuilder(provider, zap.NewNop()).
+		WithOptions(BuildOptions{MaxLoopIterations: 6}).
+		Build(context.Background(), cfg)
+	require.NoError(t, err)
+	require.NotNil(t, ag)
+	assert.Equal(t, 6, ag.Config().Runtime.MaxLoopIterations)
+}
+
 func TestBuilder_Build_WithToolScope(t *testing.T) {
 	cfg := types.AgentConfig{
 		Core: types.CoreConfig{
@@ -290,3 +313,87 @@ func TestBuilder_Build_InjectsCheckpointManagerWhenProvided(t *testing.T) {
 	require.True(t, field.IsValid())
 	require.Equal(t, reflect.ValueOf(checkpointManager).Pointer(), field.Pointer())
 }
+
+func TestBuilder_Build_PropagatesTaskLoopBudgetRunConfig(t *testing.T) {
+	cfg := types.AgentConfig{
+		Core: types.CoreConfig{
+			ID:   "test-agent",
+			Name: "Test",
+			Type: "assistant",
+		},
+		LLM: types.LLMConfig{
+			Model: "gpt-4",
+		},
+	}
+	provider := &captureRuntimeProvider{content: "hello"}
+
+	ag, err := NewBuilder(provider, zap.NewNop()).
+		WithOptions(BuildOptions{}).
+		Build(context.Background(), cfg)
+	require.NoError(t, err)
+
+	rc := agent.RunConfigFromInputContext(map[string]any{"max_loop_iterations": 4})
+	require.NotNil(t, rc)
+	ctx := agent.WithRunConfig(context.Background(), rc)
+
+	_, err = ag.ChatCompletion(ctx, []types.Message{{
+		Role:    types.RoleUser,
+		Content: "hello",
+	}})
+	require.NoError(t, err)
+	require.NotNil(t, provider.lastRequest)
+	require.NotNil(t, provider.lastRequest.Metadata)
+	assert.Equal(t, "4", provider.lastRequest.Metadata["max_loop_iterations"])
+	_, hasLegacyAlias := provider.lastRequest.Metadata["loop_max_iterations"]
+	assert.False(t, hasLegacyAlias)
+}
+
+type captureRuntimeProvider struct {
+	content     string
+	lastRequest *llm.ChatRequest
+}
+
+func (p *captureRuntimeProvider) Completion(_ context.Context, req *llm.ChatRequest) (*llm.ChatResponse, error) {
+	cloned := *req
+	if req.Metadata != nil {
+		cloned.Metadata = make(map[string]string, len(req.Metadata))
+		for key, value := range req.Metadata {
+			cloned.Metadata[key] = value
+		}
+	}
+	p.lastRequest = &cloned
+	return &llm.ChatResponse{
+		Model: req.Model,
+		Choices: []llm.ChatChoice{{
+			Index: 0,
+			Message: types.Message{
+				Role:    types.RoleAssistant,
+				Content: p.content,
+			},
+		}},
+	}, nil
+}
+
+func (p *captureRuntimeProvider) Stream(_ context.Context, req *llm.ChatRequest) (<-chan llm.StreamChunk, error) {
+	ch := make(chan llm.StreamChunk, 1)
+	ch <- llm.StreamChunk{
+		Model: req.Model,
+		Delta: types.Message{
+			Role:    types.RoleAssistant,
+			Content: p.content,
+		},
+	}
+	close(ch)
+	return ch, nil
+}
+
+func (p *captureRuntimeProvider) HealthCheck(context.Context) (*llm.HealthStatus, error) {
+	return &llm.HealthStatus{Healthy: true, Latency: time.Millisecond}, nil
+}
+
+func (p *captureRuntimeProvider) Name() string                        { return "capture-runtime-provider" }
+func (p *captureRuntimeProvider) SupportsNativeFunctionCalling() bool { return true }
+func (p *captureRuntimeProvider) ListModels(context.Context) ([]llm.Model, error) {
+	return []llm.Model{{ID: "test-model"}}, nil
+}
+func (p *captureRuntimeProvider) Endpoints() llm.ProviderEndpoints { return llm.ProviderEndpoints{} }

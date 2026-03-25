@@ -10,8 +10,12 @@ func TestDefaultCompletionJudgeJudgeSolved(t *testing.T) {
 	judge := NewDefaultCompletionJudge()
 
 	decision, err := judge.Judge(context.Background(), &LoopState{Iteration: 1, MaxIterations: 3}, &Output{
-		Content:  "done",
-		Metadata: map[string]any{"confidence": 0.75},
+		Content: "done",
+		Metadata: map[string]any{
+			"confidence":               0.75,
+			"acceptance_criteria_met":  true,
+			"tool_verification_passed": true,
+		},
 	}, nil)
 	if err != nil {
 		t.Fatalf("judge returned error: %v", err)
@@ -52,6 +56,10 @@ func TestDefaultCompletionJudgeJudgeSolvedTakesPriorityOverMaxIterations(t *test
 
 	decision, err := judge.Judge(context.Background(), &LoopState{Iteration: 3, MaxIterations: 3}, &Output{
 		Content: "done",
+		Metadata: map[string]any{
+			"acceptance_criteria_met":  true,
+			"tool_verification_passed": true,
+		},
 	}, nil)
 	if err != nil {
 		t.Fatalf("judge returned error: %v", err)
@@ -204,11 +212,102 @@ func TestDefaultCompletionJudgeTopLevelStopReasonDoesNotDependOnRetryBudget(t *t
 
 	decision, err := judge.Judge(context.Background(), &LoopState{Iteration: 1, MaxIterations: 5}, &Output{
 		Content: "final answer",
+		Metadata: map[string]any{
+			"acceptance_criteria_met":  true,
+			"tool_verification_passed": true,
+		},
 	}, nil)
 	if err != nil {
 		t.Fatalf("judge returned error: %v", err)
 	}
 	if decision.StopReason != StopReasonSolved {
 		t.Fatalf("expected solved stop reason from completion judge, got %q", decision.StopReason)
+	}
+}
+
+func TestDefaultCompletionJudgeRequiresAcceptanceCriteriaBeforeSolved(t *testing.T) {
+	judge := NewDefaultCompletionJudge()
+
+	decision, err := judge.Judge(context.Background(), &LoopState{Iteration: 1, MaxIterations: 3}, &Output{
+		Content: "draft answer",
+		Metadata: map[string]any{
+			"acceptance_criteria_met": false,
+		},
+	}, nil)
+	if err != nil {
+		t.Fatalf("judge returned error: %v", err)
+	}
+	if decision.Solved {
+		t.Fatalf("expected unsatisfied acceptance criteria to block solved decision")
+	}
+	if decision.StopReason == StopReasonSolved {
+		t.Fatalf("expected acceptance criteria to prevent solved stop reason")
+	}
+}
+
+func TestDefaultCompletionJudgeDoesNotTreatNonEmptyOutputAsSolvedWithoutValidation(t *testing.T) {
+	judge := NewDefaultCompletionJudge()
+
+	decision, err := judge.Judge(context.Background(), &LoopState{
+		Goal:          "return a verified answer",
+		Iteration:     1,
+		MaxIterations: 3,
+	}, &Output{
+		Content: "draft answer",
+	}, nil)
+	if err != nil {
+		t.Fatalf("judge returned error: %v", err)
+	}
+	if decision.Solved {
+		t.Fatalf("expected plain non-empty output to remain unsolved until validation passes")
+	}
+	if decision.Decision == LoopDecisionDone && decision.StopReason == StopReasonSolved {
+		t.Fatalf("expected completion judge to require validation before solved")
+	}
+}
+
+func TestDefaultCompletionJudgeRequiresToolVerificationBeforeSolved(t *testing.T) {
+	judge := NewDefaultCompletionJudge()
+
+	decision, err := judge.Judge(context.Background(), &LoopState{Iteration: 1, MaxIterations: 3}, &Output{
+		Content: "tool backed answer",
+		Metadata: map[string]any{
+			"tool_used":                 true,
+			"tool_verification_pending": true,
+		},
+	}, nil)
+	if err != nil {
+		t.Fatalf("judge returned error: %v", err)
+	}
+	if decision.Solved {
+		t.Fatalf("expected pending tool verification to block solved decision")
+	}
+	if decision.StopReason == StopReasonSolved {
+		t.Fatalf("expected tool verification to prevent solved stop reason")
+	}
+}
+
+func TestDefaultCompletionJudgeAllowsSolvedAfterAcceptanceAndVerification(t *testing.T) {
+	judge := NewDefaultCompletionJudge()
+
+	decision, err := judge.Judge(context.Background(), &LoopState{Iteration: 1, MaxIterations: 3}, &Output{
+		Content: "verified answer",
+		Metadata: map[string]any{
+			"acceptance_criteria_met":  true,
+			"tool_verification_passed": true,
+			"confidence":               0.92,
+		},
+	}, nil)
+	if err != nil {
+		t.Fatalf("judge returned error: %v", err)
+	}
+	if !decision.Solved {
+		t.Fatalf("expected solved decision after acceptance and verification pass")
+	}
+	if decision.StopReason != StopReasonSolved {
+		t.Fatalf("expected solved stop reason, got %q", decision.StopReason)
+	}
+	if decision.Confidence != 0.92 {
+		t.Fatalf("expected confidence 0.92, got %v", decision.Confidence)
 	}
 }

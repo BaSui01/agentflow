@@ -2,6 +2,8 @@ package agent
 
 import (
 	"context"
+	"encoding/json"
+	"strconv"
 	"strings"
 	"time"
 
@@ -32,6 +34,7 @@ type RunConfig struct {
 	DisableTools       bool              `json:"disable_tools,omitempty"`
 	Timeout            *time.Duration    `json:"timeout,omitempty"`
 	MaxReActIterations *int              `json:"max_react_iterations,omitempty"`
+	MaxLoopIterations  *int              `json:"max_loop_iterations,omitempty"`
 	Metadata           map[string]string `json:"metadata,omitempty"`
 	Tags               []string          `json:"tags,omitempty"`
 }
@@ -103,6 +106,12 @@ func (rc *RunConfig) ApplyToRequest(req *llm.ChatRequest, baseCfg types.AgentCon
 			req.Metadata[k] = v
 		}
 	}
+	if rc.MaxLoopIterations != nil {
+		if req.Metadata == nil {
+			req.Metadata = make(map[string]string, 1)
+		}
+		req.Metadata["max_loop_iterations"] = strconv.Itoa(*rc.MaxLoopIterations)
+	}
 	if len(rc.Tags) > 0 {
 		req.Tags = rc.Tags
 	}
@@ -115,6 +124,27 @@ func (rc *RunConfig) EffectiveMaxReActIterations(defaultVal int) int {
 		return *rc.MaxReActIterations
 	}
 	return defaultVal
+}
+
+// EffectiveMaxLoopIterations returns the RunConfig override if set,
+// otherwise falls back to defaultVal.
+func (rc *RunConfig) EffectiveMaxLoopIterations(defaultVal int) int {
+	if rc != nil && rc.MaxLoopIterations != nil {
+		return *rc.MaxLoopIterations
+	}
+	return defaultVal
+}
+
+// ResolveRunConfig merges context-level config, Input.Context-derived config,
+// and explicit input overrides into a single effective RunConfig.
+func ResolveRunConfig(ctx context.Context, input *Input) *RunConfig {
+	rc := GetRunConfig(ctx)
+	if input == nil {
+		return rc
+	}
+	rc = MergeRunConfig(rc, RunConfigFromInputContext(input.Context))
+	rc = MergeRunConfig(rc, input.Overrides)
+	return rc
 }
 
 // MergeRunConfig merges two RunConfigs, preserving base values unless override
@@ -168,6 +198,9 @@ func MergeRunConfig(base *RunConfig, override *RunConfig) *RunConfig {
 	if override.MaxReActIterations != nil {
 		merged.MaxReActIterations = cloneIntPtr(override.MaxReActIterations)
 	}
+	if override.MaxLoopIterations != nil {
+		merged.MaxLoopIterations = cloneIntPtr(override.MaxLoopIterations)
+	}
 	if len(override.Metadata) > 0 {
 		if merged.Metadata == nil {
 			merged.Metadata = make(map[string]string, len(override.Metadata))
@@ -198,6 +231,7 @@ func cloneRunConfig(rc *RunConfig) *RunConfig {
 	out.ToolWhitelist = append([]string(nil), rc.ToolWhitelist...)
 	out.Timeout = cloneDurationPtr(rc.Timeout)
 	out.MaxReActIterations = cloneIntPtr(rc.MaxReActIterations)
+	out.MaxLoopIterations = cloneIntPtr(rc.MaxLoopIterations)
 	out.Metadata = cloneStringMap(rc.Metadata)
 	out.Tags = append([]string(nil), rc.Tags...)
 	return &out
@@ -266,6 +300,7 @@ type preparedRequest struct {
 	toolProvider llm.Provider // for ReAct loop (may equal chatProvider)
 	hasTools     bool
 	maxReActIter int
+	maxLoopIter  int
 }
 
 // prepareChatRequest builds a ChatRequest from messages, applying context
@@ -361,7 +396,76 @@ func (b *BaseAgent) prepareChatRequest(ctx context.Context, messages []types.Mes
 		toolProvider: toolProv,
 		hasTools:     len(req.Tools) > 0 && b.toolManager != nil,
 		maxReActIter: effectiveIter,
+		maxLoopIter:  rc.EffectiveMaxLoopIterations(0),
 	}, nil
+}
+
+// RunConfigFromInputContext extracts supported runtime overrides from Input.Context-style maps.
+// Unknown keys are ignored.
+func RunConfigFromInputContext(inputCtx map[string]any) *RunConfig {
+	if len(inputCtx) == 0 {
+		return nil
+	}
+	var rc RunConfig
+	var hasOverride bool
+
+	if value, ok := intOverrideFromContext(inputCtx, "max_react_iterations"); ok {
+		rc.MaxReActIterations = IntPtr(value)
+		hasOverride = true
+	}
+	if value, ok := intOverrideFromContext(inputCtx, "max_loop_iterations"); ok {
+		rc.MaxLoopIterations = IntPtr(value)
+		hasOverride = true
+	}
+
+	if !hasOverride {
+		return nil
+	}
+	return &rc
+}
+
+func intOverrideFromContext(values map[string]any, key string) (int, bool) {
+	if len(values) == 0 {
+		return 0, false
+	}
+	raw, ok := values[key]
+	if !ok {
+		return 0, false
+	}
+	switch typed := raw.(type) {
+	case int:
+		return typed, true
+	case int32:
+		return int(typed), true
+	case int64:
+		return int(typed), true
+	case float32:
+		return int(typed), true
+	case float64:
+		return int(typed), true
+	case uint:
+		return int(typed), true
+	case uint32:
+		return int(typed), true
+	case uint64:
+		return int(typed), true
+	case json.Number:
+		if value, err := typed.Int64(); err == nil {
+			return int(value), true
+		}
+		if value, err := typed.Float64(); err == nil {
+			return int(value), true
+		}
+		return 0, false
+	case string:
+		value, err := strconv.Atoi(strings.TrimSpace(typed))
+		if err != nil {
+			return 0, false
+		}
+		return value, true
+	default:
+		return 0, false
+	}
 }
 
 // lastUserQuery extracts the content of the last user message.

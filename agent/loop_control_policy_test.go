@@ -10,6 +10,7 @@ import (
 func TestBaseAgentLoopControlPolicyUsesConfigAsSingleSource(t *testing.T) {
 	agent := newTestBaseAgent()
 	agent.config.Runtime.MaxReActIterations = 6
+	agent.config.Runtime.MaxLoopIterations = 5
 	agent.config.Features.Reflection = &types.ReflectionConfig{Enabled: true}
 	agent.config.Features.Reflection.MaxIterations = 4
 	agent.config.Features.Reflection.MinQuality = 0.82
@@ -26,8 +27,8 @@ func TestBaseAgentLoopControlPolicyUsesConfigAsSingleSource(t *testing.T) {
 	if policy.RetryBudget != 3 {
 		t.Fatalf("expected retry budget 3, got %d", policy.RetryBudget)
 	}
-	if policy.LoopIterationBudget != 4 {
-		t.Fatalf("expected top-level loop budget to follow reflection budget when reflection is enabled, got %d", policy.LoopIterationBudget)
+	if policy.LoopIterationBudget != 5 {
+		t.Fatalf("expected top-level loop budget to use dedicated runtime config, got %d", policy.LoopIterationBudget)
 	}
 }
 
@@ -54,7 +55,7 @@ func TestBaseAgentLoopControlPolicyIgnoresMaxReActIterationsForTopLevelLoop(t *t
 	agent.config.Runtime.MaxReActIterations = 9
 
 	policy := agent.loopControlPolicy()
-	if policy.LoopIterationBudget != 1 {
+	if policy.LoopIterationBudget != 3 {
 		t.Fatalf("expected top-level loop budget to ignore MaxReActIterations, got %d", policy.LoopIterationBudget)
 	}
 }

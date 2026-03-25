@@ -57,6 +57,8 @@
 - **MCP/A2A Protocol Support**: Full Agent interoperability stack (Google A2A & Anthropic MCP)
 - **Guardrails**: Input/output validation, PII detection, injection protection, custom validation rules
 - **Multiple Reasoning Modes**: ReAct, Reflexion, ReWOO, Plan-Execute, Tree of Thoughts (ToT), Dynamic Planner
+- **Default Closed Loop with Validation Gate**: `Perceive -> Analyze -> Plan -> Act -> Observe -> Validate -> Evaluate -> DecideNext`, with acceptance/verification required before a task is considered solved
+- **Dedicated Top-Level Loop Budget**: Independent `max_loop_iterations` control for the task loop, separate from reflection/reasoning internal budgets
 - **Multi-Layer Memory**: Short-term (working), long-term, episodic, semantic, procedural memory
 - **Intelligent Decay**: Recency/relevance/utility-based decay algorithm
 - **Human-in-the-Loop**: Human approval nodes

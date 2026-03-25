@@ -114,6 +114,7 @@ const (
 	LoopStagePlan       LoopStage = "plan"
 	LoopStageAct        LoopStage = "act"
 	LoopStageObserve    LoopStage = "observe"
+	LoopStageValidate   LoopStage = "validate"
 	LoopStageEvaluate   LoopStage = "evaluate"
 	LoopStageDecideNext LoopStage = "decide_next"
 )

@@ -105,6 +105,15 @@ func (b *AgentBuilder) WithMaxReActIterations(n int) *AgentBuilder {
 	return b
 }
 
+// WithMaxLoopIterations 设置默认闭环最大迭代次数。
+// n <= 0 时忽略，使用框架默认值。
+func (b *AgentBuilder) WithMaxLoopIterations(n int) *AgentBuilder {
+	if n > 0 {
+		b.config.Runtime.MaxLoopIterations = n
+	}
+	return b
+}
+
 // WithMemory 设置记忆管理器
 func (b *AgentBuilder) WithMemory(memory MemoryManager) *AgentBuilder {
 	b.memory = memory

@@ -1,8 +1,10 @@
 package bootstrap
 
 import (
+	"context"
 	"testing"
 
+	"github.com/BaSui01/agentflow/agent"
 	agentruntime "github.com/BaSui01/agentflow/agent/runtime"
 	"github.com/BaSui01/agentflow/config"
 	"github.com/BaSui01/agentflow/testutil/mocks"
@@ -54,4 +56,40 @@ func TestHotReload_DoesNotChangeRuntimeDefaultReasoningWiring(t *testing.T) {
 	})
 
 	require.NoError(t, manager.UpdateField("Log.Level", "debug"))
+}
+
+func TestHotReload_PreservesTaskLoopBudgetRunConfigPath(t *testing.T) {
+	manager := config.NewHotReloadManager(config.DefaultConfig())
+	provider := &captureBootstrapProvider{content: "hello"}
+	cfg := types.AgentConfig{
+		Core: types.CoreConfig{
+			ID:   "test-agent",
+			Name: "Test",
+			Type: "assistant",
+		},
+		LLM: types.LLMConfig{Model: "gpt-4"},
+	}
+
+	RegisterHotReloadCallbacks(manager, zap.NewNop(), func(oldConfig, newConfig *config.Config) {
+		builder := agentruntime.NewBuilder(provider, zap.NewNop()).WithOptions(agentruntime.BuildOptions{})
+		ag, err := builder.Build(context.Background(), cfg)
+		require.NoError(t, err)
+
+		rc := agent.RunConfigFromInputContext(map[string]any{"max_loop_iterations": 8})
+		require.NotNil(t, rc)
+		ctx := agent.WithRunConfig(context.Background(), rc)
+
+		_, err = ag.ChatCompletion(ctx, []types.Message{{
+			Role:    types.RoleUser,
+			Content: "hello",
+		}})
+		require.NoError(t, err)
+	})
+
+	require.NoError(t, manager.UpdateField("Log.Level", "debug"))
+	require.NotNil(t, provider.lastRequest)
+	require.NotNil(t, provider.lastRequest.Metadata)
+	require.Equal(t, "8", provider.lastRequest.Metadata["max_loop_iterations"])
+	_, hasLegacyAlias := provider.lastRequest.Metadata["loop_max_iterations"]
+	require.False(t, hasLegacyAlias)
 }

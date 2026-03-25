@@ -44,6 +44,7 @@ type BuildOptions struct {
 
 	// Optional pass-throughs for AgentBuilder runtime controls.
 	MaxReActIterations int
+	MaxLoopIterations  int
 	MemoryManager      agent.MemoryManager
 	ToolManager        agent.ToolManager
 	EventBus           agent.EventBus
@@ -167,6 +168,9 @@ func (b *Builder) Build(ctx context.Context, cfg types.AgentConfig) (*agent.Base
 
 	if opts.MaxReActIterations > 0 {
 		agentBuilder.WithMaxReActIterations(opts.MaxReActIterations)
+	}
+	if opts.MaxLoopIterations > 0 {
+		agentBuilder.WithMaxLoopIterations(opts.MaxLoopIterations)
 	}
 	if opts.MemoryManager != nil {
 		agentBuilder.WithMemory(opts.MemoryManager)

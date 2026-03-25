@@ -101,6 +101,7 @@ type Input struct {
     Content   string            `json:"content"`
     Context   map[string]any    `json:"context,omitempty"`
     Variables map[string]string `json:"variables,omitempty"`
+    Overrides *RunConfig        `json:"overrides,omitempty"`
 }
 ```
 
@@ -169,10 +170,12 @@ func (b *BaseAgent) Teardown(ctx context.Context) error
 
 说明：
 
-- `Execute(...)` 为默认唯一执行入口，会按 `AgentConfig` 自动串联已启用的 `tool selection / prompt enhancer / skills / enhanced memory / observability` 扩展，再进入闭环主链 `Perceive -> Analyze -> Plan -> Act -> Observe -> Evaluate -> DecideNext`。
+- `Execute(...)` 为默认唯一执行入口，会按 `AgentConfig` 自动串联已启用的 `tool selection / prompt enhancer / skills / enhanced memory / observability` 扩展，再进入闭环主链 `Perceive -> Analyze -> Plan -> Act -> Observe -> Validate -> Evaluate -> DecideNext`。
 - 默认单 Agent 请求不会经 `multiagent` 模式分发；`multiagent` 仅用于 `agent_ids` 多目标协作请求。
 - `Output` 中的 `current_stage / iteration_count / selected_reasoning_mode / stop_reason / checkpoint_id / resumable` 是默认闭环执行和恢复链路的统一可观测字段。
 - `Observe(...)` 写入的反馈在启用 enhanced memory 时会回流到后续 `Execute(...)` 的上下文注入链路中，不再停留为“仅存储不消费”。
+- 默认完成判定必须经过 validation/acceptance gate；仅有非空 `Content` 不再自动代表任务 solved。
+- 顶层 loop budget 独立于 reflection budget，优先级为 `Input.Overrides.max_loop_iterations` > `Input.Context.max_loop_iterations` > `AgentConfig.Runtime.MaxLoopIterations`，另外 `Input.Context.top_level_loop_budget` 可直接约束当前任务的闭环轮数。
 
 ---
 

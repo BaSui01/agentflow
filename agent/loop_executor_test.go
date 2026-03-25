@@ -510,12 +510,220 @@ func TestLoopExecutor_ExecuteEmitsClosedLoopStatusEvents(t *testing.T) {
 		string(LoopStagePlan),
 		string(LoopStageAct),
 		string(LoopStageObserve),
+		"validate",
 		string(LoopStageEvaluate),
 	} {
 		if !stageSeen[stage] {
 			t.Fatalf("expected stage %q to appear in status stream", stage)
 		}
 	}
+}
+
+func TestLoopExecutor_ExecuteHonorsTaskLevelTopLoopBudget(t *testing.T) {
+	var stepCalls int
+
+	executor := &LoopExecutor{
+		MaxIterations: 5,
+		StepExecutor: func(_ context.Context, input *Input, _ *LoopState, _ ReasoningSelection) (*Output, error) {
+			stepCalls++
+			if input.Context["max_loop_iterations"] != 1 {
+				t.Fatalf("expected canonical task-level loop budget context to be preserved")
+			}
+			if input.Overrides == nil || input.Overrides.MaxLoopIterations == nil || *input.Overrides.MaxLoopIterations != 1 {
+				t.Fatalf("expected MaxLoopIterations override to be preserved on input")
+			}
+			return &Output{Content: "still working"}, nil
+		},
+		Selector: loopExecutorSelectorStub{mode: ReasoningModeReact},
+		Judge: &loopExecutorJudgeStub{decisions: []*CompletionDecision{
+			{Decision: LoopDecisionContinue, Reason: "need another pass"},
+			{Decision: LoopDecisionContinue, Reason: "need another pass"},
+		}},
+		Logger: zap.NewNop(),
+	}
+
+	output, err := executor.Execute(context.Background(), &Input{
+		Content: "bounded task",
+		Context: map[string]any{"max_loop_iterations": 1},
+		Overrides: &RunConfig{
+			MaxLoopIterations: IntPtr(1),
+		},
+	})
+	if err != nil {
+		t.Fatalf("execute returned error: %v", err)
+	}
+	if output.IterationCount != 1 || stepCalls != 1 {
+		t.Fatalf("expected task-level loop budget to cap execution at 1 iteration, got output=%d stepCalls=%d", output.IterationCount, stepCalls)
+	}
+	if output.StopReason != string(StopReasonMaxIterations) {
+		t.Fatalf("expected task-level loop budget to stop with max_iterations, got %q", output.StopReason)
+	}
+}
+
+func TestLoopExecutor_ExecuteDoesNotStopOnNonEmptyOutputWithoutValidation(t *testing.T) {
+	executor := &LoopExecutor{
+		MaxIterations: 2,
+		StepExecutor: func(_ context.Context, _ *Input, _ *LoopState, _ ReasoningSelection) (*Output, error) {
+			return &Output{
+				Content: "candidate answer",
+				Metadata: map[string]any{
+					"acceptance_criteria_met":   false,
+					"tool_verification_pending": true,
+				},
+			}, nil
+		},
+		Selector: loopExecutorSelectorStub{mode: ReasoningModeReact},
+		Judge:    NewDefaultCompletionJudge(),
+		Logger:   zap.NewNop(),
+	}
+
+	output, err := executor.Execute(context.Background(), &Input{Content: "only stop after validation"})
+	if err != nil {
+		t.Fatalf("execute returned error: %v", err)
+	}
+	if output.IterationCount != 2 {
+		t.Fatalf("expected loop to continue until validation passes or budget exhausts, got %d iterations", output.IterationCount)
+	}
+	if output.StopReason != string(StopReasonMaxIterations) {
+		t.Fatalf("expected validation gap to keep loop open until max_iterations, got %q", output.StopReason)
+	}
+}
+
+func TestLoopExecutor_ExecuteEmitsValidationStageStatusEvent(t *testing.T) {
+	recorder := &loopRuntimeEventRecorder{}
+	ctx := WithRuntimeStreamEmitter(context.Background(), recorder.emit)
+	executor := &LoopExecutor{
+		MaxIterations: 2,
+		Planner: func(_ context.Context, _ *Input, _ *LoopState) (*PlanResult, error) {
+			return &PlanResult{Steps: []string{"inspect", "validate", "answer"}}, nil
+		},
+		StepExecutor: func(_ context.Context, _ *Input, _ *LoopState, _ ReasoningSelection) (*Output, error) {
+			return &Output{
+				Content: "candidate",
+				Metadata: map[string]any{
+					"acceptance_criteria_met":  true,
+					"tool_verification_passed": true,
+				},
+			}, nil
+		},
+		Observer: func(_ context.Context, _ *Feedback, _ *LoopState) error { return nil },
+		Selector: loopExecutorSelectorStub{mode: ReasoningModePlanAndExecute},
+		Judge: &loopExecutorJudgeStub{decisions: []*CompletionDecision{
+			{Solved: true, Decision: LoopDecisionDone, StopReason: StopReasonSolved, Reason: "validated"},
+		}},
+		Logger: zap.NewNop(),
+	}
+
+	if _, err := executor.Execute(ctx, &Input{Content: "validate before accept"}); err != nil {
+		t.Fatalf("execute returned error: %v", err)
+	}
+
+	validateStageIndex := -1
+	completionDecisionIndex := -1
+	for idx, event := range recorder.events {
+		if event.Type != RuntimeStreamStatus {
+			continue
+		}
+		data, _ := event.Data.(map[string]any)
+		status, _ := data["status"].(string)
+		if event.CurrentStage == "validate" && (status == "stage_changed" || status == "validation_checked") && validateStageIndex == -1 {
+			validateStageIndex = idx
+		}
+		if status == "completion_judge_decision" && completionDecisionIndex == -1 {
+			completionDecisionIndex = idx
+		}
+	}
+	if validateStageIndex == -1 {
+		t.Fatalf("expected validate stage status event to be emitted")
+	}
+	if completionDecisionIndex != -1 && validateStageIndex > completionDecisionIndex {
+		t.Fatalf("expected validate stage status to precede completion_judge_decision")
+	}
+}
+
+func TestLoopExecutor_ExecuteHonorsRunConfigMaxLoopIterationsOverride(t *testing.T) {
+	var stepCalls int
+
+	executor := &LoopExecutor{
+		MaxIterations: 4,
+		StepExecutor: func(_ context.Context, _ *Input, _ *LoopState, _ ReasoningSelection) (*Output, error) {
+			stepCalls++
+			return &Output{Content: "candidate"}, nil
+		},
+		Selector: loopExecutorSelectorStub{mode: ReasoningModeReact},
+		Judge: &loopExecutorJudgeStub{decisions: []*CompletionDecision{
+			{Decision: LoopDecisionContinue, Reason: "need validation"},
+			{Decision: LoopDecisionContinue, Reason: "need validation"},
+		}},
+		Logger: zap.NewNop(),
+	}
+
+	output, err := executor.Execute(context.Background(), &Input{
+		Content:   "budgeted task",
+		Overrides: &RunConfig{MaxLoopIterations: IntPtr(1)},
+	})
+	if err != nil {
+		t.Fatalf("execute returned error: %v", err)
+	}
+	if output.IterationCount != 1 || stepCalls != 1 {
+		t.Fatalf("expected RunConfig max_loop_iterations to cap execution at 1 iteration, got output=%d stepCalls=%d", output.IterationCount, stepCalls)
+	}
+	if output.StopReason != string(StopReasonMaxIterations) {
+		t.Fatalf("expected RunConfig max_loop_iterations to stop with max_iterations, got %q", output.StopReason)
+	}
+}
+
+func TestLoopExecutor_ExecuteEmitsValidationDecisionEventData(t *testing.T) {
+	recorder := &loopRuntimeEventRecorder{}
+	ctx := WithRuntimeStreamEmitter(context.Background(), recorder.emit)
+	executor := &LoopExecutor{
+		MaxIterations: 2,
+		StepExecutor: func(_ context.Context, _ *Input, _ *LoopState, _ ReasoningSelection) (*Output, error) {
+			return &Output{
+				Content: "validated answer",
+				Metadata: map[string]any{
+					"acceptance_criteria_met":  true,
+					"tool_verification_passed": true,
+				},
+			}, nil
+		},
+		Observer: func(_ context.Context, _ *Feedback, _ *LoopState) error { return nil },
+		Selector: loopExecutorSelectorStub{mode: ReasoningModeReWOO},
+		Judge: &loopExecutorJudgeStub{decisions: []*CompletionDecision{
+			{Solved: true, Decision: LoopDecisionDone, StopReason: StopReasonSolved, Reason: "validated"},
+		}},
+		Logger: zap.NewNop(),
+	}
+
+	if _, err := executor.Execute(ctx, &Input{
+		Content: "verify tool output before solving",
+		Context: map[string]any{
+			"acceptance_criteria":        []string{"must be checked"},
+			"tool_verification_required": true,
+			"validation_required":        true,
+		},
+	}); err != nil {
+		t.Fatalf("execute returned error: %v", err)
+	}
+
+	for _, event := range recorder.events {
+		if event.Type != RuntimeStreamStatus {
+			continue
+		}
+		data, _ := event.Data.(map[string]any)
+		status, _ := data["status"].(string)
+		if status != "completion_judge_decision" {
+			continue
+		}
+		if event.StopReason != string(StopReasonSolved) {
+			t.Fatalf("expected solved stop reason after validation, got %q", event.StopReason)
+		}
+		if event.SelectedMode != ReasoningModeReWOO {
+			t.Fatalf("expected verification-capable mode to be preserved, got %q", event.SelectedMode)
+		}
+		return
+	}
+	t.Fatalf("expected completion_judge_decision status event after validation")
 }
 
 func TestLoopExecutor_ExecuteResumesFromCheckpointContext(t *testing.T) {

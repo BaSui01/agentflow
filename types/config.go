@@ -57,6 +57,7 @@ type RuntimeConfig struct {
 	SystemPrompt       string   `json:"system_prompt,omitempty"`
 	Tools              []string `json:"tools,omitempty"`
 	MaxReActIterations int      `json:"max_react_iterations,omitempty"`
+	MaxLoopIterations  int      `json:"max_loop_iterations,omitempty"`
 	ToolModel          string   `json:"tool_model,omitempty"`
 }
 
@@ -242,15 +243,15 @@ func (c *ObservabilityConfig) IsEnabled() bool { return c != nil && c.Enabled }
 // Configuration Helpers
 // ============================================================
 
-func (c *AgentConfig) IsReflectionEnabled() bool      { return c.Features.Reflection.IsEnabled() }
-func (c *AgentConfig) IsToolSelectionEnabled() bool    { return c.Features.ToolSelection.IsEnabled() }
-func (c *AgentConfig) IsGuardrailsEnabled() bool       { return c.Features.Guardrails.IsEnabled() }
-func (c *AgentConfig) IsMemoryEnabled() bool            { return c.Features.Memory.IsEnabled() }
-func (c *AgentConfig) IsPromptEnhancerEnabled() bool    { return c.Features.PromptEnhancer.IsEnabled() }
-func (c *AgentConfig) IsSkillsEnabled() bool            { return c.Extensions.Skills.IsEnabled() }
-func (c *AgentConfig) IsMCPEnabled() bool               { return c.Extensions.MCP.IsEnabled() }
-func (c *AgentConfig) IsLSPEnabled() bool               { return c.Extensions.LSP.IsEnabled() }
-func (c *AgentConfig) IsObservabilityEnabled() bool     { return c.Extensions.Observability.IsEnabled() }
+func (c *AgentConfig) IsReflectionEnabled() bool     { return c.Features.Reflection.IsEnabled() }
+func (c *AgentConfig) IsToolSelectionEnabled() bool  { return c.Features.ToolSelection.IsEnabled() }
+func (c *AgentConfig) IsGuardrailsEnabled() bool     { return c.Features.Guardrails.IsEnabled() }
+func (c *AgentConfig) IsMemoryEnabled() bool         { return c.Features.Memory.IsEnabled() }
+func (c *AgentConfig) IsPromptEnhancerEnabled() bool { return c.Features.PromptEnhancer.IsEnabled() }
+func (c *AgentConfig) IsSkillsEnabled() bool         { return c.Extensions.Skills.IsEnabled() }
+func (c *AgentConfig) IsMCPEnabled() bool            { return c.Extensions.MCP.IsEnabled() }
+func (c *AgentConfig) IsLSPEnabled() bool            { return c.Extensions.LSP.IsEnabled() }
+func (c *AgentConfig) IsObservabilityEnabled() bool  { return c.Extensions.Observability.IsEnabled() }
 
 // Validate validates the configuration.
 func (c *AgentConfig) Validate() error {

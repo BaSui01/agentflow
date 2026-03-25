@@ -351,6 +351,94 @@ func TestBaseAgent_Execute_DefaultClosedLoopReflectsWithinMainChain(t *testing.T
 	assert.Equal(t, StopReasonSolved, output.Metadata["loop_stop_reason"])
 }
 
+func TestBaseAgent_Execute_DefaultClosedLoopNeedsValidationAndToolVerificationBeforeSolved(t *testing.T) {
+	logger := zap.NewNop()
+	provider := &testProvider{
+		name: "mock",
+		completionFn: func(_ context.Context, _ *llm.ChatRequest) (*llm.ChatResponse, error) {
+			return &llm.ChatResponse{
+				Provider: "mock",
+				Model:    "gpt-4",
+				Choices: []llm.ChatChoice{{
+					FinishReason: "stop",
+					Message:      types.Message{Role: llm.RoleAssistant, Content: "candidate answer"},
+				}},
+			}, nil
+		},
+		streamFn: func(_ context.Context, _ *llm.ChatRequest) (<-chan llm.StreamChunk, error) {
+			ch := make(chan llm.StreamChunk, 1)
+			ch <- llm.StreamChunk{
+				Delta:        types.Message{Role: llm.RoleAssistant, Content: "candidate answer"},
+				FinishReason: "stop",
+			}
+			close(ch)
+			return ch, nil
+		},
+	}
+
+	ag := NewBaseAgent(testAgentConfig("validate-agent", "ValidateAgent", "gpt-4"), provider, &testMemoryManager{}, &testToolManager{}, &testEventBus{}, logger, nil)
+	require.NoError(t, ag.Init(context.Background()))
+	ag.SetCompletionJudge(NewDefaultCompletionJudge())
+	ag.SetReasoningModeSelector(NewDefaultReasoningModeSelector())
+
+	output, err := ag.Execute(context.Background(), &Input{
+		TraceID: "trace-validate",
+		Content: "respond only after acceptance criteria are validated",
+		Context: map[string]any{
+			"acceptance_criteria":        []string{"must be verified"},
+			"tool_verification_required": true,
+		},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, output)
+	if output.StopReason == string(StopReasonSolved) {
+		t.Fatalf("expected default closed loop to require validation/acceptance before solved")
+	}
+	if got := output.Metadata["loop_stop_reason"]; got == StopReasonSolved || got == string(StopReasonSolved) {
+		t.Fatalf("expected default closed loop metadata to remain unsolved before validation")
+	}
+}
+
+func TestBaseAgent_Execute_DefaultClosedLoopHonorsRunConfigMaxLoopIterations(t *testing.T) {
+	logger := zap.NewNop()
+	var completionCalls int
+	provider := &testProvider{
+		name: "mock",
+		completionFn: func(_ context.Context, _ *llm.ChatRequest) (*llm.ChatResponse, error) {
+			completionCalls++
+			return &llm.ChatResponse{
+				Provider: "mock",
+				Model:    "gpt-4",
+				Choices: []llm.ChatChoice{{
+					FinishReason: "stop",
+					Message:      types.Message{Role: llm.RoleAssistant, Content: "still working"},
+				}},
+			}, nil
+		},
+	}
+
+	ag := NewBaseAgent(testAgentConfig("budget-agent", "BudgetAgent", "gpt-4"), provider, &testMemoryManager{}, &testToolManager{}, &testEventBus{}, logger, nil)
+	require.NoError(t, ag.Init(context.Background()))
+	ag.SetCompletionJudge(&integrationCompletionJudgeStub{decisions: []*CompletionDecision{
+		{Decision: LoopDecisionContinue, Reason: "need another pass"},
+		{Decision: LoopDecisionContinue, Reason: "need another pass"},
+	}})
+	ag.SetReasoningModeSelector(NewDefaultReasoningModeSelector())
+
+	output, err := ag.Execute(context.Background(), &Input{
+		TraceID: "trace-budget",
+		Content: "bounded task",
+		Overrides: &RunConfig{
+			MaxLoopIterations: IntPtr(1),
+		},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, output)
+	assert.Equal(t, 1, output.IterationCount)
+	assert.Equal(t, string(StopReasonMaxIterations), output.StopReason)
+	assert.Equal(t, 2, completionCalls)
+}
+
 func TestDefaultEnhancedExecutionOptions(t *testing.T) {
 	opts := DefaultEnhancedExecutionOptions()
 	assert.False(t, opts.UseReflection)

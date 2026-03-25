@@ -130,6 +130,67 @@ func TestDefaultReasoningModeSelector_SelectsReWOOForToolHeavyTask(t *testing.T)
 	}
 }
 
+func TestDefaultReasoningModeSelector_SelectsVerificationCapableModeDuringValidationStage(t *testing.T) {
+	registry := reasoning.NewPatternRegistry()
+	if err := registry.Register(selectorPatternStub{name: ReasoningModeReWOO}); err != nil {
+		t.Fatalf("register pattern: %v", err)
+	}
+
+	selection := DefaultReasoningModeSelector{}.Select(context.Background(), &Input{
+		Content: "cross-check the result against acceptance criteria",
+		Context: map[string]any{
+			"tool_verification_required": true,
+		},
+	}, &LoopState{CurrentStage: LoopStage("validate")}, registry, false)
+
+	if selection.Mode != ReasoningModeReWOO {
+		t.Fatalf("expected %q for validation-stage tool verification, got %q", ReasoningModeReWOO, selection.Mode)
+	}
+}
+
+func TestDefaultReasoningModeSelector_PreservesVerificationCapableModeInValidationStage(t *testing.T) {
+	registry := reasoning.NewPatternRegistry()
+	if err := registry.Register(selectorPatternStub{name: ReasoningModeReWOO}); err != nil {
+		t.Fatalf("register pattern: %v", err)
+	}
+
+	selection := DefaultReasoningModeSelector{}.Select(context.Background(), &Input{
+		Content: "validate the tool-backed answer against acceptance criteria",
+		Context: map[string]any{
+			"tool_verification_required": true,
+			"tool_intensive":             true,
+		},
+	}, &LoopState{
+		CurrentStage: LoopStage("validate"),
+		Decision:     LoopDecisionContinue,
+	}, registry, false)
+
+	if selection.Mode != ReasoningModeReWOO {
+		t.Fatalf("expected %q during validation stage, got %q", ReasoningModeReWOO, selection.Mode)
+	}
+}
+
+func TestDefaultReasoningModeSelector_PreservesVerificationCapableResumedModeDuringValidation(t *testing.T) {
+	registry := reasoning.NewPatternRegistry()
+	if err := registry.Register(selectorPatternStub{name: ReasoningModeReWOO}); err != nil {
+		t.Fatalf("register pattern: %v", err)
+	}
+
+	selection := DefaultReasoningModeSelector{}.Select(context.Background(), &Input{
+		Content: "validate the tool-backed answer",
+		Context: map[string]any{
+			"tool_verification_required": true,
+		},
+	}, &LoopState{
+		SelectedReasoningMode: ReasoningModeReWOO,
+		CurrentStage:          LoopStageObserve,
+	}, registry, false)
+
+	if selection.Mode != ReasoningModeReWOO {
+		t.Fatalf("expected resumed verification-capable mode %q, got %q", ReasoningModeReWOO, selection.Mode)
+	}
+}
+
 func TestReasoningResultToOutput(t *testing.T) {
 	duration := 2 * time.Second
 	result := &reasoning.ReasoningResult{

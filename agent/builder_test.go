@@ -84,6 +84,17 @@ func TestAgentBuilder_WithMaxReActIterations(t *testing.T) {
 	assert.Equal(t, 0, b3.config.Runtime.MaxReActIterations)
 }
 
+func TestAgentBuilder_WithMaxLoopIterations(t *testing.T) {
+	b := NewAgentBuilder(testAgentConfig("a1", "test", "gpt-4")).
+		WithProvider(&testProvider{name: "test"}).
+		WithMaxLoopIterations(4)
+	assert.Equal(t, 4, b.config.Runtime.MaxLoopIterations)
+
+	b2 := NewAgentBuilder(testAgentConfig("a1", "test", "gpt-4")).
+		WithMaxLoopIterations(0)
+	assert.Equal(t, 0, b2.config.Runtime.MaxLoopIterations)
+}
+
 func TestAgentBuilder_WithMemory(t *testing.T) {
 	mem := &testMemoryManager{}
 	b := NewAgentBuilder(types.AgentConfig{}).WithMemory(mem)
@@ -197,4 +208,3 @@ func testAgentConfig(id, name, model string) types.AgentConfig {
 		},
 	}
 }
-

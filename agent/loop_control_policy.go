@@ -7,7 +7,7 @@ import (
 )
 
 const (
-	defaultLoopIterationBudget       = 1
+	defaultLoopIterationBudget       = 3
 	defaultReflectionIterationBudget = 3
 	defaultQualityThreshold          = 0.7
 	internalBudgetScope              = "strategy_internal"
@@ -45,8 +45,8 @@ func (b *BaseAgent) loopControlPolicy() LoopControlPolicy {
 	if policy.ReflectionIterationBudget <= 0 {
 		policy.ReflectionIterationBudget = defaultReflectionIterationBudget
 	}
-	if b.config.IsReflectionEnabled() {
-		policy.LoopIterationBudget = policy.ReflectionIterationBudget
+	if b.config.Runtime.MaxLoopIterations > 0 {
+		policy.LoopIterationBudget = b.config.Runtime.MaxLoopIterations
 	}
 	if guardrailsCfg := b.runtimeGuardrailsCfg; guardrailsCfg != nil {
 		policy.RetryBudget = max(policy.RetryBudget, guardrailsCfg.MaxRetries)
