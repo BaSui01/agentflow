@@ -459,6 +459,73 @@ func TestAgentHandler_HandleExecuteAgent_ValidAgentID(t *testing.T) {
 	assert.NotEqual(t, http.StatusBadRequest, w.Code)
 }
 
+func TestAgentHandler_HandleExecuteAgent_MultiAgentValidation(t *testing.T) {
+	reg := newMockRegistry()
+	handler := newTestHandler(reg)
+
+	tests := []struct {
+		name string
+		req  usecase.AgentExecuteRequest
+	}{
+		{
+			name: "too many agent ids",
+			req: usecase.AgentExecuteRequest{
+				AgentIDs: []string{"a1", "a2", "a3", "a4", "a5", "a6"},
+				Content:  "hello",
+			},
+		},
+		{
+			name: "mixed agent_id and agent_ids",
+			req: usecase.AgentExecuteRequest{
+				AgentID:  "a1",
+				AgentIDs: []string{"a2", "a3"},
+				Content:  "hello",
+			},
+		},
+		{
+			name: "invalid mode",
+			req: usecase.AgentExecuteRequest{
+				AgentIDs: []string{"a1", "a2"},
+				Content:  "hello",
+				Mode:     "fanout",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			body, _ := json.Marshal(tt.req)
+			w := httptest.NewRecorder()
+			r := httptest.NewRequest(http.MethodPost, "/v1/agents/execute", bytes.NewReader(body))
+			r.Header.Set("Content-Type", "application/json")
+
+			handler.HandleExecuteAgent(w, r)
+
+			assert.Equal(t, http.StatusBadRequest, w.Code)
+		})
+	}
+}
+
+func TestAgentHandler_HandleExecuteAgent_MultiAgentValid(t *testing.T) {
+	reg := newMockRegistry().
+		withAgent(newTestAgentInfo("agent-1", discovery.AgentStatusOnline)).
+		withAgent(newTestAgentInfo("agent-2", discovery.AgentStatusOnline))
+	handler := newTestHandler(reg)
+
+	body, _ := json.Marshal(usecase.AgentExecuteRequest{
+		AgentIDs: []string{"agent-1", "agent-2"},
+		Content:  "hello",
+		Mode:     "parallel",
+	})
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPost, "/v1/agents/execute", bytes.NewReader(body))
+	r.Header.Set("Content-Type", "application/json")
+
+	handler.HandleExecuteAgent(w, r)
+
+	assert.NotEqual(t, http.StatusBadRequest, w.Code)
+}
+
 func TestAgentHandler_HandlePlanAgent_InvalidAgentID(t *testing.T) {
 	reg := newMockRegistry()
 	handler := newTestHandler(reg)

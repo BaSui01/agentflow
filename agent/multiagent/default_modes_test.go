@@ -10,18 +10,18 @@ import (
 )
 
 type modeTestAgent struct {
-	id     string
-	name   string
-	out    string
+	id      string
+	name    string
+	out     string
 	latency time.Duration
 }
 
-func (m *modeTestAgent) ID() string                                   { return m.id }
-func (m *modeTestAgent) Name() string                                 { return m.name }
-func (m *modeTestAgent) Type() agent.AgentType                        { return agent.TypeGeneric }
-func (m *modeTestAgent) State() agent.State                           { return agent.StateReady }
-func (m *modeTestAgent) Init(context.Context) error                   { return nil }
-func (m *modeTestAgent) Teardown(context.Context) error               { return nil }
+func (m *modeTestAgent) ID() string                     { return m.id }
+func (m *modeTestAgent) Name() string                   { return m.name }
+func (m *modeTestAgent) Type() agent.AgentType          { return agent.TypeGeneric }
+func (m *modeTestAgent) State() agent.State             { return agent.StateReady }
+func (m *modeTestAgent) Init(context.Context) error     { return nil }
+func (m *modeTestAgent) Teardown(context.Context) error { return nil }
 func (m *modeTestAgent) Plan(context.Context, *agent.Input) (*agent.PlanResult, error) {
 	return nil, nil
 }
@@ -47,6 +47,7 @@ func TestRegisterDefaultModes_RegistersAllModes(t *testing.T) {
 		ModeCrew:           true,
 		ModeDeliberation:   true,
 		ModeFederation:     true,
+		ModeParallel:       true,
 		ModeLoop:           true,
 		ModeTeamSupervisor: true,
 		ModeTeamRoundRobin: true,
@@ -134,6 +135,7 @@ func TestGlobalModeRegistry_AutoRegistersDefaults(t *testing.T) {
 		ModeCrew:          false,
 		ModeDeliberation:  false,
 		ModeFederation:    false,
+		ModeParallel:      false,
 		ModeLoop:          false,
 	}
 	for _, name := range got {
@@ -148,6 +150,38 @@ func TestGlobalModeRegistry_AutoRegistersDefaults(t *testing.T) {
 	}
 }
 
+func TestParallelMode_ExecutesAllAgentsAndAggregates(t *testing.T) {
+	reg := NewModeRegistry()
+	if err := RegisterDefaultModes(reg, zap.NewNop()); err != nil {
+		t.Fatalf("register default modes failed: %v", err)
+	}
+	agents := []agent.Agent{
+		&modeTestAgent{id: "a1", name: "agent-1", out: "alpha"},
+		&modeTestAgent{id: "a2", name: "agent-2", out: "beta"},
+	}
+
+	out, err := reg.Execute(context.Background(), ModeParallel, agents, &agent.Input{
+		TraceID: "t1",
+		Content: "hello",
+		Context: map[string]any{"aggregation_strategy": string(StrategyMergeAll)},
+	})
+	if err != nil {
+		t.Fatalf("parallel execute failed: %v", err)
+	}
+	if out.Metadata == nil {
+		t.Fatalf("parallel mode should populate metadata")
+	}
+	if out.Metadata["mode"] != ModeParallel {
+		t.Fatalf("parallel metadata missing mode tag: %#v", out.Metadata)
+	}
+	if out.Metadata["agent_count"] != len(agents) {
+		t.Fatalf("parallel metadata missing agent_count: %#v", out.Metadata)
+	}
+	if out.Content != "alpha\n\nbeta" {
+		t.Fatalf("unexpected parallel output: %q", out.Content)
+	}
+}
+
 type loopTestAgent struct {
 	id        string
 	name      string
@@ -155,12 +189,12 @@ type loopTestAgent struct {
 	stopAt    int
 }
 
-func (a *loopTestAgent) ID() string                                   { return a.id }
-func (a *loopTestAgent) Name() string                                 { return a.name }
-func (a *loopTestAgent) Type() agent.AgentType                        { return agent.TypeGeneric }
-func (a *loopTestAgent) State() agent.State                           { return agent.StateReady }
-func (a *loopTestAgent) Init(context.Context) error                   { return nil }
-func (a *loopTestAgent) Teardown(context.Context) error               { return nil }
+func (a *loopTestAgent) ID() string                     { return a.id }
+func (a *loopTestAgent) Name() string                   { return a.name }
+func (a *loopTestAgent) Type() agent.AgentType          { return agent.TypeGeneric }
+func (a *loopTestAgent) State() agent.State             { return agent.StateReady }
+func (a *loopTestAgent) Init(context.Context) error     { return nil }
+func (a *loopTestAgent) Teardown(context.Context) error { return nil }
 func (a *loopTestAgent) Plan(context.Context, *agent.Input) (*agent.PlanResult, error) {
 	return nil, nil
 }

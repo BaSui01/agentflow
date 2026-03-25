@@ -22,6 +22,7 @@ const (
 	ModeCrew          = "crew"
 	ModeDeliberation  = "deliberation"
 	ModeFederation    = "federation"
+	ModeParallel      = "parallel"
 	ModeLoop          = "loop"
 )
 
@@ -40,6 +41,7 @@ func RegisterDefaultModes(reg *ModeRegistry, logger *zap.Logger) error {
 	reg.Register(newCrewModeStrategy(logger))
 	reg.Register(newDeliberationModeStrategy(logger))
 	reg.Register(newPrimaryModeStrategy(ModeFederation, logger))
+	reg.Register(newParallelModeStrategy(logger))
 	reg.Register(newLoopModeStrategy(logger))
 
 	// Team modes (supervisor/round_robin/selector/swarm)
@@ -264,6 +266,73 @@ func (noopProvider) ListModels(context.Context) ([]llm.Model, error) { return ni
 
 func (noopProvider) Endpoints() llm.ProviderEndpoints { return llm.ProviderEndpoints{} }
 
+type parallelModeStrategy struct {
+	logger *zap.Logger
+}
+
+func newParallelModeStrategy(logger *zap.Logger) *parallelModeStrategy {
+	return &parallelModeStrategy{logger: logger.With(zap.String("mode", ModeParallel))}
+}
+
+func (m *parallelModeStrategy) Name() string { return ModeParallel }
+
+func (m *parallelModeStrategy) Execute(ctx context.Context, agents []agent.Agent, input *agent.Input) (*agent.Output, error) {
+	if len(agents) == 0 {
+		return nil, fmt.Errorf("parallel mode requires at least one agent")
+	}
+
+	cfg := DefaultSupervisorConfig()
+	cfg.AggregationStrategy = aggregationStrategyFromInput(input)
+	splitter := &StaticSplitter{Agents: agents}
+	agg, err := NewSupervisor(splitter, cfg, m.logger).Run(ctx, input)
+	if err != nil {
+		return nil, err
+	}
+
+	metadata := map[string]any{
+		"mode":                 ModeParallel,
+		"agent_count":          len(agents),
+		"source_count":         agg.SourceCount,
+		"failed_count":         agg.FailedCount,
+		"aggregation_strategy": string(cfg.AggregationStrategy),
+	}
+	for k, v := range agg.Metadata {
+		metadata[k] = v
+	}
+
+	traceID := ""
+	if input != nil {
+		traceID = input.TraceID
+	}
+
+	return &agent.Output{
+		TraceID:      traceID,
+		Content:      agg.Content,
+		TokensUsed:   agg.TokensUsed,
+		Cost:         agg.Cost,
+		Duration:     agg.Duration,
+		FinishReason: agg.FinishReason,
+		Metadata:     metadata,
+	}, nil
+}
+
+func aggregationStrategyFromInput(input *agent.Input) AggregationStrategy {
+	if input == nil || input.Context == nil {
+		return StrategyMergeAll
+	}
+	raw, _ := input.Context["aggregation_strategy"].(string)
+	switch AggregationStrategy(strings.TrimSpace(strings.ToLower(raw))) {
+	case StrategyBestOfN:
+		return StrategyBestOfN
+	case StrategyVoteMajority:
+		return StrategyVoteMajority
+	case StrategyWeightedMerge:
+		return StrategyWeightedMerge
+	default:
+		return StrategyMergeAll
+	}
+}
+
 const defaultLoopMaxIterations = 5
 
 type loopModeStrategy struct {
@@ -310,7 +379,7 @@ func (m *loopModeStrategy) Execute(ctx context.Context, agents []agent.Agent, in
 			TraceID: current.TraceID,
 			Content: current.Content,
 			Context: map[string]any{
-				"loop_iteration":     iter,
+				"loop_iteration":      iter,
 				"loop_max_iterations": maxIterations,
 			},
 		}
@@ -352,9 +421,9 @@ func (m *loopModeStrategy) Execute(ctx context.Context, agents []agent.Agent, in
 		}
 
 		current = &agent.Input{
-			TraceID:  input.TraceID,
-			Content:  out.Content,
-			Context:  input.Context,
+			TraceID:   input.TraceID,
+			Content:   out.Content,
+			Context:   input.Context,
 			Variables: input.Variables,
 		}
 	}

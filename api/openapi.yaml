@@ -1594,10 +1594,21 @@ components:
 
     AgentExecuteRequest:
       type: object
-      required: [agent_id, content]
+      required: [content]
       properties:
         agent_id:
           type: string
+          description: Single agent execution target. Cannot be combined with agent_ids.
+        agent_ids:
+          type: array
+          description: Multi-agent execution targets. Maximum 5 IDs. Cannot be combined with agent_id.
+          maxItems: 5
+          items:
+            type: string
+        mode:
+          type: string
+          enum: [reasoning, collaboration, hierarchical, crew, deliberation, federation, parallel, loop]
+          description: Execution mode. Multi-agent requests default to parallel when omitted.
         content:
           type: string
         provider:

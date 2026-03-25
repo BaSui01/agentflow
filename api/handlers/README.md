@@ -55,6 +55,24 @@ http.HandleFunc("POST /api/v1/agents/execute", agentHandler.HandleExecuteAgent)
 
 说明：`AgentHandler` 的执行、规划、流式调用统一走 `AgentService`。
 
+多 Agent 执行也走同一入口，不新增旁路 handler：
+
+```json
+{
+  "agent_ids": ["planner", "coder", "reviewer", "tester", "synthesizer"],
+  "mode": "parallel",
+  "content": "并行分析并汇总方案",
+  "context": {
+    "aggregation_strategy": "merge_all"
+  }
+}
+```
+
+- `agent_id` 与 `agent_ids` 二选一。
+- `agent_ids` 最多 5 个。
+- 未显式传 `mode` 时，多 Agent 请求默认走 `parallel`。
+- `plan/stream` 当前仅支持单 agent，不支持 `agent_ids`。
+
 ## 统一响应与错误
 
 - 成功响应：`WriteSuccess(w, data)`

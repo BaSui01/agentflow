@@ -171,7 +171,7 @@ func TestRegisterDefaultModes_NilLogger(t *testing.T) {
 	reg := NewModeRegistry()
 	err := RegisterDefaultModes(reg, nil)
 	require.NoError(t, err)
-	assert.True(t, len(reg.List()) >= 7)
+	assert.True(t, len(reg.List()) >= 8)
 }
 
 // ---------------------------------------------------------------------------
@@ -362,6 +362,26 @@ func TestCollaborationMode_NilInput(t *testing.T) {
 func TestCollaborationMode_NilContext(t *testing.T) {
 	pattern := collaborationPatternFromInput(&agent.Input{Content: "hi", Context: nil})
 	assert.NotEmpty(t, string(pattern))
+}
+
+func TestParallelMode_NoAgents(t *testing.T) {
+	reg := NewModeRegistry()
+	require.NoError(t, RegisterDefaultModes(reg, zap.NewNop()))
+	_, err := reg.Execute(context.Background(), ModeParallel, nil, &agent.Input{Content: "hi"})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "at least one agent")
+}
+
+func TestAggregationStrategyFromInput_DefaultsToMergeAll(t *testing.T) {
+	assert.Equal(t, StrategyMergeAll, aggregationStrategyFromInput(nil))
+	assert.Equal(t, StrategyMergeAll, aggregationStrategyFromInput(&agent.Input{Context: nil}))
+	assert.Equal(t, StrategyMergeAll, aggregationStrategyFromInput(&agent.Input{Context: map[string]any{"aggregation_strategy": "unknown"}}))
+}
+
+func TestAggregationStrategyFromInput_RecognizesSupportedValues(t *testing.T) {
+	assert.Equal(t, StrategyBestOfN, aggregationStrategyFromInput(&agent.Input{Context: map[string]any{"aggregation_strategy": "best_of_n"}}))
+	assert.Equal(t, StrategyVoteMajority, aggregationStrategyFromInput(&agent.Input{Context: map[string]any{"aggregation_strategy": "vote_majority"}}))
+	assert.Equal(t, StrategyWeightedMerge, aggregationStrategyFromInput(&agent.Input{Context: map[string]any{"aggregation_strategy": "weighted_merge"}}))
 }
 
 // ---------------------------------------------------------------------------

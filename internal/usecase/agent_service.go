@@ -9,6 +9,7 @@ import (
 
 	"github.com/BaSui01/agentflow/agent"
 	"github.com/BaSui01/agentflow/agent/discovery"
+	"github.com/BaSui01/agentflow/agent/multiagent"
 	llmcore "github.com/BaSui01/agentflow/llm/core"
 	"github.com/BaSui01/agentflow/types"
 )
@@ -24,11 +25,14 @@ const (
 	AgentOperationExecute AgentOperation = "execution"
 	AgentOperationStream  AgentOperation = "streaming"
 	AgentOperationPlan    AgentOperation = "planning"
+	maxExecuteAgentCount                 = 5
 )
 
 // AgentExecuteRequest is the request payload for agent execute/plan/stream operations.
 type AgentExecuteRequest struct {
 	AgentID     string            `json:"agent_id"`
+	AgentIDs    []string          `json:"agent_ids,omitempty"`
+	Mode        string            `json:"mode,omitempty"`
 	Content     string            `json:"content"`
 	Provider    string            `json:"provider,omitempty"`
 	Model       string            `json:"model,omitempty"`
@@ -121,15 +125,10 @@ func (s *DefaultAgentService) GetAgent(ctx context.Context, agentID string) (*di
 }
 
 func (s *DefaultAgentService) ExecuteAgent(ctx context.Context, req AgentExecuteRequest, traceID string) (*AgentExecuteResponse, time.Duration, *types.Error) {
-	ag, err := s.ResolveForOperation(ctx, req.AgentID, AgentOperationExecute)
-	if err != nil {
-		return nil, 0, err
-	}
-
 	execCtx := applyAgentRoutingContext(ctx, req)
 	input := toAgentInput(req, traceID)
 	start := time.Now()
-	output, execErr := ag.Execute(execCtx, input)
+	output, execErr := s.executeWithResolvedAgents(execCtx, req, input)
 	duration := time.Since(start)
 	if execErr != nil {
 		return nil, duration, ToTypesAgentError(execErr)
@@ -147,6 +146,9 @@ func (s *DefaultAgentService) ExecuteAgent(ctx context.Context, req AgentExecute
 }
 
 func (s *DefaultAgentService) PlanAgent(ctx context.Context, req AgentExecuteRequest, traceID string) (*agent.PlanResult, *types.Error) {
+	if len(req.AgentIDs) > 0 {
+		return nil, types.NewInvalidRequestError("agent_ids is not supported for planning").WithHTTPStatus(http.StatusBadRequest)
+	}
 	ag, err := s.ResolveForOperation(ctx, req.AgentID, AgentOperationPlan)
 	if err != nil {
 		return nil, err
@@ -159,6 +161,9 @@ func (s *DefaultAgentService) PlanAgent(ctx context.Context, req AgentExecuteReq
 }
 
 func (s *DefaultAgentService) ExecuteAgentStream(ctx context.Context, req AgentExecuteRequest, traceID string, emitter agent.RuntimeStreamEmitter) *types.Error {
+	if len(req.AgentIDs) > 0 {
+		return types.NewInvalidRequestError("agent_ids is not supported for streaming").WithHTTPStatus(http.StatusBadRequest)
+	}
 	ag, err := s.ResolveForOperation(ctx, req.AgentID, AgentOperationStream)
 	if err != nil {
 		return err
@@ -169,6 +174,89 @@ func (s *DefaultAgentService) ExecuteAgentStream(ctx context.Context, req AgentE
 		return ToTypesAgentError(execErr)
 	}
 	return nil
+}
+
+func (s *DefaultAgentService) executeWithResolvedAgents(ctx context.Context, req AgentExecuteRequest, input *agent.Input) (*agent.Output, error) {
+	agentIDs := normalizedAgentIDs(req)
+	if len(req.AgentIDs) > maxExecuteAgentCount {
+		return nil, types.NewInvalidRequestError("agent_ids length exceeds maximum of 5").WithHTTPStatus(http.StatusBadRequest)
+	}
+	if len(agentIDs) == 0 {
+		ag, err := s.ResolveForOperation(ctx, req.AgentID, AgentOperationExecute)
+		if err != nil {
+			return nil, err
+		}
+		return ag.Execute(ctx, input)
+	}
+
+	agents := make([]agent.Agent, 0, len(agentIDs))
+	for _, agentID := range agentIDs {
+		ag, err := s.ResolveForOperation(ctx, agentID, AgentOperationExecute)
+		if err != nil {
+			return nil, err
+		}
+		agents = append(agents, ag)
+	}
+
+	mode := normalizedExecutionMode(req)
+	return multiagent.GlobalModeRegistry().Execute(ctx, mode, agents, input)
+}
+
+func normalizedAgentIDs(req AgentExecuteRequest) []string {
+	ids := make([]string, 0, len(req.AgentIDs)+1)
+	seen := map[string]struct{}{}
+	for _, agentID := range req.AgentIDs {
+		trimmed := strings.TrimSpace(agentID)
+		if trimmed == "" {
+			continue
+		}
+		if _, ok := seen[trimmed]; ok {
+			continue
+		}
+		seen[trimmed] = struct{}{}
+		ids = append(ids, trimmed)
+	}
+	if len(ids) == 0 {
+		single := strings.TrimSpace(req.AgentID)
+		if single != "" {
+			ids = append(ids, single)
+		}
+	}
+	return ids
+}
+
+func normalizedExecutionMode(req AgentExecuteRequest) string {
+	mode := strings.TrimSpace(req.Mode)
+	if mode == "" {
+		if len(req.AgentIDs) > 0 {
+			return multiagent.ModeParallel
+		}
+		return multiagent.ModeReasoning
+	}
+	return strings.ToLower(mode)
+}
+
+func SupportedExecutionModes() []string {
+	return []string{
+		multiagent.ModeReasoning,
+		multiagent.ModeCollaboration,
+		multiagent.ModeHierarchical,
+		multiagent.ModeCrew,
+		multiagent.ModeDeliberation,
+		multiagent.ModeFederation,
+		multiagent.ModeParallel,
+		multiagent.ModeLoop,
+	}
+}
+
+func IsSupportedExecutionMode(mode string) bool {
+	normalized := strings.ToLower(strings.TrimSpace(mode))
+	for _, candidate := range SupportedExecutionModes() {
+		if candidate == normalized {
+			return true
+		}
+	}
+	return false
 }
 
 func toAgentInput(req AgentExecuteRequest, traceID string) *agent.Input {

@@ -109,3 +109,35 @@ func TestAgentService_PlanAgent_AppliesRoutingContext(t *testing.T) {
 	require.NotNil(t, rc.RoutePolicy)
 	assert.Equal(t, "latency_first", *rc.RoutePolicy)
 }
+
+func TestAgentService_ExecuteAgent_MultiAgentDefaultsToParallel(t *testing.T) {
+	agents := map[string]*routingAwareAgent{
+		"agent-1": {},
+		"agent-2": {},
+	}
+	svc := usecase.NewDefaultAgentService(nil, func(ctx context.Context, id string) (agent.Agent, error) {
+		ag, ok := agents[id]
+		if !ok {
+			return nil, assert.AnError
+		}
+		return ag, nil
+	})
+
+	resp, _, err := svc.ExecuteAgent(context.Background(), usecase.AgentExecuteRequest{
+		AgentIDs: []string{"agent-1", "agent-2"},
+		Content:  "hello",
+	}, "trace-2")
+	require.Nil(t, err)
+	require.NotNil(t, resp)
+	assert.Equal(t, "ok\n\nok", resp.Content)
+	assert.Equal(t, "parallel", resp.Metadata["mode"])
+	assert.Equal(t, 2, resp.Metadata["agent_count"])
+	require.NotNil(t, agents["agent-1"].lastExecuteCtx)
+	require.NotNil(t, agents["agent-2"].lastExecuteCtx)
+}
+
+func TestAgentService_SupportedExecutionModes_ContainsParallel(t *testing.T) {
+	assert.Contains(t, usecase.SupportedExecutionModes(), "parallel")
+	assert.True(t, usecase.IsSupportedExecutionMode("parallel"))
+	assert.False(t, usecase.IsSupportedExecutionMode("unsupported"))
+}

@@ -192,11 +192,6 @@ func (h *AgentHandler) HandleExecuteAgent(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	if req.AgentID == "" || req.Content == "" {
-		WriteErrorMessage(w, http.StatusBadRequest, types.ErrInvalidRequest, "agent_id and content are required", h.logger)
-		return
-	}
-
 	if apiErr := h.validateAgentExecuteRequest(&req); apiErr != nil {
 		WriteError(w, apiErr.WithHTTPStatus(http.StatusBadRequest), h.logger)
 		return
@@ -214,7 +209,8 @@ func (h *AgentHandler) HandleExecuteAgent(w http.ResponseWriter, r *http.Request
 	}
 
 	traceLogger.Info("agent execution completed",
-		zap.String("agent_id", req.AgentID),
+		zap.Strings("agent_ids", executionLogAgentIDs(req)),
+		zap.String("mode", normalizedExecutionModeForLog(req)),
 		zap.Duration("duration", duration),
 		zap.Int("tokens_used", resp.TokensUsed),
 	)
@@ -243,13 +239,12 @@ func (h *AgentHandler) HandleAgentStream(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	if req.AgentID == "" || req.Content == "" {
-		WriteErrorMessage(w, http.StatusBadRequest, types.ErrInvalidRequest, "agent_id and content are required", h.logger)
-		return
-	}
-
 	if apiErr := h.validateAgentExecuteRequest(&req); apiErr != nil {
 		WriteError(w, apiErr.WithHTTPStatus(http.StatusBadRequest), h.logger)
+		return
+	}
+	if len(req.AgentIDs) > 0 {
+		WriteError(w, types.NewInvalidRequestError("agent_ids is not supported for streaming").WithHTTPStatus(http.StatusBadRequest), h.logger)
 		return
 	}
 
@@ -419,13 +414,12 @@ func (h *AgentHandler) HandlePlanAgent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if req.AgentID == "" || req.Content == "" {
-		WriteErrorMessage(w, http.StatusBadRequest, types.ErrInvalidRequest, "agent_id and content are required", h.logger)
-		return
-	}
-
 	if apiErr := h.validateAgentExecuteRequest(&req); apiErr != nil {
 		WriteError(w, apiErr.WithHTTPStatus(http.StatusBadRequest), h.logger)
+		return
+	}
+	if len(req.AgentIDs) > 0 {
+		WriteError(w, types.NewInvalidRequestError("agent_ids is not supported for planning").WithHTTPStatus(http.StatusBadRequest), h.logger)
 		return
 	}
 
@@ -642,14 +636,40 @@ func (h *AgentHandler) validateAgentExecuteRequest(req *usecase.AgentExecuteRequ
 	}
 
 	req.AgentID = strings.TrimSpace(req.AgentID)
+	req.Mode = strings.TrimSpace(req.Mode)
 	req.Content = strings.TrimSpace(req.Content)
 	req.Model = strings.TrimSpace(req.Model)
-
-	if req.AgentID == "" || req.Content == "" {
-		return types.NewInvalidRequestError("agent_id and content are required")
+	for i := range req.AgentIDs {
+		req.AgentIDs[i] = strings.TrimSpace(req.AgentIDs[i])
 	}
-	if !validAgentID.MatchString(req.AgentID) {
+
+	if req.Content == "" {
+		return types.NewInvalidRequestError("content is required")
+	}
+	if req.AgentID == "" && len(req.AgentIDs) == 0 {
+		return types.NewInvalidRequestError("agent_id or agent_ids is required")
+	}
+	if req.AgentID != "" && !validAgentID.MatchString(req.AgentID) {
 		return types.NewInvalidRequestError("invalid agent ID format")
+	}
+	if len(req.AgentIDs) > 0 {
+		if req.AgentID != "" {
+			return types.NewInvalidRequestError("agent_id and agent_ids cannot be provided together")
+		}
+		if len(req.AgentIDs) > 5 {
+			return types.NewInvalidRequestError("agent_ids length exceeds maximum of 5")
+		}
+		for _, agentID := range req.AgentIDs {
+			if agentID == "" {
+				return types.NewInvalidRequestError("agent_ids cannot contain empty values")
+			}
+			if !validAgentID.MatchString(agentID) {
+				return types.NewInvalidRequestError("invalid agent ID format")
+			}
+		}
+	}
+	if req.Mode != "" && !usecase.IsSupportedExecutionMode(req.Mode) {
+		return types.NewInvalidRequestError(fmt.Sprintf("unsupported execution mode: %s", req.Mode))
 	}
 	if len(req.Content) > 100000 {
 		return types.NewInvalidRequestError("content length exceeds maximum of 100000 characters")
@@ -664,4 +684,24 @@ func (h *AgentHandler) validateAgentExecuteRequest(req *usecase.AgentExecuteRequ
 	req.Metadata = usecase.NormalizeRouteMetadata(req.Metadata)
 	req.Tags = usecase.NormalizeRouteTags(req.Tags)
 	return nil
+}
+
+func executionLogAgentIDs(req usecase.AgentExecuteRequest) []string {
+	if len(req.AgentIDs) > 0 {
+		return req.AgentIDs
+	}
+	if req.AgentID == "" {
+		return nil
+	}
+	return []string{req.AgentID}
+}
+
+func normalizedExecutionModeForLog(req usecase.AgentExecuteRequest) string {
+	if strings.TrimSpace(req.Mode) != "" {
+		return strings.ToLower(strings.TrimSpace(req.Mode))
+	}
+	if len(req.AgentIDs) > 0 {
+		return "parallel"
+	}
+	return "reasoning"
 }
