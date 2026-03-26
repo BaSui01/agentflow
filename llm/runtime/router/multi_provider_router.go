@@ -343,6 +343,7 @@ func (r *MultiProviderRouter) buildSelectionMulti(
 		ModelID:      providerModel.ModelID,
 		ModelName:    modelName,
 		RemoteModel:  providerModel.RemoteModelName,
+		BaseURL:      baseURL,
 		IsCanary:     false,
 		Strategy:     strategy,
 	}, nil

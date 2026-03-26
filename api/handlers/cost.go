@@ -3,6 +3,7 @@ package handlers
 import (
 	"net/http"
 	"strconv"
+	"sync"
 
 	"github.com/BaSui01/agentflow/llm/observability"
 	"github.com/BaSui01/agentflow/types"
@@ -10,6 +11,7 @@ import (
 )
 
 type CostHandler struct {
+	mu      sync.RWMutex
 	tracker *observability.CostTracker
 	logger  *zap.Logger
 }
@@ -24,22 +26,42 @@ func NewCostHandler(tracker *observability.CostTracker, logger *zap.Logger) *Cos
 	}
 }
 
+// UpdateTracker swaps the live cost tracker in place.
+func (h *CostHandler) UpdateTracker(tracker *observability.CostTracker) {
+	if h == nil {
+		return
+	}
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.tracker = tracker
+}
+
+func (h *CostHandler) currentTracker() *observability.CostTracker {
+	if h == nil {
+		return nil
+	}
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	return h.tracker
+}
+
 func (h *CostHandler) HandleSummary(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		WriteErrorMessage(w, http.StatusMethodNotAllowed, types.ErrInvalidRequest, "method not allowed", h.logger)
 		return
 	}
-	if h.tracker == nil {
+	tracker := h.currentTracker()
+	if tracker == nil {
 		WriteError(w, types.NewInternalError("cost tracker is not configured"), h.logger)
 		return
 	}
 	WriteSuccess(w, map[string]any{
-		"total_cost":       h.tracker.TotalCost(),
-		"by_provider":      h.tracker.CostByProvider(),
-		"by_model":         h.tracker.CostByModel(),
-		"by_agent":         h.tracker.CostByAgent(),
-		"by_session":      h.tracker.CostBySession(),
-		"by_tool":          h.tracker.CostByTool(),
+		"total_cost":  tracker.TotalCost(),
+		"by_provider": tracker.CostByProvider(),
+		"by_model":    tracker.CostByModel(),
+		"by_agent":    tracker.CostByAgent(),
+		"by_session":  tracker.CostBySession(),
+		"by_tool":     tracker.CostByTool(),
 	})
 }
 
@@ -48,7 +70,8 @@ func (h *CostHandler) HandleRecords(w http.ResponseWriter, r *http.Request) {
 		WriteErrorMessage(w, http.StatusMethodNotAllowed, types.ErrInvalidRequest, "method not allowed", h.logger)
 		return
 	}
-	if h.tracker == nil {
+	tracker := h.currentTracker()
+	if tracker == nil {
 		WriteError(w, types.NewInternalError("cost tracker is not configured"), h.logger)
 		return
 	}
@@ -73,7 +96,7 @@ func (h *CostHandler) HandleRecords(w http.ResponseWriter, r *http.Request) {
 		}
 		offset = parsed
 	}
-	records := h.tracker.Records()
+	records := tracker.Records()
 	total := len(records)
 	if offset > total {
 		offset = total
@@ -105,10 +128,11 @@ func (h *CostHandler) HandleReset(w http.ResponseWriter, r *http.Request) {
 		WriteErrorMessage(w, http.StatusMethodNotAllowed, types.ErrInvalidRequest, "method not allowed", h.logger)
 		return
 	}
-	if h.tracker == nil {
+	tracker := h.currentTracker()
+	if tracker == nil {
 		WriteError(w, types.NewInternalError("cost tracker is not configured"), h.logger)
 		return
 	}
-	h.tracker.Reset()
+	tracker.Reset()
 	WriteSuccess(w, map[string]string{"message": "cost records reset"})
 }

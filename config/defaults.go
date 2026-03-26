@@ -5,17 +5,17 @@ import "time"
 
 // 默认服务地址常量，替代硬编码
 const (
-	DefaultRedisAddr     = "localhost:6379"
-	DefaultPostgresHost  = "localhost"
-	DefaultPostgresPort  = 5432
-	DefaultQdrantHost    = "localhost"
-	DefaultQdrantPort    = 6334
-	DefaultWeaviateHost  = "localhost"
-	DefaultWeaviatePort  = 8080
-	DefaultMilvusHost    = "localhost"
-	DefaultMilvusPort    = 19530
-	DefaultMongoDBHost   = "localhost"
-	DefaultMongoDBPort   = 27017
+	DefaultRedisAddr    = "localhost:6379"
+	DefaultPostgresHost = "localhost"
+	DefaultPostgresPort = 5432
+	DefaultQdrantHost   = "localhost"
+	DefaultQdrantPort   = 6334
+	DefaultWeaviateHost = "localhost"
+	DefaultWeaviatePort = 8080
+	DefaultMilvusHost   = "localhost"
+	DefaultMilvusPort   = 19530
+	DefaultMongoDBHost  = "localhost"
+	DefaultMongoDBPort  = 27017
 )
 
 type HostedToolsConfig struct {
@@ -31,16 +31,16 @@ type FileOpsToolConfig struct {
 }
 
 type ShellToolConfig struct {
-	Enabled     bool           `yaml:"enabled" env:"ENABLED"`
-	Timeout     time.Duration  `yaml:"timeout" env:"TIMEOUT"`
-	BlockedCmds []string       `yaml:"blocked_cmds" env:"BLOCKED_CMDS"`
+	Enabled     bool          `yaml:"enabled" env:"ENABLED"`
+	Timeout     time.Duration `yaml:"timeout" env:"TIMEOUT"`
+	BlockedCmds []string      `yaml:"blocked_cmds" env:"BLOCKED_CMDS"`
 }
 
 type MCPToolConfig struct {
 	Enabled bool     `yaml:"enabled" env:"ENABLED"`
-	Command string  `yaml:"command" env:"COMMAND"`
+	Command string   `yaml:"command" env:"COMMAND"`
 	Args    []string `yaml:"args" env:"ARGS"`
-	BaseURL string  `yaml:"base_url" env:"BASE_URL"`
+	BaseURL string   `yaml:"base_url" env:"BASE_URL"`
 }
 
 type WorkflowCheckpointConfig struct {
@@ -224,16 +224,17 @@ func DefaultMongoDBConfig() MongoDBConfig {
 // DefaultLLMConfig 返回默认 LLM 连接配置
 func DefaultLLMConfig() LLMConnectionConfig {
 	return LLMConnectionConfig{
-		DefaultProvider: "openai",
-		ToolProvider:    "",
-		APIKey:          "",
-		ToolAPIKey:      "",
-		BaseURL:         "",
-		ToolBaseURL:     "",
-		Timeout:         2 * time.Minute,
-		ToolTimeout:     0,
-		MaxRetries:      3,
-		ToolMaxRetries:  0,
+		MainProviderMode: LLMMainProviderModeLegacy,
+		DefaultProvider:  "openai",
+		ToolProvider:     "",
+		APIKey:           "",
+		ToolAPIKey:       "",
+		BaseURL:          "",
+		ToolBaseURL:      "",
+		Timeout:          2 * time.Minute,
+		ToolTimeout:      0,
+		MaxRetries:       3,
+		ToolMaxRetries:   0,
 	}
 }
 
@@ -249,12 +250,12 @@ func DefaultMultimodalConfig() MultimodalConfig {
 		DefaultVideoProvider:    "",
 		DefaultChatModel:        "",
 		Image: MultimodalImageConfig{
-			OpenAIAPIKey:  "",
-			OpenAIBaseURL: "",
-			GeminiAPIKey:  "",
-			FluxAPIKey:    "",
-			FluxBaseURL:   "https://api.bfl.ai",
-			StabilityAPIKey: "",
+			OpenAIAPIKey:     "",
+			OpenAIBaseURL:    "",
+			GeminiAPIKey:     "",
+			FluxAPIKey:       "",
+			FluxBaseURL:      "https://api.bfl.ai",
+			StabilityAPIKey:  "",
 			StabilityBaseURL: "https://api.stability.ai",
 			IdeogramAPIKey:   "",
 			IdeogramBaseURL:  "https://api.ideogram.ai",
@@ -272,21 +273,21 @@ func DefaultMultimodalConfig() MultimodalConfig {
 			TencentBaseURL:   "https://aiart.tencentcloudapi.com",
 		},
 		Video: MultimodalVideoConfig{
-			RunwayAPIKey:   "",
-			RunwayBaseURL:  "https://api.runwayml.com",
-			VeoAPIKey:      "",
-			VeoBaseURL:     "https://generativelanguage.googleapis.com",
-			GoogleAPIKey:   "",
-			GoogleBaseURL:  "https://generativelanguage.googleapis.com",
-			SoraAPIKey:     "",
-			SoraBaseURL:    "https://api.openai.com",
-			KlingAPIKey:    "",
-			KlingBaseURL:   "https://api.klingai.com",
-			LumaAPIKey:     "",
-			LumaBaseURL:    "https://api.lumalabs.ai",
-			MiniMaxAPIKey:  "",
-			MiniMaxBaseURL: "https://api.minimax.chat",
-			SeedanceAPIKey: "",
+			RunwayAPIKey:    "",
+			RunwayBaseURL:   "https://api.runwayml.com",
+			VeoAPIKey:       "",
+			VeoBaseURL:      "https://generativelanguage.googleapis.com",
+			GoogleAPIKey:    "",
+			GoogleBaseURL:   "https://generativelanguage.googleapis.com",
+			SoraAPIKey:      "",
+			SoraBaseURL:     "https://api.openai.com",
+			KlingAPIKey:     "",
+			KlingBaseURL:    "https://api.klingai.com",
+			LumaAPIKey:      "",
+			LumaBaseURL:     "https://api.lumalabs.ai",
+			MiniMaxAPIKey:   "",
+			MiniMaxBaseURL:  "https://api.minimax.chat",
+			SeedanceAPIKey:  "",
 			SeedanceBaseURL: "https://api.seedance.ai",
 		},
 	}

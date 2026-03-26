@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -92,6 +93,7 @@ type InterruptManager struct {
 	store    InterruptStore
 	logger   *zap.Logger
 	handlers map[InterruptType][]InterruptHandler
+	named    map[InterruptType]map[string]struct{}
 	pending  map[string]*pendingInterrupt
 	mu       sync.RWMutex
 }
@@ -112,6 +114,7 @@ func NewInterruptManager(store InterruptStore, logger *zap.Logger) *InterruptMan
 		store:    store,
 		logger:   logger.With(zap.String("component", "interrupt_manager")),
 		handlers: make(map[InterruptType][]InterruptHandler),
+		named:    make(map[InterruptType]map[string]struct{}),
 		pending:  make(map[string]*pendingInterrupt),
 	}
 }
@@ -121,6 +124,33 @@ func (m *InterruptManager) RegisterHandler(interruptType InterruptType, handler 
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.handlers[interruptType] = append(m.handlers[interruptType], handler)
+}
+
+// RegisterNamedHandler registers a handler only once for the given interrupt
+// type and stable name. It returns true when a new handler was added.
+func (m *InterruptManager) RegisterNamedHandler(
+	interruptType InterruptType,
+	name string,
+	handler InterruptHandler,
+) bool {
+	if strings.TrimSpace(name) == "" {
+		m.RegisterHandler(interruptType, handler)
+		return true
+	}
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if m.named[interruptType] == nil {
+		m.named[interruptType] = make(map[string]struct{})
+	}
+	if _, exists := m.named[interruptType][name]; exists {
+		return false
+	}
+
+	m.handlers[interruptType] = append(m.handlers[interruptType], handler)
+	m.named[interruptType][name] = struct{}{}
+	return true
 }
 
 // 创建中断创建并等待中断解决 。

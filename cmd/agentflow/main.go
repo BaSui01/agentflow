@@ -15,7 +15,7 @@
 // =============================================================================
 
 // @title AgentFlow API
-// @version 1.8.10
+// @version 1.8.11
 // @description AgentFlow is a production-ready Go framework for building AI agents with multi-provider LLM support.
 // @description
 // @description ## Features
@@ -58,7 +58,7 @@ import (
 // =============================================================================
 
 var (
-	Version   = "1.8.10"
+	Version   = "1.8.11"
 	BuildTime = "unknown"
 	GitCommit = "unknown"
 )

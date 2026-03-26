@@ -260,6 +260,24 @@ func main() {
 }
 ```
 
+如果你的底层路由语义不是 `provider + api_key pool`，而是业务侧自定义的 `channel / key / model mapping`：
+
+- 推荐主链路是：`Handler/Service -> Gateway -> ChannelRoutedProvider -> resolvers/selectors -> provider factory -> provider API`
+- `ChannelRoutedProvider` 是 channel-based routing 的推荐主入口
+- 外部项目建议通过 `BuildChannelRoutedProvider(...)` 一次性装配这条链，而不是手工散落 wiring
+- 仓库内置 `llm/runtime/router/extensions/channelstore` 作为通用 extension 起点，提供 `StoreModelMappingResolver`、`PriorityWeightedSelector`、`StoreSecretResolver`、`StoreProviderConfigSource`、`StaticStore`
+- 上层业务保持 `Handler/Service -> Gateway` 不变，迁移时只替换 `Gateway` 后面的 routed provider 链路
+- 通过 `ChannelSelector`、`ModelMappingResolver`、`SecretResolver`、`UsageRecorder` 等接口注入自定义实现
+- `MultiProviderRouter` 继续保留，但定位为框架内置的 legacy DB-backed provider routing
+- legacy 默认文本链路仍是 `Gateway -> RoutedChatProvider -> MultiProviderRouter`；channel-based 新链路是 `Gateway -> ChannelRoutedProvider`
+- `MultiProviderRouter` 与 `ChannelRoutedProvider` 是 `Gateway` 后两个互斥的 routed provider 入口；一次请求只选一条单链路，不要把前者包进后者形成双重路由
+- 外部项目现在可通过 `llm/runtime/compose.Build(...)` 复用同一套 resilience/cache/policy/tool-provider runtime 装配；仓库自身组合根继续通过 `internal/app/bootstrap.BuildLLMHandlerRuntimeFromProvider(...)` 复用这层公共装配；`image/video` 仍延后到 `gateway + capabilities`
+- 仓库内置 `llm.main_provider_mode` 启动切换位；外部项目可以通过 `llm/runtime/compose.RegisterMainProviderBuilder(...)` 注册 `channel_routed` builder，并直接复用 server 启动链；如需通用适配器，可使用 `channelstore.NewMainProviderBuilder(...)`
+- `llm/runtime/router/extensions/runtimepolicy` 提供可复用的 `UsageRecorder` / `CooldownController` / `QuotaPolicy` 参考实现，便于先把 usage、cooldown、daily limit、concurrency limit 链路跑通
+- 第一阶段不把 `image/video` 接进 `ChannelRoutedProvider`，因为 image/video 当前走的是 capability 路由面：`gateway + capabilities + vendor.Profile`；若硬塞进 `llm.Provider`，会把文本 routed provider 与多模态 capability 入口过早耦合
+- 外部项目的 adapter-only 接入模板与配置切换示例见 `docs/architecture/channel-routing-adapter-template.zh-CN.md`
+- 设计与迁移说明见 `docs/architecture/channel-routing-extension.md`
+
 ### Reflection 自我改进
 
 完整可运行示例：`examples/06_advanced_features/`（或 `examples/09_full_integration/`）

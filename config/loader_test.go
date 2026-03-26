@@ -83,6 +83,7 @@ agent:
     max_messages: 200
 
 llm:
+  main_provider_mode: "channel_routed"
   default_provider: "openai"
   api_key: "main-key"
   base_url: "https://main.example.com"
@@ -124,6 +125,7 @@ log:
 	assert.Equal(t, 0.5, cfg.Agent.Temperature)
 	assert.Equal(t, "vector", cfg.Agent.Memory.Type)
 	assert.Equal(t, 200, cfg.Agent.Memory.MaxMessages)
+	assert.Equal(t, LLMMainProviderModeChannelRouted, cfg.LLM.MainProviderMode)
 	assert.Equal(t, "openai", cfg.LLM.DefaultProvider)
 	assert.Equal(t, "main-key", cfg.LLM.APIKey)
 	assert.Equal(t, "https://main.example.com", cfg.LLM.BaseURL)
@@ -146,25 +148,26 @@ log:
 func TestLoader_LoadFromEnv(t *testing.T) {
 	// 设置环境变量
 	envVars := map[string]string{
-		"AGENTFLOW_SERVER_HTTP_PORT":     "7777",
-		"AGENTFLOW_SERVER_GRPC_PORT":     "8888",
-		"AGENTFLOW_AGENT_NAME":           "env-agent",
-		"AGENTFLOW_AGENT_MODEL":          "gpt-4-turbo",
-		"AGENTFLOW_AGENT_TOOL_MODEL":     "gpt-4o-mini",
-		"AGENTFLOW_AGENT_MAX_ITERATIONS": "15",
-		"AGENTFLOW_AGENT_TEMPERATURE":    "0.9",
-		"AGENTFLOW_LLM_DEFAULT_PROVIDER": "openai",
-		"AGENTFLOW_LLM_API_KEY":          "main-key-env",
-		"AGENTFLOW_LLM_BASE_URL":         "https://main-env.example.com",
-		"AGENTFLOW_LLM_TIMEOUT":          "50s",
-		"AGENTFLOW_LLM_MAX_RETRIES":      "6",
-		"AGENTFLOW_LLM_TOOL_PROVIDER":    "gemini",
-		"AGENTFLOW_LLM_TOOL_API_KEY":     "tool-key-env",
-		"AGENTFLOW_LLM_TOOL_BASE_URL":    "https://tool-env.example.com",
-		"AGENTFLOW_LLM_TOOL_TIMEOUT":     "15s",
-		"AGENTFLOW_LLM_TOOL_MAX_RETRIES": "2",
-		"AGENTFLOW_REDIS_ADDR":           "env-redis:6379",
-		"AGENTFLOW_LOG_LEVEL":            "warn",
+		"AGENTFLOW_SERVER_HTTP_PORT":       "7777",
+		"AGENTFLOW_SERVER_GRPC_PORT":       "8888",
+		"AGENTFLOW_AGENT_NAME":             "env-agent",
+		"AGENTFLOW_AGENT_MODEL":            "gpt-4-turbo",
+		"AGENTFLOW_AGENT_TOOL_MODEL":       "gpt-4o-mini",
+		"AGENTFLOW_AGENT_MAX_ITERATIONS":   "15",
+		"AGENTFLOW_AGENT_TEMPERATURE":      "0.9",
+		"AGENTFLOW_LLM_MAIN_PROVIDER_MODE": "channel_routed",
+		"AGENTFLOW_LLM_DEFAULT_PROVIDER":   "openai",
+		"AGENTFLOW_LLM_API_KEY":            "main-key-env",
+		"AGENTFLOW_LLM_BASE_URL":           "https://main-env.example.com",
+		"AGENTFLOW_LLM_TIMEOUT":            "50s",
+		"AGENTFLOW_LLM_MAX_RETRIES":        "6",
+		"AGENTFLOW_LLM_TOOL_PROVIDER":      "gemini",
+		"AGENTFLOW_LLM_TOOL_API_KEY":       "tool-key-env",
+		"AGENTFLOW_LLM_TOOL_BASE_URL":      "https://tool-env.example.com",
+		"AGENTFLOW_LLM_TOOL_TIMEOUT":       "15s",
+		"AGENTFLOW_LLM_TOOL_MAX_RETRIES":   "2",
+		"AGENTFLOW_REDIS_ADDR":             "env-redis:6379",
+		"AGENTFLOW_LOG_LEVEL":              "warn",
 	}
 
 	// 设置环境变量
@@ -190,6 +193,7 @@ func TestLoader_LoadFromEnv(t *testing.T) {
 	assert.Equal(t, "gpt-4o-mini", cfg.Agent.ToolModel)
 	assert.Equal(t, 15, cfg.Agent.MaxIterations)
 	assert.Equal(t, 0.9, cfg.Agent.Temperature)
+	assert.Equal(t, LLMMainProviderModeChannelRouted, cfg.LLM.MainProviderMode)
 	assert.Equal(t, "openai", cfg.LLM.DefaultProvider)
 	assert.Equal(t, "main-key-env", cfg.LLM.APIKey)
 	assert.Equal(t, "https://main-env.example.com", cfg.LLM.BaseURL)

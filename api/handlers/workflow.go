@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"net/http"
+	"sync"
 
 	"github.com/BaSui01/agentflow/types"
 	"github.com/BaSui01/agentflow/workflow"
@@ -12,16 +13,35 @@ import (
 
 // WorkflowHandler handles workflow API requests.
 type WorkflowHandler struct {
+	mu      sync.RWMutex
 	service WorkflowService
 	logger  *zap.Logger
 }
 
 // NewWorkflowHandler creates a new workflow handler.
 func NewWorkflowHandler(executor WorkflowExecutor, parser *dsl.Parser, logger *zap.Logger) *WorkflowHandler {
-	return &WorkflowHandler{
-		service: newDefaultWorkflowService(executor, parser),
-		logger:  logger,
+	handler := &WorkflowHandler{logger: logger}
+	handler.UpdateRuntime(executor, parser)
+	return handler
+}
+
+// UpdateRuntime swaps workflow executor/parser wiring in place.
+func (h *WorkflowHandler) UpdateRuntime(executor WorkflowExecutor, parser *dsl.Parser) {
+	if h == nil {
+		return
 	}
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.service = newDefaultWorkflowService(executor, parser)
+}
+
+func (h *WorkflowHandler) currentService() WorkflowService {
+	if h == nil {
+		return nil
+	}
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	return h.service
 }
 
 // workflowExecuteRequest is the request body for HandleExecute.
@@ -57,13 +77,14 @@ func (h *WorkflowHandler) HandleExecute(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	wf, source, apiErr := h.service.BuildDAGWorkflow(req)
+	service := h.currentService()
+	wf, source, apiErr := service.BuildDAGWorkflow(req)
 	if apiErr != nil {
 		WriteError(w, apiErr, h.logger)
 		return
 	}
 
-	result, execErr := h.service.Execute(r.Context(), wf, req.Input, func(event workflow.WorkflowStreamEvent) {
+	result, execErr := service.Execute(r.Context(), wf, req.Input, func(event workflow.WorkflowStreamEvent) {
 		h.logger.Debug("workflow stream event",
 			zap.String("type", string(event.Type)),
 			zap.String("node_id", event.NodeID),
@@ -117,7 +138,8 @@ func (h *WorkflowHandler) HandleParse(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	result := h.service.ValidateDSL(req.DSL)
+	service := h.currentService()
+	result := service.ValidateDSL(req.DSL)
 	WriteSuccess(w, map[string]any{
 		"valid":  result.Valid,
 		"name":   result.Name,

@@ -5,6 +5,23 @@ All notable changes to AgentFlow will be documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.8.11] - 2026-03-26
+
+### Added
+- 新增 `ChannelRoutedProvider` 文本主链与 `channel_types` 抽象接口，支持 `ChannelSelector`、`ModelMappingResolver`、`SecretResolver`、`UsageRecorder`、`CooldownController`、`QuotaPolicy`、`ProviderConfigSource`
+- 新增 `llm.main_provider_mode=channel_routed` 与公共 `llm/runtime/compose` main-provider registry，允许组合根按配置切换 legacy / channel-routed 主链
+- 新增 `llm/runtime/router/extensions/channelstore` 与 `extensions/runtimepolicy`，提供静态 store、priority+weight selector、runtime policy 参考实现，以及外部 adapter/template 文档
+- 新增 channel-routed 文本链回归测试，覆盖 startup mode switch、chat/stream、OpenAI-compatible、失败链 usage/baseURL/remoteModel 贯通
+
+### Changed
+- 文本 runtime hot reload 改为复用共享 workflow HITL manager；成功 swap 后才清理旧 resolver cache，缺失启动路由时明确要求重启
+- `channelstore.NewMainProviderBuilder(...)` 支持透传 `ChatProviderFactory` / `LegacyProviderFactory`
+- `ChannelRoutedProvider` 在上游未返回 `model` 时统一回填 resolved remote model，保持 direct response、gateway decision、usage record 一致
+
+### Fixed
+- `wireMongoStores` 在 `mongoClient/resolver/discoveryRegistry` 缺失时安全跳过，避免非完整启动/热更新测试场景下的空指针依赖
+- workflow auto-approve handler 改为幂等注册，避免共享 HITL manager 下重复注册副作用
+
 ## [1.8.10] - 2026-03-23
 
 ### Changed

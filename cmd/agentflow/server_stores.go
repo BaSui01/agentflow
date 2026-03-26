@@ -20,6 +20,10 @@ func (s *Server) initMongoDB() error {
 }
 
 func (s *Server) wireMongoStores(resolver *agent.CachingResolver, discoveryRegistry *discovery.CapabilityRegistry) error {
+	if s.mongoClient == nil || resolver == nil || discoveryRegistry == nil {
+		return nil
+	}
+
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 

@@ -220,6 +220,7 @@ func (s *Service) Stream(ctx context.Context, req *llmcore.UnifiedRequest) (<-ch
 	}
 	mergeChatRoutingMetadata(req, chatReq)
 
+	ctx, resolvedCallRecorder := llm.WithResolvedProviderCallRecorder(ctx)
 	source, err := s.chatProvider.Stream(ctx, chatReq)
 	if err != nil {
 		return nil, err
@@ -241,9 +242,11 @@ func (s *Service) Stream(ctx context.Context, req *llmcore.UnifiedRequest) (<-ch
 		)
 
 		for chunk := range source {
+			resolvedCall, _ := resolvedCallRecorder.Load()
 			decision := llmcore.ProviderDecision{
-				Provider: firstNonEmpty(chunk.Provider, s.chatProvider.Name()),
-				Model:    firstNonEmpty(chunk.Model, chatReq.Model, req.ModelHint),
+				Provider: firstNonEmpty(resolvedCall.Provider, chunk.Provider, s.chatProvider.Name()),
+				Model:    firstNonEmpty(resolvedCall.Model, chunk.Model, chatReq.Model, req.ModelHint),
+				BaseURL:  firstNonEmpty(resolvedCall.BaseURL),
 				Strategy: string(req.RoutePolicy),
 			}
 
@@ -318,14 +321,16 @@ func (s *Service) invokeChat(ctx context.Context, req *llmcore.UnifiedRequest) (
 	}
 	mergeChatRoutingMetadata(req, chatReq)
 
+	ctx, resolvedCallRecorder := llm.WithResolvedProviderCallRecorder(ctx)
 	resp, err := s.chatProvider.Completion(ctx, chatReq)
 	if err != nil {
 		return nil, err
 	}
 
 	usage := fromChatUsage(resp.Usage)
-	provider := firstNonEmpty(resp.Provider, s.chatProvider.Name())
-	model := firstNonEmpty(resp.Model, chatReq.Model, req.ModelHint)
+	resolvedCall, _ := resolvedCallRecorder.Load()
+	provider := firstNonEmpty(resolvedCall.Provider, resp.Provider, s.chatProvider.Name())
+	model := firstNonEmpty(resolvedCall.Model, resp.Model, chatReq.Model, req.ModelHint)
 
 	return &llmcore.UnifiedResponse{
 		Output:  resp,
@@ -335,6 +340,7 @@ func (s *Service) invokeChat(ctx context.Context, req *llmcore.UnifiedRequest) (
 		ProviderDecision: llmcore.ProviderDecision{
 			Provider: provider,
 			Model:    model,
+			BaseURL:  firstNonEmpty(resolvedCall.BaseURL),
 			Strategy: string(req.RoutePolicy),
 		},
 	}, nil

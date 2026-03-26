@@ -29,6 +29,12 @@ const (
 	StorageTypePostgres = "postgres"
 )
 
+// LLM 主入口模式常量。
+const (
+	LLMMainProviderModeLegacy        = "legacy"
+	LLMMainProviderModeChannelRouted = "channel_routed"
+)
+
 // --- 核心配置结构 ---
 
 // Config 是 AgentFlow 的完整配置结构
@@ -335,6 +341,9 @@ type MongoDBConfig struct {
 // 注意：与 types.LLMConfig（运行时 Agent 配置）和 llm/config.LLMConfig（路由/降级配置）不同，
 // 此结构体仅用于应用启动时的连接参数加载。
 type LLMConnectionConfig struct {
+	// 主文本 Provider 入口模式：legacy 或 channel_routed。
+	// 空值按 legacy 处理；自定义模式保留给 bootstrap builder registry 扩展。
+	MainProviderMode string `yaml:"main_provider_mode" env:"MAIN_PROVIDER_MODE"`
 	// 默认 Provider
 	DefaultProvider string `yaml:"default_provider" env:"DEFAULT_PROVIDER"`
 	// 工具调用阶段 Provider（可选，未设置时回退 default_provider）
@@ -357,6 +366,18 @@ type LLMConnectionConfig struct {
 	MaxRetries int `yaml:"max_retries" env:"MAX_RETRIES"`
 	// 工具调用阶段最大重试次数（可选，未设置时回退 max_retries）
 	ToolMaxRetries int `yaml:"tool_max_retries" env:"TOOL_MAX_RETRIES"`
+}
+
+// NormalizeLLMMainProviderMode canonicalizes configured main provider mode.
+func NormalizeLLMMainProviderMode(raw string) string {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "", LLMMainProviderModeLegacy:
+		return LLMMainProviderModeLegacy
+	case "channel", "channel-routed", LLMMainProviderModeChannelRouted:
+		return LLMMainProviderModeChannelRouted
+	default:
+		return strings.ToLower(strings.TrimSpace(raw))
+	}
 }
 
 // MultimodalConfig 多模态框架配置（能力层，不绑定具体业务）。
@@ -384,12 +405,12 @@ type MultimodalConfig struct {
 }
 
 type MultimodalImageConfig struct {
-	OpenAIAPIKey  string `yaml:"openai_api_key" env:"OPENAI_API_KEY" json:"-"`
-	OpenAIBaseURL string `yaml:"openai_base_url" env:"OPENAI_BASE_URL"`
-	GeminiAPIKey  string `yaml:"gemini_api_key" env:"GEMINI_API_KEY" json:"-"`
-	FluxAPIKey    string `yaml:"flux_api_key" env:"FLUX_API_KEY" json:"-"`
-	FluxBaseURL   string `yaml:"flux_base_url" env:"FLUX_BASE_URL"`
-	StabilityAPIKey string `yaml:"stability_api_key" env:"STABILITY_API_KEY" json:"-"`
+	OpenAIAPIKey     string `yaml:"openai_api_key" env:"OPENAI_API_KEY" json:"-"`
+	OpenAIBaseURL    string `yaml:"openai_base_url" env:"OPENAI_BASE_URL"`
+	GeminiAPIKey     string `yaml:"gemini_api_key" env:"GEMINI_API_KEY" json:"-"`
+	FluxAPIKey       string `yaml:"flux_api_key" env:"FLUX_API_KEY" json:"-"`
+	FluxBaseURL      string `yaml:"flux_base_url" env:"FLUX_BASE_URL"`
+	StabilityAPIKey  string `yaml:"stability_api_key" env:"STABILITY_API_KEY" json:"-"`
 	StabilityBaseURL string `yaml:"stability_base_url" env:"STABILITY_BASE_URL"`
 	IdeogramAPIKey   string `yaml:"ideogram_api_key" env:"IDEOGRAM_API_KEY" json:"-"`
 	IdeogramBaseURL  string `yaml:"ideogram_base_url" env:"IDEOGRAM_BASE_URL"`
@@ -408,21 +429,21 @@ type MultimodalImageConfig struct {
 }
 
 type MultimodalVideoConfig struct {
-	RunwayAPIKey   string `yaml:"runway_api_key" env:"RUNWAY_API_KEY" json:"-"`
-	RunwayBaseURL  string `yaml:"runway_base_url" env:"RUNWAY_BASE_URL"`
-	VeoAPIKey      string `yaml:"veo_api_key" env:"VEO_API_KEY" json:"-"`
-	VeoBaseURL     string `yaml:"veo_base_url" env:"VEO_BASE_URL"`
-	GoogleAPIKey   string `yaml:"google_api_key" env:"GOOGLE_API_KEY" json:"-"`
-	GoogleBaseURL  string `yaml:"google_base_url" env:"GOOGLE_BASE_URL"`
-	SoraAPIKey     string `yaml:"sora_api_key" env:"SORA_API_KEY" json:"-"`
-	SoraBaseURL    string `yaml:"sora_base_url" env:"SORA_BASE_URL"`
-	KlingAPIKey    string `yaml:"kling_api_key" env:"KLING_API_KEY" json:"-"`
-	KlingBaseURL   string `yaml:"kling_base_url" env:"KLING_BASE_URL"`
-	LumaAPIKey     string `yaml:"luma_api_key" env:"LUMA_API_KEY" json:"-"`
-	LumaBaseURL    string `yaml:"luma_base_url" env:"LUMA_BASE_URL"`
-	MiniMaxAPIKey  string `yaml:"minimax_api_key" env:"MINIMAX_API_KEY" json:"-"`
-	MiniMaxBaseURL string `yaml:"minimax_base_url" env:"MINIMAX_BASE_URL"`
-	SeedanceAPIKey string `yaml:"seedance_api_key" env:"SEEDANCE_API_KEY" json:"-"`
+	RunwayAPIKey    string `yaml:"runway_api_key" env:"RUNWAY_API_KEY" json:"-"`
+	RunwayBaseURL   string `yaml:"runway_base_url" env:"RUNWAY_BASE_URL"`
+	VeoAPIKey       string `yaml:"veo_api_key" env:"VEO_API_KEY" json:"-"`
+	VeoBaseURL      string `yaml:"veo_base_url" env:"VEO_BASE_URL"`
+	GoogleAPIKey    string `yaml:"google_api_key" env:"GOOGLE_API_KEY" json:"-"`
+	GoogleBaseURL   string `yaml:"google_base_url" env:"GOOGLE_BASE_URL"`
+	SoraAPIKey      string `yaml:"sora_api_key" env:"SORA_API_KEY" json:"-"`
+	SoraBaseURL     string `yaml:"sora_base_url" env:"SORA_BASE_URL"`
+	KlingAPIKey     string `yaml:"kling_api_key" env:"KLING_API_KEY" json:"-"`
+	KlingBaseURL    string `yaml:"kling_base_url" env:"KLING_BASE_URL"`
+	LumaAPIKey      string `yaml:"luma_api_key" env:"LUMA_API_KEY" json:"-"`
+	LumaBaseURL     string `yaml:"luma_base_url" env:"LUMA_BASE_URL"`
+	MiniMaxAPIKey   string `yaml:"minimax_api_key" env:"MINIMAX_API_KEY" json:"-"`
+	MiniMaxBaseURL  string `yaml:"minimax_base_url" env:"MINIMAX_BASE_URL"`
+	SeedanceAPIKey  string `yaml:"seedance_api_key" env:"SEEDANCE_API_KEY" json:"-"`
 	SeedanceBaseURL string `yaml:"seedance_base_url" env:"SEEDANCE_BASE_URL"`
 }
 

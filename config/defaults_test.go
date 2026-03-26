@@ -126,6 +126,7 @@ func TestDefaultMilvusConfig(t *testing.T) {
 
 func TestDefaultLLMConfig(t *testing.T) {
 	cfg := DefaultLLMConfig()
+	assert.Equal(t, LLMMainProviderModeLegacy, cfg.MainProviderMode)
 	assert.Equal(t, "openai", cfg.DefaultProvider)
 	assert.Empty(t, cfg.APIKey)
 	assert.Empty(t, cfg.BaseURL)

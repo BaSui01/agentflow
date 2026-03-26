@@ -18,6 +18,7 @@ type LLMProviderAPIKey = llmcore.LLMProviderAPIKey
 type ChatRequest = llmcore.ChatRequest
 type ChatResponse = llmcore.ChatResponse
 type ChatChoice = llmcore.ChatChoice
+type ChatUsage = llmcore.ChatUsage
 type StreamChunk = llmcore.StreamChunk
 type Message = llmcore.Message
 type Model = llmcore.Model
@@ -26,6 +27,7 @@ type ProviderEndpoints = llmcore.ProviderEndpoints
 const (
 	LLMProviderStatusActive = llmcore.LLMProviderStatusActive
 	RoleAssistant           = llmcore.RoleAssistant
+	RoleUser                = llmcore.RoleUser
 )
 
 type CanaryConfig = llmcore.CanaryConfig

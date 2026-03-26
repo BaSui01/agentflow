@@ -47,6 +47,7 @@ type ProviderSelection struct {
 	ModelID      uint
 	ModelName    string
 	RemoteModel  string
+	BaseURL      string
 	IsCanary     bool
 	Strategy     RoutingStrategy
 }

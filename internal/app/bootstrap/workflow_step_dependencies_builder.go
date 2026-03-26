@@ -28,11 +28,11 @@ type WorkflowRuntimeOptions struct {
 	LLMProvider             llm.Provider
 	DefaultModel            string
 	AgentResolver           WorkflowAgentResolver
-	RetrievalStore         rag.VectorStore
-	EmbeddingProvider      rag.EmbeddingProvider
-	CheckpointStore        agent.CheckpointStore
+	RetrievalStore          rag.VectorStore
+	EmbeddingProvider       rag.EmbeddingProvider
+	CheckpointStore         agent.CheckpointStore
 	WorkflowCheckpointStore workflow.CheckpointStore
-	HITLManager            *hitl.InterruptManager
+	HITLManager             *hitl.InterruptManager
 }
 
 func buildStepDependencies(opts WorkflowRuntimeOptions, logger *zap.Logger) engine.StepDependencies {
@@ -369,7 +369,7 @@ func ensureAutoApproveHITL(manager *hitl.InterruptManager, logger *zap.Logger) *
 	if manager == nil {
 		return nil
 	}
-	manager.RegisterHandler(hitl.InterruptTypeApproval, func(ctx context.Context, interrupt *hitl.Interrupt) error {
+	registered := manager.RegisterNamedHandler(hitl.InterruptTypeApproval, "workflow_auto_approve", func(ctx context.Context, interrupt *hitl.Interrupt) error {
 		if interrupt == nil {
 			return nil
 		}
@@ -383,7 +383,7 @@ func ensureAutoApproveHITL(manager *hitl.InterruptManager, logger *zap.Logger) *
 			Approved: true,
 		})
 	})
-	if logger != nil {
+	if logger != nil && registered {
 		logger.Debug("workflow HITL auto-approve handler registered")
 	}
 	return manager

@@ -5,8 +5,8 @@ import (
 	"fmt"
 
 	"github.com/BaSui01/agentflow/agent"
-	"github.com/BaSui01/agentflow/agent/hitl"
 	"github.com/BaSui01/agentflow/api/handlers"
+	"github.com/BaSui01/agentflow/config"
 	"github.com/BaSui01/agentflow/internal/app/bootstrap"
 	"github.com/BaSui01/agentflow/llm/observability"
 	"github.com/BaSui01/agentflow/rag"
@@ -15,7 +15,6 @@ import (
 
 // TODO(refactor): initHandlers contains conditional assembly logic (if/else on config, runtime availability).
 // Consider moving handler assembly decisions to bootstrap to keep cmd as pure composition root.
-//
 type toolRegistryRuntimeAdapter struct {
 	runtime  *bootstrap.AgentToolingRuntime
 	onReload func(ctx context.Context)
@@ -42,6 +41,8 @@ func (a *toolRegistryRuntimeAdapter) BaseToolNames() []string {
 }
 
 func (s *Server) initHandlers() error {
+	mainProviderMode := config.NormalizeLLMMainProviderMode(s.cfg.LLM.MainProviderMode)
+
 	s.healthHandler = handlers.NewHealthHandler(s.logger)
 	if s.db != nil {
 		s.healthHandler.RegisterCheck(handlers.NewDatabaseHealthCheck("database", func(ctx context.Context) error {
@@ -61,10 +62,12 @@ func (s *Server) initHandlers() error {
 	llmRuntime, err := bootstrap.BuildLLMHandlerRuntime(s.cfg, s.db, s.logger)
 	if err != nil {
 		s.logger.Warn("Failed to create LLM runtime, chat endpoints disabled",
+			zap.String("mode", mainProviderMode),
 			zap.String("provider", s.cfg.LLM.DefaultProvider),
 			zap.Error(err))
 	} else if llmRuntime == nil {
-		s.logger.Info("LLM API key not configured, chat endpoints disabled")
+		s.logger.Info("LLM main provider not configured, chat endpoints disabled",
+			zap.String("mode", mainProviderMode))
 	} else {
 		s.provider = llmRuntime.Provider
 		s.toolProvider = llmRuntime.ToolProvider
@@ -76,6 +79,8 @@ func (s *Server) initHandlers() error {
 	}
 
 	discoveryRegistry, agentRegistry := bootstrap.BuildAgentRegistries(s.logger)
+	s.discoveryRegistry = discoveryRegistry
+	s.agentRegistry = agentRegistry
 
 	if s.apiKeyHandler = bootstrap.BuildAPIKeyHandler(s.db, s.logger); s.apiKeyHandler != nil {
 		s.logger.Info("API key handler initialized")
@@ -146,6 +151,8 @@ func (s *Server) initHandlers() error {
 		s.ragHandler = handlers.NewRAGHandler(ragRuntime.Store, ragRuntime.EmbeddingProvider, s.logger)
 		ragStore = ragRuntime.Store
 		ragEmbedding = ragRuntime.EmbeddingProvider
+		s.ragStore = ragStore
+		s.ragEmbedding = ragEmbedding
 		s.logger.Info("RAG handler initialized (in-memory store, embedding provider ready)",
 			zap.String("provider", ragRuntime.EmbeddingProvider.Name()))
 	}
@@ -160,6 +167,7 @@ func (s *Server) initHandlers() error {
 	if toolErr != nil {
 		return fmt.Errorf("failed to build agent tooling runtime: %w", toolErr)
 	}
+	s.toolingRuntime = toolingRuntime
 	toolRuntimeAdapter := &toolRegistryRuntimeAdapter{
 		runtime: toolingRuntime,
 		onReload: func(ctx context.Context) {
@@ -193,6 +201,7 @@ func (s *Server) initHandlers() error {
 			s.logger,
 		)
 		s.logger.Info("Chat handler initialized with middleware chain",
+			zap.String("mode", mainProviderMode),
 			zap.String("provider", s.cfg.LLM.DefaultProvider))
 	}
 
@@ -204,6 +213,8 @@ func (s *Server) initHandlers() error {
 	if checkpointStore != nil {
 		checkpointManager = agent.NewCheckpointManager(checkpointStore, s.logger)
 	}
+	s.checkpointStore = checkpointStore
+	s.checkpointManager = checkpointManager
 
 	if s.provider != nil {
 		resolver := agent.NewCachingResolver(agentRegistry, s.provider, s.logger).
@@ -240,7 +251,7 @@ func (s *Server) initHandlers() error {
 	var workflowStore bootstrap.WorkflowRuntimeOptions
 	workflowStore.LLMProvider = s.provider
 	workflowStore.DefaultModel = s.cfg.Agent.Model
-	workflowStore.HITLManager = hitl.NewInterruptManager(hitl.NewInMemoryInterruptStore(), s.logger)
+	workflowStore.HITLManager = s.currentWorkflowHITLManager()
 	if s.resolver != nil {
 		workflowStore.AgentResolver = func(ctx context.Context, agentID string) (agent.Agent, error) {
 			return s.resolver.Resolve(ctx, agentID)
@@ -250,6 +261,7 @@ func (s *Server) initHandlers() error {
 	if s.db != nil {
 		if wfStore, err := bootstrap.BuildWorkflowPostgreSQLCheckpointStore(context.Background(), s.db); err == nil && wfStore != nil {
 			workflowStore.WorkflowCheckpointStore = wfStore
+			s.workflowCheckpointStore = wfStore
 		}
 	}
 	workflowStore.RetrievalStore = ragStore

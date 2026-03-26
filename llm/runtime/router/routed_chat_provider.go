@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 
+	llmroot "github.com/BaSui01/agentflow/llm"
 	llmcore "github.com/BaSui01/agentflow/llm/core"
 	"github.com/BaSui01/agentflow/types"
 	"go.uber.org/zap"
@@ -58,7 +59,13 @@ func (p *RoutedChatProvider) Completion(ctx context.Context, req *ChatRequest) (
 		return nil, err
 	}
 
-	routedReq := cloneChatRequest(req, firstNonEmpty(selection.RemoteModel, req.Model))
+	resolvedModel := firstNonEmpty(selection.RemoteModel, req.Model)
+	llmroot.RecordResolvedProviderCall(ctx, llmroot.ResolvedProviderCall{
+		Provider: selection.ProviderCode,
+		Model:    resolvedModel,
+		BaseURL:  selection.BaseURL,
+	})
+	routedReq := cloneChatRequest(req, resolvedModel)
 	resp, callErr := selection.Provider.Completion(ctx, routedReq)
 	if callErr != nil {
 		p.recordAPIKeyUsage(ctx, selection, false, callErr.Error())
@@ -89,7 +96,13 @@ func (p *RoutedChatProvider) Stream(ctx context.Context, req *ChatRequest) (<-ch
 		return nil, err
 	}
 
-	routedReq := cloneChatRequest(req, firstNonEmpty(selection.RemoteModel, req.Model))
+	resolvedModel := firstNonEmpty(selection.RemoteModel, req.Model)
+	llmroot.RecordResolvedProviderCall(ctx, llmroot.ResolvedProviderCall{
+		Provider: selection.ProviderCode,
+		Model:    resolvedModel,
+		BaseURL:  selection.BaseURL,
+	})
+	routedReq := cloneChatRequest(req, resolvedModel)
 	source, streamErr := selection.Provider.Stream(ctx, routedReq)
 	if streamErr != nil {
 		p.recordAPIKeyUsage(ctx, selection, false, streamErr.Error())

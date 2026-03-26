@@ -19,7 +19,8 @@ This document defines the runtime startup chain and composition boundaries.
   - logger and telemetry initialization
   - database connection setup
 - `internal/app/bootstrap/handler_runtime_builder.go`
-  - LLM runtime setup (`llm/runtime/router` multi-provider pool + routed provider as chat main entry)
+  - LLM runtime setup (reusable main-provider assembly + default legacy multi-provider router path)
+  - `BuildLLMHandlerRuntimeFromProvider(...)` now delegates to the public `llm/runtime/compose.Build(...)` seam so bootstrap and external projects reuse the same handler runtime wiring around any already-constructed main provider
   - chat middleware chain setup
   - policy/cache/metrics/budget runtime wiring
 - `internal/app/bootstrap/domain_runtime_builders.go`
@@ -38,6 +39,9 @@ This document defines the runtime startup chain and composition boundaries.
   - HTTP route registration and startup server config builders (app + metrics)
 - `internal/app/bootstrap/hotreload_runtime_builder.go`
   - hot-reload manager/api handler construction and callback registration
+  - config reload callbacks now rebuild the handler-facing text runtime in place (`main provider`, `chat`, `agent resolver`, `workflow`, `cost`) through the same public LLM runtime seam
+  - workflow reload reuses one shared `hitl.InterruptManager`, so pending workflow interrupts survive text-runtime swaps instead of being orphaned by a new parser/runtime instance
+  - previous agent resolver caches are reset only after a successful runtime swap, including rollback-driven restoration of the last good text runtime, so stale cached agents are torn down only after the replacement runtime is live
 - `internal/app/bootstrap/handler_adapters_builder.go`
   - agent registry/handler and api-key/tool-registry handler adapter builders
 - `internal/app/bootstrap/agent_runtime_factory_builder.go`
@@ -54,3 +58,36 @@ This document defines the runtime startup chain and composition boundaries.
   - Mongo optional capabilities wiring (audit, memory, ab-testing, registry persistence)
 - `internal/app/bootstrap/mongo_client_builder.go`
   - MongoDB client creation and startup logging
+
+## Routed Provider Paths
+
+- Default legacy startup path
+  - `Handler/Service -> Gateway -> RoutedChatProvider -> MultiProviderRouter -> provider API`
+  - This remains the built-in DB-backed provider/model/api_key routing path used by current bootstrap defaults.
+- Recommended channel-based path
+  - `Handler/Service -> Gateway -> ChannelRoutedProvider -> resolvers/selectors -> provider factory -> provider API`
+  - This is the recommended single routed-provider chain when an external project already owns `channel / key / model mapping` semantics.
+- Shared bootstrap seam
+  - External projects use `llm/runtime/compose.Build(...)` to assemble middleware/cache/policy/tool-provider wiring around any main provider.
+  - `internal/app/bootstrap.BuildLLMHandlerRuntimeFromProvider(...)` remains the composition-root adapter that reuses the same public assembly seam for the built-in server startup path.
+  - Built-in startup selection now uses `llm.main_provider_mode`, while public registration goes through `llm/runtime/compose.RegisterMainProviderBuilder(...)`.
+  - Adapter-only integration, built-in config-switch usage, and `channelstore.NewMainProviderBuilder(...)` examples are documented in `docs/architecture/channel-routing-adapter-template.zh-CN.md` and `docs/architecture/channel-routing-adapter-template.md`.
+  - Built-in config hot reload now reuses the same seam to rebuild the text runtime in place when `llm.main_provider_mode` or related LLM runtime config changes.
+  - Hot reload only mutates handlers that were already bound at startup; if chat or cost routes were absent during initial route registration, a restart is still required to expose those endpoints later.
+  - Workflow hot reload keeps using the same shared HITL manager across parser/runtime rebuilds, so approval/input interrupts remain resolvable after text-runtime reload.
+  - Successful text-runtime reload also resets the previous resolver cache after the swap; if a rebuild fails, the rollback path re-applies the restored config through the same seam before any stale resolver cache is torn down.
+- Boundary rule
+  - `MultiProviderRouter` and `ChannelRoutedProvider` are alternative routed-provider entries. Do not wrap `MultiProviderRouter` inside `ChannelRoutedProvider`, and do not build a dual-routing request chain.
+
+## Routing Decision Summary
+
+- Use `Gateway -> RoutedChatProvider -> MultiProviderRouter` when you want the framework's built-in DB-backed `provider + api_key pool` path.
+- Use `Gateway -> ChannelRoutedProvider` when your project already owns `channel / key / model mapping` semantics and only needs agentflow to host the reusable routed-provider chain.
+- Treat them as two alternative entries behind `Gateway`, not a parent-child layering. One request should go through one routed-provider chain only.
+
+## Phase 1 Scope
+
+- Phase 1 only moves text `chat/completion/stream` onto the new channel-routed path.
+- `image/video` stay outside `ChannelRoutedProvider` in Phase 1 because the cleaner multimodal extension surface is `llm/gateway + llm/capabilities/* + llm/providers/vendor.Profile`, not a larger `llm.Provider`.
+- More concretely: image/video routing already depends on capability-specific provider surfaces and vendor profiles, so pushing them into `ChannelRoutedProvider` now would mix text routing concerns with multimodal capability dispatch too early.
+- This keeps the startup chain single-entry while avoiding a premature merge of text routing and multimodal capability routing.

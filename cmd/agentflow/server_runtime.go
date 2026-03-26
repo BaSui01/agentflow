@@ -6,10 +6,13 @@ import (
 	"sync"
 
 	"github.com/BaSui01/agentflow/agent"
+	"github.com/BaSui01/agentflow/agent/discovery"
 	"github.com/BaSui01/agentflow/agent/evaluation"
+	"github.com/BaSui01/agentflow/agent/hitl"
 	"github.com/BaSui01/agentflow/agent/memory"
 	"github.com/BaSui01/agentflow/api/handlers"
 	"github.com/BaSui01/agentflow/config"
+	"github.com/BaSui01/agentflow/internal/app/bootstrap"
 	"github.com/BaSui01/agentflow/llm"
 	"github.com/BaSui01/agentflow/llm/cache"
 	"github.com/BaSui01/agentflow/llm/capabilities/tools"
@@ -20,6 +23,8 @@ import (
 	"github.com/BaSui01/agentflow/pkg/server"
 	pkgservice "github.com/BaSui01/agentflow/pkg/service"
 	"github.com/BaSui01/agentflow/pkg/telemetry"
+	"github.com/BaSui01/agentflow/rag"
+	workflowpkg "github.com/BaSui01/agentflow/workflow"
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
@@ -56,7 +61,7 @@ type Server struct {
 
 	hotReloadManager *config.HotReloadManager
 	configAPIHandler *config.ConfigAPIHandler
-	costHandler     *handlers.CostHandler
+	costHandler      *handlers.CostHandler
 
 	rateLimiterCancel       context.CancelFunc
 	tenantRateLimiterCancel context.CancelFunc
@@ -71,6 +76,16 @@ type Server struct {
 	llmMetrics    *observability.Metrics
 
 	resolver *agent.CachingResolver
+
+	discoveryRegistry       *discovery.CapabilityRegistry
+	agentRegistry           *agent.AgentRegistry
+	toolingRuntime          *bootstrap.AgentToolingRuntime
+	workflowHITLManager     *hitl.InterruptManager
+	checkpointStore         agent.CheckpointStore
+	checkpointManager       *agent.CheckpointManager
+	workflowCheckpointStore workflowpkg.CheckpointStore
+	ragStore                rag.VectorStore
+	ragEmbedding            rag.EmbeddingProvider
 
 	auditLogger *tools.DefaultAuditLogger
 	abTester    *evaluation.ABTester

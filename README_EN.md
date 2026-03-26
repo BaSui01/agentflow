@@ -251,6 +251,24 @@ func main() {
 }
 ```
 
+If your routing semantics are not `provider + api_key pool`, but a custom business-side `channel / key / model mapping` system:
+
+- The recommended main chain is `Handler/Service -> Gateway -> ChannelRoutedProvider -> resolvers/selectors -> provider factory -> provider API`
+- `ChannelRoutedProvider` is the recommended entry for channel-based routing
+- External projects should prefer `BuildChannelRoutedProvider(...)` to assemble this chain once, instead of wiring the adapters by hand across multiple call sites
+- The repository now includes `llm/runtime/router/extensions/channelstore` as a reusable extension starting point with `StoreModelMappingResolver`, `PriorityWeightedSelector`, `StoreSecretResolver`, `StoreProviderConfigSource`, and `StaticStore`
+- Inject custom implementations through `ChannelSelector`, `ModelMappingResolver`, `SecretResolver`, `UsageRecorder`, and related interfaces
+- `MultiProviderRouter` remains available, but its role is the legacy built-in DB-backed provider routing path
+- The legacy text path remains `Gateway -> RoutedChatProvider -> MultiProviderRouter`, while the new channel-based path is `Gateway -> ChannelRoutedProvider`
+- `MultiProviderRouter` and `ChannelRoutedProvider` are the two mutually exclusive routed-provider entries behind `Gateway`; pick one single chain per request and do not stack them
+- The phased migration path keeps `Handler/Service -> Gateway` stable and replaces the routed provider path behind `Gateway`
+- External projects can now reuse the same resilience/cache/policy/tool-provider runtime assembly through `llm/runtime/compose.Build(...)`, while the framework's own composition root continues to reuse it via `internal/app/bootstrap.BuildLLMHandlerRuntimeFromProvider(...)`; image/video still remain deferred to `gateway + capabilities`
+- The repository now exposes the built-in startup switch `llm.main_provider_mode`; external projects can register a `channel_routed` builder through `llm/runtime/compose.RegisterMainProviderBuilder(...)` and stay on the same server startup chain. For a reusable adapter, use `channelstore.NewMainProviderBuilder(...)`
+- `llm/runtime/router/extensions/runtimepolicy` provides reusable reference implementations for `UsageRecorder`, `CooldownController`, and `QuotaPolicy`, which helps phase in usage recording, cooldown, daily limits, and concurrency limits without hardcoding storage into core
+- Phase 1 intentionally keeps `image/video` out of `ChannelRoutedProvider` because image/video already live on the capability surface `gateway + capabilities + vendor.Profile`; forcing them into `llm.Provider` would prematurely couple text routing with multimodal capability routing
+- See `docs/architecture/channel-routing-adapter-template.md` for the adapter-only integration template and recommended config-switch pattern
+- See `docs/architecture/channel-routing-extension.md` for architecture and migration guidance
+
 ### Reflection Self-Improvement
 
 Runnable example: `examples/06_advanced_features/` (or `examples/09_full_integration/`)

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/BaSui01/agentflow/agent"
@@ -32,6 +33,7 @@ const maxTokensUpperBound = 128000
 
 // ChatHandler 聊天接口处理器
 type ChatHandler struct {
+	mu        sync.RWMutex
 	gateway   llmcore.Gateway
 	converter ChatConverter
 	service   usecase.ChatService
@@ -51,19 +53,11 @@ func NewChatHandlerWithRuntime(
 	ledger observability.Ledger,
 	logger *zap.Logger,
 ) *ChatHandler {
-	gw := llmgateway.New(llmgateway.Config{
-		ChatProvider:  provider,
-		PolicyManager: policyManager,
-		Ledger:        ledger,
-		Logger:        logger,
-	})
 	handler := &ChatHandler{
-		gateway:   gw,
 		converter: NewDefaultChatConverter(defaultStreamTimeout),
 		logger:    logger,
 	}
-	chatProvider := llmgateway.NewChatProviderAdapter(handler.gateway, provider)
-	handler.service = usecase.NewDefaultChatService(handler.gateway, chatProvider, toolManager, handler.converter, logger)
+	handler.UpdateRuntime(provider, policyManager, toolManager, ledger)
 	return handler
 }
 
@@ -77,6 +71,42 @@ func NewChatHandlerWithService(service usecase.ChatService, logger *zap.Logger) 
 		converter: NewDefaultChatConverter(defaultStreamTimeout),
 		logger:    logger,
 	}
+}
+
+// UpdateRuntime swaps the handler's chat runtime in place so existing HTTP
+// route bindings keep using the latest provider chain after hot reload.
+func (h *ChatHandler) UpdateRuntime(
+	provider llm.Provider,
+	policyManager *llmpolicy.Manager,
+	toolManager agent.ToolManager,
+	ledger observability.Ledger,
+) {
+	if h == nil {
+		return
+	}
+
+	gateway := llmgateway.New(llmgateway.Config{
+		ChatProvider:  provider,
+		PolicyManager: policyManager,
+		Ledger:        ledger,
+		Logger:        h.logger,
+	})
+	chatProvider := llmgateway.NewChatProviderAdapter(gateway, provider)
+	service := usecase.NewDefaultChatService(gateway, chatProvider, toolManager, h.converter, h.logger)
+
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.gateway = gateway
+	h.service = service
+}
+
+func (h *ChatHandler) currentService() usecase.ChatService {
+	if h == nil {
+		return nil
+	}
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	return h.service
 }
 
 // HandleCompletion 处理聊天补全请求
@@ -106,12 +136,13 @@ func (h *ChatHandler) HandleCompletion(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if h.service == nil {
+	service := h.currentService()
+	if service == nil {
 		WriteError(w, types.NewInternalError("chat service is not configured"), h.logger)
 		return
 	}
 
-	result, err := h.service.Complete(r.Context(), &req)
+	result, err := service.Complete(r.Context(), &req)
 	if err != nil {
 		WriteError(w, err, h.logger)
 		return
@@ -169,12 +200,13 @@ func (h *ChatHandler) HandleStream(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Connection", "keep-alive")
 	w.Header().Set("X-Accel-Buffering", "no") // 禁用 nginx 缓冲
 
-	if h.service == nil {
+	service := h.currentService()
+	if service == nil {
 		WriteError(w, types.NewInternalError("chat service is not configured"), h.logger)
 		return
 	}
 
-	stream, err := h.service.Stream(r.Context(), &req)
+	stream, err := service.Stream(r.Context(), &req)
 	if err != nil {
 		WriteError(w, err, h.logger)
 		return
@@ -323,15 +355,16 @@ func (h *ChatHandler) HandleCapabilities(w http.ResponseWriter, r *http.Request)
 		WriteErrorMessage(w, http.StatusMethodNotAllowed, types.ErrInvalidRequest, "method not allowed", h.logger)
 		return
 	}
-	if h.service == nil {
+	service := h.currentService()
+	if service == nil {
 		WriteError(w, types.NewInternalError("chat service is not configured"), h.logger)
 		return
 	}
 
 	WriteSuccess(w, map[string]any{
 		"route_params":         []string{"provider", "model", "route_policy", "endpoint_mode", "tags", "metadata"},
-		"route_policies":       h.service.SupportedRoutePolicies(),
-		"default_route_policy": h.service.DefaultRoutePolicy(),
+		"route_policies":       service.SupportedRoutePolicies(),
+		"default_route_policy": service.DefaultRoutePolicy(),
 		"notes": []string{
 			"provider/model/route_policy/endpoint_mode are routed by service layer",
 			"provider hint effectiveness depends on runtime provider implementation",
