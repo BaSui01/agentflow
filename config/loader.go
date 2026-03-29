@@ -912,12 +912,22 @@ type CacheConfig struct {
 type BudgetConfig struct {
 	// 是否启用预算管理
 	Enabled bool `yaml:"enabled" env:"ENABLED"`
+	// 单次请求最大 Token 数
+	MaxTokensPerRequest int `yaml:"max_tokens_per_request" env:"MAX_TOKENS_PER_REQUEST"`
 	// 每分钟最大 Token 数
 	MaxTokensPerMinute int `yaml:"max_tokens_per_minute" env:"MAX_TOKENS_PER_MINUTE"`
+	// 每小时最大 Token 数
+	MaxTokensPerHour int `yaml:"max_tokens_per_hour" env:"MAX_TOKENS_PER_HOUR"`
 	// 每天最大 Token 数
 	MaxTokensPerDay int `yaml:"max_tokens_per_day" env:"MAX_TOKENS_PER_DAY"`
+	// 单次请求最大花费 (USD)
+	MaxCostPerRequest float64 `yaml:"max_cost_per_request" env:"MAX_COST_PER_REQUEST"`
 	// 每天最大花费 (USD)
 	MaxCostPerDay float64 `yaml:"max_cost_per_day" env:"MAX_COST_PER_DAY"`
 	// 告警阈值 (0.0-1.0)
 	AlertThreshold float64 `yaml:"alert_threshold" env:"ALERT_THRESHOLD"`
+	// 是否在达到分钟阈值时自动节流
+	AutoThrottle bool `yaml:"auto_throttle" env:"AUTO_THROTTLE"`
+	// 自动节流持续时间
+	ThrottleDelay time.Duration `yaml:"throttle_delay" env:"THROTTLE_DELAY"`
 }

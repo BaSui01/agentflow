@@ -360,10 +360,15 @@ func DefaultCacheConfig() CacheConfig {
 // 与 budget.DefaultBudgetConfig() 对齐
 func DefaultBudgetConfig() BudgetConfig {
 	return BudgetConfig{
-		Enabled:            true,
-		MaxTokensPerMinute: 500000,
-		MaxTokensPerDay:    50000000,
-		MaxCostPerDay:      1000.0,
-		AlertThreshold:     0.8,
+		Enabled:             true,
+		MaxTokensPerRequest: 100000,
+		MaxTokensPerMinute:  500000,
+		MaxTokensPerHour:    5000000,
+		MaxTokensPerDay:     50000000,
+		MaxCostPerRequest:   10.0,
+		MaxCostPerDay:       1000.0,
+		AlertThreshold:      0.8,
+		AutoThrottle:        true,
+		ThrottleDelay:       time.Second,
 	}
 }
