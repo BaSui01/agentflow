@@ -1593,7 +1593,7 @@ func (e *LoopExecutor) Execute(ctx context.Context, input *Input) (*Output, erro
 			}
 			needPlan = e.Planner != nil
 		default:
-			unsupportedErr := fmt.Errorf("unsupported loop decision %q", decision.Decision)
+			unsupportedErr := NewError(types.ErrAgentExecution, fmt.Sprintf("unsupported loop decision %q", decision.Decision))
 			state.MarkStopped(StopReasonBlocked, LoopDecisionDone)
 			return e.finalize(state, output, unsupportedErr)
 		}

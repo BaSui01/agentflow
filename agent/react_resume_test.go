@@ -214,6 +214,43 @@ func TestBaseAgentExecute_ResumesLoopFieldsFromExecutionContextMapping(t *testin
 	}
 }
 
+func TestPrepareResumeInput_RejectsCheckpointForDifferentAgent(t *testing.T) {
+	agent := NewBaseAgent(testAgentConfig("agent-expected", "Agent", "gpt-4"), nil, nil, nil, nil, zap.NewNop(), nil)
+	store := newInMemoryCheckpointStore()
+	manager := NewCheckpointManager(store, zap.NewNop())
+	agent.SetCheckpointManager(manager)
+
+	if err := store.Save(context.Background(), &Checkpoint{
+		ID:       "cp-wrong-agent",
+		ThreadID: "thread-mismatch",
+		AgentID:  "agent-other",
+		State:    StateRunning,
+	}); err != nil {
+		t.Fatalf("save checkpoint: %v", err)
+	}
+
+	_, err := agent.prepareResumeInput(context.Background(), &Input{
+		ChannelID: "thread-mismatch",
+		Context: map[string]any{
+			"resume_latest": true,
+		},
+	})
+	if err == nil {
+		t.Fatal("expected mismatch error")
+	}
+
+	typedErr, ok := err.(*Error)
+	if !ok {
+		t.Fatalf("expected *Error, got %T", err)
+	}
+	if typedErr.Base == nil {
+		t.Fatal("expected base typed error")
+	}
+	if typedErr.Base.Code != types.ErrInputValidation {
+		t.Fatalf("expected error code %q, got %q", types.ErrInputValidation, typedErr.Base.Code)
+	}
+}
+
 func requireReadyAgent(t *testing.T, agent *BaseAgent) {
 	t.Helper()
 	if err := agent.Init(context.Background()); err != nil {

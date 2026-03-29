@@ -54,10 +54,14 @@ func TestCanaryConfig_UpdateStage_AllStages(t *testing.T) {
 	cc := NewCanaryConfig(db, zap.NewNop())
 	t.Cleanup(cc.Stop)
 
-	// Inject a deployment
-	cc.mu.Lock()
-	cc.deployments[1] = &CanaryDeployment{ID: 1, ProviderID: 1, Stage: CanaryStageInit}
-	cc.mu.Unlock()
+	require.NoError(t, cc.SetDeployment(&CanaryDeployment{
+		ProviderID:     1,
+		CanaryVersion:  "v2",
+		StableVersion:  "v1",
+		TrafficPercent: 0,
+		Stage:          CanaryStageInit,
+		StartTime:      time.Now(),
+	}))
 
 	tests := []struct {
 		stage       CanaryStage
@@ -83,12 +87,13 @@ func TestCanaryConfig_TriggerRollback_WithDB(t *testing.T) {
 	cc := NewCanaryConfig(db, zap.NewNop())
 	t.Cleanup(cc.Stop)
 
-	cc.mu.Lock()
-	cc.deployments[1] = &CanaryDeployment{
-		ID: 1, ProviderID: 1, Stage: CanaryStage50Pct,
-		CanaryVersion: "v2", StableVersion: "v1",
-	}
-	cc.mu.Unlock()
+	require.NoError(t, cc.SetDeployment(&CanaryDeployment{
+		ProviderID:     1,
+		TrafficPercent: 50,
+		Stage:          CanaryStage50Pct,
+		CanaryVersion:  "v2", StableVersion: "v1",
+		StartTime: time.Now(),
+	}))
 
 	err := cc.TriggerRollback(1, "high error rate")
 	require.NoError(t, err)
@@ -116,6 +121,7 @@ func TestCanaryConfig_SetDeployment_WithDB(t *testing.T) {
 	err := cc.SetDeployment(deployment)
 	require.NoError(t, err)
 	assert.NotNil(t, cc.GetDeployment(1))
+	assert.NotZero(t, deployment.ID)
 }
 
 // --- ResilientProvider: Completion with retry ---

@@ -660,7 +660,8 @@ func (b *BaseAgent) prepareResumeInput(ctx context.Context, input *Input) (*Inpu
 		return nil, err
 	}
 	if checkpoint != nil && checkpoint.AgentID != "" && checkpoint.AgentID != b.ID() {
-		return nil, fmt.Errorf("agent ID mismatch: expected %s, got %s", checkpoint.AgentID, b.ID())
+		return nil, NewError(types.ErrInputValidation,
+			fmt.Sprintf("checkpoint agent ID mismatch: checkpoint belongs to %s, current agent is %s", checkpoint.AgentID, b.ID()))
 	}
 	return mergeInputWithCheckpoint(input, checkpoint), nil
 }
