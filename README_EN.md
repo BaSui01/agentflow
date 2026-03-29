@@ -84,7 +84,7 @@ English | [中文](README.md)
 - **A/B Testing Router** - Multi-variant traffic allocation, sticky routing, dynamic weight adjustment, metrics collection
 - **Unified Token Counter** - Tokenizer interface + tiktoken adapter + CJK estimator
 - **Provider Retry Wrapper** - RetryableProvider with exponential backoff, only retries recoverable errors
-- **Provider Factory Functions** - Configuration-driven Provider instantiation
+- **Provider Factory Functions** - Configuration-driven Provider instantiation (standard chat entry: `llm/providers/vendor.NewChatProviderFromConfig`)
 - **OpenAI Compatibility Layer** - Unified adapter for OpenAI-compatible APIs (9 providers slimmed to ~30 lines)
 - **API Key Pool** - Multi-key rotation, rate limit detection
 
@@ -168,8 +168,7 @@ import (
     "os"
 
     "github.com/BaSui01/agentflow/llm"
-    "github.com/BaSui01/agentflow/llm/providers"
-    openaiprov "github.com/BaSui01/agentflow/llm/providers/openai"
+    llmrouter "github.com/BaSui01/agentflow/llm/runtime/router"
     "github.com/glebarez/sqlite"
     "go.uber.org/zap"
     "gorm.io/gorm"
@@ -227,16 +226,7 @@ func main() {
         panic(err)
     }
 
-    factory := llmrouter.NewDefaultProviderFactory()
-    factory.RegisterProvider("openai", func(apiKey, baseURL string) (llm.Provider, error) {
-        return openaiprov.NewOpenAIProvider(providers.OpenAIConfig{
-            BaseProviderConfig: providers.BaseProviderConfig{
-                APIKey:  apiKey,
-                BaseURL: baseURL,
-            },
-        }, logger), nil
-    })
-
+    factory := llmrouter.VendorChatProviderFactory{Logger: logger}
     router := llmrouter.NewMultiProviderRouter(db, factory, llmrouter.RouterOptions{Logger: logger})
     if err := router.InitAPIKeyPools(ctx); err != nil {
         panic(err)
@@ -250,6 +240,8 @@ func main() {
     fmt.Printf("selected provider=%s model=%s\n", selection.ProviderCode, selection.ModelName)
 }
 ```
+
+Treat `llm/runtime/router.VendorChatProviderFactory` as the standard config-driven chat-provider entry. Reach for the low-level `llm/providers/openai`, `llm/providers/anthropic`, or `llm/providers/gemini` constructors only when you intentionally need provider-specific APIs.
 
 If your routing semantics are not `provider + api_key pool`, but a custom business-side `channel / key / model mapping` system:
 
