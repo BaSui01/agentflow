@@ -3,6 +3,7 @@ package bootstrap
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/BaSui01/agentflow/config"
 	"github.com/BaSui01/agentflow/llm"
@@ -91,6 +92,38 @@ func TestBuildLLMHandlerRuntimeFromProvider_RequiresMainProvider(t *testing.T) {
 	require.Error(t, err)
 	require.Nil(t, runtime)
 	require.ErrorContains(t, err, "main provider is required")
+}
+
+func TestBuildComposeConfig_PropagatesBudgetFields(t *testing.T) {
+	t.Parallel()
+
+	cfg := config.DefaultConfig()
+	cfg.Budget = config.BudgetConfig{
+		Enabled:             true,
+		MaxTokensPerRequest: 321,
+		MaxTokensPerMinute:  654,
+		MaxTokensPerHour:    987,
+		MaxTokensPerDay:     4321,
+		MaxCostPerRequest:   1.25,
+		MaxCostPerDay:       9.75,
+		AlertThreshold:      0.65,
+		AutoThrottle:        false,
+		ThrottleDelay:       3 * time.Second,
+	}
+
+	composeCfg := buildComposeConfig(cfg)
+	require.Equal(t, llmcompose.BudgetConfig{
+		Enabled:             true,
+		MaxTokensPerRequest: 321,
+		MaxTokensPerMinute:  654,
+		MaxTokensPerHour:    987,
+		MaxTokensPerDay:     4321,
+		MaxCostPerRequest:   1.25,
+		MaxCostPerDay:       9.75,
+		AlertThreshold:      0.65,
+		AutoThrottle:        false,
+		ThrottleDelay:       3 * time.Second,
+	}, composeCfg.Budget)
 }
 
 func TestBuildLLMHandlerRuntime_LegacyPathStillRequiresDatabase(t *testing.T) {

@@ -75,6 +75,8 @@ type ProviderBuilderResult struct {
 	VideoProviders map[string]video.Provider
 	DefaultImage   string
 	DefaultVideo   string
+	// Profiles 保留按供应商聚合的能力档案，便于上层复用同一 vendor 的默认模型与能力集。
+	Profiles map[string]*vendorprofile.Profile
 }
 
 // BuildProvidersFromConfig 统一构造多模态 image/video providers（单一构造入口）。
@@ -88,6 +90,7 @@ func BuildProvidersFromConfig(cfg ProviderBuilderConfig, logger *zap.Logger) Pro
 		VideoProviders: make(map[string]video.Provider),
 		DefaultImage:   strings.TrimSpace(cfg.DefaultImageProvider),
 		DefaultVideo:   strings.TrimSpace(cfg.DefaultVideoProvider),
+		Profiles:       make(map[string]*vendorprofile.Profile),
 	}
 
 	if cfg.OpenAIAPIKey != "" {
@@ -95,6 +98,7 @@ func BuildProvidersFromConfig(cfg ProviderBuilderConfig, logger *zap.Logger) Pro
 			APIKey:  cfg.OpenAIAPIKey,
 			BaseURL: cfg.OpenAIBaseURL,
 		}, logger)
+		result.Profiles["openai"] = openaiProfile
 		result.ImageProviders["openai"] = openaiProfile.Image
 		if result.DefaultImage == "" {
 			result.DefaultImage = "openai"
@@ -106,6 +110,7 @@ func BuildProvidersFromConfig(cfg ProviderBuilderConfig, logger *zap.Logger) Pro
 			APIKey:  cfg.GoogleAPIKey,
 			BaseURL: cfg.GoogleBaseURL,
 		}, logger)
+		result.Profiles["gemini"] = geminiProfile
 		result.ImageProviders["gemini"] = geminiProfile.Image
 		result.VideoProviders["veo"] = geminiProfile.Video
 		if result.DefaultImage == "" {

@@ -2,10 +2,12 @@ package compose
 
 import (
 	"context"
+	"math"
 	"testing"
 	"time"
 
 	"github.com/BaSui01/agentflow/llm"
+	llmpolicy "github.com/BaSui01/agentflow/llm/runtime/policy"
 	"github.com/BaSui01/agentflow/types"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
@@ -152,6 +154,45 @@ func TestBuild_UsesExplicitToolProviderOverride(t *testing.T) {
 	require.NotNil(t, runtime.Provider)
 	require.NotNil(t, runtime.ToolProvider)
 	require.NotSame(t, runtime.Provider, runtime.ToolProvider)
+}
+
+func TestBuild_BudgetManagerReceivesPerRequestAndHourLimits(t *testing.T) {
+	t.Parallel()
+
+	provider := &countingProvider{content: "hello"}
+	runtime, err := Build(Config{
+		Budget: BudgetConfig{
+			Enabled:             true,
+			MaxTokensPerRequest: 200,
+			MaxTokensPerMinute:  1000,
+			MaxTokensPerHour:    2000,
+			MaxTokensPerDay:     4000,
+			MaxCostPerRequest:   1.5,
+			MaxCostPerDay:       10,
+			AlertThreshold:      0.8,
+			AutoThrottle:        true,
+			ThrottleDelay:       time.Second,
+		},
+	}, provider, zap.NewNop())
+	require.NoError(t, err)
+	require.NotNil(t, runtime)
+	require.NotNil(t, runtime.BudgetManager)
+
+	require.NoError(t, runtime.BudgetManager.CheckBudget(context.Background(), 200, 1.5))
+
+	err = runtime.BudgetManager.CheckBudget(context.Background(), 201, 1.5)
+	require.Error(t, err)
+	require.ErrorContains(t, err, "per-request limit 200")
+
+	runtime.BudgetManager.RecordUsage(llmpolicy.UsageRecord{
+		Timestamp: time.Now(),
+		Tokens:    100,
+		Cost:      1,
+		Model:     "gpt-4o-mini",
+	})
+	status := runtime.BudgetManager.GetStatus()
+	require.False(t, math.IsNaN(status.HourUtilization))
+	require.InDelta(t, 0.05, status.HourUtilization, 0.0001)
 }
 
 func cloneStringMap(src map[string]string) map[string]string {

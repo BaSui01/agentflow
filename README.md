@@ -86,7 +86,7 @@
 - **统一 Token 计数器** - Tokenizer 接口 + tiktoken 适配器 + CJK 估算器
 - **Provider 重试包装器** - RetryableProvider 指数退避重试，仅重试可恢复错误
 - **API Key 池** - 多 Key 轮询、限流检测
-- **Provider 工厂函数** — 配置驱动的 Provider 实例化
+- **Provider 工厂函数** — 配置驱动的 Provider 实例化（标准 chat 入口：`llm/providers/vendor.NewChatProviderFromConfig`）
 - **OpenAI 兼容层** — 统一适配 OpenAI 兼容 API（9 个 provider 瘦身至 ~30 行）
 
 ### 🎨 多模态能力
@@ -177,8 +177,7 @@ import (
     "os"
 
     "github.com/BaSui01/agentflow/llm"
-    "github.com/BaSui01/agentflow/llm/providers"
-    openaiprov "github.com/BaSui01/agentflow/llm/providers/openai"
+    llmrouter "github.com/BaSui01/agentflow/llm/runtime/router"
     "github.com/glebarez/sqlite"
     "go.uber.org/zap"
     "gorm.io/gorm"
@@ -236,16 +235,7 @@ func main() {
         panic(err)
     }
 
-    factory := llmrouter.NewDefaultProviderFactory()
-    factory.RegisterProvider("openai", func(apiKey, baseURL string) (llm.Provider, error) {
-        return openaiprov.NewOpenAIProvider(providers.OpenAIConfig{
-            BaseProviderConfig: providers.BaseProviderConfig{
-                APIKey:  apiKey,
-                BaseURL: baseURL,
-            },
-        }, logger), nil
-    })
-
+    factory := llmrouter.VendorChatProviderFactory{Logger: logger}
     router := llmrouter.NewMultiProviderRouter(db, factory, llmrouter.RouterOptions{Logger: logger})
     if err := router.InitAPIKeyPools(ctx); err != nil {
         panic(err)
@@ -259,6 +249,8 @@ func main() {
     fmt.Printf("selected provider=%s model=%s\n", selection.ProviderCode, selection.ModelName)
 }
 ```
+
+推荐把 `llm/runtime/router.VendorChatProviderFactory` 视为配置驱动 chat provider 的标准构造入口；只有在你明确需要 provider 包级低级 API 时，才直接使用 `llm/providers/openai`、`llm/providers/anthropic`、`llm/providers/gemini` 构造器。
 
 如果你的底层路由语义不是 `provider + api_key pool`，而是业务侧自定义的 `channel / key / model mapping`：
 

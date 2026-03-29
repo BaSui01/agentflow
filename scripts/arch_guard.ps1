@@ -78,6 +78,54 @@ foreach ($name in $allowOneFilePkg) {
     }
 }
 
+# Rule 3: config-driven chat provider entry must stay on vendor factory path.
+$vendorEntryFiles = @(
+    "agentflow.go",
+    "llm/runtime/compose/main_provider_registry.go",
+    "llm/runtime/compose/runtime.go",
+    "llm/runtime/router/chat_provider_factory.go"
+)
+foreach ($path in $vendorEntryFiles) {
+    $content = Get-Content -Path $path -Raw
+    switch ($path) {
+        "agentflow.go" {
+            if ($content -notmatch "vendor\.NewChatProviderFromConfig\(") {
+                $errors += "[LLM] $path must use vendor.NewChatProviderFromConfig(...)"
+            }
+        }
+        "llm/runtime/router/chat_provider_factory.go" {
+            if ($content -notmatch "vendor\.NewChatProviderFromConfig\(") {
+                $errors += "[LLM] $path must route provider construction through vendor.NewChatProviderFromConfig(...)"
+            }
+        }
+        default {
+            if ($content -notmatch "VendorChatProviderFactory") {
+                $errors += "[LLM] $path must keep VendorChatProviderFactory as the config-driven provider entry"
+            }
+            if ($content -match "NewOpenAIProvider\(" -or $content -match "NewClaudeProvider\(" -or $content -match "NewGeminiProvider\(") {
+                $errors += "[LLM] $path must not hardcode direct provider constructors"
+            }
+        }
+    }
+}
+
+# Rule 4: public multi-provider docs must demonstrate the vendor factory path.
+$providerRoutingDocs = @(
+    "README.md",
+    "README_EN.md",
+    "docs/cn/tutorials/02.Provider配置指南.md",
+    "docs/en/tutorials/02.ProviderConfiguration.md"
+)
+foreach ($path in $providerRoutingDocs) {
+    $content = Get-Content -Path $path -Raw
+    if ($content -notmatch "VendorChatProviderFactory") {
+        $errors += "[DOCS] $path must document VendorChatProviderFactory for multi-provider routing"
+    }
+    if ($content -match "NewDefaultProviderFactory\(") {
+        $errors += "[DOCS] $path still documents legacy NewDefaultProviderFactory() for public multi-provider routing"
+    }
+}
+
 if ($warnings.Count -gt 0) {
     Write-Host "Architecture warnings:" -ForegroundColor Yellow
     $warnings | Sort-Object | ForEach-Object { Write-Host "  $_" -ForegroundColor Yellow }

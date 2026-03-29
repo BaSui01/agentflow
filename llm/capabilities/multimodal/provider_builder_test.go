@@ -16,6 +16,10 @@ func TestBuildProvidersFromConfig_Defaults(t *testing.T) {
 	assert.Contains(t, result.ImageProviders, "openai")
 	assert.Contains(t, result.ImageProviders, "gemini")
 	assert.Contains(t, result.VideoProviders, "veo")
+	assert.Contains(t, result.Profiles, "openai")
+	assert.Contains(t, result.Profiles, "gemini")
+	assert.NotNil(t, result.Profiles["openai"].Embedding)
+	assert.NotNil(t, result.Profiles["gemini"].Video)
 	assert.Equal(t, "openai", result.DefaultImage)
 	assert.Equal(t, "veo", result.DefaultVideo)
 }
@@ -28,6 +32,7 @@ func TestBuildProvidersFromConfig_OpenAIKeyEnablesSora(t *testing.T) {
 
 	assert.Contains(t, result.ImageProviders, "openai")
 	assert.Contains(t, result.VideoProviders, "sora")
+	assert.Contains(t, result.Profiles, "openai")
 }
 
 func TestBuildProvidersFromConfig_InvalidDefaultsFallbackToAuto(t *testing.T) {

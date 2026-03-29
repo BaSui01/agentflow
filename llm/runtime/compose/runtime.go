@@ -40,11 +40,16 @@ type Config struct {
 
 // BudgetConfig controls token and cost policy assembly.
 type BudgetConfig struct {
-	Enabled            bool
-	MaxTokensPerMinute int
-	MaxTokensPerDay    int
-	MaxCostPerDay      float64
-	AlertThreshold     float64
+	Enabled             bool
+	MaxTokensPerRequest int
+	MaxTokensPerMinute  int
+	MaxTokensPerHour    int
+	MaxTokensPerDay     int
+	MaxCostPerRequest   float64
+	MaxCostPerDay       float64
+	AlertThreshold      float64
+	AutoThrottle        bool
+	ThrottleDelay       time.Duration
 }
 
 // CacheConfig controls prompt-cache assembly.
@@ -105,10 +110,15 @@ func Build(cfg Config, mainProvider llm.Provider, logger *zap.Logger) (*Runtime,
 	var budgetManager *llmpolicy.TokenBudgetManager
 	if cfg.Budget.Enabled {
 		budgetManager = llmpolicy.NewTokenBudgetManager(llmpolicy.BudgetConfig{
-			MaxTokensPerMinute: cfg.Budget.MaxTokensPerMinute,
-			MaxTokensPerDay:    cfg.Budget.MaxTokensPerDay,
-			MaxCostPerDay:      cfg.Budget.MaxCostPerDay,
-			AlertThreshold:     cfg.Budget.AlertThreshold,
+			MaxTokensPerRequest: cfg.Budget.MaxTokensPerRequest,
+			MaxTokensPerMinute:  cfg.Budget.MaxTokensPerMinute,
+			MaxTokensPerHour:    cfg.Budget.MaxTokensPerHour,
+			MaxTokensPerDay:     cfg.Budget.MaxTokensPerDay,
+			MaxCostPerRequest:   cfg.Budget.MaxCostPerRequest,
+			MaxCostPerDay:       cfg.Budget.MaxCostPerDay,
+			AlertThreshold:      cfg.Budget.AlertThreshold,
+			AutoThrottle:        cfg.Budget.AutoThrottle,
+			ThrottleDelay:       cfg.Budget.ThrottleDelay,
 		}, logger)
 		logger.Info("Budget manager initialized")
 	}

@@ -398,6 +398,84 @@ func TestReadmeCmdAgentflowStructureConsistency(t *testing.T) {
 	}
 }
 
+func TestVendorChatProviderEntryPoints(t *testing.T) {
+	type sourceExpectation struct {
+		path              string
+		requiredSnippets  []string
+		forbiddenSnippets []string
+	}
+
+	expectations := []sourceExpectation{
+		{
+			path:             "agentflow.go",
+			requiredSnippets: []string{"vendor.NewChatProviderFromConfig("},
+		},
+		{
+			path:             "llm/runtime/compose/main_provider_registry.go",
+			requiredSnippets: []string{"VendorChatProviderFactory{"},
+			forbiddenSnippets: []string{
+				"NewOpenAIProvider(",
+				"NewClaudeProvider(",
+				"NewGeminiProvider(",
+			},
+		},
+		{
+			path:             "llm/runtime/compose/runtime.go",
+			requiredSnippets: []string{"VendorChatProviderFactory{"},
+			forbiddenSnippets: []string{
+				"NewOpenAIProvider(",
+				"NewClaudeProvider(",
+				"NewGeminiProvider(",
+			},
+		},
+		{
+			path:             "llm/runtime/router/chat_provider_factory.go",
+			requiredSnippets: []string{"vendor.NewChatProviderFromConfig("},
+		},
+	}
+
+	for _, tt := range expectations {
+		data, err := os.ReadFile(filepath.FromSlash(tt.path))
+		if err != nil {
+			t.Fatalf("read %s: %v", tt.path, err)
+		}
+		src := string(data)
+		for _, snippet := range tt.requiredSnippets {
+			if !strings.Contains(src, snippet) {
+				t.Fatalf("%s must contain %q", tt.path, snippet)
+			}
+		}
+		for _, snippet := range tt.forbiddenSnippets {
+			if strings.Contains(src, snippet) {
+				t.Fatalf("%s must not contain %q", tt.path, snippet)
+			}
+		}
+	}
+}
+
+func TestPublicProviderRoutingDocsUseVendorFactory(t *testing.T) {
+	docPaths := []string{
+		"README.md",
+		"README_EN.md",
+		"docs/cn/tutorials/02.Provider配置指南.md",
+		"docs/en/tutorials/02.ProviderConfiguration.md",
+	}
+
+	for _, path := range docPaths {
+		data, err := os.ReadFile(filepath.FromSlash(path))
+		if err != nil {
+			t.Fatalf("read %s: %v", path, err)
+		}
+		src := string(data)
+		if !strings.Contains(src, "VendorChatProviderFactory") {
+			t.Fatalf("%s must document VendorChatProviderFactory for multi-provider routing", path)
+		}
+		if strings.Contains(src, "NewDefaultProviderFactory()") {
+			t.Fatalf("%s must not document legacy NewDefaultProviderFactory() for public multi-provider routing", path)
+		}
+	}
+}
+
 func listProductionGoFiles(dir string) (map[string]struct{}, error) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
@@ -495,9 +573,9 @@ func TestAgentPackageExportedErrorStyle(t *testing.T) {
 	}
 	maxAllowed := map[string]int{
 		"agent/base.go":        0,
-		"agent/react.go":      1,
+		"agent/react.go":       1,
 		"agent/integration.go": 0,
-		"agent/completion.go": 0,
+		"agent/completion.go":  0,
 	}
 
 	for _, rel := range keyFiles {
