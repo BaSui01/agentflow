@@ -287,6 +287,63 @@ func TestOpenAIProvider_Completion_ResponsesAPI(t *testing.T) {
 	assert.Equal(t, 14, resp.Usage.TotalTokens)
 }
 
+func TestOpenAIProvider_Completion_ResponsesAPI_MapsReasoningSummaryAndOpaqueState(t *testing.T) {
+	var reqBody openAIResponsesRequest
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		require.NoError(t, json.NewDecoder(r.Body).Decode(&reqBody))
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(openAIResponsesResponse{
+			ID:        "resp_reasoning",
+			Object:    "response",
+			CreatedAt: 1700000000,
+			Status:    "completed",
+			Model:     "gpt-5.2",
+			Output: []responsesOutputItem{
+				{
+					Type:             "reasoning",
+					ID:               "rs_1",
+					Status:           "completed",
+					Summary:          []responsesContent{{Type: "summary_text", Text: "Investigating request"}},
+					EncryptedContent: "enc_123",
+				},
+				{
+					Type:   "message",
+					ID:     "msg_1",
+					Status: "completed",
+					Role:   "assistant",
+					Content: []responsesContent{
+						{Type: "output_text", Text: "done"},
+					},
+				},
+			},
+		})
+	}))
+	t.Cleanup(func() { server.Close() })
+
+	p := NewOpenAIProvider(providers.OpenAIConfig{
+		BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key", BaseURL: server.URL},
+		UseResponsesAPI:    true,
+	}, zap.NewNop())
+
+	resp, err := p.Completion(context.Background(), &llm.ChatRequest{
+		Messages:         []types.Message{{Role: llm.RoleUser, Content: "Hi"}},
+		ReasoningEffort:  "medium",
+		ReasoningSummary: "",
+	})
+	require.NoError(t, err)
+	require.NotNil(t, reqBody.Reasoning)
+	assert.Equal(t, "medium", reqBody.Reasoning.Effort)
+	assert.Equal(t, "auto", reqBody.Reasoning.Summary)
+	assert.Contains(t, reqBody.Include, "reasoning.encrypted_content")
+	require.Len(t, resp.Choices, 1)
+	require.NotNil(t, resp.Choices[0].Message.ReasoningContent)
+	assert.Equal(t, "Investigating request", *resp.Choices[0].Message.ReasoningContent)
+	require.Len(t, resp.Choices[0].Message.ReasoningSummaries, 1)
+	assert.Equal(t, "summary_text", resp.Choices[0].Message.ReasoningSummaries[0].Kind)
+	require.Len(t, resp.Choices[0].Message.OpaqueReasoning, 1)
+	assert.Equal(t, "enc_123", resp.Choices[0].Message.OpaqueReasoning[0].State)
+}
+
 func TestOpenAIProvider_Completion_ResponsesAPI_MapsNativeWebSearchTool(t *testing.T) {
 	var raw map[string]any
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -665,6 +722,66 @@ func TestOpenAIProvider_Stream_ResponsesAPI_FunctionCallName_FullSequence(t *tes
 	assert.Equal(t, "tool_calls", gotFinishReason)
 }
 
+func TestOpenAIProvider_Stream_ResponsesAPI_MapsReasoningSummaryAndOpaqueState(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(http.StatusOK)
+
+		events := []string{
+			`event: response.created` + "\n" +
+				`data: {"type":"response.created","response":{"id":"resp_reasoning","model":"gpt-5.2"}}` + "\n\n",
+			`event: response.reasoning_summary_text.delta` + "\n" +
+				`data: {"type":"response.reasoning_summary_text.delta","item_id":"rs_1","delta":"summary chunk"}` + "\n\n",
+			`event: response.output_item.done` + "\n" +
+				`data: {"type":"response.output_item.done","item":{"id":"rs_1","type":"reasoning","status":"completed","summary":[{"type":"summary_text","text":"summary chunk"}],"encrypted_content":"enc_456"}}` + "\n\n",
+			`event: response.output_text.delta` + "\n" +
+				`data: {"type":"response.output_text.delta","delta":"final"}` + "\n\n",
+			`event: response.completed` + "\n" +
+				`data: {"type":"response.completed","response":{"id":"resp_reasoning","model":"gpt-5.2","output":[{"id":"rs_1","type":"reasoning","status":"completed","summary":[{"type":"summary_text","text":"summary chunk"}],"encrypted_content":"enc_456"}],"usage":{"input_tokens":10,"output_tokens":5,"total_tokens":15}}}` + "\n\n",
+			"data: [DONE]\n\n",
+		}
+		for _, e := range events {
+			_, _ = w.Write([]byte(e))
+		}
+	}))
+	t.Cleanup(func() { server.Close() })
+
+	p := NewOpenAIProvider(providers.OpenAIConfig{
+		BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key", BaseURL: server.URL},
+		UseResponsesAPI:    true,
+	}, zap.NewNop())
+
+	ch, err := p.Stream(context.Background(), &llm.ChatRequest{
+		Messages:        []types.Message{{Role: llm.RoleUser, Content: "Hi"}},
+		ReasoningEffort: "medium",
+	})
+	require.NoError(t, err)
+
+	var (
+		chunks          []llm.StreamChunk
+		reasoningDelta  string
+		structuredChunk *llm.StreamChunk
+	)
+	for c := range ch {
+		chunks = append(chunks, c)
+		if c.Delta.ReasoningContent != nil && reasoningDelta == "" {
+			reasoningDelta = *c.Delta.ReasoningContent
+		}
+		if len(c.Delta.ReasoningSummaries) > 0 || len(c.Delta.OpaqueReasoning) > 0 {
+			copied := c
+			structuredChunk = &copied
+		}
+	}
+
+	require.NotEmpty(t, chunks)
+	assert.Equal(t, "summary chunk", reasoningDelta)
+	require.NotNil(t, structuredChunk)
+	require.Len(t, structuredChunk.Delta.ReasoningSummaries, 1)
+	assert.Equal(t, "summary chunk", structuredChunk.Delta.ReasoningSummaries[0].Text)
+	require.Len(t, structuredChunk.Delta.OpaqueReasoning, 1)
+	assert.Equal(t, "enc_456", structuredChunk.Delta.OpaqueReasoning[0].State)
+}
+
 func TestOpenAIProvider_Stream_ResponsesAPI_MapsNativeWebSearchTool(t *testing.T) {
 	var raw map[string]any
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -874,6 +991,8 @@ func TestToResponsesAPIChatResponse(t *testing.T) {
 		CreatedAt: 1700000000,
 		Status:    "completed",
 		Output: []responsesOutputItem{
+			{Type: "reasoning", ID: "rs_1", Status: "completed",
+				Summary: []responsesContent{{Type: "summary_text", Text: "summary"}}},
 			{Type: "message", ID: "msg_1", Status: "completed", Role: "assistant",
 				Content: []responsesContent{{Type: "output_text", Text: "Hello"}}},
 			{Type: "function_call", ID: "fc_1", CallID: "call_1", Name: "do_thing",
@@ -887,6 +1006,9 @@ func TestToResponsesAPIChatResponse(t *testing.T) {
 	assert.Equal(t, "openai", result.Provider)
 	// message + function_call merged into one choice
 	require.Len(t, result.Choices, 1)
+	require.NotNil(t, result.Choices[0].Message.ReasoningContent)
+	assert.Equal(t, "summary", *result.Choices[0].Message.ReasoningContent)
+	require.Len(t, result.Choices[0].Message.ReasoningSummaries, 1)
 	assert.Equal(t, "Hello", result.Choices[0].Message.Content)
 	assert.Equal(t, "tool_calls", result.Choices[0].FinishReason)
 	require.Len(t, result.Choices[0].Message.ToolCalls, 1)

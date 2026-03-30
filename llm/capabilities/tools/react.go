@@ -1,10 +1,10 @@
 package tools
 
 import (
-	"github.com/BaSui01/agentflow/types"
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/BaSui01/agentflow/types"
 	"strings"
 
 	"github.com/BaSui01/agentflow/llm"
@@ -169,12 +169,12 @@ func (r *ReActExecutor) ExecuteWithTrace(ctx context.Context, req *llm.ChatReque
 
 // ReActStep 表示 ReAct 循环（Thought -> Action -> Observation）的一步.
 type ReActStep struct {
-	StepNumber   int              `json:"step_number"`
-	Thought      string           `json:"thought,omitempty"`
+	StepNumber   int                `json:"step_number"`
+	Thought      string             `json:"thought,omitempty"`
 	Actions      []types.ToolCall   `json:"actions,omitempty"`
 	Observations []types.ToolResult `json:"observations,omitempty"`
-	Timestamp    string           `json:"timestamp"`
-	TokensUsed   int              `json:"tokens_used,omitempty"`
+	Timestamp    string             `json:"timestamp"`
+	TokensUsed   int                `json:"tokens_used,omitempty"`
 }
 
 // ReActTrace 表示完整的 ReAct 执行追踪.
@@ -289,6 +289,15 @@ func (r *ReActExecutor) ExecuteStream(ctx context.Context, req *llm.ChatRequest)
 							assembledMessage.ReasoningContent = &s
 						}
 						*assembledMessage.ReasoningContent += *chunk.Delta.ReasoningContent
+					}
+					if len(chunk.Delta.ReasoningSummaries) > 0 {
+						assembledMessage.ReasoningSummaries = append(assembledMessage.ReasoningSummaries, chunk.Delta.ReasoningSummaries...)
+					}
+					if len(chunk.Delta.OpaqueReasoning) > 0 {
+						assembledMessage.OpaqueReasoning = append(assembledMessage.OpaqueReasoning, chunk.Delta.OpaqueReasoning...)
+					}
+					if len(chunk.Delta.ThinkingBlocks) > 0 {
+						assembledMessage.ThinkingBlocks = append(assembledMessage.ThinkingBlocks, chunk.Delta.ThinkingBlocks...)
 					}
 					if len(chunk.Delta.ToolCalls) > 0 {
 						if toolCallByID == nil {
@@ -479,17 +488,17 @@ const (
 
 // ReActStreamEvent 表示流式 ReAct 循环事件.
 type ReActStreamEvent struct {
-	Type            string            `json:"type"`
-	Iteration       int               `json:"iteration,omitempty"`
-	Chunk           *llm.StreamChunk  `json:"chunk,omitempty"`
-	ToolCalls       []types.ToolCall  `json:"tool_calls,omitempty"`
+	Type            string             `json:"type"`
+	Iteration       int                `json:"iteration,omitempty"`
+	Chunk           *llm.StreamChunk   `json:"chunk,omitempty"`
+	ToolCalls       []types.ToolCall   `json:"tool_calls,omitempty"`
 	ToolResults     []types.ToolResult `json:"tool_results,omitempty"`
-	ToolCallID      string            `json:"tool_call_id,omitempty"`
-	ToolName        string            `json:"tool_name,omitempty"`
-	ProgressData    any               `json:"progress_data,omitempty"`
-	FinalResponse   *llm.ChatResponse `json:"final_response,omitempty"`
-	Error           string            `json:"error,omitempty"`
-	SteeringContent string            `json:"steering_content,omitempty"` // steering 确认内容
+	ToolCallID      string             `json:"tool_call_id,omitempty"`
+	ToolName        string             `json:"tool_name,omitempty"`
+	ProgressData    any                `json:"progress_data,omitempty"`
+	FinalResponse   *llm.ChatResponse  `json:"final_response,omitempty"`
+	Error           string             `json:"error,omitempty"`
+	SteeringContent string             `json:"steering_content,omitempty"` // steering 确认内容
 }
 
 // executeToolsWithStreaming 使用流式执行器逐个执行工具调用，
@@ -545,5 +554,3 @@ func (r *ReActExecutor) executeToolsWithStreaming(
 
 	return results
 }
-
-

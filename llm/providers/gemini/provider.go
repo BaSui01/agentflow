@@ -35,7 +35,7 @@ import (
 const (
 	defaultGoogleAIBaseURL = "https://generativelanguage.googleapis.com"
 	vertexAIHostPattern    = "https://%s-aiplatform.googleapis.com"
-	defaultVertexRegion   = "us-central1"
+	defaultVertexRegion    = "us-central1"
 )
 
 // GeminiProvider 实现 Google Gemini 的 LLM Provider
@@ -247,6 +247,7 @@ type geminiContent struct {
 type geminiPart struct {
 	Text             string                  `json:"text,omitempty"`
 	Thought          *bool                   `json:"thought,omitempty"` // true = thinking content
+	ThoughtSignature string                  `json:"thoughtSignature,omitempty"`
 	InlineData       *geminiInlineData       `json:"inlineData,omitempty"`
 	FunctionCall     *geminiFunctionCall     `json:"functionCall,omitempty"`
 	FunctionResponse *geminiFunctionResponse `json:"functionResponse,omitempty"`
@@ -257,6 +258,8 @@ func (p *geminiPart) UnmarshalJSON(data []byte) error {
 		Text                  string                  `json:"text"`
 		Thought               *bool                   `json:"thought"`
 		ThoughtSnake          *bool                   `json:"is_thought"`
+		ThoughtSignature      string                  `json:"thoughtSignature"`
+		ThoughtSignatureSnake string                  `json:"thought_signature"`
 		InlineData            *geminiInlineData       `json:"inlineData"`
 		InlineDataSnake       *geminiInlineData       `json:"inline_data"`
 		FunctionCall          *geminiFunctionCall     `json:"functionCall"`
@@ -270,6 +273,7 @@ func (p *geminiPart) UnmarshalJSON(data []byte) error {
 
 	p.Text = aux.Text
 	p.Thought = firstBoolPtr(aux.Thought, aux.ThoughtSnake)
+	p.ThoughtSignature = strings.TrimSpace(firstNonEmpty(aux.ThoughtSignature, aux.ThoughtSignatureSnake))
 	p.InlineData = firstInlineData(aux.InlineData, aux.InlineDataSnake)
 	p.FunctionCall = firstFunctionCall(aux.FunctionCall, aux.FunctionCallSnake)
 	p.FunctionResponse = firstFunctionResponse(aux.FunctionResponse, aux.FunctionResponseSnake)
@@ -345,8 +349,8 @@ type geminiGroundingChunkWeb struct {
 }
 
 type geminiGroundingSupport struct {
-	Segment              *geminiGroundingSegment `json:"segment,omitempty"`
-	GroundingChunkIndices []int                  `json:"groundingChunkIndices,omitempty"`
+	Segment               *geminiGroundingSegment `json:"segment,omitempty"`
+	GroundingChunkIndices []int                   `json:"groundingChunkIndices,omitempty"`
 }
 
 type geminiGroundingSegment struct {
@@ -399,7 +403,7 @@ type geminiCandidate struct {
 	FinishReason      string                   `json:"finishReason,omitempty"`
 	Index             int                      `json:"index"`
 	SafetyRatings     []any                    `json:"safetyRatings,omitempty"`
-	GroundingMetadata *geminiGroundingMetadata  `json:"groundingMetadata,omitempty"`
+	GroundingMetadata *geminiGroundingMetadata `json:"groundingMetadata,omitempty"`
 }
 
 func (c *geminiCandidate) UnmarshalJSON(data []byte) error {
@@ -410,8 +414,8 @@ func (c *geminiCandidate) UnmarshalJSON(data []byte) error {
 		Index                  int                      `json:"index"`
 		SafetyRatings          []any                    `json:"safetyRatings"`
 		SafetyRatingsSnake     []any                    `json:"safety_ratings"`
-		GroundingMetadata      *geminiGroundingMetadata  `json:"groundingMetadata"`
-		GroundingMetadataSnake *geminiGroundingMetadata  `json:"grounding_metadata"`
+		GroundingMetadata      *geminiGroundingMetadata `json:"groundingMetadata"`
+		GroundingMetadataSnake *geminiGroundingMetadata `json:"grounding_metadata"`
 	}
 	if err := json.Unmarshal(data, &aux); err != nil {
 		return err
@@ -614,12 +618,30 @@ func convertToGeminiContents(msgs []types.Message) (*geminiContent, []geminiCont
 		content := geminiContent{
 			Role: role,
 		}
+		partIndex := 0
+
+		if m.Role == llm.RoleAssistant && m.ReasoningContent != nil && strings.TrimSpace(*m.ReasoningContent) != "" {
+			thoughtPart := geminiPart{
+				Text:    *m.ReasoningContent,
+				Thought: boolPtr(true),
+			}
+			if sig := geminiThoughtSignatureByIndex(m, partIndex); sig != "" {
+				thoughtPart.ThoughtSignature = sig
+			}
+			content.Parts = append(content.Parts, thoughtPart)
+			partIndex++
+		}
 
 		// 文本内容（tool 消息通过 functionResponse 表达，不重复发送 text）
 		if m.Content != "" && m.Role != llm.RoleTool {
-			content.Parts = append(content.Parts, geminiPart{
+			textPart := geminiPart{
 				Text: m.Content,
-			})
+			}
+			if sig := geminiThoughtSignatureByIndex(m, partIndex); sig != "" {
+				textPart.ThoughtSignature = sig
+			}
+			content.Parts = append(content.Parts, textPart)
+			partIndex++
 		}
 
 		// 工具调用
@@ -627,12 +649,17 @@ func convertToGeminiContents(msgs []types.Message) (*geminiContent, []geminiCont
 			for _, tc := range m.ToolCalls {
 				var args map[string]any
 				if err := json.Unmarshal(tc.Arguments, &args); err == nil {
-					content.Parts = append(content.Parts, geminiPart{
+					callPart := geminiPart{
 						FunctionCall: &geminiFunctionCall{
 							Name: tc.Name,
 							Args: args,
 						},
-					})
+					}
+					if sig := geminiThoughtSignatureByIndex(m, partIndex); sig != "" {
+						callPart.ThoughtSignature = sig
+					}
+					content.Parts = append(content.Parts, callPart)
+					partIndex++
 				}
 			}
 		}
@@ -904,7 +931,7 @@ func (p *GeminiProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-ch
 			var errPayload struct {
 				Err *struct {
 					Message string `json:"message"`
-					Code   int    `json:"code"`
+					Code    int    `json:"code"`
 				} `json:"error"`
 			}
 			if err := json.Unmarshal([]byte(data), &errPayload); err == nil && errPayload.Err != nil {
@@ -956,11 +983,19 @@ func (p *GeminiProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-ch
 				}
 
 				toolCallIndex := 0
-				for _, part := range candidate.Content.Parts {
+				for partIndex, part := range candidate.Content.Parts {
 					// Thinking content
 					if part.Thought != nil && *part.Thought {
-						chunk.Delta.ReasoningContent = strPtr(part.Text)
+						appendGeminiThoughtPart(&chunk.Delta, part, partIndex, p.Name())
 						continue
+					}
+					if strings.TrimSpace(part.ThoughtSignature) != "" {
+						chunk.Delta.OpaqueReasoning = append(chunk.Delta.OpaqueReasoning, types.OpaqueReasoning{
+							Provider:  p.Name(),
+							Kind:      "thought_signature",
+							State:     part.ThoughtSignature,
+							PartIndex: partIndex,
+						})
 					}
 					if part.Text != "" {
 						chunk.Delta.Content += part.Text
@@ -1019,11 +1054,19 @@ func toGeminiChatResponse(gr geminiResponse, provider, model string) *llm.ChatRe
 		}
 
 		toolCallIndex := 0
-		for _, part := range candidate.Content.Parts {
+		for partIndex, part := range candidate.Content.Parts {
 			// Thinking content
 			if part.Thought != nil && *part.Thought {
-				msg.ReasoningContent = strPtr(part.Text)
+				appendGeminiThoughtPart(&msg, part, partIndex, provider)
 				continue
+			}
+			if strings.TrimSpace(part.ThoughtSignature) != "" {
+				msg.OpaqueReasoning = append(msg.OpaqueReasoning, types.OpaqueReasoning{
+					Provider:  provider,
+					Kind:      "thought_signature",
+					State:     part.ThoughtSignature,
+					PartIndex: partIndex,
+				})
 			}
 			if part.Text != "" {
 				msg.Content += part.Text
@@ -1070,6 +1113,35 @@ func toGeminiChatResponse(gr geminiResponse, provider, model string) *llm.ChatRe
 	}
 
 	return resp
+}
+
+func appendGeminiThoughtPart(msg *types.Message, part geminiPart, partIndex int, provider string) {
+	if msg == nil {
+		return
+	}
+	if strings.TrimSpace(part.Text) != "" {
+		if msg.ReasoningContent == nil || strings.TrimSpace(*msg.ReasoningContent) == "" {
+			msg.ReasoningContent = strPtr(part.Text)
+		} else {
+			joined := strings.TrimSpace(*msg.ReasoningContent + "\n\n" + part.Text)
+			msg.ReasoningContent = strPtr(joined)
+		}
+		msg.ReasoningSummaries = append(msg.ReasoningSummaries, types.ReasoningSummary{
+			Provider: provider,
+			Kind:     "thought_summary",
+			Text:     part.Text,
+			ID:       fmt.Sprintf("part_%d", partIndex),
+		})
+	}
+	if strings.TrimSpace(part.ThoughtSignature) != "" {
+		msg.OpaqueReasoning = append(msg.OpaqueReasoning, types.OpaqueReasoning{
+			Provider:  provider,
+			Kind:      "thought_signature",
+			State:     part.ThoughtSignature,
+			PartIndex: partIndex,
+			ID:        fmt.Sprintf("part_%d", partIndex),
+		})
+	}
 }
 
 // =============================================================================
@@ -1204,6 +1276,24 @@ func buildGenerationConfig(req *llm.ChatRequest) *geminiGenerationConfig {
 	}
 	return cfg
 }
+
+func geminiThoughtSignatureByIndex(msg types.Message, index int) string {
+	for _, opaque := range msg.OpaqueReasoning {
+		provider := strings.TrimSpace(opaque.Provider)
+		if provider != "" && provider != "gemini" {
+			continue
+		}
+		if strings.TrimSpace(opaque.Kind) != "thought_signature" {
+			continue
+		}
+		if opaque.PartIndex == index {
+			return strings.TrimSpace(opaque.State)
+		}
+	}
+	return ""
+}
+
+func boolPtr(v bool) *bool { return &v }
 
 func strPtr(s string) *string {
 	if s == "" {

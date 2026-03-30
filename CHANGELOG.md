@@ -5,8 +5,21 @@ All notable changes to AgentFlow will be documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.8.11] - 2026-03-26
+## [1.8.12] - 2026-03-31
 
+### Added
+- 统一消息/API 契约新增 `reasoning_summaries` 与 `opaque_reasoning`，在保留 `ReasoningContent` 兼容字段的同时区分“可展示 summary”与“不可展示 opaque state”
+
+### Changed
+- OpenAI Responses API 请求侧在 reasoning 开启时显式设置 `reasoning.summary`，并请求 `reasoning.encrypted_content`
+- OpenAI/Anthropic/Gemini provider 与 agent/react 流式组装统一保留 provider-native reasoning/thinking 元数据，避免在 sync/stream/assembled 路径被压平或丢失
+
+### Fixed
+- 修复 OpenAI Responses 同步/流式路径未解析 `reasoning` output item，导致 reasoning summary 与 opaque reasoning state 丢失的问题
+- 修复 Anthropic extended thinking 流式 `signature` / `redacted_thinking` 丢失的问题
+- 修复 Gemini `thoughtSignature` 未 round-trip、OpenAI-compatible `reasoning_content` 回归风险，以及 API/handler 层对 reasoning 新字段的透传缺口
+
+## [1.8.11] - 2026-03-26
 ### Added
 - 新增 `ChannelRoutedProvider` 文本主链与 `channel_types` 抽象接口，支持 `ChannelSelector`、`ModelMappingResolver`、`SecretResolver`、`UsageRecorder`、`CooldownController`、`QuotaPolicy`、`ProviderConfigSource`
 - 新增 `llm.main_provider_mode=channel_routed` 与公共 `llm/runtime/compose` main-provider registry，允许组合根按配置切换 legacy / channel-routed 主链

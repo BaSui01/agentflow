@@ -184,7 +184,7 @@ type claudeMessage struct {
 }
 
 type claudeContent struct {
-	Type      string          `json:"type"` // text, tool_use, tool_result, image, thinking, server_tool_use, web_search_tool_result
+	Type      string          `json:"type"` // text, tool_use, tool_result, image, thinking, redacted_thinking, server_tool_use, web_search_tool_result
 	Text      string          `json:"text,omitempty"`
 	ID        string          `json:"id,omitempty"`
 	Name      string          `json:"name,omitempty"`
@@ -197,6 +197,7 @@ type claudeContent struct {
 	// Thinking fields (for type="thinking")
 	Thinking  string `json:"thinking,omitempty"`
 	Signature string `json:"signature,omitempty"`
+	Data      string `json:"data,omitempty"` // for type="redacted_thinking"
 	// Web search fields
 	Citations []claudeCitation `json:"citations,omitempty"` // text 块上的引用标注
 
@@ -477,6 +478,21 @@ func convertToClaudeMessages(msgs []types.Message) (string, []claudeMessage) {
 					Type:      "thinking",
 					Thinking:  tb.Thinking,
 					Signature: tb.Signature,
+				})
+			}
+		}
+		if m.Role == llm.RoleAssistant && len(m.OpaqueReasoning) > 0 {
+			for _, opaque := range m.OpaqueReasoning {
+				provider := strings.TrimSpace(opaque.Provider)
+				if provider != "" && provider != "anthropic" {
+					continue
+				}
+				if strings.TrimSpace(opaque.Kind) != "redacted_thinking" || strings.TrimSpace(opaque.State) == "" {
+					continue
+				}
+				cm.Content = append(cm.Content, claudeContent{
+					Type: "redacted_thinking",
+					Data: opaque.State,
 				})
 			}
 		}
@@ -825,10 +841,17 @@ func (p *ClaudeProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-ch
 		// Claude 流式响应累积状态
 		var currentID string
 		var currentModel string
-		var toolCallAccumulator = make(map[int]*types.ToolCall) // 累积工具调用
-		var startUsage *claudeUsage                             // message_start 中的初始 usage
-		var webSearchBlockIndices = make(map[int]bool)          // 标记 server_tool_use / web_search_tool_result 块索引
+		var toolCallAccumulator = make(map[int]*types.ToolCall)  // 累积工具调用
+		var startUsage *claudeUsage                              // message_start 中的初始 usage
+		var webSearchBlockIndices = make(map[int]bool)           // 标记 server_tool_use / web_search_tool_result 块索引
 		var citationAccumulator = make(map[int][]claudeCitation) // 累积 text 块的引用（流式中通过 content_block_stop 发送）
+		type thinkingBlockState struct {
+			blockType string
+			thinking  strings.Builder
+			signature string
+			data      string
+		}
+		var thinkingAccumulator = make(map[int]*thinkingBlockState)
 
 		for {
 			line, err := reader.ReadString('\n')
@@ -907,6 +930,13 @@ func (p *ClaudeProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-ch
 					case "server_tool_use", "web_search_tool_result":
 						// 标记为搜索相关块，静默跳过其增量
 						webSearchBlockIndices[event.Index] = true
+					case "thinking":
+						thinkingAccumulator[event.Index] = &thinkingBlockState{blockType: "thinking"}
+					case "redacted_thinking":
+						thinkingAccumulator[event.Index] = &thinkingBlockState{
+							blockType: "redacted_thinking",
+							data:      event.ContentBlock.Data,
+						}
 					}
 				}
 
@@ -939,9 +969,15 @@ func (p *ClaudeProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-ch
 						}
 					case "thinking_delta":
 						thinking := event.Delta.Thinking
+						if state, ok := thinkingAccumulator[event.Index]; ok {
+							state.thinking.WriteString(thinking)
+						}
 						chunk.Delta.ReasoningContent = &thinking
 						sendChunk = true
 					case "signature_delta":
+						if state, ok := thinkingAccumulator[event.Index]; ok {
+							state.signature = event.Delta.Signature
+						}
 						// signature_delta 用于验证 thinking 块完整性，不发送 chunk
 					case "citations_delta":
 						// 引用增量 — 累积到 citationAccumulator，在 content_block_stop 时发送
@@ -977,6 +1013,55 @@ func (p *ClaudeProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-ch
 					}:
 					}
 					delete(toolCallAccumulator, event.Index)
+				}
+
+				if state, ok := thinkingAccumulator[event.Index]; ok {
+					switch state.blockType {
+					case "thinking":
+						block := types.ThinkingBlock{
+							Thinking:  strings.TrimSpace(state.thinking.String()),
+							Signature: strings.TrimSpace(state.signature),
+						}
+						if block.Thinking != "" || block.Signature != "" {
+							select {
+							case <-ctx.Done():
+								return
+							case ch <- llm.StreamChunk{
+								ID:       currentID,
+								Provider: p.Name(),
+								Model:    currentModel,
+								Index:    event.Index,
+								Delta: types.Message{
+									Role:           llm.RoleAssistant,
+									ThinkingBlocks: []types.ThinkingBlock{block},
+								},
+							}:
+							}
+						}
+					case "redacted_thinking":
+						if strings.TrimSpace(state.data) != "" {
+							select {
+							case <-ctx.Done():
+								return
+							case ch <- llm.StreamChunk{
+								ID:       currentID,
+								Provider: p.Name(),
+								Model:    currentModel,
+								Index:    event.Index,
+								Delta: types.Message{
+									Role: llm.RoleAssistant,
+									OpaqueReasoning: []types.OpaqueReasoning{{
+										Provider:  p.Name(),
+										Kind:      "redacted_thinking",
+										State:     state.data,
+										PartIndex: event.Index,
+									}},
+								},
+							}:
+							}
+						}
+					}
+					delete(thinkingAccumulator, event.Index)
 				}
 
 				// text 块结束时，发送累积的引用标注
@@ -1083,6 +1168,7 @@ func toClaudeChatResponse(cr claudeResponse, provider string) *llm.ChatResponse 
 	var signatures []string
 	var thinkingParts []string
 	var thinkingBlocks []types.ThinkingBlock
+	var opaqueReasoning []types.OpaqueReasoning
 	var webSearchBlocks []json.RawMessage // 保存 server_tool_use / web_search_tool_result 原始块用于多轮回传
 
 	for _, content := range cr.Content {
@@ -1118,6 +1204,14 @@ func toClaudeChatResponse(cr claudeResponse, provider string) *llm.ChatResponse 
 				Thinking:  content.Thinking,
 				Signature: content.Signature,
 			})
+		case "redacted_thinking":
+			if strings.TrimSpace(content.Data) != "" {
+				opaqueReasoning = append(opaqueReasoning, types.OpaqueReasoning{
+					Provider: "anthropic",
+					Kind:     "redacted_thinking",
+					State:    content.Data,
+				})
+			}
 		case "server_tool_use", "web_search_tool_result":
 			// 保存原始 JSON 用于多轮 round-trip
 			raw, err := json.Marshal(content)
@@ -1132,6 +1226,9 @@ func toClaudeChatResponse(cr claudeResponse, provider string) *llm.ChatResponse 
 	}
 	if len(thinkingBlocks) > 0 {
 		msg.ThinkingBlocks = thinkingBlocks
+	}
+	if len(opaqueReasoning) > 0 {
+		msg.OpaqueReasoning = opaqueReasoning
 	}
 
 	// 保存 web search blocks 到 metadata 用于多轮回传
@@ -1159,7 +1256,7 @@ func toClaudeChatResponse(cr claudeResponse, provider string) *llm.ChatResponse 
 		// Bug7 fix: 映射 cache token 用量
 		if cr.Usage.CacheCreationInputTokens > 0 || cr.Usage.CacheReadInputTokens > 0 {
 			resp.Usage.PromptTokensDetails = &llm.PromptTokensDetails{
-				CachedTokens: cr.Usage.CacheReadInputTokens,
+				CachedTokens:        cr.Usage.CacheReadInputTokens,
 				CacheCreationTokens: cr.Usage.CacheCreationInputTokens,
 			}
 		}

@@ -170,4 +170,78 @@ func TestReActExecutor_ExecuteStream_AssemblesToolCallArgumentsAcrossChunks(t *t
 	}
 }
 
+func TestReActExecutor_ExecuteStream_PreservesReasoningMetadata(t *testing.T) {
+	logger := zap.NewNop()
 
+	stream1 := make(chan llmpkg.StreamChunk, 2)
+	go func() {
+		defer close(stream1)
+		stream1 <- llmpkg.StreamChunk{
+			ID:       "c1",
+			Provider: "scripted",
+			Model:    "dummy",
+			Delta: llmpkg.Message{
+				Role:             llmpkg.RoleAssistant,
+				ReasoningContent: strPtr("summary"),
+				ReasoningSummaries: []llmpkg.ReasoningSummary{
+					{Provider: "openai", ID: "rs_1", Kind: "summary_text", Text: "summary"},
+				},
+				OpaqueReasoning: []llmpkg.OpaqueReasoning{
+					{Provider: "openai", ID: "rs_1", Kind: "encrypted_content", State: "enc_1"},
+				},
+				ThinkingBlocks: []llmpkg.ThinkingBlock{
+					{Thinking: "step 1", Signature: "sig_1"},
+				},
+			},
+			FinishReason: "stop",
+		}
+	}()
+
+	provider := &scriptedProvider{
+		supportsNative:  true,
+		streamResponses: []<-chan llmpkg.StreamChunk{stream1},
+	}
+	toolExec := &countingToolExecutor{}
+	executor := NewReActExecutor(provider, toolExec, ReActConfig{MaxIterations: 1}, logger)
+
+	evCh, err := executor.ExecuteStream(context.Background(), &llmpkg.ChatRequest{
+		Model:    "dummy",
+		Messages: []llmpkg.Message{{Role: llmpkg.RoleUser, Content: "hi"}},
+		Tools: []llmpkg.ToolSchema{{
+			Name:       "echo",
+			Parameters: json.RawMessage(`{"type":"object","properties":{"text":{"type":"string"}},"required":["text"]}`),
+		}},
+	})
+	if err != nil {
+		t.Fatalf("ExecuteStream failed: %v", err)
+	}
+
+	var final *llmpkg.ChatResponse
+	for ev := range evCh {
+		switch ev.Type {
+		case "completed":
+			final = ev.FinalResponse
+		case "error":
+			t.Fatalf("unexpected error event: %s", ev.Error)
+		}
+	}
+
+	if final == nil || len(final.Choices) == 0 {
+		t.Fatalf("unexpected final response: %#v", final)
+	}
+	msg := final.Choices[0].Message
+	if msg.ReasoningContent == nil || *msg.ReasoningContent != "summary" {
+		t.Fatalf("unexpected reasoning content: %#v", msg.ReasoningContent)
+	}
+	if len(msg.ReasoningSummaries) != 1 || msg.ReasoningSummaries[0].Text != "summary" {
+		t.Fatalf("unexpected reasoning summaries: %#v", msg.ReasoningSummaries)
+	}
+	if len(msg.OpaqueReasoning) != 1 || msg.OpaqueReasoning[0].State != "enc_1" {
+		t.Fatalf("unexpected opaque reasoning: %#v", msg.OpaqueReasoning)
+	}
+	if len(msg.ThinkingBlocks) != 1 || msg.ThinkingBlocks[0].Signature != "sig_1" {
+		t.Fatalf("unexpected thinking blocks: %#v", msg.ThinkingBlocks)
+	}
+}
+
+func strPtr(s string) *string { return &s }

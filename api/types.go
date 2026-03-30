@@ -93,6 +93,8 @@ type ChatRequest struct {
 	MaxCompletionTokens *int `json:"max_completion_tokens,omitempty"`
 	// 推理强度（none/minimal/low/medium/high/xhigh）
 	ReasoningEffort string `json:"reasoning_effort,omitempty"`
+	// OpenAI Responses reasoning.summary（auto/concise/detailed）
+	ReasoningSummary string `json:"reasoning_summary,omitempty"`
 	// 是否存储请求
 	Store *bool `json:"store,omitempty"`
 	// 输出模态（如 ["text","audio"]）
@@ -245,6 +247,10 @@ type Message struct {
 	Content string `json:"content,omitempty" example:"Hello, how are you?"`
 	// 推理/思考内容
 	ReasoningContent *string `json:"reasoning_content,omitempty"`
+	// 可展示的 provider-native reasoning/thinking summaries
+	ReasoningSummaries []types.ReasoningSummary `json:"reasoning_summaries,omitempty"`
+	// 不可展示的 opaque/encrypted reasoning state，用于 round-trip
+	OpaqueReasoning []types.OpaqueReasoning `json:"opaque_reasoning,omitempty"`
 	// Claude thinking blocks（用于多轮 round-trip）
 	ThinkingBlocks []types.ThinkingBlock `json:"thinking_blocks,omitempty"`
 	// 模型拒绝内容

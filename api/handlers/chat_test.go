@@ -440,6 +440,7 @@ func TestChatHandler_ConvertToLLMRequest(t *testing.T) {
 		User:                "openai-user",
 		MaxCompletionTokens: intPtr(80),
 		ReasoningEffort:     "low",
+		ReasoningSummary:    "detailed",
 		Store:               boolPtr(true),
 		Modalities:          []string{"text"},
 		WebSearchOptions: &api.WebSearchOptions{
@@ -487,6 +488,7 @@ func TestChatHandler_ConvertToLLMRequest(t *testing.T) {
 	require.NotNil(t, llmReq.MaxCompletionTokens)
 	assert.Equal(t, 80, *llmReq.MaxCompletionTokens)
 	assert.Equal(t, "low", llmReq.ReasoningEffort)
+	assert.Equal(t, "detailed", llmReq.ReasoningSummary)
 	require.NotNil(t, llmReq.Store)
 	assert.True(t, *llmReq.Store)
 	assert.Equal(t, []string{"text"}, llmReq.Modalities)

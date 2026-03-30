@@ -194,6 +194,12 @@ func TestChatHandler_OpenAICompatResponses(t *testing.T) {
 						Message: api.Message{
 							Role:    "assistant",
 							Content: "done",
+							ReasoningSummaries: []types.ReasoningSummary{
+								{Provider: "openai", ID: "rs_resp_1", Kind: "summary_text", Text: "summary text"},
+							},
+							OpaqueReasoning: []types.OpaqueReasoning{
+								{Provider: "openai", ID: "rs_resp_1", Kind: "encrypted_content", State: "enc_resp"},
+							},
 						},
 					},
 				},
@@ -211,7 +217,7 @@ func TestChatHandler_OpenAICompatResponses(t *testing.T) {
 	body := []byte(`{
 		"model":"gpt-5.2",
 		"input":"hello from responses",
-		"reasoning":{"effort":"medium"},
+		"reasoning":{"effort":"medium","summary":"detailed"},
 		"text":{"format":{"type":"json_schema","json_schema":{"name":"resp_fmt","schema":{"type":"object"},"strict":true}}},
 		"parallel_tool_calls":true,
 		"service_tier":"default",
@@ -254,6 +260,7 @@ func TestChatHandler_OpenAICompatResponses(t *testing.T) {
 	require.NotNil(t, svc.completeReq.ResponseFormat.JSONSchema)
 	assert.Equal(t, "resp_fmt", svc.completeReq.ResponseFormat.JSONSchema.Name)
 	assert.Equal(t, "medium", svc.completeReq.ReasoningEffort)
+	assert.Equal(t, "detailed", svc.completeReq.ReasoningSummary)
 	require.NotNil(t, svc.completeReq.ParallelToolCalls)
 	assert.True(t, *svc.completeReq.ParallelToolCalls)
 	require.NotNil(t, svc.completeReq.ServiceTier)
@@ -278,7 +285,11 @@ func TestChatHandler_OpenAICompatResponses(t *testing.T) {
 	assert.Equal(t, "response", resp.Object)
 	assert.Equal(t, "gpt-5.2", resp.Model)
 	require.NotEmpty(t, resp.Output)
-	assert.Equal(t, "message", resp.Output[0].Type)
+	assert.Equal(t, "reasoning", resp.Output[0].Type)
+	assert.Equal(t, "enc_resp", resp.Output[0].EncryptedContent)
+	require.Len(t, resp.Output[0].Summary, 1)
+	assert.Equal(t, "summary text", resp.Output[0].Summary[0].Text)
+	assert.Equal(t, "message", resp.Output[1].Type)
 }
 
 func TestChatHandler_OpenAICompatResponses_Stream(t *testing.T) {
@@ -363,4 +374,47 @@ func TestChatHandler_OpenAICompatResponses_WebSearchToolFilters(t *testing.T) {
 	assert.Equal(t, "CN", svc.completeReq.WebSearchOptions.UserLocation.Country)
 	assert.Equal(t, "Beijing", svc.completeReq.WebSearchOptions.UserLocation.City)
 	assert.Equal(t, []string{"example.com", "docs.example.com"}, svc.completeReq.WebSearchOptions.AllowedDomains)
+}
+
+func TestChatHandler_OpenAICompatResponses_InputReasoningRoundTrip(t *testing.T) {
+	svc := &openAICompatServiceStub{
+		completeResult: &usecase.ChatCompletionResult{
+			Response: &api.ChatResponse{
+				ID:    "resp_test",
+				Model: "gpt-5.2",
+				Choices: []api.ChatChoice{{
+					Index: 0,
+					Message: api.Message{
+						Role:    "assistant",
+						Content: "done",
+					},
+				}},
+			},
+		},
+	}
+	handler := NewChatHandlerWithService(svc, zap.NewNop())
+
+	body := []byte(`{
+		"model":"gpt-5.2",
+		"input":[
+			{"type":"reasoning","id":"rs_prev","status":"completed","summary":[{"type":"summary_text","text":"previous summary"}],"encrypted_content":"enc_prev"},
+			{"role":"user","content":"next question"}
+		]
+	}`)
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPost, "/v1/responses", bytes.NewReader(body))
+	r.Header.Set("Content-Type", "application/json")
+
+	handler.HandleOpenAICompatResponses(w, r)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	require.NotNil(t, svc.completeReq)
+	require.Len(t, svc.completeReq.Messages, 2)
+	require.NotNil(t, svc.completeReq.Messages[0].ReasoningContent)
+	assert.Equal(t, "previous summary", *svc.completeReq.Messages[0].ReasoningContent)
+	require.Len(t, svc.completeReq.Messages[0].ReasoningSummaries, 1)
+	assert.Equal(t, "summary_text", svc.completeReq.Messages[0].ReasoningSummaries[0].Kind)
+	require.Len(t, svc.completeReq.Messages[0].OpaqueReasoning, 1)
+	assert.Equal(t, "enc_prev", svc.completeReq.Messages[0].OpaqueReasoning[0].State)
+	assert.Equal(t, "next question", svc.completeReq.Messages[1].Content)
 }

@@ -11,6 +11,8 @@ import (
 	llmtools "github.com/BaSui01/agentflow/llm/capabilities/tools"
 	"github.com/BaSui01/agentflow/llm/observability"
 	"github.com/BaSui01/agentflow/types"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 )
 
@@ -942,6 +944,8 @@ func buildTestAgentWithProvider(t *testing.T, id string, prov llm.Provider) *Bas
 	return ag
 }
 
+func stringPtr(s string) *string { return &s }
+
 // ═══ 1. chatCompletionStreaming — no tools (plain stream) ═══
 
 func TestChatCompletionStreaming_NoTools(t *testing.T) {
@@ -1006,6 +1010,62 @@ func TestChatCompletion_StreamingPath(t *testing.T) {
 	if len(tokens) == 0 {
 		t.Fatal("expected tokens from streaming emitter")
 	}
+}
+
+func TestChatCompletion_StreamingPath_PreservesReasoningMetadata(t *testing.T) {
+	prov := &streamingMockProvider{
+		chunks: []llm.StreamChunk{
+			{
+				ID:       "s2",
+				Model:    "m",
+				Provider: "openai",
+				Delta: types.Message{
+					Role:             llm.RoleAssistant,
+					ReasoningContent: stringPtr("summary delta"),
+				},
+			},
+			{
+				ID:       "s2",
+				Model:    "m",
+				Provider: "openai",
+				Delta: types.Message{
+					Role: llm.RoleAssistant,
+					ReasoningSummaries: []types.ReasoningSummary{
+						{Provider: "openai", ID: "rs_1", Kind: "summary_text", Text: "summary delta"},
+					},
+					OpaqueReasoning: []types.OpaqueReasoning{
+						{Provider: "openai", ID: "rs_1", Kind: "encrypted_content", State: "enc_1"},
+					},
+					ThinkingBlocks: []types.ThinkingBlock{
+						{Thinking: "step 1", Signature: "sig_1"},
+					},
+				},
+				FinishReason: "stop",
+			},
+		},
+	}
+
+	ag := buildTestAgentWithProvider(t, "cc-stream-reasoning", prov)
+	ag.Init(context.Background())
+
+	ctx := WithRuntimeStreamEmitter(context.Background(), func(RuntimeStreamEvent) {})
+	resp, err := ag.ChatCompletion(ctx, []types.Message{
+		{Role: llm.RoleUser, Content: "hello"},
+	})
+	if err != nil {
+		t.Fatalf("ChatCompletion streaming failed: %v", err)
+	}
+	require.NotNil(t, resp)
+	require.Len(t, resp.Choices, 1)
+	msg := resp.Choices[0].Message
+	require.NotNil(t, msg.ReasoningContent)
+	assert.Equal(t, "summary delta", *msg.ReasoningContent)
+	require.Len(t, msg.ReasoningSummaries, 1)
+	assert.Equal(t, "summary_text", msg.ReasoningSummaries[0].Kind)
+	require.Len(t, msg.OpaqueReasoning, 1)
+	assert.Equal(t, "enc_1", msg.OpaqueReasoning[0].State)
+	require.Len(t, msg.ThinkingBlocks, 1)
+	assert.Equal(t, "sig_1", msg.ThinkingBlocks[0].Signature)
 }
 
 // ═══ 2. wrapProviderWithGateway ═══

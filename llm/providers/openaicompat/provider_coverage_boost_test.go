@@ -350,6 +350,63 @@ func TestProvider_Stream_UsageOnlyChunk(t *testing.T) {
 	assert.True(t, gotUsage)
 }
 
+func TestProvider_Completion_PreservesReasoningContent(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]any{
+			"id":    "r_reasoning",
+			"model": "m",
+			"choices": []map[string]any{
+				{
+					"index":         0,
+					"finish_reason": "stop",
+					"message": map[string]any{
+						"role":              "assistant",
+						"content":           "ok",
+						"reasoning_content": "compat reasoning",
+					},
+				},
+			},
+		})
+	}))
+	t.Cleanup(server.Close)
+
+	p := New(Config{ProviderName: "test", APIKey: "key", BaseURL: server.URL}, zap.NewNop())
+	resp, err := p.Completion(context.Background(), &llm.ChatRequest{
+		Messages: []llm.Message{{Role: llm.RoleUser, Content: "Hi"}},
+	})
+	require.NoError(t, err)
+	require.Len(t, resp.Choices, 1)
+	require.NotNil(t, resp.Choices[0].Message.ReasoningContent)
+	assert.Equal(t, "compat reasoning", *resp.Choices[0].Message.ReasoningContent)
+}
+
+func TestProvider_Stream_PreservesReasoningContent(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		chunk := `{"id":"s1","model":"m","choices":[{"index":0,"delta":{"role":"assistant","reasoning_content":"compat delta"},"finish_reason":""}]}`
+		fmt.Fprintf(w, "data: %s\n\n", chunk)
+		fmt.Fprint(w, "data: [DONE]\n\n")
+	}))
+	t.Cleanup(server.Close)
+
+	p := New(Config{ProviderName: "test", APIKey: "key", BaseURL: server.URL}, zap.NewNop())
+	ch, err := p.Stream(context.Background(), &llm.ChatRequest{
+		Messages: []llm.Message{{Role: llm.RoleUser, Content: "Hi"}},
+	})
+	require.NoError(t, err)
+
+	var got *string
+	for chunk := range ch {
+		require.Nil(t, chunk.Err)
+		if chunk.Delta.ReasoningContent != nil {
+			got = chunk.Delta.ReasoningContent
+		}
+	}
+	require.NotNil(t, got)
+	assert.Equal(t, "compat delta", *got)
+}
+
 // ---------------------------------------------------------------------------
 // convertWebSearchOptions nil
 // ---------------------------------------------------------------------------

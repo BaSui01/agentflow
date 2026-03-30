@@ -121,7 +121,8 @@ type openAICompatInboundTool struct {
 }
 
 type openAICompatResponsesReasoning struct {
-	Effort string `json:"effort,omitempty"`
+	Effort  string `json:"effort,omitempty"`
+	Summary string `json:"summary,omitempty"`
 }
 
 type openAICompatResponsesTextParam struct {
@@ -218,14 +219,16 @@ type openAICompatChatUsage struct {
 }
 
 type openAICompatResponsesOutput struct {
-	ID        string                         `json:"id,omitempty"`
-	Type      string                         `json:"type"`
-	Status    string                         `json:"status,omitempty"`
-	Role      string                         `json:"role,omitempty"`
-	Content   []openAICompatResponsesContent `json:"content,omitempty"`
-	Name      string                         `json:"name,omitempty"`
-	Arguments json.RawMessage                `json:"arguments,omitempty"`
-	CallID    string                         `json:"call_id,omitempty"`
+	ID               string                         `json:"id,omitempty"`
+	Type             string                         `json:"type"`
+	Status           string                         `json:"status,omitempty"`
+	Role             string                         `json:"role,omitempty"`
+	Content          []openAICompatResponsesContent `json:"content,omitempty"`
+	Summary          []openAICompatResponsesContent `json:"summary,omitempty"`
+	EncryptedContent string                         `json:"encrypted_content,omitempty"`
+	Name             string                         `json:"name,omitempty"`
+	Arguments        json.RawMessage                `json:"arguments,omitempty"`
+	CallID           string                         `json:"call_id,omitempty"`
 }
 
 type openAICompatResponsesContent struct {
@@ -560,6 +563,7 @@ func buildAPIChatRequestFromCompatCompletions(req openAICompatChatCompletionsReq
 		ServiceTier:         req.ServiceTier,
 		User:                req.User,
 		ReasoningEffort:     strings.TrimSpace(req.ReasoningEffort),
+		ReasoningSummary:    "",
 		Store:               req.Store,
 		Modalities:          req.Modalities,
 		PreviousResponseID:  strings.TrimSpace(req.PreviousResponseID),
@@ -615,8 +619,10 @@ func buildAPIChatRequestFromCompatResponses(req openAICompatResponsesRequest) (*
 	}
 
 	reasoningEffort := ""
+	reasoningSummary := ""
 	if req.Reasoning != nil {
 		reasoningEffort = strings.TrimSpace(req.Reasoning.Effort)
+		reasoningSummary = strings.TrimSpace(req.Reasoning.Summary)
 	}
 	wsOptions := mergeOpenAICompatWebSearchOptions(req.WebSearchOptions, wsOptionsFromTools)
 
@@ -634,6 +640,7 @@ func buildAPIChatRequestFromCompatResponses(req openAICompatResponsesRequest) (*
 		ServiceTier:         req.ServiceTier,
 		User:                req.User,
 		ReasoningEffort:     reasoningEffort,
+		ReasoningSummary:    reasoningSummary,
 		Store:               req.Store,
 		PreviousResponseID:  strings.TrimSpace(req.PreviousResponseID),
 		Include:             req.Include,
@@ -946,6 +953,10 @@ func convertOpenAICompatResponsesInput(input any) ([]api.Message, *types.Error) 
 				})
 				continue
 			}
+			if itemType == "reasoning" {
+				out = append(out, convertOpenAICompatReasoningInputItem(m))
+				continue
+			}
 			role := strings.TrimSpace(asString(m["role"]))
 			if role == "" {
 				role = "user"
@@ -962,6 +973,93 @@ func convertOpenAICompatResponsesInput(input any) ([]api.Message, *types.Error) 
 	default:
 		return nil, types.NewInvalidRequestError("responses input must be string or array")
 	}
+}
+
+func convertOpenAICompatReasoningInputItem(item map[string]any) api.Message {
+	msg := api.Message{Role: "assistant"}
+	itemID := strings.TrimSpace(asString(item["id"]))
+	if summaries := convertOpenAICompatReasoningSummaries(item["summary"], itemID); len(summaries) > 0 {
+		msg.ReasoningSummaries = summaries
+		joined := joinOpenAICompatSummaryTexts(summaries)
+		if joined != "" {
+			msg.ReasoningContent = &joined
+		}
+	}
+	if content := convertOpenAICompatReasoningText(item["content"]); content != "" {
+		msg.ReasoningContent = &content
+	}
+	if encrypted := strings.TrimSpace(asString(item["encrypted_content"])); encrypted != "" {
+		msg.OpaqueReasoning = append(msg.OpaqueReasoning, types.OpaqueReasoning{
+			Provider: "openai",
+			ID:       itemID,
+			Kind:     "encrypted_content",
+			State:    encrypted,
+			Status:   strings.TrimSpace(asString(item["status"])),
+		})
+	}
+	return msg
+}
+
+func convertOpenAICompatReasoningSummaries(raw any, itemID string) []types.ReasoningSummary {
+	items, ok := raw.([]any)
+	if !ok {
+		return nil
+	}
+	out := make([]types.ReasoningSummary, 0, len(items))
+	for _, item := range items {
+		m, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		text := strings.TrimSpace(asString(m["text"]))
+		if text == "" {
+			continue
+		}
+		kind := strings.TrimSpace(asString(m["type"]))
+		if kind == "" {
+			kind = "summary_text"
+		}
+		out = append(out, types.ReasoningSummary{
+			Provider: "openai",
+			ID:       itemID,
+			Kind:     kind,
+			Text:     text,
+		})
+	}
+	return out
+}
+
+func joinOpenAICompatSummaryTexts(summaries []types.ReasoningSummary) string {
+	parts := make([]string, 0, len(summaries))
+	for _, summary := range summaries {
+		if strings.TrimSpace(summary.Text) != "" {
+			parts = append(parts, summary.Text)
+		}
+	}
+	return strings.Join(parts, "\n\n")
+}
+
+func convertOpenAICompatReasoningText(raw any) string {
+	items, ok := raw.([]any)
+	if !ok {
+		return ""
+	}
+	parts := make([]string, 0, len(items))
+	for _, item := range items {
+		m, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		text := strings.TrimSpace(asString(m["text"]))
+		if text == "" {
+			continue
+		}
+		if kind := strings.TrimSpace(asString(m["type"])); kind != "" && kind != "reasoning_text" {
+			continue
+		}
+		parts = append(parts, text)
+	}
+	return strings.Join(parts, "\n\n")
 }
 
 func convertOpenAICompatInboundTools(in []openAICompatInboundTool) ([]api.ToolSchema, *llm.WebSearchOptions, *types.Error) {
@@ -1133,6 +1231,9 @@ func toOpenAICompatResponsesResponse(resp *api.ChatResponse) openAICompatRespons
 	}
 
 	for i, c := range resp.Choices {
+		if reasoningOut := toOpenAICompatResponsesReasoningOutput(c.Message, i); reasoningOut != nil {
+			out.Output = append(out.Output, *reasoningOut)
+		}
 		msgOut := openAICompatResponsesOutput{
 			ID:     fmt.Sprintf("msg_%d", i+1),
 			Type:   "message",
@@ -1152,6 +1253,48 @@ func toOpenAICompatResponsesResponse(resp *api.ChatResponse) openAICompatRespons
 				CallID:    tc.ID,
 			})
 		}
+	}
+	return out
+}
+
+func toOpenAICompatResponsesReasoningOutput(msg api.Message, index int) *openAICompatResponsesOutput {
+	out := &openAICompatResponsesOutput{
+		ID:     fmt.Sprintf("rs_%d", index+1),
+		Type:   "reasoning",
+		Status: "completed",
+	}
+
+	for _, summary := range msg.ReasoningSummaries {
+		if strings.TrimSpace(summary.Text) == "" {
+			continue
+		}
+		out.Summary = append(out.Summary, openAICompatResponsesContent{
+			Type: "summary_text",
+			Text: summary.Text,
+		})
+		if strings.TrimSpace(summary.ID) != "" {
+			out.ID = strings.TrimSpace(summary.ID)
+		}
+	}
+	if len(out.Summary) == 0 && msg.ReasoningContent != nil && strings.TrimSpace(*msg.ReasoningContent) != "" {
+		out.Content = []openAICompatResponsesContent{{
+			Type: "reasoning_text",
+			Text: *msg.ReasoningContent,
+		}}
+	}
+	for _, opaque := range msg.OpaqueReasoning {
+		if strings.TrimSpace(opaque.Kind) != "encrypted_content" || strings.TrimSpace(opaque.State) == "" {
+			continue
+		}
+		out.EncryptedContent = opaque.State
+		if strings.TrimSpace(opaque.ID) != "" {
+			out.ID = strings.TrimSpace(opaque.ID)
+		}
+		break
+	}
+
+	if len(out.Summary) == 0 && len(out.Content) == 0 && strings.TrimSpace(out.EncryptedContent) == "" {
+		return nil
 	}
 	return out
 }

@@ -20,13 +20,16 @@
 
 ```go
 type Message struct {
-    Role             Role           `json:"role"`    // 角色: system, user, assistant, tool
-    Content          string         `json:"content"` // 消息内容
-    ReasoningContent *string        `json:"reasoning_content,omitempty"` // 推理/思考内容
-    Name             string         `json:"name,omitempty"`
-    ToolCalls        []ToolCall     `json:"tool_calls,omitempty"`
-    ToolCallID       string         `json:"tool_call_id,omitempty"`
-    Images           []ImageContent `json:"images,omitempty"`
+    Role               Role               `json:"role"`    // 角色: system, user, assistant, tool
+    Content            string             `json:"content"` // 消息内容
+    ReasoningContent   *string            `json:"reasoning_content,omitempty"`   // 兼容旧下游的可展示 reasoning/thinking 文本
+    ReasoningSummaries []ReasoningSummary `json:"reasoning_summaries,omitempty"` // provider-native reasoning/thinking summaries
+    OpaqueReasoning    []OpaqueReasoning  `json:"opaque_reasoning,omitempty"`    // 不可展示的 opaque/encrypted reasoning state
+    ThinkingBlocks     []ThinkingBlock    `json:"thinking_blocks,omitempty"`     // Claude round-trip thinking blocks
+    Name               string             `json:"name,omitempty"`
+    ToolCalls          []ToolCall         `json:"tool_calls,omitempty"`
+    ToolCallID         string             `json:"tool_call_id,omitempty"`
+    Images             []ImageContent     `json:"images,omitempty"`
 }
 ```
 
@@ -203,13 +206,15 @@ type Provider interface {
 
 ```go
 type ChatRequest struct {
-    Model       string        `json:"model"`
-    Messages    []Message     `json:"messages"`
-    MaxTokens   int           `json:"max_tokens,omitempty"`
-    Temperature float32       `json:"temperature,omitempty"`
-    TopP        float32       `json:"top_p,omitempty"`
-    Tools       []ToolSchema  `json:"tools,omitempty"`
-    Stream      bool          `json:"stream,omitempty"`
+    Model            string       `json:"model"`
+    Messages         []Message    `json:"messages"`
+    MaxTokens        int          `json:"max_tokens,omitempty"`
+    Temperature      float32      `json:"temperature,omitempty"`
+    TopP             float32      `json:"top_p,omitempty"`
+    ReasoningEffort  string       `json:"reasoning_effort,omitempty"`
+    ReasoningSummary string       `json:"reasoning_summary,omitempty"` // OpenAI Responses reasoning.summary
+    Tools            []ToolSchema `json:"tools,omitempty"`
+    Stream           bool         `json:"stream,omitempty"`
 }
 ```
 

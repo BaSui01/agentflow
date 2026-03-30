@@ -178,6 +178,16 @@ type functionCallOutputItem struct {
 	Output string `json:"output"`
 }
 
+// responsesReasoningInputItem represents a reasoning item re-sent for manual round-tripping.
+type responsesReasoningInputItem struct {
+	Type             string             `json:"type"` // "reasoning"
+	ID               string             `json:"id,omitempty"`
+	Status           string             `json:"status,omitempty"`
+	Summary          []responsesContent `json:"summary,omitempty"`
+	Content          []responsesContent `json:"content,omitempty"`
+	EncryptedContent string             `json:"encrypted_content,omitempty"`
+}
+
 // --- Responses API Response Types ---
 
 // openAIResponsesResponse represents the Responses API response.
@@ -218,11 +228,12 @@ type responsesError struct {
 
 // responsesOutputItem represents an item in the response output array.
 type responsesOutputItem struct {
-	Type    string             `json:"type"` // "message", "function_call", "reasoning"
-	ID      string             `json:"id"`
-	Status  string             `json:"status,omitempty"`
-	Role    string             `json:"role,omitempty"`
-	Content []responsesContent `json:"content,omitempty"`
+	Type             string             `json:"type"` // "message", "function_call", "reasoning"
+	ID               string             `json:"id"`
+	Status           string             `json:"status,omitempty"`
+	Role             string             `json:"role,omitempty"`
+	Content          []responsesContent `json:"content,omitempty"`
+	EncryptedContent string             `json:"encrypted_content,omitempty"`
 	// function_call fields
 	Name      string          `json:"name,omitempty"`
 	Arguments json.RawMessage `json:"arguments,omitempty"`
@@ -281,7 +292,7 @@ func (p *OpenAIProvider) buildResponsesRequest(req *llm.ChatRequest) openAIRespo
 		ToolChoice:        req.ToolChoice,
 		Store:             req.Store,
 		Metadata:          req.Metadata,
-		Include:           req.Include,
+		Include:           append([]string(nil), req.Include...),
 		Truncation:        strings.TrimSpace(req.Truncation),
 		User:              req.User,
 		ServiceTier:       req.ServiceTier,
@@ -313,9 +324,16 @@ func (p *OpenAIProvider) buildResponsesRequest(req *llm.ChatRequest) openAIRespo
 	// 构建 tools（支持 OpenAI Responses 原生 web_search 工具）
 	body.Tools = buildResponsesTools(req)
 
-	// Reasoning: only pass valid effort values
+	// Reasoning: preserve official Responses reasoning controls and request opaque state for round-trip.
 	if effort, ok := chooseResponsesReasoningEffort(req); ok {
-		body.Reasoning = &responsesReasoning{Effort: effort}
+		body.Reasoning = &responsesReasoning{
+			Effort:  effort,
+			Summary: chooseResponsesReasoningSummary(req),
+		}
+		body.Include = ensureString(body.Include, "reasoning.encrypted_content")
+	} else if summary := chooseResponsesReasoningSummary(req); summary != "" {
+		body.Reasoning = &responsesReasoning{Summary: summary}
+		body.Include = ensureString(body.Include, "reasoning.encrypted_content")
 	}
 
 	// ResponseFormat → text.format
@@ -468,6 +486,9 @@ func convertMessagesToResponsesInput(msgs []types.Message) []any {
 				Content: buildInputContent(m),
 			})
 		case llm.RoleAssistant:
+			for _, reasoningItem := range buildOpenAIResponsesReasoningItems(m) {
+				items = append(items, reasoningItem)
+			}
 			if len(m.ToolCalls) > 0 {
 				if m.Content != "" {
 					items = append(items, responsesInputItem{
@@ -504,6 +525,49 @@ func convertMessagesToResponsesInput(msgs []types.Message) []any {
 			})
 		}
 	}
+	return items
+}
+
+func buildOpenAIResponsesReasoningItems(m types.Message) []responsesReasoningInputItem {
+	var items []responsesReasoningInputItem
+	groupedSummaries := make(map[string][]responsesContent)
+	for _, summary := range m.ReasoningSummaries {
+		provider := strings.TrimSpace(summary.Provider)
+		if provider != "" && provider != "openai" {
+			continue
+		}
+		id := strings.TrimSpace(summary.ID)
+		groupedSummaries[id] = append(groupedSummaries[id], responsesContent{
+			Type: "summary_text",
+			Text: summary.Text,
+		})
+	}
+
+	for _, opaque := range m.OpaqueReasoning {
+		provider := strings.TrimSpace(opaque.Provider)
+		if provider != "" && provider != "openai" {
+			continue
+		}
+		if strings.TrimSpace(opaque.Kind) != "encrypted_content" || strings.TrimSpace(opaque.State) == "" {
+			continue
+		}
+		itemID := strings.TrimSpace(opaque.ID)
+		if itemID == "" {
+			continue
+		}
+		item := responsesReasoningInputItem{
+			Type:             "reasoning",
+			ID:               itemID,
+			Status:           strings.TrimSpace(opaque.Status),
+			Summary:          groupedSummaries[itemID],
+			EncryptedContent: opaque.State,
+		}
+		if len(item.Summary) == 0 && m.ReasoningContent != nil && strings.TrimSpace(*m.ReasoningContent) != "" {
+			item.Summary = []responsesContent{{Type: "summary_text", Text: strings.TrimSpace(*m.ReasoningContent)}}
+		}
+		items = append(items, item)
+	}
+
 	return items
 }
 
@@ -563,6 +627,33 @@ func chooseResponsesReasoningEffort(req *llm.ChatRequest) (string, bool) {
 	}
 }
 
+func chooseResponsesReasoningSummary(req *llm.ChatRequest) string {
+	if req == nil {
+		return ""
+	}
+	switch strings.TrimSpace(req.ReasoningSummary) {
+	case "auto", "concise", "detailed":
+		return strings.TrimSpace(req.ReasoningSummary)
+	}
+	if _, ok := chooseResponsesReasoningEffort(req); ok {
+		return "auto"
+	}
+	return ""
+}
+
+func ensureString(values []string, value string) []string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return values
+	}
+	for _, existing := range values {
+		if strings.TrimSpace(existing) == value {
+			return values
+		}
+	}
+	return append(values, value)
+}
+
 func (p *OpenAIProvider) useResponsesAPIForRequest(req *llm.ChatRequest) bool {
 	mode := resolveEndpointMode(req)
 	switch mode {
@@ -600,45 +691,38 @@ func toResponsesAPIChatResponse(resp openAIResponsesResponse, provider string) *
 	for _, output := range resp.Output {
 		switch output.Type {
 		case "message":
-			msg := types.Message{Role: types.Role(output.Role)}
-			for _, content := range output.Content {
-				switch content.Type {
-				case "output_text":
-					msg.Content += content.Text
-					for _, ann := range content.Annotations {
-						msg.Annotations = append(msg.Annotations, types.Annotation{
-							Type:       ann.Type,
-							StartIndex: ann.StartIndex,
-							EndIndex:   ann.EndIndex,
-							URL:        ann.URL,
-							Title:      ann.Title,
-						})
-					}
-				case "refusal":
-					refusal := content.Refusal
-					msg.Refusal = &refusal
+			msg := buildResponsesMessage(output)
+			if len(choices) > 0 && choices[len(choices)-1].Message.Role == llm.RoleAssistant &&
+				choices[len(choices)-1].Message.Content == "" && len(choices[len(choices)-1].Message.ToolCalls) == 0 {
+				last := &choices[len(choices)-1]
+				last.Message.Content += msg.Content
+				last.Message.Annotations = append(last.Message.Annotations, msg.Annotations...)
+				if msg.Refusal != nil {
+					last.Message.Refusal = msg.Refusal
 				}
-			}
-			choices = append(choices, llm.ChatChoice{
-				Index: choiceIdx, FinishReason: mapResponsesStatus(resp.Status), Message: msg,
-			})
-			choiceIdx++
-
-		case "function_call":
-			if len(choices) == 0 || choices[len(choices)-1].Message.Role != llm.RoleAssistant {
+				last.FinishReason = mapResponsesStatus(resp.Status)
+			} else {
 				choices = append(choices, llm.ChatChoice{
-					Index: choiceIdx, FinishReason: "tool_calls",
-					Message: types.Message{Role: llm.RoleAssistant},
+					Index: choiceIdx, FinishReason: mapResponsesStatus(resp.Status), Message: msg,
 				})
 				choiceIdx++
 			}
-			lastIdx := len(choices) - 1
-			choices[lastIdx].Message.ToolCalls = append(choices[lastIdx].Message.ToolCalls, types.ToolCall{
+
+		case "reasoning":
+			choice := ensureResponsesAssistantChoice(&choices, &choiceIdx)
+			mergeResponsesReasoningItem(&choice.Message, output, provider)
+			if choice.FinishReason == "" {
+				choice.FinishReason = mapResponsesStatus(resp.Status)
+			}
+
+		case "function_call":
+			choice := ensureResponsesAssistantChoice(&choices, &choiceIdx)
+			choice.Message.ToolCalls = append(choice.Message.ToolCalls, types.ToolCall{
 				ID:        output.CallID,
 				Name:      output.Name,
 				Arguments: output.Arguments,
 			})
-			choices[lastIdx].FinishReason = "tool_calls"
+			choice.FinishReason = "tool_calls"
 		}
 	}
 
@@ -670,6 +754,190 @@ func toResponsesAPIChatResponse(resp openAIResponsesResponse, provider string) *
 		}
 	}
 	return chatResp
+}
+
+func buildResponsesMessage(output responsesOutputItem) types.Message {
+	msg := types.Message{Role: types.Role(output.Role)}
+	for _, content := range output.Content {
+		switch content.Type {
+		case "output_text":
+			msg.Content += content.Text
+			for _, ann := range content.Annotations {
+				msg.Annotations = append(msg.Annotations, types.Annotation{
+					Type:       ann.Type,
+					StartIndex: ann.StartIndex,
+					EndIndex:   ann.EndIndex,
+					URL:        ann.URL,
+					Title:      ann.Title,
+				})
+			}
+		case "refusal":
+			refusal := content.Refusal
+			msg.Refusal = &refusal
+		}
+	}
+	return msg
+}
+
+func ensureResponsesAssistantChoice(choices *[]llm.ChatChoice, choiceIdx *int) *llm.ChatChoice {
+	if len(*choices) == 0 || (*choices)[len(*choices)-1].Message.Role != llm.RoleAssistant {
+		*choices = append(*choices, llm.ChatChoice{
+			Index: *choiceIdx,
+			Message: types.Message{
+				Role: llm.RoleAssistant,
+			},
+		})
+		*choiceIdx = *choiceIdx + 1
+	}
+	return &(*choices)[len(*choices)-1]
+}
+
+func mergeResponsesReasoningItem(msg *types.Message, output responsesOutputItem, provider string) {
+	if msg == nil {
+		return
+	}
+	if msg.Role == "" {
+		msg.Role = llm.RoleAssistant
+	}
+	if summaries := responsesReasoningSummaries(output, provider); len(summaries) > 0 {
+		msg.ReasoningSummaries = append(msg.ReasoningSummaries, summaries...)
+	}
+	if opaque := responsesOpaqueReasoning(output, provider); len(opaque) > 0 {
+		msg.OpaqueReasoning = append(msg.OpaqueReasoning, opaque...)
+	}
+	if text := responsesReasoningDisplayText(output); text != "" {
+		appendReasoningText(msg, text)
+	}
+}
+
+func responsesReasoningDisplayText(output responsesOutputItem) string {
+	if text := joinResponsesContentText(output.Content, "reasoning_text"); text != "" {
+		return text
+	}
+	return joinResponsesContentText(output.Summary, "summary_text")
+}
+
+func responsesReasoningSummaries(output responsesOutputItem, provider string) []types.ReasoningSummary {
+	if len(output.Summary) == 0 {
+		return nil
+	}
+	summaries := make([]types.ReasoningSummary, 0, len(output.Summary))
+	for _, part := range output.Summary {
+		if strings.TrimSpace(part.Text) == "" {
+			continue
+		}
+		kind := strings.TrimSpace(part.Type)
+		if kind == "" {
+			kind = "summary_text"
+		}
+		summaries = append(summaries, types.ReasoningSummary{
+			Provider: provider,
+			ID:       output.ID,
+			Kind:     kind,
+			Text:     part.Text,
+		})
+	}
+	return summaries
+}
+
+func responsesOpaqueReasoning(output responsesOutputItem, provider string) []types.OpaqueReasoning {
+	if strings.TrimSpace(output.EncryptedContent) == "" {
+		return nil
+	}
+	return []types.OpaqueReasoning{{
+		Provider: provider,
+		ID:       output.ID,
+		Kind:     "encrypted_content",
+		State:    output.EncryptedContent,
+		Status:   output.Status,
+	}}
+}
+
+func joinResponsesContentText(parts []responsesContent, partType string) string {
+	var out []string
+	for _, part := range parts {
+		if strings.TrimSpace(part.Text) == "" {
+			continue
+		}
+		if partType != "" && strings.TrimSpace(part.Type) != partType {
+			continue
+		}
+		out = append(out, part.Text)
+	}
+	return strings.Join(out, "\n\n")
+}
+
+func appendReasoningText(msg *types.Message, text string) {
+	text = strings.TrimSpace(text)
+	if msg == nil || text == "" {
+		return
+	}
+	if msg.ReasoningContent == nil || strings.TrimSpace(*msg.ReasoningContent) == "" {
+		msg.ReasoningContent = stringPtr(text)
+		return
+	}
+	joined := strings.TrimSpace(*msg.ReasoningContent)
+	if joined == text {
+		return
+	}
+	joined = strings.TrimSpace(joined + "\n\n" + text)
+	msg.ReasoningContent = stringPtr(joined)
+}
+
+func stringPtr(s string) *string {
+	if strings.TrimSpace(s) == "" {
+		return nil
+	}
+	out := s
+	return &out
+}
+
+func responsesOutputItemFromAny(v any) (responsesOutputItem, bool) {
+	raw, err := json.Marshal(v)
+	if err != nil {
+		return responsesOutputItem{}, false
+	}
+	var item responsesOutputItem
+	if err := json.Unmarshal(raw, &item); err != nil {
+		return responsesOutputItem{}, false
+	}
+	return item, true
+}
+
+func responsesResponseFromAny(v any) (openAIResponsesResponse, bool) {
+	raw, err := json.Marshal(v)
+	if err != nil {
+		return openAIResponsesResponse{}, false
+	}
+	var resp openAIResponsesResponse
+	if err := json.Unmarshal(raw, &resp); err != nil {
+		return openAIResponsesResponse{}, false
+	}
+	return resp, true
+}
+
+func emitResponsesReasoningChunk(
+	ctx context.Context,
+	ch chan<- llm.StreamChunk,
+	currentID, providerName, currentModel string,
+	output responsesOutputItem,
+) bool {
+	delta := types.Message{Role: llm.RoleAssistant}
+	mergeResponsesReasoningItem(&delta, output, providerName)
+	if delta.ReasoningContent == nil && len(delta.ReasoningSummaries) == 0 && len(delta.OpaqueReasoning) == 0 {
+		return false
+	}
+	select {
+	case <-ctx.Done():
+		return false
+	case ch <- llm.StreamChunk{
+		ID:       currentID,
+		Provider: providerName,
+		Model:    currentModel,
+		Delta:    delta,
+	}:
+		return true
+	}
 }
 
 // mapResponsesStatus maps Responses API status to Chat Completions finish_reason.
@@ -750,6 +1018,7 @@ func streamResponsesSSE(ctx context.Context, body io.ReadCloser, providerName st
 		var currentModel string
 		toolCallName := map[string]string{}
 		toolCallArgs := map[string][]byte{}
+		seenReasoning := map[string]bool{}
 		finishSent := false
 
 		for {
@@ -806,13 +1075,13 @@ func streamResponsesSSE(ctx context.Context, body io.ReadCloser, providerName st
 					continue
 				}
 				itemType, _ := item["type"].(string)
-				if itemType != "function_call" {
-					continue
-				}
-				itemID, _ := item["id"].(string)
-				name, _ := item["name"].(string)
-				if itemID != "" && name != "" {
-					toolCallName[itemID] = name
+				switch itemType {
+				case "function_call":
+					itemID, _ := item["id"].(string)
+					name, _ := item["name"].(string)
+					if itemID != "" && name != "" {
+						toolCallName[itemID] = name
+					}
 				}
 
 			case "response.output_text.delta":
@@ -837,6 +1106,20 @@ func streamResponsesSSE(ctx context.Context, body io.ReadCloser, providerName st
 				}:
 				}
 
+			case "response.reasoning_text.delta", "response.reasoning_summary_text.delta":
+				delta, _ := event["delta"].(string)
+				if strings.TrimSpace(delta) == "" {
+					continue
+				}
+				select {
+				case <-ctx.Done():
+					return
+				case ch <- llm.StreamChunk{
+					ID: currentID, Provider: providerName, Model: currentModel,
+					Delta: types.Message{Role: llm.RoleAssistant, ReasoningContent: stringPtr(delta)},
+				}:
+				}
+
 			case "response.function_call_arguments.delta":
 				delta, _ := event["delta"].(string)
 				itemID, _ := event["item_id"].(string)
@@ -845,8 +1128,44 @@ func streamResponsesSSE(ctx context.Context, body io.ReadCloser, providerName st
 				}
 				toolCallArgs[itemID] = append(toolCallArgs[itemID], []byte(delta)...)
 
+			case "response.output_item.done":
+				item, _ := event["item"].(map[string]any)
+				if item == nil {
+					continue
+				}
+				itemType, _ := item["type"].(string)
+				if itemType != "reasoning" {
+					continue
+				}
+				output, ok := responsesOutputItemFromAny(item)
+				if !ok {
+					continue
+				}
+				if emitResponsesReasoningChunk(ctx, ch, currentID, providerName, currentModel, output) {
+					seenReasoning[output.ID] = true
+				}
+
 			case "response.completed":
 				if resp, ok := event["response"].(map[string]any); ok {
+					if completedResp, ok := responsesResponseFromAny(resp); ok {
+						if completedResp.ID != "" {
+							currentID = completedResp.ID
+						}
+						if completedResp.Model != "" {
+							currentModel = completedResp.Model
+						}
+						for _, output := range completedResp.Output {
+							if output.Type != "reasoning" {
+								continue
+							}
+							if seenReasoning[output.ID] {
+								continue
+							}
+							if emitResponsesReasoningChunk(ctx, ch, currentID, providerName, currentModel, output) {
+								seenReasoning[output.ID] = true
+							}
+						}
+					}
 					if usage, ok := resp["usage"].(map[string]any); ok {
 						inputTokens, _ := usage["input_tokens"].(float64)
 						outputTokens, _ := usage["output_tokens"].(float64)

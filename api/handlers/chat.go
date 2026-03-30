@@ -449,19 +449,21 @@ func writeSSE(w http.ResponseWriter, parts ...[]byte) error {
 // copying all fields including reasoning/thinking/tool/multimodal metadata.
 func convertTypesMessageToAPI(msg types.Message) api.Message {
 	m := api.Message{
-		Role:             string(msg.Role),
-		Content:          msg.Content,
-		ReasoningContent: msg.ReasoningContent,
-		ThinkingBlocks:   msg.ThinkingBlocks,
-		Refusal:          msg.Refusal,
-		Name:             msg.Name,
-		ToolCalls:        msg.ToolCalls,
-		ToolCallID:       msg.ToolCallID,
-		IsToolError:      msg.IsToolError,
-		Videos:           msg.Videos,
-		Annotations:      msg.Annotations,
-		Metadata:         msg.Metadata,
-		Timestamp:        msg.Timestamp,
+		Role:               string(msg.Role),
+		Content:            msg.Content,
+		ReasoningContent:   msg.ReasoningContent,
+		ReasoningSummaries: msg.ReasoningSummaries,
+		OpaqueReasoning:    msg.OpaqueReasoning,
+		ThinkingBlocks:     msg.ThinkingBlocks,
+		Refusal:            msg.Refusal,
+		Name:               msg.Name,
+		ToolCalls:          msg.ToolCalls,
+		ToolCallID:         msg.ToolCallID,
+		IsToolError:        msg.IsToolError,
+		Videos:             msg.Videos,
+		Annotations:        msg.Annotations,
+		Metadata:           msg.Metadata,
+		Timestamp:          msg.Timestamp,
 	}
 	if len(msg.Images) > 0 {
 		images := make([]api.ImageContent, len(msg.Images))

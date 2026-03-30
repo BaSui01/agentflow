@@ -248,6 +248,15 @@ func (b *BaseAgent) chatCompletionStreaming(ctx context.Context, pr *preparedReq
 					})
 					reasoningBuf.WriteString(*chunk.Delta.ReasoningContent)
 				}
+				if len(chunk.Delta.ReasoningSummaries) > 0 {
+					assembled.ReasoningSummaries = append(assembled.ReasoningSummaries, chunk.Delta.ReasoningSummaries...)
+				}
+				if len(chunk.Delta.OpaqueReasoning) > 0 {
+					assembled.OpaqueReasoning = append(assembled.OpaqueReasoning, chunk.Delta.OpaqueReasoning...)
+				}
+				if len(chunk.Delta.ThinkingBlocks) > 0 {
+					assembled.ThinkingBlocks = append(assembled.ThinkingBlocks, chunk.Delta.ThinkingBlocks...)
+				}
 			case msg := <-steerChOrNil(steerCh):
 				steering = &msg
 				cancelStream()

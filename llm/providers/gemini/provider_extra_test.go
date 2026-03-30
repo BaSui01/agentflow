@@ -248,7 +248,7 @@ func TestGeminiProvider_Completion_WithThinking(t *testing.T) {
 				Content: geminiContent{
 					Role: "model",
 					Parts: []geminiPart{
-						{Text: "Let me think...", Thought: &thoughtFlag},
+						{Text: "Let me think...", Thought: &thoughtFlag, ThoughtSignature: "sig_sync"},
 						{Text: "The answer is 42."},
 					},
 				},
@@ -277,6 +277,10 @@ func TestGeminiProvider_Completion_WithThinking(t *testing.T) {
 	assert.Equal(t, "The answer is 42.", resp.Choices[0].Message.Content)
 	require.NotNil(t, resp.Choices[0].Message.ReasoningContent)
 	assert.Equal(t, "Let me think...", *resp.Choices[0].Message.ReasoningContent)
+	require.Len(t, resp.Choices[0].Message.ReasoningSummaries, 1)
+	assert.Equal(t, "thought_summary", resp.Choices[0].Message.ReasoningSummaries[0].Kind)
+	require.Len(t, resp.Choices[0].Message.OpaqueReasoning, 1)
+	assert.Equal(t, "sig_sync", resp.Choices[0].Message.OpaqueReasoning[0].State)
 	require.NotNil(t, resp.Usage.CompletionTokensDetails)
 	assert.Equal(t, 5, resp.Usage.CompletionTokensDetails.ReasoningTokens)
 }
@@ -316,7 +320,7 @@ func TestGeminiProvider_Stream_WithThinking(t *testing.T) {
 				Content: geminiContent{
 					Role: "model",
 					Parts: []geminiPart{
-						{Text: "thinking...", Thought: &thoughtFlag},
+						{Text: "thinking...", Thought: &thoughtFlag, ThoughtSignature: "sig_stream"},
 						{Text: "result"},
 					},
 				},
@@ -346,7 +350,33 @@ func TestGeminiProvider_Stream_WithThinking(t *testing.T) {
 	assert.Equal(t, "result", chunks[0].Delta.Content)
 	require.NotNil(t, chunks[0].Delta.ReasoningContent)
 	assert.Equal(t, "thinking...", *chunks[0].Delta.ReasoningContent)
+	require.Len(t, chunks[0].Delta.ReasoningSummaries, 1)
+	assert.Equal(t, "thinking...", chunks[0].Delta.ReasoningSummaries[0].Text)
+	require.Len(t, chunks[0].Delta.OpaqueReasoning, 1)
+	assert.Equal(t, "sig_stream", chunks[0].Delta.OpaqueReasoning[0].State)
 	assert.Equal(t, "stop", chunks[0].FinishReason)
+}
+
+func TestConvertToGeminiContents_PreservesThoughtSignature(t *testing.T) {
+	reasoning := "thinking..."
+	system, contents := convertToGeminiContents([]types.Message{
+		{
+			Role:             llm.RoleAssistant,
+			Content:          "result",
+			ReasoningContent: &reasoning,
+			OpaqueReasoning: []types.OpaqueReasoning{
+				{Provider: "gemini", Kind: "thought_signature", State: "sig_req", PartIndex: 0},
+			},
+		},
+	})
+
+	assert.Nil(t, system)
+	require.Len(t, contents, 1)
+	require.GreaterOrEqual(t, len(contents[0].Parts), 2)
+	require.NotNil(t, contents[0].Parts[0].Thought)
+	assert.True(t, *contents[0].Parts[0].Thought)
+	assert.Equal(t, "sig_req", contents[0].Parts[0].ThoughtSignature)
+	assert.Equal(t, "result", contents[0].Parts[1].Text)
 }
 
 // --- convertSafetySettings ---
@@ -544,11 +574,11 @@ func TestExtractGroundingAnnotations_WithSupports(t *testing.T) {
 		},
 		GroundingSupports: []geminiGroundingSupport{
 			{
-				Segment:              &geminiGroundingSegment{StartIndex: 0, EndIndex: 50, Text: "Some text"},
+				Segment:               &geminiGroundingSegment{StartIndex: 0, EndIndex: 50, Text: "Some text"},
 				GroundingChunkIndices: []int{0},
 			},
 			{
-				Segment:              &geminiGroundingSegment{StartIndex: 51, EndIndex: 100},
+				Segment:               &geminiGroundingSegment{StartIndex: 51, EndIndex: 100},
 				GroundingChunkIndices: []int{1},
 			},
 		},
@@ -616,7 +646,7 @@ func TestGeminiProvider_Completion_WithGrounding(t *testing.T) {
 					},
 					GroundingSupports: []geminiGroundingSupport{
 						{
-							Segment:              &geminiGroundingSegment{StartIndex: 0, EndIndex: 27},
+							Segment:               &geminiGroundingSegment{StartIndex: 0, EndIndex: 27},
 							GroundingChunkIndices: []int{0},
 						},
 					},

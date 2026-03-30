@@ -156,6 +156,7 @@ type ChatRequest struct {
 	// OpenAI 扩展参数
 	MaxCompletionTokens *int              `json:"max_completion_tokens,omitempty"` // 替代 max_tokens 的新字段
 	ReasoningEffort     string            `json:"reasoning_effort,omitempty"`      // none/minimal/low/medium/high/xhigh
+	ReasoningSummary    string            `json:"reasoning_summary,omitempty"`     // auto/concise/detailed（Responses API reasoning.summary）
 	Store               *bool             `json:"store,omitempty"`                 // 是否存储用于蒸馏/评估
 	Modalities          []string          `json:"modalities,omitempty"`            // ["text", "audio"]
 	WebSearchOptions    *WebSearchOptions `json:"web_search_options,omitempty"`    // 内置 web 搜索

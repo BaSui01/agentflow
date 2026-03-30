@@ -461,6 +461,12 @@ func TestConvertTypesMessageToAPI_WithExtendedFields(t *testing.T) {
 		Role:             types.RoleAssistant,
 		Content:          "final answer",
 		ReasoningContent: &reasoning,
+		ReasoningSummaries: []types.ReasoningSummary{
+			{Provider: "openai", ID: "rs_1", Kind: "summary_text", Text: "short summary"},
+		},
+		OpaqueReasoning: []types.OpaqueReasoning{
+			{Provider: "openai", ID: "rs_1", Kind: "encrypted_content", State: "enc_123"},
+		},
 		ThinkingBlocks: []types.ThinkingBlock{
 			{Thinking: "step 1"},
 		},
@@ -478,6 +484,10 @@ func TestConvertTypesMessageToAPI_WithExtendedFields(t *testing.T) {
 	require.NotNil(t, result.ReasoningContent)
 	require.NotNil(t, result.Refusal)
 	assert.Equal(t, reasoning, *result.ReasoningContent)
+	require.Len(t, result.ReasoningSummaries, 1)
+	assert.Equal(t, "short summary", result.ReasoningSummaries[0].Text)
+	require.Len(t, result.OpaqueReasoning, 1)
+	assert.Equal(t, "enc_123", result.OpaqueReasoning[0].State)
 	assert.Len(t, result.ThinkingBlocks, 1)
 	assert.Equal(t, "step 1", result.ThinkingBlocks[0].Thinking)
 	assert.Equal(t, refusal, *result.Refusal)
@@ -566,6 +576,12 @@ func TestChatHandler_ConvertToLLMRequest_WithExtendedMessageFields(t *testing.T)
 				Role:             "assistant",
 				Content:          "final answer",
 				ReasoningContent: &reasoning,
+				ReasoningSummaries: []types.ReasoningSummary{
+					{Provider: "gemini", ID: "part_0", Kind: "thought_summary", Text: "summary"},
+				},
+				OpaqueReasoning: []types.OpaqueReasoning{
+					{Provider: "gemini", Kind: "thought_signature", State: "sig_1", PartIndex: 0},
+				},
 				ThinkingBlocks: []types.ThinkingBlock{
 					{Thinking: "step 1"},
 				},
@@ -587,6 +603,10 @@ func TestChatHandler_ConvertToLLMRequest_WithExtendedMessageFields(t *testing.T)
 	require.NotNil(t, msg.ReasoningContent)
 	require.NotNil(t, msg.Refusal)
 	assert.Equal(t, reasoning, *msg.ReasoningContent)
+	require.Len(t, msg.ReasoningSummaries, 1)
+	assert.Equal(t, "summary", msg.ReasoningSummaries[0].Text)
+	require.Len(t, msg.OpaqueReasoning, 1)
+	assert.Equal(t, "sig_1", msg.OpaqueReasoning[0].State)
 	assert.Len(t, msg.ThinkingBlocks, 1)
 	assert.Equal(t, "step 1", msg.ThinkingBlocks[0].Thinking)
 	assert.Equal(t, refusal, *msg.Refusal)

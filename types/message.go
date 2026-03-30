@@ -39,7 +39,7 @@ type VideoContent struct {
 
 // Annotation represents a citation or reference annotation in a message.
 type Annotation struct {
-	Type       string `json:"type"`                  // "url_citation"
+	Type       string `json:"type"` // "url_citation"
 	StartIndex int    `json:"start_index,omitempty"`
 	EndIndex   int    `json:"end_index,omitempty"`
 	URL        string `json:"url,omitempty"`
@@ -53,22 +53,44 @@ type ThinkingBlock struct {
 	Signature string `json:"signature,omitempty"`
 }
 
+// ReasoningSummary represents displayable provider-native reasoning summary text.
+// It is safe to render to users, but it is not raw chain-of-thought.
+type ReasoningSummary struct {
+	Provider string `json:"provider,omitempty"`
+	ID       string `json:"id,omitempty"`
+	Kind     string `json:"kind,omitempty"`
+	Text     string `json:"text"`
+}
+
+// OpaqueReasoning represents provider-native non-display reasoning state.
+// It is meant for storage and round-tripping, not direct user rendering.
+type OpaqueReasoning struct {
+	Provider  string `json:"provider,omitempty"`
+	ID        string `json:"id,omitempty"`
+	Kind      string `json:"kind"`
+	State     string `json:"state"`
+	PartIndex int    `json:"part_index,omitempty"`
+	Status    string `json:"status,omitempty"`
+}
+
 // Message represents a conversation message.
 type Message struct {
-	Role             Role            `json:"role"`
-	Content          string          `json:"content,omitempty"`
-	ReasoningContent *string         `json:"reasoning_content,omitempty"` // 推理/思考内容
-	ThinkingBlocks   []ThinkingBlock `json:"thinking_blocks,omitempty"`   // Claude thinking blocks（用于多轮 round-trip）
-	Refusal          *string         `json:"refusal,omitempty"`           // 模型拒绝内容
-	Name             string          `json:"name,omitempty"`
-	ToolCalls        []ToolCall      `json:"tool_calls,omitempty"`
-	ToolCallID       string          `json:"tool_call_id,omitempty"`
-	IsToolError      bool            `json:"is_tool_error,omitempty"` // tool_result 是否为错误结果
-	Images           []ImageContent  `json:"images,omitempty"`
-	Videos           []VideoContent  `json:"videos,omitempty"`
-	Annotations      []Annotation    `json:"annotations,omitempty"` // URL 引用注释
-	Metadata         any             `json:"metadata,omitempty"`
-	Timestamp        time.Time       `json:"timestamp,omitempty"`
+	Role               Role               `json:"role"`
+	Content            string             `json:"content,omitempty"`
+	ReasoningContent   *string            `json:"reasoning_content,omitempty"`   // 推理/思考内容
+	ReasoningSummaries []ReasoningSummary `json:"reasoning_summaries,omitempty"` // 可展示的 provider-native reasoning/thinking summaries
+	OpaqueReasoning    []OpaqueReasoning  `json:"opaque_reasoning,omitempty"`    // 不可展示的 provider-native opaque/encrypted reasoning state
+	ThinkingBlocks     []ThinkingBlock    `json:"thinking_blocks,omitempty"`     // Claude thinking blocks（用于多轮 round-trip）
+	Refusal            *string            `json:"refusal,omitempty"`             // 模型拒绝内容
+	Name               string             `json:"name,omitempty"`
+	ToolCalls          []ToolCall         `json:"tool_calls,omitempty"`
+	ToolCallID         string             `json:"tool_call_id,omitempty"`
+	IsToolError        bool               `json:"is_tool_error,omitempty"` // tool_result 是否为错误结果
+	Images             []ImageContent     `json:"images,omitempty"`
+	Videos             []VideoContent     `json:"videos,omitempty"`
+	Annotations        []Annotation       `json:"annotations,omitempty"` // URL 引用注释
+	Metadata           any                `json:"metadata,omitempty"`
+	Timestamp          time.Time          `json:"timestamp,omitempty"`
 }
 
 // NewMessage creates a new message with the given role and content.
@@ -128,4 +150,3 @@ func (m Message) WithMetadata(metadata any) Message {
 	m.Metadata = metadata
 	return m
 }
-

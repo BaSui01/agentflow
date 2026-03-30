@@ -341,6 +341,8 @@ func TestClaudeProvider_Completion_ThinkingContentBlock(t *testing.T) {
 	assert.Equal(t, "2+2=4", resp.Choices[0].Message.Content)
 	require.NotNil(t, resp.Choices[0].Message.ReasoningContent)
 	assert.Equal(t, "Let me think step by step...", *resp.Choices[0].Message.ReasoningContent)
+	require.Len(t, resp.Choices[0].Message.ThinkingBlocks, 1)
+	assert.Equal(t, "sig_abc", resp.Choices[0].Message.ThinkingBlocks[0].Signature)
 	assert.Equal(t, []string{"sig_abc"}, resp.ThoughtSignatures)
 }
 
@@ -861,7 +863,26 @@ func TestToClaudeChatResponse_MultipleThinkingBlocks(t *testing.T) {
 	resp := toClaudeChatResponse(cr, "claude")
 	require.NotNil(t, resp.Choices[0].Message.ReasoningContent)
 	assert.Equal(t, "Step 1: analyze\n\nStep 2: conclude", *resp.Choices[0].Message.ReasoningContent)
+	require.Len(t, resp.Choices[0].Message.ThinkingBlocks, 2)
 	assert.Equal(t, []string{"sig1", "sig2"}, resp.ThoughtSignatures)
+}
+
+func TestToClaudeChatResponse_RedactedThinking(t *testing.T) {
+	cr := claudeResponse{
+		ID: "msg_redacted", Role: "assistant", Model: "test",
+		Content: []claudeContent{
+			{Type: "redacted_thinking", Data: "opaque_blob"},
+			{Type: "text", Text: "Answer"},
+		},
+		StopReason: "end_turn",
+	}
+
+	resp := toClaudeChatResponse(cr, "claude")
+	require.Len(t, resp.Choices, 1)
+	require.Len(t, resp.Choices[0].Message.OpaqueReasoning, 1)
+	assert.Equal(t, "anthropic", resp.Choices[0].Message.OpaqueReasoning[0].Provider)
+	assert.Equal(t, "redacted_thinking", resp.Choices[0].Message.OpaqueReasoning[0].Kind)
+	assert.Equal(t, "opaque_blob", resp.Choices[0].Message.OpaqueReasoning[0].State)
 }
 
 // =============================================================================
@@ -1059,8 +1080,8 @@ func TestClaudeProvider_Stream_WebSearch(t *testing.T) {
 
 		// text block with content
 		writeSSEEvent(w, "content_block_start", claudeStreamEvent{
-			Type:  "content_block_start",
-			Index: 2,
+			Type:         "content_block_start",
+			Index:        2,
 			ContentBlock: &claudeContent{Type: "text"},
 		})
 		writeSSEEvent(w, "content_block_delta", claudeStreamEvent{
@@ -1115,4 +1136,74 @@ func TestClaudeProvider_Stream_WebSearch(t *testing.T) {
 			c.Usage != nil || len(c.Delta.Annotations) > 0
 		assert.True(t, hasContent, "should not emit empty chunks for web search blocks")
 	}
+}
+
+func TestClaudeProvider_Stream_ThinkingBlockPreservesSignature(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(http.StatusOK)
+
+		writeSSEEvent(w, "message_start", claudeStreamEvent{
+			Type: "message_start",
+			Message: &claudeResponse{
+				ID: "msg_thinking", Model: "claude-opus-4.5-20260105",
+			},
+		})
+		writeSSEEvent(w, "content_block_start", claudeStreamEvent{
+			Type:  "content_block_start",
+			Index: 0,
+			ContentBlock: &claudeContent{
+				Type: "thinking",
+			},
+		})
+		writeSSEEvent(w, "content_block_delta", claudeStreamEvent{
+			Type:  "content_block_delta",
+			Index: 0,
+			Delta: &claudeDelta{Type: "thinking_delta", Thinking: "thought text"},
+		})
+		writeSSEEvent(w, "content_block_delta", claudeStreamEvent{
+			Type:  "content_block_delta",
+			Index: 0,
+			Delta: &claudeDelta{Type: "signature_delta", Signature: "sig_stream"},
+		})
+		writeSSEEvent(w, "content_block_stop", claudeStreamEvent{
+			Type:  "content_block_stop",
+			Index: 0,
+		})
+		writeSSEEvent(w, "message_delta", claudeStreamEvent{
+			Type:  "message_delta",
+			Delta: &claudeDelta{StopReason: "end_turn"},
+		})
+		writeSSEEvent(w, "message_stop", claudeStreamEvent{Type: "message_stop"})
+	}))
+	t.Cleanup(func() { server.Close() })
+
+	p := NewClaudeProvider(providers.ClaudeConfig{
+		BaseProviderConfig: providers.BaseProviderConfig{APIKey: "sk-test", BaseURL: server.URL},
+	}, zap.NewNop())
+
+	ch, err := p.Stream(context.Background(), &llm.ChatRequest{
+		Messages: []types.Message{{Role: llm.RoleUser, Content: "think"}},
+	})
+	require.NoError(t, err)
+
+	var (
+		reasoningDelta string
+		thinkingChunk  *llm.StreamChunk
+	)
+	for c := range ch {
+		require.Nil(t, c.Err)
+		if c.Delta.ReasoningContent != nil && reasoningDelta == "" {
+			reasoningDelta = *c.Delta.ReasoningContent
+		}
+		if len(c.Delta.ThinkingBlocks) > 0 {
+			copied := c
+			thinkingChunk = &copied
+		}
+	}
+
+	assert.Equal(t, "thought text", reasoningDelta)
+	require.NotNil(t, thinkingChunk)
+	require.Len(t, thinkingChunk.Delta.ThinkingBlocks, 1)
+	assert.Equal(t, "sig_stream", thinkingChunk.Delta.ThinkingBlocks[0].Signature)
 }
