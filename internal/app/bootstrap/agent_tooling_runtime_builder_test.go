@@ -3,13 +3,19 @@ package bootstrap
 import (
 	"context"
 	"encoding/json"
+	"path/filepath"
 	"testing"
+	"time"
 
+	"github.com/BaSui01/agentflow/agent/hitl"
 	"github.com/BaSui01/agentflow/agent/hosted"
 	mcpproto "github.com/BaSui01/agentflow/agent/protocol/mcp"
+	llmtools "github.com/BaSui01/agentflow/llm/capabilities/tools"
 	"github.com/BaSui01/agentflow/rag"
 	"github.com/BaSui01/agentflow/types"
+	"github.com/alicebob/miniredis/v2"
 	"github.com/glebarez/sqlite"
+	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
@@ -24,6 +30,7 @@ func TestBuildAgentToolingRuntime_WithRetrievalTool(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, runtime)
 	require.NotNil(t, runtime.ToolManager)
+	require.NotNil(t, runtime.Permissions)
 	assert.Contains(t, runtime.ToolNames, "retrieval")
 
 	schemas := runtime.ToolManager.GetAllowedTools("agent-a")
@@ -69,6 +76,7 @@ func TestBuildAgentToolingRuntime_WithMCPTools(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, runtime)
 	require.NotNil(t, runtime.ToolManager)
+	require.NotNil(t, runtime.Permissions)
 	assert.Contains(t, runtime.ToolNames, "mcp_echo_tool")
 
 	results := runtime.ToolManager.ExecuteForAgent(context.Background(), "agent-a", []types.ToolCall{
@@ -79,8 +87,8 @@ func TestBuildAgentToolingRuntime_WithMCPTools(t *testing.T) {
 		},
 	})
 	require.Len(t, results, 1)
-	assert.Empty(t, results[0].Error)
-	assert.JSONEq(t, `{"name":"echo-tool","args":{"text":"ping"}}`, string(results[0].Result))
+	assert.Contains(t, results[0].Error, "approval required")
+	assert.Empty(t, results[0].Result)
 }
 
 func TestBuildAgentToolingRuntime_WithDBRegistrations(t *testing.T) {
@@ -101,6 +109,7 @@ func TestBuildAgentToolingRuntime_WithDBRegistrations(t *testing.T) {
 	}, zap.NewNop())
 	require.NoError(t, err)
 	require.NotNil(t, runtime)
+	require.NotNil(t, runtime.Permissions)
 	assert.Contains(t, runtime.ToolNames, "retrieval")
 	assert.Contains(t, runtime.ToolNames, "knowledge_search")
 
@@ -114,6 +123,347 @@ func TestBuildAgentToolingRuntime_WithDBRegistrations(t *testing.T) {
 	require.Len(t, results, 1)
 	assert.Empty(t, results[0].Error)
 	assert.NotEmpty(t, results[0].Result)
+}
+
+func TestBuildAgentToolingRuntime_FiltersAllowedToolsByAgentPermission(t *testing.T) {
+	runtime, err := BuildAgentToolingRuntime(AgentToolingOptions{
+		RetrievalStore:    &testVectorStore{},
+		EmbeddingProvider: &testEmbeddingProvider{},
+	}, zap.NewNop())
+	require.NoError(t, err)
+	require.NotNil(t, runtime)
+	require.NotNil(t, runtime.Permissions)
+
+	err = runtime.Permissions.SetAgentPermission(&llmtools.AgentPermission{
+		AgentID:      "agent-a",
+		AllowedTools: []string{"retrieval"},
+	})
+	require.NoError(t, err)
+
+	schemas := runtime.ToolManager.GetAllowedTools("agent-a")
+	require.Len(t, schemas, 1)
+	assert.Equal(t, "retrieval", schemas[0].Name)
+}
+
+func TestDefaultToolPermissionManager_RiskTierRules(t *testing.T) {
+	pm := newDefaultToolPermissionManager(zap.NewNop())
+
+	allowed, err := pm.CheckPermission(context.Background(), &llmtools.PermissionContext{
+		ToolName:  "retrieval",
+		RequestAt: time.Now(),
+		Metadata: map[string]string{
+			"hosted_tool_risk": "safe_read",
+		},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, llmtools.PermissionAllow, allowed.Decision)
+
+	needsApproval, err := pm.CheckPermission(context.Background(), &llmtools.PermissionContext{
+		ToolName:  "run_command",
+		RequestAt: time.Now(),
+		Metadata: map[string]string{
+			"hosted_tool_risk": "requires_approval",
+		},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, llmtools.PermissionRequireApproval, needsApproval.Decision)
+
+	denied, err := pm.CheckPermission(context.Background(), &llmtools.PermissionContext{
+		ToolName:  "unknown_tool",
+		RequestAt: time.Now(),
+		Metadata: map[string]string{
+			"hosted_tool_risk": "unknown",
+		},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, llmtools.PermissionDeny, denied.Decision)
+}
+
+func TestBuildAgentToolingRuntime_ApprovalResolutionAllowsRetry(t *testing.T) {
+	manager := hitl.NewInterruptManager(hitl.NewInMemoryInterruptStore(), zap.NewNop())
+	server := &testMCPServer{
+		tools: []mcpproto.ToolDefinition{
+			{
+				Name:        "echo-tool",
+				Description: "Echo args",
+				InputSchema: map[string]any{
+					"type": "object",
+					"properties": map[string]any{
+						"text": map[string]any{"type": "string"},
+					},
+				},
+			},
+		},
+	}
+
+	runtime, err := BuildAgentToolingRuntime(AgentToolingOptions{
+		MCPServer:           server,
+		EnableMCPTools:      true,
+		ToolApprovalManager: manager,
+		ToolApprovalConfig: ToolApprovalConfig{
+			GrantTTL: 15 * time.Minute,
+			Scope:    "request",
+		},
+	}, zap.NewNop())
+	require.NoError(t, err)
+
+	call := types.ToolCall{
+		ID:        "call-approval",
+		Name:      "mcp_echo_tool",
+		Arguments: json.RawMessage(`{"text":"ping"}`),
+	}
+
+	first := runtime.ToolManager.ExecuteForAgent(context.Background(), "agent-a", []types.ToolCall{call})
+	require.Len(t, first, 1)
+	assert.Contains(t, first[0].Error, "approval required")
+
+	pending, err := manager.ListInterrupts(context.Background(), ToolApprovalWorkflowID(), hitl.InterruptStatusPending)
+	require.NoError(t, err)
+	require.Len(t, pending, 1)
+
+	require.NoError(t, manager.ResolveInterrupt(context.Background(), pending[0].ID, &hitl.Response{
+		OptionID: "approve",
+		Approved: true,
+		Comment:  "approved in test",
+	}))
+
+	second := runtime.ToolManager.ExecuteForAgent(context.Background(), "agent-a", []types.ToolCall{call})
+	require.Len(t, second, 1)
+	assert.Empty(t, second[0].Error)
+	assert.JSONEq(t, `{"name":"echo-tool","args":{"text":"ping"}}`, string(second[0].Result))
+}
+
+func TestBuildAgentToolingRuntime_ApprovalGrantExpiresAfterTTL(t *testing.T) {
+	manager := hitl.NewInterruptManager(hitl.NewInMemoryInterruptStore(), zap.NewNop())
+	server := &testMCPServer{
+		tools: []mcpproto.ToolDefinition{{
+			Name:        "echo-tool",
+			Description: "Echo args",
+			InputSchema: map[string]any{"type": "object"},
+		}},
+	}
+
+	runtime, err := BuildAgentToolingRuntime(AgentToolingOptions{
+		MCPServer:           server,
+		EnableMCPTools:      true,
+		ToolApprovalManager: manager,
+		ToolApprovalConfig: ToolApprovalConfig{
+			GrantTTL: 20 * time.Millisecond,
+			Scope:    "request",
+		},
+	}, zap.NewNop())
+	require.NoError(t, err)
+
+	call := types.ToolCall{
+		ID:        "call-expire",
+		Name:      "mcp_echo_tool",
+		Arguments: json.RawMessage(`{"text":"ping"}`),
+	}
+	first := runtime.ToolManager.ExecuteForAgent(context.Background(), "agent-a", []types.ToolCall{call})
+	require.Len(t, first, 1)
+	assert.Contains(t, first[0].Error, "approval required")
+
+	pending, err := manager.ListInterrupts(context.Background(), ToolApprovalWorkflowID(), hitl.InterruptStatusPending)
+	require.NoError(t, err)
+	require.Len(t, pending, 1)
+	require.NoError(t, manager.ResolveInterrupt(context.Background(), pending[0].ID, &hitl.Response{
+		OptionID: "approve",
+		Approved: true,
+	}))
+
+	second := runtime.ToolManager.ExecuteForAgent(context.Background(), "agent-a", []types.ToolCall{call})
+	require.Len(t, second, 1)
+	assert.Empty(t, second[0].Error)
+
+	time.Sleep(40 * time.Millisecond)
+
+	third := runtime.ToolManager.ExecuteForAgent(context.Background(), "agent-a", []types.ToolCall{call})
+	require.Len(t, third, 1)
+	assert.Contains(t, third[0].Error, "approval required")
+}
+
+func TestBuildAgentToolingRuntime_ApprovalScopeAgentToolReusesGrantAcrossArgs(t *testing.T) {
+	manager := hitl.NewInterruptManager(hitl.NewInMemoryInterruptStore(), zap.NewNop())
+	server := &testMCPServer{
+		tools: []mcpproto.ToolDefinition{{
+			Name:        "echo-tool",
+			Description: "Echo args",
+			InputSchema: map[string]any{"type": "object"},
+		}},
+	}
+
+	runtime, err := BuildAgentToolingRuntime(AgentToolingOptions{
+		MCPServer:           server,
+		EnableMCPTools:      true,
+		ToolApprovalManager: manager,
+		ToolApprovalConfig: ToolApprovalConfig{
+			GrantTTL: 15 * time.Minute,
+			Scope:    "agent_tool",
+		},
+	}, zap.NewNop())
+	require.NoError(t, err)
+
+	callA := types.ToolCall{
+		ID:        "call-a",
+		Name:      "mcp_echo_tool",
+		Arguments: json.RawMessage(`{"text":"ping"}`),
+	}
+	first := runtime.ToolManager.ExecuteForAgent(context.Background(), "agent-a", []types.ToolCall{callA})
+	require.Len(t, first, 1)
+	assert.Contains(t, first[0].Error, "approval required")
+
+	pending, err := manager.ListInterrupts(context.Background(), ToolApprovalWorkflowID(), hitl.InterruptStatusPending)
+	require.NoError(t, err)
+	require.Len(t, pending, 1)
+	require.NoError(t, manager.ResolveInterrupt(context.Background(), pending[0].ID, &hitl.Response{
+		OptionID: "approve",
+		Approved: true,
+	}))
+
+	callB := types.ToolCall{
+		ID:        "call-b",
+		Name:      "mcp_echo_tool",
+		Arguments: json.RawMessage(`{"text":"changed"}`),
+	}
+	second := runtime.ToolManager.ExecuteForAgent(context.Background(), "agent-a", []types.ToolCall{callB})
+	require.Len(t, second, 1)
+	assert.Empty(t, second[0].Error)
+
+	otherAgent := runtime.ToolManager.ExecuteForAgent(context.Background(), "agent-b", []types.ToolCall{callB})
+	require.Len(t, otherAgent, 1)
+	assert.Contains(t, otherAgent[0].Error, "approval required")
+}
+
+func TestBuildAgentToolingRuntime_ApprovalGrantPersistsAcrossRuntimeRebuild(t *testing.T) {
+	manager := hitl.NewInterruptManager(hitl.NewInMemoryInterruptStore(), zap.NewNop())
+	server := &testMCPServer{
+		tools: []mcpproto.ToolDefinition{{
+			Name:        "echo-tool",
+			Description: "Echo args",
+			InputSchema: map[string]any{"type": "object"},
+		}},
+	}
+	storePath := filepath.Join(t.TempDir(), "tool_approval_grants.json")
+
+	opts := AgentToolingOptions{
+		MCPServer:           server,
+		EnableMCPTools:      true,
+		ToolApprovalManager: manager,
+		ToolApprovalConfig: ToolApprovalConfig{
+			GrantTTL:    15 * time.Minute,
+			Scope:       "request",
+			PersistPath: storePath,
+		},
+	}
+
+	runtimeA, err := BuildAgentToolingRuntime(opts, zap.NewNop())
+	require.NoError(t, err)
+
+	call := types.ToolCall{
+		ID:        "call-persist",
+		Name:      "mcp_echo_tool",
+		Arguments: json.RawMessage(`{"text":"ping"}`),
+	}
+	first := runtimeA.ToolManager.ExecuteForAgent(context.Background(), "agent-a", []types.ToolCall{call})
+	require.Len(t, first, 1)
+	assert.Contains(t, first[0].Error, "approval required")
+
+	pending, err := manager.ListInterrupts(context.Background(), ToolApprovalWorkflowID(), hitl.InterruptStatusPending)
+	require.NoError(t, err)
+	require.Len(t, pending, 1)
+	require.NoError(t, manager.ResolveInterrupt(context.Background(), pending[0].ID, &hitl.Response{
+		OptionID: "approve",
+		Approved: true,
+	}))
+
+	second := runtimeA.ToolManager.ExecuteForAgent(context.Background(), "agent-a", []types.ToolCall{call})
+	require.Len(t, second, 1)
+	assert.Empty(t, second[0].Error)
+
+	// Rebuild runtime and approval manager to simulate process restart.
+	runtimeB, err := BuildAgentToolingRuntime(AgentToolingOptions{
+		MCPServer:           server,
+		EnableMCPTools:      true,
+		ToolApprovalManager: hitl.NewInterruptManager(hitl.NewInMemoryInterruptStore(), zap.NewNop()),
+		ToolApprovalConfig: ToolApprovalConfig{
+			GrantTTL:    15 * time.Minute,
+			Scope:       "request",
+			PersistPath: storePath,
+		},
+	}, zap.NewNop())
+	require.NoError(t, err)
+
+	third := runtimeB.ToolManager.ExecuteForAgent(context.Background(), "agent-a", []types.ToolCall{call})
+	require.Len(t, third, 1)
+	assert.Empty(t, third[0].Error)
+	assert.JSONEq(t, `{"name":"echo-tool","args":{"text":"ping"}}`, string(third[0].Result))
+}
+
+func TestBuildAgentToolingRuntime_ApprovalGrantPersistsAcrossRuntimeRebuildWithRedisStore(t *testing.T) {
+	mr := miniredis.RunT(t)
+	clientA := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	defer clientA.Close()
+
+	managerA := hitl.NewInterruptManager(hitl.NewInMemoryInterruptStore(), zap.NewNop())
+	server := &testMCPServer{
+		tools: []mcpproto.ToolDefinition{{
+			Name:        "echo-tool",
+			Description: "Echo args",
+			InputSchema: map[string]any{"type": "object"},
+		}},
+	}
+	store := NewRedisToolApprovalGrantStore(clientA, "agentflow:test:approval", zap.NewNop())
+
+	runtimeA, err := BuildAgentToolingRuntime(AgentToolingOptions{
+		MCPServer:           server,
+		EnableMCPTools:      true,
+		ToolApprovalManager: managerA,
+		ToolApprovalConfig: ToolApprovalConfig{
+			GrantTTL:   15 * time.Minute,
+			Scope:      "request",
+			GrantStore: store,
+		},
+	}, zap.NewNop())
+	require.NoError(t, err)
+
+	call := types.ToolCall{
+		ID:        "call-redis-persist",
+		Name:      "mcp_echo_tool",
+		Arguments: json.RawMessage(`{"text":"ping"}`),
+	}
+	first := runtimeA.ToolManager.ExecuteForAgent(context.Background(), "agent-a", []types.ToolCall{call})
+	require.Len(t, first, 1)
+	assert.Contains(t, first[0].Error, "approval required")
+
+	pending, err := managerA.ListInterrupts(context.Background(), ToolApprovalWorkflowID(), hitl.InterruptStatusPending)
+	require.NoError(t, err)
+	require.Len(t, pending, 1)
+	require.NoError(t, managerA.ResolveInterrupt(context.Background(), pending[0].ID, &hitl.Response{
+		OptionID: "approve",
+		Approved: true,
+	}))
+
+	second := runtimeA.ToolManager.ExecuteForAgent(context.Background(), "agent-a", []types.ToolCall{call})
+	require.Len(t, second, 1)
+	assert.Empty(t, second[0].Error)
+
+	clientB := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	defer clientB.Close()
+	runtimeB, err := BuildAgentToolingRuntime(AgentToolingOptions{
+		MCPServer:           server,
+		EnableMCPTools:      true,
+		ToolApprovalManager: hitl.NewInterruptManager(hitl.NewInMemoryInterruptStore(), zap.NewNop()),
+		ToolApprovalConfig: ToolApprovalConfig{
+			GrantTTL:   15 * time.Minute,
+			Scope:      "request",
+			GrantStore: NewRedisToolApprovalGrantStore(clientB, "agentflow:test:approval", zap.NewNop()),
+		},
+	}, zap.NewNop())
+	require.NoError(t, err)
+
+	third := runtimeB.ToolManager.ExecuteForAgent(context.Background(), "agent-a", []types.ToolCall{call})
+	require.Len(t, third, 1)
+	assert.Empty(t, third[0].Error)
 }
 
 type testVectorStore struct{}

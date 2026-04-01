@@ -189,3 +189,13 @@ func (s *Server) currentWorkflowHITLManager() *hitl.InterruptManager {
 	}
 	return s.workflowHITLManager
 }
+
+func (s *Server) currentToolApprovalManager() *hitl.InterruptManager {
+	if s == nil {
+		return nil
+	}
+	if s.toolApprovalManager == nil {
+		s.toolApprovalManager = hitl.NewInterruptManager(hitl.NewInMemoryInterruptStore(), s.logger)
+	}
+	return s.toolApprovalManager
+}

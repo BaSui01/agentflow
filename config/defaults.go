@@ -19,9 +19,10 @@ const (
 )
 
 type HostedToolsConfig struct {
-	FileOps FileOpsToolConfig `yaml:"file_ops" env:"FILE_OPS"`
-	Shell   ShellToolConfig   `yaml:"shell" env:"SHELL"`
-	MCP     MCPToolConfig     `yaml:"mcp" env:"MCP"`
+	FileOps  FileOpsToolConfig        `yaml:"file_ops" env:"FILE_OPS"`
+	Shell    ShellToolConfig          `yaml:"shell" env:"SHELL"`
+	MCP      MCPToolConfig            `yaml:"mcp" env:"MCP"`
+	Approval HostedToolApprovalConfig `yaml:"approval" env:"APPROVAL"`
 }
 
 type FileOpsToolConfig struct {
@@ -43,6 +44,15 @@ type MCPToolConfig struct {
 	BaseURL string   `yaml:"base_url" env:"BASE_URL"`
 }
 
+type HostedToolApprovalConfig struct {
+	Backend           string        `yaml:"backend" env:"BACKEND"`
+	GrantTTL          time.Duration `yaml:"grant_ttl" env:"GRANT_TTL"`
+	Scope             string        `yaml:"scope" env:"SCOPE"`
+	PersistPath       string        `yaml:"persist_path" env:"PERSIST_PATH"`
+	RedisPrefix       string        `yaml:"redis_prefix" env:"REDIS_PREFIX"`
+	HistoryMaxEntries int           `yaml:"history_max_entries" env:"HISTORY_MAX_ENTRIES"`
+}
+
 type WorkflowCheckpointConfig struct {
 	Backend string `yaml:"backend" env:"BACKEND"`
 }
@@ -56,6 +66,14 @@ func DefaultHostedToolsConfig() HostedToolsConfig {
 		Shell: ShellToolConfig{
 			Enabled: false,
 			Timeout: 30 * time.Second,
+		},
+		Approval: HostedToolApprovalConfig{
+			Backend:           "file",
+			GrantTTL:          15 * time.Minute,
+			Scope:             "request",
+			PersistPath:       "./checkpoints/tool_approval_grants.json",
+			RedisPrefix:       "agentflow:tool_approval",
+			HistoryMaxEntries: 200,
 		},
 	}
 }

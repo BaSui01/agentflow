@@ -247,6 +247,34 @@ func TestLoader_LoadMultimodalFromEnv(t *testing.T) {
 	assert.Equal(t, "https://sora.example.internal", cfg.Multimodal.Video.SoraBaseURL)
 }
 
+func TestLoader_LoadHostedToolApprovalFromEnv(t *testing.T) {
+	envVars := map[string]string{
+		"AGENTFLOW_HOSTED_TOOLS_APPROVAL_BACKEND":             "file",
+		"AGENTFLOW_HOSTED_TOOLS_APPROVAL_GRANT_TTL":           "25m",
+		"AGENTFLOW_HOSTED_TOOLS_APPROVAL_SCOPE":               "agent_tool",
+		"AGENTFLOW_HOSTED_TOOLS_APPROVAL_PERSIST_PATH":        "./tmp/tool_approval_grants.json",
+		"AGENTFLOW_HOSTED_TOOLS_APPROVAL_REDIS_PREFIX":        "agentflow:test:tool_approval",
+		"AGENTFLOW_HOSTED_TOOLS_APPROVAL_HISTORY_MAX_ENTRIES": "321",
+	}
+	for k, v := range envVars {
+		os.Setenv(k, v)
+	}
+	defer func() {
+		for k := range envVars {
+			os.Unsetenv(k)
+		}
+	}()
+
+	cfg, err := NewLoader().Load()
+	require.NoError(t, err)
+	assert.Equal(t, "file", cfg.HostedTools.Approval.Backend)
+	assert.Equal(t, 25*time.Minute, cfg.HostedTools.Approval.GrantTTL)
+	assert.Equal(t, "agent_tool", cfg.HostedTools.Approval.Scope)
+	assert.Equal(t, "./tmp/tool_approval_grants.json", cfg.HostedTools.Approval.PersistPath)
+	assert.Equal(t, "agentflow:test:tool_approval", cfg.HostedTools.Approval.RedisPrefix)
+	assert.Equal(t, 321, cfg.HostedTools.Approval.HistoryMaxEntries)
+}
+
 func TestLoader_EnvOverridesYAML(t *testing.T) {
 	// 创建临时配置文件
 	tmpDir := t.TempDir()

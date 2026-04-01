@@ -51,11 +51,13 @@ type Server struct {
 	apiKeyHandler       *handlers.APIKeyHandler
 	toolRegistryHandler *handlers.ToolRegistryHandler
 	toolProviderHandler *handlers.ToolProviderHandler
+	toolApprovalHandler *handlers.ToolApprovalHandler
 	ragHandler          *handlers.RAGHandler
 	workflowHandler     *handlers.WorkflowHandler
 	protocolHandler     *handlers.ProtocolHandler
 	multimodalHandler   *handlers.MultimodalHandler
 	multimodalRedis     *redis.Client
+	toolApprovalRedis   *redis.Client
 
 	metricsCollector *metrics.Collector
 
@@ -80,6 +82,8 @@ type Server struct {
 	discoveryRegistry       *discovery.CapabilityRegistry
 	agentRegistry           *agent.AgentRegistry
 	toolingRuntime          *bootstrap.AgentToolingRuntime
+	toolApprovalManager     *hitl.InterruptManager
+	capabilityCatalog       *bootstrap.CapabilityCatalog
 	workflowHITLManager     *hitl.InterruptManager
 	checkpointStore         agent.CheckpointStore
 	checkpointManager       *agent.CheckpointManager

@@ -7,9 +7,11 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strings"
 	"sync"
 	"time"
 
+	llmtools "github.com/BaSui01/agentflow/llm/capabilities/tools"
 	"github.com/BaSui01/agentflow/pkg/metrics"
 	"github.com/BaSui01/agentflow/pkg/tlsutil"
 	"github.com/BaSui01/agentflow/types"
@@ -47,12 +49,18 @@ type ToolExecuteFunc func(ctx context.Context, args json.RawMessage) (json.RawMe
 // ToolMiddleware wraps tool execution with cross-cutting concerns.
 type ToolMiddleware func(next ToolExecuteFunc) ToolExecuteFunc
 
+// PermissionRiskReporter lets tools expose a stable permission risk classification.
+type PermissionRiskReporter interface {
+	PermissionRisk() string
+}
+
 // ToolRegistry manages hosted tools.
 type ToolRegistry struct {
 	tools       map[string]HostedTool
 	middlewares []ToolMiddleware
 	logger      *zap.Logger
 	metrics     *metrics.Collector
+	permissions llmtools.PermissionManager
 	mu          sync.RWMutex
 }
 
@@ -77,6 +85,11 @@ type ToolRegistryOption func(*ToolRegistry)
 // WithToolMetrics injects a Prometheus metrics collector for tool call instrumentation.
 func WithToolMetrics(c *metrics.Collector) ToolRegistryOption {
 	return func(r *ToolRegistry) { r.metrics = c }
+}
+
+// WithPermissionManager injects the permission manager used by hosted tool execution.
+func WithPermissionManager(pm llmtools.PermissionManager) ToolRegistryOption {
+	return func(r *ToolRegistry) { r.permissions = pm }
 }
 
 // 注册注册一个主机工具 。
@@ -331,10 +344,32 @@ func (r *ToolRegistry) Execute(ctx context.Context, name string, args json.RawMe
 	middlewares := make([]ToolMiddleware, len(r.middlewares))
 	copy(middlewares, r.middlewares)
 	mc := r.metrics
+	pm := r.permissions
 	r.mu.RUnlock()
 
 	if !ok {
 		return nil, fmt.Errorf("tool not found: %s", name)
+	}
+
+	if pm != nil {
+		permCtx := buildPermissionContext(ctx, tool, args)
+		ctx = llmtools.WithPermissionContext(ctx, permCtx)
+		result, err := pm.CheckPermission(ctx, permCtx)
+		if err != nil {
+			return nil, fmt.Errorf("permission check failed: %w", err)
+		}
+		switch result.Decision {
+		case llmtools.PermissionAllow:
+		case llmtools.PermissionDeny:
+			return nil, fmt.Errorf("permission denied: %s", result.Reason)
+		case llmtools.PermissionRequireApproval:
+			if result.ApprovalID != "" {
+				return nil, fmt.Errorf("approval required (ID: %s): %s", result.ApprovalID, result.Reason)
+			}
+			return nil, fmt.Errorf("approval required: %s", result.Reason)
+		default:
+			return nil, fmt.Errorf("unknown permission decision: %s", result.Decision)
+		}
 	}
 
 	var fn ToolExecuteFunc = tool.Execute
@@ -401,5 +436,129 @@ func WithMetrics(onExecute func(name string, duration time.Duration, err error))
 			}
 			return result, err
 		}
+	}
+}
+
+func buildPermissionContext(ctx context.Context, tool HostedTool, args json.RawMessage) *llmtools.PermissionContext {
+	permCtx, ok := llmtools.GetPermissionContext(ctx)
+	if !ok || permCtx == nil {
+		permCtx = &llmtools.PermissionContext{}
+	} else {
+		cloned := *permCtx
+		if permCtx.Roles != nil {
+			cloned.Roles = append([]string(nil), permCtx.Roles...)
+		}
+		if permCtx.Metadata != nil {
+			cloned.Metadata = make(map[string]string, len(permCtx.Metadata))
+			for key, value := range permCtx.Metadata {
+				cloned.Metadata[key] = value
+			}
+		}
+		if permCtx.Arguments != nil {
+			cloned.Arguments = make(map[string]any, len(permCtx.Arguments))
+			for key, value := range permCtx.Arguments {
+				cloned.Arguments[key] = value
+			}
+		}
+		permCtx = &cloned
+	}
+
+	toolName := ""
+	if tool != nil {
+		toolName = tool.Name()
+	}
+	permCtx.ToolName = toolName
+	if permCtx.RequestAt.IsZero() {
+		permCtx.RequestAt = time.Now()
+	}
+	if permCtx.Metadata == nil {
+		permCtx.Metadata = make(map[string]string)
+	}
+
+	if permCtx.AgentID == "" {
+		if agentID, ok := types.AgentID(ctx); ok {
+			permCtx.AgentID = agentID
+		}
+	}
+	if permCtx.UserID == "" {
+		if userID, ok := types.UserID(ctx); ok {
+			permCtx.UserID = userID
+		}
+	}
+	if len(permCtx.Roles) == 0 {
+		if roles, ok := types.Roles(ctx); ok {
+			permCtx.Roles = roles
+		}
+	}
+	if permCtx.TraceID == "" {
+		if traceID, ok := types.TraceID(ctx); ok {
+			permCtx.TraceID = traceID
+		}
+	}
+	if permCtx.SessionID == "" {
+		if runID, ok := types.RunID(ctx); ok {
+			permCtx.SessionID = runID
+			permCtx.Metadata["run_id"] = runID
+		}
+	}
+	if spanID, ok := types.SpanID(ctx); ok {
+		permCtx.Metadata["span_id"] = spanID
+	}
+	if tool != nil {
+		permCtx.Metadata["hosted_tool_type"] = string(tool.Type())
+		permCtx.Metadata["hosted_tool_risk"] = classifyHostedToolRisk(tool)
+	}
+
+	if len(args) > 0 && string(args) != "null" {
+		var arguments map[string]any
+		if err := json.Unmarshal(args, &arguments); err == nil && arguments != nil {
+			permCtx.Arguments = arguments
+		}
+	}
+
+	return permCtx
+}
+
+func classifyHostedToolRisk(tool HostedTool) string {
+	if tool == nil {
+		return "unknown"
+	}
+
+	name := strings.TrimSpace(tool.Name())
+	switch tool.Type() {
+	case ToolTypeWebSearch, ToolTypeFileSearch, ToolTypeRetrieval:
+		return "safe_read"
+	case ToolTypeShell, ToolTypeCodeExec, ToolTypeMCP:
+		return "requires_approval"
+	case ToolTypeFileOps:
+		switch name {
+		case "read_file", "list_directory":
+			return "safe_read"
+		case "write_file", "edit_file":
+			return "requires_approval"
+		default:
+			return "unknown"
+		}
+	case ToolTypeAlias:
+		if reporter, ok := tool.(PermissionRiskReporter); ok {
+			return reporter.PermissionRisk()
+		}
+		return "unknown"
+	default:
+		return "unknown"
+	}
+}
+
+func classifyAliasRisk(target string) string {
+	switch strings.TrimSpace(target) {
+	case "web_search", "file_search", "retrieval", "read_file", "list_directory":
+		return "safe_read"
+	case "write_file", "edit_file", "run_command", "code_execution":
+		return "requires_approval"
+	default:
+		if strings.HasPrefix(strings.TrimSpace(target), "mcp_") {
+			return "requires_approval"
+		}
+		return "unknown"
 	}
 }

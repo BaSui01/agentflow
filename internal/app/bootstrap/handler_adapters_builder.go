@@ -3,6 +3,7 @@ package bootstrap
 import (
 	"github.com/BaSui01/agentflow/agent"
 	"github.com/BaSui01/agentflow/agent/discovery"
+	"github.com/BaSui01/agentflow/agent/hitl"
 	"github.com/BaSui01/agentflow/agent/hosted"
 	"github.com/BaSui01/agentflow/api/handlers"
 	"github.com/BaSui01/agentflow/internal/usecase"
@@ -55,4 +56,22 @@ func BuildToolProviderHandler(
 		return nil
 	}
 	return handlers.NewToolProviderHandler(handlers.NewGormToolProviderStore(db), runtime, logger)
+}
+
+// BuildToolApprovalHandler creates the tool approval handler when runtime is available.
+func BuildToolApprovalHandler(
+	manager *hitl.InterruptManager,
+	workflowID string,
+	config ToolApprovalConfig,
+	logger *zap.Logger,
+) *handlers.ToolApprovalHandler {
+	if manager == nil {
+		return nil
+	}
+	return handlers.NewToolApprovalHandler(&toolApprovalRuntime{
+		manager: manager,
+		store:   defaultToolApprovalGrantStore(config, logger),
+		history: defaultToolApprovalHistoryStore(config),
+		config:  config,
+	}, workflowID, logger)
 }

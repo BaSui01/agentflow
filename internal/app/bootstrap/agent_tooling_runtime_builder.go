@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/BaSui01/agentflow/agent"
+	"github.com/BaSui01/agentflow/agent/hitl"
 	"github.com/BaSui01/agentflow/agent/hosted"
 	mcpproto "github.com/BaSui01/agentflow/agent/protocol/mcp"
 	llmtools "github.com/BaSui01/agentflow/llm/capabilities/tools"
@@ -24,11 +25,13 @@ var toolNameSanitizer = regexp.MustCompile(`[^a-zA-Z0-9_]`)
 
 // AgentToolingOptions carries optional dependencies for agent tool wiring.
 type AgentToolingOptions struct {
-	RetrievalStore    rag.VectorStore
-	EmbeddingProvider rag.EmbeddingProvider
-	MCPServer         mcpproto.MCPServer
-	EnableMCPTools    bool
-	DB                *gorm.DB
+	RetrievalStore      rag.VectorStore
+	EmbeddingProvider   rag.EmbeddingProvider
+	MCPServer           mcpproto.MCPServer
+	EnableMCPTools      bool
+	DB                  *gorm.DB
+	ToolApprovalManager *hitl.InterruptManager
+	ToolApprovalConfig  ToolApprovalConfig
 }
 
 // AgentToolingRuntime groups runtime-managed tools exposed to Agent execution.
@@ -36,6 +39,7 @@ type AgentToolingRuntime struct {
 	Registry    *hosted.ToolRegistry
 	ToolManager agent.ToolManager
 	ToolNames   []string
+	Permissions llmtools.PermissionManager
 
 	db               *gorm.DB
 	logger           *zap.Logger
@@ -161,7 +165,11 @@ func BuildAgentToolingRuntime(opts AgentToolingOptions, logger *zap.Logger) (*Ag
 	if logger == nil {
 		logger = zap.NewNop()
 	}
-	registry := hosted.NewToolRegistry(logger)
+	permissionManager := newDefaultToolPermissionManager(logger)
+	if approvalAware, ok := permissionManager.(*llmtools.DefaultPermissionManager); ok && opts.ToolApprovalManager != nil {
+		approvalAware.SetApprovalHandler(newToolApprovalHandler(opts.ToolApprovalManager, opts.ToolApprovalConfig, logger))
+	}
+	registry := hosted.NewToolRegistry(logger, hosted.WithPermissionManager(permissionManager))
 
 	baseToolNames := make(map[string]struct{}, 8)
 	appendTool := func(name string) {
@@ -199,12 +207,13 @@ func BuildAgentToolingRuntime(opts AgentToolingOptions, logger *zap.Logger) (*Ag
 
 	var manager agent.ToolManager
 	if len(registry.List()) > 0 {
-		manager = newHostedToolManager(registry, logger)
+		manager = newHostedToolManager(registry, permissionManager, logger)
 	}
 
 	runtime := &AgentToolingRuntime{
 		Registry:         registry,
 		ToolManager:      manager,
+		Permissions:      permissionManager,
 		db:               opts.DB,
 		logger:           logger.With(zap.String("component", "agent_tooling_runtime")),
 		baseToolNames:    baseToolNames,
@@ -297,6 +306,19 @@ func (t *aliasHostedTool) Description() string {
 func (t *aliasHostedTool) Schema() types.ToolSchema {
 	return t.schema
 }
+func (t *aliasHostedTool) PermissionRisk() string {
+	switch strings.TrimSpace(t.target) {
+	case "web_search", "file_search", "retrieval", "read_file", "list_directory":
+		return "safe_read"
+	case "write_file", "edit_file", "run_command", "code_execution":
+		return "requires_approval"
+	default:
+		if strings.HasPrefix(strings.TrimSpace(t.target), "mcp_") {
+			return "requires_approval"
+		}
+		return "unknown"
+	}
+}
 func (t *aliasHostedTool) Execute(ctx context.Context, args json.RawMessage) (json.RawMessage, error) {
 	if t.registry == nil {
 		return nil, fmt.Errorf("tool registry is not configured")
@@ -305,17 +327,23 @@ func (t *aliasHostedTool) Execute(ctx context.Context, args json.RawMessage) (js
 }
 
 type hostedToolManager struct {
-	registry *hosted.ToolRegistry
-	logger   *zap.Logger
+	registry    *hosted.ToolRegistry
+	permissions llmtools.PermissionManager
+	logger      *zap.Logger
 }
 
-func newHostedToolManager(registry *hosted.ToolRegistry, logger *zap.Logger) *hostedToolManager {
+func newHostedToolManager(
+	registry *hosted.ToolRegistry,
+	permissions llmtools.PermissionManager,
+	logger *zap.Logger,
+) *hostedToolManager {
 	if logger == nil {
 		logger = zap.NewNop()
 	}
 	return &hostedToolManager{
-		registry: registry,
-		logger:   logger.With(zap.String("component", "agent_tool_manager")),
+		registry:    registry,
+		permissions: permissions,
+		logger:      logger.With(zap.String("component", "agent_tool_manager")),
 	}
 }
 
@@ -323,7 +351,7 @@ func (m *hostedToolManager) GetAllowedTools(agentID string) []types.ToolSchema {
 	if m == nil || m.registry == nil {
 		return nil
 	}
-	return m.registry.GetSchemas()
+	return filterToolSchemasByAgentPermission(m.permissions, agentID, m.registry.GetSchemas())
 }
 
 func (m *hostedToolManager) ExecuteForAgent(ctx context.Context, agentID string, calls []types.ToolCall) []llmtools.ToolResult {
@@ -346,8 +374,10 @@ func (m *hostedToolManager) ExecuteForAgent(ctx context.Context, agentID string,
 				return
 			}
 
+			callCtx := types.WithAgentID(ctx, agentID)
+
 			start := time.Now()
-			raw, err := m.registry.Execute(ctx, c.Name, c.Arguments)
+			raw, err := m.registry.Execute(callCtx, c.Name, c.Arguments)
 			out[idx] = llmtools.ToolResult{
 				ToolCallID: c.ID,
 				Name:       c.Name,

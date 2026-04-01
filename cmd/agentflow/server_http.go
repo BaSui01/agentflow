@@ -22,6 +22,7 @@ func (s *Server) startHTTPServer() error {
 			APIKey:        s.apiKeyHandler,
 			Tools:         s.toolRegistryHandler,
 			ToolProviders: s.toolProviderHandler,
+			ToolApprovals: s.toolApprovalHandler,
 			Multimodal:    s.multimodalHandler,
 			Protocol:      s.protocolHandler,
 			RAG:           s.ragHandler,

@@ -102,6 +102,7 @@ type pendingInterrupt struct {
 	interrupt   *Interrupt
 	responseCh  chan *Response
 	cancelFn    context.CancelFunc
+	timeoutCtx  context.Context
 	resolveOnce sync.Once
 }
 
@@ -155,6 +156,38 @@ func (m *InterruptManager) RegisterNamedHandler(
 
 // 创建中断创建并等待中断解决 。
 func (m *InterruptManager) CreateInterrupt(ctx context.Context, opts InterruptOptions) (*Response, error) {
+	pending, err := m.createPendingInterrupt(ctx, opts, true)
+	if err != nil {
+		return nil, err
+	}
+
+	// 等待回应
+	select {
+	case response := <-pending.responseCh:
+		return response, nil
+	case <-ctx.Done():
+		_ = m.CancelInterrupt(context.Background(), pending.interrupt.ID)
+		return nil, ctx.Err()
+	case <-pending.timeoutCtx.Done():
+		m.handleTimeout(context.Background(), pending.interrupt)
+		return nil, fmt.Errorf("interrupt timeout: %s", pending.interrupt.ID)
+	}
+}
+
+// CreatePendingInterrupt creates an interrupt and registers it as pending without blocking for a response.
+func (m *InterruptManager) CreatePendingInterrupt(ctx context.Context, opts InterruptOptions) (*Interrupt, error) {
+	pending, err := m.createPendingInterrupt(ctx, opts, false)
+	if err != nil {
+		return nil, err
+	}
+	return pending.interrupt, nil
+}
+
+func (m *InterruptManager) createPendingInterrupt(
+	ctx context.Context,
+	opts InterruptOptions,
+	bindToParent bool,
+) (*pendingInterrupt, error) {
 	interrupt := &Interrupt{
 		ID:          generateInterruptID(),
 		WorkflowID:  opts.WorkflowID,
@@ -185,12 +218,16 @@ func (m *InterruptManager) CreateInterrupt(ctx context.Context, opts InterruptOp
 		return nil, fmt.Errorf("failed to save interrupt: %w", err)
 	}
 
-	// 以响应频道创建待补中断
-	interruptCtx, cancel := context.WithTimeout(ctx, interrupt.Timeout)
+	timeoutParent := context.Background()
+	if bindToParent {
+		timeoutParent = ctx
+	}
+	interruptCtx, cancel := context.WithTimeout(timeoutParent, interrupt.Timeout)
 	pending := &pendingInterrupt{
 		interrupt:  interrupt,
 		responseCh: make(chan *Response, 1),
 		cancelFn:   cancel,
+		timeoutCtx: interruptCtx,
 	}
 
 	m.mu.Lock()
@@ -200,14 +237,17 @@ func (m *InterruptManager) CreateInterrupt(ctx context.Context, opts InterruptOp
 	// 通知处理者（必须在 pending 注册后，避免处理器提前 Resolve 产生 not found）
 	m.notifyHandlers(ctx, interrupt)
 
-	// 等待回应
-	select {
-	case response := <-pending.responseCh:
-		return response, nil
-	case <-interruptCtx.Done():
-		m.handleTimeout(ctx, interrupt)
-		return nil, fmt.Errorf("interrupt timeout: %s", interrupt.ID)
+	if !bindToParent {
+		go func(waitCtx context.Context, interrupt *Interrupt) {
+			<-waitCtx.Done()
+			if waitCtx.Err() != context.DeadlineExceeded {
+				return
+			}
+			m.handleTimeout(context.Background(), interrupt)
+		}(interruptCtx, interrupt)
 	}
+
+	return pending, nil
 }
 
 // 解析中断解决待决中断 。
@@ -293,6 +333,26 @@ func (m *InterruptManager) GetPendingInterrupts(workflowID string) []*Interrupt 
 		}
 	}
 	return results
+}
+
+// GetInterrupt loads a single interrupt from the backing store.
+func (m *InterruptManager) GetInterrupt(ctx context.Context, interruptID string) (*Interrupt, error) {
+	if m == nil || m.store == nil {
+		return nil, fmt.Errorf("interrupt store is not configured")
+	}
+	return m.store.Load(ctx, interruptID)
+}
+
+// ListInterrupts lists interrupts from the backing store filtered by workflow and status.
+func (m *InterruptManager) ListInterrupts(
+	ctx context.Context,
+	workflowID string,
+	status InterruptStatus,
+) ([]*Interrupt, error) {
+	if m == nil || m.store == nil {
+		return nil, fmt.Errorf("interrupt store is not configured")
+	}
+	return m.store.List(ctx, workflowID, status)
 }
 
 func (m *InterruptManager) notifyHandlers(ctx context.Context, interrupt *Interrupt) {
