@@ -40,3 +40,8 @@
 ### 6) 测试与质量建议
 
 - **Goroutine 泄漏检测**：建议在关键包（如 `agent/`）的 `TestMain` 中集成 `go.uber.org/goleak` 的 `VerifyTestMain`，以检测测试后的 goroutine 泄漏。若现有测试存在 background goroutines 导致大量误报，可先用 `goleak.IgnoreTopFunction` 忽略已知安全 goroutine，或暂不启用，待测试稳定性提升后再接入。
+
+### 7) 外部参考目录（强制）
+
+- **`CC-Source/` 与 `docs/claude-code/` 仅作外部参考学习资料**：用于借鉴设计与实现思路，不属于当前项目正式实现。
+- **默认排除主项目语境**：做当前项目设计、开发、评审、文档同步、架构守卫判断时，默认排除上述目录；仅在明确要求参考外部实现时再读取或引用。

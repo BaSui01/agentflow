@@ -34,5 +34,9 @@ test_artifacts/
 .claude/skills/agentflow
 scripts/livecheck/logs/
 
+# External reference-only materials
+CC-Source/
+docs/claude-code/
+
 # Benchmark (latest is regenerated locally; baselines are committed)
 benchmarks/latest.txt
