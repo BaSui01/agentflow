@@ -43,16 +43,29 @@ This document defines the runtime startup chain and composition boundaries.
   - workflow reload reuses one shared `hitl.InterruptManager`, so pending workflow interrupts survive text-runtime swaps instead of being orphaned by a new parser/runtime instance
   - previous agent resolver caches are reset only after a successful runtime swap, including rollback-driven restoration of the last good text runtime, so stale cached agents are torn down only after the replacement runtime is live
 - `internal/app/bootstrap/handler_adapters_builder.go`
-  - agent registry/handler and api-key/tool-registry handler adapter builders
+  - agent registry/handler and api-key/tool-registry/tool-approval handler adapter builders
 - `internal/app/bootstrap/agent_runtime_factory_builder.go`
   - default runtime-backed agent factory registration
+- `internal/app/bootstrap/agent_tool_approval_builder.go`
+  - tool approval interrupt adapter for hosted-tool permission checks
+  - bridges `llm/capabilities/tools.PermissionManager` approval callbacks onto a dedicated `hitl.InterruptManager`
+  - maintains scoped temporary approval grants with configurable TTL
+  - supports `memory / file / redis` grant backends, so approval windows can stay process-local, survive restarts, or be shared across instances
+- `internal/app/bootstrap/agent_tool_policy_builder.go`
+  - shared hosted-tool permission manager bootstrap
+  - default risk-tier rules: safe read-only tools allow, mutating/exec/MCP tools require approval, unknown tools deny by default
+  - agent-specific allow/deny filtering helpers for runtime tool exposure
 - `internal/app/bootstrap/agent_tooling_runtime_builder.go`
   - hosted tool registry composition for agent runtime
+  - shared permission-aware hosted tool execution chain (`ToolManager -> ToolRegistry.Execute -> permission check -> tool execute`)
   - ToolManager bridge wiring (`hosted.ToolRegistry -> agent.ToolManager`)
   - built-in retrieval tool and MCP tool bridge registration (`mcp_*`)
   - shared ToolManager injection target for both `AgentHandler` and `ChatHandler` local tool loop
   - DB-backed dynamic bindings reload support (`/api/v1/tools*` writes -> runtime reload)
   - runtime reload callback hook for resolver cache reset (new tool bindings effective immediately)
+- `internal/app/bootstrap/capability_catalog_builder.go`
+  - read-only runtime capability catalog for hosted tools, agent types, and multi-agent modes
+  - used by server bootstrap for startup-time capability visibility and future统一能力面收敛
 - `internal/app/bootstrap/mongo_wiring_builder.go`
   - Mongo prompt/conversation/run stores wiring
   - Mongo optional capabilities wiring (audit, memory, ab-testing, registry persistence)

@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/BaSui01/agentflow/agent/hitl"
 	"github.com/BaSui01/agentflow/agent/hosted"
 	"github.com/BaSui01/agentflow/api/handlers"
 	"github.com/glebarez/sqlite"
@@ -64,13 +65,20 @@ func TestRegisterHTTPRoutes_RegistersToolsEndpoints(t *testing.T) {
 	runtime := &toolRegistryRuntimeStub{targets: []string{"retrieval"}}
 	toolHandler := BuildToolRegistryHandler(db, runtime, zap.NewNop())
 	providerHandler := BuildToolProviderHandler(db, runtime, zap.NewNop())
+	approvalHandler := BuildToolApprovalHandler(
+		hitl.NewInterruptManager(hitl.NewInMemoryInterruptStore(), zap.NewNop()),
+		"tool_approval",
+		ToolApprovalConfig{Backend: "memory"},
+		zap.NewNop(),
+	)
 	require.NotNil(t, toolHandler)
 	require.NotNil(t, providerHandler)
+	require.NotNil(t, approvalHandler)
 
 	mux := http.NewServeMux()
 	RegisterHTTPRoutes(
 		mux,
-		HTTPRouteHandlers{Tools: toolHandler, ToolProviders: providerHandler},
+		HTTPRouteHandlers{Tools: toolHandler, ToolProviders: providerHandler, ToolApprovals: approvalHandler},
 		"test-version",
 		"test-build-time",
 		"test-git-commit",
@@ -110,6 +118,37 @@ func TestRegisterHTTPRoutes_RegistersToolsEndpoints(t *testing.T) {
 	providerRec := httptest.NewRecorder()
 	mux.ServeHTTP(providerRec, providerReq)
 	assert.Equal(t, http.StatusOK, providerRec.Code)
+
+	approvalReq := httptest.NewRequest(http.MethodGet, "/api/v1/tools/approvals", nil)
+	approvalRec := httptest.NewRecorder()
+	mux.ServeHTTP(approvalRec, approvalReq)
+	assert.Equal(t, http.StatusOK, approvalRec.Code)
+
+	historyReq := httptest.NewRequest(http.MethodGet, "/api/v1/tools/approvals/history", nil)
+	historyRec := httptest.NewRecorder()
+	mux.ServeHTTP(historyRec, historyReq)
+	assert.Equal(t, http.StatusOK, historyRec.Code)
+
+	grantsReq := httptest.NewRequest(http.MethodGet, "/api/v1/tools/approvals/grants", nil)
+	grantsRec := httptest.NewRecorder()
+	mux.ServeHTTP(grantsRec, grantsReq)
+	assert.Equal(t, http.StatusOK, grantsRec.Code)
+
+	statsReq := httptest.NewRequest(http.MethodGet, "/api/v1/tools/approvals/stats", nil)
+	statsRec := httptest.NewRecorder()
+	mux.ServeHTTP(statsRec, statsReq)
+	assert.Equal(t, http.StatusOK, statsRec.Code)
+
+	cleanupReq := httptest.NewRequest(http.MethodPost, "/api/v1/tools/approvals/cleanup", nil)
+	cleanupRec := httptest.NewRecorder()
+	mux.ServeHTTP(cleanupRec, cleanupReq)
+	assert.Equal(t, http.StatusOK, cleanupRec.Code)
+
+	revokeReq := httptest.NewRequest(http.MethodDelete, "/api/v1/tools/approvals/grants/fp-1", nil)
+	revokeReq.SetPathValue("fingerprint", "fp-1")
+	revokeRec := httptest.NewRecorder()
+	mux.ServeHTTP(revokeRec, revokeReq)
+	assert.NotEqual(t, http.StatusNotFound, revokeRec.Code)
 }
 
 func TestRegisterHTTPRoutes_RegistersOpenAICompatChatEndpoints(t *testing.T) {

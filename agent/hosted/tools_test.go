@@ -6,9 +6,12 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
+	llmtools "github.com/BaSui01/agentflow/llm/capabilities/tools"
 	"go.uber.org/zap"
 )
 
@@ -90,6 +93,65 @@ func TestToolRegistry_GetSchemas(t *testing.T) {
 	schemas := reg.GetSchemas()
 	if len(schemas) != 2 {
 		t.Errorf("got %d schemas, want 2", len(schemas))
+	}
+}
+
+func TestToolRegistry_Execute_DeniedByPermissionManager(t *testing.T) {
+	pm := llmtools.NewPermissionManager(zap.NewNop())
+	now := time.Now()
+	err := pm.AddRule(&llmtools.PermissionRule{
+		ID:          "deny-file-search",
+		Name:        "deny file search",
+		ToolPattern: "file_search",
+		Decision:    llmtools.PermissionDeny,
+		Priority:    100,
+		CreatedAt:   now,
+		UpdatedAt:   now,
+	})
+	if err != nil {
+		t.Fatalf("AddRule failed: %v", err)
+	}
+	reg := NewToolRegistry(nil, WithPermissionManager(pm))
+	reg.Register(NewFileSearchTool(&mockFileSearchStore{}, 5))
+
+	_, err = reg.Execute(context.Background(), "file_search", json.RawMessage(`{"query":"test"}`))
+	if err == nil {
+		t.Fatal("expected permission error")
+	}
+}
+
+func TestToolRegistry_Execute_ApprovalRequiredForWriteFileRisk(t *testing.T) {
+	pm := llmtools.NewPermissionManager(zap.NewNop())
+	now := time.Now()
+	err := pm.AddRule(&llmtools.PermissionRule{
+		ID:          "ask-write-file",
+		Name:        "ask write file",
+		ToolPattern: "*",
+		Decision:    llmtools.PermissionRequireApproval,
+		Priority:    100,
+		Conditions: []llmtools.RuleCondition{{
+			Field:    "hosted_tool_risk",
+			Operator: "eq",
+			Value:    "requires_approval",
+		}},
+		CreatedAt: now,
+		UpdatedAt: now,
+	})
+	if err != nil {
+		t.Fatalf("AddRule failed: %v", err)
+	}
+
+	dir := t.TempDir()
+	reg := NewToolRegistry(nil, WithPermissionManager(pm))
+	reg.Register(NewWriteFileTool(FileOpsConfig{AllowedPaths: []string{dir}}))
+
+	target := filepath.Join(dir, "note.txt")
+	_, err = reg.Execute(context.Background(), "write_file", json.RawMessage(fmt.Sprintf(`{"path":%q,"content":"hello"}`, target)))
+	if err == nil {
+		t.Fatal("expected approval error")
+	}
+	if _, statErr := os.Stat(target); !os.IsNotExist(statErr) {
+		t.Fatalf("expected file not written, stat err=%v", statErr)
 	}
 }
 
@@ -466,4 +528,3 @@ func TestMiddleware_Chain_Order(t *testing.T) {
 		}
 	}
 }
-

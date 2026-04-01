@@ -59,8 +59,14 @@ func RegisterProvider(mux *http.ServeMux, apiKeyHandler *handlers.APIKeyHandler,
 	logger.Info("Provider API key routes registered")
 }
 
-func RegisterTools(mux *http.ServeMux, toolHandler *handlers.ToolRegistryHandler, providerHandler *handlers.ToolProviderHandler, logger *zap.Logger) {
-	if toolHandler == nil && providerHandler == nil {
+func RegisterTools(
+	mux *http.ServeMux,
+	toolHandler *handlers.ToolRegistryHandler,
+	providerHandler *handlers.ToolProviderHandler,
+	approvalHandler *handlers.ToolApprovalHandler,
+	logger *zap.Logger,
+) {
+	if toolHandler == nil && providerHandler == nil && approvalHandler == nil {
 		return
 	}
 	if toolHandler != nil {
@@ -76,6 +82,16 @@ func RegisterTools(mux *http.ServeMux, toolHandler *handlers.ToolRegistryHandler
 		mux.HandleFunc("PUT /api/v1/tools/providers/{provider}", providerHandler.HandleUpsert)
 		mux.HandleFunc("DELETE /api/v1/tools/providers/{provider}", providerHandler.HandleDelete)
 		mux.HandleFunc("POST /api/v1/tools/providers/reload", providerHandler.HandleReload)
+	}
+	if approvalHandler != nil {
+		mux.HandleFunc("GET /api/v1/tools/approvals", approvalHandler.HandleList)
+		mux.HandleFunc("GET /api/v1/tools/approvals/history", approvalHandler.HandleHistory)
+		mux.HandleFunc("GET /api/v1/tools/approvals/grants", approvalHandler.HandleListGrants)
+		mux.HandleFunc("GET /api/v1/tools/approvals/stats", approvalHandler.HandleStats)
+		mux.HandleFunc("DELETE /api/v1/tools/approvals/grants/{fingerprint}", approvalHandler.HandleRevokeGrant)
+		mux.HandleFunc("GET /api/v1/tools/approvals/{id}", approvalHandler.HandleGet)
+		mux.HandleFunc("POST /api/v1/tools/approvals/cleanup", approvalHandler.HandleCleanup)
+		mux.HandleFunc("POST /api/v1/tools/approvals/{id}/resolve", approvalHandler.HandleResolve)
 	}
 	logger.Info("Tool registry routes registered")
 }

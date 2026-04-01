@@ -23,15 +23,24 @@
 - Provider API Key: `/api/v1/providers/*`
 - Tool Registry: `/api/v1/tools*`
   - Tool Provider Config: `/api/v1/tools/providers`、`/api/v1/tools/providers/{provider}`、`/api/v1/tools/providers/reload`
+  - Tool Approval: `/api/v1/tools/approvals`、`/api/v1/tools/approvals/{id}`、`/api/v1/tools/approvals/{id}/resolve`
 - Config API: `/api/v1/config*`
 
 ## 工具共用与自动生效
 
 - 对外工具注册入口：`/api/v1/tools*`（列表/创建/更新/删除/targets/reload）。
 - 对外工具 Provider 配置入口：`/api/v1/tools/providers/*`（按 provider 持久化 `web_search` 配置并触发 runtime reload）。
+- 对外工具审批入口：`/api/v1/tools/approvals*`（列出待审批工具请求、查询详情、批准/拒绝）。
+- 审批统计与清理入口：`/api/v1/tools/approvals/stats`、`/api/v1/tools/approvals/cleanup`。
+- 授权窗口管理入口：`/api/v1/tools/approvals/grants`、`/api/v1/tools/approvals/grants/{fingerprint}`。
+- 审批历史入口：`/api/v1/tools/approvals/history`。
 - `chat` 与 `agent` 共享同一套 runtime `ToolManager`（同一注册中心，不是两套独立工具池）。
 - 当 DB 中工具注册发生变更时，服务层会触发 runtime reload；成功后会重置 agent resolver 缓存，确保新工具白名单立即生效（无需重启进程）。
-- 关键链路：`cmd/agentflow/server_handlers_runtime.go`（`toolRegistryRuntimeAdapter.ReloadBindings -> onReload -> resolver.ResetCache`）。
+- 高风险 hosted tool（写文件、shell、code execution、MCP）默认走 `require_approval`；审批通过后，会按配置的 `scope + grant_ttl` 形成临时授权窗口，后续匹配请求可在窗口期内直接通过。
+- 若 `hosted_tools.approval.backend=file`，活动授权窗口会持久化到 `persist_path` 文件；若 `backend=redis`，则通过共享 Redis 键空间跨实例恢复，直到 TTL 到期。
+- 关键链路：
+  `cmd/agentflow/server_handlers_runtime.go`（`toolRegistryRuntimeAdapter.ReloadBindings -> onReload -> resolver.ResetCache`）
+  `internal/app/bootstrap/agent_tool_approval_builder.go`（PermissionManager approval callback -> HITL interrupt）
 
 ## 关键构造示例
 

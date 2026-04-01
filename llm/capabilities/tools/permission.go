@@ -224,6 +224,15 @@ func (pm *DefaultPermissionManager) CheckPermission(ctx context.Context, permCtx
 				result.Reason = "approval request failed"
 			} else {
 				result.ApprovalID = approvalID
+				if approvalID != "" {
+					approved, statusErr := approvalHandler.CheckApprovalStatus(ctx, approvalID)
+					if statusErr != nil {
+						pm.logger.Warn("failed to check approval status", zap.String("approval_id", approvalID), zap.Error(statusErr))
+					} else if approved {
+						result.Decision = PermissionAllow
+						result.Reason = fmt.Sprintf("approval granted: %s", approvalID)
+					}
+				}
 			}
 		}
 
@@ -628,4 +637,3 @@ func GetPermissionContext(ctx context.Context) (*PermissionContext, bool) {
 	permCtx, ok := ctx.Value(permissionContextKey).(*PermissionContext)
 	return permCtx, ok
 }
-

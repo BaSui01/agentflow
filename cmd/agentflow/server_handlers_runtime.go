@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/BaSui01/agentflow/agent"
+	"github.com/BaSui01/agentflow/agent/multiagent"
 	"github.com/BaSui01/agentflow/api/handlers"
 	"github.com/BaSui01/agentflow/config"
 	"github.com/BaSui01/agentflow/internal/app/bootstrap"
@@ -157,12 +158,33 @@ func (s *Server) initHandlers() error {
 			zap.String("provider", ragRuntime.EmbeddingProvider.Name()))
 	}
 
+	toolApprovalRedis, toolApprovalStore, toolApprovalStoreErr := bootstrap.BuildToolApprovalGrantStore(s.cfg, s.logger)
+	if toolApprovalStoreErr != nil {
+		return fmt.Errorf("failed to build tool approval grant store: %w", toolApprovalStoreErr)
+	}
+	s.toolApprovalRedis = toolApprovalRedis
+	toolApprovalHistoryStore, toolApprovalHistoryErr := bootstrap.BuildToolApprovalHistoryStore(s.cfg, toolApprovalRedis)
+	if toolApprovalHistoryErr != nil {
+		return fmt.Errorf("failed to build tool approval history store: %w", toolApprovalHistoryErr)
+	}
+
 	toolingRuntime, toolErr := bootstrap.BuildAgentToolingRuntime(bootstrap.AgentToolingOptions{
-		RetrievalStore:    ragStore,
-		EmbeddingProvider: ragEmbedding,
-		MCPServer:         protocolRuntime.MCPServer,
-		EnableMCPTools:    true,
-		DB:                s.db,
+		RetrievalStore:      ragStore,
+		EmbeddingProvider:   ragEmbedding,
+		MCPServer:           protocolRuntime.MCPServer,
+		EnableMCPTools:      true,
+		DB:                  s.db,
+		ToolApprovalManager: s.currentToolApprovalManager(),
+		ToolApprovalConfig: bootstrap.ToolApprovalConfig{
+			Backend:           s.cfg.HostedTools.Approval.Backend,
+			GrantTTL:          s.cfg.HostedTools.Approval.GrantTTL,
+			Scope:             s.cfg.HostedTools.Approval.Scope,
+			PersistPath:       s.cfg.HostedTools.Approval.PersistPath,
+			RedisPrefix:       s.cfg.HostedTools.Approval.RedisPrefix,
+			HistoryMaxEntries: s.cfg.HostedTools.Approval.HistoryMaxEntries,
+			GrantStore:        toolApprovalStore,
+			HistoryStore:      toolApprovalHistoryStore,
+		},
 	}, s.logger)
 	if toolErr != nil {
 		return fmt.Errorf("failed to build agent tooling runtime: %w", toolErr)
@@ -186,6 +208,32 @@ func (s *Server) initHandlers() error {
 		s.logger.Info("Tool provider handler initialized")
 	} else {
 		s.logger.Info("Tool provider handler disabled (database or tooling runtime unavailable)")
+	}
+	if s.toolApprovalHandler = bootstrap.BuildToolApprovalHandler(s.currentToolApprovalManager(), bootstrap.ToolApprovalWorkflowID(), bootstrap.ToolApprovalConfig{
+		Backend:           s.cfg.HostedTools.Approval.Backend,
+		GrantTTL:          s.cfg.HostedTools.Approval.GrantTTL,
+		Scope:             s.cfg.HostedTools.Approval.Scope,
+		PersistPath:       s.cfg.HostedTools.Approval.PersistPath,
+		RedisPrefix:       s.cfg.HostedTools.Approval.RedisPrefix,
+		HistoryMaxEntries: s.cfg.HostedTools.Approval.HistoryMaxEntries,
+		GrantStore:        toolApprovalStore,
+		HistoryStore:      toolApprovalHistoryStore,
+	}, s.logger); s.toolApprovalHandler != nil {
+		s.logger.Info("Tool approval handler initialized")
+	}
+
+	if toolingRuntime != nil {
+		s.capabilityCatalog = bootstrap.BuildCapabilityCatalog(
+			toolingRuntime.Registry,
+			agentRegistry,
+			multiagent.GlobalModeRegistry(),
+		)
+		if s.capabilityCatalog != nil {
+			s.logger.Info("Runtime capability catalog initialized",
+				zap.Int("agent_type_count", len(s.capabilityCatalog.AgentTypes)),
+				zap.Int("tool_count", len(s.capabilityCatalog.Tools)),
+				zap.Int("mode_count", len(s.capabilityCatalog.Modes)))
+		}
 	}
 
 	if llmRuntime != nil && s.provider != nil {

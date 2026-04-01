@@ -302,7 +302,7 @@ func TestDefaultPermissionManager_CheckPermission_RequireApproval(t *testing.T) 
 	pm := NewPermissionManager(nil)
 
 	// Mock approval handler
-	mockHandler := &mockApprovalHandler{approvalID: "approval-123"}
+	mockHandler := &mockApprovalHandler{approvalID: "approval-123", approved: false}
 	pm.SetApprovalHandler(mockHandler)
 
 	require.NoError(t, pm.AddRule(&PermissionRule{
@@ -317,6 +317,27 @@ func TestDefaultPermissionManager_CheckPermission_RequireApproval(t *testing.T) 
 	})
 	require.NoError(t, err)
 	assert.Equal(t, PermissionRequireApproval, result.Decision)
+	assert.Equal(t, "approval-123", result.ApprovalID)
+}
+
+func TestDefaultPermissionManager_CheckPermission_ApprovedRequestBecomesAllow(t *testing.T) {
+	pm := NewPermissionManager(nil)
+
+	mockHandler := &mockApprovalHandler{approvalID: "approval-123", approved: true}
+	pm.SetApprovalHandler(mockHandler)
+
+	require.NoError(t, pm.AddRule(&PermissionRule{
+		ID:          "r1",
+		Name:        "needs-approval",
+		ToolPattern: "*",
+		Decision:    PermissionRequireApproval,
+	}))
+
+	result, err := pm.CheckPermission(context.Background(), &PermissionContext{
+		ToolName: "dangerous",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, PermissionAllow, result.Decision)
 	assert.Equal(t, "approval-123", result.ApprovalID)
 }
 
@@ -478,6 +499,7 @@ func TestGetPermissionContext_NotSet(t *testing.T) {
 type mockApprovalHandler struct {
 	approvalID string
 	err        error
+	approved   bool
 }
 
 func (m *mockApprovalHandler) RequestApproval(ctx context.Context, permCtx *PermissionContext, rule *PermissionRule) (string, error) {
@@ -485,6 +507,5 @@ func (m *mockApprovalHandler) RequestApproval(ctx context.Context, permCtx *Perm
 }
 
 func (m *mockApprovalHandler) CheckApprovalStatus(ctx context.Context, approvalID string) (bool, error) {
-	return true, nil
+	return m.approved, nil
 }
-

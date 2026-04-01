@@ -147,6 +147,20 @@ func TestDefaultMultimodalConfig(t *testing.T) {
 	assert.Empty(t, cfg.Video.RunwayAPIKey)
 }
 
+func TestDefaultHostedToolsConfig(t *testing.T) {
+	cfg := DefaultHostedToolsConfig()
+	assert.False(t, cfg.FileOps.Enabled)
+	assert.Equal(t, int64(10<<20), cfg.FileOps.MaxFileSize)
+	assert.False(t, cfg.Shell.Enabled)
+	assert.Equal(t, 30*time.Second, cfg.Shell.Timeout)
+	assert.Equal(t, "file", cfg.Approval.Backend)
+	assert.Equal(t, 15*time.Minute, cfg.Approval.GrantTTL)
+	assert.Equal(t, "request", cfg.Approval.Scope)
+	assert.Equal(t, "./checkpoints/tool_approval_grants.json", cfg.Approval.PersistPath)
+	assert.Equal(t, "agentflow:tool_approval", cfg.Approval.RedisPrefix)
+	assert.Equal(t, 200, cfg.Approval.HistoryMaxEntries)
+}
+
 func TestDefaultLogConfig(t *testing.T) {
 	cfg := DefaultLogConfig()
 	assert.Equal(t, "info", cfg.Level)

@@ -803,6 +803,33 @@ func (c *Config) Validate() error {
 	if c.Multimodal.Enabled && strings.TrimSpace(c.Redis.Addr) == "" {
 		errs = append(errs, "redis.addr is required when multimodal.reference_store_backend=redis")
 	}
+	if c.HostedTools.Approval.GrantTTL <= 0 {
+		errs = append(errs, "hosted_tools.approval.grant_ttl must be positive")
+	}
+	if c.HostedTools.Approval.HistoryMaxEntries <= 0 {
+		errs = append(errs, "hosted_tools.approval.history_max_entries must be positive")
+	}
+	switch strings.TrimSpace(strings.ToLower(c.HostedTools.Approval.Backend)) {
+	case "memory":
+	case "file":
+		if strings.TrimSpace(c.HostedTools.Approval.PersistPath) == "" {
+			errs = append(errs, "hosted_tools.approval.persist_path is required when backend=file")
+		}
+	case "redis":
+		if strings.TrimSpace(c.Redis.Addr) == "" {
+			errs = append(errs, "redis.addr is required when hosted_tools.approval.backend=redis")
+		}
+		if strings.TrimSpace(c.HostedTools.Approval.RedisPrefix) == "" {
+			errs = append(errs, "hosted_tools.approval.redis_prefix is required when backend=redis")
+		}
+	default:
+		errs = append(errs, "hosted_tools.approval.backend must be one of: memory, file, redis")
+	}
+	switch strings.TrimSpace(strings.ToLower(c.HostedTools.Approval.Scope)) {
+	case "request", "agent_tool", "tool":
+	default:
+		errs = append(errs, "hosted_tools.approval.scope must be one of: request, agent_tool, tool")
+	}
 
 	// V-010: MaxTokens range validation
 	if c.Agent.MaxTokens < 0 || c.Agent.MaxTokens > validateMaxTokensMax {

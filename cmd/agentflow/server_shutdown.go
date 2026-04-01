@@ -79,6 +79,12 @@ func (s *Server) Shutdown() {
 		}
 	}
 
+	if s.toolApprovalRedis != nil {
+		if err := s.toolApprovalRedis.Close(); err != nil {
+			s.logger.Error("Tool approval Redis close error", zap.Error(err))
+		}
+	}
+
 	// 7.5 关闭 AuditLogger
 	if s.auditLogger != nil {
 		if err := s.auditLogger.Close(); err != nil {
