@@ -5,6 +5,20 @@ All notable changes to AgentFlow will be documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.9.0] - 2026-04-01
+
+### Added
+- 新增 hosted tool 审批主链：高风险工具默认进入 `require_approval`，并提供 `/api/v1/tools/approvals*` 管理接口
+- 新增授权窗口管理能力：支持 `request / agent_tool / tool` 三种 scope，以及 `grant_ttl` 临时授权窗口
+- 新增工具审批授权窗口持久化后端：支持 `memory / file / redis`，其中 Redis 模式支持多实例共享授权窗口
+- 新增审批可观测能力：支持审批统计、过期清理、active grants 查看与手动撤销、审批历史查询
+- 新增只读 runtime capability catalog，用于汇总 hosted tools、agent types 与 multi-agent modes
+
+### Changed
+- hosted tool 执行统一收敛到 shared permission-aware runtime，权限检查不再由单个工具各自分散实现
+- tool approval grant 改为基于 fingerprint 的 scoped temporary grant，并支持跨进程恢复
+- tool approval/history 相关配置统一收敛到 `hosted_tools.approval.*`
+
 ## [1.8.12] - 2026-03-31
 
 ### Added
