@@ -13,6 +13,10 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - 新增工具审批授权窗口持久化后端：支持 `memory / file / redis`，其中 Redis 模式支持多实例共享授权窗口
 - 新增审批可观测能力：支持审批统计、过期清理、active grants 查看与手动撤销、审批历史查询
 - 新增只读 runtime capability catalog，用于汇总 hosted tools、agent types 与 multi-agent modes
+- 新增 `AdaptiveWeightedSelector`：基于运行时成功率/429 率/失败率动态调整渠道权重，配套 `MetricsSource` 接口与 `InMemoryMetricsSource` 默认实现
+- 新增 `InMemoryQuotaPolicy`：支持每日限额、每分钟速率限制、并发限制三重配额管控，配套 `QuotaStore` 接口
+- 新增 `CascadeCooldownController`：Key 级冷却（可配失败阈值）+ 渠道级级联冷却（所有 key 失败时自动触发），支持运行时状态查询
+- 新增 `AsyncUsageRecorder`：Worker pool 模式异步写回调用记录，队列满时降级同步写，支持 graceful shutdown drain
 
 ### Changed
 - hosted tool 执行统一收敛到 shared permission-aware runtime，权限检查不再由单个工具各自分散实现
