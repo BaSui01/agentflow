@@ -401,6 +401,19 @@ type geminiRequest struct {
 	CachedContent     string                  `json:"cachedContent,omitempty"`
 }
 
+func sanitizeGeminiCachedContentRequest(body *geminiRequest) {
+	if body == nil || strings.TrimSpace(body.CachedContent) == "" {
+		return
+	}
+
+	// Gemini cachedContent captures cacheable context such as systemInstruction/tools.
+	// When the current request also carries those mutable fields, prefer preserving
+	// request semantics and drop cache reuse instead of sending an invalid combination.
+	if body.SystemInstruction != nil || len(body.Tools) > 0 || body.ToolConfig != nil {
+		body.CachedContent = ""
+	}
+}
+
 type geminiCandidate struct {
 	Content           geminiContent            `json:"content"`
 	FinishReason      string                   `json:"finishReason,omitempty"`
@@ -768,6 +781,7 @@ func (p *GeminiProvider) Completion(ctx context.Context, req *llm.ChatRequest) (
 		SafetySettings:    convertSafetySettings(p.cfg.SafetySettings),
 		CachedContent:     strings.TrimSpace(req.CachedContent),
 	}
+	sanitizeGeminiCachedContentRequest(&body)
 
 	// 生成配置
 	body.GenerationConfig = buildGenerationConfig(req)
@@ -845,6 +859,7 @@ func (p *GeminiProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-ch
 		SafetySettings:    convertSafetySettings(p.cfg.SafetySettings),
 		CachedContent:     strings.TrimSpace(req.CachedContent),
 	}
+	sanitizeGeminiCachedContentRequest(&body)
 
 	body.GenerationConfig = buildGenerationConfig(req)
 

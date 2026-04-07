@@ -217,6 +217,8 @@ type ChatRequest struct {
     ToolChoice                       any             `json:"tool_choice,omitempty"`
     ReasoningEffort                  string          `json:"reasoning_effort,omitempty"`
     ReasoningSummary                 string          `json:"reasoning_summary,omitempty"`
+    ReasoningDisplay                 string          `json:"reasoning_display,omitempty"`
+    InferenceSpeed                   string          `json:"inference_speed,omitempty"`
     WebSearchOptions                 *WebSearchOptions `json:"web_search_options,omitempty"`
     PromptCacheKey                   string          `json:"prompt_cache_key,omitempty"`
     PromptCacheRetention             string          `json:"prompt_cache_retention,omitempty"`

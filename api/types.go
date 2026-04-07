@@ -95,6 +95,10 @@ type ChatRequest struct {
 	ReasoningEffort string `json:"reasoning_effort,omitempty"`
 	// OpenAI Responses reasoning.summary（auto/concise/detailed）
 	ReasoningSummary string `json:"reasoning_summary,omitempty"`
+	// Anthropic thinking.display（summarized/omitted）
+	ReasoningDisplay string `json:"reasoning_display,omitempty"`
+	// Provider-specific inference speed tier（例如 Anthropic fast）
+	InferenceSpeed string `json:"inference_speed,omitempty"`
 	// 是否存储请求
 	Store *bool `json:"store,omitempty"`
 	// 输出模态（如 ["text","audio"]）

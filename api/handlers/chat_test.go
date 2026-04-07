@@ -444,6 +444,8 @@ func TestChatHandler_ConvertToLLMRequest(t *testing.T) {
 		MaxCompletionTokens: intPtr(80),
 		ReasoningEffort:     "low",
 		ReasoningSummary:    "detailed",
+		ReasoningDisplay:    "summarized",
+		InferenceSpeed:      "fast",
 		Store:               boolPtr(true),
 		Modalities:          []string{"text"},
 		WebSearchOptions: &api.WebSearchOptions{
@@ -499,6 +501,8 @@ func TestChatHandler_ConvertToLLMRequest(t *testing.T) {
 	assert.Equal(t, 80, *llmReq.MaxCompletionTokens)
 	assert.Equal(t, "low", llmReq.ReasoningEffort)
 	assert.Equal(t, "detailed", llmReq.ReasoningSummary)
+	assert.Equal(t, "summarized", llmReq.ReasoningDisplay)
+	assert.Equal(t, "fast", llmReq.InferenceSpeed)
 	require.NotNil(t, llmReq.Store)
 	assert.True(t, *llmReq.Store)
 	assert.Equal(t, []string{"text"}, llmReq.Modalities)

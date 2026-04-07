@@ -249,6 +249,26 @@ func TestBuildGenerationConfig_WithResponseFormat(t *testing.T) {
 	assert.NotNil(t, cfg.ResponseSchema)
 }
 
+func TestSanitizeGeminiCachedContentRequest_DropsConflictingFields(t *testing.T) {
+	body := &geminiRequest{
+		CachedContent:     "cachedContents/abc",
+		SystemInstruction: &geminiContent{Parts: []geminiPart{{Text: "system"}}},
+		Tools:             []geminiTool{{GoogleSearch: &geminiGoogleSearch{}}},
+		ToolConfig:        &geminiToolConfig{},
+	}
+	sanitizeGeminiCachedContentRequest(body)
+	assert.Equal(t, "", body.CachedContent)
+}
+
+func TestSanitizeGeminiCachedContentRequest_PreservesCompatibleBody(t *testing.T) {
+	body := &geminiRequest{
+		CachedContent: "cachedContents/abc",
+		Contents:      []geminiContent{{Role: "user", Parts: []geminiPart{{Text: "hi"}}}},
+	}
+	sanitizeGeminiCachedContentRequest(body)
+	assert.Equal(t, "cachedContents/abc", body.CachedContent)
+}
+
 // --- Completion with thinking ---
 
 func TestGeminiProvider_Completion_WithThinking(t *testing.T) {

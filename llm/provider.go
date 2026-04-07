@@ -161,8 +161,10 @@ type ChatRequest struct {
 
 	// OpenAI 扩展参数
 	MaxCompletionTokens              *int              `json:"max_completion_tokens,omitempty"`                // 替代 max_tokens 的新字段
-	ReasoningEffort                  string            `json:"reasoning_effort,omitempty"`                     // none/minimal/low/medium/high/xhigh
+	ReasoningEffort                  string            `json:"reasoning_effort,omitempty"`                     // OpenAI: none/minimal/low/medium/high/xhigh; Anthropic: low/medium/high/max
 	ReasoningSummary                 string            `json:"reasoning_summary,omitempty"`                    // auto/concise/detailed（Responses API reasoning.summary）
+	ReasoningDisplay                 string            `json:"reasoning_display,omitempty"`                    // Anthropic thinking.display: summarized/omitted
+	InferenceSpeed                   string            `json:"inference_speed,omitempty"`                      // Provider-specific speed tier (e.g. Anthropic fast)
 	Store                            *bool             `json:"store,omitempty"`                                // 是否存储用于蒸馏/评估
 	Modalities                       []string          `json:"modalities,omitempty"`                           // ["text", "audio"]
 	WebSearchOptions                 *WebSearchOptions `json:"web_search_options,omitempty"`                   // 内置 web 搜索

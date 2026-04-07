@@ -1503,6 +1503,12 @@ components:
         reasoning_effort:
           type: string
           description: none/minimal/low/medium/high/xhigh
+        reasoning_display:
+          type: string
+          description: Anthropic thinking.display (summarized/omitted)
+        inference_speed:
+          type: string
+          description: Provider-specific inference speed tier (for example Anthropic fast)
         store:
           type: boolean
         modalities:

@@ -96,6 +96,8 @@ func (c *DefaultChatConverter) ToLLMRequest(req *api.ChatRequest) *llm.ChatReque
 		MaxCompletionTokens:              req.MaxCompletionTokens,
 		ReasoningEffort:                  req.ReasoningEffort,
 		ReasoningSummary:                 req.ReasoningSummary,
+		ReasoningDisplay:                 req.ReasoningDisplay,
+		InferenceSpeed:                   req.InferenceSpeed,
 		Store:                            req.Store,
 		Modalities:                       req.Modalities,
 		WebSearchOptions:                 convertAPIWebSearchOptions(req.WebSearchOptions),
