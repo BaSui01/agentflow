@@ -65,46 +65,52 @@ func (c *DefaultChatConverter) ToLLMRequest(req *api.ChatRequest) *llm.ChatReque
 			Name:        tool.Name,
 			Description: tool.Description,
 			Parameters:  tool.Parameters,
+			Strict:      tool.Strict,
 			Version:     tool.Version,
 		}
 	}
 
 	return &llm.ChatRequest{
-		TraceID:             req.TraceID,
-		TenantID:            req.TenantID,
-		UserID:              req.UserID,
-		Model:               req.Model,
-		Messages:            messages,
-		MaxTokens:           req.MaxTokens,
-		Temperature:         req.Temperature,
-		TopP:                req.TopP,
-		FrequencyPenalty:    req.FrequencyPenalty,
-		PresencePenalty:     req.PresencePenalty,
-		RepetitionPenalty:   req.RepetitionPenalty,
-		N:                   req.N,
-		LogProbs:            req.LogProbs,
-		TopLogProbs:         req.TopLogProbs,
-		Stop:                req.Stop,
-		Tools:               tools,
-		ToolChoice:          req.ToolChoice,
-		ResponseFormat:      convertAPIResponseFormat(req.ResponseFormat),
-		ParallelToolCalls:   req.ParallelToolCalls,
-		ServiceTier:         req.ServiceTier,
-		User:                req.User,
-		StreamOptions:       convertAPIStreamOptions(req.StreamOptions),
-		MaxCompletionTokens: req.MaxCompletionTokens,
-		ReasoningEffort:     req.ReasoningEffort,
-		ReasoningSummary:    req.ReasoningSummary,
-		Store:               req.Store,
-		Modalities:          req.Modalities,
-		WebSearchOptions:    convertAPIWebSearchOptions(req.WebSearchOptions),
-		ReasoningMode:       req.Metadata["reasoning_mode"],
-		PreviousResponseID:  req.PreviousResponseID,
-		Timeout:             timeout,
-		Metadata:            req.Metadata,
-		Tags:                req.Tags,
-		Include:             req.Include,
-		Truncation:          req.Truncation,
+		TraceID:                          req.TraceID,
+		TenantID:                         req.TenantID,
+		UserID:                           req.UserID,
+		Model:                            req.Model,
+		Messages:                         messages,
+		MaxTokens:                        req.MaxTokens,
+		Temperature:                      req.Temperature,
+		TopP:                             req.TopP,
+		FrequencyPenalty:                 req.FrequencyPenalty,
+		PresencePenalty:                  req.PresencePenalty,
+		RepetitionPenalty:                req.RepetitionPenalty,
+		N:                                req.N,
+		LogProbs:                         req.LogProbs,
+		TopLogProbs:                      req.TopLogProbs,
+		Stop:                             req.Stop,
+		Tools:                            tools,
+		ToolChoice:                       req.ToolChoice,
+		ResponseFormat:                   convertAPIResponseFormat(req.ResponseFormat),
+		ParallelToolCalls:                req.ParallelToolCalls,
+		ServiceTier:                      req.ServiceTier,
+		User:                             req.User,
+		StreamOptions:                    convertAPIStreamOptions(req.StreamOptions),
+		MaxCompletionTokens:              req.MaxCompletionTokens,
+		ReasoningEffort:                  req.ReasoningEffort,
+		ReasoningSummary:                 req.ReasoningSummary,
+		Store:                            req.Store,
+		Modalities:                       req.Modalities,
+		WebSearchOptions:                 convertAPIWebSearchOptions(req.WebSearchOptions),
+		PromptCacheKey:                   req.PromptCacheKey,
+		PromptCacheRetention:             req.PromptCacheRetention,
+		CacheControl:                     convertAPICacheControl(req.CacheControl),
+		CachedContent:                    req.CachedContent,
+		IncludeServerSideToolInvocations: req.IncludeServerSideToolInvocations,
+		ReasoningMode:                    req.Metadata["reasoning_mode"],
+		PreviousResponseID:               req.PreviousResponseID,
+		Timeout:                          timeout,
+		Metadata:                         req.Metadata,
+		Tags:                             req.Tags,
+		Include:                          req.Include,
+		Truncation:                       req.Truncation,
 	}
 }
 
@@ -219,4 +225,14 @@ func convertAPIWebSearchOptions(in *api.WebSearchOptions) *llm.WebSearchOptions 
 		}
 	}
 	return out
+}
+
+func convertAPICacheControl(in *api.CacheControl) *llm.CacheControl {
+	if in == nil {
+		return nil
+	}
+	return &llm.CacheControl{
+		Type: in.Type,
+		TTL:  in.TTL,
+	}
 }

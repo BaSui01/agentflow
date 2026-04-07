@@ -111,26 +111,28 @@ func (p *OpenAIProvider) Completion(ctx context.Context, req *llm.ChatRequest) (
 
 // openAIResponsesRequest represents the POST /v1/responses request body.
 type openAIResponsesRequest struct {
-	Model              string              `json:"model"`
-	Input              any                 `json:"input"` // string or []ResponsesInputItem
-	Instructions       string              `json:"instructions,omitempty"`
-	MaxOutputTokens    *int                `json:"max_output_tokens,omitempty"`
-	Temperature        *float32            `json:"temperature,omitempty"`
-	TopP               *float32            `json:"top_p,omitempty"`
-	Tools              []any               `json:"tools,omitempty"`
-	ToolChoice         any                 `json:"tool_choice,omitempty"`
-	ParallelToolCalls  *bool               `json:"parallel_tool_calls,omitempty"`
-	PreviousResponseID string              `json:"previous_response_id,omitempty"`
-	Store              *bool               `json:"store,omitempty"`
-	Metadata           map[string]string   `json:"metadata,omitempty"`
-	Include            []string            `json:"include,omitempty"`
-	Truncation         string              `json:"truncation,omitempty"` // "auto" or "disabled"
-	Reasoning          *responsesReasoning `json:"reasoning,omitempty"`
-	Text               *responsesTextParam `json:"text,omitempty"`
-	ServiceTier        *string             `json:"service_tier,omitempty"`
-	User               string              `json:"user,omitempty"`
-	Stream             bool                `json:"stream,omitempty"`
-	TopLogProbs        *int                `json:"top_logprobs,omitempty"`
+	Model                string              `json:"model"`
+	Input                any                 `json:"input"` // string or []ResponsesInputItem
+	Instructions         string              `json:"instructions,omitempty"`
+	MaxOutputTokens      *int                `json:"max_output_tokens,omitempty"`
+	Temperature          *float32            `json:"temperature,omitempty"`
+	TopP                 *float32            `json:"top_p,omitempty"`
+	Tools                []any               `json:"tools,omitempty"`
+	ToolChoice           any                 `json:"tool_choice,omitempty"`
+	ParallelToolCalls    *bool               `json:"parallel_tool_calls,omitempty"`
+	PreviousResponseID   string              `json:"previous_response_id,omitempty"`
+	Store                *bool               `json:"store,omitempty"`
+	Metadata             map[string]string   `json:"metadata,omitempty"`
+	PromptCacheKey       string              `json:"prompt_cache_key,omitempty"`
+	PromptCacheRetention string              `json:"prompt_cache_retention,omitempty"`
+	Include              []string            `json:"include,omitempty"`
+	Truncation           string              `json:"truncation,omitempty"` // "auto" or "disabled"
+	Reasoning            *responsesReasoning `json:"reasoning,omitempty"`
+	Text                 *responsesTextParam `json:"text,omitempty"`
+	ServiceTier          *string             `json:"service_tier,omitempty"`
+	User                 string              `json:"user,omitempty"`
+	Stream               bool                `json:"stream,omitempty"`
+	TopLogProbs          *int                `json:"top_logprobs,omitempty"`
 }
 
 // responsesReasoning configures reasoning for o-series and gpt-5 models.
@@ -288,16 +290,18 @@ func (p *OpenAIProvider) completionWithResponsesAPI(ctx context.Context, req *ll
 // buildResponsesRequest converts a ChatRequest to a Responses API request.
 func (p *OpenAIProvider) buildResponsesRequest(req *llm.ChatRequest) openAIResponsesRequest {
 	body := openAIResponsesRequest{
-		Model:             providerbase.ChooseModel(req, p.openaiCfg.Model, "gpt-5.2"),
-		ToolChoice:        req.ToolChoice,
-		Store:             req.Store,
-		Metadata:          req.Metadata,
-		Include:           append([]string(nil), req.Include...),
-		Truncation:        strings.TrimSpace(req.Truncation),
-		User:              req.User,
-		ServiceTier:       req.ServiceTier,
-		TopLogProbs:       req.TopLogProbs,
-		ParallelToolCalls: req.ParallelToolCalls,
+		Model:                providerbase.ChooseModel(req, p.openaiCfg.Model, "gpt-5.2"),
+		ToolChoice:           req.ToolChoice,
+		Store:                req.Store,
+		Metadata:             req.Metadata,
+		PromptCacheKey:       strings.TrimSpace(req.PromptCacheKey),
+		PromptCacheRetention: strings.TrimSpace(req.PromptCacheRetention),
+		Include:              append([]string(nil), req.Include...),
+		Truncation:           strings.TrimSpace(req.Truncation),
+		User:                 req.User,
+		ServiceTier:          req.ServiceTier,
+		TopLogProbs:          req.TopLogProbs,
+		ParallelToolCalls:    req.ParallelToolCalls,
 	}
 
 	// Temperature / TopP — 使用指针避免零值被发送
@@ -375,6 +379,9 @@ func buildResponsesTools(req *llm.ChatRequest) []any {
 			if err := json.Unmarshal(t.Parameters, &params); err == nil {
 				tool["parameters"] = params
 			}
+		}
+		if t.Strict != nil {
+			tool["strict"] = *t.Strict
 		}
 		tools = append(tools, tool)
 	}

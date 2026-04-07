@@ -1523,6 +1523,26 @@ components:
               description: Domain allowlist for Responses web_search tool filters.allowed_domains.
               items:
                 type: string
+        prompt_cache_key:
+          type: string
+          description: OpenAI prompt cache routing key.
+        prompt_cache_retention:
+          type: string
+          description: OpenAI prompt cache retention hint.
+        cache_control:
+          type: object
+          description: Anthropic automatic prompt caching control.
+          properties:
+            type:
+              type: string
+            ttl:
+              type: string
+        cached_content:
+          type: string
+          description: Gemini cached content resource name.
+        include_server_side_tool_invocations:
+          type: boolean
+          description: Gemini toolConfig.includeServerSideToolInvocations.
         previous_response_id:
           type: string
         include:
@@ -2067,6 +2087,9 @@ components:
           type: object
           description: JSON Schema for tool parameters
           additionalProperties: true
+        strict:
+          type: boolean
+          description: Enables strict schema validation for providers that support strict tool calling.
         version:
           type: string
           description: Tool version

@@ -239,6 +239,7 @@ type claudeTool struct {
 	Name        string          `json:"name"`
 	Description string          `json:"description,omitempty"`
 	InputSchema json.RawMessage `json:"input_schema"` // JSON Schema
+	Strict      *bool           `json:"strict,omitempty"`
 }
 
 type claudeToolChoice struct {
@@ -254,17 +255,18 @@ type claudeThinking struct {
 }
 
 type claudeRequest struct {
-	Model       string            `json:"model"`
-	Messages    []claudeMessage   `json:"messages"`
-	System      any               `json:"system,omitempty"` // string 或 []claudeSystemBlock（支持 cache_control）
-	MaxTokens   int               `json:"max_tokens"`
-	Temperature *float32          `json:"temperature,omitempty"` // 指针类型：区分 "未设置" 和 "显式设为 0"
-	TopP        *float32          `json:"top_p,omitempty"`       // 指针类型：同上
-	StopSeq     []string          `json:"stop_sequences,omitempty"`
-	Stream      bool              `json:"stream,omitempty"`
-	Tools       []json.RawMessage `json:"tools,omitempty"` // 混合类型：普通 function tool + server tool (web_search)
-	ToolChoice  *claudeToolChoice `json:"tool_choice,omitempty"`
-	Thinking    *claudeThinking   `json:"thinking,omitempty"` // Extended Thinking
+	Model        string            `json:"model"`
+	Messages     []claudeMessage   `json:"messages"`
+	System       any               `json:"system,omitempty"` // string 或 []claudeSystemBlock（支持 cache_control）
+	MaxTokens    int               `json:"max_tokens"`
+	Temperature  *float32          `json:"temperature,omitempty"` // 指针类型：区分 "未设置" 和 "显式设为 0"
+	TopP         *float32          `json:"top_p,omitempty"`       // 指针类型：同上
+	StopSeq      []string          `json:"stop_sequences,omitempty"`
+	Stream       bool              `json:"stream,omitempty"`
+	Tools        []json.RawMessage `json:"tools,omitempty"` // 混合类型：普通 function tool + server tool (web_search)
+	ToolChoice   *claudeToolChoice `json:"tool_choice,omitempty"`
+	Thinking     *claudeThinking   `json:"thinking,omitempty"`      // Extended Thinking
+	CacheControl *llm.CacheControl `json:"cache_control,omitempty"` // Automatic prompt caching
 }
 
 type claudeUsage struct {
@@ -578,7 +580,7 @@ func convertToClaudeMessages(msgs []types.Message) (string, []claudeMessage) {
 }
 
 // convertToClaudeTools 将统一工具列表转换为 Claude API 的混合工具数组。
-// 当 wsOpts 不为 nil 或工具列表中包含 web_search 时，自动注入 web_search_20250305 服务端工具。
+// 当 wsOpts 不为 nil 或工具列表中包含 web_search 时，自动注入 web_search_20260209 服务端工具。
 func convertToClaudeTools(tools []types.ToolSchema, wsOpts *llm.WebSearchOptions) []json.RawMessage {
 	hasWebSearch := wsOpts != nil
 	out := make([]json.RawMessage, 0, len(tools)+1)
@@ -593,6 +595,7 @@ func convertToClaudeTools(tools []types.ToolSchema, wsOpts *llm.WebSearchOptions
 			Name:        t.Name,
 			Description: t.Description,
 			InputSchema: t.Parameters,
+			Strict:      t.Strict,
 		})
 		if err != nil {
 			continue
@@ -600,10 +603,10 @@ func convertToClaudeTools(tools []types.ToolSchema, wsOpts *llm.WebSearchOptions
 		out = append(out, raw)
 	}
 
-	// 注入 web_search_20250305 服务端工具
+	// 注入 web_search_20260209 服务端工具
 	if hasWebSearch {
 		ws := map[string]any{
-			"type": "web_search_20250305",
+			"type": "web_search_20260209",
 			"name": "web_search",
 		}
 		if wsOpts != nil {
@@ -650,37 +653,43 @@ func convertToClaudeTools(tools []types.ToolSchema, wsOpts *llm.WebSearchOptions
 
 // convertClaudeToolChoice 将 llm.ChatRequest.ToolChoice (any) 转换为 Claude 格式。
 // 支持 string ("auto"/"any"/"none") 和 map/struct 形式。
-func convertClaudeToolChoice(tc any) *claudeToolChoice {
-	if tc == nil {
-		return nil
-	}
+func convertClaudeToolChoice(tc any, parallelToolCalls *bool, hasTools bool) *claudeToolChoice {
+	var result *claudeToolChoice
 	switch v := tc.(type) {
 	case string:
 		switch v {
 		case "auto":
-			return &claudeToolChoice{Type: "auto"}
+			result = &claudeToolChoice{Type: "auto"}
 		case "any", "required":
-			return &claudeToolChoice{Type: "any"}
+			result = &claudeToolChoice{Type: "any"}
 		case "none":
-			return &claudeToolChoice{Type: "none"}
+			result = &claudeToolChoice{Type: "none"}
 		case "":
-			return nil
+			result = nil
 		default:
 			// 假设是具体工具名
-			return &claudeToolChoice{Type: "tool", Name: v}
+			result = &claudeToolChoice{Type: "tool", Name: v}
 		}
 	case map[string]any:
-		result := &claudeToolChoice{}
+		result = &claudeToolChoice{}
 		if t, ok := v["type"].(string); ok {
 			result.Type = t
 		}
 		if n, ok := v["name"].(string); ok {
 			result.Name = n
 		}
-		return result
-	default:
-		return nil
+		if disable, ok := v["disable_parallel_tool_use"].(bool); ok {
+			result.DisableParallelToolUse = &disable
+		}
 	}
+	if parallelToolCalls != nil && !*parallelToolCalls && hasTools {
+		if result == nil {
+			result = &claudeToolChoice{Type: "auto"}
+		}
+		disable := true
+		result.DisableParallelToolUse = &disable
+	}
+	return result
 }
 
 func (p *ClaudeProvider) Completion(ctx context.Context, req *llm.ChatRequest) (*llm.ChatResponse, error) {
@@ -700,16 +709,17 @@ func (p *ClaudeProvider) Completion(ctx context.Context, req *llm.ChatRequest) (
 	system, messages := convertToClaudeMessages(req.Messages)
 
 	body := claudeRequest{
-		Model:       providerbase.ChooseModel(req, p.cfg.Model, "claude-opus-4.5-20260105"),
-		Messages:    messages,
-		System:      system,
-		MaxTokens:   chooseMaxTokens(req),
-		Temperature: float32PtrIfSet(req.Temperature),
-		TopP:        float32PtrIfSet(req.TopP),
-		StopSeq:     req.Stop,
-		Tools:       convertToClaudeTools(req.Tools, req.WebSearchOptions),
-		ToolChoice:  convertClaudeToolChoice(req.ToolChoice),
-		Thinking:    buildThinking(req),
+		Model:        providerbase.ChooseModel(req, p.cfg.Model, "claude-opus-4.5-20260105"),
+		Messages:     messages,
+		System:       system,
+		MaxTokens:    chooseMaxTokens(req),
+		Temperature:  float32PtrIfSet(req.Temperature),
+		TopP:         float32PtrIfSet(req.TopP),
+		StopSeq:      req.Stop,
+		Tools:        convertToClaudeTools(req.Tools, req.WebSearchOptions),
+		ToolChoice:   convertClaudeToolChoice(req.ToolChoice, req.ParallelToolCalls, len(req.Tools) > 0 || req.WebSearchOptions != nil),
+		Thinking:     buildThinking(req),
+		CacheControl: req.CacheControl,
 	}
 
 	// 问题 3: thinking + tool_choice 冲突校验
@@ -775,17 +785,18 @@ func (p *ClaudeProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-ch
 	system, messages := convertToClaudeMessages(req.Messages)
 
 	body := claudeRequest{
-		Model:       providerbase.ChooseModel(req, p.cfg.Model, "claude-opus-4.5-20260105"),
-		Messages:    messages,
-		System:      system,
-		MaxTokens:   chooseMaxTokens(req),
-		Temperature: float32PtrIfSet(req.Temperature),
-		TopP:        float32PtrIfSet(req.TopP),
-		StopSeq:     req.Stop,
-		Stream:      true,
-		Tools:       convertToClaudeTools(req.Tools, req.WebSearchOptions),
-		ToolChoice:  convertClaudeToolChoice(req.ToolChoice),
-		Thinking:    buildThinking(req),
+		Model:        providerbase.ChooseModel(req, p.cfg.Model, "claude-opus-4.5-20260105"),
+		Messages:     messages,
+		System:       system,
+		MaxTokens:    chooseMaxTokens(req),
+		Temperature:  float32PtrIfSet(req.Temperature),
+		TopP:         float32PtrIfSet(req.TopP),
+		StopSeq:      req.Stop,
+		Stream:       true,
+		Tools:        convertToClaudeTools(req.Tools, req.WebSearchOptions),
+		ToolChoice:   convertClaudeToolChoice(req.ToolChoice, req.ParallelToolCalls, len(req.Tools) > 0 || req.WebSearchOptions != nil),
+		Thinking:     buildThinking(req),
+		CacheControl: req.CacheControl,
 	}
 
 	// 问题 3: thinking + tool_choice 冲突校验

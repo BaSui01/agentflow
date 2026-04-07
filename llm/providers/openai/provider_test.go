@@ -897,9 +897,11 @@ func TestOpenAIProvider_Completion_ResponsesAPI_MapsIncludeAndTruncation(t *test
 	}, zap.NewNop())
 
 	_, err := p.Completion(context.Background(), &llm.ChatRequest{
-		Messages:   []types.Message{{Role: llm.RoleUser, Content: "Hi"}},
-		Include:    []string{"output_text.logprobs", "reasoning.encrypted_content"},
-		Truncation: "auto",
+		Messages:             []types.Message{{Role: llm.RoleUser, Content: "Hi"}},
+		Include:              []string{"output_text.logprobs", "reasoning.encrypted_content"},
+		Truncation:           "auto",
+		PromptCacheKey:       "route-a",
+		PromptCacheRetention: "5m",
 	})
 	require.NoError(t, err)
 
@@ -909,6 +911,24 @@ func TestOpenAIProvider_Completion_ResponsesAPI_MapsIncludeAndTruncation(t *test
 	assert.Equal(t, "output_text.logprobs", includeRaw[0])
 	assert.Equal(t, "reasoning.encrypted_content", includeRaw[1])
 	assert.Equal(t, "auto", raw["truncation"])
+	assert.Equal(t, "route-a", raw["prompt_cache_key"])
+	assert.Equal(t, "5m", raw["prompt_cache_retention"])
+}
+
+func TestBuildResponsesTools_PreservesStrict(t *testing.T) {
+	strict := true
+	tools := buildResponsesTools(&llm.ChatRequest{
+		Tools: []types.ToolSchema{{
+			Name:        "strict_tool",
+			Description: "Strict tool",
+			Parameters:  json.RawMessage(`{"type":"object"}`),
+			Strict:      &strict,
+		}},
+	})
+	require.Len(t, tools, 1)
+	tool, ok := tools[0].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, true, tool["strict"])
 }
 
 func findResponsesWebSearchTool(t *testing.T, raw map[string]any) map[string]any {

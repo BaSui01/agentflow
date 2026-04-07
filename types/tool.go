@@ -10,6 +10,7 @@ type ToolSchema struct {
 	Name        string          `json:"name"`
 	Description string          `json:"description,omitempty"`
 	Parameters  json.RawMessage `json:"parameters"`
+	Strict      *bool           `json:"strict,omitempty"`
 	Version     string          `json:"version,omitempty"`
 }
 
@@ -106,4 +107,3 @@ func ApplySteeringToMessages(msg SteeringMessage, messages []Message, partialCon
 	}
 	return messages
 }
-

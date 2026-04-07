@@ -176,7 +176,7 @@ func TestConvertClaudeToolChoice(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := convertClaudeToolChoice(tt.input)
+			result := convertClaudeToolChoice(tt.input, nil, false)
 			if tt.expected == nil {
 				assert.Nil(t, result)
 			} else {
@@ -186,6 +186,15 @@ func TestConvertClaudeToolChoice(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestConvertClaudeToolChoice_DisablesParallelToolUse(t *testing.T) {
+	parallel := false
+	result := convertClaudeToolChoice(nil, &parallel, true)
+	require.NotNil(t, result)
+	assert.Equal(t, "auto", result.Type)
+	require.NotNil(t, result.DisableParallelToolUse)
+	assert.True(t, *result.DisableParallelToolUse)
 }
 
 // --- chooseMaxTokens ---
@@ -915,7 +924,7 @@ func TestConvertToClaudeTools_WithWebSearch(t *testing.T) {
 	// 验证 web_search 工具
 	var wsTool map[string]any
 	require.NoError(t, json.Unmarshal(result[1], &wsTool))
-	assert.Equal(t, "web_search_20250305", wsTool["type"])
+	assert.Equal(t, "web_search_20260209", wsTool["type"])
 	assert.Equal(t, "web_search", wsTool["name"])
 	assert.Equal(t, float64(5), wsTool["max_uses"])
 	assert.Equal(t, []any{"example.com"}, wsTool["allowed_domains"])
@@ -932,7 +941,7 @@ func TestConvertToClaudeTools_WithWebSearch_FromToolName(t *testing.T) {
 	}
 
 	result := convertToClaudeTools(tools, nil)
-	require.Len(t, result, 2) // calculator + web_search_20250305
+	require.Len(t, result, 2) // calculator + web_search_20260209
 
 	var names []string
 	for _, raw := range result {
@@ -953,6 +962,20 @@ func TestConvertToClaudeTools_NilWebSearchOpts(t *testing.T) {
 	}
 	result := convertToClaudeTools(tools, nil)
 	require.Len(t, result, 1)
+}
+
+func TestConvertToClaudeTools_PreservesStrict(t *testing.T) {
+	strict := true
+	result := convertToClaudeTools([]types.ToolSchema{{
+		Name:        "calc",
+		Description: "Calc",
+		Parameters:  json.RawMessage(`{"type":"object"}`),
+		Strict:      &strict,
+	}}, nil)
+	require.Len(t, result, 1)
+	var tool map[string]any
+	require.NoError(t, json.Unmarshal(result[0], &tool))
+	assert.Equal(t, true, tool["strict"])
 }
 
 func TestToClaudeChatResponse_WithWebSearch(t *testing.T) {

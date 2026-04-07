@@ -223,6 +223,8 @@ func TestChatHandler_OpenAICompatResponses(t *testing.T) {
 		"service_tier":"default",
 		"user":"resp-user-1",
 		"store":true,
+		"prompt_cache_key":"route-a",
+		"prompt_cache_retention":"5m",
 		"previous_response_id":"resp_prev_456",
 		"truncation":"auto",
 		"include":["output_text"],
@@ -268,6 +270,8 @@ func TestChatHandler_OpenAICompatResponses(t *testing.T) {
 	assert.Equal(t, "resp-user-1", svc.completeReq.User)
 	require.NotNil(t, svc.completeReq.Store)
 	assert.True(t, *svc.completeReq.Store)
+	assert.Equal(t, "route-a", svc.completeReq.PromptCacheKey)
+	assert.Equal(t, "5m", svc.completeReq.PromptCacheRetention)
 	assert.Equal(t, "resp_prev_456", svc.completeReq.PreviousResponseID)
 	assert.Equal(t, "auto", svc.completeReq.Truncation)
 	assert.Equal(t, []string{"output_text"}, svc.completeReq.Include)
@@ -290,6 +294,31 @@ func TestChatHandler_OpenAICompatResponses(t *testing.T) {
 	require.Len(t, resp.Output[0].Summary, 1)
 	assert.Equal(t, "summary text", resp.Output[0].Summary[0].Text)
 	assert.Equal(t, "message", resp.Output[1].Type)
+}
+
+func TestConvertOpenAICompatInboundTools_PreservesStrict(t *testing.T) {
+	strict := true
+	tools, ws, err := convertOpenAICompatInboundTools([]openAICompatInboundTool{
+		{
+			Type: "function",
+			Function: struct {
+				Name        string `json:"name,omitempty"`
+				Description string `json:"description,omitempty"`
+				Parameters  any    `json:"parameters,omitempty"`
+				Strict      *bool  `json:"strict,omitempty"`
+			}{
+				Name:        "lookup_weather",
+				Description: "Lookup weather",
+				Parameters:  map[string]any{"type": "object"},
+				Strict:      &strict,
+			},
+		},
+	})
+	require.Nil(t, err)
+	require.Nil(t, ws)
+	require.Len(t, tools, 1)
+	require.NotNil(t, tools[0].Strict)
+	assert.True(t, *tools[0].Strict)
 }
 
 func TestChatHandler_OpenAICompatResponses_Stream(t *testing.T) {

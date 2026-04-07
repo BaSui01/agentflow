@@ -315,6 +315,19 @@ func TestConvertResponseFormat(t *testing.T) {
 	})
 }
 
+func TestConvertToolsToOpenAI_PreservesStrict(t *testing.T) {
+	strict := true
+	tools := ConvertToolsToOpenAI([]types.ToolSchema{{
+		Name:        "strict_tool",
+		Description: "Strict tool",
+		Parameters:  json.RawMessage(`{"type":"object"}`),
+		Strict:      &strict,
+	}})
+	require.Len(t, tools, 1)
+	require.NotNil(t, tools[0].Function.Strict)
+	assert.True(t, *tools[0].Function.Strict)
+}
+
 // =============================================================================
 // BearerTokenHeaders tests
 // =============================================================================

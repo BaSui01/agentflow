@@ -24,68 +24,72 @@ import (
 )
 
 type openAICompatChatCompletionsRequest struct {
-	Model               string                        `json:"model"`
-	Messages            []openAICompatInboundMessage  `json:"messages"`
-	MaxTokens           int                           `json:"max_tokens,omitempty"`
-	MaxCompletionTokens *int                          `json:"max_completion_tokens,omitempty"`
-	Temperature         float32                       `json:"temperature,omitempty"`
-	TopP                float32                       `json:"top_p,omitempty"`
-	FrequencyPenalty    *float32                      `json:"frequency_penalty,omitempty"`
-	PresencePenalty     *float32                      `json:"presence_penalty,omitempty"`
-	RepetitionPenalty   *float32                      `json:"repetition_penalty,omitempty"`
-	N                   *int                          `json:"n,omitempty"`
-	LogProbs            *bool                         `json:"logprobs,omitempty"`
-	TopLogProbs         *int                          `json:"top_logprobs,omitempty"`
-	Stop                []string                      `json:"stop,omitempty"`
-	Tools               []openAICompatInboundTool     `json:"tools,omitempty"`
-	ToolChoice          any                           `json:"tool_choice,omitempty"`
-	ResponseFormat      any                           `json:"response_format,omitempty"`
-	Stream              bool                          `json:"stream,omitempty"`
-	StreamOptions       *api.StreamOptions            `json:"stream_options,omitempty"`
-	ParallelToolCalls   *bool                         `json:"parallel_tool_calls,omitempty"`
-	ServiceTier         *string                       `json:"service_tier,omitempty"`
-	User                string                        `json:"user,omitempty"`
-	ReasoningEffort     string                        `json:"reasoning_effort,omitempty"`
-	Store               *bool                         `json:"store,omitempty"`
-	Modalities          []string                      `json:"modalities,omitempty"`
-	WebSearchOptions    *openAICompatWebSearchOptions `json:"web_search_options,omitempty"`
-	PreviousResponseID  string                        `json:"previous_response_id,omitempty"`
-	Include             []string                      `json:"include,omitempty"`
-	Truncation          string                        `json:"truncation,omitempty"`
-	Provider            string                        `json:"provider,omitempty"`
-	RoutePolicy         string                        `json:"route_policy,omitempty"`
-	EndpointMode        string                        `json:"endpoint_mode,omitempty"`
-	Timeout             string                        `json:"timeout,omitempty"`
-	Metadata            map[string]string             `json:"metadata,omitempty"`
-	Tags                []string                      `json:"tags,omitempty"`
+	Model                string                        `json:"model"`
+	Messages             []openAICompatInboundMessage  `json:"messages"`
+	MaxTokens            int                           `json:"max_tokens,omitempty"`
+	MaxCompletionTokens  *int                          `json:"max_completion_tokens,omitempty"`
+	Temperature          float32                       `json:"temperature,omitempty"`
+	TopP                 float32                       `json:"top_p,omitempty"`
+	FrequencyPenalty     *float32                      `json:"frequency_penalty,omitempty"`
+	PresencePenalty      *float32                      `json:"presence_penalty,omitempty"`
+	RepetitionPenalty    *float32                      `json:"repetition_penalty,omitempty"`
+	N                    *int                          `json:"n,omitempty"`
+	LogProbs             *bool                         `json:"logprobs,omitempty"`
+	TopLogProbs          *int                          `json:"top_logprobs,omitempty"`
+	Stop                 []string                      `json:"stop,omitempty"`
+	Tools                []openAICompatInboundTool     `json:"tools,omitempty"`
+	ToolChoice           any                           `json:"tool_choice,omitempty"`
+	ResponseFormat       any                           `json:"response_format,omitempty"`
+	Stream               bool                          `json:"stream,omitempty"`
+	StreamOptions        *api.StreamOptions            `json:"stream_options,omitempty"`
+	ParallelToolCalls    *bool                         `json:"parallel_tool_calls,omitempty"`
+	ServiceTier          *string                       `json:"service_tier,omitempty"`
+	User                 string                        `json:"user,omitempty"`
+	ReasoningEffort      string                        `json:"reasoning_effort,omitempty"`
+	Store                *bool                         `json:"store,omitempty"`
+	Modalities           []string                      `json:"modalities,omitempty"`
+	WebSearchOptions     *openAICompatWebSearchOptions `json:"web_search_options,omitempty"`
+	PromptCacheKey       string                        `json:"prompt_cache_key,omitempty"`
+	PromptCacheRetention string                        `json:"prompt_cache_retention,omitempty"`
+	PreviousResponseID   string                        `json:"previous_response_id,omitempty"`
+	Include              []string                      `json:"include,omitempty"`
+	Truncation           string                        `json:"truncation,omitempty"`
+	Provider             string                        `json:"provider,omitempty"`
+	RoutePolicy          string                        `json:"route_policy,omitempty"`
+	EndpointMode         string                        `json:"endpoint_mode,omitempty"`
+	Timeout              string                        `json:"timeout,omitempty"`
+	Metadata             map[string]string             `json:"metadata,omitempty"`
+	Tags                 []string                      `json:"tags,omitempty"`
 }
 
 type openAICompatResponsesRequest struct {
-	Model              string                          `json:"model"`
-	Input              any                             `json:"input"`
-	Instructions       string                          `json:"instructions,omitempty"`
-	MaxOutputTokens    *int                            `json:"max_output_tokens,omitempty"`
-	Temperature        *float32                        `json:"temperature,omitempty"`
-	TopP               *float32                        `json:"top_p,omitempty"`
-	Tools              []openAICompatInboundTool       `json:"tools,omitempty"`
-	ToolChoice         any                             `json:"tool_choice,omitempty"`
-	Reasoning          *openAICompatResponsesReasoning `json:"reasoning,omitempty"`
-	Text               *openAICompatResponsesTextParam `json:"text,omitempty"`
-	ParallelToolCalls  *bool                           `json:"parallel_tool_calls,omitempty"`
-	ServiceTier        *string                         `json:"service_tier,omitempty"`
-	User               string                          `json:"user,omitempty"`
-	Store              *bool                           `json:"store,omitempty"`
-	WebSearchOptions   *openAICompatWebSearchOptions   `json:"web_search_options,omitempty"`
-	PreviousResponseID string                          `json:"previous_response_id,omitempty"`
-	Include            []string                        `json:"include,omitempty"`
-	Truncation         string                          `json:"truncation,omitempty"`
-	Stream             bool                            `json:"stream,omitempty"`
-	Provider           string                          `json:"provider,omitempty"`
-	RoutePolicy        string                          `json:"route_policy,omitempty"`
-	EndpointMode       string                          `json:"endpoint_mode,omitempty"`
-	Timeout            string                          `json:"timeout,omitempty"`
-	Metadata           map[string]string               `json:"metadata,omitempty"`
-	Tags               []string                        `json:"tags,omitempty"`
+	Model                string                          `json:"model"`
+	Input                any                             `json:"input"`
+	Instructions         string                          `json:"instructions,omitempty"`
+	MaxOutputTokens      *int                            `json:"max_output_tokens,omitempty"`
+	Temperature          *float32                        `json:"temperature,omitempty"`
+	TopP                 *float32                        `json:"top_p,omitempty"`
+	Tools                []openAICompatInboundTool       `json:"tools,omitempty"`
+	ToolChoice           any                             `json:"tool_choice,omitempty"`
+	Reasoning            *openAICompatResponsesReasoning `json:"reasoning,omitempty"`
+	Text                 *openAICompatResponsesTextParam `json:"text,omitempty"`
+	ParallelToolCalls    *bool                           `json:"parallel_tool_calls,omitempty"`
+	ServiceTier          *string                         `json:"service_tier,omitempty"`
+	User                 string                          `json:"user,omitempty"`
+	Store                *bool                           `json:"store,omitempty"`
+	WebSearchOptions     *openAICompatWebSearchOptions   `json:"web_search_options,omitempty"`
+	PromptCacheKey       string                          `json:"prompt_cache_key,omitempty"`
+	PromptCacheRetention string                          `json:"prompt_cache_retention,omitempty"`
+	PreviousResponseID   string                          `json:"previous_response_id,omitempty"`
+	Include              []string                        `json:"include,omitempty"`
+	Truncation           string                          `json:"truncation,omitempty"`
+	Stream               bool                            `json:"stream,omitempty"`
+	Provider             string                          `json:"provider,omitempty"`
+	RoutePolicy          string                          `json:"route_policy,omitempty"`
+	EndpointMode         string                          `json:"endpoint_mode,omitempty"`
+	Timeout              string                          `json:"timeout,omitempty"`
+	Metadata             map[string]string               `json:"metadata,omitempty"`
+	Tags                 []string                        `json:"tags,omitempty"`
 }
 
 type openAICompatInboundMessage struct {
@@ -110,10 +114,12 @@ type openAICompatInboundTool struct {
 	Name        string `json:"name,omitempty"`
 	Description string `json:"description,omitempty"`
 	Parameters  any    `json:"parameters,omitempty"`
+	Strict      *bool  `json:"strict,omitempty"`
 	Function    struct {
 		Name        string `json:"name,omitempty"`
 		Description string `json:"description,omitempty"`
 		Parameters  any    `json:"parameters,omitempty"`
+		Strict      *bool  `json:"strict,omitempty"`
 	} `json:"function,omitempty"`
 	SearchContextSize string                        `json:"search_context_size,omitempty"`
 	UserLocation      json.RawMessage               `json:"user_location,omitempty"`
@@ -542,39 +548,41 @@ func buildAPIChatRequestFromCompatCompletions(req openAICompatChatCompletionsReq
 	wsOptions := mergeOpenAICompatWebSearchOptions(req.WebSearchOptions, wsOptionsFromTools)
 
 	apiReq := &api.ChatRequest{
-		Model:               req.Model,
-		Messages:            messages,
-		MaxTokens:           req.MaxTokens,
-		MaxCompletionTokens: req.MaxCompletionTokens,
-		Temperature:         req.Temperature,
-		TopP:                req.TopP,
-		FrequencyPenalty:    req.FrequencyPenalty,
-		PresencePenalty:     req.PresencePenalty,
-		RepetitionPenalty:   req.RepetitionPenalty,
-		N:                   req.N,
-		LogProbs:            req.LogProbs,
-		TopLogProbs:         req.TopLogProbs,
-		Stop:                req.Stop,
-		Tools:               tools,
-		ToolChoice:          req.ToolChoice,
-		ResponseFormat:      responseFormat,
-		StreamOptions:       req.StreamOptions,
-		ParallelToolCalls:   req.ParallelToolCalls,
-		ServiceTier:         req.ServiceTier,
-		User:                req.User,
-		ReasoningEffort:     strings.TrimSpace(req.ReasoningEffort),
-		ReasoningSummary:    "",
-		Store:               req.Store,
-		Modalities:          req.Modalities,
-		PreviousResponseID:  strings.TrimSpace(req.PreviousResponseID),
-		Include:             req.Include,
-		Truncation:          strings.TrimSpace(req.Truncation),
-		Provider:            req.Provider,
-		RoutePolicy:         req.RoutePolicy,
-		EndpointMode:        req.EndpointMode,
-		Timeout:             req.Timeout,
-		Metadata:            req.Metadata,
-		Tags:                req.Tags,
+		Model:                req.Model,
+		Messages:             messages,
+		MaxTokens:            req.MaxTokens,
+		MaxCompletionTokens:  req.MaxCompletionTokens,
+		Temperature:          req.Temperature,
+		TopP:                 req.TopP,
+		FrequencyPenalty:     req.FrequencyPenalty,
+		PresencePenalty:      req.PresencePenalty,
+		RepetitionPenalty:    req.RepetitionPenalty,
+		N:                    req.N,
+		LogProbs:             req.LogProbs,
+		TopLogProbs:          req.TopLogProbs,
+		Stop:                 req.Stop,
+		Tools:                tools,
+		ToolChoice:           req.ToolChoice,
+		ResponseFormat:       responseFormat,
+		StreamOptions:        req.StreamOptions,
+		ParallelToolCalls:    req.ParallelToolCalls,
+		ServiceTier:          req.ServiceTier,
+		User:                 req.User,
+		ReasoningEffort:      strings.TrimSpace(req.ReasoningEffort),
+		ReasoningSummary:     "",
+		Store:                req.Store,
+		Modalities:           req.Modalities,
+		PromptCacheKey:       strings.TrimSpace(req.PromptCacheKey),
+		PromptCacheRetention: strings.TrimSpace(req.PromptCacheRetention),
+		PreviousResponseID:   strings.TrimSpace(req.PreviousResponseID),
+		Include:              req.Include,
+		Truncation:           strings.TrimSpace(req.Truncation),
+		Provider:             req.Provider,
+		RoutePolicy:          req.RoutePolicy,
+		EndpointMode:         req.EndpointMode,
+		Timeout:              req.Timeout,
+		Metadata:             req.Metadata,
+		Tags:                 req.Tags,
 	}
 	applyWebSearchOptionsToChatRequest(apiReq, wsOptions)
 	return apiReq, nil
@@ -627,30 +635,32 @@ func buildAPIChatRequestFromCompatResponses(req openAICompatResponsesRequest) (*
 	wsOptions := mergeOpenAICompatWebSearchOptions(req.WebSearchOptions, wsOptionsFromTools)
 
 	apiReq := &api.ChatRequest{
-		Model:               req.Model,
-		Messages:            messages,
-		MaxTokens:           maxTokens,
-		MaxCompletionTokens: req.MaxOutputTokens,
-		Temperature:         temp,
-		TopP:                topP,
-		Tools:               tools,
-		ToolChoice:          req.ToolChoice,
-		ResponseFormat:      responseFormat,
-		ParallelToolCalls:   req.ParallelToolCalls,
-		ServiceTier:         req.ServiceTier,
-		User:                req.User,
-		ReasoningEffort:     reasoningEffort,
-		ReasoningSummary:    reasoningSummary,
-		Store:               req.Store,
-		PreviousResponseID:  strings.TrimSpace(req.PreviousResponseID),
-		Include:             req.Include,
-		Truncation:          strings.TrimSpace(req.Truncation),
-		Provider:            req.Provider,
-		RoutePolicy:         req.RoutePolicy,
-		EndpointMode:        endpointMode,
-		Timeout:             req.Timeout,
-		Metadata:            req.Metadata,
-		Tags:                req.Tags,
+		Model:                req.Model,
+		Messages:             messages,
+		MaxTokens:            maxTokens,
+		MaxCompletionTokens:  req.MaxOutputTokens,
+		Temperature:          temp,
+		TopP:                 topP,
+		Tools:                tools,
+		ToolChoice:           req.ToolChoice,
+		ResponseFormat:       responseFormat,
+		ParallelToolCalls:    req.ParallelToolCalls,
+		ServiceTier:          req.ServiceTier,
+		User:                 req.User,
+		ReasoningEffort:      reasoningEffort,
+		ReasoningSummary:     reasoningSummary,
+		Store:                req.Store,
+		PromptCacheKey:       strings.TrimSpace(req.PromptCacheKey),
+		PromptCacheRetention: strings.TrimSpace(req.PromptCacheRetention),
+		PreviousResponseID:   strings.TrimSpace(req.PreviousResponseID),
+		Include:              req.Include,
+		Truncation:           strings.TrimSpace(req.Truncation),
+		Provider:             req.Provider,
+		RoutePolicy:          req.RoutePolicy,
+		EndpointMode:         endpointMode,
+		Timeout:              req.Timeout,
+		Metadata:             req.Metadata,
+		Tags:                 req.Tags,
 	}
 	applyWebSearchOptionsToChatRequest(apiReq, wsOptions)
 	return apiReq, nil
@@ -1089,10 +1099,14 @@ func convertOpenAICompatInboundTools(in []openAICompatInboundTool) ([]api.ToolSc
 			name := strings.TrimSpace(tool.Name)
 			desc := strings.TrimSpace(tool.Description)
 			params := tool.Parameters
+			strict := tool.Strict
 			if strings.TrimSpace(tool.Function.Name) != "" {
 				name = strings.TrimSpace(tool.Function.Name)
 				desc = strings.TrimSpace(tool.Function.Description)
 				params = tool.Function.Parameters
+				if tool.Function.Strict != nil {
+					strict = tool.Function.Strict
+				}
 			}
 			if name == "" {
 				continue
@@ -1108,6 +1122,7 @@ func convertOpenAICompatInboundTools(in []openAICompatInboundTool) ([]api.ToolSc
 				Name:        name,
 				Description: desc,
 				Parameters:  paramJSON,
+				Strict:      strict,
 			})
 		default:
 			continue

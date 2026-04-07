@@ -58,9 +58,11 @@ type ToolCall struct {
 
 ```go
 type ToolSchema struct {
-    Name        string      `json:"name"`
-    Description string      `json:"description"`
-    Parameters  *JSONSchema `json:"parameters,omitempty"`
+    Name        string          `json:"name"`
+    Description string          `json:"description,omitempty"`
+    Parameters  json.RawMessage `json:"parameters"`
+    Strict      *bool           `json:"strict,omitempty"`
+    Version     string          `json:"version,omitempty"`
 }
 ```
 
@@ -206,15 +208,24 @@ type Provider interface {
 
 ```go
 type ChatRequest struct {
-    Model            string       `json:"model"`
-    Messages         []Message    `json:"messages"`
-    MaxTokens        int          `json:"max_tokens,omitempty"`
-    Temperature      float32      `json:"temperature,omitempty"`
-    TopP             float32      `json:"top_p,omitempty"`
-    ReasoningEffort  string       `json:"reasoning_effort,omitempty"`
-    ReasoningSummary string       `json:"reasoning_summary,omitempty"` // OpenAI Responses reasoning.summary
-    Tools            []ToolSchema `json:"tools,omitempty"`
-    Stream           bool         `json:"stream,omitempty"`
+    Model                            string          `json:"model"`
+    Messages                         []Message       `json:"messages"`
+    MaxTokens                        int             `json:"max_tokens,omitempty"`
+    Temperature                      float32         `json:"temperature,omitempty"`
+    TopP                             float32         `json:"top_p,omitempty"`
+    Tools                            []ToolSchema    `json:"tools,omitempty"`
+    ToolChoice                       any             `json:"tool_choice,omitempty"`
+    ReasoningEffort                  string          `json:"reasoning_effort,omitempty"`
+    ReasoningSummary                 string          `json:"reasoning_summary,omitempty"`
+    WebSearchOptions                 *WebSearchOptions `json:"web_search_options,omitempty"`
+    PromptCacheKey                   string          `json:"prompt_cache_key,omitempty"`
+    PromptCacheRetention             string          `json:"prompt_cache_retention,omitempty"`
+    CacheControl                     *CacheControl   `json:"cache_control,omitempty"`
+    CachedContent                    string          `json:"cached_content,omitempty"`
+    IncludeServerSideToolInvocations *bool           `json:"include_server_side_tool_invocations,omitempty"`
+    PreviousResponseID               string          `json:"previous_response_id,omitempty"`
+    Include                          []string        `json:"include,omitempty"`
+    Truncation                       string          `json:"truncation,omitempty"`
 }
 ```
 

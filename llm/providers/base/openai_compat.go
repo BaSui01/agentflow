@@ -178,6 +178,7 @@ type OpenAICompatFunction struct {
 	Name        string          `json:"name"`
 	Description string          `json:"description,omitempty"`
 	Parameters  json.RawMessage `json:"parameters,omitempty"`
+	Strict      *bool           `json:"strict,omitempty"`
 	Arguments   json.RawMessage `json:"arguments,omitempty"`
 }
 
@@ -214,10 +215,12 @@ type OpenAICompatRequest struct {
 	ReasoningEffort     *string               `json:"reasoning_effort,omitempty"`
 
 	// 新增 OpenAI 扩展字段
-	Store            *bool             `json:"store,omitempty"`              // 是否存储用于蒸馏/评估
-	Modalities       []string          `json:"modalities,omitempty"`         // ["text", "audio"]
-	WebSearchOptions *WebSearchOptions `json:"web_search_options,omitempty"` // 内置 web 搜索
-	Metadata         map[string]string `json:"metadata,omitempty"`           // OpenAI 级别元数据
+	Store                *bool             `json:"store,omitempty"`                  // 是否存储用于蒸馏/评估
+	Modalities           []string          `json:"modalities,omitempty"`             // ["text", "audio"]
+	WebSearchOptions     *WebSearchOptions `json:"web_search_options,omitempty"`     // 内置 web 搜索
+	Metadata             map[string]string `json:"metadata,omitempty"`               // OpenAI 级别元数据
+	PromptCacheKey       string            `json:"prompt_cache_key,omitempty"`       // prompt cache routing key
+	PromptCacheRetention string            `json:"prompt_cache_retention,omitempty"` // prompt cache retention policy
 
 	// Responses API 扩展字段
 	PreviousResponseID string   `json:"previous_response_id,omitempty"` // 连续对话上下文 ID
@@ -409,6 +412,7 @@ func ConvertToolsToOpenAI(tools []types.ToolSchema) []OpenAICompatTool {
 				Name:        t.Name,
 				Description: t.Description,
 				Parameters:  t.Parameters,
+				Strict:      t.Strict,
 			},
 		})
 	}

@@ -101,6 +101,16 @@ type ChatRequest struct {
 	Modalities []string `json:"modalities,omitempty"`
 	// 内置 web 搜索配置
 	WebSearchOptions *WebSearchOptions `json:"web_search_options,omitempty"`
+	// OpenAI prompt cache 路由 key
+	PromptCacheKey string `json:"prompt_cache_key,omitempty"`
+	// OpenAI prompt cache 保留策略
+	PromptCacheRetention string `json:"prompt_cache_retention,omitempty"`
+	// Anthropic automatic prompt caching 控制
+	CacheControl *CacheControl `json:"cache_control,omitempty"`
+	// Gemini cached content 资源名
+	CachedContent string `json:"cached_content,omitempty"`
+	// Gemini 是否在响应中包含服务端工具调用轨迹
+	IncludeServerSideToolInvocations *bool `json:"include_server_side_tool_invocations,omitempty"`
 	// Responses API 连续对话上下文 ID
 	PreviousResponseID string `json:"previous_response_id,omitempty"`
 	// Responses API include 字段
@@ -153,6 +163,12 @@ type WebSearchLocation struct {
 	Region   string `json:"region,omitempty"`
 	City     string `json:"city,omitempty"`
 	Timezone string `json:"timezone,omitempty"`
+}
+
+// CacheControl 定义自动 prompt caching 控制。
+type CacheControl struct {
+	Type string `json:"type,omitempty"`
+	TTL  string `json:"ttl,omitempty"`
 }
 
 // ChatResponse 表示聊天完成响应。
@@ -299,6 +315,8 @@ type ToolSchema struct {
 	Description string `json:"description,omitempty" example:"Get the current weather for a location"`
 	// 工具参数的 JSON 架构
 	Parameters json.RawMessage `json:"parameters"`
+	// 严格 JSON Schema 校验（用于 OpenAI/Anthropic strict tool calling）
+	Strict *bool `json:"strict,omitempty"`
 	// 工具版本
 	Version string `json:"version,omitempty" example:"1.0.0"`
 }

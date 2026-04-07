@@ -28,6 +28,7 @@ import (
 //   - POST /v1beta/models/{model}:generateContent
 //   - POST /v1beta/models/{model}:streamGenerateContent?alt=sse
 //   - GET  /v1beta/models
+//
 // - Vertex AI（ProjectID 非空）：https://{region}-aiplatform.googleapis.com
 //   - POST /v1/projects/{project}/locations/{region}/publishers/google/models/{model}:generateContent
 //   - POST /v1/projects/{project}/locations/{region}/publishers/google/models/{model}:streamGenerateContent?alt=sse
@@ -376,11 +377,12 @@ type geminiThinkingConfig struct {
 }
 
 type geminiToolConfig struct {
-	FunctionCallingConfig *geminiFunctionCallingConfig `json:"functionCallingConfig,omitempty"`
+	FunctionCallingConfig            *geminiFunctionCallingConfig `json:"functionCallingConfig,omitempty"`
+	IncludeServerSideToolInvocations *bool                        `json:"includeServerSideToolInvocations,omitempty"`
 }
 
 type geminiFunctionCallingConfig struct {
-	Mode                 string   `json:"mode,omitempty"`                 // AUTO, ANY, NONE
+	Mode                 string   `json:"mode,omitempty"`                 // AUTO, ANY, NONE, VALIDATED
 	AllowedFunctionNames []string `json:"allowedFunctionNames,omitempty"` // restrict callable functions
 }
 
@@ -396,6 +398,7 @@ type geminiRequest struct {
 	GenerationConfig  *geminiGenerationConfig `json:"generationConfig,omitempty"`
 	SystemInstruction *geminiContent          `json:"systemInstruction,omitempty"`
 	SafetySettings    []geminiSafetySetting   `json:"safetySettings,omitempty"`
+	CachedContent     string                  `json:"cachedContent,omitempty"`
 }
 
 type geminiCandidate struct {
@@ -760,9 +763,10 @@ func (p *GeminiProvider) Completion(ctx context.Context, req *llm.ChatRequest) (
 	body := geminiRequest{
 		Contents:          contents,
 		Tools:             convertToGeminiTools(req.Tools, req.WebSearchOptions),
-		ToolConfig:        convertToolChoice(req.ToolChoice),
+		ToolConfig:        convertToolChoice(req.ToolChoice, req.IncludeServerSideToolInvocations),
 		SystemInstruction: systemInstruction,
 		SafetySettings:    convertSafetySettings(p.cfg.SafetySettings),
+		CachedContent:     strings.TrimSpace(req.CachedContent),
 	}
 
 	// 生成配置
@@ -836,9 +840,10 @@ func (p *GeminiProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-ch
 	body := geminiRequest{
 		Contents:          contents,
 		Tools:             convertToGeminiTools(req.Tools, req.WebSearchOptions),
-		ToolConfig:        convertToolChoice(req.ToolChoice),
+		ToolConfig:        convertToolChoice(req.ToolChoice, req.IncludeServerSideToolInvocations),
 		SystemInstruction: systemInstruction,
 		SafetySettings:    convertSafetySettings(p.cfg.SafetySettings),
+		CachedContent:     strings.TrimSpace(req.CachedContent),
 	}
 
 	body.GenerationConfig = buildGenerationConfig(req)
@@ -1204,34 +1209,99 @@ func checkPromptFeedback(resp geminiResponse, provider string) error {
 }
 
 // convertToolChoice maps ChatRequest.ToolChoice to Gemini's ToolConfig.
-func convertToolChoice(toolChoice any) *geminiToolConfig {
-	if toolChoice == nil {
-		return nil
-	}
+func convertToolChoice(toolChoice any, includeServerSide *bool) *geminiToolConfig {
+	var cfg *geminiToolConfig
 	switch v := toolChoice.(type) {
 	case string:
 		switch v {
 		case "auto":
-			return &geminiToolConfig{FunctionCallingConfig: &geminiFunctionCallingConfig{Mode: "AUTO"}}
+			cfg = &geminiToolConfig{FunctionCallingConfig: &geminiFunctionCallingConfig{Mode: "AUTO"}}
 		case "required", "any":
-			return &geminiToolConfig{FunctionCallingConfig: &geminiFunctionCallingConfig{Mode: "ANY"}}
+			cfg = &geminiToolConfig{FunctionCallingConfig: &geminiFunctionCallingConfig{Mode: "ANY"}}
 		case "none":
-			return &geminiToolConfig{FunctionCallingConfig: &geminiFunctionCallingConfig{Mode: "NONE"}}
+			cfg = &geminiToolConfig{FunctionCallingConfig: &geminiFunctionCallingConfig{Mode: "NONE"}}
+		case "validated":
+			cfg = &geminiToolConfig{FunctionCallingConfig: &geminiFunctionCallingConfig{Mode: "VALIDATED"}}
 		}
 	case map[string]any:
 		// OpenAI-style {"type":"function","function":{"name":"fn"}}
 		if fn, ok := v["function"].(map[string]any); ok {
 			if name, ok := fn["name"].(string); ok {
-				return &geminiToolConfig{
+				cfg = &geminiToolConfig{
 					FunctionCallingConfig: &geminiFunctionCallingConfig{
 						Mode:                 "ANY",
 						AllowedFunctionNames: []string{name},
 					},
 				}
+				break
 			}
 		}
+		mode, _ := v["mode"].(string)
+		if mode == "" {
+			mode, _ = v["Mode"].(string)
+		}
+		mode = strings.ToUpper(strings.TrimSpace(mode))
+		if mode != "" {
+			cfg = &geminiToolConfig{
+				FunctionCallingConfig: &geminiFunctionCallingConfig{
+					Mode: mode,
+				},
+			}
+			if allowed := geminiAllowedFunctionNames(v["allowed_function_names"]); len(allowed) > 0 {
+				cfg.FunctionCallingConfig.AllowedFunctionNames = allowed
+			} else if allowed := geminiAllowedFunctionNames(v["allowedFunctionNames"]); len(allowed) > 0 {
+				cfg.FunctionCallingConfig.AllowedFunctionNames = allowed
+			}
+		}
+		if include, ok := v["include_server_side_tool_invocations"].(bool); ok {
+			includeServerSide = &include
+		} else if include, ok := v["includeServerSideToolInvocations"].(bool); ok {
+			includeServerSide = &include
+		}
 	}
-	return nil
+	if cfg != nil && cfg.FunctionCallingConfig != nil {
+		switch cfg.FunctionCallingConfig.Mode {
+		case "AUTO", "ANY", "NONE", "VALIDATED":
+		default:
+			cfg.FunctionCallingConfig.Mode = "AUTO"
+		}
+	}
+	if includeServerSide != nil {
+		if cfg == nil {
+			cfg = &geminiToolConfig{}
+		}
+		cfg.IncludeServerSideToolInvocations = includeServerSide
+	}
+	return cfg
+}
+
+func geminiAllowedFunctionNames(raw any) []string {
+	switch v := raw.(type) {
+	case []string:
+		out := make([]string, 0, len(v))
+		for _, item := range v {
+			item = strings.TrimSpace(item)
+			if item != "" {
+				out = append(out, item)
+			}
+		}
+		return out
+	case []any:
+		out := make([]string, 0, len(v))
+		for _, item := range v {
+			name, ok := item.(string)
+			if !ok {
+				continue
+			}
+			name = strings.TrimSpace(name)
+			if name != "" {
+				out = append(out, name)
+			}
+		}
+		return out
+	default:
+		return nil
+	}
 }
 
 // buildGenerationConfig constructs geminiGenerationConfig from ChatRequest.
