@@ -20,8 +20,10 @@ const (
 type ToolCall struct {
 	Index     int             `json:"index,omitempty"` // 流式 delta 中标识同一工具调用的位置索引
 	ID        string          `json:"id"`
+	Type      string          `json:"type,omitempty"`
 	Name      string          `json:"name"`
 	Arguments json.RawMessage `json:"arguments"`
+	Input     string          `json:"input,omitempty"`
 }
 
 // ImageContent represents image data for multimodal messages.

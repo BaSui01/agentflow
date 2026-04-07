@@ -313,16 +313,27 @@ type ImageContent struct {
 // ToolSchema 定义了用于 LLM 函数调用的工具接口。
 // @Description 工具架构结构
 type ToolSchema struct {
+	// 工具类型（function/custom）
+	Type string `json:"type,omitempty" example:"function"`
 	// 工具名称
 	Name string `json:"name" example:"get_weather"`
 	// 工具说明
 	Description string `json:"description,omitempty" example:"Get the current weather for a location"`
 	// 工具参数的 JSON 架构
 	Parameters json.RawMessage `json:"parameters"`
+	// 自定义工具格式（用于 OpenAI custom tools）
+	Format *ToolFormat `json:"format,omitempty"`
 	// 严格 JSON Schema 校验（用于 OpenAI/Anthropic strict tool calling）
 	Strict *bool `json:"strict,omitempty"`
 	// 工具版本
 	Version string `json:"version,omitempty" example:"1.0.0"`
+}
+
+// ToolFormat 定义 custom tool 的格式约束。
+type ToolFormat struct {
+	Type       string `json:"type"`
+	Syntax     string `json:"syntax,omitempty"`
+	Definition string `json:"definition,omitempty"`
 }
 
 // ToolResultDTO 表示工具执行结果的 API 传输对象。

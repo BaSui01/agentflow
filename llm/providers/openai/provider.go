@@ -173,9 +173,24 @@ type functionCallInputItem struct {
 	Arguments string `json:"arguments"` // Responses API 要求 string，不是 object
 }
 
+// customToolCallInputItem represents a custom tool call in the input.
+type customToolCallInputItem struct {
+	Type   string `json:"type"` // "custom_tool_call"
+	CallID string `json:"call_id"`
+	Name   string `json:"name"`
+	Input  string `json:"input"`
+}
+
 // functionCallOutputItem represents a function call output in the input.
 type functionCallOutputItem struct {
 	Type   string `json:"type"` // "function_call_output"
+	CallID string `json:"call_id"`
+	Output string `json:"output"`
+}
+
+// customToolCallOutputItem represents a custom tool call output in the input.
+type customToolCallOutputItem struct {
+	Type   string `json:"type"` // "custom_tool_call_output"
 	CallID string `json:"call_id"`
 	Output string `json:"output"`
 }
@@ -230,7 +245,7 @@ type responsesError struct {
 
 // responsesOutputItem represents an item in the response output array.
 type responsesOutputItem struct {
-	Type             string             `json:"type"` // "message", "function_call", "reasoning"
+	Type             string             `json:"type"` // "message", "function_call", "custom_tool_call", "reasoning"
 	ID               string             `json:"id"`
 	Status           string             `json:"status,omitempty"`
 	Role             string             `json:"role,omitempty"`
@@ -240,6 +255,7 @@ type responsesOutputItem struct {
 	Name      string          `json:"name,omitempty"`
 	Arguments json.RawMessage `json:"arguments,omitempty"`
 	CallID    string          `json:"call_id,omitempty"`
+	Input     string          `json:"input,omitempty"`
 	// reasoning fields
 	Summary []responsesContent `json:"summary,omitempty"`
 }
@@ -367,8 +383,45 @@ func buildResponsesTools(req *llm.ChatRequest) []any {
 			continue
 		}
 
+		tool := buildResponsesToolDefinition(t)
+		if len(tool) == 0 {
+			continue
+		}
+		tools = append(tools, tool)
+	}
+
+	// 仅设置了 web_search_options 时，自动注入原生 web_search tool。
+	if req.WebSearchOptions != nil && !hasNativeWebSearch {
+		tools = append(tools, buildResponsesWebSearchTool(req.WebSearchOptions))
+	}
+
+	if len(tools) == 0 {
+		return nil
+	}
+	return tools
+}
+
+func buildResponsesToolDefinition(t types.ToolSchema) map[string]any {
+	toolType := strings.TrimSpace(t.Type)
+	if toolType == "" {
+		toolType = types.ToolTypeFunction
+	}
+	switch toolType {
+	case types.ToolTypeCustom:
 		tool := map[string]any{
-			"type": "function",
+			"type": types.ToolTypeCustom,
+			"name": t.Name,
+		}
+		if t.Description != "" {
+			tool["description"] = t.Description
+		}
+		if format := convertCustomToolFormat(t.Format); len(format) > 0 {
+			tool["format"] = format
+		}
+		return tool
+	default:
+		tool := map[string]any{
+			"type": types.ToolTypeFunction,
 			"name": t.Name,
 		}
 		if t.Description != "" {
@@ -383,18 +436,28 @@ func buildResponsesTools(req *llm.ChatRequest) []any {
 		if t.Strict != nil {
 			tool["strict"] = *t.Strict
 		}
-		tools = append(tools, tool)
+		return tool
 	}
+}
 
-	// 仅设置了 web_search_options 时，自动注入原生 web_search tool。
-	if req.WebSearchOptions != nil && !hasNativeWebSearch {
-		tools = append(tools, buildResponsesWebSearchTool(req.WebSearchOptions))
-	}
-
-	if len(tools) == 0 {
+func convertCustomToolFormat(format *types.ToolFormat) map[string]any {
+	if format == nil {
 		return nil
 	}
-	return tools
+	out := map[string]any{}
+	if v := strings.TrimSpace(format.Type); v != "" {
+		out["type"] = v
+	}
+	if v := strings.TrimSpace(format.Syntax); v != "" {
+		out["syntax"] = v
+	}
+	if v := strings.TrimSpace(format.Definition); v != "" {
+		out["definition"] = v
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
 }
 
 func isNativeResponsesWebSearchTool(name string) bool {
@@ -480,6 +543,7 @@ func convertResponsesWebSearchLocation(loc *llm.WebSearchLocation) map[string]an
 // convertMessagesToResponsesInput converts messages to Responses API input format.
 func convertMessagesToResponsesInput(msgs []types.Message) []any {
 	items := make([]any, 0, len(msgs))
+	toolCallTypes := buildToolCallTypeIndex(msgs)
 	for _, m := range msgs {
 		switch m.Role {
 		case llm.RoleSystem, llm.RoleDeveloper:
@@ -505,13 +569,23 @@ func convertMessagesToResponsesInput(msgs []types.Message) []any {
 					})
 				}
 				for _, tc := range m.ToolCalls {
-					items = append(items, functionCallInputItem{
-						Type:      "function_call",
-						ID:        tc.ID,
-						CallID:    tc.ID,
-						Name:      tc.Name,
-						Arguments: string(tc.Arguments),
-					})
+					switch normalizeToolType(tc.Type) {
+					case types.ToolTypeCustom:
+						items = append(items, customToolCallInputItem{
+							Type:   "custom_tool_call",
+							CallID: tc.ID,
+							Name:   tc.Name,
+							Input:  tc.Input,
+						})
+					default:
+						items = append(items, functionCallInputItem{
+							Type:      "function_call",
+							ID:        tc.ID,
+							CallID:    tc.ID,
+							Name:      tc.Name,
+							Arguments: string(tc.Arguments),
+						})
+					}
 				}
 			} else {
 				items = append(items, responsesInputItem{
@@ -520,11 +594,20 @@ func convertMessagesToResponsesInput(msgs []types.Message) []any {
 				})
 			}
 		case llm.RoleTool:
-			items = append(items, functionCallOutputItem{
-				Type:   "function_call_output",
-				CallID: m.ToolCallID,
-				Output: m.Content,
-			})
+			switch toolCallTypes[m.ToolCallID] {
+			case types.ToolTypeCustom:
+				items = append(items, customToolCallOutputItem{
+					Type:   "custom_tool_call_output",
+					CallID: m.ToolCallID,
+					Output: m.Content,
+				})
+			default:
+				items = append(items, functionCallOutputItem{
+					Type:   "function_call_output",
+					CallID: m.ToolCallID,
+					Output: m.Content,
+				})
+			}
 		default:
 			items = append(items, responsesInputItem{
 				Role:    string(m.Role),
@@ -533,6 +616,39 @@ func convertMessagesToResponsesInput(msgs []types.Message) []any {
 		}
 	}
 	return items
+}
+
+func buildToolCallTypeIndex(msgs []types.Message) map[string]string {
+	out := make(map[string]string)
+	for _, m := range msgs {
+		for _, tc := range m.ToolCalls {
+			if strings.TrimSpace(tc.ID) == "" {
+				continue
+			}
+			out[tc.ID] = normalizeToolType(tc.Type)
+		}
+	}
+	return out
+}
+
+func normalizeToolType(toolType string) string {
+	switch strings.ToLower(strings.TrimSpace(toolType)) {
+	case "", types.ToolTypeFunction:
+		return types.ToolTypeFunction
+	case types.ToolTypeCustom:
+		return types.ToolTypeCustom
+	default:
+		return types.ToolTypeFunction
+	}
+}
+
+func firstNonEmptyString(values ...string) string {
+	for _, v := range values {
+		if strings.TrimSpace(v) != "" {
+			return strings.TrimSpace(v)
+		}
+	}
+	return ""
 }
 
 func buildOpenAIResponsesReasoningItems(m types.Message) []responsesReasoningInputItem {
@@ -725,9 +841,20 @@ func toResponsesAPIChatResponse(resp openAIResponsesResponse, provider string) *
 		case "function_call":
 			choice := ensureResponsesAssistantChoice(&choices, &choiceIdx)
 			choice.Message.ToolCalls = append(choice.Message.ToolCalls, types.ToolCall{
-				ID:        output.CallID,
+				ID:        firstNonEmptyString(output.CallID, output.ID),
+				Type:      types.ToolTypeFunction,
 				Name:      output.Name,
 				Arguments: output.Arguments,
+			})
+			choice.FinishReason = "tool_calls"
+
+		case "custom_tool_call":
+			choice := ensureResponsesAssistantChoice(&choices, &choiceIdx)
+			choice.Message.ToolCalls = append(choice.Message.ToolCalls, types.ToolCall{
+				ID:    firstNonEmptyString(output.CallID, output.ID),
+				Type:  types.ToolTypeCustom,
+				Name:  output.Name,
+				Input: output.Input,
 			})
 			choice.FinishReason = "tool_calls"
 		}
@@ -1024,6 +1151,8 @@ func streamResponsesSSE(ctx context.Context, body io.ReadCloser, providerName st
 		var currentID string
 		var currentModel string
 		toolCallName := map[string]string{}
+		toolCallType := map[string]string{}
+		toolCallID := map[string]string{}
 		toolCallArgs := map[string][]byte{}
 		seenReasoning := map[string]bool{}
 		finishSent := false
@@ -1075,8 +1204,7 @@ func streamResponsesSSE(ctx context.Context, body io.ReadCloser, providerName st
 				}
 
 			case "response.output_item.added":
-				// 从 output_item.added 事件提取函数调用名称
-				// 官方文档: 函数名在此事件的 item.name 中，而非 arguments.delta 中
+				// 从 output_item.added 事件提取工具调用元数据。
 				item, _ := event["item"].(map[string]any)
 				if item == nil {
 					continue
@@ -1086,8 +1214,24 @@ func streamResponsesSSE(ctx context.Context, body io.ReadCloser, providerName st
 				case "function_call":
 					itemID, _ := item["id"].(string)
 					name, _ := item["name"].(string)
+					callID, _ := item["call_id"].(string)
 					if itemID != "" && name != "" {
 						toolCallName[itemID] = name
+						toolCallType[itemID] = types.ToolTypeFunction
+						if callID != "" {
+							toolCallID[itemID] = callID
+						}
+					}
+				case "custom_tool_call":
+					itemID, _ := item["id"].(string)
+					name, _ := item["name"].(string)
+					callID, _ := item["call_id"].(string)
+					if itemID != "" && name != "" {
+						toolCallName[itemID] = name
+						toolCallType[itemID] = types.ToolTypeCustom
+						if callID != "" {
+							toolCallID[itemID] = callID
+						}
 					}
 				}
 
@@ -1135,21 +1279,48 @@ func streamResponsesSSE(ctx context.Context, body io.ReadCloser, providerName st
 				}
 				toolCallArgs[itemID] = append(toolCallArgs[itemID], []byte(delta)...)
 
+			case "response.custom_tool_call_input.delta":
+				delta, _ := event["delta"].(string)
+				itemID, _ := event["item_id"].(string)
+				if itemID == "" {
+					continue
+				}
+				toolCallArgs[itemID] = append(toolCallArgs[itemID], []byte(delta)...)
+
 			case "response.output_item.done":
 				item, _ := event["item"].(map[string]any)
 				if item == nil {
 					continue
 				}
 				itemType, _ := item["type"].(string)
-				if itemType != "reasoning" {
-					continue
-				}
 				output, ok := responsesOutputItemFromAny(item)
 				if !ok {
 					continue
 				}
-				if emitResponsesReasoningChunk(ctx, ch, currentID, providerName, currentModel, output) {
-					seenReasoning[output.ID] = true
+				switch itemType {
+				case "reasoning":
+					if emitResponsesReasoningChunk(ctx, ch, currentID, providerName, currentModel, output) {
+						seenReasoning[output.ID] = true
+					}
+				case "custom_tool_call":
+					callID := firstNonEmptyString(output.CallID, output.ID)
+					select {
+					case <-ctx.Done():
+						return
+					case ch <- llm.StreamChunk{
+						ID: currentID, Provider: providerName, Model: currentModel,
+						Delta: types.Message{
+							Role: llm.RoleAssistant,
+							ToolCalls: []types.ToolCall{{
+								ID:    callID,
+								Type:  types.ToolTypeCustom,
+								Name:  output.Name,
+								Input: output.Input,
+							}},
+						},
+						FinishReason: "tool_calls",
+					}:
+					}
 				}
 
 			case "response.completed":
@@ -1220,8 +1391,11 @@ func streamResponsesSSE(ctx context.Context, body io.ReadCloser, providerName st
 				}
 				arguments := toolCallArgs[itemID]
 				name := toolCallName[itemID]
+				callID := firstNonEmptyString(toolCallID[itemID], itemID)
 				delete(toolCallArgs, itemID)
 				delete(toolCallName, itemID)
+				delete(toolCallType, itemID)
+				delete(toolCallID, itemID)
 				if finishSent {
 					continue
 				}
@@ -1234,9 +1408,44 @@ func streamResponsesSSE(ctx context.Context, body io.ReadCloser, providerName st
 					Delta: types.Message{
 						Role: llm.RoleAssistant,
 						ToolCalls: []types.ToolCall{{
-							ID:        itemID,
+							ID:        callID,
+							Type:      types.ToolTypeFunction,
 							Name:      name,
 							Arguments: json.RawMessage(arguments),
+						}},
+					},
+					FinishReason: "tool_calls",
+				}:
+				}
+
+			case "response.custom_tool_call_input.done":
+				itemID, _ := event["item_id"].(string)
+				if itemID == "" {
+					continue
+				}
+				input := string(toolCallArgs[itemID])
+				name := toolCallName[itemID]
+				callID := firstNonEmptyString(toolCallID[itemID], itemID)
+				delete(toolCallArgs, itemID)
+				delete(toolCallName, itemID)
+				delete(toolCallType, itemID)
+				delete(toolCallID, itemID)
+				if finishSent {
+					continue
+				}
+				finishSent = true
+				select {
+				case <-ctx.Done():
+					return
+				case ch <- llm.StreamChunk{
+					ID: currentID, Provider: providerName, Model: currentModel,
+					Delta: types.Message{
+						Role: llm.RoleAssistant,
+						ToolCalls: []types.ToolCall{{
+							ID:    callID,
+							Type:  types.ToolTypeCustom,
+							Name:  name,
+							Input: input,
 						}},
 					},
 					FinishReason: "tool_calls",

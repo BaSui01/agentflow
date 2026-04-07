@@ -62,9 +62,11 @@ func (c *DefaultChatConverter) ToLLMRequest(req *api.ChatRequest) *llm.ChatReque
 	tools := make([]types.ToolSchema, len(req.Tools))
 	for i, tool := range req.Tools {
 		tools[i] = types.ToolSchema{
+			Type:        tool.Type,
 			Name:        tool.Name,
 			Description: tool.Description,
 			Parameters:  tool.Parameters,
+			Format:      convertAPIToolFormat(tool.Format),
 			Strict:      tool.Strict,
 			Version:     tool.Version,
 		}
@@ -236,5 +238,16 @@ func convertAPICacheControl(in *api.CacheControl) *llm.CacheControl {
 	return &llm.CacheControl{
 		Type: in.Type,
 		TTL:  in.TTL,
+	}
+}
+
+func convertAPIToolFormat(in *api.ToolFormat) *types.ToolFormat {
+	if in == nil {
+		return nil
+	}
+	return &types.ToolFormat{
+		Type:       in.Type,
+		Syntax:     in.Syntax,
+		Definition: in.Definition,
 	}
 }

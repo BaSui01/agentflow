@@ -107,6 +107,10 @@ type openAICompatInboundCall struct {
 		Name      string `json:"name,omitempty"`
 		Arguments string `json:"arguments,omitempty"`
 	} `json:"function,omitempty"`
+	Custom struct {
+		Name  string `json:"name,omitempty"`
+		Input string `json:"input,omitempty"`
+	} `json:"custom,omitempty"`
 }
 
 type openAICompatInboundTool struct {
@@ -114,6 +118,7 @@ type openAICompatInboundTool struct {
 	Name        string `json:"name,omitempty"`
 	Description string `json:"description,omitempty"`
 	Parameters  any    `json:"parameters,omitempty"`
+	Format      any    `json:"format,omitempty"`
 	Strict      *bool  `json:"strict,omitempty"`
 	Function    struct {
 		Name        string `json:"name,omitempty"`
@@ -121,6 +126,11 @@ type openAICompatInboundTool struct {
 		Parameters  any    `json:"parameters,omitempty"`
 		Strict      *bool  `json:"strict,omitempty"`
 	} `json:"function,omitempty"`
+	Custom struct {
+		Name        string `json:"name,omitempty"`
+		Description string `json:"description,omitempty"`
+		Format      any    `json:"format,omitempty"`
+	} `json:"custom,omitempty"`
 	SearchContextSize string                        `json:"search_context_size,omitempty"`
 	UserLocation      json.RawMessage               `json:"user_location,omitempty"`
 	Filters           *openAICompatWebSearchFilters `json:"filters,omitempty"`
@@ -190,10 +200,14 @@ type openAICompatOutboundMsg struct {
 type openAICompatOutboundToolCall struct {
 	ID       string `json:"id"`
 	Type     string `json:"type"`
-	Function struct {
+	Function *struct {
 		Name      string `json:"name"`
 		Arguments string `json:"arguments"`
-	} `json:"function"`
+	} `json:"function,omitempty"`
+	Custom *struct {
+		Name  string `json:"name"`
+		Input string `json:"input"`
+	} `json:"custom,omitempty"`
 }
 
 type openAICompatAnnotation struct {
@@ -235,6 +249,7 @@ type openAICompatResponsesOutput struct {
 	Name             string                         `json:"name,omitempty"`
 	Arguments        json.RawMessage                `json:"arguments,omitempty"`
 	CallID           string                         `json:"call_id,omitempty"`
+	Input            string                         `json:"input,omitempty"`
 }
 
 type openAICompatResponsesContent struct {
@@ -504,22 +519,46 @@ func toOpenAICompatResponsesStreamEvents(chunk *llm.StreamChunk) []openAICompatR
 		if itemID == "" {
 			itemID = fmt.Sprintf("fc_%d", time.Now().UnixNano())
 		}
-		events = append(events, openAICompatResponsesStreamEvent{
-			name: "response.function_call_arguments.delta",
-			payload: map[string]any{
-				"type":    "response.function_call_arguments.delta",
-				"item_id": itemID,
-				"name":    call.Name,
-				"delta":   string(call.Arguments),
-			},
-		})
-		events = append(events, openAICompatResponsesStreamEvent{
-			name: "response.function_call_arguments.done",
-			payload: map[string]any{
-				"type":    "response.function_call_arguments.done",
-				"item_id": itemID,
-			},
-		})
+		callType := strings.TrimSpace(call.Type)
+		if callType == "" {
+			callType = types.ToolTypeFunction
+		}
+		switch callType {
+		case types.ToolTypeCustom:
+			events = append(events, openAICompatResponsesStreamEvent{
+				name: "response.custom_tool_call_input.delta",
+				payload: map[string]any{
+					"type":    "response.custom_tool_call_input.delta",
+					"item_id": itemID,
+					"name":    call.Name,
+					"delta":   call.Input,
+				},
+			})
+			events = append(events, openAICompatResponsesStreamEvent{
+				name: "response.custom_tool_call_input.done",
+				payload: map[string]any{
+					"type":    "response.custom_tool_call_input.done",
+					"item_id": itemID,
+				},
+			})
+		default:
+			events = append(events, openAICompatResponsesStreamEvent{
+				name: "response.function_call_arguments.delta",
+				payload: map[string]any{
+					"type":    "response.function_call_arguments.delta",
+					"item_id": itemID,
+					"name":    call.Name,
+					"delta":   string(call.Arguments),
+				},
+			})
+			events = append(events, openAICompatResponsesStreamEvent{
+				name: "response.function_call_arguments.done",
+				payload: map[string]any{
+					"type":    "response.function_call_arguments.done",
+					"item_id": itemID,
+				},
+			})
+		}
 	}
 	if chunk.FinishReason == "stop" {
 		events = append(events, openAICompatResponsesStreamEvent{
@@ -922,15 +961,28 @@ func convertOpenAICompatInboundMessages(in []openAICompatInboundMessage) ([]api.
 	for _, msg := range in {
 		toolCalls := make([]types.ToolCall, 0, len(msg.ToolCalls))
 		for _, tc := range msg.ToolCalls {
-			args := json.RawMessage(strings.TrimSpace(tc.Function.Arguments))
-			if len(args) == 0 {
-				args = json.RawMessage(`{}`)
+			callType := strings.ToLower(strings.TrimSpace(tc.Type))
+			if callType == "" {
+				callType = types.ToolTypeFunction
 			}
-			toolCalls = append(toolCalls, types.ToolCall{
-				ID:        tc.ID,
-				Name:      tc.Function.Name,
-				Arguments: args,
-			})
+			call := types.ToolCall{
+				ID:   tc.ID,
+				Type: callType,
+			}
+			switch callType {
+			case types.ToolTypeCustom:
+				call.Name = strings.TrimSpace(tc.Custom.Name)
+				call.Input = tc.Custom.Input
+			default:
+				call.Type = types.ToolTypeFunction
+				args := json.RawMessage(strings.TrimSpace(tc.Function.Arguments))
+				if len(args) == 0 {
+					args = json.RawMessage(`{}`)
+				}
+				call.Name = tc.Function.Name
+				call.Arguments = args
+			}
+			toolCalls = append(toolCalls, call)
 		}
 		out = append(out, api.Message{
 			Role:       msg.Role,
@@ -960,6 +1012,42 @@ func convertOpenAICompatResponsesInput(input any) ([]api.Message, *types.Error) 
 					Role:       "tool",
 					ToolCallID: strings.TrimSpace(asString(m["call_id"])),
 					Content:    flattenOpenAICompatContent(m["output"]),
+				})
+				continue
+			}
+			if itemType == "custom_tool_call_output" {
+				out = append(out, api.Message{
+					Role:       "tool",
+					ToolCallID: strings.TrimSpace(asString(m["call_id"])),
+					Content:    flattenOpenAICompatContent(m["output"]),
+				})
+				continue
+			}
+			if itemType == "function_call" {
+				args := json.RawMessage(strings.TrimSpace(asString(m["arguments"])))
+				if len(args) == 0 {
+					args = json.RawMessage(`{}`)
+				}
+				out = append(out, api.Message{
+					Role: "assistant",
+					ToolCalls: []types.ToolCall{{
+						ID:        strings.TrimSpace(firstNonEmptyString(asString(m["call_id"]), asString(m["id"]))),
+						Type:      types.ToolTypeFunction,
+						Name:      strings.TrimSpace(asString(m["name"])),
+						Arguments: args,
+					}},
+				})
+				continue
+			}
+			if itemType == "custom_tool_call" {
+				out = append(out, api.Message{
+					Role: "assistant",
+					ToolCalls: []types.ToolCall{{
+						ID:    strings.TrimSpace(firstNonEmptyString(asString(m["call_id"]), asString(m["id"]))),
+						Type:  types.ToolTypeCustom,
+						Name:  strings.TrimSpace(asString(m["name"])),
+						Input: asString(m["input"]),
+					}},
 				})
 				continue
 			}
@@ -1119,10 +1207,30 @@ func convertOpenAICompatInboundTools(in []openAICompatInboundTool) ([]api.ToolSc
 				paramJSON = []byte(`{"type":"object","properties":{}}`)
 			}
 			tools = append(tools, api.ToolSchema{
+				Type:        types.ToolTypeFunction,
 				Name:        name,
 				Description: desc,
 				Parameters:  paramJSON,
 				Strict:      strict,
+			})
+		case types.ToolTypeCustom:
+			name := strings.TrimSpace(tool.Name)
+			desc := strings.TrimSpace(tool.Description)
+			format := tool.Format
+			if strings.TrimSpace(tool.Custom.Name) != "" {
+				name = strings.TrimSpace(tool.Custom.Name)
+				desc = strings.TrimSpace(tool.Custom.Description)
+				format = tool.Custom.Format
+			}
+			if name == "" {
+				continue
+			}
+			tools = append(tools, api.ToolSchema{
+				Type:        types.ToolTypeCustom,
+				Name:        name,
+				Description: desc,
+				Parameters:  json.RawMessage(`{}`),
+				Format:      parseOpenAICompatToolFormat(format),
 			})
 		default:
 			continue
@@ -1261,12 +1369,24 @@ func toOpenAICompatResponsesResponse(resp *api.ChatResponse) openAICompatRespons
 		out.Output = append(out.Output, msgOut)
 
 		for _, tc := range c.Message.ToolCalls {
-			out.Output = append(out.Output, openAICompatResponsesOutput{
-				Type:      "function_call",
-				Name:      tc.Name,
-				Arguments: tc.Arguments,
-				CallID:    tc.ID,
-			})
+			callType := strings.TrimSpace(tc.Type)
+			if callType == "" {
+				callType = types.ToolTypeFunction
+			}
+			item := openAICompatResponsesOutput{
+				Type:   callType,
+				Name:   tc.Name,
+				CallID: tc.ID,
+			}
+			switch callType {
+			case types.ToolTypeCustom:
+				item.Type = "custom_tool_call"
+				item.Input = tc.Input
+			default:
+				item.Type = "function_call"
+				item.Arguments = tc.Arguments
+			}
+			out.Output = append(out.Output, item)
 		}
 	}
 	return out
@@ -1322,13 +1442,51 @@ func toOpenAICompatOutboundToolCalls(calls []types.ToolCall) []openAICompatOutbo
 	for _, c := range calls {
 		item := openAICompatOutboundToolCall{
 			ID:   c.ID,
-			Type: "function",
+			Type: strings.TrimSpace(c.Type),
 		}
-		item.Function.Name = c.Name
-		item.Function.Arguments = string(c.Arguments)
+		if item.Type == "" {
+			item.Type = types.ToolTypeFunction
+		}
+		switch item.Type {
+		case types.ToolTypeCustom:
+			item.Custom = &struct {
+				Name  string `json:"name"`
+				Input string `json:"input"`
+			}{
+				Name:  c.Name,
+				Input: c.Input,
+			}
+		default:
+			item.Type = types.ToolTypeFunction
+			item.Function = &struct {
+				Name      string `json:"name"`
+				Arguments string `json:"arguments"`
+			}{
+				Name:      c.Name,
+				Arguments: string(c.Arguments),
+			}
+		}
 		out = append(out, item)
 	}
 	return out
+}
+
+func parseOpenAICompatToolFormat(raw any) *api.ToolFormat {
+	if raw == nil {
+		return nil
+	}
+	payload, err := json.Marshal(raw)
+	if err != nil {
+		return nil
+	}
+	var out api.ToolFormat
+	if err := json.Unmarshal(payload, &out); err != nil {
+		return nil
+	}
+	if strings.TrimSpace(out.Type) == "" && strings.TrimSpace(out.Syntax) == "" && strings.TrimSpace(out.Definition) == "" {
+		return nil
+	}
+	return &out
 }
 
 func toOpenAICompatAnnotations(annotations []types.Annotation) []openAICompatAnnotation {

@@ -100,7 +100,27 @@ func TestConvertMessagesToOpenAI(t *testing.T) {
 		require.Len(t, result[0].ToolCalls, 1)
 		assert.Equal(t, "tc1", result[0].ToolCalls[0].ID)
 		assert.Equal(t, "function", result[0].ToolCalls[0].Type)
+		require.NotNil(t, result[0].ToolCalls[0].Function)
 		assert.Equal(t, "search", result[0].ToolCalls[0].Function.Name)
+	})
+
+	t.Run("message with custom tool calls", func(t *testing.T) {
+		msgs := []types.Message{{
+			Role: llm.RoleAssistant,
+			ToolCalls: []types.ToolCall{{
+				ID:    "ct1",
+				Type:  types.ToolTypeCustom,
+				Name:  "code_exec",
+				Input: "print('hi')",
+			}},
+		}}
+		result := ConvertMessagesToOpenAI(msgs)
+		require.Len(t, result, 1)
+		require.Len(t, result[0].ToolCalls, 1)
+		assert.Equal(t, "custom", result[0].ToolCalls[0].Type)
+		require.NotNil(t, result[0].ToolCalls[0].Custom)
+		assert.Equal(t, "code_exec", result[0].ToolCalls[0].Custom.Name)
+		assert.Equal(t, "print('hi')", result[0].ToolCalls[0].Custom.Input)
 	})
 
 	t.Run("message with tool call ID", func(t *testing.T) {
@@ -172,9 +192,30 @@ func TestConvertToolsToOpenAI(t *testing.T) {
 		result := ConvertToolsToOpenAI(tools)
 		require.Len(t, result, 1)
 		assert.Equal(t, "function", result[0].Type)
+		require.NotNil(t, result[0].Function)
 		assert.Equal(t, "search", result[0].Function.Name)
 		assert.Equal(t, "Search the web", result[0].Function.Description)
 		assert.JSONEq(t, `{"type":"object"}`, string(result[0].Function.Parameters))
+	})
+
+	t.Run("converts custom tools", func(t *testing.T) {
+		tools := []types.ToolSchema{{
+			Type:        types.ToolTypeCustom,
+			Name:        "code_exec",
+			Description: "Execute code",
+			Format: &types.ToolFormat{
+				Type:       "grammar",
+				Syntax:     "lark",
+				Definition: "start: WORD",
+			},
+		}}
+		result := ConvertToolsToOpenAI(tools)
+		require.Len(t, result, 1)
+		assert.Equal(t, "custom", result[0].Type)
+		require.NotNil(t, result[0].Custom)
+		assert.Equal(t, "code_exec", result[0].Custom.Name)
+		require.NotNil(t, result[0].Custom.Format)
+		assert.Equal(t, "grammar", result[0].Custom.Format.Type)
 	})
 }
 
@@ -225,7 +266,7 @@ func TestToLLMChatResponse(t *testing.T) {
 							{
 								ID:   "tc1",
 								Type: "function",
-								Function: OpenAICompatFunction{
+								Function: &OpenAICompatFunction{
 									Name:      "search",
 									Arguments: json.RawMessage(`{"q":"test"}`),
 								},
@@ -240,6 +281,32 @@ func TestToLLMChatResponse(t *testing.T) {
 		require.Len(t, resp.Choices[0].Message.ToolCalls, 1)
 		assert.Equal(t, "tc1", resp.Choices[0].Message.ToolCalls[0].ID)
 		assert.Equal(t, "search", resp.Choices[0].Message.ToolCalls[0].Name)
+	})
+
+	t.Run("custom tool response", func(t *testing.T) {
+		oa := OpenAICompatResponse{
+			ID:    "resp-custom",
+			Model: "gpt-5.4",
+			Choices: []OpenAICompatChoice{{
+				Message: OpenAICompatMessage{
+					Role: "assistant",
+					ToolCalls: []OpenAICompatToolCall{{
+						ID:   "ct1",
+						Type: "custom",
+						Custom: &OpenAICompatCustomCall{
+							Name:  "code_exec",
+							Input: "print('hi')",
+						},
+					}},
+				},
+			}},
+		}
+		resp := ToLLMChatResponse(oa, "test")
+		require.Len(t, resp.Choices, 1)
+		require.Len(t, resp.Choices[0].Message.ToolCalls, 1)
+		assert.Equal(t, types.ToolTypeCustom, resp.Choices[0].Message.ToolCalls[0].Type)
+		assert.Equal(t, "code_exec", resp.Choices[0].Message.ToolCalls[0].Name)
+		assert.Equal(t, "print('hi')", resp.Choices[0].Message.ToolCalls[0].Input)
 	})
 
 	t.Run("nil usage", func(t *testing.T) {

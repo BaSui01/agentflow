@@ -321,6 +321,55 @@ func TestConvertOpenAICompatInboundTools_PreservesStrict(t *testing.T) {
 	assert.True(t, *tools[0].Strict)
 }
 
+func TestConvertOpenAICompatInboundTools_CustomTool(t *testing.T) {
+	tools, ws, err := convertOpenAICompatInboundTools([]openAICompatInboundTool{{
+		Type: "custom",
+		Custom: struct {
+			Name        string `json:"name,omitempty"`
+			Description string `json:"description,omitempty"`
+			Format      any    `json:"format,omitempty"`
+		}{
+			Name:        "code_exec",
+			Description: "Execute code",
+			Format: map[string]any{
+				"type":       "grammar",
+				"syntax":     "lark",
+				"definition": "start: WORD",
+			},
+		},
+	}})
+	require.Nil(t, err)
+	require.Nil(t, ws)
+	require.Len(t, tools, 1)
+	assert.Equal(t, types.ToolTypeCustom, tools[0].Type)
+	require.NotNil(t, tools[0].Format)
+	assert.Equal(t, "grammar", tools[0].Format.Type)
+}
+
+func TestConvertOpenAICompatResponsesInput_CustomToolCall(t *testing.T) {
+	input := []any{
+		map[string]any{
+			"type":    "custom_tool_call",
+			"call_id": "call_custom_1",
+			"name":    "code_exec",
+			"input":   "print('hi')",
+		},
+		map[string]any{
+			"type":    "custom_tool_call_output",
+			"call_id": "call_custom_1",
+			"output":  "done",
+		},
+	}
+	msgs, err := convertOpenAICompatResponsesInput(input)
+	require.Nil(t, err)
+	require.Len(t, msgs, 2)
+	require.Len(t, msgs[0].ToolCalls, 1)
+	assert.Equal(t, types.ToolTypeCustom, msgs[0].ToolCalls[0].Type)
+	assert.Equal(t, "code_exec", msgs[0].ToolCalls[0].Name)
+	assert.Equal(t, "print('hi')", msgs[0].ToolCalls[0].Input)
+	assert.Equal(t, "call_custom_1", msgs[1].ToolCallID)
+}
+
 func TestChatHandler_OpenAICompatResponses_Stream(t *testing.T) {
 	svc := &openAICompatServiceStub{
 		streamChunks: []llmcore.UnifiedChunk{

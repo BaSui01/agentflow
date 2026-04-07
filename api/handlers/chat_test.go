@@ -405,6 +405,7 @@ func TestChatHandler_ConvertToLLMRequest(t *testing.T) {
 	handler := NewChatHandler(nil, nil, logger)
 	strict := true
 	includeServerSide := true
+	format := &api.ToolFormat{Type: "grammar", Syntax: "lark", Definition: "start: WORD"}
 
 	apiReq := &api.ChatRequest{
 		TraceID:  "trace-123",
@@ -424,9 +425,11 @@ func TestChatHandler_ConvertToLLMRequest(t *testing.T) {
 		Stop:        []string{"END"},
 		Tools: []api.ToolSchema{
 			{
+				Type:        types.ToolTypeCustom,
 				Name:        "test_tool",
 				Description: "A test tool",
-				Parameters:  json.RawMessage(`{"type":"object"}`),
+				Parameters:  json.RawMessage(`{}`),
+				Format:      format,
 				Strict:      &strict,
 			},
 		},
@@ -485,6 +488,9 @@ func TestChatHandler_ConvertToLLMRequest(t *testing.T) {
 	assert.Equal(t, []string{"END"}, llmReq.Stop)
 	assert.Len(t, llmReq.Tools, 1)
 	assert.Equal(t, "test_tool", llmReq.Tools[0].Name)
+	assert.Equal(t, types.ToolTypeCustom, llmReq.Tools[0].Type)
+	require.NotNil(t, llmReq.Tools[0].Format)
+	assert.Equal(t, "grammar", llmReq.Tools[0].Format.Type)
 	require.NotNil(t, llmReq.Tools[0].Strict)
 	assert.True(t, *llmReq.Tools[0].Strict)
 	assert.Equal(t, "auto", llmReq.ToolChoice)

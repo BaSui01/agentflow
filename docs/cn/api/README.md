@@ -47,8 +47,10 @@ type Message struct {
 type ToolCall struct {
     Index     int             `json:"index,omitempty"` // 流式 delta 中标识同一工具调用的位置索引
     ID        string          `json:"id"`
+    Type      string          `json:"type,omitempty"` // function/custom
     Name      string          `json:"name"`
     Arguments json.RawMessage `json:"arguments"`
+    Input     string          `json:"input,omitempty"` // custom tool 的原始文本输入
 }
 ```
 
@@ -58,9 +60,11 @@ type ToolCall struct {
 
 ```go
 type ToolSchema struct {
+    Type        string          `json:"type,omitempty"` // function/custom
     Name        string          `json:"name"`
     Description string          `json:"description,omitempty"`
     Parameters  json.RawMessage `json:"parameters"`
+    Format      *ToolFormat     `json:"format,omitempty"` // custom tool 的格式约束
     Strict      *bool           `json:"strict,omitempty"`
     Version     string          `json:"version,omitempty"`
 }

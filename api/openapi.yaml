@@ -2079,8 +2079,12 @@ components:
 
     ToolSchema:
       type: object
-      required: [name, parameters]
+      required: [name]
       properties:
+        type:
+          type: string
+          description: Tool type (`function` or `custom`)
+          example: "function"
         name:
           type: string
           description: Tool name
@@ -2093,6 +2097,16 @@ components:
           type: object
           description: JSON Schema for tool parameters
           additionalProperties: true
+        format:
+          type: object
+          description: Custom tool format descriptor for provider-native text/grammar tools.
+          properties:
+            type:
+              type: string
+            syntax:
+              type: string
+            definition:
+              type: string
         strict:
           type: boolean
           description: Enables strict schema validation for providers that support strict tool calling.

@@ -447,6 +447,43 @@ func TestOpenAIProvider_Completion_ResponsesAPI_WithToolCalls(t *testing.T) {
 	assert.Equal(t, "call_1", resp.Choices[0].Message.ToolCalls[0].ID)
 }
 
+func TestOpenAIProvider_Completion_ResponsesAPI_WithCustomToolCalls(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(openAIResponsesResponse{
+			ID:     "resp_custom",
+			Model:  "gpt-5.4",
+			Status: "completed",
+			Output: []responsesOutputItem{
+				{
+					Type:   "custom_tool_call",
+					ID:     "ct_1",
+					CallID: "call_custom_1",
+					Name:   "code_exec",
+					Input:  "print('hi')",
+				},
+			},
+		})
+	}))
+	t.Cleanup(func() { server.Close() })
+
+	p := NewOpenAIProvider(providers.OpenAIConfig{
+		BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key", BaseURL: server.URL},
+		UseResponsesAPI:    true,
+	}, zap.NewNop())
+
+	resp, err := p.Completion(context.Background(), &llm.ChatRequest{
+		Messages: []types.Message{{Role: llm.RoleUser, Content: "Run code"}},
+	})
+	require.NoError(t, err)
+	require.Len(t, resp.Choices, 1)
+	require.Len(t, resp.Choices[0].Message.ToolCalls, 1)
+	assert.Equal(t, types.ToolTypeCustom, resp.Choices[0].Message.ToolCalls[0].Type)
+	assert.Equal(t, "code_exec", resp.Choices[0].Message.ToolCalls[0].Name)
+	assert.Equal(t, "print('hi')", resp.Choices[0].Message.ToolCalls[0].Input)
+	assert.Equal(t, "call_custom_1", resp.Choices[0].Message.ToolCalls[0].ID)
+}
+
 func TestOpenAIProvider_Completion_ResponsesAPI_PreviousResponseID(t *testing.T) {
 	var capturedPrevID string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -650,6 +687,55 @@ func TestOpenAIProvider_Stream_ResponsesAPI_ToolArgsAreAccumulated(t *testing.T)
 	assert.Equal(t, "fc_1", gotToolCall.ID)
 	assert.Equal(t, "lookup", gotToolCall.Name)
 	assert.JSONEq(t, `{"city":"NYC"}`, string(gotToolCall.Arguments))
+}
+
+func TestOpenAIProvider_Stream_ResponsesAPI_CustomToolInputIsAccumulated(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(http.StatusOK)
+
+		events := []string{
+			`event: response.created` + "\n" +
+				`data: {"type":"response.created","response":{"id":"resp_custom_stream","model":"gpt-5.4"}}` + "\n\n",
+			`event: response.output_item.added` + "\n" +
+				`data: {"type":"response.output_item.added","item":{"id":"ct_1","type":"custom_tool_call","call_id":"call_custom_1","name":"code_exec"}}` + "\n\n",
+			`event: response.custom_tool_call_input.delta` + "\n" +
+				`data: {"type":"response.custom_tool_call_input.delta","item_id":"ct_1","delta":"print("}` + "\n\n",
+			`event: response.custom_tool_call_input.delta` + "\n" +
+				`data: {"type":"response.custom_tool_call_input.delta","item_id":"ct_1","delta":"\"hi\")"}` + "\n\n",
+			`event: response.custom_tool_call_input.done` + "\n" +
+				`data: {"type":"response.custom_tool_call_input.done","item_id":"ct_1"}` + "\n\n",
+			"data: [DONE]\n\n",
+		}
+		for _, e := range events {
+			_, _ = w.Write([]byte(e))
+		}
+	}))
+	t.Cleanup(func() { server.Close() })
+
+	p := NewOpenAIProvider(providers.OpenAIConfig{
+		BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key", BaseURL: server.URL},
+		UseResponsesAPI:    true,
+	}, zap.NewNop())
+
+	ch, err := p.Stream(context.Background(), &llm.ChatRequest{
+		Messages: []types.Message{{Role: llm.RoleUser, Content: "Run code"}},
+	})
+	require.NoError(t, err)
+
+	var gotToolCall *types.ToolCall
+	for c := range ch {
+		if len(c.Delta.ToolCalls) > 0 {
+			tc := c.Delta.ToolCalls[0]
+			gotToolCall = &tc
+		}
+	}
+
+	require.NotNil(t, gotToolCall)
+	assert.Equal(t, "call_custom_1", gotToolCall.ID)
+	assert.Equal(t, types.ToolTypeCustom, gotToolCall.Type)
+	assert.Equal(t, "code_exec", gotToolCall.Name)
+	assert.Equal(t, `print("hi")`, gotToolCall.Input)
 }
 
 func TestOpenAIProvider_Stream_ResponsesAPI_FunctionCallName_FullSequence(t *testing.T) {
@@ -929,6 +1015,30 @@ func TestBuildResponsesTools_PreservesStrict(t *testing.T) {
 	tool, ok := tools[0].(map[string]any)
 	require.True(t, ok)
 	assert.Equal(t, true, tool["strict"])
+}
+
+func TestBuildResponsesTools_CustomTool(t *testing.T) {
+	tools := buildResponsesTools(&llm.ChatRequest{
+		Tools: []types.ToolSchema{{
+			Type:        types.ToolTypeCustom,
+			Name:        "code_exec",
+			Description: "Execute code",
+			Format: &types.ToolFormat{
+				Type:       "grammar",
+				Syntax:     "lark",
+				Definition: "start: WORD",
+			},
+		}},
+	})
+	require.Len(t, tools, 1)
+	tool, ok := tools[0].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, "custom", tool["type"])
+	assert.Equal(t, "code_exec", tool["name"])
+	format, ok := tool["format"].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, "grammar", format["type"])
+	assert.Equal(t, "lark", format["syntax"])
 }
 
 func findResponsesWebSearchTool(t *testing.T, raw map[string]any) map[string]any {

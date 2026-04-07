@@ -439,7 +439,7 @@ func TestProvider_Stream_ToolCallDelta(t *testing.T) {
 					Index: 0,
 					Delta: &providerbase.OpenAICompatMessage{
 						ToolCalls: []providerbase.OpenAICompatToolCall{
-							{ID: "tc1", Type: "function", Function: providerbase.OpenAICompatFunction{Name: "calc", Arguments: json.RawMessage(`{"x":1}`)}},
+							{ID: "tc1", Type: "function", Function: &providerbase.OpenAICompatFunction{Name: "calc", Arguments: json.RawMessage(`{"x":1}`)}},
 						},
 					},
 				},
