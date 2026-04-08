@@ -167,10 +167,11 @@ func (m OpenAICompatMessage) MarshalJSON() ([]byte, error) {
 
 // OpenAICompatToolCall 表示 OpenAI 兼容的工具调用.
 type OpenAICompatToolCall struct {
-	Index    int                  `json:"index"`
-	ID       string               `json:"id"`
-	Type     string               `json:"type"`
-	Function OpenAICompatFunction `json:"function"`
+	Index    int                     `json:"index"`
+	ID       string                  `json:"id"`
+	Type     string                  `json:"type"`
+	Function *OpenAICompatFunction   `json:"function,omitempty"`
+	Custom   *OpenAICompatCustomCall `json:"custom,omitempty"`
 }
 
 // OpenAICompatFunction 表示 OpenAI 兼容的函数定义.
@@ -178,13 +179,28 @@ type OpenAICompatFunction struct {
 	Name        string          `json:"name"`
 	Description string          `json:"description,omitempty"`
 	Parameters  json.RawMessage `json:"parameters,omitempty"`
+	Strict      *bool           `json:"strict,omitempty"`
 	Arguments   json.RawMessage `json:"arguments,omitempty"`
+}
+
+// OpenAICompatCustomTool represents an OpenAI custom tool definition.
+type OpenAICompatCustomTool struct {
+	Name        string            `json:"name"`
+	Description string            `json:"description,omitempty"`
+	Format      *types.ToolFormat `json:"format,omitempty"`
+}
+
+// OpenAICompatCustomCall represents an OpenAI custom tool call payload.
+type OpenAICompatCustomCall struct {
+	Name  string `json:"name"`
+	Input string `json:"input,omitempty"`
 }
 
 // OpenAICompatTool 表示 OpenAI 兼容的工具定义.
 type OpenAICompatTool struct {
-	Type     string               `json:"type"`
-	Function OpenAICompatFunction `json:"function"`
+	Type     string                  `json:"type"`
+	Function *OpenAICompatFunction   `json:"function,omitempty"`
+	Custom   *OpenAICompatCustomTool `json:"custom,omitempty"`
 }
 
 // OpenAICompatRequest 表示 OpenAI 兼容的聊天完成请求.
@@ -214,10 +230,12 @@ type OpenAICompatRequest struct {
 	ReasoningEffort     *string               `json:"reasoning_effort,omitempty"`
 
 	// 新增 OpenAI 扩展字段
-	Store            *bool             `json:"store,omitempty"`              // 是否存储用于蒸馏/评估
-	Modalities       []string          `json:"modalities,omitempty"`         // ["text", "audio"]
-	WebSearchOptions *WebSearchOptions `json:"web_search_options,omitempty"` // 内置 web 搜索
-	Metadata         map[string]string `json:"metadata,omitempty"`           // OpenAI 级别元数据
+	Store                *bool             `json:"store,omitempty"`                  // 是否存储用于蒸馏/评估
+	Modalities           []string          `json:"modalities,omitempty"`             // ["text", "audio"]
+	WebSearchOptions     *WebSearchOptions `json:"web_search_options,omitempty"`     // 内置 web 搜索
+	Metadata             map[string]string `json:"metadata,omitempty"`               // OpenAI 级别元数据
+	PromptCacheKey       string            `json:"prompt_cache_key,omitempty"`       // prompt cache routing key
+	PromptCacheRetention string            `json:"prompt_cache_retention,omitempty"` // prompt cache retention policy
 
 	// Responses API 扩展字段
 	PreviousResponseID string   `json:"previous_response_id,omitempty"` // 连续对话上下文 ID
@@ -381,14 +399,28 @@ func ConvertMessagesToOpenAI(msgs []types.Message) []OpenAICompatMessage {
 		if len(m.ToolCalls) > 0 {
 			oa.ToolCalls = make([]OpenAICompatToolCall, 0, len(m.ToolCalls))
 			for _, tc := range m.ToolCalls {
-				oa.ToolCalls = append(oa.ToolCalls, OpenAICompatToolCall{
+				callType := strings.TrimSpace(tc.Type)
+				if callType == "" {
+					callType = types.ToolTypeFunction
+				}
+				item := OpenAICompatToolCall{
 					ID:   tc.ID,
-					Type: "function",
-					Function: OpenAICompatFunction{
+					Type: callType,
+				}
+				switch callType {
+				case types.ToolTypeCustom:
+					item.Custom = &OpenAICompatCustomCall{
+						Name:  tc.Name,
+						Input: tc.Input,
+					}
+				default:
+					item.Type = types.ToolTypeFunction
+					item.Function = &OpenAICompatFunction{
 						Name:      tc.Name,
 						Arguments: tc.Arguments,
-					},
-				})
+					}
+				}
+				oa.ToolCalls = append(oa.ToolCalls, item)
 			}
 		}
 		out = append(out, oa)
@@ -403,14 +435,28 @@ func ConvertToolsToOpenAI(tools []types.ToolSchema) []OpenAICompatTool {
 	}
 	out := make([]OpenAICompatTool, 0, len(tools))
 	for _, t := range tools {
-		out = append(out, OpenAICompatTool{
-			Type: "function",
-			Function: OpenAICompatFunction{
+		toolType := strings.TrimSpace(t.Type)
+		if toolType == "" {
+			toolType = types.ToolTypeFunction
+		}
+		item := OpenAICompatTool{Type: toolType}
+		switch toolType {
+		case types.ToolTypeCustom:
+			item.Custom = &OpenAICompatCustomTool{
+				Name:        t.Name,
+				Description: t.Description,
+				Format:      t.Format,
+			}
+		default:
+			item.Type = types.ToolTypeFunction
+			item.Function = &OpenAICompatFunction{
 				Name:        t.Name,
 				Description: t.Description,
 				Parameters:  t.Parameters,
-			},
-		})
+				Strict:      t.Strict,
+			}
+		}
+		out = append(out, item)
 	}
 	return out
 }
@@ -429,11 +475,28 @@ func ToLLMChatResponse(oa OpenAICompatResponse, provider string) *llm.ChatRespon
 		if len(c.Message.ToolCalls) > 0 {
 			msg.ToolCalls = make([]types.ToolCall, 0, len(c.Message.ToolCalls))
 			for _, tc := range c.Message.ToolCalls {
-				msg.ToolCalls = append(msg.ToolCalls, types.ToolCall{
-					ID:        tc.ID,
-					Name:      tc.Function.Name,
-					Arguments: UnwrapStringifiedJSON(tc.Function.Arguments),
-				})
+				callType := strings.TrimSpace(tc.Type)
+				if callType == "" {
+					callType = types.ToolTypeFunction
+				}
+				call := types.ToolCall{
+					ID:   tc.ID,
+					Type: callType,
+				}
+				switch callType {
+				case types.ToolTypeCustom:
+					if tc.Custom != nil {
+						call.Name = tc.Custom.Name
+						call.Input = tc.Custom.Input
+					}
+				default:
+					call.Type = types.ToolTypeFunction
+					if tc.Function != nil {
+						call.Name = tc.Function.Name
+						call.Arguments = UnwrapStringifiedJSON(tc.Function.Arguments)
+					}
+				}
+				msg.ToolCalls = append(msg.ToolCalls, call)
 			}
 		}
 		// 映射 annotations

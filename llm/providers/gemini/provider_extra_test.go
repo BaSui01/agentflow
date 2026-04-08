@@ -152,17 +152,17 @@ func TestNormalizeFinishReason(t *testing.T) {
 // --- convertToolChoice ---
 
 func TestConvertToolChoice(t *testing.T) {
-	assert.Nil(t, convertToolChoice(nil))
+	assert.Nil(t, convertToolChoice(nil, nil))
 
-	tc := convertToolChoice("auto")
+	tc := convertToolChoice("auto", nil)
 	require.NotNil(t, tc)
 	assert.Equal(t, "AUTO", tc.FunctionCallingConfig.Mode)
 
-	tc = convertToolChoice("required")
+	tc = convertToolChoice("required", nil)
 	require.NotNil(t, tc)
 	assert.Equal(t, "ANY", tc.FunctionCallingConfig.Mode)
 
-	tc = convertToolChoice("none")
+	tc = convertToolChoice("none", nil)
 	require.NotNil(t, tc)
 	assert.Equal(t, "NONE", tc.FunctionCallingConfig.Mode)
 
@@ -170,13 +170,25 @@ func TestConvertToolChoice(t *testing.T) {
 	tc = convertToolChoice(map[string]any{
 		"type":     "function",
 		"function": map[string]any{"name": "get_weather"},
-	})
+	}, nil)
 	require.NotNil(t, tc)
 	assert.Equal(t, "ANY", tc.FunctionCallingConfig.Mode)
 	assert.Equal(t, []string{"get_weather"}, tc.FunctionCallingConfig.AllowedFunctionNames)
 
+	tc = convertToolChoice(map[string]any{
+		"mode":                                 "validated",
+		"allowed_function_names":               []any{"weather_lookup"},
+		"include_server_side_tool_invocations": true,
+	}, nil)
+	require.NotNil(t, tc)
+	require.NotNil(t, tc.FunctionCallingConfig)
+	assert.Equal(t, "VALIDATED", tc.FunctionCallingConfig.Mode)
+	assert.Equal(t, []string{"weather_lookup"}, tc.FunctionCallingConfig.AllowedFunctionNames)
+	require.NotNil(t, tc.IncludeServerSideToolInvocations)
+	assert.True(t, *tc.IncludeServerSideToolInvocations)
+
 	// Unknown string
-	assert.Nil(t, convertToolChoice("unknown_value"))
+	assert.Nil(t, convertToolChoice("unknown_value", nil))
 }
 
 // --- checkPromptFeedback ---
@@ -235,6 +247,26 @@ func TestBuildGenerationConfig_WithResponseFormat(t *testing.T) {
 	require.NotNil(t, cfg)
 	assert.Equal(t, "application/json", cfg.ResponseMimeType)
 	assert.NotNil(t, cfg.ResponseSchema)
+}
+
+func TestSanitizeGeminiCachedContentRequest_DropsConflictingFields(t *testing.T) {
+	body := &geminiRequest{
+		CachedContent:     "cachedContents/abc",
+		SystemInstruction: &geminiContent{Parts: []geminiPart{{Text: "system"}}},
+		Tools:             []geminiTool{{GoogleSearch: &geminiGoogleSearch{}}},
+		ToolConfig:        &geminiToolConfig{},
+	}
+	sanitizeGeminiCachedContentRequest(body)
+	assert.Equal(t, "", body.CachedContent)
+}
+
+func TestSanitizeGeminiCachedContentRequest_PreservesCompatibleBody(t *testing.T) {
+	body := &geminiRequest{
+		CachedContent: "cachedContents/abc",
+		Contents:      []geminiContent{{Role: "user", Parts: []geminiPart{{Text: "hi"}}}},
+	}
+	sanitizeGeminiCachedContentRequest(body)
+	assert.Equal(t, "cachedContents/abc", body.CachedContent)
 }
 
 // --- Completion with thinking ---

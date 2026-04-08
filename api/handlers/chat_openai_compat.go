@@ -24,68 +24,72 @@ import (
 )
 
 type openAICompatChatCompletionsRequest struct {
-	Model               string                        `json:"model"`
-	Messages            []openAICompatInboundMessage  `json:"messages"`
-	MaxTokens           int                           `json:"max_tokens,omitempty"`
-	MaxCompletionTokens *int                          `json:"max_completion_tokens,omitempty"`
-	Temperature         float32                       `json:"temperature,omitempty"`
-	TopP                float32                       `json:"top_p,omitempty"`
-	FrequencyPenalty    *float32                      `json:"frequency_penalty,omitempty"`
-	PresencePenalty     *float32                      `json:"presence_penalty,omitempty"`
-	RepetitionPenalty   *float32                      `json:"repetition_penalty,omitempty"`
-	N                   *int                          `json:"n,omitempty"`
-	LogProbs            *bool                         `json:"logprobs,omitempty"`
-	TopLogProbs         *int                          `json:"top_logprobs,omitempty"`
-	Stop                []string                      `json:"stop,omitempty"`
-	Tools               []openAICompatInboundTool     `json:"tools,omitempty"`
-	ToolChoice          any                           `json:"tool_choice,omitempty"`
-	ResponseFormat      any                           `json:"response_format,omitempty"`
-	Stream              bool                          `json:"stream,omitempty"`
-	StreamOptions       *api.StreamOptions            `json:"stream_options,omitempty"`
-	ParallelToolCalls   *bool                         `json:"parallel_tool_calls,omitempty"`
-	ServiceTier         *string                       `json:"service_tier,omitempty"`
-	User                string                        `json:"user,omitempty"`
-	ReasoningEffort     string                        `json:"reasoning_effort,omitempty"`
-	Store               *bool                         `json:"store,omitempty"`
-	Modalities          []string                      `json:"modalities,omitempty"`
-	WebSearchOptions    *openAICompatWebSearchOptions `json:"web_search_options,omitempty"`
-	PreviousResponseID  string                        `json:"previous_response_id,omitempty"`
-	Include             []string                      `json:"include,omitempty"`
-	Truncation          string                        `json:"truncation,omitempty"`
-	Provider            string                        `json:"provider,omitempty"`
-	RoutePolicy         string                        `json:"route_policy,omitempty"`
-	EndpointMode        string                        `json:"endpoint_mode,omitempty"`
-	Timeout             string                        `json:"timeout,omitempty"`
-	Metadata            map[string]string             `json:"metadata,omitempty"`
-	Tags                []string                      `json:"tags,omitempty"`
+	Model                string                        `json:"model"`
+	Messages             []openAICompatInboundMessage  `json:"messages"`
+	MaxTokens            int                           `json:"max_tokens,omitempty"`
+	MaxCompletionTokens  *int                          `json:"max_completion_tokens,omitempty"`
+	Temperature          float32                       `json:"temperature,omitempty"`
+	TopP                 float32                       `json:"top_p,omitempty"`
+	FrequencyPenalty     *float32                      `json:"frequency_penalty,omitempty"`
+	PresencePenalty      *float32                      `json:"presence_penalty,omitempty"`
+	RepetitionPenalty    *float32                      `json:"repetition_penalty,omitempty"`
+	N                    *int                          `json:"n,omitempty"`
+	LogProbs             *bool                         `json:"logprobs,omitempty"`
+	TopLogProbs          *int                          `json:"top_logprobs,omitempty"`
+	Stop                 []string                      `json:"stop,omitempty"`
+	Tools                []openAICompatInboundTool     `json:"tools,omitempty"`
+	ToolChoice           any                           `json:"tool_choice,omitempty"`
+	ResponseFormat       any                           `json:"response_format,omitempty"`
+	Stream               bool                          `json:"stream,omitempty"`
+	StreamOptions        *api.StreamOptions            `json:"stream_options,omitempty"`
+	ParallelToolCalls    *bool                         `json:"parallel_tool_calls,omitempty"`
+	ServiceTier          *string                       `json:"service_tier,omitempty"`
+	User                 string                        `json:"user,omitempty"`
+	ReasoningEffort      string                        `json:"reasoning_effort,omitempty"`
+	Store                *bool                         `json:"store,omitempty"`
+	Modalities           []string                      `json:"modalities,omitempty"`
+	WebSearchOptions     *openAICompatWebSearchOptions `json:"web_search_options,omitempty"`
+	PromptCacheKey       string                        `json:"prompt_cache_key,omitempty"`
+	PromptCacheRetention string                        `json:"prompt_cache_retention,omitempty"`
+	PreviousResponseID   string                        `json:"previous_response_id,omitempty"`
+	Include              []string                      `json:"include,omitempty"`
+	Truncation           string                        `json:"truncation,omitempty"`
+	Provider             string                        `json:"provider,omitempty"`
+	RoutePolicy          string                        `json:"route_policy,omitempty"`
+	EndpointMode         string                        `json:"endpoint_mode,omitempty"`
+	Timeout              string                        `json:"timeout,omitempty"`
+	Metadata             map[string]string             `json:"metadata,omitempty"`
+	Tags                 []string                      `json:"tags,omitempty"`
 }
 
 type openAICompatResponsesRequest struct {
-	Model              string                          `json:"model"`
-	Input              any                             `json:"input"`
-	Instructions       string                          `json:"instructions,omitempty"`
-	MaxOutputTokens    *int                            `json:"max_output_tokens,omitempty"`
-	Temperature        *float32                        `json:"temperature,omitempty"`
-	TopP               *float32                        `json:"top_p,omitempty"`
-	Tools              []openAICompatInboundTool       `json:"tools,omitempty"`
-	ToolChoice         any                             `json:"tool_choice,omitempty"`
-	Reasoning          *openAICompatResponsesReasoning `json:"reasoning,omitempty"`
-	Text               *openAICompatResponsesTextParam `json:"text,omitempty"`
-	ParallelToolCalls  *bool                           `json:"parallel_tool_calls,omitempty"`
-	ServiceTier        *string                         `json:"service_tier,omitempty"`
-	User               string                          `json:"user,omitempty"`
-	Store              *bool                           `json:"store,omitempty"`
-	WebSearchOptions   *openAICompatWebSearchOptions   `json:"web_search_options,omitempty"`
-	PreviousResponseID string                          `json:"previous_response_id,omitempty"`
-	Include            []string                        `json:"include,omitempty"`
-	Truncation         string                          `json:"truncation,omitempty"`
-	Stream             bool                            `json:"stream,omitempty"`
-	Provider           string                          `json:"provider,omitempty"`
-	RoutePolicy        string                          `json:"route_policy,omitempty"`
-	EndpointMode       string                          `json:"endpoint_mode,omitempty"`
-	Timeout            string                          `json:"timeout,omitempty"`
-	Metadata           map[string]string               `json:"metadata,omitempty"`
-	Tags               []string                        `json:"tags,omitempty"`
+	Model                string                          `json:"model"`
+	Input                any                             `json:"input"`
+	Instructions         string                          `json:"instructions,omitempty"`
+	MaxOutputTokens      *int                            `json:"max_output_tokens,omitempty"`
+	Temperature          *float32                        `json:"temperature,omitempty"`
+	TopP                 *float32                        `json:"top_p,omitempty"`
+	Tools                []openAICompatInboundTool       `json:"tools,omitempty"`
+	ToolChoice           any                             `json:"tool_choice,omitempty"`
+	Reasoning            *openAICompatResponsesReasoning `json:"reasoning,omitempty"`
+	Text                 *openAICompatResponsesTextParam `json:"text,omitempty"`
+	ParallelToolCalls    *bool                           `json:"parallel_tool_calls,omitempty"`
+	ServiceTier          *string                         `json:"service_tier,omitempty"`
+	User                 string                          `json:"user,omitempty"`
+	Store                *bool                           `json:"store,omitempty"`
+	WebSearchOptions     *openAICompatWebSearchOptions   `json:"web_search_options,omitempty"`
+	PromptCacheKey       string                          `json:"prompt_cache_key,omitempty"`
+	PromptCacheRetention string                          `json:"prompt_cache_retention,omitempty"`
+	PreviousResponseID   string                          `json:"previous_response_id,omitempty"`
+	Include              []string                        `json:"include,omitempty"`
+	Truncation           string                          `json:"truncation,omitempty"`
+	Stream               bool                            `json:"stream,omitempty"`
+	Provider             string                          `json:"provider,omitempty"`
+	RoutePolicy          string                          `json:"route_policy,omitempty"`
+	EndpointMode         string                          `json:"endpoint_mode,omitempty"`
+	Timeout              string                          `json:"timeout,omitempty"`
+	Metadata             map[string]string               `json:"metadata,omitempty"`
+	Tags                 []string                        `json:"tags,omitempty"`
 }
 
 type openAICompatInboundMessage struct {
@@ -103,6 +107,10 @@ type openAICompatInboundCall struct {
 		Name      string `json:"name,omitempty"`
 		Arguments string `json:"arguments,omitempty"`
 	} `json:"function,omitempty"`
+	Custom struct {
+		Name  string `json:"name,omitempty"`
+		Input string `json:"input,omitempty"`
+	} `json:"custom,omitempty"`
 }
 
 type openAICompatInboundTool struct {
@@ -110,11 +118,19 @@ type openAICompatInboundTool struct {
 	Name        string `json:"name,omitempty"`
 	Description string `json:"description,omitempty"`
 	Parameters  any    `json:"parameters,omitempty"`
+	Format      any    `json:"format,omitempty"`
+	Strict      *bool  `json:"strict,omitempty"`
 	Function    struct {
 		Name        string `json:"name,omitempty"`
 		Description string `json:"description,omitempty"`
 		Parameters  any    `json:"parameters,omitempty"`
+		Strict      *bool  `json:"strict,omitempty"`
 	} `json:"function,omitempty"`
+	Custom struct {
+		Name        string `json:"name,omitempty"`
+		Description string `json:"description,omitempty"`
+		Format      any    `json:"format,omitempty"`
+	} `json:"custom,omitempty"`
 	SearchContextSize string                        `json:"search_context_size,omitempty"`
 	UserLocation      json.RawMessage               `json:"user_location,omitempty"`
 	Filters           *openAICompatWebSearchFilters `json:"filters,omitempty"`
@@ -184,10 +200,14 @@ type openAICompatOutboundMsg struct {
 type openAICompatOutboundToolCall struct {
 	ID       string `json:"id"`
 	Type     string `json:"type"`
-	Function struct {
+	Function *struct {
 		Name      string `json:"name"`
 		Arguments string `json:"arguments"`
-	} `json:"function"`
+	} `json:"function,omitempty"`
+	Custom *struct {
+		Name  string `json:"name"`
+		Input string `json:"input"`
+	} `json:"custom,omitempty"`
 }
 
 type openAICompatAnnotation struct {
@@ -229,6 +249,7 @@ type openAICompatResponsesOutput struct {
 	Name             string                         `json:"name,omitempty"`
 	Arguments        json.RawMessage                `json:"arguments,omitempty"`
 	CallID           string                         `json:"call_id,omitempty"`
+	Input            string                         `json:"input,omitempty"`
 }
 
 type openAICompatResponsesContent struct {
@@ -498,22 +519,46 @@ func toOpenAICompatResponsesStreamEvents(chunk *llm.StreamChunk) []openAICompatR
 		if itemID == "" {
 			itemID = fmt.Sprintf("fc_%d", time.Now().UnixNano())
 		}
-		events = append(events, openAICompatResponsesStreamEvent{
-			name: "response.function_call_arguments.delta",
-			payload: map[string]any{
-				"type":    "response.function_call_arguments.delta",
-				"item_id": itemID,
-				"name":    call.Name,
-				"delta":   string(call.Arguments),
-			},
-		})
-		events = append(events, openAICompatResponsesStreamEvent{
-			name: "response.function_call_arguments.done",
-			payload: map[string]any{
-				"type":    "response.function_call_arguments.done",
-				"item_id": itemID,
-			},
-		})
+		callType := strings.TrimSpace(call.Type)
+		if callType == "" {
+			callType = types.ToolTypeFunction
+		}
+		switch callType {
+		case types.ToolTypeCustom:
+			events = append(events, openAICompatResponsesStreamEvent{
+				name: "response.custom_tool_call_input.delta",
+				payload: map[string]any{
+					"type":    "response.custom_tool_call_input.delta",
+					"item_id": itemID,
+					"name":    call.Name,
+					"delta":   call.Input,
+				},
+			})
+			events = append(events, openAICompatResponsesStreamEvent{
+				name: "response.custom_tool_call_input.done",
+				payload: map[string]any{
+					"type":    "response.custom_tool_call_input.done",
+					"item_id": itemID,
+				},
+			})
+		default:
+			events = append(events, openAICompatResponsesStreamEvent{
+				name: "response.function_call_arguments.delta",
+				payload: map[string]any{
+					"type":    "response.function_call_arguments.delta",
+					"item_id": itemID,
+					"name":    call.Name,
+					"delta":   string(call.Arguments),
+				},
+			})
+			events = append(events, openAICompatResponsesStreamEvent{
+				name: "response.function_call_arguments.done",
+				payload: map[string]any{
+					"type":    "response.function_call_arguments.done",
+					"item_id": itemID,
+				},
+			})
+		}
 	}
 	if chunk.FinishReason == "stop" {
 		events = append(events, openAICompatResponsesStreamEvent{
@@ -542,39 +587,41 @@ func buildAPIChatRequestFromCompatCompletions(req openAICompatChatCompletionsReq
 	wsOptions := mergeOpenAICompatWebSearchOptions(req.WebSearchOptions, wsOptionsFromTools)
 
 	apiReq := &api.ChatRequest{
-		Model:               req.Model,
-		Messages:            messages,
-		MaxTokens:           req.MaxTokens,
-		MaxCompletionTokens: req.MaxCompletionTokens,
-		Temperature:         req.Temperature,
-		TopP:                req.TopP,
-		FrequencyPenalty:    req.FrequencyPenalty,
-		PresencePenalty:     req.PresencePenalty,
-		RepetitionPenalty:   req.RepetitionPenalty,
-		N:                   req.N,
-		LogProbs:            req.LogProbs,
-		TopLogProbs:         req.TopLogProbs,
-		Stop:                req.Stop,
-		Tools:               tools,
-		ToolChoice:          req.ToolChoice,
-		ResponseFormat:      responseFormat,
-		StreamOptions:       req.StreamOptions,
-		ParallelToolCalls:   req.ParallelToolCalls,
-		ServiceTier:         req.ServiceTier,
-		User:                req.User,
-		ReasoningEffort:     strings.TrimSpace(req.ReasoningEffort),
-		ReasoningSummary:    "",
-		Store:               req.Store,
-		Modalities:          req.Modalities,
-		PreviousResponseID:  strings.TrimSpace(req.PreviousResponseID),
-		Include:             req.Include,
-		Truncation:          strings.TrimSpace(req.Truncation),
-		Provider:            req.Provider,
-		RoutePolicy:         req.RoutePolicy,
-		EndpointMode:        req.EndpointMode,
-		Timeout:             req.Timeout,
-		Metadata:            req.Metadata,
-		Tags:                req.Tags,
+		Model:                req.Model,
+		Messages:             messages,
+		MaxTokens:            req.MaxTokens,
+		MaxCompletionTokens:  req.MaxCompletionTokens,
+		Temperature:          req.Temperature,
+		TopP:                 req.TopP,
+		FrequencyPenalty:     req.FrequencyPenalty,
+		PresencePenalty:      req.PresencePenalty,
+		RepetitionPenalty:    req.RepetitionPenalty,
+		N:                    req.N,
+		LogProbs:             req.LogProbs,
+		TopLogProbs:          req.TopLogProbs,
+		Stop:                 req.Stop,
+		Tools:                tools,
+		ToolChoice:           req.ToolChoice,
+		ResponseFormat:       responseFormat,
+		StreamOptions:        req.StreamOptions,
+		ParallelToolCalls:    req.ParallelToolCalls,
+		ServiceTier:          req.ServiceTier,
+		User:                 req.User,
+		ReasoningEffort:      strings.TrimSpace(req.ReasoningEffort),
+		ReasoningSummary:     "",
+		Store:                req.Store,
+		Modalities:           req.Modalities,
+		PromptCacheKey:       strings.TrimSpace(req.PromptCacheKey),
+		PromptCacheRetention: strings.TrimSpace(req.PromptCacheRetention),
+		PreviousResponseID:   strings.TrimSpace(req.PreviousResponseID),
+		Include:              req.Include,
+		Truncation:           strings.TrimSpace(req.Truncation),
+		Provider:             req.Provider,
+		RoutePolicy:          req.RoutePolicy,
+		EndpointMode:         req.EndpointMode,
+		Timeout:              req.Timeout,
+		Metadata:             req.Metadata,
+		Tags:                 req.Tags,
 	}
 	applyWebSearchOptionsToChatRequest(apiReq, wsOptions)
 	return apiReq, nil
@@ -627,30 +674,32 @@ func buildAPIChatRequestFromCompatResponses(req openAICompatResponsesRequest) (*
 	wsOptions := mergeOpenAICompatWebSearchOptions(req.WebSearchOptions, wsOptionsFromTools)
 
 	apiReq := &api.ChatRequest{
-		Model:               req.Model,
-		Messages:            messages,
-		MaxTokens:           maxTokens,
-		MaxCompletionTokens: req.MaxOutputTokens,
-		Temperature:         temp,
-		TopP:                topP,
-		Tools:               tools,
-		ToolChoice:          req.ToolChoice,
-		ResponseFormat:      responseFormat,
-		ParallelToolCalls:   req.ParallelToolCalls,
-		ServiceTier:         req.ServiceTier,
-		User:                req.User,
-		ReasoningEffort:     reasoningEffort,
-		ReasoningSummary:    reasoningSummary,
-		Store:               req.Store,
-		PreviousResponseID:  strings.TrimSpace(req.PreviousResponseID),
-		Include:             req.Include,
-		Truncation:          strings.TrimSpace(req.Truncation),
-		Provider:            req.Provider,
-		RoutePolicy:         req.RoutePolicy,
-		EndpointMode:        endpointMode,
-		Timeout:             req.Timeout,
-		Metadata:            req.Metadata,
-		Tags:                req.Tags,
+		Model:                req.Model,
+		Messages:             messages,
+		MaxTokens:            maxTokens,
+		MaxCompletionTokens:  req.MaxOutputTokens,
+		Temperature:          temp,
+		TopP:                 topP,
+		Tools:                tools,
+		ToolChoice:           req.ToolChoice,
+		ResponseFormat:       responseFormat,
+		ParallelToolCalls:    req.ParallelToolCalls,
+		ServiceTier:          req.ServiceTier,
+		User:                 req.User,
+		ReasoningEffort:      reasoningEffort,
+		ReasoningSummary:     reasoningSummary,
+		Store:                req.Store,
+		PromptCacheKey:       strings.TrimSpace(req.PromptCacheKey),
+		PromptCacheRetention: strings.TrimSpace(req.PromptCacheRetention),
+		PreviousResponseID:   strings.TrimSpace(req.PreviousResponseID),
+		Include:              req.Include,
+		Truncation:           strings.TrimSpace(req.Truncation),
+		Provider:             req.Provider,
+		RoutePolicy:          req.RoutePolicy,
+		EndpointMode:         endpointMode,
+		Timeout:              req.Timeout,
+		Metadata:             req.Metadata,
+		Tags:                 req.Tags,
 	}
 	applyWebSearchOptionsToChatRequest(apiReq, wsOptions)
 	return apiReq, nil
@@ -912,15 +961,28 @@ func convertOpenAICompatInboundMessages(in []openAICompatInboundMessage) ([]api.
 	for _, msg := range in {
 		toolCalls := make([]types.ToolCall, 0, len(msg.ToolCalls))
 		for _, tc := range msg.ToolCalls {
-			args := json.RawMessage(strings.TrimSpace(tc.Function.Arguments))
-			if len(args) == 0 {
-				args = json.RawMessage(`{}`)
+			callType := strings.ToLower(strings.TrimSpace(tc.Type))
+			if callType == "" {
+				callType = types.ToolTypeFunction
 			}
-			toolCalls = append(toolCalls, types.ToolCall{
-				ID:        tc.ID,
-				Name:      tc.Function.Name,
-				Arguments: args,
-			})
+			call := types.ToolCall{
+				ID:   tc.ID,
+				Type: callType,
+			}
+			switch callType {
+			case types.ToolTypeCustom:
+				call.Name = strings.TrimSpace(tc.Custom.Name)
+				call.Input = tc.Custom.Input
+			default:
+				call.Type = types.ToolTypeFunction
+				args := json.RawMessage(strings.TrimSpace(tc.Function.Arguments))
+				if len(args) == 0 {
+					args = json.RawMessage(`{}`)
+				}
+				call.Name = tc.Function.Name
+				call.Arguments = args
+			}
+			toolCalls = append(toolCalls, call)
 		}
 		out = append(out, api.Message{
 			Role:       msg.Role,
@@ -950,6 +1012,42 @@ func convertOpenAICompatResponsesInput(input any) ([]api.Message, *types.Error) 
 					Role:       "tool",
 					ToolCallID: strings.TrimSpace(asString(m["call_id"])),
 					Content:    flattenOpenAICompatContent(m["output"]),
+				})
+				continue
+			}
+			if itemType == "custom_tool_call_output" {
+				out = append(out, api.Message{
+					Role:       "tool",
+					ToolCallID: strings.TrimSpace(asString(m["call_id"])),
+					Content:    flattenOpenAICompatContent(m["output"]),
+				})
+				continue
+			}
+			if itemType == "function_call" {
+				args := json.RawMessage(strings.TrimSpace(asString(m["arguments"])))
+				if len(args) == 0 {
+					args = json.RawMessage(`{}`)
+				}
+				out = append(out, api.Message{
+					Role: "assistant",
+					ToolCalls: []types.ToolCall{{
+						ID:        strings.TrimSpace(firstNonEmptyString(asString(m["call_id"]), asString(m["id"]))),
+						Type:      types.ToolTypeFunction,
+						Name:      strings.TrimSpace(asString(m["name"])),
+						Arguments: args,
+					}},
+				})
+				continue
+			}
+			if itemType == "custom_tool_call" {
+				out = append(out, api.Message{
+					Role: "assistant",
+					ToolCalls: []types.ToolCall{{
+						ID:    strings.TrimSpace(firstNonEmptyString(asString(m["call_id"]), asString(m["id"]))),
+						Type:  types.ToolTypeCustom,
+						Name:  strings.TrimSpace(asString(m["name"])),
+						Input: asString(m["input"]),
+					}},
 				})
 				continue
 			}
@@ -1089,10 +1187,14 @@ func convertOpenAICompatInboundTools(in []openAICompatInboundTool) ([]api.ToolSc
 			name := strings.TrimSpace(tool.Name)
 			desc := strings.TrimSpace(tool.Description)
 			params := tool.Parameters
+			strict := tool.Strict
 			if strings.TrimSpace(tool.Function.Name) != "" {
 				name = strings.TrimSpace(tool.Function.Name)
 				desc = strings.TrimSpace(tool.Function.Description)
 				params = tool.Function.Parameters
+				if tool.Function.Strict != nil {
+					strict = tool.Function.Strict
+				}
 			}
 			if name == "" {
 				continue
@@ -1105,9 +1207,30 @@ func convertOpenAICompatInboundTools(in []openAICompatInboundTool) ([]api.ToolSc
 				paramJSON = []byte(`{"type":"object","properties":{}}`)
 			}
 			tools = append(tools, api.ToolSchema{
+				Type:        types.ToolTypeFunction,
 				Name:        name,
 				Description: desc,
 				Parameters:  paramJSON,
+				Strict:      strict,
+			})
+		case types.ToolTypeCustom:
+			name := strings.TrimSpace(tool.Name)
+			desc := strings.TrimSpace(tool.Description)
+			format := tool.Format
+			if strings.TrimSpace(tool.Custom.Name) != "" {
+				name = strings.TrimSpace(tool.Custom.Name)
+				desc = strings.TrimSpace(tool.Custom.Description)
+				format = tool.Custom.Format
+			}
+			if name == "" {
+				continue
+			}
+			tools = append(tools, api.ToolSchema{
+				Type:        types.ToolTypeCustom,
+				Name:        name,
+				Description: desc,
+				Parameters:  json.RawMessage(`{}`),
+				Format:      parseOpenAICompatToolFormat(format),
 			})
 		default:
 			continue
@@ -1246,12 +1369,24 @@ func toOpenAICompatResponsesResponse(resp *api.ChatResponse) openAICompatRespons
 		out.Output = append(out.Output, msgOut)
 
 		for _, tc := range c.Message.ToolCalls {
-			out.Output = append(out.Output, openAICompatResponsesOutput{
-				Type:      "function_call",
-				Name:      tc.Name,
-				Arguments: tc.Arguments,
-				CallID:    tc.ID,
-			})
+			callType := strings.TrimSpace(tc.Type)
+			if callType == "" {
+				callType = types.ToolTypeFunction
+			}
+			item := openAICompatResponsesOutput{
+				Type:   callType,
+				Name:   tc.Name,
+				CallID: tc.ID,
+			}
+			switch callType {
+			case types.ToolTypeCustom:
+				item.Type = "custom_tool_call"
+				item.Input = tc.Input
+			default:
+				item.Type = "function_call"
+				item.Arguments = tc.Arguments
+			}
+			out.Output = append(out.Output, item)
 		}
 	}
 	return out
@@ -1307,13 +1442,51 @@ func toOpenAICompatOutboundToolCalls(calls []types.ToolCall) []openAICompatOutbo
 	for _, c := range calls {
 		item := openAICompatOutboundToolCall{
 			ID:   c.ID,
-			Type: "function",
+			Type: strings.TrimSpace(c.Type),
 		}
-		item.Function.Name = c.Name
-		item.Function.Arguments = string(c.Arguments)
+		if item.Type == "" {
+			item.Type = types.ToolTypeFunction
+		}
+		switch item.Type {
+		case types.ToolTypeCustom:
+			item.Custom = &struct {
+				Name  string `json:"name"`
+				Input string `json:"input"`
+			}{
+				Name:  c.Name,
+				Input: c.Input,
+			}
+		default:
+			item.Type = types.ToolTypeFunction
+			item.Function = &struct {
+				Name      string `json:"name"`
+				Arguments string `json:"arguments"`
+			}{
+				Name:      c.Name,
+				Arguments: string(c.Arguments),
+			}
+		}
 		out = append(out, item)
 	}
 	return out
+}
+
+func parseOpenAICompatToolFormat(raw any) *api.ToolFormat {
+	if raw == nil {
+		return nil
+	}
+	payload, err := json.Marshal(raw)
+	if err != nil {
+		return nil
+	}
+	var out api.ToolFormat
+	if err := json.Unmarshal(payload, &out); err != nil {
+		return nil
+	}
+	if strings.TrimSpace(out.Type) == "" && strings.TrimSpace(out.Syntax) == "" && strings.TrimSpace(out.Definition) == "" {
+		return nil
+	}
+	return &out
 }
 
 func toOpenAICompatAnnotations(annotations []types.Annotation) []openAICompatAnnotation {

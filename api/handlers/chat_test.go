@@ -403,6 +403,9 @@ func TestChatHandler_ValidateChatRequest(t *testing.T) {
 func TestChatHandler_ConvertToLLMRequest(t *testing.T) {
 	logger := zap.NewNop()
 	handler := NewChatHandler(nil, nil, logger)
+	strict := true
+	includeServerSide := true
+	format := &api.ToolFormat{Type: "grammar", Syntax: "lark", Definition: "start: WORD"}
 
 	apiReq := &api.ChatRequest{
 		TraceID:  "trace-123",
@@ -422,9 +425,12 @@ func TestChatHandler_ConvertToLLMRequest(t *testing.T) {
 		Stop:        []string{"END"},
 		Tools: []api.ToolSchema{
 			{
+				Type:        types.ToolTypeCustom,
 				Name:        "test_tool",
 				Description: "A test tool",
-				Parameters:  json.RawMessage(`{"type":"object"}`),
+				Parameters:  json.RawMessage(`{}`),
+				Format:      format,
+				Strict:      &strict,
 			},
 		},
 		ToolChoice: "auto",
@@ -441,6 +447,8 @@ func TestChatHandler_ConvertToLLMRequest(t *testing.T) {
 		MaxCompletionTokens: intPtr(80),
 		ReasoningEffort:     "low",
 		ReasoningSummary:    "detailed",
+		ReasoningDisplay:    "summarized",
+		InferenceSpeed:      "fast",
 		Store:               boolPtr(true),
 		Modalities:          []string{"text"},
 		WebSearchOptions: &api.WebSearchOptions{
@@ -451,12 +459,17 @@ func TestChatHandler_ConvertToLLMRequest(t *testing.T) {
 				City:    "San Francisco",
 			},
 		},
-		PreviousResponseID: "resp_prev_1",
-		Include:            []string{"output_text"},
-		Truncation:         "auto",
-		Timeout:            "30s",
-		Metadata:           map[string]string{"key": "value"},
-		Tags:               []string{"test"},
+		PromptCacheKey:                   "pcache-key-1",
+		PromptCacheRetention:             "5m",
+		CacheControl:                     &api.CacheControl{Type: "ephemeral", TTL: "5m"},
+		CachedContent:                    "cachedContents/session-1",
+		IncludeServerSideToolInvocations: &includeServerSide,
+		PreviousResponseID:               "resp_prev_1",
+		Include:                          []string{"output_text"},
+		Truncation:                       "auto",
+		Timeout:                          "30s",
+		Metadata:                         map[string]string{"key": "value"},
+		Tags:                             []string{"test"},
 	}
 
 	llmReq := handler.convertToLLMRequest(apiReq)
@@ -475,6 +488,11 @@ func TestChatHandler_ConvertToLLMRequest(t *testing.T) {
 	assert.Equal(t, []string{"END"}, llmReq.Stop)
 	assert.Len(t, llmReq.Tools, 1)
 	assert.Equal(t, "test_tool", llmReq.Tools[0].Name)
+	assert.Equal(t, types.ToolTypeCustom, llmReq.Tools[0].Type)
+	require.NotNil(t, llmReq.Tools[0].Format)
+	assert.Equal(t, "grammar", llmReq.Tools[0].Format.Type)
+	require.NotNil(t, llmReq.Tools[0].Strict)
+	assert.True(t, *llmReq.Tools[0].Strict)
 	assert.Equal(t, "auto", llmReq.ToolChoice)
 	require.NotNil(t, llmReq.ResponseFormat)
 	assert.Equal(t, llm.ResponseFormatType("json_schema"), llmReq.ResponseFormat.Type)
@@ -489,6 +507,8 @@ func TestChatHandler_ConvertToLLMRequest(t *testing.T) {
 	assert.Equal(t, 80, *llmReq.MaxCompletionTokens)
 	assert.Equal(t, "low", llmReq.ReasoningEffort)
 	assert.Equal(t, "detailed", llmReq.ReasoningSummary)
+	assert.Equal(t, "summarized", llmReq.ReasoningDisplay)
+	assert.Equal(t, "fast", llmReq.InferenceSpeed)
 	require.NotNil(t, llmReq.Store)
 	assert.True(t, *llmReq.Store)
 	assert.Equal(t, []string{"text"}, llmReq.Modalities)
@@ -498,6 +518,14 @@ func TestChatHandler_ConvertToLLMRequest(t *testing.T) {
 	require.NotNil(t, llmReq.WebSearchOptions.UserLocation)
 	assert.Equal(t, "US", llmReq.WebSearchOptions.UserLocation.Country)
 	assert.Equal(t, "San Francisco", llmReq.WebSearchOptions.UserLocation.City)
+	assert.Equal(t, "pcache-key-1", llmReq.PromptCacheKey)
+	assert.Equal(t, "5m", llmReq.PromptCacheRetention)
+	require.NotNil(t, llmReq.CacheControl)
+	assert.Equal(t, "ephemeral", llmReq.CacheControl.Type)
+	assert.Equal(t, "5m", llmReq.CacheControl.TTL)
+	assert.Equal(t, "cachedContents/session-1", llmReq.CachedContent)
+	require.NotNil(t, llmReq.IncludeServerSideToolInvocations)
+	assert.True(t, *llmReq.IncludeServerSideToolInvocations)
 	assert.Equal(t, "resp_prev_1", llmReq.PreviousResponseID)
 	assert.Equal(t, []string{"output_text"}, llmReq.Include)
 	assert.Equal(t, "auto", llmReq.Truncation)

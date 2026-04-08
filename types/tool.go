@@ -7,11 +7,27 @@ import (
 
 // ToolSchema defines a tool's interface for LLM function calling.
 type ToolSchema struct {
+	Type        string          `json:"type,omitempty"`
 	Name        string          `json:"name"`
 	Description string          `json:"description,omitempty"`
 	Parameters  json.RawMessage `json:"parameters"`
+	Format      *ToolFormat     `json:"format,omitempty"`
+	Strict      *bool           `json:"strict,omitempty"`
 	Version     string          `json:"version,omitempty"`
 }
+
+// ToolFormat defines provider-native formatting constraints for custom tools.
+type ToolFormat struct {
+	Type       string `json:"type"`
+	Syntax     string `json:"syntax,omitempty"`
+	Definition string `json:"definition,omitempty"`
+}
+
+// Normalized tool types.
+const (
+	ToolTypeFunction = "function"
+	ToolTypeCustom   = "custom"
+)
 
 // ToolResult represents the result of a tool execution.
 type ToolResult struct {
@@ -106,4 +122,3 @@ func ApplySteeringToMessages(msg SteeringMessage, messages []Message, partialCon
 	}
 	return messages
 }
-

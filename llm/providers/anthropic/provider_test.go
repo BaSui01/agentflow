@@ -176,7 +176,7 @@ func TestConvertClaudeToolChoice(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := convertClaudeToolChoice(tt.input)
+			result := convertClaudeToolChoice(tt.input, nil, false)
 			if tt.expected == nil {
 				assert.Nil(t, result)
 			} else {
@@ -186,6 +186,15 @@ func TestConvertClaudeToolChoice(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestConvertClaudeToolChoice_DisablesParallelToolUse(t *testing.T) {
+	parallel := false
+	result := convertClaudeToolChoice(nil, &parallel, true)
+	require.NotNil(t, result)
+	assert.Equal(t, "auto", result.Type)
+	require.NotNil(t, result.DisableParallelToolUse)
+	assert.True(t, *result.DisableParallelToolUse)
 }
 
 // --- chooseMaxTokens ---
@@ -637,39 +646,115 @@ func TestClaudeProvider_ListModels_Error(t *testing.T) {
 	assert.Equal(t, llm.ErrForbidden, llmErr.Code)
 }
 
-// --- Bug A: buildThinking budget_tokens constraint ---
+func TestBuildClaudeReasoningControls_Adaptive(t *testing.T) {
+	req := &llm.ChatRequest{
+		ReasoningMode:    "adaptive",
+		ReasoningEffort:  "xhigh",
+		ReasoningDisplay: "summary",
+		InferenceSpeed:   "fast",
+		MaxTokens:        4096,
+	}
+	controls := buildClaudeReasoningControls(req, "claude-opus-4-6")
+	require.NotNil(t, controls.Thinking)
+	assert.Equal(t, "adaptive", controls.Thinking.Type)
+	assert.Equal(t, "summarized", controls.Thinking.Display)
+	require.NotNil(t, controls.OutputConfig)
+	assert.Equal(t, "max", controls.OutputConfig.Effort)
+	assert.Equal(t, "fast", controls.Speed)
+}
 
-func TestBuildThinking_BudgetConstraints(t *testing.T) {
-	tests := []struct {
-		name      string
-		maxTokens int
-		mode      string
-		wantNil   bool
-		wantBudge int
-	}{
-		{"no reasoning", 4096, "", true, 0},
-		{"normal case", 4096, "extended", false, 3072},
-		{"max_tokens too small", 500, "extended", true, 0},
-		{"max_tokens exactly 1024", 1024, "extended", true, 0},
-		{"max_tokens 1025", 1025, "extended", false, 1024},
-		{"max_tokens 2000", 2000, "extended", false, 1500},
-		{"budget must be < max_tokens", 1366, "extended", false, 1024},
-		{"unknown mode", 4096, "fast", true, 0},
+func TestBuildClaudeReasoningControls_FallbacksGracefully(t *testing.T) {
+	req := &llm.ChatRequest{
+		ReasoningMode:    "adaptive",
+		ReasoningEffort:  "high",
+		ReasoningDisplay: "omitted",
+		InferenceSpeed:   "fast",
+		MaxTokens:        2000,
 	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			req := &llm.ChatRequest{MaxTokens: tt.maxTokens, ReasoningMode: tt.mode}
-			result := buildThinking(req)
-			if tt.wantNil {
-				assert.Nil(t, result)
-			} else {
-				require.NotNil(t, result)
-				assert.Equal(t, "enabled", result.Type)
-				assert.Equal(t, tt.wantBudge, result.BudgetTokens)
-				assert.Less(t, result.BudgetTokens, tt.maxTokens, "budget_tokens must be < max_tokens")
-			}
+	controls := buildClaudeReasoningControls(req, "claude-opus-4.5-20260105")
+	require.NotNil(t, controls.Thinking)
+	assert.Equal(t, "enabled", controls.Thinking.Type)
+	assert.Equal(t, 1500, controls.Thinking.BudgetTokens)
+	assert.Equal(t, "omitted", controls.Thinking.Display)
+	require.NotNil(t, controls.OutputConfig)
+	assert.Equal(t, "high", controls.OutputConfig.Effort)
+	assert.Equal(t, "", controls.Speed)
+}
+
+func TestBuildClaudeReasoningControls_ExtendedTooSmallDisablesThinking(t *testing.T) {
+	req := &llm.ChatRequest{
+		ReasoningMode:    "extended",
+		ReasoningEffort:  "medium",
+		ReasoningDisplay: "summary",
+		MaxTokens:        1024,
+	}
+	controls := buildClaudeReasoningControls(req, "claude-opus-4.5-20260105")
+	assert.Nil(t, controls.Thinking)
+	require.NotNil(t, controls.OutputConfig)
+	assert.Equal(t, "medium", controls.OutputConfig.Effort)
+}
+
+func TestClaudeProvider_Headers_FastModeBeta(t *testing.T) {
+	var capturedBeta string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		capturedBeta = r.Header.Get("anthropic-beta")
+		w.Header().Set("Content-Type", "application/json")
+		err := json.NewEncoder(w).Encode(claudeResponse{
+			ID: "msg_fast", Role: "assistant", Model: "claude-opus-4-6",
+			Content: []claudeContent{{Type: "text", Text: "ok"}},
 		})
-	}
+		require.NoError(t, err)
+	}))
+	t.Cleanup(func() { server.Close() })
+
+	p := NewClaudeProvider(providers.ClaudeConfig{
+		BaseProviderConfig: providers.BaseProviderConfig{APIKey: "sk-fast", BaseURL: server.URL},
+	}, zap.NewNop())
+
+	_, err := p.Completion(context.Background(), &llm.ChatRequest{
+		Model:          "claude-opus-4-6",
+		InferenceSpeed: "fast",
+		Messages:       []types.Message{{Role: llm.RoleUser, Content: "Hi"}},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "fast-mode-2026-02-01", capturedBeta)
+}
+
+func TestClaudeProvider_Completion_FastMode429Fallback(t *testing.T) {
+	callCount := 0
+	var betas []string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		callCount++
+		betas = append(betas, r.Header.Get("anthropic-beta"))
+		if callCount == 1 {
+			w.WriteHeader(http.StatusTooManyRequests)
+			_, _ = w.Write([]byte(`{"error":{"type":"rate_limit_error","message":"fast mode unavailable"}}`))
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		err := json.NewEncoder(w).Encode(claudeResponse{
+			ID: "msg_retry", Role: "assistant", Model: "claude-opus-4-6",
+			Content: []claudeContent{{Type: "text", Text: "ok"}},
+		})
+		require.NoError(t, err)
+	}))
+	t.Cleanup(func() { server.Close() })
+
+	p := NewClaudeProvider(providers.ClaudeConfig{
+		BaseProviderConfig: providers.BaseProviderConfig{APIKey: "sk-fast", BaseURL: server.URL},
+	}, zap.NewNop())
+
+	resp, err := p.Completion(context.Background(), &llm.ChatRequest{
+		Model:          "claude-opus-4-6",
+		InferenceSpeed: "fast",
+		Messages:       []types.Message{{Role: llm.RoleUser, Content: "Hi"}},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, resp)
+	assert.Equal(t, 2, callCount)
+	require.Len(t, betas, 2)
+	assert.Equal(t, "fast-mode-2026-02-01", betas[0])
+	assert.Equal(t, "", betas[1])
 }
 
 // --- Bug B: HealthCheck/ListModels use resolveAPIKey ---
@@ -915,7 +1000,7 @@ func TestConvertToClaudeTools_WithWebSearch(t *testing.T) {
 	// 验证 web_search 工具
 	var wsTool map[string]any
 	require.NoError(t, json.Unmarshal(result[1], &wsTool))
-	assert.Equal(t, "web_search_20250305", wsTool["type"])
+	assert.Equal(t, "web_search_20260209", wsTool["type"])
 	assert.Equal(t, "web_search", wsTool["name"])
 	assert.Equal(t, float64(5), wsTool["max_uses"])
 	assert.Equal(t, []any{"example.com"}, wsTool["allowed_domains"])
@@ -932,7 +1017,7 @@ func TestConvertToClaudeTools_WithWebSearch_FromToolName(t *testing.T) {
 	}
 
 	result := convertToClaudeTools(tools, nil)
-	require.Len(t, result, 2) // calculator + web_search_20250305
+	require.Len(t, result, 2) // calculator + web_search_20260209
 
 	var names []string
 	for _, raw := range result {
@@ -953,6 +1038,20 @@ func TestConvertToClaudeTools_NilWebSearchOpts(t *testing.T) {
 	}
 	result := convertToClaudeTools(tools, nil)
 	require.Len(t, result, 1)
+}
+
+func TestConvertToClaudeTools_PreservesStrict(t *testing.T) {
+	strict := true
+	result := convertToClaudeTools([]types.ToolSchema{{
+		Name:        "calc",
+		Description: "Calc",
+		Parameters:  json.RawMessage(`{"type":"object"}`),
+		Strict:      &strict,
+	}}, nil)
+	require.Len(t, result, 1)
+	var tool map[string]any
+	require.NoError(t, json.Unmarshal(result[0], &tool))
+	assert.Equal(t, true, tool["strict"])
 }
 
 func TestToClaudeChatResponse_WithWebSearch(t *testing.T) {

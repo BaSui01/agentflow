@@ -31,7 +31,7 @@ func TestProperty19_ToolCallResponseParsing(t *testing.T) {
 		{
 			name: "single tool call",
 			responseToolCalls: []providerbase.OpenAICompatToolCall{
-				{ID: "call_1", Type: "function", Function: providerbase.OpenAICompatFunction{
+				{ID: "call_1", Type: "function", Function: &providerbase.OpenAICompatFunction{
 					Name: "get_weather", Arguments: json.RawMessage(`{"location":"Beijing"}`)}},
 			},
 			expectedToolCalls: 1,
@@ -40,9 +40,9 @@ func TestProperty19_ToolCallResponseParsing(t *testing.T) {
 		{
 			name: "multiple tool calls",
 			responseToolCalls: []providerbase.OpenAICompatToolCall{
-				{ID: "call_1", Type: "function", Function: providerbase.OpenAICompatFunction{
+				{ID: "call_1", Type: "function", Function: &providerbase.OpenAICompatFunction{
 					Name: "get_weather", Arguments: json.RawMessage(`{"location":"Beijing"}`)}},
-				{ID: "call_2", Type: "function", Function: providerbase.OpenAICompatFunction{
+				{ID: "call_2", Type: "function", Function: &providerbase.OpenAICompatFunction{
 					Name: "get_time", Arguments: json.RawMessage(`{"timezone":"Asia/Shanghai"}`)}},
 			},
 			expectedToolCalls: 2,

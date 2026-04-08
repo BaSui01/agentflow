@@ -239,6 +239,7 @@ type claudeTool struct {
 	Name        string          `json:"name"`
 	Description string          `json:"description,omitempty"`
 	InputSchema json.RawMessage `json:"input_schema"` // JSON Schema
+	Strict      *bool           `json:"strict,omitempty"`
 }
 
 type claudeToolChoice struct {
@@ -249,22 +250,30 @@ type claudeToolChoice struct {
 
 // claudeThinking 控制 Claude 的 Extended Thinking 功能。
 type claudeThinking struct {
-	Type         string `json:"type"`                    // "enabled" or "disabled"
-	BudgetTokens int    `json:"budget_tokens,omitempty"` // type="enabled" 时必填，最小 1024
+	Type         string `json:"type"`                    // "enabled", "adaptive" or "disabled"
+	BudgetTokens int    `json:"budget_tokens,omitempty"` // type="enabled" 时必填，最小 1024（旧协议）
+	Display      string `json:"display,omitempty"`       // "summarized" or "omitted"
+}
+
+type claudeOutputConfig struct {
+	Effort string `json:"effort,omitempty"` // low/medium/high/max
 }
 
 type claudeRequest struct {
-	Model       string            `json:"model"`
-	Messages    []claudeMessage   `json:"messages"`
-	System      any               `json:"system,omitempty"` // string 或 []claudeSystemBlock（支持 cache_control）
-	MaxTokens   int               `json:"max_tokens"`
-	Temperature *float32          `json:"temperature,omitempty"` // 指针类型：区分 "未设置" 和 "显式设为 0"
-	TopP        *float32          `json:"top_p,omitempty"`       // 指针类型：同上
-	StopSeq     []string          `json:"stop_sequences,omitempty"`
-	Stream      bool              `json:"stream,omitempty"`
-	Tools       []json.RawMessage `json:"tools,omitempty"` // 混合类型：普通 function tool + server tool (web_search)
-	ToolChoice  *claudeToolChoice `json:"tool_choice,omitempty"`
-	Thinking    *claudeThinking   `json:"thinking,omitempty"` // Extended Thinking
+	Model        string              `json:"model"`
+	Messages     []claudeMessage     `json:"messages"`
+	System       any                 `json:"system,omitempty"` // string 或 []claudeSystemBlock（支持 cache_control）
+	MaxTokens    int                 `json:"max_tokens"`
+	Temperature  *float32            `json:"temperature,omitempty"` // 指针类型：区分 "未设置" 和 "显式设为 0"
+	TopP         *float32            `json:"top_p,omitempty"`       // 指针类型：同上
+	StopSeq      []string            `json:"stop_sequences,omitempty"`
+	Stream       bool                `json:"stream,omitempty"`
+	Tools        []json.RawMessage   `json:"tools,omitempty"` // 混合类型：普通 function tool + server tool (web_search)
+	ToolChoice   *claudeToolChoice   `json:"tool_choice,omitempty"`
+	Thinking     *claudeThinking     `json:"thinking,omitempty"`      // Extended Thinking
+	OutputConfig *claudeOutputConfig `json:"output_config,omitempty"` // 2026 effort controls
+	Speed        string              `json:"speed,omitempty"`         // standard/fast
+	CacheControl *llm.CacheControl   `json:"cache_control,omitempty"` // Automatic prompt caching
 }
 
 type claudeUsage struct {
@@ -272,6 +281,7 @@ type claudeUsage struct {
 	OutputTokens             int                  `json:"output_tokens"`
 	CacheCreationInputTokens int                  `json:"cache_creation_input_tokens,omitempty"`
 	CacheReadInputTokens     int                  `json:"cache_read_input_tokens,omitempty"`
+	Speed                    string               `json:"speed,omitempty"`
 	ServerToolUse            *claudeServerToolUse `json:"server_tool_use,omitempty"`
 }
 
@@ -287,6 +297,7 @@ func (u *claudeUsage) UnmarshalJSON(data []byte) error {
 		CacheCreationInputTokensCamel *int                 `json:"cacheCreationInputTokens"`
 		CacheReadInputTokens          *int                 `json:"cache_read_input_tokens"`
 		CacheReadInputTokensCamel     *int                 `json:"cacheReadInputTokens"`
+		Speed                         string               `json:"speed"`
 		ServerToolUse                 *claudeServerToolUse `json:"server_tool_use"`
 	}
 	if err := json.Unmarshal(data, &aux); err != nil {
@@ -297,6 +308,7 @@ func (u *claudeUsage) UnmarshalJSON(data []byte) error {
 	u.OutputTokens = firstInt(aux.OutputTokens, aux.OutputTokensCamel, aux.CompletionTokens)
 	u.CacheCreationInputTokens = firstInt(aux.CacheCreationInputTokens, aux.CacheCreationInputTokensCamel)
 	u.CacheReadInputTokens = firstInt(aux.CacheReadInputTokens, aux.CacheReadInputTokensCamel)
+	u.Speed = strings.TrimSpace(aux.Speed)
 	u.ServerToolUse = aux.ServerToolUse
 	return nil
 }
@@ -410,6 +422,12 @@ func (p *ClaudeProvider) buildHeaders(req *http.Request, apiKey string) {
 	req.Header.Set("anthropic-version", version)
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
+}
+
+func applyClaudeFastModeHeader(req *http.Request, speed string) {
+	if strings.EqualFold(strings.TrimSpace(speed), "fast") {
+		req.Header.Set("anthropic-beta", "fast-mode-2026-02-01")
+	}
 }
 
 // resolveAPIKey 解析 API Key，支持上下文覆盖和多 Key 轮询
@@ -578,7 +596,7 @@ func convertToClaudeMessages(msgs []types.Message) (string, []claudeMessage) {
 }
 
 // convertToClaudeTools 将统一工具列表转换为 Claude API 的混合工具数组。
-// 当 wsOpts 不为 nil 或工具列表中包含 web_search 时，自动注入 web_search_20250305 服务端工具。
+// 当 wsOpts 不为 nil 或工具列表中包含 web_search 时，自动注入 web_search_20260209 服务端工具。
 func convertToClaudeTools(tools []types.ToolSchema, wsOpts *llm.WebSearchOptions) []json.RawMessage {
 	hasWebSearch := wsOpts != nil
 	out := make([]json.RawMessage, 0, len(tools)+1)
@@ -593,6 +611,7 @@ func convertToClaudeTools(tools []types.ToolSchema, wsOpts *llm.WebSearchOptions
 			Name:        t.Name,
 			Description: t.Description,
 			InputSchema: t.Parameters,
+			Strict:      t.Strict,
 		})
 		if err != nil {
 			continue
@@ -600,10 +619,10 @@ func convertToClaudeTools(tools []types.ToolSchema, wsOpts *llm.WebSearchOptions
 		out = append(out, raw)
 	}
 
-	// 注入 web_search_20250305 服务端工具
+	// 注入 web_search_20260209 服务端工具
 	if hasWebSearch {
 		ws := map[string]any{
-			"type": "web_search_20250305",
+			"type": "web_search_20260209",
 			"name": "web_search",
 		}
 		if wsOpts != nil {
@@ -650,37 +669,43 @@ func convertToClaudeTools(tools []types.ToolSchema, wsOpts *llm.WebSearchOptions
 
 // convertClaudeToolChoice 将 llm.ChatRequest.ToolChoice (any) 转换为 Claude 格式。
 // 支持 string ("auto"/"any"/"none") 和 map/struct 形式。
-func convertClaudeToolChoice(tc any) *claudeToolChoice {
-	if tc == nil {
-		return nil
-	}
+func convertClaudeToolChoice(tc any, parallelToolCalls *bool, hasTools bool) *claudeToolChoice {
+	var result *claudeToolChoice
 	switch v := tc.(type) {
 	case string:
 		switch v {
 		case "auto":
-			return &claudeToolChoice{Type: "auto"}
+			result = &claudeToolChoice{Type: "auto"}
 		case "any", "required":
-			return &claudeToolChoice{Type: "any"}
+			result = &claudeToolChoice{Type: "any"}
 		case "none":
-			return &claudeToolChoice{Type: "none"}
+			result = &claudeToolChoice{Type: "none"}
 		case "":
-			return nil
+			result = nil
 		default:
 			// 假设是具体工具名
-			return &claudeToolChoice{Type: "tool", Name: v}
+			result = &claudeToolChoice{Type: "tool", Name: v}
 		}
 	case map[string]any:
-		result := &claudeToolChoice{}
+		result = &claudeToolChoice{}
 		if t, ok := v["type"].(string); ok {
 			result.Type = t
 		}
 		if n, ok := v["name"].(string); ok {
 			result.Name = n
 		}
-		return result
-	default:
-		return nil
+		if disable, ok := v["disable_parallel_tool_use"].(bool); ok {
+			result.DisableParallelToolUse = &disable
+		}
 	}
+	if parallelToolCalls != nil && !*parallelToolCalls && hasTools {
+		if result == nil {
+			result = &claudeToolChoice{Type: "auto"}
+		}
+		disable := true
+		result.DisableParallelToolUse = &disable
+	}
+	return result
 }
 
 func (p *ClaudeProvider) Completion(ctx context.Context, req *llm.ChatRequest) (*llm.ChatResponse, error) {
@@ -698,18 +723,23 @@ func (p *ClaudeProvider) Completion(ctx context.Context, req *llm.ChatRequest) (
 
 	apiKey := p.resolveAPIKey(ctx)
 	system, messages := convertToClaudeMessages(req.Messages)
+	model := providerbase.ChooseModel(req, p.cfg.Model, "claude-opus-4.5-20260105")
+	reasoning := buildClaudeReasoningControls(req, model)
 
 	body := claudeRequest{
-		Model:       providerbase.ChooseModel(req, p.cfg.Model, "claude-opus-4.5-20260105"),
-		Messages:    messages,
-		System:      system,
-		MaxTokens:   chooseMaxTokens(req),
-		Temperature: float32PtrIfSet(req.Temperature),
-		TopP:        float32PtrIfSet(req.TopP),
-		StopSeq:     req.Stop,
-		Tools:       convertToClaudeTools(req.Tools, req.WebSearchOptions),
-		ToolChoice:  convertClaudeToolChoice(req.ToolChoice),
-		Thinking:    buildThinking(req),
+		Model:        model,
+		Messages:     messages,
+		System:       system,
+		MaxTokens:    chooseMaxTokens(req),
+		Temperature:  float32PtrIfSet(req.Temperature),
+		TopP:         float32PtrIfSet(req.TopP),
+		StopSeq:      req.Stop,
+		Tools:        convertToClaudeTools(req.Tools, req.WebSearchOptions),
+		ToolChoice:   convertClaudeToolChoice(req.ToolChoice, req.ParallelToolCalls, len(req.Tools) > 0 || req.WebSearchOptions != nil),
+		Thinking:     reasoning.Thinking,
+		OutputConfig: reasoning.OutputConfig,
+		Speed:        reasoning.Speed,
+		CacheControl: req.CacheControl,
 	}
 
 	// 问题 3: thinking + tool_choice 冲突校验
@@ -728,6 +758,7 @@ func (p *ClaudeProvider) Completion(ctx context.Context, req *llm.ChatRequest) (
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
 	p.buildHeaders(httpReq, apiKey)
+	applyClaudeFastModeHeader(httpReq, body.Speed)
 
 	resp, err := p.client.Do(httpReq)
 	if err != nil {
@@ -739,6 +770,32 @@ func (p *ClaudeProvider) Completion(ctx context.Context, req *llm.ChatRequest) (
 		}
 	}
 	defer resp.Body.Close()
+
+	if resp.StatusCode >= 400 {
+		if shouldRetryClaudeWithoutFastMode(resp.StatusCode, body.Speed) {
+			resp.Body.Close()
+			body.Speed = ""
+			payload, err = json.Marshal(body)
+			if err != nil {
+				return nil, fmt.Errorf("failed to marshal request after speed fallback: %w", err)
+			}
+			httpReq, err = http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(payload))
+			if err != nil {
+				return nil, fmt.Errorf("failed to create fallback request: %w", err)
+			}
+			p.buildHeaders(httpReq, apiKey)
+			resp, err = p.client.Do(httpReq)
+			if err != nil {
+				return nil, &types.Error{
+					Code:    llm.ErrUpstreamError,
+					Message: err.Error(), Cause: err, HTTPStatus: http.StatusBadGateway,
+					Retryable: true,
+					Provider:  p.Name(),
+				}
+			}
+			defer resp.Body.Close()
+		}
+	}
 
 	if resp.StatusCode >= 400 {
 		msg := providerbase.ReadErrorMessage(resp.Body)
@@ -773,19 +830,24 @@ func (p *ClaudeProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-ch
 
 	apiKey := p.resolveAPIKey(ctx)
 	system, messages := convertToClaudeMessages(req.Messages)
+	model := providerbase.ChooseModel(req, p.cfg.Model, "claude-opus-4.5-20260105")
+	reasoning := buildClaudeReasoningControls(req, model)
 
 	body := claudeRequest{
-		Model:       providerbase.ChooseModel(req, p.cfg.Model, "claude-opus-4.5-20260105"),
-		Messages:    messages,
-		System:      system,
-		MaxTokens:   chooseMaxTokens(req),
-		Temperature: float32PtrIfSet(req.Temperature),
-		TopP:        float32PtrIfSet(req.TopP),
-		StopSeq:     req.Stop,
-		Stream:      true,
-		Tools:       convertToClaudeTools(req.Tools, req.WebSearchOptions),
-		ToolChoice:  convertClaudeToolChoice(req.ToolChoice),
-		Thinking:    buildThinking(req),
+		Model:        model,
+		Messages:     messages,
+		System:       system,
+		MaxTokens:    chooseMaxTokens(req),
+		Temperature:  float32PtrIfSet(req.Temperature),
+		TopP:         float32PtrIfSet(req.TopP),
+		StopSeq:      req.Stop,
+		Stream:       true,
+		Tools:        convertToClaudeTools(req.Tools, req.WebSearchOptions),
+		ToolChoice:   convertClaudeToolChoice(req.ToolChoice, req.ParallelToolCalls, len(req.Tools) > 0 || req.WebSearchOptions != nil),
+		Thinking:     reasoning.Thinking,
+		OutputConfig: reasoning.OutputConfig,
+		Speed:        reasoning.Speed,
+		CacheControl: req.CacheControl,
 	}
 
 	// 问题 3: thinking + tool_choice 冲突校验
@@ -816,6 +878,7 @@ func (p *ClaudeProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-ch
 		}
 	}
 	p.buildHeaders(httpReq, apiKey)
+	applyClaudeFastModeHeader(httpReq, body.Speed)
 
 	resp, err := p.client.Do(httpReq)
 	if err != nil {
@@ -824,6 +887,30 @@ func (p *ClaudeProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-ch
 			Message: err.Error(), Cause: err, HTTPStatus: http.StatusBadGateway,
 			Retryable: true,
 			Provider:  p.Name(),
+		}
+	}
+	if resp.StatusCode >= 400 {
+		if shouldRetryClaudeWithoutFastMode(resp.StatusCode, body.Speed) {
+			resp.Body.Close()
+			body.Speed = ""
+			payload, err = json.Marshal(body)
+			if err != nil {
+				return nil, fmt.Errorf("failed to marshal fallback request: %w", err)
+			}
+			httpReq, err = http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(payload))
+			if err != nil {
+				return nil, fmt.Errorf("failed to create fallback request: %w", err)
+			}
+			p.buildHeaders(httpReq, apiKey)
+			resp, err = p.client.Do(httpReq)
+			if err != nil {
+				return nil, &types.Error{
+					Code:    llm.ErrUpstreamError,
+					Message: err.Error(), Cause: err, HTTPStatus: http.StatusBadGateway,
+					Retryable: true,
+					Provider:  p.Name(),
+				}
+			}
 		}
 	}
 	if resp.StatusCode >= 400 {
@@ -1291,7 +1378,7 @@ func float32PtrIfSet(v float32) *float32 {
 // validateThinkingConstraints 校验 thinking 模式与其他参数的兼容性。
 // Claude API 约束：thinking 模式只支持 tool_choice: auto 或 none。
 func validateThinkingConstraints(body *claudeRequest) error {
-	if body.Thinking == nil || body.Thinking.Type != "enabled" {
+	if body.Thinking == nil || strings.TrimSpace(body.Thinking.Type) == "" || strings.EqualFold(body.Thinking.Type, "disabled") {
 		return nil
 	}
 	if body.ToolChoice != nil {
@@ -1301,7 +1388,7 @@ func validateThinkingConstraints(body *claudeRequest) error {
 		default:
 			return &types.Error{
 				Code:       llm.ErrInvalidRequest,
-				Message:    fmt.Sprintf("extended thinking only supports tool_choice 'auto' or 'none', got '%s'", body.ToolChoice.Type),
+				Message:    fmt.Sprintf("Claude thinking only supports tool_choice 'auto' or 'none', got '%s'", body.ToolChoice.Type),
 				HTTPStatus: http.StatusBadRequest,
 				Provider:   "claude",
 			}
@@ -1310,36 +1397,153 @@ func validateThinkingConstraints(body *claudeRequest) error {
 	return nil
 }
 
-// buildThinking 将统一的 ReasoningMode 转换为 Claude 的 Thinking 参数。
-// 约束：budget_tokens 必须 < max_tokens 且 >= 1024。
-// 如果 max_tokens 太小无法满足最低 budget，则不启用 thinking。
-func buildThinking(req *llm.ChatRequest) *claudeThinking {
-	if req == nil || req.ReasoningMode == "" {
-		return nil
+type claudeReasoningControls struct {
+	Thinking     *claudeThinking
+	OutputConfig *claudeOutputConfig
+	Speed        string
+}
+
+// buildClaudeReasoningControls maps unified reasoning options into the current Claude protocol.
+// Newer Claude 4.6/Mythos models prefer adaptive thinking + output_config.effort.
+// Older models gracefully fall back to manual thinking budgets or standard speed.
+func buildClaudeReasoningControls(req *llm.ChatRequest, model string) claudeReasoningControls {
+	if req == nil {
+		return claudeReasoningControls{}
 	}
-	switch req.ReasoningMode {
-	case "extended":
-		maxTok := chooseMaxTokens(req)
-		// budget_tokens 必须 < max_tokens，且最小 1024
-		// 如果 max_tokens <= 1024，无法满足约束，不启用 thinking
-		if maxTok <= 1024 {
-			return nil
+
+	normModel := normalizeClaudeModelName(model)
+	controls := claudeReasoningControls{
+		Speed: normalizeClaudeSpeed(req.InferenceSpeed, normModel),
+	}
+
+	if effort := normalizeClaudeEffort(req.ReasoningEffort); effort != "" && claudeModelSupportsEffort(normModel) {
+		controls.OutputConfig = &claudeOutputConfig{Effort: effort}
+	}
+
+	mode := strings.ToLower(strings.TrimSpace(req.ReasoningMode))
+	if mode == "" || mode == "disabled" {
+		return controls
+	}
+
+	display := normalizeClaudeThinkingDisplay(req.ReasoningDisplay, normModel)
+	switch mode {
+	case "adaptive":
+		if claudeModelSupportsAdaptiveThinking(normModel) {
+			controls.Thinking = &claudeThinking{
+				Type:    "adaptive",
+				Display: display,
+			}
+			return controls
 		}
-		budget := maxTok * 3 / 4
-		if budget < 1024 {
-			budget = 1024
-		}
-		// 确保 budget < max_tokens
-		if budget >= maxTok {
-			budget = maxTok - 1
-		}
-		return &claudeThinking{
-			Type:         "enabled",
-			BudgetTokens: budget,
-		}
+		mode = "extended"
+	case "extended", "enabled":
 	default:
-		return nil
+		return controls
 	}
+
+	maxTok := chooseMaxTokens(req)
+	if maxTok <= 1024 {
+		return controls
+	}
+
+	budget := maxTok * 3 / 4
+	if budget < 1024 {
+		budget = 1024
+	}
+	if budget >= maxTok {
+		budget = maxTok - 1
+	}
+
+	controls.Thinking = &claudeThinking{
+		Type:         "enabled",
+		BudgetTokens: budget,
+		Display:      display,
+	}
+	return controls
+}
+
+func normalizeClaudeModelName(model string) string {
+	return strings.ToLower(strings.TrimSpace(model))
+}
+
+func claudeModelSupportsAdaptiveThinking(model string) bool {
+	if model == "" {
+		return false
+	}
+	switch {
+	case strings.Contains(model, "claude-mythos-preview"):
+		return true
+	case strings.Contains(model, "opus-4-6"), strings.Contains(model, "opus-4.6"):
+		return true
+	case strings.Contains(model, "sonnet-4-6"), strings.Contains(model, "sonnet-4.6"):
+		return true
+	default:
+		return false
+	}
+}
+
+func claudeModelSupportsEffort(model string) bool {
+	if model == "" {
+		return false
+	}
+	if strings.Contains(model, "claude-mythos-preview") {
+		return true
+	}
+	return strings.Contains(model, "-4-") || strings.Contains(model, "-4.") || strings.Contains(model, "claude-4")
+}
+
+func claudeModelSupportsFastMode(model string) bool {
+	if model == "" {
+		return false
+	}
+	return strings.Contains(model, "opus-4-6") || strings.Contains(model, "opus-4.6")
+}
+
+func normalizeClaudeEffort(input string) string {
+	switch strings.ToLower(strings.TrimSpace(input)) {
+	case "":
+		return ""
+	case "minimal":
+		return "low"
+	case "low", "medium", "high", "max":
+		return strings.ToLower(strings.TrimSpace(input))
+	case "xhigh":
+		return "max"
+	default:
+		return ""
+	}
+}
+
+func normalizeClaudeThinkingDisplay(input, model string) string {
+	if !claudeModelSupportsEffort(model) {
+		return ""
+	}
+	switch strings.ToLower(strings.TrimSpace(input)) {
+	case "", "default":
+		return ""
+	case "summary", "summarized":
+		return "summarized"
+	case "omit", "omitted", "hidden":
+		return "omitted"
+	default:
+		return ""
+	}
+}
+
+func normalizeClaudeSpeed(input, model string) string {
+	switch strings.ToLower(strings.TrimSpace(input)) {
+	case "", "standard", "default":
+		return ""
+	case "fast":
+		if claudeModelSupportsFastMode(model) {
+			return "fast"
+		}
+	}
+	return ""
+}
+
+func shouldRetryClaudeWithoutFastMode(status int, speed string) bool {
+	return status == http.StatusTooManyRequests && strings.EqualFold(strings.TrimSpace(speed), "fast")
 }
 
 // buildStreamUsage 将 Claude 的 usage 转换为统一的 ChatUsage。

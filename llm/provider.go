@@ -123,6 +123,12 @@ type WebSearchLocation struct {
 	Timezone string `json:"timezone,omitempty"`
 }
 
+// CacheControl configures automatic prompt caching for providers that expose cache_control.
+type CacheControl struct {
+	Type string `json:"type,omitempty"` // "ephemeral"
+	TTL  string `json:"ttl,omitempty"`  // provider-specific duration (for example "5m")
+}
+
 // ChatRequest 表示聊天补全请求.
 type ChatRequest struct {
 	TraceID        string             `json:"trace_id"`
@@ -154,14 +160,21 @@ type ChatRequest struct {
 	StreamOptions     *StreamOptions `json:"stream_options,omitempty"`
 
 	// OpenAI 扩展参数
-	MaxCompletionTokens *int              `json:"max_completion_tokens,omitempty"` // 替代 max_tokens 的新字段
-	ReasoningEffort     string            `json:"reasoning_effort,omitempty"`      // none/minimal/low/medium/high/xhigh
-	ReasoningSummary    string            `json:"reasoning_summary,omitempty"`     // auto/concise/detailed（Responses API reasoning.summary）
-	Store               *bool             `json:"store,omitempty"`                 // 是否存储用于蒸馏/评估
-	Modalities          []string          `json:"modalities,omitempty"`            // ["text", "audio"]
-	WebSearchOptions    *WebSearchOptions `json:"web_search_options,omitempty"`    // 内置 web 搜索
-	Include             []string          `json:"include,omitempty"`               // Responses API include
-	Truncation          string            `json:"truncation,omitempty"`            // Responses API truncation: auto/disabled
+	MaxCompletionTokens              *int              `json:"max_completion_tokens,omitempty"`                // 替代 max_tokens 的新字段
+	ReasoningEffort                  string            `json:"reasoning_effort,omitempty"`                     // OpenAI: none/minimal/low/medium/high/xhigh; Anthropic: low/medium/high/max
+	ReasoningSummary                 string            `json:"reasoning_summary,omitempty"`                    // auto/concise/detailed（Responses API reasoning.summary）
+	ReasoningDisplay                 string            `json:"reasoning_display,omitempty"`                    // Anthropic thinking.display: summarized/omitted
+	InferenceSpeed                   string            `json:"inference_speed,omitempty"`                      // Provider-specific speed tier (e.g. Anthropic fast)
+	Store                            *bool             `json:"store,omitempty"`                                // 是否存储用于蒸馏/评估
+	Modalities                       []string          `json:"modalities,omitempty"`                           // ["text", "audio"]
+	WebSearchOptions                 *WebSearchOptions `json:"web_search_options,omitempty"`                   // 内置 web 搜索
+	PromptCacheKey                   string            `json:"prompt_cache_key,omitempty"`                     // OpenAI prompt cache routing key
+	PromptCacheRetention             string            `json:"prompt_cache_retention,omitempty"`               // OpenAI prompt cache retention hint
+	CacheControl                     *CacheControl     `json:"cache_control,omitempty"`                        // Anthropic automatic prompt caching
+	CachedContent                    string            `json:"cached_content,omitempty"`                       // Gemini cached content resource name
+	IncludeServerSideToolInvocations *bool             `json:"include_server_side_tool_invocations,omitempty"` // Gemini server-side tool traces
+	Include                          []string          `json:"include,omitempty"`                              // Responses API include
+	Truncation                       string            `json:"truncation,omitempty"`                           // Responses API truncation: auto/disabled
 
 	// 工具调用模式：native（原生 JSON）或 xml（文本降级）
 	ToolCallMode ToolCallMode `json:"tool_call_mode,omitempty"`

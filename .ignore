@@ -1,0 +1,4 @@
+# External reference-only materials.
+# Keep them in-repo for study, but exclude them from default search/index flows.
+CC-Source/
+docs/claude-code/
