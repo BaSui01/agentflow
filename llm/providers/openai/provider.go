@@ -281,7 +281,14 @@ type responsesAnnotation struct {
 
 // completionWithResponsesAPI 使用新的 Responses API (/v1/responses).
 func (p *OpenAIProvider) completionWithResponsesAPI(ctx context.Context, req *llm.ChatRequest, apiKey string) (*llm.ChatResponse, error) {
-	body := p.buildResponsesRequest(req)
+	promptCacheRetention, cacheErr := providerbase.NormalizeOpenAIPromptCacheRetention(req.PromptCacheRetention, p.Name())
+	if cacheErr != nil {
+		return nil, cacheErr
+	}
+
+	reqCopy := *req
+	reqCopy.PromptCacheRetention = promptCacheRetention
+	body := p.buildResponsesRequest(&reqCopy)
 
 	// 从 context 或 request 获取 previous_response_id
 	if req.PreviousResponseID != "" {
@@ -1107,8 +1114,15 @@ func (p *OpenAIProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-ch
 	req = rewrittenReq
 
 	apiKey := p.Provider.ResolveAPIKey(ctx)
+	promptCacheRetention, cacheErr := providerbase.NormalizeOpenAIPromptCacheRetention(req.PromptCacheRetention, p.Name())
+	if cacheErr != nil {
+		return nil, cacheErr
+	}
 
-	body := p.buildResponsesRequest(req)
+	reqCopy := *req
+	reqCopy.PromptCacheRetention = promptCacheRetention
+
+	body := p.buildResponsesRequest(&reqCopy)
 	body.Stream = true
 
 	if req.PreviousResponseID != "" {

@@ -303,6 +303,10 @@ func (p *Provider) Completion(ctx context.Context, req *llm.ChatRequest) (*llm.C
 
 	apiKey := p.resolveAPIKey(ctx)
 	model := providerbase.ChooseModel(req, p.Cfg.DefaultModel, p.Cfg.FallbackModel)
+	promptCacheRetention, cacheErr := providerbase.NormalizeOpenAIPromptCacheRetention(req.PromptCacheRetention, p.Name())
+	if cacheErr != nil {
+		return nil, cacheErr
+	}
 
 	body := providerbase.OpenAICompatRequest{
 		Model:                model,
@@ -325,7 +329,7 @@ func (p *Provider) Completion(ctx context.Context, req *llm.ChatRequest) (*llm.C
 		Store:                req.Store,
 		Modalities:           req.Modalities,
 		PromptCacheKey:       req.PromptCacheKey,
-		PromptCacheRetention: req.PromptCacheRetention,
+		PromptCacheRetention: promptCacheRetention,
 		PreviousResponseID:   req.PreviousResponseID,
 		Include:              req.Include,
 		Truncation:           req.Truncation,
@@ -381,6 +385,10 @@ func (p *Provider) Stream(ctx context.Context, req *llm.ChatRequest) (<-chan llm
 
 	apiKey := p.resolveAPIKey(ctx)
 	model := providerbase.ChooseModel(req, p.Cfg.DefaultModel, p.Cfg.FallbackModel)
+	promptCacheRetention, cacheErr := providerbase.NormalizeOpenAIPromptCacheRetention(req.PromptCacheRetention, p.Name())
+	if cacheErr != nil {
+		return nil, cacheErr
+	}
 
 	body := providerbase.OpenAICompatRequest{
 		Model:                model,
@@ -404,7 +412,7 @@ func (p *Provider) Stream(ctx context.Context, req *llm.ChatRequest) (<-chan llm
 		Store:                req.Store,
 		Modalities:           req.Modalities,
 		PromptCacheKey:       req.PromptCacheKey,
-		PromptCacheRetention: req.PromptCacheRetention,
+		PromptCacheRetention: promptCacheRetention,
 		PreviousResponseID:   req.PreviousResponseID,
 		Include:              req.Include,
 		Truncation:           req.Truncation,

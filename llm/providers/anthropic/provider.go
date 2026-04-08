@@ -725,6 +725,10 @@ func (p *ClaudeProvider) Completion(ctx context.Context, req *llm.ChatRequest) (
 	system, messages := convertToClaudeMessages(req.Messages)
 	model := providerbase.ChooseModel(req, p.cfg.Model, "claude-opus-4.5-20260105")
 	reasoning := buildClaudeReasoningControls(req, model)
+	cacheControl, cacheErr := normalizeClaudeCacheControl(req.CacheControl)
+	if cacheErr != nil {
+		return nil, cacheErr
+	}
 
 	body := claudeRequest{
 		Model:        model,
@@ -739,7 +743,7 @@ func (p *ClaudeProvider) Completion(ctx context.Context, req *llm.ChatRequest) (
 		Thinking:     reasoning.Thinking,
 		OutputConfig: reasoning.OutputConfig,
 		Speed:        reasoning.Speed,
-		CacheControl: req.CacheControl,
+		CacheControl: cacheControl,
 	}
 
 	// 问题 3: thinking + tool_choice 冲突校验
@@ -751,7 +755,7 @@ func (p *ClaudeProvider) Completion(ctx context.Context, req *llm.ChatRequest) (
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal request: %w", err)
 	}
-	endpoint := fmt.Sprintf("%s/v1/messages", strings.TrimRight(p.cfg.BaseURL, "/"))
+	endpoint := claudeMessagesEndpoint(p.cfg.BaseURL, body.Speed)
 
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(payload))
 	if err != nil {
@@ -779,6 +783,7 @@ func (p *ClaudeProvider) Completion(ctx context.Context, req *llm.ChatRequest) (
 			if err != nil {
 				return nil, fmt.Errorf("failed to marshal request after speed fallback: %w", err)
 			}
+			endpoint = claudeMessagesEndpoint(p.cfg.BaseURL, body.Speed)
 			httpReq, err = http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(payload))
 			if err != nil {
 				return nil, fmt.Errorf("failed to create fallback request: %w", err)
@@ -832,6 +837,10 @@ func (p *ClaudeProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-ch
 	system, messages := convertToClaudeMessages(req.Messages)
 	model := providerbase.ChooseModel(req, p.cfg.Model, "claude-opus-4.5-20260105")
 	reasoning := buildClaudeReasoningControls(req, model)
+	cacheControl, cacheErr := normalizeClaudeCacheControl(req.CacheControl)
+	if cacheErr != nil {
+		return nil, cacheErr
+	}
 
 	body := claudeRequest{
 		Model:        model,
@@ -847,7 +856,7 @@ func (p *ClaudeProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-ch
 		Thinking:     reasoning.Thinking,
 		OutputConfig: reasoning.OutputConfig,
 		Speed:        reasoning.Speed,
-		CacheControl: req.CacheControl,
+		CacheControl: cacheControl,
 	}
 
 	// 问题 3: thinking + tool_choice 冲突校验
@@ -865,7 +874,7 @@ func (p *ClaudeProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-ch
 			Cause:      err,
 		}
 	}
-	endpoint := fmt.Sprintf("%s/v1/messages", strings.TrimRight(p.cfg.BaseURL, "/"))
+	endpoint := claudeMessagesEndpoint(p.cfg.BaseURL, body.Speed)
 
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(payload))
 	if err != nil {
@@ -897,6 +906,7 @@ func (p *ClaudeProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-ch
 			if err != nil {
 				return nil, fmt.Errorf("failed to marshal fallback request: %w", err)
 			}
+			endpoint = claudeMessagesEndpoint(p.cfg.BaseURL, body.Speed)
 			httpReq, err = http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(payload))
 			if err != nil {
 				return nil, fmt.Errorf("failed to create fallback request: %w", err)
@@ -1401,6 +1411,47 @@ type claudeReasoningControls struct {
 	Thinking     *claudeThinking
 	OutputConfig *claudeOutputConfig
 	Speed        string
+}
+
+func normalizeClaudeCacheControl(in *llm.CacheControl) (*llm.CacheControl, *types.Error) {
+	if in == nil {
+		return nil, nil
+	}
+
+	kind := strings.ToLower(strings.TrimSpace(in.Type))
+	switch kind {
+	case "", "ephemeral":
+		kind = "ephemeral"
+	default:
+		return nil, &types.Error{
+			Code:       llm.ErrInvalidRequest,
+			Message:    fmt.Sprintf("Claude cache_control.type must be \"ephemeral\", got %q", in.Type),
+			HTTPStatus: http.StatusBadRequest,
+			Provider:   "claude",
+		}
+	}
+
+	ttl := strings.ToLower(strings.TrimSpace(in.TTL))
+	switch ttl {
+	case "", "5m", "1h":
+	default:
+		return nil, &types.Error{
+			Code:       llm.ErrInvalidRequest,
+			Message:    fmt.Sprintf("Claude cache_control.ttl must be one of \"5m\" or \"1h\", got %q", in.TTL),
+			HTTPStatus: http.StatusBadRequest,
+			Provider:   "claude",
+		}
+	}
+
+	return &llm.CacheControl{Type: kind, TTL: ttl}, nil
+}
+
+func claudeMessagesEndpoint(baseURL, speed string) string {
+	path := "/v1/messages"
+	if strings.TrimSpace(speed) != "" {
+		path += "?beta=true"
+	}
+	return fmt.Sprintf("%s%s", strings.TrimRight(baseURL, "/"), path)
 }
 
 // buildClaudeReasoningControls maps unified reasoning options into the current Claude protocol.

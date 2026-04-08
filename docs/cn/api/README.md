@@ -225,8 +225,8 @@ type ChatRequest struct {
     InferenceSpeed                   string          `json:"inference_speed,omitempty"`
     WebSearchOptions                 *WebSearchOptions `json:"web_search_options,omitempty"`
     PromptCacheKey                   string          `json:"prompt_cache_key,omitempty"`
-    PromptCacheRetention             string          `json:"prompt_cache_retention,omitempty"`
-    CacheControl                     *CacheControl   `json:"cache_control,omitempty"`
+    PromptCacheRetention             string          `json:"prompt_cache_retention,omitempty"` // OpenAI: in_memory / 24h
+    CacheControl                     *CacheControl   `json:"cache_control,omitempty"`          // Anthropic: ephemeral + ttl(5m/1h)
     CachedContent                    string          `json:"cached_content,omitempty"`
     IncludeServerSideToolInvocations *bool           `json:"include_server_side_tool_invocations,omitempty"`
     PreviousResponseID               string          `json:"previous_response_id,omitempty"`

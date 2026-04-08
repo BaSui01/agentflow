@@ -7,7 +7,7 @@ info:
     Notes:
     - API key authentication is accepted via `X-API-Key` header.
     - Query-string `api_key` authentication is not supported; use `X-API-Key` header only.
-  version: 1.8.12
+  version: 1.9.1
   contact:
     name: AgentFlow Team
     url: https://github.com/BaSui01/agentflow
@@ -1534,15 +1534,17 @@ components:
           description: OpenAI prompt cache routing key.
         prompt_cache_retention:
           type: string
-          description: OpenAI prompt cache retention hint.
+          description: OpenAI prompt cache retention hint. Allowed values: `in_memory`, `24h`.
         cache_control:
           type: object
           description: Anthropic automatic prompt caching control.
           properties:
             type:
               type: string
+              description: Anthropic currently accepts `ephemeral`.
             ttl:
               type: string
+              description: Anthropic currently accepts `5m` or `1h`.
         cached_content:
           type: string
           description: Gemini cached content resource name.

@@ -249,24 +249,42 @@ func TestBuildGenerationConfig_WithResponseFormat(t *testing.T) {
 	assert.NotNil(t, cfg.ResponseSchema)
 }
 
-func TestSanitizeGeminiCachedContentRequest_DropsConflictingFields(t *testing.T) {
-	body := &geminiRequest{
-		CachedContent:     "cachedContents/abc",
-		SystemInstruction: &geminiContent{Parts: []geminiPart{{Text: "system"}}},
-		Tools:             []geminiTool{{GoogleSearch: &geminiGoogleSearch{}}},
-		ToolConfig:        &geminiToolConfig{},
-	}
-	sanitizeGeminiCachedContentRequest(body)
-	assert.Equal(t, "", body.CachedContent)
-}
+func TestGeminiProvider_Completion_PreservesCachedContentWithToolConfig(t *testing.T) {
+	var reqBody geminiRequest
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		require.NoError(t, json.NewDecoder(r.Body).Decode(&reqBody))
+		w.Header().Set("Content-Type", "application/json")
+		require.NoError(t, json.NewEncoder(w).Encode(geminiResponse{
+			Candidates: []geminiCandidate{{
+				Content:      geminiContent{Role: "model", Parts: []geminiPart{{Text: "ok"}}},
+				FinishReason: "STOP",
+			}},
+		}))
+	}))
+	t.Cleanup(server.Close)
 
-func TestSanitizeGeminiCachedContentRequest_PreservesCompatibleBody(t *testing.T) {
-	body := &geminiRequest{
+	p := NewGeminiProvider(providers.GeminiConfig{
+		BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k", BaseURL: server.URL},
+	}, zap.NewNop())
+
+	_, err := p.Completion(context.Background(), &llm.ChatRequest{
+		Messages: []types.Message{
+			{Role: llm.RoleSystem, Content: "system"},
+			{Role: llm.RoleUser, Content: "hi"},
+		},
+		Tools: []types.ToolSchema{{
+			Name:        "weather_lookup",
+			Description: "Lookup weather",
+			Parameters:  json.RawMessage(`{"type":"object"}`),
+		}},
+		ToolChoice:    "required",
 		CachedContent: "cachedContents/abc",
-		Contents:      []geminiContent{{Role: "user", Parts: []geminiPart{{Text: "hi"}}}},
-	}
-	sanitizeGeminiCachedContentRequest(body)
-	assert.Equal(t, "cachedContents/abc", body.CachedContent)
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "cachedContents/abc", reqBody.CachedContent)
+	require.NotNil(t, reqBody.SystemInstruction)
+	require.NotNil(t, reqBody.ToolConfig)
+	require.NotEmpty(t, reqBody.Tools)
 }
 
 // --- Completion with thinking ---

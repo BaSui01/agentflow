@@ -224,7 +224,7 @@ func TestChatHandler_OpenAICompatResponses(t *testing.T) {
 		"user":"resp-user-1",
 		"store":true,
 		"prompt_cache_key":"route-a",
-		"prompt_cache_retention":"5m",
+		"prompt_cache_retention":"24h",
 		"previous_response_id":"resp_prev_456",
 		"truncation":"auto",
 		"include":["output_text"],
@@ -271,7 +271,7 @@ func TestChatHandler_OpenAICompatResponses(t *testing.T) {
 	require.NotNil(t, svc.completeReq.Store)
 	assert.True(t, *svc.completeReq.Store)
 	assert.Equal(t, "route-a", svc.completeReq.PromptCacheKey)
-	assert.Equal(t, "5m", svc.completeReq.PromptCacheRetention)
+	assert.Equal(t, "24h", svc.completeReq.PromptCacheRetention)
 	assert.Equal(t, "resp_prev_456", svc.completeReq.PreviousResponseID)
 	assert.Equal(t, "auto", svc.completeReq.Truncation)
 	assert.Equal(t, []string{"output_text"}, svc.completeReq.Include)

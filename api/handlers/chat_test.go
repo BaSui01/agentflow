@@ -460,7 +460,7 @@ func TestChatHandler_ConvertToLLMRequest(t *testing.T) {
 			},
 		},
 		PromptCacheKey:                   "pcache-key-1",
-		PromptCacheRetention:             "5m",
+		PromptCacheRetention:             "24h",
 		CacheControl:                     &api.CacheControl{Type: "ephemeral", TTL: "5m"},
 		CachedContent:                    "cachedContents/session-1",
 		IncludeServerSideToolInvocations: &includeServerSide,
@@ -519,7 +519,7 @@ func TestChatHandler_ConvertToLLMRequest(t *testing.T) {
 	assert.Equal(t, "US", llmReq.WebSearchOptions.UserLocation.Country)
 	assert.Equal(t, "San Francisco", llmReq.WebSearchOptions.UserLocation.City)
 	assert.Equal(t, "pcache-key-1", llmReq.PromptCacheKey)
-	assert.Equal(t, "5m", llmReq.PromptCacheRetention)
+	assert.Equal(t, "24h", llmReq.PromptCacheRetention)
 	require.NotNil(t, llmReq.CacheControl)
 	assert.Equal(t, "ephemeral", llmReq.CacheControl.Type)
 	assert.Equal(t, "5m", llmReq.CacheControl.TTL)

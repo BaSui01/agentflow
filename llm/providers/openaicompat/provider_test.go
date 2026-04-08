@@ -509,6 +509,20 @@ func TestProvider_Stream_WebSearchOptionsForwarded(t *testing.T) {
 	assert.Equal(t, "Shanghai", capturedRequest.WebSearchOptions.UserLocation.Approximate.City)
 }
 
+func TestProvider_Completion_RejectsInvalidPromptCacheRetention(t *testing.T) {
+	p := New(Config{ProviderName: "test", APIKey: "key", BaseURL: "https://example.com"}, zap.NewNop())
+
+	_, err := p.Completion(context.Background(), &llm.ChatRequest{
+		Messages:             []types.Message{{Role: llm.RoleUser, Content: "Hi"}},
+		PromptCacheRetention: "5m",
+	})
+	require.Error(t, err)
+	var llmErr *types.Error
+	require.ErrorAs(t, err, &llmErr)
+	assert.Equal(t, llm.ErrInvalidRequest, llmErr.Code)
+	assert.Contains(t, llmErr.Message, "prompt_cache_retention")
+}
+
 // ---------------------------------------------------------------------------
 // HealthCheck
 // ---------------------------------------------------------------------------

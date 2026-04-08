@@ -305,6 +305,29 @@ type CompletionTokensDetails struct {
 	RejectedPredictionTokens int `json:"rejected_prediction_tokens,omitempty"`
 }
 
+// NormalizeOpenAIPromptCacheRetention validates the OpenAI prompt cache retention
+// value against the current official SDK enum.
+func NormalizeOpenAIPromptCacheRetention(retention string, provider string) (string, *types.Error) {
+	normalized := strings.ToLower(strings.TrimSpace(retention))
+	switch normalized {
+	case "":
+		return "", nil
+	case "in_memory", "in-memory":
+		// The current OpenAI docs use `in_memory`, while the generated Go SDK enum
+		// currently exposes `in-memory`. Accept both and normalize to the HTTP docs form.
+		return "in_memory", nil
+	case "24h":
+		return "24h", nil
+	default:
+		return "", &types.Error{
+			Code:       llm.ErrInvalidRequest,
+			Message:    fmt.Sprintf("%s prompt_cache_retention must be one of \"in_memory\" or \"24h\", got %q", provider, retention),
+			HTTPStatus: http.StatusBadRequest,
+			Provider:   provider,
+		}
+	}
+}
+
 // OpenAICompatResponse 表示 OpenAI 兼容的聊天完成响应.
 type OpenAICompatResponse struct {
 	ID          string               `json:"id"`

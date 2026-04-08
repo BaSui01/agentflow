@@ -107,9 +107,9 @@ type ChatRequest struct {
 	WebSearchOptions *WebSearchOptions `json:"web_search_options,omitempty"`
 	// OpenAI prompt cache 路由 key
 	PromptCacheKey string `json:"prompt_cache_key,omitempty"`
-	// OpenAI prompt cache 保留策略
+	// OpenAI prompt cache 保留策略（官方值：in_memory / 24h）
 	PromptCacheRetention string `json:"prompt_cache_retention,omitempty"`
-	// Anthropic automatic prompt caching 控制
+	// Anthropic automatic prompt caching 控制（type=ephemeral, ttl=5m/1h）
 	CacheControl *CacheControl `json:"cache_control,omitempty"`
 	// Gemini cached content 资源名
 	CachedContent string `json:"cached_content,omitempty"`

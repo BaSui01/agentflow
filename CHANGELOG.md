@@ -5,6 +5,18 @@ All notable changes to AgentFlow will be documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.9.1] - 2026-04-08
+
+### Changed
+- 对齐 OpenAI 官方 SDK / 文档的 prompt cache 保留策略：`prompt_cache_retention` 现在只接受 `in_memory` / `24h`，并兼容输入别名 `in-memory`
+- 对齐 Anthropic 官方 SDK 的 fast mode / cache_control 语义：`fast` 走 beta message endpoint 语义，`cache_control` 收敛为 `ephemeral + ttl(5m/1h)`
+- 对齐 Gemini 官方 `go-genai` 的 cached content 行为：移除本地对 `cachedContent` 的过度清洗，保留 `cachedContent + systemInstruction + toolConfig` 组合透传
+
+### Fixed
+- 修复 OpenAI-compatible 与 OpenAI Responses 路径对非法 `prompt_cache_retention` 静默透传的问题，改为显式返回 typed invalid request error
+- 修复 Anthropic adapter 对非法 `cache_control.ttl/type` 缺少请求前校验的问题
+- 修复 Gemini adapter 在启用工具配置或系统指令时错误清空 `cachedContent`，导致与官方 SDK 行为不一致的问题
+
 ## [1.9.0] - 2026-04-01
 
 ### Added

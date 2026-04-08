@@ -696,8 +696,10 @@ func TestBuildClaudeReasoningControls_ExtendedTooSmallDisablesThinking(t *testin
 
 func TestClaudeProvider_Headers_FastModeBeta(t *testing.T) {
 	var capturedBeta string
+	var capturedQuery string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		capturedBeta = r.Header.Get("anthropic-beta")
+		capturedQuery = r.URL.RawQuery
 		w.Header().Set("Content-Type", "application/json")
 		err := json.NewEncoder(w).Encode(claudeResponse{
 			ID: "msg_fast", Role: "assistant", Model: "claude-opus-4-6",
@@ -718,14 +720,17 @@ func TestClaudeProvider_Headers_FastModeBeta(t *testing.T) {
 	})
 	require.NoError(t, err)
 	assert.Equal(t, "fast-mode-2026-02-01", capturedBeta)
+	assert.Equal(t, "beta=true", capturedQuery)
 }
 
 func TestClaudeProvider_Completion_FastMode429Fallback(t *testing.T) {
 	callCount := 0
 	var betas []string
+	var queries []string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		callCount++
 		betas = append(betas, r.Header.Get("anthropic-beta"))
+		queries = append(queries, r.URL.RawQuery)
 		if callCount == 1 {
 			w.WriteHeader(http.StatusTooManyRequests)
 			_, _ = w.Write([]byte(`{"error":{"type":"rate_limit_error","message":"fast mode unavailable"}}`))
@@ -755,6 +760,26 @@ func TestClaudeProvider_Completion_FastMode429Fallback(t *testing.T) {
 	require.Len(t, betas, 2)
 	assert.Equal(t, "fast-mode-2026-02-01", betas[0])
 	assert.Equal(t, "", betas[1])
+	require.Len(t, queries, 2)
+	assert.Equal(t, "beta=true", queries[0])
+	assert.Equal(t, "", queries[1])
+}
+
+func TestClaudeProvider_Completion_RejectsInvalidCacheControlTTL(t *testing.T) {
+	p := NewClaudeProvider(providers.ClaudeConfig{
+		BaseProviderConfig: providers.BaseProviderConfig{APIKey: "sk-test", BaseURL: "https://api.anthropic.com"},
+	}, zap.NewNop())
+
+	_, err := p.Completion(context.Background(), &llm.ChatRequest{
+		Model:        "claude-opus-4-6",
+		Messages:     []types.Message{{Role: llm.RoleUser, Content: "Hi"}},
+		CacheControl: &llm.CacheControl{Type: "ephemeral", TTL: "24h"},
+	})
+	require.Error(t, err)
+	var llmErr *types.Error
+	require.ErrorAs(t, err, &llmErr)
+	assert.Equal(t, llm.ErrInvalidRequest, llmErr.Code)
+	assert.Contains(t, llmErr.Message, "cache_control.ttl")
 }
 
 // --- Bug B: HealthCheck/ListModels use resolveAPIKey ---

@@ -987,7 +987,7 @@ func TestOpenAIProvider_Completion_ResponsesAPI_MapsIncludeAndTruncation(t *test
 		Include:              []string{"output_text.logprobs", "reasoning.encrypted_content"},
 		Truncation:           "auto",
 		PromptCacheKey:       "route-a",
-		PromptCacheRetention: "5m",
+		PromptCacheRetention: "in_memory",
 	})
 	require.NoError(t, err)
 
@@ -998,7 +998,24 @@ func TestOpenAIProvider_Completion_ResponsesAPI_MapsIncludeAndTruncation(t *test
 	assert.Equal(t, "reasoning.encrypted_content", includeRaw[1])
 	assert.Equal(t, "auto", raw["truncation"])
 	assert.Equal(t, "route-a", raw["prompt_cache_key"])
-	assert.Equal(t, "5m", raw["prompt_cache_retention"])
+	assert.Equal(t, "in_memory", raw["prompt_cache_retention"])
+}
+
+func TestOpenAIProvider_Completion_ResponsesAPI_RejectsInvalidPromptCacheRetention(t *testing.T) {
+	p := NewOpenAIProvider(providers.OpenAIConfig{
+		BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key", BaseURL: "https://api.openai.com"},
+		UseResponsesAPI:    true,
+	}, zap.NewNop())
+
+	_, err := p.Completion(context.Background(), &llm.ChatRequest{
+		Messages:             []types.Message{{Role: llm.RoleUser, Content: "Hi"}},
+		PromptCacheRetention: "5m",
+	})
+	require.Error(t, err)
+	var llmErr *types.Error
+	require.ErrorAs(t, err, &llmErr)
+	assert.Equal(t, llm.ErrInvalidRequest, llmErr.Code)
+	assert.Contains(t, llmErr.Message, "prompt_cache_retention")
 }
 
 func TestBuildResponsesTools_PreservesStrict(t *testing.T) {
