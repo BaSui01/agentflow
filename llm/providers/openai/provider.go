@@ -296,6 +296,12 @@ func (p *OpenAIProvider) completionWithResponsesAPI(ctx context.Context, req *ll
 	} else if prevID, ok := PreviousResponseIDFromContext(ctx); ok {
 		body.PreviousResponseID = prevID
 	}
+	llm.ReportProviderPromptUsage(ctx, llm.ProviderPromptUsageReport{
+		Provider:     p.Name(),
+		Model:        body.Model,
+		API:          "responses",
+		PromptTokens: countResponsesPromptTokens(body),
+	})
 
 	payload, err := json.Marshal(body)
 	if err != nil {
@@ -1130,6 +1136,12 @@ func (p *OpenAIProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-ch
 	} else if prevID, ok := PreviousResponseIDFromContext(ctx); ok {
 		body.PreviousResponseID = prevID
 	}
+	llm.ReportProviderPromptUsage(ctx, llm.ProviderPromptUsageReport{
+		Provider:     p.Name(),
+		Model:        body.Model,
+		API:          "responses",
+		PromptTokens: countResponsesPromptTokens(body),
+	})
 
 	payload, err := json.Marshal(body)
 	if err != nil {

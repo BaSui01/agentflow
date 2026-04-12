@@ -287,6 +287,58 @@ func TestOpenAIProvider_Completion_ResponsesAPI(t *testing.T) {
 	assert.Equal(t, 14, resp.Usage.TotalTokens)
 }
 
+func TestOpenAIProvider_Completion_ResponsesAPI_ReportsProviderPromptUsage(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "/v1/responses", r.URL.Path)
+		w.Header().Set("Content-Type", "application/json")
+		require.NoError(t, json.NewEncoder(w).Encode(openAIResponsesResponse{
+			ID:        "resp_usage",
+			Object:    "response",
+			CreatedAt: 1700000000,
+			Status:    "completed",
+			Model:     "gpt-5.2",
+			Output: []responsesOutputItem{
+				{
+					Type:   "message",
+					ID:     "msg_1",
+					Status: "completed",
+					Role:   "assistant",
+					Content: []responsesContent{
+						{Type: "output_text", Text: "ok"},
+					},
+				},
+			},
+		}))
+	}))
+	t.Cleanup(func() { server.Close() })
+
+	p := NewOpenAIProvider(providers.OpenAIConfig{
+		BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key", BaseURL: server.URL},
+		UseResponsesAPI:    true,
+	}, zap.NewNop())
+
+	var reports []llm.ProviderPromptUsageReport
+	ctx := llm.WithProviderPromptUsageReporter(context.Background(), func(report llm.ProviderPromptUsageReport) {
+		reports = append(reports, report)
+	})
+
+	_, err := p.Completion(ctx, &llm.ChatRequest{
+		Model: "gpt-5.2",
+		Messages: []types.Message{
+			{Role: llm.RoleUser, Content: "继续扩写这一段"},
+		},
+		Tools: []types.ToolSchema{
+			{Name: "search_docs", Description: "搜索资料", Parameters: json.RawMessage(`{"type":"object"}`)},
+		},
+	})
+	require.NoError(t, err)
+	require.Len(t, reports, 1)
+	assert.Equal(t, "openai", reports[0].Provider)
+	assert.Equal(t, "gpt-5.2", reports[0].Model)
+	assert.Equal(t, "responses", reports[0].API)
+	assert.Greater(t, reports[0].PromptTokens, 0)
+}
+
 func TestOpenAIProvider_Completion_ResponsesAPI_MapsReasoningSummaryAndOpaqueState(t *testing.T) {
 	var reqBody openAIResponsesRequest
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

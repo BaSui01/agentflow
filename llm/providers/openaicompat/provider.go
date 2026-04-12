@@ -355,6 +355,12 @@ func (p *Provider) Completion(ctx context.Context, req *llm.ChatRequest) (*llm.C
 	if p.Cfg.RequestHook != nil {
 		p.Cfg.RequestHook(req, &body)
 	}
+	llm.ReportProviderPromptUsage(ctx, llm.ProviderPromptUsageReport{
+		Provider:     p.Name(),
+		Model:        body.Model,
+		API:          "chat_completions",
+		PromptTokens: providerbase.CountOpenAICompatPromptTokens(body.Model, body),
+	})
 
 	var oaResp providerbase.OpenAICompatResponse
 	if err := p.DoJSON(ctx, http.MethodPost, p.Cfg.EndpointPath, body, apiKey, &oaResp); err != nil {
@@ -444,6 +450,12 @@ func (p *Provider) Stream(ctx context.Context, req *llm.ChatRequest) (<-chan llm
 	if p.Cfg.RequestHook != nil {
 		p.Cfg.RequestHook(req, &body)
 	}
+	llm.ReportProviderPromptUsage(ctx, llm.ProviderPromptUsageReport{
+		Provider:     p.Name(),
+		Model:        body.Model,
+		API:          "chat_completions",
+		PromptTokens: providerbase.CountOpenAICompatPromptTokens(body.Model, body),
+	})
 
 	payload, err := json.Marshal(body)
 	if err != nil {
