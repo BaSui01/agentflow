@@ -167,6 +167,56 @@ func TestProvider_Completion_Success(t *testing.T) {
 	assert.False(t, resp.CreatedAt.IsZero())
 }
 
+func TestProvider_Completion_ReportsProviderPromptUsage(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		err := json.NewEncoder(w).Encode(providerbase.OpenAICompatResponse{
+			ID:    "resp-usage",
+			Model: "gpt-test",
+			Choices: []providerbase.OpenAICompatChoice{
+				{
+					Index:        0,
+					FinishReason: "stop",
+					Message: providerbase.OpenAICompatMessage{
+						Role:    "assistant",
+						Content: "ok",
+					},
+				},
+			},
+		})
+		require.NoError(t, err)
+	}))
+	t.Cleanup(server.Close)
+
+	p := New(Config{
+		ProviderName: "test",
+		APIKey:       "test-key",
+		BaseURL:      server.URL,
+	}, zap.NewNop())
+
+	var reports []llm.ProviderPromptUsageReport
+	ctx := llm.WithProviderPromptUsageReporter(context.Background(), func(report llm.ProviderPromptUsageReport) {
+		reports = append(reports, report)
+	})
+
+	_, err := p.Completion(ctx, &llm.ChatRequest{
+		Model: "gpt-4o",
+		Messages: []types.Message{
+			{Role: llm.RoleSystem, Content: "你是写作助手"},
+			{Role: llm.RoleUser, Content: "给我一个开头"},
+		},
+		Tools: []types.ToolSchema{
+			{Name: "search_docs", Description: "搜索资料", Parameters: json.RawMessage(`{"type":"object"}`)},
+		},
+	})
+	require.NoError(t, err)
+	require.Len(t, reports, 1)
+	assert.Equal(t, "test", reports[0].Provider)
+	assert.Equal(t, "gpt-4o", reports[0].Model)
+	assert.Equal(t, "chat_completions", reports[0].API)
+	assert.Greater(t, reports[0].PromptTokens, 0)
+}
+
 func TestProvider_Completion_HTTPError(t *testing.T) {
 	tests := []struct {
 		name       string
