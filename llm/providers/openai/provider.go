@@ -351,8 +351,15 @@ func (p *OpenAIProvider) buildResponsesRequest(req *llm.ChatRequest) openAIRespo
 		body.MaxOutputTokens = &mt
 	}
 
-	// 构建 input
-	body.Input = convertMessagesToResponsesInput(req.Messages)
+	// 提取 system/developer message 作为 instructions
+	// OpenAI Responses API 要求 instructions 参数，不能放在 input 里
+	instructions, filteredMsgs := extractInstructionsFromMessages(req.Messages)
+	if instructions != "" {
+		body.Instructions = instructions
+	}
+
+	// 构建 input（不包含已提取的 system/developer message）
+	body.Input = convertMessagesToResponsesInput(filteredMsgs)
 
 	// 构建 tools（支持 OpenAI Responses 原生 web_search 工具）
 	body.Tools = buildResponsesTools(req)
@@ -551,6 +558,31 @@ func convertResponsesWebSearchLocation(loc *llm.WebSearchLocation) map[string]an
 		out["timezone"] = v
 	}
 	return out
+}
+
+// extractInstructionsFromMessages extracts the first system/developer message as instructions
+// and returns the instructions string along with the remaining messages.
+// OpenAI Responses API requires the instructions parameter and rejects system messages in input.
+func extractInstructionsFromMessages(msgs []types.Message) (string, []types.Message) {
+	if len(msgs) == 0 {
+		return "", msgs
+	}
+
+	// Find the first system or developer message
+	for i, m := range msgs {
+		if m.Role == llm.RoleSystem || m.Role == llm.RoleDeveloper {
+			// Extract content as instructions
+			instructions := m.Content
+			// Return remaining messages (excluding the system/developer message)
+			remaining := make([]types.Message, 0, len(msgs)-1)
+			remaining = append(remaining, msgs[:i]...)
+			remaining = append(remaining, msgs[i+1:]...)
+			return instructions, remaining
+		}
+	}
+
+	// No system/developer message found
+	return "", msgs
 }
 
 // convertMessagesToResponsesInput converts messages to Responses API input format.
