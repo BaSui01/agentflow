@@ -614,19 +614,20 @@ func convertMessagesToResponsesInput(msgs []types.Message) []any {
 					})
 				}
 				for _, tc := range m.ToolCalls {
+					responsesID := convertToResponsesToolCallID(tc.ID)
 					switch normalizeToolType(tc.Type) {
 					case types.ToolTypeCustom:
 						items = append(items, customToolCallInputItem{
 							Type:   "custom_tool_call",
-							CallID: tc.ID,
+							CallID: responsesID,
 							Name:   tc.Name,
 							Input:  tc.Input,
 						})
 					default:
 						items = append(items, functionCallInputItem{
 							Type:      "function_call",
-							ID:        tc.ID,
-							CallID:    tc.ID,
+							ID:        responsesID,
+							CallID:    responsesID,
 							Name:      tc.Name,
 							Arguments: string(tc.Arguments),
 						})
@@ -639,17 +640,18 @@ func convertMessagesToResponsesInput(msgs []types.Message) []any {
 				})
 			}
 		case llm.RoleTool:
+			responsesID := convertToResponsesToolCallID(m.ToolCallID)
 			switch toolCallTypes[m.ToolCallID] {
 			case types.ToolTypeCustom:
 				items = append(items, customToolCallOutputItem{
 					Type:   "custom_tool_call_output",
-					CallID: m.ToolCallID,
+					CallID: responsesID,
 					Output: m.Content,
 				})
 			default:
 				items = append(items, functionCallOutputItem{
 					Type:   "function_call_output",
-					CallID: m.ToolCallID,
+					CallID: responsesID,
 					Output: m.Content,
 				})
 			}
@@ -661,6 +663,26 @@ func convertMessagesToResponsesInput(msgs []types.Message) []any {
 		}
 	}
 	return items
+}
+
+// convertToResponsesToolCallID converts a Chat Completions tool call ID to Responses API format.
+// Responses API requires function call IDs to start with "fc_" prefix.
+// Chat Completions API uses "call_" prefix, so we need to convert.
+func convertToResponsesToolCallID(id string) string {
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return id
+	}
+	// Already in Responses API format
+	if strings.HasPrefix(id, "fc_") {
+		return id
+	}
+	// Convert Chat Completions "call_" prefix to Responses API "fc_" prefix
+	if strings.HasPrefix(id, "call_") {
+		return "fc_" + strings.TrimPrefix(id, "call_")
+	}
+	// For any other format, prefix with "fc_"
+	return "fc_" + id
 }
 
 func buildToolCallTypeIndex(msgs []types.Message) map[string]string {

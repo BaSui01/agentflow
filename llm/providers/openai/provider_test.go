@@ -1215,3 +1215,87 @@ func TestToResponsesAPIChatResponse(t *testing.T) {
 	assert.Equal(t, 8, result.Usage.TotalTokens)
 	assert.False(t, result.CreatedAt.IsZero())
 }
+
+// --- Tool Call ID Conversion for Responses API ---
+
+func TestConvertToResponsesToolCallID(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{"converts call_ prefix to fc_", "call_abc123", "fc_abc123"},
+		{"preserves existing fc_ prefix", "fc_xyz789", "fc_xyz789"},
+		{"adds fc_ prefix to bare ID", "simple_id", "fc_simple_id"},
+		{"handles empty string", "", ""},
+		{"handles whitespace", "  call_spaced  ", "fc_spaced"},
+		{"handles call_ with underscores", "call_test_123_abc", "fc_test_123_abc"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.expected, convertToResponsesToolCallID(tt.input))
+		})
+	}
+}
+
+func TestOpenAIProvider_Completion_ResponsesAPI_ConvertsToolCallIDs(t *testing.T) {
+	var capturedBody openAIResponsesRequest
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		err := json.NewDecoder(r.Body).Decode(&capturedBody)
+		require.NoError(t, err)
+
+		w.Header().Set("Content-Type", "application/json")
+		err = json.NewEncoder(w).Encode(openAIResponsesResponse{
+			ID:     "resp_test",
+			Model:  "gpt-5.2",
+			Status: "completed",
+			Output: []responsesOutputItem{
+				{Type: "message", Role: "assistant", Content: []responsesContent{{Type: "output_text", Text: "Done"}}},
+			},
+		})
+		require.NoError(t, err)
+	}))
+	t.Cleanup(func() { server.Close() })
+
+	p := NewOpenAIProvider(providers.OpenAIConfig{
+		BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key", BaseURL: server.URL},
+		UseResponsesAPI:    true,
+	}, zap.NewNop())
+
+	// Send a request with tool calls in history using Chat Completions "call_" prefix format
+	_, err := p.Completion(context.Background(), &llm.ChatRequest{
+		Messages: []types.Message{
+			{Role: llm.RoleUser, Content: "What's the weather?"},
+			{Role: llm.RoleAssistant, ToolCalls: []types.ToolCall{
+				{ID: "call_abc123", Type: types.ToolTypeFunction, Name: "get_weather", Arguments: json.RawMessage(`{"city":"NYC"}`)},
+			}},
+			{Role: llm.RoleTool, ToolCallID: "call_abc123", Content: `{"temp":72}`},
+		},
+	})
+	require.NoError(t, err)
+
+	// Verify the tool call IDs were converted to "fc_" prefix in the request
+	require.NotNil(t, capturedBody.Input)
+	inputItems, ok := capturedBody.Input.([]any)
+	require.True(t, ok, "expected input to be a slice")
+
+	// Find the function_call item
+	var foundFunctionCall bool
+	for _, item := range inputItems {
+		itemMap, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		if typ, _ := itemMap["type"].(string); typ == "function_call" {
+			foundFunctionCall = true
+			// ID should be converted from "call_abc123" to "fc_abc123"
+			assert.Equal(t, "fc_abc123", itemMap["id"], "function_call ID should be converted to fc_ prefix")
+			assert.Equal(t, "fc_abc123", itemMap["call_id"], "function_call call_id should be converted to fc_ prefix")
+		}
+		if typ, _ := itemMap["type"].(string); typ == "function_call_output" {
+			// CallID should be converted from "call_abc123" to "fc_abc123"
+			assert.Equal(t, "fc_abc123", itemMap["call_id"], "function_call_output call_id should be converted to fc_ prefix")
+		}
+	}
+	assert.True(t, foundFunctionCall, "expected to find a function_call in the input")
+}
