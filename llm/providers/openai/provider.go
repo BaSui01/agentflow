@@ -586,16 +586,17 @@ func extractInstructionsFromMessages(msgs []types.Message) (string, []types.Mess
 }
 
 // convertMessagesToResponsesInput converts messages to Responses API input format.
+// Note: system/developer messages are extracted as 'instructions' before this function
+// is called, so they should be skipped here to avoid API errors.
 func convertMessagesToResponsesInput(msgs []types.Message) []any {
 	items := make([]any, 0, len(msgs))
 	toolCallTypes := buildToolCallTypeIndex(msgs)
 	for _, m := range msgs {
 		switch m.Role {
 		case llm.RoleSystem, llm.RoleDeveloper:
-			items = append(items, responsesInputItem{
-				Role:    string(m.Role),
-				Content: buildInputContent(m),
-			})
+			// Skip: these are handled by extractInstructionsFromMessages
+			// Responses API requires system prompt in 'instructions' field, not in input.
+			continue
 		case llm.RoleUser:
 			items = append(items, responsesInputItem{
 				Role:    "user",
@@ -640,6 +641,10 @@ func convertMessagesToResponsesInput(msgs []types.Message) []any {
 				})
 			}
 		case llm.RoleTool:
+			// Skip tool outputs with empty ToolCallID to avoid API errors
+			if strings.TrimSpace(m.ToolCallID) == "" {
+				continue
+			}
 			responsesID := convertToResponsesToolCallID(m.ToolCallID)
 			switch toolCallTypes[m.ToolCallID] {
 			case types.ToolTypeCustom:
@@ -761,6 +766,28 @@ func buildOpenAIResponsesReasoningItems(m types.Message) []responsesReasoningInp
 			item.Summary = []responsesContent{}
 		}
 		items = append(items, item)
+	}
+
+	// Handle ReasoningSummaries that don't have corresponding OpaqueReasoning.
+	// This can happen when the previous response didn't include encrypted_content
+	// or when round-tripping from a different context.
+	// Create standalone reasoning items for these orphaned summaries.
+	usedIDs := make(map[string]bool)
+	for _, opaque := range m.OpaqueReasoning {
+		usedIDs[strings.TrimSpace(opaque.ID)] = true
+	}
+	for id, summaries := range groupedSummaries {
+		if usedIDs[id] {
+			continue // already handled above
+		}
+		if id == "" || len(summaries) == 0 {
+			continue
+		}
+		items = append(items, responsesReasoningInputItem{
+			Type:    "reasoning",
+			ID:      id,
+			Summary: summaries,
+		})
 	}
 
 	return items
