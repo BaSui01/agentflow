@@ -200,7 +200,7 @@ type responsesReasoningInputItem struct {
 	Type             string             `json:"type"` // "reasoning"
 	ID               string             `json:"id,omitempty"`
 	Status           string             `json:"status,omitempty"`
-	Summary          []responsesContent `json:"summary,omitempty"`
+	Summary          []responsesContent `json:"summary"`
 	Content          []responsesContent `json:"content,omitempty"`
 	EncryptedContent string             `json:"encrypted_content,omitempty"`
 }
@@ -755,6 +755,11 @@ func buildOpenAIResponsesReasoningItems(m types.Message) []responsesReasoningInp
 		if len(item.Summary) == 0 && m.ReasoningContent != nil && strings.TrimSpace(*m.ReasoningContent) != "" {
 			item.Summary = []responsesContent{{Type: "summary_text", Text: strings.TrimSpace(*m.ReasoningContent)}}
 		}
+		// OpenAI Responses API requires the summary field to be present (non-null).
+		// Ensure it is never nil so JSON serialization always includes "summary": [].
+		if item.Summary == nil {
+			item.Summary = []responsesContent{}
+		}
 		items = append(items, item)
 	}
 
@@ -1235,6 +1240,7 @@ func streamResponsesSSE(ctx context.Context, body io.ReadCloser, providerName st
 		toolCallID := map[string]string{}
 		toolCallArgs := map[string][]byte{}
 		seenReasoning := map[string]bool{}
+		seenToolCalls := map[string]bool{} // track tool calls emitted via .done events
 		finishSent := false
 
 		for {
@@ -1384,6 +1390,10 @@ func streamResponsesSSE(ctx context.Context, body io.ReadCloser, providerName st
 					}
 				case "custom_tool_call":
 					callID := firstNonEmptyString(output.CallID, output.ID)
+					// Skip if already emitted via custom_tool_call_input.done event
+					if seenToolCalls[callID] {
+						continue
+					}
 					select {
 					case <-ctx.Done():
 						return
@@ -1476,10 +1486,8 @@ func streamResponsesSSE(ctx context.Context, body io.ReadCloser, providerName st
 				delete(toolCallName, itemID)
 				delete(toolCallType, itemID)
 				delete(toolCallID, itemID)
-				if finishSent {
-					continue
-				}
-				finishSent = true
+				seenToolCalls[callID] = true // mark as emitted
+				// Always emit tool call chunk; FinishReason only on first one
 				select {
 				case <-ctx.Done():
 					return
@@ -1494,7 +1502,13 @@ func streamResponsesSSE(ctx context.Context, body io.ReadCloser, providerName st
 							Arguments: json.RawMessage(arguments),
 						}},
 					},
-					FinishReason: "tool_calls",
+					FinishReason: func() string {
+						if finishSent {
+							return ""
+						}
+						finishSent = true
+						return "tool_calls"
+					}(),
 				}:
 				}
 
@@ -1510,10 +1524,8 @@ func streamResponsesSSE(ctx context.Context, body io.ReadCloser, providerName st
 				delete(toolCallName, itemID)
 				delete(toolCallType, itemID)
 				delete(toolCallID, itemID)
-				if finishSent {
-					continue
-				}
-				finishSent = true
+				seenToolCalls[callID] = true // mark as emitted
+				// Always emit tool call chunk; FinishReason only on first one
 				select {
 				case <-ctx.Done():
 					return
@@ -1528,7 +1540,13 @@ func streamResponsesSSE(ctx context.Context, body io.ReadCloser, providerName st
 							Input: input,
 						}},
 					},
-					FinishReason: "tool_calls",
+					FinishReason: func() string {
+						if finishSent {
+							return ""
+						}
+						finishSent = true
+						return "tool_calls"
+					}(),
 				}:
 				}
 
