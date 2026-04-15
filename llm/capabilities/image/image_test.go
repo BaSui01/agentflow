@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -276,6 +277,26 @@ func TestGeminiProvider_Generate_Error(t *testing.T) {
 	_, err := p.Generate(context.Background(), &GenerateRequest{Prompt: "test"})
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "gemini image request failed")
+}
+
+func TestGeminiProvider_GenerateStream_DefaultsToTextAndImageModalities(t *testing.T) {
+	var capturedReq geminiImageRequest
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Contains(t, r.URL.Path, "streamGenerateContent")
+		require.NoError(t, json.NewDecoder(r.Body).Decode(&capturedReq))
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(http.StatusOK)
+		fmt.Fprint(w, "data: [DONE]\n\n")
+	}))
+	t.Cleanup(srv.Close)
+
+	p := NewGeminiProvider(GeminiConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key"}})
+	p.client = &http.Client{Transport: &redirectTransport{targetURL: srv.URL, inner: http.DefaultTransport}}
+
+	err := p.GenerateStream(context.Background(), &GenerateRequest{Prompt: "a cat"}, func(StreamChunk) {})
+	require.NoError(t, err)
+	require.NotNil(t, capturedReq.GenerationConfig)
+	assert.Equal(t, []string{"TEXT", "IMAGE"}, capturedReq.GenerationConfig.ResponseModalities)
 }
 
 func TestGeminiProvider_Edit(t *testing.T) {
