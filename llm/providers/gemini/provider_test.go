@@ -186,13 +186,79 @@ func TestConvertToGeminiContents_ToolRoleMappedToUser(t *testing.T) {
 // --- convertGeminiCapabilities ---
 
 func TestConvertGeminiCapabilities(t *testing.T) {
-	caps := convertGeminiCapabilities([]string{"generateContent", "embedContent", "unknownMethod"})
+	caps := resolveGeminiCapabilities("gemini-3-pro-preview", "", "", []string{"generateContent", "embedContent", "unknownMethod"})
 	assert.Contains(t, caps, "chat")
+	assert.Contains(t, caps, "vision")
+	assert.Contains(t, caps, "tool_calls")
+	assert.Contains(t, caps, "function_call")
 	assert.Contains(t, caps, "embedding")
-	assert.Len(t, caps, 2)
+	assert.Len(t, caps, 5)
 
-	assert.Nil(t, convertGeminiCapabilities(nil))
-	assert.Nil(t, convertGeminiCapabilities([]string{"unknownOnly"}))
+	assert.Equal(t, []string{"chat"}, resolveGeminiCapabilities("mystery-model", "", "", nil))
+}
+
+func TestResolveGeminiCapabilities_ImageFamiliesDoNotDefaultToChat(t *testing.T) {
+	caps := resolveGeminiCapabilities("gemini-2.5-flash-image", "", "Native image generation and editing", []string{"generateContent"})
+	assert.Contains(t, caps, "image-gen")
+	assert.Contains(t, caps, "vision")
+	assert.NotContains(t, caps, "chat")
+	assert.NotContains(t, caps, "tool_calls")
+	assert.NotContains(t, caps, "function_call")
+}
+
+func TestResolveGeminiCapabilities_VideoFamily(t *testing.T) {
+	caps := resolveGeminiCapabilities("veo-3.1-generate-preview", "", "Video generation model", []string{"generateContent"})
+	assert.Equal(t, []string{"video-gen"}, caps)
+}
+
+func TestResolveGeminiCapabilities_AudioFamily(t *testing.T) {
+	caps := resolveGeminiCapabilities("gemini-2.5-flash-preview-tts", "", "", []string{"generateContent"})
+	assert.Equal(t, []string{"audio-gen"}, caps)
+}
+
+func TestResolveGeminiCapabilities_EmbeddingFamily(t *testing.T) {
+	caps := resolveGeminiCapabilities("gemini-embedding-001", "", "", []string{"embedContent", "countTokens"})
+	assert.Contains(t, caps, "embedding")
+	assert.Contains(t, caps, "token_counting")
+	assert.NotContains(t, caps, "chat")
+}
+
+func TestGeminiProvider_ListModels_UsesResolvedCapabilities(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "/v1beta/models", r.URL.Path)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"models":[
+				{
+					"name":"models/gemini-3-pro-preview",
+					"displayName":"Gemini 3 Pro Preview",
+					"description":"General purpose multimodal model",
+					"supportedGenerationMethods":["generateContent","countTokens"]
+				},
+				{
+					"name":"models/gemini-2.5-flash-image",
+					"displayName":"Gemini 2.5 Flash Image",
+					"description":"Native image generation and editing",
+					"supportedGenerationMethods":["generateContent"]
+				}
+			]
+		}`))
+	}))
+	t.Cleanup(server.Close)
+
+	p := NewGeminiProvider(providers.GeminiConfig{
+		BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key", BaseURL: server.URL},
+	}, zap.NewNop())
+
+	models, err := p.ListModels(context.Background())
+	require.NoError(t, err)
+	require.Len(t, models, 2)
+
+	assert.Contains(t, models[0].Capabilities, "chat")
+	assert.Contains(t, models[0].Capabilities, "tool_calls")
+	assert.Contains(t, models[0].Capabilities, "function_call")
+	assert.Contains(t, models[1].Capabilities, "image-gen")
+	assert.NotContains(t, models[1].Capabilities, "chat")
 }
 
 // --- Completion via httptest ---

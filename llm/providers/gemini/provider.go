@@ -186,10 +186,7 @@ func (p *GeminiProvider) ListModels(ctx context.Context) ([]llm.Model, error) {
 		if modelID == "" {
 			continue
 		}
-		caps := convertGeminiCapabilities(m.SupportedMethods)
-		if len(caps) == 0 {
-			caps = convertGeminiCapabilities(m.SupportedMethodsSnake)
-		}
+		caps := resolveGeminiCapabilities(modelID, m.DisplayName, m.Description, firstNonEmptyMethods(m.SupportedMethods, m.SupportedMethodsSnake))
 		maxInput := m.InputTokenLimit
 		if maxInput == 0 {
 			maxInput = m.MaxInputTokens
@@ -206,37 +203,106 @@ func (p *GeminiProvider) ListModels(ctx context.Context) ([]llm.Model, error) {
 			MaxOutputTokens: maxOutput,
 			Capabilities:    caps,
 		}
-		if len(model.Capabilities) == 0 {
-			model.Capabilities = []string{"chat"}
-		}
 		models = append(models, model)
 	}
 
 	return models, nil
 }
 
-// convertGeminiCapabilities 将 Gemini 的 supportedGenerationMethods 转换为统一能力标识
-func convertGeminiCapabilities(methods []string) []string {
-	if len(methods) == 0 {
-		return nil
+func resolveGeminiCapabilities(modelID, displayName, description string, methods []string) []string {
+	fingerprint := strings.ToLower(strings.TrimSpace(strings.Join([]string{modelID, displayName, description}, " ")))
+	caps := make([]string, 0, 6)
+	seen := make(map[string]struct{}, 6)
+	addCap := func(cap string) {
+		if strings.TrimSpace(cap) == "" {
+			return
+		}
+		if _, ok := seen[cap]; ok {
+			return
+		}
+		seen[cap] = struct{}{}
+		caps = append(caps, cap)
 	}
-	capMap := map[string]string{
-		"generateContent":  "chat",
-		"embedContent":     "embedding",
-		"countTokens":      "token_counting",
-		"createTunedModel": "fine_tuning",
-		"generateAnswer":   "question_answering",
-	}
-	var caps []string
-	for _, m := range methods {
-		if cap, ok := capMap[m]; ok {
-			caps = append(caps, cap)
+
+	for _, method := range methods {
+		switch strings.ToLower(strings.TrimSpace(method)) {
+		case "embedcontent":
+			addCap("embedding")
+		case "counttokens":
+			addCap("token_counting")
+		case "createtunedmodel":
+			addCap("fine_tuning")
+		case "generateanswer":
+			addCap("question_answering")
 		}
 	}
+
+	switch {
+	case isGeminiEmbeddingModel(fingerprint):
+		addCap("embedding")
+	case isGeminiVideoGenerationModel(fingerprint):
+		addCap("video-gen")
+	case isGeminiAudioGenerationModel(fingerprint):
+		addCap("audio-gen")
+	case isGeminiImageGenerationModel(fingerprint):
+		addCap("image-gen")
+		addCap("vision")
+	default:
+		if hasGeminiGenerateContent(methods) || strings.Contains(fingerprint, "gemini") {
+			addCap("chat")
+			addCap("vision")
+			addCap("tool_calls")
+			addCap("function_call")
+		}
+	}
+
 	if len(caps) == 0 {
-		return nil
+		addCap("chat")
 	}
 	return caps
+}
+
+func firstNonEmptyMethods(primary, fallback []string) []string {
+	if len(primary) > 0 {
+		return primary
+	}
+	return fallback
+}
+
+func hasGeminiGenerateContent(methods []string) bool {
+	for _, method := range methods {
+		if strings.EqualFold(strings.TrimSpace(method), "generateContent") {
+			return true
+		}
+	}
+	return false
+}
+
+func isGeminiEmbeddingModel(fingerprint string) bool {
+	return strings.Contains(fingerprint, "embedding")
+}
+
+func isGeminiImageGenerationModel(fingerprint string) bool {
+	return strings.Contains(fingerprint, "imagen") ||
+		strings.Contains(fingerprint, "image generation") ||
+		strings.Contains(fingerprint, "generate images") ||
+		strings.Contains(fingerprint, "nano banana") ||
+		strings.Contains(fingerprint, "nanobanana") ||
+		strings.Contains(fingerprint, "-image") ||
+		strings.Contains(fingerprint, "image-preview")
+}
+
+func isGeminiVideoGenerationModel(fingerprint string) bool {
+	return strings.Contains(fingerprint, "veo") ||
+		strings.Contains(fingerprint, "video generation") ||
+		strings.Contains(fingerprint, "generate videos")
+}
+
+func isGeminiAudioGenerationModel(fingerprint string) bool {
+	return strings.Contains(fingerprint, "preview-tts") ||
+		strings.Contains(fingerprint, "text-to-speech") ||
+		strings.Contains(fingerprint, "speech generation") ||
+		strings.Contains(fingerprint, "audio generation")
 }
 
 // Gemini 消息结构
