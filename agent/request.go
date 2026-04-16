@@ -7,7 +7,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/BaSui01/agentflow/llm"
 	llmcore "github.com/BaSui01/agentflow/llm/core"
 	"github.com/BaSui01/agentflow/types"
 
@@ -53,7 +52,7 @@ func GetRunConfig(ctx context.Context) *RunConfig {
 // ApplyToRequest applies RunConfig overrides to a ChatRequest.
 // Fields in baseCfg are used as defaults; only non-nil RunConfig fields override them.
 // If rc is nil, this is a no-op.
-func (rc *RunConfig) ApplyToRequest(req *llm.ChatRequest, baseCfg types.AgentConfig) {
+func (rc *RunConfig) ApplyToRequest(req *types.ChatRequest, baseCfg types.AgentConfig) {
 	if rc == nil || req == nil {
 		return
 	}
@@ -294,9 +293,9 @@ func DurationPtr(d time.Duration) *time.Duration { return &d }
 // preparedRequest holds the fully-built ChatRequest together with provider
 // references needed by the execution paths (streaming, ReAct, plain completion).
 type preparedRequest struct {
-	req          *llm.ChatRequest
-	chatProvider llm.Provider
-	toolProvider llm.Provider // for ReAct loop (may equal chatProvider)
+	req          *types.ChatRequest
+	chatProvider types.ChatProvider
+	toolProvider types.ChatProvider // for ReAct loop (may equal chatProvider)
 	hasTools     bool
 	handoffTools map[string]RuntimeHandoffTarget
 	maxReActIter int
@@ -342,7 +341,7 @@ func (b *BaseAgent) prepareChatRequest(ctx context.Context, messages []types.Mes
 	}
 
 	// 3. Build base request
-	req := &llm.ChatRequest{
+	req := &types.ChatRequest{
 		Model:       model,
 		Messages:    messages,
 		MaxTokens:   b.config.LLM.MaxTokens,
@@ -487,7 +486,7 @@ func intOverrideFromContext(values map[string]any, key string) (int, bool) {
 // lastUserQuery extracts the content of the last user message.
 func lastUserQuery(messages []types.Message) string {
 	for i := len(messages) - 1; i >= 0; i-- {
-		if messages[i].Role == llm.RoleUser {
+		if messages[i].Role == types.RoleUser {
 			return messages[i].Content
 		}
 	}

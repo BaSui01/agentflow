@@ -7,14 +7,13 @@ import (
 	"sync"
 	"time"
 
-	"github.com/BaSui01/agentflow/rag"
 	"github.com/BaSui01/agentflow/types"
 
 	"go.uber.org/zap"
 )
 
 // LongTermRetriever provides a higher-quality retrieval path for long-term
-// memory search. When set, it replaces the raw LowLevelVectorStore.Search
+// memory search. When set, it replaces the raw VectorStore.Search
 // with a RAG pipeline (e.g. BM25+Vector+Rerank fusion).
 // Uses types.RetrievalRecord to avoid coupling to rag layer implementation.
 type LongTermRetriever interface {
@@ -31,7 +30,8 @@ type EnhancedMemorySystem struct {
 	working MemoryStore
 
 	// 长期记忆（向量数据库）- 持久化的重要信息
-	longTerm rag.LowLevelVectorStore
+	// 使用 types.VectorStore 接口解耦对 rag 包的直接依赖
+	longTerm types.VectorStore
 
 	// 长期记忆高级检索器（可选）— 走 RAG 管线获得更高质量结果
 	longTermRetriever LongTermRetriever
@@ -146,10 +146,10 @@ type VectorItem struct {
 	Metadata map[string]any
 }
 
-// BatchVectorStore extends LowLevelVectorStore with batch operations.
-// This is memory-specific and not part of the shared rag interface.
+// BatchVectorStore extends VectorStore with batch operations.
+// This is memory-specific and not part of the shared types interface.
 type BatchVectorStore interface {
-	rag.LowLevelVectorStore
+	types.VectorStore
 	BatchStore(ctx context.Context, items []VectorItem) error
 }
 
@@ -243,7 +243,7 @@ type ConsolidationStrategy interface {
 func NewEnhancedMemorySystem(
 	shortTerm MemoryStore,
 	working MemoryStore,
-	longTerm rag.LowLevelVectorStore,
+	longTerm types.VectorStore,
 	episodic EpisodicStore,
 	semantic KnowledgeGraph,
 	observationStore ObservationStore,
@@ -286,7 +286,7 @@ func NewDefaultEnhancedMemorySystem(config EnhancedMemoryConfig, logger *zap.Log
 		MaxEntries: config.WorkingMemorySize,
 	}, logger)
 
-	var longTerm rag.LowLevelVectorStore
+	var longTerm types.VectorStore
 	if config.LongTermEnabled {
 		longTerm = NewInMemoryVectorStore(InMemoryVectorStoreConfig{Dimension: config.VectorDimension}, logger)
 	}
@@ -410,7 +410,7 @@ func (m *EnhancedMemorySystem) SetLongTermRetriever(r LongTermRetriever) {
 
 // SearchLongTerm 搜索长期记忆
 // When a LongTermRetriever is set, it is used instead of raw vector search.
-func (m *EnhancedMemorySystem) SearchLongTerm(ctx context.Context, agentID string, queryVector []float64, topK int) ([]rag.LowLevelSearchResult, error) {
+func (m *EnhancedMemorySystem) SearchLongTerm(ctx context.Context, agentID string, queryVector []float64, topK int) ([]types.VectorSearchResult, error) {
 	if !m.config.LongTermEnabled {
 		return nil, fmt.Errorf("long-term memory not enabled")
 	}
@@ -425,7 +425,7 @@ func (m *EnhancedMemorySystem) SearchLongTerm(ctx context.Context, agentID strin
 	return m.longTerm.Search(ctx, queryVector, topK, filter)
 }
 
-func (m *EnhancedMemorySystem) searchViaRetriever(ctx context.Context, agentID string, queryVector []float64, topK int) ([]rag.LowLevelSearchResult, error) {
+func (m *EnhancedMemorySystem) searchViaRetriever(ctx context.Context, agentID string, queryVector []float64, topK int) ([]types.VectorSearchResult, error) {
 	query := fmt.Sprintf("agent:%s long-term memory", agentID)
 	results, err := m.longTermRetriever.Retrieve(ctx, query, queryVector)
 	if err != nil {
@@ -434,12 +434,12 @@ func (m *EnhancedMemorySystem) searchViaRetriever(ctx context.Context, agentID s
 		return m.longTerm.Search(ctx, queryVector, topK, map[string]any{"agent_id": agentID})
 	}
 
-	out := make([]rag.LowLevelSearchResult, 0, len(results))
+	out := make([]types.VectorSearchResult, 0, len(results))
 	for _, r := range results {
 		if len(out) >= topK {
 			break
 		}
-		out = append(out, rag.LowLevelSearchResult{
+		out = append(out, types.VectorSearchResult{
 			ID:    r.DocID,
 			Score: r.Score,
 			Metadata: map[string]any{

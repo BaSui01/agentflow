@@ -15,7 +15,7 @@ import (
 	"github.com/BaSui01/agentflow/agent/hosted"
 	mcpproto "github.com/BaSui01/agentflow/agent/protocol/mcp"
 	llmtools "github.com/BaSui01/agentflow/llm/capabilities/tools"
-	"github.com/BaSui01/agentflow/rag"
+	"github.com/BaSui01/agentflow/rag/core"
 	"github.com/BaSui01/agentflow/types"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
@@ -25,8 +25,8 @@ var toolNameSanitizer = regexp.MustCompile(`[^a-zA-Z0-9_]`)
 
 // AgentToolingOptions carries optional dependencies for agent tool wiring.
 type AgentToolingOptions struct {
-	RetrievalStore      rag.VectorStore
-	EmbeddingProvider   rag.EmbeddingProvider
+	RetrievalStore      core.VectorStore
+	EmbeddingProvider   core.EmbeddingProvider
 	MCPServer           mcpproto.MCPServer
 	EnableMCPTools      bool
 	DB                  *gorm.DB
@@ -395,8 +395,8 @@ func (m *hostedToolManager) ExecuteForAgent(ctx context.Context, agentID string,
 }
 
 type ragHostedToolRetrievalStore struct {
-	store    rag.VectorStore
-	embedder rag.EmbeddingProvider
+	store    core.VectorStore
+	embedder core.EmbeddingProvider
 }
 
 func (s ragHostedToolRetrievalStore) Retrieve(ctx context.Context, query string, topK int) ([]types.RetrievalRecord, error) {

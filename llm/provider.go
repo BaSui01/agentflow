@@ -7,48 +7,21 @@ import (
 	"github.com/BaSui01/agentflow/types"
 )
 
-// 重导出常量.
-const (
-	RoleSystem    = types.RoleSystem
-	RoleUser      = types.RoleUser
-	RoleAssistant = types.RoleAssistant
-	RoleTool      = types.RoleTool
-	RoleDeveloper = types.RoleDeveloper
-)
-
-// 重导出错误码.
-const (
-	ErrInvalidRequest      = types.ErrInvalidRequest
-	ErrAuthentication      = types.ErrAuthentication
-	ErrUnauthorized        = types.ErrUnauthorized
-	ErrForbidden           = types.ErrForbidden
-	ErrRateLimit           = types.ErrRateLimit
-	ErrQuotaExceeded       = types.ErrQuotaExceeded
-	ErrModelNotFound       = types.ErrModelNotFound
-	ErrModelOverloaded     = types.ErrModelOverloaded
-	ErrContextTooLong      = types.ErrContextTooLong
-	ErrContentFiltered     = types.ErrContentFiltered
-	ErrUpstreamError       = types.ErrUpstreamError
-	ErrUpstreamTimeout     = types.ErrUpstreamTimeout
-	ErrTimeout             = types.ErrTimeout
-	ErrInternalError       = types.ErrInternalError
-	ErrServiceUnavailable  = types.ErrServiceUnavailable
-	ErrProviderUnavailable = types.ErrProviderUnavailable
-)
+// =============================================================================
+// Provider 接口 - 实现 types.ChatProvider
+// =============================================================================
+// llm.Provider 扩展 types.ChatProvider，增加健康检查、模型列表等方法。
+// 核心类型（ChatRequest、ChatResponse、StreamChunk）定义在 types 层。
+// =============================================================================
 
 // Provider 定义了统一的 LLM 适配器接口.
+// 扩展 types.ChatProvider，增加健康检查、模型列表等方法。
 type Provider interface {
-	// Completion 发送同步聊天补全请求。
-	Completion(ctx context.Context, req *ChatRequest) (*ChatResponse, error)
-
-	// Stream 发送流式聊天请求。
-	Stream(ctx context.Context, req *ChatRequest) (<-chan StreamChunk, error)
+	// 继承 types.ChatProvider 的核心方法
+	types.ChatProvider
 
 	// HealthCheck 执行轻量级健康检查。
 	HealthCheck(ctx context.Context) (*HealthStatus, error)
-
-	// Name 返回提供者的唯一标识符。
-	Name() string
 
 	// SupportsNativeFunctionCalling 返回是否支持原生函数调用。
 	SupportsNativeFunctionCalling() bool
@@ -61,184 +34,20 @@ type Provider interface {
 	Endpoints() ProviderEndpoints
 }
 
+// 编译时接口检查：确保 Provider 满足 types.ChatProvider
+var _ types.ChatProvider = (Provider)(nil)
+
+// =============================================================================
+// Provider 特有类型（不在 types 层）
+// =============================================================================
+
 // HealthStatus 表示提供者的健康检查结果。
 // 这是 Provider 级别的统一健康状态类型，同时被 llm.Provider 和 llm/embedding.Provider 使用。
-//
-// L-003: 项目中存在两个 HealthStatus 结构体，服务于不同层次：
-//   - llm.HealthStatus（本定义）— LLM Provider 层，包含 Latency/ErrorRate
-//   - agent.HealthStatus — Agent 层，包含 State 字段
-//
-// 两者字段不同，无法统一。API 层转换请使用 handlers.ConvertHealthStatus。
 type HealthStatus struct {
 	Healthy   bool          `json:"healthy"`
 	Latency   time.Duration `json:"latency"`
 	ErrorRate float64       `json:"error_rate"`
 	Message   string        `json:"message,omitempty"`
-}
-
-// ResponseFormatType 定义响应格式类型。
-type ResponseFormatType string
-
-const (
-	ResponseFormatText       ResponseFormatType = "text"
-	ResponseFormatJSONObject ResponseFormatType = "json_object"
-	ResponseFormatJSONSchema ResponseFormatType = "json_schema"
-)
-
-// ResponseFormat 定义 API 级别的结构化输出格式。
-type ResponseFormat struct {
-	Type       ResponseFormatType `json:"type"`
-	JSONSchema *JSONSchemaParam   `json:"json_schema,omitempty"`
-}
-
-// JSONSchemaParam 定义 JSON Schema 参数，用于 json_schema 响应格式。
-type JSONSchemaParam struct {
-	Name        string         `json:"name"`
-	Description string         `json:"description,omitempty"`
-	Schema      map[string]any `json:"schema"`
-	Strict      *bool          `json:"strict,omitempty"`
-}
-
-// StreamOptions 控制流式响应中的额外信息。
-type StreamOptions struct {
-	IncludeUsage      bool `json:"include_usage,omitempty"`
-	ChunkIncludeUsage bool `json:"chunk_include_usage,omitempty"`
-}
-
-// WebSearchOptions configures the built-in web search tool for Chat Completions.
-type WebSearchOptions struct {
-	SearchContextSize string             `json:"search_context_size,omitempty"` // low/medium/high
-	UserLocation      *WebSearchLocation `json:"user_location,omitempty"`
-	AllowedDomains    []string           `json:"allowed_domains,omitempty"` // Responses web_search filters.allowed_domains
-	BlockedDomains    []string           `json:"blocked_domains,omitempty"` // Anthropic 域名黑名单
-	MaxUses           int                `json:"max_uses,omitempty"`        // Anthropic 搜索次数限制
-}
-
-// WebSearchLocation represents approximate user location for web search.
-type WebSearchLocation struct {
-	Type     string `json:"type,omitempty"` // "approximate"
-	Country  string `json:"country,omitempty"`
-	Region   string `json:"region,omitempty"`
-	City     string `json:"city,omitempty"`
-	Timezone string `json:"timezone,omitempty"`
-}
-
-// CacheControl configures automatic prompt caching for providers that expose cache_control.
-type CacheControl struct {
-	Type string `json:"type,omitempty"` // "ephemeral"
-	TTL  string `json:"ttl,omitempty"`  // provider-specific duration (for example "5m")
-}
-
-// ChatRequest 表示聊天补全请求.
-type ChatRequest struct {
-	TraceID        string             `json:"trace_id"`
-	TenantID       string             `json:"tenant_id,omitempty"`
-	UserID         string             `json:"user_id,omitempty"`
-	Model          string             `json:"model"`
-	Messages       []types.Message    `json:"messages"`
-	MaxTokens      int                `json:"max_tokens,omitempty"`
-	Temperature    float32            `json:"temperature,omitempty"`
-	TopP           float32            `json:"top_p,omitempty"`
-	Stop           []string           `json:"stop,omitempty"`
-	Tools          []types.ToolSchema `json:"tools,omitempty"`
-	ToolChoice     any                `json:"tool_choice,omitempty"`
-	ResponseFormat *ResponseFormat    `json:"response_format,omitempty"`
-	Timeout        time.Duration      `json:"timeout,omitempty"`
-	Metadata       map[string]string  `json:"metadata,omitempty"`
-	Tags           []string           `json:"tags,omitempty"`
-
-	// 采样参数
-	FrequencyPenalty  *float32       `json:"frequency_penalty,omitempty"`
-	PresencePenalty   *float32       `json:"presence_penalty,omitempty"`
-	RepetitionPenalty *float32       `json:"repetition_penalty,omitempty"`
-	N                 *int           `json:"n,omitempty"`
-	LogProbs          *bool          `json:"logprobs,omitempty"`
-	TopLogProbs       *int           `json:"top_logprobs,omitempty"`
-	ParallelToolCalls *bool          `json:"parallel_tool_calls,omitempty"`
-	ServiceTier       *string        `json:"service_tier,omitempty"`
-	User              string         `json:"user,omitempty"`
-	StreamOptions     *StreamOptions `json:"stream_options,omitempty"`
-
-	// OpenAI 扩展参数
-	MaxCompletionTokens              *int              `json:"max_completion_tokens,omitempty"`                // 替代 max_tokens 的新字段
-	ReasoningEffort                  string            `json:"reasoning_effort,omitempty"`                     // OpenAI: none/minimal/low/medium/high/xhigh; Anthropic: low/medium/high/max
-	ReasoningSummary                 string            `json:"reasoning_summary,omitempty"`                    // auto/concise/detailed（Responses API reasoning.summary）
-	ReasoningDisplay                 string            `json:"reasoning_display,omitempty"`                    // Anthropic thinking.display: summarized/omitted
-	InferenceSpeed                   string            `json:"inference_speed,omitempty"`                      // Provider-specific speed tier (e.g. Anthropic fast)
-	Store                            *bool             `json:"store,omitempty"`                                // 是否存储用于蒸馏/评估
-	Modalities                       []string          `json:"modalities,omitempty"`                           // ["text", "audio"]
-	WebSearchOptions                 *WebSearchOptions `json:"web_search_options,omitempty"`                   // 内置 web 搜索
-	PromptCacheKey                   string            `json:"prompt_cache_key,omitempty"`                     // OpenAI prompt cache routing key
-	PromptCacheRetention             string            `json:"prompt_cache_retention,omitempty"`               // OpenAI prompt cache retention hint
-	CacheControl                     *CacheControl     `json:"cache_control,omitempty"`                        // Anthropic automatic prompt caching
-	CachedContent                    string            `json:"cached_content,omitempty"`                       // Gemini cached content resource name
-	IncludeServerSideToolInvocations *bool             `json:"include_server_side_tool_invocations,omitempty"` // Gemini server-side tool traces
-	Include                          []string          `json:"include,omitempty"`                              // Responses API include
-	Truncation                       string            `json:"truncation,omitempty"`                           // Responses API truncation: auto/disabled
-
-	// 工具调用模式：native（原生 JSON）或 xml（文本降级）
-	ToolCallMode ToolCallMode `json:"tool_call_mode,omitempty"`
-
-	// 扩展字段
-	ReasoningMode      string   `json:"reasoning_mode,omitempty"`
-	PreviousResponseID string   `json:"previous_response_id,omitempty"`
-	ConversationID     string   `json:"conversation_id,omitempty"`
-	ThoughtSignatures  []string `json:"thought_signatures,omitempty"`
-}
-
-// ChatResponse 表示聊天补全响应.
-type ChatResponse struct {
-	ID                string       `json:"id,omitempty"`
-	Provider          string       `json:"provider,omitempty"`
-	Model             string       `json:"model"`
-	Choices           []ChatChoice `json:"choices"`
-	Usage             ChatUsage    `json:"usage"`
-	CreatedAt         time.Time    `json:"created_at"`
-	ThoughtSignatures []string     `json:"thought_signatures,omitempty"`
-	ServiceTier       string       `json:"service_tier,omitempty"`
-}
-
-// ChatChoice 表示响应中的单个选项.
-type ChatChoice struct {
-	Index        int           `json:"index"`
-	FinishReason string        `json:"finish_reason,omitempty"`
-	Message      types.Message `json:"message"`
-}
-
-// ChatUsage 表示响应中的 token 用量。
-type ChatUsage struct {
-	PromptTokens            int                      `json:"prompt_tokens"`
-	CompletionTokens        int                      `json:"completion_tokens"`
-	TotalTokens             int                      `json:"total_tokens"`
-	PromptTokensDetails     *PromptTokensDetails     `json:"prompt_tokens_details,omitempty"`
-	CompletionTokensDetails *CompletionTokensDetails `json:"completion_tokens_details,omitempty"`
-}
-
-// PromptTokensDetails 提示 token 详细统计。
-type PromptTokensDetails struct {
-	CachedTokens        int `json:"cached_tokens"`
-	CacheCreationTokens int `json:"cache_creation_tokens,omitempty"`
-	AudioTokens         int `json:"audio_tokens,omitempty"`
-}
-
-// CompletionTokensDetails 补全 token 详细统计。
-type CompletionTokensDetails struct {
-	ReasoningTokens          int `json:"reasoning_tokens"`
-	AudioTokens              int `json:"audio_tokens,omitempty"`
-	AcceptedPredictionTokens int `json:"accepted_prediction_tokens,omitempty"`
-	RejectedPredictionTokens int `json:"rejected_prediction_tokens,omitempty"`
-}
-
-// StreamChunk 表示流式响应块.
-type StreamChunk struct {
-	ID           string        `json:"id,omitempty"`
-	Provider     string        `json:"provider,omitempty"`
-	Model        string        `json:"model,omitempty"`
-	Index        int           `json:"index,omitempty"`
-	Delta        types.Message `json:"delta"`
-	FinishReason string        `json:"finish_reason,omitempty"`
-	Usage        *ChatUsage    `json:"usage,omitempty"`
-	Err          *types.Error  `json:"error,omitempty"`
 }
 
 // Model 表示提供者支持的一个模型.

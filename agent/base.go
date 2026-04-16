@@ -12,7 +12,6 @@ import (
 	"github.com/BaSui01/agentflow/agent/guardrails"
 	"github.com/BaSui01/agentflow/agent/memorycore"
 	"github.com/BaSui01/agentflow/agent/reasoning"
-	"github.com/BaSui01/agentflow/llm"
 	llmtools "github.com/BaSui01/agentflow/llm/capabilities/tools"
 	llmgateway "github.com/BaSui01/agentflow/llm/gateway"
 	"github.com/BaSui01/agentflow/llm/observability"
@@ -777,13 +776,14 @@ type BaseAgent struct {
 	execMu   sync.Mutex   // 执行互斥锁，防止并发执行
 	configMu sync.RWMutex // 配置互斥锁，与 execMu 分离，避免配置方法与 Execute 争用
 
-	provider        llm.Provider
+	// 使用 types.ChatProvider 接口解耦对 llm 包的直接依赖
+	provider        types.ChatProvider
 	gatewayOnce     sync.Once
-	gatewayInstance llm.Provider
-	toolProvider    llm.Provider // 工具调用专用 Provider（可选，为 nil 时退化为 provider）
+	gatewayInstance types.ChatProvider
+	toolProvider    types.ChatProvider // 工具调用专用 Provider（可选，为 nil 时退化为 provider）
 	toolGatewayOnce sync.Once
-	toolGatewayInst llm.Provider
-	externalGateway llm.Provider // injected shared gateway (skips lazy creation)
+	toolGatewayInst types.ChatProvider
+	externalGateway types.ChatProvider // injected shared gateway (skips lazy creation)
 	ledger          observability.Ledger
 	memory          MemoryManager
 	toolManager     ToolManager
@@ -819,7 +819,7 @@ type BaseAgent struct {
 // NewBaseAgent 创建基础 Agent
 func NewBaseAgent(
 	cfg types.AgentConfig,
-	provider llm.Provider,
+	provider types.ChatProvider,
 	memory MemoryManager,
 	toolManager ToolManager,
 	bus EventBus,
@@ -1126,13 +1126,13 @@ func (b *BaseAgent) RecallMemory(ctx context.Context, query string, topK int) ([
 }
 
 // Provider 返回 LLM Provider
-func (b *BaseAgent) Provider() llm.Provider { return b.provider }
+func (b *BaseAgent) Provider() types.ChatProvider { return b.provider }
 
 // ToolProvider 返回工具调用专用的 LLM Provider（可能为 nil）
-func (b *BaseAgent) ToolProvider() llm.Provider { return b.toolProvider }
+func (b *BaseAgent) ToolProvider() types.ChatProvider { return b.toolProvider }
 
 // SetToolProvider 设置工具调用专用的 LLM Provider
-func (b *BaseAgent) SetToolProvider(p llm.Provider) {
+func (b *BaseAgent) SetToolProvider(p types.ChatProvider) {
 	b.toolProvider = p
 	b.toolGatewayOnce = sync.Once{} // reset lazy init
 	b.toolGatewayInst = nil
@@ -1140,11 +1140,11 @@ func (b *BaseAgent) SetToolProvider(p llm.Provider) {
 
 // SetGateway injects a pre-built shared Gateway instance.
 // When set, lazy gateway creation is skipped.
-func (b *BaseAgent) SetGateway(gw llm.Provider) {
+func (b *BaseAgent) SetGateway(gw types.ChatProvider) {
 	b.externalGateway = gw
 }
 
-func (b *BaseAgent) gatewayProvider() llm.Provider {
+func (b *BaseAgent) gatewayProvider() types.ChatProvider {
 	if b.externalGateway != nil {
 		return b.externalGateway
 	}
@@ -1160,7 +1160,7 @@ func (b *BaseAgent) gatewayProvider() llm.Provider {
 	return b.provider
 }
 
-func (b *BaseAgent) gatewayToolProvider() llm.Provider {
+func (b *BaseAgent) gatewayToolProvider() types.ChatProvider {
 	if b.toolProvider != nil {
 		b.toolGatewayOnce.Do(func() {
 			b.toolGatewayInst = wrapProviderWithGateway(b.toolProvider, b.logger, b.ledger)
@@ -1173,7 +1173,7 @@ func (b *BaseAgent) gatewayToolProvider() llm.Provider {
 	return b.gatewayProvider()
 }
 
-func wrapProviderWithGateway(provider llm.Provider, logger *zap.Logger, ledger observability.Ledger) llm.Provider {
+func wrapProviderWithGateway(provider types.ChatProvider, logger *zap.Logger, ledger observability.Ledger) types.ChatProvider {
 	if provider == nil {
 		return nil
 	}

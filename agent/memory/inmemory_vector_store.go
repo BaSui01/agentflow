@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/BaSui01/agentflow/rag"
+	"github.com/BaSui01/agentflow/types"
 	"go.uber.org/zap"
 )
 
@@ -104,7 +104,7 @@ func (s *InMemoryVectorStore) evictOldestLocked() {
 	}
 }
 
-func (s *InMemoryVectorStore) Search(ctx context.Context, query []float64, topK int, filter map[string]any) ([]rag.LowLevelSearchResult, error) {
+func (s *InMemoryVectorStore) Search(ctx context.Context, query []float64, topK int, filter map[string]any) ([]types.VectorSearchResult, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -115,13 +115,13 @@ func (s *InMemoryVectorStore) Search(ctx context.Context, query []float64, topK 
 		return nil, fmt.Errorf("query vector dimension mismatch: got %d want %d", len(query), s.dimension)
 	}
 	if topK <= 0 {
-		return []rag.LowLevelSearchResult{}, nil
+		return []types.VectorSearchResult{}, nil
 	}
 
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	results := make([]rag.LowLevelSearchResult, 0, len(s.items))
+	results := make([]types.VectorSearchResult, 0, len(s.items))
 	for id, ent := range s.items {
 		if err := ctx.Err(); err != nil {
 			return nil, err
@@ -130,7 +130,7 @@ func (s *InMemoryVectorStore) Search(ctx context.Context, query []float64, topK 
 			continue
 		}
 		score := cosineSimilarityFloat64(query, ent.vector)
-		results = append(results, rag.LowLevelSearchResult{
+		results = append(results, types.VectorSearchResult{
 			ID:       id,
 			Score:    score,
 			Metadata: cloneMap(ent.metadata),
@@ -243,3 +243,6 @@ func cloneMap(in map[string]any) map[string]any {
 	}
 	return out
 }
+
+// 编译时接口检查：确保 InMemoryVectorStore 实现 types.VectorStore
+var _ types.VectorStore = (*InMemoryVectorStore)(nil)

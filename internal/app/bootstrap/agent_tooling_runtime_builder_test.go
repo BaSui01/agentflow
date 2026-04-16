@@ -11,7 +11,7 @@ import (
 	"github.com/BaSui01/agentflow/agent/hosted"
 	mcpproto "github.com/BaSui01/agentflow/agent/protocol/mcp"
 	llmtools "github.com/BaSui01/agentflow/llm/capabilities/tools"
-	"github.com/BaSui01/agentflow/rag"
+	"github.com/BaSui01/agentflow/rag/core"
 	"github.com/BaSui01/agentflow/types"
 	"github.com/alicebob/miniredis/v2"
 	"github.com/glebarez/sqlite"
@@ -468,11 +468,11 @@ func TestBuildAgentToolingRuntime_ApprovalGrantPersistsAcrossRuntimeRebuildWithR
 
 type testVectorStore struct{}
 
-func (s *testVectorStore) AddDocuments(ctx context.Context, docs []rag.Document) error { return nil }
-func (s *testVectorStore) Search(ctx context.Context, queryEmbedding []float64, topK int) ([]rag.VectorSearchResult, error) {
-	return []rag.VectorSearchResult{
+func (s *testVectorStore) AddDocuments(ctx context.Context, docs []core.Document) error { return nil }
+func (s *testVectorStore) Search(ctx context.Context, queryEmbedding []float64, topK int) ([]core.VectorSearchResult, error) {
+	return []core.VectorSearchResult{
 		{
-			Document: rag.Document{
+			Document: core.Document{
 				ID:      "doc-1",
 				Content: "hello world",
 			},
@@ -481,7 +481,7 @@ func (s *testVectorStore) Search(ctx context.Context, queryEmbedding []float64, 
 	}, nil
 }
 func (s *testVectorStore) DeleteDocuments(ctx context.Context, ids []string) error    { return nil }
-func (s *testVectorStore) UpdateDocument(ctx context.Context, doc rag.Document) error { return nil }
+func (s *testVectorStore) UpdateDocument(ctx context.Context, doc core.Document) error { return nil }
 func (s *testVectorStore) Count(ctx context.Context) (int, error)                     { return 1, nil }
 
 type testEmbeddingProvider struct{}
@@ -493,6 +493,11 @@ func (p *testEmbeddingProvider) EmbedDocuments(ctx context.Context, documents []
 	return [][]float64{{0.1, 0.2}}, nil
 }
 func (p *testEmbeddingProvider) Name() string { return "test-embed" }
+
+var (
+	_ core.VectorStore       = (*testVectorStore)(nil)
+	_ core.EmbeddingProvider = (*testEmbeddingProvider)(nil)
+)
 
 type testMCPServer struct {
 	tools []mcpproto.ToolDefinition

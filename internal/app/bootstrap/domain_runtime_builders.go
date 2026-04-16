@@ -6,7 +6,7 @@ import (
 	"github.com/BaSui01/agentflow/agent/protocol/a2a"
 	"github.com/BaSui01/agentflow/agent/protocol/mcp"
 	"github.com/BaSui01/agentflow/config"
-	"github.com/BaSui01/agentflow/rag"
+	"github.com/BaSui01/agentflow/rag/core"
 	ragruntime "github.com/BaSui01/agentflow/rag/runtime"
 	"github.com/BaSui01/agentflow/workflow"
 	"github.com/BaSui01/agentflow/workflow/dsl"
@@ -55,8 +55,8 @@ func BuildWorkflowRuntime(logger *zap.Logger, opts ...WorkflowRuntimeOptions) *W
 
 // RAGHandlerRuntime groups dependencies required by RAGHandler.
 type RAGHandlerRuntime struct {
-	Store             rag.VectorStore
-	EmbeddingProvider rag.EmbeddingProvider
+	Store             core.VectorStore
+	EmbeddingProvider core.EmbeddingProvider
 }
 
 // BuildRAGHandlerRuntime creates dependencies for RAG handler.
@@ -67,8 +67,8 @@ func BuildRAGHandlerRuntime(cfg *config.Config, logger *zap.Logger) (*RAGHandler
 	}
 
 	builder := ragruntime.NewBuilder(cfg, logger).
-		WithVectorStoreType(rag.VectorStoreMemory).
-		WithEmbeddingType(rag.EmbeddingProviderType(cfg.LLM.DefaultProvider)).
+		WithVectorStoreType(core.VectorStoreMemory).
+		WithEmbeddingType(core.EmbeddingProviderType(cfg.LLM.DefaultProvider)).
 		WithAPIKey(cfg.LLM.APIKey)
 
 	providers, err := builder.BuildProviders()
