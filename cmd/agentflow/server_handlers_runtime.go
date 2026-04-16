@@ -11,6 +11,7 @@ import (
 	"github.com/BaSui01/agentflow/internal/app/bootstrap"
 	"github.com/BaSui01/agentflow/llm/observability"
 	"github.com/BaSui01/agentflow/rag"
+	"github.com/BaSui01/agentflow/rag/core"
 	"go.uber.org/zap"
 )
 
@@ -140,8 +141,8 @@ func (s *Server) initHandlers() error {
 	s.logger.Info("Protocol handler initialized (MCP + A2A)")
 
 	ragRuntime, err := bootstrap.BuildRAGHandlerRuntime(s.cfg, s.logger)
-	var ragStore rag.VectorStore
-	var ragEmbedding rag.EmbeddingProvider
+	var ragStore core.VectorStore
+	var ragEmbedding core.EmbeddingProvider
 	if err != nil {
 		s.logger.Warn("RAG handler disabled (failed to create embedding provider)",
 			zap.String("provider", s.cfg.LLM.DefaultProvider),

@@ -419,23 +419,19 @@ agentflow/
 │   │   ├── openai/
 │   │   ├── anthropic/
 │   │   ├── gemini/
-│   │   ├── deepseek/
-│   │   ├── qwen/
+│   │   ├── openaicompat/     # Compat chat base
+│   │   ├── vendor/           # Chat factory + vendor profiles
 │   │   ├── retry_wrapper.go  # Provider retry wrapper (exponential backoff)
-│   │   └── ...
-│   ├── router/               # Routing layer
-│   │   ├── router.go         # Router interface
-│   │   ├── ab_router.go      # A/B testing router
-│   │   ├── prefix_router.go  # Prefix router
-│   │   └── semantic.go       # Semantic router
+│   │   └── ...               # Multimodal / vendor-specific capability code
+│   ├── runtime/              # Router / policy / compose
+│   ├── gateway/              # Unified capability entry
+│   ├── capabilities/         # Image / Video / Audio / Rerank ...
+│   ├── core/                 # UnifiedRequest / Gateway contracts
 │   ├── tokenizer/            # Unified token counter
 │   │   ├── tokenizer.go      # Tokenizer interface + global registry
 │   │   ├── tiktoken.go       # tiktoken adapter (OpenAI models)
 │   │   └── estimator.go      # CJK estimator
-│   ├── tools/                # Tool execution
-│   │   ├── executor.go
-│   │   └── react.go
-│   └── multimodal/           # Multimodal routing
+│   └── tools/                # Tool execution
 │
 ├── agent/                    # Layer 2: Agent core
 │   ├── base.go               # BaseAgent

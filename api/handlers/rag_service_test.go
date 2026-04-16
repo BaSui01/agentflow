@@ -156,7 +156,7 @@ func TestDefaultRAGService_Query_BM25(t *testing.T) {
 			docVecs:  [][]float64{{1, 0}},
 		},
 	)
-	if err := svc.Index(context.Background(), []rag.Document{
+	if err := svc.Index(context.Background(), []core.Document{
 		{ID: "doc-1", Content: "agentflow rag strategy routing"},
 	}); err != nil {
 		t.Fatalf("Index error: %v", err)

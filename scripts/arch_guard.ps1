@@ -13,6 +13,36 @@ if ($env:ARCH_GUARD_MAX_FILES) {
     $maxAgentRootFiles = [int]$env:ARCH_GUARD_MAX_FILES
 }
 
+# Stabilize local Go builds on this machine to reduce cache corruption / OOM noise.
+# Allow explicit caller overrides when needed.
+$originalGoCache = $env:GOCACHE
+$originalGoFlags = $env:GOFLAGS
+$originalGoMaxProcs = $env:GOMAXPROCS
+
+if (-not $env:ARCH_GUARD_GOCACHE) {
+    $env:ARCH_GUARD_GOCACHE = (Join-Path $root ".tmp/gocache")
+}
+if (-not $env:GOCACHE) {
+    $env:GOCACHE = $env:ARCH_GUARD_GOCACHE
+}
+New-Item -ItemType Directory -Force -Path $env:GOCACHE | Out-Null
+
+if (-not $env:ARCH_GUARD_GOFLAGS) {
+    $env:ARCH_GUARD_GOFLAGS = "-p=1"
+}
+if (-not $env:GOFLAGS) {
+    $env:GOFLAGS = $env:ARCH_GUARD_GOFLAGS
+}
+
+if (-not $env:ARCH_GUARD_GOMAXPROCS) {
+    $env:ARCH_GUARD_GOMAXPROCS = "1"
+}
+if (-not $env:GOMAXPROCS) {
+    $env:GOMAXPROCS = $env:ARCH_GUARD_GOMAXPROCS
+}
+
+Write-Host "Architecture guard Go env: GOCACHE=$($env:GOCACHE) GOFLAGS=$($env:GOFLAGS) GOMAXPROCS=$($env:GOMAXPROCS)" -ForegroundColor DarkCyan
+
 function Get-GoProductionFiles {
     Get-ChildItem -Recurse -File -Filter "*.go" |
         Where-Object {
@@ -145,7 +175,14 @@ if ($strictMode -and $warnings.Count -gt 0) {
 if ($errors.Count -gt 0) {
     Write-Host "Architecture errors:" -ForegroundColor Red
     $errors | Sort-Object | ForEach-Object { Write-Host "  $_" -ForegroundColor Red }
+    $env:GOCACHE = $originalGoCache
+    $env:GOFLAGS = $originalGoFlags
+    $env:GOMAXPROCS = $originalGoMaxProcs
     exit 1
 }
+
+$env:GOCACHE = $originalGoCache
+$env:GOFLAGS = $originalGoFlags
+$env:GOMAXPROCS = $originalGoMaxProcs
 
 Write-Host "Architecture guard passed." -ForegroundColor Green

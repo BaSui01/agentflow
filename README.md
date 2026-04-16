@@ -427,23 +427,17 @@ agentflow/
 │   │   ├── openai/           # OpenAI
 │   │   ├── anthropic/        # Claude
 │   │   ├── gemini/           # Gemini
-│   │   ├── deepseek/         # DeepSeek
-│   │   ├── qwen/             # 通义千问
+│   │   ├── openaicompat/     # Compat Chat 基座
+│   │   ├── vendor/           # Chat factory + vendor profiles
 │   │   ├── retry_wrapper.go  # Provider 重试包装器（指数退避）
-│   │   └── ...               # GLM, Grok, Mistral, Hunyuan 等
-│   ├── factory/              # Provider 工厂函数
-│   ├── budget/               # 成本控制与预算管理
+│   │   └── ...               # 多模态 / 厂商特化能力实现
+│   ├── runtime/              # Router / policy / compose
+│   ├── gateway/              # 统一能力入口
 │   ├── batch/                # 批量请求处理
-│   ├── embedding/            # Embedding 抽象
-│   ├── rerank/               # Rerank 抽象
-│   ├── router/               # 路由层
-│   │   ├── router.go         # 路由接口
-│   │   ├── ab_router.go      # A/B 测试路由
-│   │   ├── prefix_router.go  # 前缀路由
-│   │   └── semantic.go       # 语义路由
+│   ├── capabilities/         # Image / Video / Audio / Rerank ...
+│   ├── core/                 # UnifiedRequest / Gateway contracts
 │   ├── tokenizer/            # 统一 Token 计数器
-│   ├── tools/                # 工具执行
-│   └── multimodal/           # 多模态路由
+│   └── tools/                # 工具执行
 │
 ├── agent/                    # Layer 2: Agent 核心
 │   ├── base.go               # BaseAgent

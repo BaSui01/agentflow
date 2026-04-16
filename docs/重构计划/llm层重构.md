@@ -81,16 +81,16 @@
 | `openai` | `llm/providers/openai` | OpenAI 专用实现 + `openaicompat` | `https://api.openai.com` | `gpt-5.2` |
 | `claude` (`anthropic`) | `llm/providers/anthropic` | Claude 原生实现 | `https://api.anthropic.com` | `claude-opus-4.5-20260105` |
 | `gemini` | `llm/providers/gemini` | Gemini 原生实现 | `https://generativelanguage.googleapis.com`（Vertex 模式按 region） | `gemini-2.5-flash` |
-| `deepseek` | `llm/providers/deepseek` | `openaicompat` 封装 | `https://api.deepseek.com` | `deepseek-chat` |
-| `qwen` | `llm/providers/qwen` | `openaicompat` 封装 | `https://dashscope.aliyuncs.com` | `qwen3-235b-a22b` |
-| `glm` | `llm/providers/glm` | `openaicompat` 封装 | `https://open.bigmodel.cn` | `glm-4-plus` |
-| `grok` | `llm/providers/grok` | `openaicompat` 封装 | `https://api.x.ai` | `grok-3` |
-| `doubao` | `llm/providers/doubao` | `openaicompat` 封装 + 火山签名可选 | `https://ark.cn-beijing.volces.com` | `Doubao-1.5-pro-32k` |
-| `kimi` | `llm/providers/kimi` | `openaicompat` 封装 | `https://api.moonshot.cn` | `moonshot-v1-32k` |
-| `mistral` | `llm/providers/mistral` | `openaicompat` 封装 | `https://api.mistral.ai` | `mistral-large-latest` |
-| `hunyuan` | `llm/providers/hunyuan` | `openaicompat` 封装 | `https://api.hunyuan.cloud.tencent.com` | `hunyuan-turbos-latest` |
-| `minimax` | `llm/providers/minimax` | `openaicompat` 封装 + 旧模型 XML toolcall 解析 | `https://api.minimax.io` | `MiniMax-Text-01` |
-| `llama-*` | `llm/providers/llama` | `openaicompat` 封装（Together/Replicate/OpenRouter） | `https://api.together.xyz` / `https://api.replicate.com` / `https://openrouter.ai/api` | `meta-llama/Llama-3.3-70B-Instruct-Turbo` |
+| `deepseek` | `llm/providers/vendor + llm/providers/openaicompat` | compat chat profile（chat 目录已删除） | `https://api.deepseek.com` | `deepseek-chat` |
+| `qwen` | `llm/providers/vendor + llm/providers/openaicompat` | compat chat profile；能力实现保留在 `llm/providers/qwen` | `https://dashscope.aliyuncs.com` | `qwen3-235b-a22b` |
+| `glm` | `llm/providers/vendor + llm/providers/openaicompat` | compat chat profile；能力实现保留在 `llm/providers/glm` | `https://open.bigmodel.cn` | `glm-4-plus` |
+| `grok` | `llm/providers/vendor + llm/providers/openaicompat` | compat chat profile；能力实现保留在 `llm/providers/grok` | `https://api.x.ai` | `grok-3` |
+| `doubao` | `llm/providers/vendor + llm/providers/openaicompat` | compat chat profile；能力实现保留在 `llm/providers/doubao`（含 signer/context cache） | `https://ark.cn-beijing.volces.com` | `Doubao-1.5-pro-32k` |
+| `kimi` | `llm/providers/vendor + llm/providers/openaicompat` | compat chat profile（chat 目录已删除） | `https://api.moonshot.cn` | `moonshot-v1-32k` |
+| `mistral` | `llm/providers/vendor + llm/providers/openaicompat` | compat chat profile；能力实现保留在 `llm/providers/mistral` | `https://api.mistral.ai` | `mistral-large-latest` |
+| `hunyuan` | `llm/providers/vendor + llm/providers/openaicompat` | compat chat profile（chat 目录已删除） | `https://api.hunyuan.cloud.tencent.com` | `hunyuan-turbos-latest` |
+| `minimax` | `llm/providers/vendor + llm/providers/openaicompat` | compat chat profile；能力实现保留在 `llm/providers/minimax` | `https://api.minimax.io` | `MiniMax-Text-01` |
+| `llama-*` | `llm/providers/vendor + llm/providers/openaicompat` | compat chat profile（chat 目录已删除） | `https://api.together.xyz` / `https://api.replicate.com` / `https://openrouter.ai/api` | `meta-llama/Llama-3.3-70B-Instruct-Turbo` |
 | `openaicompat` | `llm/providers/openaicompat` | 通用 OpenAI-Compatible 基座 | 由配置注入 | 由配置注入 |
 
 ## 2.3 多模态能力矩阵（13 个 LLM 供应商）

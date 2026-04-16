@@ -1650,65 +1650,23 @@ go test ./workflow/... -v -race
 
 ### 需要修改的文件
 
-#### 改动 1 — 修复薄包装 provider 的错误信息 Provider 字段
+#### 改动 1 — 兼容厂商 chat 主链已收口，以下旧建议已过期
 
-**文件：llm/providers/mistral/provider.go**
+当前真实架构已经调整为：
 
-当前 Mistral 直接嵌入 OpenAIProvider，Completion/Stream 返回的错误中 Provider 字段是 "openai"。
+- compat 厂商 chat 主链统一走 `llm/providers/vendor.NewChatProviderFromConfig(...)`
+- `mistral / qwen / glm / grok / minimax / doubao` 不再暴露公共 chat 构造器
+- `kimi / llama / hunyuan` 的独立 compat chat 目录已删除
+- 厂商能力实现（multimodal / signer / context cache / fine-tuning）仍保留在各自实现中
 
-添加 Completion 和 Stream 方法覆盖，修正 Provider 字段：
-```go
-// Completion 覆盖 OpenAI 的 Completion，修正 Provider 字段
-func (p *MistralProvider) Completion(ctx context.Context, req *llm.ChatRequest) (*llm.ChatResponse, error) {
-	resp, err := p.OpenAIProvider.Completion(ctx, req)
-	if err != nil {
-		// 修正错误中的 Provider 字段
-		if llmErr, ok := err.(*llm.Error); ok {
-			llmErr.Provider = p.Name()
-			return nil, llmErr
-		}
-		return nil, err
-	}
-	resp.Provider = p.Name()
-	return resp, nil
-}
+因此，本节原先针对：
 
-// Stream 覆盖 OpenAI 的 Stream，修正 Provider 字段
-func (p *MistralProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-chan llm.StreamChunk, error) {
-	ch, err := p.OpenAIProvider.Stream(ctx, req)
-	if err != nil {
-		if llmErr, ok := err.(*llm.Error); ok {
-			llmErr.Provider = p.Name()
-			return nil, llmErr
-		}
-		return nil, err
-	}
+- `llm/providers/mistral/provider.go`
+- `llm/providers/kimi/provider.go`
+- `llm/providers/llama/provider.go`
+- `llm/providers/hunyuan/provider.go`
 
-	// 包装 channel，修正每个 chunk 的 Provider
-	wrappedCh := make(chan llm.StreamChunk)
-	go func() {
-		defer close(wrappedCh)
-		for chunk := range ch {
-			chunk.Provider = p.Name()
-			if chunk.Err != nil {
-				if llmErr, ok := chunk.Err.(*llm.Error); ok {
-					llmErr.Provider = p.Name()
-				}
-			}
-			wrappedCh <- chunk
-		}
-	}()
-	return wrappedCh, nil
-}
-```
-
-对 **kimi/provider.go**、**llama/provider.go**、**hunyuan/provider.go** 做同样的修改，只需替换 `p.Name()` 返回的名字。
-
-**文件：llm/providers/kimi/provider.go** 添加同样的 Completion/Stream 覆盖。
-
-**文件：llm/providers/llama/provider.go** 添加同样的 Completion/Stream 覆盖。
-
-**文件：llm/providers/hunyuan/provider.go** 添加同样的 Completion/Stream 覆盖。
+直接补 `Completion/Stream` 覆盖的建议，**已不再适用**，应以 `vendor/chat_profiles.go + openaicompat` 的当前主链为准。
 
 #### 改动 2 — 提取公共 OpenAI 兼容类型到 common.go
 
