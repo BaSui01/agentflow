@@ -114,6 +114,13 @@ func (b *AgentBuilder) WithMaxLoopIterations(n int) *AgentBuilder {
 	return b
 }
 
+// WithHandoffs configures static handoff targets that this agent may delegate to.
+// Empty values are ignored and duplicates are removed.
+func (b *AgentBuilder) WithHandoffs(agentIDs []string) *AgentBuilder {
+	b.config.Runtime.Handoffs = normalizeAgentIDList(agentIDs)
+	return b
+}
+
 // WithMemory 设置记忆管理器
 func (b *AgentBuilder) WithMemory(memory MemoryManager) *AgentBuilder {
 	b.memory = memory
@@ -431,6 +438,29 @@ func (b *AgentBuilder) enableOptionalFeatures(agent *BaseAgent) error {
 		agent.EnableObservability(b.observabilityInstance)
 	}
 	return nil
+}
+
+func normalizeAgentIDList(agentIDs []string) []string {
+	if len(agentIDs) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(agentIDs))
+	seen := make(map[string]struct{}, len(agentIDs))
+	for _, agentID := range agentIDs {
+		trimmed := strings.TrimSpace(agentID)
+		if trimmed == "" {
+			continue
+		}
+		if _, exists := seen[trimmed]; exists {
+			continue
+		}
+		seen[trimmed] = struct{}{}
+		out = append(out, trimmed)
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
 }
 
 func (b *AgentBuilder) enableSkills(agent *BaseAgent) error {

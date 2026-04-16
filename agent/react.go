@@ -264,8 +264,8 @@ func (b *BaseAgent) executeCore(ctx context.Context, input *Input) (_ *Output, e
 
 	// 系统提示：合并 prompt bundle + input.Context 额外上下文
 	systemContent := activeBundle.RenderSystemPromptWithVars(input.Variables)
-	if len(input.Context) > 0 {
-		ctxJSON, err := json.Marshal(input.Context)
+	if publicCtx := publicInputContext(input.Context); len(publicCtx) > 0 {
+		ctxJSON, err := json.Marshal(publicCtx)
 		if err == nil {
 			systemContent += "\n\n<additional_context>\n" + string(ctxJSON) + "\n</additional_context>"
 		}
@@ -278,8 +278,11 @@ func (b *BaseAgent) executeCore(ctx context.Context, input *Input) (_ *Output, e
 	// 添加上下文消息
 	messages = append(messages, contextMessages...)
 
-	// 添加从 ConversationStore 恢复的历史消息
-	if len(restoredMessages) > 0 {
+	// 添加 handoff 传入的历史消息；存在时优先于 ConversationStore 恢复，避免同一会话重复回放。
+	if handoffMessages := handoffMessagesFromInputContext(input.Context); len(handoffMessages) > 0 {
+		messages = append(messages, handoffMessages...)
+	} else if len(restoredMessages) > 0 {
+		// 添加从 ConversationStore 恢复的历史消息
 		messages = append(messages, restoredMessages...)
 	}
 
@@ -441,18 +444,24 @@ func (b *BaseAgent) executeCore(ctx context.Context, input *Input) (_ *Output, e
 	)
 
 	// 9. 返回结果
+	outputMetadata := map[string]any{
+		"model":    resp.Model,
+		"provider": resp.Provider,
+	}
+	if extraMetadata, ok := choice.Message.Metadata.(map[string]any); ok {
+		for key, value := range extraMetadata {
+			outputMetadata[key] = value
+		}
+	}
 	return &Output{
 		TraceID:          input.TraceID,
 		Content:          outputContent,
 		ReasoningContent: choice.Message.ReasoningContent,
-		Metadata: map[string]any{
-			"model":    resp.Model,
-			"provider": resp.Provider,
-		},
-		TokensUsed:   resp.Usage.TotalTokens,
-		Cost:         estimatedCost,
-		Duration:     duration,
-		FinishReason: choice.FinishReason,
+		Metadata:         outputMetadata,
+		TokensUsed:       resp.Usage.TotalTokens,
+		Cost:             estimatedCost,
+		Duration:         duration,
+		FinishReason:     choice.FinishReason,
 	}, nil
 }
 

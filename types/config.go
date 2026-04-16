@@ -56,6 +56,7 @@ type LLMConfig struct {
 type RuntimeConfig struct {
 	SystemPrompt       string   `json:"system_prompt,omitempty"`
 	Tools              []string `json:"tools,omitempty"`
+	Handoffs           []string `json:"handoffs,omitempty"`
 	MaxReActIterations int      `json:"max_react_iterations,omitempty"`
 	MaxLoopIterations  int      `json:"max_loop_iterations,omitempty"`
 	ToolModel          string   `json:"tool_model,omitempty"`

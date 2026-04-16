@@ -299,6 +299,7 @@ type preparedRequest struct {
 	chatProvider llm.Provider
 	toolProvider llm.Provider // for ReAct loop (may equal chatProvider)
 	hasTools     bool
+	handoffTools map[string]RuntimeHandoffTarget
 	maxReActIter int
 	maxLoopIter  int
 }
@@ -368,6 +369,33 @@ func (b *BaseAgent) prepareChatRequest(ctx context.Context, messages []types.Mes
 			req.Tools = filterToolSchemasByWhitelist(allowedTools, b.config.Runtime.Tools)
 		}
 	}
+	handoffMap := map[string]RuntimeHandoffTarget(nil)
+	handoffTargets := runtimeHandoffTargetsFromContext(ctx, b.config.Core.ID)
+	if len(handoffTargets) > 0 {
+		if len(req.Tools) == 0 {
+			req.Tools = make([]types.ToolSchema, 0, len(handoffTargets))
+		}
+		handoffMap = make(map[string]RuntimeHandoffTarget, len(handoffTargets))
+		seen := make(map[string]struct{}, len(req.Tools))
+		for _, schema := range req.Tools {
+			seen[schema.Name] = struct{}{}
+		}
+		for _, target := range handoffTargets {
+			schema := runtimeHandoffToolSchema(target)
+			handoffMap[schema.Name] = target
+			if _, exists := seen[schema.Name]; exists {
+				continue
+			}
+			seen[schema.Name] = struct{}{}
+			req.Tools = append(req.Tools, schema)
+		}
+		if len(handoffMap) > 0 {
+			if req.Metadata == nil {
+				req.Metadata = make(map[string]string, 1)
+			}
+			req.Metadata["handoff_enabled"] = "true"
+		}
+	}
 
 	// 6. 工具调用模式检测：不支持原生 FC 时自动降级到 XML 模式
 	toolProv := chatProv
@@ -394,7 +422,8 @@ func (b *BaseAgent) prepareChatRequest(ctx context.Context, messages []types.Mes
 		req:          req,
 		chatProvider: chatProv,
 		toolProvider: toolProv,
-		hasTools:     len(req.Tools) > 0 && b.toolManager != nil,
+		hasTools:     len(req.Tools) > 0 && (b.toolManager != nil || len(handoffTargets) > 0),
+		handoffTools: handoffMap,
 		maxReActIter: effectiveIter,
 		maxLoopIter:  rc.EffectiveMaxLoopIterations(0),
 	}, nil

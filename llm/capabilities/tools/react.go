@@ -120,6 +120,11 @@ func (r *ReActExecutor) Execute(ctx context.Context, req *llm.ChatRequest) (*llm
 				r.logger.Warn("tool execution failed", zap.String("tool", result.Name), zap.String("error", result.Error))
 			}
 		}
+		if handoffResp, ok := synthesizeHandoffFinalResponse(resp, toolResults, totalUsage); ok {
+			steps = append(steps, step)
+			handoffResp.Usage = totalUsage
+			return handoffResp, steps, nil
+		}
 
 		if hasError && r.config.StopOnError {
 			steps = append(steps, step)
@@ -423,6 +428,15 @@ func (r *ReActExecutor) ExecuteStream(ctx context.Context, req *llm.ChatRequest)
 				toolResults = r.toolExecutor.Execute(ctx, assembledMessage.ToolCalls)
 			}
 			eventCh <- ReActStreamEvent{Type: ReActEventToolsEnd, ToolResults: toolResults}
+			if handoffResp, ok := synthesizeHandoffFinalResponse(&llm.ChatResponse{
+				ID:       lastChunkID,
+				Provider: lastProvider,
+				Model:    lastModel,
+				Usage:    usageOrZero(lastUsage),
+			}, toolResults, usageOrZero(lastUsage)); ok {
+				eventCh <- ReActStreamEvent{Type: ReActEventCompleted, Iteration: i + 1, FinalResponse: handoffResp}
+				return
+			}
 
 			messages = append(messages, assembledMessage)
 			for _, result := range toolResults {
@@ -553,4 +567,62 @@ func (r *ReActExecutor) executeToolsWithStreaming(
 	}
 
 	return results
+}
+
+func synthesizeHandoffFinalResponse(template *llm.ChatResponse, results []types.ToolResult, usage llm.ChatUsage) (*llm.ChatResponse, bool) {
+	for _, result := range results {
+		control := result.Control()
+		if control == nil || control.Type != types.ToolResultControlTypeHandoff || control.Handoff == nil {
+			continue
+		}
+		messageMetadata := map[string]any{
+			"handoff_id":       control.Handoff.HandoffID,
+			"from_agent_id":    control.Handoff.FromAgentID,
+			"to_agent_id":      control.Handoff.ToAgentID,
+			"to_agent_name":    control.Handoff.ToAgentName,
+			"transfer_message": control.Handoff.TransferMessage,
+		}
+		for key, value := range control.Handoff.Metadata {
+			messageMetadata[key] = value
+		}
+		response := &llm.ChatResponse{
+			Usage: usage,
+			Choices: []llm.ChatChoice{{
+				Index:        0,
+				FinishReason: "stop",
+				Message: types.Message{
+					Role:             llm.RoleAssistant,
+					Content:          control.Handoff.Output,
+					ReasoningContent: control.Handoff.ReasoningContent,
+					Metadata:         messageMetadata,
+				},
+			}},
+		}
+		if template != nil {
+			response.ID = template.ID
+			response.Provider = template.Provider
+			response.Model = template.Model
+		}
+		if strings.TrimSpace(control.Handoff.Provider) != "" {
+			response.Provider = strings.TrimSpace(control.Handoff.Provider)
+		}
+		if strings.TrimSpace(control.Handoff.Model) != "" {
+			response.Model = strings.TrimSpace(control.Handoff.Model)
+		}
+		if control.Handoff.TokensUsed > 0 {
+			response.Usage = llm.ChatUsage{
+				CompletionTokens: control.Handoff.TokensUsed,
+				TotalTokens:      control.Handoff.TokensUsed,
+			}
+		}
+		return response, true
+	}
+	return nil, false
+}
+
+func usageOrZero(usage *llm.ChatUsage) llm.ChatUsage {
+	if usage == nil {
+		return llm.ChatUsage{}
+	}
+	return *usage
 }

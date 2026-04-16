@@ -181,7 +181,11 @@ func (s *DefaultAgentService) ExecuteAgentStream(ctx context.Context, req AgentE
 	if err != nil {
 		return err
 	}
-	streamCtx := agent.WithRuntimeStreamEmitter(applyAgentRoutingContext(ctx, req), emitter)
+	streamCtx, handoffErr := s.attachRuntimeHandoffTargets(applyAgentRoutingContext(ctx, req), req, ag.ID())
+	if handoffErr != nil {
+		return handoffErr
+	}
+	streamCtx = agent.WithRuntimeStreamEmitter(streamCtx, emitter)
 	_, execErr := ag.Execute(streamCtx, toAgentInput(req, traceID))
 	if execErr != nil {
 		return ToTypesAgentError(execErr)
@@ -202,6 +206,10 @@ func (s *DefaultAgentService) executeWithResolvedAgents(ctx context.Context, req
 		ag, err := s.ResolveForOperation(ctx, agentID, AgentOperationExecute)
 		if err != nil {
 			return nil, err
+		}
+		ctx, handoffErr := s.attachRuntimeHandoffTargets(ctx, req, ag.ID())
+		if handoffErr != nil {
+			return nil, handoffErr
 		}
 		return ag.Execute(ctx, input)
 	}
@@ -274,6 +282,120 @@ func IsSupportedExecutionMode(mode string) bool {
 		}
 	}
 	return false
+}
+
+func (s *DefaultAgentService) attachRuntimeHandoffTargets(ctx context.Context, req AgentExecuteRequest, sourceAgentID string) (context.Context, *types.Error) {
+	targetIDs, err := handoffAgentIDsFromRequest(req.Context)
+	if err != nil {
+		return ctx, types.NewInvalidRequestError(err.Error()).WithHTTPStatus(http.StatusBadRequest)
+	}
+	targetIDs = mergeHandoffAgentIDs(targetIDs, handoffAgentIDsFromConfig(ctx, s, req.AgentID, sourceAgentID))
+	if len(targetIDs) == 0 {
+		return ctx, nil
+	}
+	if s.resolver == nil {
+		return ctx, types.NewInternalError("handoff_agents requires an agent resolver").WithHTTPStatus(http.StatusNotImplemented)
+	}
+
+	sourceAgentID = strings.TrimSpace(sourceAgentID)
+	targets := make([]agent.RuntimeHandoffTarget, 0, len(targetIDs))
+	seen := make(map[string]struct{}, len(targetIDs))
+	for _, targetID := range targetIDs {
+		targetID = strings.TrimSpace(targetID)
+		if targetID == "" || targetID == sourceAgentID {
+			continue
+		}
+		if _, exists := seen[targetID]; exists {
+			continue
+		}
+		seen[targetID] = struct{}{}
+		target, resolveErr := s.resolver(ctx, targetID)
+		if resolveErr != nil {
+			return ctx, types.NewNotFoundError(fmt.Sprintf("handoff agent %q not found", targetID))
+		}
+		targets = append(targets, agent.RuntimeHandoffTarget{Agent: target})
+	}
+	if len(targets) == 0 {
+		return ctx, nil
+	}
+	return agent.WithRuntimeHandoffTargets(ctx, targets), nil
+}
+
+func handoffAgentIDsFromConfig(ctx context.Context, s *DefaultAgentService, requestAgentID string, sourceAgentID string) []string {
+	if s == nil || s.resolver == nil {
+		return nil
+	}
+	agentID := strings.TrimSpace(sourceAgentID)
+	if agentID == "" {
+		agentID = strings.TrimSpace(requestAgentID)
+	}
+	if agentID == "" {
+		return nil
+	}
+	ag, err := s.resolver(ctx, agentID)
+	if err != nil || ag == nil {
+		return nil
+	}
+	cfgAccessor, ok := ag.(interface{ Config() types.AgentConfig })
+	if !ok {
+		return nil
+	}
+	return append([]string(nil), cfgAccessor.Config().Runtime.Handoffs...)
+}
+
+func handoffAgentIDsFromRequest(values map[string]any) ([]string, error) {
+	if len(values) == 0 {
+		return nil, nil
+	}
+	raw, ok := values["handoff_agents"]
+	if !ok {
+		return nil, nil
+	}
+	switch typed := raw.(type) {
+	case string:
+		if strings.TrimSpace(typed) == "" {
+			return nil, nil
+		}
+		return []string{strings.TrimSpace(typed)}, nil
+	case []string:
+		return append([]string(nil), typed...), nil
+	case []any:
+		out := make([]string, 0, len(typed))
+		for _, item := range typed {
+			text, ok := item.(string)
+			if !ok {
+				return nil, fmt.Errorf("handoff_agents must contain only strings")
+			}
+			if trimmed := strings.TrimSpace(text); trimmed != "" {
+				out = append(out, trimmed)
+			}
+		}
+		return out, nil
+	default:
+		return nil, fmt.Errorf("handoff_agents must be a string array")
+	}
+}
+
+func mergeHandoffAgentIDs(slices ...[]string) []string {
+	var merged []string
+	seen := map[string]struct{}{}
+	for _, slice := range slices {
+		for _, raw := range slice {
+			trimmed := strings.TrimSpace(raw)
+			if trimmed == "" {
+				continue
+			}
+			if _, exists := seen[trimmed]; exists {
+				continue
+			}
+			seen[trimmed] = struct{}{}
+			merged = append(merged, trimmed)
+		}
+	}
+	if len(merged) == 0 {
+		return nil
+	}
+	return merged
 }
 
 func toAgentInput(req AgentExecuteRequest, traceID string) *agent.Input {

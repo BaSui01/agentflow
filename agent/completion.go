@@ -37,14 +37,20 @@ func (b *BaseAgent) ChatCompletion(ctx context.Context, messages []types.Message
 func (b *BaseAgent) chatCompletionStreaming(ctx context.Context, pr *preparedRequest, emit RuntimeStreamEmitter) (*llm.ChatResponse, error) {
 	steerCh, _ := SteeringChannelFromContext(ctx)
 	reactIterationBudget := reactToolLoopBudget(pr)
+	ctx = WithRuntimeConversationMessages(ctx, pr.req.Messages)
 
 	if pr.hasTools {
 		const selectedMode = ReasoningModeReact
 		reactReq := *pr.req
 		reactReq.Model = effectiveToolModel(pr.req.Model, b.config.Runtime.ToolModel)
+		toolExec := newRuntimeHandoffExecutor(
+			b,
+			newToolManagerExecutor(b.toolManager, b.config.Core.ID, b.config.Runtime.Tools, b.bus),
+			runtimeHandoffTargetsFromPreparedRequest(pr),
+		)
 		executor := llmtools.NewReActExecutor(
 			pr.toolProvider,
-			newToolManagerExecutor(b.toolManager, b.config.Core.ID, b.config.Runtime.Tools, b.bus),
+			toolExec,
 			llmtools.ReActConfig{MaxIterations: reactIterationBudget, StopOnError: false},
 			b.logger,
 		)
@@ -99,6 +105,10 @@ func (b *BaseAgent) chatCompletionStreaming(ctx context.Context, pr *preparedReq
 				}
 			case llmtools.ReActEventToolsStart:
 				for _, call := range ev.ToolCalls {
+					sdkEventName := SDKToolCalled
+					if runtimeHandoffToolRequested(pr, call.Name) {
+						sdkEventName = SDKHandoffRequested
+					}
 					emit(RuntimeStreamEvent{
 						Type:           RuntimeStreamToolCall,
 						Timestamp:      time.Now(),
@@ -111,11 +121,21 @@ func (b *BaseAgent) chatCompletionStreaming(ctx context.Context, pr *preparedReq
 							Arguments: append(json.RawMessage(nil), call.Arguments...),
 						},
 						SDKEventType: SDKRunItemEvent,
-						SDKEventName: SDKToolCalled,
+						SDKEventName: sdkEventName,
 					})
 				}
 			case llmtools.ReActEventToolsEnd:
 				for _, tr := range ev.ToolResults {
+					sdkEventName := SDKToolOutput
+					resultPayload := append(json.RawMessage(nil), tr.Result...)
+					if runtimeHandoffToolRequested(pr, tr.Name) {
+						sdkEventName = SDKHandoffOccured
+						if control := tr.Control(); control != nil && control.Handoff != nil {
+							if raw, err := json.Marshal(control.Handoff); err == nil {
+								resultPayload = raw
+							}
+						}
+					}
 					emit(RuntimeStreamEvent{
 						Type:           RuntimeStreamToolResult,
 						Timestamp:      time.Now(),
@@ -125,12 +145,12 @@ func (b *BaseAgent) chatCompletionStreaming(ctx context.Context, pr *preparedReq
 						ToolResult: &RuntimeToolResult{
 							ToolCallID: tr.ToolCallID,
 							Name:       tr.Name,
-							Result:     append(json.RawMessage(nil), tr.Result...),
+							Result:     resultPayload,
 							Error:      tr.Error,
 							Duration:   tr.Duration,
 						},
 						SDKEventType: SDKRunItemEvent,
-						SDKEventName: SDKToolOutput,
+						SDKEventName: sdkEventName,
 					})
 				}
 			case llmtools.ReActEventToolProgress:
@@ -366,12 +386,18 @@ func (b *BaseAgent) chatCompletionStreaming(ctx context.Context, pr *preparedReq
 
 // chatCompletionWithTools executes a non-streaming ReAct loop with tools.
 func (b *BaseAgent) chatCompletionWithTools(ctx context.Context, pr *preparedRequest) (*llm.ChatResponse, error) {
+	ctx = WithRuntimeConversationMessages(ctx, pr.req.Messages)
 	reactReq := *pr.req
 	reactReq.Model = effectiveToolModel(pr.req.Model, b.config.Runtime.ToolModel)
 	reactIterationBudget := reactToolLoopBudget(pr)
+	toolExec := newRuntimeHandoffExecutor(
+		b,
+		newToolManagerExecutor(b.toolManager, b.config.Core.ID, b.config.Runtime.Tools, b.bus),
+		runtimeHandoffTargetsFromPreparedRequest(pr),
+	)
 	executor := llmtools.NewReActExecutor(
 		pr.toolProvider,
-		newToolManagerExecutor(b.toolManager, b.config.Core.ID, b.config.Runtime.Tools, b.bus),
+		toolExec,
 		llmtools.ReActConfig{MaxIterations: reactIterationBudget, StopOnError: false},
 		b.logger,
 	)
@@ -583,4 +609,23 @@ func normalizeRuntimeStopReason(finishReason string) string {
 		return string(StopReasonSolved)
 	}
 	return normalizeTopLevelStopReason(normalized, normalized)
+}
+
+func runtimeHandoffTargetsFromPreparedRequest(pr *preparedRequest) []RuntimeHandoffTarget {
+	if pr == nil || len(pr.handoffTools) == 0 {
+		return nil
+	}
+	out := make([]RuntimeHandoffTarget, 0, len(pr.handoffTools))
+	for _, target := range pr.handoffTools {
+		out = append(out, target)
+	}
+	return out
+}
+
+func runtimeHandoffToolRequested(pr *preparedRequest, toolName string) bool {
+	if pr == nil || len(pr.handoffTools) == 0 {
+		return false
+	}
+	_, ok := pr.handoffTools[toolName]
+	return ok
 }
