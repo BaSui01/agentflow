@@ -247,57 +247,6 @@ type responsesReasoningPart struct {
 	Text string `json:"text,omitempty"`
 }
 
-// 兼容桥接/测试夹具：仍保留最小 Responses 镜像结构，便于现有测试和少量运行时桥接逐步收敛。
-type responsesContent = responsesReasoningPart
-
-type openAIResponsesResponse struct {
-	ID          string                `json:"id"`
-	Object      string                `json:"object"`
-	CreatedAt   int64                 `json:"created_at"`
-	Status      string                `json:"status"`
-	CompletedAt *int64                `json:"completed_at,omitempty"`
-	Model       string                `json:"model"`
-	Output      []responsesOutputItem `json:"output"`
-	Usage       *responsesUsage       `json:"usage,omitempty"`
-	ServiceTier string                `json:"service_tier,omitempty"`
-	Error       *responsesError       `json:"error,omitempty"`
-}
-
-type responsesUsage struct {
-	InputTokens         int                          `json:"input_tokens"`
-	OutputTokens        int                          `json:"output_tokens"`
-	TotalTokens         int                          `json:"total_tokens"`
-	InputTokensDetails  *responsesInputTokenDetails  `json:"input_tokens_details,omitempty"`
-	OutputTokensDetails *responsesOutputTokenDetails `json:"output_tokens_details,omitempty"`
-}
-
-type responsesInputTokenDetails struct {
-	CachedTokens int `json:"cached_tokens"`
-}
-
-type responsesOutputTokenDetails struct {
-	ReasoningTokens int `json:"reasoning_tokens"`
-}
-
-type responsesError struct {
-	Code    string `json:"code"`
-	Message string `json:"message"`
-}
-
-type responsesOutputItem struct {
-	Type             string             `json:"type"`
-	ID               string             `json:"id"`
-	Status           string             `json:"status,omitempty"`
-	Role             string             `json:"role,omitempty"`
-	Content          []responsesContent `json:"content,omitempty"`
-	EncryptedContent string             `json:"encrypted_content,omitempty"`
-	Name             string             `json:"name,omitempty"`
-	Arguments        json.RawMessage    `json:"arguments,omitempty"`
-	CallID           string             `json:"call_id,omitempty"`
-	Input            string             `json:"input,omitempty"`
-	Summary          []responsesContent `json:"summary,omitempty"`
-}
-
 // --- Completion & Helper Methods ---
 
 // completionWithResponsesAPI 使用新的 Responses API (/v1/responses).
@@ -901,14 +850,14 @@ func firstNonEmptyString(values ...string) string {
 
 func buildOpenAIResponsesReasoningItems(m types.Message) []responsesReasoningInputItem {
 	var items []responsesReasoningInputItem
-	groupedSummaries := make(map[string][]responsesContent)
+	groupedSummaries := make(map[string][]responsesReasoningPart)
 	for _, summary := range m.ReasoningSummaries {
 		provider := strings.TrimSpace(summary.Provider)
 		if provider != "" && provider != "openai" {
 			continue
 		}
 		id := strings.TrimSpace(summary.ID)
-		groupedSummaries[id] = append(groupedSummaries[id], responsesContent{
+		groupedSummaries[id] = append(groupedSummaries[id], responsesReasoningPart{
 			Type: "summary_text",
 			Text: summary.Text,
 		})
@@ -934,12 +883,12 @@ func buildOpenAIResponsesReasoningItems(m types.Message) []responsesReasoningInp
 			EncryptedContent: opaque.State,
 		}
 		if len(item.Summary) == 0 && m.ReasoningContent != nil && strings.TrimSpace(*m.ReasoningContent) != "" {
-			item.Summary = []responsesContent{{Type: "summary_text", Text: strings.TrimSpace(*m.ReasoningContent)}}
+			item.Summary = []responsesReasoningPart{{Type: "summary_text", Text: strings.TrimSpace(*m.ReasoningContent)}}
 		}
 		// OpenAI Responses API requires the summary field to be present (non-null).
 		// Ensure it is never nil so JSON serialization always includes "summary": [].
 		if item.Summary == nil {
-			item.Summary = []responsesContent{}
+			item.Summary = []responsesReasoningPart{}
 		}
 		items = append(items, item)
 	}
@@ -1336,113 +1285,6 @@ func emitResponsesReasoningChunk(
 	}
 }
 
-func emitLegacyResponsesReasoningChunk(
-	ctx context.Context,
-	ch chan<- llm.StreamChunk,
-	currentID, providerName, currentModel string,
-	output responsesOutputItem,
-) bool {
-	delta := types.Message{Role: llm.RoleAssistant}
-	mergeLegacyResponsesReasoningItem(&delta, output, providerName)
-	if delta.ReasoningContent == nil && len(delta.ReasoningSummaries) == 0 && len(delta.OpaqueReasoning) == 0 {
-		return false
-	}
-	select {
-	case <-ctx.Done():
-		return false
-	case ch <- llm.StreamChunk{
-		ID:       currentID,
-		Provider: providerName,
-		Model:    currentModel,
-		Delta:    delta,
-	}:
-		return true
-	}
-}
-
-func sdkOutputItemToLegacy(item responses.ResponseOutputItemUnion) (responsesOutputItem, bool) {
-	raw := item.RawJSON()
-	if strings.TrimSpace(raw) == "" {
-		return responsesOutputItem{}, false
-	}
-	var legacy responsesOutputItem
-	if err := json.Unmarshal([]byte(raw), &legacy); err != nil {
-		return responsesOutputItem{}, false
-	}
-	return legacy, true
-}
-
-func sdkResponseToLegacy(resp *responses.Response) (openAIResponsesResponse, bool) {
-	if resp == nil {
-		return openAIResponsesResponse{}, false
-	}
-	raw := resp.RawJSON()
-	if strings.TrimSpace(raw) == "" {
-		return openAIResponsesResponse{}, false
-	}
-	var legacy openAIResponsesResponse
-	if err := json.Unmarshal([]byte(raw), &legacy); err != nil {
-		return openAIResponsesResponse{}, false
-	}
-	return legacy, true
-}
-
-func mergeLegacyResponsesReasoningItem(msg *types.Message, output responsesOutputItem, provider string) {
-	if msg == nil {
-		return
-	}
-	if msg.Role == "" {
-		msg.Role = llm.RoleAssistant
-	}
-	if len(output.Summary) > 0 {
-		for _, part := range output.Summary {
-			if strings.TrimSpace(part.Text) == "" {
-				continue
-			}
-			kind := strings.TrimSpace(part.Type)
-			if kind == "" {
-				kind = "summary_text"
-			}
-			msg.ReasoningSummaries = append(msg.ReasoningSummaries, types.ReasoningSummary{
-				Provider: provider,
-				ID:       output.ID,
-				Kind:     kind,
-				Text:     part.Text,
-			})
-		}
-	}
-	if strings.TrimSpace(output.EncryptedContent) != "" {
-		msg.OpaqueReasoning = append(msg.OpaqueReasoning, types.OpaqueReasoning{
-			Provider: provider,
-			ID:       output.ID,
-			Kind:     "encrypted_content",
-			State:    output.EncryptedContent,
-			Status:   output.Status,
-		})
-	}
-	if text := joinLegacyResponsesContentText(output.Content, "reasoning_text"); text != "" {
-		appendReasoningText(msg, text)
-		return
-	}
-	if text := joinLegacyResponsesContentText(output.Summary, "summary_text"); text != "" {
-		appendReasoningText(msg, text)
-	}
-}
-
-func joinLegacyResponsesContentText(parts []responsesContent, partType string) string {
-	var out []string
-	for _, part := range parts {
-		if strings.TrimSpace(part.Text) == "" {
-			continue
-		}
-		if partType != "" && strings.TrimSpace(part.Type) != partType {
-			continue
-		}
-		out = append(out, part.Text)
-	}
-	return strings.Join(out, "\n\n")
-}
-
 // mapResponsesStatus maps Responses API status to Chat Completions finish_reason.
 func mapResponsesStatus(status string) string {
 	switch status {
@@ -1588,42 +1430,40 @@ func streamResponsesSDK(ctx context.Context, stream interface {
 				accumulator.Append(event.ItemID, event.Delta)
 
 			case "response.output_item.done":
-				output, ok := sdkOutputItemToLegacy(event.Item)
-				if !ok {
-					continue
-				}
-				switch output.Type {
-				case "reasoning":
-					if emitLegacyResponsesReasoningChunk(ctx, ch, currentID, providerName, currentModel, output) {
-						seenReasoning[output.ID] = true
+				switch item := event.Item.AsAny().(type) {
+				case responses.ResponseReasoningItem:
+					if emitResponsesReasoningChunk(ctx, ch, currentID, providerName, currentModel, item) {
+						seenReasoning[item.ID] = true
 					}
-				case "custom_tool_call":
-					callID := firstNonEmptyString(output.CallID, output.ID)
+				case responses.ResponseCustomToolCall:
+					callID := firstNonEmptyString(item.CallID, item.ID)
 					if seenToolCalls[callID] {
 						continue
 					}
 					select {
 					case <-ctx.Done():
 						return
-					case ch <- llm.StreamChunk{ID: currentID, Provider: providerName, Model: currentModel, Delta: types.Message{Role: llm.RoleAssistant, ToolCalls: providerbase.ToolCallChunk(providerbase.NewCustomToolCall(callID, output.Name, output.Input))}, FinishReason: "tool_calls"}:
+					case ch <- llm.StreamChunk{ID: currentID, Provider: providerName, Model: currentModel, Delta: types.Message{Role: llm.RoleAssistant, ToolCalls: providerbase.ToolCallChunk(providerbase.NewCustomToolCall(callID, item.Name, item.Input))}, FinishReason: "tool_calls"}:
 					}
 				}
 
 			case "response.completed":
-				if completedResp, ok := sdkResponseToLegacy(&event.Response); ok {
-					if completedResp.ID != "" {
-						currentID = completedResp.ID
+				if event.Response.ID != "" {
+					currentID = event.Response.ID
+				}
+				if event.Response.Model != "" {
+					currentModel = string(event.Response.Model)
+				}
+				for _, output := range event.Response.Output {
+					if output.Type != "reasoning" {
+						continue
 					}
-					if completedResp.Model != "" {
-						currentModel = completedResp.Model
+					reasoning := output.AsReasoning()
+					if seenReasoning[reasoning.ID] {
+						continue
 					}
-					for _, output := range completedResp.Output {
-						if output.Type != "reasoning" || seenReasoning[output.ID] {
-							continue
-						}
-						if emitLegacyResponsesReasoningChunk(ctx, ch, currentID, providerName, currentModel, output) {
-							seenReasoning[output.ID] = true
-						}
+					if emitResponsesReasoningChunk(ctx, ch, currentID, providerName, currentModel, reasoning) {
+						seenReasoning[reasoning.ID] = true
 					}
 				}
 				select {

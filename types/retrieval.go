@@ -30,6 +30,13 @@ type RetrievalRecord struct {
 	Trace   RetrievalTrace `json:"trace,omitempty"`
 }
 
+type ToolStateSnapshot struct {
+	ToolName   string            `json:"tool_name"`
+	Summary    string            `json:"summary"`
+	ArtifactID string            `json:"artifact_id,omitempty"`
+	Metadata   map[string]string `json:"metadata,omitempty"`
+}
+
 // RetrievalMetricsContract defines minimal retrieval observability fields.
 type RetrievalMetricsContract struct {
 	Trace              RetrievalTrace `json:"trace,omitempty"`
