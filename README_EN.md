@@ -38,7 +38,7 @@ English | [中文](README.md)
   - **Semantic Memory** - Stores factual knowledge and ontological relationships
   - **Procedural Memory** - Stores "how-to" skills and procedures
 - **Intelligent Decay** - Smart decay based on recency/relevance/utility
-- **Context Engineering** - Adaptive compression, summarization, window management, emergency truncation
+- **Context Runtime** - Unified assembly of conversation, memory, retrieval, and tool-state under one token budget
 
 ### 🧩 Reasoning Patterns
 - **ReAct** - Reasoning and action alternation
@@ -299,6 +299,16 @@ if err != nil {
 }
 
 fmt.Println("LSP enabled:", ag.GetFeatureStatus()["lsp"])
+```
+
+The context runtime is also wired by default through `AgentBuilder` / `runtime.Builder`; configure it via `types.AgentConfig.Context`:
+
+```go
+cfg.Context = &types.ContextConfig{
+    Enabled:          true,
+    MaxContextTokens: 128000,
+    ReserveForOutput: 4096,
+}
 ```
 
 You can also toggle it via `runtime.Builder`:

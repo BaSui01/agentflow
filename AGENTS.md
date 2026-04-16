@@ -40,6 +40,8 @@
 ### 6) 测试与质量建议
 
 - **Goroutine 泄漏检测**：建议在关键包（如 `agent/`）的 `TestMain` 中集成 `go.uber.org/goleak` 的 `VerifyTestMain`，以检测测试后的 goroutine 泄漏。若现有测试存在 background goroutines 导致大量误报，可先用 `goleak.IgnoreTopFunction` 忽略已知安全 goroutine，或暂不启用，待测试稳定性提升后再接入。
+- **禁止擅自恢复文件**：未获得用户明确授权，不允许以 `git checkout`、`git show HEAD > file`、覆盖写回等方式恢复、回滚或重置任何工作区文件（包括代码与测试）。
+- **测试范围最小化**：默认只运行与当前修改直接相关的测试、构建或校验；不要擅自扩大到无关模块、全量测试或全仓回归，除非用户明确要求。
 
 ### 7) 外部参考目录（强制）
 
