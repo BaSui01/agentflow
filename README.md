@@ -62,6 +62,8 @@
 
 - **单入口启动链路** - `cmd/agentflow/main.runServe -> internal/app/bootstrap.InitializeServeRuntime -> cmd/agentflow/server_*.Start -> bootstrap.RegisterHTTPRoutes -> api/routes -> api/handlers -> domain(agent/rag/workflow/llm)`
 - **组合根职责收敛** - `cmd` 仅做装配；运行时构建集中在 `internal/app/bootstrap`（详见 `docs/architecture/startup-composition.md`）
+- **领域入口并列** - `api/handlers` 可直接进入 `agent usecase`、`rag usecase`、`workflow usecase`；不是所有请求都必须先进入 `workflow`
+- **编排关系固定** - `workflow` 是 Layer 3 编排层，不是 `agent` 的一种；有编排需求时由 `workflow` 调用 `agent/rag/llm`，无编排需求时可直接走 `agent` 或 `rag`
 
 ### 🔍 RAG 系统 (检索增强生成)
 
@@ -345,6 +347,67 @@ result, _ := wf.Execute(ctx, input)
 
 如果你觉得子目录过多、阅读压力大，先看精简导航：`docs/cn/目录导航(精简版).md`。
 
+### 分层与依赖全图
+
+```text
+                        ┌──────────────────────────────┐
+                        │ cmd/                        │
+                        │ 组合根：启动/装配/生命周期      │
+                        └──────────────┬───────────────┘
+                                       │
+                        ┌──────────────▼───────────────┐
+                        │ api/                        │
+                        │ 协议适配层：HTTP/MCP/A2A      │
+                        └──────────────┬───────────────┘
+                                       │
+                        ┌──────────────▼───────────────┐
+                        │ workflow/  (Layer 3)        │
+                        │ 编排层：DAG/DSL/步骤调度      │
+                        │ 可调用 agent/rag/llm         │
+                        └───────┬─────────────┬────────┘
+                                │             │
+                 ┌──────────────▼───┐   ┌────▼─────────────┐
+                 │ agent/ (Layer 2) │   │ rag/ (Layer 2)   │
+                 │ 执行能力/推理/工具 │   │ 检索能力/索引/重排 │
+                 └──────────────┬───┘   └────┬─────────────┘
+                                │            │
+                                └──────┬─────┘
+                                       │
+                             ┌─────────▼─────────┐
+                             │ llm/ (Layer 1)    │
+                             │ Provider/Gateway  │
+                             └─────────┬─────────┘
+                                       │
+                             ┌─────────▼─────────┐
+                             │ types/ (Layer 0)  │
+                             │ 零依赖共享契约层     │
+                             └───────────────────┘
+
+pkg/ = 横向基础设施层，可被多层复用，但不得反向依赖 api/ 与 cmd/
+internal/app/bootstrap/ = 启动期装配与 bridge，属于组合根支撑，不承载领域决策
+```
+
+依赖规则速记：
+
+- `types` 只允许被依赖，不反向依赖业务层
+- `llm` 不依赖 `agent/workflow/api/cmd`
+- `agent` 与 `rag` 同属 Layer 2；单 agent 可以直接用 rag
+- `workflow` 在 `agent/rag` 之上，是编排层，不是 agent 的一种
+- `api` 只做协议转换；`cmd` 只做装配
+
+### 允许依赖 / 禁止依赖矩阵
+
+| 源目录 | 允许依赖 | 禁止依赖 |
+| --- | --- | --- |
+| `types/` | 无 | `llm/`、`agent/`、`rag/`、`workflow/`、`api/`、`cmd/`、`internal/`、`config/`、`pkg/` |
+| `llm/` | `types/`、`pkg/`、`config/` | `agent/`、`rag/`、`workflow/`、`api/`、`cmd/`、`internal/` |
+| `agent/` | `types/`、`llm/`、`rag/`、`pkg/`、`config/` | `workflow/`、`api/`、`cmd/`、`internal/` |
+| `rag/` | `types/`、`llm/`、`pkg/`、`config/` | `agent/`、`workflow/`、`api/`、`cmd/`、`internal/` |
+| `workflow/` | `types/`、`llm/`、`agent/`、`rag/`、`pkg/`、`config/` | `api/`、`cmd/`、`internal/`、`agent/persistence` |
+| `api/` | `types/`、`llm/`、`agent/`、`rag/`、`workflow/`、`config/` | provider 实现细节、组合根逻辑 |
+| `cmd/` | 通过 `internal/app/bootstrap` 装配各层 | 业务实现下沉、绕过 bootstrap 直拼底层细节 |
+| `pkg/` | `types/` 与必要的 `pkg/*` | `api/`、`cmd/` |
+
 ```
 agentflow/
 ├── types/                    # Layer 0: 零依赖核心类型
@@ -420,7 +483,7 @@ agentflow/
 │   ├── execution/            # 执行引擎
 │   └── context/              # 上下文管理
 │
-├── rag/                      # Layer 2: RAG 系统
+├── rag/                      # Layer 2: RAG 检索能力（可被 agent/workflow 复用）
 │   ├── loader/               # DocumentLoader（Text/Markdown/CSV/JSON）
 │   ├── sources/              # 数据源适配器（arXiv, GitHub）
 │   ├── runtime/              # RAG 运行时构建入口（Builder + config bridge）
@@ -439,7 +502,7 @@ agentflow/
 │   ├── weaviate_store.go     # Weaviate 实现
 │   └── web_retrieval.go      # Web 增强检索
 │
-├── workflow/                 # Layer 3: 工作流
+├── workflow/                 # Layer 3: 工作流编排层（位于 agent/rag 之上）
 │   ├── workflow.go
 │   ├── dag.go                # DAG 定义
 │   ├── dag_builder.go        # DAG 构建器
@@ -455,6 +518,13 @@ agentflow/
 │       ├── parser.go         # YAML 解析 + 变量插值
 │       └── validator.go      # DSL 验证器
 │
+├── api/                      # 适配层：HTTP/MCP/A2A handler + routes
+│   ├── handlers/             # 协议解析、响应序列化、service/usecase 入口
+│   └── routes/               # 路由注册
+│
+├── internal/                 # 组合根支撑：启动期 builder / wiring / bridge
+│   └── app/bootstrap/        # runtime 构建、依赖注入、handler 装配
+│
 ├── config/                   # 配置管理
 │   ├── loader.go             # 配置加载器
 │   ├── defaults.go           # 默认配置
@@ -463,7 +533,9 @@ agentflow/
 │   ├── api.go                # 配置 API
 │   └── doc.go                # 包文档
 │
-├── pkg/openapi/              # OpenAPI 工具生成
+├── pkg/                      # 横向基础设施层（不得反向依赖 api/cmd）
+│   ├── service/              # 生命周期服务注册与总线
+│   └── openapi/              # OpenAPI 工具生成
 │
 ├── cmd/agentflow/            # 应用入口与运行时装配
 │   ├── main.go               # CLI 入口（serve/migrate/health/version）

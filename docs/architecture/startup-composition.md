@@ -11,6 +11,48 @@ This document defines the runtime startup chain and composition boundaries.
 - `cmd/agentflow` is the composition root and lifecycle host.
 - `internal/app/bootstrap` centralizes startup builders used by `cmd`.
 - `api/handlers` stays focused on protocol conversion and delegates domain behavior.
+- `workflow` is the Layer 3 orchestrator; it is not an `agent` subtype and should only coordinate lower-level capabilities.
+- `agent` and `rag` are peer Layer 2 domain capabilities; either may be called directly from handler/usecase entrypoints.
+
+## Layer Map
+
+```text
+cmd/                         composition root
+  -> api/                    protocol adapters
+    -> workflow/             Layer 3 orchestration (optional entry)
+    -> agent/                Layer 2 execution capability
+    -> rag/                  Layer 2 retrieval capability
+    -> llm/                  Layer 1 provider/gateway capability
+      -> types/              Layer 0 zero-dependency contracts
+
+pkg/                         horizontal infrastructure, reusable by multiple layers
+internal/app/bootstrap/      startup-only builders/bridges, not domain decision logic
+```
+
+Rules:
+
+- Not every request enters `workflow`; `agent` and `rag` remain direct domain entries.
+- When a workflow uses an agent step, the dependency direction is `workflow -> agent`, never `agent -> workflow` as the default main chain.
+- A single `agent` may use `rag` directly; `rag` is not reserved for workflow or multi-agent scenarios.
+
+## Allowed / Forbidden Dependency Matrix
+
+| Source | Allowed to depend on | Forbidden to depend on |
+| --- | --- | --- |
+| `types/` | none | `llm/`, `agent/`, `rag/`, `workflow/`, `api/`, `cmd/`, `internal/`, `config/`, `pkg/` |
+| `llm/` | `types/`, `pkg/`, `config/` | `agent/`, `rag/`, `workflow/`, `api/`, `cmd/`, `internal/` |
+| `agent/` | `types/`, `llm/`, `rag/`, `pkg/`, `config/` | `workflow/`, `api/`, `cmd/`, `internal/` |
+| `rag/` | `types/`, `llm/`, `pkg/`, `config/` | `agent/`, `workflow/`, `api/`, `cmd/`, `internal/` |
+| `workflow/` | `types/`, `llm/`, `agent/`, `rag/`, `pkg/`, `config/` | `api/`, `cmd/`, `internal/`, `agent/persistence` |
+| `api/` | `types/`, `llm/`, `agent/`, `rag/`, `workflow/`, `config/` | provider implementation details, composition-root logic |
+| `cmd/` | all runtime builders via `internal/app/bootstrap` and domain entrypoints | domain implementation hidden inside handler/business packages |
+| `pkg/` | `types/` and other `pkg/` subpackages as needed | `api/`, `cmd/` |
+
+Notes:
+
+- `agent/` and `rag/` are peer Layer 2 capabilities, not parent/child modules.
+- `workflow/` can orchestrate `agent/` and `rag/`, but that does not make `workflow/` the mandatory entry for all requests.
+- `internal/app/bootstrap` is intentionally excluded from normal domain dependency graphs; it is startup-only composition support.
 
 ## Current Builder Split
 
