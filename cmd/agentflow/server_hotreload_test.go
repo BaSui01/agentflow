@@ -71,6 +71,14 @@ func (*hotReloadProvider) ListModels(context.Context) ([]llm.Model, error) { ret
 
 func (*hotReloadProvider) Endpoints() llm.ProviderEndpoints { return llm.ProviderEndpoints{} }
 
+func (p *hotReloadProvider) CountTokens(context.Context, *llm.ChatRequest) (*llm.TokenCountResponse, error) {
+	return &llm.TokenCountResponse{
+		Model:       p.name,
+		InputTokens: 4,
+		TotalTokens: 4,
+	}, nil
+}
+
 type hotReloadTestAgent struct {
 	id        string
 	teardowns *atomic.Int32

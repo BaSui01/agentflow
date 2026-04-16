@@ -136,6 +136,11 @@ func TestDependencyDirectionGuards(t *testing.T) {
 			reason:       "RAG layer must not depend on composition root",
 		},
 		{
+			sourcePrefix: "rag",
+			targetPrefix: "internal",
+			reason:       "RAG layer must not depend on startup-only internal composition support",
+		},
+		{
 			sourcePrefix: "types",
 			targetPrefix: "agent",
 			reason:       "shared types must stay leaf-level and avoid business dependencies",
@@ -189,6 +194,56 @@ func TestDependencyDirectionGuards(t *testing.T) {
 			sourcePrefix: "llm",
 			targetPrefix: "workflow",
 			reason:       "llm layer must not depend on workflow layer",
+		},
+		{
+			sourcePrefix: "llm",
+			targetPrefix: "api",
+			reason:       "llm layer must not depend on API adapter layer",
+		},
+		{
+			sourcePrefix: "llm",
+			targetPrefix: "cmd",
+			reason:       "llm layer must not depend on composition root",
+		},
+		{
+			sourcePrefix: "llm",
+			targetPrefix: "internal",
+			reason:       "llm layer must not depend on startup-only internal composition support",
+		},
+		{
+			sourcePrefix: "agent",
+			targetPrefix: "workflow",
+			reason:       "agent layer must not depend upward on workflow orchestrator",
+		},
+		{
+			sourcePrefix: "agent",
+			targetPrefix: "api",
+			reason:       "agent layer must not depend on API adapter layer",
+		},
+		{
+			sourcePrefix: "agent",
+			targetPrefix: "cmd",
+			reason:       "agent layer must not depend on composition root",
+		},
+		{
+			sourcePrefix: "agent",
+			targetPrefix: "internal",
+			reason:       "agent layer must not depend on startup-only internal composition support",
+		},
+		{
+			sourcePrefix: "workflow",
+			targetPrefix: "api",
+			reason:       "workflow layer must not depend on API adapter layer",
+		},
+		{
+			sourcePrefix: "workflow",
+			targetPrefix: "cmd",
+			reason:       "workflow layer must not depend on composition root",
+		},
+		{
+			sourcePrefix: "workflow",
+			targetPrefix: "internal",
+			reason:       "workflow layer must not depend on startup-only internal composition support",
 		},
 	}
 
@@ -394,6 +449,55 @@ func TestReadmeCmdAgentflowStructureConsistency(t *testing.T) {
 		if len(stale) > 0 {
 			slices.Sort(stale)
 			t.Fatalf("%s has stale cmd/agentflow files: %s", readmePath, strings.Join(stale, ", "))
+		}
+	}
+}
+
+func TestReadmeLayerMapAndMatrixConsistency(t *testing.T) {
+	type docExpectations struct {
+		path             string
+		requiredSnippets []string
+	}
+
+	expectations := []docExpectations{
+		{
+			path: "README.md",
+			requiredSnippets: []string{
+				"### 分层与依赖全图",
+				"### 允许依赖 / 禁止依赖矩阵",
+				"├── api/                      # 适配层：HTTP/MCP/A2A handler + routes",
+				"├── internal/                 # 组合根支撑：启动期 builder / wiring / bridge",
+				"├── pkg/                      # 横向基础设施层（不得反向依赖 api/cmd）",
+				"├── rag/                      # Layer 2: RAG 检索能力（可被 agent/workflow 复用）",
+				"├── workflow/                 # Layer 3: 工作流编排层（位于 agent/rag 之上）",
+				"| `workflow/` | `types/`、`llm/`、`agent/`、`rag/`、`pkg/`、`config/` | `api/`、`cmd/`、`internal/`、`agent/persistence` |",
+			},
+		},
+		{
+			path: "README_EN.md",
+			requiredSnippets: []string{
+				"### Full layer map",
+				"### Allowed / forbidden dependency matrix",
+				"├── api/                      # Adapter layer: HTTP/MCP/A2A handlers + routes",
+				"├── internal/                 # Composition-root support: startup builders / bridges",
+				"├── pkg/                      # Horizontal infrastructure layer (must not depend on api/cmd)",
+				"├── rag/                      # Layer 2: RAG retrieval capability (reused by agent/workflow)",
+				"├── workflow/                 # Layer 3: Workflow orchestration (above agent/rag)",
+				"| `workflow/` | `types/`, `llm/`, `agent/`, `rag/`, `pkg/`, `config/` | `api/`, `cmd/`, `internal/`, `agent/persistence` |",
+			},
+		},
+	}
+
+	for _, tt := range expectations {
+		data, err := os.ReadFile(tt.path)
+		if err != nil {
+			t.Fatalf("read %s: %v", tt.path, err)
+		}
+		content := string(data)
+		for _, snippet := range tt.requiredSnippets {
+			if !strings.Contains(content, snippet) {
+				t.Fatalf("%s must contain %q", tt.path, snippet)
+			}
 		}
 	}
 }

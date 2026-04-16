@@ -399,7 +399,7 @@ type ragHostedToolRetrievalStore struct {
 	embedder rag.EmbeddingProvider
 }
 
-func (s ragHostedToolRetrievalStore) Retrieve(ctx context.Context, query string, topK int) ([]hosted.RetrievalResult, error) {
+func (s ragHostedToolRetrievalStore) Retrieve(ctx context.Context, query string, topK int) ([]types.RetrievalRecord, error) {
 	if s.store == nil || s.embedder == nil {
 		return nil, fmt.Errorf("agent retrieval dependencies are not configured")
 	}
@@ -411,13 +411,12 @@ func (s ragHostedToolRetrievalStore) Retrieve(ctx context.Context, query string,
 	if err != nil {
 		return nil, err
 	}
-	out := make([]hosted.RetrievalResult, 0, len(results))
+	out := make([]types.RetrievalRecord, 0, len(results))
 	for _, item := range results {
-		out = append(out, hosted.RetrievalResult{
-			DocumentID: item.Document.ID,
-			Content:    item.Document.Content,
-			Score:      item.Score,
-			Metadata:   item.Document.Metadata,
+		out = append(out, types.RetrievalRecord{
+			DocID:   item.Document.ID,
+			Content: item.Document.Content,
+			Score:   item.Score,
 		})
 	}
 	return out, nil

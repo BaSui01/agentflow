@@ -1,7 +1,6 @@
 package main
 
 import (
-	"github.com/BaSui01/agentflow/types"
 	"context"
 	"fmt"
 	"log"
@@ -9,11 +8,8 @@ import (
 	"time"
 
 	"github.com/BaSui01/agentflow/llm"
-	"github.com/BaSui01/agentflow/llm/providers"
-	"github.com/BaSui01/agentflow/llm/providers/hunyuan"
-	"github.com/BaSui01/agentflow/llm/providers/kimi"
-	"github.com/BaSui01/agentflow/llm/providers/llama"
-	"github.com/BaSui01/agentflow/llm/providers/mistral"
+	"github.com/BaSui01/agentflow/llm/providers/vendor"
+	"github.com/BaSui01/agentflow/types"
 	"go.uber.org/zap"
 )
 
@@ -23,57 +19,83 @@ func main() {
 
 	ctx := context.Background()
 
-	// Example 1: Mistral AI
 	fmt.Println("=== Testing Mistral AI ===")
-	testMistral(ctx, logger)
+	testCompatProvider(ctx, logger, compatProviderExample{
+		ProviderCode: "mistral",
+		APIKeyEnv:    "MISTRAL_API_KEY",
+		Model:        "mistral-large-latest",
+		Prompt:       "What is the capital of France?",
+	})
 
-	// Example 2: Tencent Hunyuan
 	fmt.Println("\n=== Testing Tencent Hunyuan ===")
-	testHunyuan(ctx, logger)
+	testCompatProvider(ctx, logger, compatProviderExample{
+		ProviderCode: "hunyuan",
+		APIKeyEnv:    "HUNYUAN_API_KEY",
+		Model:        "hunyuan-lite",
+		Prompt:       "介绍一下北京",
+	})
 
-	// Example 3: Moonshot Kimi
 	fmt.Println("\n=== Testing Moonshot Kimi ===")
-	testKimi(ctx, logger)
+	testCompatProvider(ctx, logger, compatProviderExample{
+		ProviderCode: "kimi",
+		APIKeyEnv:    "KIMI_API_KEY",
+		Model:        "moonshot-v1-8k",
+		Prompt:       "什么是月之暗面？",
+	})
 
-	// Example 4: Meta Llama (via Together AI)
 	fmt.Println("\n=== Testing Meta Llama ===")
-	testLlama(ctx, logger)
+	testCompatProvider(ctx, logger, compatProviderExample{
+		ProviderCode: "llama",
+		APIKeyEnv:    "TOGETHER_API_KEY",
+		Model:        "meta-llama/Llama-3.3-70B-Instruct-Turbo",
+		Prompt:       "What is Meta's Llama model?",
+		Extra: map[string]any{
+			"provider": "together",
+		},
+	})
 }
 
-func testMistral(ctx context.Context, logger *zap.Logger) {
-	apiKey := os.Getenv("MISTRAL_API_KEY")
+type compatProviderExample struct {
+	ProviderCode string
+	APIKeyEnv    string
+	Model        string
+	Prompt       string
+	Extra        map[string]any
+}
+
+func testCompatProvider(ctx context.Context, logger *zap.Logger, cfg compatProviderExample) {
+	apiKey := os.Getenv(cfg.APIKeyEnv)
 	if apiKey == "" {
-		log.Println("MISTRAL_API_KEY not set, skipping")
+		log.Printf("%s not set, skipping\n", cfg.APIKeyEnv)
 		return
 	}
 
-	provider := mistral.NewMistralProvider(providers.MistralConfig{
-		BaseProviderConfig: providers.BaseProviderConfig{
-			APIKey:  apiKey,
-			Model:   "mistral-large-latest",
-			Timeout: 30 * time.Second,
-		},
+	provider, err := vendor.NewChatProviderFromConfig(cfg.ProviderCode, vendor.ChatProviderConfig{
+		APIKey:  apiKey,
+		Model:   cfg.Model,
+		Timeout: 30 * time.Second,
+		Extra:   cfg.Extra,
 	}, logger)
+	if err != nil {
+		log.Printf("create provider failed: %v\n", err)
+		return
+	}
 
-	// Health check
 	status, err := provider.HealthCheck(ctx)
 	if err != nil {
 		log.Printf("Health check failed: %v\n", err)
 		return
 	}
-	fmt.Printf("Health: %v, Latency: %v\n", status.Healthy, status.Latency)
+	fmt.Printf("Provider: %s, Health: %v, Latency: %v\n", provider.Name(), status.Healthy, status.Latency)
 
-	// Chat completion
-	req := &llm.ChatRequest{
-		Model: "mistral-large-latest",
+	resp, err := provider.Completion(ctx, &llm.ChatRequest{
+		Model: cfg.Model,
 		Messages: []types.Message{
-			{Role: llm.RoleUser, Content: "What is the capital of France?"},
+			{Role: llm.RoleUser, Content: cfg.Prompt},
 		},
 		MaxTokens:   100,
 		Temperature: 0.7,
-	}
-
-	resp, err := provider.Completion(ctx, req)
+	})
 	if err != nil {
 		log.Printf("Completion failed: %v\n", err)
 		return
@@ -82,135 +104,3 @@ func testMistral(ctx context.Context, logger *zap.Logger) {
 	fmt.Printf("Response: %s\n", resp.Choices[0].Message.Content)
 	fmt.Printf("Usage: %d tokens\n", resp.Usage.TotalTokens)
 }
-
-func testHunyuan(ctx context.Context, logger *zap.Logger) {
-	apiKey := os.Getenv("HUNYUAN_API_KEY")
-	if apiKey == "" {
-		log.Println("HUNYUAN_API_KEY not set, skipping")
-		return
-	}
-
-	provider := hunyuan.NewHunyuanProvider(providers.HunyuanConfig{
-		BaseProviderConfig: providers.BaseProviderConfig{
-			APIKey:  apiKey,
-			Model:   "hunyuan-lite",
-			Timeout: 30 * time.Second,
-		},
-	}, logger)
-
-	// Health check
-	status, err := provider.HealthCheck(ctx)
-	if err != nil {
-		log.Printf("Health check failed: %v\n", err)
-		return
-	}
-	fmt.Printf("Health: %v, Latency: %v\n", status.Healthy, status.Latency)
-
-	// Chat completion
-	req := &llm.ChatRequest{
-		Model: "hunyuan-lite",
-		Messages: []types.Message{
-			{Role: llm.RoleUser, Content: "介绍一下北京"},
-		},
-		MaxTokens:   100,
-		Temperature: 0.7,
-	}
-
-	resp, err := provider.Completion(ctx, req)
-	if err != nil {
-		log.Printf("Completion failed: %v\n", err)
-		return
-	}
-
-	fmt.Printf("Response: %s\n", resp.Choices[0].Message.Content)
-	fmt.Printf("Usage: %d tokens\n", resp.Usage.TotalTokens)
-}
-
-func testKimi(ctx context.Context, logger *zap.Logger) {
-	apiKey := os.Getenv("KIMI_API_KEY")
-	if apiKey == "" {
-		log.Println("KIMI_API_KEY not set, skipping")
-		return
-	}
-
-	provider := kimi.NewKimiProvider(providers.KimiConfig{
-		BaseProviderConfig: providers.BaseProviderConfig{
-			APIKey:  apiKey,
-			Model:   "moonshot-v1-8k",
-			Timeout: 30 * time.Second,
-		},
-	}, logger)
-
-	// Health check
-	status, err := provider.HealthCheck(ctx)
-	if err != nil {
-		log.Printf("Health check failed: %v\n", err)
-		return
-	}
-	fmt.Printf("Health: %v, Latency: %v\n", status.Healthy, status.Latency)
-
-	// Chat completion
-	req := &llm.ChatRequest{
-		Model: "moonshot-v1-8k",
-		Messages: []types.Message{
-			{Role: llm.RoleUser, Content: "什么是月之暗面？"},
-		},
-		MaxTokens:   100,
-		Temperature: 0.7,
-	}
-
-	resp, err := provider.Completion(ctx, req)
-	if err != nil {
-		log.Printf("Completion failed: %v\n", err)
-		return
-	}
-
-	fmt.Printf("Response: %s\n", resp.Choices[0].Message.Content)
-	fmt.Printf("Usage: %d tokens\n", resp.Usage.TotalTokens)
-}
-
-func testLlama(ctx context.Context, logger *zap.Logger) {
-	apiKey := os.Getenv("TOGETHER_API_KEY")
-	if apiKey == "" {
-		log.Println("TOGETHER_API_KEY not set, skipping")
-		return
-	}
-
-	provider := llama.NewLlamaProvider(providers.LlamaConfig{
-		BaseProviderConfig: providers.BaseProviderConfig{
-			APIKey:   apiKey,
-			Model:    "meta-llama/Llama-3.3-70B-Instruct-Turbo",
-			Timeout:  30 * time.Second,
-		},
-		Provider: "together",
-	}, logger)
-
-	// Health check
-	status, err := provider.HealthCheck(ctx)
-	if err != nil {
-		log.Printf("Health check failed: %v\n", err)
-		return
-	}
-	fmt.Printf("Health: %v, Latency: %v\n", status.Healthy, status.Latency)
-
-	// Chat completion
-	req := &llm.ChatRequest{
-		Model: "meta-llama/Llama-3.3-70B-Instruct-Turbo",
-		Messages: []types.Message{
-			{Role: llm.RoleUser, Content: "What is Meta's Llama model?"},
-		},
-		MaxTokens:   100,
-		Temperature: 0.7,
-	}
-
-	resp, err := provider.Completion(ctx, req)
-	if err != nil {
-		log.Printf("Completion failed: %v\n", err)
-		return
-	}
-
-	fmt.Printf("Response: %s\n", resp.Choices[0].Message.Content)
-	fmt.Printf("Usage: %d tokens\n", resp.Usage.TotalTokens)
-}
-
-

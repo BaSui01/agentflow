@@ -9,16 +9,27 @@ exclude:
   - agent
   - api
   - cmd
-  - config
   - internal
   - llm
-  - pkg
   - rag
   - workflow
   - testutil
   - scripts
   - examples
   - .snow
+  - vendor
+  - docs
+  - deployments
+  - benchmarks
+  - build
+  - CC-Source
+  - .ace-tool
+  - .bug
+  - .claude
+  - .codex
+  - .github
+  - .omx
+  - .vscode
 
 excludeFiles:
   - '^.*_test\.go$'
@@ -30,8 +41,84 @@ components:
   types:
     in:
       - types
+  config:
+    in:
+      - config
+  pkg_cache:
+    in:
+      - pkg/cache
+  pkg_database:
+    in:
+      - pkg/database
+  pkg_jsonschema:
+    in:
+      - pkg/jsonschema
+  pkg_metrics:
+    in:
+      - pkg/metrics
+  pkg_middleware:
+    in:
+      - pkg/middleware
+  pkg_migration:
+    in:
+      - pkg/migration
+  pkg_mongodb:
+    in:
+      - pkg/mongodb
+  pkg_openapi:
+    in:
+      - pkg/openapi
+  pkg_server:
+    in:
+      - pkg/server
+  pkg_service:
+    in:
+      - pkg/service
+  pkg_storage:
+    in:
+      - pkg/storage
+  pkg_telemetry:
+    in:
+      - pkg/telemetry
+  pkg_tlsutil:
+    in:
+      - pkg/tlsutil
+
+commonComponents:
+  - types
 
 deps:
   types:
     mayDependOn:
       - types
+  config:
+    mayDependOn:
+      - config
+      - types
+  pkg_cache:
+    mayDependOn: [pkg_cache, pkg_tlsutil, types]
+  pkg_database:
+    mayDependOn: [pkg_database, types]
+  pkg_jsonschema:
+    mayDependOn: [pkg_jsonschema, types]
+  pkg_metrics:
+    mayDependOn: [pkg_metrics, types]
+  pkg_middleware:
+    mayDependOn: [pkg_middleware, pkg_metrics, pkg_telemetry, config, types]
+  pkg_migration:
+    mayDependOn: [pkg_migration, config, types]
+  pkg_mongodb:
+    mayDependOn: [pkg_mongodb, pkg_tlsutil, config, types]
+  pkg_openapi:
+    mayDependOn: [pkg_openapi, pkg_tlsutil, types]
+  pkg_server:
+    mayDependOn: [pkg_server, pkg_tlsutil, types]
+  pkg_service:
+    mayDependOn: [pkg_service, types]
+  pkg_storage:
+    mayDependOn: [pkg_storage, pkg_tlsutil, types]
+  pkg_telemetry:
+    mayDependOn: [pkg_telemetry, config, types]
+  pkg_tlsutil:
+    mayDependOn: [pkg_tlsutil, types]
+
