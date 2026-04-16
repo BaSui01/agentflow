@@ -5,6 +5,7 @@ import (
 	"os"
 	"strings"
 
+	agentcontext "github.com/BaSui01/agentflow/agent/context"
 	agentlsp "github.com/BaSui01/agentflow/agent/lsp"
 	"github.com/BaSui01/agentflow/agent/memory"
 	mcpproto "github.com/BaSui01/agentflow/agent/protocol/mcp"
@@ -13,6 +14,7 @@ import (
 	"github.com/BaSui01/agentflow/types"
 
 	"github.com/BaSui01/agentflow/agent/guardrails"
+	"github.com/BaSui01/agentflow/llm"
 	"github.com/BaSui01/agentflow/llm/observability"
 	"go.uber.org/zap"
 )
@@ -21,13 +23,14 @@ import (
 // 支持链式调用，简化 Agent 创建过程
 type AgentBuilder struct {
 	config       types.AgentConfig
-	provider     types.ChatProvider
-	toolProvider types.ChatProvider // 工具调用专用 Provider（可选，为 nil 时退化为 provider）
+	provider     llm.Provider
+	toolProvider llm.Provider // 工具调用专用 Provider（可选，为 nil 时退化为 provider）
 	ledger       observability.Ledger
 	memory       MemoryManager
 	toolManager  ToolManager
 	bus          EventBus
 	logger       *zap.Logger
+	contextMgr   ContextManager
 
 	// 增强功能配置
 	reflectionConfig       *ReflectionExecutorConfig
@@ -72,7 +75,7 @@ func NewAgentBuilder(config types.AgentConfig) *AgentBuilder {
 }
 
 // WithProvider 设置 LLM Provider
-func (b *AgentBuilder) WithProvider(provider types.ChatProvider) *AgentBuilder {
+func (b *AgentBuilder) WithProvider(provider llm.Provider) *AgentBuilder {
 	if provider == nil {
 		b.errors = append(b.errors, fmt.Errorf("provider cannot be nil"))
 		return b
@@ -84,7 +87,7 @@ func (b *AgentBuilder) WithProvider(provider types.ChatProvider) *AgentBuilder {
 // WithToolProvider 设置工具调用专用的 LLM Provider。
 // ReAct 循环中的推理和工具调用将使用此 Provider，而最终内容生成仍使用主 Provider。
 // 如果不设置，所有调用都使用主 Provider。
-func (b *AgentBuilder) WithToolProvider(provider types.ChatProvider) *AgentBuilder {
+func (b *AgentBuilder) WithToolProvider(provider llm.Provider) *AgentBuilder {
 	b.toolProvider = provider
 	return b
 }

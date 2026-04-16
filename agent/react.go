@@ -60,10 +60,10 @@ func (b *BaseAgent) Plan(ctx context.Context, input *Input) (*PlanResult, error)
 	}
 
 	// 解析计划
-	choice, err := types.FirstChoice(resp)
-	if err != nil {
-		return nil, NewErrorWithCause(types.ErrLLMResponseEmpty, "plan generation returned no choices", err)
+	if resp == nil || len(resp.Choices) == 0 {
+		return nil, NewError(types.ErrLLMResponseEmpty, "plan generation returned no choices")
 	}
+	choice := resp.FirstChoice()
 	planContent := choice.Message.Content
 	steps := parsePlanSteps(planContent)
 
@@ -334,11 +334,10 @@ func (b *BaseAgent) executeCore(ctx context.Context, input *Input) (_ *Output, e
 			return nil, NewErrorWithCause(types.ErrAgentExecution, "execution failed", err)
 		}
 
-		var choiceErr error
-		choice, choiceErr = types.FirstChoice(resp)
-		if choiceErr != nil {
-			return nil, NewErrorWithCause(types.ErrLLMResponseEmpty, "execution returned no choices", choiceErr)
+		if resp == nil || len(resp.Choices) == 0 {
+			return nil, NewError(types.ErrLLMResponseEmpty, "execution returned no choices")
 		}
+		choice = resp.FirstChoice()
 		outputContent = choice.Message.Content
 
 		// 产出验证(护栏)

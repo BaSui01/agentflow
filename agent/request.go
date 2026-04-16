@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/BaSui01/agentflow/llm"
 	llmcore "github.com/BaSui01/agentflow/llm/core"
 	"github.com/BaSui01/agentflow/types"
 
@@ -294,8 +295,8 @@ func DurationPtr(d time.Duration) *time.Duration { return &d }
 // references needed by the execution paths (streaming, ReAct, plain completion).
 type preparedRequest struct {
 	req          *types.ChatRequest
-	chatProvider types.ChatProvider
-	toolProvider types.ChatProvider // for ReAct loop (may equal chatProvider)
+	chatProvider llm.Provider
+	toolProvider llm.Provider // for ReAct loop (may equal chatProvider)
 	hasTools     bool
 	handoffTools map[string]RuntimeHandoffTarget
 	maxReActIter int
