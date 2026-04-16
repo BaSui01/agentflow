@@ -8,8 +8,6 @@ import (
 	"time"
 
 	"github.com/BaSui01/agentflow/config"
-	"github.com/BaSui01/agentflow/llm/capabilities/embedding"
-	"github.com/BaSui01/agentflow/llm/capabilities/rerank"
 	"github.com/BaSui01/agentflow/rag"
 	"github.com/BaSui01/agentflow/rag/core"
 	"go.uber.org/zap"
@@ -108,66 +106,18 @@ func (b *Builder) WithLogger(logger *zap.Logger) *Builder {
 }
 
 // BuildProviders 构建 RAG 运行时所需 provider 依赖。
+// 注意：provider 必须由上层通过 WithEmbeddingProvider/WithRerankProvider 注入，
+// 本方法不再直接依赖 llm 层创建 provider。
 func (b *Builder) BuildProviders() (*Providers, error) {
 	if b == nil {
 		return nil, fmt.Errorf("builder is nil")
 	}
 
-	apiKey := b.apiKey
-	if apiKey == "" && b.cfg != nil {
-		apiKey = b.cfg.LLM.APIKey
-	}
-	baseURL := ""
-	timeout := time.Duration(0)
-	if b.cfg != nil {
-		baseURL = b.cfg.LLM.BaseURL
-		timeout = b.cfg.LLM.Timeout
-	}
-
-	emb := b.embeddingProvider
-	if emb == nil {
-		embType := b.embeddingType
-		if embType == "" && b.cfg != nil {
-			embType = core.EmbeddingProviderType(b.cfg.LLM.DefaultProvider)
-		}
-		if embType == "" {
-			return nil, fmt.Errorf("embedding provider type is empty")
-		}
-		if apiKey == "" {
-			return nil, fmt.Errorf("llm api key is empty")
-		}
-		p, err := embedding.NewProviderFromConfig(embedding.FactoryConfig{
-			Type:    embedding.ProviderType(embType),
-			APIKey:  apiKey,
-			BaseURL: baseURL,
-			Timeout: timeout,
-		})
-		if err != nil {
-			return nil, fmt.Errorf("create embedding provider: %w", err)
-		}
-		emb = p
-	}
-
-	rerankProv := b.rerankProvider
-	if rerankProv == nil && b.rerankType != "" {
-		if apiKey == "" {
-			return nil, fmt.Errorf("llm api key is empty")
-		}
-		p, err := rerank.NewProviderFromConfig(rerank.FactoryConfig{
-			Type:    rerank.ProviderType(b.rerankType),
-			APIKey:  apiKey,
-			BaseURL: baseURL,
-			Timeout: timeout,
-		})
-		if err != nil {
-			return nil, fmt.Errorf("create rerank provider: %w", err)
-		}
-		rerankProv = p
-	}
-
+	// Provider 必须由上层注入，不再在 rag 层直接创建
+	// 如果 provider 为 nil，返回的 Providers 中对应字段也为 nil
 	return &Providers{
-		Embedding: emb,
-		Rerank:    rerankProv,
+		Embedding: b.embeddingProvider,
+		Rerank:    b.rerankProvider,
 	}, nil
 }
 

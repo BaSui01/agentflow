@@ -1,5 +1,19 @@
 package types
 
+// RerankDocument 表示待重排序的文档（RerankResult 的子结构）。
+type RerankDocument struct {
+	Text  string `json:"text"`
+	ID    string `json:"id,omitempty"`
+	Title string `json:"title,omitempty"`
+}
+
+// RerankResult 表示单个重排序结果（从 LLM 层下沉到 types 层）。
+type RerankResult struct {
+	Index          int     `json:"index"`           // 输入中的原始索引
+	RelevanceScore float64 `json:"relevance_score"` // 0-1 归一化分数
+	Document       string  `json:"document,omitempty"`
+}
+
 // RetrievalTrace defines minimal cross-layer trace fields for retrieval flows.
 type RetrievalTrace struct {
 	TraceID string `json:"trace_id,omitempty"`
