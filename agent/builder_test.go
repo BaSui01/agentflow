@@ -174,6 +174,18 @@ func TestAgentBuilder_Build_Success(t *testing.T) {
 	require.NotNil(t, agent)
 	assert.Equal(t, "a1", agent.ID())
 	assert.Equal(t, "test", agent.Name())
+	assert.True(t, agent.ContextEngineEnabled())
+}
+
+func TestAgentBuilder_WithContextManager(t *testing.T) {
+	manager := &testContextManager{}
+	agent, err := NewAgentBuilder(testAgentConfig("a1", "test", "gpt-4")).
+		WithProvider(&testProvider{name: "test"}).
+		WithLogger(zap.NewNop()).
+		WithContextManager(manager).
+		Build()
+	require.NoError(t, err)
+	assert.True(t, agent.ContextEngineEnabled())
 }
 
 func TestAgentBuilder_WithDefaultMCPServer(t *testing.T) {

@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	agentcontext "github.com/BaSui01/agentflow/agent/context"
 	"github.com/BaSui01/agentflow/types"
 
 	"github.com/BaSui01/agentflow/agent/guardrails"
@@ -234,62 +235,40 @@ func (b *BaseAgent) executeCore(ctx context.Context, input *Input) (_ *Output, e
 		}
 	}
 
-	// 5. 加载最近的记忆（如果有）
-	var contextMessages []types.Message
-	if b.memory != nil {
-		b.recentMemoryMu.RLock()
-		hasMemory := len(b.recentMemory) > 0
-		if hasMemory {
-			// 将最近的记忆转换为消息
-			for _, mem := range b.recentMemory {
-				if mem.Kind == MemoryShortTerm {
-					role := types.RoleAssistant
-					if r, ok := mem.Metadata["role"].(string); ok && r != "" {
-						role = types.Role(r)
-					}
-					contextMessages = append(contextMessages, types.Message{
-						Role:    role,
-						Content: mem.Content,
-					})
-				}
-			}
-		}
-		b.recentMemoryMu.RUnlock()
-	}
-
-	// 6. 构建消息
-	msgCap := 1 + len(contextMessages) + len(restoredMessages) + 1
-	messages := make([]types.Message, 0, msgCap)
-
-	// 系统提示：合并 prompt bundle + input.Context 额外上下文
-	systemContent := activeBundle.RenderSystemPromptWithVars(input.Variables)
-	if publicCtx := publicInputContext(input.Context); len(publicCtx) > 0 {
-		ctxJSON, err := json.Marshal(publicCtx)
-		if err == nil {
-			systemContent += "\n\n<additional_context>\n" + string(ctxJSON) + "\n</additional_context>"
-		}
-	}
-	messages = append(messages, types.Message{
-		Role:    types.RoleSystem,
-		Content: systemContent,
-	})
-
-	// 添加上下文消息
-	messages = append(messages, contextMessages...)
-
-	// 添加 handoff 传入的历史消息；存在时优先于 ConversationStore 恢复，避免同一会话重复回放。
+	// 5. 收集上下文来源并通过 context runtime 组装消息
+	memoryContext := b.collectContextMemory(input.Context)
+	conversation := restoredMessages
 	if handoffMessages := handoffMessagesFromInputContext(input.Context); len(handoffMessages) > 0 {
-		messages = append(messages, handoffMessages...)
-	} else if len(restoredMessages) > 0 {
-		// 添加从 ConversationStore 恢复的历史消息
-		messages = append(messages, restoredMessages...)
+		conversation = handoffMessages
 	}
 
-	// 添加用户输入
-	messages = append(messages, types.Message{
-		Role:    types.RoleUser,
-		Content: input.Content,
-	})
+	systemContent := activeBundle.RenderSystemPromptWithVars(input.Variables)
+	retrievalItems := retrievalItemsFromInputContext(input.Context)
+	if len(retrievalItems) == 0 && b.retriever != nil {
+		if records, err := b.retriever.Retrieve(ctx, input.Content, 5); err != nil {
+			b.logger.Warn("failed to load retrieval context", zap.Error(err))
+		} else {
+			retrievalItems = retrievalItemsFromRecords(records)
+		}
+	}
+	toolStates := toolStatesFromInputContext(input.Context)
+	if len(toolStates) == 0 && b.toolState != nil {
+		if snapshots, err := b.toolState.LoadToolState(ctx, b.ID()); err != nil {
+			b.logger.Warn("failed to load tool state context", zap.Error(err))
+		} else {
+			toolStates = toolStatesFromSnapshots(snapshots)
+		}
+	}
+
+	messages, assembled := b.assembleMessages(ctx, systemContent, publicInputContext(input.Context), memoryContext, conversation, retrievalItems, toolStates, input.Content)
+	if assembled != nil {
+		b.logger.Debug("context assembled",
+			zap.Int("tokens_before", assembled.TokensBefore),
+			zap.Int("tokens_after", assembled.TokensAfter),
+			zap.String("strategy", assembled.Plan.Strategy),
+			zap.String("compression_reason", assembled.Plan.CompressionReason),
+		)
+	}
 
 	// 7. 执行产出验证和重试支持
 	// 要求2.4:对产出验证失败进行重试
@@ -569,6 +548,163 @@ func parsePlanSteps(content string) []string {
 	}
 
 	return steps
+}
+
+func (b *BaseAgent) collectContextMemory(values map[string]any) []string {
+	var memoryContext []string
+	appendValue := func(v string) {
+		if trimmed := strings.TrimSpace(v); trimmed != "" {
+			memoryContext = append(memoryContext, trimmed)
+		}
+	}
+
+	b.recentMemoryMu.RLock()
+	for _, mem := range b.recentMemory {
+		if mem.Kind == MemoryShortTerm {
+			appendValue(mem.Content)
+		}
+	}
+	b.recentMemoryMu.RUnlock()
+
+	if b.memoryFacade != nil {
+		for _, item := range b.memoryFacade.LoadContext(context.Background(), b.ID()) {
+			appendValue(item)
+		}
+	}
+
+	if len(values) > 0 {
+		if raw, ok := values["memory_context"].([]string); ok {
+			for _, item := range raw {
+				appendValue(item)
+			}
+		}
+	}
+	return memoryContext
+}
+
+func (b *BaseAgent) assembleMessages(
+	ctx context.Context,
+	systemPrompt string,
+	additionalContext map[string]any,
+	memoryContext []string,
+	conversation []types.Message,
+	retrieval []agentcontext.RetrievalItem,
+	toolStates []agentcontext.ToolState,
+	userInput string,
+) ([]types.Message, *agentcontext.AssembleResult) {
+	if manager, ok := b.contextManager.(interface {
+		Assemble(context.Context, *agentcontext.AssembleRequest) (*agentcontext.AssembleResult, error)
+	}); ok {
+		result, err := manager.Assemble(ctx, &agentcontext.AssembleRequest{
+			SystemPrompt:      systemPrompt,
+			AdditionalContext: additionalContext,
+			MemoryContext:     memoryContext,
+			Conversation:      conversation,
+			Retrieval:         retrieval,
+			ToolState:         toolStates,
+			UserInput:         userInput,
+			Query:             userInput,
+		})
+		if err == nil && result != nil && len(result.Messages) > 0 {
+			return result.Messages, result
+		}
+		if err != nil {
+			b.logger.Warn("context assembly failed, falling back to legacy message construction", zap.Error(err))
+		}
+	}
+
+	msgCap := 1 + len(memoryContext) + len(conversation) + 1
+	messages := make([]types.Message, 0, msgCap)
+	if strings.TrimSpace(systemPrompt) != "" {
+		if publicCtx := additionalContextText(additionalContext); publicCtx != "" {
+			systemPrompt += "\n\n<additional_context>\n" + publicCtx + "\n</additional_context>"
+		}
+		messages = append(messages, types.Message{Role: types.RoleSystem, Content: systemPrompt})
+	}
+	for _, item := range memoryContext {
+		messages = append(messages, types.Message{Role: types.RoleSystem, Content: item})
+	}
+	messages = append(messages, conversation...)
+	messages = append(messages, types.Message{Role: types.RoleUser, Content: userInput})
+	return messages, nil
+}
+
+func retrievalItemsFromInputContext(values map[string]any) []agentcontext.RetrievalItem {
+	if len(values) == 0 {
+		return nil
+	}
+	raw, ok := values["retrieval_context"]
+	if !ok {
+		return nil
+	}
+	items, ok := raw.([]agentcontext.RetrievalItem)
+	if !ok {
+		return nil
+	}
+	return append([]agentcontext.RetrievalItem(nil), items...)
+}
+
+func retrievalItemsFromRecords(records []types.RetrievalRecord) []agentcontext.RetrievalItem {
+	if len(records) == 0 {
+		return nil
+	}
+	items := make([]agentcontext.RetrievalItem, 0, len(records))
+	for _, record := range records {
+		if strings.TrimSpace(record.Content) == "" {
+			continue
+		}
+		items = append(items, agentcontext.RetrievalItem{
+			Title:   record.DocID,
+			Content: record.Content,
+			Source:  record.Source,
+			Score:   record.Score,
+		})
+	}
+	return items
+}
+
+func toolStatesFromInputContext(values map[string]any) []agentcontext.ToolState {
+	if len(values) == 0 {
+		return nil
+	}
+	raw, ok := values["tool_state"]
+	if !ok {
+		return nil
+	}
+	items, ok := raw.([]agentcontext.ToolState)
+	if !ok {
+		return nil
+	}
+	return append([]agentcontext.ToolState(nil), items...)
+}
+
+func toolStatesFromSnapshots(items []types.ToolStateSnapshot) []agentcontext.ToolState {
+	if len(items) == 0 {
+		return nil
+	}
+	out := make([]agentcontext.ToolState, 0, len(items))
+	for _, item := range items {
+		if strings.TrimSpace(item.Summary) == "" {
+			continue
+		}
+		out = append(out, agentcontext.ToolState{
+			ToolName:   item.ToolName,
+			Summary:    item.Summary,
+			ArtifactID: item.ArtifactID,
+		})
+	}
+	return out
+}
+
+func additionalContextText(values map[string]any) string {
+	if len(values) == 0 {
+		return ""
+	}
+	ctxJSON, err := json.Marshal(values)
+	if err != nil {
+		return ""
+	}
+	return string(ctxJSON)
 }
 
 // applyInputContext injects well-known keys from Input.Context into the Go context

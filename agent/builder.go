@@ -31,6 +31,8 @@ type AgentBuilder struct {
 	bus          EventBus
 	logger       *zap.Logger
 	contextMgr   ContextManager
+	retriever    RetrievalProvider
+	toolState    ToolStateProvider
 
 	// 增强功能配置
 	reflectionConfig       *ReflectionExecutorConfig
@@ -138,6 +140,16 @@ func (b *AgentBuilder) WithContextManager(manager ContextManager) *AgentBuilder 
 // WithToolManager 设置工具管理器
 func (b *AgentBuilder) WithToolManager(toolManager ToolManager) *AgentBuilder {
 	b.toolManager = toolManager
+	return b
+}
+
+func (b *AgentBuilder) WithRetrievalProvider(provider RetrievalProvider) *AgentBuilder {
+	b.retriever = provider
+	return b
+}
+
+func (b *AgentBuilder) WithToolStateProvider(provider ToolStateProvider) *AgentBuilder {
+	b.toolState = provider
 	return b
 }
 
@@ -414,6 +426,8 @@ func (b *AgentBuilder) configureContext(agent *BaseAgent) {
 		}
 	}
 	agent.SetContextManager(manager)
+	agent.SetRetrievalProvider(b.retriever)
+	agent.SetToolStateProvider(b.toolState)
 }
 
 func (b *AgentBuilder) ensureFeatureDefaults() {

@@ -10,8 +10,6 @@ import (
 	"github.com/BaSui01/agentflow/llm"
 	llmcore "github.com/BaSui01/agentflow/llm/core"
 	"github.com/BaSui01/agentflow/types"
-
-	"go.uber.org/zap"
 )
 
 // runConfigKey is the unexported context key for RunConfig.
@@ -317,31 +315,13 @@ func (b *BaseAgent) prepareChatRequest(ctx context.Context, messages []types.Mes
 
 	chatProv := b.gatewayProvider()
 
-	// 1. Context engineering: optimise message history
-	if b.contextEngineEnabled && b.contextManager != nil && len(messages) > 1 {
-		query := lastUserQuery(messages)
-		optimized, err := b.contextManager.PrepareMessages(ctx, messages, query)
-		if err != nil {
-			b.logger.Warn("context optimization failed, using original messages", zap.Error(err))
-		} else {
-			tokensBefore := b.contextManager.EstimateTokens(messages)
-			tokensAfter := b.contextManager.EstimateTokens(optimized)
-			if tokensBefore != tokensAfter {
-				b.logger.Debug("context optimized",
-					zap.Int("tokens_before", tokensBefore),
-					zap.Int("tokens_after", tokensAfter))
-			}
-			messages = optimized
-		}
-	}
-
-	// 2. Model selection (context override takes precedence over config)
+	// 1. Model selection (context override takes precedence over config)
 	model := b.config.LLM.Model
 	if v, ok := types.LLMModel(ctx); ok && strings.TrimSpace(v) != "" {
 		model = strings.TrimSpace(v)
 	}
 
-	// 3. Build base request
+	// 2. Build base request
 	req := &types.ChatRequest{
 		Model:       model,
 		Messages:    messages,
@@ -349,14 +329,14 @@ func (b *BaseAgent) prepareChatRequest(ctx context.Context, messages []types.Mes
 		Temperature: b.config.LLM.Temperature,
 	}
 
-	// 4. Apply RunConfig overrides
+	// 3. Apply RunConfig overrides
 	rc := GetRunConfig(ctx)
 	if rc != nil {
 		rc.ApplyToRequest(req, b.config)
 	}
 	applyContextRouteHints(req, ctx)
 
-	// 5. Tool whitelist filtering
+	// 4. Tool whitelist filtering
 	if b.toolManager != nil {
 		allowedTools := b.toolManager.GetAllowedTools(b.config.Core.ID)
 		switch {
@@ -396,13 +376,13 @@ func (b *BaseAgent) prepareChatRequest(ctx context.Context, messages []types.Mes
 		}
 	}
 
-	// 6. 选择执行 provider。工具协议差异（如 XML fallback）统一在 llm/gateway 内处理。
+	// 5. 选择执行 provider。工具协议差异（如 XML fallback）统一在 llm/gateway 内处理。
 	toolProv := chatProv
 	if b.toolProvider != nil {
 		toolProv = b.gatewayToolProvider()
 	}
 
-	// 7. Effective ReAct iterations
+	// 6. Effective ReAct iterations
 	effectiveIter := rc.EffectiveMaxReActIterations(b.maxReActIterations())
 
 	return &preparedRequest{
