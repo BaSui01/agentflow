@@ -1,12 +1,10 @@
 package openai
 
 import (
-	"bufio"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -19,7 +17,9 @@ import (
 	"github.com/BaSui01/agentflow/llm/providers/openaicompat"
 	"github.com/BaSui01/agentflow/types"
 	openaisdk "github.com/openai/openai-go/v3"
-	openaisdkoption "github.com/openai/openai-go/v3/option"
+	"github.com/openai/openai-go/v3/packages/param"
+	"github.com/openai/openai-go/v3/responses"
+	"github.com/openai/openai-go/v3/shared"
 	"go.uber.org/zap"
 )
 
@@ -340,14 +340,22 @@ func (p *OpenAIProvider) completionWithResponsesAPI(ctx context.Context, req *ll
 	reqCopy := *req
 	reqCopy.PromptCacheRetention = promptCacheRetention
 	body := p.buildResponsesRequest(&reqCopy)
+	params := p.buildResponsesParams(&reqCopy, body)
 
 	// 从 context 或 request 获取 previous_response_id
 	if req.PreviousResponseID != "" {
 		body.PreviousResponseID = req.PreviousResponseID
+		params.PreviousResponseID = param.NewOpt(req.PreviousResponseID)
 	} else if prevID, ok := PreviousResponseIDFromContext(ctx); ok {
 		body.PreviousResponseID = prevID
+		params.PreviousResponseID = param.NewOpt(prevID)
 	}
 	body.Conversation = strings.TrimSpace(req.ConversationID)
+	if body.Conversation != "" {
+		params.Conversation = responses.ResponseNewParamsConversationUnion{
+			OfString: param.NewOpt(body.Conversation),
+		}
+	}
 	llm.ReportProviderPromptUsage(ctx, llm.ProviderPromptUsageReport{
 		Provider:     p.Name(),
 		Model:        body.Model,
@@ -355,13 +363,129 @@ func (p *OpenAIProvider) completionWithResponsesAPI(ctx context.Context, req *ll
 		PromptTokens: countResponsesPromptTokens(body),
 	})
 
-	var responsesResp openAIResponsesResponse
-	client := openaiofficial.NewClient(p.openaiCfg, apiKey, p.Provider.Client)
-	if err := client.Post(ctx, "/responses", body, &responsesResp); err != nil {
+	client := p.sdkClient(ctx)
+	responsesResp, err := client.Responses.New(ctx, params)
+	if err != nil {
 		return nil, p.mapSDKError(err)
 	}
 
-	return toResponsesAPIChatResponse(responsesResp, p.Name()), nil
+	return toResponsesAPIChatResponseFromSDK(responsesResp, p.Name()), nil
+}
+
+func (p *OpenAIProvider) buildResponsesParams(req *llm.ChatRequest, body openAIResponsesRequest) responses.ResponseNewParams {
+	params := responses.ResponseNewParams{
+		Model: shared.ResponsesModel(body.Model),
+	}
+	if body.Instructions != "" {
+		params.Instructions = param.NewOpt(body.Instructions)
+	}
+	if body.MaxOutputTokens != nil {
+		params.MaxOutputTokens = param.NewOpt(int64(*body.MaxOutputTokens))
+	}
+	if body.Temperature != nil {
+		params.Temperature = param.NewOpt(float64(*body.Temperature))
+	}
+	if body.TopP != nil {
+		params.TopP = param.NewOpt(float64(*body.TopP))
+	}
+	if body.ParallelToolCalls != nil {
+		params.ParallelToolCalls = param.NewOpt(*body.ParallelToolCalls)
+	}
+	if body.Store != nil {
+		params.Store = param.NewOpt(*body.Store)
+	}
+	if body.PromptCacheKey != "" {
+		params.PromptCacheKey = param.NewOpt(body.PromptCacheKey)
+	}
+	if body.User != "" {
+		params.User = param.NewOpt(body.User)
+	}
+	if body.ServiceTier != nil && strings.TrimSpace(*body.ServiceTier) != "" {
+		params.ServiceTier = responses.ResponseNewParamsServiceTier(strings.TrimSpace(*body.ServiceTier))
+	}
+	if body.TopLogProbs != nil {
+		params.TopLogprobs = param.NewOpt(int64(*body.TopLogProbs))
+	}
+	if len(body.Metadata) > 0 {
+		params.Metadata = body.Metadata
+	}
+	if body.PromptCacheRetention != "" {
+		switch strings.ToLower(strings.TrimSpace(body.PromptCacheRetention)) {
+		case "in_memory", "in-memory":
+			params.PromptCacheRetention = responses.ResponseNewParamsPromptCacheRetentionInMemory
+		case "24h":
+			params.PromptCacheRetention = responses.ResponseNewParamsPromptCacheRetention24h
+		}
+	}
+	if body.Truncation != "" {
+		params.Truncation = responses.ResponseNewParamsTruncation(body.Truncation)
+	}
+	if len(body.Include) > 0 {
+		params.Include = make([]responses.ResponseIncludable, 0, len(body.Include))
+		for _, include := range body.Include {
+			include = strings.TrimSpace(include)
+			if include == "" {
+				continue
+			}
+			params.Include = append(params.Include, responses.ResponseIncludable(include))
+		}
+	}
+	if len(body.Tools) > 0 {
+		params.Tools = make([]responses.ToolUnionParam, 0, len(body.Tools))
+		for _, tool := range body.Tools {
+			params.Tools = append(params.Tools, overrideSDKParam[responses.ToolUnionParam](tool))
+		}
+	}
+	if body.ToolChoice != nil {
+		params.ToolChoice = overrideSDKParam[responses.ResponseNewParamsToolChoiceUnion](body.ToolChoice)
+	}
+	if body.Reasoning != nil {
+		params.Reasoning = shared.ReasoningParam{
+			Effort:  shared.ReasoningEffort(strings.TrimSpace(body.Reasoning.Effort)),
+			Summary: shared.ReasoningSummary(strings.TrimSpace(body.Reasoning.Summary)),
+		}
+	}
+	if body.Text != nil {
+		text := responses.ResponseTextConfigParam{}
+		if body.Text.Verbosity != "" {
+			text.Verbosity = body.Text.Verbosity
+		}
+		if body.Text.Format != nil {
+			text.Format = overrideSDKParam[responses.ResponseFormatTextConfigUnionParam](body.Text.Format)
+		}
+		params.Text = text
+	}
+	switch input := body.Input.(type) {
+	case string:
+		if strings.TrimSpace(input) != "" {
+			params.Input = responses.ResponseNewParamsInputUnion{OfString: param.NewOpt(input)}
+		}
+	case []any:
+		params.Input = responses.ResponseNewParamsInputUnion{
+			OfInputItemList: overrideSliceSDKParam[responses.ResponseInputItemUnionParam](input),
+		}
+	}
+	return params
+}
+
+func overrideSDKParam[T any](value any) T {
+	raw, err := json.Marshal(value)
+	if err != nil {
+		var zero T
+		return zero
+	}
+	return param.Override[T](json.RawMessage(raw))
+}
+
+func overrideSliceSDKParam[T any](items []any) []T {
+	if len(items) == 0 {
+		return nil
+	}
+	out := make([]T, 0, len(items))
+	for _, item := range items {
+		out = append(out, overrideSDKParam[T](item))
+	}
+	return out
 }
 
 // buildResponsesRequest converts a ChatRequest to a Responses API request.
@@ -881,6 +1005,40 @@ func resolveEndpointMode(req *llm.ChatRequest) string {
 	}
 }
 
+func toResponsesAPIChatResponseFromSDK(resp *responses.Response, provider string) *llm.ChatResponse {
+	if resp == nil {
+		return &llm.ChatResponse{Provider: provider}
+	}
+	legacy, ok := sdkResponseToLegacy(resp)
+	if !ok {
+		return &llm.ChatResponse{
+			ID:       resp.ID,
+			Provider: provider,
+			Model:    string(resp.Model),
+		}
+	}
+	return toResponsesAPIChatResponse(legacy, provider)
+}
+
+func sdkResponseToLegacy(resp *responses.Response) (openAIResponsesResponse, bool) {
+	if resp == nil {
+		return openAIResponsesResponse{}, false
+	}
+	var legacy openAIResponsesResponse
+	if err := json.Unmarshal([]byte(resp.RawJSON()), &legacy); err != nil {
+		return openAIResponsesResponse{}, false
+	}
+	return legacy, true
+}
+
+func sdkOutputItemToLegacy(item responses.ResponseOutputItemUnion) (responsesOutputItem, bool) {
+	var legacy responsesOutputItem
+	if err := json.Unmarshal([]byte(item.RawJSON()), &legacy); err != nil {
+		return responsesOutputItem{}, false
+	}
+	return legacy, true
+}
+
 // toResponsesAPIChatResponse 将 Responses API 响应转换为统一的 llm.ChatResponse.
 func toResponsesAPIChatResponse(resp openAIResponsesResponse, provider string) *llm.ChatResponse {
 	var choices []llm.ChatChoice
@@ -1175,7 +1333,6 @@ func (p *OpenAIProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-ch
 	}
 	req = rewrittenReq
 
-	apiKey := p.Provider.ResolveAPIKey(ctx)
 	promptCacheRetention, cacheErr := providerbase.NormalizeOpenAIPromptCacheRetention(req.PromptCacheRetention, p.Name())
 	if cacheErr != nil {
 		return nil, cacheErr
@@ -1185,14 +1342,19 @@ func (p *OpenAIProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-ch
 	reqCopy.PromptCacheRetention = promptCacheRetention
 
 	body := p.buildResponsesRequest(&reqCopy)
-	body.Stream = true
+	params := p.buildResponsesParams(&reqCopy, body)
 
 	if req.PreviousResponseID != "" {
 		body.PreviousResponseID = req.PreviousResponseID
+		params.PreviousResponseID = param.NewOpt(req.PreviousResponseID)
 	} else if prevID, ok := PreviousResponseIDFromContext(ctx); ok {
 		body.PreviousResponseID = prevID
+		params.PreviousResponseID = param.NewOpt(prevID)
 	}
 	body.Conversation = strings.TrimSpace(req.ConversationID)
+	if body.Conversation != "" {
+		params.Conversation = responses.ResponseNewParamsConversationUnion{OfString: param.NewOpt(body.Conversation)}
+	}
 	llm.ReportProviderPromptUsage(ctx, llm.ProviderPromptUsageReport{
 		Provider:     p.Name(),
 		Model:        body.Model,
@@ -1200,241 +1362,135 @@ func (p *OpenAIProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-ch
 		PromptTokens: countResponsesPromptTokens(body),
 	})
 
-	client := openaiofficial.NewClient(p.openaiCfg, apiKey, p.Provider.Client)
-	var rawResp *http.Response
-	if err := client.Post(ctx, "/responses", body, &rawResp, openaisdkoption.WithHeader("Accept", "text/event-stream")); err != nil {
+	stream := p.sdkClient(ctx).Responses.NewStreaming(ctx, params)
+	if err := stream.Err(); err != nil {
 		return nil, p.mapSDKError(err)
 	}
-	if rawResp == nil || rawResp.Body == nil {
-		return nil, &types.Error{
-			Code:       llm.ErrUpstreamError,
-			Message:    "openai responses stream returned empty response body",
-			HTTPStatus: http.StatusBadGateway,
-			Retryable:  true,
-			Provider:   p.Name(),
-		}
-	}
 
-	return streamResponsesSSE(ctx, rawResp.Body, p.Name()), nil
+	return streamResponsesSDK(ctx, stream, p.Name()), nil
 }
 
-// streamResponsesSSE parses SSE events from the Responses API.
-func streamResponsesSSE(ctx context.Context, body io.ReadCloser, providerName string) <-chan llm.StreamChunk {
+// streamResponsesSDK parses typed streaming events from the Responses API.
+func streamResponsesSDK(ctx context.Context, stream interface {
+	Next() bool
+	Current() responses.ResponseStreamEventUnion
+	Err() error
+	Close() error
+}, providerName string) <-chan llm.StreamChunk {
 	ch := make(chan llm.StreamChunk)
 	go func() {
-		defer body.Close()
+		defer stream.Close()
 		defer close(ch)
-		reader := bufio.NewReader(body)
 
 		var currentID string
 		var currentModel string
 		accumulator := providerbase.NewToolCallDeltaAccumulator()
 		seenReasoning := map[string]bool{}
-		seenToolCalls := map[string]bool{} // track tool calls emitted via .done events
+		seenToolCalls := map[string]bool{}
 		finishSent := false
 
-		for {
-			line, err := reader.ReadString('\n')
-			if err != nil {
-				if err != io.EOF {
-					select {
-					case <-ctx.Done():
-						return
-					case ch <- llm.StreamChunk{Err: &types.Error{
-						Code: llm.ErrUpstreamError, Message: err.Error(), Cause: err, HTTPStatus: http.StatusBadGateway, Retryable: true, Provider: providerName,
-					}}:
-					}
-				}
-				return
-			}
-			line = strings.TrimSpace(line)
-
-			// Parse event type
-			if strings.HasPrefix(line, "event:") {
-				continue
-			}
-			if !strings.HasPrefix(line, "data:") || line == "" {
-				continue
-			}
-			data := strings.TrimSpace(strings.TrimPrefix(line, "data:"))
-			if data == "[DONE]" {
-				return
-			}
-
-			var event map[string]any
-			if err := json.Unmarshal([]byte(data), &event); err != nil {
-				continue
-			}
-
-			eventType, _ := event["type"].(string)
-
-			switch eventType {
+		for stream.Next() {
+			event := stream.Current()
+			switch event.Type {
 			case "response.created", "response.in_progress":
-				if resp, ok := event["response"].(map[string]any); ok {
-					if id, ok := resp["id"].(string); ok {
-						currentID = id
-					}
-					if model, ok := resp["model"].(string); ok {
-						currentModel = model
-					}
+				if event.Response.ID != "" {
+					currentID = event.Response.ID
+				}
+				if event.Response.Model != "" {
+					currentModel = string(event.Response.Model)
 				}
 
 			case "response.output_item.added":
-				// 从 output_item.added 事件提取工具调用元数据。
-				item, _ := event["item"].(map[string]any)
-				if item == nil {
-					continue
-				}
-				itemType, _ := item["type"].(string)
-				switch itemType {
-				case "function_call":
-					itemID, _ := item["id"].(string)
-					name, _ := item["name"].(string)
-					callID, _ := item["call_id"].(string)
-					if itemID != "" && name != "" {
-						accumulator.Register(itemID, types.ToolTypeFunction, name, callID)
+				switch item := event.Item.AsAny().(type) {
+				case responses.ResponseFunctionToolCall:
+					if item.ID != "" && item.Name != "" {
+						accumulator.Register(item.ID, types.ToolTypeFunction, item.Name, item.CallID)
 					}
-				case "custom_tool_call":
-					itemID, _ := item["id"].(string)
-					name, _ := item["name"].(string)
-					callID, _ := item["call_id"].(string)
-					if itemID != "" && name != "" {
-						accumulator.Register(itemID, types.ToolTypeCustom, name, callID)
+				case responses.ResponseCustomToolCall:
+					if item.ID != "" && item.Name != "" {
+						accumulator.Register(item.ID, types.ToolTypeCustom, item.Name, item.CallID)
 					}
 				}
 
 			case "response.output_text.delta":
-				delta, _ := event["delta"].(string)
 				select {
 				case <-ctx.Done():
 					return
-				case ch <- llm.StreamChunk{
-					ID: currentID, Provider: providerName, Model: currentModel,
-					Delta: types.Message{Role: llm.RoleAssistant, Content: delta},
-				}:
+				case ch <- llm.StreamChunk{ID: currentID, Provider: providerName, Model: currentModel, Delta: types.Message{Role: llm.RoleAssistant, Content: event.Delta}}:
 				}
 
 			case "response.refusal.delta":
-				delta, _ := event["delta"].(string)
+				delta := event.Delta
 				select {
 				case <-ctx.Done():
 					return
-				case ch <- llm.StreamChunk{
-					ID: currentID, Provider: providerName, Model: currentModel,
-					Delta: types.Message{Role: llm.RoleAssistant, Refusal: &delta},
-				}:
+				case ch <- llm.StreamChunk{ID: currentID, Provider: providerName, Model: currentModel, Delta: types.Message{Role: llm.RoleAssistant, Refusal: &delta}}:
 				}
 
 			case "response.reasoning_text.delta", "response.reasoning_summary_text.delta":
-				delta, _ := event["delta"].(string)
-				if strings.TrimSpace(delta) == "" {
+				if strings.TrimSpace(event.Delta) == "" {
 					continue
 				}
+				delta := event.Delta
 				select {
 				case <-ctx.Done():
 					return
-				case ch <- llm.StreamChunk{
-					ID: currentID, Provider: providerName, Model: currentModel,
-					Delta: types.Message{Role: llm.RoleAssistant, ReasoningContent: stringPtr(delta)},
-				}:
+				case ch <- llm.StreamChunk{ID: currentID, Provider: providerName, Model: currentModel, Delta: types.Message{Role: llm.RoleAssistant, ReasoningContent: stringPtr(delta)}}:
 				}
 
-			case "response.function_call_arguments.delta":
-				delta, _ := event["delta"].(string)
-				itemID, _ := event["item_id"].(string)
-				if itemID == "" {
+			case "response.function_call_arguments.delta", "response.custom_tool_call_input.delta":
+				if event.ItemID == "" {
 					continue
 				}
-				accumulator.Append(itemID, delta)
-
-			case "response.custom_tool_call_input.delta":
-				delta, _ := event["delta"].(string)
-				itemID, _ := event["item_id"].(string)
-				if itemID == "" {
-					continue
-				}
-				accumulator.Append(itemID, delta)
+				accumulator.Append(event.ItemID, event.Delta)
 
 			case "response.output_item.done":
-				item, _ := event["item"].(map[string]any)
-				if item == nil {
-					continue
-				}
-				itemType, _ := item["type"].(string)
-				output, ok := responsesOutputItemFromAny(item)
+				output, ok := sdkOutputItemToLegacy(event.Item)
 				if !ok {
 					continue
 				}
-				switch itemType {
+				switch output.Type {
 				case "reasoning":
 					if emitResponsesReasoningChunk(ctx, ch, currentID, providerName, currentModel, output) {
 						seenReasoning[output.ID] = true
 					}
 				case "custom_tool_call":
 					callID := firstNonEmptyString(output.CallID, output.ID)
-					// Skip if already emitted via custom_tool_call_input.done event
 					if seenToolCalls[callID] {
 						continue
 					}
 					select {
 					case <-ctx.Done():
 						return
-					case ch <- llm.StreamChunk{
-						ID: currentID, Provider: providerName, Model: currentModel,
-						Delta: types.Message{
-							Role:      llm.RoleAssistant,
-							ToolCalls: providerbase.ToolCallChunk(providerbase.NewCustomToolCall(callID, output.Name, output.Input)),
-						},
-						FinishReason: "tool_calls",
-					}:
+					case ch <- llm.StreamChunk{ID: currentID, Provider: providerName, Model: currentModel, Delta: types.Message{Role: llm.RoleAssistant, ToolCalls: providerbase.ToolCallChunk(providerbase.NewCustomToolCall(callID, output.Name, output.Input))}, FinishReason: "tool_calls"}:
 					}
 				}
 
 			case "response.completed":
-				if resp, ok := event["response"].(map[string]any); ok {
-					if completedResp, ok := responsesResponseFromAny(resp); ok {
-						if completedResp.ID != "" {
-							currentID = completedResp.ID
+				if completedResp, ok := sdkResponseToLegacy(&event.Response); ok {
+					if completedResp.ID != "" {
+						currentID = completedResp.ID
+					}
+					if completedResp.Model != "" {
+						currentModel = completedResp.Model
+					}
+					for _, output := range completedResp.Output {
+						if output.Type != "reasoning" || seenReasoning[output.ID] {
+							continue
 						}
-						if completedResp.Model != "" {
-							currentModel = completedResp.Model
-						}
-						for _, output := range completedResp.Output {
-							if output.Type != "reasoning" {
-								continue
-							}
-							if seenReasoning[output.ID] {
-								continue
-							}
-							if emitResponsesReasoningChunk(ctx, ch, currentID, providerName, currentModel, output) {
-								seenReasoning[output.ID] = true
-							}
+						if emitResponsesReasoningChunk(ctx, ch, currentID, providerName, currentModel, output) {
+							seenReasoning[output.ID] = true
 						}
 					}
-					if usage, ok := resp["usage"].(map[string]any); ok {
-						inputTokens, _ := usage["input_tokens"].(float64)
-						outputTokens, _ := usage["output_tokens"].(float64)
-						totalTokens, _ := usage["total_tokens"].(float64)
-						select {
-						case <-ctx.Done():
-							return
-						case ch <- llm.StreamChunk{
-							ID: currentID, Provider: providerName, Model: currentModel,
-							FinishReason: func() string {
-								if finishSent {
-									return ""
-								}
-								finishSent = true
-								return "stop"
-							}(),
-							Usage: &llm.ChatUsage{
-								PromptTokens:     int(inputTokens),
-								CompletionTokens: int(outputTokens),
-								TotalTokens:      int(totalTokens),
-							},
-						}:
-						}
-					}
+				}
+				select {
+				case <-ctx.Done():
+					return
+				case ch <- llm.StreamChunk{ID: currentID, Provider: providerName, Model: currentModel, FinishReason: func() string {
+					if finishSent { return "" }
+					finishSent = true
+					return "stop"
+				}(), Usage: usageFromSDK(event.Response.Usage)}:
 				}
 
 			case "response.output_text.done":
@@ -1445,87 +1501,83 @@ func streamResponsesSSE(ctx context.Context, body io.ReadCloser, providerName st
 				select {
 				case <-ctx.Done():
 					return
-				case ch <- llm.StreamChunk{
-					ID: currentID, Provider: providerName, Model: currentModel,
-					FinishReason: "stop",
-				}:
+				case ch <- llm.StreamChunk{ID: currentID, Provider: providerName, Model: currentModel, FinishReason: "stop"}:
 				}
 
 			case "response.function_call_arguments.done":
-				itemID, _ := event["item_id"].(string)
-				if itemID == "" {
+				if event.ItemID == "" {
 					continue
 				}
-				toolCall, ok := accumulator.CompleteFunction(itemID)
+				toolCall, ok := accumulator.CompleteFunction(event.ItemID)
 				if !ok {
 					continue
 				}
 				callID := toolCall.ID
-				seenToolCalls[callID] = true // mark as emitted
-				// Always emit tool call chunk; FinishReason only on first one
+				seenToolCalls[callID] = true
 				select {
 				case <-ctx.Done():
 					return
-				case ch <- llm.StreamChunk{
-					ID: currentID, Provider: providerName, Model: currentModel,
-					Delta: types.Message{
-						Role:      llm.RoleAssistant,
-						ToolCalls: providerbase.ToolCallChunk(toolCall),
-					},
-					FinishReason: func() string {
-						if finishSent {
-							return ""
-						}
-						finishSent = true
-						return "tool_calls"
-					}(),
-				}:
+				case ch <- llm.StreamChunk{ID: currentID, Provider: providerName, Model: currentModel, Delta: types.Message{Role: llm.RoleAssistant, ToolCalls: providerbase.ToolCallChunk(toolCall)}, FinishReason: func() string {
+					if finishSent { return "" }
+					finishSent = true
+					return "tool_calls"
+				}()}:
 				}
 
 			case "response.custom_tool_call_input.done":
-				itemID, _ := event["item_id"].(string)
-				if itemID == "" {
+				if event.ItemID == "" {
 					continue
 				}
-				toolCall, ok := accumulator.CompleteCustom(itemID)
+				toolCall, ok := accumulator.CompleteCustom(event.ItemID)
 				if !ok {
 					continue
 				}
 				callID := toolCall.ID
-				seenToolCalls[callID] = true // mark as emitted
-				// Always emit tool call chunk; FinishReason only on first one
+				seenToolCalls[callID] = true
 				select {
 				case <-ctx.Done():
 					return
-				case ch <- llm.StreamChunk{
-					ID: currentID, Provider: providerName, Model: currentModel,
-					Delta: types.Message{
-						Role:      llm.RoleAssistant,
-						ToolCalls: providerbase.ToolCallChunk(toolCall),
-					},
-					FinishReason: func() string {
-						if finishSent {
-							return ""
-						}
-						finishSent = true
-						return "tool_calls"
-					}(),
-				}:
+				case ch <- llm.StreamChunk{ID: currentID, Provider: providerName, Model: currentModel, Delta: types.Message{Role: llm.RoleAssistant, ToolCalls: providerbase.ToolCallChunk(toolCall)}, FinishReason: func() string {
+					if finishSent { return "" }
+					finishSent = true
+					return "tool_calls"
+				}()}:
 				}
 
 			case "error":
-				errMsg, _ := event["message"].(string)
 				select {
 				case <-ctx.Done():
 					return
-				case ch <- llm.StreamChunk{Err: &types.Error{
-					Code: llm.ErrUpstreamError, Message: errMsg,
-					HTTPStatus: http.StatusBadGateway, Provider: providerName,
-				}}:
+				case ch <- llm.StreamChunk{Err: &types.Error{Code: llm.ErrUpstreamError, Message: event.Message, HTTPStatus: http.StatusBadGateway, Provider: providerName}}:
 				}
 				return
 			}
 		}
+		if err := stream.Err(); err != nil {
+			select {
+			case <-ctx.Done():
+				return
+			case ch <- llm.StreamChunk{Err: &types.Error{Code: llm.ErrUpstreamError, Message: err.Error(), Cause: err, HTTPStatus: http.StatusBadGateway, Retryable: true, Provider: providerName}}:
+			}
+		}
 	}()
 	return ch
+}
+
+func usageFromSDK(usage responses.ResponseUsage) *llm.ChatUsage {
+	if !usage.JSON.TotalTokens.Valid() && !usage.JSON.InputTokens.Valid() && !usage.JSON.OutputTokens.Valid() {
+		return nil
+	}
+	result := &llm.ChatUsage{
+		PromptTokens:     int(usage.InputTokens),
+		CompletionTokens: int(usage.OutputTokens),
+		TotalTokens:      int(usage.TotalTokens),
+	}
+	if usage.JSON.InputTokensDetails.Valid() {
+		result.PromptTokensDetails = &llm.PromptTokensDetails{CachedTokens: int(usage.InputTokensDetails.CachedTokens)}
+	}
+	if usage.JSON.OutputTokensDetails.Valid() {
+		result.CompletionTokensDetails = &llm.CompletionTokensDetails{ReasoningTokens: int(usage.OutputTokensDetails.ReasoningTokens)}
+	}
+	return result
 }
