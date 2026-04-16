@@ -57,7 +57,7 @@ type MemoryEntry struct {
 
 // ReflexionExecutor执行Reflexion模式.
 type ReflexionExecutor struct {
-	provider     llm.Provider
+	provider     types.ChatProvider
 	toolExecutor tools.ToolExecutor
 	toolSchemas  []types.ToolSchema
 	config       ReflexionConfig
@@ -66,7 +66,7 @@ type ReflexionExecutor struct {
 }
 
 // 新ReflexionExecutor创建了新的Reflexion执行器.
-func NewReflexionExecutor(provider llm.Provider, executor tools.ToolExecutor, schemas []types.ToolSchema, config ReflexionConfig, logger *zap.Logger) *ReflexionExecutor {
+func NewReflexionExecutor(provider types.ChatProvider, executor tools.ToolExecutor, schemas []types.ToolSchema, config ReflexionConfig, logger *zap.Logger) *ReflexionExecutor {
 	if logger == nil {
 		logger = zap.NewNop()
 	}

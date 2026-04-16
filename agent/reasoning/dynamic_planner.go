@@ -73,7 +73,7 @@ const (
 
 // Dynamic Planner执行动态规划并进行回溯跟踪.
 type DynamicPlanner struct {
-	provider     llm.Provider
+	provider     types.ChatProvider
 	toolExecutor tools.ToolExecutor
 	toolSchemas  []types.ToolSchema
 	config       DynamicPlannerConfig
@@ -88,7 +88,7 @@ type DynamicPlanner struct {
 }
 
 // NewDynamic Planner创建了新的动态计划.
-func NewDynamicPlanner(provider llm.Provider, executor tools.ToolExecutor, schemas []types.ToolSchema, config DynamicPlannerConfig, logger *zap.Logger) *DynamicPlanner {
+func NewDynamicPlanner(provider types.ChatProvider, executor tools.ToolExecutor, schemas []types.ToolSchema, config DynamicPlannerConfig, logger *zap.Logger) *DynamicPlanner {
 	if logger == nil {
 		logger = zap.NewNop()
 	}

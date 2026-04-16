@@ -60,6 +60,12 @@ Transport baseline after the current migration wave:
 - Gemini native chat/streaming/embedding/image/video primary paths use `google.golang.org/genai`
 - `llm/providers/openaicompat` remains intentionally HTTP-based for non-native OpenAI-compatible vendors
 
+OpenAI-specific rule of thumb:
+
+- Responses completion, typed streaming, and native input-token counting should default to `client.Responses.*`
+- request construction may adapt AgentFlow contracts into SDK params, but new work must not add a second manual `/v1/responses` transport path beside the SDK-backed one
+- if a provider-local fallback is temporarily required for an SDK gap, keep it scoped to that one operation and document the gap inline
+
 ## Migration Rule For New Work
 
 When adding or changing a native OpenAI / Anthropic / Gemini capability:

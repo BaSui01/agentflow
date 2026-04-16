@@ -149,14 +149,14 @@ func DefaultTreeOfThoughtConfig() TreeOfThoughtConfig {
 // Tree Of Thought 执行思想之树推理模式.
 // 它平行地探索多条推理路径,并选择了最好的一条.
 type TreeOfThought struct {
-	provider     llm.Provider
+	provider     types.ChatProvider
 	toolExecutor tools.ToolExecutor
 	config       TreeOfThoughtConfig
 	logger       *zap.Logger
 }
 
 // NewTreeOfThought创造出"思想理性之树".
-func NewTreeOfThought(provider llm.Provider, executor tools.ToolExecutor, config TreeOfThoughtConfig, logger *zap.Logger) *TreeOfThought {
+func NewTreeOfThought(provider types.ChatProvider, executor tools.ToolExecutor, config TreeOfThoughtConfig, logger *zap.Logger) *TreeOfThought {
 	if logger == nil {
 		logger = zap.NewNop()
 	}

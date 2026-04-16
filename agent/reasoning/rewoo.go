@@ -41,7 +41,7 @@ func DefaultReWOOConfig() ReWOOConfig {
 // 它产生一个完整的计划前, 然后执行所有步骤,
 // 最后从所有观测中合成答案。
 type ReWOO struct {
-	provider     llm.Provider
+	provider     types.ChatProvider
 	toolExecutor tools.ToolExecutor
 	toolSchemas  []types.ToolSchema
 	config       ReWOOConfig
@@ -49,7 +49,7 @@ type ReWOO struct {
 }
 
 // NewReWOO创建了新的ReWOO理性.
-func NewReWOO(provider llm.Provider, executor tools.ToolExecutor, schemas []types.ToolSchema, config ReWOOConfig, logger *zap.Logger) *ReWOO {
+func NewReWOO(provider types.ChatProvider, executor tools.ToolExecutor, schemas []types.ToolSchema, config ReWOOConfig, logger *zap.Logger) *ReWOO {
 	if logger == nil {
 		logger = zap.NewNop()
 	}

@@ -63,7 +63,7 @@ const (
 )
 
 // NewPlanAndExecute创建了一个新的"计划"和"执行"推理器.
-func NewPlanAndExecute(provider llm.Provider, executor tools.ToolExecutor, schemas []types.ToolSchema, config PlanExecuteConfig, logger *zap.Logger) *PlanAndExecute {
+func NewPlanAndExecute(provider types.ChatProvider, executor tools.ToolExecutor, schemas []types.ToolSchema, config PlanExecuteConfig, logger *zap.Logger) *PlanAndExecute {
 	if logger == nil {
 		logger = zap.NewNop()
 	}
