@@ -5,7 +5,6 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/BaSui01/agentflow/rag"
 	"github.com/BaSui01/agentflow/rag/core"
 	"github.com/BaSui01/agentflow/types"
 )

@@ -17,8 +17,8 @@ import (
 	"github.com/BaSui01/agentflow/api"
 	"github.com/BaSui01/agentflow/api/handlers"
 	"github.com/BaSui01/agentflow/config"
+	"github.com/BaSui01/agentflow/internal/app/bootstrap"
 	"github.com/BaSui01/agentflow/llm"
-	llmcompose "github.com/BaSui01/agentflow/llm/runtime/compose"
 	pkgserver "github.com/BaSui01/agentflow/pkg/server"
 	"github.com/BaSui01/agentflow/types"
 	"github.com/stretchr/testify/require"
@@ -110,18 +110,18 @@ func TestServerHotReload_UpdatesChatHandlerInPlace(t *testing.T) {
 
 	modeA := "reload-a"
 	modeB := "reload-b"
-	llmcompose.UnregisterMainProviderBuilder(modeA)
-	llmcompose.UnregisterMainProviderBuilder(modeB)
-	require.NoError(t, llmcompose.RegisterMainProviderBuilder(modeA,
+	bootstrap.UnregisterMainProviderBuilder(modeA)
+	bootstrap.UnregisterMainProviderBuilder(modeB)
+	require.NoError(t, bootstrap.RegisterMainProviderBuilder(modeA,
 		func(context.Context, *config.Config, *gorm.DB, *zap.Logger) (llm.Provider, error) {
 			return &hotReloadProvider{name: "provider-a", content: "from-a"}, nil
 		}))
-	require.NoError(t, llmcompose.RegisterMainProviderBuilder(modeB,
+	require.NoError(t, bootstrap.RegisterMainProviderBuilder(modeB,
 		func(context.Context, *config.Config, *gorm.DB, *zap.Logger) (llm.Provider, error) {
 			return &hotReloadProvider{name: "provider-b", content: "from-b"}, nil
 		}))
-	defer llmcompose.UnregisterMainProviderBuilder(modeA)
-	defer llmcompose.UnregisterMainProviderBuilder(modeB)
+	defer bootstrap.UnregisterMainProviderBuilder(modeA)
+	defer bootstrap.UnregisterMainProviderBuilder(modeB)
 
 	cfg := config.DefaultConfig()
 	cfg.LLM.MainProviderMode = modeA
@@ -150,18 +150,18 @@ func TestServerHotReload_RollsBackOnRuntimeRebuildFailure(t *testing.T) {
 
 	modeA := "reload-good"
 	modeBroken := "reload-broken"
-	llmcompose.UnregisterMainProviderBuilder(modeA)
-	llmcompose.UnregisterMainProviderBuilder(modeBroken)
-	require.NoError(t, llmcompose.RegisterMainProviderBuilder(modeA,
+	bootstrap.UnregisterMainProviderBuilder(modeA)
+	bootstrap.UnregisterMainProviderBuilder(modeBroken)
+	require.NoError(t, bootstrap.RegisterMainProviderBuilder(modeA,
 		func(context.Context, *config.Config, *gorm.DB, *zap.Logger) (llm.Provider, error) {
 			return &hotReloadProvider{name: "provider-good", content: "stable"}, nil
 		}))
-	require.NoError(t, llmcompose.RegisterMainProviderBuilder(modeBroken,
+	require.NoError(t, bootstrap.RegisterMainProviderBuilder(modeBroken,
 		func(context.Context, *config.Config, *gorm.DB, *zap.Logger) (llm.Provider, error) {
 			return nil, fmt.Errorf("broken builder")
 		}))
-	defer llmcompose.UnregisterMainProviderBuilder(modeA)
-	defer llmcompose.UnregisterMainProviderBuilder(modeBroken)
+	defer bootstrap.UnregisterMainProviderBuilder(modeA)
+	defer bootstrap.UnregisterMainProviderBuilder(modeBroken)
 
 	cfg := config.DefaultConfig()
 	cfg.LLM.MainProviderMode = modeA
@@ -189,12 +189,12 @@ func TestServerHotReload_RequiresRestartToActivateMissingChatAndCostRoutes(t *te
 	t.Parallel()
 
 	modeGood := "reload-startup-good"
-	llmcompose.UnregisterMainProviderBuilder(modeGood)
-	require.NoError(t, llmcompose.RegisterMainProviderBuilder(modeGood,
+	bootstrap.UnregisterMainProviderBuilder(modeGood)
+	require.NoError(t, bootstrap.RegisterMainProviderBuilder(modeGood,
 		func(context.Context, *config.Config, *gorm.DB, *zap.Logger) (llm.Provider, error) {
 			return &hotReloadProvider{name: "provider-good", content: "live"}, nil
 		}))
-	defer llmcompose.UnregisterMainProviderBuilder(modeGood)
+	defer bootstrap.UnregisterMainProviderBuilder(modeGood)
 
 	cfg := config.DefaultConfig()
 	cfg.LLM.MainProviderMode = modeGood
@@ -219,18 +219,18 @@ func TestServerHotReload_TeardownsPreviousResolverCache(t *testing.T) {
 
 	modeA := "reload-resolver-a"
 	modeB := "reload-resolver-b"
-	llmcompose.UnregisterMainProviderBuilder(modeA)
-	llmcompose.UnregisterMainProviderBuilder(modeB)
-	require.NoError(t, llmcompose.RegisterMainProviderBuilder(modeA,
+	bootstrap.UnregisterMainProviderBuilder(modeA)
+	bootstrap.UnregisterMainProviderBuilder(modeB)
+	require.NoError(t, bootstrap.RegisterMainProviderBuilder(modeA,
 		func(context.Context, *config.Config, *gorm.DB, *zap.Logger) (llm.Provider, error) {
 			return &hotReloadProvider{name: "provider-resolver-a", content: "resolver-a"}, nil
 		}))
-	require.NoError(t, llmcompose.RegisterMainProviderBuilder(modeB,
+	require.NoError(t, bootstrap.RegisterMainProviderBuilder(modeB,
 		func(context.Context, *config.Config, *gorm.DB, *zap.Logger) (llm.Provider, error) {
 			return &hotReloadProvider{name: "provider-resolver-b", content: "resolver-b"}, nil
 		}))
-	defer llmcompose.UnregisterMainProviderBuilder(modeA)
-	defer llmcompose.UnregisterMainProviderBuilder(modeB)
+	defer bootstrap.UnregisterMainProviderBuilder(modeA)
+	defer bootstrap.UnregisterMainProviderBuilder(modeB)
 
 	cfg := config.DefaultConfig()
 	cfg.LLM.MainProviderMode = modeA
@@ -279,18 +279,18 @@ func TestServerHotReload_ReusesWorkflowHITLManager(t *testing.T) {
 
 	modeA := "reload-workflow-a"
 	modeB := "reload-workflow-b"
-	llmcompose.UnregisterMainProviderBuilder(modeA)
-	llmcompose.UnregisterMainProviderBuilder(modeB)
-	require.NoError(t, llmcompose.RegisterMainProviderBuilder(modeA,
+	bootstrap.UnregisterMainProviderBuilder(modeA)
+	bootstrap.UnregisterMainProviderBuilder(modeB)
+	require.NoError(t, bootstrap.RegisterMainProviderBuilder(modeA,
 		func(context.Context, *config.Config, *gorm.DB, *zap.Logger) (llm.Provider, error) {
 			return &hotReloadProvider{name: "provider-workflow-a", content: "a"}, nil
 		}))
-	require.NoError(t, llmcompose.RegisterMainProviderBuilder(modeB,
+	require.NoError(t, bootstrap.RegisterMainProviderBuilder(modeB,
 		func(context.Context, *config.Config, *gorm.DB, *zap.Logger) (llm.Provider, error) {
 			return &hotReloadProvider{name: "provider-workflow-b", content: "b"}, nil
 		}))
-	defer llmcompose.UnregisterMainProviderBuilder(modeA)
-	defer llmcompose.UnregisterMainProviderBuilder(modeB)
+	defer bootstrap.UnregisterMainProviderBuilder(modeA)
+	defer bootstrap.UnregisterMainProviderBuilder(modeB)
 
 	cfg := config.DefaultConfig()
 	cfg.LLM.MainProviderMode = modeA

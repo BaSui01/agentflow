@@ -98,12 +98,10 @@ func main() {
 		fmt.Println("缓存未命中")
 	}
 
-	// 7. 上下文压缩示例
-	fmt.Println("\n=== 上下文压缩 ===")
+	// 7. 上下文运行时示例
+	fmt.Println("\n=== 上下文运行时 ===")
 
-	// 使用新的 agent/context.Engineer 进行上下文管理
-	engineerConfig := agentcontext.DefaultConfig()
-	engineer := agentcontext.New(engineerConfig, logger)
+	manager := agentcontext.NewAgentContextManager(agentcontext.DefaultAgentContextConfig("gpt-4o"), logger)
 
 	// 准备消息
 	messages := []types.Message{
@@ -115,13 +113,13 @@ func main() {
 	}
 
 	// 获取上下文状态
-	status := engineer.GetStatus(messages)
+	status := manager.GetStatus(messages)
 	fmt.Printf("当前 token 数: %d\n", status.CurrentTokens)
 	fmt.Printf("使用率: %.2f%%\n", status.UsageRatio*100)
 	fmt.Printf("建议: %s\n", status.Recommendation)
 
 	// 管理上下文（如果需要压缩）
-	managed, err := engineer.Manage(context.Background(), messages, "What about Python?")
+	managed, err := manager.PrepareMessages(context.Background(), messages, "What about Python?")
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -187,7 +185,7 @@ func demoRuntimeBuilder(logger *zap.Logger) {
 }
 
 func demoContextManagers(logger *zap.Logger) {
-	fmt.Println("\n=== Context Managers 集成 ===")
+	fmt.Println("\n=== Context Runtime 集成 ===")
 	ctx := context.Background()
 
 	overflowMessages := []types.Message{
@@ -195,22 +193,6 @@ func demoContextManagers(logger *zap.Logger) {
 		{Role: types.RoleUser, Content: strings.Repeat("very long user message ", 120)},
 		{Role: types.RoleAssistant, Content: strings.Repeat("very long assistant message ", 120)},
 	}
-
-	engineer := agentcontext.New(agentcontext.Config{
-		MaxContextTokens: 80,
-		ReserveForOutput: 0,
-		SoftLimit:        0.2,
-		WarnLimit:        0.4,
-		HardLimit:        0.6,
-		TargetUsage:      0.3,
-		Strategy:         agentcontext.StrategyAdaptive,
-	}, logger)
-	status := engineer.GetStatus(overflowMessages)
-	fmt.Printf("engineer level=%s usage=%.2f\n", status.Level.String(), status.UsageRatio)
-	_, _ = engineer.MustFit(ctx, overflowMessages, "compress")
-	_ = engineer.GetStats()
-	_ = engineer.EstimateTokens(overflowMessages)
-	_ = engineer.CanAddMessage(overflowMessages, types.Message{Role: types.RoleUser, Content: "next"})
 
 	agentCfg := agentcontext.DefaultAgentContextConfig("gpt-4o")
 	agentCfg.MaxContextTokens = 80
@@ -227,37 +209,18 @@ func demoContextManagers(logger *zap.Logger) {
 	_ = manager.ShouldCompress(overflowMessages)
 	_ = manager.GetRecommendation(overflowMessages)
 
-	slide := agentcontext.NewWindowManager(agentcontext.WindowConfig{
-		Strategy:      agentcontext.StrategySlidingWindow,
-		MaxTokens:     120,
-		MaxMessages:   2,
-		ReserveTokens: 10,
-		KeepSystemMsg: true,
-		KeepLastN:     1,
-	}, nil, nil)
-	_, _ = slide.PrepareMessages(ctx, overflowMessages, "slide")
-	_ = slide.GetStatus(overflowMessages)
-	_ = slide.EstimateTokens(overflowMessages)
+	assembled, _ := manager.Assemble(ctx, &agentcontext.AssembleRequest{
+		SystemPrompt:  "You are a strict assistant.",
+		Conversation:  overflowMessages,
+		MemoryContext: []string{"user prefers concise answers"},
+		UserInput:     "prepare",
+		Query:         "prepare",
+	})
+	if assembled != nil {
+		fmt.Printf("context runtime tokens before=%d after=%d\n", assembled.TokensBefore, assembled.TokensAfter)
+	}
 
-	budget := agentcontext.NewWindowManager(agentcontext.WindowConfig{
-		Strategy:      agentcontext.StrategyTokenBudget,
-		MaxTokens:     120,
-		ReserveTokens: 10,
-		KeepSystemMsg: true,
-		KeepLastN:     1,
-	}, nil, nil)
-	_, _ = budget.PrepareMessages(ctx, overflowMessages, "budget")
-
-	summary := agentcontext.NewWindowManager(agentcontext.WindowConfig{
-		Strategy:      agentcontext.StrategySummarize,
-		MaxTokens:     120,
-		ReserveTokens: 10,
-		KeepSystemMsg: true,
-		KeepLastN:     1,
-	}, nil, simpleSummarizer{})
-	_, _ = summary.PrepareMessages(ctx, overflowMessages, "summary")
-
-	fmt.Println("agent/context 的 Engineer/AgentContextManager/WindowManager 已接入示例链路")
+	fmt.Println("agent/context 的 AgentContextManager/Assembler 已接入示例链路")
 }
 
 type exampleEmbeddingProvider struct{}
