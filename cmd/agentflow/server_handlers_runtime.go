@@ -10,7 +10,6 @@ import (
 	"github.com/BaSui01/agentflow/config"
 	"github.com/BaSui01/agentflow/internal/app/bootstrap"
 	"github.com/BaSui01/agentflow/llm/observability"
-	"github.com/BaSui01/agentflow/rag"
 	"github.com/BaSui01/agentflow/rag/core"
 	"go.uber.org/zap"
 )

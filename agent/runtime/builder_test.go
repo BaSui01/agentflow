@@ -269,6 +269,7 @@ func TestResolveRuntimeReasoningRegistry_PrefersExplicitRegistry(t *testing.T) {
 
 	resolved := resolveRuntimeReasoningRegistry(
 		mocks.NewSuccessProvider("hello"),
+		"gpt-4",
 		"agent-1",
 		BuildOptions{ReasoningRegistry: explicitRegistry},
 		zap.NewNop(),
@@ -280,6 +281,7 @@ func TestResolveRuntimeReasoningRegistry_PrefersExplicitRegistry(t *testing.T) {
 func TestResolveRuntimeReasoningRegistry_UsesRuntimeDefaultModesOnly(t *testing.T) {
 	resolved := resolveRuntimeReasoningRegistry(
 		mocks.NewSuccessProvider("hello"),
+		"gpt-4",
 		"agent-1",
 		BuildOptions{},
 		zap.NewNop(),

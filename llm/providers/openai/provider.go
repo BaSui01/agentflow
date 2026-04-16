@@ -232,33 +232,24 @@ type customToolCallInputItem struct {
 	Input  string `json:"input"`
 }
 
-// functionCallOutputItem represents a function call output in the input.
-type functionCallOutputItem struct {
-	Type   string `json:"type"` // "function_call_output"
-	CallID string `json:"call_id"`
-	Output string `json:"output"`
-}
-
-// customToolCallOutputItem represents a custom tool call output in the input.
-type customToolCallOutputItem struct {
-	Type   string `json:"type"` // "custom_tool_call_output"
-	CallID string `json:"call_id"`
-	Output string `json:"output"`
-}
-
 // responsesReasoningInputItem represents a reasoning item re-sent for manual round-tripping.
 type responsesReasoningInputItem struct {
-	Type             string             `json:"type"` // "reasoning"
-	ID               string             `json:"id,omitempty"`
-	Status           string             `json:"status,omitempty"`
-	Summary          []responsesContent `json:"summary"`
-	Content          []responsesContent `json:"content,omitempty"`
-	EncryptedContent string             `json:"encrypted_content,omitempty"`
+	Type             string                   `json:"type"` // "reasoning"
+	ID               string                   `json:"id,omitempty"`
+	Status           string                   `json:"status,omitempty"`
+	Summary          []responsesReasoningPart `json:"summary"`
+	Content          []responsesReasoningPart `json:"content,omitempty"`
+	EncryptedContent string                   `json:"encrypted_content,omitempty"`
 }
 
-// --- Responses API Response Types ---
+type responsesReasoningPart struct {
+	Type string `json:"type"`
+	Text string `json:"text,omitempty"`
+}
 
-// openAIResponsesResponse represents the Responses API response.
+// 兼容桥接/测试夹具：仍保留最小 Responses 镜像结构，便于现有测试和少量运行时桥接逐步收敛。
+type responsesContent = responsesReasoningPart
+
 type openAIResponsesResponse struct {
 	ID          string                `json:"id"`
 	Object      string                `json:"object"`
@@ -272,7 +263,6 @@ type openAIResponsesResponse struct {
 	Error       *responsesError       `json:"error,omitempty"`
 }
 
-// responsesUsage uses different field names than Chat Completions.
 type responsesUsage struct {
 	InputTokens         int                          `json:"input_tokens"`
 	OutputTokens        int                          `json:"output_tokens"`
@@ -294,38 +284,18 @@ type responsesError struct {
 	Message string `json:"message"`
 }
 
-// responsesOutputItem represents an item in the response output array.
 type responsesOutputItem struct {
-	Type             string             `json:"type"` // "message", "function_call", "custom_tool_call", "reasoning"
+	Type             string             `json:"type"`
 	ID               string             `json:"id"`
 	Status           string             `json:"status,omitempty"`
 	Role             string             `json:"role,omitempty"`
 	Content          []responsesContent `json:"content,omitempty"`
 	EncryptedContent string             `json:"encrypted_content,omitempty"`
-	// function_call fields
-	Name      string          `json:"name,omitempty"`
-	Arguments json.RawMessage `json:"arguments,omitempty"`
-	CallID    string          `json:"call_id,omitempty"`
-	Input     string          `json:"input,omitempty"`
-	// reasoning fields
-	Summary []responsesContent `json:"summary,omitempty"`
-}
-
-// responsesContent represents a content item in the output.
-type responsesContent struct {
-	Type        string                `json:"type"`
-	Text        string                `json:"text,omitempty"`
-	Refusal     string                `json:"refusal,omitempty"`
-	Annotations []responsesAnnotation `json:"annotations,omitempty"`
-}
-
-// responsesAnnotation represents a citation annotation.
-type responsesAnnotation struct {
-	Type       string `json:"type"`
-	StartIndex int    `json:"start_index,omitempty"`
-	EndIndex   int    `json:"end_index,omitempty"`
-	URL        string `json:"url,omitempty"`
-	Title      string `json:"title,omitempty"`
+	Name             string             `json:"name,omitempty"`
+	Arguments        json.RawMessage    `json:"arguments,omitempty"`
+	CallID           string             `json:"call_id,omitempty"`
+	Input            string             `json:"input,omitempty"`
+	Summary          []responsesContent `json:"summary,omitempty"`
 }
 
 // --- Completion & Helper Methods ---
@@ -369,7 +339,7 @@ func (p *OpenAIProvider) completionWithResponsesAPI(ctx context.Context, req *ll
 		return nil, p.mapSDKError(err)
 	}
 
-	return toResponsesAPIChatResponseFromSDK(responsesResp, p.Name()), nil
+	return toResponsesAPIChatResponse(responsesResp, p.Name()), nil
 }
 
 func (p *OpenAIProvider) buildResponsesParams(req *llm.ChatRequest, body openAIResponsesRequest) responses.ResponseNewParams {
@@ -437,7 +407,7 @@ func (p *OpenAIProvider) buildResponsesParams(req *llm.ChatRequest, body openAIR
 		}
 	}
 	if body.ToolChoice != nil {
-		params.ToolChoice = decodeSDKParam[responses.ResponseNewParamsToolChoiceUnion](body.ToolChoice)
+		params.ToolChoice = buildSDKResponseToolChoice(body.ToolChoice, body.Tools)
 	}
 	if body.Reasoning != nil {
 		params.Reasoning = shared.ReasoningParam{
@@ -500,6 +470,98 @@ func responseRequestOptions(body openAIResponsesRequest) []openaisdkoption.Reque
 	return []openaisdkoption.RequestOption{
 		openaisdkoption.WithJSONSet("prompt_cache_retention", body.PromptCacheRetention),
 	}
+}
+
+func buildSDKResponseToolChoice(choice any, tools []any) responses.ResponseNewParamsToolChoiceUnion {
+	if choice == nil {
+		return responses.ResponseNewParamsToolChoiceUnion{}
+	}
+	if _, ok := choice.(map[string]any); !ok {
+		return decodeSDKParam[responses.ResponseNewParamsToolChoiceUnion](choice)
+	}
+	normalized := providerbase.NormalizeToolChoice(choice)
+	switch normalized.Mode {
+	case "tool":
+		name := strings.TrimSpace(normalized.SpecificName)
+		if name == "" {
+			return decodeSDKParam[responses.ResponseNewParamsToolChoiceUnion](choice)
+		}
+		if toolType := findResponseToolTypeByName(tools, name); toolType == types.ToolTypeCustom {
+			return responses.ResponseNewParamsToolChoiceUnion{
+				OfCustomTool: &responses.ToolChoiceCustomParam{Name: name},
+			}
+		}
+		return responses.ResponseNewParamsToolChoiceUnion{
+			OfFunctionTool: &responses.ToolChoiceFunctionParam{Name: name},
+		}
+	case "any":
+		allowedTools := buildAllowedToolsChoice(tools)
+		if len(allowedTools) == 0 {
+			return decodeSDKParam[responses.ResponseNewParamsToolChoiceUnion](choice)
+		}
+		return responses.ResponseNewParamsToolChoiceUnion{
+			OfAllowedTools: &responses.ToolChoiceAllowedParam{
+				Mode:  responses.ToolChoiceAllowedModeRequired,
+				Tools: allowedTools,
+			},
+		}
+	case "auto":
+		return responses.ResponseNewParamsToolChoiceUnion{
+			OfToolChoiceMode: param.NewOpt(responses.ToolChoiceOptionsAuto),
+		}
+	case "none":
+		return responses.ResponseNewParamsToolChoiceUnion{
+			OfToolChoiceMode: param.NewOpt(responses.ToolChoiceOptionsNone),
+		}
+	default:
+		return decodeSDKParam[responses.ResponseNewParamsToolChoiceUnion](choice)
+	}
+}
+
+func buildAllowedToolsChoice(tools []any) []map[string]any {
+	if len(tools) == 0 {
+		return nil
+	}
+	out := make([]map[string]any, 0, len(tools))
+	for _, tool := range tools {
+		toolMap, ok := tool.(map[string]any)
+		if !ok {
+			continue
+		}
+		entry := map[string]any{}
+		if toolType, _ := toolMap["type"].(string); strings.TrimSpace(toolType) != "" {
+			entry["type"] = strings.TrimSpace(toolType)
+		}
+		if name, _ := toolMap["name"].(string); strings.TrimSpace(name) != "" {
+			entry["name"] = strings.TrimSpace(name)
+		}
+		if len(entry) > 0 {
+			out = append(out, entry)
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+func findResponseToolTypeByName(tools []any, name string) string {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return ""
+	}
+	for _, tool := range tools {
+		toolMap, ok := tool.(map[string]any)
+		if !ok {
+			continue
+		}
+		if toolName, _ := toolMap["name"].(string); strings.TrimSpace(toolName) == name {
+			if toolType, _ := toolMap["type"].(string); strings.TrimSpace(toolType) != "" {
+				return providerbase.NormalizeToolType(toolType)
+			}
+		}
+	}
+	return ""
 }
 
 // buildResponsesRequest converts a ChatRequest to a Responses API request.
@@ -1019,49 +1081,18 @@ func resolveEndpointMode(req *llm.ChatRequest) string {
 	}
 }
 
-func toResponsesAPIChatResponseFromSDK(resp *responses.Response, provider string) *llm.ChatResponse {
+// toResponsesAPIChatResponse 将 Responses API 响应转换为统一的 llm.ChatResponse.
+func toResponsesAPIChatResponse(resp *responses.Response, provider string) *llm.ChatResponse {
 	if resp == nil {
 		return &llm.ChatResponse{Provider: provider}
 	}
-	legacy, ok := sdkResponseToLegacy(resp)
-	if !ok {
-		return &llm.ChatResponse{
-			ID:       resp.ID,
-			Provider: provider,
-			Model:    string(resp.Model),
-		}
-	}
-	return toResponsesAPIChatResponse(legacy, provider)
-}
-
-func sdkResponseToLegacy(resp *responses.Response) (openAIResponsesResponse, bool) {
-	if resp == nil {
-		return openAIResponsesResponse{}, false
-	}
-	var legacy openAIResponsesResponse
-	if err := json.Unmarshal([]byte(resp.RawJSON()), &legacy); err != nil {
-		return openAIResponsesResponse{}, false
-	}
-	return legacy, true
-}
-
-func sdkOutputItemToLegacy(item responses.ResponseOutputItemUnion) (responsesOutputItem, bool) {
-	var legacy responsesOutputItem
-	if err := json.Unmarshal([]byte(item.RawJSON()), &legacy); err != nil {
-		return responsesOutputItem{}, false
-	}
-	return legacy, true
-}
-
-// toResponsesAPIChatResponse 将 Responses API 响应转换为统一的 llm.ChatResponse.
-func toResponsesAPIChatResponse(resp openAIResponsesResponse, provider string) *llm.ChatResponse {
 	var choices []llm.ChatChoice
 	choiceIdx := 0
 
 	for _, output := range resp.Output {
 		switch output.Type {
 		case "message":
-			msg := buildResponsesMessage(output)
+			msg := buildResponsesMessage(output.AsMessage())
 			if len(choices) > 0 && choices[len(choices)-1].Message.Role == llm.RoleAssistant &&
 				choices[len(choices)-1].Message.Content == "" && len(choices[len(choices)-1].Message.ToolCalls) == 0 {
 				last := &choices[len(choices)-1]
@@ -1070,32 +1101,42 @@ func toResponsesAPIChatResponse(resp openAIResponsesResponse, provider string) *
 				if msg.Refusal != nil {
 					last.Message.Refusal = msg.Refusal
 				}
-				last.FinishReason = mapResponsesStatus(resp.Status)
+				last.FinishReason = mapResponsesStatus(string(resp.Status))
 			} else {
 				choices = append(choices, llm.ChatChoice{
-					Index: choiceIdx, FinishReason: mapResponsesStatus(resp.Status), Message: msg,
+					Index: choiceIdx, FinishReason: mapResponsesStatus(string(resp.Status)), Message: msg,
 				})
 				choiceIdx++
 			}
 
 		case "reasoning":
 			choice := ensureResponsesAssistantChoice(&choices, &choiceIdx)
-			mergeResponsesReasoningItem(&choice.Message, output, provider)
+			mergeResponsesReasoningItem(&choice.Message, output.AsReasoning(), provider)
 			if choice.FinishReason == "" {
-				choice.FinishReason = mapResponsesStatus(resp.Status)
+				choice.FinishReason = mapResponsesStatus(string(resp.Status))
 			}
 
 		case "function_call":
+			functionCall := output.AsFunctionCall()
 			choice := ensureResponsesAssistantChoice(&choices, &choiceIdx)
 			choice.Message.ToolCalls = append(choice.Message.ToolCalls,
-				providerbase.NewFunctionToolCall(firstNonEmptyString(output.CallID, output.ID), output.Name, output.Arguments),
+				providerbase.NewFunctionToolCall(
+					firstNonEmptyString(functionCall.CallID, functionCall.ID),
+					functionCall.Name,
+					functionCallArguments(functionCall),
+				),
 			)
 			choice.FinishReason = "tool_calls"
 
 		case "custom_tool_call":
+			customToolCall := output.AsCustomToolCall()
 			choice := ensureResponsesAssistantChoice(&choices, &choiceIdx)
 			choice.Message.ToolCalls = append(choice.Message.ToolCalls,
-				providerbase.NewCustomToolCall(firstNonEmptyString(output.CallID, output.ID), output.Name, output.Input),
+				providerbase.NewCustomToolCall(
+					firstNonEmptyString(customToolCall.CallID, customToolCall.ID),
+					customToolCall.Name,
+					customToolCall.Input,
+				),
 			)
 			choice.FinishReason = "tool_calls"
 		}
@@ -1104,35 +1145,31 @@ func toResponsesAPIChatResponse(resp openAIResponsesResponse, provider string) *
 	chatResp := &llm.ChatResponse{
 		ID:          resp.ID,
 		Provider:    provider,
-		Model:       resp.Model,
+		Model:       string(resp.Model),
 		Choices:     choices,
-		ServiceTier: resp.ServiceTier,
+		ServiceTier: string(resp.ServiceTier),
 	}
 	if resp.CreatedAt != 0 {
-		chatResp.CreatedAt = time.Unix(resp.CreatedAt, 0)
+		chatResp.CreatedAt = time.Unix(int64(resp.CreatedAt), 0)
 	}
-	if resp.Usage != nil {
-		chatResp.Usage = llm.ChatUsage{
-			PromptTokens:     resp.Usage.InputTokens,
-			CompletionTokens: resp.Usage.OutputTokens,
-			TotalTokens:      resp.Usage.TotalTokens,
-		}
-		if resp.Usage.InputTokensDetails != nil {
-			chatResp.Usage.PromptTokensDetails = &llm.PromptTokensDetails{
-				CachedTokens: resp.Usage.InputTokensDetails.CachedTokens,
-			}
-		}
-		if resp.Usage.OutputTokensDetails != nil {
-			chatResp.Usage.CompletionTokensDetails = &llm.CompletionTokensDetails{
-				ReasoningTokens: resp.Usage.OutputTokensDetails.ReasoningTokens,
-			}
-		}
+	if usage := usageFromSDK(resp.Usage); usage != nil {
+		chatResp.Usage = *usage
 	}
 	return chatResp
 }
 
-func buildResponsesMessage(output responsesOutputItem) types.Message {
-	msg := types.Message{Role: types.Role(output.Role)}
+func functionCallArguments(output responses.ResponseFunctionToolCall) json.RawMessage {
+	if strings.TrimSpace(output.Arguments) == "" {
+		return nil
+	}
+	return json.RawMessage(output.Arguments)
+}
+
+func buildResponsesMessage(output responses.ResponseOutputMessage) types.Message {
+	msg := types.Message{Role: llm.RoleAssistant}
+	if role := strings.TrimSpace(string(output.Role)); role != "" {
+		msg.Role = types.Role(role)
+	}
 	for _, content := range output.Content {
 		switch content.Type {
 		case "output_text":
@@ -1140,8 +1177,8 @@ func buildResponsesMessage(output responsesOutputItem) types.Message {
 			for _, ann := range content.Annotations {
 				msg.Annotations = append(msg.Annotations, types.Annotation{
 					Type:       ann.Type,
-					StartIndex: ann.StartIndex,
-					EndIndex:   ann.EndIndex,
+					StartIndex: int(ann.StartIndex),
+					EndIndex:   int(ann.EndIndex),
 					URL:        ann.URL,
 					Title:      ann.Title,
 				})
@@ -1167,7 +1204,7 @@ func ensureResponsesAssistantChoice(choices *[]llm.ChatChoice, choiceIdx *int) *
 	return &(*choices)[len(*choices)-1]
 }
 
-func mergeResponsesReasoningItem(msg *types.Message, output responsesOutputItem, provider string) {
+func mergeResponsesReasoningItem(msg *types.Message, output responses.ResponseReasoningItem, provider string) {
 	if msg == nil {
 		return
 	}
@@ -1185,14 +1222,14 @@ func mergeResponsesReasoningItem(msg *types.Message, output responsesOutputItem,
 	}
 }
 
-func responsesReasoningDisplayText(output responsesOutputItem) string {
-	if text := joinResponsesContentText(output.Content, "reasoning_text"); text != "" {
+func responsesReasoningDisplayText(output responses.ResponseReasoningItem) string {
+	if text := joinResponsesReasoningContentText(output.Content); text != "" {
 		return text
 	}
-	return joinResponsesContentText(output.Summary, "summary_text")
+	return joinResponsesReasoningSummaryText(output.Summary)
 }
 
-func responsesReasoningSummaries(output responsesOutputItem, provider string) []types.ReasoningSummary {
+func responsesReasoningSummaries(output responses.ResponseReasoningItem, provider string) []types.ReasoningSummary {
 	if len(output.Summary) == 0 {
 		return nil
 	}
@@ -1201,7 +1238,7 @@ func responsesReasoningSummaries(output responsesOutputItem, provider string) []
 		if strings.TrimSpace(part.Text) == "" {
 			continue
 		}
-		kind := strings.TrimSpace(part.Type)
+		kind := strings.TrimSpace(string(part.Type))
 		if kind == "" {
 			kind = "summary_text"
 		}
@@ -1215,7 +1252,7 @@ func responsesReasoningSummaries(output responsesOutputItem, provider string) []
 	return summaries
 }
 
-func responsesOpaqueReasoning(output responsesOutputItem, provider string) []types.OpaqueReasoning {
+func responsesOpaqueReasoning(output responses.ResponseReasoningItem, provider string) []types.OpaqueReasoning {
 	if strings.TrimSpace(output.EncryptedContent) == "" {
 		return nil
 	}
@@ -1224,17 +1261,25 @@ func responsesOpaqueReasoning(output responsesOutputItem, provider string) []typ
 		ID:       output.ID,
 		Kind:     "encrypted_content",
 		State:    output.EncryptedContent,
-		Status:   output.Status,
+		Status:   string(output.Status),
 	}}
 }
 
-func joinResponsesContentText(parts []responsesContent, partType string) string {
+func joinResponsesReasoningContentText(parts []responses.ResponseReasoningItemContent) string {
 	var out []string
 	for _, part := range parts {
 		if strings.TrimSpace(part.Text) == "" {
 			continue
 		}
-		if partType != "" && strings.TrimSpace(part.Type) != partType {
+		out = append(out, part.Text)
+	}
+	return strings.Join(out, "\n\n")
+}
+
+func joinResponsesReasoningSummaryText(parts []responses.ResponseReasoningItemSummary) string {
+	var out []string
+	for _, part := range parts {
+		if strings.TrimSpace(part.Text) == "" {
 			continue
 		}
 		out = append(out, part.Text)
@@ -1271,7 +1316,7 @@ func emitResponsesReasoningChunk(
 	ctx context.Context,
 	ch chan<- llm.StreamChunk,
 	currentID, providerName, currentModel string,
-	output responsesOutputItem,
+	output responses.ResponseReasoningItem,
 ) bool {
 	delta := types.Message{Role: llm.RoleAssistant}
 	mergeResponsesReasoningItem(&delta, output, providerName)
@@ -1289,6 +1334,113 @@ func emitResponsesReasoningChunk(
 	}:
 		return true
 	}
+}
+
+func emitLegacyResponsesReasoningChunk(
+	ctx context.Context,
+	ch chan<- llm.StreamChunk,
+	currentID, providerName, currentModel string,
+	output responsesOutputItem,
+) bool {
+	delta := types.Message{Role: llm.RoleAssistant}
+	mergeLegacyResponsesReasoningItem(&delta, output, providerName)
+	if delta.ReasoningContent == nil && len(delta.ReasoningSummaries) == 0 && len(delta.OpaqueReasoning) == 0 {
+		return false
+	}
+	select {
+	case <-ctx.Done():
+		return false
+	case ch <- llm.StreamChunk{
+		ID:       currentID,
+		Provider: providerName,
+		Model:    currentModel,
+		Delta:    delta,
+	}:
+		return true
+	}
+}
+
+func sdkOutputItemToLegacy(item responses.ResponseOutputItemUnion) (responsesOutputItem, bool) {
+	raw := item.RawJSON()
+	if strings.TrimSpace(raw) == "" {
+		return responsesOutputItem{}, false
+	}
+	var legacy responsesOutputItem
+	if err := json.Unmarshal([]byte(raw), &legacy); err != nil {
+		return responsesOutputItem{}, false
+	}
+	return legacy, true
+}
+
+func sdkResponseToLegacy(resp *responses.Response) (openAIResponsesResponse, bool) {
+	if resp == nil {
+		return openAIResponsesResponse{}, false
+	}
+	raw := resp.RawJSON()
+	if strings.TrimSpace(raw) == "" {
+		return openAIResponsesResponse{}, false
+	}
+	var legacy openAIResponsesResponse
+	if err := json.Unmarshal([]byte(raw), &legacy); err != nil {
+		return openAIResponsesResponse{}, false
+	}
+	return legacy, true
+}
+
+func mergeLegacyResponsesReasoningItem(msg *types.Message, output responsesOutputItem, provider string) {
+	if msg == nil {
+		return
+	}
+	if msg.Role == "" {
+		msg.Role = llm.RoleAssistant
+	}
+	if len(output.Summary) > 0 {
+		for _, part := range output.Summary {
+			if strings.TrimSpace(part.Text) == "" {
+				continue
+			}
+			kind := strings.TrimSpace(part.Type)
+			if kind == "" {
+				kind = "summary_text"
+			}
+			msg.ReasoningSummaries = append(msg.ReasoningSummaries, types.ReasoningSummary{
+				Provider: provider,
+				ID:       output.ID,
+				Kind:     kind,
+				Text:     part.Text,
+			})
+		}
+	}
+	if strings.TrimSpace(output.EncryptedContent) != "" {
+		msg.OpaqueReasoning = append(msg.OpaqueReasoning, types.OpaqueReasoning{
+			Provider: provider,
+			ID:       output.ID,
+			Kind:     "encrypted_content",
+			State:    output.EncryptedContent,
+			Status:   output.Status,
+		})
+	}
+	if text := joinLegacyResponsesContentText(output.Content, "reasoning_text"); text != "" {
+		appendReasoningText(msg, text)
+		return
+	}
+	if text := joinLegacyResponsesContentText(output.Summary, "summary_text"); text != "" {
+		appendReasoningText(msg, text)
+	}
+}
+
+func joinLegacyResponsesContentText(parts []responsesContent, partType string) string {
+	var out []string
+	for _, part := range parts {
+		if strings.TrimSpace(part.Text) == "" {
+			continue
+		}
+		if partType != "" && strings.TrimSpace(part.Type) != partType {
+			continue
+		}
+		out = append(out, part.Text)
+	}
+	return strings.Join(out, "\n\n")
 }
 
 // mapResponsesStatus maps Responses API status to Chat Completions finish_reason.
@@ -1442,7 +1594,7 @@ func streamResponsesSDK(ctx context.Context, stream interface {
 				}
 				switch output.Type {
 				case "reasoning":
-					if emitResponsesReasoningChunk(ctx, ch, currentID, providerName, currentModel, output) {
+					if emitLegacyResponsesReasoningChunk(ctx, ch, currentID, providerName, currentModel, output) {
 						seenReasoning[output.ID] = true
 					}
 				case "custom_tool_call":
@@ -1469,7 +1621,7 @@ func streamResponsesSDK(ctx context.Context, stream interface {
 						if output.Type != "reasoning" || seenReasoning[output.ID] {
 							continue
 						}
-						if emitResponsesReasoningChunk(ctx, ch, currentID, providerName, currentModel, output) {
+						if emitLegacyResponsesReasoningChunk(ctx, ch, currentID, providerName, currentModel, output) {
 							seenReasoning[output.ID] = true
 						}
 					}

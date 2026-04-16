@@ -1,14 +1,12 @@
 package claude
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"strings"
 	"sync/atomic"
@@ -24,6 +22,7 @@ import (
 	"github.com/BaSui01/agentflow/types"
 	anthropicsdk "github.com/anthropics/anthropic-sdk-go"
 	anthropicsdkoption "github.com/anthropics/anthropic-sdk-go/option"
+	anthropicsdkparam "github.com/anthropics/anthropic-sdk-go/packages/param"
 	"go.uber.org/zap"
 )
 
@@ -83,6 +82,7 @@ func (p *ClaudeProvider) sdkRequestOptions(speed string) []anthropicsdkoption.Re
 	options = append(options, anthropicsdkoption.WithHeader("anthropic-version", version))
 	if strings.EqualFold(strings.TrimSpace(speed), "fast") {
 		options = append(options, anthropicsdkoption.WithHeader("anthropic-beta", "fast-mode-2026-02-01"))
+		options = append(options, anthropicsdkoption.WithQuery("beta", "true"))
 	}
 	return options
 }
@@ -700,6 +700,29 @@ func convertClaudeToolChoice(tc any, parallelToolCalls *bool, hasTools bool) *cl
 	return result
 }
 
+func overrideAnthropicMessageParams(body claudeRequest) (anthropicsdk.MessageNewParams, error) {
+	raw, err := json.Marshal(body)
+	if err != nil {
+		return anthropicsdk.MessageNewParams{}, err
+	}
+	return anthropicsdkparam.Override[anthropicsdk.MessageNewParams](json.RawMessage(raw)), nil
+}
+
+func overrideAnthropicCountTokensParams(body claudeTokenCountRequest) (anthropicsdk.MessageCountTokensParams, error) {
+	raw, err := json.Marshal(body)
+	if err != nil {
+		return anthropicsdk.MessageCountTokensParams{}, err
+	}
+	return anthropicsdkparam.Override[anthropicsdk.MessageCountTokensParams](json.RawMessage(raw)), nil
+}
+
+func decodeAnthropicSDKRawJSON(raw string, dst any) error {
+	if strings.TrimSpace(raw) == "" {
+		return fmt.Errorf("anthropic sdk returned empty raw json")
+	}
+	return json.Unmarshal([]byte(raw), dst)
+}
+
 func (p *ClaudeProvider) Completion(ctx context.Context, req *llm.ChatRequest) (*llm.ChatResponse, error) {
 	// 统一入口：应用改写器链
 	rewrittenReq, err := p.rewriterChain.Execute(ctx, req)
@@ -743,16 +766,23 @@ func (p *ClaudeProvider) Completion(ctx context.Context, req *llm.ChatRequest) (
 		return nil, err
 	}
 
-	var claudeResp claudeResponse
-	client := p.sdkClient(apiKey)
-	path := "/v1/messages"
-	if strings.TrimSpace(body.Speed) != "" {
-		path += "?beta=true"
+	params, err := overrideAnthropicMessageParams(body)
+	if err != nil {
+		return nil, p.mapSDKError(err)
 	}
-	if err := client.Post(ctx, path, body, &claudeResp, p.sdkRequestOptions(body.Speed)...); err != nil {
+
+	client := p.sdkClient(apiKey)
+	sdkResp, err := client.Messages.New(ctx, params, p.sdkRequestOptions(body.Speed)...)
+	if err != nil {
 		if shouldRetryClaudeWithoutFastMode(sdkStatusCode(err), body.Speed) {
 			body.Speed = ""
-			if retryErr := client.Post(ctx, "/v1/messages", body, &claudeResp, p.sdkRequestOptions(body.Speed)...); retryErr != nil {
+			params, paramErr := overrideAnthropicMessageParams(body)
+			if paramErr != nil {
+				return nil, p.mapSDKError(paramErr)
+			}
+			var retryErr error
+			sdkResp, retryErr = client.Messages.New(ctx, params, p.sdkRequestOptions(body.Speed)...)
+			if retryErr != nil {
 				return nil, p.mapSDKError(retryErr)
 			}
 		} else {
@@ -760,6 +790,10 @@ func (p *ClaudeProvider) Completion(ctx context.Context, req *llm.ChatRequest) (
 		}
 	}
 
+	var claudeResp claudeResponse
+	if err := decodeAnthropicSDKRawJSON(sdkResp.RawJSON(), &claudeResp); err != nil {
+		return nil, p.mapSDKError(err)
+	}
 	return toClaudeChatResponse(claudeResp, p.Name()), nil
 }
 
@@ -807,37 +841,51 @@ func (p *ClaudeProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-ch
 		return nil, err
 	}
 
-	client := p.sdkClient(apiKey)
-	var resp *http.Response
-	path := "/v1/messages"
-	if strings.TrimSpace(body.Speed) != "" {
-		path += "?beta=true"
+	params, err := overrideAnthropicMessageParams(body)
+	if err != nil {
+		return nil, p.mapSDKError(err)
 	}
-	if err := client.Post(ctx, path, body, &resp, append(p.sdkRequestOptions(body.Speed), anthropicsdkoption.WithHeader("Accept", "text/event-stream"))...); err != nil {
+
+	client := p.sdkClient(apiKey)
+	stream := client.Messages.NewStreaming(ctx, params, p.sdkRequestOptions(body.Speed)...)
+	if stream == nil {
+		return nil, &types.Error{
+			Code:       llm.ErrUpstreamError,
+			Message:    "claude stream returned empty stream handle",
+			HTTPStatus: http.StatusBadGateway,
+			Provider:   p.Name(),
+			Retryable:  true,
+		}
+	}
+	if err := stream.Err(); err != nil {
 		if shouldRetryClaudeWithoutFastMode(sdkStatusCode(err), body.Speed) {
 			body.Speed = ""
-			if retryErr := client.Post(ctx, "/v1/messages", body, &resp, append(p.sdkRequestOptions(body.Speed), anthropicsdkoption.WithHeader("Accept", "text/event-stream"))...); retryErr != nil {
+			params, paramErr := overrideAnthropicMessageParams(body)
+			if paramErr != nil {
+				return nil, p.mapSDKError(paramErr)
+			}
+			stream = client.Messages.NewStreaming(ctx, params, p.sdkRequestOptions(body.Speed)...)
+			if stream == nil {
+				return nil, &types.Error{
+					Code:       llm.ErrUpstreamError,
+					Message:    "claude stream retry returned empty stream handle",
+					HTTPStatus: http.StatusBadGateway,
+					Provider:   p.Name(),
+					Retryable:  true,
+				}
+			}
+			if retryErr := stream.Err(); retryErr != nil {
 				return nil, p.mapSDKError(retryErr)
 			}
 		} else {
 			return nil, p.mapSDKError(err)
 		}
 	}
-	if resp == nil || resp.Body == nil {
-		return nil, &types.Error{
-			Code:       llm.ErrUpstreamError,
-			Message:    "claude stream returned empty response body",
-			HTTPStatus: http.StatusBadGateway,
-			Provider:   p.Name(),
-			Retryable:  true,
-		}
-	}
 
 	ch := make(chan llm.StreamChunk)
 	go func() {
-		defer resp.Body.Close()
+		defer stream.Close()
 		defer close(ch)
-		reader := bufio.NewReader(resp.Body)
 
 		// Claude 流式响应累积状态
 		var currentID string
@@ -854,53 +902,21 @@ func (p *ClaudeProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-ch
 		}
 		var thinkingAccumulator = make(map[int]*thinkingBlockState)
 
-		for {
-			line, err := reader.ReadString('\n')
-			if err != nil {
-				if err != io.EOF {
-					select {
-					case <-ctx.Done():
-						return
-					case ch <- llm.StreamChunk{
-						Err: &types.Error{
-							Code:    llm.ErrUpstreamError,
-							Message: err.Error(), Cause: err, HTTPStatus: http.StatusBadGateway,
-							Retryable: true,
-							Provider:  p.Name(),
-						},
-					}:
-					}
-				}
-				return
-			}
-
-			line = strings.TrimSpace(line)
-			if line == "" {
-				continue
-			}
-
-			// Claude SSE 格式：event: <type>\ndata: <json>
-			if strings.HasPrefix(line, "event:") {
-				continue
-			}
-
-			if !strings.HasPrefix(line, "data:") {
-				continue
-			}
-
-			data := strings.TrimSpace(strings.TrimPrefix(line, "data:"))
-
+		for stream.Next() {
+			current := stream.Current()
 			var event claudeStreamEvent
-			if err := json.Unmarshal([]byte(data), &event); err != nil {
+			if err := decodeAnthropicSDKRawJSON(current.RawJSON(), &event); err != nil {
 				select {
 				case <-ctx.Done():
 					return
 				case ch <- llm.StreamChunk{
 					Err: &types.Error{
-						Code:    llm.ErrUpstreamError,
-						Message: err.Error(), Cause: err, HTTPStatus: http.StatusBadGateway,
-						Retryable: true,
-						Provider:  p.Name(),
+						Code:       llm.ErrUpstreamError,
+						Message:    err.Error(),
+						Cause:      err,
+						HTTPStatus: http.StatusBadGateway,
+						Retryable:  true,
+						Provider:   p.Name(),
 					},
 				}:
 				}
@@ -1131,19 +1147,13 @@ func (p *ClaudeProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-ch
 				// 心跳事件，忽略
 
 			case "error":
-				// 流式错误事件，解析实际错误信息
-				errMsg := "stream error event received"
-				var errEvent claudeErrorResp
-				if json.Unmarshal([]byte(data), &errEvent) == nil && errEvent.Error.Message != "" {
-					errMsg = fmt.Sprintf("%s: %s", errEvent.Error.Type, errEvent.Error.Message)
-				}
 				select {
 				case <-ctx.Done():
 					return
 				case ch <- llm.StreamChunk{
 					Err: &types.Error{
 						Code:       llm.ErrUpstreamError,
-						Message:    errMsg,
+						Message:    "stream error event received",
 						HTTPStatus: http.StatusBadGateway,
 						Retryable:  true,
 						Provider:   p.Name(),
@@ -1151,6 +1161,23 @@ func (p *ClaudeProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-ch
 				}:
 				}
 				return
+			}
+		}
+
+		if err := stream.Err(); err != nil {
+			select {
+			case <-ctx.Done():
+				return
+			case ch <- llm.StreamChunk{
+				Err: &types.Error{
+					Code:       llm.ErrUpstreamError,
+					Message:    err.Error(),
+					Cause:      err,
+					HTTPStatus: http.StatusBadGateway,
+					Retryable:  true,
+					Provider:   p.Name(),
+				},
+			}:
 			}
 		}
 	}()

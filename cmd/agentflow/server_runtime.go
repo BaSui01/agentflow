@@ -23,7 +23,6 @@ import (
 	"github.com/BaSui01/agentflow/pkg/server"
 	pkgservice "github.com/BaSui01/agentflow/pkg/service"
 	"github.com/BaSui01/agentflow/pkg/telemetry"
-	"github.com/BaSui01/agentflow/rag"
 	"github.com/BaSui01/agentflow/rag/core"
 	workflowpkg "github.com/BaSui01/agentflow/workflow"
 	"github.com/redis/go-redis/v9"

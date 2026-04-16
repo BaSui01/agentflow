@@ -21,7 +21,7 @@ func BuildLLMHandlerRuntime(cfg *config.Config, db *gorm.DB, logger *zap.Logger)
 		return nil, fmt.Errorf("config is required for llm handler runtime")
 	}
 
-	baseProvider, err := llmcompose.BuildMainProvider(context.Background(), cfg, db, logger)
+	baseProvider, err := BuildMainProvider(context.Background(), cfg, db, logger)
 	if err != nil {
 		return nil, err
 	}

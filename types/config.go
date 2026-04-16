@@ -22,6 +22,9 @@ type AgentConfig struct {
 	// Runtime execution behavior configuration
 	Runtime RuntimeConfig `json:"runtime,omitempty"`
 
+	// Context orchestration configuration
+	Context *ContextConfig `json:"context,omitempty"`
+
 	// Feature configurations (optional)
 	Features FeaturesConfig `json:"features,omitempty"`
 
@@ -61,6 +64,46 @@ type RuntimeConfig struct {
 	MaxLoopIterations  int      `json:"max_loop_iterations,omitempty"`
 	ToolModel          string   `json:"tool_model,omitempty"`
 }
+
+// ContextConfig configures context assembly, budgeting, and compression.
+type ContextConfig struct {
+	Enabled              bool    `json:"enabled"`
+	MaxContextTokens     int     `json:"max_context_tokens,omitempty"`
+	ReserveForOutput     int     `json:"reserve_for_output,omitempty"`
+	SoftLimit            float64 `json:"soft_limit,omitempty"`
+	WarnLimit            float64 `json:"warn_limit,omitempty"`
+	HardLimit            float64 `json:"hard_limit,omitempty"`
+	TargetUsage          float64 `json:"target_usage,omitempty"`
+	KeepSystem           bool    `json:"keep_system,omitempty"`
+	KeepLastN            int     `json:"keep_last_n,omitempty"`
+	EnableSummarize      bool    `json:"enable_summarize,omitempty"`
+	EnableMetrics        bool    `json:"enable_metrics,omitempty"`
+	MemoryBudgetRatio    float64 `json:"memory_budget_ratio,omitempty"`
+	RetrievalBudgetRatio float64 `json:"retrieval_budget_ratio,omitempty"`
+	ToolStateBudgetRatio float64 `json:"tool_state_budget_ratio,omitempty"`
+}
+
+// DefaultContextConfig returns sensible defaults for context orchestration.
+func DefaultContextConfig() *ContextConfig {
+	return &ContextConfig{
+		Enabled:              true,
+		MaxContextTokens:     32000,
+		ReserveForOutput:     4096,
+		SoftLimit:            0.7,
+		WarnLimit:            0.85,
+		HardLimit:            0.95,
+		TargetUsage:          0.5,
+		KeepSystem:           true,
+		KeepLastN:            2,
+		EnableSummarize:      true,
+		EnableMetrics:        true,
+		MemoryBudgetRatio:    0.2,
+		RetrievalBudgetRatio: 0.2,
+		ToolStateBudgetRatio: 0.2,
+	}
+}
+
+func (c *ContextConfig) IsEnabled() bool { return c != nil && c.Enabled }
 
 // FeaturesConfig contains optional feature configurations.
 // Each feature is enabled by providing its configuration (nil = disabled).
@@ -246,6 +289,7 @@ func (c *ObservabilityConfig) IsEnabled() bool { return c != nil && c.Enabled }
 
 func (c *AgentConfig) IsReflectionEnabled() bool     { return c.Features.Reflection.IsEnabled() }
 func (c *AgentConfig) IsToolSelectionEnabled() bool  { return c.Features.ToolSelection.IsEnabled() }
+func (c *AgentConfig) IsContextEnabled() bool        { return c.Context.IsEnabled() }
 func (c *AgentConfig) IsGuardrailsEnabled() bool     { return c.Features.Guardrails.IsEnabled() }
 func (c *AgentConfig) IsMemoryEnabled() bool         { return c.Features.Memory.IsEnabled() }
 func (c *AgentConfig) IsPromptEnhancerEnabled() bool { return c.Features.PromptEnhancer.IsEnabled() }
