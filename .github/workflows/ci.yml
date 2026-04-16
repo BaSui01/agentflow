@@ -68,7 +68,8 @@ jobs:
 
       - name: Check architecture dependencies
         continue-on-error: true
-        run: "$(go env GOPATH)/bin/go-arch-lint" check
+        run: |
+          "$(go env GOPATH)/bin/go-arch-lint" check
 
       - name: Run architecture guard script
         shell: pwsh
