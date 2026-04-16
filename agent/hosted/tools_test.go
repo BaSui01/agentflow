@@ -12,6 +12,7 @@ import (
 	"time"
 
 	llmtools "github.com/BaSui01/agentflow/llm/capabilities/tools"
+	"github.com/BaSui01/agentflow/types"
 	"go.uber.org/zap"
 )
 
@@ -48,10 +49,10 @@ func (m *mockCodeExecutor) Execute(ctx context.Context, language string, code st
 }
 
 type mockRetrievalStore struct {
-	retrieveFn func(ctx context.Context, query string, topK int) ([]RetrievalResult, error)
+	retrieveFn func(ctx context.Context, query string, topK int) ([]types.RetrievalRecord, error)
 }
 
-func (m *mockRetrievalStore) Retrieve(ctx context.Context, query string, topK int) ([]RetrievalResult, error) {
+func (m *mockRetrievalStore) Retrieve(ctx context.Context, query string, topK int) ([]types.RetrievalRecord, error) {
 	if m.retrieveFn != nil {
 		return m.retrieveFn(ctx, query, topK)
 	}
@@ -344,15 +345,15 @@ func TestCodeExecTool_Execute_CustomTimeout(t *testing.T) {
 
 func TestRetrievalTool_Execute_Success(t *testing.T) {
 	store := &mockRetrievalStore{
-		retrieveFn: func(_ context.Context, query string, topK int) ([]RetrievalResult, error) {
+		retrieveFn: func(_ context.Context, query string, topK int) ([]types.RetrievalRecord, error) {
 			if query != "how to deploy" {
 				t.Errorf("unexpected query: %s", query)
 			}
 			if topK != 5 {
 				t.Errorf("unexpected topK: %d", topK)
 			}
-			return []RetrievalResult{
-				{DocumentID: "d1", Content: "deploy guide", Score: 0.9},
+			return []types.RetrievalRecord{
+				{DocID: "d1", Content: "deploy guide", Score: 0.9},
 			}, nil
 		},
 	}
@@ -365,11 +366,11 @@ func TestRetrievalTool_Execute_Success(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	var got []RetrievalResult
+	var got []types.RetrievalRecord
 	if err := json.Unmarshal(result, &got); err != nil {
 		t.Fatalf("failed to unmarshal: %v", err)
 	}
-	if len(got) != 1 || got[0].DocumentID != "d1" {
+	if len(got) != 1 || got[0].DocID != "d1" {
 		t.Errorf("unexpected results: %+v", got)
 	}
 }
@@ -387,7 +388,7 @@ func TestRetrievalTool_Execute_EmptyQuery(t *testing.T) {
 func TestRetrievalTool_Execute_DefaultMaxResults(t *testing.T) {
 	var receivedTopK int
 	store := &mockRetrievalStore{
-		retrieveFn: func(_ context.Context, _ string, topK int) ([]RetrievalResult, error) {
+		retrieveFn: func(_ context.Context, _ string, topK int) ([]types.RetrievalRecord, error) {
 			receivedTopK = topK
 			return nil, nil
 		},

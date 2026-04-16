@@ -7,7 +7,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/BaSui01/agentflow/rag"
+	"github.com/BaSui01/agentflow/types"
 	"go.uber.org/zap"
 )
 
@@ -18,12 +18,12 @@ type QueryDecomposer interface {
 
 // RetrievalWorker executes retrieval for a sub-query.
 type RetrievalWorker interface {
-	Retrieve(ctx context.Context, query string) ([]rag.RetrievalResult, error)
+	Retrieve(ctx context.Context, query string) ([]types.RetrievalRecord, error)
 }
 
 // RetrievalResultAggregator merges worker retrieval outputs.
 type RetrievalResultAggregator interface {
-	Aggregate(ctx context.Context, resultsByQuery map[string][]rag.RetrievalResult) ([]rag.RetrievalResult, error)
+	Aggregate(ctx context.Context, resultsByQuery map[string][]types.RetrievalRecord) ([]types.RetrievalRecord, error)
 }
 
 // RetrievalSupervisor orchestrates query decomposition -> parallel worker retrieval -> dedup aggregation.
@@ -56,7 +56,7 @@ func NewRetrievalSupervisor(
 }
 
 // Retrieve runs the collaboration pipeline.
-func (s *RetrievalSupervisor) Retrieve(ctx context.Context, query string) ([]rag.RetrievalResult, error) {
+func (s *RetrievalSupervisor) Retrieve(ctx context.Context, query string) ([]types.RetrievalRecord, error) {
 	query = strings.TrimSpace(query)
 	if query == "" {
 		return nil, fmt.Errorf("query is empty")
@@ -76,7 +76,7 @@ func (s *RetrievalSupervisor) Retrieve(ctx context.Context, query string) ([]rag
 		subQueries = []string{query}
 	}
 
-	resultsByQuery := make(map[string][]rag.RetrievalResult, len(subQueries))
+	resultsByQuery := make(map[string][]types.RetrievalRecord, len(subQueries))
 	var mu sync.Mutex
 	var wg sync.WaitGroup
 	errCh := make(chan error, len(subQueries))
@@ -124,19 +124,19 @@ type DedupResultAggregator struct{}
 func NewDedupResultAggregator() *DedupResultAggregator { return &DedupResultAggregator{} }
 
 // Aggregate merges and deduplicates by document ID (fallback: content).
-func (a *DedupResultAggregator) Aggregate(_ context.Context, resultsByQuery map[string][]rag.RetrievalResult) ([]rag.RetrievalResult, error) {
-	merged := make(map[string]rag.RetrievalResult)
+func (a *DedupResultAggregator) Aggregate(_ context.Context, resultsByQuery map[string][]types.RetrievalRecord) ([]types.RetrievalRecord, error) {
+	merged := make(map[string]types.RetrievalRecord)
 	for _, results := range resultsByQuery {
 		for _, item := range results {
-			key := strings.TrimSpace(item.Document.ID)
+			key := strings.TrimSpace(item.DocID)
 			if key == "" {
-				key = strings.TrimSpace(item.Document.Content)
+				key = strings.TrimSpace(item.Content)
 			}
 			if key == "" {
 				continue
 			}
 			if current, ok := merged[key]; ok {
-				if item.FinalScore > current.FinalScore {
+				if item.Score > current.Score {
 					merged[key] = item
 				}
 				continue
@@ -145,12 +145,12 @@ func (a *DedupResultAggregator) Aggregate(_ context.Context, resultsByQuery map[
 		}
 	}
 
-	out := make([]rag.RetrievalResult, 0, len(merged))
+	out := make([]types.RetrievalRecord, 0, len(merged))
 	for _, v := range merged {
 		out = append(out, v)
 	}
 	sort.Slice(out, func(i, j int) bool {
-		return out[i].FinalScore > out[j].FinalScore
+		return out[i].Score > out[j].Score
 	})
 	return out, nil
 }

@@ -12,15 +12,7 @@ import (
 // RetrievalStore is the interface for document retrieval.
 // Local interface to avoid importing rag package directly (§15).
 type RetrievalStore interface {
-	Retrieve(ctx context.Context, query string, topK int) ([]RetrievalResult, error)
-}
-
-// RetrievalResult represents a single retrieval result.
-type RetrievalResult struct {
-	DocumentID string         `json:"document_id"`
-	Content    string         `json:"content"`
-	Score      float64        `json:"score"`
-	Metadata   map[string]any `json:"metadata,omitempty"`
+	Retrieve(ctx context.Context, query string, topK int) ([]types.RetrievalRecord, error)
 }
 
 // RetrievalTool provides RAG retrieval as a hosted tool.

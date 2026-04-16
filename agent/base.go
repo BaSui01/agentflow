@@ -1148,7 +1148,7 @@ func (b *BaseAgent) gatewayProvider() llm.Provider {
 	if b.externalGateway != nil {
 		return b.externalGateway
 	}
-	if b.provider == nil || b.ledger == nil {
+	if b.provider == nil {
 		return b.provider
 	}
 	b.gatewayOnce.Do(func() {
@@ -1162,9 +1162,6 @@ func (b *BaseAgent) gatewayProvider() llm.Provider {
 
 func (b *BaseAgent) gatewayToolProvider() llm.Provider {
 	if b.toolProvider != nil {
-		if b.ledger == nil {
-			return b.toolProvider
-		}
 		b.toolGatewayOnce.Do(func() {
 			b.toolGatewayInst = wrapProviderWithGateway(b.toolProvider, b.logger, b.ledger)
 		})
