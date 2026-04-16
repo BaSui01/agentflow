@@ -27,6 +27,7 @@ type DynamicPlannerConfig struct {
 	Timeout             time.Duration // Overall timeout
 	EnableParallel      bool          // Enable parallel path exploration
 	MaxParallelPaths    int           // Maximum parallel paths to explore
+	Model               string        // LLM model to use for reasoning steps
 }
 
 // 默认 DynamicPlannerConfig 返回合理的默认值 。
@@ -38,6 +39,7 @@ func DefaultDynamicPlannerConfig() DynamicPlannerConfig {
 		Timeout:             180 * time.Second,
 		EnableParallel:      true,
 		MaxParallelPaths:    3,
+		Model:               "gpt-4o",
 	}
 }
 
@@ -204,7 +206,7 @@ Generate 1-3 next steps with alternatives. Output as JSON:
 }`, joinStrings(toolDescs, "\n"), task, contextInfo)
 
 	resp, err := d.provider.Completion(ctx, &llm.ChatRequest{
-		Model: "gpt-4o",
+		Model: defaultModel(d.config.Model),
 		Messages: []types.Message{
 			{Role: llm.RoleUser, Content: prompt},
 		},
@@ -403,7 +405,7 @@ func (d *DynamicPlanner) executeLLMNode(ctx context.Context, node *PlanNode) (st
 Think through this step and provide your reasoning and conclusion.`, node.Description)
 
 	resp, err := d.provider.Completion(ctx, &llm.ChatRequest{
-		Model: "gpt-4o",
+		Model: defaultModel(d.config.Model),
 		Messages: []types.Message{
 			{Role: llm.RoleUser, Content: prompt},
 		},
@@ -538,7 +540,7 @@ Execution results:
 Synthesize a final answer based on these results.`, task, joinStrings(results, "\n"))
 
 	resp, err := d.provider.Completion(ctx, &llm.ChatRequest{
-		Model: "gpt-4o",
+		Model: defaultModel(d.config.Model),
 		Messages: []types.Message{
 			{Role: llm.RoleUser, Content: prompt},
 		},

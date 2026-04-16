@@ -17,6 +17,7 @@ import (
 	"github.com/BaSui01/agentflow/llm/providers/openaicompat"
 	"github.com/BaSui01/agentflow/types"
 	openaisdk "github.com/openai/openai-go/v3"
+	openaisdkoption "github.com/openai/openai-go/v3/option"
 	"github.com/openai/openai-go/v3/packages/param"
 	"github.com/openai/openai-go/v3/responses"
 	"github.com/openai/openai-go/v3/shared"
@@ -153,8 +154,7 @@ func (p *OpenAIProvider) Completion(ctx context.Context, req *llm.ChatRequest) (
 	}
 	req = rewrittenReq
 
-	apiKey := p.Provider.ResolveAPIKey(ctx)
-	return p.completionWithResponsesAPI(ctx, req, apiKey)
+	return p.completionWithResponsesAPI(ctx, req)
 }
 
 // --- Responses API Types ---
@@ -331,7 +331,7 @@ type responsesAnnotation struct {
 // --- Completion & Helper Methods ---
 
 // completionWithResponsesAPI 使用新的 Responses API (/v1/responses).
-func (p *OpenAIProvider) completionWithResponsesAPI(ctx context.Context, req *llm.ChatRequest, apiKey string) (*llm.ChatResponse, error) {
+func (p *OpenAIProvider) completionWithResponsesAPI(ctx context.Context, req *llm.ChatRequest) (*llm.ChatResponse, error) {
 	promptCacheRetention, cacheErr := providerbase.NormalizeOpenAIPromptCacheRetention(req.PromptCacheRetention, p.Name())
 	if cacheErr != nil {
 		return nil, cacheErr
@@ -364,7 +364,7 @@ func (p *OpenAIProvider) completionWithResponsesAPI(ctx context.Context, req *ll
 	})
 
 	client := p.sdkClient(ctx)
-	responsesResp, err := client.Responses.New(ctx, params)
+	responsesResp, err := client.Responses.New(ctx, params, responseRequestOptions(body)...)
 	if err != nil {
 		return nil, p.mapSDKError(err)
 	}
@@ -433,11 +433,11 @@ func (p *OpenAIProvider) buildResponsesParams(req *llm.ChatRequest, body openAIR
 	if len(body.Tools) > 0 {
 		params.Tools = make([]responses.ToolUnionParam, 0, len(body.Tools))
 		for _, tool := range body.Tools {
-			params.Tools = append(params.Tools, overrideSDKParam[responses.ToolUnionParam](tool))
+			params.Tools = append(params.Tools, decodeSDKParam[responses.ToolUnionParam](tool))
 		}
 	}
 	if body.ToolChoice != nil {
-		params.ToolChoice = overrideSDKParam[responses.ResponseNewParamsToolChoiceUnion](body.ToolChoice)
+		params.ToolChoice = decodeSDKParam[responses.ResponseNewParamsToolChoiceUnion](body.ToolChoice)
 	}
 	if body.Reasoning != nil {
 		params.Reasoning = shared.ReasoningParam{
@@ -448,10 +448,10 @@ func (p *OpenAIProvider) buildResponsesParams(req *llm.ChatRequest, body openAIR
 	if body.Text != nil {
 		text := responses.ResponseTextConfigParam{}
 		if body.Text.Verbosity != "" {
-			text.Verbosity = body.Text.Verbosity
+			text.Verbosity = responses.ResponseTextConfigVerbosity(body.Text.Verbosity)
 		}
 		if body.Text.Format != nil {
-			text.Format = overrideSDKParam[responses.ResponseFormatTextConfigUnionParam](body.Text.Format)
+			text.Format = decodeSDKParam[responses.ResponseFormatTextConfigUnionParam](body.Text.Format)
 		}
 		params.Text = text
 	}
@@ -462,30 +462,44 @@ func (p *OpenAIProvider) buildResponsesParams(req *llm.ChatRequest, body openAIR
 		}
 	case []any:
 		params.Input = responses.ResponseNewParamsInputUnion{
-			OfInputItemList: overrideSliceSDKParam[responses.ResponseInputItemUnionParam](input),
+			OfInputItemList: decodeSliceSDKParam[responses.ResponseInputItemUnionParam](input),
 		}
 	}
 	return params
 }
 
-func overrideSDKParam[T any](value any) T {
+func decodeSDKParam[T any](value any) T {
 	raw, err := json.Marshal(value)
 	if err != nil {
 		var zero T
 		return zero
 	}
-	return param.Override[T](json.RawMessage(raw))
+	var result T
+	if err := json.Unmarshal(raw, &result); err != nil {
+		var zero T
+		return zero
+	}
+	return result
 }
 
-func overrideSliceSDKParam[T any](items []any) []T {
+func decodeSliceSDKParam[T any](items []any) []T {
 	if len(items) == 0 {
 		return nil
 	}
 	out := make([]T, 0, len(items))
 	for _, item := range items {
-		out = append(out, overrideSDKParam[T](item))
+		out = append(out, decodeSDKParam[T](item))
 	}
 	return out
+}
+
+func responseRequestOptions(body openAIResponsesRequest) []openaisdkoption.RequestOption {
+	if strings.TrimSpace(body.PromptCacheRetention) == "" {
+		return nil
+	}
+	return []openaisdkoption.RequestOption{
+		openaisdkoption.WithJSONSet("prompt_cache_retention", body.PromptCacheRetention),
+	}
 }
 
 // buildResponsesRequest converts a ChatRequest to a Responses API request.
@@ -1362,7 +1376,8 @@ func (p *OpenAIProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-ch
 		PromptTokens: countResponsesPromptTokens(body),
 	})
 
-	stream := p.sdkClient(ctx).Responses.NewStreaming(ctx, params)
+	client := p.sdkClient(ctx)
+	stream := client.Responses.NewStreaming(ctx, params, responseRequestOptions(body)...)
 	if err := stream.Err(); err != nil {
 		return nil, p.mapSDKError(err)
 	}
@@ -1487,7 +1502,9 @@ func streamResponsesSDK(ctx context.Context, stream interface {
 				case <-ctx.Done():
 					return
 				case ch <- llm.StreamChunk{ID: currentID, Provider: providerName, Model: currentModel, FinishReason: func() string {
-					if finishSent { return "" }
+					if finishSent {
+						return ""
+					}
 					finishSent = true
 					return "stop"
 				}(), Usage: usageFromSDK(event.Response.Usage)}:
@@ -1518,7 +1535,9 @@ func streamResponsesSDK(ctx context.Context, stream interface {
 				case <-ctx.Done():
 					return
 				case ch <- llm.StreamChunk{ID: currentID, Provider: providerName, Model: currentModel, Delta: types.Message{Role: llm.RoleAssistant, ToolCalls: providerbase.ToolCallChunk(toolCall)}, FinishReason: func() string {
-					if finishSent { return "" }
+					if finishSent {
+						return ""
+					}
 					finishSent = true
 					return "tool_calls"
 				}()}:
@@ -1538,7 +1557,9 @@ func streamResponsesSDK(ctx context.Context, stream interface {
 				case <-ctx.Done():
 					return
 				case ch <- llm.StreamChunk{ID: currentID, Provider: providerName, Model: currentModel, Delta: types.Message{Role: llm.RoleAssistant, ToolCalls: providerbase.ToolCallChunk(toolCall)}, FinishReason: func() string {
-					if finishSent { return "" }
+					if finishSent {
+						return ""
+					}
 					finishSent = true
 					return "tool_calls"
 				}()}:

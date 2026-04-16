@@ -1128,6 +1128,9 @@ func (b *BaseAgent) RecallMemory(ctx context.Context, query string, topK int) ([
 // Provider 返回 LLM Provider
 func (b *BaseAgent) Provider() types.ChatProvider { return b.provider }
 
+// MainProvider 返回经过 gateway 包装后的主 LLM Provider。
+func (b *BaseAgent) MainProvider() types.ChatProvider { return b.gatewayProvider() }
+
 // ToolProvider 返回工具调用专用的 LLM Provider（可能为 nil）
 func (b *BaseAgent) ToolProvider() types.ChatProvider { return b.toolProvider }
 

@@ -31,17 +31,17 @@ func (p *OpenAIProvider) CountTokens(ctx context.Context, req *llm.ChatRequest) 
 		params.Input = responses.InputTokenCountParamsInputUnion{OfString: param.NewOpt(input)}
 	case []any:
 		params.Input = responses.InputTokenCountParamsInputUnion{
-			OfResponseInputItemArray: overrideSliceSDKParam[responses.ResponseInputItemUnionParam](input),
+			OfResponseInputItemArray: decodeSliceSDKParam[responses.ResponseInputItemUnionParam](input),
 		}
 	}
 	if len(body.Tools) > 0 {
 		params.Tools = make([]responses.ToolUnionParam, 0, len(body.Tools))
 		for _, tool := range body.Tools {
-			params.Tools = append(params.Tools, overrideSDKParam[responses.ToolUnionParam](tool))
+			params.Tools = append(params.Tools, decodeSDKParam[responses.ToolUnionParam](tool))
 		}
 	}
 	if body.ToolChoice != nil {
-		params.ToolChoice = overrideSDKParam[responses.InputTokenCountParamsToolChoiceUnion](body.ToolChoice)
+		params.ToolChoice = decodeSDKParam[responses.InputTokenCountParamsToolChoiceUnion](body.ToolChoice)
 	}
 	if body.ParallelToolCalls != nil {
 		params.ParallelToolCalls = param.NewOpt(*body.ParallelToolCalls)
@@ -64,7 +64,7 @@ func (p *OpenAIProvider) CountTokens(ctx context.Context, req *llm.ChatRequest) 
 			text.Verbosity = body.Text.Verbosity
 		}
 		if body.Text.Format != nil {
-			text.Format = overrideSDKParam[responses.ResponseFormatTextConfigUnionParam](body.Text.Format)
+			text.Format = decodeSDKParam[responses.ResponseFormatTextConfigUnionParam](body.Text.Format)
 		}
 		params.Text = text
 	}
@@ -72,7 +72,8 @@ func (p *OpenAIProvider) CountTokens(ctx context.Context, req *llm.ChatRequest) 
 		params.Truncation = responses.InputTokenCountParamsTruncation(body.Truncation)
 	}
 
-	tokenResp, err := p.sdkClient(ctx).Responses.InputTokens.Count(ctx, params)
+	client := p.sdkClient(ctx)
+	tokenResp, err := client.Responses.InputTokens.Count(ctx, params, responseRequestOptions(body)...)
 	if err != nil {
 		return nil, p.mapSDKError(err)
 	}

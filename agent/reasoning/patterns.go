@@ -107,6 +107,13 @@ func (r *PatternRegistry) Unregister(name string) bool {
 	return true
 }
 
+func defaultModel(model string) string {
+	if model == "" {
+		return "gpt-4o"
+	}
+	return model
+}
+
 // ============================================================
 // 思维树图案
 // ============================================================
@@ -120,6 +127,8 @@ type TreeOfThoughtConfig struct {
 	PruneThreshold  float64       // Minimum score to keep a branch (0-1)
 	Timeout         time.Duration // Overall timeout
 	ParallelEval    bool          // Evaluate branches in parallel
+	Model           string        // LLM model for thought generation
+	EvalModel       string        // LLM model for evaluation (can be cheaper)
 }
 
 // 默认TreeOfThoughtConfig 返回合理的默认值 。
@@ -132,6 +141,8 @@ func DefaultTreeOfThoughtConfig() TreeOfThoughtConfig {
 		PruneThreshold:  0.3,
 		Timeout:         120 * time.Second,
 		ParallelEval:    true,
+		Model:           "gpt-4o",
+		EvalModel:       "gpt-4o-mini",
 	}
 }
 
@@ -262,7 +273,7 @@ Format as JSON array: [{"thought": "next step", "reasoning": "why"}]`, task, par
 	}
 
 	resp, err := t.provider.Completion(ctx, &llm.ChatRequest{
-		Model: "gpt-4o",
+		Model: defaultModel(t.config.Model),
 		Messages: []types.Message{
 			{Role: llm.RoleUser, Content: prompt},
 		},
@@ -351,7 +362,7 @@ Rate this approach on a scale of 0.0 to 1.0 based on:
 Respond with only a number between 0.0 and 1.0`, task, thought.Content)
 
 	resp, err := t.provider.Completion(ctx, &llm.ChatRequest{
-		Model: "gpt-4o-mini",
+		Model: defaultModel(t.config.EvalModel),
 		Messages: []types.Message{
 			{Role: llm.RoleUser, Content: prompt},
 		},

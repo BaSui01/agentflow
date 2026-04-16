@@ -35,6 +35,11 @@ Current runtime baseline:
 
 Official SDKs are therefore allowed inside the provider boundary, but they do not replace the unified `llm.Provider` contract or the vendor factory entry.
 
+OpenAI-specific execution rule:
+
+- `llm/providers/openai` treats the official OpenAI Go SDK as the default transport for native Responses, streaming, token counting, models, and multimodal endpoints
+- provider-local adapters may still normalize AgentFlow semantics (tools, reasoning, stream events), but must not reintroduce a parallel manual HTTP primary path for native OpenAI operations already covered by the SDK
+
 ### 2. Standard Chat Construction Entry
 
 For config-driven chat provider construction, the standard entry is:

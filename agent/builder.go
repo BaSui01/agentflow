@@ -670,6 +670,7 @@ func typesGuardrailsFromRuntime(cfg *guardrails.GuardrailsConfig) *types.Guardra
 // runtime.Builder when the caller does not inject one explicitly.
 func NewDefaultReasoningRegistry(
 	provider types.ChatProvider,
+	model string,
 	toolManager ToolManager,
 	agentID string,
 	bus EventBus,
@@ -682,11 +683,25 @@ func NewDefaultReasoningRegistry(
 	toolExecutor := newToolManagerExecutor(toolManager, agentID, nil, bus)
 	toolSchemas := reasoningToolSchemas(toolManager, agentID)
 
-	registerDefaultReasoningPattern(registry, reasoning.NewTreeOfThought(provider, toolExecutor, reasoning.DefaultTreeOfThoughtConfig(), logger), logger)
-	registerDefaultReasoningPattern(registry, reasoning.NewReWOO(provider, toolExecutor, toolSchemas, reasoning.DefaultReWOOConfig(), logger), logger)
-	registerDefaultReasoningPattern(registry, reasoning.NewPlanAndExecute(provider, toolExecutor, toolSchemas, reasoning.DefaultPlanExecuteConfig(), logger), logger)
-	registerDefaultReasoningPattern(registry, reasoning.NewDynamicPlanner(provider, toolExecutor, toolSchemas, reasoning.DefaultDynamicPlannerConfig(), logger), logger)
-	registerDefaultReasoningPattern(registry, reasoning.NewReflexionExecutor(provider, toolExecutor, toolSchemas, reasoning.DefaultReflexionConfig(), logger), logger)
+	totCfg := reasoning.DefaultTreeOfThoughtConfig()
+	totCfg.Model = model
+	registerDefaultReasoningPattern(registry, reasoning.NewTreeOfThought(provider, toolExecutor, totCfg, logger), logger)
+
+	rewooCfg := reasoning.DefaultReWOOConfig()
+	rewooCfg.Model = model
+	registerDefaultReasoningPattern(registry, reasoning.NewReWOO(provider, toolExecutor, toolSchemas, rewooCfg, logger), logger)
+
+	peCfg := reasoning.DefaultPlanExecuteConfig()
+	peCfg.Model = model
+	registerDefaultReasoningPattern(registry, reasoning.NewPlanAndExecute(provider, toolExecutor, toolSchemas, peCfg, logger), logger)
+
+	dpCfg := reasoning.DefaultDynamicPlannerConfig()
+	dpCfg.Model = model
+	registerDefaultReasoningPattern(registry, reasoning.NewDynamicPlanner(provider, toolExecutor, toolSchemas, dpCfg, logger), logger)
+
+	refCfg := reasoning.DefaultReflexionConfig()
+	refCfg.Model = model
+	registerDefaultReasoningPattern(registry, reasoning.NewReflexionExecutor(provider, toolExecutor, toolSchemas, refCfg, logger), logger)
 	return registry
 }
 

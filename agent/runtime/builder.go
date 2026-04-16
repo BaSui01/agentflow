@@ -248,7 +248,7 @@ func (b *Builder) Build(ctx context.Context, cfg types.AgentConfig) (*agent.Base
 		return nil, err
 	}
 
-	reasoningRegistry := resolveRuntimeReasoningRegistry(b.provider, cfg2.Core.ID, opts, b.logger)
+	reasoningRegistry := resolveRuntimeReasoningRegistry(ag.MainProvider(), cfg2.LLM.Model, cfg2.Core.ID, opts, b.logger)
 	ag.SetReasoningRegistry(reasoningRegistry)
 	if opts.CheckpointManager != nil {
 		ag.SetCheckpointManager(opts.CheckpointManager)
@@ -269,6 +269,7 @@ func (b *Builder) Build(ctx context.Context, cfg types.AgentConfig) (*agent.Base
 
 func resolveRuntimeReasoningRegistry(
 	provider llm.Provider,
+	model string,
 	agentID string,
 	opts BuildOptions,
 	logger *zap.Logger,
@@ -278,6 +279,7 @@ func resolveRuntimeReasoningRegistry(
 	}
 	return agent.NewDefaultReasoningRegistry(
 		provider,
+		model,
 		opts.ToolManager,
 		agentID,
 		opts.EventBus,
