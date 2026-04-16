@@ -187,6 +187,11 @@ func TestDependencyDirectionGuards(t *testing.T) {
 		},
 		{
 			sourcePrefix: "llm",
+			targetPrefix: "rag",
+			reason:       "llm layer must not depend on sibling rag capability layer",
+		},
+		{
+			sourcePrefix: "llm",
 			targetPrefix: "agent",
 			reason:       "llm layer must not depend on agent layer",
 		},
@@ -304,6 +309,55 @@ func TestDependencyDirectionGuards(t *testing.T) {
 	if len(violations) > 0 {
 		slices.Sort(violations)
 		t.Fatalf("dependency direction violations:\n%s", strings.Join(violations, "\n"))
+	}
+}
+
+func TestLLMComposeImportGuards(t *testing.T) {
+	const (
+		composeDir       = "llm/runtime/compose"
+		configImportPath = "github.com/BaSui01/agentflow/config"
+		gormImportPath   = "gorm.io/gorm"
+	)
+
+	fset := token.NewFileSet()
+	var violations []string
+
+	walkErr := filepath.WalkDir(composeDir, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() || !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
+			return nil
+		}
+
+		rel, err := filepath.Rel(".", path)
+		if err != nil {
+			return err
+		}
+		rel = filepath.ToSlash(rel)
+
+		file, err := parser.ParseFile(fset, path, nil, parser.ImportsOnly)
+		if err != nil {
+			return fmt.Errorf("parse imports for %s: %w", rel, err)
+		}
+		for _, imp := range file.Imports {
+			importPath, err := strconv.Unquote(imp.Path.Value)
+			if err != nil {
+				return fmt.Errorf("unquote import path for %s: %w", rel, err)
+			}
+			if importPath == configImportPath || importPath == gormImportPath {
+				violations = append(violations, fmt.Sprintf("%s imports %s", rel, importPath))
+			}
+		}
+		return nil
+	})
+
+	if walkErr != nil {
+		t.Fatalf("scan llm compose import guards: %v", walkErr)
+	}
+	if len(violations) > 0 {
+		slices.Sort(violations)
+		t.Fatalf("llm compose import violations:\n%s", strings.Join(violations, "\n"))
 	}
 }
 
@@ -515,7 +569,7 @@ func TestVendorChatProviderEntryPoints(t *testing.T) {
 			requiredSnippets: []string{"vendor.NewChatProviderFromConfig("},
 		},
 		{
-			path:             "llm/runtime/compose/main_provider_registry.go",
+			path:             "internal/app/bootstrap/main_provider_registry.go",
 			requiredSnippets: []string{"VendorChatProviderFactory{"},
 			forbiddenSnippets: []string{
 				"NewOpenAIProvider(",

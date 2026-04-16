@@ -24,6 +24,7 @@ type PlanExecuteConfig struct {
 	MaxReplanAttempts int           // Maximum replanning attempts on failure
 	Timeout           time.Duration // Overall timeout
 	AdaptivePlanning  bool          // Allow plan modification during execution
+	Model             string        // LLM model to use for reasoning steps
 }
 
 // 默认 PlanExecuteConfig 返回合理的默认值 。
@@ -33,13 +34,14 @@ func DefaultPlanExecuteConfig() PlanExecuteConfig {
 		MaxReplanAttempts: 3,
 		Timeout:           180 * time.Second,
 		AdaptivePlanning:  true,
+		Model:             "gpt-4o",
 	}
 }
 
 // PlanAndExecute执行"计划与执行"推理模式.
 // 与ReWOO不同,它可以根据中间结果来调整计划.
 type PlanAndExecute struct {
-	provider     llm.Provider
+	provider     types.ChatProvider
 	toolExecutor tools.ToolExecutor
 	toolSchemas  []types.ToolSchema
 	config       PlanExecuteConfig
@@ -61,7 +63,7 @@ const (
 )
 
 // NewPlanAndExecute创建了一个新的"计划"和"执行"推理器.
-func NewPlanAndExecute(provider llm.Provider, executor tools.ToolExecutor, schemas []types.ToolSchema, config PlanExecuteConfig, logger *zap.Logger) *PlanAndExecute {
+func NewPlanAndExecute(provider types.ChatProvider, executor tools.ToolExecutor, schemas []types.ToolSchema, config PlanExecuteConfig, logger *zap.Logger) *PlanAndExecute {
 	if logger == nil {
 		logger = zap.NewNop()
 	}
@@ -246,7 +248,7 @@ Create a detailed plan. Output as JSON:
 Keep the plan focused and achievable (max %d steps).`, strings.Join(toolDescs, "\n"), task, p.config.MaxPlanSteps)
 
 	resp, err := p.provider.Completion(ctx, &llm.ChatRequest{
-		Model: "gpt-4o",
+		Model: defaultModel(p.config.Model),
 		Messages: []types.Message{
 			{Role: llm.RoleUser, Content: prompt},
 		},
@@ -361,7 +363,7 @@ Description: %s
 Execute this step and provide the result.`, plan.Goal, strings.Join(context, "\n"), step.ID, step.Description)
 
 	resp, err := p.provider.Completion(ctx, &llm.ChatRequest{
-		Model: "gpt-4o",
+		Model: defaultModel(p.config.Model),
 		Messages: []types.Message{
 			{Role: llm.RoleUser, Content: prompt},
 		},
@@ -408,7 +410,7 @@ Create a new plan to continue from here. Output as JSON:
 }`, task, strings.Join(completedContext, "\n"), failedStep.ID, failedStep.Description, errorMsg)
 
 	resp, err := p.provider.Completion(ctx, &llm.ChatRequest{
-		Model: "gpt-4o",
+		Model: defaultModel(p.config.Model),
 		Messages: []types.Message{
 			{Role: llm.RoleUser, Content: prompt},
 		},
@@ -457,7 +459,7 @@ Execution results:
 Based on these results, provide a clear and complete final answer.`, task, strings.Join(stepResults, "\n"))
 
 	resp, err := p.provider.Completion(ctx, &llm.ChatRequest{
-		Model: "gpt-4o",
+		Model: defaultModel(p.config.Model),
 		Messages: []types.Message{
 			{Role: llm.RoleUser, Content: prompt},
 		},

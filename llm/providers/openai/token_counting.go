@@ -2,9 +2,11 @@ package openai
 
 import (
 	"context"
-	"strings"
 
 	"github.com/BaSui01/agentflow/llm"
+	"github.com/openai/openai-go/v3/packages/param"
+	"github.com/openai/openai-go/v3/responses"
+	"github.com/openai/openai-go/v3/shared"
 )
 
 type openAIInputTokenCountResponse struct {
@@ -17,41 +19,62 @@ func (p *OpenAIProvider) CountTokens(ctx context.Context, req *llm.ChatRequest) 
 	}
 	reqCopy := *req
 	body := p.buildResponsesRequest(&reqCopy)
-	tokenBody := map[string]any{
-		"model": body.Model,
-		"input": body.Input,
+	body.Conversation = req.ConversationID
+	params := responses.InputTokenCountParams{
+		Model: param.NewOpt(body.Model),
 	}
 	if body.Instructions != "" {
-		tokenBody["instructions"] = body.Instructions
+		params.Instructions = param.NewOpt(body.Instructions)
+	}
+	switch input := body.Input.(type) {
+	case string:
+		params.Input = responses.InputTokenCountParamsInputUnion{OfString: param.NewOpt(input)}
+	case []any:
+		params.Input = responses.InputTokenCountParamsInputUnion{
+			OfResponseInputItemArray: decodeSliceSDKParam[responses.ResponseInputItemUnionParam](input),
+		}
 	}
 	if len(body.Tools) > 0 {
-		tokenBody["tools"] = body.Tools
+		params.Tools = make([]responses.ToolUnionParam, 0, len(body.Tools))
+		for _, tool := range body.Tools {
+			params.Tools = append(params.Tools, decodeSDKParam[responses.ToolUnionParam](tool))
+		}
 	}
 	if body.ToolChoice != nil {
-		tokenBody["tool_choice"] = body.ToolChoice
+		params.ToolChoice = decodeSDKParam[responses.InputTokenCountParamsToolChoiceUnion](body.ToolChoice)
 	}
 	if body.ParallelToolCalls != nil {
-		tokenBody["parallel_tool_calls"] = *body.ParallelToolCalls
+		params.ParallelToolCalls = param.NewOpt(*body.ParallelToolCalls)
 	}
 	if body.PreviousResponseID != "" {
-		tokenBody["previous_response_id"] = body.PreviousResponseID
+		params.PreviousResponseID = param.NewOpt(body.PreviousResponseID)
 	}
-	if strings.TrimSpace(req.ConversationID) != "" {
-		tokenBody["conversation"] = strings.TrimSpace(req.ConversationID)
+	if body.Conversation != "" {
+		params.Conversation = responses.InputTokenCountParamsConversationUnion{OfString: param.NewOpt(body.Conversation)}
 	}
 	if body.Reasoning != nil {
-		tokenBody["reasoning"] = body.Reasoning
+		params.Reasoning = shared.ReasoningParam{
+			Effort:  shared.ReasoningEffort(body.Reasoning.Effort),
+			Summary: shared.ReasoningSummary(body.Reasoning.Summary),
+		}
 	}
 	if body.Text != nil {
-		tokenBody["text"] = body.Text
+		text := responses.InputTokenCountParamsText{}
+		if body.Text.Verbosity != "" {
+			text.Verbosity = body.Text.Verbosity
+		}
+		if body.Text.Format != nil {
+			text.Format = decodeSDKParam[responses.ResponseFormatTextConfigUnionParam](body.Text.Format)
+		}
+		params.Text = text
 	}
 	if body.Truncation != "" {
-		tokenBody["truncation"] = body.Truncation
+		params.Truncation = responses.InputTokenCountParamsTruncation(body.Truncation)
 	}
 
 	client := p.sdkClient(ctx)
-	var tokenResp openAIInputTokenCountResponse
-	if err := client.Post(ctx, "/responses/input_tokens", tokenBody, &tokenResp); err != nil {
+	tokenResp, err := client.Responses.InputTokens.Count(ctx, params, responseRequestOptions(body)...)
+	if err != nil {
 		return nil, p.mapSDKError(err)
 	}
 	return &llm.TokenCountResponse{

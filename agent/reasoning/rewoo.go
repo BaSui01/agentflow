@@ -24,6 +24,7 @@ type ReWOOConfig struct {
 	MaxPlanSteps    int           // Maximum steps in the plan
 	Timeout         time.Duration // Overall timeout
 	ParallelWorkers int           // Number of parallel workers for independent steps
+	Model           string        // LLM model to use for reasoning steps
 }
 
 // 默认 ReWOOConfig 返回合理的默认值 。
@@ -32,6 +33,7 @@ func DefaultReWOOConfig() ReWOOConfig {
 		MaxPlanSteps:    10,
 		Timeout:         120 * time.Second,
 		ParallelWorkers: 5,
+		Model:           "gpt-4o",
 	}
 }
 
@@ -39,7 +41,7 @@ func DefaultReWOOConfig() ReWOOConfig {
 // 它产生一个完整的计划前, 然后执行所有步骤,
 // 最后从所有观测中合成答案。
 type ReWOO struct {
-	provider     llm.Provider
+	provider     types.ChatProvider
 	toolExecutor tools.ToolExecutor
 	toolSchemas  []types.ToolSchema
 	config       ReWOOConfig
@@ -47,7 +49,7 @@ type ReWOO struct {
 }
 
 // NewReWOO创建了新的ReWOO理性.
-func NewReWOO(provider llm.Provider, executor tools.ToolExecutor, schemas []types.ToolSchema, config ReWOOConfig, logger *zap.Logger) *ReWOO {
+func NewReWOO(provider types.ChatProvider, executor tools.ToolExecutor, schemas []types.ToolSchema, config ReWOOConfig, logger *zap.Logger) *ReWOO {
 	if logger == nil {
 		logger = zap.NewNop()
 	}
@@ -149,7 +151,7 @@ Create a plan (max %d steps). Output as JSON array:
 ]`, strings.Join(toolDescs, "\n"), task, r.config.MaxPlanSteps)
 
 	resp, err := r.provider.Completion(ctx, &llm.ChatRequest{
-		Model: "gpt-4o",
+		Model: defaultModel(r.config.Model),
 		Messages: []types.Message{
 			{Role: llm.RoleUser, Content: prompt},
 		},
@@ -308,7 +310,7 @@ Plan execution results:
 Based on these results, provide a clear and complete answer to the task.`, task, strings.Join(planSummary, "\n"))
 
 	resp, err := r.provider.Completion(ctx, &llm.ChatRequest{
-		Model: "gpt-4o",
+		Model: defaultModel(r.config.Model),
 		Messages: []types.Message{
 			{Role: llm.RoleUser, Content: prompt},
 		},

@@ -17,7 +17,7 @@ func TestNewDefaultReasoningRegistry_RegistersSupportedPatterns(t *testing.T) {
 		},
 	}
 
-	registry := NewDefaultReasoningRegistry(provider, toolManager, "agent-1", nil, zap.NewNop())
+	registry := NewDefaultReasoningRegistry(provider, "gpt-4o", toolManager, "agent-1", nil, zap.NewNop())
 	require.NotNil(t, registry)
 	require.Equal(t, []string{
 		"dynamic_planner",

@@ -27,6 +27,7 @@ type DynamicPlannerConfig struct {
 	Timeout             time.Duration // Overall timeout
 	EnableParallel      bool          // Enable parallel path exploration
 	MaxParallelPaths    int           // Maximum parallel paths to explore
+	Model               string        // LLM model to use for reasoning steps
 }
 
 // 默认 DynamicPlannerConfig 返回合理的默认值 。
@@ -38,6 +39,7 @@ func DefaultDynamicPlannerConfig() DynamicPlannerConfig {
 		Timeout:             180 * time.Second,
 		EnableParallel:      true,
 		MaxParallelPaths:    3,
+		Model:               "gpt-4o",
 	}
 }
 
@@ -71,7 +73,7 @@ const (
 
 // Dynamic Planner执行动态规划并进行回溯跟踪.
 type DynamicPlanner struct {
-	provider     llm.Provider
+	provider     types.ChatProvider
 	toolExecutor tools.ToolExecutor
 	toolSchemas  []types.ToolSchema
 	config       DynamicPlannerConfig
@@ -86,7 +88,7 @@ type DynamicPlanner struct {
 }
 
 // NewDynamic Planner创建了新的动态计划.
-func NewDynamicPlanner(provider llm.Provider, executor tools.ToolExecutor, schemas []types.ToolSchema, config DynamicPlannerConfig, logger *zap.Logger) *DynamicPlanner {
+func NewDynamicPlanner(provider types.ChatProvider, executor tools.ToolExecutor, schemas []types.ToolSchema, config DynamicPlannerConfig, logger *zap.Logger) *DynamicPlanner {
 	if logger == nil {
 		logger = zap.NewNop()
 	}
@@ -204,7 +206,7 @@ Generate 1-3 next steps with alternatives. Output as JSON:
 }`, joinStrings(toolDescs, "\n"), task, contextInfo)
 
 	resp, err := d.provider.Completion(ctx, &llm.ChatRequest{
-		Model: "gpt-4o",
+		Model: defaultModel(d.config.Model),
 		Messages: []types.Message{
 			{Role: llm.RoleUser, Content: prompt},
 		},
@@ -403,7 +405,7 @@ func (d *DynamicPlanner) executeLLMNode(ctx context.Context, node *PlanNode) (st
 Think through this step and provide your reasoning and conclusion.`, node.Description)
 
 	resp, err := d.provider.Completion(ctx, &llm.ChatRequest{
-		Model: "gpt-4o",
+		Model: defaultModel(d.config.Model),
 		Messages: []types.Message{
 			{Role: llm.RoleUser, Content: prompt},
 		},
@@ -538,7 +540,7 @@ Execution results:
 Synthesize a final answer based on these results.`, task, joinStrings(results, "\n"))
 
 	resp, err := d.provider.Completion(ctx, &llm.ChatRequest{
-		Model: "gpt-4o",
+		Model: defaultModel(d.config.Model),
 		Messages: []types.Message{
 			{Role: llm.RoleUser, Content: prompt},
 		},

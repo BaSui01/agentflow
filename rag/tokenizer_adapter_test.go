@@ -41,11 +41,11 @@ func (m *mockLLMTokenizer) Name() string   { return "mock" }
 
 // --- Tests ---
 
-func TestTokenizerAdapter_ImplementsTokenizer(t *testing.T) {
-	var _ Tokenizer = (*lltok.TokenizerAdapter)(nil)
+func TestLLMTokenizerAdapter_ImplementsTokenizer(t *testing.T) {
+	var _ Tokenizer = (*LLMTokenizerAdapter)(nil)
 }
 
-func TestTokenizerAdapter_CountTokens(t *testing.T) {
+func TestLLMTokenizerAdapter_CountTokens(t *testing.T) {
 	tests := []struct {
 		name     string
 		mock     *mockLLMTokenizer
@@ -74,14 +74,14 @@ func TestTokenizerAdapter_CountTokens(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			adapter := lltok.NewTokenizerAdapter(tt.mock, zap.NewNop())
+			adapter := NewLLMTokenizerAdapter(tt.mock, zap.NewNop())
 			got := adapter.CountTokens(tt.input)
 			assert.Equal(t, tt.expected, got)
 		})
 	}
 }
 
-func TestTokenizerAdapter_Encode(t *testing.T) {
+func TestLLMTokenizerAdapter_Encode(t *testing.T) {
 	tests := []struct {
 		name     string
 		mock     *mockLLMTokenizer
@@ -110,16 +110,16 @@ func TestTokenizerAdapter_Encode(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			adapter := lltok.NewTokenizerAdapter(tt.mock, zap.NewNop())
+			adapter := NewLLMTokenizerAdapter(tt.mock, zap.NewNop())
 			got := adapter.Encode(tt.input)
 			assert.Equal(t, tt.expected, got)
 		})
 	}
 }
 
-func TestTokenizerAdapter_NilLogger(t *testing.T) {
+func TestLLMTokenizerAdapter_NilLogger(t *testing.T) {
 	mock := &mockLLMTokenizer{countResult: 10}
-	adapter := lltok.NewTokenizerAdapter(mock, nil)
+	adapter := NewLLMTokenizerAdapter(mock, nil)
 	require.NotNil(t, adapter)
 	assert.Equal(t, 10, adapter.CountTokens("test"))
 }
@@ -261,4 +261,3 @@ func TestNewEstimatorAdapter_CJKAwareness(t *testing.T) {
 	assert.Greater(t, cjkCount, 0)
 	assert.Greater(t, asciiCount, 0)
 }
-

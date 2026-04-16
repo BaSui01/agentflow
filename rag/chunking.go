@@ -1,6 +1,7 @@
 package rag
 
 import (
+	"fmt"
 	"math"
 	"strings"
 	"unicode"
@@ -793,12 +794,16 @@ func (c *DocumentChunker) tfidfCosineSimilarity(s1, s2 string, idf map[string]fl
 // NewTiktokenAdapter 创建一个基于 tiktoken 的 rag.Tokenizer 适配器。
 // model 参数指定 tiktoken 模型（如 "gpt-4o", "gpt-4", "gpt-3.5-turbo"）。
 func NewTiktokenAdapter(model string, logger *zap.Logger) (Tokenizer, error) {
-	return lltok.NewTiktokenAdapter(model, logger)
+	tok, err := lltok.NewTiktokenTokenizer(model)
+	if err != nil {
+		return nil, fmt.Errorf("create tiktoken tokenizer: %w", err)
+	}
+	return NewLLMTokenizerAdapter(tok, logger), nil
 }
 
 // NewEstimatorAdapter 创建一个基于 llm/tokenizer.EstimatorTokenizer 的 rag.Tokenizer 适配器。
 // 比 SimpleTokenizer 更精确（CJK 感知），且不需要外部编码数据下载。
 // model 参数仅用于标识，maxTokens 指定模型上下文长度（0 使用默认值 4096）。
 func NewEstimatorAdapter(model string, maxTokens int, logger *zap.Logger) Tokenizer {
-	return lltok.NewEstimatorAdapter(model, maxTokens, logger)
+	return NewLLMTokenizerAdapter(lltok.NewEstimatorTokenizer(model, maxTokens), logger)
 }

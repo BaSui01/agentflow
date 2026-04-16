@@ -239,7 +239,7 @@ At the current stage, agentflow core already provides:
 
 - `BuildChannelRoutedProvider(...)`
 - `llm/runtime/compose.Build(...)`
-- `llm/runtime/compose.RegisterMainProviderBuilder(...)`
+- `channelstore.NewMainProviderBuilder(...)`
 - the built-in config field `llm.main_provider_mode`
 
 That means an external project can now reuse agentflow's built-in server-side switch:
@@ -249,30 +249,30 @@ llm:
   main_provider_mode: channel_routed # legacy | channel_routed
 ```
 
-Then register the channel builder in its own composition root:
+Then construct the channel builder in its own composition root:
 
 ```go
 import (
+    "context"
     "github.com/BaSui01/agentflow/config"
-    llmcompose "github.com/BaSui01/agentflow/llm/runtime/compose"
+    "github.com/BaSui01/agentflow/llm"
     "github.com/BaSui01/agentflow/llm/runtime/router/extensions/channelstore"
+    "go.uber.org/zap"
+    "gorm.io/gorm"
 )
 
-func registerMainProviderBuilders(store channelstore.Store) error {
-    return llmcompose.RegisterMainProviderBuilder(
-        config.LLMMainProviderModeChannelRouted,
-        channelstore.NewMainProviderBuilder(channelstore.MainProviderBuilderOptions{
-            Name:  "acme-channel-router",
-            Store: store,
-        }),
-    )
+func buildMainProviderBuilder(store channelstore.Store) func(context.Context, *config.Config, *gorm.DB, *zap.Logger) (llm.Provider, error) {
+    return channelstore.NewMainProviderBuilder(channelstore.MainProviderBuilderOptions{
+        Name:  "acme-channel-router",
+        Store: store,
+    })
 }
 ```
 
 If you do not want to reuse agentflow's built-in `config.Config`, you can still keep an app-owned config and map it into:
 
 - `cfg.LLM.MainProviderMode`
-- `llmcompose.RegisterMainProviderBuilder(...)`
+- your own startup/composition registry
 
 This keeps the boundary clean because:
 
