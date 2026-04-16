@@ -2,130 +2,233 @@ package context
 
 import (
 	"context"
+	"fmt"
+	"strings"
+	"sync"
 
 	"github.com/BaSui01/agentflow/types"
 	"go.uber.org/zap"
 )
 
-// Agent ContextManager是代理的标准上下文管理组件.
-// 它将工程师包裹在具有特定代理功能的容器上.
+// AgentContextManager is the standard context orchestration component used by agents.
 type AgentContextManager struct {
-	engineer      *Engineer
-	summaryFunc   func(context.Context, []types.Message) (string, error)
-	logger        *zap.Logger
-	enableMetrics bool
+	runtime   *Assembler
+	logger    *zap.Logger
+	tokenizer types.Tokenizer
+	mu        sync.RWMutex
+	stats     Stats
 }
 
-// Agent ContextConfig 配置代理上下文管理器.
-type AgentContextConfig struct {
-	// Max ContextTokens是模型的上下文窗口大小.
-	MaxContextTokens int `json:"max_context_tokens"`
+type Strategy string
 
-	// 储备输出为模型输出保留符.
-	ReserveForOutput int `json:"reserve_for_output"`
+const (
+	StrategyAdaptive   Strategy = "adaptive"
+	StrategySummary    Strategy = "summary"
+	StrategyPruning    Strategy = "pruning"
+	StrategySliding    Strategy = "sliding"
+	StrategyAggressive Strategy = "aggressive"
+)
 
-	// 策略决定了压缩行为.
-	Strategy Strategy `json:"strategy"`
+type Level int
 
-	// 启用度量衡允许压缩度量衡收集 。
-	EnableMetrics bool `json:"enable_metrics"`
-}
+const (
+	LevelNone Level = iota
+	LevelNormal
+	LevelAggressive
+	LevelEmergency
+)
 
-// 默认 Agent ContextConfig 返回常见模型的默认值。
-func DefaultAgentContextConfig(modelFamily string) AgentContextConfig {
-	switch modelFamily {
-	case "gpt-4", "gpt-4o":
-		return AgentContextConfig{
-			MaxContextTokens: 128000,
-			ReserveForOutput: 4096,
-			Strategy:         StrategyAdaptive,
-			EnableMetrics:    true,
-		}
-	case "claude-3", "claude-3.5":
-		return AgentContextConfig{
-			MaxContextTokens: 200000,
-			ReserveForOutput: 8192,
-			Strategy:         StrategyAdaptive,
-			EnableMetrics:    true,
-		}
-	case "gemini-1.5", "gemini-2":
-		return AgentContextConfig{
-			MaxContextTokens: 1000000,
-			ReserveForOutput: 8192,
-			Strategy:         StrategyAdaptive,
-			EnableMetrics:    true,
-		}
+func (l Level) String() string {
+	switch l {
+	case LevelNone:
+		return "none"
+	case LevelNormal:
+		return "normal"
+	case LevelAggressive:
+		return "aggressive"
+	case LevelEmergency:
+		return "emergency"
 	default:
-		return AgentContextConfig{
-			MaxContextTokens: 32000,
-			ReserveForOutput: 4096,
-			Strategy:         StrategyAdaptive,
-			EnableMetrics:    true,
-		}
+		return fmt.Sprintf("Level(%d)", l)
 	}
 }
 
-// NewAgent ContextManager为代理创建上下文管理器.
+type Stats struct {
+	TotalCompressions   int64   `json:"total_compressions"`
+	EmergencyCount      int64   `json:"emergency_count"`
+	AvgCompressionRatio float64 `json:"avg_compression_ratio"`
+	TokensSaved         int64   `json:"tokens_saved"`
+}
+
+type Status struct {
+	CurrentTokens  int     `json:"current_tokens"`
+	MaxTokens      int     `json:"max_tokens"`
+	UsageRatio     float64 `json:"usage_ratio"`
+	Level          Level   `json:"level"`
+	Recommendation string  `json:"recommendation"`
+}
+
+// AgentContextConfig configures the context runtime.
+type AgentContextConfig struct {
+	Enabled              bool     `json:"enabled"`
+	MaxContextTokens     int      `json:"max_context_tokens"`
+	ReserveForOutput     int      `json:"reserve_for_output"`
+	SoftLimit            float64  `json:"soft_limit"`
+	WarnLimit            float64  `json:"warn_limit"`
+	HardLimit            float64  `json:"hard_limit"`
+	TargetUsage          float64  `json:"target_usage"`
+	KeepSystem           bool     `json:"keep_system"`
+	KeepLastN            int      `json:"keep_last_n"`
+	EnableSummarize      bool     `json:"enable_summarize"`
+	EnableMetrics        bool     `json:"enable_metrics"`
+	MemoryBudgetRatio    float64  `json:"memory_budget_ratio"`
+	RetrievalBudgetRatio float64  `json:"retrieval_budget_ratio"`
+	ToolStateBudgetRatio float64  `json:"tool_state_budget_ratio"`
+	Strategy             Strategy `json:"strategy"`
+}
+
+func DefaultAgentContextConfig(modelFamily string) AgentContextConfig {
+	cfg := AgentContextConfig{
+		Enabled:              true,
+		MaxContextTokens:     32000,
+		ReserveForOutput:     4096,
+		SoftLimit:            0.7,
+		WarnLimit:            0.85,
+		HardLimit:            0.95,
+		TargetUsage:          0.5,
+		KeepSystem:           true,
+		KeepLastN:            2,
+		EnableSummarize:      true,
+		EnableMetrics:        true,
+		MemoryBudgetRatio:    0.2,
+		RetrievalBudgetRatio: 0.2,
+		ToolStateBudgetRatio: 0.2,
+		Strategy:             StrategyAdaptive,
+	}
+	switch {
+	case strings.Contains(modelFamily, "gpt-4"), strings.Contains(modelFamily, "gpt-4o"):
+		cfg.MaxContextTokens = 128000
+	case strings.Contains(modelFamily, "claude-3"), strings.Contains(modelFamily, "claude-4"):
+		cfg.MaxContextTokens = 200000
+		cfg.ReserveForOutput = 8192
+	case strings.Contains(modelFamily, "gemini-1.5"), strings.Contains(modelFamily, "gemini-2"):
+		cfg.MaxContextTokens = 1000000
+		cfg.ReserveForOutput = 8192
+	}
+	return cfg
+}
+
 func NewAgentContextManager(cfg AgentContextConfig, logger *zap.Logger) *AgentContextManager {
-	engineerCfg := Config{
-		MaxContextTokens: cfg.MaxContextTokens,
-		ReserveForOutput: cfg.ReserveForOutput,
-		SoftLimit:        0.7,
-		WarnLimit:        0.85,
-		HardLimit:        0.95,
-		TargetUsage:      0.5,
-		Strategy:         cfg.Strategy,
+	if logger == nil {
+		logger = zap.NewNop()
 	}
-
 	return &AgentContextManager{
-		engineer:      New(engineerCfg, logger),
-		logger:        logger,
-		enableMetrics: cfg.EnableMetrics,
+		runtime:   newAssembler(cfg, logger),
+		logger:    logger,
+		tokenizer: types.NewEstimateTokenizer(),
 	}
 }
 
-// SetSummary Provider 设置基于 LLM 的汇总函数.
 func (m *AgentContextManager) SetSummaryProvider(fn func(context.Context, []types.Message) (string, error)) {
-	m.summaryFunc = fn
+	if fn == nil {
+		m.runtime.summarizer = nil
+		return
+	}
+	m.runtime.summarizer = summaryFuncAdapter{fn: fn}
 }
 
-// ReadyMessages在发送到 LLM 之前优化消息.
-func (m *AgentContextManager) PrepareMessages(
-	ctx context.Context,
-	messages []types.Message,
-	currentQuery string,
-) ([]types.Message, error) {
-	return m.engineer.MustFit(ctx, messages, currentQuery)
+func (m *AgentContextManager) Assemble(ctx context.Context, req *AssembleRequest) (*AssembleResult, error) {
+	return m.runtime.Assemble(ctx, req)
 }
 
-// GetState 返回当前上下文状态 。
+func (m *AgentContextManager) PrepareMessages(ctx context.Context, messages []types.Message, currentQuery string) ([]types.Message, error) {
+	before := m.EstimateTokens(messages)
+	result, err := m.runtime.Assemble(ctx, &AssembleRequest{
+		Conversation: messages,
+		Query:        currentQuery,
+	})
+	if err != nil {
+		return nil, err
+	}
+	m.recordStats(before, m.EstimateTokens(result.Messages), m.GetStatus(messages).Level)
+	return result.Messages, nil
+}
+
 func (m *AgentContextManager) GetStatus(messages []types.Message) Status {
-	return m.engineer.GetStatus(messages)
+	currentTokens := m.EstimateTokens(messages)
+	effectiveMax := m.runtime.config.MaxContextTokens - m.runtime.config.ReserveForOutput
+	usage := 0.0
+	if effectiveMax > 0 {
+		usage = float64(currentTokens) / float64(effectiveMax)
+	}
+	status := Status{
+		CurrentTokens: currentTokens,
+		MaxTokens:     effectiveMax,
+		UsageRatio:    usage,
+		Level:         m.getLevel(usage),
+	}
+	switch {
+	case usage >= m.runtime.config.HardLimit:
+		status.Recommendation = "CRITICAL: immediate compression required"
+	case usage >= m.runtime.config.WarnLimit:
+		status.Recommendation = "WARNING: compression recommended"
+	case usage >= m.runtime.config.SoftLimit:
+		status.Recommendation = "INFO: monitoring context usage"
+	default:
+		status.Recommendation = "OK: context usage normal"
+	}
+	return status
 }
 
-// CanAddMessage 检查是否可以不溢出添加消息 。
 func (m *AgentContextManager) CanAddMessage(messages []types.Message, newMsg types.Message) bool {
-	return m.engineer.CanAddMessage(messages, newMsg)
+	currentTokens := m.EstimateTokens(messages)
+	newTokens := m.tokenizer.CountMessageTokens(newMsg)
+	maxTokens := m.runtime.config.MaxContextTokens - m.runtime.config.ReserveForOutput
+	return currentTokens+newTokens <= maxTokens
 }
 
-// 估计Tokens返回消息的符号数 。
 func (m *AgentContextManager) EstimateTokens(messages []types.Message) int {
-	return m.engineer.EstimateTokens(messages)
+	return m.tokenizer.CountMessagesTokens(messages)
 }
 
-// GetStats 返回压缩统计.
 func (m *AgentContextManager) GetStats() Stats {
-	return m.engineer.GetStats()
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.stats
 }
 
-// 如果建议压缩, 则应该压缩检查 。
 func (m *AgentContextManager) ShouldCompress(messages []types.Message) bool {
-	status := m.engineer.GetStatus(messages)
-	return status.Level >= LevelNormal
+	return m.GetStatus(messages).Level >= LevelNormal
 }
 
-// Get Agreement return a human可读的推荐。
 func (m *AgentContextManager) GetRecommendation(messages []types.Message) string {
-	status := m.engineer.GetStatus(messages)
-	return status.Recommendation
+	return m.GetStatus(messages).Recommendation
+}
+
+func (m *AgentContextManager) getLevel(usage float64) Level {
+	switch {
+	case usage >= m.runtime.config.HardLimit:
+		return LevelEmergency
+	case usage >= m.runtime.config.WarnLimit:
+		return LevelAggressive
+	case usage >= m.runtime.config.SoftLimit:
+		return LevelNormal
+	default:
+		return LevelNone
+	}
+}
+
+func (m *AgentContextManager) recordStats(originalTokens, finalTokens int, level Level) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if originalTokens <= 0 {
+		return
+	}
+	m.stats.TotalCompressions++
+	if level == LevelEmergency {
+		m.stats.EmergencyCount++
+	}
+	m.stats.TokensSaved += int64(originalTokens - finalTokens)
+	ratio := float64(finalTokens) / float64(originalTokens)
+	m.stats.AvgCompressionRatio = (m.stats.AvgCompressionRatio*float64(m.stats.TotalCompressions-1) + ratio) / float64(m.stats.TotalCompressions)
 }

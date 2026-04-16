@@ -4,6 +4,7 @@ import (
 	"context"
 	"sync"
 
+	agentcontext "github.com/BaSui01/agentflow/agent/context"
 	"github.com/BaSui01/agentflow/types"
 
 	"github.com/BaSui01/agentflow/llm"
@@ -127,12 +128,16 @@ type testEventBus struct {
 // testContextManager implements ContextManager for testing.
 type testContextManager struct{}
 
+func (m *testContextManager) Assemble(ctx context.Context, req *agentcontext.AssembleRequest) (*agentcontext.AssembleResult, error) {
+	return &agentcontext.AssembleResult{Messages: req.Conversation}, nil
+}
+
 func (m *testContextManager) PrepareMessages(ctx context.Context, messages []types.Message, currentQuery string) ([]types.Message, error) {
 	return messages, nil
 }
 
-func (m *testContextManager) GetStatus(messages []types.Message) any {
-	return map[string]any{"enabled": true}
+func (m *testContextManager) GetStatus(messages []types.Message) agentcontext.Status {
+	return agentcontext.Status{}
 }
 
 func (m *testContextManager) EstimateTokens(messages []types.Message) int {

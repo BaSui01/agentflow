@@ -47,6 +47,8 @@ type BuildOptions struct {
 	MaxLoopIterations  int
 	MemoryManager      agent.MemoryManager
 	ToolManager        agent.ToolManager
+	RetrievalProvider  agent.RetrievalProvider
+	ToolStateProvider  agent.ToolStateProvider
 	EventBus           agent.EventBus
 	LSPClient          agent.LSPClientRunner
 
@@ -177,6 +179,12 @@ func (b *Builder) Build(ctx context.Context, cfg types.AgentConfig) (*agent.Base
 	}
 	if opts.ToolManager != nil {
 		agentBuilder.WithToolManager(opts.ToolManager)
+	}
+	if opts.RetrievalProvider != nil {
+		agentBuilder.WithRetrievalProvider(opts.RetrievalProvider)
+	}
+	if opts.ToolStateProvider != nil {
+		agentBuilder.WithToolStateProvider(opts.ToolStateProvider)
 	}
 	if opts.EventBus != nil {
 		agentBuilder.WithEventBus(opts.EventBus)

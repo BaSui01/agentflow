@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"strings"
 	"time"
 
@@ -345,7 +344,7 @@ chunkLoop:
 			b.logger.Warn("stream inactivity timeout",
 				zap.Duration("timeout", DefaultStreamInactivityTimeout),
 			)
-			return nil, fmt.Errorf("stream inactivity timeout after %v (no data received)", DefaultStreamInactivityTimeout)
+			return nil, NewError(types.ErrAgentExecution, "stream inactivity timeout after "+DefaultStreamInactivityTimeout.String()+" (no data received)")
 		case <-ctx.Done():
 			return nil, ctx.Err()
 		}

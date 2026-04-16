@@ -205,12 +205,7 @@ func (p *ClaudeProvider) ListModels(ctx context.Context) ([]llm.Model, error) {
 	return models, nil
 }
 
-// Claude 的消息结构与 OpenAI 不同
-type claudeMessage struct {
-	Role    string          `json:"role"` // user 或 assistant
-	Content []claudeContent `json:"content"`
-}
-
+// 保留的响应结构体（用于解析 SDK 返回的 RawJSON）
 type claudeContent struct {
 	Type      string          `json:"type"` // text, tool_use, tool_result, image, thinking, redacted_thinking, server_tool_use, web_search_tool_result
 	Text      string          `json:"text,omitempty"`
@@ -261,47 +256,6 @@ type claudeImageSource struct {
 	MediaType string `json:"media_type,omitempty"` // e.g., "image/png"
 	Data      string `json:"data,omitempty"`       // base64 data
 	URL       string `json:"url,omitempty"`        // image URL
-}
-
-type claudeTool struct {
-	Name        string          `json:"name"`
-	Description string          `json:"description,omitempty"`
-	InputSchema json.RawMessage `json:"input_schema"` // JSON Schema
-	Strict      *bool           `json:"strict,omitempty"`
-}
-
-type claudeToolChoice struct {
-	Type                   string `json:"type"`                                // "auto", "any", "tool", "none"
-	Name                   string `json:"name,omitempty"`                      // 仅 type="tool" 时
-	DisableParallelToolUse *bool  `json:"disable_parallel_tool_use,omitempty"` // 可选
-}
-
-// claudeThinking 控制 Claude 的 Extended Thinking 功能。
-type claudeThinking struct {
-	Type         string `json:"type"`                    // "enabled", "adaptive" or "disabled"
-	BudgetTokens int    `json:"budget_tokens,omitempty"` // type="enabled" 时必填，最小 1024（旧协议）
-	Display      string `json:"display,omitempty"`       // "summarized" or "omitted"
-}
-
-type claudeOutputConfig struct {
-	Effort string `json:"effort,omitempty"` // low/medium/high/max
-}
-
-type claudeRequest struct {
-	Model        string              `json:"model"`
-	Messages     []claudeMessage     `json:"messages"`
-	System       any                 `json:"system,omitempty"` // string 或 []claudeSystemBlock（支持 cache_control）
-	MaxTokens    int                 `json:"max_tokens"`
-	Temperature  *float32            `json:"temperature,omitempty"` // 指针类型：区分 "未设置" 和 "显式设为 0"
-	TopP         *float32            `json:"top_p,omitempty"`       // 指针类型：同上
-	StopSeq      []string            `json:"stop_sequences,omitempty"`
-	Stream       bool                `json:"stream,omitempty"`
-	Tools        []json.RawMessage   `json:"tools,omitempty"` // 混合类型：普通 function tool + server tool (web_search)
-	ToolChoice   *claudeToolChoice   `json:"tool_choice,omitempty"`
-	Thinking     *claudeThinking     `json:"thinking,omitempty"`      // Extended Thinking
-	OutputConfig *claudeOutputConfig `json:"output_config,omitempty"` // 2026 effort controls
-	Speed        string              `json:"speed,omitempty"`         // standard/fast
-	CacheControl *llm.CacheControl   `json:"cache_control,omitempty"` // Automatic prompt caching
 }
 
 type claudeUsage struct {
@@ -454,57 +408,70 @@ func (p *ClaudeProvider) resolveAPIKey(ctx context.Context) string {
 	return p.cfg.APIKey
 }
 
-// convertToClaudeMessages 将统一格式转换为 Claude 格式
+// convertToClaudeMessages 将统一格式转换为 Claude SDK 格式
 // Claude 的特殊要求：
 // 1. system 消息需要单独提取到 system 字段
 // 2. 消息必须是 user/assistant 交替出现
 // 3. content 是数组形式，可包含文本和工具调用
-func convertToClaudeMessages(msgs []types.Message) (string, []claudeMessage) {
-	var systemParts []string
-	var claudeMsgs []claudeMessage
+func convertToClaudeMessages(msgs []types.Message) ([]anthropicsdk.TextBlockParam, []anthropicsdk.MessageParam) {
+	var systemParts []anthropicsdk.TextBlockParam
+	var claudeMsgs []anthropicsdk.MessageParam
 
 	for _, m := range msgs {
-		// 提取 system 消息（多条拼接）
+		// 提取 system 消息
 		if m.Role == llm.RoleSystem || m.Role == llm.RoleDeveloper {
 			if m.Content != "" {
-				systemParts = append(systemParts, m.Content)
+				systemParts = append(systemParts, anthropicsdk.TextBlockParam{Text: m.Content})
 			}
 			continue
 		}
 
-		// 处理 tool 角色（Claude 将其作为 assistant 的 tool_result）
+		// 处理 tool 角色（Claude 将其作为 user 的 tool_result）
 		if m.Role == llm.RoleTool {
 			writeback, ok := providerbase.ToolOutputFromMessage(m, nil)
 			if !ok {
 				continue
 			}
 			rawBlock := providerbase.BuildAnthropicToolResultBlock(writeback)
-			var tr claudeContent
-			raw, err := json.Marshal(rawBlock)
-			if err != nil || json.Unmarshal(raw, &tr) != nil {
-				continue
+			content := make([]anthropicsdk.ToolResultBlockParamContentUnion, 0, 1)
+			if txt, ok := rawBlock["content"].(string); ok && txt != "" {
+				content = append(content, anthropicsdk.ToolResultBlockParamContentUnion{
+					OfText: &anthropicsdk.TextBlockParam{Text: txt},
+				})
 			}
-			claudeMsgs = append(claudeMsgs, claudeMessage{
-				Role:    "user",
-				Content: []claudeContent{tr},
+			isError := false
+			if v, ok := rawBlock["is_error"].(bool); ok {
+				isError = v
+			}
+			tr := anthropicsdk.ToolResultBlockParam{
+				ToolUseID: rawBlock["tool_use_id"].(string),
+				Content:   content,
+			}
+			if isError {
+				tr.IsError = anthropicsdkparam.NewOpt(true)
+			}
+			claudeMsgs = append(claudeMsgs, anthropicsdk.MessageParam{
+				Role:    anthropicsdk.MessageParamRoleUser,
+				Content: []anthropicsdk.ContentBlockParamUnion{{OfToolResult: &tr}},
 			})
 			continue
 		}
 
 		// 构建普通消息
-		role := "user"
+		role := anthropicsdk.MessageParamRoleUser
 		if m.Role == llm.RoleAssistant {
-			role = "assistant"
+			role = anthropicsdk.MessageParamRoleAssistant
 		}
-		cm := claudeMessage{Role: role}
+		var blocks []anthropicsdk.ContentBlockParamUnion
 
 		// Assistant thinking blocks must round-trip as Claude thinking content blocks.
 		if m.Role == llm.RoleAssistant && len(m.ThinkingBlocks) > 0 {
 			for _, tb := range m.ThinkingBlocks {
-				cm.Content = append(cm.Content, claudeContent{
-					Type:      "thinking",
-					Thinking:  tb.Thinking,
-					Signature: tb.Signature,
+				blocks = append(blocks, anthropicsdk.ContentBlockParamUnion{
+					OfThinking: &anthropicsdk.ThinkingBlockParam{
+						Thinking:  tb.Thinking,
+						Signature: tb.Signature,
+					},
 				})
 			}
 		}
@@ -517,18 +484,14 @@ func convertToClaudeMessages(msgs []types.Message) (string, []claudeMessage) {
 				if strings.TrimSpace(opaque.Kind) != "redacted_thinking" || strings.TrimSpace(opaque.State) == "" {
 					continue
 				}
-				cm.Content = append(cm.Content, claudeContent{
-					Type: "redacted_thinking",
-					Data: opaque.State,
-				})
+				blocks = append(blocks, anthropicsdk.NewRedactedThinkingBlock(opaque.State))
 			}
 		}
 
 		// 文本内容
 		if m.Content != "" {
-			cm.Content = append(cm.Content, claudeContent{
-				Type: "text",
-				Text: m.Content,
+			blocks = append(blocks, anthropicsdk.ContentBlockParamUnion{
+				OfText: &anthropicsdk.TextBlockParam{Text: m.Content},
 			})
 		}
 
@@ -536,20 +499,24 @@ func convertToClaudeMessages(msgs []types.Message) (string, []claudeMessage) {
 		if len(m.Images) > 0 {
 			for _, img := range m.Images {
 				if img.Type == "base64" && img.Data != "" {
-					cm.Content = append(cm.Content, claudeContent{
-						Type: "image",
-						Source: &claudeImageSource{
-							Type:      "base64",
-							MediaType: detectImageMediaType(img.Data),
-							Data:      img.Data,
+					blocks = append(blocks, anthropicsdk.ContentBlockParamUnion{
+						OfImage: &anthropicsdk.ImageBlockParam{
+							Source: anthropicsdk.ImageBlockParamSourceUnion{
+								OfBase64: &anthropicsdk.Base64ImageSourceParam{
+									MediaType: anthropicsdk.Base64ImageSourceMediaType(detectImageMediaType(img.Data)),
+									Data:      img.Data,
+								},
+							},
 						},
 					})
 				} else if img.Type == "url" && img.URL != "" {
-					cm.Content = append(cm.Content, claudeContent{
-						Type: "image",
-						Source: &claudeImageSource{
-							Type: "url",
-							URL:  img.URL,
+					blocks = append(blocks, anthropicsdk.ContentBlockParamUnion{
+						OfImage: &anthropicsdk.ImageBlockParam{
+							Source: anthropicsdk.ImageBlockParamSourceUnion{
+								OfURL: &anthropicsdk.URLImageSourceParam{
+									URL: img.URL,
+								},
+							},
 						},
 					})
 				}
@@ -559,56 +526,87 @@ func convertToClaudeMessages(msgs []types.Message) (string, []claudeMessage) {
 		// ToolCall 转换
 		if len(m.ToolCalls) > 0 {
 			for _, tc := range m.ToolCalls {
-				cm.Content = append(cm.Content, claudeContent{
-					Type:  "tool_use",
-					ID:    tc.ID,
-					Name:  tc.Name,
-					Input: tc.Arguments,
+				var input any
+				if len(tc.Arguments) > 0 {
+					if err := json.Unmarshal(tc.Arguments, &input); err != nil {
+						input = map[string]any{}
+					}
+				} else {
+					input = map[string]any{}
+				}
+				blocks = append(blocks, anthropicsdk.ContentBlockParamUnion{
+					OfToolUse: &anthropicsdk.ToolUseBlockParam{
+						ID:    tc.ID,
+						Name:  tc.Name,
+						Input: input,
+					},
 				})
 			}
 		}
 
-		if len(cm.Content) > 0 {
+		if len(blocks) > 0 {
 			// 多轮回传：如果 assistant 消息的 Metadata 中包含 web search blocks，追加到 content 数组
 			if m.Role == llm.RoleAssistant {
 				if meta, ok := m.Metadata.(map[string]any); ok {
 					if rawBlocks, ok := meta["claude_web_search_blocks"]; ok {
-						switch blocks := rawBlocks.(type) {
+						switch items := rawBlocks.(type) {
 						case []json.RawMessage:
-							for _, raw := range blocks {
+							for _, raw := range items {
 								var block claudeContent
 								if json.Unmarshal(raw, &block) == nil {
-									cm.Content = append(cm.Content, block)
+									blocks = appendServerToolBlock(blocks, block)
 								}
 							}
 						case []any:
-							// 经过 JSON round-trip 后可能变成 []any
-							for _, item := range blocks {
+							for _, item := range items {
 								raw, err := json.Marshal(item)
 								if err != nil {
 									continue
 								}
 								var block claudeContent
 								if json.Unmarshal(raw, &block) == nil {
-									cm.Content = append(cm.Content, block)
+									blocks = appendServerToolBlock(blocks, block)
 								}
 							}
 						}
 					}
 				}
 			}
-			claudeMsgs = append(claudeMsgs, cm)
+			claudeMsgs = append(claudeMsgs, anthropicsdk.MessageParam{
+				Role:    role,
+				Content: blocks,
+			})
 		}
 	}
 
-	return strings.Join(systemParts, "\n\n"), claudeMsgs
+	return systemParts, claudeMsgs
+}
+
+// appendServerToolBlock 将原始 server_tool_use / web_search_tool_result 块追加为 SDK 类型。
+// 由于 SDK 没有暴露直接构造 ServerToolUseBlockParam 的便利函数，这里通过 JSON round-trip 构造。
+func appendServerToolBlock(blocks []anthropicsdk.ContentBlockParamUnion, block claudeContent) []anthropicsdk.ContentBlockParamUnion {
+	raw, err := json.Marshal(block)
+	if err != nil {
+		return blocks
+	}
+	// 尝试解析为 ServerToolUseBlockParam
+	var stu anthropicsdk.ServerToolUseBlockParam
+	if err := json.Unmarshal(raw, &stu); err == nil && stu.ID != "" {
+		return append(blocks, anthropicsdk.ContentBlockParamUnion{OfServerToolUse: &stu})
+	}
+	// 尝试解析为 WebSearchToolResultBlockParam
+	var wsr anthropicsdk.WebSearchToolResultBlockParam
+	if err := json.Unmarshal(raw, &wsr); err == nil && wsr.ToolUseID != "" {
+		return append(blocks, anthropicsdk.ContentBlockParamUnion{OfWebSearchToolResult: &wsr})
+	}
+	return blocks
 }
 
 // convertToClaudeTools 将统一工具列表转换为 Claude API 的混合工具数组。
 // 当 wsOpts 不为 nil 或工具列表中包含 web_search 时，自动注入 web_search_20260209 服务端工具。
-func convertToClaudeTools(tools []types.ToolSchema, wsOpts *llm.WebSearchOptions) []json.RawMessage {
+func convertToClaudeTools(tools []types.ToolSchema, wsOpts *llm.WebSearchOptions) []anthropicsdk.ToolUnionParam {
 	hasWebSearch := wsOpts != nil
-	out := make([]json.RawMessage, 0, len(tools)+1)
+	out := make([]anthropicsdk.ToolUnionParam, 0, len(tools)+1)
 
 	for _, t := range tools {
 		// 跳过客户端传入的 web_search 占位工具（避免双重注入）
@@ -616,58 +614,54 @@ func convertToClaudeTools(tools []types.ToolSchema, wsOpts *llm.WebSearchOptions
 			hasWebSearch = true
 			continue
 		}
-		raw, err := json.Marshal(claudeTool{
-			Name:        t.Name,
-			Description: t.Description,
-			InputSchema: t.Parameters,
-			Strict:      t.Strict,
-		})
-		if err != nil {
-			continue
+		var schema anthropicsdk.ToolInputSchemaParam
+		if len(t.Parameters) > 0 {
+			_ = json.Unmarshal(t.Parameters, &schema)
 		}
-		out = append(out, raw)
+		tool := anthropicsdk.ToolParam{
+			Name:        t.Name,
+			InputSchema: schema,
+		}
+		if t.Description != "" {
+			tool.Description = anthropicsdkparam.NewOpt(t.Description)
+		}
+		if t.Strict != nil {
+			tool.Strict = anthropicsdkparam.NewOpt(*t.Strict)
+		}
+		out = append(out, anthropicsdk.ToolUnionParam{OfTool: &tool})
 	}
 
 	// 注入 web_search_20260209 服务端工具
 	if hasWebSearch {
-		ws := map[string]any{
-			"type": "web_search_20260209",
-			"name": "web_search",
-		}
+		wsTool := anthropicsdk.WebSearchTool20260209Param{}
 		if wsOpts != nil {
 			if len(wsOpts.AllowedDomains) > 0 {
-				ws["allowed_domains"] = wsOpts.AllowedDomains
+				wsTool.AllowedDomains = wsOpts.AllowedDomains
 			}
 			if len(wsOpts.BlockedDomains) > 0 {
-				ws["blocked_domains"] = wsOpts.BlockedDomains
+				wsTool.BlockedDomains = wsOpts.BlockedDomains
 			}
 			if wsOpts.MaxUses > 0 {
-				ws["max_uses"] = wsOpts.MaxUses
+				wsTool.MaxUses = anthropicsdkparam.NewOpt(int64(wsOpts.MaxUses))
 			}
 			if wsOpts.UserLocation != nil {
-				loc := map[string]string{}
-				if wsOpts.UserLocation.Type != "" {
-					loc["type"] = wsOpts.UserLocation.Type
-				}
+				loc := anthropicsdk.UserLocationParam{}
 				if wsOpts.UserLocation.Country != "" {
-					loc["country"] = wsOpts.UserLocation.Country
+					loc.Country = anthropicsdkparam.NewOpt(wsOpts.UserLocation.Country)
 				}
 				if wsOpts.UserLocation.Region != "" {
-					loc["region"] = wsOpts.UserLocation.Region
+					loc.Region = anthropicsdkparam.NewOpt(wsOpts.UserLocation.Region)
 				}
 				if wsOpts.UserLocation.City != "" {
-					loc["city"] = wsOpts.UserLocation.City
+					loc.City = anthropicsdkparam.NewOpt(wsOpts.UserLocation.City)
 				}
 				if wsOpts.UserLocation.Timezone != "" {
-					loc["timezone"] = wsOpts.UserLocation.Timezone
+					loc.Timezone = anthropicsdkparam.NewOpt(wsOpts.UserLocation.Timezone)
 				}
-				if len(loc) > 0 {
-					ws["user_location"] = loc
-				}
+				wsTool.UserLocation = loc
 			}
 		}
-		raw, _ := json.Marshal(ws)
-		out = append(out, raw)
+		out = append(out, anthropicsdk.ToolUnionParam{OfWebSearchTool20260209: &wsTool})
 	}
 
 	if len(out) == 0 {
@@ -676,44 +670,45 @@ func convertToClaudeTools(tools []types.ToolSchema, wsOpts *llm.WebSearchOptions
 	return out
 }
 
-// convertClaudeToolChoice 将 llm.ChatRequest.ToolChoice (any) 转换为 Claude 格式。
+// convertClaudeToolChoice 将 llm.ChatRequest.ToolChoice (any) 转换为 Claude SDK 格式。
 // 支持 string ("auto"/"any"/"none") 和 map/struct 形式。
-func convertClaudeToolChoice(tc any, parallelToolCalls *bool, hasTools bool) *claudeToolChoice {
+func convertClaudeToolChoice(tc any, parallelToolCalls *bool, hasTools bool) anthropicsdk.ToolChoiceUnionParam {
 	spec := providerbase.NormalizeToolChoice(tc)
-	var result *claudeToolChoice
+	var result anthropicsdk.ToolChoiceUnionParam
 	switch spec.Mode {
-	case "auto", "any", "none":
-		result = &claudeToolChoice{Type: spec.Mode}
+	case "auto":
+		result = anthropicsdk.ToolChoiceUnionParam{OfAuto: &anthropicsdk.ToolChoiceAutoParam{}}
+	case "any":
+		result = anthropicsdk.ToolChoiceUnionParam{OfAny: &anthropicsdk.ToolChoiceAnyParam{}}
+	case "none":
+		result = anthropicsdk.ToolChoiceUnionParam{OfNone: &anthropicsdk.ToolChoiceNoneParam{}}
 	case "tool":
-		result = &claudeToolChoice{Type: "tool", Name: spec.SpecificName}
+		result = anthropicsdk.ToolChoiceParamOfTool(spec.SpecificName)
 	}
-	if result != nil && spec.DisableParallelToolUse != nil {
-		result.DisableParallelToolUse = spec.DisableParallelToolUse
+	if spec.DisableParallelToolUse != nil {
+		switch {
+		case result.OfAuto != nil:
+			result.OfAuto.DisableParallelToolUse = anthropicsdkparam.NewOpt(*spec.DisableParallelToolUse)
+		case result.OfAny != nil:
+			result.OfAny.DisableParallelToolUse = anthropicsdkparam.NewOpt(*spec.DisableParallelToolUse)
+		case result.OfTool != nil:
+			result.OfTool.DisableParallelToolUse = anthropicsdkparam.NewOpt(*spec.DisableParallelToolUse)
+		}
 	}
 	if parallelToolCalls != nil && !*parallelToolCalls && hasTools {
-		if result == nil {
-			result = &claudeToolChoice{Type: "auto"}
+		if result.OfAuto == nil && result.OfAny == nil && result.OfTool == nil && result.OfNone == nil {
+			result = anthropicsdk.ToolChoiceUnionParam{OfAuto: &anthropicsdk.ToolChoiceAutoParam{}}
 		}
-		disable := true
-		result.DisableParallelToolUse = &disable
+		switch {
+		case result.OfAuto != nil:
+			result.OfAuto.DisableParallelToolUse = anthropicsdkparam.NewOpt(true)
+		case result.OfAny != nil:
+			result.OfAny.DisableParallelToolUse = anthropicsdkparam.NewOpt(true)
+		case result.OfTool != nil:
+			result.OfTool.DisableParallelToolUse = anthropicsdkparam.NewOpt(true)
+		}
 	}
 	return result
-}
-
-func overrideAnthropicMessageParams(body claudeRequest) (anthropicsdk.MessageNewParams, error) {
-	raw, err := json.Marshal(body)
-	if err != nil {
-		return anthropicsdk.MessageNewParams{}, err
-	}
-	return anthropicsdkparam.Override[anthropicsdk.MessageNewParams](json.RawMessage(raw)), nil
-}
-
-func overrideAnthropicCountTokensParams(body claudeTokenCountRequest) (anthropicsdk.MessageCountTokensParams, error) {
-	raw, err := json.Marshal(body)
-	if err != nil {
-		return anthropicsdk.MessageCountTokensParams{}, err
-	}
-	return anthropicsdkparam.Override[anthropicsdk.MessageCountTokensParams](json.RawMessage(raw)), nil
 }
 
 func decodeAnthropicSDKRawJSON(raw string, dst any) error {
@@ -739,51 +734,60 @@ func (p *ClaudeProvider) Completion(ctx context.Context, req *llm.ChatRequest) (
 	apiKey := p.resolveAPIKey(ctx)
 	system, messages := convertToClaudeMessages(req.Messages)
 	model := providerbase.ChooseModel(req, p.cfg.Model, "claude-opus-4.5-20260105")
-	reasoning := buildClaudeReasoningControls(req, model)
+	thinking, outputConfig, speed := buildClaudeReasoningControls(req, model)
 	cacheControl, cacheErr := normalizeClaudeCacheControl(req.CacheControl)
 	if cacheErr != nil {
 		return nil, cacheErr
 	}
 
-	body := claudeRequest{
-		Model:        model,
-		Messages:     messages,
-		System:       system,
-		MaxTokens:    chooseMaxTokens(req),
-		Temperature:  float32PtrIfSet(req.Temperature),
-		TopP:         float32PtrIfSet(req.TopP),
-		StopSeq:      req.Stop,
-		Tools:        convertToClaudeTools(req.Tools, req.WebSearchOptions),
-		ToolChoice:   convertClaudeToolChoice(req.ToolChoice, req.ParallelToolCalls, len(req.Tools) > 0 || req.WebSearchOptions != nil),
-		Thinking:     reasoning.Thinking,
-		OutputConfig: reasoning.OutputConfig,
-		Speed:        reasoning.Speed,
-		CacheControl: cacheControl,
+	params := anthropicsdk.MessageNewParams{
+		Model:     model,
+		MaxTokens: int64(chooseMaxTokens(req)),
+		Messages:  messages,
+	}
+	if len(system) > 0 {
+		params.System = system
+	}
+	if req.Temperature != 0 {
+		params.Temperature = anthropicsdkparam.NewOpt(float64(req.Temperature))
+	}
+	if req.TopP != 0 {
+		params.TopP = anthropicsdkparam.NewOpt(float64(req.TopP))
+	}
+	if len(req.Stop) > 0 {
+		params.StopSequences = req.Stop
+	}
+	tools := convertToClaudeTools(req.Tools, req.WebSearchOptions)
+	if len(tools) > 0 {
+		params.Tools = tools
+	}
+	tc := convertClaudeToolChoice(req.ToolChoice, req.ParallelToolCalls, len(req.Tools) > 0 || req.WebSearchOptions != nil)
+	if tc.OfAuto != nil || tc.OfAny != nil || tc.OfTool != nil || tc.OfNone != nil {
+		params.ToolChoice = tc
+	}
+	if thinking.OfEnabled != nil || thinking.OfAdaptive != nil || thinking.OfDisabled != nil {
+		params.Thinking = thinking
+	}
+	if outputConfig.Effort != "" {
+		params.OutputConfig = outputConfig
+	}
+	if cacheControl != nil {
+		params.CacheControl = *cacheControl
 	}
 
 	// Claude thinking mode only supports compatible tool_choice combinations.
-	if err := validateThinkingConstraints(&body); err != nil {
+	if err := validateThinkingConstraints(thinking, tc); err != nil {
 		return nil, err
 	}
 
-	params, err := overrideAnthropicMessageParams(body)
-	if err != nil {
-		return nil, p.mapSDKError(err)
-	}
-
 	client := p.sdkClient(apiKey)
-	sdkResp, err := client.Messages.New(ctx, params, p.sdkRequestOptions(body.Speed)...)
+	sdkResp, err := client.Messages.New(ctx, params, p.sdkRequestOptions(speed)...)
 	if err != nil {
-		if shouldRetryClaudeWithoutFastMode(sdkStatusCode(err), body.Speed) {
-			body.Speed = ""
-			params, paramErr := overrideAnthropicMessageParams(body)
-			if paramErr != nil {
-				return nil, p.mapSDKError(paramErr)
-			}
-			var retryErr error
-			sdkResp, retryErr = client.Messages.New(ctx, params, p.sdkRequestOptions(body.Speed)...)
-			if retryErr != nil {
-				return nil, p.mapSDKError(retryErr)
+		if shouldRetryClaudeWithoutFastMode(sdkStatusCode(err), speed) {
+			speed = ""
+			sdkResp, err = client.Messages.New(ctx, params, p.sdkRequestOptions(speed)...)
+			if err != nil {
+				return nil, p.mapSDKError(err)
 			}
 		} else {
 			return nil, p.mapSDKError(err)
@@ -813,41 +817,54 @@ func (p *ClaudeProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-ch
 	apiKey := p.resolveAPIKey(ctx)
 	system, messages := convertToClaudeMessages(req.Messages)
 	model := providerbase.ChooseModel(req, p.cfg.Model, "claude-opus-4.5-20260105")
-	reasoning := buildClaudeReasoningControls(req, model)
+	thinking, outputConfig, speed := buildClaudeReasoningControls(req, model)
 	cacheControl, cacheErr := normalizeClaudeCacheControl(req.CacheControl)
 	if cacheErr != nil {
 		return nil, cacheErr
 	}
 
-	body := claudeRequest{
-		Model:        model,
-		Messages:     messages,
-		System:       system,
-		MaxTokens:    chooseMaxTokens(req),
-		Temperature:  float32PtrIfSet(req.Temperature),
-		TopP:         float32PtrIfSet(req.TopP),
-		StopSeq:      req.Stop,
-		Stream:       true,
-		Tools:        convertToClaudeTools(req.Tools, req.WebSearchOptions),
-		ToolChoice:   convertClaudeToolChoice(req.ToolChoice, req.ParallelToolCalls, len(req.Tools) > 0 || req.WebSearchOptions != nil),
-		Thinking:     reasoning.Thinking,
-		OutputConfig: reasoning.OutputConfig,
-		Speed:        reasoning.Speed,
-		CacheControl: cacheControl,
+	params := anthropicsdk.MessageNewParams{
+		Model:     model,
+		MaxTokens: int64(chooseMaxTokens(req)),
+		Messages:  messages,
+	}
+	if len(system) > 0 {
+		params.System = system
+	}
+	if req.Temperature != 0 {
+		params.Temperature = anthropicsdkparam.NewOpt(float64(req.Temperature))
+	}
+	if req.TopP != 0 {
+		params.TopP = anthropicsdkparam.NewOpt(float64(req.TopP))
+	}
+	if len(req.Stop) > 0 {
+		params.StopSequences = req.Stop
+	}
+	tools := convertToClaudeTools(req.Tools, req.WebSearchOptions)
+	if len(tools) > 0 {
+		params.Tools = tools
+	}
+	tc := convertClaudeToolChoice(req.ToolChoice, req.ParallelToolCalls, len(req.Tools) > 0 || req.WebSearchOptions != nil)
+	if tc.OfAuto != nil || tc.OfAny != nil || tc.OfTool != nil || tc.OfNone != nil {
+		params.ToolChoice = tc
+	}
+	if thinking.OfEnabled != nil || thinking.OfAdaptive != nil || thinking.OfDisabled != nil {
+		params.Thinking = thinking
+	}
+	if outputConfig.Effort != "" {
+		params.OutputConfig = outputConfig
+	}
+	if cacheControl != nil {
+		params.CacheControl = *cacheControl
 	}
 
 	// Claude thinking mode only supports compatible tool_choice combinations.
-	if err := validateThinkingConstraints(&body); err != nil {
+	if err := validateThinkingConstraints(thinking, tc); err != nil {
 		return nil, err
 	}
 
-	params, err := overrideAnthropicMessageParams(body)
-	if err != nil {
-		return nil, p.mapSDKError(err)
-	}
-
 	client := p.sdkClient(apiKey)
-	stream := client.Messages.NewStreaming(ctx, params, p.sdkRequestOptions(body.Speed)...)
+	stream := client.Messages.NewStreaming(ctx, params, p.sdkRequestOptions(speed)...)
 	if stream == nil {
 		return nil, &types.Error{
 			Code:       llm.ErrUpstreamError,
@@ -858,13 +875,9 @@ func (p *ClaudeProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-ch
 		}
 	}
 	if err := stream.Err(); err != nil {
-		if shouldRetryClaudeWithoutFastMode(sdkStatusCode(err), body.Speed) {
-			body.Speed = ""
-			params, paramErr := overrideAnthropicMessageParams(body)
-			if paramErr != nil {
-				return nil, p.mapSDKError(paramErr)
-			}
-			stream = client.Messages.NewStreaming(ctx, params, p.sdkRequestOptions(body.Speed)...)
+		if shouldRetryClaudeWithoutFastMode(sdkStatusCode(err), speed) {
+			speed = ""
+			stream = client.Messages.NewStreaming(ctx, params, p.sdkRequestOptions(speed)...)
 			if stream == nil {
 				return nil, &types.Error{
 					Code:       llm.ErrUpstreamError,
@@ -1300,42 +1313,27 @@ func chooseMaxTokens(req *llm.ChatRequest) int {
 	return 4096
 }
 
-// float32PtrIfSet 将 float32 转为指针。零值返回 nil（不发送），非零值返回指针。
-// 注意：这意味着无法通过 ChatRequest.Temperature=0 显式发送 temperature:0。
-// 这是 ChatRequest 使用非指针 float32 的已知限制。
-func float32PtrIfSet(v float32) *float32 {
-	if v == 0 {
-		return nil
-	}
-	return &v
-}
-
 // validateThinkingConstraints 校验 thinking 模式与其他参数的兼容性。
 // Claude API 约束：thinking 模式只支持 tool_choice: auto 或 none。
-func validateThinkingConstraints(body *claudeRequest) error {
-	if body.Thinking == nil || strings.TrimSpace(body.Thinking.Type) == "" || strings.EqualFold(body.Thinking.Type, "disabled") {
+func validateThinkingConstraints(thinking anthropicsdk.ThinkingConfigParamUnion, toolChoice anthropicsdk.ToolChoiceUnionParam) error {
+	if thinking.OfEnabled == nil && thinking.OfAdaptive == nil {
 		return nil
 	}
-	if body.ToolChoice != nil {
-		switch body.ToolChoice.Type {
-		case "auto", "none":
-			// 允许
-		default:
-			return &types.Error{
-				Code:       llm.ErrInvalidRequest,
-				Message:    fmt.Sprintf("Claude thinking only supports tool_choice 'auto' or 'none', got '%s'", body.ToolChoice.Type),
-				HTTPStatus: http.StatusBadRequest,
-				Provider:   "claude",
-			}
-		}
+	if toolChoice.OfAuto != nil || toolChoice.OfNone != nil || (toolChoice.OfAny == nil && toolChoice.OfTool == nil) {
+		return nil
 	}
-	return nil
-}
-
-type claudeReasoningControls struct {
-	Thinking     *claudeThinking
-	OutputConfig *claudeOutputConfig
-	Speed        string
+	tcType := ""
+	if toolChoice.OfAny != nil {
+		tcType = "any"
+	} else if toolChoice.OfTool != nil {
+		tcType = "tool"
+	}
+	return &types.Error{
+		Code:       llm.ErrInvalidRequest,
+		Message:    fmt.Sprintf("Claude thinking only supports tool_choice 'auto' or 'none', got '%s'", tcType),
+		HTTPStatus: http.StatusBadRequest,
+		Provider:   "claude",
+	}
 }
 
 func sdkStatusCode(err error) int {
@@ -1346,7 +1344,7 @@ func sdkStatusCode(err error) int {
 	return 0
 }
 
-func normalizeClaudeCacheControl(in *llm.CacheControl) (*llm.CacheControl, *types.Error) {
+func normalizeClaudeCacheControl(in *llm.CacheControl) (*anthropicsdk.CacheControlEphemeralParam, *types.Error) {
 	if in == nil {
 		return nil, nil
 	}
@@ -1376,50 +1374,53 @@ func normalizeClaudeCacheControl(in *llm.CacheControl) (*llm.CacheControl, *type
 		}
 	}
 
-	return &llm.CacheControl{Type: kind, TTL: ttl}, nil
+	ccp := anthropicsdk.NewCacheControlEphemeralParam()
+	if ttl != "" {
+		ccp.TTL = anthropicsdk.CacheControlEphemeralTTL(ttl)
+	}
+	return &ccp, nil
 }
 
 // buildClaudeReasoningControls maps unified reasoning options into the current Claude protocol.
 // Newer Claude 4.6/Mythos models prefer adaptive thinking + output_config.effort.
 // Older models gracefully fall back to manual thinking budgets or standard speed.
-func buildClaudeReasoningControls(req *llm.ChatRequest, model string) claudeReasoningControls {
+func buildClaudeReasoningControls(req *llm.ChatRequest, model string) (anthropicsdk.ThinkingConfigParamUnion, anthropicsdk.OutputConfigParam, string) {
 	if req == nil {
-		return claudeReasoningControls{}
+		return anthropicsdk.ThinkingConfigParamUnion{}, anthropicsdk.OutputConfigParam{}, ""
 	}
 
 	normModel := normalizeClaudeModelName(model)
-	controls := claudeReasoningControls{
-		Speed: normalizeClaudeSpeed(req.InferenceSpeed, normModel),
-	}
+	speed := normalizeClaudeSpeed(req.InferenceSpeed, normModel)
+	var outputConfig anthropicsdk.OutputConfigParam
 
 	if effort := normalizeClaudeEffort(req.ReasoningEffort); effort != "" && claudeModelSupportsEffort(normModel) {
-		controls.OutputConfig = &claudeOutputConfig{Effort: effort}
+		outputConfig.Effort = anthropicsdk.OutputConfigEffort(effort)
 	}
 
 	mode := strings.ToLower(strings.TrimSpace(req.ReasoningMode))
 	if mode == "" || mode == "disabled" {
-		return controls
+		return anthropicsdk.ThinkingConfigParamUnion{}, outputConfig, speed
 	}
 
 	display := normalizeClaudeThinkingDisplay(req.ReasoningDisplay, normModel)
 	switch mode {
 	case "adaptive":
 		if claudeModelSupportsAdaptiveThinking(normModel) {
-			controls.Thinking = &claudeThinking{
-				Type:    "adaptive",
-				Display: display,
+			var adaptive anthropicsdk.ThinkingConfigAdaptiveParam
+			if display != "" {
+				adaptive.Display = anthropicsdk.ThinkingConfigAdaptiveDisplay(display)
 			}
-			return controls
+			return anthropicsdk.ThinkingConfigParamUnion{OfAdaptive: &adaptive}, outputConfig, speed
 		}
 		mode = "extended"
 	case "extended", "enabled":
 	default:
-		return controls
+		return anthropicsdk.ThinkingConfigParamUnion{}, outputConfig, speed
 	}
 
 	maxTok := chooseMaxTokens(req)
 	if maxTok <= 1024 {
-		return controls
+		return anthropicsdk.ThinkingConfigParamUnion{}, outputConfig, speed
 	}
 
 	budget := maxTok * 3 / 4
@@ -1430,12 +1431,13 @@ func buildClaudeReasoningControls(req *llm.ChatRequest, model string) claudeReas
 		budget = maxTok - 1
 	}
 
-	controls.Thinking = &claudeThinking{
-		Type:         "enabled",
-		BudgetTokens: budget,
-		Display:      display,
+	enabled := anthropicsdk.ThinkingConfigEnabledParam{
+		BudgetTokens: int64(budget),
 	}
-	return controls
+	if display != "" {
+		enabled.Display = anthropicsdk.ThinkingConfigEnabledDisplay(display)
+	}
+	return anthropicsdk.ThinkingConfigParamUnion{OfEnabled: &enabled}, outputConfig, speed
 }
 
 func normalizeClaudeModelName(model string) string {

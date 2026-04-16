@@ -312,6 +312,16 @@ if err != nil {
 fmt.Println("LSP enabled:", ag.GetFeatureStatus()["lsp"])
 ```
 
+上下文运行时默认也会随 `AgentBuilder` / `runtime.Builder` 装配；可通过 `types.AgentConfig.Context` 控制预算与压缩策略：
+
+```go
+cfg.Context = &types.ContextConfig{
+    Enabled:          true,
+    MaxContextTokens: 128000,
+    ReserveForOutput: 4096,
+}
+```
+
 也可以通过 `runtime.Builder` 一键开关：
 
 ```go

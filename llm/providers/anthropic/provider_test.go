@@ -13,6 +13,7 @@ import (
 
 	"github.com/BaSui01/agentflow/llm"
 	"github.com/BaSui01/agentflow/llm/providers"
+	anthropicsdk "github.com/anthropics/anthropic-sdk-go"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
@@ -134,55 +135,68 @@ func TestConvertToClaudeMessages(t *testing.T) {
 	}
 
 	system, claudeMsgs := convertToClaudeMessages(msgs)
-	assert.Equal(t, "You are helpful\n\nAlways answer in JSON", system)
+	require.Len(t, system, 2)
+	assert.Equal(t, "You are helpful", system[0].Text)
+	assert.Equal(t, "Always answer in JSON", system[1].Text)
 	require.Len(t, claudeMsgs, 3)
 
 	// User message
-	assert.Equal(t, "user", claudeMsgs[0].Role)
+	assert.Equal(t, anthropicsdk.MessageParamRoleUser, claudeMsgs[0].Role)
 	require.Len(t, claudeMsgs[0].Content, 1)
-	assert.Equal(t, "text", claudeMsgs[0].Content[0].Type)
+	assert.NotNil(t, claudeMsgs[0].Content[0].OfText)
 
 	// Assistant with tool_use
-	assert.Equal(t, "assistant", claudeMsgs[1].Role)
+	assert.Equal(t, anthropicsdk.MessageParamRoleAssistant, claudeMsgs[1].Role)
 	require.Len(t, claudeMsgs[1].Content, 2)
-	assert.Equal(t, "text", claudeMsgs[1].Content[0].Type)
-	assert.Equal(t, "tool_use", claudeMsgs[1].Content[1].Type)
-	assert.Equal(t, "search", claudeMsgs[1].Content[1].Name)
+	assert.NotNil(t, claudeMsgs[1].Content[0].OfText)
+	assert.NotNil(t, claudeMsgs[1].Content[1].OfToolUse)
+	assert.Equal(t, "search", claudeMsgs[1].Content[1].OfToolUse.Name)
 
 	// Tool result wrapped as user
-	assert.Equal(t, "user", claudeMsgs[2].Role)
-	assert.Equal(t, "tool_result", claudeMsgs[2].Content[0].Type)
-	assert.Equal(t, "tc_1", claudeMsgs[2].Content[0].ToolUseID)
+	assert.Equal(t, anthropicsdk.MessageParamRoleUser, claudeMsgs[2].Role)
+	require.Len(t, claudeMsgs[2].Content, 1)
+	assert.NotNil(t, claudeMsgs[2].Content[0].OfToolResult)
+	assert.Equal(t, "tc_1", claudeMsgs[2].Content[0].OfToolResult.ToolUseID)
 }
 
 // --- convertClaudeToolChoice ---
 
 func TestConvertClaudeToolChoice(t *testing.T) {
 	tests := []struct {
-		name     string
-		input    any
-		expected *claudeToolChoice
+		name         string
+		input        any
+		expectedType string
+		expectedName string
+		isZero       bool
 	}{
-		{"nil", nil, nil},
-		{"auto string", "auto", &claudeToolChoice{Type: "auto"}},
-		{"any string", "any", &claudeToolChoice{Type: "any"}},
-		{"required string", "required", &claudeToolChoice{Type: "any"}},
-		{"none string", "none", &claudeToolChoice{Type: "none"}},
-		{"empty string", "", nil},
-		{"specific tool", "my_tool", &claudeToolChoice{Type: "tool", Name: "my_tool"}},
-		{"map form", map[string]any{"type": "tool", "name": "calc"}, &claudeToolChoice{Type: "tool", Name: "calc"}},
-		{"unsupported type", 42, nil},
+		{"nil", nil, "", "", true},
+		{"auto string", "auto", "auto", "", false},
+		{"any string", "any", "any", "", false},
+		{"required string", "required", "any", "", false},
+		{"none string", "none", "none", "", false},
+		{"empty string", "", "", "", true},
+		{"specific tool", "my_tool", "tool", "my_tool", false},
+		{"map form", map[string]any{"type": "tool", "name": "calc"}, "tool", "calc", false},
+		{"unsupported type", 42, "", "", true},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result := convertClaudeToolChoice(tt.input, nil, false)
-			if tt.expected == nil {
-				assert.Nil(t, result)
-			} else {
-				require.NotNil(t, result)
-				assert.Equal(t, tt.expected.Type, result.Type)
-				assert.Equal(t, tt.expected.Name, result.Name)
+			if tt.isZero {
+				assert.True(t, result.OfAuto == nil && result.OfAny == nil && result.OfTool == nil && result.OfNone == nil)
+				return
+			}
+			switch tt.expectedType {
+			case "auto":
+				require.NotNil(t, result.OfAuto)
+			case "any":
+				require.NotNil(t, result.OfAny)
+			case "none":
+				require.NotNil(t, result.OfNone)
+			case "tool":
+				require.NotNil(t, result.OfTool)
+				assert.Equal(t, tt.expectedName, result.OfTool.Name)
 			}
 		})
 	}
@@ -191,10 +205,8 @@ func TestConvertClaudeToolChoice(t *testing.T) {
 func TestConvertClaudeToolChoice_DisablesParallelToolUse(t *testing.T) {
 	parallel := false
 	result := convertClaudeToolChoice(nil, &parallel, true)
-	require.NotNil(t, result)
-	assert.Equal(t, "auto", result.Type)
-	require.NotNil(t, result.DisableParallelToolUse)
-	assert.True(t, *result.DisableParallelToolUse)
+	require.NotNil(t, result.OfAuto)
+	assert.True(t, result.OfAuto.DisableParallelToolUse.Value)
 }
 
 // --- chooseMaxTokens ---
@@ -208,12 +220,12 @@ func TestChooseMaxTokens(t *testing.T) {
 // --- Completion via httptest ---
 
 func TestClaudeProvider_Completion(t *testing.T) {
-	var capturedRequest claudeRequest
+	var capturedBody map[string]any
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, "/v1/messages", r.URL.Path)
 		assert.Equal(t, http.MethodPost, r.Method)
 
-		err := json.NewDecoder(r.Body).Decode(&capturedRequest)
+		err := json.NewDecoder(r.Body).Decode(&capturedBody)
 		require.NoError(t, err)
 
 		w.Header().Set("Content-Type", "application/json")
@@ -256,8 +268,12 @@ func TestClaudeProvider_Completion(t *testing.T) {
 	assert.Equal(t, 15, resp.Usage.TotalTokens)
 
 	// Verify request body
-	assert.Equal(t, "Be helpful", capturedRequest.System)
-	assert.Equal(t, 100, capturedRequest.MaxTokens)
+	systemBlocks, ok := capturedBody["system"].([]any)
+	require.True(t, ok)
+	require.Len(t, systemBlocks, 1)
+	sysText, _ := systemBlocks[0].(map[string]any)["text"].(string)
+	assert.Equal(t, "Be helpful", sysText)
+	assert.Equal(t, float64(100), capturedBody["max_tokens"])
 }
 
 func TestClaudeProvider_Completion_WithToolCalls(t *testing.T) {
@@ -654,13 +670,11 @@ func TestBuildClaudeReasoningControls_Adaptive(t *testing.T) {
 		InferenceSpeed:   "fast",
 		MaxTokens:        4096,
 	}
-	controls := buildClaudeReasoningControls(req, "claude-opus-4-6")
-	require.NotNil(t, controls.Thinking)
-	assert.Equal(t, "adaptive", controls.Thinking.Type)
-	assert.Equal(t, "summarized", controls.Thinking.Display)
-	require.NotNil(t, controls.OutputConfig)
-	assert.Equal(t, "max", controls.OutputConfig.Effort)
-	assert.Equal(t, "fast", controls.Speed)
+	thinking, outputConfig, speed := buildClaudeReasoningControls(req, "claude-opus-4-6")
+	require.NotNil(t, thinking.OfAdaptive)
+	assert.Equal(t, anthropicsdk.ThinkingConfigAdaptiveDisplay("summarized"), thinking.OfAdaptive.Display)
+	assert.Equal(t, anthropicsdk.OutputConfigEffort("max"), outputConfig.Effort)
+	assert.Equal(t, "fast", speed)
 }
 
 func TestBuildClaudeReasoningControls_FallbacksGracefully(t *testing.T) {
@@ -671,14 +685,12 @@ func TestBuildClaudeReasoningControls_FallbacksGracefully(t *testing.T) {
 		InferenceSpeed:   "fast",
 		MaxTokens:        2000,
 	}
-	controls := buildClaudeReasoningControls(req, "claude-opus-4.5-20260105")
-	require.NotNil(t, controls.Thinking)
-	assert.Equal(t, "enabled", controls.Thinking.Type)
-	assert.Equal(t, 1500, controls.Thinking.BudgetTokens)
-	assert.Equal(t, "omitted", controls.Thinking.Display)
-	require.NotNil(t, controls.OutputConfig)
-	assert.Equal(t, "high", controls.OutputConfig.Effort)
-	assert.Equal(t, "", controls.Speed)
+	thinking, outputConfig, speed := buildClaudeReasoningControls(req, "claude-opus-4.5-20260105")
+	require.NotNil(t, thinking.OfEnabled)
+	assert.Equal(t, int64(1500), thinking.OfEnabled.BudgetTokens)
+	assert.Equal(t, anthropicsdk.ThinkingConfigEnabledDisplay("omitted"), thinking.OfEnabled.Display)
+	assert.Equal(t, anthropicsdk.OutputConfigEffort("high"), outputConfig.Effort)
+	assert.Equal(t, "", speed)
 }
 
 func TestBuildClaudeReasoningControls_ExtendedTooSmallDisablesThinking(t *testing.T) {
@@ -688,10 +700,9 @@ func TestBuildClaudeReasoningControls_ExtendedTooSmallDisablesThinking(t *testin
 		ReasoningDisplay: "summary",
 		MaxTokens:        1024,
 	}
-	controls := buildClaudeReasoningControls(req, "claude-opus-4.5-20260105")
-	assert.Nil(t, controls.Thinking)
-	require.NotNil(t, controls.OutputConfig)
-	assert.Equal(t, "medium", controls.OutputConfig.Effort)
+	thinking, outputConfig, _ := buildClaudeReasoningControls(req, "claude-opus-4.5-20260105")
+	assert.True(t, thinking.OfEnabled == nil && thinking.OfAdaptive == nil && thinking.OfDisabled == nil)
+	assert.Equal(t, anthropicsdk.OutputConfigEffort("medium"), outputConfig.Effort)
 }
 
 func TestClaudeProvider_Headers_FastModeBeta(t *testing.T) {
@@ -729,14 +740,13 @@ func TestConvertToClaudeMessages_ToolErrorWriteback(t *testing.T) {
 	}
 
 	system, claudeMsgs := convertToClaudeMessages(msgs)
-	assert.Equal(t, "", system)
+	assert.Empty(t, system)
 	require.Len(t, claudeMsgs, 1)
 	require.Len(t, claudeMsgs[0].Content, 1)
-	assert.Equal(t, "tool_result", claudeMsgs[0].Content[0].Type)
-	assert.Equal(t, "tc_err", claudeMsgs[0].Content[0].ToolUseID)
-	if assert.NotNil(t, claudeMsgs[0].Content[0].IsError) {
-		assert.True(t, *claudeMsgs[0].Content[0].IsError)
-	}
+	tr := claudeMsgs[0].Content[0].OfToolResult
+	require.NotNil(t, tr)
+	assert.Equal(t, "tc_err", tr.ToolUseID)
+	assert.True(t, tr.IsError.Value)
 }
 
 func TestClaudeProvider_Completion_FastMode429Fallback(t *testing.T) {
@@ -970,7 +980,9 @@ func TestConvertToClaudeMessages_MultipleSystem(t *testing.T) {
 		{Role: llm.RoleUser, Content: "Hi"},
 	}
 	system, claudeMsgs := convertToClaudeMessages(msgs)
-	assert.Equal(t, "You are helpful.\n\nBe concise.", system)
+	require.Len(t, system, 2)
+	assert.Equal(t, "You are helpful.", system[0].Text)
+	assert.Equal(t, "Be concise.", system[1].Text)
 	require.Len(t, claudeMsgs, 1)
 }
 
@@ -1034,20 +1046,16 @@ func TestConvertToClaudeTools_WithWebSearch(t *testing.T) {
 	require.Len(t, result, 2) // 1 function tool + 1 web_search tool
 
 	// 验证普通工具
-	var funcTool map[string]any
-	require.NoError(t, json.Unmarshal(result[0], &funcTool))
-	assert.Equal(t, "get_weather", funcTool["name"])
+	require.NotNil(t, result[0].OfTool)
+	assert.Equal(t, "get_weather", result[0].OfTool.Name)
 
 	// 验证 web_search 工具
-	var wsTool map[string]any
-	require.NoError(t, json.Unmarshal(result[1], &wsTool))
-	assert.Equal(t, "web_search_20260209", wsTool["type"])
-	assert.Equal(t, "web_search", wsTool["name"])
-	assert.Equal(t, float64(5), wsTool["max_uses"])
-	assert.Equal(t, []any{"example.com"}, wsTool["allowed_domains"])
-	assert.Equal(t, []any{"spam.com"}, wsTool["blocked_domains"])
-	loc := wsTool["user_location"].(map[string]any)
-	assert.Equal(t, "US", loc["country"])
+	require.NotNil(t, result[1].OfWebSearchTool20260209)
+	wsTool := result[1].OfWebSearchTool20260209
+	assert.Equal(t, []string{"example.com"}, wsTool.AllowedDomains)
+	assert.Equal(t, []string{"spam.com"}, wsTool.BlockedDomains)
+	assert.Equal(t, int64(5), wsTool.MaxUses.Value)
+	assert.Equal(t, "US", wsTool.UserLocation.Country.Value)
 }
 
 func TestConvertToClaudeTools_WithWebSearch_FromToolName(t *testing.T) {
@@ -1061,11 +1069,11 @@ func TestConvertToClaudeTools_WithWebSearch_FromToolName(t *testing.T) {
 	require.Len(t, result, 2) // calculator + web_search_20260209
 
 	var names []string
-	for _, raw := range result {
-		var m map[string]any
-		json.Unmarshal(raw, &m)
-		if n, ok := m["name"].(string); ok {
-			names = append(names, n)
+	for _, t := range result {
+		if t.OfTool != nil {
+			names = append(names, t.OfTool.Name)
+		} else if t.OfWebSearchTool20260209 != nil {
+			names = append(names, "web_search")
 		}
 	}
 	assert.Contains(t, names, "calculator")
@@ -1079,6 +1087,7 @@ func TestConvertToClaudeTools_NilWebSearchOpts(t *testing.T) {
 	}
 	result := convertToClaudeTools(tools, nil)
 	require.Len(t, result, 1)
+	assert.NotNil(t, result[0].OfTool)
 }
 
 func TestConvertToClaudeTools_PreservesStrict(t *testing.T) {
@@ -1090,9 +1099,8 @@ func TestConvertToClaudeTools_PreservesStrict(t *testing.T) {
 		Strict:      &strict,
 	}}, nil)
 	require.Len(t, result, 1)
-	var tool map[string]any
-	require.NoError(t, json.Unmarshal(result[0], &tool))
-	assert.Equal(t, true, tool["strict"])
+	require.NotNil(t, result[0].OfTool)
+	assert.True(t, result[0].OfTool.Strict.Value)
 }
 
 func TestToClaudeChatResponse_WithWebSearch(t *testing.T) {
@@ -1153,7 +1161,7 @@ func TestConvertToClaudeMessages_WebSearchRoundTrip(t *testing.T) {
 	// 模拟 assistant 消息带有 web search metadata
 	wsBlocks := []json.RawMessage{
 		json.RawMessage(`{"type":"server_tool_use","id":"srvtoolu_1","name":"web_search"}`),
-		json.RawMessage(`{"type":"web_search_tool_result","id":"srvtoolu_1","encrypted_content":"enc123"}`),
+		json.RawMessage(`{"type":"web_search_tool_result","tool_use_id":"srvtoolu_1","encrypted_content":"enc123"}`),
 	}
 	msgs := []types.Message{
 		{Role: llm.RoleUser, Content: "search for Go 1.22"},
@@ -1172,13 +1180,13 @@ func TestConvertToClaudeMessages_WebSearchRoundTrip(t *testing.T) {
 
 	// assistant 消息应包含 text + 2 个 web search blocks
 	assistantMsg := claudeMsgs[1]
-	assert.Equal(t, "assistant", assistantMsg.Role)
+	assert.Equal(t, anthropicsdk.MessageParamRoleAssistant, assistantMsg.Role)
 	require.GreaterOrEqual(t, len(assistantMsg.Content), 3)
 
 	// 验证 web search blocks 被正确回传
-	assert.Equal(t, "text", assistantMsg.Content[0].Type)
-	assert.Equal(t, "server_tool_use", assistantMsg.Content[1].Type)
-	assert.Equal(t, "web_search_tool_result", assistantMsg.Content[2].Type)
+	assert.NotNil(t, assistantMsg.Content[0].OfText)
+	assert.NotNil(t, assistantMsg.Content[1].OfServerToolUse)
+	assert.NotNil(t, assistantMsg.Content[2].OfWebSearchToolResult)
 }
 
 func TestClaudeProvider_Stream_WebSearch(t *testing.T) {

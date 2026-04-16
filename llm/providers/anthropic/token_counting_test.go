@@ -45,5 +45,9 @@ func TestClaudeProvider_CountTokens(t *testing.T) {
 	require.NotNil(t, resp)
 	assert.Equal(t, "/v1/messages/count_tokens", capturedPath)
 	assert.Equal(t, 21, resp.InputTokens)
-	assert.Equal(t, "You are helpful.", capturedBody["system"])
+	systemBlocks, ok := capturedBody["system"].([]any)
+	require.True(t, ok)
+	require.Len(t, systemBlocks, 1)
+	sysText, _ := systemBlocks[0].(map[string]any)["text"].(string)
+	assert.Equal(t, "You are helpful.", sysText)
 }

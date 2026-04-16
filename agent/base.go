@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	agentcontext "github.com/BaSui01/agentflow/agent/context"
 	agentcore "github.com/BaSui01/agentflow/agent/core"
 	"github.com/BaSui01/agentflow/agent/guardcore"
 	"github.com/BaSui01/agentflow/agent/guardrails"
@@ -57,8 +58,16 @@ type Agent interface {
 // 使用 pkg/context.AgentContextManager 作为标准实现
 type ContextManager interface {
 	PrepareMessages(ctx context.Context, messages []types.Message, currentQuery string) ([]types.Message, error)
-	GetStatus(messages []types.Message) any
+	GetStatus(messages []types.Message) agentcontext.Status
 	EstimateTokens(messages []types.Message) int
+}
+
+type RetrievalProvider interface {
+	Retrieve(ctx context.Context, query string, topK int) ([]types.RetrievalRecord, error)
+}
+
+type ToolStateProvider interface {
+	LoadToolState(ctx context.Context, agentID string) ([]types.ToolStateSnapshot, error)
 }
 
 // Input Agent 输入
@@ -788,6 +797,8 @@ type BaseAgent struct {
 	ledger          observability.Ledger
 	memory          MemoryManager
 	toolManager     ToolManager
+	retriever       RetrievalProvider
+	toolState       ToolStateProvider
 	bus             EventBus
 
 	recentMemory   []MemoryRecord // 缓存最近加载的记忆
@@ -1202,6 +1213,16 @@ func (b *BaseAgent) Memory() MemoryManager { return b.memory }
 
 // Tools 返回工具注册中心
 func (b *BaseAgent) Tools() ToolManager { return b.toolManager }
+
+// SetRetrievalProvider configures retrieval-backed context injection.
+func (b *BaseAgent) SetRetrievalProvider(provider RetrievalProvider) {
+	b.retriever = provider
+}
+
+// SetToolStateProvider configures tool/artifact state-backed context injection.
+func (b *BaseAgent) SetToolStateProvider(provider ToolStateProvider) {
+	b.toolState = provider
+}
 
 // Config 返回配置
 func (b *BaseAgent) Config() types.AgentConfig { return b.config }
