@@ -132,11 +132,11 @@ func (p *QwenProvider) Rerank(ctx context.Context, req *RerankRequest) (*RerankR
 	}
 
 	return &RerankResponse{
-		ID:       qResp.RequestID,
-		Provider: p.Name(),
-		Model:    model,
-		Results:  results,
-		Usage:    RerankUsage{TotalTokens: qResp.Usage.TotalTokens},
+		ID:        qResp.RequestID,
+		Provider:  p.Name(),
+		Model:     model,
+		Results:   results,
+		Usage:     RerankUsage{TotalTokens: qResp.Usage.TotalTokens},
 		CreatedAt: time.Now(),
 	}, nil
 }

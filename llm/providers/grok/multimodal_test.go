@@ -50,7 +50,7 @@ func TestGrokProvider_GenerateVideo_Success(t *testing.T) {
 	}))
 	t.Cleanup(server.Close)
 
-	p := NewGrokProvider(providers.GrokConfig{
+	p := newGrokCapabilityHost(providers.GrokConfig{
 		BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key", BaseURL: server.URL},
 	}, zap.NewNop())
 
@@ -72,7 +72,7 @@ func TestGrokProvider_GenerateVideo_UpstreamError(t *testing.T) {
 	}))
 	t.Cleanup(server.Close)
 
-	p := NewGrokProvider(providers.GrokConfig{
+	p := newGrokCapabilityHost(providers.GrokConfig{
 		BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key", BaseURL: server.URL},
 	}, zap.NewNop())
 
@@ -98,7 +98,7 @@ func TestGrokProvider_GenerateVideo_PollTimeout(t *testing.T) {
 	}))
 	t.Cleanup(server.Close)
 
-	p := NewGrokProvider(providers.GrokConfig{
+	p := newGrokCapabilityHost(providers.GrokConfig{
 		BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key", BaseURL: server.URL},
 	}, zap.NewNop())
 
@@ -108,4 +108,3 @@ func TestGrokProvider_GenerateVideo_PollTimeout(t *testing.T) {
 	_, err := p.GenerateVideo(ctx, &llm.VideoGenerationRequest{Prompt: "test"})
 	require.Error(t, err)
 }
-

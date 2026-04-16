@@ -143,7 +143,7 @@ func demoFullModuleIntegrationReachability() {
 	var ref_rag_KnowledgeGraph rag.KnowledgeGraph
 	var ref_rag_LLMContextProvider rag.LLMContextProvider
 	var ref_rag_LLMReranker rag.LLMReranker
-	var ref_rag_LLMTokenizerAdapter rag.LLMTokenizerAdapter
+	var ref_llm_tokenizer_TokenizerAdapter llm_tokenizer.TokenizerAdapter
 	var ref_rag_MultiHopReasoner rag.MultiHopReasoner
 	var ref_rag_QueryRouter rag.QueryRouter
 	var ref_rag_QueryTransformer rag.QueryTransformer
@@ -423,8 +423,8 @@ func demoFullModuleIntegrationReachability() {
 	_ = ref_rag_KnowledgeGraph.QueryByType
 	_ = ref_rag_LLMContextProvider.GenerateContext
 	_ = ref_rag_LLMReranker.Rerank
-	_ = ref_rag_LLMTokenizerAdapter.CountTokens
-	_ = ref_rag_LLMTokenizerAdapter.Encode
+	_ = ref_llm_tokenizer_TokenizerAdapter.CountTokens
+	_ = ref_llm_tokenizer_TokenizerAdapter.Encode
 	_ = ref_rag_loader_ArxivSourceAdapter.Load
 	_ = ref_rag_loader_ArxivSourceAdapter.SupportedTypes
 	_ = ref_rag_loader_CSVLoader.Load
@@ -683,7 +683,7 @@ func demoFullModuleIntegrationReachability() {
 	_ = rag.NewHNSWIndex
 	_ = rag.NewLLMContextProvider
 	_ = rag.NewLLMReranker
-	_ = rag.NewLLMTokenizerAdapter
+	_ = llm_tokenizer.NewTokenizerAdapter
 	_ = rag.NewMultiHopReasoner
 	_ = rag.NewQueryRouter
 	_ = rag.NewQueryTransformer
@@ -872,7 +872,7 @@ func demoFullModuleIntegrationReachability() {
 		rag.NewHNSWIndex(rag.HNSWConfig{}, nil)
 		rag.NewLLMContextProvider(nil, nil)
 		rag.NewLLMReranker(nil, rag.LLMRerankerConfig{}, nil)
-		rag.NewLLMTokenizerAdapter(nil, nil)
+		llm_tokenizer.NewTokenizerAdapter(nil, nil)
 		rag.NewMultiHopReasoner(rag.MultiHopConfig{}, nil, nil, nil, nil, nil)
 		rag.NewQueryRouter(rag.QueryRouterConfig{}, nil, nil, nil)
 		rag.NewQueryTransformer(rag.QueryTransformConfig{}, nil, nil)

@@ -85,7 +85,7 @@ func TestProperty19_ToolCallResponseParsing(t *testing.T) {
 					BaseURL: server.URL,
 				},
 			}
-			provider := NewMiniMaxProvider(cfg, zap.NewNop())
+			provider := newMiniMaxProvider(cfg, zap.NewNop())
 
 			ctx := context.Background()
 			req := &llm.ChatRequest{

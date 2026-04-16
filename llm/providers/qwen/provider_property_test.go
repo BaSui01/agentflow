@@ -139,7 +139,7 @@ func TestProperty3_OpenAIFormatConversion(t *testing.T) {
 					BaseURL: server.URL,
 				},
 			}
-			provider := NewQwenProvider(cfg, zap.NewNop())
+			provider := newQwenProvider(cfg, zap.NewNop())
 
 			// 提出完成请求
 			ctx := context.Background()

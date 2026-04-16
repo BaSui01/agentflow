@@ -11,6 +11,7 @@ import (
 	mcpproto "github.com/BaSui01/agentflow/agent/protocol/mcp"
 	"github.com/BaSui01/agentflow/llm"
 	"github.com/BaSui01/agentflow/rag"
+	"github.com/BaSui01/agentflow/rag/core"
 	"github.com/BaSui01/agentflow/types"
 	"go.uber.org/zap"
 )
@@ -231,7 +232,7 @@ func runFaultRAGDimensionMismatch(ctx context.Context, logger *zap.Logger) error
 		Collection: "fault_dimension_check",
 	}, logger)
 
-	err := store.AddDocuments(ctx, []rag.Document{
+	err := store.AddDocuments(ctx, []core.Document{
 		{
 			ID:        "doc-1",
 			Content:   "ok embedding",

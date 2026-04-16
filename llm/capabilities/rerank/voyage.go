@@ -12,6 +12,7 @@ import (
 
 	"github.com/BaSui01/agentflow/pkg/tlsutil"
 )
+
 type VoyageProvider struct {
 	cfg    VoyageConfig
 	client *http.Client
@@ -145,4 +146,3 @@ func (p *VoyageProvider) RerankSimple(ctx context.Context, query string, documen
 	}
 	return resp.Results, nil
 }
-

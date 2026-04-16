@@ -44,7 +44,7 @@ func TestNewMistralProvider_Defaults(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			p := NewMistralProvider(tt.cfg, zap.NewNop())
+			p := newMistralProvider(tt.cfg, zap.NewNop())
 			require.NotNil(t, p)
 			assert.Equal(t, "mistral", p.Name())
 			assert.Equal(t, tt.expectedBaseURL, p.Cfg.BaseURL)
@@ -53,28 +53,28 @@ func TestNewMistralProvider_Defaults(t *testing.T) {
 }
 
 func TestMistralProvider_FallbackModel(t *testing.T) {
-	p := NewMistralProvider(providers.MistralConfig{}, zap.NewNop())
+	p := newMistralProvider(providers.MistralConfig{}, zap.NewNop())
 	assert.Equal(t, "mistral-large-latest", p.Cfg.FallbackModel)
 }
 
 func TestMistralProvider_NilLogger(t *testing.T) {
-	p := NewMistralProvider(providers.MistralConfig{}, nil)
+	p := newMistralProvider(providers.MistralConfig{}, nil)
 	require.NotNil(t, p)
 	assert.Equal(t, "mistral", p.Name())
 }
 
 func TestMistralProvider_SupportsNativeFunctionCalling(t *testing.T) {
-	p := NewMistralProvider(providers.MistralConfig{}, zap.NewNop())
+	p := newMistralProvider(providers.MistralConfig{}, zap.NewNop())
 	assert.True(t, p.SupportsNativeFunctionCalling())
 }
 
 func TestMistralProvider_SupportsStructuredOutput(t *testing.T) {
-	p := NewMistralProvider(providers.MistralConfig{}, zap.NewNop())
+	p := newMistralProvider(providers.MistralConfig{}, zap.NewNop())
 	assert.True(t, p.SupportsStructuredOutput())
 }
 
 func TestMistralProvider_EndpointPath(t *testing.T) {
-	p := NewMistralProvider(providers.MistralConfig{}, zap.NewNop())
+	p := newMistralProvider(providers.MistralConfig{}, zap.NewNop())
 	assert.Equal(t, "/v1/chat/completions", p.Cfg.EndpointPath)
 }
 
@@ -119,7 +119,7 @@ func TestMistralProvider_Completion(t *testing.T) {
 			BaseURL: server.URL,
 		},
 	}
-	p := NewMistralProvider(cfg, zap.NewNop())
+	p := newMistralProvider(cfg, zap.NewNop())
 
 	resp, err := p.Completion(context.Background(), &llm.ChatRequest{
 		Messages: []types.Message{
@@ -154,7 +154,7 @@ func TestMistralProvider_Completion_WithCustomModel(t *testing.T) {
 	}))
 	t.Cleanup(func() { server.Close() })
 
-	p := NewMistralProvider(providers.MistralConfig{
+	p := newMistralProvider(providers.MistralConfig{
 		BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k", BaseURL: server.URL},
 	}, zap.NewNop())
 
@@ -178,7 +178,7 @@ func TestMistralProvider_Completion_Error(t *testing.T) {
 	}))
 	t.Cleanup(func() { server.Close() })
 
-	p := NewMistralProvider(providers.MistralConfig{
+	p := newMistralProvider(providers.MistralConfig{
 		BaseProviderConfig: providers.BaseProviderConfig{APIKey: "bad-key", BaseURL: server.URL},
 	}, zap.NewNop())
 
@@ -199,7 +199,7 @@ func TestMistralProvider_Completion_RateLimited(t *testing.T) {
 	}))
 	t.Cleanup(func() { server.Close() })
 
-	p := NewMistralProvider(providers.MistralConfig{
+	p := newMistralProvider(providers.MistralConfig{
 		BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k", BaseURL: server.URL},
 	}, zap.NewNop())
 
@@ -221,7 +221,7 @@ func TestMistralProvider_Completion_ServerError(t *testing.T) {
 	}))
 	t.Cleanup(func() { server.Close() })
 
-	p := NewMistralProvider(providers.MistralConfig{
+	p := newMistralProvider(providers.MistralConfig{
 		BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k", BaseURL: server.URL},
 	}, zap.NewNop())
 
@@ -261,7 +261,7 @@ func TestMistralProvider_Stream(t *testing.T) {
 	}))
 	t.Cleanup(func() { server.Close() })
 
-	p := NewMistralProvider(providers.MistralConfig{
+	p := newMistralProvider(providers.MistralConfig{
 		BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key", BaseURL: server.URL},
 	}, zap.NewNop())
 
@@ -302,7 +302,7 @@ func TestMistralProvider_Stream_MultipleChunks(t *testing.T) {
 	}))
 	t.Cleanup(func() { server.Close() })
 
-	p := NewMistralProvider(providers.MistralConfig{
+	p := newMistralProvider(providers.MistralConfig{
 		BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k", BaseURL: server.URL},
 	}, zap.NewNop())
 
@@ -325,7 +325,7 @@ func TestMistralProvider_Stream_Error(t *testing.T) {
 	}))
 	t.Cleanup(func() { server.Close() })
 
-	p := NewMistralProvider(providers.MistralConfig{
+	p := newMistralProvider(providers.MistralConfig{
 		BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key", BaseURL: server.URL},
 	}, zap.NewNop())
 
@@ -341,7 +341,7 @@ func TestMistralProvider_Stream_Error(t *testing.T) {
 // --- Multimodal not-supported methods ---
 
 func TestMistralProvider_NotSupported(t *testing.T) {
-	p := NewMistralProvider(providers.MistralConfig{}, zap.NewNop())
+	p := newMistralProvider(providers.MistralConfig{}, zap.NewNop())
 	ctx := context.Background()
 
 	tests := []struct {
@@ -390,15 +390,15 @@ func TestMistralProvider_CreateFineTuningJob(t *testing.T) {
 
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(llm.FineTuningJob{
-			ID:      "ft-job-123",
-			Model:   "mistral-small-latest",
-			Status:  "queued",
-			Object:  "fine_tuning.job",
+			ID:     "ft-job-123",
+			Model:  "mistral-small-latest",
+			Status: "queued",
+			Object: "fine_tuning.job",
 		})
 	}))
 	t.Cleanup(func() { server.Close() })
 
-	p := NewMistralProvider(providers.MistralConfig{
+	p := newMistralProvider(providers.MistralConfig{
 		BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key", BaseURL: server.URL},
 	}, zap.NewNop())
 
@@ -426,7 +426,7 @@ func TestMistralProvider_ListFineTuningJobs(t *testing.T) {
 	}))
 	t.Cleanup(func() { server.Close() })
 
-	p := NewMistralProvider(providers.MistralConfig{
+	p := newMistralProvider(providers.MistralConfig{
 		BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key", BaseURL: server.URL},
 	}, zap.NewNop())
 
@@ -450,7 +450,7 @@ func TestMistralProvider_GetFineTuningJob(t *testing.T) {
 	}))
 	t.Cleanup(func() { server.Close() })
 
-	p := NewMistralProvider(providers.MistralConfig{
+	p := newMistralProvider(providers.MistralConfig{
 		BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key", BaseURL: server.URL},
 	}, zap.NewNop())
 
@@ -473,7 +473,7 @@ func TestMistralProvider_CancelFineTuningJob(t *testing.T) {
 	}))
 	t.Cleanup(func() { server.Close() })
 
-	p := NewMistralProvider(providers.MistralConfig{
+	p := newMistralProvider(providers.MistralConfig{
 		BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key", BaseURL: server.URL},
 	}, zap.NewNop())
 
@@ -495,7 +495,7 @@ func TestMistralProvider_TranscribeAudio(t *testing.T) {
 	}))
 	t.Cleanup(func() { server.Close() })
 
-	p := NewMistralProvider(providers.MistralConfig{
+	p := newMistralProvider(providers.MistralConfig{
 		BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key", BaseURL: server.URL},
 	}, zap.NewNop())
 
@@ -513,7 +513,7 @@ func TestMistralProvider_TranscribeAudio_Error(t *testing.T) {
 	}))
 	t.Cleanup(func() { server.Close() })
 
-	p := NewMistralProvider(providers.MistralConfig{
+	p := newMistralProvider(providers.MistralConfig{
 		BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k", BaseURL: server.URL},
 	}, zap.NewNop())
 
@@ -535,7 +535,7 @@ func TestMistralProvider_CreateEmbedding(t *testing.T) {
 	}))
 	t.Cleanup(func() { server.Close() })
 
-	p := NewMistralProvider(providers.MistralConfig{
+	p := newMistralProvider(providers.MistralConfig{
 		BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k", BaseURL: server.URL},
 	}, zap.NewNop())
 
@@ -554,7 +554,7 @@ func TestMistralProvider_CreateEmbedding_Error(t *testing.T) {
 	}))
 	t.Cleanup(func() { server.Close() })
 
-	p := NewMistralProvider(providers.MistralConfig{
+	p := newMistralProvider(providers.MistralConfig{
 		BaseProviderConfig: providers.BaseProviderConfig{APIKey: "bad", BaseURL: server.URL},
 	}, zap.NewNop())
 
@@ -572,7 +572,7 @@ func TestMistralProvider_HealthCheck(t *testing.T) {
 	}))
 	t.Cleanup(func() { server.Close() })
 
-	p := NewMistralProvider(providers.MistralConfig{
+	p := newMistralProvider(providers.MistralConfig{
 		BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k", BaseURL: server.URL},
 	}, zap.NewNop())
 
@@ -589,7 +589,7 @@ func TestMistralProvider_HealthCheck_Unhealthy(t *testing.T) {
 	}))
 	t.Cleanup(func() { server.Close() })
 
-	p := NewMistralProvider(providers.MistralConfig{
+	p := newMistralProvider(providers.MistralConfig{
 		BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k", BaseURL: server.URL},
 	}, zap.NewNop())
 

@@ -46,11 +46,11 @@ func (p *GLMProvider) Name() string      { return "glm-rerank" }
 func (p *GLMProvider) MaxDocuments() int { return 1000 }
 
 type glmRerankRequest struct {
-	Model    string   `json:"model"`
-	Query    string   `json:"query"`
-	Documents []string `json:"documents"`
-	TopN     int      `json:"top_n,omitempty"`
-	ReturnDocuments bool `json:"return_documents,omitempty"`
+	Model           string   `json:"model"`
+	Query           string   `json:"query"`
+	Documents       []string `json:"documents"`
+	TopN            int      `json:"top_n,omitempty"`
+	ReturnDocuments bool     `json:"return_documents,omitempty"`
 }
 
 type glmRerankResponse struct {
@@ -80,10 +80,10 @@ func (p *GLMProvider) Rerank(ctx context.Context, req *RerankRequest) (*RerankRe
 	}
 
 	body := glmRerankRequest{
-		Model:     model,
-		Query:     req.Query,
-		Documents: docs,
-		TopN:      req.TopN,
+		Model:           model,
+		Query:           req.Query,
+		Documents:       docs,
+		TopN:            req.TopN,
 		ReturnDocuments: req.ReturnDocuments,
 	}
 

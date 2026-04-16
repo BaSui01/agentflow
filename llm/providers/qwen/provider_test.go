@@ -32,7 +32,7 @@ func TestNewQwenProvider_Defaults(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			p := NewQwenProvider(tt.cfg, zap.NewNop())
+			p := newQwenProvider(tt.cfg, zap.NewNop())
 			require.NotNil(t, p)
 			assert.Equal(t, "qwen", p.Name())
 			assert.Equal(t, tt.expectedBaseURL, p.Cfg.BaseURL)
@@ -41,23 +41,23 @@ func TestNewQwenProvider_Defaults(t *testing.T) {
 }
 
 func TestQwenProvider_FallbackModel(t *testing.T) {
-	p := NewQwenProvider(providers.QwenConfig{}, zap.NewNop())
+	p := newQwenProvider(providers.QwenConfig{}, zap.NewNop())
 	assert.Equal(t, "qwen3-235b-a22b", p.Cfg.FallbackModel)
 }
 
 func TestQwenProvider_EndpointPath(t *testing.T) {
-	p := NewQwenProvider(providers.QwenConfig{}, zap.NewNop())
+	p := newQwenProvider(providers.QwenConfig{}, zap.NewNop())
 	assert.Equal(t, "/compatible-mode/v1/chat/completions", p.Cfg.EndpointPath)
 }
 
 func TestQwenProvider_NilLogger(t *testing.T) {
-	p := NewQwenProvider(providers.QwenConfig{}, nil)
+	p := newQwenProvider(providers.QwenConfig{}, nil)
 	require.NotNil(t, p)
 	assert.Equal(t, "qwen", p.Name())
 }
 
 func TestQwenProvider_SupportsNativeFunctionCalling(t *testing.T) {
-	p := NewQwenProvider(providers.QwenConfig{}, zap.NewNop())
+	p := newQwenProvider(providers.QwenConfig{}, zap.NewNop())
 	assert.True(t, p.SupportsNativeFunctionCalling())
 }
 
@@ -80,7 +80,7 @@ func TestQwenProvider_Completion(t *testing.T) {
 	}))
 	t.Cleanup(func() { server.Close() })
 
-	p := NewQwenProvider(providers.QwenConfig{
+	p := newQwenProvider(providers.QwenConfig{
 		BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key", BaseURL: server.URL},
 	}, zap.NewNop())
 
@@ -103,7 +103,7 @@ func TestQwenProvider_Completion_Error(t *testing.T) {
 	}))
 	t.Cleanup(func() { server.Close() })
 
-	p := NewQwenProvider(providers.QwenConfig{
+	p := newQwenProvider(providers.QwenConfig{
 		BaseProviderConfig: providers.BaseProviderConfig{APIKey: "bad", BaseURL: server.URL},
 	}, zap.NewNop())
 
@@ -124,7 +124,7 @@ func TestQwenProvider_Completion_RateLimited(t *testing.T) {
 	}))
 	t.Cleanup(func() { server.Close() })
 
-	p := NewQwenProvider(providers.QwenConfig{
+	p := newQwenProvider(providers.QwenConfig{
 		BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k", BaseURL: server.URL},
 	}, zap.NewNop())
 
@@ -156,7 +156,7 @@ func TestQwenProvider_Stream(t *testing.T) {
 	}))
 	t.Cleanup(func() { server.Close() })
 
-	p := NewQwenProvider(providers.QwenConfig{
+	p := newQwenProvider(providers.QwenConfig{
 		BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k", BaseURL: server.URL},
 	}, zap.NewNop())
 
@@ -181,7 +181,7 @@ func TestQwenProvider_Stream_Error(t *testing.T) {
 	}))
 	t.Cleanup(func() { server.Close() })
 
-	p := NewQwenProvider(providers.QwenConfig{
+	p := newQwenProvider(providers.QwenConfig{
 		BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k", BaseURL: server.URL},
 	}, zap.NewNop())
 
@@ -192,7 +192,7 @@ func TestQwenProvider_Stream_Error(t *testing.T) {
 }
 
 func TestQwenProvider_NotSupported(t *testing.T) {
-	p := NewQwenProvider(providers.QwenConfig{}, zap.NewNop())
+	p := newQwenProvider(providers.QwenConfig{}, zap.NewNop())
 	ctx := context.Background()
 
 	tests := []struct {
@@ -268,7 +268,7 @@ func TestQwenProvider_GenerateVideo(t *testing.T) {
 	}))
 	t.Cleanup(func() { server.Close() })
 
-	p := NewQwenProvider(providers.QwenConfig{
+	p := newQwenProvider(providers.QwenConfig{
 		BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key", BaseURL: server.URL},
 	}, zap.NewNop())
 
@@ -290,7 +290,7 @@ func TestQwenProvider_GenerateVideo_Error(t *testing.T) {
 	}))
 	t.Cleanup(func() { server.Close() })
 
-	p := NewQwenProvider(providers.QwenConfig{
+	p := newQwenProvider(providers.QwenConfig{
 		BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key", BaseURL: server.URL},
 	}, zap.NewNop())
 
@@ -322,7 +322,7 @@ func TestQwenProvider_GenerateVideo_PollTimeout(t *testing.T) {
 	}))
 	t.Cleanup(func() { server.Close() })
 
-	p := NewQwenProvider(providers.QwenConfig{
+	p := newQwenProvider(providers.QwenConfig{
 		BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key", BaseURL: server.URL},
 	}, zap.NewNop())
 
@@ -339,7 +339,7 @@ func TestQwenProvider_HealthCheck(t *testing.T) {
 	}))
 	t.Cleanup(func() { server.Close() })
 
-	p := NewQwenProvider(providers.QwenConfig{
+	p := newQwenProvider(providers.QwenConfig{
 		BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k", BaseURL: server.URL},
 	}, zap.NewNop())
 

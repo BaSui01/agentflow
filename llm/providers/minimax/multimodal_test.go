@@ -16,7 +16,7 @@ import (
 )
 
 func TestMiniMaxProvider_MultimodalNotSupported(t *testing.T) {
-	p := NewMiniMaxProvider(providers.MiniMaxConfig{}, zap.NewNop())
+	p := newMiniMaxCapabilityHost(providers.MiniMaxConfig{}, zap.NewNop())
 	ctx := context.Background()
 
 	tests := []struct {
@@ -53,7 +53,7 @@ func TestMiniMaxProvider_GenerateAudio_Success(t *testing.T) {
 	}))
 	t.Cleanup(server.Close)
 
-	p := NewMiniMaxProvider(providers.MiniMaxConfig{
+	p := newMiniMaxCapabilityHost(providers.MiniMaxConfig{
 		BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key", BaseURL: server.URL},
 	}, zap.NewNop())
 

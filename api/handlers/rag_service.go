@@ -250,7 +250,7 @@ func normalizeRAGStrategy(strategy string) string {
 	}
 }
 
-func convertRetrievalResults(results []rag.RetrievalResult, topK int) []rag.VectorSearchResult {
+func convertRetrievalResults(results []core.RetrievalResult, topK int) []core.VectorSearchResult {
 	if topK <= 0 {
 		topK = 5
 	}
@@ -258,7 +258,7 @@ func convertRetrievalResults(results []rag.RetrievalResult, topK int) []rag.Vect
 		results = results[:topK]
 	}
 
-	out := make([]rag.VectorSearchResult, 0, len(results))
+	out := make([]core.VectorSearchResult, 0, len(results))
 	for i := range results {
 		score := results[i].FinalScore
 		if score == 0 {
@@ -267,7 +267,7 @@ func convertRetrievalResults(results []rag.RetrievalResult, topK int) []rag.Vect
 		if score == 0 {
 			score = results[i].VectorScore
 		}
-		out = append(out, rag.VectorSearchResult{
+		out = append(out, core.VectorSearchResult{
 			Document: results[i].Document,
 			Score:    score,
 		})

@@ -12,6 +12,7 @@ import (
 
 	"github.com/BaSui01/agentflow/pkg/tlsutil"
 )
+
 type CohereProvider struct {
 	cfg    CohereConfig
 	client *http.Client
@@ -151,4 +152,3 @@ func (p *CohereProvider) RerankSimple(ctx context.Context, query string, documen
 	}
 	return resp.Results, nil
 }
-

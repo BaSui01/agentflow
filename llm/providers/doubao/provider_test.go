@@ -57,7 +57,7 @@ func TestNewDoubaoProvider_Defaults(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			p := NewDoubaoProvider(tt.cfg, zap.NewNop())
+			p := newDoubaoProvider(tt.cfg, zap.NewNop())
 			require.NotNil(t, p)
 			assert.Equal(t, tt.expectedName, p.Name())
 			assert.Equal(t, tt.expectedBaseURL, p.Cfg.BaseURL)
@@ -66,22 +66,22 @@ func TestNewDoubaoProvider_Defaults(t *testing.T) {
 }
 
 func TestDoubaoProvider_EndpointPath(t *testing.T) {
-	p := NewDoubaoProvider(providers.DoubaoConfig{}, zap.NewNop())
+	p := newDoubaoProvider(providers.DoubaoConfig{}, zap.NewNop())
 	assert.Equal(t, "/api/v3/chat/completions", p.Cfg.EndpointPath)
 }
 
 func TestDoubaoProvider_FallbackModel(t *testing.T) {
-	p := NewDoubaoProvider(providers.DoubaoConfig{}, zap.NewNop())
+	p := newDoubaoProvider(providers.DoubaoConfig{}, zap.NewNop())
 	assert.Equal(t, "Doubao-1.5-pro-32k", p.Cfg.FallbackModel)
 }
 
 func TestDoubaoProvider_SupportsNativeFunctionCalling(t *testing.T) {
-	p := NewDoubaoProvider(providers.DoubaoConfig{}, zap.NewNop())
+	p := newDoubaoProvider(providers.DoubaoConfig{}, zap.NewNop())
 	assert.True(t, p.SupportsNativeFunctionCalling())
 }
 
 func TestDoubaoProvider_NilLogger(t *testing.T) {
-	p := NewDoubaoProvider(providers.DoubaoConfig{}, nil)
+	p := newDoubaoProvider(providers.DoubaoConfig{}, nil)
 	require.NotNil(t, p)
 	assert.Equal(t, "doubao", p.Name())
 }
@@ -89,7 +89,7 @@ func TestDoubaoProvider_NilLogger(t *testing.T) {
 // --- Multimodal not-supported methods ---
 
 func TestDoubaoProvider_NotSupported(t *testing.T) {
-	p := NewDoubaoProvider(providers.DoubaoConfig{}, zap.NewNop())
+	p := newDoubaoProvider(providers.DoubaoConfig{}, zap.NewNop())
 	ctx := context.Background()
 
 	tests := []struct {
@@ -170,7 +170,7 @@ func TestDoubaoProvider_GenerateImage(t *testing.T) {
 			BaseURL: server.URL,
 		},
 	}
-	p := NewDoubaoProvider(cfg, zap.NewNop())
+	p := newDoubaoProvider(cfg, zap.NewNop())
 
 	resp, err := p.GenerateImage(context.Background(), &llm.ImageGenerationRequest{
 		Prompt: "test prompt",
@@ -220,7 +220,7 @@ func TestDoubaoProvider_Completion(t *testing.T) {
 			BaseURL: server.URL,
 		},
 	}
-	p := NewDoubaoProvider(cfg, zap.NewNop())
+	p := newDoubaoProvider(cfg, zap.NewNop())
 
 	resp, err := p.Completion(context.Background(), &llm.ChatRequest{
 		Messages: []types.Message{
@@ -275,7 +275,7 @@ func TestDoubaoProvider_Stream(t *testing.T) {
 			BaseURL: server.URL,
 		},
 	}
-	p := NewDoubaoProvider(cfg, zap.NewNop())
+	p := newDoubaoProvider(cfg, zap.NewNop())
 
 	ch, err := p.Stream(context.Background(), &llm.ChatRequest{
 		Messages: []types.Message{

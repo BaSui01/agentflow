@@ -31,7 +31,7 @@ func TestNewGrokProvider_Defaults(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			p := NewGrokProvider(tt.cfg, zap.NewNop())
+			p := newGrokProvider(tt.cfg, zap.NewNop())
 			require.NotNil(t, p)
 			assert.Equal(t, "grok", p.Name())
 			assert.Equal(t, tt.expectedBaseURL, p.Cfg.BaseURL)
@@ -40,18 +40,18 @@ func TestNewGrokProvider_Defaults(t *testing.T) {
 }
 
 func TestGrokProvider_FallbackModel(t *testing.T) {
-	p := NewGrokProvider(providers.GrokConfig{}, zap.NewNop())
+	p := newGrokProvider(providers.GrokConfig{}, zap.NewNop())
 	assert.Equal(t, "grok-3", p.Cfg.FallbackModel)
 }
 
 func TestGrokProvider_NilLogger(t *testing.T) {
-	p := NewGrokProvider(providers.GrokConfig{}, nil)
+	p := newGrokProvider(providers.GrokConfig{}, nil)
 	require.NotNil(t, p)
 	assert.Equal(t, "grok", p.Name())
 }
 
 func TestGrokProvider_SupportsNativeFunctionCalling(t *testing.T) {
-	p := NewGrokProvider(providers.GrokConfig{}, zap.NewNop())
+	p := newGrokProvider(providers.GrokConfig{}, zap.NewNop())
 	assert.True(t, p.SupportsNativeFunctionCalling())
 }
 
@@ -71,7 +71,7 @@ func TestGrokProvider_Completion(t *testing.T) {
 	}))
 	t.Cleanup(func() { server.Close() })
 
-	p := NewGrokProvider(providers.GrokConfig{
+	p := newGrokProvider(providers.GrokConfig{
 		BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key", BaseURL: server.URL},
 	}, zap.NewNop())
 
@@ -93,7 +93,7 @@ func TestGrokProvider_Completion_Error(t *testing.T) {
 	}))
 	t.Cleanup(func() { server.Close() })
 
-	p := NewGrokProvider(providers.GrokConfig{
+	p := newGrokProvider(providers.GrokConfig{
 		BaseProviderConfig: providers.BaseProviderConfig{APIKey: "bad", BaseURL: server.URL},
 	}, zap.NewNop())
 
@@ -113,7 +113,7 @@ func TestGrokProvider_Completion_RateLimited(t *testing.T) {
 	}))
 	t.Cleanup(func() { server.Close() })
 
-	p := NewGrokProvider(providers.GrokConfig{
+	p := newGrokProvider(providers.GrokConfig{
 		BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k", BaseURL: server.URL},
 	}, zap.NewNop())
 
@@ -143,7 +143,7 @@ func TestGrokProvider_Stream(t *testing.T) {
 	}))
 	t.Cleanup(func() { server.Close() })
 
-	p := NewGrokProvider(providers.GrokConfig{
+	p := newGrokProvider(providers.GrokConfig{
 		BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k", BaseURL: server.URL},
 	}, zap.NewNop())
 
@@ -168,7 +168,7 @@ func TestGrokProvider_Stream_Error(t *testing.T) {
 	}))
 	t.Cleanup(func() { server.Close() })
 
-	p := NewGrokProvider(providers.GrokConfig{
+	p := newGrokProvider(providers.GrokConfig{
 		BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k", BaseURL: server.URL},
 	}, zap.NewNop())
 
@@ -179,7 +179,7 @@ func TestGrokProvider_Stream_Error(t *testing.T) {
 }
 
 func TestGrokProvider_NotSupported(t *testing.T) {
-	p := NewGrokProvider(providers.GrokConfig{}, zap.NewNop())
+	p := newGrokProvider(providers.GrokConfig{}, zap.NewNop())
 	ctx := context.Background()
 
 	tests := []struct {
@@ -215,7 +215,7 @@ func TestGrokProvider_HealthCheck(t *testing.T) {
 	}))
 	t.Cleanup(func() { server.Close() })
 
-	p := NewGrokProvider(providers.GrokConfig{
+	p := newGrokProvider(providers.GrokConfig{
 		BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k", BaseURL: server.URL},
 	}, zap.NewNop())
 

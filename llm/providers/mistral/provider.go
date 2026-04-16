@@ -14,8 +14,9 @@ type MistralProvider struct {
 	*openaicompat.Provider
 }
 
-// NewMistralProvider 创建新的 Mistral 提供者实例.
-func NewMistralProvider(cfg providers.MistralConfig, logger *zap.Logger) *MistralProvider {
+// newMistralCapabilityHost 创建 Mistral capability host。
+// 它承载 transcription/embedding/fine-tuning 等能力实现，但不是公共 chat 主链入口。
+func newMistralCapabilityHost(cfg providers.MistralConfig, logger *zap.Logger) *MistralProvider {
 	if cfg.BaseURL == "" {
 		cfg.BaseURL = "https://api.mistral.ai"
 	}
@@ -32,6 +33,11 @@ func NewMistralProvider(cfg providers.MistralConfig, logger *zap.Logger) *Mistra
 			RequestHook:   mistralRequestHook,
 		}, logger),
 	}
+}
+
+// newMistralProvider 仅供本包测试与能力承载复用；公共 chat 入口统一走 vendor factory。
+func newMistralProvider(cfg providers.MistralConfig, logger *zap.Logger) *MistralProvider {
+	return newMistralCapabilityHost(cfg, logger)
 }
 
 // mistralRequestHook handles Mistral-specific request modifications.
