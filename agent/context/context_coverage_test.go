@@ -57,6 +57,7 @@ func TestEngineer_CanAddMessage(t *testing.T) {
 	newMsg := types.Message{Role: types.RoleAssistant, Content: "hi"}
 	assert.True(t, eng.CanAddMessage(msgs, newMsg))
 }
+
 // --- aggressiveCompress ---
 
 func TestEngineer_AggressiveCompress(t *testing.T) {
@@ -217,4 +218,3 @@ func TestEngineer_HardTruncate_Empty(t *testing.T) {
 	result := eng.hardTruncate(nil, 100)
 	assert.Empty(t, result)
 }
-

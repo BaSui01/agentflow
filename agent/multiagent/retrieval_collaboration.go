@@ -154,4 +154,3 @@ func (a *DedupResultAggregator) Aggregate(_ context.Context, resultsByQuery map[
 	})
 	return out, nil
 }
-

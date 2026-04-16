@@ -44,7 +44,7 @@ func NewMCPToolBridge(client MCPClientLike, tool MCPToolInfo) *MCPToolBridge {
 
 func (t *MCPToolBridge) Type() HostedToolType { return ToolTypeMCP }
 func (t *MCPToolBridge) Name() string         { return t.toolName }
-func (t *MCPToolBridge) Description() string { return t.toolDesc }
+func (t *MCPToolBridge) Description() string  { return t.toolDesc }
 
 func (t *MCPToolBridge) Schema() types.ToolSchema {
 	return types.ToolSchema{

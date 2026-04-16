@@ -68,7 +68,7 @@ func (w *WindowManager) countTokens(text string) int {
 		return w.tokenCounter.CountTokens(text)
 	}
 	n := len(text) / 4
-	if n == 0 && len(text) > 0 {
+	if n == 0 && text != "" {
 		return 1
 	}
 	return n
@@ -92,8 +92,8 @@ func (w *WindowManager) messageTokens(msg types.Message) int {
 // EstimateTokens returns the total token count across all messages.
 func (w *WindowManager) EstimateTokens(messages []types.Message) int {
 	total := 0
-	for _, m := range messages {
-		total += w.messageTokens(m)
+	for i := range messages {
+		total += w.messageTokens(messages[i])
 	}
 	return total
 }
@@ -132,11 +132,11 @@ func (w *WindowManager) PrepareMessages(ctx context.Context, messages []types.Me
 
 // splitSystemAndOther separates system messages from the rest.
 func splitSystemAndOther(msgs []types.Message, keepSystem bool) (system, other []types.Message) {
-	for _, m := range msgs {
-		if keepSystem && m.Role == types.RoleSystem {
-			system = append(system, m)
+	for i := range msgs {
+		if keepSystem && msgs[i].Role == types.RoleSystem {
+			system = append(system, msgs[i])
 		} else {
-			other = append(other, m)
+			other = append(other, msgs[i])
 		}
 	}
 	return
@@ -183,8 +183,8 @@ func (w *WindowManager) tokenBudget(messages []types.Message) []types.Message {
 
 	// Account for system message tokens first.
 	used := 0
-	for _, m := range system {
-		used += w.messageTokens(m)
+	for i := range system {
+		used += w.messageTokens(system[i])
 	}
 
 	// Guarantee KeepLastN from the tail.
@@ -264,4 +264,3 @@ func (w *WindowManager) summarize(ctx context.Context, messages []types.Message)
 	result = append(result, tail...)
 	return result, nil
 }
-

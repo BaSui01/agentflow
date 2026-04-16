@@ -37,15 +37,15 @@ func DefaultDecayConfig() DecayConfig {
 
 // 内存项目代表着一个带有衰变元数据的内存项目.
 type MemoryItem struct {
-	ID           string                 `json:"id"`
-	Content      string                 `json:"content"`
-	Vector       []float64              `json:"vector,omitempty"`
-	CreatedAt    time.Time              `json:"created_at"`
-	LastAccessed time.Time              `json:"last_accessed"`
-	AccessCount  int                    `json:"access_count"`
-	Relevance    float64                `json:"relevance"` // User-defined relevance (0-1)
-	Utility      float64                `json:"utility"`   // Computed utility based on usage
-	Tags         []string               `json:"tags,omitempty"`
+	ID           string         `json:"id"`
+	Content      string         `json:"content"`
+	Vector       []float64      `json:"vector,omitempty"`
+	CreatedAt    time.Time      `json:"created_at"`
+	LastAccessed time.Time      `json:"last_accessed"`
+	AccessCount  int            `json:"access_count"`
+	Relevance    float64        `json:"relevance"` // User-defined relevance (0-1)
+	Utility      float64        `json:"utility"`   // Computed utility based on usage
+	Tags         []string       `json:"tags,omitempty"`
 	Metadata     map[string]any `json:"metadata,omitempty"`
 }
 
@@ -367,4 +367,3 @@ func cosineSimilarity(a, b []float64) float64 {
 
 	return dot / (math.Sqrt(normA) * math.Sqrt(normB))
 }
-

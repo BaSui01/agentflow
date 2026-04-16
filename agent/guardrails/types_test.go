@@ -159,8 +159,8 @@ type registryMockValidator struct {
 	priority int
 }
 
-func (v *registryMockValidator) Name() string     { return v.name }
-func (v *registryMockValidator) Priority() int     { return v.priority }
+func (v *registryMockValidator) Name() string  { return v.name }
+func (v *registryMockValidator) Priority() int { return v.priority }
 func (v *registryMockValidator) Validate(_ context.Context, _ string) (*ValidationResult, error) {
 	return NewValidationResult(), nil
 }
@@ -307,4 +307,3 @@ func TestFailureActionConstants(t *testing.T) {
 	assert.Equal(t, FailureAction("warn"), FailureActionWarn)
 	assert.Equal(t, FailureAction("retry"), FailureActionRetry)
 }
-

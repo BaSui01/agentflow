@@ -11,9 +11,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/coder/websocket"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/coder/websocket"
 )
 
 // --- Interface compliance ---
@@ -294,4 +294,3 @@ func TestWebSocketStreamConnection_JSONRoundTrip_Fidelity(t *testing.T) {
 	recvJSON, _ := json.Marshal(received)
 	assert.JSONEq(t, string(sentJSON), string(recvJSON))
 }
-

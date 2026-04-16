@@ -73,7 +73,7 @@ type CompletionItem struct {
 	TextEdit         *TextEdit          `json:"textEdit,omitempty"`
 	AdditionalEdits  []TextEdit         `json:"additionalTextEdits,omitempty"`
 	CommitCharacters []string           `json:"commitCharacters,omitempty"`
-	Data             any        `json:"data,omitempty"`
+	Data             any                `json:"data,omitempty"`
 }
 
 // CompletionItemKind 补全项类型
@@ -172,7 +172,7 @@ type CodeAction struct {
 	IsPreferred bool           `json:"isPreferred,omitempty"`
 	Edit        *WorkspaceEdit `json:"edit,omitempty"`
 	Command     *Command       `json:"command,omitempty"`
-	Data        any    `json:"data,omitempty"`
+	Data        any            `json:"data,omitempty"`
 }
 
 // CodeActionKind 代码操作类型
@@ -208,9 +208,9 @@ type VersionedTextDocumentIdentifier struct {
 
 // Command 命令
 type Command struct {
-	Title     string        `json:"title"`
-	Command   string        `json:"command"`
-	Arguments []any `json:"arguments,omitempty"`
+	Title     string `json:"title"`
+	Command   string `json:"command"`
+	Arguments []any  `json:"arguments,omitempty"`
 }
 
 // SignatureHelp 签名帮助
@@ -253,4 +253,3 @@ const (
 	HighlightRead  DocumentHighlightKind = 2
 	HighlightWrite DocumentHighlightKind = 3
 )
-

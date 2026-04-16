@@ -161,10 +161,10 @@ func mapSkillCategoryToCapType(category string) string {
 // buildSkillMetadata builds metadata map from skill fields.
 func buildSkillMetadata(skill *Skill) map[string]string {
 	meta := map[string]string{
-		"source":     "skills",
-		"skill_id":   skill.ID,
-		"version":    skill.Version,
-		"synced_at":  time.Now().Format(time.RFC3339),
+		"source":    "skills",
+		"skill_id":  skill.ID,
+		"version":   skill.Version,
+		"synced_at": time.Now().Format(time.RFC3339),
 	}
 	if skill.Category != "" {
 		meta["category"] = skill.Category
@@ -174,4 +174,3 @@ func buildSkillMetadata(skill *Skill) map[string]string {
 	}
 	return meta
 }
-

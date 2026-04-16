@@ -390,4 +390,3 @@ func (m *contextAwareMetric) Compute(ctx context.Context, input *EvalInput, outp
 		return 1.0, nil
 	}
 }
-

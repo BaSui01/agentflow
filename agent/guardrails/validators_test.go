@@ -526,4 +526,3 @@ func TestValidators_PriorityOrder(t *testing.T) {
 	assert.Equal(t, "injection_detector", validators[2].Name())
 	assert.Equal(t, "pii_detector", validators[3].Name())
 }
-

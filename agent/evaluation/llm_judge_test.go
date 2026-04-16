@@ -1,11 +1,12 @@
 package evaluation
 
 import (
-	"github.com/BaSui01/agentflow/types"
 	"context"
 	"encoding/json"
 	"testing"
 	"time"
+
+	"github.com/BaSui01/agentflow/types"
 
 	"github.com/BaSui01/agentflow/llm"
 	"github.com/stretchr/testify/assert"
@@ -338,5 +339,3 @@ func TestHelperFunctions(t *testing.T) {
 		assert.InDelta(t, 0.0, sqrt(-1.0), 0.001)
 	})
 }
-
-

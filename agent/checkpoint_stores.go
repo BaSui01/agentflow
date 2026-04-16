@@ -29,7 +29,7 @@ type FileCheckpointStore struct {
 // NewFileCheckpointStore 创建文件检查点存储
 func NewFileCheckpointStore(basePath string, logger *zap.Logger) (*FileCheckpointStore, error) {
 	// 创建基础目录
-	if err := os.MkdirAll(basePath, 0755); err != nil {
+	if err := os.MkdirAll(basePath, 0o755); err != nil {
 		return nil, fmt.Errorf("failed to create base directory: %w", err)
 	}
 
@@ -44,14 +44,14 @@ func (s *FileCheckpointStore) Save(ctx context.Context, checkpoint *Checkpoint) 
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	return s.saveLocked(ctx, checkpoint)
+	return s.saveLocked(checkpoint)
 }
 
 // saveLocked 保存检查点的内部实现（调用方必须持有 s.mu 锁）
-func (s *FileCheckpointStore) saveLocked(ctx context.Context, checkpoint *Checkpoint) error {
+func (s *FileCheckpointStore) saveLocked(checkpoint *Checkpoint) error {
 	// 如果版本号为0，自动分配版本号
 	if checkpoint.Version == 0 {
-		versions, err := s.listVersionsUnlocked(ctx, checkpoint.ThreadID)
+		versions, err := s.listVersionsUnlocked(checkpoint.ThreadID)
 		if err == nil && len(versions) > 0 {
 			maxVersion := 0
 			for _, v := range versions {
@@ -67,12 +67,12 @@ func (s *FileCheckpointStore) saveLocked(ctx context.Context, checkpoint *Checkp
 
 	// 创建线程目录
 	threadDir := s.threadDir(checkpoint.ThreadID)
-	if err := os.MkdirAll(threadDir, 0755); err != nil {
+	if err := os.MkdirAll(threadDir, 0o755); err != nil {
 		return fmt.Errorf("failed to create thread directory: %w", err)
 	}
 
 	checkpointsDir := filepath.Join(threadDir, "checkpoints")
-	if err := os.MkdirAll(checkpointsDir, 0755); err != nil {
+	if err := os.MkdirAll(checkpointsDir, 0o755); err != nil {
 		return fmt.Errorf("failed to create checkpoints directory: %w", err)
 	}
 
@@ -84,7 +84,7 @@ func (s *FileCheckpointStore) saveLocked(ctx context.Context, checkpoint *Checkp
 
 	// 写入检查点文件
 	checkpointFile := filepath.Join(checkpointsDir, fmt.Sprintf("%s.json", checkpoint.ID))
-	if err := os.WriteFile(checkpointFile, data, 0644); err != nil {
+	if err := os.WriteFile(checkpointFile, data, 0o600); err != nil {
 		return fmt.Errorf("failed to write checkpoint file: %w", err)
 	}
 
@@ -95,7 +95,7 @@ func (s *FileCheckpointStore) saveLocked(ctx context.Context, checkpoint *Checkp
 
 	// 更新 latest.txt
 	latestFile := filepath.Join(threadDir, "latest.txt")
-	if err := os.WriteFile(latestFile, []byte(checkpoint.ID), 0644); err != nil {
+	if err := os.WriteFile(latestFile, []byte(checkpoint.ID), 0o600); err != nil {
 		return fmt.Errorf("failed to update latest file: %w", err)
 	}
 
@@ -265,7 +265,7 @@ func (s *FileCheckpointStore) LoadVersion(ctx context.Context, threadID string, 
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	versions, err := s.listVersionsUnlocked(ctx, threadID)
+	versions, err := s.listVersionsUnlocked(threadID)
 	if err != nil {
 		return nil, fmt.Errorf("list versions: %w", err)
 	}
@@ -285,7 +285,7 @@ func (s *FileCheckpointStore) ListVersions(ctx context.Context, threadID string)
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	return s.listVersionsUnlocked(ctx, threadID)
+	return s.listVersionsUnlocked(threadID)
 }
 
 // Rollback 回滚到指定版本
@@ -294,7 +294,7 @@ func (s *FileCheckpointStore) Rollback(ctx context.Context, threadID string, ver
 	defer s.mu.Unlock()
 
 	// 加载指定版本的检查点
-	versions, err := s.listVersionsUnlocked(ctx, threadID)
+	versions, err := s.listVersionsUnlocked(threadID)
 	if err != nil {
 		return fmt.Errorf("list versions for rollback: %w", err)
 	}
@@ -337,7 +337,7 @@ func (s *FileCheckpointStore) Rollback(ctx context.Context, threadID string, ver
 	newCheckpoint.Metadata["rollback_from_version"] = version
 
 	// 直接调用 saveLocked，避免释放锁后的竞态窗口
-	return s.saveLocked(ctx, &newCheckpoint)
+	return s.saveLocked(&newCheckpoint)
 }
 
 // 辅助方法
@@ -407,14 +407,14 @@ func (s *FileCheckpointStore) updateVersionsIndex(threadID string, checkpoint *C
 		return fmt.Errorf("failed to marshal versions: %w", err)
 	}
 
-	if err := os.WriteFile(versionsFile, data, 0644); err != nil {
+	if err := os.WriteFile(versionsFile, data, 0o600); err != nil {
 		return fmt.Errorf("failed to write versions file: %w", err)
 	}
 
 	return nil
 }
 
-func (s *FileCheckpointStore) listVersionsUnlocked(ctx context.Context, threadID string) ([]CheckpointVersion, error) {
+func (s *FileCheckpointStore) listVersionsUnlocked(threadID string) ([]CheckpointVersion, error) {
 	versionsFile := filepath.Join(s.threadDir(threadID), "versions.json")
 
 	data, err := os.ReadFile(versionsFile)
@@ -1094,6 +1094,16 @@ func (c *Checkpoint) normalizeLoopPersistenceFields() {
 	if c == nil {
 		return
 	}
+	c.ensureLoopPersistenceContainers()
+	c.mergeLoopPersistenceVariables()
+	c.restoreLoopPersistenceIdentity()
+	c.restoreLoopPersistenceCollections()
+	c.restoreLoopPersistenceStatus()
+	c.syncLoopPersistenceContext()
+	c.persistNormalizedLoopContextValues()
+}
+
+func (c *Checkpoint) ensureLoopPersistenceContainers() {
 	if c.Metadata == nil {
 		c.Metadata = make(map[string]any)
 	}
@@ -1103,41 +1113,33 @@ func (c *Checkpoint) normalizeLoopPersistenceFields() {
 	if c.ExecutionContext.Variables == nil {
 		c.ExecutionContext.Variables = make(map[string]any)
 	}
+}
 
+func (c *Checkpoint) mergeLoopPersistenceVariables() {
 	for key, value := range c.Metadata {
 		c.ExecutionContext.Variables[key] = value
 	}
 	for key, value := range c.ExecutionContext.Variables {
 		c.Metadata[key] = value
 	}
+}
 
+func (c *Checkpoint) restoreLoopPersistenceIdentity() {
 	c.LoopStateID = firstNonEmptyString(c.LoopStateID, loopContextStringValue(c.ExecutionContext.Variables, "loop_state_id"), loopContextStringValue(c.Metadata, "loop_state_id"), c.ExecutionContext.LoopStateID)
 	c.RunID = firstNonEmptyString(c.RunID, loopContextStringValue(c.ExecutionContext.Variables, "run_id"), loopContextStringValue(c.Metadata, "run_id"), c.ExecutionContext.RunID)
 	c.AgentID = firstNonEmptyString(c.AgentID, loopContextStringValue(c.ExecutionContext.Variables, "agent_id"), loopContextStringValue(c.Metadata, "agent_id"), c.ExecutionContext.AgentID)
 	c.Goal = firstNonEmptyString(c.Goal, loopContextStringValue(c.ExecutionContext.Variables, "goal"), loopContextStringValue(c.Metadata, "goal"), c.ExecutionContext.Goal)
-	if values, ok := loopContextStrings(c.ExecutionContext.Variables, "acceptance_criteria"); ok && len(c.AcceptanceCriteria) == 0 {
-		c.AcceptanceCriteria = values
-	} else if values, ok := loopContextStrings(c.Metadata, "acceptance_criteria"); ok && len(c.AcceptanceCriteria) == 0 {
-		c.AcceptanceCriteria = values
-	} else if len(c.AcceptanceCriteria) == 0 {
-		c.AcceptanceCriteria = cloneStringSlice(c.ExecutionContext.AcceptanceCriteria)
-	}
-	if values, ok := loopContextStrings(c.ExecutionContext.Variables, "unresolved_items"); ok && len(c.UnresolvedItems) == 0 {
-		c.UnresolvedItems = values
-	} else if values, ok := loopContextStrings(c.Metadata, "unresolved_items"); ok && len(c.UnresolvedItems) == 0 {
-		c.UnresolvedItems = values
-	} else if len(c.UnresolvedItems) == 0 {
-		c.UnresolvedItems = cloneStringSlice(c.ExecutionContext.UnresolvedItems)
-	}
-	if values, ok := loopContextStrings(c.ExecutionContext.Variables, "remaining_risks"); ok && len(c.RemainingRisks) == 0 {
-		c.RemainingRisks = values
-	} else if values, ok := loopContextStrings(c.Metadata, "remaining_risks"); ok && len(c.RemainingRisks) == 0 {
-		c.RemainingRisks = values
-	} else if len(c.RemainingRisks) == 0 {
-		c.RemainingRisks = cloneStringSlice(c.ExecutionContext.RemainingRisks)
-	}
 	c.CurrentPlanID = firstNonEmptyString(c.CurrentPlanID, loopContextStringValue(c.ExecutionContext.Variables, "current_plan_id"), loopContextStringValue(c.Metadata, "current_plan_id"), c.ExecutionContext.CurrentPlanID)
 	c.CurrentStepID = firstNonEmptyString(c.CurrentStepID, loopContextStringValue(c.ExecutionContext.Variables, "current_step_id"), loopContextStringValue(c.ExecutionContext.Variables, "current_step"), loopContextStringValue(c.Metadata, "current_step_id"), loopContextStringValue(c.Metadata, "current_step"), c.ExecutionContext.CurrentStepID)
+}
+
+func (c *Checkpoint) restoreLoopPersistenceCollections() {
+	c.AcceptanceCriteria = checkpointLoopStrings(c.AcceptanceCriteria, c.ExecutionContext.Variables, c.Metadata, "acceptance_criteria", c.ExecutionContext.AcceptanceCriteria)
+	c.UnresolvedItems = checkpointLoopStrings(c.UnresolvedItems, c.ExecutionContext.Variables, c.Metadata, "unresolved_items", c.ExecutionContext.UnresolvedItems)
+	c.RemainingRisks = checkpointLoopStrings(c.RemainingRisks, c.ExecutionContext.Variables, c.Metadata, "remaining_risks", c.ExecutionContext.RemainingRisks)
+}
+
+func (c *Checkpoint) restoreLoopPersistenceStatus() {
 	if c.ValidationStatus == "" {
 		if value, ok := loopContextString(c.ExecutionContext.Variables, "validation_status"); ok {
 			c.ValidationStatus = LoopValidationStatus(value)
@@ -1160,7 +1162,9 @@ func (c *Checkpoint) normalizeLoopPersistenceFields() {
 			c.PlanVersion = c.ExecutionContext.PlanVersion
 		}
 	}
+}
 
+func (c *Checkpoint) syncLoopPersistenceContext() {
 	c.ExecutionContext.LoopStateID = firstNonEmptyString(c.ExecutionContext.LoopStateID, c.LoopStateID)
 	c.ExecutionContext.RunID = firstNonEmptyString(c.ExecutionContext.RunID, c.RunID)
 	c.ExecutionContext.AgentID = firstNonEmptyString(c.ExecutionContext.AgentID, c.AgentID)
@@ -1180,11 +1184,26 @@ func (c *Checkpoint) normalizeLoopPersistenceFields() {
 	c.ExecutionContext.ObservationsSummary = firstNonEmptyString(c.ExecutionContext.ObservationsSummary, c.ObservationsSummary)
 	c.ExecutionContext.LastOutputSummary = firstNonEmptyString(c.ExecutionContext.LastOutputSummary, c.LastOutputSummary)
 	c.ExecutionContext.LastError = firstNonEmptyString(c.ExecutionContext.LastError, c.LastError)
+}
 
+func (c *Checkpoint) persistNormalizedLoopContextValues() {
 	for key, value := range c.loopContextValuesNormalized() {
 		c.Metadata[key] = value
 		c.ExecutionContext.Variables[key] = value
 	}
+}
+
+func checkpointLoopStrings(current []string, variables, metadata map[string]any, key string, fallback []string) []string {
+	if len(current) > 0 {
+		return current
+	}
+	if values, ok := loopContextStrings(variables, key); ok {
+		return values
+	}
+	if values, ok := loopContextStrings(metadata, key); ok {
+		return values
+	}
+	return cloneStringSlice(fallback)
 }
 
 func firstNonEmptyString(values ...string) string {
@@ -1529,7 +1548,7 @@ func (m *CheckpointManager) RollbackToVersion(ctx context.Context, agent Agent, 
 		)
 	}
 
-	// 执行存储回滚( 创建新检查点)
+	// 执行存储回滚，并生成新的检查点版本。
 	if err := m.store.Rollback(ctx, threadID, version); err != nil {
 		return fmt.Errorf("failed to rollback in store: %w", err)
 	}

@@ -604,4 +604,3 @@ func TestCreateInterruptContextCanceled(t *testing.T) {
 	cancel()
 	<-done
 }
-

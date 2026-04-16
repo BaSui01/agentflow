@@ -87,10 +87,10 @@ func TestProperty_CheckpointRoundTripConsistency(t *testing.T) {
 
 			return true
 		},
-		gen.Identifier(),                                                    // threadID
-		gen.Identifier(),                                                    // agentID
+		gen.Identifier(), // threadID
+		gen.Identifier(), // agentID
 		gen.OneConstOf(StateInit, StateReady, StateRunning, StateCompleted), // state
-		gen.IntRange(0, 10),                                                 // messageCount
+		gen.IntRange(0, 10), // messageCount
 	))
 
 	properties.TestingRun(t)
@@ -113,12 +113,12 @@ func TestProperty_CheckpointIDAndTimestampAssignment(t *testing.T) {
 			beforeSave := time.Now()
 
 			checkpoint := &Checkpoint{
-				ID:       generateCheckpointID(), // Generate ID before save
-				ThreadID: threadID,
-				AgentID:  agentID,
-				State:    StateReady,
-				Messages: []CheckpointMessage{},
-				Metadata: make(map[string]any),
+				ID:        generateCheckpointID(), // Generate ID before save
+				ThreadID:  threadID,
+				AgentID:   agentID,
+				State:     StateReady,
+				Messages:  []CheckpointMessage{},
+				Metadata:  make(map[string]any),
 				CreatedAt: time.Now(),
 			}
 
@@ -136,7 +136,7 @@ func TestProperty_CheckpointIDAndTimestampAssignment(t *testing.T) {
 				return false
 			}
 
-			// 验证时间戳是有效的( 在保存前后之间)
+			// 验证时间戳落在保存窗口内。
 			if checkpoint.CreatedAt.Before(beforeSave) || checkpoint.CreatedAt.After(afterSave) {
 				t.Logf("Timestamp out of range: %v not between %v and %v", checkpoint.CreatedAt, beforeSave, afterSave)
 				return false
@@ -214,7 +214,7 @@ func TestProperty_CheckpointListingOrder(t *testing.T) {
 				return false
 			}
 
-			// 校验反向时间顺序( 最新第一)
+			// 校验结果按时间逆序排列。
 			for i := 0; i < len(checkpoints)-1; i++ {
 				if checkpoints[i].CreatedAt.Before(checkpoints[i+1].CreatedAt) {
 					t.Logf("Checkpoints not in reverse chronological order at index %d", i)
@@ -301,4 +301,3 @@ func TestProperty_SequentialVersionNumbering(t *testing.T) {
 
 	properties.TestingRun(t)
 }
-

@@ -526,4 +526,3 @@ func TestEvaluator_RegisterScorer_CustomType(t *testing.T) {
 	assert.Equal(t, 1.0, report.Results[0].Score)
 	assert.True(t, report.Results[0].Success)
 }
-

@@ -192,4 +192,3 @@ func TestAgentOperator_RegisterAgent_WithScaleCallback(t *testing.T) {
 	// Scale callback may or may not be called depending on reconcile logic
 	_ = scaleCalled
 }
-

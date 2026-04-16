@@ -197,4 +197,3 @@ func TestProperty_PIIDetector_NoFalsePositives(t *testing.T) {
 		assert.True(t, result.Valid, "Clean content should pass: %s", content)
 	})
 }
-

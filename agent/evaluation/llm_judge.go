@@ -1,13 +1,14 @@
 package evaluation
 
 import (
-	"github.com/BaSui01/agentflow/types"
 	"context"
 	"encoding/json"
 	"fmt"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/BaSui01/agentflow/types"
 
 	"github.com/BaSui01/agentflow/llm"
 	"go.uber.org/zap"
@@ -541,5 +542,3 @@ func sqrt(x float64) float64 {
 	}
 	return z
 }
-
-

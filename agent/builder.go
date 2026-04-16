@@ -336,30 +336,50 @@ func (b *AgentBuilder) ReasoningRegistry() *reasoning.PatternRegistry {
 
 // Build 构建 Agent 实例
 func (b *AgentBuilder) Build() (*BaseAgent, error) {
-	// 检查构建过程中的错误
-	if len(b.errors) > 0 {
-		return nil, NewErrorWithCause(types.ErrInputValidation, "builder validation failed", b.errors[0])
-	}
-
-	// 验证必需字段
-	if b.provider == nil {
-		return nil, ErrProviderNotSet
-	}
-
-	// V-013: Model is required for agent to function
-	if b.config.LLM.Model == "" {
-		return nil, NewError(types.ErrInputValidation, "config.Model is required")
+	if err := b.validateBuildInputs(); err != nil {
+		return nil, err
 	}
 
 	// V-011: persistence 为可选依赖，nil 时 PersistenceStores 内部会优雅降级（LoadPrompt/RecordRun 等返回空）
+	b.ensureBuildLogger()
 
-	// 设置默认 logger
+	// 创建基础 Agent
+	agent := b.newBaseAgent()
+
+	// 设置工具专用 Provider（双模型模式）
+	if b.toolProvider != nil {
+		agent.SetToolProvider(b.toolProvider)
+	}
+
+	b.configurePersistence(agent)
+	b.ensureFeatureDefaults()
+	b.enableConfiguredCoreFeatures(agent)
+	b.enableOptionalFeatures(agent)
+	b.finalizeAgent(agent)
+	return agent, nil
+}
+
+func (b *AgentBuilder) validateBuildInputs() error {
+	if len(b.errors) > 0 {
+		return NewErrorWithCause(types.ErrInputValidation, "builder validation failed", b.errors[0])
+	}
+	if b.provider == nil {
+		return ErrProviderNotSet
+	}
+	if b.config.LLM.Model == "" {
+		return NewError(types.ErrInputValidation, "config.Model is required")
+	}
+	return nil
+}
+
+func (b *AgentBuilder) ensureBuildLogger() {
 	if b.logger == nil {
 		b.logger = zap.NewNop()
 	}
+}
 
-	// 创建基础 Agent
-	agent := NewBaseAgent(
+func (b *AgentBuilder) newBaseAgent() *BaseAgent {
+	return NewBaseAgent(
 		b.config,
 		b.provider,
 		b.memory,
@@ -368,18 +388,15 @@ func (b *AgentBuilder) Build() (*BaseAgent, error) {
 		b.logger,
 		b.ledger,
 	)
+}
 
-	// 设置工具专用 Provider（双模型模式）
-	if b.toolProvider != nil {
-		agent.SetToolProvider(b.toolProvider)
-	}
-
-	// Wire MongoDB persistence stores via the composite manager.
+func (b *AgentBuilder) configurePersistence(agent *BaseAgent) {
 	agent.persistence.SetPromptStore(b.promptStore)
 	agent.persistence.SetConversationStore(b.conversationStore)
 	agent.persistence.SetRunStore(b.runStore)
+}
 
-	// 如果直接在配置上启用了特性标记, 请返回默认配置 。
+func (b *AgentBuilder) ensureFeatureDefaults() {
 	if b.config.IsReflectionEnabled() && b.reflectionConfig == nil {
 		b.reflectionConfig = DefaultReflectionConfig()
 	}
@@ -389,8 +406,9 @@ func (b *AgentBuilder) Build() (*BaseAgent, error) {
 	if b.config.IsPromptEnhancerEnabled() && b.promptEnhancerConfig == nil {
 		b.promptEnhancerConfig = DefaultPromptEnhancerConfig()
 	}
+}
 
-	// 启用高级特性
+func (b *AgentBuilder) enableConfiguredCoreFeatures(agent *BaseAgent) {
 	if b.config.IsReflectionEnabled() && b.reflectionConfig != nil {
 		reflectionExecutor := NewReflectionExecutor(agent, reflectionExecutorConfigFromPolicy(agent.loopControlPolicy()))
 		agent.EnableReflection(AsReflectionRunner(reflectionExecutor))
@@ -405,25 +423,19 @@ func (b *AgentBuilder) Build() (*BaseAgent, error) {
 		promptEnhancer := NewPromptEnhancer(*b.promptEnhancerConfig)
 		agent.EnablePromptEnhancer(AsPromptEnhancerRunner(promptEnhancer))
 	}
+}
 
-	if err := b.enableOptionalFeatures(agent); err != nil {
-		return nil, err
-	}
-
+func (b *AgentBuilder) finalizeAgent(agent *BaseAgent) {
 	if b.reasoningRegistry != nil {
 		agent.SetReasoningRegistry(b.reasoningRegistry)
 	}
 	agent.SetReasoningModeSelector(NewDefaultReasoningModeSelector())
 	agent.SetCompletionJudge(NewDefaultCompletionJudge())
-
-	return agent, nil
 }
 
-func (b *AgentBuilder) enableOptionalFeatures(agent *BaseAgent) error {
+func (b *AgentBuilder) enableOptionalFeatures(agent *BaseAgent) {
 	if b.config.IsSkillsEnabled() {
-		if err := b.enableSkills(agent); err != nil {
-			return fmt.Errorf("enable skills: %w", err)
-		}
+		b.enableSkills(agent)
 	}
 	if b.config.IsMCPEnabled() {
 		b.enableMCP(agent)
@@ -437,7 +449,6 @@ func (b *AgentBuilder) enableOptionalFeatures(agent *BaseAgent) error {
 	if b.config.IsObservabilityEnabled() && b.observabilityInstance != nil {
 		agent.EnableObservability(b.observabilityInstance)
 	}
-	return nil
 }
 
 func normalizeAgentIDList(agentIDs []string) []string {
@@ -463,10 +474,10 @@ func normalizeAgentIDList(agentIDs []string) []string {
 	return out
 }
 
-func (b *AgentBuilder) enableSkills(agent *BaseAgent) error {
+func (b *AgentBuilder) enableSkills(agent *BaseAgent) {
 	if b.skillsInstance != nil {
 		agent.EnableSkills(b.skillsInstance)
-		return nil
+		return
 	}
 	// Create default skill manager
 	mgr := skills.NewSkillManager(skills.DefaultSkillManagerConfig(), b.logger)
@@ -476,7 +487,6 @@ func (b *AgentBuilder) enableSkills(agent *BaseAgent) error {
 		}
 	}
 	agent.EnableSkills(mgr)
-	return nil
 }
 
 func (b *AgentBuilder) enableMCP(agent *BaseAgent) {

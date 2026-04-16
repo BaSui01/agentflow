@@ -303,8 +303,8 @@ func TestFileCheckpointStore_ConcurrentAccess(t *testing.T) {
 				State:     StateReady,
 				CreatedAt: time.Now(),
 			}
-			err := store.Save(ctx, checkpoint)
-			assert.NoError(t, err)
+			saveErr := store.Save(ctx, checkpoint)
+			assert.NoError(t, saveErr)
 			done <- true
 		}(i)
 	}
@@ -358,4 +358,3 @@ func TestFileCheckpointStore_DirectoryStructure(t *testing.T) {
 	latestFile := filepath.Join(threadDir, "latest.txt")
 	assert.FileExists(t, latestFile)
 }
-

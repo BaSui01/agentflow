@@ -189,8 +189,8 @@ func TestIntelligentDecay_Decay(t *testing.T) {
 
 	for i := 0; i < 5; i++ {
 		decay.Add(&MemoryItem{
-			ID:       fmt.Sprintf("m%d", i),
-			Content:  "test",
+			ID:        fmt.Sprintf("m%d", i),
+			Content:   "test",
 			Relevance: 0.1,
 		})
 	}
@@ -337,4 +337,3 @@ func TestExtractMemoryTimestamp(t *testing.T) {
 		assert.True(t, ts.IsZero())
 	})
 }
-

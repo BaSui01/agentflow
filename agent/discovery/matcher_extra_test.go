@@ -156,4 +156,3 @@ func TestCapabilityComposer_ResolveDependencies_Circular(t *testing.T) {
 	_ = err
 	_ = deps
 }
-

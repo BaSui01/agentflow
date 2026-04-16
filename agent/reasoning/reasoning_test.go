@@ -1,11 +1,12 @@
 package reasoning
 
 import (
-	"github.com/BaSui01/agentflow/types"
 	"context"
 	"encoding/json"
 	"testing"
 	"time"
+
+	"github.com/BaSui01/agentflow/types"
 
 	"github.com/BaSui01/agentflow/llm"
 	"github.com/BaSui01/agentflow/llm/capabilities/tools"
@@ -34,8 +35,8 @@ func (p *testProvider) Stream(context.Context, *llm.ChatRequest) (<-chan llm.Str
 func (p *testProvider) HealthCheck(context.Context) (*llm.HealthStatus, error) {
 	return &llm.HealthStatus{Healthy: true}, nil
 }
-func (p *testProvider) Name() string                          { return "test" }
-func (p *testProvider) SupportsNativeFunctionCalling() bool   { return false }
+func (p *testProvider) Name() string                        { return "test" }
+func (p *testProvider) SupportsNativeFunctionCalling() bool { return false }
 func (p *testProvider) ListModels(context.Context) ([]llm.Model, error) {
 	return nil, nil
 }
@@ -1124,5 +1125,3 @@ func TestIterativeDeepening_Execute_Success(t *testing.T) {
 	assert.Equal(t, "iterative_deepening", result.Pattern)
 	assert.NotEmpty(t, result.FinalAnswer)
 }
-
-

@@ -20,61 +20,83 @@ import (
 // --- mock TaskStore ---
 
 type mockTaskStore struct {
-	saveFn      func(ctx context.Context, task *persistence.AsyncTask) error
-	getFn       func(ctx context.Context, id string) (*persistence.AsyncTask, error)
-	listFn      func(ctx context.Context, filter persistence.TaskFilter) ([]*persistence.AsyncTask, error)
-	updateFn    func(ctx context.Context, id string, status persistence.TaskStatus, result any, errMsg string) error
-	progressFn  func(ctx context.Context, id string, progress float64) error
-	deleteFn    func(ctx context.Context, id string) error
-	recoverFn   func(ctx context.Context) ([]*persistence.AsyncTask, error)
-	cleanupFn   func(ctx context.Context, older time.Duration) (int, error)
-	statsFn     func(ctx context.Context) (*persistence.TaskStoreStats, error)
-	closeFn     func() error
-	pingFn      func(ctx context.Context) error
+	saveFn     func(ctx context.Context, task *persistence.AsyncTask) error
+	getFn      func(ctx context.Context, id string) (*persistence.AsyncTask, error)
+	listFn     func(ctx context.Context, filter persistence.TaskFilter) ([]*persistence.AsyncTask, error)
+	updateFn   func(ctx context.Context, id string, status persistence.TaskStatus, result any, errMsg string) error
+	progressFn func(ctx context.Context, id string, progress float64) error
+	deleteFn   func(ctx context.Context, id string) error
+	recoverFn  func(ctx context.Context) ([]*persistence.AsyncTask, error)
+	cleanupFn  func(ctx context.Context, older time.Duration) (int, error)
+	statsFn    func(ctx context.Context) (*persistence.TaskStoreStats, error)
+	closeFn    func() error
+	pingFn     func(ctx context.Context) error
 }
 
 func (m *mockTaskStore) SaveTask(ctx context.Context, task *persistence.AsyncTask) error {
-	if m.saveFn != nil { return m.saveFn(ctx, task) }
+	if m.saveFn != nil {
+		return m.saveFn(ctx, task)
+	}
 	return nil
 }
 func (m *mockTaskStore) GetTask(ctx context.Context, id string) (*persistence.AsyncTask, error) {
-	if m.getFn != nil { return m.getFn(ctx, id) }
+	if m.getFn != nil {
+		return m.getFn(ctx, id)
+	}
 	return nil, nil
 }
 func (m *mockTaskStore) ListTasks(ctx context.Context, filter persistence.TaskFilter) ([]*persistence.AsyncTask, error) {
-	if m.listFn != nil { return m.listFn(ctx, filter) }
+	if m.listFn != nil {
+		return m.listFn(ctx, filter)
+	}
 	return nil, nil
 }
 func (m *mockTaskStore) UpdateStatus(ctx context.Context, id string, status persistence.TaskStatus, result any, errMsg string) error {
-	if m.updateFn != nil { return m.updateFn(ctx, id, status, result, errMsg) }
+	if m.updateFn != nil {
+		return m.updateFn(ctx, id, status, result, errMsg)
+	}
 	return nil
 }
 func (m *mockTaskStore) UpdateProgress(ctx context.Context, id string, progress float64) error {
-	if m.progressFn != nil { return m.progressFn(ctx, id, progress) }
+	if m.progressFn != nil {
+		return m.progressFn(ctx, id, progress)
+	}
 	return nil
 }
 func (m *mockTaskStore) DeleteTask(ctx context.Context, id string) error {
-	if m.deleteFn != nil { return m.deleteFn(ctx, id) }
+	if m.deleteFn != nil {
+		return m.deleteFn(ctx, id)
+	}
 	return nil
 }
 func (m *mockTaskStore) GetRecoverableTasks(ctx context.Context) ([]*persistence.AsyncTask, error) {
-	if m.recoverFn != nil { return m.recoverFn(ctx) }
+	if m.recoverFn != nil {
+		return m.recoverFn(ctx)
+	}
 	return nil, nil
 }
 func (m *mockTaskStore) Cleanup(ctx context.Context, older time.Duration) (int, error) {
-	if m.cleanupFn != nil { return m.cleanupFn(ctx, older) }
+	if m.cleanupFn != nil {
+		return m.cleanupFn(ctx, older)
+	}
 	return 0, nil
 }
 func (m *mockTaskStore) Stats(ctx context.Context) (*persistence.TaskStoreStats, error) {
-	if m.statsFn != nil { return m.statsFn(ctx) }
+	if m.statsFn != nil {
+		return m.statsFn(ctx)
+	}
 	return &persistence.TaskStoreStats{}, nil
 }
 func (m *mockTaskStore) Close() error {
-	if m.closeFn != nil { return m.closeFn() }
+	if m.closeFn != nil {
+		return m.closeFn()
+	}
 	return nil
 }
 func (m *mockTaskStore) Ping(ctx context.Context) error {
-	if m.pingFn != nil { return m.pingFn(ctx) }
+	if m.pingFn != nil {
+		return m.pingFn(ctx)
+	}
 	return nil
 }
 
@@ -546,4 +568,3 @@ func TestAgentCard_SetGetMetadata(t *testing.T) {
 	_, ok = card2.GetMetadata("key")
 	assert.False(t, ok)
 }
-

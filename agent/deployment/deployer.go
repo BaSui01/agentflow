@@ -312,7 +312,7 @@ func (d *Deployer) ListDeployments() []*Deployment {
 	d.mu.RLock()
 	defer d.mu.RUnlock()
 
-	var result []*Deployment
+	result := make([]*Deployment, 0, len(d.deployments))
 	for _, dep := range d.deployments {
 		result = append(result, dep)
 	}
@@ -404,4 +404,3 @@ func (d *Deployer) ExportManifest(deploymentID string) ([]byte, error) {
 
 	return json.MarshalIndent(manifest, "", "  ")
 }
-

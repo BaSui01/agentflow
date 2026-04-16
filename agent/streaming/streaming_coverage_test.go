@@ -426,4 +426,3 @@ func TestBidirectionalStream_ProcessOutbound_HandlerError(t *testing.T) {
 	cancel()
 	stream.Close()
 }
-

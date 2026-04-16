@@ -532,4 +532,3 @@ func TestMessageHub_Close_WithStore(t *testing.T) {
 	err = hub.Close()
 	assert.NoError(t, err)
 }
-

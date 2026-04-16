@@ -23,13 +23,13 @@ type mockAgent struct {
 	executeFn func(ctx context.Context, input *agent.Input) (*agent.Output, error)
 }
 
-func (m *mockAgent) ID() string        { return m.id }
-func (m *mockAgent) Name() string      { return m.name }
+func (m *mockAgent) ID() string            { return m.id }
+func (m *mockAgent) Name() string          { return m.name }
 func (m *mockAgent) Type() agent.AgentType { return m.agentType }
-func (m *mockAgent) State() agent.State { return agent.StateReady }
+func (m *mockAgent) State() agent.State    { return agent.StateReady }
 
-func (m *mockAgent) Init(_ context.Context) error                       { return nil }
-func (m *mockAgent) Teardown(_ context.Context) error                   { return nil }
+func (m *mockAgent) Init(_ context.Context) error     { return nil }
+func (m *mockAgent) Teardown(_ context.Context) error { return nil }
 func (m *mockAgent) Plan(_ context.Context, _ *agent.Input) (*agent.PlanResult, error) {
 	return &agent.PlanResult{}, nil
 }
@@ -49,7 +49,7 @@ type mockPatternExecutor struct {
 	executeFn func(ctx context.Context, task *OrchestrationTask) (*OrchestrationResult, error)
 }
 
-func (m *mockPatternExecutor) Name() Pattern { return m.name }
+func (m *mockPatternExecutor) Name() Pattern                       { return m.name }
 func (m *mockPatternExecutor) CanHandle(_ *OrchestrationTask) bool { return m.canHandle }
 func (m *mockPatternExecutor) Priority(_ *OrchestrationTask) int   { return m.priority }
 
@@ -295,4 +295,3 @@ func TestExecute_ExecutorFailure_ReturnsError(t *testing.T) {
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "executor boom")
 }
-

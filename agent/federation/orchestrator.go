@@ -425,4 +425,3 @@ func (o *Orchestrator) Stop() {
 	o.closeOnce.Do(func() { close(o.done) })
 	o.logger.Info("federation orchestrator stopped")
 }
-

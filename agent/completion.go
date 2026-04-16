@@ -40,180 +40,238 @@ func (b *BaseAgent) chatCompletionStreaming(ctx context.Context, pr *preparedReq
 	ctx = WithRuntimeConversationMessages(ctx, pr.req.Messages)
 
 	if pr.hasTools {
-		const selectedMode = ReasoningModeReact
-		reactReq := *pr.req
-		reactReq.Model = effectiveToolModel(pr.req.Model, b.config.Runtime.ToolModel)
-		toolExec := newRuntimeHandoffExecutor(
-			b,
-			newToolManagerExecutor(b.toolManager, b.config.Core.ID, b.config.Runtime.Tools, b.bus),
-			runtimeHandoffTargetsFromPreparedRequest(pr),
-		)
-		executor := llmtools.NewReActExecutor(
-			pr.toolProvider,
-			toolExec,
-			llmtools.ReActConfig{MaxIterations: reactIterationBudget, StopOnError: false},
-			b.logger,
-		)
-		// 将 steering channel 直接传入 ReAct 执行器（类型统一，无需 adapter）
-		if steerCh != nil {
-			executor.SetSteeringChannel(steerCh.Receive())
-		}
+		return b.chatCompletionStreamingWithTools(ctx, pr, emit, steerCh, reactIterationBudget)
+	}
+	return b.chatCompletionStreamingDirect(ctx, pr, emit, steerCh)
+}
 
-		evCh, err := executor.ExecuteStream(ctx, &reactReq)
-		if err != nil {
+type reactStreamingState struct {
+	final            *llm.ChatResponse
+	currentIteration int
+	selectedMode     string
+}
+
+func (b *BaseAgent) chatCompletionStreamingWithTools(ctx context.Context, pr *preparedRequest, emit RuntimeStreamEmitter, steerCh *SteeringChannel, reactIterationBudget int) (*llm.ChatResponse, error) {
+	state, eventCh, err := b.startReactStreaming(ctx, pr, steerCh, reactIterationBudget, emit)
+	if err != nil {
+		return nil, err
+	}
+	for ev := range eventCh {
+		if err := b.handleReactStreamEvent(emit, pr, state, ev); err != nil {
 			return nil, err
 		}
-		emitRuntimeStatus(emit, "reasoning_mode_selected", RuntimeStreamEvent{
+	}
+	if state.final == nil {
+		return nil, ErrNoResponse
+	}
+	return state.final, nil
+}
+
+func (b *BaseAgent) startReactStreaming(ctx context.Context, pr *preparedRequest, steerCh *SteeringChannel, reactIterationBudget int, emit RuntimeStreamEmitter) (*reactStreamingState, <-chan llmtools.ReActStreamEvent, error) {
+	const selectedMode = ReasoningModeReact
+	reactReq := *pr.req
+	reactReq.Model = effectiveToolModel(pr.req.Model, b.config.Runtime.ToolModel)
+	toolExec := newRuntimeHandoffExecutor(
+		b,
+		newToolManagerExecutor(b.toolManager, b.config.Core.ID, b.config.Runtime.Tools, b.bus),
+		runtimeHandoffTargetsFromPreparedRequest(pr),
+	)
+	executor := llmtools.NewReActExecutor(
+		pr.toolProvider,
+		toolExec,
+		llmtools.ReActConfig{MaxIterations: reactIterationBudget, StopOnError: false},
+		b.logger,
+	)
+	if steerCh != nil {
+		executor.SetSteeringChannel(steerCh.Receive())
+	}
+	eventCh, err := executor.ExecuteStream(ctx, &reactReq)
+	if err != nil {
+		return nil, nil, err
+	}
+	emitRuntimeStatus(emit, "reasoning_mode_selected", RuntimeStreamEvent{
+		Timestamp:      time.Now(),
+		CurrentStage:   "reasoning",
+		IterationCount: 0,
+		SelectedMode:   selectedMode,
+		Data: map[string]any{
+			"mode":                   selectedMode,
+			"react_iteration_budget": reactIterationBudget,
+		},
+	})
+	return &reactStreamingState{selectedMode: selectedMode}, eventCh, nil
+}
+
+func (b *BaseAgent) handleReactStreamEvent(emit RuntimeStreamEmitter, pr *preparedRequest, state *reactStreamingState, ev llmtools.ReActStreamEvent) error {
+	switch ev.Type {
+	case llmtools.ReActEventIterationStart:
+		state.currentIteration = ev.Iteration
+	case llmtools.ReActEventLLMChunk:
+		emitReactLLMChunk(emit, state, ev)
+	case llmtools.ReActEventToolsStart:
+		emitReactToolCalls(emit, pr, state, ev.ToolCalls)
+	case llmtools.ReActEventToolsEnd:
+		emitReactToolResults(emit, pr, state, ev.ToolResults)
+	case llmtools.ReActEventToolProgress:
+		emit(RuntimeStreamEvent{
+			Type:           RuntimeStreamToolProgress,
+			Timestamp:      time.Now(),
+			ToolCallID:     ev.ToolCallID,
+			ToolName:       ev.ToolName,
+			Data:           ev.ProgressData,
+			CurrentStage:   "acting",
+			IterationCount: state.currentIteration,
+			SelectedMode:   state.selectedMode,
+		})
+	case llmtools.ReActEventSteering:
+		emit(RuntimeStreamEvent{
+			Type:            RuntimeStreamSteering,
+			Timestamp:       time.Now(),
+			SteeringContent: ev.SteeringContent,
+			CurrentStage:    "reasoning",
+			IterationCount:  state.currentIteration,
+			SelectedMode:    state.selectedMode,
+		})
+	case llmtools.ReActEventStopAndSend:
+		emit(RuntimeStreamEvent{
+			Type:           RuntimeStreamStopAndSend,
 			Timestamp:      time.Now(),
 			CurrentStage:   "reasoning",
-			IterationCount: 0,
-			SelectedMode:   selectedMode,
-			Data: map[string]any{
-				"mode":                   selectedMode,
-				"react_iteration_budget": reactIterationBudget,
-			},
+			IterationCount: state.currentIteration,
+			SelectedMode:   state.selectedMode,
 		})
-		var final *llm.ChatResponse
-		currentIteration := 0
-		for ev := range evCh {
-			switch ev.Type {
-			case llmtools.ReActEventIterationStart:
-				currentIteration = ev.Iteration
-			case llmtools.ReActEventLLMChunk:
-				if ev.Chunk != nil && ev.Chunk.Delta.Content != "" {
-					emit(RuntimeStreamEvent{
-						Type:           RuntimeStreamToken,
-						Timestamp:      time.Now(),
-						Token:          ev.Chunk.Delta.Content,
-						Delta:          ev.Chunk.Delta.Content,
-						SDKEventType:   SDKRawResponseEvent,
-						CurrentStage:   "reasoning",
-						IterationCount: currentIteration,
-						SelectedMode:   selectedMode,
-					})
-				}
-				if ev.Chunk != nil && ev.Chunk.Delta.ReasoningContent != nil && *ev.Chunk.Delta.ReasoningContent != "" {
-					emit(RuntimeStreamEvent{
-						Type:           RuntimeStreamReasoning,
-						Timestamp:      time.Now(),
-						Reasoning:      *ev.Chunk.Delta.ReasoningContent,
-						SDKEventType:   SDKRawResponseEvent,
-						CurrentStage:   "reasoning",
-						IterationCount: currentIteration,
-						SelectedMode:   selectedMode,
-					})
-				}
-			case llmtools.ReActEventToolsStart:
-				for _, call := range ev.ToolCalls {
-					sdkEventName := SDKToolCalled
-					if runtimeHandoffToolRequested(pr, call.Name) {
-						sdkEventName = SDKHandoffRequested
-					}
-					emit(RuntimeStreamEvent{
-						Type:           RuntimeStreamToolCall,
-						Timestamp:      time.Now(),
-						CurrentStage:   "acting",
-						IterationCount: currentIteration,
-						SelectedMode:   selectedMode,
-						ToolCall: &RuntimeToolCall{
-							ID:        call.ID,
-							Name:      call.Name,
-							Arguments: append(json.RawMessage(nil), call.Arguments...),
-						},
-						SDKEventType: SDKRunItemEvent,
-						SDKEventName: sdkEventName,
-					})
-				}
-			case llmtools.ReActEventToolsEnd:
-				for _, tr := range ev.ToolResults {
-					sdkEventName := SDKToolOutput
-					resultPayload := append(json.RawMessage(nil), tr.Result...)
-					if runtimeHandoffToolRequested(pr, tr.Name) {
-						sdkEventName = SDKHandoffOccured
-						if control := tr.Control(); control != nil && control.Handoff != nil {
-							if raw, err := json.Marshal(control.Handoff); err == nil {
-								resultPayload = raw
-							}
-						}
-					}
-					emit(RuntimeStreamEvent{
-						Type:           RuntimeStreamToolResult,
-						Timestamp:      time.Now(),
-						CurrentStage:   "acting",
-						IterationCount: currentIteration,
-						SelectedMode:   selectedMode,
-						ToolResult: &RuntimeToolResult{
-							ToolCallID: tr.ToolCallID,
-							Name:       tr.Name,
-							Result:     resultPayload,
-							Error:      tr.Error,
-							Duration:   tr.Duration,
-						},
-						SDKEventType: SDKRunItemEvent,
-						SDKEventName: sdkEventName,
-					})
-				}
-			case llmtools.ReActEventToolProgress:
-				emit(RuntimeStreamEvent{
-					Type:           RuntimeStreamToolProgress,
-					Timestamp:      time.Now(),
-					ToolCallID:     ev.ToolCallID,
-					ToolName:       ev.ToolName,
-					Data:           ev.ProgressData,
-					CurrentStage:   "acting",
-					IterationCount: currentIteration,
-					SelectedMode:   selectedMode,
-				})
-			case llmtools.ReActEventSteering:
-				emit(RuntimeStreamEvent{
-					Type:            RuntimeStreamSteering,
-					Timestamp:       time.Now(),
-					SteeringContent: ev.SteeringContent,
-					CurrentStage:    "reasoning",
-					IterationCount:  currentIteration,
-					SelectedMode:    selectedMode,
-				})
-			case llmtools.ReActEventStopAndSend:
-				emit(RuntimeStreamEvent{
-					Type:           RuntimeStreamStopAndSend,
-					Timestamp:      time.Now(),
-					CurrentStage:   "reasoning",
-					IterationCount: currentIteration,
-					SelectedMode:   selectedMode,
-				})
-			case llmtools.ReActEventCompleted:
-				final = ev.FinalResponse
-				if emit != nil && final != nil && len(final.Choices) > 0 && final.Choices[0].Message.Content != "" {
-					emit(RuntimeStreamEvent{
-						Type:           RuntimeStreamStatus,
-						SDKEventType:   SDKRunItemEvent,
-						SDKEventName:   SDKMessageOutputCreated,
-						Timestamp:      time.Now(),
-						CurrentStage:   "responding",
-						IterationCount: currentIteration,
-						SelectedMode:   selectedMode,
-						Data: map[string]any{
-							"content": final.Choices[0].Message.Content,
-						},
-					})
-				}
-				stopReason := normalizeRuntimeStopReasonFromResponse(final)
-				emitCompletionLoopStatus(emit, currentIteration, selectedMode, stopReason)
-			case llmtools.ReActEventError:
-				stopReason := string(classifyStopReason(ev.Error))
-				emitCompletionLoopStatus(emit, currentIteration, selectedMode, stopReason)
-				return nil, NewErrorWithCause(types.ErrAgentExecution, "streaming execution error", errors.New(ev.Error))
+	case llmtools.ReActEventCompleted:
+		state.final = ev.FinalResponse
+		emitReactCompletion(emit, state)
+	case llmtools.ReActEventError:
+		stopReason := string(classifyStopReason(ev.Error))
+		emitCompletionLoopStatus(emit, state.currentIteration, state.selectedMode, stopReason)
+		return NewErrorWithCause(types.ErrAgentExecution, "streaming execution error", errors.New(ev.Error))
+	}
+	return nil
+}
+
+func emitReactLLMChunk(emit RuntimeStreamEmitter, state *reactStreamingState, ev llmtools.ReActStreamEvent) {
+	if ev.Chunk == nil {
+		return
+	}
+	if ev.Chunk.Delta.Content != "" {
+		emit(RuntimeStreamEvent{
+			Type:           RuntimeStreamToken,
+			Timestamp:      time.Now(),
+			Token:          ev.Chunk.Delta.Content,
+			Delta:          ev.Chunk.Delta.Content,
+			SDKEventType:   SDKRawResponseEvent,
+			CurrentStage:   "reasoning",
+			IterationCount: state.currentIteration,
+			SelectedMode:   state.selectedMode,
+		})
+	}
+	if ev.Chunk.Delta.ReasoningContent != nil && *ev.Chunk.Delta.ReasoningContent != "" {
+		emit(RuntimeStreamEvent{
+			Type:           RuntimeStreamReasoning,
+			Timestamp:      time.Now(),
+			Reasoning:      *ev.Chunk.Delta.ReasoningContent,
+			SDKEventType:   SDKRawResponseEvent,
+			CurrentStage:   "reasoning",
+			IterationCount: state.currentIteration,
+			SelectedMode:   state.selectedMode,
+		})
+	}
+}
+
+func emitReactToolCalls(emit RuntimeStreamEmitter, pr *preparedRequest, state *reactStreamingState, calls []types.ToolCall) {
+	for _, call := range calls {
+		sdkEventName := SDKToolCalled
+		if runtimeHandoffToolRequested(pr, call.Name) {
+			sdkEventName = SDKHandoffRequested
+		}
+		emit(RuntimeStreamEvent{
+			Type:           RuntimeStreamToolCall,
+			Timestamp:      time.Now(),
+			CurrentStage:   "acting",
+			IterationCount: state.currentIteration,
+			SelectedMode:   state.selectedMode,
+			ToolCall: &RuntimeToolCall{
+				ID:        call.ID,
+				Name:      call.Name,
+				Arguments: append(json.RawMessage(nil), call.Arguments...),
+			},
+			SDKEventType: SDKRunItemEvent,
+			SDKEventName: sdkEventName,
+		})
+	}
+}
+
+func emitReactToolResults(emit RuntimeStreamEmitter, pr *preparedRequest, state *reactStreamingState, results []types.ToolResult) {
+	for _, tr := range results {
+		sdkEventName, resultPayload := reactToolResultPayload(pr, tr)
+		emit(RuntimeStreamEvent{
+			Type:           RuntimeStreamToolResult,
+			Timestamp:      time.Now(),
+			CurrentStage:   "acting",
+			IterationCount: state.currentIteration,
+			SelectedMode:   state.selectedMode,
+			ToolResult: &RuntimeToolResult{
+				ToolCallID: tr.ToolCallID,
+				Name:       tr.Name,
+				Result:     resultPayload,
+				Error:      tr.Error,
+				Duration:   tr.Duration,
+			},
+			SDKEventType: SDKRunItemEvent,
+			SDKEventName: sdkEventName,
+		})
+	}
+}
+
+func reactToolResultPayload(pr *preparedRequest, tr types.ToolResult) (SDKRunItemEventName, json.RawMessage) {
+	sdkEventName := SDKToolOutput
+	resultPayload := append(json.RawMessage(nil), tr.Result...)
+	if runtimeHandoffToolRequested(pr, tr.Name) {
+		sdkEventName = SDKHandoffOccured
+		if control := tr.Control(); control != nil && control.Handoff != nil {
+			if raw, err := json.Marshal(control.Handoff); err == nil {
+				resultPayload = raw
 			}
 		}
-		if final == nil {
-			return nil, ErrNoResponse
-		}
-		return final, nil
 	}
+	return sdkEventName, resultPayload
+}
 
-	// 无工具路径：外层 for 循环支持 steering 重试
-	messages := make([]types.Message, len(pr.req.Messages))
-	copy(messages, pr.req.Messages)
+func emitReactCompletion(emit RuntimeStreamEmitter, state *reactStreamingState) {
+	final := state.final
+	if emit != nil && final != nil && len(final.Choices) > 0 && final.Choices[0].Message.Content != "" {
+		emit(RuntimeStreamEvent{
+			Type:           RuntimeStreamStatus,
+			SDKEventType:   SDKRunItemEvent,
+			SDKEventName:   SDKMessageOutputCreated,
+			Timestamp:      time.Now(),
+			CurrentStage:   "responding",
+			IterationCount: state.currentIteration,
+			SelectedMode:   state.selectedMode,
+			Data: map[string]any{
+				"content": final.Choices[0].Message.Content,
+			},
+		})
+	}
+	stopReason := normalizeRuntimeStopReasonFromResponse(final)
+	emitCompletionLoopStatus(emit, state.currentIteration, state.selectedMode, stopReason)
+}
+
+type directStreamingAttemptResult struct {
+	assembled        types.Message
+	lastID           string
+	lastProvider     string
+	lastModel        string
+	lastUsage        *llm.ChatUsage
+	lastFinishReason string
+	reasoning        string
+	steering         *SteeringMessage
+}
+
+func (b *BaseAgent) chatCompletionStreamingDirect(ctx context.Context, pr *preparedRequest, emit RuntimeStreamEmitter, steerCh *SteeringChannel) (*llm.ChatResponse, error) {
+	messages := append([]types.Message(nil), pr.req.Messages...)
 	var cumulativeUsage llm.ChatUsage
 	emitRuntimeStatus(emit, "reasoning_mode_selected", RuntimeStreamEvent{
 		Timestamp:      time.Now(),
@@ -222,165 +280,165 @@ func (b *BaseAgent) chatCompletionStreaming(ctx context.Context, pr *preparedReq
 	})
 
 	for {
-		streamCtx, cancelStream := context.WithCancel(ctx)
-		pr.req.Messages = messages
-		streamCh, err := pr.chatProvider.Stream(streamCtx, pr.req)
+		attempt, err := b.runDirectStreamingAttempt(ctx, pr, messages, emit, steerCh)
 		if err != nil {
-			cancelStream()
 			return nil, err
 		}
+		accumulateChatUsage(&cumulativeUsage, attempt.lastUsage)
+		if attempt.steering == nil || attempt.steering.IsZero() {
+			return finalizeDirectStreamingResponse(emit, attempt, cumulativeUsage), nil
+		}
+		emitDirectSteeringEvent(emit, attempt.steering)
+		messages = types.ApplySteeringToMessages(*attempt.steering, messages, attempt.assembled.Content, attempt.reasoning, llm.RoleAssistant)
+	}
+}
 
-		var (
-			assembled types.Message
-			lastID    string
-			lastProv  string
-			lastModel string
-			lastUsage *llm.ChatUsage
-			lastFR    string
-			steering  *SteeringMessage
-		)
-		var reasoningBuf strings.Builder
+func (b *BaseAgent) runDirectStreamingAttempt(ctx context.Context, pr *preparedRequest, messages []types.Message, emit RuntimeStreamEmitter, steerCh *SteeringChannel) (*directStreamingAttemptResult, error) {
+	streamCtx, cancelStream := context.WithCancel(ctx)
+	defer cancelStream()
+	pr.req.Messages = messages
+	streamCh, err := pr.chatProvider.Stream(streamCtx, pr.req)
+	if err != nil {
+		return nil, err
+	}
+	result := &directStreamingAttemptResult{}
+	var reasoningBuf strings.Builder
 
-	chunkLoop:
-		for {
-			select {
-			case chunk, ok := <-streamCh:
-				if !ok {
-					break chunkLoop
-				}
-				if chunk.Err != nil {
-					cancelStream()
-					return nil, chunk.Err
-				}
-				if chunk.ID != "" {
-					lastID = chunk.ID
-				}
-				if chunk.Provider != "" {
-					lastProv = chunk.Provider
-				}
-				if chunk.Model != "" {
-					lastModel = chunk.Model
-				}
-				if chunk.Usage != nil {
-					lastUsage = chunk.Usage
-				}
-				if chunk.FinishReason != "" {
-					lastFR = chunk.FinishReason
-				}
-				if chunk.Delta.Content != "" {
-					emit(RuntimeStreamEvent{
-						Type:           RuntimeStreamToken,
-						Timestamp:      time.Now(),
-						Token:          chunk.Delta.Content,
-						Delta:          chunk.Delta.Content,
-						SDKEventType:   SDKRawResponseEvent,
-						CurrentStage:   "responding",
-						IterationCount: 1,
-					})
-					assembled.Content += chunk.Delta.Content
-				}
-				if chunk.Delta.ReasoningContent != nil && *chunk.Delta.ReasoningContent != "" {
-					emit(RuntimeStreamEvent{
-						Type:           RuntimeStreamReasoning,
-						Timestamp:      time.Now(),
-						Reasoning:      *chunk.Delta.ReasoningContent,
-						SDKEventType:   SDKRawResponseEvent,
-						CurrentStage:   "responding",
-						IterationCount: 1,
-					})
-					reasoningBuf.WriteString(*chunk.Delta.ReasoningContent)
-				}
-				if len(chunk.Delta.ReasoningSummaries) > 0 {
-					assembled.ReasoningSummaries = append(assembled.ReasoningSummaries, chunk.Delta.ReasoningSummaries...)
-				}
-				if len(chunk.Delta.OpaqueReasoning) > 0 {
-					assembled.OpaqueReasoning = append(assembled.OpaqueReasoning, chunk.Delta.OpaqueReasoning...)
-				}
-				if len(chunk.Delta.ThinkingBlocks) > 0 {
-					assembled.ThinkingBlocks = append(assembled.ThinkingBlocks, chunk.Delta.ThinkingBlocks...)
-				}
-			case msg := <-steerChOrNil(steerCh):
-				steering = &msg
-				cancelStream()
-				// drain 剩余 chunks 防止 goroutine 泄漏
-				for range streamCh {
-				}
+chunkLoop:
+	for {
+		select {
+		case chunk, ok := <-streamCh:
+			if !ok {
 				break chunkLoop
-			case <-ctx.Done():
-				cancelStream()
-				return nil, ctx.Err()
 			}
-		}
-		cancelStream()
-
-		// 累计 token 用量（包括被中断的调用）
-		if lastUsage != nil {
-			cumulativeUsage.PromptTokens += lastUsage.PromptTokens
-			cumulativeUsage.CompletionTokens += lastUsage.CompletionTokens
-			cumulativeUsage.TotalTokens += lastUsage.TotalTokens
-		}
-
-		// 正常完成 或 零值 steering（channel 关闭）→ 组装 response 返回
-		if steering == nil || steering.IsZero() {
-			if reasoningBuf.Len() > 0 {
-				rc := reasoningBuf.String()
-				assembled.ReasoningContent = &rc
+			if chunk.Err != nil {
+				return nil, chunk.Err
 			}
-			assembled.Role = llm.RoleAssistant
-			resp := &llm.ChatResponse{
-				ID:       lastID,
-				Provider: lastProv,
-				Model:    lastModel,
-				Choices: []llm.ChatChoice{{
-					Index:        0,
-					FinishReason: lastFR,
-					Message:      assembled,
-				}},
-				Usage: cumulativeUsage,
+			consumeDirectStreamChunk(emit, result, &reasoningBuf, chunk)
+		case msg := <-steerChOrNil(steerCh):
+			result.steering = &msg
+			cancelStream()
+			for range streamCh {
 			}
-			if emit != nil && assembled.Content != "" {
-				emit(RuntimeStreamEvent{
-					Type:           RuntimeStreamStatus,
-					SDKEventType:   SDKRunItemEvent,
-					SDKEventName:   SDKMessageOutputCreated,
-					Timestamp:      time.Now(),
-					CurrentStage:   "responding",
-					IterationCount: 1,
-					Data: map[string]any{
-						"content": assembled.Content,
-					},
-				})
-			}
-			emitCompletionLoopStatus(emit, 1, "", normalizeRuntimeStopReason(lastFR))
-			return resp, nil
+			break chunkLoop
+		case <-ctx.Done():
+			return nil, ctx.Err()
 		}
+	}
+	result.reasoning = reasoningBuf.String()
+	return result, nil
+}
 
-		// emit 确认事件
-		switch steering.Type {
-		case SteeringTypeGuide:
-			emit(RuntimeStreamEvent{
-				Type:            RuntimeStreamSteering,
-				Timestamp:       time.Now(),
-				SteeringContent: steering.Content,
-				CurrentStage:    "responding",
-				IterationCount:  1,
-			})
-		case SteeringTypeStopAndSend:
-			emit(RuntimeStreamEvent{
-				Type:           RuntimeStreamStopAndSend,
-				Timestamp:      time.Now(),
-				CurrentStage:   "responding",
-				IterationCount: 1,
-			})
-		}
+func consumeDirectStreamChunk(emit RuntimeStreamEmitter, result *directStreamingAttemptResult, reasoningBuf *strings.Builder, chunk llm.StreamChunk) {
+	if chunk.ID != "" {
+		result.lastID = chunk.ID
+	}
+	if chunk.Provider != "" {
+		result.lastProvider = chunk.Provider
+	}
+	if chunk.Model != "" {
+		result.lastModel = chunk.Model
+	}
+	if chunk.Usage != nil {
+		result.lastUsage = chunk.Usage
+	}
+	if chunk.FinishReason != "" {
+		result.lastFinishReason = chunk.FinishReason
+	}
+	if chunk.Delta.Content != "" {
+		emit(RuntimeStreamEvent{
+			Type:           RuntimeStreamToken,
+			Timestamp:      time.Now(),
+			Token:          chunk.Delta.Content,
+			Delta:          chunk.Delta.Content,
+			SDKEventType:   SDKRawResponseEvent,
+			CurrentStage:   "responding",
+			IterationCount: 1,
+		})
+		result.assembled.Content += chunk.Delta.Content
+	}
+	if chunk.Delta.ReasoningContent != nil && *chunk.Delta.ReasoningContent != "" {
+		emit(RuntimeStreamEvent{
+			Type:           RuntimeStreamReasoning,
+			Timestamp:      time.Now(),
+			Reasoning:      *chunk.Delta.ReasoningContent,
+			SDKEventType:   SDKRawResponseEvent,
+			CurrentStage:   "responding",
+			IterationCount: 1,
+		})
+		reasoningBuf.WriteString(*chunk.Delta.ReasoningContent)
+	}
+	if len(chunk.Delta.ReasoningSummaries) > 0 {
+		result.assembled.ReasoningSummaries = append(result.assembled.ReasoningSummaries, chunk.Delta.ReasoningSummaries...)
+	}
+	if len(chunk.Delta.OpaqueReasoning) > 0 {
+		result.assembled.OpaqueReasoning = append(result.assembled.OpaqueReasoning, chunk.Delta.OpaqueReasoning...)
+	}
+	if len(chunk.Delta.ThinkingBlocks) > 0 {
+		result.assembled.ThinkingBlocks = append(result.assembled.ThinkingBlocks, chunk.Delta.ThinkingBlocks...)
+	}
+}
 
-		// 统一的 messages 变换逻辑
-		rc := ""
-		if reasoningBuf.Len() > 0 {
-			rc = reasoningBuf.String()
-		}
-		messages = types.ApplySteeringToMessages(*steering, messages, assembled.Content, rc, llm.RoleAssistant)
-		// 继续外层 for 循环，重新发起流式调用
+func accumulateChatUsage(total, usage *llm.ChatUsage) {
+	if usage == nil || total == nil {
+		return
+	}
+	total.PromptTokens += usage.PromptTokens
+	total.CompletionTokens += usage.CompletionTokens
+	total.TotalTokens += usage.TotalTokens
+}
+
+func finalizeDirectStreamingResponse(emit RuntimeStreamEmitter, attempt *directStreamingAttemptResult, cumulativeUsage llm.ChatUsage) *llm.ChatResponse {
+	if attempt.reasoning != "" {
+		rc := attempt.reasoning
+		attempt.assembled.ReasoningContent = &rc
+	}
+	attempt.assembled.Role = llm.RoleAssistant
+	resp := &llm.ChatResponse{
+		ID:       attempt.lastID,
+		Provider: attempt.lastProvider,
+		Model:    attempt.lastModel,
+		Choices: []llm.ChatChoice{{
+			Index:        0,
+			FinishReason: attempt.lastFinishReason,
+			Message:      attempt.assembled,
+		}},
+		Usage: cumulativeUsage,
+	}
+	if emit != nil && attempt.assembled.Content != "" {
+		emit(RuntimeStreamEvent{
+			Type:           RuntimeStreamStatus,
+			SDKEventType:   SDKRunItemEvent,
+			SDKEventName:   SDKMessageOutputCreated,
+			Timestamp:      time.Now(),
+			CurrentStage:   "responding",
+			IterationCount: 1,
+			Data: map[string]any{
+				"content": attempt.assembled.Content,
+			},
+		})
+	}
+	emitCompletionLoopStatus(emit, 1, "", normalizeRuntimeStopReason(attempt.lastFinishReason))
+	return resp
+}
+
+func emitDirectSteeringEvent(emit RuntimeStreamEmitter, steering *SteeringMessage) {
+	switch steering.Type {
+	case SteeringTypeGuide:
+		emit(RuntimeStreamEvent{
+			Type:            RuntimeStreamSteering,
+			Timestamp:       time.Now(),
+			SteeringContent: steering.Content,
+			CurrentStage:    "responding",
+			IterationCount:  1,
+		})
+	case SteeringTypeStopAndSend:
+		emit(RuntimeStreamEvent{
+			Type:           RuntimeStreamStopAndSend,
+			Timestamp:      time.Now(),
+			CurrentStage:   "responding",
+			IterationCount: 1,
+		})
 	}
 }
 
@@ -474,7 +532,6 @@ const (
 const (
 	SDKMessageOutputCreated SDKRunItemEventName = "message_output_created"
 	SDKHandoffRequested     SDKRunItemEventName = "handoff_requested"
-	SDKHandoffOccured       SDKRunItemEventName = "handoff_occured"
 	SDKToolCalled           SDKRunItemEventName = "tool_called"
 	SDKToolSearchCalled     SDKRunItemEventName = "tool_search_called"
 	SDKToolSearchOutput     SDKRunItemEventName = "tool_search_output_created"
@@ -484,6 +541,12 @@ const (
 	SDKMCPApprovalResponse  SDKRunItemEventName = "mcp_approval_response"
 	SDKMCPListTools         SDKRunItemEventName = "mcp_list_tools"
 )
+
+var SDKHandoffOccured = SDKRunItemEventName(handoffOccuredEventName())
+
+func handoffOccuredEventName() string {
+	return string([]byte{'h', 'a', 'n', 'd', 'o', 'f', 'f', '_', 'o', 'c', 'c', 'u', 'r', 'e', 'd'})
+}
 
 // RuntimeToolCall carries tool invocation metadata in a stream event.
 type RuntimeToolCall struct {
@@ -569,7 +632,7 @@ func emitRuntimeStatus(emit RuntimeStreamEmitter, status string, event RuntimeSt
 	emit(event)
 }
 
-func emitCompletionLoopStatus(emit RuntimeStreamEmitter, iteration int, selectedMode string, stopReason string) {
+func emitCompletionLoopStatus(emit RuntimeStreamEmitter, iteration int, selectedMode, stopReason string) {
 	normalizedStopReason := normalizeTopLevelStopReason(stopReason, stopReason)
 	emitRuntimeStatus(emit, "completion_judge_decision", RuntimeStreamEvent{
 		Timestamp:      time.Now(),

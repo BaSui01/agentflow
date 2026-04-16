@@ -31,8 +31,8 @@ func NewSchemaGenerator() *SchemaGenerator {
 //   - 最大值=100:数字的最大值
 //   - minLength=1:最小字符串长度
 //   - 最大Length=100:最大字符串长度
-//   -图案QQ[a-z]+美元:字符串的正则图案
-//   -格式=电子邮件:字符串格式(电子邮件、uri、uuid、日期-时间等)
+//     -图案QQ[a-z]+美元:字符串的正则图案
+//     -格式=电子邮件:字符串格式(电子邮件、uri、uuid、日期-时间等)
 //   - 分钟项目=1:最小数组项目
 //   - 最大项目=10:最大数组项目
 //   - 说明=: 实地说明
@@ -412,4 +412,3 @@ func (g *SchemaGenerator) GenerateSchemaFromValue(v any) (*JSONSchema, error) {
 	}
 	return g.GenerateSchema(reflect.TypeOf(v))
 }
-

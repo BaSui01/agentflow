@@ -465,4 +465,3 @@ func TestNativeAudioReasoner_Interrupt(t *testing.T) {
 	metrics := reasoner.GetMetrics()
 	assert.Equal(t, int64(2), metrics.Interruptions)
 }
-

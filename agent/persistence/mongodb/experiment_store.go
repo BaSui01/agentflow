@@ -15,9 +15,9 @@ import (
 
 // Collection names for experiment data.
 const (
-	experimentsCollection  = "experiments"
-	assignmentsCollection  = "experiment_assignments"
-	expResultsCollection   = "experiment_results"
+	experimentsCollection = "experiments"
+	assignmentsCollection = "experiment_assignments"
+	expResultsCollection  = "experiment_results"
 )
 
 // experimentDocument wraps evaluation.Experiment for MongoDB storage.
@@ -42,10 +42,10 @@ type assignmentDocument struct {
 
 // resultDocument stores an evaluation result for a variant.
 type resultDocument struct {
-	ExperimentID string              `bson:"experiment_id" json:"experiment_id"`
-	VariantID    string              `bson:"variant_id"    json:"variant_id"`
+	ExperimentID string                 `bson:"experiment_id" json:"experiment_id"`
+	VariantID    string                 `bson:"variant_id"    json:"variant_id"`
 	Result       *evaluation.EvalResult `bson:"result"     json:"result"`
-	RecordedAt   time.Time           `bson:"recorded_at"   json:"recorded_at"`
+	RecordedAt   time.Time              `bson:"recorded_at"   json:"recorded_at"`
 }
 
 // MongoExperimentStore implements evaluation.ExperimentStore backed by MongoDB.
@@ -233,4 +233,3 @@ func docToExperiment(doc *experimentDocument) *evaluation.Experiment {
 
 // Compile-time interface check.
 var _ evaluation.ExperimentStore = (*MongoExperimentStore)(nil)
-

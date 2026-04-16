@@ -10,8 +10,8 @@ import (
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
 
 	"github.com/BaSui01/agentflow/agent/memory"
-	"github.com/BaSui01/agentflow/types"
 	mongoclient "github.com/BaSui01/agentflow/pkg/mongodb"
+	"github.com/BaSui01/agentflow/types"
 )
 
 // Collection name for episodic events.
@@ -157,4 +157,3 @@ func (s *MongoEpisodicStore) findEvents(ctx context.Context, filter bson.D, opts
 
 // Compile-time interface check.
 var _ memory.EpisodicStore = (*MongoEpisodicStore)(nil)
-

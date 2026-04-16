@@ -58,7 +58,7 @@ func TestCapabilityRegistry_RegisterAgent(t *testing.T) {
 		t.Errorf("expected 2 capabilities, got %d", len(retrieved.Capabilities))
 	}
 
-	// 尝试再次注册同一代理( 应失败 )
+	// 再次注册同一代理时应该返回错误。
 	err = registry.RegisterAgent(ctx, info)
 	if err == nil {
 		t.Error("expected error when registering duplicate agent")
@@ -186,23 +186,23 @@ func TestCapabilityRegistry_RecordExecution(t *testing.T) {
 	}
 
 	// 验证数据
-	cap, err := registry.GetCapability(ctx, "test-agent", "code_review")
+	capability, err := registry.GetCapability(ctx, "test-agent", "code_review")
 	if err != nil {
 		t.Fatalf("failed to get capability: %v", err)
 	}
 
-	if cap.SuccessCount != 5 {
-		t.Errorf("expected 5 successes, got %d", cap.SuccessCount)
+	if capability.SuccessCount != 5 {
+		t.Errorf("expected 5 successes, got %d", capability.SuccessCount)
 	}
 
-	if cap.FailureCount != 1 {
-		t.Errorf("expected 1 failure, got %d", cap.FailureCount)
+	if capability.FailureCount != 1 {
+		t.Errorf("expected 1 failure, got %d", capability.FailureCount)
 	}
 
 	// 应根据成功率更新分数(5/6=83.33%)
 	expectedScore := (5.0 / 6.0) * 100
-	if cap.Score < expectedScore-1 || cap.Score > expectedScore+1 {
-		t.Errorf("expected score around %.2f, got %.2f", expectedScore, cap.Score)
+	if capability.Score < expectedScore-1 || capability.Score > expectedScore+1 {
+		t.Errorf("expected score around %.2f, got %.2f", expectedScore, capability.Score)
 	}
 }
 
@@ -596,4 +596,3 @@ func TestCapabilityRegistry_EventSubscription(t *testing.T) {
 		t.Error("timeout waiting for event")
 	}
 }
-

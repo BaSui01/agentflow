@@ -93,4 +93,3 @@ func TestRetrievalStep_Execute_RerankError(t *testing.T) {
 	_, err := step.Execute(context.Background(), RetrievalStepRequest{Query: "hello"})
 	require.Error(t, err)
 }
-

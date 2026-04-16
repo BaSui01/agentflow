@@ -17,10 +17,10 @@ import (
 
 func TestParseMessageID(t *testing.T) {
 	tests := []struct {
-		name     string
-		input    any
-		wantID   int64
-		wantOK   bool
+		name   string
+		input  any
+		wantID int64
+		wantOK bool
 	}{
 		{"float64", float64(42), 42, true},
 		{"int64", int64(7), 7, true},
@@ -392,4 +392,3 @@ func TestIdentifierPrefixAtPosition(t *testing.T) {
 	_, err = identifierPrefixAtPosition(text, Position{Line: 0, Character: -1})
 	assert.Error(t, err)
 }
-

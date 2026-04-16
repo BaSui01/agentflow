@@ -119,8 +119,8 @@ func (m *deliberationModeStrategy) Execute(ctx context.Context, agents []agent.A
 				Content: prompt,
 				Context: map[string]any{
 					"deliberation_round": round,
-					"max_rounds":        maxRounds,
-					"agent_id":          id,
+					"max_rounds":         maxRounds,
+					"agent_id":           id,
 				},
 			}
 
@@ -207,9 +207,9 @@ func (m *deliberationModeStrategy) Execute(ctx context.Context, agents []agent.A
 	finalOutput.TokensUsed += totalTokens
 	finalOutput.Cost += totalCost
 	finalOutput.Metadata = collaboration.MergeMetadata(finalOutput.Metadata, map[string]any{
-		"mode":               ModeDeliberation,
-		"participating_ids":   orderedIDs,
-		"synthesizer_id":     synthesizerID,
+		"mode":              ModeDeliberation,
+		"participating_ids": orderedIDs,
+		"synthesizer_id":    synthesizerID,
 	})
 
 	return finalOutput, nil

@@ -35,7 +35,7 @@ func TestClosedLoopPlanDoc_RetainsRegressionGuardItems(t *testing.T) {
 	requireAnyTopic(t, doc, "non-empty output is not enough", "non-empty output", "非空输出", "不能直接 solved")
 }
 
-func requireAnyTopic(t *testing.T, doc string, topic string, needles ...string) {
+func requireAnyTopic(t *testing.T, doc, topic string, needles ...string) {
 	t.Helper()
 
 	docLower := strings.ToLower(doc)

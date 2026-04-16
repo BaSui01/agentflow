@@ -458,4 +458,3 @@ func EnsureImages(ctx context.Context, languages []Language, logger *zap.Logger)
 
 	return nil
 }
-

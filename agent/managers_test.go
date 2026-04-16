@@ -237,5 +237,3 @@ func TestMemoryCoordinator_SaveCacheEviction(t *testing.T) {
 		t.Errorf("expected cache size %d, got %d", defaultMaxRecentMemory, len(recent))
 	}
 }
-
-

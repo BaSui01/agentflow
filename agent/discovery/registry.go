@@ -738,36 +738,36 @@ func (r *CapabilityRegistry) emitEvent(event *DiscoveryEvent) {
 			}()
 
 			// 添加超时控制，防止 handler 阻塞导致 goroutine 堆积
-		done := make(chan struct{})
-		go func() {
-			defer close(done)
-			defer func() {
-				if rec := recover(); rec != nil {
-					err := recoveredPanicToError(rec)
-					r.logger.Error("inner event handler panicked",
-						zap.Any("recover", rec),
-						zap.Error(err),
-						zap.String("event_type", string(event.Type)),
-						zap.Stack("stack"),
-					)
-					if r.panicErrChan != nil {
-						select {
-						case r.panicErrChan <- err:
-						default:
+			done := make(chan struct{})
+			go func() {
+				defer close(done)
+				defer func() {
+					if rec := recover(); rec != nil {
+						err := recoveredPanicToError(rec)
+						r.logger.Error("inner event handler panicked",
+							zap.Any("recover", rec),
+							zap.Error(err),
+							zap.String("event_type", string(event.Type)),
+							zap.Stack("stack"),
+						)
+						if r.panicErrChan != nil {
+							select {
+							case r.panicErrChan <- err:
+							default:
+							}
 						}
 					}
-				}
+				}()
+				h(event)
 			}()
-			h(event)
-		}()
-		// P-007: 使用 NewTimer 替代 time.After，避免循环中持续分配 timer
-		timer := time.NewTimer(5 * time.Second)
-		defer timer.Stop()
-		select {
-		case <-done:
-		case <-timer.C:
-			r.logger.Warn("event handler timeout")
-		}
+			// P-007: 使用 NewTimer 替代 time.After，避免循环中持续分配 timer
+			timer := time.NewTimer(5 * time.Second)
+			defer timer.Stop()
+			select {
+			case <-done:
+			case <-timer.C:
+				r.logger.Warn("event handler timeout")
+			}
 		}()
 	}
 }

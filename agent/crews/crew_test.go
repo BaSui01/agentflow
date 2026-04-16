@@ -298,11 +298,11 @@ func TestCrew_FindBestMember(t *testing.T) {
 	crew := newTestCrew(t, ProcessSequential, agent1, agent2)
 
 	tests := []struct {
-		name     string
-		task     *CrewTask
-		setup    func()
-		wantID   string
-		wantNil  bool
+		name    string
+		task    *CrewTask
+		setup   func()
+		wantID  string
+		wantNil bool
 	}{
 		{
 			name:   "assigned to specific agent",
@@ -368,4 +368,3 @@ func TestCrew_AddTask_AutoID(t *testing.T) {
 	assert.Equal(t, "task_1", crew.Tasks[0].ID)
 	assert.Equal(t, "task_2", crew.Tasks[1].ID)
 }
-

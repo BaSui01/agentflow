@@ -19,9 +19,9 @@ const registryCollection = "agent_registry"
 
 // registryDocument wraps discovery.AgentInfo with a MongoDB _id field.
 type registryDocument struct {
-	ID        string              `bson:"_id"`
+	ID        string               `bson:"_id"`
 	AgentInfo *discovery.AgentInfo `bson:"agent_info"`
-	UpdatedAt time.Time           `bson:"updated_at"`
+	UpdatedAt time.Time            `bson:"updated_at"`
 }
 
 // MongoRegistryStore implements discovery.RegistryStore backed by MongoDB.
@@ -103,4 +103,3 @@ func (s *MongoRegistryStore) Delete(ctx context.Context, id string) error {
 
 // Compile-time interface check.
 var _ discovery.RegistryStore = (*MongoRegistryStore)(nil)
-

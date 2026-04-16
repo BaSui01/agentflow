@@ -24,14 +24,16 @@ type mockAgent struct {
 	err    error
 }
 
-func (m *mockAgent) ID() string                                              { return m.id }
-func (m *mockAgent) Name() string                                            { return m.name }
-func (m *mockAgent) Type() agent.AgentType                                   { return agent.TypeGeneric }
-func (m *mockAgent) State() agent.State                                      { return agent.StateReady }
-func (m *mockAgent) Init(context.Context) error                              { return nil }
-func (m *mockAgent) Teardown(context.Context) error                          { return nil }
-func (m *mockAgent) Plan(context.Context, *agent.Input) (*agent.PlanResult, error) { return &agent.PlanResult{}, nil }
-func (m *mockAgent) Observe(context.Context, *agent.Feedback) error          { return nil }
+func (m *mockAgent) ID() string                     { return m.id }
+func (m *mockAgent) Name() string                   { return m.name }
+func (m *mockAgent) Type() agent.AgentType          { return agent.TypeGeneric }
+func (m *mockAgent) State() agent.State             { return agent.StateReady }
+func (m *mockAgent) Init(context.Context) error     { return nil }
+func (m *mockAgent) Teardown(context.Context) error { return nil }
+func (m *mockAgent) Plan(context.Context, *agent.Input) (*agent.PlanResult, error) {
+	return &agent.PlanResult{}, nil
+}
+func (m *mockAgent) Observe(context.Context, *agent.Feedback) error { return nil }
 func (m *mockAgent) Execute(_ context.Context, input *agent.Input) (*agent.Output, error) {
 	if m.err != nil {
 		return nil, m.err

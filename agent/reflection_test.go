@@ -1,10 +1,11 @@
 package agent
 
 import (
-	"github.com/BaSui01/agentflow/types"
 	"context"
 	"sync/atomic"
 	"testing"
+
+	"github.com/BaSui01/agentflow/types"
 
 	"github.com/BaSui01/agentflow/llm"
 	"github.com/stretchr/testify/assert"
@@ -289,5 +290,3 @@ func TestReflectionExecutor_extractScore(t *testing.T) {
 		})
 	}
 }
-
-

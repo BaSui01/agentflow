@@ -102,6 +102,7 @@ func (s *PersistentCheckpointStore) LoadCheckpoint(ctx context.Context, execID s
 	}
 	return &exec, nil
 }
+
 // ListCheckpoints retrieves all TaskRecords and unmarshals each to an Execution.
 func (s *PersistentCheckpointStore) ListCheckpoints(ctx context.Context) ([]*Execution, error) {
 	records, err := s.store.ListTasks(ctx)
@@ -129,4 +130,3 @@ func (s *PersistentCheckpointStore) DeleteCheckpoint(ctx context.Context, execID
 	}
 	return nil
 }
-

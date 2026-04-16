@@ -51,11 +51,11 @@ func (m *mockAgent) WithError(err error) *mockAgent {
 	return m
 }
 
-func (m *mockAgent) ID() string              { return m.id }
-func (m *mockAgent) Name() string            { return m.name }
-func (m *mockAgent) Type() agent.AgentType   { return m.agentType }
-func (m *mockAgent) State() agent.State      { return m.state }
-func (m *mockAgent) Init(context.Context) error    { return nil }
+func (m *mockAgent) ID() string                     { return m.id }
+func (m *mockAgent) Name() string                   { return m.name }
+func (m *mockAgent) Type() agent.AgentType          { return m.agentType }
+func (m *mockAgent) State() agent.State             { return m.state }
+func (m *mockAgent) Init(context.Context) error     { return nil }
 func (m *mockAgent) Teardown(context.Context) error { return nil }
 func (m *mockAgent) Plan(context.Context, *agent.Input) (*agent.PlanResult, error) {
 	return &agent.PlanResult{}, nil
@@ -446,4 +446,3 @@ func TestMessageHub_FromPersistMessage(t *testing.T) {
 	assert.Equal(t, "reply", msg.Content)
 	assert.True(t, msg.Timestamp.Equal(now))
 }
-

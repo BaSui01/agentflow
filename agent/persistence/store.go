@@ -166,4 +166,3 @@ type Store interface {
 	// 平平检查,如果商店是健康的
 	Ping(ctx context.Context) error
 }
-

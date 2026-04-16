@@ -65,4 +65,3 @@ func TestGuardrailsCoordinator_GetInputValidatorChain_WithConfig(t *testing.T) {
 	gc := NewGuardrailsCoordinator(cfg, zap.NewNop())
 	assert.NotNil(t, gc.GetInputValidatorChain())
 }
-

@@ -210,9 +210,8 @@ func TestProperty_CheckpointRecovery_StepSkipping(t *testing.T) {
 	rapid.Check(t, func(rt *rapid.T) {
 		// 生成测试参数
 		totalSteps := rapid.IntRange(2, 20).Draw(rt, "totalSteps")
-		// 当前步骤必须在0到总步骤1之间(至少剩余一步骤)
+		// 当前步骤必须落在有效范围内，并至少保留一个后续步骤。
 		currentStep := rapid.IntRange(0, totalSteps-1).Draw(rt, "currentStep")
-
 		logger, _ := zap.NewDevelopment()
 
 		// 创建执行跟踪器
@@ -362,7 +361,6 @@ func TestProperty_CheckpointRecovery_NoStepsSkippedWhenStartingFresh(t *testing.
 		// 生成测试参数
 		totalSteps := rapid.IntRange(1, 20).Draw(rt, "totalSteps")
 		currentStep := 0 // Starting fresh, no steps completed
-
 		logger, _ := zap.NewDevelopment()
 
 		// 创建执行跟踪器
@@ -399,7 +397,6 @@ func TestProperty_CheckpointRecovery_LastStepOnly(t *testing.T) {
 		// 生成测试参数
 		totalSteps := rapid.IntRange(2, 20).Draw(rt, "totalSteps")
 		currentStep := totalSteps - 1 // Only last step remaining
-
 		logger, _ := zap.NewDevelopment()
 
 		// 创建执行跟踪器
@@ -443,8 +440,6 @@ func TestProperty_CheckpointRecovery_ContextCancellation(t *testing.T) {
 		currentStep := rapid.IntRange(0, totalSteps-3).Draw(rt, "currentStep")
 		cancelAfterSteps := rapid.IntRange(1, totalSteps-currentStep-1).Draw(rt, "cancelAfterSteps")
 
-		logger, _ := zap.NewDevelopment()
-
 		// 创建执行跟踪器
 		execID := genValidExecutionID().Draw(rt, "execID")
 		execution := newStepTrackingExecution(execID, currentStep, totalSteps)
@@ -454,10 +449,7 @@ func TestProperty_CheckpointRecovery_ContextCancellation(t *testing.T) {
 
 		// 创建自定义执行器, 在特定步骤后取消
 		stepsExecuted := int32(0)
-		customExecutor := &stepExecutor{
-			execution: execution,
-			logger:    logger,
-		}
+		customExecutor := &stepExecutor{}
 
 		// 运行行刑程序
 		done := make(chan error, 1)
@@ -505,4 +497,3 @@ func TestProperty_CheckpointRecovery_ContextCancellation(t *testing.T) {
 		}
 	})
 }
-

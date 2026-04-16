@@ -11,10 +11,10 @@ import (
 // 用于生成计划的测试结构
 
 type SimpleStruct struct {
-	Name    string `json:"name"`
-	Age     int    `json:"age"`
-	Active  bool   `json:"active"`
-	Score   float64
+	Name   string `json:"name"`
+	Age    int    `json:"age"`
+	Active bool   `json:"active"`
+	Score  float64
 	//lint:ignore U1000 故意用于测试 schema 跳过未导出字段
 	private string
 }
@@ -433,4 +433,3 @@ func TestSchemaGenerator_DefaultValues(t *testing.T) {
 	assert.Equal(t, 3.14, schema.Properties["float_val"].Default)
 	assert.Equal(t, true, schema.Properties["bool_val"].Default)
 }
-

@@ -52,8 +52,14 @@ func findAvailablePort() (int, error) {
 	if err != nil {
 		return 0, fmt.Errorf("find available port: %w", err)
 	}
-	port := l.Addr().(*net.TCPAddr).Port
-	_ = l.Close()
+	defer func() {
+		_ = l.Close()
+	}()
+	addr, ok := l.Addr().(*net.TCPAddr)
+	if !ok {
+		return 0, fmt.Errorf("listen addr is not TCP")
+	}
+	port := addr.Port
 	return port, nil
 }
 
@@ -114,7 +120,7 @@ func (p *LocalProvider) Deploy(ctx context.Context, d *Deployment) error {
 	return nil
 }
 
-func resolveLocalCommand(image string) (string, []string) {
+func resolveLocalCommand(image string) (command string, args []string) {
 	if runtime.GOOS != "windows" {
 		return image, nil
 	}
@@ -160,15 +166,21 @@ func (p *LocalProvider) Delete(_ context.Context, deploymentID string) error {
 	// Send SIGTERM first.
 	if lp.cmd.Process != nil {
 		if runtime.GOOS == "windows" {
-			_ = lp.cmd.Process.Kill()
+			if err := lp.cmd.Process.Kill(); err != nil {
+				p.logger.Debug("failed to kill local process on windows", zap.Error(err))
+			}
 		} else {
-			_ = lp.cmd.Process.Signal(syscall.SIGTERM)
+			if err := lp.cmd.Process.Signal(syscall.SIGTERM); err != nil {
+				p.logger.Debug("failed to signal local process", zap.Error(err))
+			}
 		}
 
 		// Wait up to 5 seconds for graceful shutdown.
 		done := make(chan struct{})
 		go func() {
-			_ = lp.cmd.Wait()
+			if err := lp.cmd.Wait(); err != nil {
+				p.logger.Debug("local process wait returned error", zap.Error(err))
+			}
 			close(done)
 		}()
 
@@ -177,7 +189,9 @@ func (p *LocalProvider) Delete(_ context.Context, deploymentID string) error {
 			// Process exited gracefully.
 		case <-time.After(5 * time.Second):
 			// Force kill.
-			_ = lp.cmd.Process.Kill()
+			if err := lp.cmd.Process.Kill(); err != nil {
+				p.logger.Debug("failed to force kill local process", zap.Error(err))
+			}
 			<-done
 		}
 	}
@@ -248,7 +262,7 @@ func splitLines(s string) []string {
 	for i := 0; i < len(s); i++ {
 		if s[i] == '\n' {
 			line := s[start:i]
-			if len(line) > 0 && line[len(line)-1] == '\r' {
+			if line != "" && line[len(line)-1] == '\r' {
 				line = line[:len(line)-1]
 			}
 			if line != "" {
@@ -262,4 +276,3 @@ func splitLines(s string) []string {
 	}
 	return result
 }
-

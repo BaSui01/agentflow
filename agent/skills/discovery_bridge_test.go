@@ -148,4 +148,3 @@ func TestBuildSkillMetadata(t *testing.T) {
 	assert.Equal(t, "test-author", meta["author"])
 	assert.NotEmpty(t, meta["synced_at"])
 }
-

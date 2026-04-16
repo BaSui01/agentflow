@@ -222,4 +222,3 @@ func TestMetricInterface(t *testing.T) {
 		assert.Equal(t, 1.0, value)
 	})
 }
-

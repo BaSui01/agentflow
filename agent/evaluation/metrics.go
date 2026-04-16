@@ -175,4 +175,3 @@ func (r *MetricRegistry) ComputeAll(ctx context.Context, input *EvalInput, outpu
 
 	return result, nil
 }
-

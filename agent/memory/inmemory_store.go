@@ -229,4 +229,3 @@ func matchWildcard(pattern, s string) bool {
 	}
 	return true
 }
-

@@ -124,4 +124,3 @@ func coerceVector(raw any) ([]float64, bool) {
 		return nil, false
 	}
 }
-

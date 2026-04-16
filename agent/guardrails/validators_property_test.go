@@ -288,4 +288,3 @@ func TestProperty_KeywordValidator_AddRemoveKeyword(t *testing.T) {
 		assert.True(t, result.Valid, "Removed keyword should not be detected")
 	})
 }
-

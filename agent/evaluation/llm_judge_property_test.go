@@ -1,11 +1,12 @@
 package evaluation
 
 import (
-	"github.com/BaSui01/agentflow/types"
 	"context"
 	"encoding/json"
 	"fmt"
 	"testing"
+
+	"github.com/BaSui01/agentflow/types"
 
 	"github.com/BaSui01/agentflow/llm"
 	"github.com/stretchr/testify/assert"
@@ -446,5 +447,3 @@ func (m *mockJudgeProvider) ListModels(ctx context.Context) ([]llm.Model, error)
 }
 
 func (m *mockJudgeProvider) Endpoints() llm.ProviderEndpoints { return llm.ProviderEndpoints{} }
-
-

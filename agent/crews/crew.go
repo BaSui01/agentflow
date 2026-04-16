@@ -188,9 +188,7 @@ func (c *Crew) Execute(ctx context.Context) (*CrewResult, error) {
 			return result, err
 		}
 	case ProcessConsensus:
-		if err := c.executeConsensus(ctx, result); err != nil {
-			return result, err
-		}
+		c.executeConsensus(ctx, result)
 	}
 
 	result.EndTime = time.Now()
@@ -219,7 +217,7 @@ func (c *Crew) executeSequential(ctx context.Context, result *CrewResult) error 
 }
 
 func (c *Crew) executeHierarchical(ctx context.Context, result *CrewResult) error {
-	// 查找管理器( 最优先的成员)
+	// 选择允许委派的成员作为默认经理。
 	var manager *CrewMember
 	for _, m := range c.Members {
 		if manager == nil || m.Role.AllowDelegation {
@@ -272,55 +270,62 @@ func (c *Crew) executeHierarchical(ctx context.Context, result *CrewResult) erro
 	return nil
 }
 
-func (c *Crew) executeConsensus(ctx context.Context, result *CrewResult) error {
+func (c *Crew) executeConsensus(ctx context.Context, result *CrewResult) {
 	for _, task := range c.Tasks {
-		// 所有成员投票表决谁应承担这项任务
-		votes := make(map[string]int)
-		for _, member := range c.Members {
-			proposal := Proposal{
-				Type:    ProposalTypeRequest,
-				Task:    task,
-				Message: "Who should handle this task?",
-			}
-			// BUG-5 FIX: 正确处理 negotiate 错误，记录日志并跳过该成员的投票
-			negResult, negErr := member.Agent.Negotiate(ctx, proposal)
-			if negErr != nil {
-				c.logger.Warn("consensus negotiation failed",
-					zap.String("member", member.ID),
-					zap.String("task", task.ID),
-					zap.Error(negErr))
-				continue
-			}
-			if negResult != nil && negResult.Response != "" {
-				votes[negResult.Response]++
-			}
-		}
-
-		// 找到赢家
-		var winner *CrewMember
-		maxVotes := 0
-		for memberID, count := range votes {
-			if count > maxVotes {
-				maxVotes = count
-				winner = c.Members[memberID]
-			}
-		}
-
-		if winner == nil {
-			winner = c.findBestMember(task)
-		}
-
+		votes := c.collectConsensusVotes(ctx, task)
+		winner := c.pickConsensusWinner(task, votes)
 		if winner != nil {
-			winner.Status = MemberStatusWorking
-			taskResult, err := winner.Agent.Execute(ctx, *task)
-			winner.Status = MemberStatusIdle
-			if err != nil {
-				taskResult = &TaskResult{TaskID: task.ID, Error: err.Error()}
-			}
-			result.TaskResults[task.ID] = taskResult
+			c.executeCrewTask(ctx, winner, task, result)
 		}
 	}
-	return nil
+}
+
+func (c *Crew) collectConsensusVotes(ctx context.Context, task *CrewTask) map[string]int {
+	votes := make(map[string]int)
+	for _, member := range c.Members {
+		proposal := Proposal{
+			Type:    ProposalTypeRequest,
+			Task:    task,
+			Message: "Who should handle this task?",
+		}
+		negResult, negErr := member.Agent.Negotiate(ctx, proposal)
+		if negErr != nil {
+			c.logger.Warn("consensus negotiation failed",
+				zap.String("member", member.ID),
+				zap.String("task", task.ID),
+				zap.Error(negErr))
+			continue
+		}
+		if negResult != nil && negResult.Response != "" {
+			votes[negResult.Response]++
+		}
+	}
+	return votes
+}
+
+func (c *Crew) pickConsensusWinner(task *CrewTask, votes map[string]int) *CrewMember {
+	var winner *CrewMember
+	maxVotes := 0
+	for memberID, count := range votes {
+		if count > maxVotes {
+			maxVotes = count
+			winner = c.Members[memberID]
+		}
+	}
+	if winner == nil {
+		winner = c.findBestMember(task)
+	}
+	return winner
+}
+
+func (c *Crew) executeCrewTask(ctx context.Context, winner *CrewMember, task *CrewTask, result *CrewResult) {
+	winner.Status = MemberStatusWorking
+	taskResult, err := winner.Agent.Execute(ctx, *task)
+	winner.Status = MemberStatusIdle
+	if err != nil {
+		taskResult = &TaskResult{TaskID: task.ID, Error: err.Error()}
+	}
+	result.TaskResults[task.ID] = taskResult
 }
 
 func (c *Crew) findBestMember(task *CrewTask) *CrewMember {
@@ -351,4 +356,3 @@ type CrewResult struct {
 func generateCrewID() string {
 	return fmt.Sprintf("crew_%d", time.Now().UnixNano())
 }
-

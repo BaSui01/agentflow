@@ -302,4 +302,3 @@ func formatPIIWarningMessage(piiType PIIType, count int) string {
 	}
 	return "检测到 " + typeName + " 信息"
 }
-

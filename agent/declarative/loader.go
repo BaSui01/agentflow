@@ -75,4 +75,3 @@ func detectFormat(path string) string {
 		return ""
 	}
 }
-

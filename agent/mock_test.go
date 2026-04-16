@@ -2,8 +2,9 @@ package agent
 
 import (
 	"context"
-	"github.com/BaSui01/agentflow/types"
 	"sync"
+
+	"github.com/BaSui01/agentflow/types"
 
 	"github.com/BaSui01/agentflow/llm"
 	llmtools "github.com/BaSui01/agentflow/llm/capabilities/tools"

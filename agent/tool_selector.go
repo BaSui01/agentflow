@@ -1,13 +1,14 @@
 package agent
 
 import (
-	"github.com/BaSui01/agentflow/types"
 	"context"
 	"fmt"
 	"math"
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/BaSui01/agentflow/types"
 
 	"github.com/BaSui01/agentflow/llm"
 	"go.uber.org/zap"
@@ -16,11 +17,11 @@ import (
 // ToolScore 工具评分
 type ToolScore struct {
 	Tool               types.ToolSchema `json:"tool"`
-	SemanticSimilarity float64        `json:"semantic_similarity"` // Semantic similarity (0-1)
-	EstimatedCost      float64        `json:"estimated_cost"`      // Estimated cost
-	AvgLatency         time.Duration  `json:"avg_latency"`         // Average latency
-	ReliabilityScore   float64        `json:"reliability_score"`   // Reliability (0-1)
-	TotalScore         float64        `json:"total_score"`         // Total score (0-1)
+	SemanticSimilarity float64          `json:"semantic_similarity"` // Semantic similarity (0-1)
+	EstimatedCost      float64          `json:"estimated_cost"`      // Estimated cost
+	AvgLatency         time.Duration    `json:"avg_latency"`         // Average latency
+	ReliabilityScore   float64          `json:"reliability_score"`   // Reliability (0-1)
+	TotalScore         float64          `json:"total_score"`         // Total score (0-1)
 }
 
 // ToolSelectionConfig 工具选择配置
@@ -436,5 +437,3 @@ func parseToolIndices(text string) []int {
 
 	return indices
 }
-
-

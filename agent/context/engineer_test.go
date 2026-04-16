@@ -121,4 +121,3 @@ func TestDefaultAgentContextConfig(t *testing.T) {
 		t.Fatalf("unexpected config: %+v", cfg)
 	}
 }
-

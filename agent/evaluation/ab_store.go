@@ -187,4 +187,3 @@ func (s *MemoryExperimentStore) GetResultCount(experimentID string) map[string]i
 
 	return counts
 }
-

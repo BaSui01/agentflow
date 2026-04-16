@@ -319,4 +319,3 @@ func TestProperty_ContentFilterValidator_Integration(t *testing.T) {
 		assert.NotContains(t, filtered, blockedWord)
 	})
 }
-

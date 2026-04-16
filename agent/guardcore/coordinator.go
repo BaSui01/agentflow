@@ -83,8 +83,8 @@ func (gc *Coordinator) ValidateOutput(ctx context.Context, output string) (strin
 	return gc.outputValidator.ValidateAndFilter(ctx, output)
 }
 
-func (gc *Coordinator) Enabled() bool            { return gc.enabled }
-func (gc *Coordinator) SetEnabled(enabled bool)  { gc.enabled = enabled }
+func (gc *Coordinator) Enabled() bool                           { return gc.enabled }
+func (gc *Coordinator) SetEnabled(enabled bool)                 { gc.enabled = enabled }
 func (gc *Coordinator) GetConfig() *guardrails.GuardrailsConfig { return gc.config }
 
 func (gc *Coordinator) AddInputValidator(v guardrails.Validator) {
@@ -121,8 +121,10 @@ func (gc *Coordinator) BuildValidationFeedbackMessage(result *guardrails.Validat
 	return sb.String()
 }
 
-func (gc *Coordinator) GetInputValidatorChain() *guardrails.ValidatorChain { return gc.inputValidatorChain }
-func (gc *Coordinator) GetOutputValidator() *guardrails.OutputValidator     { return gc.outputValidator }
+func (gc *Coordinator) GetInputValidatorChain() *guardrails.ValidatorChain {
+	return gc.inputValidatorChain
+}
+func (gc *Coordinator) GetOutputValidator() *guardrails.OutputValidator { return gc.outputValidator }
 
 func (gc *Coordinator) InputValidatorCount() int {
 	if gc.inputValidatorChain == nil {

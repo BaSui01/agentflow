@@ -78,4 +78,3 @@ func mapLanguage(lang string) (Language, bool) {
 		return "", false
 	}
 }
-

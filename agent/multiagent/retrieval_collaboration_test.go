@@ -91,4 +91,3 @@ func TestRetrievalSupervisor_ErrorPath(t *testing.T) {
 		t.Fatal("expected empty workers error")
 	}
 }
-

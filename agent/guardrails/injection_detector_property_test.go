@@ -238,4 +238,3 @@ func TestProperty_InjectionDetector_DetectReturnsMatchInfo(t *testing.T) {
 		}
 	})
 }
-

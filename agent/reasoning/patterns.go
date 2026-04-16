@@ -1,13 +1,14 @@
 package reasoning
 
 import (
-	"github.com/BaSui01/agentflow/types"
 	"context"
 	"encoding/json"
 	"fmt"
 	"sort"
 	"sync"
 	"time"
+
+	"github.com/BaSui01/agentflow/types"
 
 	"github.com/BaSui01/agentflow/llm"
 	"github.com/BaSui01/agentflow/llm/capabilities/tools"
@@ -394,5 +395,3 @@ func (t *TreeOfThought) selectTopBranches(thoughts []ReasoningStep, n int) []Rea
 	}
 	return filtered
 }
-
-

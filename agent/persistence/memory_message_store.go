@@ -455,4 +455,3 @@ func (s *MemoryMessageStore) cleanupLoop(interval time.Duration) {
 
 // 确保内存MessageStore执行信件Store
 var _ MessageStore = (*MemoryMessageStore)(nil)
-

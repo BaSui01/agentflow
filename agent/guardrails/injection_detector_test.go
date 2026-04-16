@@ -471,4 +471,3 @@ func TestCompareSeverity(t *testing.T) {
 		}
 	}
 }
-

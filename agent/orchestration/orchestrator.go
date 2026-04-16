@@ -195,4 +195,3 @@ func hasDistinctRoles(task *OrchestrationTask) bool {
 	_, ok := task.Metadata["roles"]
 	return ok
 }
-

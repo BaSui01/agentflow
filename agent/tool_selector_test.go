@@ -1,10 +1,11 @@
 package agent
 
 import (
-	"github.com/BaSui01/agentflow/types"
 	"context"
 	"testing"
 	"time"
+
+	"github.com/BaSui01/agentflow/types"
 
 	"github.com/BaSui01/agentflow/llm"
 	"github.com/stretchr/testify/assert"
@@ -399,5 +400,3 @@ func BenchmarkDynamicToolSelector_SelectTools(b *testing.B) {
 		_, _ = selector.SelectTools(ctx, "test task", tools)
 	}
 }
-
-

@@ -637,4 +637,3 @@ func scoreMetadataMatch(meta *SkillMetadata, query string, tokens []string) floa
 	}
 	return score
 }
-

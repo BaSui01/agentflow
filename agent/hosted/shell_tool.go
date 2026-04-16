@@ -14,9 +14,9 @@ import (
 )
 
 const (
-	defaultShellTimeout     = 30 * time.Second
-	defaultMaxOutputSize    = 1 << 20
-	maxShellTimeout = 300 * time.Second
+	defaultShellTimeout  = 30 * time.Second
+	defaultMaxOutputSize = 1 << 20
+	maxShellTimeout      = 300 * time.Second
 )
 
 var defaultBlockedCmds = []string{
@@ -131,9 +131,9 @@ func (t *ShellTool) Schema() types.ToolSchema {
 }
 
 type runCommandArgs struct {
-	Command           string `json:"command"`
-	WorkingDirectory  string `json:"working_directory,omitempty"`
-	TimeoutSeconds    int    `json:"timeout_seconds,omitempty"`
+	Command          string `json:"command"`
+	WorkingDirectory string `json:"working_directory,omitempty"`
+	TimeoutSeconds   int    `json:"timeout_seconds,omitempty"`
 }
 
 type runCommandResult struct {

@@ -20,11 +20,11 @@ type mockTeamAgent struct {
 	err    error
 }
 
-func (m *mockTeamAgent) ID() string   { return m.id }
-func (m *mockTeamAgent) Name() string { return m.name }
-func (m *mockTeamAgent) Type() agent.AgentType { return agent.TypeGeneric }
-func (m *mockTeamAgent) State() agent.State { return agent.StateReady }
-func (m *mockTeamAgent) Init(context.Context) error    { return nil }
+func (m *mockTeamAgent) ID() string                     { return m.id }
+func (m *mockTeamAgent) Name() string                   { return m.name }
+func (m *mockTeamAgent) Type() agent.AgentType          { return agent.TypeGeneric }
+func (m *mockTeamAgent) State() agent.State             { return agent.StateReady }
+func (m *mockTeamAgent) Init(context.Context) error     { return nil }
 func (m *mockTeamAgent) Teardown(context.Context) error { return nil }
 func (m *mockTeamAgent) Plan(context.Context, *agent.Input) (*agent.PlanResult, error) {
 	return &agent.PlanResult{}, nil

@@ -79,18 +79,18 @@ func DefaultStreamConfig() StreamConfig {
 
 // 双向结构管理实时双向通信.
 type BidirectionalStream struct {
-	ID       string
-	Config   StreamConfig
-	State    StreamState
-	inbound  chan StreamChunk
-	outbound chan StreamChunk
-	handler  StreamHandler
-	conn     StreamConnection // 新增：底层连接
-	logger   *zap.Logger
-	mu       sync.RWMutex
-	done     chan struct{}
+	ID        string
+	Config    StreamConfig
+	State     StreamState
+	inbound   chan StreamChunk
+	outbound  chan StreamChunk
+	handler   StreamHandler
+	conn      StreamConnection // 新增：底层连接
+	logger    *zap.Logger
+	mu        sync.RWMutex
+	done      chan struct{}
 	closeOnce sync.Once
-	sequence int64
+	sequence  int64
 	// 新增字段
 	connFactory    func() (StreamConnection, error) // 连接工厂，用于重连
 	reconnectCount int
@@ -766,4 +766,3 @@ func (w *StreamWriter) Write(p []byte) (n int, err error) {
 	}
 	return len(p), nil
 }
-

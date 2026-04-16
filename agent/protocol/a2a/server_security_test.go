@@ -62,4 +62,3 @@ func TestHTTPServer_HandleSyncMessage_EmptyTargetFallsBackToDefault(t *testing.T
 
 	assert.Equal(t, http.StatusOK, w.Code)
 }
-

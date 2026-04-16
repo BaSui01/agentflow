@@ -375,6 +375,14 @@ func (s *LoopState) restoreFromContext(values map[string]any) {
 	if s == nil || len(values) == 0 {
 		return
 	}
+	s.restoreCoreContext(values)
+	s.restorePlanContext(values)
+	s.restoreExecutionContext(values)
+	s.restoreValidationContext(values)
+	s.normalizeCheckpointFields()
+}
+
+func (s *LoopState) restoreCoreContext(values map[string]any) {
 	if value, ok := loopContextString(values, "loop_state_id"); ok {
 		s.LoopStateID = value
 	}
@@ -387,6 +395,9 @@ func (s *LoopState) restoreFromContext(values map[string]any) {
 	if value, ok := loopContextString(values, "goal"); ok {
 		s.Goal = value
 	}
+}
+
+func (s *LoopState) restorePlanContext(values map[string]any) {
 	if plan, ok := loopContextStrings(values, "loop_plan", "plan"); ok {
 		s.Plan = plan
 	}
@@ -408,6 +419,9 @@ func (s *LoopState) restoreFromContext(values map[string]any) {
 	if value, ok := loopContextString(values, "current_step", "current_step_id"); ok {
 		s.CurrentStepID = value
 	}
+}
+
+func (s *LoopState) restoreExecutionContext(values map[string]any) {
 	if value, ok := loopContextString(values, "current_stage"); ok {
 		s.CurrentStage = LoopStage(value)
 	}
@@ -426,6 +440,15 @@ func (s *LoopState) restoreFromContext(values map[string]any) {
 	if value, ok := loopContextString(values, "selected_reasoning_mode"); ok {
 		s.SelectedReasoningMode = value
 	}
+	if value, ok := loopContextBool(values, "resumable"); ok {
+		s.Resumable = value
+	}
+	if value, ok := loopContextString(values, "checkpoint_id"); ok {
+		s.CheckpointID = value
+	}
+}
+
+func (s *LoopState) restoreValidationContext(values map[string]any) {
 	if value, ok := loopContextString(values, "validation_status"); ok {
 		s.ValidationStatus = LoopValidationStatus(value)
 	}
@@ -437,12 +460,6 @@ func (s *LoopState) restoreFromContext(values map[string]any) {
 	}
 	if value, ok := loopContextBool(values, "need_human", "loop_need_human"); ok {
 		s.NeedHuman = value
-	}
-	if value, ok := loopContextString(values, "checkpoint_id"); ok {
-		s.CheckpointID = value
-	}
-	if value, ok := loopContextBool(values, "resumable"); ok {
-		s.Resumable = value
 	}
 	if value, ok := loopContextString(values, "observations_summary"); ok {
 		s.ObservationsSummary = value
@@ -456,7 +473,6 @@ func (s *LoopState) restoreFromContext(values map[string]any) {
 	if observations, ok := loopContextObservations(values, "loop_observations", "observations"); ok {
 		s.Observations = observations
 	}
-	s.normalizeCheckpointFields()
 }
 
 func (s *LoopState) normalizeCheckpointFields() {
@@ -574,7 +590,7 @@ func summarizeLastError(observations []LoopObservation) string {
 	return ""
 }
 
-func summarizeValidationState(status LoopValidationStatus, unresolvedItems []string, remainingRisks []string) string {
+func summarizeValidationState(status LoopValidationStatus, unresolvedItems, remainingRisks []string) string {
 	if len(unresolvedItems) == 0 && len(remainingRisks) == 0 {
 		switch status {
 		case LoopValidationStatusPassed:
@@ -691,13 +707,13 @@ func loopContextFloat(values map[string]any, keys ...string) (float64, bool) {
 	return 0, false
 }
 
-func loopContextBool(values map[string]any, keys ...string) (bool, bool) {
+func loopContextBool(values map[string]any, keys ...string) (value, ok bool) {
 	for _, key := range keys {
-		raw, ok := values[key]
-		if !ok {
+		raw, found := values[key]
+		if !found {
 			continue
 		}
-		value, ok := raw.(bool)
+		value, ok = raw.(bool)
 		if ok {
 			return value, true
 		}

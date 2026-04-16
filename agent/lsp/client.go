@@ -436,7 +436,7 @@ type InitializeParams struct {
 	ProcessID             int                `json:"processId"`
 	RootURI               string             `json:"rootUri"`
 	Capabilities          ClientCapabilities `json:"capabilities"`
-	InitializationOptions any        `json:"initializationOptions,omitempty"`
+	InitializationOptions any                `json:"initializationOptions,omitempty"`
 }
 
 // ClientCapabilities 客户端能力
@@ -549,4 +549,3 @@ type DidCloseTextDocumentParams struct {
 type TextDocumentIdentifier struct {
 	URI string `json:"uri"`
 }
-

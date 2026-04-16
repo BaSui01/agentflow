@@ -106,7 +106,7 @@ func (m *supervisorMode) executeSimple(ctx context.Context, supervisor agent.Tea
 	}
 
 	var (
-		contents   []string
+		contents    []string
 		totalTokens = supOutput.TokensUsed
 		totalCost   = supOutput.Cost
 	)
@@ -155,9 +155,9 @@ func (m *roundRobinMode) Execute(ctx context.Context, members []agent.TeamMember
 	}
 
 	var (
-		history    []TurnRecord
-		current    = task
-		lastOutput *agent.Output
+		history     []TurnRecord
+		current     = task
+		lastOutput  *agent.Output
 		totalTokens int
 		totalCost   float64
 	)

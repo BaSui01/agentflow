@@ -108,4 +108,3 @@ func TestMongoEpisodicStore_GetTimeline(t *testing.T) {
 		t.Error("timeline events not sorted ascending")
 	}
 }
-

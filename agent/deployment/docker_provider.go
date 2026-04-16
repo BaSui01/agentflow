@@ -107,7 +107,7 @@ func (p *DockerProvider) GetStatus(ctx context.Context, deploymentID string) (*D
 	}
 
 	state := strings.TrimSpace(out.String())
-	status := StatusRunning
+	var status DeploymentStatus
 	switch state {
 	case "running":
 		status = StatusRunning
@@ -136,6 +136,7 @@ func (p *DockerProvider) GetLogs(ctx context.Context, deploymentID string, lines
 	}
 
 	var out bytes.Buffer
+	// #nosec G204 -- exec.CommandContext does not use a shell and arguments are passed directly to docker.
 	cmd := exec.CommandContext(ctx, "docker", "logs",
 		"--tail", fmt.Sprintf("%d", lines), name)
 	cmd.Stdout = &out
@@ -160,4 +161,3 @@ func splitDockerLines(s string) []string {
 	}
 	return result
 }
-

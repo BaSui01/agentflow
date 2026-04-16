@@ -15,9 +15,9 @@ type mockDiscoveryRegistry struct {
 	unregisterFn   func(ctx context.Context, agentID string) error
 	updateStatusFn func(ctx context.Context, agentID string, status string) error
 
-	mu          sync.Mutex
-	registered  map[string]*AgentRegistration
-	statuses    map[string]string
+	mu           sync.Mutex
+	registered   map[string]*AgentRegistration
+	statuses     map[string]string
 	unregistered []string
 }
 
@@ -267,4 +267,3 @@ func TestDefaultBridgeConfig(t *testing.T) {
 		t.Error("AutoSync should default to true")
 	}
 }
-

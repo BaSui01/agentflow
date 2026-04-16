@@ -3,9 +3,10 @@ package conversation
 import (
 	"context"
 	"fmt"
-	"github.com/BaSui01/agentflow/types"
 	"testing"
 	"time"
+
+	"github.com/BaSui01/agentflow/types"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"

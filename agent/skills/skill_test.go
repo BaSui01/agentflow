@@ -201,4 +201,3 @@ func TestSaveSkillToDirectory_WithResources(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "res-skill", loaded.ID)
 }
-

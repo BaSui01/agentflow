@@ -9,30 +9,30 @@ import (
 
 // TrajectoryRecord captures a complete execution trajectory for evaluation and replay.
 type TrajectoryRecord struct {
-	ID          string          `json:"id"`
-	AgentID     string          `json:"agent_id"`
-	Pattern     string          `json:"pattern"`
-	Task        string          `json:"task"`
+	ID          string           `json:"id"`
+	AgentID     string           `json:"agent_id"`
+	Pattern     string           `json:"pattern"`
+	Task        string           `json:"task"`
 	Steps       []TrajectoryStep `json:"steps"`
-	FinalAnswer string          `json:"final_answer"`
-	Quality     float64         `json:"quality,omitempty"`
-	TotalTokens int             `json:"total_tokens"`
-	Duration    time.Duration   `json:"duration"`
-	CreatedAt   time.Time       `json:"created_at"`
-	Metadata    map[string]any  `json:"metadata,omitempty"`
+	FinalAnswer string           `json:"final_answer"`
+	Quality     float64          `json:"quality,omitempty"`
+	TotalTokens int              `json:"total_tokens"`
+	Duration    time.Duration    `json:"duration"`
+	CreatedAt   time.Time        `json:"created_at"`
+	Metadata    map[string]any   `json:"metadata,omitempty"`
 }
 
 // TrajectoryStep records a single Thought → Action → Observation cycle.
 type TrajectoryStep struct {
-	Index       int            `json:"index"`
-	Type        string         `json:"type"` // thought, action, observation, reflection, tool_call
-	Content     string         `json:"content"`
-	ToolName    string         `json:"tool_name,omitempty"`
-	ToolArgs    map[string]any `json:"tool_args,omitempty"`
-	ToolResult  string         `json:"tool_result,omitempty"`
-	TokensUsed  int            `json:"tokens_used,omitempty"`
-	Duration    time.Duration  `json:"duration"`
-	Timestamp   time.Time      `json:"timestamp"`
+	Index      int            `json:"index"`
+	Type       string         `json:"type"` // thought, action, observation, reflection, tool_call
+	Content    string         `json:"content"`
+	ToolName   string         `json:"tool_name,omitempty"`
+	ToolArgs   map[string]any `json:"tool_args,omitempty"`
+	ToolResult string         `json:"tool_result,omitempty"`
+	TokensUsed int            `json:"tokens_used,omitempty"`
+	Duration   time.Duration  `json:"duration"`
+	Timestamp  time.Time      `json:"timestamp"`
 }
 
 // TrajectoryStore persists and retrieves trajectory records.

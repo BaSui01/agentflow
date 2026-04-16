@@ -231,4 +231,3 @@ func (r *FilterRegistry) List() []Filter {
 	}
 	return result
 }
-

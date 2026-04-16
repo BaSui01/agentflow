@@ -1,13 +1,14 @@
 package reasoning
 
 import (
-	"github.com/BaSui01/agentflow/types"
 	"context"
 	"encoding/json"
 	"fmt"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/BaSui01/agentflow/types"
 
 	"github.com/BaSui01/agentflow/llm"
 	"github.com/BaSui01/agentflow/llm/capabilities/tools"
@@ -83,9 +84,9 @@ type researchFinding struct {
 
 // 研究方向是探索的新方向。
 type researchDirection struct {
-	Query      string  `json:"query"`
-	Rationale  string  `json:"rationale"`
-	Priority   float64 `json:"priority"`
+	Query     string  `json:"query"`
+	Rationale string  `json:"rationale"`
+	Priority  float64 `json:"priority"`
 }
 
 // Execute运行"惯性深化研究"推理模式.
@@ -535,5 +536,3 @@ func (id *IterativeDeepening) calculateConfidence(findings []researchFinding) fl
 
 	return confidence
 }
-
-

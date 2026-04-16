@@ -225,10 +225,10 @@ func TestExplainabilityTracker_GenerateAuditReport_NotFound(t *testing.T) {
 func TestAuditReport_Export(t *testing.T) {
 	t.Parallel()
 	report := &AuditReport{
-		TraceID:   "t1",
-		AgentID:   "a1",
-		Success:   true,
-		Timeline:  []TimelineEvent{{Type: "step", Description: "test"}},
+		TraceID:  "t1",
+		AgentID:  "a1",
+		Success:  true,
+		Timeline: []TimelineEvent{{Type: "step", Description: "test"}},
 	}
 
 	data, err := report.Export()
@@ -267,4 +267,3 @@ func TestDefaultExplainabilityConfig(t *testing.T) {
 	assert.True(t, cfg.RecordAlternatives)
 	assert.True(t, cfg.RecordFactors)
 }
-

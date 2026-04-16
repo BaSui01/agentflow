@@ -85,9 +85,9 @@ func TestDefensivePromptEnhancer_SanitizeUserInput(t *testing.T) {
 	enhancer := NewDefensivePromptEnhancer(cfg)
 
 	tests := []struct {
-		name     string
-		input    string
-		wantOK   bool
+		name      string
+		input     string
+		wantOK    bool
 		wantEmpty bool
 	}{
 		{
@@ -207,4 +207,3 @@ func TestDefensivePromptEnhancer_ValidateOutput(t *testing.T) {
 		})
 	}
 }
-

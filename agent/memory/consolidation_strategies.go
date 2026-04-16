@@ -242,4 +242,3 @@ func parseAgentIDFromKey(key, prefix string) string {
 	}
 	return rest[:idx]
 }
-

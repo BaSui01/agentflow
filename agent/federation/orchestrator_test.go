@@ -165,10 +165,10 @@ func TestOrchestrator_SubmitTask(t *testing.T) {
 	})
 
 	tests := []struct {
-		name         string
-		task         *FederatedTask
-		expectErr    bool
-		errContains  string
+		name        string
+		task        *FederatedTask
+		expectErr   bool
+		errContains string
 	}{
 		{
 			name: "task with matching capabilities",
@@ -297,4 +297,3 @@ func TestOrchestrator_StopDoubleClose(t *testing.T) {
 	orch.Stop()
 	orch.Stop()
 }
-

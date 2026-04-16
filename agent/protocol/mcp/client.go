@@ -18,11 +18,11 @@ type MCPTool struct {
 type ToolsChangedHandler func(ctx context.Context, tools []MCPTool)
 
 type DefaultMCPClient struct {
-	transport       Transport
-	logger          *zap.Logger
-	nextID          atomic.Int64
-	toolsChangedFn  ToolsChangedHandler
-	notifDone       chan struct{}
+	transport      Transport
+	logger         *zap.Logger
+	nextID         atomic.Int64
+	toolsChangedFn ToolsChangedHandler
+	notifDone      chan struct{}
 }
 
 // ClientOption configures optional DefaultMCPClient behavior.

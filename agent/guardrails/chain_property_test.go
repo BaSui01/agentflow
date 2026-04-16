@@ -286,4 +286,3 @@ func (v *propMockFailingValidator) Validate(ctx context.Context, content string)
 	})
 	return result, nil
 }
-

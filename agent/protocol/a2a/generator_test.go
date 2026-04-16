@@ -2,8 +2,9 @@ package a2a
 
 import (
 	"encoding/json"
-	"github.com/BaSui01/agentflow/types"
 	"testing"
+
+	"github.com/BaSui01/agentflow/types"
 
 	"github.com/BaSui01/agentflow/agent/structured"
 	"github.com/stretchr/testify/assert"

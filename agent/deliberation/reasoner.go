@@ -1,11 +1,12 @@
 package deliberation
 
 import (
-	"github.com/BaSui01/agentflow/types"
 	"context"
 	"fmt"
 	"strconv"
 	"strings"
+
+	"github.com/BaSui01/agentflow/types"
 
 	"github.com/BaSui01/agentflow/llm"
 	"go.uber.org/zap"
@@ -32,7 +33,7 @@ func NewLLMReasoner(provider llm.Provider, model string, logger *zap.Logger) *LL
 
 // Think sends a reasoning prompt to the LLM and returns the response content
 // along with a confidence score extracted from the response.
-func (r *LLMReasoner) Think(ctx context.Context, prompt string) (string, float64, error) {
+func (r *LLMReasoner) Think(ctx context.Context, prompt string) (content string, confidence float64, err error) {
 	req := &llm.ChatRequest{
 		Model: r.model,
 		Messages: []types.Message{
@@ -57,8 +58,8 @@ func (r *LLMReasoner) Think(ctx context.Context, prompt string) (string, float64
 		return "", 0, fmt.Errorf("llm returned no choices")
 	}
 
-	content := resp.Choices[0].Message.Content
-	confidence := parseConfidence(content)
+	content = resp.Choices[0].Message.Content
+	confidence = parseConfidence(content)
 
 	r.logger.Debug("reasoning complete",
 		zap.Int("content_len", len(content)),
@@ -101,5 +102,3 @@ Where <value> is a decimal number between 0 and 1 representing how confident you
 Example:
 Based on the available tools and task description, the best approach is to use the search tool first.
 CONFIDENCE: 0.85`
-
-

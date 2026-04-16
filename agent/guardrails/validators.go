@@ -446,4 +446,3 @@ func replaceAllCaseInsensitive(content, old, new string) string {
 
 	return result.String()
 }
-

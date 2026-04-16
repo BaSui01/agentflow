@@ -153,9 +153,9 @@ func (m *mockTaskStore) Stats(_ context.Context) (*persistence.TaskStoreStats, e
 	return &persistence.TaskStoreStats{}, nil
 }
 
-func (m *mockTaskStore) Close() error                        { return nil }
-func (m *mockTaskStore) Health(_ context.Context) error       { return nil }
-func (m *mockTaskStore) Ping(_ context.Context) error         { return nil }
+func (m *mockTaskStore) Close() error                   { return nil }
+func (m *mockTaskStore) Health(_ context.Context) error { return nil }
+func (m *mockTaskStore) Ping(_ context.Context) error   { return nil }
 
 func TestTaskStoreBridge_SaveAndGetTask(t *testing.T) {
 	store := newMockTaskStore()
@@ -294,4 +294,3 @@ func TestAsyncTaskToRecord(t *testing.T) {
 		assert.Contains(t, string(rec.Data), "foo")
 	})
 }
-

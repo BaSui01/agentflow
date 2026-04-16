@@ -147,14 +147,14 @@ func (e *GuardrailsError) Error() string {
 }
 
 var (
-	ErrProviderNotSet          = NewError(types.ErrProviderNotSet, "LLM provider not configured")
-	ErrAgentNotReady           = NewError(types.ErrAgentNotReady, "agent not in ready state")
-	ErrAgentBusy               = NewError(types.ErrAgentBusy, "agent is busy executing another task")
+	ErrProviderNotSet           = NewError(types.ErrProviderNotSet, "LLM provider not configured")
+	ErrAgentNotReady            = NewError(types.ErrAgentNotReady, "agent not in ready state")
+	ErrAgentBusy                = NewError(types.ErrAgentBusy, "agent is busy executing another task")
 	ErrToolProviderNotSupported = NewError(types.ErrProviderNotSupported, "provider does not support native function calling")
-	ErrNoResponse              = NewError(types.ErrLLMResponseEmpty, "LLM returned no response")
-	ErrNoChoices               = NewError(types.ErrLLMResponseEmpty, "LLM returned no choices")
-	ErrPlanGenerationFailed    = NewError(types.ErrAgentExecution, "plan generation failed")
-	ErrExecutionFailed         = NewError(types.ErrAgentExecution, "execution failed")
-	ErrInputValidationFailed   = NewError(types.ErrInputValidation, "input validation error")
-	ErrOutputValidationFailed  = NewError(types.ErrOutputValidation, "output validation error")
+	ErrNoResponse               = NewError(types.ErrLLMResponseEmpty, "LLM returned no response")
+	ErrNoChoices                = NewError(types.ErrLLMResponseEmpty, "LLM returned no choices")
+	ErrPlanGenerationFailed     = NewError(types.ErrAgentExecution, "plan generation failed")
+	ErrExecutionFailed          = NewError(types.ErrAgentExecution, "execution failed")
+	ErrInputValidationFailed    = NewError(types.ErrInputValidation, "input validation error")
+	ErrOutputValidationFailed   = NewError(types.ErrOutputValidation, "output validation error")
 )

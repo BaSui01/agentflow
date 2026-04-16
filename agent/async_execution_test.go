@@ -426,4 +426,3 @@ func (a *asyncStubAgent) Execute(ctx context.Context, input *Input) (*Output, er
 	return &Output{Content: "default"}, nil
 }
 func (a *asyncStubAgent) Observe(ctx context.Context, feedback *Feedback) error { return nil }
-

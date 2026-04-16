@@ -399,4 +399,3 @@ func TestProperty_A2AMessage_RoundTrip_TimestampPrecision(t *testing.T) {
 			"Timestamp should be preserved with correct precision")
 	})
 }
-

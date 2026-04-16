@@ -20,12 +20,12 @@ import (
 // =============================================================================
 
 type mockExecutor struct {
-	id      string
-	name    string
-	output  string
-	err     error
-	calls   atomic.Int32
-	delay   time.Duration
+	id     string
+	name   string
+	output string
+	err    error
+	calls  atomic.Int32
+	delay  time.Duration
 }
 
 func (m *mockExecutor) ID() string   { return m.id }

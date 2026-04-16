@@ -35,4 +35,3 @@ func TestAgentBuilder_WithDefaultLSPServer(t *testing.T) {
 		t.Fatalf("teardown failed: %v", err)
 	}
 }
-

@@ -31,11 +31,11 @@ type FailureMode struct {
 
 // OutputSchema 输出格式 Schema
 type OutputSchema struct {
-	Type       string                 `json:"type"`             // "json", "markdown", "structured_text"
+	Type       string         `json:"type"`             // "json", "markdown", "structured_text"
 	Schema     map[string]any `json:"schema,omitempty"` // JSON Schema
-	Required   []string               `json:"required,omitempty"`
-	Example    string                 `json:"example,omitempty"`
-	Validation string                 `json:"validation,omitempty"` // 验证规则描述
+	Required   []string       `json:"required,omitempty"`
+	Example    string         `json:"example,omitempty"`
+	Validation string         `json:"validation,omitempty"` // 验证规则描述
 }
 
 // GuardRail 护栏规则（负面指令）
@@ -180,8 +180,9 @@ func (e *DefensivePromptEnhancer) addOutputSchemaEnforcement(bundle PromptBundle
 	schemaSection += fmt.Sprintf("所有输出必须严格遵循以下 %s 格式：\n\n", schema.Type)
 
 	if schema.Schema != nil {
-		schemaJSON, _ := json.MarshalIndent(schema.Schema, "", "  ")
-		schemaSection += fmt.Sprintf("```json\n%s\n```\n\n", string(schemaJSON))
+		if schemaJSON, err := json.MarshalIndent(schema.Schema, "", "  "); err == nil {
+			schemaSection += fmt.Sprintf("```json\n%s\n```\n\n", string(schemaJSON))
+		}
 	}
 
 	if len(schema.Required) > 0 {
@@ -303,4 +304,3 @@ func (e *DefensivePromptEnhancer) ValidateOutput(output string) error {
 
 	return nil
 }
-

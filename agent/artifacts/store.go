@@ -57,14 +57,14 @@ func (s *FileStore) Save(ctx context.Context, artifact *Artifact, data io.Reader
 
 	// 创建存储路径
 	artifactDir := filepath.Join(s.basePath, safeArtifactDirName(artifact.ID))
-	if err := os.MkdirAll(artifactDir, 0o755); err != nil {
-		return fmt.Errorf("failed to create artifact dir: %w", err)
+	if mkdirErr := os.MkdirAll(artifactDir, 0o755); mkdirErr != nil {
+		return fmt.Errorf("failed to create artifact dir: %w", mkdirErr)
 	}
 
 	// 写入数据文件
 	dataPath := filepath.Join(artifactDir, "data")
-	if err := os.WriteFile(dataPath, dataBytes, 0o600); err != nil {
-		return fmt.Errorf("failed to write data: %w", err)
+	if writeErr := os.WriteFile(dataPath, dataBytes, 0o600); writeErr != nil {
+		return fmt.Errorf("failed to write data: %w", writeErr)
 	}
 	artifact.StoragePath = dataPath
 

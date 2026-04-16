@@ -108,4 +108,3 @@ func (s *FileCheckpointStore) DeleteCheckpoint(_ context.Context, execID string)
 	}
 	return nil
 }
-

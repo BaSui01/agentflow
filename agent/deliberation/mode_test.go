@@ -18,7 +18,7 @@ type mockReasoner struct {
 	thinkFn func(ctx context.Context, prompt string) (string, float64, error)
 }
 
-func (m *mockReasoner) Think(ctx context.Context, prompt string) (string, float64, error) {
+func (m *mockReasoner) Think(ctx context.Context, prompt string) (content string, confidence float64, err error) {
 	if m.thinkFn != nil {
 		return m.thinkFn(ctx, prompt)
 	}
@@ -90,6 +90,7 @@ func TestDeliberate_FullCycle(t *testing.T) {
 	assert.Equal(t, "search", result.Decision.Tool) // parsed from TOOL: line
 	assert.Equal(t, 0.9, result.FinalConfidence)
 }
+
 // APPEND_MARKER_2
 
 // --- Adaptive mode selects correct mode ---
@@ -146,6 +147,7 @@ func TestDeliberate_AdaptiveSelectsDeliberate(t *testing.T) {
 	require.NotNil(t, result.Decision)
 	assert.Greater(t, result.Iterations, 0) // ran deliberation loop
 }
+
 // APPEND_MARKER_3
 
 // --- Timeout cancellation between steps ---
@@ -179,7 +181,7 @@ func TestDeliberate_TimeoutBetweenSteps(t *testing.T) {
 
 	_, err := engine.Deliberate(ctx, task)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "cancelled")
+	assert.Contains(t, err.Error(), "canceled")
 }
 
 // --- Self-critique loop when confidence is low ---
@@ -236,6 +238,7 @@ func TestDeliberate_SelfCritiqueLoop(t *testing.T) {
 	}
 	assert.True(t, hasCritique, "expected a critique thought")
 }
+
 // APPEND_MARKER_4
 
 // --- Event hooks ---
@@ -373,4 +376,3 @@ func TestSelectAdaptiveMode(t *testing.T) {
 		assert.Equal(t, ModeDeliberate, engine.selectAdaptiveMode(task))
 	})
 }
-

@@ -362,4 +362,3 @@ func sortValidatorsByPriority(validators []Validator) {
 		return validators[i].Priority() < validators[j].Priority()
 	})
 }
-

@@ -145,4 +145,3 @@ func TestSimpleEventBus_StopWaitsForSlowHandler(t *testing.T) {
 		t.Fatal("Stop should wait for the active handler to finish")
 	}
 }
-

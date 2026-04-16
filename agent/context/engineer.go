@@ -181,26 +181,18 @@ func (e *Engineer) emergencyCompress(msgs []types.Message) ([]types.Message, err
 	e.mu.Unlock()
 
 	originalTokens := e.tokenizer.CountMessagesTokens(msgs)
-	targetTokens := int(float64(e.config.MaxContextTokens-e.config.ReserveForOutput) * e.config.TargetUsage)
-
 	// 单独的系统和其他信息
 	var systemMsgs, otherMsgs []types.Message
-	for _, msg := range msgs {
-		if msg.Role == types.RoleSystem {
-			systemMsgs = append(systemMsgs, msg)
+	for i := range msgs {
+		if msgs[i].Role == types.RoleSystem {
+			systemMsgs = append(systemMsgs, msgs[i])
 		} else {
-			otherMsgs = append(otherMsgs, msg)
+			otherMsgs = append(otherMsgs, msgs[i])
 		}
 	}
 
 	// 如果系统消息时间太长, 则中断
 	systemMsgs = e.truncateMessages(systemMsgs, 4000)
-	systemTokens := e.tokenizer.CountMessagesTokens(systemMsgs)
-
-	remainingBudget := targetTokens - systemTokens
-	if remainingBudget < 1000 {
-		remainingBudget = 1000
-	}
 
 	// 只保留上两个消息
 	preserveCount := 2
@@ -267,10 +259,10 @@ func (e *Engineer) normalCompress(msgs []types.Message) ([]types.Message, error)
 	result := make([]types.Message, len(msgs))
 	maxToolLen := 2000
 
-	for i, msg := range msgs {
-		result[i] = msg
-		if msg.Role == types.RoleTool && len(msg.Content) > maxToolLen {
-			result[i].Content = msg.Content[:maxToolLen] + "\n...[truncated]"
+	for i := range msgs {
+		result[i] = msgs[i]
+		if msgs[i].Role == types.RoleTool && len(msgs[i].Content) > maxToolLen {
+			result[i].Content = msgs[i].Content[:maxToolLen] + "\n...[truncated]"
 		}
 	}
 
@@ -280,17 +272,17 @@ func (e *Engineer) normalCompress(msgs []types.Message) ([]types.Message, error)
 // 切换Messages 切换信件, 超过每封信的最大切换量 。
 func (e *Engineer) truncateMessages(msgs []types.Message, maxTokens int) []types.Message {
 	result := make([]types.Message, len(msgs))
-	for i, msg := range msgs {
-		result[i] = msg
-		msgTokens := e.tokenizer.CountMessageTokens(msg)
+	for i := range msgs {
+		result[i] = msgs[i]
+		msgTokens := e.tokenizer.CountMessageTokens(msgs[i])
 		if msgTokens > maxTokens {
 			ratio := float64(maxTokens) / float64(msgTokens) * 0.9
-			targetLen := int(float64(len(msg.Content)) * ratio)
+			targetLen := int(float64(len(msgs[i].Content)) * ratio)
 			if targetLen < 100 {
 				targetLen = 100
 			}
-			if targetLen < len(msg.Content) {
-				result[i].Content = msg.Content[:targetLen] + "\n...[truncated]"
+			if targetLen < len(msgs[i].Content) {
+				result[i].Content = msgs[i].Content[:targetLen] + "\n...[truncated]"
 			}
 		}
 	}
@@ -306,8 +298,8 @@ func (e *Engineer) createEmergencySummary(msgs []types.Message) string {
 	var sb strings.Builder
 	userCount, assistantCount, toolCount := 0, 0, 0
 
-	for _, msg := range msgs {
-		switch msg.Role {
+	for i := range msgs {
+		switch msgs[i].Role {
 		case types.RoleUser:
 			userCount++
 		case types.RoleAssistant:
@@ -383,55 +375,69 @@ func (e *Engineer) MustFit(ctx context.Context, msgs []types.Message, query stri
 func (e *Engineer) hardTruncate(msgs []types.Message, maxTokens int) []types.Message {
 	e.logger.Warn("hard truncate triggered")
 
-	var systemMsgs, otherMsgs []types.Message
-	for _, msg := range msgs {
-		if msg.Role == types.RoleSystem {
-			systemMsgs = append(systemMsgs, msg)
-		} else {
-			otherMsgs = append(otherMsgs, msg)
-		}
-	}
-
-	// 截断系统消息
-	for i := range systemMsgs {
-		if len(systemMsgs[i].Content) > 1000 {
-			systemMsgs[i].Content = systemMsgs[i].Content[:1000] + "\n...[truncated]"
-		}
-	}
-
-	// 只保留最后两个其他信件
-	if len(otherMsgs) > 2 {
-		otherMsgs = otherMsgs[len(otherMsgs)-2:]
-	}
-
-	result := append(systemMsgs, otherMsgs...)
+	systemMsgs, otherMsgs := splitMessagesByRole(msgs, types.RoleSystem)
+	systemMsgs = truncateSystemMessages(systemMsgs, 1000)
+	otherMsgs = keepLastMessages(otherMsgs, 2)
+	result := make([]types.Message, 0, len(systemMsgs)+len(otherMsgs))
+	result = append(result, systemMsgs...)
+	result = append(result, otherMsgs...)
 	if len(result) == 0 {
 		return result
 	}
 
-	// 确保我们实际符合所要求的预算。
+	result = e.dropMessagesToBudget(result, maxTokens)
+	return e.squeezeMessagesToBudget(result, maxTokens)
+}
+
+func splitMessagesByRole(msgs []types.Message, role types.Role) (matching, remaining []types.Message) {
+	for i := range msgs {
+		if msgs[i].Role == role {
+			matching = append(matching, msgs[i])
+		} else {
+			remaining = append(remaining, msgs[i])
+		}
+	}
+	return matching, remaining
+}
+
+func truncateSystemMessages(msgs []types.Message, maxLen int) []types.Message {
+	for i := range msgs {
+		if len(msgs[i].Content) > maxLen {
+			msgs[i].Content = msgs[i].Content[:maxLen] + "\n...[truncated]"
+		}
+	}
+	return msgs
+}
+
+func keepLastMessages(msgs []types.Message, maxCount int) []types.Message {
+	if len(msgs) <= maxCount {
+		return msgs
+	}
+	return msgs[len(msgs)-maxCount:]
+}
+
+func (e *Engineer) dropMessagesToBudget(result []types.Message, maxTokens int) []types.Message {
 	for tries := 0; tries < 20 && e.tokenizer.CountMessagesTokens(result) > maxTokens; tries++ {
-		// 最好先扔出旧的非系统消息
-		if len(result) > 1 {
-			dropIdx := -1
-			for i := 0; i < len(result); i++ {
-				if result[i].Role != types.RoleSystem {
-					dropIdx = i
-					break
-				}
-			}
-			if dropIdx < 0 {
-				dropIdx = 0
-			}
-			result = append(result[:dropIdx], result[dropIdx+1:]...)
+		if len(result) <= 1 {
+			result = e.truncateMessages(result, maxTokens)
 			continue
 		}
-
-		// 左边的单条信息: 快速切入以适应。
-		result = e.truncateMessages(result, maxTokens)
+		dropIdx := firstNonSystemMessageIndex(result)
+		result = append(result[:dropIdx], result[dropIdx+1:]...)
 	}
+	return result
+}
 
-	// 如果我们仍然溢出,尝试缩短 与每个消息的预算。
+func firstNonSystemMessageIndex(msgs []types.Message) int {
+	for i := range msgs {
+		if msgs[i].Role != types.RoleSystem {
+			return i
+		}
+	}
+	return 0
+}
+
+func (e *Engineer) squeezeMessagesToBudget(result []types.Message, maxTokens int) []types.Message {
 	for tries := 0; tries < 10 && e.tokenizer.CountMessagesTokens(result) > maxTokens && len(result) > 0; tries++ {
 		perMsg := maxTokens / len(result)
 		if perMsg < 1 {
@@ -445,7 +451,6 @@ func (e *Engineer) hardTruncate(msgs []types.Message, maxTokens int) []types.Mes
 			result = result[1:]
 		}
 	}
-
 	return result
 }
 
@@ -461,4 +466,3 @@ func (e *Engineer) CanAddMessage(msgs []types.Message, newMsg types.Message) boo
 	maxTokens := e.config.MaxContextTokens - e.config.ReserveForOutput
 	return currentTokens+newTokens <= maxTokens
 }
-

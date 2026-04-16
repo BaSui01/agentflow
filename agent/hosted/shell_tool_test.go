@@ -75,4 +75,3 @@ func TestShellTool_Execute_EmptyCommand(t *testing.T) {
 		t.Fatal("expected command required error")
 	}
 }
-

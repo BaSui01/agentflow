@@ -585,4 +585,3 @@ func TestHTTPClient_TaskRegistry(t *testing.T) {
 		assert.NotErrorIs(t, err, ErrTaskNotFound)
 	})
 }
-

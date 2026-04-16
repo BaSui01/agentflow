@@ -1,4 +1,4 @@
-﻿package discovery
+package discovery
 
 import (
 	"context"
@@ -101,21 +101,11 @@ func NewCapabilityComposer(registry Registry, matcher Matcher, config *ComposerC
 
 // 作曲从多个代理中产生能力组成.
 func (c *CapabilityComposer) Compose(ctx context.Context, req *CompositionRequest) (*CompositionResult, error) {
-	if req == nil {
-		return nil, fmt.Errorf("composition request is nil")
+	if err := validateCompositionRequest(req); err != nil {
+		return nil, err
 	}
 
-	if len(req.RequiredCapabilities) == 0 {
-		return nil, fmt.Errorf("no required capabilities specified")
-	}
-
-	// 应用默认
-	timeout := req.Timeout
-	if timeout <= 0 {
-		timeout = c.config.DefaultTimeout
-	}
-
-	ctx, cancel := context.WithTimeout(ctx, timeout)
+	ctx, cancel := context.WithTimeout(ctx, compositionTimeout(req, c.config))
 	defer cancel()
 
 	result := &CompositionResult{
@@ -124,114 +114,18 @@ func (c *CapabilityComposer) Compose(ctx context.Context, req *CompositionReques
 		Dependencies:  make(map[string][]string),
 	}
 
-	// 1. 解决依赖关系
-	allCapabilities := req.RequiredCapabilities
-	if c.config.EnableDependencyResolution {
-		deps, err := c.ResolveDependencies(ctx, req.RequiredCapabilities)
-		if err != nil {
-			return nil, fmt.Errorf("failed to resolve dependencies: %w", err)
-		}
-		result.Dependencies = deps
-
-		// 增加所需能力的依赖性
-		for _, depList := range deps {
-			for _, dep := range depList {
-				if !c.contains(allCapabilities, dep) {
-					allCapabilities = append(allCapabilities, dep)
-				}
-			}
-		}
+	allCapabilities, err := c.resolveCompositionCapabilities(ctx, req, result)
+	if err != nil {
+		return nil, err
 	}
-
-	// 2. 侦测冲突
-	if c.config.EnableConflictDetection {
-		conflicts, err := c.DetectConflicts(ctx, allCapabilities)
-		if err != nil {
-			return nil, fmt.Errorf("failed to detect conflicts: %w", err)
-		}
-		result.Conflicts = conflicts
-
-		// 如果存在无法解决的冲突, 返回错误
-		for _, conflict := range conflicts {
-			if conflict.Resolution == "" {
-				if !req.AllowPartial && !c.config.AllowPartialComposition {
-					return nil, fmt.Errorf("unresolvable conflict: %s", conflict.Description)
-				}
-			}
-		}
+	if err := c.populateCompositionConflicts(ctx, req, result, allCapabilities); err != nil {
+		return nil, err
 	}
-
-	// 3. 为每种能力寻找代理人
-	agentSet := make(map[string]*AgentInfo)
-	missingCapabilities := make([]string, 0)
-
-	for _, capName := range allCapabilities {
-		// 找到有这种能力的特工
-		caps, err := c.registry.FindCapabilities(ctx, capName)
-		if err != nil {
-			c.logger.Warn("failed to find capability", zap.String("capability", capName), zap.Error(err))
-			missingCapabilities = append(missingCapabilities, capName)
-			continue
-		}
-
-		if len(caps) == 0 {
-			missingCapabilities = append(missingCapabilities, capName)
-			continue
-		}
-
-		// 选择此能力的最佳代理
-		bestCap := c.selectBestCapability(caps)
-		result.CapabilityMap[capName] = bestCap.AgentID
-
-		// 如果尚未设置, 则添加代理设置
-		if _, exists := agentSet[bestCap.AgentID]; !exists {
-			agent, err := c.registry.GetAgent(ctx, bestCap.AgentID)
-			if err != nil {
-				c.logger.Warn("failed to get agent", zap.String("agent_id", bestCap.AgentID), zap.Error(err))
-				continue
-			}
-			agentSet[bestCap.AgentID] = agent
-		}
+	agentSet, missingCapabilities := c.composeAgentsForCapabilities(ctx, result, allCapabilities)
+	if err := c.finalizeCompositionResult(req, result, agentSet, missingCapabilities); err != nil {
+		return nil, err
 	}
-
-	// 4. 检查组成是否完整
-	result.MissingCapabilities = missingCapabilities
-	result.Complete = len(missingCapabilities) == 0
-
-	if !result.Complete && !req.AllowPartial && !c.config.AllowPartialComposition {
-		return nil, fmt.Errorf("incomplete composition: missing capabilities: %v", missingCapabilities)
-	}
-
-	// 5. 应用最大剂限
-	for _, agent := range agentSet {
-		result.Agents = append(result.Agents, agent)
-	}
-
-	if req.MaxAgents > 0 && len(result.Agents) > req.MaxAgents {
-		// 优先考虑能力较强的代理人
-		sort.Slice(result.Agents, func(i, j int) bool {
-			countI := c.countCapabilitiesForAgent(result.CapabilityMap, result.Agents[i].Card.Name)
-			countJ := c.countCapabilitiesForAgent(result.CapabilityMap, result.Agents[j].Card.Name)
-			return countI > countJ
-		})
-		result.Agents = result.Agents[:req.MaxAgents]
-
-		// 更新能力映射只包含选定的代理
-		newCapMap := make(map[string]string)
-		for cap, agentID := range result.CapabilityMap {
-			for _, agent := range result.Agents {
-				if agent.Card.Name == agentID {
-					newCapMap[cap] = agentID
-					break
-				}
-			}
-		}
-		result.CapabilityMap = newCapMap
-	}
-
-	// 6. 计算执行令
 	result.ExecutionOrder = c.calculateExecutionOrder(allCapabilities, result.Dependencies)
-
 	c.logger.Info("composition completed",
 		zap.Int("agents", len(result.Agents)),
 		zap.Int("capabilities", len(result.CapabilityMap)),
@@ -239,6 +133,129 @@ func (c *CapabilityComposer) Compose(ctx context.Context, req *CompositionReques
 	)
 
 	return result, nil
+}
+
+func validateCompositionRequest(req *CompositionRequest) error {
+	if req == nil {
+		return fmt.Errorf("composition request is nil")
+	}
+	if len(req.RequiredCapabilities) == 0 {
+		return fmt.Errorf("no required capabilities specified")
+	}
+	return nil
+}
+
+func compositionTimeout(req *CompositionRequest, config *ComposerConfig) time.Duration {
+	timeout := req.Timeout
+	if timeout <= 0 {
+		timeout = config.DefaultTimeout
+	}
+	return timeout
+}
+
+func (c *CapabilityComposer) resolveCompositionCapabilities(ctx context.Context, req *CompositionRequest, result *CompositionResult) ([]string, error) {
+	allCapabilities := append([]string(nil), req.RequiredCapabilities...)
+	if !c.config.EnableDependencyResolution {
+		return allCapabilities, nil
+	}
+	deps, err := c.ResolveDependencies(ctx, req.RequiredCapabilities)
+	if err != nil {
+		return nil, fmt.Errorf("failed to resolve dependencies: %w", err)
+	}
+	result.Dependencies = deps
+	for _, depList := range deps {
+		for _, dep := range depList {
+			if !c.contains(allCapabilities, dep) {
+				allCapabilities = append(allCapabilities, dep)
+			}
+		}
+	}
+	return allCapabilities, nil
+}
+
+func (c *CapabilityComposer) populateCompositionConflicts(ctx context.Context, req *CompositionRequest, result *CompositionResult, allCapabilities []string) error {
+	if !c.config.EnableConflictDetection {
+		return nil
+	}
+	conflicts, err := c.DetectConflicts(ctx, allCapabilities)
+	if err != nil {
+		return fmt.Errorf("failed to detect conflicts: %w", err)
+	}
+	result.Conflicts = conflicts
+	for _, conflict := range conflicts {
+		if conflict.Resolution == "" && !req.AllowPartial && !c.config.AllowPartialComposition {
+			return fmt.Errorf("unresolvable conflict: %s", conflict.Description)
+		}
+	}
+	return nil
+}
+
+func (c *CapabilityComposer) composeAgentsForCapabilities(ctx context.Context, result *CompositionResult, allCapabilities []string) (map[string]*AgentInfo, []string) {
+	agentSet := make(map[string]*AgentInfo)
+	missingCapabilities := make([]string, 0)
+	for _, capabilityName := range allCapabilities {
+		if !c.composeCapabilityAgent(ctx, result, agentSet, capabilityName) {
+			missingCapabilities = append(missingCapabilities, capabilityName)
+		}
+	}
+	return agentSet, missingCapabilities
+}
+
+func (c *CapabilityComposer) composeCapabilityAgent(ctx context.Context, result *CompositionResult, agentSet map[string]*AgentInfo, capabilityName string) bool {
+	caps, err := c.registry.FindCapabilities(ctx, capabilityName)
+	if err != nil {
+		c.logger.Warn("failed to find capability", zap.String("capability", capabilityName), zap.Error(err))
+		return false
+	}
+	if len(caps) == 0 {
+		return false
+	}
+	bestCap := c.selectBestCapability(caps)
+	result.CapabilityMap[capabilityName] = bestCap.AgentID
+	if _, exists := agentSet[bestCap.AgentID]; exists {
+		return true
+	}
+	agentInfo, err := c.registry.GetAgent(ctx, bestCap.AgentID)
+	if err != nil {
+		c.logger.Warn("failed to get agent", zap.String("agent_id", bestCap.AgentID), zap.Error(err))
+		return false
+	}
+	agentSet[bestCap.AgentID] = agentInfo
+	return true
+}
+
+func (c *CapabilityComposer) finalizeCompositionResult(req *CompositionRequest, result *CompositionResult, agentSet map[string]*AgentInfo, missingCapabilities []string) error {
+	result.MissingCapabilities = missingCapabilities
+	result.Complete = len(missingCapabilities) == 0
+	if !result.Complete && !req.AllowPartial && !c.config.AllowPartialComposition {
+		return fmt.Errorf("incomplete composition: missing capabilities: %v", missingCapabilities)
+	}
+	for _, agentInfo := range agentSet {
+		result.Agents = append(result.Agents, agentInfo)
+	}
+	if req.MaxAgents > 0 && len(result.Agents) > req.MaxAgents {
+		c.trimCompositionAgents(req, result)
+	}
+	return nil
+}
+
+func (c *CapabilityComposer) trimCompositionAgents(req *CompositionRequest, result *CompositionResult) {
+	sort.Slice(result.Agents, func(i, j int) bool {
+		countI := c.countCapabilitiesForAgent(result.CapabilityMap, result.Agents[i].Card.Name)
+		countJ := c.countCapabilitiesForAgent(result.CapabilityMap, result.Agents[j].Card.Name)
+		return countI > countJ
+	})
+	result.Agents = result.Agents[:req.MaxAgents]
+	newCapMap := make(map[string]string)
+	for capabilityName, agentID := range result.CapabilityMap {
+		for _, agentInfo := range result.Agents {
+			if agentInfo.Card.Name == agentID {
+				newCapMap[capabilityName] = agentID
+				break
+			}
+		}
+	}
+	result.CapabilityMap = newCapMap
 }
 
 // 解决依赖解决了能力之间的依赖.
@@ -288,20 +305,26 @@ func (c *CapabilityComposer) ResolveDependencies(ctx context.Context, capabiliti
 // 侦测冲突能发现能力之间的冲突。
 func (c *CapabilityComposer) DetectConflicts(ctx context.Context, capabilities []string) ([]Conflict, error) {
 	conflicts := make([]Conflict, 0)
+	conflicts = append(conflicts, c.detectExclusiveGroupConflicts(capabilities)...)
+	conflicts = append(conflicts, c.detectResourceConflicts(capabilities)...)
+	conflicts = append(conflicts, c.detectDependencyConflicts(capabilities)...)
+	return conflicts, nil
+}
 
-	// 1. 检查专属团体
+func (c *CapabilityComposer) detectExclusiveGroupConflicts(capabilities []string) []Conflict {
+	conflicts := make([]Conflict, 0)
 	c.exclMu.RLock()
+	defer c.exclMu.RUnlock()
 	for _, group := range c.exclusiveGroups {
 		matchedCaps := make([]string, 0)
-		for _, cap := range capabilities {
+		for _, capabilityName := range capabilities {
 			for _, exclCap := range group {
-				if strings.EqualFold(cap, exclCap) {
-					matchedCaps = append(matchedCaps, cap)
+				if strings.EqualFold(capabilityName, exclCap) {
+					matchedCaps = append(matchedCaps, capabilityName)
 					break
 				}
 			}
 		}
-
 		if len(matchedCaps) > 1 {
 			conflicts = append(conflicts, Conflict{
 				Type:         ConflictTypeExclusive,
@@ -311,23 +334,23 @@ func (c *CapabilityComposer) DetectConflicts(ctx context.Context, capabilities [
 			})
 		}
 	}
-	c.exclMu.RUnlock()
+	return conflicts
+}
 
-	// 2. 检查资源冲突
+func (c *CapabilityComposer) detectResourceConflicts(capabilities []string) []Conflict {
+	conflicts := make([]Conflict, 0)
+	resourceUsage := make(map[string][]string)
 	c.resMu.RLock()
-	resourceUsage := make(map[string][]string) // resource -> capabilities using it
-	for _, cap := range capabilities {
-		req, exists := c.resourceRequirements[cap]
+	for _, capabilityName := range capabilities {
+		req, exists := c.resourceRequirements[capabilityName]
 		if !exists {
 			continue
 		}
-
 		for _, res := range req.ExclusiveResources {
-			resourceUsage[res] = append(resourceUsage[res], cap)
+			resourceUsage[res] = append(resourceUsage[res], capabilityName)
 		}
 	}
 	c.resMu.RUnlock()
-
 	for res, caps := range resourceUsage {
 		if len(caps) > 1 {
 			conflicts = append(conflicts, Conflict{
@@ -337,21 +360,23 @@ func (c *CapabilityComposer) DetectConflicts(ctx context.Context, capabilities [
 			})
 		}
 	}
+	return conflicts
+}
 
-	// 3. 检查依赖性冲突(依赖性)
+func (c *CapabilityComposer) detectDependencyConflicts(capabilities []string) []Conflict {
+	conflicts := make([]Conflict, 0)
 	c.depMu.RLock()
-	for _, cap := range capabilities {
-		if c.hasCircularDependency(cap, make(map[string]bool)) {
+	defer c.depMu.RUnlock()
+	for _, capabilityName := range capabilities {
+		if c.hasCircularDependency(capabilityName, make(map[string]bool)) {
 			conflicts = append(conflicts, Conflict{
 				Type:         ConflictTypeDependency,
-				Capabilities: []string{cap},
-				Description:  fmt.Sprintf("capability %s has circular dependencies", cap),
+				Capabilities: []string{capabilityName},
+				Description:  fmt.Sprintf("capability %s has circular dependencies", capabilityName),
 			})
 		}
 	}
-	c.depMu.RUnlock()
-
-	return conflicts, nil
+	return conflicts
 }
 
 // 登记册的依赖性对各种能力之间的依赖性进行登记。
@@ -434,21 +459,21 @@ func (c *CapabilityComposer) calculateExecutionOrder(capabilities []string, depe
 
 	// 找到没有边缘的所有节点
 	queue := make([]string, 0)
-	for cap, degree := range inDegree {
+	for capabilityName, degree := range inDegree {
 		if degree == 0 {
-			queue = append(queue, cap)
+			queue = append(queue, capabilityName)
 		}
 	}
 
 	order := make([]string, 0, len(capabilities))
 	for len(queue) > 0 {
 		// 从队列中弹出
-		cap := queue[0]
+		capabilityName := queue[0]
 		queue = queue[1:]
-		order = append(order, cap)
+		order = append(order, capabilityName)
 
 		// 减少依赖能力的学位
-		if deps, exists := dependencies[cap]; exists {
+		if deps, exists := dependencies[capabilityName]; exists {
 			for _, dep := range deps {
 				inDegree[dep]--
 				if inDegree[dep] == 0 {
@@ -458,7 +483,7 @@ func (c *CapabilityComposer) calculateExecutionOrder(capabilities []string, depe
 		}
 	}
 
-	// 倒置顺序( 相互依存应优先)
+	// 反转顺序，让依赖项优先执行。
 	for i, j := 0, len(order)-1; i < j; i, j = i+1, j-1 {
 		order[i], order[j] = order[j], order[i]
 	}
@@ -467,13 +492,13 @@ func (c *CapabilityComposer) calculateExecutionOrder(capabilities []string, depe
 }
 
 // 如果某个能力具有循环依赖性,则有循环依赖性检查。
-func (c *CapabilityComposer) hasCircularDependency(cap string, visited map[string]bool) bool {
-	if visited[cap] {
+func (c *CapabilityComposer) hasCircularDependency(capabilityName string, visited map[string]bool) bool {
+	if visited[capabilityName] {
 		return true
 	}
 
-	visited[cap] = true
-	deps, exists := c.dependencyGraph[cap]
+	visited[capabilityName] = true
+	deps, exists := c.dependencyGraph[capabilityName]
 	if !exists {
 		return false
 	}
@@ -484,7 +509,7 @@ func (c *CapabilityComposer) hasCircularDependency(cap string, visited map[strin
 		}
 	}
 
-	delete(visited, cap)
+	delete(visited, capabilityName)
 	return false
 }
 
@@ -544,4 +569,3 @@ func (c *CapabilityComposer) ClearExclusiveGroups() {
 
 // 确保 CapableComposer 执行 Composer 接口.
 var _ Composer = (*CapabilityComposer)(nil)
-

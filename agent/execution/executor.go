@@ -840,4 +840,3 @@ func (t *SandboxTool) Execute(ctx context.Context, args json.RawMessage) (json.R
 
 	return json.Marshal(result)
 }
-

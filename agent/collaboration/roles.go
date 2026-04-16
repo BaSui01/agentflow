@@ -300,11 +300,9 @@ func (p *RolePipeline) executeStage(
 	previousResults map[RoleType]any,
 ) (map[RoleType]any, error) {
 	results := make(map[RoleType]any)
-	var mu sync.Mutex
 	var wg sync.WaitGroup
-	var firstErr error
+	acc := &stageExecutionAccumulator{results: results}
 
-	// 限制货币
 	sem := make(chan struct{}, p.config.MaxConcurrency)
 
 	for _, roleType := range roles {
@@ -313,126 +311,176 @@ func (p *RolePipeline) executeStage(
 			p.logger.Warn("role not found, skipping", zap.String("role", string(roleType)))
 			continue
 		}
-
-		// 确定输入:如果可用,使用依赖性输出
-		roleInput := input
-		for _, dep := range def.Dependencies {
-			if depOutput, ok := previousResults[dep]; ok {
-				roleInput = depOutput
-				break
-			}
-		}
-
 		wg.Add(1)
-		go func(rt RoleType, rd *RoleDefinition, ri any) {
-			defer wg.Done()
-
-			sem <- struct{}{}        // Acquire
-			defer func() { <-sem }() // Release
-
-			instance := &RoleInstance{
-				ID:         fmt.Sprintf("%s_%d", rt, time.Now().UnixNano()),
-				Definition: *rd,
-				Status:     RoleStatusActive,
-				Input:      ri,
-				StartedAt:  time.Now(),
-				Metadata:   make(map[string]any),
-			}
-
-			p.mu.Lock()
-			p.instances[instance.ID] = instance
-			p.mu.Unlock()
-
-			p.logger.Info("executing role",
-				zap.String("role", string(rt)),
-				zap.String("instance", instance.ID))
-
-			// 以超时执行
-			roleCtx := ctx
-			if rd.Timeout > 0 {
-				var roleCancel context.CancelFunc
-				roleCtx, roleCancel = context.WithTimeout(ctx, rd.Timeout)
-				defer roleCancel()
-			}
-
-			// 用重试执行
-			var output any
-			var err error
-			maxAttempts := 1
-			if rd.RetryPolicy != nil {
-				maxAttempts = rd.RetryPolicy.MaxRetries + 1
-			}
-
-		retryLoop:
-			for attempt := 0; attempt < maxAttempts; attempt++ {
-				if attempt > 0 {
-					delay := rd.RetryPolicy.Delay
-					if rd.RetryPolicy.BackoffMul > 0 {
-						for i := 0; i < attempt-1; i++ {
-							delay = time.Duration(float64(delay) * rd.RetryPolicy.BackoffMul)
-						}
-					}
-					select {
-					case <-roleCtx.Done():
-						err = roleCtx.Err()
-						break retryLoop
-					case <-time.After(delay):
-					}
-				}
-
-				output, err = p.executeFn(roleCtx, rd, ri)
-				if err == nil {
-					break
-				}
-				p.logger.Warn("role execution failed, retrying",
-					zap.String("role", string(rt)),
-					zap.Int("attempt", attempt+1),
-					zap.Error(err))
-			}
-
-			now := time.Now()
-			instance.CompletedAt = &now
-
-			if err != nil {
-				instance.Status = RoleStatusFailed
-				instance.Error = err.Error()
-				p.logger.Error("role failed",
-					zap.String("role", string(rt)),
-					zap.Error(err))
-
-				mu.Lock()
-				if firstErr == nil {
-					firstErr = fmt.Errorf("role %s failed: %w", rt, err)
-				}
-				mu.Unlock()
-				return
-			}
-
-			instance.Status = RoleStatusDone
-			instance.Output = output
-
-			mu.Lock()
-			results[rt] = output
-			mu.Unlock()
-
-			// 记录过渡
-			p.mu.Lock()
-			p.transitions = append(p.transitions, RoleTransition{
-				FromRole:  rt,
-				ToRole:    "", // Will be filled when next stage runs
-				Data:      output,
-				Timestamp: time.Now(),
-			})
-			p.mu.Unlock()
-
-			p.logger.Info("role completed",
-				zap.String("role", string(rt)),
-				zap.Duration("duration", now.Sub(instance.StartedAt)))
-		}(roleType, def, roleInput)
+		roleInput := resolveRoleStageInput(input, previousResults, def)
+		go p.executeStageRole(ctx, sem, &wg, acc, roleType, def, roleInput)
 	}
 
 	wg.Wait()
-	return results, firstErr
+	return results, acc.firstErr
+}
+
+type stageExecutionAccumulator struct {
+	mu       sync.Mutex
+	results  map[RoleType]any
+	firstErr error
+}
+
+func resolveRoleStageInput(input any, previousResults map[RoleType]any, def *RoleDefinition) any {
+	roleInput := input
+	for _, dep := range def.Dependencies {
+		if depOutput, ok := previousResults[dep]; ok {
+			roleInput = depOutput
+			break
+		}
+	}
+	return roleInput
+}
+
+func (p *RolePipeline) executeStageRole(
+	ctx context.Context,
+	sem chan struct{},
+	wg *sync.WaitGroup,
+	acc *stageExecutionAccumulator,
+	roleType RoleType,
+	def *RoleDefinition,
+	roleInput any,
+) {
+	defer wg.Done()
+
+	sem <- struct{}{}
+	defer func() { <-sem }()
+
+	instance := p.newRoleInstance(roleType, def, roleInput)
+	p.storeRoleInstance(instance)
+	p.logger.Info("executing role",
+		zap.String("role", string(roleType)),
+		zap.String("instance", instance.ID))
+
+	output, err := p.executeRoleWithRetry(ctx, roleType, def, roleInput)
+	p.finishRoleExecution(roleType, instance, output, err, acc)
+}
+
+func (p *RolePipeline) newRoleInstance(roleType RoleType, def *RoleDefinition, roleInput any) *RoleInstance {
+	return &RoleInstance{
+		ID:         fmt.Sprintf("%s_%d", roleType, time.Now().UnixNano()),
+		Definition: *def,
+		Status:     RoleStatusActive,
+		Input:      roleInput,
+		StartedAt:  time.Now(),
+		Metadata:   make(map[string]any),
+	}
+}
+
+func (p *RolePipeline) storeRoleInstance(instance *RoleInstance) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.instances[instance.ID] = instance
+}
+
+func (p *RolePipeline) executeRoleWithRetry(ctx context.Context, roleType RoleType, def *RoleDefinition, roleInput any) (any, error) {
+	roleCtx, cancel := roleExecutionContext(ctx, def)
+	defer cancel()
+
+	maxAttempts := 1
+	if def.RetryPolicy != nil {
+		maxAttempts = def.RetryPolicy.MaxRetries + 1
+	}
+
+	var output any
+	var err error
+	for attempt := 0; attempt < maxAttempts; attempt++ {
+		if attempt > 0 {
+			if waitErr := waitRoleRetry(roleCtx, def, attempt); waitErr != nil {
+				return nil, waitErr
+			}
+		}
+
+		output, err = p.executeFn(roleCtx, def, roleInput)
+		if err == nil {
+			return output, nil
+		}
+
+		p.logger.Warn("role execution failed, retrying",
+			zap.String("role", string(roleType)),
+			zap.Int("attempt", attempt+1),
+			zap.Error(err))
+	}
+	return nil, err
+}
+
+func roleExecutionContext(ctx context.Context, def *RoleDefinition) (context.Context, context.CancelFunc) {
+	if def.Timeout > 0 {
+		return context.WithTimeout(ctx, def.Timeout)
+	}
+	return ctx, func() {}
+}
+
+func waitRoleRetry(ctx context.Context, def *RoleDefinition, attempt int) error {
+	if def.RetryPolicy == nil {
+		return nil
+	}
+	delay := def.RetryPolicy.Delay
+	if def.RetryPolicy.BackoffMul > 0 {
+		for i := 0; i < attempt-1; i++ {
+			delay = time.Duration(float64(delay) * def.RetryPolicy.BackoffMul)
+		}
+	}
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-time.After(delay):
+		return nil
+	}
+}
+
+func (p *RolePipeline) finishRoleExecution(
+	roleType RoleType,
+	instance *RoleInstance,
+	output any,
+	err error,
+	acc *stageExecutionAccumulator,
+) {
+	now := time.Now()
+	instance.CompletedAt = &now
+
+	if err != nil {
+		instance.Status = RoleStatusFailed
+		instance.Error = err.Error()
+		p.logger.Error("role failed",
+			zap.String("role", string(roleType)),
+			zap.Error(err))
+
+		acc.mu.Lock()
+		if acc.firstErr == nil {
+			acc.firstErr = fmt.Errorf("role %s failed: %w", roleType, err)
+		}
+		acc.mu.Unlock()
+		return
+	}
+
+	instance.Status = RoleStatusDone
+	instance.Output = output
+
+	acc.mu.Lock()
+	acc.results[roleType] = output
+	acc.mu.Unlock()
+
+	p.recordRoleTransition(roleType, output)
+	p.logger.Info("role completed",
+		zap.String("role", string(roleType)),
+		zap.Duration("duration", now.Sub(instance.StartedAt)))
+}
+
+func (p *RolePipeline) recordRoleTransition(roleType RoleType, output any) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.transitions = append(p.transitions, RoleTransition{
+		FromRole:  roleType,
+		ToRole:    "",
+		Data:      output,
+		Timestamp: time.Now(),
+	})
 }
 
 // GetInstances 获取所有角色实例

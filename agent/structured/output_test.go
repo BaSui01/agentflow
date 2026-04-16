@@ -1,10 +1,11 @@
 package structured
 
 import (
-	"github.com/BaSui01/agentflow/types"
 	"context"
 	"encoding/json"
 	"testing"
+
+	"github.com/BaSui01/agentflow/types"
 
 	"github.com/BaSui01/agentflow/llm"
 	"github.com/stretchr/testify/assert"
@@ -366,10 +367,10 @@ func TestParseResult_IsValid(t *testing.T) {
 
 // TestComplexStruct 测试结构化输出并有嵌入类型.
 type TestComplexStruct struct {
-	ID       int                    `json:"id" jsonschema:"required"`
-	Name     string                 `json:"name" jsonschema:"required,minLength=1"`
+	ID       int            `json:"id" jsonschema:"required"`
+	Name     string         `json:"name" jsonschema:"required,minLength=1"`
 	Metadata map[string]any `json:"metadata,omitempty"`
-	Items    []TestItem             `json:"items" jsonschema:"minItems=0"`
+	Items    []TestItem     `json:"items" jsonschema:"minItems=0"`
 }
 
 type TestItem struct {
@@ -508,5 +509,3 @@ func TestParseResult_JSON(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, string(data), `"raw"`)
 }
-
-

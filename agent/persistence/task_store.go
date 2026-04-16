@@ -340,4 +340,3 @@ const (
 	// 任务Event 已恢复 。
 	TaskEventRecovered TaskEventType = "recovered"
 )
-

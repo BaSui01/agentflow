@@ -202,4 +202,3 @@ func TestMemoryMessageStore_Ping_Closed(t *testing.T) {
 	store.Close()
 	assert.ErrorIs(t, store.Ping(context.Background()), ErrStoreClosed)
 }
-

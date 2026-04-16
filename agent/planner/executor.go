@@ -154,7 +154,7 @@ func (e *PlanExecutor) setTaskStatus(planID, taskID string, status PlanTaskStatu
 // aggregateResults combines all completed task results into a single TaskOutput.
 func (e *PlanExecutor) aggregateResults(plan *Plan) *TaskOutput {
 	var (
-		contents   []string
+		contents    []string
 		totalTokens int
 		totalCost   float64
 		totalDur    time.Duration

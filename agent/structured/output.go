@@ -1,13 +1,14 @@
 package structured
 
 import (
-	"github.com/BaSui01/agentflow/types"
 	"context"
 	"encoding/json"
 	"fmt"
 	"reflect"
 	"regexp"
 	"strings"
+
+	"github.com/BaSui01/agentflow/types"
 
 	"github.com/BaSui01/agentflow/llm"
 )
@@ -386,5 +387,3 @@ func (s *StructuredOutput[T]) ParseWithResult(jsonStr string) *ParseResult[T] {
 		Errors: errors,
 	}
 }
-
-

@@ -3,11 +3,12 @@ package skills
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/BaSui01/agentflow/types"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/BaSui01/agentflow/types"
 )
 
 // Skill 代表一个可加载的 Agent 技能

@@ -311,4 +311,3 @@ func (g *MongoKnowledgeGraph) dfs(
 
 // Compile-time interface check.
 var _ memory.KnowledgeGraph = (*MongoKnowledgeGraph)(nil)
-

@@ -11,22 +11,24 @@ import (
 
 // mockAgent implements agent.Agent for testing.
 type mockAgent struct {
-	id      string
-	name    string
-	output  *agent.Output
-	err     error
-	delay   time.Duration
-	execFn  func(ctx context.Context, input *agent.Input) (*agent.Output, error)
+	id     string
+	name   string
+	output *agent.Output
+	err    error
+	delay  time.Duration
+	execFn func(ctx context.Context, input *agent.Input) (*agent.Output, error)
 }
 
-func (m *mockAgent) ID() string                                                  { return m.id }
-func (m *mockAgent) Name() string                                                { return m.name }
-func (m *mockAgent) Type() agent.AgentType                                       { return "mock" }
-func (m *mockAgent) State() agent.State                                          { return agent.StateReady }
-func (m *mockAgent) Init(_ context.Context) error                                { return nil }
-func (m *mockAgent) Teardown(_ context.Context) error                            { return nil }
-func (m *mockAgent) Plan(_ context.Context, _ *agent.Input) (*agent.PlanResult, error) { return nil, nil }
-func (m *mockAgent) Observe(_ context.Context, _ *agent.Feedback) error          { return nil }
+func (m *mockAgent) ID() string                       { return m.id }
+func (m *mockAgent) Name() string                     { return m.name }
+func (m *mockAgent) Type() agent.AgentType            { return "mock" }
+func (m *mockAgent) State() agent.State               { return agent.StateReady }
+func (m *mockAgent) Init(_ context.Context) error     { return nil }
+func (m *mockAgent) Teardown(_ context.Context) error { return nil }
+func (m *mockAgent) Plan(_ context.Context, _ *agent.Input) (*agent.PlanResult, error) {
+	return nil, nil
+}
+func (m *mockAgent) Observe(_ context.Context, _ *agent.Feedback) error { return nil }
 
 func (m *mockAgent) Execute(ctx context.Context, input *agent.Input) (*agent.Output, error) {
 	if m.execFn != nil {

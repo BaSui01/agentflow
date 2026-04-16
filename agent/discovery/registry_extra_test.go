@@ -332,4 +332,3 @@ func TestMustMarshal(t *testing.T) {
 	data = mustMarshal(make(chan int))
 	assert.Nil(t, data)
 }
-

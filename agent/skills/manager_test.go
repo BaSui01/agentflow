@@ -144,4 +144,3 @@ func createSkillFixture(t *testing.T, root, id, name, instructions string) {
 		t.Fatalf("write manifest: %v", err)
 	}
 }
-

@@ -627,4 +627,3 @@ func (v *DefaultValidator) valueKey(value any) string {
 	data, _ := json.Marshal(value)
 	return string(data)
 }
-

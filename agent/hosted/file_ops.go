@@ -64,7 +64,7 @@ func NewReadFileTool(cfg FileOpsConfig) *ReadFileTool {
 
 func (t *ReadFileTool) Type() HostedToolType { return ToolTypeFileOps }
 func (t *ReadFileTool) Name() string         { return "read_file" }
-func (t *ReadFileTool) Description() string { return "Read file content" }
+func (t *ReadFileTool) Description() string  { return "Read file content" }
 
 func (t *ReadFileTool) Schema() types.ToolSchema {
 	params, err := json.Marshal(map[string]any{
@@ -153,7 +153,7 @@ func NewWriteFileTool(cfg FileOpsConfig) *WriteFileTool {
 
 func (t *WriteFileTool) Type() HostedToolType { return ToolTypeFileOps }
 func (t *WriteFileTool) Name() string         { return "write_file" }
-func (t *WriteFileTool) Description() string { return "Write content to file" }
+func (t *WriteFileTool) Description() string  { return "Write content to file" }
 
 func (t *WriteFileTool) Schema() types.ToolSchema {
 	params, err := json.Marshal(map[string]any{
@@ -214,7 +214,7 @@ func NewEditFileTool(cfg FileOpsConfig) *EditFileTool {
 
 func (t *EditFileTool) Type() HostedToolType { return ToolTypeFileOps }
 func (t *EditFileTool) Name() string         { return "edit_file" }
-func (t *EditFileTool) Description() string { return "Replace old_string with new_string in file" }
+func (t *EditFileTool) Description() string  { return "Replace old_string with new_string in file" }
 
 func (t *EditFileTool) Schema() types.ToolSchema {
 	params, err := json.Marshal(map[string]any{
@@ -285,7 +285,7 @@ func NewListDirectoryTool(cfg FileOpsConfig) *ListDirectoryTool {
 
 func (t *ListDirectoryTool) Type() HostedToolType { return ToolTypeFileOps }
 func (t *ListDirectoryTool) Name() string         { return "list_directory" }
-func (t *ListDirectoryTool) Description() string { return "List directory contents" }
+func (t *ListDirectoryTool) Description() string  { return "List directory contents" }
 
 func (t *ListDirectoryTool) Schema() types.ToolSchema {
 	params, err := json.Marshal(map[string]any{

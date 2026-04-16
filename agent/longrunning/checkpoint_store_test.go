@@ -121,6 +121,7 @@ func TestFileCheckpointStore_DeleteCheckpoint(t *testing.T) {
 		t.Fatal("expected error loading deleted checkpoint")
 	}
 }
+
 // mockTaskStoreAdapter is a function-callback-based mock for TaskStoreAdapter.
 type mockTaskStoreAdapter struct {
 	saveFn     func(ctx context.Context, task *TaskRecord) error
@@ -446,4 +447,3 @@ func TestAutoResumeAll_SkipsCompleted(t *testing.T) {
 		t.Fatalf("expected 0 resumed (completed should be skipped), got %d", resumed)
 	}
 }
-

@@ -497,4 +497,3 @@ func TestProperty_SchemaRoundTrip_MapFields(t *testing.T) {
 		assert.Equal(t, instance.Settings, parsed.Settings)
 	})
 }
-

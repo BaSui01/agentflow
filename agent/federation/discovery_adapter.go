@@ -59,4 +59,3 @@ func (a *DiscoveryRegistryAdapter) UpdateAgentStatus(ctx context.Context, agentI
 
 // Compile-time check that DiscoveryRegistryAdapter implements DiscoveryRegistry.
 var _ DiscoveryRegistry = (*DiscoveryRegistryAdapter)(nil)
-

@@ -34,4 +34,3 @@ func CanTransition(from, to State) bool {
 	}
 	return false
 }
-

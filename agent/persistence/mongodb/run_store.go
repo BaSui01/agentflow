@@ -240,4 +240,3 @@ func (s *MongoRunStore) Stats(ctx context.Context, agentID, tenantID string) (*R
 	}
 	return &results[0], nil
 }
-

@@ -31,4 +31,3 @@ func TestNewDefaultOrchestrator_UsesModeRegistryExecutors(t *testing.T) {
 		t.Fatalf("expected handoff pattern to remain registered")
 	}
 }
-

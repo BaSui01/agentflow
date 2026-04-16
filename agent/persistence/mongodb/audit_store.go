@@ -108,4 +108,3 @@ func (b *MongoAuditBackend) Close() error {
 
 // Compile-time interface check.
 var _ tools.AuditBackend = (*MongoAuditBackend)(nil)
-

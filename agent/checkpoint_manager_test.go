@@ -53,16 +53,16 @@ func TestCheckpointManager_RollbackToVersion(t *testing.T) {
 	threadID := "test-thread"
 	ctx := context.Background()
 
-	// 创建第一个检查站( 第1版)
+	// 创建第一个检查点版本。
 	err = manager.CreateCheckpoint(ctx, agent, threadID)
 	require.NoError(t, err)
 
-	// 更改状态并创建第二个检查点( 第2版)
+	// 切换状态后创建第二个检查点版本。
 	agent.state = StateRunning
 	err = manager.CreateCheckpoint(ctx, agent, threadID)
 	require.NoError(t, err)
 
-	// 更改状态并创建第三个检查站(第3版)
+	// 再次切换状态后创建第三个检查点版本。
 	agent.state = StateReady
 	err = manager.CreateCheckpoint(ctx, agent, threadID)
 	require.NoError(t, err)

@@ -3,8 +3,9 @@ package a2a
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/BaSui01/agentflow/types"
 	"strings"
+
+	"github.com/BaSui01/agentflow/types"
 
 	"github.com/BaSui01/agentflow/agent/structured"
 )

@@ -369,4 +369,3 @@ func TestSandboxTool_WithWarnings(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotNil(t, result)
 }
-

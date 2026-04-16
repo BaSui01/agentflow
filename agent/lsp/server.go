@@ -1029,17 +1029,16 @@ func isKeyword(word string) bool {
 // LSPMessage LSP 消息
 type LSPMessage struct {
 	JSONRPC string          `json:"jsonrpc"`
-	ID      any     `json:"id,omitempty"`
+	ID      any             `json:"id,omitempty"`
 	Method  string          `json:"method,omitempty"`
 	Params  json.RawMessage `json:"params,omitempty"`
-	Result  any     `json:"result,omitempty"`
+	Result  any             `json:"result,omitempty"`
 	Error   *LSPError       `json:"error,omitempty"`
 }
 
 // LSPError LSP 错误
 type LSPError struct {
-	Code    int         `json:"code"`
-	Message string      `json:"message"`
-	Data    any `json:"data,omitempty"`
+	Code    int    `json:"code"`
+	Message string `json:"message"`
+	Data    any    `json:"data,omitempty"`
 }
-

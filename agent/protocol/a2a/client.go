@@ -1,4 +1,4 @@
-﻿package a2a
+package a2a
 
 import (
 	"bytes"
@@ -81,8 +81,8 @@ func NewHTTPClient(config *ClientConfig) *HTTPClient {
 	}
 
 	return &HTTPClient{
-		config: config,
-		httpClient: tlsutil.SecureHTTPClient(config.Timeout),
+		config:       config,
+		httpClient:   tlsutil.SecureHTTPClient(config.Timeout),
 		cardCache:    make(map[string]*cachedCard),
 		taskRegistry: make(map[string]*taskInfo),
 	}
@@ -494,4 +494,3 @@ func (c *HTTPClient) SetTimeout(timeout time.Duration) {
 
 // 确保 HTTPClient 执行 A2AClient 接口.
 var _ A2AClient = (*HTTPClient)(nil)
-

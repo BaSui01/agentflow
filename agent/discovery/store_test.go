@@ -101,4 +101,3 @@ func TestInMemoryRegistryStore_SaveOverwrite(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, AgentStatusBusy, loaded.Status)
 }
-

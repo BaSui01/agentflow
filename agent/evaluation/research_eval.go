@@ -46,15 +46,15 @@ type ResearchEvalConfig struct {
 	Weights map[ResearchDimension]float64 `json:"weights"`
 
 	// 评价设置
-	UseLLMJudge     bool          `json:"use_llm_judge"`     // Use LLM as judge
-	NumJudges       int           `json:"num_judges"`        // Number of LLM judges (for voting)
-	JudgeModel      string        `json:"judge_model"`       // Model for LLM judge
-	Timeout         time.Duration `json:"timeout"`           // Per-evaluation timeout
-	PassThreshold   float64       `json:"pass_threshold"`    // Minimum score to pass (0-1)
+	UseLLMJudge   bool          `json:"use_llm_judge"`  // Use LLM as judge
+	NumJudges     int           `json:"num_judges"`     // Number of LLM judges (for voting)
+	JudgeModel    string        `json:"judge_model"`    // Model for LLM judge
+	Timeout       time.Duration `json:"timeout"`        // Per-evaluation timeout
+	PassThreshold float64       `json:"pass_threshold"` // Minimum score to pass (0-1)
 
 	// 基于参考的评价
-	UseReferences   bool `json:"use_references"`   // Compare against reference papers
-	MaxReferences   int  `json:"max_references"`   // Maximum reference papers to compare
+	UseReferences bool `json:"use_references"` // Compare against reference papers
+	MaxReferences int  `json:"max_references"` // Maximum reference papers to compare
 }
 
 // DefaultResearchEvalConfig 返回默认研究评估配置
@@ -80,15 +80,15 @@ func DefaultResearchEvalConfig() ResearchEvalConfig {
 
 // ResearchEvalResult 研究评估结果
 type ResearchEvalResult struct {
-	OverallScore    float64                          `json:"overall_score"`    // 综合得分 (0-1)
-	DimensionScores map[ResearchDimension]float64    `json:"dimension_scores"` // 各维度得分
-	Passed          bool                             `json:"passed"`           // 是否通过
-	Feedback        map[ResearchDimension]string     `json:"feedback"`         // 各维度反馈
-	Strengths       []string                         `json:"strengths"`        // 优势
-	Weaknesses      []string                         `json:"weaknesses"`       // 不足
-	Suggestions     []string                         `json:"suggestions"`      // 改进建议
-	EvaluatedAt     time.Time                        `json:"evaluated_at"`
-	Duration        time.Duration                    `json:"duration"`
+	OverallScore    float64                       `json:"overall_score"`    // 综合得分 (0-1)
+	DimensionScores map[ResearchDimension]float64 `json:"dimension_scores"` // 各维度得分
+	Passed          bool                          `json:"passed"`           // 是否通过
+	Feedback        map[ResearchDimension]string  `json:"feedback"`         // 各维度反馈
+	Strengths       []string                      `json:"strengths"`        // 优势
+	Weaknesses      []string                      `json:"weaknesses"`       // 不足
+	Suggestions     []string                      `json:"suggestions"`      // 改进建议
+	EvaluatedAt     time.Time                     `json:"evaluated_at"`
+	Duration        time.Duration                 `json:"duration"`
 }
 
 // ============================================================================
@@ -293,13 +293,13 @@ func (m *CompletenessMetric) Compute(ctx context.Context, input *EvalInput, outp
 
 	// 检查基本研究部分
 	essentialSections := map[string]float64{
-		"introduction":  0.10,
-		"methodology":   0.15,
-		"results":       0.15,
-		"conclusion":    0.10,
-		"references":    0.05,
-		"discussion":    0.08,
-		"related work":  0.07,
+		"introduction": 0.10,
+		"methodology":  0.15,
+		"results":      0.15,
+		"conclusion":   0.10,
+		"references":   0.05,
+		"discussion":   0.08,
+		"related work": 0.07,
 	}
 
 	for section, weight := range essentialSections {
@@ -538,4 +538,3 @@ func RegisterResearchMetrics(evaluator *ResearchEvaluator, logger *zap.Logger) {
 	evaluator.RegisterMetric(DimensionClarity, NewClarityMetric(logger))
 	evaluator.RegisterMetric(DimensionCompleteness, NewCompletenessMetric(logger))
 }
-

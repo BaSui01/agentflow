@@ -303,13 +303,13 @@ func (t *ConversationTree) MergeBranch(sourceBranch string) error {
 
 	// 从源添加新信件
 	newMessages := sourceState.Messages[targetMsgCount:]
-	for _, msg := range newMessages {
+	for i := range newMessages {
 		t.stateCounter++
 		currentState := target.States[len(target.States)-1]
 		newState := &ConversationState{
 			ID:        fmt.Sprintf("state_%d", t.stateCounter),
 			ParentID:  currentState.ID,
-			Messages:  append(append([]types.Message{}, currentState.Messages...), msg),
+			Messages:  append(append([]types.Message{}, currentState.Messages...), newMessages[i]),
 			CreatedAt: time.Now(),
 			Label:     fmt.Sprintf("merged from %s", sourceBranch),
 			Metadata:  map[string]any{"merged_from": sourceBranch},

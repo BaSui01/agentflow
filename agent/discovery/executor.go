@@ -1,4 +1,4 @@
-﻿package discovery
+package discovery
 
 import (
 	"context"
@@ -254,4 +254,3 @@ func (e *CompositionExecutor) buildCapabilityInput(
 	}
 	return capInput
 }
-

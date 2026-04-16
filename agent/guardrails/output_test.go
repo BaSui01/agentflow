@@ -621,4 +621,3 @@ func TestOutputValidator_ContextCancellation(t *testing.T) {
 	assert.Error(t, err)
 	assert.Equal(t, context.Canceled, err)
 }
-

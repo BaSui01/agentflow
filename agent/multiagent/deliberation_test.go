@@ -28,11 +28,11 @@ func newDeliberationMock(id, name string, content string) *deliberationMockAgent
 	}
 }
 
-func (m *deliberationMockAgent) ID() string    { return m.id }
-func (m *deliberationMockAgent) Name() string  { return m.name }
-func (m *deliberationMockAgent) Type() agent.AgentType { return agent.TypeGeneric }
-func (m *deliberationMockAgent) State() agent.State    { return agent.StateReady }
-func (m *deliberationMockAgent) Init(context.Context) error    { return nil }
+func (m *deliberationMockAgent) ID() string                     { return m.id }
+func (m *deliberationMockAgent) Name() string                   { return m.name }
+func (m *deliberationMockAgent) Type() agent.AgentType          { return agent.TypeGeneric }
+func (m *deliberationMockAgent) State() agent.State             { return agent.StateReady }
+func (m *deliberationMockAgent) Init(context.Context) error     { return nil }
 func (m *deliberationMockAgent) Teardown(context.Context) error { return nil }
 func (m *deliberationMockAgent) Plan(context.Context, *agent.Input) (*agent.PlanResult, error) {
 	return &agent.PlanResult{}, nil

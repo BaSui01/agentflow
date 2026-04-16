@@ -249,12 +249,12 @@ type InstanceProvider interface {
 
 // 运算仪包含运算器级的度量衡.
 type OperatorMetrics struct {
-	ReconcileTotal       atomic.Int64  `json:"reconcileTotal"`
-	ReconcileErrors      atomic.Int64  `json:"reconcileErrors"`
-	ScaleUpEvents        atomic.Int64  `json:"scaleUpEvents"`
-	ScaleDownEvents      atomic.Int64  `json:"scaleDownEvents"`
-	SelfHealingEvents    atomic.Int64  `json:"selfHealingEvents"`
-	AverageReconcileTime atomic.Int64  `json:"averageReconcileTime"` // nanoseconds
+	ReconcileTotal       atomic.Int64 `json:"reconcileTotal"`
+	ReconcileErrors      atomic.Int64 `json:"reconcileErrors"`
+	ScaleUpEvents        atomic.Int64 `json:"scaleUpEvents"`
+	ScaleDownEvents      atomic.Int64 `json:"scaleDownEvents"`
+	SelfHealingEvents    atomic.Int64 `json:"selfHealingEvents"`
+	AverageReconcileTime atomic.Int64 `json:"averageReconcileTime"` // nanoseconds
 }
 
 // 新代理运营商创建了新的代理运营商.
@@ -881,4 +881,3 @@ func (o *AgentOperator) ImportCRD(data []byte) error {
 	}
 	return o.RegisterAgent(&agent)
 }
-

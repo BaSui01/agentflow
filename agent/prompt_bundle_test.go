@@ -149,4 +149,3 @@ func TestPromptBundle_AppendExamples(t *testing.T) {
 	b.AppendExamples(Example{User: "c", Assistant: "d"}, Example{User: "e", Assistant: "f"})
 	assert.Len(t, b.Examples, 3)
 }
-

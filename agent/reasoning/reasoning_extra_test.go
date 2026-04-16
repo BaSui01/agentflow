@@ -1,11 +1,12 @@
 package reasoning
 
 import (
-	"github.com/BaSui01/agentflow/types"
 	"context"
 	"encoding/json"
 	"fmt"
 	"testing"
+
+	"github.com/BaSui01/agentflow/types"
 
 	"github.com/BaSui01/agentflow/llm"
 	"github.com/BaSui01/agentflow/llm/capabilities/tools"
@@ -253,5 +254,3 @@ func TestDynamicPlanner_GetNodeDepth_OrphanNode(t *testing.T) {
 	depth := dp.getNodeDepth(orphan)
 	assert.Equal(t, 1, depth) // finds nonexistent parent, breaks
 }
-
-

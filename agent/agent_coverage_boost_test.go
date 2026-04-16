@@ -833,8 +833,8 @@ type streamingMockProvider struct {
 
 func (p *streamingMockProvider) Stream(_ context.Context, _ *llm.ChatRequest) (<-chan llm.StreamChunk, error) {
 	ch := make(chan llm.StreamChunk, len(p.chunks))
-	for _, c := range p.chunks {
-		ch <- c
+	for i := range p.chunks {
+		ch <- p.chunks[i]
 	}
 	close(ch)
 	return ch, nil
@@ -2384,7 +2384,8 @@ func TestWithRuntimeStreamEmitter_NilEmitter(t *testing.T) {
 
 func TestWithRuntimeStreamEmitter_NilCtx(t *testing.T) {
 	emit := func(ev RuntimeStreamEvent) {}
-	ctx := WithRuntimeStreamEmitter(nil, emit)
+	var nilCtx context.Context
+	ctx := WithRuntimeStreamEmitter(nilCtx, emit)
 	got, ok := runtimeStreamEmitterFromContext(ctx)
 	if !ok || got == nil {
 		t.Fatal("expected emitter from nil ctx")
@@ -2392,7 +2393,8 @@ func TestWithRuntimeStreamEmitter_NilCtx(t *testing.T) {
 }
 
 func TestRuntimeStreamEmitterFromContext_NilCtx(t *testing.T) {
-	_, ok := runtimeStreamEmitterFromContext(nil)
+	var nilCtx context.Context
+	_, ok := runtimeStreamEmitterFromContext(nilCtx)
 	if ok {
 		t.Fatal("expected false for nil ctx")
 	}

@@ -129,4 +129,3 @@ func (m *AgentContextManager) GetRecommendation(messages []types.Message) string
 	status := m.engineer.GetStatus(messages)
 	return status.Recommendation
 }
-

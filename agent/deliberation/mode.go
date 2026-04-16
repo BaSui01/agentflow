@@ -105,7 +105,8 @@ func (e *Engine) Deliberate(ctx context.Context, task Task) (*DeliberationResult
 	}
 
 	if mode == ModeImmediate {
-		return e.immediateDecision(task)
+		result := e.immediateDecision(task)
+		return result, nil
 	}
 
 	start := time.Now()
@@ -121,62 +122,15 @@ func (e *Engine) Deliberate(ctx context.Context, task Task) (*DeliberationResult
 	var confidence float64
 
 	for i := 0; i < e.config.MaxIterations; i++ {
+		decision, iterationConfidence, done, err := e.runDeliberationIteration(ctx, task, result, i)
+		if err != nil {
+			return result, err
+		}
 		result.Iterations = i + 1
-
-		// Check context before understand step.
-		if err := ctx.Err(); err != nil {
-			return result, fmt.Errorf("deliberation cancelled before understand: %w", err)
+		confidence = iterationConfidence
+		if !done {
+			continue
 		}
-
-		// Step 1: Understand the task.
-		thought, err := e.understand(ctx, task, i)
-		if err != nil {
-			return result, err
-		}
-		result.Thoughts = append(result.Thoughts, *thought)
-		e.emitThought(*thought)
-
-		// Check context before evaluate step.
-		if err := ctx.Err(); err != nil {
-			return result, fmt.Errorf("deliberation cancelled before evaluate: %w", err)
-		}
-
-		// Step 2: Evaluate options.
-		evalThought, err := e.evaluate(ctx, task, result.Thoughts, i)
-		if err != nil {
-			return result, err
-		}
-		result.Thoughts = append(result.Thoughts, *evalThought)
-		e.emitThought(*evalThought)
-
-		// Check context before plan step.
-		if err := ctx.Err(); err != nil {
-			return result, fmt.Errorf("deliberation cancelled before plan: %w", err)
-		}
-
-		// Step 3: Plan action.
-		decision, planThought, err := e.plan(ctx, task, result.Thoughts, i)
-		if err != nil {
-			return result, err
-		}
-		result.Thoughts = append(result.Thoughts, *planThought)
-		e.emitThought(*planThought)
-		confidence = decision.Confidence
-
-		// Step 4: Self-critique (optional).
-		if e.config.EnableSelfCritique && confidence < e.config.MinConfidence {
-			if err := ctx.Err(); err != nil {
-				return result, fmt.Errorf("deliberation cancelled before critique: %w", err)
-			}
-			critiqueThought, err := e.critique(ctx, decision, i)
-			if err != nil {
-				return result, err
-			}
-			result.Thoughts = append(result.Thoughts, *critiqueThought)
-			e.emitThought(*critiqueThought)
-			continue // Another iteration
-		}
-
 		finalDecision = decision
 		break
 	}
@@ -199,7 +153,67 @@ func (e *Engine) Deliberate(ctx context.Context, task Task) (*DeliberationResult
 	return result, nil
 }
 
-func (e *Engine) immediateDecision(task Task) (*DeliberationResult, error) {
+func (e *Engine) runDeliberationIteration(ctx context.Context, task Task, result *DeliberationResult, step int) (decision *Decision, confidence float64, done bool, err error) {
+	if checkErr := ensureDeliberationContext(ctx, "understand"); checkErr != nil {
+		return nil, 0, false, checkErr
+	}
+	thought, err := e.understand(ctx, task, step)
+	if err != nil {
+		return nil, 0, false, err
+	}
+	appendThought(result, thought, e.emitThought)
+
+	if checkErr := ensureDeliberationContext(ctx, "evaluate"); checkErr != nil {
+		return nil, 0, false, checkErr
+	}
+	evalThought, err := e.evaluate(ctx, task, result.Thoughts, step)
+	if err != nil {
+		return nil, 0, false, err
+	}
+	appendThought(result, evalThought, e.emitThought)
+
+	if checkErr := ensureDeliberationContext(ctx, "plan"); checkErr != nil {
+		return nil, 0, false, checkErr
+	}
+	decision, planThought, err := e.plan(ctx, task, result.Thoughts, step)
+	if err != nil {
+		return nil, 0, false, err
+	}
+	appendThought(result, planThought, e.emitThought)
+
+	if e.config.EnableSelfCritique && decision.Confidence < e.config.MinConfidence {
+		if checkErr := ensureDeliberationContext(ctx, "critique"); checkErr != nil {
+			return nil, 0, false, checkErr
+		}
+		critiqueThought, err := e.critique(ctx, decision, step)
+		if err != nil {
+			return nil, 0, false, err
+		}
+		appendThought(result, critiqueThought, e.emitThought)
+		return nil, decision.Confidence, false, nil
+	}
+
+	return decision, decision.Confidence, true, nil
+}
+
+func ensureDeliberationContext(ctx context.Context, stage string) error {
+	if err := ctx.Err(); err != nil {
+		return fmt.Errorf("deliberation canceled before %s: %w", stage, err)
+	}
+	return nil
+}
+
+func appendThought(result *DeliberationResult, thought *ThoughtProcess, emit func(ThoughtProcess)) {
+	if result == nil || thought == nil {
+		return
+	}
+	result.Thoughts = append(result.Thoughts, *thought)
+	if emit != nil {
+		emit(*thought)
+	}
+}
+
+func (e *Engine) immediateDecision(task Task) *DeliberationResult {
 	return &DeliberationResult{
 		TaskID: task.ID,
 		Decision: &Decision{
@@ -212,7 +226,7 @@ func (e *Engine) immediateDecision(task Task) (*DeliberationResult, error) {
 		TotalTime:       0,
 		Iterations:      0,
 		FinalConfidence: 1.0,
-	}, nil
+	}
 }
 
 func (e *Engine) understand(ctx context.Context, task Task, step int) (*ThoughtProcess, error) {
@@ -401,4 +415,3 @@ type Task struct {
 	SuggestedTool  string         `json:"suggested_tool,omitempty"`
 	Parameters     map[string]any `json:"parameters,omitempty"`
 }
-

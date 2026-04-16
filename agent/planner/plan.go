@@ -40,11 +40,11 @@ type TaskOutput struct {
 // PlanTask represents a single task within a plan.
 type PlanTask struct {
 	ID           string
-	ParentID     string           // 父任务 ID（支持递归分解）
+	ParentID     string // 父任务 ID（支持递归分解）
 	Title        string
 	Description  string
-	AssignTo     string           // 目标 agent role/id
-	Dependencies []string         // 依赖的任务 ID 列表
+	AssignTo     string   // 目标 agent role/id
+	Dependencies []string // 依赖的任务 ID 列表
 	Priority     int
 	Status       PlanTaskStatus
 	Result       *TaskOutput
@@ -56,7 +56,7 @@ type PlanTask struct {
 type Plan struct {
 	ID         string
 	Title      string
-	RootTaskID string               // 根任务 ID
+	RootTaskID string // 根任务 ID
 	Tasks      map[string]*PlanTask
 	Status     PlanStatus
 	CreatedAt  time.Time

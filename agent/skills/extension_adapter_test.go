@@ -86,4 +86,3 @@ func TestSkillsExtensionAdapter_ExecuteSkill_NotFound(t *testing.T) {
 	_, err := adapter.ExecuteSkill(context.Background(), "nonexistent", nil)
 	assert.Error(t, err)
 }
-

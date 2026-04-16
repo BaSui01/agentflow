@@ -177,10 +177,10 @@ type mockCapabilityProvider struct {
 	card *a2a.AgentCard
 }
 
-func (m *mockCapabilityProvider) ID() string                       { return m.id }
-func (m *mockCapabilityProvider) Name() string                     { return m.name }
+func (m *mockCapabilityProvider) ID() string                        { return m.id }
+func (m *mockCapabilityProvider) Name() string                      { return m.name }
 func (m *mockCapabilityProvider) GetCapabilities() []a2a.Capability { return m.caps }
-func (m *mockCapabilityProvider) GetAgentCard() *a2a.AgentCard     { return m.card }
+func (m *mockCapabilityProvider) GetAgentCard() *a2a.AgentCard      { return m.card }
 
 // --- helpers ---
 
@@ -194,4 +194,3 @@ func newCovTestRegistry(t *testing.T) *CapabilityRegistry {
 func newCovTestMatcher(registry Registry) *CapabilityMatcher {
 	return NewCapabilityMatcher(registry, nil, zap.NewNop())
 }
-

@@ -204,8 +204,8 @@ type AsyncExecution struct {
 	output  *Output
 	endTime time.Time
 
-	doneCh      chan struct{}
-	doneOnce    sync.Once
+	doneCh     chan struct{}
+	doneOnce   sync.Once
 	waitResult executionResult
 }
 
@@ -263,7 +263,7 @@ const (
 	ExecutionStatusRunning   ExecutionStatus = "running"
 	ExecutionStatusCompleted ExecutionStatus = "completed"
 	ExecutionStatusFailed    ExecutionStatus = "failed"
-	ExecutionStatusCancelled ExecutionStatus = "cancelled"
+	ExecutionStatusCanceled  ExecutionStatus = "canceled"
 )
 
 // Wait 等待执行完成。可安全地被多次调用，
@@ -621,4 +621,3 @@ type SubagentCompletedEvent struct {
 
 func (e *SubagentCompletedEvent) Timestamp() time.Time { return e.Timestamp_ }
 func (e *SubagentCompletedEvent) Type() EventType      { return EventSubagentCompleted }
-

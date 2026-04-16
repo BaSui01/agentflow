@@ -96,4 +96,3 @@ func TestAgentRunErrorEvent(t *testing.T) {
 	assert.Equal(t, "timeout", e.Error)
 	assert.Equal(t, int64(200), e.LatencyMs)
 }
-
