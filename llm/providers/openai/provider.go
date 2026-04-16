@@ -121,6 +121,7 @@ type openAIResponsesRequest struct {
 	ToolChoice           any                 `json:"tool_choice,omitempty"`
 	ParallelToolCalls    *bool               `json:"parallel_tool_calls,omitempty"`
 	PreviousResponseID   string              `json:"previous_response_id,omitempty"`
+	Conversation         string              `json:"conversation,omitempty"`
 	Store                *bool               `json:"store,omitempty"`
 	Metadata             map[string]string   `json:"metadata,omitempty"`
 	PromptCacheKey       string              `json:"prompt_cache_key,omitempty"`
@@ -296,6 +297,7 @@ func (p *OpenAIProvider) completionWithResponsesAPI(ctx context.Context, req *ll
 	} else if prevID, ok := PreviousResponseIDFromContext(ctx); ok {
 		body.PreviousResponseID = prevID
 	}
+	body.Conversation = strings.TrimSpace(req.ConversationID)
 	llm.ReportProviderPromptUsage(ctx, llm.ProviderPromptUsageReport{
 		Provider:     p.Name(),
 		Model:        body.Model,
@@ -568,21 +570,21 @@ func extractInstructionsFromMessages(msgs []types.Message) (string, []types.Mess
 		return "", msgs
 	}
 
-	// Find the first system or developer message
-	for i, m := range msgs {
+	instructions := make([]string, 0, len(msgs))
+	remaining := make([]types.Message, 0, len(msgs))
+	for _, m := range msgs {
 		if m.Role == llm.RoleSystem || m.Role == llm.RoleDeveloper {
-			// Extract content as instructions
-			instructions := m.Content
-			// Return remaining messages (excluding the system/developer message)
-			remaining := make([]types.Message, 0, len(msgs)-1)
-			remaining = append(remaining, msgs[:i]...)
-			remaining = append(remaining, msgs[i+1:]...)
-			return instructions, remaining
+			if text := strings.TrimSpace(m.Content); text != "" {
+				instructions = append(instructions, text)
+			}
+			continue
 		}
+		remaining = append(remaining, m)
 	}
-
-	// No system/developer message found
-	return "", msgs
+	if len(instructions) == 0 {
+		return "", msgs
+	}
+	return strings.Join(instructions, "\n\n"), remaining
 }
 
 // convertMessagesToResponsesInput converts messages to Responses API input format.
@@ -1222,6 +1224,7 @@ func (p *OpenAIProvider) Stream(ctx context.Context, req *llm.ChatRequest) (<-ch
 	} else if prevID, ok := PreviousResponseIDFromContext(ctx); ok {
 		body.PreviousResponseID = prevID
 	}
+	body.Conversation = strings.TrimSpace(req.ConversationID)
 	llm.ReportProviderPromptUsage(ctx, llm.ProviderPromptUsageReport{
 		Provider:     p.Name(),
 		Model:        body.Model,

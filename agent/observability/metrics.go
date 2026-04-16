@@ -2,6 +2,8 @@ package observability
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"fmt"
 	"math"
 	"sort"
@@ -84,11 +86,14 @@ type Tracer struct {
 
 // Trace 追踪记录
 type Trace struct {
-	TraceID   string
-	AgentID   string
-	StartTime time.Time
-	EndTime   time.Time
-	Duration  time.Duration
+	TraceID      string
+	AgentID      string
+	WorkflowName string
+	GroupID      string
+	StartTime    time.Time
+	EndTime      time.Time
+	Duration     time.Duration
+	Disabled     bool
 
 	// 执行步骤
 	Spans []*Span
@@ -101,9 +106,16 @@ type Trace struct {
 	Metadata map[string]any
 }
 
+// SpanError 对齐官方 tracing span error 结构。
+type SpanError struct {
+	Message string         `json:"message"`
+	Data    map[string]any `json:"data,omitempty"`
+}
+
 // Span 执行步骤
 type Span struct {
 	SpanID    string
+	TraceID   string
 	Name      string
 	StartTime time.Time
 	EndTime   time.Time
@@ -114,6 +126,7 @@ type Span struct {
 
 	// 属性
 	Attributes map[string]any
+	Error      *SpanError
 
 	// 事件
 	Events []SpanEvent
@@ -318,12 +331,17 @@ func (t *Tracer) StartTrace(traceID, agentID string) *Trace {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
+	if strings.TrimSpace(traceID) == "" {
+		traceID = generateTraceID()
+	}
+
 	trace := &Trace{
-		TraceID:   traceID,
-		AgentID:   agentID,
-		StartTime: time.Now(),
-		Spans:     []*Span{},
-		Metadata:  make(map[string]any),
+		TraceID:      traceID,
+		AgentID:      agentID,
+		WorkflowName: agentID,
+		StartTime:    time.Now(),
+		Spans:        []*Span{},
+		Metadata:     make(map[string]any),
 	}
 
 	t.traces[traceID] = trace
@@ -353,6 +371,17 @@ func (t *Tracer) AddSpan(traceID string, span *Span) {
 	defer t.mu.Unlock()
 
 	if trace, ok := t.traces[traceID]; ok {
+		if span != nil {
+			if span.TraceID == "" {
+				span.TraceID = trace.TraceID
+			}
+			if span.StartTime.IsZero() {
+				span.StartTime = time.Now()
+			}
+			if !span.EndTime.IsZero() && span.Duration <= 0 {
+				span.Duration = span.EndTime.Sub(span.StartTime)
+			}
+		}
 		trace.Spans = append(trace.Spans, span)
 	}
 }
@@ -367,6 +396,69 @@ func (t *Tracer) GetTrace(traceID string) *Trace {
 	}
 
 	return nil
+}
+
+func (t *Trace) Export() map[string]any {
+	if t == nil {
+		return nil
+	}
+	workflowName := strings.TrimSpace(t.WorkflowName)
+	if workflowName == "" {
+		workflowName = t.AgentID
+	}
+	return map[string]any{
+		"object":        "trace",
+		"id":            t.TraceID,
+		"workflow_name": workflowName,
+		"group_id":      t.GroupID,
+		"metadata":      t.Metadata,
+	}
+}
+
+func (s *Span) SetError(message string, data map[string]any) {
+	if s == nil {
+		return
+	}
+	s.Error = &SpanError{Message: message, Data: data}
+}
+
+func (s *Span) Export() map[string]any {
+	if s == nil {
+		return nil
+	}
+	startedAt := ""
+	if !s.StartTime.IsZero() {
+		startedAt = s.StartTime.UTC().Format(time.RFC3339Nano)
+	}
+	endedAt := ""
+	if !s.EndTime.IsZero() {
+		endedAt = s.EndTime.UTC().Format(time.RFC3339Nano)
+	}
+	attrs := s.Attributes
+	if attrs == nil {
+		attrs = map[string]any{}
+	}
+	return map[string]any{
+		"object":     "span",
+		"id":         s.SpanID,
+		"trace_id":   s.TraceID,
+		"parent_id":  s.ParentSpanID,
+		"started_at": startedAt,
+		"ended_at":   endedAt,
+		"span_data": map[string]any{
+			"name":       s.Name,
+			"attributes": attrs,
+		},
+		"error": s.Error,
+	}
+}
+
+func generateTraceID() string {
+	var raw [16]byte
+	if _, err := rand.Read(raw[:]); err != nil {
+		return fmt.Sprintf("trace_%d", time.Now().UnixNano())
+	}
+	return "trace_" + hex.EncodeToString(raw[:])
 }
 
 // NewEvaluator 创建评估器
@@ -616,4 +708,3 @@ func structureScore(text string) float64 {
 		return 0.6
 	}
 }
-

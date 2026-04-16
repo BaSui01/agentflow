@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
 	"time"
 
@@ -673,11 +672,11 @@ func TestJinaProviderHTTPError(t *testing.T) {
 
 func TestGeminiProviderSingleEmbed(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		assert.Contains(t, r.URL.Path, "embedContent")
+		assert.Contains(t, r.URL.Path, "batchEmbedContents")
 		assert.Equal(t, "test-key", r.Header.Get("x-goog-api-key"))
 
-		json.NewEncoder(w).Encode(geminiEmbedResponse{
-			Embedding: geminiContentEmbedding{Values: []float64{0.7, 0.8}},
+		json.NewEncoder(w).Encode(geminiBatchEmbedResponse{
+			Embeddings: []geminiContentEmbedding{{Values: []float64{0.7, 0.8}}},
 		})
 	}))
 	defer srv.Close()
@@ -697,7 +696,7 @@ func TestGeminiProviderSingleEmbed(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "gemini-embedding", resp.Provider)
 	require.Len(t, resp.Embeddings, 1)
-	assert.Equal(t, []float64{0.7, 0.8}, resp.Embeddings[0].Embedding)
+	assert.InDeltaSlice(t, []float64{0.7, 0.8}, resp.Embeddings[0].Embedding, 1e-6)
 }
 
 func TestGeminiProviderBatchEmbed(t *testing.T) {
@@ -725,24 +724,18 @@ func TestGeminiProviderBatchEmbed(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Len(t, resp.Embeddings, 2)
-	assert.Equal(t, []float64{0.1}, resp.Embeddings[0].Embedding)
-	assert.Equal(t, []float64{0.2}, resp.Embeddings[1].Embedding)
+	assert.InDeltaSlice(t, []float64{0.1}, resp.Embeddings[0].Embedding, 1e-6)
+	assert.InDeltaSlice(t, []float64{0.2}, resp.Embeddings[1].Embedding, 1e-6)
 }
 
 func TestGeminiProviderEmbedQueryAndDocuments(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if strings.Contains(r.URL.Path, "batchEmbedContents") {
-			json.NewEncoder(w).Encode(geminiBatchEmbedResponse{
-				Embeddings: []geminiContentEmbedding{
-					{Values: []float64{0.1}},
-					{Values: []float64{0.2}},
-				},
-			})
-		} else {
-			json.NewEncoder(w).Encode(geminiEmbedResponse{
-				Embedding: geminiContentEmbedding{Values: []float64{0.5}},
-			})
-		}
+		json.NewEncoder(w).Encode(geminiBatchEmbedResponse{
+			Embeddings: []geminiContentEmbedding{
+				{Values: []float64{0.5}},
+				{Values: []float64{0.2}},
+			},
+		})
 	}))
 	defer srv.Close()
 
@@ -750,7 +743,7 @@ func TestGeminiProviderEmbedQueryAndDocuments(t *testing.T) {
 
 	vec, err := p.EmbedQuery(context.Background(), "query")
 	require.NoError(t, err)
-	assert.Equal(t, []float64{0.5}, vec)
+	assert.InDeltaSlice(t, []float64{0.5}, vec, 1e-6)
 
 	vecs, err := p.EmbedDocuments(context.Background(), []string{"a", "b"})
 	require.NoError(t, err)
@@ -767,7 +760,7 @@ func TestGeminiProviderHTTPError(t *testing.T) {
 	p := NewGeminiProvider(GeminiConfig{BaseProviderConfig: providers.BaseProviderConfig{APIKey: "k", BaseURL: srv.URL}})
 	_, err := p.Embed(context.Background(), &EmbeddingRequest{Input: []string{"test"}})
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "FORBIDDEN")
+	assert.Contains(t, err.Error(), "403")
 }
 
 func TestGeminiProviderDefaults(t *testing.T) {

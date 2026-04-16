@@ -80,6 +80,7 @@ func (b *BaseAgent) chatCompletionStreaming(ctx context.Context, pr *preparedReq
 						Timestamp:      time.Now(),
 						Token:          ev.Chunk.Delta.Content,
 						Delta:          ev.Chunk.Delta.Content,
+						SDKEventType:   SDKRawResponseEvent,
 						CurrentStage:   "reasoning",
 						IterationCount: currentIteration,
 						SelectedMode:   selectedMode,
@@ -90,6 +91,7 @@ func (b *BaseAgent) chatCompletionStreaming(ctx context.Context, pr *preparedReq
 						Type:           RuntimeStreamReasoning,
 						Timestamp:      time.Now(),
 						Reasoning:      *ev.Chunk.Delta.ReasoningContent,
+						SDKEventType:   SDKRawResponseEvent,
 						CurrentStage:   "reasoning",
 						IterationCount: currentIteration,
 						SelectedMode:   selectedMode,
@@ -108,6 +110,8 @@ func (b *BaseAgent) chatCompletionStreaming(ctx context.Context, pr *preparedReq
 							Name:      call.Name,
 							Arguments: append(json.RawMessage(nil), call.Arguments...),
 						},
+						SDKEventType: SDKRunItemEvent,
+						SDKEventName: SDKToolCalled,
 					})
 				}
 			case llmtools.ReActEventToolsEnd:
@@ -125,6 +129,8 @@ func (b *BaseAgent) chatCompletionStreaming(ctx context.Context, pr *preparedReq
 							Error:      tr.Error,
 							Duration:   tr.Duration,
 						},
+						SDKEventType: SDKRunItemEvent,
+						SDKEventName: SDKToolOutput,
 					})
 				}
 			case llmtools.ReActEventToolProgress:
@@ -157,6 +163,20 @@ func (b *BaseAgent) chatCompletionStreaming(ctx context.Context, pr *preparedReq
 				})
 			case llmtools.ReActEventCompleted:
 				final = ev.FinalResponse
+				if emit != nil && final != nil && len(final.Choices) > 0 && final.Choices[0].Message.Content != "" {
+					emit(RuntimeStreamEvent{
+						Type:           RuntimeStreamStatus,
+						SDKEventType:   SDKRunItemEvent,
+						SDKEventName:   SDKMessageOutputCreated,
+						Timestamp:      time.Now(),
+						CurrentStage:   "responding",
+						IterationCount: currentIteration,
+						SelectedMode:   selectedMode,
+						Data: map[string]any{
+							"content": final.Choices[0].Message.Content,
+						},
+					})
+				}
 				stopReason := normalizeRuntimeStopReasonFromResponse(final)
 				emitCompletionLoopStatus(emit, currentIteration, selectedMode, stopReason)
 			case llmtools.ReActEventError:
@@ -233,6 +253,7 @@ func (b *BaseAgent) chatCompletionStreaming(ctx context.Context, pr *preparedReq
 						Timestamp:      time.Now(),
 						Token:          chunk.Delta.Content,
 						Delta:          chunk.Delta.Content,
+						SDKEventType:   SDKRawResponseEvent,
 						CurrentStage:   "responding",
 						IterationCount: 1,
 					})
@@ -243,6 +264,7 @@ func (b *BaseAgent) chatCompletionStreaming(ctx context.Context, pr *preparedReq
 						Type:           RuntimeStreamReasoning,
 						Timestamp:      time.Now(),
 						Reasoning:      *chunk.Delta.ReasoningContent,
+						SDKEventType:   SDKRawResponseEvent,
 						CurrentStage:   "responding",
 						IterationCount: 1,
 					})
@@ -295,6 +317,19 @@ func (b *BaseAgent) chatCompletionStreaming(ctx context.Context, pr *preparedReq
 					Message:      assembled,
 				}},
 				Usage: cumulativeUsage,
+			}
+			if emit != nil && assembled.Content != "" {
+				emit(RuntimeStreamEvent{
+					Type:           RuntimeStreamStatus,
+					SDKEventType:   SDKRunItemEvent,
+					SDKEventName:   SDKMessageOutputCreated,
+					Timestamp:      time.Now(),
+					CurrentStage:   "responding",
+					IterationCount: 1,
+					Data: map[string]any{
+						"content": assembled.Content,
+					},
+				})
 			}
 			emitCompletionLoopStatus(emit, 1, "", normalizeRuntimeStopReason(lastFR))
 			return resp, nil
@@ -389,6 +424,8 @@ type runtimeStreamEmitterKey struct{}
 
 // RuntimeStreamEventType identifies the kind of runtime stream event.
 type RuntimeStreamEventType string
+type SDKStreamEventType string
+type SDKRunItemEventName string
 
 const (
 	RuntimeStreamToken        RuntimeStreamEventType = "token"
@@ -400,6 +437,26 @@ const (
 	RuntimeStreamStatus       RuntimeStreamEventType = "status"
 	RuntimeStreamSteering     RuntimeStreamEventType = "steering"
 	RuntimeStreamStopAndSend  RuntimeStreamEventType = "stop_and_send"
+)
+
+const (
+	SDKRawResponseEvent  SDKStreamEventType = "raw_response_event"
+	SDKRunItemEvent      SDKStreamEventType = "run_item_stream_event"
+	SDKAgentUpdatedEvent SDKStreamEventType = "agent_updated_stream_event"
+)
+
+const (
+	SDKMessageOutputCreated SDKRunItemEventName = "message_output_created"
+	SDKHandoffRequested     SDKRunItemEventName = "handoff_requested"
+	SDKHandoffOccured       SDKRunItemEventName = "handoff_occured"
+	SDKToolCalled           SDKRunItemEventName = "tool_called"
+	SDKToolSearchCalled     SDKRunItemEventName = "tool_search_called"
+	SDKToolSearchOutput     SDKRunItemEventName = "tool_search_output_created"
+	SDKToolOutput           SDKRunItemEventName = "tool_output"
+	SDKReasoningCreated     SDKRunItemEventName = "reasoning_item_created"
+	SDKMCPApprovalRequested SDKRunItemEventName = "mcp_approval_requested"
+	SDKMCPApprovalResponse  SDKRunItemEventName = "mcp_approval_response"
+	SDKMCPListTools         SDKRunItemEventName = "mcp_list_tools"
 )
 
 // RuntimeToolCall carries tool invocation metadata in a stream event.
@@ -421,6 +478,8 @@ type RuntimeToolResult struct {
 // RuntimeStreamEvent is a single event emitted during streamed Agent execution.
 type RuntimeStreamEvent struct {
 	Type            RuntimeStreamEventType `json:"type"`
+	SDKEventType    SDKStreamEventType     `json:"sdk_event_type,omitempty"`
+	SDKEventName    SDKRunItemEventName    `json:"sdk_event_name,omitempty"`
 	Timestamp       time.Time              `json:"timestamp"`
 	Token           string                 `json:"token,omitempty"`
 	Delta           string                 `json:"delta,omitempty"`

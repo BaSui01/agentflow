@@ -538,11 +538,13 @@ func TestOpenAIProvider_Completion_ResponsesAPI_WithCustomToolCalls(t *testing.T
 
 func TestOpenAIProvider_Completion_ResponsesAPI_PreviousResponseID(t *testing.T) {
 	var capturedPrevID string
+	var capturedConversation string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var reqBody openAIResponsesRequest
 		err := json.NewDecoder(r.Body).Decode(&reqBody)
 		require.NoError(t, err)
 		capturedPrevID = reqBody.PreviousResponseID
+		capturedConversation = reqBody.Conversation
 
 		w.Header().Set("Content-Type", "application/json")
 		err = json.NewEncoder(w).Encode(openAIResponsesResponse{
@@ -561,10 +563,12 @@ func TestOpenAIProvider_Completion_ResponsesAPI_PreviousResponseID(t *testing.T)
 	// Via context
 	ctx := WithPreviousResponseID(context.Background(), "resp_prev_ctx")
 	_, err := p.Completion(ctx, &llm.ChatRequest{
-		Messages: []types.Message{{Role: llm.RoleUser, Content: "Hi"}},
+		Messages:       []types.Message{{Role: llm.RoleUser, Content: "Hi"}},
+		ConversationID: "conv_req_1",
 	})
 	require.NoError(t, err)
 	assert.Equal(t, "resp_prev_ctx", capturedPrevID)
+	assert.Equal(t, "conv_req_1", capturedConversation)
 
 	// Via request field (takes precedence)
 	_, err = p.Completion(ctx, &llm.ChatRequest{
@@ -573,6 +577,30 @@ func TestOpenAIProvider_Completion_ResponsesAPI_PreviousResponseID(t *testing.T)
 	})
 	require.NoError(t, err)
 	assert.Equal(t, "resp_prev_req", capturedPrevID)
+}
+
+func TestBuildResponsesRequest_MergesAllInstructionMessages(t *testing.T) {
+	p := NewOpenAIProvider(providers.OpenAIConfig{
+		BaseProviderConfig: providers.BaseProviderConfig{APIKey: "test-key", BaseURL: "https://api.openai.com"},
+		UseResponsesAPI:    true,
+	}, zap.NewNop())
+
+	body := p.buildResponsesRequest(&llm.ChatRequest{
+		Messages: []types.Message{
+			{Role: llm.RoleSystem, Content: "system instruction"},
+			{Role: llm.RoleDeveloper, Content: "developer instruction"},
+			{Role: llm.RoleUser, Content: "hello"},
+		},
+	})
+
+	assert.Equal(t, "system instruction\n\ndeveloper instruction", body.Instructions)
+	inputs, ok := body.Input.([]any)
+	require.True(t, ok)
+	require.Len(t, inputs, 1)
+	item, ok := inputs[0].(responsesInputItem)
+	require.True(t, ok)
+	assert.Equal(t, "user", item.Role)
+	assert.Equal(t, "hello", item.Content)
 }
 
 // --- Completion errors ---

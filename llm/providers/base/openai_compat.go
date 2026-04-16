@@ -239,6 +239,7 @@ type OpenAICompatRequest struct {
 
 	// Responses API 扩展字段
 	PreviousResponseID string   `json:"previous_response_id,omitempty"` // 连续对话上下文 ID
+	ConversationID     string   `json:"conversation_id,omitempty"`      // OpenAI server-managed conversation ID
 	Include            []string `json:"include,omitempty"`              // include 字段
 	Truncation         string   `json:"truncation,omitempty"`           // auto/disabled
 }

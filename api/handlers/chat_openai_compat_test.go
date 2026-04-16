@@ -96,6 +96,7 @@ func TestChatHandler_OpenAICompatChatCompletions(t *testing.T) {
 		"max_completion_tokens":256,
 		"store":true,
 		"previous_response_id":"resp_prev_123",
+		"conversation_id":"conv_chat_123",
 		"web_search_options":{
 			"search_context_size":"high",
 			"user_location":{
@@ -129,6 +130,7 @@ func TestChatHandler_OpenAICompatChatCompletions(t *testing.T) {
 	require.NotNil(t, svc.completeReq.Store)
 	assert.True(t, *svc.completeReq.Store)
 	assert.Equal(t, "resp_prev_123", svc.completeReq.PreviousResponseID)
+	assert.Equal(t, "conv_chat_123", svc.completeReq.ConversationID)
 	require.NotNil(t, svc.completeReq.WebSearchOptions)
 	assert.Equal(t, "high", svc.completeReq.WebSearchOptions.SearchContextSize)
 	require.NotNil(t, svc.completeReq.WebSearchOptions.UserLocation)
@@ -226,6 +228,7 @@ func TestChatHandler_OpenAICompatResponses(t *testing.T) {
 		"prompt_cache_key":"route-a",
 		"prompt_cache_retention":"24h",
 		"previous_response_id":"resp_prev_456",
+		"conversation":"conv_resp_456",
 		"truncation":"auto",
 		"include":["output_text"],
 		"tools":[
@@ -273,6 +276,7 @@ func TestChatHandler_OpenAICompatResponses(t *testing.T) {
 	assert.Equal(t, "route-a", svc.completeReq.PromptCacheKey)
 	assert.Equal(t, "24h", svc.completeReq.PromptCacheRetention)
 	assert.Equal(t, "resp_prev_456", svc.completeReq.PreviousResponseID)
+	assert.Equal(t, "conv_resp_456", svc.completeReq.ConversationID)
 	assert.Equal(t, "auto", svc.completeReq.Truncation)
 	assert.Equal(t, []string{"output_text"}, svc.completeReq.Include)
 	require.NotNil(t, svc.completeReq.WebSearchOptions)

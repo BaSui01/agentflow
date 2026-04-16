@@ -147,13 +147,15 @@ func TestGeminiProvider_Generate_NotSupported(t *testing.T) {
 
 func TestGeminiProvider_Analyze_WithVideoData(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		var req geminiRequest
-		json.NewDecoder(r.Body).Decode(&req)
-		assert.Len(t, req.Contents, 1)
-		assert.Len(t, req.Contents[0].Parts, 2) // video + prompt
-		assert.NotNil(t, req.Contents[0].Parts[0].InlineData)
-		assert.Equal(t, "video/mp4", req.Contents[0].Parts[0].InlineData.MimeType)
-		assert.Equal(t, "describe this", req.Contents[0].Parts[1].Text)
+		var req map[string]any
+		require.NoError(t, json.NewDecoder(r.Body).Decode(&req))
+		contents := req["contents"].([]any)
+		require.Len(t, contents, 1)
+		parts := contents[0].(map[string]any)["parts"].([]any)
+		require.Len(t, parts, 2)
+		inline := parts[0].(map[string]any)["inlineData"].(map[string]any)
+		assert.Equal(t, "video/mp4", inline["mimeType"])
+		assert.Equal(t, "describe this", parts[1].(map[string]any)["text"])
 
 		resp := geminiResponse{}
 		resp.Candidates = append(resp.Candidates, struct {
@@ -174,7 +176,7 @@ func TestGeminiProvider_Analyze_WithVideoData(t *testing.T) {
 	p.client = &http.Client{Transport: &redirectTransport{targetURL: srv.URL, inner: http.DefaultTransport}}
 
 	resp, err := p.Analyze(context.Background(), &AnalyzeRequest{
-		VideoData: "base64videodata",
+		VideoData: "YmFzZTY0dmlkZW9kYXRh",
 		Prompt:    "describe this",
 	})
 	require.NoError(t, err)
@@ -184,10 +186,13 @@ func TestGeminiProvider_Analyze_WithVideoData(t *testing.T) {
 
 func TestGeminiProvider_Analyze_WithVideoURL(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		var req geminiRequest
-		json.NewDecoder(r.Body).Decode(&req)
-		assert.NotNil(t, req.Contents[0].Parts[0].FileData)
-		assert.Equal(t, "gs://bucket/video.mp4", req.Contents[0].Parts[0].FileData.FileURI)
+		var req map[string]any
+		require.NoError(t, json.NewDecoder(r.Body).Decode(&req))
+		contents := req["contents"].([]any)
+		first := contents[0].(map[string]any)
+		parts := first["parts"].([]any)
+		fileData := parts[0].(map[string]any)["fileData"].(map[string]any)
+		assert.Equal(t, "gs://bucket/video.mp4", fileData["fileUri"])
 
 		resp := geminiResponse{}
 		resp.Candidates = append(resp.Candidates, struct {
@@ -217,9 +222,13 @@ func TestGeminiProvider_Analyze_WithVideoURL(t *testing.T) {
 
 func TestGeminiProvider_Analyze_WithFormat(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		var req geminiRequest
-		json.NewDecoder(r.Body).Decode(&req)
-		assert.Equal(t, "video/webm", req.Contents[0].Parts[0].InlineData.MimeType)
+		var req map[string]any
+		require.NoError(t, json.NewDecoder(r.Body).Decode(&req))
+		contents := req["contents"].([]any)
+		first := contents[0].(map[string]any)
+		parts := first["parts"].([]any)
+		inline := parts[0].(map[string]any)["inlineData"].(map[string]any)
+		assert.Equal(t, "video/webm", inline["mimeType"])
 
 		resp := geminiResponse{}
 		resp.Candidates = append(resp.Candidates, struct {
@@ -240,7 +249,7 @@ func TestGeminiProvider_Analyze_WithFormat(t *testing.T) {
 	p.client = &http.Client{Transport: &redirectTransport{targetURL: srv.URL, inner: http.DefaultTransport}}
 
 	resp, err := p.Analyze(context.Background(), &AnalyzeRequest{
-		VideoData:   "data",
+		VideoData:   "ZGF0YQ==",
 		VideoFormat: "webm",
 		Prompt:      "test",
 	})
@@ -260,7 +269,7 @@ func TestGeminiProvider_Analyze_Error(t *testing.T) {
 
 	_, err := p.Analyze(context.Background(), &AnalyzeRequest{Prompt: "test"})
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "gemini error")
+	assert.Contains(t, err.Error(), "gemini video request failed")
 }
 
 func TestGeminiProvider_Analyze_EmptyResponse(t *testing.T) {

@@ -182,6 +182,7 @@ type ChatRequest struct {
 	// 扩展字段
 	ReasoningMode      string   `json:"reasoning_mode,omitempty"`
 	PreviousResponseID string   `json:"previous_response_id,omitempty"`
+	ConversationID     string   `json:"conversation_id,omitempty"`
 	ThoughtSignatures  []string `json:"thought_signatures,omitempty"`
 }
 

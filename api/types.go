@@ -117,6 +117,8 @@ type ChatRequest struct {
 	IncludeServerSideToolInvocations *bool `json:"include_server_side_tool_invocations,omitempty"`
 	// Responses API 连续对话上下文 ID
 	PreviousResponseID string `json:"previous_response_id,omitempty"`
+	// Responses API/OpenAI Agents SDK conversation_id（映射到底层 conversation 字段）
+	ConversationID string `json:"conversation_id,omitempty"`
 	// Responses API include 字段
 	Include []string `json:"include,omitempty"`
 	// Responses API truncation（auto/disabled）

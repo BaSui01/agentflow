@@ -736,6 +736,12 @@ func mergeExecutionFields(fields map[string]any, event agent.RuntimeStreamEvent)
 	if event.Resumable {
 		fields["resumable"] = true
 	}
+	if event.SDKEventType != "" {
+		fields["sdk_event_type"] = event.SDKEventType
+	}
+	if event.SDKEventName != "" {
+		fields["sdk_event_name"] = event.SDKEventName
+	}
 	return fields
 }
 

@@ -298,7 +298,7 @@ func TestGeminiProvider_Completion_WithThinking(t *testing.T) {
 				Content: geminiContent{
 					Role: "model",
 					Parts: []geminiPart{
-						{Text: "Let me think...", Thought: &thoughtFlag, ThoughtSignature: "sig_sync"},
+						{Text: "Let me think...", Thought: &thoughtFlag, ThoughtSignature: "c2lnX3N5bmM="},
 						{Text: "The answer is 42."},
 					},
 				},
@@ -330,7 +330,7 @@ func TestGeminiProvider_Completion_WithThinking(t *testing.T) {
 	require.Len(t, resp.Choices[0].Message.ReasoningSummaries, 1)
 	assert.Equal(t, "thought_summary", resp.Choices[0].Message.ReasoningSummaries[0].Kind)
 	require.Len(t, resp.Choices[0].Message.OpaqueReasoning, 1)
-	assert.Equal(t, "sig_sync", resp.Choices[0].Message.OpaqueReasoning[0].State)
+	assert.Equal(t, "c2lnX3N5bmM=", resp.Choices[0].Message.OpaqueReasoning[0].State)
 	require.NotNil(t, resp.Usage.CompletionTokensDetails)
 	assert.Equal(t, 5, resp.Usage.CompletionTokensDetails.ReasoningTokens)
 }
@@ -370,7 +370,7 @@ func TestGeminiProvider_Stream_WithThinking(t *testing.T) {
 				Content: geminiContent{
 					Role: "model",
 					Parts: []geminiPart{
-						{Text: "thinking...", Thought: &thoughtFlag, ThoughtSignature: "sig_stream"},
+						{Text: "thinking...", Thought: &thoughtFlag, ThoughtSignature: "c2lnX3N0cmVhbQ=="},
 						{Text: "result"},
 					},
 				},
@@ -403,7 +403,7 @@ func TestGeminiProvider_Stream_WithThinking(t *testing.T) {
 	require.Len(t, chunks[0].Delta.ReasoningSummaries, 1)
 	assert.Equal(t, "thinking...", chunks[0].Delta.ReasoningSummaries[0].Text)
 	require.Len(t, chunks[0].Delta.OpaqueReasoning, 1)
-	assert.Equal(t, "sig_stream", chunks[0].Delta.OpaqueReasoning[0].State)
+	assert.Equal(t, "c2lnX3N0cmVhbQ==", chunks[0].Delta.OpaqueReasoning[0].State)
 	assert.Equal(t, "stop", chunks[0].FinishReason)
 }
 
@@ -489,10 +489,15 @@ func TestGeminiProvider_Stream_HTTPError(t *testing.T) {
 		BaseProviderConfig: providers.BaseProviderConfig{APIKey: "bad-key", BaseURL: server.URL},
 	}, zap.NewNop())
 
-	_, err := p.Stream(context.Background(), &llm.ChatRequest{
+	ch, err := p.Stream(context.Background(), &llm.ChatRequest{
 		Messages: []types.Message{{Role: llm.RoleUser, Content: "Hi"}},
 	})
-	require.Error(t, err)
+	require.NoError(t, err)
+	var gotErr *types.Error
+	for chunk := range ch {
+		gotErr = chunk.Err
+	}
+	require.NotNil(t, gotErr)
 }
 
 func TestGeminiProvider_Stream_PromptBlocked(t *testing.T) {
@@ -671,13 +676,41 @@ func TestExtractGroundingAnnotations_Nil(t *testing.T) {
 func TestGeminiProvider_Completion_WithGrounding(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// 验证请求中包含 google_search 工具
-		var reqBody geminiRequest
-		json.NewDecoder(r.Body).Decode(&reqBody)
+		var reqBody map[string]any
+		require.NoError(t, json.NewDecoder(r.Body).Decode(&reqBody))
 		hasGoogleSearch := false
-		for _, tool := range reqBody.Tools {
-			if tool.GoogleSearch != nil {
-				hasGoogleSearch = true
+		if tools, ok := reqBody["tools"].([]any); ok {
+			for _, toolAny := range tools {
+				tool, ok := toolAny.(map[string]any)
+				if !ok {
+					continue
+				}
+				if _, ok := tool["googleSearch"]; ok {
+					hasGoogleSearch = true
+					break
+				}
+				if _, ok := tool["google_search"]; ok {
+					hasGoogleSearch = true
+					break
+				}
 			}
+		}
+		if !hasGoogleSearch {
+			if tools, ok := reqBody["tools"].([]any); ok {
+				for _, toolAny := range tools {
+					tool, ok := toolAny.(map[string]any)
+					if !ok {
+						continue
+					}
+					if _, ok := tool["googleSearchRetrieval"]; ok {
+						hasGoogleSearch = true
+						break
+					}
+				}
+			}
+		}
+		if hasGoogleSearch {
+			hasGoogleSearch = true
 		}
 		assert.True(t, hasGoogleSearch, "request should contain google_search tool")
 

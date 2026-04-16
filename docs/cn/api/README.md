@@ -230,6 +230,7 @@ type ChatRequest struct {
     CachedContent                    string          `json:"cached_content,omitempty"`
     IncludeServerSideToolInvocations *bool           `json:"include_server_side_tool_invocations,omitempty"`
     PreviousResponseID               string          `json:"previous_response_id,omitempty"`
+    ConversationID                   string          `json:"conversation_id,omitempty"`
     Include                          []string        `json:"include,omitempty"`
     Truncation                       string          `json:"truncation,omitempty"`
 }

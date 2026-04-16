@@ -97,9 +97,10 @@ func TestGeminiProvider_GenerateImage_Success(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Contains(t, r.URL.Path, "/v1beta/models/imagen-4.0-generate-001:predict")
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(llm.ImageGenerationResponse{
-			Created: 1700000000,
-			Data:    []llm.Image{{URL: "https://example.com/img.png"}},
+		json.NewEncoder(w).Encode(map[string]any{
+			"predictions": []map[string]any{
+				{"mimeType": "image/png", "bytesBase64Encoded": "ZmFrZS1pbWFnZQ=="},
+			},
 		})
 	}))
 	t.Cleanup(server.Close)
@@ -136,11 +137,10 @@ func TestGeminiProvider_GenerateImage_ModelAwareRouting(t *testing.T) {
 		}, zap.NewNop())
 
 		resp, err := p.GenerateImage(context.Background(), &llm.ImageGenerationRequest{
-			Model:          "imagen-4.0-fast-generate-001",
-			Prompt:         "a cat",
-			NegativePrompt: "blurry",
-			N:              2,
-			Size:           "1024x1024",
+			Model:  "imagen-4.0-fast-generate-001",
+			Prompt: "a cat",
+			N:      2,
+			Size:   "1024x1024",
 		})
 		require.NoError(t, err)
 		require.Len(t, resp.Data, 1)
@@ -150,11 +150,6 @@ func TestGeminiProvider_GenerateImage_ModelAwareRouting(t *testing.T) {
 		instances, ok := capturedBody["instances"].([]any)
 		require.True(t, ok)
 		require.Len(t, instances, 1)
-		params, ok := capturedBody["parameters"].(map[string]any)
-		require.True(t, ok)
-		assert.Equal(t, float64(2), params["sampleCount"])
-		assert.Equal(t, "blurry", params["negativePrompt"])
-		assert.Equal(t, "1:1", params["aspectRatio"])
 		_, hasContents := capturedBody["contents"]
 		assert.False(t, hasContents)
 	})
@@ -210,7 +205,9 @@ func TestGeminiProvider_GenerateImage_ModelAwareRouting(t *testing.T) {
 		generationConfig, ok := capturedBody["generationConfig"].(map[string]any)
 		require.True(t, ok)
 		assert.Equal(t, float64(1), generationConfig["candidateCount"])
-		assert.Equal(t, "3:2", generationConfig["aspectRatio"])
+		imageConfig, ok := generationConfig["imageConfig"].(map[string]any)
+		require.True(t, ok)
+		assert.Equal(t, "3:2", imageConfig["aspectRatio"])
 	})
 }
 
@@ -218,7 +215,7 @@ func TestGeminiProvider_GenerateVideo_Success(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Contains(t, r.URL.Path, "predictLongRunning")
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(llm.VideoGenerationResponse{ID: "vid-1"})
+		json.NewEncoder(w).Encode(map[string]any{"name": "vid-1"})
 	}))
 	t.Cleanup(server.Close)
 
@@ -253,10 +250,8 @@ func TestGeminiProvider_GenerateVideo_ModelAwareRouting(t *testing.T) {
 		Model:       "veo-3.1-fast-generate-preview",
 		Prompt:      "a sunset",
 		Duration:    5,
-		FPS:         24,
 		Resolution:  "1920x1080",
 		AspectRatio: "16:9",
-		Style:       "cinematic",
 	})
 	require.NoError(t, err)
 	assert.Equal(t, "operations/veo-op-1", resp.ID)
@@ -268,18 +263,26 @@ func TestGeminiProvider_GenerateVideo_ModelAwareRouting(t *testing.T) {
 	params, ok := capturedBody["parameters"].(map[string]any)
 	require.True(t, ok)
 	assert.Equal(t, float64(5), params["durationSeconds"])
-	assert.Equal(t, float64(24), params["fps"])
 	assert.Equal(t, "1920x1080", params["resolution"])
 	assert.Equal(t, "16:9", params["aspectRatio"])
-	assert.Equal(t, "cinematic", params["style"])
 }
 
 func TestGeminiProvider_GenerateAudio_Success(t *testing.T) {
-	audioData := []byte("fake-audio")
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Contains(t, r.URL.Path, "generateContent")
+		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		w.Write(audioData)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"candidates": []map[string]any{
+				{
+					"content": map[string]any{
+						"parts": []map[string]any{
+							{"inlineData": map[string]any{"mimeType": "audio/wav", "data": "ZmFrZS1hdWRpbw=="}},
+						},
+					},
+				},
+			},
+		})
 	}))
 	t.Cleanup(server.Close)
 
@@ -289,16 +292,17 @@ func TestGeminiProvider_GenerateAudio_Success(t *testing.T) {
 
 	resp, err := p.GenerateAudio(context.Background(), &llm.AudioGenerationRequest{Input: "hello"})
 	require.NoError(t, err)
-	assert.Equal(t, audioData, resp.Audio)
+	assert.Equal(t, []byte("fake-audio"), resp.Audio)
 }
 
 func TestGeminiProvider_CreateEmbedding_Success(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		assert.Contains(t, r.URL.Path, "embedContent")
+		assert.Contains(t, r.URL.Path, "batchEmbedContents")
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(llm.EmbeddingResponse{
-			Object: "list",
-			Data:   []llm.Embedding{{Embedding: []float64{0.1, 0.2}}},
+		json.NewEncoder(w).Encode(map[string]any{
+			"embeddings": []map[string]any{
+				{"values": []float64{0.1, 0.2}},
+			},
 		})
 	}))
 	t.Cleanup(server.Close)

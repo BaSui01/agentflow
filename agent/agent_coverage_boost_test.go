@@ -960,9 +960,17 @@ func TestChatCompletionStreaming_NoTools(t *testing.T) {
 	ag.Init(context.Background())
 
 	var collected []string
+	var sdkTypes []SDKStreamEventType
+	var sdkNames []SDKRunItemEventName
 	emitter := func(ev RuntimeStreamEvent) {
 		if ev.Type == RuntimeStreamToken {
 			collected = append(collected, ev.Token)
+		}
+		if ev.SDKEventType != "" {
+			sdkTypes = append(sdkTypes, ev.SDKEventType)
+		}
+		if ev.SDKEventName != "" {
+			sdkNames = append(sdkNames, ev.SDKEventName)
 		}
 	}
 	ctx := WithRuntimeStreamEmitter(context.Background(), emitter)
@@ -977,6 +985,8 @@ func TestChatCompletionStreaming_NoTools(t *testing.T) {
 	if len(collected) == 0 {
 		t.Fatal("expected emitter to receive tokens")
 	}
+	assert.Contains(t, sdkTypes, SDKRawResponseEvent)
+	assert.Contains(t, sdkNames, SDKMessageOutputCreated)
 }
 
 func TestChatCompletion_StreamingPath(t *testing.T) {
@@ -991,9 +1001,17 @@ func TestChatCompletion_StreamingPath(t *testing.T) {
 	ag.Init(context.Background())
 
 	var tokens []string
+	var sdkTypes []SDKStreamEventType
+	var sdkNames []SDKRunItemEventName
 	emitter := func(ev RuntimeStreamEvent) {
 		if ev.Type == RuntimeStreamToken {
 			tokens = append(tokens, ev.Token)
+		}
+		if ev.SDKEventType != "" {
+			sdkTypes = append(sdkTypes, ev.SDKEventType)
+		}
+		if ev.SDKEventName != "" {
+			sdkNames = append(sdkNames, ev.SDKEventName)
 		}
 	}
 	ctx := WithRuntimeStreamEmitter(context.Background(), emitter)
@@ -1010,6 +1028,8 @@ func TestChatCompletion_StreamingPath(t *testing.T) {
 	if len(tokens) == 0 {
 		t.Fatal("expected tokens from streaming emitter")
 	}
+	assert.Contains(t, sdkTypes, SDKRawResponseEvent)
+	assert.Contains(t, sdkNames, SDKMessageOutputCreated)
 }
 
 func TestChatCompletion_StreamingPath_PreservesReasoningMetadata(t *testing.T) {

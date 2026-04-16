@@ -141,6 +141,10 @@ func TestTracer_StartEndTrace(t *testing.T) {
 	assert.Equal(t, "success", got.Status)
 	assert.Nil(t, got.Error)
 	assert.Greater(t, got.Duration, time.Duration(0))
+	exported := got.Export()
+	assert.Equal(t, "trace", exported["object"])
+	assert.Equal(t, "t1", exported["id"])
+	assert.Equal(t, "a1", exported["workflow_name"])
 }
 
 func TestTracer_EndTrace_WithError(t *testing.T) {
@@ -165,12 +169,42 @@ func TestTracer_AddSpan(t *testing.T) {
 
 	got := tracer.GetTrace("t1")
 	require.Len(t, got.Spans, 2)
+	assert.Equal(t, "t1", got.Spans[0].TraceID)
 }
 
 func TestTracer_GetTrace_NotFound(t *testing.T) {
 	t.Parallel()
 	tracer := NewTracer(zap.NewNop())
 	assert.Nil(t, tracer.GetTrace("nonexistent"))
+}
+
+func TestTracer_StartTrace_GeneratesOfficialStyleID(t *testing.T) {
+	t.Parallel()
+	tracer := NewTracer(zap.NewNop())
+	trace := tracer.StartTrace("", "workflow")
+	require.NotNil(t, trace)
+	assert.Regexp(t, `^trace_[0-9a-f]{32}$`, trace.TraceID)
+}
+
+func TestSpan_Export_WithError(t *testing.T) {
+	t.Parallel()
+	span := &Span{
+		SpanID:       "s1",
+		TraceID:      "trace_123",
+		Name:         "tool_execution",
+		ParentSpanID: "parent_1",
+		StartTime:    time.Unix(1700000000, 0),
+		EndTime:      time.Unix(1700000001, 0),
+		Attributes:   map[string]any{"tool_name": "search"},
+	}
+	span.SetError("tool failed", map[string]any{"code": "timeout"})
+	exported := span.Export()
+	assert.Equal(t, "span", exported["object"])
+	assert.Equal(t, "trace_123", exported["trace_id"])
+	assert.Equal(t, "parent_1", exported["parent_id"])
+	errObj, ok := exported["error"].(*SpanError)
+	require.True(t, ok)
+	assert.Equal(t, "tool failed", errObj.Message)
 }
 
 // --- Evaluator tests ---
@@ -267,4 +301,3 @@ func TestMaxHistorySize_Enforcement(t *testing.T) {
 	assert.LessOrEqual(t, len(m.LatencyHistory), maxHistorySize)
 	assert.LessOrEqual(t, len(m.QualityHistory), maxHistorySize)
 }
-

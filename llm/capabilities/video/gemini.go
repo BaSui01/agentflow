@@ -1,15 +1,17 @@
 package video
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
+	"encoding/base64"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
+	googlegenai "github.com/BaSui01/agentflow/llm/internal/googlegenai"
 	"github.com/BaSui01/agentflow/pkg/tlsutil"
 	"go.uber.org/zap"
+	"google.golang.org/genai"
 )
 
 // GeminiProvider analyzes video content using Google Gemini.
@@ -107,87 +109,53 @@ func (p *GeminiProvider) Analyze(ctx context.Context, req *AnalyzeRequest) (*Ana
 		zap.Bool("has_video_data", req.VideoData != ""),
 		zap.Bool("has_video_url", req.VideoURL != ""))
 
-	var parts []geminiVideoPart
+	client, err := googlegenai.NewClient(ctx, googlegenai.ClientConfig{
+		APIKey:     p.cfg.APIKey,
+		BaseURL:    p.cfg.BaseURL,
+		ProjectID:  p.cfg.ProjectID,
+		Region:     p.cfg.Location,
+		Timeout:    p.cfg.Timeout,
+		HTTPClient: p.client,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to create google genai client: %w", err)
+	}
 
-	// Add video content.
+	parts := make([]*genai.Part, 0, 2)
+	mimeType := fmt.Sprintf("video/%s", req.VideoFormat)
+	if req.VideoFormat == "" {
+		mimeType = "video/mp4"
+	}
 	if req.VideoData != "" {
-		mimeType := fmt.Sprintf("video/%s", req.VideoFormat)
-		if req.VideoFormat == "" {
-			mimeType = "video/mp4"
+		videoBytes, err := base64.StdEncoding.DecodeString(req.VideoData)
+		if err != nil {
+			return nil, fmt.Errorf("failed to decode video data: %w", err)
 		}
-		parts = append(parts, geminiVideoPart{
-			InlineData: &geminiInline{
-				MimeType: mimeType,
-				Data:     req.VideoData,
-			},
-		})
+		parts = append(parts, genai.NewPartFromBytes(videoBytes, mimeType))
 	} else if req.VideoURL != "" {
-		mimeType := fmt.Sprintf("video/%s", req.VideoFormat)
-		if req.VideoFormat == "" {
-			mimeType = "video/mp4"
-		}
-		parts = append(parts, geminiVideoPart{
-			FileData: &geminiFileData{
-				MimeType: mimeType,
-				FileURI:  req.VideoURL,
-			},
-		})
+		parts = append(parts, genai.NewPartFromURI(req.VideoURL, mimeType))
 	}
+	parts = append(parts, genai.NewPartFromText(req.Prompt))
 
-	// Add the user prompt.
-	parts = append(parts, geminiVideoPart{Text: req.Prompt})
-
-	body := geminiRequest{
-		Contents: []geminiContent{{Parts: parts, Role: "user"}},
-		GenerationConfig: &geminiGenConfig{
-			Temperature:     0.4,
-			MaxOutputTokens: 8192,
-		},
-	}
-
-	payload, err := marshalJSONRequest("gemini video", body)
-	if err != nil {
-		return nil, err
-	}
-	url := fmt.Sprintf("https://generativelanguage.googleapis.com/v1beta/models/%s:generateContent",
-		model)
-
-	httpReq, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(payload))
-	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
-	}
-	httpReq.Header.Set("Authorization", "Bearer "+p.cfg.APIKey)
-	httpReq.Header.Set("Content-Type", "application/json")
-
-	resp, err := p.client.Do(httpReq)
+	resp, err := client.Models.GenerateContent(ctx, model, []*genai.Content{
+		genai.NewContentFromParts(parts, genai.RoleUser),
+	}, &genai.GenerateContentConfig{
+		Temperature:     genai.Ptr(float32(0.4)),
+		MaxOutputTokens: 8192,
+	})
 	if err != nil {
 		return nil, fmt.Errorf("gemini video request failed: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode >= 400 {
-		return nil, httpStatusError(p.logger, "gemini", "analyze", resp.StatusCode, resp.Body)
-	}
-
-	var gResp geminiResponse
-	if err := json.NewDecoder(resp.Body).Decode(&gResp); err != nil {
-		return nil, fmt.Errorf("failed to decode gemini response: %w", err)
-	}
-
-	content := ""
-	if len(gResp.Candidates) > 0 && len(gResp.Candidates[0].Content.Parts) > 0 {
-		content = gResp.Candidates[0].Content.Parts[0].Text
 	}
 
 	result := &AnalyzeResponse{
 		Provider:  p.Name(),
 		Model:     model,
-		Content:   content,
+		Content:   strings.TrimSpace(resp.Text()),
 		CreatedAt: time.Now(),
 	}
 	p.logger.Info("gemini video analyze complete",
 		zap.String("model", model),
-		zap.Int("content_length", len(content)))
+		zap.Int("content_length", len(result.Content)))
 	return result, nil
 }
 
